@@ -1,0 +1,126 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>dispread</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>spectro/dispread</b>&nbsp;</h2>
+<h3>Summary</h3>
+Display test patches on a monitor, read the colorimetric value result
+with the colorimeter, and create the chart readings file.<br>
+<h3>Usage</h3>
+dispread [-options]<i> inoutfile</i><br>
+&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;Verbose mode<br>
+&nbsp;<a href="printread.html#d">-d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Print debug diagnostics<br>
+&nbsp;<a href="#c">-c comport</a>&nbsp; Set COM port, 1..N (default 1)<br>
+&nbsp;<a href="#a">-a</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;Run calibration<br>
+&nbsp;<a href="#i">-i 92|SO</a> &nbsp;&nbsp;&nbsp;&nbsp; Select target
+instrument (default DTP92)<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;92
+=
+DTP92, SO = Spectrolino<br>
+<a href="dispcal.html#k">-k file.cal</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply
+display calibration file while reading<br>
+&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;Save spectral information (default don't save)<br>
+&nbsp;<a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;[X11 only] Don't set override redirect on test window<br>
+&nbsp;<a href="#p1"><i>inoutfile</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Base name for input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
+ href="File_Formats.html#.ti3">.ti3</a>] file.<br>
+<br>
+<b>Examples</b><br>
+<br>
+dispread -c1 -i92 mycrt<br>
+<h3>Comments<br>
+</h3>
+This is the utility for exercising a display, in order to measure its
+color characteristics. The device test colors are defined by the
+outfile.ti1 file, while the resulting device+colorimetric and optional
+spectral readings are stored in the outfile.ti3 file. Display
+calibration curves can be applied during the measurements, and the
+curves included in the resulting .ti3 data file using the <span
+ style="font-weight: bold;">-k</span>flag. See <a href="dispcal.html">dispcal</a>
+for information on how&nbsp; to calibrate the display before profiling
+it.<br>
+<br>
+<a name="v"></a> The <b>-v</b> flag reports progress information.<br>
+<br>
+<a name="d"></a>The <b>-d</b> flag causes serial communications
+diagnostics to be printed to stdout. This can be useful in tracking
+down why an instrument can't connect.<br>
+<br>
+<a name="c"></a> The instrument is assumed to communicate through a
+serial
+communication port, and the port can be selected with the <b>-c</b>
+option,
+if the instrument is not connected to the first port. If you invoke <span
+ style="font-weight: bold;">dispread</span> so as to display the usage
+information (i.e. "dispread -?" or "dispread --"), then the discovered
+serial ports will be listed on Windows and Mac OSX systems.<br>
+<br>
+<a name="a"></a> The -a option runs through the black and sensor
+relative
+calibration routines for the Xrite DTP92 instrument. If a Spectrolino
+is being used, then a white calibration will always be performed before
+the instrument can be placed on the display.<br>
+<br>
+<a name="i"></a>By default <b>dispread</b> expects to use an Xrite
+DTP92
+CRT instrument, but the GretagMacbeth Spectrolino can be selected by
+using the
+"SO" argument to the <b>-i</b> option, for use on either a CRT or LCD
+type of display.<br>
+<br>
+<a name="s"></a>By default only the colorimetric information (XYZ
+value)
+will be saved, but for instruments that support spectral readings (such
+as
+the Gretag Spectrolino), the <b>-s</b> option will save the spectral
+readings
+to the .ti3 file as well.<br>
+<br>
+<a name="k"></a> If a display video lookup table calibration <a
+ href="File_Formats.html#.cal">.cal</a> file is provided, it will be
+applied to the display while the measurements are being taken, and also
+included in the resulting .ti3 data file, so that <a
+ href="profile.html">profile</a> can include it as a <span
+ style="font-weight: bold;">vcgt</span> tag in the resulting
+profile.&nbsp; The calibration file has usually been created using <a
+ href="dispcal.html">dispcal</a>. <br>
+<br>
+<a name="n"></a>When running on a UNIX based system that used the X11
+Windowing
+System, <b>dispread</b> normally selects the override redirect so that
+the
+test window will appear above any other windows on the display. On some
+systems
+this can interfere with window manager operation, and the <b>-n</b>
+option
+turns this behaviour off.<br>
+<br>
+<a name="p1"></a> The final parameter on the command line is the base
+filename for the <a href="File_Formats.html#.ti1">.ti1</a>
+input file, and the <a href="File_Formats.html#.ti3">.ti3</a> output
+file. <b>dispread</b> will add the .ti1 and .ti3 extensions
+automatically.<br>
+<br>
+If a large number of patches is being read, the screensaver on many
+systems can interfere with the operation of dispread. It is therefore
+advisable
+in these cases to manually turn off the screensaver before commencing
+the
+measurements.<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

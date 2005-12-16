@@ -1,0 +1,27 @@
+
+#SubDir TOP plot ;
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;
+
+if $(UNIX) && $(OS) != MACOSX {
+	LibWin = /usr/X11R6/lib/libX11.lib ;
+	LibWinH = /usr/X11R6/include ;
+}
+
+# PLOT library
+if $(UNIX) && $(OS) != MACOSX {
+  ObjectHdrs plot$(SUFOBJ) : $(LibWinH) ;
+}
+Library libplot.lib : plot.c ;
+
+# Individual stand alone test of plot library
+Object sa_plot$(SUFOBJ) : plot.c ;
+MainFromObjects plot : sa_plot$(SUFOBJ) ;
+ObjectCcFlags sa_plot.c : -DSTANDALONE_TEST ;
+if $(UNIX) && $(OS) != MACOSX {
+  LinkLibraries plot : $(LibWin) ;
+}
+
+

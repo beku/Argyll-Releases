@@ -1,0 +1,50 @@
+
+#SubDir TOP tiff ;
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;
+
+SEARCH_SOURCE = port ;
+
+# support library for generation utilities
+Library libport.lib : getopt.c strcasecmp.c strtoul.c ;
+
+# generation utilities
+SEARCH_SOURCE = libtiff ;
+Main mkg3states$(SUFEXE) : mkg3states.c ;
+LinkLibraries mkg3states$(SUFEXE) : libport.lib ;
+GenFileND tif_fax3sm.c : mkg3states$(SUFEXE) "-c const tif_fax3sm.c" ;
+
+# version file
+Main mkversion$(SUFEXE) : libtiff/mkversion.c ;
+GenFileND version.h : mkversion "-v VERSION -a dist/tiff.alpha libtiff/version.h" ;
+
+# tiff library
+
+IPATH on libtiff =	../jpeg ;
+
+LIBSRCS = tif_fax3.c tif_aux.c tif_close.c tif_codec.c tif_fax3sm.c tif_predict.c
+        tif_compress.c tif_dir.c tif_dirinfo.c tif_dirread.c tif_dirwrite.c 
+        tif_dumpmode.c tif_error.c tif_getimage.c tif_flush.c tif_luv.c
+        tif_lzw.c tif_next.c tif_open.c tif_packbits.c tif_print.c 
+        tif_read.c tif_swab.c tif_strip.c tif_thunder.c tif_tile.c 
+        tif_version.c tif_warning.c tif_write.c ;
+
+if $(UNIX) {
+	LIBSRCS += tif_unix.c ;
+} else {
+	LIBSRCS += tif_msdos.c ;
+}
+
+# tif_jpeg.c
+# tif_zip.c
+
+ObjectHdrs libtiff.lib : $(IPATH) ;
+Library libtiff.lib : $(LIBSRCS) ;
+
+# copy header file to lib directory
+File tiff.h : libtiff/tiff.h ;
+File tiffio.h : libtiff/tiffio.h ;
+File tiffvers.h : libtiff/tiffvers.h ;
+

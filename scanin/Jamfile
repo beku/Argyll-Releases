@@ -1,0 +1,40 @@
+
+#SubDir TOP scanin ;
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;
+
+if $(HAVE_TIFF) {
+	TIFFLIB = ;
+	TIFFINC = ;
+	LINKLIBS on scanin$(SUFEXE) = -ltiff $(LINKLIBS) ;
+} else {
+	TIFFLIB = ../tiff/libtiff.lib ;
+	TIFFINC = ../tiff ;
+}
+
+#Products
+Libraries = libscanrd ;
+Executables = scanin ;
+Headers = scanrd.h ;
+Samples = it8.cht ColorCheckerDC.cht ;
+
+#Install
+InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
+InstallFile $(DOTDOT)$(SLASH)ref : $(Samples) ;
+#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
+#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+
+# Chart recognition library
+Library libscanrd.lib : scanrd.c ;
+ObjectHdrs scanrd : ../numlib ;	# icc bug workaround
+
+# IT8 chart reader - sucks in tiff file and spits out cgats file
+Main scanin : scanin.c ;
+ObjectHdrs scanin : ../cgats ../numlib ../icc ../xicc $(TIFFINC) ;	# icc bug workaround
+LinkLibraries scanin : libscanrd.lib ../numlib/libnum.lib
+                           $(TIFFLIB) ../cgats/libcgats.lib
+                           ../icc/libicc.lib ../xicc/libxcolorants.lib ;
+
+

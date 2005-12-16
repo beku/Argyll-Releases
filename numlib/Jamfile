@@ -1,0 +1,42 @@
+
+#SubDir TOP numlib ;
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;
+#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+
+#Products
+Libraries = libnum ;
+Headers = numlib.h ;
+
+#Install
+#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
+#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+
+# Numeric library
+Library libnum.lib : numsup.c dnsq.c powell.c dhsx.c  ludecomp.c svd.c zbrent.c rand.c sobol.c ;
+
+# Utilities / test programs
+Main dnsqtest : dnsqtest.c ;
+LinkLibraries dnsqtest : libnum.lib ;
+
+Main tpowell : tpowell.c ;
+LinkLibraries tpowell : libnum.lib ;
+
+Main tdhsx : tdhsx.c ;
+LinkLibraries tdhsx : libnum.lib ;
+
+Main LUtest : LUtest.c ;
+LinkLibraries LUtest : libnum.lib ;
+
+Main svdtest : svdtest.c ;
+LinkLibraries svdtest : libnum.lib ;
+
+Main zbrenttest : zbrenttest.c ;
+LinkLibraries zbrenttest : libnum.lib ;
+
+Main soboltest : soboltest.c ;
+LinkLibraries soboltest : libnum.lib ;
+

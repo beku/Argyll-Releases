@@ -1,0 +1,44 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>filmread</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>spectro/filmread</b></h2>
+<h3>Summary</h3>
+Read film colorimetric values using a Gretag SpectroScanT spectrometer.<br>
+<h3>Usage</h3>
+filmread [-v] [-s] [-c comport] outfile<br>
+&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Verbose mode<br>
+&nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Gather spectral data also<br>
+&nbsp;-c comport&nbsp;&nbsp;&nbsp;&nbsp; Set COM port, 1..N (default 1)<br>
+&nbsp;outfile&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;Base
+name for input[<a href="File_Formats.html#.ti2">.ti2</a>]/output[<a
+ href="File_Formats.html#.ti3">.ti3</a>] file<br>
+<h3>Comments</h3>
+This utility allows reading of film test patches, one at a time using
+the
+transparent mode of the Gretag SpectroscanT. <br>
+<br>
+The instrument is assumed to communicate through a
+serial
+communication port, and the port can be selected with the <b>-c</b>
+option,
+if the instrument is not connected to the first port. If you invoke <span
+ style="font-weight: bold;">filmread</span> so as to display the usage
+information (i.e. "filmread -?" or "filmread --"), then the discovered
+serial ports will be listed on Windows and Mac OSX systems.<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

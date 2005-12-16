@@ -1,0 +1,50 @@
+# JAM style makefile for icclink and friends
+ 
+#SubDir TOP link ;
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	    += $(CCDEBUGFLAG) ;		# Debugging flags
+#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+#CCFLAGS	+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
+
+if $(UNIX) && $(OS) != MACOSX {
+	LibWin = /usr/X11R6/lib/libX11.lib ;
+	LibWinH = /usr/X11R6/include/X11 ;
+}
+
+#Products
+Executables = icclink ;
+
+#Install
+InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
+
+# ICC linker
+Main icclink : icclink.c ;
+ObjectHdrs icclink$(SUFOBJ) : ../h ../icc ../cgats ../xicc ../spectro ../gamut ../rspl
+                              ../numlib ../plot ;
+LinkLibraries icclink : ../icc/libicc.lib ../xicc/libxicc.lib ../gamut/libgamut.c
+                        ../gamut/libgammap.lib ../rspl/librspl.lib 
+                        ../cgats/libcgats.lib ../numlib/libnum.lib
+                        ../plot/libplot.lib $(LibWin) ;
+
+# K only reprocessor
+#Main icc2ko : icc2ko.c ;
+#ObjectHdrs icc2ko$(SUFOBJ) : ../h ../icc ../rspl ../numlib ;	# icc bug workaround
+#LinkLibraries icc2ko : libiccxfm.lib ../icc/libicc.lib ../rspl/librspl.lib ../numlib/libnum.lib ;
+
+# Monochrome transfer curve plotter
+Main monoplot : monoplot.c ;
+ObjectHdrs monoplot$(SUFOBJ) : ../h ../icc ../plot ;	# icc bug workaround
+LinkLibraries monoplot : ../icc/libicc.lib ../plot/libplot.lib $(LibWin) ;
+
+# Device path L curve plotter
+Main pathplot : pathplot.c ;
+ObjectHdrs pathplot$(SUFOBJ) : ../h ../icc ../xicc ../cgats ../gamut ../rspl
+                              ../numlib ../spectro ../plot ;	# icc bug workaround
+LinkLibraries pathplot : ../icc/libicc.lib ../xicc/libxicc.lib ../gamut/libgamut.c
+                        ../gamut/libgammap.lib ../rspl/librspl.lib 
+                        ../cgats/libcgats.lib ../numlib/libnum.lib
+                        ../plot/libplot.lib $(LibWin) ;
+

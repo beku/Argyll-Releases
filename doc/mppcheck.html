@@ -1,0 +1,71 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>mppcheck</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>profile/mppcheck</b>&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;<br>
+</h2>
+<h3>Summary</h3>
+Check an&nbsp;<a href="File_Formats.html#MPP">MPP</a> profile
+against&nbsp;<a href="File_Formats.html#.ti3">.ti3</a>
+test chart data.<br>
+<h3>Usage Summary</h3>
+mppcheck [-v] [-s] -[y] values.ti3 profile.mpp<br>
+-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; Verbose mode<br>
+-c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;Show CIE94 delta E values<br>
+-k &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;&nbsp; Show CIEDE2000 delta E values<br>
+-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; Check spectral model too<br>
+-y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; Detail each value<br>
+values.ti3&nbsp; &nbsp; &nbsp; Test values to check against<br>
+<i> profile.mpp</i> &nbsp; Profile to check<br>
+<h3>Usage Details and Discussion</h3>
+mppcheck provides a way of checking how well an&nbsp;<a
+ href="File_Formats.html#MPP">MPP</a> profile conforms to the test
+sample data that was used to create it. This is the same sort of check
+done within the profile making utility (<a href="mpprof.html">mpprof</a>),
+but having a separate utility provides some flexibility. <br>
+<br>
+The <b>-v</b> flag prints out extra information during the checking.<br>
+<br>
+The <b>-c</b> option causes the differences between the test values
+and
+the profile prediction of the color for each device value to be
+displayed
+in CIE94 delta E, rather than plain L*a*b* delta E. CIE94 delta E has a
+closer
+correspondence with perceived color differences than the default CIE76
+delta E values.<br>
+<br>
+The <b>-k</b> option causes the differences between the test values
+and
+the profile prediction of the color for each device value to be
+displayed
+in CIEDE2000 delta E, rather than plain L*a*b* delta E. CIEDE2000 delta
+E has a
+closer
+correspondence with perceived color differences than either CIE76 or
+CIE94 delta E values.<br>
+<br>
+The <b>-s</b> flag causes the spectral model (if present) to be
+checked against the test data spectral values (if present). Errors are
+given as a percentage error for each reflectance band, as well as a
+delta E of the resulting CIE color computed from the spectral values.<br>
+<br>
+The <b>-y</b> flag when used in combination with the <b>-v</b> flag,
+causes each test value and its error to be printed. <br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

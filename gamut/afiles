@@ -1,0 +1,15 @@
+gamut/Readme.txt
+gamut/gammap.txt
+gamut/Licence.txt
+gamut/afiles
+gamut/Jamfile
+gamut/gamut.c
+gamut/gamut.h
+gamut/viewgam.c
+gamut/gammap.c
+gamut/gammap.h
+gamut/nearsmth.c
+gamut/nearsmth.h
+gamut/maptest.c
+gamut/smthtest.c
+gamut/NewRMG2Gam.c

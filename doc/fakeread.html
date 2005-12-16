@@ -1,0 +1,121 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>fakeread</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>spectro/fakeread</b></h2>
+<h3>Summary</h3>
+Simulate the measurement of a devices response, using an existing
+device profile, or measured test point data set. The device profile can
+be either
+an <a href="File_Formats.html#ICC">ICC</a> or <a
+ href="File_Formats.html#MPP">MPP</a> profile, or the data set can be a
+<a href="File_Formats.html#.ti3">.ti3</a> file. A device link
+separation or color space conversion can be applied before the
+print/measure simulation.<br>
+<h3>Usage</h3>
+fakeread [-v] [-s] <i>profile.</i>[icm|mpp|ti3] <i>outfile</i><br>
+&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Verbose mode<br>
+&nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; Lookup <a
+ href="File_Formats.html#MPP">MPP</a> spectral values<br>
+&nbsp;-p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use separation profile<br>
+&nbsp;-l&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Output Lab rather than XYZ<br>
+&nbsp;-0
+pow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply power to input device chanel 0-9 (after sep.)<br>
+&nbsp;-r
+level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Add total of &lt;level&gt; random to input device values 0.0 - 1.0
+(after sep.)<br>
+&nbsp;-R
+level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Add total of &lt;level&gt; random to output PCS values 0.0 - 100.0<br>
+&nbsp;[separation.icc]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Device link separation profile<br>
+&nbsp;<i>profile.</i>[icm|mpp|ti3] &nbsp; &nbsp; <a
+ href="File_Formats.html#ICC">ICC</a>, <a href="File_Formats.html#MPP">MPP</a>
+or&nbsp;<a href="File_Formats.html#.ti3">.ti3</a>
+profile/file to use<br>
+&nbsp;<i>outfile</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; Base name for
+input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
+ href="File_Formats.html#.ti3">.ti3</a>] file<br>
+<b><br>
+Examples</b><br>
+<br>
+fakeread profile.icm testvalues<br>
+fakeread -p convert.icm profile.icm testvalues<br>
+<h3>Comments<br>
+</h3>
+The -v flag does nothing at the moment.<br>
+The -s flag works only with MPP profiles that contain spectral model
+information.<br>
+The -p flag enables a device to device value conversion before
+converting to expected PCS values.<br>
+The -l flag causes the CIE output values to be L*a*b* rather than the
+default XYZ values.<br>
+<br>
+The -0, -1, -2 .. -9 parameters are a way of simulating changes in the
+behaviour of the simulated printing system. The parameter supplied to
+the flag will be used to modify the device values (after any separation
+is applied) by raising them to the power of the parameter. This applies
+a transfer curve to the simulated device response.<br>
+<br>
+The -r parameter is a way of simulating instability in the behaviour of
+the simulated
+printing system. The parameter supplied to the flag will be used to
+scale a random offset added to the device values (after any separation
+is applied). The offset will be +/- 0.5 * &lt;level&gt;, added to the
+device value that is in the range 0.0 - 1.0. A typically value supplied
+might be 0.01 to simulate
++/- 0.5% randomness.<br>
+<br>
+The -R parameter is a way of simulating instability in the behaviour of
+the simulated
+measuring system. The parameter supplied to the flag will be used to
+scale a random offset added to the PCS values. The offset will be +/-
+0.5 * &lt;level&gt;, added to the PCS value that is typically in the
+range 0.0 - 100.0 for an XYZ PCS, and 0.0 - 100.0 and -128.0 - 127.0
+for Lab. A typically value supplied might be&nbsp; 1.0 to simulate
++/- 0.5% randomness.<br>
+<br>
+Fakeread is useful in creating artificial test value for testing <a
+ href="profile.html">profile</a>, as well as providing one path for
+turning an MPP profile into an ICC profile. If a <a
+ href="File_Formats.html#.ti3">.ti3</a> file is
+specified instead of an <a href="File_Formats.html#ICC">ICC</a> or <a
+ href="File_Formats.html#MPP">MPP</a> profile,
+then the closest matching measured points in the .<a
+ href="File_Formats.html#.ti3">.ti3</a> are substituted
+for the test values in the <a href="File_Formats.html#.ti1">.ti1</a>
+file on
+output. If the <a href="File_Formats.html#.ti1">.ti1</a>
+file is a monochrome test file with a White device value, then an RGB <a
+ href="File_Formats.html#ICC">ICC</a> profile, <a
+ href="File_Formats.html#MPP">MPP</a> or <a
+ href="File_Formats.html#.ti3">.ti3</a> may be used, and the White
+values will be translated to equal RGB values. If the <a
+ href="File_Formats.html#.ti1">.ti1</a>
+file is a monochrome test file with a Black device value, then a CMYK <a
+ href="File_Formats.html#ICC">ICC</a> profile, <a
+ href="File_Formats.html#MPP">MPP</a> or <a
+ href="File_Formats.html#.ti3">.ti3</a> may be used, and the Black
+values will be translated to equal CMY = 0, K = grey values. <br>
+<br>
+If a separation device profile is provided (e.g. from CMY -&gt; CMYK,
+or perhaps CMYK-&gt;CMYK, to simulate a color correction step before
+"printing"), then this will be applied to the .ti1 device values,
+before converting the the device values into .ti3 PCS values.<br>
+<br>
+<br>
+<br>
+</body>
+</html>

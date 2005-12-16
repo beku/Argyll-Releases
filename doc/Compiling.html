@@ -1,0 +1,99 @@
+<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+  <meta http-equiv="Content-Type"
+ content="text/html; charset=iso-8859-1">
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="GENERATOR"
+ content="Mozilla/4.73 [en] (WinNT; I) [Netscape]">
+  <title>Argyll Compiling</title>
+</head>
+<body>
+<h2>
+<u>Compiling the Source Code</u></h2>
+If you have downloaded the source code package, then you will need to
+read the following instructions in order to compile and then run any of
+the utilities. If you have downloaded one of the platform specific
+executable package, then the executables don't need to be compiled, and
+the following instructions are not relevant.<br>
+<br>
+Argyll makes use of an unconventional build system called <a
+ href="http://www.perforce.com/jam/jam.html">Jam/MR</a>. This
+can make it a little tricky to build.
+<p>You need to have the Jam/MR build utility installed on your system.
+(If you don't want to install/use Jam, then you are going to need to
+write
+a number of makefiles in whatever build system you prefer ...) The
+Jambase
+I am using is included in the Argyll archive, and it is recommended
+that
+you use this, or at least do a diff with your current Jambase, and make
+appropriate changes. A typical problem with not using a properly
+configured
+Jambase, is that the maths library isn't linked in on some UNIX
+systems.
+Jam/MR is available from <a href="http://www.perforce.com/jam/jam.html">&lt;http://www.perforce.com/jam/jam.html&gt;</a>
+You'll
+want to bootstrap it up using its Makefile, and then use it with the
+Jambase
+provided in argyll, perhaps using the -f flag, creating an alias of jam
+that invokes jam using the -f flag, or modify the makeall scripts in
+Argyll
+to invoke Jam with the -f flag. (The Jam I'm using has been modified to
+look for a Jambase specified by a JAMBASE environment variable).
+</p>
+<p>After unzipping the argyll.zip file, you will have to cd to the tiff
+sub-directory, and unzip the tiff.zip archive. If you are running on a
+Linux/OSX/Unix-like system, you should probably also run the
+configuration
+script (i.e. sh configure). There is no need to complete the
+configuration
+if you don't want to - ^C out of it when it asks you where you want to
+install things. cd back to the Argyll root directory, and if you are on
+a Windows NT system, run makeall.bat, and if you are on a
+Linux/OSX/Unix-like
+system, run makeall.ksh (i.e. sh makeall.ksh).
+</p>
+<p>You will have to watch the compile process to pick up any build
+failures in
+each sub-directory (The Jamfiles are setup for development in a
+particular
+directory, rather than for building the whole system in one hit.)
+</p>
+<p>If you are running on Mac OSX, then even though OSX comes with a
+version
+of Jam/MR in the development system, you will need to download, build
+and
+install a normal version of Jam/MR Version 2.4 or later from perforce,
+to be able to build Argyll. This is due to Apple changing their version
+of Jam sufficiently to make it incompatible with normal Jamfiles :-(.
+The
+current release was built using OSX 10.3, although there is no
+particular
+reason it shouldn't compile on earlier OSX versions).
+</p>
+<p>On OSX what I did was to name the "normal" Jam ajam, and then setup
+a jam shell script to invoke it something like this: "ajam
+-f$~wherever/argyll/Jambase
+$*", and to make sure that my script is ahead of Apples jam in my
+$PATH.
+<br>
+&nbsp;
+<br>
+&nbsp;
+<br>
+&nbsp;
+<br>
+&nbsp;
+<br>
+&nbsp;
+<br>
+&nbsp;
+<br>
+&nbsp;
+<br>
+&nbsp;
+</p>
+</body>
+</html>

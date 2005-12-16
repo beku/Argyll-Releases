@@ -1,0 +1,519 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>icclink</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>link/icclink</b></h2>
+<h3>Summary</h3>
+Link two ICC device profiles to create an ICC device link profile.<br>
+<br>
+<b> icclink</b> takes two device ICC profiles, and links them together,
+either in a simple fashion using the standard ICC forward and reverse
+tables of the specified intent, or using color appearance space and
+true gamut mapping, together with possibly inverting the forward
+profile,&nbsp; to allow black ink regeneration or to retain the input
+black characteristic from the input profile.<br>
+<h3>Usage Summary</h3>
+icclink [-options] inprofile outprofile linkedprofile<br>
+&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; Verbose<br>
+&nbsp;<a href="#V">-V</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;Verify existing profile, rather than link (Debug
+option)<br>
+&nbsp;<a href="#q">-q [lmhu]</a>&nbsp; &nbsp; &nbsp; &nbsp;Quality -
+Low, Medium (def), High, Ultra<br>
+&nbsp;<a href="#r">-r <i>res</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;Override clut res. set by -q<br>
+&nbsp;<a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; Don't preserve device curves in result<br>
+&nbsp;<a href="#f">-f</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;Special :- Force neutral colors to be K only output.<br>
+&nbsp;<a href="#F">-F</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; Special :- Force all colors to be K only output.<br>
+&nbsp;<a href="#p">-p aprof.icm</a>&nbsp;&nbsp; Include abstract
+profile in link<br>
+&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; Simple Mode (default)<br>
+&nbsp;<a href="#g">-g [src.gam]</a>&nbsp; &nbsp;Gamut Mapping Mode
+[optional source image gamut]<br>
+&nbsp;<a href="#G">-G [src.gam]</a>&nbsp; Gamut Mapping Mode using
+inverse outprofile A2B [optional source gamut]<br>
+&nbsp; &nbsp; &nbsp;<u>Simple Mode Options:</u><br>
+&nbsp;<a href="#si">-i <i>in_intent</i></a>&nbsp; &nbsp; &nbsp;
+&nbsp;p = perceptual, r = relative colorimetric,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; s = saturation, a = absolute colorimetric<br>
+&nbsp;<a href="#so">-o </a><i><a href="#so">out_intent</a> </i>&nbsp;
+&nbsp;p = perceptual, r = relative colorimetric,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; s = saturation, a = absolute colorimetric<br>
+&nbsp; &nbsp;&nbsp; <u>Mapping Mode Options:</u><br>
+&nbsp;<a href="#i">-i <i>intent</i></a>&nbsp;&nbsp;&nbsp;&nbsp; set
+linking intent from the following choice:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 0: Absolute Colorimetric (in Jab) [ICC
+Absolute Colorimetric]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 1: Absolute Appearance<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 2: White Point Matched Appearance [ICC
+Relative Colorimetric]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 3: Luminance matched Appearance<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 4: Perceptual (Preferred) [ICC Perceptual]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 5: Saturation<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;6: Enhanced Saturation [ICC
+Saturation]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;7: Absolute Colorimetric (Lab)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+(Can also use -ia, -ir, -ip or -is as aliases.)<br>
+&nbsp;<a href="#w">-w [J,a,b]</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use forced whitepoint hack [optional color to map the white to]<br>
+&nbsp;<a href="#c">-c <i>viewcond</i></a>&nbsp; &nbsp; set input
+viewing conditions for CIECAM02,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; either an enumerated choice, or a parameter<br>
+&nbsp;<a href="#d">-d <i>viewcond</i></a>&nbsp; &nbsp; set output
+viewing conditions for CIECAM02,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; either an enumerated choice, or a parameter<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; Enumerated Viewing Conditions:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 0: Practical Reflection Print<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 1: Print evaluation environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 2: Monitor in typical work environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 3: Monitor in darkened work environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 4: Projector in dim environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 5: Projector in dark environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 6: Original scene - Outdoors<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 7: Photo CD - original scene<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 8: Transparencies on a viewing box<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; s:surround&nbsp; a =
+average, m = dim, d = dark,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;c = transparency (default average)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;Adapted white point
+as XYZ (default media white)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+Adapted white point as x, y<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+a:adaptation&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; Adaptatation luminance in
+cd.m^2
+(default 50.0)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; b:background&nbsp;
+Background % of image luminance (default 20)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; Flare
+light % of image luminance (default 1)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; Flare color
+as XYZ (default media white)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; Flare color as x, y<br>
+&nbsp; &nbsp; &nbsp; &nbsp;<u>Inverse outprofile A2B Options:</u><br>
+&nbsp;<a href="#k">-k [tzhxr]</a>&nbsp;&nbsp;&nbsp; CMYK Black
+generation<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; t = transfer K from input to output<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; z = zero K, h = 0.5 K (def), x = maximum
+K, r = ramp K<br>
+&nbsp;<a href="#kp">-k p stle stpo enpo enle shape</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; p = black locus generation curve parameters<br>
+&nbsp;<a href="#kq">-k q stle0 stpo0 enpo0 enle0 shape0 stle2 stpo2
+enpo2 enle2 shape2</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; q = transfer input K to dual curve limits<br>
+&nbsp;<a href="#l">-l <i>tlimit</i></a>&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; set total ink limit, 0 - 400% (default none)<br>
+&nbsp;<a href="#L">-L <i>klimit</i></a>&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; set
+total ink limit, 0 - 100% (default none)<br>
+<h3>Usage Details and Discussion</h3>
+<b><a name="v"></a> -v</b> Turns on verbose mode. Gives progress
+information as the profile is created. Since gamut map mode inverse
+profile linking can take a long time to perform, this is often useful.<br>
+<br>
+<b><a name="V"></a> -V</b> Verifies an existing profile. This is really
+a debugging option. It is only useful if all the linking parameters are
+identical
+to those used during the creation of the profile being verified.<br>
+<br>
+<b><a name="q"></a> -q [lmhu]</b>&nbsp; &nbsp; &nbsp; &nbsp;Quality -
+Low, Medium
+(def), High, Ultra<br>
+<b><a name="r"></a> -r res&nbsp;</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;Override clut res. set by <b>-q</b><br>
+<br>
+This sets the basic quality of the resulting link, by choosing the
+resolution of various tables in the resulting profile, as well as the
+resolution of other temporary tables used in creating the link. The <b>-r</b>
+flag allows overriding the resolution set by the <b>-q</b> option, for
+the ICC profile CLUT multi-dimensional interpolation table. <br>
+<br>
+Normally the per channel device curves in the input and output profiles
+are preserved in the resulting device link profile, but the <b>-n</b>
+option disables this. This can be useful if the device linearisation
+curves
+are inappropriate in nature.<br>
+<br>
+<a name="f"></a> The <b>-f</b> option is a special purpose flag useful
+only for 3 component (RGB or CMY) input to CMYK output linking, that
+causes the output to be
+K only for neutral axis input. Neutral axis input is assumed for R=G=B
+or
+C=M=Y input values. <a name="F"></a>If the <b>-F</b> flag is used,
+then all colors will
+be converted to K only output.<br>
+<br>
+<a name="p"></a> The <b>-p</b> option alows specifying an abstract
+profile be applied between the input and output profiles. An abstract
+profile is a way of specifying a color adjustment in a device
+independent way. The abstract profile might have been created using one
+of the <span style="font-weight: bold;">tweak</span> tools, such as <a
+ href="refine.html">refine</a>.<br>
+<br>
+The basic linking style is chosen by using the <b>-s</b> (default), <b>-g</b>
+or <b>-G</b> flags. The three behaviors are:<br>
+<br>
+<a name="s"></a>&nbsp;<b>-s</b>&nbsp;&nbsp; Simple mode. No gamut
+mapping is performed, the selected intent AtoB and BtoA tables are
+simply concatenated to create the output link, with the gamut mapping
+behavior being determined solely by the BtoA table. The -i and -o
+options allow selection of the input and output ICC intents. This is
+typically how other CMS do ICC linking. <a href="#ss">Details</a>.<br>
+<br>
+<a name="g"></a> &nbsp;<b>-g</b>&nbsp;&nbsp; Gamut mapping mode. In
+this mode, the absolute colorimetric AtoB and BtoA tables are used to
+perform the link, and the intermediate linking color space is
+(generally) the CIECAM02 Jab appearance space. The input and output
+viewing conditions can be selected using the <b>-c</b> and <b>-d</b>
+options. A gamut mapping is performed between the two spaces,
+using&nbsp; the intent selected by the <b>-i</b> option. There is an
+optional argument, which is a source gamut to use
+instead of that of the source profile. This is to allow optimizing the
+gamut mapping to a source gamut of &nbsp;a particular image, which can
+give slightly better results that gamut mapping from the gamut of the
+source colorspace. Such a source image gamut can be created using the <a
+ href="tiffgamut.html"> tiffgamut</a> utility. More&nbsp; <a href="#gg">details</a>
+about gamut mapping mode.<br>
+<br>
+<a name="G"></a>&nbsp;<b>-G</b>&nbsp; Use the gamut mapped, inverse
+AtoB table linking method. This is generally the most accurate, smooth
+and flexible linking method, but takes the longest to perform. The
+gamut mapping mode&nbsp; (<span style="font-weight: bold;">-g</span>)
+options <b>-i</b>, <b>-c</b>, <b>-d</b>, <b>-k</b> and <b>-l</b>
+are effective when this method is selected. There is an optional
+argument, which is a source gamut to use instead of that of the source
+profile. This is to allow optimizing the gamut mapping to a source
+gamut of &nbsp;a particular image, which can give slightly better
+results that gamut mapping from the gamut of the source colorspace.
+Such a source image gamut can be created using the <a
+ href="tiffgamut.html"> tiffgamut</a> utility. More <a href="#GG">details</a>
+about the gamut mapping, inverse AtoB mode.<br>
+<br>
+The gamut provided to the <span style="font-weight: bold;">-g</span>
+or <span style="font-weight: bold;">-G</span> flag should be in the
+same colorspace that <span style="font-weight: bold;">icclink</span>
+is using internally to connect the two profiles. For all intents except
+the last one (no. <span style="font-weight: bold;">7</span>),
+the space should be Jab appearance space, with the viewing
+conditions generally being those of the input profile viewing
+conditions. The input profile will normally be the one used to create a
+source image gamut using <span style="font-weight: bold;">tiffgamut</span>.<br>
+&nbsp;<br>
+<u><a name="ss"></a> Simple mode gamut mapping options:</u><br>
+<br>
+<a name="si"></a> &nbsp;&nbsp; &nbsp;&nbsp; <b>-i</b> <i>in_intent</i>&nbsp;
+&nbsp; &nbsp; &nbsp;<b>p</b> = perceptual, <b>r</b> = relative
+colorimetric,<br>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <b>s</b> =
+saturation, <b>a</b> = absolute colorimetric<br>
+<a name="so"></a> &nbsp;&nbsp; &nbsp;&nbsp; <b>-o</b> <i>out_intent</i>
+&nbsp; &nbsp;<b>p</b> = perceptual, <b>r</b> = relative colorimetric,<br>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <b>s</b> =
+saturation, <b>a</b> = absolute colorimetric<br>
+<br>
+These two options simply select the appropriate ICC table, according to
+desired intent. Generally, it is a good idea to use the same intent for
+both source and destination. Not all ICC profiles support all four
+intents.<br>
+<br>
+<u><a name="gg"></a> Gamut mapping mode options:</u><br>
+<br>
+<a name="i"></a> &nbsp;<b>-i</b> <i>intent</i><br>
+<br>
+Select the gamut mapping intent. In gamut mapping mode there is
+only a single overall intent. As well as a number selection, the
+letters <span style="font-weight: bold;">a</span>, <span
+ style="font-weight: bold;">r</span>, <span style="font-weight: bold;">p</span>
+and <span style="font-weight: bold;">s</span> can be used as aliases
+for the intents <span style="font-weight: bold;">absolute colorimetric</span>,
+<span style="font-weight: bold;">relative colorimetric</span>, <span
+ style="font-weight: bold;">perceptual</span> and <span
+ style="font-weight: bold;">saturation</span>.<br>
+<br>
+<a name="i0"></a><a name="ia"></a>The No.<b>0</b> (or <span
+ style="font-weight: bold;">a</span>) intent, Absolute Colorimetric is
+intended to reproduce
+colors exactly, irrespective of the white point of the each medium.
+This
+is done using CIECAM02 Jab appearance colorspace by forcing the source
+and
+destination to have a common white point (but other aspects of the
+individual viewing conditions are active), and colors are mapped
+directly from
+input to output, clipping any out of gamut colors to the closest match.
+This is equivalent to the ICC <span style="font-weight: bold;">Absolute
+Colorimetric</span> intent.<br>
+<br>
+<a name="i1"></a>The No. <b>1</b> intent, Absolute Appearance, simply
+maps the Jab
+colors directly from input to output, clipping any out of gamut colors
+to the closest match. This attempts to match the exact appearance of
+colors as closely as possible, but may not exactly map the white point
+of the source to the destination, depending on how different the
+viewing conditions are.<br>
+<br>
+<a name="i2"></a><a name="ir"></a>The No. <b>2</b> (or <span
+ style="font-weight: bold;">r</span>) intent is like Absolute
+Appearance mode, but maps the
+white point from input to output
+precisely, and otherwise maps the Jab colors directly from input to
+output, clipping any out of gamut colors to the closest match. This is
+equivalent to the ICC <span style="font-weight: bold;">Relative
+Colorimetric</span> intent.<br>
+<br>
+<a name="i3"></a>The No. <b>3</b> intent, Luminance matched
+appearance, linearly
+compresses or expands the the luminance axis to match the input to the
+output space, while not otherwise altering the gamut, clipping any out
+of gamut colors to the closest match.<br>
+<br>
+<a name="i4"></a><a name="ip"></a>The No. <b>4</b> (or <span
+ style="font-weight: bold;">p</span>) intent, Perceptual, uses "knee"
+type compression to
+make the input gamut fit within the output gamut. As much as possible,
+clipping is avoided, hues and the overall appearance is maintained.
+This is equivalent to the ICC <span style="font-weight: bold;">Perceptual</span>
+intent.<br>
+<br>
+<a name="i5"></a>The No. <b>5</b> intent, Saturation, uses compression
+and expansion to
+try and make the input gamut exactly match the output gamut, and also
+favors higher saturation over hue or lightness preservation.<br>
+<br>
+<a name="i6"></a><a name="is"></a>The No. <b>6</b> (or <span
+ style="font-weight: bold;">s</span>) intent, Enhanced Saturation, uses
+the same basic
+gamut mapping as No. 5, Saturation, but increases saturation slightly
+in
+highly saturated areas of the gamut. This is equivalent to the ICC <span
+ style="font-weight: bold;">Saturation</span> intent.<br>
+<br>
+<a name="i7"></a>The No. <b>7</b> intent, Absolute Appearance (Lab),
+is similar to
+intent 0, but L*a*b* colorspace is used rather than CIECAM02 Jab
+appearance space. This often leads to poor reproduction of blue and red
+hues.<br>
+<br>
+<a name="w"></a> The <b>-w</b> flag forces the white points to be
+mapped from source to destination, irrespective of the intent chosen.
+This is useful if absolute intent is being used, and the two media
+white points should match, but don't quite due to measurement error.<br>
+The <b>-w</b> flag can optionally be followed by three numbers, that
+specify a color that white should be mapped to. This will be in the
+colorspace used during linking (typically Jab space, which
+has similar characteristics to L*a*b* space). This options can be
+useful in fine tuning paper emulation is absolute
+colorimetric mapping mode.<br>
+<br>
+<a name="c"></a><a name="d"></a> The <b>-c</b> and <b>-d</b> options
+allow specification of the viewing conditions for the source and
+destination colorspaces respectively. The viewing condition information
+is used to map the profile PCS (Profile Connection Space, which us
+either XYZ or L*a*b*) color into appearance space (CIECAM02), which
+is a better colorspace to do gamut mapping in. The viewing conditions
+allow the conversion into appearance space to take account of how color
+will be seen under particular viewing conditions.<br>
+Viewing conditions can be specified in two basic ways. One is to
+select from the list of "pre canned", enumerated viewing conditions,
+choosing one that is closest to the conditions that are appropriate for
+the media type and situation. Alternatively, the viewing conditions
+parameters can be specified in detail individually. If both methods are
+used, them the chosen enumerated condition will be used as a base, and
+its parameters will
+then be individually overridden.<br>
+<br>
+<u> <a name="GG"></a>Inverse outprofile A2B Options:</u><br>
+<br>
+When the <b>-G</b> flag is used, the A2B table is inverted "on the
+fly", allowing various additional choices as to what device values are
+used
+to reproduce a particular color. (If the <b>-G</b> flag is not used,
+then
+such decisions are encoded in the B2A table in the profile, and cannot
+be
+altered during linking).<br>
+<br>
+<a name="k"></a> -<b>k</b> flag sets the amount of Under Color Removal,
+or black generation level when inverting a CMYK output profile. The
+black levels specified by the flag are all in relation to the possible
+black values for each color being looked up (the possible black locus),
+NOT the absolute amount of black that will be used. For instance, at
+the white point, no black will be used in the output, even if the black
+generation specifies a maximum (since the maximum amount of black that
+can be used to print white is actually zero). Similarly, at the black
+point, black may well be used, even if the black generation specifies
+zero black (since a certain amount of black is needed to achieve the
+desired density of color). Possible arguments to the <b>-k</b> option
+are:<br>
+<br>
+<b> -kz</b> selects minimum black (0.0)<br>
+<b> -kh</b> selects a black locus value of 0.5<br>
+<b> -kx</b> selects the maximum possible black (1.0)<br>
+<b> -kr</b> selects a linear locus ramp, starting at minimum black for
+highlight, and maximum black for shadow (equivalent to -kp 0 0 1 1 1)<br>
+<b>-kt</b>, will preserve the black amount from the input (CMYK)
+profile to the output&nbsp; (CMYK) profile as much as possible. This
+may
+be most useful in creating a CMYK to CMYK conversion between two
+different
+press conditions, while preserving as much as possible the &nbsp;black
+only use for text etc. in anything converted.<br>
+<b><a name="kp"></a>-k p stle stpo enpo enle shape</b>&nbsp; allows an
+arbitrary black locus ramp to be defined, consisting of a starting
+value (stle) for highlights, a breakpoint L value (stpo) where it
+starts to transition to the shadow level, an end breakpoint L (enpo)
+where it flattens out again, and the finishing black level (enle) for
+the shadows. There is also a curve parameter, that modifies the
+transition from stle to enle to either be concave (ie.&nbsp; the
+transition starts gradually and and finished more abruptly) using
+values 0.0-1.0, with 0.0 being most concave, or convex (the transition
+starts more abruptly but finishes gradually), using values 1.0-2.0,
+with 2.0 being the most convex.<br>
+<b><a name="kq"></a>-k q stle0 stpo0 enpo0 enle0 shape0 stle2 stpo2
+enpo2 enle2 shape2</b> is a combination of the <b>-kt</b> and <b>-kp</b>
+functionality, with the black being preserved in CMYK to CMYK linking,
+with the output black constrained to be between the first and second
+set of curve parameters.<br>
+<br>
+Typical black locus generation curve with parameters something
+like: -kp .1 .3 .5 .8 1<br>
+<br>
+<tt> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 K &nbsp; |
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;enpo<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; &nbsp;_______&nbsp;
+enle<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; /<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; /<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; stle&nbsp;
+| ------/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; +-------------------<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0.0 K&nbsp;
+0.0&nbsp;&nbsp;&nbsp; stpo&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Black</tt><br>
+<tt> </tt><br>
+For minimum sensitivity of printed output to the lighting spectrum, it
+currently seems best to use the maximum possible black, but other black
+generation levels (ie. 0.3 to 0.5) may well be preferred if one wants
+to
+minimize the noisy appearance of black on an inkjet device, or
+if the banding behavior or other rendering flaws of the printer is to
+be minimized. <br>
+&nbsp;<br>
+A set of values for an inkjet printer might be something like -kp 0.0
+0.2 0.7 0.7 1.0<br>
+<br>
+The <a href="xicclu.html">xicclu</a> utility can be used to plot out
+the resulting black level for a given set of parameters, by using the <a
+ href="xicclu.html#g">-g</a> flag.<br>
+<br>
+<a name="l"></a> The <b>-l</b> <i>tlimit</i> parameter sets the total
+ink limit (TAC, Total Area Coverage) for the CMYK separation, as a
+total
+percentage from 0% to 400%. The limit value should generally be set
+a little below the value used in the test chart generation, to avoid
+the
+very edges of the gamut. If the test chart ink limit has been chosen to
+be a little beyond an acceptable level, then this number should be the
+acceptable level. Although limits can be set below 200%, this will
+generally
+restrict the color gamut noticeably, as fully saturated secondary
+colors
+will not be reproduced. Values are between 220% and 300% for typical
+printing
+devices.<br>
+<br>
+<a name="L"></a> The <b>-L</b> <i>klimit</i> parameter sets the black
+channel ink limit for the CMYK separation, as a total percentage from
+0%
+to 100%. For printing press like devices, this can be used to prevent
+the
+black channel screening pattern "filling in". Typical values might be
+from
+95% to 99%. <br>
+<br>
+<a name="p1"></a>The <i><b>inprofile</b></i> argument specifies the
+input profile.
+This is the color space/device we are attempting to emulate in the
+overall conversion.<br>
+<br>
+<a name="p2"></a>The<i><b> outprofile</b></i> argument specifies the
+output profile.
+This is the device we are actually displaying on or printing to.<br>
+<br>
+<a name="p3"></a>The <i><b>linkedprofile</b></i> argument specifies
+the device link
+profile. This profile will contain the color transform from the input
+space to output space.<br>
+<br>
+For information on typical usage, see the <a href="Scenarios.html">Typical
+Usage Scenarios</a> page.<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

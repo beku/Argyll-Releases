@@ -1,0 +1,163 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>spotread</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>target/spotread</b></h2>
+<h3>Summary</h3>
+Use an instrument to read a single color value. This can be a useful
+diagnostic aid.<br>
+<h3>Usage Summary</h3>
+spotread [-options]<br>
+&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose mode<br>
+&nbsp;<a href="printread.html#d">-d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Print debug diagnostics<br>
+&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Print spectrum for each reading<br>
+&nbsp;<a href="#c">-c comport</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set COM port, 1..4
+(default 1)<br>
+&nbsp;<a href="#i">-i 41 | 51 | SO | SS</a> &nbsp; Select target
+instrument (no default)<br>
+&nbsp;<a href="#t">-t</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use
+transmission measurement mode<br>
+&nbsp;<a href="#t">-e</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use emissive&nbsp; measurement mode (absolute results)<br>
+&nbsp;<a href="#l">-l illum</a>&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose
+illuminant for print/transparency spectral data:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; A, D50 (def.), D65,
+F5, F8,
+F10 or file.sp<br>
+&nbsp;<a href="#o">-o observ</a>&nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose CIE
+Observer for
+spectral data:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1931_2, 1964_10, S&amp;B
+1955_2, J&amp;V 1978_2 (def.)<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (Choose FWA during
+operation)<br>
+<h3>Usage Details and Discussion</h3>
+<b>spotread</b> operates in a similar fashion to <a
+ href="printread.html"> printread</a>, but allows the reading of a
+succession
+of single color values. This can be useful in diagnosing issues with
+profile
+creation
+and operation.<br>
+<br>
+<a name="v"></a>The <b>-v</b> flag causes extra information to be
+printed out during
+printread operation.<br>
+<br>
+<a name="d"></a>The <b>-d</b> flag causes serial communications
+diagnostics to be printed to stdout. This can be useful in tracking
+down why an instrument can't connect.<br>
+<br>
+<a name="s"></a>The <b>-s</b> flag enables the printing out spectral
+reflectance/transmittance values, if the instrument supports this.<br>
+<br>
+<a name="c"></a>Normally instruments are connected via a serial
+communication port, and
+the port used should be selected by supplying the correct parameter to
+the <b>-c</b> flag. If you invoke <span style="font-weight: bold;">printspot</span>
+so as to display the usage
+information (i.e. "spotread -?" or "spotread --"), then the
+discovered
+serial ports will be listed on Windows and Mac OSX systems.<br>
+<br>
+<a name="i"></a>The type of instrument should be specified by using the
+<b>-i</b> flag
+with the appropriate argument. An instrument must be chosen. <span
+ style="font-weight: bold;">41</span> selects the Xrite DTP41, <span
+ style="font-weight: bold;">51</span> selects the Xrite DTP51, <span
+ style="font-weight: bold;">SO</span> or <span
+ style="font-weight: bold;">SS</span> selects the Gretag
+Spectrolino, SpectroScan or SpectroScanT. All instruments will be used
+in a spot mode. For the SpectroScan instrument, the samples can be
+placed on the table, and the measuring head positioned before taking a
+measurement.<br>
+<br>
+<a name="t"></a>If using an Xrite DTP41T or SpectroScanT, and printing
+onto transparent or back lit
+media, use the <b>-t</b> flag to operate the instrument in
+transparency mode. If using the Spectroscan, this triggers a fake
+transparency
+mode, that uses a separate backlight (such as a light box). The&nbsp;
+instrument will be used to calibrate the level of backlight, and use
+this to compute the transparency of the test chart samples. Note that
+for good transparency values, the backlight level needs to be neither
+too bright not too dark, should ideally be incandescent rather than
+fluorescent (since fluorescent lights often have big dips in their
+spectrum), and ideally should be of uniform brightness over the
+measurement area.<br>
+<br>
+<a name="e"></a>The <span style="font-weight: bold;">-e</span> flag
+allows measuring
+in emission mode (e.g. displays or illuminants) using instruments that
+support this mode. Values returned are absolute.<br>
+<br>
+<a name="l"></a>The <b>-l</b> flag allows specifying a standard or
+custom illumination
+spectrum, applied to reflective spectral data to compute CIE
+tristimulus values. <b>A</b>, <b>D50</b>, <b>D65</b>, <b>F5</b>, <b>F8</b>,
+<b>F10</b> are a selection of standard illuminant spectrums, with <b>D50</b>
+being the default. If a filename is specified instead, it will be
+assumed to be an Argyll
+specific <a href="File_Formats.html#.sp">.sp</a> spectrum file.<br>
+<br>
+<a name="o"></a>The <b>-o</b> flag allows specifying a tristimulus
+observer from a
+built in set.<br>
+<b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer.<br>
+&nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree observer.<br>
+&nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
+observer<br>
+&nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree observer<br>
+&nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
+observer<br>
+<br>
+Once <b>spotread</b> has established communications with the
+instrument, it awaits a command from the user, indicated by the user
+hitting a key. <br>
+If Fluorescent Whiter Additive (FWA) compensated readings are to be
+made, then this needs to be enabled and setup by first reading the
+paper white background
+color to establish an FWA reference. There are 25 FWA reference
+locations
+available, keyed to the keys <b>A-Q</b> and <b>S-Z</b> (must be
+capital letters).<br>
+Once a particular reference location is initialized with the FWA paper
+color, subsequent readings will use FWA compensation for that keyed
+location.<br>
+If FWA readings are not to be performed, then a reading for a location
+that has not been initialized should be used.<br>
+Spot readings are performed by hitting a key <b>a-q</b> or <b>s-z</b>
+(must be lower case letters).<br>
+The previous reading can be stored as a reference, and delta E's
+computed for each reading, using the <b>r</b> key.<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

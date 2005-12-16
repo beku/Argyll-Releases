@@ -1,0 +1,497 @@
+<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+  <meta http-equiv="Content-Type"
+ content="text/html; charset=iso-8859-1">
+  <meta name="author" content="Graeme Gill">
+  <meta name="description" content="Root of Argyll CMS documentation">
+  <meta name="GENERATOR"
+ content="Mozilla/4.73 [en] (WinNT; I) [Netscape]">
+  <title>Argyll Documentation Top</title>
+</head>
+<body>
+<h1>
+Argyll CMS documentation index</h1>
+Date:&nbsp;&nbsp; 16th December 2005
+<br>
+Author: Graeme Gill
+<h2><u>Introduction</u></h2>
+Argyll is an experimental, open source, ICC compatible color management
+system. It supports accurate ICC profile creation for scanners, CMYK
+printers,
+film recorders and calibration and profiling of displays.
+Spectral sample data is supported,
+allowing a selection of illuminants observer types, and paper
+fluorescent
+whitener additive compensation. Profiles can also incorporate source
+specific
+gamut mappings for perceptual and saturation intents. Gamut mapping and
+profile linking uses the CIECAM02 appearance model, a unique gamut
+mapping
+algorithm, and a wide selection of rendering intents. It also includes
+code for the fastest portable 8 bit raster color conversion engine
+available
+anywhere, as well as support for fast, fully accurate 16 bit
+conversion.
+Device color gamuts can also be viewed and compared using a VRML
+viewer.
+<p>This is Version 0.53. The last full release was in November 2005.
+The first public release of Argyll was made in July 2000. Code
+development
+commenced in 1995. See <a href="ChangesSummary.html">Changes Summary</a>
+for an overview of changes since the last release. Details on changes
+between
+revisions is detailed in the <b>log.txt</b> file that accompanies the
+source
+code.
+</p>
+<p>The latest source code is available from <a
+ href="http://www.argyllcms.com/">here</a>.
+</p>
+<p>Argyll is known to compile and run in at least three environments:
+</p>
+1) MSWindows NT/2K system running the Microsoft VC++ compiler and
+Jam/MR <br>
+2) MSWindows NT/2K system running the MingW port of the GCC compiler
+and Jam/MR
+<br>
+3) Linux using gcc and Jam/MR
+<br>
+4) Macintosh OSX 10.3 gcc and Jam/MR
+<p>but may well compile in more.
+</p>
+<p>This is a command line only environment.
+</p>
+<p>It still has an amount of debugging turned on.
+</p>
+<p>The Argyll CMS is Copyright 1995 - 2005 Graeme W. Gill, and is made
+available under the terms of the GNU General Public License, as
+detailed
+in the <a href="Licence.txt">Licence.txt</a> file.
+</p>
+<p>The film recorder support (spectro/filmread.c, spm.[ch],
+gretag.[ch]) support is
+Copyright
+2001, DreamWorks LLC (Author Neil Okamoto),&nbsp;
+and is made available under the terms of the GNU General Public
+License,
+as detailed in the <a href="Licence.txt">Licence.txt</a> file.<br>
+</p>
+<p>The utility spectro/spec2cie.c is 2005 Gerhard Fuernkranz, and is
+made available under the terms of the GNU General Public
+License,
+as detailed in the <a href="Licence.txt">Licence.txt</a> file.
+</p>
+<p>The icc library in icc/ and the CGATS library in cgats/ are
+available
+according to the licence granted in the icc/Licence.txt
+<br>
+and cgats/Licence.txt file (a "BSD" like licence).
+</p>
+<p>The TIFF library included for convenience in this snapshot, has its
+own copyright and licence detailed in tiff/COPYRIGHT
+</p>
+<h2><u><a href="Overview.html">Overview</a></u></h2>
+Overview of the software and its aims and functionality.
+<h2><u><a href="Organisation.html">Organization</a></u></h2>
+How directories are organized, what they contain.
+<h2><u><a href="Compiling.html">Compiling</a></u></h2>
+How to build the software from the source.
+<h2><u><a href="Source.html">Source</a></u></h2>
+Any detailed documentation on how the software works, or what
+algorithms
+it is based on. (Very incomplete at the moment.)
+<h2><u><font color="#3333ff">Main Utilities</font></u></h2>
+These are all command line ("DOS" shell) utilities, and are licensed
+under
+the GNU licence, and can't be copied or sold without providing the
+source
+code. Nothing other than your agreement and compliance with the GNU
+Licence,
+grants you permission to modify or distribute Argyll source code,
+executables
+or
+its derivative works. The GNU licence prohibits combining these
+utilities
+into any sort of package (i.e. by providing other programs or scripts
+that
+make use of, depend on, or work with the Argyll code), unless the other
+elements of the package are also licensed under the GPL. It is
+permissible
+to provide Argyll utilities with other non GPL components, if such a
+packaging
+is mere aggregation. For all the gory details, please read the
+accompanying
+<a href="Licence.txt">licence</a>.
+<p>Note that unlike many commercial ICC profiling tools, the profiles
+created
+using Argyll, are not subject to any claims or restrictions of Argyll's
+author(s), but are the copyright property of the person who gathers the
+characterization data, and causes the profiles to be created.
+</p>
+<p>Each Argyll tool require appropriate options to be set, followed by
+filename arguments. Sometimes the filenames will have to include the
+usual
+extensions, sometimes they are implicit. To get a brief listing of the
+possible arguments and usage of any of the utilities, run it with just
+an "-?" argument, i.e.
+<b>targen -? </b>(or some other unrecognized flag,
+if the "?" character is treated specially in your shell, i.e. try
+"--").
+</p>
+<p>In order to make use of the tools, it is necessary to keep track of
+where various files are, and what they are called. There are many
+possible
+ways of doing this. One way is to put each source profile and all its
+associated
+files (test charts, spectrometer values etc.) in one set of directories
+for each source profile type. Similarly the device profiles could be
+stored
+in a hierarchy of directories ordered by device type, media,
+resolution,
+device mode etc.
+<br>
+&nbsp;
+</p>
+<h2><u><a href="Scenarios.html">Typical
+usage scenarios and examples</a></u></h2>
+A guided tour of the major utilities, applied to typical CMS jobs, such
+as creating device profiles, linking them, and converting color spaces
+of raster files.
+<br>
+&nbsp;
+<h2><b><u><font size="+2">Main Utilities by category:</font></u></b></h2>
+<h3>Calibrating devices<br>
+</h3>
+<a href="dispcal.html">dispcal</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Calibrate a display, producing a <a href="File_Formats.html#.cal">.cal</a>
+file.<a href="filmtarg.html"><br>
+</a>
+<h3>Creating test targets for profiling</h3>
+<a href="targen.html">targen</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Generate a profiling test target values .ti1 file.
+<br>
+<a href="filmtarg.html">filmtarg</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create film recorder TIFF files from Argyll .ti1 file.
+<br>
+<a href="printtarg.html">printtarg</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create a PS or EPS file to containing test patch values, ready for
+printing.
+<h3>Obtaining test results for profiling</h3>
+<a href="printread.html">printread</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Read a printer test chart using an instrument to create a .ti3 data
+file.
+<br>
+<a href="dispread.html">dispread</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Test and read colorimetric values from a display
+<br>
+<a href="filmread.html">filmread</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Read film colorimetric values using a SpectroScanT (Deprecated ?)<br>
+<a href="scanin.html">scanin</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Convert a TIFF&nbsp; image of a test chart into .ti3 device values.
+<br>
+<a href="fakeread.html">fakeread</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Fake the reading of a device using an ICC or MPP profile.
+<br>
+<a href="cb2cgats.html">cb2cgats</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Convert Colorblind format CMY/RGB test chart into Argyll .ti3 CGATS
+format.
+<br>
+<a href="kodak2cgats.html">kodak2cgats</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Convert Kodak Colorflow format CMYK test chart into Argyll .ti3 CGATS
+format.
+<br>
+<a href="logo2cgats.html">logo2cgats</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Convert Gretag/Logo format CMYK test chart results into Argyll .ti3
+CGATS
+format.
+<br>
+<a href="fakeCMY.html">fakeCMY</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create a fake Argyll .ti3 CMY data file from a CMYK profile, as a basis
+of creating a CMY to CMYK separation
+<h3>Creating Device Profiles</h3>
+<a href="profile.html">profile</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create an ICC profile from the .ti3 test data.
+<br>
+<a href="mpprof.html">mpprof</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create a Model Printer Profile (MPP) from the .ti3 test data.
+<br>
+<a href="sepgen.html">sepgen</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<b>IN DEVELOPMENT</b> Create a CMY[K] to device colorant separation.
+<br>
+<a href="revfix.html">revfix</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Regenerate a device profiles B2A table data by inverting the A2B table.
+<h3>Linking Profiles</h3>
+<a href="icclink.html">icclink</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Link two device ICC profiles to create a device link profile.
+<h3>Converting colors</h3>
+<a href="cctiff.html">cctiff</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Color convert a TIFF file using an ICC device link profile, or two ICC
+device profiles
+<br>
+<a href="icclu.html">icclu&nbsp;</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Lookup individual color values through any ICC profile table.
+<br>
+<a href="xicclu.html">xicclu</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Lookup individual color values forward or inverted though an ICC
+profile
+table.
+<br>
+<a href="mpplu.html">mpplu</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Lookup individual color values though an MPP profile. Also create MPP
+gamut
+files/views.
+<h3>Color Tweaking tools<br>
+</h3>
+<a href="refine.html">refine</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Creates an abstract profile from two chart readings, useful for
+refining proofing profiles.
+<a href="mpprof.html"><br>
+</a>
+<h3>Creating gamut views</h3>
+<a href="iccgamut.html">iccgamut</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create a gamut file or VRML file&nbsp; of the color gamut of an ICC
+profile.
+<br>
+<a href="tiffgamut.html">tiffgamut</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create a gamut file or VRML file&nbsp; of the color gamut of a TIFF
+image.
+<br>
+<a href="viewgam.html">viewgam</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Convert one or more gamuts into a VRML 3D visualization file.
+<h3>Diagnostic and test utilities</h3>
+<a href="iccdump.html">iccdump</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Dump the contents of an ICC profile as text.
+<br>
+<a href="profcheck.html">profcheck</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Check an ICC profile against .ti3 test chart data.
+<br>
+<a href="splitcgats.html">splitscgats</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Split a
+CGATS file (ie. a .ti3) into two parts randomly to verify profiling.
+<br>
+<a href="mppcheck.html">mppcheck</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Check an MPP profile against .ti3 test chart data.
+<br>
+<a href="spotread.html">spotread</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use an instrument to read a single spot color value.
+<br>
+<a href="verify.html">verify</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verify matching of CIE in two .ti3 files.
+<br>
+<h3>Other Utilities</h3>
+<a href="spec2cie.html">spec2cie</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<span style="text-decoration: underline;"></span>Convert spectral .ti3
+readings into CIE XYZ or L*a*b* readings.<br>
+&nbsp;
+<h2><b><u><font size="+2">Main Utilities Alphabetic Listing:</font></u></b></h2>
+<a href="cb2cgats.html">cb2cgats</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Convert Colorblind format CMY/RGB test chart into Argyll .ti3 CGATS
+format.
+<br>
+<a href="cctiff.html">cctiff</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Color convert a TIFF file using an ICC device link profile, or two ICC
+device profiles
+<br>
+<a href="dispcal.html">dispcal</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Calibrate a display, producing a <a href="File_Formats.html#.cal">.cal</a>
+file.<br>
+<a href="dispread.html">dispread</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Test and read colorimetric values from a display
+<br>
+<a href="fakeCMY.html">fakeCMY</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create a fake Argyll .ti3 CMY data file from a CMYK profile, as a basis
+of creating a CMY to CMYK separation
+<br>
+<a href="fakeread.html">fakeread</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Fake the reading of a device using an ICC or MPP profile.
+<br>
+<a href="filmread.html">filmread</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Read film colorimetric values using a SpectroScanT (Deprecated ?)<br>
+<a href="filmtarg.html">filmtarg</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create film recorder TIFF files from Argyll .ti1 file.
+<br>
+<a href="iccdump.html">iccdump</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Dump the contents of an ICC profile as text.
+<br>
+<a href="iccgamut.html">iccgamut</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create a gamut file or VRML file&nbsp; of the color gamut of an ICC
+profile.
+<br>
+<a href="icclink.html">icclink</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Link two device ICC profiles to create a device link profile.
+<br>
+<a href="icclu.html">icclu&nbsp;</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Lookup individual color values through any ICC profile table.
+<br>
+<a href="kodak2cgats.html">kodak2cgats</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Convert Kodak Colorflow format CMYK test chart into Argyll .ti3 CGATS
+format.
+<br>
+<a href="logo2cgats.html">logo2cgats</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Convert Gretag/Logo format CMYK test chart results into Argyll .ti3
+CGATS
+format.
+<br>
+<a href="mppcheck.html">mppcheck</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Check an MPP profile against .ti3 test chart data.
+<br>
+<a href="mpplu.html">mpplu</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Lookup individual color values though an MPP profile. Also create MPP
+gamut
+files/views.
+<br>
+<a href="mpprof.html">mpprof</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create a Model Printer Profile (MPP) from the .ti3 test data.
+<br>
+<a href="printread.html">printread</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Read a printer test chart using an instrument to create a .ti3 data
+file.
+<br>
+<a href="printtarg.html">printtarg</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create a PS or EPS file to containing test patch values, ready for
+printing.
+<br>
+<a href="profcheck.html">profcheck</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Check an ICC profile against .ti3 test chart data.
+<br>
+<a href="profile.html">profile</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create an ICC profile from the .ti3 test data.
+<br>
+<a href="refine.html">refine</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Creates an abstract profile from two chart readings, useful for
+refining proofing profiles.
+<br>
+<a href="revfix.html">revfix</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Regenerate a device profiles B2A table data by inverting the A2B table.
+<br>
+<a href="scanin.html">scanin</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Convert a TIFF&nbsp; image of a test chart into .ti3 device values.
+<br>
+<a href="sepgen.html">sepgen</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<b>IN DEVELOPMENT</b> Create a CMY[K] to device colorant separation.
+<br>
+<a href="spec2cie.html">spec2cie</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<span style="text-decoration: underline;"></span>Convert spectral .ti3
+readings into CIE XYZ or L*a*b* readings.<br>
+<a href="spotread.html">spotread</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use an instrument to read a single spot color value.
+<br>
+<a href="splitcgats.html">splitscgats</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Split a
+CGATS file (ie. a .ti3) into two parts randomly to verify profiling.
+<br>
+<a href="targen.html">targen</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Generate a profiling test target values .ti1 file.
+<br>
+<a href="tiffgamut.html">tiffgamut</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create a gamut file or VRML file&nbsp; of the color gamut of a TIFF
+image.
+<br>
+<a href="verify.html">verify</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verify matching of CIE in two .ti3 files.
+<br>
+<a href="viewgam.html">viewgam</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Convert one or more gamuts into a VRML 3D visualization file.
+<br>
+<a href="xicclu.html">xicclu</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Lookup individual color values forward or inverted though an ICC
+profile
+table.
+<br>
+&nbsp;
+<h2><u><a href="MinorUtilities.html">Minor Utilities</a></u></h2>
+A very brief description of minor utilities and test harnesses.
+<br>
+<br>
+<h2><u><a href="Performance.html">Performance Tuning<br>
+</a></u></h2>
+<span style="text-decoration: underline;"><span
+ style="font-weight: bold;"></span></span> Performance hints.
+<br>
+&nbsp;
+<h2><u><a href="File_Formats.html">File formats that Argyll uses</a></u></h2>
+Argyll uses a number of file formats for its operation, some that are
+external
+standards, and some that are unique to Argyll. <br>
+<br>
+<a href="File_Formats.html#.ti1">.ti1</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Device test values
+<br>
+<a href="File_Formats.html#.ti2">.ti2</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Device test values &amp; chart layout
+<br>
+<a href="File_Formats.html#.ti3">.ti3</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Device test values &amp; CIE tristimulus/spectral results <br>
+<a href="File_Formats.html#.cal">.cal</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Device calibration information<br>
+<a href="File_Formats.html#.cht">.cht</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Test chart recognition template. <a href="cht_format.html">Format
+details.</a>
+<br>
+<a href="File_Formats.html#.gam">.gam</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+3D gamut surface description
+<br>
+<a href="File_Formats.html#.sp">.sp</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Illuminant spectral description
+<br>
+<a href="File_Formats.html#CGATS">CGATS</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Standard text based data exchange format
+<br>
+<a href="File_Formats.html#ICC">ICC</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+International Color Consortium profile format
+<br>
+<a href="File_Formats.html#MPP">MPP</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Model device profile format
+<br>
+<a href="File_Formats.html#TIFF">TIFF</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Tag Image File Format raster files.
+<br>
+<a href="File_Formats.html#VRML">VRML</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Virtual Reality Modelling Language 3D file format.
+<br>
+&nbsp;
+<h2><u>Errors, Corrections and Omissions:</u></h2>
+<script language="JavaScript">
+
+<!--
+
+// Comment
+
+var v1 = ".com"
+
+var v2 = "argyllcms"
+
+var v3 = "Graeme"
+
+var v4 = "@"
+
+var v5 = "mailto:"
+
+var v6 = v5 + v3 + v4 + v2 + v1
+
+document.write("<a href=" + v6 + ">" + "Let me know" + "</a>")
+
+//-->
+
+
+
+</script>
+if you notice any errors, corrections needed or omissions in the
+current
+documentation.
+<br>
+&nbsp;
+<br>
+&nbsp;
+</body>
+</html>

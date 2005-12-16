@@ -1,0 +1,35 @@
+ 
+#SubDir TOP cgats ;
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;
+
+#if stdio is not wanted in icclib:
+#CCFLAGS	+= $(DEFFLAG)SEPARATE_STD ;
+
+#Products
+Libraries = libcgats ;
+Headers = cgats.h ;
+
+#Install
+#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
+
+# CGATS library
+Library libcgats.lib : pars.c cgats.c ;
+
+# Individual stand alone test of parser
+MainFromObjects pars : sa_pars$(SUFOBJ) e_parsstd$(SUFOBJ) ;
+Object e_parsstd$(SUFOBJ) : parsstd.c ;
+Object sa_pars$(SUFOBJ) : pars.c ;
+ObjectCcFlags sa_pars.c : -DSTANDALONE_TEST ;
+
+# Individual stand alone test of cgats i/o
+MainFromObjects cgats : sa_cgats$(SUFOBJ) e_pars$(SUFOBJ) e_cgatsstd$(SUFOBJ) e_parsstd$(SUFOBJ) ;
+Object e_pars$(SUFOBJ) : pars.c ;
+Object e_parsstd$(SUFOBJ) : parsstd.c ;
+Object e_cgatsstd$(SUFOBJ) : cgatsstd.c ;
+Object sa_cgats$(SUFOBJ) : cgats.c ;
+ObjectCcFlags sa_cgats.c : -DSTANDALONE_TEST ;
+

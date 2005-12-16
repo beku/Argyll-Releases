@@ -1,0 +1,143 @@
+
+Author: Graeme W. Gill
+Date:   2000/10/28
+
+Discussion of the gamut mapping algorithm used in Argyll:
+
+
+	Jam Morovic provides an extensive summary of previous Gamut Mapping Algoriths
+	(GMA) in his thesis "To Develop a Universal Gamut Mapping Algorithm".
+
+	Mark Fairchild and Gustav Braun also discuss some interesting aspects of
+	gamut mapping in "General-Purpose Gamut-Mapping Algorithms: Evaluation
+	of Contrast-Preserving Rescaling Functions for Color Gamut Mapping".
+
+	One thing that is striking in reading the current Gamut Mapping
+	literature, is the schism between gamut mapping, and gammut clipping.
+
+	A number of studies have indicated the satisfactory results from performing
+	gamut clipping by mapping out of gamut points to the closest point
+	within gamut, using a minumim delta E criteria. Ideally this would be
+	in a perceptually uniform space, and in practical spaces (ie L*a*b* space),
+	it appears a mapping that weightes luminance errors twice as much as
+	hue and saturation errors is the most satisfactory
+	(ie. Katoh & Ito 1996, Ebner & Fairchild 1997).
+	This approach makes perfect sense, if the perceptually linear
+	delta E spaces is working as its should :- providing a means of
+	computing the minimal perceptual error between two colors.
+
+	Almost all the gamut mapping algorithms on the other hand, take a
+	completely different approach. They are dominated by algorithms with
+	appeal for their mathematical and algorithmic simplicity, rather than
+	any objective sense. Clipping along a line of constant hue, in a
+	particular direction, with some sort of compression along line
+	length curve seems to be a favourite.
+	My own experience with such an approach used for gamut clipping
+	shows up the logical flaws in this approach.  In printed media, for
+	instance, the yellow dye tends to have a very sharp cusp in (say) Lab
+	space.  When mapping along a line towards the neutral axis, it is almost
+	impossible to come up with a choice of line direction that
+	doesn't severly distort the clipped color. It is often extremely
+	de-saturated at the point the line hits the gamut boundary. Line
+	directions that take some account of the equivalent yellow cusp
+	in the target gamut improve the situation, but it seems highly
+	illogical to choosing an algorithm that gives a result with such
+	high delta E's, measured in any colorspace !
+
+	My conclusion is this: If we are working in a good perceptually
+	uniform space (ie. L*a*b*, Luv or CIECAM97), then we want to minimise
+	the delta E of the gamut mapped points at all times (this is the point
+	of using a perceptually uniform space !). This means that points
+	on the source gamut surface, should map to the target surface in
+	a very similar way to which they would be mapped using gamut clipping,
+	ie. minimum delta E. The distinction between gamut mapping and clipping
+	only becomes evident then, when we consider points that fall within
+	both gamuts. For pure gamut clipping, these points should not be
+	modified. For gamut mapping they should be modified in a way that
+	trades off increased absolute delta E, for reduced delta E relative
+	to surrounding colors.
+
+	Gamut clipping should not be something separate to gamut mapping,
+	but should just be one extreme in a continuum of gamut mapping
+	choices.
+
+	A consideration revealed by Jam Morovic's work, is that it may be
+	desirable to treat colors on and close to the neutral axis a little
+	differently that those saturated colors near the gamut surface.
+	It seems desirable to align and compress the neutral axis to
+	give a good gray-scale mapping, as well as preserving the
+	relative colorimetry of low saturation colors.
+
+	Mark fairchild's work also indicates the desirablility of
+	trying to maintain the relative contrast of image data after
+	compression. This can be achieved by using a sigmoidal
+	mapping during compression (often called a soft knee compression
+	characteristic), rather than linear compression. Gamut
+	clipping can be considered to be an extreme example of
+	knee compression, where the knee is "hard".
+
+	A final consideration is how the various user intents are going
+	to be accomodated. One of the nice features of a consistent
+	clipping/compression approach is that many of the distinctions
+	between different intents seems to disappear.
+
+ Description of algorithms used:
+
+	The algorithm chosen here is (as far as I am aware) a new one,
+	that tries to combine all the considerations made above.
+
+	The gamut mapping is divided into two regions, the gamut surface
+	region, and the neutral axis region.
+
+	The basic transform mechanism is based on determining specific
+	mapping sampled points, and then an overall 3D -> 3D mapping is
+	created using the rspl thin plate spline mechanism available in
+	Argyll.  By controlling the number, extent and strength of these
+	sample point mappings, it is possible to arrive at a smooth
+	mapping that has (controllable) areas of influence between
+	different regions, and can achieve sigmoid like "soft" clipping
+	curves.
+
+ ~~~ need more details, ie. how neutral axis mapping points
+     are determined, how knee points are determined.
+
+
+	The mapping points created for determinining the 3D compression
+    are created from the source gamut surface verticies that lie outside
+	the destinatio gamut. The raw mapping for the outside of the
+	gamut is simply from these source points to the closest point to
+	the source point on the destination gamut surface.
+
+	Since this can create undesirable many to one mappings to the
+	most prominent regions of the destination gamut, a smoothing
+	factor can be introduced, that has the effect of spreading
+	out the near points landing on the destination gamut surface.
+
+	This is acheived by the mapping to a "shadow" destination
+	gamut that is a scaled down version of the actual destination
+	gamut, and then clipping the resulting src->dst vector onto
+	the actual destination gamut surface. This means that the many
+	to one mappings are "cut off" by the real destination gamut
+	surface, before they actualy coincide at the "shadow" destination
+	gamut surface. The scale factor allows control over this smoothing
+	effect. At extreme smoothing, the resulting mapping becomes
+	a purely radial mapping to the 50, 0, 0 point, rather than
+	a nearest mapping.
+
+	The actual implimentaion of the scalling is done inverted :-
+	ie. the destination is scaled up, the nearest point located
+	on the destination gamut to the scaled source point, and then
+	the near point scaled down the corresponding amount to produce
+	the near point on the "shadow" destination gamut. The resulting
+	src->dst vector is then clipped to give the smoothed destination
+	point.
+	
+	The overall compression factor blends between the pure src->dst
+	smoothed nearest mapping, and the src point, to allow intermediate
+	amounts of compression.
+
+ ~~~ need details on knee points
+
+ ~~~ corresponding discussion for gamut expansion
+
+

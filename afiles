@@ -1,0 +1,15 @@
+Readme.txt
+afiles
+Jambase
+Licence.txt
+ttbd.txt
+log.txt
+notes.txt
+makeall.bat
+install.bat
+makeall.ksh
+cleanall.ksh
+ziparch.ksh
+makeinstall.ksh
+makepackagebin.ksh
+sanitycheck.ksh

@@ -1,0 +1,283 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>scanin</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>scanin/scanin</b></h2>
+<h3>Summary</h3>
+Convert an 8 or 16 bit per component <a href="File_Formats.html#TIFF">TIFF</a>
+image of a
+test chart into&nbsp;<a href="File_Formats.html#.ti3">.ti3</a> device
+values
+using automatic pattern recognition.<br>
+Performs other tasks associated with turning a TIFF raster of test
+patches into numeric values. <br>
+<h3>Usage Summary<br>
+</h3>
+<a href="#_"> usage</a>: scanin [options] input.tif recogin.cht
+valin.cie [diag.tif]<br>
+&nbsp;&nbsp; :- inputs 'input.tif',&nbsp; and outputs scanner
+'input.ti3', or<br>
+<br>
+<a href="#g"> usage</a>: scanin -g [options] input.tif recogout.cht
+[diag.tif]<br>
+&nbsp;&nbsp; :- outputs file 'recogout.cht', or<br>
+<br>
+<a href="#o"> usage</a>: scanin -o [options] input.tif recogin.cht
+[diag.tif]<br>
+&nbsp;&nbsp; :- outputs file 'input.val', or<br>
+<br>
+<a href="#c"> usage</a>: scanin -c [options] input.tif recogin.cht
+scanprofile.icc pbase [diag.tif]<br>
+&nbsp;&nbsp; :- inputs pbase.ti2 and outputs printer pbase.ti3, or<br>
+<br>
+<a href="#r"> usage</a>: scanin -r [options] input.tif recogin.cht
+pbase [diag.tif]<br>
+&nbsp;&nbsp; :- inputs pbase.ti2+.ti3 and outputs pbase.ti3<br>
+<br>
+&nbsp;<a href="#g">-g</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Generate a chart reference (.cht) file<br>
+&nbsp;<a href="#o">-o</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Output patch values in .val file<br>
+&nbsp;<a href="#c">-c</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use scanner as colorimeter to<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+convert printer .ti2 to .ti3<br>
+&nbsp;<a href="#ca">-ca</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Same as -c, but accumulates more values to .ti3<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+from subsequent pages<br>
+&nbsp;<a href="#r">-r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Replace device values in .ti3<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Default is to create a scanner .ti3 file<br>
+&nbsp;<a href="#a">-a</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Recognize chart in normal orientation only<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;Default is to recognize all possible chart angles<br>
+&nbsp;<a href="#v">-v [n]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbosity level 0-9<br>
+&nbsp;<a href="#d">-d</a> [ihvglLrsonap]&nbsp;&nbsp; Generate
+diagnostic output (try -dipn)<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#di">i</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;diag - B&amp;W of input image<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dh">h</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - Horizontal edge detection<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dv">v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - Vertical edge detection<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dg">g</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - Groups detected<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dl">l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;diag - Lines detected<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dL">L</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - All lines detected<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dr">r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;diag - lines rotated<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#ds">s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;diag - sample boxes rotated<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#do">o</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - sample box outlines<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dn">n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - sample box names<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#da">a</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - sample box areas<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dp">p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - pixel areas sampled<br>
+<h3>Usage Details and Discussion</h3>
+<span style="font-weight: bold;">scanin</span> is setup to deal with a
+raster file that has been roughly cropped to a size that contains the
+test chart. It's exact orientation is not important [ie. there is
+usually no need to rotate or crop the image any more finely.] The
+reference files are normally set up with the assumption that the edges
+of the chart are visible within the image, and if the image is cropped
+to exclude the chart edges, it may well not recognize the chart
+properly.<br>
+<br>
+There are 5 basic modes that <b>scanin</b> operates in.<br>
+<ul>
+  <li><a name="_"></a>When no special argument is given scanin is
+assumed to be scanning an input device characterization chart (ie. an
+IT8.7/2 chart), for the purpose of creating a <a
+ href="File_Formats.html#.ti3">.ti3</a> data file containing
+the CIE test values and the corresponding RGB scanner values. The <a
+ href="File_Formats.html#.ti3">.ti3</a> file can then be used for
+creating
+an input profile using <a href="profile.html">profile</a>. The file
+arguments are: <a name="_p1"></a>The TIFF file that is to be
+processed, <a name="_p2"></a>the image recognition template file, <a
+ name="_p3"></a>the CIE reference value definitions for the test chart
+(sometimes labeled a ".q60" file), <a name="_p4"></a>and an optional
+name for the image recognition
+diagnostic output. The resulting .ti3 file will have the same base name
+as the input TIFF file.</li>
+  <li><a name="g"></a>If the<b> -g</b> flag is specified, then scanin
+is operating in a mode designed to create the necessary image
+recognition template file (<a href="File_Formats.html#.cht">.cht</a>)
+boilerplate information. Patch
+location and labeling information would need to be added manually to
+such
+a generated file, to make a complete and useable recognition template
+file. <a href="cht_format.html">CHT file format.</a> The input TIFF
+file in
+this situation, should be a good quality image, perhaps synthetically
+generated
+(rather than being scanned), and perfectly oriented, to make
+specification
+of the patch locations easier. The file arguments are: <a name="gp1"></a>The
+TIFF file that
+is to be processed, <a name="gp2"></a>the image recognition template
+file to be created, <a name="gp3"></a>and
+an optional name for the image recognition diagnostic output.</li>
+  <li><a name="o"></a>If the <b>-o</b> flag is used, then scanin will
+process the input TIFF file and produce a generic&nbsp;<a
+ href="File_Formats.html#CGATS">CGATS</a>
+&nbsp;style file containing just the patch values (a <span
+ style="font-weight: bold;">.val</span> file). The file arguments
+are: <a name="op1"></a>The TIFF file that is to be processed, <a
+ name="op2"></a>the image recognition template file
+to be created, <a name="op3"></a>and an optional name for the image
+recognition diagnostic
+output.</li>
+  <li><a name="c"></a>If the <b>-c</b> flag is used, then the scanned
+file can be used
+in combination with an input profile, to estimate the CIE tristimulus
+values represented by the scanned patch values. This allows an RGB
+scanner to be used as a "poor mans" colorimeter. The icc profile has
+(presumably) been
+created by scanning an IT8.7/2 chart (or similar) through the scanner,
+and
+then using scanin to create the .ti3 file needed to feed to profile to
+create
+the scanner profile. The file arguments in -c mode are: <a name="cp1"></a>The
+TIFF file that
+is to be processed containing a scanned image of a print test chart, <a
+ name="cp2"></a>the image recognition template file for the test chart
+generated by the <a href="printtarg.html"> printtarg</a> utility, <a
+ name="cp3"></a>the scanner ICC profile, <a name="cp4"></a>the base
+name for the .ti2 file containing the
+test chart printer device
+values and their patch identifiers and the base name for the resulting
+.ti3
+file, <a name="cp5"></a>and finally an optional name for the image
+recognition diagnostic output.
+The resulting .ti3 file will have the same base name as the input TIFF
+file.
+If there is more than one page in the test chart, then scanin will need
+to be run multiple times, once for each scan file made from each test
+chart. <a name="ca"></a>The <b>-ca</b> flag combination should be
+used
+for all pages after the first,
+as this then adds that pages test values to the .ti3 file, rather than
+creating
+a .ti3 file that contains only that pages test values.</li>
+  <li><a name="r"></a>If the -r flag is used, then the input TIFF value
+is used as a source of device values to replace any existing device
+values in the given .ti3
+file. This is intended for use in the situation in which the device
+values
+being fed into an output device are altered in some way that is
+difficult
+to predict (ie. such as being screened and then de-screened), and this
+alteration
+to the device values needs to be taken into account in creating a
+profile
+for such a device. The file arguments in -r mode are: <a name="rp1"></a>The
+TIFF file that
+is to be processed containing a rasterized image of an output test
+chart, <a name="rp2"></a>the image recognition template file for the
+test
+chart generated by the <a href="printtarg.html"> printtarg</a>
+utility,&nbsp; <a name="rp3"></a>the base name for
+the .ti2 file containing the output test chart device values and their
+patch
+identifiers and the base name for the .ti3 file that is to have its
+device
+values replaced, <a name="rp4"></a>and finally an optional name for
+the
+image recognition diagnostic
+output.<br>
+  </li>
+</ul>
+A number of flags and options are available, that are independent of
+the
+mode that scanin is in.<br>
+<br>
+Normally scanin will try and recognize a chart, irrespective of its
+orientation. For charts that have some asymmetric patch size or
+arrangement (such as an IT8.7/2, or a chart generated by <a
+ href="printtarg.html"> printtarg</a>
+with the <b>-s</b> option), this is both flexible and reliable. Other
+charts
+may be symmetrical, and therefore having scanin figure out the
+orientation
+automatically is a problem if the recognition template does not contain
+expected patch values, since it will have an equal chance of
+orienting
+it incorrectly as correctly. To solve this, the <b>-a</b> flag can be
+used,
+and care taken to provide a raster file that is within 45 degrees of
+"no
+rotation".<br>
+<br>
+<a name="v"></a> The <b>-v</b> flag enables extra verbosity in
+processing. This can aid debugging, if a chart fails to be recognized.<br>
+<br>
+<a name="d"></a> The <b>-d</b> flag enables the generation of an image
+recognition diagnostic raster. The name of diagnostic raster can be
+specified as the last in the
+command line, or if not, will default to <span
+ style="font-weight: bold;">diag.tif</span>. Various flags control what
+is written to the diagnostic
+raster.
+Note that no diagnostic raster will be produced if at least one flag
+isn't
+specified.<br>
+<b><a name="di"></a>i</b>&nbsp;&nbsp;&nbsp; creates a black and white
+version of the input raster in the diagnostic output, to be able to
+compare with the feature extraction.<br>
+<b><a name="dh"></a>h</b>&nbsp;&nbsp;&nbsp; will show pixels in the
+input image classified as being on horizontal edges, in red.<br>
+<b><a name="dv"></a>v</b>&nbsp;&nbsp;&nbsp; will show pixels in the
+input image classified as being vertical edges, in green.<br>
+<b><a name="dg"></a>g</b>&nbsp;&nbsp;&nbsp; will show groups of pixels
+that will be used
+to estimate edge lines, each group in a different color.<br>
+<b><a name="dl"></a>l</b>&nbsp;&nbsp;&nbsp; will show valid lines
+estimated from the vertical and horizontal pixel groups, in white.<br>
+<b><a name="dL"></a>L</b>&nbsp;&nbsp;&nbsp; will show all lines (valid
+and invalid) estimated from the vertical and horizontal pixel groups,
+in white.<br>
+<b><a name="dr"></a>r</b>&nbsp;&nbsp;&nbsp; will show the lines rotated
+to the reference
+chart orientation, in yellow.<br>
+<b><a name="ds"></a>s</b>&nbsp;&nbsp;&nbsp; will show the diagnostic
+sampling box edge outlines, rotated to the reference chart orientation,
+in orange.<br>
+<b><a name="do"></a>o</b>&nbsp;&nbsp;&nbsp; will show all the sampling
+box edge outlines, in orange.<br>
+<b><a name="dn"></a>n</b>&nbsp;&nbsp;&nbsp; will show the ID names of
+the sampling boxes, plus the diagnostic sample boxes, using a simple
+stroke font, in orange.<br>
+<b><a name="da"></a>a</b>&nbsp;&nbsp;&nbsp; will show the sampling
+areas as crossed boxes, plus the diagnostic sample boxes, in orange.<br>
+<b><a name="dp"></a>p</b>&nbsp;&nbsp;&nbsp; will show the sampling
+areas as colored pixels.<br>
+<br>
+The combination of <b>-dipn</b> is usually a good place to start.<br>
+<br>
+The <a href="File_Formats.html#TIFF">TIFF</a> file can be either 8 or
+16 bits per color component, with 16 bit files being slower to process,
+but yielding more accurate results.<br>
+<br>
+If at all in doubt that the file has been recognized correctly, use the
+<span style="font-weight: bold;">-dipn</span> diagnostic flag
+combination, and check the resulting diagnostic raster file.<br>
+<br>
+<br>
+<br>
+</body>
+</html>

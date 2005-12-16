@@ -1,0 +1,695 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>profile</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2> profile/profile</h2>
+<h3>Summary</h3>
+Create an&nbsp;<a href="File_Formats.html#ICC">ICC</a> profile from
+the&nbsp;<a href="File_Formats.html#.ti3">.ti3</a> test chart patch
+values.<br>
+<h3>Usage Summary</h3>
+&nbsp;profile [-<i>options</i>] outfile<br>
+&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose mode<br>
+&nbsp;<a href="#A">-A "manufacturer"</a> Set the manufacturer
+description string<br>
+&nbsp;<a href="#M">-M "model"</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set the model
+description string<br>
+&nbsp;<a href="#D">-D "description"</a>&nbsp;&nbsp;&nbsp;&nbsp; Set the
+profile Description string&nbsp; (Default "<span
+ style="font-style: italic;">inoutfile</span>")<br>
+&nbsp;<a href="#C">-C "copyright"</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set the copyright string<br>
+&nbsp;<a href="#q">-q [lmhu]</a>&nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Quality - Low, Medium (def),
+High, Ultra<br>
+&nbsp;<a href="#b">-b</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+B2A table will not be used (V. low quality, -B Extremely low)<br>
+&nbsp;<a href="#y">-y</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verify A2B profile<br>
+&nbsp;<a href="#ni">-ni</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Don't
+create input (Device) shaper curves<br>
+&nbsp;<a href="#no">-no</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Don't
+create output (PCS) shaper curves<br>
+&nbsp;<a href="#k">-k [zhxr]</a>&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Black generation: z = zero K,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+h = 0.5 K (def), x = max K, r = ramp K<br>
+&nbsp;<a href="#kp">-k p stle stpo enpo enle shape</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; stle: K level at White 0.0 -
+1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; stpo: start point of
+transition Wh 0.0 - Bk 1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; enpo: End point of transition
+Wh 0.0 - Bk 1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; enle: K level at Black 0.0 -
+1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; shape: 1.0 = straight,
+0.0-1.0 concave, 1.0-2.0 convex<br>
+&nbsp;<a href="#l">-l <i>tlimit</i></a>&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; override
+default CMYK total ink limit, 0
+- 400%<br>
+&nbsp;<a href="#L">-L <i>klimit</i></a>&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; override default
+black ink limit, 0 - 100%<br>
+&nbsp;<a href="#a">-a [lxgs]</a>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Algorithm type override<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+l = Lab clut, x = XYZ lut<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+g = gamma+matrix, s = shaper+matrix<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+G = single gamma+matrix,
+S = single shaper+matrix<br>
+&nbsp;<a href="#u">-u</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; If
+Lut input profile, make it absolute (non-standard)<br>
+&nbsp;<a href="#i">-i <i>illum</i></a>&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose illuminant
+for print/transparency spectral data:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+A, D50 (def.), D65, F5,
+F8, F10 or file.sp<br>
+&nbsp;<a href="#o">-o <i>observ</i></a>&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose CIE Observer for spectral
+data:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1931_2, 1964_10, S&amp;B
+1955_2, 1964_10c, shaw, J&amp;V 1978_2 (def.)<br>
+&nbsp;<a href="#f">-f</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use
+Fluorescent Whitening Agent compensation<br>
+&nbsp;<a href="#r">-r avgdev</a> &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp; Average deviation of device+instrument readings as a
+percentage (default 0.25%)<br>
+&nbsp;<a href="#s">-s src.icc</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply gamut mapping to perceptual B2A table for given source<br>
+&nbsp;<a href="#S">-S src.icc</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply gamut mapping to perceptual and saturation B2A table<br>
+&nbsp;<a href="#g">-g src.gam</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use source
+image gamut as well for gamut mapping<br>
+&nbsp;<a href="#p">-p aprof.icm</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Include abstract
+profile in output tables<br>
+&nbsp;<a href="#t">-t intent</a>&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Override gamut mapping intent for perceptual table:<br>
+&nbsp;<a href="#T">-T intent</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Override gamut mapping
+intent for saturation table:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+0: Absolute Colorimetric (in Jab) [ICC Absolute Colorimetric]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1: Absolute Appearance<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+2: White Point Matched Appearance [ICC Relative Colorimetric]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+3: Luminance matched Appearance<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+4: Perceptual (Preferred) [ICC Perceptual]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+5: Saturation<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+6: Enhanced Saturation [ICC Saturation]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+7: Absolute Colorimetric (Lab)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+(Can also use -Ta, -Tr, -Tp or -Ts as aliases.)<br>
+&nbsp;<a href="#c">-c viewcond</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+set input viewing conditions for CIECAM02 gamut mapping,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+either an enumerated choice, or a parameter<br>
+&nbsp;<a href="#d">-d viewcond</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+set output viewing conditions for CIECAM02, gamut mapping<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+either an enumerated choice, or a parameter<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Also enables out of gamut clipping CAM space.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Enumerated Viewing Conditions:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+0: Practical Reflection Print<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1: Print evaluation environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+2: Monitor in typical work environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+3: Monitor in darkened work environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; 4:
+Projector in dim environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+5: Projector in dark environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+6: Original scene - Outdoors<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+7: Photo CD - original scene<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; 8:
+Transparencies on a viewing box<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; s:surround&nbsp; a =
+average, m = dim, d = dark,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; c = transparency (default average)<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;Adapted white point
+as XYZ (default media white)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+Adapted white point as x, y<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+a:adaptation&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; Adaptatation luminance in
+cd.m^2
+(default 50.0)<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; b:background&nbsp;
+Background % of image luminance (default 20)<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; Flare
+light % of image luminance (default 1)<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; Flare color
+as XYZ (default media white)<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; Flare color as x, y<br>
+&nbsp;<a href="#p1"><i>inoutfile</i></a> &nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;&nbsp; Base name for input.ti3/output.icc file<br>
+<br>
+<h3>Options<br>
+</h3>
+<b><a name="v"></a>-v</b>&nbsp; Turn on verbose mode. Gives progress
+information as the profile is created. Since profiles can take a long
+time to generate, this is often useful to monitor progress. If used in
+combination with the <b>-y</b> flag, the error of each test point to
+the resulting profile will be printed out.<br>
+<br>
+<a name="A"></a>The <b>-A</b> parameter allows setting of the device
+manufacturer description tag. The parameter should be a string that
+identifies the manufacturer of the device being profiled. With most
+command line shells, it will be necessary to enclose the parameter
+with double quotes, so that spaces and other special characters are
+included in the parameter, and not mistaken for the start of another
+flag, or as a final command line parameters. By default no manufacturer
+description string tag will be generated for the profile.<br>
+<br>
+<a name="M"></a>The <b>-M</b> parameter allows setting of the device
+mode description tag. The parameter should be a string that identifies
+the particular model of device being profiled. With most command line
+shells, it will be necessary to enclose the parameter with double
+quotes, so that spaces and other special characters are included in the
+parameter, and not mistaken for the start of another flag, or as a
+final command line parameters. By default no model description string
+tag will be generated for the profile.<br>
+<br>
+<a name="D"></a>The <b>-D</b> parameter allows setting of the profile
+description tag. The parameter should be a string that describes the
+device and profile. With most command line shells, it will be
+necessary to enclose the parameter with double quotes, so that spaces
+and other special characters are included in the parameter, and not
+mistaken for the start of another flag, or as a final command line
+parameter. Many programs that deal with ICC profiles use the
+description tag to identify a profile, rather than the profile
+filename, so using a descriptive string is important in being able to
+find a profile. By default, the base name of the resulting profile will
+be used as the description.<br>
+<br>
+<a name="C"></a>The <b>-C</b> parameter allows setting of the profile
+copyright tag. The parameter should be a string that describes the
+copyright (if any) claimed on the profile being generated.. With most
+command line shells, it will be necessary to enclose the parameter
+with double quotes, so that spaces and other special characters are
+included in the parameter, and not mistaken for the start of another
+flag, or as a final command line parameters. By default a generic
+copyright string will be generated for the profile.<br>
+<br>
+<a name="q"></a> The <b>-q</b> parameter sets the level of
+effort and/or detail in the resulting profile. For table based profiles
+("lut" profiles), it sets the main lookup table size,&nbsp; and hence
+quality in the resulting profile. If a top quality profile&nbsp; is
+not desired, then medium quality may be selected, and the profile will
+be smaller, and faster to generate. When creating a preliminary
+profile, low or medium quality should be adequate.<br>
+<br>
+<a name="b"></a> The <b>-b</b> flag overrides the <b>-q</b>
+parameter, and sets the lut resolution for the BtoA (inverse) to a low
+value. The creation of the B2A table is fairly time consuming, and if
+the profile is only going to be used by <a href="targen.html">targen</a>,
+or if it will only be used as an input space profile, or if it will
+only
+be linked as an output profile using Argyll's&nbsp;<a
+ href="icclink.html"> icclink</a> utility using the <b>-G</b> option
+(inverse AtoB option), then a high quality BtoA table is not required,
+and some time and profile space can be saved. If the profile is to be
+used
+as an output space profile with another CMS, or is going to be linked
+using
+the simple (-s) or mapping mode (-g) options, then the -b flag should
+NOT
+be set.<br>
+<br>
+<a name="y"></a> The <b>-y</b> flag does a verification check on the
+AtoB profile. This is done by comparing what CIE colors the
+profile predicts for the test chart test patches, and comparing them
+to the actual values. A summary of the average and maximum Lab delta
+E's will be printed out if this flag is set. If the <b>-v</b> flag is
+also set, then information for each patch will also be printed.<br>
+<br>
+Normally Lut base profiles are generated with three major elements:-
+per
+device channel (shaper) curves, the multi-dimensional lut table,
+and per PCS channel (shaper) curves. <a name="ni"></a>Using the <b>-ni</b>
+flag disables the creation of the per device channel curves, <a
+ name="no"></a>while using the <b>-no</b> flag disables the creation
+of the per PCS channel curves.<br>
+<br>
+<a name="k"></a> -<b>k</b> flag sets the amount of Under Color Removal,
+or black generation level when creating B2A CMYK output tables. The
+black levels specified by the flag are all in relation to the possible
+black values for each color being created (the possible black locus),
+NOT the absolute amount of black that will be used. For instance, at
+the
+white point, no black will be used in the output, even if the black
+generation specifies a maximum (since the maximum amount of black that
+can be used to print white is actually zero). Similarly, at the black
+point, black may well be used, even if the black generation specifies
+zero black (since a certain amount of black is needed to achieve the
+desired density of color). Possible arguments to the <b>-k</b> option
+are:<br>
+<br>
+<b> -kz</b> selects minimum black (0.0)<br>
+<b> -kh</b> selects a black locus value of 0.5<br>
+<b> -kx</b> selects the maximum possible black (1.0)<br>
+<b> -kr</b> selects a linear locus ramp, starting at minimum
+black for highlight, and maximum black for shadow (equivalent to -kp
+0 0 1 1 1)<br>
+<b><a name="kp"></a>-k p stle stpo enpo enle shape</b>&nbsp;
+allows an arbitrary black locus ramp to be defined, consisting of a
+starting value (stle) for highlights, a breakpoint L value (stpo) where
+it starts to transition to the shadow level, an end breakpoint L (enpo)
+where it flattens out again, and the finishing black level (enle) for
+the shadows. There is also a curve parameter, that modifies the
+transition
+from stle to enle to either be concave (ie. the transition starts
+gradually
+and and finished more abruptly) using values 0.0-1.0, with 0.0 being
+most
+concave, or convex (the transition starts more abruptly but finishes
+gradually), using values 1.0-2.0, with 2.0 being the most convex.<br>
+<br>
+Typical black locus generation curve with parameters something like:
+-kp .1 .3 .5 .8 1<br>
+<br>
+<tt> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 K
+&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;enpo<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; &nbsp;_______&nbsp;
+enle<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; /<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; /<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; stle&nbsp;
+| ------/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; +-------------------<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0.0 K&nbsp;
+0.0&nbsp;&nbsp;&nbsp; stpo&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Black</tt><br>
+<tt> </tt><br>
+For minimum sensitivity of printed output to the lighting spectrum, it
+currently seems best to use the maximum possible black, but other black
+generation levels (ie. 0.3 to 0.5) may well be preferred if one wants
+to
+minimize the noisy appearance of black on an inkjet device, or
+if the banding behavior or other rendering flaws of the printer is to
+be minimized. <br>
+&nbsp;<br>
+A set of values for an inkjet printer might be something like -kp 0.0
+0.2 0.7 0.7 1.0<br>
+<br>
+<a name="l"></a> The <b>-l</b> <i>tlimit</i> parameter sets the total
+ink limit (TAC, Total Area Coverage) for the CMYK separation, as a
+total percentage from 0% to 400%, and overrides any ink limit specified
+in the .ti3 file. The limit value should generally be set a little
+below the value used in the test chart generation, to avoid the very
+edges of the gamut. If the test chart ink limit has been chosen to be a
+little beyond an acceptable level, then this number should be the
+acceptable level. Although
+limits can be set below 200%, this will generally restrict the color
+gamut
+noticeably, as fully saturated secondary colors will not be reproduced.
+Values are between 220% and 300% for typical printing devices.<br>
+<br>
+<a name="L"></a> The <b>-L</b> <i>klimit</i> parameter sets the black
+channel ink limit for the CMYK separation, as a total percentage from
+0%
+to 100%. For printing press like devices, this can be used to prevent
+the
+black channel screening pattern "filling in". Typical values might be
+from
+95% to 99%. <br>
+<br>
+<a name="a"></a> The <b>-a</b> parameter allows choosing an alternate
+profile type, for RGB input or display profiles. By default (equivalent
+to <b>-al</b>) profile creates a lut based table profile with a PCS
+(Profile Connection Space) of L*a*b*, which generally gives the most
+accurate results, and allows for the four different rendering intents
+that ICC profiles
+can support. A lut base table profile using a PCS of XYZ can be created
+if <b>-ax</b> is used. For RGB input or display profiles, a simpler
+type
+of profile using either a gamma curves or a general shaper curves,
+combined
+with a matrix can be created, although such a profile cannot support
+perceptual
+or saturation intents. Gamma curve and matrix profiles can be created
+by
+specifying <b>-ag</b> or <b>-aG</b>, the former creating three
+independent
+gamma curves, one for each device channel, and the latter creating one
+common curve for all the device channels. The latter may be needed with
+certain applications that will not accept different gamma curves for
+each
+channel. General shaper curve and matrix profiles (which are superior
+to
+gamma curve profiles) can be created by specifying <b>-as</b> or <b>-aS</b>,
+the former creating three independent shaper curves, one for each
+device channel, and the latter creating one common curve for all the
+device channels. The latter may be needed with certain applications
+that will not accept
+different shaper curves for each channel.<br>
+<br>
+<a name="u"></a> Normally, lut style input profiles will be created
+such that the white point of the test chart, will be mapped to perfect
+white when used with any of the non-absolute colorimetric intents. This
+is the normally expected behavior for input profiles. If such a profile
+is then used with a sample that has a lighter color than the original
+test chart, the profile will clip the value, since it cannot be
+represented in the lut table. Using the <b>-u</b> flag causes the lut
+based input profile to be constructed so that the lut table contains
+absolute color values, and the white of the test chart will map to its
+absolute value, and any values whiter than that, will not be clipped by
+the profile. The profile effectively operates in an absolute intent
+mode, &nbsp;irrespective of what intent is selected when it is used.
+This flag can be useful when an input profile is needed for using a
+scanner as a "poor mans" colorimeter, or if the white point of the test
+chart doesn't represent the white points of media
+that will be used in practice, and that white point adjustment will be
+done individually in some application.<br>
+<br>
+<a name="i"></a> The <b>-i</b> flag allows specifying a standard or
+custom illumination spectrum, applied to spectral .ti3 data to compute
+PCS (Profile Connection Space) tristimulus values. <b>A</b>, <b>D50</b>,
+<b>D65</b>, <b>F5</b>, <b>F8</b>, <b>F10</b> are a selection of
+standard illuminant spectrums, with <b>D50</b> being the default. If a
+filename is specified instead, it will be assumed to be an Argyll
+specific <a href="File_Formats.html#.sp">.sp</a> custom spectrum file.
+This only works if spectral data is available. Illuminant details are:<br>
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; A&nbsp;&nbsp; CIE tungsten
+filament lamp 2848K<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; D50 CIE daylight 5000K<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; D65 CIE daylight 6500K<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; F5&nbsp; CIE Fluorescent
+6350K, CRI 72<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; F8&nbsp; CIE Fluorescent
+5000K, CRI 95<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; F10 CIE Fluorescent 5000K,
+CRI 81<br>
+<br>
+Custom illuminants are most often used when a fluorescent tube base
+viewing booth is going to be used to view results.&nbsp; Other
+illuminant reference files could be created using a suitable measuring
+instrument such as a spectrocam, or an eyeone, although such
+instruments do not provide the necessary response down to Ultra Violet
+that is needed for accurate operation of Fluorescent Whitening Agent
+compensation.<br>
+Note that if an illuminant other than D50 is chosen, the resulting ICC
+profile will not be standard, and cannot be freely interchanged with
+other profiles that that us the standard D50 illuminant. Profiles
+should only be linked with other profiles that have the same illuminant
+and observer.<br>
+<br>
+<a name="o"></a> The <b>-o</b> flag allows specifying a tristimulus
+observer, and is used to compute PCS (Profile Connection Space)
+tristimulus values. The following choices are available:<br>
+<b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer.<br>
+&nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree observer.<br>
+&nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
+observer<br>
+&nbsp; <b>1964_10c</b> selects a version of the CIE 1964 10 degree
+observer adjusted for better compatibility with the 1931 2 degree
+observer.<br>
+&nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree observer<br>
+&nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
+observer<br>
+<br>
+Note that if an observer other than 1931 2 degree is chosen, the
+resulting ICC profile will not be standard, and cannot be freely
+interchanged with other profiles that that us the standard 1931 2
+degree
+observer. Profiles should only be linked with other profiles that have
+the same illuminant and observer.<br>
+<br>
+<a name="f"></a> The <b>-f</b> flag enables Fluorescent Whitening
+Agent compensation. This only works if spectral data is available, and
+allows the effects of different levels of Ultra Violet in the viewing
+illuminant from that used by the instrument, be compensated for.<br>
+<br>
+<a name="r"></a> The <b>-r</b> parameter specifies the average
+deviation of device+instrument readings from the perfect, noiseless
+values as a percentage. Knowing the uncertainty in the reproduction and
+test patch reading can allow the profiling process to be optimized in
+determining the behaviour of the underlying system. The lower the
+uncertainty, the more each individual test reading can be relied on to
+infer the underlying systems color behaviour at that point in the
+device space. Conversely, the higher the uncertainty, the less the
+individual readings can be relied upon, and the more the collective
+response will have to be used. In effect, the higher the uncertainty,
+the more the input test patch values will be smoothed in determining
+the devices response. If the perfect, noiseless test patch values had a
+uniformly distributed error of +/- 0.5% added to them, then this would
+be
+an average deviation of 0.25%. If the perfect, noiseless test patch
+values had a normally distributed&nbsp; error with a standard deviation
+of 1% added to them, then this would correspond to an average deviation
+of 0.564%. For a lower quality instrument (less than say a Gretag
+Spectrolino or Xrite DTP41), or a more variable device (such as a
+xerographic print engine, rather than a good quality inkjet), then you
+might be advised to increase the <span style="font-weight: bold;">-r</span>
+parameter above its default value (double or perhaps 4x would be good
+starting values.) <br>
+<br>
+In order to generate perceptual and saturation intent B2A tables, it is
+necessary to specify at least one profile to define what source gamut
+should be used in the source to destination gamut mapping. <a name="S"></a>The
+<b>-S</b> parameter is used to do this, and doing so causes perceptual
+and saturation tables to be generated. If only a perceptual
+intent is needed, <a name="s"></a>then the <b>-s</b> flag can be
+used,
+and the saturation intent will use the same table as the perceptual
+intent.
+Note that a input, output or display device profile should be
+specified, not a colorspace,
+device
+link or abstract profile.<br>
+<br>
+The <a name="g"></a><span style="font-weight: bold;">-g</span> flag
+and its argument allow the use of a source gamut to use instead of that
+of the source
+profile. This is to allow optimizing the gamut mapping to a source
+gamut of &nbsp;a particular image, which can give slightly better
+results that gamut mapping from the gamut of the source colorspace.
+Such a source image gamut can be created using the <a
+ href="tiffgamut.html"> tiffgamut</a> utility. The gamut provided to
+the <span style="font-weight: bold;">-g</span> <span
+ style="font-weight: bold;"></span> flag should be in the
+same colorspace that <span style="font-weight: bold;">profile</span>
+is using internally to connect the two profiles. For all intents except
+the last one (no. <span style="font-weight: bold;">7</span>),
+the space should be Jab appearance space, with the viewing
+conditions generally being those of the input profile viewing
+conditions. The input profile will normally be the one used to create a
+source image gamut using <span style="font-weight: bold;">tiffgamut</span>.<br>
+<br>
+The <b><a name="p"></a>-p</b> option alows specifying an abstract
+profile be applied to all of the output tables, after any gamut
+mapping. An abstract
+profile is a way of specifying a color adjustment in a device
+independent way. The abstract profile might have been created using one
+of the <span style="font-weight: bold;">tweak</span> tools, such as <a
+ href="refine.html">refine</a>.<br>
+<br>
+One strategy for getting the best perceptual results when using ICC
+profiles with systems that don't accept device link profiles, is as
+follows: Specify a gamut mapping profile of opposite type to the type
+of device being profiled, and when linking, use the relative
+colorimetric intent if the two profiles are of the same type, and
+perceptual intent if the two profiles are of the opposite type. For
+instance, if you are
+creating a CMYK output profile, specify an RGB profile for the <b>-s</b>
+or <b>-S</b> parameter. If linking that profile with a CMYK source
+profile,
+use relative colorimetric intent, or if linking with an RGB profile,
+use
+the perceptual intent. Conversely, if creating an RGB output profile,
+specify
+a CMYK profile for the <b>-s</b> or <b>-S</b> parameter, and if
+linking
+that profile with an RGB source profile, use relative colorimetric
+intent,
+or if linking with a CMYK profile, use the perceptual intent.<br>
+<br>
+Normally, the gamut mapping used in creating the perceptual and
+saturation intent tables is set to perceptual and saturation gamut
+mapping (as would be expected), but it is possible to override this
+default selection for each intent using the <b>-t</b> and <b>-T</b>
+flags. <a name="t"></a>The <b>-t</b> flag can be used to set the
+gamut mapping for the perceptual table, <a name="T"></a>and the <b>-T</b>
+flag can be used to set the gamut mapping for the saturation table. The
+same choices available in <a href="icclink.html"> icclink</a> are
+available here:<br>
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+0: Absolute Colorimetric (in Jab)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1: Absolute Appearance<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+2: White Point Matched Appearance<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+3: Luminance matched Appearance<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+4: Perceptual (Preferred)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+5: Saturation<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+6: Enhanced Saturation<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+7: Absolute Colorimetric (Lab)<br>
+<br>
+Note that intents 0 and 7 are probably not useful in this context.<br>
+<br>
+Since appearance space is used in the gamut mapping (just as it
+is in <a href="icclink.html"> icclink</a>), the viewing conditions
+for the source and destination colorspaces should really be specified.
+The
+source colorspace is the profile specified with the <b>-s</b> or <b>-S</b>
+flag, and the destination is the profile being created. The <a name="c"></a><b>-c</b>
+and <b><a name="d"></a>-d</b> options allow specification
+of their respective, associated viewing conditions. The viewing
+condition
+information is used to map the profile PCS (Profile Connection Space,
+which
+us either XYZ or L*a*b*) color into appearance space (CIECAM02), which
+is
+a better colorspace to do gamut mapping in. The viewing conditions
+allow
+the conversion into appearance space to take account of how color will
+be
+seen under particular viewing conditions. <br>
+<br>
+Viewing conditions can be specified in two basic ways. One is to select
+from the list of "pre canned", enumerated viewing conditions, choosing
+one that is closest to the conditions that are appropriate for the
+media type and situation. Alternatively, the viewing conditions
+parameters can be specified in detail individually. If both methods are
+used, them the chosen enumerated condition will be used as a base, and
+its parameters will then be individually overridden.<br>
+<br>
+Appearance space is also used to provide a space to map any remaining
+out of gamut colors (after a possible gamut mapping has been applied)
+into the device gamut. This is of&nbsp; importance with the 0, 1 and 6
+intents.<span style="font-weight: bold;"></span><br>
+<br>
+<a name="p1"></a> The final parameter is the file base name for the <a
+ href="File_Formats.html#.ti3">.ti3</a> input test point data, and the
+resulting <a href="File_Formats.html#ICC">ICC</a> output profile (.icm
+extension on the Windows platform, .icc on Apple or Unix platforms).<br>
+<h3>Discussion</h3>
+If the <b>-v</b> flag is used (verbose), then at the end of creating a
+profile,
+the maximum and average fit error of the input points to the resulting
+profile
+will be reported. This is a good guide as to whether things have gone
+smoothly
+in creating a profile. Depending on the type of device, and the
+consistency
+of the readings, average errors of 5 or less, and maximum errors of 15
+or
+less would normally be expected. If errors are grossly higher than
+this,
+then this is an indication that something is seriously wrong with the
+device
+testing, or profile creation.<br>
+<br>
+Given a .ti3 file from a display device that contains display RAMDAC
+calibration information (generated by <a href="dispcal.html">dispcal</a>,
+passed through <a href="dispread.html">dispread</a>),&nbsp; <span
+ style="font-weight: bold;">profile</span> will convert this into a <span
+ style="font-weight: bold;">vcgt</span> tag in the resulting profile,
+so that the operating system utilities can configure the display
+hardware appropriately, whenever the profile is used.<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

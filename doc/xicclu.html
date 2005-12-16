@@ -1,0 +1,331 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>xicclu</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>xicc/xicclu</b>&nbsp; </h2>
+<h3>Summary&nbsp;<br>
+</h3>
+Lookup individual color values forward or inverted though an ICC
+profile table. <b>xicclu</b> is the analogue of the icclib utility <a
+ href="icclu.html">icclu</a>, but expands the capability to reverse
+lookup the Lut tables, and displaying PCS values in CIECAM02 Jab space.
+<b>xicclu</b>
+can also be used to plot the device value composition down the neutral
+axis,
+for device profiles.<br>
+<h3>Usage Summary</h3>
+&nbsp;xicclu [-<i>options</i>] profile<br>
+&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Verbose<br>
+&nbsp;<a href="#g">-g</a> &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp; Plot neutral axis device values.<br>
+&nbsp;<a href="#f">-f function</a>&nbsp;&nbsp; f = forward, b =
+backwards, g = gamut, p = preview<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;if = inverted forward, ib = inverted backwards<br>
+&nbsp;<a href="#i">-i intent</a>&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;p
+= perceptual, r = relative colorimetric,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;s = saturation, a = absolute, j = Appearance
+CIECAM02<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;k = Absolute Appearance CIECAM02<br>
+&nbsp;<a href="#o">-o order</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; n
+= normal (priority: lut &gt; matrix &gt; monochrome)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; r = reverse (priority: monochrome &gt; matrix &gt;
+lut)<br>
+&nbsp;<a href="#p">-p oride</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;x = XYZ_PCS, l = Lab_PCS, y = Yxy, j = Jab<br>
+&nbsp;<a href="#S">-s scale</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Scale device range 0.0 - scale rather than 0.0 - 1.0<br>
+&nbsp;<a href="#k">-k [zhxrlv]</a>&nbsp; Black generation: z = zero K,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; h = 0.5 K (def), x = max K, r = ramp K<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; l = extra PCS input is portion of K locus<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; v = extra PCS input is K target value<br>
+&nbsp;<a href="#kp">-k p stle stpo enpo enle shape</a><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; stle: K level at White 0.0 - 1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; stpo: start point of transition Wh 0.0 - Bk 1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; enpo: End point of transition Wh 0.0 - Bk 1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; enle: K level at Black 0.0 - 1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0
+convex<br>
+&nbsp;<a href="#l">-l tlimit</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; set total ink limit, 0 - 400%<br>
+&nbsp;<a href="#L">-L klimit</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+set black ink limit, 0 - 100%<br>
+&nbsp;<a href="#a">-a</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;show actual target values if clipped<br>
+&nbsp;<a href="#b">-b</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;merge output processing into clut<br>
+&nbsp;<a href="#S">-S</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;&nbsp; Use internal optimized separation for inverse 4d <span
+ style="font-weight: bold;">[NOT IMPLEMENTED]</span><br>
+&nbsp;<a href="#c">-c viewcond</a>&nbsp;&nbsp; set viewing conditions
+for CIECAM02,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+either an enumerated choice, or a parameter:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+0: Practical Reflection Print<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1: Print evaluation environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+2: Monitor in typical work environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+3: Monitor in darkened work environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+4: Projector in dim environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+5: Projector in dark environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+6: Original scene - Outdoors<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+7: Photo CD - original scene<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+8: Transparencies on a viewing box<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+s:surround&nbsp;&nbsp;&nbsp; a = average, m = dim, d = dark,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;c = transparency (default average)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; Adapted white point
+as XYZ (default media white, Abs: D50)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+Adapted white point as x, y<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+a:adaptation&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; Adaptation luminance in
+cd.m^2
+(default 50.0)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; b:background&nbsp;
+Background % of image luminance (default 20)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; Flare
+light % of image luminance (default 1)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; Flare color
+as XYZ (default media white, Abs: D50)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; Flare color as x, y<br>
+<br>
+&nbsp;&nbsp;&nbsp; The colors to be translated should be fed into
+standard in,<br>
+&nbsp;&nbsp;&nbsp; one input color per line, white space separated.<br>
+&nbsp;&nbsp;&nbsp; A line starting with a # will be ignored.<br>
+&nbsp;&nbsp;&nbsp; A line not starting with a number will terminate the
+program.<br>
+<h3>Flags and Parameters</h3>
+<a name="v"></a> The <b>-v</b> flag enables more verbose output.<br>
+<br>
+<a name="g"></a>The <b>-g</b> flag causes a plot of the device values
+along the neutral axis
+to be plotted, rather than allowing the interactive looking up of color
+values.
+This is useful in determining the existing black generation in a CMYK
+profile,
+or exploring the behavior of various black generation options using
+the
+<b>-k</b> parameters. The profile must be a device profile, and the PCS
+must
+be either Lab or Jab. The plot up the neutral axis is from L or J = 100
+(white)
+to L or J = 0 (black). To examine a profiles B2A table black
+generation,
+use the flag <b>-fb</b> to select the B2A table, or to invert the A2B
+table,
+and be able to explore black generation behavior, use the <b>-fif</b>
+flag.
+The appropriate intent can be selected with the <b>-i</b> flag,
+&nbsp;as
+can other flags appropriate to the function selected.&nbsp; See <a
+ href="#xg">example</a>.<br>
+<br>
+<a name="f"></a> The <b>-f</b> flag selects which type of table or
+conversion is to be used. In addition to the usual four tables that can
+be accessed in a fully populated Lut based profile, two additional
+options are available in <b>xicclu</b>. One is to invert the forward
+table, and the other is to invert the backward table. For non Lut based
+profiles, -fif is equivalent to -fb, and -fib is equivalent to -ff.
+Note that the -fib combination may not be fully supported.<br>
+<br>
+<a name="i"></a> The <b>-i</b> flag selects the intent for a lut based
+profile. In addition to the usual 4 ICC based intents, two other
+options
+are available: CIECAM02 Jab appearance space, and a version of Jab with
+a fixed white reference, which emulates an absolute CIECAM02 Jab
+appearance space.<br>
+<br>
+<a name="o"></a> A profile is allowed to contain more than the minimum
+number of elements or table needed to describe a certain transform, and
+may contain redundant descriptions. &nbsp;By default, Lut based table
+information will be used first if present, followed by matrix/shaper
+information, and only using monochrome information if it is all that is
+present. The <b>-o</b> flag, reverses this order.&nbsp;&nbsp;&nbsp; <br>
+<br>
+<a name="p"></a> Normally the native PCS (Profile Connection Space) of
+a device or abstract profile is used, but the <b>-p</b> flag allows
+this to be overridden, and XYZ, L*a*b*, Yxy space or Jab
+(CIECAM02) space to be substituted.<br>
+<br>
+<a name="s"></a> Usually device values are processed and displayed
+using a normalized value range between 0.0 and 1.0 Sometimes other
+systems scale them to some other range (such as 100 or 255) due to an
+underlying binary representation. The <span style="font-weight: bold;">-s</span>
+flag lets you input and display such data in its normal range. For
+instance, if your device values have a range between 0 and 255, use <span
+ style="font-weight: bold;">-s 255.</span><br>
+<br>
+<a name="k"></a> When inverting a CMYK profile, (ie. using the -fif
+flag), an input PCS value can have many possible CMYK solutions. To be
+able to return a unique solution, a black level (or black inking rule)
+should be chosen. The choice here reflect similar choices in black
+generation available in other utilities (eg. <a href="profile.html">profile</a>,
+<a href="icclink.html"> icclink</a>), with the addition of two extra
+options.<br>
+<br>
+&nbsp;Possible arguments to the <b>-k</b> option are:<br>
+<br>
+<b> -kz</b> selects minimum black (0.0)<br>
+<b> -kh</b> selects a black locus value of 0.5<br>
+<b> -kx</b> selects the maximum possible black (1.0)<br>
+<b> -kr</b> selects a linear locus ramp, starting at minimum black for
+highlight, and maximum black for shadow (equivalent to -kp 0 0 1 1 1)<br>
+<b> -kl</b> uses an extra (fourth) value entered after the input PCS
+value, to select a black locus target between 0.0 and 1.0.<br>
+<b> -kv</b> uses an extra (fourth) value entered after the input PCS
+value, to select a black ink target value between 0.0 and 1.0.<br>
+<b><a name="kp"></a>-k p stle stpo enpo enle shape</b>&nbsp; allows an
+arbitrary black locus ramp to be defined, consisting of a starting
+value (stle) for highlights, a breakpoint L value (stpo) where it
+starts to transition to the shadow level, an end breakpoint L (enpo)
+where it flattens out again, and the finishing black level (enle) for
+the shadows. There is also a curve parameter, that modifies the
+transition from stle to enle to either be concave (ie.&nbsp; the
+transition starts gradually and and finished more abruptly) using
+values 0.0-1.0, with 0.0 being most concave, or convex (the transition
+starts more abruptly but finishes gradually), using values 1.0-2.0,
+with 2.0 being the most convex.<br>
+<br>
+Typical black locus generation curve with parameters something
+like: -kp .1 .3 .5 .8 1<br>
+<br>
+<tt> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 K &nbsp; |
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;enpo<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; &nbsp;_______&nbsp;
+enle<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; /<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; /<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; stle&nbsp;
+| ------/<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; +-------------------<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0.0 K&nbsp;
+0.0&nbsp;&nbsp;&nbsp; stpo&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Black</tt><br>
+<br>
+&nbsp;The <b>-g</b> flag can be used together with the <b>-fif</b>
+flag, to plot
+out the resulting black channel behavior for various <b>-k</b>
+parameter
+values.<br>
+<br>
+<b><a name="l"></a>-l</b> <i>tlimit</i>&nbsp; &nbsp;&nbsp; Sets the
+total ink limit (TAC, Total Area Coverage) for the CMYK inverse forward
+lookup, as a total percentage from 0% to 400%.<br>
+<br>
+<b><a name="L"></a>-L</b> <i>klimit</i>&nbsp; &nbsp; Sets the black
+ink limit for the CMYK inverse forward lookup, as a total percentage
+from 0% to 100%.<br>
+<br>
+<a name="a"></a> If the <b>-a</b> flag is used for inverse forward
+lookups, then if
+the target PCS value cannot be reproduced by the device (ie. it clips),
+then the achievable, clipped PCS value is displayed.<br>
+<br>
+<a name="b"></a> The <b>-b</b> flag turns on an internal processing
+option, in which the per device curve lookup table processing is merged
+into the main multi-dimensional interpolation lut lookup.<br>
+<br>
+<a name="S"></a> The <b>-S</b> flag is not currently implemented.<br>
+<br>
+Whenever PCS values are to be specified or displayed in Jab/CIECAM02
+colorspace, a set of viewing conditions will be used to determine the
+details of the conversion. The <b>-c</b> parameter allows the
+specification of the viewing conditions. Viewing conditions can be
+specified in two basic ways. One
+is to select from the list of "pre canned", enumerated viewing
+conditions, choosing one that is closest to the conditions that are
+appropriate for the media type and situation. Alternatively, the
+viewing conditions parameters can be specified in detail individually.
+If both methods are used, them the chosen enumerated condition will be
+used as a base, and its parameters will then be individually overridden.<br>
+<h3>Usage and Discussion</h3>
+Typical usage for an output profile might be:<br>
+<br>
+&nbsp;&nbsp;&nbsp; xicclu -ff -ip profile.icm<br>
+<br>
+Normally the program is interactive, allowing the user to type in input
+color
+values, each number separated by a space, and the resulting output
+color
+being looked up and displayed after pressing return. To batch process
+a
+group of color values, prepare a text file containing each input value
+on
+a
+separate line, and use the input indirection facilities of your command
+line
+shell to redirect this input file into the standard input of xicclu.
+The
+output can be captured to a file by redirecting standard output to a
+file.
+In most shells this would be done something like this:<br>
+<br>
+&nbsp;&nbsp;&nbsp; xicclu -ff -ip profile.icm &lt; inputvalues.txt &gt;
+outputvalues.txt<br>
+<br>
+<a name="xg"></a>When plotting the neutral axis behavior, plotting the
+existing B2A table
+behavior would typically be done something like this:<br>
+<br>
+&nbsp;&nbsp;&nbsp; xicclu -g -fb profile.icm<br>
+<br>
+Exploring possible black generation and ink limiting behavior might be
+done
+like this:<br>
+<br>
+&nbsp;&nbsp;&nbsp; xicclu -g -fif -kp 0 .1 .8 .7 1 -l230 -L95
+profile.icm<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

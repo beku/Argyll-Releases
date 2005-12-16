@@ -1,0 +1,432 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>targen</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>target/targen</b></h2>
+<h3>Summary</h3>
+Generate a profiling test target values&nbsp;<a
+ href="File_Formats.html#.ti1">.ti1</a> file. &nbsp;<b>targen</b> is
+used to generate the device channel test point values for grayscale,
+RGB, CMY, CMYK or N-color output or display devices.&nbsp;
+<h3>Usage Summary</h3>
+targen [options] outfile<br>
+&nbsp;<a href="#v">-v [level]</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Verbose mode [optional
+verbose level, 1..n]<br>
+&nbsp;<a href="#d">-d col_comb</a>&nbsp;&nbsp;&nbsp;&nbsp; choose
+colorant combination from the following:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+0: Video grey<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp; 1: Print grey<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2: Print CMY<br>
+&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3:
+Video RGB<br>
+&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+4: CMYK<br>
+&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 5:
+CMYK + Light CM<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 6: CMYK + Light CMK<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 7: CMYK + Red + Blue<br>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 8: CMYK +
+Orange + Green<br>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 9: CMYK +
+Light CMK + Light Light K<br>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 10: CMYK +
+Orange + Green + Light CM<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 11: CMYK + Light
+CM + Medium CM<br>
+&nbsp;<a href="targen.html#D">-D colorant</a> &nbsp;&nbsp; Add or
+delete colorant from combination:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0: Additive<br>
+&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1:
+Cyan<br>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2: Magenta<br>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3: Yellow<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 4: Black<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 5: Orange<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 6:
+Red<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+7: Green<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+8: Blue<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+9: White<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+10: Light Cyan<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+11: Light Magenta<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+12: Light Yellow<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 13:
+Light Black<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+14: Medium Cyan<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 15:
+Medium Magenta<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 16:
+Medium Yellow<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;&nbsp; 17: Medium
+Black<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 18: Light Light
+Black<br>
+&nbsp;<a href="#e">-e patches</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; White
+color test patches (default 4)<br>
+&nbsp;<a href="#s">-s steps</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;Single channel steps (default 0)<br>
+&nbsp;<a href="#g">-g steps</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Gray axis RGB or CMY steps (default 0)<br>
+&nbsp;<a href="#m">-m steps</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Multidimensional cube steps (default 2)<br>
+&nbsp;<a href="#f">-f patches</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Add
+iterative &amp; adaptive full spread patches to total (default 836)<br>
+&nbsp; <a href="#t">-t</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Use incremental far point for full spread<br>
+&nbsp; <a href="#r">-r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Use device space random for full spread<br>
+&nbsp; <a href="#R">-R</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;Use perceptual space random for full spread<br>
+&nbsp; <a href="#q">-q</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;Use device space-filling quasi-random for full spread<br>
+&nbsp; <a href="#i">-i</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Use device space body centered cubic grid for full spread<br>
+&nbsp; <a href="#I">-I</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Use perceptual space body centered cubic grid for full
+spread<br>
+&nbsp; <a href="#a">-a angle</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Simplex grid angle 0.0 - 0.5 for B.C.C. grid, default -2047840407<br>
+&nbsp; <a href="#A">-A adaptation</a>&nbsp; Degree of iterative
+adaptation 0.0 - 1.0 (default 0.0)<br>
+&nbsp;<a href="#t">-t</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;Use incremental far point for full spread (default
+iterative)<br>
+&nbsp;<a href="#l">-l ilimit</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Total
+ink limit in %(default = none)<br>
+&nbsp;<a href="#c">-c profile</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Optional device ICC or MPP pre-conditioning profile filename<br>
+<a href="#F">-F L,a,b,rad</a>&nbsp;&nbsp;&nbsp; Filter out samples
+outside Lab sphere.<br>
+&nbsp;<a href="#w">-w</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;Dump diagnostic outfile.wrl file<br>
+&nbsp;<a href="#p1">outfile</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;Base name for output(.ti1)<br>
+<h3>Usage Details and Discussion<br>
+</h3>
+The number of target patches needs to be chosen, depending on the media
+size, the type of device, and the quality of profile required. For an
+inkjet device, something like 3000 test points or more is desirable
+for high quality profiles, while 500-1000 will probably suffice for a
+medium quality profile. A few hundred may be sufficient for a
+preliminary profile. Well behaved printing devices (such as a chemical
+proof, or a high quality printing press) may produce good profiles with
+1000 to 2000 test points. Well behaved RGB devices such as CRT monitors
+may need only a few
+hundred points, if a shaper/matrix type profile is to be produced,
+while pseudo RGB printers, or other RGB devices that a CLUT type
+profile may be used
+with, should probably choose somewhere between 500 and 3000 patches.
+For n color profile creation,
+3000 or more test points should probably be used.<br>
+<br>
+<a name="v"></a> The <b>-v</b> flag turns on extra verbosity when
+generating patch values. Extra diagnostics and verbosity may be
+available if a parameter is provided with a value greater than 1.<br>
+<br>
+<a name="d"></a> The <b>-d</b> parameter sets the colorspace the test
+values will be generated in. Video gray space is assumed to be an
+additive space, where a zero device value will be black, and a maximum
+device value will be white. A print gray space is assumed to be a
+subtractive space,
+in which a zero device value will be white, and a maximum device value
+will
+be black. If no colorspace is specified, subtractive CMYK is assumed as
+a default.<br>
+<br>
+<a name="D"></a> The <b>-D</b> parameter Adds or Deletes a single
+colorant from the colorspace colorant set. This flag can be specified
+multiple times to build up a custom colorant combination, or delete
+multiple colorants from a colorspace set. A pseudo colorant "Additive"
+allows specifying an additive colorspace rather than subtractive. To
+list the known colorants, use -?? or --- as a parameter.<br>
+<br>
+The composition of the test patches is controlled by the following
+flags and parameters:<br>
+<br>
+<a name="e"></a> The <b>-e</b> parameter sets the number of white
+colored test patches, defaulting to 4 if the -e flag isn't used. The
+white patches are usually very important in establishing white point
+that the ICC data is made relative to, so it improves robustness to use
+more than a
+single point.<br>
+<br>
+<a name="s"></a> The <b>-s</b> parameter sets the number of patches
+in a set of per colorant wedges. The steps are evenly spaced in device
+space, and the total number of test patches will be the number of
+colorants
+times the value specified with the -s flag. By default, no per colorant
+test wedge values are generated. When creating a test chart for a
+device
+that will be used as a source colorspace, it is often useful to
+generated
+some per colorant wedge values.<br>
+<br>
+<a name="g"></a> The <b>-g</b> parameter sets the number of patches
+in a set of combined (nominally gray) wedges. This will typically be
+equal RGB or CMY values, and will be equally spaced steps in device
+space. By
+default, no gray combination values are generated. When creating a test
+chart for a device that will be used as a source colorspace, it is
+often
+useful to generated some per colorant wedge values.<br>
+<br>
+<a name="m"></a> The <b>-m</b> parameter sets the edge size of the
+multidimensional grid of test values. The total number of patches of
+this type will be the -m parameter value to the power of the number of
+colorants. The grid steps are evenly spaced in device space. By
+default, all the device primary color combinations that fall within the
+ink limit are generated..<br>
+<br>
+The behavior of the <b>-e</b>, <b>-s</b>, <b>-g</b> and <b>-m</b>
+flags, is not to duplicate test values already created by a previous
+type.<br>
+<br>
+<a name="f"></a> The <b>-f</b> parameter sets the number of full
+spread test patches. Full spread patches are distributed according to
+the default or chosen algorithm. The default algorithm will optimize
+the point locations to minimize the distance from any point in device
+space, to the nearest
+sample point. This can be overridden by specifying the <b>-t. -r, -R,
+-q,
+-i or -I</b> flags. If the default algorithm is used, then adaptive
+test
+point distribution can be enabled by specifying a non-zero value for
+the
+<b>-A</b> parameter, which sets the degree of adaptation. A value of
+1.0
+distributes the test points so as to minimize the estimated error in
+the
+resulting profile. The total number patches specified will include any
+patches
+generated using the <b>-e</b>, <b>-s</b>, <b>-g</b> and <b>-m</b>
+flags (i.e.
+full spread patches will be added to bring the total number of patches
+including
+those generated using the <b>-e</b>, <b>-s</b>, <b>-g</b> and <b>-m</b>
+flags
+up to the specified number). When there are more than four device
+channels,
+the full spread distribution algorithm can't deal with so many
+dimensions,
+and <b>targen</b> falls back on an incremental far point distribution
+algorithm
+by default, that doesn't generate such evenly spread points. This
+behavior
+can be forced using the <b>-t</b> flag. A <a href="#Table">table</a>
+of useful total patch counts for different paper sizes is shown below.<br>
+<br>
+<a name="t"></a> The <b>-t</b> flag overrides the default full spread
+test patch algorithm, and makes use of the Incremental Far Point
+Distribution
+algorithm, which incrementally searches for test points that are as far
+away
+as possible from any existing points. This is used as the default for
+dimensions
+higher than 4.<br>
+<br>
+<a name="r"></a> The <b>-r</b> flag overrides the default full spread
+test patch algorithm, and chooses test points with an even random
+distribution in device space.<br>
+<br>
+<a name="R"></a> The <b>-R</b> flag overrides the default full spread
+test patch algorithm, and chooses test points with an even random
+distribution in perceptual space.<br>
+<br>
+<a name="q"></a> The <b>-q</b> flag overrides the default full spread
+test patch algorithm, and chooses test points with a quasi-random,
+space filling distribution in device space.<br>
+<br>
+<a name="i"></a> The <b>-i</b> flag overrides the default full spread
+test patch algorithm, and chooses test points with body centered cubic
+distribution in device space.<br>
+<br>
+<a name="I"></a> The <b>-I</b> flag overrides the default full spread
+test patch algorithm, and chooses test points with body centered cubic
+distribution in perceptual space.<br>
+<br>
+<a name="a"></a> The <b>-a <i>angle</i></b> parameter sets the
+overall
+angle that the body centered grid distribution has.<br>
+<br>
+<a name="A"></a> The <b>-A <i>adaptation</i></b> parameter sets the
+degree of adaptation to the known device characteristics, used by the
+default full spread iterative &amp; adaptive algorithm. <br>
+<br>
+<a name="l"></a> The <b>-l</b> flag and parameter sets a total ink
+limit (Total
+Area Coverage or TAC), which is adhered to for all the generated
+points. In the case of device cube points, this can generate extra test
+values that lie at the ink limit boundary. For gray wedge values, any
+that exceed the ink limit are omitted. Full spread test values are all
+generated to lie
+within the ink limit. Although it doesn't make much sense, this
+parameter has an affect on additive device spaces (such as RGB), but
+should not normally be used with such devices. The total ink limit
+value will be written to the
+.ti1 file, and carried through automatically to the .ti3 file, so that
+it
+can be used during profile creation.<br>
+<br>
+<a name="c"></a> The <b>-c</b> flag and parameter is used to specify
+an <a href="File_Formats.html#ICC">ICC</a> or <a
+ href="File_Formats.html#MPP">MPP</a> pre-conditioning profile, for
+estimating perceptual distances and colorspace curvature, used in
+optimizing the full spread test point placement. Normally a previous
+profile for this or a similar device will be used, or a simpler,
+preliminary profile will be created and used. If no such profile is
+specified, a default device space model is used. <br>
+<br>
+<a name="F"></a> The <b>-F</b> flag and parameters is used to define
+an L*a*b* sphere to filter the test points through. Only test points
+within the sphere (defined by it's center and radius) will be written
+to the .ti1 file. This can be good for targeting supplemental test
+points at a troublesome area of a device. The accuracy of the L*a*b*
+target will be best when the <span style="font-weight: bold;">-c</span>
+option is used to specify a reasonably accurate profile for the device.
+Note that the actual number of points generated can be hard to predict,
+and will depend on the type of generation used. All means of generating
+points except the -f N &amp; -r, -R and -q will generate a smaller
+number of test points than expected. If the -f N &amp; -r, -R and -q
+methods are used, then the target number of points will be achieved.
+For this reason, the -f N -q method is probably the easiest to use.<br>
+<br>
+<a name="w"></a> The <b>-w</b> flag causes a diagnostic <a
+ href="File_Formats.html#VRML">VRML</a> .wrl file to be created, in
+which the test points are plotted as small spheres in L*a*b*
+colorspace. Note that for a CMYK device, the point spacing may seem
+strange, since the extra K dimension is compressed into the 3
+dimensional L*a*b* space.<br>
+<br>
+<a name="p1"></a> The final parameter on the command line is the base
+filename for the <a href="File_Formats.html#.ti1">.ti1</a> output
+file. <b>targen</b> will add the .ti1 extension automatically.<br>
+<br>
+Some typical total patch number/paper size combinations are shown
+below. These "magic" numbers are found by using <a
+ href="printtarg.html">printtarg</a> to compute the row length and
+number of rows, and then adjusting the total number of patches to fill
+the last row or paper size, in an iterative fashion.<br>
+<br>
+<a name="Table"></a> &nbsp;&nbsp; &nbsp; Size (mm/Standard Name),
+&nbsp;
+No. Patches<br>
+<br>
+&nbsp; DTP41:<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 110x200&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp;105<br>
+&nbsp;&nbsp; &nbsp;&nbsp; A3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 304<br>
+&nbsp; &nbsp; &nbsp; Letter &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;368<br>
+&nbsp; &nbsp; &nbsp; A4 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp; &nbsp;375<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 115x645&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;
+&nbsp; &nbsp;494<br>
+&nbsp; &nbsp; &nbsp; 11x17 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 819<br>
+&nbsp; &nbsp; &nbsp; A3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; 836<br>
+&nbsp; &nbsp; &nbsp; 210x600&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp; 855<br>
+&nbsp; &nbsp; &nbsp; 420x645&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;1984<br>
+&nbsp; &nbsp; &nbsp; 575x500&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;2024<br>
+&nbsp; &nbsp; &nbsp; 687x590&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;2968<br>
+&nbsp; &nbsp; &nbsp; 630x645&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;2976<br>
+&nbsp; &nbsp;&nbsp; &nbsp;830x950&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;
+6016<br>
+<br>
+&nbsp; SpectroScan with square patches:<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1xA4R&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 1053<br>
+&nbsp; &nbsp; &nbsp; 2xA4R &nbsp; &nbsp; &nbsp; 2106<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 3xA4R&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; 3159<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 4xA4R&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; 4212<br>
+<br>
+&nbsp;&nbsp;&nbsp; &nbsp; 1xLetterR &nbsp; 1008<br>
+&nbsp; &nbsp; &nbsp; 2xLetterR&nbsp;&nbsp; 2016<br>
+&nbsp; &nbsp;&nbsp; &nbsp;3xLetterR&nbsp;&nbsp; 3024<br>
+&nbsp; &nbsp; &nbsp; 4xLetterR&nbsp;&nbsp; 4032<br>
+<br>
+&nbsp; SpectroScan with hexagonal patches:<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1xA4R&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 1178<br>
+&nbsp; &nbsp; &nbsp; 2xA4R &nbsp; &nbsp; &nbsp; 2356<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 3xA4R&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; 3534<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 4xA4R&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; 4712<br>
+<br>
+&nbsp;&nbsp;&nbsp; &nbsp; 1xLetterR&nbsp;&nbsp; 1152<br>
+&nbsp; &nbsp; &nbsp; 2xLetterR&nbsp;&nbsp; 2304<br>
+&nbsp; &nbsp;&nbsp; &nbsp;3xLetterR&nbsp;&nbsp; 3456<br>
+&nbsp; &nbsp; &nbsp; 4xLetterR&nbsp;&nbsp; 4608<br>
+<br>
+<br>
+&nbsp; Scanner (printtarg with -iSS -s options):<br>
+<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 1xA4R &nbsp; &nbsp;&nbsp; 1026<br>
+&nbsp; &nbsp; &nbsp; &nbsp;2xA4R &nbsp; &nbsp;&nbsp; 2052<br>
+&nbsp; &nbsp; &nbsp; &nbsp;3xA4R &nbsp; &nbsp;&nbsp; 3078<br>
+&nbsp; &nbsp; &nbsp; &nbsp;4xA4R &nbsp; &nbsp;&nbsp; 4104<br>
+<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 1xLetterR&nbsp; 1008<br>
+&nbsp; &nbsp; &nbsp; &nbsp;2xLetterR&nbsp; 2016<br>
+&nbsp; &nbsp; &nbsp; &nbsp;3xLetterR&nbsp; 3024<br>
+&nbsp; &nbsp; &nbsp; &nbsp;4xLetterR&nbsp; 4032<br>
+&nbsp; &nbsp; &nbsp; &nbsp;<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

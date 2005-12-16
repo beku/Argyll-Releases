@@ -1,0 +1,754 @@
+
+#ifndef SS_IMP_H
+
+/* 
+ * Argyll Color Correction System
+ *
+ * Gretag Spectrolino and Spectroscan related
+ * defines and declarations - implementation.
+ *
+ * Author: Graeme W. Gill
+ * Date:   13/7/2005
+ *
+ * Copyright 2005 Graeme W. Gill
+ * All rights reserved.
+ *
+ * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
+ * see the Licence.txt file for licencing details.
+ *
+ * This is an alternative driver to spm/gretag.
+ */
+
+
+/* Communication symbol definitions */
+/* From the Gretag Spectrolino/Spectroscan */
+/* Serial Interface manual. */
+/* We are using the Hex communication method */
+
+/* Timout values for commands */
+#define SH_TMO	0.5			/* Short timout for establishing communications */
+#define IT_TMO	18.0		/* Initialisation commands */
+#define MV_TMO	10.0		/* Move commands */
+#define DF_TMO	6.0			/* Other commands */
+
+/* Actual Filter Type */
+typedef enum {
+	ss_aft_NoDefined    = 0x00,
+	ss_aft_NoFilter     = 0x01,
+	ss_aft_PolFilter    = 0x02,
+	ss_aft_D65Filter    = 0x03,
+	ss_aft_UVCutFilter  = 0x05,
+	ss_aft_CustomFilter = 0x06
+} ss_aft;
+
+/* Article Number Type */
+
+/* Baudrate Type */
+typedef enum {
+	ss_bt_110   = 0x00,
+	ss_bt_150   = 0x01,
+	ss_bt_300   = 0x02,
+	ss_bt_600   = 0x03,
+	ss_bt_1200  = 0x04,
+	ss_bt_2400  = 0x05,
+	ss_bt_4800  = 0x06,
+	ss_bt_9600  = 0x07,
+	ss_bt_19200 = 0x08,
+	ss_bt_28080 = 0x09,
+	ss_bt_57600 = 0x0A
+} ss_bt;
+
+/* Color Type */
+
+/* COM Float Type */
+typedef enum {
+	ss_comft_vPhotometricYRef = 0x01		/* cd/m^2 */
+} ss_comft;
+
+/* Control Type */
+typedef enum {
+	ss_ctt_ProtokolWithXonXoff    = 0x1E,
+	ss_ctt_ProtokolWithoutXonXoff = 0x1F,
+	ss_ctt_ProtokolWithHardwareHS = 0xCF,
+	ss_ctt_SetBaud110             = 0x20,
+	ss_ctt_SetBaud150             = 0x21,
+	ss_ctt_SetBaud300             = 0x22,
+	ss_ctt_SetBaud600             = 0x23,
+	ss_ctt_SetBaud1200            = 0x24,
+	ss_ctt_SetBaud2400            = 0x25,
+	ss_ctt_SetBaud4800            = 0x26,
+	ss_ctt_SetBaud9600            = 0x27,
+	ss_ctt_SetBaud19200           = 0x28,
+	ss_ctt_SetBaud28800           = 0x98,
+	ss_ctt_SetBaud57600           = 0x99,
+	ss_ctt_SpeakerON              = 0x54,
+	ss_ctt_SpeakerOFF             = 0x55,
+	ss_ctt_RemissionMeas          = 0x9B,
+	ss_ctt_TransmissionMeas       = 0x9C,
+	ss_ctt_EmissionMeas           = 0x9D,
+	ss_ctt_PhotometricAbsolute    = 0x9E,
+	ss_ctt_PhotometricRelative    = 0x9F,
+	ss_ctt_SetCustomFilter        = 0xA0,
+	ss_ctt_ReleaseCustomFilter    = 0xA1
+} ss_ctt;
+
+/* Color Space Type */
+typedef enum {
+	ss_cst_XyY       = 0x00,
+	ss_cst_Lab       = 0x01,
+	ss_cst_LChab     = 0x02,
+	ss_cst_Luv       = 0x03,
+	ss_cst_XYZ       = 0x04,
+	ss_cst_RxRyRz    = 0x05,
+	ss_cst_HLab      = 0x06,
+	ss_cst_LABmg     = 0x0B,
+	ss_cst_LCHmg     = 0x0C,
+	ss_cst_LCHuv     = 0x0D
+} ss_cst;
+
+/* Date Type */
+
+/* Density Filter Spectral Array Type */
+
+/* Density Filter Array Type */
+
+/* Density Filter Type */
+typedef enum {
+	ss_dft_Db    = 0x00,
+	ss_dft_Dc    = 0x01,
+	ss_dft_Dm    = 0x02,
+	ss_dft_Dy    = 0x03,
+	ss_dft_Dmax  = 0x04,
+	ss_dft_Dauto = 0x05
+} ss_dft;
+
+/* Device Name Type */
+
+/* Device Number Type */
+typedef enum {
+	ss_dnot_SPM10       = 0x00,
+	ss_dnot_SPM50       = 0x01,
+	ss_dnot_SPM55       = 0x02,
+	ss_dnot_SPM60       = 0x03,
+	ss_dnot_SPM100      = 0x04,
+	ss_dnot_SPM100IInl  = 0x05,
+	ss_dnot_SPM100II    = 0x06,
+	ss_dnot_D196        = 0x10,
+	ss_dnot_D19C        = 0x11,
+	ss_dnot_D118C       = 0x12,
+	ss_dnot_DM620       = 0x13,
+	ss_dnot_SPECTROLINO = 0x20,
+	ss_dnot_VIDEOLINO   = 0x30,
+	ss_dnot_SPECTROSCAN = 0x40
+} ss_dnot;
+
+/* Dmax OK Type */
+typedef enum {
+	ss_dmot_FALSE = 0x00,
+	ss_dmot_TRUE  = 0x01
+} ss_dmot;
+
+/* Dmax Type */
+
+/* Density Standard Type */
+typedef enum {
+	ss_dst_ANSIA   = 0x00,
+	ss_dst_ANSIT   = 0x01,
+	ss_dst_DIN     = 0x02,
+	ss_dst_DINNB   = 0x03,
+	ss_dst_DS1     = 0x08		/* User defined */
+} ss_dst;
+
+/* Communication Error Type */
+typedef enum {
+	ss_cet_NoError            = 0x00,
+	ss_cet_StopButNoStart     = 0x01,
+	ss_cet_IllegalCharInRec   = 0x02,
+	ss_cet_IncorrectRecLen    = 0x03,
+	ss_cet_IllegalRecType     = 0x04,
+	ss_cet_NoTagField         = 0x06,
+	ss_cet_ConvError          = 0x07,
+	ss_cet_InvalidForEmission = 0x08,
+	ss_cet_NoAccess           = 0x10,
+} ss_cet;
+
+/* Daylight Color Temperature Type */
+
+/* Error Type + augmentation */
+typedef enum {
+	ss_et_NoError         = 0x00,
+	ss_et_MemoryFailure   = 0x01,
+	ss_et_PowerFailure    = 0x02,
+	ss_et_LampFailure     = 0x04,
+	ss_et_HardwareFailure = 0x05,
+	ss_et_FilterOutOfPos  = 0x06,
+	ss_et_SendTimeout     = 0x07,
+	ss_et_DriveError      = 0x08,
+	ss_et_MeasDisabled    = 0x09,
+	ss_et_DensCalError    = 0x0A,
+	ss_et_EPROMFailure    = 0x0D,
+	ss_et_RemOverFlow     = 0x0E,
+	ss_et_MemoryError     = 0x10,
+	ss_et_FullMemory      = 0x11,
+	ss_et_WhiteMeasOK     = 0x13,
+	ss_et_NotReady        = 0x15,
+	ss_et_WhiteMeasWarn   = 0x32,
+	ss_et_ResetDone       = 0x33,
+	ss_et_EmissionCalOK   = 0x34,
+	ss_et_OnlyEmission    = 0x35,
+	ss_et_CheckSumWrong   = 0x36,
+	ss_et_NoValidMeas     = 0x37,
+	ss_et_BackupError     = 0x38,
+	ss_et_ProgramROMError = 0x3C,
+
+	/* Incorporate remote error set (bitmask) codes thus: */
+	ss_et_NoValidDStd           = 0x41,
+	ss_et_NoValidWhite          = 0x42,
+	ss_et_NoValidIllum          = 0x43,
+	ss_et_NoValidObserver       = 0x44,
+	ss_et_NoValidMaxLambda      = 0x45,
+	ss_et_NoValidSpect          = 0x46,
+	ss_et_NoValidColSysOrIndex  = 0x47,
+	ss_et_NoValidChar           = 0x48,
+	ss_et_DorlOutOfRange        = 0x49,
+	ss_et_ReflectanceOutOfRange = 0x4A,
+	ss_et_Color1OutOfRange      = 0x4B,
+	ss_et_Color2OutOfRange      = 0x4C,
+	ss_et_Color3OutOfRange      = 0x4D,
+	ss_et_NotAnSROrBoolean      = 0x4E,
+	ss_et_NoValidValOrRef       = 0x4F,
+
+	/* Incorporate scan error codes thus: */
+	ss_et_DeviceIsOffline    = 0x61,
+	ss_et_OutOfRange         = 0x62,
+	ss_et_ProgrammingError   = 0x63,
+	ss_et_NoUserAccess       = 0x64,
+	ss_et_NoValidCommand     = 0x65,
+	ss_et_NoDeviceFound      = 0x66,
+	ss_et_MeasurementError   = 0x67,
+	ss_et_NoTransmTable      = 0x68,
+	ss_et_NotInTransmMode    = 0x69,
+	ss_et_NotInReflectMode   = 0x6A,
+
+	/* Incorporate communication errors thus: */
+	ss_et_StopButNoStart     = 0x81,
+	ss_et_IllegalCharInRec   = 0x82,
+	ss_et_IncorrectRecLen    = 0x83,
+	ss_et_IllegalRecType     = 0x84,
+	ss_et_NoTagField         = 0x86,
+	ss_et_ConvError          = 0x87,
+	ss_et_InvalidForEmission = 0x88,
+	ss_et_NoAccess           = 0x90,
+
+	/* Add out own communication errors here too. */
+	ss_et_SerialFail         = 0xF0,
+	ss_et_UserAbort          = 0xF1,
+	ss_et_SendBufferFull     = 0xF2,
+	ss_et_RecBufferEmpty     = 0xF3,
+	ss_et_BadAnsFormat       = 0xF4,
+	ss_et_BadHexEncoding     = 0xF5,
+	ss_et_RecBufferOverun    = 0xF6
+} ss_et;
+
+/* Handshake Type */
+typedef enum {
+	ss_hst_None     = 0x00,
+	ss_hst_XonXOff  = 0x01,
+	ss_hst_Hardware = 0x02,
+} ss_hst;
+
+/* Illuminant Type */
+typedef enum {
+	ss_ilt_A       = 0x00,
+	ss_ilt_C       = 0x01,
+	ss_ilt_D65     = 0x02,
+	ss_ilt_D50     = 0x03,
+	ss_ilt_1       = 0x08,		/* User defined */
+	ss_ilt_Dxx     = 0x10,		/* Variable daylight table */
+	ss_ilt_F1      = 0x18,
+	ss_ilt_F2      = 0x19,
+	ss_ilt_F3      = 0x1A,
+	ss_ilt_F4      = 0x1B,
+	ss_ilt_F5      = 0x1C,
+	ss_ilt_F6      = 0x1D,
+	ss_ilt_F7      = 0x1E,
+	ss_ilt_F8      = 0x1F,
+	ss_ilt_F9      = 0x20,
+	ss_ilt_F10     = 0x21,
+	ss_ilt_F11     = 0x22,
+	ss_ilt_F12     = 0x23
+} ss_ilt;
+
+/* Keyset - treat as cardinal */
+typedef enum {
+	ss_ks_NoKey          = 0x0000,
+	ss_ks_MeasurementKey = 0x0080
+} ss_ks;
+
+/* Lambda Type */
+
+/* Light Level Type */
+typedef enum {
+	ss_llt_AllOff   = 0x00,		/* All lights off during standby */
+	ss_llt_Standby1 = 0x01,		/* Surround is on but measurement lamp is off */
+	ss_llt_Standby2 = 0x02,		/* Surround is on and measurement lamp is on low */
+} ss_llt;
+
+/* Measurement Mode Type */
+typedef enum {
+	ss_mmt_NormalMeas        = 0x00,
+	ss_mmt_WhiteCalibration  = 0x01,
+	ss_mmt_WhiteCalWithWarn  = 0x07,
+	ss_mmt_EmissionCal       = 0x08
+} ss_mmt;
+
+/* New Key Type */
+typedef enum {
+	ss_nkt_False  = 0x00,
+	ss_nkt_True   = 0x01
+} ss_nkt;
+
+/* New Measurement Type */
+typedef enum {
+	ss_nmt_NoNewMeas      = 0x00,
+	ss_nmt_NewMeas        = 0x01,
+	ss_nmt_NewWhiteCal    = 0x02,
+	ss_nmt_NewWhiteCalWW  = 0x03,
+	ss_nmt_NewEmissionCal = 0x04
+} ss_nmt;
+
+/* Observer Type */
+typedef enum {
+	ss_ot_TwoDeg   = 0x00,
+	ss_ot_TenDeg   = 0x01
+} ss_ot;
+
+/* Original White Reference Type */
+typedef enum {
+	ss_owrt_OriginalWhiteRef     = 0x00,
+	ss_owrt_OriginalUserWhiteRef = 0x01,
+	ss_owrt_NotDefWhiteRef       = 0x02
+} ss_owrt;
+
+
+/* Output Set Type */
+typedef enum {
+	ss_ost_ParameterSet = 0x00,	/* To define measurement of parameters for output */
+	ss_ost_SpectrumSet  = 0x01,	/* To define spectra for output */
+	ss_ost_CMetry1Set   = 0x02,	/* To define colorimetry values for output */
+	ss_ost_CMetry2Set   = 0x03,	/* To define colorimetry values for output */
+	ss_ost_DensitySet   = 0x04,	/* To define densitometry values for output */
+	ss_ost_ErrorType    = 0xFF	/* To get the error of the measurement */
+} ss_ost;
+
+/* Output Parameter Set - bit masks */
+typedef enum {
+	ss_ops_None         = 0x00,
+	ss_ops_DStdType     = 0x01,
+	ss_ops_WBase      	= 0x02,
+	ss_ops_Illuminant   = 0x04,
+	ss_ops_Observer  	= 0x08,
+	ss_ops_ActualFilter = 0x10
+} ss_ops;
+
+/* Output Spectrum Set - bit masks */
+typedef enum {
+	ss_oss_None        = 0x00,
+	ss_oss_Spectrum    = 0x01,
+	ss_oss_Density     = 0x02
+} ss_oss;
+
+/* Output Colorimetry 1 Set - bit masks */
+typedef enum {
+	ss_oc1s_None      = 0x00,
+	ss_oc1s_xyY       = 0x01,
+	ss_oc1s_Lab       = 0x02,
+	ss_oc1s_LChab     = 0x04,
+	ss_oc1s_Luv       = 0x08,
+	ss_oc1s_XYZ       = 0x10,
+	ss_oc1s_RxRyRz    = 0x20,
+	ss_oc1s_HLab      = 0x40
+} ss_oc1s;
+
+/* Output Colorimetry 2 Set - bit masks */
+typedef enum {
+	ss_oc2s_None      = 0x00,
+	ss_oc2s_LABmg     = 0x01,
+	ss_oc2s_LCHmg     = 0x02,
+	ss_oc2s_LChuv     = 0x04
+} ss_oc2s;
+
+/* Output Density Set - bit masks */
+typedef enum {
+	ss_ods_None       = 0x00,
+	ss_ods_Black      = 0x01,
+	ss_ods_Cyan       = 0x02,
+	ss_ods_Magenta    = 0x04,
+	ss_ods_Yellow     = 0x08,
+	ss_ods_Max        = 0x10,
+	ss_ods_Auto       = 0x20
+} ss_ods;
+
+/* Type that is one of the above, depending on what ss_ost is selected */
+typedef union {
+	ss_ods  od;
+	ss_oss  os;
+	ss_oc1s oc1;
+	ss_oc2s oc2;
+	ss_ops  op;
+	int     i;
+} ss_os;
+
+
+/* Press Time Type */
+typedef enum {
+	ss_ptt_Short        = 0x00,
+	ss_ptt_Long         = 0x01
+} ss_ptt;
+
+/* Reference Type */
+typedef enum {
+	ss_rt_SensorRef    = 0x00,
+	ss_rt_SightRef     = 0x01
+} ss_rt;
+
+/* Reference Valid Type */
+typedef enum {
+	ss_rvt_False       = 0x00,
+	ss_rvt_True        = 0x01
+} ss_rvt;
+
+/* Remaining Positions Type */
+
+/* Remote Error Set - bit mask - treat as cardinal */
+typedef enum {
+	ss_res_NoError               = 0x0000,
+	ss_res_SlopeOutOfRange       = 0x0100,
+	ss_res_DorlOutOfRange        = 0x0200,
+	ss_res_ReflectanceOutOfRange = 0x0400,
+	ss_res_Color1OutOfRange      = 0x0800,
+	ss_res_Color2OutOfRange      = 0x1000,
+	ss_res_Color3OutOfRange      = 0x2000,
+	ss_res_NotAnSROrBoolean      = 0x4000,
+	ss_res_NoValidValOrRef       = 0x8000,
+	ss_res_NoValidDStd           = 0x0001,
+	ss_res_NoValidWhite          = 0x0002,
+	ss_res_NoValidIllum          = 0x0004,
+	ss_res_NoValidObserver       = 0x0008,
+	ss_res_NoValidMaxLambda      = 0x0010,
+	ss_res_NoValidSpect          = 0x0020,
+	ss_res_NoValidColSysOrIndex  = 0x0040,
+	ss_res_NoValidChar           = 0x0080
+} ss_res;
+
+/* Scan Error Type */
+typedef enum {
+	ss_set_NoError               = 0x00,
+	ss_set_DeviceIsOffline       = 0x01,
+	ss_set_OutOfRange            = 0x02,
+	ss_set_ProgrammingError      = 0x03,
+	ss_set_NoUserAccess          = 0x04,
+	ss_set_NoValidCommand        = 0x05,
+	ss_set_NoDeviceFound         = 0x06,
+	ss_set_MeasurementError      = 0x07,
+	ss_set_NoTransmTable         = 0x08,
+	ss_set_NotInTransmMode       = 0x09,
+	ss_set_NotInReflectMode      = 0x0A
+} ss_set;
+
+/* Scan Key Set - bit mask */
+typedef enum {
+	ss_sks_EnterKey          = 0x01,
+	ss_sks_PaperKey          = 0x02,
+	ss_sks_OnlineKey         = 0x04,
+	ss_sks_UpDownKey         = 0x08,
+	ss_sks_MoveRightKey      = 0x10,
+	ss_sks_MoveLeftKey       = 0x20,
+	ss_sks_MoveDownKey       = 0x40,
+	ss_sks_MoveUpKey         = 0x80
+} ss_sks;
+
+/* Serial Number Type */
+
+/* Special Status Set - bit mask */
+typedef enum {
+	ss_sss_HeadDwnOnMove     = 0x01,	/* Don't lift the head when moving */
+	ss_sss_TableInTransMode  = 0x10,	/* Table is set to transmission mode */
+	ss_sss_AllLightsOn       = 0x20		/* Surround light on + low measure light */
+} ss_sss;
+
+/* Spect. Type */
+typedef enum {
+	ss_st_LinearSpectrum      = 0x00,
+	ss_st_DensitySpectrum     = 0x01
+} ss_st;
+
+/* Status Mode Type */
+typedef enum {
+	ss_smt_InitAll           = 0x01,
+	ss_smt_InitWithoutRemote = 0x05
+} ss_smt;
+
+/* Status Set - bit mask */
+typedef enum {
+	ss_sts_EnterKeyPressed   = 0x01,
+	ss_sts_DeviceIsOnline    = 0x10,
+	ss_sts_DigitizingModeOn  = 0x20,
+	ss_sts_KeyAckModeOn      = 0x40,
+	ss_sts_PaperIsHeld       = 0x80
+} ss_sts;
+
+/* Standard Density Filter Type */
+typedef enum {
+	ss_sdft_Db    = 0x00,
+	ss_sdft_Dc    = 0x01,
+	ss_sdft_Dm    = 0x02,
+	ss_sdft_Dy    = 0x03
+} ss_sdft;
+
+/* Table Mode Type */
+typedef enum {
+	ss_tmt_Reflectance  = 0x00,
+	ss_tmt_Transmission = 0x01
+} ss_tmt;
+
+/* Table Value Type */
+typedef enum {
+	ss_tvt_vDxx1  = 0x60
+} ss_tvt;
+
+/* Target On Off Status Type (locks key function ?) */
+typedef enum {
+	ss_toost_Activated   = 0x00,
+	ss_toost_Deactivated = 0x01
+} ss_toost;
+
+/* Target Tech Type */
+typedef enum {
+	ss_ttt_SPM          = 0x00,
+	ss_ttt_D190         = 0x01,
+	ss_ttt_Spectrolino  = 0x02,
+	ss_ttt_Videolino    = 0x03,
+	ss_ttt_SpectroScan  = 0x04
+} ss_ttt;
+
+/* White Base Type */
+typedef enum {
+	ss_wbt_Pap = 0x00,
+	ss_wbt_Abs = 0x01
+} ss_wbt;
+
+/* White Reference Position Type */
+typedef enum {
+	ss_wrpt_RefTile1 = 0x00,
+	ss_wrpt_RefTile2 = 0x01
+} ss_wrpt;
+
+/* Zed Koordinate Type Type */
+typedef enum {
+	ss_zkt_SensorUp   = 0x00,
+	ss_zkt_SensorDown = 0x01
+} ss_zkt;
+
+/* Spectrolino request and answer types */
+typedef enum {
+	ss_ParameterRequest          = 0x00,
+	ss_ParameterAnswer           = 0x0B,
+	ss_SlopeRequest              = 0x01,
+	ss_SlopeAnswer               = 0x0C,
+	ss_DensityRequest            = 0x03,
+	ss_DensityAnswer             = 0x0E,
+	ss_DmaxRequest               = 0x04,
+	ss_DmaxAnswer                = 0x0F,
+	ss_SpectrumRequest           = 0x05,
+	ss_SpectrumAnswer            = 0x10,
+	ss_CRequest                  = 0x06,
+	ss_CAnswer                   = 0x11,
+	ss_NewMeasureRequest         = 0x07,
+	ss_NewMeasureAnswer          = 0x12,
+	ss_NewKeyRequest             = 0x08,
+	ss_NewKeyAnswer              = 0x13,
+	ss_ParameterDownload         = 0x16,
+	ss_SlopeDownload             = 0x17,
+	ss_DownloadError             = 0x1F,
+	ss_ExecMeasurement           = 0x20,
+	ss_ExecWhiteMeasurement      = 0x21,
+	ss_ExecRefMeasurement        = 0x22,
+	ss_ExecError                 = 0x25,
+	ss_ActErrorRequest           = 0x29,
+	ss_ActErrorAnswer            = 0x2F,
+	ss_TargetIdRequest           = 0x2B,
+	ss_TargetIdAnswer            = 0x31,
+	ss_TargetOnOffStDownload     = 0x33,
+	ss_IllumTabRequest           = 0x38,
+	ss_IllumTabAnswer            = 0x39,
+	ss_IllumTabDownload          = 0x3A,
+	ss_DensTabRequest            = 0x3B,
+	ss_DensTabAnswer             = 0x3C,
+	ss_DensTabDownload           = 0x3D,
+	ss_GetValNr                  = 0x47,
+	ss_ValNrAnswer               = 0x48,
+	ss_SetValNr                  = 0x49,
+	ss_ExecWhiteRefToOrigDat     = 0x4A,
+	ss_MeasControlDownload       = 0x4D,
+	ss_ResetStatusDownload       = 0x5A,
+	ss_MeasControlRequest        = 0x5B,
+	ss_MeasControlAnswer         = 0x5C,
+	ss_SetMeasurementOutput      = 0xB1,
+	ss_WhiteReferenceRequest     = 0xB3,
+	ss_WhiteReferenceAnswer      = 0xB4,
+	ss_DeviceDataRequest         = 0xB5,
+	ss_DeviceDataAnswer          = 0xB6,
+	ss_WhiteReferenceDownld      = 0xB7,
+	ss_SpecParameterRequest      = 0xB8,
+	ss_SpecParameterAnswer       = 0xB9,
+	ss_CParameterRequest         = 0xBA,
+	ss_CParameterAnswer          = 0xBB,
+	ss_DensityParameterAnswer    = 0xBC,
+	ss_DensityParameterRequest   = 0xBD,
+	ss_Printout                  = 0xBE,
+	ss_FloatRequest              = 0xC0,
+	ss_FloatAnswer               = 0xC1,
+	ss_FloatDownload             = 0xC2,
+	ss_COMErr                    = 0x26
+} ss_so_cat;
+
+/* Spectroscan request and answer types */
+typedef enum {
+	ss_ReqPFX                    = 0xD0,		/* Prefix */
+	ss_AnsPFX                    = 0xD1,		/* Prefix */
+	ss_MoveAbsolut               = 0x00,
+	ss_MoveRelative              = 0x01,
+	ss_MoveHome                  = 0x02,
+	ss_MoveUp                    = 0x03,
+	ss_MoveDown                  = 0x04,
+	ss_OutputActualPosition      = 0x05,
+	ss_MoveToWhiteRefPos         = 0x06,
+	ss_MoveAndMeasure            = 0x07,
+	ss_InitializeDevice          = 0x0A,
+	ss_ScanSpectrolino           = 0x0B,
+	ss_InitMotorPosition         = 0x0C,
+	ss_SetTableMode              = 0x0D,
+	ss_SetLightLevel             = 0x0E,
+	ss_SetTransmStandbyPos       = 0x0F,
+	ss_SetDeviceOnline           = 0x10,
+	ss_SetDeviceOffline          = 0x11,
+	ss_HoldPaper                 = 0x12,
+	ss_ReleasePaper              = 0x13,
+	ss_SetDigitizingMode         = 0x14,
+	ss_OutputDigitizingValues    = 0x15,
+	ss_SetKeyAcknowlge           = 0x16,
+	ss_ResetKeyAcknowlge         = 0x17,
+	ss_ChangeBaudRate            = 0x20,
+	ss_ChangeHandshake           = 0x21,
+	ss_OutputActualKey           = 0x22,
+	ss_OutputLastKey             = 0x23,
+	ss_OutputStatus              = 0x24,
+	ss_ClearStatus               = 0x25,
+	ss_SetSpecialStatus          = 0x26,
+	ss_ClearSpecialStatus        = 0x27,
+	ss_OutputSpecialStatus       = 0x28,
+	ss_OutputType                = 0x30,
+	ss_OutputSerialNumber        = 0x31,
+	ss_OutputArticleNumber       = 0x32,
+	ss_OutputProductionDate      = 0x33,
+	ss_OutputSoftwareVersion     = 0x34,
+	ss_ErrorAnswer               = 0x80,
+	ss_PositionAnswer            = 0x81,
+	ss_KeyAnswer                 = 0x82,
+	ss_StatusAnswer              = 0x83,
+	ss_TypeAnswer                = 0x90,
+	ss_SerialNumberAnswer        = 0x91,
+	ss_ArticleNumberAnswer       = 0x92,
+	ss_ProductionDateAnswer      = 0x93,
+	ss_SoftwareVersionAnswer     = 0x94,
+	ss_SSCOMErr                  = 0xA0
+} ss_ss_cat;
+
+/* -------------------------- */
+/* Interface declarations */
+
+/* -------------------------- */
+/* Query and Answer methods */
+
+struct _ss;
+
+/* Reset send buffer, and init with start chacater */
+void ss_init_send(struct _ss *p);
+
+/* Reset send buffer, and add an Spectrolino Request enum */
+void ss_add_ssreq(struct _ss *p, int rq);
+
+/* Reset send buffer, and add an Spectroscan Request enum */
+void ss_add_soreq(struct _ss *p, int rq);
+
+/* Add an int/enum/char into one byte type */
+void ss_add_1(struct _ss *p, int b);
+
+/* Add an int/enum into two byte type */
+void ss_add_2(struct _ss *p, int s);
+
+/* Add an int/enum into four byte type */
+void ss_add_4(struct _ss *p, int i);
+
+/* Add a double into four byte type */
+void ss_add_double(struct _ss *p, double d);
+
+/* Add an  ASCII string into the send buffer. */
+/* The string will be padded with nul's up to len. */
+void ss_add_string(struct _ss *p, char *t, int len);
+
+/* Terminate the send buffer, and then do a */
+/* send/receieve to the device. */
+/* Leave any error in p->snerr */
+void ss_command(struct _ss *p, double tmo);
+
+/* Return the first enum from the recieve buffer without removing it. */
+int ss_peek_ans(struct _ss *p);
+
+/* Remove a Spectrolino answer enum from the revieve buffer,
+/* and check it is correct.  */
+void ss_sub_ssans(struct _ss *p, int cv);
+
+/* Remove a Spectroscan answer enum from the recieve buffer, */
+/* and check it is correct.  */
+void ss_sub_soans(struct _ss *p, int cv);
+
+/* Remove an int/enum/char into one byte type */
+int ss_sub_1(struct _ss *p);
+
+/* Remove an int/enum into two byte type */
+int ss_sub_2(struct _ss *p);
+
+/* Remove an int/enum into four byte type */
+int ss_sub_4(struct _ss *p);
+
+/* Remove a double into four byte type */
+double ss_sub_double(struct _ss *p);
+
+/* Remove an  ASCII string from the receive buffer. */
+/* The string will be terminated with a nul, so a buffer */
+/* of len+1 should be provided to return the string in. */
+void ss_sub_string(struct _ss *p, char *t, int len);
+
+/* ------------------------------------------- */
+/* Instrument specific commands and queries */
+
+inst_code ss_do_TargetIdRequest(
+struct _ss *p,
+char *s19,		/* Device Name */
+int *sn,		/* Serial Number */
+int *sr,		/* Software Release */
+int *yp,		/* Year of production */
+int *mp,		/* Month of production */
+int *dp,		/* Day of production */
+int *hp,		/* Hour of production */
+int *np,		/* Minuite of production */
+ss_ttt *tt,		/* Target Tech Type */
+int *fswl,		/* First spectral wavelength */
+int *nosw,		/* Number of spectral wavelengths */
+int *dpsw		/* Distance between spectral wavelengths */
+);
+
+#define SS_IMP_H
+#endif /* SS_IMP_H */

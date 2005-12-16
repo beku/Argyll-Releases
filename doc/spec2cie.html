@@ -1,0 +1,151 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>fakeread</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>spectro/</b><span style="text-decoration: underline;"></span>spec2cie</h2>
+<h3>Summary</h3>
+Convert spectral <a href="File_Formats.html#.ti3">.ti3</a>
+readings into CIE XYZ or L*a*b* readings. FWA compensation may be
+applied.<br>
+<h3>Usage</h3>
+spec2cie [options] <span style="font-style: italic;">input.ti3
+output.ti3</span><br>
+&nbsp;
+<a href="#i">-i <i>illum</i></a>&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose illuminant
+for print/transparency spectral data:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+A, D50 (def.), D65, F5,
+F8, F10 or file.sp<br>
+&nbsp;<span style="text-decoration: underline;"> </span><a href="#o">-o
+<i>observ</i></a>&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose CIE Observer for spectral
+data:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1931_2, 1964_10, S&amp;B
+1955_2, 1964_10c, shaw, J&amp;V 1978_2 (def.)<br>
+&nbsp; <a href="profile.html#f">-f</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use
+Fluorescent Whitening Agent compensation<br>
+&nbsp;<a href="#I"> -I <i>illum</i></a>&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp; Override instrument illuminant
+in .ti3 file:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+A, D50, D65, F5,
+F8, F10 or file.sp<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+(only used in conjunction with <span style="font-weight: bold;">-f</span>)<br>
+&nbsp;<span style="font-style: italic;">input.ti3</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Measurement file<br>
+&nbsp;<span style="font-style: italic;">output.ti3</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Converted measurement file<br>
+<h3>Comments</h3>
+This program takes the spectral data in a .ti3 file, converts them to
+XYZ and Lab and fills the XYZ_[XYZ] and LAB_[LAB] columns in the output
+.ti3 file with the computed XYZ and Lab values. If the columns
+XYZ_[XYZ] and/or LAB_[LAB] are missing in the input file, they are
+added to the output file.<br>
+<br>
+All other columns are copied from the input to the output .ti3 file.<br>
+<br>
+If the <span style="font-weight: bold;">-f</span> option is used, the
+FWA corrected spectral reflectances are written to the output .ti3
+file, instead of simply copying the spectral reflectances from the
+input .ti3 file. In this case, the XYZ_[XYZ] and LAB_[LAB] values are
+computed from the FWA corrected reflectances as well.<br>
+<br>
+<a name="i"></a>The <b>-i</b> flag allows specifying a standard or
+custom illumination spectrum, applied to spectral .ti3 data to compute
+PCS (Profile Connection Space) tristimulus values. <b>A</b>, <b>D50</b>,
+<b>D65</b>, <b>F5</b>, <b>F8</b>, <b>F10</b> are a selection of
+standard illuminant spectrums, with <b>D50</b> being the default. If a
+filename is specified instead, it will be assumed to be an Argyll
+specific <a href="File_Formats.html#.sp">.sp</a> custom spectrum file.
+This only works if spectral data is available. Illuminant details are:<br>
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; A&nbsp;&nbsp; CIE tungsten
+filament lamp 2848K<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; D50 CIE daylight 5000K<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; D65 CIE daylight 6500K<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; F5&nbsp; CIE Fluorescent
+6350K, CRI 72<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; F8&nbsp; CIE Fluorescent
+5000K, CRI 95<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; F10 CIE Fluorescent 5000K,
+CRI 81<br>
+<br>
+Custom illuminants are most often used when a fluorescent tube base
+viewing booth is going to be used to view results.&nbsp; Other
+illuminant reference files could be created using a suitable measuring
+instrument such as a spectrocam, or an eyeone, although such
+instruments do not provide the necessary response down to Ultra Violet
+that is needed for accurate operation of Fluorescent Whitening Agent
+compensation.<br>
+Note that if an illuminant other than D50 is chosen, the resulting ICC
+profile will not be standard, and cannot be freely interchanged with
+other profiles that that us the standard D50 illuminant. Profiles
+should only be linked with other profiles that have the same illuminant
+and observer.<br>
+<br>
+<a name="o"></a> The <b>-o</b> flag allows specifying a tristimulus
+observer, and is used to compute PCS (Profile Connection Space)
+tristimulus values. The following choices are available:<br>
+<b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer.<br>
+&nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree observer.<br>
+&nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
+observer<br>
+&nbsp; <b>1964_10c</b> selects a version of the CIE 1964 10 degree
+observer adjusted for better compatibility with the 1931 2 degree
+observer.<br>
+&nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree observer<br>
+&nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
+observer<br>
+<br>
+Note that if an observer other than 1931 2 degree is chosen, the
+resulting ICC profile will not be standard, and cannot be freely
+interchanged with other profiles that that us the standard 1931 2
+degree
+observer. Profiles should only be linked with other profiles that have
+the same illuminant and observer.<br>
+<br>
+<a name="f"></a> The <b>-f</b> flag enables Fluorescent Whitening
+Agent compensation. This
+allows the effects of different levels of Ultra Violet in the viewing
+illuminant from that used by the instrument, be compensated for.<br>
+<br>
+<a name="I"></a>The <b>-I</b> flag allows specifying a an illumination
+spectrum for the instrument illuminant, overriding that computed from
+the type of instrument (recorded in the .ti3 file). This flag is can
+only be used in combination with the <span style="font-weight: bold;">-f</span>
+flag. If a
+filename is specified instead, it will be assumed to be an Argyll
+specific <a href="File_Formats.html#.sp">.sp</a> custom spectrum file.
+Illuminant details are:<br>
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; A&nbsp;&nbsp; CIE tungsten
+filament lamp 2848K<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; D50 CIE daylight 5000K<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; D65 CIE daylight 6500K<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; F5&nbsp; CIE Fluorescent
+6350K, CRI 72<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; F8&nbsp; CIE Fluorescent
+5000K, CRI 95<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; F10 CIE Fluorescent 5000K,
+CRI 81<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

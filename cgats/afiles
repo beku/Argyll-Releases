@@ -1,0 +1,16 @@
+cgats/Readme.txt
+cgats/Licence.txt
+cgats/afiles
+cgats/cgats.c
+cgats/cgats.h
+cgats/pars.c
+cgats/pars.h
+cgats/parsstd.c
+cgats/cgatsstd.c
+cgats/Jamfile
+cgats/Makefile
+cgats/Makefile.WNT
+cgats/Makefile.IBMNT
+cgats/Makefile.UNIX
+cgats/Makefile.OSX
+cgats/makezip.ksh

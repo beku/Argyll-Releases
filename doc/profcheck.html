@@ -1,0 +1,142 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>profcheck</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>profile/profcheck</b></h2>
+<h3>Summary</h3>
+Check an&nbsp;<a href="File_Formats.html#ICC">ICC</a> profile
+against&nbsp;<a href="File_Formats.html#.ti3">.ti3</a> test chart
+data.<br>
+<h3>Usage Summary</h3>
+profcheck&nbsp; [-options] data.ti3 iccprofile.icm<br>
+&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;Verbose - print each patch value<br>
+&nbsp;-c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;Show CIE94 delta E values<br>
+&nbsp;-k &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp; Show CIEDE2000 delta E values<br>
+&nbsp;-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; create VRML visualization (iccprofile.wrl)<br>
+&nbsp;-x&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;Use VRML axes<br>
+&nbsp;-d devval1,deval2,devvalN<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Specify a device value to sort
+against<br>
+&nbsp;-p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;Sort device value by PCS/Lab target<br>
+&nbsp;-i illum&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+Choose
+illuminant for print/transparency spectral data:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; A, D50 (def.), D65, F5, F8, F10 or
+file.sp<br>
+&nbsp;-o observ&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; Choose CIE
+Observer
+for spectral data:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 1931_2, 1964_10, S&amp;B 1955_2,
+J&amp;V
+1978_2 (def.)<br>
+&nbsp;-f&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;Use Fluorescent Whitening Agent
+compensation<br>
+<i> &nbsp;data.ti3</i>&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
+Test
+point data file<br>
+<i>&nbsp;iccprofile.icm</i>&nbsp;&nbsp; Profile to check<br>
+<h3>Usage Details and Discussion</h3>
+<b> profcheck</b> provides a way of checking how well an&nbsp;<a
+ href="File_Formats.html#ICC">ICC</a> profile conforms to the test
+sample data that was used to create it (or other test samples
+that are from the same device). This is the same sort of check done
+within
+the profile making utility (<a href="profile.html">profile</a>), but
+having a
+separate utility provides some flexibility. <br>
+<br>
+The <b>-v</b> flag prints out extra information during the checking.<br>
+<br>
+The <b>-c</b> option causes the differences between the test values
+and
+the profile prediction of the color for each device value to be
+displayed
+in CIE94 delta E, rather than plain L*a*b* delta E. CIE94 delta E has a
+closer
+correspondence with perceived color differences than the default CIE76
+delta E values.<br>
+<br>
+The <b>-k</b> option causes the differences between the test values
+and
+the profile prediction of the color for each device value to be
+displayed
+in CIEDE2000 delta E, rather than plain L*a*b* delta E. CIEDE2000 delta
+E has a
+closer
+correspondence with perceived color differences than either CIE76 or
+CIE94 delta E values.<br>
+<br>
+The <b>-w</b> creates a <a href="File_Formats.html#VRML">VRML</a> 3D
+visualization
+of the differences between the test points and the profiles prediction
+of
+the resulting colors.<br>
+<br>
+The <b>-x</b> flag adds Lab axes to the VRML output.<br>
+<br>
+The <b>-d</b> parameters allow the specification of a particular
+device value,
+and the test point by test point output will be sorted by distance from
+the
+given device value. This can be useful in determining how well
+"supported"
+the profile is in a particular area of the colorspace.<br>
+<br>
+If the <b>-p </b>flag is used in combination with the <b>-d</b>
+parameters,
+then the test point by test point output will be sorted by distance in
+PCS
+(Lab) space rather than distance in device space.<br>
+<br>
+The <b>-i</b> flag allows specifying a standard or custom illumination
+spectrum, applied to the spectral test point values, to compute CIE
+tristimulus
+values. <b>A</b>, <b>D50</b>, <b>D65</b>, <b>F5</b>, <b>F8</b>, <b>F10</b>
+are a selection of standard illuminant spectrums, with <b>D50</b>
+being the
+default. If a filename is specified instead, it will be assumed to be
+an
+Argyll specific <a href="File_Formats.html#.sp">.sp</a> spectrum file.
+The same value should be used as was used during the creation of the
+profile.<br>
+<br>
+The <b>-o</b> flag allows specifying a tristimulus observer, and is
+used
+to compute CIE tristimulus values. The following choices are available:<br>
+<b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer.<br>
+&nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree observer.<br>
+&nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
+observer<br>
+&nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree observer<br>
+&nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
+observer<br>
+The same parameter value should be used as was used during the creation
+of the profile.<br>
+<br>
+The <b>-f</b> flag enables Fluorescent Whitening Agent compensation,
+which compensates for the effect a different illuminant will have, on
+any Fluorescent Whitening Agent present in the reflective media. The
+same setting should
+be used as was used during the creation of the profile.<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

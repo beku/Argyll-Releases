@@ -1,0 +1,116 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>cctiff</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>imdi/cctiff</b></h2>
+<h3>Summary</h3>
+Color convert a TIFF file using an ICC device link profile, or source
+and destination ICC device profiles. <br>
+<h3>Usage<br>
+</h3>
+cctiff [-options] <i>devlinkprofile.icm infile.tif outfile.tif</i><br>
+cctiff -l [-options] [-i intent] [-o intent] <i>inprofile.icm
+outprofile.icm infile.tif outfile.tif</i><br>
+&nbsp;<a href="#l">-l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; Link
+input and output device profiles, rather than using single device link
+profile.<br>
+&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp; Verbose<br>
+&nbsp;<a href="#c">-c</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp; Combine
+linearisation curves into one transform<br>
+&nbsp;<a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; Use slow
+precise floating point conversion, rather than fast integer routines.<br>
+&nbsp;<a href="#k">-k</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp; Check
+fast result against precise, and report differences.<br>
+&nbsp;<a href="#i">-i <span style="font-style: italic;">intent</span></a>&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; Input profile intent<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; p = perceptual, r = relative colorimetric,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp; s =
+saturation, a = absolute colorimetric<br>
+&nbsp;<a href="#o">-o <span style="font-style: italic;">intent</span></a>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; Output profile intent<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; p = perceptual, r = relative colorimetric,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;s =
+saturation, a = absolute colorimetric<br>
+&nbsp; <a href="#p1"><i>devlinkprofile.icm</i></a> &nbsp;Device link
+profile. Typically
+created using <a href="icclink.html"> icclink</a>.<br>
+&nbsp; <a href="#p1i"><i>inprofile.icm</i></a> &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;A device
+profile that defines the input color space. Typically created using <a
+ href="profile.html">profile</a>.<br>
+&nbsp; <a href="#p1o"><i>outprofile.icm</i></a> &nbsp; &nbsp; &nbsp;A
+device profile
+that defines the output color space. Typically created using <a
+ href="profile.html">profile</a>.<br>
+&nbsp; <a href="#p2"><i>infile.tif</i></a> &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;A <a href="File_Formats.html#TIFF">TIFF</a>
+Raster file that will be the input raster to be transformed.<br>
+&nbsp; <a href="#p3"><i>outfile.tif</i></a> &nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; &nbsp;A <a href="File_Formats.html#TIFF">TIFF</a>
+Raster file created from the input raster, using the given color
+transform.<b><br>
+<br>
+Examples</b><br>
+<br>
+cctiff -l -ir -or sRGB.icm CMYKprinter.icm infile.tif outfile.tif<br>
+<br>
+cctiff devicelink.icm infile.tif outfile.tif<br>
+<h3>Comments<br>
+</h3>
+<a name="v"></a> The -v flag reports extra information about the ICC
+profile.<br>
+<a name="c"></a><a name="p"></a><a name="k"></a> The -c, -p and -k
+options are intended to aid debugging.<br>
+<a name="l"></a> The -l option allows for the linking of two <a
+ href="File_Formats.html#ICC">ICC</a> device profiles, "on the fly".
+The linking mode is the equivalent of the "simple" mode in <a
+ href="icclink.html">icclink</a>. Monochrome, RGB, CMYK and
+multi-channel files
+are processed, as well as 8 bit and 16 bit files in the <a
+ href="File_Formats.html#TIFF">TIFF</a> raster format.<br>
+<a name="i"></a><a name="o"></a>The -i and -o parameters allow
+selecting the intent for the source and destination profiles. Normally
+the same intent should be used for both.<br>
+<a name="p1"></a>If the <span style="font-weight: bold;">-l</span>
+flag is not used, then a device link profile should be provided as the
+first argument.<br>
+<a name="p1i"></a>If the <span style="font-weight: bold;">-l</span>
+flag is being used, then the first argument should be the source device
+profile.<br>
+<a name="p1o"></a>If the <span style="font-weight: bold;">-l</span>
+flag is being used, then the second argument should be the destination
+device profile.<br>
+<a name="p2"></a>The second last argument should be the name of the
+TIFF file that is to be processed.<br>
+<a name="p3"></a>The last argument should be the name of the TIFF file
+to hold the results.<br>
+<br>
+<span style="font-weight: bold;">cctiff</span> uses very fast integer
+conversion routines to process the raster. Both 8 and 16 bit per
+component files can be handled, and up to 8 color channels.<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

@@ -1,0 +1,89 @@
+# JAM style makefile for integer interpolation code, cctiff etc.
+
+#SubDir TOP imdi ;
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+#CCFLAGS	    += $(CCDEBUGFLAG) ;		# Debugging flags
+#CCFLAGS	+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
+
+if $(HAVE_TIFF) {	# Alternate TIFF library
+	TIFFLIB = ;
+	TIFFINC = ;
+	LINKLIBS on cctiff$(SUFEXE) = -ltiff $(LINKLIBS) ;
+} else {
+	TIFFLIB = ../tiff/libtiff.lib ;
+	TIFFINC = ../tiff ;
+}
+
+#Products
+Libraries = libimdi ;
+Executables = cctiff ;
+Headers = imdi.h ;
+
+#Install
+InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
+#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
+#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+
+# imdi cgen test code
+Main ctest : ctest.c cgen.c ;
+
+# imdi test code
+#Main tt : tt.c ;
+#Main t : t.c ;
+
+# imdi generator executable
+Main imdi_gen : imdi_gen.c cgen.c ;
+ObjectHdrs imdi_gen : ../h ;
+
+# GenFile source.c : program args ;	make custom file
+# Generate all the kernel files
+GenFile imdi_k.h : imdi_gen ;
+
+# imdi library
+Library libimdi.lib : imdi.c imdi_tab.c ;
+ObjectHdrs imdi_tab$(SUFOBJ) : ../h ../numlib ;
+
+# imdi test code
+Main itest : itest.c refi.c ;
+ObjectHdrs itest$(SUFOBJ) refi$(SUFOBJ) : ../h ../rspl ../numlib ;	# icc bug workaround
+LinkLibraries itest : libimdi.lib ../rspl/librspl.h ../numlib/libnum.h ;
+
+# TIFF file color correction utlity
+Main cctiff : cctiff.c ;
+ObjectHdrs cctiff$(SUFOBJ) : ../h ../icc $(TIFFINC) ;	# icc bug workaround
+LinkLibraries cctiff : ../icc/libicc.lib $(TIFFLIB) libimdi.lib ;
+
+if $(DEV_CODE) {
+
+	# Development TIFF file color correction utlity
+	Main cctiff2 : cctiff2.c ;
+	ObjectHdrs cctiff2$(SUFOBJ) : ../h ../icc $(TIFFINC) ;	# icc bug workaround
+	LinkLibraries cctiff2 : ../icc/libicc.lib $(TIFFLIB) libimdi.lib ;
+
+}
+
+# TIFF file monochrome conversion utlity
+Main greytiff : greytiff.c ;
+ObjectHdrs greytiff$(SUFOBJ) : ../h ../icc $(TIFFINC) ;	# icc bug workaround
+LinkLibraries greytiff : ../icc/libicc.lib $(TIFFLIB) libimdi.lib ;
+
+# ssort generation code
+Main ssort : ssort.c ;
+
+if $(BUILD_JUNK) {
+
+	CCFLAGS 	+= -msse3 ;
+
+	Main tvec : tvec.c ;
+	Main tvec2 : tvec2.c ;
+
+	# test code
+	Main tsort : tsort.c ;
+	ObjectHdrs tsort$(SUFOBJ) : ../h ../numlib ;
+	LinkLibraries tsort : ../numlib/libnum.h ;
+}
+

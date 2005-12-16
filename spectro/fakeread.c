@@ -1,0 +1,809 @@
+/* 
+ * Argyll Color Correction System
+ * Fake print target chart reader - use ICC or MPP profile rather than instrument
+ *
+ * Author: Graeme W. Gill
+ * Date:   17/2/2002
+ *
+ * Copyright 2002 - 2005 Graeme W. Gill
+ * All rights reserved.
+ *
+ * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
+ * see the Licence.txt file for licencing details.
+ */
+
+/*
+ * TTBD: 
+ *
+ */
+
+
+#undef DEBUG
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <sys/types.h>
+#include <time.h>
+#include <string.h>
+#include "copyright.h"
+#include "config.h"
+#include "numlib.h"
+#include "cgats.h"
+#include "xicc.h"
+#include "icc.h"
+
+void
+usage(char *mes) {
+	fprintf(stderr,"Fake test chart reader - lookup values in ICC/MPP profile, Version %s\n",
+	               ARGYLL_VERSION_STR);
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	if (mes != NULL)
+		fprintf(stderr,"Error '%s'\n",mes);
+	fprintf(stderr,"usage: printread [-v] [-s] [separation.icm] profile.[icc|mpp|ti3] outfile\n");
+	fprintf(stderr," -v                Verbose mode\n");
+	fprintf(stderr," -s                Lookup MPP spectral values\n");
+	fprintf(stderr," -p                Use separation profile\n");
+	fprintf(stderr," -l                Output Lab rather than XYZ\n");
+	fprintf(stderr," -0 pow            Apply power to input device chanel 0-9 (after sep.)\n");
+	fprintf(stderr," -r level          Add total of <level> random to input device values 0.0 - 1.0 (after sep.)\n");
+	fprintf(stderr," -R level          Add total of <level> random to output PCS values 0.0 - 100.0\n");
+	fprintf(stderr," [separation.icm]  Device link separation profile\n");
+	fprintf(stderr," profile.[icc|mpp|ti3] ICC, MPP profile or TI3 to use\n");
+	fprintf(stderr," outfile           Base name for input[ti1]/output[ti3] file\n");
+	exit(1);
+	}
+
+main(int argc, char *argv[])
+{
+	int i,j;
+	int fa,nfa;							/* current argument we're looking at */
+	int verb = 0;		/* Verbose flag */
+	int dosep = 0;		/* Use separation before profile */
+	int dolab = 0;		/* Output Lab rather than XYZ */
+	int gfudge = 0;		/* Do grey fudge, 1 = W->RGB, 2 = K->xxxK */
+	double chpow[10] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+	double rdlevel = 0.0;	/* Random device level */
+	double rplevel = 0.0;	/* Random PCS level */
+	static char sepname[500] = { 0 };	/* ICC separation profile */
+	static char profname[500] = { 0 };	/* ICC or MPP Profile name */
+	static char inname[500] = { 0 };	/* Input cgats file base name */
+	static char outname[500] = { 0 };	/* Output cgats file base name */
+	cgats *icg;			/* input cgats structure */
+	cgats *ocg;			/* output cgats structure */
+	int nmask = 0;		/* Test chart device colorant mask */
+	int nchan = 0;		/* Test chart number of device chanels */
+	int npat;			/* Number of patches */
+	int si;				/* Sample id index */
+	int li;				/* Location id index */
+	int ti;				/* Temp index */
+	int fi;				/* Colorspace index */
+
+	/* ICC separation device link profile  */
+	icmFile *sep_fp = NULL;		/* Color profile file */
+	icc *sep_icco = NULL;		/* Profile object */
+	icmLuBase *sep_luo = NULL;	/* Conversion object */
+	icColorSpaceSignature sep_ins, sep_outs;	/* Type of input and output spaces */
+	int sep_inn;				/* Number of input channels to separation */
+	int sep_nmask;				/* Colorant mask for separation input */
+
+	/* ICC profile based */
+	icmFile *icc_fp = NULL;	/* Color profile file */
+	icc *icc_icco = NULL;	/* Profile object */
+	icmLuBase *icc_luo = NULL;	/* Conversion object */
+
+	/* MPP profile based */
+	mpp *mlu = NULL;	/* Conversion object */
+	instType itype = instUnknown;	/* Type of instrument used */
+	int dospec = 0;		/* Do spectral MPP lookup */
+	int spec_n = 0;		/* Number of spectral bands */
+	double spec_wl_short;/* First reading wavelength in nm (shortest) */
+	double spec_wl_long; /* Last reading wavelength in nm (longest) */
+
+	/* TI3 based fake read */
+	cgats *ti3 = NULL;	/* input cgats structure */
+	int ti3_npat;		/* Number of patches in reference file */
+	int ti3_chix[ICX_MXINKS];	/* Device chanel indexes */
+	int ti3_pcsix[3];	/* Device chanel indexes */
+	int ti3_spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
+	int ti3_isLab;		/* Flag indicating PCS for TI3 file */
+
+	int rv = 0;
+	int inn, outn;		/* Number of channels for conversion input, output */
+	icColorSpaceSignature ins, outs;	/* Type of conversion input and output spaces */
+	int cnv_nmask = 0;	/* Conversion input nmask */ 
+	time_t clk = time(0);
+	struct tm *tsp = localtime(&clk);
+	char *atm = asctime(tsp); /* Ascii time */
+	char *xyzfname[3] = { "XYZ_X", "XYZ_Y", "XYZ_Z" };
+	char *labfname[3] = { "LAB_L", "LAB_A", "LAB_B" };
+
+	error_program = "Fakeread";
+	if (argc < 3)
+		usage("Too few arguments");
+
+	/* Process the arguments */
+	for(fa = 1;fa < argc;fa++) {
+		nfa = fa;					/* skip to nfa if next argument is used */
+		if (argv[fa][0] == '-') {	/* Look for any flags */
+			char *na = NULL;		/* next argument after flag, null if none */
+
+			if (argv[fa][2] != '\000')
+				na = &argv[fa][2];		/* next is directly after flag */
+			else
+				{
+				if ((fa+1) < argc)
+					{
+					if (argv[fa+1][0] != '-')
+						{
+						nfa = fa + 1;
+						na = argv[nfa];		/* next is seperate non-flag argument */
+						}
+					}
+				}
+
+			if (argv[fa][1] == '?')
+				usage("Usage requested");
+
+			/* Verbose */
+			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+				verb = 1;
+
+			/* Spectral MPP lookup */
+			else if (argv[fa][1] == 's' || argv[fa][1] == 'S')
+				dospec = 1;
+
+			/* Separation */
+			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P')
+				dosep = 1;
+
+			/* Lab */
+			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L')
+				dolab = 1;
+
+			/* Random addition to device levels */
+			else if (argv[fa][1] == 'r') {
+				fa = nfa;
+				if (na == NULL) usage("Expect argument to -r");
+				rdlevel = atof(na);
+				rand32(time(NULL));		/* Init seed randomly */
+			}
+
+			/* Random addition to PCS levels */
+			else if (argv[fa][1] == 'R') {
+				fa = nfa;
+				if (na == NULL) usage("Expect argument to -R");
+				rplevel = atof(na);
+				rand32(time(NULL));		/* Init seed randomly */
+			}
+
+
+			/* Power applied to device channels */
+			else if (argv[fa][1] >= '0' && argv[fa][1] <= '9') {
+				fa = nfa;
+				if (na == NULL) usage("Expect argument to -[0-9]");
+				chpow[argv[fa][1]-'0'] = atof(na);
+			}
+
+			else
+				usage("Unrecognised flag");
+		}
+		else
+			break;
+	}
+
+	/* Get the file name argument */
+	if (dosep) {
+		if (fa >= argc || argv[fa][0] == '-') usage("Missing separation profile filename argument");
+		strcpy(sepname,argv[fa++]);
+	}
+
+	if (fa >= argc || argv[fa][0] == '-') usage("Missing profile filename argument");
+	strcpy(profname,argv[fa++]);
+
+	if (fa >= argc || argv[fa][0] == '-') usage("Missing basename argument");
+	strcpy(inname,argv[fa]);
+	strcat(inname,".ti1");
+	strcpy(outname,argv[fa]);
+	strcat(outname,".ti3");
+
+	/* Deal with separation */
+	if (dosep) {
+		if ((sep_fp = new_icmFileStd_name(sepname,"r")) == NULL)
+			error ("Can't open file '%s'",sepname);
+	
+		if ((sep_icco = new_icc()) == NULL)
+			error ("Creation of ICC object failed");
+	
+		/* Deal with ICC separation */
+		if ((rv = sep_icco->read(sep_icco,sep_fp,0)) == 0) {
+	
+			/* Get a conversion object */
+			if ((sep_luo = sep_icco->get_luobj(sep_icco, icmFwd, icmDefaultIntent, icmSigDefaultData, icmLuOrdNorm)) == NULL) {
+					error ("%d, %s",sep_icco->errc, sep_icco->err);
+			}
+	
+			/* Get details of conversion */
+			sep_luo->spaces(sep_luo, &sep_ins, &sep_inn, &sep_outs, NULL, NULL, NULL, NULL, NULL);
+			sep_nmask = icx_icc_to_colorant_comb(sep_ins);
+		}
+	}
+
+	/* Deal with ICC profile */
+	if ((icc_fp = new_icmFileStd_name(profname,"r")) == NULL)
+		error ("Can't open file '%s'",profname);
+
+	if ((icc_icco = new_icc()) == NULL)
+		error ("Creation of ICC object failed");
+
+	/* Deal with ICC profile */
+	if ((rv = icc_icco->read(icc_icco,icc_fp,0)) == 0) {
+
+		/* Get a Device to PCS conversion object */
+		if ((icc_luo = icc_icco->get_luobj(icc_icco, icmFwd, icAbsoluteColorimetric,
+		                           dolab ? icSigLabData : icSigXYZData, icmLuOrdNorm)) == NULL) {
+			if ((icc_luo = icc_icco->get_luobj(icc_icco, icmFwd, icmDefaultIntent,
+			                       dolab ? icSigLabData : icSigXYZData, icmLuOrdNorm)) == NULL)
+				error ("%d, %s",icc_icco->errc, icc_icco->err);
+		}
+
+		/* Get details of conversion */
+		icc_luo->spaces(icc_luo, &ins, &inn, &outs, &outn, NULL, NULL, NULL, NULL);
+		cnv_nmask = icx_icc_to_colorant_comb(ins);
+
+		if (dospec)
+			error("Can't lookup spectral values for ICC profile");
+
+	} else {	/* Not a valid ICC */
+		/* Close out the ICC profile */
+		icc_icco->del(icc_icco);
+		icc_icco = NULL;
+		icc_fp->del(icc_fp);
+		icc_fp = NULL;
+		icc_luo = NULL;
+	}
+
+	/* If we don't have an ICC lookup object, look for an MPP */
+	if (icc_luo == NULL) {
+
+		if ((mlu = new_mpp()) == NULL)
+			error ("Creation of MPP object failed");
+
+		if ((rv = mlu->read_mpp(mlu, profname)) == 0) {
+
+			/* mlu defaults to absolute XYZ lookup */
+			if (dolab) {
+				mlu->set_ilob(mlu, icxIT_default, NULL, icxOT_default, NULL, icSigLabData, 0);
+			}
+
+			mlu->get_info(mlu, &cnv_nmask, &inn, NULL,
+			                   &spec_n, &spec_wl_short, &spec_wl_long, &itype);
+	
+			outn = 3;
+			outs = dolab ? icSigLabData : icSigXYZData;
+	
+			if ((ins = icx_colorant_comb_to_icc(cnv_nmask)) == 0)
+				error ("Couldn't match MPP mask to valid ICC colorspace");
+	
+			if (dospec && spec_n <= 0)
+				error("Can't lookup spectral values for non-spectral MPP profile");
+		} else {
+			mlu->del(mlu);
+			mlu = NULL;
+		}
+	}
+
+	/* If we don't have an ICC or MPP lookup object, look for a TI3 */
+	if (icc_luo == NULL && mlu == NULL) {
+		char *buf, *outc;
+		char *ti3_ident;
+		int ti3_nchan;
+
+		ti3 = new_cgats();			/* Create a CGATS structure */
+		ti3->add_other(ti3, "CTI3");/* our special input type is Calibration Target Information 3 */
+	
+		if (ti3->read_name(ti3, profname))
+			error("CGATS file read error : %s",ti3->err);
+	
+		if (ti3->t[0].tt != tt_other || ti3->t[0].oi != 0)
+			error ("Profile file '%s' isn't a CTI3 format file",profname);
+		if (ti3->ntables != 1)
+			error ("Input file '%s' doesn't contain one table",profname);
+
+		if ((ti = ti3->find_kword(ti3, 0, "COLOR_REP")) < 0)
+			error("Input file doesn't contain keyword COLOR_REPS");
+	
+		if ((buf = strdup(ti3->t[0].kdata[ti])) == NULL)
+			error("Malloc failed");
+	
+		/* Split COLOR_REP into device and PCS space */
+		if ((outc = strchr(buf, '_')) == NULL)
+			error("COLOR_REP '%s' invalid", ti3->t[0].kdata[ti]);
+		*outc++ = '\000';
+	
+		outn = 3;
+		if (strcmp(outc, "XYZ") == 0) {
+			ti3_isLab = 0;
+			outs = icSigXYZData;
+		} else if (strcmp(outc, "LAB") == 0) {
+			ti3_isLab = 1;
+			outs = icSigLabData;
+		} else
+			error("COLOR_REP '%s' invalid (Neither XYZ nor LAB)", ti3->t[0].kdata[ti]);
+
+		if ((cnv_nmask = icx_char2inkmask(buf)) == 0) {
+			error ("File '%s' keyword COLOR_REPS has unknown device value '%s'",profname,buf);
+		}
+
+		free(buf);
+
+		if ((ins = icx_colorant_comb_to_icc(cnv_nmask)) == 0)
+			error ("Couldn't match MPP mask to valid ICC colorspace");
+
+		if ((inn = icmCSSig2nchan(ins)) == 0)
+			error ("TI3 Colorspace with unknown number of channels");
+
+		if ((ti3_npat = ti3->t[0].nsets) <= 0)
+			error ("No sets of data in reference TI3 file");
+
+		ti3_nchan = icx_noofinks(cnv_nmask);
+		ti3_ident = icx_inkmask2char(cnv_nmask); 
+
+		/* Find device fields */
+		for (j = 0; j < ti3_nchan; j++) {
+			int ii, imask;
+			char fname[100];
+
+			imask = icx_index2ink(cnv_nmask, j);
+			sprintf(fname,"%s_%s",cnv_nmask == ICX_W || cnv_nmask == ICX_K ? "GRAY" : ti3_ident,
+			                      icx_ink2char(imask));
+
+			if ((ii = ti3->find_field(ti3, 0, fname)) < 0)
+				error ("Input file doesn't contain field %s",fname);
+			if (ti3->t[0].ftype[ii] != r_t)
+				error ("Field %s is wrong type",fname);
+			ti3_chix[j] = ii;
+		}
+
+		/* Find PCS fields */
+		for (j = 0; j < 3; j++) {
+			int ii;
+
+			if ((ii = ti3->find_field(ti3, 0, ti3_isLab ? labfname[j] : xyzfname[j])) < 0)
+				error ("Input file doesn't contain field %s",ti3_isLab ? labfname[j] : xyzfname[j]);
+			if (ti3->t[0].ftype[ii] != r_t)
+				error ("Field %s is wrong type",ti3_isLab ? labfname[j] : xyzfname[j]);
+			ti3_pcsix[j] = ii;
+		}
+
+		/* Find spectral fields */
+		if ((ti = ti3->find_kword(ti3, 0, "SPECTRAL_BANDS")) >= 0) {
+			spec_n = atoi(ti3->t[0].kdata[ti]);
+			if ((ti = ti3->find_kword(ti3, 0, "SPECTRAL_START_NM")) < 0)
+				error ("Input file doesn't contain keyword SPECTRAL_START_NM");
+			spec_wl_short = atof(ti3->t[0].kdata[ti]);
+			if ((ti = ti3->find_kword(ti3, 0, "SPECTRAL_END_NM")) < 0)
+				error ("Input file doesn't contain keyword SPECTRAL_END_NM");
+			spec_wl_long = atof(ti3->t[0].kdata[ti]);
+	
+			/* Find the fields for spectral values */
+			for (j = 0; j < spec_n; j++) {
+				int nm;
+		
+				/* Compute nearest integer wavelength */
+				nm = (int)(spec_wl_short + ((double)j/(spec_n-1.0))
+				            * (spec_wl_long - spec_wl_short) + 0.5);
+				
+				sprintf(buf,"SPEC_%03d",nm);
+	
+				if ((ti3_spi[j] = ti3->find_field(ti3, 0, buf)) < 0)
+					error("Input file doesn't contain field %s",buf);
+			}
+		}
+
+		if (dospec && spec_n <= 0)
+			error("Can't lookup spectral values for non-spectral TI3 file");
+	}
+
+	/* Deal with input CGATS files */
+	icg = new_cgats();			/* Create a CGATS structure */
+	icg->add_other(icg, "CTI1"); 	/* our special input type is Calibration Target Information 1 */
+
+	if (icg->read_name(icg, inname))
+		error("CGATS file read error : %s",icg->err);
+
+	if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
+		error ("Input file isn't a CTI1 format file");
+	if (icg->ntables != 1 && icg->ntables != 2)
+		error ("Input file doesn't contain one or two tables");
+
+	if ((npat = icg->t[0].nsets) <= 0)
+		error ("No sets of data");
+
+	/* Setup output cgats file */
+	ocg = new_cgats();				/* Create a CGATS structure */
+	ocg->add_other(ocg, "CTI3"); 		/* our special type is Calibration Target Information 3 */
+	ocg->add_table(ocg, tt_other, 0);	/* Start the first table */
+
+	ocg->add_kword(ocg, 0, "DESCRIPTOR", "Argyll Calibration Target chart information 3",NULL);
+	ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll printread", NULL);
+	atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
+	ocg->add_kword(ocg, 0, "CREATED",atm, NULL);
+
+	/* What sort of device this is */
+	if (ti3 != NULL) {
+		if ((ti = ti3->find_kword(ti3, 0, "DEVICE_CLASS")) < 0)
+			error("Input TI3 doesn't contain keyword DEVICE_CLASS");
+		ocg->add_kword(ocg, 0, "DEVICE_CLASS",ti3->t[0].kdata[ti], NULL);	/* Copy */
+	} else if (mlu != NULL) {
+		/* This is a guess. It may not be correct. */
+		if (cnv_nmask & ICX_ADDITIVE)	
+			ocg->add_kword(ocg, 0, "DEVICE_CLASS","DISPLAY", NULL);
+		else
+			ocg->add_kword(ocg, 0, "DEVICE_CLASS","OUTPUT", NULL);
+	} else {	/* Assume ICC */
+		if (icc_icco->header->deviceClass == icSigDisplayClass)
+			ocg->add_kword(ocg, 0, "DEVICE_CLASS","DISPLAY", NULL);
+		else
+			ocg->add_kword(ocg, 0, "DEVICE_CLASS","OUTPUT", NULL);
+	}
+
+	if ((ti = icg->find_kword(icg, 0, "SINGLE_DIM_STEPS")) >= 0)
+		ocg->add_kword(ocg, 0, "SINGLE_DIM_STEPS",icg->t[0].kdata[ti], NULL);
+
+	if ((ti = icg->find_kword(icg, 0, "COMP_GREY_STEPS")) >= 0)
+		ocg->add_kword(ocg, 0, "COMP_GREY_STEPS",icg->t[0].kdata[ti], NULL);
+
+	if ((ti = icg->find_kword(icg, 0, "MULTI_DIM_STEPS")) >= 0)
+		ocg->add_kword(ocg, 0, "MULTI_DIM_STEPS",icg->t[0].kdata[ti], NULL);
+
+	if ((ti = icg->find_kword(icg, 0, "FULL_SPREAD_PATCHES")) >= 0)
+		ocg->add_kword(ocg, 0, "FULL_SPREAD_PATCHES",icg->t[0].kdata[ti], NULL);
+	
+	if (icc_luo == NULL) {	/* If MPP profile, we know what the target instrument is */
+		ocg->add_kword(ocg, 0, "TARGET_INSTRUMENT", inst_name(itype) , NULL);
+	}
+
+	/* Fields we want */
+	ocg->add_field(ocg, 0, "SAMPLE_ID", nqcs_t);
+
+	if ((si = icg->find_field(icg, 0, "SAMPLE_ID")) < 0)
+		error ("Input file doesn't contain field SAMPLE_ID");
+
+	/* Figure out the color space */
+	if ((fi = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
+		error ("Input file doesn't contain keyword COLOR_REPS");
+
+	if ((nmask = icx_char2inkmask(icg->t[0].kdata[fi])) == 0)
+		error ("Input file keyword COLOR_REPS has unknown value");
+
+	{
+		int i, j, ii;
+		int chix[ICX_MXINKS];	/* Device chanel indexes */
+		char *ident;
+		int nsetel = 0;
+		cgats_set_elem *setel;	/* Array of set value elements */
+
+		/* Sanity check what we're going to do */
+		if (dosep) {
+
+			/* Check if sep ICC input is compatible with .ti1 */
+			if (nmask == ICX_W && sep_ins == icSigRgbData)
+				gfudge = 1;
+			else if (nmask == ICX_K && sep_ins == icSigCmykData)
+				gfudge = 2;
+			else if (icx_colorant_comb_match_icc(nmask, sep_ins) == 0) {
+				error("Separation ICC device space '%s' dosen't match TI1 '%s'",
+				       icm2str(icmColorSpaceSignature, sep_ins),
+				       icx_inkmask2char(nmask));	/* Should free(). */
+			}
+
+			/* Check if separation ICC output is compatible with ICC/MPP/TI3 conversion */ 
+			if (icc_luo != NULL) {
+				/* Check if icc is compatible with .ti1 */
+				if (sep_outs != ins)
+					error("ICC device space '%s' dosen't match Separation ICC '%s'",
+					       icm2str(icmColorSpaceSignature, ins),
+					       icm2str(icmColorSpaceSignature, sep_outs));
+			} else if (mlu != NULL) {
+				/* Check if mpp is compatible with .ti1 */
+				if (icx_colorant_comb_match_icc(cnv_nmask, sep_outs) == 0)
+					error("MPP device space '%s' doesn't match Separation ICC '%s'",
+					       icx_inkmask2char(cnv_nmask),	/* Should free(). */
+					       icm2str(icmColorSpaceSignature, sep_outs));
+			} else if (ti3 != NULL) {
+				/* Check if .ti3 is compatible with .ti1 */
+				if (icx_colorant_comb_match_icc(cnv_nmask, sep_outs) == 0)
+					error("TI3 device space '%s' doesn't match Separation ICC '%s'",
+					       icx_inkmask2char(cnv_nmask),	/* Should free(). */
+					       icm2str(icmColorSpaceSignature, sep_outs));
+			}
+		} else if (icc_luo != NULL) {
+			/* Check if icc is compatible with .ti1 */
+			if (nmask == ICX_W && ins == icSigRgbData)
+				gfudge = 1;
+			else if (nmask == ICX_K && ins == icSigCmykData)
+				gfudge = 2;		/* Should allow for other colorant combo's that include black */
+			else if (icx_colorant_comb_match_icc(nmask, ins) == 0) {
+				error("ICC device space '%s' dosen't match TI1 '%s'",
+				       icm2str(icmColorSpaceSignature, ins),
+				       icx_inkmask2char(nmask));	// Should free().
+			}
+		} else if (mlu != NULL) {
+			/* Check if mpp is compatible with .ti1 */
+			if (nmask == ICX_W && cnv_nmask == ICX_RGB)
+				gfudge = 1;
+			else if (nmask == ICX_K && (cnv_nmask & ICX_BLACK))
+				gfudge = 2;
+			else if (cnv_nmask != nmask)
+				error("MPP device space '%s' doesn't match TI1 '%s'",
+				       icx_inkmask2char(cnv_nmask), icx_inkmask2char(nmask));	// Should free().
+		} else if (ti3 != NULL) {
+			/* Check if .ti3 is compatible with .ti1 */
+			if (nmask == ICX_W && cnv_nmask == ICX_RGB)
+				gfudge = 1;
+			else if (nmask == ICX_K && (cnv_nmask & ICX_BLACK))
+				gfudge = 2;
+			else if (cnv_nmask != nmask)
+				error("TI3 device space '%s' doesn't match TI1 '%s'",
+				       icx_inkmask2char(cnv_nmask), icx_inkmask2char(nmask));	// Should free().
+		}
+
+		if ((ii = icg->find_kword(icg, 0, "TOTAL_INK_LIMIT")) >= 0)
+			ocg->add_kword(ocg, 0, "TOTAL_INK_LIMIT",icg->t[0].kdata[ii], NULL);
+
+		nchan = icx_noofinks(nmask);
+		ident = icx_inkmask2char(nmask); 
+
+		nsetel += 1;		/* For id */
+		nsetel += nchan;	/* For device values */
+		nsetel += 3;		/* For XYZ/Lab */
+
+		for (j = 0; j < nchan; j++) {
+			int imask;
+			char fname[100];
+
+			imask = icx_index2ink(nmask, j);
+			sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : ident,
+			                      icx_ink2char(imask));
+
+			if ((ii = icg->find_field(icg, 0, fname)) < 0)
+				error ("Input file doesn't contain field %s",fname);
+			if (icg->t[0].ftype[ii] != r_t)
+				error ("Field %s is wrong type",fname);
+	
+			ocg->add_field(ocg, 0, fname, r_t);
+			chix[j] = ii;
+		}
+
+		/* Add PCS fields */
+		for (j = 0; j < 3; j++) {
+			ocg->add_field(ocg, 0, dolab ? labfname[j] : xyzfname[j], r_t);
+		}
+
+		/* If we have spectral information, output it too */
+		if (dospec > 0 && spec_n > 0) {
+			char buf[100];
+
+			nsetel += spec_n;		/* Spectral values */
+			sprintf(buf,"%d", spec_n);
+			ocg->add_kword(ocg, 0, "SPECTRAL_BANDS",buf, NULL);
+			sprintf(buf,"%f", spec_wl_short);
+			ocg->add_kword(ocg, 0, "SPECTRAL_START_NM",buf, NULL);
+			sprintf(buf,"%f", spec_wl_long);
+			ocg->add_kword(ocg, 0, "SPECTRAL_END_NM",buf, NULL);
+
+			/* Generate fields for spectral values */
+			for (i = 0; i < spec_n; i++) {
+				int nm;
+		
+				/* Compute nearest integer wavelength */
+				nm = (int)(spec_wl_short + ((double)i/(spec_n-1.0))
+				            * (spec_wl_long - spec_wl_short) + 0.5);
+				
+				sprintf(buf,"SPEC_%03d",nm);
+				ocg->add_field(ocg, 0, buf, r_t);
+			}
+		}
+
+		{
+			char fname[100];
+			sprintf(fname, dolab ? "%s_LAB" : "%s_XYZ", ident);
+			ocg->add_kword(ocg, 0, "COLOR_REP", fname, NULL);
+		}
+
+		if ((setel = (cgats_set_elem *)malloc(sizeof(cgats_set_elem) * nsetel)) == NULL)
+			error("Malloc failed!");
+
+		/* Read all the test patches in, convert them, */
+		/* and write them out. */
+		for (i = 0; i < npat; i++) {
+			int k = 0;
+			char *id;
+			double odev[ICX_MXINKS], dev[ICX_MXINKS], sep[ICX_MXINKS], PCS[3];
+			xspect out;
+
+			id = ((char *)icg->t[0].fdata[i][si]);
+			for (j = 0; j < nchan; j++) {
+				double dv = *((double *)icg->t[0].fdata[i][chix[j]]) / 100.0;
+				odev[j] = dev[j] = sep[j] = dv;
+			}
+
+			if (gfudge) {
+				int nch;
+
+				if (dosep)		/* Figure number of channels into conversion */
+					nch = sep_inn;
+				else
+					nch = inn;
+
+				if (gfudge == 1) { 	/* Convert W -> RGB */
+					double wval = dev[0];
+					for (j = 0; j < nch; j++)
+						dev[j] = sep[j] = wval; 
+
+				} else {			/* Convert K->xxxK */
+					int kch;
+					int inmask;
+					double kval = dev[0];
+
+					if (dosep)		/* Figure number of channels into conversion */
+						inmask = sep_nmask;
+					else
+						inmask = cnv_nmask;
+
+					if (inmask == 0)
+						error("Input colorspace ambiguous - can't determine if it has black");
+
+					if ((kch = icx_ink2index(inmask, ICX_BLACK)) == -1)
+						error("Can't find black colorant for K fudge");
+					for (j = 0; j < nch; j++) {
+						if (j == kch)
+							dev[j] = sep[j] = kval; 
+						else
+							dev[j] = sep[j] = 0.0; 
+					}
+				}
+			}
+
+			if (dosep)
+				if (sep_luo->lookup(sep_luo, sep, dev) > 1)
+					error ("%d, %s",icc_icco->errc,icc_icco->err);
+
+			/* Add randomness and non-linearity */
+			for (j = 0; j < inn; j++) {
+				double dv = sep[j];
+				if (rdlevel > 0.0) {
+					double rr = d_rand(-0.5 * rdlevel, 0.5 * rdlevel);
+					dv += rr;
+					if (dv < 0.0)
+						dv = 0.0;
+					else if (dv > 1.0)
+						dv = 1.0;
+				}
+				if (chpow[j] != 1.0) {
+					dv = pow(dv, chpow[j]);
+				}
+				sep[j] = dv;
+			}
+
+			/* Do color conversion */
+			if (icc_luo != NULL) {
+				if (icc_luo->lookup(icc_luo, PCS, sep) > 1)
+					error ("%d, %s",icc_icco->errc,icc_icco->err);
+			} else if (mlu != NULL) {
+				mlu->lookup(mlu, PCS, sep);
+				if (dospec && spec_n > 0) {
+					mlu->lookup_spec(mlu, &out, sep);
+				}
+			} else if (ti3 != NULL) {
+				int m;
+				double bdif = 1e6;
+				int bix = -1;
+
+				/* Search for the closest device values in TI3 file */
+				for (m = 0; m < ti3_npat; m++) {
+					double dif;
+
+					for (dif = 0.0, j = 0; j < nchan; j++) {
+						double xx;
+
+						xx = (*((double *)ti3->t[0].fdata[m][ti3_chix[j]]) / 100.0) - sep[j];
+						dif += xx * xx;
+					}
+					if (dif < bdif) {
+						bdif = dif;
+						bix = m;
+					}
+				}
+				/* Copy best value over */
+				if (!dosep)		/* Doesn't make sense for separation */
+					for (j = 0; j < nchan; j++) {
+						dev[j] = *((double *)ti3->t[0].fdata[bix][ti3_chix[j]]) / 100.0;
+					}
+				for (j = 0; j < 3; j++) {
+					PCS[j] = *((double *)ti3->t[0].fdata[bix][ti3_pcsix[j]]);
+				}
+				if (ti3_isLab && !dolab) {	/* Convert Lab to XYZ */
+					icmLab2XYZ(&icmD50, PCS, PCS);
+				} else if (!ti3_isLab && dolab) {	/* Convert XYZ to Lab */
+					icmXYZ2Lab(&icmD50, PCS, PCS);
+				} else if (!ti3_isLab) {		/* Convert XYZ100 to XYZ1 */
+					PCS[0] /= 100.0;
+					PCS[1] /= 100.0;
+					PCS[2] /= 100.0;
+				}
+				if (dospec && spec_n > 0) {
+					for (j = 0; j < spec_n; j++) {
+						out.spec[j] = *((double *)ti3->t[0].fdata[bix][ti3_spi[j]]);
+					}
+				}
+			}
+
+			setel[k++].c = id;
+			
+			for (j = 0; j < nchan; j++)
+				setel[k++].d = 100.0 * odev[j];
+
+			if (dolab == 0) {
+				PCS[0] *= 100.0;
+				PCS[1] *= 100.0;
+				PCS[2] *= 100.0;
+			}
+
+			/* Add randomness */
+			if (rplevel > 0.0) {
+				for (j = 0; j < 3; j++) {
+					double dv = PCS[j];
+					double rr = d_rand(-0.5 * rplevel, 0.5 * rplevel);
+					dv += rr;
+					if (dv < 0.0)
+						dv = 0.0;
+					PCS[j] = dv;
+				}
+			}
+
+			setel[k++].d = PCS[0];
+			setel[k++].d = PCS[1];
+			setel[k++].d = PCS[2];
+
+			if (dospec && spec_n > 0) {
+				for (j = 0; j < spec_n; j++) {
+					setel[k++].d = 100.0 * out.spec[j];
+				}
+			}
+
+			ocg->add_setarr(ocg, 0, setel);
+		}
+
+		free(setel);
+		free(ident);
+	}
+
+	if (sep_luo != NULL) {
+		sep_luo->del(sep_luo);
+		sep_icco->del(sep_icco);
+		sep_fp->del(sep_fp);
+	}
+
+	if (icc_luo != NULL) {
+		/* Cleanup ICC profile */
+		icc_luo->del(icc_luo);
+		icc_icco->del(icc_icco);
+		icc_fp->del(icc_fp);
+	} else if (mlu != NULL) {
+		mlu->del(mlu);
+	} else if (ti3 != NULL) {
+		ti3->del(ti3);
+	}
+
+	if (ocg->write_name(ocg, outname))
+		error("Write error : %s",ocg->err);
+
+	ocg->del(ocg);		/* Clean up */
+	icg->del(icg);		/* Clean up */
+
+	return 0;
+}
+
+

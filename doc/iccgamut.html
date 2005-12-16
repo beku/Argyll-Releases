@@ -1,0 +1,169 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>iccgamut</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>xicc/iccgamut</b></h2>
+<br>
+Create a gamut file or VRML file &nbsp;of the color gamut of an ICC
+profile.<br>
+<span style="font-weight: bold;"> iccgamut</span> allows creation of
+gamut files from the forward or backwards
+table of an ICC profile, in Lab or CIECAM02 Jab colorspace, and can
+also
+representing the gamut as a VRML file.<br>
+<h3>Usage<br>
+</h3>
+iccgamut [-options] <i>profile</i><br>
+&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Verbose<br>
+&nbsp;-d sres&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; Surface
+resolution details 1.0 - 50.0<br>
+&nbsp;-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;emit VRML .wrl file as well as CGATS .gam file<br>
+&nbsp;-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Don't add VRML axes or white/black point<br>
+&nbsp;-f function&nbsp; &nbsp; f = forward*, b = backwards<br>
+&nbsp;-i intent&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; p = perceptual, r
+= relative colorimetric,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; s = saturation, a = absolute*,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; j = Appearance CIECAM02, d = default<br>
+&nbsp;-o order&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; n = normal
+(priority: lut &gt; matrix &gt; monochrome)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; r = reverse (priority: monochrome &gt; matrix &gt;
+lut)<br>
+&nbsp;-l tlimit&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; set total
+ink limit, 0 - 400% (default none)<br>
+&nbsp;-L klimit&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; set black ink
+limit, 0 - 100% (default none)<br>
+&nbsp;-c viewcond&nbsp; set viewing conditions for CIECAM02,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; either an enumerated choice, or a series of
+parameters:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;0: Practical Reflection Print<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;1: Print evaluation environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;2: Monitor in typical work environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;3: Monitor in darkened work
+environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;4: Projector in dim environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;5: Projector in dark environment<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;6: Original scene - Outdoors<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;7: Photo CD - original scene<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;8: Transparencies on a viewing box<br>
+<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+s:surround&nbsp;&nbsp;&nbsp; &nbsp;a = average, m = dim, d = dark,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; c = transparency (default average)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;Adapted white point
+as XYZ (default media white)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;Adapted white point as x, y<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+a:adaptation&nbsp;&nbsp; Adaptation luminance in cd.m^2 (default 50.0)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; b:background
+Background % of image luminance (default 20)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;Flare
+light % of image luminance (default 1)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;Flare color as
+XYZ (default media white)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp;Flare color as x, y<br>
+<i>profile</i> &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;The name of the <a href="File_Formats.html#ICC">ICC</a>
+profile, as well as the basename of the <a
+ href="File_Formats.html#.gam">gamut</a> [.gam] and/or <a
+ href="File_Formats.html#.wrl">VRML</a> [.wrl] file.<br>
+<h3>Comments</h3>
+The parameters are all those that control which table in the ICC
+profile to use, as well as what color space to convert it to. <br>
+<br>
+The<b> -v</b> parameter dumps out the ICC profile header information.<br>
+<br>
+The <b>-d</b> parameter controls the level of detail displayed in the
+surface. The parameter roughly corresponds to a deltaE value, so
+smaller
+values give greater detail. The default value is around 10, and is a
+good
+place to start. Small values may take a lot of time to generate, and
+will
+produce big files.<br>
+<br>
+The <b>-w</b> option causes a VRML file to be produced, as well as a
+gamut file.<br>
+<br>
+The <b>-n</b> parameter suppresses the L*a*b* axes being created in
+the VRML.<br>
+<br>
+The <b>-f </b>option allows choosing the ICC table to be used in
+plotting the gamut. The backwards tables generally incorporate gamut
+compression, and therefore don't reflect the native capabilities of the
+device.<br>
+<br>
+The <b>-i</b> flag allows choosing the table being used by its intent.
+Anything other than colorimetric may not represent the native
+capabilities of the device. The j parameter interprets the absolute
+colorimetric table in terms of CIECAM02 appearance space Jab values.<br>
+<br>
+An ICC profile is allowed to contain more than the minimum number of
+elements or table needed to describe a certain transform, and may
+contain redundant descriptions. &nbsp;By default, lut based table
+information will be used first if present, followed by matrix/shaper
+information, and only using
+monochrome information if it is all that is present. The <b>-o</b>
+flag,
+reverses this order.&nbsp;&nbsp;&nbsp; <br>
+<br>
+The <b>-l</b> flag allows setting a total ink limit (TAC) for printing
+devices. If a device has a total ink limit, and hasn't been
+characterised with device values above this limit, then plotting the
+gamut in these areas will almost certainly be misleading.<br>
+<br>
+The <b>-L</b> flag allows setting a black ink limit for printing
+devices. If a device is to be used with a black ink limit, then it is
+useful to evaluate
+the gamut with the limit in place.<br>
+<br>
+The <b>-c</b> option allows setting the CIECAM02 viewing conditions,
+either by choosing a typical viewing environment, or controlling
+particular viewing condition parameters.<br>
+<h3>Example<br>
+</h3>
+To create a view in L*a*b* of the absolute gamut of a CMYK file with an
+ink limit of 260%, one might use:<br>
+<br>
+&nbsp;&nbsp;&nbsp; <span style="font-style: italic;">iccgamut -w -ff
+-ia -l260 profile.icm</span><br>
+<br>
+and the resulting files will be <span
+ style="text-decoration: underline;">profile.gam</span> and <span
+ style="text-decoration: underline;">profile.wrl</span>.<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

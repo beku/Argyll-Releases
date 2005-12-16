@@ -1,0 +1,199 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>printread</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>spectro/printread</b></h2>
+<h3>Summary</h3>
+Read a printer test chart using an instrument, to create a&nbsp;<a
+ href="File_Formats.html#.ti3">.ti3</a> data file.<br>
+<h3>Usage</h3>
+printread [-options] outfile<br>
+&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; Verbose mode<br>
+&nbsp;<a href="#d">-d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Print debug diagnostics<br>
+&nbsp;<a href="#c">-c comport</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set COM
+port, 1..N (default 1)<br>
+&nbsp;<a href="#i">-i 41 | 51 | SS</a> &nbsp; Choose target instrument<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; 41 = DTP41, 51 = DTP51, SS = Spectrolino or
+SpectroScan or SpectroScanT<br>
+&nbsp;<a href="#t">-t</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; Use transmission measurement mode<br>
+<a href="#e">-e</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use emissive&nbsp; measurement mode (absolute results)<br>
+<a href="#x">-x [lx]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Take external values, either L*a*b* (-xl) or XYZ (-xx).<br>
+&nbsp;<a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; Don't save spectral information (default saves
+spectral)<br>
+&nbsp;<a href="#p1"><i>inoutfile</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;Base
+name for input[<a href="File_Formats.html#.ti2">.ti2</a>]/output[<a
+ href="File_Formats.html#.ti3">.ti3</a>] file<br>
+<h3>Usage Details</h3>
+<a name="v"></a>The <b>-v</b> flag causes extra information to be
+printed out during printread
+operation.<br>
+<br>
+<a name="d"></a>The <b>-d</b> flag causes serial communications
+diagnostics to be printed to stdout. This can be useful in tracking
+down why an instrument can't connect.<br>
+<br>
+<a name="c"></a>Normally instruments are connected via a serial
+communication port, and the
+port used should be selected by supplying the correct parameter to the <b>-c</b>
+flag. If you invoke <span style="font-weight: bold;">printread</span>
+so as to display the usage
+information (i.e. "printread -?" or "printread --"), then the
+discovered
+serial ports will be listed on Windows and Mac OSX systems.<br>
+<br>
+<a name="i"></a>The type of instrument is normally specified when
+creating the test chart
+with <a href="printtarg.html"> printtarg</a>,
+but it can be overridden by using the <b>-i</b> flag. Note that
+specifying -iSS will enable automatic detection of a Spectrlino (hand
+held), SpectroScan or SpectroScanT.<br>
+<br>
+<a name="t"></a>If using an Xrite DTP41T, and printing onto transparent
+or back lit media,
+use the <b>-t</b> flag to operate the instrument in transparency mode.
+If using a Spectrolino (handheld), this triggers a fake transparency
+mode, that uses a separate backlight (such as a light box). The&nbsp;
+instrument will be used to calibrate the level of backlight, and use
+this to compute the transparency of the test chart samples. Note that
+for good transparency values, the backlight level needs to be neither
+too bright not too dark, should ideally be incandescent rather than
+fluorescent (since fluorescent lights often have big dips in their
+spectrum), and ideally should be of uniform brightness over the
+measurement area. If using the SpectroScanT, the <span
+ style="font-weight: bold;">-t</span> flag operates the instrument in
+transparency mode, each reading being manually triggered.<br>
+<br>
+<a name="e"></a> If using an instrument that supports an emissive
+measurement mode (such as the Spectrolino), then the <span
+ style="font-weight: bold;">-e</span> flag enables this measurement
+mode, and the values recorded will be absolute XYZ values. This can be
+used for media such as backlit film, measuring it on a lightbox, so as
+to capture the actual illumination characteristics of that particular
+media.<br>
+<br>
+<a name="x"></a> The <span style="font-weight: bold;">-x</span> flag
+causes printread to expect values to be entered for each reading,
+rather than using an instrument to do the measurements.&nbsp; This mode
+is ideal if your instrument is not supported by Argyll. Either XYZ or
+L*a*b* values can be entered, depending on what option follows <span
+ style="font-weight: bold;"><span style="font-weight: bold;">-l</span></span>,
+<span style="font-weight: bold;">-lx</span> to specify XYZ values, or <span
+ style="font-weight: bold;">-ll</span> to specify L*a*b* values. XYZ
+values are expected to be scaled to a maximum of 100. It is possible to
+navigate about the test values being measured, so as to do them in any
+order, as well as re-do values, in case of any mistakes.<br>
+<br>
+<a name="n"></a> By default spectral information as well as D50
+standard observer XYZ values
+will be recorded for each test patch, when such readings are available
+from a device. The spectral readings allow for
+choosing
+a non-standard viewing illuminant, a non-standard observer model, or
+the use of the Fluorescent Paper Whitener Additive
+compensation
+when creating the profile. If the spectral readings are not needed,
+then
+prinread operation can be speeded up by specifying the <b>-n</b> flag.<br>
+<br>
+<a name="p1"></a> The <i>inoutfile</i> parameters should be the base
+name of the .ti2 file,
+and printread will output an .ti3 that has the same basename and the
+.ti3
+extension.<br>
+<h3>Discussion</h3>
+When used with an Xrite DTP41 or DTP51 strip reading instrument,
+printread
+will first establish communications with the instrument, and then set
+it
+up ready to read the strips. The strips are labeled A to ZZ, and for
+each
+strip it will prompt:<br>
+<br>
+&nbsp;&nbsp;&nbsp; About to read strip XX&nbsp; :<br>
+<br>
+where XX is the strip label. You should line the appropriate strip up
+in
+the machine, and press its button. Since there is a slight delay
+between
+printing the "About to read" message and issuing the strip setup to the
+instrument,
+the button should be pressed a little after the message is displayed.<br>
+<br>
+If the strip is read successfully, the line will be completed with:<br>
+<br>
+&nbsp;&nbsp;&nbsp; About to read strip&nbsp; XX&nbsp; :&nbsp; Strip
+read
+OK<br>
+<br>
+If there is an error of some sort, a message will be issued, and you
+will
+be asked whether to abort the chart reading, or retry the<br>
+failed strip:<br>
+<br>
+&nbsp;&nbsp;&nbsp; About to read strip X&nbsp; : read_strip returned
+'Strip
+misread' (Bad reading)<br>
+<br>
+&nbsp;&nbsp;&nbsp; Strip read failed due to misread<br>
+&nbsp;&nbsp;&nbsp; Hit Esc to give up, any other key to retry:<br>
+<br>
+If the strip is read successfully, but the patches values don't seem to
+be reasonable, you will get the following type of response:<br>
+<br>
+&nbsp;&nbsp;&nbsp; About to read strip&nbsp; XX&nbsp; :<br>
+&nbsp;&nbsp;&nbsp; Seem to have read strip&nbsp; YY&nbsp; rather
+than&nbsp;
+XX !<br>
+&nbsp;&nbsp;&nbsp; Hit Return to use it anyway, any other key to retry:<br>
+<br>
+If you are sure you lined up the correct strip, then hit return,
+otherwise
+line the appropriate strip up again, and hit some other key (ie. space).<br>
+<br>
+You can abort the whole process at any time by hitting Escape.<br>
+<br>
+<br>
+When you are using an XY table type instrument, such as a Gretag
+SpectroScan,
+&nbsp;printread will first establish communications with the
+instrument,
+and then set it up ready to read the chart. You will be prompted for
+each
+sheet with a message such as:<br>
+<br>
+&nbsp;&nbsp;&nbsp; Please make sure that the white reference is in slot
+1, then<br>
+&nbsp;&nbsp;&nbsp; place sheet 1 of 4 on table, then<br>
+&nbsp;&nbsp;&nbsp; hit return to continue, Esc to give up<br>
+<br>
+After hitting return you will be prompted to line up three squares on
+the
+sheet, one at a time:<br>
+<br>
+&nbsp;&nbsp;&nbsp; Using the XY table controls, locate patch A1 with
+the
+sight,<br>
+&nbsp;&nbsp;&nbsp; then hit return to continue, Esc to give up<br>
+<br>
+On completing this, the instrument will commence reading each sheet.<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

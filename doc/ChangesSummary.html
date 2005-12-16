@@ -1,0 +1,57 @@
+<!DOCTYPE doctype PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+  <meta http-equiv="Content-Type"
+ content="text/html; charset=iso-8859-1">
+  <meta name="author" content="Graeme Gill">
+  <meta name="description" content="Root of Argyll CMS documentation">
+  <meta name="GENERATOR"
+ content="Mozilla/4.73 [en] (WinNT; I) [Netscape]">
+  <meta name="Author" content="Graeme Gill">
+  <meta name="Description"
+ content="Summary of changes for the most recent release.">
+  <title>Argyll CMS changes since last release</title>
+</head>
+<body>
+<h1> Summary of Argyll CMS Changes since last release</h1>
+<h1>[V0.52 -&gt; V0.53] <br>
+</h1>
+<br>
+The main changes to this version compared to the previous one, are some
+important bug fixes. Some of the changes made in V0.52 CLUT profile
+algorithms, unfortunately took the profiling backwards rather than
+forwards. In penance, I've spent a lot of time cleaning up the
+scattered data interpolation code, optimizing it, and more extensively
+verifying it. The quality of profiles should be noticeably improved.
+These fixes will affect profile, icclink (when gamut mapping is being
+used), and also refine. An independent improvement has also been made
+to the refine utility, so this promises to be more useful than in the
+past. A serious bug in the default behaviour of targen has also been
+corrected. The display calibration utility dispcal has been improved in
+how it computes the maximum brightness it can achieve for a target
+white point, and also its algorithm has been improved slightly, which
+should lead to slightly more accurate results.<br>
+<br>
+Some features have also been added during all this:<br>
+<ul>
+  <li>CIEDE2000 Delta E support is now available in icclib, and can be
+made use of in the profcheck, mppcheck and verify utilities.</li>
+  <li>Hexagonal test charts can now be printed and read using the
+Gretag SpectrScan, allowing more patches per printed sheet. The default
+patch size has also been reduced slightly, increasing the patch count
+as well.</li>
+</ul>
+As usual, a more detailed description of all changes is in the <b>log.txt</b>
+file that accompanies the
+source
+code.
+<p><br>
+&nbsp; <br>
+&nbsp; <br>
+&nbsp; <br>
+&nbsp; <br>
+&nbsp; <br>
+&nbsp; </p>
+<br>
+</body>
+</html>

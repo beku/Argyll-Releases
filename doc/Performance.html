@@ -1,0 +1,72 @@
+<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+  <meta http-equiv="Content-Type"
+ content="text/html; charset=iso-8859-1">
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="GENERATOR"
+ content="Mozilla/4.73 [en] (WinNT; I) [Netscape]">
+  <title>Argyll Performance Tuning</title>
+</head>
+<body>
+<h2>
+<u>Performance Tuning</u></h2>
+<br>
+Some operations in Argyll can be particularly slow, so it is worth
+examining ways of<br>
+improving performance.<br>
+<br>
+<h3>Creating Profiles:</h3>
+&nbsp;&nbsp;&nbsp; (To be added).<br>
+<br>
+&nbsp;See also "Creating Device Links" for how to increase the reverse
+cache size, if creating the B2A table is particularly slow.<br>
+<br>
+<h3>Creating Device Links:</h3>
+Just as in creating the B2A tables of profiles, the execution time of
+creating device links is often dominated by the inversion of forward
+color lookup values. A memory cache is employed to speed up this
+operation, by keeping computed values in case they can be used more
+than once. The amount of memory used for caching these values is
+pre-set within the inversion code, and on typical problems<br>
+uses 50-100 Mbytes of memory. If you have more memory available in your
+system, you can try increasing the cache size<br>
+(particularly if you get a "Warning - Reverse Cell Cache exhausted,
+processing in chunks" message during processing).<br>
+<br>
+This can be done by setting an environment variable
+ARGYLL_REV_CACHE_MULT to a number greater than 1. This<br>
+will multiply the size of the cache by that number (i.e. 2 would double
+the cache size).<br>
+<br>
+If you do this, take care that you don't make the cache too big, and
+cause your system to run out of memory.<br>
+<br>
+To do this in a Windows DOS shell, either use set, e.g.;<br>
+<br>
+&nbsp;&nbsp;&nbsp; set ARGYLL_REV_CACHE_MULT=2<br>
+<br>
+which will set the value for that session, or set it in<br>
+<br>
+Control Panel-&gt;System-&gt;Advanced-&gt;Environment Variables..<br>
+<br>
+in either user or system variables.<br>
+<br>
+For OS X or Linux, the exact procedure will depend on the shell you are
+running, but<br>
+is usually something like:<br>
+<br>
+&nbsp;&nbsp;&nbsp; set ARGYLL_REV_CACHE_MULT=2<br>
+or<br>
+&nbsp;&nbsp;&nbsp; exportset ARGYLL_REV_CACHE_MULT=2<br>
+or<br>
+&nbsp;&nbsp;&nbsp; ARGYLL_REV_CACHE_MULT=2<br>
+<br>
+Generally it should be configured in the shell startup script, if you
+want the setting to be used<br>
+for every session.<br>
+<br>
+<br>
+</body>
+</html>

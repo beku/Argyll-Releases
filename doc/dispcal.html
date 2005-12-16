@@ -1,0 +1,164 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>dispcal</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>spectro/dispcal</b></h2>
+<h3>Summary</h3>
+Given a calibration target [white point, maximum brightness, and
+response curve ("gamma")], display a series of test patches on the
+display, and using the colorimetric values read, create red, green and
+blue lookup tables that make the display meet the desired target.<br>
+<h3>Usage</h3>
+dispcal [-options]<i> inoutfile</i><br>
+&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;Verbose mode<br>
+&nbsp;<a href="printread.html#d">-d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Print debug diagnostics<br>
+&nbsp;<a href="#c">-c comport</a>&nbsp;&nbsp; Set COM port, 1..N
+(default 1)<br>
+&nbsp;<a href="#a">-a</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Run instrument calibration<br>
+&nbsp;<a href="#i">-i 92|SO</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Select
+target
+instrument (default DTP92)<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+92
+=
+DTP92, SO = Spectrolino<br>
+&nbsp;<a href="#q">-q [lmhu]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Quality
+- Low, Medium (def), High, Ultra<br>
+&nbsp;<a href="#t">-t temp</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set the target white point daylight color temperature in deg. K<br>
+&nbsp;<a href="#w">-w x,y</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set the target white point as chromaticity coordinates<br>
+&nbsp;<a href="#b">-b bright</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set the target brightness in cd/m^2<br>
+&nbsp;<a href="#g">-g gamma</a>&nbsp;&nbsp;&nbsp;&nbsp; Set the target
+response curve gamma (Def. 2.2)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use "-gl" for L*a*b* curve<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;&nbsp; Use "-gs" for sRGB curve<br>
+&nbsp;<a href="#V">-V</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Run verify pass on final curves<br>
+&nbsp;<a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;[X11 only] Don't set override redirect on test window<br>
+&nbsp;<a href="#p1"><i>inoutfile</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Base name for input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
+ href="File_Formats.html#.ti3">.ti3</a>] file.<br>
+<br>
+<h3>Comments<br>
+</h3>
+This is the utility is used for calibrating a display, to reach
+specified target behaviour. <br>
+<br>
+<a name="v"></a> The <b>-v</b> flag reports progress information, as
+well as other statistics about the progress of calibration.<br>
+<br>
+<a name="d"></a>The <b>-d</b> flag causes serial communications
+diagnostics to be printed to stdout. This can be useful in tracking
+down why an instrument can't connect.<br>
+<br>
+<a name="c"></a> The instrument is assumed to communicate through a
+serial
+communication port, and the port can be selected with the <b>-c</b>
+option,
+if the instrument is not connected to the first port. If you invoke <span
+ style="font-weight: bold;">dispread</span> so as to display the usage
+information (i.e. "dispread -?" or "dispread --"), then the discovered
+serial ports will be listed on Windows and Mac OSX systems.<br>
+<br>
+<a name="i"></a>By default <b>dispcal</b> expects to use an Xrite
+DTP92
+CRT instrument, but the GretagMacbeth Spectrolino can be selected by
+using the
+"SO" argument to the <b>-i</b> option, for use on either a CRT or LCD
+type of display.<br>
+<br>
+<a name="q"></a>&nbsp; Quality - Low, Medium (def), High, Ultra. The <span
+ style="font-weight: bold;">-q</span> flag determines how much time and
+effort to go to in calibrating the display. The higher the quality, the
+more test readings will be done, the more refinement passes will be
+done, and the more detailed will be the calibration of the display.<br>
+<br>
+&nbsp;<a name="t"></a><span style="text-decoration: underline;"></span>
+Set the target white point, daylight color temperature in deg. Kelvin.
+By default, the native white point of the display is used.
+Typical&nbsp;
+values might be 5000 for matching printed output, or 65000, which gives
+a brighter, bluer look. The cooler white point may limit the maximum
+brightness possible.<br>
+<br>
+&nbsp;<a name="w"></a> An alternative to specifying the white point in
+degrees Kevin, is to specify it in chromaticity co-ordinates. This
+allows the white point to be a color other than one on the blackbody
+locus.<br>
+<br>
+&nbsp;<a name="b"></a> Set the target brightness of white in cd/m^2. If
+this number cannot be reached, the brightest output possible is chosen.<br>
+<br>
+&nbsp;<a name="g"></a> Set the target response curve gamma. This is
+normally an exponential curve (output = input ^gamma), and defaults to
+2.2, a standard sort of value. Two alternatives to the power curve are
+to use the sRGB curve response curve, which is an exponent curve with a
+straight segment at the dark end (<span style="font-weight: bold;">-gs</span>),
+or the L* curve, which is the response of the CIE L*a*b* perceptual
+colorspace (<span style="font-weight: bold;">-gl</span>).<br>
+<br>
+&nbsp;<a name="V"></a>&nbsp; Run verify pass on the final curves. This
+is an extra set of instrument readings, that are used to estimate how
+well the device will match the targets with the computed calibration
+curves.<br>
+<br>
+<a name="a"></a> The -<span style="font-weight: bold;">a</span> option
+runs through the black and sensor
+relative
+calibration routines for the Xrite DTP92 instrument. If a Spectrolino
+is being used, then a white calibration will always be performed before
+the instrument can be placed on the display.<br>
+<br>
+<a name="n"></a>When running on a UNIX based system that used the X11
+Windowing
+System, <b>dispread</b> normally selects the override redirect so that
+the
+test window will appear above any other windows on the display. On some
+systems
+this can interfere with window manager operation, and the <b>-n</b>
+option
+turns this behaviour off.<br>
+<br>
+<a name="p1"></a> The final parameter on the command line is the base
+filename for the <a href="File_Formats.html#.ti1">.ti1</a>
+input file, and the <a href="File_Formats.html#.ti3">.ti3</a> output
+file. <b>dispread</b> will add the .ti1 and .ti3 extensions
+automatically.<br>
+<br>
+If a large number of patches is being read, the screensaver or
+powersaver on many
+systems can interfere with the operation of dispread. It is therefore
+advisable
+in these cases to manually turn off the screensaver before commencing
+the
+measurements.<br>
+<br>
+The calibration tables produced maintain the maximum level of precision
+available on a system. If the system RAMDAC outputs are better than 8
+bits per component, then the resulting curves can reflect this.<br>
+<br>
+Note that currently there is no support for adjusting the display
+controls (brightness, contrast, R, G &amp; B channel controls etc.) and
+providing feedback on how close the native response is to the targets.
+Currently it is up to the user to adjust these controls using some
+other feedback, before running dispcal.<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

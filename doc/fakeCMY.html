@@ -1,0 +1,49 @@
+<!DOCTYPE doctype PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+  <meta http-equiv="Content-Type"
+ content="text/html; charset=iso-8859-1">
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+  <meta name="GENERATOR"
+ content="Mozilla/4.73 [en] (WinNT; I) [Netscape]">
+  <title>fakeread</title>
+</head>
+<body>
+<h2> <b>xicc/fakeCMY</b></h2>
+<h3> Summary</h3>
+Using a CMYK <a href="File_Formats.html#ICC">ICC</a> profile, create a
+<a href="File_Formats.html#.ti3">.ti3</a> file containing device CMY to
+colorimetric
+values. This can then be used to create a CMY profile, that can be
+linked
+with the original CMYK profile to form a CMY to CMYK separation
+transform.
+<h3> Usage</h3>
+fakeCMY [<i>options</i>]&nbsp; <i>cmykprofile.</i>icm <i>fakecmy</i>.ti3
+<br>
+&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose mode <br>
+&nbsp;-r <i>res</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set the resolution of the resulting <a href="File_Formats.html#.ti3">.ti3</a>
+file (default 3). <br>
+&nbsp;-l <i>tlimit</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set a total ink limit, 0 .. 400%&nbsp; (default none)<br>
+&nbsp;-l <i>klimit</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set a black ink limit, 0 .. 100%&nbsp; (default none) <br>
+&nbsp;<i>profile.</i>icm&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+CMYK&nbsp; <a href="File_Formats.html#ICC">ICC</a> input profile to
+use <br>
+&nbsp;<i>outfile</i>.ti3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Name for output <a href="File_Formats.html#.ti3">.ti3</a> file <br>
+&nbsp;
+<h3> Comments</h3>
+This utility is a means of producing a CMY to CMYK separation. A fake
+CMY profile is created from the output of fakeCMY, and this is then
+linked to
+the original CMYK profile using <a href="icclink.html">icclink</a>, to
+create
+a separation containing the desired black generation. <br>
+</body>
+</html>

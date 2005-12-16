@@ -1,0 +1,155 @@
+# Regular spline library
+
+#SubDir TOP rspl ;
+
+# Optimization and Debug flags
+
+CFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+#CCFLAGS		+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;      # Link with debug info
+
+if $(UNIX) {
+  if $(OS) = MACOSX {
+	LINKFLAGS += -framework IOKit ;
+	LINKFLAGS += -framework CoreFoundation ;
+  } else {
+	LibWin = /usr/X11R6/lib/libX11.lib 
+	         /usr/X11R6/lib/libXxf86vm.lib
+	         /usr/X11R6/lib/libXext.lib ;
+	LibWinD = /usr/X11R6/lib/ ;
+	LibWinH = /usr/X11R6/include/X11 ;
+  }
+}
+
+SCAT = scat ;	# Use thps scattered interpolation library
+
+if $(HAVE_TIFF) {	# Alternate TIFF library
+	TIFFLIB = ;
+	TIFFINC = ;
+	LINKLIBS on c1$(SUFEXE)
+				c1df$(SUFEXE)
+				c1i$(SUFEXE)
+				t2d$(SUFEXE)
+				t2dfw$(SUFEXE)
+				t3d$(SUFEXE)
+				t3ddf$(SUFEXE)
+				smtnd$(SUFEXE)
+				smtmpp$(SUFEXE)
+				tnd$(SUFEXE)
+				trnd$(SUFEXE)
+				revbench$(SUFEXE) = -ltiff $(LINKLIBS) ;
+} else {
+	TIFFLIB = ../tiff/libtiff.lib ;
+	TIFFINC = ../tiff ;
+}
+
+#Products
+Libraries = librspl ;
+Headers = rspl.h ;
+
+#Install
+#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
+
+# Multi-dimensional regular spline library
+Library librspl.lib : rspl.c $(SCAT).c rev.c spline.c opt.c ;
+ObjectHdrs rspl$(SUFOBJ) $(SCAT)$(SUFOBJ) rev$(SUFOBJ) xi
+spline$(SUFOBJ) mlbs$(SUFOBJ) opt$(SUFOBJ) : ../h ../numlib ../plot ;
+
+# Test of 1D rspl library
+Main c1 : c1.c ;
+ObjectHdrs c1 : ../h ../numlib ../plot $(TIFFINC) ;
+LinkLibraries c1 : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+
+# Test of 1D rspl library with incremental
+Main c1i : c1i.c ;
+ObjectHdrs c1i : ../h ../numlib ../plot $(TIFFINC) ;
+LinkLibraries c1i : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+
+# Test of 1D rspl library with weak default function
+Main c1df : c1df.c ;
+ObjectHdrs c1df : ../h ../numlib ../plot $(TIFFINC) ;
+LinkLibraries c1df : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+
+# Test of rspl in 2d
+Main t2d : t2d.c ;
+ObjectHdrs t2d : ../h ../numlib ../plot $(TIFFINC) ;
+LinkLibraries t2d : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+
+# Test of rspl in 2d with weak default function
+Main t2ddf : t2ddf.c ;
+ObjectHdrs t2ddf : ../h ../numlib ../plot $(TIFFINC) ;
+LinkLibraries t2ddf : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+
+# Test of rspl in 3d
+Main t3d : t3d.c ;
+ObjectHdrs t3d : ../h ../numlib ../plot $(TIFFINC) ;
+LinkLibraries t3d : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+
+# Test of rspl in 3d with weak default function
+Main t3ddf : t3ddf.c ;
+ObjectHdrs t3ddf : ../h ../numlib ../plot $(TIFFINC) ;
+LinkLibraries t3ddf : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+
+# Test of regspl in up to 4d
+Main tnd : tnd.c ;
+ObjectHdrs tnd : ../h ../numlib ../plot $(TIFFINC) ;
+LinkLibraries tnd : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+
+# Test of rev regspl in 3 or 4d
+Main trnd : trnd.c ;
+ObjectHdrs trnd : ../h ../numlib ../plot $(TIFFINC) ;
+LinkLibraries trnd : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+
+# Benchmarl of rev regspl 
+Main revbench : revbench.c ;
+ObjectHdrs revbench : ../h ../numlib ../plot $(TIFFINC) ;
+LinkLibraries revbench : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+
+# Smoothness factor tuning test in Nd.
+Main smtnd : smtnd.c ;
+ObjectHdrs smtnd : ../h ../numlib ../rspl ../xicc ../icc ../gamut ../cgats ../spectro ../plot $(TIFFINC) ;
+LinkLibraries smtnd : librspl.lib ../xicc/libxicc.lib ../spectro/libinst.lib ../icc/libicc.lib
+                      ../gamut/libgamut.lib ../cgats/libcgats.lib
+                      ../plot/libplot.lib ../numlib/libnum.lib $(LibWin) ;
+
+# Smoothness factor tuning test in Nd.
+Main smtmpp : smtmpp.c ;
+ObjectHdrs smtmpp : ../h ../numlib ../rspl ../xicc ../icc ../gamut ../cgats ../spectro ../plot $(TIFFINC) ;
+LinkLibraries smtmpp : librspl.lib ../xicc/libxicc.lib ../spectro/libinst.lib ../icc/libicc.lib
+                      ../gamut/libgamut.lib ../cgats/libcgats.lib
+                      ../plot/libplot.lib ../numlib/libnum.lib $(LibWin) ;
+
+Main sm1 : sm1.c ;
+Main sm2 : sm2.c ;
+Main sm3 : sm3.c ;
+
+if $(BUILD_JUNK) {
+	#Main temp : temp.c ;
+
+	#Main prime : prime.c ;
+
+	#Main combo : combo.c ;
+	#Main combo2 : combo2.c ;
+	#Main combo3 : combo3.c ;
+	#Main combo4 : combo4.c ;
+	#Main combo5 : combo5.c ;
+	#Main combo9 : combo9.c ;
+	#ObjectHdrs combo combo2 combo3 combo4 combo5 combo9 : ../numlib ;
+
+	#Main cache : cache.c ;
+	#ObjectHdrs cache$(SUFOBJ) : ../h ../numlib ;
+	#LinkLibraries cache : ../numlib/libnum.lib $(LibWin) ;
+
+	Main nptest : nptest.c ;
+
+	#direct mlbs scattered interpolation test
+	Main mlbs_test : mlbs_test.c ;
+	ObjectHdrs mlbs_test$(SUFOBJ) : ../h ../numlib ;
+	LinkLibraries mlbs_test : ../numlib/libnum.lib librspl.lib ;
+
+}
+

@@ -1,0 +1,7 @@
+tiff/afiles
+tiff/tiff.zip
+tiff/Jamfile
+tiff/Makefile
+tiff/Makefile.WNT
+tiff/Makefile.IBMNT
+tiff/Makefile.UNIX

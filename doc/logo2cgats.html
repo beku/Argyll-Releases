@@ -1,0 +1,54 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>logo2cgats</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>profile/logo2cgats</b></h2>
+<h3>Summary</h3>
+Convert Gretag/Logo Profile Maker format test chart results into
+Argyll&nbsp;<a href="File_Formats.html#.ti3">.ti3</a> CGATS
+format.&nbsp;
+<h3>Usage Summary</h3>
+logo2gcats [-v] [-l limit] [devfile] infile [specfile] outfile<br>
+<br>
+-l <i>limit</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; set ink limit, 0
+-
+400%<br>
+<i>[devfile]</i>&nbsp;&nbsp;&nbsp;&nbsp; Device CMYK target .txt file<br>
+<i>infile&nbsp;</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; Input
+CIE, Spectral or Device &amp; Spectral.txt file.<br>
+<i>[specfile]</i>&nbsp;&nbsp;&nbsp; Input Spectral .txt file<br>
+<i>outfile</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; Name for
+output<a href="File_Formats.html#.ti3">.ti3</a> file<br>
+<h3>Usage Details and Discussion</h3>
+logo2CGATS takes the Gretag/Logo test chart results, and converts them
+into Argyll&nbsp;<a href="File_Formats.html#.ti3">.ti3</a> CGATS files.<br>
+It is quite common to find profile test chart data from various
+standards bodies and industry organizations, in this format, so it is
+useful to be able to convert them for use with Argyll. ICC profiles
+created using Gretag Profile Maker also commonly contain the test chart
+results embedded in the profile.<br>
+<br>
+A variety of different packaging of Gretag/Logo data can be accepted: <br>
+<br>
+1&nbsp;source files, consisting of a combined device value and CIE
+and/or spectral values.<br>
+2 source files, consisting of &nbsp;a file containing the device
+values, and a file containing the CIE and/or spectral values.<br>
+2 source files, consisting of a file containing the device values and
+the CIE values, and a file containing the spectral values.<br>
+3 source files, consisting of a file containing the device values, a
+file containing the CIE values, and a file containing the spectral
+values.<br>
+<br>
+The Gretag/Logo test chart results format seem to change with each
+minor release of Profile Maker, so this utility may not work in all
+cases.<br>
+<br>
+<br>
+</body>
+</html>

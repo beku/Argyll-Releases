@@ -1,0 +1,279 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>printtarg</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>target/printtarg</b></h2>
+<h3>Summary</h3>
+Create a PS or EPS file containing profile test patch values, ready for
+printing.<br>
+<h3>Usage Summary</h3>
+printtarg [-v] [-i instr] [-r] [-s] [-p size] basename<br>
+&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Verbose mode<br>
+&nbsp;<a href="#i">-i 41 | 51 | SS</a> Select target instrument
+(default DTP41)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;41 = DTP41, 51=DTP51, SS = SpectroScan<br>
+&nbsp;<a href="#a">-a scale</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Scale patch size by factor (e.g. 0.857 or 1.5 etc.)<br>
+&nbsp;<a href="printtarg.html#h">-h</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Use hexagon patches for SS<br>
+&nbsp;<a href="#r">-r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Don't randomize patch location<br>
+&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Create a scan image recognition (.cht) file<br>
+&nbsp;<a href="#S">-S</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Same as -s, but don't generate wide orientation strip.<br>
+&nbsp;<a href="#c">-c</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Force colored spacers<br>
+&nbsp;<a href="#b">-b</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; Force B&amp;W spacers<br>
+&nbsp;<a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Force no spacers<br>
+&nbsp;<a href="#f">-f</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Create DeviceN Color fallback<br>
+&nbsp;<a href="#w">-w g|r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+White test encoding DeviceGray (def), DeviceRGB, Separation or DeviceN<br>
+&nbsp;<a href="#k">-k g|c|s|n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Black
+test encoding DeviceGray (def), DeviceCMYK, Separation or DeviceN<br>
+&nbsp;<a href="#e">-e</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; Output EPS compatible file<br>
+&nbsp;<a href="#t">-t rsnum</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use given random start number<br>
+&nbsp;<a href="#x">-x pattern</a>&nbsp;&nbsp;&nbsp;&nbsp; Use given
+strip indexing pattern (Default = "A-Z, A-Z")<br>
+&nbsp;<a href="#y">-y pattern</a>&nbsp;&nbsp;&nbsp;&nbsp; Use given
+patch indexing pattern (Default = "0-9,@-9,@-9;1-999")<br>
+&nbsp;<a href="#p">-p size</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Select page size from:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;A4&nbsp;&nbsp;&nbsp;&nbsp; [210.0 x 297.0 mm]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;A4R&nbsp;&nbsp;&nbsp; [297.0 x 210.0 mm]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;A3&nbsp;&nbsp;&nbsp;&nbsp; [297.0 x 420.0 mm] (default)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;A2&nbsp;&nbsp;&nbsp;&nbsp; [420.0 x 594.0 mm]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;Letter [215.9 x 279.4 mm]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;LetterR&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; [279.4 x
+215.9 mm]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;Legal&nbsp; [215.9 x 355.6 mm]<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;11x17&nbsp; [279.4 x 431.8 mm]<br>
+&nbsp;<a href="#pp">-p WWWxHHH</a>&nbsp; Custom size, WWW mm wide by
+HHH mm high<br>
+&nbsp; <a href="#p1"><i>basename</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Base name for input(<a href="File_Formats.html#.ti1">.ti1</a>)/output(<a
+ href="File_Formats.html#.ti2">.ti2</a>)<br>
+<h3>Usage Details and Discussion</h3>
+<b> printtarg</b> is used to generate a PostScript print file from
+device test values in a .ti1 file. It output both a PostScript/EPS
+file, and a .ti2 file containing the device test values together with
+the layout information needed to identify the patch location. This
+module can also generate the image recognition templates needed to read
+the print targets in using a scanner.<br>
+<br>
+<a name="v"></a> The <b>-v</b> flag turns on verbose mode. Prints
+information about how many patches there are in a row, how many patches
+in a set,&nbsp; and how many pages will be generated. Good for figuring
+out what the magic number of patches should be for a particular page
+size.<br>
+<br>
+<a name="i"></a> The <b>-i</b> parameter should be used to tel
+printtarg which instrument it should lay the patches out for. Each
+instrument has a
+slightly different requirement, and will lead to a different number of
+patches
+ending up on a particular page size.<br>
+<br>
+<a name="a"></a> Normally, <b>printtarg</b> prints test patches that
+are the minimum size that can be reliably and accurately read by the
+instrument.&nbsp; For some media, it might be desirable to use test
+patches that are larger than this minimum (e.g. if the media has poor
+registration, bets physically distorted in the print production
+process, or if it has a coarse screen, and there are few samples per
+patch), and the <span style="font-weight: bold;">-a</span> flag should
+be given an argument greater than 1.0 to increase the patch size. A
+value of 1.5 would make the patch 50% larger for instance. For the
+strip reading instruments the patch is made longer, the strip spacing
+remaining the same, while for XY scanning instruments, both the width
+and height will be increased. If a value less than 1.0 is given as an
+argument, then the patches will be made smaller. For instance, using
+the SpectroScan instrument it is possible to reduce the test patches to
+6mm rather than the default 7`mm by supplying an argument of 0.857.
+Note
+that this make lining up of the scan head very critical, and increases
+the amount of bleed through from adjacent squares.<br>
+<br>
+<a name="h"></a> Normally, <b>printtarg</b> creates a regular grid of
+test patches, but for instruments that support arbitrary X, Y
+addressing (such as the SpectroScan), it can create a chart using
+regular hexagonal patches, allowing more patches to be fitted into a
+single sheet. The <span style="font-weight: bold;">-h</span> flag
+enables this feature.<br>
+<br>
+<a name="r"></a> Normally, <b>printtarg</b> randomizes the patch
+locations, which helps in being able to detect incorrect strips being
+fed into strip reading instruments, but also assists in randomizing any
+systematic printing errors introduced into the test chart, due to print
+engine unevenness, inkjet banding, or printing press ink key settings
+etc. The <b>-r</b> flag turns this off, and lays the test squares out
+in the order the values appear in, in the .ti1 file.<br>
+<br>
+<a name="s"></a> The <b>-s</b> flag does two things. One is that it
+causes printtarg to output a chart recognition file (<a
+ href="File_Formats.html#.cht">.cht</a>) so that <a href="scanin.html">
+scanin</a> can recognize the chart, and convert rasterized patches into
+patch values, and the second is that is expands the size of the leading
+row
+of patches by 50%, to make sure that each sheet can be oriented
+correctly by <a href="scanin.html"> scanin</a>. <a name="S"></a>If <b>-S</b>
+is used
+rather than <b>-s</b>, then the recognition chart will be created, but
+the
+leading row will be the same size as all the other rows.<br>
+<br>
+<a name="c"></a> For strip reading instruments, the contrast with the
+spacers is important in ensuring that a reading will be successful.
+Normally <span style="font-weight: bold;">printtarg</span> ensures
+this by printing optimally contrasting colored spacers between each
+measurement patch. The <b>-c</b> flag is therefore the default
+behavior. <a name="b"></a>If the <b>-b</b> flag is used, then
+contrasting neutral colored
+spacers will be used, but these generally work less reliably than
+colored
+spacers. <a name="n"></a>The <b>-n</b> flag will cause spacers to be
+omitted,
+which may still work with smaller numbers of test values, when the
+patch
+selection is randomized, but won't work successfully when a large
+number
+of test points is being used (&gt;200), or when the patches are not
+randomized
+in location.<br>
+<br>
+When creating a test chart for more than CMYK inks, the PostScript file
+normally contains color settings that use the PostScript level 3
+"Device
+N" color specifications. Such color specifications have a "fallback"
+color,
+for PostScript interpreters that don't handle Device N specifications.
+Such
+fallback colors are normally set to a grayscale estimate of the patch
+color,
+so that it is possible to tell if the PostScript interpreter is not
+rendering
+the Device N values correctly. <a name="f"></a>The <b>-f</b> flag,
+causes
+the fallback color to be a color estimate of the Device N test patch
+color,
+which is useful for diagnostic purposes.<br>
+<br>
+<a name="e"></a> The <b>-e</b> flag gives EPS output, rather than
+PostScript, allowing the charts to be included in other applications.
+Because EPS disallows the showpage command, multiple EPS files will
+result for a multi-page test chart.<br>
+<br>
+<a name="t"></a> The <b>-t</b> parameter allows setting the random
+layout seed. Normally the seed is chosen at random, but sometimes it is
+useful to be able to generate a chart with the same layout, so a
+specific seed can be specified this way. The seed used to generate a
+chart is recorded in the
+.ti2 file.<br>
+<br>
+<a name="x"></a> The <b>-x</b> parameter allows specifying the
+labelling sequence used for strips (e.g. the X axis of the chart). By
+default this will be a character sequence A, B, C .. Z. AA, AB, AC ..
+ZZ, but this can be changed by specifying an alternate labelling
+sequence pattern. The pattern specifies the labelling sequence as
+follows: First comes the definition of the symbols for each digit
+location, least significant to most significant. The number of
+definitions declares the maximum number of digits. For example, for a 2
+digit numerical sequence: "0123456789, 123456789" would define
+0..99 with the most significant digit suppressed when it is 0. Ranges
+can be used for brevity: "0-9, 1-9". As a special case, the '@'
+character can be used to instead of '0' to indicate suppression of the
+leading zero: "0-9,@-9". Leading ' ' characters in a sequence are
+omitted. Optionally following this, and delimited by a ';'
+character, are the definitions of valid segments of the index sequence.
+For instance, to define the index range to be 1..19, 30..39 one could
+use the pattern "0-9, 1-9;1-19,30-39". Of course most of the time an
+alphabetic sequence will be wanted, to distinguish it from the
+numerical sequence used to number the patches in a strip. For a
+sequence A, B, C .. AA, AB, AC etc. (the default used in Argyll), the
+following patter would be used: "A-Z, A-Z". For a some ECI2002R charts
+that skip columns Y and Z, and use a leading numeric digits for
+addressing strips over 26, the following might be used: "A-Z,
+2-9;A-X,2A-9Z".<br>
+<br>
+<a name="y"></a> The <b>-y</b> parameter allows specifying the
+labelling sequence used for patches (e.g. the Y axis of the chart). By
+default this will be a number sequence 1, 2, ..10, 11, ... 999, but
+this can be changed by specifying an alternate labelling
+sequence pattern. See the above description for the labelling sequence
+encoding.<br>
+<br>
+<a name="w"></a> The <b>-w</b> parameter changes how a white channel
+test chart (ie. Additive Grey) will be represented in the Postscript.
+The default is to use the DeviceGray representation (<span
+ style="font-weight: bold;">-wg</span>), but Device RGB can also be
+used, where the R, G &amp;B values are all set to the same value (<span
+ style="font-weight: bold;">-wr</span>), a <span
+ style="font-weight: bold;">White</span> separation color can be
+specified (<span style="font-weight: bold;">-ws</span>), or a DeviceN <span
+ style="font-weight: bold;">White</span> color can be used (<span
+ style="font-weight: bold;">-wn</span>).<br>
+<br>
+<a name="k"></a> The <b>-k</b> parameter changes how a black channel
+test chart (ie. Subtractive
+Grey) will be represented in the Postscript. The default is to use the
+DeviceGray representation (<span style="font-weight: bold;">-kg</span>),
+but Device CMYK can also be used, where the CMY values are zero, and
+just the K channel is used (<span style="font-weight: bold;">-kc</span>),
+a <span style="font-weight: bold;">Black</span> separation color can
+be specified (<span style="font-weight: bold;">-ks</span>), or a
+DeviceN <span style="font-weight: bold;">Black</span> color can be
+used (<span style="font-weight: bold;">-kn</span>).<br>
+<br>
+<a name="p"></a> The <b>-p</b> parameter specifies the paper size. The
+size can either be one of the default sizes, <a name="pp"></a>or can
+be specified in millimeters. limitations of the instrument may limit
+the maximum number of patches in a strip. For SpectroScan, a size of
+&nbsp;A4 or Letter (or smaller) should be used. Useful combinations of
+number of patches and paper size are listed <a href="targen.html#Table">here</a>.<br>
+<br>
+<a name="p1"></a><i>basename</i> is the base file name of the&nbsp;<a
+ href="File_Formats.html#.ti1">.ti1</a> file that contains the device
+values to be put on the test chart. <b>printtarg</b> will output a <i>basename.ps</i>
+or one or more <i>basenameNN.eps</i> files files that should be
+printed on the devices, as well as a <i>basename.ti2</i> file that
+contains both the device test point values, and the location of the
+corresponding patch on the test chart. If the <b>-s</b> or <b>-S</b>
+flag was specified, then&nbsp; one or more <i>basenameNN.cht</i> files
+will also be generated.<br>
+<br>
+<a href="http://www.ghostgum.com.au/">GSview</a> or <a
+ href="http://www.cs.wisc.edu/%7Eghost/gv/index.htm">GhostView</a> are
+good programs to use to check what the PostScript or EPS file will look
+like,
+without actually printing it out, and may assist in allowing printing
+to
+non PostScript printers.<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+</body>
+</html>

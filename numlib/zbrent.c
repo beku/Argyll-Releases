@@ -9,8 +9,8 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include "numsup.h"
@@ -93,8 +93,8 @@ void *fdata								/* Opaque data pointer */
 	cf = bf;
 	for (i = 0; i < ZBRENT_MAXIT; i++) {
 		double xdel;		/* Bisection delta to bx */
-		double del;			/* Delta to be applied to bx */
-		double pdel;		/* Last del from interpolation step */
+		double del = 1e80;	/* Delta to be applied to bx */
+		double pdel = 1e80;	/* Last del from interpolation step */
 		double tol1;		/* Minimum reasonable change in bx */
 
 		/* Make bx and cx straddle root */
@@ -103,7 +103,8 @@ void *fdata								/* Opaque data pointer */
 			cf = af;
 			pdel = del = bx - ax;
 		}
-	    	/* Make bx be point closest to solution */
+
+    	/* Make bx be point closest to solution */
 		if (fabs(cf) < fabs(bf)) {
 			ax = bx;				/* swap bx & cx, and make ax == new cx */
 			af = bf;

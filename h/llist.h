@@ -80,7 +80,7 @@ struct {				\
 
 /* ----------------------------- */
 
-/* initialise a list to have ony one entry */
+/* initialise a list to have only one entry */
 #define INIT_LINK(objp) \
 	((objp)->_llistp.fwd = (objp)->_llistp.bwd = (objp))
 

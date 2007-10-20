@@ -9,8 +9,8 @@
  *
  * Copyright 2000, 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  */
 

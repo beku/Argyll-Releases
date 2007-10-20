@@ -9,8 +9,8 @@
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  */
 
 /*
@@ -50,164 +50,6 @@
 /*  Make the default grid points of the Lab clut be symetrical about */
 /* a/b 0.0, and also make L = 100.0 fall on a grid point. */
 #define SYMETRICAL_DEFAULT_LAB_RANGE
-
-/*
- * Change History:
- * 
- *		Further add V4 compatibility, with changes to PCS encoding. 
- * 
- * 2.06
- *
- *		Added MD5 checksum code for profile ID support.
- *
- * 2.05
- *      Version in Argyll V0.51 release.
- *
- *      Started adding support for ICC V4. Not enabled yet.
- *
- *      Expanded internal/effective colorspace/ranges support
- *      to be uniform between all the lookup types.
- *
- * 2.04
- *
- *      Fixed minor casting nits picked up by some compilers
- *      (thanks to Keith Trummel).
- *
- *      Make intent selection for Matrix profiles and Gamut tables
- *      more forgiving if not ICM_STRICT.
- *
- * 2.03
- *      Added simple extention when dumping binary data tag to
- *      dump ASCII as well if verb >= 4.
- *
- *      Added Makefile support for compiling under MAC OSX.
- *
- *      Added access to primitive read and write functions, so custom tag
- *      data can be marshalled using standard encodings.
- *
- *      Expanded ICM_STRICT to encompass bad DateTime information in the header,
- *      and also disable required tag checking on reading or lookups.
- *      Changed default intent for Output profiles to perceptual from
- *      colorimetric, since this would usually be expected.
- *
- *      Added workaround for faulty Kodak RGB matrix profiles, that
- *      have their primary XYZ coordinates scaled to 100.0 rather than
- *      1.0. This is enabled if ICM_STRICT is not defined.
- *
- *      Replaced Lab<->XYZ functions with simpler versions.
- *
- *      Expand icmFile implimentation to handle icmAlloc
- *
- *		Do check for header Magic number first.
- *
- *      Add convenience function that creates an RGB to XYZ transform
- *      matrix from the device primaries and the white point.
- *
- *      Separated stdio versions of file and alloc to allow
- *      compile without these.
- *
- *      Non-standard (ie. Apple) 5,6,7 & 8 channel color signatures
- *      weren't being handled properly thruout the library.
- *
- * 2.02
- *      Merged rename of [u]int64 to icm[Ui][I]nt64 (to work around
- *      AIX 5.1L portability bug) from Raph Levien.
- *
- *      Fixed stray , in icmLookupOrder structure definition (from Dan Coby)
- *
- * 2.01
- *		Change TextDescription code to not barf if #undef ICM_STRICT and
- *      Apple scriptcode not padded to 67 bytes.
- *
- *      Add get_ranges() method to all Lu types, not just LuLut.
- *      Fix bug in PCS override logic that was causing
- *		reverse conversions to apply the wrong conversion.
- *
- *      Added Delta E convenience functions icmLabDE() and
- *      icmCIE94() etc.
- *
- *		Merged Raph Levien's cleanups, to quiet gcc warnings.
- *
- *      Merged another couple of warning cleanups from Jouk Jansen.
- *
- * 2.00
- *      Change absolute conversion to be white point only, and use
- *      Bradford transform by default. (ie. we are now ignoring the
- *      comment in section 6.4.22 of the 1998 spec. about the
- *      media black point being used for absolute colorimetry,
- *      ignoring the recommendation on page 118 in section E.5,
- *      and are taking up the recommendation on page 124 in section
- *      E.16 that a more sophisticated chromatic adaptation model be used.)
- *
- *      This is for better compatibility with other CMM's, and to
- *      improve the results when using simple links between
- *      profiles with non-D50 white points. Standard profiles
- *      like sRGB will also be more accurate when interpreted
- *      with absolute colorimetric intent.
- *      This will cause some slight incompatibilty with previous
- *      versions of icclib.
- *
- *      Added ColorSync 2.5 specific VideoCardGamma tag support
- *      (from Neil Okamoto)
- *
- * 1.31
- *      Added file I/O class to allow substitution of alternative ICC profile
- *      file access. Provide standard file class instance, and memory image
- *      instance of file I/O class as default and example. 
- *      Added an optional new_icc_a() object creator, that takes a memory
- *      allocator class instance. This allows an alternate memory heap to
- *      be used with the icc class. 
- *      Renamed object free() methods to del() for more consistency with new().
- *
- * 1.30	
- *      Added workaround for reading some Adobe profiles with confused header DateTime.
- *      Enhanced tag allocate() methods so that they can resize allocations.
- *      Enhanced icmLut_set_tables() to access grid points in a cache friendly order.
- *      Fixed bug in check_icc_legal() that caused bogus errors, removed
- *      uneccessary static declarations in icc.h, and fixed a bug in
- *      icmTable_lookup_bwd() that effected both accuracy and speed. (Thanks to Andrei Frolov)
- *      Removed icmAbsoluteColorimetricXYZ intent, and replaced it with
- *      a PCS override capability. This adds a new parameter to get_luobj() 
- *      Added Lab translations of some XYZ "dump" strings.
- *      Fix memory leak after failed tag read + rename_tag function
- *      + shared library support changes. (Thanks to Carles Llopis).
- *		Changed all the public 2str utility routines to a single function
- *      that can be used to interpret an enumeration or tag in a human
- *      readable form. 
- *
- * 1.23	
- *      Fixed important bug in Lut read/write. The matrix values had their
- *      rows and columns switched. Not many profiles exercise this code.
- *      Thanks to David Gillman for discovering this problem.
- *      Fixup compiler complains about illegal enum values for icmCurveStyle,
- *      and icmDataStyle. Malloc memory icmLut_lookup_clut_nl for gw[], so that
- *      it is more friendly to systems with a limited stack. (Thanks to Dave White)
- *
- * 1.22	99/11/11 Snapshot of current code.
- *      Added more hooks to support inherited implementation of
- *      color conversion, used in Argyll to support reversing
- *      multi-dimentional table lookups.
- *      Cleaned up color conversion code to make it easier to follow.
- *      Adding simplex interpolation for non-Lab style input space interpolation.
- *      Fix Sun misalignment and realloc problems (Thanks to Allan N. Hessenflow)
- *      Fixed endian problem with Unicode on read and write.
- *      Expanded icmTextDescription_dump() to do hex dump of Unicode and ScriptCode.
- *      Changed over to ICC.1:1998-09 .h file.
- *      Started implementing ICC.1:1998-09, but not complete yet!
- *
- * 1.21	99/2/14
- *     	After re-reading Michael Bourgoin's 1998 SIGGRAPH notes,
- *      I have consolidated the Lut input index, and table value encodings.
- *      The default set_tables() scaling has been adjusted appropriately
- *      for this correction of Lab encoding.
- *      Trying to create an 8 bit XYZ Lut will now fail if icclib helper
- *      functions are used to create it.
- * 
- * 1.20	99/2/7
- *      Added profile color lookup functon.
- *      Added set_tables() support.
- *      Various bug fixes and enhancements.
- */
 
 #define _ICC_C_				/* Turn on implimentation code */
 
@@ -321,7 +163,7 @@ const char *format,
 
 	va_start(args, format);
 
-#if (defined(__IBMC__) && defined(_M_IX86))
+#if ((defined(__IBMC__) || defined(__BORLANDC__)) && defined(_M_IX86))
 	rv = vsprintf((char *)p->cur, format, args);	/* This could overwrite the buffer !!! */
 #else
 	rv = vsnprintf(p->cur, (p->end - p->cur), format, args);
@@ -644,6 +486,16 @@ static void Lut_Lab2LutV2_16(double *out, double *in);
 static void Lut_Lut2LabV4_16(double *out, double *in);
 static void Lut_Lab2LutV4_16(double *out, double *in);
 
+static void Lut_Lut2Y(double *out, double *in);
+static void Lut_Y2Lut(double *out, double *in);
+static void Lut_Lut2L_8(double *out, double *in);
+static void Lut_L2Lut_8(double *out, double *in);
+static void Lut_Lut2LV2_16(double *out, double *in);
+static void Lut_L2LutV2_16(double *out, double *in);
+static void Lut_Lut2LV4_16(double *out, double *in);
+static void Lut_L2LutV4_16(double *out, double *in);
+
+//~~~~888888
 /* read a PCS number. PCS can be profile PCS, profile version Lab, */
 /* or a specific type of Lab, depending on the value of csig: */
 /*   icmSigPCSData, icSigXYZData, icmSigLab8Data, icSigLabData, */
@@ -653,11 +505,12 @@ static void read_PCSNumber(icc *icp, icColorSpaceSignature csig, double pcs[3], 
 
 	if (csig == icmSigPCSData)
 		csig = icp->header->pcs;
-	if (csig == icSigLabData)
+	if (csig == icSigLabData) {
 		if (icp->ver != 0)
 			csig = icmSigLabV4Data;
 		else
 			csig = icmSigLabV2Data;
+	}
 
 	if (csig == icmSigLab8Data) {
 		pcs[0] = read_DCS8Number(p);
@@ -681,6 +534,8 @@ static void read_PCSNumber(icc *icp, icColorSpaceSignature csig, double pcs[3], 
 		case icmSigLabV4Data:
 			Lut_Lut2LabV4_16(pcs, pcs);
 			break;
+		default:
+			break;
 	}
 }
 
@@ -695,11 +550,12 @@ static int write_PCSNumber(icc *icp, icColorSpaceSignature csig, double pcs[3], 
 
 	if (csig == icmSigPCSData)
 		csig = icp->header->pcs;
-	if (csig == icSigLabData)
+	if (csig == icSigLabData) {
 		if (icp->ver != 0)
 			csig = icmSigLabV4Data;
 		else
 			csig = icmSigLabV2Data;
+	}
 
 	switch (csig) {
 		case icSigXYZData:
@@ -733,6 +589,7 @@ static int write_PCSNumber(icc *icp, icColorSpaceSignature csig, double pcs[3], 
 }
 
 /* Read a given primitive type. Return non-zero on error */
+/* (Not currently used internaly ?) */
 /* Public: */
 int read_Primitive(icc *icp, icmPrimType ptype, void *prim, char *p) {
 
@@ -800,6 +657,7 @@ int read_Primitive(icc *icp, icmPrimType ptype, void *prim, char *p) {
 }
 
 /* Write a given primitive type. Return non-zero on error */
+/* (Not currently used internaly ?) */
 /* Public: */
 int write_Primitive(icc *icp, icmPrimType ptype, char *p, void *prim) {
 
@@ -920,6 +778,8 @@ static int check_null_string16(char *cp, int len) {
 	return 0;
 }
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
 /* Color Space to number of component conversion */
 /* Return 0 on error */
 static unsigned int number_ColorSpaceSignature(icColorSpaceSignature sig) {
@@ -978,9 +838,31 @@ static unsigned int number_ColorSpaceSignature(icColorSpaceSignature sig) {
 			return 14;
 		case icSig15colorData:
 			return 15;
+
+		/* Non-standard and Pseudo spaces */
+		case icmSigYData:
+			return 1;
+		case icmSigLData:
+			return 1;
+		case icmSigL8Data:
+			return 1;
+		case icmSigLV2Data:
+			return 1;
+		case icmSigLV4Data:
+			return 1;
+		case icmSigPCSData:
+			return 3;
+		case icmSigLab8Data:
+			return 3;
+		case icmSigLabV2Data:
+			return 3;
+		case icmSigLabV4Data:
+			return 3;
+
 		default:
-			return 0;
+			break;
 	}
+	return 0;
 }
 
 /* Public version of above */
@@ -988,6 +870,107 @@ static unsigned int number_ColorSpaceSignature(icColorSpaceSignature sig) {
 /* Return the number of channels for the given color space. Return 0 if unknown. */
 ICCLIB_API unsigned int icmCSSig2nchan(icColorSpaceSignature sig) {
 	return number_ColorSpaceSignature(sig);
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Return the individual channel names and number of channels give a colorspace signature. */
+/* Return 0 if it is not a colorspace that itself defines particular channels, */ 
+/* 1 if it is a colorant based colorspace, and 2 if it is not a colorant based space */
+static int chnames_ColorSpaceSignature(
+icColorSpaceSignature sig,
+char *cvals[]				/* Pointers to return for each channel */
+) {
+	switch (sig) {
+    	case icSigXYZData:
+			cvals[0] = "CIE X";
+			cvals[1] = "CIE Y";
+			cvals[2] = "CIE Z";
+			return 2;
+
+    	case icSigLabData:
+			cvals[0] = "CIE L*";
+			cvals[1] = "CIE a*";
+			cvals[2] = "CIE b*";
+			return 2;
+
+    	case icSigLuvData:
+			cvals[0] = "CIE L*";
+			cvals[1] = "CIE u*";
+			cvals[2] = "CIE v*";
+			return 2;
+
+		/* Usually ITU-R BT.601 (was CCIR 601) */
+    	case icSigYCbCrData:
+			cvals[0] = "ITU Y";
+			cvals[1] = "ITU Cb";
+			cvals[2] = "ITU Cr";
+			return 2;
+
+    	case icSigYxyData:
+			cvals[0] = "CIE Y";
+			cvals[1] = "CIE x";
+			cvals[2] = "CIE y";
+			return 2;
+
+		/* Alvy Ray Smith ? */
+    	case icSigHsvData:
+			cvals[0] = "RGB Hue";
+			cvals[1] = "RGB Saturation";
+			cvals[2] = "RGB Value";
+			return 2;
+
+		/* GSPC ? */
+    	case icSigHlsData:
+			cvals[0] = "RGB Hue";
+			cvals[1] = "RGB Lightness";
+			cvals[2] = "RGB Saturation";
+			return 2;
+
+		case icSigCmyData:
+			cvals[0] = "Cyan";
+			cvals[1] = "Magenta";
+			cvals[2] = "Yellow";
+			return 1;
+
+		case icSigRgbData:
+			cvals[0] = "Red";
+			cvals[1] = "Green";
+			cvals[2] = "Blue";
+			return 1;
+
+		case icSigCmykData:
+			cvals[0] = "Cyan";
+			cvals[1] = "Magenta";
+			cvals[2] = "Yellow";
+			cvals[3] = "Black";
+			return 1;
+
+		
+		/* Non-standard and Pseudo spaces */
+    	case icmSigYData:
+			cvals[0] = "CIE Y";
+			return 2;
+
+    	case icmSigLData:
+			cvals[0] = "CIE L*";
+			return 2;
+
+		default:
+			break;
+
+	}
+	return 0;
+}
+
+/* Public version of above */
+
+/* Return the individual channel names and number of channels give a colorspace signature. */
+/* Return 0 if it is not a colorspace that itself defines particular channels, */ 
+/* 1 if it is a colorant based colorspace, and 2 if it is not a colorant based space */
+ICCLIB_API unsigned int icmCSSig2chanNames(icColorSpaceSignature sig, char *cvals[]) {
+
+	return chnames_ColorSpaceSignature(sig, cvals);
 }
 
 /* ------------------------------------------------------- */
@@ -1362,6 +1345,27 @@ static const char *string_ColorSpaceSignature(icColorSpaceSignature sig) {
 			return "14 Color";
 		case icSig15colorData:
 			return "15 Color";
+
+		/* Non-standard and Pseudo spaces */
+		case icmSigYData:
+			return "Y";
+		case icmSigLData:
+			return "L";
+		case icmSigL8Data:
+			return "L";
+		case icmSigLV2Data:
+			return "L";
+		case icmSigLV4Data:
+			return "L";
+		case icmSigPCSData:
+			return "PCS";
+		case icmSigLab8Data:
+			return "Lab";
+		case icmSigLabV2Data:
+			return "Lab";
+		case icmSigLabV4Data:
+			return "Lab";
+
 		default:
 			sprintf(buf,"Unrecognized - %s",tag2str(sig));
 			return buf;
@@ -1443,16 +1447,37 @@ static const char *string_RenderingIntent(icRenderingIntent sig) {
 		case icPerceptual:
 			return "Perceptual";
 		case icRelativeColorimetric:
-	    		return "Relative Colorimetric";
+    		return "Relative Colorimetric";
 		case icSaturation:
-	    		return "Saturation";
+    		return "Saturation";
 		case icAbsoluteColorimetric:
-	    		return "Absolute Colorimetric";
+    		return "Absolute Colorimetric";
+		case icmDefaultIntent:
+    		return "Default Intent";
 		default:
 			sprintf(buf,"Unrecognized - 0x%x",sig);
 			return buf;
 	}
 }
+
+/* Transform Lookup function */
+static const char *string_LookupFunc(icmLookupFunc sig) {
+	static char buf[30];
+	switch(sig) {
+		case icmFwd:
+			return "Forward";
+		case icmBwd:
+    		return "Backward";
+		case icmGamut:
+    		return "Gamut";
+		case icmPreview:
+    		return "Preview";
+		default:
+			sprintf(buf,"Unrecognized - 0x%x",sig);
+			return buf;
+	}
+}
+
 
 /* Different Spot Shapes currently defined, used for screeningType */
 static const char *string_SpotShape(icSpotShape sig) {
@@ -1574,6 +1599,8 @@ const char *icm2str(icmEnumType etype, int enumval) {
 			return string_MeasurementGeometry((icMeasurementGeometry) enumval);
 		case icmRenderingIntent:
 			return string_RenderingIntent((icRenderingIntent) enumval);
+		case icmTransformLookupFunc:
+			return string_LookupFunc((icmLookupFunc) enumval);
 		case icmSpotShape:
 			return string_SpotShape((icSpotShape) enumval);
 		case icmStandardObserver:
@@ -1590,6 +1617,234 @@ const char *icm2str(icmEnumType etype, int enumval) {
 /* ========================================================== */
 /* Object I/O routines                                        */
 /* ========================================================== */
+/* icmUnknown object */
+
+/* Return the number of bytes needed to write this tag */
+static unsigned int icmUnknown_get_size(
+	icmBase *pp
+) {
+	icmUnknown *p = (icmUnknown *)pp;
+	unsigned int len = 0;
+	len += 8;			/* 8 bytes for tag and padding */
+	len += p->size * 1;	/* 1 byte for each unknown data */
+	return len;
+}
+
+/* read the object, return 0 on success, error code on fail */
+static int icmUnknown_read(
+	icmBase *pp,
+	unsigned long len,		/* tag length */
+	unsigned long of		/* start offset within file */
+) {
+	icmUnknown *p = (icmUnknown *)pp;
+	icc *icp = p->icp;
+	int rv = 0;
+	unsigned long i, size;
+	char *bp, *buf;
+
+	if (len < 8) {
+		sprintf(icp->err,"icmUnknown_read: Tag too small to be legal");
+		return icp->errc = 1;
+	}
+
+	/* Allocate a file read buffer */
+	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
+		sprintf(icp->err,"icmUnknown_read: malloc() failed");
+		return icp->errc = 2;
+	}
+	bp = buf;
+
+	/* Read portion of file into buffer */
+	if (   icp->fp->seek(icp->fp, of) != 0
+	    || icp->fp->read(icp->fp, bp, 1, len) != len) {
+		sprintf(icp->err,"icmUnknown_read: fseek() or fread() failed");
+		icp->al->free(icp->al, buf);
+		return icp->errc = 1;
+	}
+	p->size = size = (len - 8)/1;		/* Number of elements in the array */
+
+	if ((rv = p->allocate((icmBase *)p)) != 0) {
+		icp->al->free(icp->al, buf);
+		return rv;
+	}
+
+	/* Read type descriptor from the buffer */
+	p->uttype = (icTagTypeSignature)read_SInt32Number(bp);
+	bp += 8;	/* Skip padding */
+
+	/* Read all the data from the buffer */
+	for (i = 0; i < size; i++, bp += 1) {
+		p->data[i] = read_UInt8Number(bp);
+	}
+	icp->al->free(p->icp->al, buf);
+	return 0;
+}
+
+/* Write the contents of the object. Return 0 on sucess, error code on failure */
+static int icmUnknown_write(
+	icmBase *pp,
+	unsigned long of			/* File offset to write from */
+) {
+	icmUnknown *p = (icmUnknown *)pp;
+	icc *icp = p->icp;
+	unsigned long i;
+	unsigned int len;
+	char *bp, *buf;		/* Buffer to write from */
+	int rv = 0;
+
+	/* Allocate a file write buffer */
+	len = p->get_size((icmBase *)p);
+	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
+		sprintf(icp->err,"icmUnknown_write malloc() failed");
+		return icp->errc = 2;
+	}
+	bp = buf;
+
+	/* Write type descriptor to the buffer */
+	if ((rv = write_SInt32Number((int)p->uttype,bp)) != 0) {
+		sprintf(icp->err,"icmUnknown_write: write_SInt32Number() failed");
+		icp->al->free(icp->al, buf);
+		return icp->errc = rv;
+	}
+	write_SInt32Number(0,bp+4);			/* Set padding to 0 */
+	bp += 8;	/* Skip padding */
+
+	/* Write all the data to the buffer */
+	for (i = 0; i < p->size; i++, bp += 1) {
+		if ((rv = write_UInt8Number(p->data[i],bp)) != 0) {
+			sprintf(icp->err,"icmUnknown_write: write_UInt8umber() failed");
+			icp->al->free(icp->al, buf);
+			return icp->errc = rv;
+		}
+	}
+
+	/* Write to the file */
+	if (   icp->fp->seek(icp->fp, of) != 0
+	    || icp->fp->write(icp->fp, buf, 1, len) != len) {
+		sprintf(icp->err,"icmUnknown_write fseek() or fwrite() failed");
+		icp->al->free(icp->al, buf);
+		return icp->errc = 2;
+	}
+	icp->al->free(icp->al, buf);
+	return 0;
+}
+
+/* Dump a text description of the object */
+static void icmUnknown_dump(
+	icmBase *pp,
+	icmFile *op,	/* Output to dump to */
+	int   verb		/* Verbosity level */
+) {
+	icmUnknown *p = (icmUnknown *)pp;
+	unsigned int i, ii, r, ph;
+
+	if (verb <= 1)
+		return;
+
+	op->printf(op,"Unknown:\n");
+	op->printf(op,"  Payload size in bytes = %u\n",p->size);
+
+	/* Print one row of binary and ASCII interpretation if verb == 2, All if == 3 */
+	/* else print all of it. */
+	ii = i = ph = 0;
+	for (r = 1;; r++) {		/* count rows */
+		int c = 1;			/* Character location */
+
+		c = 1;
+		if (ph != 0) {	/* Print ASCII under binary */
+			op->printf(op,"           ");
+			i = ii;				/* Swap */
+			c += 11;
+		} else {
+			op->printf(op,"    0x%04lx: ",i);
+			ii = i;				/* Swap */
+			c += 10;
+		}
+		while (i < p->size && c < 75) {
+			if (ph == 0) 
+				op->printf(op,"%02x ",p->data[i]);
+			else {
+				if (isprint(p->data[i]))
+					op->printf(op," %c ",p->data[i]);
+				else
+					op->printf(op,"   ",p->data[i]);
+			}
+			c += 3;
+			i++;
+		}
+		if (ph == 0 || i < p->size)
+			op->printf(op,"\n");
+
+		if (ph == 1 && i >= p->size) {
+			op->printf(op,"\n");
+			break;
+		}
+		if (ph == 1 && r > 1 && verb < 3) {
+			op->printf(op,"    ...\n");
+			break;			/* Print 1 row if not verbose */
+		}
+
+		if (ph == 0)
+			ph = 1;
+		else
+			ph = 0;
+
+	}
+}
+
+/* Allocate variable sized data elements */
+static int icmUnknown_allocate(
+	icmBase *pp
+) {
+	icmUnknown *p = (icmUnknown *)pp;
+	icc *icp = p->icp;
+
+	if (p->size != p->_size) {
+		if (p->data != NULL)
+			icp->al->free(icp->al, p->data);
+		if ((p->data = (unsigned char *) icp->al->malloc(icp->al, p->size * sizeof(unsigned char))) == NULL) {
+			sprintf(icp->err,"icmUnknown_alloc: malloc() of icmUnknown data failed");
+			return icp->errc = 2;
+		}
+		p->_size = p->size;
+	}
+	return 0;
+}
+
+/* Free all storage in the object */
+static void icmUnknown_delete(
+	icmBase *pp
+) {
+	icmUnknown *p = (icmUnknown *)pp;
+	icc *icp = p->icp;
+
+	if (p->data != NULL)
+		icp->al->free(icp->al, p->data);
+	icp->al->free(icp->al, p);
+}
+
+/* Create an empty object. Return null on error */
+static icmBase *new_icmUnknown(
+	icc *icp
+) {
+	icmUnknown *p;
+	if ((p = (icmUnknown *) icp->al->calloc(icp->al,1,sizeof(icmUnknown))) == NULL)
+		return NULL;
+	p->ttype    = icmSigUnknownType;
+	p->uttype   = icmSigUnknownType;
+	p->refcount = 1;
+	p->get_size = icmUnknown_get_size;
+	p->read     = icmUnknown_read;
+	p->write    = icmUnknown_write;
+	p->dump     = icmUnknown_dump;
+	p->allocate = icmUnknown_allocate;
+	p->del      = icmUnknown_delete;
+	p->icp      = icp;
+
+	return (icmBase *)p;
+}
+
+/* ---------------------------------------------------------- */
 /* icmUInt8Array object */
 
 /* Return the number of bytes needed to write this tag */
@@ -2962,8 +3217,10 @@ static int icmCurve_lookup_fwd(
 			*out = 0.0;
 		else
 			*out = pow(val, p->data[0]);
+	} else if (p->size == 0) { /* Table of 0 size */
+		*out = *in;
 	} else { /* Use linear interpolation */
-		int ix;
+		unsigned int ix;
 		double val, w;
 		double inputEnt_1 = (double)(p->size-1);
 
@@ -2975,7 +3232,7 @@ static int icmCurve_lookup_fwd(
 			val = inputEnt_1;
 			rv |= 1;
 		}
-		ix = (int)floor(val);		/* Coordinate */
+		ix = (unsigned int)floor(val);		/* Coordinate */
 		if (ix > (p->size-2))
 			ix = (p->size-2);
 		w = val - (double)ix;		/* weight */
@@ -2996,7 +3253,7 @@ static int icmTable_setup_bwd(
 	unsigned long size,			/* Size of fwd table */
 	double       *data			/* Table */
 ) {
-	int i;
+	unsigned int i;
 
 	rt->size = size;		/* Stash pointers to these away */
 	rt->data = data;
@@ -3016,15 +3273,15 @@ static int icmTable_setup_bwd(
 	rt->qscale = (double)rt->rsize/(rt->rmax - rt->rmin);	/* Scale factor to quantize to */
 	
 	/* Initialize the reverse lookup structures, and get overall min/max */
-	if ((rt->rlists = (int **) icp->al->calloc(icp->al, 1, rt->rsize * sizeof(int *))) == NULL) {
+	if ((rt->rlists = (unsigned int **) icp->al->calloc(icp->al, 1, rt->rsize * sizeof(unsigned int *))) == NULL) {
 		return 2;
 	}
 
 	/* Assign each output value range bucket lists it intersects */
 	for (i = 0; i < (rt->size-1); i++) {
 		int s, e, j;	/* Start and end indexes (inclusive) */
-		s = ((rt->data[i] - rt->rmin) * rt->qscale);
-		e = ((rt->data[i+1] - rt->rmin) * rt->qscale);
+		s = (int)((rt->data[i] - rt->rmin) * rt->qscale);
+		e = (int)((rt->data[i+1] - rt->rmin) * rt->qscale);
 		if (s > e) {	/* swap */
 			int t;
 			t = s; s = e; e = t;
@@ -3085,7 +3342,7 @@ static int icmTable_lookup_bwd(
 	double *in
 ) {
 	int rv = 0;
-	int ix, i, k;
+	unsigned int ix, k, i;
 	double oval, ival = *in, val;
 	double rsize_1;
 
@@ -3158,6 +3415,8 @@ static int icmCurve_lookup_bwd(
 			*out = 0.0;
 		else
 			*out = pow(val, 1.0/p->data[0]);
+	} else if (p->size == 0) { /* Table of 0 size */
+		*out = *in;
 	} else { /* Use linear interpolation */
 		if (p->rt.inited == 0) {	
 			rv = icmTable_setup_bwd(icp, &p->rt, p->size, p->data);
@@ -3250,7 +3509,7 @@ static int icmCurve_read(
 		/* Read all the data from the buffer */
 		for (i = 0; i < p->size; i++, bp += 2) {
 			if ((bp + 2) > end) {
-				sprintf(icp->err,"icmData_read: Data too short to curve value");
+				sprintf(icp->err,"icmCurve_read: Data too short to curve value");
 				icp->al->free(icp->al, buf);
 				return icp->errc = 1;
 			}
@@ -3491,6 +3750,10 @@ static int icmData_read(
 		p->flag = icmDataASCII;
 	} else if (f == 1) {
 		p->flag = icmDataBin;
+#ifndef ICM_STRICT				/* Profile maker sometimes has a problem */
+	} else if (f == 0x01000000) {
+		p->flag = icmDataBin;
+#endif
 	} else {
 		sprintf(icp->err,"icmData_read: Unknown flag value 0x%x",f);
 		icp->al->free(icp->al, buf);
@@ -4263,8 +4526,8 @@ static void icmLut_min_max(
 ) {
 	double *tp;
 	double minv, maxv;	/* Values */
-	int e, ee, f;
-	double gc[MAX_CHAN];	/* Grid coordinate */
+	unsigned int e, ee, f;
+	int gc[MAX_CHAN];	/* Grid coordinate */
 
 	minv = 1e6;
 	maxv = -1e6;
@@ -4294,8 +4557,7 @@ static void icmLut_min_max(
 
 		/* Increment coord */
 		for (e = 0; e < p->inputChan; e++) {
-			gc[e]++;
-			if (gc[e] < p->clutPoints)
+			if (++gc[e] < p->clutPoints)
 				break;	/* No carry */
 			gc[e] = 0;
 		}
@@ -4327,33 +4589,38 @@ double *out,	/* Output array[inputChan] */
 double *in		/* Input array[inputChan] */
 ) {
 	int rv = 0;
-	int ix,n;
+	unsigned int ix, n;
 	double inputEnt_1 = (double)(p->inputEnt-1);
 	double *table = p->inputTable;
 
-	/* Use linear interpolation */
-	for (n = 0; n < p->inputChan; n++, table += p->inputEnt) {
-		double val, w;
-		val = in[n] * inputEnt_1;
-		if (val < 0.0) {
-			val = 0.0;
-			rv |= 1;
-		} else if (val > inputEnt_1) {
-			val = inputEnt_1;
-			rv |= 1;
+	if (p->inputEnt == 0) {		/* Hmm. */
+		for (n = 0; n < p->inputChan; n++)
+			out[n] = in[n];
+	} else {
+		/* Use linear interpolation */
+		for (n = 0; n < p->inputChan; n++, table += p->inputEnt) {
+			double val, w;
+			val = in[n] * inputEnt_1;
+			if (val < 0.0) {
+				val = 0.0;
+				rv |= 1;
+			} else if (val > inputEnt_1) {
+				val = inputEnt_1;
+				rv |= 1;
+			}
+			ix = (int)floor(val);		/* Grid coordinate */
+			if (ix > (p->inputEnt-2))
+				ix = (p->inputEnt-2);
+			w = val - (double)ix;		/* weight */
+			val = table[ix];
+			out[n] = val + w * (table[ix+1] - val);
 		}
-		ix = (int)floor(val);		/* Grid coordinate */
-		if (ix > (p->inputEnt-2))
-			ix = (p->inputEnt-2);
-		w = val - (double)ix;		/* weight */
-		val = table[ix];
-		out[n] = val + w * (table[ix+1] - val);
 	}
 	return rv;
 }
 
 /* Convert normalized numbers though this Luts multi-dimensional table. */
-/* using n-linear interpolation. */
+/* using multi-linear interpolation. */
 static int icmLut_lookup_clut_nl(
 /* Return 0 on success, 1 if clipping occured, 2 on other error */
 icmLut *p,		/* Pointer to Lut object */
@@ -4375,7 +4642,7 @@ double *in		/* Input array[outputChan] */
 		}
 	}
 
-	/* We are using an n-linear (ie. Trilinear for 3D input) interpolation. */
+	/* We are using an multi-linear (ie. Trilinear for 3D input) interpolation. */
 	/* The implementation here uses more multiplies that some other schemes, */
 	/* (for instance, see "Tri-Linear Interpolation" by Steve Hill, */
 	/* Graphics Gems IV, page 521), but has less involved bookeeping, */
@@ -4385,7 +4652,7 @@ double *in		/* Input array[outputChan] */
 
 	/* Compute base index into grid and coordinate offsets */
 	{
-		int e;
+		unsigned int e;
 		double clutPoints_1 = (double)(p->clutPoints-1);
 		int    clutPoints_2 = p->clutPoints-2;
 		gp = p->clutTable;		/* Base of grid array */
@@ -4410,7 +4677,8 @@ double *in		/* Input array[outputChan] */
 	}
 	/* Compute corner weights needed for interpolation */
 	{
-		int e, i, g = 1;
+		unsigned int e;
+		int i, g = 1;
 		gw[0] = 1.0;
 		for (e = 0; e < p->inputChan; e++) {
 			for (i = 0; i < g; i++) {
@@ -4422,7 +4690,8 @@ double *in		/* Input array[outputChan] */
 	}
 	/* Now compute the output values */
 	{
-		int i, f;
+		int i;
+		unsigned int f;
 		double w = gw[0];
 		double *d = gp + p->dcube[0];
 		for (f = 0; f < p->outputChan; f++)			/* Base of cube */
@@ -4430,9 +4699,8 @@ double *in		/* Input array[outputChan] */
 		for (i = 1; i < (1 << p->inputChan); i++) {	/* For all other corners of cube */
 			w = gw[i];				/* Strength reduce */
 			d = gp + p->dcube[i];
-			for (f = 0; f < p->outputChan; f++) {
+			for (f = 0; f < p->outputChan; f++)
 				out[f] += w * d[f];
-			}
 		}
 	}
 	if (gw != GW)
@@ -4458,7 +4726,7 @@ double *in		/* Input array[outputChan] */
 
 	/* Compute base index into grid and coordinate offsets */
 	{
-		int e;
+		unsigned int e;
 		double clutPoints_1 = (double)(p->clutPoints-1);
 		int    clutPoints_2 = p->clutPoints-2;
 		gp = p->clutTable;		/* Base of grid array */
@@ -4481,7 +4749,8 @@ double *in		/* Input array[outputChan] */
 			gp += x * p->dinc[e];		/* Add index offset for base of cube */
 		}
 	}
-	/* Do selection sort on coordinates */
+#ifdef NEVER
+	/* Do selection sort on coordinates, smallest to largest. */
 	{
 		int e, f;
 		for (e = 0; e < p->inputChan; e++)
@@ -4500,9 +4769,30 @@ double *in		/* Input array[outputChan] */
 			}
 		}
 	}
+#else
+	/* Do insertion sort on coordinates, smallest to largest. */
+	{
+		int f, vf;
+		unsigned int e;
+		double v;
+		for (e = 0; e < p->inputChan; e++)
+			si[e] = e;						/* Initial unsorted indexes */
+
+		for (e = 1; e < p->inputChan; e++) {
+			f = e;
+			v = co[si[f]];
+			vf = f;
+			while (f > 0 && co[si[f-1]] > v) {
+				si[f] = si[f-1];
+				f--;
+			}
+			si[f] = vf;
+		}
+	}
+#endif
 	/* Now compute the weightings, simplex vertices and output values */
 	{
-		int e, f;
+		unsigned int e, f;
 		double w;		/* Current vertex weight */
 
 		w = 1.0 - co[si[p->inputChan-1]];		/* Vertex at base of cell */
@@ -4524,6 +4814,135 @@ double *in		/* Input array[outputChan] */
 	return rv;
 }
 
+/* Convert normalized numbers though this Luts multi-dimensional table */
+/* using optimised simplex interpolation. */
+/* This version optimses the simplex split axis depending on the input */
+/* colorspace. */
+static int icmLut_lookup_clut_osx(
+/* Return 0 on success, 1 if clipping occured, 2 on other error */
+icmLut *p,		/* Pointer to Lut object */
+double *out,	/* Output array[inputChan] */
+double *in		/* Input array[outputChan] */
+) {
+	int rv = 0;
+	double *gp;					/* Pointer to grid cube base */
+	double co[MAX_CHAN];		/* Coordinate offset with the grid cell */
+	int    si[MAX_CHAN];		/* co[] Sort index, [0] = smalest */
+	char xflip[MAX_CHAN];		/* Optimised simplex axis flip flags */
+
+	/* Compute base index into grid and coordinate offsets */
+	{
+		unsigned int e;
+		double clutPoints_1 = (double)(p->clutPoints-1);
+		int    clutPoints_2 = p->clutPoints-2;
+		gp = p->clutTable;		/* Base of grid array */
+
+		for (e = 0; e < p->inputChan; e++) {
+			int x;
+			double val;
+// ~~~999
+#ifdef NEVER
+			xflip[e] = p->finfo[e].bthff;
+			if (in[e] >= p->finfo[e].fth)
+				xflip[e] = p->finfo[e].athff;
+#else
+
+			xflip[e] = 	0;
+			if (e == 0)
+				xflip[e] = 1;
+#endif
+			val = in[e] * clutPoints_1;
+			if (val < 0.0) {
+				val = 0.0;
+				rv |= 1;
+			} else if (val > clutPoints_1) {
+				val = clutPoints_1;
+				rv |= 1;
+			}
+			x = (int)floor(val);		/* Grid coordinate */
+			if (x > clutPoints_2)
+				x = clutPoints_2;
+			co[e] = val - (double)x;	/* 1.0 - weight */
+			gp += x * p->dinc[e];		/* Add index offset for base of cube */
+			if (xflip[e]) {				/* Reverse sense of direction for this axis */
+				co[e] = 1.0 - co[e];
+				gp += p->dinc[e];
+			}
+		}
+	}
+//printf("*");fflush(stdout);
+#ifdef NEVER
+	/* Do selection sort on coordinates, smallest to largest. */
+	{
+		int e, f;
+		for (e = 0; e < p->inputChan; e++)
+			si[e] = e;						/* Initial unsorted indexes */
+		for (e = 0; e < (p->inputChan-1); e++) {
+			double cosn;
+			cosn = co[si[e]];				/* Current smallest value */
+			for (f = e+1; f < p->inputChan; f++) {	/* Check against rest */
+				int tt;
+				tt = si[f];
+				if (cosn > co[tt]) {
+					si[f] = si[e]; 			/* Exchange */
+					si[e] = tt;
+					cosn = co[tt];
+				}
+			}
+		}
+	}
+#else
+	/* Do insertion sort on coordinates, smallest to largest. */
+	{
+		int f, vf;
+		unsigned int e;
+		double v;
+		for (e = 0; e < p->inputChan; e++)
+			si[e] = e;						/* Initial unsorted indexes */
+
+		for (e = 1; e < p->inputChan; e++) {
+			f = e;
+			v = co[si[f]];
+			vf = f;
+			while (f > 0 && co[si[f-1]] > v) {
+				si[f] = si[f-1];
+				f--;
+			}
+			si[f] = vf;
+		}
+	}
+#endif
+	/* Now compute the weightings, simplex vertices and output values */
+	{
+		unsigned int e, f;
+		double w;		/* Current vertex weight */
+
+		w = 1.0 - co[si[p->inputChan-1]];		/* Vertex at base of cell */
+		for (f = 0; f < p->outputChan; f++)
+			out[f] = w * gp[f];
+
+		for (e = p->inputChan-1; e > 0; e--) {	/* Middle verticies */
+			w = co[si[e]] - co[si[e-1]];
+			if (xflip[e])
+				gp -= p->dinc[si[e]];			/* Move to top of cell in next largest dimension */
+			else
+				gp += p->dinc[si[e]];			/* Move to top of cell in next largest dimension */
+			for (f = 0; f < p->outputChan; f++)
+				out[f] += w * gp[f];
+		}
+
+		w = co[si[0]];
+		if (xflip[0])
+			gp -= p->dinc[si[0]];		/* Far corner from base of cell */
+		else
+			gp += p->dinc[si[0]];		/* Far corner from base of cell */
+		for (f = 0; f < p->outputChan; f++)
+			out[f] += w * gp[f];
+	}
+	return rv;
+}
+
+
 /* Convert normalized numbers though this Luts output tables. */
 /* Return 0 on success, 1 if clipping occured, 2 on other error */
 static int icmLut_lookup_output(
@@ -4532,27 +4951,32 @@ double *out,	/* Output array[outputChan] */
 double *in		/* Input array[outputChan] */
 ) {
 	int rv = 0;
-	int ix,n;
+	unsigned int ix, n;
 	double outputEnt_1 = (double)(p->outputEnt-1);
 	double *table = p->outputTable;
 
-	/* Use linear interpolation */
-	for (n = 0; n < p->outputChan; n++, table += p->outputEnt) {
-		double val, w;
-		val = in[n] * outputEnt_1;
-		if (val < 0.0) {
-			val = 0.0;
-			rv |= 1;
-		} else if (val > outputEnt_1) {
-			val = outputEnt_1;
-			rv |= 1;
+	if (p->outputEnt == 0) {		/* Hmm. */
+		for (n = 0; n < p->outputChan; n++)
+			out[n] = in[n];
+	} else {
+		/* Use linear interpolation */
+		for (n = 0; n < p->outputChan; n++, table += p->outputEnt) {
+			double val, w;
+			val = in[n] * outputEnt_1;
+			if (val < 0.0) {
+				val = 0.0;
+				rv |= 1;
+			} else if (val > outputEnt_1) {
+				val = outputEnt_1;
+				rv |= 1;
+			}
+			ix = (int)floor(val);		/* Grid coordinate */
+			if (ix > (p->outputEnt-2))
+				ix = (p->outputEnt-2);
+			w = val - (double)ix;		/* weight */
+			val = table[ix];
+			out[n] = val + w * (table[ix+1] - val);
 		}
-		ix = (int)floor(val);		/* Grid coordinate */
-		if (ix > (p->outputEnt-2))
-			ix = (p->outputEnt-2);
-		w = val - (double)ix;		/* weight */
-		val = table[ix];
-		out[n] = val + w * (table[ix+1] - val);
 	}
 	return rv;
 }
@@ -4570,9 +4994,9 @@ double *in		/* Input array[outputChan] */
 unsigned
 psh_init(
 psh *p,	/* Pointer to structure to initialise */
-int      di,	/* Dimensionality */
-unsigned res,	/* Size per coordinate */
-int co[]		/* Coordinates to initialise (May be NULL) */
+int      di,		/* Dimensionality */
+unsigned int res,	/* Size per coordinate */
+int co[]			/* Coordinates to initialise (May be NULL) */
 ) {
 	int e;
 
@@ -4580,7 +5004,7 @@ int co[]		/* Coordinates to initialise (May be NULL) */
 	p->res = res;
 
 	/* Compute bits */
-	for (p->bits = 0; (1 << p->bits) < res; p->bits++)
+	for (p->bits = 0; (1u << p->bits) < res; p->bits++)
 		;
 
 	/* Compute the total count mask */
@@ -4617,12 +5041,12 @@ psh *p,	/* Pointer to structure */
 int co[]		/* Coordinates to return */
 ) {
 	int di = p->di;
-	int res = p->res;
-	int bits = p->bits;
+	unsigned int res = p->res;
+	unsigned int bits = p->bits;
 	int e;
 
 	do {
-		int b;
+		unsigned int b;
 		int gix;	/* Gray code index */
 		
 		p->ix = (p->ix + 1) & p->tmask;
@@ -4648,7 +5072,7 @@ int co[]		/* Coordinates to return */
 	
 		/* Convert from Gray to binary coordinates */
 		for (e = 0; e < di; e++)  {
-			unsigned sh, tv;
+			unsigned int sh, tv;
 
 			for(sh = 1, tv = co[e];; sh <<= 1) {
 				unsigned ptv = tv;
@@ -4693,6 +5117,7 @@ static int getNormFunc(
 int icmSetMultiLutTables (
 	int ntables,							/* Number of tables to be set, 1..3 */
 	icmLut *pp[3],							/* Pointer to array of Lut objects */
+	int     flags,							/* Setting flags */
 	void   *cbctx,							/* Opaque callback context pointer value */
 	icColorSpaceSignature insig, 			/* Input color space */
 	icColorSpaceSignature outsig, 			/* Output color space */
@@ -4714,7 +5139,9 @@ int icmSetMultiLutTables (
 {
 	icmLut *p, *pn;				/* Pointer to 0'th nd tn'th Lut object */
 	icc *icp;					/* Pointer to common icc */
-	int tn, n, e;
+	int tn;
+	unsigned int e, f, i, n;
+	double **clutTable2 = NULL;		/* Cell center values for ICM_CLUT_SET_APXLS */ 
 	int ii[MAX_CHAN];		/* Index value */
 	psh counter;			/* Pseudo-Hilbert counter */
 	double _iv[4 * MAX_CHAN], *iv = &_iv[MAX_CHAN], *ivn;	/* Real index value/table value */
@@ -4806,8 +5233,8 @@ int icmSetMultiLutTables (
 					mn[0] =   0.0, mn[1] = mn[2] = -127.0;
 					mx[0] = 100.0, mx[1] = mx[2] =  127.0;
 				} else {
-					mn[0] =   0.0, mn[1] = mn[2] = -127.0;
-					mx[0] = 100.0, mx[1] = mx[2] =  127.0;
+					mn[0] =   0.0, mn[1] = mn[2] = -127.0 - 255.0/256.0;
+					mx[0] = 100.0, mx[1] = mx[2] =  127.0 + 255.0/256.0;
 				}
 				itoentry(imin, mn);	/* Convert from input color space to table representation */
 				itoentry(imax, mx);
@@ -4832,7 +5259,11 @@ int icmSetMultiLutTables (
 
 	/* Setup output table value min-max */
 	if (clutmin == NULL || clutmax == NULL) {
-#ifdef SYMETRICAL_DEFAULT_LAB_RANGE	/* Use range that maps 0.5 exactly onto an integer */
+#ifdef SYMETRICAL_DEFAULT_LAB_RANGE
+		/* This really isn't doing much, since the full range encoding doesn't need */
+		/* any adjustment to map a*b* 0 to an integer value. */
+		/* We are tweaking the 16 bit L* = 100 to the last index into */
+		/* the output table, which may help its accuracy slightly. */
 		/* We are assuming V2 Lab16 encoding, since this is a lut16type that always uses */
 		/* this encoding */
 		if (outsig == icSigLabData) { /* Special case Lab */
@@ -4861,9 +5292,9 @@ int icmSetMultiLutTables (
 		} else
 #endif
 		{
-			for (e = 0; e < p->outputChan; e++) {
-				omin[e] = 0.0;		/* We are assuming this is true for all other color spaces. */
-				omax[e] = 1.0;
+			for (f = 0; f < p->outputChan; f++) {
+				omin[f] = 0.0;		/* We are assuming this is true for all other color spaces. */
+				omax[f] = 1.0;
 			}
 		}
 	} else {
@@ -4906,6 +5337,24 @@ int icmSetMultiLutTables (
 		}
 	}
 
+	/* Allocate space for cell center value lookup */
+	if (flags == ICM_CLUT_SET_APXLS) {
+		if ((clutTable2 = (double **) icp->al->calloc(icp->al,sizeof(double *), ntables)) == NULL) {
+			sprintf(icp->err,"icmLut_set_tables malloc of cube center array failed");
+			return icp->errc = 1;
+		}
+		for (tn = 0; tn < ntables; tn++) {
+			if ((clutTable2[tn] = (double *) icp->al->calloc(icp->al,sizeof(double),
+			                                               p->clutTable_size)) == NULL) {
+				for (--tn; tn >= 0; tn--)
+					icp->al->free(icp->al, clutTable2[tn]);
+				icp->al->free(icp->al, clutTable2);
+				sprintf(icp->err,"icmLut_set_tables malloc of cube center array failed");
+				return icp->errc = 1;
+			}
+		}
+	}
+
 	/* Create the multi-dimensional lookup table values */
 
 	/* To make this clut function cache friendly, we use the pseudo-hilbert */
@@ -4925,7 +5374,7 @@ int icmSetMultiLutTables (
 			ti += ii[e] * p->dinc[e];				/* Clut index */
 			iv[e] = ii[e]/(p->clutPoints-1.0);		/* Vertex coordinates */
 			iv[e] = iv[e] * (imax[e] - imin[e]) + imin[e]; /* Undo expansion to 0.0 - 1.0 */
-			*((int *)&iv[-e-1]) = ii[e];			/* Trick to supply grid index in iv[] */
+			*((int *)&iv[-((int)e)-1]) = ii[e];	/* Trick to supply grid index in iv[] */
 		}
 	
 		ifromentry(iv,iv);			/* Convert from table value to input color space */
@@ -4940,25 +5389,157 @@ int icmSetMultiLutTables (
 			otoentry(ivn,ivn);			/* Convert from output color space value to table value */
 	
 			/* Expand used range to 0.0 - 1.0, and clip to legal values */
-			for (e = 0; e < pn->outputChan; e++) {
+			for (f = 0; f < pn->outputChan; f++) {
 				double tt;
-				tt = (ivn[e] - omin[e])/(omax[e] - omin[e]);
+				tt = (ivn[f] - omin[f])/(omax[f] - omin[f]);
 				if (tt < 0.0)
 					tt = 0.0;
 				else if (tt > 1.0)
 					tt = 1.0;
-				ivn[e] = tt;
+				ivn[f] = tt;
 			}
 		
-			for (e = 0; e < pn->outputChan; e++) 	/* Output chans */
-				pn->clutTable[ti + e] = ivn[e];
+			for (f = 0; f < pn->outputChan; f++) 	/* Output chans */
+				pn->clutTable[ti + f] = ivn[f];
 		}
 	
+		/* Lookup cell center value if ICM_CLUT_SET_APXLS */
+		if (clutTable2 != NULL) {
+
+			for (e = 0; e < p->inputChan; e++) {
+				if (ii[e] >= (p->clutPoints-1))
+					break;										/* Don't lookup last */
+				iv[e] = (ii[e] + 0.5)/(p->clutPoints-1.0);		/* Vertex coordinates + 0.5 */
+				iv[e] = iv[e] * (imax[e] - imin[e]) + imin[e]; /* Undo expansion to 0.0 - 1.0 */
+				*((int *)&iv[-((int)e)-1]) = ii[e];	/* Trick to supply grid index in iv[] */
+													/* (Not this is only the base for +0.5) */
+			}
+
+			if (e >= p->inputChan) {	/* We're not on the last row */
+		
+				ifromentry(iv,iv);			/* Convert from table value to input color space */
+			
+				/* Apply incolor -> outcolor function we want to represent */
+				clutfunc(cbctx, iv, iv);
+			
+				/* Disperse the results */
+				for (tn = 0, ivn = iv; tn < ntables; ivn += p->outputChan, tn++) {
+					pn = pp[tn];
+				
+					otoentry(ivn,ivn);			/* Convert from output color space value to table value */
+			
+					/* Expand used range to 0.0 - 1.0, and clip to legal values */
+					for (f = 0; f < pn->outputChan; f++) {
+						double tt;
+						tt = (ivn[f] - omin[f])/(omax[f] - omin[f]);
+						if (tt < 0.0)
+							tt = 0.0;
+						else if (tt > 1.0)
+							tt = 1.0;
+						ivn[f] = tt;
+					}
+				
+					for (f = 0; f < pn->outputChan; f++) 	/* Output chans */
+						clutTable2[tn][ti + f] = ivn[f];
+				}
+			}
+		}
+
 		/* Increment index within block (Reverse index significancd) */
 		if (psh_inc(&counter, ii))
 			break;
 	}
 
+	/* Deal with cell center value, aproximate least squares adjustment */
+	if (clutTable2 != NULL) {
+		int ti;					/* Table index */
+		int ee;
+		double cw = 1.0/(double)(1 << p->inputChan);		/* Weight for each cube corner */
+
+		for (e = 0; e < p->inputChan; e++)
+			ii[e] = 0;	/* init coords */
+
+		/* Compute linear interpolated error to actual cell center value */
+		for (ee = 0; ee < p->inputChan;) {
+
+			/* Compute base index for this cell */
+			for (ti = e = 0; e < p->inputChan; e++)  	/* Input tables */
+				ti += ii[e] * p->dinc[e];				/* Clut index */
+
+			for (tn = 0; tn < ntables; tn++) {
+				pn = pp[tn];
+			
+				for (f = 0; f < pn->outputChan; f++) { 	/* Output chans */
+					double sum = 0.0;
+			
+					for (i = 0; i < (1 << p->inputChan); i++) { /* For corners of cube */
+						sum += pn->clutTable[ti + pn->dcube[i] + f];
+					}
+					sum *= cw;						/* Interpolated value */
+					clutTable2[tn][ti + f] -= sum;	/* Correction to actual value */
+
+					/* Average half the error to cube corners */
+					clutTable2[tn][ti + f] *= 0.5 * cw;	/* Distribution fraction */
+				}
+			}
+
+			/* Increment coord */
+			for (ee = 0; ee < p->inputChan; ee++) {
+				if (++ii[ee] < (p->clutPoints-1))		/* Don't go through upper edge */
+					break;	/* No carry */
+				ii[ee] = 0;
+			}
+		}
+		
+		for (e = 0; e < p->inputChan; e++)
+			ii[e] = 0;	/* init coords */
+
+		/* Distribute the center error to the cell corners */
+		for (ee = 0; ee < p->inputChan;) {
+
+			/* Compute base index for this cell */
+			for (ti = e = 0; e < p->inputChan; e++) {  	/* Input tables */
+				ti += ii[e] * p->dinc[e];				/* Clut index */
+			}
+
+			for (i = 0; i < (1 << p->inputChan); i++) { /* For corners of cube */
+				double sc = 1.0;		/* Scale factor for edge nodes */
+
+				/* Compute averaging scale factor for edge nodes */
+				for (e = 0; e < p->inputChan; e++) {
+					if ((ii[e] == 0 && (i & (1 << e)) == 0)
+					 || (ii[e] == ((p->clutPoints-2)) && (i & (1 << e)) != 0))
+						sc *= 2.0;
+				}
+
+				for (tn = 0; tn < ntables; tn++) {
+					pn = pp[tn];
+				
+					for (f = 0; f < pn->outputChan; f++) { 	/* Output chans */
+						double vv;
+						vv = pn->clutTable[ti + pn->dcube[i] + f];		/* Current value */
+						vv += sc * clutTable2[tn][ti + f];			/* Correction */
+						if (vv < 0.0)
+							vv = 0.0;
+						else if (vv > 1.0)
+							vv = 1.0;
+						pn->clutTable[ti + pn->dcube[i] + f] = vv;
+					}
+				}
+			}
+
+			/* Increment coord */
+			for (ee = 0; ee < p->inputChan; ee++) {
+				if (++ii[ee] < (p->clutPoints-1))		/* Don't go through upper edge */
+					break;	/* No carry */
+				ii[ee] = 0;
+			}
+		}
+
+		for (tn = 0; tn < ntables; tn++)
+			icp->al->free(icp->al, clutTable2[tn]);
+		icp->al->free(icp->al, clutTable2);
+	}
 
 	/* Create the output table entry values */
 	for (tn = 0; tn < ntables; tn++) {
@@ -4966,12 +5547,12 @@ int icmSetMultiLutTables (
 		for (n = 0; n < pn->outputEnt; n++) {
 			double fv;
 			fv = n/(pn->outputEnt-1.0);
-			for (e = 0; e < pn->outputChan; e++)
-				iv[e] = fv;
+			for (f = 0; f < pn->outputChan; f++)
+				iv[f] = fv;
 
 			/* Undo expansion to 0.0 - 1.0 */
-			for (e = 0; e < pn->outputChan; e++) 		/* Output tables */
-				iv[e] = iv[e] * (omax[e] - omin[e]) + omin[e];
+			for (f = 0; f < pn->outputChan; f++) 		/* Output tables */
+				iv[f] = iv[f] * (omax[f] - omin[f]) + omin[f];
 
 			ofromentry(iv,iv);			/* Convert from table value to output color space value */
 
@@ -4981,20 +5562,21 @@ int icmSetMultiLutTables (
 			otoentry(iv,iv);			/* Convert from output color space value to table value */
 
 			/* Clip to legal values */
-			for (e = 0; e < pn->outputChan; e++) {
+			for (f = 0; f < pn->outputChan; f++) {
 				double tt;
-				tt = iv[e];
+				tt = iv[f];
 				if (tt < 0.0)
 					tt = 0.0;
 				else if (tt > 1.0)
 					tt = 1.0;
-				iv[e] = tt;
+				iv[f] = tt;
 			}
 
-			for (e = 0; e < pn->outputChan; e++) 		/* Input tables */
-				pn->outputTable[e * pn->outputEnt + n] = iv[e];
+			for (f = 0; f < pn->outputChan; f++) 		/* Input tables */
+				pn->outputTable[f * pn->outputEnt + n] = iv[f];
 		}
 	}
+
 	return 0;
 }
 
@@ -5003,6 +5585,7 @@ int icmSetMultiLutTables (
 /* Set errc and return error number */
 static int icmLut_set_tables (
 icmLut *p,									/* Pointer to Lut object */
+int     flags,							/* Setting flags */
 void   *cbctx,								/* Opaque callback context pointer value */
 icColorSpaceSignature insig, 				/* Input color space */
 icColorSpaceSignature outsig, 				/* Output color space */
@@ -5019,7 +5602,7 @@ void (*outfunc)(void *cbctx, double *out, double *in)
 	
 	/* Simply call the multiple table function with one table */
 	pp[0] = p;
-	return icmSetMultiLutTables(1, pp, 
+	return icmSetMultiLutTables(1, pp, flags, 
 	                            cbctx, insig, outsig,
 	                            infunc,
 	                            inmin, inmax,
@@ -5268,6 +5851,11 @@ static int icmLut_write(
 		}
 		bp = buf+48;
 	} else {
+		if (p->inputEnt > 4096 || p->outputEnt > 4096) {
+			sprintf(icp->err,"icmLut_write: 16 bit Input and Output tables must each be less than 4096 entries");
+			icp->al->free(icp->al, buf);
+			return icp->errc = 1;
+		}
 		if ((rv = write_UInt16Number(p->inputEnt, bp+48)) != 0) {
 			sprintf(icp->err,"icmLut_write: write_UInt16Number() failed");
 			icp->al->free(icp->al, buf);
@@ -5377,8 +5965,7 @@ static void icmLut_dump(
 	op->printf(op,"                %f, %f, %f\n",p->e[2][0],p->e[2][1],p->e[2][2]);
 
 	if (verb >= 2) {
-		unsigned int i,size;
-		int j;
+		unsigned int i, j, size;
 		unsigned int ii[MAX_CHAN];	/* maximum no of input channels */
 
 		op->printf(op,"  Input table:\n");
@@ -5397,10 +5984,10 @@ static void icmLut_dump(
 			for (j = 0; j < p->inputChan; j++)
 				ii[j] = 0;
 			for (i = 0; i < size;) {
-				int k;
+				unsigned int k;
 				/* Print table entry index */
 				op->printf(op,"   ");
-				for (j = p->inputChan-1; j >= 0; j--)
+				for (j = p->inputChan-1; j < p->inputChan; j--)
 					op->printf(op," %2u",ii[j]);
 				op->printf(op,":");
 				/* Print table entry contents */
@@ -5501,6 +6088,7 @@ static void icmLut_delete(
 ) {
 	icmLut *p = (icmLut *)pp;
 	icc *icp = p->icp;
+	int i;
 
 	if (p->inputTable != NULL)
 		icp->al->free(icp->al, p->inputTable);
@@ -5508,8 +6096,10 @@ static void icmLut_delete(
 		icp->al->free(icp->al, p->clutTable);
 	if (p->outputTable != NULL)
 		icp->al->free(icp->al, p->outputTable);
-	icmTable_delete_bwd(icp, &p->rit);
-	icmTable_delete_bwd(icp, &p->rot);
+	for (i = 0; i < p->inputChan; i++)
+		icmTable_delete_bwd(icp, &p->rit[i]);
+	for (i = 0; i < p->outputChan; i++)
+		icmTable_delete_bwd(icp, &p->rot[i]);
 	icp->al->free(icp->al, p);
 }
 
@@ -5560,8 +6150,10 @@ static icmBase *new_icmLut(
 	for (i = 0; i < (1 << MAX_CHAN); i++)
 		p->dcube[i] = 0;
 
-	p->rit.inited = 0;
-	p->rot.inited = 0;
+	for (i = 0; i < MAX_CHAN; i++) {
+		p->rit[i].inited = 0;
+		p->rot[i].inited = 0;
+	}
 
 	return (icmBase *)p;
 }
@@ -5784,7 +6376,7 @@ static int read_NamedColorVal(
 	unsigned int ndc				/* Number of device corrds */
 ) {
 	icc *icp = p->icp;
-	int i;
+	unsigned int i;
 	unsigned int mxl;	/* Max possible string length */
 
 	mxl = (end - bp) < 32 ? (end - bp) : 32;
@@ -5813,7 +6405,7 @@ static int read_NamedColorVal2(
 	unsigned int ndc				/* Number of device corrds */
 ) {
 	icc *icp = p->icp;
-	int i;
+	unsigned int i;
 	if ((bp + 32 + 6 + ndc * 2) > end) {
 		sprintf(icp->err,"icmNamedColorVal2_read: Data too short to read");
 		return icp->errc = 1;
@@ -5846,7 +6438,8 @@ static int write_NamedColorVal(
 	unsigned int ndc				/* Number of device corrds */
 ) {
 	icc *icp = p->icp;
-	int i, rv = 0;
+	unsigned int i;
+	int rv = 0;
 	if (check_null_string(p->root,32) != 0) {
 		sprintf(icp->err,"icmNamedColorVal_write: Root string names is unterminated");
 		return icp->errc = 1;
@@ -5870,7 +6463,8 @@ static int write_NamedColorVal2(
 	unsigned int ndc				/* Number of device corrds */
 ) {
 	icc *icp = p->icp;
-	int i, rv = 0;
+	unsigned int i;
+	int rv = 0;
 	if (check_null_string(p->root,32)) {
 		sprintf(icp->err,"icmNamedColorVal2_write: Root string names is unterminated");
 		return icp->errc = 1;
@@ -6227,11 +6821,11 @@ static void icmNamedColor_dump(
 			if (p->ttype == icSigNamedColor2Type) {
 				switch(icp->header->pcs) {
 					case icSigXYZData:
-							op->printf(op,"      XYZ = %f, %f, %f'\n",
+							op->printf(op,"      XYZ = %f, %f, %f\n",
 							        vp->pcsCoords[0],vp->pcsCoords[1],vp->pcsCoords[2]);
 						break;
 			    	case icSigLabData:
-							op->printf(op,"      Lab = %f, %f, %f'\n",
+							op->printf(op,"      Lab = %f, %f, %f\n",
 							        vp->pcsCoords[0],vp->pcsCoords[1],vp->pcsCoords[2]);
 						break;
 					default:
@@ -6321,7 +6915,6 @@ static int read_ColorantTableVal(
 	icColorSpaceSignature pcs		/* Header Profile Connection Space */
 ) {
 	icc *icp = p->icp;
-	int i;
 	if ((bp + 32 + 6) > end) {
 		sprintf(icp->err,"icmColorantTableVal_read: Data too short to read");
 		return icp->errc = 1;
@@ -6348,7 +6941,7 @@ static int write_ColorantTableVal(
 	icColorSpaceSignature pcs		/* Header Profile Connection Space */
 ) {
 	icc *icp = p->icp;
-	int i, rv = 0;
+	int rv = 0;
 	if (check_null_string(p->name,32)) {
 		sprintf(icp->err,"icmColorantTableVal_write: Name string is unterminated");
 		return icp->errc = 1;
@@ -6360,7 +6953,7 @@ static int write_ColorantTableVal(
 			rv |= write_PCSNumber(icp, pcs, p->pcsCoords, bp+32);
 			break;
 		default:
-			sprintf(icp->err,"icmiColorantTableVal_write: Unknown PCS");
+			sprintf(icp->err,"icmColorantTableVal_write: Unknown PCS");
 			return icp->errc = 1;
 	}
 	if (rv) {
@@ -6399,9 +6992,15 @@ static int icmColorantTable_read(
 ) {
 	icmColorantTable *p = (icmColorantTable *)pp;
 	icc *icp = p->icp;
+	icColorSpaceSignature pcs;
 	unsigned long i;
 	char *bp, *buf, *end;
 	int rv = 0;
+
+	if (icp->header->deviceClass != icSigLinkClass)
+		pcs = icp->header->pcs;
+	else
+		pcs = icSigLabData;
 
 	if (len < 4) {
 		sprintf(icp->err,"icmColorantTable_read: Tag too small to be legal");
@@ -6432,31 +7031,27 @@ static int icmColorantTable_read(
 		return icp->errc = 1;
 	}
 
-	if (p->ttype == icSigColorantTableType) {
-		if (len < 12) {
-			sprintf(icp->err,"icmColorantTable_read: Tag too small to be legal");
-			icp->al->free(icp->al, buf);
-			return icp->errc = 1;
-		}
+	if (len < 12) {
+		sprintf(icp->err,"icmColorantTable_read: Tag too small to be legal");
+		icp->al->free(icp->al, buf);
+		return icp->errc = 1;
 	}
 
 	/* Read count of colorants */
 	p->count = read_UInt32Number(bp+8);
 
-	if (p->ttype == icSigColorantTableType) {
-		bp = bp + 12;
+	bp = bp + 12;
 
-		if ((rv = p->allocate((icmBase *)p)) != 0) {
+	if ((rv = p->allocate((icmBase *)p)) != 0) {
+		icp->al->free(icp->al, buf);
+		return rv;
+	}
+
+	/* Read all the data from the buffer */
+	for (i = 0; i < p->count; i++, bp += (32 + 6)) {
+		if ((rv = read_ColorantTableVal(p->data+i, bp, end, pcs)) != 0) {
 			icp->al->free(icp->al, buf);
 			return rv;
-		}
-	
-		/* Read all the data from the buffer */
-		for (i = 0; i < p->count; i++, bp += (32 + 6)) {
-			if ((rv = read_ColorantTableVal(p->data+i, bp, end, icp->header->pcs)) != 0) {
-				icp->al->free(icp->al, buf);
-				return rv;
-			}
 		}
 	}
 
@@ -6471,10 +7066,16 @@ static int icmColorantTable_write(
 ) {
 	icmColorantTable *p = (icmColorantTable *)pp;
 	icc *icp = p->icp;
+	icColorSpaceSignature pcs;
 	unsigned long i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
+
+	if (icp->header->deviceClass != icSigLinkClass)
+		pcs = icp->header->pcs;
+	else
+		pcs = icSigLabData;
 
 	/* Allocate a file write buffer */
 	len = p->get_size((icmBase *)p);
@@ -6499,16 +7100,13 @@ static int icmColorantTable_write(
 		return icp->errc = rv;
 	}
 
-	if (p->ttype == icSigColorantTableType) {
-		bp = bp + 12;
+	bp = bp + 12;
 	
-		/* Write all the data to the buffer */
-
-		for (i = 0; i < p->count; i++, bp += (32 + 6)) {
-			if ((rv = write_ColorantTableVal(p->data+i, bp, icp->header->pcs)) != 0) {
-				icp->al->free(icp->al, buf);
-				return rv;
-			}
+	/* Write all the data to the buffer */
+	for (i = 0; i < p->count; i++, bp += (32 + 6)) {
+		if ((rv = write_ColorantTableVal(p->data+i, bp, pcs)) != 0) {
+			icp->al->free(icp->al, buf);
+			return rv;
 		}
 	}
 
@@ -6531,6 +7129,13 @@ static void icmColorantTable_dump(
 ) {
 	icmColorantTable *p = (icmColorantTable *)pp;
 	icc *icp = p->icp;
+	icColorSpaceSignature pcs;
+
+	if (icp->header->deviceClass != icSigLinkClass)
+		pcs = icp->header->pcs;
+	else
+		pcs = icSigLabData;
+
 	if (verb <= 0)
 		return;
 
@@ -6538,7 +7143,7 @@ static void icmColorantTable_dump(
 		op->printf(op,"ColorantTable:\n");
 	op->printf(op,"  No. colorants  = %u\n",p->count);
 	if (verb >= 2) {
-		unsigned long i, n;
+		unsigned long i;
 		icmColorantTableVal *vp;
 		for (i = 0; i < p->count; i++) {
 			vp = p->data + i;
@@ -6546,13 +7151,13 @@ static void icmColorantTable_dump(
 			op->printf(op,"      Name = '%s'\n",vp->name);
 
 			if (p->ttype == icSigColorantTableType) {
-				switch(icp->header->pcs) {
+				switch(pcs) {
 					case icSigXYZData:
-							op->printf(op,"      XYZ = %f, %f, %f'\n",
+							op->printf(op,"      XYZ = %f, %f, %f\n",
 							        vp->pcsCoords[0],vp->pcsCoords[1],vp->pcsCoords[2]);
 						break;
 			    	case icSigLabData:
-							op->printf(op,"      Lab = %f, %f, %f'\n",
+							op->printf(op,"      Lab = %f, %f, %f\n",
 							        vp->pcsCoords[0],vp->pcsCoords[1],vp->pcsCoords[2]);
 						break;
 					default:
@@ -6786,9 +7391,14 @@ static int icmTextDescription_core_read(
 			return icp->errc = 1;
 		}
 		if (check_null_string(bp,p->scSize)) {
+#ifdef ICM_STRICT
 			*bpp = bp;
 			sprintf(icp->err,"icmTextDescription_read: ScriptCode string is not terminated");
 			return icp->errc = 1;
+#else
+			/* Patch it up */
+			bp[p->scSize-1] = '\000';
+#endif
 		}
 		memcpy((void *)p->scDesc, (void *)bp, p->scSize);
 	} else {
@@ -8247,6 +8857,7 @@ static icmBase *new_icmUcrBg(
 
 /* ---------------------------------------------------------- */
 /* VideoCardGamma (ColorSync 2.5 specific - c/o Neil Okamoto) */
+/* 'vcgt' */
 
 static unsigned int icmVideoCardGamma_get_size(
 	icmBase *pp
@@ -8283,8 +8894,8 @@ static int icmVideoCardGamma_read(
 	icc *icp = p->icp;
 	int rv, c;
 	char *bp, *buf;
-	unsigned char *pchar;
-	unsigned short *pshort;
+	ORD8 *pchar;
+	ORD16 *pshort;
 
 	if (len < 18) {
 		sprintf(icp->err,"icmVideoCardGamma_read: Tag too small to be legal");
@@ -8314,15 +8925,16 @@ static int icmVideoCardGamma_read(
 	}
 
 	/* Read gamma format (eg. table or formula) from the buffer */
-	p->tagType = read_UInt32Number(bp+8);
+	p->tagType = (icmVideoCardGammaTagType)read_UInt32Number(bp+8);
 
 	/* Read remaining gamma data based on format */
-	switch ((int)p->tagType) {
-	case icmVideoCardGammaTableType:
+	if (p->tagType == icmVideoCardGammaTableType) {
 		p->u.table.channels   = read_UInt16Number(bp+12);
 		p->u.table.entryCount = read_UInt16Number(bp+14);
 		p->u.table.entrySize  = read_UInt16Number(bp+16);
-		if (len-18 < p->u.table.channels*p->u.table.entryCount*p->u.table.entrySize) {
+		if ((len-18) < (unsigned int)(p->u.table.channels
+		                            * p->u.table.entryCount
+		                            * p->u.table.entrySize)) {
 			sprintf(icp->err,"icmVideoCardGamma_read: Tag too small to be legal");
 			return icp->errc = 1;
 		}
@@ -8330,8 +8942,9 @@ static int icmVideoCardGamma_read(
 			icp->al->free(icp->al, buf);
 			return icp->errc = rv;
 		}
-		pchar = (unsigned char*)p->u.table.data;
-		pshort = (unsigned short*)p->u.table.data;
+		/* ~~~~ This should be a table of doules like the rest of icclib ! ~~~~ */
+		pchar = (ORD8 *)p->u.table.data;
+		pshort = (ORD16 *)p->u.table.data;
 		for (c=0, bp=bp+18; c<p->u.table.channels*p->u.table.entryCount; c++) {
 			switch (p->u.table.entrySize) {
 			case 1:
@@ -8349,12 +8962,12 @@ static int icmVideoCardGamma_read(
 				return icp->errc = 1;
 			}
 		}
-		break;
-	case icmVideoCardGammaFormulaType:
+	} else if (p->tagType == icmVideoCardGammaFormulaType) {
 		if (len < 48) {
 			sprintf(icp->err,"icmVideoCardGamma_read: Tag too small to be legal");
 			return icp->errc = 1;
 		}
+		p->u.table.channels     = 3;	/* Always 3 for formula */
 		p->u.formula.redGamma   = read_S15Fixed16Number(bp+12);
 		p->u.formula.redMin     = read_S15Fixed16Number(bp+16);
 		p->u.formula.redMax     = read_S15Fixed16Number(bp+20);
@@ -8364,8 +8977,7 @@ static int icmVideoCardGamma_read(
 		p->u.formula.blueGamma  = read_S15Fixed16Number(bp+36);
 		p->u.formula.blueMin    = read_S15Fixed16Number(bp+40);
 		p->u.formula.blueMax    = read_S15Fixed16Number(bp+44);
-		break;
-	default:
+	} else {
 		sprintf(icp->err,"icmVideoCardGammaTable_read: Unknown gamma format for icmVideoCardGamma");
 		icp->al->free(icp->al, buf);
 		return icp->errc = 1;
@@ -8385,8 +8997,8 @@ static int icmVideoCardGamma_write(
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0, c;
-	unsigned char *pchar;
-	unsigned short *pshort;
+	ORD8 *pchar;
+	ORD16 *pshort;
 
 	/* Allocate a file write buffer */
 	len = p->get_size((icmBase *)p);
@@ -8412,8 +9024,7 @@ static int icmVideoCardGamma_write(
 	}
 
 	/* Write remaining gamma data based on format */
-	switch ((int)p->tagType) {
-	case icmVideoCardGammaTableType:
+	if (p->tagType == icmVideoCardGammaTableType) {
 		if ((rv = write_UInt16Number(p->u.table.channels,bp+12)) != 0) {
 			sprintf(icp->err,"icmVideoCardGamma_write: write_UInt16Number() failed");
 			icp->al->free(icp->al, buf);
@@ -8429,8 +9040,8 @@ static int icmVideoCardGamma_write(
 			icp->al->free(icp->al, buf);
 			return icp->errc = rv;
 		}
-		pchar = (unsigned char*)p->u.table.data;
-		pshort = (unsigned short*)p->u.table.data;
+		pchar = (ORD8 *)p->u.table.data;
+		pshort = (ORD16 *)p->u.table.data;
 		for (c=0, bp=bp+18; c<p->u.table.channels*p->u.table.entryCount; c++) {
 			switch (p->u.table.entrySize) {
 			case 1:
@@ -8447,8 +9058,7 @@ static int icmVideoCardGamma_write(
 				return icp->errc = 1;
 			}
 		}
-		break;
-	case icmVideoCardGammaFormulaType:
+	} else if (p->tagType == icmVideoCardGammaFormulaType) {
 		if ((rv = write_S15Fixed16Number(p->u.formula.redGamma,bp+12)) != 0) {
 			sprintf(icp->err,"icmVideoCardGamma_write: write_S15Fixed16Number() failed");
 			icp->al->free(icp->al, buf);
@@ -8494,8 +9104,7 @@ static int icmVideoCardGamma_write(
 			icp->al->free(icp->al, buf);
 			return icp->errc = rv;
 		}
-		break;
-	default:
+	} else {
 		sprintf(icp->err,"icmVideoCardGammaTable_write: Unknown gamma format for icmVideoCardGamma");
 		icp->al->free(icp->al, buf);
 		return icp->errc = 1;
@@ -8524,8 +9133,7 @@ static void icmVideoCardGamma_dump(
 	if (verb <= 0)
 		return;
 
-	switch ((int)p->tagType) {
-	case icmVideoCardGammaTableType:
+	if (p->tagType == icmVideoCardGammaTableType) {
 		op->printf(op,"VideoCardGammaTable:\n");
 		op->printf(op,"  channels  = %d\n", p->u.table.channels);
 		op->printf(op,"  entries   = %d\n", p->u.table.entryCount);
@@ -8536,16 +9144,15 @@ static void icmVideoCardGamma_dump(
 				op->printf(op,"  channel #%d\n",c);
 				for (i=0; i<p->u.table.entryCount; i++) {
 					if (p->u.table.entrySize == 1) {
-						op->printf(op,"    %d: %d\n",i,((unsigned char*)p->u.table.data)[c*p->u.table.entryCount+i]);
+						op->printf(op,"    %d: %d\n",i,((ORD8 *)p->u.table.data)[c*p->u.table.entryCount+i]);
 					}
 					else if (p->u.table.entrySize == 2) {
-						op->printf(op,"    %d: %d\n",i,((unsigned short*)p->u.table.data)[c*p->u.table.entryCount+i]);
+						op->printf(op,"    %d: %d\n",i,((ORD16 *)p->u.table.data)[c*p->u.table.entryCount+i]);
 					}
 				}
 			}
 		}
-		break;
-	case icmVideoCardGammaFormulaType:
+	} else if (p->tagType == icmVideoCardGammaFormulaType) {
 		op->printf(op,"VideoCardGammaFormula:\n");
 		op->printf(op,"  red gamma   = %f\n", p->u.formula.redGamma);
 		op->printf(op,"  red min     = %f\n", p->u.formula.redMin);
@@ -8556,8 +9163,7 @@ static void icmVideoCardGamma_dump(
 		op->printf(op,"  blue gamma  = %f\n", p->u.formula.blueGamma);
 		op->printf(op,"  blue min    = %f\n", p->u.formula.blueMin);
 		op->printf(op,"  blue max    = %f\n", p->u.formula.blueMax);
-		break;
-	default:
+	} else {
 		op->printf(op,"  Unknown tag format\n");
 	}
 }
@@ -8582,7 +9188,7 @@ static int icmVideoCardGamma_allocate(
 				p->u.table.entryCount);
 		switch (p->u.table.entrySize) {
 		case 1:
-			size *= sizeof(unsigned char);
+			size *= sizeof(ORD8);
 			break;
 		case 2:
 			size *= sizeof(unsigned short);
@@ -8598,6 +9204,70 @@ static int icmVideoCardGamma_allocate(
 	}
 
 	return 0;
+}
+
+/* Read a value */
+static double icmVideoCardGamma_lookup(
+	icmVideoCardGamma *p,
+	int chan,		/* Channel, 0, 1 or 2 */
+	double iv		/* Input value 0.0 - 1.0 */
+) {
+	double ov = 0.0;
+
+	if (chan < 0 || chan > (p->u.table.channels-1)
+	 || iv < 0.0 || iv > 1.0)
+		return iv;
+
+	if (p->tagType == icmVideoCardGammaTableType && p->u.table.entryCount == 0) {
+		/* Deal with siliness */
+		ov = iv;
+	} else if (p->tagType == icmVideoCardGammaTableType) {
+		/* Use linear interpolation */
+		int ix;
+		double val0, val1, w;
+		double inputEnt_1 = (double)(p->u.table.entryCount-1);
+
+		val0 = iv * inputEnt_1;
+		if (val0 < 0.0)
+			val0 = 0.0;
+		else if (val0 > inputEnt_1)
+			val0 = inputEnt_1;
+		ix = (int)floor(val0);		/* Coordinate */
+		if (ix > (p->u.table.entryCount-2))
+			ix = (p->u.table.entryCount-2);
+		w = val0 - (double)ix;		/* weight */
+		if (p->u.table.entrySize == 1) {
+			val0 = ((ORD8 *)p->u.table.data)[chan * p->u.table.entryCount + ix]/255.0;
+			val1 = ((ORD8 *)p->u.table.data)[chan * p->u.table.entryCount + ix + 1]/255.0;
+		} else if (p->u.table.entrySize == 2) {
+			val0 = ((ORD16 *)p->u.table.data)[chan * p->u.table.entryCount + ix]/65535.0;
+			val1 = ((ORD16 *)p->u.table.data)[chan * p->u.table.entryCount + ix + 1]/65535.0;
+		} else {
+			val0 = val1 = iv;
+		}
+		ov = val0 + w * (val1 - val0);
+
+	} else if (p->tagType == icmVideoCardGammaFormulaType) {
+		double min, max, gam;
+
+		if (iv == 0) {
+			min = p->u.formula.redMin;
+			max = p->u.formula.redMax;
+			gam = p->u.formula.redGamma;
+		} else if (iv == 1) {
+			min = p->u.formula.greenMin;
+			max = p->u.formula.greenMax;
+			gam = p->u.formula.greenGamma;
+		} else {
+			min = p->u.formula.blueMin;
+			max = p->u.formula.blueMax;
+			gam = p->u.formula.blueGamma;
+		}
+
+		/* The Apple OSX doco confirms this is the formula */
+		ov = min + (max - min) * pow(iv, gam);
+	}
+	return ov;
 }
 
 /* Free all storage in the object */
@@ -8625,6 +9295,7 @@ static icmBase *new_icmVideoCardGamma(
 	p->get_size = icmVideoCardGamma_get_size;
 	p->read     = icmVideoCardGamma_read;
 	p->write    = icmVideoCardGamma_write;
+	p->lookup   = icmVideoCardGamma_lookup;
 	p->dump     = icmVideoCardGamma_dump;
 	p->allocate = icmVideoCardGamma_allocate;
 	p->del      = icmVideoCardGamma_delete;
@@ -9247,6 +9918,12 @@ static int icmHeader_read(
 
 	icp->al->free(icp->al, buf);
 
+#ifndef ENABLE_V4
+	if (icp->ver) {
+		sprintf(icp->err,"icmHeader_read: ICC V4 not supported!");
+		return icp->errc = 1;
+	}
+#endif
 	return 0;
 }
 
@@ -9501,6 +10178,7 @@ static struct {
 	{icSigCalibrationDateTimeTag,	{icSigDateTimeType,icMaxEnumType}},
 	{icSigCharTargetTag,			{icSigTextType,icMaxEnumType}},
 	{icSigColorantTableTag,         {icSigColorantTableType,icMaxEnumType}},
+	{icSigColorantTableOutTag,      {icSigColorantTableType,icMaxEnumType}},
 	{icSigCopyrightTag,				{icSigTextType,icMaxEnumType}},
 	{icSigCrdInfoTag,				{icSigCrdInfoType,icMaxEnumType}},
 	{icSigDeviceMfgDescTag,			{icSigTextDescriptionType,icMaxEnumType}},
@@ -9698,21 +10376,44 @@ static struct {
 /* ------------------------------------------------------------- */
 
 
-/* Change the version to be ICC V4 (used for creation) */
+/* Change the version to be non-default (ie. not 2.2.0), */
+/* e.g. ICC V4 (used for creation) */
 /* Return 0 if OK */
 /* Return 1 on error */
-static int icc_set_v4(icc *p) {
-	p->ver = 1;
+static int icc_set_version(icc *p, icmICCVersion ver) {
 
 	if (p->header == NULL) {
-		sprintf(p->err,"icc_set_v4: Header is missing");
+		sprintf(p->err,"icc_set_version: Header is missing");
 		return p->errc = 1;
 	}
 
-    p->header->majv = 4;
-	p->header->minv = 1;
-	p->header->bfv  = 0;
-
+	switch (ver) {
+		case icmVersionDefault:
+		    p->header->majv = 2;
+			p->header->minv = 2;
+			p->header->bfv  = 0;
+			break;
+		case icmVersion2_3:
+		    p->header->majv = 2;
+			p->header->minv = 3;
+			p->header->bfv  = 0;
+			break;
+		case icmVersion2_4:
+		    p->header->majv = 2;
+			p->header->minv = 4;
+			p->header->bfv  = 0;
+			break;
+#ifdef ENABLE_V4
+		case icmVersion4_1:
+		    p->header->majv = 4;
+			p->header->minv = 1;
+			p->header->bfv  = 0;
+			break;
+#endif
+		default:
+			sprintf(p->err,"icc_set_version: Unsupported version 0x%x",ver);
+			return p->errc = 1;
+	}
 	return 0;
 }
 
@@ -9794,8 +10495,7 @@ static int icc_read(
 	unsigned long of		/* File offset to read from */
 ) {
 	char tcbuf[4];			/* Tag count read buffer */
-	int i;
-	unsigned int len;
+	unsigned int i, len;
 	int er = 0;				/* Error code */
 	
 	p->fp = fp;
@@ -9945,7 +10645,6 @@ static int icc_check_id(
 	return 2;			/* Didn't match */
 }
 
-
 /* Forced byte alignment for tag table and tags */
 
 #define ALIGN_SIZE 4
@@ -9956,8 +10655,7 @@ static int icc_check_id(
 static unsigned int icc_get_size(
 	icc *p
 ) {
-	unsigned int size = 0;
-	int i;
+	unsigned int i, size = 0;
 
 #ifdef ICM_STRICT
 	/* Check that the right tags etc. are present for a legal ICC profile */
@@ -10008,8 +10706,7 @@ static int icc_write(
 	char *bp, *buf;		/* tag table buffer */
 	unsigned int len;
 	int rv = 0;
-	int i;
-	unsigned int size = 0;
+	unsigned int i, size = 0;
 	unsigned char pbuf[ALIGN_SIZE];
 
 	for (i = 0; i < ALIGN_SIZE; i++)
@@ -10069,7 +10766,7 @@ static int icc_write(
 			size = DO_ALIGN(size);
 			p->data[i].objp->touched = 1;	/* Allocated space for it */
 		} else { /* must be linked - copy allocation */
-			int k;
+			unsigned int k;
 			for (k = 0; k < p->count; k++) {	/* Find linked tag */
 				if (p->data[k].objp == p->data[i].objp)
 					break;
@@ -10140,6 +10837,7 @@ static int icc_write(
 		}
 	
 		/* Dumy write all the tag element data */
+		/* (We invert meaning of touched here) */
 		for (i = 0; i < p->count; i++) {	/* For all the tag element data */
 			if (p->data[i].objp->touched == 0)
 				continue;		/* Must be linked, and we've already written it */
@@ -10202,6 +10900,7 @@ static int icc_write(
 	p->al->free(p->al, buf);
 
 	/* Write all the tag element data */
+	/* (We invert the meaning of touched here) */
 	for (i = 0; i < p->count; i++) {	/* For all the tag element data */
 		if (p->data[i].objp->touched == 0)
 			continue;		/* Must be linked, and we've already written it */
@@ -10234,6 +10933,8 @@ static int icc_write(
 /* 2 on system error, */
 /* 3 if unknown tag */
 /* NOTE: that we prevent tag duplication */
+/* NOTE: to create a tag type icmSigUnknownType, set ttype to icmSigUnknownType, */
+/* and set the actual tag type in icmSigUnknownType->uttype */
 static icmBase *icc_add_tag(
 	icc *p,
     icTagSignature sig,			/* Tag signature - may be unknown */
@@ -10241,34 +10942,38 @@ static icmBase *icc_add_tag(
 ) {
 	icmBase *tp;
 	icmBase *nob;
-	int i, j, ok = 1;
+	int i, ok = 1;
+	unsigned int j;
 
-	/* Check that a known signature has an acceptable type */
-	for (i = 0; sigtypetable[i].sig != icMaxEnumType; i++) {
-		if (sigtypetable[i].sig == sig) {	/* recognized signature */
-			ok = 0;
-			for (j = 0; sigtypetable[i].ttypes[j] != icMaxEnumType; j++) {
-				if (sigtypetable[i].ttypes[j] == ttype)	/* recognized type */
-					ok = 1;
+	if (ttype != icmSigUnknownType) {   /* Check only for possibly known types */
+
+		/* Check that a known signature has an acceptable type */
+		for (i = 0; sigtypetable[i].sig != icMaxEnumType; i++) {
+			if (sigtypetable[i].sig == sig) {	/* recognized signature */
+				ok = 0;
+				for (j = 0; sigtypetable[i].ttypes[j] != icMaxEnumType; j++) {
+					if (sigtypetable[i].ttypes[j] == ttype)	/* recognized type */
+						ok = 1;
+				}
+				break;
 			}
-			break;
 		}
-	}
-	if (!ok) {
-		sprintf(p->err,"icc_add_tag: wrong tag type for signature");
-		p->errc = 1;
-		return NULL;
-	}
+		if (!ok) {
+			sprintf(p->err,"icc_add_tag: wrong tag type for signature");
+			p->errc = 1;
+			return NULL;
+		}
 
-	/* Check that we know how to handle this type */
-	for (i = 0; typetable[i].ttype != icMaxEnumType; i++) {
-		if (typetable[i].ttype == ttype)
-			break;
-	}
-	if (typetable[i].ttype == icMaxEnumType) {
-		sprintf(p->err,"icc_add_tag: unsupported tag type");
-		p->errc = 1;
-		return NULL;
+		/* Check that we know how to handle this type */
+		for (i = 0; typetable[i].ttype != icMaxEnumType; i++) {
+			if (typetable[i].ttype == ttype)
+				break;
+		}
+		if (typetable[i].ttype == icMaxEnumType) {
+			sprintf(p->err,"icc_add_tag: unsupported tag type");
+			p->errc = 1;
+			return NULL;
+		}
 	}
 
 	/* Check that this tag doesn't already exits */
@@ -10293,9 +10998,14 @@ static icmBase *icc_add_tag(
 	}
 	p->data = (icmTag *)tp;
 
-	/* Allocate the empty object */
-	if ((nob = typetable[i].new_obj(p)) == NULL)
-		return NULL;
+	if (ttype == icmSigUnknownType) {
+		if ((nob = new_icmUnknown(p)) == NULL)
+			return NULL;
+	} else {
+		/* Allocate the empty object */
+		if ((nob = typetable[i].new_obj(p)) == NULL)
+			return NULL;
+	}
 
 	/* Fill out our tag table entry */
     p->data[p->count].sig = sig;		/* The tag signature */
@@ -10319,7 +11029,8 @@ static icmBase *icc_link_tag(
     icTagSignature ex_sig		/* Tag signature of tag to link to */
 ) {
 	icmBase *tp;
-	int i, j, exi, ok = 1;
+	unsigned int j, exi;
+	int i, ok = 1;
 
 	/* Search for existing signature */
 	for (exi = 0; exi < p->count; exi++) {
@@ -10399,7 +11110,8 @@ static int icc_find_tag(
 	icc *p,
     icTagSignature sig			/* Tag signature - may be unknown */
 ) {
-	int i,j;
+	unsigned int i;
+	int j;
 
 	/* Search for signature */
 	for (i = 0; i < p->count; i++) {
@@ -10421,18 +11133,20 @@ static int icc_find_tag(
 }
 
 /* Read the tag element data, and return a pointer to the object */
-/**
+/*
  * Returns NULL if error - icc->errc will contain:
- * 1 if found but not handled type
  * 2 if not found
- **/
-/* NOTE: we don't handle tag duplication - you'll always get the first in the file */
+ * Returns an icmSigUnknownType object if the tag type isn't handled by a specific object.
+ * NOTE: we don't handle tag duplication - you'll always get the first in the file
+ */
 static icmBase *icc_read_tag(
 	icc *p,
     icTagSignature sig			/* Tag signature - may be unknown */
 ) {
+	icTagTypeSignature ttype;	/* Tag type we will create */
 	icmBase *nob;
-	int i,j,k;
+	unsigned int i, k;
+	int j;
 
 	/* Search for signature */
 	for (i = 0; i < p->count; i++) {
@@ -10471,15 +11185,22 @@ static icmBase *icc_read_tag(
 		if (typetable[j].ttype == p->data[i].ttype)
 			break;
 	}
+
 	if (typetable[j].ttype == icMaxEnumType) {
-		sprintf(p->err,"icc_read_tag: Unhandled tag type '%s'",string_TypeSignature(p->data[i].ttype));
-		p->errc = 1;
-		return NULL;
+		ttype = icmSigUnknownType; /* Use the Unknown type to handle an unknown tag type */
+	} else {
+		ttype = p->data[i].ttype;	/* We known this type */
 	}
 	
 	/* Creat and read in the object */
-	if ((nob = typetable[j].new_obj(p)) == NULL)
+	if (ttype == icmSigUnknownType)
+		nob = new_icmUnknown(p);
+	else
+		nob = typetable[j].new_obj(p);
+
+	if (nob == NULL)
 		return NULL;
+
 	if ((nob->read(nob, p->data[i].size, p->of + p->data[i].offset)) != 0) {
 		nob->del(nob);		/* Failed, so destroy it */
 		return NULL;
@@ -10494,7 +11215,8 @@ static int icc_rename_tag(
     icTagSignature sig,			/* Existing Tag signature - may be unknown */
     icTagSignature sigNew		/* New Tag signature - may be unknown */
 ) {
-	int i, j, k, ok = 1;
+	unsigned int k;
+	int i, j, ok = 1;
 
 	/* Search for signature */
 	for (k = 0; k < p->count; k++) {
@@ -10539,7 +11261,7 @@ static int icc_unread_tag(
 	icc *p,
     icTagSignature sig		/* Tag signature - may be unknown */
 ) {
-	int i;
+	unsigned int i;
 
 	/* Search for signature */
 	for (i = 0; i < p->count; i++) {
@@ -10572,7 +11294,7 @@ static int icc_delete_tag(
 	icc *p,
     icTagSignature sig		/* Tag signature - may be unknown */
 ) {
-	int i;
+	unsigned int i;
 
 	/* Search for signature */
 	for (i = 0; i < p->count; i++) {
@@ -10606,7 +11328,7 @@ static int icc_delete_tag(
 static int icc_read_all_tags(
 	icc *p
 ) {
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < p->count; i++) {	/* For all the tag element data */
 		icmBase *ob;
@@ -10623,7 +11345,7 @@ static void icc_dump(
 	icmFile *op,	/* Output to dump to */
 	int   verb		/* Verbosity level */
 ) {
-	int i;
+	unsigned int i;
 	if (verb <= 0)
 		return;
 
@@ -10667,7 +11389,7 @@ static void icc_dump(
 static void icc_delete(
 	icc *p
 ) {
-	int i;
+	unsigned int i;
 	icmAlloc *al = p->al;
 	int del_al   = p->del_al;
 
@@ -10700,12 +11422,12 @@ static void icc_delete(
 /* As a rule, I am representing Lut in memory as values in machine form as real */
 /* numbers in the range 0.0 - 1.0. For many color spaces (ie. RGB, Gray, */
 /* hsv, hls, cmyk and other device coords), this is entirely appropriate. */
-/* For the PCS though, this is not correct, since (I assume!) the binary */
+/* For CIE based spaces though, this is not correct, since (I assume!) the binary */
 /* representation will be consistent with the encoding in Annex A, page 74 */
 /* of the standard. Note that the standard doesn't specify the encoding of */
 /* many color spaces (ie. Yuv, Yxy etc.), and is unclear about PCS. */
 
-/* The following functions convert to and from the PCS spaces (XYZ or Lab) */
+/* The following functions convert to and from the CIE base spaces */
 /* and the real Lut input/output values. These are used to convert real color */
 /* space values into/out of the raw lut 0.0-1.0 representation (which subsequently */
 /* get converted to ICC integer values in the obvious way as a mapping to 0 .. 2^n-1). */
@@ -10738,6 +11460,16 @@ static void Lut_XYZ2Lut(double *out, double *in) {
 	out[2] = in[2] * (1.0/(1.0 + 32767.0/32768));
 }
 
+/* Convert Lut index/value to Y coord. */ 
+static void Lut_Lut2Y(double *out, double *in) {
+	out[0] = in[0] * (1.0 + 32767.0/32768); /* Y */
+}
+
+/* Convert Y coord to Lut index/value. */ 
+static void Lut_Y2Lut(double *out, double *in) {
+	out[0] = in[0] * (1.0/(1.0 + 32767.0/32768));
+}
+
 /* - - - - - - - - - - - - - - - - */
 /* Convert 8 bit Lab to Lut numbers */
 /* Annex A specifies 8 and 16 bit encoding, but is */
@@ -10760,6 +11492,16 @@ static void Lut_Lab2Lut_8(double *out, double *in) {
 	out[2] = (in[2] + 128.0) * 1.0/255.0;	/* b */
 }
 
+/* Convert Lut8 table index/value to L */
+static void Lut_Lut2L_8(double *out, double *in) {
+	out[0] = in[0] * 100.0;				/* L */
+}
+
+/* Convert L to Lut8 table index/value */
+static void Lut_L2Lut_8(double *out, double *in) {
+	out[0] = in[0] * 1.0/100.0;				/* L */
+}
+
 /* - - - - - - - - - - - - - - - - */
 /* Convert 16 bit Lab to Lut numbers, V2 */
 
@@ -10777,6 +11519,16 @@ static void Lut_Lab2LutV2_16(double *out, double *in) {
 	out[2] = (in[2] + 128.0) * 65280.0/(255.0 * 65535.0);	/* b */
 }
 
+/* Convert Lut16 table index/value to L */
+static void Lut_Lut2LV2_16(double *out, double *in) {
+	out[0] = in[0] * (100.0 * 65535.0)/65280.0;			/* L */
+}
+
+/* Convert Lab to Lut16 table index/value */
+static void Lut_L2LutV2_16(double *out, double *in) {
+	out[0] = in[0] * 65280.0/(100.0 * 65535.0);				/* L */
+}
+
 /* - - - - - - - - - - - - - - - - */
 /* Convert 16 bit Lab to Lut numbers, V4 */
 
@@ -10792,6 +11544,16 @@ static void Lut_Lab2LutV4_16(double *out, double *in) {
 	out[0] = in[0] * 1.0/100.0;				/* L */
 	out[1] = (in[1] + 128.0) * 1.0/255.0;	/* a */
 	out[2] = (in[2] + 128.0) * 1.0/255.0;	/* b */
+}
+
+/* Convert Lut16 table index/value to L */
+static void Lut_Lut2LV4_16(double *out, double *in) {
+	out[0] = in[0] * 100.0;				/* L */
+}
+
+/* Convert L to Lut16 table index/value */
+static void Lut_L2LutV4_16(double *out, double *in) {
+	out[0] = in[0] * 1.0/100.0;				/* L */
 }
 
 /* - - - - - - - - - - - - - - - - */
@@ -10920,88 +11682,83 @@ static struct {
 	void (*fromLut)(double *out, double *in);	/* from Lut index/entry */
 	void (*toLut)(double *out, double *in);		/* to Lut index/entry */
 } colnormtable[] = {
-	{icSigXYZData,     Lut_Lut2XYZ,   Lut_XYZ2Lut },
-	{icmSigLab8Data,   Lut_Lut2Lab_8, Lut_Lab2Lut_8 },
+	{icSigXYZData,     Lut_Lut2XYZ,      Lut_XYZ2Lut },
+	{icmSigYData,      Lut_Lut2Y,        Lut_Y2Lut },
+	{icmSigLab8Data,   Lut_Lut2Lab_8,    Lut_Lab2Lut_8 },
 	{icmSigLabV2Data,  Lut_Lut2LabV2_16, Lut_Lab2LutV2_16 },
 	{icmSigLabV4Data,  Lut_Lut2LabV4_16, Lut_Lab2LutV4_16 },
-	{icSigLuvData,     Lut_Lut2Luv,  Lut_Luv2Lut },
-	{icSigYxyData,     Lut_3,        Lut_3 },
-	{icSigRgbData,     Lut_3,        Lut_3 },
-	{icSigGrayData,    Lut_1,        Lut_1 },
-	{icSigHsvData,     Lut_3,        Lut_3 },
-	{icSigHlsData,     Lut_3,        Lut_3 },
-	{icSigCmykData,    Lut_4,        Lut_4 },
-	{icSigCmyData,     Lut_3,        Lut_3 },
-	{icSigMch6Data,    Lut_6,        Lut_6 },
-	{icSig2colorData,  Lut_2,        Lut_2 },
-	{icSig3colorData,  Lut_3,        Lut_3 },
-	{icSig4colorData,  Lut_4,        Lut_4 },
-	{icSig5colorData,  Lut_5,        Lut_5 },
-	{icSig6colorData,  Lut_6,        Lut_6 },
-	{icSig7colorData,  Lut_7,        Lut_7 },
-	{icSigMch5Data,    Lut_5,        Lut_5 },
-	{icSigMch6Data,    Lut_6,        Lut_6 },
-	{icSigMch7Data,    Lut_7,        Lut_7 },
-	{icSigMch8Data,    Lut_8,        Lut_8 },
-	{icSig8colorData,  Lut_8,        Lut_8 },
-	{icSig9colorData,  Lut_9,        Lut_9 },
-	{icSig10colorData, Lut_10,       Lut_10 },
-	{icSig11colorData, Lut_11,       Lut_11 },
-	{icSig12colorData, Lut_12,       Lut_12 },
-	{icSig13colorData, Lut_13,       Lut_13 },
-	{icSig14colorData, Lut_14,       Lut_14 },
-	{icSig15colorData, Lut_15,       Lut_15 },
-	{icMaxEnumData,    NULL,         NULL   }
+	{icmSigL8Data,     Lut_Lut2L_8,      Lut_L2Lut_8 },
+	{icmSigLV2Data,    Lut_Lut2LV2_16,   Lut_L2LutV2_16 },
+	{icmSigLV4Data,    Lut_Lut2LV4_16,   Lut_L2LutV4_16 },
+	{icSigLuvData,     Lut_Lut2Luv,      Lut_Luv2Lut },
+	{icSigYxyData,     Lut_3,            Lut_3 },
+	{icSigRgbData,     Lut_3,            Lut_3 },
+	{icSigGrayData,    Lut_1,            Lut_1 },
+	{icSigHsvData,     Lut_3,            Lut_3 },
+	{icSigHlsData,     Lut_3,            Lut_3 },
+	{icSigCmykData,    Lut_4,            Lut_4 },
+	{icSigCmyData,     Lut_3,            Lut_3 },
+	{icSigMch6Data,    Lut_6,            Lut_6 },
+	{icSig2colorData,  Lut_2,            Lut_2 },
+	{icSig3colorData,  Lut_3,            Lut_3 },
+	{icSig4colorData,  Lut_4,            Lut_4 },
+	{icSig5colorData,  Lut_5,            Lut_5 },
+	{icSig6colorData,  Lut_6,            Lut_6 },
+	{icSig7colorData,  Lut_7,            Lut_7 },
+	{icSigMch5Data,    Lut_5,            Lut_5 },
+	{icSigMch6Data,    Lut_6,            Lut_6 },
+	{icSigMch7Data,    Lut_7,            Lut_7 },
+	{icSigMch8Data,    Lut_8,            Lut_8 },
+	{icSig8colorData,  Lut_8,            Lut_8 },
+	{icSig9colorData,  Lut_9,            Lut_9 },
+	{icSig10colorData, Lut_10,           Lut_10 },
+	{icSig11colorData, Lut_11,           Lut_11 },
+	{icSig12colorData, Lut_12,           Lut_12 },
+	{icSig13colorData, Lut_13,           Lut_13 },
+	{icSig14colorData, Lut_14,           Lut_14 },
+	{icSig15colorData, Lut_15,           Lut_15 },
+	{icMaxEnumData,    NULL,             NULL   }
 };
 	
 /*
 	Legacy Lab encoding:
 
-	The V4 specificatins are clear on this, but the resulting behaviour is
-	strange. The V2 Lab encoding should only be used if:
+	The V4 specificatins are misleading on this, since they assume in this
+	instance that all devices spaces, however labeled, have no defined
+	ICC encoding. The end result is simple enough though:
 
-	(The profile is V2)
-	or
-	(
-		(The profile is V4)
-		and
-		(
-			(
-				(
-					(The tag type is icSigLut16Type)
-					or
-					(The tag type is icSigNamedColor2Type)
-				)
-				and
-				(
-					(the encoding is for the PCS)
-					or
-					(the profile is an abstract profile)
-				)
-			)
-		)
-	)
+	ICC V2 Lab encoding should be used in all PCS encodings in
+	a icSigLut16Type or icSigNamedColor2Type tag, and can be used
+	for Lab encoding in device spaces for these tags.
 
+	ICC V4 Lab encoding should be used in all PCS encodings in
+	all other situations, and can be used for Lab encoding in
+	device spaces for all other situtaions.
+
+	This logic has yet to be fully implemented here.
 */
 
 /* Find appropriate conversion functions from the normalised */
-/* Lut data range 0.0 - 1.0 to/from a givem colorspace value, */
+/* Lut data range 0.0 - 1.0 to/from a given colorspace value, */
 /* given the color space and Lut type. */
 /* Return 0 on success, 1 on match failure. */
 /* NOTE: doesn't set error value, message etc.! */
 static int getNormFunc(
 	icc *icp,
-	icColorSpaceSignature csig, 		/* Colorspace */
-	icTagTypeSignature    tagSig,		/* icSigLut8Type or icSigLut16Type or V4 lut */
-	icmNormFlag           flag,			/* icmFromLuti, icmFromLutv or icmToLuti, icmToLutv */
-	void               (**nfunc)(double *out, double *in)
+//	icProfileClassSignature psig,		/* Profile signature to use */
+	icColorSpaceSignature   csig, 		/* Colorspace to use. */
+//  int                     lutin,		/* 0 if this is for a icSigLut16Type input, nz for output */
+//	icTagSignature          tagSig,		/* Tag signature involved (AtoB or B2A etc.) */
+	icTagTypeSignature      tagType,	/* icSigLut8Type or icSigLut16Type or V4 lut */
+	icmNormFlag             flag,		/* icmFromLuti, icmFromLutv or icmToLuti, icmToLutv */
+	void                 (**nfunc)(double *out, double *in)
 ) {
 	int i;
-	if (tagSig == icSigLut8Type && csig == icSigLabData) {
+	if (tagType == icSigLut8Type && csig == icSigLabData) {
 		csig = icmSigLab8Data;
 	}
 	if (csig == icSigLabData) {
-		if (tagSig == icSigLut16Type)	/* Lut16 retains legacy encoding */
+		if (tagType == icSigLut16Type)	/* Lut16 retains legacy encoding */
 			csig = icmSigLabV2Data;
 		else {							/* Other tag types use version specific encoding */
 			if (icp->ver)
@@ -11038,21 +11795,26 @@ static int getNormFunc(
 /* Function table - match ranges to color spaces. */
 /* Anything not here, we don't know how to convert. */
 /* (ie. YCbCr) */
-/* Hmm. we're not handling Lab8 properly ??a ~~999 */
+/* Hmm. we're not handling Lab8 properly ?? ~~~8888 */
 static struct {
 	icColorSpaceSignature csig;
 	int same;				/* Non zero if first entry applies to all channels */
-	double min[15];			/* Minimum value for this colorspace */
-	double max[15];			/* Maximum value for this colorspace */
+	double min[3];			/* Minimum value for this colorspace */
+	double max[3];			/* Maximum value for this colorspace */
 } colorrangetable[] = {
 	{icSigXYZData,     1, { 0.0 } , { 1.0 + 32767.0/32768.0 } },
 	{icmSigLab8Data,   0, { 0.0, -128.0, -128.0 }, { 100.0, 127.0,  127.0 } }, 
 	{icmSigLabV2Data,  0, { 0.0, -128.0, -128.0 },
 	                      { 100.0 + 25500.0/65280.0, 127.0 + 255.0/256.0, 127.0 + 255.0/256.0 } }, 
 	{icmSigLabV4Data,  0, { 0.0, -128.0, -128.0 }, { 100.0, 127.0,  127.0 } }, 
+	{icmSigYData,      1, { 0.0 }, { 1.0 + 32767.0/32768.0 } },
+	{icmSigL8Data,     1, { 0.0 }, { 100.0 } }, 
+	{icmSigLV2Data,    1, { 0.0 }, { 100.0 + 25500.0/65280.0 } }, 
+	{icmSigLV4Data,    1, { 0.0 }, { 100.0 } }, 
 	{icSigLuvData,     0, { 0.0, -128.0, -128.0 },
-	                      { 100.0, 127.0 + 255.0/256.0, 127.0 + 255.0/256.0 } }, 
-	{icSigYxyData,     1, { 0.0 }, { 1.0 } },
+	                      { 100.0, 127.0 + 255.0/256.0, 127.0 + 255.0/256.0 } },
+	{icSigYCbCrData,   1, { 0.0 }, { 1.0 } },			/* ??? */
+	{icSigYxyData,     1, { 0.0 }, { 1.0 } },			/* ??? */
 	{icSigRgbData,     1, { 0.0 }, { 1.0 } },
 	{icSigGrayData,    1, { 0.0 }, { 1.0 } },
 	{icSigHsvData,     1, { 0.0 }, { 1.0 } },
@@ -11078,7 +11840,7 @@ static struct {
 	{icSig13colorData, 1, { 0.0 }, { 1.0 } },
 	{icSig14colorData, 1, { 0.0 }, { 1.0 } },
 	{icSig15colorData, 1, { 0.0 }, { 1.0 } },
-	{icMaxEnumData     }
+	{icMaxEnumData,    1, { 0.0 }, { 1.0 } }
 };
 	
 /* Find appropriate typical encoding ranges for a */
@@ -11086,17 +11848,20 @@ static struct {
 /* Return 0 on success, 1 on match failure */
 static int getRange(
 	icc *icp,
-	icColorSpaceSignature csig, 
-	icTagTypeSignature    tagSig,		/* icSigLut8Type or icSigLut16Type or V4 lut */
-	double *min, double *max
+//	icProfileClassSignature psig,		/* Profile signature to use */
+	icColorSpaceSignature   csig, 		/* Colorspace to use. */
+//  int                     lutin,		/* 0 if this is for a icSigLut16Type input, nz for output */
+//	icTagSignature          tagSig,		/* Tag signature involved (AtoB or B2A etc.) */
+	icTagTypeSignature      tagType,	/* icSigLut8Type or icSigLut16Type or V4 lut */
+	double *min, double *max			/* Return range values */
 ) {
 	int i, e, ee;
 
-	if (tagSig == icSigLut8Type && csig == icSigLabData) {
+	if (tagType == icSigLut8Type && csig == icSigLabData) {
 		csig = icmSigLab8Data;
 	}
 	if (csig == icSigLabData) {
-		if (tagSig == icSigLut16Type)	/* Lut16 retains legacy encoding */
+		if (tagType == icSigLut16Type)	/* Lut16 retains legacy encoding */
 			csig = icmSigLabV2Data;
 		else {							/* Other tag types use version specific encoding */
 			if (icp->ver)
@@ -11136,6 +11901,137 @@ static int getRange(
 /* ============================================= */
 /* Misc. support functions.                      */
 
+
+/* Add two 3 vectors */
+void icmAdd3(double out[3], double in1[3], double in2[3]) {
+	out[0] = in1[0] + in2[0];
+	out[1] = in1[1] + in2[1];
+	out[2] = in1[2] + in2[2];
+}
+
+/* Subtract two 3 vectors, out = in1 - in2 */
+void icmSub3(double out[3], double in1[3], double in2[3]) {
+	out[0] = in1[0] - in2[0];
+	out[1] = in1[1] - in2[1];
+	out[2] = in1[2] - in2[2];
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Copy a 3x3 transform matrix */
+void icmCpy3x3(double dst[3][3], double src[3][3]) {
+	int i, j;
+
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 3; i++)
+			dst[j][i] = src[j][i];
+	}
+}
+
+/* Scale each element of a 3x3 transform matrix */
+void icmScale3x3(double dst[3][3], double src[3][3], double scale) {
+	int i, j;
+
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 3; i++)
+			dst[j][i] = src[j][i] * scale;
+	}
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* 
+
+  mat     in    out
+
+[     ]   []    []
+[     ] * [] => []
+[     ]   []    []
+
+ */
+
+/* Multiply 3 array by 3x3 transform matrix */
+void icmMulBy3x3(double out[3], double mat[3][3], double in[3]) {
+	double tt[3];
+
+	tt[0] = mat[0][0] * in[0] + mat[0][1] * in[1] + mat[0][2] * in[2];
+	tt[1] = mat[1][0] * in[0] + mat[1][1] * in[1] + mat[1][2] * in[2];
+	tt[2] = mat[2][0] * in[0] + mat[2][1] * in[1] + mat[2][2] * in[2];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Add one 3x3 to another */
+/* dst = src1 + src2 */
+void icmAdd3x3(double dst[3][3], double src1[3][3], double src2[3][3]) {
+	int i, j;
+
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 3; i++)
+			dst[j][i] = src1[j][i] + src2[j][i];
+	}
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Tensor product. Multiply two 3 vectors to form a 3x3 matrix */
+/* src1[] forms the colums, and src2[] forms the rows in the result */
+void icmTensMul3(double dst[3][3], double src1[3], double src2[3]) {
+	int i, j;
+	
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 3; i++)
+			dst[j][i] = src1[j] * src2[i];
+	}
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Multiply one 3x3 with another */
+/* dst = src * dst */
+void icmMul3x3(double dst[3][3], double src[3][3]) {
+	int i, j, k;
+	double td[3][3];		/* Temporary dest */
+
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 3; i++) {
+			double tt = 0.0;
+			for (k = 0; k < 3; k++)
+				tt += src[j][k] * dst[k][i];
+			td[j][i] = tt;
+		}
+	}
+
+	/* Copy result out */
+	for (j = 0; j < 3; j++)
+		for (i = 0; i < 3; i++)
+			dst[j][i] = td[j][i];
+}
+
+/* Multiply one 3x3 with another #2 */
+/* dst = src1 * src2 */
+void icmMul3x3_2(double dst[3][3], double src1[3][3], double src2[3][3]) {
+	int i, j, k;
+	double td[3][3];		/* Temporary dest */
+
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 3; i++) {
+			double tt = 0.0;
+			for (k = 0; k < 3; k++)
+				tt += src1[j][k] * src2[k][i];
+			td[j][i] = tt;
+		}
+	}
+
+	/* Copy result out */
+	for (j = 0; j < 3; j++)
+		for (i = 0; i < 3; i++)
+			dst[j][i] = td[j][i];
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
 /* 
 	Matrix Inversion
 	by Richard Carling
@@ -11191,7 +12087,7 @@ double in[3][3]
 }
 
 /*
- * double = det3x3(  a1, a2, a3, b1, b2, b3, c1, c2, c3 )
+ * double = icmDet3x3(  a1, a2, a3, b1, b2, b3, c1, c2, c3 )
  * 
  * calculate the determinant of a 3x3 matrix
  * in the form
@@ -11201,7 +12097,7 @@ double in[3][3]
  *     | a3,  b3,  c3 |
  */
 
-static double det3x3(double in[3][3]) {
+double icmDet3x3(double in[3][3]) {
     double a1, a2, a3, b1, b2, b3, c1, c2, c3;
     double ans;
 
@@ -11215,7 +12111,7 @@ static double det3x3(double in[3][3]) {
     return ans;
 }
 
-#define SMALL_NUMBER	1.e-8
+#define ICM_SMALL_NUMBER	1.e-8
 /* 
  *   inverse( original_matrix, inverse_matrix )
  * 
@@ -11238,9 +12134,9 @@ double in[3][3]
      *  if the determinant is zero, 
      *  then the inverse matrix is not unique.
      */
-    det = det3x3(in);
+    det = icmDet3x3(in);
 
-    if ( fabs(det) < SMALL_NUMBER)
+    if ( fabs(det) < ICM_SMALL_NUMBER)
         return 1;
 
     /* calculate the adjoint matrix */
@@ -11254,8 +12150,108 @@ double in[3][3]
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
-/* Given two 3D vectors, create a matrix that rotates */
-/* and scales one onto the other about 0,0,0. */
+/* Compute the dot product of two 3 vectors */
+double icmDot3(double in1[3], double in2[3]) {
+	return in1[0] * in2[0] + in1[1] * in2[1] + in1[2] * in2[2];
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Compute the cross product of two 3D vectors, out = in1 x in2 */
+void icmCross3(double out[3], double in1[3], double in2[3]) {
+	double tt[3];
+    tt[0] = (in1[1] * in2[2]) - (in1[2] * in2[1]);
+    tt[1] = (in1[2] * in2[0]) - (in1[0] * in2[2]);
+    tt[2] = (in1[0] * in2[1]) - (in1[1] * in2[0]);
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Compute the norm (length) squared of a 3 vector */
+double icmNorm3sq(double in[3]) {
+	return in[0] * in[0] + in[1] * in[1] + in[2] * in[2];
+}
+
+/* Compute the norm (length) of a 3 vector */
+double icmNorm3(double in[3]) {
+	return sqrt(in[0] * in[0] + in[1] * in[1] + in[2] * in[2]);
+}
+
+/* Scale a 3 vector by the given ratio */
+void icmScale3(double out[3], double in[3], double rat) {
+	out[0] = in[0] * rat;
+	out[1] = in[1] * rat;
+	out[2] = in[2] * rat;
+}
+
+/* Normalise a 3 vector to the given length. Return nz if not normalisable */
+int icmNormalize3(double out[3], double in[3], double len) {
+	double tt = sqrt(in[0] * in[0] + in[1] * in[1] + in[2] * in[2]);
+	
+	if (tt < ICM_SMALL_NUMBER)
+		return 1;
+	tt = len/tt;
+	out[0] = in[0] * tt;
+	out[1] = in[1] * tt;
+	out[2] = in[2] * tt;
+	return 0;
+}
+
+/* Compute the norm (length) squared of a two point vector */
+double icmNorm33sq(double in1[3], double in0[3]) {
+	int j;
+	double rv;
+	for (rv = 0.0, j = 0; j < 3; j++) {
+		double tt = in1[j] - in0[j];
+		rv += tt * tt;
+	}
+	return rv;
+}
+
+/* Compute the norm (length) of a two point vector */
+double icmNorm33(double in1[3], double in0[3]) {
+	int j;
+	double rv;
+	for (rv = 0.0, j = 0; j < 3; j++) {
+		double tt = in1[j] - in0[j];
+		rv += tt * tt;
+	}
+	return sqrt(rv);
+}
+
+/* Scale a two point vector by the given ratio */
+void icmScale33(double out[3], double in1[3], double in0[3], double rat) {
+	out[0] = in0[0] + (in1[0] - in0[0]) * rat;
+	out[1] = in0[1] + (in1[1] - in0[1]) * rat;
+	out[2] = in0[2] + (in1[2] - in0[2]) * rat;
+}
+
+/* Normalise a two point vector to the given length. */
+/* The new location of in1[] is returned in out[]. */
+/* Return nz if not normalisable */
+int icmNormalize33(double out[3], double in1[3], double in0[3], double len) {
+	int j;
+	double vl;
+
+	for (vl = 0.0, j = 0; j < 3; j++) {
+		double tt = in1[j] - in0[j];
+		vl += tt * tt;
+	}
+	vl = sqrt(vl);
+	if (vl < ICM_SMALL_NUMBER)
+		return 1;
+	
+	vl = len/vl;
+	for (j = 0; j < 3; j++) {
+		out[j] = in0[j] + (in1[j] - in0[j]) * vl;
+	}
+	return 0;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Given two 3D points, create a matrix that rotates */
+/* and scales one onto the other about the origin 0,0,0. */
 /* The maths is from page 52 of Tomas Moller and Eric Haines */
 /* "Real-Time Rendering". */
 /* s is source vector, t is target vector. */
@@ -11273,8 +12269,22 @@ void icmRotMat(double m[3][3], double s[3], double t[3]) {
 	/* Normalise input vectors */
 	/* The rotation will be about 0,0,0 */
 	sl = sqrt(s[0] * s[0] + s[1] * s[1] + s[2] * s[2]);
-	sn[0] = s[0]/sl; sn[1] = s[1]/sl; sn[2] = s[2]/sl;
 	tl = sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
+
+	if (sl < 1e-12 || tl < 1e-12) {	/* Hmm. Do nothing */
+		m[0][0] = 1.0;
+		m[0][1] = 0.0;
+		m[0][2] = 0.0;
+		m[1][0] = 0.0;
+		m[1][1] = 1.0;
+		m[1][2] = 0.0;
+		m[2][0] = 0.0;
+		m[2][1] = 0.0;
+		m[2][2] = 1.0;
+		return;
+	}
+
+	sn[0] = s[0]/sl; sn[1] = s[1]/sl; sn[2] = s[2]/sl;
 	tn[0] = t[0]/tl; tn[1] = t[1]/tl; tn[2] = t[2]/tl;
 
 	/* Compute the cross product */
@@ -11290,16 +12300,16 @@ void icmRotMat(double m[3][3], double s[3], double t[3]) {
 
 	/* If the two input vectors are close to being parallel, */
 	/* then h will be close to zero. */
-	if (fabs(h) < 0.000001) {
-		m[0][0] = fabs(s[0]) > 0.0001 ? t[0]/s[0] : 1.0;
+	if (fabs(h) < 1e-12) {
+		m[0][0] = tl/sl;
 		m[0][1] = 0.0;
 		m[0][2] = 0.0;
 		m[1][0] = 0.0;
-		m[1][1] = fabs(s[1]) > 0.0001 ? t[1]/s[1] : 1.0;
+		m[1][1] = tl/sl;
 		m[1][2] = 0.0;
 		m[2][0] = 0.0;
 		m[2][1] = 0.0;
-		m[2][2] = fabs(s[2]) > 0.0001 ? t[2]/s[2] : 1.0;
+		m[2][2] = tl/sl;
 	} else {
 		/* 1-e/Cross product dot squared */
 	    h = (1.0 - e) / h;
@@ -11318,13 +12328,13 @@ void icmRotMat(double m[3][3], double s[3], double t[3]) {
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 
-/* Multiply XYZ array by 3x3 transform matrix */
-void icmMulBy3x3(double out[3], double mat[3][3], double in[3]) {
+/* Multiply 3 array by 3x4 transform matrix */
+void icmMul3By3x4(double out[3], double mat[3][4], double in[3]) {
 	double tt[3];
 
-	tt[0] = mat[0][0] * in[0] + mat[0][1] * in[1] + mat[0][2] * in[2];
-	tt[1] = mat[1][0] * in[0] + mat[1][1] * in[1] + mat[1][2] * in[2];
-	tt[2] = mat[2][0] * in[0] + mat[2][1] * in[1] + mat[2][2] * in[2];
+	tt[0] = mat[0][0] * in[0] + mat[0][1] * in[1] + mat[0][2] * in[2] + mat[0][3];
+	tt[1] = mat[1][0] * in[0] + mat[1][1] * in[1] + mat[1][2] * in[2] + mat[1][3];
+	tt[2] = mat[2][0] * in[0] + mat[2][1] * in[1] + mat[2][2] * in[2] + mat[2][3];
 
 	out[0] = tt[0];
 	out[1] = tt[1];
@@ -11332,13 +12342,52 @@ void icmMulBy3x3(double out[3], double mat[3][3], double in[3]) {
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Given two 3D vectors, create a matrix that translates, */
+/* rotates and scales one onto the other. */
+/* The maths is from page 52 of Tomas Moller and Eric Haines */
+/* "Real-Time Rendering". */
+/* s0 -> s1 is source vector, t0 -> t1 is target vector. */
+/* Usage of icmRotMat: */
+/*	t[0] == mat[0][0] * s[0] + mat[0][1] * s[1] + mat[0][2] * s[2] + mat[0][3]; */
+/*	t[1] == mat[1][0] * s[0] + mat[1][1] * s[1] + mat[1][2] * s[2] + mat[1][3]; */
+/*	t[2] == mat[2][0] * s[0] + mat[2][1] * s[1] + mat[2][2] * s[2] + mat[2][3]; */
+/* i.e. use icmMul3By3x4 */
+void icmVecRotMat(double m[3][4], double s1[3], double s0[3], double t1[3], double t0[3]) {
+	int i, j;
+	double ss[3], tt[3], rr[3][3];
 
-/* CIE XYZ to perceptual Lab */
+	/* Create the rotation matrix: */
+	for (i = 0; i < 3; i++) {
+		ss[i] = s1[i] - s0[i];
+		tt[i] = t1[i] - t0[i];
+	}
+	icmRotMat(rr, ss, tt);
+	
+	/* Create rotated version of s0: */
+	icmMulBy3x3(ss, rr, s0);
+
+	/* Create 4x4 matrix */
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 4; i++) {
+			if (i < 3 && j < 3)
+				m[j][i] = rr[j][i];
+			else if (i == 3 && j < 3)
+				m[j][i] = t0[j] - ss[j];
+			else if (i == j)
+				m[j][i] = 1.0;
+			else
+				m[j][i] = 0.0;
+		}
+	}
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* CIE XYZ to perceptual CIE 1976 L*a*b* */
 void
 icmXYZ2Lab(icmXYZNumber *w, double *out, double *in) {
 	double X = in[0], Y = in[1], Z = in[2];
 	double x,y,z,fx,fy,fz;
-	double L;
 
 	x = X/w->X;
 	y = Y/w->Y;
@@ -11364,7 +12413,7 @@ icmXYZ2Lab(icmXYZNumber *w, double *out, double *in) {
 	out[2] = 200.0 * (fy - fz);
 }
 
-/* Perceptual Lab to CIE XYZ */
+/* Perceptual CIE 1976 L*a*b* to CIE XYZ */
 void
 icmLab2XYZ(icmXYZNumber *w, double *out, double *in) {
 	double L = in[0], a = in[1], b = in[2];
@@ -11422,7 +12471,7 @@ void icmLab2LCh(double *out, double *in) {
 }
 
 /* XYZ to Yxy */
-extern ICCLIB_API icmXYZ2Yxy(double *out, double *in) {
+extern ICCLIB_API void icmXYZ2Yxy(double *out, double *in) {
 	double sum = in[0] + in[1] + in[2];
 	double Y, x, y;
 
@@ -11441,7 +12490,7 @@ extern ICCLIB_API icmXYZ2Yxy(double *out, double *in) {
 }
 
 /* Yxy to XYZ */
-extern ICCLIB_API icmYxy2XYZ(double *out, double *in) {
+extern ICCLIB_API void icmYxy2XYZ(double *out, double *in) {
 	double Y = in[0];
 	double x = in[1];
 	double y = in[2];
@@ -11458,14 +12507,93 @@ extern ICCLIB_API icmYxy2XYZ(double *out, double *in) {
 }
 
 
+/* CIE XYZ to perceptual CIE 1976 L*u*v* */
+extern ICCLIB_API void icmXYZ2Luv(icmXYZNumber *w, double *out, double *in) {
+	double X = in[0], Y = in[1], Z = in[2];
+	double un, vn, u, v, fl, fu, fv;
+
+	un = (4.0 * w->X) / (w->X + 15.0 * w->Y + 3.0 * w->Z);
+	vn = (9.0 * w->Y) / (w->X + 15.0 * w->Y + 3.0 * w->Z);
+	u = (4.0 * X) / (X + 15.0 * Y + 3.0 * Z);
+	v = (9.0 * Y) / (X + 15.0 * Y + 3.0 * Z);
+	
+	Y /= w->Y;
+
+	if (Y > 0.008856451586)
+		fl = pow(Y,1.0/3.0);
+	else
+		fl = 7.787036979 * Y + 16.0/116.0;
+
+	fu = u - un;
+	fv = v - vn;
+
+	out[0] = 116.0 * fl - 16.0;
+	out[1] = 13.0 * out[0] * fu;
+	out[2] = 13.0 * out[0] * fv;
+}
+
+/* Perceptual CIE 1976 L*u*v* to CIE XYZ */
+extern ICCLIB_API void icmLuv2XYZ(icmXYZNumber *w, double *out, double *in) {
+	double un, vn, u, v, fl, fu, fv, sum, X, Y, Z;
+
+	fl = (in[0] + 16.0)/116.0;
+	fu = in[1] / (13.0 * in[0]);
+	fv = in[2] / (13.0 * in[0]);
+
+	un = (4.0 * w->X) / (w->X + 15.0 * w->Y + 3.0 * w->Z);
+	vn = (9.0 * w->Y) / (w->X + 15.0 * w->Y + 3.0 * w->Z);
+
+	u = fu + un;
+	v = fv + vn;
+
+	if (fl > 24.0/116.0)
+		Y = pow(fl,3.0);
+	else
+		Y = (fl - 16.0/116.0)/7.787036979;
+	Y *= w->Y;
+
+	sum = (9.0 * Y)/v;
+	X = (u * sum)/4.0;
+	Z = (sum - X - 15.0 * Y)/3.0;
+
+	out[0] = X;
+	out[1] = Y;
+	out[2] = Z;
+}
+
+/* CIE XYZ to perceptual CIE 1960 UCS */
+extern ICCLIB_API void icmXYZ2UCS(icmXYZNumber *w, double *out, double *in) {
+	icmXYZ2Luv(w, out, in);
+	out[2] *= 2.0/3.0;
+}
+
+/* Perceptual CIE 1960 UCS to CIE XYZ */
+extern ICCLIB_API void icmUCS2XYZ(icmXYZNumber *w, double *out, double *in) {
+	double tin[3];
+	tin[0] = in[0];
+	tin[1] = in[1];
+	tin[2] = 3.0/2.0 * in[2];
+	icmLuv2XYZ(w, out, tin);
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+
 /* available D50 Illuminant */
 icmXYZNumber icmD50 = { 		/* Profile illuminant - D50 */
     0.9642, 1.0000, 0.8249
 };
 
+icmXYZNumber icmD50_100 = {		/* Profile illuminant - D50, scaled to 100 */
+    96.42, 100.00, 82.49
+};
+
 /* available D65 Illuminant */
 icmXYZNumber icmD65 = { 		/* Profile illuminant - D65 */
 	0.9505, 1.0000, 1.0890
+};
+
+icmXYZNumber icmD65_100 = { 	/* Profile illuminant - D65, scaled to 100 */
+	95.05, 100.00, 108.90
 };
 
 /* Default black point */
@@ -11474,45 +12602,56 @@ icmXYZNumber icmBlack = {
 };
 
 /* Return the normal Delta E given two Lab values */
-double icmLabDE(double *Lab1, double *Lab2) {
+double icmLabDE(double *Lab0, double *Lab1) {
 	double rv = 0.0, tt;
 
-	tt = Lab1[0] - Lab2[0];
+	tt = Lab0[0] - Lab1[0];
 	rv += tt * tt;
-	tt = Lab1[1] - Lab2[1];
+	tt = Lab0[1] - Lab1[1];
 	rv += tt * tt;
-	tt = Lab1[2] - Lab2[2];
+	tt = Lab0[2] - Lab1[2];
 	rv += tt * tt;
 	
 	return sqrt(rv);
 }
 
 /* Return the normal Delta E squared, given two Lab values */
-double icmLabDEsq(double *Lab1, double *Lab2) {
+double icmLabDEsq(double *Lab0, double *Lab1) {
 	double rv = 0.0, tt;
 
-	tt = Lab1[0] - Lab2[0];
+	tt = Lab0[0] - Lab1[0];
 	rv += tt * tt;
-	tt = Lab1[1] - Lab2[1];
+	tt = Lab0[1] - Lab1[1];
 	rv += tt * tt;
-	tt = Lab1[2] - Lab2[2];
+	tt = Lab0[2] - Lab1[2];
 	rv += tt * tt;
 	
 	return rv;
 }
 
+/* Return the normal Delta E given two XYZ values */
+extern ICCLIB_API double icmXYZLabDE(icmXYZNumber *w, double *in0, double *in1) {
+	double lab0[3], lab1[3], rv;
+
+	icmXYZ2Lab(w, lab0, in0);
+	icmXYZ2Lab(w, lab1, in1);
+	rv = icmLabDE(lab0, lab1);
+	return rv;
+}
+
+
 /* Return the CIE94 Delta E color difference measure, squared */
-double icmCIE94sq(double Lab1[3], double Lab2[3]) {
+double icmCIE94sq(double Lab0[3], double Lab1[3]) {
 	double desq, dhsq;
 	double dlsq, dcsq;
 	double c12;
 
 	{
 		double dl, da, db;
-		dl = Lab1[0] - Lab2[0];
+		dl = Lab0[0] - Lab1[0];
 		dlsq = dl * dl;		/* dl squared */
-		da = Lab1[1] - Lab2[1];
-		db = Lab1[2] - Lab2[2];
+		da = Lab0[1] - Lab1[1];
+		db = Lab0[2] - Lab1[2];
 
 		/* Compute normal Lab delta E squared */
 		desq = dlsq + da * da + db * db;
@@ -11522,8 +12661,8 @@ double icmCIE94sq(double Lab1[3], double Lab2[3]) {
 		double c1, c2, dc;
 
 		/* Compute chromanance for the two colors */
-		c1 = sqrt(Lab1[1] * Lab1[1] + Lab1[2] * Lab1[2]);
-		c2 = sqrt(Lab2[1] * Lab2[1] + Lab2[2] * Lab2[2]);
+		c1 = sqrt(Lab0[1] * Lab0[1] + Lab0[2] * Lab0[2]);
+		c2 = sqrt(Lab1[1] * Lab1[1] + Lab1[2] * Lab1[2]);
 		c12 = sqrt(c1 * c2);	/* Symetric chromanance */
 
 		/* delta chromanance squared */
@@ -11534,7 +12673,6 @@ double icmCIE94sq(double Lab1[3], double Lab2[3]) {
 	/* Compute delta hue squared */
 	if ((dhsq = desq - dlsq - dcsq) < 0.0)
 		dhsq = 0.0;
-
 	{
 		double sc, sh;
 
@@ -11547,9 +12685,19 @@ double icmCIE94sq(double Lab1[3], double Lab2[3]) {
 }
 
 /* Return the CIE94 Delta E color difference measure */
-double icmCIE94(double Lab1[3], double Lab2[3]) {
-	return sqrt(icmCIE94sq(Lab1, Lab2));
+double icmCIE94(double Lab0[3], double Lab1[3]) {
+	return sqrt(icmCIE94sq(Lab0, Lab1));
 }
+
+/* Return the CIE94 Delta E color difference measure for two XYZ values */
+extern ICCLIB_API double icmXYZCIE94(icmXYZNumber *w, double *in0, double *in1) {
+	double lab0[3], lab1[3];
+
+	icmXYZ2Lab(w, lab0, in0);
+	icmXYZ2Lab(w, lab1, in1);
+	return sqrt(icmCIE94sq(lab0, lab1));
+}
+
 
 /* From the paper "The CIEDE2000 Color-Difference Formula: Implementation Notes, */
 /* Supplementary Test Data, and Mathematical Observations", by */
@@ -11557,16 +12705,16 @@ double icmCIE94(double Lab1[3], double Lab2[3]) {
 /* Color Res. Appl., vol. 30, no. 1, pp. 21-30, Feb. 2005. */
 
 /* Return the CIEDE2000 Delta E color difference measure squared, for two Lab values */
-double icmCIE2Ksq(double *Lab1, double *Lab2) {
+double icmCIE2Ksq(double *Lab0, double *Lab1) {
 	double C1, C2;
 	double h1, h2;
 	double dL, dC, dH;
 	double dsq;
 
-	/* The trucated value of PI is needed to ensure that the */
-	/* test cases pass, as one of them lies on the edge of */
-	/* a mathermatical discontinuity. The precision is still */
-	/* enough for any practical use. */
+/* The trucated value of PI is needed to ensure that the */
+/* test cases pass, as one of them lies on the edge of */
+/* a mathermatical discontinuity. The precision is still */
+/* enough for any practical use. */
 #define RAD2DEG(xx) (180.0/3.14159265358979 * (xx))
 #define DEG2RAD(xx) (3.14159265358979/180.0 * (xx))
 
@@ -11576,20 +12724,20 @@ double icmCIE2Ksq(double *Lab1, double *Lab2) {
 		double Cab, Cab7, G;
 		double a1, a2;
 
-		C1ab = sqrt(Lab1[1] * Lab1[1] + Lab1[2] * Lab1[2]);
-		C2ab = sqrt(Lab2[1] * Lab2[1] + Lab2[2] * Lab2[2]);
+		C1ab = sqrt(Lab0[1] * Lab0[1] + Lab0[2] * Lab0[2]);
+		C2ab = sqrt(Lab1[1] * Lab1[1] + Lab1[2] * Lab1[2]);
 		Cab = 0.5 * (C1ab + C2ab);
 		Cab7 = pow(Cab,7.0);
 		G = 0.5 * (1.0 - sqrt(Cab7/(Cab7 + 6103515625.0)));
-		a1 = (1.0 + G) * Lab1[1];
-		a2 = (1.0 + G) * Lab2[1];
-		C1 = sqrt(a1 * a1 + Lab1[2] * Lab1[2]);
-		C2 = sqrt(a2 * a2 + Lab2[2] * Lab2[2]);
+		a1 = (1.0 + G) * Lab0[1];
+		a2 = (1.0 + G) * Lab1[1];
+		C1 = sqrt(a1 * a1 + Lab0[2] * Lab0[2]);
+		C2 = sqrt(a2 * a2 + Lab1[2] * Lab1[2]);
 
 		if (C1 < 1e-9)
 			h1 = 0.0;
 		else {
-			h1 = RAD2DEG(atan2(Lab1[2], a1));
+			h1 = RAD2DEG(atan2(Lab0[2], a1));
 			if (h1 < 0.0)
 				h1 += 360.0;
 		}
@@ -11597,7 +12745,7 @@ double icmCIE2Ksq(double *Lab1, double *Lab2) {
 		if (C2 < 1e-9)
 			h2 = 0.0;
 		else {
-			h2 = RAD2DEG(atan2(Lab2[2], a2));
+			h2 = RAD2DEG(atan2(Lab1[2], a2));
 			if (h2 < 0.0)
 				h2 += 360.0;
 		}
@@ -11607,7 +12755,7 @@ double icmCIE2Ksq(double *Lab1, double *Lab2) {
 	{
 		double dh;
 
-		dL = Lab2[0] - Lab1[0];
+		dL = Lab1[0] - Lab0[0];
 		dC = C2 - C1;
 		if (C1 < 1e-9 || C2 < 1e-9) {
 			dh = 0.0;
@@ -11628,7 +12776,7 @@ double icmCIE2Ksq(double *Lab1, double *Lab2) {
 		double C7, RC, L50sq, SL, SC, SH, RT;
 		double dLsq, dCsq, dHsq, RCH;
 
-		L = 0.5 * (Lab1[0]  + Lab2[0]);
+		L = 0.5 * (Lab0[0]  + Lab1[0]);
 		C = 0.5 * (C1 + C2);
 		if (C1 < 1e-9 || C2 < 1e-9) {
 			h = h1 + h2;
@@ -11674,33 +12822,21 @@ double icmCIE2Ksq(double *Lab1, double *Lab2) {
 }
 
 /* Return the CIE2DE000 Delta E color difference measure for two Lab values */
-double icmCIE2K(double *Lab1, double *Lab2) {
-	return sqrt(icmCIE2Ksq(Lab1, Lab2));
+double icmCIE2K(double *Lab0, double *Lab1) {
+	return sqrt(icmCIE2Ksq(Lab0, Lab1));
+}
+
+/* Return the CIEDE2000 Delta E color difference measure for two XYZ values */
+extern ICCLIB_API double icmXYZCIE2K(icmXYZNumber *w, double *in0, double *in1) {
+	double lab0[3], lab1[3];
+
+	icmXYZ2Lab(w, lab0, in0);
+	icmXYZ2Lab(w, lab1, in1);
+	return sqrt(icmCIE2Ksq(lab0, lab1));
 }
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
-
-/* Multiply one 3x3 with another */
-static void mul3x3(double dst[3][3], double src[3][3]) {
-	int i, j, k;
-	double td[3][3];		/* Temporary dest */
-
-	for (j = 0; j < 3; j++) {
-		for (i = 0; i < 3; i++) {
-			double tt = 0.0;
-			for (k = 0; k < 3; k++)
-				tt += src[j][k] * dst[k][i];
-			td[j][i] = tt;
-		}
-	}
-
-	/* Copy result out */
-	for (j = 0; j < 3; j++)
-		for (i = 0; i < 3; i++)
-			dst[j][i] = td[j][i];
-}
-
 /* Chromatic adaptation transform utility */
 /* Return a 3x3 chromatic adaptation matrix */
 void icmChromAdaptMatrix(
@@ -11711,6 +12847,13 @@ void icmChromAdaptMatrix(
 ) {
 	double dst[3], src[3];			/* Source & destination white points */
 	double vkmat[3][3];				/* Von Kries matrix */
+#ifdef NEVER
+	static double bradford[3][3] = {	/* Linear cone space matrix */
+		{  1.0,  0.0, 0.0 },
+		{  0.0,  1.0, 0.0 },
+		{  0.0,  0.0, 1.0 }
+	};
+#endif /* NEVER */
 	static double bradford[3][3] = {	/* Bradford cone space matrix */
 		{  0.8951,  0.2664, -0.1614 },
 		{ -0.7502,  1.7135,  0.0367 },
@@ -11745,11 +12888,11 @@ void icmChromAdaptMatrix(
 
 	/* Transform to Bradford space if requested */
 	if (flags & ICM_CAM_BRADFORD) {
-		mul3x3(mat, bradford);
+		icmMul3x3(mat, bradford);
 	}
 
 	/* Apply chromatic adaptation */
-	mul3x3(mat, vkmat);
+	icmMul3x3(mat, vkmat);
 
 	/* Transform from Bradford space */
 	if (flags & ICM_CAM_BRADFORD) {
@@ -11757,7 +12900,7 @@ void icmChromAdaptMatrix(
 			icmInverse3x3(ibradford, bradford);
 			inited = 1;
 		}
-		mul3x3(mat, ibradford);
+		icmMul3x3(mat, ibradford);
 	}
 
 	/* We're done */
@@ -11765,7 +12908,7 @@ void icmChromAdaptMatrix(
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 
-/* RGB primaries device to XYZ transform matrix */
+/* RGB primaries device to RGB->XYZ transform matrix */
 /* Return non-zero if matrix would be singular */
 int icmRGBprim2matrix(
 	icmXYZNumber white,		/* White point */
@@ -11815,6 +12958,110 @@ int icmRGBprim2matrix(
 	mat[2][2] = blue.Z  * t[2];
 
 	return 0;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Some PCS utility functions */
+
+/* Clip Lab, while maintaining hue angle. */
+/* Return nz if clipping occured */
+int icmClipLab(double out[3], double in[3]) {
+	double C;
+
+	out[0] = in[0];
+	out[1] = in[1];
+	out[2] = in[2];
+
+	if (out[0] >= 0.0 && out[0] <= 100.0
+	 && out[1] >= -128.0 && out[1] <= 127.0
+	 && out[2] >= -128.0 && out[2] <= 127.0)
+		return 0;
+
+	/* Clip L */
+	if (out[0] < 0.0)
+		out[0] = 0.0;
+	else if (out[0] > 100.0)
+		out[0] = 100.0;
+	
+	C = out[1];
+	if (fabs(out[2]) > fabs(C))
+		C = out[2];
+	if (C < -128.0 || C > 127.0) {
+		if (C < 0.0)
+			C = -128.0/C;
+		else
+			C = 127.0/C;
+		out[1] *= C;
+		out[2] *= C;
+	}
+
+	return 1;
+}
+
+/* Clip XYZ, while maintaining hue angle */
+/* Return nz if clipping occured */
+int icmClipXYZ(double out[3], double in[3]) {
+	out[0] = in[0];
+	out[1] = in[1];
+	out[2] = in[2];
+
+	if (out[0] >= 0.0 && out[0] <= 1.9999
+	 && out[1] >= 0.0 && out[1] <= 1.9999
+	 && out[2] >= 0.0 && out[2] <= 1.9999)
+		return 0;
+
+	/* Clip Y and scale X and Z similarly */
+
+	if (out[1] > 1.9999) {
+		out[0] *= 1.9999/out[1];
+		out[2] *= 1.9999/out[1];
+		out[1] = 1.9999;
+	} else if (out[1] < 0.0) {
+		out[0] = 0.0;
+		out[1] = 0.0;
+		out[2] = 0.0;
+	}
+
+	if (out[0] < 0.0 || out[0] > 1.9999
+	 || out[2] < 0.0 || out[2] > 1.9999) {
+		double D50[3] = { 0.9642, 1.0000, 0.8249 };
+		double bb = 0.0;
+
+		/* Scale the D50 so that it has the same Y value as our color */
+		D50[0] *= out[1];
+		D50[1] *= out[1];
+		D50[2] *= out[1];
+
+		/* Figure out what blend factor with Y scaled D50, brings our */
+		/* color X and Z values into range */
+
+		if (out[0] < 0.0) {
+			double b;
+			b = (0.0 - out[0])/(D50[0] - out[0]);
+			if (b > bb)
+				bb = b;
+		} else if (out[0] > 1.9999) {
+			double b;
+			b = (1.9999 - out[0])/(D50[0] - out[0]);
+			if (b > bb)
+				bb = b;
+		}
+		if (out[2] < 0.0) {
+			double b;
+			b = (0.0 - out[2])/(D50[2] - out[2]);
+			if (b > bb)
+				bb = b;
+		} else if (out[2] > 1.9999) {
+			double b;
+			b = (1.9999 - out[2])/(D50[2] - out[2]);
+			if (b > bb)
+				bb = b;
+		}
+		/* Do the desaturation */
+		out[0] = D50[0] * bb + (1.0 - bb) * out[0];
+		out[2] = D50[2] * bb + (1.0 - bb) * out[2];
+	}
+	return 1;
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -11936,7 +13183,7 @@ static void icmMD5_accume(icmMD5 *p, ORD8 *in) {
 
 /* Add some bytes */
 static void icmMD5_add(icmMD5 *p, ORD8 *ibuf, unsigned int len) {
-	int bs;
+	unsigned int bs;
 
 	if (p->fin)
 		return;				/* This is actually an error */
@@ -12071,9 +13318,8 @@ icmFile *pp,
 long int offset
 ) {
 	icmFileMD5 *p = (icmFileMD5 *)pp;
-	unsigned char *np;
 
-	if (p->of != offset) {
+	if (p->of != (unsigned int) offset) {
 		p->errc = 1;
 	}
 	return 0;
@@ -12256,6 +13502,40 @@ static void icmLuXYZ_Abs2Rel(icmLuBase *p, double *out, double *in) {
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Methods common to all non-named transforms (icmLuBase) : */
 
+/* Initialise the white and black points from the ICC tags, */
+/* and the corresponding absolute<->relative conversion matrices */
+/* return nz on error */
+static int icmLuInit_Wh_bk(
+struct _icmLuBase *lup
+) {
+	icmXYZArray *whitePointTag, *blackPointTag;
+	icc *p = lup->icp;
+
+	if ((whitePointTag = (icmXYZArray *)p->read_tag(p, icSigMediaWhitePointTag)) == NULL
+        || whitePointTag->ttype != icSigXYZType || whitePointTag->size < 1) {
+		if (p->header->deviceClass != icSigLinkClass 
+		 && lup->intent == icAbsoluteColorimetric) {
+			sprintf(p->err,"icc_lookup: Profile is missing Media White Point Tag");
+			p->errc = 1;
+			return 1;
+		}
+		lup->whitePoint = icmD50;						/* safe value */
+	} else
+		lup->whitePoint = whitePointTag->data[0];	/* Copy structure */
+
+	if ((blackPointTag = (icmXYZArray *)p->read_tag(p, icSigMediaBlackPointTag)) == NULL
+        || blackPointTag->ttype != icSigXYZType || blackPointTag->size < 1) {
+		lup->blackPoint = icmBlack;						/* default */
+	} else 
+		lup->blackPoint = blackPointTag->data[0];	/* Copy structure */
+
+	/* Create absolute <-> relative conversion matricies */
+	icmChromAdaptMatrix(ICM_CAM_BRADFORD, lup->whitePoint, icmD50, lup->toAbs);
+	icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, lup->whitePoint,  lup->fromAbs);
+
+	return 0;
+}
+
 /* Return the media white and black points in XYZ space. */
 /* Note that if not in the icc, the black point will be returned as 0, 0, 0 */
 /* Any pointer may be NULL if value is not to be returned */
@@ -12360,10 +13640,10 @@ double *in			/* Vector of input values in Native PCS */
 ) {
 	int rv = 0;
 
-	if (out != in) {
-		int i;
-		for (i = 0; i < 3; i++)		/* Don't alter input values */
-			out[i] = in[i];
+	if (out != in) {	/* Don't alter input values */
+		out[0] = in[0];
+		out[1] = in[1];
+		out[2] = in[2];
 	}
 
 	/* Do absolute conversion */
@@ -12391,7 +13671,7 @@ double *in			/* Vector of input values in Native PCS */
 }
 
 
-/* Overall Fwd conversion routine */
+/* Overall Fwd conversion routine (Dev->PCS) */
 static int
 icmLuMonoFwd_lookup (
 icmLuBase *pp,		/* This */
@@ -12406,7 +13686,47 @@ double *in			/* Input value */
 	return rv;
 }
 
+/* Three stage conversion routines */
+static int
+icmLuMonoFwd_lookup_in(
+icmLuBase *pp,		/* This */
+double *out,		/* Output value */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuMono *p = (icmLuMono *)pp;
+	rv |= icmLuMonoFwd_curve(p, out, in);
+	return rv;
+}
 
+static int
+icmLuMonoFwd_lookup_core(
+icmLuBase *pp,		/* This */
+double *out,		/* Output value */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuMono *p = (icmLuMono *)pp;
+	rv |= icmLuMonoFwd_map(p, out, in);
+	rv |= icmLuMonoFwd_abs(p, out, out);
+	return rv;
+}
+
+static int
+icmLuMonoFwd_lookup_out(
+icmLuBase *pp,		/* This */
+double *out,		/* Output value */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	out[0] = in[0]; 
+	out[1] = in[1]; 
+	out[2] = in[2]; 
+	return rv;
+}
+
+
+/* -  -  -  -  -  -  -  -  -  -  -  -  -  - */
 /* Individual components of Bwd conversion: */
 
 /* Convert from relative PCS to absolute PCS (if required) */
@@ -12418,10 +13738,10 @@ double *in			/* Vector of input values in Effective PCS */
 ) {
 	int rv = 0;
 
-	if (out != in) {
-		int i;
-		for (i = 0; i < 3; i++)		/* Don't alter input values */
-			out[i] = in[i];
+	if (out != in) {	/* Don't alter input values */
+		out[0] = in[0];
+		out[1] = in[1];
+		out[2] = in[2];
 	}
 
 	/* Force to monochrome locus in correct space */
@@ -12451,7 +13771,7 @@ double *in			/* Vector of input values in Effective PCS */
 		}
 	}
 
-	/* Do absolute conversion to */
+	/* Do absolute conversion, and conversion to effective PCS */
 	if (p->intent == icAbsoluteColorimetric) {
 
 		if (p->e_pcs == icSigLabData)
@@ -12520,7 +13840,7 @@ double *in			/* Input value */
 	return rv;
 }
 
-/* Overall Bwd conversion routine */
+/* Overall Bwd conversion routine (PCS->Dev) */
 static int
 icmLuMonoBwd_lookup (
 icmLuBase *pp,		/* This */
@@ -12535,6 +13855,48 @@ double *in			/* Vector of input values */
 	rv |= icmLuMonoBwd_curve(p, out, out);
 	return rv;
 }
+
+/* Three stage conversion routines */
+static int
+icmLuMonoBwd_lookup_in(
+icmLuBase *pp,		/* This */
+double *out,		/* Output value */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	out[0] = in[0];
+	out[1] = in[1];
+	out[2] = in[2];
+	return rv;
+}
+
+static int
+icmLuMonoBwd_lookup_core(
+icmLuBase *pp,		/* This */
+double *out,		/* Output value */
+double *in			/* Vector of input values */
+) {
+	double temp[3];
+	int rv = 0;
+	icmLuMono *p = (icmLuMono *)pp;
+	rv |= icmLuMonoBwd_abs(p, temp, in);
+	rv |= icmLuMonoBwd_map(p, out, temp);
+	return rv;
+}
+
+static int
+icmLuMonoBwd_lookup_out(
+icmLuBase *pp,		/* This */
+double *out,		/* Output value */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuMono *p = (icmLuMono *)pp;
+	rv |= icmLuMonoBwd_curve(p, out, in);
+	return rv;
+}
+
+/* -  -  -  -  -  -  -  -  -  -  -  -  -  - */
 
 static void
 icmLuMono_delete(
@@ -12554,8 +13916,6 @@ new_icmLuMono(
     icColorSpaceSignature e_inSpace,	/* Effective Input color space */
     icColorSpaceSignature e_outSpace,	/* Effective Output color space */
     icColorSpaceSignature e_pcs,		/* Effective PCS */
-	icmXYZNumber          whitePoint,	/* Profile absolute white point */
-	icmXYZNumber          blackPoint,	/* Profile absolute black point */
 	icRenderingIntent     intent,		/* Rendering intent */
 	icmLookupFunc         func,			/* Functionality requested */
 	int dir								/* 0 = fwd, 1 = bwd */
@@ -12572,6 +13932,7 @@ new_icmLuMono(
 	p->XYZ_Abs2Rel = icmLuXYZ_Abs2Rel;
 	p->get_lutranges = icmLu_get_lutranges;
 	p->get_ranges = icmLu_get_ranges;
+	p->init_wh_bk = icmLuInit_Wh_bk;
 	p->wh_bk_points = icmLuWh_bk_points;
 	p->fwd_lookup = icmLuMonoFwd_lookup;
 	p->fwd_curve  = icmLuMonoFwd_curve;
@@ -12582,11 +13943,25 @@ new_icmLuMono(
 	p->bwd_map    = icmLuMonoFwd_map;
 	p->bwd_curve  = icmLuMonoFwd_curve;
 	if (dir) {
-		p->ttype      = icmMonoBwdType;
-		p->lookup     = icmLuMonoBwd_lookup;
+		p->ttype         = icmMonoBwdType;
+		p->lookup        = icmLuMonoBwd_lookup;
+		p->lookup_in     = icmLuMonoBwd_lookup_in;
+		p->lookup_core   = icmLuMonoBwd_lookup_core;
+		p->lookup_out    = icmLuMonoBwd_lookup_out;
+		p->lookup_inv_in = icmLuMonoFwd_lookup_out;		/* Opposite of Bwd_lookup_in */
 	} else {
-		p->ttype      = icmMonoFwdType;
-		p->lookup     = icmLuMonoFwd_lookup;
+		p->ttype         = icmMonoFwdType;
+		p->lookup        = icmLuMonoFwd_lookup;
+		p->lookup_in     = icmLuMonoFwd_lookup_in;
+		p->lookup_core   = icmLuMonoFwd_lookup_core;
+		p->lookup_out    = icmLuMonoFwd_lookup_out;
+		p->lookup_inv_in = icmLuMonoBwd_lookup_out;		/* Opposite of Fwd_lookup_in */
+	}
+
+	/* Lookup the white and black points */
+	if (p->init_wh_bk((icmLuBase *)p)) {
+		p->del((icmLuBase *)p);
+		return NULL;
 	}
 
 	/* See if the color spaces are appropriate for the mono type */
@@ -12604,8 +13979,6 @@ new_icmLuMono(
 	}
 
 	p->pcswht = icp->header->illuminant;
-	p->whitePoint = whitePoint;
-	p->blackPoint = blackPoint;
 	p->intent   = intent;
 	p->function = func;
 	p->inSpace  = inSpace;
@@ -12614,10 +13987,6 @@ new_icmLuMono(
 	p->e_inSpace  = e_inSpace;
 	p->e_outSpace = e_outSpace;
 	p->e_pcs      = e_pcs;
-
-	/* Create absolute <-> relative conversion matricies */
-	icmChromAdaptMatrix(ICM_CAM_BRADFORD, whitePoint, icmD50, p->toAbs);
-	icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, whitePoint,  p->fromAbs);
 
 	return (icmLuBase *)p;
 }
@@ -12631,13 +14000,11 @@ new_icmLuMonoFwd(
     icColorSpaceSignature e_inSpace,	/* Effective Input color space */
     icColorSpaceSignature e_outSpace,	/* Effective Output color space */
     icColorSpaceSignature e_pcs,		/* Effective PCS */
-	icmXYZNumber          whitePoint,	/* Profile absolute white point */
-	icmXYZNumber          blackPoint,	/* Profile absolute black point */
 	icRenderingIntent     intent,		/* Rendering intent */
 	icmLookupFunc         func			/* Functionality requested */
 ) {
 	return new_icmLuMono(icp, inSpace, outSpace, pcs, e_inSpace, e_outSpace, e_pcs,
-	                     whitePoint, blackPoint, intent, func, 0);
+	                     intent, func, 0);
 }
 
 
@@ -12650,13 +14017,11 @@ new_icmLuMonoBwd(
     icColorSpaceSignature e_inSpace,	/* Effective Input color space */
     icColorSpaceSignature e_outSpace,	/* Effective Output color space */
     icColorSpaceSignature e_pcs,		/* Effective PCS */
-	icmXYZNumber          whitePoint,	/* Profile absolute white point */
-	icmXYZNumber          blackPoint,	/* Profile absolute black point */
 	icRenderingIntent     intent,		/* Rendering intent */
 	icmLookupFunc         func			/* Functionality requested */
 ) {
 	return new_icmLuMono(icp, inSpace, outSpace, pcs, e_inSpace, e_outSpace, e_pcs,
-	                     whitePoint, blackPoint, intent, func, 1);
+	                     intent, func, 1);
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
@@ -12714,10 +14079,10 @@ double *in			/* Vector of input values */
 ) {
 	int rv = 0;
 
-	if (out != in) {
-		int i;
-		for (i = 0; i < 3; i++)		/* Don't alter input values */
-			out[i] = in[i];
+	if (out != in) {	/* Don't alter input values */
+		out[0] = in[0];
+		out[1] = in[1];
+		out[2] = in[2];
 	}
 
 	/* If required, convert from Relative to Absolute colorimetric */
@@ -12733,7 +14098,7 @@ double *in			/* Vector of input values */
 }
 
 
-/* Overall Fwd conversion */
+/* Overall Fwd conversion (Dev->PCS)*/
 static int
 icmLuMatrixFwd_lookup (
 icmLuBase *pp,		/* This */
@@ -12748,6 +14113,46 @@ double *in			/* Vector of input values */
 	return rv;
 }
 
+/* Three stage conversion routines */
+static int
+icmLuMatrixFwd_lookup_in (
+icmLuBase *pp,		/* This */
+double *out,		/* Vector of output values */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuMatrix *p = (icmLuMatrix *)pp;
+	rv |= icmLuMatrixFwd_curve(p, out, in);
+	return rv;
+}
+
+static int
+icmLuMatrixFwd_lookup_core (
+icmLuBase *pp,		/* This */
+double *out,		/* Vector of output values */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuMatrix *p = (icmLuMatrix *)pp;
+	rv |= icmLuMatrixFwd_matrix(p, out, in);
+	rv |= icmLuMatrixFwd_abs(p, out, out);
+	return rv;
+}
+
+static int
+icmLuMatrixFwd_lookup_out (
+icmLuBase *pp,		/* This */
+double *out,		/* Vector of output values */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	out[0] = in[0];
+	out[1] = in[1];
+	out[2] = in[2];
+	return rv;
+}
+
+/* -  -  -  -  -  -  -  -  -  -  -  -  -  - */
 /* Individual components of Bwd conversion: */
 
 static int
@@ -12758,10 +14163,10 @@ double *in			/* Vector of input values */
 ) {
 	int rv = 0;
 
-	if (out != in) {
-		int i;
-		for (i = 0; i < 3; i++)		/* Don't alter input values */
-			out[i] = in[i];
+	if (out != in) {	/* Don't alter input values */
+		out[0] = in[0];
+		out[1] = in[1];
+		out[2] = in[2];
 	}
 
 	/* If e_pcs is Lab, then convert Lab to XYZ */
@@ -12785,14 +14190,14 @@ double *in			/* Vector of input values */
 	int rv = 0;
 	double tt[3];
 
-	/* Matrix */
-	tt[0] = p->bmx[0][0] * in[0] + p->bmx[0][1] * in[1] + p->bmx[0][2] * in[2];
-	tt[1] = p->bmx[1][0] * in[0] + p->bmx[1][1] * in[1] + p->bmx[1][2] * in[2];
-	tt[2] = p->bmx[2][0] * in[0] + p->bmx[2][1] * in[1] + p->bmx[2][2] * in[2];
+	tt[0] = in[0];
+	tt[1] = in[1];
+	tt[2] = in[2];
 
-	out[0] = tt[0];
-	out[1] = tt[1];
-	out[2] = tt[2];
+	/* Matrix */
+	out[0] = p->bmx[0][0] * tt[0] + p->bmx[0][1] * tt[1] + p->bmx[0][2] * tt[2];
+	out[1] = p->bmx[1][0] * tt[0] + p->bmx[1][1] * tt[1] + p->bmx[1][2] * tt[2];
+	out[2] = p->bmx[2][0] * tt[0] + p->bmx[2][1] * tt[1] + p->bmx[2][2] * tt[2];
 
 	return rv;
 }
@@ -12807,9 +14212,9 @@ double *in			/* Vector of input values */
 	int rv = 0;
 
 	/* Curves */
-	if ((rv |= p->redCurve->lookup_bwd(p->redCurve,&out[0],&out[0])) > 1
-	 ||	(rv |= p->greenCurve->lookup_bwd(p->greenCurve,&out[1],&out[1])) > 1
-	 || (rv |= p->blueCurve->lookup_bwd(p->blueCurve,&out[2],&out[2])) > 1) {
+	if ((rv |= p->redCurve->lookup_bwd(p->redCurve,&out[0],&in[0])) > 1
+	 ||	(rv |= p->greenCurve->lookup_bwd(p->greenCurve,&out[1],&in[1])) > 1
+	 || (rv |= p->blueCurve->lookup_bwd(p->blueCurve,&out[2],&in[2])) > 1) {
 		sprintf(icp->err,"icc_lookup: Curve->lookup_bwd() failed");
 		icp->errc = rv;
 		return 2;
@@ -12817,7 +14222,7 @@ double *in			/* Vector of input values */
 	return rv;
 }
 
-/* Overall Bwd conversion */
+/* Overall Bwd conversion (PCS->Dev) */
 static int
 icmLuMatrixBwd_lookup (
 icmLuBase *pp,		/* This */
@@ -12831,6 +14236,47 @@ double *in			/* Vector of input values */
 	rv |= icmLuMatrixBwd_curve(p, out, out);
 	return rv;
 }
+
+/* Three stage conversion routines */
+static int
+icmLuMatrixBwd_lookup_in (
+icmLuBase *pp,		/* This */
+double *out,		/* Vector of output values */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	out[0] = in[0];
+	out[1] = in[1];
+	out[2] = in[2];
+	return rv;
+}
+
+static int
+icmLuMatrixBwd_lookup_core (
+icmLuBase *pp,		/* This */
+double *out,		/* Vector of output values */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuMatrix *p = (icmLuMatrix *)pp;
+	rv |= icmLuMatrixBwd_abs(p, out, in);
+	rv |= icmLuMatrixBwd_matrix(p, out, out);
+	return rv;
+}
+
+static int
+icmLuMatrixBwd_lookup_out (
+icmLuBase *pp,		/* This */
+double *out,		/* Vector of output values */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuMatrix *p = (icmLuMatrix *)pp;
+	rv |= icmLuMatrixBwd_curve(p, out, in);
+	return rv;
+}
+
+/* -  -  -  -  -  -  -  -  -  -  -  -  -  - */
 
 static void
 icmLuMatrix_delete(
@@ -12852,8 +14298,6 @@ new_icmLuMatrix(
     icColorSpaceSignature e_inSpace,	/* Effective Input color space */
     icColorSpaceSignature e_outSpace,	/* Effective Output color space */
     icColorSpaceSignature e_pcs,		/* Effective PCS */
-	icmXYZNumber          whitePoint,	/* Profile absolute white point */
-	icmXYZNumber          blackPoint,	/* Profile absolute black point */
 	icRenderingIntent     intent,		/* Rendering intent */
 	icmLookupFunc         func,			/* Functionality requested */
 	int dir								/* 0 = fwd, 1 = bwd */
@@ -12870,6 +14314,7 @@ new_icmLuMatrix(
 	p->XYZ_Abs2Rel = icmLuXYZ_Abs2Rel;
 	p->get_lutranges = icmLu_get_lutranges;
 	p->get_ranges = icmLu_get_ranges;
+	p->init_wh_bk = icmLuInit_Wh_bk;
 	p->wh_bk_points = icmLuWh_bk_points;
 	p->fwd_lookup = icmLuMatrixFwd_lookup;
 	p->fwd_curve  = icmLuMatrixFwd_curve;
@@ -12880,11 +14325,25 @@ new_icmLuMatrix(
 	p->bwd_matrix = icmLuMatrixBwd_matrix;
 	p->bwd_curve  = icmLuMatrixBwd_curve;
 	if (dir) {
-		p->ttype      = icmMatrixBwdType;
-		p->lookup     = icmLuMatrixBwd_lookup;
+		p->ttype         = icmMatrixBwdType;
+		p->lookup        = icmLuMatrixBwd_lookup;
+		p->lookup_in     = icmLuMatrixBwd_lookup_in;
+		p->lookup_core   = icmLuMatrixBwd_lookup_core;
+		p->lookup_out    = icmLuMatrixBwd_lookup_out;
+		p->lookup_inv_in = icmLuMatrixFwd_lookup_out;		/* Opposite of Bwd_lookup_in */
 	} else {
-		p->ttype      = icmMatrixFwdType;
-		p->lookup     = icmLuMatrixFwd_lookup;
+		p->ttype         = icmMatrixFwdType;
+		p->lookup        = icmLuMatrixFwd_lookup;
+		p->lookup_in     = icmLuMatrixFwd_lookup_in;
+		p->lookup_core   = icmLuMatrixFwd_lookup_core;
+		p->lookup_out    = icmLuMatrixFwd_lookup_out;
+		p->lookup_inv_in = icmLuMatrixBwd_lookup_out;		/* Opposite of Fwd_lookup_in */
+	}
+
+	/* Lookup the white and black points */
+	if (p->init_wh_bk((icmLuBase *)p)) {
+		p->del((icmLuBase *)p);
+		return NULL;
 	}
 
 	/* Note that we can use matrix type even if PCS is Lab, */
@@ -12944,8 +14403,6 @@ new_icmLuMatrix(
 	}
 
 	p->pcswht = icp->header->illuminant;
-	p->whitePoint = whitePoint;
-	p->blackPoint = blackPoint;
 	p->intent   = intent;
 	p->function = func;
 	p->inSpace  = inSpace;
@@ -12955,9 +14412,11 @@ new_icmLuMatrix(
 	p->e_outSpace = e_outSpace;
 	p->e_pcs      = e_pcs;
 
-	/* Create absolute <-> relative conversion matricies */
-	icmChromAdaptMatrix(ICM_CAM_BRADFORD, whitePoint, icmD50, p->toAbs);
-	icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, whitePoint,  p->fromAbs);
+	/* Lookup the white and black points */
+	if (p->init_wh_bk((icmLuBase *)p)) {
+		p->del((icmLuBase *)p);
+		return NULL;
+	}
 
 	return (icmLuBase *)p;
 }
@@ -12971,13 +14430,11 @@ new_icmLuMatrixFwd(
     icColorSpaceSignature e_inSpace,	/* Effective Input color space */
     icColorSpaceSignature e_outSpace,	/* Effective Output color space */
     icColorSpaceSignature e_pcs,		/* Effective PCS */
-	icmXYZNumber          whitePoint,	/* Profile absolute white point */
-	icmXYZNumber          blackPoint,	/* Profile absolute black point */
 	icRenderingIntent     intent,		/* Rendering intent */
 	icmLookupFunc         func			/* Functionality requested */
 ) {
 	return new_icmLuMatrix(icp, inSpace, outSpace, pcs, e_inSpace, e_outSpace, e_pcs,
-	                       whitePoint, blackPoint, intent, func, 0);
+	                       intent, func, 0);
 }
 
 
@@ -12990,13 +14447,11 @@ new_icmLuMatrixBwd(
     icColorSpaceSignature e_inSpace,	/* Effective Input color space */
     icColorSpaceSignature e_outSpace,	/* Effective Output color space */
     icColorSpaceSignature e_pcs,		/* Effective PCS */
-	icmXYZNumber          whitePoint,	/* Profile absolute white point */
-	icmXYZNumber          blackPoint,	/* Profile absolute black point */
 	icRenderingIntent     intent,		/* Rendering intent */
 	icmLookupFunc         func			/* Functionality requested */
 ) {
 	return new_icmLuMatrix(icp, inSpace, outSpace, pcs, e_inSpace, e_outSpace, e_pcs,
-	                       whitePoint, blackPoint, intent, func, 1);
+	                       intent, func, 1);
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
@@ -13009,7 +14464,7 @@ static int icmLuLut_in_abs(icmLuLut *p, double *out, double *in) {
 	int rv = 0;
 
 	if (out != in) {
-		int i;
+		unsigned int i;
 		for (i = 0; i < lut->inputChan; i++)		/* Don't alter input values */
 			out[i] = in[i];
 	}
@@ -13047,7 +14502,7 @@ static int icmLuLut_matrix(icmLuLut *p, double *out, double *in) {
 	if (p->usematrix)		
 		rv |= lut->lookup_matrix(lut,out,in);
 	else if (out != in) {
-		int i;
+		unsigned int i;
 		for (i = 0; i < lut->inputChan; i++)
 			out[i] = in[i];
 	}
@@ -13093,7 +14548,7 @@ static int icmLuLut_out_abs(icmLuLut *p, double *out, double *in) {
 	int rv = 0;
 
 	if (out != in) {
-		int i;
+		unsigned int i;
 		for (i = 0; i < lut->inputChan; i++)		/* Don't alter input values */
 			out[i] = in[i];
 	}
@@ -13135,15 +14590,25 @@ double *in			/* Vector of input values */
 	icmLut *lut = p->lut;
 	double temp[MAX_CHAN];
 
+//printf("~1 icmLuLut_lookup: in = %f %f %f\n", in[0], in[1], in[2]);
 	rv |= p->in_abs(p,temp,in);						/* Possible absolute conversion */
-	if (p->usematrix)		
+//printf("~1 icmLuLut_lookup: in_abs = %f %f %f\n", temp[0], temp[1], temp[2]);
+	if (p->usematrix) {
 		rv |= lut->lookup_matrix(lut,temp,temp);/* If XYZ, multiply by non-unity matrix */
+//printf("~1 icmLuLut_lookup: matrix = %f %f %f\n", temp[0], temp[1], temp[2]);
+	}
 	p->in_normf(temp, temp);					/* Normalize for input color space */
+//printf("~1 icmLuLut_lookup: norm = %f %f %f\n", temp[0], temp[1], temp[2]);
 	rv |= lut->lookup_input(lut,temp,temp);		/* Lookup though input tables */
+//printf("~1 icmLuLut_lookup: input = %f %f %f\n", temp[0], temp[1], temp[2]);
 	rv |= p->lookup_clut(lut,out,temp);			/* Lookup though clut tables */
+//printf("~1 icmLuLut_lookup: clut = %f %f %f\n", out[0], out[1], out[2]);
 	rv |= lut->lookup_output(lut,out,out);		/* Lookup though output tables */
+//printf("~1 icmLuLut_lookup: output = %f %f %f\n", out[0], out[1], out[2]);
 	p->out_denormf(out,out);					/* Normalize for output color space */
+//printf("~1 icmLuLut_lookup: denorm = %f %f %f\n", out[0], out[1], out[2]);
 	rv |= p->out_abs(p,out,out);				/* Possible absolute conversion */
+//printf("~1 icmLuLut_lookup: out_abse = %f %f %f\n", out[0], out[1], out[2]);
 
 	return rv;
 }
@@ -13171,7 +14636,117 @@ double *in			/* Vector of input values */
 
 	return rv;
 }
+
 #endif	/* NEVER */
+
+/* Three stage conversion */
+static int
+icmLuLut_lookup_in (
+icmLuBase *pp,		/* This */
+double *out,		/* Vector of output values */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuLut *p = (icmLuLut *)pp;
+	icmLut *lut = p->lut;
+
+	/* If in_abs() or matrix() are active, then we can't have a per component input curve */
+	if (((p->function == icmBwd || p->function == icmGamut || p->function == icmPreview)
+		&& p->intent == icAbsoluteColorimetric)
+	 || (p->e_inSpace != p->inSpace)
+	 || (p->usematrix)) {
+		unsigned int i;
+		for (i = 0; i < lut->inputChan; i++)
+			out[i] = in[i];
+	} else {
+		rv |= p->input(p,out,in);
+	}
+	return rv;
+}
+
+static int
+icmLuLut_lookup_core (
+icmLuBase *pp,		/* This */
+double *out,		/* Vector of output values */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuLut *p = (icmLuLut *)pp;
+
+	/* If in_abs() or matrix() are active, then we have to do the per component input curve here */
+	if (((p->function == icmBwd || p->function == icmGamut || p->function == icmPreview)
+		&& p->intent == icAbsoluteColorimetric)
+	 || (p->e_inSpace != p->inSpace)
+	 || (p->usematrix)) {
+		double temp[MAX_CHAN];
+		rv |= p->in_abs(p,temp,in);
+		rv |= p->matrix(p,temp,temp);
+		rv |= p->input(p,temp,temp);
+		rv |= p->clut(p,out,temp);
+	} else {
+		rv |= p->clut(p,out,in);
+	}
+
+	/* If out_abs() is active, then we can't have do per component out curve here */
+	if (((p->function == icmFwd || p->function == icmPreview)
+		&& p->intent == icAbsoluteColorimetric)
+	 || (p->outSpace != p->e_outSpace)) {
+		rv |= p->output(p,out,out);
+		rv |= p->out_abs(p,out,out);
+	}
+
+	return rv;
+}
+
+static int
+icmLuLut_lookup_out (
+icmLuBase *pp,		/* This */
+double *out,		/* Vector of output values */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuLut *p = (icmLuLut *)pp;
+	icmLut *lut = p->lut;
+
+	/* If out_abs() is active, then we can't have a per component out curve */
+	if (((p->function == icmFwd || p->function == icmPreview)
+		&& p->intent == icAbsoluteColorimetric)
+	 || (p->outSpace != p->e_outSpace)) {
+		unsigned int i;
+		for (i = 0; i < lut->outputChan; i++)
+			out[i] = in[i];
+	} else {
+		rv |= p->output(p,out,in);
+	}
+
+	return rv;
+}
+
+/* Inverse three stage conversion (partly implemented) */
+static int
+icmLuLut_lookup_inv_in (
+icmLuBase *pp,		/* This */
+double *out,		/* Vector of output values */
+double *in			/* Vector of input values */
+) {
+	int rv = 0;
+	icmLuLut *p = (icmLuLut *)pp;
+	icmLut *lut = p->lut;
+
+	/* If in_abs() or matrix() are active, then we can't have a per component input curve */
+	if (((p->function == icmBwd || p->function == icmGamut || p->function == icmPreview)
+		&& p->intent == icAbsoluteColorimetric)
+	 || (p->e_inSpace != p->inSpace)
+	 || (p->usematrix)) {
+		unsigned int i;
+		for (i = 0; i < lut->inputChan; i++)
+			out[i] = in[i];
+	} else {
+		rv |= p->inv_input(p,out,in);
+	}
+	return rv;
+}
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Some components of inverse lookup, in order */
 /* ~~ should these be in icmLut (like all the fwd transforms)? */
@@ -13181,7 +14756,7 @@ static int icmLuLut_inv_out_abs(icmLuLut *p, double *out, double *in) {
 	int rv = 0;
 
 	if (out != in) {
-		int i;
+		unsigned int i;
 		for (i = 0; i < lut->inputChan; i++)		/* Don't alter input values */
 			out[i] = in[i];
 	}
@@ -13216,18 +14791,25 @@ static int icmLuLut_inv_out_abs(icmLuLut *p, double *out, double *in) {
 static int icmLuLut_inv_output(icmLuLut *p, double *out, double *in) {
 	icc *icp = p->icp;
 	icmLut *lut = p->lut;
+	int i;
 	int rv = 0;
 
-	if (lut->rot.inited == 0) {	
-		rv = icmTable_setup_bwd(icp, &lut->rot, lut->outputEnt, lut->outputTable);
-		if (rv != 0) {
-			sprintf(icp->err,"icc_Lut_inv_input: Malloc failure in inverse lookup init.");
-			return icp->errc = rv;
+	if (lut->rot[0].inited == 0) {	
+		for (i = 0; i < lut->outputChan; i++) {
+			rv = icmTable_setup_bwd(icp, &lut->rot[i], lut->outputEnt,
+			                             lut->outputTable + i * lut->outputEnt);
+			if (rv != 0) {
+				sprintf(icp->err,"icc_Lut_inv_input: Malloc failure in inverse lookup init.");
+				return icp->errc = rv;
+			}
 		}
 	}
 
 	p->out_normf(out,in);						/* Normalize from output color space */
-	rv |= icmTable_lookup_bwd(&lut->rot, out, out); /* Reverse lookup though output tables */
+	for (i = 0; i < lut->outputChan; i++) {
+		/* Reverse lookup though output tables */
+		rv |= icmTable_lookup_bwd(&lut->rot[i], &out[i], &out[i]);
+	}
 	p->out_denormf(out, out);					/* De-normalize to output color space */
 	return rv;
 }
@@ -13239,18 +14821,25 @@ static int icmLuLut_inv_output(icmLuLut *p, double *out, double *in) {
 static int icmLuLut_inv_input(icmLuLut *p, double *out, double *in) {
 	icc *icp = p->icp;
 	icmLut *lut = p->lut;
+	int i;
 	int rv = 0;
 
-	if (lut->rit.inited == 0) {	
-		rv = icmTable_setup_bwd(icp, &lut->rit, lut->inputEnt, lut->inputTable);
-		if (rv != 0) {
-			sprintf(icp->err,"icc_Lut_inv_input: Malloc failure in inverse lookup init.");
-			return icp->errc = rv;
+	if (lut->rit[0].inited == 0) {	
+		for (i = 0; i < lut->inputChan; i++) {
+			rv = icmTable_setup_bwd(icp, &lut->rit[i], lut->inputEnt,
+			                             lut->inputTable + i * lut->inputEnt);
+			if (rv != 0) {
+				sprintf(icp->err,"icc_Lut_inv_input: Malloc failure in inverse lookup init.");
+				return icp->errc = rv;
+			}
 		}
 	}
 
 	p->in_normf(out, in); 						/* Normalize from input color space */
-	rv |= icmTable_lookup_bwd(&lut->rit, out, out); /* Reverse lookup though input tables */
+	for (i = 0; i < lut->inputChan; i++) {
+		/* Reverse lookup though input tables */
+		rv |= icmTable_lookup_bwd(&lut->rit[i], &out[i], &out[i]);
+	}
 	p->in_denormf(out,out);						/* De-normalize to input color space */
 	return rv;
 }
@@ -13277,7 +14866,7 @@ static int icmLuLut_inv_matrix(icmLuLut *p, double *out, double *in) {
 		tt[2] = p->imx[2][0] * in[0] + p->imx[2][1] * in[1] + p->imx[2][2] * in[2];
 		out[0] = tt[0], out[1] = tt[1], out[2] = tt[2];
 	} else if (out != in) {
-		int i;
+		unsigned int i;
 		for (i = 0; i < lut->inputChan; i++)
 			out[i] = in[i];
 	}
@@ -13289,7 +14878,7 @@ static int icmLuLut_inv_in_abs(icmLuLut *p, double *out, double *in) {
 	int rv = 0;
 
 	if (out != in) {
-		int i;
+		unsigned int i;
 		for (i = 0; i < lut->inputChan; i++)		/* Don't alter input values */
 			out[i] = in[i];
 	}
@@ -13349,7 +14938,7 @@ icmLuLut_get_lutranges (
 	double *outmin, double *outmax		/* Return maximum range of outspace values */
 ) {
 	icmLuLut *p = (icmLuLut *)pp;
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < p->lut->inputChan; i++) {
 		inmin[i] = 0.0;	/* Normalized range of input space values */
@@ -13396,7 +14985,6 @@ icmLuLut_get_ranges (
 	double *outmin, double *outmax		/* Return maximum range of outspace values */
 ) {
 	icmLuLut *p = (icmLuLut *)pp;
-	int i;
 
 	/* Get the native ranges first */
 	icmLuLut_get_lutranges(pp, inmin, inmax, outmin, outmax);
@@ -13455,8 +15043,6 @@ new_icmLuLut(
     icColorSpaceSignature e_inSpace,	/* Effective Input color space */
     icColorSpaceSignature e_outSpace,	/* Effective Output color space */
     icColorSpaceSignature e_pcs,		/* Effective PCS */
-	icmXYZNumber          whitePoint,	/* Profile absolute white point */
-	icmXYZNumber          blackPoint,	/* Profile absolute black point */
 	icRenderingIntent     intent,		/* Rendering intent */
 	icmLookupFunc         func			/* Functionality requested */
 ) {
@@ -13471,12 +15057,14 @@ new_icmLuLut(
 	p->spaces   = icmLuSpaces;
 	p->XYZ_Rel2Abs = icmLuXYZ_Rel2Abs;
 	p->XYZ_Abs2Rel = icmLuXYZ_Abs2Rel;
+	p->init_wh_bk  = icmLuInit_Wh_bk;
 	p->wh_bk_points = icmLuWh_bk_points;
 
-	p->lookup      = icmLuLut_lookup;
-//	p->lookup_in   = icmLuLut_lookup_in;
-//	p->lookup_core = icmLuLut_lookup_core;
-//	p->lookup_out  = icmLuLut_lookup_out;
+	p->lookup        = icmLuLut_lookup;
+	p->lookup_in     = icmLuLut_lookup_in;
+	p->lookup_core   = icmLuLut_lookup_core;
+	p->lookup_out    = icmLuLut_lookup_out;
+	p->lookup_inv_in = icmLuLut_lookup_inv_in;
 
 	p->in_abs   = icmLuLut_in_abs;
 	p->matrix   = icmLuLut_matrix;
@@ -13492,8 +15080,6 @@ new_icmLuLut(
 	p->inv_out_abs  = icmLuLut_inv_out_abs;
 
 	p->pcswht   = icp->header->illuminant;
-	p->whitePoint = whitePoint;
-	p->blackPoint = blackPoint;
 	p->intent   = intent;
 	p->function = func;
 	p->inSpace  = inSpace;
@@ -13507,9 +15093,11 @@ new_icmLuLut(
 	p->get_ranges = icmLuLut_get_ranges;
 	p->get_matrix = icmLuLut_get_matrix;
 
-	/* Create absolute <-> relative conversion matricies */
-	icmChromAdaptMatrix(ICM_CAM_BRADFORD, whitePoint, icmD50, p->toAbs);
-	icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, whitePoint,  p->fromAbs);
+	/* Lookup the white and black points */
+	if (p->init_wh_bk((icmLuBase *)p)) {
+		p->del((icmLuBase *)p);
+		return NULL;
+	}
 
 	/* Get the Lut tag, & check that it is expected type */
 	if ((p->lut = (icmLut *)icp->read_tag(icp, ttag)) == NULL
@@ -13575,6 +15163,9 @@ new_icmLuLut(
 		return NULL;
 	}
 
+// ~~~999
+#ifndef NEVER
+	/* Standard code */
 	/* Determine appropriate clut lookup algorithm */
 	{
 		int use_sx;				/* -1 = undecided, 0 = N-linear, 1 = Simplex lookup */
@@ -13590,6 +15181,7 @@ new_icmLuLut(
 
 			/* Luminence is carried by the sum of all the output channels, */
 			/* so output luminence will dominantly be in diagonal direction. */
+			case icSigXYZData:		/* This seems to be appropriate ? */
 			case icSigRgbData:
 			case icSigGrayData:
 			case icSigCmykData:
@@ -13603,7 +15195,6 @@ new_icmLuLut(
 			case icSigLuvData:
 			case icSigYCbCrData:
 			case icSigYxyData:
-			case icSigXYZData:
 			case icSigHlsData:
 			case icSigHsvData:
 				use_sx = 0;		/* N-linear interpolation is appropriate */
@@ -13694,9 +15285,68 @@ new_icmLuLut(
 
 		if (use_sx) {
 			p->lookup_clut = p->lut->lookup_clut_sx;
-		} else
+		} else {
 			p->lookup_clut = p->lut->lookup_clut_nl;
+		}
 	}
+#else	/* Development code */
+	/* Determine appropriate clut lookup algorithm, */
+	/* and set optimised simplex tables */
+	{
+		int lualg = 0;			/* 0 = simplex, 1 = multi-linear, 2 = optimised simlpex */
+		icColorSpaceSignature ins, outs;	/* In and out Lut color spaces */
+		int inn, outn;		/* in and out number of Lut components */
+
+		p->lutspaces((icmLuBase *)p, &ins, &inn, &outs, &outn, NULL);
+
+		/* Determine which type of Lut lookup algorithm is likely to give */
+		/* minimal interpolation errors. */
+		/* To use the optimised simplex, we should ideally determine */
+		/* the simplex cell orientation that makes the simplex split diagonal */
+		/* always point towards the white or black points. */
+		switch(ins) {
+
+			case icSigXYZData:		/* This seems to be appropriate ? */
+			case icSigRgbData:
+			case icSigGrayData:
+			case icSigCmykData:
+			case icSigCmyData:
+			case icSigMch6Data:
+				lualg = 0;		/* Simplex interpolation is appropriate */
+				break;
+
+			case icSigLabData:
+// ~~~~9999 this isn't right! need to lookup Lab 50,0,0 through input curves then */
+/* quantize to clut nodes to figure threshold for axis flips */
+				p->lut->finfo[0].fth = 0.5; p->lut->finfo[0].bthff = 0; p->lut->finfo[0].athff = 1;
+				p->lut->finfo[1].fth = 0.5; p->lut->finfo[1].bthff = 1; p->lut->finfo[1].athff = 0;
+				p->lut->finfo[2].fth = 0.5; p->lut->finfo[2].bthff = 1; p->lut->finfo[2].athff = 0;
+				lualg = 2;	
+				break;
+
+			/* !!! Should switch to optimised simplex for these too !!! */
+			case icSigLuvData:
+			case icSigYCbCrData:
+			case icSigYxyData:
+			case icSigHlsData:
+			case icSigHsvData:
+				lualg = 1;		/* Multi-linear is best as a default for these ? */
+				break;
+
+			default:
+				lualg = 0;		/* Simplex is best if we known nothing. */
+		    	break;
+		}
+
+		if (lualg == 2) {
+			p->lookup_clut = icmLut_lookup_clut_osx;
+		} else if (lualg == 1) {
+			p->lookup_clut = p->lut->lookup_clut_nl;
+		} else {
+			p->lookup_clut = p->lut->lookup_clut_sx;
+		}
+	}
+#endif
 	return (icmLuBase *)p;
 }
 
@@ -13711,12 +15361,11 @@ static icmLuBase* icc_get_luobj (
 	icColorSpaceSignature pcsor,/* PCS override (0 = def) */
 	icmLookupOrder order		/* Conversion representation search Order */
 ) {
-	int rv;
 	icmLuBase *luobj = NULL;	/* Lookup object to return */
-	icmXYZNumber whitePoint, blackPoint;
 	icColorSpaceSignature pcs, e_pcs;	/* PCS and effective PCS */
 	
 #ifdef ICM_STRICT
+	int rv;
 	/* Check that the profile is legal, since we depend on it ? */
 	if ((rv = check_icc_legal(p)) != 0)
 		return NULL;
@@ -13727,86 +15376,83 @@ static icmLuBase* icc_get_luobj (
 	if (pcsor != icmSigDefaultData)
 		e_pcs = pcsor;			/* Override */
 
-	/* Get White and Black points from the profile */
-	{
-		icmXYZArray *whitePointTag, *blackPointTag;
-
-		if ((whitePointTag = (icmXYZArray *)p->read_tag(p, icSigMediaWhitePointTag)) == NULL
-         || whitePointTag->ttype != icSigXYZType || whitePointTag->size < 1) {
-			if (intent == icAbsoluteColorimetric) {
-				sprintf(p->err,"icc_lookup: Profile is missing Media White Point Tag");
-				p->errc = 1;
-				return NULL;
-			}
-			whitePoint = icmD50;						/* safe value */
-		} else
-			whitePoint = whitePointTag->data[0];	/* Copy structure */
-
-		if ((blackPointTag = (icmXYZArray *)p->read_tag(p, icSigMediaBlackPointTag)) == NULL
-         || blackPointTag->ttype != icSigXYZType || blackPointTag->size < 1) {
-			blackPoint = icmBlack;						/* default */
-		} else 
-			blackPoint = blackPointTag->data[0];	/* Copy structure */
-	}
-
 	/* How we expect to execute the request depends firstly on the type of profile */
 	switch (p->header->deviceClass) {
     	case icSigInputClass:
     	case icSigDisplayClass:
-			/* Look for AToB0 based profile + optional BToA0 reverse */
+    	case icSigColorSpaceClass:
+
+			/* Look for Intent based AToBX profile + optional BToAX reverse */
+			/* or for AToB0 based profile + optional BToA0 reverse */
 			/* or three component matrix profile (reversable) */
 			/* or momochrome table profile (reversable) */ 
-			/* No intent for ICC < V2.3, */
-			/* but possible for >= V2.4. What should we do ? */
+			/* No Lut intent for ICC < V2.4, but possible for >= V2.4, */
+			/* so fall back if we can't find the chosen Lut intent.. */
 			/* Device <-> PCS */
 			/* Determine the algorithm and set its parameters */
 
-#ifdef ICM_STRICT	/* Allow only default and absolute */
-			if (intent != icmDefaultIntent
-			 && intent != icAbsoluteColorimetric) {
-				sprintf(p->err,"icc_get_luobj: Intent is inappropriate for Input/Display profile");
-				p->errc = 1;
-				return NULL;
-			}
-#else				/* Be more forgiving */
-			switch (intent) {
-    			case icAbsoluteColorimetric:
-					break;
-				case icmDefaultIntent:
-    			case icRelativeColorimetric:
-    			case icPerceptual:
-    			case icSaturation:
-					intent = icmDefaultIntent;	/* Make all other look like default */
-					break;
-				default:
-					sprintf(p->err,"icc_get_luobj: Unknown intent (0x%x)",intent);
-					p->errc = 1;
-					return NULL;
-			}
-
-#endif
 			switch (func) {
+				icRenderingIntent fbintent;		/* Fallback intent */
+				icTagSignature ttag, fbtag;
+
 		    	case icmFwd:	/* Device to PCS */
+					if (intent == icmDefaultIntent)
+						intent = icPerceptual;	/* Make this the default */
+
+					switch (intent) {
+		    			case icAbsoluteColorimetric:
+							ttag = icSigAToB1Tag;
+							fbtag = icSigAToB0Tag;
+							fbintent = intent;
+							break;
+		    			case icRelativeColorimetric:
+							ttag = icSigAToB1Tag;
+							fbtag = icSigAToB0Tag;
+							fbintent = icmDefaultIntent;
+							break;
+		    			case icPerceptual:
+							ttag = icSigAToB0Tag;
+							fbtag = icSigAToB0Tag;
+							fbintent = icmDefaultIntent;
+							break;
+		    			case icSaturation:
+							ttag = icSigAToB2Tag;
+							fbtag = icSigAToB0Tag;
+							fbintent = icmDefaultIntent;
+							break;
+						default:
+							sprintf(p->err,"icc_get_luobj: Unknown intent");
+							p->errc = 1;
+							return NULL;
+					}
+
 					if (order != icmLuOrdRev) {
-						/* Try Lut type lookup first */
-						if ((luobj = new_icmLuLut(p, icSigAToB0Tag,
+						/* Try Lut type lookup with the chosen intent first */
+						if ((luobj = new_icmLuLut(p, ttag,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
+							break;
+	
+						/* Try the fallback tag */
+						if ((luobj = new_icmLuLut(p, fbtag,
+						     p->header->colorSpace, pcs, pcs,
+						     p->header->colorSpace, e_pcs, e_pcs,
+						     fbintent, func)) != NULL)
 							break;
 	
 						/* See if it could be a matrix lookup */
 						if ((luobj = new_icmLuMatrixFwd(p,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 						/* See if it could be a monochrome lookup */
 						if ((luobj = new_icmLuMonoFwd(p,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 					} else {
@@ -13814,67 +15460,119 @@ static icmLuBase* icc_get_luobj (
 						if ((luobj = new_icmLuMonoFwd(p,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 
 						/* See if it could be a matrix lookup */
 						if ((luobj = new_icmLuMatrixFwd(p,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 						/* Try Lut type lookup last */
-						if ((luobj = new_icmLuLut(p, icSigAToB0Tag,
+						if ((luobj = new_icmLuLut(p, ttag,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
+							break;
+	
+						/* Try the fallback tag */
+						if ((luobj = new_icmLuLut(p, fbtag,
+						     p->header->colorSpace, pcs, pcs,
+						     p->header->colorSpace, e_pcs, e_pcs,
+						     fbintent, func)) != NULL)
 							break;
 					}
 					break;
 
 		    	case icmBwd:	/* PCS to Device */
+					if (intent == icmDefaultIntent)
+						intent = icPerceptual;	/* Make this the default */
+
+					switch (intent) {
+		    			case icAbsoluteColorimetric:
+							ttag = icSigBToA1Tag;
+							fbtag = icSigBToA0Tag;
+							fbintent = intent;
+							break;
+		    			case icRelativeColorimetric:
+							ttag = icSigBToA1Tag;
+							fbtag = icSigBToA0Tag;
+							fbintent = icmDefaultIntent;
+							break;
+		    			case icPerceptual:
+							ttag = icSigBToA0Tag;
+							fbtag = icSigBToA0Tag;
+							fbintent = icmDefaultIntent;
+							break;
+		    			case icSaturation:
+							ttag = icSigBToA2Tag;
+							fbtag = icSigBToA0Tag;
+							fbintent = icmDefaultIntent;
+							break;
+						default:
+							sprintf(p->err,"icc_get_luobj: Unknown intent");
+							p->errc = 1;
+							return NULL;
+					}
+
+
 					if (order != icmLuOrdRev) {
 						/* Try Lut type lookup first */
-						if ((luobj = new_icmLuLut(p, icSigBToA0Tag,
+						if ((luobj = new_icmLuLut(p, ttag,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
+							break;
+
+						/* Try the fallback Lut */
+						if ((luobj = new_icmLuLut(p, fbtag,
+						     pcs, p->header->colorSpace, pcs,
+						     e_pcs, p->header->colorSpace, e_pcs,
+						     fbintent, func)) != NULL)
 							break;
 	
 						/* See if it could be a matrix lookup */
 						if ((luobj = new_icmLuMatrixBwd(p,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 						/* See if it could be a monochrome lookup */
 						if ((luobj = new_icmLuMonoBwd(p,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 					} else {
 						/* See if it could be a monochrome lookup */
 						if ((luobj = new_icmLuMonoBwd(p,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 						/* See if it could be a matrix lookup */
 						if ((luobj = new_icmLuMatrixBwd(p,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 						/* Try Lut type lookup last */
-						if ((luobj = new_icmLuLut(p, icSigBToA0Tag,
+						if ((luobj = new_icmLuLut(p, ttag,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
+							break;
+
+						/* Try the fallback Lut */
+						if ((luobj = new_icmLuLut(p, fbtag,
+						     pcs, p->header->colorSpace, pcs,
+						     e_pcs, p->header->colorSpace, e_pcs,
+						     fbintent, func)) != NULL)
 							break;
 					}
 					break;
@@ -13924,7 +15622,7 @@ static icmLuBase* icc_get_luobj (
 						if ((luobj = new_icmLuLut(p, ttag,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL) {
+						     intent, func)) != NULL) {
 							break;
 						}
 	
@@ -13932,35 +15630,35 @@ static icmLuBase* icc_get_luobj (
 						if ((luobj = new_icmLuMatrixFwd(p,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 						/* See if it could be a monochrome lookup */
 						if ((luobj = new_icmLuMonoFwd(p,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 					} else {
 						/* See if it could be a monochrome lookup */
 						if ((luobj = new_icmLuMonoFwd(p,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 
 						/* See if it could be a matrix lookup */
 						if ((luobj = new_icmLuMatrixFwd(p,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 						/* Try Lut type lookup last */
 						if ((luobj = new_icmLuLut(p, ttag,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 					}
 					break;
@@ -13992,42 +15690,42 @@ static icmLuBase* icc_get_luobj (
 						if ((luobj = new_icmLuLut(p, ttag,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 						/* See if it could be a matrix lookup */
 						if ((luobj = new_icmLuMatrixBwd(p,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 						/* See if it could be a monochrome lookup */
 						if ((luobj = new_icmLuMonoBwd(p,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 					} else {
 						/* See if it could be a monochrome lookup */
 						if ((luobj = new_icmLuMonoBwd(p,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 
 						/* See if it could be a matrix lookup */
 						if ((luobj = new_icmLuMatrixBwd(p,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 	
 						/* Try Lut type lookup last */
 						if ((luobj = new_icmLuLut(p, ttag,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
-						     whitePoint, blackPoint, intent, func)) != NULL)
+						     intent, func)) != NULL)
 							break;
 					}
 					break;
@@ -14062,7 +15760,7 @@ static icmLuBase* icc_get_luobj (
 					luobj = new_icmLuLut(p, icSigGamutTag,
 					     pcs, icSigGrayData, pcs,
 					     e_pcs, icSigGrayData, e_pcs,
-					     whitePoint, blackPoint, intent, func);
+					     intent, func);
 					break;
 
 		    	case icmPreview:	/* PCS to PCS */
@@ -14091,7 +15789,7 @@ static icmLuBase* icc_get_luobj (
 					luobj = new_icmLuLut(p, ttag,
 					     pcs, pcs, pcs,
 					     e_pcs, e_pcs, e_pcs,
-					     whitePoint, blackPoint, intent, func);
+					     intent, func);
 					break;
 
 				default:
@@ -14120,7 +15818,7 @@ static icmLuBase* icc_get_luobj (
 					luobj = new_icmLuLut(p, icSigAToB0Tag,
 					     p->header->colorSpace, pcs, pcs,
 					     p->header->colorSpace, pcs, pcs,
-					     whitePoint, blackPoint, intent, func);
+					     intent, func);
 					break;
 
 		    	case icmBwd:	/* PCS (== Device) to Device */
@@ -14128,7 +15826,7 @@ static icmLuBase* icc_get_luobj (
 					luobj = new_icmLuLut(p, icSigBToA0Tag,
 					     pcs, p->header->colorSpace, pcs,
 					     pcs, p->header->colorSpace, pcs,
-					     whitePoint, blackPoint, intent, func);
+					     intent, func);
 					break;
 
 				default:
@@ -14139,7 +15837,7 @@ static icmLuBase* icc_get_luobj (
 			break;
 
     	case icSigAbstractClass:
-			/* Expect AToB0 Lut and option BToA0 Lut, with either relative or absolute intent.
+			/* Expect AToB0 Lut and option BToA0 Lut, with either relative or absolute intent. */
 			/* PCS <-> PCS */
 			/* Determine the algorithm and set its parameters */
 
@@ -14157,7 +15855,7 @@ static icmLuBase* icc_get_luobj (
 					luobj = new_icmLuLut(p, icSigAToB0Tag,
 					     p->header->colorSpace, pcs, pcs,
 					     e_pcs, e_pcs, e_pcs,
-					     whitePoint, blackPoint, intent, func);
+					     intent, func);
 					break;
 
 		    	case icmBwd:	/* PCS to PCS (== Device) */
@@ -14165,42 +15863,7 @@ static icmLuBase* icc_get_luobj (
 					luobj = new_icmLuLut(p, icSigBToA0Tag,
 					     pcs, p->header->colorSpace, pcs,
 					     e_pcs, e_pcs, e_pcs,
-					     whitePoint, blackPoint, intent, func);
-					break;
-
-				default:
-					sprintf(p->err,"icc_get_luobj: Inaproptiate function requested");
-					p->errc = 1;
-					return NULL;
-			}
-			break;
-
-    	case icSigColorSpaceClass:
-			/* Expect AToB0 Lut and BToA0 Lut, no intents, */
-			/* Device <-> PCS */
-
-			if (intent != icmDefaultIntent) {
-				sprintf(p->err,"icc_get_luobj: Intent is inappropriate for Colorspace profile");
-				p->errc = 1;
-				return NULL;
-			}
-
-			/* Determine the algorithm and set its parameters */
-			switch (func) {
-		    	case icmFwd:	/* Device to PCS */
-
-					luobj = new_icmLuLut(p, icSigAToB0Tag,
-					     p->header->colorSpace, pcs, pcs,
-					     p->header->colorSpace, e_pcs, e_pcs,
-					     whitePoint, blackPoint, intent, func);
-					break;
-
-		    	case icmBwd:	/* PCS to Device */
-
-					luobj = new_icmLuLut(p, icSigBToA0Tag,
-					     pcs, p->header->colorSpace, pcs,
-					     e_pcs, p->header->colorSpace, e_pcs,
-					     whitePoint, blackPoint, intent, func);
+					     intent, func);
 					break;
 
 				default:
@@ -14239,6 +15902,111 @@ static icmLuBase* icc_get_luobj (
 	return luobj;
 }
 
+/* - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Returns total ink limit and channel maximums */
+/* Returns -1.0 if not applicable for this type of profile. */
+/* Returns -1.0 for grey, additive, or any profiles < 4 channels. */
+/* This is a place holder that uses a heuristic, */
+/* until there is a private or standard tag for this information */
+static double icm_get_tac(		/* return TAC */
+icc *p,
+double *chmax					/* device return channel sums. May be NULL */
+) {
+	icmHeader *rh = p->header;
+	icmLuBase *luo;
+	icmLuLut *ll;
+	icmLut *lut;
+	icColorSpaceSignature outs;		/* Type of output space */
+	int inn, outn;					/* Number of components */
+	icmLuAlgType alg;				/* Type of lookup algorithm */
+	double tac = 0.0;
+	double max[MAX_CHAN];			/* Channel maximums */
+	int i, f;
+	unsigned int uf;
+	int size;						/* Lut table size */
+	double *gp;						/* Pointer to grid cube base */
+
+	/* If not something that can really have a TAC */
+	if (rh->deviceClass != icSigDisplayClass
+	 && rh->deviceClass != icSigOutputClass
+	 && rh->deviceClass != icSigLinkClass) {
+		return -1.0;
+	}
+
+	/* If not a suitable color space */
+	switch (rh->colorSpace) {
+		/* Not applicable */
+    	case icSigXYZData:
+    	case icSigLabData:
+    	case icSigLuvData:
+    	case icSigYCbCrData:
+    	case icSigYxyData:
+    	case icSigHsvData:
+    	case icSigHlsData:
+			return -1.0;
+
+		/* Assume no limit */
+    	case icSigGrayData:
+    	case icSig2colorData:
+    	case icSig3colorData:
+    	case icSigRgbData:
+			return -1.0;
+
+		default:
+			break;
+	}
+
+	/* Get a PCS->device colorimetric lookup */
+	if ((luo = p->get_luobj(p, icmBwd, icRelativeColorimetric, icmSigDefaultData, icmLuOrdNorm)) == NULL) {
+		if ((luo = p->get_luobj(p, icmBwd, icmDefaultIntent, icmSigDefaultData, icmLuOrdNorm)) == NULL) {
+			return -1.0;
+		}
+	}
+
+	/* Get details of conversion (Arguments may be NULL if info not needed) */
+	luo->spaces(luo, NULL, &inn, &outs, &outn, &alg, NULL, NULL, NULL);
+
+	/* Assume any non-Lut type doesn't have a TAC */
+	if (alg != icmLutType) {
+		return -1.0;
+	}
+
+	ll = (icmLuLut *)luo;
+
+	/* We have a Lut type. Search the lut for the largest values */
+	for (f = 0; f < outn; f++)
+		max[f] = 0.0;
+
+	lut = ll->lut;
+	gp = lut->clutTable;		/* Base of grid array */
+	size = uipow(lut->clutPoints,lut->inputChan);
+	for (i = 0; i < size; i++) {
+		double tot, vv[MAX_CHAN];			
+		
+		lut->lookup_output(lut,vv,gp);		/* Lookup though output tables */
+		ll->out_denormf(vv,vv);				/* Normalize for output color space */
+
+		for (tot = 0.0, uf = 0; uf < lut->outputChan; uf++) {
+			tot += vv[uf];
+			if (vv[uf] > max[uf])
+				max[uf] = vv[uf];
+		}
+		if (tot > tac)
+			tac = tot;
+		gp += lut->outputChan;
+	}
+
+	if (chmax != NULL) {
+		for (f = 0; f < outn; f++)
+			chmax[f] = max[f];
+	}
+
+	luo->del(luo);
+
+	return tac;
+}
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Create an empty object. Return NULL on error */
@@ -14255,7 +16023,7 @@ icmAlloc *al			/* Memory allocator */
 
 	p->al = al;			/* Heap allocator */
 
-	p->set_v4        = icc_set_v4;
+	p->set_version   = icc_set_version;
 	p->get_size      = icc_get_size;
 	p->read          = icc_read;
 	p->write         = icc_write;
@@ -14268,10 +16036,10 @@ icmAlloc *al			/* Memory allocator */
 	p->rename_tag    = icc_rename_tag;
 	p->unread_tag    = icc_unread_tag;
 	p->read_all_tags = icc_read_all_tags;
-	p->check_id      = icc_check_id;
 	p->delete_tag    = icc_delete_tag;
-
-	p->get_luobj  = icc_get_luobj;
+	p->check_id      = icc_check_id;
+	p->get_tac       = icm_get_tac;
+	p->get_luobj     = icc_get_luobj;
 
 #if defined(__IBMC__) && defined(_M_IX86)
 	_control87(EM_UNDERFLOW, EM_UNDERFLOW);

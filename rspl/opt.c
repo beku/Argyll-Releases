@@ -10,8 +10,8 @@
  * Copyright 1996 - 2001 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* This file contains an rspl initialiser that */
@@ -36,6 +36,7 @@
 
 #include "rspl_imp.h"
 #include "numlib.h"
+#include "counters.h"	/* Counter macros */
 
 extern void error(char *fmt, ...), warning(char *fmt, ...);
 
@@ -87,7 +88,7 @@ struct _omgtp {
 	struct {
 		int res[MXDI];	/* Single dimension grid resolution for each dimension */
 		int bres, brix;	/* Biggest resolution and its index */
-		int mres;		/* Geometric mean res[] */
+		double mres;	/* Geometric mean res[] */
 		int no;			/* Total number of points in grid = res ^ di */
 		datai l,h,w;	/* Grid low, high, grid cell width */
 
@@ -122,7 +123,7 @@ static void init_fsoln(omgtp *m, double **vdata);
 
 /* Initialise the regular spline from the optimisation callback function */
 /* The target data is auxiliary data used to "target" the optimisation */
-/* callback function.
+/* callback function. */
 /* The callback function arguments are as follows:
  *	void *fdata,
  *	double *inout,	Pointers to fdi+tdi+adi values for the grid point being optimised.
@@ -153,8 +154,10 @@ opt_rspl_imp(
 	datao vlow,		/* Data value low normalize, NULL = default 0.0 */
 	datao vhigh		/* Data value high normalize - NULL = default 1.0 */
 ) {
-	int di = s->di, fdi = s->fdi;
-	int i, n, e, f;
+//	int di = s->di
+	int fdi = s->fdi;
+	int i, e, f;
+//	int n;
 
 #if defined(__IBMC__) && defined(_M_IX86)
 	_control87(EM_UNDERFLOW, EM_UNDERFLOW);
@@ -253,7 +256,7 @@ opt_rspl_imp(
 			fres *= gratio;
 			res = (int)(fres + 0.5);
 			if ((res + 1) >= s->g.mres)	/* If close enough */
-				res = s->g.mres;
+				res = (int)s->g.mres;
 			om = m;
 		}
 
@@ -263,7 +266,7 @@ opt_rspl_imp(
 		/* Transfer result in x[] to appropriate grid point value */
 		for (gp = s->g.a, mgp = m->g.a, i = 0; i < s->g.no; gp += s->g.pss, mgp += m->g.pss, i++)
 			for (f = 0; f < fdi; f++)
-				gp[f] = mgp[f];
+				gp[f] = (float)mgp[f];
 		free_omgtp(m);
 	}
 
@@ -287,11 +290,10 @@ static omgtp *new_omgtp(
 ) {
 	omgtp *m;
 	int di = s->di, fdi = s->fdi;
-	int dno = s->d.no;
+//	int dno = s->d.no;
 	int gno;
-	int e, f, g, n, i, j, k;
-	double ua[MXDI];		/* Grid curvature error scale normalizing factor */
-	double uaa[MXDI];		/* Grid curvature error squared scale normalizing factor */
+	int e, g, i;
+//	int f, n, j, k;
 
 	/* Allocate a structure */
 	if ((m = (omgtp *) calloc(1, sizeof(omgtp))) == NULL)
@@ -406,7 +408,7 @@ double **vdata		/* di^2 array of function and target values to init array corner
 	int gres_1[MXDI];
 	int e, n;
 	double *gp;				/* Pointer to dest g.a[] grid cube base */
-	ECOUNT(gc, di, m->g.res);	/* Counter for output points */
+	ECOUNT(gc, MXDIDO, di, m->g.res);	/* Counter for output points */
 	double *gw;				/* weight for each grid cube corner */
 	double a_gw[DEF2MXDI];	/* default allocation for gw */
 
@@ -426,8 +428,6 @@ double **vdata		/* di^2 array of function and target values to init array corner
 		
 		/* Figure out the pointer to the grid data and its weighting */
 		{
-			double t;
-			int mi;
 			gp = m->g.a;					/* Base of output array */
 			for (e = 0; e < di; e++)
 				we[e] = (double)gc[e]/gres_1[e]; /* 1.0 - weight */
@@ -479,13 +479,12 @@ static void init_soln(
 ) {
 	rspl *s = m1->s;
 	int di  = s->di;
-	int fdi = s->fdi;
 	int gno = m1->g.no;
 	int gres1_1[MXDI];
 	int gres2_1[MXDI];
 	int e, n;
 	double *a;				/* Pointer to dest g.a[] grid cube base */
-	ECOUNT(gc, di, m1->g.res);	/* Counter for output points */
+	ECOUNT(gc, MXDIDO, di, m1->g.res);	/* Counter for output points */
 	double *gw;				/* weight for each grid cube corner */
 	double a_gw[DEF2MXDI];	/* default allocation for gw */
 
@@ -597,11 +596,11 @@ int first		/* Flag, NZ if this is the first pass at this resolution */
 ) {
 	int di = m->s->di, fdi = m->s->fdi;
 	int tdi = m->tdi;
-	int i, e, f, k;
+	int i, e, f;
 	int gc[MXDI];
 	int *gres = m->g.res;
 	int gres_1[MXDI];
-	DCOUNT(cc, di, -1, -1, 2);	/* Surrounding cube counter */
+	DCOUNT(cc, MXDIDO, di, -1, -1, 2);	/* Surrounding cube counter */
 	double *gpp;				/* Current grid point pointer */
 	double ssum[MXDO+MXDI+2*MXDI];	/* Pointer to surrounding average values */
 	double *surav;				/* Surrounding average values */

@@ -9,8 +9,8 @@
  *
  * Copyright 1999 - 2005 Graeme W. Gill
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  */
 
 /* TTBD:

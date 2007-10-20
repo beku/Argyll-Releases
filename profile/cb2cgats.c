@@ -12,8 +12,8 @@
  *
  * Copyright 2000, Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #define VERSION "1.0"
@@ -39,7 +39,7 @@ void error(char *fmt, ...);
 void
 usage(void) {
 	fprintf(stderr,"Convert Colorblind raw device profile data to Argyll data, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: cb2gcats [-v] [-l limit] infile outfile\n");
 	fprintf(stderr," -v              Verbose mode\n");
 	fprintf(stderr," -l limit        Set inklimit in .ti3 file\n");
@@ -48,9 +48,9 @@ usage(void) {
 	exit(1);
 	}
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
-	int i,j;
+	int i;
 	int fa,nfa;				/* current argument we're looking at */
 	int verb = 0;
 	static char tarname[200] = { 0 };		/* Input .CMY file */
@@ -120,7 +120,7 @@ main(int argc, char *argv[])
 	cmy->add_other(cmy, "CBTA"); 	/* Colorblind Target file */
 	if (cmy->read_name(cmy, inname))
 		error ("Read: Can't open file '%s'",inname);
-	if (cmy->t[0].tt != tt_other || cmy->t[0].oi != 0)
+	if (cmy->ntables == 0 || cmy->t[0].tt != tt_other || cmy->t[0].oi != 0)
 		error ("Input file isn't a 'CBTA' format file");
 	if (cmy->ntables != 1)
 		fprintf(stderr,"Input file '%s' doesn't contain exactly one table",inname);
@@ -153,7 +153,7 @@ main(int argc, char *argv[])
 	ncie->add_other(ncie, "CBPR"); 	/* Colorblind Printer Response file */
 	if (ncie->read_name(ncie, tarname))
 		error ("Read: Can't open file '%s'",tarname);
-	if (ncie->t[0].tt != tt_other || ncie->t[0].oi != 0)
+	if (ncie->ntables == 0 || ncie->t[0].tt != tt_other || ncie->t[0].oi != 0)
 		error ("Input file isn't a 'CBTA' format file");
 	if (ncie->ntables != 1)
 		fprintf(stderr,"Input file '%s' doesn't contain exactly one table",tarname);
@@ -205,7 +205,6 @@ main(int argc, char *argv[])
 
 	/* Write out the patch info to the output CGATS file */
 	for (i = 0; i < npat; i++) {
-		int rv;
 		char id[100];
 		double rgb[3]; 
 		double xyz[3]; 

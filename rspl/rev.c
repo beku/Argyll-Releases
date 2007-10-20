@@ -10,8 +10,8 @@
  * Copyright 1999 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * Latest simplex/linear equation version.
  */
@@ -60,13 +60,17 @@
 #include <memory.h>
 #include <time.h>
 
-#undef SSS				/* ~~~ TEST exaustinve nn search */
+						/* Just search within closest cell returned by nn_find, */
+						/* rather that doing a complete expanding sphere search */
+						/* for clipping situation */
+#undef SSS				/* SSS turns on an exapanding square search */		
 
 #define INKSCALE 5000.0	/* For ink limit weighting to fudge SVD least squares solution */
 
 #include "rspl_imp.h"
 #include "numlib.h"
-#include "../h/sort.h"		/* Heap sort */
+#include "sort.h"		/* Heap sort */
+#include "counters.h"	/* Counter macros */
 
 //#define DMALLOC_GLOBALS
 //#include "dmalloc.h"
@@ -112,16 +116,20 @@
 #undef DEBUG	// ~~1
 
 #ifdef DEBUG
+#undef DBGS
 #undef DBG
 #undef DBGV
 #undef DBGM
+#define DBGS(xxx) xxx
 #define DBG(xxx) DBGI(xxx)
 #define DBGV(xxx) DBGVI xxx
 #define DBGM(xxx) DBGMI xxx
 #else
+#undef DBGS
 #undef DBG
 #undef DBGV
 #undef DBGM
+#define DBGS(xxx) 
 #define DBG(xxx) 
 #define DBGV(xxx) 
 #define DBGM(xxx) 
@@ -270,9 +278,8 @@ rev_interp_rspl(
 					/* input space solutions in cpp[0..retval-1].p[], and */
 ) {
 	int e, di = s->di;
-	int f, fdi = s->fdi;
+	int fdi = s->fdi;
 	int i, *rip = NULL;
-	cell *cells;			/* Candidate cells */
 	schbase *b = NULL;		/* Base search information */
 	double auxv[MXRI];		/* Locus proportional auxiliary values */
 	int didclip = 0;		/* flag - set if we clipped the target */
@@ -377,7 +384,9 @@ rev_interp_rspl(
 		}
 	
 		/* If we selected exact aux, but failed to find a solution, relax expectation */
-		if (b->nsoln == 0 & b->naux > 0 && (flags & RSPL_EXACTAUX)) {
+		if (b->nsoln == 0 && b->naux > 0 && (flags & RSPL_EXACTAUX)) {
+//printf("~1 relaxing expactation when nsoln == %d, naux = %d, falgs & RSPL_EXACTAUX = 0x%x\n",
+//b->nsoln,b->naux,flags & RSPL_EXACTAUX);
 			DBG(("Searching for exact match to auxiliary target failed, so try again\n"));
 			adjust_search(s, flags & ~RSPL_EXACTAUX, NULL, exact);
 
@@ -397,6 +406,7 @@ rev_interp_rspl(
 	/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 	/* If the exact search failed, and we should look for a nearest solution */
 	if (b->nsoln == 0 && (flags & RSPL_NEARCLIP)) {
+#ifndef NEVER 	// ~~~~999999 debug testing
 		unsigned int tcount;	/* grid touch count for this opperation */
 
 		adjust_search(s, flags, NULL, clipn);
@@ -408,7 +418,7 @@ rev_interp_rspl(
 		/* We get returned a list of cube base indexes of all cubes that have */
 		/* the closest valid vertex value to the target value. */
 		/* (This may not result in the true closest point if the geometry of */
-		/* the vertex values is localy non-smooth or self interesecting, */
+		/* the vertex values is localy non-smooth or self intersecting, */
 		/* but seems to return a good result in most realistic situations ?) */
 
 #ifdef NEVER
@@ -435,7 +445,7 @@ rev_interp_rspl(
 		/* until we run out of cells, or we have looked at all cells that */
 		/* are as close or closer to the current best solution. */
 
-#ifdef NEVER	// ~2
+#ifdef NEVER
 		rip = init_sphere(s, &sh, cpp[0].v);	/* Init the sphere cell searcher */
 		for (; sh.ldist <= b->cdist ;
 		                    rip = next_sphere_cell(&sh)) {
@@ -468,6 +478,20 @@ rev_interp_rspl(
 
 		if (b->nsoln > 0)
 			didclip = RSPL_DIDCLIP;
+#else /* !NEVER */
+static void debug_find_closest_rev(rspl *s, double *out, double *in);
+
+		debug_find_closest_rev(s, cpp[0].p, cpp[0].v);
+		b->nsoln = 1;
+		didclip = RSPL_DIDCLIP;
+printf("~1 debug_find_closest_rev returned %f %f %f from %f %f %f\n",
+		cpp[0].p[0],
+		cpp[0].p[1],
+		cpp[0].p[2],
+		cpp[0].v[0],
+		cpp[0].v[1],
+		cpp[0].v[2]);
+#endif	/* !NEVER */
 	}
 
 	/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -517,7 +541,7 @@ rev_interp_rspl(
 		double c_idist = b->idist;	
 		int c_nsoln    = b->nsoln;
 		int c_pauxcell = b->pauxcell;
-		int c_cdist    = b->cdist;
+		double c_cdist = b->cdist;
 		int c_iclip    = b->iclip;
 
 		DBG(("Trying exact search again\n"));
@@ -539,7 +563,7 @@ rev_interp_rspl(
 		}
 	
 		/* If we selected exact aux, but failed to find a solution, relax expectation */
-		if (b->nsoln == 0 & b->naux > 0 && (flags & RSPL_EXACTAUX)) {
+		if (b->nsoln == 0 && b->naux > 0 && (flags & RSPL_EXACTAUX)) {
 			DBG(("Searching for exact match to auxiliary target failed, so try again\n"));
 			adjust_search(s, flags & ~RSPL_EXACTAUX, NULL, exact);
 
@@ -1003,7 +1027,7 @@ adjust_search(
 ) {
 	schbase *b = s->rev.sb;		/* Pointer to search base information structure */
 	int e, di = s->di;
-	int f, fdi = s->fdi;
+	int fdi = s->fdi;
 
 	DBG(("Adjusting search\n"));
 
@@ -1188,10 +1212,9 @@ calc_fwd_cell_list(
 	return *rpp;
 }
 
-static int rev_sch(schbase *b, cell *c, int level);
 void alloc_simplexes(cell *c, int nsdi);
 
-/* Given a pointer to a list of fwd cells, cull cells that
+/* Given a pointer to a list of fwd cells, cull cells that */
 /* cannot contain or improve the solution, sort the list, */
 /* and then compute the final best solution. */
 static void
@@ -1201,7 +1224,6 @@ int     *rip,			/* Pointer to base of cell list, entry 0 = allocated space */
 unsigned int tcount		/* grid touch count for this opperation */
 ) {
 	rspl *s = b->s;
-	int e, di = s->di;
 	int nsdi;
 	int i;
 	int nilist;			/* Number in cell list */
@@ -1236,7 +1258,7 @@ unsigned int tcount		/* grid touch count for this opperation */
 			}
 			/* Get pointers to cells from cache, and lock it in the cache */
 			if ((c = get_rcell(b, ix)) == NULL) {
-				static warned = 0;
+				static int warned = 0;
 				if (!warned) {
 					warning("Reverse Cell Cache exausted, processing in chunks");
 					warned = 1;
@@ -1295,6 +1317,8 @@ unsigned int tcount		/* grid touch count for this opperation */
 #define 	HEAP_COMPARE(A,B) (A->sort < B->sort)
 				HEAPSORT(cell *,b->lclist, nilist)
 #undef 		HEAP_COMPARE
+				break;
+			default:
 				break;
 		}
 #endif /* DOSORT */
@@ -1685,7 +1709,6 @@ static int auxil_solve(schbase *b, simplex *x, double *xp);
 /* Exact search functions */
 /* Return non-zero if cell is acceptable */
 static int exact_setsort(schbase *b, cell *c) {
-	int ee, di  = b->s->di;
 	int f, fdi  = b->s->fdi;
 	double ss;
 
@@ -1718,7 +1741,6 @@ static int exact_setsort(schbase *b, cell *c) {
 /* Return 1 if search should be aborted */
 static int exact_compute(schbase *b, simplex *x) {
 	rspl *s     = b->s;
-	cell *c     = x->c;
 	int e, di = s->di, sdi  = x->sdi;
 	int f, fdi  = s->fdi;
 	int i;
@@ -1822,6 +1844,8 @@ static int auxil_setsort(schbase *b, cell *c) {
 	DBG(("Reverse auxiliary search, evaluate and set sort key on cell\n"));
 
 	if (b->s->di <= fdi) {	/* Assert ~1 */
+// ~~9999
+*((char *)0) = 55;
 		error("rspl auxiliary reverse interp called with di <= fdi (%d %d)", b->s->di, fdi);
 	}
 
@@ -1892,7 +1916,6 @@ static int auxil_compute(schbase *b, simplex *x) {
 	cell *c     = x->c;
 	int e, di   = s->di;
 	int f, fdi  = s->fdi;
-	int ixc = b->ixc;
 	datai xp;		/* solution in simplex relative coord order */
 	datai p;		/* absolute solution */
 	double idist;	/* Auxiliary input distance */
@@ -1976,7 +1999,6 @@ static int locus_setsort(schbase *b, cell *c) {
 	int f, fdi  = b->s->fdi;
 	int lxi = b->lxi;	/* Auxiliary we are finding min/max of */
 	int ixc = b->ixc;
-	int ee, p2di = (1<<b->s->di);
 	double sort, ss;
 
 	DBG(("Reverse locus evaluate and set sort key on cell\n"));
@@ -2043,8 +2065,6 @@ static int auxil_locus(schbase *b, simplex *x);
 /* We expect to be given a sub-simplex with no DOF, to give an exact solution */
 static int locus_compute(schbase *b, simplex *x) {
 	rspl *s  = b->s;
-	cell *c  = x->c;
-	int di   = s->di;
 	int f, fdi  = s->fdi;
 	int lxi  = b->lxi;	/* Auxiliary we are finding min/max of */
 
@@ -2135,7 +2155,7 @@ static int clipv_check(schbase *b, cell *c) {
 
 	if (b->cdist < INF_DIST) {	/* If some clip solution has been found */
 		int f, fdi = b->s->fdi;
-		double dist, brad;
+		double dist;
 		/* Compute a conservative "best possible solution clip distance" */
 		for (dist = 0.0, f = 0; f < fdi ; f++) {
 			double tt = (c->bcent[f] - b->v[f]);
@@ -2310,7 +2330,7 @@ double *xp		/* Return solution xp[sdi] */
 	rspl *s = b->s;
 	cell *c  = x->c;
 	int ee, e, di = s->di, sdi = x->sdi; 
-	int f,    fdi = s->fdi, efdi = x->efdi; 
+	int f, efdi = x->efdi; 
 	int dof = sdi-efdi;			 /* Degree of freedom of simplex locus */
 	int *icomb = x->psxi->icomb; /* abs -> simplex coordinate translation */
 	double auxt[MXRI];			/* Simplex relative auxiliary targets */
@@ -2443,8 +2463,8 @@ simplex *x
 ) {
 	rspl *s = b->s;
 	cell *c  = x->c;
-	int ee, e, di = s->di, sdi = x->sdi; 
-	int f,    fdi = s->fdi, efdi = x->efdi; 
+	int sdi = x->sdi; 
+	int f, efdi = x->efdi; 
 	double pp[MXRI];
 	int wsrv;	/* Within simplex return value */
 
@@ -2532,11 +2552,11 @@ double *xp,		/* Return solution (simplex parameter space) */
 double *xv,		/* Return solution (output space) */
 double *err		/* Output error distance at solution point */
 ) {
-	cell *c = x->c;
+	DBGS(cell *c = x->c;)
 	rspl *s = b->s;
-	int ee, e, di = s->di, sdi = x->sdi; 
+	int e, sdi = x->sdi; 
 	int f, fdi = s->fdi, efdi = x->efdi; 
-	int i, g;
+	int g;
 	int wsrv;	/* Within simplex return value */
 
 	double *ta[MXRO], TA[MXRO][MXRO];
@@ -2578,7 +2598,6 @@ double *err		/* Output error distance at solution point */
 
 	/* Check that the solution is within the simplex */
 	if ((wsrv = within_simplex(x, tb)) != 0) {
-		double vv[MXRO];			/* space for trial solution */
 		double dist;				/* distance to clip target */
 
 		DBG(("Got solution within simplex\n"));
@@ -2629,11 +2648,10 @@ double *xp,		/* Return solution (simplex parameter space) */
 double *xv,		/* Return solution (output space) */
 double *err		/* Output error distance at solution point */
 ) {
-	cell *c = x->c;
+	DBGS(cell *c = x->c;)
 	rspl *s = b->s;
-	int ee, e, di = s->di, sdi = x->sdi; 
+	int e, sdi = x->sdi; 
 	int f, fdi = s->fdi, efdi = x->efdi; 
-	int i, g;
 	double tb[MXRO];		/* RHS & Parameter solution */
 	double dist;			/* distance to clip target */
 	int wsrv = 0;			/* Within simplex return value */
@@ -2835,7 +2853,8 @@ double *p			/* Array of input values (can be NULL to compute) */
 	lv = base[-1];					/* Fetch existing ink limit function value */
 	if ((float)lv == L_UNINIT) {			/* Not been computed yet */
 		if (p != NULL) {
-			base[-1] = lv = INKSCALE * b->limit(b->cntx, p);	/* Do it */
+			lv = INKSCALE * b->limit(b->cntx, p);	/* Do it */
+			base[-1] = (float)lv;
 		} else {
 			int e, di = s->di;
 			double pp[MXRI];			/* Copy from float to double */
@@ -2847,7 +2866,8 @@ double *p			/* Array of input values (can be NULL to compute) */
 				tix /= s->g.res[e];
 				pp[e] = s->g.l[e] + (double)dix * s->g.w[e];	/* Base point */
 			}
-			base[-1] = lv = INKSCALE * b->limit(b->cntx, pp);	/* Do it */
+			lv = INKSCALE * b->limit(b->cntx, pp);	/* Do it */
+			base[-1] = (float)lv;
 		}
 		s->g.limitv_cached = 1;			/* At least one limit value is cached */
 	}
@@ -2891,7 +2911,6 @@ int ix				/* fwd index of cell */
 	int ee, e, di = s->di;
 	int p2di = (1<<di);
 	int ff, f, fdi = s->fdi;
-	int dof;
 	cell *c;
 
 	c = cache_rcell(s->rev.cache, ix);		/* Fetch it from the cache and lock it */
@@ -2961,7 +2980,7 @@ int ix				/* fwd index of cell */
 			double *min[MXRO], *max[MXRO];	/* Pointers to points with min/max values */
 			double radsq = -1.0;			/* Span/radius squared */
 			double rad;
-			int spf;
+			int spf = 0;
 			
 			/* Find verticies of cell that have min and max values in output space */
 			for (f = 0; f < fdi; f++)
@@ -3249,10 +3268,6 @@ int nsdi			/* non limit sub simplex dimensionaity */
 
 	for (si = 0; si < sxno; si++) { /* For all the simplexes */
 		simplex *x = &c->sx[nsdi][si];
-		int sdi  = x->sdi;
-		int efdi = x->efdi;
-		int dof  = sdi - efdi;	/* Extra DOF */
-		int naux = x->naux;
 
 		if (x->aloc2 != NULL)
 			free(x->aloc2);
@@ -3477,7 +3492,7 @@ add_lu_svd(simplex *x) {
 					error("rspl malloc failed - reverse cell sub-simplex matricies");
 
 				/* Allocate biggest to smallest (double, pointers, ints) */
-				/* to make sure that items lie on the natural boundaries. /
+				/* to make sure that items lie on the natural boundaries. */
 
 				/* Reserve matrix doubles */
 				mem += efdi * sdi * sizeof(double);
@@ -3508,7 +3523,7 @@ add_lu_svd(simplex *x) {
 					error("rspl malloc failed - reverse cell sub-simplex matricies");
 
 				/* Allocate biggest to smallest (double, pointers, ints) */
-				/* to make sure that items lie on the natural boundaries. /
+				/* to make sure that items lie on the natural boundaries. */
 
 				/* Reserve matrix doubles */
 				mem += sdi * (efdi + sdi + adof) * sizeof(double);
@@ -3609,7 +3624,7 @@ add_locus(
 schbase *b,
 simplex *x
 ) {
-	int e,  sdi = x->sdi; 
+	int sdi = x->sdi; 
 	int f, efdi = x->efdi; 
 	int doback = 0;
 
@@ -3653,7 +3668,7 @@ add_auxil_lu_svd(
 schbase *b,
 simplex *x
 ) {
-	int ee, e, sdi = x->sdi; 
+	int ee, sdi = x->sdi; 
 	int f, efdi = x->efdi; 
 	int dof = sdi-efdi;		/* Degree of freedom of locus */
 	int naux = b->naux;		/* Number of auxiliaries actually available */
@@ -3694,7 +3709,7 @@ simplex *x
 					error("rspl malloc failed - reverse cell sub-simplex matricies");
 
 				/* Allocate biggest to smallest (double, pointers, ints) */
-				/* to make sure that items lie on the natural boundaries. /
+				/* to make sure that items lie on the natural boundaries. */
 
 				/* Reserve matrix doubles */
 				mem += naux * dof * sizeof(double);
@@ -3722,7 +3737,7 @@ simplex *x
 					error("rspl malloc failed - reverse cell sub-simplex matricies");
 
 				/* Allocate biggest to smallest (double, pointers, ints) */
-				/* to make sure that items lie on the natural boundaries. /
+				/* to make sure that items lie on the natural boundaries. */
 
 				/* Reserve matrix doubles */
 				mem += dof * (naux + dof) * sizeof(double);
@@ -3802,7 +3817,7 @@ int sdi					/* Sub-simplex dimensionality (range 0 - di) */
 	int e, di = s->di;		/* Dimensionality */
 	ssxinfo *xip;			/* Pointer to sub-simplex info structure */
 	int vi, nospx;			/* Number of sub-simplexes */
-	XCOMBO(vcmb, sdi+1, 1 << di);/* Simplex dimension sdi out of cube dimension di counter */
+	XCOMBO(vcmb, MXDI, sdi+1, 1 << di);/* Simplex dimension sdi out of cube dimension di counter */
 
 	xip = &s->rev.sspxi[sdi];
 	if (xip->spxi != NULL)	/* Assert */
@@ -3865,7 +3880,7 @@ int sdi					/* Sub-simplex dimensionality (range 0 - di) */
 				}
 			} else {
 				for (e = 0; e < di; e++) {			/* Input space */
-					double vv = vcmb[i] & (1<<e);
+					int vv = vcmb[i] & (1<<e);
 					if (vv < pmin[e]) {				/* Adjust min/max offsets */
 						x->pmino[e] = vcmb[i];
 						pmin[e] = vv;
@@ -3928,7 +3943,6 @@ rspl *s
 ) {
 	revcache *rc;
 	char *ev;
-	int i;
 
 	if ((rc = (revcache *) calloc(1, sizeof(revcache))) == NULL)
 		error("rspl malloc failed - reverse cell cache");
@@ -4183,7 +4197,7 @@ void free_rev(
 rspl *s		/* Pointer to rspl grid */
 ) {
 	int e, di = s->di;
-	int i,**rpp;
+	int **rpp;
 		
 	/* If first section has been initialised */
 	if (s->rev.inited != 0)	 {
@@ -4259,6 +4273,51 @@ rspl *s		/* Pointer to rspl grid */
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - */
+// ~~~~~99999 debug - RGB only !!!
+
+
+static void debug_find_closest_rev(
+rspl *s,
+double *out,
+double *in
+) {
+	double best = 1e38;
+	int e, f;
+	rpsh counter;		/* Pseudo-hilbert counter */
+	int gc[MXDI];		/* Grid index value */
+	double iv[MXDI];
+	float *gp;			/* Pointer to grid data */
+
+	rpsh_init(&counter, s->di, s->g.res, gc);	/* Initialise counter */
+	for (;;) {
+		double dist;
+
+		/* Compute grid pointer and input sample values */
+		gp = s->g.a;	/* Base of grid data */
+		for (e = 0; e < s->di; e++) { 				/* Input tables */
+			gp += s->g.fci[e] * gc[e];				/* Grid value pointer */
+			iv[e] = s->g.l[e] + gc[e] * s->g.w[e];	/* Input sample values */
+		}
+
+		dist = 0.0;
+		for (f = 0; f < s->fdi; f++) {
+			double tt = in[f] - (double)gp[f];
+			dist += tt * tt;
+		}
+		if (dist < best) {
+			best = dist;
+			for (e = 0; e < s->di; e++)
+				out[e] = iv[e];
+		}
+
+		/* Increment counter */
+		if (rpsh_inc(&counter, gc))
+			break;
+	}
+}
+
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Make reverse index list (rev First section init) */
 /* This is called by a reverse interpolation call */
 /* that discovers that the reverse index list haven't */
@@ -4317,7 +4376,7 @@ rspl *s
 //printf("~~got output range\n");
 
 	/* Heuristic - main grid resolution ? */
-	if ((rgres = s->g.mres + 1) < 4)
+	if ((rgres = (int)s->g.mres + 1) < 4)
 		rgres = 4;
 	s->rev.res = rgres;			/* == number of cells per side */
 	rgres_1 = rgres-1;
@@ -4472,6 +4531,8 @@ printf("gc[%d] = %d\n",f,gc[f]);
 static void make_rev_nn(
 rspl *s
 ) {
+	int k1;
+
 	/* The reverse clip nearest lookup relies on being able to quicly find the */
 	/* nearest valid vertex value. We use an acceleration structure that minimised */
 	/* the number of verticies examined in any detail. */
@@ -4491,6 +4552,9 @@ rspl *s
 	int gno = s->g.no;
 	int i;			/* Index of fwd grid point */
 	
+	for (k1 = i = 0; key[i] != 0 ; i++)
+		k1 -= key[i];
+
 	DBG(("make_rev_nn called\n"));
 
 	/* Allocate the arrays spaces */
@@ -4501,10 +4565,13 @@ rspl *s
 	if ((rs->touch = (unsigned int *)calloc(sizeof(unsigned int), gno)) == NULL)
 		error("rspl rev malloc failed - make_rev_nn allocate touch array");
 
+	for (i = 0; key[i] != 0 ; i++)
+		k1 += key[i];
+
 	/* Fill out the axis arrays */
 	for (i = 0; i < gno; i++) {
 		for (f = 0; f < fdi; f++) {
-			rs->sax[f][i] = gbase + i * gpss;	/* Address of point vector */
+			rs->sax[f][i] = gbase + i * (k1 + gpss);	/* Address of point vector */
 		}
 	}
 

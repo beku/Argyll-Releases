@@ -10,8 +10,8 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 
@@ -23,11 +23,10 @@
 #define SURFACE_ONLY
 #define GAMRES 10.0		/* Default surface resolution */
 
+#define USE_CAM_CLIP_OPT
+
 #define RGBRES 33	/* 33 */
 #define CMYKRES 17	/* 17 */
-
-#undef RANDOMPOINTS
-#undef RANDCUBE
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,14 +39,10 @@
 #include "xicc.h"
 #include "gamut.h"
 
-#ifdef NEVER
-void error(char *fmt, ...), warning(char *fmt, ...);
-#endif
-
 void usage(char *diag) {
 	int i;
 	fprintf(stderr,"Create Lab/Jab gamut plot\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: iccgamut [options] profile\n");
 	if (diag != NULL)
 		fprintf(stderr,"Diagnostic: %s\n",diag);
@@ -55,22 +50,23 @@ void usage(char *diag) {
 	fprintf(stderr," -d sres       Surface resolution details 1.0 - 50.0\n");
 	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .gam file\n");
 	fprintf(stderr," -n            Don't add VRML axes or white/black point\n");
+	fprintf(stderr," -k            Add markers for prim. & sec. \"cusp\" points\n");
 	fprintf(stderr," -f function   f = forward*, b = backwards\n");
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"               s = saturation, a = absolute*,\n");
 	fprintf(stderr,"               j = Appearance %s, d = default\n",icxcam_description(cam_default));
 	fprintf(stderr," -o order      n = normal (priority: lut > matrix > monochrome)\n");
 	fprintf(stderr,"               r = reverse (priority: monochrome > matrix > lut)\n");
-	fprintf(stderr," -l tlimit     set total ink limit, 0 - 400%% (default none)\n");
-	fprintf(stderr," -L klimit     set black ink limit, 0 - 100%% (default none)\n");
+	fprintf(stderr," -l tlimit     set total ink limit, 0 - 400%% (estimate by default)\n");
+	fprintf(stderr," -L klimit     set black ink limit, 0 - 100%% (estimate by default)\n");
 	fprintf(stderr," -c viewcond   set viewing conditions for %s,\n",icxcam_description(cam_default));
-	fprintf(stderr,"               either an enumerated choice, or a series of parameters:\n");
+	fprintf(stderr,"               either an enumerated choice, or a series of parameter:value changes\n");
 	for (i = 0; ; i++) {
 		icxViewCond vc;
-		if (xicc_enum_viewcond(NULL, &vc, i, 1))
+		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1) == -999)
 			break;
 
-		fprintf(stderr,"               %d: %s\n",i,vc.desc);
+		fprintf(stderr,"           %s\n",vc.desc);
 	}
 	fprintf(stderr,"         s:surround    a = average, m = dim, d = dark,\n");
 	fprintf(stderr,"                       c = transparency (default average)\n");
@@ -98,8 +94,10 @@ main(int argc, char *argv[]) {
 	int rv = 0;
 	int vrml = 0;
 	int doaxes = 1;
-	double gamres = GAMRES;				/* Surface resolution */
-	icxInk ink;							/* Ink parameters */
+	int docusps = 0;
+	double gamres = GAMRES;		/* Surface resolution */
+	int fl = 0;					/* luobj flags */
+	icxInk ink;					/* Ink parameters */
 	int tlimit = -1;			/* Total ink limit as a % */
 	int klimit = -1;			/* Black ink limit as a % */
 	icxViewCond vc;				/* Viewing Condition for CIECAM */
@@ -112,7 +110,6 @@ main(int argc, char *argv[]) {
 	double vc_f = -1.0;			/* Flare % overid */
 	double vc_fXYZ[3] = {-1.0, -1.0, -1.0};	/* Flare color override in XYZ */
 	double vc_fxy[2] = {-1.0, -1.0};		/* Flare color override in x,y */
-	char buf[200];
 
 	icxLuBase *luo;
 
@@ -232,6 +229,10 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
 				doaxes = 0;
 			}
+			/* Do cusp markers */
+			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
+				docusps = 1;
+			}
 			/* Ink limit */
 			else if (argv[fa][1] == 'l') {
 				fa = nfa;
@@ -257,8 +258,14 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -c");
+#ifdef NEVER
 				if (na[0] >= '0' && na[0] <= '9') {
 					vc_e = atoi(na);
+				} else
+#endif
+				if (na[1] != ':') {
+					if ((vc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
+						usage("Urecognised Enumerated Viewing conditions");
 				} else if (na[0] == 's' || na[0] == 'S') {
 					if (na[1] != ':')
 						usage("Unrecognised parameters after -cs");
@@ -332,19 +339,18 @@ main(int argc, char *argv[]) {
 	if ((xicco = new_xicc(icco)) == NULL)
 		error ("Creation of xicc failed");
 
-	/* Setup ink limit */
-	if (tlimit >= 0)
-		ink.tlimit = tlimit/100.0;	/* Set a total ink limit */
-	else
-		ink.tlimit = -1.0;			/* Don't use a limit */
+	/* Set the ink limits */
+	icxDefaultLimits(icco, &ink.tlimit, tlimit/100.0, &ink.klimit, klimit/100.0);
 
-	if (klimit >= 0)
-		ink.klimit = klimit/100.0;	/* Set a black ink limit */
-	else
-		ink.klimit = -1.0;			/* Don't use a limit */
+	if (verb) {
+		if (ink.tlimit >= 0.0)
+			printf("Total ink limit assumed is %3.0f%%\n",100.0 * ink.tlimit);
+		if (ink.klimit >= 0.0)
+			printf("Black ink limit assumed is %3.0f%%\n",100.0 * ink.klimit);
+	}
 
 	/* Setup a safe ink generation (not used) */
-	ink.k_rule = icxKluma5;
+	ink.k_rule = icxKluma5k;
 	ink.c.Ksmth = ICXINKDEFSMTH;	/* Default smoothing */
 	ink.c.Kstle = 0.0;		/* Min K at white end */
 	ink.c.Kstpo = 0.0;		/* Start of transition is at white */
@@ -352,12 +358,12 @@ main(int argc, char *argv[]) {
 	ink.c.Kenpo = 1.0;		/* End transition at black */
 	ink.c.Kshap = 1.0;		/* Linear transition */
 
-	/* Setup the viewing conditions */
-	if (xicc_enum_viewcond(xicco, &vc, -1, 0))
+	/* Setup the default viewing conditions */
+	if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0) == -2)
 		error ("%d, %s",xicco->errc, xicco->err);
 
-	if (vc_e >= 0)
-		if (xicc_enum_viewcond(xicco, &vc, vc_e, 0))
+	if (vc_e != -1)
+		if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0) == -2)
 			error ("%d, %s",xicco->errc, xicco->err);
 	if (vc_s >= 0)
 		vc.Ev = vc_s;
@@ -392,8 +398,20 @@ main(int argc, char *argv[]) {
 		vc.Fxyz[2] = z/y * vc.Fxyz[1];
 	}
 
+#ifdef USE_CAM_CLIP_OPT
+	 fl |= ICX_CAM_CLIP;
+#endif
+
+#ifdef NEVER
+	printf("~1 output space flags = 0x%x\n",fl);
+	printf("~1 output space intent = %s\n",icx2str(icmRenderingIntent,intent));
+	printf("~1 output space pcs = %s\n",icx2str(icmColorSpaceSignature,pcsor));
+	printf("~1 output space viewing conditions =\n"); xicc_dump_viewcond(&vc);
+	printf("~1 output space inking =\n"); xicc_dump_inking(&ink);
+#endif
+
 	/* Get a expanded color conversion object */
-	if ((luo = xicco->get_luobj(xicco, 0, func, intent, pcsor, order, &vc, &ink)) == NULL)
+	if ((luo = xicco->get_luobj(xicco, fl, func, intent, pcsor, order, &vc, &ink)) == NULL)
 		error ("%d, %s",xicco->errc, xicco->err);
 
 	/* Creat a gamut surface */
@@ -410,7 +428,7 @@ main(int argc, char *argv[]) {
 
 	if (vrml) {
 		strcpy(xl,".wrl");
-		if (gam->write_vrml(gam,out_name, doaxes))
+		if (gam->write_vrml(gam,out_name, doaxes, docusps))
 			error ("write vrml failed on '%s'",out_name);
 	}
 
@@ -429,33 +447,3 @@ main(int argc, char *argv[]) {
 	return 0;
 }
 
-
-#ifdef NEVER
-/* Basic printf type error() and warning() routines */
-
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"icclu: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
-}
-
-void
-warning(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"icclu: Warning - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-}
-
-#endif /* NEVER */

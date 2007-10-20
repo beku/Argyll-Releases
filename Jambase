@@ -62,8 +62,9 @@
 # Clean clean : sources ;				remove sources with 'jam clean'
 # File dest : source ;						copy file
 # Fortran obj.o : source.f ;				.f -> .o
-# GenFile source.c : program args ;		make custom file, args dependent
-# GenFileND source.c : program args ;		make custom file, args not dependent
+# GenFile source.c : program args ;		make custom file, program & args dependent
+# GenFileND source.c : program args ;		make custom file, program dependent & args not
+# GenFileNND source.c : program args ;		make custom file, program & args not dependent
 # GUIApp image ;						mark executable as GUI application
 # Hardlink target : source ;				make link from source to target
 # HdrRule source : headers ;				handle #includes
@@ -78,9 +79,7 @@
 # LibraryFromObjects lib : objects ;		archive library from objects
 # LinkLibraries images : libraries ;		bag libraries onto Mains
 # Main image : source ;						link executable from compiled sources
-# GUIMain image : source ;				link GUI executable from compiled sources
 # MainFromObjects image : objects ;		link executable from objects
-# GUIMainFromObjects image : objects ;		link GUI executable from objects
 # MkDir dir ;								make a directory, if not there
 # Object object : source ;				compile object from source
 # ObjectCcFlags source : flags ;		add compiler flags for object
@@ -189,6 +188,8 @@ case SOLARIS :	RANLIB default = "" ;
 				INSTALL default = "install" ;
 				AR default = "/usr/ccs/bin/ar ru" ;
 case UNIXWARE :	RANLIB default = "" ; RELOCATE = true ;
+case MINGW :	OS = "NT" ;	 # Fix release jam madness...
+				NT = "true" ;
 }
 
 #if $(OS) = SUNOS && $(TZ)
@@ -246,7 +247,7 @@ if $(UNIX)
 	C++				default = gcc ;
 	C++FLAGS		default = ;
 	CC				default = cc ;
-	CCFLAGS			default = -DUNIX ;
+	CCFLAGS			default = -DUNIX -D_THREAD_SAFE ;
 	CCOPTFLAG		default = -O2 ;
 	CCDEBUGFLAG		default = -g ;
 	CCPROFFLAG		default = ;
@@ -265,7 +266,9 @@ if $(UNIX)
 	LIBDIR			default = /usr/local/lib ;
 	LINK			default = $(CC) ;
 	LINKFLAGS		default = $(CCFLAGS) ;
-	LINKLIBS		default = -lm ;
+	LINKDEBUGFLAG	default = ;
+	LINKPROFFLAG	default = ;
+	LINKLIBS		default = -lm -lpthread ;
 	LN				default = ln ;
 	MANDIR			default = /usr/local/man ;
 	MKDIR			default = mkdir ;
@@ -288,6 +291,12 @@ if $(UNIX)
 	YACC			default = yacc ;
 	YACCFLAGS		default = -d ;
 	YACCFILES		default = y.tab ;
+
+	if $(OS) =  MACOSX {
+		CCFLAGS   += -Wno-sign-compare ;	# supress new gcc4 warnings
+		CCFLAGS   += -fpascal-strings ;
+		LINKFLAGS += -framework Carbon ;
+	}
 }
 else if $(NT)
 {
@@ -390,7 +399,7 @@ else if $(NT)
 		STDHDRS			default = $(BCCROOT)\\include ;
 		NOARSCAN		default = true ;
 	}
-	else if $(MingW)
+	else if $(MingW) || $(MINGW)
 	{
 		ECHO "Compiler is MingW" ;
 
@@ -611,7 +620,6 @@ else if $(MAC)
 	SUFLIB			default = .lib ;
 	SUFOBJ			default = .o ;
 	SUFEXE			default = "" ;
-	NOARSCAN		default = true ;
 }
 
 # 
@@ -767,6 +775,20 @@ rule GenFileND
 rule GenFileND1
 {
 	MakeLocate $(<) : $(LOCATE_SOURCE) ;
+	SEARCH on $(>[1]) = $(SEARCH_SOURCE) ;
+}
+
+rule GenFileNND 
+{
+	local s ;
+	makeGristedName s : $(<) ;
+	GenFileNND1 $(s) : $(>[1]) $(>[2-]) ;
+	Clean clean : $(s) ;
+}
+
+rule GenFileNND1
+{
+#	MakeLocate $(<) : $(LOCATE_SOURCE) ;
 	SEARCH on $(>[1]) = $(SEARCH_SOURCE) ;
 }
 
@@ -1007,12 +1029,6 @@ rule Main
 	Objects $(>) ;
 }
 
-rule GUIMain
-{
-	GUIMainFromObjects $(<) : $(>:S=$(SUFOBJ)) ;
-	Objects $(>) ;
-}
-
 rule MainFromObjects
 {
 	local s t ;
@@ -1038,11 +1054,7 @@ rule MainFromObjects
 	Clean clean : $(t) ;
 
 	Link $(t) : $(s) ;
-}
 
-rule GUIMainFromObjects
-{
-	MainFromObjects $(<) : $(>) ;
 	GUIApp $(<) ;
 }
 
@@ -1633,6 +1645,13 @@ if $(UNIX)
 		$(AR) $(<) $(>)
 		}
 	}
+	else if $(OS) = MACOSX
+	{
+		actions together Archive
+		{
+		$(AR) $(<) $(>)
+		}
+	}
 	else
 	{
 		actions updated together piecemeal Archive
@@ -1719,6 +1738,11 @@ if $(UNIX)
 	}
 
 	actions GenFileND1
+	{
+		$(>[1]) $(>[2-])
+	}
+
+	actions GenFileNND1
 	{
 		$(>[1]) $(>[2-])
 	}
@@ -1988,6 +2012,11 @@ else if $(NT) || $(OS2)
 		$(>[1]) $(>[2-])
 	}
 
+	actions GenFileNND1
+	{
+		$(>[1]) $(>[2-])
+	}
+
 	actions Install
 	{
 		copy $(>) $(<)
@@ -2059,6 +2088,11 @@ else if $(VMS)
 	}
 
 	actions GenFileND1
+	{
+		$(>[1]) $(>[2-])
+	}
+
+	actions GenFileNND1
 	{
 		$(>[1]) $(>[2-])
 	}
@@ -2143,6 +2177,11 @@ else if $(MAC)
 	}
 
 	actions GenFileND1
+	{
+		$(>[1]) $(>[2-])
+	}
+
+	actions GenFileNND1
 	{
 		$(>[1]) $(>[2-])
 	}

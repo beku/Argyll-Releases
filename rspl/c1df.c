@@ -11,8 +11,8 @@
  *
  * Copyright 1995, 1996, 2005 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #undef DIAG
@@ -20,7 +20,6 @@
 #undef GLOB_CHECK
 #define RES2			/* Do multiple test at various resolutions */
 #undef EXTRAFIT			/* Test extra fitting effort */
-#undef NONMON			/* Test non-monotonic handling */
 #define SMOOTH 1.0
 #define AVGDEV 0.0
 
@@ -83,9 +82,9 @@ int main(int argc, char *argv[]) {
 	double xx[XRES];
 	double yy[6][XRES];
 	rspl *rss;		/* incremental solution version */
-	double pef;
 	datai low,high;
 	int gres[MXDI];
+	double avgdev[MXDO];
 	double wweight = 1.0;
 
 	/* Process the arguments */
@@ -120,11 +119,12 @@ int main(int argc, char *argv[]) {
 
 	low[0] = 0.0;
 	high[0] = 1.0;
+	avgdev[0] = AVGDEV;
 
 	error_program = "Curve1";
 
 	for (n = 0; n < TRIALS; n++) {
-		double lrand;		/* Amount of level randomness */
+		double lrand = 0.0;	/* Amount of level randomness */
 		int pnts;
 		int fres;
 
@@ -182,16 +182,13 @@ int main(int argc, char *argv[]) {
 #ifdef EXTRAFIT
 		           RSPL_EXTRAFIT |	/* Extra fit flag */
 #endif
-#ifdef NONMON
-		           RSPL_NONMON |	/* Non-mono flag */
-#endif
 		           0,
 		           test_points,			/* Test points */
 		           pnts,	/* Number of test points */
 		           low, high, gres,		/* Low, high, resolution of grid */
 		           low, high,			/* Data scale */
 		           SMOOTH,				/* Smoothing */
-		           AVGDEV,				/* Average deviation */
+		           avgdev,				/* Average deviation */
                    wweight,				/* weak function weight */
 				   NULL,				/* No context */
 		           wfunc				/* Weak function */
@@ -247,16 +244,13 @@ int main(int argc, char *argv[]) {
 #ifdef EXTRAFIT
 		           RSPL_EXTRAFIT |		/* Extra fit flag */
 #endif
-#ifdef NONMON
-		           RSPL_NONMON |		/* Non-mono flag */
-#endif
 			           0,
 			           test_points,			/* Test points */
 			           pnts,	/* Number of test points */
 			           low, high, gres,		/* Low, high, resolution of grid */
 			           low, high,			/* Data scale */
 			           SMOOTH,				/* Smoothing */
-			           AVGDEV,				/* Average deviation */
+			           avgdev,				/* Average deviation */
 	                   wweight,				/* weak function weight */
 					   NULL,				/* No context */
 			           wfunc				/* Weak function */
@@ -295,7 +289,7 @@ double xa[],
 double ya[],
 int n)
 	{
-	int i,j;
+	int i;
 	double y;
 
 	if (x < xa[0])

@@ -9,8 +9,8 @@
  *
  * Copyright 1998 - 2005 Graeme W. Gill
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  */
 
 /* TTBD:
@@ -39,7 +39,7 @@ void usage(void) {
 	fprintf(stderr,"Translate colors through an ICC profile, V%s\n",ICCLIB_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: icclu [-v level] [-f func] [-i intent] [-o order] profile\n");
-	fprintf(stderr," -v            Verbose\n");
+	fprintf(stderr," -v level      Verbosity level 0 - 2 (default = 1)\n");
 	fprintf(stderr," -f function   f = forward, b = backwards, g = gamut, p = preview\n");
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"               s = saturation, a = absolute\n");
@@ -61,7 +61,7 @@ main(int argc, char *argv[]) {
 	char prof_name[500];
 	icmFile *fp;
 	icc *icco;
-	int verb = 0;
+	int verb = 1;
 	double scale = 0.0;		/* Device value scale factor */
 	int rv = 0;
 	int repYxy = 0;			/* Report Yxy */
@@ -104,8 +104,21 @@ main(int argc, char *argv[]) {
 
 			/* Verbosity */
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
-				verb = 1;
+				fa = nfa;
+				if (na == NULL)
+					verb = 2;
+				else {
+					if (na[0] == '0')
+						verb = 0;
+					else if (na[0] == '1')
+						verb = 1;
+					else if (na[0] == '2')
+						verb = 2;
+					else
+						usage();
+				}
 			}
+
 			/* function */
 			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F') {
 				fa = nfa;
@@ -228,7 +241,7 @@ main(int argc, char *argv[]) {
 	if ((rv = icco->read(icco,fp,0)) != 0)
 		error ("%d, %s",rv,icco->err);
 
-	if (verb) {
+	if (verb > 1) {
 		icmFile *op;
 		if ((op = new_icmFileStd_fp(stdout)) == NULL)
 			error ("Can't open stdout");
@@ -264,7 +277,8 @@ main(int argc, char *argv[]) {
 		if (fgets(buf, 200, stdin) == NULL)
 			break;
 		if (buf[0] == '#') {
-			fprintf(stdout,"%s\n",buf);
+			if (verb > 0)
+				fprintf(stdout,"%s\n",buf);
 			continue;
 		}
 		/* For each input number */
@@ -312,15 +326,17 @@ main(int argc, char *argv[]) {
 			error ("%d, %s",icco->errc,icco->err);
 
 		/* Output the results */
-		for (j = 0; j < inn; j++) {
-			if (j > 0)
-				fprintf(stdout," %f",oin[j]);
-			else
-				fprintf(stdout,"%f",oin[j]);
-		}
-		printf(" [%s] -> %s -> ", icm2str(icmColorSpaceSignature, ins),
+		if (verb > 0) {
+			for (j = 0; j < inn; j++) {
+				if (j > 0)
+					fprintf(stdout," %f",oin[j]);
+				else
+					fprintf(stdout,"%f",oin[j]);
+			}
+			printf(" [%s] -> %s -> ", icm2str(icmColorSpaceSignature, ins),
 		                          icm2str(icmLuAlg, alg));
-
+		}
+		
 		if (repYxy && outs == icSigYxyData) {
 			double X = out[0];
 			double Y = out[1];
@@ -355,12 +371,13 @@ main(int argc, char *argv[]) {
 			else
 				fprintf(stdout,"%f",out[j]);
 		}
-		printf(" [%s]", icm2str(icmColorSpaceSignature, outs));
+		if (verb > 0)
+			printf(" [%s]", icm2str(icmColorSpaceSignature, outs));
 
-		if (rv == 0)
-			fprintf(stdout,"\n");
-		else
-			fprintf(stdout," (clip)\n");
+		if (verb > 0 && rv != 0)
+			fprintf(stdout," (clip)");
+
+		fprintf(stdout,"\n");
 
 	}
 

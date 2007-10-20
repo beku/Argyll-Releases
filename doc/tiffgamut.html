@@ -22,85 +22,147 @@ in, or a colorspace it might get transformed into, and can also be used
 to create an image source gamut for use with <a href="icclink.html">
 icclink</a>.<br>
 <br>
-For creating a gamut suitable for use with the <a
- href="icclink.html">icclink</a> <a
- href="icclink.html#g">-g</a> or <a
- href="icclink.html#G">-G</a>
-flags, use the Jab appearance space intent and the same viewing
+<span style="font-weight: bold;">NOTE</span> that if you are creating
+an image gamut suitable for use with the <a href="icclink.html">icclink</a>
+<a href="icclink.html#g">-g</a> or <a href="icclink.html#G">-G</a>
+flags, or <a href="profile.html#g">profile
+-g</a>, use the Jab appearance space intent for appearance space gamut
+mappings, and the same input viewing
 conditions to be used in <span style="font-weight: bold;">icclink</span>
+or <span style="font-weight: bold;">profile</span>
 using
 the -c flag, i.e. "tiffgamut -ij -c2 sRGB.icm image.tif"<br>
 <h3>Usage Summary</h3>
-tiffgamut [-v level] profile.icm infile.tif<br>
-&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp;Verbose<br>
-&nbsp;-i intent&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;p =
-perceptual, r = relative colorimetric,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp;s = saturation, a = absolute, j = Appearance
-CIECAM02<br>
-&nbsp;-o order&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; n = normal
-(priority: lut &gt; matrix &gt; monochrome)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp;r = reverse (priority: monochrome &gt;
-matrix &gt; lut)<br>
-&nbsp;-c viewcond&nbsp;&nbsp; set viewing conditions for CIECAM02,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-either an enumerated choice, or a parameter:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-0: Practical Reflection Print<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-1: Print evaluation environment<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-2: Monitor in typical work environment<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-3: Monitor in darkened work environment<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-4: Projector in dim environment<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-5: Projector in dark environment<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-6: Original scene - Outdoors<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-7: Photo CD - original scene<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-8: Transparencies on a viewing box<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-s:surround&nbsp;&nbsp;&nbsp; &nbsp; a = average, m = dim, d = dark,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp;c = transparency (default average)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; Adapted white point
-as XYZ (default media white)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
-Adapted white point as x, y<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-a:adaptation&nbsp;&nbsp;&nbsp; Adaptation luminance in
+<small><span style="font-family: monospace;">tiffgamut [-v level]
+profile.icm infile.tif</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose</span><br style="font-family: monospace;">
+&nbsp;
+<span style="font-family: monospace;">-d
+sres&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Surface
+resolution details 1.0 - 50.0</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+emit VRML .wrl file as well as CGATS .gam file</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Don't add VRML axes or white/black point</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-k&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Add markers for prim. &amp; sec. "cusp" points</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-i
+intent&nbsp;&nbsp;&nbsp;&nbsp; p =
+perceptual, r = relative colorimetric,</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+s = saturation, a = absolute, j = Appearance
+CIECAM02</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-o
+order&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; n = normal
+(priority: lut &gt; matrix &gt; monochrome)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+r = reverse (priority: monochrome &gt;
+matrix &gt; lut)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-c viewcond&nbsp;&nbsp; set
+appearance mode and viewing conditions for CIECAM02,</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span></small><small><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+either an enumerated choice, or a parameter:value change</span><span
+ style="font-family: monospace;"></span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;
+&nbsp; &nbsp;&nbsp; &nbsp;
+&nbsp; pp - Practical Reflection Print</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; pe - Print evaluation environment</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; mt - Monitor in typical work environment</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; mb - Monitor in bright work environment</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; md - Monitor in darkened work
+environment</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; jm - Projector in dim environment</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; jd - Projector in dark environment</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; pcd - Photo CD - original scene
+outdoors</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; ob - Original scene - Bright Outdoors</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; cx - Cut Sheet Transparencies on a viewing box</span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+s:surround&nbsp;&nbsp; a = average, m = dim, d = dark,</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp; c = transparency (default average)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Adapted white point
+as XYZ (default media white)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Adapted white point as
+x, y</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+a:adaptation Adaptation luminance in
 cd.m^2
-(default 50.0)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; b:background&nbsp;
-Background % of image luminance (default 20)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;Flare
-light % of image luminance (default 1)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;Flare color as
-XYZ (default media white)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
-&nbsp;Flare color as x, y<br>
-&nbsp;-d sres&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;Surface
-resolution details 1.0 - 50.0<br>
-&nbsp;-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;emit VRML .wrl file as well as CGATS .gam file<br>
-&nbsp;-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; Don't add VRML axes or white/black point<br>
+(default 50.0)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+b:background Background % of image luminance (default 20)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare
+light % of image luminance (default 1)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;
+f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as
+XYZ (default media white)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as x, y</span><br
+ style="font-family: monospace;">
+</small><br>
 <h3>Usage Details and Discussion<br>
 </h3>
-The<b> -v</b> parameter dumps out the ICC profile header information.<br>
+The<b> -v</b> flag dumps out the ICC profile header information.<br>
 <br>
-The <b>-i</b> flag allows choosing the ICC profile table being used by
+The <b>-d</b> parameter controls the level of detail displayed in the
+surface. The parameter roughly corresponds to a deltaE value, so
+smaller
+values
+give greater detail. The default value is around 10, and is a good
+place
+to start. Small values may take a lot of time to generate, and will
+produce
+big files.<br>
+<br>
+The <b>-w</b> flag causes a VRML file to be produced, as well as a
+gamut file.<br>
+<br>
+The <b>-n</b> flag suppresses the L*a*b* axes being created in
+the
+VRML.<br>
+<br>
+The <span style="font-weight: bold;">-k</span> flag adds markers for
+each of the primary and secondary "cusp" points (Red, Yellow, Green,
+Cyan, Blue &amp; Magenta). No markers will be displayed if the cusps
+cannot be determined.<br>
+<br>
+The <b>-i</b> parameter allows choosing the ICC profile table being
+used by
 its intent. Anything other than colorimetric may not represent the
 native capabilities of the device. The j parameter interprets the
 absolute colorimetric table in terms of CIECAM02 appearance space Jab
@@ -115,30 +177,13 @@ information if it is all that is present. The <b>-o</b> flag, reverses
 this
 order.&nbsp;&nbsp;&nbsp; <br>
 <br>
-The <b>-c</b> option allows setting the CIECAM02 viewing conditions,
-either by choosing a typical viewing environment, or controlling
-particular
-viewing condition parameters.<br>
-<br>
-The <b>-d</b> parameter controls the level of detail displayed in the
-surface. The parameter roughly corresponds to a deltaE value, so
-smaller
-values
-give greater detail. The default value is around 10, and is a good
-place
-to start. Small values may take a lot of time to generate, and will
-produce
-big files.<br>
-<br>
-The <b>-w</b> option causes a VRML file to be produced, as well as a
-gamut file.<br>
-<br>
-The <b>-n</b> parameter suppresses the L*a*b* axes being created in
-the
-VRML.<br>
-<br>
-<br>
-<br>
+The <span style="font-weight: bold;">-c</span> parameter sets the
+output space to CIECAM02 appearance Jab values, and also allows
+choosing
+a set of viewing conditions, either by choosing a typical viewing
+environment, or controlling
+particular viewing condition parameters.<br>
+<span style="font-weight: bold;"></span><br>
 <br>
 <br>
 </body>

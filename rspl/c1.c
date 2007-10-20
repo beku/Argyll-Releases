@@ -12,18 +12,15 @@
  *
  * Copyright 1995, 1996 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #undef DIAG
 #undef DIAG2
 #undef GLOB_CHECK
 #define RES2			/* Do multiple test at various resolutions */
-#undef EXTRAFIT			/* Test extra fitting effort */
-#undef NONMON			/* Test non-monotonic handling */
-#define SMOOTH 1.0
-#define AVGDEV 0.0
+#define AVGDEV 0.0		/* Average deviation of function data */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,31 +50,80 @@ double ya[MAX_PNTS];
 #define XRES 100
 
 #define PNTS 10
-//#define GRES 200
-#define GRES 800
+#define GRES 400
+//#define GRES 800
 double t1xa[PNTS] = { 0.2, 0.25, 0.30, 0.35,  0.40,  0.44, 0.48, 0.51,  0.64,  0.75  };
 double t1ya[PNTS] = { 0.3, 0.35, 0.4,  0.41,  0.42,  0.46, 0.5,  0.575, 0.48,  0.75  };
 co test_points[MAX_PNTS];
 
 double lin(double x, double xa[], double ya[], int n);
 
-main() {
+void usage(void) {
+	fprintf(stderr,"Test 1D rspl interpolation\n");
+	fprintf(stderr,"Author: Graeme W. Gill\n");
+	fprintf(stderr,"usage: c1 [options]\n");
+	fprintf(stderr," -s smooth     Use given smoothness (default 1.0)\n");
+	fprintf(stderr," -x            Use extra fitting\n");
+	exit(1);
+}
+
+int main(int argc, char *argv[]) {
+	int fa,nfa;				/* argument we're looking at */
 	int i,j, n;
 	double x;
 	double xx[XRES];
 	double yy[6][XRES];
 	rspl *rss;		/* incremental solution version */
-	double pef;
 	datai low,high;
 	int gres[MXDI];
+	double smooth = 1.0;
+	int extra = 0;
+	double avgdev[MXDO];
 
 	low[0] = 0.0;
 	high[0] = 1.0;
+	avgdev[0] = AVGDEV;
 
-	error_program = "Curve1";
+	error_program = "c1";
+
+	/* Process the arguments */
+	for(fa = 1;fa < argc;fa++) {
+		nfa = fa;					/* skip to nfa if next argument is used */
+		if (argv[fa][0] == '-')	{	/* Look for any flags */
+			char *na = NULL;		/* next argument after flag, null if none */
+
+			if (argv[fa][2] != '\000')
+				na = &argv[fa][2];		/* next is directly after flag */
+			else {
+				if ((fa+1) < argc) {
+					if (argv[fa+1][0] != '-') {
+						nfa = fa + 1;
+						na = argv[nfa];		/* next is seperate non-flag argument */
+					}
+				}
+			}
+
+			if (argv[fa][1] == '?')
+				usage();
+
+			/* smoothness */
+			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+				fa = nfa;
+				if (na == NULL) usage();
+				smooth = atof(na);
+			}
+
+			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
+				extra = 1;
+
+			} else 
+				usage();
+		} else
+			break;
+	}
 
 	for (n = 0; n < TRIALS; n++) {
-		double lrand;		/* Amount of level randomness */
+		double lrand = 0.0;		/* Amount of level randomness */
 		int pnts;
 		int fres;
 
@@ -140,19 +186,13 @@ main() {
 #endif
 		/* Fit to scattered data */
 		rss->fit_rspl(rss,
-#ifdef EXTRAFIT
-		           RSPL_EXTRAFIT |	/* Extra fit flag */
-#endif
-#ifdef NONMON
-		           RSPL_NONMON |	/* Non-mono flag */
-#endif
-		           0,
+		           0 | extra ? RSPL_EXTRAFIT : 0 ,
 		           test_points,			/* Test points */
 		           pnts,	/* Number of test points */
 		           low, high, gres,		/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
-		           SMOOTH,				/* Smoothing */
-		           AVGDEV);				/* Average deviation */
+		           smooth,				/* Smoothing */
+		           avgdev);				/* Average deviation */
 
 
 		/* Display the result */
@@ -205,16 +245,13 @@ main() {
 #ifdef EXTRAFIT
 		           RSPL_EXTRAFIT |		/* Extra fit flag */
 #endif
-#ifdef NONMON
-		           RSPL_NONMON |		/* Non-mono flag */
-#endif
 			           0,
 			           test_points,			/* Test points */
 			           pnts,	/* Number of test points */
 			           low, high, gres,		/* Low, high, resolution of grid */
 			           NULL, NULL,			/* Default data scale */
-			           SMOOTH,				/* Smoothing */
-			           AVGDEV);				/* Average deviation */
+			           smooth,				/* Smoothing */
+			           avgdev);				/* Average deviation */
 	
 				/* Get the result */
 				for (i = 0; i < XRES; i++) {
@@ -247,9 +284,8 @@ lin(
 double x,
 double xa[],
 double ya[],
-int n)
-	{
-	int i,j;
+int n) {
+	int i;
 	double y;
 
 	if (x < xa[0])
@@ -266,19 +302,12 @@ int n)
 	y = ya[i] + (ya[i+1] - ya[i]) * x;
 	
 	return y;
-	}
+}
 
 
 /******************************************************************/
 /* Error/debug output routines */
 /******************************************************************/
-
-void
-usage(void) {
-	printf("1D rspl curve test by Graeme Gill, Version %s\n",ARGYLL_VERSION_STR);
-	printf("usage: c1\n");
-	exit(1);
-	}
 
 /* Next u function done with optimization */
 

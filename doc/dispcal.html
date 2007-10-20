@@ -9,122 +9,464 @@
 <body>
 <h2><b>spectro/dispcal</b></h2>
 <h3>Summary</h3>
-Given a calibration target [white point, maximum brightness, and
+Given calibration target information [white point, maximum brightness,
+and
 response curve ("gamma")], display a series of test patches on the
-display, and using the colorimetric values read, create red, green and
-blue lookup tables that make the display meet the desired target.<br>
+display, and using the colorimetric values read, create a calibration
+lookup tables that make the display meet the desired target. The type
+of instrument is determined by the communication port selected.
+Emission and display measurement instruments are supported.<br>
 <h3>Usage</h3>
-dispcal [-options]<i> inoutfile</i><br>
-&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;Verbose mode<br>
-&nbsp;<a href="printread.html#d">-d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Print debug diagnostics<br>
-&nbsp;<a href="#c">-c comport</a>&nbsp;&nbsp; Set COM port, 1..N
-(default 1)<br>
-&nbsp;<a href="#a">-a</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; Run instrument calibration<br>
-&nbsp;<a href="#i">-i 92|SO</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Select
-target
-instrument (default DTP92)<br>
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-92
-=
-DTP92, SO = Spectrolino<br>
-&nbsp;<a href="#q">-q [lmhu]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Quality
-- Low, Medium (def), High, Ultra<br>
-&nbsp;<a href="#t">-t temp</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Set the target white point daylight color temperature in deg. K<br>
-&nbsp;<a href="#w">-w x,y</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Set the target white point as chromaticity coordinates<br>
-&nbsp;<a href="#b">-b bright</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Set the target brightness in cd/m^2<br>
-&nbsp;<a href="#g">-g gamma</a>&nbsp;&nbsp;&nbsp;&nbsp; Set the target
-response curve gamma (Def. 2.2)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use "-gl" for L*a*b* curve<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp; Use "-gs" for sRGB curve<br>
-&nbsp;<a href="#V">-V</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Run verify pass on final curves<br>
-&nbsp;<a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;[X11 only] Don't set override redirect on test window<br>
-&nbsp;<a href="#p1"><i>inoutfile</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Base name for input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
- href="File_Formats.html#.ti3">.ti3</a>] file.<br>
+<font size="-1"><span style="font-family: monospace;">dispcal [-options]</span><i
+ style="font-family: monospace;"> inoutfile</i><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#v">-v [n]</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose mode<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#display">-display displayname</a><span
+ style="font-family: monospace;"> [X11 only] Choose X11 display name<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="dispwin.html#dnm">-d n[,m]</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; [X11
+only]Choose the display from the following list (default 1),<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+and optionally choose a different display m for VideoLUT access.</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="dispwin.html#d">-d n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Choose the display from the following list (default 1)</span></font><br
+ style="font-family: monospace;">
+<font size="-1"><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span>&nbsp; <span
+ style="font-family: monospace;"></span></font><small
+ style="font-family: monospace;"><span style="font-family: monospace;"></span><a
+ style="font-family: monospace;" href="dispread.html#c">-c listno</a><span
+ style="font-family: monospace;"> &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set
+communication port from the following list (default 1)<br>
+</span></small><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="dispcal.html#r">-r</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; Report on the calibrated display then exit</span></font><font
+ size="-1"><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"><br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#R">-R</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; Report on the uncalibrated display then exit</span></font><font
+ size="-1"><span style="font-family: monospace;"></span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#m">-m</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; </span></font><font size="-1"><span
+ style="font-family: monospace;">Skip</span><span
+ style="font-family: monospace;"> adjustment of the monitor
+controls</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#u">-u</a>
+<a href="#u_p1">[profile.icm]</a>&nbsp;&nbsp;&nbsp;&nbsp;
+Update previous calibration [update profile with new calibration]</span><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#q">-q [lmh]</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Quality
+- Low, Medium (def), High<br>
+&nbsp;<a href="#y">-y c|l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Display type, c = CRT, l = LCD<br style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#t">-t [temp]</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+White Daylight locus target, optional target temperaturee in deg. K
+(deflt.)<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#T">-T [temp]</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+White Black Body locus target, optional target temperaturee in deg. K</span></font><br
+ style="font-family: monospace;">
+<font size="-1"><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#w">-w x,y</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set the target white point as chromaticity coordinates</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#b">-b bright</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set the target brightness in cd/m^2</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#g">-g gamma</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set the target
+response curve gamma (Def. 2.2)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use "-gl" for L*a*b* curve</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; Use "-gs" for sRGB curve<br>
+&nbsp;<a href="#k">-k factor</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Amount to
+try and correct black point. Default 1.0, LCD default 0.0<br
+ style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#e">-e [n]</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Run n verify passes on final curves<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#E">-E</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Run only verify pass on installed calibration curves</span></font><br
+ style="font-family: monospace;">
+<font size="-1"><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;<a href="#p">-p ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Position test window and scale it</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#n">-n</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; [X11 only] Don't set override redirect on test
+window<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="dispcal.html#K">-K</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; Run instrument calibration first<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#H">-H</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; Use high resolution spectrum mode (if
+available)</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Disable auto calibration of instrument<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#D">-D [level]</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Print debug diagnostics to stderr</span></font><br
+ style="font-family: monospace;">
+<font size="-1"><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#p1"><i>inoutfile</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Base name for input</span><span style="font-family: monospace;">/output[</span><a
+ style="font-family: monospace;" href="cal_format.html">.cal</a><span
+ style="font-family: monospace;">] file.</span></font><br>
 <br>
 <h3>Comments<br>
 </h3>
 This is the utility is used for calibrating a display, to reach
-specified target behaviour. <br>
+specified target behaviour.&nbsp; For best results on a CRT, you should
+run this
+against a neutral grey desktop background, and avoid having any bright
+images or windows on the screen at the time you run dispcal<br>
 <br>
 <a name="v"></a> The <b>-v</b> flag reports progress information, as
-well as other statistics about the progress of calibration.<br>
+well as other statistics about the progress of calibration. A numerical
+argument greater than 1 gives greater verbosity.<br>
 <br>
-<a name="d"></a>The <b>-d</b> flag causes serial communications
-diagnostics to be printed to stdout. This can be useful in tracking
-down why an instrument can't connect.<br>
+<a name="display"></a>When running on a UNIX based system that used the
+X11
+Windowing
+System, <b>dispcal</b> will by default use the $DISPLAY environment
+variable to determine which display and screen to read from. This can
+be overridden by supplying an X11 display name to the <span
+ style="font-weight: bold;">-display</span> option. Note that if
+Xinerama is active, you can't select the screen using $DISPLAY or
+-display, you have to select it using the <span
+ style="font-weight: bold;">-d</span> parameter.<br>
 <br>
-<a name="c"></a> The instrument is assumed to communicate through a
-serial
-communication port, and the port can be selected with the <b>-c</b>
+<a name="d"></a> By default the main display will be the location of
+the test window. If the system has more than
+one display or screen, an alternate display/screen can be selected with
+the <span style="font-weight: bold;">-d</span> parameter. If you
+invoke <span style="font-weight: bold;">dispcal</span>
+so as to display the usage
+information (i.e. "dispcal -?" or "dispcal --"), then the discovered
+displays/screens will be listed. Multiple displays may not be listed,
+if they appear as a single display to the operating system (ie. the
+multi-display support is hidden in the video card driver). On UNIX
+based system that used the X11
+Windowing
+System, the <span style="font-weight: bold;">-d</span> parameter will
+override the screen specified by the $DISPLAY or parameter.<br>
+<br>
+<span style="font-weight: bold;">Note</span> that on X11,
+if the VideoLUTs for a display are not accessible, <span
+ style="font-weight: bold;">dispcal</span> will fail with an error.
+This could be because you are trying to access a remote display, and
+the remote display doesn't support the XF86VidMode extension, or
+perhaps you are running multiple monitors using NVidia TwinView, or
+MergedFB, and trying to access anything other than the primary monitor.
+TwinView and MergedFB don't properly support the XF86VidMode extension
+for multiple displays. You can use <a href="dispwin.html#r">dispwin -r</a>
+to test whether the VideoLUTs are accessible for a particular display.
+See also below, on how to select a different display for VideoLUT
+access. Also note that dispcal will fail if the Visual depth doesn't
+match the VideoLUT depth. Typically the VideoLUTs have 256 entries per
+color component, so the Visual generally needs to be 24 bits, 8 bits
+per color component.<br>
+<br>
+<a name="dnm"></a>Because of the difficulty cause by TwinView and
+MergedFB in X11 based systems, you can optionally specify a separate
+display number after the display that is going to be used to present
+test patches, for accessing the VideoLUT hardware. This must be
+specified as a single string, e.g. <span style="font-weight: bold;">-d
+1,2</span>
+. Some experimentation may be needed using <a href="dispwin.html">dispwin</a>
+on such systems, to discover what
+screen has access to the VideoLUT hardware, and which screens the test
+patches appear on. You may be able to calibrate one screen, and then
+share the calibration with another screen. Profiling can be done
+independently to calibration on each screen.<br>
+<br>
+<a name="c"></a> <span style="font-weight: bold;">-c</span> The
+instrument is assumed to communicate through a
+USB or serial communication port, and the port can be selected with the
+<b>-c</b>
 option,
 if the instrument is not connected to the first port. If you invoke <span
- style="font-weight: bold;">dispread</span> so as to display the usage
-information (i.e. "dispread -?" or "dispread --"), then the discovered
-serial ports will be listed on Windows and Mac OSX systems.<br>
+ style="font-weight: bold;">dispcal</span>
+so as to display the usage
+information (i.e. "dispcal -?" or "dispcal --"), then the discovered
+USB and serial ports will be listed. On
+UNIX/Linux, a list of all possible serial ports are shown, but not all
+of them may
+actually be present on your system.<br>
 <br>
-<a name="i"></a>By default <b>dispcal</b> expects to use an Xrite
-DTP92
-CRT instrument, but the GretagMacbeth Spectrolino can be selected by
-using the
-"SO" argument to the <b>-i</b> option, for use on either a CRT or LCD
-type of display.<br>
+<a name="r"></a> The -<span style="font-weight: bold;">r</span> and <span
+ style="font-weight: bold;"><a name="R"></a>-R </span>flags
+perform a quick measurement of current display behaviour, reports
+and then exits. If the <span style="font-weight: bold;">-r</span> flag
+is used the measurement are taken using the currently loaded
+calibration (Video LUT) curves. If <span style="font-weight: bold;">-R</span>
+is use, then the uncalibrated ("raw" or "native") behaviour is
+measured. Reported are: <br>
 <br>
-<a name="q"></a>&nbsp; Quality - Low, Medium (def), High, Ultra. The <span
+&nbsp;&nbsp;&nbsp; Black Brightness in cd/m^2<br>
+&nbsp;&nbsp;&nbsp; White Brightness in cd/m^2<br>
+&nbsp;&nbsp;&nbsp; The approximate Gamma<br>
+&nbsp;&nbsp;&nbsp; The white point x,y chromaticity co-ordinates<br>
+&nbsp;&nbsp;&nbsp; The correlated color temperature in Kelvin, and the
+CIEDE200 to the Black Body locus.<br>
+&nbsp;&nbsp;&nbsp; The correlated Daylight temperature in Kelvin, and
+the CIEDE200 to the Daylight locus.<br>
+&nbsp;&nbsp;&nbsp; The visual color temperature in Kelvin, and the
+CIEDE200 to the Black Body locus.<br>
+&nbsp;&nbsp;&nbsp; The visual Daylight temperature in Kelvin, and the
+CIEDE200 to the Daylight locus.<br>
+&nbsp;&nbsp;&nbsp; The visual color temperature in Kelvin<br>
+<br>
+Note that the correlated color temperature is the temperature of a
+black body radiator that has the closest color to the white point
+measured using the traditional CIE 1960 UCS space color difference
+formula. The correlated daylight temperature is a similar thing, except
+the CIE daylight locus is used. The visual color temperature values are
+calculated similarly to the correlated color temperatures, but using
+the
+modern CIEDE2000 color difference formula to calculate a better visual
+approximation to the closest temperature to the displays white point.
+There will be no difference between the UCS and CIEDE2000 temperatures
+if the display white point actually lies on the particular locus.<br>
+<br>
+<a name="m"></a> The -<span style="font-weight: bold;">m</span> option
+skips the usual process of adjusting the display monitor contrast,
+brightness and white point controls, and skips straight to calibration.<br>
+<br>
+<a name="u"></a><span style="font-weight: bold;">-u</span> Normally <span
+ style="font-weight: bold;">dispcal</span>
+creates a new calibration file, based on the requested targets, and the
+response of the display. This can take a fair amount of time,
+particularly if a high quality level has been selected, so to speed up
+the process of keeping a display in calibration the <span
+ style="font-weight: bold;">-u</span> flag can be used. This uses the
+same calibration targets as the previous calibration but does a smaller
+number of refinement passes, enough to improve the accuracy of the
+calibration to account for drift in the device. If a display ICC
+profile is provided as an argument to <span style="font-weight: bold;">-u</span>,
+then the vcgt tag within the profile will be updated with the new
+calibration. This keeps the profile up to date with the display.
+Normally <span style="font-weight: bold;">dispcal -u</span> will use
+the same quality level that was specified in the previous calibration,
+but this can be overridden using the <span style="font-weight: bold;">-q</span>
+flag. Any options that attempt to change the calibration target (ie.
+white point, brightness, gamma etc.) will be ignored. Adjustment of the
+display monitor controls is skipped.<br>
+<br>
+<a name="q"></a>&nbsp; Quality - Low, Medium (def), High. The <span
  style="font-weight: bold;">-q</span> flag determines how much time and
 effort to go to in calibrating the display. The higher the quality, the
 more test readings will be done, the more refinement passes will be
-done, and the more detailed will be the calibration of the display.<br>
+done, the tighter will be the accuracy tolerance, and the more detailed
+will be the calibration of the display. The result will ultimately be
+limited by the accuracy of the instrument, the repeatability of the
+display and instrument, and the resolution of the Video Lookup table
+entries and Digital or Analogue output (RAMDAC).<br>
 <br>
-&nbsp;<a name="t"></a><span style="text-decoration: underline;"></span>
-Set the target white point, daylight color temperature in deg. Kelvin.
-By default, the native white point of the display is used.
+<a name="y"></a>&nbsp; Display type. Colorimeters can
+do a more accurate job if they know what type of display technology
+they are measuring. Use <span style="font-weight: bold;">-yc</span> if
+you are
+calibrating a CRT (Cathode Ray Tube) type monitor, and use <span
+ style="font-weight: bold;">-yl</span> if you are calibrating an LCD
+(Liquid Crystal Display). A spectrometer instrument will not need this
+option.<br>
+<br>
+<a name="t"></a><span style="text-decoration: underline;"></span>
+<span style="font-weight: bold;">-t</span> Set the target white point
+locus to the equivalent of a Daylight
+spectrum of the given temperature in degrees Kelvin.
+By default the white point target will be the native white of the
+display, and it's color temperature and delta E to the daylight
+spectrum locus will be shown during monitor adjustment, and adjustments
+will be recommended to put the display white point directly on the
+Daylight locus. If a Daylight color temperature is given as an argument
+to <span style="font-weight: bold;">-t</span>, then this will become
+the target of the adjustment, and the recommended adjustments will be
+those needed to make the monitor white point meet the target.
 Typical&nbsp;
-values might be 5000 for matching printed output, or 65000, which gives
-a brighter, bluer look. The cooler white point may limit the maximum
+values might be 5000 for matching printed output, or 6500, which gives
+a brighter, bluer look. A white point temperature different to that
+native to the display may limit
+the maximum
 brightness possible.<br>
 <br>
-&nbsp;<a name="w"></a> An alternative to specifying the white point in
-degrees Kevin, is to specify it in chromaticity co-ordinates. This
-allows the white point to be a color other than one on the blackbody
-locus.<br>
+<a name="T"></a><span style="text-decoration: underline;"></span>
+<span style="font-weight: bold;">-T</span> Same functionality as the <span
+ style="font-weight: bold;">-t</span> option, except the white point
+locus will be the Black Body, or Planckian locus, rather than the
+Daylight locus. While these two white point loci are quite close, they
+are subtly different. If a temperature is given as an argument, this
+will become the Black Body target temperature during adjustment.<br>
 <br>
-&nbsp;<a name="b"></a> Set the target brightness of white in cd/m^2. If
-this number cannot be reached, the brightest output possible is chosen.<br>
+<a name="w"></a><span style="font-weight: bold;">-w</span> An
+alternative to specifying a&nbsp; white point target in
+Daylight or Black Body degrees Kevin, is to specify it in chromaticity
+co-ordinates. This
+allows the white point to be a color other than one on the Daylight or
+Black Body. Note that the x,y numbers must be specified as a single
+string
+(no space between the numbers and the comma).<br>
 <br>
-&nbsp;<a name="g"></a> Set the target response curve gamma. This is
+<a name="b"></a><span style="font-weight: bold;">-b</span> Set the
+target brightness of white in cd/m^2. If
+this number cannot be reached, the brightest output possible is chosen,
+consistent with matching the white point target. Note that many of the
+instruments are not particularly accurate when assessing the absolute
+display brightness in cd/m^2.<br>
+<br>
+<a name="g"></a><span style="font-weight: bold;">-g</span> Set the
+target response curve gamma. This is
 normally an exponential curve (output = input ^gamma), and defaults to
-2.2, a standard sort of value. Two alternatives to the power curve are
+2.2 on MSWindows and Linux/Unix, and 1.8 on a Macontosh (OS X). Two
+alternatives to the power curve are
 to use the sRGB curve response curve, which is an exponent curve with a
 straight segment at the dark end (<span style="font-weight: bold;">-gs</span>),
 or the L* curve, which is the response of the CIE L*a*b* perceptual
-colorspace (<span style="font-weight: bold;">-gl</span>).<br>
+colorspace (<span style="font-weight: bold;">-gl</span>). Note that a
+real display can't reproduce any of these ideal curves, since it will
+have a non-zero black point, whereas all the ideal curves assume zero
+light at zero input. In the case of a gamma curve target, dispcal uses
+a power curve shape that aims for the same relative output at 50% input
+as the ideal power curve, but has an input value offset such that its
+zero input plus the offset creates the black level. For the sRGB and L*
+target curve, the target curve is the ideal curve value plus the black
+level. <br>
 <br>
-&nbsp;<a name="V"></a>&nbsp; Run verify pass on the final curves. This
-is an extra set of instrument readings, that are used to estimate how
+<a name="k"></a><span style="font-weight: bold;">-k</span> Normally
+dispcal will attempt to make all colors
+down the neutral axis (R=G=B) have the same hue as the chosen white
+point. Near the black point, red, green or blue can only be added, not
+subtracted from zero, so the process of making the near black colors
+have the desired hue, will lighten them to some extent. For a device
+with a good contrast ratio or a black point that has nearly the same
+hue as the white, this is not a problem. If the device contrast ratio
+is not so good, and the black hue is noticeably different to that of
+the chosen white point (which is often the case for <span
+ style="font-weight: bold;">LCD</span> type displays), this could have
+a noticeably detrimental effect
+on an already limited contrast ratio. The <span
+ style="font-weight: bold;">-k</span> flag allows the amount of black
+point hue correction to be controlled. By default a factor of <span
+ style="font-weight: bold;">1.0</span> will be used, which is usually
+good for <span style="font-weight: bold;">CRT</span> and also by
+default a factor of <span style="font-weight: bold;">0.0</span> is
+used for <span style="font-weight: bold;">LCD</span>
+type displays, but the <span style="font-weight: bold;">-k</span>
+option allows overriding these with a custom value between 0.0 (no
+correction) to 1.0 (full correction). If less than full correction is
+chosen, then the resulting calibration curves will have the target
+white point down most of the curve, but will then cross over to the
+native or compromise black point.<br>
+<br>
+<a name="e"></a><span style="font-weight: bold;">-e [n]</span> Run <span
+ style="font-weight: bold;">n</span> verify
+passes on the final curves. This
+is an extra set of instrument readings, that can be used to estimate
+how
 well the device will match the targets with the computed calibration
-curves.<br>
+curves. Note that the usefulness of the verification is sometimes
+limited by the repeatability of the device &amp; instrument readings.
+This
+is often evident for CRT displays, which (due to their refresh rate)
+flicker. More than one verification pass can be done by providing the
+parameter <span style="font-weight: bold;">n</span>, and by then
+comparing the successive verifications, some idea of the repeatability
+can be ascertained. The verification uses a fixed number of semi-random
+test values to test the calibration.<br>
 <br>
-<a name="a"></a> The -<span style="font-weight: bold;">a</span> option
-runs through the black and sensor
-relative
-calibration routines for the Xrite DTP92 instrument. If a Spectrolino
-is being used, then a white calibration will always be performed before
-the instrument can be placed on the display.<br>
+<a name="E"></a><span style="font-weight: bold;">-E</span> Run verify
+pass on the display as it is
+currently setup (currently installed LUT curves). This will use the
+usual input
+parameters to establish the expected (target) characteristic. You can
+use <a href="dispwin.html">dispwin</a> to load a <span
+ style="font-weight: bold;">.cal</span> file into the display before
+running dispcal <span style="font-weight: bold;">-E</span>. Note that
+on Apple OS X, you will need to run dispwin with the <a
+ href="dispwin.html%20#x">-x</a> option <span
+ style="font-weight: bold;"></span>to ensure that the calibration is
+retained while dispcal <span style="font-weight: bold;">-E</span> is
+run.<br>
 <br>
-<a name="n"></a>When running on a UNIX based system that used the X11
+<a name="p"></a> The <span style="font-weight: bold;">-p</span>
+parameter allows you to position and size the test patch window. By
+default it is places in the center of the screen, and sized
+appropriately for the type of instrument. The <span
+ style="font-weight: bold;">ho</span> and <span
+ style="font-weight: bold;">vo</span> values govern the horizontal and
+vertical offset respectively. A value of 0.0 positions the window to
+the far left or top of the screen, a value of 0.5 positions it in the
+center of the screen (the default), and 1.0 positions it to the far
+right or bottom of the screen. The <span style="font-weight: bold;">ss</span>
+parameter is a scale factor for the test window size. A value of 0.5
+for instance, would produce a half sized window. A value of 2.0 will
+produce a double size window. Note that the ho,vo,ss numbers must be
+specified as a single string (no space between the numbers and the
+comma).<br>
+For example, to create a double sized test window at the top right of
+the screen, use <span style="font-weight: bold;">-p 1,0,2</span> .<br>
+<br>
+<a name="n"></a><span style="font-weight: bold;">-n</span> When running
+on a UNIX based system that used the X11
 Windowing
-System, <b>dispread</b> normally selects the override redirect so that
+System, <b>dispcal</b> normally selects the override redirect so that
 the
 test window will appear above any other windows on the display. On some
 systems
@@ -132,29 +474,332 @@ this can interfere with window manager operation, and the <b>-n</b>
 option
 turns this behaviour off.<br>
 <br>
-<a name="p1"></a> The final parameter on the command line is the base
-filename for the <a href="File_Formats.html#.ti1">.ti1</a>
-input file, and the <a href="File_Formats.html#.ti3">.ti3</a> output
-file. <b>dispread</b> will add the .ti1 and .ti3 extensions
-automatically.<br>
+<a name="K"></a> The -<span style="font-weight: bold;">K</span> option
+runs through the black and sensor
+relative
+calibration routines for the Xrite DTP92 and DTP94 instruments, the
+black level calibration for the Eye-One Display 1, and a CRT frequency
+calibration for the Eye-One Display 2. For the
+black calibration the instrument should be placed on an opaque, black
+surface, and any stray light should be avoided by placing something
+opaque over the instrument. If a
+Spectrolino
+is being used, then a white and black calibration will always be
+performed before
+the instrument can be placed on the display, unless the <a
+ href="dispcal.html#N">-N</a>
+flag is used. Generally it is not necessary to do a calibration every
+time an instrument is used, just now and again. There is also no point
+in
+doing&nbsp; a CRT frequency calibration, as this will be done
+automatically at the commencement of patch reading, and will be lost
+between runs.<br>
 <br>
-If a large number of patches is being read, the screensaver or
-powersaver on many
-systems can interfere with the operation of dispread. It is therefore
-advisable
-in these cases to manually turn off the screensaver before commencing
-the
+<a name="H"></a> The -<span style="font-weight: bold;">H</span> option
+turns on high resolution spectral mode, if the instrument supports it,
+such as the Eye-One Pro.
+See <a href="instruments.html">Operation of particular instruments</a>
+for more details. This may give better accuracy for display
 measurements.<br>
 <br>
-The calibration tables produced maintain the maximum level of precision
-available on a system. If the system RAMDAC outputs are better than 8
-bits per component, then the resulting curves can reflect this.<br>
+<a name="D"></a>The <b>-D</b> flag causes communications
+and other instrument diagnostics to be printed to stdout. A level can
+be set between 1 .. 9, that may give progressively more verbose
+information, depending on the instrument. This can be useful in
+tracking
+down why an instrument can't connect.<br>
 <br>
-Note that currently there is no support for adjusting the display
-controls (brightness, contrast, R, G &amp; B channel controls etc.) and
-providing feedback on how close the native response is to the targets.
-Currently it is up to the user to adjust these controls using some
-other feedback, before running dispcal.<br>
+<a name="p1"></a><span style="font-weight: bold;">inoutfile</span> The
+final parameter on the command line is the base
+filename for the <a href="cal_format.html">.cal</a>
+file. Normally this will be created (or an existing file will be
+overwritten). If the <span style="font-weight: bold;">-u</span> flag
+is used, then this file will be updated.<br>
+<br>
+<hr style="width: 100%; height: 2px;"><br>
+<a name="Adjustment"></a>The adjustment of the display controls
+(brightness, contrast, R, G
+&amp; B channel controls etc.) is very dependent on the particular
+monitor. Different types and brands of monitors will have different
+controls, or controls that operate in different ways.<br>
+<br>
+Almost all LCD displays lack a real <span style="font-weight: bold;">contrast</span>
+control. Those that do
+present such a control generally fake it by adjusting the video
+signal. For this reason it is usually best to set an LCD's <span
+ style="font-weight: bold;">contrast</span> control at its neutral
+setting (ie. the setting at which it doesn't change the video signal).
+Unfortunately, it can be hard to know what this neutral setting is. On
+some displays it is 50%, others 75%. If the LCD display has a "reset to
+factory defaults" mode, then try using this first, as a way of setting
+the <span style="font-weight: bold;">contrast</span> control to
+neutral. The LCD <span style="font-weight: bold;">brightness</span>
+control generally adjusts the level of backlighting the display gets,
+which affects the maximum brightness, and also tends to raise or lower
+the black level in proportion, without changing the displays response
+curve shape or overall contrast ratio.<br>
+<br>
+On CRT based displays, the <span style="font-weight: bold;">brightness</span>
+control generally adjusts the black level of the display, and as a side
+effect, tends to change the maximum brightness too. A CRT <span
+ style="font-weight: bold;">contrast</span> control generally adjusts
+the maximum brightness without affecting the black level a great deal.
+On a CRT both the <span style="font-weight: bold;">brightness</span>
+and <span style="font-weight: bold;">contrast</span> controls will
+tend to affect the shape or gamma of the display response curve.<br>
+<br>
+Many displays have some sort of color temperature adjustment. This may
+be in the form of some pre-set color temperatures, or in the form of
+individual Red, Green and Blue channel gain adjustments. Some displays
+also have R, G &amp; B channel offset adjustments that will affect the
+color temperatures near black, as well as affect the individual gun's
+curve shape. Some special LCD displays may have a white point
+adjustment that changes the color of the backlight. The color
+temperature adjustment will generally affect the maximum brightness,
+and may also affect the black level and the shape of the display
+response curves.<br>
+<br>
+Due to the variety of controls as well as the interaction between them,
+it can be an iterative process to arrive at a good monitor set-up,
+before proceeding on to calibrating and profiling a display. For this
+reason, <span style="font-weight: bold;">dispcal</span> offers a menu
+of adjustment modes, so that the user can interactively and
+iteratively adjust the display controls to meet the desired targets.<br>
+<br>
+&nbsp; 1) Black level (CRT: Brightness)<br>
+&nbsp; 2) White point (Color temperature, R,G,B, Gain)<br>
+&nbsp; 3) White level (CRT: Contrast, LCD: Brightness)<br>
+&nbsp; 4) Black point (R,G,B, Offset)<br>
+&nbsp; 5) Check all<br>
+&nbsp; 6) Continue on to calibration<br>
+&nbsp; 7) Exit<br>
+<br>
+There are four basic adjustment modes. Normally one would proceed
+through them in the order above, then perhaps repeat the first
+adjustment, before
+checking the overall settings. The White point and White level modes
+operate slightly differently, depending on whether a white target point
+has been set using the <span style="font-weight: bold;">-t -T</span>
+or <span style="font-weight: bold;">-w</span> options, and on whether
+a brightness target has been set using the <span
+ style="font-weight: bold;">-b</span> option.<br>
+<br>
+<br>
+The first mode lets you adjust the black level of a CRT display. Given
+the
+current white level, it calculates a value that should produce a 1%
+display brightness if the black level is set correctly. After doing
+some initial measurements, it will show the target brightness value (in
+cd/m^2) on one line, and then underneath it will show continuously
+updated readings from the
+display. The left most character will switch from '\' to '/' or back
+again each time a reading is updated. Some instruments can be quite
+slow in measuring dark colors, and it's best to wait for a reading
+update before changing the controls more than once. Underneath the
+target value is
+displayed the current reading, and to the right of this is a '+', '-'
+or '=' symbol, which gives a hint as to which way to adjust the
+brightness control to improve the match to the target.<br>
+<br>
+<small style="font-weight: bold;"><span style="font-family: monospace;">&nbsp;
+Adjust CRT brightness to get target level. Press space when done.</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; &nbsp; Target 0.60</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; / Current 0.68&nbsp; -</span></small><br>
+<br>
+Once happy with the adjustment, press space to go back to the menu.<br>
+<br>
+<br>
+The second mode lets you adjust the color of the white point of the
+display.
+If a target white point has been set, it will show the target
+brightness value (in
+cd/m^2) on one line, together with the target chromaticity co-ordinates
+for the white point, and then underneath it will show continuously
+updated readings from
+the display. The left most character will switch from '\' to '/' or
+back again each time a reading is updated. Underneath the target
+brightness value is
+displayed the current reading, and then the current chromaticity
+co-ordinate values. To the right of this is the current delta E of the
+white point from the target, and further to the right are hints '+',
+'-'
+or '='&nbsp; as to which direction to adjust the individual Red, Green
+and Blue gain settings to move the white point in the direction of the
+target.
+If the symbol is doubled, then this channel will have the greatest
+effect. If you do not have individual channel gain controls, then try
+choosing amongst color temperature pre-sets, to find one with the
+lowest delta E.<br>
+<br>
+&nbsp;&nbsp;
+<small style="font-weight: bold;"><span style="font-family: monospace;">Adjust
+R,G &amp; B gain to get target x,y. Press space when done.<br>
+&nbsp;&nbsp; &nbsp; Target B 60.00, x 0.3451, y 0.3516<br>
+&nbsp; / Current B 60.05, x 0.3426, y 0.3506&nbsp; DE&nbsp; 1.4&nbsp;
+R+&nbsp; G+&nbsp; B--</span><span style="font-family: monospace;"></span></small><br>
+<br>
+If you did not set a white point target, then the information shown is
+a little
+different - it will show
+the initial
+white point value, as well as the color temperature, and the CIEDE2000
+of the white point to either the Daylight or Black Body locus
+(depending on whether the <span style="font-weight: bold;">-T</span>
+flag was set). The constantly updated values show the same thing, and
+the Red, Green and Blue control hints show the direction to adjust the
+controls to place the white point on the locus. The control that will
+have the most direct effect on the color temperature will be the Blue,
+while the Green will most directly move the white point towards or away
+from the locus (but there is interaction).<br>
+<br>
+<small style="font-weight: bold;"><span style="font-family: monospace;">Adjust
+R,G &amp; B gain to desired white point. Press space when done.</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; Initial B 47.25, x 0.3417,
+y 0.3456, CDT 5113 DE&nbsp; 6.9</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">\ Current B 47.38, x 0.3420, y
+0.3460&nbsp; CDT 5104 DE&nbsp; 6.7&nbsp; R-- G+&nbsp; B-</span></small><br>
+<br>
+&nbsp;The brightness value is just there as a guide to what effect the
+adjustment is having on the overall brightness. Usually the white level
+brightness is adjusted using the next adjustment mode. Once happy with
+the adjustment, press space to go back to the menu.<br>
+<br>
+<br>
+The third mode lets you adjust the brightness of white on the
+display. If you set a target brightness using the <span
+ style="font-weight: bold;"><span style="font-weight: bold;">-b</span></span>
+parameter, it will show the target brightness value (in
+cd/m^2) on one line, and then underneath it will show continuously
+updated readings from the
+display. The left most character will switch from '\' to '/' or back
+again each time a reading is updated. Underneath the target value is
+displayed the current reading, and to the right of this is a '+', '-'
+or '=' symbol, which gives a hint as to which way to adjust the CRT
+contrast or LCD brightness control to improve the match to the target.<br>
+<br>
+&nbsp;&nbsp;
+<small style="font-weight: bold;"><span style="font-family: monospace;">Adjust
+CRT Contrast or LCD Brightness to get target level. Press space when
+done.<br>
+&nbsp;&nbsp; &nbsp; Target 60.00<br>
+&nbsp; / Current 59.96&nbsp; +</span><span
+ style="font-family: monospace;"></span></small><br>
+<br>
+If you did not set a brightness target, it will show the initial
+brightness as the target, and the current brightness, which you can
+then set any way you want:<br>
+<br>
+<small style="font-weight: bold;"><span style="font-family: monospace;">Adjust
+CRT Contrast or LCD Brightness to desired level. Press space when done.</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; Initial 47.32</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">/ Current 47.54</span></small><br>
+<br>
+Once happy with the adjustment, press space to go back to the menu.<br>
+<br>
+<br>
+The fourth mode lets you adjust the color of the black point of the
+display, if the display has Red, Green and Blue channel offset
+controls.
+It will show the target 1% brightness value (in
+cd/m^2) on one line, together with the target chromaticity co-ordinates
+for the black point, and then underneath it will show continuously
+updated readings from
+the display. The left most character will switch from '\' to '/' or
+back again each time a reading is updated. Underneath the target
+brightness value is
+displayed the current reading, and then the current chromaticity
+co-ordinate values. To the right of this is the current delta E of the
+black point from the target, and further to the right are hints '+',
+'-'
+or '='&nbsp; as to which direction to adjust the individual Red, Green
+and
+Blue offset settings to move the black point in the right direction. If
+the symbol is doubled, then this channel will have the greatest effect.
+<br>
+<br>
+<span style="font-family: monospace;"><span style="font-weight: bold;">&nbsp;
+Adjust R,G &amp; B offsets to get target x,y. Press space when done.<br>
+&nbsp;&nbsp; &nbsp; Target B 0.60, x 0.3451, y 0.3516<br>
+&nbsp; \ Current B 0.62, x 0.2782, y 0.2331&nbsp; DE&nbsp; 10.3&nbsp;
+R+&nbsp; G++ B-</span></span><small style="font-weight: bold;"><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span></small><br>
+<br>
+The 1%&nbsp; brightness value is just there as a guide to what effect
+the
+adjustment is having on the 1% brightness level. The combined channel
+offsets may have an effect on this in combination with the CRT
+brightness control. Press space to go back to the menu.<br>
+<br>
+<br>
+The fifth selection checks on the overall settings.&nbsp; If targets
+have been set, it will be like:<br>
+<br>
+<small style="font-weight: bold;"><span style="font-family: monospace;">&nbsp;
+Target Brightness = 50.00, Current = 47.44, error = -5.1%<br>
+&nbsp; Target 50% Level&nbsp; = 10.32, Current =&nbsp; 8.10, error =
+-4.4%<br>
+&nbsp; Target Near Black =&nbsp; 0.47, Current =&nbsp; 0.68, error
+=&nbsp; 0.4%<br>
+&nbsp; Target white = x 0.3458, y 0.3586, Current = x 0.3420, y 0.3454,
+error =&nbsp; 7.55 DE<br>
+&nbsp; Target black = x 0.3458, y 0.3586, Current = x 0.2908, y 0.2270,
+error = 29.69 DE</span><span style="font-family: monospace;"></span></small><br>
+<br>
+or if no targets are set:<br>
+<br>
+<small style="font-weight: bold;"><span style="font-family: monospace;">&nbsp;
+Current Brightness = 46.28</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; Target 50% Level&nbsp; =
+10.07, Current =&nbsp; 7.52, error = -5.5%</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; Target Near Black =&nbsp;
+0.46, Current =&nbsp; 0.46, error = -0.0%</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; Current white = x 0.3439,
+y 0.3466, VCT 5098K DE&nbsp; 3.0</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; Target black = x 0.3439, y
+0.3466, Current = x 0.3093, y 0.2165, error = 30.30 DE</span></small><br>
+<br>
+and will then go back to the menu.<br>
+<br>
+Once&nbsp; you're happy with the display set-up, you can either proceed
+on to the rest of the calibration by selecting <span
+ style="font-weight: bold;">6)</span>, or exit and re-start by
+selecting <span style="font-weight: bold;">7)</span>. You might want
+to re-start if you want to change the calibration targets.<br>
+<br>
+<hr style="width: 100%; height: 2px;"><br>
+The program attempts to stop any screensaver or
+powersaver from interfering with the measurements, but this may not be
+effective on some systems, so it may be necessary to manually disable
+the screensaver and/or powersaver before commencing
+the calibration with a large number of patches.<br>
+<br>
+The calibration tables produced maintain the maximum level of precision
+available on a system. If the system RAMDAC (Video Lookup Tables and
+Digital To Analog Converted) outputs are better than 8
+bits per component, then the resulting curves can reflect this,
+although few current operating systems and/or display cards actually
+support better than 8 bit per component output.<br>
+<br>
+If communications break down with a USB connected instrument, you may
+have to unplug it, and plug it in again to recover operation.<br>
+<br>
+Some systems (Apple OSX in particular) have a special set of user
+interface controls ("Universal Access") that allows altering the
+display in ways designed to assist visually impaired users, by
+increasing contrast etc. This will interfere badly with any attempts to
+calibrate or profile such a system, and must be turned off in order to
+do so. Note that certain magic
+keyboard sequences can turn this on by accident.<br>
 <br>
 <br>
 <br>

@@ -18,8 +18,8 @@
  * Copyright 1996 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* TTBD:
@@ -61,13 +61,14 @@ void error(), warning(), verbose();
 #endif
 #endif	/* NEVER */
 
+#ifdef STANDALONE_TEST
 #ifdef DUMP_PLOT
 static void dump_image(ppoint *s, int pcp);
 #endif
+#endif
 
-static void ppoint_dump(ppoint *s);
 static void add_dist_points(ppoint *s, co *pp, int nn);
-static double far_dist(ppoint *s, double *p);
+//static double far_dist(ppoint *s, double *p);
 
 /* Default convert the nodes device coordinates into approximate perceptual coordinates */
 /* (usually overriden by caller supplied function) */
@@ -75,7 +76,6 @@ static void
 default_ppoint_to_percept(void *od, double *p, double *d) {
 	ppoint *s = (ppoint *)od;
 	int e;
-	double tt;
 
 #ifndef NEVER
 	/* Default Do nothing - copy device to perceptual. */
@@ -138,6 +138,7 @@ ppoint_in_dev_gamut(ppoint *s, double *d, int *bvp) {
 	return dd;
 }
 
+#ifdef NEVER	/* Not currently used */
 /* Given the new intended device coordinates, */
 /* clip the new position to the device gamut edge */
 /* return non-zero if the point was clipped */
@@ -164,6 +165,7 @@ ppoint_clip_point(ppoint *s, double *d) {
 	}
 	return rv;
 }
+#endif /* NEVER */
 
 /* --------------------------------------------------- */
 /* Locate the best set of points to add */
@@ -330,8 +332,8 @@ int tnn			/* Number to return */
 	for (i = 0; i < opoints; i++) {
 		double mx;
 
-		if ((mx = powell(di, fp[i].p, sr,  0.001, 100, 
-		(double (*)(void *, double *))efunc1, (void *)s)) < 0.0 || mx >= 50000.0) {
+		if (powell(&mx, di, fp[i].p, sr,  0.001, 100, 
+		(double (*)(void *, double *))efunc1, (void *)s) != 0 || mx >= 50000.0) {
 #ifdef ALWAYS
 			printf("ppoint powell failed, tt = %f\n",mx);
 #endif
@@ -539,6 +541,7 @@ int nn		/* Number in the list */
 	           pdfunc1);			/* Callback function */
 }
 
+#ifdef NEVER	/* Not currently used */
 /* Return the farthest distance value for this given location */
 static double far_dist(ppoint *s, double *p) {
 	int e, di = s->di;
@@ -554,6 +557,7 @@ static double far_dist(ppoint *s, double *p) {
 		cdist = 0.0;
 	return cdist;
 }
+#endif /* NEVER */
 
 /* --------------------------------------------------- */
 /* Seed the whole thing with points */
@@ -683,7 +687,7 @@ ppoint_reset(ppoint *s) {
 /* Return nz if no more */
 static int
 ppoint_read(ppoint *s, double *p, double *f) {
-	int e, di = s->di;
+	int e;
 
 	/* Advance to next non-fixed point */
 	while(s->rix < s->np && s->list[s->rix].fx)
@@ -730,7 +734,6 @@ int fxno,				/* Number of existing fixes points */
 void (*percept)(void *od, double *out, double *in),		/* Perceptual lookup func. */
 void *od				/* context for Perceptual function */
 ) {
-	int i;
 	ppoint *s;
 
 	// ~~~99 Info for logging
@@ -787,6 +790,7 @@ void *od				/* context for Perceptual function */
 		int tres, gres[MXDI];
 		datai pl,ph;
 		datai vl,vh;
+		double avgdev[MXDO];
 		pdatas pdd;			/* pd callback context */
 
 #ifndef NEVER	/* High res. */
@@ -821,6 +825,7 @@ void *od				/* context for Perceptual function */
 				vh[e] = 100.0;
 			}
 			gres[e] = tres;
+			avgdev[e] = 0.005;
 		}
 
 		/* Setup other details of rspl */
@@ -833,7 +838,7 @@ void *od				/* context for Perceptual function */
 		           pl, ph, gres,		/* Low, high, resolution of grid */
 		           vl, vh,				/* Data scale */
 		           0.3,					/* Smoothing */
-		           0.005);				/* Average Deviation */
+		           avgdev);				/* Average Deviation */
 
 
 		/* Track closest perceptual distance to existing test points. */
@@ -893,8 +898,6 @@ static void sa_percept(void *od, double *out, double *in) {
 #else
 
 static void sa_percept(void *od, double *p, double *d) {
-	int e, di = 2;
-	double tt;
 
 #ifndef NEVER
 	/* Default Do nothing - copy device to perceptual. */
@@ -986,7 +989,8 @@ va_dcl
 #endif /* STANDALONE_TEST */
 
 
-#if defined(DEBUG) || defined(DUMP_PLOT)
+#ifdef STANDALONE_TEST
+#ifdef DUMP_PLOT
 
 /* Dump the current point positions to a plot window file */
 void
@@ -1032,7 +1036,8 @@ static dump_image(ppoint *s, int pcp) {
 				x1a, y1a, x1a, y1a, s->np, DO_WAIT, NULL, NULL, 0);
 }
 
-#endif /* DEBUG || DUMP_PLOT */
+#endif /* DUMP_PLOT */
+#endif /* STANDALONE_TEST */
 
 
 

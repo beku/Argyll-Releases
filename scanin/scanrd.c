@@ -6,8 +6,8 @@
  * Author: Graeme Gill
  *
  * Copyright 1995 - 2004 Graeme W. Gill, All right reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -61,7 +61,7 @@ static int scanrd_read(scanrd *ps, char *id, double *P, double *mP,
 static unsigned int scanrd_error(scanrd *s, char **errm);
 
 /* Forward internal function declaration */
-static scanrd_ *new_scanrd(int flags, int verb,
+static scanrd_ *new_scanrd(int flags, int verb, double gammav,
 	int (*write_line)(void *ddata, int y, char *src), void *ddata,
 	int w, int h, int d, int p,
 	int (*read_line)(void *fdata, int y, char *dst), void *fdata,
@@ -75,6 +75,7 @@ static int write_elists(scanrd_ *s);
 static int read_relists(scanrd_ *s);
 static int do_match(scanrd_ *s);
 static int compute_trans(scanrd_ *s);
+static int compute_man_trans(scanrd_ *s, double *sfids);
 static int setup_sboxes(scanrd_ *s);
 static int do_value_scan(scanrd_ *s);
 static int compute_xcc(scanrd_ *s);
@@ -93,6 +94,9 @@ scanrd *do_scanrd(
 int flags,			/* option flags */
 int verb,			/* verbosity level */
 
+double gammav,		/* Apprimate gamma encoding of image (0.0 = default 2.2) */
+double *sfid,		/* Specified fiducials x1, y1, x2, y2, NULL if auto recognition */
+
 int w, int h, 		/* Width and Height of input raster in pixels */
 int d, int p,		/* Plane Depth, Bit presision of input pixels */
 int (*read_line)(void *fdata, int y, char *dst),	/* Read RGB line of source file */
@@ -108,7 +112,7 @@ void *ddata			/* Opaque data for write_line */
 	/* allocate the basic object */
 	if (verb >= 2)
 		DBG((dbgo,"About to allocate scanrd_ object\n"));
-	if ((s = new_scanrd(flags, verb, write_line, ddata, w, h, d, p, read_line, fdata, refname)) == NULL)
+	if ((s = new_scanrd(flags, verb, gammav, write_line, ddata, w, h, d, p, read_line, fdata, refname)) == NULL)
 		return NULL;
 
 	if (s->errv != 0)	/* Some other error from new_scanrd() */
@@ -172,15 +176,30 @@ void *ddata			/* Opaque data for write_line */
 		if (s->verb >= 2)
 			DBG((dbgo,"Read of chart reference file succeeded\n"));
 
-		/* Attempt to match input file with reference */
-		if (s->verb >= 2)
-			DBG((dbgo,"About to match features\n"));
-		if ((rv = do_match(s)) != 0) {
-			if (rv == 1) {	/* No reasonable rotation found */
-				s->errv = SI_POOR_MATCH;
-				sprintf(s->errm,"Pattern match wasn't good enough");
+		if (sfid != NULL) {		/* Manual matching */
+			if (s->verb >= 2)
+				DBG((dbgo,"Using manual matching\n"));
+
+			if (s->havefids == 0) {
+				s->errv = SI_NO_FIDUCIALS_ERR;
+				sprintf(s->errm,"Chart recognition definition file doesn't contain fiducials");
+				goto sierr;		/* Error */
 			}
-			goto sierr;
+			if (compute_man_trans(s, sfid))
+				goto sierr;
+
+		} else {
+
+			/* Attempt to match input file with reference */
+			if (s->verb >= 2)
+				DBG((dbgo,"About to match features\n"));
+			if ((rv = do_match(s)) != 0) {
+				if (rv == 1) {	/* No reasonable rotation found */
+					s->errv = SI_POOR_MATCH;
+					sprintf(s->errm,"Pattern match wasn't good enough");
+				}
+				goto sierr;
+			}
 		}
 
 		if (s->norots > 1 && (s->flags & SI_SHOW_SAMPLED_AREA)) {
@@ -190,7 +209,6 @@ void *ddata			/* Opaque data for write_line */
 
 		/* For each candidate rotation, scan in the pixel values */
 		for (s->crot = 0; s->crot < s->norots; s->crot++) {
-			int oflags;
 
 			/* Compute transformation from reference to input file */
 			if (s->verb >= 2)
@@ -276,6 +294,7 @@ static scanrd_
 *new_scanrd(
 	int flags,			/* option flags */
 	int verb,			/* verbosity level */
+	double gammav,		/* Approximate gamma encoding of image (0.0 = default 2.2) */
 	int (*write_line)(void *ddata, int y, char *src),	/* Write RGB line of diag file */
 	void *ddata,		/* Opaque data for write_line() */
 	int w, int h, 		/* Width and Height of input raster in pixels */
@@ -311,6 +330,9 @@ static scanrd_
 	s->errv = 0;
 	s->errm[0] = '\0';
 
+	if (gammav <= 0.0)
+		gammav = 2.2;			/* default */
+	s->gammav = gammav;
 	s->width = w;
 	s->height = h;
 	s->depth = d;
@@ -415,7 +437,7 @@ scanrd *ps
 	free_elist_array(&s->rxelist);
 	free_elist_array(&s->ryelist);
 	
-	if (s->sboxes != NULL);
+	if (s->sboxes != NULL)
 		free(s->sboxes);
 	if (s->sbstart != NULL)
 		free(s->sbstart);
@@ -596,19 +618,25 @@ int y						/* Current line y */
 		inp2[x] = (unsigned short *)inp[x];
 
 	if (s->inited == 0) {
-		/* Init gamma lookup and region tracking */
+		/* Init gamma conversion lookup and region tracking. */
+		/* The assumption is that a typical chart has an approx. visually */
+		/* uniform distribution of samples, so that a typically gamma */
+		/* encoded scan image will have an average pixel value of 50%. */
+		/* If a the chart has a different gamma encoding (ie. linear), */
+		/* then we convert it to gamma 2.2 encoded to (hopefuly) enhance */
+		/* the patch contrast. */
 		if (s->bpp == 8)
 		    for (i = 0; i < 256; i++) {
 				int byteb1;
 			
-				byteb1 = (int)(0.5 + 255 * pow( i / 255.0, 1.0/1.7 ));
+				byteb1 = (int)(0.5 + 255 * pow( i / 255.0, s->gammav/2.2 ));
 				gamma[i] = byteb1;
 			}
 		else
 		    for (i = 0; i < 65536; i++) {
 				int byteb1;
 			
-				byteb1 = (int)(0.5 + 65535 * pow( i / 65535.0, 1.0/1.7 ));
+				byteb1 = (int)(0.5 + 65535 * pow( i / 65535.0, s->gammav/2.2 ));
 				gamma[i] = byteb1;
 			}
 
@@ -640,10 +668,10 @@ int y						/* Current line y */
 		s->inited = 1;
 	}
 
-	/* Gamma correct the latest input line */
+	/* Un-gamma correct the latest input line */
 	if (s->bpp == 8)
 		for (x = 0; x < stride; x++)
-			inp[5][x] = gamma[inp[5][x]];
+			inp[5][x] = (unsigned char)gamma[inp[5][x]];
 	else
 		for (x = 0; x < stride; x++)
 			inp2[5][x] = gamma[inp2[5][x]];
@@ -773,7 +801,7 @@ int y						/* Current line y */
 			/* Separate the orthogonal elements */
 			if (av  >= s->divval && av < (s->divval + 2.0)) {
 				if (s->flags & SI_SHOW_DIFFSH)
-					out[idx] = 255;			/* Red */
+					out[idx] = (char)255;		/* Red */
 				/* Add point to new region */
 				/* See if we can add to last region */
 				if (s->no_hn > 0 && x == s->hregn[s->no_hn-1].hx)
@@ -791,7 +819,7 @@ int y						/* Current line y */
 				}
 			} else {
 				if (s->flags & SI_SHOW_DIFFSV)
-					out[idx+1] = 255;		/* Green */
+					out[idx+1] = (char)255;		/* Green */
 				/* Add point to new region */
 				/* See if we can add to last region */
 				if (s->no_vn > 0 && x == s->vregn[s->no_vn-1].hx)
@@ -1337,7 +1365,6 @@ int close			/* Closeness factor, smaller = coarser */
 
 	r = (el->a[el->c-1].pos - el->a[0].pos)/(double)close;
 	for (k = 0, i = 1; i < el->c; i++) {
-		double dd;
 		if ((el->a[i].pos - el->a[k].pos) <= r) {
 			/* Merge the two */
 			double lk = el->a[k].len;
@@ -1372,9 +1399,7 @@ int ref			/* 1 if generating reference lists */
 	int outw = s->width;
 	int outh = s->height;
 	points *tp;
-	int nl;			/* Number of lines used */
 	int i,j;
-	double r;
 	double cirot,sirot;		/* cos and sin of -irot */
 	elist xl, yl;	/* Temporary X and Y edge lists array */
 	elist tl;		/* temporary crossing list */
@@ -1382,13 +1407,13 @@ int ref			/* 1 if generating reference lists */
 	/* Allocate structures for edge lists */
 	if ((xl.a = (epoint *) malloc(sizeof(epoint) * s->novlines)) == NULL) {
 		s->errv = SI_MALLOC_ELIST;
-		sprintf(s->errm,"scanrd: calc_elist: malloc failed - novlines = %f",s->novlines);
+		sprintf(s->errm,"scanrd: calc_elist: malloc failed - novlines = %d",s->novlines);
 		return 1;
 	}
 	xl.c = 0;
 	if ((yl.a = (epoint *) malloc(sizeof(epoint) * s->novlines)) == NULL) {
 		s->errv = SI_MALLOC_ELIST;
-		sprintf(s->errm,"scanrd: calc_elist: malloc failed - novlines = %f",s->novlines);
+		sprintf(s->errm,"scanrd: calc_elist: malloc failed - novlines = %d",s->novlines);
 		return 1;
 	}
 	yl.c = 0;
@@ -1470,8 +1495,6 @@ int ref			/* 1 if generating reference lists */
 	/* X list */
 	for (i = 0; i < s->xelist.c; i++) {
 		double ppos = s->xelist.a[i].pos;
-		double pp1 = s->xelist.a[i].p1;
-		double pp2 = s->xelist.a[i].p2;
 		double pp,np;		/* Previous and next pos */
 		if ((i-1) >= 0)
 			pp = (ppos + s->xelist.a[i-1].pos)/2.0;	/* Half distance to next line */
@@ -1511,8 +1534,6 @@ int ref			/* 1 if generating reference lists */
 	/* Y list */
 	for (i = 0; i < s->yelist.c; i++) {
 		double ppos = s->yelist.a[i].pos;
-		double pp1 = s->yelist.a[i].p1;
-		double pp2 = s->yelist.a[i].p2;
 		double pp,np;		/* Previous and next pos */
 		if ((i-1) >= 0)
 			pp = (ppos + s->yelist.a[i-1].pos)/2.0;	/* Half distance to next line */
@@ -1609,7 +1630,7 @@ char *s
 	int i,n,c;	/* Length of string and carry flag */
 	n = strlen(s);
 	for (c = 1, i = n-1; i >= 0 && c != 0; i--) {
-		char sval;
+		char sval = ' ';
 		if (s[i] == '9') {
 			s[i] = '0';
 			sval = '1';
@@ -1691,6 +1712,10 @@ scanrd_ *s
 		return 1;
 	}
 
+	s->fid[0][0] = s->fid[0][1] = 0.0;
+	s->fid[1][0] = s->fid[1][1] = 0.0;
+	s->fid[2][0] = s->fid[2][1] = 0.0;
+
 	/* BOXES */
 	for(;;) {
 		if((rv = fscanf(elf,"BOXES %d",&s->nsbox)) == 1) {
@@ -1721,11 +1746,26 @@ scanrd_ *s
 		double x;
 
 		if(fscanf(elf," %19s %19s %19s %19s %19s %lf %lf %lf %lf %lf %lf",xfirst ,xfix1, xfix2, yfix1, yfix2, &w, &h, &ox, &oy, &xi, &yi) != 11) {
+printf("~1 read of '%s' failed\n",elf);
 			em = "Read of BOX failed";
 			goto read_error;
 		}
 		l++;
 
+		if (xfirst[0] == 'F') {
+			s->fid[0][0] = w;
+			s->fid[0][1] = h;
+			s->fid[1][0] = ox;
+			s->fid[1][1] = oy;
+			s->fid[2][0] = xi;
+			s->fid[2][1] = yi;
+			s->fidsize = fabs(s->fid[1][0] - s->fid[0][0]) + fabs(s->fid[2][1] - s->fid[1][1]);
+			s->fidsize /= 80.0;
+			s->havefids = 1;
+
+//printf("~1 fiducials %f %f, %f %f %f, %f\n",w, h, ox,oy, xi, yi);
+			continue;
+		}
 		for(;;) {		/* Do Y increment */
 			x = ox;
 			strcpy(xf,xfix1);
@@ -1849,7 +1889,7 @@ scanrd_ *s
 	/* EXPECTED */
 	{
 		int j;
-		int isxyz;
+		int isxyz = 0;
 		int nxpt = 0;
 		char csps[20];
 
@@ -1971,7 +2011,7 @@ elist *el
 ) {
 	int i, rc = el->c;
 	
-	DBG((dbgo,"Elist has %d entries allocated at 0x%x\n",el->c,el->a));
+	DBG((dbgo,"Elist has %d entries allocated at 0x%x\n",el->c,(unsigned int)el->a));
 	DBG((dbgo,"lennorm = %f\n",el->lennorm));
 	for (i = 0; i < rc; i++)
 		DBG((dbgo,"  [%d] = %f %f %f\n",i,el->a[i].pos,el->a[i].len,el->a[i].ccount));
@@ -2142,7 +2182,7 @@ ematch *rv		/* Return values */
 	int r0,r1,rw,t0,t1;
 	double rwidth;
 	double cc;
-	double bcc = 0.0, boff, bscale;	/* best values */
+	double bcc = 0.0, boff = 0.0, bscale = 0.0;	/* best values */
 	
 	/* The target has been rotated, and we go through all reasonable */
 	/* translations and scales to see if we can match it to the */
@@ -2173,6 +2213,7 @@ ematch *rv		/* Return values */
 			if (cc > 0.20) {	/* Looks promising, try optimizing solution */
 				double cp[2];	/* Start point/improved point */
 				double rv;		/* Return value */
+				int rc;			/* Return code */
 				edatas dd;		/* Data structure */
 				double ss[2] = { 0.1, 0.1};	/* Initial search distance */
 				
@@ -2189,9 +2230,9 @@ ematch *rv		/* Return values */
 				ss[1] = scale * 0.1 * rwidth/ELISTCDIST;
 
 				/* Find minimum */
-				rv = powell(2,cp,ss,0.0001,200,efunc,&dd);
+				rc = powell(&rv, 2,cp,ss,0.0001,200,efunc,&dd);
 
-				if (rv != -1.0						/* Powell converged */
+				if (rc == 0								/* Powell converged */
 				  && cp[1] > 0.001 && cp[1] < 100.0) {	/* and not ridiculous */
 					cc = 2.0 - rv;
 					off = cp[0];
@@ -2283,6 +2324,7 @@ scanrd_ *s
 	s->norots = 0;
 	if (s->flags & SI_GENERAL_ROT) { /* If general rotation allowed */
 		if (s->xpt == 0) {		/* No expected color information to check rotations agaist */
+			DBG((dbgo,"There is no expected color information, so best fit rotations will be used\n"));
 			if (r0 >= MATCHCC && r0 >= r90 && r0 >= r180 && r0 >= r270) {
 				s->rots[0].ixoff   = -xx.off; 
 				s->rots[0].ixscale = 1.0/xx.scale;
@@ -2432,6 +2474,85 @@ scanrd_ *s
 	return 0;
 }
 
+/* Compute combined transformation matrix */
+/* for the manual alignment case, using fiducial marks. */
+/* Return non-zero on error */
+static int
+compute_man_trans(
+scanrd_ *s,
+double *sfid		/* X & Y of the three marks */
+) {
+	double *A[6], _A[6][6];
+
+	A[0] = _A[0];
+	A[1] = _A[1];
+	A[2] = _A[2];
+	A[3] = _A[3];
+	A[4] = _A[4];
+	A[5] = _A[5];
+
+	/* Setup the equation matrix to be solved */
+
+	A[0][0] = 1.0;
+	A[0][1] = s->fid[0][0];
+	A[0][2] = s->fid[0][1];
+	A[0][3] = 0.0;
+	A[0][4] = 0.0;
+	A[0][5] = 0.0;
+
+	A[1][0] = 0.0;
+	A[1][1] = 0.0;
+	A[1][2] = 0.0;
+	A[1][3] = 1.0;
+	A[1][4] = s->fid[0][0];
+	A[1][5] = s->fid[0][1];
+	
+	A[2][0] = 1.0;
+	A[2][1] = s->fid[1][0];
+	A[2][2] = s->fid[1][1];
+	A[2][3] = 0.0;
+	A[2][4] = 0.0;
+	A[2][5] = 0.0;
+
+	A[3][0] = 0.0;
+	A[3][1] = 0.0;
+	A[3][2] = 0.0;
+	A[3][3] = 1.0;
+	A[3][4] = s->fid[1][0];
+	A[3][5] = s->fid[1][1];
+	
+	A[4][0] = 1.0;
+	A[4][1] = s->fid[2][0];
+	A[4][2] = s->fid[2][1];
+	A[4][3] = 0.0;
+	A[4][4] = 0.0;
+	A[4][5] = 0.0;
+
+	A[5][0] = 0.0;
+	A[5][1] = 0.0;
+	A[5][2] = 0.0;
+	A[5][3] = 1.0;
+	A[5][4] = s->fid[2][0];
+	A[5][5] = s->fid[2][1];
+
+	/* Setup right hand side */
+	s->trans[0] = sfid[0];
+	s->trans[1] = sfid[1];
+	s->trans[2] = sfid[2];
+	s->trans[3] = sfid[3];
+	s->trans[4] = sfid[4];
+	s->trans[5] = sfid[5];
+
+	/* Solve the transformation matrix */
+	if (solve_se(A, s->trans, 6)) {
+		s->errv = SI_BAD_FIDUCIALS_ERR;
+		sprintf(s->errm,"Fiducial alignment failed - bad fiducials ?");
+		return 1;
+	}
+
+	return 0;
+}
+
 /********************************************************************************/
 /* Initialise the sample boxes read for a rescan of the input file */
 static int
@@ -2570,7 +2691,6 @@ escan *es
 	/* If never inited or hit start of next segment */
 	/* Initialize the next segment */
 	if (i == -1 || es->y == p[i1].y) {
-		int dx, dy;			/* Line deltas */
 		int adx, ady;		/* Absolute deltas */
 
 		i = ++es->i;
@@ -2623,7 +2743,7 @@ scanrd_ *s
 ) {
 	int y;			/* current y */
 	int ox,oy;		/* x and y size */
-	int i,e;
+	int e;
 	unsigned char *in;		/* Input pixel buffer (8bpp) */
 	unsigned short *in2;	/* Input pixel buffer (16bpp) */
 	int binsize;
@@ -2882,9 +3002,9 @@ scanrd_read(
 scanrd *ps,
 char *id,			/* patch id copied to here */
 double *P,			/* Robust mean values */
-double *mP,		/* Raw Mean values */
+double *mP,			/* Raw Mean values */
 double *sdP,		/* Standard deviation */
-int *cnt			/* Pixel count */
+int *cnt			/* Return pixel count, may be NULL */
 ) {
 	scanrd_ *s = (scanrd_ *)ps;	/* Cast public to private */
 	sbox *sp;
@@ -2910,7 +3030,7 @@ int *cnt			/* Pixel count */
 				sdP[e] = sp->sdP[e];
 		}
 		if (cnt != NULL)
-			*cnt, sp->cnt;
+			*cnt = sp->cnt;
 	}
 	return 0;
 }
@@ -2919,7 +3039,7 @@ int *cnt			/* Pixel count */
 static int show_string(scanrd_ *s, char *is, double x, double y,
 	double w, unsigned long col, double xfm[6]);
 
-/* show all the sample boxes in the diagnostic raster */
+/* show all the fiducial and sample boxes in the diagnostic raster */
 /* return non-zero on error */
 static int
 show_sbox(
@@ -2970,6 +3090,44 @@ scanrd_ *s
 			ev |= show_line(s,sp->p[1].x,sp->p[1].y,sp->p[3].x,sp->p[3].y,col);
 		}
 	}
+
+	if (s->havefids) {
+		for (i = 0; i < 3; i++) {
+			unsigned long col = 0x0000ff;	/* Red */
+			double xx1 = s->fid[i][0];
+			double yy1 = s->fid[i][1];
+			double x1,y1,x2,y2, x3,y3,x4,y4;
+			double xsz, ysz;
+
+
+			/* Make corner point the right way */
+			if (i == 0) {
+				xsz = s->fidsize;
+				ysz = s->fidsize;
+			} else if (i == 1) {
+				xsz = -s->fidsize;
+				ysz = s->fidsize;
+			} else {
+				xsz = -s->fidsize;
+				ysz = -s->fidsize;
+			}
+	
+			/* Create an aligned corner at the fiducial point */
+			x1 = trans[0] + xx1 * trans[1] + yy1 * trans[2];
+			y1 = trans[3] + xx1 * trans[4] + yy1 * trans[5];
+			x2 = trans[0] + (xx1 + xsz) * trans[1] + yy1 * trans[2];
+			y2 = trans[3] + (xx1 + xsz) * trans[4] + yy1 * trans[5];
+
+			x3 = trans[0] + xx1 * trans[1] + yy1 * trans[2];
+			y3 = trans[3] + xx1 * trans[4] + yy1 * trans[5];
+			x4 = trans[0] + xx1 * trans[1] + (yy1 + ysz) * trans[2];
+			y4 = trans[3] + xx1 * trans[4] + (yy1 + ysz) * trans[5];
+	
+			ev |= show_line(s,(int)(x1+0.5),(int)(y1+0.5),(int)(x2+0.5),(int)(y2+0.5),col);
+			ev |= show_line(s,(int)(x3+0.5),(int)(y3+0.5),(int)(x4+0.5),(int)(y4+0.5),col);
+		}
+	}
+
 	return ev;
 }
 
@@ -3170,8 +3328,8 @@ typedef int FX;
 /* Other aa macros */
 #define SWAP(a,b)	((a)^=(b), (b)^=(a), (a)^=(b))
 
-/* BLENDING FUNCTION:
-/*  'cover' is coverage -- in the range [0,255]
+/* BLENDING FUNCTION: */
+/*  'cover' is coverage -- in the range [0,255] */
 /*  'back' is background color -- in the range [0,255] */
 /*  'fgnd' is foreground color -- in the range [0,255] */
 #define BLEND(cover,fgnd,back) ( \
@@ -3204,8 +3362,8 @@ int Anti_Init (scanrd_ *s) {
 	/* init */
 	s->coverage = NULL;
 
-	line_r     = 0.717;  /* line radius */
-	pix_r      = 0.5;	 /* pixel radius */
+	line_r     = 0.717f;	 /* line radius */
+	pix_r      = 0.5;	 	/* pixel radius */
 	covercells = 128;
 
 	inv_log_2  = 1.0 / log( 2.0 );
@@ -3671,7 +3829,6 @@ int depth, int bpp
 static void XYZ2Lab(double *out, double *in) {
 	double X = in[0], Y = in[1], Z = in[2];
 	double x,y,z,fx,fy,fz;
-	double L;
 
 	x = X/96.42;
 	y = Y/100.0;
@@ -3777,7 +3934,6 @@ static void pval2Lab(double *out, double *in, int depth) {
 	{
 		double X = XYZ[0], Y = XYZ[1], Z = XYZ[2];
 		double x,y,z,fx,fy,fz;
-		double L;
 
 		x = X/wXYZ[0];
 		y = Y/wXYZ[1];

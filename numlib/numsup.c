@@ -4,6 +4,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
+#if defined (NT)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+#ifdef UNIX
+#include <sys/param.h>
+#endif
 
 #include "numsup.h"
 
@@ -15,16 +23,134 @@
  *
  */
 
-char *error_program = "Numeric";
+char *exe_path = "\000";			/* Directory executable resides in ('/' dir separator) */
+char *error_program = "Unknown";	/* Name to report as responsible for an error */
 #define ERROR_OUT_DEFAULT stderr
 #define WARN_OUT_DEFAULT stderr
 #define VERBOSE_OUT_DEFAULT stdout
-
 int verbose_level = 6;			/* Current verbosity level */
 								/* 0 = none */
 								/* !0 = diagnostics */
 
 #undef RETURN_NULL_ON_MALLOC	/* Else error out here */
+
+/******************************************************************/
+/* Executable path routine. Sets default error_program too. */
+/******************************************************************/
+
+/* Pass in argv[0] from main() */
+/* Sets the error_program name too */
+void set_exe_path(char *argv0) {
+	int i;
+
+	error_program = argv0;
+	i = strlen(argv0);
+	if ((exe_path = malloc(i + 5)) == NULL)
+		error("set_exe_path: malloc %d bytes failed",i+5);
+	strcpy(exe_path, argv0);
+
+#ifdef NT	/* CMD.EXE doesn't give us the full path in argv[0] :-( */
+			/* so we need to fix this */
+	{
+		HMODULE mh;
+		char *tpath = NULL;
+		int pl;
+
+		/* Add an .exe extension if it is missing */
+		if (i < 4 || _stricmp(exe_path +i -4, ".exe") != 0)
+			strcat(exe_path, ".exe");
+
+		if ((mh = GetModuleHandle(exe_path)) == NULL)
+			error("set_exe_path: GetModuleHandle '%s' failed",exe_path);
+		
+		/* Retry until we don't truncate the returned path */
+		for (pl = 100; ; pl *= 2) {
+			if (tpath != NULL)
+				free(tpath);
+			if ((tpath = malloc(pl)) == NULL)
+				error("set_exe_path: malloc %d bytes failed",pl);
+			if ((i = GetModuleFileName(mh, tpath, pl)) == 0)
+				error("set_exe_path: GetModuleFileName failed");
+			if (i < pl)		/* There was enough space */
+				break;
+		}
+		free(exe_path);
+		exe_path = tpath;
+
+		/* Convert from MSWindows to UNIX file separator convention */
+		for (i = 0; ;i++) {
+			if (exe_path[i] == '\000')
+				break;
+			if (exe_path[i] == '\\')
+				exe_path[i] = '/';
+		}
+	}
+#else		/* Neither does UNIX */
+
+	if (*exe_path != '/') {			/* Not already absolute */
+		char *p, *cp;
+		if (strchr(exe_path, '/') != 0) {	/* relative path */
+			cp = ".:";				/* Fake a relative PATH */
+		} else  {
+			cp = getenv("PATH");
+		}
+		if (cp != NULL) {
+			int found = 0;
+			while((p = strchr(cp,':')) != NULL
+			 || *cp != '\000') {
+				char b1[PATH_MAX], b2[PATH_MAX];
+ 				int ll;
+				if (p == NULL)
+					ll = strlen(cp);
+				else
+					ll = p - cp;
+				strncpy(b1, cp, ll);		/* Element of path to search */
+				b1[ll] = '\000';
+				strcat(b1, "/");
+				strcat(b1, exe_path);		/* Construct path */
+				if (realpath(b1, b2)) {
+					if (access(b2, 0) == 0) {	/* See if exe exits */
+						found = 1;
+						free(exe_path);
+						if ((exe_path = malloc(sizeof(b2)+1)) == NULL)
+							error("set_exe_path: malloc %d bytes failed",sizeof(b2)+1);
+						strcpy(exe_path, b2);
+						break;
+					}
+				}
+				if (p == NULL)
+					break;
+				cp = p + 1;
+			}
+			if (found == 0)
+				exe_path[0] = '\000';
+		}
+	}
+#endif
+	/* strip the executable path to the base */
+	for (i = strlen(exe_path)-1; i >= 0; i--) {
+		if (exe_path[i] == '/') {
+			char *tpath;
+			if ((tpath = malloc(sizeof(exe_path + i))) == NULL)
+				error("set_exe_path: malloc %d bytes failed",sizeof(exe_path + i));
+			strcpy(tpath, exe_path + i + 1);
+			error_program = tpath;				/* Set error_program to base name */
+			exe_path[i+1] = '\000';
+			break;
+		}
+	}
+	/* strip off any .exe from the error_program to be more readable */
+	i = strlen(error_program);
+	if (i >= 4
+	 && error_program[i-4] == '.'
+	 && (error_program[i-3] == 'e' || error_program[i-3] == 'E')
+	 && (error_program[i-2] == 'x' || error_program[i-2] == 'X')
+	 && (error_program[i-1] == 'e' || error_program[i-1] == 'E'))
+		error_program[i-4] = '\000';
+
+//printf("exe_path = '%s'\n",exe_path);
+//printf("error_program = '%s'\n",error_program);
+}
 
 /******************************************************************/
 /* Error/debug output routines */
@@ -86,146 +212,6 @@ verbose(int level, char *fmt, ...) {
 /******************************************************************/
 /* Note the z suffix versions return zero'd vectors/matricies */
 
-/* Float Vector malloc/free */
-float *fvector(
-int nl,		/* Lowest index */
-int nh		/* Highest index */
-)	{
-	float *v;
-
-	if ((v = (float *) malloc((nh-nl+1) * sizeof(float))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dvector()");
-#endif
-	return v-nl;
-}
-
-float *fvectorz(
-int nl,		/* Lowest index */
-int nh		/* Highest index */
-) {
-	float *v;
-
-	if ((v = (float *) calloc(nh-nl+1, sizeof(float))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dvector()");
-#endif
-	return v-nl;
-}
-
-void free_fvector(
-float *v,
-int nl,		/* Lowest index */
-int nh		/* Highest index */
-) {
-	free((char *) (v+nl));
-}
-
-/* --------------------- */
-/* 2D Float vector malloc/free */
-float **fmatrix(
-int nrl,	/* Row low index */
-int nrh,	/* Row high index */
-int ncl,	/* Col low index */
-int nch		/* Col high index */
-) {
-	int i;
-	int rows, cols;
-	float **m;
-
-	if (nrh < nrl)	/* Prevent failure for 0 dimension */
-		nrh = nrl;
-	if (nch < ncl)
-		nch = ncl;
-
-	rows = nrh - nrl + 1;
-	cols = nch - ncl + 1;
-
-	if ((m = (float **) malloc((rows + 1) * sizeof(float *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), pointers");
-#endif
-	m -= nrl;	/* Offset to nrl */
-	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
-
-	if ((m[nrl-1] = (float *) malloc(rows * cols * sizeof(float))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), array");
-#endif
-
-	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
-	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
-		m[i] = m[i-1] + cols;
-
-	return m;
-}
-
-float **fmatrixz(
-int nrl,	/* Row low index */
-int nrh,	/* Row high index */
-int ncl,	/* Col low index */
-int nch		/* Col high index */
-) {
-	int i;
-	int rows, cols;
-	float **m;
-
-	if (nrh < nrl)	/* Prevent failure for 0 dimension */
-		nrh = nrl;
-	if (nch < ncl)
-		nch = ncl;
-
-	rows = nrh - nrl + 1;
-	cols = nch - ncl + 1;
-
-	if ((m = (float **) malloc((rows + 1) * sizeof(float *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), pointers");
-#endif
-	m -= nrl;	/* Offset to nrl */
-	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
-
-	if ((m[nrl-1] = (float *) calloc(rows * cols, sizeof(float))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), array");
-#endif
-
-	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
-	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
-		m[i] = m[i-1] + cols;
-
-	return m;
-}
-
-void free_fmatrix(
-float **m,
-int nrl,
-int nrh,
-int ncl,
-int nch
-) {
-	if (nrh < nrl)	/* Prevent failure for 0 dimension */
-		nrh = nrl;
-	if (nch < ncl)
-		nch = ncl;
-
-	free((char *)(m[nrl-1]));
-	free((char *)(m+nrl-1));
-}
-
-/* -------------------------- */
 /* Double Vector malloc/free */
 double *dvector(
 int nl,		/* Lowest index */
@@ -262,6 +248,9 @@ double *v,
 int nl,		/* Lowest index */
 int nh		/* Highest index */
 ) {
+	if (v == NULL)
+		return;
+
 	free((char *) (v+nl));
 }
 
@@ -356,6 +345,9 @@ int nrh,
 int ncl,
 int nch
 ) {
+	if (m == NULL)
+		return;
+
 	if (nrh < nrl)	/* Prevent failure for 0 dimension */
 		nrh = nrl;
 	if (nch < ncl)
@@ -376,7 +368,7 @@ int ncl,	/* Col low index */
 int nch		/* Col high index */
 ) {
 	int i, j;
-	int rows, cols, nn;
+	int rows, cols;
 	double **m;
 
 	if (nrh < nrl)	/* Prevent failure for 0 dimension */
@@ -424,7 +416,7 @@ int ncl,	/* Col low index */
 int nch		/* Col high index */
 ) {
 	int i, j;
-	int rows, cols, nn;
+	int rows, cols;
 	double **m;
 
 	if (nrh < nrl)	/* Prevent failure for 0 dimension */
@@ -472,6 +464,9 @@ int nrh,
 int ncl,
 int nch
 ) {
+	if (m == NULL)
+		return;
+
 	if (nrh < nrl)	/* Prevent failure for 0 dimension */
 		nrh = nrl;
 	if (nch < ncl)
@@ -534,7 +529,156 @@ int nrh,
 int ncl,
 int nch
 ) {
+	if (m == NULL)
+		return;
+
 	free((char*) (m+nrl));
+}
+
+/* -------------------------- */
+/* Float Vector malloc/free */
+float *fvector(
+int nl,		/* Lowest index */
+int nh		/* Highest index */
+)	{
+	float *v;
+
+	if ((v = (float *) malloc((nh-nl+1) * sizeof(float))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in dvector()");
+#endif
+	return v-nl;
+}
+
+float *fvectorz(
+int nl,		/* Lowest index */
+int nh		/* Highest index */
+) {
+	float *v;
+
+	if ((v = (float *) calloc(nh-nl+1, sizeof(float))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in dvector()");
+#endif
+	return v-nl;
+}
+
+void free_fvector(
+float *v,
+int nl,		/* Lowest index */
+int nh		/* Highest index */
+) {
+	if (v == NULL)
+		return;
+
+	free((char *) (v+nl));
+}
+
+/* --------------------- */
+/* 2D Float vector malloc/free */
+float **fmatrix(
+int nrl,	/* Row low index */
+int nrh,	/* Row high index */
+int ncl,	/* Col low index */
+int nch		/* Col high index */
+) {
+	int i;
+	int rows, cols;
+	float **m;
+
+	if (nrh < nrl)	/* Prevent failure for 0 dimension */
+		nrh = nrl;
+	if (nch < ncl)
+		nch = ncl;
+
+	rows = nrh - nrl + 1;
+	cols = nch - ncl + 1;
+
+	if ((m = (float **) malloc((rows + 1) * sizeof(float *))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in dmatrix(), pointers");
+#endif
+	m -= nrl;	/* Offset to nrl */
+	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
+
+	if ((m[nrl-1] = (float *) malloc(rows * cols * sizeof(float))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in dmatrix(), array");
+#endif
+
+	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
+	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
+		m[i] = m[i-1] + cols;
+
+	return m;
+}
+
+float **fmatrixz(
+int nrl,	/* Row low index */
+int nrh,	/* Row high index */
+int ncl,	/* Col low index */
+int nch		/* Col high index */
+) {
+	int i;
+	int rows, cols;
+	float **m;
+
+	if (nrh < nrl)	/* Prevent failure for 0 dimension */
+		nrh = nrl;
+	if (nch < ncl)
+		nch = ncl;
+
+	rows = nrh - nrl + 1;
+	cols = nch - ncl + 1;
+
+	if ((m = (float **) malloc((rows + 1) * sizeof(float *))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in dmatrix(), pointers");
+#endif
+	m -= nrl;	/* Offset to nrl */
+	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
+
+	if ((m[nrl-1] = (float *) calloc(rows * cols, sizeof(float))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in dmatrix(), array");
+#endif
+
+	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
+	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
+		m[i] = m[i-1] + cols;
+
+	return m;
+}
+
+void free_fmatrix(
+float **m,
+int nrl,
+int nrh,
+int ncl,
+int nch
+) {
+	if (m == NULL)
+		return;
+
+	if (nrh < nrl)	/* Prevent failure for 0 dimension */
+		nrh = nrl;
+	if (nch < ncl)
+		nch = ncl;
+
+	free((char *)(m[nrl-1]));
+	free((char *)(m+nrl-1));
 }
 
 /* ------------------ */
@@ -574,6 +718,9 @@ int *v,
 int nl,		/* Lowest index */
 int nh		/* Highest index */
 ) {
+	if (v == NULL)
+		return;
+
 	free((char *) (v+nl));
 }
 
@@ -670,6 +817,9 @@ int nrh,
 int ncl,
 int nch
 ) {
+	if (m == NULL)
+		return;
+
 	if (nrh < nrl)	/* Prevent failure for 0 dimension */
 		nrh = nrl;
 	if (nch < ncl)
@@ -677,5 +827,220 @@ int nch
 
 	free((char *)(m[nrl-1]));
 	free((char *)(m+nrl-1));
+}
+
+/* ------------------ */
+/* Short vector malloc/free */
+short *svector(
+int nl,		/* Lowest index */
+int nh		/* Highest index */
+) {
+	short *v;
+
+	if ((v = (short *) malloc((nh-nl+1) * sizeof(short))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in dvector()");
+#endif
+	return v-nl;
+}
+
+short *svectorz(
+int nl,		/* Lowest index */
+int nh		/* Highest index */
+) {
+	short *v;
+
+	if ((v = (short *) calloc(nh-nl+1, sizeof(short))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in dvector()");
+#endif
+	return v-nl;
+}
+
+void free_svector(
+short *v,
+int nl,		/* Lowest index */
+int nh		/* Highest index */
+) {
+	if (v == NULL)
+		return;
+
+	free((char *) (v+nl));
+}
+
+
+/* ------------------------------ */
+/* 2D short vector malloc/free */
+
+short **smatrix(
+int nrl,	/* Row low index */
+int nrh,	/* Row high index */
+int ncl,	/* Col low index */
+int nch		/* Col high index */
+) {
+	int i;
+	int rows, cols;
+	short **m;
+
+	if (nrh < nrl)	/* Prevent failure for 0 dimension */
+		nrh = nrl;
+	if (nch < ncl)
+		nch = ncl;
+
+	rows = nrh - nrl + 1;
+	cols = nch - ncl + 1;
+
+	if ((m = (short **) malloc((rows + 1) * sizeof(short *))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in imatrix(), pointers");
+#endif
+	m -= nrl;	/* Offset to nrl */
+	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
+
+	if ((m[nrl-1] = (short *) malloc(rows * cols * sizeof(short))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in imatrix(), array");
+#endif
+
+	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
+	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
+		m[i] = m[i-1] + cols;
+
+	return m;
+}
+
+short **smatrixz(
+int nrl,	/* Row low index */
+int nrh,	/* Row high index */
+int ncl,	/* Col low index */
+int nch		/* Col high index */
+) {
+	int i;
+	int rows, cols;
+	short **m;
+
+	if (nrh < nrl)	/* Prevent failure for 0 dimension */
+		nrh = nrl;
+	if (nch < ncl)
+		nch = ncl;
+
+	rows = nrh - nrl + 1;
+	cols = nch - ncl + 1;
+
+	if ((m = (short **) malloc((rows + 1) * sizeof(short *))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in imatrix(), pointers");
+#endif
+	m -= nrl;	/* Offset to nrl */
+	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
+
+	if ((m[nrl-1] = (short *) calloc(rows * cols, sizeof(short))) == NULL)
+#ifdef RETURN_NULL_ON_MALLOC
+		return NULL;
+#else
+		error("Malloc failure in imatrix(), array");
+#endif
+
+	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
+	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
+		m[i] = m[i-1] + cols;
+
+	return m;
+}
+
+void free_smatrix(
+short **m,
+int nrl,
+int nrh,
+int ncl,
+int nch
+) {
+	if (m == NULL)
+		return;
+
+	if (nrh < nrl)	/* Prevent failure for 0 dimension */
+		nrh = nrl;
+	if (nch < ncl)
+		nch = ncl;
+
+	free((char *)(m[nrl-1]));
+	free((char *)(m+nrl-1));
+}
+
+/*******************************************/
+/* Platform independent IEE754 conversions */
+/*******************************************/
+
+/* Cast a double to an IEEE754 single precision value, */
+/* in a platform independent fashion. (ie. This works even */
+/* on the rare platforms that don't use IEEE 754 floating */
+/* point for their C implementation) */
+unsigned int doubletoIEEE754(double d) {
+	unsigned int sn = 0, ep = 0, ma;
+	unsigned int id;
+
+	/* Convert double to IEEE754 single precision. */
+	/* This would be easy if we're running on an IEEE754 architecture, */
+	/* but isn't generally portable, so we use ugly code: */
+
+	if (d < 0.0) {
+		sn = 1;
+		d = -d;
+	}
+	if (d != 0.0) {
+		int ee;
+		ee = (int)floor(log(d)/log(2.0));
+		if (ee < -126)			/* Allow for denormalized */
+			ee = -126;
+		d *= pow(0.5, (double)ee);
+		ee += 127;
+		if (ee < 1)				/* Too small */
+			ee = 0;				/* Zero or denormalised */
+		else if (ee > 254) {	/* Too large */
+			ee = 255;			/* Infinity */
+			d = 0.0;
+		}
+		ep = ee;
+	} else {
+		ep = 0;					/* Zero */
+	}
+	ma = ((unsigned int)(d * (1 << 23) + 0.5)) & 0x7fffff;
+	id = (sn << 31) | (ep << 23) | ma;
+
+	return id;
+}
+
+/* Cast a an IEEE754 single precision value to a double, */
+/* in a platform independent fashion. (ie. This works even */
+/* on the rare platforms that don't use IEEE 754 floating */
+/* point for their C implementation) */
+double IEEE754todouble(unsigned int ip) {
+	unsigned int sn = 0, ep = 0, ma;
+	double op;
+
+	sn = (ip >> 31) & 0x1;
+	ep = (ip >> 23) & 0xff;
+	ma = ip & 0x7fffff;
+
+	if (ep == 0) { 		/* Zero or denormalised */
+		op = (double)ma/(double)(1 << 23);
+		op *= pow(2, (-126.0));
+	} else {
+		op = (double)(ma | (1 << 23))/(double)(1 << 23);
+		op *= pow(2, (((int)ep)-127.0));
+	}
+	if (sn)
+		op = -op;
+	return op;
 }
 

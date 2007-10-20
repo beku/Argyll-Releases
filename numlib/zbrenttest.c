@@ -4,8 +4,8 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* Solves (3 - 2*X) * X = -1  */
@@ -18,7 +18,7 @@ double fcn(void *fdata, double tp);
 /* Expected solution */
 double expect = -2.80776403408306e-01;
 
-main(void)
+int main(void)
 {
 	int rv;
 	double x1, x2, soln;

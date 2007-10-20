@@ -13,8 +13,8 @@
  *
  * Copyright 1995, 1996 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #undef DIAG
@@ -56,36 +56,34 @@ co tpts[MAX_PNTS];
 
 double lin(double x, double xa[], double ya[], int n);
 
-main() {
-	int i, j, n;
+int main() {
+	int i, j;
 	double x;
 	double xx[XRES];		/* Up to 3 graphs */
 	double y1[XRES];		/* Full */
 	double y2[XRES];		/* 8 points */
 	double y3[XRES];		/* 8 + 2 points */
 	rspl *rss;		/* incremental solution version */
-	double pef;
 	datai low,high;
 	int gres[MXDI];
+	double avgdev[MXDO];
 
 	low[0] = 0.0;
 	high[0] = 1.0;
+	avgdev[0] = 0.0;
 
 	error_program = "Curve1";
 
 	{
-		double lrand;		/* Amount of level randomness */
 		int pnts;
-		double fres;
 
 		/* Standard versions with all the points */
 		pnts = PNTS;
-		fres = GRES; 
 		for (i = 0; i < pnts; i++) {
 			tpts[i].p[0] = t1xa[i];
 			tpts[i].v[0] = t1ya[i];
 		}
-		gres[0] = (int)fres;
+		gres[0] = GRES;
 
 		/* Create the object */
 		rss =  new_rspl(1, 1);				/* di */
@@ -99,7 +97,7 @@ main() {
 		           low, high, gres,	/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
 		           1.0,					/* Smoothing */
-		           0.0);				/* Average Deviation */
+		           avgdev);				/* Average Deviation */
 
 		/* Save the result */
 		for (i = 0; i < XRES; i++) {
@@ -123,12 +121,11 @@ main() {
 
 		/* Do second run with 8 points */
 		pnts = PNTS2;
-		fres = GRES; 
 		for (i = 0; i < pnts; i++) {
 			tpts[i].p[0] = t1xa[i];
 			tpts[i].v[0] = t1ya[i];
 		}
-		gres[0] = fres;
+		gres[0] = GRES;
 
 		/* Fit to scattered data */
 		rss->fit_rspl(rss,
@@ -140,7 +137,7 @@ main() {
 		           low, high, gres,/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
 		           1.0,					/* Smoothing */
-		           0.0);				/* Average Deviation */
+		           avgdev);				/* Average Deviation */
 
 		/* Save the result */
 		for (i = 0; i < XRES; i++) {
@@ -221,7 +218,7 @@ double xa[],
 double ya[],
 int n)
 	{
-	int i,j;
+	int i;
 	double y;
 
 	if (x < xa[0])

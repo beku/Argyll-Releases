@@ -10,8 +10,8 @@
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  */
 
 /* We can get some subtle errors if certain headers aren't included */
@@ -23,10 +23,16 @@
 #include <time.h>
 #include <sys/types.h>
 
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 /* Version of icclib release */
 
-#define ICCLIB_VERSION 0x020006
-#define ICCLIB_VERSION_STR "2.06"
+#define ICCLIB_VERSION 0x020010
+#define ICCLIB_VERSION_STR "2.10"
+
+#undef ENABLE_V4		/* V4 is not fully implemented */
 
 /*
  *  Note XYZ scaling to 1.0, not 100.0
@@ -52,11 +58,6 @@
 # endif
 #else						/* Using static library */
 # define ICCLIB_API	/* empty */
-#endif
-
-
-#ifdef __cplusplus
-	extern "C" {
 #endif
 
 
@@ -234,7 +235,18 @@ icmFile *new_icmFileMem(void *base, size_t length);
 
 typedef int icmSig;	/* Otherwise un-enumerated 4 byte signature */
 
-/* Pseudo PCS colospace of proile */
+/* Non-standard Color Space Signatures - will be incompatible outside icclib! */
+
+/* A monochrome CIE L* space */
+#define icmSigLData ((icColorSpaceSignature) icmMakeTag('L',' ',' ',' '))
+
+/* A monochrome CIE Y space */
+#define icmSigYData ((icColorSpaceSignature) icmMakeTag('Y',' ',' ',' '))
+
+
+/* Pseudo Color Space Signatures - just used within icclib */
+
+/* Pseudo PCS colospace of profile */
 #define icmSigPCSData ((icColorSpaceSignature) icmMakeTag('P','C','S',' '))
 
 /* Pseudo PCS colospace to signal 8 bit Lab */
@@ -245,6 +257,23 @@ typedef int icmSig;	/* Otherwise un-enumerated 4 byte signature */
 
 /* Pseudo PCS colospace to signal V4 16 bit Lab */
 #define icmSigLabV4Data ((icColorSpaceSignature) icmMakeTag('L','a','b','4'))
+
+/* Pseudo PCS colospace to signal 8 bit L */
+#define icmSigL8Data ((icColorSpaceSignature) icmMakeTag('L',' ',' ','8'))
+
+/* Pseudo PCS colospace to signal V2 16 bit L */
+#define icmSigLV2Data ((icColorSpaceSignature) icmMakeTag('L',' ',' ','2'))
+
+/* Pseudo PCS colospace to signal V4 16 bit L */
+#define icmSigLV4Data ((icColorSpaceSignature) icmMakeTag('L',' ',' ','4'))
+
+/* Non-standard Platform Signature */
+#define icmSig_nix ((icPlatformSignature) icmMakeTag('*','n','i','x'))
+
+
+/* Internal Tag Type signature, used to handle any tag that */
+/* isn't handled with a specific type object. */
+#define icmSigUnknownType ((icTagTypeSignature)icmMakeTag('?','?','?','?'))
 
 typedef struct {
 	ORD32 l;			/* High and low components of signed 64 bit */
@@ -287,13 +316,28 @@ typedef struct {
 	void           (*del)(struct _icmBase *p);											\
 																						\
 	/* Public: */																		\
-	void           (*dump)(struct _icmBase *p, icmFile *op, int verb);						\
+	void           (*dump)(struct _icmBase *p, icmFile *op, int verb);					\
 	int            (*allocate)(struct _icmBase *p);									
 
 /* Base tag element data object */
 struct _icmBase {
 	ICM_BASE_MEMBERS
 }; typedef struct _icmBase icmBase;
+
+/* - - - - - - - - - - - - - - - - - - - - -  */
+/* Tag type to hold an unknown tag type, */
+/* so that it can be read and copied. */
+struct _icmUnknown {
+	ICM_BASE_MEMBERS
+
+	/* Private: */
+	unsigned int      _size;	/* size of data currently allocated */
+
+	/* Public: */
+	icTagTypeSignature uttype;	/* The unknown tag type signature */
+	unsigned int	  size;		/* Allocated and used size of the array */
+    unsigned char	  *data;  	/* tag data */
+}; typedef struct _icmUnknown icmUnknown;
 
 /* - - - - - - - - - - - - - - - - - - - - -  */
 /* UInt8 Array */
@@ -401,7 +445,7 @@ typedef struct {
 	double rmin, rmax;		/* Range of reverse grid */
 	double qscale;			/* Quantising scale factor */
 	long rsize;				/* Number of reverse lists */
-	int **rlists;			/* Array of list of fwd values that may contain output value */
+	unsigned int **rlists;	/* Array of list of fwd values that may contain output value */
 							/* Offset 0 = allocated size */
 							/* Offset 1 = next free index */
 							/* Offset 2 = first fwd index */
@@ -558,21 +602,42 @@ struct _icmDeviceSettings {
 #endif /* NEW */
 
 /* - - - - - - - - - - - - - - - - - - - - -  */
+/* optimised simplex Lut lookup axis flipping structure */
+typedef struct {
+	double fth;		/* Flip threshold */
+	char bthff;		/* Below threshold flip flag value */
+	char athff;		/* Above threshold flip flag value */
+} sx_flip_info;
+ 
+/* Set method flags */
+#define ICM_CLUT_SET_EXACT 0x0000	/* Set clut node values exactly from callback */
+#define ICM_CLUT_SET_APXLS 0x0001	/* Set clut node values to aproximate least squares fit */
+
 /* lut */
 struct _icmLut {
 	ICM_BASE_MEMBERS
 
 	/* Private: */
 	/* Cache appropriate normalization routines */
-	int dinc[MAX_CHAN];				/* Dimensional increment through clut */
-	int dcube[1 << MAX_CHAN];		/* Hyper cube offsets */
-	icmRevTable  rit;				/* Reverse input table information */
-	icmRevTable  rot;				/* Reverse output table information */
+	int dinc[MAX_CHAN];				/* Dimensional increment through clut (in doubles) */
+	int dcube[1 << MAX_CHAN];		/* Hyper cube offsets (in doubles) */
+	icmRevTable rit[MAX_CHAN];		/* Reverse input table information */
+	icmRevTable rot[MAX_CHAN];		/* Reverse output table information */
+	sx_flip_info finfo[MAX_CHAN];	/* Optimised simplex flip information */
 
 	unsigned int inputTable_size;	/* size allocated to input table */
 	unsigned int clutTable_size;	/* size allocated to clut table */
 	unsigned int outputTable_size;	/* size allocated to output table */
 
+	/* Optimised simplex orientation information. oso_ffa is NZ if valid. */
+	/* Only valid if inputChan > 1 && clutPoints > 1 */
+									/* oso_ff[01] will be NULL if not valid */
+	unsigned short *oso_ffa;		/* Flip flags for inputChan-1 dimensions, organised */
+									/* [inputChan 0, 0..cp-2]..[inputChan ic-2, 0..cp-2] */
+	unsigned short *oso_ffb;		/* Flip flags for dimemension inputChan-1, organised */
+									/* [0..cp-2] */
+	int odinc[MAX_CHAN];			/* Dimensional increment through oso_ffa */
+	
 	/* return the minimum and maximum values of the given channel in the clut */
 	void (*min_max) (struct _icmLut *pp, double *minv, double *maxv, int chan);
 
@@ -606,6 +671,7 @@ struct _icmLut {
 	/* Helper function to setup a Lut tables contents */
 	int (*set_tables) (
 		struct _icmLut *p,						/* Pointer to Lut object */
+		int     flags,							/* Setting flags */
 		void   *cbctx,							/* Opaque callback context pointer value */
 		icColorSpaceSignature insig, 			/* Input color space */
 		icColorSpaceSignature outsig, 			/* Output color space */
@@ -624,11 +690,12 @@ struct _icmLut {
 
 /* Helper function to set multiple Lut tables simultaneously */
 /* Note that these tables all have to be compatible in */
-/* having the same configuration and resolution. */
+/* having the same configuration and resolutions. */
 /* Set errc and return error number in underlying icc */
 int icmSetMultiLutTables (
 	int ntables,							/* Number of tables to be set, 1..3 */
 	struct _icmLut *p[3],					/* Pointer to Lut object */
+	int     flags,							/* Setting flags */
 	void   *cbctx,							/* Opaque callback context pointer value */
 	icColorSpaceSignature insig, 			/* Input color space */
 	icColorSpaceSignature outsig, 			/* Output color space */
@@ -644,9 +711,36 @@ int icmSetMultiLutTables (
 							/* to out[]. */
 	double *clutmin, double *clutmax,		/* Maximum range of outspace' values */
 											/* (NULL = default) */
-	void (*outfunc)(void *cbntx, double *out, double *in));
+	void (*outfunc)(void *cbntx, double *out, double *in)
 								/* Output transfer function, outspace'->outspace (NULL = deflt) */
 								/* Will be called ntables times on each output value */
+);
+		
+
+/* Helper function to set multiple Lut tables simultaneously */
+/* Note that these tables all have to be compatible in */
+/* having the same configuration and resolutions. */
+/* Set errc and return error number in underlying icc */
+/* Version that assumes independence of input and output curves */
+int icmSetMultiLutTables2 (
+	int ntables,							/* Number of tables to be set, 1..n */
+	struct _icmLut *p[3],					/* Pointer to Lut objects */
+	int     flags,							/* Setting flags */
+	void   *cbctx,							/* Opaque callback context pointer value */
+	icColorSpaceSignature insig, 			/* Input color space */
+	icColorSpaceSignature outsig, 			/* Output color space */
+	void (*infunc)(void *cbctx, double *out, double *in, int tab),
+							/* Input transfer function, inspace->inspace' (NULL = default) */
+	double *inmin[MAX_CHAN], double *inmax[MAX_CHAN],
+							/* Maximum range of inspace' values (NULL = default) */
+	void (*clutfunc)(void *cbntx, double *out, double *in, int tab),
+							/* inspace' -> outspace[ntables]' transfer function */
+							/* will be called once for each input' grid value */
+	double *clutmin[MAX_CHAN], double *clutmax[MAX_CHAN],	
+							/* Maximum range of outspace' values (NULL = default) */
+	void (*outfunc)(void *cbntx, double *out, double *in, int tab)
+								/* Output transfer function, outspace'->outspace (NULL = deflt) */
+);
 		
 
 /* - - - - - - - - - - - - - - - - - - - - -  */
@@ -707,20 +801,20 @@ struct _icmNamedColor {
 
 /* - - - - - - - - - - - - - - - - - - - - -  */
 /* Colorant table */
-/* (Contribution from Piet Vandenborre) */
+/* (Contribution from Piet Vandenborre, derived from NamedColor) */
 
 /* Structure that holds colorant table data */
 typedef struct {
-	struct _icc         *icp;				/* Pointer to ICC we're a part of */
-	char                 name[32];			/* Name for colorant */
-	double               pcsCoords[3];		/* icmNC2: PCS coords of colorant */
+	struct _icc         *icp;			/* Pointer to ICC we're a part of */
+	char                 name[32];		/* Name for colorant */
+	double               pcsCoords[3];	/* PCS coords of colorant */
 } icmColorantTableVal;
 
 struct _icmColorantTable {
 	ICM_BASE_MEMBERS
 
 	/* Private: */
-	unsigned int         _count;			/* Count currently allocated */
+	unsigned int         _count;		/* Count currently allocated */
 
 	/* Public: */
     unsigned int         count;			/* Count of colorants */
@@ -874,15 +968,16 @@ struct _icmCrdInfo {
 }; typedef struct _icmCrdInfo icmCrdInfo;
 
 /* - - - - - - - - - - - - - - - - - - - - -  */
-/* Apple ColorSync 2.5 video card gamma type */
+/* Apple ColorSync 2.5 video card gamma type (vcgt) */
 struct _icmVideoCardGammaTable {
-	unsigned short   channels;		/* # of gamma channels (1 or 3) */
-	unsigned short   entryCount; 	/* 1-based number of entries per channel */
-	unsigned short   entrySize;		/* size in bytes of each entry */
-	void            *data;			/* variable size data */
+	unsigned short   channels;		/* No of gamma channels (1 or 3) */
+	unsigned short   entryCount; 	/* Number of entries per channel */
+	unsigned short   entrySize;		/* Size in bytes of each entry */
+	void            *data;			/* Variable size data */
 }; typedef struct _icmVideoCardGammaTable icmVideoCardGammaTable;
 
 struct _icmVideoCardGammaFormula {
+	unsigned short   channels;		/* No of gamma channels (always 3) */
 	double           redGamma;		/* must be > 0.0 */
 	double           redMin;		/* must be > 0.0 and < 1.0 */
 	double           redMax;		/* must be > 0.0 and < 1.0 */
@@ -894,18 +989,21 @@ struct _icmVideoCardGammaFormula {
 	double           blueMax;		/* must be > 0.0 and < 1.0 */
 }; typedef struct _icmVideoCardGammaFormula icmVideoCardGammaFormula;
 
-enum {
+typedef enum {
 	icmVideoCardGammaTableType = 0,
 	icmVideoCardGammaFormulaType = 1
-};
+} icmVideoCardGammaTagType;
 
 struct _icmVideoCardGamma {
 	ICM_BASE_MEMBERS
-	unsigned long                tagType;		/* eg. table or formula, use above enum */
+	icmVideoCardGammaTagType tagType;	/* eg. table or formula, use above enum */
 	union {
 		icmVideoCardGammaTable   table;
 		icmVideoCardGammaFormula formula;
 	} u;
+
+	double (*lookup)(struct _icmVideoCardGamma *p, int chan, double iv); /* Read a value */
+
 }; typedef struct _icmVideoCardGamma icmVideoCardGamma;
 
 /* ------------------------------------------------- */
@@ -932,7 +1030,7 @@ struct _icmHeader {
 	/* Values that should be set before writing */
     icmSig                  manufacturer;	/* Dev manufacturer */
     icmSig		            model;			/* Dev model */
-    icmUint64               attributes;		/* Device attributes.l */
+    icmUint64               attributes;		/* Device attributes */
     unsigned int            flags;			/* Various bits */
 
 	/* Values that may optionally be set before writing */
@@ -1041,7 +1139,12 @@ typedef enum {
 		double *inmin, double *inmax,		/* Range of inspace values */					\
 		double *outmin, double *outmax);	/* Range of outspace values */					\
 																							\
-	/* Get the white and black points in XYZ space. */										\
+	/* Initialise the white and black points from the ICC tags */							\
+	/* and the corresponding absolute<->relative conversion matrices */						\
+	/* Return nz on error */																\
+	int (*init_wh_bk)(struct _icmLuBase *p);												\
+																							\
+	/* Get the LU white and black points in XYZ space. */									\
 	void (*wh_bk_points)(struct _icmLuBase *p, icmXYZNumber *wht, icmXYZNumber *blk);		\
 																							\
 	/* Translate color values through profile in effective in and out colorspaces, */		\
@@ -1053,8 +1156,9 @@ typedef enum {
 																							\
 																							\
 	/* Alternate to above, splits color conversion into three steps. */						\
-	/* Colorspace of _in and _out is the same as overall in and out. */						\
-	/* (NOT IMPLEMENTED YET!) */                                                            \
+	/* Colorspace of _in and _out and _core are the effective in and out */					\
+	/* colorspaces. Note that setting colorspace overrides will probably. */				\
+	/* force _in and/or _out to be dumy (unity) transforms. */								\
 																							\
 	/* Per channel input lookup (may be unity): */											\
 	int (*lookup_in) (struct _icmLuBase *p, double *out, double *in);						\
@@ -1064,6 +1168,10 @@ typedef enum {
 																							\
 	/* Per channel output lookup (may be unity): */											\
 	int (*lookup_out) (struct _icmLuBase *p, double *out, double *in);						\
+																							\
+	/* Inverse versions of above - partially implemented */									\
+	/* Inverse per channel input lookup (may be unity): */									\
+	int (*lookup_inv_in) (struct _icmLuBase *p, double *out, double *in);					\
 																							\
 
 
@@ -1144,7 +1252,7 @@ struct _icmLuLut {
 	int (*output)  (struct _icmLuLut *p, double *out, double *in);
 	int (*out_abs) (struct _icmLuLut *p, double *out, double *in);	/* Should be in icmLut ? */
 
-	/* Some inverse components */
+	/* Some inverse components, in reverse order */
 	/* Should be in icmLut ??? */
 	int (*inv_out_abs) (struct _icmLuLut *p, double *out, double *in);
 	int (*inv_output)  (struct _icmLuLut *p, double *out, double *in);
@@ -1218,17 +1326,26 @@ typedef struct {
 #define icmSigNamedData ((icColorSpaceSignature) 0x1)
 
 
+/* Arguments to set a non-default creation version */
+typedef enum {
+    icmVersionDefault       = 0,	/* Version 2.2.0 is default */
+    icmVersion2_3           = 1,	/* Version 2.3.0 - Chromaticity Tag */
+    icmVersion2_4           = 2,	/* Version 2.4.0 - Display etc. have intents */
+    icmVersion4_1           = 3,	/* Version 4.1.0 - General V4 features */
+} icmICCVersion;
+
 /* The ICC object */
 struct _icc {
   /* Public: */
-	int          (*set_v4)(struct _icc *p);					/* For creation, use ICC V4 */
+	int          (*set_version)(struct _icc *p, icmICCVersion ver);
+	                                                       /* For creation, use ICC V4 etc. */
 	unsigned int (*get_size)(struct _icc *p);				/* Return total size needed, 0 = err. */
 	int          (*read)(struct _icc *p, icmFile *fp, unsigned long of);	/* Returns error code */
 	int          (*write)(struct _icc *p, icmFile *fp, unsigned long of);/* Returns error code */
 	void         (*dump)(struct _icc *p, icmFile *op, int verb);	/* Dump whole icc */
 	void         (*del)(struct _icc *p);						/* Free whole icc */
 	int          (*find_tag)(struct _icc *p, icTagSignature sig);
-															/* Returns 1 if found, 2 readable */
+							/* Returns 0 if found, 1 if found but not readable, 2 of not found */
 	icmBase *    (*read_tag)(struct _icc *p, icTagSignature sig);
 															/* Returns pointer to object */
 	icmBase *    (*add_tag)(struct _icc *p, icTagSignature sig, icTagTypeSignature ttype);
@@ -1244,6 +1361,7 @@ struct _icc {
 	int          (*delete_tag)(struct _icc *p, icTagSignature sig);
 															/* Returns 0 if deleted OK */
 	int          (*check_id)(struct _icc *p, ORD8 *id); /* Returns 0 if ID is OK, 1 if not present etc. */
+	double       (*get_tac)(struct _icc *p, double *chmax); /* Returns total ink limit and channel maximums */
 	icmLuBase *  (*get_luobj) (struct _icc *p,
                                      icmLookupFunc func,			/* Functionality */
 	                                 icRenderingIntent intent,		/* Intent */
@@ -1264,7 +1382,7 @@ struct _icc {
 	unsigned long    of;				/* Offset of the profile within the file */
     unsigned int     count;				/* Num tags in the profile */
     icmTag          *data;    			/* The tagTable and tagData */
-	int              ver;				/* Version class, 0 == V2.X, 1 == V4.X */
+	icmICCVersion    ver;				/* Version class, see icmICCVersion enum */
 
 	}; typedef struct _icc icc;
 
@@ -1297,11 +1415,11 @@ typedef enum {
 /* Structure to hold pseudo-hilbert counter info */
 struct _psh {
 	int      di;	/* Dimensionality */
-	unsigned res;	/* Resolution per coordinate */
-	unsigned bits;	/* Bits per coordinate */
-	unsigned ix;	/* Current binary index */
-	unsigned tmask;	/* Total 2^n count mask */
-	unsigned count;	/* Usable count */
+	unsigned int res;	/* Resolution per coordinate */
+	unsigned int bits;	/* Bits per coordinate */
+	unsigned int ix;	/* Current binary index */
+	unsigned int tmask;	/* Total 2^n count mask */
+	unsigned int count;	/* Usable count */
 }; typedef struct _psh psh;
 
 /* Type of encoding to be returned as a string */
@@ -1319,6 +1437,7 @@ typedef enum {
 	icmMeasurementFlare,
 	icmMeasurementGeometry,
 	icmRenderingIntent,
+	icmTransformLookupFunc,
 	icmSpotShape,
 	icmStandardObserver,
 	icmIlluminant,
@@ -1402,6 +1521,11 @@ extern ICCLIB_API const char *icm2str(icmEnumType etype, int enumval);
 /* Return the number of channels for the given color space. Return 0 if unknown. */
 extern ICCLIB_API unsigned int icmCSSig2nchan(icColorSpaceSignature sig);
 
+/* Return the individual channel names and number of channels give a colorspace signature. */
+/* Return 0 if it is not a colorspace that itself defines particular channels, */ 
+/* 1 if it is a colorant based colorspace, and 2 if it is not a colorant based space */
+extern ICCLIB_API unsigned int icmCSSig2chanNames( icColorSpaceSignature sig, char *cvals[]);
+
 
 /* Simple macro to transfer an array to an XYZ number */
 #define icmAry2XYZ(xyz, ary) ((xyz).X = (ary)[0], (xyz).Y = (ary)[1], (xyz).Z = (ary)[2])
@@ -1430,23 +1554,39 @@ extern ICCLIB_API void icmLCh2Lab(double *out, double *in);
 extern ICCLIB_API void icmLab2LCh(double *out, double *in);
 
 /* XYZ to Yxy */
-extern ICCLIB_API icmXYZ2Yxy(double *out, double *in);
+extern ICCLIB_API void icmXYZ2Yxy(double *out, double *in);
 
 /* Yxy to XYZ */
-extern ICCLIB_API icmYxy2XYZ(double *out, double *in);
+extern ICCLIB_API void icmYxy2XYZ(double *out, double *in);
+
+/* CIE XYZ to perceptual Luv */
+extern ICCLIB_API void icmXYZ2Luv(icmXYZNumber *w, double *out, double *in);
+
+/* Perceptual Luv to CIE XYZ */
+extern ICCLIB_API void icmLuv(icmXYZNumber *w, double *out, double *in);
+
+
+/* CIE XYZ to perceptual CIE 1960 UCS */
+extern ICCLIB_API void icmXYZ2UCS(icmXYZNumber *w, double *out, double *in);
+
+/* Perceptual CIE 1960 UCS to CIE XYZ */
+extern ICCLIB_API void icmUCS2XYZ(icmXYZNumber *w, double *out, double *in);
+
 
 /* The standard D50 illuminant value */
 extern ICCLIB_API icmXYZNumber icmD50;
+extern ICCLIB_API icmXYZNumber icmD50_100;		/* Scaled to 100 */
 
 /* The standard D65 illuminant value */
 extern ICCLIB_API icmXYZNumber icmD65;
+extern ICCLIB_API icmXYZNumber icmD65_100;		/* Scaled to 100 */
 
 /* The default black value */
 extern ICCLIB_API icmXYZNumber icmBlack;
 
 
 /* Initialise a pseudo-hilbert grid counter, return total usable count. */
-extern ICCLIB_API unsigned psh_init(psh *p, int di, unsigned res, int co[]);
+extern ICCLIB_API unsigned psh_init(psh *p, int di, unsigned int res, int co[]);
 
 /* Reset the counter */
 extern ICCLIB_API void psh_reset(psh *p);
@@ -1456,7 +1596,7 @@ extern ICCLIB_API void psh_reset(psh *p);
 extern ICCLIB_API int psh_inc(psh *p, int co[]);
 
 
-/* RGB primaries to device to XYZ transform matrix */
+/* RGB primaries to device to RGB->XYZ transform matrix */
 /* Return non-zero if matrix would be singular */
 int icmRGBprim2matrix(
 	icmXYZNumber white,		/* White point */
@@ -1479,34 +1619,144 @@ void icmChromAdaptMatrix(
 	double mat[3][3]		/* Destination matrix */
 );
 
-/* Multiply XYZ array by 3x3 transform matrix */
+/* - - - - - - - - - - - - - - */
+
+/* Note icmAry2Ary() above */
+
+/* Copy a 3x3 transform matrix */
+void icmCpy3x3(double out[3][3], double mat[3][3]);
+
+/* Scale each element of a 3x3 transform matrix */
+void icmScale3x3(double dst[3][3], double src[3][3], double scale);
+
+/* Multiply 3 vector by 3x3 transform matrix */
+/* Organization is mat[out][in] */
 void icmMulBy3x3(double out[3], double mat[3][3], double in[3]);
+
+/* Add one 3x3 to another */
+/* dst = src1 + src2 */
+void icmAdd3x3(double dst[3][3], double src1[3][3], double src2[3][3]);
+
+/* Tensor product. Multiply two 3 vectors to form a 3x3 matrix */
+/* src1[] forms the colums, and src2[] forms the rows in the result */
+void icmTensMul3(double dst[3][3], double src1[3], double src2[3]);
+
+/* Multiply one 3x3 with another */
+/* dst = src * dst */
+void icmMul3x3(double dst[3][3], double src[3][3]);
+
+/* Multiply one 3x3 with another #2 */
+/* dst = src1 * src2 */
+void icmMul3x3_2(double dst[3][3], double src1[3][3], double src2[3][3]);
+
+/* Add two 3 vectors */
+void icmAdd3(double out[3], double in1[3], double in2[3]);
+
+#define ICMADD3(o, i, j) ((o)[0] = (i)[0] + (j)[0], (o)[1] = (i)[1] + (j)[1], (o)[2] = (i)[2] + (j)[2])
+
+/* Subtract two 3 vectors, out = in1 - in2 */
+void icmSub3(double out[3], double in1[3], double in2[3]);
+
+#define ICMSUB3(o, i, j) ((o)[0] = (i)[0] - (j)[0], (o)[1] = (i)[1] - (j)[1], (o)[2] = (i)[2] - (j)[2])
+
+/* Compute the dot product of two 3 vectors */
+double icmDot3(double in1[3], double in2[3]);
+
+#define ICMDOT3(o, i, j) ((o) = (i)[0] * (j)[0] + (i)[1] * (j)[1] + (i)[2] * (j)[2])
+
+/* Compute the cross product of two 3D vectors, out = in1 x in2 */
+void icmCross3(double out[3], double in1[3], double in2[3]);
+
+/* Compute the norm squared (length squared) of a 3 vector */
+double icmNorm3sq(double in[3]);
+
+#define ICMNORM3SQ(i) ((i)[0] * (i)[0] + (i)[1] * (i)[1] + (i)[2] * (i)[2])
+
+/* Compute the norm (length) of a 3 vector */
+double icmNorm3(double in[3]);
+
+#define ICMNORM3(i) sqrt((i)[0] * (i)[0] + (i)[1] * (i)[1] + (i)[2] * (i)[2])
+
+/* Scale a 3 vector by the given ratio */
+void icmScale3(double out[3], double in[3], double rat);
+
+#define ICMSCALE3(o, i, j) ((o)[0] = (i)[0] * (j), (o)[1] = (i)[1] * (j), (o)[2] = (i)[2] * (j))
+
+/* Normalise a 3 vector to the given length. Return nz if not normalisable */
+int icmNormalize3(double out[3], double in[3], double len);
+
+/* Compute the norm squared (length squared) of two point vector */
+double icmNorm33sq(double in1[3], double in0[3]);
+
+/* Compute the norm (length) of two point vector */
+double icmNorm33(double in1[3], double in0[3]);
+
+/* Scale a two point vector by the given ratio */
+void icmScale33(double out[3], double in1[3], double in0[3], double rat);
+
+/* Normalise a two point vector to the given length. */
+/* The new location of in1[] is returned in out[], in0[] is the origin. */
+/* Return nz if not normalisable */
+int icmNormalize33(double out[3], double in1[3], double in0[3], double len);
+
+/* Compute the determinant of a 3x3 matrix */
+double icmDet3x3(double in[3][3]);
 
 /* Invert a 3x3 transform matrix. Return 1 if error. */
 int icmInverse3x3(double out[3][3], double in[3][3]);
 
-/* Given two 3D vectors, create a matrix that rotates */
-/* and scales one onto the other about 0,0,0. */
+/* Given two 3D points, create a matrix that rotates */
+/* and scales one onto the other about the origin 0,0,0. */
+/* Use icmMulBy3x3() to apply this to other points */
 void icmRotMat(double m[3][3], double s[3], double t[3]);
 
+/* Multiply 3 array by 3x4 transform matrix */
+void icmMul3By3x4(double out[3], double mat[3][4], double in[3]);
+
+/* Given two 3D vectors, create a matrix that translates, */
+/* rotates and scales one onto the other. */
+/* Use icmMul3By3x4 to apply this to other points */
+void icmVecRotMat(double m[3][4], double s1[3], double s0[3], double t1[3], double t0[3]);
+
+/* - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Return the normal Delta E given two Lab values */
-extern ICCLIB_API double icmLabDE(double *in1, double *in2);
+extern ICCLIB_API double icmLabDE(double *in0, double *in1);
 
 /* Return the normal Delta E squared, given two Lab values */
-extern ICCLIB_API double icmLabDEsq(double *in1, double *in2);
+extern ICCLIB_API double icmLabDEsq(double *in0, double *in1);
+
+/* Return the normal Delta E given two XYZ values */
+extern ICCLIB_API double icmXYZLabDE(icmXYZNumber *w, double *in0, double *in1);
+
 
 /* Return the CIE94 Delta E color difference measure for two Lab values */
-extern ICCLIB_API double icmCIE94(double *in1, double *in2);
+extern ICCLIB_API double icmCIE94(double *in0, double *in1);
 
 /* Return the CIE94 Delta E color difference measure squared, for two Lab values */
-extern ICCLIB_API double icmCIE94sq(double *in1, double *in2);
+extern ICCLIB_API double icmCIE94sq(double *in0, double *in1);
 
-/* Return the CIE2DE000 Delta E color difference measure for two Lab values */
-extern ICCLIB_API double icmCIE2K(double *in1, double *in2);
+/* Return the CIE94 Delta E color difference measure for two XYZ values */
+extern ICCLIB_API double icmXYZCIE94(icmXYZNumber *w, double *in0, double *in1);
+
+
+/* Return the CIEDE2000 Delta E color difference measure for two Lab values */
+extern ICCLIB_API double icmCIE2K(double *in0, double *in1);
 
 /* Return the CIEDE2000 Delta E color difference measure squared, for two Lab values */
-extern ICCLIB_API double icmCIE2Ksq(double *in1, double *in2);
+extern ICCLIB_API double icmCIE2Ksq(double *in0, double *in1);
+
+/* Return the CIEDE2000 Delta E color difference measure for two XYZ values */
+extern ICCLIB_API double icmXYZCIE2K(icmXYZNumber *w, double *in0, double *in1);
+
+/* - - - - - - - - - - - - - - - - - - - - - - - */
+/* Clip Lab, while maintaining hue angle. */
+/* Return nz if clipping occured */
+int icmClipLab(double out[3], double in[3]);
+
+/* Clip XYZ, while maintaining hue angle */
+/* Return nz if clipping occured */
+int icmClipXYZ(double out[3], double in[3]);
 
 /* ---------------------------------------------------------- */
 

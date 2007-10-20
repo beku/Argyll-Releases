@@ -12,24 +12,41 @@
 Convert Kodak Colorflow format CMYK test chart into Argyll&nbsp;<a
  href="File_Formats.html#.ti3">.ti3</a> CGATS format.<br>
 <h3>Usage Summary</h3>
-kodak2gcats [-v] [-l limit] infile outfile<br>
-<b> -l</b> <i>limit</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; set
+<small><span style="font-family: monospace;">kodak2gcats [-v] [-l
+limit] infile outfile<br>
+</span></small><small><b style="font-family: monospace;"> -v</b><span
+ style="font-family: monospace;"> <span style="font-style: italic;">&nbsp;
+&nbsp; &nbsp;</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+verbose mode<br>
+</span></small><small><b style="font-family: monospace;"> -l</b><span
+ style="font-family: monospace;"> </span><i
+ style="font-family: monospace;">limit</i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+set
 ink
-limit, 0 - 400%<br>
-<i> infile</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;Base name for input.pat file<br>
-<i> outfile</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Base
-name for output<a href="File_Formats.html#.ti3">.ti3</a>
-file<br>
+limit, 0 - 400%</span></small><br style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><b
+ style="font-family: monospace;"> -r</b><span
+ style="font-family: monospace;"> <span style="font-style: italic;">filename</span>
+&nbsp;&nbsp;&nbsp; Use an alternate 928 patch reference file</span><br
+ style="font-family: monospace;">
+<i style="font-family: monospace;"> infile</i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Base name for input.pat file</span><br style="font-family: monospace;">
+<i style="font-family: monospace;"> outfile</i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Base
+name for output</span><a style="font-family: monospace;"
+ href="File_Formats.html#.ti3">.ti3</a><span
+ style="font-family: monospace;">
+file</span></small>
+<br>
 <h3>Usage Details and Discussion</h3>
 kodak2CGATS takes the Kodak Colorflow CMYK printer spectrometer data
-and
-reference files, and turns them into Argyll .ti3 CGATS files.<br>
-As well as the specified .pat file, kodak2cgats expects to read a file
-called
-CMYK_LargeTarget_928 in the current directory, which is the file
-containing
-the device reference data for the standard Kodak CMYK test chart.<br>
+file, and turns them into Argyll .ti3 CGATS files.<br>
+By default kodak2cgats expects a standard 928 patch test chart has been
+used. If an alternate 928 test chart has been used, an alternate device
+reference file can be supplied using the -r parameter.<br>
 The Argyll <a href="File_Formats.html#.ti3">.ti3</a>
 format usually contains an ink limit or TAC (Total Area Coverage) limit
 value,

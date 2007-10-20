@@ -5,11 +5,11 @@
  * Author: Graeme W. Gill
  * Date:   4/10/96
  *
- * Copyright 1996 - 2005 Graeme W. Gill
+ * Copyright 1996 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* This program displays test patches, and takes readings from a display device */
@@ -21,8 +21,15 @@
 #undef DEBUG
 #undef DEBUG_OFFSET	/* Keep test window out of the way */
 
+/* Invoke with -dfake for testing with a fake device */
+/* Will use fake.icm if present */
+
 #define COMPORT 1		/* Default com port 1..4 */
 #define VERBOUT stdout
+
+#ifdef __MINGW32__
+# define WINVER 0x0500
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,10 +43,9 @@
 #include "numlib.h"
 #include "xspect.h"
 #include "cgats.h"
-#include "serio.h"
+#include "insttypes.h"
+#include "icoms.h"
 #include "inst.h"
-#include "dtp92.h"
-#include "gretag.h"
 #include "dispwin.h"
 #include "dispsup.h"
 #include "sort.h"
@@ -47,87 +53,141 @@
 #include <conio.h>
 #endif
 
-void
-usage(void) {
-	serio *sio;
+#include "spyd2setup.h"			/* Enable Spyder 2 access */
+
+void usage(char *diag, ...) {
+	disppath **dp;
+	icoms *icom;
+
 	fprintf(stderr,"Read a Display, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
-	fprintf(stderr,"usage: dispread [-v] [-c comport] [-a] [-i inst] [-s]%s outfile\n",
-#if defined(UNIX) && !defined(__APPLE__)
-	" [-n]"
-#else
-	""
-#endif
-    );
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	if (setup_spyd2() == 2)
+		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
+	if (diag != NULL) {
+		va_list args;
+		fprintf(stderr,"Diagnostic: ");
+		va_start(args, diag);
+		vfprintf(stderr, diag, args);
+		va_end(args);
+		fprintf(stderr,"\n");
+	}
+	fprintf(stderr,"usage: dispread [options] outfile\n");
 	fprintf(stderr," -v              Verbose mode\n");
-	fprintf(stderr," -d              Print debug diagnostics to stderr\n");
-	fprintf(stderr," -c comport      Set COM port, 1..N (default %d)\n",COMPORT);
-	if ((sio = new_serio()) != NULL) {
-		char **paths;
-		if ((paths = sio->get_paths(sio)) != NULL) {
+#if defined(UNIX) && !defined(__APPLE__)
+	fprintf(stderr," -display displayname Choose X11 display name\n");
+	fprintf(stderr," -d n[,m]             Choose the display n from the following list (default 1)\n");
+	fprintf(stderr,"                      Optionally choose different display m for VideoLUT access\n"); 
+#else
+	fprintf(stderr," -d n                 Choose the display from the following list (default 1)\n");
+#endif
+//	fprintf(stderr," -d fake              Use a fake display device for testing, fake.icm if present\n");
+	dp = get_displays();
+	if (dp == NULL || dp[0] == NULL)
+		fprintf(stderr,"    ** No displays found **\n");
+	else {
+		int i;
+		for (i = 0; ; i++) {
+			if (dp[i] == NULL)
+				break;
+			fprintf(stderr,"    %d = '%s'\n",i+1,dp[i]->description);
+		}
+	}
+	free_disppaths(dp);
+	fprintf(stderr," -c listno            Set communication port from the following list (default %d)\n",COMPORT);
+	if ((icom = new_icoms()) != NULL) {
+		icompath **paths;
+		if ((paths = icom->get_paths(icom)) != NULL) {
 			int i;
 			for (i = 0; ; i++) {
 				if (paths[i] == NULL)
 					break;
-				fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]);
+				if (strlen(paths[i]->path) >= 8
+				  && strcmp(paths[i]->path+strlen(paths[i]->path)-8, "Spyder2)") == 0
+				  && setup_spyd2() == 0)
+					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->path);
+				else
+					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
 			}
 		} else
 			fprintf(stderr,"    ** No ports found **\n");
-		sio->del(sio);
+		icom->del(icom);
 	}
-	fprintf(stderr," -a              Run instrument calibration\n");
- 	fprintf(stderr," -i 92|SO        Select target instrument (default DTP92)\n");
-	fprintf(stderr,"                 92 = DTP92, SO = Spectrolino\n");
-	fprintf(stderr," -k file.cal     Apply display calibration file while reading\n");
-	fprintf(stderr," -s              Save spectral information (default don't save)\n");
+	fprintf(stderr," -y c|l               Display type, c = CRT, l = LCD\n");
+	fprintf(stderr," -k file.cal          Apply display calibration file while reading\n");
+	fprintf(stderr," -s                   Save spectral information (default don't save)\n");
+	fprintf(stderr," -p ho,vo,ss          Position test window and scale it\n");
+	fprintf(stderr,"                      ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
+	fprintf(stderr,"                      ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
 #if defined(UNIX) && !defined(__APPLE__)
-	fprintf(stderr," -n              Don't set override redirect on test window\n");
+	fprintf(stderr," -n                   Don't set override redirect on test window\n");
 #endif
-	fprintf(stderr," outfile         Base name for input[ti1]/output[ti3] file\n");
+	fprintf(stderr," -K                   Run instrument calibration first (used rarely)\n");
+	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
+	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
+	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
+	fprintf(stderr," outfile              Base name for input[ti1]/output[ti3] file\n");
 	exit(1);
 	}
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int i,j;
-	int fa,nfa;							/* current argument we're looking at */
-	double patsize = 80.0;				/* size of displayed color patch */
-	double ho = 0.0, vo = 0.0;
+	int fa, nfa, mfa;					/* current argument we're looking at */
+	disppath *disp = NULL;				/* Display being used */
+	double patsize = 100.0;				/* size of displayed color patch */
+	double patscale = 1.0;				/* scale factor for test patch size */
+	double ho = 0.0, vo = 0.0;			/* Test window offsets, -1.0 to 1.0 */
 	int verb = 0;
 	int debug = 0;
+	int fake = 0;						/* Use the fake device for testing */
 	int override = 1;					/* Override redirect on X11 */
 	int comport = COMPORT;				/* COM port used */
-	instType itype = instDTP92;			/* Default target instrument */
-	int doCalib = 0;					/* Do a calibration */
+	instType itype = instUnknown;		/* Default target instrument - none */
+	int docalib = 0;					/* Do a calibration */
+	int highres = 0;					/* Use high res mode if available */
+	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
+	int nocal = 0;						/* Disable auto calibration */
 	int spectral = 0;					/* Don't save spectral information */
 	char inname[MAXNAMEL+1] = "\000";	/* Input cgats file base name */
 	char outname[MAXNAMEL+1] = "\000";	/* Output cgats file base name */
 	char calname[MAXNAMEL+1] = "\000";	/* Calibration file name */
 	double cal[3][256];					/* Display calibration */
-	cgats *icg;			/* input cgats structure */
-	cgats *ocg;			/* output cgats structure */
+	cgats *icg;							/* input cgats structure */
+	cgats *ocg;							/* output cgats structure */
 	time_t clk = time(0);
 	struct tm *tsp = localtime(&clk);
-	char *atm = asctime(tsp); /* Ascii time */
-	col *cols;			/* Internal storage of all the patch colors */
-	int dim;			/* Dimensionality - 1, 3, or 4 */
-	int npat;			/* Number of patches/colors */
-	int xpat = 0;		/* Set to number of extra patches */
-	int wpat;			/* Set to index of white patch */
-	int si;				/* Sample id index */
-	int li;				/* Location id index */
-	int ti;				/* Temp index */
-	int fi;				/* Colorspace index */
+	char *atm = asctime(tsp);			/* Ascii time */
+	col *cols;							/* Internal storage of all the patch colors */
+	int dim = 0;						/* Dimensionality - 1, 3, or 4 */
+	int npat;							/* Number of patches/colors */
+	int xpat = 0;						/* Set to number of extra patches */
+	int wpat;							/* Set to index of white patch */
+	int si;								/* Sample id index */
+	int ti;								/* Temp index */
+	int fi;								/* Colorspace index */
 	int nsetel = 0;
-	cgats_set_elem *setel;	/* Array of set value elements */
-	disprd *dr;			/* Display patch read object */
+	cgats_set_elem *setel;				/* Array of set value elements */
+	disprd *dr;							/* Display patch read object */
+	int errc;							/* Return value from new_disprd() */
 	int rv;
 
-	error_program = "Dispread";
+	set_exe_path(argv[0]);			/* Set global exe_path and error_program */
+	setup_spyd2();					/* Load firware if available */
+
+#ifdef DEBUG_OFFSET
+	ho = 0.8;
+	vo = -0.8;
+#endif
+
+#if defined(DEBUG) || defined(DEBUG_OFFSET)
+	printf("!!!!!! Debug turned on !!!!!!\n");
+#endif
+
 	if (argc <= 1)
-		usage();
+		usage("Too few arguments");
 
 	/* Process the arguments */
+	mfa = 1;        /* Minimum final arguments */
 	for (fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */
 		if (argv[fa][0] == '-') {		/* Look for any flags */
@@ -136,7 +196,7 @@ main(int argc, char *argv[])
 			if (argv[fa][2] != '\000')
 				na = &argv[fa][2];		/* next is directly after flag */
 			else {
-				if ((fa+1) < argc) {
+				if ((fa+1+mfa) < argc) {
 					if (argv[fa+1][0] != '-') {
 						nfa = fa + 1;
 						na = argv[nfa];		/* next is seperate non-flag argument */
@@ -144,75 +204,131 @@ main(int argc, char *argv[])
 				}
 			}
 
-			if (argv[fa][1] == '?')
-				usage();
+			if (argv[fa][1] == '?' || argv[fa][1] == '-') {
+				usage("Usage requested");
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
 
-			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D')
-				debug = 1;
-
+			/* Display number */
+			} else if (argv[fa][1] == 'd') {
 #if defined(UNIX) && !defined(__APPLE__)
-			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N')
+				int ix, iv;
+
+				if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
+					if (++fa >= argc || argv[fa][0] == '-') usage("Parameter expected following -display");
+					setenv("DISPLAY", argv[fa], 1);
+				} else {
+					if (na == NULL) usage("Parameter expected following -d");
+					fa = nfa;
+					if (strcmp(na,"fake") == 0) {
+						fake = 1;
+					} else {
+						if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
+							ix = atoi(na);
+							iv = 0;
+						}
+						if ((disp = get_a_display(ix-1)) == NULL)
+							usage("-d parameter %d out of range",ix);
+						if (iv > 0)
+							disp->rscreen = iv-1;
+					}
+				}
+#else
+				int ix;
+				if (na == NULL) usage("Parameter expected following -d");
+				fa = nfa;
+				if (strcmp(na,"fake") == 0) {
+					fake = 1;
+				} else {
+					ix = atoi(na);
+					if ((disp = get_a_display(ix-1)) == NULL)
+						usage("-d parameter %d out of range",ix);
+				}
+#endif
+#if defined(UNIX) && !defined(__APPLE__)
+			} else if (argv[fa][1] == 'n') {
 				override = 0;
 #endif /* UNIX */
 			/* COM port  */
-			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
+			} else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage("Paramater expected following -c");
 				comport = atoi(na);
-				if (comport < 1 || comport > 4) usage();
-			}
-			/* Target Instrument */
-			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
-				char *p;
-				int tt;
-				fa = nfa;
-				if (na == NULL) usage();
+				if (comport < 1 || comport > 50) usage("-c parameter %d out of range",comport);
 
-				if (strcmp("92", na) == 0) {
-					itype = instDTP92;
-					patsize = 80.0;
-				}
-				else if (strcmp("so", na) == 0
-				      || strcmp("SO", na) == 0) {
-					itype = instSpectrolino;
-					patsize = 60.0;
-				}
+			/* Display type */
+			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expected after -y");
+				if (na[0] == 'c' || na[0] == 'C')
+					dtype = 1;
+				else if (na[0] == 'l' || na[0] == 'L')
+					dtype = 2;
 				else
-					usage();
-			}
-			else if (argv[fa][1] == 'a' || argv[fa][1] == 'A') {
-				doCalib = 1;
+					usage("-y parameter '%c' not recognised",na[0]);
 
-			}
 			/* Calibration file */
-			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
-				char *p;
-				int tt;
+			} else if (argv[fa][1] == 'k') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage("Parameter expected after -k");
 				strncpy(calname,na,MAXNAMEL); calname[MAXNAMEL] = '\000';
 			}
+
+			/* Save spectral data */
 			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
 				spectral = 1;
 
+			/* Test patch offset and size */
+			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expected after -p");
+				if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &patscale) != 3)
+					usage("-p parameter '%s' not recognised",na);
+				if (ho < 0.0 || ho > 1.0
+				 || vo < 0.0 || vo > 1.0
+				 || patscale <= 0.0 || patscale > 50.0)
+					usage("-p parameters %f %f %f out of range",ho,vo,patscale);
+				ho = 2.0 * ho - 1.0;
+				vo = 2.0 * vo - 1.0;
+
+			} else if (argv[fa][1] == 'K') {
+				docalib = 1;
+
+			/* High res mode */
+			} else if (argv[fa][1] == 'H') {
+				highres = 1;
+
+			} else if (argv[fa][1] == 'D') {
+				debug = 1;
+				if (na != NULL && na[0] >= '0' && na[0] <= '9') {
+					debug = atoi(na);
+					fa = nfa;
+				}
+			} else if (argv[fa][1] == 'N') {
+				nocal = 1;
+
 			} else 
-				usage();
+				usage("Flag '-%c' not recognised",argv[fa][1]);
 			}
 		else
 			break;
 	}
 
-	if (doCalib) {
-		if ((rv = disprd_calibration(itype, comport, override, patsize, verb, debug)) != 0) {
+	patsize *= patscale;
+
+	if (!fake && disp == NULL && (disp = get_a_display(0)) == NULL) {
+		error("Unable to open the display");
+	}
+
+	if (docalib) {
+		if ((rv = disprd_calibration(itype, comport, dtype, nocal, disp, override, patsize, ho, vo, verb, debug)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
 		}
 	}
 
 	/* Get the file name argument */
-	if (fa >= argc || argv[fa][0] == '-') usage();
+	if (fa >= argc || argv[fa][0] == '-') usage("Filname parameter not found");
 	strncpy(inname,argv[fa++],MAXNAMEL-4); inname[MAXNAMEL-4] = '\000';
 	strcpy(outname,inname);
 	strcat(inname,".ti1");
@@ -224,10 +340,10 @@ main(int argc, char *argv[])
 	if (icg->read_name(icg, inname))
 		error("CGATS file read error : %s",icg->err);
 
-	if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
+	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0)
 		error ("Input file isn't a CTI1 format file");
-	if (icg->ntables != 2)		/* We don't use second table at the moment */
-		error ("Input file doesn't contain exactly two tables");
+	if (icg->ntables < 1)		/* We don't use second table at the moment */
+		error ("Input file doesn't contain at least one table");
 
 	if ((npat = icg->t[0].nsets) <= 0)
 		error ("No sets of data");
@@ -305,7 +421,8 @@ main(int argc, char *argv[])
 	} else
 		error ("Input file keyword COLOR_REPS has illegal value");
 
-	/* Check that there is a white patch, and if not, add one */
+	/* Check that there is a white patch, and if not, add one, */
+	/* so that we can normalize the values to white. */
 	for (wpat = 0; wpat < npat; wpat++) {
 		if (cols[wpat].r > 0.9999999 && 
 		    cols[wpat].g > 0.9999999 && 
@@ -314,6 +431,8 @@ main(int argc, char *argv[])
 		}
 	}
 	if (wpat >= npat) {	/* Create a white patch */
+		if (verb)
+			printf("Adding one white patch\n");
 		xpat = 1;
 		cols[wpat].r = cols[wpat].g = cols[wpat].b = 1.0;
 	}
@@ -330,7 +449,7 @@ main(int argc, char *argv[])
 		if (ccg->read_name(ccg, calname))
 			error("CGATS calibration file read error %s on file '%s'",ccg->err,calname);
 	
-		if (ccg->t[0].tt != tt_other || ccg->t[0].oi != 0)
+		if (ccg->ntables == 0 || ccg->t[0].tt != tt_other || ccg->t[0].oi != 0)
 			error ("Calibration file isn't a CAL format file");
 		if (ccg->ntables < 1)
 			error ("Calibration file '%s' doesn't contain at least one table",calname);
@@ -372,17 +491,13 @@ main(int argc, char *argv[])
 		cal[0][0] = -1.0;	/* Not used */
 	}
 
-#ifdef DEBUG_OFFSET
-	ho = 0.8;
-	vo = -0.8;
-#endif
-
-	if ((dr = new_disprd(itype, comport, 0, cal, override, patsize, ho, vo,
-	                     spectral, verb, VERBOUT, debug)) == NULL)
-		error("dispread failed to create a disprd object\n");
+	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, dtype, nocal, highres, 0, cal, disp,
+	                     override, patsize, ho, vo, spectral, verb, VERBOUT, debug,
+	                     "fake.icm")) == NULL)
+		error("dispread failed with '%s'\n",disprd_err(errc));
 
 	/* Test the CRT with all of the test points */
-	if ((rv = dr->read(dr, cols, npat + xpat, 0, 0)) != 0) {
+	if ((rv = dr->read(dr, cols, npat + xpat, 1, npat + xpat, 1, 0)) != 0) {
 		dr->del(dr);
 		error("test_crt returned error code %d\n",rv);
 	}
@@ -412,24 +527,24 @@ main(int argc, char *argv[])
 	nsetel += 3;		/* For XYZ */
 
 	/* If we have spectral information, output it too */
-	if (npat > 0 && cols[0].spec_n > 0) {
+	if (npat > 0 && cols[0].sp.spec_n > 0) {
 		char buf[100];
 
-		nsetel += cols[0].spec_n;		/* Spectral values */
-		sprintf(buf,"%d", cols[0].spec_n);
+		nsetel += cols[0].sp.spec_n;		/* Spectral values */
+		sprintf(buf,"%d", cols[0].sp.spec_n);
 		ocg->add_kword(ocg, 0, "SPECTRAL_BANDS",buf, NULL);
-		sprintf(buf,"%f", cols[0].spec_wl_short);
+		sprintf(buf,"%f", cols[0].sp.spec_wl_short);
 		ocg->add_kword(ocg, 0, "SPECTRAL_START_NM",buf, NULL);
-		sprintf(buf,"%f", cols[0].spec_wl_long);
+		sprintf(buf,"%f", cols[0].sp.spec_wl_long);
 		ocg->add_kword(ocg, 0, "SPECTRAL_END_NM",buf, NULL);
 
 		/* Generate fields for spectral values */
-		for (i = 0; i < cols[0].spec_n; i++) {
+		for (i = 0; i < cols[0].sp.spec_n; i++) {
 			int nm;
 	
 			/* Compute nearest integer wavelength */
-			nm = (int)(cols[0].spec_wl_short + ((double)i/(cols[0].spec_n-1.0))
-			            * (cols[0].spec_wl_long - cols[0].spec_wl_short) + 0.5);
+			nm = (int)(cols[0].sp.spec_wl_short + ((double)i/(cols[0].sp.spec_n-1.0))
+			            * (cols[0].sp.spec_wl_long - cols[0].sp.spec_wl_short) + 0.5);
 			
 			sprintf(buf,"SPEC_%03d",nm);
 			ocg->add_field(ocg, 0, buf, r_t);
@@ -452,8 +567,8 @@ main(int argc, char *argv[])
 		setel[k++].d = cols[i].XYZ[1];
 		setel[k++].d = cols[i].XYZ[2];
 
-		for (j = 0; j < cols[i].spec_n; j++) {
-			setel[k++].d = cols[i].spec[j];
+		for (j = 0; j < cols[i].sp.spec_n; j++) {
+			setel[k++].d = cols[i].sp.spec[j];
 		}
 
 		ocg->add_setarr(ocg, 0, setel);
@@ -508,6 +623,7 @@ main(int argc, char *argv[])
 	free(cols);
 	ocg->del(ocg);		/* Clean up */
 	icg->del(icg);		/* Clean up */
+	free_a_disppath(disp);
 
 	return 0;
 }

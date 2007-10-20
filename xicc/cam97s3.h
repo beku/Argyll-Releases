@@ -17,8 +17,8 @@
  *
  * Copyright 2000 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* Algorithm tweaks */
@@ -52,11 +52,11 @@
 
 /* Rules of Thumb: */
 /* Ambient Luminance (Lat, cd/m^2) is Ambient Illuminance (Lux) divided by PI. */
-/* i.e. Lat = Iat/PI */
+/* i.e. Lat = Iat/PI */	/* (1 foot candle = 0.0929 lux) */
 
 /* The Adapting/Surround Luminance is often taken to be */
 /* the 20% of the Ambient Luminance. (gray world) */
-/* i.e. La = Lat/5  */
+/* i.e. La = Lat/5 = Iat/15.7 */
 
 /* For a reflective print, the Viewing/Scene/Image luminance (Lv, cd/m^2), */
 /* will be the Illuminating Luminance (Li, cd/m^2) reflected by the */
@@ -89,16 +89,19 @@
 
 /*
 
-  Typical Field brightness
-  (cd/m2) Condition 
-    30	Subdued indoor lighting 
-    60	Less than typical office light; sometimes recommended for
-  		display-only workplaces 
-   120	Typical office 
-   240	Bright indoor office 
-   480	Very bright; precision indoor tasks 
-   960	Usual outdoors 
-  1920	Bright afternoon 
+  Typical Ambient Illuminance brightness
+  (Lux)   La  Condition 
+    11     1  Twilight
+    32     2  Subdued indoor lighting
+    64     4  Less than typical office light; sometimes recommended for
+              display-only workplaces (sRGB)
+   350    22  Typical Office (sRGB annex D)
+   500    32  Practical print evaluationa (ISO-3664 P2)
+  1000    64  Good Print evaluation (CIE 116-1995)
+  1000    64  Overcast Outdoors
+  2000   127  Critical print evaluation (ISO-3664 P1)
+ 10000   637  Typical outdoors, full daylight 
+ 50000  3185  Bright summers day 
 
 */
 

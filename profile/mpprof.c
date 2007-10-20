@@ -9,8 +9,8 @@
  * Copyright 2003 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -68,7 +68,7 @@
 void
 usage(void) {
 	fprintf(stderr,"Create Model Printer Profile, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: %s [options] outfile\n",error_program);
 	fprintf(stderr," -v         Verbose mode\n");
 	fprintf(stderr," -q [lmhus]  Quality - Low, Medium (def), High, Ultra, Simple\n");
@@ -84,7 +84,7 @@ usage(void) {
 static int make_output_mpp(int verb, int quality, int verify, char *inname, char *outname,
 double ilimit, int ospec, int omix, profxinf *xpi);
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int fa,nfa;							/* current argument we're looking at */
 	int verb = 0;
@@ -95,7 +95,6 @@ main(int argc, char *argv[])
 	int omix = 0;						/* Output mixing model flag */
 	static char inname[200] = { 0 };	/* Input cgats file base name */
 	static char outname[200] = { 0 };		/* Output cgats file base name */
-	int ti;								/* Temporary CGATs index */
 	profxinf xpi;						/* Extra profile information */
 
 #if defined(__IBMC__) && defined(_M_IX86)
@@ -217,18 +216,18 @@ make_output_mpp(
 	int omix,				/* Output ink mixing model */
 	profxinf *xpi			/* Optional Profile creation extra data */
 ) {
-	int it, i, j, k;
+	int i, j;
 	int ti;					/* Temporary index */
 	cgats *icg;				/* input cgats structure */
 	int devmask;			/* ICX ink mask of device space */
 	int devchan;			/* Number of chanels in device space */
-	int isLab;				/* Flag indicating whether PCS is XYZ or Lab */
-	int isDisplay;			/* Flag indicating that this is a display device, not output */
+	int isLab = 0;			/* Flag indicating whether PCS is XYZ or Lab */
+	int isDisplay = 0;		/* Flag indicating that this is a display device, not output */
 	instType itype = instUnknown;	/* Spectral instrument type */
 	int    spec_n = 0;		/* Number of spectral bands, 0 if not valid */
-	double spec_wl_short;	/* First reading wavelength in nm (shortest) */
-	double spec_wl_long;	/* Last reading wavelength in nm (longest) */
-	double norm;			/* Normalising scale value */
+	double spec_wl_short = 0.0;	/* First reading wavelength in nm (shortest) */
+	double spec_wl_long = 0.0;	/* Last reading wavelength in nm (longest) */
+	double norm = 0.0;		/* Normalising scale value */
 	int nodp;				/* Number of test patches */
 	mppcol *cols;			/* Test patches */
 	mpp *p;					/* Model Printer Profile */
@@ -240,7 +239,7 @@ make_output_mpp(
 	if (icg->read_name(icg, inname))
 		error("CGATS file read error : %s",icg->err);
 
-	if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
+	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0)
 		error ("Input file isn't a CTI3 format file");
 	if (icg->ntables < 1)
 		error ("Input file doesn't contain at least one table");
@@ -547,8 +546,8 @@ make_output_mpp(
 			aerr += mxd;
 			nsamps++;
 		}
-		printf("profile Lab check complete, avg err = %f, max err = %f\n",
-			    aerr/nsamps, merr);
+		printf("profile Lab check complete, peak err = %f, avg err = %f\n",
+			    merr, aerr/nsamps);
 
 		if (ospec) {
 			merr = 0.0;

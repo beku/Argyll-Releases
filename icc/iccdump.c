@@ -9,8 +9,8 @@
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  */
 
 /*
@@ -33,17 +33,19 @@ void usage(void) {
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: iccdump [-v level] [-t tagname] [-s] infile\n");
 	fprintf(stderr," -v level                 Verbose level 1-3 (default 2)\n");
-	fprintf(stderr," -t tag                   Dump this tag only\n");
+	fprintf(stderr," -t tag                   Dump this tag only (can be used multiple times)\n");
 	fprintf(stderr," -s                       Search for embedded profile\n");
 	fprintf(stderr," -i                       Check V4 ID value\n");
 	exit(1);
 }
 
+#define MXTGNMS 10
 int
 main(int argc, char *argv[]) {
 	int fa,nfa;				/* argument we're looking at */
 	char in_name[500];
-	char tag_name[40] = { '\000' };
+	int ntag_names = 0;
+	char tag_names[MXTGNMS][5];
 	int verb = 2;
 	int search = 0;
 	int chid = 0;		/* Check V4 ID */
@@ -87,7 +89,10 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 't' || argv[fa][1] == 'T') {
 				fa = nfa;
 				if (na == NULL) usage();
-				strcpy(tag_name,na);
+				if (ntag_names >= MXTGNMS)
+					usage();
+				strncpy(tag_names[ntag_names],na,4);
+				tag_names[ntag_names++][5] = '\000';
 			}
 			/* Search */
 			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
@@ -176,22 +181,26 @@ main(int argc, char *argv[]) {
 			if ((rv = icco->read(icco,fp,offset)) != 0)
 				error ("%d, %s",rv,icco->err);
 		
-			if (tag_name[0] != '\000') {
-				icTagSignature sig = str2tag(tag_name);
-		
-				/* Try and locate that particular tag */
-				if ((rv = icco->find_tag(icco,sig)) != 0) {
-					if (rv == 1)
-						warning ("icc->find_tag() tag '%s' found but unknown", tag_name);
-					else
-						warning ("icc->find_tag() can't find tag '%s' in file", tag2str(sig));
-				} else {
-					icmBase *ob;
-		
-					if ((ob = icco->read_tag(icco, sig)) == NULL) {
-						warning("Failed to read tag '%s': %d, %s",tag_name, icco->errc,icco->err);
+			if (ntag_names > 0) {
+				int i;
+				for (i = 0; i < ntag_names; i++) {
+
+					icTagSignature sig = str2tag(tag_names[i]);
+			
+					/* Try and locate that particular tag */
+					if ((rv = icco->find_tag(icco,sig)) != 0) {
+						if (rv == 1)
+							warning ("icc->find_tag() tag '%s' found but unknown", tag_names[i]);
+						else
+							warning ("icc->find_tag() can't find tag '%s' in file", tag2str(sig));
 					} else {
-						ob->dump(ob, op, verb-1);
+						icmBase *ob;
+			
+						if ((ob = icco->read_tag(icco, sig)) == NULL) {
+							warning("Failed to read tag '%s': %d, %s",tag_names[i], icco->errc,icco->err);
+						} else {
+							ob->dump(ob, op, verb-1);
+						}
 					}
 				}
 			} else {

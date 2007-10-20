@@ -9,8 +9,8 @@
  * Copyright 1996 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* Version that a combination of relaxation and conjugate gradient */
@@ -35,6 +35,7 @@
 
 #include "rspl_imp.h"
 #include "numlib.h"
+#include "counters.h"	/* Counter macros */
 
 extern void error(char *fmt, ...), warning(char *fmt, ...);
 
@@ -55,7 +56,7 @@ static double get_out_scale(rspl *s);
 static unsigned int get_next_touch(rspl *s);
 static int within_restrictedsize(rspl *s);
 static int interp_rspl_sx(rspl *s, co *p);
-static int interp_rspl_nl(rspl *s, co *p);
+//static int interp_rspl_nl(rspl *s, co *p);
 int is_mono(rspl *s);
 static int set_rspl(rspl *s, int flags, void *cbctx,
                         void (*func)(void *cbctx, double *out, double *in),
@@ -83,6 +84,10 @@ void free_spline(rspl *s);
 int opt_rspl_imp(struct _rspl *s, int flags, int tdi, int adi, double **vdata,
 	double (*func)(void *fdata, double *inout, double *surav, int first, double *cw),
 	void *fdata, datai glow, datai ghigh, int gres[MXDI], datao vlow, datao vhigh);
+
+/* Implemented in gcso.c: */
+int init_gcso(rspl *s);
+void free_gcso(rspl *s);
 
 /* Convention is to use:
    i to index grid points u.a
@@ -135,6 +140,7 @@ new_rspl(
 	init_rev(s);
 	init_grid(s);
 	init_spline(s);
+	init_gcso(s);
 
 	/* Set pointers to methods in this file */
 	s->del           = free_rspl;
@@ -157,6 +163,7 @@ new_rspl(
 static void free_rspl(rspl *s) {
 
 	/* Free everying contained */
+	free_gcso(s);		/* Free any gcso data */
 	free_data(s);		/* Free any scattered data */
 	free_rev(s);		/* Free any reverse lookup data */
 	free_grid(s);		/* Free any grid data */
@@ -176,9 +183,9 @@ static void free_rspl(rspl *s) {
 void
 alloc_grid(rspl *s) {
 	int di = s->di, fdi = s->fdi;
-	int e,g,i,n;
+	int e,g,i;
 	int gno;				/* Number of points in grid */
-	ECOUNT(gc, di, s->g.res);/* coordinates */
+	ECOUNT(gc, MXDIDO, di, s->g.res);/* coordinates */
 	float *gp;				/* Grid point pointer */
 
 	/* Compute total number of elements in the grid */
@@ -446,8 +453,11 @@ co *p			/* Input value and returned function value */
 }
 
 /* ============================================ */
+
+#ifdef NEVER	/* Not currently used */
 /* Do a forward interpolation using an n-linear method. */
 /* Return 0 if OK, 1 if input was clipped to grid */
+/* Alternative to interp_rspl_sx */
 static int interp_rspl_nl(
 rspl *s,
 co *p			/* Input value and returned function value */
@@ -526,11 +536,14 @@ co *p			/* Input value and returned function value */
 
 	return rv;
 }
+#endif
 
 /* ============================================ */
 /* Non-mono calculations */
 /* Compute non-monotonicity factor for each grid point, and */
 /* return non-zero if the overall grid is monotonic. */
+/* (Note that this is not a true non-monotonicity test. */
+/*  A true test has to deal with PCS combination values.) */
 int
 is_mono(
 rspl *s
@@ -538,7 +551,6 @@ rspl *s
 	int f;
 	int di  = s->di;
 	int fdi = s->fdi;
-	int nig = s->g.no;
 	int *fci = s->g.fci;	/* Strength reduction */
 	float *gp, *ep;
 	double mcinc = MCINC/(s->g.mres-1);	/* Scaled version of MCINC */
@@ -591,8 +603,14 @@ rspl *s
 }
 
 /* ============================================ */
-/* Initialize the grid from a provided function */
-/* Grid index values are supplied "under" in[] at *((int*)&iv[-e-1]) */
+/* Initialize the grid from a provided function. By default the grid */
+/* values are set to exactly the value returned fy func(), unless the */
+/* RSPL_SET_APXLS flag is set, in which case an attempt is made to have */
+/* the grid points represent a least squares aproximation to the underlying */
+/* surface. */
+/* Grid index values are supplied "under" in[] at *((int*)&iv[-e-1]), */
+/* but if RSPL_SET_APXLS is set, the grid index will be the base of */
+/* the cell the center point is sampled from every second sample. */
 /* Return non-monotonic status */
 static int set_rspl(
 	struct _rspl *s,/* this */
@@ -605,10 +623,11 @@ static int set_rspl(
 	datao vlow,		/* Data value low normalize, NULL = default 0.0 */
 	datao vhigh		/* Data value high normalize - NULL = default 1.0 */
 ) {
-	int e, f;
+	int e, f, j;
 	rpsh counter;		/* Pseudo-hilbert counter */
 	int gc[MXDI];		/* Grid index value */
 	float *gp;			/* Pointer to grid data */
+	float *cc = NULL;			/* Pointer to cell center data */
 	double _iv[2 * MXDI], *iv = &_iv[MXDI];	/* Real index value/table value */
 	double ov[MXDO];
 
@@ -659,6 +678,12 @@ static int set_rspl(
 	/* Allocate the grid data */
 	alloc_grid(s);
 
+	/* Allocate space for cell center value lookup */
+	if (flags & RSPL_SET_APXLS) {
+		if ((cc = (float *)malloc(sizeof(float) * s->g.no * s->fdi)) == NULL)
+			error("rspl malloc failed - center cell points");
+	}
+
 	/* Reset output min/max */
 	for (f = 0; f < s->fdi; f++) {
 		s->g.fmin[f] = 1e30;
@@ -676,7 +701,7 @@ static int set_rspl(
 		/* Compute grid pointer and input sample values */
 		gp = s->g.a;	/* Base of grid data */
 		for (e = 0; e < s->di; e++) { 				/* Input tables */
-			gp += s->g.fci[e] * gc[e];				/* Grid value pointer */
+			gp += gc[e] * s->g.fci[e];				/* Grid value pointer */
 			iv[e] = s->g.l[e] + gc[e] * s->g.w[e];	/* Input sample values */
 			*((int *)&iv[-e-1]) = gc[e];			/* Trick to supply grid index in iv[] */
 		}
@@ -685,16 +710,124 @@ static int set_rspl(
 		func(cbctx, ov, iv);
 
 		for (f = 0; f < s->fdi; f++) { 	/* Output chans */
-			gp[f] = ov[f];		/* Set output value */
+			gp[f] = (float)ov[f];		/* Set output value */
 			if (s->g.fmin[f] > gp[f])
 				 s->g.fmin[f] = gp[f];
 			if (s->g.fmax[f] < gp[f])
 				 s->g.fmax[f] = gp[f];
 		}
 
+		/* Get the center of the cell values */
+		if (cc != NULL) {
+			float *ccp;
+
+			ccp = cc;
+			for (e = 0; e < s->di; e++) { 				/* Input tables */
+				if (gc[e] >=  (gres[e]-1))
+					break;								/* No center for outer row */
+				iv[e] = s->g.l[e] + (gc[e] + 0.5) * s->g.w[e];	/* Input sample values */
+				ccp += gc[e] * s->g.ci[e] * s->fdi;		/* cc location */
+			}
+	
+			if (e >= s->di) {			/* Not outer row */
+				/* Apply incolor -> outcolor function we want to represent */
+				func(cbctx, ov, iv);
+	
+				for (f = 0; f < s->fdi; f++) { 	/* Output chans */
+					ccp[f] = (float)ov[f];		/* Set output value */
+				}
+			}
+		}
+
 		/* Increment counter */
 		if (rpsh_inc(&counter, gc))
 			break;
+	}
+
+	/* Deal with cell center value, aproximate least squares adjustment */
+	if (cc != NULL) {
+		int ti;					/* Table index */
+		int ee;
+		double cw = 1.0/(double)(1 << s->di);		/* Weight for each cube corner */
+		float *ccp;
+
+		for (e = 0; e < s->di; e++)
+			gc[e] = 0;	/* init coords */
+
+		/* Compute linear interpolated error to actual cell center value */
+		for (ee = 0; ee < s->di;) {
+
+			gp = s->g.a;	/* Base of grid data */
+			ccp = cc;		/* Base of center data */
+			for (e = 0; e < s->di; e++) { 				/* Input tables */
+				gp += gc[e] * s->g.fci[e];				/* Grid value pointer */
+				ccp += gc[e] * s->g.ci[e] * s->fdi;		/* cc location */
+			}
+
+			for (f = 0; f < s->fdi; f++) { 	/* Output chans */
+				double sum = 0.0;
+		
+				for (j = 0; j < (1 << s->di); j++) /* For corners of cube */
+					sum += (gp + s->g.fhi[j])[f];
+				sum *= cw;			/* Interpolated value */
+				ccp[f] -= sum;		/* Correction to actual value */
+
+				/* Average half the error to cube corners */
+				ccp[f] *= 0.5 * cw;	/* Distribution fraction */
+			}
+
+			/* Increment coord */
+			for (ee = 0; ee < s->di; ee++) {
+				if (++gc[ee] < (gres[ee]-1))		/* Don't go through upper edge */
+					break;	/* No carry */
+				gc[ee] = 0;
+			}
+		}
+		
+		for (e = 0; e < s->di; e++)
+			gc[e] = 0;	/* init coords */
+
+		/* Distribute the center error to the cell corners */
+		for (ee = 0; ee < s->di;) {
+
+			gp = s->g.a;	/* Base of grid data */
+			ccp = cc;		/* Base of center data */
+			for (e = 0; e < s->di; e++) { 				/* Input tables */
+				gp += gc[e] * s->g.fci[e];				/* Grid value pointer */
+				ccp += gc[e] * s->g.ci[e] * s->fdi;		/* cc location */
+			}
+
+			for (j = 0; j < (1 << s->di); j++) { /* For corners of cube */
+				double sc = 1.0;		/* Scale factor for edge nodes */
+
+				/* Compute averaging scale factor for edge nodes */
+				for (e = 0; e < s->di; e++) {
+					if ((gc[e] == 0 && (j & (1 << e)) == 0)
+					 || (gc[e] == ((gres[e]-2)) && (j & (1 << e)) != 0))
+						sc *= 2.0;
+				}
+
+				for (f = 0; f < s->fdi; f++) { 	/* Output chans */
+					double vv;
+					vv = (gp + s->g.fhi[j])[f];				/* Current value */
+					vv += sc * cc[f];		/* Correction */
+					if (s->g.fmin[f] > vv)
+						 s->g.fmin[f] = vv;
+					if (s->g.fmax[f] < vv)
+						 s->g.fmax[f] = vv;
+					(gp + s->g.fhi[j])[f] = vv;
+				}
+			}
+
+			/* Increment coord */
+			for (ee = 0; ee < s->di; ee++) {
+				if (++gc[ee] < (gres[ee]-1))		/* Don't go through upper edge */
+					break;	/* No carry */
+				gc[ee] = 0;
+			}
+		}
+
+		free((void *)cc);
 	}
 
 	/* Compute overall output scale */
@@ -760,7 +893,7 @@ int change		/* Flag - nz means change values, 0 means scan values */
 
 		if (change) {		/* Put new output values back */
 			for (f = 0; f < s->fdi; f++) { 	/* Output chans */
-				gp[f] = ov[f];
+				gp[f] = (float)ov[f];
 				if (s->g.fmin[f] > gp[f])
 					 s->g.fmin[f] = gp[f];
 				if (s->g.fmax[f] < gp[f])
@@ -834,13 +967,11 @@ void *cbctx,	/* Opaque function context */
 void (*func)(void *cbntx, float **out, double *in, int cvi) /* Function to set from */
 ) {
 	int e, f;
-	ECOUNT(gc, s->di, s->g.res);	/* coordinates */
-	DCOUNT(cc, s->di, -1, -1, 2);	/* Surrounding cube counter */
-	int fc[MXDI];		/* Final coord */
+	ECOUNT(gc, MXDIDO, s->di, s->g.res);	/* coordinates */
+	DCOUNT(cc, MXDIDO, s->di, -1, -1, 2);	/* Surrounding cube counter */
 	float *gp, *ep;		/* Pointer to grid data */
 	float *tarry, *tp;	/* Temporary array of values */
 	double _iv[2 * MXDI], *iv = &_iv[MXDI];	/* Real index value/table value */
-	double ov[MXDO];
 	int cvi;				/* Center value index = 3^di-1)/2 */
 	int pow3di = 1;
 	float **svals;			/* Pointer to surrounding output values */
@@ -955,10 +1086,10 @@ void (*func)(void *cbntx, float **out, double *in, int cvi) /* Function to set f
 
 /* Initialise, returns total usable count */
 unsigned rpsh_init(
-rpsh *p,		/* Pointer to structure to initialise */
-int      di,	/* Dimensionality */
-unsigned *res,	/* Size per coordinate */
-int co[]		/* Coordinates to initialise (May be NULL) */
+rpsh         *p,	/* Pointer to structure to initialise */
+int           di,	/* Dimensionality */
+unsigned int *res,	/* Size per coordinate */
+int           co[]	/* Coordinates to initialise (May be NULL) */
 ) {
 	int e;
 
@@ -968,7 +1099,7 @@ int co[]		/* Coordinates to initialise (May be NULL) */
 		p->res[e] = res[e];
 
 		/* Compute bits */
-		for (p->bits[e] = 0; (1 << p->bits[e]) < res[e]; p->bits[e]++)
+		for (p->bits[e] = 0; (1u << p->bits[e]) < res[e]; p->bits[e]++)
 			;
 		p->tbits += p->bits[e];
 	}
@@ -981,13 +1112,13 @@ int co[]		/* Coordinates to initialise (May be NULL) */
 	for (e = 0; e < di; e++)
 		p->count *= res[e];
 
+	/* Reset the counter */
 	p->ix = 0;
 
 	if (co != NULL) {
 		for (e = 0; e < di; e++)
 			co[e] = 0;
 	}
-
 	return p->count;
 }
 
@@ -1010,7 +1141,7 @@ int coa[]	/* Coordinates to return */
 	int e;
 
 	do {
-		int b, tb;
+		unsigned int b, tb;
 		int gix;	/* Gray code index */
 		
 		p->ix = (p->ix + 1) & p->tmask;
@@ -1056,7 +1187,7 @@ int coa[]	/* Coordinates to return */
 		}
 
 	} while (e < di);
-	
+
 	return (p->ix == 0);
 }
 

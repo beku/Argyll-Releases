@@ -6,8 +6,8 @@
  * Copyright 1998 Graeme Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include "numsup.h"
@@ -82,7 +82,7 @@ int dnsqe(
 	double *diag;		/* Diagonal scaling matrix */
 	double **sjac;		/* Last jacobian */
 
-	int mode, nfev, njev;
+	int nfev, njev;
 	int i,j, index, ml, lr, mu;
 	double epsfcn = 0.0;
 	double factor = 100.0;
@@ -511,9 +511,9 @@ int dnsq(
 	int ncsuc;
 	int nslow1, nslow2, ncfail;
 	double temp;
-	double delta;
+	double delta = 0.0;
 	double ratio, fnorm, pnorm;
-	double xnorm;
+	double xnorm = 0.0;
 	double fnorm1;
 	double actred, prered;
 	double sum;
@@ -942,7 +942,7 @@ static int d1mpyq(
 	int i, j;
 	int nm1 = n - 1;
 	double temp;
-	double cos_, sin_;
+	double cos_ = 0.0, sin_ = 0.0;
 
 	/* Apply the first set of givens rotations to a. */
 	if (nm1 >= 1) {
@@ -1170,7 +1170,7 @@ static int ddoglg(
 	int jp1;
 	int nm1 = n-1;
 	double temp;
-	double alpha, bnorm, gnorm, qnorm;
+	double alpha, gnorm, qnorm;
 	double epsmch;
 	double sgnorm;
 	double sum;

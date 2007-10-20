@@ -4,7 +4,7 @@
 
 # Optimization and Debug flags
 
-CFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
 #CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
 #CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
 #LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
@@ -16,11 +16,11 @@ if $(UNIX) {
 	LINKFLAGS += -framework IOKit ;
 	LINKFLAGS += -framework CoreFoundation ;
   } else {
-	LibWin = /usr/X11R6/lib/libX11.lib 
-	         /usr/X11R6/lib/libXxf86vm.lib
-	         /usr/X11R6/lib/libXext.lib ;
-	LibWinD = /usr/X11R6/lib/ ;
-	LibWinH = /usr/X11R6/include/X11 ;
+	WinDir = /usr/X11R6 ;
+	LibWinH = $(WinDir)/include/X11 ;
+	LibWinD = $(WinDir)/lib ;
+	LibWin = ;
+	LINKFLAGS += -L$(LibWinD) -lX11 -lXau -lXdmcp ;
   }
 }
 
@@ -36,8 +36,6 @@ if $(HAVE_TIFF) {	# Alternate TIFF library
 				t2dfw$(SUFEXE)
 				t3d$(SUFEXE)
 				t3ddf$(SUFEXE)
-				smtnd$(SUFEXE)
-				smtmpp$(SUFEXE)
 				tnd$(SUFEXE)
 				trnd$(SUFEXE)
 				revbench$(SUFEXE) = -ltiff $(LINKLIBS) ;
@@ -55,9 +53,9 @@ Headers = rspl.h ;
 #InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
 
 # Multi-dimensional regular spline library
-Library librspl.lib : rspl.c $(SCAT).c rev.c spline.c opt.c ;
+Library librspl.lib : rspl.c $(SCAT).c rev.c spline.c opt.c gcso.c ;
 ObjectHdrs rspl$(SUFOBJ) $(SCAT)$(SUFOBJ) rev$(SUFOBJ) xi
-spline$(SUFOBJ) mlbs$(SUFOBJ) opt$(SUFOBJ) : ../h ../numlib ../plot ;
+spline$(SUFOBJ) mlbs$(SUFOBJ) opt$(SUFOBJ) gcso$(SUFOBJ) : ../h ../numlib ../plot ;
 
 # Test of 1D rspl library
 Main c1 : c1.c ;
@@ -104,30 +102,39 @@ Main trnd : trnd.c ;
 ObjectHdrs trnd : ../h ../numlib ../plot $(TIFFINC) ;
 LinkLibraries trnd : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
 
-# Benchmarl of rev regspl 
+# Benchmark of rev regspl 
 Main revbench : revbench.c ;
 ObjectHdrs revbench : ../h ../numlib ../plot $(TIFFINC) ;
 LinkLibraries revbench : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
 
-# Smoothness factor tuning test in Nd.
-Main smtnd : smtnd.c ;
-ObjectHdrs smtnd : ../h ../numlib ../rspl ../xicc ../icc ../gamut ../cgats ../spectro ../plot $(TIFFINC) ;
-LinkLibraries smtnd : librspl.lib ../xicc/libxicc.lib ../spectro/libinst.lib ../icc/libicc.lib
+if 1 || $(BUILD_TESTS) {
+
+	# Smoothness factor tuning test in Nd.
+	Main smtnd : smtnd.c ;
+	ObjectHdrs smtnd : ../h ../numlib ../rspl ../xicc ../icc ../gamut ../cgats ../spectro ../plot $(TIFFINC) ;
+	LinkLibraries smtnd : librspl.lib ../xicc/libxicc.lib ../spectro/libinsttypes.lib ../icc/libicc.lib
                       ../gamut/libgamut.lib ../cgats/libcgats.lib
                       ../plot/libplot.lib ../numlib/libnum.lib $(LibWin) ;
 
-# Smoothness factor tuning test in Nd.
-Main smtmpp : smtmpp.c ;
-ObjectHdrs smtmpp : ../h ../numlib ../rspl ../xicc ../icc ../gamut ../cgats ../spectro ../plot $(TIFFINC) ;
-LinkLibraries smtmpp : librspl.lib ../xicc/libxicc.lib ../spectro/libinst.lib ../icc/libicc.lib
+	# Smoothness factor tuning test in Nd.
+	Main smtmpp : smtmpp.c ;
+	ObjectHdrs smtmpp : ../h ../numlib ../rspl ../xicc ../icc ../gamut ../cgats ../spectro ../plot $(TIFFINC) ;
+	LinkLibraries smtmpp : librspl.lib ../xicc/libxicc.lib ../spectro/libinsttypes.lib ../icc/libicc.lib
+                      ../xicc/libxcolorants.lib
                       ../gamut/libgamut.lib ../cgats/libcgats.lib
                       ../plot/libplot.lib ../numlib/libnum.lib $(LibWin) ;
 
-Main sm1 : sm1.c ;
-Main sm2 : sm2.c ;
-Main sm3 : sm3.c ;
+	Main sm1 : sm1.c ;
+	Main sm2 : sm2.c ;
+	Main sm3 : sm3.c ;
+}
 
 if $(BUILD_JUNK) {
+
+	Main t : t.c ;
+	ObjectHdrs t : ../h ../numlib ;
+	LinkLibraries t : ../numlib/libnum.lib ;
+
 	#Main temp : temp.c ;
 
 	#Main prime : prime.c ;
@@ -144,7 +151,11 @@ if $(BUILD_JUNK) {
 	#ObjectHdrs cache$(SUFOBJ) : ../h ../numlib ;
 	#LinkLibraries cache : ../numlib/libnum.lib $(LibWin) ;
 
+	# Nearest point test code
 	Main nptest : nptest.c ;
+
+	# Nearest object test code
+	Main notest : notest.c ;
 
 	#direct mlbs scattered interpolation test
 	Main mlbs_test : mlbs_test.c ;

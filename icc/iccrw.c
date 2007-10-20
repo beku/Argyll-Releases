@@ -9,8 +9,8 @@
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  */
 
 /* TTBD:
@@ -28,6 +28,7 @@
 #undef TEST_VIDGAMTAG		/* Add ColorSync 2.5 VideoCardGamma tag with linear table */
 #undef TEST_SRGB_FIX		/* Some test code */
 #undef WP_PATCH			/* Overwrite the white point */
+#undef INVERT_GRAY			/* Invert single TRC gray profile */
 
 void error(char *fmt, ...), warning(char *fmt, ...);
 
@@ -45,7 +46,6 @@ main(int argc, char *argv[]) {
 	char out_name[500];
 	icmFile *rd_fp, *wr_fp;
 	icc *icco;
-	int i;
 	int verb = 0;
 	int rv = 0;
 
@@ -71,6 +71,9 @@ main(int argc, char *argv[]) {
 
 			if (argv[fa][1] == '?')
 				usage();
+
+			if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+				verb = 1;
 
 			/* No options */
 			usage();
@@ -201,6 +204,32 @@ main(int argc, char *argv[]) {
 
 	/* Show we modified this ICC file */
 	icco->header->cmmId = str2tag("argl");		/* CMM for profile - Argyll CMM */
+#endif
+#ifdef INVERT_GRAY			/* Invert single TRC gray profile */
+	{
+		icmCurve *ro;
+		int i;
+
+		/* Try and read the tag from the file */
+		ro = (icmCurve *)icco->read_tag(icco, icSigGrayTRCTag);
+		if (ro == NULL) 
+			error("Unable to read GrayTRC");
+
+		/* Need to check that the cast is appropriate. */
+		if (ro->ttype != icSigCurveType)
+			error("GrayTRC is not CurveType");
+
+		/* Swap the curve entries from top to bottom */
+		for (i = 0; i < (ro->size/2); i++) {
+			double temp;
+			int ii = 255 - i;
+
+			temp = ro->data[ii];
+			ro->data[ii] = ro->data[i];
+			ro->data[i] = temp;
+		}
+	}
+
 #endif
 
 	/* ======================================= */

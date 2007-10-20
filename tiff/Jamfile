@@ -7,6 +7,13 @@ LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 SEARCH_SOURCE = port ;
 
+# Run configure if it seems to be needed
+if $(UNIX) {
+	Depends libtiff/port.h : configure ;
+	GenFileNND libtiff/port.h : "./configure" ;
+	Depends first : libtiff/port.h ;
+}
+
 # support library for generation utilities
 Library libport.lib : getopt.c strcasecmp.c strtoul.c ;
 

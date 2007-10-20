@@ -18,7 +18,7 @@ if $(HAVE_TIFF) {
 Libraries = libscanrd ;
 Executables = scanin ;
 Headers = scanrd.h ;
-Samples = it8.cht ColorCheckerDC.cht ;
+Samples = it8.cht ColorCheckerDC.cht ColorCheckerSG.cht Hutchcolor.cht i1_RGB_Scan_1.4.cht ;
 
 #Install
 InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;

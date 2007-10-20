@@ -13,40 +13,61 @@ Convert spectral <a href="File_Formats.html#.ti3">.ti3</a>
 readings into CIE XYZ or L*a*b* readings. FWA compensation may be
 applied.<br>
 <h3>Usage</h3>
-spec2cie [options] <span style="font-style: italic;">input.ti3
-output.ti3</span><br>
-&nbsp;
-<a href="#i">-i <i>illum</i></a>&nbsp;&nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose illuminant
-for print/transparency spectral data:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<small><span style="font-family: monospace;">spec2cie [options] </span><span
+ style="font-style: italic; font-family: monospace;">input.ti3
+output.ti3<br>
+</span></small><small><span style="font-family: monospace;">&nbsp; -v
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose mode</span></small><small><span
+ style="font-style: italic; font-family: monospace;"> <br
+ style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;
+</span><a style="font-family: monospace;" href="#i">-i <i>illum</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp; &nbsp;&nbsp; Choose
+illuminant
+for print/transparency spectral data:</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;&nbsp;&nbsp;
 A, D50 (def.), D65, F5,
-F8, F10 or file.sp<br>
-&nbsp;<span style="text-decoration: underline;"> </span><a href="#o">-o
-<i>observ</i></a>&nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose CIE Observer for spectral
-data:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-1931_2, 1964_10, S&amp;B
-1955_2, 1964_10c, shaw, J&amp;V 1978_2 (def.)<br>
-&nbsp; <a href="profile.html#f">-f</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use
-Fluorescent Whitening Agent compensation<br>
-&nbsp;<a href="#I"> -I <i>illum</i></a>&nbsp;&nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp; Override instrument illuminant
-in .ti3 file:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-A, D50, D65, F5,
-F8, F10 or file.sp<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-(only used in conjunction with <span style="font-weight: bold;">-f</span>)<br>
-&nbsp;<span style="font-style: italic;">input.ti3</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Measurement file<br>
-&nbsp;<span style="font-style: italic;">output.ti3</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Converted measurement file<br>
+F8, F10 or file.sp</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><span
+ style="text-decoration: underline; font-family: monospace;"> </span><a
+ style="font-family: monospace;" href="#o">-o
+<i>observ</i></a><span style="font-family: monospace;">&nbsp;
+&nbsp;&nbsp; Choose CIE Observer for spectral
+data:</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; 1931_2, 1964_10, S&amp;B
+1955_2, 1964_10c, shaw, J&amp;V 1978_2 (def.)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; </span><a
+ style="font-family: monospace;" href="profile.html#f">-f</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; Use
+Fluorescent Whitening Agent compensation</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#I"> -I <i>illum</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp; &nbsp;&nbsp; Override
+instrument illuminant
+in .ti3 file:</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; A, D50, D65, F5,
+F8, F10 or file.sp</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+(only used in conjunction with </span><span
+ style="font-weight: bold; font-family: monospace;">-f</span><span
+ style="font-family: monospace;">)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><span
+ style="font-style: italic; font-family: monospace;">input.ti3</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Measurement file</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><span
+ style="font-style: italic; font-family: monospace;">output.ti3</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; Converted
+measurement file</span></small><br>
 <h3>Comments</h3>
 This program takes the spectral data in a .ti3 file, converts them to
 XYZ and Lab and fills the XYZ_[XYZ] and LAB_[LAB] columns in the output

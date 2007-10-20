@@ -11,8 +11,8 @@
  * Copyright 1996 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include "numsup.h"
@@ -83,6 +83,7 @@ struct _rpnts {
 	double p[MXRI];		/* Data position [di] */
 	double v[MXRO];		/* Data value    [fdi] */
 	double k;			/* Weight factor (nominally 1.0, less for lower confidence data point) */
+	double kx;			/* Extra weight factor for extra fit adjustment */
 }; typedef struct _rpnts rpnts;
 
 /* Hermite interpolation magic data */
@@ -102,9 +103,10 @@ struct _rspl {
 	int debug;		/* 0 = no debug */
 	int verbose;	/* 0 = no verbose */
 	double smooth;	/* Smoothness factor */
+	double avgdev[MXDO];
+	                /* Average Deviation of function values as proportion of function range. */
 	int symdom;		/* 0 = non-symetric smoothness with different grid resolutions, */
 	           		/* 1 = symetric smoothness with different grid resolutions, */
-	double avgdev;	/* Average Deviation of input values as proportion of input range. */
 
 	int di;			/* Input dimensionality */
 	int fdi;		/* Output function dimensionality */
@@ -116,8 +118,7 @@ struct _rspl {
 					/* Function to set from */
 
 	/* Scattered Data point related information */
-	int nm;			/* Enforce non-monotonicity flag (Doesn't work reliably) */
-	int xf;			/* Extra fitting flag - relax smoothness near poor fitting points */
+	int xf;			/* Extra fitting flag - change local smoothing in second round */
 	int inc;		/* Flag - Incremental scattered data mode */
 	int sinit;		/* Flag - Grid has been initialised from scattered data */
 	struct {
@@ -128,7 +129,6 @@ struct _rspl {
 		datao va;		/* Data value averages */
 	} d;
 	int niters;		/* Number of multigrid itterations needed */
-	int titers;		/* Total multigrid itterations including extra fit itterations */
 	int **ires; 	/* Resolution for each itteration and dimension */
 	void **mgtmps[MXRO]; /* Store pointers to re-usable mgtmp when incremental */
 
@@ -137,7 +137,7 @@ struct _rspl {
 	struct {
 		int res[MXDI];	/* Single dimension grid resolution for each axis */
 		int bres, brix;	/* Biggest resolution and its index */
-		int mres;		/* Geometric mean res[] */
+		double mres;	/* Geometric mean res[] */
 		int no;			/* Total number of points in grid = res[0] * res[1] * .. res[di-1] */
 		datai l,h,w;	/* Grid low, high, grid cell width */
 						/* This is used to map from the input domain to the grid */
@@ -150,7 +150,7 @@ struct _rspl {
 #define G_XTRA 3		/* Extra floats per grid point */
 		float *alloc;	/* Grid points allocated address */
 		float *a;		/* Grid point flags + data */
-						/* Array is res ^ di entries float[fdi+G_XTRA], offset by G_XTRA */
+						/* Array is res[] ^ di entries float[fdi+G_XTRA], offset by G_XTRA */
 						/* (But is expanded when spline interpolaton is active) */
 						/* float[-1] contains the ink limit function value, L_UNINIT if not initd */
 						/* float[-2] contains the edge flag values. */
@@ -204,17 +204,44 @@ struct _rspl {
 	/* Reverse Interpolation support */
 	rev_struct rev;		/* See rev.h */
 
+	/* Grid Cell Size optimisation support */
+	struct {
+		int xi;			/* Optimization axis this rspl is for (0..di-1) */
+		int xires;		/* Resolution on this axis */
+
+		float *sy; 	 	/* Grid data of sum of output' values along xi */
+		float *sxy;  	/* Grid data of sum of output' values times input offset along xi */
+						/* Array is res[] ^ di entries float[fdi] */
+
+		/* Grid array offset lookups - in floats */
+		int ci[MXDI];		/* Grid coordinate increments for each dimension (same as g.ci[]) */
+		int fci[MXDI];		/* Grid coordinate increments for each dimension in floats */
+
+		double **de;		/* xi axis ^ 2 cache of de values for quantized [x0][x1] spans */
+		double **sde;		/* xi axis ^ 2 cache of span de values for quantized [x0][x1] spans */
+
+		int inde;				/* Compute error in input space rather than output space */
+		void *cntx;				/* Context of callbacks */
+		void (*ocurv)(void *cntx, double *out, double *in);
+								/* callback to convert fdi values from out' to out values */
+		void (*iocurv)(void *cntx, double *out, double *in);
+								/* callback to convert fdi values from out to out' values */ 
+		void *cntx2;			/* Context of to_de2 callback */
+		double (*to_de2)(void *cntx, double *in1, double *in2);
+								/* callback to convert error values to delta E squared */
+	} gcso;
+
 	/* Methods */
 
 	/* Free ourselves */
 	void (*del)(struct _rspl *ss);
 
 	/* Combination lags used by various functions */
-#define RSPL_NONMON      0x0001		/* Enable elimination of non-monoticities */
 #define RSPL_EXTRAFIT    0x0002		/* Enable extra fitting effort by relaxing smoothing */
 #define RSPL_SYMDOMAIN   0x0004		/* Maintain symetric smoothness with nonsym. resolution */
 #define RSPL_INCREMENTAL 0x0008		/* Enable adding more data points */ 
 #define RSPL_FINAL       0x0010		/* Signal to add_rspl() that this is the last points */
+#define RSPL_SET_APXLS   0x0020		/* For set_rspl, adjust samples for aproximate least squares */
 #define RSPL_VERBOSE     0x8000		/* Print progress messages */
 
 	/* Initialise from scattered data. RESTRICTED SIZE */
@@ -231,8 +258,9 @@ struct _rspl {
 		datao vlow,		/* Data value low normalize, NULL = default 0.0 */
 		datao vhigh,	/* Data value high normalize - NULL = default 1.0 */
 		double smooth,	/* Smoothing factor, nominal = 1.0 */
-		double avgdev	/* Average Deviation of input values as proportion of input range, */
-						/* typical value 0.0025 ? (aprox. = 0.564 times the standard deviation) */
+		double avgdev[MXDO]
+		                /* Average Deviation of function values as proportion of function range, */
+						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
 	);
 
 	/* Initialise from scattered data, with per point weighting. RESTRICTED SIZE */
@@ -249,8 +277,9 @@ struct _rspl {
 		datao vlow,		/* Data value low normalize, NULL = default 0.0 */
 		datao vhigh,	/* Data value high normalize - NULL = default 1.0 */
 		double smooth,	/* Smoothing factor, nominal = 1.0 */
-		double avgdev	/* Average Deviation of input values as proportion of input range, */
-						/* typical value 0.0025 ? (aprox. = 0.564 times the standard deviation) */
+		double avgdev[MXDO]
+		                /* Average Deviation of function values as proportion of function range, */
+						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
 	);
 
 	/* Initialise from scattered data, with weak default function. */
@@ -268,8 +297,9 @@ struct _rspl {
 		datao vlow,		/* Data value low normalize, NULL = default 0.0 */
 		datao vhigh,	/* Data value high normalize - NULL = default 1.0 */
 		double smooth,	/* Smoothing factor, nominal = 1.0 */
-		double avgdev,	/* Average Deviation of input values as proportion of input range, */
-						/* typical value 0.0025 ? (aprox. = 0.564 times the standard deviation) */
+		double avgdev[MXDO],
+		                /* Average Deviation of function values as proportion of function range, */
+						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
 		double weak,	/* Weak weighting, nominal = 1.0 */
 		void *cbntx,	/* Opaque function context */
 		void (*func)(void *cbntx, double *out, double *in)		/* Function to set from */
@@ -290,8 +320,9 @@ struct _rspl {
 		datao vlow,		/* Data value low normalize, NULL = default 0.0 */
 		datao vhigh,	/* Data value high normalize - NULL = default 1.0 */
 		double smooth,	/* Smoothing factor, nominal = 1.0 */
-		double avgdev,	/* Average Deviation of input values as proportion of input range, */
-						/* typical value 0.0025 ? (aprox. = 0.564 times the standard deviation) */
+		double avgdev[MXDO],
+		                /* Average Deviation of function values as proportion of function range, */
+						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
 		double weak,	/* Weak weighting, nominal = 1.0 */
 		void *cbntx,	/* Opaque function context */
 		void (*func)(void *cbntx, double *out, double *in)		/* Function to set from */
@@ -307,8 +338,12 @@ struct _rspl {
 		int ndp			/* Number of data points to add */
 	);
 
-	/* Set values from a function. Grid index values are supplied */
-	/* "under" in[] at *((int*)&in[-e-1]) */
+	/* Initialize the grid from a provided function. By default the grid */
+	/* values are set to exactly the value returned fy func(), unless the */
+	/* RSPL_SET_APXLS flag is set, in which case an attempt is made to have */
+	/* the grid points represent a least squares aproximation to the underlying */
+	/* surface. */
+	/* Grid index values are supplied "under" in[] at *((int*)&in[-e-1]) */
 	/* Return non-monotonic status */
 	int
 	(*set_rspl)(
@@ -387,6 +422,8 @@ struct _rspl {
 		co *p);				/* Input and output values */
 
 
+	/* ------------------------------- */
+
 	/* Set the ink limit information for any reverse interpolation. RESTRICTED SIZE */
 	/* Calling this will clear the reverse interpolaton cache. */
 	void (*rev_set_limit)(
@@ -454,7 +491,35 @@ struct _rspl {
 		double max[][MXRI]	/* Array of max[MXRI] to hold return segment maximum values. */
 	);
 
-	/* return the min and max of the input values valid in the grid */
+
+	/* ------------------------------- */
+	/* Setup the gcso to return particular error etimates */
+	/* Return nz on error */
+	int (*gcso_setup)(
+		struct _rspl *s,		/* this */
+		int xi,					/* index of input axis of interest */
+		int indel,				/* Compute error in input space rather than output space */
+		void *cntx,				/* Context of callbacks */
+		void (*ocurv)(void *cntx, double *out, double *in),
+								/* callback to convert fdi values from out' to out space */ 
+		void (*iocurv)(void *cntx, double *out, double *in),
+								/* callback to convert fdi values from out to out' space */
+		void *cntx2,			/* Context of to_de2 callback */
+		double (*to_de2)(void *cntx2, double *in1, double *in2)	
+								/* callback to convert in or out values to delta E squared */
+	);
+
+	/* return the estimated delta E for the given grid span on the axis of interest */
+	double (*gcso_fwd_err)(
+		struct _rspl *s,		/* this */
+		double *spande,			/* if not NULL return the span width delta E */
+								/* as measured by delta E of the span */
+		double x0, double x1	/* Span range in input space, x0 < x1 */
+	);
+
+	/* ------------------------------- */
+
+	/* Return the min and max of the input values valid in the grid */
 	void (*get_in_range)(
 		struct _rspl *s,			/* this */
 		double *min, double *max);	/* Return min/max values */
@@ -481,6 +546,8 @@ struct _rspl {
 
 /* Create a new, empty rspl object */
 rspl *new_rspl(int di, int fdi);	/* Input and output dimentiality */
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Utility functions */
 

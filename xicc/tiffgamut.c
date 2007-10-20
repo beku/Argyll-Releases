@@ -8,8 +8,8 @@
  *
  * Copyright 2000, 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -20,6 +20,8 @@
  *		icclink can be detected or allowed for.
  *
  *       Need to cope with profile not having black point.
+ *
+ *       Should handle L*a*b* TIFF files.
  */
 
 
@@ -42,21 +44,25 @@ void error(char *fmt, ...), warning(char *fmt, ...);
 void usage(void) {
 	int i;
 	fprintf(stderr,"Create VRML image of the gamut surface of a TIFF, V2.00\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: tiffgamut [-v level] profile.icm infile.tif\n");
 	fprintf(stderr," -v            Verbose\n");
+	fprintf(stderr," -d sres       Surface resolution details 1.0 - 50.0\n");
+	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .gam file\n");
+	fprintf(stderr," -n            Don't add VRML axes or white/black point\n");
+	fprintf(stderr," -k            Add markers for prim. & sec. \"cusp\" points\n");
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"               s = saturation, a = absolute, j = Appearance %s\n",icxcam_description(cam_default));
 	fprintf(stderr," -o order      n = normal (priority: lut > matrix > monochrome)\n");
 	fprintf(stderr,"               r = reverse (priority: monochrome > matrix > lut)\n");
-	fprintf(stderr," -c viewcond   set viewing conditions for %s,\n",icxcam_description(cam_default));
-	fprintf(stderr,"               either an enumerated choice, or a parameter:\n");
+	fprintf(stderr," -c viewcond   set appearance mode and viewing conditions for %s,\n",icxcam_description(cam_default));
+	fprintf(stderr,"               either an enumerated choice, or a parameter:value changes\n");
 	for (i = 0; ; i++) {
 		icxViewCond vc;
-		if (xicc_enum_viewcond(NULL, &vc, i, 1))
+		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1) == -999)
 			break;
 
-		fprintf(stderr,"               %d: %s\n",i,vc.desc);
+		fprintf(stderr,"           %s\n",vc.desc);
 	}
 	fprintf(stderr,"         s:surround    a = average, m = dim, d = dark,\n");
 	fprintf(stderr,"                       c = transparency (default average)\n");
@@ -67,9 +73,6 @@ void usage(void) {
 	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 1)\n");
 	fprintf(stderr,"         f:X:Y:Z       Flare color as XYZ (default media white)\n");
 	fprintf(stderr,"         f:x:y         Flare color as x, y\n");
-	fprintf(stderr," -d sres       Surface resolution details 1.0 - 50.0\n");
-	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .gam file\n");
-	fprintf(stderr," -n            Don't add VRML axes or white/black point\n");
 	exit(1);
 }
 
@@ -178,6 +181,7 @@ main(int argc, char *argv[]) {
 	int verb = 0;
 	int vrml = 0;
 	int doaxes = 1;
+	int docusps = 0;
 	int rv = 0;
 
 	TIFF *rh = NULL;
@@ -283,8 +287,15 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
 				if (na == NULL) usage();
-				if (na[0] >= '0' && na[0] <= '9') {
-					vc_e = atoi(na);
+
+				/* Switch to Jab automatically */
+				intent = icxAppearance;
+				pcsor = icxSigJabData;
+
+				/* Set the viewing conditions */
+				if (na[1] != ':') {
+					if ((vc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
+						usage();
 				} else if (na[0] == 's' || na[0] == 'S') {
 					if (na[1] != ':')
 						usage();
@@ -336,6 +347,10 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
 				doaxes = 0;
 			}
+			/* Do cusp markers */
+			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
+				docusps = 1;
+			}
 			/* Surface Detail */
 			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D') {
 				fa = nfa;
@@ -384,12 +399,12 @@ main(int argc, char *argv[]) {
 	if ((xicco = new_xicc(icco)) == NULL)
 		error ("Creation of xicc failed");
 
-	/* Setup the viewing conditions */
-	if (xicc_enum_viewcond(xicco, &vc, -1, 0))
+	/* Setup the default viewing conditions */
+	if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0) == -999)
 		error ("%d, %s",xicco->errc, xicco->err);
 
-	if (vc_e >= 0)
-		if (xicc_enum_viewcond(xicco, &vc, vc_e, 0))
+	if (vc_e != -1)
+		if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0) == -999)
 			error ("%d, %s",xicco->errc, xicco->err);
 	if (vc_s >= 0)
 		vc.Ev = vc_s;
@@ -442,7 +457,7 @@ main(int argc, char *argv[]) {
 	TIFFGetField(rh, TIFFTAG_IMAGELENGTH, &height);
 
 	TIFFGetField(rh, TIFFTAG_BITSPERSAMPLE, &bitspersample);
-	if (bitspersample != 8)
+	if (bitspersample != 8 && bitspersample != 16)
 		error("TIFF Input file must be 8 bit/channel");
 
 	TIFFGetField(rh, TIFFTAG_PHOTOMETRIC, &photometric);
@@ -468,7 +483,7 @@ main(int argc, char *argv[]) {
 
 	/* - - - - - - - - - - - - - - - */
 	/* Creat a gamut surface */
-	gam = new_gamut(gamres);
+	gam = new_gamut(gamres, pcsor == icxSigJabData);
 
 	/* - - - - - - - - - - - - - - - */
 	/* Process colors to translate */
@@ -487,8 +502,15 @@ main(int argc, char *argv[]) {
 			int i;
 			double in[MAX_CHAN], out[MAX_CHAN];
 			
-			for (i = 0; i < inn; i++) {
-				in[i] = ((unsigned char *)inbuf)[x * inn + i]/255.0;
+			if (bitspersample == 8) {
+				for (i = 0; i < inn; i++) {
+					in[i] = ((unsigned char *)inbuf)[x * inn + i]/255.0;
+				}
+			} else {
+				for (i = 0; i < inn; i++) {
+					int v = ((unsigned short *)inbuf)[x * inn + i];
+					in[i] = v/65535.0;
+				}
 			}
 			
 			if ((rv = luo->lookup(luo, out, in)) > 1)
@@ -528,7 +550,7 @@ main(int argc, char *argv[]) {
 
 	if (vrml) {
 		strcpy(xl,".wrl");
-		if (gam->write_vrml(gam,out_name, doaxes))
+		if (gam->write_vrml(gam,out_name, doaxes, docusps))
 			error ("write vrml failed on '%s'",out_name);
 	}
 

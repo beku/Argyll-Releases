@@ -11,8 +11,8 @@
  * Copyright 1995, 1996, 2002, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  */
 
 /* Version of cgatslib release */

@@ -7,10 +7,13 @@
 
 /* Version of Argyll release */
 
-#define ARGYLL_VERSION 0x000503
-#define ARGYLL_VERSION_STR "0.53"
+#define ARGYLL_VERSION 0x000700
+#define ARGYLL_VERSION_STR "0.70 (BETA 7)"
 
 /* Maximum file path length */
 #define MAXNAMEL 512
+
+/* Enable access to USB instruments using libusb */
+#define ENABLE_USB
 
 #endif /* __CONFIG_H__ */

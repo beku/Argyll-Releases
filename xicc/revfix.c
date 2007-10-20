@@ -10,7 +10,7 @@
  * Version: 1.00
  *
  * Copyright 2000 Graeme W. Gill
- * Please refer to Licence.txt file for details.
+ * Please refer to License.txt file for details.
  */
 
 /* TTBD:
@@ -39,26 +39,27 @@
 
 void usage(void) {
 	fprintf(stderr,"Invert AtoB1 to make BtoA1 for CMYK profiles, V1.20\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: revfix [-options] iccin iccout\n");
-	fprintf(stderr," -v         Verbose\n");
-	fprintf(stderr," -0         Process perceptual\n");
-	fprintf(stderr," -1         Process absolute/relative colorimetric\n");
-	fprintf(stderr," -2         Process saturation\n");
-	fprintf(stderr," -r res     Override BtoA1 Clut res\n");
-	fprintf(stderr," -k [ezhxr] e = same K as existing BtoA table (def)\n");
-	fprintf(stderr,"            z = zero, h = 0.5 K, x = max K, r = ramp K\n");
+	fprintf(stderr," -v             Verbose\n");
+	fprintf(stderr," -0             Process perceptual\n");
+	fprintf(stderr," -1             Process absolute/relative colorimetric\n");
+	fprintf(stderr," -2             Process saturation\n");
+	fprintf(stderr," -r res         Override BtoA1 Clut res\n");
+	fprintf(stderr," -k [ezhxr]     e = same K as existing BtoA table (def)\n");
+	fprintf(stderr,"                z = zero, h = 0.5 K, x = max K, r = ramp K\n");
 	fprintf(stderr," -k p stle stpo enle enpo shape\n");
-	fprintf(stderr,"            p = curve parameters\n");
-	fprintf(stderr,"            stle: K level at White 0.0 - 1.0\n");
-	fprintf(stderr,"            stpo: start point of transition Wh 0.0 - Bk 1.0\n");
-	fprintf(stderr,"            enpo: End point of transition Wh 0.0 - Bk 1.0\n");
-	fprintf(stderr,"            enle: K level at Black 0.0 - 1.0\n");
-	fprintf(stderr,"            shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0 convex\n");
-	fprintf(stderr," -l tlimit  set total ink limit, 0 - 400%% (default none)\n");
-	fprintf(stderr," -L klimit  set black ink limit, 0 - 100%% (default none)\n");
-	fprintf(stderr," -p absprof Include abstract profile in output tables\n");
-//	fprintf(stderr," -s         Use internal optimized separation for CMYK\n");
+	fprintf(stderr,"                p = curve parameters\n");
+	fprintf(stderr,"                stle: K level at White 0.0 - 1.0\n");
+	fprintf(stderr,"                stpo: start point of transition Wh 0.0 - Bk 1.0\n");
+	fprintf(stderr,"                enpo: End point of transition Wh 0.0 - Bk 1.0\n");
+	fprintf(stderr,"                enle: K level at Black 0.0 - 1.0\n");
+	fprintf(stderr,"                shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0 convex\n");
+	fprintf(stderr," -K parameters  Same as -k, but target is K locus rather than K value itself\n");
+	fprintf(stderr," -l tlimit      set total ink limit, 0 - 400%% (estimate by default)\n");
+	fprintf(stderr," -L klimit      set black ink limit, 0 - 100%% (estimate by default)\n");
+	fprintf(stderr," -p absprof     Include abstract profile in output tables\n");
+//	fprintf(stderr," -s             Use internal optimized separation for CMYK\n");
 	exit(1);
 }
 
@@ -143,7 +144,7 @@ void Lab_Labp(void *cntx, double out[3], double in[3]) {
 
 /* Normal CLUT routine */
 void Labp_CMYKp(void *cntx, double out[4], double in[3]) {
-	double temp[4], targetk;
+	double temp[4], targetk = 0.0;
 	int rv;
 	callback *p = (callback *)cntx;
 
@@ -247,7 +248,7 @@ void Labp_CMYKp(void *cntx, double out[4], double in[3]) {
 	if (p->verb) {		/* Output percent intervals */
 		int pc;
 		p->count++;
-		pc = p->count * 100.0/p->total + 0.5;
+		pc = (int)(p->count * 100.0/p->total + 0.5);
 		if (pc != p->last) {
 			printf("\r%2d%%",pc), fflush(stdout);
 			p->last = pc;
@@ -294,12 +295,12 @@ main(int argc, char *argv[]) {
 	int do1 = 0;
 	int do2 = 0;
 	int inking = 0;			/* Default copy from existing */
-	double Kstle, Kstpo, Kenle, Kenpo, Kshap;
-	int tlimit = -1;		/* Total ink limit as a % */
-	int klimit = -1;		/* Black ink limit as a % */
+	int locus = 0;			/* Default K value target */
+	double Kstle = 0.0, Kstpo = 0.0, Kenle = 0.0, Kenpo = 0.0, Kshap = 0.0;
+	double tlimit = -1.0;	/* Total ink limit */
+	double klimit = -1.0;	/* Black ink limit */
 	int intsep = 0;			/* Not implimented in xicc yet ??? */
 	int rv = 0;
-	char buf[200];
 	error_program = argv[0];
 
 	if (argc < 2)
@@ -348,6 +349,10 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
 				fa = nfa;
 				if (na == NULL) usage();
+				if (argv[fa][1] == 'k')
+					locus = 0;			/* K value target */
+				else
+					locus = 1;			/* K locus target */
     			switch (na[0]) {
 					case 'e':
 					case 'E':
@@ -399,12 +404,12 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'l') {
 				fa = nfa;
 				if (na == NULL) usage();
-				tlimit = atoi(na);
+				tlimit = atoi(na)/100.0;
 			}
 			else if (argv[fa][1] == 'L') {
 				fa = nfa;
 				if (na == NULL) usage();
-				klimit = atoi(na);
+				klimit = atoi(na)/100.0;
 			}
 
 			/* Use internal separation */
@@ -467,7 +472,6 @@ main(int argc, char *argv[]) {
 	if (verb && inking == 5) {
 		double tL;
 		printf("K parameters are are %f %f %f %f %f\n",Kstle, Kstpo, Kenpo, Kenle, Kshap);
-		/* Plot expected K locus goal */
 		for (tL = 100.0; tL >= 0.0; tL -= 10.0) {
 			double rv, L;
 
@@ -508,7 +512,7 @@ main(int argc, char *argv[]) {
 			else if (rv > 1.0)
 				rv = 1.0;
 
-			printf("L = %f, K locus = %f\n",tL, rv);
+			printf("L = %f, K %s = %f\n",tL, locus ? "locus" : "value", rv);
 		}
 	}
 
@@ -516,30 +520,33 @@ main(int argc, char *argv[]) {
 	{
 		int ii;						/* Current intent */
 		icmLut *done[3];			/* record pointers to done Luts here */
-		icRenderingIntent intent;
-		icTagSignature sig;
+		icRenderingIntent intent = 0;
+		icTagSignature sig = 0;
 		xicc *xicco;
-		callback cb;						/* Callback support stucture */
-		icxInk ink;							/* Ink parameters */
-		icmLuAlgType alg;					/* Type of lookup algorithm */
-		icmFile *abs_fp;	/* Abstract profile transform: */
-		icc *abs_icc;
-		xicc *abs_xicc;
+		callback cb;					/* Callback support stucture */
+		icxInk ink;						/* Ink parameters */
+		icmLuAlgType alg;				/* Type of lookup algorithm */
+		icmFile *abs_fp = NULL;			/* Abstract profile transform: */
+		icc *abs_icc = NULL;
+		xicc *abs_xicc = NULL;
 		
 		/* Wrap with an expanded icc */
 		if ((xicco = new_xicc(icco)) == NULL)
 			error ("Creation of xicc failed");
 
 		/* Setup CMYK -> Lab conversion (Fwd) object */
-		if (tlimit >= 0)
-		ink.tlimit = tlimit/100.0;	/* Set a total ink limit */
-		else
-			ink.tlimit = -1.0;			/* Don't use a limit */
 
-		if (klimit >= 0)
-			ink.klimit = klimit/100.0;	/* Set a black ink limit */
-		else
-			ink.klimit = -1.0;			/* Don't use a limit */
+		/* Set the default ink limits if not set on command line */
+		icxDefaultLimits(icco, &ink.tlimit, tlimit, &ink.klimit, klimit);
+
+		if (verb) {
+			if (!do0 && !do1 && !do2)
+				printf("WARNING: nothing to do!\n");
+			if (ink.tlimit >= 0.0)
+				printf("Total ink limit assumed is %3.0f%%\n",100.0 * ink.tlimit);
+			if (ink.klimit >= 0.0)
+				printf("Black ink limit assumed is %3.0f%%\n",100.0 * ink.klimit);
+		}
 
 		ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
 
@@ -547,34 +554,35 @@ main(int argc, char *argv[]) {
 			ink.k_rule = icxKvalue;		/* K is auxiliary target */
 
 		} else if (inking == 1) {		/* Use minimum */
+			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 			ink.c.Kstle = 0.0;
 			ink.c.Kstpo = 0.0;
 			ink.c.Kenpo = 1.0;
 			ink.c.Kenle = 0.0;
 			ink.c.Kshap = 1.0;
 		} else if (inking == 2) {		/* Use 0.5  */
-			ink.k_rule = icxKluma5;
+			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 			ink.c.Kstle = 0.5;
 			ink.c.Kstpo = 0.0;
 			ink.c.Kenpo = 1.0;
 			ink.c.Kenle = 0.5;
 			ink.c.Kshap = 1.0;
 		} else if (inking == 3) {		/* Use maximum  */
-			ink.k_rule = icxKluma5;
+			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 			ink.c.Kstle = 1.0;
 			ink.c.Kstpo = 0.0;
 			ink.c.Kenpo = 1.0;
 			ink.c.Kenle = 1.0;
 			ink.c.Kshap = 1.0;
 		} else if (inking == 4) {		/* Use ramp  */
-			ink.k_rule = icxKluma5;
+			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 			ink.c.Kstle = 0.0;
 			ink.c.Kstpo = 0.0;
 			ink.c.Kenpo = 1.0;
 			ink.c.Kenle = 1.0;
 			ink.c.Kshap = 1.0;
 		} else {						/* Use specified curve */
-			ink.k_rule = icxKluma5;
+			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 			ink.c.Kstle = Kstle;
 			ink.c.Kstpo = Kstpo;
 			ink.c.Kenpo = Kenpo;
@@ -614,7 +622,6 @@ main(int argc, char *argv[]) {
 			/* Read header etc. */
 			if ((rv = abs_icc->read(abs_icc,abs_fp,0)) != 0)
 				error ("%d, %s",rv,abs_icc->err);
-			abs_icc->header;
 	
 			if (abs_icc->header->deviceClass != icSigAbstractClass)
 				error("Abstract profile isn't an abstract profile");
@@ -728,12 +735,14 @@ main(int argc, char *argv[]) {
 					printf("About to start processing %s\n", icm2str(icmRenderingIntent, intent));
 	
 				if (cb.verb) {
-					for (cb.total = 1, i = 0; i < wo->inputChan; i++, cb.total *= wo->clutPoints)
+					unsigned int ui;
+					for (cb.total = 1, ui = 0; ui < wo->inputChan; ui++, cb.total *= wo->clutPoints)
 						; 
 					printf(" 0%%"), fflush(stdout);
 				}
 				/* Use helper function to do the hard work. */
 				if (wo->set_tables(wo,
+						ICM_CLUT_SET_APXLS,
 						&cb,						/* Context */
 						icSigLabData, 				/* Input color space */
 						icSigCmykData, 				/* Output color space */

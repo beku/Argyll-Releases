@@ -6,9 +6,13 @@
  * This concatenation Copyright 1998 Graeme Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
 
 /*
 
@@ -94,6 +98,10 @@ int dnsqe(
 	double tol,		/* Desired tollerance of the solution */
 	int nprint	 	/* Turn on debugging printouts from func() every nprint itterations */
 );
+
+#ifdef __cplusplus
+	}
+#endif
 
 #endif /* DNSQ_H */
 

@@ -3,26 +3,37 @@ Argyll - Things To Be Done (in no particular priority)
 
 Categories:
 
-1) Active list
-2) General
-3) Documentation
-4) Charts
-5) Readings/Instruments
-6) Profiles
+1)  Active list
+2)  General
+3)  Documentation
+4)  Charts
+5)  Readings/Instruments
+6)  Profiles
 6a) icclib
-7) Linking, gamut mapping
+7)  Linking, gamut mapping
 7a) Profile/Link speedups
-8) Raster conversion
-9) Scanin
+8)  Raster conversion
+9)  Scanin
 10) Bugs
 
 --------------------------------------------------------
 1) Active list:
 
 *   Implement ICC V4
-*	Get optimised separations working for CMY->CMYK & smoothed sep. option
-*	Finish new cctiff with Lab handling
-*	Add monochrome suppport
+
+
+1a) Candidate list:
+
+* Get optimised separations working for CMY->CMYK & smoothed sep. option
+
+* Add monochrome suppport
+
+* Fix plot to have seperate thread etc, and
+  add "save spectrum support" is spotread.
+
+* Fix xmatrix.c to allow for curve offset - this will
+  improve quality of non-calibrated display matrix profiles greatly.
+
 
 2) General:
 
@@ -64,6 +75,7 @@ Categories:
   to make it a full "library". Python interface ?
 
 * Fixup error and allocation code in all the Argyll libraries.
+  Add a better error reporting mechanism ?
 
 * Create a useful system independent build system, and convert
   Argyll to use it (ie. based the "gin" version of jam ?).
@@ -81,20 +93,26 @@ Categories:
   color space the gamut and intent is represented in. This is to be able
   to detect (and possibly convert) incompatible gamuts.
 
-* Make printspot more flexible - plot spectrums, save spectrums, load
-  them, etc. - similar to Xrites DTP41 utility.
+* Make printspot more flexible - load spectrums, compare them
+  etc. - similar to Xrites DTP41 utility.
 
+* Create a device "linearity" measure utlity. Read in a CLUT
+  profile and compute the first and second differences of the grid.
+  Report grid res. scaled average & maximums ?
+  (What about input and output curve effects ? - sample overall
+   chacateristics ??)
 
 3) Documentation:
 
+* Add page on viewing condition parameters and typical values,
+  to link to from profile, icclink etc.
+
 * Add help in generating greyscale test charts into targen doco.(-f0 etc.)
 
-* Add comment about support for other color instruments.
+* Add comment about support for other color instruments (X-Rite .
 
 * Add review of different file formats (.ti?, .mpp etc.), and keep
-  them current.
-
-* Document the .ti3 file format to assist support for other instruments.
+  them current. (Partly done)
 
 * Add doco on intependent verification of profile accuracy.
 
@@ -128,7 +146,7 @@ Categories:
 
 * Add raster output option for print chart generation,
   as well as PS (Need a simple but general raster
-  rendering module. How to render text ??)
+  rendering module. How to render text ?? see argyll/render)
 
 * Create tool workflow to allow creating a "worst case"
   verification chart based on the veronoi locations of
@@ -138,7 +156,7 @@ Categories:
 5) Readings & Instruments:
 
 * Would be nice to sort out issues with disabling screensavers
-  and monitor powersave for dispcal and dispread.
+  and monitor powersave for dispcal and dispread (mostly done).
   Windows screensaver disable seems to work, but need to
   check if a separate call is needed to disable powersave.
   X11 seems to be a mess, because XGetScreenSaver appears to
@@ -152,22 +170,22 @@ Categories:
 * In printread, add RGB and Monochrome "generic"
   profiles, so that bad reading scan be recognised (??)
 
-* Fix serial I/O library to allow for XON/XOFF handshaking,
-  and turn this on for Spectrolino/SpectroScan, since this
-  is the default for it. Add DOCO to the effect that things
-  are setup for a default configured instrument.
-
 * Create utility that translates between an XYZ only .ti3 and
   an estimated spectral .ti3, based on a spectral .mpp,
   to allow applying WFA compensation using non-spectral
   instruments.
 
-* Check unixio init code with keyspan doco, to simplify it
-  and make sure it is likely to work more widely.
-
 
 
 6) Profiles:
+
+* Determine typical statistical distribution of errors
+  in relation to Lab space, and use per sample point
+  weightings to apply more uncertaintly specific smoothing 
+  factors.
+
+* Add option to use XYZ as PCS, and matrix in B2A table
+  to improve efficiency of B2A conversion (hence acuracy).
 
 * Investigate why using a black ink limit slows inversion down so much,
   and see if the performance can be improved. Shift black ink limit
@@ -209,12 +227,15 @@ Categories:
   should it use, XYZ for the matrix, or Lab for the
   best quality Lut ?? What other CMS need such things ?) 
 
+* Modify the rspl simplex code (and possibly imdi code)
+  to orient the simplexes in each cell to minimse the
+  expected curvature error at the center of each cell.
 
 
 6a) Icclib:
 
 * Re-architect icclib to allow for unknown datatypes,
-  dynamic custom tages, and full ICC V4 support.
+  dynamic custom tags, and full ICC V4 support.
 
 * Add full spot color library support
 
@@ -225,8 +246,10 @@ Categories:
 
 7) Linking, gamut mapping:
 
-* Fix luminence scaling of gamut mapping to better
-  reflect the real world. (ie. linear light space ??)
+* Would be nice to be able to weigh L errors more in
+  gamut clipping. Would have to introduce scaling factors
+  in rspl values to fake this without changing the
+  insides of RSPL.
 
 * Fix xicc library to handle matrix/shaper profile inversion
   correctly, when the target is out of gamut. Don't clip in
@@ -244,21 +267,23 @@ Categories:
   Current grey mapping won't work because it just mapps the
   Lmax/Lmins, rather than the Lmax just in gamut.
   Add glum flag to create this behaviour ?
+  Would this also work to "trick" monitor displays into
+  having a bigger gamut ?
 
 * Add flag to work with "preserve black" that forces K only
   input to map to pure K only output, to suite use on press
   re-targeting. How about creating a gamut mapping to do
   this for arbatrary colorants ? - Can use "weak default mapping"
-  to help curve shape ?
+  to help curve shape ? How to handle resulting gamut shape change ??
 
 * Add proper support for a "filtering" mode of black generation,
   that smooths the black colorant target to take into account
   gamut boundary issues. ie. revisit auxsmth.c ? Use optimised
-  separations ??
+  separations mechansim instead ??
 
 * Add support in icclink for linking with monochrome in and out
-  profiles. Gamut mapping needs to have monochrome representation
-  and mapping support added.
+  profiles. Gamut mapping needs to have monochrome bypass of
+  3D mapping.
 
 
 
@@ -293,7 +318,7 @@ Categories:
 9) Scanin
 
 * Add support for 3 or 4 fiducials to be defined in .cht,
-  and option of supplying them as options, as a worjaround
+  and option of supplying them as options, as a workaround
   to failure of automatic recognition.
 
 * Add check in scanin that prints warning message if

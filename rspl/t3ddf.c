@@ -7,8 +7,8 @@
  * Derived from cmatch.c
  * Copyright 1995, 2005 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 
@@ -21,6 +21,7 @@
 #include <math.h>
 #include "rspl.h"
 #include "tiffio.h"
+#include "plot.h"
 
 #ifdef NEVER
 #define INTERP spline_interp
@@ -112,11 +113,12 @@ void usage(void) {
 
 int main(int argc, char *argv[]) {
 	int fa,nfa;				/* argument we're looking at */
-	rspl *rss;	/* Regularized spline structure */
-	rspl *rss2;	/* Regularized spline structure at half/quarter resolution */
+	rspl *rss;			/* Regularized spline structure */
+	rspl *rss2 = NULL;	/* Regularized spline structure at half/quarter resolution */
 	datai low,high;
 	int gres[MXDI];
 	int gres2[MXDI];
+	double avgdev[MXDO];
 	co *test_points = test_points1;
 	int npoints = sizeof(test_points1)/sizeof(co);
 	double wweight = 1.0;
@@ -136,6 +138,9 @@ int main(int argc, char *argv[]) {
 	gres[0] = GRES0;
 	gres[1] = GRES1;
 	gres[2] = GRES2;
+	avgdev[0] = 0.0;
+	avgdev[1] = 0.0;
+	avgdev[2] = 0.0;
 
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
@@ -217,7 +222,7 @@ int main(int argc, char *argv[]) {
 	           low, high, gres,		/* Low, high, resolution of grid */
 	           low, high,			/* Default data scale */
 	           1.0,					/* Smoothing */
-	           0.0,					/* Average Deviation */
+	           avgdev,				/* Average Deviation */
                wweight,				/* weak function weight */
 	           NULL,				/* No context */
 	           wfunc				/* Weak function */
@@ -244,7 +249,7 @@ int main(int argc, char *argv[]) {
 		           low, high, gres2,	/* Low, high, resolution of grid */
 		           low, high,			/* Default data scale */
 		           1.0, 				/* Smoothing */
-		           0.0,					/* Average Deviation */
+		           avgdev,				/* Average Deviation */
                    wweight,				/* weak function weight */
 	               NULL,				/* No context */
 	               wfunc				/* Weak function */
@@ -253,7 +258,7 @@ int main(int argc, char *argv[]) {
 
 	/* Test the interpolation with a slice in 2D */
 	for (rsv = 0; rsv <= doh; rsv++) {
-		double z[2][2] = { 0.1, 0.5, 0.5, 0.9 }; 
+		double z[2][2] = { { 0.1, 0.5 }, { 0.5, 0.9 } }; 
 		double x1 = -0.2;
 		double x2 = 1.2;
 		double y1 = -0.2;

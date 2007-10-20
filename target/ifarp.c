@@ -10,8 +10,8 @@
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -93,7 +93,6 @@ static void
 ifarp_to_percept(void *od, double *p, double *d) {
 	ifarp *s = (ifarp *)od;
 	int e;
-	double tt;
 
 	/* Do nothing - copy device to perceptual. */
 	for (e = 0; e < s->di; e++) {
@@ -203,7 +202,6 @@ ifarp *s,
 double *d		/* starting and returned device position */
 ) {
 	int e, di = s->di;
-	double pp[MXTD];
 	double sr[MXTD];	/* Search radius in each device dimension */
 	double drad = 1.0;	/* Search Radius (affects fill evenness) */
 	double ptol = 0.001;	/* Tolerance */
@@ -212,7 +210,7 @@ double *d		/* starting and returned device position */
 // ~~99
 	for (e = 0; e < di; e++)
 		sr[e] = drad;			/* Device space search radius */
-	if ((tt = powell(di, d, sr,  ptol, 500, efunc, (void *)s)) < 0.0 || tt >= 50000.0) {
+	if (powell(&tt, di, d, sr,  ptol, 500, efunc, (void *)s) != 0 || tt >= 50000.0) {
 #ifdef DEBUG
 		warning("ifarp: powell failed, tt = %f",tt);
 #endif
@@ -231,7 +229,7 @@ ifarp *s,
 int ix		/* Index of point to start from */
 ) {
 	int di = s->di;
-	int i, e;
+	int e;
 
 // ~~99
 	/* Retry if powell failes */
@@ -282,7 +280,7 @@ ifarp *s,
 double *d,		/* Device position */
 double *p		/* Perceptual value */
 ) {
-	int i, j;
+	int j;
 
 	for (; s->rix < s->np; s->rix++) {
 
@@ -427,7 +425,7 @@ nearest(
 ifarp *s,
 double *q		/* Target point location */
 ) {
-	int e, f, i, k;
+	int e, i, k;
 	int di = s->di;
 	int wex[MXTD * 2];		/* Current window edge indexes */
 	double wed[MXTD * 2];	/* Current window edge distances */
@@ -570,11 +568,11 @@ double *q		/* Target point location */
 
 		/* Until we're done */
 		for (;;) {
-			int ee;			/* Axis & expanding box edge */
-			int ff;			/* Axis */
-			int ii;			/* Index of chosen point */
+			int ee;				/* Axis & expanding box edge */
+			int ff;				/* Axis */
+			int ii;				/* Index of chosen point */
 			ifpnode *ob;		/* Current object */
-			int ctv;		/* Current touch value */
+			unsigned int ctv;	/* Current touch value */
 //printf("\n");
 //printf("wwidth = %f, bdist = %f, window = %d-%d, %d-%d\n",
 //bw, bdist, wex[0], wex[1], wex[2], wex[3]);
@@ -821,9 +819,9 @@ static void del_nn(ifarp *s) {
 icxColorantLu *clu;
 
 void sa_percept(void *od, double *out, double *in) {
-	double lab[3];
 	
 #ifdef NEVER
+	double lab[3];
 	clu->dev_to_rLab(clu, lab, in);
 
 	out[0] = lab[0];

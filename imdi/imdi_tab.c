@@ -1,19 +1,20 @@
 
 /* Integer Multi-Dimensional Interpolation */
+
 /*
- * Copyright 2000 - 2002 Graeme W. Gill
+ * Copyright 2000 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
-/* Run time table allocater and initialiser */
-
 /*
+ * Run time table allocater and initialiser
+ *
  * The function here that knows how to create the
  * appropriate run time tables for our chosen kernel,
- * and the color mapping we want to perform.
+ * and the type color mapping we want to perform.
  */
 
 #include <stdio.h>
@@ -22,8 +23,7 @@
 #include <stdarg.h>
 #include <string.h>
 
-#include "imdi_imp.h"
-#include "imdi_gen.h"
+#include "imdi.h"
 #include "imdi_tab.h"
 
 #undef VERBOSE
@@ -33,8 +33,9 @@
 #include <numlib.h>
 #endif
 
-typedef unsigned char byte;
 
+
+typedef unsigned char byte;
 
 /* Left shift, handles >= 32 properly */
 #define LSHIFT(aa, bb)  ((bb) <= 31 ? ((aa) << (bb)) : (((aa) << 31) << ((bb)-31)))
@@ -103,7 +104,6 @@ unsigned long v
 #endif
 ) {
 	fprintf(stderr,"imdi_tabl: internal failure - unexpected write size!\n");
-*((char *)NULL) = 0;	// ~~999
 	exit(-1);
 }
 
@@ -114,7 +114,7 @@ void (*write_entry[16])(byte *p, unsigned longlong v);
 void (*write_entry[16])(byte *p, unsigned long v);
 #endif
 
-void
+static void
 init_write_tab(void) {
 	int i;
 
@@ -130,20 +130,32 @@ init_write_tab(void) {
 #endif /* ALLOW64 */
 }
 
+/* Table creation function */
 imdi_imp *
 imdi_tab(
-	genspec *gs,	/* Pointer to gen spec */
-	tabspec *ts,	/* Pointer to table spec */
+	genspec *gs,		/* Pointer to gen spec */
+	tabspec *ts,		/* Pointer to table spec */
+	imdi_conv cnv,		/* Runtime argument conversion needed */
+	imdi_pixrep irep,	/* High level input pixel representation to match  */
+	imdi_pixrep orep,	/* High level output pixel representation to match */
+	void (*interp)(struct _imdi *s, void **outp, int outst,	/* Underlying conversion function */
+	                                void **inp, int inst,
+	                                unsigned int npixels),
+
+	int *inm,			/* Input raster channel to callback channel mapping, NULL for none. */
+	int *outm,			/* Output raster channel to callback channel mapping, NULL for none. */
+	imdi_ooptions oopt,	  /* Output per channel options (Callback channel, NOT output channel) */
+	unsigned int *checkv, /* Output channel check values (Callback channel, NULL for none == 0. */
 
 	/* Callbacks to lookup the mdi table values */
-	double (*input_curve) (void *cntx, int ch, double in_val),
-	void   (*md_table)    (void *cntx, double *out_vals, double *in_vals),
-	double (*output_curve)(void *cntx, int ch, double in_val),
+	void (*input_curves) (void *cntx, double *out_vals, double *in_vals),
+	void (*md_table)     (void *cntx, double *out_vals, double *in_vals),
+	void (*output_curves)(void *cntx, double *out_vals, double *in_vals),
 	void *cntx		/* Context to callbacks */
 ) {
-	static inited = 0;
-	static bigend = 0;
-	int e;
+	static int inited = 0;
+	static int bigend = 0;
+	int i, e, f;
 	imdi_imp *it;
 	unsigned long etest = 0xff;
 	int idinc[IXDI+1];		/* Increment for each dimension of interp table. */
@@ -164,17 +176,63 @@ imdi_tab(
 		inited = 1;
 	}
 
-	if ((it = (imdi_imp *)malloc(sizeof(imdi_imp))) == NULL) {
+	if ((it = (imdi_imp *)calloc(1, sizeof(imdi_imp))) == NULL) {
 #ifdef VERBOSE
 		printf("malloc imdi_imp size %d failed\n",sizeof(imdi_imp));
 #endif
 		return NULL;	/* Should we signal error ? How ? */
 	}
 
+	it->size = sizeof(imdi_imp);
+#ifdef VERBOSE
+	printf("Allocated imdi_imp structure size %u\n",it->size);
+#endif /* VERBOSE */
+
+	/* Set runtime matching conversion provided */
+	it->cnv = cnv;
+	it->id = gs->id;
+	it->od = gs->od;
+	it->cirep = irep;		/* Pixel representation interp is called with */
+	it->corep = orep;
+	it->firep = gs->irep;	/* Pixel representation of function we are going to use */
+	it->forep = gs->orep;
+	it->interp = interp;
+	it->checkf = 0;
+
+	/* Compute number of written channels (allow for skip) */
+	it->wod = it->od;
+	for (i = 0; i < it->od; i++) {
+		if ((oopt & OOPT(oopts_skip,i)) != 0)
+			it->wod--;
+	}
+
+	/* Setup the raster to callback channel mappings */
+	if (inm != NULL) {
+		for (e = 0; e < it->id; e++)
+			it->it_map[e] = inm[e];			/* Copy input */
+	} else {
+		for (e = 0; e < it->id; e++)
+			it->it_map[e] = e;				/* Direct mapping */
+	}
+	if (outm != NULL) {
+		for (e = 0; e < it->od; e++)
+			it->im_map[e] = outm[e];		/* Copy input */
+	} else {
+		for (e = 0; e < it->od; e++)
+			it->im_map[e] = e;				/* Direct mapping */
+	}
+	if (checkv != NULL) {
+		for (e = 0; e < it->od; e++)
+			it->checkv[e] = checkv[it->im_map[e]];	/* Copy input and convert to Output index */
+	} else {
+		for (e = 0; e < it->od; e++)
+			it->checkv[e] = 0;				/* Set to zero */
+	}
+
 	/* Compute interp and simplex table dimension increments & total sizes */
 	idinc[0]  = 1;
 	ibdinc[0] = ts->im_ts;
-	for (e = 1; e <= gs->id; e++) {
+	for (e = 1; e <= it->id; e++) {
 		idinc[e]  = idinc[e-1]  * gs->itres;
 		ibdinc[e] = ibdinc[e-1] * gs->itres;
 	}
@@ -182,14 +240,14 @@ imdi_tab(
 	if (!ts->sort) {
 		sdinc[0]  = 1;
 		sbdinc[0] = ts->sm_ts;
-		for (e = 1; e <= gs->id; e++) {
+		for (e = 1; e <= it->id; e++) {
 			sdinc[e]  = sdinc[e-1]  * gs->stres;
 			sbdinc[e] = sbdinc[e-1] * gs->stres;
 		}
 	}
 
 	/* First we setup the input tables */
-	for (e = 0; e < gs->id; e++) {
+	for (e = 0; e < it->id; e++) {
 		byte *t, *p;	/* Pointer to input table, entry pointer */
 		int ne;			/* Number of entries */
 		int ex;			/* Entry index */
@@ -214,10 +272,13 @@ imdi_tab(
 #endif
 			return NULL;	/* Should we signal error ? How ? */
 		}
+		it->size += ts->it_ts * ne;
+#ifdef VERBOSE
+		printf("Allocated input table %d size %u = %u * %u\n",e, ts->it_ts * ne,ts->it_ts,ne);
+#endif /* VERBOSE */
 
 		/* For each possible input value, compute the entry value */
 		for (ex = 0, p = t; ex < ne; ex++, p += ts->it_ts) {
-			int ee;
 			int iiv;		/* Integer input value */
 			int ivr;		/* Input value range */
 			int isb;		/* Input sign bit/signed to offset displacement */
@@ -226,9 +287,9 @@ imdi_tab(
 			double rmi;		/* Real interpolation table index */
 			double rsi;		/* Real simplex index */
 			int imi;		/* Interpiolation table index */
-			int isi;		/* Integer simplex index */
-			int iwe;		/* Integer weighting value */
-			int vo;			/* Vertex offset value */
+			int isi = 0;	/* Integer simplex index */
+			int iwe = 0;	/* Integer weighting value */
+			int vo = 0;		/* Vertex offset value */
 
 			if (ix) {		/* Extract value from index */
 				ivr = ((1 << (gs->in.bpv[e])) -1);
@@ -241,7 +302,13 @@ imdi_tab(
 			if (gs->in_signed & (1 << e))		/* Treat input as signed */
 				iiv = (iiv & isb) ? iiv - isb : iiv + isb;	/* Convert to offset from signed */
 			riv = (double) iiv / (double)ivr;	/* Compute floating point */
-			rtv = input_curve(cntx, e, riv);	/* Lookup the input table transform */
+			{
+				double civ[IXDI], cov[IXDI];
+				for (f = 0; f < it->id; f++)
+					civ[f] = riv;
+				input_curves(cntx, cov, civ);		/* Lookup the input table transform */
+				rtv = cov[it->it_map[e]];
+			}
 			if (rtv < 0.0)						/* Guard against sillies */
 				rtv = 0.0;
 			else if (rtv > 1.0)
@@ -270,12 +337,12 @@ imdi_tab(
 			/* ~~~ needs fixing for sort ~~~~ */
 			if ((imi & (LSHIFT(1,ts->it_ab)-1)) != imi)
 				error("imdi_tab assert: (imi & ((1 << ts->it_ab)-1)) != imi, imi = 0x%x, it_ab = 0x%x\n",imi,ts->it_ab);
-			if (imi >= idinc[gs->id])
-				error("imdi_tab assert: imi >= idinc[gs->id]\n");
+			if (imi >= idinc[it->id])
+				error("imdi_tab assert: imi >= idinc[it->id]\n");
 			if ((isi & (LSHIFT(1,ts->sx_ab)-1)) != isi) 
 				error("imdi_tab assert: (isi & ((1 << ts->sx_ab)-1)) != isi, isi = 0x%x, sx_ab = 0x%x\n",isi,ts->sx_ab);
-			if (!ts->sort && isi >= sdinc[gs->id])
-				error("imdi_tab assert: isi >= sdinc[gs->id]\n");
+			if (!ts->sort && isi >= sdinc[it->id])
+				error("imdi_tab assert: isi >= sdinc[it->id]\n");
 #endif
 
 			/* Now stuff them into the table entry */
@@ -337,38 +404,50 @@ imdi_tab(
 			vsize = (gs->prec * 2)/8;	/* Fixed point entry & computation size */
 		else
 			vsize = gs->prec/8;			/* Fixed point entry size */
-		vscale = (1 << gs->prec) -1.0;	/* Value scale for fixed point padding */
-										/* -1.0 is to prevent carry after accumulation */
+		vscale = (1 << gs->prec) -0.50000001;
+										/* Value scale for fixed point padding */
+										/* -0.5 is to prevent carry/rollover after accumulation */
+										/* Could get better accuracy with saturation arithmatic */
+
 		/* Allocate the table */
-		if ((t = (byte *)malloc(ibdinc[gs->id])) == NULL) {
+		if ((t = (byte *)malloc(ibdinc[it->id])) == NULL) {
 #ifdef VERBOSE
-			printf("malloc imdi interpolation table size %d failed\n",ibdinc[gs->id]);
+			printf("malloc imdi interpolation table size %d failed\n",ibdinc[it->id]);
 #endif
 			return NULL;	/* Should we signal error ? How ? */
 		}
+		it->size += ibdinc[it->id];
 #ifdef VERBOSE
-		printf("Allocated grid table = %d bytes\n",ibdinc[gs->id]);
-#endif
+		printf("Allocated grid table = %u bytes, composed of %d dim of res %d entry %d\n",ibdinc[it->id], it->id, gs->itres, ts->im_ts);
+#endif /* VERBOSE */
 
 		/* Get ready to access all the entries in the table */
 		p = t;
-		PH_INIT(phc, gs->id, gs->itres)
+		PH_INIT(phc, it->id, gs->itres)
 
 		/* Create all the interpolation table entry values */
 		do {
-			int ee, f;
+			int ee, ff;
 			double riv[IXDI];	/* Real input values */
 			double rev[IXDO];	/* Real entry values */
 			unsigned long iev; 
 			byte *pp;			/* Pointer to sub-entry */
 
-			for (e = 0, p = t; e < gs->id; e++) {
+			for (e = 0, p = t; e < it->id; e++) {
 				riv[e] = ((double)phc[e]) / (gs->itres - 1.0);
 				p += phc[e] * ibdinc[e];		/* Compute pointer to entry value */
 			}
 
 			/* Lookup this verticies value */
-			md_table(cntx, rev, riv);
+			{
+				double mriv[IXDI];	/* Channel mapped real input values */
+				double mrev[IXDO];	/* Channel mapped real entry values */
+				for (e = 0; e < it->id; e++)
+					mriv[it->it_map[e]] = riv[e];
+				md_table(cntx, mrev, mriv);
+				for (e = 0; e < it->od; e++)
+					rev[e] = mrev[it->im_map[e]];
+			}
 
 			/* Create all the output values */
 
@@ -376,12 +455,12 @@ imdi_tab(
 			/* variables, since it is difficult dynamically. */
 
 			/* For all the full entries */
-			f = 0;
+			ff = 0;
 			pp = p;
 			for (e = 0; e < ts->im_fn; e++, pp += ts->im_fs) {
 				/* For all channels within full entry */
-				for (ee = 0; ee < ts->im_fv; ee++, f++) {
-					double revf = rev[f];
+				for (ee = 0; ee < ts->im_fv; ee++, ff++) {
+					double revf = rev[ff];
 					if (revf < 0.0)						/* Guard against sillies */
 						revf = 0.0;
 					else if (revf > 1.0)
@@ -399,8 +478,8 @@ imdi_tab(
 			/* For all the 0 or 1 partial entry */
 			for (e = 0; e < ts->im_pn; e++) {
 				/* For all channels within partial entry */
-				for (ee = 0; ee < ts->im_pv; ee++, f++) {
-					double revf = rev[f];
+				for (ee = 0; ee < ts->im_pv; ee++, ff++) {
+					double revf = rev[ff];
 					if (revf < 0.0)						/* Guard against sillies */
 						revf = 0.0;
 					else if (revf > 1.0)
@@ -415,11 +494,12 @@ imdi_tab(
 				}
 			}
 #ifdef ASSERTS
-			if (f != gs->od)
-				fprintf(stderr,"imdi_tab assert: f == gs->od\n");
+			if (f != it->od)
+				fprintf(stderr,"imdi_tab assert: f == it->od\n");
 #endif
 
 			PH_INC(phc)
+
 		} while (!PH_LOOPED(phc));
 
 		/* Put table into place */
@@ -433,30 +513,31 @@ imdi_tab(
 	} else {
 		byte *t, *p;		/* Pointer to input table, pointer to total entry */
 		int nsplx;			/* Total number of simplexes */
-		XCOMBO(vcmb, gs->id+1, 1 << gs->id);/* Simplex dimension id out of cube dimention id */
+		XCOMBO(vcmb, it->id+1, 1 << it->id);/* Simplex dimension id out of cube dimention id */
 		int comb[24][IXDI];	/* Parameter[id]->Absolute[id] coordinate index */
 		int ps[IXDI+1];		/* Base simplex parameter space counter */
 		int pse;			/* Base simplex parameter space counter index */
 		int idioff;			/* Interpolation table diagonal offset value */
 
-		if (gs->id > 4) {
+		if (it->id > 4) {
 			fprintf(stderr,"imdi_tabl: internal failure - trying to create simplex table with di > 4!\n");
 			exit(-1);
 		}
 
 		/* Allocate the table */
-		if ((t = (byte *)malloc(sbdinc[gs->id])) == NULL) {
+		if ((t = (byte *)malloc(sbdinc[it->id])) == NULL) {
 #ifdef VERBOSE
-			printf("malloc imdi simplex table size %d failed\n",sbdinc[gs->id]);
+			printf("malloc imdi simplex table size %d failed\n",sbdinc[it->id]);
 #endif
 			return NULL;	/* Should we signal error ? How ? */
 		}
+		it->size += sbdinc[it->id];
 #ifdef VERBOSE
-		printf("Allocated simplex table = %d bytes\n",sbdinc[gs->id]);
-#endif
+		printf("Allocated simplex table = %u bytes, composed of %d dim of res %d entry %d\n",sbdinc[it->id], it->id, gs->stres, ts->sm_ts);
+#endif /* VERBOSE */
 
 		/* Compute the interp table offset to the diagonal vertex */
-		for (idioff = 0, e = 0; e < gs->id; e++)
+		for (idioff = 0, e = 0; e < it->id; e++)
 			idioff += idinc[e];		/* Sum one offset in each dimension */
 
 		/* Figure out how many simplexes fit into this dimension cube, */
@@ -468,8 +549,8 @@ imdi_tab(
 			/* XCOMB generates verticies in order from max to min offest */
 	
 			/* Compute Absolute -> Parameter mapping */
-			for (e = 0; e < gs->id; e++) {		/* For each absolute axis */
-				for (i = 0; i < gs->id; i++) {	/* For each verticy, order large to small */
+			for (e = 0; e < it->id; e++) {		/* For each absolute axis */
+				for (i = 0; i < it->id; i++) {	/* For each verticy, order large to small */
 					if ((vcmb[i]   & (1<<e)) != 0 && 
 					    (vcmb[i+1] & (1<<e)) == 0) {/* Transition from offset 1 to 0 */
 						comb[nsplx][i] = e;
@@ -479,12 +560,12 @@ imdi_tab(
 			}
 	
 //printf("~~Verticies   = ");
-//for (i = 0; i <= gs->id; i++)
+//for (i = 0; i <= it->id; i++)
 //	printf("%d ",vcmb[i]);
 //printf("\n");
 
 //printf("~~Parm -> Abs = ");
-//for (e = 0; e < gs->id; e++)
+//for (e = 0; e < it->id; e++)
 //	printf("%d ",comb[nsplx][e]);
 //printf("\n");
 
@@ -500,38 +581,39 @@ imdi_tab(
 
 		/* Init parameter space counter. */
 		/* Note that ps[id-1] >= ps[id-2] >=  ... >= ps[1] >= ps[0] */
-		for (pse = 0; pse < gs->id; pse++)
+		for (pse = 0; pse < it->id; pse++)
 			ps[pse] = 0;
 		ps[pse] = gs->stres-1;
 
 		/* Itterate through the simplex parameter space */
-		for (pse = 0; pse < gs->id;) {
-			double qps[IXDI];	/* Quantized parameter values */
-			int    we[IXDI+1];	/* Baricentric coords/vertex weighting */
+		for (pse = 0; pse < it->id;) {
+			int qps[IXDI];		/* Quantized parameter values */
+			int we[IXDI+1];		/* Baricentric coords/vertex weighting */
 			double wvscale = (1 << gs->prec);	/* Weighting value scale */
 			int sx;				/* Simplex */
 
 //printf("Param coord =");
-//for (e = gs->id-1; e >= 0; e--) {
+//for (e = it->id-1; e >= 0; e--) {
 //	printf(" %d",ps[e]);
 //}
 //printf("\n");
-			for (e = 0; e < gs->id; e++) {
+
+			for (e = 0; e < it->id; e++) {
 				/* (Should try wvscale + 0.49999999, or something ?) */
 				double tt = (wvscale * (double)ps[e])/((double)gs->stres);
 				qps[e] = (int)(tt + 0.5);
 			}
 	
 			/* Convert quantized parameter values into weighting values */
-			we[gs->id] = (1 << gs->prec) - qps[gs->id-1];
-			for (e = gs->id-1; e > 0; e--)
+			we[it->id] = (1 << gs->prec) - qps[it->id-1];
+			for (e = it->id-1; e > 0; e--)
 				we[e] = qps[e] - qps[e-1];
 			we[0] = qps[0];
 
 #ifdef ASSERTS
 			{
 				int sow = 0;
-				for (e = gs->id; e >= 0; e--)
+				for (e = it->id; e >= 0; e--)
 					sow += we[e];
 				
 				if (sow != (1 << gs->prec))
@@ -540,7 +622,7 @@ imdi_tab(
 #endif
 
 //printf("Baricentric coord =");
-//for (e = gs->id; e >= 0; e--) {
+//for (e = it->id; e >= 0; e--) {
 //	printf(" %d",we[e]);
 //}
 //printf("\n");
@@ -550,16 +632,16 @@ imdi_tab(
 			for (sx = 0; sx < nsplx; sx++ ) {
 				int v;					/* Vertex index */
 				byte *pp;				/* Pointer to sub-entry */
-				unsigned long vofb;		/* Vertex offset, base */
+				unsigned long vofb = 0;	/* Vertex offset, base */
 				unsigned long vwe;		/* Vertex weight */
 
-				for (e = 0, p = t; e < gs->id; e++) {
+				for (e = 0, p = t; e < it->id; e++) {
 					int ee = comb[sx][e];		/* Absolute coord index */
 					p += ps[e] * sbdinc[ee];	/* Pointer to entry */
 				}
 
 				/* For each vertex entry */
-				for (v = 0, pp = p; v <= gs->id; v++) {
+				for (v = 0, pp = p; v <= it->id; v++) {
 					unsigned long vof;
 					if (v == 0) {
 						vofb = idioff;		/* Start at diagonal offset */
@@ -598,7 +680,7 @@ imdi_tab(
 			}	/* Next simplex */
 
 			/* Increment the parameter coords */
-			for (pse = 0; pse < gs->id; pse++) {
+			for (pse = 0; pse < it->id; pse++) {
 				ps[pse]++;
 				if (ps[pse] <= ps[pse+1])
 					break;	/* No carry */
@@ -611,7 +693,7 @@ imdi_tab(
 	}
 	
 	/* Last, setup the output tables */
-	for (e = 0; e < gs->od; e++) {
+	for (e = 0; e < it->od; e++) {
 		byte *t, *p;	/* Pointer to output table, entry pointer */
 		int ne;			/* Number of entries */
 		int iiv;		/* Integer input value */
@@ -629,23 +711,32 @@ imdi_tab(
 #endif
 			return NULL;	/* Should we signal error ? How ? */
 		}
+		it->size += ts->ot_ts * ne;
+#ifdef VERBOSE
+		printf("Allocated output table %d size %u = %u * %u\n",e, ts->ot_ts * ne,ts->ot_ts,ne);
+#endif /* VERBOSE */
 
 		/* For each possible output value, compute the entry value */
 		for (iiv = 0, p = t; iiv < ne; iiv++, p += ts->ot_ts) {
-			int ee;
 			double riv;		/* Real input value, 0.0 - 1.0 */
 			double rtv;		/* Real transformed value, 0.0 - 1.0 */
 			unsigned long iov;	/* Integer output value */
 
 			riv = (double) iiv / ivr;			/* Compute floating point */
-			rtv = output_curve(cntx, e, riv);	/* Lookup the output table transform */
+			{
+				double civ[IXDO], cov[IXDO];
+				for (f = 0; f < it->od; f++)
+					civ[f] = riv;
+				output_curves(cntx, cov, civ);		/* Lookup the input table transform */
+				rtv = cov[it->im_map[e]];
+			}
 			if (rtv < 0.0)						/* Guard against sillies */
 				rtv = 0.0;
 			else if (rtv > 1.0)
 				rtv = 1.0;
 			iov = (unsigned long)(rtv * ovr + 0.5);	/* output value */
 			if (gs->out_signed & (1 << e))		/* Treat output as signed */
-				iov = (iov >= osb) ? iov - osb : iov + osb; /* Convert to signed from offset */
+				iov = (iov & osb) ? iov - osb : iov + osb; /* Convert to signed from offset */
 			iov <<= ooff;						/* Aligned for output */
 
 			write_entry[ts->ot_ts](p, iov);		/* Write entry */
@@ -655,6 +746,31 @@ imdi_tab(
 		it->out_tables[e] = (void *)t;
 	}
 	it->nouttabs = e;
+
+	/* Adjust the check values for output value shift */
+	for (e = 0; e < it->od; e++) {
+		int ooff = ts->ot_off[e];	/* Output value bit offset */
+		it->checkv[e] <<= ooff;		/* Aligned for output */
+	}
+
+	/* Setup the appropriate skip flags, indexed by Output channel */
+	it->skipf = 0;
+	if ((oopt & OOPTS_SKIP) != 0) {
+		int i;
+		for (i = 0; i < it->od; i++) {
+			if (oopt & OOPT(oopts_skip,it->im_map[i])) {	/* Skip flag for this output chan */
+				it->skipf |= (1 << i);
+			}
+		}
+	}
+
+	/* Fill in some report information */
+	it->gres = gs->itres; 
+	if (!ts->sort) {
+		it->sres = gs->stres; 
+	} else {
+		it->sres = 0; 
+	}
 
 #ifdef VERBOSE
 	printf("imdi_tabl returning OK\n");
@@ -672,8 +788,10 @@ imdi_imp *it
 	for (e = 0; e < it->nintabs; e++)
 		free(it->in_tables[e]);
 
-	free(it->sw_table);
-	free(it->im_table);
+	if (it->sw_table != NULL)
+		free(it->sw_table);
+	if (it->im_table != NULL)
+		free(it->im_table);
 
 	for (e = 0; e < it->nouttabs; e++)
 		free(it->out_tables[e]);

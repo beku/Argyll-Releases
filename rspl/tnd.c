@@ -8,8 +8,8 @@
  * Derived from cmatch.c
  * Copyright 1995 - 2000 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 
@@ -33,7 +33,7 @@ int verbose_level = 6;			/* Current verbosity level */
 #define spline_interp interp
 
 /* rspl flags */
-#define FLAGS (0 /* | REGSPL_NONMON */)
+#define FLAGS (0 /* */)
 
 #define TEST_FWD_2D
 #define TEST_REV_LOOKUP
@@ -92,15 +92,13 @@ void error(), warning(), verbose();
 
 void write_rgb_tiff(char *name, int width, int height, unsigned char *data);
 
-main(argc,argv)
-int argc;
-char *argv[];
-	{
+int main(int argc, char *argv[]) {
 	co *tps = NULL;
 	int ntps = 0;
 	rspl *rss;	/* Multi-resolution regularized spline structure */
 	datai low,high;
 	int gres[MXDI];
+	double avgdev[MXDO];
 	low[0] = 0.0;
 	low[1] = 0.0;
 	low[2] = 0.0;
@@ -113,6 +111,10 @@ char *argv[];
 	gres[1] = GRES;
 	gres[2] = GRES;
 	gres[3] = GRES;
+	avgdev[0] = 0.0;
+	avgdev[1] = 0.0;
+	avgdev[2] = 0.0;
+	avgdev[3] = 0.0;
 
 	/* Create the object */
 	rss =  new_rspl(DI,				/* di */
@@ -147,7 +149,7 @@ char *argv[];
 	           low, high, gres,		/* Low, high, resolution of grid */
 	           NULL, NULL,			/* Default data scale */
 	           1.0,					/* Smoothing */
-	           0.0);				/* Average Deviation */
+	           avgdev);				/* Average Deviation */
                /* IT_TOL, MAX_ITS); */
 
 /*	verbose(1,"Regular spline fit error = %f\n",rss->efactor(rss,0)); */
@@ -297,7 +299,6 @@ char *argv[];
 	co tco;	/* Test point */
 	double sx,sy;
 	int i,j,k;
-	int nop;
 
 	sx = (x2 - x1)/(double)WIDTH;
 	sy = (y2 - y1)/(double)HEIGHT;

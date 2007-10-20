@@ -7,8 +7,8 @@
  *
  * Copyright 2000, 2003 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * Based on the old iccXfm class.
  */
@@ -25,16 +25,21 @@
  *       Some of the error handling is crude. Shouldn't use
  *       error(), should return status.
  *
- *		XSHAPE_BASE weghting needs tuning.
+ *		Should allow for offset in curves - this will greatly improve
+ *		profile quality on non-calibrated displays. See spectro/dispcal.c
+ *		spectro/moncurve.c. Use conjgrad() instead of powell() to speed things up.
  */
 
 #define USE_CIE94_DE	/* Use CIE94 delta E measure when creating fit */
 
-#define MXNORDERS 8				/* Maximum shaper harmonic orders to use */
-#define XSHAPE_BASE  0.0002		/* 0 & 1 harmonic parameter weight */
-#define XSHAPE_HBASE 0.01		/* 3rd harmonic and above base parameter weight */
+/* Weights in shaper parameters, to minimise unconstrained "wiggles" */
+#define MXNORDERS 30			/* Maximum shaper harmonic orders to use */
+#define XSHAPE_MAG  5000.0		/* Overall shaper parameter magnitide */
+#define XSHAPE_BASE  0.00001	/* 0 & 1 harmonic weight */
+#define XSHAPE_HBASE 0.0001		/* 2nd and higher additional weight */
 
-#undef DEBUG		/* Extra printfs and curve plot */
+#undef DEBUG			/* Extra printfs */
+#undef DEBUG_PLOT		/* Plot curves */
 
 /* ========================================================= */
 /* Forward and Backward Matrix type conversion */
@@ -275,9 +280,12 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 
 	/* Init the CAM model */
 	if (pcsor == icxSigJabData) {
-		p->vc  = *vc;				/* Copy the structure */
+		if (vc != NULL)		/* One has been provided */
+			p->vc  = *vc;		/* Copy the structure */
+		else
+			xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0);	/* Use a default */
 		p->cam = new_icxcam(cam_default);
-		p->cam->set_view(p->cam, vc->Ev, vc->Wxyz, vc->Yb, vc->La, vc->Lv, vc->Yf, vc->Fxyz, 1);
+		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.Yb, p->vc.La, p->vc.Lv, p->vc.Yf, p->vc.Fxyz, XICC_USE_HK);
 	} else {
 		p->cam = NULL;
 	}
@@ -329,30 +337,6 @@ typedef struct {
 	double nmin, nmax;	/* PCS End points to linearise */
 	double min, max;	/* device End points to linearise */
 } mxinctx;
-
-/* Function to pass to rspl to set input transfer function */
-static void
-matrix_set_linfunc(
-	void *pp,			/* mxinctx structure */
-	double *out,		/* Device output value */
-	double *in			/* Device input value */
-) {
-	co cc;
-	mxinctx *p    = (mxinctx *)pp;			/* this */
-	int nsoln;
-	double cdir;
-
-	if (p->linear != 0) {
-		out[0] = in[0];
-		return;
-	} else {
-		double t;
-		cc.p[0] = in[0];
-		p->r->interp(p->r, &cc);
-		t = (cc.v[0] - p->nmin)/(p->nmax - p->nmin);
-		out[0] = t * (p->max - p->min) + p->min;
-	}
-}
 
 #define NPARMS (15 + 3 * MXNORDERS)
 
@@ -507,10 +491,13 @@ double *v			/* Pointer to parameters */
 		for (f = 0; f < p->norders; f++) {
 			tt = v[12 + f];
 			tt *= tt;
-			w = (f < 2) ? XSHAPE_BASE : f * XSHAPE_HBASE;
+			if (f <= 1)	/* First or second curves */
+				w = XSHAPE_BASE;
+			else
+				w = XSHAPE_BASE + (f-1) * XSHAPE_HBASE;
 			tparam += w * tt;
 		}
-		return tparam;
+		return XSHAPE_MAG * tparam;
 	}
 
 	/* Offset value */
@@ -525,11 +512,14 @@ double *v			/* Pointer to parameters */
 		for (g = 0; g < 3; g++) {
 			tt = v[12 + 3 * f + g];
 			tt *= tt;
-			w = (f < 2) ? XSHAPE_BASE : f * XSHAPE_HBASE;
+			if (f <= 1)	/* First or second curves */
+				w = XSHAPE_BASE;
+			else
+				w = XSHAPE_BASE + (f-1) * XSHAPE_HBASE;
 			tparam += w * tt;
 		}
 	}
-	return tparam;
+	return XSHAPE_MAG * tparam/3.0;
 }
 
 /* Matrix optimisation function handed to powell() */
@@ -540,7 +530,6 @@ static double mxoptfunc(void *edata, double *v) {
 	int i;
 
 	for (i = 0; i < p->nodp; i++) {
-		int j;
 
 		/* Apply our function */
 //printf("%f %f %f -> %f %f %f\n", p->points[i].p[0], p->points[i].p[1], p->points[i].p[2],
@@ -609,13 +598,12 @@ int                quality			/* Quality metric, 0..3 */
 	double stopon = 0.01;
 	co *points;			/* Copy of ipoints */
 	mxopt os;			/* Optimisation information */
-	int rv;
 
-#ifdef DEBUG
+#ifdef DEBUG_PLOT
 	#define	XRES 100
 	double xx[XRES];
 	double y1[XRES];
-#endif /* DEBUG */
+#endif /* DEBUG_PLOT */
 
 	if (flags & ICX_VERBOSE)
 		rsplflags |= RSPL_VERBOSE;
@@ -715,21 +703,21 @@ int                quality			/* Quality metric, 0..3 */
 
 	/* Set quality/effort  factors */
 	if (quality >= 3) {			/* Ultra high */
-		os.norders = 6;
+		os.norders = 20;
+		maxits = 5000;
+		stopon = 0.000001;
+	} else if (quality == 2) {	/* High */
+		os.norders = 15;
 		maxits = 1000;
 		stopon = 0.00001;
-	} else if (quality == 2) {	/* High */
-		os.norders = 5;
-		maxits = 700;
-		stopon = 0.0001;
 	} else if (quality == 1) {	/* Medium */
-		os.norders = 4;
+		os.norders = 10;
 		maxits = 500;
-		stopon = 0.001;
+		stopon = 0.0001;
 	} else {					/* Low */
-		os.norders = 2;
-		maxits = 100;
-		stopon = 0.01;
+		os.norders = 5;
+		maxits = 200;
+		stopon = 0.001;
 	}
 	if (os.norders > MXNORDERS)
 		os.norders = MXNORDERS;
@@ -767,7 +755,7 @@ int                quality			/* Quality metric, 0..3 */
 		os.optdim = ((os.optdim - 9)/3) + 9;
 	}
 
-	if (powell(os.optdim, os.v, os.sa, stopon, maxits, mxoptfunc, (void *)&os) < 0.0)
+	if (powell(NULL, os.optdim, os.v, os.sa, stopon, maxits, mxoptfunc, (void *)&os) != 0)
 		error ("Powell failed");
 
 	if (os.verb)
@@ -993,28 +981,29 @@ printf("         %f %f %f\n",os.v[6], os.v[7], os.v[8]);
 
 	/* Write the gamma/shaper and matrix to the icc memory structures */
 	if (!isGamma) {		/* Creating input curves */
+		unsigned int ui;
 		icmCurve *wor, *wog, *wob;
 		wor = pmlu->redCurve;
 		wog = pmlu->greenCurve;
 		wob = pmlu->blueCurve;
 
-		for (i = 0; i < wor->size; i++) {
+		for (ui = 0; ui < wor->size; ui++) {
 			double in, rgb[3];
 
 			for (j = 0; j < 3; j++) {
 
-				in = (double)i / (wor->size - 1.0);
+				in = (double)ui / (wor->size - 1.0);
 	
 				mxmfunc1(&os, j, os.v, &rgb[j], &in);
 
 			}
-			wor->data[i] = rgb[0];	/* Curve values 0.0 - 1.0 */
+			wor->data[ui] = rgb[0];	/* Curve values 0.0 - 1.0 */
 			if (!isShTRC) {
-				wog->data[i] = rgb[1];
-				wob->data[i] = rgb[2];
+				wog->data[ui] = rgb[1];
+				wob->data[ui] = rgb[2];
 			}
 		}
-#ifdef DEBUG
+#ifdef DEBUG_PLOT
 		/* Display the result fit */
 		for (j = 0; j < 3; j++) {
 			for (i = 0; i < XRES; i++) {
@@ -1025,7 +1014,7 @@ printf("         %f %f %f\n",os.v[6], os.v[7], os.v[8]);
 			}
 			do_plot(xx,y1,NULL,NULL,XRES);
 		}
-#endif /* DEBUG */
+#endif /* DEBUG_PLOT */
 
 
 	} else {			/* Gamma */
@@ -1077,9 +1066,8 @@ double       detail		/* gamut detail level, 0.0 = def */
 	icmLookupFunc func;
 	double white[3], black[3];
 	gamut *gam;
-	psh counter;
-	int co[3];
 	int res;		/* Sample point resolution */
+	int i, e;
 
 	if (detail == 0.0)
 		detail = 10.0;
@@ -1099,43 +1087,150 @@ double       detail		/* gamut detail level, 0.0 = def */
 		return NULL;
 	}
 
-	gam = new_gamut(detail);
+	gam = new_gamut(detail, pcs == icxSigJabData);
 
 	/* Explore the gamut by itterating through */
 	/* it with sample points in device space. */
 
-	res = (int)(100.0/detail);	/* Establish an appropriate sampling density */
+	res = (int)(600.0/detail);	/* Establish an appropriate sampling density */
 
-	if (res < 5)
-		res = 5;
+	if (res < 40)
+		res = 40;
 
-	psh_init(&counter, 3, res, co);	/* Initialise counter */
+	/* Since matrix profiles can't be non-monotonic, */
+	/* just itterate through the surface colors. */
+	for (i = 0; i < 3; i++) {
+		int co[3];
+		int ep[3];
+		int co_e = 0;
 
-	/* Itterate through all verticies in the grid */
-	for (;;) {
-		int e;
+		for (e = 0; e < 3; e++) {
+			co[e] = 0;
+			ep[e] = res;
+		}
+		ep[i] = 2;
+
+		while (co_e < 3) {
+			double in[3];
+			double out[3];
+	
+			for (e = 0; e < 3; e++) 		/* Convert count to input value */
+				in[e] = co[e]/(ep[e]-1.0);
+	
+			/* Always use the device->PCS conversion */
+			if (lumat->fwd_lookup((icxLuBase *)lumat, out, in) > 1)
+				error ("%d, %s",p->errc,p->err);
+	
+			gam->expand(gam, out);
+		
+			/* Increment the counter */
+			for (co_e = 0; co_e < 3; co_e++) {
+				co[co_e]++;
+				if (co[co_e] < ep[co_e])
+					break;	/* No carry */
+				co[co_e] = 0;
+			}
+		}
+	}
+
+#ifdef NEVER
+	/* Try it twice */
+	for (i = 0; i < 3; i++) {
+		int co[3];
+		int ep[3];
+		int co_e = 0;
+
+		for (e = 0; e < 3; e++) {
+			co[e] = 0;
+			ep[e] = res;
+		}
+		ep[i] = 2;
+
+		while (co_e < 3) {
+			double in[3];
+			double out[3];
+	
+			for (e = 0; e < 3; e++) 		/* Convert count to input value */
+				in[e] = co[e]/(ep[e]-1.0);
+	
+			/* Always use the device->PCS conversion */
+			if (lumat->fwd_lookup((icxLuBase *)lumat, out, in) > 1)
+				error ("%d, %s",p->errc,p->err);
+	
+			gam->expand(gam, out);
+		
+			/* Increment the counter */
+			for (co_e = 0; co_e < 3; co_e++) {
+				co[co_e]++;
+				if (co[co_e] < ep[co_e])
+					break;	/* No carry */
+				co[co_e] = 0;
+			}
+		}
+	}
+#endif
+
+#ifdef NEVER	// (doesn't seem to make much difference) 
+	/* run along the primary ridges in more detail too */
+	/* just itterate through the surface colors. */
+	for (i = 0; i < 3; i++) {
+		int j;
 		double in[3];
 		double out[3];
+		
+		res *= 4;
 
-		for (e = 0; e < 3; e++) {		/* Convert count to input value */
-			in[e] = co[e]/(res-1.0);
+		for (j = 0; j < res; j++) {
+			double vv = i/(res-1.0);
+
+			in[0] = in[1] = in[2] = vv;
+			in[i] = 0.0;
+
+			if (lumat->fwd_lookup((icxLuBase *)lumat, out, in) > 1)
+				error ("%d, %s",p->errc,p->err);
+			gam->expand(gam, out);
+
+			in[0] = in[1] = in[2] = 0.0;
+			in[i] = vv;
+
+			if (lumat->fwd_lookup((icxLuBase *)lumat, out, in) > 1)
+				error ("%d, %s",p->errc,p->err);
+			gam->expand(gam, out);
 		}
-
-		/* Always use the device->PCS conversion */
-		if (lumat->fwd_lookup((icxLuBase *)lumat, out, in) > 1)
-			error ("%d, %s",p->errc,p->err);
-
-		gam->expand(gam, out);
-
-		/* Increment index within block */
-		if (psh_inc(&counter, co))
-			break;
 	}
+#endif
 
 	/* Put the white and black points in the gamut */
 	plu->rel_wh_bk_points(plu, white, black);
 
 	gam->setwb(gam, white, black);
+
+	/* set the cusp points by itterating through the 0 & 100% colorant combinations */
+	{
+		DCOUNT(co, 3, 3, 0, 0, 2);
+
+		gam->setcusps(gam, 0, NULL);
+		DC_INIT(co);
+		while(!DC_DONE(co)) {
+			int e;
+			double in[3];
+			double out[3];
+	
+			if (!(co[0] == 0 && co[1] == 0 && co[2] == 0)
+			 && !(co[0] == 1 && co[1] == 1 && co[2] == 1)) {	/* Skip white and black */
+				for (e = 0; e < 3; e++)
+					in[e] = (double)co[e];
+	
+				/* Always use the device->PCS conversion */
+				if (lumat->fwd_lookup((icxLuBase *)lumat, out, in) > 1)
+					error ("%d, %s",p->errc,p->err);
+				gam->setcusps(gam, 3, out);
+			}
+
+			DC_INC(co);
+		}
+		gam->setcusps(gam, 2, NULL);
+	}
 
 #ifdef NEVER	/* Not sure if this is a good idea ?? */
 	/* Since we know this is a profile, force the space and gamut points to be the same */

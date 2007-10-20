@@ -2,25 +2,26 @@
 /* 
  * Argyll Color Correction System
  *
- * Read in the CMYK device data from Gretag/Logo
- * device files, nd convert it into a CGATs format
+ * Read in the RGB/CMYK device data from Gretag/Logo
+ * device files or X-Rite Color Port files, and
+ * convert it into a CGATs format
  * suitable for the Argyll CMS.
  *
  * Derived from  kodak2cgats.c 
  * Author: Graeme W. Gill
  * Date:   16/11/00
  *
- * Copyright 2000, Graeme W. Gill
+ * Copyright 2000 - 2006, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* TTBD
  */
 
-#undef DEBUG
+#define DEBUG
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,20 +34,20 @@
 #include "config.h"
 #include "cgats.h"
 #include "xspect.h"
-#include "serio.h"
-#include "inst.h"
+#include "insttypes.h"
 #include "numlib.h"
 
 void
 usage(char *mes) {
-	fprintf(stderr,"Convert Gretag/Logo raw CMYK device profile data to Argyll data, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Convert Gretag/Logo or X-Rite ColorPport raw RGB or CMYK device profile data to Argyll CGATS data, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (mes != NULL)
 		fprintf(stderr,"error: %s\n",mes);
-	fprintf(stderr,"usage: logo2gcats [-v] [-l limit] devfile infile outfile\n");
+	fprintf(stderr,"usage: logo2gcats [-v] [-l limit] [devfile] infile [specfile] outfile\n");
 /*	fprintf(stderr," -v            Verbose mode\n"); */
-	fprintf(stderr," -2            Create dumy .ti2 file as well\n");
+	fprintf(stderr," -2            Create dummy .ti2 file as well\n");
 	fprintf(stderr," -l limit      set ink limit, 0 - 400%% (default max in file)\n");
+	fprintf(stderr," -d            Set type of device as Display, not Output\n");
 	fprintf(stderr," [devfile]     Device CMYK target .txt file\n");
 	fprintf(stderr," infile        Input CIE, Spectral or Device & Spectral.txt file\n");
 	fprintf(stderr," [specfile]    Input Spectral .txt file\n");
@@ -54,34 +55,38 @@ usage(char *mes) {
 	exit(1);
 	}
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
-	int i,j;
+	int i, j;
 	int fa,nfa;				/* current argument we're looking at */
 	int verb = 0;
 	int out2 = 0;			/* Create dumy .ti2 file output */
+	int disp = 0;			/* nz if this is a display device */
 	static char devname[200] = { 0 };		/* Input CMYK/Device .txt file (may be null) */
 	static char ciename[200] = { 0 };		/* Input CIE .txt file (may be null) */
 	static char specname[200] = { 0 };		/* Input Device / Spectral .txt file */
 	static char outname[200] = { 0 };		/* Output cgats .ti3 file base name */
 	static char outname2[200] = { 0 };		/* Output cgats .ti2 file base name */
 	cgats *cmy = NULL;		/* Input RGB/CMYK reference file */
-	int f_id1, f_c, f_m, f_y, f_k;	/* Field indexes */
+	int f_id1, f_c, f_m, f_y, f_k = 0;	/* Field indexes */
 	cgats *ncie = NULL;		/* Input CIE readings file (may be Dev & spectral too) */
-	int f_id2, f_xx, f_yy, f_zz;	/* Field indexes */
+	int f_id2, f_cie[3];	/* Field indexes */
 	cgats *spec = NULL;		/* Input spectral readings (NULL if none) */
-	int f_id3;	/* Field indexes */
-	int spi[50];		/* CGATS indexes for each wavelength */
-	cgats *ocg;			/* output cgats structure for .ti3 */
-	cgats *ocg2;		/* output cgats structure for .ti2 */
+	double spec_scale = 1.0;	/* Spectral value scaling */
+	int f_id3 = 0;			/* Field indexes */
+	int spi[100];			/* CGATS indexes for each wavelength */
+	cgats *ocg;				/* output cgats structure for .ti3 */
+	cgats *ocg2;			/* output cgats structure for .ti2 */
 	time_t clk = time(0);
 	struct tm *tsp = localtime(&clk);
 	char *atm = asctime(tsp); /* Ascii time */
+	int islab = 0;			/* CIE is Lab rather than XYZ */
+	int specmin = 0, specmax = 0, specnum = 0;	/* Min and max spectral in nm, inclusive */
 	int npat = 0;			/* Number of patches */
 	int isrgb = 0;			/* Is an RGB target, not CMYK */
-	int limit = -1;			/* Not set */
+	int tlimit = -1;		/* Not set */
 	double mxsum = -1.0;	/* Maximim sum of inks found in file */
-	int mxsumix;
+	int mxsumix = 0;
 
 	error_program = "logo2cgats";
 
@@ -89,26 +94,21 @@ main(int argc, char *argv[])
 		usage("Too few arguments");
 
 	/* Process the arguments */
-	for(fa = 1;fa < argc;fa++)
-		{
+	for(fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */
-		if (argv[fa][0] == '-')		/* Look for any flags */
-			{
+		if (argv[fa][0] == '-') {	/* Look for any flags */
 			char *na = NULL;		/* next argument after flag, null if none */
 
 			if (argv[fa][2] != '\000')
 				na = &argv[fa][2];		/* next is directly after flag */
-			else
-				{
-				if ((fa+1) < argc)
-					{
-					if (argv[fa+1][0] != '-')
-						{
+			else {
+				if ((fa+1) < argc) {
+					if (argv[fa+1][0] != '-') {
 						nfa = fa + 1;
 						na = argv[nfa];		/* next is seperate non-flag argument */
-						}
 					}
 				}
+			}
 
 			if (argv[fa][1] == '?')
 				usage(NULL);
@@ -119,19 +119,21 @@ main(int argc, char *argv[])
 			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L') {
 				fa = nfa;
 				if (na == NULL) usage("No ink limit parameter");
-				limit = atoi(na);
-				if (limit < 1)
-					limit = -1;
+				tlimit = atoi(na);
+				if (tlimit < 1)
+					tlimit = -1;
 			}
+
+			else if (argv[fa][1] == 'd')
+				disp = 1;
 
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
 				verb = 1;
 			else 
 				usage("Unknown flag");
-			}
-		else
+		} else
 			break;
-		}
+	}
 
 	/* See how many arguments remain */
 	switch (argc - fa) {
@@ -195,7 +197,8 @@ main(int argc, char *argv[])
 	 && (f_id1 = cmy->find_field(cmy, 0, "SAMPLE_NAME")) < 0
 	 && (f_id1 = cmy->find_field(cmy, 0, "SAMPLE_ID")) < 0)
 		error("Input file '%s' doesn't contain field SampleName, Sample_Name, SAMPLE_NAME or SAMPLE_ID",devname);
-	if (cmy->t[0].ftype[f_id1] != nqcs_t)
+	if (cmy->t[0].ftype[f_id1] != nqcs_t
+	 && cmy->t[0].ftype[f_id1] != cs_t)
 		error("Field SampleName (%s) from CMYK/RGB file '%s' is wrong type",cmy->t[0].fsym[f_id1],devname);
 
 	if (cmy->find_field(cmy, 0, "RGB_R") >= 0) {
@@ -245,14 +248,15 @@ main(int argc, char *argv[])
 	}
 	if (verb) printf("Read device values\n");
 
-	if ((f_xx = cmy->find_field(cmy, 0, "XYZ_X")) >= 0) {
+	if (cmy->find_field(cmy, 0, "XYZ_X") >= 0
+	 || cmy->find_field(cmy, 0, "LAB_L") >= 0) {
 		/* We've got a new combined device+cie file as the first one. */
 		/* Shuffle it into ciename , and ciename into specname */
 
 		strcpy(specname, ciename);
 		strcpy(ciename, devname);
 
-		if (verb) printf("We've got a combined device + cie/spectral file\n");
+		if (verb) printf("We've got a combined device + instrument readings file\n");
 	}
 
 	/* Open up the input nCIE or Spectral device data file */
@@ -273,14 +277,18 @@ main(int argc, char *argv[])
 	 && (f_id2 = ncie->find_field(ncie, 0, "SAMPLE_NAME")) < 0
 	 && (f_id2 = ncie->find_field(ncie, 0, "SAMPLE_ID")) < 0)
 		error("Input file '%s' doesn't contain field SampleName, Sample_Name, SAMPLE_NAME or SAMPLE_ID",ciename);
-	if (ncie->t[0].ftype[f_id2] != nqcs_t)
+	if (ncie->t[0].ftype[f_id2] != nqcs_t
+	 && ncie->t[0].ftype[f_id2] != cs_t)
 		error("Field SampleName (%s) from cie file '%s' is wrong type",ncie->t[0].fsym[f_id2],ciename);
 
-	if ((f_xx = ncie->find_field(ncie, 0, "XYZ_X")) < 0) {
+	if (ncie->find_field(ncie, 0, "XYZ_X") < 0
+	 && ncie->find_field(ncie, 0, "LAB_L") < 0) {
 
 		/* Not a cie file. See if it's a spectral file */
 		if (ncie->find_field(ncie, 0, "nm500") < 0
-		 && ncie->find_field(ncie, 0, "SPECTRAL_NM_500") < 0)
+		 && ncie->find_field(ncie, 0, "SPECTRAL_NM_500") < 0
+		 && ncie->find_field(ncie, 0, "R_500") < 0
+		 && ncie->find_field(ncie, 0, "SPECTRAL_500") < 0)
 			error("Input file '%s' doesn't contain field XYZ_X or spectral",ciename);	/* Nope */
 
 		/* We have a spectral file only. Fix things and drop through */
@@ -290,31 +298,39 @@ main(int argc, char *argv[])
 		ciename[0] = '\000';
 
 	} else {	/* Continue dealing with cie value file */
+		char *fields[2][3] = {
+			{ "XYZ_X", "XYZ_Y", "XYZ_Z" },
+			{ "LAB_L", "LAB_A", "LAB_B" }
+		};
 
 		if (ncie->find_field(ncie, 0, "nm500") >= 0
-		 || ncie->find_field(ncie, 0, "SPECTRAL_NM_500") >= 0) {
+		 || ncie->find_field(ncie, 0, "SPECTRAL_NM_500") >= 0
+		 || ncie->find_field(ncie, 0, "R_500") >= 0
+		 || ncie->find_field(ncie, 0, "SPECTRAL_500") >= 0) {
+			if (verb) printf("Found spectral values\n");
 			/* It's got spectral data too. Make sure we read it */
 			strcpy(specname, ciename);
 		}
 
-		if (ncie->t[0].ftype[f_xx] != r_t)
-			error("Field XYZ_X from file '%s' is wrong type",ciename);
-	
-		if ((f_yy = ncie->find_field(ncie, 0, "XYZ_Y")) < 0)
-			error("Input file '%s' doesn't contain field XYZ_Y",ciename);
-		if (ncie->t[0].ftype[f_yy] != r_t)
-			error("Field XYZ_Y from file '%s' is wrong type",ciename);
-	
-		if ((f_zz = ncie->find_field(ncie, 0, "XYZ_Z")) < 0)
-			error("Input file '%s' doesn't contain field XYZ_Z",ciename);
-		if (ncie->t[0].ftype[f_zz] != r_t)
-			error("Field XYZ_Z from file '%s' is wrong type",ciename);
+		if (ncie->find_field(ncie, 0, "LAB_L") >= 0)
+			islab = 1;
 
-		if (verb) printf("Read CIE values\n");
+		for (i = 0; i < 3; i++) {
+
+			if ((f_cie[i] = ncie->find_field(ncie, 0, fields[islab][i])) < 0)
+				error("Input file '%s' doesn't contain field XYZ_Y",fields[islab][i], ciename);
+
+			if (ncie->t[0].ftype[f_cie[i]] != r_t)
+				error("Field %s from file '%s' is wrong type",fields[islab][i], ciename);
+		}
+	
+		if (verb) printf("Found CIE values\n");
 	}
 
 	/* Open up the input Spectral device data file */
 	if (specname[0] != '\000') {
+		char bufs[4][50];
+
 		spec = new_cgats();	/* Create a CGATS structure */
 		spec->add_other(spec, "LGOROWLENGTH"); 	/* Gretag/Logo Target file */
 		spec->add_other(spec, "ECI2002"); 		/* Gretag/Logo Target file */
@@ -332,26 +348,67 @@ main(int argc, char *argv[])
 		 && (f_id3 = spec->find_field(spec, 0, "SAMPLE_NAME")) < 0
 		 && (f_id3 = spec->find_field(spec, 0, "SAMPLE_ID")) < 0)
 			error("Input file '%s' doesn't contain field SampleName, Sample_Name, SAMPLE_NAME or SAMPLE_ID",specname);
-		if (spec->t[0].ftype[f_id3] != nqcs_t)
+		if (spec->t[0].ftype[f_id3] != nqcs_t
+		 && spec->t[0].ftype[f_id3] != cs_t)
 			error("Field SampleName (%s) from spec file '%s' is wrong type",spec->t[0].fsym[f_id3],specname);
 
-		/* Find the fields for spectral values */
-		for (j = 0; j < 36; j++) {
-			char buf1[100];
-			char buf2[100];
-			char buf3[100];
-			sprintf(buf1,"nm%03d", 380 + 10 * j);
-			sprintf(buf2,"SPECTRAL_NM_%03d", 380 + 10 * j);
-			sprintf(buf3,"R_%03d", 380 + 10 * j);
+		/* Find the spectral readings nm range */
+		for (specmin = 500; specmin >= 300; specmin -= 10) {
+			sprintf(bufs[0],"nm%03d", specmin);
+			sprintf(bufs[1],"SPECTRAL_NM_%03d", specmin);
+			sprintf(bufs[2],"R_%03d", specmin);
+			sprintf(bufs[3],"SPECTRAL_%03d", specmin);
 
-			if ((spi[j] = spec->find_field(spec, 0, buf1)) < 0
-			 && (spi[j] = spec->find_field(spec, 0, buf2)) < 0
-			 && (spi[j] = spec->find_field(spec, 0, buf3)) < 0) {	/* Not found */
+			if (spec->find_field(spec, 0, bufs[0]) < 0
+			 && spec->find_field(spec, 0, bufs[1]) < 0
+			 && spec->find_field(spec, 0, bufs[2]) < 0
+			 && spec->find_field(spec, 0, bufs[3]) < 0)	/* Not found */
+			break;
+		}
+		specmin += 10;
+		for (specmax = 500; specmax <= 900; specmax += 10) {
+			sprintf(bufs[0],"nm%03d", specmax);
+			sprintf(bufs[1],"SPECTRAL_NM_%03d", specmax);
+			sprintf(bufs[2],"R_%03d", specmax);
+			sprintf(bufs[3],"SPECTRAL_%03d", specmax);
+
+			if (spec->find_field(spec, 0, bufs[0]) < 0
+			 && spec->find_field(spec, 0, bufs[1]) < 0
+			 && spec->find_field(spec, 0, bufs[2]) < 0
+			 && spec->find_field(spec, 0, bufs[3]) < 0) /* Not found */
+			break;
+		}
+		specmax -= 10;
 				
-				spec->del(spec);
-				spec = NULL;
-				specname[0] = '\000';
-				break;
+		if (specmin > 420 || specmax < 680) {	/* Not enough range to be useful */
+			spec->del(spec);
+			spec = NULL;
+			specname[0] = '\000';
+		} else {
+
+			specnum = (specmax - specmin)/10 + 1;
+
+			if (verb)
+				printf("Found there are %d spectral values, from %d to %d nm\n",specnum,specmin,specmax);
+			
+
+			/* Locate the fields for spectral values */
+			for (j = 0; j < specnum; j++) {
+				sprintf(bufs[0],"nm%03d", specmin + 10 * j);
+				sprintf(bufs[1],"SPECTRAL_NM_%03d", specmin + 10 * j);
+				sprintf(bufs[2],"R_%03d", specmin + 10 * j);
+				sprintf(bufs[3],"SPECTRAL_%03d", specmin + 10 * j);
+	
+				if ((spi[j] = spec->find_field(spec, 0, bufs[0])) < 0
+				 && (spi[j] = spec->find_field(spec, 0, bufs[1])) < 0
+				 && (spi[j] = spec->find_field(spec, 0, bufs[2])) < 0
+				 && (spi[j] = spec->find_field(spec, 0, bufs[3])) < 0) {	/* Not found */
+					
+					spec->del(spec);
+					spec = NULL;
+					specname[0] = '\000';
+					break;
+				}
 			}
 		}
 	}
@@ -368,8 +425,10 @@ main(int argc, char *argv[])
 	ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll target", NULL);
 	atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
 	ocg->add_kword(ocg, 0, "CREATED",atm, NULL);
-	ocg->add_kword(ocg, 0, "DEVICE_CLASS","OUTPUT", NULL);	/* What sort of device this is */
-									/* NOTE we assume not Display, even if RGB */
+	if (disp)
+		ocg->add_kword(ocg, 0, "DEVICE_CLASS","DISPLAY", NULL);	/* What sort of device this is */
+	else
+		ocg->add_kword(ocg, 0, "DEVICE_CLASS","OUTPUT", NULL);	/* What sort of device this is */
 
 	/* Note what instrument the chart was read with */
 	/* Assume this - could try reading from file INSTRUMENTATION "SpectroScan" ?? */
@@ -382,34 +441,63 @@ main(int argc, char *argv[])
 		ocg->add_field(ocg, 0, "RGB_R", r_t);
 		ocg->add_field(ocg, 0, "RGB_G", r_t);
 		ocg->add_field(ocg, 0, "RGB_B", r_t);
-		ocg->add_kword(ocg, 0, "COLOR_REP","RGB_XYZ", NULL);
+		if (islab)
+			ocg->add_kword(ocg, 0, "COLOR_REP","RGB_LAB", NULL);
+		else
+			ocg->add_kword(ocg, 0, "COLOR_REP","RGB_XYZ", NULL);
 	} else {
 		ocg->add_field(ocg, 0, "CMYK_C", r_t);
 		ocg->add_field(ocg, 0, "CMYK_M", r_t);
 		ocg->add_field(ocg, 0, "CMYK_Y", r_t);
 		ocg->add_field(ocg, 0, "CMYK_K", r_t);
-		ocg->add_kword(ocg, 0, "COLOR_REP","CMYK_XYZ", NULL);
+		if (islab)
+			ocg->add_kword(ocg, 0, "COLOR_REP","CMYK_LAB", NULL);
+		else
+			ocg->add_kword(ocg, 0, "COLOR_REP","CMYK_XYZ", NULL);
 	}
 
 	if (ncie != NULL) {
-		ocg->add_field(ocg, 0, "XYZ_X", r_t);
-		ocg->add_field(ocg, 0, "XYZ_Y", r_t);
-		ocg->add_field(ocg, 0, "XYZ_Z", r_t);
+		if (islab) {
+			ocg->add_field(ocg, 0, "LAB_L", r_t);
+			ocg->add_field(ocg, 0, "LAB_A", r_t);
+			ocg->add_field(ocg, 0, "LAB_B", r_t);
+		} else {
+			ocg->add_field(ocg, 0, "XYZ_X", r_t);
+			ocg->add_field(ocg, 0, "XYZ_Y", r_t);
+			ocg->add_field(ocg, 0, "XYZ_Z", r_t);
+		}
 	}
 
 	if (spec != NULL) {
 		char buf[100];
-		sprintf(buf,"%d", 36);
+		double maxv = 0.0;
+		sprintf(buf,"%d", specnum);
 		ocg->add_kword(ocg, 0, "SPECTRAL_BANDS",buf, NULL);
-		sprintf(buf,"%f", 380.0);
+		sprintf(buf,"%d", specmin);
 		ocg->add_kword(ocg, 0, "SPECTRAL_START_NM",buf, NULL);
-		sprintf(buf,"%f", 730.0);
+		sprintf(buf,"%d", specmax);
 		ocg->add_kword(ocg, 0, "SPECTRAL_END_NM",buf, NULL);
 
 		/* Generate fields for spectral values */
-		for (j = 0; j < 36; j++) {
-			sprintf(buf,"SPEC_%03d", 380 + 10 * j);
+		for (j = 0; j < specnum; j++) {
+			sprintf(buf,"SPEC_%03d", specmin + 10 * j);
 			ocg->add_field(ocg, 0, buf, r_t);
+		}
+
+		/* Guess what scale the spectral data is set to */
+		for (i = 0; i < npat; i++) {
+			for (j = 0; j < specnum; j++) {
+				double vv;
+				vv = *((double *)spec->t[0].fdata[i][spi[j]]);
+				if (vv > maxv)
+					maxv = vv;
+			}
+		}
+		if (maxv < 2.0) {
+			spec_scale = 100.0;
+			if (verb) printf("Spectral value scale = 100.0\n");
+		} else {
+			if (verb) printf("Spectral value scale = 1.0\n");
 		}
 	}
 
@@ -418,7 +506,7 @@ main(int argc, char *argv[])
 		cgats_set_elem *setel;	/* Array of set value elements */
 
 		if ((setel = (cgats_set_elem *)malloc(
-		     sizeof(cgats_set_elem) * (1 + (isrgb ? 3 : 4) + 3 + (spec != NULL ? 36 : 0)))) == NULL)
+		     sizeof(cgats_set_elem) * (1 + (isrgb ? 3 : 4) + 3 + (spec != NULL ? specnum : 0)))) == NULL)
 			error("Malloc failed!");
 
 		/* Write out the patch info to the output CGATS file */
@@ -464,14 +552,14 @@ main(int argc, char *argv[])
 			}
 	
 			if (ncie != NULL) {
-				setel[k++].d = *((double *)ncie->t[0].fdata[i][f_xx]);	
-				setel[k++].d = *((double *)ncie->t[0].fdata[i][f_yy]);
-				setel[k++].d = *((double *)ncie->t[0].fdata[i][f_zz]);
+				setel[k++].d = *((double *)ncie->t[0].fdata[i][f_cie[0]]);	
+				setel[k++].d = *((double *)ncie->t[0].fdata[i][f_cie[1]]);
+				setel[k++].d = *((double *)ncie->t[0].fdata[i][f_cie[2]]);
 			}
 	
 			if (spec) {
-				for (j = 0; j < 36; j++) {
-					setel[k++].d = 100.0 * *((double *)spec->t[0].fdata[i][spi[j]]);
+				for (j = 0; j < specnum; j++) {
+					setel[k++].d = spec_scale * *((double *)spec->t[0].fdata[i][spi[j]]);
 				}
 			}
 
@@ -481,16 +569,16 @@ main(int argc, char *argv[])
 		free(setel);
 	}
 
-	if (limit < 0 && mxsum > 0.0) {
+	if (tlimit < 0 && mxsum > 0.0) {
 		if (verb)
 			printf("No ink limit given, using maximum %f found in file at %d\n",mxsum,mxsumix+1);
 
-		limit = (int)(mxsum + 0.5);
+		tlimit = (int)(mxsum + 0.5);
 	}
 
-	if (limit > 0) {
+	if (tlimit > 0) {
 		char buf[100];
-		sprintf(buf, "%d", limit);
+		sprintf(buf, "%d", tlimit);
 		ocg->add_kword(ocg, 0, "TOTAL_INK_LIMIT", buf, NULL);
 	}
 
@@ -502,15 +590,17 @@ main(int argc, char *argv[])
 
 		/* Setup output cgats file */
 		ocg2 = new_cgats();	/* Create a CGATS structure */
-		ocg2->add_other(ocg2, "CTI2"); 	/* our special type is Calibration Target Information 3 */
+		ocg2->add_other(ocg2, "CTI2"); 	/* our special type is Calibration Target Information 2 */
 		ocg2->add_table(ocg2, tt_other, 0);	/* Start the first table */
 
-		ocg2->add_kword(ocg2, 0, "DESCRIPTOR", "Argyll Calibration Target chart information 3",NULL);
-		ocg2->add_kword(ocg2, 0, "ORIGINATOR", "Argyll target", NULL);
+		ocg2->add_kword(ocg2, 0, "DESCRIPTOR", "Argyll Calibration Target chart information 2",NULL);
+		ocg2->add_kword(ocg2, 0, "ORIGINATOR", "Argyll logo2cgats", NULL);
 		atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
 		ocg2->add_kword(ocg2, 0, "CREATED",atm, NULL);
-		ocg2->add_kword(ocg2, 0, "DEVICE_CLASS","OUTPUT", NULL);	/* What sort of device this is */
-										/* NOTE we assume not Display, even if RGB */
+		if (disp)
+			ocg2->add_kword(ocg2, 0, "DEVICE_CLASS","DISPLAY", NULL);	/* What sort of device this is */
+		else
+			ocg2->add_kword(ocg2, 0, "DEVICE_CLASS","OUTPUT", NULL);	/* What sort of device this is */
 		/* Note what instrument the chart was read with */
 		/* Assume this - could try reading from file INSTRUMENTATION "SpectroScan" ?? */
 		ocg2->add_kword(ocg2, 0, "TARGET_INSTRUMENT", inst_name(instSpectrolino) , NULL);
@@ -519,9 +609,20 @@ main(int argc, char *argv[])
 		ocg2->add_field(ocg2, 0, "SAMPLE_ID", nqcs_t);
 		ocg2->add_field(ocg2, 0, "SAMPLE_LOC", nqcs_t);
 
-		if (limit > 0) {
+		/* We're missing lots of .ti2 stuff like: */
+		/* ocg->add_kword(ocg, 0, "APPROX_WHITE_POINT",icg->t[0].kdata[fi], NULL); */
+		/* ocg->add_kword(ocg, 0, "PATCH_LENGTH", buf, NULL); */
+		/* ocg->add_kword(ocg, 0, "GAP_LENGTH", buf, NULL); */
+		/* ocg->add_kword(ocg, 0, "TRAILER_LENGTH", buf, NULL); */
+		/* ocg->add_kword(ocg, 0, "STEPS_IN_PASS", buf, NULL); */
+		/* ocg->add_kword(ocg, 0, "PASSES_IN_STRIPS", pis, NULL); */
+		/* ocg->add_kword(ocg, 0, "STRIP_INDEX_PATTERN", sixpat, NULL); */
+		/* ocg->add_kword(ocg, 0, "PATCH_INDEX_PATTERN", pixpat, NULL); */
+		/* ocg->add_kword(ocg, 0, "INDEX_ORDER", ixord ? "PATCH_THEN_STRIP" : "STRIP_THEN_PATCH", NULL); */
+
+		if (tlimit > 0) {
 			char buf[100];
-			sprintf(buf, "%d", limit);
+			sprintf(buf, "%d", tlimit);
 			ocg2->add_kword(ocg2, 0, "TOTAL_INK_LIMIT", buf, NULL);
 		}
 
@@ -539,24 +640,14 @@ main(int argc, char *argv[])
 		}
 
 		if (ncie != NULL) {
-			ocg2->add_field(ocg2, 0, "XYZ_X", r_t);
-			ocg2->add_field(ocg2, 0, "XYZ_Y", r_t);
-			ocg2->add_field(ocg2, 0, "XYZ_Z", r_t);
-		}
-
-		if (spec != NULL) {
-			char buf[100];
-			sprintf(buf,"%d", 36);
-			ocg2->add_kword(ocg2, 0, "SPECTRAL_BANDS",buf, NULL);
-			sprintf(buf,"%f", 380.0);
-			ocg2->add_kword(ocg2, 0, "SPECTRAL_START_NM",buf, NULL);
-			sprintf(buf,"%f", 730.0);
-			ocg2->add_kword(ocg2, 0, "SPECTRAL_END_NM",buf, NULL);
-
-			/* Generate fields for spectral values */
-			for (j = 0; j < 36; j++) {
-				sprintf(buf,"SPEC_%03d", 380 + 10 * j);
-				ocg2->add_field(ocg2, 0, buf, r_t);
+			if (islab) {
+				ocg2->add_field(ocg2, 0, "LAB_L", r_t);
+				ocg2->add_field(ocg2, 0, "LAB_A", r_t);
+				ocg2->add_field(ocg2, 0, "LAB_B", r_t);
+			} else {
+				ocg2->add_field(ocg2, 0, "XYZ_X", r_t);
+				ocg2->add_field(ocg2, 0, "XYZ_Y", r_t);
+				ocg2->add_field(ocg2, 0, "XYZ_Z", r_t);
 			}
 		}
 
@@ -565,7 +656,7 @@ main(int argc, char *argv[])
 			cgats_set_elem *setel;	/* Array of set value elements */
 
 			if ((setel = (cgats_set_elem *)malloc(
-			     sizeof(cgats_set_elem) * (1 + (isrgb ? 3 : 4) + 3 + (spec != NULL ? 36 : 0)))) == NULL)
+			     sizeof(cgats_set_elem) * (2 + (isrgb ? 3 : 4) + (ncie != NULL ? 3 : 0)))) == NULL)
 				error("Malloc failed!");
 
 			/* Write out the patch info to the output CGATS file */
@@ -592,9 +683,8 @@ main(int argc, char *argv[])
 				}
 
 				sprintf(id, "%d", i+1);
-				setel[k++].c = id;
-				
-				setel[k++].c = ((char *)cmy->t[0].fdata[i][f_id1]);
+				setel[k++].c = id;						/* ID */
+				setel[k++].c = ((char *)cmy->t[0].fdata[i][f_id1]); 	/* Location */
 
 				if (isrgb) {
 					setel[k++].d = 100.0/255.0 * *((double *)cmy->t[0].fdata[i][f_c]);
@@ -608,17 +698,10 @@ main(int argc, char *argv[])
 				}
 		
 				if (ncie != NULL) {
-					setel[k++].d = *((double *)ncie->t[0].fdata[i][f_xx]);	
-					setel[k++].d = *((double *)ncie->t[0].fdata[i][f_yy]);
-					setel[k++].d = *((double *)ncie->t[0].fdata[i][f_zz]);
+					setel[k++].d = *((double *)ncie->t[0].fdata[i][f_cie[0]]);	
+					setel[k++].d = *((double *)ncie->t[0].fdata[i][f_cie[1]]);
+					setel[k++].d = *((double *)ncie->t[0].fdata[i][f_cie[2]]);
 				}
-		
-				if (spec) {
-					for (j = 0; j < 36; j++) {
-						setel[k++].d = 100.0 * *((double *)spec->t[0].fdata[i][spi[j]]);
-					}
-				}
-
 				ocg2->add_setarr(ocg2, 0, setel);
 			}
 

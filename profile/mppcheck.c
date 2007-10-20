@@ -10,8 +10,8 @@
  * Copyright 2003 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #define DEBUG
@@ -37,7 +37,7 @@
 void
 usage(void) {
 	fprintf(stderr,"Check Model Printer Profile, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: %s [-v] [-c] [-s] [-y] values.ti3 profile.mpp\n",error_program);
 	fprintf(stderr," -v          Verbose mode\n");
 	fprintf(stderr," -c          Show CIE94 delta E values\n");
@@ -49,7 +49,7 @@ usage(void) {
 	exit(1);
 	}
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int fa,nfa;							/* current argument we're looking at */
 	int verb = 0;
@@ -57,23 +57,22 @@ main(int argc, char *argv[])
 	int cie2k = 0;						/* Display CIEDE2000 delta E */
 	int verify = 0;
 	int ospec = 0;						/* Output spectral model flag */
-	int omix = 0;						/* Output mixing model flag */
 	static char ti3name[200] = { 0 };	/* Input cgats file base name */
 	static char mppname[200] = { 0 };	/* Profile file base name */
 
-	int it, i, j, k;
+	int i, j;
 	int ti;					/* Temporary index */
 	cgats *icg;				/* input cgats structure */
 	int devmask;			/* ICX ink mask of device space */
 	int devchan;			/* Number of chanels in device space */
-	int isLab;				/* Flag indicating whether PCS is XYZ or Lab */
-	int isDisplay;			/* Flag indicating that this is a display device, not output */
+	int isLab = 0;			/* Flag indicating whether PCS is XYZ or Lab */
+	int isDisplay = 0;		/* Flag indicating that this is a display device, not output */
 	double limit = -1.0;	/* Ink limit */
 	instType itype = instUnknown;	/* Spectral instrument type */
 	int    spec_n = 0;		/* Number of spectral bands, 0 if not valid */
-	double spec_wl_short;	/* First reading wavelength in nm (shortest) */
-	double spec_wl_long;	/* Last reading wavelength in nm (longest) */
-	double norm;			/* Normalising scale value */
+	double spec_wl_short = 0.0;	/* First reading wavelength in nm (shortest) */
+	double spec_wl_long = 0.0;	/* Last reading wavelength in nm (longest) */
+	double norm = 0.0;		/* Normalising scale value */
 	int nodp;				/* Number of test patches */
 	mppcol *cols;			/* Test patches */
 	mpp *p;					/* Model Printer Profile */
@@ -153,7 +152,7 @@ main(int argc, char *argv[])
 	if (icg->read_name(icg, ti3name))
 		error("CGATS file read error : %s",icg->err);
 
-	if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
+	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0)
 		error ("Input file isn't a CTI3 format file");
 	if (icg->ntables != 1)
 		error ("Input file doesn't contain exactly one table");

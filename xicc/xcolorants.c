@@ -9,8 +9,8 @@
  *
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  */
 
@@ -26,8 +26,10 @@
 #include <math.h>
 #include "icc.h"
 #include "xcolorants.h"
+#include "sort.h"
 
-/* Colorant table for N color device characterisation */
+/* Colorant table for N color device characterisation. */
+/* This is ordered to match the ICC colorspace convention. */
 /* NOTE:- need to keep these in same order as ink mask */
 /* enumeration (lsb to msb), or strange things result! */
 static struct {
@@ -148,7 +150,7 @@ int icx_noofinks(inkmask mask) {
 /* Return NULL on error. free() after use */
 char *icx_inkmask2char(inkmask mask) {
 	int i;
-	char *rv, *cp;
+	char *rv;
 
 	if ((rv = malloc(2 * ICX_MXINKS + 1)) == NULL)
 		return NULL;
@@ -354,8 +356,6 @@ icColorSpaceSignature sig	/* ICC signature */
 
 /* Given an ICC colorspace signature, return the appropriate */
 /* colorant combination mask. Return 0 if ambiguous signature. */
-/* (Should expand this do do a proper job by looking at other */
-/* tags in a profile.) */
 inkmask icx_icc_to_colorant_comb(icColorSpaceSignature sig) {
 	switch (sig) {
 		case icSigCmyData:
@@ -367,8 +367,201 @@ inkmask icx_icc_to_colorant_comb(icColorSpaceSignature sig) {
 		case icSigCmykData:
 			return ICX_CMYK;
 
+		default:
+			break;
 	}
-	return -1;
+	return 0;
+}
+
+/* Given an ICC colorspace signature, and a matching list */
+/* of the D50 L*a*b* colors of the colorants, return the best matching */
+/* colorant combination mask. Return 0 if not an applicable colorspace. */
+/* (Note we're not dealing with colorant order here.) */
+inkmask icx_icc_cv_to_colorant_comb(
+icColorSpaceSignature sig,	/* Input ICC colorspace signature */ 
+double cvals[][3]			/* Input L*a*b* colorant values */
+) {
+	int i, j;
+	int imask;
+	int ninks, ncol;
+	double slab[ICX_MXINKS][3];
+	double alab[ICX_MXINKS][3];
+	typedef struct { int x; double v; } mchstr;
+	mchstr mch[MAX_CHAN][ICX_MXINKS];	/* match index */
+	int used[ICX_MXINKS];
+	int co[ICX_MXINKS];		/* Combination counter */
+	double cmv;				/* Combination match value */
+	int bco[ICX_MXINKS];	/* Best Combinat */
+	double bcmv;			/* Best Match value */
+	int order[MAX_CHAN];	/* Place holder, not currently used - return ink order */
+
+	switch (sig) {
+    	case icSigXYZData:
+    	case icSigLabData:
+    	case icSigLuvData:
+    	case icSigYCbCrData:
+    	case icSigYxyData:
+    	case icSigHsvData:
+    	case icSigHlsData:
+		case icSigNamedData:
+			return 0;
+
+		case icSigCmyData:
+			return ICX_CMY;
+
+		case icSigRgbData:
+			return ICX_RGB;
+
+		case icSigCmykData:
+			return ICX_CMYK;
+
+		default:
+			break;
+
+	}
+	if (sig == icSigGrayData) {
+		/* This only works reliably if we got the Lab data from a non-ICC */
+		/* conformant monochrome profile (one that doesn't force device 0 */
+		/* input of the grayTRTC to black), or uses a LUT based monochrome */
+		/* profile. */
+		/* It also won't work if someone uses a monochrome profile for a */
+		/* device with a non grey colorant. */
+		/* Really ICC should have icSigWhiteData, icSigBlackData, icSig1colorData ? */
+		if (cvals[0][0] > 50.0) {
+			return ICX_W;
+		} else {
+			return ICX_K;
+		} 
+	}
+
+	/* Compute Lab values of stock inks, and count them */
+	for (ninks = 0; ninks < ICX_MXINKS; ninks++) {
+		if (icx_ink_table[ninks].m == 0)
+			break;
+		icmXYZ2Lab(&icmD50, slab[ninks], icx_ink_table[ninks].sXYZ);
+		icmXYZ2Lab(&icmD50, alab[ninks], icx_ink_table[ninks].aXYZ);
+	}
+
+	ncol = icmCSSig2nchan(sig);	/* Number of colorants */
+
+	/* Compute ideal matching of device colorants to stock inks */
+	for (i = 0; i < ncol; i++) {
+		for (j = 0; j < ninks; j++) {
+			double tt;
+			mch[i][j].x = j;
+			mch[i][j].v = icmCIE94sq(cvals[i], slab[j]);
+			tt = icmCIE94sq(cvals[i], alab[j]);
+			if (tt < mch[i][j].v)
+				mch[i][j].v = tt;
+		}
+		/* Sort the matches for this colorant */
+#define HEAP_COMPARE(A,B) (A.v < B.v)
+		HEAPSORT(mchstr, mch[i], ninks)
+#undef HEAP_COMPARE
+
+//printf("\n~1 Colorant %d has best matches\n",i);
+//for (j = 0; j < ninks; j++)
+//printf("~1 ix %d color = '%s' dE %f\n",j, icx_ink_table[mch[i][j].x].s, mch[i][j].v);
+	} 
+
+	/* Do exaustive combination search, using early */
+	/* out to keep combination count down.*/
+	
+	/* Reset the combination counter */
+	for (j = 0; j < ninks; j++)	/* Reset ink used flag */
+		used[j] = 0;
+	cmv = 0.0;
+	for (i = ncol-1; i >= 0; i--) {
+		for (j = 0; j < ninks; j++) {			/* Set to lowest usable number */
+			if (used[mch[i][j].x] == 0) {		/* Can use this one */
+				used[mch[i][j].x] = 1;			/* Now it's matched */
+				cmv += mch[i][j].v;
+				co[i] = j;
+				break;							/* we assume ncol < ninks */
+			}
+		}
+	} 
+
+//printf("\n~1 Initial combination has cmv = %f\n",cmv);
+//for (i = 0; i < ncol; i++)
+//printf("~1 Chan %d color = '%s'\n",i, icx_ink_table[mch[i][co[i]].x].s);
+
+	/* Set this as the best initial match */
+	for (i = 0; i < ncol; i++)
+		bco[i] = co[i];
+	bcmv = cmv;
+	
+	/* Now go through all other combinations */
+	for (;;) {
+
+		/* Increment counter */
+		for (i = 0;;) {
+
+			/* Work up the digits, incrementing each one */
+			for (; i < ncol; i++) {
+				j = co[i];
+				used[mch[i][j].x] = 0;
+				cmv -= mch[i][j].v;
+				while (++j < ninks && (used[mch[i][j].x] != 0 || (cmv + mch[i][j].v) >= bcmv)) {
+				}; 
+				if (j < ninks) {	/* No carry */
+					used[mch[i][j].x] = 1;
+					cmv += mch[i][j].v;
+					co[i] = j;
+					break;
+				}
+				/* Carry to next colorant */
+			}
+			if (i >= ncol)
+				break;				/* Run out of digits to increment */
+
+			/* Now work down again, resetting digit */
+			for (--i; i >= 0; i--) {
+				for (j = 0; j < ninks; j++) {		/* Set to lowest usable number */
+					if (used[mch[i][j].x] == 0 && (cmv + mch[i][j].v) < bcmv) {
+						/* Can use this one */
+						used[mch[i][j].x] = 1;		/* Now it's matched */
+						cmv += mch[i][j].v;
+						co[i] = j;
+						break;
+					}
+				}
+				if (j >= ninks) {		/* No combination is feasible */
+					i++;				/* Go back to incrementing next highest digit */
+					break;
+				}
+			}
+			if (i < 0)					/* We reset all the lower digits */
+				break;					/* We're at a good combination, so done. */
+		}
+		if (i >= ncol)
+			break;				/* We're done all combinations */
+
+//printf("\n~1 New combination has cmv = %f\n",cmv);
+//for (i = 0; i < ncol; i++)
+//printf("~1 Chan %d color = '%s'\n",i, icx_ink_table[mch[i][co[i]].x].s);
+
+		/* See if this is better (it always should be !) */
+		if (cmv < bcmv) {
+			for (i = 0; i < ncol; i++)
+				bco[i] = co[i];
+			bcmv = cmv;
+		}
+	}
+
+	/* Compile the result */
+	for (imask = 0, i = 0; i < ncol; i++) {
+		imask |= icx_ink_table[mch[i][bco[i]].x].m;
+		order[i] = bco[i];		/* icx ink_table index corresponding to channel */
+	}
+
+	/* Slight hack to recognise some additive combinations */
+	if (imask == ICX_WHITE)
+		imask = ICX_W;
+	else if (imask == (ICX_RED | ICX_GREEN | ICX_BLUE))
+		imask = ICX_RGB;
+
+	return imask;
 }
 
 /* Given a colorant combination mask */

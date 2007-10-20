@@ -1,6 +1,6 @@
 
 /**********************************************************/
-/* Investigate GEMS transfer curve function parameters */
+/* Investigate Graphics GEMS transfer curve function parameters */
 /**********************************************************/
 
 /* Author: Graeme Gill
@@ -8,8 +8,8 @@
  *
  * Copyright 2003 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include <stdio.h>

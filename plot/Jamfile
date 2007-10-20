@@ -6,15 +6,18 @@ CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
 LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 if $(UNIX) && $(OS) != MACOSX {
-	LibWin = /usr/X11R6/lib/libX11.lib ;
-	LibWinH = /usr/X11R6/include ;
+	WinDir = /usr/X11R6 ;
+	LibWinH = $(WinDir)/include ;
+	LibWinD = $(WinDir)/lib ;
+	LibWin = ;
+	LINKFLAGS += -L$(LibWinD) -lX11 -lXau -lXdmcp ;
 }
 
 # PLOT library
+Library libplot.lib : plot.c ;
 if $(UNIX) && $(OS) != MACOSX {
   ObjectHdrs plot$(SUFOBJ) : $(LibWinH) ;
 }
-Library libplot.lib : plot.c ;
 
 # Individual stand alone test of plot library
 Object sa_plot$(SUFOBJ) : plot.c ;
@@ -24,4 +27,7 @@ if $(UNIX) && $(OS) != MACOSX {
   LinkLibraries plot : $(LibWin) ;
 }
 
+# VRML plot library
+Library libvrml.lib : vrml.c ;
+ObjectHdrs vrml$(SUFOBJ) : ../h ../icc ../cgats ../numlib ../gamut ;
 

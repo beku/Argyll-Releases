@@ -7,7 +7,7 @@
  * Version: 1.23
  *
  * Copyright 2000 Graeme W. Gill
- * Please refer to Licence.txt file for details.
+ * Please refer to License.txt file for details.
  */
 
 /* TTBD:
@@ -59,7 +59,7 @@ double absdiff(double in1[3], double in2[3]) {
 
 void usage(void) {
 	fprintf(stderr,"View inv fwd table device interp of an ICC file, V1.23\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: fbtest [options] infile\n");
 	fprintf(stderr," -v          verbose\n");
 	fprintf(stderr," -f          Show PCS target -> reference clipped PCS vectors\n");
@@ -69,8 +69,8 @@ void usage(void) {
 	fprintf(stderr," -r res      Resolution of test grid\n");
 	fprintf(stderr," -g          Do full grid, not just L = 0\n");
 	fprintf(stderr," -c          Do all values, not just clipped ones\n");
-	fprintf(stderr," -l tlimit   set total ink limit, 0 - 400%% (default none)\n");
-	fprintf(stderr," -L klimit   set black ink limit, 0 - 100%% (default none)\n");
+	fprintf(stderr," -l tlimit   set total ink limit, 0 - 400%% (estimate by default)\n");
+	fprintf(stderr," -L klimit   set black ink limit, 0 - 100%% (estimate by default)\n");
 	exit(1);
 }
 
@@ -82,9 +82,8 @@ main(
 	int fa,nfa;				/* argument we're looking at */
 	int verb = 0;
 	int doaxes = 0;
-	int incclip = 0;
-	int tlimit = -1;			/* Total ink limit as a % */
-	int klimit = -1;			/* Black ink limit as a % */
+	double tlimit = -1.0;	/* Total ink limit */
+	double klimit = -1.0;	/* Black ink limit */
 	int tres = 33;
 	int doref = 0;			/* Show reference lookups */
 	int dodelta = 0;		/* Show device interp delta variation */
@@ -95,7 +94,7 @@ main(
 	char in_name[100];
 	char *xl, out_name[100];
 	icmFile *rd_fp;
-	icc *wr_icco, *rd_icco;		/* Keep object separate */
+	icc *rd_icco;
 	int rv = 0;
 	icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
 
@@ -156,12 +155,12 @@ main(
 			else if (argv[fa][1] == 'l') {
 				fa = nfa;
 				if (na == NULL) usage();
-				tlimit = atoi(na);
+				tlimit = atoi(na)/100.0;
 			}
 			else if (argv[fa][1] == 'L') {
 				fa = nfa;
 				if (na == NULL) usage();
-				klimit = atoi(na);
+				klimit = atoi(na)/100.0;
 			}
 
 			/* Resolution */
@@ -225,20 +224,19 @@ main(
 		if ((xicco = new_xicc(rd_icco)) == NULL)
 			error ("Creation of xicc failed");
 	
-		/* Setup ink limit */
-		if (tlimit >= 0)
-			ink.tlimit = tlimit/100.0;	/* Set a total ink limit */
-		else
-			ink.tlimit = -1.0;			/* Don't use a limit */
-	
-		if (klimit >= 0)
-			ink.klimit = klimit/100.0;	/* Set a black ink limit */
-		else
-			ink.klimit = -1.0;			/* Don't use a limit */
+		/* Set the default ink limits if not set on command line */
+		icxDefaultLimits(rd_icco, &ink.tlimit, tlimit, &ink.klimit, klimit);
+
+		if (verb) {
+			if (ink.tlimit >= 0.0)
+				printf("Total ink limit assumed is %3.0f%%\n",100.0 * ink.tlimit);
+			if (ink.klimit >= 0.0)
+				printf("Black ink limit assumed is %3.0f%%\n",100.0 * ink.klimit);
+		}
 	
 		ink.c.Ksmth = ICXINKDEFSMTH;	/* Default smoothing */
 		ink.c.Kstle = 0.5;		/* Min K at white end */
-		ink.c.Kstpo = 0.5;		/* Start of transition is at white 	
+		ink.c.Kstpo = 0.5;		/* Start of transition is at white */ 	
 		ink.c.Kenle = 0.5;		/* Max K at black end */
 		ink.c.Kenpo = 0.5;		/* End transition at black */
 		ink.c.Kshap = 1.0;		/* Linear transition */
@@ -315,11 +313,8 @@ main(
 				for (coa[1] = 0; coa[1] < tres; coa[1]++) {
 					for (coa[2] = 0; coa[2] < tres; coa[2]++) {
 						double in[4], dev[4], out[4];
-						double in4[4], check[4];
-						double temp[4], adev[4];
-						double dev0[4], dev1[4], dev2[4], dev3[4];
+						double temp[4];
 						int rv1, rv2;
-						double absd;
 
 						temp[0] = coa[0]/(tres-1.0);
 						temp[1] = coa[1]/(tres-1.0);
@@ -394,7 +389,6 @@ main(
 						double temp[4], adev[4];
 						double dev0[4], dev1[4], dev2[4], dev3[4];
 						int rv1, rv2;
-						double absd;
 
 						temp[0] = coa[0]/(tres-1.0);
 						temp[1] = coa[1]/(tres-1.0);
@@ -547,11 +541,8 @@ main(
 				for (coa[1] = 0; coa[1] < tres; coa[1]++) {
 					for (coa[2] = 0; coa[2] < tres; coa[2]++) {
 						double in[4], dev[4], out[4];
-						double in4[4], check[4];
-						double temp[4], adev[4];
-						double dev0[4], dev1[4], dev2[4], dev3[4];
+						double temp[4];
 						int rv1, rv2;
-						double absd;
 
 						temp[0] = coa[0]/(tres-1.0);
 						temp[1] = coa[1]/(tres-1.0);
@@ -629,11 +620,9 @@ main(
 				for (coa[1] = 0; coa[1] < tres; coa[1]++) {
 					for (coa[2] = 0; coa[2] < tres; coa[2]++) {
 						double in[4], dev[4], out[4];
-						double in4[4], check[4];
-						double temp[4], adev[4];
-						double dev0[4], dev1[4], dev2[4], dev3[4];
+						double check[4];
+						double temp[4];
 						int rv1, rv2;
-						double absd;
 
 						temp[0] = coa[0]/(tres-1.0);
 						temp[1] = coa[1]/(tres-1.0);

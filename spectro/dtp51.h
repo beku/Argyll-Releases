@@ -6,13 +6,31 @@
  * Xrite DTP51 related defines
  *
  * Author: Graeme W. Gill
- * Date:   5/10/96
+ * Date:   5/10/1996
  *
- * Copyright 1996, Graeme W. Gill
+ * Copyright 1996 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
+ */
+
+/* 
+   If you make use of the instrument driver code here, please note
+   that it is the author(s) of the code who take responsibility
+   for its operation. Any problems or queries regarding driving
+   instruments with the Argyll drivers, should be directed to
+   the Argyll's author(s), and not to any other party.
+
+   If there is some instrument feature or function that you
+   would like supported here, it is recommended that you
+   contact Argyll's author(s) first, rather than attempt to
+   modify the software yourself, if you don't have firm knowledge
+   of the instrument communicate protocols. There is a chance
+   that an instrument could be damaged by an incautious command
+   sequence, and the instrument companies generally cannot and
+   will not support developers that they have not qualified
+   and agreed to support.
  */
 
 #include "inst.h"
@@ -22,7 +40,10 @@
 #define DTP51_COMS_FAIL				0x62			/* Communication failure */
 #define DTP51_UNKNOWN_MODEL			0x63			/* Not a DPT51 or DTP52 */
 #define DTP51_DATA_PARSE_ERROR  	0x64			/* Read data parsing error */
-#define DTP51_USER_ABORT		    0x65			/* User hit escape */
+#define DTP51_USER_ABORT		    0x65			/* User hit abort */
+#define DTP51_USER_TERM		    	0x66			/* User hit terminate */
+#define DTP51_USER_TRIG 		    0x67			/* User hit trigger */
+#define DTP51_USER_CMND		    	0x68			/* User hit command */
 
 /* Real error code */
 #define DTP51_OK   					0x00
@@ -71,15 +92,14 @@
 struct _dtp51 {
 	INST_OBJ_BASE
 
-	/* *** DTP51 private methods *** */
-	/* Do a command/response echange with the instrument */
-	/* Return the inst error code */
-	inst_code (*command)(struct _inst *p, char *in, char *out, int bsize);
-
+	int need_cal;				/* needs calibration */
+	inst_opt_mode trig;			/* Reading trigger mode */
+	int trig_return;			/* Emit "\n" after trigger */
+	
 	}; typedef struct _dtp51 dtp51;
 
 /* Constructor */
-extern dtp51 *new_dtp51(void);
+extern dtp51 *new_dtp51(icoms *icom, int debug, int verb);
 
 
 

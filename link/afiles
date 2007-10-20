@@ -1,7 +1,7 @@
-link/Readme.txt
-link/Licence.txt
-link/afiles
-link/Jamfile
-link/icclink.c
-link/monoplot.c
-link/pathplot.c
+Readme.txt
+License.txt
+afiles
+Jamfile
+icclink.c
+monoplot.c
+pathplot.c

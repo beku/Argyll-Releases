@@ -9,15 +9,14 @@
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  */
 
 /* TTBD:
  *
  *	Fix enums to be selected randomly (ie. header)
  *
- *	Should add test of icmColorantTable.
  *	Should add test of ->delete_tag()
  *	Should add test of ->rename_tag()
  *
@@ -102,7 +101,8 @@ main(
 	icmFile *wr_fp, *rd_fp;
 	icc *wr_icco, *rd_icco;		/* Keep object separate */
 	int rv = 0;
-	int i, offset = 0;			/* File write/read offset, 0 for standard icc */
+	int i;
+	unsigned int offset = 0;	/* File write/read offset, 0 for standard icc */
 
 	printf("ICC library regression test, V%s\n",ICCLIB_VERSION_STR);
 
@@ -153,7 +153,7 @@ main(
 
 			if (fseek(pp->fp, 0, SEEK_END))
 				error ("Write: seek to EOF failed");
-			if (ftell(pp->fp) != offset + size)
+			if ((unsigned long)ftell(pp->fp) != offset + size)
 				error ("Write: get_size function didn't return correct value - got %d, expected %d",
 				        ftell(pp->fp),offset+size);
 		}
@@ -222,16 +222,16 @@ int md5_test() {
 		unsigned char *s;
 		ORD32 sum[4];
 	} tc[] = {
-		{ "", 0xd41d8cd9, 0x8f00b204, 0xe9800998, 0xecf8427e },
-		{ "a", 0x0cc175b9, 0xc0f1b6a8, 0x31c399e2, 0x69772661 },
-		{ "abc", 0x90015098, 0x3cd24fb0, 0xd6963f7d, 0x28e17f72 },
-		{ "message digest", 0xf96b697d, 0x7cb7938d, 0x525a2f31, 0xaaf161d0 },
-		{ "abcdefghijklmnopqrstuvwxyz", 0xc3fcd3d7, 0x6192e400, 0x7dfb496c, 0xca67e13b },
+		{ "",  { 0xd41d8cd9, 0x8f00b204, 0xe9800998, 0xecf8427e } },
+		{ "a", { 0x0cc175b9, 0xc0f1b6a8, 0x31c399e2, 0x69772661 } },
+		{ "abc", { 0x90015098, 0x3cd24fb0, 0xd6963f7d, 0x28e17f72 } },
+		{ "message digest", { 0xf96b697d, 0x7cb7938d, 0x525a2f31, 0xaaf161d0 } },
+		{ "abcdefghijklmnopqrstuvwxyz", { 0xc3fcd3d7, 0x6192e400, 0x7dfb496c, 0xca67e13b } },
 		{ "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
-			0xd174ab98, 0xd277d9f5, 0xa5611c2c, 0x9f419d9f },
+			 { 0xd174ab98, 0xd277d9f5, 0xa5611c2c, 0x9f419d9f } },
 		{ "12345678901234567890123456789012345678901234567890123456789012345678901234567890",
-			0x57edf4a2, 0x2be3c955, 0xac49da2e, 0x2107b67a },
-		{ NULL, 0,0,0,0 }
+			 { 0x57edf4a2, 0x2be3c955, 0xac49da2e, 0x2107b67a } },
+		{ NULL,  { 0,0,0,0 } }
 	};
 
 	if ((icco = new_icc()) == NULL)
@@ -380,7 +380,7 @@ int doit(
 	                  "Intent three CRD Name" };
 	static icmCrdInfo *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		if ((wo = (icmCrdInfo *)wr_icco->add_tag(
 		           wr_icco, icSigCrdInfoTag, icSigCrdInfoType)) == NULL) 
 			return 1;
@@ -397,7 +397,7 @@ int doit(
 			strcpy(wo->crdname[i], str2[i]);	/* Copy the text in */
 	} else {
 		icmCrdInfo *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmCrdInfo *)rd_icco->read_tag(rd_icco, icSigCrdInfoTag);
@@ -500,7 +500,7 @@ int doit(
 	{
 	static icmCurve *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		if ((wo = (icmCurve *)wr_icco->add_tag(
 		           wr_icco, icSigBlueTRCTag, icSigCurveType)) == NULL) 
 			return 1;
@@ -512,7 +512,7 @@ int doit(
 			wo->data[i] = rand_16f();	/* Curve values 0.0 - 1.0 */
 	} else {
 		icmCurve *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmCurve *)rd_icco->read_tag(rd_icco, icSigBlueTRCTag);
@@ -581,7 +581,7 @@ int doit(
 	{
 	static icmData *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		if ((wo = (icmData *)wr_icco->add_tag(
 		           wr_icco, icSigPs2CRD1Tag,	icSigDataType)) == NULL) 
 			return 1;
@@ -593,7 +593,7 @@ int doit(
 			wo->data[i] = rand_o8();
 	} else {
 		icmData *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmData *)rd_icco->read_tag(rd_icco, icSigPs2CRD1Tag);
@@ -977,7 +977,7 @@ int doit(
 	{
 	static icmNamedColor *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		if ((wo = (icmNamedColor *)wr_icco->add_tag(
 		           wr_icco, icSigNamedColorTag, icSigNamedColorType)) == NULL) 
 			return 1;
@@ -990,14 +990,14 @@ int doit(
 		wo->allocate((icmBase *)wo);	/* Allocate named color structures */
 
 		for (i = 0; i < wo->count; i++) {
-			int j;
+			unsigned int j;
 			sprintf(wo->data[i].root,"Color %d",i); /* Root name, max 32, null terminated */
 			for (j = 0; j < wo->nDeviceCoords; j++)	/* nDeviceCoords defaults appropriately */
 				wo->data[i].deviceCoords[j] = rand_8f(); /* Device coords of color */
 		}
 	} else {
 		icmNamedColor *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmNamedColor *)rd_icco->read_tag(rd_icco, icSigNamedColorTag);
@@ -1019,7 +1019,7 @@ int doit(
 			error ("NamedColor verify failed");
 
 		for (i = 0; i < wo->count; i++) {
-			int j;
+			unsigned int j;
 			rv |= strcmp(ro->data[i].root, wo->data[i].root);
 			for (j = 0; j < wo->nDeviceCoords; j++)
 				rv |= dcomp(ro->data[i].deviceCoords[j], wo->data[i].deviceCoords[j]);
@@ -1034,12 +1034,12 @@ int doit(
 	{
 	static icmNamedColor *wo;	/* Shares same machine specific structure */
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		if ((wo = (icmNamedColor *)wr_icco->add_tag(
 		           wr_icco, icSigNamedColor2Tag, icSigNamedColor2Type)) == NULL) 
 			return 1;
 
-   		wo->vendorFlag = rand_int(0,65535) << 16;	/* Bottom 16 bits for IC use */
+   		wo->vendorFlag = rand_int(0,65535) << 16;	/* Bottom 16 bits for ICC use */
    		wo->count = 4;			/* Count of named colors */
    		wo->nDeviceCoords =	3;	/* Num of device coordinates */
 		         /* Could set this different to that implied by wr_icco->header->colorSpace */
@@ -1049,7 +1049,7 @@ int doit(
 		wo->allocate((icmBase *)wo);	/* Allocate named color structures */
 
 		for (i = 0; i < wo->count; i++) {
-			int j;
+			unsigned int j;
 			sprintf(wo->data[i].root,"Pigment %d",i); /* Root name, max 32, null terminated */
 			for (j = 0; j < wo->nDeviceCoords; j++)
 				wo->data[i].deviceCoords[j] = rand_8f(); /* Device coords of color */
@@ -1064,11 +1064,13 @@ int doit(
 						wo->data[i].pcsCoords[1] = rand_ab16();
 						wo->data[i].pcsCoords[2] = rand_ab16();
 					break;
+				default:
+					break;
 			}
 		}
 	} else {
 		icmNamedColor *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmNamedColor *)rd_icco->read_tag(rd_icco, icSigNamedColor2Tag);
@@ -1090,18 +1092,78 @@ int doit(
 			error ("NamedColor2 verify failed");
 
 		for (i = 0; i < wo->count; i++) {
-			int j;
+			unsigned int j;
 			rv |= strcmp(ro->data[i].root, wo->data[i].root);
 			for (j = 0; j < wo->nDeviceCoords; j++)
 				rv |= dcomp(ro->data[i].deviceCoords[j], wo->data[i].deviceCoords[j]);
 			for (j = 0; j < 3; j++) {
 				rv |= dcomp(ro->data[i].pcsCoords[j], wo->data[i].pcsCoords[j]);
-if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->data[i].pcsCoords[j], wo->data[i].pcsCoords[j], wo->icp->header->pcs);
 			}
 		}
 
 		if (rv)
 			error ("NamedColor2 verify failed");
+	}
+	}
+	/* ----------------- */
+	/* ColorantTable: */
+	{
+	static icmColorantTable *wo;
+	if (mode == 0) {
+		unsigned int i;
+		if ((wo = (icmColorantTable *)wr_icco->add_tag(
+		           wr_icco, icSigColorantTableTag, icSigColorantTableType)) == NULL) 
+			return 1;
+
+   		wo->count = 4;			/* Count of colorants - should be same as implied by device space */
+		wo->allocate((icmBase *)wo);	/* Allocate ColorantTable structures */
+
+		for (i = 0; i < wo->count; i++) {
+			sprintf(wo->data[i].name,"Color %d",i); /* Colorant name, max 32, null terminated */
+			switch(wo->icp->header->pcs) {
+				case icSigXYZData:
+						wo->data[i].pcsCoords[0] = rand_XYZ16();
+						wo->data[i].pcsCoords[1] = rand_XYZ16();
+						wo->data[i].pcsCoords[2] = rand_XYZ16();
+					break;
+			   	case icSigLabData:
+						wo->data[i].pcsCoords[0] = rand_L16();
+						wo->data[i].pcsCoords[1] = rand_ab16();
+						wo->data[i].pcsCoords[2] = rand_ab16();
+					break;
+				default:
+					break;
+			}
+		}
+	} else {
+		icmColorantTable *ro;
+		unsigned int i;
+
+		/* Try and read the tag from the file */
+		ro = (icmColorantTable *)rd_icco->read_tag(rd_icco, icSigColorantTableTag);
+		if (ro == NULL) 
+			return 1;
+
+		/* Need to check that the cast is appropriate. */
+		if (ro->ttype != icSigColorantTableType)
+			return 1;
+
+		/* Now check it out */	
+    	rv |= (ro->count != wo->count);
+
+		if (rv)
+			error ("ColorantTable verify failed");
+
+		for (i = 0; i < wo->count; i++) {
+			int j;
+			rv |= strcmp(ro->data[i].name, wo->data[i].name);
+			for (j = 0; j < 3; j++) {
+				rv |= dcomp(ro->data[i].pcsCoords[j], wo->data[i].pcsCoords[j]);
+			}
+		}
+
+		if (rv)
+			error ("ColorantTable verify failed");
 	}
 	}
 	/* ----------------- */
@@ -1115,7 +1177,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 	char *ts3b = "This is a model description";
 	static icmProfileSequenceDesc*wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		if ((wo = (icmProfileSequenceDesc *)wr_icco->add_tag(
 		           wr_icco, icSigProfileSequenceDescTag, icSigProfileSequenceDescType)) == NULL) 
 			return 1;
@@ -1170,7 +1232,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 		}
 	} else {
 		icmProfileSequenceDesc *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmProfileSequenceDesc *)rd_icco->read_tag(rd_icco, icSigProfileSequenceDescTag);
@@ -1226,7 +1288,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 	{
 	static icmS15Fixed16Array *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		/* There is no standard Tag that uses icSigS15Fixed16ArrayType, so use a 'custom' tag */
 		if ((wo = (icmS15Fixed16Array *)wr_icco->add_tag(
 		           wr_icco, str2tag("sf32"), icSigS15Fixed16ArrayType)) == NULL) 
@@ -1239,7 +1301,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 		}
 	} else {
 		icmS15Fixed16Array *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmS15Fixed16Array *)rd_icco->read_tag(rd_icco, str2tag("sf32"));
@@ -1267,7 +1329,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 	{
 	static icmScreening *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		if ((wo = (icmScreening *)wr_icco->add_tag(
 		           wr_icco, icSigScreeningTag, icSigScreeningType)) == NULL) 
 			return 1;
@@ -1282,7 +1344,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 		}
 	} else {
 		icmScreening *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmScreening *)rd_icco->read_tag(rd_icco, icSigScreeningTag);
@@ -1437,7 +1499,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 	{
 	static icmU16Fixed16Array *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		/* There is no standard Tag that uses icSigU16Fixed16ArrayType, so use a 'custom' tag */
 		if ((wo = (icmU16Fixed16Array *)wr_icco->add_tag(
 		           wr_icco, str2tag("uf32"), icSigU16Fixed16ArrayType)) == NULL) 
@@ -1450,7 +1512,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 		}
 	} else {
 		icmU16Fixed16Array *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmU16Fixed16Array *)rd_icco->read_tag(rd_icco, str2tag("uf32"));
@@ -1479,7 +1541,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 	static icmUcrBg *wo;
 	char *ts1 = "UcrBg - full curve info";
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		if ((wo = (icmUcrBg *)wr_icco->add_tag(
 		           wr_icco, icSigUcrBgTag, icSigUcrBgType)) == NULL) 
 			return 1;
@@ -1496,7 +1558,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 		strcpy(wo->string, ts1);			/* Copy the text in */
 	} else {
 		icmUcrBg *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmUcrBg *)rd_icco->read_tag(rd_icco, icSigUcrBgTag);
@@ -1583,7 +1645,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 	{
 	static icmUInt16Array *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		/* There is no standard Tag that uses icSigUInt16ArrayType, so use a 'custom' tag */
 		if ((wo = (icmUInt16Array *)wr_icco->add_tag(
 		           wr_icco, str2tag("ui16"), icSigUInt16ArrayType)) == NULL) 
@@ -1596,7 +1658,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 		}
 	} else {
 		icmUInt16Array *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmUInt16Array *)rd_icco->read_tag(rd_icco, str2tag("ui16"));
@@ -1624,7 +1686,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 	{
 	static icmUInt32Array *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		/* There is no standard Tag that uses icSigUInt32ArrayType, so use a 'custom' tag */
 		if ((wo = (icmUInt32Array *)wr_icco->add_tag(
 		           wr_icco, str2tag("ui32"), icSigUInt32ArrayType)) == NULL) 
@@ -1637,7 +1699,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 		}
 	} else {
 		icmUInt32Array *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmUInt32Array *)rd_icco->read_tag(rd_icco, str2tag("ui32"));
@@ -1665,7 +1727,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 	{
 	static icmUInt64Array *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		/* There is no standard Tag that uses icSigUInt64ArrayType, so use a 'custom' tag */
 		if ((wo = (icmUInt64Array *)wr_icco->add_tag(
 		           wr_icco, str2tag("ui64"), icSigUInt64ArrayType)) == NULL) 
@@ -1679,7 +1741,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 		}
 	} else {
 		icmUInt64Array *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmUInt64Array *)rd_icco->read_tag(rd_icco, str2tag("ui64"));
@@ -1708,7 +1770,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 	{
 	static icmUInt8Array *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		/* There is no standard Tag that uses icSigUInt8ArrayType, so use a 'custom' tag */
 		if ((wo = (icmUInt8Array *)wr_icco->add_tag(
 		           wr_icco, str2tag("ui08"), icSigUInt8ArrayType)) == NULL) 
@@ -1721,7 +1783,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 		}
 	} else {
 		icmUInt8Array *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmUInt8Array *)rd_icco->read_tag(rd_icco, str2tag("ui08"));
@@ -1840,7 +1902,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 	{
 	static icmXYZArray *wo;
 	if (mode == 0) {
-		int i;
+		unsigned int i;
 		/* Note that tag types icSigXYZType and icSigXYZArrayType are identical */
 		if ((wo = (icmXYZArray *)wr_icco->add_tag(
 		           wr_icco, icSigMediaWhitePointTag, icSigXYZArrayType)) == NULL) 
@@ -1855,7 +1917,7 @@ if (rv) printf("~1 i = %d, j = %d, is %f, should be %f, PCS 0x%x\n",i,j, ro->dat
 		}
 	} else {
 		icmXYZArray *ro;
-		int i;
+		unsigned int i;
 
 		/* Try and read the tag from the file */
 		ro = (icmXYZArray *)rd_icco->read_tag(rd_icco, icSigMediaWhitePointTag);
@@ -2037,7 +2099,7 @@ unsigned long rand_ProfileHeaderFlags() {
 
 
 unsigned long rand_AsciiOrBinaryData() {
-	unsigned long flags;
+	unsigned long flags = 0;
 
 	if (rand_int(0,1) == 0)
 		flags |= icBinaryData;

@@ -2,65 +2,82 @@
 #define IMDI_H
 
 /* Integer Multi-Dimensional Interpolation */
-/*
- * Copyright 2000 - 2002 Graeme W. Gill
- * All rights reserved.
- *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
- */
 
 /*
- * This software provides support for high speed integer
- * multimensional interpolation.  
+ * Copyright 2000 - 2007 Graeme W. Gill
+ * All rights reserved.
+ *
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
  * This file provides the common definitions for IMDI, and
- * the data structures for communcating between the client
- * imdi object.
-*/
+ * in particular, the runtime conversion object. 
+ * Actual runtime details are kept opaque.
+ */
 
-/* Pixel representation description */
-
-/* This is a high level macro desciption of the pixel layout. */
-/* It can be expanded by adding a new enumeration, and then */
-/* implementing the code in imdi_gen to translate the enumeration */
-/* into the exact pixlayout structure details. */
-
-typedef enum {
-	invalid_rep = 0,
-	pixint8    = 1,		/* 8 Bits per value, pixel interleaved, no padding */
-	planeint8  = 2,		/* 8 bits per value, plane interleaved */
-	pixint16   = 3,		/* 16 Bits per value, pixel interleaved, no padding */
-	planeint16 = 4		/* 16 bits per value, plane interleaved */
-} imdi_pixrep;
+#include "imdi_utl.h"
+#include "imdi_arch.h"
+#include "imdi_gen.h"
 
 /* IMDI Object */
 struct _imdi {
-	void *impl;			/* Pointer to implementation information */
+	void *impl;			/* Opaque pointer to implementation information (type imdi_imp *) */
 
-	/* Do the interpolation */
-	void (*interp)(struct _imdi *s, void **inp, void **outp, unsigned int npixels);
-	void (*done)(struct _imdi *s);		/* Done with it */
+	/* Do the interpolation. */
+
+	/* Each pointer corresponds to the colors plane for plane interleaved. */
+	/* pointer[0] is used for pixel interleave. */
+	
+	/* Stride is only obeyed if the appropriate option flag was set */
+	/* in new_imdi, and is in pixel components, and effectively defaults */
+	/* to 1 for plane interleaved, and id and od (adjusted for skip) for pixel interleave, */
+	/* so warp is in components (NOT bytes) */
+	/* Output pointers and data must only reference non-skipped output channels. */
+	void (*interp)(struct _imdi *s, void **outp, int outst,		/* Ouput pointers and stride */
+	                                void **inp, int inst,		/* Input pointers and stride */
+	                                unsigned int npixels);		/* Number of pixels */
+
+	/* Return some information about the imdi */
+	void (*info)(struct _imdi *s, unsigned long *size, int *gres, int *sres);
+
+	/* Get the per output channel check flags (bit is indexed by callback channel) */
+	/* Flag gets set if output != checkv */
+	unsigned int (*get_check)(struct _imdi *s);
+	
+	/* Reset the output check flags (flag is not reset by interp) */
+	void (*reset_check)(struct _imdi *s);
+
+	/* Delete this object */
+	void (*del)(struct _imdi *s);
 
 }; typedef struct _imdi imdi;
 
-/* Create a new imdi */
+/* Create a new imdi. */
 /* Return NULL if request is not supported */
 imdi *new_imdi(
-	int id,			/* Number of input dimensions */
-	int od,			/* Number of output dimensions */
-	imdi_pixrep in,	/* Input pixel representation */
-	int in_signed,	/* Bit flag per channel, NZ if treat as signed */
-	imdi_pixrep out,/* Output pixel representation */
-	int out_signed,	/* Bit flag per channel, NZ if treat as signed */
-	int res,		/* Desired table resolution */
+	int id,				  /* Number of input dimensions */
+	int od,				  /* Number of output lookup dimensions */
+	                      /* Number of output channels written = od - no. of oopt skip flags */
+	imdi_pixrep in,		  /* Input pixel representation */
+	int in_signed,		  /* Bit flag per channel, NZ if treat as signed */
+	int *inm,			  /* Input raster channel to callback channel mapping, NULL for none. */
+	imdi_iprec iprec,	  /* Internal processing precision */
+	imdi_pixrep out,	  /* Output pixel representation */
+	int out_signed,		  /* Bit flag per channel, NZ if treat as signed */
+	int *outm,			  /* Output raster channel to callback channel mapping, NULL for none. */
+	                      /* Mapping must include skipped channels. */
+	int res,			  /* Desired table resolution */
+	imdi_ooptions oopt,   /* Output per channel options (by callback channel) */
+	unsigned int *checkv, /* Output channel check values (by callback channel, NULL == 0) */
+	imdi_options opt,	  /* Direction and stride options */
 
-	/* Callbacks to lookup the mdi table values */
-	double (*input_curve) (void *cntx, int ch, double in_val),
-	void   (*md_table)    (void *cntx, double *out_vals, double *in_vals),
-	double (*output_curve)(void *cntx, int ch, double in_val),
+	/* Callbacks to lookup the imdi table values. */
+	/* (Skip output channels are looked up) */
+	void (*input_curves) (void *cntx, double *out_vals, double *in_vals),
+	void (*md_table)     (void *cntx, double *out_vals, double *in_vals),
+	void (*output_curves)(void *cntx, double *out_vals, double *in_vals),
 	void *cntx		/* Context to callbacks */
 );
 

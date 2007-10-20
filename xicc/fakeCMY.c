@@ -9,11 +9,13 @@
  * Version: 1.00
  *
  * Copyright 2004 Graeme W. Gill
- * Please refer to Licence.txt file for details.
+ * Please refer to License.txt file for details.
  */
 
 /* TTBD:
  *
+ *	Add a flag to create RGB instead, by simply inverting the CMY values
+ *	when writing to the .ti3 file.
  */
 
 #include <stdio.h>
@@ -37,14 +39,14 @@ void error(char *fmt, ...), warning(char *fmt, ...);
 
 void usage(char *diag) {
 	fprintf(stderr,"Create a fake CMY data file from a CMYK profile\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: fakeCMY [option] profile.icm fake.ti3\n");
 	if (diag != NULL)
 		fprintf(stderr,"Diagnostic: %s\n",diag);
 	fprintf(stderr," -v          verbose\n");
 	fprintf(stderr," -r res      set surface point resolution (default 3)\n");
-	fprintf(stderr," -l tlimit    set total ink limit, 0 - 400%% (default none)\n");
-	fprintf(stderr," -L klimit    set black ink limit, 0 - 100%% (default none)\n");
+	fprintf(stderr," -l tlimit    set total ink limit, 0 - 400%% (estimate by default)\n");
+	fprintf(stderr," -L klimit    set black ink limit, 0 - 100%% (estimate by default)\n");
 	exit(1);
 }
 
@@ -110,8 +112,8 @@ main(
 ) {
 	int fa,nfa;				/* argument we're looking at */
 	int verb = 0;
-	int tlimit = -1;		/* Total ink limit as a % */
-	int klimit = -1;		/* Black ink limit as a % */
+	double tlimit = -1.0;	/* Total ink limit */
+	double klimit = -1.0;	/* Black ink limit */
 	int tres = 3;			/* Resolution of suface grid */
 	int gres = tres+2;		/* Resolution of grey points */
 	char in_name[100];
@@ -168,13 +170,13 @@ main(
 			else if (argv[fa][1] == 'l') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -l");
-				tlimit = atoi(na);
+				tlimit = atoi(na)/100.0;
 			}
 
 			else if (argv[fa][1] == 'L') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -L");
-				klimit = atoi(na);
+				klimit = atoi(na)/100.0;
 			}
 
 			/* Resolution */
@@ -216,19 +218,20 @@ main(
 		error ("Creation of xicc failed");
 	
 	/* Setup ink limit */
-	if (tlimit >= 0)
-		ink.tlimit = tlimit/100.0;	/* Set a total ink limit */
-	else
-		ink.tlimit = -1.0;			/* Don't use a limit */
 
-	if (klimit >= 0)
-		ink.klimit = klimit/100.0;	/* Set a black ink limit */
-	else
-		ink.klimit = -1.0;			/* Don't use a limit */
-	
+	/* Set the default ink limits if not set on command line */
+	icxDefaultLimits(rd_icco, &ink.tlimit, tlimit, &ink.klimit, klimit);
+
+	if (verb) {
+		if (ink.tlimit >= 0.0)
+			printf("Total ink limit assumed is %3.0f%%\n",100.0 * ink.tlimit);
+		if (ink.klimit >= 0.0)
+			printf("Black ink limit assumed is %3.0f%%\n",100.0 * ink.klimit);
+	}
+
 	ink.c.Ksmth = ICXINKDEFSMTH;	/* Default smoothing */
 	ink.c.Kstle = 0.5;		/* Min K at white end */
-	ink.c.Kstpo = 0.5;		/* Start of transition is at white 	
+	ink.c.Kstpo = 0.5;		/* Start of transition is at white */ 	
 	ink.c.Kenle = 0.5;		/* Max K at black end */
 	ink.c.Kenpo = 0.5;		/* End transition at black */
 	ink.c.Kshap = 1.0;		/* Linear transition */
@@ -305,13 +308,7 @@ main(
 	for (i = 0; i < fxno; i++) {
 		if ((rv = luo->lookup(luo, fxlist[i].v, fxlist[i].p)) > 1)
 			error ("%d, %s",rd_icco->errc,rd_icco->err);
-printf("~1 initial lookup %f %f %f -> %f %f %f\n",
-fxlist[i].p[0],
-fxlist[i].p[1],
-fxlist[i].p[2],
-fxlist[i].v[0],
-fxlist[i].v[1],
-fxlist[i].v[2]);
+//printf("~1 initial lookup %f %f %f -> %f %f %f\n", fxlist[i].p[0], fxlist[i].p[1], fxlist[i].p[2], fxlist[i].v[0], fxlist[i].v[1], fxlist[i].v[2]);
 	}
 
 	/* Figure out the general scale at the black end */
@@ -360,12 +357,12 @@ fxlist[i].v[2]);
 				double xyz[3];			/* Temporary */
 				double lab[3];			/* Temporary */
 
-printf("~1 scaled neutral L value from %f",fxlist[i].v[0]);
+//printf("~1 scaled neutral L value from %f",fxlist[i].v[0]);
 
 				/* Scale L value from K to CMYK black */
 				fxlist[i].v[0] = lab_wt[0] + (fxlist[i].v[0] - lab_wt[0]) *
 					                         (cmyk_bk[0] - lab_wt[0])/(k_bk[0] - lab_wt[0]);
-printf(" to %f\n",fxlist[i].v[0]);
+//printf(" to %f\n",fxlist[i].v[0]);
 
 #ifdef NEVER
 				/* Make a & b values same as CMYK black */
@@ -388,7 +385,7 @@ printf(" to %f\n",fxlist[i].v[0]);
 				icmMulBy3x3(xyz, toAbs, xyz);
 				icmXYZ2Lab(&icmD50, lab, xyz);
 
-printf("~1 corrected neutral value from Lab %f %f %f to %f %f %f\n", fxlist[i].v[0], fxlist[i].v[1], fxlist[i].v[2], lab[0], lab[1], lab[2]);
+//printf("~1 corrected neutral value from Lab %f %f %f to %f %f %f\n", fxlist[i].v[0], fxlist[i].v[1], fxlist[i].v[2], lab[0], lab[1], lab[2]);
 
 				for (j = 0; j < 3; j++)
 					fxlist[i].v[j] = lab[j];
@@ -445,12 +442,12 @@ printf("~1 corrected neutral value from Lab %f %f %f to %f %f %f\n", fxlist[i].v
 		ocg->add_kword(ocg, 0, "COLOR_REP","CMY_LAB", NULL);
 	
 		if (tlimit >= 0) {
-			sprintf(buf,"%d.0",tlimit);
+			sprintf(buf,"%.0f",tlimit);
 			ocg->add_kword(ocg, 0, "TOTAL_INK_LIMIT",buf, NULL);
 		}
 
 		if (klimit >= 0) {
-			sprintf(buf,"%d.0",klimit);
+			sprintf(buf,"%.0f",klimit);
 			ocg->add_kword(ocg, 0, "BLACK_INK_LIMIT",buf, NULL);
 		}
 

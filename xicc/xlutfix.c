@@ -8,8 +8,8 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  */
 
@@ -353,6 +353,7 @@ void (*outfunc)(void *cbctx, double *out, double *in)
 
 	if (outsig != icSigCmykData) {	/* Don'y know how/if to fix this */
 		rv = p->set_tables(p,
+			ICM_CLUT_SET_APXLS,
 			(void *)&xcs,
 			insig, outsig,
 			xif_set_input,
@@ -524,6 +525,7 @@ printf("~1 doing the first pass\n");
 	/* First pass */
 	xcs.dofix = 1;
 	rv = p->set_tables(p,
+		ICM_CLUT_SET_APXLS,
 		(void *)&xcs,
 		insig, outsig,
 		xif_set_input,
@@ -577,6 +579,7 @@ printf("~1 updatding the icc\n");
 	/* Second pass */
 	xcs.dofix = 2;
 	rv = p->set_tables(p,
+		ICM_CLUT_SET_APXLS,
 		(void *)&xcs,
 		insig, outsig,
 		xif_set_input,
@@ -784,10 +787,10 @@ printf("~1 ier = %f, wpcsd = %f, Dev = %f %f %f %f\n", ier, wpcsd, aout[0], aout
 		}
 
 		if (markcell) {
-			int fo[MAX_CHAN], fe;	/* region counter */
+
+#ifndef WIDEFILTER
 			/* Mark the whole cube around this base point */
 			tcount++;
-#ifndef WIDEFILTER
 			/* Grid points that make up cell */
 			for (m = 0; m < p->nhi; m++) {
 				float *fp = gp + p->fhi[m];
@@ -800,7 +803,10 @@ printf("~1 ier = %f, wpcsd = %f, Dev = %f %f %f %f\n", ier, wpcsd, aout[0], aout
 					p->cmax[e] = coa[e] + 2;
 			}
 #else
+			int fo[MAX_CHAN], fe;	/* region counter */
 
+			/* Mark the whole cube around this base point */
+			tcount++;
 			/* Grid points one row beyond cell */
 			for (fe = 0; fe < p->din; fe++)
 				fo[fe] = -1;		/* Init the neighborhood counter */
@@ -926,7 +932,7 @@ static int filter_grid(xifs *p, int tharder) {
 			/* Compute average value, and save it */
 			fp = gp + p->oauxvv;
 			for (f = 0; f < p->daux; f++)
-				fp[f] = faux[f] / nfv;
+				fp[f] = (float)(faux[f] / nfv);
 
 		}
 
@@ -978,7 +984,7 @@ static int filter_grid(xifs *p, int tharder) {
 				}
 				ov = dp[f];					/* Old aux value */
 				if (fabs(ov - v) > 0.001) {
-					dp[f] = v;
+					dp[f] = (float)v;
 					ud = 1;					/* Worth updating it */
 				}
 			}
@@ -1187,9 +1193,7 @@ p->clutipcsfunc(p->cbctx, start, NULL, auxst, dev);
 	for (i = 0; i < p->dout; i++)
 		ss[i] = 0.3;
 
-	rv = powell(p->dout, dev, ss, 0.001, 1000, minfunc, p);
-
-	if (rv < 0.0) {
+	if (powell(&rv, p->dout, dev, ss, 0.001, 1000, minfunc, p) != 0) {
 		return 1;
 	}
 

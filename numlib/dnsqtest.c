@@ -38,7 +38,7 @@ double expect[9] = {
        -0.5960342E+00,
        -0.4164121E+00 };
 
-main(void)
+int main(void)
 {
 	int n = 9 /* 9 */;			/* Problem vector size */
 	double x[9];		/* Function input values */

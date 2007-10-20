@@ -8,15 +8,33 @@
  * Author: Graeme W. Gill
  * Date:   13/7/2005
  *
- * Copyright 2005 Graeme W. Gill
+ * Copyright 2005 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * Derived from DTP41.h
  *
  * This is an alternative driver to spm/gretag.
+ */
+
+/* 
+   If you make use of the instrument driver code here, please note
+   that it is the author(s) of the code who take responsibility
+   for its operation. Any problems or queries regarding driving
+   instruments with the Argyll drivers, should be directed to
+   the Argyll's author(s), and not to any other party.
+
+   If there is some instrument feature or function that you
+   would like supported here, it is recommended that you
+   contact Argyll's author(s) first, rather than attempt to
+   modify the software yourself, if you don't have firm knowledge
+   of the instrument communicate protocols. There is a chance
+   that an instrument could be damaged by an incautious command
+   sequence, and the instrument companies generally cannot and
+   will not support developers that they have not qualified
+   and agreed to support.
  */
 
 #include <stdio.h>
@@ -24,32 +42,20 @@
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
+#include "copyright.h"
+#include "config.h"
 #include "xspect.h"
-#include "serio.h"
+#include "insttypes.h"
+#include "icoms.h"
 #include "ss.h"
 
 #undef DEBUG
 
+#define HWFC	/* Hardware flow control */
+#undef XXFC		/* Xon/Xoff flow control */
+
 #include <stdarg.h>
-void error(char *fmt, ...), warning(char *fmt, ...), verbose(int level, char *fmt, ...);
 
-
-/* Convert control chars to ^[A-Z] notation in a string */
-static char *
-fix(char *s) {
-	static char buf[3 * SS_MAX_WR_SIZE];
-	char *d;
-	for(d = buf; ;) {
-		if (*s < ' ' && *s > '\000') {
-			*d++ = '^';
-			*d++ = *s++ + '@';
-		} else
-		*d++ = *s++;
-		if (s[-1] == '\000')
-			break;
-	}
-	return buf;
-}
 
 /* Some tables to convert between emums and text descriptions */
 
@@ -59,7 +65,8 @@ char* filter_desc[] = {
 	"No Filter (U)",
 	"Polarizing Filter",
 	"D65 Filter",
-	"(Illegal)",
+	"(Unknown Filter)",
+	"UV cut Filter",
 	"Custon Filter"
 };
 
@@ -67,14 +74,31 @@ char* filter_desc[] = {
 /* be done at the right time. */
 static void inc_calcount(ss *p) {
 	p->calcount++;
-	if (((p->mode & inst_mode_illum_mask) == inst_mode_reflection && p->calcount >= 50 ) ||
-		((p->mode & inst_mode_illum_mask) == inst_mode_transmission
+	if ((p->mode & inst_mode_illum_mask) == inst_mode_reflection && p->calcount >= 50) {
+		p->need_w_cal = 1;
+
+	} else if (((p->mode & inst_mode_illum_mask) == inst_mode_transmission
 		 && (p->mode & inst_mode_sub_mask) != inst_mode_spot		/* ??? */
 	     && p->calcount >= 10)) {
-		p->calcount = 0;
-		p->need_cal = 1;
+		p->need_t_cal = 1;
 	}
 }
+
+#if defined(XXFC) || defined(HWFC)
+# if defined(HWFC)
+#  define FC_SERIAL fc_Hardware
+#  define FC_INST1 ss_ctt_ProtokolWithHardwareHS
+#  define FC_INST2 ss_hst_Hardware
+# else
+#  define FC_SERIAL fc_XonXOff
+#  define FC_INST1 ss_ctt_ProtokolWithXonXoff
+#  define FC_INST2 ss_hst_XonXOff
+# endif
+#else
+# define FC_SERIAL fc_none
+# define FC_INST1 ss_ctt_ProtokolWithoutXonXoff
+# define FC_INST2 ss_hst_None
+#endif
 
 /* Establish communications with a Spectrolino/Spectroscan */
 /* Use the baud rate given, and timeout in to secs */
@@ -93,9 +117,8 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 	ss_ctt sobrc[7]  = { ss_ctt_SetBaud9600, ss_ctt_SetBaud19200, ss_ctt_SetBaud57600,
 	                     ss_ctt_SetBaud2400, ss_ctt_SetBaud1200,  ss_ctt_SetBaud600,
 	                     ss_ctt_SetBaud300 };
-	int bi;
 	long etime;
-	int i, rv;
+	int ci, bi, i;
 	inst_code ev = inst_ok;
 
 #ifdef DEBUG
@@ -103,7 +126,7 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 #endif
 
 	if (p->debug)
-		p->sio->debug = p->debug;	/* Turn on debugging */
+		p->icom->debug = p->debug;	/* Turn on debugging */
 
 	/* Figure Spectrolino baud rate being asked for */
 	for (bi = 0; bi < 7; bi++) {
@@ -113,6 +136,14 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 	if (bi >= 7)
 		bi = 0;
 
+	/* Figure current icoms baud rate */
+	for (ci = 0; ci < 7; ci++) {
+		if (brt[ci] == p->icom->baud)
+			break;
+	}
+	if (ci >= 7)
+		ci = bi;	
+
 	/* The tick to give up on */
 	etime = clock() + (long)(CLOCKS_PER_SEC * tout + 0.5);
 
@@ -120,11 +151,11 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 	while (clock() < etime) {
 
 		/* Until we time out, find the correct baud rate */
-		for (i = 0; clock() < etime;) {
+		for (i = ci; clock() < etime;) {
 #ifdef DEBUG
 			printf("Trying baud rate %d\n",i);
 #endif
-			p->sio->set_port(p->sio, NULL, port, brt[i], parity_none, stop_1, length_8);
+			p->icom->set_ser_port(p->icom, port, fc_none, brt[i], parity_none, stop_1, length_8);
 
 			/* Try a SpectroScan Output Status */
 			ss_init_send(p);
@@ -132,8 +163,13 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 			ss_command(p, SH_TMO);
 			
 			if (ss_sub_1(p) == ss_AnsPFX				/* Got comms */
-			 || p->snerr == ss_et_UserAbort)			/* User aborted */
+			 || p->snerr == ss_et_UserAbort				/* Or user aborted */
+			 || p->snerr == ss_et_UserTerm				/* Or user terminated */
+			 || p->snerr == ss_et_UserTrig				/* Or user trigger */
+			 || p->snerr == ss_et_UserCmnd) {			/* Or user command */
+				p->itype = instSpectroScan;				/* Preliminary */
 				break;
+			}
 
 			/* Try a Spectrolino Parameter Request */
 			ss_init_send(p);
@@ -141,8 +177,14 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 			ss_command(p, SH_TMO);
 			
 			if (ss_sub_1(p) == ss_ParameterAnswer		/* Got comms */
-			 || p->snerr == ss_et_UserAbort)			/* User aborted */
+			 || p->snerr == ss_et_UserAbort				/* Or user aborted */
+			 || p->snerr == ss_et_UserTerm				/* Or user terminated */
+			 || p->snerr == ss_et_UserTrig				/* Or user trigger */
+			 || p->snerr == ss_et_UserCmnd) {			/* Or user command */
+			 	p->itype = instSpectrolino;
 				break;
+			}
+			
 
 			if (++i >= 7)
 				i = 0;
@@ -150,6 +192,12 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 
 		if (p->snerr == ss_et_UserAbort)
 			return inst_user_abort;
+		if (p->snerr == ss_et_UserTerm)
+			return inst_user_term;
+		if (p->snerr == ss_et_UserTrig)
+			return inst_user_trig;
+		if (p->snerr == ss_et_UserCmnd)
+			return inst_user_cmnd;
 
 		break;			/* Got coms */
 	}
@@ -162,9 +210,40 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 	printf("Got basic communications\n");
 #endif
 
-	p->itype = instUnknown;
+	/* Finalise the communications */
+	if (p->itype == instSpectrolino) {
 
-	/* See if we have a Spectroscan or SpectroscanT */
+		if ((ev = so_do_MeasControlDownload(p, FC_INST1)) != inst_ok)
+			return ev;
+
+		/* Do baudrate change without checking results */
+		so_do_MeasControlDownload(p, sobrc[bi]);
+		p->icom->set_ser_port(p->icom, port, FC_SERIAL, brt[bi], parity_none, stop_1, length_8);
+
+	} else {	/* Spectroscan */
+
+		ss_do_SetDeviceOnline(p);	/* Put the device online */
+
+		/* Make sure other communication parameters are right */
+		if ((ev = ss_do_ChangeHandshake(p, FC_INST2)) != inst_ok)
+			return ev;
+
+		/* Do baudrate change without checking results */
+		ss_do_ChangeBaudRate(p, ssbrc[bi]); 
+		p->icom->set_ser_port(p->icom, port, FC_SERIAL, brt[bi], parity_none, stop_1, length_8);
+
+		/* Make sure the Spectrolino is talking to us. */
+		if ((ev = ss_do_ScanSpectrolino(p)) != inst_ok) {
+			return ev;
+		}
+	}
+
+#ifdef DEBUG
+	printf("Establish communications\n");
+#endif
+
+	/* See if we have a Spectroscan or SpectroscanT, and get other details */
+	p->itype = instUnknown;
 	{
 		char devn[19];
 
@@ -207,42 +286,6 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 		}
 	}
 	
-#ifdef DEBUG
-	printf("Trying to change baud rate etc.\n");
-#endif
-	if (p->itype == instSpectrolino) {
-
-		if ((ev = so_do_MeasControlDownload(p, ss_ctt_ProtokolWithoutXonXoff)) != inst_ok)
-			return ev;
-
-		if (bi != i) { 	/* Set the requested baud rate now. */
-			/* Do baudrate change without checking results */
-			so_do_MeasControlDownload(p, sobrc[bi]);
-			p->sio->set_port(p->sio, NULL, port, brt[bi], parity_none, stop_1, length_8);
-		}
-	} else {	/* Spectroscan */
-
-		ss_do_SetDeviceOnline(p);	/* Put the device online */
-
-		/* Make sure other communication parameters are right */
-		if ((ev = ss_do_ChangeHandshake(p, ss_hst_None)) != inst_ok)
-			return ev;
-
-		if (bi != i) { 	/* Set the requested baud rate now. */
-			/* Do baudrate change without checking results */
-			ss_do_ChangeBaudRate(p, ssbrc[bi]); 
-			p->sio->set_port(p->sio, NULL, port, brt[bi], parity_none, stop_1, length_8);
-		}
-
-		/* Make sure the Spectrolino is talking to us. */
-		if ((ev = ss_do_ScanSpectrolino(p)) != inst_ok) {
-			return ev;
-		}
-	}
-
-#ifdef DEBUG
-	printf("Establish communications\n");
-#endif
 #ifdef EMSST
 	printf("DEBUG: Emulating SpectroScanT with SpectroScan!\n");
 #endif
@@ -299,12 +342,11 @@ ss_init_inst(inst *pp) {
 			if ((rv = ss_do_OutputSoftwareVersion(p, sv)) != inst_ok)
 				return rv;
 
-			sprintf(buf, "Device:     %s\n"
-			             "Serial No:  %u\n"
-			             "Part No:    %s\n"
-			             "Prod Date:  %d/%d/%d\n"
-			             "SW Version: %s\n", dn, sn, pn, dp, mp, yp, sv);
-			p->user((inst *)p, inst_verb, 1, 0, buf);
+			printf(" Device:     %s\n"
+			       " Serial No:  %u\n"
+			       " Part No:    %s\n"
+			       " Prod Date:  %d/%d/%d\n"
+			       " SW Version: %s\n", dn, sn, pn, dp, mp, yp, sv);
 		}
 	}
 	/* Do Spectrolino stuff */
@@ -335,12 +377,11 @@ ss_init_inst(inst *pp) {
 	                           &tt, &fswl, &nosw, &dsw)) != inst_ok)
 			return rv;
 
-		sprintf(buf, "Device:     %s\n"
-		             "Serial No:  %u\n"
-		             "Part No:    %s\n"
-		             "Prod Date:  %d/%d/%d\n"
-		             "SW Version: %s\n", dn, sn, pn, dp, mp, yp, sv);
-		p->user((inst *)p, inst_verb, 1, 0, buf);
+		sprintf("Device:     %s\n"
+		        "Serial No:  %u\n"
+		        "Part No:    %s\n"
+		        "Prod Date:  %d/%d/%d\n"
+		        "SW Version: %s\n", dn, sn, pn, dp, mp, yp, sv);
 	}
 
 	/* Set the default colorimetric parameters */
@@ -348,27 +389,52 @@ ss_init_inst(inst *pp) {
 		return rv;
 
 	/* Set the capabilities mask */
-	p->cap = ( inst_ref_spot     |
-	           inst_emis_spot    |
-	           inst_emis_disp    |
-	           inst_emis_illum   |
-	           inst_colorimeter  |
-	           inst_spectral     |
-	           inst_calib 
-	         );
+	p->cap = inst_ref_spot
+	       |  inst_emis_spot
+	       |  inst_emis_disp
+	       |  inst_emis_illum
+	       |  inst_colorimeter
+	       |  inst_spectral
+	       ;
 
-	if (p->itype == instSpectrolino)
+	if (p->itype == instSpectrolino) {
 		p->cap |= inst_trans_spot;		/* Support this manually using a light table */
+	}
 
 	if (p->itype == instSpectroScan
 	 || p->itype == instSpectroScanT)	/* Only in reflective mode */
-		p->cap |= (inst_ref_xy       |
-	               inst_xy_holdrel   |
-	               inst_xy_locate    |
-	               inst_xy_position);
+		p->cap |= inst_ref_xy;
 
-	if (p->itype == instSpectroScanT)
+	if (p->itype == instSpectroScanT) {
 		p->cap |= inst_trans_spot;
+	}
+
+	/* Set the capabilities mask 2 */
+	p->cap2 = inst2_cal_ref_white
+	        | inst2_prog_trig
+	        | inst2_keyb_trig
+	        | inst2_keyb_switch_trig
+	        ;
+
+	if (p->itype == instSpectrolino) {
+		p->cap2 |= inst2_cal_trans_white;	/* Support this manually using a light table */
+	}
+
+	if (p->itype == instSpectroScan
+	 || p->itype == instSpectroScanT)	/* Only in reflective mode */
+		p->cap2 |= inst2_xy_holdrel
+	            |  inst2_xy_locate
+	            |  inst2_xy_position
+	            ;
+
+	if (p->itype == instSpectroScanT) {
+		p->cap2 |= inst2_cal_trans_white;
+	}
+
+	/* Deactivate measurement switch */
+	if ((rv = so_do_TargetOnOffStDownload(p,ss_toost_Deactivated)) != inst_ok)
+		return rv;
+	p->trig = inst_opt_trig_keyb;
 
 	if (rv == inst_ok)
 		p->inited = 1;
@@ -384,7 +450,8 @@ struct _inst *pp) {
 	ss *p = (ss *)pp;
 	inst_code rv = inst_ok;
 
-	rv = ss_do_ReleasePaper(p);
+	if (p->cap2 & inst2_xy_holdrel)
+		rv = ss_do_ReleasePaper(p);
 	return rv;
 }
 
@@ -396,7 +463,8 @@ struct _inst *pp) {
 	ss *p = (ss *)pp;
 	inst_code rv = inst_ok;
 
-	rv = ss_do_HoldPaper(p);
+	if (p->cap2 & inst2_xy_holdrel)
+		rv = ss_do_HoldPaper(p);
 	return rv;
 }
 
@@ -408,11 +476,14 @@ struct _inst *pp) {
 	ss *p = (ss *)pp;
 	inst_code rv = inst_ok;
 
-	rv = ss_do_SetDeviceOffline(p);
+	if (p->cap2 & inst2_xy_locate) {
+		rv = ss_do_SetDeviceOffline(p);
+		p->offline = 1;
+	}
 	return rv;
 }
 
-/* For an xy instrument, position the reeading point */
+/* For an xy instrument, position the reading point */
 /* Return the inst error code */
 static inst_code ss_xy_position(
 struct _inst *pp,
@@ -422,8 +493,9 @@ double x, double y
 	ss *p = (ss *)pp;
 	inst_code rv = inst_ok;
 
-	if ((rv = ss_do_MoveAbsolut(p, measure ? ss_rt_SensorRef : ss_rt_SightRef, x, y)) != inst_ok)
-		return rv;
+	if (p->cap2 & inst2_xy_position)
+		if ((rv = ss_do_MoveAbsolut(p, measure ? ss_rt_SensorRef : ss_rt_SightRef, x, y)) != inst_ok)
+			return rv;
 
 	return rv;
 }
@@ -439,8 +511,9 @@ double *x, double *y) {
 	ss_rt rr;
 	ss_zkt zk;
 
-	if ((rv = ss_do_OutputActualPosition(p, ss_rt_SightRef, &rr, x, y, &zk)) != inst_ok)
-		return rv;
+	if (p->cap2 & inst2_xy_position)
+		if ((rv = ss_do_OutputActualPosition(p, ss_rt_SightRef, &rr, x, y, &zk)) != inst_ok)
+			return rv;
 
 	return rv;
 }
@@ -453,7 +526,10 @@ struct _inst *pp) {
 	ss *p = (ss *)pp;
 	inst_code rv = inst_ok;
 
-	rv = ss_do_SetDeviceOnline(p);
+	if (p->cap2 & inst2_xy_position) {
+		rv = ss_do_SetDeviceOnline(p);
+		p->offline = 0;
+	}
 	return rv;
 }
 
@@ -465,15 +541,17 @@ struct _inst *pp) {
 	ss *p = (ss *)pp;
 	inst_code rv = inst_ok;
 
-	ss_do_SetDeviceOnline(p);	/* Put the device online */
-	ss_do_MoveUp(p);			/* Raise the sensor */
-	ss_do_ReleasePaper(p);		/* Release the paper */
-	ss_do_MoveHome(p);			/* Move to the home position */
+	if (p->cap2 & inst2_xy_position) {
+		ss_do_SetDeviceOnline(p);	/* Put the device online */
+		ss_do_MoveUp(p);			/* Raise the sensor */
+		ss_do_ReleasePaper(p);		/* Release the paper */
+		ss_do_MoveHome(p);			/* Move to the home position */
+	}
 
 	return rv;
 }
 
-static inst_code ss_calibrate_imp(ss *p, int cal_no, int recal);
+static inst_code ss_calibrate_imp(ss *p, inst_cal_type calt, inst_cal_cond *calc, char id[CALIDLEN]);
 
 /* Read a sheet full of patches using xy mode */
 /* Return the inst error code */
@@ -493,9 +571,6 @@ ipatch *vals) { 		/* Pointer to array of values */
 	ss *p = (ss *)pp;
 	inst_code rv = inst_ok;
 	int pass, step, patch;
-	inst_code err;
-	unsigned char execerror;
-	char buf[255];
 	int tries, tc;			/* Total read tries */
 	int fstep = 0;			/* NZ if step is fast & quiet direction */
 	int cstep;				/* step value closest to calibration tile */
@@ -547,12 +622,19 @@ ipatch *vals) { 		/* Pointer to array of values */
 				iy += aay;
 			}
 
-			/* Do calibration if it is needed, */
-			/* when closest to white tile. */
+			/* Do calibration if it is needed, when closest to white tile. */
 			if ((fstep ? astep == cstep : apass == cstep)
-			    && p->need_cal && p->noutocalib == 0) {
-				if ((rv = ss_calibrate_imp(p, 0, 1)) != inst_ok)
-					return rv;
+			    && (p->need_w_cal || p->need_t_cal)
+			    && p->noautocalib == 0) {
+				inst_cal_cond calc = inst_calc_none;
+				char id[CALIDLEN];
+
+				/* We expect this to be automatic, but handle as if it mightn't be */
+				if ((rv = ss_calibrate_imp(p, inst_calt_all, &calc, id)) != inst_ok) {
+					if (rv == inst_cal_setup)
+						return inst_needs_cal;	/* Not automatic, needs a manual setup */
+					return rv;		/* Error */
+				}
 			}
 
 			{
@@ -563,20 +645,17 @@ ipatch *vals) { 		/* Pointer to array of values */
 				vals[patch].XYZ_v = 0;
 				vals[patch].aXYZ_v = 0;
 				vals[patch].Lab_v = 0;
-				vals[patch].spec_n = 0;
+				vals[patch].sp.spec_n = 0;
 			
 				/* move and measure gives us spectrum data anyway */
 				if ((rv = ss_do_MoveAndMeasure(p, ix, iy, spec, &refvalid)) != inst_ok)
 					return rv;
 
-				vals[patch].spec_n = 36;
-				vals[patch].spec_wl_short = 380;
-				vals[patch].spec_wl_long = 730;
-				for (i = 0; i < INSTR_MAX_BANDS; i++)
-					if (i < vals[patch].spec_n)
-						vals[patch].spec[i] = 100.0 * (double)spec[i];
-					else
-						vals[patch].spec[i] = -1.0;
+				vals[patch].sp.spec_n = 36;
+				vals[patch].sp.spec_wl_short = 380;
+				vals[patch].sp.spec_wl_long = 730;
+				for (i = 0; i < vals[patch].sp.spec_n; i++)
+					vals[patch].sp.spec[i] = 100.0 * (double)spec[i];
 
 				/* Get the XYZ */
 				{
@@ -631,73 +710,74 @@ double pwid,		/* Patch length in mm (For DTP41) */
 double gwid,		/* Gap length in mm (For DTP41) */
 double twid,		/* Trailer length in mm (For DTP41T) */
 ipatch *vals) {		/* Pointer to array of instrument patch values */
-	ss *p = (ss *)pp;
+//	ss *p = (ss *)pp;
 	inst_code rv = inst_unsupported;
 	return rv;
 }
 
 
-/* Observer weightings for Spectrolino spectrum */
-/* 2 degree/10 degree, X, Y, Z */
+/* Observer weightings for Spectrolino spectrum, 380 .. 730 nm in 10nm steps */
+/* 1931 2 degree/10 degree, X, Y, Z */
+/* Derived from the 1mm CIE data by integrating over +/- 5nm */
 double obsv[2][3][36] = {
 	{
 		{
-			0.001446366705, 0.004669560650, 0.015038215600, 0.047557971000, 0.140987051500,
-			0.276828785000, 0.342502310000, 0.334490535000, 0.287317520000, 0.195959900000,
-			0.098192668500, 0.034533608000, 0.007030228050, 0.013030656650, 0.066802270500,
-			0.166799475500, 0.291746645000, 0.434847990000, 0.594927790000, 0.761146250000,
-			0.912975800000, 1.021235340000, 1.055716880000, 0.996420100000, 0.848984685000,
-			0.644757190000, 0.449904640000, 0.287097725000, 0.167828905000, 0.090282337500,
-			0.047660644500, 0.023668598500, 0.011722312400, 0.005977020750, 0.003003636650,
-			0.001489205265
+			0.001393497640, 0.004448031900, 0.014518206300, 0.045720800000, 0.138923633000,
+			0.279645970000, 0.344841960000, 0.335387990000, 0.288918940000, 0.196038970000,
+			0.097089264500, 0.033433134500, 0.006117900200, 0.011512466000, 0.065321232000,
+			0.166161125000, 0.291199155000, 0.434290495000, 0.594727005000, 0.761531500000,
+			0.914317000000, 1.023460340000, 1.058604000000, 0.999075000000, 0.851037990000,
+			0.644076660000, 0.449047000000, 0.285682340000, 0.166610680000, 0.089139475000,
+			0.047203532000, 0.023272100000, 0.011556993000, 0.005897781550, 0.002960988050,
+			0.001468472565
 		},
 		{
-			0.000041511229, 0.000132336684, 0.000417218810, 0.001328120585, 0.004421233900,
-			0.011872663850, 0.023193248000, 0.038522636000, 0.060559925000, 0.092293997500,
-			0.140178090000, 0.211441485000, 0.328653775000, 0.505678185000, 0.704742665000,
-			0.857418505000, 0.950276520000, 0.992144120000, 0.991708975000, 0.949110500000,
-			0.867608170000, 0.756175865000, 0.630904045000, 0.503568860000, 0.381089945000,
-			0.267281115000, 0.176511260000, 0.108674442500, 0.062212162000, 0.033089676500,
-			0.017336597000, 0.008564816100, 0.004233960250, 0.002158411500, 0.001084668205,
-			0.000537779300
+			0.000040014416, 0.000126320071, 0.000402526680, 0.001272963400, 0.004268400000,
+			0.011759799700, 0.023092867000, 0.038306468000, 0.060303866000, 0.091762739000,
+			0.139594730000, 0.210065540000, 0.326613130000, 0.504776000000, 0.706552500000,
+			0.859214005000, 0.951809665000, 0.993340440000, 0.993019710000, 0.950281660000,
+			0.868557660000, 0.756550000000, 0.630964340000, 0.503366340000, 0.380962000000,
+			0.266444660000, 0.175871340000, 0.108002605000, 0.061709066000, 0.032657466000,
+			0.017165009000, 0.008419183400, 0.004173919800, 0.002129796800, 0.001069267000,
+			0.000530292340
 		},
 		{
-			0.006818967200, 0.022079022300, 0.071358445500, 0.226964156000, 0.678939510000,
-			1.354105715000, 1.721483290000, 1.766641960000, 1.649692095000, 1.285482130000,
-			0.822264325000, 0.476534375000, 0.278198295000, 0.160407804000, 0.081826455500,
-			0.042977953000, 0.021066016500, 0.009229350450, 0.004104619900, 0.002201453250,
-			0.001622560100, 0.001153694700, 0.000797717335, 0.000383841335, 0.000179449332,
-			0.000058813330, 0.000020030666, 0.000002926667, 0.000000000000, 0.000000000000,
+			0.006568973000, 0.021026087500, 0.068865635000, 0.218090190000, 0.668415545000,
+			1.366703205000, 1.731816230000, 1.769890130000, 1.658588340000, 1.288104470000,
+			0.818359800000, 0.471791600000, 0.275824200000, 0.159485840000, 0.080436864500,
+			0.042599734500, 0.020750932000, 0.009028633450, 0.004015999900, 0.002160166550,
+			0.001629500100, 0.001143333400, 0.000804400000, 0.000372600000, 0.000180700000,
+			0.000054966665, 0.000019933332, 0.000002266667, 0.000000000000, 0.000000000000,
 			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
 			0.000000000000
 		}
 	},
 	{
 		{
-			0.000272700780, 0.003297449000, 0.022707435000, 0.088927850000, 0.203483000000,
-			0.312590900000, 0.377132950000, 0.367243000000, 0.300031250000, 0.194373900000,
-			0.084108500000, 0.020172350000, 0.007532100000, 0.040903550000, 0.120323550000,
-			0.237736250000, 0.377452300000, 0.532077950000, 0.705061800000, 0.875160750000,
-			1.013217150000, 1.110392000000, 1.116849000000, 1.024365500000, 0.854241200000,
-			0.646132200000, 0.436043700000, 0.271629400000, 0.155857600000, 0.083471760000,
-			0.042258530000, 0.020691880000, 0.009953238000, 0.004740058000, 0.002262416000,
-			0.001086550000
+			0.000221161200, 0.002892312000, 0.021223545000, 0.087243800000, 0.203891450000,
+			0.313689500000, 0.379737550000, 0.368800750000, 0.301126300000, 0.194835400000,
+			0.082524250000, 0.018557800000, 0.006085000000, 0.039474500000, 0.119180250000,
+			0.237142500000, 0.377122750000, 0.531279950000, 0.705108350000, 0.876453800000,
+			1.013894200000, 1.113552000000, 1.119829000000, 1.026837000000, 0.855199200000,
+			0.646495700000, 0.434312700000, 0.270230400000, 0.154505300000, 0.082548760000,
+			0.041674230000, 0.020379080000, 0.009795728000, 0.004661858000, 0.002225776000,
+			0.001069074500
 		},
 		{
-			0.000029496310, 0.000351341000, 0.002371945000, 0.009177750000, 0.021731100000,
-			0.039180250000, 0.062144850000, 0.090069850000, 0.129007450000, 0.185882000000,
-			0.256457250000, 0.343273100000, 0.462339900000, 0.607733100000, 0.757658700000,
-			0.874167100000, 0.956879800000, 0.991016600000, 0.993553000000, 0.951687050000,
-			0.869684200000, 0.774904950000, 0.657614200000, 0.527900150000, 0.399541600000,
-			0.283781050000, 0.182358050000, 0.109413600000, 0.061649085000, 0.032699280000,
-			0.016462845000, 0.008041705000, 0.003864443500, 0.001841166000, 0.000880087000,
-			0.000423607700
+			0.000023956650, 0.000309054000, 0.002220395000, 0.009005150000, 0.021600050000,
+			0.038992450000, 0.062072600000, 0.089764700000, 0.128515350000, 0.185550850000,
+			0.255690850000, 0.342051100000, 0.461805650000, 0.607378100000, 0.759122200000,
+			0.874795100000, 0.958787300000, 0.991541600000, 0.995046500000, 0.953158750000,
+			0.869616900000, 0.775837500000, 0.657942650000, 0.527902700000, 0.399013000000,
+			0.283553200000, 0.181354350000, 0.108672400000, 0.061082550000, 0.032323865000,
+			0.016231270000, 0.007919470000, 0.003803046000, 0.001810832500, 0.000865886500,
+			0.000416835450
 		},
 		{
-			0.001204339800, 0.014693135000, 0.102659390000, 0.410999600000, 0.971019700000,
-			1.545538000000, 1.936093000000, 1.976725000000, 1.734917000000, 1.303624000000,
-			0.788122500000, 0.427392300000, 0.225584500000, 0.116998350000, 0.061871800000,
-			0.031261400000, 0.014025850000, 0.004297150000, 0.000313350000, 0.000000000000,
+			0.000975787600, 0.012867500000, 0.095777190000, 0.402301600000, 0.971629200000,
+			1.549938000000, 1.948388000000, 1.984670000000, 1.739857000000, 1.308151000000,
+			0.781796500000, 0.422593900000, 0.222878650000, 0.115174050000, 0.061302800000,
+			0.030879300000, 0.013841200000, 0.004144350000, 0.000189450000, 0.000000000000,
 			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
 			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
 			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
@@ -715,6 +795,8 @@ char *name,			/* Strip name (7 chars) */
 ipatch *val) {		/* Pointer to instrument patch value */
 	ss *p = (ss *)pp;
 	inst_code rv = inst_ok;
+	int switch_trig = 0;
+	int user_trig = 0;
 	double col[3], spec[36];
 	int i;
 
@@ -724,32 +806,103 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	val->XYZ_v = 0;
 	val->aXYZ_v = 0;
 	val->Lab_v = 0;
-	val->spec_n = 0;
+	val->sp.spec_n = 0;
 
 	/* Do calibration if it is needed */
-	if (p->need_cal && p->noutocalib == 0) {
-		if ((rv = ss_calibrate_imp(p, 0, 1)) != inst_ok)
+	if ((p->need_w_cal || p->need_t_cal) && p->noautocalib == 0) {
+		inst_cal_cond calc = inst_calc_none;
+		char id[CALIDLEN];
+
+		/* This could be automatic or need manual intervention */
+		if ((rv = ss_calibrate_imp(p, inst_calt_all, &calc, id)) != inst_ok) {
+			if (rv == inst_cal_setup) {
+				return inst_needs_cal;	/* Not automatic, needs a manual setup */
+			}
+			return rv;		/* Error */
+		}
+	}
+
+	if (p->trig == inst_opt_trig_keyb_switch) {
+
+		/* We're assuming that switch trigger won't be selected */
+		/* for spot measurement on the spectroscan, so we don't lower the head. */
+
+		/* Activate measurement switch */
+		if ((rv = so_do_TargetOnOffStDownload(p,ss_toost_Activated)) != inst_ok) {
 			return rv;
+		}
+
+		/* Wait for a measurement or for the user to hit a key */
+		for (;;) {
+			ss_nmt nm;
+
+			/* Query whether a new measurement was performed since the last */
+			if ((rv = so_do_NewMeasureRequest(p, &nm)) != inst_ok) {
+				if ((rv & inst_mask) != inst_user_trig) {
+					return rv;		/* Abort, term, command or error */
+				}
+				user_trig = 1;
+				break;
+			}
+			if (nm == ss_nmt_NewMeas) {
+				switch_trig = 1;
+				break;
+			}
+		}
+
+		/* Deactivate measurement switch */
+		if ((rv = so_do_TargetOnOffStDownload(p,ss_toost_Deactivated)) != inst_ok)
+			return rv;
+
+		if (p->trig_return)
+			printf("\n");
+
+	} else if (p->trig == inst_opt_trig_keyb) {
+		int se;
+
+		if ((se = icoms_poll_user(p->icom, 1)) != ICOM_TRIG) {
+			/* Abort, term or command */
+			p->snerr = icoms2ss_err(se);
+			return ss_inst_err(p);
+		}
+		user_trig = 1;
+		if (p->trig_return)
+			printf("\n");
 	}
 
-	/* For reflection spot mode on a SpectroScan, lower the head. */
-	/* (A SpectroScanT in transmission will position automatically) */
-	if (p->itype != instSpectrolino
-	 && (p->mode & inst_mode_illum_mask) != inst_mode_transmission) {
-		if ((rv = ss_do_MoveDown(p)) != inst_ok)
-				return rv;
-	}
+	/* Trigger a read if the switch has not been used */
+	if (switch_trig == 0) {
+		ss_nmt nm;
 
-	/* measure */
-	if ((rv = so_do_ExecMeasurement(p)) != inst_ok)
-		return rv;
-
-	/* For reflection spot mode on a SpectroScan, raise the head. */
-	/* (A SpectroScanT in transmission will position automatically) */
-	if (p->itype != instSpectrolino
-	 && (p->mode & inst_mode_illum_mask) != inst_mode_transmission) {
-		if ((rv = ss_do_MoveUp(p)) != inst_ok)
+		/* For the spectroscan, make sure the instrument is on line, */
+		/* since it may be off line to allow the user to position it. */
+		if (p->itype != instSpectrolino && p->offline) {
+			if ((rv = p->xy_locate_end((inst *)p)) != inst_ok)
 				return rv;
+		}
+
+		/* For reflection spot mode on a SpectroScan, lower the head. */
+		/* (A SpectroScanT in transmission will position automatically) */
+		if (p->itype != instSpectrolino
+		 && (p->mode & inst_mode_illum_mask) != inst_mode_transmission) {
+			if ((rv = ss_do_MoveDown(p)) != inst_ok)
+					return rv;
+		}
+
+		/* trigger it in software */
+		if ((rv = so_do_ExecMeasurement(p)) != inst_ok)
+			return rv;
+		/* Query measurement to reset count */
+		if ((rv = so_do_NewMeasureRequest(p, &nm)) != inst_ok)
+			return rv;
+
+		/* For reflection spot mode on a SpectroScan, raise the head. */
+		/* (A SpectroScanT in transmission will position automatically) */
+		if (p->itype != instSpectrolino
+		 && (p->mode & inst_mode_illum_mask) != inst_mode_transmission) {
+			if ((rv = ss_do_MoveUp(p)) != inst_ok)
+					return rv;
+		}
 	}
 
 	/* Track the need for a calibration */
@@ -781,14 +934,11 @@ ipatch *val) {		/* Pointer to instrument patch value */
 		}
 
 		if (p->mode & inst_mode_spectral) {
-			val->spec_n = 36;
-			val->spec_wl_short = 380;
-			val->spec_wl_long = 730;
-			for (i=0; i < INSTR_MAX_BANDS; i++)
-				if (i < val->spec_n)
-					val->spec[i] = 100.0 * (double)spec[i];
-				else
-					val->spec[i] = -1.0;
+			val->sp.spec_n = 36;
+			val->sp.spec_wl_short = 380;
+			val->sp.spec_wl_long = 730;
+			for (i = 0; i < val->sp.spec_n; i++)
+				val->sp.spec[i] = 100.0 * (double)spec[i];
 		}
 
 		/* Convert to desired illuminant XYZ */
@@ -817,6 +967,90 @@ ipatch *val) {		/* Pointer to instrument patch value */
 
 		val->XYZ_v = 1;
 	 
+
+	/* Using filter compensation */
+	/* This isn't applicable to emulated transmission mode, because */
+	/* the filter will be calibrated out in the illuminant measurement. */
+	} else if (p->compen |= 0) {
+		ss_cst rct;
+		ss_st rst;		/* Return Spectrum Type (Reflectance/Density) */
+		ss_rvt rvf;		/* Return Reference Valid Flag */
+		ss_aft af;		/* Return filter being used (None/Pol/D65/UV/custom */
+		ss_ilt it;
+		ss_ot  ot;
+		ss_wbt wb;		/* Return white base (Paper/Absolute) */
+#ifdef NEVER
+		double norm;	/* Y normalisation factor */
+#endif
+		double XYZ[3];
+		int j, tix = 0;	/* Default 2 degree */
+
+		/* Get the XYZ */
+		if ((rv = so_do_CParameterRequest(p, ss_cst_XYZ, &rct, col, &rvf,
+		     &af, &wb, &it, &ot)) != inst_ok)
+			return rv;
+
+		/* Get the spectrum */
+		if ((rv = so_do_SpecParameterRequest(p, ss_st_LinearSpectrum,
+		          &rst, spec, &rvf, &af, &wb)) != inst_ok)
+			return rv;
+
+		/* Multiply by the filter compensation values to do correction */
+		for (i = 0; i < 36; i++) {
+			spec[i] *= p->comp[i];
+		}
+
+		/* Return the results */
+		if (p->mode & inst_mode_spectral) {
+			val->sp.spec_n = 36;
+			val->sp.spec_wl_short = 380;
+			val->sp.spec_wl_long = 730;
+			for (i = 0; i < val->sp.spec_n; i++)
+				val->sp.spec[i] = 100.0 * (double)spec[i];
+		}
+
+		/* Convert to desired illuminant XYZ */
+		if (p->obsv == ss_ot_TenDeg)
+			tix = 1;
+
+		/* Compute XYZ */
+		for (j = 0; j < 3; j++)
+			XYZ[j] = 0.0;
+		for (i = 0; i < 36; i++)
+			for (j = 0; j < 3; j++)
+				XYZ[j] += obsv[tix][j][i] * spec[i];
+
+		/* I'm a bit unclear about the relationship between */
+		/* the spectral values the instrument returns in emissive mode, */
+		/* and the XYZ values it computes. */
+#ifdef NEVER
+		/* Compute normalisation factor */
+		for (norm = 0.0, i = 0; i < 36; i++)
+			norm += obsv[tix][1][i];
+
+		norm = 100.0/norm;
+
+		XYZ[0] *= norm;
+		XYZ[2] *= norm;
+		XYZ[1] *= norm;
+#endif
+
+		if ((p->mode & inst_mode_illum_mask) == inst_mode_emission) {
+			/* The CIE maximum spectral luminence efficiency is 683 lumens per watt, */
+			/* which is the constant applied to sumation over 1nm from 360 to 830nm, */
+			/* so this needs to be scaled by the sumation over 5nm from 380 to 830, */
+			/* a factor of 10.683/106.86 * 683. The sumation that Gretag uses must be */
+			/* slightly different to the above table, about 1.06895 ?? */
+			val->aXYZ_v = 1;
+			val->aXYZ[0] = XYZ[0] * 6.83226;
+			val->aXYZ[1] = XYZ[1] * 6.83226;
+			val->aXYZ[2] = XYZ[2] * 6.83226;
+		} else {
+			val->XYZ_v = 1;
+			val->XYZ[0] = XYZ[0];
+			val->XYZ[1] = XYZ[1];
+			val->XYZ[2] = XYZ[2];
+		}
 
 	/* Normal instrument values */
 	} else {
@@ -853,57 +1087,84 @@ ipatch *val) {		/* Pointer to instrument patch value */
 			          &rst, spec, &rvf, &af, &wb)) != inst_ok)
 				return rv;
 	 
-			val->spec_n = 36;
-			val->spec_wl_short = 380;
-			val->spec_wl_long = 730;
-			for (i=0; i<INSTR_MAX_BANDS; i++)
-				if (i < val->spec_n)
-					val->spec[i] = 100.0 * (double)spec[i];
-				else
-					val->spec[i] = -1.0;
+			val->sp.spec_n = 36;
+			val->sp.spec_wl_short = 380;
+			val->sp.spec_wl_long = 730;
+			for (i = 0; i < val->sp.spec_n; i++)
+				val->sp.spec[i] = 100.0 * (double)spec[i];
 		}
 	}
+	if (user_trig)
+		return inst_user_trig;
 	return rv;
 }
 
-
-/* Determine if a calibration is needed. Returns inst_ok if not, */
-/* inst_unsupported if it is unknown, or inst_needs_cal if needs calibration */
-inst_code ss_needs_calibration(struct _inst *pp) {
+/* Determine if a calibration is needed. Returns inst_calt_none if not, */
+/* inst_calt_unknown if it is unknown, or inst_calt_XXX if needs calibration, */
+/* and the first type of calibration needed. */
+inst_cal_type ss_needs_calibration(inst *pp) {
 	ss *p = (ss *)pp;
-	inst_code rv = inst_ok;
 
-	if (p->need_cal)
-		return inst_needs_cal;
-	return rv;
+	if (p->need_w_cal && p->noautocalib == 0) {
+		return inst_calt_ref_white;
+
+	} else if (p->need_t_cal && p->noautocalib == 0) {
+		return inst_calt_trans_white;
+	}
+
+	return inst_calt_none;
 }
 
 /* Perform an instrument calibration (implementation). */
-/* Switches to next mode. */
 static inst_code ss_calibrate_imp(
 ss *p,
-int cal_no,				/* Type of calibration 0-n */
-int recal				/* nz if recalibration rather than first calibration */
+inst_cal_type caltp,	/* Calibration type. inst_calt_all for all neeeded */
+inst_cal_cond *calc,	/* Current condition/desired condition */
+char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 ) {
 	inst_code rv = inst_ok;
 	ss_aft afilt;	/* Actual filter */
 	double sp[36];	/* Spectral values of filter */
 	ss_owrt owr;	/* Original white reference */
+	inst_cal_type calt = caltp;	/* Specific calibration type */
 
-//printf("~1 Attempting calibration, recal = %d\n",recal);
+	id[0] = '\000';
+
+//printf("~1 ss calibrate called with calt = 0x%x, condition 0x%x, need w %d, t %d\n",
+//calt, *calc, p->need_w_cal, p->need_t_cal);
+
+	/* Interpret default into specific calibration */
+	if (caltp == inst_calt_all) {
+
+		if (p->need_w_cal)
+			calt = inst_calt_ref_white;
+		else if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission && p->need_t_cal)
+			calt = inst_calt_trans_white;
+		else
+			calt = inst_calt_ref_white;
+//printf("~1 ss cal converted all to calt = 0x%x\n",calt);
+	}
+
+	/* See if it's a request we can handle */
+	if (calt != inst_calt_ref_white
+	 && ((p->mode & inst_mode_illum_mask) != inst_mode_transmission
+	   || calt != inst_calt_trans_white)) {
+		return inst_unsupported;
+	}
+
 	/* There are different procedures depending on the intended mode, */
-	/* whether this is a Spectrolino or SpectrScan, and whether this is a */
-	/* first calibration since changing a mode, or a recalibration. */
-	p->mode = p->nextmode;
-	if ((p->nextmode & inst_mode_illum_mask) == inst_mode_emission)
-		p->filt = ss_aft_NoFilter;	/* Need no filter for emission */
+	/* whether this is a Spectrolino or SpectrScan, and whether just a white, */
+	/* or a transmission calibration are needed or both. */
 
 	/* All first time calibrations do an initial reflective white calibration. */
-	if (recal == 0
-	 || (p->mode & inst_mode_illum_mask) == inst_mode_reflection) {
-		char wrn[19];	/* White reference name */
+	if (calt == inst_calt_ref_white) {
 
-		/* Set mode to reflection */
+//printf("~1 ss cal dealing with being on ref_white\n");
+
+		if ((p->mode & inst_mode_illum_mask) == inst_mode_emission)
+			p->filt = ss_aft_NoFilter;	/* Need no filter for emission */
+	
+		/* Set mode to reflection as a default for calibration */
 		if (p->itype == instSpectroScanT) {
 			if ((rv = ss_do_SetTableMode(p, ss_tmt_Reflectance)) != inst_ok)
 				return rv;
@@ -911,95 +1172,104 @@ int recal				/* nz if recalibration rather than first calibration */
 			if ((rv = so_do_MeasControlDownload(p, ss_ctt_RemissionMeas)) != inst_ok)
 				return rv;
 		}
-
-		/* Get the name of the expected white reference */
-		if ((rv = so_do_WhiteReferenceRequest(p, p->filt, &afilt, sp, &owr, wrn)) != inst_ok)
+	
+		/* Set the desired colorimetric parameters + absolute white base */
+		if ((rv = so_do_ParameterDownload(p, p->dstd, ss_wbt_Abs, p->illum, p->obsv)) != inst_ok)
 			return rv;
 
-		if (p->itype == instSpectrolino) {
-			char buf1[100];
-			sprintf(buf1, "Place Spectrolino on white reference %s and press:\n",wrn);
-			if (p->user((inst *)p, inst_question, 3, 2, buf1, "Continue\n", "Abort\n") != 1)
-				return inst_user_abort;
-		} else if (recal == 0) { /* SpectroScan/T on first calibration */
-			char buf1[100];
-			sprintf(buf1, "Confirm white reference %s is in slot 1 and press:\n",wrn);
-			if (p->user((inst *)p, inst_question, 3, 2, buf1, "Continue\n", "Abort\n") != 1)
-				return inst_user_abort;
-		}
+		/* Get the name of the expected white reference */
+		if ((rv = so_do_WhiteReferenceRequest(p, p->filt, &afilt, sp, &owr, id)) != inst_ok)
+			return rv;
 
-		/* Do the white calibration */
-		for (;;) {		/* Untill everything is OK */
-			/* Set the desired colorimetric parameters + absolute white base */
-			if ((rv = so_do_ParameterDownload(p, p->dstd, ss_wbt_Abs, p->illum, p->obsv))
-			                                                                  != inst_ok)
-				return rv;
+		if (p->noautocalib == 0) {
 
-			/* For SpectroScan, move to the white reference in slot 1 and lower */
-			if (p->itype != instSpectrolino) {
-				if ((rv = ss_do_MoveToWhiteRefPos(p, ss_wrpt_RefTile1)) != inst_ok)
-					return rv;
-				if ((rv = ss_do_MoveDown(p)) != inst_ok)
-					return rv;
+			/* Make sure we're in a condition to do the calibration */
+			if (p->itype == instSpectrolino && *calc != inst_calc_man_ref_white) {
+				*calc = inst_calc_man_ref_white;
+//printf("~1 ss cal need cond. inst_calc_man_ref_white and haven't got it\n");
+				return inst_cal_setup;
 			}
 
-			/* Calibrate */
-			if ((rv = so_do_ExecRefMeasurement(p, ss_mmt_WhiteCalWithWarn))
-			                          != (inst_notify | ss_et_WhiteMeasOK))
-				return rv;
-			rv = inst_ok;
+			/* Do the white calibration */
+			for (;;) {		/* Untill everything is OK */
 
-			/* For SpectroScan, raise */
-			if (p->itype != instSpectrolino) {
-				if ((rv = ss_do_MoveUp(p)) != inst_ok)
-					return rv;
-			}
+//printf("~1 ss cal doing white reflective cal\n");
+				/* For SpectroScan, move to the white reference in slot 1 and lower */
+				if (p->itype != instSpectrolino) {
+					if ((rv = ss_do_MoveToWhiteRefPos(p, ss_wrpt_RefTile1)) != inst_ok)
+						return rv;
+					if ((rv = ss_do_MoveDown(p)) != inst_ok)
+						return rv;
+				}
 
-			/* Verify the filter. */
-			{
-				char buf[200];
-				ss_dst ds;
-				ss_wbt wb;
-				ss_ilt it;
-				ss_ot  ot;
-				ss_aft af;
-
-				if ((rv = so_do_ParameterRequest(p, &ds, &wb, &it, &ot, &af)) != inst_ok)
-					return rv;
-				if (af == p->filt)
-					break;
-				sprintf(buf, "Filter mismatch - replace filter with '%s' and press:\n",filter_desc[p->filt]);
-				if (p->user((inst *)p, inst_question, 3, 2, buf, "Continue\n", "Abort\n") != 1)
-					return inst_user_abort;
-			}
-		}
-//printf("~1 reflection calibration and filter verify is complete\n");
-
-		/* Emission or spot transmission mode */
-		if ((p->mode & inst_mode_illum_mask) == inst_mode_emission
-		 || ((p->mode & inst_mode_illum_mask) == inst_mode_transmission
-		     && p->itype == instSpectrolino)) {
-//printf("~1 emmission dark calibration:\n");
-				/* Set emission mode */
-				if ((rv = so_do_MeasControlDownload(p, ss_ctt_EmissionMeas)) != inst_ok)
-					return rv;
-				/* Do dark calibration (Assume we're still on white reference) */
-				if ((rv = so_do_ExecRefMeasurement(p, ss_mmt_EmissionCal))
-				                    != (inst_notify | ss_et_EmissionCalOK))
+				/* Calibrate */
+				if ((rv = so_do_ExecRefMeasurement(p, ss_mmt_WhiteCalWithWarn))
+				                          != (inst_notify | ss_et_WhiteMeasOK))
 					return rv;
 				rv = inst_ok;
-//printf("~1 emmission dark calibration done\n");
 
+				/* For SpectroScan, raise */
+				if (p->itype != instSpectrolino) {
+					if ((rv = ss_do_MoveUp(p)) != inst_ok)
+						return rv;
+				}
+
+				/* Verify the filter. */
+				{
+					ss_dst ds;
+					ss_wbt wb;
+					ss_ilt it;
+					ss_ot  ot;
+					ss_aft af;
+
+					if ((rv = so_do_ParameterRequest(p, &ds, &wb, &it, &ot, &af)) != inst_ok)
+						return rv;
+					if (af == p->filt)
+						break;
+
+//printf("~1 got filt %d, want %d\n",af,p->filt);
+
+					strcpy(id, filter_desc[p->filt]);
+					*calc = inst_calc_change_filter;
+					return inst_cal_setup;
+				}
+			}
+//printf("~1 reflection calibration and filter verify is complete\n");
+
+			/* Emission or spot transmission mode, dark calibration. */
+			if ((p->mode & inst_mode_illum_mask) == inst_mode_emission
+			 || ((p->mode & inst_mode_illum_mask) == inst_mode_transmission
+			     && p->itype == instSpectrolino)) {
+//printf("~1 emmission/transmission dark calibration:\n");
+					/* Set emission mode */
+					if ((rv = so_do_MeasControlDownload(p, ss_ctt_EmissionMeas)) != inst_ok)
+						return rv;
+					if (p->noautocalib == 0) {
+						/* Do dark calibration (Assume we're still on white reference) */
+						if ((rv = so_do_ExecRefMeasurement(p, ss_mmt_EmissionCal))
+						                    != (inst_notify | ss_et_EmissionCalOK))
+							return rv;
+					}
+					rv = inst_ok;
+//printf("~1 emmission/transmisson dark calibration done\n");
+			}
+
+			p->calcount = 0;
+			p->need_w_cal = 0;
 		}
-		/* SpectroScanT - Transmission mode */
+
+		/* Restore the instrument to the desired mode */
+		/* SpectroScanT - Transmission mode, set transmission mode. */
 		if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission
 		     && p->itype == instSpectroScanT) {
 
+#ifdef NEVER	/* Nice , but not essential to warn the user. */
 			/* Advise user to change aperture before switching to transmission mode. */
 			if (p->user((inst *)p, inst_question, 3, 2,
 			     "Ensure that desired transmission aperture is fitted and press:\n",
 			     "Continue\n", "Abort\n") != 1)
 				return inst_user_abort;
+#endif /* NEVER */
 
 			if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission) {
 				if ((rv = ss_do_SetTableMode(p, ss_tmt_Transmission)) != inst_ok)
@@ -1009,52 +1279,67 @@ int recal				/* nz if recalibration rather than first calibration */
 		}
 	}
 
-//printf("~1 got out of first calibrate/filter loop\n");
+//printf("~1 got out of first white/dark calibrate/filter loop\n");
 
 	/* ??? If White Base Type is not Absolute, where is Paper type set, */
-	/* ??? and how is it calibrated ????? */
+	/* and how is it calibrated ????? */
 
 	/* For non-reflective measurement, do the recalibration or 2nd part of calibration. */
 
-	/* Transmission mode calibration: */
-	if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission) {
+	/* Interpret default again after possible inst_calt_ref_white is complete */
+	if (caltp == inst_calt_all) {
+		if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission && p->need_t_cal)
+			calt = inst_calt_trans_white;
+	}
 
+	/* Transmission mode calibration: */
+	if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission
+	 && calt == inst_calt_trans_white) {
+
+//printf("~1 ss cal need trans with calt = trans_white\n");
 		/* Emulated spot transmission */
 		if (p->itype == instSpectrolino) {
-			if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission) {
-				ss_st rst;		/* Return Spectrum Type (Reflectance/Density) */
-				ss_rvt rvf;		/* Return Reference Valid Flag */
-				ss_aft af;		/* Return filter being used (None/Pol/D65/UV/custom */
-				ss_wbt wb;		/* Return white base (Paper/Absolute) */
-				ss_ilt it;		/* Return illuminant type */
-				int i;
+			ss_st rst;		/* Return Spectrum Type (Reflectance/Density) */
+			ss_rvt rvf;		/* Return Reference Valid Flag */
+			ss_aft af;		/* Return filter being used (None/Pol/D65/UV/custom */
+			ss_wbt wb;		/* Return white base (Paper/Absolute) */
+			ss_ilt it;		/* Return illuminant type */
+			int i;
 
-				if (p->user((inst *)p, inst_question, 3, 2,
-				    "Place Spectrolino on transmission white reference and press:\n",
-				    "Continue\n", "Abort\n") != 1)
-					return inst_user_abort;
-	
-				/* Measure white reference spectrum */
-				if ((rv = so_do_ExecMeasurement(p)) != inst_ok)
-					return rv;
-				if ((rv = so_do_SpecParameterRequest(p, ss_st_LinearSpectrum,
-				          &rst, p->tref, &rvf, &af, &wb)) != inst_ok)
-					return rv;
-
-				/* See how good a source it is */
-				for (i = 0; i < 36; i++)  {
-					if (p->tref[i] < 0.0001)
-						break;
-				}
-				if (i < 36) {
-					p->user((inst *)p, inst_question, 1, 0,
-					    "Warning: Transmission light source is low at some wavelengths!\n");
-				}
-				
-				/* Get the instrument illuminant */
-				if ((rv = so_do_IllumTabRequest(p, p->illum, &it, p->cill)) != inst_ok)
-					return rv; 
+//printf("~1 ss cal need trans, spectrolino \n");
+			/* Make sure we're in a condition to do the calibration */
+			if (*calc != inst_calc_man_trans_white) {
+				*calc = inst_calc_man_trans_white;
+//printf("~1 ss cal need cond. inst_calc_man_trans_white and haven't got it\n");
+				return inst_cal_setup;
 			}
+
+			/* Measure white reference spectrum */
+			if ((rv = so_do_ExecMeasurement(p)) != inst_ok)
+				return rv;
+			if ((rv = so_do_SpecParameterRequest(p, ss_st_LinearSpectrum,
+			          &rst, p->tref, &rvf, &af, &wb)) != inst_ok)
+				return rv;
+
+			/* See how good a source it is */
+			for (i = 0; i < 36; i++)  {
+				if (p->tref[i] < 0.0001)
+					break;
+			}
+
+			if (i < 36) {
+				*calc = inst_calc_message;
+				strcpy(id, "Warning: Transmission light source is low at some wavelengths!");
+				rv = inst_ok;
+			}
+
+			/* Get the instrument illuminant */
+			if ((rv = so_do_IllumTabRequest(p, p->illum, &it, p->cill)) != inst_ok)
+				return rv; 
+
+			p->calcount = 0;
+		 	p->need_t_cal = 0;
+//printf("~1 tranmission lino cal done\n");
 
 		/* SpectroScanT */
 		} else {
@@ -1063,35 +1348,67 @@ int recal				/* nz if recalibration rather than first calibration */
 			                          != (inst_notify | ss_et_WhiteMeasOK))
 				return rv;
 			rv = inst_ok;
+			p->calcount = 0;
+		 	p->need_t_cal = 0;
+//printf("~1 tranmission scan cal done\n");
 		}
 	}
-	
-	p->need_cal = 0;
 
 //printf("~1 calibration completed\n");
 	return rv;
 }
 
-/* Perform an instrument calibration. */
-/* Switches to next mode. */
+/* Request an instrument calibration. */
+/* This is use if the user decides they want to do a calibration, */
+/* in anticipation of a calibration (needs_calibration()) to avoid */
+/* requiring one during measurement, or in response to measureing */
+/* returning inst_needs_cal. Initially us an inst_cal_cond of inst_calc_none, */
+/* and then be prepared to setup the right conditions, or ask the */
+/* user to do so, each time the error inst_cal_setup is returned. */
 inst_code ss_calibrate(
-struct _inst *pp,
-int cal_no				/* Type of calibration 0-n */
+inst *pp,
+inst_cal_type calt,		/* Calibration type. inst_calt_all for all neeeded */
+inst_cal_cond *calc,	/* Current condition/desired condition */
+char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 ) {
 	ss *p = (ss *)pp;
-	inst_code rv = inst_ok;
 
-	/* Call the implementation code */
-	rv =  ss_calibrate_imp(p, cal_no, 0);
+	return ss_calibrate_imp(p, calt, calc, id);
+}
 
-	return rv;
+/* Insert a compensation filter in the instrument readings */
+/* This is typically needed if an adapter is being used, that alters */
+/* the spectrum of the light reaching the instrument */
+/* To remove the filter, pass NULL for the filter filename */
+inst_code ss_comp_filter(
+struct _inst *pp,
+char *filtername
+) {
+	ss *p = (ss *)pp;
+	
+	if (filtername == NULL) {
+		p->compen = 0;
+	} else {
+		xspect sp;
+		int i;
+		if (read_xspect(&sp, filtername) != 0) {
+			return inst_wrong_config;
+		}
+		if (sp.spec_n != 36 || sp.spec_wl_short != 380.0 || sp.spec_wl_long != 730.0) {
+			return inst_wrong_config;
+		}
+		for (i = 0; i < 36; i++)
+			p->comp[i] = sp.spec[i];
+		p->compen = 1;
+	}
+	return inst_ok;
 }
 
 /* Instrument specific error codes interpretation */
 static char *
 ss_interp_error(inst *pp, int ec) {
-	ss *p = (ss *)pp;
-	ec &= 0xff;
+//	ss *p = (ss *)pp;
+	ec &= inst_imask;
 
 	switch (ec) {
 
@@ -1220,8 +1537,16 @@ ss_interp_error(inst *pp, int ec) {
 		/* Our own communication errors here too. */
 		case ss_et_SerialFail:
 			return "Serial communications failure";
+
 		case ss_et_UserAbort:
-			return "User requested abort";
+			return "User hit Abort key";
+		case ss_et_UserTerm:
+			return "User hit Terminate key";
+		case ss_et_UserTrig:
+			return "User hit Trigger key";
+		case ss_et_UserCmnd:
+			return "User hit a Command key";
+
 		case ss_et_SendBufferFull:
 			return "Message send buffer is full";
 		case ss_et_RecBufferEmpty:
@@ -1237,13 +1562,6 @@ ss_interp_error(inst *pp, int ec) {
 	}
 }
 
-/* Return the last serial I/O error code */
-static int
-ss_last_sioerr(inst *pp) {
-	ss *p = (ss *)pp;
-	return p->sio->lerr;
-}
-
 /* Return the instrument capabilities */
 inst_capability ss_capabilities(inst *pp) {
 	ss *p = (ss *)pp;
@@ -1251,10 +1569,20 @@ inst_capability ss_capabilities(inst *pp) {
 	return p->cap;
 }
 
+/* Return the instrument capabilities 2 */
+inst2_capability ss_capabilities2(inst *pp) {
+	ss *p = (ss *)pp;
+	inst2_capability rv;
+
+	rv = p->cap2;
+
+	return rv;
+}
+
 /* 
  * set measurement mode
  * We assume that the instrument has been initialised.
- * The measurement mode is not activated until it's actually needed.
+ * The measurement mode is activated.
  */
 static inst_code
 ss_set_mode(inst *pp, inst_mode m) {
@@ -1265,7 +1593,7 @@ ss_set_mode(inst *pp, inst_mode m) {
 	inst_mode mm;		/* Measurement mode */
 
 	/* The measurement mode portion of the mode */
-	mm = m & inst_mode_measuremet_mask;
+	mm = m & inst_mode_measurement_mask;
 
 	/* General check mode against specific capabilities logic: */
 	if (mm == inst_mode_ref_spot) {
@@ -1319,9 +1647,12 @@ ss_set_mode(inst *pp, inst_mode m) {
 
 		/* Mode has changed */
 		p->mode = p->nextmode;
-		p->need_cal = 1;
 
-		rv = ss_calibrate_imp(p, 0, 0);
+		/* So we need calibration */
+		p->need_w_cal = 1;
+		if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission) {
+			p->need_t_cal = 1;
+		}
 	}
 	return rv;
 }
@@ -1331,24 +1662,63 @@ ss_set_mode(inst *pp, inst_mode m) {
  * We assume that the instrument has been initialised.
  */
 static inst_code
-ss_set_opt_mode(inst *pp, inst_opt_mode m)
+ss_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 {
 	ss *p = (ss *)pp;
 
-	switch(m) {
-		case inst_opt_noautocalib:
-			p->noutocalib = 1;
-			break;
-	
-		case inst_opt_autocalib:
-			p->noutocalib = 0;
-			break;
+	if (m == inst_opt_noautocalib) {
+		p->noautocalib = 1;
+		return inst_ok;
 
-		default:
-			return inst_unsupported;
+	} else if (m == inst_opt_autocalib) {
+		p->noautocalib = 0;
+		return inst_ok;
+
+	} else if (m == inst_opt_set_filter) {
+		va_list args;
+		inst_opt_filter fe = inst_opt_filter_unknown;
+
+		va_start(args, m);
+
+		fe = va_arg(args, inst_opt_filter);
+
+		va_end(args);
+
+		switch(fe) {
+		
+			case inst_opt_filter_none:
+				p->filt = ss_aft_NoFilter;
+				return inst_ok;
+			case inst_opt_filter_pol:
+				p->filt = ss_aft_PolFilter;
+				return inst_ok;
+			case inst_opt_filter_D65:
+				p->filt = ss_aft_D65Filter;
+				return inst_ok;
+			case inst_opt_filter_UVCut:
+				p->filt = ss_aft_UVCutFilter;
+				return inst_ok;
+		}
+		return inst_unsupported;
 	}
 
-	return inst_ok;
+	/* Record the trigger mode */
+	if (m == inst_opt_trig_prog
+	 || m == inst_opt_trig_keyb
+	 || m == inst_opt_trig_keyb_switch) {
+
+		p->trig = m;
+		return inst_ok;
+	}
+	if (m == inst_opt_trig_return) {
+		p->trig_return = 1;
+		return inst_ok;
+	} else if (m == inst_opt_trig_no_return) {
+		p->trig_return = 0;
+		return inst_ok;
+	}
+	
+	return inst_unsupported;
 }
 
 /* Destroy ourselves */
@@ -1360,23 +1730,30 @@ ss_del(inst *pp) {
 		ss_xy_clear(pp);
 	}
 
-	if (p->sio != NULL)
-		p->sio->del(p->sio);
+	if (p->icom != NULL)
+		p->icom->del(p->icom);
 	free (p);
 }
 
 /* Constructor */
-extern ss *new_gretag() {
+extern ss *new_gretag(icoms *icom, int debug, int verb) {
 	ss *p;
 	if ((p = (ss *)calloc(sizeof(ss),1)) == NULL)
 		error("ss: malloc failed!");
 
-	p->sio = new_serio();
+	if (icom == NULL)
+		p->icom = new_icoms();
+	else
+		p->icom = icom;
+
+	p->debug = debug;
+	p->verb = verb;
 
 	/* Init public methods */
 	p->init_coms    	= ss_init_coms;
 	p->init_inst    	= ss_init_inst;
 	p->capabilities 	= ss_capabilities;
+	p->capabilities2 	= ss_capabilities2;
 	p->set_mode     	= ss_set_mode;
 	p->set_opt_mode     = ss_set_opt_mode;
 	p->xy_sheet_release = ss_xy_sheet_release;
@@ -1391,9 +1768,8 @@ extern ss *new_gretag() {
 	p->read_sample  	= ss_read_sample;
 	p->needs_calibration = ss_needs_calibration;
 	p->calibrate    	= ss_calibrate;
+	p->comp_filter    	= ss_comp_filter;
 	p->interp_error 	= ss_interp_error;
-	p->inst_interp_error = NULL;				/* virtual constructor will do this */
-	p->last_sioerr  	= ss_last_sioerr;
 	p->del          	= ss_del;
 
 	/* Init state */

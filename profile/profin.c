@@ -9,8 +9,8 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -73,8 +73,12 @@
 void
 make_input_icc(
 	prof_atype ptype,		/* Profile algorithm type */
+	icmICCVersion iccver,	/* ICC profile version to create */
 	int verb,
 	int iquality,			/* A2B table quality, 0..3 */
+	int noiluts,			/* nz to supress creation of input (Device) shaper luts */
+	int noisluts,			/* nz to supress creation of input sub-grid (Device) shaper luts */
+	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
 	int verify,
 	int nsabs,				/* nz for non-standard absolute output */
 	char *file_name,		/* output icc name */
@@ -145,6 +149,15 @@ make_input_icc(
 		/* Values that may be set before writing */
 		if (xpi != NULL && xpi->creator != 0L)
 			wh->creator = xpi->creator;
+#ifdef NT
+		wh->platform = icSigMicrosoft;
+#endif
+#ifdef __APPLE__
+		wh->platform = icSigMacintosh;
+#endif
+#if defined(UNIX) && !defined(__APPLE__)
+		wh->platform = icmSig_nix;
+#endif
 	}
 	/* Profile Description Tag: */
 	{
@@ -302,7 +315,6 @@ make_input_icc(
 		/* Red, Green and Blue Tone Reproduction Curve Tags: */
 		{
 			icmCurve *wor, *wog, *wob;
-			int i;
 			if ((wor = (icmCurve *)wr_icco->add_tag(
 			           wr_icco, icSigRedTRCTag, icSigCurveType)) == NULL) 
 				error("add_tag failed: %d, %s",rv,wr_icco->err);
@@ -352,7 +364,7 @@ make_input_icc(
 
 	/* Read in the CGATs fields */
 	{
-		int ti, ii;
+		int ti;
 		int Xi, Yi, Zi;
 		int ri, gi, bi;
 
@@ -444,6 +456,15 @@ make_input_icc(
 		/* Wrap with an expanded icc */
 		if ((wr_xicc = new_xicc(wr_icco)) == NULL)
 			error ("Creation of xicc failed");
+
+		if (noiluts)
+			flags |= ICX_NO_IN_LUTS;
+
+		if (noisluts)
+			flags |= ICX_NO_IN_SUBG_LUTS;
+
+		if (nooluts)
+			flags |= ICX_NO_OUT_LUTS;
 
 		if (verb)
 			flags |= ICX_VERBOSE;

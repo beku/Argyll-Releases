@@ -9,8 +9,8 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include "numsup.h"
@@ -77,7 +77,7 @@ int      n		/* Number of unknowns */
 		/* Deal with lower column at i */
 		w[i] = 0.0;
 		if (i < m) {			/* If it makes sense to go from row i .. m-1 */ 
-			double ss, ff;
+			double ss, ff = 0.0;
 
 			for (ss = 0.0, k = m-1; k >= i; k--) {	/* Sum of squares of column */
 				ff = a[k][i];
@@ -106,7 +106,7 @@ int      n		/* Number of unknowns */
 		if (ip1 < n) {				/* If it makes sense to go from column i+1 .. n-1 */
 			rv1[ip1] = 0.0;
 			if (i < m) {			/* If it makes sense to process row i */
-				double ss, ff;
+				double ss, ff = 0.0;
 				for (ss = 0.0, k = n-1; k >= ip1; k--) {	/* Sum of squares of row */
 					ff = a[i][k];
 					ss += ff * ff;
@@ -196,7 +196,7 @@ int      n		/* Number of unknowns */
 	for (k = (n-1); k >= 0; k--) {					/* For all the singular values */
 		for (its = 0;; its++) {
 			int flag;
-			int lm1;
+			int lm1 = 0;
 			int ll;
 			double zz;
 
@@ -349,7 +349,6 @@ int      n,		/* Number of unknowns */
 int      dof	/* Expected degree of freedom */
 ) {
 	int i, j;
-	double minw;
 
 	/* Set the dof smallest elements to zero */
 	/* (This algorithm is simple but not quick) */

@@ -12,8 +12,8 @@
  * Copyright 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #ifndef MXPD
@@ -22,12 +22,13 @@
 #define POW3MXPD 81		/* 3 ^ MXPD */
 #endif
 
-/* A plane equation. (Plane equations are duplicated, not shared) */
+/* A plane equation. The planes make up the surfaces of the */
+/* Voronoi polyhedra. (Plane equations are duplicated, not shared) */
 struct _peq {
 	double pe[MXPD+1];	/* Vertex plane equation. First di elements are normalized */
 						/* outward pointing normal (from first sample point), last element */
 						/* is constant. If point . pe > 0, then point is outside surface */
-	double cp[MXPD];	/* Closest point possible on plane */
+	double cp[MXPD];	/* Closest point possible on plane to poi */
 	int poi;			/* Sample point of interest */
 	int ix;				/* Index of other sample point forming plane, -ve for gamut surface */
 	int del;			/* Marked for deletion ? */
@@ -35,14 +36,17 @@ struct _peq {
 	struct _peq *link;	/* Linked list of free peq's */
 }; typedef struct _peq peq;
 
-/* A vertex (Non gamut boundary verticies are shared) */
+/* A vertex. This is a point of intersection of the various planes, */
+/* and are the vericies of the Voronoi polyhedra */
+/* (Non gamut boundary verticies are shared) */
 struct _vtx {
 	double p[MXPD];		/* Vertex location */
 	int nix[MXPD+1];	/* di+1 Sample point node indexes involved in vertex */
-	double rads;		/* Radius squared to sample points */
+	double rads;		/* Radius squared to sample points on circimsphere */
 	int vvalid;			/* Flag indicating v[], iv[] & eserr are valid */
-	double v[MXPD];		/* Subjective value at vertex */
+	double v[MXPD];		/* Subjective value at vertex (Labj) ? */
 	double iv[MXPD];	/* Interpolated subjective value */
+	double rserr;		/* Raw (non padapt) estimated sampling error */
 	double eserr;		/* Estimated sampling error */
 	int del;			/* Marked for deletion ? */
 	int refc;			/* Reference count */
@@ -59,20 +63,23 @@ typedef struct {
 	peq *pp[MXPD];		/* Pointers to planes involved in vertex */
 } vtxp;
 
-/* A sample point node */
+/* A sample point node. */
+/* Sample points are the points around which the Voronoi polyhedra */
+/* are constructed. If a network is constructed between nodes that */
+/* form a plane, the netork will be the Delaunay tesselation. */
 struct _node {
 	int    ix;			/* Index of node in s->n[] */
 	int    fx;			/* nz if point is fixed */
 	double p[MXPD];		/* Device coordinate position */
 	double v[MXPD];		/* Subjective value (Labk) ? */
 
-	int nvp;			/* Number of voronoi surface planes */ 
+	int nvp;			/* Number of Voronoi surface planes */ 
 	int _nvp;			/* Number allocated */
-	peq **vp;			/* List of voronoi surface planes */
+	peq **vp;			/* List of Voronoi surface planes */
 
-	int nvv;			/* Number of voronoi surface verticies */ 
+	int nvv;			/* Number of Voronoi surface verticies */ 
 	int _nvv;			/* Number allocated */
-	vtxp *vv;			/* List of voronoi surface verticies */
+	vtxp *vv;			/* List of Voronoi surface verticies */
 
 	double dmxs;		/* double maxiumum distance to sample point squared (for fast reject) */
 	double op[MXPD];	/* Previous device coordinates during opt */
@@ -120,11 +127,10 @@ struct _ofps {
 	double mxmvsq;		/* Maximum movement during optimisation */
 	
 	/* Gamut surface definition */
-	node gn;			/* voronoi surface for gamut */
+	node gn;			/* Voronoi surface for gamut */
 
 	/* Currently used vertex */
-	struct _vtx *uvtx;	/* Linked list of free vtx's */
-	unsigned int vflag;	/* Vertex touch flag */
+	struct _vtx *uvtx;	/* Linked list of used vtx's */
 
 	/* Free Plane and Vertex */
 	struct _peq *fpeq;	/* Linked list of free peq's */

@@ -1,3 +1,4 @@
+
 /* 
  * Argyll Color Correction System
  * Multi-dimensional regularized spline data structure
@@ -10,8 +11,8 @@
  * Copyright 1998, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* TTBD:
@@ -95,7 +96,7 @@ rspl *s		/* Pointer to rspl grid */
 	float *tang_alloc, *tang;	/* Tangency info */
 	float *gt;		/* Working grid point */
 	
-printf("~~make_tang called\n");
+//printf("~~make_tang called\n");
 	/* Organized as: tang[[grid]][di combs.][fdi] */
 	/* Allocate space for tangency info */
 	if ((tang_alloc = (float *) malloc(sizeof(float) * nig * (((1 << di) * fdi)+G_XTRA))) == NULL)
@@ -183,7 +184,7 @@ printf("~~make_tang called\n");
 				nia++;
 			}
 			for (f = 0; f < fdi; f++) {
-				*tp++ = av[f]/(double)nia;
+				*tp++ = (float)(av[f]/(double)nia);
 /* printf("Tang value out %d = %f, average of %d\n",f,tp[-1],nia); */
 			}
 		}	/* Next dimension combination */
@@ -212,7 +213,7 @@ printf("~~make_tang called\n");
 					s->spline.magic[mix].p = p;
 					s->spline.magic[mix].i = i;
 					s->spline.magic[mix].j = fdi * j;	/* Pre-scale */
-					s->spline.magic[mix].wgt = wgt;
+					s->spline.magic[mix].wgt = (float)wgt;
 					mix++;
 				}
 			}
@@ -239,7 +240,7 @@ printf("~~make_tang called\n");
 
 	s->spline.spline = 1;
 
-printf("~~make_tang finished\n");
+//printf("~~make_tang finished\n");
 }
 
 /* Do a Hermite spline smooth interpolation based on the finest grid */
@@ -252,9 +253,8 @@ int spline_interp_rspl(
 rspl *s,
 co *cp			/* Input value and returned function value */
 ) {
-	int e,f,g,p,i,j;
+	int e,f,p,i;
 	int di  = s->di;
-	int di2 = di * 2;	
 	int fdi = s->fdi;
 	double ppw[MXRI][4];	/* Parameter powers of 0, 1, 2, 3 */
 	float  *ga[POW2MXRI];	/* Pointers to grid cubes data in tang[] */
@@ -310,22 +310,24 @@ co *cp			/* Input value and returned function value */
 		cp->v[f] = 0.0;
 	
 	/* For all non-zero combinations of parameter powers */
-	for (tp = s->spline.magic, p = -1; tp < &s->spline.magic[s->spline.nm]; tp++) {
-		double ppc;		/* Parameter power combination */
-		double wgt;		/* Magic matrix weight */
-		float *gp;		/* Pointer to vertex data */
+	{
+		double ppc = -1000.0;			/* Parameter power combination */
+		for (tp = s->spline.magic, p = -1; tp < &s->spline.magic[s->spline.nm]; tp++) {
+			double wgt;			/* Magic matrix weight */
+			float *gp;			/* Pointer to vertex data */
 
-		if (p != tp->p) {		/* Param power needs re-calculating */
-			int pp;
-			p = tp->p;
-			for (ppc = 1.0, pp = 0; pp < di; pp++)
-				ppc *= ppw[pp][3&(p>>(2*pp))];		/* comb. of param powers value */
+			if (p != tp->p) {		/* Param power needs re-calculating */
+				int pp;
+				p = tp->p;
+				for (ppc = 1.0, pp = 0; pp < di; pp++)
+					ppc *= ppw[pp][3&(p>>(2*pp))];		/* comb. of param powers value */
+			}
+
+			wgt = tp->wgt * ppc;		/* matrix times parameter */
+			gp = ga[tp->i] + tp->j;		/* Point to base of vertex data */
+			for (f = 0; f < fdi; f++) 	/* For all output values */
+				cp->v[f] += wgt * gp[f];
 		}
-
-		wgt = tp->wgt * ppc;		/* matrix times parameter */
-		gp = ga[tp->i] + tp->j;		/* Point to base of vertex data */
-		for (f = 0; f < fdi; f++) 	/* For all output values */
-			cp->v[f] += wgt * gp[f];
 	}
 /* printf("~~smooth interp finished\n"); */
 	return rv;

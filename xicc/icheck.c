@@ -9,7 +9,7 @@
  * Version: 1.00
  *
  * Copyright 2000 Graeme W. Gill
- * Please refer to Licence.txt file for details.
+ * Please refer to License.txt file for details.
  */
 
 /* TTBD:
@@ -28,7 +28,7 @@ void error(char *fmt, ...), warning(char *fmt, ...);
 
 void usage(void) {
 	fprintf(stderr,"Check PCS->Device Interpolation faults of ICC file, V1.00\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: icheck [-v] [-w] infile\n");
 	fprintf(stderr," -v        verbose\n");
 	fprintf(stderr," -w        create VRML visualisation\n");
@@ -54,7 +54,7 @@ main(
 	char in_name[100];
 	char out_name[100], *xl;
 	icmFile *rd_fp;
-	icc *wr_icco, *rd_icco;		/* Keep object separate */
+	icc *rd_icco;
 	int rv = 0;
 
 	/* Check variables */
@@ -64,8 +64,7 @@ main(
 	icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
 	int inn;							/* Number of input chanels */
 	icmLuAlgType alg;
-	FILE *wrl;
-	int chan, cs, ce;
+	FILE *wrl = NULL;
 	
 	if (argc < 2)
 		usage();

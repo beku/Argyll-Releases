@@ -1,0 +1,12 @@
+#!/bin/sh
+# Copy to /etc/hotplug/usb/Argyll
+#
+# Argyll hotplug script. Simply enable permissions.
+if [ "${ACTION}" = "add" ] && [ -f "${DEVICE}" ]
+then
+    # Should have a "pci" group, or "argyll" group, but do it crudely for now,
+    # by making it world readable.
+    # chgrp argyll "${DEVICE}"
+    # chmod 660 "${DEVICE}"
+    chmod 666 "${DEVICE}"
+fi

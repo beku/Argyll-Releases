@@ -17,14 +17,16 @@ read the following instructions in order to compile and then run any of
 the utilities. If you have downloaded one of the platform specific
 executable package, then the executables don't need to be compiled, and
 the following instructions are not relevant.<br>
-<br>
+<h5><span style="text-decoration: underline;">First&nbsp; setup JAM:</span><br>
+</h5>
 Argyll makes use of an unconventional build system called <a
  href="http://www.perforce.com/jam/jam.html">Jam/MR</a>. This
 can make it a little tricky to build.
 <p>You need to have the Jam/MR build utility installed on your system.
 (If you don't want to install/use Jam, then you are going to need to
 write
-a number of makefiles in whatever build system you prefer ...) The
+a number of makefiles in whatever build system you prefer. Check on the
+Argyll download page if any other packagings are available.) The
 Jambase
 I am using is included in the Argyll archive, and it is recommended
 that
@@ -37,29 +39,21 @@ Jam/MR is available from <a href="http://www.perforce.com/jam/jam.html">&lt;http
 You'll
 want to bootstrap it up using its Makefile, and then use it with the
 Jambase
-provided in argyll, perhaps using the -f flag, creating an alias of jam
+provided in Argyll, perhaps using the -f flag (like the default scripts
+do), creating an alias of jam
 that invokes jam using the -f flag, or modify the makeall scripts in
 Argyll
 to invoke Jam with the -f flag. (The Jam I'm using has been modified to
-look for a Jambase specified by a JAMBASE environment variable).
+look for a Jambase specified by a JAMBASE environment variable). Note
+that Apple OSX is a UNIX based system, and you'll simply want to use
+"make" to build Jam.<br>
 </p>
-<p>After unzipping the argyll.zip file, you will have to cd to the tiff
-sub-directory, and unzip the tiff.zip archive. If you are running on a
-Linux/OSX/Unix-like system, you should probably also run the
-configuration
-script (i.e. sh configure). There is no need to complete the
-configuration
-if you don't want to - ^C out of it when it asks you where you want to
-install things. cd back to the Argyll root directory, and if you are on
-a Windows NT system, run makeall.bat, and if you are on a
-Linux/OSX/Unix-like
-system, run makeall.ksh (i.e. sh makeall.ksh).
-</p>
-<p>You will have to watch the compile process to pick up any build
-failures in
-each sub-directory (The Jamfiles are setup for development in a
-particular
-directory, rather than for building the whole system in one hit.)
+<p>If you're using MINGW on MSWindows, you will need to make sure that
+the Jam Makefile has CFLAGS = -DNT when building Jam (rather than<br>
+CFLAGS = -DMINGW) otherwise the resulting Jam executable won't know
+it's on a Windows NT type system (this seems to be a compatibility bug
+in Jam. I've tried to work around this in my Jambase, but this may not
+work completely).<br>
 </p>
 <p>If you are running on Mac OSX, then even though OSX comes with a
 version
@@ -71,18 +65,47 @@ of Jam sufficiently to make it incompatible with normal Jamfiles :-(.
 The
 current release was built using OSX 10.3, although there is no
 particular
-reason it shouldn't compile on earlier OSX versions).
+reason it shouldn't compile on earlier or later OSX versions).
 </p>
 <p>On OSX what I did was to name the "normal" Jam ajam, and then setup
 a jam shell script to invoke it something like this: "ajam
--f$~wherever/argyll/Jambase
+-f~/src/argyll/Jambase
 $*", and to make sure that my script is ahead of Apples jam in my
-$PATH.
-<br>
-&nbsp;
-<br>
-&nbsp;
-<br>
+$PATH.&nbsp;
+The makeall.ksh script will run Jam with the -f flag.</p>
+<p>You may also have to set the appropriate environment variable to
+tell the Jambase which compiler you are using.<br>
+</p>
+<h5><span style="text-decoration: underline;">Then compile Argyll:</span><br>
+</h5>
+<p>Once you've got a working Jam, you simply have to unzip the
+argyll.zip file in a directory you have created
+for it, and then run the top level makeall script. On an MSWindows
+system, run makeall.bat, and if you are on a
+Linux/OSX/Unix-like
+system, run makeall.ksh (i.e. <span style="color: rgb(102, 0, 204);">sh
+makeall.ksh</span>). You may have to <span
+ style="color: rgb(102, 0, 204);">chmod +x makeall.ksh</span> if the
+unzip has not restored executable status.<br>
+</p>
+<p>You will have to watch the compile process to pick up any build
+failures in
+each sub-directory (The Jamfiles are setup for development in a
+particular
+directory, rather than for building the whole system in one hit. I
+haven't found an easy way yet to make it do both.)
+</p>
+<p>Another thing to watch on the Intel versions of OS X, is that your
+shell environment variable $MACHTYPE may be incorrect. On Intel 10.4 it
+should be i386-apple-darwin8.0, but there are bugs in Apples
+distribution.</p>
+<p>If&nbsp; you are on MSWindows and have the DDK installed, then it is
+worth setting the environment variables %DDK_INC_PATH% and
+%DDK_LIB_PATH% to the header and DDK library directories, so that the
+MSWindows HID driver inteface will get enabled. This allows accessing
+USB instruments&nbsp;
+that are labeled as HID devices (such as the Gretag Huey) , without
+having to install the libusb kernel drivers.<br>
 &nbsp;
 <br>
 &nbsp;

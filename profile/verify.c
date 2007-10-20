@@ -8,8 +8,8 @@
  * Copyright 2005 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -27,6 +27,7 @@
 #define verbo stdout
 
 #include <stdio.h>
+#include <string.h>
 #if defined(__IBMC__)
 #include <float.h>
 #endif
@@ -41,18 +42,20 @@
 void
 usage(void) {
 	fprintf(stderr,"Verify CIE values, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: verify [-options] target.ti3 measured.ti3\n");
 	fprintf(stderr," -v              Verbose - print each patch value\n");
+	fprintf(stderr," -n              Normalise each files reading to white Y\n");
+	fprintf(stderr," -N              Normalise each files reading to white XYZ\n");
 	fprintf(stderr," -c              Show CIE94 delta E values\n");
 	fprintf(stderr," -k              Show CIEDE2000 delta E values\n");
 	fprintf(stderr," -s              Sort patch values by error\n");
 	fprintf(stderr," -w              create VRML vector visualisation (measured.wrl)\n");
-	fprintf(stderr," -x              Use VRML axies\n");
+	fprintf(stderr," -x              Use VRML axes\n");
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
 	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
-	fprintf(stderr,"                 1931_2, 1964_10, S&B 1955_2, J&V 1978_2 (def.)\n");
+	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
 	fprintf(stderr," target.ti3      Target (reference) PCS or spectral values.\n");
 	fprintf(stderr," measured.ti3    Measured (actual) PCS or spectral values\n");
@@ -69,14 +72,15 @@ void end_vrml(FILE *wrl);
 /* Patch value type */
 typedef struct {
 	char sid[50];		/* sample id */
-	double v[3];		/* CIE value */
+	double v[3];		/* Lab value */
 	double de;			/* Delta E */
 } pval;
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int fa,nfa;				/* current argument we're looking at */
 	int verb = 0;
+	int norm = 0;			/* 1 = norm to Y, 2 = norm to XYZ */
 	int cie94 = 0;
 	int cie2k = 0;
 	int dovrml = 0;
@@ -95,12 +99,12 @@ main(int argc, char *argv[])
 	int spec = 0;				/* Use spectral data flag */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;			/* Custom illumination spectrum */
-	icxObserverType observ = icxOT_Judd_Voss_2;
+	icxObserverType observ = icxOT_CIE_1931_2;
 
 	char out_name[MAXNAMEL+4+1]; /* VRML name */
-	FILE *wrl;
+	FILE *wrl = NULL;
 
-	int i, j, n, rv = 0;
+	int i, j, n;
 
 #if defined(__IBMC__)
 	_control87(EM_UNDERFLOW, EM_UNDERFLOW);
@@ -133,6 +137,13 @@ main(int argc, char *argv[])
 
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
 				verb = 1;
+
+			/* normalize */
+			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
+				norm = 1;
+				if (argv[fa][1] == 'N')
+					norm = 2;
+			}
 
 			/* VRML */
 			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W')
@@ -402,7 +413,7 @@ main(int argc, char *argv[])
 				int ti;
 				xspect mwsp;			/* Medium spectrum */
 				instType itype;			/* Spectral instrument type */
-				xspect *insp;			/* Instrument illuminant */
+				xspect insp;			/* Instrument illuminant */
 
 				mwsp = sp;		/* Struct copy */
 
@@ -412,15 +423,20 @@ main(int argc, char *argv[])
 				if ((itype = inst_enum(cgf->t[0].kdata[ti])) == instUnknown)
 					error ("Unrecognised target instrument '%s'", cgf->t[0].kdata[ti]);
 
-				if ((insp = inst_illuminant(itype)) == NULL)
+				if (inst_illuminant(&insp, itype) != 0)
 					error ("Instrument doesn't have an FWA illuminent");
 
 				/* Determine a media white spectral reflectance */
 				for (j = 0; j < mwsp.spec_n; j++)
 					mwsp.spec[j] = 0.0;
 
+				/* Since we don't want to assume that there are any associated device */
+				/* values present in each file, we can't use this as means of */
+				/* determining the media color. Use an alternative approach here, */
+				/* which may give slightly different results to profile. */
+
 				/* Track the maximum reflectance for any band to determine white. */
-				/* This might silently fail, if there isn't white in the sampe set. */
+				/* This might silently fail, if there isn't white in the sample set. */
 				for (i = 0; i < cg[0].npat; i++) {
 					for (j = 0; j < mwsp.spec_n; j++) {
 						double rv = *((double *)cgf->t[0].fdata[i][spi[j]]);
@@ -428,8 +444,14 @@ main(int argc, char *argv[])
 							mwsp.spec[j] = rv;
 					}
 				}
-				if (sp2cie->set_fwa(sp2cie, insp, &mwsp)) 
+				if (sp2cie->set_fwa(sp2cie, &insp, &mwsp)) 
 					error ("Set FWA on sp2cie failed");
+
+				if (verb) {
+					double FWAc;
+					sp2cie->get_fwa_info(sp2cie, &FWAc);
+					fprintf(verbo,"FWA content = %f\n",FWAc);
+				}
 			}
 
 			for (i = 0; i < cg[0].npat; i++) {
@@ -448,6 +470,39 @@ main(int argc, char *argv[])
 			sp2cie->del(sp2cie);		/* Done with this */
 
 		}	/* End of reading in CGATs file */
+
+
+		/* Normalise to white = 1.0 */
+		if (norm) {
+			double bxyz[3] = { 0.0, -100.0, 0.0 };
+
+			/* Locate patch with biggest Y */
+			for (i = 0; i < cg[n].npat; i++) {
+				double xyz[3];
+				icmLab2XYZ(&icmD50, xyz, cg[n].pat[i].v);
+				if (xyz[1] > bxyz[1]) {
+					bxyz[0] = xyz[0];
+					bxyz[1] = xyz[1];
+					bxyz[2] = xyz[2];
+				}
+			}
+
+			/* Then normalize all the values */
+			for (i = 0; i < cg[n].npat; i++) {
+				double xyz[3];
+				icmLab2XYZ(&icmD50, xyz, cg[n].pat[i].v);
+				if (norm == 1) {
+					xyz[0] /= bxyz[1];
+					xyz[1] /= bxyz[1];
+					xyz[2] /= bxyz[1];
+				} else {
+					xyz[0] *= icmD50.X/bxyz[0];
+					xyz[1] *= icmD50.Y/bxyz[1];
+					xyz[2] *= icmD50.Z/bxyz[2];
+				}
+				icmXYZ2Lab(&icmD50, cg[n].pat[i].v, xyz);
+			}
+		}
 		cgf->del(cgf);		/* Clean up */
 	}
 
@@ -593,19 +648,35 @@ static void Lab2RGB(double *out, double *in);
 
 FILE *start_vrml(char *name, int doaxes) {
 	FILE *wrl;
+
+	/* Define the axis boxes */
+	struct {
+		double x, y, z;			/* Box center */
+		double wx, wy, wz;		/* Box size */
+		double r, g, b;			/* Box color */
+	} axes[5] = {
+		{ 0, 0,   50-GAMUT_LCENT, 2, 2, 100, .7, .7, .7 },	/* L axis */
+		{ 50, 0,  0-GAMUT_LCENT,  100, 2, 2,  1,  0,  0 },	/* +a (red) axis */
+		{ 0, -50, 0-GAMUT_LCENT,  2, 100, 2,  0,  0,  1 },	/* -b (blue) axis */
+		{ -50, 0, 0-GAMUT_LCENT,  100, 2, 2,  0,  1,  0 },	/* -a (green) axis */
+		{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,  1,  1,  0 },	/* +b (yellow) axis */
+	};
+
+	/* Define the labels */
 	struct {
 		double x, y, z;
-		double wx, wy, wz;
+		double size;
+		char *string;
 		double r, g, b;
-	} axes[5] = {
-		{ 0, 0,  50-GAMUT_LCENT,  2, 2, 100,  .7, .7, .7 },	/* L axis */
-		{ 50, 0,  0-GAMUT_LCENT,  100, 2, 2,   1,  0,  0 },	/* +a (red) axis */
-		{ 0, -50, 0-GAMUT_LCENT,  2, 100, 2,   0,  0,  1 },	/* -b (blue) axis */
-		{ -50, 0, 0-GAMUT_LCENT,  100, 2, 2,   0,  1,  0 },	/* -a (green) axis */
-		{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
+	} labels[6] = {
+		{ -2, 2, -GAMUT_LCENT + 100 + 10, 10, "+L*",  .7, .7, .7 },	/* Top of L axis */
+		{ -2, 2, -GAMUT_LCENT - 10,      10, "0",    .7, .7, .7 },	/* Bottom of L axis */
+		{ 100 + 5, -3,  0-GAMUT_LCENT,  10, "+a*",  1,  0,  0 },	/* +a (red) axis */
+		{ -5, -100 - 10, 0-GAMUT_LCENT,  10, "-b*",  0,  0,  1 },	/* -b (blue) axis */
+		{ -100 - 15, -3, 0-GAMUT_LCENT,  10, "-a*",  0,  0,  1 },	/* -a (green) axis */
+		{ -5,  100 + 5, 0-GAMUT_LCENT,  10, "+b*",  1,  1,  0 },	/* +b (yellow) axis */
 	};
-	int i;
-	
+
 	if ((wrl = fopen(name,"w")) == NULL)
 		error("Error opening VRML file '%s'\n",name);
 
@@ -630,18 +701,34 @@ FILE *start_vrml(char *name, int doaxes) {
 	fprintf(wrl,"    }\n");
 	fprintf(wrl,"\n");
 	if (doaxes != 0) {
-		fprintf(wrl,"# Lab axes as boxes:\n");
-		for (i = 0; i < 5; i++) {
-			fprintf(wrl,"Transform { translation %f %f %f\n", axes[i].x, axes[i].y, axes[i].z);
-			fprintf(wrl,"\tchildren [\n");
-			fprintf(wrl,"\t\tShape{\n");
-			fprintf(wrl,"\t\t\tgeometry Box { size %f %f %f }\n",
-			                  axes[i].wx, axes[i].wy, axes[i].wz);
-			fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[i].r, axes[i].g, axes[i].b);
-			fprintf(wrl,"\t\t}\n");
-			fprintf(wrl,"\t]\n");
-			fprintf(wrl,"}\n");
+		int n;
+		fprintf(wrl,"    # Lab axes as boxes:\n");
+		for (n = 0; n < 5; n++) {
+			fprintf(wrl,"    Transform { translation %f %f %f\n", axes[n].x, axes[n].y, axes[n].z);
+			fprintf(wrl,"      children [\n");
+			fprintf(wrl,"        Shape{\n");
+			fprintf(wrl,"          geometry Box { size %f %f %f }\n",
+			                       axes[n].wx, axes[n].wy, axes[n].wz);
+			fprintf(wrl,"          appearance Appearance { material Material ");
+			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[n].r, axes[n].g, axes[n].b);
+			fprintf(wrl,"        }\n");
+			fprintf(wrl,"      ]\n");
+			fprintf(wrl,"    }\n");
+		}
+		fprintf(wrl,"    # Axes identification:\n");
+		for (n = 0; n < 6; n++) {
+			fprintf(wrl,"    Transform { translation %f %f %f\n", labels[n].x, labels[n].y, labels[n].z);
+			fprintf(wrl,"      children [\n");
+			fprintf(wrl,"        Shape{\n");
+			fprintf(wrl,"          geometry Text { string [\"%s\"]\n",labels[n].string);
+			fprintf(wrl,"            fontStyle FontStyle { family \"SANS\" style \"BOLD\" size %f }\n",
+			                                  labels[n].size);
+			fprintf(wrl,"                        }\n");
+			fprintf(wrl,"          appearance Appearance { material Material ");
+			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", labels[n].r, labels[n].g, labels[n].b);
+			fprintf(wrl,"        }\n");
+			fprintf(wrl,"      ]\n");
+			fprintf(wrl,"    }\n");
 		}
 		fprintf(wrl,"\n");
 	}
@@ -726,6 +813,7 @@ void end_vrml(FILE *wrl) {
 	if (fclose(wrl) != 0)
 		error("Error closing VRML file\n");
 }
+
 
 
 /* Convert a gamut Lab value to an RGB value for display purposes */

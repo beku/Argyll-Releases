@@ -9,8 +9,8 @@
  * Copyright 2000, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -39,18 +39,18 @@
 #include "config.h"
 #include "tiffio.h"
 #include "icc.h"
+#include "xicc.h"
 #include "imdi.h"
 
 #undef DO_CHECK		/* Do floating point check */
 
-void error(char *fmt, ...), warning(char *fmt, ...);
-
 void usage(void) {
 	fprintf(stderr,"Convert a TIFF file to monochrome using an ICC device profile, V%s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: greytiff [-v level] profile.icm infile.tif outfile.tif\n");
-	fprintf(stderr," -p            Use slow precise correction\n");
 	fprintf(stderr," -v            Verbose\n");
+	fprintf(stderr," -p            Use slow precise correction\n");
+	fprintf(stderr," -j            Use CIECAM02\n");
 	exit(1);
 }
 
@@ -138,17 +138,22 @@ int pmtc
 
 /* Context for imdi setup callbacks */
 typedef struct {
-	icmLuBase *flu;		/* Device -> Lab */
-	icmLuBase *blu;		/* Lab -> Device */
+	int id, od;
+	icxLuBase *flu;		/* Device -> Jab/Lab */
+	icxLuBase *blu;		/* Jab/Lab -> Device */
 } sucntx;
 
 /* Input curve function */
-double input_curve(
+void input_curve(
 	void *cntx,
-	int ch,
-	double in_val
+	double *out_vals,
+	double *in_vals
 ) {
-	return in_val;
+	sucntx *rx = (sucntx *)cntx;
+	int e;
+
+	for (e = 0; e < rx->id; e++) 
+		out_vals[e] = in_vals[e];
 }
 
 /* Multi-dim table function */
@@ -167,12 +172,16 @@ double *in_vals
 
 
 /* Output curve function */
-double output_curve(
-void *cntx,
-int ch,
-double in_val
+void output_curve(
+	void *cntx,
+	double *out_vals,
+	double *in_vals
 ) {
-	return in_val;
+	sucntx *rx = (sucntx *)cntx;
+	int e;
+
+	for (e = 0; e < rx->od; e++) 
+		out_vals[e] = in_vals[e];
 }
 
 int
@@ -184,9 +193,11 @@ main(int argc, char *argv[]) {
 
 	icmFile *p_fp;
 	icc *icco;
+	xicc *xicco;
 	int verb = 0;
 	int slow = 0;
 	int rv = 0;
+	icColorSpaceSignature pcsor = icSigLabData;
 
 	TIFF *rh = NULL, *wh = NULL;
 	int x, y, width, height;					/* Size of image */
@@ -205,10 +216,12 @@ main(int argc, char *argv[]) {
 	unsigned char *inp[MAX_CHAN];
 	unsigned char *outp[MAX_CHAN];
 
+#ifdef DO_CHECK
 	/* Error check */
 	int mxerr = 0;
 	double avgerr = 0.0;
 	double avgcount = 0.0;
+#endif /* DO_CHECK */
 
 	if (argc < 2)
 		usage();
@@ -236,6 +249,11 @@ main(int argc, char *argv[]) {
 			/* Slow, Precise */
 			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
 				slow = 1;
+			}
+
+			/* Use CIECAM02 */
+			else if (argv[fa][1] == 'j' || argv[fa][1] == 'J') {
+				pcsor = icxSigJabData;
 			}
 
 			/* Verbosity */
@@ -266,6 +284,10 @@ main(int argc, char *argv[]) {
 	if ((icco = new_icc()) == NULL)
 		error ("Creation of ICC object failed");
 
+	/* Wrap with an expanded icc */
+	if ((xicco = new_xicc(icco)) == NULL)
+		error ("Creation of xicc failed");
+
 	if ((rv = icco->read(icco,p_fp,0)) != 0)
 		error ("%d, %s",rv,icco->err);
 
@@ -278,24 +300,25 @@ main(int argc, char *argv[]) {
 	}
 
 	/* Check that the profile is appropriate */
-	if (icco->header->deviceClass != icSigDisplayClass
-	 && icco->header->deviceClass != icSigOutputClass)
-		error("Profile isn't a Display or Output profile");
+	if (icco->header->deviceClass != icSigInputClass
+	 && icco->header->deviceClass != icSigDisplayClass
+	 && icco->header->deviceClass != icSigOutputClass
+	 && icco->header->deviceClass != icSigColorSpaceClass)	/* For sRGB etc. */
+		error("Profile isn't a device profile");
 
-	/* Get a fwd conversion object */
-	if ((su.flu = icco->get_luobj(icco, icmFwd, icRelativeColorimetric, icSigLabData, icmLuOrdNorm)) == NULL) {
-		if ((su.flu = icco->get_luobj(icco, icmFwd, icmDefaultIntent, icSigLabData, icmLuOrdNorm)) == NULL)
-			error ("%d, %s",icco->errc, icco->err);
-	}
+	/* Get a expanded color conversion object */
+	if ((su.flu = xicco->get_luobj(xicco, 0, icmFwd, icRelativeColorimetric, pcsor, icmLuOrdNorm, NULL, NULL)) == NULL)
+		error ("%d, %s",xicco->errc, xicco->err);
 
 	/* Get details of conversion (Arguments may be NULL if info not needed) */
 	su.flu->spaces(su.flu, &ins, &inn, NULL, NULL, NULL, NULL, NULL, NULL);
 
+	su.id = inn;
+	su.od = inn;
+
 	/* Get a bwd conversion object */
-	if ((su.blu = icco->get_luobj(icco, icmBwd, icRelativeColorimetric, icSigLabData, icmLuOrdNorm)) == NULL) {
-		if ((su.blu = icco->get_luobj(icco, icmBwd, icmDefaultIntent, icSigLabData, icmLuOrdNorm)) == NULL)
-			error ("%d, %s",icco->errc, icco->err);
-	}
+	if ((su.blu = xicco->get_luobj(xicco, 0, icmBwd, icRelativeColorimetric, pcsor, icmLuOrdNorm, NULL, NULL)) == NULL)
+		error ("%d, %s",xicco->errc, xicco->err);
 
 	/* - - - - - - - - - - - - - - - */
 	/* Open up input tiff file ready for reading */
@@ -364,9 +387,15 @@ main(int argc, char *argv[]) {
 			bitspersample == 8 ? pixint8 : pixint16,
 							/* Output pixel representation */
 			0x0,			/* Treat every channel as unsigned */
+			NULL,			/* No raster to callback channel mapping */
+			prec_min,		/* Minimum of input and output precision */
 			bitspersample == 8 ? pixint8 : pixint16,
 			0x0,			/* Treat every channel as unsigned */
+			NULL,			/* No raster to callback channel mapping */
 			17,				/* Desired table resolution. 33 is also a good number */
+			oopts_none,		/* Desired per channel output options */
+			NULL,			/* Output channel check values */
+			opts_none,		/* Desired processing direction and stride support */
 			input_curve,	/* Callback functions */
 			md_table,
 			output_curve,
@@ -396,7 +425,7 @@ main(int argc, char *argv[]) {
 				error ("Failed to read TIFF line %d",y);
 
 			/* Do fast conversion */
-			s->interp(s, (void **)outp, (void **)inp, width);
+			s->interp(s, (void **)outp, 0, (void **)inp, 0, width);
 			
 #ifdef DO_CHECK
 			/* Do floating point conversion */
@@ -530,9 +559,10 @@ main(int argc, char *argv[]) {
 
 	/* Done with lookup object */
 	if (s != NULL)
-		s->done(s);
+		s->del(s);
 	su.flu->del(su.flu);
 	su.blu->del(su.blu);
+	xicco->del(xicco);
 	icco->del(icco);
 	p_fp->del(p_fp);
 
@@ -542,30 +572,3 @@ main(int argc, char *argv[]) {
 	return 0;
 }
 
-
-/* Basic printf type error() and warning() routines */
-
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"greytiff: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
-}
-
-void
-warning(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"greytiff: Warning - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-}

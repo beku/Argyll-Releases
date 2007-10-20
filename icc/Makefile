@@ -3,10 +3,10 @@
 # by uncommenting the appropriate line:
 
 # Microsoft C++, WinNT setup
-#include Makefile.WNT
+include Makefile.WNT
 
 # IBM C++, WinNT setup
-include Makefile.IBMNT
+#include Makefile.IBMNT
 
 # Generic UNIX setup
 #include Makefile.UNIX
@@ -28,7 +28,7 @@ CCFLAGS = $(CCFLAGSDEF) $(CCOPTFLAG) $(CCDEFINES)
 STDHDRS = $(STDHDRSDEF)
 LINKFLAGS = $(LINKFLAGSDEF) $(LINKDEBUGFLAG)
 
-all:: libicc$(SUFLIB) icctest$(SUFEXE) lutest$(SUFEXE) icclu$(SUFEXE) iccdump$(SUFEXE) iccrw$(SUFEXE) fbtest$(SUFEXE)
+all:: libicc$(SUFLIB) icctest$(SUFEXE) lutest$(SUFEXE) icclu$(SUFEXE) iccdump$(SUFEXE) iccrw$(SUFEXE)
 
 
 icc$(SUFOBJ): icc.c icc.h
@@ -78,11 +78,5 @@ iccrw$(SUFOBJ): iccrw.c icc.h
 iccrw$(SUFEXE): iccrw$(SUFOBJ) iccstd$(SUFOBJ) libicc$(SUFLIB)
 	$(LINK) $(LINKOF)iccrw$(SUFEXE) iccrw$(SUFOBJ) iccstd$(SUFOBJ) libicc$(SUFLIB)
 
-
-fbtest$(SUFOBJ): fbtest.c icc.h
-	$(CC) $(CCOF)fbtest$(SUFOBJ) fbtest.c
-
-fbtest$(SUFEXE): fbtest$(SUFOBJ) iccstd$(SUFOBJ) libicc$(SUFLIB)
-	$(LINK) $(LINKOF)fbtest$(SUFEXE) fbtest$(SUFOBJ) iccstd$(SUFOBJ) libicc$(SUFLIB)
 
 

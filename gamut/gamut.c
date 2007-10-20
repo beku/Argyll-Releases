@@ -5,15 +5,19 @@
  * Gamut support routines.
  *
  * Author:  Graeme W. Gill
- * Date:    9/3/00
+ * Date:    9/3/2000
  * Version: 1.00
  *
- * Copyright 2000 Graeme W. Gill
+ * Copyright 2000 - 2006 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
+
+/* TTBD:
+
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,23 +26,38 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
-#include "../h/sort.h"
+#include "icc.h"
 #include "gamut.h"
 #include "cgats.h"
 #include "numlib.h"
+#include "sort.h"			/* ../h sort macro */
+#include "counters.h"		/* ../h counter macros */
+#include "xlist.h"			/* ../h expandable list macros */
 
-#undef DO_REMAP			/* Remap all the verticies that weren't on the surface */
-#undef ADD_EXTRA		/* Create extra verticies to improve resolution */
-						/* !!! Seems to cause infinite recursion with some profiles !!! */
+#define COLORED_VRML
+
+#define DO_TWOPASS			/* Second pass with adjustment based on first pass */
+
+#define USE_FAKE_SEED		/* Use fake seed points */
+#define FAKE_SEED_SIZE 0.1	/* Usually 0.1 */
+#define TRIANG_TOL 1e-10	/* Triangulation tollerance, usually 1e-10 */
+
+#undef TEST_CONVEX_HULL		/* Use pure convex hull, not log hull */
+
+#undef DEBUG_TRIANG			/* Enable detailed triangulation debugging */
+#undef DEBUG_TRIANG_VRML	/* Create debug.wrl for each step of triangulation */
+							/* (Only on second pass if #define DO_TWOPASS) */
+#undef DEBUG_TRIANG_VRML_STEP	/* Wait for return after each step */
+
+#undef DEBUG_SPLIT_VRML	/* Create debug.wrl for each step of triangle plane split */
 
 #undef TEST_LOOKUP
 #undef TEST_NEAREST
+#undef TEST_NOSORT			/* Turn off sorted insersion of verticies */
 
 #undef SHOW_BUCKETS			/* Show vertex buckets as surface */
 #undef SHOW_SPHERE			/* Show surface on sphere */
 #undef SHOW_HULL_PNTS		/* Show log() length convex hull points */
-
-#define COLORED_VRML
 
 #undef ASSERTS				/* Do internal checking */
 
@@ -66,6 +85,10 @@
  *  the gamut colorspace is a mismatch in icclink, or to be able
  *  to translate the verticies into the correct colorespace.
  *
+ *  Add interface to transform all the nodes, while
+ *  keeping structure (For use within gamut map, or
+ *  transforming existing gamut from Lab to Jab etc.)
+ *
  *  Add inteface to fetch the triangle information ?
  *
  *  Need to cleanup error handling. We just exit() at the moment.
@@ -73,14 +96,16 @@
  *  Replace BSP tree optmisation with ball tree, to speedup
  *  radial, nearest, and vector search ?
  *
- *  The log surface stuff is a hack. It might be better to
- *  use alpha shapes on real surface to allow for concavity,
- *  and this will prevent too many surface points dissapearing,
- *  removing the need for DO_REMAP or ADD_EXTRA, and improving
- *  gamut fidelity. Problem with doing this is that
- *  the current code relies on convex hull consistency
- *  to maintain triangle face ordering, and this breaks with
- *  alpha shape code.
+ *  The log surface stuff is a compromise, that ends up with
+ *  some dings and nicks, and a not fully detailed/smooth surface.
+ *  The fundamental limitation is the use of the Delaunay triangulation
+ *  criteria, and the triangulation algorithm dependence on it for consistency.
+ *  Want to switch to triangulation algorithm that doesn't
+ *  depend on this, and can triangulate concave objects,
+ *  so that something like alpha-shapes criteria can be
+ *  used to filter out non surface points. Inserting verticies
+ *  from largest radius to smallest seems to do the right thing
+ *  with cusp ridges, and this property needs to be retained.
  *
  */
 
@@ -92,15 +117,20 @@
 static void del_gamut(gamut *s);
 static void expand_gamut(gamut *s, double in[3]);
 static double getsres(gamut *s);
+static int getisjab(gamut *s);
+static int compatible(gamut *s, gamut *t);
 static int nrawverts(gamut *s);
 static int getrawvert(gamut *s, double pos[3], int ix);
+static int nraw0verts(gamut *s);
+static int getraw0vert(gamut *s, double pos[3], int ix);
 static int nverts(gamut *s);
 static int getvert(gamut *s, double *rad, double pos[3], int ix);
-static int getvertn(gamut *s, int nix[MAXGAMN+1], double *rad, double pos[3], int ix);
+static void startnexttri(gamut *s);
+static int getnexttri(gamut *s, int v[3]);
 static double volume(gamut *s);
-static int write_trans_vrml(gamut *s, char *filename, int doaxes,
-                  void (*transform)(void *cntx, double out[3], double in[3]), void *cntx);
-static int write_vrml(gamut *s, char *filename, int doaxes);
+static int write_trans_vrml(gamut *s, char *filename, int doaxes, int docusps,
+	void (*transform)(void *cntx, double out[3], double in[3]), void *cntx);
+static int write_vrml(gamut *s, char *filename, int doaxes, int docusps);
 static int write_gam(gamut *s, char *filename);
 static int read_gam(gamut *s, char *filename);
 static double radial(gamut *s, double out[3], double in[3]);
@@ -108,72 +138,188 @@ static double nradial(gamut *s, double out[3], double in[3]);
 static void nearest(gamut *s, double out[3], double in[3]);
 static void setwb(gamut *s, double *wp, double *bp);
 static int getwb(gamut *s, double *cswp, double *csbp, double *gawp, double *gabp);
+static void setcusps(gamut *s, int flag, double in[3]);
+static int getcusps(gamut *s, double cusps[6][3]);
 static int compute_vector_isect(gamut *s, double *p1, double *p2, double *min, double *max, double *mint, double *maxt);
 static double log_scale(double ss);
 
-double gam_Labc[3] = { GAMUT_LCENT, 0.0, 0.0 };	/* Constant */
-
 /* ------------------------------------ */
-static void del_gquad(gquad *q);
 
-/* Call the appropriate destructor for the node */
-static void
-del_gnode(gnode *n) {
-	if (n == NULL)
-		return;
-	switch(n->tag) {
-		/* Don't delete gverts here */
-		case 2:
-			del_gquad((gquad *)n);
-			break;
+/* Hue directions in degrees for Lab and Jab */
+/* Must be in increasing order */
+double gam_hues[2][7] = {
+	{
+		/* Lab */
+		36.0,			/* Red */
+		101.0,			/* Yellow */
+		149.0,			/* Green */
+		225.0,			/* Cyan */
+		300.0,			/* Blue */
+		337.0,			/* Magenta */
+		36.0 + 360.0	/* Red */
+	},
+	{
+		/* Jab */
+		28.0,			/* Red */
+		101.0,			/* Yellow */
+		148.0,			/* Green */
+		211.0,			/* Cyan */
+		269.0,			/* Blue */
+		346.0,			/* Magenta */
+		28.0 + 360.0	/* Red */
 	}
-}
+};
+
 
 /* ------------------------------------ */
 static
 gvert *new_gvert(
 gamut *s,
-double l,			/* Left border */
-double r,			/* Right border */
-double b,			/* Top border */
-double t			/* Bottom border */
+gquad *p,			/* Parent quad (may be NULL) */
+int i,				/* Intended node in quad */
+int f,				/* Flag value to be OR'ed */
+double pp[3],		/* Point in xyz rectangular coordinates, absolute */
+double rr[3],		/* Radial coordinates */
+double lrr0,		/* log scaled rr[0] */
+double sp[3],		/* Point mapped to surface of unit sphere, relative to center */
+double ch[3]		/* Point mapped for convex hull testing, relative to center */
 ) {
 	gvert *v;
 
-	/* Make sure there is one to grab */
-	if (s->nv >= s->na) {
-		if (s->na == 0) {
-			if ((s->verts = (gvert **)malloc(5 * sizeof(gvert *))) == NULL) {
-				fprintf(stderr,"gamut: malloc failed on gvert pointer\n");
-				exit (-1);
-			}
-			s->na = 5;
-		} else {
-			if ((s->verts = (gvert **)realloc(s->verts, s->na * 2 * sizeof(gvert *))) == NULL) {
-				fprintf(stderr,"gamut: realloc failed on gvert pointer\n");
-				exit (-1);
-			}
-			s->na = s->na * 2;
-		}
-	}
+	if (s->doingfake == 0 && s->ul != NULL) {	/* There is an unused one available */
+		v = s->ul;
+		s->ul = v->ul;
 
-	if ((v = (gvert *)calloc(1, sizeof(gvert))) == NULL) {
-		fprintf(stderr,"gamut: malloc failed on gvert object\n");
-		exit (-1);
+	} else {				/* Allocate a new one */
+
+		if (s->nv >= s->na) {	/* We need a new slot in the list */
+			if (s->na == 0) {
+				s->na = 5;
+				if ((s->verts = (gvert **)malloc(s->na * sizeof(gvert *))) == NULL) {
+					fprintf(stderr,"gamut: malloc failed on %d gvert pointer\n",s->na);
+					exit (-1);
+				}
+			} else {
+				s->na *= 2;
+				if ((s->verts = (gvert **)realloc(s->verts, s->na * sizeof(gvert *))) == NULL) {
+					fprintf(stderr,"gamut: realloc failed on %d gvert pointer\n",s->na);
+					exit (-1);
+				}
+			}
+		}
+	
+		if ((v = (gvert *)calloc(1, sizeof(gvert))) == NULL) {
+			fprintf(stderr,"gamut: malloc failed on gvert object\n");
+			exit (-1);
+		}
+		s->verts[s->nv] = v;
+		v->n = s->nv++;
 	}
-	s->verts[s->nv] = v;
 	v->tag = 1;
-	v->w = r - l;
-	v->h = t - b;
-	v->hc = (l + r) * 0.5;
-	v->vc = (t + b) * 0.5;
-	v->n = s->nv++;
-	v->f = GVERT_NONE;
+
+	if  (p != NULL) {
+		v->w = 0.5 * p->w;
+		v->h = 0.5 * p->h;
+
+		v->hc = p->hc;
+		if (i & 1)
+			v->hc += 0.5 * v->w;
+		else
+			v->hc -= 0.5 * v->w;
+	
+		v->vc = p->vc;
+		if (i & 2)
+			v->vc += 0.5 * v->h;
+		else
+			v->vc -= 0.5 * v->h;
+	} else {
+		v->w = 0.0;
+		v->h = 0.0;
+		v->hc = 0.0;
+		v->vc = 0.0;
+	}
+		
+	v->f = GVERT_NONE | f;
+	v->ul = NULL;
+	v->rc = 1;
+
+	v->p[0] = pp[0];
+	v->p[1] = pp[1];
+	v->p[2] = pp[2];
+	v->r[0] = rr[0];
+	v->r[1] = rr[1];
+	v->r[2] = rr[2];
+	v->lr0  = lrr0;
+	v->sp[0] = sp[0];
+	v->sp[1] = sp[1];
+	v->sp[2] = sp[2];
+	v->ch[0] = ch[0];
+	v->ch[1] = ch[1];
+	v->ch[2] = ch[2];
+
 	return v;
 }
 
-static void
-del_gverts(gamut *s) {
+/* Set the size of gvert angular segment */
+static
+void set_gvert(
+gvert *v,		/* gvert to set */
+gquad *p,		/* Parent quad */
+int i			/* Intended node in quad */
+) {
+	v->w = 0.5 * p->w;
+	v->h = 0.5 * p->h;
+
+	v->hc = p->hc;
+	if (i & 1)
+		v->hc += 0.5 * v->w;
+	else
+		v->hc -= 0.5 * v->w;
+
+	v->vc = p->vc;
+	if (i & 2)
+		v->vc += 0.5 * v->h;
+	else
+		v->vc -= 0.5 * v->h;
+}
+
+/* Increment the reference count on a gvert */
+static gvert *inc_gvert(gamut *s, gvert *v) {
+	if (v == NULL)
+		return v;
+	v->rc++;
+//printf("~1 incremented count on 0x%x to %d\n",v,v->rc);
+	return v;
+}
+
+/* Decrement the reference count on a gvert */
+/* Copes with NULL gvert. */
+/* If the reference count goes to 0, place the */
+/* vert on the unused list. */
+static void dec_gvert(gamut *s, gvert *v) {
+	if (v == NULL)
+		return;
+
+	v->rc--;
+//printf("~1 decremended count on 0x%x to %d\n",v,v->rc);
+
+#ifdef ASSERTS
+	if (v->tag != 1)
+		error("Assert: doing decremented on gquad node");
+
+	if (v->rc < 0)
+		error("Assert: decremented gvert ref count too far");
+#endif
+	
+	if (v->rc <= 0) {	/* Add it to the unused list */
+		memset((void *)v, 0, sizeof(gvert));
+		v->ul = s->ul;
+		s->ul = v;
+	}
+}
+
+/* Delete all the gverts */
+static void del_gverts(gamut *s) {
 	int i;
 	for (i = 0; i < s->nv; i++) {
 		free(s->verts[i]);
@@ -186,12 +332,44 @@ del_gverts(gamut *s) {
 }
 
 /* ------------------------------------ */
+
 static
 gquad *new_gquad(
-double l,			/* Left border */
-double r,			/* Right border */
-double b,			/* Top border */
-double t			/* Bottom border */
+gquad *p,			/* Parent quad */
+int i				/* Intended node in quad */
+) {
+	gquad *q;
+	if ((q = (gquad *)calloc(1, sizeof(gquad))) == NULL) {
+		fprintf(stderr,"gamut: calloc failed on gquad object\n");
+		exit (-1);
+	}
+	q->tag = 2;
+
+	q->w = 0.5 * p->w;
+	q->h = 0.5 * p->h;
+
+	q->hc = p->hc;
+	if (i & 1)
+		q->hc += 0.5 * q->w;
+	else
+		q->hc -= 0.5 * q->w;
+
+	q->vc = p->vc;
+	if (i & 2)
+		q->vc += 0.5 * q->h;
+	else
+		q->vc -= 0.5 * q->h;
+		
+	return q;
+}
+
+/* Same as above, but create with explicit size */
+static
+gquad *new_gquad2(
+double l,		/* Left border */
+double r,		/* Right border */
+double b,		/* Top border */
+double t		/* Bottom border */
 ) {
 	gquad *q;
 	if ((q = (gquad *)calloc(1, sizeof(gquad))) == NULL) {
@@ -213,9 +391,40 @@ del_gquad(gquad *q) {
 	if (q == NULL)
 		return;
 	for (i = 0; i < 4; i++) {
-		del_gnode((gnode *)q->qt[i]);
+		gnode *n = (gnode *)q->qt[i][0];
+		if (n != NULL && n->tag == 2)
+			del_gquad((gquad *)n);		/* Recurse */
 	}
 	free(q);
+}
+
+/* Helper functions */
+
+/* Given a gquad and a location, decide which quandrant we're in */
+static int gquad_quadrant(gquad *q, double p[3]) {
+	int i;
+
+#ifdef ASSERTS
+	if (p[1] < (q->hc - q->w * 0.5 - 1e-10)
+			 || p[1] > (q->hc + q->w * 0.5 + 1e-10)
+			 || p[2] < (q->vc - q->h * 0.5 - 1e-10)
+	 || p[2] > (q->vc + q->h * 0.5 + 1e-10)) {
+		fprintf(stderr,"error! point doesn't fall into bucket chosen for it!!!\n");
+		fprintf(stderr,"point x: %f < %f\n", p[1], (q->hc - q->w * 0.5));
+		fprintf(stderr,"point x: %f > %f\n", p[1], (q->hc + q->w * 0.5));
+		fprintf(stderr,"point y: %f < %f\n", p[2], (q->vc - q->h * 0.5));
+		fprintf(stderr,"point y: %f > %f\n", p[2], (q->vc + q->h * 0.5));
+		exit(-1);
+	}
+#endif
+
+	i = 0;
+	if (p[1] >= q->hc)
+		i |= 1;
+	if (p[2] >= q->vc)
+		i |= 2;
+
+	return i;
 }
 
 /* ------------------------------------ */
@@ -307,10 +516,15 @@ void del_gedge(gedge *t) {
 	
 /* Create a standard gamut map */
 gamut *new_gamut(
-double sres				/* Resolution (in rect coord units) of surface triangles */
+double sres,			/* Resolution (in rect coord units) of surface triangles */
 						/* 0.0 = default */
+int isJab				/* Flag indicating Jab space */
 ) {
 	gamut *s;
+
+#ifdef ASSERTS
+	fprintf(stderr,">>>>>>> ASSERTS ARE COMPILED INTO GAMUT.C <<<<<<<\n");
+#endif /* ASSERTS */
 
 	if ((s = (gamut *)calloc(1, sizeof(gamut))) == NULL) {
 		fprintf(stderr,"gamut: calloc failed on gamut object\n");
@@ -318,12 +532,24 @@ double sres				/* Resolution (in rect coord units) of surface triangles */
 	}
 
 	if (sres <= 0.0)
-		sres = 11.0;	/* default */
+		sres = 10.0;	/* default */
+	if (sres > 15.0)	/* Anything less is very poor */
+		sres = 15.0;
 	s->sres = sres;
 
+	if (isJab != 0)
+		s->isJab = 1;
+
+	/* Center point for radial values, surface creation etc. */
+	/* To compare two gamuts using radial values, their cent must */
+	/* be the same. */
+	s->cent[0] = 50.0;
+	s->cent[1] = 0.0;
+	s->cent[2] = 0.0;
+
 	/* Create top level quadtree nodes */
-	s->tl = new_gquad(-M_PI, 0.0, -M_PI/2.0, M_PI/2.0);	/* Left one */
-	s->tr = new_gquad(0.0, M_PI, -M_PI/2.0, M_PI/2.0);	/* Right one */
+	s->tl = new_gquad2(-M_PI, 0.0, -M_PI/2.0, M_PI/2.0);	/* Left one */
+	s->tr = new_gquad2(0.0, M_PI, -M_PI/2.0, M_PI/2.0);	/* Right one */
 
 	INIT_LIST(s->tris);			/* Init triangle list */
 	INIT_LIST(s->edges);		/* Init edge list (?) */
@@ -334,25 +560,33 @@ double sres				/* Resolution (in rect coord units) of surface triangles */
 	s->gawbset = 0;
 
 	/* Setup methods */
-	s->del        = del_gamut;
-	s->expand     = expand_gamut;
-	s->getsres    = getsres;
-	s->nrawverts  = nrawverts;
-	s->getrawvert = getrawvert;
-	s->nverts     = nverts;
-	s->getvert    = getvert;
-	s->getvertn   = getvertn;
-	s->volume     = volume;
-	s->radial     = radial;
-	s->nradial    = nradial;
-	s->nearest    = nearest;
+	s->del         = del_gamut;
+	s->expand      = expand_gamut;
+	s->getsres     = getsres;
+	s->getisjab    = getisjab;
+	s->compatible  = compatible;
+	s->nrawverts   = nrawverts;
+	s->getrawvert  = getrawvert;
+	s->nraw0verts  = nraw0verts;
+	s->getraw0vert = getraw0vert;
+	s->nverts      = nverts;
+	s->getvert     = getvert;
+	s->startnexttri = startnexttri;
+	s->getnexttri = getnexttri;
+	s->getvert     = getvert;
+	s->volume      = volume;
+	s->radial      = radial;
+	s->nradial     = nradial;
+	s->nearest     = nearest;
 	s->vector_isect = compute_vector_isect;
-	s->setwb      = setwb;
-	s->getwb      = getwb;
-	s->write_vrml = write_vrml;
+	s->setwb       = setwb;
+	s->getwb       = getwb;
+	s->setcusps    = setcusps;
+	s->getcusps    = getcusps;
+	s->write_vrml  = write_vrml;
 	s->write_trans_vrml = write_trans_vrml;
-	s->write_gam  = write_gam;
-	s->read_gam   = read_gam;
+	s->write_gam   = write_gam;
+	s->read_gam    = read_gam;
 
 	return s;
 }
@@ -360,9 +594,10 @@ double sres				/* Resolution (in rect coord units) of surface triangles */
 static void del_gnn(gnn *p);
 static void del_gbsp(gbsp *n);
 
-/* Free and clear the triangulation structures */
-/* Note that this doesn't reset the point flags */
+/* Free and clear the triangulation structures, */
+/* and clear the triangulation vertex flags. */
 static void del_triang(gamut *s) {
+	int i;
 	gtri *tp;		/* Triangle pointer */
 	gedge *ep;
 
@@ -395,71 +630,199 @@ static void del_triang(gamut *s) {
 		s->nns = NULL;
 	}
 	s->ne_inited = 0;
+
+	/* Reset the vertex flags triangulation changes */
+	for (i = 0; i < s->nv; i++) {
+		s->verts[i]->f &= ~GVERT_TRI;
+		s->verts[i]->f &= ~GVERT_INSIDE;
+	}
 }
 
 static void
 del_gamut(gamut *s) {
-	gtri *tp;		/* Triangle pointer */
-	gedge *ep;
-
 	del_gquad(s->tl);
 	del_gquad(s->tr);
 
-	del_gverts(s);
-
 	del_triang(s);
+	del_gverts(s);
 
 	free(s);
 }
 
-/* ------------------------------------ */
+/* ===================================================== */
+/* Segmented maxima filter code */
+/* ===================================================== */
+
+/*
+	This implementation has two twists on the usual
+    segmented maxima filtering:
+
+	* Rather than using a uniform radial grid, it
+      uses an adaptive, quadtree structure, so that
+      rather than having a constant angular resolution
+      for the segments, the sements are chosen so as to
+      aproximately correspond to a constant surface detail
+      level. [ A subtle problem with this approach is that
+      some points will be discarded early on, that wouldn't
+      be discarded later, when the quadtree is finer. A hack
+      is to run the points throught twice.]
+
+    * Rather than keep the single sample with the
+      largest radius in each radial segment,
+      four samples are kept, each being the largest
+      in a different direction. This helps avoid
+      "knicks" in edges, where a non edge sample
+      displaces an edge sample within a segment.
+
+ */
+
+/* Helper function that returns nz if v1 should replace v2 */
+static int smreplace(
+gamut *s,
+int d,			/* Slot number */
+gvert *v1,		/* Candidate vertex */
+gvert *v2		/* Existing vertex */
+) {
+	double xx, w[3], c[3];
+	int j;
+	if (v2 == NULL)
+		return 1;
+
+	/* Filter out any points that are almost identical */
+	/* This can cause numerical problems in the triangle BSP tree creation. */ 
+	for (xx = 0.0, j = 0; j < 3; j++) {
+		double tt = v1->p[j] - v2->p[j];
+		xx += tt * tt;
+	}
+	if (xx < (1e-4 * 1e-4))
+		return 0;
+
+	c[0] = s->cent[0];
+	c[1] = s->cent[1];
+	c[2] = s->cent[2];
+
+	/* Set L, a & b weighting depending on the slot */
+	switch(d) {
+		case 1:
+			w[0] = 0.5;
+			w[1] = 1.0;
+			w[2] = 1.0;
+			break;
+		case 2:
+			w[0] = 2.0;
+			w[1] = 1.0;
+			w[2] = 1.0;
+			break;
+		case 3:
+			w[0] = 4.0;
+			w[1] = 1.0;
+			w[2] = 1.0;
+			break;
+		case 4:
+			w[0] = 0.0;
+			w[1] = 1.0;
+			w[2] = 0.1;
+			break;
+		case 5:
+			w[0] = 0.0;
+			w[1] = 0.1;
+			w[2] = 1.0;
+			break;
+		default:
+			w[0] = 1.0;
+			w[1] = 1.0;
+			w[2] = 1.0;
+			break;
+	}
+	w[0] *= w[0];		/* Because we're weighting the squares */
+	w[1] *= w[1];
+	w[2] *= w[2];
+	return ( w[0] * (v1->p[0] - c[0]) * (v1->p[0] - c[0])
+	       + w[1] * (v1->p[1] - c[1]) * (v1->p[1] - c[1])
+	       + w[2] * (v1->p[2] - c[2]) * (v1->p[2] - c[2]))
+	     > ( w[0] * (v2->p[0] - c[0]) * (v2->p[0] - c[0])
+	       + w[1] * (v2->p[1] - c[1]) * (v2->p[1] - c[1])
+	       + w[2] * (v2->p[2] - c[2]) * (v2->p[2] - c[2]));
+}
+
 
 /* Expand the gamut by adding a point */
-/* (Normal, non-gamut difference entry point) */
 static void expand_gamut(
 gamut *s,
 double pp[3]		/* rectangular coordinate of point */
 ) {
 	gnode *n;		/* Current node */
-	gvert *v;		/* alias, current vertex */
+	gvert *nv, *ov;	/* new vertex, old vertex */
 	gquad *q;		/* Parent quad */
 	int i;			/* Sub element within quad */
+	int k;			/* Index of direction slot */
 	double rr[3];	/* Radial coordinate version of pp[] */
+	double sp[3];	/* Unit shere mapped version of pp[] relative to center */
+	double ch[3];	/* Convex hull testing mapped version of pp[] relative to center */
 	double lrr0;	/* log scaled rr[0] */
 	double hang, vang;	/* Critical angles for this points depth */
-	double aarea;
+	double aa;
+	int j;
 
 	if (s->tris != NULL || s->read_inited || s->lu_inited || s->ne_inited) {
 		fprintf(stderr,"Can't add points to gamut now!\n");
 		exit(-1);
 	}
 
+	if (s->doingfake == 0)
+		s->cu_inited = 0;		/* Invalidate cust info */
+
 	/* Convert to radial coords */
-	gamut_rect2radial(rr, pp);
+	gamut_rect2radial(s, rr, pp);
+
+	if (rr[0] < 1e-6) 		/* Ignore a point right at the center */
+		return;
 
 	/* Figure log scaled radius */
 	lrr0 = log_scale(rr[0]);
 
-#ifdef NEVER	/* Test points on sphere as input */
-{
-rr[0] = 50.0;	/* Sphere radius */
-gamut_radial2rect(pp, rr);
-}
-#endif
+	/* Compute unit shere mapped location */
+	aa = 1.0/rr[0];				/* Adjustment to put in on unit sphere */
+	for (j = 0; j < 3; j++)
+		sp[j] = (pp[j] - s->cent[j]) * aa;
 
-//printf("\n~1 Expand called with point %f %f %f, rad %f %f %f\n",
-//pp[0], pp[1], pp[2], rr[0], rr[1], rr[2]);
+	/* Compute hull testing mapped version */
+	for (j = 0; j < 3; j++)
+		ch[j] = sp[j] * lrr0;
 
-	/* compute angle resolution required */
-	vang = s->sres/rr[0];
-	hang = s->sres/(rr[0] * cos(rr[2]));
+	/* compute twice angle resolution required (will compare to parent size) */
+	hang = pow(rr[0], 1.01) * fabs(cos(rr[2]));
+	if (hang < 1e-9)
+		hang = 1e-9;
+	hang = 4.0 * s->sres/hang;
+	vang = 4.0 * s->sres/pow(rr[0], 1.01);
 
-	aarea = vang * hang;
+//printf("~1 Point at %f %f %f, radial %f %f %f\n", pp[0], pp[1], pp[2], rr[0], rr[1], rr[2]);
+//printf("~1     shere at %f %f %f, log %f %f %f, vhang %f %f\n", sp[0], sp[1], sp[2], ch[0], ch[1], ch[2], vang, hang);
 
-//~~8
-//vang = hang;
+	/* If nofilter flag is set, add all points as verticies */
+	if (s->nofilter) {
 
-//printf("~1 res needed for point h = %f, v = %f\n",hang, vang);
+		/* Filter out any points that are almost identical. */
+		/* This can cause numerical problems in the triangle BSP tree creation. */ 
+		for (i = 0; i < s->nv; i++) {
+			double xx;
+	
+			for (xx = 0.0, j = 0; j < 3; j++) {
+				double tt = pp[j] - s->verts[i]->p[j];
+				xx += tt * tt;
+			}
+			if (xx < (1e-4 * 1e-4)) {
+				return;			/* Ignore duplicate */
+			}
+		}
+		
+		/* Create a vertex for the point we're possibly adding */
+		new_gvert(s, NULL, 0, GVERT_SET | (s->doingfake ? GVERT_FAKE : 0), pp, rr, lrr0, sp, ch);
+
+		return;
+	}
+	/* else filter using adaptive segmented maxima */
 
 	/* Start by looking at the top level quads */
 	if (rr[1] >= 0.0) {
@@ -468,193 +831,304 @@ gamut_radial2rect(pp, rr);
 		q = s->tl;
 	}
 	n = (gnode *)q;
-//printf("Starting with quad 0x%x, width %f, height %f\n",q, q->w, q->h);
+//printf("~1 Starting with quad 0x%x, width %f, height %f\n",q, q->w, q->h);
 
-	/* Now recurse until we find a vertex */
-	do {
-		/* Decend into this quad */
-		q = (gquad *)n;
-//printf("Current quad 0x%x, width %f, height %f\n",q, q->w, q->h);
-		i = 0;
-		if (rr[1] >= q->hc)
-			i |= 1;
-		if (rr[2] >= q->vc)
-			i |= 2;
-		n = q->qt[i];
+	/* Now recurse until we have a virtex at the right location and depth */
+	for (;;) {
+		/* Recurse into quad node n */
+		q = (gquad *)n;					/* Parent node */
+		i = gquad_quadrant(q, rr);		/* Quadrand of parent */
+		n = q->qt[i][0];				/* Child node in quadrant */
 
-//printf("~1 decending to quadrant %d of quad 0x%x, node 0x%x, type %d\n",
-//i, q, n, n != NULL ? n->tag : 0);
+//printf("~1 Current quad 0x%x, width %f, height %f\n",q, q->w, q->h);
+//printf("~1 Current child in quadrant %d, node 0x%x, type %d\n", i, n, n != NULL ? n->tag : 0);
 
-		/* If there isn't a node there, create one */
-		if (n == NULL) {
-			double w2 = q->w/2.0;
-			double h2 = q->h/2.0;
-			double l, r, b, t;
+		/* If we're at the right depth to create a vertex, break out of decent loop. */
 
-			switch (i) {
-				case 0:
-					l = q->hc - w2; r = q->hc; b = q->vc - h2; t = q->vc;
-					break;
-				case 1:
-					l = q->hc; r = q->hc + w2; b = q->vc - h2; t = q->vc;
-					break;
-				case 2:
-					l = q->hc - w2; r = q->hc; b = q->vc; t = q->vc + h2;
-					break;
-				case 3:
-					l = q->hc; r = q->hc + w2; b = q->vc; t = q->vc + h2;
-					break;
+		if (n == NULL) {			/* Create new node */
+			if (q->w <= hang && q->h <= vang) {
+//printf("~1 We're at the right depth to add vertex\n");
+				break;
 			}
-			
-			if (w2 <= hang && h2 <= vang) {
-//			if (w2 <= hang || h2 <= vang) {
-//			if ((w2 * h2) <= aarea) {
-				/* If this resolution is OK, create a vertex */
-				n = (gnode *)new_gvert(s, l, r, b, t);
-//printf("~1 creating vertex node 0x%x width %f, height %f\n",n,w2,h2);
-			} else {
-				/* else create another quad to sub-divide the area */
-				n = (gnode *)new_gquad(l, r, b, t);
-//printf("~1 creating quad node 0x%x\n",n);
+			/* Else create a new quad */
+			n = (gnode *)new_gquad(q, i);
+			q->qt[i][0] = n;
+//printf("~1 Empty child node not deep enough, creating new quad node 0x%x\n",n);
+
+		/* If we've found verticies at this node */
+		} else if (n->tag == 1) {
+			int j;
+			gquad *qq;				/* New child quad */
+			gvert *vv[NSLOTS];		/* Existing verticies at this level */
+
+			if (q->w <= hang && q->h <= vang) {
+//printf("~1 We're at the right depth to replace vertex\n");
+				break;
 			}
-			q->qt[i] = n;
-		}
-	} while (n->tag != 1);
+//printf("~1 deepening verticies\n");
 
-//printf("~1 Got parent quad 0x%x, quadrant %d, vertex 0x%x\n", q, i, n);
-//printf("~1 vertex 0x%x has width %f, height %f\n", n, n->w, n->h);
-
-	/* We now have a vertex (n) and its parent quad (q), and its quadrant (i) */
-	/* but it may not be at the right depth */
-	while (n->w > hang || n->h > vang) {
-//	while (n->w > hang && n->h > vang) {
-//	while ((n->w * n->h) > aarea) {
-		int j;
-		double w2 = q->w/2.0;
-		double h2 = q->h/2.0;
-		double l, r, b, t;
-
-//printf("~1 deepening vertex\n");
-
-		switch (i) {	/* Compute current nodes location */
-			case 0:
-				l = q->hc - w2; r = q->hc; b = q->vc - h2; t = q->vc;
-				break;
-			case 1:
-				l = q->hc; r = q->hc + w2; b = q->vc - h2; t = q->vc;
-				break;
-			case 2:
-				l = q->hc - w2; r = q->hc; b = q->vc; t = q->vc + h2;
-					break;
-			case 3:
-			l = q->hc; r = q->hc + w2; b = q->vc; t = q->vc + h2;
-				break;
-		}
+			for (k = 0; k < NSLOTS; k++)
+				vv[k] = (gvert *)q->qt[i][k];	/* Save pointers to current verticies */
 			
-		/* make a quad to replace the current node */
-		q->qt[i] = (gnode *)new_gquad(l, r, b, t);
-		q = (gquad *)q->qt[i];	/* This is new parent */
+//printf("~1 existing verticies are 0x%x, 0x%x, 0x%x, 0x%x\n", vv[0], vv[1], vv[2], vv[3]);
+
+			/* make a quad to replace the current verticies */
+			qq = new_gquad(q, i);
+			n = (gnode *)qq;
+			q->qt[i][0] = n;
+			for (k = 1; k < NSLOTS; k++)
+				q->qt[i][k] = NULL;
+
 //printf("~1 added quad 0x%x to quadrant %d\n",i,q);
 
-		w2 = q->w/2.0;			/* Parents quads half width and height */
-		h2 = q->h/2.0;
+			/* Distribute verticies that were here, into new quad */
+			for (j = 0; j < NSLOTS; j++) {			/* For all existing verticies */
 
-		/* Figure where current node fits in new parent */
-		/* and adjust its size and location */
-		v = (gvert *)n;
-//		v->f &= ~GVERT_SET;		/* Invalidate in case its discarded ? */
-		v->w = w2;
-		v->h = h2;
-		v->hc = q->hc - w2 * 0.5;
-		v->vc = q->vc - h2 * 0.5;
+				if (vv[j] == NULL)
+					continue;
 
-		/* Figure out old vertex location within the new parent */
-		j = 0;
-		if (v->r[1] >= q->hc) {
-			j |= 1;
-			v->hc += w2;
-		}
-		if (v->r[2] >= q->vc) {
-			j |= 2;
-			v->vc += h2;
-		}
+//printf("~1 re-distributing verticy 0x%x\n",vv[j]);
+				i = gquad_quadrant(qq, vv[j]->r);	/* Quadrant for existing vertex */
 
-		/* Figure out the new vertex location within the new parent */
-		i = 0;
-		if (rr[1] >= q->hc)
-			i |= 1;
-		if (rr[2] >= q->vc)
-			i |= 2;
+				set_gvert(vv[j], qq, i);			/* Update vertex node location */
 
-//printf("~1 current node will be in quadrant %d of quad 0x%x\n",j,q);
-
-		/* If the current vertex will not be in the same square as the new point, */
-		/* retain it, and keep decending. */
-		if (j != i) {
-			double l, r, b, t;
-
-			q->qt[j] = n;		/* Split off existing node */
-
-			/* Compute location of new node and create it */
-			switch (i) {	
-				case 0:
-					l = q->hc - w2; r = q->hc; b = q->vc - h2; t = q->vc;
-					break;
-				case 1:
-					l = q->hc; r = q->hc + w2; b = q->vc - h2; t = q->vc;
-					break;
-				case 2:
-					l = q->hc - w2; r = q->hc; b = q->vc; t = q->vc + h2;
-					break;
-				case 3:
-					l = q->hc; r = q->hc + w2; b = q->vc; t = q->vc + h2;
-					break;
-			}
-			n = (gnode *)new_gvert(s, l, r, b, t);	/* Creat new node */
-//printf("~1 placing old node 0x%x in quadrant %d of quad 0x%x\n",n,j,q);
-		}
-		q->qt[i] = n;	/* Insert current/new node in its location */
-//printf("~1 placing new node 0x%x in quadrant %d of quad 0x%x\n",n,i,q);
-	}	/* End of "untill deep enough" */
-
-	/* Add the point in into the current/new vertex */
-if (n->tag != 1) {
-fprintf(stderr,"~~1 expected vertex, got quad!\n");
-exit(-1);
-}
-	v = (gvert *)n;
-//printf("~1 Vertex node to check is 0x%x, flags 0x%x, depth %f\n",v, v->f, v->r[0]);
-
-
-#ifdef ASSERTS
-	if (rr[1] < (v->hc - v->w * 0.5 - 1e-10)
-	 || rr[1] > (v->hc + v->w * 0.5 + 1e-10)
-	 || rr[2] < (v->vc - v->h * 0.5 - 1e-10)
-	 || rr[2] > (v->vc + v->h * 0.5 + 1e-10)) {
-	fprintf(stderr,"error! point doesn't fall into bucket chosen for it!!!\n");
-	fprintf(stderr,"%f < %f\n", rr[1], (v->hc - v->w * 0.5));
-	fprintf(stderr,"%f > %f\n", rr[1], (v->hc + v->w * 0.5));
-	fprintf(stderr,"%f < %f\n", rr[2], (v->vc - v->h * 0.5));
-	fprintf(stderr,"%f > %f\n", rr[2], (v->vc + v->h * 0.5));
-	exit(-1);
-	}
+				nv = vv[j];
+				for (k = 0; nv != NULL && k < NSLOTS; k++) {	/* For direction slot */
+					ov = (gvert *)qq->qt[i][k];
+					if (smreplace(s, k, nv, ov)) {
+						if (k == 0) {			/* Track points that are in k == 0 direction */
+							if (ov != NULL && ov->k0 > 0)
+								ov->k0--;
+							nv->k0++;
+						}
+#ifndef NEVER
+						qq->qt[i][k] = (gnode *)inc_gvert(s, nv);
+						dec_gvert(s, ov);
+#else
+						/* Use slots for best, 2nd best, etc */
+						qq->qt[i][k] = (gnode *)inc_gvert(s, nv);
+						dec_gvert(s, nv);
+						nv = ov;
 #endif
+//printf("Node 0x%x rc %d at %f %f %f is replacing\n",nv, nv->rc, nv->p[0], nv->p[1], nv->p[2]);
+//if (ov != NULL) printf(" replacing node 0x%x rc %d at %f %f %f\n",ov, ov->rc, ov->p[0], ov->p[1], ov->p[2]);
+//else printf(" NULL\n");
+					}
+				}
+				dec_gvert(s, nv);
+			}
+		}
+		/* Else it's a quad, and we will decend into it */
 
-	if (!(v->f & GVERT_SET) || lrr0 > v->lr0) {
-		v->f |= GVERT_SET;
-		v->p[0] = pp[0];
-		v->p[1] = pp[1];
-		v->p[2] = pp[2];
-		v->r[0] = rr[0];
-		v->r[1] = rr[1];
-		v->r[2] = rr[2];
-		v->lr0  = lrr0;
-//printf("~1 New value set\n");
+	}	/* keep decending until we find right depth */
+
+//printf("~1 Got parent quad 0x%x, quadrant %d, vertex 0x%x\n", q, i, n);
+
+	/* Create a vertex for the point we're possibly adding */
+	nv = new_gvert(s, q, i, GVERT_SET, pp, rr, lrr0, sp, ch);
+
+	/* Replace any existing gverts with this one */
+	for (k = 0; k < NSLOTS; k++) {		/* For direction slot */
+		ov = (gvert *)q->qt[i][k];
+		if (smreplace(s, k, nv, ov)) {
+			if (k == 0) {			/* Track points that are in k == 0 direction */
+				if (ov != NULL && ov->k0 > 0)
+					ov->k0--;
+				nv->k0++;
+			}
+#ifndef NEVER
+			q->qt[i][k] = (gnode *)inc_gvert(s, nv);
+			dec_gvert(s, ov);
+#else
+			/* Use slots for best, 2nd best, etc */
+			q->qt[i][k] = (gnode *)inc_gvert(s, nv);
+			dec_gvert(s, nv);
+			nv = ov;
+#endif
+		}
 	}
-//printf("~1 Point is done\n");
+	dec_gvert(s, nv);	 /* Make sure it's reclaimed if wasn't used */
+
+//printf("~1 Point is done\n\n");
 }
 
 /* ------------------------------------ */
+/* Locate the vertices most likely to correspond to the */
+/* primary and secondary colors (cusps) */
+/*
+ * Notes:
+ *
+ *	To better support gamuts of devices with more than 4 colorants,
+ *  it may be necessary to add another flag type that expands
+ *  the cusps to lie on the actual gamut surface, as for
+ *  some devices this lies outside the pure colorant combinations.
+ */ 
+
+static void setcusps(gamut *s, int flag, double in[3]) {
+	int i, j;
+
+	if (flag == 0) {	/* Reset */
+		for (j = 0; j < 6; j++) {
+			s->cusps[j][0] = 0.0;		/* Marker values */
+			s->cusps[j][1] = 0.0;
+			s->cusps[j][2] = 0.0;
+		}
+		s->dcuspixs = 0;
+		s->cu_inited = 0;
+		return;
+
+	} else if (flag == 2) {	/* Finalize */
+
+		if (s->dcuspixs > 0) {
+			double JCh[3];
+			double hues[6];
+			int r, br;
+			double berr;
+
+			/* Figure out where to put the ones we got */
+			for (j = 0; j < 6; j++) {	/* Compute the hues */
+				icmLab2LCh(JCh, s->dcusps[j]);
+				hues[j] = JCh[2];
+			}
+
+			/* Sort them into hue order */
+			for (j = 0; j < 5; j++) {
+				for (i = j+1; i < 6; i++) {
+					if (hues[j] > hues[i]) {
+						double tt;
+						tt = hues[j]; hues[j] = hues[i]; hues[i] = tt;
+						tt = s->dcusps[j][0]; s->dcusps[j][0] = s->dcusps[i][0]; s->dcusps[i][0] = tt;
+						tt = s->dcusps[j][1]; s->dcusps[j][1] = s->dcusps[i][1]; s->dcusps[i][1] = tt;
+						tt = s->dcusps[j][2]; s->dcusps[j][2] = s->dcusps[i][2]; s->dcusps[i][2] = tt;
+					}
+				}
+			}
+
+			/* Figure out which is the best match by rotation */
+			berr = 1e6;
+			for (r = 0; r < 6; r++) {
+				double terr = 0.0;
+				for (j = 0; j < 6; j++) {
+					double tt;
+
+					tt = fabs(gam_hues[s->isJab][j] - hues[(j + r) % 6]);
+					if (tt > 180.0)
+						tt = 360.0 - tt;
+					terr += tt;
+				}
+				if (terr < berr) {
+					br = r;
+					berr = terr;
+				}
+			}
+			/* Place them at that rotation */
+			for (j = 0; j < 6; j++) {	/* Compute the hues */
+//printf("~1 placing hue %f ix %d into hue %f ix %d\n", hues[(j + br) % 6],(j + br) % 6, gam_hues[s->isJab][j] ,j);
+
+				s->cusps[j][0] = s->dcusps[(j + br) % 6][0];
+				s->cusps[j][1] = s->dcusps[(j + br) % 6][1];
+				s->cusps[j][2] = s->dcusps[(j + br) % 6][2];
+			}
+		}
+
+		/* Check we've got a cusp */
+		for (j = 0; j < 6; j++) {
+			if (s->cusps[j][0] == 0.0
+			 && s->cusps[j][1] == 0.0
+			 && s->cusps[j][2] == 0.0) {
+//printf("~1 not enough cusps were found = slot %d hue %f is empty\n",j,gam_hues[s->isJab][j]);
+				s->cu_inited = 0;
+				return;			/* Not all have been set */
+			}
+		}
+		s->cu_inited = 1;
+		return;
+
+	} else if (flag == 3) {	/* Definite 1/6 cusp */
+
+		if (s->dcuspixs >= 6) {
+//printf("~1 too many cusp values added\n");
+			return;						/* Error - extra cusp ignored */
+		}
+		s->dcusps[s->dcuspixs][0] = in[0];
+		s->dcusps[s->dcuspixs][1] = in[1];
+		s->dcusps[s->dcuspixs++][2] = in[2];
+
+	} else {	/* Consider another point as a cusp point */
+		double JCh[3];
+		int bj = 0, sbj = 0;
+		double bh = 1e6, sbh = 1e6;
+		double ns, es;
+
+		icmLab2LCh(JCh, in);
+
+		/* See which hue it is closest and 2nd closet to cusp hue. */
+		for (j = 0; j < 6; j++) {
+			double tt;
+
+			tt = fabs(gam_hues[s->isJab][j] - JCh[2]);
+			if (tt > 180.0)
+				tt = 360.0 - tt;
+
+			if (tt < bh) {
+				if (bh < sbh) {
+					sbh = bh;
+					sbj = bj;
+				}
+				bh = tt;
+				bj = j;
+			} else if (tt < sbh) {
+				sbh = tt;
+				sbj = j;
+			}
+		}
+
+		/* Compute distance of existing and new */
+		es = s->cusps[bj][1] * s->cusps[bj][1] + s->cusps[bj][2] * s->cusps[bj][2];
+		ns = in[1] * in[1] + in[2] * in[2];
+//printf("~1 chroma dist of chexisting %f, new %f\n",es,ns);
+		if (ns > es) {
+//printf("~1 New closest\n");
+			s->cusps[bj][0] = in[0];
+			s->cusps[bj][1] = in[1];
+			s->cusps[bj][2] = in[2];
+
+		} else {	/* If 2nd best has no entry, use this to fill it */
+			if (s->cusps[sbj][0] == 0.0
+			 && s->cusps[sbj][1] == 0.0
+			 && s->cusps[sbj][2] == 0.0) {
+//printf("~1 Fill with 2nd closest\n");
+				s->cusps[sbj][0] = in[0];
+				s->cusps[sbj][1] = in[1];
+				s->cusps[sbj][2] = in[2];
+			}
+		}
+	}
+}
+
+
+/* Get the cusp values for red, yellow, green, cyan, blue & magenta */
+/* Return nz if there are no cusps available */
+static int getcusps(
+gamut *s,
+double cusps[6][3]
+) {
+	int i, j;
+
+	if (s->cu_inited == 0)
+		return 1;
+
+	for (i = 0; i < 6; i++)
+		for (j = 0; j < 3; j++)
+			cusps[i][j] = s->cusps[i][j];
+
+	return 0;
+}
+
+/* ===================================================== */
+/* Triangulation code */
+/* ===================================================== */
+
 /* Given three points, compute the normalised plane equation */
 /* of a surface through them. */
 /* Return non-zero on error */
@@ -727,16 +1201,19 @@ double *p2
 /* Compute the log surface plane equation for the triangle */
 /* and other triangle attributes. (Doesn't depend on edge info.) */
 void
-circumcircle(
+comptriattr(
+gamut *s,
 gtri *t
 ) {
 	static double v0[3] = {0.0, 0.0, 0.0};
 
 	/* Compute the plane equation for the absolute triangle. */
+	/* This is used for testing if a point is inside the gamut hull. */
 	plane_equation(t->pe, t->v[0]->p, t->v[1]->p, t->v[2]->p);
 
 	/* Compute the plane equation for the triangle */
-	/* based on the log compressed convex hull verticies */
+	/* based on the log compressed convex hull verticies. */
+	/* This is used for convex hull construction. */
 	plane_equation(t->che, t->v[0]->ch, t->v[1]->ch, t->v[2]->ch);
 
 	/* Compute the plane equation for the triangle */
@@ -752,6 +1229,7 @@ gtri *t
 	plane_equation(t->ee[1], v0, t->v[2]->sp, t->v[0]->sp);
 	plane_equation(t->ee[2], v0, t->v[0]->sp, t->v[1]->sp);
 
+#ifdef NEVER // ???
 #ifdef ASSERTS
 	{
 	int j;
@@ -759,8 +1237,8 @@ gtri *t
 	double ds;
 	for (j = 0; j < 3; j++) {
 		tt[j] = (t->v[0]->p[j] + t->v[1]->p[j] + t->v[2]->p[j])/3.0;
+		tt[j] -= s->cent[j];			/* Make it center relative */
 	}
-	tt[0] -= GAMUT_LCENT;			/* Make it relative */
 	for (j = 0; j < 3; j++) {
 		ds = t->ee[j][0] * tt[0]	/* Point we know is inside */
 		    + t->ee[j][1] * tt[1]
@@ -777,10 +1255,11 @@ gtri *t
 		}
 	}
 #endif /* ASSERTS */
+#endif /* NEVER */
 
 }
 
-/* By using the log() of the radial distance, */
+/* By using the pow() or log() of the radial distance, */
 /* blended with a sphere surface, we try and strike a compromise */
 /* between a pure convex hull surface, and a pure Delaunay triangulation */
 /* the latter which would show dings and nicks from points */
@@ -788,144 +1267,72 @@ gtri *t
 static double log_scale(double ss) {
 	double aa;
 
+#ifdef TEST_CONVEX_HULL
+	return ss;
+#else
+#ifdef NEVER		/* (Not using this version) */
 	aa = (2.0 + ss)/3.0;	/* Blend with sphere */
 	aa = log(aa);			/* Allow for concave slope */
 	if (aa < 0.0)			/* but constrain to be +ve */
 		aa = 0.0;
+#else				/* (Using simpler version) */
+	aa = 20.0 * pow(ss, 0.25);
+#endif
+#endif	/* TEST_CONVEX_HULL */
+
 	return aa;
 }
 
-/* The inverse of the above */
-static double inv_log_scale(double aa) {
-	double ss;
-
-	aa = exp(aa);			/* Undo log */
-	ss = (aa * 3.0) - 2.0;	/* Undo blend with sphere */
-	return ss;
-}
-
-/* Normalise the vertex values to map them to a unit sphere, */
-/* and also compute the log surface coordinates. */
-/* (ie. compute sp[] and ch[] from p[]) */
+/* Comput r[], lr0, sp[] and ch[] from p[] for all verticies */
+/* (Note that lr0 will be the first cut, log_scale() value) */ 
 static void
-sphere_map_vertex(
-gamut *s,
-gvert *v
-) {
-	int j;
-	double co[3], ss, aa;
-
-	if (!(v->f & GVERT_SET)) {
-		for (j = 0; j < 3; j++)
-			v->sp[j] = 0.0;
-		return;
-	}
-
-	co[0] = v->p[0] - gam_Labc[0];
-	co[1] = v->p[1] - gam_Labc[1];
-	co[2] = v->p[2] - gam_Labc[2];
-	for (ss = 0.0, j = 0; j < 3; j++)
-		ss += co[j] * co[j];
-	ss = sqrt(ss);				/* Points radial length */
-
-	aa = 1.0/ss;				/* Adjustment to put in on unit sphere */
-	for (j = 0; j < 3; j++)
-		v->sp[j] = co[j] * aa;
-
-#ifdef NEVER
-	aa = log_scale(ss);			/* Compute lr0 */
-#else
-	aa = v->lr0;				/* Should be set correctly already */
-#endif
-	aa = aa/ss;					/* Adjustment to make to vector length */
-	for (j = 0; j < 3; j++)
-		v->ch[j] = co[j] * aa;
-}
-
-/* Shere map all the verticies */
-static void
-sphere_map(
+compute_vertex_coords(
 gamut *s
 ) {
-	int i;
+	int i, j;
 
 	for (i = 0; i < s->nv; i++) {
-		sphere_map_vertex(s, s->verts[i]);
+		gamut_rect2radial(s, s->verts[i]->r, s->verts[i]->p);
+
+		if (s->verts[i]->r[0] < 1e-6) { 		/* Ignore a point right at the center */
+			s->verts[i]->lr0 = 0.0;
+			for (j = 0; j < 3; j++) {
+				s->verts[i]->sp[j] = 0.0;
+				s->verts[i]->ch[j] = 0.0;
+			}
+		} else {
+			double aa;
+
+			/* Figure log scaled radius */
+			s->verts[i]->lr0 = log_scale(s->verts[i]->r[0]);
+
+			/* Compute unit shere mapped location */
+			aa = 1.0/s->verts[i]->r[0];		/* Adjustment to put in on unit sphere */
+			for (j = 0; j < 3; j++)
+				s->verts[i]->sp[j] = (s->verts[i]->p[j] - s->cent[j]) * aa;
+		
+			/* Compute hull testing mapped version */
+			for (j = 0; j < 3; j++)
+				s->verts[i]->ch[j] = s->verts[i]->p[j] * s->verts[i]->lr0;
+		}
 	}
 }
-
-/* Given a vertex that lies beneath the log surface by log distance c, */
-/* adjust its location radially so that it now lies on the surface */
-static void remap_vertex(
-gamut *s,
-gvert *v,		/* Vertex to map to surface */
-gtri *tp		/* Triangle to map to */
-) {
-	int j;
-	double tr;		/* Target radius */
-	double ltr;		/* Log target radius */
-	double rr;		/* ltr from tr */
-
-	/* Compute the target linear radius */
-	tr = -(  tp->pe[0] * gam_Labc[0]
-	       + tp->pe[1] * gam_Labc[1]
-	       + tp->pe[2] * gam_Labc[2] + tp->pe[3])/
-	      (  tp->pe[0] * v->sp[0]
-	       + tp->pe[1] * v->sp[1]
-	       + tp->pe[2] * v->sp[2]);
-	tr += 1e-5;
-
-	/* Compute the target log radius */
-	ltr = -tp->che[3]/
-	      (  tp->che[0] * v->sp[0]
-	       + tp->che[1] * v->sp[1]
-	       + tp->che[2] * v->sp[2]);
-	ltr += 1e-3;
-
-	/* Use linear or log target, whichever is greater in log */
-	rr = log_scale(tr);
-	if (rr > ltr) {
-		ltr = rr;
-	} else {
-		tr = inv_log_scale(ltr);
-	}
-
-	/* Adjust p[] */
-	for (j = 0; j < 3; j++) {
-		double tt = v->p[j] - gam_Labc[j];	/* Relative location */
-		tt *= 1.00 * tr/v->r[0];			/* Scale radialy outwards */
-		v->p[j] = tt +  gam_Labc[j];		/* Convert back to absolute */
-	}
-
-	/* recompute r[] */
-	gamut_rect2radial(v->r, v->p);
-
-	/* Figure log scaled radius */
-	v->lr0 = log_scale(v->r[0]);
-
-	/* Recompute sp[] and ch[] */
-	sphere_map_vertex(s, v);
-
-#ifdef ASSERTS
-{
-	if (fabs(tr - v->r[0]) > 1e-6)
-		printf("Assert: remap radius didn't remap! %f should be %f\n",tr, v->r[0]);
-}
-#endif
-
-}
-
 
 /* Sort the verticies from maximum radius */
 static void sort_verticies(
 gamut *s
 ) {
-	int i, j;
+	int i;
+
+#ifndef TEST_NOSORT
 
 	/* Sort them */
-#define 	HEAP_COMPARE(A,B) (A->r[0] > B->r[0])
+//#define 	HEAP_COMPARE(A,B) (A->r[0] > B->r[0])
+#define 	HEAP_COMPARE(A,B) (A->lr0 > B->lr0)
 			HEAPSORT(gvert *, s->verts, s->nv)
 #undef HEAP_COMPARE
+
+#endif /* !TEST_NOSORT */
 
 	/* Renumber them */
 	for (i = 0; i < s->nv; i++) {
@@ -933,17 +1340,27 @@ gamut *s
 	}
 }
 
-/* Number just the verticies used in the convex hull */
+/* Number just the verticies that have been set, */
+/* and those that have been used in the convex hull */
 static void renumber_verticies(
 gamut *s
 ) {
 	int i, j;
 
 	for (j = i = 0; i < s->nv; i++) {
+		if (!(s->verts[i]->f & GVERT_SET))
+			continue;
+
+		s->verts[i]->sn = j;
+		j++;
+	}
+	s->nsv = j;
+
+	for (j = i = 0; i < s->nv; i++) {
 		if (!(s->verts[i]->f & GVERT_TRI))
 			continue;
 
-		s->verts[i]->un = j;
+		s->verts[i]->tn = j;
 		j++;
 	}
 	s->ntv = j;
@@ -951,6 +1368,7 @@ gamut *s
 
 /* Given a list of target convex hull locations, */
 /* return pointers to the closest verticies in those directions */
+/* (Used to setup initial convex hull) */
 void closest_verticies(
 gamut *s,			/* Gamut with convex hull points to search */
 gvert **tvs,		/* Return pointers to best verticies */
@@ -980,6 +1398,9 @@ int nn				/* Number of points */
 			if (!(s->verts[i]->f & GVERT_SET))
 				continue;
 
+			if (!(s->verts[i]->f & GVERT_FAKE))
+				continue;
+
 			/* If this vector is already been used for a target, skip it */
 			for (j = 0; j < m; j++) {
 				if (tvs[j] == s->verts[i])
@@ -1005,12 +1426,18 @@ int nn				/* Number of points */
 	/* Sanity check */
 	for (m = 0; m < nn; m++) {
 		if (tvs[m] == NULL) {
-			fprintf(stderr,"gamut: internal error - closest verticies not found\n");
+			fprintf(stderr,"gamut: internal error - enough seed verticies not found\n");
 			exit(-1);
 		}
 	}
-//printf("Returning closest verticies %d %d %d %d\n",
-//tvs[0]->n, tvs[1]->n, tvs[2]->n, tvs[3]->n);
+
+#ifdef DEBUG_TRIANG
+	printf("Returning closest verticies %d %d %d %d\n",
+	        tvs[0]->n, tvs[1]->n, tvs[2]->n, tvs[3]->n);
+	for (m = 0; m < nn; m++) {
+		printf("Vert %d ch = %f %f %f\n", m, tvs[m]->ch[0], tvs[m]->ch[1], tvs[m]->ch[2]);
+	}
+#endif
 	free(bestd);
 }
 
@@ -1032,9 +1459,9 @@ static void check_triangulation(gamut *s, int final) {
 			for (j = i+1; j < 3; j++) {
 				if (tp->v[i] == tp->v[j]) {
 					failed = 1;
-printf("Validation failed - duplicate verticies:\n");
-printf("Triangle %d, has verticies %d %d %d\n", tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
-fflush(stdout);
+	printf("Validation failed - duplicate verticies:\n");
+	printf("Triangle %d, has verticies %d %d %d\n", tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
+	fflush(stdout);
 				}
 			}
 		}
@@ -1044,10 +1471,10 @@ fflush(stdout);
 			for (j = i+1; j < 3; j++) {
 				if (tp->e[i] == tp->e[j]) {
 					failed = 1;
-printf("Validation failed - duplicate connectivity:\n");
-printf("Triangle %d, has verticies %d %d %d\n", tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
-printf("Triangle %d, has edges %d %d %d\n", tp->n, tp->e[0]->n, tp->e[1]->n, tp->e[2]->n);
-fflush(stdout);
+	printf("Validation failed - duplicate connectivity:\n");
+	printf("Triangle %d, has verticies %d %d %d\n", tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
+	printf("Triangle %d, has edges %d %d %d\n", tp->n, tp->e[0]->n, tp->e[1]->n, tp->e[2]->n);
+	fflush(stdout);
 				}
 			}
 		}
@@ -1067,29 +1494,29 @@ fflush(stdout);
 			/* for this triangle is correct */
 			if (ei1 != i) {
 				failed = 1;
-printf("Validation failed - triangle edge index doesn't match record withing edge:\n");
-printf("Triangle %d, edge index %d edge %d has record %d\n", tp->n, i, e->n, ei1);
-fflush(stdout);
+	printf("Validation failed - triangle edge index doesn't match record withing edge:\n");
+	printf("Triangle %d, edge index %d edge %d has record %d\n", tp->n, i, e->n, ei1);
+	fflush(stdout);
 			}
 
 			/* Check that the edges pointer to the triangle is this triangle */
 			if (tp != e->t[tei]) {
 				failed = 1;
-printf("Validation failed - edge doesn't point back to triangle:\n");
-printf("Triangle %d, edge index %d is edge %d\n",tp->n, i, e->n);
-printf("Edge     %d, triangle index %d is triangle %d\n", e->n, tei, e->t[tei]);
-printf("Edge     %d, triangle index %d is triangle %d\n", e->n, tei^1, e->t[tei^1]);
-fflush(stdout);
+	printf("Validation failed - edge doesn't point back to triangle:\n");
+	printf("Triangle %d, edge index %d is edge %d\n",tp->n, i, e->n);
+	printf("Edge     %d, triangle index %d is triangle %d\n", e->n, tei, e->t[tei]->n);
+	printf("Edge     %d, triangle index %d is triangle %d\n", e->n, tei^1, e->t[tei^1]->n);
+	fflush(stdout);
 			}
 
 			/* Check the verticies for this edge match edge record */
 			if ((e->v[0] != tp->v[i] || e->v[1] != tp->v[(i+1) % 3])
 			 && (e->v[1] != tp->v[i] || e->v[0] != tp->v[(i+1) % 3])) {
 				failed = 1;
-printf("Validation failed - edge doesn't have same verticies as triangle expects:\n");
-printf("Triangle %d, has verticies %d %d\n", tp->n, tp->v[i]->n, tp->v[(i+1) % 3]->n);
-printf("Edge     %d, has verticies %d %d\n", e->n, e->v[0]->n, e->v[1]->n);
-fflush(stdout);
+	printf("Validation failed - edge doesn't have same verticies as triangle expects:\n");
+	printf("Triangle %d, has verticies %d %d\n", tp->n, tp->v[i]->n, tp->v[(i+1) % 3]->n);
+	printf("Edge     %d, has verticies %d %d\n", e->n, e->v[0]->n, e->v[1]->n);
+	fflush(stdout);
 			}
 
 			t2 = e->t[tei ^ 1];		/* The other triangle */
@@ -1097,18 +1524,18 @@ fflush(stdout);
 
 			if (t2 == tp) {
 				failed = 1;
-printf("Validation failed - connects to itself:\n");
-printf("Triangle %d, has edges %d %d %d\n", tp->n, tp->e[0]->n, tp->e[1]->n, tp->e[2]->n);
-fflush(stdout);
+	printf("Validation failed - connects to itself:\n");
+	printf("Triangle %d, has edges %d %d %d\n", tp->n, tp->e[0]->n, tp->e[1]->n, tp->e[2]->n);
+	fflush(stdout);
 			}
 
 			/* Check that the connection is reflective */
 			if (e != t2->e[ei2]) {
 				failed = 1;
-printf("Validation failed - connectivity not reflected:\n");
-printf("Triangle %d, edge index %d points to edge %d\n",tp->n, i, e);
-printf("Triangle %d, edge index %d points to edge %d\n",t2->n, ei2, t2->e[ei2]);
-fflush(stdout);
+	printf("Validation failed - connectivity not reflected:\n");
+	printf("Triangle %d, edge index %d points to edge %d\n",tp->n, i, e->n);
+	printf("Triangle %d, edge index %d points to edge %d\n",t2->n, ei2, t2->e[ei2]->n);
+	fflush(stdout);
 			}
 		}
 	} END_FOR_ALL_ITEMS(tp);
@@ -1128,14 +1555,14 @@ fflush(stdout);
 		if (!(v->f & GVERT_SET)) {
 			if ((v->f & GVERT_TRI)
 			 || (v->f & GVERT_INSIDE)) {
-printf("Validation failed - vertex %d has strange flags 0x%x\n",i, v->f);
-fflush(stdout);
+	printf("Validation failed - vertex %d has strange flags 0x%x\n",i, v->f);
+	fflush(stdout);
 				failed = 1;
 			}
 		} else {
 			if ((v->f & GVERT_TRI) && (v->f & GVERT_INSIDE)) {
-printf("Validation failed - vertex %d has strange flags 0x%x\n",i, v->f);
-fflush(stdout);
+	printf("Validation failed - vertex %d has strange flags 0x%x\n",i, v->f);
+	fflush(stdout);
 				failed = 1;
 			}
 		}
@@ -1156,13 +1583,13 @@ fflush(stdout);
 	for (i = 0; i < s->nv; i++) {
 		if (s->verts[i]->f & GVERT_TRI) {
 			if ((s->verts[i]->as & 1) == 0) {
-printf("Validation failed - vertex %d is not in any triangles\n",i);
-fflush(stdout);
+	printf("Validation failed - vertex %d is not in any triangles\n",i);
+	fflush(stdout);
 				failed = 1;
 			}
 			if ((s->verts[i]->as & 2) == 0) {
-printf("Validation failed - vertex %d is not in any edge\n",i);
-fflush(stdout);
+	printf("Validation failed - vertex %d is not in any edge\n",i);
+	fflush(stdout);
 				failed = 1;
 			}
 		}
@@ -1181,8 +1608,8 @@ fflush(stdout);
 	ep = s->edges; 
 	FOR_ALL_ITEMS(gedge, ep) {
 		if (ep->as != 1) {
-printf("Validation failed - edge %d is not in any triangle\n",ep->n);
-fflush(stdout);
+	printf("Validation failed - edge %d is not in any triangle\n",ep->n);
+	fflush(stdout);
 			failed = 1;
 		}
 	} END_FOR_ALL_ITEMS(ep);
@@ -1195,11 +1622,11 @@ fflush(stdout);
 #endif /* ASSERTS */
 
 /* -------------------------------------- */
-/* Add a face to the hit list, if it is not a duplicate */
+/* Add a face to the hit list, if it is not a duplicate. */
 static void add_to_hit_list(
 gamut *s, 
-gtri **hlp,
-gtri *cf
+gtri **hlp,		/* Hit list */
+gtri *cf		/* Face to be added (triangle verts 0, 1) */
 ) {
 	gtri *tp;		/* Triangle pointer */
 	gvert *c0 = cf->v[0];
@@ -1209,15 +1636,17 @@ gtri *cf
 //cf->n, cf->v[0]->n, cf->v[1]->n);
 
 	tp = *hlp; 
+	/* Search current faces in hit list */
 	FOR_ALL_ITEMS(gtri, tp) {
 		gvert *v0 = tp->v[0];
 		gvert *v1 = tp->v[1];
-		if ((c0 == v0 && c1 == v1)
+		if ((c0 == v0 && c1 == v1)			/* Same face from other side */
 		 || (c0 == v1 && c1 == v0)) {
 			/* Duplicate found */
 //printf("Duplicate found %d: %d %d\n",
 //tp->n, tp->v[0]->n, tp->v[1]->n);
 			DEL_LINK(*hlp, tp);		/* Delete from the hit list */
+
 			/* Check face is common */
 			if (cf->e[0] != tp->e[0]) {
 				fprintf(stderr,"gamut: internal error - face match inconsistency\n");
@@ -1235,10 +1664,66 @@ gtri *cf
 	} END_FOR_ALL_ITEMS(tp);
 
 	/* Safe to add it to face hit list */
+	/* This removes triangle from triangles list ? */
 	ADD_ITEM_TO_BOT(*hlp, cf);
 //printf("Face added\n");
 }
-/* - - - - - - - - - - - - - - - - */
+
+/* Add a triangles faces to the hit list. */
+static void add_tri_to_hit_list(
+gamut *s, 
+gtri **hlp,		/* Hit list */
+gtri *tp		/* Triangle faces to be added */
+) {
+	int j;
+	gtri *t1, *t2;
+
+	/* In case some verticies disapear below the log surface, */
+	/* and don't remain part of the triangulation, we mark them off. */
+	for (j = 0; j < 3 ; j++) {
+		tp->v[j]->f &= ~GVERT_TRI;
+		tp->v[j]->f |= GVERT_INSIDE;
+	}
+
+	/* Decompose the triangle into three faces, each face being stored */
+	/* into a triangle created on the hit list, using verticices 0, 1. */
+	/* The edges adjacency info remains valid for the three faces, */
+	/* as does the edge plane equation. */
+	DEL_LINK(s->tris, tp);		/* Delete it from the triangulation list */
+	t1 = new_gtri();
+	t1->v[0] = tp->v[1];		/* Duplicate with rotated faces */
+	t1->v[1] = tp->v[2];
+	t1->e[0] = tp->e[1];		/* Edge adjacency for this edge */
+	t1->ei[0] = tp->ei[1];		/* Edge index of this triangle */
+	t1->e[0]->t[t1->ei[0]] = t1; /* Fixup reverse adjacency for valid edge */
+	t1->e[0]->ti[t1->ei[0]] = 0; /* Rotated index of new triangles edge */
+	t1->e[1] = t1->e[2] = NULL;	/* be safe */
+	for (j = 0; j < 4; j++)		/* Copy edge plane equation */
+		t1->ee[2][j] = tp->ee[0][j];
+
+	t2 = new_gtri();
+	t2->v[0] = tp->v[2];		/* Duplicate with rotated faces */
+	t2->v[1] = tp->v[0];
+	t2->e[0] = tp->e[2];		/* Edge adjacency for this edge */
+	t2->ei[0] = tp->ei[2];		/* Edge index of this triangle */
+	t2->e[0]->t[t2->ei[0]] = t2; /* Fixup reverse adjacency for valid edge */
+	t2->e[0]->ti[t2->ei[0]] = 0; /* Rotated index of new triangles edge */
+	t2->e[1] = t2->e[2] = NULL;	/* be safe */
+	for (j = 0; j < 4; j++)		/* Copy edge plane equation */
+		t2->ee[2][j] = tp->ee[1][j];
+
+	tp->e[1] = tp->e[2] = NULL;	/* be safe */
+	add_to_hit_list(s, hlp, tp);	/* Add edge 0 to hit list as is */
+	add_to_hit_list(s, hlp, t1);	/* Add edge 1 to hit list */
+	add_to_hit_list(s, hlp, t2);	/* Add edge 2 to hit list */
+}
+
+#ifdef DEBUG_TRIANG
+	typedef struct {
+		int tix[3];		/* Triangle indexes */
+		int type;		/* 0 = hit, 1 = added */
+	} tidxs;
+#endif
 
 /* Insert a vertex into the triangulation */
 static void insert_vertex(
@@ -1246,11 +1731,20 @@ gamut *s,
 gvert *v		/* Vertex to insert */
 ) {
 	gtri *tp, *tp2;		/* Triangle pointers */
-	gtri *hl;			/* Triangle face hit list */
-	int hit;			/* Flags */
+	gtri *hl;			/* Triangle face hit list (polygon faces) */
+	double tol = TRIANG_TOL;
+	int hit = 0;		/* Vertex expands hull flag */
+#ifdef DEBUG_TRIANG
+	int intri = 0;		/* Vertex landed in a triangle */
+	XLIST(tidxs, hittris)
+	tidxs xxs;
 
-//printf("Adding vertex %d: %f %f %f\n",
-//v->n, v->sp[0], v->sp[1], v->sp[2]);
+	XLIST_INIT(tidxs, &hittris);
+#endif
+
+#ifdef DEBUG_TRIANG
+	printf("Adding vertex to triang %d: %f %f %f\n", v->n, v->p[0], v->p[1], v->p[2]);
+#endif
 
 	/* First we search the current triangles, and convert */
 	/* any trianges that are visible from the new point, */
@@ -1259,18 +1753,14 @@ gvert *v		/* Vertex to insert */
 	/* We are using a brute force search, which will make the */
 	/* algorithm speed proportional to n^2. For better performance */
 	/* with a large number of verticies, an acceleration structure */
-	/* should be used to speed cirmumradius hit detection. */
+	/* should be used to speed circumradius hit detection. */
 	v->f &= ~GVERT_INSIDE;	/* Reset flags */
 	v->f &= ~GVERT_TRI;
 	INIT_LIST(hl);
 	hit = 0;
 	tp = s->tris; 
 	FOR_ALL_ITEMS(gtri, tp) {
-		int j;
 		double c;
-		double th;					/* Convex hull threshold */
-
-		th = -1e-20;
 
 		/* Check the depth out compared to this triangle log plane equation */
 		c = tp->che[0] * v->ch[0]
@@ -1278,92 +1768,37 @@ gvert *v		/* Vertex to insert */
 	      + tp->che[2] * v->ch[2]
 		  + tp->che[3];
 
-#ifdef NEVER		/* Alpha shape code - needs testing, breaks things */
-		{
-			double ltr, pch[3];			/* new vertex in log plane */
-			/* Check if the vertex is within this triangle */
-			for (j = 0; j < 3; j++) {
-				double ds;
-				ds = tp->ee[j][0] * (v->p[0] - GAMUT_LCENT)
-				   + tp->ee[j][1] * v->p[1]
-			       + tp->ee[j][2] * v->p[2]
-				   + tp->ee[j][3];
-				if (ds > 1e-8) {
-					break;
-				}
-			}
-			if (j >= 3) {		/* We are within triangle */
-				int i;
-				double rad = 10.0;				/* Alpha radius */
-				double rads = rad * rad;
-
-				/* Compute version of target verticy lying on the log plane */
-				ltr = -tp->che[3]/(c - tp->che[3]);
-				for (j = 0; j < 3; j++)
-					pch[j] = ltr * v->ch[j];
-		
-				/* Find distance from target verticy to nearest triangle vertex */
-				ltr = 1e30;
-				for (i = 0; i < 3; i++) {
-					double dd = 0.0;
-					for (j = 0; j < 3; j++) {
-						double tt = pch[j] - tp->v[i]->ch[j];
-						dd += tt * tt;
-					}
-					if (dd < ltr)
-						ltr = dd;
-				}
-
-				/* Compute margine for given alpha radius for */
-				/* new vertex to be below log plane */
-
-				if (ltr > (0.5 * rads))			/* Limit to sane value */
-					ltr = 0.5 * rads;
-				th = rad - sqrt(rads - ltr);	/* Set threshold below log plane */
-			}
-		}
-#endif /* NEVER */
-
-		/* Above convex hull surface by a small margin */
-		if (c < th) {
+		/* If vertex is above the log hull surface, add triangle to the hit list. */
+		if (c < 0.0) {
 			int j;
 			gtri *t1, *t2;
 			hit = 1;
 
-//printf("Got a hit on triangle %d: %d %d %d\n",
-//tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
-			/* In case some verticies disapear below the log surface, */
-			/* and don't remain part of the triangulation, we mark them off. */
-			for (j = 0; j < 3 ; j++) {
-				tp->v[j]->f &= ~GVERT_TRI;
-				tp->v[j]->f |= GVERT_INSIDE;
+#ifdef DEBUG_TRIANG
+			printf("Got a hit on triangle %d: %d %d %d\n",
+			           tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
+#endif
+
+#ifdef DEBUG_TRIANG
+			for (j = 0; j < 3; j++) {
+				double ds;
+				ds = tp->ee[j][0] * v->ch[0]
+				   + tp->ee[j][1] * v->ch[1]
+		   	    + tp->ee[j][2] * v->ch[2]
+				   + tp->ee[j][3];
+				if (ds > tol) {
+					printf("Vertex is not in triangle by %e\n",ds);
+					break;
+				}
 			}
+			if (j >= 3)
+				intri = 1;		/* Landed in this triangle */
 
-			/* Decompose the triangle into three faces. */
-			/* The edges remain valid for the three faces. */
-			DEL_LINK(s->tris, tp);		/* Delete it from the triangulation list */
-			t1 = new_gtri();
-			t1->v[0] = tp->v[1];		/* Duplicate with rotated faces */
-			t1->v[1] = tp->v[2];
-			t1->e[0] = tp->e[1];		/* Edge adjacency for this edge */
-			t1->ei[0] = tp->ei[1];		/* Edge index of this triangle */
-			t1->e[0]->t[t1->ei[0]] = t1; /* Fixup reverse adjacency for valid edge */
-			t1->e[0]->ti[t1->ei[0]] = 0; /* Rotated index of new triangles edge */
-			t1->e[1] = t1->e[2] = NULL;	/* be safe */
-
-			t2 = new_gtri();
-			t2->v[0] = tp->v[2];		/* Duplicate with rotated faces */
-			t2->v[1] = tp->v[0];
-			t2->e[0] = tp->e[2];		/* Edge adjacency for this edge */
-			t2->ei[0] = tp->ei[2];		/* Edge index of this triangle */
-			t2->e[0]->t[t2->ei[0]] = t2; /* Fixup reverse adjacency for valid edge */
-			t2->e[0]->ti[t2->ei[0]] = 0; /* Rotated index of new triangles edge */
-			t2->e[1] = t2->e[2] = NULL;	/* be safe */
-
-			tp->e[1] = tp->e[2] = NULL;	/* be safe */
-			add_to_hit_list(s, &hl, tp);	/* Add edge 0 to hit list as is */
-			add_to_hit_list(s, &hl, t1);	/* Add edge 1 to hit list */
-			add_to_hit_list(s, &hl, t2);	/* Add edge 2 to hit list */
+			xxs.tix[0] = tp->v[0]->n, xxs.tix[1] = tp->v[1]->n, xxs.tix[2] = tp->v[2]->n;
+			xxs.type = 0;
+			XLIST_ADD(&hittris, xxs)
+#endif
+			add_tri_to_hit_list(s, &hl, tp);
 		}
 	} END_FOR_ALL_ITEMS(tp);
 	
@@ -1373,14 +1808,66 @@ gvert *v		/* Vertex to insert */
 		v->f |= GVERT_INSIDE;	/* This point is inside the log hull */
 		v->f &= ~GVERT_TRI;
 	} else {
+		int changed = 1;
+
+#ifdef DEBUG_TRIANG
+if (!intri) printf("~1 ###### vertex didn't land in any triangle! ########\n");
+#endif
+
+//printf("Checking out hit polygon edges:\n");
+		/* Now we must make a pass though the hit list, checking that each */
+		/* hit list face will make a correctly oriented, non-sliver triangle */
+		/* when joined to the vertex. */
+		/* Do this check until there are no changes */
+		for (;changed != 0 ;) {
+			tp = hl; 
+			changed = 0;
+			FOR_ALL_ITEMS(gtri, tp) {
+				/* Check which side of the edge our vertex is */
+				double ds;
+				ds = tp->ee[2][0] * v->ch[0]
+				   + tp->ee[2][1] * v->ch[1]
+			       + tp->ee[2][2] * v->ch[2]
+				   + tp->ee[2][3];
+//printf("Vertex margin to edge = %e\n",ds);
+				/* If vertex is not to the right of this edge by tol */
+				/* add associated triangle to the hit list. */
+				if (ds > -tol) {
+					gtri *xtp;
+//printf("~1 ###### vertex on wrong side by %e - expand hit list  ######\n",ds);
+					if (tp->e[0]->t[0] != tp)
+						xtp = tp->e[0]->t[0];
+					else
+						xtp = tp->e[0]->t[1];
+//printf("Got a hit on triangle %d: %d %d %d\n", xtp->n, xtp->v[0]->n, xtp->v[1]->n, xtp->v[2]->n);
+
+#ifdef DEBUG_TRIANG
+					xxs.tix[0] = xtp->v[0]->n, xxs.tix[1] = xtp->v[1]->n, xxs.tix[2] = xtp->v[2]->n;
+					xxs.type = 1;
+					XLIST_ADD(&hittris, xxs)
+#endif
+
+					add_tri_to_hit_list(s, &hl, xtp);
+					changed = 1;
+					break;
+				}
+			} END_FOR_ALL_ITEMS(tp);
+		}
+
+#ifdef DEBUG_TRIANG_VRML
+		write_diag_vrml(s, v->ch, hittris.no, hittris.list, hl);
+#endif
+
+//printf("About to turn polygon faces into triangles\n");
 		/* Turn all the faces that made it to the */
-		/* hit list, into triangles */
+		/* hit list, into triangles using the new vertex. */
 		tp = hl; 
 		FOR_ALL_ITEMS(gtri, tp) {
 			tp->v[2] = v;				/* Add third vertex to face to make triangle */
-			circumcircle(tp);			/* Compute circumcircle info */
+			comptriattr(s, tp);			/* Compute triangle attributes */
 
-			/* Find the new adjacent triangles */
+			/* Find the new adjacent triangles from the triangles being formed, */
+			/* to maintain edge adjacency information. */
 			/* Do only one edge at a time, since each adjacency */
 			/* will be visited twice. */
 			tp2 = hl; 
@@ -1402,10 +1889,26 @@ gvert *v		/* Vertex to insert */
 				}
 			} END_FOR_ALL_ITEMS(tp2);
 
-//printf("~1 Creating new triangle %d: %d %d %d\n",
-//tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
+//printf("~1 Creating new triangle %d: %d %d %d\n", tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
 		} END_FOR_ALL_ITEMS(tp);
 		
+#ifdef DEBUG_TRIANG_VRML
+		tp = hl; 
+		hittris.no = 0;
+		FOR_ALL_ITEMS(gtri, tp) {
+			xxs.tix[0] = tp->v[0]->n, xxs.tix[1] = tp->v[1]->n, xxs.tix[2] = tp->v[2]->n;
+			xxs.type = 2;
+			XLIST_ADD(&hittris, xxs)
+		} END_FOR_ALL_ITEMS(tp);
+		write_diag_vrml(s, v->ch, hittris.no, hittris.list, NULL);
+#ifdef DEBUG_TRIANG_VRML_STEP
+#ifdef DO_TWOPASS
+		if (s->pass > 0)
+#endif	/* DO_TWOPASS */
+		getchar();
+#endif
+#endif
+
 		/* Move them to the triangulation. */
 		tp = hl; 
 		FOR_ALL_ITEMS(gtri, tp) {
@@ -1421,171 +1924,89 @@ gvert *v		/* Vertex to insert */
 		v->f |= GVERT_TRI;		/* This vertex has been added to triangulation */
 		v->f &= ~GVERT_INSIDE;	/* and it's not inside */
 	}
-}
 
-/* Force insert a vertex into the triangulation */
-/* This breaks the delauny condition */
-static void force_insert_vertex(
-gamut *s, 
-gvert *v		/* Vertex to insert */
-) {
-	gtri *tp;		/* Triangle pointers */
-
-//printf("~1 Force adding vertex %d: %f %f %f\n",
-//v->n, v->sp[0], v->sp[1], v->sp[2]);
-
-	v->f &= ~GVERT_INSIDE;	/* Reset flags */
-	v->f &= ~GVERT_TRI;
-
-	/* Search all the triangles */
-	tp = s->tris; 
-	FOR_ALL_ITEMS(gtri, tp) {
-		int j;
-
-		/* Check if the vertex is within this triangle */
-		for (j = 0; j < 3; j++) {
-			double ds;
-			ds = tp->ee[j][0] * (v->p[0] - GAMUT_LCENT)
-			   + tp->ee[j][1] * v->p[1]
-		       + tp->ee[j][2] * v->p[2]
-			   + tp->ee[j][3];
-			if (ds > 1e-8) {
-				break;
-			}
-		}
-		if (j >= 3) {		/* It's in this triangle */
-			double c, lc;
-			gtri *t1, *t2;
-			gtri *hl;			/* Triangle face hit list */
-
-			/* See if it will be below the surface of this triangle */
-			c = tp->pe[0] * v->p[0]
-			  + tp->pe[1] * v->p[1]
-		      + tp->pe[2] * v->p[2]
-			  + tp->pe[3];
-
-			/* See if it will be below the log surface of this triangle */
-			lc = tp->che[0] * v->ch[0]
-			   + tp->che[1] * v->ch[1]
-		       + tp->che[2] * v->ch[2]
-			   + tp->che[3];
-
-			/* Remap it to the same height as the triangle */
-			if (c >= -1e-10 || lc >= -1e-10) {
-				remap_vertex(s, v, tp);
-			}
-
-			/* Decompose the triangle into three faces. */
-			/* The edges remain valid for the three faces. */
-			INIT_LIST(hl);
-			DEL_LINK(s->tris, tp);		/* Delete it from the triangulation list */
-			t1 = new_gtri();
-			t1->v[0] = tp->v[1];		/* Duplicate with rotated faces */
-			t1->v[1] = tp->v[2];
-			t1->e[0] = tp->e[1];		/* Edge adjacency for this edge */
-			t1->ei[0] = tp->ei[1];		/* Edge index of this triangle */
-			t1->e[0]->t[t1->ei[0]] = t1; /* Fixup reverse adjacency for valid edge */
-			t1->e[0]->ti[t1->ei[0]] = 0; /* Rotated index of new triangles edge */
-			t1->e[1] = t1->e[2] = NULL;	/* be safe */
-
-			t2 = new_gtri();
-			t2->v[0] = tp->v[2];		/* Duplicate with rotated faces */
-			t2->v[1] = tp->v[0];
-			t2->e[0] = tp->e[2];		/* Edge adjacency for this edge */
-			t2->ei[0] = tp->ei[2];		/* Edge index of this triangle */
-			t2->e[0]->t[t2->ei[0]] = t2; /* Fixup reverse adjacency for valid edge */
-			t2->e[0]->ti[t2->ei[0]] = 0; /* Rotated index of new triangles edge */
-			t2->e[1] = t2->e[2] = NULL;	/* be safe */
-
-			tp->e[1] = tp->e[2] = NULL;	/* be safe */
-			add_to_hit_list(s, &hl, tp);	/* Add edge 0 to hit list as is */
-			add_to_hit_list(s, &hl, t1);	/* Add edge 1 to hit list */
-			add_to_hit_list(s, &hl, t2);	/* Add edge 2 to hit list */
-	
-			/* Turn all the faces in the list, into triangles */
-			t1 = hl; 
-			FOR_ALL_ITEMS(gtri, t1) {
-				t1->v[2] = v;				/* Add third vertex to face to make triangle */
-				circumcircle(t1);			/* Compute circumcircle info */
-
-				/* Find the new adjacent triangles */
-				/* Do only one edge at a time, since each adjacency */
-				/* will be visited twice. */
-				t2 = hl; 
-				FOR_ALL_ITEMS(gtri, t2) {
-					if (t2->v[0] == t1->v[1]) {	/* Found 1/2 t1/t2 edge adjacency */
-						gedge *e;
-						e = new_gedge();
-						ADD_ITEM_TO_BOT(s->edges, e);	/* Append to edge list */
-						t1->e[1] = e;			/* Point to edge */
-						t1->ei[1] = 0;			/* edges 0th triangle */
-						e->t[0] = t1;			/* triangles 1st edge */
-						e->ti[0] = 1;			/* triangles 1st edge */
-						t2->e[2] = e;			/* Point to edge */
-						t2->ei[2] = 1;			/* edges 1st triangle */
-						e->t[1] = t2;			/* Triangles 2nd edge */
-						e->ti[1] = 2;			/* Triangles 2nd edge */
-						e->v[0] = v;			/* Add the two verticies */
-						e->v[1] = t1->v[1];
-					}
-				} END_FOR_ALL_ITEMS(t2);
-
-//printf("~1 Creating new triangle %d: %d %d %d\n",
-//t1->n, t1->v[0]->n, t1->v[1]->n, t1->v[2]->n);
-			} END_FOR_ALL_ITEMS(t1);
-		
-			/* Move all three triangles to the triangulation. */
-			t1 = hl; 
-			FOR_ALL_ITEMS(gtri, t1) {
-				int j;
-				DEL_LINK(hl, t1);				/* Gone from the hit list */
-				ADD_ITEM_TO_BOT(s->tris, t1);	/* Append to triangulation list */
-				for (j = 0; j < 3 ; j++) {		/* Verticies weren't dropped from triangulation */
-					t1->v[j]->f |= GVERT_TRI;
-					t1->v[j]->f &= ~GVERT_INSIDE;
-				}
-			} END_FOR_ALL_ITEMS(t1);
-
-			v->f |= GVERT_TRI;		/* This vertex has been added to triangulation */
-			v->f &= ~GVERT_INSIDE;	/* and it's not inside */
-		}
-	} END_FOR_ALL_ITEMS(tp);
+#ifdef DEBUG_TRIANG
+	XLIST_FREE(&hittris);
+#endif
 }
 
 /* - - - - - - - - - - - - - - - - */
 
-/* Create the surface triangulation */
-static void triangulate_pass(
+/* Create the convex hull surface triangulation */
+static void triangulate_ch(
 gamut *s
 ) {
-	/* Compute the vertex point mappings to the cube surface */
-	sphere_map(s);
-
-	/* Sort the verticies from maximum radius, */
-	/* to make our log convex hull logic work */
-	sort_verticies(s);
-
 	/* Establish the base triangulation */
 	{
-		int i;
+		int i, j;
+		gvert *tvs[4];	/* Initial verticies */
+		gtri  *tr[4];	/* Initial triangles */
+		gedge *ed[6];	/* Initial edges */
+
+#ifdef USE_FAKE_SEED
+		double fsz = FAKE_SEED_SIZE;		/* Initial tetra size */
+		double ff[3];
+		int onf;
+		static double foffs[4][3] = {		/* tetrahedral offsets */
+			{  0.0,   0.0,       1.0 },
+			{  0.0,   0.80254,  -0.5 },
+			{  0.75, -0.330127, -0.5 },
+			{ -0.75, -0.330127, -0.5 }
+		};
+
+		/* Delete any current fake verticies */
+		for (j = i = 0; i < s->nv; i++) {
+			if (!(s->verts[i]->f & GVERT_FAKE))
+				s->verts[j++] = s->verts[i];
+			else
+				free(s->verts[i]);
+		}
+		s->nv = j;
+
+		/* Re-create fake points on each pass */
+		onf = s->nofilter;
+		s->nofilter = 1;			/* Turn off filtering */
+		s->doingfake = 1;			/* Adding fake points */
+
+		for (i = 0; i < 4; i++) {
+			ff[0] = fsz * foffs[i][2] + s->cent[0];
+			ff[1] = fsz * foffs[i][0] + s->cent[1];
+			ff[2] = fsz * foffs[i][1] + s->cent[2];
+			expand_gamut(s, ff);
+		}
+
+		s->nofilter = onf;
+		s->doingfake = 0;
+
+		/* Locate them for initial triangulation */
+		for (j = i = 0; i < s->nv && j < 4; i++) {
+			if (s->verts[i]->f & GVERT_FAKE) {
+				tvs[j++] = s->verts[i];
+			}
+		}
+#else	/* !USE_FAKE_SEED */
 		/* Tetrahedral target points, outside log surface */
 		/* (Assuming input values are < 1000) */
-		static double tgvals[4][3] = {
+		double tgvals[4][3] = {
 			{  0.0e4,   0.0e4,        1.0e4 },
 			{  0.0e4,   0.8660254e4, -0.5e4 },
 			{  0.75e4, -0.4330127e4, -0.5e4 },
 			{ -0.75e4, -0.4330127e4, -0.5e4 }
 		};
-		static double *tgts[4] = {
+		double *tgts[4] = {
 			tgvals[0], tgvals[1], tgvals[2], tgvals[3]
 		};
-		gvert *tvs[4];
-		gtri  *tr[4];	/* Initial triangles */
-		gedge *ed[6];	/* Initial edges */
 
 		/* Find the closest verticies to the ideal tetrahedral */
 		closest_verticies(s, tvs, tgts, 4);
+#endif	/* !USE_FAKE_SEED */
 		
+#ifdef NEVER
+		printf("Initial verticies:\n");
+		for (i = 0; i < 4; i++) {
+			printf(" %d: %f %f %f\n",tvs[i]->n, tvs[i]->p[0], tvs[i]->p[1], tvs[i]->p[2]);
+		}
+#endif
 		/* Setup the initial triangulation */
 		for (i = 0; i < 4; i++) {
 			tr[i] = new_gtri();
@@ -1630,7 +2051,7 @@ gamut *s
 		ed[2]->t[0] = tr[0];
 		ed[2]->ti[0] = 2;
 	
-		circumcircle(tr[0]);				/* Compute circumcircle info */
+		comptriattr(s, tr[0]);				/* Compute triangle attributes */
 		ADD_ITEM_TO_BOT(s->tris, tr[0]);	/* Append to list */
 		
 		/* Triangle facing in the -x, +y +z direction */
@@ -1653,7 +2074,7 @@ gamut *s
 		ed[0]->t[1] = tr[1];
 		ed[0]->ti[1] = 2;
 	
-		circumcircle(tr[1]);				/* Compute circumcircle info */
+		comptriattr(s, tr[1]);				/* Compute triangle attributes */
 		ADD_ITEM_TO_BOT(s->tris, tr[1]);	/* Append to list */
 		
 		/* Triangle facing in the -y +z direction */
@@ -1676,7 +2097,7 @@ gamut *s
 		ed[3]->t[1] = tr[2];
 		ed[3]->ti[1] = 2;
 	
-		circumcircle(tr[2]);				/* Compute circumcircle info */
+		comptriattr(s, tr[2]);					/* Compute triangle attributes */
 		ADD_ITEM_TO_BOT(s->tris, tr[2]);	/* Append to list */
 		
 		/* Triangle facing in the -z direction */
@@ -1699,22 +2120,26 @@ gamut *s
 		ed[1]->t[1] = tr[3];
 		ed[1]->ti[1] = 2;
 
-		circumcircle(tr[3]);				/* Compute circumcircle info */
+		comptriattr(s, tr[3]);				/* Compute triangle attributes */
 		ADD_ITEM_TO_BOT(s->tris, tr[3]);	/* Append to list */
 
 		/* The four used verticies are now part of the triangulation */
 		for (i = 0; i < 4; i++) {
 			tvs[i]->f |= GVERT_TRI;
-//printf("Base triangle %d: %d %d %d\n",
-//tr[i]->n, tr[i]->v[0]->n, tr[i]->v[1]->n, tr[i]->v[2]->n);
+//printf("Base triangle %d: %d %d %d (Verticies 0x%x, 0x%x, 0x%x, 0x%x)\n",
+//tr[i]->n, tr[i]->v[0]->n, tr[i]->v[1]->n, tr[i]->v[2]->n, tr[i]->v[0], tr[i]->v[1], tr[i]->v[2]);
 		}
 #ifdef ASSERTS
 		check_triangulation(s, 0);
 #endif
 	}
 	
+	/* Sort the verticies from maximum radius, */
+	/* to make our log convex hull logic work */
+	sort_verticies(s);
+
 	{
-		int i, j;
+		int i;
 		/* Complete the triangulation by adding all the remaining verticies */
 		/* in order of decreasing radius, so that those below the log */
 		/* convex hull get discarded. */
@@ -1724,138 +2149,13 @@ gamut *s
 			 || (s->verts[i]->f & GVERT_INSIDE)) {
 				continue;
 			}
+
 			insert_vertex(s, s->verts[i]);
 #ifdef ASSERTS
 			check_triangulation(s, 0);
 #endif
 		}
 	}
-
-#ifdef DO_REMAP
-	{
-		int i, j;
-
-		/* In order to maintain surface detail, and to provide an even */
-		/* number of surface points for gamut mapping etc., we will */
-		/* add the points that fell below the surface back into */
-		/* the triangulation by mapping them to the current surface. */
-		for (j = 0; j < 5; j++) {	/* Until we give up */
-			int a1;
-
-			a1 = 0;
-			for (i = 0; i < s->nv; i++) {
-				if (!(s->verts[i]->f & GVERT_SET)
-				 || (s->verts[i]->f & GVERT_TRI)
-				 || !(s->verts[i]->f & GVERT_INSIDE)) {
-					continue;
-				}
-
-				a1 = 1;
-				force_insert_vertex(s, s->verts[i]);
-#ifdef ASSERTS
-				check_triangulation(s, 0);
-#endif
-			}
-			if (a1 == 0)	/* Didn't add one this round */
-				break;
-		}
-	}
-#endif /* DOREMAP */
-
-#ifdef ADD_EXTRA
-	{
-		int ii, xtra = 1;
-
-		for (ii = 0; ii < 8 && xtra != 0; ii++) {
-			int i, k;
-			gtri *tp;
-			double len;
-
-			xtra = 0;
-			tp = s->tris; 
-			FOR_ALL_ITEMS(gtri, tp) {
-				double smallest, smallest2; 
-	
-				/* Locate any triangles that are too big */
-				smallest = smallest2 = 1e30;
-				for (k = i = 0; i < 3; i++) {
-					int j;
-					gvert *v0 = tp->v[i];
-					gvert *v1 = tp->v[(i + 1) % 3];
-					
-					len = 0.0;
-					for (j = 0; j < 3; j++) {
-						double tt = v0->p[j] - v1->p[j];
-						len += tt * tt;
-					}
-					len = sqrt(len);	/* Length of this side */
-					if (len > (s->sres * 4.0))
-						k++;
-					if (len < smallest) {
-						smallest2 = smallest;
-						smallest = len;
-					} else if (len < smallest2) {
-						smallest2 = len;
-					}
-				}
-				/* If one side is too long, and smallest side is */
-				/* much smaller than the other two, add a middle node */
-				/* to form 3 new triangles */
-				if (k > 0 && smallest2 > (smallest * 2.1)) {
-					int j;
-					gvert *v;
-					double ww[3];		/* Blend weights */
-
-					xtra = 1;			/* We added a new vertex */
-
-					/* Create a point that will lie inside the triangle */
-					v = new_gvert(s, 0.0, 0.0, 0.0, 0.0);
-
-					/* Compute randomized blend factors */
-					ww[0] = d_rand(0.1, 0.7);
-					ww[1] = d_rand(ww[0], 0.9);
-					ww[2] = 1.0 - ww[1];
-					ww[1] = ww[1] - ww[0];
-
-					for (j = 0; j < 3; j++)
-						v->p[j] = 0.0;
-					for (i = 0; i < 3; i++) {
-						for (j = 0; j < 3; j++)
-							v->p[j] += ww[i] * tp->v[i]->p[j];
-					}
-
-					v->f = GVERT_SET;
-
-					/* recompute r[] */
-					gamut_rect2radial(v->r, v->p);
-
-					/* Figure log scaled radius */
-					v->lr0 = log_scale(v->r[0]);
-
-					/* Recompute sp[] and ch[] */
-					sphere_map_vertex(s, v);
-
-					/* Remap it to the same log height as the triangle */
-					remap_vertex(s, v, tp);
-				}
-
-			} END_FOR_ALL_ITEMS(tp);
-
-			/* Add all the new verticies to the trianglulation */
-			for (i = 0; i < s->nv; i++) {
-				if (!(s->verts[i]->f & GVERT_SET)
-				 || (s->verts[i]->f & GVERT_TRI)
-				 || (s->verts[i]->f & GVERT_INSIDE)) {
-					continue;
-				}
-				force_insert_vertex(s, s->verts[i]);
-#ifdef ASSERTS
-				check_triangulation(s, 0);
-#endif
-			}
-		}
-	}
-#endif /* ADD_EXTRA */
 
 	/* Number the used verticies */
 	renumber_verticies(s);
@@ -1865,83 +2165,140 @@ gamut *s
 #endif
 }
 
-/* Reset triangulation so that it can be re-formed with */
-/* a different visible surface metric. */
-/* This doesn't work any better, and so is currently not called */
-static void reset_triangulation(
+/* - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Compute a new convex hull mapping radius for the sample points, */
+/* on the basis of the initial mapping. */
+static void compute_smchrad(
 gamut *s
 ) {
 	int i, j;
+	double zz[3] = { 0.0, 0.0, 1.0 };
+	double rot[3][3];
+	double ssr = 0.5 * s->sres;		/* Sample size radius in delta E */
+//	double ssr = 10.0;
+	int res = 4;			/* resolution of sample grid */
+
+//printf("~1 computing smoothed chrads\n");
 
 	/* Compute the new log surface value */
 	for (i = 0; i < s->nv; i++) {
-		double rad, lr;
-		double out[3];
+		double pr;			/* Current surface radius at this vertex */ 
+		double rad, rw;		/* Smoothed radius, weight */
+		double out[3];		/* Point on surface for this vertex */
+		int x, y;
 
 		if (!(s->verts[i]->f & GVERT_SET)) {
 			continue;
 		}
 
-		/* Find the surface level for this point */
+//printf("~1 vertex %d, %f %f %f\n",i, s->verts[i]->p[0], s->verts[i]->p[1], s->verts[i]->p[2]);
+
+		/* Find the average surface level near this point */
+		pr = s->radial(s, out, s->verts[i]->p);
+
+//printf("~1 surface radius %f, location %f %f %f\n",pr, out[0],out[1],out[2]);
+
+		/* Compute a rotation that lines Z up with the radial direction */
+		out[0] -= s->cent[0];		/* Radial vector through point to surface */
+		out[1] -= s->cent[1];
+		out[2] -= s->cent[2];
+		zz[2] = pr;					/* Z vector of same length */
+		icmRotMat(rot, zz, out);	/* Compute vector from Z to radial */
+		out[0] += s->cent[0];
+		out[1] += s->cent[1];
+		out[2] += s->cent[2];
+		rad = rw = 0.0;
+	
+		/* Sample a rectangular array orthogonal to radial vector, */
+		/* and weight samples appropriately */
+		for (x = 0; x < res; x++) {
+			for (y = 0; y < res; y++) {
+				double tt, off[3], rv, in[3];
+
+				off[0] = 2.0 * (x/(res-1.0) - 0.5);		/* -1.0 to 1.0 */
+				off[1] = 2.0 * (y/(res-1.0) - 0.5);		/* -1.0 to 1.0 */
+				off[2] = 0.0;
+
+				rv = off[0] * off[0] + off[1] * off[1];
+				if (rv > 1.0)
+					continue;			/* Outside circle */
 #ifdef NEVER
-		rad = s->radial(s, out, s->verts[i]->p);
+				rv = 1.0 - sqrt(rv);	/* Radius from center */
+				rv = rv * rv * (3.0 - 2.0 * rv);	/* Spline weight it */
 #else
-		{	/* Average from surrounder */
-			int k;
-			double pp[3];
-			rad = 0.0;
-			for (k = 0; k < 6; k++) {
-				for (j = 0; j < 3; j++) 
-					pp[j] = s->verts[i]->p[j];
-				pp[k/2] += (k & 1) ? 8.0 : -8.0;
-				rad += s->radial(s, out, pp);
-			}
-			rad /= 6.0;
-		}
+				rv = 1.0;				/* Moving average weighting */
 #endif
 
-#ifndef NEVER
-		lr = (s->verts[i]->r[0] / rad) * 40.0;
-//		lr = (2.0 + lr)/3.0;	/* Blend with sphere */
-		lr = log(lr) * 20.0;
-		if (lr < 0.0)
-			lr = 0.0;
-#else
-		lr = (2.0 + s->verts[i]->r[0])/3.0;	/* Blend with sphere */
-		lr = log(lr);			/* Allow for concave slope */
-		if (lr < 0.0)			/* but constrain to be +ve */
-			lr = 0.0;
-#endif
+				off[0] *= ssr;			/* Scale offset to sampling radius */
+				off[1] *= ssr;
 
-//printf("Converting lograd from %f to %f for point %d\n",
-//s->verts[i]->lr0, lr, s->verts[i]->n);
-
-		s->verts[i]->lr0 = lr;
+				/* Rotate offset to be orthogonal to radial vector */
+				icmMulBy3x3(off, rot, off);
 			
-		s->verts[i]->f &= ~GVERT_TRI;
-		s->verts[i]->f &= ~GVERT_INSIDE;
+				/* Add offset to surface point over current vertex */
+				in[0] = out[0] + off[0];
+				in[1] = out[1] + off[1];
+				in[2] = out[2] + off[2];
+
+//printf("~1 grid %d %d, weight %f, offset %f %f %f\n",x,y,rv,off[0],off[1],off[2]);
+
+				/* Sum weighted radius at sample point */
+				tt = s->radial(s, NULL, in);
+				tt = log_scale(tt);
+				rad += rv * tt;
+				rw += rv;
+
+			}
+		}
+		/* Compute sample filtered radius at the sample point */
+		rad /= rw;
+//printf("~1 sampled radius = %f\n\n",rad);
+
+		/* Now compute new hull mapping radius for this point, */
+		/* based on dividing out the sampled radius */
+
+//		s->verts[i]->lr0 = 40.0 + s->verts[i]->lr0 - rad;
+		s->verts[i]->lr0 = 40.0 + log_scale(s->verts[i]->r[0]) - rad;
+		/* Prevent silliness */
+		if (s->verts[i]->lr0 < (2.0 * FAKE_SEED_SIZE))
+			s->verts[i]->lr0 = (2.0 * FAKE_SEED_SIZE);
+
+//printf("~1 new lr0 = %f\n\n",s->verts[i]->lr0);
+
+		/* recompute ch[] for new lr0 */
+		for (j = 0; j < 3; j++)
+			s->verts[i]->ch[j] = s->verts[i]->sp[j] * s->verts[i]->lr0;
 	}
-
-	/* Clear the triangulation */
-	del_triang(s);
-}
-
-/* Overall triangulation */
-/* This allows for a 2 pass triangulation, where */
-/* this first pass is used to filter the convex hull */
-/* determination of the second pass. */
-static void triangulate(
-gamut *s) {
-
-	triangulate_pass(s);
-
-#ifdef NEVER
-	reset_triangulation(s);
-	triangulate_pass(s);
-#endif
 }
 
 /* ===================================================== */
+/* Overall triangulation */
+static void triangulate(
+gamut *s
+) {
+
+	/* Create the convex hull */
+	triangulate_ch(s);
+
+#if defined(DO_TWOPASS) && !defined(TEST_CONVEX_HULL)
+#ifdef DEBUG_TRIANG
+	printf("############ Starting second pass ###################\n");
+#endif
+	compute_smchrad(s);
+	del_triang(s);
+	s->pass++;
+	triangulate_ch(s);
+
+	/* Three passes is slightly better, but slower... */
+//	compute_smchrad(s);
+//	del_triang(s);
+//	s->pass++;
+//	triangulate_ch(s);
+#endif /* DO_TWOPASS && !TEST_CONVEX_HULL */
+}
+
+/* ===================================================== */
+/* Code that makes use of the triangulation */
 /* ===================================================== */
 
 /* return the current surface resolution */
@@ -1951,12 +2308,42 @@ gamut *s
 	return s->sres;
 }
 
+/* return the isJab flag value */
+static int getisjab(
+gamut *s
+) {
+	return s->isJab;
+}
+
+/* return nz if the two gamut are compatible */
+static int compatible(
+gamut *s, struct _gamut *t) {
+	int j;
+
+	/* The same colorspace ? */
+	if (s->isJab && !t->isJab
+	 || !s->isJab && t->isJab) {
+		return 0;
+	}
+
+	/* The same gamut center ? */
+	for (j = 0; j < 3; j++) {
+		if (fabs(s->cent[j] - t->cent[j]) > 1e-9) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
 
 /* Return the number of raw verticies used to construct surface */
 static int nrawverts(
 gamut *s
 ) {
 	int i, nrv = 0;
+
+	/* Sort them so that triangulate doesn't mess indexing up */
+	sort_verticies(s);
 
 	/* Count them */
 	for (i = 0; i < s->nv; i++) {
@@ -1967,16 +2354,69 @@ gamut *s
 	return nrv;
 }
 
-/* Return the raw verticies location given its index. */
+/* Return the raw (triangle and non-triangle surface) verticies */
+/* location given its index. */
 /* return the next (sparse) index, or -1 if beyond last */
 static int getrawvert(
 gamut *s,
 double pos[3],		/* Return absolute position */
 int ix				/* Input index */
 ) {
+	if (ix < 0)
+		return -1;
+
 	/* Find then next used in the triangulation */
 	for (; ix < s->nv; ix++) {
 		if (!(s->verts[ix]->f & GVERT_SET))
+			continue;
+		break;
+	}
+
+	if (ix >= s->nv)
+		return -1;
+
+	pos[0] = s->verts[ix]->p[0];
+	pos[1] = s->verts[ix]->p[1];
+	pos[2] = s->verts[ix]->p[2];
+
+	return ix+1;
+}
+
+/* Return the number of raw direction 0 verticies used */
+/* to construct surface. (Direction 0 is radial direction maxima) */
+static int nraw0verts(
+gamut *s
+) {
+	int i, nrv = 0;
+
+	/* Sort them so that triangulate doesn't mess indexing up */
+	sort_verticies(s);
+
+	/* Count them */
+	for (i = 0; i < s->nv; i++) {
+		if ((s->verts[i]->f & GVERT_SET)
+		 && (s->verts[i]->k0 > 0))
+			nrv++;
+	}
+
+	return nrv;
+}
+
+/* Return the raw (triangle and non-triangle surface)  direction 0 */
+/* verticies location given its index. (Direction 0 is radial direction maxima) */
+/* return the next (sparse) index, or -1 if beyond last */
+static int getraw0vert(
+gamut *s,
+double pos[3],		/* Return absolute position */
+int ix				/* Input index */
+) {
+	if (ix < 0)
+		return -1;
+
+	/* Find then next used in the triangulation and direction 0 */
+	for (; ix < s->nv; ix++) {
+		if (!(s->verts[ix]->f & GVERT_SET)
+		 || !(s->verts[ix]->k0 > 0))
 			continue;
 		break;
 	}
@@ -2019,69 +2459,49 @@ int ix				/* Input index */
 		break;
 	}
 
-	*rad   = s->verts[ix]->r[0];
-	pos[0] = s->verts[ix]->p[0];
-	pos[1] = s->verts[ix]->p[1];
-	pos[2] = s->verts[ix]->p[2];
-
-	return ix+1;
-}
-
-/* Return the verticies location, radius and list of neighbor */
-/* points indexes, given its sparse index. */
-/* return the next (sparse) index, or -1 if beyond last */
-static int getvertn(
-gamut *s,
-int nix[MAXGAMN+1],	/* Return neighbor indexes, terminated with -1 */
-double *rad,		/* Return radial radius */
-double pos[3],		/* Return absolute position */
-int ix				/* Input index */
-) {
-	gvert *vp, *op;	/* Verticy pointers */
-	gedge *ep;		/* Edge pointer */
-	int nn;			/* Number of neighbors */
-
-	if (ix >= s->nv)
-		return -1;
-
-	/* Find then next used in the triangulation */
-	for (; ix < s->nv; ix++) {
-		if (!(s->verts[ix]->f & GVERT_TRI)) {
-			continue;
-		}
-		break;
+	if (rad != NULL)
+		*rad   = s->verts[ix]->r[0];
+	if (pos != NULL) {
+		pos[0] = s->verts[ix]->p[0];
+		pos[1] = s->verts[ix]->p[1];
+		pos[2] = s->verts[ix]->p[2];
 	}
 
-	vp = s->verts[ix];
-	*rad   = vp->r[0];
-	pos[0] = vp->p[0];
-	pos[1] = vp->p[1];
-	pos[2] = vp->p[2];
-
-	/* Now locate all its neighbors, up to MAXGAMN */
-	/* Do this the hard way by looking for our point */
-	/* in all the edges */
-	nn = 0;
-	ep = s->edges; 
-	FOR_ALL_ITEMS(gedge, ep) {
-		op = NULL;
-		if (ep->v[0] == vp)
-			op = ep->v[1];
-		else if (ep->v[1] == vp)
-			op = ep->v[0];
-
-		if (op != NULL) {
-			nix[nn++] = op->un;		/* Used (ie. packed) verticy */
-			if (nn >= MAXGAMN) {
-				break;			/* Can't fit any more in our array */
-			}
-		}
-	} END_FOR_ALL_ITEMS(ep);
-	nix[nn] = -1;
-
 	return ix+1;
 }
 
+
+/* Reset indexing through triangles for getnexttri() */
+static void startnexttri(gamut *s) {
+	if IS_LIST_EMPTY(s->tris)
+		triangulate(s);
+
+	s->nexttri = NULL;
+}
+
+/* Return the next surface triange, nz on no more */
+static int getnexttri(
+gamut *s,
+int v[3]		/* Return indexes for same order as getvert() */
+) {
+	if IS_LIST_EMPTY(s->tris)
+		triangulate(s);
+
+	if (s->nexttri == NULL) {
+		s->nexttri = s->tris;
+		if (s->nexttri == NULL)
+			return 1;
+	} else {	
+		s->nexttri = NEXT_FWD(s->nexttri);
+		if (s->nexttri == s->tris)
+			return 1;
+	}
+
+	v[0] = s->nexttri->v[0]->tn;
+	v[1] = s->nexttri->v[1]->tn;
+	v[2] = s->nexttri->v[2]->tn;
+	return 0;
+}
 
 /* ===================================================== */
 
@@ -2147,14 +2567,14 @@ static double radial_point(gamut *s, gbsp *np, double in[3]);
 
 /* Implementation for following two functions: */
 /* Given a point, return the point in that direction */
-/* that lies on the gamut surface */
+/* that lies on the gamut surface. */
 /* Return the radial length of the input and radial length of result */
 static void
 _radial(
 gamut *s,
-double *ir,		/* return input radius */
-double *or,		/* return output radius */
-double *out,	/* result point (absolute) */
+double *ir,		/* return input radius (may be NULL) */
+double *or,		/* return output radius (may be NULL) */
+double *out,	/* result point (absolute) (may be NULL) */
 double *in		/* input point (absolute)*/
 ) {
 	int j;
@@ -2171,8 +2591,7 @@ double *in		/* input point (absolute)*/
 //printf("~1 radial called with %f %f %f\n", in[0], in[1], in[2]);
 
 	for (j = 0; j < 3; j++)
-		nin[j] = in[j];
-	nin[0] -= GAMUT_LCENT;			/* Make relative to gamut center */
+		nin[j] = in[j] - s->cent[j]; /* relative to gamut center */
 
 	for (ss = 0.0, j = 0; j < 3; j++)
 		ss += nin[j] * nin[j];
@@ -2188,19 +2607,22 @@ double *in		/* input point (absolute)*/
 //printf("~1 Normalised in = %f %f %f\n", nin[0], nin[1], nin[2]);
 	rv = radial_point(s, s->lutree, nin);
 
-	if (rv < 0) {
+	if (rv < 0.0) {
 		fprintf(stderr,"gamut: radial internal error - failed to find triangle\n");
 		exit (-1);
 	}
 
-	for (j = 0; j < 3; j++)
-		out[j] = nin[j] * rv;		/* Scale out to surface length */
-	out[0] += GAMUT_LCENT;			/* Make absolute */
-
+	if (out != NULL) {
+		for (j = 0; j < 3; j++)
+			out[j] = nin[j] * rv + s->cent[j];		/* Scale out to surface length, absolute */
 //printf("~1 result = %f %f %f\n",out[0], out[1], out[2]);
+	}
 
-	*ir = ss;
-	*or = rv;
+	if (ir != NULL)
+		*ir = ss;
+
+	if (or != NULL)
+		*or = rv;
 }
 
 /* Given a point, return the point in that direction */
@@ -2209,7 +2631,7 @@ double *in		/* input point (absolute)*/
 static double
 nradial(
 gamut *s,
-double *out,	/* result point (absolute) */
+double *out,	/* result point (absolute) (May be NULL) */
 double *in		/* input point (absolute)*/
 ) {
 	double ss, rv;
@@ -2224,7 +2646,7 @@ double *in		/* input point (absolute)*/
 static double
 radial(
 gamut *s,
-double *out,	/* result point (absolute) */
+double *out,	/* result point (absolute) (May be NULL) */
 double *in		/* input point (absolute)*/
 ) {
 	double ss, rv;
@@ -2297,13 +2719,12 @@ int rdepth,		/* Current recursion depth */
 gtri **list,	/* Current triangle list */
 int llen		/* Number of triangles in the list */
 ) {
-	int ii = 0, jj = 0;	/* Progress through edges */
+	int ii, jj;			/* Progress through edges */
 	int pcount;			/* Current best scored try */
 	int ncount;
 	int bcount;
 	int mcount;
 	double peqs[4];
-	gtri *tp;				/* Triangle pointer */
 	gtri **plist, **nlist;	/* New sub-lists */
 	int pix, nix;			/* pos/ned sublist indexes */
 	gbspn *bspn;			/* BSP decision node */
@@ -2315,7 +2736,10 @@ int llen		/* Number of triangles in the list */
 		for (i = 0; i < llen; i++) {
 			printf("Triang index %d = %d\n",i, list[i]->n);
 			printf("Triang verts %d %d %d\n", 
-			list[i]->v[0]->un, list[i]->v[1]->un, list[i]->v[2]->un);
+			list[i]->v[0]->tn, list[i]->v[1]->tn, list[i]->v[2]->tn);
+			printf("Vert 0 at %.18f %.18f %.18f\n",list[i]->v[0]->sp[0], list[i]->v[0]->sp[1], list[i]->v[0]->sp[2]);
+			printf("Vert 1 at %.18f %.18f %.18f\n",list[i]->v[1]->sp[0], list[i]->v[1]->sp[1], list[i]->v[1]->sp[2]);
+			printf("Vert 2 at %.18f %.18f %.18f\n",list[i]->v[2]->sp[0], list[i]->v[2]->sp[1], list[i]->v[2]->sp[2]);
 		}
 	}
 #endif /* DEBUG */
@@ -2326,13 +2750,14 @@ int llen		/* Number of triangles in the list */
 	}
 
 	pcount = ncount = bcount = -1;
-	mcount = 0x7fffffff;
+	mcount = 0;
 	/* test every edge in turn */
-	for (;ii < llen;) {
+	for (ii = jj = 0;ii < llen;) {
 		double eqs[4];
 		int i;
-		gedge *ep;		/* Edge pointer */
-		int pc, nc, bc;			/* Score a try */
+		gedge *ep;			/* Edge pointer */
+		int pc, nc, bc;		/* Score a try, postive count, negative count, both count */
+		int mc;				/* Minumum count */
 
 		ep = list[ii]->e[jj];
 		eqs[0] = ep->re[0];	/* Use this edge */
@@ -2347,7 +2772,7 @@ int llen		/* Number of triangles in the list */
 		/* Do the trial split */
 		pc = nc = bc = 0;
 		for (i = 0; i < llen; i++) {
-			int mv, j;
+			int j;
 			int po, ne;
 
 			/* Compute distance from plane of all verticies in triangle */
@@ -2384,32 +2809,42 @@ int llen		/* Number of triangles in the list */
 				list[i]->sort = 3;	/* Assume both */
 			}
 		}
-//printf("~1 lu_split trial %d, pc %d, nc %d, bc %d\n",ii *3 + jj, pc, nc, bc);
-		if (pc != 0 && nc != 0
-		 && bc < pc && bc < nc) {
-			int mc = pc > nc ? pc : nc;
-			mc += bc;
-			if (mc < mcount) {			/* New best */
-				mcount = mc;
-				pcount = pc;
-				ncount = nc;
-				bcount = bc;
-				peqs[0] = eqs[0];
-				peqs[1] = eqs[1];
-				peqs[2] = eqs[2];
-				peqs[3] = eqs[3];
-//printf("~1 new best - plane %f %f %f %f\n",peqs[0], peqs[1], peqs[2], peqs[3]);
-				for (i = 0; i < llen; i++) {
-					list[i]->bsort = list[i]->sort;
-				}
-				if ((double)mc/llen <= 0.60)	/* Good enough */
-					break;
+		mc = pc < nc ? pc : nc;		/* Size of smallest group */
+		mc -= bc;
+//printf("~1 lu_split trial %d, mc %d, pc %d, nc %d, bc %d\n",ii * 3 + jj, mc, pc, nc, bc);
+		if (mc > mcount) {			/* New largest small group */
+			mcount = mc;
+			pcount = pc;
+			ncount = nc;
+			bcount = bc;
+			peqs[0] = eqs[0];
+			peqs[1] = eqs[1];
+			peqs[2] = eqs[2];
+			peqs[3] = eqs[3];
+//printf("~1 new best - plane mc = %d, %f %f %f %f\n",mc, peqs[0], peqs[1], peqs[2], peqs[3]);
+			for (i = 0; i < llen; i++) {
+				list[i]->bsort = list[i]->sort;
 			}
 		}
 	}
-	if (ii >= llen && bcount < 0) {
-		fprintf(stderr,"lu_init: Failed to find split plane\n");
-		exit(-1);
+
+#ifdef DEBUG_SPLIT_VRML
+	write_split_diag_vrml(s, list, llen);
+	getchar();
+#endif /* DEBUG_SPLIT_VRML */
+
+	if (ii >= llen && bcount < 0) {	/* We failed to find a split plane */
+		/* This is usually a result of the list being 2 or more triangles */
+		/* that do not share any edges (disconected from each other), and */
+		/* lying so that any split plane formed from an edge of one, */
+		/* intersects one of the others. */
+
+		/* Leave our list of triangles as the leaf node, */
+		/* and let the search algorithms deal with this. */
+
+		*np = (gbsp *)new_gbspl(llen, list);
+printf("~1 lu_split returning with a non split list of %d triangles\n",llen);
+		return;
 	}
 
 	/* Divide the triangles into two lists */
@@ -2466,8 +2901,9 @@ int llen		/* Number of triangles in the list */
 }
 
 /* Given a point and a node in the BSP tree, recurse down */
-/* the correct side of the tree, or return the triangle on */
-/* the gamut surface. Return NULL if it wasn't in triangle. */
+/* the correct side of the tree, or return the triangle or */
+/* triangles that could be on the gamut surface. Return NULL */
+/* if it wasn't in triangle. */
 static gtri *radial_point_triang(
 gamut *s,
 gbsp *np,		/* BSP node pointer we're at */
@@ -2487,10 +2923,33 @@ double *nin		/* Normalised center relative point */
 		else
 			return radial_point_triang(s, n->ne, nin);
 
-	} else {	/* We've arrive at a triangle */
-
+	} else if (np->tag == 2) {	/* It's a triangle */
 		return (gtri *)np;
+
+	} else {			/* It's a triangle list */	
+		gbspl *n = (gbspl *)np;
+		int i, j;
+//printf("~1 got triangle list - radial failed to split triangles!\n");
+
+		/* Go through the list and stop at the first triangle */
+		/* that the node lies in. */
+		for (i = 0; i < n->nt; i++) {
+			/* Check if the point is within this triangle */
+			for (j = 0; j < 3; j++) {
+				double ds;
+				ds = n->t[i]->ee[j][0] * nin[0]
+				   + n->t[i]->ee[j][1] * nin[1]
+			       + n->t[i]->ee[j][2] * nin[2]
+				   + n->t[i]->ee[j][3];
+				if (ds > 1e-8)
+					break;			/* Not within triangle */
+			}
+			if (j >= 3)
+				return n->t[i];
+		}
 	}
+
+	return NULL;
 }
 
 /* Return the location on the surface of the triangle */
@@ -2507,9 +2966,12 @@ double *nin		/* Normalised center relative point */
 
 	t = radial_point_triang(s, np, nin);
 
+	if (t == NULL)
+		return -1.0;
+
 	/* Compute the intersection of the input vector with the triangle plane */
-	/* (Since nin[] is already relative, we don't need to subtract Labc from it) */
-	rv = -(t->pe[0] * gam_Labc[0] + t->pe[1] * gam_Labc[1] + t->pe[2] * gam_Labc[2] + t->pe[3])/
+	/* (Since nin[] is already relative, we don't need to subtract cent[] from it) */
+	rv = -(t->pe[0] * s->cent[0] + t->pe[1] * s->cent[1] + t->pe[2] * s->cent[2] + t->pe[3])/
 	      (t->pe[0] * nin[0] + t->pe[1] * nin[1] + t->pe[2] * nin[2]);
 
 #ifdef ASSERTS
@@ -2518,9 +2980,8 @@ double *nin		/* Normalised center relative point */
 		double tt[3];
 		double ds;
 		int j;
-		for (j = 0; j < 3; j++)			/* Compute result */
-			tt[j] = nin[j] * rv;
-		tt[0] += GAMUT_LCENT;			/* Make absolute */
+		for (j = 0; j < 3; j++)			/* Compute result, absolute */
+			tt[j] = nin[j] * rv + s->cent[j];
 		
 		ds = t->pe[0] * tt[0]
 		   + t->pe[1] * tt[1]
@@ -2535,9 +2996,9 @@ double *nin		/* Normalised center relative point */
 		/* Check if the closest point is within this triangle */
 		for (j = 0; j < 3; j++) {
 			double ds;
-			ds = t->ee[j][0] * (tt[0] - GAMUT_LCENT)
-			   + t->ee[j][1] * tt[1]
-		       + t->ee[j][2] * tt[2]
+			ds = t->ee[j][0] * (tt[0] - s->cent[0])
+			   + t->ee[j][1] * (tt[1] - s->cent[1])
+		       + t->ee[j][2] * (tt[2] - s->cent[2])
 			   + t->ee[j][3];
 			if (ds > 1e-8) {
 				fprintf(stderr,"radial: lookup point wasn't within its triangle (%f) !!\n",ds);
@@ -2574,7 +3035,6 @@ static void del_gbsp(gbsp *n) {
 
 #define GNN_INF 1e307
 static void init_ne(gamut *s);
-static void nearest_point(gamut *s, gbsp *np, double out[3], double in[3]);
 static double ne_point_on_tri(gamut *s, gtri *t, double *out, double *in);
 
 /* Given an absolute point, return the point on the gamut */
@@ -2586,7 +3046,7 @@ double *rout,	/* result point (absolute) */
 double *q		/* Target point (absolute) */
 ) {
 	gnn *p;				/* Pointer to nearest neighbor structure */
-	int e, f, i;
+	int e, i;
 	double r[3];		/* Possible solution point */
 	double out[3];		/* Current best output value */
 	int wex[3 * 2];		/* Current window edge indexes */
@@ -2739,11 +3199,11 @@ double *q		/* Target point (absolute) */
 
 		/* Until we're done */
 		for (;;ptested++) {
-			int ee;			/* Axis & expanding box edge */
-			int ff;			/* Axis */
-			int ii;			/* Index of chosen point */
-			gtri *ob;		/* Current object */
-			int ctv;		/* Current touch value */
+			int ee;				/* Axis & expanding box edge */
+			int ff;				/* Axis */
+			int ii;				/* Index of chosen point */
+			gtri *ob;			/* Current object */
+			unsigned int ctv;	/* Current touch value */
 //printf("\n");
 //printf("wwidth = %f, bdist = %f, window = %d-%d, %d-%d, %d-%d\n",
 //bw, bobj == NULL ? 0.0 : bdist, wex[0], wex[1], wex[2], wex[3], wex[4], wex[5]);
@@ -3092,9 +3552,9 @@ gtri *t			/* Triangle in question */
 	/* Check if the intersection point is within the triangle */
 	for (j = 0; j < 3; j++) {
 		double ds;
-		ds = t->ee[j][0] * (ival[0] - GAMUT_LCENT)	/* Convert to relative for edge check */
-		   + t->ee[j][1] * ival[1]
-	       + t->ee[j][2] * ival[2]
+		ds = t->ee[j][0] * (ival[0] - s->cent[0])	/* Convert to relative for edge check */
+		   + t->ee[j][1] * (ival[1] - s->cent[1])
+	       + t->ee[j][2] * (ival[2] - s->cent[2])
 		   + t->ee[j][3];
 		if (ds > 1e-8) {
 			return 0;		/* Not within triangle */
@@ -3135,9 +3595,9 @@ double *in		/* Absolute input point */
 	/* Check if the closest point is within this triangle */
 	for (j = 0; j < 3; j++) {
 		double ds;
-		ds = t->ee[j][0] * (out[0] - GAMUT_LCENT)	/* Convert to relative for edge check */
-		   + t->ee[j][1] * out[1]
-	       + t->ee[j][2] * out[2]
+		ds = t->ee[j][0] * (out[0] - s->cent[0])	/* Convert to relative for edge check */
+		   + t->ee[j][1] * (out[1] - s->cent[1])
+	       + t->ee[j][2] * (out[2] - s->cent[2])
 		   + t->ee[j][3];
 		if (ds > 1e-8) {
 			break;		/* Not within triangle */
@@ -3221,17 +3681,15 @@ double *in		/* input point (absolute)*/
 		triangulate(s);
 
 	/* Compute vector length to center point */
-	ss  = (in[0] - GAMUT_LCENT) * (in[0] - GAMUT_LCENT);
-	ss += in[1] * in[1];
-	ss += in[2] * in[2];
+	for (ss = 0.0, j = 0; j < 3; j++)
+		ss += (in[j] - s->cent[j]) * (in[j] - s->cent[j]);
 	ss = 1.0/sqrt(ss);				/* Normalising factor */
-	nin[0] = GAMUT_LCENT + (in[0] - GAMUT_LCENT) * ss;
-	nin[1] = in[1] * ss;
-	nin[2] = in[2] * ss;
+	for (ss = 0.0, j = 0; j < 3; j++)
+		nin[j] = s->cent[j] + (in[j] - s->cent[j]) * ss;
 
 	tp = s->tris; 
 	FOR_ALL_ITEMS(gtri, tp) {
-		if (vect_intersect(s, &rv, out, gam_Labc, nin, tp)) {
+		if (vect_intersect(s, &rv, out, s->cent, nin, tp)) {
 			if (rv > 0.0)	/* Expect only one intersection */
 				break;
 		}
@@ -3279,7 +3737,7 @@ double *q		/* Target point (absolute) */
 #endif /* NEVER */
 
 /* Given a vector, find the two extreme intersection with */
-/* the gamut surface.
+/* the gamut surface. */
 /* We use a simple exuastive search, so this is not very fast. */
 /* Return 0 if there is no intersection */
 static int compute_vector_isect(
@@ -3346,123 +3804,16 @@ double *omxt	/* and 1 being at p2 */
 
 /* ===================================================== */
 /* ===================================================== */
-#ifdef NEVER
-/* Write to a wavefront .lwo file */
-static void write_lwo(
-gamut *s,
-char *filename
-) {
-	int i, j, gx;
-	gtri *tp;		/* Triangle pointer */
-	FILE *lwo;
-
-	if IS_LIST_EMPTY(s->tris)
-		triangulate(s);
-		
-	if ((lwo = fopen(filename,"w")) == NULL) {
-		printf("Error opening output file '%s'\n",filename);
-		exit (-1);
-	}
-	/* Spit out Wavefront Object surface of gamut */
-	
-	/* First spit out the point values, in order. */
-	fprintf(lwo,"# Gamut vertexes\n");
-	for (i = 0; i < s->nv; i++) {
-
-#ifdef SHOW_BUCKETS		/* Show vertex buckets as surface */
-		double cc[3], rr[3];
-# ifdef SHOW_SPHERE			/* Show surface on sphere */
-		rr[0] = 50.0;		/* Sphere radius */
-# else
-		rr[0] = s->verts[i]->r[0],
-# endif /* SHOW_SPHERE */
-		if (!(s->verts[i]->f & GVERT_TRI))
-			continue;
-
-		rr[1] = s->verts[i]->hc - 0.5 * s->verts[i]->w;
-		rr[2] = s->verts[i]->vc - 0.5 * s->verts[i]->h;
-		gamut_radial2rect(cc, rr);
-		fprintf(lwo,"v %f %f %f\n",cc[0], cc[1], cc[2]);
-
-		rr[1] = s->verts[i]->hc - 0.5 * s->verts[i]->w;
-		rr[2] = s->verts[i]->vc + 0.5 * s->verts[i]->h;
-		gamut_radial2rect(cc, rr);
-		fprintf(lwo,"v %f %f %f\n",cc[0], cc[1], cc[2]);
-
-		rr[1] = s->verts[i]->hc + 0.5 * s->verts[i]->w;
-		rr[2] = s->verts[i]->vc + 0.5 * s->verts[i]->h;
-		gamut_radial2rect(cc, rr);
-		fprintf(lwo,"v %f %f %f\n",cc[0], cc[1], cc[2]);
-
-		rr[1] = s->verts[i]->hc + 0.5 * s->verts[i]->w;
-		rr[2] = s->verts[i]->vc - 0.5 * s->verts[i]->h;
-		gamut_radial2rect(cc, rr);
-		fprintf(lwo,"v %f %f %f\n",cc[0], cc[1], cc[2]);
-
-#else	/* Show point data */
-# ifdef SHOW_SPHERE			/* Show surface on sphere */
-		fprintf(lwo,"v %f %f %f\n",s->verts[i]->sp[0], s->verts[i]->sp[1],
-		                           s->verts[i]->sp[2]);
-# else
-# ifdef SHOW_HULL_PNTS
-		fprintf(lwo,"v %f %f %f\n",s->verts[i]->ch[0], s->verts[i]->ch[1],
-		                           s->verts[i]->ch[2]);
-# else
-		fprintf(lwo,"v %f %f %f\n",s->verts[i]->p[1], s->verts[i]->p[2],
-		                           s->verts[i]->p[0]-GAMUT_LCENT);
-# endif /* SHOW_HULL_PNTS */
-# endif /* SHOW_SPHERE */
-
-#endif /* SHOW_BUCKETS */
-
-	}
-	/* And center point */
-	fprintf(lwo,"v %f %f %f\n",0.0, 0.0, 0.0);
-	fprintf(lwo,"\n");
-	
-#ifdef NEVER
-
-	/* Print out the vertex vectors */
-	fprintf(lwo,"# Gamut vectors\n");
-	for (i = 0; i < s->nv; i++) {
-		int j;
-		if (!(s->verts[i]->f & GVERT_SET))
-			continue;
-		j = s->verts[i]->un;
-		fprintf(lwo,"l %d %d\n",j+1,s->nv+1);
-	}
-	fprintf(lwo,"\n");
-
-#else
-#ifdef SHOW_BUCKETS		/* Show vertex buckets as surface */
-	for (i = 0; i < s->nv; i++) {
-		int j;
-		if (!(s->verts[i]->f & GVERT_SET))
-			continue;
-		j = s->verts[i]->un;
-		fprintf(lwo,"f %d %d %d %d\n", j * 4 + 1, j * 4 + 2, j * 4 + 3, j * 4 + 4);
-	}
-#else
-	tp = s->tris; 
-	FOR_ALL_ITEMS(gtri, tp) {
-		fprintf(lwo,"f %d %d %d\n", tp->v[0]->un+1, tp->v[1]->un+1, tp->v[2]->un+1);
-	} END_FOR_ALL_ITEMS(tp);
-#endif /* SHOW_BUCKETS */
-#endif
-
-	fclose(lwo);
-}
-#endif /* NEVER */
-
 /* ----------------------------------- */
 /* Write to a VRML .wrl file */
 /* Return non-zero on error */
 static int write_vrml(
 gamut *s,
 char *filename,
-int doaxes			/* Non-zero if axes are to be written */
+int doaxes,			/* Non-zero if axes are to be written */
+int docusps			/* Non-zero if cusp points are to be marked */
 ) {
-	return write_trans_vrml(s, filename, doaxes, NULL, NULL);
+	return write_trans_vrml(s, filename, doaxes, docusps, NULL, NULL);
 }
 
 /* Write to a VRML .wrl file */
@@ -3471,10 +3822,11 @@ static int write_trans_vrml(
 gamut *s,
 char *filename,
 int doaxes,			/* Non-zero if axes are to be written */
+int docusps,		/* Non-zero if cusp points are to be marked */
 void (*transform)(void *cntx, double out[3], double in[3]),	/* Optional transformation callback */
 void *cntx
 ) {
-	int i, j, gx;
+	int i;
 	gtri *tp;		/* Triangle pointer */
 	FILE *wrl;
 	struct {
@@ -3482,11 +3834,37 @@ void *cntx
 		double wx, wy, wz;
 		double r, g, b;
 	} axes[5] = {
-		{ 0, 0,  50-GAMUT_LCENT,  2, 2, 100,  .7, .7, .7 },	/* L axis */
-		{ 50, 0,  0-GAMUT_LCENT,  100, 2, 2,   1,  0,  0 },	/* +a (red) axis */
-		{ 0, -50, 0-GAMUT_LCENT,  2, 100, 2,   0,  0,  1 },	/* -b (blue) axis */
-		{ -50, 0, 0-GAMUT_LCENT,  100, 2, 2,   0,  1,  0 },	/* -a (green) axis */
-		{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
+		{ 0 - s->cent[1], 0 - s->cent[2],  50 - s->cent[0], 2, 2, 100, .7, .7, .7 },
+																			/* L axis */
+		{ 50 - s->cent[1], 0 - s->cent[2],  0 - s->cent[0], 100, 2, 2,  1,  0,  0 },
+																			/* +a (red) axis */
+		{ 0 - s->cent[1], -50 - s->cent[2], 0 - s->cent[0], 2, 100, 2,  0,  0,  1 },
+																			/* -b (blue) axis */
+		{ -50 - s->cent[1], 0 - s->cent[2], 0 - s->cent[0], 100, 2, 2,  0,  1,  0 },
+																			/* -a (green) axis */
+		{ 0 - s->cent[1],  50 - s->cent[2], 0 - s->cent[0], 2, 100, 2,  1,  1,  0 },
+																			/* +b (yellow) axis */
+	};
+
+	/* Define the labels */
+	struct {
+		double x, y, z;
+		double size;
+		char *string;
+		double r, g, b;
+	} labels[6] = {
+		{ -2 - s->cent[1], 2 - s->cent[2],  - s->cent[0] + 100 + 10, 10, "+L*",  .7, .7, .7 },
+																			/* Top of L axis */
+		{ -2 - s->cent[1], 2 - s->cent[2],  - s->cent[0] - 10,      10, "0",    .7, .7, .7 },
+																			/* Bottom of L axis */
+		{ 100 + 5 - s->cent[1], -3 - s->cent[2],  0 - s->cent[0],  10, "+a*",  1,  0,  0 },
+																			/* +a (red) axis */
+		{ -5 - s->cent[1], -100 - 10 - s->cent[2], 0 - s->cent[0],  10, "-b*",  0,  0,  1 },
+																			/* -b (blue) axis */
+		{ -100 - 15 - s->cent[1], -3 - s->cent[2], 0 - s->cent[0],  10, "-a*",  0,  0,  1 },
+																			/* -a (green) axis */
+		{ -5 - s->cent[1],  100 + 5 - s->cent[2], 0 - s->cent[0],  10, "+b*",  1,  1,  0 },
+																			/* +b (yellow) axis */
 	};
 
 	if IS_LIST_EMPTY(s->tris)
@@ -3509,12 +3887,18 @@ void *cntx
 	fprintf(wrl,"	} # We'll add our own light\n");
 	fprintf(wrl,"\n");
 	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
-	fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
+	fprintf(wrl,"        intensity 0.2\n");
+	fprintf(wrl,"        ambientIntensity 0.1\n");
+	fprintf(wrl,"        direction -1 -1 -1\n");
+	fprintf(wrl,"    }\n");
+	fprintf(wrl,"    DirectionalLight {\n");
+	fprintf(wrl,"        intensity 0.6\n");
+	fprintf(wrl,"        ambientIntensity 0.2\n");
+	fprintf(wrl,"        direction 1 1 1\n");
 	fprintf(wrl,"    }\n");
 	fprintf(wrl,"\n");
 	fprintf(wrl,"    Viewpoint {\n");
-	fprintf(wrl,"        position 0 0 340      # Position we view from\n");
+	fprintf(wrl,"        position 0 0 250      # Position we view from\n");
 	fprintf(wrl,"    }\n");
 	fprintf(wrl,"\n");
 	if (doaxes != 0) {
@@ -3522,11 +3906,26 @@ void *cntx
 		for (i = 0; i < 5; i++) {
 			fprintf(wrl,"Transform { translation %f %f %f\n", axes[i].x, axes[i].y, axes[i].z);
 			fprintf(wrl,"\tchildren [\n");
-			fprintf(wrl,"\t\tShape{\n");
+			fprintf(wrl,"\t\tShape {\n");
 			fprintf(wrl,"\t\t\tgeometry Box { size %f %f %f }\n",
 			                  axes[i].wx, axes[i].wy, axes[i].wz);
 			fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
 			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[i].r, axes[i].g, axes[i].b);
+			fprintf(wrl,"\t\t}\n");
+			fprintf(wrl,"\t]\n");
+			fprintf(wrl,"}\n");
+		}
+		fprintf(wrl,"# Axes identification:\n");
+		for (i = 0; i < 6; i++) {
+			fprintf(wrl,"Transform { translation %f %f %f\n", labels[i].x, labels[i].y, labels[i].z);
+			fprintf(wrl,"\tchildren [\n");
+			fprintf(wrl,"\t\tShape {\n");
+			fprintf(wrl,"\t\t\tgeometry Text { string [\"%s\"]\n",labels[i].string);
+			fprintf(wrl,"\t\t\t\tfontStyle FontStyle { family \"SANS\" style \"BOLD\" size %f }\n",
+			                                            labels[i].size);
+			fprintf(wrl,"\t\t\t\t}\n");
+			fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
+			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", labels[i].r, labels[i].g, labels[i].b);
 			fprintf(wrl,"\t\t}\n");
 			fprintf(wrl,"\t]\n");
 			fprintf(wrl,"}\n");
@@ -3547,7 +3946,13 @@ void *cntx
 	/* Spit out the point values, in order. */
 	/* Note that a->x, b->y, L->z */
 	for (i = 0; i < s->nv; i++) {
+		double out[3];
+
+#ifdef SHOW_BUCKETS		/* Show vertex buckets as surface */
+		if (!(s->verts[i]->f & GVERT_SET))
+#else
 		if (!(s->verts[i]->f & GVERT_TRI))
+#endif
 			continue;
 
 #ifdef SHOW_BUCKETS		/* Show vertex buckets as surface */
@@ -3561,22 +3966,22 @@ void *cntx
 
 			rr[1] = s->verts[i]->hc - 0.5 * s->verts[i]->w;
 			rr[2] = s->verts[i]->vc - 0.5 * s->verts[i]->h;
-			gamut_radial2rect(cc, rr);
+			gamut_radial2rect(s, cc, rr);
 			fprintf(wrl,"%f %f %f,\n",cc[1], cc[2], cc[0]);
 	
 			rr[1] = s->verts[i]->hc - 0.5 * s->verts[i]->w;
 			rr[2] = s->verts[i]->vc + 0.5 * s->verts[i]->h;
-			gamut_radial2rect(cc, rr);
+			gamut_radial2rect(s, cc, rr);
 			fprintf(wrl,"%f %f %f,\n",cc[1], cc[2], cc[0]);
 	
 			rr[1] = s->verts[i]->hc + 0.5 * s->verts[i]->w;
 			rr[2] = s->verts[i]->vc + 0.5 * s->verts[i]->h;
-			gamut_radial2rect(cc, rr);
+			gamut_radial2rect(s, cc, rr);
 			fprintf(wrl,"%f %f %f,\n",cc[1], cc[2], cc[0]);
 	
 			rr[1] = s->verts[i]->hc + 0.5 * s->verts[i]->w;
 			rr[2] = s->verts[i]->vc - 0.5 * s->verts[i]->h;
-			gamut_radial2rect(cc, rr);
+			gamut_radial2rect(s, cc, rr);
 			fprintf(wrl,"%f %f %f,\n",cc[1], cc[2], cc[0]);
 		}
 
@@ -3591,14 +3996,15 @@ void *cntx
 		                           s->verts[i]->ch[0]);
 # else
 		/* Show normal gamut surface */
-		if (transform) {
-			double out[3];
-			transform(cntx, out, s->verts[i]->p);		/* Do transform */
-			fprintf(wrl,"%f %f %f,\n",out[1], out[2], out[0]-GAMUT_LCENT);
-		} else {
-			fprintf(wrl,"%f %f %f,\n",s->verts[i]->p[1], s->verts[i]->p[2],
-		                           s->verts[i]->p[0]-GAMUT_LCENT);
-		}
+		out[0] = s->verts[i]->p[0];
+		out[1] = s->verts[i]->p[1];
+		out[2] = s->verts[i]->p[2];
+
+		if (transform)
+			transform(cntx, out, out);		/* Do transform */
+
+		fprintf(wrl,"%f %f %f,\n",out[1]-s->cent[1], out[2]-s->cent[2], out[0]-s->cent[0]);
+
 # endif /* SHOW_HULL_PNTS */
 # endif /* SHOW_SPHERE */
 
@@ -3612,15 +4018,15 @@ void *cntx
 
 #ifdef SHOW_BUCKETS		/* Show vertex buckets as surface */
 	for (i = 0; i < s->nv; i++) {
-		int j = s->verts[i]->un;
-		if (!(s->verts[i]->f & GVERT_TRI))
+		int j = s->verts[i]->sn;
+		if (!(s->verts[i]->f & GVERT_SET))
 			continue;
 		fprintf(wrl,"%d, %d, %d, %d, -1\n", j * 4, j * 4 + 1, j * 4 + 2, j * 4 + 3);
 	}
-#else
+#else	/* Show gamut triangular surface */
 	tp = s->tris; 
 	FOR_ALL_ITEMS(gtri, tp) {
-		fprintf(wrl,"%d, %d, %d, -1\n", tp->v[0]->un, tp->v[1]->un, tp->v[2]->un);
+		fprintf(wrl,"%d, %d, %d, -1\n", tp->v[0]->tn, tp->v[1]->tn, tp->v[2]->tn);
 	} END_FOR_ALL_ITEMS(tp);
 #endif /* SHOW_BUCKETS */
 
@@ -3633,15 +4039,24 @@ void *cntx
 	/* Spit out the colors for each vertex */
 	for (i = 0; i < s->nv; i++) {
 		double rgb[3];
+#ifdef SHOW_BUCKETS		/* Show vertex buckets as surface */
+		if (!(s->verts[i]->f & GVERT_SET))
+#else
 		if (!(s->verts[i]->f & GVERT_TRI))
+#endif
 			continue;
 
 #ifdef COLORED_VRML
 		gamut_Lab2RGB(rgb, s->verts[i]->p);
-		fprintf(wrl,"%f %f %f,\n", rgb[0], rgb[1], rgb[2]);
 #else
-		fprintf(wrl,"%f %f %f,\n", 1.0, 1.0, 1.0);
+		rgb[0] = rgb[1] = rgb[2] = 1.0;
 #endif
+		fprintf(wrl,"%f %f %f,\n", rgb[0], rgb[1], rgb[2]);
+#ifdef SHOW_BUCKETS		/* Show vertex buckets as surface */
+		fprintf(wrl,"%f %f %f,\n", rgb[0], rgb[1], rgb[2]);
+		fprintf(wrl,"%f %f %f,\n", rgb[0], rgb[1], rgb[2]);
+		fprintf(wrl,"%f %f %f,\n", rgb[0], rgb[1], rgb[2]);
+#endif /* SHOW_BUCKETS */
 	}
 	fprintf(wrl,"					] \n");
 	fprintf(wrl,"		        }\n");
@@ -3663,7 +4078,7 @@ void *cntx
 		/* Show the gamut white and black points */
 		fprintf(wrl,"\n");
 		fprintf(wrl,"    Transform {\n");
-		fprintf(wrl,"      translation %f %f %f\n",s->ga_wp[1], s->ga_wp[2], s->ga_wp[0]-GAMUT_LCENT);
+		fprintf(wrl,"      translation %f %f %f\n",s->ga_wp[1]-s->cent[1], s->ga_wp[2]-s->cent[2], s->ga_wp[0]-s->cent[0]);
 		fprintf(wrl,"      children [\n");
 		fprintf(wrl,"		Shape { \n");
 		fprintf(wrl,"		 geometry Sphere { radius 2.0 }\n");
@@ -3673,7 +4088,7 @@ void *cntx
 		fprintf(wrl,"    }\n");
 		fprintf(wrl,"\n");
 		fprintf(wrl,"    Transform {\n");
-		fprintf(wrl,"      translation %f %f %f\n",s->ga_bp[1], s->ga_bp[2], s->ga_bp[0]-GAMUT_LCENT);
+		fprintf(wrl,"      translation %f %f %f\n",s->ga_bp[1]-s->cent[1], s->ga_bp[2]-s->cent[2], s->ga_bp[0]-s->cent[0]);
 		fprintf(wrl,"      children [\n");
 		fprintf(wrl,"		Shape { \n");
 		fprintf(wrl,"		 geometry Sphere { radius 2.0 }\n");
@@ -3681,6 +4096,30 @@ void *cntx
 		fprintf(wrl,"		} \n");
 		fprintf(wrl,"      ]\n");
 		fprintf(wrl,"    }\n");
+	}
+
+	if (docusps && s->cu_inited != 0) {
+		double ccolors[6][3] = {
+			{ 1.0, 0.1, 0.1 },		/* Red */
+			{ 1.0, 1.0, 0.1 },		/* Yellow */
+			{ 0.1, 1.0, 0.1 },		/* Green */
+			{ 0.1, 1.0, 1.0 },		/* Cyan */
+			{ 0.1, 0.1, 1.0 },		/* Blue */
+			{ 1.0, 0.1, 1.0 }		/* Magenta */
+		};
+
+		for (i = 0; i < 6; i++) {
+			fprintf(wrl,"\n");
+			fprintf(wrl,"    Transform {\n");
+			fprintf(wrl,"      translation %f %f %f\n",s->cusps[i][1]-s->cent[1], s->cusps[i][2]-s->cent[2], s->cusps[i][0]-s->cent[0]);
+			fprintf(wrl,"      children [\n");
+			fprintf(wrl,"		Shape { \n");
+			fprintf(wrl,"		 geometry Sphere { radius 2.0 }\n");
+			fprintf(wrl,"        appearance Appearance { material Material { diffuseColor %f %f %f } }\n", ccolors[i][0],ccolors[i][1],ccolors[i][2]);
+			fprintf(wrl,"		} \n");
+			fprintf(wrl,"      ]\n");
+			fprintf(wrl,"    }\n");
+		}
 	}
 
 #ifdef TEST_LOOKUP
@@ -3696,18 +4135,17 @@ void *cntx
 
 		for (i = 0; i < 10; i++) {
 			double ss;
-			/* Create random vector relative to center */
-			in[0] = (rand() / (double)RAND_MAX) - 0.5;
-			in[1] = (rand() / (double)RAND_MAX) - 0.5;
-			in[2] = (rand() / (double)RAND_MAX) - 0.5;
-			in[0] += GAMUT_LCENT;		/* Make absolute */
+			/* Create random vector relative to center, absolute */
+			in[0] = (rand() / (double)RAND_MAX) - 0.5 + s->cent[0];
+			in[1] = (rand() / (double)RAND_MAX) - 0.5 + s->cent[1];
+			in[2] = (rand() / (double)RAND_MAX) - 0.5 + s->cent[2];
 				
 			s->radial(s, out, in);	/* Lookup point on gamut surface */
 
-			out[0] = (out[0] - GAMUT_LCENT) * 1.01 + GAMUT_LCENT;
-			out[1] *= 1.01;
-			out[2] *= 1.01;
-			fprintf(wrl,"%f %f %f,\n",out[1], out[2], out[0]-GAMUT_LCENT);
+			out[0] = (out[0] - s->cent[0]) * 1.01 + s->cent[0];
+			out[1] = (out[1] - s->cent[1]) * 1.01 + s->cent[1];
+			out[2] = (out[2] - s->cent[2]) * 1.01 + s->cent[2];
+			fprintf(wrl,"%f %f %f,\n",out[1]-s->cent[1], out[2]-s->cent[2], out[0]-s->cent[0]);
 		}
 		fprintf(wrl,"      ]\n");
 		fprintf(wrl,"    }\n");
@@ -3737,25 +4175,27 @@ void *cntx
 			in[2] = (rand() / (double)RAND_MAX) - 0.5;
 
 #ifndef NEVER	/* Make points just above surface */
-			in[0] += GAMUT_LCENT;			/* Make absolute */
+			in[0] += s->cent[0];			/* Make absolute */
+			in[1] += s->cent[1];
+			in[2] += s->cent[2];
 			s->radial(s, in, in);	/* Lookup point on gamut surface */
-			in[0] = (in[0] - GAMUT_LCENT) * 1.20 + GAMUT_LCENT;	/* Extend by 10% */
-			in[1] *= 1.20;
-			in[2] *= 1.20;
+			in[0] = (in[0] - s->cent[0]) * 1.20 + s->cent[0];	/* Extend by 10% */
+			in[1] = (in[1] - s->cent[1]) * 1.20 + s->cent[1];
+			in[2] = (in[2] - s->cent[2]) * 1.20 + s->cent[2];
 #else
 			/* Make distance 150 */
 			ss = sqrt(in[0] * in[0] + in[1] * in[1] + in[2] * in[2]);
-			in[0] = 60.0/ss * in[0] + GAMUT_LCENT;
-			in[1] = 60.0/ss * in[1];
-			in[2] = 60.0/ss * in[2];
+			in[0] = 60.0/ss * in[0] + s->cent[0];
+			in[1] = 60.0/ss * in[1] + s->cent[1];
+			in[2] = 60.0/ss * in[2] + s->cent[2];
 #endif
 
 //			s->radial(s, out, in);	/* Lookup point on gamut surface */
 
 			s->nearest(s, out, in);	/* Nearest point on gamut surface */
 
-			fprintf(wrl,"%f %f %f,\n",in[1], in[2], in[0]-GAMUT_LCENT);
-			fprintf(wrl,"%f %f %f,\n",out[1], out[2], out[0]-GAMUT_LCENT);
+			fprintf(wrl,"%f %f %f,\n",in[1]-s->cent[1], in[2]-s->cent[2], in[0]-s->cent[0]);
+			fprintf(wrl,"%f %f %f,\n",out[1]-s->cent[1], out[2]-s->cent[2], out[0]-s->cent[0]);
 		}
 
 		fprintf(wrl,"      ]\n");
@@ -3798,6 +4238,7 @@ char *filename
 	int i;
 	gtri *tp;		/* Triangle pointer */
 	cgats *gam;
+	char buf[100];
 
 	if IS_LIST_EMPTY(s->tris)
 		triangulate(s);
@@ -3815,12 +4256,17 @@ char *filename
 #ifdef NEVER
 	/* would be nice to add extra info like description, source (ie icc filename) etc. */
 	gam->add_kword(gam, 0, "DEVICE_CLASS","INPUT", NULL);	/* What sort of device this is */
-	gam->add_kword(gam, 0, "COLOR_REP","XYZ_RGB", NULL);
 #endif
+	if (s->isJab)
+		gam->add_kword(gam, 0, "COLOR_REP","JAB", NULL);
+	else
+		gam->add_kword(gam, 0, "COLOR_REP","LAB", NULL);
+
+	sprintf(buf,"%f %f %f", s->cent[0], s->cent[1], s->cent[2]);
+	gam->add_kword(gam, 0, "GAMUT_CENTER",buf, NULL);
 
 	/* If the white and black points are known, put them in the file */
 	if (s->cswbset) {
-		char buf[100];
 
 		compgawb(s);		/* make sure we have gamut white/black available */
 
@@ -3837,6 +4283,18 @@ char *filename
 		gam->add_kword(gam, 0, "GAMUT_BLACK",buf, NULL);
 	}
 
+	/* If cusp values are known, put them in the file */
+	if (s->cu_inited != 0) {
+		char buf1[50], buf2[100];
+		char *cnames[6] = { "RED", "YELLOW", "GREEN", "CYAN", "BLUE", "MAGENTA" };
+
+		for (i = 0; i < 6; i++) {
+			sprintf(buf1,"CUSP_%s", cnames[i]);
+			sprintf(buf2,"%f %f %f", s->cusps[i][0], s->cusps[i][1], s->cusps[i][2]);
+			gam->add_kword(gam, 0, buf1, buf2, NULL);
+		}
+	}
+
 	gam->add_kword(gam, 0, NULL, NULL, "First come the triangle verticy location");
 
 	gam->add_field(gam, 0, "VERTEX_NO", i_t);
@@ -3848,7 +4306,7 @@ char *filename
 	for (i = 0; i < s->nv; i++) {
 		if (!(s->verts[i]->f & GVERT_TRI))
 			continue;
-		gam->add_set(gam, 0, s->verts[i]->un,
+		gam->add_set(gam, 0, s->verts[i]->tn,
 		             s->verts[i]->p[0], s->verts[i]->p[1], s->verts[i]->p[2]);
 	}
 
@@ -3862,7 +4320,7 @@ char *filename
 
 	tp = s->tris; 
 	FOR_ALL_ITEMS(gtri, tp) {
-		gam->add_set(gam, 1, tp->v[0]->un, tp->v[1]->un, tp->v[2]->un);
+		gam->add_set(gam, 1, tp->v[0]->tn, tp->v[1]->tn, tp->v[2]->tn);
 	} END_FOR_ALL_ITEMS(tp);
 
 
@@ -3915,6 +4373,13 @@ char *filename
 		return 1;
 	}
 
+	/* Figure the basic colorspace information */
+	s->isJab = 0;
+	if ((cw = gam->find_kword(gam, 0, "COLOR_REP")) >= 0) {
+		if (strcmp(gam->t[0].kdata[cw], "JAB") == 0)
+			s->isJab = 1;
+	}
+
 	/* If we can find the the colorspace white and black points, add them to the gamut */
 	cw = gam->find_kword(gam, 0, "CSPACE_WHITE");
 	cb = gam->find_kword(gam, 0, "CSPACE_BLACK");
@@ -3954,6 +4419,27 @@ char *filename
 			s->gawbset = 1;
 		}
 	}
+
+	/* See if there are cusp values */
+	{
+		int kk;
+		char buf1[50];
+		char *cnames[6] = { "RED", "YELLOW", "GREEN", "CYAN", "BLUE", "MAGENTA" };
+
+		for (i = 0; i < 6; i++) {
+			sprintf(buf1,"CUSP_%s", cnames[i]);
+			if ((kk = gam->find_kword(gam, 0, buf1)) < 0)
+				break;
+
+			if (sscanf(gam->t[0].kdata[kk], "%lf %lf %lf",
+		           &s->cusps[i][0], &s->cusps[i][1], &s->cusps[i][2]) != 3) {
+				break;
+			}
+		}
+		if (i >= 6)
+			s->cu_inited = 1;
+	}
+
 
 	if ((nverts = gam->t[0].nsets) <= 0) {
 		fprintf(stderr,"No verticies");
@@ -4007,19 +4493,19 @@ char *filename
 		}
 		s->verts[i] = v;
 		v->tag = 1;
-		v->un = v->n = i;
+		v->tn = v->n = i;
 		v->f = GVERT_SET | GVERT_TRI;		/* Will be part of the triangulation */
 
 		v->p[0] = *((double *)gam->t[0].fdata[i][Lf]);
 		v->p[1] = *((double *)gam->t[0].fdata[i][af]);
 		v->p[2] = *((double *)gam->t[0].fdata[i][bf]);
 
-		gamut_rect2radial(v->r, v->p);
+		gamut_rect2radial(s, v->r, v->p);
 	}
 	s->ntv = i;
 
 	/* Compute the other vertex values */
-	sphere_map(s);
+	compute_vertex_coords(s);
 
 	/* Get ready to read the triangle data */
 	if ((v0f = gam->find_field(gam, 1, "VERTEX_0")) < 0) {
@@ -4063,7 +4549,7 @@ char *filename
 		t->v[1] = s->verts[v1];
 		t->v[2] = s->verts[v2];
 
-		circumcircle(t);		/* Compute various equations */
+		comptriattr(s, t);		/* Compute triangle attributes */
 	}
 
 	/* Connect edge information */
@@ -4106,7 +4592,8 @@ char *filename
 			if (tp->e[en] != NULL
 			 || tp2->e[em] != NULL) {
 				fprintf(stderr,".gam file triangle data is not consistent\n");
-				fprintf(stderr,"tp1->e[%d] = 0x%x, tp2->e[%d]= 0x%x\n",en,tp->e[en],em,tp2->e[em]);
+				fprintf(stderr,"tp1->e[%d] = 0x%lx, tp2->e[%d]= 0x%lx\n",en,
+				        (unsigned long)tp->e[en],em,(unsigned long)tp2->e[em]);
 				return 1;
 			}
 
@@ -4143,6 +4630,7 @@ char *filename
 /* Convert from rectangular to radial coordinates */
 void
 gamut_rect2radial(
+gamut *s,
 double out[3],			/* Radius, longitude, lattitude out */
 double in[3]			/* Lab in */
 ) {
@@ -4151,9 +4639,9 @@ double in[3]			/* Lab in */
 	double c;	/* Chromatic length */
 	
 
-	L = in[0] - GAMUT_LCENT;	/* Offset value */
-	a = in[1];
-	b = in[2];
+	L = in[0] - s->cent[0];	/* Offset value */
+	a = in[1] - s->cent[1];
+	b = in[2] - s->cent[2];
 	c = a * a + b * b;
 	R = c + L * L;
 	c = sqrt(c);		/* Saturation */
@@ -4187,6 +4675,7 @@ double in[3]			/* Lab in */
 /* Convert from radial to rectangular coordinates */
 void
 gamut_radial2rect(
+gamut *s,
 double out[3],			/* Lab out */
 double in[3]			/* Radius, longitude, lattitude in */
 ) {
@@ -4204,9 +4693,9 @@ double in[3]			/* Radius, longitude, lattitude in */
 	a = c * cos(g);
 	b = c * sin(g);
 
-	out[0] = L + GAMUT_LCENT;
-	out[1] = a;
-	out[2] = b;
+	out[0] = L + s->cent[0];
+	out[1] = a + s->cent[1];
+	out[2] = b + s->cent[2];
 }
 
 
@@ -4277,8 +4766,358 @@ gamut_Lab2RGB(double *out, double *in) {
 }
 
 
+/* -------------------------------------------------- */
+
+#ifdef DEBUG_TRIANG
+
+/* Write a surface contrsuction diagnostic VRML .wrl file */
+static int write_diag_vrml(
+gamut *s,
+double vv[3],		/* Vertex being added */
+int nh,				/* Number of hit triangles */
+tidxs *hixs,		/* verticy indexes of hit triangles */
+gtri *hl			/* Edge hit list (may be NULL) */
+) {
+	char *filename;
+	int i, j;
+	gtri *tp;		/* Triangle pointer */
+	FILE *wrl;
+
+	if (hl)
+		filename = "diag1.wrl";		/* Triangles hit */
+	else
+		filename = "diag2.wrl";		/* Triangles formed */
+
+	if ((wrl = fopen(filename,"w")) == NULL) {
+		fprintf(stderr,"Error opening output file '%s'\n",filename);
+		return 2;
+	}
+
+	/* Spit out a VRML 2 Object surface of gamut */
+
+	fprintf(wrl,"#VRML V2.0 utf8\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"# Created by the Argyll CMS\n");
+	fprintf(wrl,"Transform {\n");
+  	fprintf(wrl,"children [\n");
+    fprintf(wrl,"	NavigationInfo {\n");
+	fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
+	fprintf(wrl,"	} # We'll add our own light\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"    DirectionalLight {\n");
+	fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
+	fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
+	fprintf(wrl,"    }\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"    Viewpoint {\n");
+	fprintf(wrl,"        position 0 0 200      # Position we view from\n");
+	fprintf(wrl,"    }\n");
+	fprintf(wrl,"\n");
+
+	fprintf(wrl,"    Transform {\n");
+	fprintf(wrl,"      translation 0 0 0\n");
+	fprintf(wrl,"      children [\n");
+	fprintf(wrl,"		Shape { \n");
+	fprintf(wrl,"		    geometry IndexedFaceSet {\n");
+	fprintf(wrl,"				ccw FALSE\n");
+	fprintf(wrl,"				convex TRUE\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"		        coord Coordinate { \n");
+	fprintf(wrl,"		            point [			# Verticy coordinates\n");
+
+	/* Spit out the vertex values, in order. */
+	/* Note that a->x, b->y, L->z */
+	for (i = 0; i < s->nv; i++) {
+		double out[3];
+
+		/* Show normal gamut surface */
+		out[0] = s->verts[i]->ch[0];
+		out[1] = s->verts[i]->ch[1];
+		out[2] = s->verts[i]->ch[2];
+
+		fprintf(wrl,"%f %f %f,\n",out[1], out[2], out[0]);
+	}
+	fprintf(wrl,"					]\n");
+	fprintf(wrl,"		        }\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"		        coordIndex [ 		# Indexes of poligon Verticies \n");
+
+	tp = s->tris; 
+	FOR_ALL_ITEMS(gtri, tp) {
+		fprintf(wrl,"%d, %d, %d, -1\n", tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
+	} END_FOR_ALL_ITEMS(tp);
+
+	for (i = 0; i < nh; i++) { 
+		fprintf(wrl,"%d, %d, %d, -1\n", hixs[i].tix[0], hixs[i].tix[1], hixs[i].tix[2]);
+	}
+
+	fprintf(wrl,"				]\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"				colorPerVertex FALSE\n");
+	fprintf(wrl,"		        color Color {\n");
+	fprintf(wrl,"		            color [			# RGB colors of each vertex\n");
+
+	/* Spit out the colors for each face */
+	tp = s->tris; 
+	FOR_ALL_ITEMS(gtri, tp) {
+		fprintf(wrl,"%f %f %f,\n", 0.7, 0.7, 0.7);
+	} END_FOR_ALL_ITEMS(tp);
+	for (i = 0; i < nh; i++) { 
+		if (hixs[i].type == 0)
+			fprintf(wrl,"%f %f %f,\n", 0.4, 1.0, 0.4);	/* Green for hit */
+		else if (hixs[i].type == 1)
+			fprintf(wrl,"%f %f %f,\n", 0.4, 0.4, 1.0);	/* Blue for extra */
+		else
+			fprintf(wrl,"%f %f %f,\n", 0.8, 0.8, 0.2);	/* Yellow for new */
+	}
+	fprintf(wrl,"					] \n");
+	fprintf(wrl,"		        }\n");
+	fprintf(wrl,"		    }	# end IndexedFaceSet\n");
+
+	fprintf(wrl,"		    appearance Appearance { \n");
+	fprintf(wrl,"		        material Material {\n");
+	fprintf(wrl,"					transparency 0.0\n");
+	fprintf(wrl,"					ambientIntensity 0.3\n");
+	fprintf(wrl,"					shininess 0.5\n");
+	fprintf(wrl,"				}\n");
+	fprintf(wrl,"		    }\n");
+	fprintf(wrl,"		}	# end Shape\n");
+	fprintf(wrl,"      ]\n");
+	fprintf(wrl,"    } # end of transform\n");
+
+	/* center of gamut */
+	fprintf(wrl,"\n");
+	fprintf(wrl,"    Transform {\n");
+	fprintf(wrl,"      translation %f %f %f\n",0.0, 0.0, 0.0);
+	fprintf(wrl,"      children [\n");
+	fprintf(wrl,"		Shape { \n");
+	fprintf(wrl,"		 geometry Sphere { radius 1.5 }\n");
+	fprintf(wrl,"        appearance Appearance { material Material { diffuseColor %f %f %f } }\n", 1.0, 1.0, 0.0);
+	fprintf(wrl,"		} \n");
+	fprintf(wrl,"      ]\n");
+	fprintf(wrl,"    }\n");
+
+	/* vertex being added */
+	fprintf(wrl,"\n");
+	fprintf(wrl,"    Transform {\n");
+	fprintf(wrl,"      translation %f %f %f\n",vv[1], vv[2], vv[0]);
+	fprintf(wrl,"      children [\n");
+	fprintf(wrl,"		Shape { \n");
+	fprintf(wrl,"		 geometry Sphere { radius 1.5 }\n");
+	fprintf(wrl,"        appearance Appearance { material Material { diffuseColor %f %f %f } }\n", 1.0, 0.0, 0.0);
+	fprintf(wrl,"		} \n");
+	fprintf(wrl,"      ]\n");
+	fprintf(wrl,"    }\n");
 
 
+	/* Verticies for Polygon edges */
+	if (hl != NULL) {
+		double base[3] = { 0.0, 0.0, 1.0 };		/* Default orientation of cone is b axis */
+		tp = hl; 
+		FOR_ALL_ITEMS(gtri, tp) {
+			double len;
+			double loc[3];
+			double vec[3];
+			double axis[3];		/* Axis to rotate around */
+			double rot;			/* In radians */
+
+//printf("~1 edge vert %d to %d\n",tp->v[0]->n, tp->v[1]->n);
+//printf("~1 edge %f %f %f to %f %f %f\n",
+//tp->v[0]->ch[0], tp->v[0]->ch[1], tp->v[0]->ch[2],
+//tp->v[1]->ch[0], tp->v[1]->ch[1], tp->v[1]->ch[2]);
+
+			icmAdd3(loc, tp->v[1]->ch, tp->v[0]->ch);
+			icmScale3(loc, loc, 0.5);
+			icmSub3(vec, tp->v[1]->ch, tp->v[0]->ch);
+			len = icmNorm3(vec);
+
+			if (len < 1.0)
+				len = 1.0;
+
+			icmNormalize3(base, base, 1.0);
+			icmNormalize3(vec, vec, 1.0);
+			icmCross3(axis, base, vec);
+			rot = icmDot3(base, vec);
+//printf("~1 Axis = %f %f %f\n",axis[0],axis[1],axis[2]);
+			if (icmNorm3sq(axis) < 1e-10) {		/* 0 or 180 degrees */
+				double base2[3];
+				int mxi = 0;
+				base2[0] = vec[1];		/* Comute vector in a different direction */
+				base2[1] = vec[2];
+				base2[2] = vec[0];
+				for (j = 1; j < 3; j++) {
+					if (fabs(base2[j]) > fabs(base2[mxi])) 
+						mxi = j;
+				}
+				base2[mxi] = -base2[mxi];
+					
+				icmCross3(axis, base2, vec);
+				if (icmNorm3sq(axis) < 1e-10) {		/* 0 or 180 degrees */
+					error("VRML rotate axis still too small");
+				}
+				if (rot < 0.0)
+					rot = 3.1415926;
+				else
+					rot = 0.0;			
+			} else {
+				rot = acos(rot);
+//printf("~1 rotation %f\n",rot);
+			}
+
+			fprintf(wrl,"\n");
+			fprintf(wrl,"    Transform {\n");
+			fprintf(wrl,"      rotation %f %f %f %f\n",axis[1], axis[2], axis[0], rot);
+			fprintf(wrl,"      translation %f %f %f\n",loc[1], loc[2], loc[0]);
+			fprintf(wrl,"      children [\n");
+			fprintf(wrl,"		Shape { \n");
+			fprintf(wrl,"		 geometry Cone { bottomRadius 0.5 height %f }\n",len);
+			fprintf(wrl,"        appearance Appearance { material Material { diffuseColor 0.7 0.0 1.0 } }\n");
+			fprintf(wrl,"		} \n");
+			fprintf(wrl,"      ]\n");
+			fprintf(wrl,"    }\n");
+		} END_FOR_ALL_ITEMS(tp);
+	}
+
+	fprintf(wrl,"\n");
+	fprintf(wrl,"  ] # end of children for world\n");
+	fprintf(wrl,"}\n");
+
+	if (fclose(wrl) != 0) {
+		fprintf(stderr,"Error closing output file '%s'\n",filename);
+		return 2;
+	}
+
+	return 0;
+}
+
+#endif /* DEBUG_TRIANG */
+
+
+#ifdef DEBUG_SPLIT_VRML
+
+/* Write a triangle split diagnostic VRML .wrl file */
+static int write_split_diag_vrml(
+gamut *s,
+gtri **list,	/* Triangle list */
+int llen		/* Number of triangles in the list */
+) {
+	char *filename;
+	int i, j;
+	FILE *wrl;
+
+	filename = "diag3.wrl";		/* Triangles split */
+
+	if ((wrl = fopen(filename,"w")) == NULL) {
+		fprintf(stderr,"Error opening output file '%s'\n",filename);
+		return 2;
+	}
+
+	/* Spit out a VRML 2 Object surface of gamut */
+
+	fprintf(wrl,"#VRML V2.0 utf8\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"# Created by the Argyll CMS\n");
+	fprintf(wrl,"Transform {\n");
+  	fprintf(wrl,"children [\n");
+    fprintf(wrl,"	NavigationInfo {\n");
+	fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
+	fprintf(wrl,"	} # We'll add our own light\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"    DirectionalLight {\n");
+	fprintf(wrl,"        ambientIntensity 0.3           # Ambient light illuminating the scene\n");
+	fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
+	fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
+	fprintf(wrl,"    }\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"    Viewpoint {\n");
+	fprintf(wrl,"        position 0 0 5      # Position we view from\n");
+	fprintf(wrl,"    }\n");
+	fprintf(wrl,"\n");
+
+	fprintf(wrl,"    Transform {\n");
+	fprintf(wrl,"      translation 0 0 0\n");
+	fprintf(wrl,"      children [\n");
+	fprintf(wrl,"		Shape { \n");
+	fprintf(wrl,"		    geometry IndexedFaceSet {\n");
+	fprintf(wrl,"				ccw FALSE\n");
+	fprintf(wrl,"				convex TRUE\n");
+	fprintf(wrl,"				solid FALSE\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"		        coord Coordinate { \n");
+	fprintf(wrl,"		            point [			# Verticy coordinates\n");
+
+	/* Spit out the vertex values, in order. */
+	for (i = 0; i < llen; i++) {
+		fprintf(wrl,"%f %f %f,\n",list[i]->v[0]->sp[0], list[i]->v[0]->sp[1], list[i]->v[0]->sp[2]);
+		fprintf(wrl,"%f %f %f,\n",list[i]->v[1]->sp[0], list[i]->v[1]->sp[1], list[i]->v[1]->sp[2]);
+		fprintf(wrl,"%f %f %f,\n",list[i]->v[2]->sp[0], list[i]->v[2]->sp[1], list[i]->v[2]->sp[2]);
+	}
+	fprintf(wrl,"					]\n");
+	fprintf(wrl,"		        }\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"		        coordIndex [ 		# Indexes of poligon Verticies \n");
+
+	for (i = 0; i < llen; i++) {
+		fprintf(wrl,"%d, %d, %d, -1\n", i * 3 + 0, i * 3 + 1, i * 3 + 2);
+	}
+	fprintf(wrl,"				]\n");
+	fprintf(wrl,"\n");
+	fprintf(wrl,"				colorPerVertex FALSE\n");
+	fprintf(wrl,"		        color Color {\n");
+	fprintf(wrl,"		            color [			# RGB colors of each vertex\n");
+
+	/* Spit out the colors for each face */
+	for (i = 0; i < llen; i++) {
+		if (list[i]->bsort == 1) {	/* Positive */
+			fprintf(wrl,"%f %f %f,\n", 1.0, 0.3, 0.3);		/* Red */
+		} else if (list[i]->bsort == 2) {	/* Negative */
+			fprintf(wrl,"%f %f %f,\n", 0.3, 1.0, 0.3);		/* Green */
+		} else if (list[i]->bsort == 3) {	/* Both */
+			fprintf(wrl,"%f %f %f,\n", 1.0, 1.0, 0.3);		/* Yellow */
+		} else {	/* Neither */
+			fprintf(wrl,"%f %f %f,\n", 0.3, 0.3, 1.0);		/* Blue */
+		} 
+	}
+	fprintf(wrl,"					] \n");
+	fprintf(wrl,"		        }\n");
+	fprintf(wrl,"		    }	# end IndexedFaceSet\n");
+
+	fprintf(wrl,"		    appearance Appearance { \n");
+	fprintf(wrl,"		        material Material {\n");
+	fprintf(wrl,"					transparency 0.0\n");
+	fprintf(wrl,"					ambientIntensity 0.3\n");
+	fprintf(wrl,"					shininess 0.5\n");
+	fprintf(wrl,"				}\n");
+	fprintf(wrl,"		    }\n");
+	fprintf(wrl,"		}	# end Shape\n");
+	fprintf(wrl,"      ]\n");
+	fprintf(wrl,"    } # end of transform\n");
+
+	/* center of gamut */
+	fprintf(wrl,"\n");
+	fprintf(wrl,"    Transform {\n");
+	fprintf(wrl,"      translation %f %f %f\n",0.0, 0.0, 0.0);
+	fprintf(wrl,"      children [\n");
+	fprintf(wrl,"		Shape { \n");
+	fprintf(wrl,"		 geometry Sphere { radius 0.05 }\n");
+	fprintf(wrl,"        appearance Appearance { material Material { diffuseColor %f %f %f } }\n", 1.0, 1.0, 0.0);
+	fprintf(wrl,"		} \n");
+	fprintf(wrl,"      ]\n");
+	fprintf(wrl,"    }\n");
+
+	fprintf(wrl,"\n");
+	fprintf(wrl,"  ] # end of children for world\n");
+	fprintf(wrl,"}\n");
+
+	if (fclose(wrl) != 0) {
+		fprintf(stderr,"Error closing output file '%s'\n",filename);
+		return 2;
+	}
+
+	return 0;
+}
+
+#endif /* DEBUG_SPLIT_VRML */
 
 
 

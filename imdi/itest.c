@@ -1,11 +1,11 @@
 
 /* Verify and benchmark the imdi code */
 /*
- * Copyright 2000 - 2002 Graeme W. Gill
+ * Copyright 2000 - 2006 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include <stdio.h>
@@ -18,14 +18,14 @@
 #include "refi.h"
 
 /* Test parameters */
-#define TEST1					/* Test just one combination */
+#undef TEST1					/* Test just one combination */
 #define FULL					/* Test full range */
 #undef VERBOSE					/* Report every conversion */
 #undef REPORT_ERRORS			/* Report conversion with large errors */
 #define TRAND					/* Test random in/out table contents */
 #define TCRAND					/* Test random clut table contents */
-#undef QUANTIZE				/* Quantize the target table values */
-#define TBUFSIZE (2 * 1024 * 1024)		/* Default number of pixels to test */
+#undef QUANTIZE					/* Quantize the target table values */
+#define TBUFSIZE (2 * 1024 * 1024)	/* Default number of input bytes to test */
 #define ITERS 10					/* Itterations */
 
 double trans1(double in, double t);
@@ -41,29 +41,31 @@ typedef struct {
 } rcntx;
 
 /* Input curve function */
-double input_curve(
+static void input_curves(
 	void *cntx,
-	int ch,
-	double in_val
+	double *out_vals,
+	double *in_vals
 ) {
+	int i;
 	rcntx *rx = (rcntx *)cntx;
+
+	for (i = 0; i < rx->id; i++) {
+		double val = in_vals[i];
 #ifdef TRAND
-	double val;
-	val = trans1(in_val, rx->icurve[ch]);
+		val = trans1(val, rx->icurve[i]);
 #ifdef QUANTIZE
-	val = ((int)(val * 255.0 + 0.5))/255.0;	/* Quantize to 8 bits */
+		val = ((int)(val * 255.0 + 0.5))/255.0;	/* Quantize to 8 bits */
 #endif
-	return val;
-#else
-	return in_val;
 #endif
+		out_vals[i] = val;
+	}
 }
 
 /* Multi-dim table function */
-void md_table(
-void *cntx,
-double *out_vals,
-double *in_vals
+static void md_table(
+	void *cntx,
+	double *out_vals,
+	double *in_vals
 ) {
 	rcntx *rx = (rcntx *)cntx;
 	int i, j;
@@ -87,22 +89,24 @@ double *in_vals
 }
 
 /* Output curve function */
-double output_curve(
-void *cntx,
-int ch,
-double in_val
+static void output_curves(
+	void *cntx,
+	double *out_vals,
+	double *in_vals
 ) {
+	int i;
 	rcntx *rx = (rcntx *)cntx;
+
+	for (i = 0; i < rx->od; i++) {
+		double val = in_vals[i];
 #ifdef TRAND
-	double val;
-	val = trans2(in_val, rx->ocurve[ch]);
+		val = trans1(val, rx->ocurve[i]);
 #ifdef QUANTIZE
-	val = ((int)(val * 255.0 + 0.5))/255.0;	/* Quantize to 8 bits */
+		val = ((int)(val * 255.0 + 0.5))/255.0;	/* Quantize to 8 bits */
 #endif
-	return val;
-#else
-	return in_val;
 #endif
+		out_vals[i] = val;
+	}
 }
 
 /* Complete reference interpolation */
@@ -151,10 +155,10 @@ main(int argc, char *argv[]) {
 
 	/* Define combinations to test */
 #ifdef TEST1
-	int ids[] = { 3, 4, 0 };			/* Input dimensions */
-	int ods[] = { 3, 4, 0 };			/* Output dimensions */
-	int iprs[] = { 8, 16, 0 };
-	int oprs[] = { 8, 16, 0 };
+	int ids[] = { 3, 0 };			/* Input dimensions */
+	int ods[] = { 4, 0 };							/* Output dimensions */
+	int iprs[] = { 8, 0 };
+	int oprs[] = { 8, 0 };
 #else
 #ifndef FULL
 	int ids[] = { 1, 3, 4, 8, 0 };
@@ -307,9 +311,9 @@ main(int argc, char *argv[]) {
 					ires,			/* Input table resolution */
 					cres,			/* clut resolution */
 					ores,			/* Output table resolution */
-					input_curve,	/* Callback functions */
+					input_curves,	/* Callback functions */
 					md_table,
-					output_curve,
+					output_curves,
 					(void *)&rx		/* Context to callbacks */
 				);
 
@@ -326,9 +330,15 @@ main(int argc, char *argv[]) {
 					od,				/* Number of output dimensions */
 					ip == 8 ? pixint8 : pixint16,	/* Input pixel representation */
 					0x0,			/* Treat every channel as unsigned */
+					NULL,			/* No raster to callback mapping */
+					prec_min,		/* Minimum of input and output precision */
 					op == 8 ? pixint8 : pixint16,	/* Output pixel representation */
 					0x0,			/* Treat every channel as unsigned */
+					NULL,			/* No raster to callback mapping */
 					cres,			/* Desired table resolution */
+					oopts_none,		/* Desired per channel output options */
+					NULL,			/* Output channel check values */
+					opts_none,		/* Desired processing direction and stride support */
 					refi_input,		/* Callback functions */
 					refi_clut,
 					refi_output,
@@ -359,32 +369,27 @@ main(int argc, char *argv[]) {
 				/* Initialise the input buffer contents */
 				rand32(0x12345678);
 				if (ip == 8) {
+					unsigned ui;
 					int rr = rbits;
 					if (rr > 8)
 						rr = 8;
-					rmask = (1 << (8 - rr)) -1;
-printf("~1 rmask = 0x%x\n",rmask);
-					for (i = 0; i < tbufsize; i += id) {
+					rmask = ((1 << rr) -1) << (8-rr);
+					for (ui = 0; ui < tbufsize; ui += id) {
 						for (e = 0; e < id; e++) {
-							unsigned long ran = rand32(0) | rmask;
-							ibuf[i + e] = ran & 0xff;
+							unsigned long ran = rand32(0);
+							ibuf[ui + e] = (unsigned char)(ran & rmask);
 						}
 					}
 				} else {
-					rmask = (1 << (16 - rbits)) -1;
-printf("~1 rmask = 0x%x\n",rmask);
-					for (i = 0; i < tbufsize; i += id) {
+					unsigned ui;
+					rmask = ((1 << rbits) -1) << (16-rbits);
+					for (ui = 0; ui < tbufsize; ui += id) {
 						for (e = 0; e < id; e++) {
-							unsigned long ran = rand32(0) | rmask;
-							ibuf2[i + e] = ran & 0xffff;
+							unsigned long ran = rand32(0);
+							ibuf2[ui + e] = (unsigned short)(ran & rmask);
 						}
 					}
 				}
-
-//~9
-//ibuf[0] = 124;
-//ibuf[1] = 113;
-//ibuf[2] = 137;
 
 				/* We are assuming packed pixel interleaved */
 				inp[0]  = ibuf;
@@ -393,7 +398,7 @@ printf("~1 rmask = 0x%x\n",rmask);
 				/* Benchmark it */
 				stime = clock();
 				for (n = 0; n < iters; n++) {
-					s->interp(s, (void **)outp, (void **)inp, tbufsize);
+					s->interp(s, (void **)outp, 0, (void **)inp, 0, tbufsize);
 				}
 				ttime = clock() - stime;
 				xtime = (double)ttime/(double)CLOCKS_PER_SEC;
@@ -405,20 +410,21 @@ printf("~1 rmask = 0x%x\n",rmask);
 					printf("Speed - too fast!\n");
 
 				{
-					int mxerr = 0;
+					unsigned ui;
+					double mxerr = 0.0;
 					double avgerr = 0.0;
 
 					/* Verify the accuracy against refi of each sample */
-					for (i = j = 0; i < tbufsize; i += id, j += od) {
+					for (ui = j = 0; ui < tbufsize; ui += id, j += od) {
 						int mxserr;
 
 						if (ip == 8) {
 							for (e = 0; e < id; e++) {
-								ribuf[e] = ibuf[i + e]/255.0;
+								ribuf[e] = ibuf[ui + e]/255.0;
 							}
 						} else {
 							for (e = 0; e < id; e++) {
-								ribuf[e] = ibuf2[i + e]/65535.0;
+								ribuf[e] = ibuf2[ui + e]/65535.0;
 							}
 						}
 						refi_interp(r, robuf, ribuf);
@@ -427,53 +433,49 @@ printf("~1 rmask = 0x%x\n",rmask);
 
 						if (ip == 8) {
 							for (e = 0; e < od; e++) {
-								int err = (int)(robuf[e] * 255.0 + 0.5) - obuf[j + e];
+								double err = robuf[e] * 255.0 - obuf[j + e];
 								if (err < 0)
 									err = -err;
 								if (err > mxerr)
 									mxerr = err;
 								if (err > mxserr)
 									mxserr = err;
-								avgerr += (double)err;
+								avgerr += err;
 							}
 						} else {
 							for (e = 0; e < od; e++) {
-								int err = (int)(robuf[e] * 65535.0 + 0.5) - obuf2[j + e];
+								double err = robuf[e] * 65535.0 - obuf2[j + e];
 								if (err < 0)
 									err = -err;
 								if (err > mxerr)
 									mxerr = err;
 								if (err > mxserr)
 									mxserr = err;
-								avgerr += (double)err;
+								avgerr += err;
 							}
 						}
-#ifdef VERBOSE
-						mxserr = 37;
-#endif
-
 #if defined(REPORT_ERRORS) || defined(VERBOSE)
 						if (mxserr >= 37) {
 							if (ip == 8) {
 								if (id == 1)
-									printf("in %d, ", ibuf[i+0]);
+									printf("in %d, ", ibuf[ui+0]);
 								if (id == 2)
-									printf("in %d %d, ", ibuf[i+0], ibuf[i+1]);
+									printf("in %d %d, ", ibuf[ui+0], ibuf[ui+1]);
 								if (id == 3)
-									printf("in %d %d %d, ", ibuf[i+0], ibuf[i+1], ibuf[i+2]);
+									printf("in %d %d %d, ", ibuf[ui+0], ibuf[ui+1], ibuf[ui+2]);
 								if (id == 4)
 									printf("in %d %d %d, ", 
-											ibuf[i+0], ibuf[i+1], ibuf[i+2], ibuf[i+3]);
+											ibuf[ui+0], ibuf[ui+1], ibuf[ui+2], ibuf[ui+3]);
 							} else {
 								if (id == 1)
-									printf("in %d, ", ibuf2[i+0]);
+									printf("in %d, ", ibuf2[ui+0]);
 								if (id == 2)
-									printf("in %d %d, ", ibuf2[i+0], ibuf2[i+1]);
+									printf("in %d %d, ", ibuf2[ui+0], ibuf2[ui+1]);
 								if (id == 3)
-									printf("~in %d %d %d, ", ibuf2[i+0], ibuf2[i+1], ibuf2[i+2]);
+									printf("~in %d %d %d, ", ibuf2[ui+0], ibuf2[ui+1], ibuf2[ui+2]);
 								if (id == 4)
 									printf("in %d %d %d, ",
-											ibuf2[i+0], ibuf2[i+1], ibuf2[i+2], ibuf2[i+3]);
+											ibuf2[ui+0], ibuf2[ui+1], ibuf2[ui+2], ibuf2[ui+3]);
 							}
 							if (ip == 8) {
 								if (od == 1)
@@ -536,7 +538,7 @@ printf("~1 rmask = 0x%x\n",rmask);
 						fmxerr = mxerr / ((1 << op) - 1.0);
 						favgerr = avgerr / ((1 << op) - 1.0);
 
-						printf("Worst error = %d = %f%%, average error = %f%%\n",
+						printf("Worst error = %f = %f%%, average error = %f%%\n",
 						       mxerr, 100.0 * fmxerr, 100.0 * favgerr);
 						printf("\n");
 						
@@ -549,7 +551,7 @@ printf("~1 rmask = 0x%x\n",rmask);
 				free(ibuf);
 				free(obuf);
 				refi_free(r);
-				s->done(s);
+				s->del(s);
 
 				if (stop &&	(100.0 * omxerr) > 1.2) {
 					goto quit;
@@ -576,25 +578,25 @@ refi *r,
 double *out_vals,
 double *in_vals
 ) {
+#ifdef QUANTIZE
 	int e;
+#endif
 	double ivals[MXDI];
 	double ovals[MXDO];
 
-	for (e = 0; e < r->id; e++) {
-		ivals[e] = refi_input((void *)r, e, in_vals[e]);
+	refi_input((void *)r, ivals, in_vals);
 #ifdef QUANTIZE
+	for (e = 0; e < r->id; e++)
 		ivals[e] = ((int)(ivals[e] * 255.0 + 0.5))/255.0;	/* Quantize to 8 bits */
 #endif
-	}
 
 	refi_clut((void *)r, ovals, ivals);
 
-	for (e = 0; e < r->od; e++) {
 #ifdef QUANTIZE
+	for (e = 0; e < r->od; e++)
 		ovals[e] = ((int)(ovals[e] * 255.0 + 0.5))/255.0;	/* Quantize to 8 bits */
 #endif
-		out_vals[e] = refi_output((void *)r, e, ovals[e]);
-	}
+	refi_output((void *)r, out_vals, ovals);
 }
 
 

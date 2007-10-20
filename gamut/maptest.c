@@ -9,8 +9,8 @@
  * Copyright 2000, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* TTBD:
@@ -34,7 +34,7 @@
 
 void usage(void) {
 	fprintf(stderr,"Map bteween two gamuts\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: maptest [options] ingamut outgamut diag_gamut\n");
 	fprintf(stderr," -v            Verbose\n");
 	exit(1);
@@ -52,8 +52,6 @@ main(int argc, char *argv[]) {
 
 	gamut *gin, *gout;		/* Input and Output gamuts */
 
-	int rv = 0;
-	char buf[200];
 	error_program = argv[0];
 
 	if (argc < 3)
@@ -102,7 +100,7 @@ main(int argc, char *argv[]) {
 	/* - - - - - - - - - - - - - - - - - - - */
 	/* read the input device gamut */
 
-	gin = new_gamut(0.0);
+	gin = new_gamut(0.0, 0);
 
 	if ((xl = strrchr(in_name, '.')) == NULL) {	/* Add .gam extention if there isn't one */
 		xl = in_name + strlen(in_name);
@@ -115,7 +113,7 @@ main(int argc, char *argv[]) {
 	/* - - - - - - - - - - - - - - - - - - - */
 	/* read the output device gamut */
 
-	gout = new_gamut(0.0);
+	gout = new_gamut(0.0, 0);
 
 	if ((xl = strrchr(out_name, '.')) == NULL) { /* Add .gam extention if there isn't one */
 		xl = out_name + strlen(out_name);
@@ -145,8 +143,8 @@ main(int argc, char *argv[]) {
 		0.7,		/* Gamut knee factor, 0.0 - 1.0 */
 		1.0,		/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
 		0.0,		/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
-		17,			/* rspl resolution of 17 */
 		0.0,		/* Saturation enhancement factor */
+		17,			/* rspl resolution of 17 */
 		NULL,		/* No input range override */
 		NULL
 	);

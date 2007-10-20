@@ -7,15 +7,20 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 /* Standard interface for powell function */
-/* return err on sucess, -1.0 on failure */
+/* return 0 on sucess, 1 on failure due to excessive itterations */
 /* Result will be in cp */
 /* Arrays start at 0 */
-double powell(
+int powell(
+double *rv,				/* If not NULL, return the residual error */
 int di,					/* Dimentionality */
 double cp[],			/* Initial starting point */
 double s[],				/* Size of initial search area */
@@ -25,9 +30,10 @@ double (*funk)(void *fdata, double tp[]),		/* Error function to evaluate */
 void *fdata);			/* Opaque data needed by function */
 
 /* Conjugate Gradient optimiser */
-/* return err on sucess, -1.0 on failure */
+/* return 0 on sucess, 1 on failure due to excessive itterations */
 /* Result will be in cp */
-double conjgrad(
+int conjgrad(
+double *rv,				/* If not NULL, return the residual error */
 int di,					/* Dimentionality */
 double cp[],			/* Initial starting point */
 double s[],				/* Size of initial search area */
@@ -55,5 +61,9 @@ double (*func)(void *fdata, double tp[]),		/* Error function to evaluate */
 void *fdata,			/* Opaque data */
 double pcom[],			/* Base vector point */
 double xicom[]);		/* Vector that will be multiplied and added to pcom[] */
+
+#ifdef __cplusplus
+	}
+#endif
 
 #endif /* POWELL_H */

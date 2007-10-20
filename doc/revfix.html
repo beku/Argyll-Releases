@@ -12,61 +12,85 @@
 Regenerate a CLUT device profiles B2A table data by inverting the A2B
 table.<br>
 <h3>Usage Summary</h3>
-revfix [-options] iccin iccout<br>
-&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Verbose<br>
-&nbsp;-0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Process perceptual<br>
-&nbsp;-1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Process absolute/relative colorimetric<br>
-&nbsp;-2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Process saturation<br>
-&nbsp;-r res&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Override BtoA1
-CLUT res.<br>
-&nbsp;-k [ezhxr] &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; e =
-same K as existing BtoA table (def)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; z =
-zero, h = 0.5 K, x = max K, r = ramp K<br>
-&nbsp;-k p stle stpo enle enpo shape<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p =
-curve parameters<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; stle: K
-level at White 0.0 - 1.0<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; stpo:
-start point of transition Wh 0.0 - Bk 1.0<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; enpo:
-End point of transition Wh 0.0 - Bk 1.0<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-enle: K level at Black 0.0 - 1.0<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; shape:
+<small><span style="font-family: monospace;">revfix [-options] iccin
+iccout</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Verbose</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Process perceptual</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Process absolute/relative colorimetric</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Process saturation</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-r res&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Override BtoA1
+CLUT res.</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#k">-k</a><span
+ style="font-family: monospace;"> [ezhxr]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; e =
+same K as existing BtoA table (def)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp; z =
+zero, h = 0.5 K, x = max K, r = ramp K</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#kp">-k p stle stpo enle enpo
+shape</a><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp; p =
+curve parameters</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp; stle: K
+level at White 0.0 - 1.0</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp; stpo:
+start point of transition Wh 0.0 - Bk 1.0</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp; enpo:
+End point of transition Wh 0.0 - Bk 1.0</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; enle: K level at Black 0.0 - 1.0</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp; shape:
 1.0 = straight, 0.0-1.0 concave, 1.0-2.0
-convex<br>
-&nbsp;-l tlimit&nbsp;&nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; set total ink limit, 0
+convex</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#K">-K parameters</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Same as
+-k, but
+target is K locus rather than K value itself</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#l">-l tlimit</a><span
+ style="font-family: monospace;">&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; set total ink limit, 0
 - 400%
-(default none)<br>
-&nbsp;-L klimit&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; set black ink limit, 0
+(estimate by default)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#L">-L klimit</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; set black ink limit, 0
 - 100%
-(default
-none)<br>
-&nbsp;-p aprof.icm&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Include abstract
-profile in output tables<br>
-&nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use internal optimized separation for CMYK<br>
+(estimate by default)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#p">-p aprof.icm</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Include abstract
+profile in output tables</span></small><br>
 <h3>Usage Details and Discussion</h3>
 Existing ICC profiles may not contain accurately inverted AtoB table
 data in their B2A tables, and this utility provides a means of
@@ -96,43 +120,35 @@ table,
 with 17 being used for a high quality CMYK table. For an RGB profile, a
 resolution of 17 might be used for a medium quality table, and 33 being
 used for a high quality table.<br>
+<tt></tt><br>
+<a name="k"></a> -<b>k</b> parameter sets the target level of black (K)
+when creating a B2A CMYK output tables. This is often called a black
+level, a black inking rule, black generation, or under color
+removal.&nbsp; These set the target black level.<br>
 <br>
--<b>k</b> flag sets the amount of Under Color Removal, or black
-generation level when creating B2A CMYK output tables. The black levels
-specified by the flag are all in relation to the possible black values
-for each color being created (the possible black locus), NOT the
-absolute amount of black that will be used. For instance, at the white
-point, no black will be used in the output, even if the black
-generation specifies a maximum (since the maximum amount of black that
-can be used to print white is actually zero). Similarly, at the black
-point, black may well be used, even if the black generation specifies
-zero black (since a certain amount of black is needed to achieve the
-desired density of color). Possible arguments to the <b>-k</b> option
-are:<br>
+&nbsp;Possible arguments to the <b>-k</b> flag are:<br>
 <br>
-<b>-ke</b> selects a black level as similar as possible to the existing
-B2A tables black level.<br>
 <b> -kz</b> selects minimum black (0.0)<br>
 <b> -kh</b> selects a black value of 0.5<br>
 <b> -kx</b> selects the maximum possible black (1.0)<br>
-<b> -kr</b> selects a linear ramp, starting at minimum black for
-highlight, and maximum black for shadow (equivalent to -kp 0 0 1 1 1)<br>
-<b>-k p stle stpo enpo enle shape</b>&nbsp; allows an arbitrary black
-locus ramp to be defined, consisting of a starting value (stle) for
-highlights, a breakpoint L value (stpo) where it starts to transition
-to the shadow level, an end breakpoint L (enpo) where it flattens out
-again, and the finishing black level (enle) for the shadows. There is
-also a curve parameter, that modifies the transition from stle to enle
-to either be concave (ie. the
+<b> -kr</b> selects a linear black ramp, starting at minimum black for
+highlight, and maximum black for shadow (equivalent to -kp 0 0 1 1 1).
+This is the default.<br>
+<br>
+<b><a name="kp"></a>-k p stle stpo enpo enle shape</b>&nbsp; allows an
+arbitrary black value ramp to be defined, consisting of a starting
+value (stle) for highlights, a breakpoint L value (stpo) where it
+starts to transition to the shadow level, an end breakpoint L (enpo)
+where it flattens out again, and the finishing black level (enle) for
+the shadows. There is also a curve parameter, that modifies the
+transition from stle to enle to either be concave (ie.&nbsp; the
 transition starts gradually and and finished more abruptly) using
 values 0.0-1.0, with 0.0 being most concave, or convex (the transition
-starts more
-abruptly but finishes gradually), using values 1.0-2.0, with 2.0 being
-the
-most convex.<br>
+starts more abruptly but finishes gradually), using values 1.0-2.0,
+with 2.0 being the most convex.<br>
 <br>
-Typical lack locus generation curve with parameters something like: -kp
-.1 .3 .5 .8 1<br>
+Typical black value generation curve with parameters something
+like: -kp 0 .1 .9 1 .5<br>
 <br>
 <tt> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 K &nbsp; |
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;enpo<br>
@@ -155,11 +171,44 @@ enle<br>
 0.0&nbsp;&nbsp;&nbsp; stpo&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Black</tt><br>
+Black<br>
+</tt>
+<br>
+For minimum sensitivity of printed output to the lighting spectrum, it
+currently seems best to use the maximum possible black, but other black
+generation levels (ie. 0.3 to 0.5) may well be preferred if one wants
+to
+minimize the noisy appearance of black on an inkjet device, or
+if the banding behaviour or other rendering flaws of the printer is to
+be minimized. <br>
+&nbsp;
+<br>
+The <a href="xicclu.html">xicclu</a> utility can be used to plot out
+the resulting black level for a given set of parameters, by using the <a
+ href="xicclu.html#g">-g</a> flag of a profile already created from the
+same .ti3 file.<br>
+<br>
+<a name="K"></a> <span style="font-weight: bold;">-K parameters.</span>
+Any of the <span style="font-weight: bold;">-k</span> options above
+can use the <span style="font-weight: bold;">-K</span> version, in
+which rather than a black value target being defined by the inking
+rule, a black <span style="text-decoration: underline;">locus</span>
+target is defined. For each lookup, the minimum possible black level
+and the maximum possible black level is determined, the former
+corresponding to a locus target of 0, and the latter corresponding to a
+locus target of 1. For instance, at
+the
+white point, no black will be used in the output, even if the black
+locus specifies a maximum (since the maximum amount of black that
+can be used to print white is actually zero). Similarly, at the black
+point, black may well be used, even if the black locus specifies
+zero black (since a certain amount of black is needed to achieve the
+desired density of color). <br>
 <tt> </tt><br>
-The <b>-l</b> <i>tlimit</i> parameter sets the ink limit (TAC, Total
+<a name="l"></a>The <b>-l</b> <i>tlimit</i> parameter sets the ink
+limit (TAC, Total
 Area Coverage) for the CMYK separation, as a total percentage from 0%
-to 400%, and overrides any ink limit specified in the .ti3 file. The
+to 400%. By default, this value will be estimated from the profile. The
 limit value should generally be set a little below the value used in
 the test chart
 generation, to avoid the very edges of the gamut. If the test chart ink
@@ -175,7 +224,8 @@ for typical printing devices.<br>
 <a name="L"></a> The <b>-L</b> <i>klimit</i> parameter sets the black
 channel ink limit for the CMYK separation, as a total percentage from
 0%
-to 100%. For printing press like devices, this can be used to prevent
+to 100%. By default, this value will be estimated from the profile. For
+printing press like devices, this can be used to prevent
 the
 black channel screening pattern "filling in". Typical values might be
 from
@@ -188,7 +238,6 @@ independent way. The abstract profile might have been created using one
 of the <span style="font-weight: bold;">tweak</span> tools, such as <a
  href="refine.html">refine</a>.<br>
 <br>
-The <b>-s</b> flag is not currently implemented.<br>
 <br>
 &nbsp;<br>
 <br>

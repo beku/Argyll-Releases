@@ -3,8 +3,8 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include "stdio.h"
@@ -17,9 +17,15 @@ void *cbctx,
 double *out,
 double *in
 ) {
+	int i;
 	refi *r = (refi *)cbctx;
+	double ov[MXDI], iv[MXDI];
 
-	*out = r->input_curve(r->cntx, r->chan, *in);
+	for (i = 0; i < r->id; i++)
+		iv[i] = *in;
+	r->input_curves(r->cntx, ov, iv);
+
+	*out = ov[r->chan];
 }
 
 static void clutlu(
@@ -37,9 +43,15 @@ void *cbctx,
 double *out,
 double *in
 ) {
+	int i;
 	refi *r = (refi *)cbctx;
+	double ov[MXDO], iv[MXDO];
 
-	*out = r->output_curve(r->cntx, r->chan, *in);
+	for (i = 0; i < r->od; i++)
+		iv[i] = *in;
+	r->output_curves(r->cntx, ov, iv);
+
+	*out = ov[r->chan];
 }
 
 
@@ -51,9 +63,9 @@ int clutres,	/* Desired clut table resolution */
 int outres,		/* Desired output table resolution */
 
 /* Callbacks to lookup the table values */
-double (*input_curve) (void *cntx, int ch, double in_val),
-void   (*md_table)    (void *cntx, double *out_vals, double *in_vals),
-double (*output_curve)(void *cntx, int ch, double in_val),
+void (*input_curves) (void *cntx, double *out_vals, double *in_vals),
+void (*md_table)     (void *cntx, double *out_vals, double *in_vals),
+void (*output_curves)(void *cntx, double *out_vals, double *in_vals),
 void *cntx		/* Context to callbacks */
 ) {
 	refi *r;
@@ -70,10 +82,10 @@ void *cntx		/* Context to callbacks */
 	r->inres = inres;
 	r->clutres = clutres;
 	r->outres = outres;
-	r->input_curve  = input_curve;
-	r->md_table     = md_table;
-	r->output_curve = output_curve;
-	r->cntx		    = cntx;
+	r->input_curves  = input_curves;
+	r->md_table      = md_table;
+	r->output_curves = output_curves;
+	r->cntx		     = cntx;
 
 	/* Create some input interpolations */
 	for (e = 0; e < id; e++) {
@@ -108,17 +120,20 @@ void *cntx		/* Context to callbacks */
 }
 
 /* Run an interpolation through an input table */
-double refi_input(
+void refi_input(
 void *cntx,
-int ch,
-double in_val
+double *out_vals,
+double *in_vals
 ) {
 	refi *r = (refi *)cntx;
+	int e;
 	co vals;				/* Input and output values */
 
-	vals.p[0] = in_val;
-	r->in[ch]->interp(r->in[ch], &vals);
-	return vals.v[0];
+	for (e = 0; e < r->id; e++) {
+		vals.p[0] = in_vals[e];
+		r->in[e]->interp(r->in[e], &vals);
+		out_vals[e] = vals.v[0];
+	}
 }
 
 /* Run an interpolation through an clut table */
@@ -139,17 +154,20 @@ double *in_vals
 }
 
 /* Run an interpolation through an output table */
-double refi_output(
+void refi_output(
 void *cntx,
-int ch,
-double in_val
+double *out_vals,
+double *in_vals
 ) {
 	refi *r = (refi *)cntx;
+	int e;
 	co vals;				/* Input and output values */
 
-	vals.p[0] = in_val;
-	r->out[ch]->interp(r->out[ch], &vals);
-	return vals.v[0];
+	for (e = 0; e < r->od; e++) {
+		vals.p[0] = in_vals[e];
+		r->out[e]->interp(r->out[e], &vals);
+		out_vals[e] = vals.v[0];
+	}
 }
 
 void

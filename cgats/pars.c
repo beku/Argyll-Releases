@@ -10,8 +10,8 @@
  * Copyright 1996, 2002 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  */
 
 #define _PARS_C_				/* Turn on implimentation code */
@@ -42,7 +42,6 @@ cgatsAlloc *al,		/* Allocator object */
 cgatsFile *fp		/* File to read from */
 ) {
 	parse *p;
-	int i;
 
 	if ((p = (parse *) al->calloc(al, sizeof(parse), 1)) == NULL) {
 		return NULL;

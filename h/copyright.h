@@ -1,5 +1,5 @@
 
 /* Embed a copyright string */
-static char __copyright__[] = "Copyright 2005 Graeme W. Gill";
+static volatile char __copyright__[] = "Copyright 1995-2007 Graeme W. Gill";
 
 

@@ -10,8 +10,8 @@
  * "Scattered Data Interpolation with Multilevel B-Splines"
  * by Seungyong Lee, George Wolberg and Sung Yong Shin,
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include <stdio.h>

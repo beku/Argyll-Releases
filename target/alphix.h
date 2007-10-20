@@ -12,8 +12,8 @@
  * Copyright 2005, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* 
@@ -23,19 +23,20 @@
  * First comes the definition of the symbols for each digit
  * location, LS to MS. The number of definitions declares the
  * maximum number of digits. For example, for a normal 2 digit numerical
- * sequence: "0123456789, 123456789" would define 0..99 with the
- * MS digit supressed when it is 0. Ranges can be used for brevity:
- * "0-9, 1-9". As a special case, the '@' character can be used to
+ * sequence: "0123456789, 123456789" (note the space is significant)
+ * would define 0..99 with the MS digit supressed when it is 0.
+ * Ranges can be used for brevity: * "0-9, 1-9".
+ * As a special case, the '@' character can be used 
  * instead of '0' to indicate suppression of the leading zero.
- * Leading ' ' characters in a sequence are omitted.
+ * Leading ' ' characters in a generated sequence are omitted.
  *
  * Optional, and delimited by a ';' character, valid segments of the
  * index sequence can be defined. For instance, to define the index
  * range to be 1..49 one could use the pattern "0-9, 1-9;1-49"
  *
- * Of course the main reaso for using alphix is to allow letter index
+ * Of course the main reason for using alphix is to allow letter index
  * sequences. For a sequence A, B, C .. AA, AB, AC etc. (the default
- * used in Argyll), the following patter would be used: "A-Z, A-Z"
+ * used in Argyll), the following pattern would be used: "A-Z, A-Z"
  *
  * For a some ECI2002R charts that skip columns Y and Z, the following
  * might be used: "A-Z, 2-9;A-X,2A-9Z"

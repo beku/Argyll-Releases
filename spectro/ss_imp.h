@@ -10,13 +10,31 @@
  * Author: Graeme W. Gill
  * Date:   13/7/2005
  *
- * Copyright 2005 Graeme W. Gill
+ * Copyright 2005 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * This is an alternative driver to spm/gretag.
+ */
+
+/* 
+   If you make use of the instrument driver code here, please note
+   that it is the author(s) of the code who take responsibility
+   for its operation. Any problems or queries regarding driving
+   instruments with the Argyll drivers, should be directed to
+   the Argyll's author(s), and not to any other party.
+
+   If there is some instrument feature or function that you
+   would like supported here, it is recommended that you
+   contact Argyll's author(s) first, rather than attempt to
+   modify the software yourself, if you don't have firm knowledge
+   of the instrument communicate protocols. There is a chance
+   that an instrument could be damaged by an incautious command
+   sequence, and the instrument companies generally cannot and
+   will not support developers that they have not qualified
+   and agreed to support.
  */
 
 
@@ -240,14 +258,17 @@ typedef enum {
 	ss_et_InvalidForEmission = 0x88,
 	ss_et_NoAccess           = 0x90,
 
-	/* Add out own communication errors here too. */
+	/* Add our own communication errors here too. */
 	ss_et_SerialFail         = 0xF0,
 	ss_et_UserAbort          = 0xF1,
-	ss_et_SendBufferFull     = 0xF2,
-	ss_et_RecBufferEmpty     = 0xF3,
-	ss_et_BadAnsFormat       = 0xF4,
-	ss_et_BadHexEncoding     = 0xF5,
-	ss_et_RecBufferOverun    = 0xF6
+	ss_et_UserTerm           = 0xF2,
+	ss_et_UserTrig           = 0xF3,
+	ss_et_UserCmnd           = 0xF4,
+	ss_et_SendBufferFull     = 0xF5,
+	ss_et_RecBufferEmpty     = 0xF6,
+	ss_et_BadAnsFormat       = 0xF7,
+	ss_et_BadHexEncoding     = 0xF8,
+	ss_et_RecBufferOverun    = 0xF9
 } ss_et;
 
 /* Handshake Type */
@@ -423,6 +444,14 @@ typedef enum {
 /* Remote Error Set - bit mask - treat as cardinal */
 typedef enum {
 	ss_res_NoError               = 0x0000,
+	ss_res_NoValidDStd           = 0x0001,
+	ss_res_NoValidWhite          = 0x0002,
+	ss_res_NoValidIllum          = 0x0004,
+	ss_res_NoValidObserver       = 0x0008,
+	ss_res_NoValidMaxLambda      = 0x0010,
+	ss_res_NoValidSpect          = 0x0020,
+	ss_res_NoValidColSysOrIndex  = 0x0040,
+	ss_res_NoValidChar           = 0x0080,
 	ss_res_SlopeOutOfRange       = 0x0100,
 	ss_res_DorlOutOfRange        = 0x0200,
 	ss_res_ReflectanceOutOfRange = 0x0400,
@@ -431,14 +460,6 @@ typedef enum {
 	ss_res_Color3OutOfRange      = 0x2000,
 	ss_res_NotAnSROrBoolean      = 0x4000,
 	ss_res_NoValidValOrRef       = 0x8000,
-	ss_res_NoValidDStd           = 0x0001,
-	ss_res_NoValidWhite          = 0x0002,
-	ss_res_NoValidIllum          = 0x0004,
-	ss_res_NoValidObserver       = 0x0008,
-	ss_res_NoValidMaxLambda      = 0x0010,
-	ss_res_NoValidSpect          = 0x0020,
-	ss_res_NoValidColSysOrIndex  = 0x0040,
-	ss_res_NoValidChar           = 0x0080
 } ss_res;
 
 /* Scan Error Type */
@@ -517,7 +538,7 @@ typedef enum {
 	ss_tvt_vDxx1  = 0x60
 } ss_tvt;
 
-/* Target On Off Status Type (locks key function ?) */
+/* Target On Off Status Type (Enables/Disables measurement key ?) */
 typedef enum {
 	ss_toost_Activated   = 0x00,
 	ss_toost_Deactivated = 0x01
@@ -668,22 +689,23 @@ typedef enum {
 /* -------------------------- */
 /* Interface declarations */
 
-/* -------------------------- */
-/* Query and Answer methods */
-
 struct _ss;
 
-/* Reset send buffer, and init with start chacater */
+/* ------------------------------------------- */
+/* Serialisation for different types functions */
+
+/* QUERY: */
+/* Reset send buffer, and init with start character */
 void ss_init_send(struct _ss *p);
 
 /* Reset send buffer, and add an Spectrolino Request enum */
-void ss_add_ssreq(struct _ss *p, int rq);
-
-/* Reset send buffer, and add an Spectroscan Request enum */
 void ss_add_soreq(struct _ss *p, int rq);
 
+/* Reset send buffer, and add an SpectroScan Request enum */
+void ss_add_ssreq(struct _ss *p, int rq);
+
 /* Add an int/enum/char into one byte type */
-void ss_add_1(struct _ss *p, int b);
+void ss_add_1(struct _ss *p, int c);
 
 /* Add an int/enum into two byte type */
 void ss_add_2(struct _ss *p, int s);
@@ -698,21 +720,19 @@ void ss_add_double(struct _ss *p, double d);
 /* The string will be padded with nul's up to len. */
 void ss_add_string(struct _ss *p, char *t, int len);
 
-/* Terminate the send buffer, and then do a */
-/* send/receieve to the device. */
-/* Leave any error in p->snerr */
-void ss_command(struct _ss *p, double tmo);
+/* - - - - - - - - - - - - - - - - - - - - - */
+/* ANSWER: */
 
 /* Return the first enum from the recieve buffer without removing it. */
 int ss_peek_ans(struct _ss *p);
 
-/* Remove a Spectrolino answer enum from the revieve buffer,
-/* and check it is correct.  */
-void ss_sub_ssans(struct _ss *p, int cv);
-
-/* Remove a Spectroscan answer enum from the recieve buffer, */
+/* Remove a Spectrolino answer enum from the revieve buffer, */
 /* and check it is correct.  */
 void ss_sub_soans(struct _ss *p, int cv);
+
+/* Remove a SpectroScan Prefix and answer enum from the revieve buffer, */
+/* and check it is correct.  */
+void ss_sub_ssans(struct _ss *p, int cv);
 
 /* Remove an int/enum/char into one byte type */
 int ss_sub_1(struct _ss *p);
@@ -731,23 +751,587 @@ double ss_sub_double(struct _ss *p);
 /* of len+1 should be provided to return the string in. */
 void ss_sub_string(struct _ss *p, char *t, int len);
 
-/* ------------------------------------------- */
-/* Instrument specific commands and queries */
+/* - - - - - - - - - - - - - - - - - - - - - */
+/* ERROR CODES: */
 
-inst_code ss_do_TargetIdRequest(
+/* Convert an ss error into an inst_error */
+inst_code ss_inst_err(struct _ss *p);
+
+/* Incorporate a error into the snerr value */
+void ss_incorp_err(struct _ss *p, ss_et se);
+
+/* Incororate Remote Error Set values into snerr value */
+/* Since ss_res is a bit mask, we just prioritize the errors. */
+void ss_incorp_remerrset(struct _ss *p, ss_res es);
+
+/* Incorporate a scan error into the snerr value */
+void ss_incorp_scanerr(struct _ss *p, ss_set se);
+
+/* Incorporate a device communication error into the snerr value */
+void ss_incorp_comerr(struct _ss *p, ss_cet se);
+
+/* - - - - - - - - - - - - - - - - - - - - - */
+/* EXECUTION: */
+
+/* Interpret an icoms error into a SS error */
+int icoms2ss_err(int se);
+
+/* Terminate the send buffer, and then do a */
+/* send/receieve to the device. */
+/* Leave any error in p->snerr */
+void ss_command(struct _ss *p, double tmo);
+
+/* - - - - - - - - - - - - - - - - - - - - */
+/* Device Initialisation and configuration */
+
+/* Reset instrument */
+inst_code so_do_ResetStatusDownload(
 struct _ss *p,
-char *s19,		/* Device Name */
-int *sn,		/* Serial Number */
-int *sr,		/* Software Release */
-int *yp,		/* Year of production */
-int *mp,		/* Month of production */
-int *dp,		/* Day of production */
-int *hp,		/* Hour of production */
-int *np,		/* Minuite of production */
-ss_ttt *tt,		/* Target Tech Type */
-int *fswl,		/* First spectral wavelength */
-int *nosw,		/* Number of spectral wavelengths */
-int *dpsw		/* Distance between spectral wavelengths */
+ss_smt sm		/* Init all or all except communications */
+);
+
+/* Load various parameters, such as: */
+/* comm flow control, baud rate, speaker, */
+/* reflective/tranmission/emmission mode, */
+/* custom filter on/off */
+inst_code so_do_MeasControlDownload(
+struct _ss *p,
+ss_ctt ct			/* Control */
+);
+
+/* Query various current parameters, such as: */
+/* comm flow control, baud rate, speaker, */
+/* reflective/tranmission/emmission mode, */
+/* custom filter on/off. */
+inst_code so_do_MeasControlRequest(
+struct _ss *p,
+ss_ctt ct,		/* Control to query  */
+ss_ctt *rct		/* Return current state */
+);
+
+/* Queries specific device data */
+inst_code so_do_DeviceDataRequest(
+struct _ss *p,
+char dn[19],		/* Return the device name */
+ss_dnot *dno,		/* Return device number */
+char pn[9],			/* Return the part number */
+unsigned int *sn,	/* Return serial number */
+char sv[13]			/* Return software version */
+);
+
+/* Query special device data */
+inst_code so_do_TargetIdRequest(
+struct _ss *p,
+char dn[19],	/* Return Device Name */
+int *sn,		/* Return Serial Number (1-65535) */
+int *sr,		/* Return Software Release */
+int *yp,		/* Return Year of production (e.g. 1996) */
+int *mp,		/* Return Month of production (1-12) */
+int *dp,		/* Return Day of production (1-31) */
+int *hp,		/* Return Hour of production (0-23) */
+int *np,		/* Return Minuite of production (0-59) */
+ss_ttt *tt,		/* Return Target Tech Type (SPM/Spectrolino etc.) */
+int *fswl,		/* Return First spectral wavelength (nm) */
+int *nosw,		/* Return Number of spectral wavelengths */
+int *dpsw		/* Return Distance between spectral wavelengths (nm) */
+);
+
+/* - - - - - - - - - - - - - */
+/* Measurement configuration */
+
+/* Query the standard or user definable densitometric tables */
+inst_code so_do_DensTabRequest(
+struct _ss *p,
+ss_dst ds,			/* Density standard (ANSI/DIN/User etc.) */
+ss_dst *rds,		/* Return Density standard (ANSI/DIN/User etc.) */
+double sp[4][36]	/* Return 4 * 36 spectral weighting values */
+);
+
+/* Download user definable densitometric tables */
+inst_code so_do_DensTabDownload(
+struct _ss *p,
+double sp[4][36]	/* 4 * 36 spectral weighting values */
+);
+
+/* Set slope values for densitometry */
+inst_code so_do_SlopeDownload(
+struct _ss *p,
+double dv[4]	/* Db Dc Dm Dy density values */
+);
+
+/* Query slope values of densitometry */
+inst_code so_do_SlopeRequest(
+struct _ss *p,
+double dv[4]	/* Return Db Dc Dm Dy density values */
+);
+
+/* Set the colorimetric parameters */
+inst_code so_do_ParameterDownload(
+struct _ss *p,
+ss_dst ds,	/* Density standard (ANSI/DIN etc.) */
+ss_wbt wb,	/* White base (Paper/Absolute) */
+ss_ilt it,	/* Illuminant type (A/C/D65 etc.) */
+ss_ot  ot	/* Observer type (2deg/10deg) */
+);
+
+/* Query colorimetric parameters */
+inst_code so_do_ParameterRequest(
+struct _ss *p,
+ss_dst *ds,		/* Return Density Standard */
+ss_wbt *wb,		/* Return White Base */
+ss_ilt *it,		/* Return Illuminant type (A/C/D65/User etc.) */
+ss_ot  *ot,		/* Return Observer type (2deg/10deg) */
+ss_aft *af		/* Return Filter being used (None/Pol/D65/UV/custom */
+);
+
+/* Query the standard or user defined illuminant tables (Colorimetry) */
+inst_code so_do_IllumTabRequest(
+struct _ss *p,
+ss_ilt it,		/* Illuminant type (A/C/D65/User etc.) */
+ss_ilt *rit,	/* Return Illuminant type (A/C/D65/User etc.) */
+double sp[36]	/* Return 36 spectral values */
+);
+
+/* Download user definable illuminant tables (Colorimetry) */
+inst_code so_do_IllumTabDownload(
+struct _ss *p,
+double sp[36]	/* 36 spectral values to set */
+);
+
+/* Query for the color temperature of daylight illuminant Dxx */
+inst_code so_do_GetValNr(
+struct _ss *p,
+int *ct		/* Return color temperature in deg K/100 */
+);
+
+/* Download user definable illuminant tables (Colorimetry) */
+inst_code so_do_SetValNr(
+struct _ss *p,
+int ct		/* Color temperature to set for illuminant Dxx in deg K/100 */
+);
+
+/* Queries the spectra of the white reference for the desired filter */
+inst_code so_do_WhiteReferenceRequest(
+struct _ss *p,
+ss_aft af,		/* Filter being queried (None/Pol/D65/UV/custom */
+ss_aft *raf,	/* Return filter being queried (None/Pol/D65/UV/custom */
+double sp[36],	/* Return 36 spectral values */
+ss_owrt *owr,	/* Return original white reference */
+char dtn[19]	/* Return name of data table */
+);
+
+/* Load spectra of a user defined white reference for the desired filter. */
+/* A name can be given to the white reference. */
+inst_code so_do_WhiteReferenceDownld(
+struct _ss *p,
+ss_aft af,		/* Filter being set (None/Pol/D65/UV/custom */
+double sp[36],	/* 36 spectral values being set */
+char dtn[19]	/* Name for data table */
+);
+
+/* Query the reference value for the relative photometric (emission) reference value */
+inst_code so_do_FloatRequest(
+struct _ss *p,
+ss_comft comf,		/* Choose common float type (PhotometricYRef) */
+ss_comft *rcomf,	/* Return common float type (PhotometricYRef) */
+double *comfv		/* Return the reference value */
+);
+
+/* Set the reference value for the relative photometric (emission) reference value */
+inst_code so_do_FloatDownload(
+struct _ss *p,
+ss_comft comf,		/* Choose common float type (PhotometricYRef) */
+double comfv		/* The reference value */
+);
+
+/* - - - - - - */
+/* Calibration */
+
+/* Reset the spectra of the respective white reference to the original data */
+inst_code so_do_ExecWhiteRefToOrigDat(
+struct _ss *p
+);
+
+
+/* Perform a Reference Measurement */
+inst_code so_do_ExecRefMeasurement(
+struct _ss *p,
+ss_mmt mm	/* Measurement Mode (Meas/Cal etc.) */
+);
+
+/* Perform a White Measurement - not recommended */
+/* (ExecRefMeasuremen is preferred instead) */
+inst_code so_do_ExecWhiteMeasurement(struct _ss *p);
+
+/* - - - - - - - - - - - - */
+/* Performing measurements */
+
+/* Perform a Measurement */
+inst_code so_do_ExecMeasurement(struct _ss *p);
+
+/* Define automatic output after each measurement */
+/* [Note that dealing with the resulting measurement replies */
+/*  isn't directly supported, currently.] */
+inst_code so_do_SetMeasurementOutput(
+struct _ss *p,
+ss_ost os,		/* Type of output to request */
+ss_os o			/* bitmask of output */
+);
+
+/* - - - - - - - - */
+/* Getting results */
+
+/* Query Density measurement results and associated parameters */
+inst_code so_do_DensityParameterRequest(
+struct _ss *p,
+ss_cst *rct,	/* Return Color Type (Lab/XYZ etc.) */
+double dv[4],	/* Return Db Dc Dm Dy density values */
+ss_sdft *sdf,	/* Return Standard Density Filter (Db/Dc/Dm/Dy) */
+ss_rvt *rv,		/* Return Reference Valid Flag */
+ss_aft *af,		/* Return filter being used (None/Pol/D65/UV/custom */
+ss_wbt *wb,		/* Return white base (Paper/Absolute) */
+ss_dst *ds,		/* Return Density standard (ANSI/DIN/User etc.) */
+ss_ilt *rit,	/* Return Illuminant type (A/C/D65/User etc.) */
+ss_ot  *ot		/* Return Observer type (2deg/10deg) */
+);
+
+/* Query Densitometric measurement values - not recommended */
+/* (DensityParameterRequest is preferred instead) */
+inst_code so_do_DensityRequest(
+struct _ss *p,
+double dv[4],	/* Return Db Dc Dm Dy density values */
+ss_sdft *sdf,	/* Return Standard Density Filter (Db/Dc/Dm/Dy) */
+ss_rvt  *rv		/* Return Reference Valid */
+);
+
+/* Query maximum density reading */
+inst_code so_do_DmaxRequest(
+struct _ss *p,
+double *Dmax,	/* Return Value of Maximum Density */
+int *lambda,	/* Return wavelength where maximum density was found */
+ss_dmot *dmo,	/* Return Dmax OK flag. */
+ss_rvt *rv		/* Return Reference Valid Flag */
+);
+
+/* Query Color measurement results and associated parameters */
+inst_code so_do_CParameterRequest(
+struct _ss *p,
+ss_cst ct,		/* Choose Color Type (Lab/XYZ etc.) */
+ss_cst *rct,	/* Return Color Type (Lab/XYZ etc.) */
+double cv[3],	/* Return 3 color values */
+ss_rvt *rv,		/* Return Reference Valid Flag */
+ss_aft *af,		/* Return filter being used (None/Pol/D65/UV/custom) */
+ss_wbt *wb,		/* Return white base (Paper/Absolute) */
+ss_ilt *it,		/* Return Illuminant type (A/C/D65/User etc.) */
+ss_ot  *ot		/* Return Observer type (2deg/10deg) */
+);
+
+/* Query Colorimetric measurement results - not recommended */
+/* (CParameterRequest is prefered instead) */
+inst_code so_do_CRequest(
+struct _ss *p,
+ss_cst *ct,		/* Return Color Type (Lab/XYZ etc.) */
+double *cv[3],	/* Return 3 color values */
+ss_rvt *rv		/* Return Reference Valid Flag */
+);
+
+/* Query Spectral measurement results and associated parameters */
+inst_code so_do_SpecParameterRequest(
+struct _ss *p,
+ss_st st,		/* Choose Spectrum Type (Reflectance/Density) */
+ss_st *rst,		/* Return Spectrum Type (Reflectance/Density) */
+double sp[36],	/* Return 36 spectral values */
+ss_rvt *rv,		/* Return Reference Valid Flag */
+ss_aft *af,		/* Return filter being used (None/Pol/D65/UV/custom */
+ss_wbt *wb		/* Return white base (Paper/Absolute) */
+);
+
+/* Query Spectral measurement results - not recommended */
+/* (SpecParameterRequest is preferred instead) */
+inst_code so_do_SpectrumRequest(
+struct _ss *p,
+ss_st *st,		/* Return Spectrum Type (Reflectance/Density) */
+double sp[36],	/* Return 36 spectral values */
+ss_rvt *rv		/* Return Reference Valid Flag */
+);
+
+/* - - - - - -  */
+/* Miscelanious */
+
+/* Query whether a new measurement was performed since the last accestruct _ss */
+inst_code so_do_NewMeasureRequest(
+struct _ss *p,
+ss_nmt *nm		/* Return New Measurement (None/Meas/White etc.) */
+);
+
+/* Query whether a key was pressed since the last accestruct _ss */
+inst_code so_do_NewKeyRequest(
+struct _ss *p,
+ss_nkt *nk,		/* Return whether a new key was pressed */
+ss_ks *k		/* Return the key that was pressed (none/meas) */
+);
+
+/* Query for the general error status */
+inst_code so_do_ActErrorRequest(
+struct _ss *p
+);
+
+/* Set Target On/Off status (Enables/Disables measurement key ?) */
+inst_code so_do_TargetOnOffStDownload(
+struct _ss *p,
+ss_toost oo		/* Activated/Deactivated */
+);
+
+/* =========================================== */
+/* SpectroScan/T specific commands and queries */
+
+/* - - - - - - - - - - - - - - - - - - - - */
+/* Device Initialisation and configuration */
+
+/* Initialise the device. Scans the Spectrolino */
+/* (Doesn't work when device is offline ) */
+inst_code ss_do_ScanInitializeDevice(struct _ss *p);
+
+/* Establish communications between the SpectroScan and Spectrolino */
+/* at the highest possible baud rate. */
+/* (Doesn't work when device is offline ) */
+inst_code ss_do_ScanSpectrolino(struct _ss *p);
+
+/* Establish the zero position of the motors and set the position to 0,0 */ 
+/* (Doesn't work when device is offline ) */
+inst_code ss_do_InitMotorPosition(struct _ss *p);
+
+/* Change the SpectroScan baud rate */
+inst_code ss_do_ChangeBaudRate(
+struct _ss *p,
+ss_bt br		/* Baud rate (110 - 57600) */
+);
+
+/* Change the SpectroScan handshaking mode. */
+inst_code ss_do_ChangeHandshake(
+struct _ss *p,
+ss_hst hs		/* Handshake type (None/XonXoff/HW) */
+);
+
+/* Query the type of XY table */
+inst_code ss_do_OutputType(
+struct _ss *p,
+char dt[19]		/* Return Device Type ("SpectroScan " or "SpectroScanT") */
+);
+
+/* Query the serial number of the XY table */
+inst_code ss_do_OutputSerialNumber(
+struct _ss *p,
+unsigned int *sn	/* Return serial number */
+);
+
+/* Query the part number of the XY table */
+inst_code ss_do_OutputArticleNumber(
+struct _ss *p,
+char pn[9]		/* Return Part Number */
+);
+
+/* Query the production date of the XY table */
+inst_code ss_do_OutputProductionDate(
+struct _ss *p,
+int *yp,	/* Return Year of production (e.g. 1996) */
+int *mp,	/* Return Month of production (1-12) */
+int *dp		/* Return Day of production (1-31) */
+);
+
+/* Query the Software Version of the XY table */
+inst_code ss_do_OutputSoftwareVersion(
+struct _ss *p,
+char sv[13]		/* Return Software Version */
+);
+
+/* - - - - - - - - - - - - - */
+/* Measurement configuration */
+
+/* Set the SpectroScanT to reflectance or transmission. */
+/* The Spectrolino is also automatically set to the corresponding mode. */
+/* (Doesn't work when device is offline ) */
+inst_code ss_do_SetTableMode(
+struct _ss *p,
+ss_tmt tm	/* Table mode (Reflectance/Transmission) */
+);
+
+/* - - - - - - - - - - - - - */
+/* Table operation */
+
+/* Set the SpectrScan to online. All moving keys are disabled. */
+/* (Only valid when device is in reflectance mode.) */
+inst_code ss_do_SetDeviceOnline(struct _ss *p);
+
+/* Set the SpectrScan to offline. All moving keys are enabled. */
+/* (Only valid when device is in reflectance mode.) */
+/* (All remote commands to move the device will be ignored.) */
+inst_code ss_do_SetDeviceOffline(struct _ss *p);
+
+/* Enable electrostatic paper hold. */
+/* (Not valid when device is offline) */
+inst_code ss_do_HoldPaper(struct _ss *p);
+
+/* Disable electrostatic paper hold. */
+/* (Not valid when device is offline) */
+inst_code ss_do_ReleasePaper(struct _ss *p);
+
+/* - - - - - - */
+/* Positioning */
+
+/* Move either the sight or sensor to an absolute position. */
+/* (Doesn't work when device is offline or transmissioin mode.) */
+inst_code ss_do_MoveAbsolut(
+struct _ss *p,
+ss_rt  r,	/* Reference (Sensor/Sight) */
+double x,	/* X coord in mm, 0-310.0, accurate to 0.1mm */
+double y	/* Y coord in mm, 0-230.0, accurate to 0.1mm */
+);
+
+/* Move relative to current position. */
+/* (Doesn't work when device is offline or transmissioin mode.) */
+inst_code ss_do_MoveRelative(
+struct _ss *p,
+double x,	/* X distance in mm, 0-310.0, accurate to 0.1mm */
+double y	/* Y distance in mm, 0-230.0, accurate to 0.1mm */
+);
+
+/* Move to the home position (== 0,0). */
+/* (Doesn't work when device is offline or transmissioin mode.) */
+inst_code ss_do_MoveHome(
+struct _ss *p
+);
+
+/* Move to the sensor up. */
+/* (Doesn't work when device is offline or transmissioin mode.) */
+inst_code ss_do_MoveUp(
+struct _ss *p
+);
+
+/* Move to the sensor down. */
+/* (Doesn't work when device is offline or transmission mode.) */
+inst_code ss_do_MoveDown(
+struct _ss *p
+);
+
+/* Query the current absolute position of the sensor or sight. */
+/* (Doesn't work when device is offline or transmissioin mode.) */
+inst_code ss_do_OutputActualPosition(
+struct _ss *p,
+ss_rt  r,	/* Reference (Sensor/Sight) */
+ss_rt  *rr,	/* Return reference (Sensor/Sight) */
+double *x,	/* Return the X coord in mm, 0-310.0, accurate to 0.1mm */
+double *y,	/* Return the Y coord in mm, 0-230.0, accurate to 0.1mm */
+ss_zkt *zk	/* Return the Z coordinate (Up/Down) */
+);
+
+/* Move to the white reference position */
+/* (Doesn't work when device is offline or transmissioin mode.) */
+inst_code ss_do_MoveToWhiteRefPos(
+struct _ss *p,
+ss_wrpt wrp		/* White Reference Position (Tile1/Tile2) */
+);
+
+/* - - - - - - - - - - - - */
+/* Performing measurements */
+
+/* Move the sensor to an absolute position, move the */
+/* sensor down, execute a measurement, move the head up, */
+/* and return spectral measuring results. */
+inst_code ss_do_MoveAndMeasure(
+struct _ss *p,
+double x,		/* X coord in mm, 0-310.0, accurate to 0.1mm */
+double y,		/* Y coord in mm, 0-230.0, accurate to 0.1mm */
+double sp[36],	/* Return 36 spectral values */
+ss_rvt *rv		/* Return Reference Valid Flag */
+);
+
+/* - - - - - -  */
+/* Miscelanious */
+
+/* Set the SpectroScanT transmission light level during standby. */
+/* (Only valid on SpectroScanT in transmission mode) */
+inst_code ss_do_SetLightLevel(
+struct _ss *p,
+ss_llt ll	/* Transmission light level (Off/Surround/Low) */
+);
+
+/* Set tranmission standby position. */
+/* (Only valid on SpectroScanT in transmission mode) */
+inst_code ss_do_SetTransmStandbyPos(
+struct _ss *p,
+ss_rt  r,	/* Reference (Sensor/Sight) */
+double x,	/* X coord in mm, 0-310.0, accurate to 0.1mm */
+double y	/* Y coord in mm, 0-230.0, accurate to 0.1mm */
+);
+
+/* Set digitizing mode. Clears digitizing buffer, */
+/* and puts the device offline. The user can move */
+/* and enter positions. */
+inst_code ss_do_SetDigitizingMode(struct _ss *p);
+
+/* Get last digitized position from memory. */
+inst_code ss_do_OutputDigitizingValues(
+struct _ss *p,
+ss_rt  r,	/* Reference (Sensor/Sight) */
+ss_rt  *rr,	/* Return reference (Sensor/Sight) */
+int    *nrp,/* Return the number of remaining positions in memory. */
+double *x,	/* Return the X coord in mm, 0-310.0, accurate to 0.1mm */
+double *y,	/* Return the Y coord in mm, 0-230.0, accurate to 0.1mm */
+ss_zkt *zk	/* Return the Z coordinate (Up/Down) */
+);
+
+/* Turn on key aknowledge mode. Causes a KeyAnswer message */
+/* to be generated whenever a key is pressed. */
+/* (KetAnswer isn't well supported here ?) */
+inst_code ss_do_SetKeyAcknowlge(struct _ss *p);
+
+/* Turn off key aknowledge mode. */
+inst_code ss_do_ResetKeyAcknowlge(struct _ss *p);
+
+/* Query the keys that are currently pressed */
+inst_code ss_do_OutputActualKey(
+struct _ss *p,
+ss_sks *sk,	/* Return Scan Key Set (Key bitmask) */
+ss_ptt *pt	/* Return press time (Short/Long) */
+);
+
+/* Query the keys that were last pressed */
+inst_code ss_do_OutputLastKey(
+struct _ss *p,
+ss_sks *sk,	/* Return Scan Key bitmask (Keys) */
+ss_ptt *pt	/* Return press time (Short/Long) */
+);
+
+/* Query the status register */
+inst_code ss_do_OutputStatus(
+struct _ss *p,
+ss_sts *st	/* Return status bitmask (Enter key/Online/Digitize/KeyAck/Paper) */
+);
+
+/* Clear the status register */
+inst_code ss_do_ClearStatus(
+struct _ss *p,
+ss_sts st	/* Status to reset (Enter key/Online/Digitize/KeyAck/Paper) */
+);
+
+/* Set the special status register */
+/* (Set to all 0 on reset) */
+inst_code ss_do_SetSpecialStatus(
+struct _ss *p,
+ss_sss sss	/* Status bits to set (HeadDwnOnMv/TableInTransMode/AllLightsOn) */
+);
+
+/* Clear the special status register */
+inst_code ss_do_ClearSpecialStatus(
+struct _ss *p,
+ss_sss sss	/* Status bits to clear (HeadDwnOnMv/TableInTransMode/AllLightsOn) */
+);
+
+/* Query the special status register */
+inst_code ss_do_OutputSpecialStatus(
+struct _ss *p,
+ss_sss *sss	/* Return Special Status bits */
 );
 
 #define SS_IMP_H

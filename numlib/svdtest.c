@@ -5,8 +5,8 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* We assume two device dependent variables, and one objective function value */
@@ -24,7 +24,7 @@
 
 int main(void) {
 	int its;
-	int i,j,x,y;
+	int i,j,x;
 	double **a;		/* A[0..M-1][0..N-1] input */
 	double **u;		/* U[0..M-1][0..N-1] output */
 	double *w;		/* W[0..N-1]	     output */

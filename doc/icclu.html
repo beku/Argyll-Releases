@@ -13,24 +13,40 @@ Lookup individual color values through any ICC profile table, either
 interactively, or as a batch.<br>
 <h3>Usage summary<br>
 </h3>
-icclu [-v level] [-f func] [-i intent] [-o order] profile<br>
-&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;Verbose<br>
-&nbsp;-f <i>function</i>&nbsp;&nbsp; f = forward, b = backwards, g =
-gamut, p = preview<br>
-&nbsp;-i <i>intent</i>&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;p =
-perceptual, r = relative colorimetric,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;s = saturation, a = absolute<br>
-&nbsp;-p <i>oride</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; x =
-XYZ_PCS, l = Lab_PCS, y = Yxy,<br>
-&nbsp;-o <i>order</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; n = normal
-(priority: lut &gt; matrix &gt; monochrome)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;r = reverse (priority: monochrome &gt; matrix &gt;
-lut)<br>
-&nbsp;-s<span style="font-style: italic;"> scale</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Scale device range 0.0 - scale rather than 0.0 - 1.0<br>
+<small><span style="font-family: monospace;">icclu [-v level] [-f func]
+[-i intent] [-o order] profile</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-v level
+&nbsp;&nbsp;&nbsp;&nbsp; Verbosity level 0 -
+2 (default = 1)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-f </span><i
+ style="font-family: monospace;">function</i><span
+ style="font-family: monospace;">&nbsp;&nbsp; f = forward, b =
+backwards, g =
+gamut, p = preview</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-i </span><i
+ style="font-family: monospace;">intent</i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; p =
+perceptual, r = relative colorimetric,</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+s = saturation, a = absolute</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-p </span><i
+ style="font-family: monospace;">oride</i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; x =
+XYZ_PCS, l = Lab_PCS, y = Yxy,</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-o </span><i
+ style="font-family: monospace;">order</i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; n =
+normal
+(priority: lut &gt; matrix &gt; monochrome)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+r = reverse (priority: monochrome &gt; matrix &gt;
+lut)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-s</span><span
+ style="font-style: italic; font-family: monospace;"> scale</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Scale
+device range 0.0 - scale rather than 0.0 - 1.0</span></small><br>
 <br>
 The colors to be translated should be fed into standard input,<br>
 one input color per line, white space separated.<br>
@@ -38,7 +54,13 @@ A line starting with a # will be ignored.<br>
 A line not starting with a number will terminate the program.<br>
 <h3></h3>
 <h3>Flags and Parameters</h3>
-The <b>-v</b> flag enables more verbose output.<br>
+The <b>-v</b> parameter sets the level of verbosity.
+Default is level 1, which repeats each input value, the colorspaces of
+input and output, the type of conversion algorithm used, and if the
+result was clipped. Level 2 adds prints extra information about the
+profile before doing the conversions. Level 0 turns off all verbosity,
+just outputting the results of each conversion. Use the latter to
+capture batch output ready for further processing.<br>
 <br>
 The <b>-f</b> flag selects which type of table or conversion is to be
 used.<br>

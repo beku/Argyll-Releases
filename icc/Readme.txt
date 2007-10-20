@@ -1,6 +1,11 @@
 ICC profile I/O library (icclib), README file
 ---------------------------------------------
 
+Version part of Argyll V 0.70 Beta
+
+-------------------------------------------
+
+
 Date 2nd December 2004, Version 2.03
 
 This distribution contains source code which implements the reading and
@@ -77,7 +82,7 @@ Package contents:
 
  icclib.zip    ZIP archive of the following files
  README.txt    This file.
- Licence.txt   Important! - Permissions for use of this package.
+ License.txt   Important! - Permissions for use of this package.
  icc.c         Library source file.
  iccstd.c      Library source that uses stdio and malloc system calls.
 

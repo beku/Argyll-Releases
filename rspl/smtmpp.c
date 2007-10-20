@@ -8,8 +8,8 @@
  * Derived from cmatch.c
  * Copyright 1995 - 2005 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * Test set for tuning smoothness factor for optimal interpolation
  * with respect to dimension, number of sample points, and uncertainty
@@ -26,7 +26,9 @@
 #include "rspl.h"
 #include "numlib.h"
 #include "xicc.h"
+#include "plot.h"
 #include "rspl_imp.h"
+#include "counters.h"	/* Counter macros */
 
 /* rspl flags */
 #define FLAGS (0)
@@ -148,6 +150,8 @@ static void do_series_1(mpp *mppo, int di) {
 	its = trials[di-1];
 	res = reses[di-1];
 
+	printf("Testing underlying\n");
+
 	printf("Tests %d\n",its);
 
 	printf("Dimensions %d\n",di);
@@ -181,7 +185,7 @@ static void do_series_1(mpp *mppo, int di) {
 	printf("\n");
 }
 
-/* Veriify the current behaviour with test point number and noise volume */
+/* Verify the current behaviour with test point number and noise volume */
 static void do_series_2(mpp *mppo, int di) {
 	int verb = 0;
 	int plot = 0;
@@ -266,6 +270,8 @@ static void do_series_2(mpp *mppo, int di) {
 	its = trials[di-1];
 	res = reses[di-1];
 
+	printf("Verification\n");
+
 	printf("Tests %d\n",its);
 
 	printf("Dimensions %d\n",di);
@@ -307,7 +313,8 @@ void usage(void) {
 	fprintf(stderr," -v            Verbose\n");
 	fprintf(stderr," -p            Plot graphs\n");
 	fprintf(stderr," -z n          Do test series ""n""\n");
-	fprintf(stderr,"               1 = Number of test points\n");
+	fprintf(stderr,"               1 = underlying smoothness\n");
+	fprintf(stderr,"               2 = verification of optimal smoothness\n");
 	fprintf(stderr," -S            Compute smoothness factor instead\n");
 	fprintf(stderr," -r res        Rspl resolution (defaults 129, 65, 33, 17)\n");
 	fprintf(stderr," -n no         Test ""no"" sample points (default 20, 40, 80, 100)\n");
@@ -337,12 +344,7 @@ int main(int argc, char *argv[]) {
 	int smfunc = 0;
 	double trmse, tavge, tmaxe;
 
-	sobol *so;			/* Sobol sequence generator */
-	co *tps = NULL;
-	rspl *rss;	/* Multi-resolution regularized spline structure */
-	datai low,high;
-	int gres[MXDI];
-	int i, j, it, rv;
+	int rv;
 
 	error_program = "smtnd";
 
@@ -541,6 +543,7 @@ static void do_test(
 	rspl *rss;	/* Multi-resolution regularized spline structure */
 	datai low,high;
 	int gres[MXDI];
+	double avgdev[MXDO];
 	int i, j, it;
 
 	*trmse = 0.0;
@@ -581,6 +584,7 @@ static void do_test(
 
 		/* Fit to scattered data */
 		if (verb) printf("Fitting the scattered data\n");
+		avgdev[0] = 0.25 * noise;
 		rss->fit_rspl(rss,
 		           FLAGS,				/* Non-mon and clip flags */
 		           tps,					/* Test points */
@@ -588,7 +592,7 @@ static void do_test(
 		           low, high, gres,		/* Low, high, resolution of grid */
 		           low, high,			/* Default data scale */
 		           smooth,				/* Smoothing */
-		           0.25 * noise);		/* Average Deviation */
+		           avgdev);				/* Average Deviation */
 
 		/* Plot out function values */
 		if (plot) {
@@ -665,7 +669,6 @@ static void do_test(
 		for (i = 0; i <100000; i++) {
 			double out[3];
 			co tp;	/* Test point */
-			double pp[MXDI];
 			double aa, bb, err;
 
 			so->next(so, tp.p);
@@ -713,11 +716,8 @@ static double do_stest(
 	int its,			/* Number of function tests */
 	int res				/* RSPL grid resolution */
 ) {
-	sobol *so;			/* Sobol sequence generator */
-	co *tps = NULL;
-	rspl *rss;	/* Multi-resolution regularized spline structure */
-	DCOUNT(gc, di, 1, 1, res-1);
-	int i, j, it;
+	DCOUNT(gc, MXDIDO, di, 1, 1, res-1);
+	int it;
 	double atse = 0.0;
 
 	/* Make repeatable by setting random seed before a test set. */

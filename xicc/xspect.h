@@ -10,8 +10,8 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  */
 
@@ -31,7 +31,7 @@
 
 /* Structure for conveying spectral information */
 
-#define XSPECT_MAX_BANDS 500		/* Enought for 1nm */
+#define XSPECT_MAX_BANDS 601		/* Enought for 1nm from 300 to 900 */
 
 typedef struct {
 	int    spec_n;					/* Number of spectral bands, 0 if not valid */
@@ -41,9 +41,22 @@ typedef struct {
 	double spec[XSPECT_MAX_BANDS];	/* Spectral value, shortest to longest */
 } xspect;
 
+/* Some helpful macro's: */
+
+/* Given an index and the sampling ranges, compute the sample wavelegth */
+#define XSPECT_WL(SHORT, LONG, N, IX) \
+((SHORT) + (double)(IX) * ((LONG) - (SHORT))/((N)-1.0))
+
+/* Given the address of an xspect and an index, compute the sample wavelegth */
+#define XSPECT_XWL(PXSP, IX) \
+(((PXSP)->spec_wl_short) + (double)(IX) * (((PXSP)->spec_wl_long) - ((PXSP)->spec_wl_short))/(((PXSP)->spec_n)-1.0))
+
 /* Spectrum utility functions */
 int write_xspect(char *fname, xspect *s);
 int read_xspect(xspect *sp, char *fname);
+
+/* Get interpolated value at wavelenth (not normalised) */
+double value_xspect(xspect *sp, double wl);
 
 /* ------------------------------------------------------------------------------ */
 /* Class for converting between spectral and CIE */
@@ -52,21 +65,27 @@ int read_xspect(xspect *sp, char *fname);
 
 /* Type of illumination */
 typedef enum {
-    icxIT_default	= 0,	/* Default illuminant (usually D50) */
-    icxIT_none		= 1,	/* No illuminant - self luminous spectrum */
-    icxIT_custom	= 2,	/* Custom illuminant spectrum */
-    icxIT_A			= 3,	/* Standard Illuminant A */
-    icxIT_D50		= 4,	/* Daylight 5000K */
-    icxIT_D65		= 5,	/* Daylight 6500K */
-    icxIT_F5		= 6,	/* Fluorescent, Standard, 6350K, CRI 72 */
-    icxIT_F8		= 7,	/* Fluorescent, Broad Band 5000K, CRI 95 */
-    icxIT_F10		= 8,	/* Fluorescent Narrow Band 5000K, CRI 81 */
-	icxIT_Spectrocam = 9	/* Spectrocam Xenon Lamp */
+    icxIT_default	 = 0,	/* Default illuminant (usually D50) */
+    icxIT_none		 = 1,	/* No illuminant - self luminous spectrum */
+    icxIT_custom	 = 2,	/* Custom illuminant spectrum */
+    icxIT_A			 = 3,	/* Standard Illuminant A */
+    icxIT_D50		 = 4,	/* Daylight 5000K */
+    icxIT_D65		 = 5,	/* Daylight 6500K */
+    icxIT_F5		 = 6,	/* Fluorescent, Standard, 6350K, CRI 72 */
+    icxIT_F8		 = 7,	/* Fluorescent, Broad Band 5000K, CRI 95 */
+    icxIT_F10		 = 8,	/* Fluorescent Narrow Band 5000K, CRI 81 */
+	icxIT_Spectrocam = 9,	/* Spectrocam Xenon Lamp */
+    icxIT_Dtemp		 = 10,	/* Daylight at specified temperature */
+    icxIT_Ptemp		 = 11	/* Planckian at specified temperature */
 } icxIllumeType;
 
-/* Return a pointer to a standard illuminant spectrum */
-/* return NULL if not matched */
-xspect *standardIlluminant(icxIllumeType ilType);
+/* Fill in an xpsect with a standard illuminant spectrum */
+/* return 0 on sucecss, nz if not matched */
+int standardIlluminant(
+xspect *sp,					/* Xspect to fill in */
+icxIllumeType ilType,		/* Type of illuminant */
+double temp);				/* Optional temperature in degrees kelvin, for Dtemp and Ptemp */
+
 
 /* Type of observer */
 typedef enum {
@@ -79,6 +98,15 @@ typedef enum {
     icxOT_CIE_1964_10c		= 6,	/* Standard CIE 1964 10 degree, 2 degree compatible */
     icxOT_Shaw_Fairchild_2	= 7		/* Shaw & Fairchild 1997 2 degree */
 } icxObserverType;
+
+/* Fill in three xpsects with a standard observer weighting curves */
+/* return 0 on sucecss, nz if not matched */
+int standardObserver(
+xspect *sp0,
+xspect *sp1,
+xspect *sp2,				/* Xspects to fill in */
+icxObserverType obType);	/* Type of observer */
+
 
 /* The conversion object */
 struct _xsp2cie {
@@ -108,8 +136,8 @@ struct _xsp2cie {
 	/* Convert and also return (possibly corrected) reflectance spectrum */
 	/* Spectrum will be same wlength range and readings as input spectrum */
 	void (*sconvert) (struct _xsp2cie *p,	/* this */
-	                 xspect *sout,			/* Return corrected reflectance spectrum */
-	                 double *out,			/* Return XYZ or D50 Lab value */
+	                 xspect *sout,			/* Return corrected refl. spectrum (may be NULL) */
+	                 double *out,			/* Return XYZ or D50 Lab value (may be NULL) */
 	                 xspect *in				/* Spectrum to be converted, normalised by norm */
 	                );
 
@@ -118,6 +146,12 @@ struct _xsp2cie {
 	int (*set_fwa) (struct _xsp2cie *p,	/* this */
 					xspect *inst,		/* Spectrum of instrument illuminant */
 	                xspect *white		/* Spectrum of plain media */
+	                );
+
+	/* Get Fluorescent Whitening Agent compensation information */
+	/* return NZ if error */
+	void (*get_fwa_info) (struct _xsp2cie *p,	/* this */
+					double *FWAc		/* FWA content as a ratio. */
 	                );
 
 }; typedef struct _xsp2cie xsp2cie;
@@ -164,13 +198,33 @@ double *in				/* Input XYZ values */
 );
 
 
-/* Given a daylight color temperature in degrees K, */
-/* return the corresponding XYZ value */
-void icx_DTEMP2XYZ(
-double *out,			/* Return XYZ value with Y == 1 */
-double in				/* Input temperature in degrees K */
-);
 
+/* Given an illuminant definition and an observer model, return */
+/* the normalised XYZ value for that spectrum. */
+/* Return 0 on sucess, 1 on error */
+int icx_ill_sp2XYZ(
+double xyz[3],			/* Return XYZ value with Y == 1 */
+icxObserverType obType,	/* Observer */
+xspect *custObserver[3],/* Optional custom observer */
+icxIllumeType ilType,	/* Type of illuminant */
+double ct,				/* Input temperature in degrees K */
+xspect *custIllum);		/* Optional custom illuminant */
+
+
+/* Given a choice of temperature dependent illuminant (icxIT_Dtemp or icxIT_Ptemp), */
+/* return the closest correlated color temperature to the given spectrum or XYZ. */
+/* An observer type can be chosen for interpretting the spectrum of the input and */
+/* the illuminant. */
+/* Note we're using CICDE94, rather than the traditional L*u*v* 2/3 space for CCT */
+/* Return -1 on erorr */
+double icx_XYZ2ill_ct(
+double txyz[3],			/* If not NULL, return the XYZ of the black body temperature */
+icxIllumeType ilType,	/* Type of illuminant, icxIT_Dtemp or icxIT_Ptemp */
+icxObserverType obType,	/* Observer */
+xspect *custObserver[3],/* Optional custom observer */
+double xyz[3],			/* Input XYZ value, NULL if spectrum intead */
+xspect *insp0,			/* Input spectrum value, NULL if xyz[] instead */
+int viscct);			/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
 
 #endif /* XSPECTFM_H */
 

@@ -9,8 +9,8 @@
  * Copyright 2002, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* TTBD:
@@ -35,32 +35,47 @@
 #include "gamut.h"
 #include "nearsmth.h"
 
+/* Mapping weights */
+gammapweights weights[] = {
+	{
+		gmm_default,
+
+		{		/* Weighting of absolute error of destination from source */
+			1.0,	/* Absolute error overall weight */
+			{
+				1.0,	/* Absolute luminance error weight */
+				1.0,	/* Absolute chroma error weight */
+				1.0		/* Absolute hue error weight */
+			}
+		},
+		{		/* Weighting of relative error of destination points to each */
+				/* other, compared to source points to each other. */
+			1.0,	/* Relative error overall weight */
+			{
+				1.0,	/* Relative luminance error weight */
+				1.0,	/* Relative chroma error weight */
+				1.0		/* Relative hue error weight */
+			}
+		},
+		{		/* Weighting of error between destination point and source */
+				/* point radially mapped to destination. */
+			0.0,	/* Radial error overall weight */
+			{
+				1.0,	/* Radial luminance error weight */
+				1.0,	/* Radial chroma error weight */
+				1.0		/* Radial hue error weight */
+			}
+		},
+	
+		0.0
+	}
+};
+
 #define OVERSHOOT 1.0
-
-#define A_WEIGHT 1.0		/* Absolute error overall weight */
-#define A_LWEIGHT 1.0		/* Absolute luminance error weight */
-#define A_CWEIGHT0 1.0		/* Absolute chroma error weight at L = 100 */
-#define A_CWEIGHT1 1.0		/* Absolute chroma error weight at L = 0 */
-#define A_HWEIGHT 1.0		/* Absolute hue error weight */
-
-#define R_WEIGHT 1.0		/* Relative error overall weight */
-#define R_LWEIGHT 0.0		/* Relative luminance error weight */
-#define R_CWEIGHT 0.0		/* Relative chroma error weight */
-#define R_HWEIGHT 0.0		/* Relative hue error weight */
-
-#define D_WEIGHT 0.0		/* Radial error overall weight */
-#define D_LWEIGHT 0.0		/* Radial luminance error weight */
-#define D_CWEIGHT 0.0		/* Radial chroma error weight */
-#define D_HWEIGHT 0.0		/* Radial hue error weight */
-
-//#define A_WEIGHT 0.1		/* Weight absolute error less */
-//#define A_LWEIGHT 20.0		/* Weight absolute luminance errors much more */
-//#define R_LWEIGHT 5.0		/* Weight relative luminance errors more */
-//#define R_CWEIGHT 0.5		/* Weight relative chroma errors less */
 
 void usage(void) {
 	fprintf(stderr,"Create smoothed near mapping between two gamuts\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: smthtest [options] ingamut outgamut diag_vrml\n");
 	fprintf(stderr," -v            Verbose\n");
 //	fprintf(stderr," -s nearf      Absolute delta E weighting\n");
@@ -88,8 +103,8 @@ main(int argc, char *argv[]) {
 	int nnsm;				/* Number of near smoothed points */
 	FILE *wrl;				/* VRML output file */
 
-	int rv = 0;
-	char buf[200];
+	gammapweights xweights[7];
+
 	int i;
 
 #if defined(__IBMC__) && defined(_M_IX86)
@@ -150,7 +165,7 @@ main(int argc, char *argv[]) {
 	/* - - - - - - - - - - - - - - - - - - - */
 	/* read the input device gamut */
 
-	gin = new_gamut(0.0);
+	gin = new_gamut(0.0, 0);
 
 	if ((xl = strrchr(in_name, '.')) == NULL) {	/* Add .gam extention if there isn't one */
 		xl = in_name + strlen(in_name);
@@ -163,7 +178,7 @@ main(int argc, char *argv[]) {
 	/* - - - - - - - - - - - - - - - - - - - */
 	/* read the output device gamut */
 
-	gout = new_gamut(0.0);
+	gout = new_gamut(0.0, 0);
 
 	if ((xl = strrchr(out_name, '.')) == NULL) { /* Add .gam extention if there isn't one */
 		xl = out_name + strlen(out_name);
@@ -175,13 +190,12 @@ main(int argc, char *argv[]) {
 
 	/* - - - - - - - - - - - - - - - - - - - */
 
+	
+	/* Convert from compact to explicit hextant weightings */
+	expand_weights(xweights, weights);
+
 	/* Create the near point mapping */
-	nsm = near_smooth(verb, &nnsm, gin, gin, gout,
-	                  A_WEIGHT, A_LWEIGHT, A_CWEIGHT0, A_CWEIGHT1, A_HWEIGHT,
-	                  R_WEIGHT, R_LWEIGHT, R_CWEIGHT, R_HWEIGHT,
-	                  D_WEIGHT, D_LWEIGHT, D_CWEIGHT, D_HWEIGHT,
-	                  OVERSHOOT,
-	                  1, 1);
+	nsm = near_smooth(verb, &nnsm, gin, gin, gout, NULL, xweights, 1, 1);
 	if (nsm == NULL)
 		error("Creating smoothed near points failed");
 

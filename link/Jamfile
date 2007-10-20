@@ -10,8 +10,11 @@ CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
 LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
 
 if $(UNIX) && $(OS) != MACOSX {
-	LibWin = /usr/X11R6/lib/libX11.lib ;
-	LibWinH = /usr/X11R6/include/X11 ;
+	WinDir = /usr/X11R6 ;
+	LibWinH = $(WinDir)/include/X11 ;
+	LibWinD = $(WinDir)/lib ;
+	LibWin = ;
+	LINKFLAGS += -L$(LibWinD) -lX11 -lXau -lXdmcp ;
 }
 
 #Products
@@ -24,10 +27,10 @@ InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
 Main icclink : icclink.c ;
 ObjectHdrs icclink$(SUFOBJ) : ../h ../icc ../cgats ../xicc ../spectro ../gamut ../rspl
                               ../numlib ../plot ;
-LinkLibraries icclink : ../icc/libicc.lib ../xicc/libxicc.lib ../gamut/libgamut.c
-                        ../gamut/libgammap.lib ../rspl/librspl.lib 
+LinkLibraries icclink : ../icc/libicc.lib ../xicc/libxicc.lib ../xicc/libxcolorants.lib
+						../gamut/libgamut.c ../gamut/libgammap.lib ../rspl/librspl.lib 
                         ../cgats/libcgats.lib ../numlib/libnum.lib
-                        ../plot/libplot.lib $(LibWin) ;
+                        ../plot/libplot.lib ../plot/libvrml.lib $(LibWin) ;
 
 # K only reprocessor
 #Main icc2ko : icc2ko.c ;

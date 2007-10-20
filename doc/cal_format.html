@@ -1,0 +1,95 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>Calibration Format File (.cal)</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2>Description of the .cal format</h2>
+Device calibration information. This is ASCII text, <a
+ href="File_Formats.html#CGATS">CGATS</a>, Argyll specific format, used
+to hold a description of device setup information that brings it to a
+desired calibration state. Currently only display output curves are
+defined. Created by <a href="dispcal.html">dispcal</a>.<br>
+<br>
+While fully compatible with the CGATS.5 Data Exchange Format, the
+particular required keywords and fields are unique to Argyll, hence an
+Argyll specific file identifier <span style="font-weight: bold;">CAL</span>
+is used to avoid confusion with standard ANSI or CGATS files.<br>
+<br>
+The <span style="font-weight: bold;">.cal</span> format changes from
+time to time with new releases, to add new functionality, but generally
+retains backwards compatibility. Note that in the description below,
+the word "may" indicates an optional component, while the word "shall"
+indicates a necessary component.<br>
+<br>
+Generally a .cal file contains only one table, the table containing the
+setup information. <br>
+<br>
+<br>
+The table contains the following:<br>
+<br>
+The file identifier (First 7 characters) shall be <span
+ style="font-weight: bold;">CAL</span>.<br>
+<br>
+A <span style="font-weight: bold;">#</span> character introduces a
+comment.<br>
+<br>
+<span style="font-weight: bold;"><span style="font-weight: bold;"><span
+ style="font-weight: bold;"></span></span></span>There may be <span
+ style="font-weight: bold;">DESCRIPTOR</span>, <span
+ style="font-weight: bold;">ORIGINATOR</span>, or <span
+ style="font-weight: bold;">CREATED</span> keywords and values (as per
+CGATS).<br>
+<br>
+There shall be a <span style="font-weight: bold;">DEVICE_CLASS</span>
+keyword that has a value of <span style="font-weight: bold;">"OUTPUT</span>",
+"<span style="font-weight: bold;">DISPLAY</span>" or <span
+ style="font-weight: bold;">"INPUT"</span>.<br>
+This indicates what type of device the calibration information is
+suitable for.<br>
+<br>
+The <span style="font-weight: bold;">NUMBER_OF_FIELDS</span> keyword
+shall have a value that indicates the number of fields in each data
+set, e.g. <span style="font-weight: bold;">4</span> (as per CGATS).<br>
+<br>
+The start of the declaration of the fields shall be marked by the <span
+ style="font-weight: bold;">BEGIN_DATA_FORMAT</span> keyword (as per
+CGATS).<br>
+<br>
+For a <span style="font-weight: bold;">DISPLAY</span> device, the
+following fields shall be used:<br>
+<br>
+&nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_I</span>&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; index of the RAMDAC entry.<br>
+&nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_R</span>&nbsp;&nbsp;&nbsp;
+&nbsp; RAMDAC Red value for that entry.<br>
+&nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_G</span>
+&nbsp;&nbsp; &nbsp; RAMDAC Green value for that entry.<br>
+&nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_B</span>
+&nbsp;&nbsp; &nbsp; RAMDAC Blue value for that entry.<br>
+<br>
+The definition of the fields shall be terminated by the <span
+ style="font-weight: bold;">END_DATA_FORMAT</span> keyword (as per
+CGATS).<br>
+<br>
+The <span style="font-weight: bold;">NUMBER_OF_SETS</span> keyword
+shall have a value that indicates the number of sets of data, e.g. <span
+ style="font-weight: bold;">256</span> (as per CGATS).<br>
+<br>
+The start of the values of the data sets shall be marked by the <span
+ style="font-weight: bold;">BEGIN_DATA</span> keyword (as per CGATS).<br>
+<br>
+Each set of data shall be on one line, and shall be separated by white
+space. All values shall be normalized to lie between 0.0 and 1.0.<br>
+<br>
+The end of the values of the data sets shall be marked by the <span
+ style="font-weight: bold;">END_DATA</span> keyword (as per CGATS).<br>
+<br>
+Generally any other keywords and values will be ignored.<br>
+<br>
+<br>
+</body>
+</html>

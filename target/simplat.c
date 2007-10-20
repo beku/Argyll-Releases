@@ -12,8 +12,8 @@
  * Copyright 2002 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* TTBD:
@@ -69,7 +69,6 @@ static void
 default_simplat_to_percept(void *od, double *p, double *d) {
 	simplat *s = (simplat *)od;
 	int e;
-	double tt;
 
 	/* Default Do nothing - copy device to perceptual. */
 	for (e = 0; e < s->di; e++) {
@@ -203,7 +202,7 @@ double *p			/* Given perceptual value */
 	for (e = 0; e < di; e++) {
 		sr[e] = drad;			/* Device space search radius */
 	}
-	if ((tt = powell(di, d, sr,  ptol, 500, efunc, (void *)&ed)) < 0.0 || tt >= 50000.0) {
+	if (powell(&tt, di, d, sr,  ptol, 500, efunc, (void *)&ed) != 0 || tt >= 50000.0) {
 		error("simplat: powell failed, tt = %f\n",tt);
 	}
 	snap_to_gamut(s, d);
@@ -410,7 +409,7 @@ int     hash	/* Hash */
 ) {
 	int di = s->di;
 	int hp;		/* node index */
-	int ip, j;
+	int j;
 
 	for (hp = s->hash[hash]; hp >= 0; hp = s->nodes[hp].hp) {
 
@@ -437,7 +436,7 @@ int    hash		/* Hash */
 	int b = 0; 		/* NZ if a boundary point */
 	int nn;			/* New node index */
 	int hp;			/* Hash chain index */
-	int ip, i, j;
+	int i, j;
 
 	/* Make room for it */
 	if ((s->np+1) >= s->np_a) {
@@ -504,7 +503,7 @@ simplat *s,
 double *d,		/* Device position */
 double *p		/* Perceptual value */
 ) {
-	int i, j;
+	int j;
 
 	for (; s->rix < s->bnp; s->rix++) {
 
@@ -891,7 +890,6 @@ static void sa_percept(void *od, double *out, double *in) {
 
 static void sa_percept(void *od, double *p, double *d) {
 	int e, di = 2;
-	double tt;
 
 #ifndef NEVER
 	/* Default Do nothing - copy device to perceptual. */

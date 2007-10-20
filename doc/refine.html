@@ -27,38 +27,64 @@ reproduction.<br>
 <a href="verify.html">verify</a> is a useful utility to use on the two
 test charts, to check how well the refinement is proceeding.<br>
 <h3>Usage Summary</h3>
-usage: refine [-options] cietarget ciecurrent [outdevicc] [inabs] outabs<br>
-&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Verbose<br>
-&nbsp;-c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Create initial abstract correction profile<br>
-&nbsp;-g&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Don't impose output device gamut limit<br>
-&nbsp;-r
-res&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set
-abstract profile clut resolution (default 33)<br>
-&nbsp;-d factor&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Override default
-damping factor (default 0.950000)<br>
-&nbsp;-i illum&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Choose illuminant for spectral data:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-A, D50 (def.), D65, F5, F8, F10 or file.sp<br>
-&nbsp;-o observ&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose CIE Observer
-for spectral data:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-1931_2, 1964_10, S&amp;B 1955_2, J&amp;V 1978_2 (def.)<br>
-&nbsp;-f&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use Fluorescent Whitening Agent compensation on spectral data<br>
-&nbsp;<span style="font-style: italic;">cietarget&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Target CIE or spectral values, CGATS file (e.g. .ti3)<br>
-&nbsp;<span style="font-style: italic;">ciecurrent</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Actual CIE or spectral values, CGATS file (e.g. .ti3)<br>
-&nbsp;[<span style="font-style: italic;">outdevicc</span>]&nbsp;&nbsp;&nbsp;&nbsp;
-Output device ICC profile to set gamut limit (not used if -g)<br>
-&nbsp;[<span style="font-style: italic;">inabs</span>]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Previous abstract correction ICC profile (not used if -c)<br>
-&nbsp;<span style="font-style: italic;">outabs</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Created/refined abstract correction ICC profile<br>
+<small><span style="font-family: monospace;">usage: refine [-options]
+cietarget ciecurrent [outdevicc] [inabs] outabs</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create initial abstract correction profile</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-g&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Don't impose output device gamut limit</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-r
+res&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set
+abstract profile clut resolution (default 33)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-d
+factor&nbsp;&nbsp;&nbsp;&nbsp; Override default
+damping factor (default 0.950000)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-i
+illum&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose illuminant for spectral data:</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+A, D50 (def.), D65, F5, F8, F10 or file.sp</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-o
+observ&nbsp;&nbsp;&nbsp;&nbsp; Choose CIE Observer
+for spectral data:</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1931_2, 1964_10, S&amp;B 1955_2, J&amp;V 1978_2 (def.)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-f&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use Fluorescent Whitening Agent compensation on spectral data</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><span
+ style="font-style: italic; font-family: monospace;">cietarget&nbsp;</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp; Target CIE or
+spectral values, CGATS file (e.g. .ti3)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><span
+ style="font-style: italic; font-family: monospace;">ciecurrent</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp; Actual CIE or
+spectral values, CGATS file (e.g. .ti3)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;[</span><span
+ style="font-style: italic; font-family: monospace;">outdevicc</span><span
+ style="font-family: monospace;">]&nbsp;&nbsp; Output device ICC
+profile to set gamut limit (not used if -g)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;[</span><span
+ style="font-style: italic; font-family: monospace;">inabs</span><span
+ style="font-family: monospace;">]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Previous abstract correction ICC profile (not used if -c)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><span
+ style="font-style: italic; font-family: monospace;">outabs</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Created/refined abstract correction ICC profile</span></small><br>
 <h3>Usage Details</h3>
 <b>refine</b> provides a way of improving the profile accuracy of a
 proofing system.<br>
@@ -200,7 +226,7 @@ We then create our initial abstract correction fix profile <span
  style="font-weight: bold;">fix1.icm</span> using refine:<br>
 <br>
 &nbsp;&nbsp;&nbsp; refine -v -c&nbsp; reference.ti3 chart1.ti3
-proofer.cm fix1.icm<br>
+proofer.icm fix1.icm<br>
 <br>
 Applying this to your process for creating the proofer device profile
 or
@@ -212,13 +238,14 @@ measurement data using&nbsp; <span style="font-weight: bold;">profile</span>,
 or whether you are using a device link profile created using <span
  style="font-weight: bold;">icclink</span>):<br>
 <br>
-&nbsp;&nbsp;&nbsp; revfix -v -1 -ke -p fix1.icm proofer.icm proofer1.icm<br>
+&nbsp;&nbsp;&nbsp; revfix -v -1 -ke -p fix1.icm proofer.icm
+proofer_fix1.icm<br>
 or<br>
-&nbsp;&nbsp;&nbsp; copy proofer.ti3 proofer1.ti3<br>
-&nbsp;&nbsp;&nbsp; profile -v -p fix1.icm proofer1<br>
+&nbsp;&nbsp;&nbsp; copy proofer.ti3 proofer_fix1.ti3<br>
+&nbsp;&nbsp;&nbsp; profile -v -p fix1.icm proofer_fix1<br>
 or<br>
 &nbsp;&nbsp;&nbsp; icclink -v -s -ia -oa -p fix1.icm target.icm
-proofer.icm target_proofer1.icm<br>
+proofer.icm target_proofer_fix1.icm<br>
 <br>
 Note that the above example is a simple one - you should use all the
 same options as you used to create your initial <span
@@ -227,8 +254,8 @@ same options as you used to create your initial <span
 with the addition of the "-p fix1.icm" option to specify the abstract
 correction profile be applied.<br>
 <br>
-Use the <span style="font-weight: bold;">proofer1.icm</span> or <span
- style="font-weight: bold;">target_proofer1.icm</span> to
+Use the <span style="font-weight: bold;">proofer_fix1.icm</span> or <span
+ style="font-weight: bold;">target_proofer_fix1.icm</span> to
 print out the test chart again, and read it in, resulting in <span
  style="font-weight: bold;">chart2.ti3</span> file.<br>
 <br>
@@ -245,22 +272,23 @@ can then start another round of improvement:<br>
 <br>
 We refine our previous abstract correction fix profile using refine:<br>
 <br>
-&nbsp;&nbsp;&nbsp; refine -v&nbsp; reference.ti3 chart1.ti3 proofer.cm
+&nbsp;&nbsp;&nbsp; refine -v&nbsp; reference.ti3 chart2.ti3 proofer.icm
 fix1.icm fix2.icm<br>
 <br>
 Applying this new abstract profile to our process for creating the
 proofing device profile or link again:<br>
 <br>
-&nbsp;&nbsp;&nbsp; revfix -v -1 -ke -p fix2.icm proofer.icm proofer2.icm<br>
+&nbsp;&nbsp;&nbsp; revfix -v -1 -ke -p fix2.icm proofer.icm
+proofer_fix2.icm<br>
 or<br>
-&nbsp;&nbsp;&nbsp; copy proofer.ti3 proofer2.ti3<br>
-&nbsp;&nbsp;&nbsp; profile -v -p fix2.icm proofer2<br>
+&nbsp;&nbsp;&nbsp; copy proofer.ti3 proofer_fix2.ti3<br>
+&nbsp;&nbsp;&nbsp; profile -v -p fix2.icm proofer_fix2<br>
 or<br>
 &nbsp;&nbsp;&nbsp; icclink -v -s -ia -oa -p fix2.icm target.icm
-proofer.icm target_proofer2.icm<br>
+proofer.icm target_proofer_fix2.icm<br>
 <br>
-Use the <span style="font-weight: bold;">proofer2.icm</span> or <span
- style="font-weight: bold;">target_proofer2.icm</span> to
+Use the <span style="font-weight: bold;">proofer_fix2.icm</span> or <span
+ style="font-weight: bold;">target_proofer_fix2.icm</span> to
 print out the test chart again, and read it in, resulting in <span
  style="font-weight: bold;">chart3.ti3</span> file.<br>
 <br>
@@ -273,8 +301,8 @@ Rounds of improvements can be continues by looping back to <span
  style="font-weight: bold;">&gt;&gt;&gt;</span>, being careful to
 increment the
 names of the <span style="font-weight: bold;">fixN.icm</span>,&nbsp; <span
- style="font-weight: bold;">prooferN.icm</span> or <span
- style="font-weight: bold;">target_prooferN.icm</span> and <span
+ style="font-weight: bold;">proofer_fixN.icm</span> or <span
+ style="font-weight: bold;">target_proofer_fixN.icm</span> and <span
  style="font-weight: bold;">chartN.ti3</span>files. Stop when
 exhausted,
 or if it looks like things are getting worse, rather than better. If

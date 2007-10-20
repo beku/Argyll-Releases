@@ -36,14 +36,14 @@ Both 8 bit per component and 16 bit per component
 pixel data is handled, up to 8 input and output
 dimensions (but this limit could be trivially raised).
 
-imdi_gen.exe	is the module that triggers the generation of
+imdi_make.exe	is the module that triggers the generation of
 		optimised source code as configured for the color spaces
 		and pixel formats selected. By default creates
 		a single imdi_k.c and imdi_k.h file, but if
 		given the -i flag, creates a separate file
 		for each kernel variant.
 
-cgen.c		C code generator module.
+cgen.c	C code generator module.
 
 itest.c	regresion test routine.
 		Normally runs speed and accuracy tests for

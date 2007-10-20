@@ -10,13 +10,31 @@
  * Author: Graeme W. Gill
  * Date:   14/7/2005
  *
- * Copyright 2005 Graeme W. Gill
+ * Copyright 2005 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * This is an alternative driver to spm/gretag.
+ */
+
+/* 
+   If you make use of the instrument driver code here, please note
+   that it is the author(s) of the code who take responsibility
+   for its operation. Any problems or queries regarding driving
+   instruments with the Argyll drivers, should be directed to
+   the Argyll's author(s), and not to any other party.
+
+   If there is some instrument feature or function that you
+   would like supported here, it is recommended that you
+   contact Argyll's author(s) first, rather than attempt to
+   modify the software yourself, if you don't have firm knowledge
+   of the instrument communicate protocols. There is a chance
+   that an instrument could be damaged by an incautious command
+   sequence, and the instrument companies generally cannot and
+   will not support developers that they have not qualified
+   and agreed to support.
  */
 
 #include <stdio.h>
@@ -24,8 +42,12 @@
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
+#include "copyright.h"
+#include "config.h"
+#include "numlib.h"
 #include "xspect.h"
-#include "serio.h"
+#include "insttypes.h"
+#include "icoms.h"
 #include "ss.h"
 
 /* ------------------------------------------- */
@@ -114,36 +136,9 @@ void ss_add_4(ss *p, int i) {
 
 /* Add a double into four byte type */
 void ss_add_double(ss *p, double d) {
-	unsigned int sn = 0, ep = 0, ma;
 	unsigned int id;
 
-	/* Convert double to IEEE754 single precision. */
-	/* This is easy if we're running on an IEEE754 architecture, */
-	/* but isn't generally portable. */
-
-	if (d < 0.0) {
-		sn = 1;
-		d = -d;
-	}
-	if (d != 0.0) {
-		int ee;
-		ee = floor(log(d)/log(2.0));
-		if (ee < -126)		/* Allow for denormalized */
-			ee = -126;
-		d *= pow(0.5, (double)ee);
-		ee += 127;
-		if (ee < 1)			/* Too small */
-			ee = 0;			/* Zero or denormalised */
-		else if (ee > 254) {	/* Too large */
-			ee = 255;		/* Infinity */
-			d = 0.0;
-		}
-		ep = ee;
-	} else {
-		ep = 0;				/* Zero */
-	}
-	ma = ((unsigned int)(d * (1 << 23) + 0.5)) & 0x7fffff;
-	id = (sn << 31) | (ep << 23) | ma;
+	id = doubletoIEEE754(d);
 
 	ss_add_4(p, id);
 }
@@ -196,7 +191,8 @@ static int chrspace(ss *p, int size) {
 
 /* Check that the read buffer is fully consumed. */
 static void chended(ss *p) {
-	if (p->rbufe != p->rbuf) {
+	if (p->snerr == ss_et_NoError	/* Don't overrite any existing error */
+	 && p->rbufe != p->rbuf) {
 		p->snerr = ss_et_BadAnsFormat;
 	}
 }
@@ -209,7 +205,8 @@ static int h2b(ss *p, char c) {
 		return (10 + c-(int)'A');
 	if (c >= 'a' && c <= 'f')
 		return (10 + c-(int)'a');
-	p->snerr = ss_et_BadHexEncoding;
+	if (p->snerr == ss_et_NoError)   /* Don't overrite any existing error */
+		p->snerr = ss_et_BadHexEncoding;
 	return 0;
 }
 
@@ -225,7 +222,7 @@ int ss_peek_ans(ss *p) {
 	return rv;
 }
 
-/* Remove a Spectrolino answer enum from the revieve buffer,
+/* Remove a Spectrolino answer enum from the revieve buffer, */
 /* and check it is correct.  */
 void ss_sub_soans(ss *p, int cv) {
 	int rv;
@@ -236,7 +233,8 @@ void ss_sub_soans(ss *p, int cv) {
 	   | (h2b(p, p->rbuf[1]) << 0);
 	p->rbuf += 2;
 	if (rv != cv) {
-		p->snerr = ss_et_BadAnsFormat;
+		if (p->snerr == ss_et_NoError)   /* Don't overrite any existing error */
+			p->snerr = ss_et_BadAnsFormat;
 		return;
 	}
 	return;
@@ -251,14 +249,16 @@ void ss_sub_ssans(ss *p, int cv) {
 		return;
 	if (p->rbuf[0] != 'D'
 	 || p->rbuf[1] != '1') {
-		p->snerr = ss_et_BadAnsFormat;
+		if (p->snerr == ss_et_NoError)   /* Don't overrite any existing error */
+			p->snerr = ss_et_BadAnsFormat;
 		return;
 	}
 	rv = (h2b(p, p->rbuf[2]) << 4)
 	   | (h2b(p, p->rbuf[3]) << 0);
 	p->rbuf += 4;
 	if (rv != cv) {
-		p->snerr = ss_et_BadAnsFormat;
+		if (p->snerr == ss_et_NoError)   /* Don't overrite any existing error */
+			p->snerr = ss_et_BadAnsFormat;
 		return;
 	}
 	return;
@@ -313,29 +313,13 @@ int ss_sub_4(ss *p) {
 
 /* Remove a double into four byte type */
 double ss_sub_double(ss *p) {
-	unsigned int sn = 0, ep = 0, ma;
 	unsigned int ip;
 	double op;
 
 	ip = (unsigned int)ss_sub_4(p);
 
-	/* Convert IEEE754 single precision to double. */
-	/* This is easy if we're running on an IEEE754 architecture, */
-	/* but isn't generally portable. */
+	op = IEEE754todouble(ip);
 
-	sn = (ip >> 31) & 0x1;
-	ep = (ip >> 23) & 0xff;
-	ma = ip & 0x7fffff;
-
-	if (ep == 0) { 		/* Zero or denormalised */
-		op = (double)ma/(double)(1 << 23);
-		op *= pow(2, (-126.0));
-	} else {
-		op = (double)(ma | (1 << 23))/(double)(1 << 23);
-		op *= pow(2, (((int)ep)-127.0));
-	}
-	if (sn)
-		op = -op;
 	return op;
 }
 
@@ -394,6 +378,12 @@ inst_code ss_inst_err(ss *p) {
 
 		case ss_et_UserAbort:
 			return inst_user_abort | ec;
+		case ss_et_UserTerm:
+			return inst_user_term | ec;
+		case ss_et_UserTrig:
+			return inst_user_trig | ec;
+		case ss_et_UserCmnd:
+			return inst_user_cmnd | ec;
 
 		case ss_et_RemOverFlow:
 		case ss_et_MeasDisabled:
@@ -458,7 +448,7 @@ inst_code ss_inst_err(ss *p) {
 
 /* Incorporate a error into the snerr value */
 void ss_incorp_err(ss *p, ss_et se) {
-	if (p->snerr != ss_et_NoError)
+	if (p->snerr != ss_et_NoError)		/* Don't overrite any existing error */
 		return;
 	if (se == ss_set_NoError)
 		return;
@@ -470,22 +460,22 @@ void ss_incorp_err(ss *p, ss_et se) {
 /* Since ss_res is a bit mask, we just prioritize the errors. */
 void ss_incorp_remerrset(ss *p, ss_res es) {
 	int i, ii;
-	if (p->snerr != ss_et_NoError)
+	if (p->snerr != ss_et_NoError)      /* Don't overrite any existing error */
 		return;
 	if (es == ss_res_NoError)
 		return;
-	if (es & ss_res_SlopeOutOfRange)
 
 	for (i = ss_et_NoValidDStd, ii = 0x0001; ii < 0x10000; i++, ii <<= 1) {
-		if ((ii & es) != 0)
+		if ((ii & es) != 0) {
 			break;
+		}
 	}
-	p->snerr = es;
+	p->snerr = i;
 }
 
 /* Incorporate a scan error into the snerr value */
 void ss_incorp_scanerr(ss *p, ss_set se) {
-	if (p->snerr != ss_et_NoError)
+	if (p->snerr != ss_et_NoError)		/* Don't overrite any existing error */
 		return;
 	if (se == ss_set_NoError)
 		return;
@@ -495,7 +485,7 @@ void ss_incorp_scanerr(ss *p, ss_set se) {
 
 /* Incorporate a device communication error into the snerr value */
 void ss_incorp_comerr(ss *p, ss_cet se) {
-	if (p->snerr != ss_et_NoError)
+	if (p->snerr != ss_et_NoError)		/* Don't overrite any existing error */
 		return;
 	if (se == ss_cet_NoError)
 		return;
@@ -505,6 +495,24 @@ void ss_incorp_comerr(ss *p, ss_cet se) {
 
 /* - - - - - - - - - - - - - - - - - - - - - */
 /* EXECUTION: */
+
+/* Interpret an icoms error into a SS error */
+int icoms2ss_err(int se) {
+	if (se & ICOM_USERM) {
+		se &= ICOM_USERM;
+		if (se == ICOM_USER)
+			return ss_et_UserAbort;
+		else if (se == ICOM_TERM)
+			return ss_et_UserTerm;
+		else if (se == ICOM_TRIG)
+			return ss_et_UserTrig;
+		else if (se == ICOM_CMND)
+			return ss_et_UserCmnd;
+	}
+	if (se != ICOM_OK)
+		return ss_et_SerialFail;
+	return ss_et_NoError;
+}
 
 /* Terminate the send buffer, and then do a */
 /* send/receieve to the device. */
@@ -518,12 +526,8 @@ void ss_command(ss *p, double tmo) {
 	p->sbuf[2] = '\00';					/* write_read terminates on nul */
 
 	p->rbuf = p->_rbuf;				/* Reset read pointer */
-	if ((se = p->sio->write_read(p->sio, p->_sbuf, p->_rbuf, SS_MAX_RD_SIZE, '\n', 1, tmo)) != 0) {
-		if (se & SIO_USER) {
-			p->snerr = ss_et_UserAbort;
-			return;
-		}
-		p->snerr = ss_et_SerialFail;
+	if ((se = p->icom->write_read(p->icom, p->_sbuf, p->_rbuf, SS_MAX_RD_SIZE, '\n', 1, tmo)) != 0) {
+		p->snerr = icoms2ss_err(se);
 		return;
 	}
 
@@ -553,7 +557,6 @@ void ss_command(ss *p, double tmo) {
 		if ((p->rbufe - p->rbuf) >= 4
 		  && p->rbuf[0] == 'A'
 		  && p->rbuf[1] == '0') {	/* COMM Error */
-			ss_et tt;
 			p->rbuf += 4;
 			ss_incorp_comerr(p, (ss_cet)ss_sub_1(p));
 			return;
@@ -564,7 +567,6 @@ void ss_command(ss *p, double tmo) {
 	if ((p->rbufe - p->rbuf) >= 2
 	  && p->rbuf[0] == '2'
 	  && p->rbuf[1] == '6') {	/* COMM Error */
-		ss_et tt;
 		p->rbuf += 2;
 		ss_incorp_comerr(p, (ss_cet)ss_sub_1(p));
 		return;
@@ -586,7 +588,6 @@ inst_code so_do_ResetStatusDownload(
 ss *p,
 ss_smt sm		/* Init all or all except communications */
 ) {
-	int i;
 	ss_add_soreq(p, ss_ResetStatusDownload);
 	ss_add_1(p, 0x01);
 	ss_add_1(p, 0x04);
@@ -645,7 +646,6 @@ char pn[9],			/* Return the part number */
 unsigned int *sn,	/* Return serial number */
 char sv[13]			/* Return software version */
 ) {
-	int i;
 	char rsv[17];	/* Space for resered field */
 	ss_add_soreq(p, ss_DeviceDataRequest);
 	ss_command(p, DF_TMO);
@@ -855,7 +855,6 @@ inst_code so_do_GetValNr(
 ss *p,
 int *ct		/* Return color temperature in deg K/100 */
 ) {
-	int i;
 	ss_add_soreq(p, ss_GetValNr);
 	ss_add_1(p, 0x60);
 	ss_command(p, DF_TMO);
@@ -872,7 +871,6 @@ inst_code so_do_SetValNr(
 ss *p,
 int ct		/* Color temperature to set for illuminant Dxx in deg K/100 */
 ) {
-	int i;
 	ss_add_soreq(p, ss_IllumTabDownload);
 	ss_add_1(p, 0x60);
 	ss_add_2(p, ct);
@@ -914,7 +912,7 @@ ss_aft af,		/* Filter being set (None/Pol/D65/UV/custom */
 double sp[36],	/* 36 spectral values being set */
 char dtn[19]	/* Name for data table */
 ) {
-	int i, n;
+	int i;
 	ss_add_soreq(p, ss_WhiteReferenceDownld);
 	ss_add_1(p, af);
 	for (i = 0; i < 36; i++)
@@ -985,8 +983,10 @@ ss_mmt mm	/* Measurement Mode (Meas/Cal etc.) */
 	if (p->tmode != 0) {
 		ss_rvt rv;
 		double sp[36];
+		ss_nmt nm;
 		p->tmode = 0;
 		ss_do_MoveAndMeasure(p, 155.0, 230.0, sp, &rv);
+		so_do_NewMeasureRequest(p, &nm);
 		ss_do_MoveAbsolut(p, p->sbr, p->sbx, p->sby);
 		p->tmode = 1;
 		return (inst_notify | ss_et_WhiteMeasOK);
@@ -1165,6 +1165,7 @@ ss_ot  *ot		/* Return Observer type (2deg/10deg) */
 	ss_add_1(p, 0x09);
 	ss_add_1(p,ct);
 	ss_command(p, DF_TMO);
+
 	ss_sub_soans(p, ss_CParameterAnswer);
 	ss_sub_soans(p, 0x09);
 	*rct = ss_sub_1(p);
@@ -1306,7 +1307,9 @@ ss *p,
 ss_toost oo		/* Activated/Deactivated */
 ) {
 	ss_add_soreq(p, ss_TargetOnOffStDownload);
+	ss_add_1(p, 0x00);
 	ss_add_1(p, oo);
+	ss_add_1(p, 0x00);
 	ss_command(p, DF_TMO);
 	ss_sub_soans(p, ss_DownloadError);
 	ss_incorp_remerrset(p, ss_sub_2(p));
@@ -1627,7 +1630,7 @@ ss *p
 }
 
 /* Move to the sensor down. */
-/* (Doesn't work when device is offline or transmissioin mode.) */
+/* (Doesn't work when device is offline or transmission mode.) */
 inst_code ss_do_MoveDown(
 ss *p
 ) {

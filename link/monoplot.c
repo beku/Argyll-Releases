@@ -10,8 +10,8 @@
  *
  * Copyright 2001 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* TTBD:
@@ -37,6 +37,7 @@ void error(char *fmt, ...), warning(char *fmt, ...);
 
 void usage(void) {
 	fprintf(stderr,"Plot monochrome axis of ICC link file, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"PCS->DEV ->link-> DEV->PCS\n");
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: monoplot inprof linkprof outprof\n");
 	fprintf(stderr," -v        verbose\n");

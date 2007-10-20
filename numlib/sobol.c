@@ -12,8 +12,8 @@
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include "numsup.h"
@@ -32,7 +32,7 @@
  * 236-242. 
  */
 
-static int poly[SOBOL_MAXDIM] = {
+static int sobol_poly[SOBOL_MAXDIM] = {
 	  1,   3,   7,  11,  13,  19,  25,  37,  59,  47,
 	 61,  55,  41,  67,  97,  91, 109, 103, 115, 131,
 	193, 137, 145, 143, 241, 157, 185, 167, 229, 171,
@@ -145,11 +145,13 @@ sobol *new_sobol(int dim) {
 	sobol *s = NULL;
 	int i, j, p;
 
-	if(dim < 1 || dim > SOBOL_MAXDIM)
+	if (dim < 1 || dim > SOBOL_MAXDIM) {
 		return NULL;
+	}
 
-	if ((s = (sobol *)malloc(sizeof(sobol))) == NULL)
+	if ((s = (sobol *)malloc(sizeof(sobol))) == NULL) {
 		return NULL;
+	}
 
 	s->dim  = dim;
 	s->next  = next_sobol;
@@ -167,7 +169,7 @@ sobol *new_sobol(int dim) {
 			int pm;				/* Polinomial mask */
 	
 			/* Find degree of polynomial from binary encoding */
-			for (m = 0, pm = poly[i] >> 1; pm != 0; m++, pm >>= 1)
+			for (m = 0, pm = sobol_poly[i] >> 1; pm != 0; m++, pm >>= 1)
 				; 
 	
 			/* The leading elements of row i come from vinit[][] */
@@ -177,7 +179,7 @@ sobol *new_sobol(int dim) {
 	
 			/* Calculate remaining elements of row i as explained */
 			/* in bratley and fox, section 2 */
-			pm = poly[i];
+			pm = sobol_poly[i];
 			for (j = m; j < SOBOL_MAXBIT; j++) {
 				int k;
 				int newv = s->dir[j-m][i];

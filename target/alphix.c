@@ -10,12 +10,20 @@
  * Copyright 2005, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
+ */
+
+/* TTBD:
+	It would be nice if it was possible to add a delimeter between
+    the X and Y identifiers so that number + number or alpha + alpha
+    identification was possible.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include "numsup.h"
 #include "alphix.h"
 
 /* Return the alpha index for the given raw index number */
@@ -91,7 +99,7 @@ static int fromanat(alphix *p, char *ax) {
 
 /* Working from the end of the string, */
 /* return a pointer to the maximum number of characters */
-/* that are legaly part of this alhpa index. */
+/* that are legaly part of this alpha index. */
 static char *find_start(alphix *p, char *ax) {
 	int i, k;
 	char *v;
@@ -179,10 +187,10 @@ alphix_del(alphix *p) {
 alphix *new_alphix(char *pattern) {
 	alphix *p;
 	char *pp = pattern;
-	int i, j;
+	int i;
 
 	if ((p = (alphix *)calloc(1,sizeof(alphix))) == NULL)
-		error ("alphix: malloc failed");
+		error("alphix: malloc failed");
 
 	p->maxlen = alphix_maxlen;
 	p->aix    = alphix_aix;
@@ -403,8 +411,9 @@ char *patch_location(
 /* ==================================================================== */
 /* Utility function: */
 /* Given the strip and patch alphix objects, and order flag, */
-/* and a coresonding patch location string, return an index */
+/* and a corresonding patch location string, return an index */
 /* number suitable for sorting location strings. */
+/* The sort order is in order of strips, then patches within each strip */
 /* Return -1 on error */
 int patch_location_order(
 	alphix *saix,		/* Strip alpha index object */
@@ -423,13 +432,12 @@ int patch_location_order(
 	strcpy(ax,_ax);
 
 	if (ixord == 0) {
-		rh = paix;		/* Patch is right hand */
 		lh = saix;		/* Strip is left hand */
+		rh = paix;		/* Patch is right hand */
 	} else {
 		rh = saix;		/* Strip is right hand */
 		lh = paix;		/* Patch is left hand */
 	}
-	
 
 	/* We need to identify the boundary between */
 	/* the right hand and left hand indexes. */
@@ -443,7 +451,10 @@ int patch_location_order(
 	if (ri < 0 || li < 0)
 		return -1;
 
-	return li * rh->cmct + ri;
+	if (ixord == 0)		/* Strip is left hand */
+		return li * rh->cmct + ri;
+	else
+		return ri * lh->cmct + li;
 }
 
 

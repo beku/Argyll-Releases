@@ -8,7 +8,7 @@
  * Version: 1.23
  *
  * Copyright 2000 Graeme W. Gill
- * Please refer to Licence.txt file for details.
+ * Please refer to License.txt file for details.
  */
 
 /* TTBD:
@@ -57,7 +57,7 @@ double absdiff(double in1[3], double in2[3]) {
 
 void usage(void) {
 	fprintf(stderr,"View bwd table clipping of an ICC file, V1.23\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: fbtest [-v] infile\n");
 	fprintf(stderr," -v        verbose\n");
 	exit(1);
@@ -71,11 +71,10 @@ main(
 	int fa,nfa;				/* argument we're looking at */
 	int verb = 0;
 	int doaxes = 0;
-	int incclip = 0;
 	char in_name[100];
 	char *xl, out_name[100];
 	icmFile *rd_fp;
-	icc *wr_icco, *rd_icco;		/* Keep object separate */
+	icc *rd_icco;
 	int rv = 0;
 	icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
 

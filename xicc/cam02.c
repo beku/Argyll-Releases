@@ -1,4 +1,9 @@
 
+// Version that computes ab scale factor using decomposition
+// into independent factors, and then limits the ratio between
+// the two factors that form the denominator of the scale/unscale.
+// Works best of all schemes so far ???
+
 /* 
  * cam02
  *
@@ -9,9 +14,17 @@
  * Conference, with the addition of the Viewing Flare
  * model described on page 487 of "Digital Color Management",
  * by Edward Giorgianni and Thomas Madden, and the
- * Helmholtz-Kohlraush effect, using the equation
- * the Bradford-Hunt 96C model as detailed in Mark Fairchilds
+ * Helmholtz-Kohlraush effect, using the equation from
+ * the Bradford-Hunt 96C model as detailed in Mark Fairchild's
  * book "Color Appearance Models". 
+ * The Slight modification to the Hunt-Pointer-Estevez matrix
+ * recommended by Kuo, Zeis and Lai in IS&T/SID 14th Color Imaging
+ * Conference "Robust CIECAM02 Implementation and Numerical
+ * Experiment within an ICC Workflow", page 215, together with
+ * their matrix formulation of inversion has been adopted.
+ *
+ * In addition the algorithm has unique extensions to allow
+ * it to operate reasonably over an unbounded domain.
  *
  * Author:  Graeme W. Gill
  * Date:    17/1/2004
@@ -19,10 +32,10 @@
  *
  * This file is based on cam97s3.c by Graeme Gill.
  *
- * Copyright 2004 Graeme W. Gill
+ * Copyright 2004 - 2007 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 
@@ -30,15 +43,60 @@
 /* with the ICC convention (not 100.0 as assumed by the CIECAM spec.) */
 /* Note that all whites are assumed to be normalised (ie. Y = 1.0) */
 
-/* Various minor changes have been made to allow the CAM conversions to */
-/* function over a much greater range of XYZ and Jab values than */
-/* the functions described in the above references. This is */
-/* because such values arise in the process of gamut mapping, and */
-/* in scanning through the grid of PCS values needed to fill in */
-/* the A2B table of an ICC profile. Such values have no correlation */
-/* to a real color value, but none the less need to be handled without */
-/* causing an exception, in a geometrically consistent and reversible */
-/* fashion. */ 
+/*
+	Various additions and changes have been made to allow the CAM
+	conversions to and from an unbounded range of XYZ and Jab values,
+	in a (somewhat) geometrically consistent maner. This is because
+	such values arise in the process of gamut mapping, and in scanning through
+	the grid of PCS values needed to fill in the A2B table of an
+	ICC profile. Such values have no correlation to a real color
+	value, but none the less need to be handled without causing an
+	exception, in a geometrically consistent and reversible
+	fashion.
+
+	The changes are:
+
+	The Hunt-Pointer-Estevez matrix has been increased in precission by
+	1 digit [Kuo, Zeise & Lai, IS&T/SID 14th Color Imaging Conference pp. 215-219]
+
+	The sharpened cone response matrix third row has been changed from
+	[0.0030, 0.0136, 0.9834] to [0.0000, 0.0000, 1.0000]
+	[Susstrunk & Brill, IS&T/SID 14th Color Imaging Conference Late Breaking News sublement]
+
+	The post-adaptation non-linearity response has had a straigt
+	line negative extension added, that preserves negative values
+	but expands them more than the positive characteristic on conversion
+	to the CAM, and therefore compresses such values more on
+	coversion from the CAM back to XYZ. This helps minimise 
+	shifts int resulting color for CAM values near or just below zero.
+	The positive region has a tangential linear extension, so that the
+	range of values is not limited.
+		
+	The preliminary saturation denominator value is limited to a minimum
+	value of 0.305 (the value it has for zero XYZ input), to prevent
+	the saturation rising to infinity, or going negative, or flipping the
+	hue angle. It is also limited to a maximum ration to ttA of 2.5, which
+	ensures that the same problems do not occur in the reverse
+	conversion. 
+	In regions with a ttA value less than 0.305, the saturation
+	denominator is also limited to the value it would have if ttA was 0.305,
+	ensuring that saturation denominator has continuity
+	with all possible values of a and b;   (???)
+
+	To cope with -ve acromatic response values, rather than
+	using a symetric conversion to J, a straight line segment
+	is used below A values of 0.1.
+
+	To avoid chroma and hue angle information being lost when the
+	J value used to scale the chroma is 0, and to ensure
+	that J = 0, a,b != 0 values have a valid mapping into
+	XYZ space, the J value used to multiply Chroma, is limited
+	to be equivalent to not less than A == 0.1.
+
+	The Helmholtz-Kohlraush effect is crafted to have resonable
+	effects over the range of J from 0 to 100, and have more
+	moderate effects outside this range. 
+*/
 
 #include <copyright.h>
 #include <stdio.h>
@@ -46,11 +104,51 @@
 #include <math.h>
 #include "xcam.h"
 #include "cam02.h"
+#include "numlib.h"
 
-#undef DIAG				/* Print internal value diagnostics for each conversion */
-#undef DISABLE_MATRIX	/* Debug - wire XYZ to rgba */
+#undef ENTRACE				/* Enable internal value runtime tracing if s->trace != 0 */
+#define DISABLE_SS			/* Disable overall ss limit values (?) */
 
-#define CAM02_PI 3.14159265359
+#undef DIAG1				/* Print internal value diagnostics for conditions setup */
+#undef DIAG2				/* Print internal value diagnostics for each conversion */
+#undef TRACKMINMAX			/* Track min/max limit values */
+#undef DISABLE_MATRIX		/* Debug - wire XYZ to rgba */
+#undef DISABLE_NONLIN		/* Debug - wire rgbp to rgba */
+#undef DISABLE_TTD			/* Debug - disable ttd vector 'tilt' */
+#undef DISABLE_HHKR			/* Debug - disable Helmholtz-Kohlraush */
+
+#define NLDLIMIT 0.005		/* Non-linearity lower crossover to straight line */
+#define NLULIMIT 1e5		/* Non-linearity upper crossover to straight line */
+
+#ifndef DISABLE_SS
+#define SSLLIMIT 0.5		/* Overall ab scale lower limit */
+#define SSULIMIT 450.0      /* Overall ab scale upper limit */
+//#define SSLLIMIT 0.000001	/* ab scale lower limit */
+//#define SSULIMIT 100000.0	/* ab scale upper limit */
+#endif /* DISABLE_SS */
+
+#define DDLLIMIT 0.55		/* ab component -k3:k2 ratio limit (must be < 1.0) */
+#define DDULIMIT 0.9993		/* ab component k3:k1 ratio limit (must be < 1.0) */
+//#define DDLLIMIT 0.9999	/* ab component -k3:k2 ratio limit (must be < 1.0) */
+//#define DDULIMIT 0.9999	/* ab component k3:k1 ratio limit (must be < 1.0) */
+#define SSMINJ 0.005		/* Minumum ab scale k1 component J value */
+#define JLIMIT 0.005		/* J encoding cutover point straight line (0 - 1.0 range) */
+#define HKLIMIT 0.5			/* Maximum Helmholtz-Kohlraush lift */
+
+#ifdef TRACKMINMAX
+double minss = 0.0;
+double maxss = 0.0;
+#define noslots 103
+double slotsd[noslots];
+double slotsu[noslots];
+double minj = 1e38, maxj = -1e38;
+#endif /* TRACKMINMAX */
+
+#ifdef ENTRACE
+#define TRACE(xxxx) if (s->trace) printf xxxx ;
+#else
+#define TRACE(xxxx) 
+#endif
 
 /* Utility function */
 /* Return a viewing condition enumeration from the given Ambient and */
@@ -75,7 +173,7 @@ double Lv		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 
 static void cam_free(cam02 *s);
 static int set_view(struct _cam02 *s, ViewingCondition Ev, double Wxyz[3],
-                    double Yb, double La, double Lv, double Yf, double Fxyz[3],
+	                double Yb, double La, double Lv, double Yf, double Fxyz[3],
 					int hk);
 static int XYZ_to_cam(struct _cam02 *s, double *Jab, double *xyz);
 static int cam_to_XYZ(struct _cam02 *s, double *xyz, double *Jab);
@@ -83,7 +181,7 @@ static int cam_to_XYZ(struct _cam02 *s, double *xyz, double *Jab);
 /* Create a cam02 conversion object, with default viewing conditions */
 cam02 *new_cam02(void) {
 	cam02 *s;
-	double D50[3] = { 0.9642, 1.0000, 0.8249 };
+//	double D50[3] = { 0.9642, 1.0000, 0.8249 };
 
 	if ((s = (cam02 *)calloc(1, sizeof(cam02))) == NULL) {
 		fprintf(stderr,"cam02: malloc failed allocating object\n");
@@ -96,21 +194,48 @@ cam02 *new_cam02(void) {
 	s->XYZ_to_cam = XYZ_to_cam;
 	s->cam_to_XYZ = cam_to_XYZ;
 
+	/* Set default range handling limits */
+	s->nldlimit = NLDLIMIT;
+	s->nlulimit = NLULIMIT;
+	s->ddllimit = DDLLIMIT;
+	s->ddulimit = DDULIMIT;
+	s->ssminj = SSMINJ;
+	s->jlimit = JLIMIT;
+	s->hklimit = HKLIMIT;
+
 	/* Set a default viewing condition ?? */
 	/* set_view(s, vc_average, D50, 0.2, 33.0, 0.0, 0.0, D50, 0); */
+
+#ifdef TRACKMINMAX
+	{
+		int i;
+		for (i = 0; i < noslots; i++) {
+			slotsd[i] = 0.0;
+			slotsu[i] = 0.0;
+		}
+	}
+#endif /* TRACKMINMAX */
 
 	return s;
 }
 
 static void cam_free(cam02 *s) {
+
+#ifdef TRACKMINMAX
+	{
+		int i;
+		for (i = 0; i < noslots; i++) {
+			printf("Slot %d = %f, %f\n",i,slotsd[i], slotsu[i]);
+		}
+		printf("minj = %f, maxj = %f\n",minj,maxj);
+	
+		printf("minss = %f\n",minss);
+		printf("maxss = %f\n",maxss);
+	}
+#endif /* TRACKMINMAX */
+
 	if (s != NULL)
 		free(s);
-}
-
-/* A version of the pow() function that preserves the */
-/* sign of its first argument. */
-static double spow(double x, double y) {
-	return x < 0.0 ? -pow(-x,y) : pow(x,y);
 }
 
 static int set_view(
@@ -125,7 +250,7 @@ double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) *
 double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
 int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 ) {
-	double tt;
+	double tt, t1, t2, t3;
 
 	if (Ev == vc_none)		/* Compute enumerated viewing condition */
 		Ev = cam02_Ambient2VC(La, Lv);
@@ -166,6 +291,28 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 			break;
 	}
 
+	/* The rgba vectors */
+	s->Va[0] = 1.0;
+	s->Va[1] = -12.0/11.0;
+	s->Va[2] = 1.0/11.0;
+
+	s->Vb[0] = 1.0/9.0;
+	s->Vb[1] = 1.0/9.0;
+	s->Vb[2] = -2.0/9.0;
+
+	s->VttA[0] = 2.0;
+	s->VttA[1] = 1.0;
+	s->VttA[2] = 1.0/20.0;
+
+	s->Vttd[0] = 1.0;
+	s->Vttd[1] = 1.0;
+	s->Vttd[2] = 21.0/20.0;
+
+	/* Vttd in terms of the VttA, Va and Vb vectors */
+	s->dcomp[0] = 1.0;
+	s->dcomp[1] = -11.0/23.0;
+	s->dcomp[2] = -108.0/23.0;
+
 	/* Compute values that only change with viewing parameters */
 
 	/* Figure out the Flare contribution to the flareless XYZ input */
@@ -184,7 +331,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	/* Sharpened cone response white values */
 	s->rgbW[0] =  0.7328 * s->Wxyz[0] + 0.4296 * s->Wxyz[1] - 0.1624 * s->Wxyz[2];
 	s->rgbW[1] = -0.7036 * s->Wxyz[0] + 1.6975 * s->Wxyz[1] + 0.0061 * s->Wxyz[2];
-	s->rgbW[2] =  0.0030 * s->Wxyz[0] + 0.0136 * s->Wxyz[1] + 0.9834 * s->Wxyz[2];
+	s->rgbW[2] =  0.0000 * s->Wxyz[0] + 0.0000 * s->Wxyz[1] + 1.0000 * s->Wxyz[2];
 
 	/* Degree of chromatic adaptation */
 	s->D = s->F * (1.0 - exp((-s->La - 42.0)/92.0)/3.6);
@@ -200,18 +347,18 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->rgbcW[2] = s->Drgb[2] * s->rgbW[2];
 	
 	/* Transform from spectrally sharpened, to Hunt-Pointer_Estevez cone space */
-	s->rgbpW[0] =  0.7409790970135310 * s->rgbcW[0]
-	            +  0.2180251556757356 * s->rgbcW[1]
-	            +  0.0410057473107336 * s->rgbcW[2];
-	s->rgbpW[1] =  0.2853532916858800 * s->rgbcW[0]
-	            +  0.6242015741188160 * s->rgbcW[1]
+	s->rgbpW[0] =  0.7409744840453773 * s->rgbcW[0]
+	            +  0.2180245944753982 * s->rgbcW[1]
+	            +  0.0410009214792244 * s->rgbcW[2];
+	s->rgbpW[1] =  0.2853532916858801 * s->rgbcW[0]
+	            +  0.6242015741188157 * s->rgbcW[1]
 	            +  0.0904451341953042 * s->rgbcW[2];
 	s->rgbpW[2] = -0.0096276087384294 * s->rgbcW[0]
 	            -  0.0056980312161134 * s->rgbcW[1]
 	            +  1.0153256399545427 * s->rgbcW[2];
 
 	/* Background induction factor */
-    s->n = s->Yb/ s->Wxyz[1];
+	s->n = s->Yb/ s->Wxyz[1];
 	s->nn = pow(1.64 - pow(0.29, s->n), 0.73);	/* Pre computed value */
 
 	/* Lightness contrast factor ?? */
@@ -232,16 +379,39 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 
 	/* Post-adapted cone response of white */
 	tt = pow(s->Fl * s->rgbpW[0], 0.42);
-	s->rgbaW[0] = (400.1 * tt + 2.713) / (tt + 27.13);
+	s->rgbaW[0] = 400.0 * tt / (tt + 27.13) + 0.1;
 	tt = pow(s->Fl * s->rgbpW[1], 0.42);
-	s->rgbaW[1] = (400.1 * tt + 2.713) / (tt + 27.13);
+	s->rgbaW[1] = 400.0 * tt / (tt + 27.13) + 0.1;
 	tt = pow(s->Fl * s->rgbpW[2], 0.42);
-	s->rgbaW[2] = (400.1 * tt + 2.713) / (tt + 27.13);
+	s->rgbaW[2] = 400.0 * tt / (tt + 27.13) + 0.1;
 
 	/* Achromatic response of white */
-    s->Aw = (2.0 * s->rgbaW[0] + s->rgbaW[1] + (1.0/20.0) * s->rgbaW[2] - 0.305) * s->Nbb;
+	s->Aw = (s->VttA[0] * s->rgbaW[0]
+	      +  s->VttA[1] * s->rgbaW[1]
+	      +  s->VttA[2] * s->rgbaW[2] - 0.305) * s->Nbb;
 
-#ifdef DIAG
+	/* Non-linearity lower crossover value */
+	tt = pow(s->Fl * s->nldlimit, 0.42);
+	s->nldxval = 400.0 * tt / (tt + 27.13) + 0.1;
+
+	/* Non-linearity lower crossover slope */
+	s->nldxslope = (s->nldxval-0.1)/s->nldlimit;
+//printf("~1 nldxval = %f, nlxdslope = %f\n",s->nldxval,s->nldxslope);
+
+	/* Non-linearity upper crossover value */
+	tt = pow(s->Fl * s->nlulimit, 0.42);
+	s->nlxval = 400.0 * tt / (tt + 27.13) + 0.1;
+
+	/* Non-linearity upper crossover slope */
+	t1 = s->Fl * s->nlulimit;
+	t2 = 0.42 * s->Fl * 400.0;
+	t3 = pow(t1, 0.42) + 27.13;
+	s->nlxslope = t2/(pow(t1,0.58) * t3) - t2/(pow(t1,0.16) * t3 * t3);
+
+	/* Limited A value at J = JLIMIT */
+	s->lA = pow(s->jlimit, 1.0/(s->C * s->z)) * s->Aw;
+
+#ifdef DIAG1
 	printf("Scene parameters:\n");
 	printf("Viewing condition Ev = %d\n",s->Ev);
 	printf("Ref white Wxyz = %f %f %f\n", s->Wxyz[0], s->Wxyz[1], s->Wxyz[2]);
@@ -262,6 +432,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	printf("Chromatically transformed white rgbcW = %f %f %f\n", s->rgbcW[0], s->rgbcW[1], s->rgbcW[2]);
 	printf("Hunter-P-E cone response white rgbpW = %f %f %f\n", s->rgbpW[0], s->rgbpW[1], s->rgbpW[2]);
 	printf("Background induction factor n = %f\n", s->n);
+	printf("                            nn = %f\n", s->nn);
 	printf("Lightness contrast factor Fl = %f\n", s->Fl);
 	printf("Background brightness induction factor Nbb = %f\n", s->Nbb);
 	printf("Chromatic brightness induction factor Ncb = %f\n", s->Ncb);
@@ -280,18 +451,28 @@ double Jab[3],
 double XYZ[3]
 ) {
 	int i;
-	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbaW[3], rgbc[3], rgbcW[3];
-	double a, b, nab, J, C, h, e, A, ss;
-	double ttd, ttA, ttS, tt;
+	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbc[3];
+	double a, b, ja, jb, J, JJ, C, h, e, A, ssk, ss;
+	double ttA, rS, cJ, mJ, tt;
+	double k1, k2, k3;
+	int clip = 0;			// ~~999
 
-//printf("\n~1 Forward conversion:\n");
-//printf("~1 XYZ %f %f %f\n",XYZ[0], XYZ[1], XYZ[2]);
+#ifdef DIAG2		/* Incase in == out */
+	double XYZi[3];
+
+	XYZi[0] = XYZ[0];
+	XYZi[1] = XYZ[1];
+	XYZi[2] = XYZ[2];
+#endif
+
+	TRACE(("\nForward conversion:\n"))
+	TRACE(("XYZ %f %f %f\n",XYZ[0], XYZ[1], XYZ[2]))
 
 #ifdef DISABLE_MATRIX
 
-	rgba[0]= XYZ[0];
-	rgba[1]= XYZ[1];
-	rgba[2]= XYZ[2];
+	rgba[0] = XYZ[0];
+	rgba[1] = XYZ[1];
+	rgba[2] = XYZ[2];
 
 #else /* !DISABLE_MATRIX */
 
@@ -303,7 +484,7 @@ double XYZ[3]
 	/* Spectrally sharpened cone responses */
 	rgb[0] =  0.7328 * xyz[0] + 0.4296 * xyz[1] - 0.1624 * xyz[2];
 	rgb[1] = -0.7036 * xyz[0] + 1.6975 * xyz[1] + 0.0061 * xyz[2];
-	rgb[2] =  0.0030 * xyz[0] + 0.0136 * xyz[1] + 0.9834 * xyz[2];
+	rgb[2] =  0.0000 * xyz[0] + 0.0000 * xyz[1] + 1.0000 * xyz[2];
 	
 	/* Chromaticaly transformed sample value */
 	rgbc[0] = s->Drgb[0] * rgb[0];
@@ -311,146 +492,235 @@ double XYZ[3]
 	rgbc[2] = s->Drgb[2] * rgb[2];
 	
 	/* Transform from spectrally sharpened, to Hunt-Pointer_Estevez cone space */
-	rgbp[0] =  0.7409790970135310 * rgbc[0]
-	        +  0.2180251556757356 * rgbc[1]
-	        +  0.0410057473107336 * rgbc[2];
-	rgbp[1] =  0.2853532916858800 * rgbc[0]
-	        +  0.6242015741188160 * rgbc[1]
+	rgbp[0] =  0.7409744840453773 * rgbc[0]
+	        +  0.2180245944753982 * rgbc[1]
+	        +  0.0410009214792244 * rgbc[2];
+	rgbp[1] =  0.2853532916858801 * rgbc[0]
+	        +  0.6242015741188157 * rgbc[1]
 	        +  0.0904451341953042 * rgbc[2];
 	rgbp[2] = -0.0096276087384294 * rgbc[0]
 	        -  0.0056980312161134 * rgbc[1]
 	        +  1.0153256399545427 * rgbc[2];
 
+	TRACE(("rgbp = %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]))
+#ifdef DISABLE_NONLIN
+	rgba[0] = 400.0/27.13 * rgbp[0];
+	rgba[1] = 400.0/27.13 * rgbp[1];
+	rgba[2] = 400.0/27.13 * rgbp[2];
+#else	/* !DISABLE_NONLIN */
 	/* Post-adapted cone response of sample. */
 	/* rgba[] has a minimum value of 0.1 for XYZ[] = 0 and no flare. */
-	/* We add a symetric negative compression region, plus linear segments at */
-	/* the ends of this conversion to allow numerical handling of a */
+	/* We add a negative compression region, plus a linear segment at */
+	/* the end of the +ve conversion to allow numerical handling of a */
 	/* very wide range of values. */
-	for (i = 0; i < 3; i++) {
-		if (rgbp[i] < 0.0) {
-			tt = pow(s->Fl * -rgbp[i], 0.42);
-			if (tt < 10756.69231)
-				rgba[i] = (2.713 - 397.387 * tt) / (tt + 27.13);
-			else 
-				rgba[i] = (2.713 - tt) / 27.13;
 
+	for (i = 0; i < 3; i++) {
+		if (rgbp[i] < s->nldlimit) {
+			rgba[i] = 0.1 + s->nldxslope * rgbp[i];
 		} else {
-			tt = pow(s->Fl * rgbp[i], 0.42);
-			if (tt < 10824.87)
-				rgba[i] = (400.1 * tt + 2.713) / (tt + 27.13);
-			else
-				rgba[i] = (tt + 2.713) / 27.13;
+			if (rgbp[i] <= s->nlulimit) {
+				tt = pow(s->Fl * rgbp[i], 0.42);
+				rgba[i] = 400.0 * tt / (tt + 27.13) + 0.1;
+			} else {
+				rgba[i] = s->nlxval + s->nlxslope * (rgbp[i] - s->nlulimit);
+			}
 		}
 	}
+#endif	/* !DISABLE_NONLIN */
 
 #endif /* !DISABLE_MATRIX */
-
-	/* Deal with the core rgb to A, S & h conversion: */
-
-//printf("~1 rgba = %f %f %f\n", rgba[0], rgba[1], rgba[2]);
 
 	/* Note that the minimum values of rgba[] for XYZ = 0 is 0.1, */
 	/* hence magic 0.305 below comes from the following weighting of rgba[], */
 	/* to base A at 0.0 */
-	ttA = 2.0 * rgba[0] + rgba[1] + (1.0/20.0) * rgba[2];
+	/* Deal with the core rgb to A, S & h conversion: */
 
-	/* Avoid the inverse blowing up due to ttA == 0 */
-	/* Note that the three threshold values (Fwd ttA, Fwd ttd and Bwd ttA) */
-	/* have bee carefuly juggled to minimise errors in typical situations. */
-	if (fabs(ttA) < 0.00002) {
-		double shift = ttA < 0.0 ? -0.00002 : 0.00002;
-//printf("~1 ttA %f being limited to %f\n",ttA,shift);
-		rgba[0] += (shift-ttA) * (20.0 * 40.0)/(40.0 * 40.0 + 20.0 * 20.0 + 1.0);
-		rgba[1] += (shift-ttA) * (20.0 * 20.0)/(40.0 * 40.0 + 20.0 * 20.0 + 1.0);
-		rgba[2] += (shift-ttA) * (20.0 * 1.0)/(40.0 * 40.0 + 20.0 * 20.0 + 1.0);
-		ttA = 2.0 * rgba[0] + rgba[1] + (1.0/20.0) * rgba[2];
-//printf("~1 After adjustment, ttA = %e\n",ttA);
-	}
+	TRACE(("rgba = %f %f %f\n", rgba[0], rgba[1], rgba[2]))
 
-	/* Preliminary Saturation denominator */
-	ttd = rgba[0] + rgba[1] + (21.0/20.0) * rgba[2];
-	
-	/* Avoid Preliminary Saturation denominator blowing things up */
-	if (fabs(ttd) < 0.00000001) {
-		double shift = ttd < 0.0 ? -0.00000001 : 0.00000001;
-//printf("~1 ttd %f being limited to %f\n",ttd,shift);
-		rgba[0] += shift * 20.0/61;
-		rgba[1] += shift * 20.0/61;
-		rgba[2] += shift * 21.0/40;
-		ttd = rgba[0] + rgba[1] + (21.0/20.0) * rgba[2];
-		ttA = 2.0 * rgba[0] + rgba[1] + (1.0/20.0) * rgba[2];
-//printf("~1 After adjustment, ttA = %e, ttd = %e\n",ttA,ttd);
-	}
-
-	/* Preliminary red-green & yellow-blue opponent dimensions */
-	a     = rgba[0] - 12.0 * rgba[1]/11.0 + rgba[2]/11.0;
-    b     = (1.0/9.0) * (rgba[0] + rgba[1] - 2.0 * rgba[2]);
-	nab   = sqrt(a * a + b * b);		/* Normalised a, b */
-
-	/* Deal with sign flip in ttd */
-	if (ttd < 0.0) {
-//printf("~1 Experimental ttd sign flip triggered\n");
-		ttd = -ttd;
-		a = -a;
-		b = -b;
-//printf("~1 After sign flip: a = %f, b = %f, ttd = %f\n",a,b,ttd);
-	}
-
-	/* Preliminary Saturation - always +ve */
-	ttS = nab/ttd;
-
-	/* Final hue angle */
-    h = (180.0/CAM02_PI) * atan2(b,a);
-	h = (h < 0.0) ? h + 360.0 : h;
-
-//printf("~1 ttd = %f, ttA = %f, ttS = %f, h = %f\n",ttd,ttA,ttS,h);
-
-	/* Finish of conversion from core values to Jab: */
-
-	/* Eccentricity factor */
-	e = (cos(h * CAM02_PI/180.0 + 2.0) + 3.8);
+	/* Preliminary Acromatic response */
+	ttA = s->VttA[0] * rgba[0] + s->VttA[1] * rgba[1] + s->VttA[2] * rgba[2];
 
 	/* Achromatic response */
 	A = (ttA - 0.305) * s->Nbb;
 
-	/* Lightness */
-	/* Derived directly from Acromatic response. */
-	J = spow(A/s->Aw, s->C * s->z);		/* J/100  - keep Sign */
+	/* Preliminary red-green & yellow-blue opponent dimensions */
+	/* a, b & ttd form an (almost) orthogonal coordinate set. */
+	/* ttA is in a different direction */
+	a = s->Va[0] * rgba[0] + s->Va[1] * rgba[1] + s->Va[2] * rgba[2];
+	b = s->Vb[0] * rgba[0] + s->Vb[1] * rgba[1] + s->Vb[2] * rgba[2];
 
-	/* Preliminary saturation always +ve */
-	ss = (12500.0/13.0 * s->Nc * s->Ncb * e) * ttS;
+	/* constrained raw Saturation to stop divide by zero */
+	rS = sqrt(a * a + b * b);
+	if (rS < DBL_EPSILON)
+		rS = DBL_EPSILON;
 
-	/* Croma - always +ve */
-	tt = fabs(J);
-	C = pow(ss, 0.9) * spow(tt, 0.5) * s->nn;
-	
-//printf("~1 ss = %f, A = %f, J = %f, C = %f\n",ss,A,J,C);
+	TRACE(("ttA = %f, a = %f, b = %f, rS = %f, A = %f\n", ttA,a,b,rS,A))
 
- 	/* Helmholtz-Kohlraush effect */
-	if (s->hk) {
-		double kk = C/300.0 * sin(CAM02_PI * fabs(0.5 * (h - 90.0))/180.0);
-		if (kk > 0.9)		/* Limit kk to a reasonable range */
-			kk = 0.9;
-		J = J + (1.0 - J) * kk;
+	/* Lightness, Derived directly from Acromatic response. */
+	/* Use straight line segment when A < 0.1, */
+	if (A >= s->lA) {
+		J = pow(A/s->Aw, s->C * s->z);		/* J/100  - keep Sign */
+	} else {
+		J = s->jlimit/s->lA * A;				/* Straight line */
+		TRACE(("limited Acromatic to straight line\n"))
 	}
 
-	J *= 100.0;		/* Scale J */
+	/* Constraied (+ve) J */
+	if (A > 0.0)
+		cJ = pow(A/s->Aw, s->C * s->z);
+	else
+		cJ = 0.0;
+
+	mJ = cJ;
+	if (mJ < s->ssminj)
+		mJ = s->ssminj;
+
+	TRACE(("J = %f, cJ = %f, mJ = \n",J,cJ,mJ))
+
+	/* Final hue angle */
+	h = (180.0/DBL_PI) * atan2(b,a);
+	h = (h < 0.0) ? h + 360.0 : h;
+
+	/* Eccentricity factor and saturation constant */
+	e = (cos(h * DBL_PI/180.0 + 2.0) + 3.8);
+	ssk = (12500.0/13.0 * s->Nc * s->Ncb * e);
+
+	/* ab scale components */
+	k1 = pow(s->nn, 1.0/0.9) * ssk * pow(mJ, 1.0/1.8)/pow(rS, 1.0/9.0);
+	k2 = pow(cJ, 1.0/(s->C * s->z)) * s->Aw/s->Nbb + 0.305;
+	k3 = s->dcomp[1] * a + s->dcomp[2] * b;
+
+	TRACE(("Raw k1 = %f, k2 = %f, k3 = %f, raw ss = %f\n",k1, k2, k3, pow(k1/(k2 + k3), 0.9)))
+
+#ifdef TRACKMINMAX
+	{
+		int sno;
+		double lrat, urat;
+
+		ss = pow(k1/(k2 + k3), 0.9);
+
+		lrat = -k3/k2;
+		urat =  k3 * pow(ss, 10.0/9.0) / k1; 
+		if (lrat > minss)
+			minss = lrat;
+		if (urat > maxss)
+			maxss = urat;
+
+		/* Record distribution of ss min/max vs. J for */
+		/* regions outside a,b == 0 */
+
+		sno = (int)(J * 100.0 + 0.5);
+		if (sno < 0) {
+			sno = 101;
+			if (J < minj)
+				minj = J;
+		} else if (sno > 100) {
+			sno = 102;
+			if (J > maxj)
+				maxj = J;
+		}
+		if (slotsd[sno] < lrat)
+			slotsd[sno] = lrat;
+		if (slotsu[sno] < urat)
+			slotsu[sno] = urat;
+	}
+#endif /* TRACKMINMAX */
+
+#ifdef DISABLE_TTD 
+	ss = pow((k1/k2), 0.9);
+#else
+	/* Limit ratio of k3 to k2 to stop zero or -ve ss */
+	if (-k3 > (k2 * s->ddllimit)) {
+		k3 = -k2 * s->ddllimit;
+		TRACE(("k3 limited to %f due to k3:k2 ratio, ss = %f\n",k3,pow(k1/(k2 + k3), 0.9)))
+		clip = 1;
+	}
+
+	/* Compute preliminary ab scale factor */
+	ss = pow(k1/(k2 + k3), 0.9);
+
+	/* See if there is going to be a problem in bwd */
+	if ((ss * k3) > (s->ddulimit * k1/pow(ss, 1.0/9.0))) {
+		/* Adjust ss to allow for bwd limited computation */
+		ss = pow(k1 * (1.0 - s->ddulimit)/k2, 0.9);
+		TRACE(("ss set to %f to allow for bk3:bk1 bwd limit\n",ss))
+		clip = 1;
+	}
+#endif
+
+#ifndef DISABLE_SS
+	if (ss < SSLLIMIT)
+		ss = SSLLIMIT;
+	else if (ss > SSULIMIT)
+		ss = SSULIMIT;
+#endif /* DISABLE_SS */
+
+#ifdef NEVER
+// -------------------------------------------
+	/* Show ss components ~~999 */
+	if (s->retss) {
+		Jab[0] = 1.0;
+		if (clip)
+			Jab[0] = 0.0;
+		Jab[1] = (log10(ss) - +1.5)/(2.0 - +1.5);
+		Jab[2] = (log10(ss) - +1.0)/(2.5 - +1.0);
+
+		for (i = 0; i < 3; i++) {
+			if (Jab[i] < 0.0)
+				Jab[i] = 0.0;
+			else if (Jab[i] > 1.0)
+				Jab[i] = 1.0;
+		}
+		return 0;
+	}
+// -------------------------------------------
+#endif /* NEVER */
+
+	ja = a * ss;
+	jb = b * ss;
+
+	/* Chroma - always +ve, used just for HHKR */
+	C = sqrt(ja * ja + jb * jb);
+	
+	TRACE(("ss = %f, A = %f, J = %f, C = %f, h = %f\n",ss,A,J,C,h))
+
+	JJ = J;
+#ifndef DISABLE_HHKR
+ 	/* Helmholtz-Kohlraush effect */
+	if (s->hk && J < 1.0) {
+		double kk = C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
+		if (kk > s->hklimit)		/* Limit kk to a reasonable range */
+			kk = s->hklimit;
+		JJ = J + (1.0 - (J > 0.0 ? J : 0.0)) * kk;
+		TRACE(("JJ = %f from J = %f, kk = %f\n",JJ,J,kk))
+	}
+#endif /* DISABLE_HHKR */
+
+	JJ *= 100.0;	/* Scale J */
 
 	/* Compute Jab value */
-	Jab[0] = J;
-	if (nab > 1e-10) {
-		Jab[1] = C * a/nab;
-		Jab[2] = C * b/nab;
-	} else {
-		Jab[1] = 0.0;
-		Jab[2] = 0.0;
+	Jab[0] = JJ;
+	Jab[1] = ja;
+	Jab[2] = jb;
+
+#ifdef NEVER	/* Brightness/Colorfulness */
+	{
+		double M, Q;
+
+		Q = (4.0/s->C) * sqrt(JJ/100.0) * (s->Aw + 4.0) * pow(s->Fl, 0.25);
+		M = C * pow(s->Fl, 0.25);
+
+		printf("Lightness = %f, Chroma = %f\n",J,C);
+		printf("Brightness = %f, Colorfulness = %f\n",M,Q);
 	}
+#endif /* NEVER */
 
-//printf("~1 Jab %f %f %f\n",Jab[0], Jab[1], Jab[2]);
+	TRACE(("Jab %f %f %f\n",Jab[0], Jab[1], Jab[2]))
+	TRACE(("\n"))
 
-#ifdef DIAG
+#ifdef DIAG2
 	printf("Processing:\n");
-	printf("XYZ = %f %f %f\n", XYZ[0], XYZ[1], XYZ[2]);
+	printf("XYZ = %f %f %f\n", XYZi[0], XYZi[1], XYZi[2]);
 	printf("Including flare XYZ = %f %f %f\n", xyz[0], xyz[1], xyz[2]);
 	printf("Sharpened cone sample rgb = %f %f %f\n", rgb[0], rgb[1], rgb[2]);
 	printf("Chromatically transformed sample value rgbc = %f %f %f\n", rgbc[0], rgbc[1], rgbc[2]);
@@ -460,7 +730,7 @@ double XYZ[3]
 	printf("Hue angle h = %f\n", h);
 	printf("Eccentricity factor e = %f\n", e);
 	printf("Achromatic response A = %f\n", A);
-	printf("Lightness J = %f\n", J);
+	printf("Lightness J = %f, H.K. Lightness = %f\n", J * 100, JJ);
 	printf("Prelim Saturation ss = %f\n", ss);
 	printf("Chroma C = %f\n", C);
 	printf("Jab = %f %f %f\n", Jab[0], Jab[1], Jab[2]);
@@ -474,120 +744,136 @@ struct _cam02 *s,
 double XYZ[3],
 double Jab[3]
 ) {
-	int i;
-	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbaW[3], rgbc[3], rgbcW[3];
-	double ja, jb, aa, ab, a, b, J, C, h, e, A, ss;
-	double tt, ttA, ttS;
+	int i, j;
+	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbc[3];
+	double a, b, ja, jb, J, JJ, C, cC, h, e, A, ssk, ss;
+	double tt, cJ, mJ, ttA, cttA, ttd, issp;
+	double k1, k2, k3;
 
-//printf("\n~1 Reverse conversion\n");
-//printf("~1 Jab %f %f %f\n",Jab[0], Jab[1], Jab[2]);
+#ifdef DIAG2		/* Incase in == out */
+	double Jabi[3];
 
-	J = Jab[0] * 0.01;	/* J/100 */
+	Jabi[0] = Jab[0];
+	Jabi[1] = Jab[1];
+	Jabi[2] = Jab[2];
+
+#endif
+
+	TRACE(("\nReverse conversion:\n"))
+	TRACE(("Jab %f %f %f\n",Jab[0], Jab[1], Jab[2]))
+
+	JJ = Jab[0] * 0.01;	/* J/100 */
 	ja = Jab[1];
 	jb = Jab[2];
 
 	/* Convert Jab to core A, S & h values: */
 
 	/* Compute hue angle */
-    h = (180.0/CAM02_PI) * atan2(jb, ja);
+	h = (180.0/DBL_PI) * atan2(jb, ja);
 	h = (h < 0.0) ? h + 360.0 : h;
 	
 	/* Compute chroma value */
-	C = sqrt(ja * ja + jb * jb);		/* Must be Always +ve */
+	C = sqrt(ja * ja + jb * jb);	/* Must be Always +ve, Can be NZ even if J == 0 */
+	cC = C;
+	if (cC < DBL_EPSILON)			/* Constrained value to avoid divide by zero */
+		cC = DBL_EPSILON;
 
- 	/* Helmholtz-Kohlraush effect */
-	if (s->hk) {
-		double kk = C/300.0 * sin(CAM02_PI * fabs(0.5 * (h - 90.0))/180.0);
-		if (kk > 0.9)		/* Limit kk to a reasonable range */
-			kk = 0.9;
-		J = (J - kk)/(1.0 - kk);
+	J = JJ;
+#ifndef DISABLE_HHKR
+ 	/* Undo Helmholtz-Kohlraush effect */
+	if (s->hk && J < 1.0) {
+		double kk = C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
+		if (kk > s->hklimit)		/* Limit kk to a reasonable range */
+			kk = s->hklimit;
+		J = (JJ - kk)/(1.0 - kk);
+		if (J < 0.0)
+			J = JJ - kk;
+		TRACE(("J = %f from JJ = %f, kk = %f\n",J,JJ,kk))
 	}
-
-	/* Eccentricity factor */
-	e = (cos(h * CAM02_PI/180.0 + 2.0) + 3.8);
+#endif /* DISABLE_HHKR */
 
 	/* Achromatic response */
-	A = spow(J, 1.0/(s->C * s->z)) * s->Aw;
-
-	/* Preliminary Saturation - always +ve */
-	tt = fabs(J);
-	ss = pow(C/(pow(tt, 0.5) * s->nn), 1.0/0.9);	/* keep +ve */
-
-//printf("~1 ss = %f, A = %f, J = %f, C = %f\n",ss,A,J,C);
-
-	ttS = ss/(12500.0/13.0 * e * s->Nc * s->Ncb);	/* Simplified variable, +ve */
-    ttA = (A/s->Nbb)+0.305;							/* Simplified variable, +ve */
-
-//printf("~1 ttA = %f, ttS = %f, h = %f\n",ttA,ttS,h);
-
-	/* Invert A, S & h into rgb values */
-
-	/* Attempt to avoid loosing saturation/hue information */
-	if (fabs(ttA) < 0.00002) {
-//printf("~1 ttA being limited to +-0.00002\n");
-		if (ttA < 0.0)
-			ttA = -0.00002;
-		else
-			ttA = 0.00002;
-	}
-	
-	/* Solve for preliminary a & b, taking care of numerical problems */
-	aa = fabs(ja);
-	ab = fabs(jb);
-
-	if (aa < 1e-10 && ab < 1e-10) {
-		double sign = ttA < 0.0 ? -1.0 : 1.0;
-		a = sign * 1e-8 * cos(CAM02_PI * h/180.0);
-		b = sign * 1e-8 * sin(CAM02_PI * h/180.0);
-//printf("~1 ttS nearly zero, preserve hue angle\n");
-
-	} else if (aa > ab) {
-		double ttanh = jb/ja;
-		double sign = (h > 90.0 && h <= 270.0) ? -1.0 : 1.0;
-		double tsden;		/* Solution denominator */
-
-		tsden = (108.0/23.0 * ttanh + 11.0/23.0) * ttS + sign * sqrt(ttanh * ttanh + 1.0);
-//printf("~1 aa > ab, ttanh = %f, signA = %f, tsden = %f\n",ttanh, sign, tsden);
-
-#ifdef NEVER
-		if (fabs(tsden) < 1e-10)  {		/* Happens if ttA == 0 */
-			printf("~1 #### Warning tsden is %e, composed of %f + %f\n",tsden,(108.0/23.0 * ttanh + 11.0/23.0) * ttS,sign * sqrt(ttanh * ttanh + 1.0));
-		}
-#endif
-
-		a = (ttA * ttS) / tsden;
-		b = a * ttanh;
-
-	} else {	/* ab > aa */
-		double itanh = ja/jb;
-		double sign = (h > 180.0 && h <= 360.0) ? -1.0 : 1.0;
-		double isden;		/* Solution denominator */
-
-		isden = (108.0/23.0 + 11.0/23.0 * itanh) * ttS + sign * sqrt(itanh * itanh + 1.0);
-//printf("~1 ab > aa, itanh = %f, signB = %f, isden = %f\n",itanh,sign, isden);
-
-#ifdef NEVER
-		if (fabs(isden) < 1e-10)		/* Happens if ttA == 0 */
-			printf("~1 #### Warning isden is %e, composed of %f + %f\n",isden,(108.0/23.0 + 11.0/23.0 * itanh) * ttS,sign * sqrt(itanh * itanh + 1.0));
-#endif
-
-		b = (ttA * ttS) / isden;
-		a = b * itanh;
+	if (J >= s->jlimit) {
+		A = pow(J, 1.0/(s->C * s->z)) * s->Aw;
+	} else {	/* In the straight line segment */
+		A = s->lA/s->jlimit * J;
+		TRACE(("Undo Acromatic straight line\n"))
 	}
 
-	/* Post-adapted cone response of sample */
-    rgba[0] = (20.0/61.0) * ttA
+	/* Preliminary Acromatic response +ve */ 
+	ttA = (A/s->Nbb)+0.305;
+
+	if (A > 0.0) {
+		cJ = pow(A/s->Aw, s->C * s->z);
+		cttA = ttA;
+	} else {
+		cJ = 0.0;
+		cttA = 0.305;
+	}
+	TRACE(("C = %f, A = %f from J = %f, cJ = %f\n",C, A,J,cJ))
+
+	mJ = cJ;
+	if (mJ < s->ssminj)
+		mJ = s->ssminj;
+
+	/* Eccentricity factor and saturation constant */
+	e = (cos(h * DBL_PI/180.0 + 2.0) + 3.8);
+	ssk = (12500.0/13.0 * s->Nc * s->Ncb * e);		/* Saturation constant */
+
+	/* ab scale components */
+	k1 = pow(s->nn, 1.0/0.9) * ssk * pow(mJ, 1.0/1.8)/pow(C, 1.0/9.0);
+	k2 = pow(cJ, 1.0/(s->C * s->z)) * s->Aw/s->Nbb + 0.305;
+	k3 = s->dcomp[1] * ja + s->dcomp[2] * jb;
+
+	TRACE(("Raw k1 = %f, k2 = %f, k3 = %f, raw ss = %f\n",k1, k2, k3, (k1 - k3)/k2))
+
+#ifdef DISABLE_TTD 
+	ss = k1/k2;
+#else
+	/* Limit ratio of k3 to k1 to stop zero or -ve ss */
+	if (k3 > (k1 * s->ddulimit)) {
+		k3 = k1 * s->ddulimit;
+		TRACE(("k3 limited to %f due to k3:k1 ratio, ss = %f\n",k3,(k1 - k3)/k2))
+	}
+
+	/* Compute preliminary ab scale factor */
+	ss = (k1 - k3)/k2;
+
+	/* See if there is going to be a problem in fwd */
+	if (-k3 > (ss * k2 * s->ddllimit)) {
+		/* Adjust ss to allow for fwd limitd computation */
+		ss = k1/(k2 * (1.0 - s->ddllimit));
+		TRACE(("ss set to %f to allow for fk3:fk2 fwd limit\n",ss))
+	}
+#endif
+
+#ifndef DISABLE_SS
+	if (ss < SSLLIMIT)
+		ss = SSLLIMIT;
+	else if (ss > SSULIMIT)
+		ss = SSULIMIT;
+#endif /* DISABLE_SS */
+
+	/* Unscale a and b */
+	a = ja / ss;
+	b = jb / ss;
+
+	TRACE(("ss = %f, ttA = %f, a = %f, b = %f\n",ss,ttA,a,b))
+
+	/* Solve for post-adapted cone response of sample */
+	/* using inverse matrix on ttA, a, b */
+	rgba[0] = (20.0/61.0) * ttA
 	        + ((41.0 * 11.0)/(61.0 * 23.0)) * a
 	        + ((288.0 * 1.0)/(61.0 * 23.0)) * b;
-    rgba[1] = (20.0/61.0) * ttA
+	rgba[1] = (20.0/61.0) * ttA
 	        - ((81.0 * 11.0)/(61.0 * 23.0)) * a
 	        - ((261.0 * 1.0)/(61.0 * 23.0)) * b;
-    rgba[2] = (20.0/61.0) * ttA
+	rgba[2] = (20.0/61.0) * ttA
 	        - ((20.0 * 11.0)/(61.0 * 23.0)) * a
 	        - ((20.0 * 315.0)/(61.0 * 23.0)) * b;
 
-//printf("~1 rgba %f %f %f\n",rgba[0], rgba[1], rgba[2]);
-
+	TRACE(("rgba %f %f %f\n",rgba[0], rgba[1], rgba[2]))
+	
 #ifdef DISABLE_MATRIX
 
 	XYZ[0] = rgba[0];
@@ -596,29 +882,38 @@ double Jab[3]
 
 #else /* !DISABLE_MATRIX */
 
+#ifdef DISABLE_NONLIN
+	rgbp[0] = 27.13/400.0 * rgba[0];
+	rgbp[1] = 27.13/400.0 * rgba[1];
+	rgbp[2] = 27.13/400.0 * rgba[2];
+#else	/* !DISABLE_NONLIN */
+
 	/* Hunt-Pointer_Estevez cone space */
-	/* (with linear segments at the ends) */
-	tt = 1.0/s->Fl;
+	/* (with linear segment at the +ve end) */
 	for (i = 0; i < 3; i++) {
-		if (rgba[i] < 0.1) {
-			double ta = rgba[i] > -396.387 ? rgba[i] : -396.387;
-			rgbp[i] = -tt * pow((2.713 - 27.13 * rgba[i] )/(397.387 + ta), 1.0/0.42);
+		if (rgba[i] < s->nldxval) {
+			rgbp[i] = (rgba[i] - 0.1)/s->nldxslope;
+		} else if (rgba[i] <= s->nlxval) {
+			tt = rgba[i] - 0.1;
+			rgbp[i] = pow((27.13 * tt)/(400.0 - tt), 1.0/0.42)/s->Fl;
 		} else {
-			double ta = rgba[i] < 399.1 ? rgba[i] : 399.1;
-			rgbp[i] =  tt * pow((27.13 * rgba[i] -2.713)/(400.1 - ta), 1.0/0.42);
+			rgbp[i] = s->nlulimit + (rgba[i] - s->nlxval)/s->nlxslope;
 		}
 	}
+#endif /* !DISABLE_NONLIN */
+
+	TRACE(("rgbp %f %f %f\n",rgbp[0], rgbp[1], rgbp[2]))
 
 	/* Chromaticaly transformed sample value */
-	rgbc[0] =  1.5591523979049677 * rgbp[0]
-	        -  0.5447226796590880 * rgbp[1]
-	        -  0.0144453097698588 * rgbp[2];
-	rgbc[1] = -0.7143267176368630 * rgbp[0]
-	        +  1.8503099728895096 * rgbp[1]
-	        -  0.1359761119854705 * rgbp[2];
-	rgbc[2] =  0.0107755117023383 * rgbp[0]
-	        +  0.0052187662221759 * rgbp[1]
-	        +  0.9840056143203700 * rgbp[2];
+	rgbc[0] =  1.5591630679450694 * rgbp[0]
+	        -  0.5447249392120921 * rgbp[1]
+	        -  0.0144381287329769 * rgbp[2];
+	rgbc[1] = -0.7143316061228973 * rgbp[0]
+	        +  1.8503110081052354 * rgbp[1]
+	        -  0.1359794019823380 * rgbp[2];
+	rgbc[2] =  0.0107755854444190 * rgbp[0]
+	        +  0.0052187506061015 * rgbp[1]
+	        +  0.9840056639494795 * rgbp[2];
 
 	/* Spectrally sharpened cone responses */
 	rgb[0]  =  rgbc[0]/s->Drgb[0];
@@ -626,15 +921,15 @@ double Jab[3]
 	rgb[2]  =  rgbc[2]/s->Drgb[2];
 
 	/* XYZ values */
-	xyz[0] =  1.0961238208355140 * rgb[0]
-	       -  0.2788690002182872 * rgb[1]
-	       +  0.1827451793827730 * rgb[2];
-	xyz[1] =  0.4543690419753590 * rgb[0]
-	       +  0.4735331543074120 * rgb[1]
-	       +  0.0720978037172291 * rgb[2];
-	xyz[2] = -0.0096276087384294 * rgb[0]
-	       -  0.0056980312161134 * rgb[1]
-	       +  1.0153256399545427 * rgb[2];
+	xyz[0] =  1.0978566630062390 * rgb[0]
+	       -  0.2778434300014611 * rgb[1]
+	       +  0.1799867669952221 * rgb[2];
+	xyz[1] =  0.4550526940154284 * rgb[0]
+	       +  0.4739377688665520 * rgb[1]
+	       +  0.0710095371180196 * rgb[2];
+	xyz[2] =  0.0000000000000000 * rgb[0]
+	       +  0.0000000000000000 * rgb[1]
+	       +  1.0000000000000000 * rgb[2];
 
 	/* Subtract flare */
 	XYZ[0] = s->Fisc * (xyz[0] - s->Fsxyz[0]);
@@ -643,18 +938,18 @@ double Jab[3]
 
 #endif /* !DISABLE_MATRIX */
 
-//printf("~1 XYZ = %f %f %f\n",XYZ[0], XYZ[1], XYZ[2]);
+	TRACE(("XYZ = %f %f %f\n",XYZ[0], XYZ[1], XYZ[2]))
+	TRACE(("\n"))
 
-#ifdef DIAG
+#ifdef DIAG2
 	printf("Processing:\n");
-	printf("Jab = %f %f %f\n", Jab[0], Jab[1], Jab[2]);
+	printf("Jab = %f %f %f\n", Jabi[0], Jabi[1], Jabi[2]);
 	printf("Chroma C = %f\n", C);
 	printf("Preliminary Saturation ss = %f\n", ss);
-	printf("Lightness J = %f\n", J * 100.0);
+	printf("Lightness J = %f, H.K. Lightness = %f\n", J * 100, JJ * 100);
 	printf("Achromatic response A = %f\n", A);
 	printf("Eccentricity factor e = %f\n", e);
 	printf("Hue angle h = %f\n", h);
-	printf("Prelim red green a = %f, b = %f\n", a, b);
 	printf("Post adapted cone response rgba = %f %f %f\n", rgba[0], rgba[1], rgba[2]);
 	printf("Hunt-P-E cone space rgbp = %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]);
 	printf("Chromatically transformed sample value rgbc = %f %f %f\n", rgbc[0], rgbc[1], rgbc[2]);

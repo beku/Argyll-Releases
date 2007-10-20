@@ -6,11 +6,11 @@
  * Author: Graeme W. Gill
  * Date:   15/11/2005
  *
- * Copyright 1996 - 2005 Graeme W. Gill
+ * Copyright 1996 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #undef DEBUG
@@ -36,19 +36,18 @@
 
 void
 usage(void) {
-	fprintf(stderr,"Create linear display calibration file\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Create linear display calibration file, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: displin outfile\n");
 	fprintf(stderr," outfile         Base name for output .cal file\n");
 	exit(1);
 	}
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int fa,nfa;							/* current argument we're looking at */
 	int verb = 0;
 	static char outname[200] = { 0 };	/* Output cgats file base name */
-	int rv;
 
 	error_program = "displin";
 	if (argc <= 1)

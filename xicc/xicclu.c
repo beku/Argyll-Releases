@@ -12,8 +12,8 @@
  *
  * Copyright 1999, 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* TTBD:
@@ -25,56 +25,63 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
+#include "copyright.h"
+#include "config.h"
 #include "numlib.h"
 #include "plot.h"
 #include "xicc.h"
 
+
 #define USE_NEARCLIP		/* Our usual expectation */
 #define XRES 128			/* Plotting resolution */
+#undef HACK_PLOT			/* Plot locus other than the neutral axis */
 
 void usage(char *diag) {
 	int i;
 	fprintf(stderr,"Translate colors through an xicc, V1.00\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: xicclu [-options] profile\n");
 	if (diag != NULL)
 		fprintf(stderr,"Diagnostic: %s\n",diag);
-	fprintf(stderr," -v            Verbose\n");
-	fprintf(stderr," -g            Plot neutral axis instead of looking colors up.\n");
-	fprintf(stderr," -f function   f = forward, b = backwards, g = gamut, p = preview\n");
-	fprintf(stderr,"               if = inverted forward, ib = inverted backwards\n");
-	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
-	fprintf(stderr,"               s = saturation, a = absolute, j = Appearance %s\n",icxcam_description(cam_default));
-	fprintf(stderr,"               k = Absolute Appearance %s\n",icxcam_description(cam_default));
-	fprintf(stderr," -o order      n = normal (priority: lut > matrix > monochrome)\n");
-	fprintf(stderr,"               r = reverse (priority: monochrome > matrix > lut)\n");
-	fprintf(stderr," -p oride      x = XYZ_PCS, l = Lab_PCS, y = Yxy, j = Jab, J = JCh\n");
-	fprintf(stderr," -s scale      Scale device range 0.0 - scale rather than 0.0 - 1.0\n");
-	fprintf(stderr," -k [zhxrlv]  Black generation: z = zero K,\n");
-	fprintf(stderr,"               h = 0.5 K, x = max K, r = ramp K (def)\n");
-	fprintf(stderr,"               l = extra PCS input is portion of K locus\n");
-	fprintf(stderr,"               v = extra PCS input is K target value\n");
+	fprintf(stderr," -v level       Verbosity level 0 - 2 (default = 1)\n");
+	fprintf(stderr," -g             Plot neutral axis instead of looking colors up.\n");
+	fprintf(stderr," -f function    f = forward, b = backwards, g = gamut, p = preview\n");
+	fprintf(stderr,"                if = inverted forward, ib = inverted backwards\n");
+	fprintf(stderr," -i intent      p = perceptual, r = relative colorimetric,\n");
+	fprintf(stderr,"                s = saturation, a = absolute, j = Appearance %s\n",icxcam_description(cam_default));
+	fprintf(stderr,"                k = Absolute Appearance %s\n",icxcam_description(cam_default));
+	fprintf(stderr," -o order       n = normal (priority: lut > matrix > monochrome)\n");
+	fprintf(stderr,"                r = reverse (priority: monochrome > matrix > lut)\n");
+	fprintf(stderr," -p oride       x = XYZ_PCS, X = XYZ * 100, l = Lab_PCS, L = LCh, y = Yxy, j = Jab, J = JCh\n");
+	fprintf(stderr," -s scale       Scale device range 0.0 - scale rather than 0.0 - 1.0\n");
+	fprintf(stderr," -k [zhxrlv]    Black value target: z = zero K,\n");
+	fprintf(stderr,"                h = 0.5 K, x = max K, r = ramp K (def.)\n");
+	fprintf(stderr,"                l = extra PCS input is portion of K locus\n");
+	fprintf(stderr,"                v = extra PCS input is K target value\n");
 	fprintf(stderr," -k p stle stpo enpo enle shape\n");
-	fprintf(stderr,"               stle: K level at White 0.0 - 1.0\n");
-	fprintf(stderr,"               stpo: start point of transition Wh 0.0 - Bk 1.0\n");
-	fprintf(stderr,"               enpo: End point of transition Wh 0.0 - Bk 1.0\n");
-	fprintf(stderr,"               enle: K level at Black 0.0 - 1.0\n");
-	fprintf(stderr,"               shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0 convex\n");
-	fprintf(stderr," -l tlimit     set total ink limit, 0 - 400%%\n");
-	fprintf(stderr," -L klimit     set black ink limit, 0 - 100%%\n");
-	fprintf(stderr," -a            show actual target values if clipped\n");
-	fprintf(stderr," -m            merge output processing into clut\n");
-	fprintf(stderr," -b            use CAM Jab for clipping\n");
-	fprintf(stderr," -S            Use internal optimised separation for inverse 4d\n");
+	fprintf(stderr,"                stle: K level at White 0.0 - 1.0\n");
+	fprintf(stderr,"                stpo: start point of transition Wh 0.0 - Bk 1.0\n");
+	fprintf(stderr,"                enpo: End point of transition Wh 0.0 - Bk 1.0\n");
+	fprintf(stderr,"                enle: K level at Black 0.0 - 1.0\n");
+	fprintf(stderr,"                shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0 convex\n");
+	fprintf(stderr," -k q stle0 stpo0 enpo0 enle0 shape0 stle2 stpo2 enpo2 enle2 shape2\n");
+	fprintf(stderr,"                Transfer extra PCS input to dual curve limits\n");
+	fprintf(stderr," -K parameters  Same as -k, but target is K locus rather than K value itself\n");
+	fprintf(stderr," -l tlimit      set total ink limit, 0 - 400%% (estimate by default)\n");
+	fprintf(stderr," -L klimit      set black ink limit, 0 - 100%% (estimate by default)\n");
+	fprintf(stderr," -a             show actual target values if clipped\n");
+	fprintf(stderr," -m             merge output processing into clut\n");
+	fprintf(stderr," -b             use CAM Jab for clipping\n");
+	fprintf(stderr," -S             Use internal optimised separation for inverse 4d\n");
 
-	fprintf(stderr," -c viewcond   set viewing conditions for CIECAM97s,\n");
-	fprintf(stderr,"               either an enumerated choice, or a parameter:\n");
+	fprintf(stderr," -c viewcond    set viewing conditions for CIECAM97s,\n");
+	fprintf(stderr,"                either an enumerated choice, or a parameter:value changes\n");
 	for (i = 0; ; i++) {
 		icxViewCond vc;
-		if (xicc_enum_viewcond(NULL, &vc, i, 1))
+		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1) == -999)
 			break;
 
-		fprintf(stderr,"               %d: %s\n",i,vc.desc);
+		fprintf(stderr,"            %s\n",vc.desc);
 	}
 
 	fprintf(stderr,"         s:surround    a = average, m = dim, d = dark,\n");
@@ -98,14 +105,14 @@ void usage(char *diag) {
 int
 main(int argc, char *argv[]) {
 	int fa,nfa;				/* argument we're looking at */
-	char prof_name[100];
+	char prof_name[MAXNAMEL+1];
 	icmFile *fp;
 	icc *icco;
 	xicc *xicco;
 	int doplot = 0;				/* Do grey axis plot */
 	icxInk ink;					/* Ink parameters */
-	int tlimit = -1;			/* Total ink limit as a % */
-	int klimit = -1;			/* Black ink limit as a % */
+	double tlimit = -1.0;		/* Total ink limit */
+	double klimit = -1.0;		/* Black ink limit */
 	int intsep = 0;
 	icxViewCond vc;				/* Viewing Condition for CIECAM97s */
 	int vc_e = -1;				/* Enumerated viewing condition */
@@ -117,13 +124,14 @@ main(int argc, char *argv[]) {
 	double vc_f = -1.0;			/* Flare % overid */
 	double vc_fXYZ[3] = {-1.0, -1.0, -1.0};	/* Flare color override in XYZ */
 	double vc_fxy[2] = {-1.0, -1.0};		/* Flare color override in x,y */
-	int verb = 0;
+	int verb = 1;
 	int actual = 0;
-	int dual = 0;
 	int merge = 0;
 	int camclip = 0;
 	int repYxy = 0;			/* Report Yxy */
 	int repJCh = 0;			/* Report JCh */
+	int repLCh = 0;			/* Report LCh */
+	int repXYZ100 = 0;		/* Scale XYZ by 10 */
 	double scale = 0.0;		/* Device value scale factor */
 	int rv = 0;
 	char buf[200];
@@ -140,7 +148,11 @@ main(int argc, char *argv[]) {
 	icColorSpaceSignature pcsor = icmSigDefaultData;	/* Default */
 	icmLookupOrder    order  = icmLuOrdNorm;		/* Default */
 	int               inking = 3;					/* Default is ramp */
-	double Kstle, Kstpo, Kenle, Kenpo, Kshap;		/* K curve params */
+	int               locus = 0;					/* Default is K value */
+													/* K curve params */
+	double Kstle = 0.0, Kstpo = 0.0, Kenle = 0.0, Kenpo = 0.0, Kshap = 0.0;
+													/* K curve params (max) */
+	double Kstle1 = 0.0, Kstpo1 = 0.0, Kenle1 = 0.0, Kenpo1 = 0.0, Kshap1 = 0.0;
 	int               invert = 0;
 	
 	error_program = argv[0];
@@ -170,8 +182,21 @@ main(int argc, char *argv[]) {
 
 			/* Verbosity */
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
-				verb = 1;
+				fa = nfa;
+				if (na == NULL)
+					verb = 2;
+				else {
+					if (na[0] == '0')
+						verb = 0;
+					else if (na[0] == '1')
+						verb = 1;
+					else if (na[0] == '2')
+						verb = 2;
+					else
+						usage("Illegal verbosity level");
+				}
 			}
+
 			/* Grey axis plot */
 			else if (argv[fa][1] == 'g' || argv[fa][1] == 'G') {
 				doplot = 1;
@@ -279,28 +304,48 @@ main(int argc, char *argv[]) {
 				if (na == NULL) usage("No parameter after flag -i");
     			switch (na[0]) {
 					case 'x':
+						pcsor = icSigXYZData;
+						repYxy = 0;
+						repLCh = 0;
+						repJCh = 0;
+						repXYZ100 = 0;
+						break;
 					case 'X':
 						pcsor = icSigXYZData;
 						repYxy = 0;
+						repLCh = 0;
+						repJCh = 0;
+						repXYZ100 = 1;
 						break;
 					case 'l':
+						pcsor = icSigLabData;
+						repYxy = 0;
+						repLCh = 0;
+						repJCh = 0;
+						break;
 					case 'L':
 						pcsor = icSigLabData;
 						repYxy = 0;
+						repLCh = 1;
+						repJCh = 0;
 						break;
 					case 'y':
 					case 'Y':
 						pcsor = icSigXYZData;
 						repYxy = 1;
+						repLCh = 0;
+						repJCh = 0;
 						break;
 					case 'j':
 						pcsor = icxSigJabData;
 						repYxy = 0;
+						repLCh = 0;
 						repJCh = 0;
 						break;
 					case 'J':
 						pcsor = icxSigJabData;
 						repYxy = 0;
+						repLCh = 0;
 						repJCh = 1;
 						break;
 					default:
@@ -330,6 +375,10 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -k");
+				if (argv[fa][1] == 'k')
+					locus = 0;			/* K value target */
+				else
+					locus = 1;			/* K locus target */
     			switch (na[0]) {
 					case 'z':
 					case 'Z':
@@ -357,26 +406,54 @@ main(int argc, char *argv[]) {
 						break;
 					case 'p':
 					case 'P':
+					case 'q':
+					case 'Q':
 						inking = 6;		/* Use curve parameter */
+
 						++fa;
-						if (fa >= argc) usage(NULL);
+						if (fa >= argc) usage("Inking rule (-kp) expects more parameters");
 						Kstle = atof(argv[fa]);
 
 						++fa;
-						if (fa >= argc) usage(NULL);
+						if (fa >= argc) usage("Inking rule (-kp) expects more parameters");
 						Kstpo = atof(argv[fa]);
 
 						++fa;
-						if (fa >= argc || argv[fa][0] == '-') usage(NULL);
+						if (fa >= argc || argv[fa][0] == '-') usage("Inking rule (-kp) expects more parameters");
 						Kenpo = atof(argv[fa]);
 
 						++fa;
-						if (fa >= argc) usage(NULL);
+						if (fa >= argc || argv[fa][0] == '-') usage("Inking rule (-kp) expects more parameters");
 						Kenle = atof(argv[fa]);
 
 						++fa;
-						if (fa >= argc || argv[fa][0] == '-') usage(NULL);
+						if (fa >= argc || argv[fa][0] == '-') usage("Inking rule (-kp) expects more parameters");
 						Kshap = atof(argv[fa]);
+
+						if (na[0] == 'q' || na[0] == 'Q') {
+							inking = 7;		/* Use transfer to dual curve parameter */
+
+							++fa;
+							if (fa >= argc) usage("Inking rule (-kq) expects more parameters");
+							Kstle1 = atof(argv[fa]);
+	
+							++fa;
+							if (fa >= argc) usage("Inking rule (-kq) expects more parameters");
+							Kstpo1 = atof(argv[fa]);
+	
+							++fa;
+							if (fa >= argc || argv[fa][0] == '-') usage("Inking rule (-kq) expects more parameters");
+							Kenpo1 = atof(argv[fa]);
+	
+							++fa;
+							if (fa >= argc) usage("Inking rule (-kq) expects more parameters");
+							Kenle1 = atof(argv[fa]);
+	
+							++fa;
+							if (fa >= argc || argv[fa][0] == '-') usage("Inking rule (-kq) expects more parameters");
+							Kshap1 = atof(argv[fa]);
+	
+						}
 						break;
 					default:
 						usage("Unknown parameter after flag -k");
@@ -386,21 +463,27 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'l') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -l");
-				tlimit = atoi(na);
+				tlimit = atoi(na)/100.0;
 			}
 
 			else if (argv[fa][1] == 'L') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -L");
-				klimit = atoi(na);
+				klimit = atoi(na)/100.0;
 			}
 
 			/* Viewing conditions */
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -c");
+#ifdef NEVER
 				if (na[0] >= '0' && na[0] <= '9') {
 					vc_e = atoi(na);
+				} else
+#endif
+				if (na[1] != ':') {
+					if ((vc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
+						usage("Urecognised Enumerated Viewing conditions");
 				} else if (na[0] == 's' || na[0] == 'S') {
 					if (na[1] != ':')
 						usage("Unrecognised parameters after -cs");
@@ -451,12 +534,13 @@ main(int argc, char *argv[]) {
 	}
 
 	if (fa >= argc || argv[fa][0] == '-') usage("Expecting profile file name");
-	strcpy(prof_name,argv[fa]);
+	strncpy(prof_name,argv[fa],MAXNAMEL); prof_name[MAXNAMEL] = '\000';
 
 	if (doplot) {
 
 		/* Force PCS to be Lab or Jab */
 		repJCh = 0;
+		repLCh = 0;
 		if (pcsor != icxSigJabData)
 			pcsor = icSigLabData;
 
@@ -482,7 +566,7 @@ main(int argc, char *argv[]) {
 			error("Profile must be a device profile to plot neutral axis");
 	}
 
-	if (verb) {
+	if (verb > 1) {
 		icmFile *op;
 		if ((op = new_icmFileStd_fp(stdout)) == NULL)
 			error ("Can't open stdout");
@@ -494,40 +578,39 @@ main(int argc, char *argv[]) {
 	if ((xicco = new_xicc(icco)) == NULL)
 		error ("Creation of xicc failed");
 
-	/* Setup Inking and limit rules */
-	if (tlimit >= 0)
-		ink.tlimit = tlimit/100.0;	/* Set a total ink limit */
-	else
-		ink.tlimit = -1.0;			/* Don't use a limit */
+	/* Set the default ink limits if not set on command line */
+	icxDefaultLimits(icco, &ink.tlimit, tlimit, &ink.klimit, klimit);
 
-	if (klimit >= 0)
-		ink.klimit = klimit/100.0;	/* Set a black ink limit */
-	else
-		ink.klimit = -1.0;			/* Don't use a limit */
+	if (verb > 1) {
+		if (ink.tlimit >= 0.0)
+			printf("Total ink limit assumed is %3.0f%%\n",100.0 * ink.tlimit);
+		if (ink.klimit >= 0.0)
+			printf("Black ink limit assumed is %3.0f%%\n",100.0 * ink.klimit);
+	}
 
 	if (inking == 0) {			/* Use minimum */
-		ink.k_rule = icxKluma5;
+		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
 		ink.c.Kstle = 0.0;
 		ink.c.Kstpo = 0.0;
 		ink.c.Kenpo = 1.0;
 		ink.c.Kenle = 0.0;
 		ink.c.Kshap = 1.0;
 	} else if (inking == 1) {	/* Use 0.5  */
-		ink.k_rule = icxKluma5;
+		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
 		ink.c.Kstle = 0.5;
 		ink.c.Kstpo = 0.0;
 		ink.c.Kenpo = 1.0;
 		ink.c.Kenle = 0.5;
 		ink.c.Kshap = 1.0;
 	} else if (inking == 2) {	/* Use maximum  */
-		ink.k_rule = icxKluma5;
+		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
 		ink.c.Kstle = 1.0;
 		ink.c.Kstpo = 0.0;
 		ink.c.Kenpo = 1.0;
 		ink.c.Kenle = 1.0;
 		ink.c.Kshap = 1.0;
 	} else if (inking == 3) {	/* Use ramp  */
-		ink.k_rule = icxKluma5;
+		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
 		ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
 		ink.c.Kstle = 0.0;
 		ink.c.Kstpo = 0.0;
@@ -538,23 +621,37 @@ main(int argc, char *argv[]) {
 		ink.k_rule = icxKlocus;
 	} else if (inking == 5) {	/* Use K target  */
 		ink.k_rule = icxKvalue;
-	} else {				/* Use specified curve */
-		ink.k_rule = icxKluma5;
+	} else if (inking == 6) {	/* Use specified curve */
+		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
 		ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
 		ink.c.Kstle = Kstle;
 		ink.c.Kstpo = Kstpo;
 		ink.c.Kenpo = Kenpo;
 		ink.c.Kenle = Kenle;
 		ink.c.Kshap = Kshap;
+	} else {				/* Use dual curves */
+		ink.k_rule = locus ? icxKl5l : icxKl5lk;	/* Locus or value target */
+		ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
+		ink.c.Kstle = Kstle;
+		ink.c.Kstpo = Kstpo;
+		ink.c.Kenpo = Kenpo;
+		ink.c.Kenle = Kenle;
+		ink.c.Kshap = Kshap;
+		ink.x.Ksmth = ICXINKDEFSMTH;
+		ink.x.Kstle = Kstle1;
+		ink.x.Kstpo = Kstpo1;
+		ink.x.Kenpo = Kenpo1;
+		ink.x.Kenle = Kenle1;
+		ink.x.Kshap = Kshap1;
 	}
 
 	/* Setup the viewing conditions */
-	if (xicc_enum_viewcond(xicco, &vc, -1, 0))
+	if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0) == -999)
 		error ("%d, %s",xicco->errc, xicco->err);
 
 //xicc_dump_viewcond(&vc);
-	if (vc_e >= 0)
-		if (xicc_enum_viewcond(xicco, &vc, vc_e, 0))
+	if (vc_e != -1)
+		if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0) == -999)
 			error ("%d, %s",xicco->errc, xicco->err);
 	if (vc_s >= 0)
 		vc.Ev = vc_s;
@@ -621,7 +718,7 @@ main(int argc, char *argv[]) {
 	}
 
 	/* More information */
-	if (verb) {
+	if (verb > 1) {
 		int j;
 		double inmin[MAX_CHAN], inmax[MAX_CHAN];
 		double outmin[MAX_CHAN], outmax[MAX_CHAN];
@@ -673,20 +770,33 @@ main(int argc, char *argv[]) {
 		if (outs == icxSigJabData)
 			outs = icxSigJChData; 
 	}
+	if (repLCh) {	/* report LCh rather than Lab */
+		if (ins == icSigLabData)
+			ins = icxSigLChData; 
+		if (outs == icSigLabData)
+			outs = icxSigLChData; 
+	}
 
 	if (doplot) {
 		int i, j;
 		double xx[XRES];
 		double yy[6][XRES];
+#ifdef HACK_PLOT
+		double start[3] = { 91.069165, -13.555080, 85.608633 };
+		double end[3] = { 8.602831, -3.112174, 12.541111 };
+#else
+		double start[3] = { 100.0, 0.0, 0.0 };
+		double end[3] = { 0.0, 0.0, 0.0 };
+#endif
 
+		/* Plot from white to black */
 		for (i = 0; i < XRES; i++) {
 			double ival = (double)i/(XRES-1.0);
 
 			/* Input is always Jab or Lab */
-			in[0] = 100.0 * (1.0 - ival);
-			in[1] = 0.0;
-			in[2] = 0.0;
-			in[3] = 0.0;
+			in[0] = ival * end[0] + (1.0 - ival) * start[0];
+			in[1] = ival * end[1] + (1.0 - ival) * start[1];
+			in[2] = ival * end[2] + (1.0 - ival) * start[2];
 
 			/* Do the conversion */
 			if (invert) {
@@ -744,7 +854,8 @@ main(int argc, char *argv[]) {
 			if (fgets(buf, 200, stdin) == NULL)
 				break;
 			if (buf[0] == '#') {
-				fprintf(stdout,"%s\n",buf);
+				if (verb > 0)
+					fprintf(stdout,"%s\n",buf);
 				continue;
 			}
 			/* For each input number */
@@ -763,6 +874,7 @@ main(int argc, char *argv[]) {
 			 && ins != icxSigJChData
 			 && ins != icSigXYZData
 			 && ins != icSigLabData
+			 && ins != icxSigLChData
 			 && ins != icSigLuvData
 			 && ins != icSigYCbCrData
 			 && ins != icSigYxyData
@@ -771,6 +883,12 @@ main(int argc, char *argv[]) {
 				for (i = 0; i < MAX_CHAN; i++) {
 					in[i] /= scale;
 				}
+			}
+
+			if (repXYZ100 && ins == icSigXYZData) {
+				in[0] /= 100.0;
+				in[1] /= 100.0;
+				in[2] /= 100.0;
 			}
 
 			if (repYxy && ins == icSigYxyData) {
@@ -789,8 +907,9 @@ main(int argc, char *argv[]) {
 				}
 			}
 
-			/* JCh -> Jab */
-			if (repJCh && ins == icxSigJChData) {
+			/* JCh -> Jab & LCh -> Lab */
+			if ((repJCh && ins == icxSigJChData) 
+			 || (repLCh && ins == icxSigLChData)) {
 				double C = out[1];
 				double h = out[2];
 				out[1] = C * cos(3.14159265359/180.0 * h);
@@ -808,6 +927,12 @@ main(int argc, char *argv[]) {
 					error ("%d, %s",xicco->errc,xicco->err);
 			}
 
+			if (repXYZ100 && outs == icSigXYZData) {
+				out[0] *= 100.0;
+				out[1] *= 100.0;
+				out[2] *= 100.0;
+			}
+
 			if (repYxy && outs == icSigYxyData) {
 				double X = out[0];
 				double Y = out[1];
@@ -822,8 +947,9 @@ main(int argc, char *argv[]) {
 				}
 			}
 
-			/* Jab -> JCh */
-			if (repJCh && outs == icxSigJChData) {
+			/* Jab -> JCh and Lab -> LCh */
+			if ((repJCh && outs == icxSigJChData) 
+			 || (repLCh && outs == icxSigLChData)) {
 				double a = out[1];
 				double b = out[2];
 				out[1] = sqrt(a * a + b * b);
@@ -837,6 +963,7 @@ main(int argc, char *argv[]) {
 			 && outs != icxSigJChData
 			 && outs != icSigXYZData
 			 && outs != icSigLabData
+			 && outs != icxSigLChData
 			 && outs != icSigLuvData
 			 && outs != icSigYCbCrData
 			 && outs != icSigYxyData
@@ -848,13 +975,16 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Output the results */
-			for (j = 0; j < inn; j++) {
-				if (j > 0)
-					fprintf(stdout," %f",oin[j]);
-				else
-					fprintf(stdout,"%f",oin[j]);
+			if (verb > 0) {
+				for (j = 0; j < inn; j++) {
+					if (j > 0)
+						fprintf(stdout," %f",oin[j]);
+					else
+						fprintf(stdout,"%f",oin[j]);
+				}
+				printf(" [%s] -> %s -> ", icx2str(icmColorSpaceSignature, ins),
+				                          icm2str(icmLuAlg, alg));
 			}
-			printf(" [%s] -> %s -> ", icx2str(icmColorSpaceSignature, ins), icm2str(icmLuAlg, alg));
 
 			for (j = 0; j < outn; j++) {
 				if (j > 0)
@@ -862,16 +992,17 @@ main(int argc, char *argv[]) {
 				else
 					fprintf(stdout,"%f",out[j]);
 			}
-			printf(" [%s]", icx2str(icmColorSpaceSignature, outs));
+			if (verb > 0)
+				printf(" [%s]", icx2str(icmColorSpaceSignature, outs));
 
-			if (tlimit >= 0) {
+			if (verb > 0 && tlimit >= 0) {
 				double tot;	
 				for (tot = 0.0, j = 0; j < outn; j++) {
 					tot += out[j];
 				}
 				printf(" Lim %f",tot);
 			}
-			if (rv == 0)
+			if (verb == 0 || rv == 0)
 				fprintf(stdout,"\n");
 			else {
 				fprintf(stdout," (clip)\n");

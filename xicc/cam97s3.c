@@ -17,8 +17,8 @@
  *
  * Copyright 2000, 2002 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* Note that XYZ values are normalised to 1.0 consistent */
@@ -76,7 +76,7 @@ static int cam_to_XYZ(struct _cam97s3 *s, double *xyz, double *Jab);
 /* Create a cam97s3 conversion object, with default viewing conditions */
 cam97s3 *new_cam97s3(void) {
 	cam97s3 *s;
-	double D50[3] = { 0.9642, 1.0000, 0.8249 };
+//	double D50[3] = { 0.9642, 1.0000, 0.8249 };
 
 	if ((s = (cam97s3 *)calloc(1, sizeof(cam97s3))) == NULL) {
 		fprintf(stderr,"cam97s3: malloc failed allocating object\n");
@@ -266,7 +266,7 @@ double Jab[3],
 double XYZ[3]
 ) {
 	int i;
-	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbaW[3], rgbc[3], rgbcW[3];
+	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbc[3];
 	double a, b, nab, J, C, h, e, A, ss;
 	double ttd, tt;
 
@@ -419,7 +419,7 @@ double XYZ[3],
 double Jab[3]
 ) {
 	int i;
-	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbaW[3], rgbc[3], rgbcW[3];
+	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbc[3];
 	double ja, jb, aa, ab, a, b, J, C, h, e, A, ss;
 	double tt, ttA, tte;
 

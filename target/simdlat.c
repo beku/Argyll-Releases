@@ -11,8 +11,8 @@
  * Copyright 2002 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * Based on simplat.c
  */
@@ -69,7 +69,6 @@ static void
 default_simdlat_to_percept(void *od, double *p, double *d) {
 	simdlat *s = (simdlat *)od;
 	int e;
-	double tt;
 
 	/* Default Do nothing - copy device to perceptual. */
 	for (e = 0; e < s->di; e++) {
@@ -78,6 +77,7 @@ default_simdlat_to_percept(void *od, double *p, double *d) {
 }
 
 
+#ifdef NEVER /* Not currently used */
 /* Return the largest distance of the point outside the device gamut. */
 /* This will be 0 if inside the gamut, and > 0 if outside.  */
 static double
@@ -108,6 +108,7 @@ simdlat_in_dev_gamut(simdlat *s, double *d) {
 	}
 	return dd;
 }
+#endif /* NEVER */
 
 /* Snap a point to the device gamut boundary. */
 /* Return nz if it has been snapped. */
@@ -368,7 +369,7 @@ int     hash	/* Hash */
 ) {
 	int di = s->di;
 	int hp;		/* node index */
-	int ip, j;
+	int j;
 
 	for (hp = s->hash[hash]; hp >= 0; hp = s->nodes[hp].hp) {
 
@@ -395,7 +396,7 @@ int    hash		/* Hash */
 	int b = 0; 		/* NZ if a boundary point */
 	int nn;			/* New node index */
 	int hp;			/* Hash chain index */
-	int ip, i, j;
+	int i, j;
 
 	/* Make room for it */
 	if ((s->np+1) >= s->np_a) {
@@ -463,7 +464,7 @@ simdlat *s,
 double *d,		/* Device position */
 double *p		/* Perceptual value */
 ) {
-	int i, j;
+	int j;
 
 	for (; s->rix < s->bnp; s->rix++) {
 
@@ -647,7 +648,7 @@ double dia		/* Simplex diameter to try */
 	dump_image(s, PERC_PLOT);
 #endif /* DUMP_PLOT */
 
-printf("~1 got %d valid out of %d total\n",s->nvp, s->np);
+//printf("~1 got %d valid out of %d total\n",s->nvp, s->np);
 	np = s->nvp;
 
 	/* If we have a new best */
@@ -737,7 +738,7 @@ void *od				/* context for Perceptual function */
 	if (ctol < s->tol) {
 		s->tol = ctol;
 	}
-printf("~1 tol = %f\n",s->tol);
+//printf("~1 tol = %f\n",s->tol);
 
 	s->fxlist = fxlist;		/* remember fixed points */
 	s->fxno   = fxno;
@@ -768,7 +769,7 @@ printf("~1 tol = %f\n",s->tol);
 	if (np == 0)
 		error("simdlat: First pass gave 0 points!");
 
-printf("~1 first cut dia %f ang %f gave %d points, target = %d\n",dia, s->angle, np, s->inp);
+//printf("~1 first cut dia %f ang %f gave %d points, target = %d\n",dia, s->angle, np, s->inp);
 
 	if (np < s->inp) {		/* Low count */
 		ldia = dia;
@@ -778,7 +779,7 @@ printf("~1 first cut dia %f ang %f gave %d points, target = %d\n",dia, s->angle,
 //printf("~1 next try dia %f in hope of %f\n",dia, 1.5 * s->inp);
 
 			np = do_pass(s, dia);
-printf("~1 second cut dia %f ang %f gave %d points, target = %d\n",dia, s->angle, np,s->inp);
+//printf("~1 second cut dia %f ang %f gave %d points, target = %d\n",dia, s->angle, np,s->inp);
 			if (np >= s->inp)
 				break;
 			ldia = dia;		/* New low count */
@@ -793,7 +794,7 @@ printf("~1 second cut dia %f ang %f gave %d points, target = %d\n",dia, s->angle
 			dia = pow(np/(0.6 * s->inp), 1.0/di) * dia;
 //printf("~1 next try dia %f in hope of %f\n",dia, 0.6 * s->inp);
 			np = do_pass(s, dia);
-printf("~1 second cut dia %f ang %f gave %d points, target = %d\n",dia, s->angle, np,s->inp);
+//printf("~1 second cut dia %f ang %f gave %d points, target = %d\n",dia, s->angle, np,s->inp);
 			if (np <= s->inp)
 				break;
 			hdia = dia;			/* new high count */
@@ -817,7 +818,7 @@ printf("~1 second cut dia %f ang %f gave %d points, target = %d\n",dia, s->angle
 		dia = ratio * (hdia - ldia) + ldia;
 		np = do_pass(s, dia);
 
-printf("~1 try %d, cut dia %f ang %f gave %d points, target = %d\n",i, dia, s->angle, np,s->inp);
+//printf("~1 try %d, cut dia %f ang %f gave %d points, target = %d\n",i, dia, s->angle, np,s->inp);
 		if (np > s->inp) {
 			hdia = dia;
 			hnp = np;
@@ -829,7 +830,7 @@ printf("~1 try %d, cut dia %f ang %f gave %d points, target = %d\n",i, dia, s->a
 	
 	simdlat_reset(s);
 
-printf("~1 total of %d patches\n",s->bnvp);
+//printf("~1 total of %d patches\n",s->bnvp);
 
 	return s;
 }
@@ -857,7 +858,6 @@ static void sa_percept(void *od, double *out, double *in) {
 
 static void sa_percept(void *od, double *p, double *d) {
 	int e, di = 2;
-	double tt;
 
 #ifndef NEVER
 	/* Default Do nothing - copy device to perceptual. */

@@ -7,14 +7,14 @@
  * Gamut support routines.
  *
  * Author:  Graeme W. Gill
- * Date:    9/3/00
+ * Date:    9/3/2000
  * Version: 1.00
  *
- * Copyright 2000 Graeme W. Gill
+ * Copyright 2000-2006 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 
@@ -27,8 +27,6 @@
 
 #include "../h/llist.h"
 
-#define GAMUT_LCENT 50.0	/* L center point */
-
 #define BSPDEPTH 100		/* Maximum BSP tree depth */
 
 #define PFARNDIST  0.1			/* Positive (inwards) far "near" distance */
@@ -36,6 +34,7 @@
 #define MFARNDIST PFARNDIST		/* Minimum (absolute) of the two */
 
 #define MAXGAMN 10				/* Maximum gamut point neighbors returned */
+#define NSLOTS 6				/* Number of maximum direction slots */
 
 /* ------------------------------------ */
 #define NODE_STRUCT							\
@@ -51,13 +50,19 @@ struct _gnode {
 /* Vertex node */
 struct _gvert {
 	NODE_STRUCT
+	int rc;				/* reference count */
+	struct _gvert *ul;	/* Unused list */
+
 	int n;			/* Index number of vertex */
-	int un;			/* Used Index number of vertex */
+	int sn;			/* Set Index number of vertex */
+	int tn;			/* Triangulated Index number of vertex */
 	int f;			/* Flag value */
 #define GVERT_NONE 0x0000		/* No flags */
 #define GVERT_SET  0x0001		/* Value has been set */
-#define GVERT_TRI  0x0002		/* Vertex has been added to triangulation */
+#define GVERT_TRI  0x0002		/* Vertex has been added to triangulation (Exclsv with _INSIDE) */
 #define GVERT_INSIDE  0x0004	/* Vertex is inside the log hull (Exclusive with _TRI) */
+#define GVERT_FAKE  0x0008		/* Fake establishment point */
+	int k0;			/* k0 direction reference count */
 
 	double p[3];		/* Point in xyz rectangular coordinates, absolute */
 	double r[3];		/* Radial coordinates */
@@ -72,12 +77,19 @@ struct _gvert {
 /* Quadtree node */
 struct _gquad {
 	NODE_STRUCT
-	gnode *qt[4];	/* Child nodes, NULL if none */
-					/* Ordered --------- */
-					/*         | 2 | 3 | */
-					/*         --------- */
-					/*         | 0 | 1 | */
-					/*         --------- */
+	gnode *qt[4][NSLOTS];
+
+	/* Child nodes, NULL if none, */
+	/* Nodes are ordered: */
+	/* --------- */
+	/* | 2 | 3 | */
+	/* --------- */
+	/* | 0 | 1 | */
+	/* --------- */
+	/* and each node contains NSLOTS slots. */
+	/* If the quadtree recurses, the first slot containts another */
+	/* quadtree, otherwise the slots contain pointers to the */
+	/* four best verticies in the various directions. */
 
 }; typedef struct _gquad gquad;
 
@@ -107,14 +119,14 @@ struct _gbspn {
 /* A BSP tree triangle list node */
 struct _gbspl {
 	BSP_STRUCT
-	int n;			/* Serial number */
+	int n;					/* Serial number */
 	int nt;					/* Number of triangles in the list */
-	struct _gtri  *t[0];	/* List of triangles - allocated with struct */
+	struct _gtri  *t[];	/* List of triangles - allocated with struct */
 }; typedef struct _gbspl gbspl;
 
 /* ------------------------------------ */
 
-/* A triangle in the mesh */
+/* A triangle in the surface mesh */
 struct _gtri {
 	BSP_STRUCT
 	int n;			/* Serial number */
@@ -126,7 +138,7 @@ struct _gtri {
 						/* (The first three elements is the unit normal vector to the plane) */
 	double che[4];		/* convex hull testing triangle plane equation (relative) */
 	double spe[4];		/* sphere mapped triangle plane equation (relative) */
-	double ee[3][4];	/* sp[] Edge triangle plane equations for opposite edge (relative) */
+	double ee[3][4];	/* sphere sp[] Edge triangle plane equations for opposite edge (relative) */
 
 	int sort;			/* lookup: Plane sorting result for each try */
 	int bsort;			/* lookup: Current best tries sort */
@@ -170,14 +182,23 @@ struct _gamut {
 
 /* Private: */
 	double sres;		/* Surface triangle resolution */
+	int isJab;			/* nz if Jab CIECAM02 type space rather than L*a*b* */
+	double cent[3];		/* Gamut center for radial conversion. Default 50.0,0,0 */
+						/* Must be same to compare radial values. */
 
 	int nv;				/* Number of verticies used out of allocation */
+	gvert *ul;			/* Linked list of unused verticies */
 	int na;				/* Number of verticies allocated */
+	int nsv;			/* Number of verticies that have been set */
 	int ntv;			/* Number of verticies used in triangulation */
 	gvert **verts;		/* Pointers to allocated verticies */
 	int read_inited;	/* Flag set if gamut was initialised from a read */
 	int lu_inited;		/* Flag set if radial surface lookup is inited */
 	int ne_inited;		/* Flag set if nearest lookup is inited */
+	int cu_inited;		/* Flag set if cusp values inited */
+	int nofilter;		/* Debug Flag, skip segmented maxima filtering */
+	int doingfake;		/* Internal transient state */
+	int pass;			/* Pass number for multi-pass */
 
 	gquad *tl, *tr;		/* Top left and quadtree elements */
 
@@ -196,34 +217,44 @@ struct _gamut {
 	double ga_wp[3];	/* Gamut white point */
 	double ga_bp[3];	/* Gamut black point */
 
+	int dcuspixs;		/* Cusp we're up to */
+	double dcusps[6][3];/* Entered cusp values to setcusps(, 3, ) */
+	double cusps[6][3];	/* Cusp values for red, yellow, green, cyan, blue & magenta */ 
+
+	gtri *nexttri;		/* Context for getnexttri() */
+
 /* Public: */
 	/* Methods */
 	void (*del)(struct _gamut *s);						/* Free ourselves */
 
 	void (*expand)(struct _gamut *s, double in[3]);		/* Expand the gamut surface */
 
-	void (*expand2)(struct _gamut *s, double in[3], double diff, double dir[3]);
-								/* Expand the gamut difference surface */
-								/* in[] is (absolute) direction coordinate */
-								/* diff is the difference in that dir. 0..100 */
-								/* dir is direction vector to be interpolated */
+	int (*getisjab)(struct _gamut *s);	/* Return the isJab flag value */
 
 	double (*getsres)(struct _gamut *s);	/* Return the surface resolution */
+
+	int (*compatible)(struct _gamut *s, struct _gamut *t);	/* Return the nz if compatible gamuts */
 
 	int (*nrawverts)(struct _gamut *s); /* Return the number of raw verticies */
 
 	int (*getrawvert)(struct _gamut *s, double pos[3], int ix);
 									/* Return the raw verticies location */
 
+	int (*nraw0verts)(struct _gamut *s); /* Return the number of raw verticies in */
+	                                    /* the radial maxima direction*/
+
+	int (*getraw0vert)(struct _gamut *s, double pos[3], int ix);
+									/* Return the raw 0 direction verticies location */
+
 	int (*nverts)(struct _gamut *s); /* Return the number of surface verticies */
 
 	int (*getvert)(struct _gamut *s, double *rad, double pos[3], int ix);
 									/* Return the surface verticies location and radius */
 
-	int (*getvertn)(struct _gamut *s, int nix[MAXGAMN+1], double *rad, double pos[3], int ix);
-								/* Return the verticies location and radius, */
-								/* plus neigbor indexes up to MAXGAMN neighbors, */
-								/* terminated with index -1 */
+	void (*startnexttri)(struct _gamut *s); /* Reset indexing through triangles for getnexttri() */
+
+	int (*getnexttri)(struct _gamut *s, int v[3]);
+									/* Return the next surface triange, nz on no more */
 
 	double (*volume)(struct _gamut *s);
 								/* Return the total volume enclosed by the gamut */
@@ -231,13 +262,12 @@ struct _gamut {
 	double (*radial)(struct _gamut *s, double out[3], double in[3]);
 								/* return point on surface in same radial direction. */
 								/* Return the radial radius to the surface point in */
-								/* colorspace units. */
-								/* For difference map, return the interpolated direction vector. */
+								/* colorspace units. out[] may be NULL */
 
 	double (*nradial)(struct _gamut *s, double out[3], double in[3]);
 								/* return point on surface in same radial direction, */
 								/* and normalised radial radius. This will be <= 1.0 if within */
-								/* gamut, and > 1.0 if out of gamut. */
+								/* gamut, and > 1.0 if out of gamut. out[] may be NULL */
 
 	void (*nearest)(struct _gamut *s, double out[3], double in[3]);
 	                          /* return point on surface closest to input */
@@ -261,25 +291,38 @@ struct _gamut {
 	                                                            /* not possible. */
 	                                                            /* Same colorspace as gamut */
 
-	int (*write_vrml)(struct _gamut *s, char *filename, int doaxes); /* Write to a VRML .wrl file */
+	void (*setcusps)(struct _gamut *s, int flag, double in[3]);	/* Set potential cusp values. */
+																/* flag == 0 = reset, */
+																/* flag == 1 = add general point, */
+																/* flag == 3 = add definite point, */
+																/* flag == 2 = finish */
+
+	int (*getcusps)(struct _gamut *s, double cusps[6][3]);		/* Get the cusp values for */
+																/* red, yellow, green, cyan, */
+																/* blue & magenta. Return */
+																/* nz if no cusps available. */
+
+																/* Following return nz on error: */
+	int (*write_vrml)(struct _gamut *s, char *filename,
+	                              int doaxes, int docusps); /* Write to a VRML .wrl file */
 	int (*write_gam)(struct _gamut *s, char *filename);		/* Write to a CGATS .gam file */
 	int (*read_gam)(struct _gamut *s, char *filename);		/* Read from a CGATS .gam file */
 
 	int (*write_trans_vrml)(struct _gamut *s, char *filename, /* Write to a VRML .wrl file */
-		int doaxes, void (*transform)(void *cntx, double out[3], double in[3]), /* with xform */
+		int doaxes, int docusps, void (*transform)(void *cntx, double out[3], double in[3]), /* with xform */
 		void *cntx);
 
 }; typedef struct _gamut gamut;
 
 /* Creator */
-gamut *new_gamut(double sres);		/* Surface resolution, 0.0 = default */
-gamut *new_gamut_dif(double sres);	/* Surface resolution, 0.0 = default */
+gamut *new_gamut(double sres, int isJab);		/* Surface resolution, 0.0 = default */
 
 /* Utility */
-void gamut_rect2radial(double out[3], double in[3]);
-void gamut_radial2rect(double out[3], double in[3]);
+void gamut_rect2radial(gamut *s, double out[3], double in[3]);
+void gamut_radial2rect(gamut *s, double out[3], double in[3]);
 void gamut_Lab2RGB(double *in, double *out);
-double gam_Labc[3];					/* Gamut center */
+extern double gam_hues[2][7];	/* Lab & Jab color hues in degrees */
+
 
 #endif /* GAMUT_H */
 

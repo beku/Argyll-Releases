@@ -13,61 +13,92 @@ LINKFLAGS	+= $(LINKDEBUGFLAG) ;      # Link with debug info
 #Products
 Libraries = libgamut libgammap ;
 Executables = viewgam ;
+Samples = RefMediumGamut.gam ;
 Headers = gammap.h gamut.h ;
 
 #Install
 InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
+InstallFile $(DOTDOT)$(SLASH)bin : $(Samples) ;
 #InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
 #InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
 
 # Gamut handling library
 Library libgamut.lib : gamut.c ;
-ObjectHdrs gamut$(SUFOBJ) : ../h ../icc ../cgats ../numlib ;	# icc bug workaround
+ObjectHdrs gamut$(SUFOBJ) : ../h ../icc ../cgats ../numlib ;
 
 # Gamut mapping library
 Library libgammap.lib : gammap.c nearsmth.c ;
-ObjectHdrs gammap$(SUFOBJ) nearsmth$(SUFOBJ) : ../rspl ../numlib ../plot ;
+ObjectHdrs gammap$(SUFOBJ) nearsmth$(SUFOBJ) : ../h ../icc ../rspl ../numlib ../plot ;
 
 Main viewgam : viewgam.c ;
-ObjectHdrs viewgam$(SUFOBJ) : ../h ../cgats ../numlib ;
-LinkLibraries viewgam : libgamut.lib ../cgats/libcgats.lib ../numlib/libnum.lib  ;
+ObjectHdrs viewgam$(SUFOBJ) : ../h ../icc ../cgats ../numlib ;
+LinkLibraries viewgam : libgamut.lib ../icc/libicc.lib ../cgats/libcgats.lib ../numlib/libnum.lib  ;
 
 # Mapping test routine
 Main maptest : maptest.c ;
 ObjectHdrs maptest : ../h ../numlib ../icc ../rspl ;
 LinkLibraries maptest : libgamut.lib libgammap.lib ../icc/libicc.lib
                         ../cgats/libcgats.lib ../rspl/librspl.lib 
-						../plot/libplot.lib  ../numlib/libnum.lib ;
+						../plot/libplot.lib ../plot/libvrml.lib ../numlib/libnum.lib ;
 
 # Smoothed nearpoint test routine
 Main  smthtest :  smthtest.c ;
-ObjectHdrs  smthtest : ../h ../numlib ;	# icc bug workaround
-LinkLibraries  smthtest : libgamut.lib libgammap.lib ../cgats/libcgats.lib ../numlib/libnum.lib ;
+ObjectHdrs  smthtest : ../h ../icc ../numlib ;
+LinkLibraries  smthtest : libgamut.lib libgammap.lib ../cgats/libcgats.lib 
+                          ../icc/libicc.lib ../numlib/libnum.lib ;
 
 
-# Preliminary sRGB V4 Reference Medium Gamut
-Main NewRMG2Gam : NewRMG2Gam.c ;
-ObjectHdrs NewRMG2Gam : ../h ../icc ../gamut ../numlib ../cgats ;
-LinkLibraries NewRMG2Gam : libgamut.lib ../icc/libicc.lib ../cgats/libcgats.lib
+# Surfacing test routine
+Main surftest : surftest.c ;
+ObjectHdrs surftest : ../h ../numlib ../icc ../rspl ;
+LinkLibraries surftest : libgamut.lib libgammap.lib ../icc/libicc.lib
+                        ../cgats/libcgats.lib ../rspl/librspl.lib 
+						../plot/libplot.lib ../plot/libvrml.lib ../numlib/libnum.lib ;
+
+# Preliminary ICC V4 Reference Medium Gamut
+Main GenRMGam : GenRMGam.c ;
+ObjectHdrs GenRMGam : ../h ../icc ../gamut ../numlib ../cgats ;
+LinkLibraries GenRMGam : libgamut.lib ../icc/libicc.lib ../cgats/libcgats.lib
                               ../numlib/libnum.lib ;
+# Generate referenec medium gamut the kernel files
+GenFile RefMediumGamut.gam : GenRMGam ;
+
+# Visual gamut
+Main GenVisGam : GenVisGam.c ;
+ObjectHdrs GenVisGam : ../h ../icc ../gamut ../numlib ../cgats ;
+LinkLibraries GenVisGam : libgamut.lib ../icc/libicc.lib ../cgats/libcgats.lib
+                              ../numlib/libnum.lib ;
+
+# Develop hue sensitive parameter interpolation */
+#Main tttt : tttt.c ;
+#ObjectHdrs tttt$(SUFOBJ) : ../h ../icc ../numlib ;
+#LinkLibraries tttt : ../icc/libicc.lib ../numlib/libnum.lib ;
 
 if $(BUILD_JUNK) {
 
+	# Gamut creation test routine
+	Main gamtest : gamtest.c ;
+	ObjectHdrs gamtest : ../h ../numlib ../icc ../rspl ;
+	LinkLibraries gamtest : libgamut.lib ../icc/libicc.lib
+                        ../cgats/libcgats.lib ../numlib/libnum.lib ;
+
+	# Group finding test.
+	Main gtest : gtest.c ;
+	ObjectHdrs gtest : ../h ../numlib ../plot ;
+	LinkLibraries gtest : ../numlib/libnum.lib ../plot/libplot.lib ../plot/libvrml.lib ;
+
 	# Test routine
 	Main test : test.c ;
-	#ObjectHdrs test : ../rspl ;	# icc bug workaround
+	#ObjectHdrs test : ../rspl ;
 	LinkLibraries test : libgamut.lib ;
-
-	# Bit vector class test
-	Main bvtest : bvtest.c ;
 
 	# Atan aproximation test
 	Main xtan : xtan.c ;
 
-	Main tt : tt.c ;
-	ObjectHdrs tt$(SUFOBJ) : ../numlib ;	# icc bug workaround
-	LinkLibraries tt : ../numlib/libnum.lib ;
+	# Bit vector class test
+	Main bvtest : bvtest.c ;
 
-	# Nearest object development
-	Main notest : notest.c ;
+	Main tt : tt.c ;
+	ObjectHdrs tt$(SUFOBJ) : ../numlib ;
+	LinkLibraries tt : ../numlib/libnum.lib ;
 }

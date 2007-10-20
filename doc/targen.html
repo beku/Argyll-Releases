@@ -14,138 +14,225 @@ Generate a profiling test target values&nbsp;<a
 used to generate the device channel test point values for grayscale,
 RGB, CMY, CMYK or N-color output or display devices.&nbsp;
 <h3>Usage Summary</h3>
-targen [options] outfile<br>
-&nbsp;<a href="#v">-v [level]</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Verbose mode [optional
-verbose level, 1..n]<br>
-&nbsp;<a href="#d">-d col_comb</a>&nbsp;&nbsp;&nbsp;&nbsp; choose
-colorant combination from the following:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-0: Video grey<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp; 1: Print grey<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2: Print CMY<br>
-&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3:
-Video RGB<br>
-&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-4: CMYK<br>
-&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 5:
-CMYK + Light CM<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 6: CMYK + Light CMK<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 7: CMYK + Red + Blue<br>
-&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 8: CMYK +
-Orange + Green<br>
-&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 9: CMYK +
-Light CMK + Light Light K<br>
-&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 10: CMYK +
-Orange + Green + Light CM<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 11: CMYK + Light
-CM + Medium CM<br>
-&nbsp;<a href="targen.html#D">-D colorant</a> &nbsp;&nbsp; Add or
-delete colorant from combination:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0: Additive<br>
-&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1:
-Cyan<br>
-&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2: Magenta<br>
-&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3: Yellow<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 4: Black<br>
+<small><span style="font-family: monospace;">targen [options] outfile</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#v">-v [level]</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp; Verbose mode [optional
+verbose level, 1..n]</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#d">-d col_comb</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; choose
+colorant combination from the following:</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+0: Video grey</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp; 1: Print grey</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2: Print CMY</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3:
+Video RGB</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 5: Orange<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+4: CMYK</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 5:
+CMYK + Light CM</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 6: CMYK + Light CMK</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;
+&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; 7: CMYK + Red + Blue</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 8: CMYK +
+Orange + Green</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 9: CMYK +
+Light CMK + Light Light K</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 10: CMYK +
+Orange + Green + Light CM</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 11: CMYK + Light
+CM + Medium CM</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="targen.html#D">-D colorant</a><span
+ style="font-family: monospace;"> &nbsp;&nbsp;&nbsp; Add or
+delete colorant from combination:</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0: Additive</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1:
+Cyan</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2: Magenta</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3: Yellow</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 4: Black</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 5: Orange</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 6:
-Red<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Red</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-7: Green<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+7: Green</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-8: Blue<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+8: Blue</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-9: White<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+9: White</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-10: Light Cyan<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+10: Light Cyan</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-11: Light Magenta<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+11: Light Magenta</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-12: Light Yellow<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+12: Light Yellow</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 13:
-Light Black<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Light Black</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-14: Medium Cyan<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+14: Medium Cyan</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 15:
-Medium Magenta<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Medium Magenta</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 16:
-Medium Yellow<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Medium Yellow</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;&nbsp; 17: Medium
-Black<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Black</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 18: Light Light
-Black<br>
-&nbsp;<a href="#e">-e patches</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; White
-color test patches (default 4)<br>
-&nbsp;<a href="#s">-s steps</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;Single channel steps (default 0)<br>
-&nbsp;<a href="#g">-g steps</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Gray axis RGB or CMY steps (default 0)<br>
-&nbsp;<a href="#m">-m steps</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Multidimensional cube steps (default 2)<br>
-&nbsp;<a href="#f">-f patches</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Add
+Black</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#e">-e patches</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; White
+color test patches (default 4)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#s">-s steps</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Single channel steps (default 0)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#g">-g steps</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Gray axis RGB or CMY steps (default 0)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#m">-m steps</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Multidimensional cube steps (default 2)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#f">-f patches</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Add
 iterative &amp; adaptive full spread patches to total (default 836)<br>
-&nbsp; <a href="#t">-t</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; Use incremental far point for full spread<br>
-&nbsp; <a href="#r">-r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; Use device space random for full spread<br>
-&nbsp; <a href="#R">-R</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;Use perceptual space random for full spread<br>
-&nbsp; <a href="#q">-q</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;Use device space-filling quasi-random for full spread<br>
-&nbsp; <a href="#i">-i</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; Use device space body centered cubic grid for full spread<br>
-&nbsp; <a href="#I">-I</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Default is Optimised Farthest Point Sampling (OFPS)<br
+ style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp; </span><a
+ style="font-family: monospace;" href="#t">-t</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Use incremental far point for full spread</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; </span><a
+ style="font-family: monospace;" href="#r">-r</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Use device space random for full spread</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; </span><a
+ style="font-family: monospace;" href="#R">-R</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Use perceptual space random for full spread</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; </span><a
+ style="font-family: monospace;" href="#q">-q</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Use device space-filling quasi-random for full spread</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; </span><a
+ style="font-family: monospace;" href="#i">-i</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Use device space body centered cubic grid for full spread</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; </span><a
+ style="font-family: monospace;" href="#I">-I</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; Use perceptual space body centered cubic grid for full
-spread<br>
-&nbsp; <a href="#a">-a angle</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; Simplex grid angle 0.0 - 0.5 for B.C.C. grid, default -2047840407<br>
-&nbsp; <a href="#A">-A adaptation</a>&nbsp; Degree of iterative
-adaptation 0.0 - 1.0 (default 0.0)<br>
-&nbsp;<a href="#t">-t</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;Use incremental far point for full spread (default
-iterative)<br>
-&nbsp;<a href="#l">-l ilimit</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; Total
-ink limit in %(default = none)<br>
-&nbsp;<a href="#c">-c profile</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Optional device ICC or MPP pre-conditioning profile filename<br>
-<a href="#F">-F L,a,b,rad</a>&nbsp;&nbsp;&nbsp; Filter out samples
-outside Lab sphere.<br>
-&nbsp;<a href="#w">-w</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;Dump diagnostic outfile.wrl file<br>
-&nbsp;<a href="#p1">outfile</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;Base name for output(.ti1)<br>
+spread</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; </span><a
+ style="font-family: monospace;" href="#a">-a angle</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Simplex grid angle 0.0 - 0.5 for B.C.C. grid, default -2047840407</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; </span><a
+ style="font-family: monospace;" href="#A">-A adaptation</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Degree
+of adaptation for preconditioning in OFPS 0.0 - 1.0 (default 0.0)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#t">-t</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use incremental far point for full spread (default
+iterative)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#l">-l ilimit</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Total
+ink limit in %(default = none, or estimated from profile)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#c">-c profile</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Optional device ICC or MPP pre-conditioning profile filename</span><br
+ style="font-family: monospace;">
+<a style="font-family: monospace;" href="#F">-F L,a,b,rad</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; Filter out
+samples
+outside Lab sphere.</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#w">-w</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Dump diagnostic outfile.wrl file</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#p1">outfile</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Base name for output(.ti1)</span></small>
+<br>
 <h3>Usage Details and Discussion<br>
 </h3>
 The number of target patches needs to be chosen, depending on the media
@@ -231,9 +318,11 @@ spread test patches. Full spread patches are distributed according to
 the default or chosen algorithm. The default algorithm will optimize
 the point locations to minimize the distance from any point in device
 space, to the nearest
-sample point. This can be overridden by specifying the <b>-t. -r, -R,
+sample point. This is called Optimized Farthest Point Sampling (OFPS) .
+This can be overridden by specifying the <b>-t. -r, -R,
 -q,
--i or -I</b> flags. If the default algorithm is used, then adaptive
+-i or -I</b> flags. If the default OFPS algorithm is used, then
+adaptive
 test
 point distribution can be enabled by specifying a non-zero value for
 the
@@ -241,7 +330,11 @@ the
 1.0
 distributes the test points so as to minimize the estimated error in
 the
-resulting profile. The total number patches specified will include any
+resulting profile. A value less than 1.0 is generally recommended -
+e.g. try starting with a value of 0.5. Currently if a value of greater
+than 0.0 is use, the distribution is not as highly optimized as it is
+when the default 0.0 is used. The total number patches specified will
+include any
 patches
 generated using the <b>-e</b>, <b>-s</b>, <b>-g</b> and <b>-m</b>
 flags (i.e.
@@ -256,7 +349,7 @@ dimensions,
 and <b>targen</b> falls back on an incremental far point distribution
 algorithm
 by default, that doesn't generate such evenly spread points. This
-behavior
+behaviour
 can be forced using the <b>-t</b> flag. A <a href="#Table">table</a>
 of useful total patch counts for different paper sizes is shown below.<br>
 <br>
@@ -295,12 +388,16 @@ angle that the body centered grid distribution has.<br>
 <br>
 <a name="A"></a> The <b>-A <i>adaptation</i></b> parameter sets the
 degree of adaptation to the known device characteristics, used by the
-default full spread iterative &amp; adaptive algorithm. <br>
+default full spread iterative &amp; adaptive algorithm.&nbsp; By
+default the adapatation is 0.0, (none).<br>
 <br>
 <a name="l"></a> The <b>-l</b> flag and parameter sets a total ink
 limit (Total
 Area Coverage or TAC), which is adhered to for all the generated
-points. In the case of device cube points, this can generate extra test
+points. It is generally good practice to set a test chart ink limit at
+least 10% higher than the ink limit that will be applied when making
+the resulting profile. In the case of device cube points, this can
+generate extra test
 values that lie at the ink limit boundary. For gray wedge values, any
 that exceed the ink limit are omitted. Full spread test values are all
 generated to lie
@@ -310,7 +407,10 @@ should not normally be used with such devices. The total ink limit
 value will be written to the
 .ti1 file, and carried through automatically to the .ti3 file, so that
 it
-can be used during profile creation.<br>
+can be used during profile creation. If a profile is provided using the
+<span style="font-weight: bold;">-c</span> flag, then this will be used
+to estimate an ink limit, if none is provided with the <span
+ style="font-weight: bold;">-l</span> flag. <br>
 <br>
 <a name="c"></a> The <b>-c</b> flag and parameter is used to specify
 an <a href="File_Formats.html#ICC">ICC</a> or <a
@@ -319,7 +419,10 @@ estimating perceptual distances and colorspace curvature, used in
 optimizing the full spread test point placement. Normally a previous
 profile for this or a similar device will be used, or a simpler,
 preliminary profile will be created and used. If no such profile is
-specified, a default device space model is used. <br>
+specified, a default device space model is used.&nbsp; Note that this
+will only have an effect if an algorithm that uses the perceptual
+placement, such as <span style="font-weight: bold;">-R -I</span>, or a
+<span style="font-weight: bold;">-A</span> value &gt; 0.0.<br>
 <br>
 <a name="F"></a> The <b>-F</b> flag and parameters is used to define
 an L*a*b* sphere to filter the test points through. Only test points
@@ -380,6 +483,20 @@ No. Patches<br>
 &nbsp; &nbsp;&nbsp; &nbsp;830x950&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;
 6016<br>
 <br>
+DTP20:<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1xA4&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 540<br>
+&nbsp; &nbsp; &nbsp; 2xA4 &nbsp; &nbsp; &nbsp; 1110<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 3xA4&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; 1680<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 4xA4&nbsp; &nbsp;
+&nbsp;&nbsp; 2250<br>
+<br>
+&nbsp;&nbsp;&nbsp; &nbsp; 1xLetter &nbsp; 570<br>
+&nbsp; &nbsp; &nbsp; 2xLetter&nbsp;&nbsp; 1170<br>
+&nbsp; &nbsp;&nbsp; &nbsp;3xLetter&nbsp;&nbsp; 1770<br>
+&nbsp; &nbsp; &nbsp; 4xLetter&nbsp;&nbsp; 2370<br>
+<br>
 &nbsp; SpectroScan with square patches:<br>
 <br>
 &nbsp; &nbsp; &nbsp; 1xA4R&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 1053<br>
@@ -408,6 +525,19 @@ No. Patches<br>
 &nbsp; &nbsp;&nbsp; &nbsp;3xLetterR&nbsp;&nbsp; 3456<br>
 &nbsp; &nbsp; &nbsp; 4xLetterR&nbsp;&nbsp; 4608<br>
 <br>
+&nbsp; SpectroScan with square patches:<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1xA4&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 504<br>
+&nbsp; &nbsp; &nbsp; 2xA4 &nbsp; &nbsp; &nbsp; 1008<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 3xA4&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; 1512<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 4xA4&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; 2016<br>
+<br>
+&nbsp;&nbsp;&nbsp; &nbsp; 1xLetter &nbsp; 525<br>
+&nbsp; &nbsp; &nbsp; 2xLetter&nbsp;&nbsp; 1050<br>
+&nbsp; &nbsp;&nbsp; &nbsp;3xLetter&nbsp;&nbsp; 2475<br>
+&nbsp; &nbsp; &nbsp; 4xLetter&nbsp;&nbsp; 3300<br>
 <br>
 &nbsp; Scanner (printtarg with -iSS -s options):<br>
 <br>

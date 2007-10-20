@@ -1,3 +1,4 @@
+
 /* 
  * Argyll Color Correction System
  * Color Device profile checker.
@@ -5,11 +6,11 @@
  * Author: Graeme W. Gill
  * Date:   15/7/2001
  *
- * Copyright 2001, 2002 Graeme W. Gill
+ * Copyright 2001 - 2005 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -24,11 +25,14 @@
  *		and allow checking ICC profiles > 4 colors
  */
 
-#define DEBUG
+#undef DEBUG
+
+#define IMP_MONO			/* Turn on development code */
 
 #define verbo stdout
 
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 #if defined(__IBMC__)
 #include <float.h>
@@ -44,20 +48,21 @@
 void
 usage(void) {
 	fprintf(stderr,"Check accuracy of ICC profile, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: profcheck [-options] data.ti3 iccprofile.icm\n");
 	fprintf(stderr," -v              Verbose - print each patch value\n");
 	fprintf(stderr," -c              Show CIE94 delta E values\n");
 	fprintf(stderr," -k              Show CIEDE2000 delta E values\n");
 	fprintf(stderr," -w              create VRML visualisation (iccprofile.wrl)\n");
-	fprintf(stderr," -x              Use VRML axies\n");
+	fprintf(stderr," -x              Use VRML axes\n");
+	fprintf(stderr," -e              Color vectors acording to delta E\n");
 	fprintf(stderr," -d devval1,deval2,devvalN\n");
 	fprintf(stderr,"                 Specify a device value to sort against\n");
 	fprintf(stderr," -p              Sort device value by PCS (Lab) target\n");
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
 	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
-	fprintf(stderr,"                 1931_2, 1964_10, S&B 1955_2, J&V 1978_2 (def.)\n");
+	fprintf(stderr,"                 1931_2 (def.), 1964_10, S&B 1955_2, J&V 1978_2\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
 	fprintf(stderr," data.ti3        Test data file\n");
 	fprintf(stderr," iccprofile.icm  Profile to check against\n");
@@ -68,6 +73,7 @@ FILE *start_vrml(char *name, int doaxes);
 void start_line_set(FILE *wrl);
 void add_vertex(FILE *wrl, double pp[3]);
 void make_lines(FILE *wrl, int ppset);
+void make_de_lines(FILE *wrl);
 void end_vrml(FILE *wrl);
 
 /* Patch value type */
@@ -79,7 +85,7 @@ typedef struct {
 	double dv;			/* Delta from CIE value */
 } pval;
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int fa,nfa;				/* current argument we're looking at */
 	int verb = 0;
@@ -87,21 +93,22 @@ main(int argc, char *argv[])
 	int cie2k = 0;
 	int dovrml = 0;
 	int doaxes = 0;
-	char ti3name[200] = { 0 };		/* Input cgats file base name */
+	int dodecol = 0;
+	char ti3name[MAXNAMEL+1] = { 0 };	/* Input cgats file base name */
 	cgats *icg;				/* input cgats structure */
-	char iccname[200] = { 0 };		/* Input icc file base name */
+	char iccname[MAXNAMEL+1] = { 0 };	/* Input icc file base name */
 	icmFile *rd_fp;
 	icc *rd_icco;
 	icmLuBase *luo;
-	char out_name[100], *xl;		/* VRML name */
-	FILE *wrl;
+	char out_name[MAXNAMEL+1], *xl;		/* VRML name */
+	FILE *wrl = NULL;
 
 	int fwacomp = 0;			/* FWA compensation */
 	int isdisp = 0;				/* nz if this is a display device, 0 if output */
 	int spec = 0;				/* Use spectral data flag */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;			/* Custom illumination spectrum */
-	icxObserverType observ = icxOT_Judd_Voss_2;
+	icxObserverType observ = icxOT_CIE_1931_2;
 
 	int ddevv = 0;				/* Do device value sort */
 	double devval[MAX_CHAN];	/* device value to sort on */
@@ -110,7 +117,8 @@ main(int argc, char *argv[])
 	int npat;					/* Number of patches */
 	pval *tpat;					/* Patch input values */
 	int i, j, rv = 0;
-	icColorSpaceSignature devspace;	/* The device colorspace */
+	icColorSpaceSignature devspace = 0;	/* The device colorspace */
+	int isAdditive = 0;			/* 0 if subtractive, 1 if additive colorspace */
 	int isLab = 0;				/* 0 if input is XYZ, 1 if input is Lab */
 	int devchan = 0;			/* Number of device chanels */
 
@@ -118,6 +126,8 @@ main(int argc, char *argv[])
 	_control87(EM_UNDERFLOW, EM_UNDERFLOW);
 	_control87(EM_OVERFLOW, EM_OVERFLOW);
 #endif
+
+	error_program = "profcheck";
 
 	if (argc <= 1)
 		usage();
@@ -153,6 +163,10 @@ main(int argc, char *argv[])
 			/* Axes */
 			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X')
 				doaxes = 1;
+
+			/* Delta E coloring */
+			else if (argv[fa][1] == 'e' || argv[fa][1] == 'E')
+				dodecol = 1;
 
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				cie94 = 1;
@@ -256,12 +270,12 @@ main(int argc, char *argv[])
 
 	/* Get the file name arguments */
 	if (fa >= argc || argv[fa][0] == '-') usage();
-	strcpy(ti3name,argv[fa++]);
+	strncpy(ti3name,argv[fa++],MAXNAMEL); ti3name[MAXNAMEL] = '\000';
 
 	if (fa >= argc || argv[fa][0] == '-') usage();
-	strcpy(iccname,argv[fa]);
+	strncpy(iccname,argv[fa++],MAXNAMEL); iccname[MAXNAMEL] = '\000';
 
-	strcpy(out_name, iccname);
+	strncpy(out_name,iccname,MAXNAMEL-4); out_name[MAXNAMEL-4] = '\000';
 	if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
 		xl = out_name + strlen(out_name);
 	strcpy(xl,".wrl");
@@ -276,7 +290,7 @@ main(int argc, char *argv[])
 	if (icg->read_name(icg, ti3name))
 		error("CGATS file read error on '%s': %s",ti3name,icg->err);
 
-	if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
+	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0)
 		error ("Input file '%s' isn't a CTI3 format file",ti3name);
 	if (icg->ntables < 1)
 		error ("Input file '%s' doesn't contain at least one table",ti3name);
@@ -320,34 +334,66 @@ main(int argc, char *argv[])
 			devspace = icSigCmykData;
 			devchan = 4;
 			isLab = 0;
+			isAdditive = 0;
 		} else if (strcmp(icg->t[0].kdata[ti],"CMYK_LAB") == 0) {
 			devspace = icSigCmykData;
 			devchan = 4;
 			isLab = 1;
+			isAdditive = 0;
 		} else if (strcmp(icg->t[0].kdata[ti],"CMY_XYZ") == 0) {
 			devspace = icSigCmyData;
 			devchan = 3;
 			isLab = 0;
+			isAdditive = 0;
 		} else if (strcmp(icg->t[0].kdata[ti],"CMY_LAB") == 0) {
 			devspace = icSigCmyData;
 			devchan = 3;
 			isLab = 1;
+			isAdditive = 0;
 		} else if (strcmp(icg->t[0].kdata[ti],"RGB_XYZ") == 0) {
 			devspace = icSigRgbData;
 			devchan = 3;
 			isLab = 0;
+			isAdditive = 1;
 		} else if (strcmp(icg->t[0].kdata[ti],"RGB_LAB") == 0) {
 			devspace = icSigRgbData;
 			devchan = 3;
 			isLab = 1;
+			isAdditive = 1;
+		/* Scanner .ti3 files: */
 		} else if (strcmp(icg->t[0].kdata[ti],"XYZ_RGB") == 0) {
 			devspace = icSigRgbData;
 			devchan = 3;
 			isLab = 0;
+			isAdditive = 1;
 		} else if (strcmp(icg->t[0].kdata[ti],"LAB_RGB") == 0) {
 			devspace = icSigRgbData;
 			devchan = 3;
 			isLab = 1;
+			isAdditive = 1;
+#ifdef IMP_MONO
+		} else if (strcmp(icg->t[0].kdata[ti],"K_XYZ") == 0) {
+			devspace = icSigGrayData;
+			devchan = 1;
+			isLab = 0;
+			isAdditive = 0;
+		} else if (strcmp(icg->t[0].kdata[ti],"K_LAB") == 0) {
+			devspace = icSigGrayData;
+			devchan = 1;
+			isLab = 1;
+			isAdditive = 0;
+		} else if (strcmp(icg->t[0].kdata[ti],"W_XYZ") == 0) {
+			devspace = icSigGrayData;
+			devchan = 1;
+			isLab = 0;
+			isAdditive = 1;
+		} else if (strcmp(icg->t[0].kdata[ti],"W_LAB") == 0) {
+			devspace = icSigGrayData;
+			devchan = 1;
+			isLab = 1;
+			isAdditive = 1;
+#endif /* IMP_MONO */
+
 		} else 
 			error("Device input file '%s' has unhandled color representation '%s'",
 			                                                     ti3name, icg->t[0].kdata[ti]);
@@ -367,7 +413,7 @@ main(int argc, char *argv[])
 	/* Read in the CGATs fields */
 	{
 		int sidx;					/* Sample ID index */
-		int ti, ii, ci, mi, yi, ki;
+		int ti, ci, mi, yi, ki;
 		int Xi, Yi, Zi;
 
 		if ((sidx = icg->find_field(icg, 0, "SAMPLE_ID")) < 0)
@@ -375,7 +421,21 @@ main(int argc, char *argv[])
 		if (icg->t[0].ftype[sidx] != nqcs_t)
 			error("Input file '%s' field SAMPLE_ID is wrong type",ti3name);
 
-		if (devspace == icSigRgbData) {
+		if (devspace == icSigGrayData) {
+			if (isAdditive) {
+				if ((ci = icg->find_field(icg, 0, "GRAY_W")) < 0)
+					error("Input file doesn't contain field GRAY_W");
+				if (icg->t[0].ftype[ci] != r_t)
+					error("Field GRAY_W is wrong type - corrupted file ?");
+			} else {
+				if ((ci = icg->find_field(icg, 0, "GRAY_K")) < 0)
+					error("Input file doesn't contain field GRAY_K");
+				if (icg->t[0].ftype[ci] != r_t)
+					error("Field GRAY_K is wrong type - corrupted file ?");
+			}
+			mi = yi = ki = ci;
+
+		} else if (devspace == icSigRgbData) {
 			if ((ci = icg->find_field(icg, 0, "RGB_R")) < 0)
 				error("Input file '%s' doesn't contain field RGB_R",ti3name);
 			if (icg->t[0].ftype[ci] != r_t)
@@ -524,7 +584,7 @@ main(int argc, char *argv[])
 				double nw = 0.0;		/* Number of media white patches */
 				xspect mwsp;			/* Medium spectrum */
 				instType itype;			/* Spectral instrument type */
-				xspect *insp;			/* Instrument illuminant */
+				xspect insp;			/* Instrument illuminant */
 
 				mwsp = sp;		/* Struct copy */
 
@@ -534,7 +594,7 @@ main(int argc, char *argv[])
 				if ((itype = inst_enum(icg->t[0].kdata[ti])) == instUnknown)
 					error ("Input file '%s' unrecognised target instrument '%s'",ti3name, icg->t[0].kdata[ti]);
 
-				if ((insp = inst_illuminant(itype)) == NULL)
+				if (inst_illuminant(&insp, itype) != 0)
 					error ("Instrument doesn't have an FWA illuminent");
 
 				/* Find the media white spectral reflectance */
@@ -543,12 +603,37 @@ main(int argc, char *argv[])
 
 				/* Compute the mean of all the media white patches */
 				for (i = 0; i < npat; i++) {
+					int use = 0;
 	
-					if (*((double *)icg->t[0].fdata[i][ci]) < 1e-4
-					 && *((double *)icg->t[0].fdata[i][mi]) < 1e-4
-					 && *((double *)icg->t[0].fdata[i][yi]) < 1e-4
-					 && *((double *)icg->t[0].fdata[i][ki]) < 1e-4) {
-	
+					if (devspace == icSigGrayData) {
+						if (isAdditive) {
+							if (*((double *)icg->t[0].fdata[i][ci]) > (100.0 - 0.1))
+								use = 1;
+						} else {
+							if (*((double *)icg->t[0].fdata[i][ci]) < 0.1)
+								use = 1;
+						}
+					} else if (devspace == icSigRgbData) {
+						if (*((double *)icg->t[0].fdata[i][ci]) > (100.0 - 0.1)
+						 && *((double *)icg->t[0].fdata[i][mi]) > (100.0 - 0.1)
+						 && *((double *)icg->t[0].fdata[i][yi]) > (100.0 - 0.1))
+							use = 1;
+					} else if (devspace == icSigCmyData) {
+						if (*((double *)icg->t[0].fdata[i][ci]) < 0.1
+						 && *((double *)icg->t[0].fdata[i][mi]) < 0.1
+						 && *((double *)icg->t[0].fdata[i][yi]) < 0.1)
+							use = 1;
+					} else {	/* Assume CMYK */
+
+						if (*((double *)icg->t[0].fdata[i][ci]) < 0.1
+						 && *((double *)icg->t[0].fdata[i][mi]) < 0.1
+						 && *((double *)icg->t[0].fdata[i][yi]) < 0.1
+						 && *((double *)icg->t[0].fdata[i][ki]) < 0.1) {
+							use = 1;
+						}
+					}
+
+					if (use) {
 						/* Read the spectral values for this patch */
 						for (j = 0; j < mwsp.spec_n; j++) {
 							mwsp.spec[j] += *((double *)icg->t[0].fdata[i][spi[j]]);
@@ -556,14 +641,33 @@ main(int argc, char *argv[])
 						nw++;
 					}
 				}
-				if (nw == 0.0)
-					error ("Input file '%s' can't find a media white patch to init FWA",ti3name);
+				if (nw == 0.0) {
+					warning("Input file '%s' can't find a media white patch to init FWA",ti3name);
+
+					/* Track the maximum reflectance for any band to determine white. */
+					/* This might give bogus results if there is no white patch... */
+					for (i = 0; i < npat; i++) {
+						for (j = 0; j < mwsp.spec_n; j++) {
+							double rv = *((double *)icg->t[0].fdata[i][spi[j]]);
+							if (rv > mwsp.spec[j])
+								mwsp.spec[j] = rv;
+						}
+					}
+					nw++;
+				}
 
 				for (j = 0; j < mwsp.spec_n; j++)
 					mwsp.spec[j] /= nw;	/* Compute average */
 
-				if (sp2cie->set_fwa(sp2cie, insp, &mwsp)) 
+				if (sp2cie->set_fwa(sp2cie, &insp, &mwsp)) 
 					error ("Set FWA on sp2cie failed");
+
+				if (verb) {
+					double FWAc;
+					sp2cie->get_fwa_info(sp2cie, &FWAc);
+					fprintf(verbo,"FWA content = %f\n",FWAc);
+				}
+				
 			}
 
 			for (i = 0; i < npat; i++) {
@@ -677,10 +781,13 @@ main(int argc, char *argv[])
 
 		}
 		if (dovrml) {
-			make_lines(wrl, 2);
+			if (dodecol)
+				make_de_lines(wrl);
+			else
+				make_lines(wrl, 2);
 			end_vrml(wrl);
 		}
-		printf("Profile check complete, errors%s: peak = %f, avg = %f, rms = %f\n",
+		printf("Profile check complete, errors%s: max. = %f, avg. = %f, RMS = %f\n",
             cie2k ? "(CIEDE2000)" : cie94 ? " (CIE94)" : "", merr, aerr/nsamps, sqrt(rerr/nsamps));
 
 		/* ------------------------------- */
@@ -774,22 +881,39 @@ static int paloc = 0;
 static struct { double pp[3]; } *pary;
 
 static void Lab2RGB(double *out, double *in);
+static void DE2RGB(double *out, double in);
 
 FILE *start_vrml(char *name, int doaxes) {
 	FILE *wrl;
+
+	/* Define the axis boxes */
+	struct {
+		double x, y, z;			/* Box center */
+		double wx, wy, wz;		/* Box size */
+		double r, g, b;			/* Box color */
+	} axes[5] = {
+		{ 0, 0,   50-GAMUT_LCENT, 2, 2, 100, .7, .7, .7 },	/* L axis */
+		{ 50, 0,  0-GAMUT_LCENT,  100, 2, 2,  1,  0,  0 },	/* +a (red) axis */
+		{ 0, -50, 0-GAMUT_LCENT,  2, 100, 2,  0,  0,  1 },	/* -b (blue) axis */
+		{ -50, 0, 0-GAMUT_LCENT,  100, 2, 2,  0,  1,  0 },	/* -a (green) axis */
+		{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,  1,  1,  0 },	/* +b (yellow) axis */
+	};
+
+	/* Define the labels */
 	struct {
 		double x, y, z;
-		double wx, wy, wz;
+		double size;
+		char *string;
 		double r, g, b;
-	} axes[5] = {
-		{ 0, 0,  50-GAMUT_LCENT,  2, 2, 100,  .7, .7, .7 },	/* L axis */
-		{ 50, 0,  0-GAMUT_LCENT,  100, 2, 2,   1,  0,  0 },	/* +a (red) axis */
-		{ 0, -50, 0-GAMUT_LCENT,  2, 100, 2,   0,  0,  1 },	/* -b (blue) axis */
-		{ -50, 0, 0-GAMUT_LCENT,  100, 2, 2,   0,  1,  0 },	/* -a (green) axis */
-		{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
+	} labels[6] = {
+		{ -2, 2, -GAMUT_LCENT + 100 + 10, 10, "+L*",  .7, .7, .7 },	/* Top of L axis */
+		{ -2, 2, -GAMUT_LCENT - 10,      10, "0",    .7, .7, .7 },	/* Bottom of L axis */
+		{ 100 + 5, -3,  0-GAMUT_LCENT,  10, "+a*",  1,  0,  0 },	/* +a (red) axis */
+		{ -5, -100 - 10, 0-GAMUT_LCENT,  10, "-b*",  0,  0,  1 },	/* -b (blue) axis */
+		{ -100 - 15, -3, 0-GAMUT_LCENT,  10, "-a*",  0,  0,  1 },	/* -a (green) axis */
+		{ -5,  100 + 5, 0-GAMUT_LCENT,  10, "+b*",  1,  1,  0 },	/* +b (yellow) axis */
 	};
-	int i;
-	
+
 	if ((wrl = fopen(name,"w")) == NULL)
 		error("Error opening VRML file '%s'\n",name);
 
@@ -814,18 +938,34 @@ FILE *start_vrml(char *name, int doaxes) {
 	fprintf(wrl,"    }\n");
 	fprintf(wrl,"\n");
 	if (doaxes != 0) {
-		fprintf(wrl,"# Lab axes as boxes:\n");
-		for (i = 0; i < 5; i++) {
-			fprintf(wrl,"Transform { translation %f %f %f\n", axes[i].x, axes[i].y, axes[i].z);
-			fprintf(wrl,"\tchildren [\n");
-			fprintf(wrl,"\t\tShape{\n");
-			fprintf(wrl,"\t\t\tgeometry Box { size %f %f %f }\n",
-			                  axes[i].wx, axes[i].wy, axes[i].wz);
-			fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[i].r, axes[i].g, axes[i].b);
-			fprintf(wrl,"\t\t}\n");
-			fprintf(wrl,"\t]\n");
-			fprintf(wrl,"}\n");
+		int n;
+		fprintf(wrl,"    # Lab axes as boxes:\n");
+		for (n = 0; n < 5; n++) {
+			fprintf(wrl,"    Transform { translation %f %f %f\n", axes[n].x, axes[n].y, axes[n].z);
+			fprintf(wrl,"      children [\n");
+			fprintf(wrl,"        Shape{\n");
+			fprintf(wrl,"          geometry Box { size %f %f %f }\n",
+			                       axes[n].wx, axes[n].wy, axes[n].wz);
+			fprintf(wrl,"          appearance Appearance { material Material ");
+			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[n].r, axes[n].g, axes[n].b);
+			fprintf(wrl,"        }\n");
+			fprintf(wrl,"      ]\n");
+			fprintf(wrl,"    }\n");
+		}
+		fprintf(wrl,"    # Axes identification:\n");
+		for (n = 0; n < 6; n++) {
+			fprintf(wrl,"    Transform { translation %f %f %f\n", labels[n].x, labels[n].y, labels[n].z);
+			fprintf(wrl,"      children [\n");
+			fprintf(wrl,"        Shape{\n");
+			fprintf(wrl,"          geometry Text { string [\"%s\"]\n",labels[n].string);
+			fprintf(wrl,"            fontStyle FontStyle { family \"SANS\" style \"BOLD\" size %f }\n",
+			                                  labels[n].size);
+			fprintf(wrl,"                        }\n");
+			fprintf(wrl,"          appearance Appearance { material Material ");
+			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", labels[n].r, labels[n].g, labels[n].b);
+			fprintf(wrl,"        }\n");
+			fprintf(wrl,"      ]\n");
+			fprintf(wrl,"    }\n");
 		}
 		fprintf(wrl,"\n");
 	}
@@ -898,7 +1038,45 @@ void make_lines(FILE *wrl, int ppset) {
 
 	fprintf(wrl,"  }\n");
 	fprintf(wrl,"} # end shape\n");
+}
 
+/* Assume 2 ppset, and make line color prop to length */
+void make_de_lines(FILE *wrl) {
+	int i, j;
+
+	fprintf(wrl,"      ]\n");
+	fprintf(wrl,"    }\n");
+	fprintf(wrl,"  coordIndex [\n");
+
+	for (i = 0; i < npoints;) {
+		for (j = 0; j < 2; j++, i++) {
+			fprintf(wrl,"%d, ", i);
+		}
+		fprintf(wrl,"-1,\n");
+	}
+	fprintf(wrl,"    ]\n");
+
+	/* Color */
+	fprintf(wrl,"            colorPerVertex TRUE\n");
+	fprintf(wrl,"            color Color {\n");
+	fprintf(wrl,"              color [			# RGB colors of each vertex\n");
+
+	for (i = 0; i < npoints; i++) {
+		double rgb[3], ss;
+		for (ss = 0.0, j = 0; j < 3; j++) {
+			double tt = (pary[i & ~1].pp[j] - pary[i | 1].pp[j]);
+			ss += tt * tt;
+		}
+		ss = sqrt(ss);
+		DE2RGB(rgb, ss);
+		fprintf(wrl,"                %f %f %f,\n", rgb[0], rgb[1], rgb[2]);
+	}
+	fprintf(wrl,"              ] \n");
+	fprintf(wrl,"            }\n");
+	/* End color */
+
+	fprintf(wrl,"  }\n");
+	fprintf(wrl,"} # end shape\n");
 }
 
 void end_vrml(FILE *wrl) {
@@ -976,6 +1154,39 @@ Lab2RGB(double *out, double *in) {
 	out[2] = B;
 }
 
+/* Convert a delta E value into a signal color: */
+static void
+DE2RGB(double *out, double in) {
+	struct {
+		double de;
+		double r, g, b;
+	} range[6] = {
+		{ 10.0, 1, 1, 0 },		/* yellow */
+		{ 4.0,  1, 0, 0 },		/* red */
+		{ 2.0, 1, 0, 1 },		/* magenta */
+		{ 1.0, 0, 0, 1 },		/* blue */
+		{ 0.5, 0, 1, 1 },		/* cyan */
+		{ 0.0, 0, 1, 0 }		/* green */
+	};
+	int i;
+	double bl;
+
+	/* Locate the range we're in */
+	if (in > range[0].de) {
+		out[0] = range[0].r;
+		out[1] = range[0].g;
+		out[2] = range[0].b;
+	} else {
+		for (i = 0; i < 5; i++) {
+			if (in <= range[i].de && in >= range[i+1].de)
+				break;
+		}
+		bl = (in - range[i+1].de)/(range[i].de - range[i+1].de);
+		out[0] = bl * range[i].r + (1.0 - bl) * range[i+1].r;
+		out[1] = bl * range[i].g + (1.0 - bl) * range[i+1].g;
+		out[2] = bl * range[i].b + (1.0 - bl) * range[i+1].b;
+	}
+}
 
 
 

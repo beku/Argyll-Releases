@@ -7,7 +7,7 @@
  * Version: 1.0
  *
  * Copyright 2000 - 2005 Graeme W. Gill
- * Please refer to Licence.txt file for details.
+ * Please refer to License.txt file for details.
  */
 
 /* TTBD:
@@ -54,7 +54,6 @@ main(
 	int verb = 0;
 	int chan = 0;			/* Chosen channel to plot against */
 	char in_name[100];
-	icmFile *rd_fp;
 
 	char *buf, *outc;
 	int ti;
@@ -69,7 +68,7 @@ main(
 	int chix[ICX_MXINKS];	/* Device chanel indexes */
 	int pcsix[3];	/* Device chanel indexes */
 	pval *pat;					/* patch values */
-	int i, j, rv = 0;
+	int i, j;
 	
 	if (argc < 2)
 		usage();
@@ -117,7 +116,7 @@ main(
 	if (cgf->read_name(cgf, in_name))
 		error("CGATS file read error %s on file '%s'",cgf->err, in_name);
 
-	if (cgf->t[0].tt != tt_other || cgf->t[0].oi != 0)
+	if (cgf->ntables == 0 || cgf->t[0].tt != tt_other || cgf->t[0].oi != 0)
 		error ("Profile file '%s' isn't a CTI3 format file",in_name);
 
 	if (cgf->ntables < 1)
@@ -211,7 +210,7 @@ main(
 
 	/* Create the plot */
 	{
-		int i, j;
+		int i;
 		double *xx;
 		double *y0;
 		double *y1;

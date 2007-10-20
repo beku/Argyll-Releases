@@ -15,7 +15,8 @@ based
 on various distribution algorithms suitable for
 reading using an Xrite DTP51 or DTP41 colorimeter, or scanner for print
 charts,
-the Gretag Spectrolino for film charts, or the Xrite DTP92 for monitor
+the Gretag Spectrolino for film charts, or the Xrite DTP92 pr DTP94 for
+monitor
 calibration.
 The generated file is a PostScript file for the print chart, and a
 series
@@ -26,7 +27,8 @@ of TIFF files for the film chart.<br>
 This directory contains the routines to read a print test chart with an
 Xrite DTP51 or DTP41, Gretag Spectroscan, a film test chart using a
 Gretag SpectroscanT, or a
-monitor calibration using an Xrite DTP92 or Gretag Spectrolino, and
+monitor adjustment and calibration using an Xrite DTP92 or DTP94 or
+Gretag Spectrolino, and
 create an appropriate CGATS
 file containing the raw printer calibration information. <br>
 <br>
@@ -99,7 +101,7 @@ system for n-color printing devices (MPP) lives here too.<br>
 <br>
 <b>RSPL</b><br>
 <br>
-This is the second generation Thin Plate Regular Spline library. It
+This is the second generation Regular Spline library. It
 contains
 scattered data point to regular grid interpolation, as well as spline
 smoothing,
@@ -184,6 +186,31 @@ Where project common #include files live.<br>
 <br>
 Where the main executables are copied to, when install.ksh or
 install.bat is run. Other useful files get copied here too.<br>
+<br style="font-weight: bold;">
+<span style="font-weight: bold;">LIBUSB, LIBUSBW<br>
+<br>
+</span>The necessary libraries to access USB devices live here<br>
+<br>
+<span style="font-weight: bold;">TWEAK<br>
+<br>
+</span>Tools that allow adjustment and improvement of profiles or links
+live here. Currently the tool <span style="font-weight: bold;">refine</span>
+is the only member.<br>
+<br>
+<span style="font-weight: bold;">RENDER</span><br>
+<span style="font-weight: bold;"></span><br>
+This is a library and set of tools for rendering to raster images.
+Currently it supports creating a couple of test images.<br>
+<br>
+<span style="font-weight: bold;">REF</span><br>
+<br>
+Miscellaneous useful reference files, such as scanin recognition
+templates for standard charts, live here.<br>
+<br>
+<span style="font-weight: bold;">DOC</span><br>
+<br>
+All the Argyll HTML documentation lives here.<br>
+<br>
 <br>
 <br>
 <br>

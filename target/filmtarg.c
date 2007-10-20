@@ -8,8 +8,8 @@
  * Copyright 2001, DreamWorks LLC
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* This program generates a set of TIFF images containing color test patches,
@@ -77,11 +77,11 @@ int rand,			/* Randomise flag */
 int rstart,			/* Starting index for random */
 int verb)			/* Verbose flag */
 {
-	randix *r;	    /* Random index order object */
-	int ix;		    /* Patch index in target list */
-	int i;		    /* Logical patch in target list */
-	char slab[6];	/* Strip label */
-	char fname[200];/* File name */
+	randix *r = NULL;	/* Random index order object */
+	int ix;		    	/* Patch index in target list */
+	int i;		    	/* Logical patch in target list */
+	char slab[6];		/* Strip label */
+	char fname[200];	/* File name */
 	TIFF *tiff;					/* TIFF file handle */
 	unsigned short* scanline;	/* scanline buffer */
 	int x,y;					/* position in TIFF image */
@@ -128,9 +128,9 @@ int verb)			/* Verbose flag */
 			/* fill scanline */
 			for (x=0; x<pw; x++) {
 				int xx = 3*x;
-				scanline[xx++] = (cols[ix].r * 65535.0) + 0.5;
-				scanline[xx++] = (cols[ix].g * 65535.0) + 0.5;
-				scanline[xx]   = (cols[ix].b * 65535.0) + 0.5;
+				scanline[xx++] = (unsigned short)((cols[ix].r * 65535.0) + 0.5);
+				scanline[xx++] = (unsigned short)((cols[ix].g * 65535.0) + 0.5);
+				scanline[xx]   = (unsigned short)((cols[ix].b * 65535.0) + 0.5);
 			}
 			for (y=0; y<ph; y++) {
 				if (TIFFWriteScanline(tiff, (tdata_t)scanline, y, 0) < 0) {
@@ -164,7 +164,7 @@ static film filmsizes[] = {
 	{ "FullAp_Half", 2048, 1556 },
 	{ "Vista_Full",  4096, 6144 },
 	{ "Vista_Half",  2048, 3072 },
-	{ NULL, 0.0, 0.0 }
+	{ NULL, 0, 0 }
 };
 
 /* Case independent string compare */
@@ -207,7 +207,6 @@ char *argv[];
 	static char inname[200] = { 0 };		/* Input cgats file base name */
 	static char outname[200] = { 0 };		/* Output cgats file base name */
 	static char tiffname[200] = { 0 };		/* Output postscrip file base name */
-	FILE *of;
 	cgats *icg;			/* input cgats structure */
 	cgats *ocg;			/* output cgats structure */
 	int i;
@@ -220,7 +219,7 @@ char *argv[];
 	struct tm *tsp = localtime(&clk);
 	char *atm = asctime(tsp); /* Ascii time */
 	char buf[100];	/* general sprintf buffer */
-	int rstart;			/* Random sequence start value */
+	int rstart = 0;	/* Random sequence start value */
 
 #if defined(__IBMC__)
 	_control87(EM_UNDERFLOW, EM_UNDERFLOW);
@@ -269,7 +268,6 @@ char *argv[];
 			}
 			/* Image format */
 			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F') {
-				int tt;
 				fa = nfa;
 				if (na == NULL) usage();
 				for (flm = filmsizes; flm->name != NULL; flm++) {
@@ -301,8 +299,8 @@ char *argv[];
 
 	if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
 		error ("Input file isn't a CTI1 format file");
-	if (icg->ntables != 1)
-		error ("Input file doesn't contain exactly one table");
+	if (icg->ntables < 1)
+		error ("Input file doesn't contain at least one table");
 
 	if ((npat = icg->t[0].nsets) <= 0)
 		error ("No sets of data");

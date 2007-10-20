@@ -3,8 +3,8 @@
  * Copyright 1999 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include <stdio.h>
@@ -29,15 +29,14 @@ double fcn(		/* Return function value */
 
 #define N 9
 
-main(void)
+int main(void)
 {
 	double cp[N];		/* Function input values */
 	double s[N];		/* Search area */
 	double err;
 	int j;
-	double fnorm;
 	int nprint = 0;		/* Itteration debugging print = off */
-	double tol;
+	int rc;
 
 	error_program = "tpowell";	/* Set global error reporting string */
 
@@ -53,7 +52,8 @@ main(void)
 	/*	 Unless high precision solutions are required, */
 	/*	 this is the recommended setting. */
 
-	err = powell(
+	rc = powell(
+		&err,
 		N, 				/* Dimentionality */
 		cp,				/* Initial starting point */
 		s,				/* Size of initial search area */
@@ -63,7 +63,7 @@ main(void)
 		NULL);			/* Opaque data needed by function */
 
 
-	fprintf(stdout,"Final approximate solution err = %f:\n",err);
+	fprintf(stdout,"Status = %d, final approximate solution err = %f:\n",rc,err);
 	for (j = 0; j < N; j++) {
 		fprintf(stdout,"cp[%d] = %e, expect %e\n",j,cp[j],expect[j]);
 	}

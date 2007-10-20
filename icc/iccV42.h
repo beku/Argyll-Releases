@@ -16,8 +16,8 @@
  * not spec. version numbers.
  *
  * Portions of this file are Copyright 2004 - 2005 Graeme W. Gill,
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  *
  *  Graeme Gill.
  */
@@ -25,6 +25,10 @@
 /* Header file guard bands */
 #ifndef ICCV42_H
 #define ICCV42_H
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
 
 /***************************************************************** 
  Copyright (c) 1994-1998 SunSoft, Inc.
@@ -543,5 +547,9 @@ typedef enum {
     icCurveFunction5                    = 0x0003,
     icCurveFunction7                    = 0x0004
 } icParametricCurveFunctionType;
+
+#ifdef __cplusplus
+	}
+#endif
 
 #endif /* ICCV42_H */

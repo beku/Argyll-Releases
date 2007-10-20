@@ -10,40 +10,91 @@
 <h2><b>spectro/printread</b></h2>
 <h3>Summary</h3>
 Read a printer test chart using an instrument, to create a&nbsp;<a
- href="File_Formats.html#.ti3">.ti3</a> data file.<br>
+ href="File_Formats.html#.ti3">.ti3</a> data file. The type of
+instrument is determined by the communication port
+selected.<br>
 <h3>Usage</h3>
-printread [-options] outfile<br>
-&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; Verbose mode<br>
-&nbsp;<a href="#d">-d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Print debug diagnostics<br>
-&nbsp;<a href="#c">-c comport</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set COM
-port, 1..N (default 1)<br>
-&nbsp;<a href="#i">-i 41 | 51 | SS</a> &nbsp; Choose target instrument<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; 41 = DTP41, 51 = DTP51, SS = Spectrolino or
-SpectroScan or SpectroScanT<br>
-&nbsp;<a href="#t">-t</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; Use transmission measurement mode<br>
-<a href="#e">-e</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<small><span style="font-family: monospace;">printread [-options]
+outfile</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#v">-v</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Verbose mode</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#c">-c listno</a><span
+ style="font-family: monospace;"> &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;
+Set communication port from the following list (default 1)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#t">-t</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; Use transmission measurement mode<br>
+&nbsp;</span><a style="font-family: monospace;" href="#e">-e</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Use emissive&nbsp; measurement mode (absolute results)<br>
-<a href="#x">-x [lx]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Take external values, either L*a*b* (-xl) or XYZ (-xx).<br>
-&nbsp;<a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; Don't save spectral information (default saves
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#p">-p</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Measure patch by patch rather than strip</span></small><br>
+<small><span style="font-family: monospace;"></span>&nbsp; <a
+ style="font-family: monospace;" href="#x">-x [lx]</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Take external values, either L*a*b* (-xl) or XYZ (-xx).</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#n">-n</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Don't save spectral information (default saves
 spectral)<br>
-&nbsp;<a href="#p1"><i>inoutfile</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#l">-l</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Save CIE as D50 L*a*b* rather than XYZ<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#a">-a</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Save patch locations to output as well</span></small><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#N">-N</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; Disable auto calibration of instrument<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#B">-B</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; Disable auto bi-directional strip recognition</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#H">-H</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; Use high resolution spectrum mode (if available)<br>
+&nbsp;<a href="#T">-T ratio</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Modify strip patch consistency tollerance by ratio (if available)<br
+ style="font-family: monospace;">
+</span></font><small><span style="font-family: monospace;"></span><small
+ style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print debug diagnostics to
+stderr</small><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#p1"><i>inoutfile</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;Base
-name for input[<a href="File_Formats.html#.ti2">.ti2</a>]/output[<a
- href="File_Formats.html#.ti3">.ti3</a>] file<br>
+name for input[</span><a style="font-family: monospace;"
+ href="File_Formats.html#.ti2">.ti2</a><span
+ style="font-family: monospace;">]/output[</span><a
+ style="font-family: monospace;" href="File_Formats.html#.ti3">.ti3</a><span
+ style="font-family: monospace;">] file</span></small>
+<br>
 <h3>Usage Details</h3>
 <a name="v"></a>The <b>-v</b> flag causes extra information to be
 printed out during printread
 operation.<br>
 <br>
-<a name="d"></a>The <b>-d</b> flag causes serial communications
-diagnostics to be printed to stdout. This can be useful in tracking
-down why an instrument can't connect.<br>
 <br>
 <a name="c"></a>Normally instruments are connected via a serial
 communication port, and the
@@ -54,17 +105,11 @@ information (i.e. "printread -?" or "printread --"), then the
 discovered
 serial ports will be listed on Windows and Mac OSX systems.<br>
 <br>
-<a name="i"></a>The type of instrument is normally specified when
-creating the test chart
-with <a href="printtarg.html"> printtarg</a>,
-but it can be overridden by using the <b>-i</b> flag. Note that
-specifying -iSS will enable automatic detection of a Spectrlino (hand
-held), SpectroScan or SpectroScanT.<br>
-<br>
 <a name="t"></a>If using an Xrite DTP41T, and printing onto transparent
 or back lit media,
 use the <b>-t</b> flag to operate the instrument in transparency mode.
-If using a Spectrolino (handheld), this triggers a fake transparency
+If using a Spectrolino or Eye-One Pro (handheld), this triggers a fake
+transparency
 mode, that uses a separate backlight (such as a light box). The&nbsp;
 instrument will be used to calibrate the level of backlight, and use
 this to compute the transparency of the test chart samples. Note that
@@ -83,6 +128,12 @@ mode, and the values recorded will be absolute XYZ values. This can be
 used for media such as backlit film, measuring it on a lightbox, so as
 to capture the actual illumination characteristics of that particular
 media.<br>
+<br>
+<a name="p"></a> The <span style="font-weight: bold;">-p</span> flag
+causes printread to use a spot read mode for an instrument, even if it
+is capable of faster chart reading modes such as strip reading. This
+can be useful if strip measurement patch recognition is not reliable
+for certain media.<br>
 <br>
 <a name="x"></a> The <span style="font-weight: bold;">-x</span> flag
 causes printread to expect values to be entered for each reading,
@@ -108,91 +159,71 @@ when creating the profile. If the spectral readings are not needed,
 then
 prinread operation can be speeded up by specifying the <b>-n</b> flag.<br>
 <br>
+<a name="l"></a> By default D50
+standard observer XYZ values
+will be recorded for each test patch, but if the <span
+ style="font-weight: bold;"><span style="font-weight: bold;">-l</span></span>
+flag is used, D50 L*a*b* values will be recorded instead.<br>
+<br>
+<a name="a"></a> Normally the patch locations are not needed in the
+output, but if a chart is being read as an input reference (for use in
+profiling a scanner or a camera), then the patch locations will still
+be needed. The <span style="font-weight: bold;">-a</span> flag adds
+the locations to the output .ti3 file.<br>
+<br>
+<a name="N"></a> Many instruments automatically ask for an instrument
+calibration before each set of readings. Sometimes this can be awkward
+if the instrument is being mounted in some sort of measuring jig, or
+annoying if several sets of readings are being taken in quick
+succession. The -<span style="font-weight: bold;">N</span> suppresses
+this automatic calibration (if possible), causing the previous
+calibration recorded in the instrument or on the host computer. It is
+advisable to only use this option on the second and subsequent
+measurements in a single session.<br>
+<br>
+<a name="B"></a> Some strip instruments (i.e.. Eye-One Pro) when used
+with Argyll will automatically recognize a strip when read in the
+reverse direction, by matching the patch readings against their
+expected values. If the expected values are not known accurately
+enough, this may cause erroneous reverse recognition, so the <span
+ style="font-weight: bold;">-<span style="font-weight: bold;">B</span></span>
+flag allows this to be turned off, forcing strips to only be read in
+the forward direction.<br>
+<br>
+<a name="H"></a> The -<span style="font-weight: bold;">H</span> option
+turns on high resolution spectral mode, if the instrument supports it.
+See <a href="instruments.html">Operation of particular instruments</a>
+for more details.<br>
+<br>
+<a name="T"></a> The -<span style="font-weight: bold;">T ratio</span>
+argument modifies the patch consistency tolerance threshold for some
+strip reading instruments (ie. the Eye-One Pro). In recognizing patches
+in a strip, an instrument may take multiple readings as the strip is
+read, and then divide the readings up into each patch. It may then
+check the consistency of the multiple readings corresponding to each
+patch, and reject the measurement if they are too inconsistent. For
+some media (ie. a coarser screens, fabric etc.) the default tolerance
+may be unreasonably tight, so the <span style="font-weight: bold;">-T
+ratio</span> argument can be used to modify this criteria. To loosen
+the tolerance, use a number greater than 1.0 (ie. 1.5, 2.0).<br>
+<br>
+<a name="D"></a>The <b>-D</b> flag causes communications
+and other instrument diagnostics to be printed to stdout. A level can
+be set between 1 .. 9, that may give progressively more verbose
+information, depending on the instrument. This can be useful in
+tracking
+down why an instrument can't connect.<br>
+<br>
 <a name="p1"></a> The <i>inoutfile</i> parameters should be the base
 name of the .ti2 file,
 and printread will output an .ti3 that has the same basename and the
 .ti3
 extension.<br>
+<br>
+<hr style="width: 50%; height: 2px;">
 <h3>Discussion</h3>
-When used with an Xrite DTP41 or DTP51 strip reading instrument,
-printread
-will first establish communications with the instrument, and then set
-it
-up ready to read the strips. The strips are labeled A to ZZ, and for
-each
-strip it will prompt:<br>
-<br>
-&nbsp;&nbsp;&nbsp; About to read strip XX&nbsp; :<br>
-<br>
-where XX is the strip label. You should line the appropriate strip up
-in
-the machine, and press its button. Since there is a slight delay
-between
-printing the "About to read" message and issuing the strip setup to the
-instrument,
-the button should be pressed a little after the message is displayed.<br>
-<br>
-If the strip is read successfully, the line will be completed with:<br>
-<br>
-&nbsp;&nbsp;&nbsp; About to read strip&nbsp; XX&nbsp; :&nbsp; Strip
-read
-OK<br>
-<br>
-If there is an error of some sort, a message will be issued, and you
-will
-be asked whether to abort the chart reading, or retry the<br>
-failed strip:<br>
-<br>
-&nbsp;&nbsp;&nbsp; About to read strip X&nbsp; : read_strip returned
-'Strip
-misread' (Bad reading)<br>
-<br>
-&nbsp;&nbsp;&nbsp; Strip read failed due to misread<br>
-&nbsp;&nbsp;&nbsp; Hit Esc to give up, any other key to retry:<br>
-<br>
-If the strip is read successfully, but the patches values don't seem to
-be reasonable, you will get the following type of response:<br>
-<br>
-&nbsp;&nbsp;&nbsp; About to read strip&nbsp; XX&nbsp; :<br>
-&nbsp;&nbsp;&nbsp; Seem to have read strip&nbsp; YY&nbsp; rather
-than&nbsp;
-XX !<br>
-&nbsp;&nbsp;&nbsp; Hit Return to use it anyway, any other key to retry:<br>
-<br>
-If you are sure you lined up the correct strip, then hit return,
-otherwise
-line the appropriate strip up again, and hit some other key (ie. space).<br>
-<br>
-You can abort the whole process at any time by hitting Escape.<br>
-<br>
-<br>
-When you are using an XY table type instrument, such as a Gretag
-SpectroScan,
-&nbsp;printread will first establish communications with the
-instrument,
-and then set it up ready to read the chart. You will be prompted for
-each
-sheet with a message such as:<br>
-<br>
-&nbsp;&nbsp;&nbsp; Please make sure that the white reference is in slot
-1, then<br>
-&nbsp;&nbsp;&nbsp; place sheet 1 of 4 on table, then<br>
-&nbsp;&nbsp;&nbsp; hit return to continue, Esc to give up<br>
-<br>
-After hitting return you will be prompted to line up three squares on
-the
-sheet, one at a time:<br>
-<br>
-&nbsp;&nbsp;&nbsp; Using the XY table controls, locate patch A1 with
-the
-sight,<br>
-&nbsp;&nbsp;&nbsp; then hit return to continue, Esc to give up<br>
-<br>
-On completing this, the instrument will commence reading each sheet.<br>
-<br>
-<br>
-<br>
-<br>
+For information about the operation of different instruments, see <a
+ href="instruments.html">Operation of particular instruments</a>.<br>
 <br>
 <br>
 </body>

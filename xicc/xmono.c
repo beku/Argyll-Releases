@@ -7,8 +7,8 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * Based on the old iccXfm class.
  */
@@ -250,7 +250,7 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 	if (pcsor == icxSigJabData) {
 		p->vc  = *vc;				/* Copy the structure */
 		p->cam = new_icxcam(cam_default);
-		p->cam->set_view(p->cam, vc->Ev, vc->Wxyz, vc->Yb, vc->La, vc->Lv, vc->Yf, vc->Fxyz, 1);
+		p->cam->set_view(p->cam, vc->Ev, vc->Wxyz, vc->Yb, vc->La, vc->Lv, vc->Yf, vc->Fxyz, XICC_USE_HK);
 	} else 
 		p->cam = NULL;
 

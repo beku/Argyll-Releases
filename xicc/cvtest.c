@@ -11,12 +11,12 @@
  * Copyright 2003 Graeme W. Gill
  * Parts derived from rspl/c1.c
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #undef DIAG
-#undef TEST_SYM
+#undef TEST_SYM		/* Test forcing center to zero (a*, b* constraint) */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,28 +28,22 @@
 #include "numlib.h"
 #include "plot.h"
 
-#define MAX_PARM 40
+#define MAX_PARM 40		/* Make > SHAPE_ORDS */
 
-#define POWTOL 1e-4
+#define POWTOL 1e-5
 #define MAXITS 10000
-
-//#define SHAPE_PMW 0.0001	/* Shape parameter (wiggle) minimisation weight */
-//#define SHAPE_PMW 0.0001	/* Shape parameter (wiggle) minimisation weight */
-//#define ORDS 8
-//#define SHAPE_BASE 0.1		/* Base harmonic weight */
-//#define SHAPE_HBASE 5.0		/* Upper harmonic base weight */
-
-//#define SHAPE_BASE  0.00002	/* 0 & 1 harmonic parameter weight */
-//#define SHAPE_HBASE 0.0004		/* 3rd harmonic and above base parameter weight */
 
 /* SHAPE_BASE doesn't seem extremely critical.  It is centered in +/- 1 magnitude */
 /* 10 x more filters out noise reasonably heaviliy, 10 x less gives noticable */
 /* overshoot Range 0.00001 .. 0.001 */
 /* SHAPE_HBASE is more critical. */
 /* Range 0.00005 .. 0.001 */
+//#define SHAPE_BASE  0.00001		/* 0 & 1 harmonic weight */
+//#define SHAPE_HBASE 0.0002		/* 2nd and higher additional weight */
+//#define SHAPE_ORDS 20
 #define SHAPE_BASE  0.00001		/* 0 & 1 harmonic weight */
-#define SHAPE_HBASE 0.00001		/* 2nd and higher additional weight */
-#define SHAPE_ORDS 25
+#define SHAPE_HBASE 0.0001		/* 2nd and higher additional weight */
+#define SHAPE_ORDS 20
 
 /* Interface coordinate value */
 typedef struct {
@@ -78,11 +72,12 @@ double ya[ABS_MAX_PNTS];
 
 #define XRES 100
 
-#define TSETS 3
+#define TSETS 4
 #define PNTS 11
 #define GRES 100
 int t1p[TSETS] = {
 	4,
+	11,
 	11,
 	11
 };
@@ -90,11 +85,13 @@ int t1p[TSETS] = {
 double t1xa[TSETS][PNTS] = {
 	{ 0.0, 0.2,  0.8,  1.0  },
 	{ 0.0, 0.1,  0.2,  0.3,   0.4,   0.5,  0.6,  0.7,   0.8,   0.9,  1.0  },
+	{ 0.0, 0.1,  0.2,  0.3,   0.4,   0.5,  0.6,  0.7,   0.8,   0.9,  1.0  },
 	{ 0.0, 0.25, 0.30, 0.35,  0.40,  0.44, 0.48, 0.51,  0.64,  0.75, 1.0  }
 };
 
 double t1ya[TSETS][PNTS] = {
 	{ 0.0, 0.5,  0.6,  1.0  },
+	{ 0.0, 0.10, 0.22, 0.35,  0.52,  0.65,  0.78, 0.91, 1.0,   0.9,   0.85  },
 	{ 0.0, 0.0,  0.5,  0.5,   0.5,   0.5,   0.5,  0.8,  1.0,   1.0,   1.0  },
 	{ 0.0, 0.35, 0.4,  0.41,  0.42,  0.46, 0.5,  0.575, 0.48,  0.75,  1.0  }
 };
@@ -104,14 +101,12 @@ co test_points[ABS_MAX_PNTS];
 
 double lin(double x, double xa[], double ya[], int n);
 
-main() {
-	int i,j, n;
+int main(void) {
+	int i, n;
 	double x;
 	double xx[XRES];
 	double y1[XRES];
 	double y2[XRES];
-	double y3[XRES];
-	double pef;
 	int np = SHAPE_ORDS;					/* Number of harmonics */
 	double params[MAX_PARM];	/* Harmonic parameters */
 
@@ -133,7 +128,20 @@ main() {
 				ya[i] = t1ya[n][i];
 			}
 		} else if (n == TSETS) {	/* Exponential function aproximation */
-			double ex = 2.4;
+			double ex = 2.2;
+			pnts = MAX_PNTS;
+
+			printf("Trial %d, no points = %d, exponential %f\n",n,pnts,ex);
+
+			/* Create X values */
+			for (i = 0; i < pnts; i++)
+				xa[i] = i/(pnts-1.0);
+
+			for (i = 0; i < pnts; i++)
+				ya[i] = pow(xa[i], ex);
+
+		} else if (n == (TSETS+1)) {	/* Exponential function aproximation */
+			double ex = 1.0/2.2;
 			pnts = MAX_PNTS;
 
 			printf("Trial %d, no points = %d, exponential %f\n",n,pnts,ex);
@@ -219,7 +227,7 @@ double x,
 double xa[],
 double ya[],
 int n) {
-	int i,j;
+	int i;
 	double y;
 
 	if (x < xa[0])
@@ -341,7 +349,6 @@ static double luoptfunc(void *edata, double *v) {
 	/* For all our data points */
 	for (i = 0; i < p->nodp; i++) {
 		double ev;
-		int j;
 
 		/* Apply our function */
 		out = tfunc(v, p->luord, p->points[i].p);
@@ -393,10 +400,12 @@ int pnts			/* Number of test points */
 	os.points= test_points;
 	os.nodp = pnts;
 
-	for (i = 0; i < np; i++)
+	for (i = 0; i < np; i++) {
 		sa[i] = 0.5;
+		params[i] = 0.0;
+	}
 
-	if (powell(np, params, sa, POWTOL, MAXITS, luoptfunc, (void *)&os) < 0.0)
+	if (powell(NULL, np, params, sa, POWTOL, MAXITS, luoptfunc, (void *)&os) != 0)
 		error ("Powell failed");
 }
 

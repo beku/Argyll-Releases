@@ -1,10 +1,23 @@
+
+#ifndef LUDECOMP_H
+#define LUDECOMP_H
+
 /*
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
+/* NOTE:- lu decomp rearanges the rows of the matrix */
+/* by swapping pointers rather than exchanging data, */
+/* so the matrix must be addressed by the **pointer */
+/* if it is re-used after an ludecomp!!! */
 
 /* Solve the simultaneous linear equations A.X = B */
 /* Return 1 if the matrix is singular, 0 if OK */
@@ -46,4 +59,8 @@ double  *x,			/* X[] solution to be polished */
 int     *pivx		/* Pivoting row permutations record */
 );
 
+#ifdef __cplusplus
+	}
+#endif
 
+#endif /* LUDECOMP_H */

@@ -10,8 +10,8 @@
  *
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  */
 
@@ -19,17 +19,36 @@
 
 /*
    Note that we don't handle the issue of an arbitrary ink order,
-   nor are we coping with multi-ink ICC profiles mapping to xcolorants
-   and back.
+   and we are only partially coping with multi-ink ICC profiles
+   mapping to xcolorants and back. This is supported by mapping
+   inkmask to ICC ColorantTable names and back (if needed),
+   or by guessing colorants to match profile (icx_icc_cv_to_colorant_comb()).
+
+   default xcolorant order matches the concrete ICC order, but
+   ICC icSigXXcolorData could be in any order, and xcolorants
+   currently doesn't handle it.
+
+   One way of encapsulating things would be to change inkmask to:
+
+	struct {
+		unsigned int attr;							// Attributes (ie. Additive)
+		unsigned int mask[(ICX_MXINKS + 31)/32];	// Ink masks
+		int inks[MAX_CHAN];							// icx_ink_table[] index
+	} inkmask;
+
+   Then add appropriate macros & functions to replace current bit mask logic.
 
    Would it be easier to make all Argyll internal handling conform
    to the standard xcolorants order, and translate in the ICC file I/O ?
    MPP and .ti? files are assumed/made to conform to xcolorants order.
-
+   
    Another change would be to make xcolorants an object,
    with dynamic colorant and colorant combination values.
    These would be initialised to defaults, but could then
    be added to at run time.
+
+   Handling the "colorant" of non-device type color channels
+   is also a challenge (ie., Lab, Hsv etc.)
 
  */ 
 
@@ -82,7 +101,7 @@ typedef unsigned int inkmask;
 #define ICX_C_MEDIUM_BLACK      "2k"
 #define ICX_C_LIGHT_LIGHT_BLACK "1k"
 
-/* String representation */
+/* Everyday String representation (max 31 chars) */
 #define ICX_S_CYAN              "Cyan"
 #define ICX_S_MAGENTA           "Magenta"
 #define ICX_S_YELLOW            "Yellow"
@@ -215,7 +234,7 @@ char *icx_ink2psstring(inkmask mask);
 /* Return 0 if no such enumeration, single colorant mask if there is */
 inkmask icx_enum_colorant(int no, char **desc);
 
-/* Return an enumerated colorant combination */
+/* Return an enumerated colorant combination inkmask and description */
 /* Return 0 if no such enumeration, colorant combination mask if there is */
 inkmask icx_enum_colorant_comb(int no, char **desc);
 
@@ -228,6 +247,11 @@ int icx_colorant_comb_match_icc(inkmask mask, icColorSpaceSignature sig);
 /* Given an ICC colorspace signature, return the appropriate */
 /* colorant combination mask. Return 0 if ambiguous signature. */
 inkmask icx_icc_to_colorant_comb(icColorSpaceSignature sig);
+
+/* Given an ICC colorspace signature, and a matching list */
+/* of the D50 L*a*b* colors of the colorants, return the best matching */
+/* colorant combination mask. Return 0 if not applicable to colorspace. */
+inkmask icx_icc_cv_to_colorant_comb(icColorSpaceSignature sig, double cvals[][3]);
 
 /* Given an colorant combination mask */
 /* return the primary matching ICC colorspace signature. */ 

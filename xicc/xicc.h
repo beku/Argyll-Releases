@@ -9,8 +9,8 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * Based on the old iccXfm class.
  */
@@ -34,6 +34,7 @@
 #include "icc.h"		/* icclib ICC definitions */ 
 #include "rspl.h"		/* rspllib thin plate spline definitions */
 #include "gamut.h"		/* gamut definitions */
+#include "xutils.h"		/* Utility functions */
 #include "xcam.h"		/* CAM definitions */
 #include "xspect.h"		/* Spectral conversion object */
 #include "xsep.h"		/* Separation and multi-ink support */
@@ -41,8 +42,11 @@
 #include "cgats.h"		/* CGAT format */	
 #include "insttypes.h"	/* Instrument type support */
 #include "mpp.h"		/* model printer profile support */
+#include "xfit1.h"		/* Input/Output per channel curve fitting support - original */
+#include "xfit2.h"		/* Input/Output per channel curve fitting support - algorithm 2 */
+#include "xfit3.h"		/* Input/Output per channel curve fitting support - algorithm 3 */
 
-
+#define XICC_USE_HK 1	/* Set to 1 to use Helmholtz-Kohlraush in all CAM conversions */
 
 /* ------------------------------------------------------------------------------ */
 
@@ -59,6 +63,7 @@
 
 /* Default Color Appearance Space */
 #define icxAppearance ((icRenderingIntent)999)
+
 /* Represents icAbsoluteColorimetric, converted to Color Appearance space */
 #define icxAbsAppearance ((icRenderingIntent)998)	/* Fixed D50 white point */
 
@@ -67,6 +72,9 @@
 
 /* Pseudo PCS colospace returned as PCS for intent icxAppearanceJCh */
 #define icxSigJChData ((icColorSpaceSignature) icmMakeTag('J','C','h',' '))
+
+/* Pseudo PCS colospace returned as PCS */
+#define icxSigLChData ((icColorSpaceSignature) icmMakeTag('L','C','h',' '))
 
 /* Return a string description of the given enumeration value */
 const char *icx2str(icmEnumType etype, int enumval);
@@ -80,8 +88,10 @@ const char *icx2str(icmEnumType etype, int enumval);
 typedef enum {
     icxKvalue    = 0,	/* K is specified as output K target by PCS auxiliary */
     icxKlocus    = 1,	/* K is specified as proportion of K locus by PCS auxiliary */
-    icxKluma5    = 2,	/* K is specified by 5 parameters as a function of L */
-    icxKl5l      = 3	/* K is specified by 2x5 parameters as a function of L and K locus aux */
+    icxKluma5    = 2,	/* K is specified as locus by 5 parameters as a function of L */
+    icxKluma5k   = 3,	/* K is specified as K value by 5 parameters as a function of L */
+    icxKl5l      = 4,	/* K is specified as locus by 2x5 parameters as a function of L and K locus aux */
+    icxKl5lk      = 5	/* K is specified as K value by 2x5 parameters as a function of L and K value aux */
 } icxKrule;
 
 /* Curve parameters */
@@ -132,22 +142,25 @@ typedef struct {
 
 /* Structure to convey gamut mapping intent */
 typedef struct {
-	int    usecas;		/* 1 if Color Appearance Space should be used, else Lab */
-						/* 2 if Absolute Color Appearance Space */
-	int    usemap;		/* NZ if Gamut mapping should be used, else clip */
-	double greymf;		/* Grey axis hue matching factor, 0.0 - 1.0 */
-	double glumwcpf;	/* Grey axis luminance white compression factor, 0.0 - 1.0 */
-	double glumwexf;	/* Grey axis luminance white expansion factor, 0.0 - 1.0 */
-	double glumbcpf;	/* Grey axis luminance black compression factor, 0.0 - 1.0 */
-	double glumbexf;	/* Grey axis luminance black expansion factor, 0.0 - 1.0 */
-	double glumknf;		/* Grey axis luminance knee factor, 0.0 - 1.0 */
-	double gamcpf;		/* Gamut compression factor, 0.0 - 1.0 */
-	double gamexf;		/* Gamut expansion factor, 0.0 - 1.0 */
-	double gamknf;		/* Gamut knee factor, 0.0 - 1.0 */
-	double gampwf;		/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
-	double gamswf;		/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
-	double satenh;		/* Saturation enhancement value, 0.0 - Inf */
-	char *desc;			/* Possible description of this VC */
+	int    usecas;			/* 0x0 Use Lab space */
+							/* 0x1 Use Color Appearance Space */
+							/* 0x2 Use Absolute Color Appearance Space */
+							/* 0x101 Use Color Appearance Space with luminence scaling */
+	int    usemap;			/* NZ if Gamut mapping should be used, else clip */
+	double greymf;			/* Grey axis hue matching factor, 0.0 - 1.0 */
+	double glumwcpf;		/* Grey axis luminance white compression factor, 0.0 - 1.0 */
+	double glumwexf;		/* Grey axis luminance white expansion factor, 0.0 - 1.0 */
+	double glumbcpf;		/* Grey axis luminance black compression factor, 0.0 - 1.0 */
+	double glumbexf;		/* Grey axis luminance black expansion factor, 0.0 - 1.0 */
+	double glumknf;			/* Grey axis luminance knee factor, 0.0 - 1.0 */
+	double gamcpf;			/* Gamut compression factor, 0.0 - 1.0 */
+	double gamexf;			/* Gamut expansion factor, 0.0 - 1.0 */
+	double gamknf;			/* Gamut knee factor, 0.0 - 1.0 */
+	double gampwf;			/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
+	double gamswf;			/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
+	double satenh;			/* Saturation enhancement value, 0.0 - Inf */
+	char *desc;				/* Possible description of this VC */
+	icRenderingIntent icci;	/* Closest ICC intent */
 } icxGMappingIntent;
 
 struct _xicc {
@@ -192,12 +205,13 @@ struct _xicc {
 										/* Return appropriate lookup object */
 										/* NULL on error, check errc+err for reason */
 	/* "create" flags */
-#define ICX_SET_WHITE   0x0001			/* find, set and make relative to the white point */
-#define ICX_SET_BLACK   0x0002			/* find and set the black point */
-#define ICX_NO_IN_LUTS  0x0040			/* If LuLut: Don't create input (Device) curves. */
-#define ICX_NO_OUT_LUTS 0x0080			/* If LuLut: Don't create output (PCS) curves. */
-#define ICX_EXTRA_FIT   0x0400			/* If LuLut: Don't create output (PCS) curves. */
-#define ICX_VERBOSE     0x8000			/* Turn on verboseness during creation */
+#define ICX_SET_WHITE       0x0001		/* find, set and make relative to the white point */
+#define ICX_SET_BLACK       0x0002		/* find and set the black point */
+#define ICX_NO_IN_LUTS      0x0040		/* If LuLut: Don't create input (Device) curves. */
+#define ICX_NO_IN_SUBG_LUTS 0x0080		/* If LuLut: Don't create input sub-grid (Device) curves. */
+#define ICX_NO_OUT_LUTS     0x0100		/* If LuLut: Don't create output (PCS) curves. */
+#define ICX_EXTRA_FIT       0x0400		/* If LuLut: Don't create output (PCS) curves. */
+#define ICX_VERBOSE         0x8000		/* Turn on verboseness during creation */
 	struct _icxLuBase * (*set_luobj) (struct _xicc *p,
 	                                  icmLookupFunc func,		/* Functionality to set */
 	                                  icRenderingIntent intent,	/* Intent to set */
@@ -224,6 +238,10 @@ struct _xicc {
 	char             err[512];			/* Error message */
 	int              errc;				/* Error code */
 }; typedef struct _xicc xicc;
+
+/* ~~~~~ */
+/* Might be good to add a slow but very precise vector and closest "clip to gamut" */
+/* function for use in setting white and black points. Use this in profile. */
 
 xicc *new_xicc(icc *picc);
 
@@ -257,10 +275,11 @@ xicc *new_xicc(icc *picc);
 																						\
 	/* Attributes inhereted by ixcLu's */												\
 	int noiluts;	/* Flag - If LuLut: Don't create input (Device) curves. */			\
+	int noisluts;	/* Flag - If LuLut: Don't create input (Device) sub-grid curves. */	\
 	int nooluts;	/* Flag - If LuLut: Don't create output (PCS) curves. */			\
 	int nearclip;	/* Flag - If clipping occurs, return the nearest solution, */		\
 	int mergeclut;	/* Flag - If LuLut: Merge output() and out_abs() into clut(). */	\
-	int camclip;	/* Flag - If LuLut: Use CIECAM97s for clut reverse lookup clipping */ \
+	int camclip;	/* Flag - If LuLut: Use CIECAM for clut reverse lookup clipping */ \
 	int intsep;		/* Flag - If LuLut: Do internal separation for 4d device */			\
 																						\
 	/* Public: */																		\
@@ -290,7 +309,7 @@ xicc *new_xicc(icc *picc);
 																						\
 																						\
 								/* Return the relative media white and black points */	\
-								/* in the PCS colorspace. */							\
+								/* in the Effective PCS colorspace. */					\
 	void    (*rel_wh_bk_points)(struct _icxLuBase *p, double *wht, double *blk);		\
 																						\
 	/* Translate color values through profile */										\
@@ -307,7 +326,7 @@ xicc *new_xicc(icc *picc);
 											/* Inverse conversion */					\
 																						\
 	/* Given an xicc lookup object, returm a gamut object. */							\
-	/* Note that the PCS must be Lab or Jab */											\
+	/* Note that the Effective PCS must be Lab or Jab */								\
 	/* A icxLuLut type must be icmFwd or icmBwd, */										\
 	/* and for icmFwd, the ink limit (if supplied) */									\
 	/* will be applied. */																\
@@ -315,15 +334,17 @@ xicc *new_xicc(icc *picc);
 	gamut * (*get_gamut) (struct _icxLuBase *plu,	/* xicc lookup object */			\
 	                      double detail);			/* gamut detail level, 0.0 = def */	\
 																						\
-	/* Given a relative XYZ or Lab PCS value, convert in the fwd direction into */      \
-	/* the nominated output PCS (ie. Absolute, Jab etc.) */								\
-	/* (This is used in generating gamut compression in B2A tables) */					\
+	/* The following two functions expose the relative colorimetric native ICC PCS */	\
+	/* <--> absolute/CAM space transform, so that CAM based gamut compression */		\
+	/* can be applied in creating the ICC Lut tabls in profout.c. */					\
+																						\
+	/* Given a native ICC relative XYZ or Lab PCS value, convert in the fwd */			\
+	/* direction into the nominated Effective output PCS (ie. Absolute, Jab etc.) */	\
 	void (*fwd_relpcs_outpcs) (struct _icxLuBase *p, icColorSpaceSignature is,			\
 	                                                   double *out, double *in);		\
 																						\
-	/* Given a nominated output PCS (ie. Absolute, Jab etc.), convert it in the bwd */	\
-	/* direction into a relative XYZ or Lab PCS value */      							\
-	/* (This is used in generating gamut compression in B2A tables) */					\
+	/* Given a nominated Effective output PCS (ie. Absolute, Jab etc.), convert it */	\
+	/* in the bwd direction into a native ICC relative XYZ or Lab PCS value */			\
 	void (*bwd_outpcs_relpcs) (struct _icxLuBase *p, icColorSpaceSignature os,			\
 	                                                   double *out, double *in);		\
 																						\
@@ -455,7 +476,7 @@ struct _icxLuLut {
 	int (*inv_matrix)  (struct _icxLuLut *p, double *out, double *in);
 	int (*inv_in_abs)  (struct _icxLuLut *p, double *out, double *in);
 
-	/* Get locus information for a clut */
+	/* Get locus information for a clut (see xlut.c for details) */
 	int (*clut_locus)  (struct _icxLuLut *p, double *locus, double *out, double *in);
 
 	/* Get various types of information about the LuLut */
@@ -469,7 +490,25 @@ struct _icxLuLut {
 }; typedef struct _icxLuLut icxLuLut;
 
 /* ------------------------------------------------------------------------------ */
-/* Utility functions */
+/* Utility declarations and functions */
+
+/* Profile Creation Suplimental Information structure */
+struct _profxinf {
+    icmSig manufacturer;	/* Device manufacturer ICC Sig, 0 for default */
+	char *deviceMfgDesc;	/* Manufacturer text description, NULL for none */
+
+    icmSig model;			/* Device model ICC Sig, 0 for default */
+	char *modelDesc;		/* Model text description, NULL for none */
+
+    icmSig creator;			/* Profile creator ICC Sig, 0 for default */
+
+	char *profDesc;			/* Text profile description, NULL for default */
+
+	char *copyright;		/* Copyrigh text, NULL for default */
+
+	/* Should add header attributue flags ?? */
+
+}; typedef struct _profxinf profxinf;
 
 /* Set an icc's Lut tables, and take care of auxiliary continuity problems. */
 /* Only useful if there are auxiliary device output chanels to be set. */
@@ -500,29 +539,44 @@ void (*outfunc)(void *cbntx, double *out, double *in)
 		
 
 /* Return an enumerated viewing condition */
-/* Return 0 if OK, 1 if there is no such enumeration. */
+/* Return the enumeration if OK, -999 if there is no such enumeration. */
 int xicc_enum_viewcond(
 xicc *p,			/* Expanded profile we're working with (May be NULL if desc NZ) */
 icxViewCond *vc,	/* Viewing parameters to return */
-int no,				/* Enumeration to return */
+int no,				/* Enumeration to return, -1 for default, -2 for none  */
+char *as,			/* String alias to number, NULL if none */
 int desc			/* NZ - Just return a description of this enumeration */
 );
 
 /* Debug: dump a Viewing Condition to standard out */
 void xicc_dump_viewcond(icxViewCond *vc);
 
+/* Debug: dump an Inking setup to standard out */
+void xicc_dump_inking(icxInk *ik);
+
 /* Return enumerated gamut mapping intents */
 /* Return 0 if OK, 1 if there is no such enumeration. */
 /* Note the following fixed numbers meanings: */
-#define icxDefaultGMIntent -1
-#define icxAbsoluteGMIntent -2
-#define icxRelativeGMIntent -3
-#define icxPerceptualGMIntent -4
-#define icxSaturationGMIntent -5
+#define icxNoGMIntent -1
+#define icxDefaultGMIntent -2
+#define icxAbsoluteGMIntent -3
+#define icxRelativeGMIntent -4
+#define icxPerceptualGMIntent -5
+#define icxSaturationGMIntent -6
 #define icxIllegalGMIntent -999
-int xicc_enum_gmapintent(icxGMappingIntent *gmi, int no);
+int xicc_enum_gmapintent(icxGMappingIntent *gmi, int no, char *as);
 void xicc_dump_gmi(icxGMappingIntent *gmi);
 
+/* - - - - - - - - - - */
+
+/* Utility function - given an open icc profile, */
+/* estmate the total ink limit and black ink limit. */
+void icxGetLimits(icc *p, double *tlimit, double *klimit);
+
+/* Using the above function, set default total and black ink values */
+void icxDefaultLimits(icc *p, double *tlout, double tlin, double *klout, double klin);
+
+/* - - - - - - - - - - */
 
 /* Utility function - compute the clip vector direction. */
 /* return NULL if vector clip isn't used. */
@@ -531,12 +585,6 @@ icxClip *p,			/* Clipping setup information */
 double *in,			/* Target point */
 double *cdirv		/* Space for returned clip vector */
 );
-
-/* Utility function - */
-/* Return a lut resolution given the input dimesion and quality */
-/* Input dimension [0-8], quality: low, medium, high, very high. */
-/* A returned value of 0 indicates illegal.  */
-int dim_to_clutres(int dim, int quality);
 
 /* - - - - - - - - - - */
 
@@ -560,8 +608,24 @@ int    luord,		/* Number of parameters */
 double vv			/* Source of value */
 );
 
+/* Inverse Transfer function */
+double icxInvTransFunc(
+double *v,			/* Pointer to first parameter */
+int    luord,		/* Number of parameters */
+double vv			/* Source of value */
+);
+
 /* Transfer function with scaling */
 double icxSTransFunc(
+double *v,			/* Pointer to first parameter */
+int    luord,		/* Number of parameters */
+double vv,			/* Source of value */
+double min,			/* Scale values */
+double max
+);
+
+/* Inverse Transfer function with scaling */
+double icxInvSTransFunc(
 double *v,			/* Pointer to first parameter */
 int    luord,		/* Number of parameters */
 double vv,			/* Source of value */
@@ -632,6 +696,9 @@ double min,			/* Scale values */
 double max
 );
 
+/* Should add/move the spectro/moncurve stuff in here, */
+/* since it has offset and scaling. */
+
 /* - - - - - - - - - - */
 
 /* Matrix cube interpolation - interpolate between 2^di output corner values. */
@@ -654,6 +721,26 @@ int    fdi,			/* Number of output channels */
 int    di,			/* Number of input channels */
 double *out,		/* Resulting fdi values */
 double *in			/* Input di values */
+);
+
+/* - - - - - - - - - - */
+
+/* 3x3 matrix multiplication, with the matrix in a 1D array */
+/* with respect to the input and parameters. */
+void icxMulBy3x3Parm(
+	double out[3],			/* Return input multiplied by matrix */
+	double mat[9],			/* Matrix organised in [slow][fast] order */
+	double in[3]			/* Input values */
+);
+
+/* 3x3 matrix multiplication, with partial derivatives */
+/* with respect to the input and parameters. */
+void icxdpdiMulBy3x3Parm(
+	double out[3],			/* Return input multiplied by matrix */
+	double dv[3][9],		/* Return deriv for each [output] with respect to [param] */
+	double din[3][3],		/* Return deriv for each [output] with respect to [input] */
+	double mat[9],			/* Matrix organised in [slow][fast] order */
+	double in[3]			/* Input values */
 );
 
 /* - - - - - - - - - - */

@@ -11,8 +11,8 @@
  *
  * Copyright 2005 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * This is based on the monotonic curve equations used elsewhere,
  * but currently intended to support the display calibration process.
@@ -28,6 +28,7 @@
 typedef struct {
 	double p;		/* Position */
 	double v;		/* Value */
+	double w;		/* Weighting, nominally 1.0 */
 } mcvco;
 
 struct _mcv {
@@ -44,35 +45,67 @@ struct _mcv {
 	            double smooth	/* Degree of smoothing, 1.0 = normal */			
 	);
 
+	/* Offset the the output so that the value for input 0.0, */
+	/* is the given value. Don't change the 1.0 output */
+	void (*force_0) (struct _mcv *p,
+	            double target	/* Target output value */
+	);
+
 	/* Scale the the output so that the value for input 1.0, */
-	/* is the given value. */
+	/* is the given value. Don't change the 0.0 output */
+	void (*force_1) (struct _mcv *p,
+	            double target	/* Target output value */
+	);
+
+	/* Scale the the output so that the value for input 1.0, */
+	/* is the given target value. Scale the value for 0 too. */
 	void (*force_scale) (struct _mcv *p,
 	            double target	/* Target output value */
 	);
 
-	/* Translate a value through the curve */
+	/* Return the number of parameters and the parameters in */
+	/* an allocated array. free() when done */
+	int (*get_params)(struct _mcv *p, double **rp);
+
+	/* Translate a value through the current curve */
 	double (*interp) (struct _mcv *p,
 	                  double in);	/* Input value */
 
-	/* Translate a value through backwards the curve */
+	/* Translate a value backwards through the current curve */
 	double (*inv_interp) (struct _mcv *p,
 	                  double in);	/* Input value */
 
+	/* Translate a value given the parametrs */
+	double (*interp_p) (struct _mcv *p,
+	                  double *pms, double in);	/* Input value */
+
+	/* return the shaper parameters normalising weight */ 
+	double (*shweight_p)(struct _mcv *p, double *v, double smooth);
+
+	/* Translate a value given the parametrs, with partial derivatives */
+	double (*dinterp_p) (struct _mcv *p, double *pms, double *dv, double vv);
+
+	/* return the shaper parameters normalising weight, with partial derivatives */ 
+	double (*dshweight_p)(struct _mcv *p, double *v, double *dv, double smooth);
+
   /* Private: */
 	int verb;				/* Verbose */
-	int luord;				/* Lookup order including scale */
+	int luord;				/* Lookup order including offset and scale */
 	double *pms;			/* Allocated curve parameters */
-	double *upms;			/* Pointer to parameters to use */
-	double *dv;				/* Work space for dv's */
+	double *dv;				/* Work space for dv's durint optimisation */
 
 	mcvco *d;				/* Array holding scattered initialisation data */
 	int ndp;				/* Number of data points */
+
 	double smooth;			/* Smoothing factor */
 
 }; typedef struct _mcv mcv;
 
 /* Create a new, uninitialised mcv */
 mcv *new_mcv(void);
+
+/* Create a new mcv initiated with the given parameters */
+mcv *new_mcv_p(double *pp, int np);
 
 #endif /* MCV */
 

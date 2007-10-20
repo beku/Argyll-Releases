@@ -8,8 +8,8 @@
  *
  * Copyright 2000-2004 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  */
 
@@ -70,7 +70,6 @@ static void
 XYZ2Lab(double *out, double *in) {
 	double X = in[0], Y = in[1], Z = in[2];
 	double x,y,z,fx,fy,fz;
-	double L;
 
 	x = X/0.9642;
 	y = Y/1.0000;
@@ -291,7 +290,7 @@ main(void) {
 		{
 			int co0, co1, co2;		/* (using co[3] triggers compiler bug) */
 			double merr = 0.0;
-			double xyz[3], Lab[3], Jab[3], in[3], checkxyz[3];
+			double xyz[3], Lab[3], Jab[3], checkxyz[3];
 
 
 #ifdef NEVER
@@ -350,7 +349,6 @@ main(void) {
 				ok = 0;
 			}
 #ifdef DIAG
-			printf("\n",merr);
 			printf("Inversion check complete, peak error = %f\n",merr);
 #endif /* !NEVER */
 
@@ -381,7 +379,7 @@ main(void) {
 		{
 			int co0, co1, co2;		/* (using co[3] triggers compiler bug) */
 			double merr = 0.0;
-			double xyz[3], Jab[3], in[3], checkJab[3];
+			double xyz[3], Jab[3], checkJab[3];
 
 #ifdef NEVER
 			/* Test case */
@@ -410,7 +408,6 @@ main(void) {
 					Jab[1] = (Jab[1] - 0.5) * 256.0;
 					for (co2 = 0; co2 < TRES; co2++) {
 						double mxd;
-						int i;
 						Jab[2] = co2/(TRES-1.0);
 						Jab[2] = (Jab[2] - 0.5) * 256.0;
 		

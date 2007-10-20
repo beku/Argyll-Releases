@@ -6,6 +6,10 @@
 /* "Numerical Recipes in C", by W.H.Press, B.P.Flannery, */
 /* S.A.Teukolsky & W.T.Vetterling. */
 
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 /* Down hill simplex function */
 /* return err on sucess, -1.0 on failure */
 /* Result will be in cp */
@@ -23,5 +27,9 @@ void *fdata);			/* Data needed by function */
 double dhsx_funk(		/* Return function value */
 	void *fdata,		/* Opaque data pointer */
 	double tp[]);		/* Multivriate input value */
+
+#ifdef __cplusplus
+	}
+#endif
 
 #endif /* DHSX_H */

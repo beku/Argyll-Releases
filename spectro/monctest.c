@@ -6,8 +6,8 @@
  * Copyright 2005 Graeme W. Gill
  * Parts derived from rspl/c1.c, cv.c etc.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * Test monocurve class.
  *
@@ -23,6 +23,8 @@
 #if defined(__IBMC__) && defined(_M_IX86)
 #include <float.h>
 #endif
+#include "copyright.h"
+#include "config.h"
 #include "numlib.h"
 #include "plot.h"
 #include "moncurve.h"
@@ -30,10 +32,10 @@
 double lin(double x, double xa[], double ya[], int n);
 void usage(void);
 
-#define TRIALS 40		/* Number of random trials */
+#define TRIALS 30	/* Number of random trials */
 #define SKIP 0		/* Number of random trials to skip */
 
-#define SHAPE_ORDS 25		/* Number of order to use */
+#define SHAPE_ORDS 30		/* Number of order to use */
 
 #define ABS_MAX_PNTS 100
 
@@ -80,15 +82,13 @@ usage(void) {
 	exit(1);
 }
 
-main() {
+int main() {
 	mcv *p;
-	int i,j, n;
+	int i, n;
 	double x, y;
 	double xx[XRES];
 	double y1[XRES];
 	double y2[XRES];
-	double y3[XRES];
-	double pef;
 	int np = SHAPE_ORDS;					/* Number of harmonics */
 
 	error_program = "monctest";
@@ -160,7 +160,10 @@ main() {
 		for (i = 0; i < pnts; i++) {
 			test_points[i].p = xa[i];
 			test_points[i].v = ya[i];
+			test_points[i].w = 1.0;
 		}
+		/* Test weighting */
+		test_points[pnts-1].w = 1.0;
 
 //		for (np = 2; np <= SHAPE_ORDS; np++) {
 		for (np = SHAPE_ORDS; np <= SHAPE_ORDS; np++) {
@@ -208,7 +211,7 @@ double x,
 double xa[],
 double ya[],
 int n) {
-	int i,j;
+	int i;
 	double y;
 
 	if (x < xa[0])

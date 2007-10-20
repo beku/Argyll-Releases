@@ -10,8 +10,8 @@
  * Copyright 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 
@@ -45,7 +45,6 @@ static void
 default_prand(void *od, double *p, double *d) {
 	prand *s = (prand *)od;
 	int e;
-	double tt;
 
 	/* Default Do nothing - copy device to perceptual. */
 	for (e = 0; e < s->di; e++) {
@@ -138,7 +137,7 @@ double *p			/* given perceptual value, return clipped. */
 	for (e = 0; e < di; e++) {
 		sr[e] = drad;			/* Device space search radius */
 	}
-	if ((tt = powell(di, d, sr,  ptol, 500, efunc, (void *)&ed)) < 0.0 || tt >= 50000.0) {
+	if (powell(&tt, di, d, sr,  ptol, 500, efunc, (void *)&ed) != 0 || tt >= 50000.0) {
 		error("prand: powell failed, tt = %f\n",tt);
 	}
 	s->percept(s->od, pp, d);	/* Lookup clipped perceptual */
@@ -167,7 +166,7 @@ fxpos *fxlist,			/* List of existing fixed points */
 int fxno				/* Number in fixed list */
 ) {
 	int e, di = s->di;
-	int i, j;
+	int i;
 
 	/* Add fixed points if there are any */
 	if (fxno > 0) {
@@ -223,7 +222,7 @@ prand_reset(prand *s) {
 /* Return nz if no more */
 static int
 prand_read(prand *s, double *p, double *f) {
-	int e, di = s->di;
+	int e;
 
 	/* Advance to next non-fixed point */
 	while(s->rix < s->np && s->n[s->rix].fx)
@@ -250,8 +249,6 @@ prand_read(prand *s, double *p, double *f) {
 /* Destroy ourselves */
 static void
 prand_del(prand *s) {
-	int i;
-
 	free(s->n);
 
 	free (s);
@@ -267,7 +264,6 @@ int fxno,				/* Number of existing fixes points */
 void (*percept)(void *od, double *out, double *in),		/* Perceptual lookup func. */
 void *od				/* context for Perceptual function */
 ) {
-	int i;
 	prand *s;
 
 	if ((s = (prand *)calloc(sizeof(prand), 1)) == NULL)

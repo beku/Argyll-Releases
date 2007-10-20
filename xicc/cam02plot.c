@@ -8,17 +8,16 @@
  *
  * Copyright 2000-2004 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  */
 
 /*
- * This is some test code to test the CIECAM02 functionality. 
- * This test creates a .tiff file containing values that
- * have been converted through CIECAM02 space. 
+ * This is some test code to test the CIECAM02 continuity. 
+ * This test creates file "cam02plot.tif" containing values that
+ * have been converted to and back from CIECAM02 space. 
  */
-
 
 #include <stdio.h>
 #include <math.h>
@@ -26,7 +25,8 @@
 #include "cam02.h"
 #include "tiffio.h"
 
-#define USE_HK 0	/* Use Helmholtz-Kohlraush */
+#define DEFRES 100		/* Default cube resolution */
+
 
 #ifndef _isnan
 #define _isnan(x) ((x) != (x))
@@ -94,32 +94,326 @@ XYZ2Lab(double *out, double *in) {
 	out[2] = 200.0 * (fy - fz);
 }
 
+static double sign(double x) {
+	if (x < 0.0)
+		return -1.0;
+	else
+		return 1.0;
+}
+
+#ifndef NEVER
+/* Version with reasonable clipping */
 /* Convert from XYZ to sRGB */
-void XYZ2sRGB(double *out, double *in) {
+void XYZ2sRGB(double *out, double *in, int trace) {
 	double tmp[3];
+	double scale = 1.0;		/* Scale RGB towards grey */
+	double mat[3][3] = 
+		{
+			{  3.2410, -1.5374, -0.4986 },
+			{ -0.9692,  1.8760,  0.0416 },
+			{  0.0556, -0.2040,  1.0570 }
+		};
 	int i;
 
-	/* Now convert to sRGB assuming D50 (??) white point */
-	tmp[0] = in[0] * 3.2410  + in[1] * -1.5374 + in[2] * -0.4986;
-	tmp[1] = in[0] * -0.9692 + in[1] * 1.8760  + in[2] * 0.0416;
-	tmp[2] = in[0] * 0.0556  + in[1] * -0.2040 + in[2] * 1.0570;
+// ~~999
+	trace = 0;
 
-	/* Apply gamma and clip */
+	/* Copy from input */
+	for(i = 0; i < 3; i++)
+		tmp[i] = in[i];
+
+
+	if (trace) printf("XYZ to RGB\n");
+	if (trace) printf("input XYZ %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+	/* Clip to reasonable range */
+//	if (tmp[1] <= 0.0)
+//		tmp[0] = tmp[2] = 0.0;
+	XYZ2Lab(tmp, tmp);
+	if (trace) printf("Lab %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+	icmClipLab(tmp, tmp);
+	if (trace) printf("Clipped Lab %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+	if (tmp[0] <= 0.0) {
+		tmp[1] = tmp[2] = 0.0;
+	}
+	if (trace) printf("Clipped Lab2 %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+	Lab2XYZ(tmp, tmp);
+	if (trace) printf("XYZ %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+	icmClipXYZ(tmp, tmp);
+	if (trace) printf("clipped XYZ %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	/* Now convert to sRGB assuming D50 (??) white point */
+	icmMulBy3x3(tmp, mat, tmp);
+
+	/* Scale */
+	for(i = 0; i < 3; i++) {
+		tmp[i] = ((tmp[i] - 0.5) * scale) + 0.5;
+	}
+
+	if (trace) printf("raw RGB %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	/* Apply gamma */
 	for(i = 0; i < 3; i++) {
 		if (tmp[i] < 0.00304) {
-			out[i] = tmp[i] * 12.92;
+			tmp[i] = tmp[i] * 12.92;
 		} else {
-			out[i] = 1.055 * pow(tmp[i], 1.0/2.4) - 0.055;
+			tmp[i] = 1.055 * pow(tmp[i], 1.0/2.4) - 0.055;
 		}
-		if (out[i] < 0.0)
-			out[i] = 0.0;
-		else if (out[i] > 1.0)
-			out[i] = 1.0;
 	}
+
+	if (trace) printf("gamma corrected RGB %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+#ifndef NEVER
+	/* Clip to nearest */
+	for(i = 0; i < 3; i++) {
+		if (tmp[i] < 0.0)
+			tmp[i] = 0.0;
+		else if (tmp[i] > 1.0)
+			tmp[i] = 1.0;
+	}
+#else
+	/* Clip towards center */
+	{
+		double biggest = -100.0;
+		for(i = 0; i < 3; i++) {
+			tmp[i] -= 0.5;
+			if (fabs(tmp[i]) > biggest)
+				biggest = fabs(tmp[i]);
+		}
+		for(i = 0; i < 3; i++) {
+			if (biggest > 0.5)
+				tmp[i] *= 0.5/biggest; 
+			tmp[i] += 0.5;
+		}
+	}
+#endif
+	if (trace) printf("output clipped RGB %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	/* Copy to output */
+	for(i = 0; i < 3; i++)
+		out[i] = tmp[i];
+
+}
+
+#endif /* NEVER */
+
+#ifdef NEVER
+/* Nieve version with RGB clipping */
+/* Convert from XYZ to sRGB */
+void XYZ2sRGB(double *out, double *in, int trace) {
+	double tmp[3];
+	double scale = 1.0;		/* Scale RGB towards grey */
+	double mat[3][3] = 
+		{
+			{  3.2410, -1.5374, -0.4986 },
+			{ -0.9692,  1.8760,  0.0416 },
+			{  0.0556, -0.2040,  1.0570 }
+		};
+	int i;
+
+	if (trace) printf("XYZ to RGB\n");
+	if (trace) printf("input XYZ %f %f %f\n",in[0],in[1],in[2]);
+
+	/* Now convert to sRGB assuming D50 (??) white point */
+	icmMulBy3x3(tmp, mat, in);
+
+	/* Scale */
+	for(i = 0; i < 3; i++) {
+		tmp[i] = ((tmp[i] - 0.5) * scale) + 0.5;
+	}
+
+	if (trace) printf("raw RGB %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	/* Clip to nearest */
+	for(i = 0; i < 3; i++) {
+		if (tmp[i] < 0.0)
+			tmp[i] = 0.0;
+		else if (tmp[i] > 1.0)
+			tmp[i] = 1.0;
+	}
+
+	if (trace) printf("clipped RGB %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	/* Apply gamma */
+	for(i = 0; i < 3; i++) {
+		if (tmp[i] < 0.00304) {
+			tmp[i] = tmp[i] * 12.92;
+		} else {
+			tmp[i] = 1.055 * pow(tmp[i], 1.0/2.4) - 0.055;
+		}
+	}
+
+	if (trace) printf("output gamma corrected RGB %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	/* Copy to output */
+	for(i = 0; i < 3; i++)
+		out[i] = tmp[i];
+}
+
+#endif /* NEVER */
+
+#ifdef NEVER
+
+/* Complex version using powell to ensure good clipping */
+/* Callback context */
+typedef struct {
+	double scale;
+	double lab[3];
+	double imat[3][3];
+} ctx;
+
+double clipf(void *fdata, double tp[]) {
+	ctx *x = (ctx *)fdata;
+	double lab[3], tmp[3], tt;
+	int k;
+	double rv = 0.0;
+
+//printf("\n");
+//printf("~1 clipf got %f %f %f\n",tp[0],tp[1],tp[2]);
+
+	/* Penalize for being out of gamut */
+	for (k = 0; k < 3; k++) {
+		if (tp[k] < 0.0) {
+			tt = 100000.0 * (0.0 - tp[k]);
+			rv += tt * tt;
+		} else if (tp[k] > 1.0) {
+			tt = 100000.0 * (tp[k] - 1.0);
+			rv += tt * tt;
+		}
+	}
+//printf("~1 rv out of gamut = %f\n",rv);
+
+	/* Unscale it */
+	for(k = 0; k < 3; k++)
+		tmp[k] = ((tp[k] - 0.5) / x->scale) + 0.5;
+//printf("~1 unscale %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	icmMulBy3x3(tmp, x->imat, tmp);		/* To XYZ */
+//printf("~1 xyz %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+	XYZ2Lab(lab, tmp);					/* To Lab */
+//printf("~1 lab    = %f %f %f\n",lab[0],lab[1],lab[2]);
+//printf("~1 target = %f %f %f\n",x->lab[0],x->lab[1],x->lab[2]);
+
+	/* Compute an error to the goal */
+	tt = 10000.0 * (lab[0] - x->lab[0]);
+	rv += tt * tt;
+
+	tt = 1.0 * (lab[1] - x->lab[1]);
+	rv += tt * tt;
+	tt = 1.0 * (lab[2] - x->lab[2]);
+	rv += tt * tt;
+
+//printf("~1 rv = %f\n",rv);
+
+	return rv;
+}
+
+/* Convert from XYZ to sRGB */
+void XYZ2sRGB(double *out, double *in, int trace) {
+	double lab[3], tmp[3];
+	double scale = 1.0;		/* Scale RGB towards grey */
+	double mat[3][3] = 
+		{
+			{  3.2410, -1.5374, -0.4986 },
+			{ -0.9692,  1.8760,  0.0416 },
+			{  0.0556, -0.2040,  1.0570 }
+		};
+	int i;
+
+	/* Copy from input */
+	for(i = 0; i < 3; i++)
+		tmp[i] = in[i];
+
+	if (trace) printf("XYZ to RGB\n");
+
+	if (trace) printf("input XYZ %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	XYZ2Lab(lab, tmp);
+
+	if (trace) printf("Lab %f %f %f\n",lab[0],lab[1],lab[2]);
+
+	icmClipLab(lab, lab);
+
+	if (trace) printf("Clipped Lab %f %f %f\n",lab[0],lab[1],lab[2]);
+
+	/* Now convert to sRGB assuming D50 (??) white point */
+	Lab2XYZ(tmp, lab);
+	icmMulBy3x3(tmp, mat, tmp);
+
+	/* Scale */
+	for(i = 0; i < 3; i++) {
+		tmp[i] = ((tmp[i] - 0.5) * scale) + 0.5;
+	}
+
+	if (trace) printf("raw RGB %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	/* See if it need clipping */
+	for(i = 0; i < 3; i++) {
+		if (tmp[i] < 0.0 || tmp[i] > 1.0)
+			break;
+	}
+	/* It needs more clipping */
+	if (i < 3) {
+		ctx x;
+		double ss[3] = { 0.1, 0.1, 0.1 };
+		x.lab[0] = lab[0];
+		x.lab[1] = lab[1];
+		x.lab[2] = lab[2];
+		x.scale = scale;
+		icmInverse3x3(x.imat, mat);
+
+		if (powell(NULL, 3, tmp, ss, 1e-6, 1000, clipf, (void *)&x) < 0.0)
+			error("RGB clip failed");
+	}
+	if (trace) printf("RGB clip %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	/* Clip to nearest */
+	for(i = 0; i < 3; i++) {
+		if (tmp[i] < 0.0)
+			tmp[i] = 0.0;
+		else if (tmp[i] > 1.0)
+			tmp[i] = 1.0;
+	}
+	if (trace) printf("clip to nearest RGB %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	/* Apply gamma */
+	for(i = 0; i < 3; i++) {
+		if (tmp[i] < 0.00304) {
+			tmp[i] = tmp[i] * 12.92;
+		} else {
+			tmp[i] = 1.055 * pow(tmp[i], 1.0/2.4) - 0.055;
+		}
+	}
+	if (trace) printf("gamma corrected RGB %f %f %f\n",tmp[0],tmp[1],tmp[2]);
+
+	/* Copy to output */
+	for(i = 0; i < 3; i++)
+		out[i] = tmp[i];
+
+}
+#endif 	/* NEVER */
+
+void usage(char *diag) {
+	fprintf(stderr,"Create a 3D slice plot of XYZ/Lab <-> Jab\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	if (diag != NULL)
+		fprintf(stderr,"Diagnostic '%s'\n",diag);
+	fprintf(stderr,"usage: cam02plot [-options] [x y]\n");
+	fprintf(stderr,"'cam02plot -l -o' shows problem best\n");
+	fprintf(stderr," -v level Verbosity level 0 - 2 (default = 1)\n");
+	fprintf(stderr," -n       Don't use Helmholtz-Kohlraush flag\n"); 
+	fprintf(stderr," -r res   Resolution (default %d)\n",DEFRES); 
+	fprintf(stderr," -l       Lab source cube (default XYZ source cube)\n");
+	fprintf(stderr," -i       XYZ/Lab -> Jab (default XYZ/Lab -> Lab)\n");
+	fprintf(stderr," -o       Jab -> XYZ -> RGB (defult Lab -> XYZ -> RGB\n");
+	fprintf(stderr," -s       XYZ/Lab -> ab scale as RGB\n");
+	fprintf(stderr," -x       Cross section plots\n");
+	fprintf(stderr,"    x y   Return input color for this coordinate\n");
+	exit(1);
 }
 
 int
-main(void) {
+main(int argc, char *argv[]) {
+	int fa,nfa;				/* argument we're looking at */
 	char *tiffname = "cam02plot.tif";
 	TIFF *wh = NULL;
 	uint16 depth, bps;
@@ -128,27 +422,122 @@ main(void) {
 	float resx = 75.0, resy = 75.0;
 	tdata_t *obuf;
 	unsigned char *ob;
+	int verb = 0;
+	int transl = 0;				/* Translate x,y into input color */
+	int tx, ty;					/* coordinate to translate */
+	int use_hk = 1;				/* Use Helmholtz-Kohlraush flag */
+	int lab_plot = 0;			/* Lab <-> Jab plot, else XYZ <-> Jab */
+	int to_jab = 0;				/* Convert to Jab, else convert to Lab */
+	int from_jab = 0;			/* Convert from Jab, else convert from Lab */
+	int to_ss = 0;				/* Convert from XYZ/Lab to abs scale ss */
+	int xsect = 0;				/* Cross section plots */
 	
-	double white[6][3] = {
-		{ 0.9505, 1.000, 1.0888 },
-		{ 0.9505, 1.000, 1.0888 },
-		{ 1.0985, 1.000, 0.3558 },
-		{ 1.0985, 1.000, 0.3558 },
-		{ 0.9505, 1.0000, 1.0890 }, /* D65 */
-		{ 0.9642, 1.000, 0.8249 }	/* D50 for inversion tests */
+	double white[9][3] = {
+		{ 0.964242, 1.000000, 0.825124 },		/* 0: D50 */
+		{ 1.098494, 1.000000, 0.355908 },		/* 1: A */
+		{ 0.908731, 1.000000, 0.987233 },		/* 2: F5 */
+		{ 1.128981, 1.000000, 0.305862 },		/* 3: D25 */
+		{ 0.950471, 1.000000, 1.088828 },		/* 4: D65 */
+		{ 0.949662, 1.000000, 1.160438 },		/* 5: D80 */
+		{ 0.949662, 1.000000, 1.160438 },		/* 6: D80 */
+		{ 0.951297, 1.000000, 1.338196 },		/* 7: D85 */
+		{ 0.952480, 1.000000, 1.386693 }		/* 8: D90 */
 	};
-	double La[6] = { 318.31, 31.83, 318.31, 31.83, 318.31, 150.0 };
+	double La[6] = { 10.0, 31.83, 100.0, 318.31, 1000.83, 3183.1 };
+
+	ViewingCondition Vc[4] = {
+		vc_average,
+		vc_dark,
+		vc_dim,
+		vc_cut_sheet
+	};
 
 	int i, j, k, m;
 	int e;
 	double xyz[3], Jab[3], rgb[3];
 	cam02 *cam1, *cam2;
 
-	int res = 32;	/* Resolution of scan through space */
+	int res = DEFRES;	/* Resolution of scan through space */
 	int ares;		/* Array of 2d sub-rasters */
 	int w, h;		/* Width and height of raster */
 	int x, y;
 	int sp = 5;			/* Spacing beween resxres sub-images */
+
+	/* Process the arguments */
+	for(fa = 1;fa < argc;fa++) {
+		nfa = fa;					/* skip to nfa if next argument is used */
+		if (argv[fa][0] == '-')	{	/* Look for any flags */
+			char *na = NULL;		/* next argument after flag, null if none */
+
+			if (argv[fa][2] != '\000')
+				na = &argv[fa][2];		/* next is directly after flag */
+			else {
+				if ((fa+1) < argc) {
+					if (argv[fa+1][0] != '-') {
+						nfa = fa + 1;
+						na = argv[nfa];		/* next is seperate non-flag argument */
+					}
+				}
+			}
+
+			if (argv[fa][1] == '?')
+				usage("Requested usage");
+
+			/* Verbosity */
+			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+				fa = nfa;
+				if (na == NULL)
+					verb = 2;
+				else {
+					if (na[0] == '0')
+						verb = 0;
+					else if (na[0] == '1')
+						verb = 1;
+					else if (na[0] == '2')
+						verb = 2;
+					else
+						usage("Illegal verbosity level");
+				}
+			}
+
+			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
+				fa = nfa;
+				if (na == NULL)
+					usage("Need resolution after -r");
+				res = atoi(na);
+				if (res < 2 || res > 1000)
+					usage("Resolution is out of range");
+			}
+			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
+				use_hk = 0;
+			}
+			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L') {
+				lab_plot = 1;
+			}
+			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
+				to_jab = 1;
+			}
+			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+				from_jab = 1;
+			}
+			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+				to_ss = 1;
+			}
+			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
+				xsect = 1;
+			}
+			else 
+				usage("Unknown flag");
+		} else
+			break;
+	}
+
+	if ((fa+1) < argc) {
+		tx = atoi(argv[fa]);
+		ty = atoi(argv[fa+1]);
+		transl = 1;
+	}
+
 
 	/* Setup cam to convert to Jab */
 	cam1 = new_cam02();
@@ -161,7 +550,7 @@ main(void) {
 		0.0,		/* Luminance of white in image - not used */
 		0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 		white[4],	/* The Flare color coordinates (typically the Ambient color) */
-		USE_HK		/* use Helmholtz-Kohlraush flag */ 
+		use_hk		/* use Helmholtz-Kohlraush flag */ 
 	);
 	
 	/* Setup cam to convert from Jab */
@@ -169,23 +558,130 @@ main(void) {
 	cam2->set_view(
 		cam2,
 		vc_average,	/* Enumerated Viewing Condition */
-		white[5],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
+		white[4],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
 		0.20,		/* Relative Luminance of Background to reference white */
-		100.0,		/* Adapting/Surround Luminance cd/m^2 */
+		1000.0,		/* Adapting/Surround Luminance cd/m^2 */
 		0.0,		/* Luminance of white in image - not used */
 		0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-		white[5],	/* The Flare color coordinates (typically the Ambient color) */
-		USE_HK		/* use Helmholtz-Kohlraush flag */ 
+		white[4],	/* The Flare color coordinates (typically the Ambient color) */
+		use_hk		/* use Helmholtz-Kohlraush flag */ 
 	);
 	
 	/* Figure out the size of the raster */
 	ares = (int)ceil(sqrt((double)res));
-	printf("~1 for res %d, ares = %d\n",res,ares);
+	if (verb)
+		printf("For res %d, ares = %d\n",res,ares);
 	
 	w = ares * res + sp * (ares+1);
 	h = ares * res + sp * (ares+1);
 
-	printf("~1 raster width = %d, height = %d\n",w,h);
+	if (to_ss) {
+		cam1->retss = 1;
+	}
+
+	if (transl) {
+		int ix,iy,iz;
+		double dx,dy,dz;
+		double tmp[3], lab[3];
+
+		cam1->trace = 1;
+		cam2->trace = 1;
+
+//printf("~1 translate %d %d\n",tx,ty);
+		tx -= sp;		/* Border at base */
+		ty -= sp;
+
+//printf("~1 offset %d %d\n",tx,ty);
+		ix = tx % (res + sp);
+		iy = ty % (res + sp);
+		iz = (ty / (res + sp)) * ares + (tx / (res + sp));
+		
+//printf("~1 x y z = %d %d %d\n", ix,iy,iz);
+
+		dx = ix/(res-1.0);
+		dy = iy/(res-1.0);
+		dz = iz/((ares * ares)-1.0);
+		
+//printf("~1 X Y Z = %f %f %f\n", dx,dy,dz);
+
+		/* Source range is extended L*a*b* type */
+		if (lab_plot) {
+			if (xsect) {
+				lab[0] = 180.0 * dz - 40.0;
+				lab[1] = 300.0 * dy - 150.0;
+				lab[2] = 300.0 * dx - 150.0;
+			} else {
+				lab[0] = 180.0 * dx - 40.0;
+				lab[1] = 300.0 * dy - 150.0;
+				lab[2] = 300.0 * dz - 150.0;
+			}
+//printf("~1 Lab = %f %f %f\n", lab[0],lab[1],lab[2]);
+			Lab2XYZ(tmp, lab);
+			printf("======================================================\n");
+			printf("%d,%d -> Lab        %f %f %f\n", tx+sp, ty+sp, lab[0],lab[1],lab[2]);
+			printf("      == XYZ        %f %f %f\n", tmp[0],tmp[1],tmp[2]);
+
+		/* Else source range is extended XYZ type */
+		} else {
+			if (xsect) {
+				tmp[0] = 1.4 * dz - 0.2;
+				tmp[1] = 1.4 * dy - 0.2;
+				tmp[2] = 1.6 * dx - 0.2;
+			} else {
+				tmp[0] = 1.4 * dx - 0.2;
+				tmp[1] = 1.4 * dy - 0.2;
+				tmp[2] = 1.6 * dz - 0.2;
+			}
+			printf("%d,%d -> Input color XYZ %f %f %f\n", tx, ty, tmp[0],tmp[1],tmp[2]);
+		}
+
+		if (to_ss) {
+			cam1->XYZ_to_cam(cam1, Jab, tmp);
+			printf("         XYZ -> ss %f %f %f\n", Jab[0],Jab[1],Jab[2]);
+
+		/* Convert XYZ through cam and back, then to RGB */
+		} else if (to_jab) {
+			cam1->XYZ_to_cam(cam1, Jab, tmp);
+			if (to_ss) {
+				printf("         XYZ -> ss %f %f %f\n", Jab[0],Jab[1],Jab[2]);
+			} else {
+				printf("         XYZ -> ss %f %f %f\n", Jab[0],Jab[1],Jab[2]);
+			}
+
+		/* Else convert XYZ to L*a*b* */
+		} else {
+			XYZ2Lab(Jab, tmp);
+			printf("         XYZ -> Lab %f %f %f\n", Jab[0],Jab[1],Jab[2]);
+		}
+
+		/* Convert from Jab back to XYZ */
+		if (from_jab) {
+			cam2->cam_to_XYZ(cam2, rgb, Jab);
+			printf("         Jab -> XYZ %f %f %f\n", rgb[0],rgb[1],rgb[2]);
+
+		/* Else convert from Lab back to XYZ */
+		} else {
+			Lab2XYZ(rgb, Jab);
+			printf("         Lab -> XYZ %f %f %f\n", rgb[0],rgb[1],rgb[2]);
+		}
+
+		XYZ2Lab(tmp, rgb);
+		printf("      == Lab        %f %f %f\n", tmp[0],tmp[1],tmp[2]);
+
+		/* Interpret XYZ as RGB color */
+		XYZ2sRGB(rgb, rgb, 1);
+		printf("         XYZ -> RGB %f %f %f\n", rgb[0],rgb[1],rgb[2]);
+
+		cam1->trace = 0;
+		cam2->trace = 0;
+
+		printf("\n");
+		exit(0);
+	}
+
+	if (verb)
+		printf("Raster width = %d, height = %d\n",w,h);
+
 	/* Setup the tiff file */
 	if ((wh = TIFFOpen(tiffname, "w")) == NULL)
 		error("Can\'t create TIFF file '%s'!",tiffname);
@@ -214,12 +710,11 @@ main(void) {
 		x += 3;
 	}
 	for (j = 0; j < sp; j++, y++) {
-//printf("~1 writing first blank lines at %d\n",y);
 		TIFFWriteScanline(wh, ob, y, 0);
 	}
 
-	for (i = 0; i < ares; i++) {				/* Vertical blocks */
-		for (j = 0; j < res; j++, y++) {		/* Vertical in block */
+	for (i = 0; i < ares; i++) {				/* Vertical blocks (rows) */
+		for (j = 0; j < res; j++, y++) {		/* Vertical in block (y = Y/a*) */
 			xyz[1] = j/(res-1.0);
 			x = 0;
 
@@ -228,7 +723,7 @@ main(void) {
 				ob[x] = ob[x+1] = ob[x+2] = 0;
 				x += 3;
 			}
-			for (k = 0; k < ares; k++) {		/* Horizontal blocks */
+			for (k = 0; k < ares; k++) {		/* Horizontal blocks (columns) */
 				int zv = i * ares + k;
 				if (zv >= res) {
 					/* Fill res pixels with black */
@@ -237,25 +732,54 @@ main(void) {
 						x += 3;
 					}
 				} else {
-					xyz[2] = zv/(res-1.0);
-					for (m = 0; m < res; m++) {	/* Horizontal in block */
-						double tmp[3];
+					xyz[2] = zv/(res-1.0);		/* z = block = Z/b* */
+					for (m = 0; m < res; m++) {	/* Horizontal in block (x = X/L*) */
+						double tmp[3], xyz2[3];
 						xyz[0] = m/(res-1.0);
 
-#ifndef NEVER	/* Straight XYZ */
-						tmp[0] = xyz[0];
-						tmp[1] = xyz[1];
-						tmp[2] = xyz[2];
-#else
-						tmp[0] = 100.0 * xyz[0];
-						tmp[1] = 256.0 * xyz[1] - 128.0;
-						tmp[2] = 256.0 * xyz[2] - 128.0;
-						Lab2XYZ(tmp, tmp);
-#endif
+						if (lab_plot) {
+							if (xsect) {
+								tmp[0] = 180.0 * xyz[2] - 40.0;
+								tmp[1] = 300.0 * xyz[1] - 150.0;
+								tmp[2] = 300.0 * xyz[0] - 150.0;
+							} else {
+								tmp[0] = 180.0 * xyz[0] - 40.0;
+								tmp[1] = 300.0 * xyz[1] - 150.0;
+								tmp[2] = 300.0 * xyz[2] - 150.0;
+							}
+							Lab2XYZ(tmp, tmp);
+
+						} else {
+							if (xsect) {
+								tmp[0] = 1.4 * xyz[2] - 0.2;
+								tmp[1] = 1.4 * xyz[1] - 0.2;
+								tmp[2] = 1.6 * xyz[0] - 0.2;
+							} else {
+								tmp[0] = 1.4 * xyz[0] - 0.2;
+								tmp[1] = 1.4 * xyz[1] - 0.2;
+								tmp[2] = 1.6 * xyz[2] - 0.2;
+							}
+						}
+
 						/* Convert XYZ through cam and back, then to RGB */
-						cam1->XYZ_to_cam(cam1, Jab, tmp);
-						cam2->cam_to_XYZ(cam2, rgb, Jab);
-						XYZ2sRGB(rgb, rgb);
+						if (to_jab || to_ss)
+							cam1->XYZ_to_cam(cam1, Jab, tmp);
+						else
+							XYZ2Lab(Jab, tmp);
+
+						if (to_ss) {
+							rgb[0] = Jab[0];
+							rgb[1] = Jab[1];
+							rgb[2] = Jab[2];
+						} else {
+							if (from_jab)
+								cam2->cam_to_XYZ(cam2, xyz2, Jab);
+							else
+								Lab2XYZ(xyz2, Jab);
+	
+							XYZ2sRGB(rgb, xyz2, 0);
+						}
+
 						/* Fill with pixel value */
 						ob[x+0] = (int)(rgb[0] * 255.0 + 0.5);
 						ob[x+1] = (int)(rgb[1] * 255.0 + 0.5);
@@ -269,7 +793,6 @@ main(void) {
 					x += 3;
 				}
 			}
-//printf("~1 writing scan line at %d\n",y);
 			TIFFWriteScanline(wh, ob, y, 0);
 		}
 		/* Fill sp lines with black */
@@ -278,10 +801,12 @@ main(void) {
 			x += 3;
 		}
 		for (j = 0; j < sp; j++, y++) {
-//printf("~1 writing blank scan line at %d\n",y);
 			TIFFWriteScanline(wh, ob, y, 0);
 		}
 	}
+
+	cam1->del(cam1);
+	cam2->del(cam2);
 
 	/* Write TIFF file */
 	TIFFClose(wh);

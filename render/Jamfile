@@ -1,0 +1,33 @@
+
+#SubDir TOP render ;
+
+# Optimization and Debug flags
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+#CCFLAGS		+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;      # Link with debug info
+#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+
+#Products
+Libraries = librender ;
+Executables = timage ;
+Headers = render.h ;
+
+#Install
+InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
+#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
+#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+
+# 2D Rendering library
+Library librender.lib : render.c ;
+ObjectHdrs render$(SUFOBJ) : ../h ../numlib ../tiff ;
+
+Main timage : timage.c ;
+ObjectHdrs timage$(SUFOBJ) : ../h ../numlib ../tiff ;
+LinkLibraries timage : librender.lib ../numlib/libnum.lib ../tiff/libtiff.lib ;
+
+if $(BUILD_JUNK) {
+
+}

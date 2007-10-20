@@ -14,8 +14,11 @@ if $(UNIX) {
 	LINKFLAGS += -framework IOKit ;
 	LINKFLAGS += -framework CoreFoundation ;
   } else {
-	LibWin = /usr/X11R6/lib/libX11.lib ;
-	LibWinH = /usr/X11R6/include/X11 ;
+	WinDir = /usr/X11R6 ;
+	LibWinH = $(WinDir)/include/X11 ;
+	LibWinD = $(WinDir)/lib ;
+	LibWin = ;
+	LINKFLAGS += -L$(LibWinD) -lX11 -lXau -lXdmcp ;
   }
 }
 
@@ -35,32 +38,41 @@ Executables = targen filmtarg printtarg ;
 #Install
 InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
 
+Object alphix$(SUFOBJ) : alphix.c ;
+ObjectHdrs alphix$(SUFOBJ) : ../h ../numlib ;
+
+Object randix$(SUFOBJ) : randix.c ;
+ObjectHdrs randix$(SUFOBJ) : ../h ../numlib ;
+
+#target generator
 Main targen : targen.c ppoint.c ofps.c ifarp.c simplat.c simdlat.c prand.c ;
-ObjectHdrs targen$(SUFOBJ) : ../h ../numlib ../rspl ../cgats ../icc ../gamut ../xicc ../spectro ;
 ObjectHdrs ppoint$(SUFOBJ) : ../h ../numlib ../plot ../icc ../rspl ../xicc ; 
 ObjectHdrs ofps$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ; 
 ObjectHdrs ifarp$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ;
 ObjectHdrs simplat$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ;
 ObjectHdrs simdlat$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ;
 ObjectHdrs prand$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ;
-LinkLibraries targen : ../rspl/librspl.lib ../numlib/libnum.lib ../cgats/libcgats.lib
+ObjectHdrs targen$(SUFOBJ) : ../h ../numlib ../rspl ../cgats ../icc ../gamut ../xicc ../spectro ;
+LinkLibraries targen : ../rspl/librspl.lib ../cgats/libcgats.lib
                        ../icc/libicc.lib ../plot/libplot.lib ../xicc/libxicc.lib
                        ../xicc/libxcolorants.lib ../gamut/libgamut.lib
-                       ../spectro/libinst.lib 
+                       ../numlib/libnum.lib ../spectro/libinsttypes.lib 
                        $(LibWin) ;
 
 # Film Calibration Target File generator
-Main filmtarg : filmtarg.c alphix.c randix.c ;
-ObjectHdrs filmtarg$(SUFOBJ) : ../h ../cgats $(TIFFINC) ;	# icc bug workaround
+MainFromObjects filmtarg : filmtarg$(SUFOBJ) alphix$(SUFOBJ) randix$(SUFOBJ) ;
+Object filmtarg$(SUFOBJ) : filmtarg.c ;
+ObjectHdrs filmtarg$(SUFOBJ) : ../h ../numlib ../cgats $(TIFFINC) ;
 LinkLibraries filmtarg : ../cgats/libcgats.lib $(TIFFLIB) ;
 
-# Print Calibration Target Postscript File generator
-Main printtarg : printtarg.c alphix.c randix.c ;
+# Print Calibration Target Postscrip../numlib t File generator
+MainFromObjects printtarg : printtarg$(SUFOBJ) alphix$(SUFOBJ) randix$(SUFOBJ) ;
+Object printtarg$(SUFOBJ) : printtarg.c ;
 ObjectHdrs printtarg$(SUFOBJ) : ../h ../numlib ../cgats ../spectro ../rspl ../icc ../xicc
                                 ../gamut ;
 LinkLibraries printtarg : ../cgats/libcgats.lib ../xicc/libxicc.lib
                           ../xicc/libxcolorants.lib ../icc/libicc.lib
-                          ../numlib/libnum.lib ../spectro/libinst.lib
+                          ../numlib/libnum.lib ../spectro/libinsttypes.lib
                           ../plot/libplot.lib $(LibWin) ;
 
 # Individual stand alone test of sample point classes

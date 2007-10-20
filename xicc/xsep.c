@@ -8,8 +8,8 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  */
 
@@ -57,6 +57,8 @@ xsep *p
 }
 
 
+#ifdef NEVER	/* Not used yet */
+
 /* The optimisation function passed to opt_rspl */
 /* Returns value is the "error" for this point. */
 static double optfunc(
@@ -93,6 +95,8 @@ double cw		/* The (grid resolution) curvature weighting factor */
 
 	return 0.0;
 }
+
+#endif /* NEVER */
 
 
 /* default target vectors (Labx) for CMYx input */
@@ -140,7 +144,7 @@ icxScat cat[MXDO]	/* Device channel control and function category */
 	xsep *p;		/* this */
 	rspl *sep;		/* Mapping we will create */
 	int i, j;
-	double **vdata;	/* pdi^2 array of function, target and additional values to init */
+//	double **vdata;	/* pdi^2 array of function, target and additional values to init */
 	double *vdatap[16];
 
 	/* Sanity check */

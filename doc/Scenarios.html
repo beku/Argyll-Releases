@@ -1,7 +1,7 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
-  <title>Argyll Overview</title>
+  <title>Argyll Usage Scenarios</title>
   <meta http-equiv="content-type"
  content="text/html; charset=ISO-8859-1">
 </head>
@@ -10,12 +10,15 @@
 Choose a task from the list below. For more details on alternative
 options, follow the links to the individual utilities being used.<br>
 <h4><a href="#PM1">Profiling Displays</a></h4>
-<h4>&nbsp;&nbsp;&nbsp;&nbsp; <a href="Scenarios.html#PM1a">Calibrating
+<h4>&nbsp;&nbsp;&nbsp;&nbsp; <a href="#PM1a">Adjusting and Calibrating
 a
 displays</a><span style="font-weight: bold;"></span></h4>
 <h4>&nbsp;&nbsp;&nbsp; <a href="#PM2">Creating display test values</a></h4>
 <h4> &nbsp;&nbsp;&nbsp; <a href="#PM3">Taking readings from a display</a></h4>
-<h4> &nbsp;&nbsp;&nbsp; <a href="Scenarios.html#PM3">Creating a
+<h4> &nbsp;&nbsp;&nbsp; <a href="#PM4">Creating a
+display profile</a></h4>
+<h4> &nbsp;&nbsp;&nbsp; <span style="text-decoration: underline;"></span><a
+ href="#PM5">Installing a
 display profile</a></h4>
 <h4><br>
 <a href="#PS1">Profiling Scanners</a></h4>
@@ -30,7 +33,9 @@ using an instrument</a></h4>
 <h4> &nbsp;&nbsp;&nbsp; <a href="#PP4">Reading a print test chart
 using a scanner</a></h4>
 <h4> </h4>
-<h4>&nbsp;&nbsp;&nbsp; <a href="#PP5">Creating a printer profile</a> </h4>
+<h4>&nbsp;&nbsp;&nbsp; <a href="#PP5">Creating a printer profile<br>
+</a></h4>
+<h4>&nbsp;&nbsp;&nbsp; <a href="#PP6">Choosing a black generation curve</a></h4>
 <h4><br>
 <a href="#LP1">Linking Profiles</a></h4>
 <h4><br>
@@ -38,24 +43,28 @@ using a scanner</a></h4>
 <br>
 <hr style="width: 100%; height: 2px;">
 <h3><a name="PM1"></a>Profiling Displays</h3>
-Currently Argyll supports calibrating and profiling of displays using
-one of two
-instruments, an Xrite DTP92, or a Gretag Spectrolino. Calibration is a
-prior step to profiling, in which the display is adjusted using it's
-controls and per channel lookup tables to have a well behaved response,
+Argyll supports adjusting, calibrating and profiling of displays using
+one of a number of
+instruments - see <a href="instruments.html">instruments</a> for a
+current list.&nbsp; Adjustment and calibration are prior
+steps to profiling, in which the display is adjusted using it's
+screen controls,&nbsp; and then per channel lookup tables are created
+to make it meet a well behaved response
 of the desired type. The process
-for creating a display profile is similar to that of all output
+for creating a display profile is then similar to that of all other
+output
 devices. First a set of device colorspace test values needs to be
 created to exercise the display, then these values need to be
 displayed, while taking measurements of the resulting colors using the
 instrument. Finally, the device value/measured color values need to be
 converted into an ICC profile.<br>
 <br>
-<h3><a name="PM1a"></a>Calibrating Displays</h3>
-The first step is to decide what the target should be for calibration.
+<h3><a name="PM1a"></a>Adjusting and Calibrating Displays</h3>
+The first step is to decide what the target should be for adjustment
+and calibration.
 This boils down to three things: The desired brightness, the desired
 white point, and the desired response curve. The native brightness and
-white points of some displays may be different to the desired
+white points of a display may be different to the desired
 characteristics for some purposes. For instance, for graphic arts use,
 it might be desirable to run with a warmer white point of about 5000
 degrees Kelvin, rather than the default display white point of 6500 to
@@ -63,15 +72,20 @@ degrees Kelvin, rather than the default display white point of 6500 to
 material under available lighting, so it might be desirable to reduce
 the maximum brightness.<br>
 <br>
-In the current release of Argyll, there is no particular support for
-adjusting the display controls. It is up to you to decide how you<br>
-will set the brightness, contrast, white point and other controls on
-the monitor.<br>
+You can run <a href="dispcal.html#r">dispcal -r</a> to check on how
+your display is currently set up. (you may have to run this as <span
+ style="text-decoration: underline; color: rgb(204, 51, 204);">dispcal
+-yl -r</span> for an LCD display, or <span
+ style="text-decoration: underline; color: rgb(204, 51, 204);">dispcal
+-yc -r</span> for a CRT display with most of the colorimeter
+instruments. If so, this will apply to all of the following examples.)<br>
 <br>
 Once this is done, <a href="dispcal.html">dispcal</a> can be run to
-calibrate it. By default the brightness and white point will be kept
+guide you through the display adjustments, and then calibrate it. By
+default, the brightness and white point will be kept
 the same as the devices natural brightness and white point. The default
-response curve is a gamma of 2.2, which is close to that of&nbsp; many
+response curve is a gamma of 2.2 on MSWindows and X11 systems, and 1.8
+on Apple OSX systems. 2.2 is close to that of&nbsp; many
 monitors, and close to that of the sRGB colorspace. <br>
 <br>
 A typical calibration that leaves the brightness and white point alone,
@@ -80,20 +94,60 @@ might be:<br>
 <a href="dispcal.html">dispcal</a> -v TargetA<br>
 <br>
 which will result in a "TargetA.cal" calibration file, that can then be
-used during the calibration stage.<br>
+used during the profiling stage.<br>
 <br>
 If the absolutely native response of the display is desired during
 profiling, then calibration should be skipped, and the linear.cal file
 from the "ref" directory used instead as the argument to the -k flag of
-dispread.<br>
+<span style="font-weight: bold;">dispread</span>.<br>
 <br>
-<b>dispcal</b> will display a test window in the middle of the screen,
+<b>Dispcal</b> will display a test window in the middle of the screen,
 and issue a series of instructions about placing the instrument on the
 display. You may need to make sure that the display cursor is not in
 the test window, and it may also be necessary to disable any
-screensaver before starting the
-process.<br>
-<h4><a name="PM2"></a>Creating display test values</h4>
+screensaver and powersavers before starting the
+process, although both <span style="font-weight: bold;">dispcal</span>
+and <span style="font-weight: bold;">dispread</span> will attempt to
+do this for you. It's also highly desirable on CRT's, to clear your
+screen
+of
+any white
+or bright background images or windows (running your shell window with
+white text on a black background helps a lot here.), or at least keep
+any bright areas away from the test window, and be careful not to
+change anything on the display while the readings
+are taken. Lots of bright images or windows can affect the ability to
+measure
+the black point accurately, and changing images on the display can
+cause inconsistency in the readings,&nbsp; and leading to poor results.<span
+ style="font-weight: bold;"></span> LCD displays seem to be
+less influenced by what else is on the screen.<br>
+<br>
+If <span style="font-weight: bold;">dispcal</span> is run
+without arguments, it will provide a usage screen. The <span
+ style="font-weight: bold;">-c</span> parameter allows selecting a
+communication port for an instrument, or selecting the instrument you
+want to use,&nbsp; and the <span style="font-weight: bold;">-d</span>
+option allows selecting a target
+display on a multi-display system. On some multi-monitor systems, it
+may not be possible to independently calibrate and profile each display
+if they appear as one single screen to the operating system, or if it
+is not possible to set separate video lookup tables for each
+display. You can change the position and size of the test
+window using the <span style="font-weight: bold;">-p</span> parameter.
+You can determine how best to arrange the test window, as well as
+whether each display has separate video lookup capability, by
+experimenting with the <a href="dispwin.html">dispwin</a> utility. <br>
+<br>
+For a more detailed discussion on interactively adjusting the display
+controls using <span style="font-weight: bold;">dispcal</span>, see <a
+ href="dispcal.html#Adjustment">dispcal-adjustment</a>. Once you have
+adjusted and calibrated your display, you can move on to the next step.<br>
+<br>
+Once you have calibrated and profiled your display, you can keep it
+calibrated using the <a href="dispcal.html#u">dispcal -u</a> option.<br>
+<br>
+<a name="PM2"></a>Creating display test values
 The first step in profiling any output device, is to create a set
 of device colorspace test values. The important parameters needed are:
 <br>
@@ -110,7 +164,7 @@ At a minimum, a few hundred values are needed. A matrix/shaper type of
 profile can get by with fewer test values, while a LUT based profile
 will give better results if more test values are used. A typical number
 might be 200-600 or so values, while 1000-2000 is not an unreasonable
-number for a very high quality characterization of a display.<br>
+number for a high quality characterization of a display.<br>
 <br>
 To assist the choice of test patch values, it can help to have a rough
 idea of how the device behaves. This could be in the form of an ICC
@@ -150,44 +204,27 @@ following example, it is assumed that the instrument is connected to
 COM port 1, the
 default port. Invoking dispread so as to display the usage information
 (by
-using a flag -? or --) will list the identified serial ports, and their
+using a flag -? or --) will list the identified serial and USB ports,
+and their
 labels. If we created a calibration for the display using <a
  href="dispcal.html">dispcal</a>, then we will want to use this when we
 take the display readings (e.g. TargetA.cal from the calibration
 example)..<br>
 <br>
 <a href="dispread.html">dispread</a> <a href="dispread.html#v">-v</a> <a
- href="dispread.html#i">-i92</a> <a href="dispread.html#k">-k
+ href="dispread.html#k">-k
 TargetA.cal</a> <a href="dispread.html#p1">DisplayA</a><br>
-<br>
-<br>
-To calibrate the DTP92 instrument beforehand, use the <a
- href="dispread.html#a">-a</a> flag, ie:<br>
-<br>
-<a href="dispread.html">dispread</a> <a href="dispread.html#a">-a</a> <a
- href="dispread.html#i">-i92</a><br>
-<br>
-and it will go through the process of black level and gray level
-calibration.<br>
-<br>
-<br>
-For the Spectrolino , the following command could be used to
-characterize the display:<br>
-<br>
-<a href="dispread.html">dispread</a> <a href="dispread.html#v">-v</a> <a
- href="dispread.html#i">-iSO</a> <a href="dispread.html#k">-k
-TargetA.cal</a> <a href="dispread.html#p1">DisplayA</a><br>
-<br>
-The spectrolino will request calibration using the white tile before in
-can be placed on the screen.<br>
 <br>
 <b>dispread</b> will display a test window in the middle of the screen,
 and issue a series of instructions about placing the instrument on the
 display. You may need to make sure that the display cursor is not in
 the test window, and it may also be necessary to disable any
 screensaver before starting the
-process.<br>
-<br>
+process. Exactly the same facilities are provided to select alternate
+displays using the <span style="font-weight: bold;">-d</span>
+parameter, and an alternate location and size for the test window using
+the <span style="font-weight: bold;">-p</span> parameter as with <span
+ style="font-weight: bold;">dispcal</span>.<br>
 <h4><a name="PM4"></a>Creating a display profile</h4>
 There are two basic choices of profile type for a display, a
 shaper/matrix profile, or a LUT based profile. They have different
@@ -195,7 +232,7 @@ tradeoffs. A shaper/matrix profile will work well on a well behaved
 display, that is one that behaves in an additive color manner, will
 give
 very smooth looking results, and needs fewer test points to create. A
-LUT based profile on the other hand, will model any display behavior
+LUT based profile on the other hand, will model any display behaviour
 more accurately, and can accommodate gamut mapping and different intent
 tables. Often it can show some unevenness and contouring in the results
 though.<br>
@@ -216,7 +253,8 @@ suffice:<br>
  href="profile.html#E">-D"Display A"</a>
 <a href="profile.html#q">-qm</a> <a href="profile.html#S">-S</a><a
  href="profile.html#S">
-swop.icm</a> <a href="profile.html#c">-c0</a> <a href="profile.html#d">-d2</a>
+swop.icm</a> <a href="profile.html#c">-cpp</a> <a
+ href="profile.html#d">-dmt</a>
 <a href="profile.html#p1">DisplayA</a><br>
 <br>
 Make sure you check the delta E report at the end of the profile
@@ -225,6 +263,98 @@ If a calibration file was used with <a href="dispread.html">dispread</a>,
 then it will be converted to a vcgt tag in the profile, so that the
 operating system or other system color utilities load the lookup curves
 into the display hardware, when the profile is used.<br>
+<h4><a name="PM5"></a>Installing a display profile</h4>
+Installing a display profile for your monitor is very operating system
+dependent. On some systems it is not the operating system itself that
+supports display profiles, but individual applications, or helper
+programs.<br>
+<br>
+<br>
+On <span style="font-weight: bold;">Microsoft Windows</span>, display
+profiles are typically in one of the
+following directories:<br>
+<p>&nbsp;&nbsp;&nbsp; Windows Me and 98: C:\Windows\System\Color<br>
+</p>
+<p>&nbsp;&nbsp;&nbsp; Windows NT: C:\Winnt\system32\spool\drivers\color
+</p>
+<p>&nbsp;&nbsp;&nbsp; Window 2000 and XP:
+C:\Windows\system32\spool\drivers\color</p>
+<p>The profile can be associated with your display by using the Display
+Property dialog, advanced settings, Color management tab. This in
+itself does not cause the profile to be made use of anywhere in your
+system.<br>
+</p>
+<p>If you are using Adobe Photoshop on your system, then you can tell
+it to use your monitor profile by editing the appropriate registry key,
+typically "My
+Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Adobe\Color\Monitor\Monitor0", to
+contain the name of the display profile, and then restart Photoshop
+This is the simplest way of ensuring that the Adobe calibration loader
+utility Adobe Gamma loads the video hardware lookup tables from the
+vcgt tag, and
+uses the profile as its display profile.<br>
+</p>
+<p>The adobe gamma utility can be told to use your profile, but the
+procedure is slightly tricky: Open adobe gamma from photoshop (in the
+Help-&gt;Color Management... menu item), select "Open Adobe Gamma", and
+select the "Load.." button. Select your profile and "Open". Select "OK"
+in the Adobe Gamma, it will then ask you to save it's modified version
+of your profile under a different name. Chose a name for the modified
+profile, and save it. Exit from Photoshop. Copy the profile you want to
+use, over the modified profile that you saved in Adobe Gamma. (If you
+don't do the last step, the profile Photoshop will be using will have
+been modified in strange ways from what you intended.)<br>
+</p>
+<p>Other Microsoft Windows applications may come with
+"Gamma/VCGT/RAMDAC/Video LUT"
+loader utilities, consult their documentation and check your Start Menu
+Startup folders. If you don't want to use any of these 3rd party
+utilities, you can also use the <a href="dispwin.html">dispwin</a>
+utility to do this for you, as it takes either a <a
+ href="cal_format.html">.cal</a> or ICC file as an argument. The <a
+ href="http://freshmeat.net/projects/xcalib/">xcalib</a>
+utility could also be used.<br>
+</p>
+Newer version of Microsoft Windows (XP) have better ways of
+handling this. For instance, try right clicking on the profiles icon,
+and see if there is an "install profile" option, and there is a
+Color Control Panel Applet for Windows XP available for
+download from
+Microsoft, which handles loading the profile vcgt tag into displays.<br>
+<br>
+<p>On <span style="font-weight: bold;">Apple OSX</span>, the display
+profile are in one of the following
+locations:<br>
+</p>
+&nbsp;&nbsp;&nbsp; /Network/Library/ColorSync/Profiles<br>
+&nbsp;&nbsp;&nbsp; /System/Library/Colorsync/Profiles<br>
+&nbsp;&nbsp;&nbsp; /Library/ColorSync/Profiles<br>
+&nbsp;&nbsp;&nbsp; ~/Library/ColorSync/Profiles<br>
+<br>
+Generally you should only copy new profiles to either of the last two
+locations, the former for profile you want to be available to all users
+of a machine, and the latter, user specific location if you want the
+profile to only be available to that user. You can then launch the
+"System Preferences-&gt;Displays-&gt;Color" utility, to select the
+profile as the one to use for your display. Note that the contents of
+the description tag will be used to identify the profile.<br>
+<br>
+<br>
+On <span style="font-weight: bold;">Linux</span> and other <span
+ style="font-weight: bold;">Unix</span> style systems, there is no
+universally agreed location for ICC profiles yet,
+although the following locations have been suggested at various times:<br>
+<br>
+&nbsp;&nbsp;&nbsp; /usr/share/color/icc<br>
+&nbsp;&nbsp;&nbsp; ~/.color/icc<br>
+&nbsp;&nbsp;&nbsp; /usr/local/share/Scribus/profiles<br>
+<br>
+and other programs may use other locations.<br>
+&nbsp;&nbsp; <br>
+If you want the display calibration to be loaded, you should consider
+installing a utility to do so at startup, such as <a
+ href="dispwin.html">dispwin</a>
+or <a href="http://freshmeat.net/projects/xcalib/">xcalib</a>.<br>
 <br>
 <hr size="2" width="100%">
 <h3><a name="PS1"></a>Profiling Scanners</h3>
@@ -242,10 +372,23 @@ Color Input Target is a typical example:<br>
 <img src="Q60.jpg" alt="Kodak Q60 chart image" height="141" width="200">
 <br>
 <br>
-Another popular chart is the GretagMacbeth ColorChecker DC chart:<br>
+Other popular charts are the GretagMacbeth ColorChecker DC and
+ColorChecker SG charts:<br>
 <br>
 <img src="DC.jpg" alt="GretagMacbeth ColorChecker DC chart" height="122"
- width="200"> <br>
+ width="200"> <img alt="ColorChecker SG" src="SG.jpg"
+ style="width: 174px; height: 122px;"><br>
+<br>
+The GretagMacbeth Eye-One Pro Scan Target 1.4 can also be used:<br>
+<br>
+<img alt="Eye-One Scan Target 1.4" src="i1scan14.jpg"
+ style="border: 2px solid ; width: 200px; height: 140px;"><br>
+<br>
+Also supported is the <a href="http://www.hutchcolor.com/hct.htm">HutchColor
+HCT</a> :<br>
+<br>
+<img alt="HutchColor HCT" src="HCT.jpg"
+ style="width: 182px; height: 140px;"><br>
 <br>
 <h4><a name="PS3"></a>Taking readings from a scanner</h4>
 The test chart you are using needs to be placed on the scanner, and the
@@ -258,24 +401,64 @@ resulting
 file is called scanner.tif. The raster file need only be roughly
 cropped so as to contain the test chart (including the charts edges).<br>
 <br>
-The second step is to extract the RGB values from the scanner.tif file.
+The second step is to extract the RGB values from the scanner.tif file,
+and match then to the reference CIE values.
 To locate the patch values in the scan, the <b>scanin</b> utility
 needs to
-be given a template file that describes the features of the chart, and
+be given a template <a href="File_Formats.html#.cht">.cht</a> file
+that describes the features of the chart, and
 how
-the test patches are labeled. For an IT8.7/2 chart, this is the <b>it8.ch</b>
-file supplied with Argyll. For the ColorChecker DC chart, the
-ColorCheckerDC.cht file should be used. For any other type of chart, a
+the test patches are labelled. Also needed is a file containing the CIE
+values for each of the patches in the chart.<br>
+<br>
+<div style="margin-left: 40px;">For an IT8.7/2 chart, this is the <span
+ style="font-weight: bold;">ref/</span><b>it8.ch</b>
+file supplied with Argyll, and&nbsp; the manufacturer will will supply
+an
+individual or batch average file&nbsp; long with the chart containing
+this
+information, or downloadable from their web site.<br>
+<br>
+For the ColorChecker DC chart, the
+<span style="font-weight: bold;">ref/ColorCheckerDC.cht</span> file
+should be used, and there will be a ColorCheckerDC reference
+file supplied by GretagMacbeth with the chart.<br>
+<br>
+For the ColorCheckerSG chart, the <span style="font-weight: bold;"><span
+ style="font-weight: bold;">ref/</span>ColorCheckerSG.cht</span> file
+should be used, and there will be a <span style="font-weight: bold;">ColorCheckerSG.txt</span>
+supplied with the chart that contains the spectral reference
+information. To convert this to a&nbsp; <span
+ style="font-weight: bold;">ColorCheckerSG.cie</span> reference file,
+follow the following steps:<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="logo2cgats.html">logo2cgats</a>
+ColorCheckerSG.txt ColorCheckerSG.ti3<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="spec2cie.html">spec2cie</a>
+ColorCheckerSG.ti3 ColorCheckerSG.cie<br>
+<br>
+For the Eye-One Pro Scan Target 1.4 chart, the <span
+ style="font-weight: bold;"><span style="font-weight: bold;">ref/</span>i1_RGB_Scan_1.4.cht</span>
+file should be used, and as there is no reference file accompanying
+this chart, the chart needs to be read with an instrument (usually the
+Eye-One Pro). This can be done using printread,&nbsp; making use of the
+chart reference file <span style="font-weight: bold;">ref/i1_RGB_Scan_1.4.ti2</span>:<br>
+&nbsp;&nbsp;&nbsp; <a href="printread.html">printread</a> -n -a
+i1_RGB_Scan_1.4<br>
+and then rename the resulting <span style="font-weight: bold;">i1_RGB_Scan_1.4.ti3</span>
+file to <span style="font-weight: bold;">i1_RGB_Scan_1.4.cie</span><br>
+<span style="font-weight: bold;"></span><br>
+For the HutchColor HCT chart, the <span style="font-weight: bold;"><span
+ style="font-weight: bold;">ref/</span>Hutchcolor.cht</span> file
+should be used, and the reference <span style="font-weight: bold;">.txt</span>
+file downloaded from the website.<br>
+</div>
+<br>
+For any other type of chart, a
 chart recognition template file will need to be created (this is beyond
 the scope of the current documentation).<br>
 <br>
-To create the .ti3 file, the CIE values for each of the patches will
-also be needed. For an IT8.7/2 chart, the manufacturer will supply an
-individual or batch average file along with the chart containing this
-information. Similarly GretagMacbeth supply a ColorCheckerDC reference
-file for their chart.<br>
-<br>
-To create the .ti3 file, run the <b>scanin</b> utility as follows
+To create the scanner .ti3 file, run the <b>scanin</b> utility as
+follows
 (assuming an IT8 chart is being used):<br>
 <br>
 <a href="scanin.html"> scanin</a> -v scanner.tif It8.cht It8ref.txt<br>
@@ -417,10 +600,10 @@ full strength.<br>
 <br>
 Once an ink limit is used in printing the characterization test chart
 for a device, it becomes a critical parameter<br>
-in knowing what the characterised gamut of the device is. If after
+in knowing what the characterized gamut of the device is. If after
 printing the test chart, a greater ink limit<br>
 were to be used, the the software would effectively be extrapolating
-the device behavior at total ink levels<br>
+the device behaviour at total ink levels<br>
 beyond that used in the test chart, leading to inaccuracies.<br>
 <br>
 Generally in Argyll, the ink limit is established when creating the
@@ -479,16 +662,16 @@ can printed on the device. The basic information that needs to be
 supplied is the type of instrument that will be used to read the
 patches, as well as the paper size it is to be formatted for.<br>
 <br>
-For an Xrite DTP41, the following would be typical:<br>
+For an X-Rite DTP41, the following would be typical:<br>
 <br>
 <a href="printtarg.html">printtarg</a> <a href="printtarg.html#v">-v</a>
 <a href="printtarg.html#i">-i41</a> <a href="printtarg.html#p">-pA4</a>
 <a href="printtarg.html#p1">PrinterA</a><br>
 &nbsp;<br>
-For a Gretag Spectroscan, the following would be typical:<br>
+For a Gretag Eye-One Pro, the following would be typical:<br>
 <br>
 <a href="printtarg.html">printtarg</a> <a href="printtarg.html#v">-v</a>
-<a href="printtarg.html#i">-iSS</a> <a href="printtarg.html#p">-pA4R</a>
+<a href="printtarg.html#i">-ii1</a> <a href="printtarg.html#p">-pA4</a>
 <a href="printtarg.html#p1">PrinterA</a><br>
 <br>
 For using with a scanner as a colorimeter, the Gretag Spectroscan
@@ -536,38 +719,40 @@ one at a time (see the <a href="printtarg#e">-e</a> flag).<br>
 Once the test chart has been printed, the color of the patches needs to
 be read using a suitable instrument.<br>
 <br>
-Three different instruments are currently supported, the Xrite DTP51
-strip reading colorimeter, the Xrite DTP41 strip reading Spectrometer,
-and the GretagMacbeth Spectroscan XY scanning spectrometer.<br>
+Several different instruments are currently supported, some that need
+to be used patch by patch, some read a strip at a time, and some read a
+sheet at a time. See <a href="instruments.html">instruments</a> for a
+current list.<br>
 <br>
 The instrument needs to be connected to your computer before running
-the <a href="printread.html">printread</a> command. Only serial port
-connected Instruments are supported currently. A serial port to USB
+the <a href="printread.html">printread</a> command. Both serial port
+and USB connected Instruments are supported. A serial port to USB
 adapter
-might have to be used if your computer doesn't have any serial ports
-(ie. Recent Apple Macs).<br>
+might have to be used if your computer doesn't have any serial ports,
+and you have a serial interface connected instrument.<br>
 <br>
 If you run <a href="printread.html">printread</a> so as to print out
 its usage message (ie. by using a <span style="font-weight: bold;">-?</span>
 or <span style="font-weight: bold;">--</span> flags), then it will
-list any identified serial ports, and their corresponding number for
+list any identified serial ports or USB connected instruments, and
+their corresponding number for
 the <a href="printread.html#c">-c</a> option. By default, <a
- href="printread.html">printread</a> will try and find the instrument
-on the first available serial port.<br>
+ href="printread.html">printread</a> will try to connect to the first
+available USB instrument, or an instrument on the first serial port.<br>
 <br>
-The only arguments required are to select the type of instrument, and
+The only arguments required is
 to specify the basename of the .ti2 file. If a non-default serial port
 is to be used, then the <span style="font-weight: bold;">-c</span>
 option would also be specified.<br>
 <br>
-&nbsp;e.g. for a Spectroscan:<br>
+&nbsp;e.g. for a Spectroscan on the second port:<br>
 <br>
 <a href="printread.html">printread</a> <a href="printread.html#c">-c2</a>
-<a href="printread.html#i">-iSS</a> <a href="printread.html#p1">PrinterA</a><br>
+<a href="printread.html#p1">PrinterA</a><br>
 <br>
 For a DTP41 to the default serial port:<br>
 <br>
-<a href="printread.html">printread</a> <a href="printread.html#i">-i41</a>
+<a href="printread.html">printread</a><a href="printread.html#i"></a>
 <a href="printread.html#p1">PrinterA</a><br>
 <br>
 <span style="font-weight: bold;">printread</span> will interactively
@@ -676,7 +861,7 @@ technique to specify the source gamut as the opposite
 type of profile to that being created, i.e. if a printer profile is
 being
 created, specify a display profile (e.g. sRGB) as the source gamut. If
-an display profile is being created, then specify a printer profile as
+a display profile is being created, then specify a printer profile as
 the source
 (e.g. SWOP).&nbsp; When linking to the profile you have created this
 way as the output profile, then use perceptual intent if the source is
@@ -710,7 +895,7 @@ be a typical profile usage:<br>
 <a href="profile.html">profile</a> <a href="profile.html#v">-v</a> <a
  href="profile.html#E">-D"Printer A"</a> <a href="profile.html#q">-qm</a>
 <a href="profile.html#S">-S</a><a href="profile.html#S"> sRGB.icm</a> <a
- href="profile.html#c">-c2</a> <a href="profile.html#d">-d0</a>
+ href="profile.html#c">-cmt</a> <a href="profile.html#d">-dpp</a>
 <a href="profile.html#p1">PrinterA</a><br>
 <br>
 or if you intent to print from SWOP style CMYK originals:<br>
@@ -718,18 +903,131 @@ or if you intent to print from SWOP style CMYK originals:<br>
 <a href="profile.html">profile</a> <a href="profile.html#v">-v</a> <a
  href="profile.html#E">-D"Printer A"</a> <a href="profile.html#q">-qm</a>
 <a href="profile.html#S">-S</a><a href="profile.html#S">
-swop.icm</a> <a href="profile.html#c">-c0</a> <a href="profile.html#d">-d0</a>
+swop.icm</a> <a href="profile.html#c">-cmt</a> <a
+ href="profile.html#d">-dpp</a>
 <a href="profile.html#p1">PrinterA</a><br>
 <br>
+<h4><a name="PP6"></a>Choosing a black generation curve (and other CMYK
+printer options)<br>
+</h4>
 For a CMYK printer, it would be normal to specify the type of black
-generation, either as something simple, or as a specific curve. See the
-details in <a href="profile.html#p">profile</a> for more details of
-possible parameters. If you want to play about with the various black
+generation, either as something simple, or as a specific curve. The
+documentation&nbsp; in <a href="profile.html#k">profile</a> for the
+details of the options. If you want to experiment with the various
+black
 generation parameters,<br>
 then it might be a good idea to create a preliminary profile (using <a
- href="profile.html#q">-ql</a> <a href="profile.html#b">-b</a> and no <a
- href="profile.html#S">-S</a>), and then used <a href="xicclu.html#g">xicclu</a>
-to explore the effect of the parameters. Normally the total ink limit
+ href="profile.html#q">-ql</a> <a href="profile.html#b">-b</a> <a
+ href="profile.html#ni">-no</a>, <a href="profile.html#no">-ni</a> and
+no <a href="profile.html#S">-S</a>), and then used <a
+ href="xicclu.html#g">xicclu</a>
+to explore the effect of the parameters.<br>
+<br>
+For instance, say we have our CMYK .ti3 file <span
+ style="font-weight: bold;">PrinterB.ti3</span>. First we make a
+preliminary profile called <span style="font-weight: bold;">PrinterBt</span>:<br>
+<br>
+copy PrinterB.ti3 PrinterBt.ti3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (Use "cp"
+on Linux or OSX of course.)<br>
+<a href="profile.html">profile</a> <a href="profile.html#v">-v</a> <a
+ href="profile.html#q">-ql</a>
+<a href="profile.html#b">-b</a> <a href="profile.html#ni">-no</a> <a
+ href="profile.html#no">-ni</a>
+<a href="profile.html#p1">PrinterBt</a><br>
+<br>
+Then see what the minimum black level down the neutral axis can be:<br>
+<br>
+<a href="xicclu.html">xicclu</a> <a href="xicclu.html#g">-g</a> <a
+ href="xicclu.html#k">-kz</a> <a href="xicclu.html#f">-fif</a> <a
+ href="xicclu.html#i">-ir</a> <a href="xicclu.html#p1">PrinterBt.icm</a><br>
+<br>
+Which might be a graph something like this:<br>
+<br>
+<img alt="Graph of CMYK neutral axis with minimum K" src="Kgraph1.jpg"
+ style="width: 250px; height: 250px;"><br>
+<br>
+Note&nbsp; how the minimum black is zero up to about L* value 20 (= 80%
+of the curve), and then jumps up to 70%. This is because we've reached
+the total ink limit, and K then has to be substituted for CMY, to keep
+the total under the total ink limit.<br>
+<br>
+Then let's see what the maximum black level down the neutral axis can
+be:<br>
+<br>
+<a href="xicclu.html">xicclu</a> <a href="xicclu.html#g">-g</a> <a
+ href="xicclu.html#k">-kx</a> <a href="xicclu.html#f">-fif</a> <a
+ href="xicclu.html#i">-ir</a><a href="xicclu.html#l"></a> <a
+ href="xicclu.html#p1">PrinterBt.icm</a><br>
+<br>
+Which might be a graph something like this:<br>
+<br>
+<img alt="Graph of CMYK neutral axis with maximum K" src="Kgraph2.jpg"
+ style="width: 250px; height: 250px;"><br>
+<br>
+Note how the CMY values are fairly low up to an L* value of about 15
+(the low levels are setting the neutral color), and then they jump up.
+This is because we've reach the point where black on it's own, isn't as
+dark as the color that can be achieved using CMY and K. Because the K
+has a dominant effect on the hue of the black, the levels of CMY are
+often fairly volatile in this region.<br>
+<br>
+Any K curve we specify must lie between the black curves of the above
+two graphs.<br>
+<br>
+Let's say we'd like to chose a moderate black curve, one that aims for
+about equal levels of CMY and K. We should also aim for it to be fairly
+smooth, since this will minimize visual artefacts caused by the limited
+fidelity that profile LUT tables are able to represent inside the
+profile.<br>
+<br>
+We need our curve to at least reach 70% at an L* value of 20 (80% of
+the curve.) Lets also start at 0 at L* == 100 (0% of the curve).<br>
+<br>
+So for a first try:<br>
+<br>
+<a href="xicclu.html">xicclu</a> <a href="xicclu.html#g">-g</a> <a
+ href="xicclu.html#k">-kp 0 0 .8 .7 1</a> <a href="xicclu.html#f">-fif</a>
+<a href="xicclu.html#i">-ir</a> <a href="xicclu.html#p1">PrinterBt.icm</a><br>
+<br>
+<img alt="Graph of CMYK neutral axis with -kp 0 0 .8 .7 1"
+ src="Kgraph3.jpg" style="width: 250px; height: 250px;"><br>
+<br>
+We've matched the curve at 80% quite well, but the transition isn't
+very smooth, and the black level is higher than the CMY for most of the
+curve. Let's try making the black curve somewhat concave, and also
+adjust the other parameters slightly:<br>
+<br>
+<a href="xicclu.html">xicclu</a> <a href="xicclu.html#g">-g</a> <a
+ href="xicclu.html#k">-kp 0 0 .83 .75 .5</a> <a href="xicclu.html#f">-fif</a>
+<a href="xicclu.html#i">-ir</a> <a href="xicclu.html#p1">PrinterBt.icm</a><br>
+<br>
+<img alt="Graph of CMYK neutral axis with -kp 0 0 .83 .75 .5"
+ src="Kgraph4.jpg" style="width: 250px; height: 250px;"><br>
+<br>
+This is looking pretty good now, but the L* = 100 point has the black
+curving up rather suddenly at the start. Lets adjust the black curve so
+the black will only start coming in at the 10% mark:<br>
+<br>
+<a href="xicclu.html">xicclu</a> <a href="xicclu.html#g">-g</a> <a
+ href="xicclu.html#k">-kp 0 .1 .83 .83 .6</a> <a href="xicclu.html#f">-fif</a>
+<a href="xicclu.html#i">-ir</a> <a href="xicclu.html#p1">PrinterBt.icm</a><br>
+<br>
+<img alt="Graph of CMYK neutral axis with -kp 0 .1 .83 .83 .6"
+ src="Kgraph5.jpg" style="width: 250px; height: 250px;"><br>
+<br>
+<br>
+The curve parameters can now be used to generate our real profile:<br>
+<br>
+<a href="profile.html">profile</a> <a href="profile.html#v">-v</a> <a
+ href="profile.html#E">-D"Printer B"</a> <a href="profile.html#q">-qm</a>
+<a href="profile.html#k">-kp 0 .1 .83 .83 .6</a>
+<a href="profile.html#S">-S</a><a href="profile.html#S"> sRGB.icm</a> <a
+ href="profile.html#c">-cmt</a> <a href="profile.html#d">-dpp</a>
+<a href="profile.html#p1">PrinterB</a><br>
+<br>
+<h4>Overriding the ink limit<br>
+</h4>
+Normally the total ink limit
 will be read from the <span style="font-weight: bold;">PrinterB.ti3</span>
 file, and will be set at a level 10% lower than the number used in
 creating the test chart values using <a href="targen.html#l">targen -l</a>.
@@ -739,13 +1037,12 @@ If you want to override this with a lower limit, then use the <a
 <a href="profile.html">profile</a> <a href="profile.html#v">-v</a> <a
  href="profile.html#E">-D"Printer B"</a> <a href="profile.html#q">-qm</a>
 <a href="profile.html#S">-S</a><a href="profile.html#S"> sRGB.icm</a> <a
- href="profile.html#c">-c2</a> <a href="profile.html#d">-d0</a> <a
+ href="profile.html#c">-cmt</a> <a href="profile.html#d">-dpp</a> <a
  href="profile.html#k">-kr</a>
 <a href="profile.html#p1">PrinterB</a><br>
 <br>
 Make sure you check the delta E report at the end of the profile
 creation, to see if the profile is behaving reasonably.<br>
-<br>
 <br>
 <hr size="2" width="100%">
 <h3><a name="LP1"></a>Linking Profiles</h3>
@@ -794,8 +1091,8 @@ appearance space conversion to work as intended:<br>
 <br>
 <a href="icclink.html">icclink</a> <a href="icclink.html#v">-v</a> <a
  href="icclink.html#q">-qm</a> <a href="icclink.html#g">-g</a> <a
- href="icclink.html#si">-ip</a> <a href="icclink.html#c">-c2</a> <a
- href="icclink.html#d">-d0</a> <a href="icclink.html#p1">MonitorSouceProfile.icm</a>
+ href="icclink.html#si">-ip</a> <a href="icclink.html#c">-cmt</a> <a
+ href="icclink.html#d">-dpp</a> <a href="icclink.html#p1">MonitorSouceProfile.icm</a>
 <a href="icclink.html#p2">DestinationProfile.icm</a>
 <a href="icclink.html#p3">Source2Destination.icm</a><br>
 <br>
@@ -815,8 +1112,8 @@ would be appropriate:<br>
 <br>
 <a href="icclink.html">icclink</a> <a href="icclink.html#v">-v</a> <a
  href="icclink.html#q">-qm</a> <a href="icclink.html#G">-G</a> <a
- href="icclink.html#si">-ip</a> <a href="icclink.html#c">-c2</a> <a
- href="icclink.html#d">-d0</a> <a href="icclink.html#p1">MonitorSouceProfile.icm</a>
+ href="icclink.html#si">-ip</a> <a href="icclink.html#c">-cmt</a> <a
+ href="icclink.html#d">-dpp</a> <a href="icclink.html#p1">MonitorSouceProfile.icm</a>
 <a href="icclink.html#p2">RGBDestinationProfile.icm</a>
 <a href="icclink.html#p3">Source2Destination.icm</a><br>
 <br>
@@ -827,8 +1124,8 @@ specified:<br>
 <br>
 <a href="icclink.html">icclink</a> <a href="icclink.html#v">-v</a> <a
  href="icclink.html#q">-qm</a> <a href="icclink.html#G">-G</a> <a
- href="icclink.html#si">-ip</a> <a href="icclink.html#c">-c2</a> <a
- href="icclink.html#d">-d0</a> <a href="icclink.html#l">-l250</a> <a
+ href="icclink.html#si">-ip</a> <a href="icclink.html#c">-cmt</a> <a
+ href="icclink.html#d">-dpp</a> <a href="icclink.html#l">-l250</a> <a
  href="icclink.html#k">-kr</a> <a href="icclink.html#p1">MonitorSouceProfile.icm</a>
 <a href="icclink.html#p2">CMYKDestinationProfile.icm</a>
 <a href="icclink.html#p3">Source2Destination.icm</a><br>
@@ -845,35 +1142,28 @@ Although a device profile or device link profile may be useful with
 other programs and systems, Argyll provides the utility <a
  href="cctiff.html">cctiff</a> for directly applying a device to device
 transform to a <a href="File_Formats.html#TIFF">TIFF</a> raster file.
-The cctiff utility operating in one of two modes. In the default mode
-the name of a device link profile must be supplied, and it will be used
-to transform the pixel values of the input TIFF file. In the linking
-mode, a source and destination device profile will be linked together
-(equivalent to <a href="icclink.html">icclink</a> <a
- href="icclink.html#s">-s</a> mode, including the same <a
- href="icclink.html#i">-i</a> and <a href="icclink.html#o">-o</a>
-options to select the source and destination rendering intents), and
-the resulting device to device transform used to transform the pixel
-values of the input TIFF file. Both 8 and 16 bit per component files
+The cctiff utility is capable of linking an arbitrary sequence of
+device profiles, device links and abstract profiles. Each device
+profile can be preceded by the <span style="font-weight: bold;">-i</span>
+option to indicate the intent that should be used. Both 8 and 16 bit
+per component files
 can be handled, and up to 8 color channels. The color transform is
-optimized to performed the transformation rapidly.<br>
+optimized to perform the transformation rapidly.<br>
 <br>
 If a device link is to be used, the following is a typical example:<br>
 <br>
 <a href="cctiff.html">cctiff</a> <a href="cctiff.html#p1">Source2Destination.icm</a>
 <a href="cctiff.html#p2">infile.tif</a> <a href="cctiff.html#p3">outfile.tif</a><br>
 <br>
-<br>
 <i><br>
 </i>If a source and destination profile are to be used, the following
 would be a typical example:<br>
 <br>
-<br>
 <a href="cctiff.html">
-cctiff</a> <a href="cctiff.html#l">-l</a> <a href="cctiff.html#i">-ip</a>
-<a href="cctiff.html#o">-op</a> <a href="cctiff.html#p1i">SourceProfile.icm</a>
-<a href="cctiff.html#p1o">DestinationProfile.icm</a> <a
- href="cctiff.html#p2">infile.tif</a>
+cctiff</a>&nbsp; <a href="cctiff.html#i">-ip</a> <a
+ href="cctiff.html#p1i">SourceProfile.icm</a>
+<a href="cctiff.html#i">-ip</a> <a href="cctiff.html#p1o">DestinationProfile.icm</a>
+<a href="cctiff.html#p2">infile.tif</a>
 <a href="cctiff.html#p3">outfile.tif</a><br>
 <br>
 <br>

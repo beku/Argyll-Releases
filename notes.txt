@@ -37,7 +37,8 @@ be selected to make the display behave as if it had an ideal exponential
 manual adjustments made by the user. Include "white target", "Gamma target",
 "brightness target" assistance.
 
--> this needs to be added to dispcal.
+-> dispcal allows for all of the above.
+
 
 
 Things I'd like to standardise

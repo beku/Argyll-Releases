@@ -5,8 +5,8 @@
  * Copyright 1999 - 2005 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include <stdio.h>
@@ -31,15 +31,13 @@ double fcn(		/* Return function value */
 
 #define N 9
 
-main(void)
+int main(void)
 {
 	double cp[N];		/* Function input values */
 	double s[N];		/* Search area */
 	double err;
 	int j;
-	double fnorm;
 	int nprint = 0;		/* Itteration debugging print = off */
-	double tol;
 
 	error_program = "tdhsx";	/* Set global error reporting string */
 

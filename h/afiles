@@ -1,6 +1,8 @@
-h/Readme.txt
-h/afiles
-h/copyright.h
-h/config.h
-h/sort.h
-h/llist.h
+Readme.txt
+afiles
+copyright.h
+config.h
+sort.h
+llist.h
+xlist.h
+counters.h

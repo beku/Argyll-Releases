@@ -1,6 +1,10 @@
 #ifndef SOBOL_H
 #define SOBOL_H
 
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 #define SOBOL_MAXBIT 30
 #define SOBOL_MAXDIM 40
 
@@ -15,14 +19,24 @@ struct _sobol {
 
 	/* Public: */
 	/* Methods */
+
+	/* Get the next sobol vector, return nz if we've run out */
 	int (*next)(struct _sobol *s, double *v);
+
+	/* Rest to the begining of the sequence */
 	void (*reset)(struct _sobol *s);
+
+	/* We're done with the object */
 	void (*del)(struct _sobol *s);
 
 }; typedef struct _sobol sobol;
 
 /* Return NULL on error */
 sobol *new_sobol(int dim);
+
+#ifdef __cplusplus
+	}
+#endif
 
 #endif /* SOBOL_H */
 

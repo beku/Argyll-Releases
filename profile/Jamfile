@@ -11,17 +11,22 @@ if $(UNIX) {
 	LINKFLAGS += -framework IOKit ;
 	LINKFLAGS += -framework CoreFoundation ;
   } else {
-	LibWin = /usr/X11R6/lib/libX11.lib ;
-	LibWinH = /usr/X11R6/include/X11 ;
+	WinDir = /usr/X11R6 ;
+	LibWinH = $(WinDir)/include/X11 ;
+	LibWinD = $(WinDir)/lib ;
+	LibWin = ;
+	LINKFLAGS += -L$(LibWinD) -lX11 -lXau -lXdmcp ;
   }
 }
 
 #Products
 Libraries = libprof ;
 Executables = cb2cgats kodak2cgats logo2cgats splitcgats mppcheck mpprof
-              profcheck verify profile sepgen ;
+              profcheck invprofcheck verify profile sepgen ;
 Headers = prof.h ;
-Samples = example.sp 3dap5k.sp GTIPlus.sp Office.sp Trulux.sp TruluxPlus.sp ;
+Samples = example.sp example121.sp 3dap5k.sp GTIPlus.sp Office.sp Trulux.sp TruluxPlus.sp
+		D50_0.0.sp D50_0.3.sp D50_0.5.sp D50_0.7.sp D50_1.0.sp D50_1.2.sp
+		D50_1.5.sp D50_1.7.sp D50_2.0.sp D50_2.5.sp D50_3.0.sp ;
 
 #Install
 InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
@@ -32,12 +37,12 @@ InstallFile $(DOTDOT)$(SLASH)ref : $(Samples) ;
 # PROF library
 Library libprof.lib : profin.c profout.c ;
 ObjectHdrs profin$(SUFOBJ) profout$(SUFOBJ) : ../h ../icc ../cgats ../rspl
-                                    ../numlib ../gamut ../xicc ../spectro ;
+                                    ../numlib ../gamut ../xicc ../spectro ../plot ;
 
 # Simple profile generator
-Main sprof : sprof.c ;
-ObjectHdrs sprof : ../h ../icc ../cgats ../rspl ../numlib ;
-LinkLibraries sprof : ../icc/libicc.lib ../cgats/libcgats.lib
+Main simpprof : simpprof.c ;
+ObjectHdrs simpprof : ../h ../icc ../cgats ../rspl ../numlib ;
+LinkLibraries simpprof : ../icc/libicc.lib ../cgats/libcgats.lib
                       ../rspl/librspl.lib ../numlib/libnum.lib ;
 
 # Full profile generator
@@ -47,14 +52,16 @@ ObjectHdrs profile : ../h ../icc ../cgats ../rspl ../numlib
 LinkLibraries profile : libprof.lib ../icc/libicc.lib ../xicc/libxicc.lib
                             ../cgats/libcgats.lib ../rspl/librspl.lib
                             ../gamut/libgamut.lib ../gamut/libgammap.lib
-                            ../numlib/libnum.lib ../spectro/libinst.lib
-                            ../xicc/libxicc.lib ../plot/libplot.lib $(LibWin) ;
+                            ../numlib/libnum.lib ../spectro/libinsttypes.lib
+                            ../xicc/libxicc.lib ../xicc/libxcolorants.lib
+							../plot/libplot.lib ../plot/libvrml.lib
+							$(LibWin) ;
 
 # Model Printer Profile generator
 Main mpprof : mpprof.c ;
 ObjectHdrs mpprof : ../h ../icc ../cgats ../rspl ../numlib
                          ../gamut ../xicc ../spectro ../plot ;
-LinkLibraries mpprof : libprof.lib ../icc/libicc.lib ../spectro/libinst.lib 
+LinkLibraries mpprof : libprof.lib ../icc/libicc.lib ../spectro/libinsttypes.lib 
                             ../xicc/libxicc.lib ../xicc/libxcolorants.lib
                             ../cgats/libcgats.lib ../rspl/librspl.lib
                             ../gamut/libgamut.lib ../numlib/libnum.lib
@@ -64,7 +71,7 @@ LinkLibraries mpprof : libprof.lib ../icc/libicc.lib ../spectro/libinst.lib
 Main mppcheck : mppcheck.c ;
 ObjectHdrs mppcheck : ../h ../icc ../cgats ../rspl ../numlib
                          ../gamut ../xicc ../spectro ../plot ;
-LinkLibraries mppcheck : libprof.lib ../icc/libicc.lib ../spectro/libinst.lib 
+LinkLibraries mppcheck : libprof.lib ../icc/libicc.lib ../spectro/libinsttypes.lib 
                             ../xicc/libxicc.lib ../xicc/libxcolorants.lib
                             ../cgats/libcgats.lib ../rspl/librspl.lib
                             ../gamut/libgamut.lib ../numlib/libnum.lib
@@ -76,7 +83,7 @@ ObjectHdrs sepgen : ../h ../icc ../cgats ../rspl ../numlib
                          ../gamut ../xicc ../spectro ../plot ;
 LinkLibraries sepgen : libprof.lib ../icc/libicc.lib
                             ../xicc/libxicc.lib ../xicc/libxcolorants.lib
-                            ../spectro/libinst.lib  ../rspl/librspl.lib
+                            ../spectro/libinsttypes.lib  ../rspl/librspl.lib
                             ../cgats/libcgats.lib ../gamut/libgamut.lib
                             ../numlib/libnum.lib ../plot/libplot.lib ;
 
@@ -86,18 +93,32 @@ Main profcheck : profcheck.c ;
 ObjectHdrs profcheck : ../h ../icc ../cgats ../rspl ../numlib ../spectro
                          ../gamut ../xicc ../plot ;
 LinkLibraries profcheck : libprof.lib ../icc/libicc.lib ../xicc/libxicc.lib
-                            ../cgats/libcgats.lib ../spectro/libinst.lib
+                            ../cgats/libcgats.lib ../spectro/libinsttypes.lib
                             ../rspl/librspl.lib ../numlib/libnum.lib
                             ../gamut/libgamut.lib ../plot/libplot.lib $(LibWin) ;
+
+# Reverse Profile checker
+Main invprofcheck : invprofcheck.c ;
+ObjectHdrs invprofcheck : ../h ../icc ../cgats ../rspl ../numlib ../spectro
+                         ../gamut ../xicc ../plot ;
+LinkLibraries invprofcheck : libprof.lib ../icc/libicc.lib ../xicc/libxicc.lib
+                            ../spectro/libinsttypes.lib
+                            ../rspl/librspl.lib ../numlib/libnum.lib
+                            ../gamut/libgamut.lib
+                            ../cgats/libcgats.lib
+                            ../plot/libplot.lib $(LibWin) ;
 
 # Verifyer 
 Main verify : verify.c ;
 ObjectHdrs verify : ../h ../icc ../cgats ../rspl ../numlib ../spectro
                          ../gamut ../xicc ../plot ;
 LinkLibraries verify : libprof.lib ../icc/libicc.lib ../xicc/libxicc.lib
-                            ../cgats/libcgats.lib ../spectro/libinst.lib
-                            ../rspl/librspl.lib ../numlib/libnum.lib
-                            ../gamut/libgamut.lib ../plot/libplot.lib $(LibWin) ;
+                            ../spectro/libinsttypes.lib
+                            ../rspl/librspl.lib
+                            ../gamut/libgamut.lib
+                            ../cgats/libcgats.lib
+                            ../plot/libplot.lib
+                            ../numlib/libnum.lib $(LibWin) ;
 
 #Kodak raw profile data to Argyll CGATS format converter
 Main kodak2cgats : kodak2cgats.c ;
@@ -112,13 +133,14 @@ LinkLibraries cb2cgats : ../cgats/libcgats.lib ;
 #Gretag/Logo raw CMYK profile data to Argyll CGATS format converter
 Main logo2cgats : logo2cgats.c ;
 ObjectHdrs logo2cgats : ../h ../numlib ../cgats ../xicc ../gamut ../spectro ../icc ../plot ;
-LinkLibraries logo2cgats : ../cgats/libcgats.lib ../spectro/libinst.lib 
-	../xicc/libxicc.lib ../icc/libicc.lib ../plot/libplot.lib ../numlib/libnum.lib ;
+LinkLibraries logo2cgats : ../cgats/libcgats.lib ../spectro/libinsttypes.lib 
+	../xicc/libxicc.lib ../icc/libicc.lib ../plot/libplot.lib ../numlib/libnum.lib
+	../xicc/libxcolorants.lib ;
 
 #Split a .ti3 into two pieces randomly
 Main splitcgats : splitcgats.c ;
 ObjectHdrs splitcgats : ../h ../numlib ../cgats ../xicc ../rspl ../gamut ../spectro ../icc ../plot ;
-LinkLibraries splitcgats : ../cgats/libcgats.lib ../spectro/libinst.lib 
+LinkLibraries splitcgats : ../cgats/libcgats.lib ../spectro/libinsttypes.lib 
 	../xicc/libxicc.lib ../icc/libicc.lib ../plot/libplot.lib ../numlib/libnum.lib ;
 
 

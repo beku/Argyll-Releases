@@ -11,8 +11,8 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include "numsup.h"
@@ -29,7 +29,6 @@ double **a,	/* A[][] input matrix, returns LU decomposition of A */
 double  *b,	/* B[]   input array, returns solution X[] */
 int      n	/* Dimensionality */
 ) {
-	int i, j;
 	double rip;		/* Row interchange parity */
 	int *pivx, PIVX[10];
 #if defined(DO_POLISH) || defined(DO_CHECK)
@@ -134,7 +133,7 @@ double  *rip	/* Row interchange parity, +/- 1.0, used for determinant */
 	/* For each column (Crout's method) */
 	for (*rip = 1.0, j = 0; j < n; j++) {
 		double big;
-		int k, bigi;
+		int k, bigi = 0;
 
 		/* For each row */
 		for (i = 0; i < j; i++) {

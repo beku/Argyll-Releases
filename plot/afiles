@@ -1,7 +1,9 @@
-plot/Readme.txt
-plot/Licence.txt
-plot/Jamfile
-plot/Imakefile
-plot/afiles
-plot/plot.c
-plot/plot.h
+Readme.txt
+License.txt
+Jamfile
+Imakefile
+afiles
+plot.c
+plot.h
+vrml.c
+vrml.h

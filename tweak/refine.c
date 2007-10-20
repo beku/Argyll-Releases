@@ -9,7 +9,7 @@
  * Version: 1.00
  *
  * Copyright 2005 Graeme W. Gill
- * Please refer to Licence.txt file for details.
+ * Please refer to License.txt file for details.
  */
 
 /* TTBD:
@@ -41,6 +41,17 @@
 		Refinement feedback could go unstable.
 		- use a damping factor to improve stability.
 
+	Currently the way out of gamut value are handled is to
+	allow a full attempt at correction for the first round,
+	and then constrain any subsequent corrections to be
+	of no greater magnitude than that first correction.
+	Subsequent corrections can change the direction of
+	correction, but cannot increase its magnitude. This
+	seems to work OK with light out of gamut colors,
+	but dark CMYK out of gamut colors sometimes regress at
+	the first step, possibly because of the gamut boundary
+	topolgy in those regions.
+
 	Interestingly, for CMYK the results are most stable (in simulation)
 	when applied to the simple linked device link, and tends to
 	be slightly unstable when applied to inverse A2B lookups
@@ -68,18 +79,86 @@
 #include "xicc.h"
 #include "xicc.h"
 
-#undef DEBUG		/* Print each value changed */
+#define COMPLOOKUP	/* Compound with previous in ICM lookup rather than rspl */
+#undef DEBUG1		/* Print each correction value */
+#undef DEBUG2		/* Print each value changed */
+#undef DEBUG3		/* Trace history of particular points */
 
 #define verbo stdout
 
-#define DEF_DAMP1 0.95
-#define DEF_DAMP2 0.50
+#define DEF_DAMP1 0.95		/* Initial */
+#define DEF_DAMP2 0.70		/* Subsequent */
 #define DEF_CLUTRES 33
 #define GAMRES 10.0
+#define SMOOTHF 0.3			/* RSPL smoothing factor */
+#define AVGDEV 0.003		/* Average deviation of input values */
+#define WWEIGHT 1.0			/* weak default function weight */
+#define WHITEWEIGHT 5.0		/* Weight to put on discovered white correction */
 
-void usage(void) {
+#ifdef DEBUG3
+/* Debug points of interest */
+int poi[] = {
+	8,
+	15,
+	10,
+	14,
+	380,
+	274,
+	562,
+	172,
+	510,
+	331,
+	297,
+	494,
+	102,
+	18,
+	13,
+	6,
+	305,
+	61,
+	455,
+	63,
+	461,
+	68,
+	7,
+	369,
+	211,
+	42,
+	427,
+	113,
+	204,
+	224,
+	334,
+	28,
+	175,
+	330,
+	273,
+	376,
+	318,
+	44,
+	57,
+	469,
+	9,
+	85,
+	278,
+	414,
+	124,
+	-1
+};
+
+#endif /* DEBUG3 */
+
+void usage(char *diag, ...) {
 	fprintf(stderr,"Create abstract correction profile given table of absolute CIE correction values\n");
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	if (diag != NULL) {
+		va_list args;
+		fprintf(stderr,"Diagnostic: ");
+		va_start(args, diag);
+		vfprintf(stderr, diag, args);
+		va_end(args);
+		fprintf(stderr,"\n");
+	}
 	fprintf(stderr,"usage: refine [-options] cietarget ciecurrent [outdevicc] [inabs] outabs\n");
 	fprintf(stderr," -v              Verbose\n");
 	fprintf(stderr," -c              Create initial abstract correction profile\n");
@@ -117,44 +196,29 @@ struct _callback {
 /* New CLUT table */
 /* Correct for PCS errors */
 void PCSp_PCSp(void *cntx, double *out, double *in) {
-	double vv[3], temp[3];
 	callback *p = (callback *)cntx;
 	co pp;
 
-#ifdef DEBUG
+#ifdef DEBUG2
 	printf("Got Lab in %f %f %f\n",in[0],in[1],in[2]);
 #endif
 
-//printf("~1 radial on %f %f %f = %f\n",in[0],in[1],in[2],p->dev_gam->nradial(p->dev_gam, temp, in));
-	vv[0] = in[0];
-	vv[1] = in[1];
-	vv[2] = in[2];
+	pp.p[0] = in[0];
+	pp.p[1] = in[1];
+	pp.p[2] = in[2];
+	p->r->interp(p->r, &pp);				/* This correction */
+	out[0] = pp.v[0];
+	out[1] = pp.v[1];
+	out[2] = pp.v[2];
 
-	/* We compound new correction only if */
-	/* this is the first one, 
-	/* the source is in gamut, to prevent runaway corrections. */
-	if (p->rd_luo == NULL
-	 || p->dev_gam == NULL
-	 || p->dev_gam->nradial(p->dev_gam, temp, in) <= 1.00) {
-		pp.p[0] = vv[0];
-		pp.p[1] = vv[1];
-		pp.p[2] = vv[2];
-		p->r->interp(p->r, &pp);				/* This correction */
-		vv[0] = pp.v[0];
-		vv[1] = pp.v[1];
-		vv[2] = pp.v[2];
-	}
-
+#ifdef COMPLOOKUP
 	/* Compound with previous correction */
 	if (p->rd_luo != NULL) {
-		p->rd_luo->lookup(p->rd_luo, vv, vv);			/* Previous correction */
+		p->rd_luo->lookup(p->rd_luo, out, out);			/* Previous correction */
 	}
+#endif
 
-	out[0] = vv[0];
-	out[1] = vv[1];
-	out[2] = vv[2];
-
-#ifdef DEBUG
+#ifdef DEBUG2
 	printf("Got Lab out %f %f %f\n",out[0],out[1],out[2]);
 	printf("\n");
 #endif
@@ -206,11 +270,7 @@ main(int argc, char *argv[]) {
 	icxObserverType observ = icxOT_Judd_Voss_2;
 	callback cb;				/* Callback support stucture for setting abstract profile */
 
-	icmFile *dev_fp;			/* Output device profile for gamut limit */
-	icc *dev_icc;
-	xicc *dev_xicc;
-
-	icmFile *rd_fp;				/* Existing abstract profile to modify */
+	icmFile *rd_fp = NULL;		/* Existing abstract profile to modify */
 	icc *rd_icc = NULL;
 
 	icmFile *wr_fp;				/* Modified/created abstract profile to write */
@@ -220,17 +280,19 @@ main(int argc, char *argv[]) {
 	int nogamut = 0;					/* Don't impose a gamut limit */
 	int docreate = 0;					/* Create an initial abstract correction profile */
 	int clutres = DEF_CLUTRES;			/* Output abstract profile clut resolution */
-	double damp = 0.0;					/* Damping factor */
-	double smoothf = 1.0;				/* RSPL Smoothing factor */
-	double avgdev = 0.005;				/* RSPL Average Deviation */
-	double wweight = 1.0;				/* weak default function weight */
+	double damp1 = DEF_DAMP1;			/* Initial damping factor */
+	double damp2 = DEF_DAMP2;			/* Subsequent damping factor */
+	double smoothf = SMOOTHF;			/* RSPL Smoothing factor */
+	double avgdev[MXDO];				/* RSPL Average Deviation */
+	double wweight = WWEIGHT;			/* weak default function weight */
+	int whitepatch = -1;				/* Index of white patch */
 	double merr = 0.0, aerr = 0.0;		/* Stats on color change */
 	int i, j, e, n, rv = 0;
 
 	error_program = argv[0];
 
 	if (argc < 6)
-		usage();
+		usage("Too few arguments");
 
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
@@ -250,7 +312,7 @@ main(int argc, char *argv[]) {
 			}
 
 			if (argv[fa][1] == '?')
-				usage();
+				usage("Usage requested");
 
 			/* Verbosity */
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
@@ -267,21 +329,21 @@ main(int argc, char *argv[]) {
 			/* Override the correction clut resolution */
 			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage("Expect argument to -r");
 				clutres = atoi(na);
 			}
 			/* Override the damping factor */
 			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D') {
 				fa = nfa;
-				if (na == NULL) usage();
-				damp = atof(na);
+				if (na == NULL) usage("Expect argument to -d");
+				damp2 = atof(na);
 			}
 
 
 			/* Spectral Illuminant type */
 			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage("Expect argument to -i");
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
@@ -304,14 +366,14 @@ main(int argc, char *argv[]) {
 					spec = 1;
 					illum = icxIT_custom;
 					if (read_xspect(&cust_illum, na) != 0)
-						usage();
+						usage("Unable to read custom spectrum '%s'",na);
 				}
 			}
 
 			/* Spectral Observer type */
 			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage("Expected argument to -o");
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
 					spec = 1;
 					observ = icxOT_CIE_1931_2;
@@ -328,7 +390,7 @@ main(int argc, char *argv[]) {
 					spec = 1;
 					observ = icxOT_Shaw_Fairchild_2;
 				} else
-					usage();
+					usage("Unrecogised argument '%s' to -o",na);
 			}
 
 			/* FWA compensation */
@@ -336,7 +398,7 @@ main(int argc, char *argv[]) {
 				fwacomp = 1;
 
 			else 
-				usage();
+				usage("Unrecognised flag -%c",argv[fa][1]);
 		} else
 			break;
 	}
@@ -344,34 +406,27 @@ main(int argc, char *argv[]) {
 	/* Grab all the filenames: */
 
 	/* The two CIE value files */
-	if (fa >= argc || argv[fa][0] == '-') usage();
+	if (fa >= argc || argv[fa][0] == '-') usage("Expected cietarget file argument");
 	strncpy(cg[0].name,argv[fa++],MAXNAMEL); cg[0].name[MAXNAMEL] = '\000';
 
-	if (fa >= argc || argv[fa][0] == '-') usage();
+	if (fa >= argc || argv[fa][0] == '-') usage("Expected ciecurrent file argument");
 	strncpy(cg[1].name,argv[fa++],MAXNAMEL); cg[1].name[MAXNAMEL] = '\000';
 
 	/* Optional output device name */
 	if (nogamut == 0) {
-		if (fa >= argc || argv[fa][0] == '-') usage();
+		if (fa >= argc || argv[fa][0] == '-') usage("Expected outdevicc file argument");
 		strncpy(dev_name,argv[fa++],MAXNAMEL); dev_name[MAXNAMEL] = '\000';
 	}
 
 	/* Optional input abstract profile name */
 	if (docreate == 0) {
-		if (fa >= argc || argv[fa][0] == '-') usage();
+		if (fa >= argc || argv[fa][0] == '-') usage("Expected inabs file argument");
 		strncpy(rd_name,argv[fa++],MAXNAMEL); rd_name[MAXNAMEL] = '\000';
 	}
 
 	/* Output abstract profile name */
-	if (fa >= argc || argv[fa][0] == '-') usage();
+	if (fa >= argc || argv[fa][0] == '-') usage("Expected outabs file argument");
 	strncpy(wr_name,argv[fa++],MAXNAMEL); wr_name[MAXNAMEL] = '\000';
-
-	if (damp == 0.0) {		/* Use default damping */
-		if (docreate)
-			damp = DEF_DAMP1;
-		else
-			damp = DEF_DAMP2;
-	}
 
 	/* ======================= */
 	/* Open up each CIE file in turn, target then measured, */
@@ -536,7 +591,7 @@ main(int argc, char *argv[]) {
 				int ti;
 				xspect mwsp;			/* Medium spectrum */
 				instType itype;			/* Spectral instrument type */
-				xspect *insp;			/* Instrument illuminant */
+				xspect insp;			/* Instrument illuminant */
 
 				mwsp = sp;		/* Struct copy */
 
@@ -546,7 +601,7 @@ main(int argc, char *argv[]) {
 				if ((itype = inst_enum(cgf->t[0].kdata[ti])) == instUnknown)
 					error ("Unrecognised target instrument '%s'", cgf->t[0].kdata[ti]);
 
-				if ((insp = inst_illuminant(itype)) == NULL)
+				if (inst_illuminant(&insp, itype) != 0)
 					error ("Instrument doesn't have an FWA illuminent");
 
 				/* Determine a media white spectral reflectance */
@@ -562,7 +617,7 @@ main(int argc, char *argv[]) {
 							mwsp.spec[j] = rv;
 					}
 				}
-				if (sp2cie->set_fwa(sp2cie, insp, &mwsp)) 
+				if (sp2cie->set_fwa(sp2cie, &insp, &mwsp)) 
 					error ("Set FWA on sp2cie failed");
 			}
 
@@ -615,71 +670,21 @@ main(int argc, char *argv[]) {
 	if (cg[0].npat > 0)
 		aerr /= (double)cg[0].npat;
 
+	/* Try and figure out which is the white patch */
+	{
+		double hL = -1.0;
+		for (i = 0; i < cg[0].npat; i++) {
+			if (cg[0].pat[i].v[0] > hL) {
+				hL = cg[0].pat[i].v[0];
+				whitepatch = i;
+			}
+		}
+	}
+
 	if (verb) {
 		fprintf(verbo,"No of correction patches = %d\n",cg[0].npat);
 		fprintf(verbo,"Average dE = %f, Maximum dE = %f\n",aerr,merr);
-	}
-
-	/* ======================= */
-	/* Create refining rspl */
-	{
-		cow *rp;		/* rspl setup points */
-		int npnts = 0;	/* Total number of test points */
-		int gres[MXDI];	/* rspl grid resolution */
-		datai mn, mx;
-
-		if ((rp = (cow *)malloc(sizeof(cow) * cg[0].npat)) == NULL)
-			error("Malloc failed - rp[]");
-		
-		/* Create mapping points */
-		for (i = 0; i < cg[0].npat; i++) {
-
-			/* Input is target [0] */
-			for (j = 0; j < 3; j++)
-				rp[i].p[j] = cg[0].pat[i].v[j];
-
-			/* Cull out of range points */
-			if (rp[i].p[0] < 0.0 || rp[i].p[0] > 100.0
-			 || rp[i].p[1] < -127.0 || rp[i].p[1] > 127.0
-			 || rp[i].p[2] < -127.0 || rp[i].p[2] > 127.0)
-				continue;
-			
-			/* Creat output as absolute Lab correction */
-			/* [0] = target, [1] = measured */
-			for (j = 0; j < 3; j++) {
-				rp[i].v[j] = cg[0].pat[i].v[j] + damp * (cg[0].pat[i].v[j] - cg[1].pat[match[i]].v[j]);
-			}
-
-			/* Set weighting */
-			rp[i].w = 1.0;
-			npnts++;
-		}
-
-		/* Create refining rspl */
-		mn[0] =   0.0, mn[1] = mn[2] = -128.0;			/* Allow for 16 bit grid range */
-		mx[0] = 100.0, mx[1] = mx[2] =  (65535.0 * 255.0)/65280.0 - 128.0;
-		cb.verb = verb;
-		if ((cb.r = new_rspl(3, 3)) == NULL)
-			error("new_rspl failed");
-
-		for (e = 0; e < 3; e++)
-			gres[e] = clutres;
-
-		cb.r->fit_rspl_w_df(cb.r,
-		           RSPL_EXTRAFIT		/* Extra fit flag */
-		           | verb ? RSPL_VERBOSE : 0,
-		           rp,					/* Test points */
-		           npnts,				/* Number of test points */
-		           mn, mx, gres,		/* Low, high, resolution of grid */
-		           NULL, NULL,			/* Default data scale */
-		           smoothf,				/* Smoothing */
-		           avgdev,				/* Average Deviation */
-                   wweight,				/* weak default function weight */
-				   NULL,				/* No context */
-		           wfunc				/* Weak function */
-		);
-		if (verb) printf("\n");
-		free(rp);
+		fprintf(verbo,"White patch assumed to be patch %s\n",cg[0].pat[whitepatch].sid);
 	}
 
 	/* ======================= */
@@ -697,11 +702,11 @@ main(int argc, char *argv[]) {
 			error ("Can't open file '%s'",dev_name);
 	
 		if ((dev_icc = new_icc()) == NULL)
-			error ("Creation of ICC object failed");
+			error("Creation of ICC object failed");
 	
 		/* Read header etc. */
 		if ((rv = dev_icc->read(dev_icc,dev_fp,0)) != 0)
-			error ("%d, %s",rv,dev_icc->err);
+			error("Reading profile '%s' failed: %d, %s",dev_name,rv,dev_icc->err);
 	
 		/* Check that the profile is appropriate */
 		if (dev_icc->header->deviceClass != icSigInputClass
@@ -714,43 +719,11 @@ main(int argc, char *argv[]) {
 
 		/* Use a heuristic to guess the ink limit */
 		if (icmCSSig2nchan(dev_icc->header->colorSpace) > 3) {
-			int ttres = 17;
-			int co[3];
-			double in[3], out[MAX_CHAN];
-			icmLuBase *luo;
-			int nooch;
-			double maxink = 0.0;
+			ink.tlimit = dev_icc->get_tac(dev_icc, NULL);
+			ink.tlimit += 0.05;		/* allow a slight margine */
 
-			nooch = icmCSSig2nchan(dev_icc->header->colorSpace);
-			/* Lab to device lookup */
-			if ((luo = dev_icc->get_luobj(dev_icc, icmBwd, icRelativeColorimetric, icSigLabData, icmLuOrdNorm)) == NULL)
-				error ("%d, %s",dev_icc->errc, dev_icc->err);
-
-			for (co[0] = 0; co[0] < ttres; co[0]++) {
-				for (co[1] = 0; co[1] < ttres; co[1]++) {
-					for (co[2] = 0; co[2] < ttres; co[2]++) {
-						double sum;
-
-						in[0] = 60.0 * co[0]/(ttres-1.0);
-						in[1] = 200.0 * co[1]/(ttres-1.0) - 100.0;
-						in[2] = 200.0 * co[2]/(ttres-1.0) - 100.0;
-
-						/* PCS -> Device */
-						if ((rv = luo->lookup(luo, out, in)) > 1)
-							error ("%d, %s",rd_icc->errc,rd_icc->err);
-		
-						for (i = 0, sum = 0.0; i < nooch; i++)
-							sum += out[i];
-						if (sum > maxink)
-							maxink = sum;
-					}
-				}
-			}
-			maxink += 0.05;		/* allow a slight margine */
 			if (verb)
-				printf("Guessed inklimit is %f%%\n",100.0 * maxink);
-			ink.tlimit = maxink;
-			luo->del(luo);
+				printf("Estimated inklimit is %f%%\n",100.0 * ink.tlimit);
 		}
 
 		/* Wrap with an expanded icc */
@@ -793,6 +766,253 @@ main(int argc, char *argv[]) {
 				error ("%d, %s",rd_icc->errc, rd_icc->err);
 	} else {
 		cb.rd_luo = NULL;
+	}
+
+	/* ======================= */
+	/* Create refining rspl */
+	{
+		cow *rp;		/* rspl setup points */
+		int npnts = 0;	/* Total number of test points */
+		int gres[MXDI];	/* rspl grid resolution */
+		double damp;
+		datai mn, mx;
+
+		if ((rp = (cow *)malloc(sizeof(cow) * cg[0].npat)) == NULL)
+			error("Malloc failed - rp[]");
+		
+		/* Create mapping points */
+		for (i = 0; i < cg[0].npat; i++) {
+			double temp[3];
+			double ccor[3], cmag;				/* Current correction vector */
+			double ncor[3], nmag;				/* New correction vector */
+
+			/* Input is target [0] */
+			for (j = 0; j < 3; j++)
+				rp[i].p[j] = cg[0].pat[i].v[j];
+
+			/* Cull out of range points */
+			if (rp[i].p[0] < 0.0 || rp[i].p[0] > 100.0
+			 || rp[i].p[1] < -127.0 || rp[i].p[1] > 127.0
+			 || rp[i].p[2] < -127.0 || rp[i].p[2] > 127.0) {
+#ifdef DEBUG1
+			printf("Ignoring %f %f %f\n",rp[i].p[0],rp[i].p[1],rp[i].p[2]);
+#endif
+				continue;
+			}
+			
+#ifdef DEBUG1
+			printf("%d: Target        %f %f %f\n",i,rp[i].p[0],rp[i].p[1],rp[i].p[2]);
+#endif
+
+			damp = cb.rd_luo != NULL ? damp2 : damp1;
+			ccor[0] = ccor[1] = ccor[2] = 0.0;
+			cmag = 0.0;
+
+			/* Lookup the current correction applied to the target */
+			if (cb.rd_luo != NULL) {		/* Subsequent pass */
+				double corval[3];
+				cb.rd_luo->lookup(cb.rd_luo, corval, cg[0].pat[i].v);
+				icmSub3(ccor, corval, cg[0].pat[i].v);
+				cmag = icmNorm3(ccor);
+#ifdef DEBUG1
+				printf("%d: ccor          %f %f %f, mag %f\n",i, ccor[0],ccor[1],ccor[2],cmag);
+#endif
+			}
+
+			/* Create a trial 100% full correction point */
+			for (j = 0; j < 3; j++)
+				rp[i].v[j] = ccor[j] + 2.0 * cg[0].pat[i].v[j] - cg[1].pat[match[i]].v[j];
+
+			/* If a first pass and the target or the correction are out of gamut, */
+			/* use a damping factor of 1.0 */
+			if (cb.rd_luo == NULL
+			 && cb.dev_gam != NULL
+			 && cb.dev_gam->nradial(cb.dev_gam, temp, rp[i].p) > 1.0
+			 && cb.dev_gam->nradial(cb.dev_gam, temp, rp[i].v) > 1.0) {
+				damp = 1.0;
+			}
+
+#ifdef DEBUG1
+			printf("%d: damp =         %f\n",i, damp);
+#endif
+
+			/* Create a new correction that does a damped correction to the current error */
+			/* [0] = target, [1] = measured */
+			for (j = 0; j < 3; j++)
+				ncor[j] = ccor[j] + damp * (cg[0].pat[i].v[j] - cg[1].pat[match[i]].v[j]);
+			nmag = icmNorm3(ncor);
+
+#ifdef DEBUG1
+			printf("%d: ncor          %f %f %f, mag %f\n",i, ncor[0],ncor[1],ncor[2],nmag);
+#endif
+
+			/* If this is not the first pass, limit the new correction */
+			/* to be 1 + damp as big as the previous correction */
+			if (cb.rd_luo != NULL) {
+				if ((nmag/cmag) > (1.0 + damp2)) {
+#ifdef DEBUG1
+					printf("%d: Limited cor mag from %f to %f\n",i, nmag, (1.0 + damp2) * cmag);
+#endif
+					icmScale3(ncor, ncor, (1.0 + damp2) * cmag/nmag);
+				}
+			}
+
+			/* Create correction point */
+			for (j = 0; j < 3; j++)
+				rp[i].v[j] = cg[0].pat[i].v[j] + ncor[j];
+
+			/* If the target point or corrected point is likely to be outside */
+			/* the gamut, limit the magnitude of the correction to be the same */
+			/* as the previous correction. */ 
+			if (cb.rd_luo != NULL && cb.dev_gam != NULL) {
+				if (cb.dev_gam->nradial(cb.dev_gam, temp, rp[i].p) > 1.0
+				 || cb.dev_gam->nradial(cb.dev_gam, temp, rp[i].v) > 1.0) {
+#ifdef DEBUG1
+					printf("%d: Limited cor mag from %f to %f\n",i, nmag, cmag);
+#endif
+					icmScale3(ncor, ncor, cmag/nmag);
+				}
+				/* Create correction point again */
+				for (j = 0; j < 3; j++)
+					rp[i].v[j] = cg[0].pat[i].v[j] + ncor[j];
+			}
+
+#ifdef DEBUG1
+			printf("%d: Was           %f %f %f\n",i, cg[1].pat[match[i]].v[0], cg[1].pat[match[i]].v[1], cg[1].pat[match[i]].v[2]);
+			printf("%d: Correction to %f %f %f\n",i, rp[i].v[0], rp[i].v[1], rp[i].v[2]);
+#endif
+
+#ifdef COMPLOOKUP
+			/* Remove current correction from new change */
+			for (j = 0; j < 3; j++)
+				rp[i].v[j] -= ccor[j];
+#endif
+			/* Set weighting */
+			if (i == whitepatch)
+				rp[i].w = WHITEWEIGHT;
+			else
+				rp[i].w = 1.0;
+			npnts++;
+
+#ifdef DEBUG3
+			{
+				char fname[50], tmp[50];
+				FILE *lf;
+				int mi = match[i];
+				double tig, cig, rig;  
+				double vv[3], temp[3];
+				double del[3], delt;
+				double corrdel[3], corrdelt;
+				double pcval[3], pcorrdel[3], pcorrdelt;
+
+				for (j = 0;; j++) {
+					if (poi[j] == (i+1) || poi[j] < 0)
+						break;
+				}
+				if (poi[j] < 0) {
+					continue;
+				}
+
+#ifdef COMPLOOKUP
+				/* Compute total correction point */
+				for (j = 0; j < 3; j++)
+					vv[j] = rp[i].v[j] + ccor[j];
+#else
+				for (j = 0; j < 3; j++)
+					vv[j] = rp[i].v[j];
+#endif
+				sprintf(fname,"patch%04d.log",i+1);
+				if ((lf = fopen(fname, "a")) == NULL)
+					error("Unable to open debug3 log file '%s'\n",fname);
+
+	 			cig = cb.dev_gam->nradial(cb.dev_gam, temp, cg[1].pat[mi].v) - 1.0;
+				if (cig > 0.0)
+					sprintf(tmp, " OUT %f",cig);
+				else
+					sprintf(tmp, "");
+				fprintf(lf,"Currently  %f %f %f%s\n", cg[1].pat[mi].v[0], cg[1].pat[mi].v[1], cg[1].pat[mi].v[2], tmp);
+
+	 			tig = cb.dev_gam->nradial(cb.dev_gam, temp, cg[0].pat[i].v) - 1.0;
+				if (tig > 0.0)
+					sprintf(tmp, " OUT %f",tig);
+				else
+					sprintf(tmp, "");
+				fprintf(lf,"Target     %f %f %f%s\n", cg[0].pat[i].v[0], cg[0].pat[i].v[1], cg[0].pat[i].v[2], tmp);
+
+				icmSub3(del, cg[1].pat[mi].v, cg[0].pat[i].v);
+				delt = icmNorm3(del);
+				fprintf(lf,"DE         %f %f %f (%f)\n", del[0], del[1], del[2], delt);
+				
+				rig = cb.dev_gam->nradial(cb.dev_gam, temp, vv) - 1.0;
+				if (rig > 0.0)
+					sprintf(tmp, " OUT %f",rig);
+				else
+					sprintf(tmp, "");
+				fprintf(lf,"Correction %f %f %f%s\n", vv[0], vv[1], vv[2], tmp);
+				icmSub3(corrdel, vv, cg[0].pat[i].v);
+				corrdelt = icmNorm3(corrdel);
+				fprintf(lf,"CorrDelta  %f %f %f (%f)\n", corrdel[0], corrdel[1], corrdel[2], corrdelt);
+				/* Note the previous correction we're compunded with */
+				if (cb.rd_luo != NULL) {
+					cb.rd_luo->lookup(cb.rd_luo, pcval, cg[0].pat[i].v);
+					icmSub3(pcorrdel, pcval, cg[0].pat[i].v);
+					pcorrdelt = icmNorm3(pcorrdel);
+					fprintf(lf,"PrevCorrDelta %f %f %f (%f)\n", pcorrdel[0], pcorrdel[1], pcorrdel[2], pcorrdelt);
+				}
+				fprintf(lf,"\n");
+
+				fclose(lf);
+			}
+#endif /* DEBUG3 */
+		}
+
+		/* Create refining rspl */
+		mn[0] =   0.0, mn[1] = mn[2] = -128.0;			/* Allow for 16 bit grid range */
+		mx[0] = 100.0, mx[1] = mx[2] =  (65535.0 * 255.0)/65280.0 - 128.0;
+		cb.verb = verb;
+		if ((cb.r = new_rspl(3, 3)) == NULL)
+			error("new_rspl failed");
+
+		for (e = 0; e < 3; e++)
+			gres[e] = clutres;
+		for (e = 0; e < 3; e++)
+			avgdev[e] = AVGDEV;
+
+		cb.r->fit_rspl_w_df(cb.r,
+		           RSPL_EXTRAFIT		/* Extra fit flag */
+		           | verb ? RSPL_VERBOSE : 0,
+		           rp,					/* Test points */
+		           npnts,				/* Number of test points */
+		           mn, mx, gres,		/* Low, high, resolution of grid */
+		           NULL, NULL,			/* Default data scale */
+		           smoothf,				/* Smoothing */
+		           avgdev,				/* Average Deviation */
+                   wweight,				/* weak default function weight */
+				   NULL,				/* No context */
+		           wfunc				/* Weak function */
+		);
+		if (verb) printf("\n");
+
+		/* Report how good the fit is */
+		if (verb) {
+			co tco;	/* Test point */
+			double maxe = -1e6, avge = 0.0;
+
+			for (i = 0; i < npnts; i++) {
+				double de;
+
+				icmAry2Ary(tco.p, rp[i].p);
+				cb.r->interp(cb.r, &tco);
+
+				de = icmLabDE(tco.v, rp[i].v);
+				if (de > maxe)
+					maxe = de;
+				avge += de;
+			}
+			avge /= (double)npnts;
+			printf("Refining transform has error to defining points avg: %f, max %f\n",avge,maxe);
+		}
+		free(rp);
 	}
 
 	/* ======================= */
@@ -854,6 +1074,7 @@ main(int argc, char *argv[]) {
 	/* 16 bit pcs -> pcs lut: */
 	{
 		icmLut *wo;
+		int flags = ICM_CLUT_SET_EXACT;	/* Assume we're setting from RSPL's */
 
 		/* Intent 0 = default/perceptual */
 		if ((wo = (icmLut *)wr_icc->add_tag(
@@ -878,7 +1099,16 @@ main(int argc, char *argv[]) {
 			cb.last = -1;
 			printf(" 0%%"), fflush(stdout);
 		}
-		if (wo->set_tables(wo, &cb,
+
+#ifdef COMPLOOKUP
+		/* Compound with previous correction */
+		if (cb.rd_luo != NULL)
+			flags = ICM_CLUT_SET_APXLS;	/* Won't be least squares, so do extra sampling */
+#endif
+
+		if (wo->set_tables(wo,
+				flags,
+				&cb,
 				icSigLabData, 			/* Input color space */
 				icSigLabData, 			/* Output color space */
 				NULL,					/* Linear input transform Lab->Lab' (NULL = default) */

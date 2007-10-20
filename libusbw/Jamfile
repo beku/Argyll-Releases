@@ -1,0 +1,32 @@
+
+# This builds the client libraries libusb.lib for libusb-win32,
+# and leaves it and usb.h in ../libusbw ready for any
+# other component of Argyll to use it.
+
+# If we're MingW, we can actually build the drivers too
+# by running gmake, but we're not doing so at the moment.
+
+#SubDir TOP libusbw ;
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;
+
+if ! $(UNIX) {
+	
+	if $(MingW) {
+		Depends all : libusb.lib ;
+		Depends libusb.lib : libusb0.def ;
+		GenFileNND libusb.lib : dlltool "-d libusb0.def -l libusb.lib" ;
+	} else if $(MSVCDir) {
+		FWD = / ;
+		Depends all : libusb.lib ;
+		Depends libusb.lib : libusb0.def ;
+		GenFileNND libusb.lib : "lib /machine:i386 /def:libusb0.def /out:libusb.lib &/" ;
+	} else {
+		EXIT "Unknown compiler !" ;
+	}
+
+	# Copy the header file to the libusb directory
+	File usb.h : src/usb.h ;
+}

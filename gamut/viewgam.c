@@ -11,8 +11,8 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include <stdio.h>
@@ -46,7 +46,7 @@ void error(char *fmt, ...), warning(char *fmt, ...);
 
 void usage(char *diag, ...) {
 	fprintf(stderr,"View gamuts Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"Diagnostic: ");
@@ -65,6 +65,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," infile.gam    Name of .gam file\n");
 	fprintf(stderr,"               Repeat above for each input file\n\n");
 	fprintf(stderr," -n            Don't add Lab axes\n");
+	fprintf(stderr," -k            Add markers for prim. & sec. \"cusp\" points\n");
 	fprintf(stderr," outfile.wrl   Name of output .wrl file\n");
 	fprintf(stderr,"\n");
 	exit(1);
@@ -72,7 +73,7 @@ void usage(char *diag, ...) {
 
 #define MXGAMTS 5		/* Maximum number of gamuts that can be displayed */
 
-#define GCENT 50.0
+#define GCENT 50.0		/* Center of object view */
 
 typedef enum {
 	gam_red       = 0,
@@ -114,23 +115,9 @@ main(int argc, char *argv[]) {
 	double in_trans[MXGAMTS+1];		/* Transparency for each input */
 	gam_reps in_rep[MXGAMTS+1];		/* Representation enum for each input */
 	int doaxes = 1;
+	int docusps = 0;
 	FILE *wrl;
-	char *xl, out_name[100];
-	FILE *fp;
-	int verb = 0;
-	int rv = 0;
-	struct {
-		double x, y, z;
-		double wx, wy, wz;
-		double r, g, b;
-	} axes[5] = {
-		{ 0, 0,  50-GCENT,  2, 2, 100,  .7, .7, .7 },	/* L axis */
-		{ 50, 0,  0-GCENT,  100, 2, 2,   1,  0,  0 },	/* +a (red) axis */
-		{ 0, -50, 0-GCENT,  2, 100, 2,   0,  0,  1 },	/* -b (blue) axis */
-		{ -50, 0, 0-GCENT,  100, 2, 2,   0,  1,  0 },	/* -a (green) axis */
-		{ 0,  50, 0-GCENT,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
-	};
-
+	char out_name[100];
 	if (argc < 3)
 		usage("Too few arguments, got %d expect at least 2",argc-1);
 
@@ -269,6 +256,11 @@ main(int argc, char *argv[]) {
 				doaxes = 0;
 			}
 
+			/* Add cusp markers */
+			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
+				docusps = 1;
+			}
+
 			else 
 				usage("Unknown flag '%c'",argv[fa][1]);
 
@@ -318,16 +310,57 @@ main(int argc, char *argv[]) {
 	fprintf(wrl,"      type \"EXAMINE\"        # It's an object we examine\n");
 	fprintf(wrl,"    } # We'll add our own light\n");
 	fprintf(wrl,"\n");
+#ifdef NEVER
 	fprintf(wrl,"    DirectionalLight {\n");
 	fprintf(wrl,"      direction 0 0 -1      # Light illuminating the scene\n");
 	fprintf(wrl,"      direction 0 -1 0      # Light illuminating the scene\n");
 	fprintf(wrl,"    }\n");
+#else
+	fprintf(wrl,"    DirectionalLight {\n");
+	fprintf(wrl,"        intensity 0.2\n");
+	fprintf(wrl,"        ambientIntensity 0.1\n");
+	fprintf(wrl,"        direction -1 -1 -1\n");
+	fprintf(wrl,"    }\n");
+	fprintf(wrl,"    DirectionalLight {\n");
+	fprintf(wrl,"        intensity 0.6\n");
+	fprintf(wrl,"        ambientIntensity 0.2\n");
+	fprintf(wrl,"        direction 1 1 1\n");
+	fprintf(wrl,"    }\n");
+#endif
 	fprintf(wrl,"\n");
 	fprintf(wrl,"    Viewpoint {\n");
 	fprintf(wrl,"      position 0 0 340      # Position we view from\n");
 	fprintf(wrl,"    }\n");
 	fprintf(wrl,"\n");
 	if (doaxes) {
+		/* Define the axis boxes */
+		struct {
+			double x, y, z;			/* Box center */
+			double wx, wy, wz;		/* Box size */
+			double r, g, b;			/* Box color */
+		} axes[5] = {
+			{ 0, 0,   50-GCENT, 2, 2, 100, .7, .7, .7 },	/* L axis */
+			{ 50, 0,  0-GCENT,  100, 2, 2,  1,  0,  0 },	/* +a (red) axis */
+			{ 0, -50, 0-GCENT,  2, 100, 2,  0,  0,  1 },	/* -b (blue) axis */
+			{ -50, 0, 0-GCENT,  100, 2, 2,  0,  1,  0 },	/* -a (green) axis */
+			{ 0,  50, 0-GCENT,  2, 100, 2,  1,  1,  0 },	/* +b (yellow) axis */
+		};
+
+		/* Define the labels */
+		struct {
+			double x, y, z;
+			double size;
+			char *string;
+			double r, g, b;
+		} labels[6] = {
+			{ -2, 2, -GCENT + 100 + 10, 10, "+L*",  .7, .7, .7 },	/* Top of L axis */
+			{ -2, 2, -GCENT - 10,      10, "0",    .7, .7, .7 },	/* Bottom of L axis */
+			{ 100 + 5, -3,  0-GCENT,  10, "+a*",  1,  0,  0 },	/* +a (red) axis */
+			{ -5, -100 - 10, 0-GCENT,  10, "-b*",  0,  0,  1 },	/* -b (blue) axis */
+			{ -100 - 15, -3, 0-GCENT,  10, "-a*",  0,  0,  1 },	/* -a (green) axis */
+			{ -5,  100 + 5, 0-GCENT,  10, "+b*",  1,  1,  0 },	/* +b (yellow) axis */
+		};
+
 		fprintf(wrl,"    # Lab axes as boxes:\n");
 		for (n = 0; n < 5; n++) {
 			fprintf(wrl,"    Transform { translation %f %f %f\n", axes[n].x, axes[n].y, axes[n].z);
@@ -341,90 +374,22 @@ main(int argc, char *argv[]) {
 			fprintf(wrl,"      ]\n");
 			fprintf(wrl,"    }\n");
 		}
+		fprintf(wrl,"    # Axes identification:\n");
+		for (n = 0; n < 6; n++) {
+			fprintf(wrl,"    Transform { translation %f %f %f\n", labels[n].x, labels[n].y, labels[n].z);
+			fprintf(wrl,"      children [\n");
+			fprintf(wrl,"        Shape{\n");
+			fprintf(wrl,"          geometry Text { string [\"%s\"]\n",labels[n].string);
+			fprintf(wrl,"            fontStyle FontStyle { family \"SANS\" style \"BOLD\" size %f }\n",
+			                                  labels[n].size);
+			fprintf(wrl,"                        }\n");
+			fprintf(wrl,"          appearance Appearance { material Material ");
+			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", labels[n].r, labels[n].g, labels[n].b);
+			fprintf(wrl,"        }\n");
+			fprintf(wrl,"      ]\n");
+			fprintf(wrl,"    }\n");
+		}
 	}
-
-#ifdef NEVER
-
-Add in labels:
-
-# Axe descriptions L* a* b* and O
-
-    Transform { translation -5.0 115.0 -50.0
-            children[
-                  Shape{
-                         geometry Text {        string ["+B*"]
-                             fontStyle FontStyle { family "SANS"
-                                                   style "BOLD"
-                                                   size 10.0 } }
-                         appearance Appearance { material Material { diffuseColor 0.7 0.7 0.7 } }
-                        }
-                    ]
-               }
-
-    Transform { translation -5.0 -120.0 -50.0
-            children[
-                  Shape{
-                         geometry Text {        string ["-B*"]
-                             fontStyle FontStyle { family "SANS"
-                                                   style "BOLD"
-                                                   size 10.0 } }
-                         appearance Appearance { material Material { diffuseColor 0.7 0.7 0.7 } }
-                        }
-                    ]
-               }
-
-    Transform { translation 115.0 -3.0 -50.0
-            children[
-                  Shape{
-                         geometry Text {        string ["+A*"]
-                             fontStyle FontStyle { family "SANS"
-                                                   style "BOLD"
-                                                   size 10.0 } }
-                         appearance Appearance { material Material { diffuseColor 0.7 0.7 0.7 } }
-                        }
-                    ]
-               }
-
-    Transform { translation -125.0 -3.0 -50.0
-            children[
-                  Shape{
-                         geometry Text {        string ["-A*"]
-                             fontStyle FontStyle { family "SANS"
-                                                   style "BOLD"
-                                                   size 10.0 } }
-                         appearance Appearance { material Material { diffuseColor 0.7 0.7 0.7 } }
-                        }
-                    ]
-               }
-
-    Transform { translation -2.0 2.0 56.0
-                rotation 0.85 -0.35 -0.35 1.76269
-            children[
-                  Shape{
-                         geometry Text {        string ["+L*"]
-                             fontStyle FontStyle { family "SANS"
-                                                   style "BOLD"
-                                                   size 10.0 } }
-                         appearance Appearance { material Material { diffuseColor 0.7 0.7 0.7 } }
-                        }
-                    ]
-               }
-
-    Transform { translation -2.0 2.0 -60.0
-                rotation 0.85 -0.35 -0.35 1.76269
-            children[
-                  Shape{
-                         geometry Text {        string ["0"]
-                             fontStyle FontStyle { family "SANS"
-                                                   style "BOLD"
-                                                   size 10.0 } }
-                         appearance Appearance { material Material { diffuseColor 0.7 0.7 0.7 } }
-                        }
-                    ]
-               }
-
-
-#endif /* NEVER */
 
 	/* Read each input in turn */
 	for (n = 0; n < ng; n++) {
@@ -574,6 +539,47 @@ Add in labels:
 		fprintf(wrl,"      ] # end children\n");
 		fprintf(wrl,"    } # end Transform\n");
 		fprintf(wrl,"\n");
+
+		/* See if there are cusp values */
+		if (docusps) {
+			int kk;
+			double rgb[3], Lab[3];
+			char buf1[50];
+			char *cnames[6] = { "RED", "YELLOW", "GREEN", "CYAN", "BLUE", "MAGENTA" };
+	
+			for (i = 0; i < 6; i++) {
+				sprintf(buf1,"CUSP_%s", cnames[i]);
+				if ((kk = pp->find_kword(pp, 0, buf1)) < 0)
+					break;
+	
+				if (sscanf(pp->t[0].kdata[kk], "%lf %lf %lf",
+			           &Lab[0], &Lab[1], &Lab[2]) != 3) {
+					break;
+				}
+
+				gamut_Lab2RGB(rgb, Lab);
+
+				fprintf(wrl,"\n");
+				fprintf(wrl,"    Transform {\n");
+				fprintf(wrl,"      translation %f %f %f\n",Lab[1], Lab[2], Lab[0]-GCENT);
+				fprintf(wrl,"      children [\n");
+				fprintf(wrl,"		Shape { \n");
+				fprintf(wrl,"		 geometry Sphere { radius 2.0 }\n");
+				fprintf(wrl,"         appearance Appearance { material Material {\n");
+				if (in_trans[n] > 0.0)
+				fprintf(wrl,"         transparency %f\n", in_trans[n]);
+				if (in_colors[n] != gam_natural)
+				fprintf(wrl,"          diffuseColor %f %f %f\n", color_rgb[in_colors[n]].r, color_rgb[in_colors[n]].g, color_rgb[in_colors[n]].b);
+				else
+				fprintf(wrl,"          diffuseColor  %f %f %f\n", rgb[0], rgb[1], rgb[2]);
+				fprintf(wrl,"		  }\n");
+				fprintf(wrl,"		}\n");
+				fprintf(wrl,"      }\n");
+				fprintf(wrl,"     ]\n");
+				fprintf(wrl,"    }\n");
+			}
+			fprintf(wrl,"\n");
+		}
 
 		pp->del(pp);		/* Clean up */
 	}

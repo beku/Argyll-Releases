@@ -7,7 +7,7 @@ This is more complicated that it really should be:
 
 Spec. Name		Spec. Version	File Version
 ----------      -------------   ------------
-ICC.1:2004-10	4.2				4.2.0      <-- target icclib
+ICC.1:2004-10	4.2				4.2.0      <-- target icclib4
 ICC.1:2003-09	4.1				4.1.0
 ICC.1:2001-12	4.0				4.0.0
 ICC.1:2001-04	(3.7?)			2.4.0
@@ -21,8 +21,20 @@ ICC.1:1998-09	(3.5?)			2.2.0
 
 -----------------------------
 There are other changes from V2.1 in later versions,
-such as making multiple intents in display Lut profiles
-valid in V2.4. Can this be made backwards compatible without
+such as:
+
+	2.3.0
+		Chromaticity Tag added
+
+	2.4.0
+		Lut tables now allowed for monochrome
+
+		Added chromaticAdaptationTag
+
+		Input, Display, Output and Colorspace LUT profiles
+		now support all 3 intents.
+
+Can this be made backwards compatible without
 messing about with specific code for other versions ??
 
 This doesn't seem possible. The profile generator code and icclib
@@ -30,7 +42,7 @@ would seem to need to know which version they were generating,
 for assured backwards compatibility with other CMMs.
 -----------------------------
 Should add "guess ink limit" support to ease gamut finding
-from profiles.
+from profiles. (Implemented in xicc at the moment) ? 
 -----------------------------
 
 Add usage of #def icVersionNumberV41 when "V4" flag is active.
@@ -49,6 +61,7 @@ Tags needed since V2.1
 Tag types needed since V2.1
 
     icSigDeviceSettingsType             = 0x64657673L,  /* 'devs' V2.2 - V4.0 */
+    icSigChromaticityTag                = 0x6368726DL,  /* 'chrm' V2.3+ */ 
 	icSigColorantOrderType              = 0x636C726FL,  /* 'clro' V4.0+ */
 	icSigColorantTableType              = 0x636C7274L,  /* 'clrt' V4.0+ */
     icSigLutAtoBType                    = 0x6d414220L,  /* 'mAB ' V4.0+ */
@@ -57,7 +70,7 @@ Tag types needed since V2.1
     icSigParametricCurveType            = 0x70617261L,  /* 'para' V4.0+ */
     icSigResponseCurveSet16Type         = 0x72637332L,  /* 'rcs2' V2.2 - V4.0 */
 
-Stuff to deal with:
+Stuff to deal with in implementing ICCV4:
 -------------------
 
 Make sure DLL/SO version is compilable ??
@@ -103,7 +116,8 @@ Check mono profile black and white interpretation.
 
 
 Matrix/shaper in V4 has clipping requirements. Should these be honoured ??
-Maybe make this optional ?
+Maybe make this optional via a run time flag ?
+May be best to have multiple conformance flags (Absolute Intent etc. ?)
 
 Check icclink set header rendering intents correctly for device links.
 
@@ -113,11 +127,6 @@ do the work.
 
 Implement MultiLocalizedUnicodeType as overload of icmTextDescription, or new tagtype ??
 
-
-
-Implement new tag types for: 
-    icSigDeviceSettingsType             = 0x64657673L,  /* 'devs' V2.2 - V4.0 */
-    icSigResponseCurveSet16Type         = 0x72637332L,  /* 'rcs2' V2.2 - V4.0 */
 
 
 - - - - - 
@@ -144,23 +153,37 @@ Add new methods to setup the transform stages, with current set mathods implemen
 as backwards compatible ? Have multiple methods rather than a single "set" ?
 ( - how are ranges determined in latter case ?)
 
-Finish support for generic 3 stage conversion view (input per chan, cross chan, output per chan.).
+Finish support for generic 3 stage conversion view (input per chan, cross chan, output per chan.),
+and support this in icclib4.
 
 Use bit flags to indicate which stages are valid.
 Flags effectively replace "algorithm" flag.
 Flag combination set determines how transform can be represented by a profile
 (Mono, Matrix, V2Lut, V4Lut etc.).
 
+Have flags for "separable" (i.e. channel independent) and
+"reversable".
+
+Support implementing a universal transform both forwards and
+backwards from a given set of ICC tags (backwards won't be
+valid for some tags, ie. Lut).
+
 lookup object acts as ideal abstract above exact tag representation within
 a profile. Use this model for other aspects of ICC profiles.
 Extend to simplify xicc/icc relationship - make xicc a true inheriting
-class.
+class, and add whatever hooks are needed into icclib4 to make this work.
 ICC tags -> luo -> transform
 ICC tags <- luo <- Set transform
 
+What impact does this have on memory usage though ?
+- Makes sure transform is completely independent of
+  tags or profile after setting up, so that tags and/or
+  profile can be released.
+
 - - - - - - 
 
-Split icc.c into 2 or 3 levels ??:
+Split icc.c into 3 levels:
+
  1 Basic support (I/O, primitives)
    Toolkit for buiding ICC like file formats, but not
    specic to the actual ICC file. Can be used to

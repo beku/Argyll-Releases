@@ -19,10 +19,10 @@
  *
  * This file is based on cam97s3.h by Graeme Gill.
  *
- * Copyright 2004 Graeme W. Gill
+ * Copyright 2004 - 2007 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* Definitions assumed here:
@@ -53,11 +53,11 @@
 
 /* Rules of Thumb: */
 /* Ambient Luminance (Lat, cd/m^2) is Ambient Illuminance (Lux) divided by PI. */
-/* i.e. Lat = Iat/PI */
+/* i.e. Lat = Iat/PI */	/* (1 foot candle = 0.0929 lux) */
 
 /* The Adapting/Surround Luminance is often taken to be */
 /* the 20% of the Ambient Luminance. (gray world) */
-/* i.e. La = Lat/5  */
+/* i.e. La = Lat/5 = Iat/15.7 */
 
 /* For a reflective print, the Viewing/Scene/Image luminance (Lv, cd/m^2), */
 /* will be the Illuminating Luminance (Li, cd/m^2) reflected by the */
@@ -90,16 +90,19 @@
 
 /*
 
-  Typical Field brightness
-  (cd/m2) Condition 
-    30	Subdued indoor lighting 
-    60	Less than typical office light; sometimes recommended for
-  		display-only workplaces 
-   120	Typical office 
-   240	Bright indoor office 
-   480	Very bright; precision indoor tasks 
-   960	Usual outdoors 
-  1920	Bright afternoon 
+  Typical Ambient Illuminance brightness
+  (Lux)   La  Condition 
+    11     1  Twilight
+    32     2  Subdued indoor lighting
+    64     4  Less than typical office light; sometimes recommended for
+              display-only workplaces (sRGB)
+   350    22  Typical Office (sRGB annex D)
+   500    32  Practical print evaluationa (ISO-3664 P2)
+  1000    64  Good Print evaluation (CIE 116-1995)
+  1000    64  Overcast Outdoors
+  2000   127  Critical print evaluation (ISO-3664 P1)
+ 10000   637  Typical outdoors, full daylight 
+ 50000  3185  Bright summers day 
 
 */
 
@@ -122,7 +125,7 @@ struct _cam02 {
 		int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	);
 
-	/* Conversions */
+	/* Conversions. Return nz on error */
 	int (*XYZ_to_cam)(struct _cam02 *s, double *out, double *in);
 	int (*cam_to_XYZ)(struct _cam02 *s, double *out, double *in);
 
@@ -141,6 +144,8 @@ struct _cam02 {
 	double  F;		/* Adaptation Degree */
 
 	/* Pre-computed values */
+	double Va[3], Vb[3], VttA[3], Vttd[3];	/* rgba vectors */
+	double dcomp[3];	/* Vttd in terms of VttA, Va, Vb */
 	double Fsc;			/* Flare scale */
 	double Fisc;		/* Inverse flare scale */
 	double Fsxyz[3];	/* Scaled Flare color coordinates */
@@ -157,9 +162,24 @@ struct _cam02 {
 	double z;			/* Base exponential nonlinearity */
 	double rgbaW[3];	/* Post-adapted cone response of white */
 	double Aw;			/* Achromatic response of white */
+	double nldxval;		/* Non-linearity value at lower crossover to linear */
+	double nldxslope;	/* Non-linearity slope at lower crossover to linear */
+	double nlxval;		/* Non-linearity value at uppper crossover to linear */
+	double nlxslope;	/* Non-linearity slope at uppper crossover to linear */
+	double lA;			/* JLIMIT Limited A */
 
 	/* Option flags */
 	int hk;				/* Use Helmholtz-Kohlraush effect */
+	int trace;			/* Trace values through computation */
+	int retss;			/* Return ss rather than Jab */
+
+	double nldlimit;	/* value of NLDLIMIT */
+	double nlulimit;	/* value of NLULIMIT */
+	double ddllimit;	/* value of DDLLIMIT */
+	double ddulimit;	/* value of DDULIMIT */
+	double ssminj;		/* value of SSMINJ */
+	double jlimit;		/* value of JLIMIT */
+	double hklimit;		/* value of HKLIMIT */
 
 }; typedef struct _cam02 cam02;
 

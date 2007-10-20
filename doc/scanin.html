@@ -18,75 +18,154 @@ Performs other tasks associated with turning a TIFF raster of test
 patches into numeric values. <br>
 <h3>Usage Summary<br>
 </h3>
-<a href="#_"> usage</a>: scanin [options] input.tif recogin.cht
-valin.cie [diag.tif]<br>
-&nbsp;&nbsp; :- inputs 'input.tif',&nbsp; and outputs scanner
-'input.ti3', or<br>
-<br>
-<a href="#g"> usage</a>: scanin -g [options] input.tif recogout.cht
-[diag.tif]<br>
-&nbsp;&nbsp; :- outputs file 'recogout.cht', or<br>
-<br>
-<a href="#o"> usage</a>: scanin -o [options] input.tif recogin.cht
-[diag.tif]<br>
-&nbsp;&nbsp; :- outputs file 'input.val', or<br>
-<br>
-<a href="#c"> usage</a>: scanin -c [options] input.tif recogin.cht
-scanprofile.icc pbase [diag.tif]<br>
-&nbsp;&nbsp; :- inputs pbase.ti2 and outputs printer pbase.ti3, or<br>
-<br>
-<a href="#r"> usage</a>: scanin -r [options] input.tif recogin.cht
-pbase [diag.tif]<br>
-&nbsp;&nbsp; :- inputs pbase.ti2+.ti3 and outputs pbase.ti3<br>
-<br>
-&nbsp;<a href="#g">-g</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Generate a chart reference (.cht) file<br>
-&nbsp;<a href="#o">-o</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Output patch values in .val file<br>
-&nbsp;<a href="#c">-c</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use scanner as colorimeter to<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-convert printer .ti2 to .ti3<br>
-&nbsp;<a href="#ca">-ca</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Same as -c, but accumulates more values to .ti3<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-from subsequent pages<br>
-&nbsp;<a href="#r">-r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Replace device values in .ti3<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<small><a style="font-family: monospace;" href="#_"> usage</a><span
+ style="font-family: monospace;">: scanin [options] input.tif
+recogin.cht
+valin.cie [diag.tif]</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; :- inputs
+'input.tif',&nbsp; and outputs scanner
+'input.ti3', or</span><br style="font-family: monospace;">
+<br style="font-family: monospace;">
+<a style="font-family: monospace;" href="#g"> usage</a><span
+ style="font-family: monospace;">: scanin -g [options] input.tif
+recogout.cht
+[diag.tif]</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; :- outputs file
+'recogout.cht', or</span><br style="font-family: monospace;">
+<br style="font-family: monospace;">
+<a style="font-family: monospace;" href="#o"> usage</a><span
+ style="font-family: monospace;">: scanin -o [options] input.tif
+recogin.cht
+[diag.tif]</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; :- outputs file
+'input.val', or</span><br style="font-family: monospace;">
+<br style="font-family: monospace;">
+<a style="font-family: monospace;" href="#c"> usage</a><span
+ style="font-family: monospace;">: scanin -c [options] input.tif
+recogin.cht
+scanprofile.icc pbase [diag.tif]</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; :- inputs pbase.ti2
+and outputs printer pbase.ti3, or</span><br
+ style="font-family: monospace;">
+<br style="font-family: monospace;">
+<a style="font-family: monospace;" href="#r"> usage</a><span
+ style="font-family: monospace;">: scanin -r [options] input.tif
+recogin.cht
+pbase [diag.tif]</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; :- inputs
+pbase.ti2+.ti3 and outputs pbase.ti3</span><br
+ style="font-family: monospace;">
+<br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#g">-g</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Generate a chart reference (.cht) file</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#o">-o</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Output patch values in .val file</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#c">-c</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use scanner as colorimeter to</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+convert printer .ti2 to .ti3</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#ca">-ca</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Same as -c, but accumulates more values to .ti3</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+from subsequent pages</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#r">-r</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Replace device values in .ti3</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Default is to create a scanner .ti3 file<br>
-&nbsp;<a href="#a">-a</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Recognize chart in normal orientation only<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;Default is to recognize all possible chart angles<br>
-&nbsp;<a href="#v">-v [n]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Verbosity level 0-9<br>
-&nbsp;<a href="#d">-d</a> [ihvglLrsonap]&nbsp;&nbsp; Generate
-diagnostic output (try -dipn)<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#di">i</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;diag - B&amp;W of input image<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dh">h</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-diag - Horizontal edge detection<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dv">v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-diag - Vertical edge detection<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dg">g</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-diag - Groups detected<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dl">l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;diag - Lines detected<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dL">L</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-diag - All lines detected<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dr">r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;diag - lines rotated<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#ds">s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;diag - sample boxes rotated<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#do">o</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-diag - sample box outlines<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dn">n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-diag - sample box names<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#da">a</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-diag - sample box areas<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="#dp">p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-diag - pixel areas sampled<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#F">-F x1,y1,x2,y2,x3,y3</a><span
+ style="font-family: monospace;"> Don't auto recognize, locate using
+three fiducual marks</span></small><br style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#a">-a</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Recognize chart in normal orientation only</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Default is to recognize all possible chart angles<br>
+&nbsp;<a href="#m">-m</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Return true mean (default is robust mean)<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;<a
+ href="scanin.html#G">-G gamma</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Approximate
+gamma encoding of image</span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#v">-v [n]</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbosity level 0-9</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#d">-d</a><span
+ style="font-family: monospace;"> [ihvglLrsonap]&nbsp;&nbsp;&nbsp;
+Generate
+diagnostic output (try -dipn)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#di">i</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - B&amp;W of input image</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#dh">h</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - Horizontal edge detection</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#dv">v</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - Vertical edge detection</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#dg">g</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - Groups detected</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#dl">l</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - Lines detected</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#dL">L</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - All lines detected</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#dr">r</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - lines rotated</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#ds">s</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - sample boxes rotated</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#do">o</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - sample box outlines</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#dn">n</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - sample box names</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#da">a</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - sample box areas</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+ style="font-family: monospace;" href="#dp">p</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - pixel areas sampled</span></small>
+<br>
 <h3>Usage Details and Discussion</h3>
 <span style="font-weight: bold;">scanin</span> is setup to deal with a
 raster file that has been roughly cropped to a size that contains the
@@ -95,7 +174,12 @@ usually no need to rotate or crop the image any more finely.] The
 reference files are normally set up with the assumption that the edges
 of the chart are visible within the image, and if the image is cropped
 to exclude the chart edges, it may well not recognize the chart
-properly.<br>
+properly. It is designed to cope with a variety of resolutions, and
+will cope with some degree of noise in the scan (due to screening
+artefacts on the original, or film grain), but it isn't really designed
+to accept very high resolution input. For anything over 600DPI, you
+should consider down sampling the scan using a filtering downsample,
+before submitting the file to scanin.<br>
 <br>
 There are 5 basic modes that <b>scanin</b> operates in.<br>
 <ul>
@@ -217,11 +301,46 @@ orientation
 automatically is a problem if the recognition template does not contain
 expected patch values, since it will have an equal chance of
 orienting
-it incorrectly as correctly. To solve this, the <b>-a</b> flag can be
+it incorrectly as correctly. To solve this, the <a name="a"></a><b>-a</b>
+flag can be
 used,
 and care taken to provide a raster file that is within 45 degrees of
 "no
 rotation".<br>
+<br>
+<a name="F"></a>Normally scanin will use automatic chart recognition to
+identify the location of the test patches and extract their values. If
+the chart <a href="cht_format.html">CHT file</a>&nbsp;
+has three fiducial marks defined, then the chart can be manually
+aligned by specifying the pixel location of the three marks as
+arguments to the <span style="font-weight: bold;"><span
+ style="font-weight: bold;">-F</span></span> flag. The top left, top
+right and bottom right fiducial marks X and Y co-ordinates should be
+specified as a single concatenated argument, separated by comma's, e.g:
+-F 10,20,435,22,432,239&nbsp; The coodinates may be fractional.<br>
+<br>
+<a name="m"></a>Normally scanin computes an average of the pixel values
+within a sample square, using a "robust" mean, that discards pixel
+values that are too far from the average ("outlier" pixel values). This
+is done in an attempt to discard value that are due to scanning
+artefacts such as dust, scratches etc. You can force scanin to return
+the true mean values for the sample squares that includes all the pixel
+values, by using the <span style="font-weight: bold;">-m</span> flag.<br>
+<br>
+<a name="G"></a>Normally scanin has reasonably robust feature
+recognition, but the default assumption is that the input chart has an
+approximately even visual distribution of patch values, and has been
+scanned and converted to a typical gamma 2.2 corrected image, meaning
+that the average patch pixel value is expected to be about 50%. If this
+is not the case (for instance if the input chart has been scanned with
+linear light or "raw" encoding), then it may enhance the image
+recognition to provide the approximate gamma encoding of the image. For
+instance, if linear light encoding ("Raw") is used, a <span
+ style="font-weight: bold;">-G</span> value of 1.0 would be
+appropriate. Values less than 2.2 should be tried if the chart is
+particularly dark, or greater than 2.2 if the chart is particularly
+light. Generally it is only necessary to provide this is there are
+problems in recognizing the chart.<br>
 <br>
 <a name="v"></a> The <b>-v</b> flag enables extra verbosity in
 processing. This can aid debugging, if a chart fails to be recognized.<br>
@@ -233,9 +352,8 @@ command line, or if not, will default to <span
  style="font-weight: bold;">diag.tif</span>. Various flags control what
 is written to the diagnostic
 raster.
-Note that no diagnostic raster will be produced if at least one flag
-isn't
-specified.<br>
+Note that at least one flag must be specified for a diagnostic raster
+to be produced.<br>
 <b><a name="di"></a>i</b>&nbsp;&nbsp;&nbsp; creates a black and white
 version of the input raster in the diagnostic output, to be able to
 compare with the feature extraction.<br>

@@ -18,144 +18,339 @@ true gamut mapping, together with possibly inverting the forward
 profile,&nbsp; to allow black ink regeneration or to retain the input
 black characteristic from the input profile.<br>
 <h3>Usage Summary</h3>
-icclink [-options] inprofile outprofile linkedprofile<br>
-&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; Verbose<br>
-&nbsp;<a href="#V">-V</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;Verify existing profile, rather than link (Debug
-option)<br>
-&nbsp;<a href="#q">-q [lmhu]</a>&nbsp; &nbsp; &nbsp; &nbsp;Quality -
-Low, Medium (def), High, Ultra<br>
-&nbsp;<a href="#r">-r <i>res</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;Override clut res. set by -q<br>
-&nbsp;<a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; Don't preserve device curves in result<br>
-&nbsp;<a href="#f">-f</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp;Special :- Force neutral colors to be K only output.<br>
-&nbsp;<a href="#F">-F</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
-&nbsp; Special :- Force all colors to be K only output.<br>
-&nbsp;<a href="#p">-p aprof.icm</a>&nbsp;&nbsp; Include abstract
-profile in link<br>
-&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; Simple Mode (default)<br>
-&nbsp;<a href="#g">-g [src.gam]</a>&nbsp; &nbsp;Gamut Mapping Mode
-[optional source image gamut]<br>
-&nbsp;<a href="#G">-G [src.gam]</a>&nbsp; Gamut Mapping Mode using
-inverse outprofile A2B [optional source gamut]<br>
-&nbsp; &nbsp; &nbsp;<u>Simple Mode Options:</u><br>
-&nbsp;<a href="#si">-i <i>in_intent</i></a>&nbsp; &nbsp; &nbsp;
-&nbsp;p = perceptual, r = relative colorimetric,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; s = saturation, a = absolute colorimetric<br>
-&nbsp;<a href="#so">-o </a><i><a href="#so">out_intent</a> </i>&nbsp;
-&nbsp;p = perceptual, r = relative colorimetric,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; s = saturation, a = absolute colorimetric<br>
-&nbsp; &nbsp;&nbsp; <u>Mapping Mode Options:</u><br>
-&nbsp;<a href="#i">-i <i>intent</i></a>&nbsp;&nbsp;&nbsp;&nbsp; set
-linking intent from the following choice:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 0: Absolute Colorimetric (in Jab) [ICC
+<small><span style="font-family: monospace;">icclink [-options]
+inprofile outprofile linkedprofile</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#v">-v</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#A">-A "manufacturer"</a><span
+ style="font-family: monospace;">&nbsp; Set the manufacturer
+description string</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#M">-M "model"</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set the model
+description string</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#D">-D "description"</a><span
+ style="font-family: monospace;">&nbsp;&nbsp; Set the
+profile Description string&nbsp; (Default "</span><span
+ style="font-style: italic; font-family: monospace;">inoutfile</span><span
+ style="font-family: monospace;">")</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#C">-C "copyright"</a><span
+ style="font-family: monospace;"> &nbsp;&nbsp;&nbsp; Set the copyright
+string</span></small><br style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#V">-V</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verify existing profile, rather than link (Debug
+option)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#q">-q lmhu</a><span
+ style="font-family: monospace;"> &nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Quality -
+Low, Medium (def), High, Ultra</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#r">-r <i>res</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Override clut res. set by -q</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#n">-n</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Don't preserve device curves in result</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#f">-f</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Special
+:- Force neutral colors to be K only output.</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#F">-F</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Special
+:- Force all colors to be K only output.</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#p">-p aprof.icm</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Include abstract
+profile in link</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#s">-s</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Simple Mode (default)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#g">-g [src.gam]</a><span
+ style="font-family: monospace;">&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; Gamut
+Mapping Mode
+[optional source image gamut]</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#G">-G [src.gam]</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Gamut Mapping Mode using
+inverse outprofile A2B [optional source gamut]</span><br
+ style="font-family: monospace;">
+<br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; &nbsp;&nbsp; </span><u
+ style="font-family: monospace;">Simple Mode Options:</u><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#si">-i <i>in_intent</i></a><span
+ style="font-family: monospace;">&nbsp; &nbsp;&nbsp;&nbsp;
+p = perceptual, r = relative colorimetric,</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; s = saturation, a = absolute colorimetric</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#so">-o </a><i
+ style="font-family: monospace;"><a href="#so">out_intent</a> </i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp; p = perceptual, r =
+relative colorimetric,</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; s = saturation, a = absolute colorimetric</span><br
+ style="font-family: monospace;">
+<br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; &nbsp;&nbsp; </span><u
+ style="font-family: monospace;">Mapping Mode Options:</u><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#i">-i <i>intent</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; set
+linking intent from the following choice:</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+a - Absolute Colorimetric (in Jab) [ICC
 Absolute Colorimetric]<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 1: Absolute Appearance<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 2: White Point Matched Appearance [ICC
-Relative Colorimetric]<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 3: Luminance matched Appearance<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 4: Perceptual (Preferred) [ICC Perceptual]<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 5: Saturation<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;6: Enhanced Saturation [ICC
-Saturation]<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;7: Absolute Colorimetric (Lab)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-(Can also use -ia, -ir, -ip or -is as aliases.)<br>
-&nbsp;<a href="#w">-w [J,a,b]</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use forced whitepoint hack [optional color to map the white to]<br>
-&nbsp;<a href="#c">-c <i>viewcond</i></a>&nbsp; &nbsp; set input
-viewing conditions for CIECAM02,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; either an enumerated choice, or a parameter<br>
-&nbsp;<a href="#d">-d <i>viewcond</i></a>&nbsp; &nbsp; set output
-viewing conditions for CIECAM02,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; either an enumerated choice, or a parameter<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; Enumerated Viewing Conditions:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 0: Practical Reflection Print<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 1: Print evaluation environment<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 2: Monitor in typical work environment<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 3: Monitor in darkened work environment<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 4: Projector in dim environment<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 5: Projector in dark environment<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 6: Original scene - Outdoors<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 7: Photo CD - original scene<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 8: Transparencies on a viewing box<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; s:surround&nbsp; a =
-average, m = dim, d = dark,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;c = transparency (default average)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;Adapted white point
-as XYZ (default media white)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
-Adapted white point as x, y<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-a:adaptation&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; Adaptatation luminance in
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+aw - Absolute Colorimetric (in Jab) with scaling to fit white point<br
+ style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+aa - Absolute Appearance</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+r - White Point Matched Appearance [ICC
+Relative Colorimetric]</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+la - Luminance matched Appearance</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+p - Perceptual (Preferred) [ICC Perceptual]</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ms - Saturation</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+s - Enhanced Saturation [ICC
+Saturation]</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+al - Absolute Colorimetric (Lab)</span><span
+ style="font-family: monospace;"></span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#w">-w [J,a,b]</a><span
+ style="font-family: monospace;"> &nbsp;&nbsp;&nbsp; Use forced
+whitepoint hack [optional color to map the white to]</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#c">-c <i>viewcond</i></a><span
+ style="font-family: monospace;">&nbsp; &nbsp; set input
+viewing conditions for CIECAM02,</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; either an enumerated choice, or a parameter</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#d">-d <i>viewcond</i></a><span
+ style="font-family: monospace;">&nbsp; &nbsp; set output
+viewing conditions for CIECAM02,</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; either an enumerated choice, or a parameter:value change</span><span
+ style="font-family: monospace;"></span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; pp - Practical Reflection Print</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; pe - Print evaluation environment</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; mt - Monitor in typical work environment</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; mb - Monitor in bright work environment</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp; md - Monitor in darkened work
+environment</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp; jm - Projector in dim environment</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp; jd - Projector in dark environment</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; pcd - Photo CD - original scene
+outdoors</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp; ob - Original scene - Bright Outdoors</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp; cx - Cut Sheet Transparencies on a viewing box</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+s:surround a =
+average, m = dim, d = dark,</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;&nbsp;&nbsp; c = transparency (default average)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Adapted white point
+as XYZ (default media white)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Adapted white
+point as x, y</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+a:adaptation&nbsp; Adaptatation luminance in
 cd.m^2
-(default 50.0)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; b:background&nbsp;
-Background % of image luminance (default 20)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; Flare
-light % of image luminance (default 1)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; Flare color
-as XYZ (default media white)<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
-&nbsp; Flare color as x, y<br>
-&nbsp; &nbsp; &nbsp; &nbsp;<u>Inverse outprofile A2B Options:</u><br>
-&nbsp;<a href="#k">-k [tzhxr]</a>&nbsp;&nbsp;&nbsp; CMYK Black
-generation<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; t = transfer K from input to output<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; z = zero K, h = 0.5 K (def), x = maximum
-K, r = ramp K<br>
-&nbsp;<a href="#kp">-k p stle stpo enpo enle shape</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; p = black locus generation curve parameters<br>
-&nbsp;<a href="#kq">-k q stle0 stpo0 enpo0 enle0 shape0 stle2 stpo2
-enpo2 enle2 shape2</a><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; q = transfer input K to dual curve limits<br>
-&nbsp;<a href="#l">-l <i>tlimit</i></a>&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp; &nbsp; set total ink limit, 0 - 400% (default none)<br>
-&nbsp;<a href="#L">-L <i>klimit</i></a>&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp; set
-total ink limit, 0 - 100% (default none)<br>
+(default 50.0)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+b:background&nbsp;
+Background % of image luminance (default 20)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare
+light % of image luminance (default 1)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color
+as XYZ (default media white)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as x,
+y</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="icclink.html#t">-t <i>tlimit</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+set input total ink limit, 0 - 400% (estimate by default)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="icclink.html#T">-T <i>klimit</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+set
+input total ink limit, 0 - 100% (estimate by default)</span><br
+ style="font-family: monospace;">
+<br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp; &nbsp; &nbsp;&nbsp; </span><u
+ style="font-family: monospace;">Inverse outprofile A2B Options:</u><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#k">-k tezhxr</a><span
+ style="font-family: monospace;">&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;
+CMYK
+Black
+generation</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; t = transfer K from input to output, e = retain K of
+output B2A table</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; z = zero K, h = 0.5 K, x = maximum
+K, r = ramp K (default)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#kp">-k p stle stpo enpo enle
+shape</a><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; p = black level generation curve parameters</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#kq">-k q stle0 stpo0 enpo0
+enle0 shape0 stle2 stpo2
+enpo2 enle2 shape2</a><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; q = transfer input K to dual curve limits</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="xicclu.html#K">-K parameters</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Same as
+-k, but
+target is K locus rather than K value itself</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#l">-l <i>tlimit</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+set
+output total ink limit, 0 - 400% (estimate by default)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#L">-L <i>klimit</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+set
+output total ink limit, 0 - 100% (estimate by default)</span></small>
+<br>
 <h3>Usage Details and Discussion</h3>
 <b><a name="v"></a> -v</b> Turns on verbose mode. Gives progress
 information as the profile is created. Since gamut map mode inverse
-profile linking can take a long time to perform, this is often useful.<br>
+profile linking can take a long time to perform, this is often useful. <br>
+<br>
+<a name="A"></a>The <b>-A</b> parameter allows setting of the device
+manufacturer description tag. This parameter may not be relevant for a
+link profile, but if used should be a string that
+identifies the manufacturer of the primary device used in the link.
+With most
+command line shells, it will be necessary to enclose the parameter
+with double quotes, so that spaces and other special characters are
+included in the parameter, and not mistaken for the start of another
+flag, or as a final command line parameters. By default no manufacturer
+description string tag will be generated for the profile.<br>
+<br>
+<a name="M"></a>The <b>-M</b> parameter allows setting of the device
+mode description tag. This parameter may not be relevant for a link
+profile, but if used should be a string that
+identifies the particular model of primary device used in the link.
+With most command line
+shells, it will be necessary to enclose the parameter with double
+quotes, so that spaces and other special characters are included in the
+parameter, and not mistaken for the start of another flag, or as a
+final command line parameters. By default no model description string
+tag will be generated for the profile.<br>
+<br>
+<a name="D"></a>The <b>-D</b> parameter allows setting of the profile
+description tag. The parameter should be a string that describes the
+profile. On many systems, it will be this string that will be used to
+identify the profile from a list of possible profiles. With most
+command line shells, it will be
+necessary to enclose the parameter with double quotes, so that spaces
+and other special characters are included in the parameter, and not
+mistaken for the start of another flag, or as a final command line
+parameter. Many programs that deal with ICC profiles use the
+description tag to identify a profile, rather than the profile
+filename, so using a descriptive string is important in being able to
+find a profile. By default, the base name of the resulting profile will
+be used as the description.<br>
+<br>
+<a name="C"></a>The <b>-C</b> parameter allows setting of the profile
+copyright tag. The parameter should be a string that describes the
+copyright (if any) claimed on the profile being generated.. With most
+command line shells, it will be necessary to enclose the parameter
+with double quotes, so that spaces and other special characters are
+included in the parameter, and not mistaken for the start of another
+flag, or as a final command line parameters. By default a generic
+copyright string will be generated for the profile.<br>
+<br>
 <br>
 <b><a name="V"></a> -V</b> Verifies an existing profile. This is really
 a debugging option. It is only useful if all the linking parameters are
@@ -172,7 +367,12 @@ This sets the basic quality of the resulting link, by choosing the
 resolution of various tables in the resulting profile, as well as the
 resolution of other temporary tables used in creating the link. The <b>-r</b>
 flag allows overriding the resolution set by the <b>-q</b> option, for
-the ICC profile CLUT multi-dimensional interpolation table. <br>
+the ICC profile CLUT multi-dimensional interpolation table. It is
+highly recommended that <span style="font-weight: bold;">-qm</span> be
+used as a starting point, and other settings only tried after this has
+been evaluated. <span style="font-weight: bold;">-qu</span> should
+almost never be used, except to prove that it should almost never be
+used.<br>
 <br>
 Normally the per channel device curves in the input and output profiles
 are preserved in the resulting device link profile, but the <b>-n</b>
@@ -269,17 +469,12 @@ intents.<br>
 <a name="i"></a> &nbsp;<b>-i</b> <i>intent</i><br>
 <br>
 Select the gamut mapping intent. In gamut mapping mode there is
-only a single overall intent. As well as a number selection, the
-letters <span style="font-weight: bold;">a</span>, <span
- style="font-weight: bold;">r</span>, <span style="font-weight: bold;">p</span>
-and <span style="font-weight: bold;">s</span> can be used as aliases
-for the intents <span style="font-weight: bold;">absolute colorimetric</span>,
-<span style="font-weight: bold;">relative colorimetric</span>, <span
- style="font-weight: bold;">perceptual</span> and <span
- style="font-weight: bold;">saturation</span>.<br>
+only a single overall intent. The intent is selected using the 1 two
+letter option parameter, the standard ICC profile being a subset of the
+available selections.<br>
 <br>
-<a name="i0"></a><a name="ia"></a>The No.<b>0</b> (or <span
- style="font-weight: bold;">a</span>) intent, Absolute Colorimetric is
+<a name="ia"></a>The No.<b>&nbsp;</b> <span style="font-weight: bold;">a</span>
+intent, Absolute Colorimetric is
 intended to reproduce
 colors exactly, irrespective of the white point of the each medium.
 This
@@ -290,9 +485,24 @@ individual viewing conditions are active), and colors are mapped
 directly from
 input to output, clipping any out of gamut colors to the closest match.
 This is equivalent to the ICC <span style="font-weight: bold;">Absolute
-Colorimetric</span> intent.<br>
+Colorimetric</span> intent, and is often used for proofing purposes. <br>
 <br>
-<a name="i1"></a>The No. <b>1</b> intent, Absolute Appearance, simply
+<a name="iaw"></a>The <span style="font-weight: bold;">aw</span><b
+ style="font-weight: bold;"></b> intent, Absolute Colorimetric with
+scaling to fit white point, is very similar to the <span
+ style="font-weight: bold;">a</span> intent, except that it will scale
+the source colorspace down in order to make sure that the source white
+point isn't clipped by the gamut of the destination. This might be used
+in some print proofing situations where the source white is lightly
+lighter than the destination white (as an alternative to using the <a
+ href="#w">-w</a> flag), or it may be useful in some soft proofing
+situations where the differences in white point of the display
+destination would cause clipping of the source white point.&nbsp; When
+the <a href="#v">-v</a> flag is on, the scaling factor used will be
+displayed during execution.<br>
+<br>
+<a name="iaa"></a>The <span style="font-weight: bold;">aa</span>
+intent, Absolute Appearance, simply
 maps the Jab
 colors directly from input to output, clipping any out of gamut colors
 to the closest match. This attempts to match the exact appearance of
@@ -300,8 +510,8 @@ colors as closely as possible, but may not exactly map the white point
 of the source to the destination, depending on how different the
 viewing conditions are.<br>
 <br>
-<a name="i2"></a><a name="ir"></a>The No. <b>2</b> (or <span
- style="font-weight: bold;">r</span>) intent is like Absolute
+<a name="ir"></a>The&nbsp;<span style="font-weight: bold;">r</span>
+intent is like Absolute
 Appearance mode, but maps the
 white point from input to output
 precisely, and otherwise maps the Jab colors directly from input to
@@ -309,36 +519,42 @@ output, clipping any out of gamut colors to the closest match. This is
 equivalent to the ICC <span style="font-weight: bold;">Relative
 Colorimetric</span> intent.<br>
 <br>
-<a name="i3"></a>The No. <b>3</b> intent, Luminance matched
+<a name="ila"></a>The <span style="font-weight: bold;">la</span>
+intent, Luminance matched
 appearance, linearly
 compresses or expands the the luminance axis to match the input to the
 output space, while not otherwise altering the gamut, clipping any out
 of gamut colors to the closest match.<br>
 <br>
-<a name="i4"></a><a name="ip"></a>The No. <b>4</b> (or <span
- style="font-weight: bold;">p</span>) intent, Perceptual, uses "knee"
-type compression to
+<a name="ip"></a>The&nbsp; <span style="font-weight: bold;">p</span>
+intent, Perceptual, uses "knee"
+type 3 Dimensional compression to
 make the input gamut fit within the output gamut. As much as possible,
 clipping is avoided, hues and the overall appearance is maintained.
 This is equivalent to the ICC <span style="font-weight: bold;">Perceptual</span>
 intent.<br>
 <br>
-<a name="i5"></a>The No. <b>5</b> intent, Saturation, uses compression
+<a name="ims"></a>The <span style="font-weight: bold;">ms</span>
+intent, Saturation, uses 3 Dimensional
+compression
 and expansion to
 try and make the input gamut exactly match the output gamut, and also
-favors higher saturation over hue or lightness preservation.<br>
+favours higher saturation over hue or lightness preservation.<br>
 <br>
-<a name="i6"></a><a name="is"></a>The No. <b>6</b> (or <span
- style="font-weight: bold;">s</span>) intent, Enhanced Saturation, uses
+<a name="is"></a>The <span style="font-weight: bold;"></span><span
+ style="font-weight: bold;">s</span> intent, Enhanced Saturation, uses
 the same basic
-gamut mapping as No. 5, Saturation, but increases saturation slightly
+gamut mapping as <span style="font-weight: bold;">ms</span>,
+Saturation, but increases saturation slightly
 in
 highly saturated areas of the gamut. This is equivalent to the ICC <span
  style="font-weight: bold;">Saturation</span> intent.<br>
 <br>
-<a name="i7"></a>The No. <b>7</b> intent, Absolute Appearance (Lab),
+<a name="ial"></a>The <span style="font-weight: bold;">al</span>
+intent, Absolute Appearance (Lab),
 is similar to
-intent 0, but L*a*b* colorspace is used rather than CIECAM02 Jab
+intent <span style="font-weight: bold;">a</span>, but L*a*b*
+colorspace is used rather than CIECAM02 Jab
 appearance space. This often leads to poor reproduction of blue and red
 hues.<br>
 <br>
@@ -370,6 +586,21 @@ used, them the chosen enumerated condition will be used as a base, and
 its parameters will
 then be individually overridden.<br>
 <br>
+<a name="t"></a> The <b>-t</b> <i>tlimit</i> parameter sets the total
+ink limit (TAC, Total Area Coverage) for a CMYK input profile, as a
+total
+percentage from 0% to 400%. This affects the gamut assumed for the
+input profile. By default, a total ink limit will
+be estimated from the output profile tables.<br>
+<br>
+<a name="T"></a> The <b>-T</b> <i>klimit</i> parameter sets the black
+channel ink limit for a CMYK input profile, as a total percentage from
+0%
+to 100%. This affects the gamut assumed for the input profile. By
+default, a black ink limit will
+be estimated from the profile tables.<br>
+<br>
+<br>
 <u> <a name="GG"></a>Inverse outprofile A2B Options:</u><br>
 <br>
 When the <b>-G</b> flag is used, the A2B table is inverted "on the
@@ -381,24 +612,17 @@ such decisions are encoded in the B2A table in the profile, and cannot
 be
 altered during linking).<br>
 <br>
-<a name="k"></a> -<b>k</b> flag sets the amount of Under Color Removal,
-or black generation level when inverting a CMYK output profile. The
-black levels specified by the flag are all in relation to the possible
-black values for each color being looked up (the possible black locus),
-NOT the absolute amount of black that will be used. For instance, at
-the white point, no black will be used in the output, even if the black
-generation specifies a maximum (since the maximum amount of black that
-can be used to print white is actually zero). Similarly, at the black
-point, black may well be used, even if the black generation specifies
-zero black (since a certain amount of black is needed to achieve the
-desired density of color). Possible arguments to the <b>-k</b> option
-are:<br>
+<a name="k"></a> -<b>k</b> parameter sets the target level of black (K)
+when creating a B2A CMYK output tables. This is often called a black
+level, a black inking rule, black generation, or under color
+removal.&nbsp; These set the target black level:<br>
 <br>
 <b> -kz</b> selects minimum black (0.0)<br>
-<b> -kh</b> selects a black locus value of 0.5<br>
+<b> -kh</b> selects a black level value of 0.5<br>
 <b> -kx</b> selects the maximum possible black (1.0)<br>
-<b> -kr</b> selects a linear locus ramp, starting at minimum black for
-highlight, and maximum black for shadow (equivalent to -kp 0 0 1 1 1)<br>
+<b> -kr</b> selects a linear level ramp, starting at minimum black for
+highlight, and maximum black for shadow (equivalent to -kp 0 0 1 1 1).
+This is the default.<br>
 <b>-kt</b>, will preserve the black amount from the input (CMYK)
 profile to the output&nbsp; (CMYK) profile as much as possible. This
 may
@@ -406,6 +630,9 @@ be most useful in creating a CMYK to CMYK conversion between two
 different
 press conditions, while preserving as much as possible the &nbsp;black
 only use for text etc. in anything converted.<br>
+<b>-ke</b>, will preserve the black amount from the output profile B2A
+table (CMYK).<br>
+<br>
 <b><a name="kp"></a>-k p stle stpo enpo enle shape</b>&nbsp; allows an
 arbitrary black locus ramp to be defined, consisting of a starting
 value (stle) for highlights, a breakpoint L value (stpo) where it
@@ -417,14 +644,9 @@ transition starts gradually and and finished more abruptly) using
 values 0.0-1.0, with 0.0 being most concave, or convex (the transition
 starts more abruptly but finishes gradually), using values 1.0-2.0,
 with 2.0 being the most convex.<br>
-<b><a name="kq"></a>-k q stle0 stpo0 enpo0 enle0 shape0 stle2 stpo2
-enpo2 enle2 shape2</b> is a combination of the <b>-kt</b> and <b>-kp</b>
-functionality, with the black being preserved in CMYK to CMYK linking,
-with the output black constrained to be between the first and second
-set of curve parameters.<br>
 <br>
-Typical black locus generation curve with parameters something
-like: -kp .1 .3 .5 .8 1<br>
+Typical black value generation curve with parameters something
+like: -kp 0 .1 .9 1 .5<br>
 <br>
 <tt> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 K &nbsp; |
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;enpo<br>
@@ -447,27 +669,52 @@ enle<br>
 0.0&nbsp;&nbsp;&nbsp; stpo&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Black</tt><br>
-<tt> </tt><br>
-For minimum sensitivity of printed output to the lighting spectrum, it
+Black<br>
+<br>
+</tt>For minimum sensitivity of printed output to the lighting
+spectrum, it
 currently seems best to use the maximum possible black, but other black
 generation levels (ie. 0.3 to 0.5) may well be preferred if one wants
 to
 minimize the noisy appearance of black on an inkjet device, or
-if the banding behavior or other rendering flaws of the printer is to
+if the banding behaviour or other rendering flaws of the printer is to
 be minimized. <br>
-&nbsp;<br>
-A set of values for an inkjet printer might be something like -kp 0.0
-0.2 0.7 0.7 1.0<br>
+<br>
+<b><a name="kq"></a>-k q stle0 stpo0 enpo0 enle0 shape0 stle2 stpo2
+enpo2 enle2 shape2</b> is a combination of the <b>-kt</b> and <b>-kp</b>
+functionality, with the black being preserved in CMYK to CMYK linking,
+with the output black constrained to be between the first and second
+set of curve parameters.<br>
 <br>
 The <a href="xicclu.html">xicclu</a> utility can be used to plot out
 the resulting black level for a given set of parameters, by using the <a
- href="xicclu.html#g">-g</a> flag.<br>
+ href="xicclu.html#g">-g</a> flag of a profile already created from the
+same .ti3 file.<br>
 <br>
+<a name="K"></a> <span style="font-weight: bold;">-K parameters.</span>
+Any of the <span style="font-weight: bold;">-k</span> options above
+can use the <span style="font-weight: bold;">-K</span> version, in
+which rather than a black value target being defined by the inking
+rule, a black <span style="text-decoration: underline;">locus</span>
+target is defined. For each lookup, the minimum possible black level
+and the maximum possible black level is determined, the former
+corresponding to a locus target value of 0, and the latter
+corresponding to a
+locus target value of 1. For instance, at
+the
+white point, no black will be used in the output, even if the black
+locus specifies a maximum (since the maximum amount of black that
+can be used to print white is actually zero). Similarly, at the black
+point, black may well be used, even if the black locus specifies
+zero black (since a certain amount of black is needed to achieve the
+desired density of color). <br>
+<tt> </tt><br>
 <a name="l"></a> The <b>-l</b> <i>tlimit</i> parameter sets the total
 ink limit (TAC, Total Area Coverage) for the CMYK separation, as a
 total
-percentage from 0% to 400%. The limit value should generally be set
+percentage from 0% to 400%. This affects the gamut assumed for the
+output profile, as well as the ink limit in the generated device link.
+The limit value should generally be set
 a little below the value used in the test chart generation, to avoid
 the
 very edges of the gamut. If the test chart ink limit has been chosen to
@@ -478,16 +725,20 @@ restrict the color gamut noticeably, as fully saturated secondary
 colors
 will not be reproduced. Values are between 220% and 300% for typical
 printing
-devices.<br>
+devices. By default, a total ink limit will
+be estimated from the output profile tables.<br>
 <br>
 <a name="L"></a> The <b>-L</b> <i>klimit</i> parameter sets the black
 channel ink limit for the CMYK separation, as a total percentage from
 0%
-to 100%. For printing press like devices, this can be used to prevent
+to 100%. This affects the gamut assumed for the output profile, as well
+as the ink limit in the generated device link. For printing press like
+devices, this can be used to prevent
 the
 black channel screening pattern "filling in". Typical values might be
 from
-95% to 99%. <br>
+95% to 99%. By default, a black ink limit will
+be estimated from the profile tables.<br>
 <br>
 <a name="p1"></a>The <i><b>inprofile</b></i> argument specifies the
 input profile.

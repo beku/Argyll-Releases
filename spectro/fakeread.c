@@ -5,11 +5,11 @@
  * Author: Graeme W. Gill
  * Date:   17/2/2002
  *
- * Copyright 2002 - 2005 Graeme W. Gill
+ * Copyright 2002 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -37,34 +37,38 @@ void
 usage(char *mes) {
 	fprintf(stderr,"Fake test chart reader - lookup values in ICC/MPP profile, Version %s\n",
 	               ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (mes != NULL)
 		fprintf(stderr,"Error '%s'\n",mes);
-	fprintf(stderr,"usage: printread [-v] [-s] [separation.icm] profile.[icc|mpp|ti3] outfile\n");
+	fprintf(stderr,"usage: fakeread [-v] [-s] [separation.icm] profile.[icc|mpp|ti3] outfile\n");
 	fprintf(stderr," -v                Verbose mode\n");
 	fprintf(stderr," -s                Lookup MPP spectral values\n");
 	fprintf(stderr," -p                Use separation profile\n");
 	fprintf(stderr," -l                Output Lab rather than XYZ\n");
 	fprintf(stderr," -0 pow            Apply power to input device chanel 0-9 (after sep.)\n");
-	fprintf(stderr," -r level          Add total of <level> random to input device values 0.0 - 1.0 (after sep.)\n");
-	fprintf(stderr," -R level          Add total of <level> random to output PCS values 0.0 - 100.0\n");
+	fprintf(stderr," -r level          Add average random deviation of <level>%% to input device values (after sep.)\n");
+	fprintf(stderr," -R level          Add average random deviation of <level>%% to output PCS values\n");
+	fprintf(stderr," -u                Make random deviations have uniform distributions rather than normal\n");
+	fprintf(stderr," -b L,a,b          Scale black point to target Lab value\n");
 	fprintf(stderr," [separation.icm]  Device link separation profile\n");
 	fprintf(stderr," profile.[icc|mpp|ti3] ICC, MPP profile or TI3 to use\n");
 	fprintf(stderr," outfile           Base name for input[ti1]/output[ti3] file\n");
 	exit(1);
 	}
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
-	int i,j;
+	int j;
 	int fa,nfa;							/* current argument we're looking at */
 	int verb = 0;		/* Verbose flag */
 	int dosep = 0;		/* Use separation before profile */
 	int dolab = 0;		/* Output Lab rather than XYZ */
 	int gfudge = 0;		/* Do grey fudge, 1 = W->RGB, 2 = K->xxxK */
 	double chpow[10] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
-	double rdlevel = 0.0;	/* Random device level */
+	double rdlevel = 0.0;	/* Random device average deviation level */
 	double rplevel = 0.0;	/* Random PCS level */
+	int unidist = 0;		/* Use uniform distribution of errors */
+	double tbp[3] = { -1.0, 0.0, 0.0 };	/* Target black point */
 	static char sepname[500] = { 0 };	/* ICC separation profile */
 	static char profname[500] = { 0 };	/* ICC or MPP Profile name */
 	static char inname[500] = { 0 };	/* Input cgats file base name */
@@ -75,7 +79,6 @@ main(int argc, char *argv[])
 	int nchan = 0;		/* Test chart number of device chanels */
 	int npat;			/* Number of patches */
 	int si;				/* Sample id index */
-	int li;				/* Location id index */
 	int ti;				/* Temp index */
 	int fi;				/* Colorspace index */
 
@@ -85,7 +88,9 @@ main(int argc, char *argv[])
 	icmLuBase *sep_luo = NULL;	/* Conversion object */
 	icColorSpaceSignature sep_ins, sep_outs;	/* Type of input and output spaces */
 	int sep_inn;				/* Number of input channels to separation */
-	int sep_nmask;				/* Colorant mask for separation input */
+	inkmask sep_nmask = 0;		/* Colorant mask for separation input */
+	double wp[3], bp[3];		/* ICC profile Lab white and black points */
+	double bpt[3][3];			/* Black point transform matrix (Lab->Lab) */
 
 	/* ICC profile based */
 	icmFile *icc_fp = NULL;	/* Color profile file */
@@ -102,11 +107,11 @@ main(int argc, char *argv[])
 
 	/* TI3 based fake read */
 	cgats *ti3 = NULL;	/* input cgats structure */
-	int ti3_npat;		/* Number of patches in reference file */
+	int ti3_npat = 0;	/* Number of patches in reference file */
 	int ti3_chix[ICX_MXINKS];	/* Device chanel indexes */
 	int ti3_pcsix[3];	/* Device chanel indexes */
 	int ti3_spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
-	int ti3_isLab;		/* Flag indicating PCS for TI3 file */
+	int ti3_isLab = 0;	/* Flag indicating PCS for TI3 file */
 
 	int rv = 0;
 	int inn, outn;		/* Number of channels for conversion input, output */
@@ -161,6 +166,10 @@ main(int argc, char *argv[])
 			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L')
 				dolab = 1;
 
+			/* Uniform distrivuted errors */
+			else if (argv[fa][1] == 'u' || argv[fa][1] == 'U')
+				unidist = 1;
+
 			/* Random addition to device levels */
 			else if (argv[fa][1] == 'r') {
 				fa = nfa;
@@ -177,12 +186,22 @@ main(int argc, char *argv[])
 				rand32(time(NULL));		/* Init seed randomly */
 			}
 
-
 			/* Power applied to device channels */
 			else if (argv[fa][1] >= '0' && argv[fa][1] <= '9') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -[0-9]");
 				chpow[argv[fa][1]-'0'] = atof(na);
+			}
+
+			/* Black point scale */
+			else if (argv[fa][1] == 'b' || argv[fa][1] == 'B') {
+				if (na == NULL) usage("Expect argument to -b");
+				fa = nfa;
+				if (sscanf(na, " %lf , %lf , %lf ",&tbp[0], &tbp[1], &tbp[2]) != 3)
+					usage("Couldn't parse argument to -b");
+				if (tbp[0] < 0.0 || tbp[0] > 100.0) usage("-b L* value out of range");
+				if (tbp[1] < -128.0 || tbp[1] > 128.0) usage("-b a* value out of range");
+				if (tbp[2] < -128.0 || tbp[2] > 128.0) usage("-b b* value out of range");
 			}
 
 			else
@@ -254,6 +273,34 @@ main(int argc, char *argv[])
 		if (dospec)
 			error("Can't lookup spectral values for ICC profile");
 
+		if (tbp[0] >= 0.0) {
+			icmXYZNumber wht, blk;
+			double ss[3], tt[3];
+	
+			icc_luo->wh_bk_points(icc_luo, &wht, &blk);
+			icmXYZ2Ary(wp, wht);
+			icmXYZ2Ary(bp, blk);
+			if (dolab) {
+				icmXYZ2Lab(&icmD50, wp, wp);
+				icmXYZ2Lab(&icmD50, bp, bp);
+			} else {
+				icmLab2XYZ(&icmD50, tbp, tbp);
+			}
+
+			/* Create scaling matrix */
+			for (j = 0; j < 3; j++) {
+				tt[j] = tbp[j] - wp[j];
+				ss[j] = bp[j] - wp[j];
+			}
+			icmRotMat(bpt, ss, tt);
+
+			if (verb) {
+				printf("White point = %f %f %f (%s)\n",wp[0],wp[1],wp[2], dolab ? "Lab" : "XYZ");
+				printf("Black point = %f %f %f (%s)\n",bp[0],bp[1],bp[2], dolab ? "Lab" : "XYZ");
+				printf("Target Black point = %f %f %f (%s)\n",tbp[0],tbp[1],tbp[2], dolab ? "Lab" : "XYZ");
+			}
+		}
+
 	} else {	/* Not a valid ICC */
 		/* Close out the ICC profile */
 		icc_icco->del(icc_icco);
@@ -305,7 +352,7 @@ main(int argc, char *argv[])
 		if (ti3->read_name(ti3, profname))
 			error("CGATS file read error : %s",ti3->err);
 	
-		if (ti3->t[0].tt != tt_other || ti3->t[0].oi != 0)
+		if (ti3->ntables == 0 || ti3->t[0].tt != tt_other || ti3->t[0].oi != 0)
 			error ("Profile file '%s' isn't a CTI3 format file",profname);
 		if (ti3->ntables != 1)
 			error ("Input file '%s' doesn't contain one table",profname);
@@ -405,6 +452,10 @@ main(int argc, char *argv[])
 			error("Can't lookup spectral values for non-spectral TI3 file");
 	}
 
+	/* Some sanity checking */
+	if (tbp[0] >= 0.0 && icc_luo == NULL)
+		error("Black scaling only works with ICC profile");
+
 	/* Deal with input CGATS files */
 	icg = new_cgats();			/* Create a CGATS structure */
 	icg->add_other(icg, "CTI1"); 	/* our special input type is Calibration Target Information 1 */
@@ -412,10 +463,10 @@ main(int argc, char *argv[])
 	if (icg->read_name(icg, inname))
 		error("CGATS file read error : %s",icg->err);
 
-	if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
+	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0)
 		error ("Input file isn't a CTI1 format file");
-	if (icg->ntables != 1 && icg->ntables != 2)
-		error ("Input file doesn't contain one or two tables");
+	if (icg->ntables != 1 && icg->ntables != 2 && icg->ntables != 3)
+		error ("Input file doesn't contain one, two or three tables");
 
 	if ((npat = icg->t[0].nsets) <= 0)
 		error ("No sets of data");
@@ -671,10 +722,15 @@ main(int argc, char *argv[])
 					error ("%d, %s",icc_icco->errc,icc_icco->err);
 
 			/* Add randomness and non-linearity */
+			/* Note dev/sep is 0-1.0 at this stage */
 			for (j = 0; j < inn; j++) {
 				double dv = sep[j];
 				if (rdlevel > 0.0) {
-					double rr = d_rand(-0.5 * rdlevel, 0.5 * rdlevel);
+					double rr;
+					if (unidist)
+						rr = 0.01 * d_rand(-2.0 * rdlevel, 2.0 * rdlevel);
+					else
+						rr = 0.01 * 1.773 * rdlevel * norm_rand();
 					dv += rr;
 					if (dv < 0.0)
 						dv = 0.0;
@@ -691,6 +747,16 @@ main(int argc, char *argv[])
 			if (icc_luo != NULL) {
 				if (icc_luo->lookup(icc_luo, PCS, sep) > 1)
 					error ("%d, %s",icc_icco->errc,icc_icco->err);
+
+				if (tbp[0] >= 0) {	/* Doing black point scaling */
+
+					for (j = 0; j < 3; j++)
+						PCS[j] -= wp[j];
+					icmMulBy3x3(PCS, bpt, PCS);
+					for (j = 0; j < 3; j++)
+						PCS[j] += wp[j];
+				}
+	
 			} else if (mlu != NULL) {
 				mlu->lookup(mlu, PCS, sep);
 				if (dospec && spec_n > 0) {
@@ -752,12 +818,19 @@ main(int argc, char *argv[])
 			}
 
 			/* Add randomness */
+			/* Note PCS is 0..100 XYZ or Lab at this point */
 			if (rplevel > 0.0) {
 				for (j = 0; j < 3; j++) {
 					double dv = PCS[j];
-					double rr = d_rand(-0.5 * rplevel, 0.5 * rplevel);
+					double rr;
+					if (unidist)
+						rr = d_rand(-2.0 * rplevel, 2.0 * rplevel);
+					else
+						rr = 1.773 * rplevel * norm_rand();
 					dv += rr;
-					if (dv < 0.0)
+
+					/* Don't let L*, X, Y or Z go negative */
+					if ((!dolab || j == 0) && dv < 0.0)
 						dv = 0.0;
 					PCS[j] = dv;
 				}

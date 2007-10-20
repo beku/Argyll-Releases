@@ -5,9 +5,13 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
 
 /* 1 dimentional root finding code */
 
@@ -32,5 +36,9 @@ double x2,								/* (Min, Max) */
 double tol,								/* Desired tollerance */
 double (*func)(void *fdata, double tp),	/* function to evaluate */
 void *fdata);							/* Opaque data pointer */
+
+#ifdef __cplusplus
+	}
+#endif
 
 #endif /* ROOT_H */

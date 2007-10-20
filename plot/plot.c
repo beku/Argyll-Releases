@@ -3,8 +3,8 @@
  * Copyright 1998 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* This is a simple 2d graph plotter that runs on MSWindows/OSX/X11 */
@@ -14,6 +14,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
+#ifndef NT
+#include <unistd.h>
+#endif
 #include <math.h>
 #include "plot.h"
 
@@ -21,6 +25,8 @@
 //#define STANDALONE_TEST	/* Defined by build script */
 
 #define NTICK 10
+#define LTHICK 1.2			/* Plot line thickness */
+#define ILTHICK ((int)(LTHICK+0.5))		/* Integer line thickness */
 #undef CROSSES		/* Mark input points with crosses */
 
 #define DEFWWIDTH  500
@@ -35,7 +41,7 @@ double nicenum(double x, int round);
 struct _plot_info {
 	void *cx;				/* Other Context */
 
-	int dowait;				/* Wait for user key */
+	int dowait;				/* Wait for user key if > 0, wait for n secs if < 0 */
 
 	/* Plot point information */
 	double mnx, mxx, mny, mxy;		/* Extrema of values to be plotted */
@@ -55,14 +61,14 @@ struct _plot_info {
 /* Global to transfer info to window callback */
 static plot_info pd;
 
-static int do_plot2(double xmin, double xmax, double ymin, double ymax,
+static int do_plot2(double xmin, double xmax, double ymin, double ymax, double ratio,
                     double *x1, double *y1, double *x2, double *y2,
                     double *x3, double *y3, double *y4, double *y5, double *y6,
                     int n, int m, int dowait);
 
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
-/* Public routines /
+/* Public routines */
 /* Plot up to 3 graphs. Wait for key */
 /* return 0 on success, -1 on error */
 /* If n is -ve, reverse the X axis */
@@ -109,10 +115,80 @@ int n) {
 	if ((ymax - ymin) == 0.0)
 		ymax += 0.5, ymin -= 0.5;
 
-	return do_plot2(xmin, xmax, ymin, ymax, x, y1, NULL, y2, NULL, y3, NULL, NULL, NULL,  n, 0, 1); 
+	return do_plot2(xmin, xmax, ymin, ymax, 1.0, x, y1, NULL, y2, NULL, y3, NULL, NULL, NULL,  n, 0, 1); 
 }
 
-/* Public routines /
+/* Plot up to 3 graphs. */
+/* if dowait > 0, wait for user key */
+/* if dowait < 0, wait for no seconds */
+/* If xmax > xmin, use as x scale, else auto. */
+/* If ymax > ymin, use as y scale, else auto. */
+/* ratio is window X / Y */
+/* return 0 on success, -1 on error */
+/* If n is -ve, reverse the X axis */
+int
+do_plot_x(
+double *x,
+double *y1,
+double *y2,
+double *y3,
+int n,
+int dowait,
+double pxmin,
+double pxmax,
+double pymin,
+double pymax,
+double ratio
+) {
+	int i;
+	double xmin, xmax, ymin, ymax;
+
+	/* Determine min and max dimensions of plot */
+	xmin = ymin = 1e6;
+	xmax = ymax = -1e6;
+
+	for (i = 0; i < n; i++) {
+		if (xmin > x[i])
+			xmin = x[i];
+		if (xmax < x[i])
+			xmax = x[i];
+		if (ymin > y1[i])
+			ymin = y1[i];
+		if (ymax < y1[i])
+			ymax = y1[i];
+		if (y2 != NULL) {
+			if (ymin > y2[i])
+				ymin = y2[i];
+			if (ymax < y2[i])
+				ymax = y2[i];
+		}
+		if (y3 != NULL) {
+			if (ymin > y3[i])
+				ymin = y3[i];
+			if (ymax < y3[i])
+				ymax = y3[i];
+		}
+	}
+
+	/* Work out scale factors */
+	if ((xmax - xmin) == 0.0)
+		xmax += 0.5, xmin -= 0.5;
+	if ((ymax - ymin) == 0.0)
+		ymax += 0.5, ymin -= 0.5;
+
+	if (pxmax > pxmin) {
+		xmax = pxmax;
+		xmin = pxmin;
+	}
+	if (pymax > pymin) {
+		ymax = pymax;
+		ymin = pymin;
+	}
+
+	return do_plot2(xmin, xmax, ymin, ymax, ratio, x, y1, NULL, y2, NULL, y3, NULL, NULL, NULL,  n, 0, dowait); 
+}
+
+/* Public routines */
 /* Plot up to 6 graphs. Wait for a key */
 /* return 0 on success, -1 on error */
 /* If n is -ve, reverse the X axis */
@@ -139,10 +215,12 @@ int n) {	/* Number of values */
 			xmin = x[i];
 		if (xmax < x[i])
 			xmax = x[i];
-		if (ymin > y1[i])
-			ymin = y1[i];
-		if (ymax < y1[i])
-			ymax = y1[i];
+		if (y1 != NULL) {
+			if (ymin > y1[i])
+				ymin = y1[i];
+			if (ymax < y1[i])
+				ymax = y1[i];
+		}
 		if (y2 != NULL) {
 			if (ymin > y2[i])
 				ymin = y2[i];
@@ -181,7 +259,7 @@ int n) {	/* Number of values */
 	if ((ymax - ymin) == 0.0)
 		ymax += 0.5, ymin -= 0.5;
 
-	return do_plot2(xmin, xmax, ymin, ymax, x, y1, NULL, y2, NULL, y3, y4, y5, y6, n, 0, 1); 
+	return do_plot2(xmin, xmax, ymin, ymax, 1.0, x, y1, NULL, y2, NULL, y3, y4, y5, y6, n, 0, 1); 
 }
 
 /* Plot a bunch of vectors */
@@ -201,7 +279,7 @@ double *x3,		/* extra point */
 double *y3,
 int m			/* Number of points */
 ) {
-	return do_plot2(xmin, xmax, ymin, ymax, x1, y1, x2, y2, x3, y3, NULL, NULL, NULL, n, m, dowait); 
+	return do_plot2(xmin, xmax, ymin, ymax, 1.0, x1, y1, x2, y2, x3, y3, NULL, NULL, NULL, n, m, dowait); 
 }
 
 /* ********************************** NT version ********************** */
@@ -215,7 +293,7 @@ int m			/* Number of points */
 # define debugf(xx)
 #endif
 
-LRESULT CALLBACK MainWndProc (HWND, UINT, WPARAM, LPARAM);
+static LRESULT CALLBACK MainWndProc (HWND, UINT, WPARAM, LPARAM);
 
 /* Combined implementation */
 /* return 0 on success, -1 on error */
@@ -225,6 +303,7 @@ double xmin,	/* Bounding box */
 double xmax,
 double ymin,
 double ymax,
+double ratio,	/* Aspect ratio of window, X/Y */
 double *x1,		/* Graph or vector data */
 double *y1,
 double *x2,
@@ -240,9 +319,8 @@ int n,			/* Number of points/vectors. -ve for reversed X axis */
 int m,			/* Number of extra points */
 int dowait		/* Wait for a user key */
 ) {
-	pd.dowait = dowait;
+	pd.dowait = 10 * dowait;
 	{
-		int i;
 		double xr,yr;
 
 		pd.mnx = xmin;
@@ -308,7 +386,7 @@ int dowait		/* Wait for a user key */
 			wc.cbWndExtra    = 0;			// No per-window extra data.
 			wc.hInstance     = NULL;		// Application that owns the class.
 			wc.hIcon         = LoadIcon(NULL, IDI_APPLICATION);
-			wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
+			wc.hCursor       = LoadCursor(NULL, IDC_CROSS);
 			wc.hbrBackground = GetStockObject(WHITE_BRUSH);
 			wc.lpszMenuName  = NULL;
 			wc.lpszClassName = AppName;
@@ -326,7 +404,7 @@ int dowait		/* Wait for a user key */
 				WS_OVERLAPPEDWINDOW,
 				CW_USEDEFAULT,
 				CW_USEDEFAULT,
-				DEFWWIDTH,
+				(int)(DEFWWIDTH * ratio + 0.5),
 				DEFWHEIGHT,
 				NULL,
 				NULL,
@@ -339,23 +417,45 @@ int dowait		/* Wait for a user key */
 			}
 			
 			ShowWindow(hwnd, SW_SHOW);
+			SetForegroundWindow(hwnd);
 
 			if (!UpdateWindow(hwnd)) {
 				debugf(("UpdateWindow failed, lasterr = %d\n",GetLastError()));
 				return -1;
 			}
-		} else {
-		/* Force a repaint with the new data */
+		} else {	/* Re-use the existing window */
+
+			/* Force a repaint with the new data */
 			if (!InvalidateRgn(hwnd,NULL,TRUE)) {
 				debugf(("InvalidateRgn failed, lasterr = %d\n",GetLastError()));
 				return -1;
 			}
 		}
 
+#ifdef NEVER
 		while (GetMessage(&msg, NULL, 0, 0)) {
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
+#else
+		for (;;) {
+			if (PeekMessage(&msg, hwnd, 0, 0, PM_REMOVE)) {
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+				if (msg.message == WM_QUIT) {
+					break;
+				}
+			}
+			/* Can check for timeout here */
+			Sleep(100);
+			if (pd.dowait < 0) {		/* Don't wait */
+				pd.dowait++;
+				if (++pd.dowait >= 0)
+					PostQuitMessage(0);
+//printf("~1 dowait = %d\n",pd.dowait++);
+			}
+		}
+#endif
 
 
 #ifdef NEVER
@@ -377,7 +477,7 @@ int dowait		/* Wait for a user key */
 
 void DoPlot(HDC hdc, plot_info *pd);
 
-LRESULT CALLBACK MainWndProc(
+static LRESULT CALLBACK MainWndProc(
 	HWND hwnd,
 	UINT message,
 	WPARAM wParam,
@@ -387,6 +487,7 @@ LRESULT CALLBACK MainWndProc(
 	PAINTSTRUCT ps;
 	RECT rect;
 
+	// Could use Set/GetWindowLong() to pass window class info instead of global pd (beware NULL)
 	switch(message) {
 		case WM_PAINT:
 			hdc = BeginPaint(hwnd, &ps);
@@ -404,10 +505,8 @@ LRESULT CALLBACK MainWndProc(
 
 			EndPaint(hwnd, &ps);
 
-			if (!pd.dowait) {		/* Don't wait */
-				PostQuitMessage(0);
-				return 0;
-			}
+#ifdef NEVER
+#endif
 			return 0;
 
 		case WM_CHAR:
@@ -524,21 +623,21 @@ plot_info *pdp
 			{ 200, 200,   0},	/* Yellow */
 			{ 220,   0, 255}	/* Purple */
 		};
-		double *yps[6] = {
-			pdp->y1,
-			pdp->y2,
-			pdp->y3,
-			pdp->y4,
-			pdp->y5,
-			pdp->y6,
-		};
+		double *yps[6];
+
+		yps[0] = pdp->y1;
+		yps[1] = pdp->y2;
+		yps[2] = pdp->y3;
+		yps[3] = pdp->y4;
+		yps[4] = pdp->y5;
+		yps[5] = pdp->y6;
 		for (j = 0; j < 6; j++) {
 			double *yp = yps[j];
 		
 			if (yp == NULL)
 				continue;
 
-			pen = CreatePen(PS_SOLID,0,RGB(gcolors[j][0],gcolors[j][1],gcolors[j][2]));
+			pen = CreatePen(PS_SOLID,ILTHICK,RGB(gcolors[j][0],gcolors[j][1],gcolors[j][2]));
 			SelectObject(hdc,pen);
 
 			lx = (int)((pdp->x1[0] - pdp->mnx) * pdp->scx + 0.5);
@@ -565,7 +664,7 @@ plot_info *pdp
 
 	} else {	/* Vectors */
 
-		pen = CreatePen(PS_SOLID,0,RGB(0,0,0));
+		pen = CreatePen(PS_SOLID,ILTHICK,RGB(0,0,0));
 		SelectObject(hdc,pen);
 
 		for (i = 0; i < pdp->n; i++) {
@@ -588,7 +687,7 @@ plot_info *pdp
 		DeleteObject(pen);
 
 		if (pdp->x3 != NULL) {		/* Extra points */
-			pen = CreatePen(PS_SOLID,0,RGB(210,150,0));
+			pen = CreatePen(PS_SOLID,ILTHICK,RGB(210,150,0));
 			SelectObject(hdc,pen);
 	
 			for (i = 0; i < pdp->m; i++) {
@@ -632,6 +731,7 @@ double xmin,	/* Bounding box */
 double xmax,
 double ymin,
 double ymax,
+double ratio,	/* Aspect ratio of window, X/Y */
 double *x1,		/* Graph or vector data */
 double *y1,
 double *x2,	
@@ -648,7 +748,6 @@ int m,			/* Number of extra points */
 int dowait		/* Wait for a user key */
 ) {
 	{
-		int i;
 		double xr,yr;
 
 		pd.dowait = dowait;
@@ -719,7 +818,10 @@ int dowait		/* Wait for a user key */
 			attr |= kWindowStandardHandlerAttribute;/* This window has the standard Carbon Handler */
 			attr |= kWindowStandardDocumentAttributes;	/* The minimum set of window attributes */
 
-		    SetRect(&wRect,100,100,100+DEFWWIDTH,100+DEFWHEIGHT); /* left, top, right, bottom */
+	    	wRect.left = 100;
+			wRect.top = 100;
+			wRect.right = (int)(100+DEFWWIDTH*ratio+0.5);
+			wRect.bottom = 100+DEFWHEIGHT;
 
 			/* Create invisible new window of given class, attributes and size */
 		    stat = CreateNewWindow(wclass, attr, &wRect, &myWindow);
@@ -762,7 +864,6 @@ int dowait		/* Wait for a user key */
 			}
 
 			/* Activate the window */
-			InitCursor();			/* Set the standard cursor */
 			ShowWindow(myWindow);	/* Makes visible and triggers update event */
 
 		} else {
@@ -796,7 +897,7 @@ void* userData
 			switch (GetEventKind(theEvent)) {
 				case kEventWindowClose:
 					debugf(("Event: Close Window, exiting event loop\n"));
-					pdp->cx = NULL;			/* Mark the window closed */
+					/* pdp->cx = NULL; */			/* Mark the window closed */
 					QuitApplicationEventLoop();
 					result = noErr;
 					break;
@@ -812,11 +913,12 @@ void* userData
 					break;
 				}
 				case kEventWindowDrawContent: {
-					OSStatus stat;
 					DoPlot(myWindow, pdp);
 					result = noErr;
-					if (!pdp->dowait) { 		/* Don't wait */
+					if (pdp->dowait <= 0) { 		/* Don't wait */
 						debugf(("Exiting event loop after drawing contents\n"));
+						if (pdp->dowait < 0)
+							sleep(-pdp->dowait);
 						QuitApplicationEventLoop();
 					}
 					break;
@@ -1085,7 +1187,7 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 	}
 	
 	/* Plot the axis lines */
-	CGContextSetLineWidth(mygc, 1.2);
+	CGContextSetLineWidth(mygc, 1.0);
 	CGContextSetRGBStrokeColor(mygc, 0.6, 0.6, 0.6, 1.0);	/* Grey */
 	CGContextSetLineDash(mygc, 0.0, dash_list, 2);		/* Set dashed lines for axes */
 
@@ -1101,7 +1203,8 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 	/* Plot vertical axis */
 	loose_label(mygc, pdp, pdp->mny, pdp->mxy, ytick);
 
-	/* Reset dashed lines */
+	/* Set to non-dashed line */
+	CGContextSetLineWidth(mygc, LTHICK);
 	CGContextSetLineDash(mygc, 0.0, NULL, 0);
 
 	if (pdp->graph) {		/* Up to 6 graphs */
@@ -1210,6 +1313,7 @@ double xmin,	/* Bounding box */
 double xmax,
 double ymin,
 double ymax,
+double ratio,	/* Aspect ratio of window, X/Y */
 double *x1,		/* Graph or vector data */
 double *y1,
 double *x2,	
@@ -1226,7 +1330,6 @@ int m,			/* Number of extra points */
 int dowait		/* Wait for a user key */
 ) {
 		{
-		int i;
 		double xr,yr;
 
 		pd.dowait = dowait;
@@ -1287,10 +1390,6 @@ int dowait		/* Wait for a user key */
 		int myscreen;
 		unsigned long myforeground,mybackground;
 		int done;
-		XImage *myimage;
-		Region expregion=0;		/* Expose region */
-		XRectangle exprect;		/* Expose rectangle */
-		Colormap mycmap;		/* Color map. May be default or private */
 	
 		/* open the display */
 		mydisplay = XOpenDisplay("");
@@ -1302,7 +1401,7 @@ int dowait		/* Wait for a user key */
 	
 		myhint.x = 100;
 		myhint.y = 100;
-		myhint.width = DEFWWIDTH;
+		myhint.width = (int)(DEFWWIDTH * ratio + 0.5);
 		myhint.height = DEFWHEIGHT;
 		myhint.flags = PPosition | USSize;
 	
@@ -1345,7 +1444,9 @@ int dowait		/* Wait for a user key */
   
 						DoPlot(mydisplay,mywindow, mygc, &pd);
 
-						if (!pd.dowait) {		/* Don't wait */
+						if (pd.dowait <= 0) {		/* Don't wait */
+							if (pd.dowait < 0)
+								sleep(-pd.dowait);
 							debugf(("Not waiting, so set done=1\n"));
 							done = 1;
 						}
@@ -1492,7 +1593,7 @@ plot_info *pdp
 			col.blue  = gcolors[j][2] * 256;
 			XAllocColor(mydisplay, mycmap, &col);
 			XSetForeground(mydisplay,mygc, col.pixel);
-			XSetLineAttributes(mydisplay, mygc, 0, LineSolid, CapButt, JoinBevel);
+			XSetLineAttributes(mydisplay, mygc, ILTHICK, LineSolid, CapButt, JoinBevel);
 
 			lx = (int)((pdp->x1[0] - pdp->mnx) * pdp->scx + 0.5);
 			ly = (int)((     yp[0] - pdp->mny) * pdp->scy + 0.5);
@@ -1518,7 +1619,7 @@ plot_info *pdp
 		col.red = col.green = col.blue = 0 * 256;
 		XAllocColor(mydisplay, mycmap, &col);
 		XSetForeground(mydisplay,mygc, col.pixel);
-		XSetLineAttributes(mydisplay, mygc, 0, LineSolid, CapButt, JoinBevel);
+		XSetLineAttributes(mydisplay, mygc, ILTHICK, LineSolid, CapButt, JoinBevel);
 
 		for (i = 0; i < pdp->n; i++) {
 			int cx,cy;
@@ -1539,7 +1640,7 @@ plot_info *pdp
 			col.red = 210 * 256; col.green = 150 * 256; col.blue = 0 * 256;
 			XAllocColor(mydisplay, mycmap, &col);
 			XSetForeground(mydisplay,mygc, col.pixel);
-			XSetLineAttributes(mydisplay, mygc, 0, LineSolid, CapButt, JoinBevel);
+			XSetLineAttributes(mydisplay, mygc, ILTHICK, LineSolid, CapButt, JoinBevel);
 	
 			for (i = 0; i < pdp->m; i++) {
 				lx = (int)((pdp->x3[i] - pdp->mnx) * pdp->scx + 0.5);

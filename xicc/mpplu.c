@@ -8,8 +8,8 @@
  *
  * Copyright 2002, 2003 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  */
 
@@ -37,7 +37,7 @@ void usage(void) {
 	fprintf(stderr," -i illum   Choose illuminant for print/transparency spectral data:\n");
 	fprintf(stderr,"            A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ  Choose CIE Observer for spectral data:\n");
-	fprintf(stderr,"            1931_2, 1964_10, S&B 1955_2, J&V 1978_2 (def.), shaw\n");
+	fprintf(stderr,"            1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -u         Use Fluorescent Whitening Agent compensation\n");
 	fprintf(stderr," -g         Create gamut output\n");
 	fprintf(stderr," -w         Create gamut VRML as well\n");
@@ -399,6 +399,7 @@ main(int argc, char *argv[]) {
 		gamut *gam;
 		char *xl, gam_name[100];
 		int doaxes = 1;
+		int docusps = 1;
 
 		if ((gam = mppo->get_gamut(mppo, gamres)) == NULL)
 			error("get_gamut failed\n");
@@ -413,7 +414,7 @@ main(int argc, char *argv[]) {
 	
 		if (dowrl) {
 			strcpy(xl,".wrl");
-			if (gam->write_vrml(gam,gam_name, doaxes))
+			if (gam->write_vrml(gam,gam_name, doaxes, docusps))
 				error ("write vrml failed on '%s'",gam_name);
 		}
 
@@ -601,6 +602,8 @@ main(int argc, char *argv[]) {
 /* -------------------------------------------- */
 /* Code for special gamut surface plot */
 
+#define GAMUT_LCENT 50
+
 /* Create a diagnostic gamut, illustrating */
 /* device space "fold-over" */
 /* (This will be in the current PCS, but assumed to be Lab) */
@@ -609,7 +612,7 @@ mpp *p,				/* This */
 double detail,		/* Gamut resolution detail */
 char *outname		/* Output VRML file */
 ) {
-	int i, j, gx;
+	int i, j;
 	int doaxes = 1;
 	FILE *wrl;
 	struct {
@@ -770,7 +773,6 @@ char *outname		/* Output VRML file */
 	while(!DC_DONE(coa)) {
 		int e, m1, m2;
 		double in[MAX_CHAN];
-		double out[3];
 		double sum;
 
 		/* Scan only device surface */
@@ -817,7 +819,6 @@ char *outname		/* Output VRML file */
 	while(!DC_DONE(coa)) {
 		int e, m1, m2;
 		double in[MAX_CHAN];
-		double out[3];
 		double sum;
 
 		/* Scan only device surface */
@@ -1255,7 +1256,7 @@ printf("~1 start point array done, %d out of %d valid\n",nisay,mxstart);
 	/* Search the start array for closest matching point */
 	{
 		double bde = 1e38;
-		int bix;
+		int bix = 0;
 
 		for (i = 0; i < nisay; i++) {
 			double de;
@@ -1310,7 +1311,7 @@ printf("\n");
 
 #ifdef NEVER
 	rs.pass = 0;
-	if ((tt = powell(inn, out, sr,  0.001, 5000, revoptfunc, (void *)&rs)) < 0.0) {
+	if (powell(&tt, inn, out, sr,  0.001, 5000, revoptfunc, (void *)&rs) != 0) {
 		error("Powell failed inside mpp_rev()");
 	}
 printf("\n\n\n\n\n\n#############################################\n");
@@ -1336,7 +1337,7 @@ printf("#############################################\n\n\n\n\n\n\n\n");
 #endif
 #ifndef NEVER
 	rs.pass = 1;
-	if ((tt = powell(inn, out, sr,  0.00001, 5000, revoptfunc, (void *)&rs)) < 0.0) {
+	if (powell(&tt, inn, out, sr,  0.00001, 5000, revoptfunc, (void *)&rs) != 0) {
 		error("Powell failed inside mpp_rev()");
 	}
 #endif

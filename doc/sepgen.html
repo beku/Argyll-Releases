@@ -12,41 +12,63 @@
 </h2>
 <b>[IN DEVELOPMENT]</b> Create a CMY[K] to device colorant separation.<br>
 <h3>Summary</h3>
-sepgen [-<i>options</i>] infile.[icm|mpp] outprofile.icm<br>
--v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Verbose mode<br>
--3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Create psuedo-CMY input device space,<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Default is
+<small><span style="font-family: monospace;">sepgen [-</span><i
+ style="font-family: monospace;">options</i><span
+ style="font-family: monospace;">] infile.[icm|mpp] outprofile.icm</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp; Verbose mode</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">-3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp; Create psuedo-CMY input device space,</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Default is
 psuedo-CMYK
-input device space,<br>
--e &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp; description&nbsp; Description string<br>
--q [lmhu]&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Quality -
-Low, Medium (def), High, Ultra<br>
--l tlimit&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;
-override default profile total ink limit, 1 - 400+%<br>
--L klimit&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
-override
-default profile black ink limit, 1 - 100%<br>
--i illum&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;Choose illuminant for print/transparency spectral MPP profile:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; A, D50 (def.),
-D65, F5, F8, F10 or file.sp<br>
--o observ&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Choose CIE
-Observer for spectral MPP profile:<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;1931_2, 1964_10,
-S&amp;B 1955_2, J&amp;V 1978_2 (def.)<br>
--f&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Use Fluorescent Whitening Agent
-compensation for spectral MPP profile.<br>
-infile.[icm|mpp] &nbsp; &nbsp;Name of device forward profile<br>
-outfile.icm&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; Name for
-output.icm device to device separation profile file<br>
+input device space,</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">-e &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp; description&nbsp; Description string</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">-q [lmhu]&nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;&nbsp; Quality -
+Low, Medium (def), High, Ultra</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">-l tlimit&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; override default profile total ink limit, 1 - 400+%</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">-L klimit&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; override
+default profile black ink limit, 1 - 100%</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">-i illum&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp; Choose illuminant for print/transparency
+spectral MPP profile:</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; A, D50 (def.),
+D65, F5, F8, F10 or file.sp</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">-o observ&nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;&nbsp; Choose CIE
+Observer for spectral MPP profile:</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; </span></small><small><span
+ style="font-family: monospace;">1931_2 </span></small><small><span
+ style="font-family: monospace;"> (def.)</span></small><small><span
+ style="font-family: monospace;">, 1964_10, S&amp;B
+1955_2, shaw, J&amp;V 1978_2</span></small><small><span
+ style="font-family: monospace;"></span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">-f&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp; Use Fluorescent Whitening Agent
+compensation for spectral MPP profile.</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">infile.[icm|mpp] &nbsp;
+&nbsp;Name of device forward profile</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">outfile.icm&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; Name for
+output.icm device to device separation profile file</span></small><br>
 <h3>Usage Details and Discussion</h3>
 This utility is under development, and currently does nothing useful.<br>
 <br>

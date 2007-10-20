@@ -11,8 +11,8 @@
  *
  * Copyright 1995, 1996, Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include "scanrd.h"		/* Include public structure */
@@ -67,7 +67,7 @@ struct _points {
 #define F_LINESTATS 0x01		/* Line stats valid */
 #define F_VALID		0x02		/* Line passes valid criteria */
 
-/* Structure to hold an agregation region description */
+/* Structure to hold an aggregation region description */
 struct _region {
 	int lx,hx;	/* Region covers values of lx <= x < hx */
 	points *p;	/* Head of points linked list associated with region */
@@ -169,6 +169,7 @@ struct _scanrd_ {
 	unsigned int errv;		/* Error value */
 	char errm[200];			/* Error message */
 
+	double gammav;			/* Approximate gamma encoding of input image */
 	int width,height;		/* With and height of raster in pixels */
 	int depth;				/* Pixel Plane depth */
 	int bpp;				/* Bit precision per pixel, 8 or 16 */
@@ -202,6 +203,9 @@ struct _scanrd_ {
 	double rbox_shrink;		/* Reference box shrink factor */
 	int xpt;				/* NZ if got expected reference values */
 	
+	double fid[3][2];		/* Three fiducial locations */
+	double fidsize;			/* Fiducial diagnostic cross size */
+	double havefids;		/* NZ if there are fiducials */
 	int nsbox;				/* Number of sample boxes */
 	sbox *sboxes;			/* List of sample boxes */
 	sbox **sbstart;			/* Sorted start list */
@@ -217,7 +221,7 @@ struct _scanrd_ {
 	char *refname;			/* Path of reference file */
 	
 	int inited;				/* Gamma and regions inited */
-	unsigned short gamma[256 * 256];	/* Gamma lookup */
+	unsigned short gamma[256 * 256];	/* Inverse gamma lookup */
 	region *vrego, *vregn;	/* Old and New region for delX or vertical lines */
 	int no_vo, no_vn;		/* Number of regions in array */
 	region *hrego, *hregn;	/* Old and New region for delY or horizontal lines */

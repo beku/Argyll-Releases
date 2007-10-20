@@ -1,6 +1,6 @@
 
 /************************************************/
-/* Benchmark RSPL reverse lookup 
+/* Benchmark RSPL reverse lookup                */ 
 /************************************************/
 
 /* Author: Graeme Gill
@@ -8,8 +8,8 @@
  * Derived from tnd.c
  * Copyright 1999 - 2000 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 
@@ -169,14 +169,19 @@ main(int argc, char *argv[]) {
 		double secs;
 		rpsh counter;
 		unsigned rcount;
-		int ii[3], j;
+		int ii[10];
 		int f, rgres[MXDO];
 
 		int flags = 0;		/* rev hint flags */
-		co tp[NIP], chp;	/* Test point, check point */
+		co tp[NIP];			/* Test point */
 		double cvec[4];		/* Text clip vector */
 		int auxm[4];		/* Auxiliary target value valid flag */
+#ifdef DOCHECK
+		int j;
+#endif
+#ifdef NEVER
 		double lmin[4], lmax[4];	/* Locus min/max values */
+#endif
 
 #ifdef DOCHECK
 		char *check;		/* Check that we hit every cell */
@@ -204,19 +209,18 @@ main(int argc, char *argv[]) {
 			error("Malloc of check array\n");
 #endif /* DOCHECK */
 
+		for (f = 0; f < FDI; f++)
+			rgres[f] = rres;
+
 		rcount = rpsh_init(&counter, FDI, rgres, ii);	/* Initialise counter */
 		
 		stime = clock();
-
-		for (f = 0; f < FDI; f++)
-			rgres[f] = rres;
 
 		/* Itterate though the grid */
 		for (ops = 0;; ops++) {
 			int r;
 			int e;			/* Table index */
 	
-
 #ifdef DOCHECK
 			check[((ii[2] * rres + ii[1]) * rres) + ii[0]] = 1;
 #endif /* DOCHECK */
@@ -281,7 +285,7 @@ main(int argc, char *argv[]) {
 
 		ttime = clock() - stime;
 		secs = (double)ttime/CLOCKS_PER_SEC;
-		printf("Done - %f seconds, rate = %f ops/sec\n",secs,ops/secs);
+		printf("Done - %d ops in %f seconds, rate = %f ops/sec\n",ops, secs,ops/secs);
 #ifdef DOCHECK
 		for (j = 0; j < rcount; j++) {
 			if (check[j] != 1) {

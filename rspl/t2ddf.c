@@ -7,8 +7,8 @@
  * Derived from cmatch.c
  * Copyright 1995, 2005 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 
@@ -21,6 +21,7 @@
 #include <math.h>
 #include "rspl.h"
 #include "tiffio.h"
+#include "plot.h"
 
 #ifdef NEVER
 #define INTERP spline_interp
@@ -36,7 +37,7 @@ int verbose_level = 6;			/* Current verbosity level */
 #endif /* NEVER */
 
 /* rspl flags */
-#define FLAGS (0 /* | RSPL_EXTRAFIT | RSPL_NONMON */)
+#define FLAGS (0 /* | RSPL_EXTRAFIT */)
 
 #define PLOTRES 256
 #define WIDTH 400			/* Raster size */
@@ -95,12 +96,13 @@ void usage(void) {
 }
 
 int main(int argc, char *argv[]) {
-	int fa,nfa;				/* argument we're looking at */
-	rspl *rss;	/* Regularized spline structure */
-	rspl *rss2;	/* Regularized spline structure at half resolution */
+	int fa,nfa;			/* argument we're looking at */
+	rspl *rss;			/* Regularized spline structure */
+	rspl *rss2 = NULL;	/* Regularized spline structure at half resolution */
 	datai low,high;
 	int gres[MXDI];
 	int gres2[MXDI];
+	double avgdev[MXDO];
 	co *test_points = test_points1;
 	int npoints = sizeof(test_points1)/sizeof(co);
 	double wweight = 1.0;
@@ -117,6 +119,8 @@ int main(int argc, char *argv[]) {
 	high[1] = 1.0;
 	gres[0] = GRES0;
 	gres[1] = GRES1;
+	avgdev[0] = 0.0;
+	avgdev[1] = 0.0;
 
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
@@ -198,7 +202,7 @@ int main(int argc, char *argv[]) {
 	           low, high, gres,		/* Low, high, resolution of grid */
 	           NULL, NULL,			/* Default data scale */
 	           1.0,					/* Smoothing */
-	           0.0,					/* Average Deviation */
+	           avgdev,				/* Average Deviation */
                wweight,				/* weak function weight */
 	           NULL,				/* No context */
 	           wfunc				/* Weak function */
@@ -224,7 +228,7 @@ int main(int argc, char *argv[]) {
 		           low, high, gres2,	/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
 		           1.0,					/* Smoothing */
-		           0.0,					/* Average Deviation */
+		           avgdev,				/* Average Deviation */
 	               wweight,				/* weak function weight */
 		           NULL,				/* No context */
 		           wfunc				/* Weak function */

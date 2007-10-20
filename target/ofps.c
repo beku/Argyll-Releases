@@ -10,8 +10,8 @@
  * Copyright 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* TTBD:
@@ -20,17 +20,28 @@
    and you only get the initial placement if dadaptation > 0.0.
 
    Need to figure out how to get itterative improvement of adaptive working
-   properly. 
+   properly. The current itterative code depends on the space being Euclidean,
+   so distorting the space metric for adaptive breaks it.
 
+	See ~9
  */
 
 /*
+	Description:
+
+		We build a Voronoi volume description around each sample point,
+	so that we can locate the furthest point (vertex) from all existing sample
+	points. Initially, we add sampling points at the largest distance verticies.
+	This gives us an optimal distribution within a tollerance of 2:1
+	We then iteratively improve the distribution by moving each point to be at
+	the center of the minimal bounding sphere touching it's surrounding vertex points.
+
 	Ideas for improving speed:
 
-		Share planes to reduce percept computation.
+		Share planes to reduce perceptual computation.
 		Share planes to allow vertexes to be computed once (reduce matrix soln time).
 		Improve search for next location to seed point.
-		Improve search for next point in neighborhood when computing voronoi for added point.
+		Improve search for next point in neighborhood when computing Voronoi for added point.
  */
 
 
@@ -52,18 +63,34 @@
 //#include <iperf.h>
 
 #undef DEBUG
-#undef DUMP_PLOT		/* Show on screen plot */
-#define DUMP_VTX 0		/* Display the vertex locations too */
-#define PERC_PLOT 0		/* Emit perceptive space plots */
-#define DO_WAIT 1		/* Wait for user key after each plot */
 
-#define MAXITS 30		/* Number of optimisation itterations (0 to disable optimisation) */
+#ifndef NEVER	// Real settings
+
+# define MAXITS 20		/* Number of optimisation itterations (0 to disable optimisation) */
+# define AMAXITS 0		/* Adaptive number of itterations */
+# define STOP_TOL 0.0005	/* Stopping tollerance */
+# define SA_ADAPT 0.5	/* Standalone test, adaptation level */
+
+#else			// development settings
+
+# define MAXITS 1000		/* Number of optimisation itterations (0 to disable optimisation) */
+# define AMAXITS 1000		/* Adaptive number of itterations */
+# define STOP_TOL 0.00001	/* Stopping tollerance */
+
+# define DUMP_PLOT		/* Show on screen plot */
+# define DUMP_VTX 1		/* Display the vertex locations too */
+# define PERC_PLOT 0	/* Emit perceptive space plots */
+# define DO_WAIT 1		/* Wait for user key after each plot */
+# define SA_ADAPT 0.9	/* Standalone test, adaptation level */
+
+#endif /* NEVER */
 
 #define NUMTOL 1e-10	/* Numerical tollerance */
 #define DOACCEL			/* Use near cell grid acceleration */
 #define TNPAGRID 1.0	/* Target nodes per acceleration grid cell */
 #define FASTREJECT		/* Fast reject test for acceleration */
 #define RANDOM_PERTERB	/* Perpterb initial placement to break up patterns */
+#define PERTERB_AMOUNT 0.01
 #define OPT_INITIAL_OVERSHOOT 1.0	/* Optimisation movement initial overshoot (1.5) */
 
 #define ALWAYS
@@ -84,7 +111,6 @@ static void dump_image(ofps *s, int pcp, int dwt, int vtx);
 #endif
 
 static void ofps_stats(ofps *s);
-static void ofps_dump(ofps *s);
 static int ofps_point2cell(ofps *s, double *p);
 static void ofps_add_vacc(ofps *s, vtx *vx);
 static void ofps_rem_vacc(ofps *s, vtx *vx);
@@ -96,7 +122,6 @@ static void
 default_ofps_to_percept(void *od, double *p, double *d) {
 	ofps *s = (ofps *)od;
 	int e;
-	double tt;
 
 #ifndef NEVER
 	/* Default Do nothing - copy device to perceptual. */
@@ -123,6 +148,7 @@ default_ofps_to_percept(void *od, double *p, double *d) {
 #endif
 }
 
+#ifdef NEVER /* Not currently used */
 /* Return the distance of the device value from the device gamut */
 /* This will be -ve if the point is outside */
 /* If bvp is non-null, the index of the closest dim times 2 */
@@ -159,6 +185,7 @@ ofps_in_dev_gamut(ofps *s, double *d, int *bvp) {
 		*bvp = bv;
 	return dd;
 }
+#endif /* NEVER */
 
 /* Given the new intended device coordinates, */
 /* clip the new position to the device gamut edge */
@@ -280,14 +307,14 @@ static void copy_vtx(vtx *dst, vtx *src) {
 static void node_free(ofps *s, node *p) {
 	int i;
 
-	/* Free up list of voronoi surface planes */
+	/* Free up list of Voronoi surface planes */
 	if (p->vp != NULL) {
 		for (i = 0; i < p->nvp; i++)
 			del_peq(s, p->vp[i]);
 		free(p->vp);
 	}
 
-	/* Free up list of voronoi verticies */
+	/* Free up list of Voronoi verticies */
 	if (p->vv != NULL) {
 		for (i = 0; i < p->nvv; i++)
 			del_vtx(s, p->vv[i].p);
@@ -322,7 +349,7 @@ static void node_add_plane(ofps *s, node *p, peq *pl) {
 
 	/* Compute the cp[]'s radius squared to the node position */
 	for (pl->rads = 0.0, e = 0; e < di; e++) {
-		double tt = p->p[e] - pl->cp[e];	/* sample point to voronoi plane center */
+		double tt = p->p[e] - pl->cp[e];	/* sample point to Voronoi plane center */
 		pl->rads += tt * tt;
 	}
 }
@@ -348,7 +375,6 @@ static void node_del_planes(ofps *s, node *p) {
 /* (Increments reference count on vertex) */
 static void node_add_vertex(ofps *s, node *pp, vtxp *vxp) {
 	vtx *vx = vxp->p;
-	int e, di = s->di;
 
 	if (pp->_nvv == 0) {
 		pp->_nvv = 4;		/* Initial allocation */
@@ -512,6 +538,7 @@ static double vtx_eserr(ofps *s, vtx *vx) {
 	if (vx->vvalid)
 		return vx->eserr;
 
+	/* If not adaptive, then error is simple the radius of the circumsphere, so */
 	if (s->padapt == 0.0) {
 		vx->eserr = vx->rads;
 		vx->vvalid = 1;
@@ -525,6 +552,8 @@ static double vtx_eserr(ofps *s, vtx *vx) {
 	/* Compute average of real sample points perceptual value associated with vertex */
 	if (vx->nix[s->di] >= 0) {
 
+		/* We use an equal weighting, because a vertex is at the intersection */
+		/* of bisectors, and hence is at the circumcenter of the nodes. */
 		for (e = 0; e < di; e++)
 			vx->iv[e] = 0.0;
 		for (i = 0; i <= di; i++) {
@@ -598,9 +627,12 @@ static double vtx_eserr(ofps *s, vtx *vx) {
 		double tt = vx->v[e] - vx->iv[e];
 		de += tt * tt;
 	}
-	de *= 1.0/(100.0 * 100.0);		/* Scale perceptual to device levels */
+// ~~99
+//	de *= 1.0/(100.0 * 100.0);		/* Scale perceptual to device levels */
+	de *= 1.0/(100.0);		/* Scale perceptual to device levels */
 
 	/* Blend distances squared acording to degree of adaptation */
+	vx->rserr = de;
 	vx->eserr = (1.0 - s->padapt) * vx->rads + s->padapt * de;
 	vx->vvalid = 1;
 
@@ -689,7 +721,7 @@ static int comp_vtx(ofps *s, vtxp *vxp) {
 	return rv;
 }
 
-/* Add a plane to a voronoi surface around a test point */
+/* Add a plane to a Voronoi surface around a test point */
 /* return nz if it was added to the surface */
 /* Note that numerical inacuracy can lead to strange results here, ie. */
 /* planes being accepted but no corresponding verticies etc. */
@@ -847,12 +879,12 @@ create_new:
 					printf("%f ",vv.p->p[e]);
 				printf("\n");
 #endif
-				/* Check if new vertex is within voronoi surface */
+				/* Check if new vertex is within Voronoi surface */
 				for (j = 0; j < pp->nvp; j++) {
 					double v;
 					peq *pl = pp->vp[j];
 		
-					/* Compute relation of new vertex to voronoi planes */
+					/* Compute relation of new vertex to Voronoi planes */
 					for (v = pl->pe[di], e = 0; e < di; e++)
 						v += pl->pe[e] * vv.p->p[e];
 
@@ -864,10 +896,10 @@ create_new:
 #endif
 					if (v > NUMTOL) {			/* Point is above plane */
 #ifdef DEBUG
-						printf("~1 Vertex is outside voronoi volume\n");
+						printf("~1 Vertex is outside Voronoi volume\n");
 #endif
 						del_vtx(s, vv.p);
-						goto next_combo;	/* Not in voronoi volume */
+						goto next_combo;	/* Not in Voronoi volume */
 					}
 				}
 
@@ -889,7 +921,7 @@ next_combo:
 	}
 //PERF("Added verticies");
 
-	/* Now delete all the verticies that are no longer within voronoi volume */
+	/* Now delete all the verticies that are no longer within Voronoi volume */
 	node_del_verticies(s, pp);
 
 //PERF("Deleted verticies");
@@ -898,10 +930,10 @@ next_combo:
 	return 1;					/* Plane was added. caller should lose reference to it */
 }
 
-/* Compute the veronoi surface from scratch, for a given sample point */
+/* Compute the Voronoi surface around the given sample point node from scratch. */
 static void node_voronoi(
 ofps *s,
-int poi		/* Index of sample point to update/create voronoi surface */
+int poi		/* Index of sample point to update/create Voronoi surface */
 ) {
 	node *pp = &s->n[poi];		/* Node in question */
 	peq *vp = NULL;				/* Next plane to check */
@@ -914,7 +946,7 @@ int poi		/* Index of sample point to update/create voronoi surface */
 
 //int nt, nr, nf, na;		// Stats
 
-	/* Deconstruct the current voronoi information */
+	/* Deconstruct the current Voronoi information associated with this sample node */
 	while (pp->nvp > 0) {	/* Planes */
 		del_peq(s, pp->vp[--pp->nvp]);
 	};
@@ -925,7 +957,7 @@ int poi		/* Index of sample point to update/create voronoi surface */
 	/* Misc other init */
 	pp->ix = poi;
 
-	/* Setup initial surface by cloning the gamut surface */
+	/* Setup initial surface around this node by cloning the gamut surface */
 	for (i = 0; i < s->gn.nvp; i++) {		/* Clone planes */
 		peq *vp;							/* plane being added */
 
@@ -936,7 +968,6 @@ int poi		/* Index of sample point to update/create voronoi surface */
 	}
 	pp->dmxs = -1e80;
 	for (i = 0; i < s->gn.nvv; i++) {		/* Clone verticies */
-		double dd;
 		vtxp vv;							/* vertex being added */
 
 		vv.p = new_vtx(s);
@@ -1040,14 +1071,13 @@ int poi		/* Index of sample point to update/create voronoi surface */
 //printf("~1 of %d, fast rej %d, full test %d, accepted %d\n",nt,nr,nf,na);
 }
 
-/* Update the current voroni surface with one extra plane/node */
+/* Update the current Voroni surface with one extra plane/node */
 static void node_add_neigbor(
 ofps *s,
 peq *ovp		/* Inverse of plane to add */
 ) {
 	node *pp = &s->n[ovp->ix];		/* Node of interest to add plane to */
 	peq *vp;						/* Plane to add */
-	int e, di = s->di;
 
 	vp = new_peq(s);
 
@@ -1074,22 +1104,43 @@ peq *ovp		/* Inverse of plane to add */
 
 /* --------------------------------------------------- */
 
+#ifdef NEVER
 /* Structure to hold data for optimization function */
 struct _edatas {
 	ofps *s;			/* ppoint structure */
 	node *pp;			/* Node in question */
+	double *c;			/* Circumcenter */
 }; typedef struct _edatas edatas;
 
-/* Definition of the optimization functions handed to powell() */
-/* We want to minimise the maximum distance weighted vertex eserr value. */
+/* Definition of the optimization functions handed to powell(.) */
+/* We want to minimise the differences between the distance */
+/* weighted vertex eserr values, in an attempt to make them equal. */
 static double efunc1(void *edata, double p[]) {
 	edatas *ep = (edatas *)edata;
 	ofps *s = ep->s;
 	int e, di = s->di;
 	node *pp = ep->pp;
+	double mnerr = 1e80;
 	double mxerr = -1e80;
+	double avg = 0.0;
 	int i;
 
+	/* For each vertex around this sampling node */
+	for (i = 0; i < pp->nvv; i++) {
+		vtx *vv = pp->vv[i].p;
+		double sum;
+
+		/* Compute distance to vertex */
+		for (sum = 0.0, e = 0; e < di; e++) {
+			double tt = p[e] - vv->p[e];
+			sum += tt * tt;
+		}
+		sum = sqrt(sum);
+		avg += sum;
+	}
+	avg /= (double)pp->nvv;
+	
+	/* For each vertex around this sampling node */
 	for (i = 0; i < pp->nvv; i++) {
 		vtx *vv = pp->vv[i].p;
 		double sum, werr;
@@ -1102,21 +1153,26 @@ static double efunc1(void *edata, double p[]) {
 		sum = sqrt(sum);
 
 		/* Computed distance weighted estimated sampling error */
-		werr = sum * vv->eserr;
+		werr = sum/avg * vv->rserr;
+//		werr = sum;				/* Just distance = center */
 		if (werr > mxerr)
 			mxerr = werr;
+		if (werr < mnerr)
+			mnerr = werr;
 	}
-//printf("~9 efunc returning %f\n",mxerr);
-	return mxerr;
+//printf("~9 efunc returning %f\n",mxerr - mnerr);
+	return mxerr - mnerr;
 }
+#endif
 
-// ~~999
 /* Move the node to optimise it location amongst the surrounding */
 /* verticies. */
 /* When there is no adaptation, we compute a minimal bounding sphere */
 /* that encloses the vertex points. */
-/* When we are usin adaptation, find a node location that minimises the */
-/* maximum inverse distance weighted vertex eserr value. */
+/* */
+/* When we are using adaptation, find a node location that minimises the */
+/* maximum inverse distance weighted vertex eserr value. (This doesn't work!) */
+// ~~99
 /* Use -1 to compute center for gamut "node" */
 static void comp_opt(ofps *s, int poi, double oshoot) {
 	node *pp;						/* Node in question */
@@ -1125,7 +1181,7 @@ static void comp_opt(ofps *s, int poi, double oshoot) {
 	double rad;
 	double sum;
 	int i, j;
-	int bi, bj;
+	int bi = 0, bj = 0;
 
 	if (poi < 0)
 		pp = &s->gn;			/* gamut "node" */
@@ -1137,85 +1193,82 @@ static void comp_opt(ofps *s, int poi, double oshoot) {
 
 	if (pp->nvv > 0) {
 
-		/* Use minimise maximum distance enclosing sphere */
-		if (s->padapt == 0.0 || poi < 0) {
-
-			/* Find the two verticies that are farthest appart. Brute force search */
-			for (i = 0; i < (pp->nvv-1); i++) {
-				for (j = i+1; j < pp->nvv; j++) {
-					for (sum = 0.0, e = 0; e < di; e++) {
-						double tt = pp->vv[i].p->p[e] - pp->vv[j].p->p[e];
-						sum += tt * tt;
-					}
-					if (sum > radsq) {
-						radsq = sum;
-						bi = i;
-						bj = j;
-					}
-				}
-			}
-			
-			/* Set initial bounding sphere */
-			for (e = 0; e < di; e++)
-				pp->p[e] = 0.5 * (pp->vv[bi].p->p[e] + pp->vv[bj].p->p[e]);
-			radsq /= 4.0;			/* diam^2 -> rad^2 */
-
-			rad = sqrt(radsq);
-			
-			/* Go though all the points again, expanding sphere if necessary */
-			for (i = 0; i < pp->nvv; i++) {
-
-				if (i == bi || i == bj)
-					continue;
-
-				/* Compute distance squared of vertex to bounding sphere center */
+		/* Locate a center point that minimises the maximum distance of an enclosing sphere */
+		/* Find the two verticies that are farthest apart. Brute force search */
+		for (i = 0; i < (pp->nvv-1); i++) {
+			for (j = i+1; j < pp->nvv; j++) {
 				for (sum = 0.0, e = 0; e < di; e++) {
-					double tt = pp->vv[i].p->p[e] - pp->p[e];
+					double tt = pp->vv[i].p->p[e] - pp->vv[j].p->p[e];
 					sum += tt * tt;
 				}
 				if (sum > radsq) {
-					double tt;
-
-					sum = sqrt(sum) + 1e-10;			/* Radius to point */
-					rad = 0.5 * (rad + sum);
-					radsq = rad * rad;
-					tt = sum - rad;
-					for (e = 0; e < di; e++)
-						pp->p[e] = (rad * pp->p[e] + tt * pp->vv[i].p->p[e])/sum;
+					radsq = sum;
+					bi = i;
+					bj = j;
 				}
 			}
+		}
+		
+		/* Set initial bounding sphere */
+		for (e = 0; e < di; e++)
+			pp->p[e] = 0.5 * (pp->vv[bi].p->p[e] + pp->vv[bj].p->p[e]);
+		radsq /= 4.0;			/* diam^2 -> rad^2 */
 
-		} else {
-			/* Minimise maximum eserr inverse distance weighted values */
-			double mxrads = -1e80;
-			edatas ed;				/* optimiser information */
-			double p[MXPD];		/* Device location */
-			double sr[MXPD];	/* Search radius */
-			double rv;
+		rad = sqrt(radsq);
+		
+		/* Go though all the points again, expanding sphere if necessary */
+		for (i = 0; i < pp->nvv; i++) {
+
+			if (i == bi || i == bj)
+				continue;
+
+			/* Compute distance squared of vertex to bounding sphere center */
+			for (sum = 0.0, e = 0; e < di; e++) {
+				double tt = pp->vv[i].p->p[e] - pp->p[e];
+				sum += tt * tt;
+			}
+			if (sum > radsq) {
+				double tt;
+
+				sum = sqrt(sum) + 1e-10;			/* Radius to point */
+				rad = 0.5 * (rad + sum);
+				radsq = rad * rad;
+				tt = sum - rad;
+				for (e = 0; e < di; e++)
+					pp->p[e] = (rad * pp->p[e] + tt * pp->vv[i].p->p[e])/sum;
+			}
+		}
+
+		/* If adaptive, move towards vertex with highest eserr */
+		if (s->padapt > 0.0 && poi >= 0) {
+			double sum;
+
+			/* For each surrounding vertex, compute the distance weighted eserr, */
+			/* and bias the enclosing sphere center point */
 
 			/* Make sure eserr is valid for all the verticies */
-			for (i = 0; i < pp->nvv; i++) {
+			for (sum = 0.0, i = 0; i < pp->nvv; i++) {
 				vtx *vv = pp->vv[i].p;
 				vtx_eserr(s, vv);		/* Estimated sampling error */
-				if (vv->rads > mxrads)
-					mxrads = vv->rads;	/* Track maximum vertex rads */
+				sum += vv->rserr;		/* Track sum of weights */
 			}
 
-			ed.s = s;
-			ed.pp = pp;
+			if (sum > 0.0) {
+				double wp[MXPD];
 
-			for (e = 0; e < di; e++) {
-				p[e] = pp->p[e];			/* Starting point */
-				sr[e] = 0.3 * sqrt(mxrads);	/* Device space search radius */
-			}
-
-			if ((rv = powell(di, p, sr,  0.001, 500, efunc1, (void *)&ed)) < 0.0 || rv >= 50000.0) {
-#ifdef ALWAYS
-				printf("ppoint powell failed, tt = %f\n",rv);
-#endif
-			} else {	/* Move the node */
 				for (e = 0; e < di; e++)
-					pp->p[e] = 0.9 * pp->p[e] + 0.1 * p[e];		/* Starting point */
+					wp[e] = 0.0;
+
+				/* Apply weighted vector towards verticies */
+				for (i = 0; i < pp->nvv; i++) {
+					vtx *vv = pp->vv[i].p;
+			
+					for (e = 0; e < di; e++) {
+						wp[e] += vv->rserr/sum * vv->p[e];
+					}
+				}
+				for (e = 0; e < di; e++)
+					pp->p[e] = 0.5 * pp->p[e] + 0.5 * wp[e];
 			}
 		}
 	}
@@ -1225,6 +1278,9 @@ static void comp_opt(ofps *s, int poi, double oshoot) {
 		for (e = 0; e < di; e++)
 			pp->p[e] = (pp->p[e] - pp->op[e]) * oshoot + pp->op[e];
 	}
+
+	/* Clip the new location */
+	ofps_clip_point(s, pp->p);
 
 	/* Compute how far the point has moved */
 	for (sum = 0.0, e = 0; e < di; e++) {
@@ -1236,7 +1292,7 @@ static void comp_opt(ofps *s, int poi, double oshoot) {
 }
 
 /* --------------------------------------------------- */
-/* Setup gamut voronoi surface */
+/* Setup gamut Voronoi surface */
 static void ofps_binit(ofps *s) {
 	int e, di = s->di;
 	int doink = 0;
@@ -1397,7 +1453,7 @@ ofps_init_acc(ofps *s) {
 		DC_INIT(co);
 		while (!DC_DONE(co)) {
 			int io;
-			int ss, tt;
+			double ss, tt;
 
 			/* Calc index offset */
 			for (io = 0, ss = 0.0, e = 0; e < di; e++) {
@@ -1443,7 +1499,7 @@ ofps_point2cell(ofps *s, double *p) {
 
 	for (i = e = 0; e < di; e++) {
 		int t;
-		t = floor(agres * p[e]);
+		t = (int)floor(agres * p[e]);
 		if (t < 0)
 			t = 0;
 		else if (t >= agres)
@@ -1493,8 +1549,7 @@ ofps_rem_vacc(ofps *s, vtx *vx) {
 /* Clear the acceleration structure */
 static void
 ofps_reset_acc(ofps *s) {
-	int i, e;
-	int di = s->di;
+	int i;
 
 	s->flag = 0;
 	for (i = 0; i < s->nig; i++) {
@@ -1507,8 +1562,8 @@ ofps_reset_acc(ofps *s) {
 
 
 /* --------------------------------------------------- */
-/* Seed the object with the initial fixed points */
 
+/* Seed the object with any fixed points */
 static void
 ofps_add_fixed(
 ofps *s,
@@ -1524,7 +1579,7 @@ int fxno				/* Number in fixed list */
 		for (i = 0; (i < fxno) && (i < s->tinp); i++) {
 			node *p = &s->n[s->np];	/* Destination for point */
 
-			/* Reject any duplicate points, or voronoi will get confused.. */
+			/* Reject any duplicate points, or Voronoi will get confused.. */
 			for (ii = 0; ii < s->np; ii++) {
 				for (e = 0; e < di; e++) {
 					if (fabs(s->n[ii].p[e] - fxlist[i].p[e]) > 1e-5)
@@ -1544,7 +1599,7 @@ int fxno				/* Number in fixed list */
 			p->fx = 1;			/* is a fixed point */
 			s->percept(s->od, p->v, p->p);
 
-			/* Compute the veronoi for it */
+			/* Compute the Voronoi for it */
 			node_voronoi(s, s->np-1);
 
 			/* Add bisecting plane due to new node to all of its neighbors */
@@ -1563,7 +1618,7 @@ int fxno				/* Number in fixed list */
 	}
 }
 
-/* Seed the object with the movable incremental farthest points. */
+/* Seed the object with any movable incremental farthest points. */
 static void
 ofps_seed(ofps *s) {
 	int e, di = s->di;
@@ -1573,12 +1628,12 @@ ofps_seed(ofps *s) {
 	printf("\n");
 
 	/* Seed the non-fixed points */
-	for (i = s->fnp; i < s->tinp; i++) {
+	for (j = 0, i = s->fnp; i < s->tinp; i++, j++) {
 		node *p = &s->n[i];		/* New node */
 
 		if (i == 0) {			/* No initial fixed points */
 			/* If there are no fixed points, place first point */
-			/* in the center of the gamuts voronoi verticies. */
+			/* in the center of the gamuts Voronoi verticies. */
 			comp_opt(s, -1, 1.0);
 
 			/* Add the new point */
@@ -1588,14 +1643,16 @@ ofps_seed(ofps *s) {
 			s->percept(s->od, p->v, p->p);
 			s->np = i+1;
 
-			/* Compute the veronoi for it */
+			/* Compute the Voronoi for it */
 			node_voronoi(s, i);
 
 		} else {
+			int k;
+
 			double mx = -1e80;
 			vtx *vx, *bvx = NULL;
 
-			/* Locate the voronoi vertex with the greatest distance to a sampling points */
+			/* Locate the Voronoi vertex with the greatest distance to a sampling points */
 			/* (Might be speedup if keep vertex worst distance sorted ?) */
 			for (vx = s->uvtx; vx != NULL; vx = vx->link) {
 				vtx_eserr(s, vx);		/* Estimated sampling error */
@@ -1607,7 +1664,7 @@ ofps_seed(ofps *s) {
 
 			/* Add the new point */
 #ifdef RANDOM_PERTERB
-			rerr = 0.10 * sqrt(bvx->rads);
+			rerr = PERTERB_AMOUNT * sqrt(bvx->rads);
 			for (e = 0; e < di; e++)
 				p->p[e] = bvx->p[e] + d_rand(-rerr, rerr);
 			ofps_clip_point(s, p->p);
@@ -1621,12 +1678,12 @@ ofps_seed(ofps *s) {
 			s->percept(s->od, p->v, p->p);
 			s->np = i+1;
 
-			/* Compute the veronoi for it */
+			/* Compute the Voronoi for it */
 			node_voronoi(s, i);
 
 			/* Add bisecting plane due to new node to all of its neighbors */
-			for (j = 0; j < p->nvp; j++) {
-				peq *vp = p->vp[j];				/* plane being added */
+			for (k = 0; k < p->nvp; k++) {
+				peq *vp = p->vp[k];				/* plane being added */
 				if (vp->ix >= 0)				/* If not gamut plane */
 					node_add_neigbor(s, vp);	/* add new point as neighbor */
 			}
@@ -1635,19 +1692,21 @@ ofps_seed(ofps *s) {
 		/* Add node to acceleration structure */
 		ofps_add_nacc(s, p);
 
-		printf("\rAdded %d/%d",s->np,s->tinp); fflush(stdout);
+		if (j == 11 || i == (s->tinp-1)) {
+			printf("\rAdded %d/%d",s->np,s->tinp); fflush(stdout);
+			j = 0;
+		}
 	}
 	printf("\n");
 }
 
-/* Recreate the voronoi diagram with the current point positions */
+/* Recreate the Voronoi diagram with the current point positions */
 /* (Could avoid adding fixed points again, by making a copy and restoring it ??) */
 static void
-ofps_redo_veronoi(
+ofps_redo_voronoi(
 ofps *s
 ) {
-	int e, di = s->di;
-	int i, j;
+	int j;
 
 	/* Clear out the acceleration structure */
 	ofps_reset_acc(s);
@@ -1656,7 +1715,7 @@ ofps *s
 	for (s->np = 0; s->np < s->tinp; s->np++) {
 		node *p = &s->n[s->np];	/* Destination for point */
 
-		/* Compute the veronoi for it */
+		/* Compute the Voronoi for it */
 		node_voronoi(s, s->np);
 
 		/* Add bisecting plane due to new node to all of its neighbors */
@@ -1696,13 +1755,13 @@ ofps *s
 			oshoot = 1.0;
 		}
 
-		/* Rebuild voronoi surface from scratch */
-		ofps_redo_veronoi(s);
+		/* Rebuild Voronoi surface from scratch */
+		ofps_redo_voronoi(s);
 
 		ofps_stats(s);
 		printf("Maxmv = %f, stats Min = %f, Average = %f, Max = %f\n",sqrt(s->mxmvsq),s->mn,s->av,s->mx);
 		printf("                Percep: Min = %f, Average = %f, Max = %f\n",s->pmn,s->pav,s->pmx);
-		if (sqrt(s->mxmvsq) < 0.0001)
+		if (sqrt(s->mxmvsq) < STOP_TOL)
 			break;
 	}
 }
@@ -1784,7 +1843,7 @@ ofps_reset(ofps *s) {
 /* Return nz if no more */
 static int
 ofps_read(ofps *s, double *p, double *f) {
-	int e, di = s->di;
+	int e;
 
 	/* Advance to next non-fixed point */
 	while(s->rix < s->np && s->n[s->rix].fx)
@@ -1915,7 +1974,7 @@ void *od				/* context for Perceptual function */
 	}
 
 	if (s->padapt > 0.0)		/* Because this doesn't work yet */
-		s->maxits = 0;
+		s->maxits = AMAXITS;
 	else
 		s->maxits = MAXITS;
 
@@ -1994,17 +2053,16 @@ static void sa_percept(void *od, double *out, double *in) {
 #else
 
 static void sa_percept(void *od, double *p, double *d) {
-	int e, di = 2;
-	double tt;
 
-#ifndef NEVER
+#ifdef NEVER
 	/* Default two curves with some interaction */
 	p[0] = 100.0 * gcurve(d[0], -4.5);
 	p[1] = 100.0 * gcurve(d[1], 2.8);
 	p[1] = 0.8 * p[1] + 0.2 * p[0];
 
 #else
-	for (e = 0; e < di; e++) {
+	int e;
+	for (e = 0; e < 2; e++) {
 		double tt = d[e];
 		/* Two slopes with a sharp turnover in X */
 		if (e == 0) {
@@ -2051,7 +2109,7 @@ char *argv[];
 
 	/* Create the required points */
 	stime = clock();
-	s = new_ofps(2, 1.5, npoints, 0.0, fx, 0, sa_percept, (void *)NULL);
+	s = new_ofps(2, 1.5, npoints, SA_ADAPT, fx, 0, sa_percept, (void *)NULL);
 
 	ttime = clock() - stime;
 	printf("Execution time = %f seconds\n",ttime/(double)CLOCKS_PER_SEC);
@@ -2113,7 +2171,7 @@ dump_image(ofps *s, int pcp, int dwt, int dvx) {
 	static double *y1a = NULL;
 	static double *x2a = NULL;		/* Previous sample locations */
 	static double *y2a = NULL;
-	static int _n3 = 0;				/* Current voronoi verticies */
+	static int _n3 = 0;				/* Current Voronoi verticies */
 	static double *x3a = NULL;
 	static double *y3a = NULL;
 	int n3 = 0;
@@ -2167,7 +2225,7 @@ dump_image(ofps *s, int pcp, int dwt, int dvx) {
 				error ("ofps: malloc failed");
 		}
 
-		/* Add voronoi verticies */
+		/* Add Voronoi verticies */
 		for (vx = s->uvtx; vx != NULL; vx = vx->link) {
 
 			if (n3 >= _n3) {		/* need more space */

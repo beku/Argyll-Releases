@@ -6,10 +6,11 @@
  * Date:   3/1/2001
  *
  * Copyright 2001, DreamWorks LLC
+ * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE :-
+ * see the License2.txt file for licencing details.
  */
 
 /* This program reads a film target chart using a colorimeter. */
@@ -24,11 +25,13 @@
 #include <sys/types.h>
 #include <time.h>
 #include <string.h>
+#include "copyright.h"
 #include "config.h"
 #include "numlib.h"
 #include "xspect.h"
 #include "cgats.h"
-#include "serio.h"
+#include "insttypes.h"
+#include "icoms.h"
 #include "../h/sort.h"
 #include "inst.h"
 
@@ -58,7 +61,7 @@ read_patches(col *cols, int npat, int comport, int verb, int qspect)
 	inst *gt;
 	int i,j, rv;
 
-	gt = new_inst(instSpectroScanT);
+	gt = new_inst(comport, instSpectroScanT, 0, 0);
 
 	/* Establish communications */
 	if ((rv = gt->init_coms(gt, comport, baud_nc, -1.0)) != inst_ok) {
@@ -99,10 +102,10 @@ read_patches(col *cols, int npat, int comport, int verb, int qspect)
 		}
 
 		/* Do a calibration up front, so as not to get in the users way. */
-		if (gt->needs_calibration(gt) == inst_needs_cal) {
-			if ((rv = gt->calibrate(gt, 0)) != inst_ok) {
-				printf("Calibrate failed with '%s' (%s)\n",
-			       gt->inst_interp_error(gt, rv), gt->interp_error(gt, rv));
+		if (gt->needs_calibration(gt) & inst_calt_needs_cal_mask) {
+			inst_code ev;
+			ev = inst_handle_calibrate(gt, inst_calt_all, inst_calc_none, NULL);
+			if (ev != inst_ok) {	/* Abort or fatal error */
 				return -1;
 			}
 		}
@@ -117,11 +120,19 @@ read_patches(col *cols, int npat, int comport, int verb, int qspect)
 
 		/* TODO: a clean way to save data and resume later... */
 		for (;;) {
-			if ((rv = gt->read_sample(gt,cols[i].id,&pat)) != inst_ok) {
-				if (rv == inst_needs_cal) {
+			if ((rv = gt->read_sample(gt,cols[i].id,&pat)) != inst_ok
+			 && (rv & inst_mask) != inst_user_trig) {
+
+				if ((rv & inst_mask) == inst_needs_cal) {
+					inst_code ev;
+
 					printf("Spectrolino needs to recalibrate. Please clear table.\n");
-					if ((rv = gt->calibrate(gt,0)) != inst_ok)
-						error("couldn't recalibrate... aborting");
+
+					printf("\nStrip read failed because instruments needs calibration\n");
+					ev = inst_handle_calibrate(gt, inst_calt_all, inst_calc_none);
+					if (ev != inst_ok) {	/* Abort or fatal error */
+						error("Calibration failed or was aborted");
+					}
 				}
 				else
 					error("bad measurement... aborting");
@@ -132,8 +143,8 @@ read_patches(col *cols, int npat, int comport, int verb, int qspect)
 		/* copy and convert data */
 		if (pat.XYZ_v)
 			for (j=0; j<3; j++) cols[i].XYZ[j] = pat.XYZ[j];
-		if (qspect && pat.spec_n > 0)
-			for (j=0; j<pat.spec_n; j++) cols[i].spect[j] = pat.spec[j]*100.0;
+		if (qspect && pat.sp.spec_n > 0)
+			for (j=0; j<pat.sp.spec_n; j++) cols[i].spect[j] = pat.sp.spec[j]*100.0;
 
 		printf("patch %s: RGB %f %f %f XYZ %f %f %f\n",
 			   cols[i].id,
@@ -149,31 +160,31 @@ read_patches(col *cols, int npat, int comport, int verb, int qspect)
 
 void
 usage(void) {
-	serio *sio;
+	icoms *icom;
 	fprintf(stderr,"Read Film Target Test Chart colors, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Licensed under the GPL\n");
 	fprintf(stderr,"usage: filmread [-v] [-s] [-c comport] outfile\n");
 	fprintf(stderr," -v              Verbose mode\n");
 	fprintf(stderr," -s              Gather spectral data also\n");
-	fprintf(stderr," -c comport      Set COM port, 1..N (default %d)\n",COMPORT);
-	if ((sio = new_serio()) != NULL) {
-		char **paths;
-		if ((paths = sio->get_paths(sio)) != NULL) {
+	fprintf(stderr," -c listno       Set communication port from the following list (default %d)\n",COMPORT);
+	if ((icom = new_icoms()) != NULL) {
+		icompath **paths;
+		if ((paths = icom->get_paths(icom)) != NULL) {
 			int i;
 			for (i = 0; ; i++) {
 				if (paths[i] == NULL)
 					break;
-				fprintf(stderr,"    %d: '%s'\n",i+1,paths[i]);
+				fprintf(stderr,"    %d: '%s'\n",i+1,paths[i]->path);
 			}
 		} else
 			fprintf(stderr,"    ** No ports found **\n");
-		sio->del(sio);
+		icom->del(icom);
 	}
 	fprintf(stderr," outfile         Base name for input[.ti2]/output[.ti3] file\n");
 	exit(1);
 	}
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int i,j;
 	int fa,nfa;				/* current argument we're looking at */
@@ -188,7 +199,7 @@ main(int argc, char *argv[])
 	struct tm *tsp = localtime(&clk);
 	char *atm = asctime(tsp); /* Ascii time */
 	col *cols;			/* Internal storage of all the patch colors */
-	int dim;			/* Dimensionality - 1, 3, or 4 */
+	int dim = 0;		/* Dimensionality - 1, 3, or 4 */
 	int npat;			/* Number of patches */
 	int si;				/* Sample id index */
 	int li;				/* Location id index */
@@ -196,7 +207,8 @@ main(int argc, char *argv[])
 	int fi;				/* Colorspace index */
 	int rstart = -1;	/* Random start index */
 
-	error_program = "Filmread";
+	set_exe_path(argv[0]);			/* Set global exe_path and error_program */
+
 	if (argc <= 1)
 		usage();
 
@@ -236,7 +248,7 @@ main(int argc, char *argv[])
 				fa = nfa;
 				if (na == NULL) usage();
 				comport = atoi(na);
-				if (comport < 1 || comport > 4) usage();
+				if (comport < 1 || comport > 40) usage();
 			}
 
 			else 
@@ -259,7 +271,7 @@ main(int argc, char *argv[])
 	if (icg->read_name(icg, inname))
 		error("CGATS file read error : %s",icg->err);
 
-	if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
+	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0)
 		error ("Input file isn't a CTI2 format file");
 	if (icg->ntables != 1)
 		error ("Input file doesn't contain exactly one table");

@@ -7,8 +7,8 @@
  * Derived from cmatch.c
  * Copyright 1995 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 
@@ -21,12 +21,8 @@
 #include <math.h>
 #include "rspl.h"
 #include "tiffio.h"
+#include "plot.h"
 
-#ifdef NEVER
-#define INTERP spline_interp
-#else
-#define INTERP interp
-#endif
 
 #ifdef NEVER
 FILE *verbose_out = stdout;
@@ -36,7 +32,7 @@ int verbose_level = 6;			/* Current verbosity level */
 #endif /* NEVER */
 
 /* rspl flags */
-#define FLAGS (0 /* | RSPL_EXTRAFIT | RSPL_NONMON */)
+#define FLAGS (0 /* | RSPL_EXTRAFIT */)
 
 #define PLOTRES 256
 #define WIDTH 400			/* Raster size */
@@ -324,19 +320,22 @@ void usage(void) {
 	fprintf(stderr," -h            Test half scale resolution too\n");
 	fprintf(stderr," -q            Test quarter scale resolution too\n");
 	fprintf(stderr," -s            Test symetric smoothness\n");
+	fprintf(stderr," -S            Test spline interpolation\n");
 	fprintf(stderr," -p            plot 3 slices, x = 0.5, y = 0.5, x = y\n");
 	exit(1);
 }
 
 int main(int argc, char *argv[]) {
 	int fa,nfa;				/* argument we're looking at */
-	rspl *rss;	/* Regularized spline structure */
-	rspl *rss2;	/* Regularized spline structure at half resolution */
+	rspl *rss;			/* Regularized spline structure */
+	rspl *rss2 = NULL;	/* Regularized spline structure at half resolution */
 	datai low,high;
 	int gres[MXDI];
 	int gres2[MXDI];
+	double avgdev[MXDO];
 	co *test_points = test_points1;
 	int npoints = sizeof(test_points1)/sizeof(co);
+	int dospline = 0;
 	int dosym = 0;
 	int doplot = 0;
 	int doh = 0;
@@ -350,6 +349,8 @@ int main(int argc, char *argv[]) {
 	high[1] = 1.0;
 	gres[0] = GRES0;
 	gres[1] = GRES1;
+	avgdev[0] = 0.0;
+	avgdev[1] = 0.0;
 
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
@@ -438,7 +439,10 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
 				doplot = 1;
 
-			} else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+			} else if (argv[fa][1] == 'S') {
+				dospline = 1;
+
+			} else if (argv[fa][1] == 's') {
 				dosym = 1;
 
 			} else 
@@ -462,7 +466,7 @@ int main(int argc, char *argv[]) {
 	           low, high, gres,		/* Low, high, resolution of grid */
 	           NULL, NULL,			/* Default data scale */
 	           1.0,					/* Smoothing */
-	           0.0);				/* Average deviation */
+	           avgdev);				/* Average deviation */
 	if (doh) {
 
 		if (doq) {
@@ -483,7 +487,7 @@ int main(int argc, char *argv[]) {
 		           low, high, gres2,	/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
 		           1.0,					/* Smoothing */
-		           0.0);				/* Average deviation */
+		           avgdev);				/* Average deviation */
 	}
 
 	/* Test the interpolation in 2D */
@@ -512,7 +516,8 @@ int main(int argc, char *argv[]) {
 			tco.p[1] = (double)((HEIGHT-1) - j) * sy + y1;
 			for (i=0; i < WIDTH; i++) {
 				tco.p[0] = (double)i * sx + x1;
-				if (rs->INTERP(rs, &tco)) {
+				if ((dospline && rs->spline_interp(rs, &tco))
+				 || (!dospline && rs->interp(rs, &tco))) {
 					pa[j][i][0] = 0;	/* Out of bounds in green */
 					pa[j][i][1] = 100;
 					pa[j][i][2] = 0;
@@ -591,12 +596,14 @@ int main(int argc, char *argv[]) {
 				tp.p[0] = xx;
 				tp.p[1] = yy;
 
-				if (rss->INTERP(rss, &tp))
+				if ((dospline && rss->spline_interp(rss, &tp))
+				 || (!dospline && rss->interp(rss, &tp)))
 					tp.v[0] = -0.1;
 				ya[i] = tp.v[0];
 
 				if (doh) {
-					if (rss2->INTERP(rss2, &tp))
+					if ((dospline && rss2->spline_interp(rss2, &tp))
+					 || (!dospline && rss2->interp(rss2, &tp)))
 						tp.v[0] = -0.1;
 					yb[i] = tp.v[0];
 				}
@@ -624,7 +631,10 @@ int main(int argc, char *argv[]) {
 			double err;
 			tco.p[0] = test_points[k].p[0];
 			tco.p[1] = test_points[k].p[1];
-			rss->INTERP(rss, &tco);
+			if (dospline)
+				rss->spline_interp(rss, &tco);
+			else
+				rss->interp(rss, &tco);
 
 			err = tco.v[0] - test_points[k].v[0];
 			err = fabs(err);

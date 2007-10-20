@@ -9,8 +9,8 @@
  * Copyright 2002, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  *
  * These are kept in a separate file to allow them to be
  * selectively ommitted from the cgats library.
@@ -55,7 +55,8 @@ size_t size,
 char *file,
 int line
 ) {
-	return malloc(size);
+	void *rv = malloc(size);
+	return rv;
 }
 
 static void *cgatsAllocStd_dcalloc(
@@ -65,7 +66,8 @@ size_t size,
 char *file,
 int line
 ) {
-	return calloc(num, size);
+	void *rv = calloc(num, size);
+	return rv;
 }
 
 static void *cgatsAllocStd_drealloc(
@@ -75,7 +77,8 @@ size_t size,
 char *file,
 int line
 ) {
-	return realloc(ptr, size);
+	void *rv = realloc(ptr, size);
+	return rv;
 }
 
 
@@ -125,7 +128,8 @@ static void *cgatsAllocStd_malloc(
 struct _cgatsAlloc *pp,
 size_t size
 ) {
-	return malloc(size);
+	void *rv = malloc(size);
+	return rv;
 }
 
 static void *cgatsAllocStd_calloc(
@@ -133,7 +137,8 @@ struct _cgatsAlloc *pp,
 size_t num,
 size_t size
 ) {
-	return calloc(num, size);
+	void *rv = calloc(num, size);
+	return rv;
 }
 
 static void *cgatsAllocStd_realloc(
@@ -141,7 +146,8 @@ struct _cgatsAlloc *pp,
 void *ptr,
 size_t size
 ) {
-	return realloc(ptr, size);
+	void *rv = realloc(ptr, size);
+	return rv;
 }
 
 

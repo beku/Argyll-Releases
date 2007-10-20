@@ -1,26 +1,34 @@
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <memory.h>
 
 /* Test frame for cgen.c IMDI generation code */
 /*
- * Copyright 2000, Graeme W. Gill
+ * Copyright 2000 - 2006 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
-#include "imdi_imp.h"
-#include "imdi_gen.h"
+#include "imdi.h"
 #include "imdi_tab.h"
 
 
 int
 main(void) {
 	int rv;
-	genspec gs;
+	genspec gs, ogs;
+	tabspec ts, ots;
 	mach_arch  ar;
 	FILE *kcode;
+
+	/* Zero out the gen and tabspecs, to give diff a place to start */
+	memset((void *)&ogs, 0, sizeof(genspec));
+	memset((void *)&gs, 0, sizeof(genspec));
+	memset((void *)&ots, 0, sizeof(tabspec));
+	memset((void *)&ts, 0, sizeof(tabspec));
 
 	printf("Testing gen_c_kernel\n");
 
@@ -90,7 +98,7 @@ main(void) {
 	gs.out.bov[5] = 0;	/* Bit offset to value within channel */
 	gs.out.bpv[5] = 8;	/* Bits per value within channel */
 
-	gs.dir = 0;			/* Non-zero if processing should be from end to start */
+	gs.opt = opts_none;		/* Direction and stride options */
 
 	gs.prec  = 8;		/* Precsision needed */
 	gs.itres = 16;		/* Interpolation table resolution */
@@ -140,7 +148,7 @@ main(void) {
 #endif /* ALLOW64 */
 	ar.natint = 2;		/* Most natural type */
 
-	rv = gen_c_kernel(&gs, &ar, kcode, 99);
+	rv = gen_c_kernel(&gs, &ts, &ar, kcode, 99, &ogs, &ots);
 
 	fclose(kcode);
 

@@ -9,8 +9,8 @@
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -38,9 +38,8 @@
 #include "prof.h"
 
 void usage(char *diag, ...) {
-	int i;
 	fprintf(stderr,"Create Optimsed separation, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"Diagnostic: ");
@@ -50,48 +49,49 @@ void usage(char *diag, ...) {
 		fprintf(stderr,"\n");
 	}
 	fprintf(stderr,"usage: %s [-options] infile.[icm|mpp] outprofile.icm\n",error_program);
-	fprintf(stderr," -v         Verbose mode\n");
-	fprintf(stderr," -t         Create psuedo-CMY input device space,\n");
-	fprintf(stderr," -T         Create psuedo-RGB input device space,\n");
-	fprintf(stderr,"            Default is psuedo-CMYK input device space,\n");
+	fprintf(stderr," -v              Verbose mode\n");
+	fprintf(stderr," -t              Create psuedo-CMY input device space,\n");
+	fprintf(stderr," -T              Create psuedo-RGB input device space,\n");
+	fprintf(stderr,"                 Default is psuedo-CMYK input device space,\n");
 	fprintf(stderr," -e description  Description string\n");
-	fprintf(stderr," -q [lmhu]  Quality - Low, Medium (def), High, Ultra\n");
-	fprintf(stderr," -l tlimit  override total ink limit, 0 - 400+%%\n");
-	fprintf(stderr," -L klimit  override black ink limit, 0 - 100%%\n");
-	fprintf(stderr,"            Black generation for pseudo-CMY or RGB:\n");
-	fprintf(stderr," -k [zhxr]  z = zero K, h = 0.5 K (def),\n");
-	fprintf(stderr,"            x = max K, r = ramp K\n");
+	fprintf(stderr," -q [lmhu]       Quality - Low, Medium (def), High, Ultra\n");
+	fprintf(stderr," -l tlimit       override total ink limit, 0 - 400+%%\n");
+	fprintf(stderr," -L klimit       override black ink limit, 0 - 100%%\n");
+	fprintf(stderr,"                 Black generation for pseudo-CMY or RGB:\n");
+	fprintf(stderr," -k [zhxr]       z = zero K, h = 0.5 K,\n");
+	fprintf(stderr,"                 x = max K, r = ramp K (def.)\n");
 	fprintf(stderr," -k p stle stpo enpo enle shape\n");
-	fprintf(stderr,"            stle: K level at White 0.0 - 1.0\n");
-	fprintf(stderr,"            stpo: start point of transition Wh 0.0 - Bk 1.0\n");
-	fprintf(stderr,"            enpo: End point of transition Wh 0.0 - Bk 1.0\n");
-	fprintf(stderr,"            enle: K level at Black 0.0 - 1.0\n");
-	fprintf(stderr,"            shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0 convex\n");
-	fprintf(stderr," -i illum   Choose illuminant for print/transparency spectral MPP profile:\n");
-	fprintf(stderr,"            A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
-	fprintf(stderr," -o observ  Choose CIE Observer for spectral MPP profile:\n");
-	fprintf(stderr,"            1931_2, 1964_10, S&B 1955_2, J&V 1978_2 (def.)\n");
-//	fprintf(stderr,"            1931_2, 1964_10, S&B 1955_2, 1964_10c, shaw, J&V 1978_2 (def.)\n");
-	fprintf(stderr," -f         Use Fluorescent Whitening Agent compensation for spectral MPP profile\n");
+	fprintf(stderr,"                 stle: K level at White 0.0 - 1.0\n");
+	fprintf(stderr,"                 stpo: start point of transition Wh 0.0 - Bk 1.0\n");
+	fprintf(stderr,"                 enpo: End point of transition Wh 0.0 - Bk 1.0\n");
+	fprintf(stderr,"                 enle: K level at Black 0.0 - 1.0\n");
+	fprintf(stderr,"                 shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0 convex\n");
+	fprintf(stderr," -K parameters   Same as -k, but target is K locus rather than K value itself\n");
+	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral MPP profile:\n");
+	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr," -o observ       Choose CIE Observer for spectral MPP profile:\n");
+	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
+	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation for spectral MPP profile\n");
 	fprintf(stderr," infile.[icm|mpp] Name of device forward profile\n");
 	fprintf(stderr," outfile.icm      Name for output.icm device to device separation profile file\n");
 	exit(1);
 	}
 
 
-main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 	int fa,nfa;					/* current argument we're looking at */
 	int verb = 0;
 	int quality = 1;			/* quality */
-	int inking = 1;				/* Default 0.5 K */
-	double Kstle, Kstpo, Kenle, Kenpo, Kshap;
+	int inking = 3;				/* Default ramp */
+	int locus = 0;				/* Default K value target */
+	double Kstle = 0.0, Kstpo = 0.0, Kenle = 0.0, Kenpo = 0.0, Kshap = 0.0;
 	double tlimit = -1.0;		/* No total ink limit (0 .. inn)*/
 	double klimit = -1.0;		/* No black ink limit (0 .. 1.0)*/
 	int fwacomp = 0;			/* FWA compensation */
 	int spec = 0;				/* Use spectral data flag */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;			/* Custom illumination spectrum */
-	icxObserverType observ = icxOT_Judd_Voss_2;
+	icxObserverType observ = icxOT_CIE_1931_2;
 	static char inname[1000] = { 0 };		/* Input icc or mpp file base name */
 	static char outname[1000] = { 0 };		/* Output icc file base name */
 	profxinf xpi;				/* Extra profile information */
@@ -105,8 +105,8 @@ main(int argc, char *argv[]) {
 	int iimask = ICX_CMYK;		/* Input ink mask */
 	int outn;					/* Output number of components */
 	int oimask;					/* Output ink mask */
-	xsep *xsepo;				/* Separation object */
-	icc *sep_icco;				/* Output icc */
+//	xsep *xsepo;				/* Separation object */
+//	icc *sep_icco;				/* Output icc */
 
 	icxInk ink;					/* K Inking parameters */
 
@@ -191,6 +191,10 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to inking flag -k");
+				if (argv[fa][1] == 'k')
+					locus = 0;			/* Use K value target */
+				else
+					locus = 1;			/* Use K locus target */
     			switch (na[0]) {
 					case 'z':
 					case 'Z':
@@ -385,7 +389,7 @@ main(int argc, char *argv[]) {
 	/* Configure ink limits */
 	if (tlimit >= 0.0) {
 		if (verb)
-			printf("Total ink limit being used is %d%%\n",tlimit);
+			printf("Total ink limit being used is %.0f%%\n",tlimit);
 		ink.tlimit = tlimit;			/* Set a total ink limit */
 	} else {
 		if (verb)
@@ -395,7 +399,7 @@ main(int argc, char *argv[]) {
 
 	if (klimit >= 0.0) {
 		if (verb)
-			printf("Black ink limit being used is %d%%\n",klimit);
+			printf("Black ink limit being used is %.0f%%\n",klimit);
 		ink.klimit = klimit;		/* Set a black ink limit */
 	} else {
 		if (verb)
@@ -406,35 +410,35 @@ main(int argc, char *argv[]) {
 	/* Configure black generation */
 	/* This will be ignored if the pseudo input is CMYK */
 	if (inking == 0) {			/* Use minimum */
-		ink.k_rule = icxKluma5;
+		ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 		ink.c.Kstle = 0.0;
 		ink.c.Kstpo = 0.0;
 		ink.c.Kenpo = 1.0;
 		ink.c.Kenle = 0.0;
 		ink.c.Kshap = 1.0;
 	} else if (inking == 1) {	/* Use 0.5  */
-		ink.k_rule = icxKluma5;
+		ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 		ink.c.Kstle = 0.5;
 		ink.c.Kstpo = 0.0;
 		ink.c.Kenpo = 1.0;
 		ink.c.Kenle = 0.5;
 		ink.c.Kshap = 1.0;
 	} else if (inking == 2) {	/* Use maximum  */
-		ink.k_rule = icxKluma5;
+		ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 		ink.c.Kstle = 1.0;
 		ink.c.Kstpo = 0.0;
 		ink.c.Kenpo = 1.0;
 		ink.c.Kenle = 1.0;
 		ink.c.Kshap = 1.0;
 	} else if (inking == 3) {	/* Use ramp  */
-		ink.k_rule = icxKluma5;
+		ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 		ink.c.Kstle = 0.0;
 		ink.c.Kstpo = 0.0;
 		ink.c.Kenpo = 1.0;
 		ink.c.Kenle = 1.0;
 		ink.c.Kshap = 1.0;
 	} else {				/* Use specified curve */
-		ink.k_rule = icxKluma5;
+		ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 		ink.c.Kstle = Kstle;
 		ink.c.Kstpo = Kstpo;
 		ink.c.Kenpo = Kenpo;

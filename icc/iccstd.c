@@ -8,8 +8,8 @@
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  *
  * These are kept in a separate file to allow them to be
  * selectively ommitted from the icc library.
@@ -71,7 +71,10 @@ size_t size,
 char *name,
 int line
 ) {
-	return calloc(num, size);
+	size_t tot = num * size;
+	if (tot < num || tot < size)
+		return NULL;
+	calloc(num, size);
 }
 
 static void *icmAllocStd_drealloc(
@@ -139,6 +142,9 @@ struct _icmAlloc *pp,
 size_t num,
 size_t size
 ) {
+	size_t tot = num * size;
+	if (tot < num || tot < size)
+		return NULL;		/* Overflow */
 	return calloc(num, size);
 }
 

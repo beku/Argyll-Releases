@@ -1,0 +1,51 @@
+
+#SubDir TOP tiff ;
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;
+
+if $(HAVE_TIFF) {	# Alternate TIFF library
+	TIFFLIB = ;
+	TIFFINC = ;
+	LINKLIBS on cctiff$(SUFEXE) = -ltiff $(LINKLIBS) ;
+} else {
+	TIFFLIB = ../libtiff.lib ;
+	TIFFINC = ../ ;
+}
+
+# 
+Main tiffcp : tiffcp.c ../port/getopt.c ;
+ObjectHdrs tiffcp$(SUFOBJ) : .. ../libtiff ;
+#LinkLibraries tiffcp : ../libport.lib ../libtiff.lib ;
+LinkLibraries tiffcp : ../libtiff.lib ;
+
+# 
+Main tiff2bw : tiff2bw.c ../port/getopt.c ;
+ObjectHdrs tiff2bw$(SUFOBJ) : .. ../libtiff ;
+#LinkLibraries tiff2bw : ../libport.lib ../libtiff.lib ;
+LinkLibraries tiff2bw : ../libtiff.lib ;
+
+# 
+Main tiffset : tiffset.c ../port/getopt.c ;
+ObjectHdrs tiffset$(SUFOBJ) : .. ../libtiff ;
+#LinkLibraries tiffset : ../libport.lib ../libtiff.lib ;
+LinkLibraries tiffset : ../libtiff.lib ;
+
+# 
+Main tiffdump : tiffdump.c ../port/getopt.c ;
+ObjectHdrs tiffdump$(SUFOBJ) : .. ../libtiff ;
+#LinkLibraries tiffdump : ../libport.lib ../libtiff.lib ;
+LinkLibraries tiffdump : ../libtiff.lib ;
+
+# 
+Main tiffinfo : tiffinfo.c ../port/getopt.c ../libtiff/tif_extension.c ;
+ObjectHdrs tiffinfo$(SUFOBJ) : .. ../libtiff ;
+#LinkLibraries tiffinfo : ../libport.lib ../libtiff.lib ;
+LinkLibraries tiffinfo : ../libtiff.lib ;
+
+# 
+Main tiffsplit : tiffsplit.c ../port/getopt.c ../libtiff/tif_extension.c ;
+ObjectHdrs tiffsplit$(SUFOBJ) : .. ../libtiff ;
+#LinkLibraries tiffsplit : ../libport.lib ../libtiff.lib ;
+LinkLibraries tiffsplit : ../libtiff.lib ;

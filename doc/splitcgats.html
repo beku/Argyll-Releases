@@ -15,22 +15,34 @@ choosing the sets randomly. Usually the CGATS file will be a <a
 format file, and the intent is to create a test and reference data set,
 to verify the operation of <a href="profile.html">profile</a>.<br>
 <h3>Usage Summary</h3>
-usage: splitcgats [-options] input.ti3 output1.ti3 output2.ti3<br>
-&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Verbose - print each patch value<br>
-&nbsp;-n
-no&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Put no sets in first file, and balance in second file.<br>
-&nbsp;-p percent&nbsp;&nbsp;&nbsp;&nbsp; Put percentage% in first file,
-and balance in second file. (def. 50%)<br>
-&nbsp;-r seed&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use
-given random seed.<br>
-&nbsp;<span style="font-style: italic;">input.ti3</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; File to be split up.<br>
-&nbsp;<span style="font-style: italic;">output1.ti3</span>&nbsp;&nbsp;&nbsp;&nbsp;
-First output file<br>
-&nbsp;<span style="font-style: italic;">output2.ti3</span>&nbsp;&nbsp;&nbsp;&nbsp;
-Second output file<br>
+<small><span style="font-family: monospace;">usage: splitcgats
+[-options] input.ti3 output1.ti3 output2.ti3</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose - print each patch value</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-n
+no&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Put no sets in
+first file, and balance in second file.</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-p
+percent&nbsp;&nbsp;&nbsp;&nbsp; Put percentage% in first file,
+and balance in second file. (def. 50%)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-r
+seed&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use
+given random seed.</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><span
+ style="font-style: italic; font-family: monospace;">input.ti3</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; File to
+be split up.</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><span
+ style="font-style: italic; font-family: monospace;">output1.ti3</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp; First output file</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><span
+ style="font-style: italic; font-family: monospace;">output2.ti3</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp; Second output file</span></small><br>
 <h3>Usage Details and Discussion</h3>
 <b>splitcgats</b> together with <a href="profcheck.html">profcheck</a>
 provides a way of verifying how well the profiling process is working.

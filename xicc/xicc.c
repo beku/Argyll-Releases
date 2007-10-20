@@ -1,3 +1,4 @@
+
 /* 
  * International Color Consortium color transform expanded support
  *
@@ -7,8 +8,8 @@
  *
  * Copyright 2000, 2001 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  * Based on the old iccXfm class.
  */
@@ -37,6 +38,7 @@
 #include <float.h>
 #endif
 #include "numlib.h"
+#include "counters.h"
 #include "plot.h"
 #include "../h/sort.h"
 #include "xicc.h"		/* definitions for this library */
@@ -78,6 +80,13 @@ int xicc_get_viewcond(xicc *p, icxViewCond *vc);
 #include "xlut.c"		/* New in & out optimising based profiles */
 //#include "xlut1.c"	/* Old device curve linear with Y based profiles */
 
+#ifdef NT		/* You'd think there might be some standards.... */
+# ifndef __BORLANDC__
+#  define stricmp _stricmp
+# endif
+#else
+# define stricmp strcasecmp
+#endif
 /* Utilities */
 
 /* Return a string description of the given enumeration value */
@@ -88,6 +97,13 @@ const char *icx2str(icmEnumType etype, int enumval) {
 			return "Jab";
 		else if (((icColorSpaceSignature)enumval) == icxSigJChData)
 			return "JCh";
+		else if (((icColorSpaceSignature)enumval) == icxSigLChData)
+			return "LCh";
+	} else if (etype == icmRenderingIntent) {
+		if (((icRenderingIntent)enumval) == icxAppearance)
+			return "icxAppearance";
+		else if (((icRenderingIntent)enumval) == icxAbsAppearance)
+			return "icxAbsAppearance";
 	}
 	return icm2str(etype, enumval);
 }
@@ -203,28 +219,11 @@ struct _icxLuBase *p,
 double *wht,
 double *blk
 ) {
-	icColorSpaceSignature pcs = p->plu->icp->header->pcs;
 	icmXYZNumber whiteXYZ, blackXYZ;
 	double white[3], black[3];
 
-	/* Define or fetch the white and black points, as appropriate */
-	switch (p->intent) {
-		/* If it is relative */
-		case icmDefaultIntent:				/* Shouldn't happen */
-		case icPerceptual:
-		case icRelativeColorimetric:
-		case icSaturation:
-			whiteXYZ = icmD50;					/* By definition */
-			blackXYZ.X = blackXYZ.Y = blackXYZ.Z = 0.0;
-			break;
-
-		/* If it is absolute, get the media values */
-		case icAbsoluteColorimetric:
-		case icxAppearance:
-		case icxAbsAppearance:
-			p->plu->wh_bk_points(p->plu, &whiteXYZ, &blackXYZ);
-			break;							/* Leave unchanged */
-	}
+	/* Get the absolute XYZ profile black and white points */
+	p->plu->wh_bk_points(p->plu, &whiteXYZ, &blackXYZ);
 
 	white[0] = whiteXYZ.X;
 	white[1] = whiteXYZ.Y;
@@ -232,6 +231,18 @@ double *blk
 	black[0] = blackXYZ.X;
 	black[1] = blackXYZ.Y;
 	black[2] = blackXYZ.Z;
+
+	/* Convert to relative colorimetric if appropriate */
+	switch (p->intent) {
+		/* If it is relative */
+		case icmDefaultIntent:				/* Shouldn't happen */
+		case icPerceptual:
+		case icRelativeColorimetric:
+		case icSaturation:
+			p->plu->XYZ_Abs2Rel(p->plu,white,white);
+			p->plu->XYZ_Abs2Rel(p->plu,black,black);
+			break;
+	}
 
 	/* Convert to the (possibly) override PCS */
 	switch (p->pcs) {
@@ -244,6 +255,8 @@ double *blk
 		case icxSigJabData:
 			p->cam->XYZ_to_cam(p->cam, white, white);	/* Convert from XYZ to Jab */
 			p->cam->XYZ_to_cam(p->cam, black, black);
+			break;
+		default:
 			break;
 	}
 	if (wht != NULL) {
@@ -375,6 +388,9 @@ icxInk *ink					/* inking details (NULL for default) */
     	case icmLutType:
 			xplu = new_icxLuLut(p, flags, plu, func, intent, pcsor, vc, ink);
 			break;
+		default:
+			xplu = NULL;
+			break;
 	}
 
 	return xplu;
@@ -382,7 +398,7 @@ icxInk *ink					/* inking details (NULL for default) */
 
 
 /* Return an expanded lookup object, initialised */
-/* from the icc, and then overwritten by a conversion
+/* from the icc, and then overwritten by a conversion */
 /* created from the supplied scattered data points. */
 /* The Lut is assumed to be a device -> native PCS profile. */
 /* If the SET_WHITE and/or SET_BLACK flags are set, */
@@ -404,7 +420,7 @@ icxInk *ink,				/* inking details (NULL for default) */
 int quality					/* Quality metric, 0..3 */
 ) {
 	icmLuBase *plu;
-	icxLuBase *xplu;
+	icxLuBase *xplu = NULL;
 	icmLuAlgType alg;
 
 #if defined(__IBMC__)
@@ -446,6 +462,9 @@ int quality					/* Quality metric, 0..3 */
 			/* ~~~ Should add check that it is a fwd profile ~~~ */
 			xplu = set_icxLuLut(p, plu, intent, func, flags, no, points, smooth, avgdev, vc, ink, quality);
 			break;
+
+		default:
+			break;
 	}
 
 	return xplu;
@@ -453,6 +472,8 @@ int quality					/* Quality metric, 0..3 */
 
 /* ------------------------------------------------------ */
 /* Viewing Condition Parameter stuff */
+
+#ifdef NEVER	/* Not currently used */
 
 /* Guess viewing parameters from the technology signature */
 static void guess_from_techsig(
@@ -525,6 +546,8 @@ double Yb = -1.0;
 	if (Ybp != NULL)
 		*Ybp = Yb;
 }
+
+#endif /* NEVER */
 
 
 /* See if we can read or guess the viewing conditions */
@@ -903,7 +926,7 @@ void xicc_set_viewcond(
 xicc *p,			/* Expanded profile we're working with */
 icxViewCond *vc		/* Viewing parameters to return */
 ) {
-	icc *pp = p->pp;	/* Base ICC */
+	//icc *pp = p->pp;	/* Base ICC */
 
 	// ~~1	Not implemented yet
 }
@@ -911,20 +934,21 @@ icxViewCond *vc		/* Viewing parameters to return */
 
 
 /* Return an enumerated viewing condition */
-/* Return 0 if OK, 1 if there is no such enumeration. */
+/* Return enumeration if OK, -999 if there is no such enumeration. */
 int xicc_enum_viewcond(
 xicc *p,			/* Expanded profile to get white point (May be NULL if desc NZ) */
-icxViewCond *vc,	/* Viewing parameters to return */
-int no,				/* Enumeration to return */
-int desc			/* NZ - Just return a description of this enumeration */
+icxViewCond *vc,	/* Viewing parameters to return, May be NULL if desc is nz */
+int no,				/* Enumeration to return, -1 for default, -2 for none */
+char *as,			/* String alias to number, NULL if none */
+int desc			/* NZ - Just return a description of this enumeration in vc */
 ) {
 
-	if (desc == 0) {
+	if (desc == 0) {	/* We're setting the viewing condition */
 		icc *pp;		/* Base ICC */
 		icmXYZArray *whitePointTag;
 
 		if (p == NULL)
-			return 2;
+			return -999;
 	
 		pp = p->pp;
 		if ((whitePointTag = (icmXYZArray *)pp->read_tag(pp, icSigMediaWhitePointTag)) != NULL
@@ -938,102 +962,169 @@ int desc			/* NZ - Just return a description of this enumeration */
 			vc->Fxyz[1] = vc->Wxyz[1];
 			vc->Fxyz[2] = vc->Wxyz[2];
 		} else {
-			p->errc = 2;
 			sprintf(p->err,"Enum VC: Failed to read Media White point");
-			return p->errc;
+			p->errc = 2;
+			return -999;
 		}
 	}
 
-	switch(no) {
-		case -1:
-			vc->desc = "Default Viewing Condition";
+/*
+  Typical Ambient Illuminance brightness
+  (Lux)   La  Condition 
+    11     1  Twilight
+    32     2  Subdued indoor lighting
+    64     4  Less than typical office light; sometimes recommended for
+              display-only workplaces (sRGB)
+   350    22  Typical Office (sRGB annex D)
+   500    32  Practical print viewing environment (ISO-3664 P2)
+  1000    64  Print evaluation (CIE 116-1995)
+  1000    64  Overcast Outdoors
+  2000   127  Critical print evaluation (ISO-3664 P1)
+ 10000   637  Typical outdoors, full daylight 
+ 50000  3185  Bright summers day 
+*/
+
+	if (no == -1
+	 || (as != NULL && stricmp(as,"d") == 0)) {
+
+		no = -1;
+		if (vc != NULL) {
+			vc->desc = "  d: Default Viewing Condition";
 			vc->Ev = vc_average;	/* Average viewing conditions */
 			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 50.0;			/* Compromise brightness */
 			vc->Yf = 0.01;			/* 1% flare */
-			break;
+		}
+	}
+	else if (no == 0
+	 || (as != NULL && stricmp(as,"pp") == 0)) {
 
-		case 0:
-			vc->desc = "Practical Reflection Print";
+		no = 0;
+		if (vc != NULL) {
+			vc->desc = " pp - Practical Reflection Print";
 			vc->Ev = vc_average;	/* Average viewing conditions */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->La = 34.0;			/* Use a practical print evaluation number */
+			vc->La = 32.0;			/* Use a practical print evaluation number */
 			vc->Yf = 0.01;			/* 1% flare */
-			break;
+		}
+	}
+	else if (no == 1
+	 || (as != NULL && stricmp(as,"pe") == 0)) {
 
-		case 1:
-			vc->desc = "Print evaluation environment";
+		no = 1;
+		if (vc != NULL) {
+			vc->desc = " pe - Print evaluation environment";
 			vc->Ev = vc_average;	/* Average viewing conditions */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->La = 60.0;			/* Bright */
+			vc->La = 64.0;			/* Bright */
 			vc->Yf = 0.01;			/* 1% flare */
-			break;
+		}
+	}
+	else if (no == 2
+	 || (as != NULL && stricmp(as,"mt") == 0)) {
 
-		case 2:
-			vc->desc = "Monitor in typical work environment";
+		no = 2;
+		if (vc != NULL) {
+			vc->desc = " mt - Monitor in typical work environment";
 			vc->Ev = vc_average;	/* Average viewing conditions */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->La = 33.0;			/* Typical work environment */
+			vc->La = 22.0;			/* Typical work environment */
 			vc->Yf = 0.02;			/* 2% flare */
-			break;
+		}
+	}
+	else if (no == 3
+	 || (as != NULL && stricmp(as,"mb") == 0)) {
 
-		case 3:
-			vc->desc = "Monitor in darkened work environment";
+		no = 3;
+		if (vc != NULL) {
+			vc->desc = " mb - Monitor in bright work environment";
+			vc->Ev = vc_average;	/* Average viewing conditions */
+			vc->Yb = 0.2;			/* Grey world */
+			vc->La = 42.0;			/* Bright work environment */
+			vc->Yf = 0.02;			/* 2% flare */
+		}
+	}
+	else if (no == 4
+	 || (as != NULL && stricmp(as,"md") == 0)) {
+
+		no = 4;
+		if (vc != NULL) {
+			vc->desc = " md - Monitor in darkened work environment";
 			vc->Ev = vc_dim;		/* Dim viewing conditions */
 			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 4.0;			/* Darkened work environment */
 			vc->Yf = 0.01;			/* 1% flare */
-			break;
+		}
+	}
+	else if (no == 5
+	 || (as != NULL && stricmp(as,"jm") == 0)) {
 
-		case 4:
-			vc->desc = "Projector in dim environment";
+		no = 5;
+		if (vc != NULL) {
+			vc->desc = " jm - Projector in dim environment";
 			vc->Ev = vc_dim;		/* Dim viewing conditions */
-			vc->Yb = 0.2;			/* Grey world
+			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 10.0;			/* Adaptation is from display */
 			vc->Yf = 0.01;			/* 1% flare */
-			break;
+		}
+	}
+	else if (no == 6
+	 || (as != NULL && stricmp(as,"jd") == 0)) {
 
-		case 5:
-			vc->desc = "Projector in dark environment";
+		no = 6;
+		if (vc != NULL) {
+			vc->desc = " jd - Projector in dark environment";
 			vc->Ev = vc_dark;		/* Dark viewing conditions */
-			vc->Yb = 0.2;			/* Grey world
+			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 10.0;			/* Adaptation is from display */
 			vc->Yf = 0.01;			/* 1% flare ? */
-			break;
+		}
+	}
+	else if (no == 7
+	 || (as != NULL && stricmp(as,"pcd") == 0)) {
 
-		case 6:
-			vc->desc = "Original scene - Outdoors";
+		no = 7;
+		if (vc != NULL) {
+			vc->desc = "pcd - Photo CD - original scene outdoors";
 			vc->Ev = vc_average;	/* Average viewing conditions */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->La = 200.0;			/* Outdoors */
+			vc->La = 320.0;			/* Typical outdoors, 1600 cd/m^2 */
 			vc->Yf = 0.00;			/* 0% flare */
-			break;
+		}
+	}
+	else if (no == 8
+	 || (as != NULL && stricmp(as,"ob") == 0)) {
 
-		case 7:
-			vc->desc = "Photo CD - original scene";
+		no = 8;
+		if (vc != NULL) {
+			vc->desc = " ob - Original scene - Bright Outdoors";
 			vc->Ev = vc_average;	/* Average viewing conditions */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->La = 320.0;			/* Bright outdoors */
+			vc->La = 2000.0;		/* Bright Outdoors */
 			vc->Yf = 0.00;			/* 0% flare */
-			break;
+		}
+	}
+	else if (no == 9
+	 || (as != NULL && stricmp(as,"cx") == 0)) {
 
-		case 8:
-			vc->desc = "Transparencies on a viewing box";
+		no = 9;
+		if (vc != NULL) {
+			vc->desc = " cx - Cut Sheet Transparencies on a viewing box";
 			vc->Ev = vc_cut_sheet;	/* Cut sheet viewing conditions */
 			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 53.0;			/* Dim, adapted to slide ? */
 			vc->Yf = 0.01;			/* 1% flare ? */
-			break;
-
-		default:
-			if (p != NULL) {
-				p->errc = 1;
-				sprintf(p->err,"Enum VC: Out of range enumeration %d",no);
-			}
-			return 1;
+		}
+	}
+	else {
+		if (p != NULL) {
+			sprintf(p->err,"Enum VC: Unrecognised enumeration %d",no);
+			p->errc = 1;
+		}
+		return -999;
 	}
 
-	return 0;
+	return no;
 }
 
 /* Debug: dump a Viewing Condition to standard out */
@@ -1059,183 +1150,309 @@ icxViewCond *vc
 }
 
 
+/* Debug: dump an Inking setup to standard out */
+void xicc_dump_inking(icxInk *ik) {
+	printf("Inking settings:\n");
+	if (ik->tlimit < 0.0)
+		printf("No total limit\n");
+	else
+		printf("Total limit = %f%%\n",ik->tlimit * 100.0);
+	if (ik->klimit < 0.0)
+		printf("No black limit\n");
+	else
+		printf("Black limit = %f%%\n",ik->klimit * 100.0);
+
+	if (ik->k_rule == icxKvalue) {
+		printf("Inking rule is a fixed K target\n");
+	} if (ik->k_rule == icxKlocus) {
+		printf("Inking rule is a fixed locus target\n");
+	} if (ik->k_rule == icxKluma5 || ik->k_rule == icxKluma5k) {
+		if (ik->k_rule == icxKluma5)
+			printf("Inking rule is a 5 parameter locus function of L\n");
+		else
+			printf("Inking rule is a 5 parameter K function of L\n");
+		printf("Ksmth = %f\n",ik->c.Ksmth);
+		printf("Kstle = %f\n",ik->c.Kstle);
+		printf("Kstpo = %f\n",ik->c.Kstpo);
+		printf("Kenpo = %f\n",ik->c.Kenpo);
+		printf("Kenle = %f\n",ik->c.Kenle);
+		printf("Kshap = %f\n",ik->c.Kshap);
+	} if (ik->k_rule == icxKl5l || ik->k_rule == icxKl5lk) {
+		if (ik->k_rule == icxKl5l)
+			printf("Inking rule is a 2x5 parameter locus function of L and K aux\n");
+		else
+			printf("Inking rule is a 2x5 parameter K function of L and K aux\n");
+		printf("Min Ksmth = %f\n",ik->c.Ksmth);
+		printf("Min Kstle = %f\n",ik->c.Kstle);
+		printf("Min Kstpo = %f\n",ik->c.Kstpo);
+		printf("Min Kenpo = %f\n",ik->c.Kenpo);
+		printf("Min Kenle = %f\n",ik->c.Kenle);
+		printf("Min Kshap = %f\n",ik->c.Kshap);
+		printf("Max Ksmth = %f\n",ik->x.Ksmth);
+		printf("Max Kstle = %f\n",ik->x.Kstle);
+		printf("Max Kstpo = %f\n",ik->x.Kstpo);
+		printf("Max Kenpo = %f\n",ik->x.Kenpo);
+		printf("Max Kenle = %f\n",ik->x.Kenle);
+		printf("Max Kshap = %f\n",ik->x.Kshap);
+	} 
+}
 
 /* ------------------------------------------------------ */
 /* Gamut Mapping Intent stuff */
 
 /* Return an enumerated gamut mapping intent */
-/* Return 0 if OK, 1 if there is no such enumeration. */
+/* Return enumeration if OK, icxIllegalGMIntent if there is no such enumeration. */
 int xicc_enum_gmapintent(
 icxGMappingIntent *gmi,	/* Gamut Mapping parameters to return */
-int no					/* Enumeration selected */
+int no,					/* Enumeration selected, icxNoGMIntent for none */
+char *as				/* Alias string selector, NULL for none */
 ) {
-	switch(no) {
-		case icxAbsoluteGMIntent:
-		case 0:
-			/* Map Absolute Jab to Jab and clip out of gamut */
-			gmi->desc = "Absolute Colorimetric (in Jab) [ICC Absolute Colorimetric]";
-			gmi->usecas  = 2;			/* Use absolute appearance space */
-			gmi->usemap  = 0;			/* Don't use gamut mapping */
-			gmi->greymf  = 0.0;
-			gmi->glumwcpf = 0.0;
-			gmi->glumwexf = 0.0;
-			gmi->glumbcpf = 0.0;
-			gmi->glumbexf = 0.0;
-			gmi->glumknf = 0.0;
-			gmi->gamcpf  = 0.0;
-			gmi->gamexf  = 0.0;
-			gmi->gamknf  = 0.0;
-			gmi->gampwf  = 0.0;
-			gmi->gamswf  = 0.0;
-			gmi->satenh  = 0.0;			/* No saturation enhancement */
-			break;
+	int perccas = 0x1;	/* Use cas for perceptual style intents */
+//	int perccas = 0x0;	/* ~~~99 Use Lab for perceptual style intents */
 
-		case 1:
-			/* Map Jab to Jab and clip out of gamut */
-			gmi->desc = "Absolute Appearance";
-			gmi->usecas  = 1;			/* Appearance space */
-			gmi->usemap  = 0;			/* Don't use gamut mapping */
-			gmi->greymf  = 0.0;
-			gmi->glumwcpf = 0.0;
-			gmi->glumwexf = 0.0;
-			gmi->glumbcpf = 0.0;
-			gmi->glumbexf = 0.0;
-			gmi->glumknf = 0.0;
-			gmi->gamcpf  = 0.0;
-			gmi->gamexf  = 0.0;
-			gmi->gamknf  = 0.0;
-			gmi->gampwf  = 0.0;
-			gmi->gamswf  = 0.0;
-			gmi->satenh  = 0.0;			/* No saturation enhancement */
-			break;
+	/* Assert default if no guidance given */
+	if (no == icxNoGMIntent && as == NULL)
+		no = icxDefaultGMIntent;
 
-		case icxRelativeGMIntent:
-		case 2:
-			/* Map Jab to Jab and clip out of gamut */
-			/* Linear transform of the neutral axis to align white */
-			gmi->desc = "White Point Matched Appearance [ICC Relative Colorimetric]";
-			gmi->usecas  = 1;			/* Appearance space */
-			gmi->usemap  = 1;			/* Use gamut mapping */
-			gmi->greymf  = 0.0;			/* But don't do anything */
-			gmi->glumwcpf = 0.0;
-			gmi->glumwexf = 0.0;
-			gmi->glumbcpf = 0.0;
-			gmi->glumbexf = 0.0;
-			gmi->glumknf = 0.0;
-			gmi->gamcpf  = 0.0;
-			gmi->gamexf  = 0.0;
-			gmi->gamknf  = 0.0;
-			gmi->gampwf  = 0.0;
-			gmi->gamswf  = 0.0;
-			gmi->satenh  = 0.0;			/* No saturation enhancement */
-			break;
+	if (no == 0
+	 || no == icxAbsoluteGMIntent
+	 || (as != NULL && stricmp(as,"a") == 0)) {
+		/* Map Absolute Jab to Jab and clip out of gamut */
+		no = 0;
+		gmi->desc = " a - Absolute Colorimetric (in Jab) [ICC Absolute Colorimetric]";
+		gmi->icci = icAbsoluteColorimetric;
+		gmi->usecas  = 0x2;			/* Use absolute appearance space */
+		gmi->usemap  = 0;			/* Don't use gamut mapping */
+		gmi->greymf  = 0.0;
+		gmi->glumwcpf = 0.0;
+		gmi->glumwexf = 0.0;
+		gmi->glumbcpf = 0.0;
+		gmi->glumbexf = 0.0;
+		gmi->glumknf = 0.0;
+		gmi->gamcpf  = 0.0;
+		gmi->gamexf  = 0.0;
+		gmi->gamknf  = 0.0;
+		gmi->gampwf  = 0.0;
+		gmi->gamswf  = 0.0;
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else if (no == 1
+	 || (as != NULL && stricmp(as,"aw") == 0)) {
 
-		case 3:
-			/* Map Jab to Jab, linear map white/black points, and clip out of gamut */
-			gmi->desc = "Luminance matched Appearance";
-			gmi->usecas  = 1;			/* Appearance space */
-			gmi->usemap  = 1;			/* Use gamut mapping */
-			gmi->greymf  = 1.0;			/* Fully align grey axis */
-			gmi->glumwcpf = 1.0;		/* Fully compress grey axis */
-			gmi->glumwexf = 1.0;		/* Fully expand grey axis at black end */
-			gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
-			gmi->glumbexf = 1.0;		/* Fully expand grey axis */
-			gmi->glumknf = 1.0;			/* Distort at white/black ends only */
-			gmi->gamcpf  = 0.0;			/* No gamut compression */
-			gmi->gamexf  = 0.0;			/* No gamut expansion */
-			gmi->gamknf  = 0.0;			/* No knee in gamut compress/expand */
-			gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
-			gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
-			gmi->satenh  = 0.0;			/* No saturation enhancement */
-			break;
+		/* I'm not sure how often this intent is useful. It's less likely than */
+		/* I though that a printer white point won't fit within the gamut */
+		/* of a display profile, since the display white always has Y = 1.0, */
+		/* and no paper has better than about 95% reflectance. */
 
-		case icxDefaultGMIntent:
-		case icxPerceptualGMIntent:
-		case 4:
-			/* Map Jab to Jab, sigma map white/black, compress out of gamut */
-			/* NOTE would like to be using sigma knee on gamut in these two, */
-			/* but the current gamut mapping isn't linear enough to need extra knee :-) */
-			gmi->desc = "Perceptual (Preferred) [ICC Perceptual]";
-			gmi->usecas  = 1;			/* Appearance space */
-			gmi->usemap  = 1;			/* Use gamut mapping */
-			gmi->greymf  = 1.0;			/* Fully align grey axis */
-			gmi->glumwcpf = 1.0;		/* Fully compress grey axis at white end */
-			gmi->glumwexf = 1.0;		/* Fully expand grey axis at white end */
-			gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
-			gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
-			gmi->glumknf = 0.5;			/* Sigma knee in grey compress/expand */
-			gmi->gamcpf  = 1.0;			/* Full gamut compression */
-			gmi->gamexf  = 0.0;			/* No gamut expansion */
-			gmi->gamknf  = 0.5;			/* Sigma knee in gamut compress/expand */
-			gmi->gampwf  = 1.0;			/* Full Perceptual surface weighting factor */
-			gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
-			gmi->satenh  = 0.0;			/* No saturation enhancement */
-			break;
+		/* Map Absolute Jab to Jab and scale source to avoid clipping the white point */
+		no = 1;
+		gmi->desc = "aw - Absolute Colorimetric (in Jab) with scaling to fit white point";
+		gmi->icci = icAbsoluteColorimetric;
+		gmi->usecas  = 0x102;		/* Absolute Appearance space with scaling */
+									/* to avoid clipping the source white point */
+		gmi->usemap  = 0;			/* Don't use gamut mapping */
+		gmi->greymf  = 0.0;
+		gmi->glumwcpf = 0.0;
+		gmi->glumwexf = 0.0;
+		gmi->glumbcpf = 0.0;
+		gmi->glumbexf = 0.0;
+		gmi->glumknf = 0.0;
+		gmi->gamcpf  = 0.0;
+		gmi->gamexf  = 0.0;
+		gmi->gamknf  = 0.0;
+		gmi->gampwf  = 0.0;
+		gmi->gamswf  = 0.0;
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else if (no == 2
+	 || (as != NULL && stricmp(as,"aa") == 0)) {
 
-		case 5:
-			/* Map Jab to Jab, sigma map whole gamut */
-			gmi->desc = "Saturation";
-			gmi->usecas  = 1;			/* Appearance space */
-			gmi->usemap  = 1;			/* Use gamut mapping */
-			gmi->greymf  = 1.0;			/* Fully align grey axis */
-			gmi->glumwcpf = 1.0;		/* Fully compress grey axis at white end */
-			gmi->glumwexf = 1.0;		/* Fully expand grey axis at white end */
-			gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
-			gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
-			gmi->glumknf = 0.5;			/* Sigma knee in grey compress/expand */
-			gmi->gamcpf  = 0.95;		/* Almost full gamut compression */
-			gmi->gamexf  = 1.5;			/* Excessive expansion to compensate for rspl effect */
-			gmi->gamknf  = 1.0;			/* Sigma knee in gamut compress/expand */
-			gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
-			gmi->gamswf  = 1.0;			/* Full Saturation surface weighting factor */
-			gmi->satenh  = 0.0;			/* No saturation enhancement */
-			break;
+		/* Map Jab to Jab and clip out of gamut */
+		no = 2;
+		gmi->desc = "aa - Absolute Appearance";
+		gmi->icci = icRelativeColorimetric;
+		gmi->usecas  = perccas;		/* Appearance space */
+		gmi->usemap  = 0;			/* Don't use gamut mapping */
+		gmi->greymf  = 0.0;
+		gmi->glumwcpf = 0.0;
+		gmi->glumwexf = 0.0;
+		gmi->glumbcpf = 0.0;
+		gmi->glumbexf = 0.0;
+		gmi->glumknf = 0.0;
+		gmi->gamcpf  = 0.0;
+		gmi->gamexf  = 0.0;
+		gmi->gamknf  = 0.0;
+		gmi->gampwf  = 0.0;
+		gmi->gamswf  = 0.0;
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else if (no == 3
+	 || no == icxRelativeGMIntent
+	 || (as != NULL && stricmp(as,"r") == 0)) {
 
-		case icxSaturationGMIntent:
-		case 6:
-			/* Map Jab to Jab, sigma map whole gamut */
-			gmi->desc = "Enhanced Saturation [ICC Saturation]";
-			gmi->usecas  = 1;			/* Appearance space */
-			gmi->usemap  = 1;			/* Use gamut mapping */
-			gmi->greymf  = 1.0;			/* Fully align grey axis */
-			gmi->glumwcpf = 1.0;		/* Fully compress grey axis at white end */
-			gmi->glumwexf = 1.0;		/* Fully expand grey axis at white end */
-			gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
-			gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
-			gmi->glumknf = 0.5;			/* Sigma knee in grey compress/expand */
-			gmi->gamcpf  = 0.85;		/* Almost full gamut compression */
-			gmi->gamexf  = 1.5;			/* Excessive expansion to compensate for rspl effect */
-			gmi->gamknf  = 1.0;			/* Sigma knee in gamut compress/expand */
-			gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
-			gmi->gamswf  = 1.0;			/* Full Saturation surface weighting factor */
-			gmi->satenh  = 0.8;			/* Medium saturation enhancement */
-			break;
+		/* Map Jab to Jab and clip out of gamut */
+		/* Linear transform of the neutral axis to align white */
+		no = 3;
+		gmi->desc = " r - White Point Matched Appearance [ICC Relative Colorimetric]";
+		gmi->icci = icRelativeColorimetric;
+		gmi->usecas  = perccas;		/* Appearance space */
+		gmi->usemap  = 1;			/* Use gamut mapping */
+		gmi->greymf  = 1.0;			/* And linearly map white point */
+		gmi->glumwcpf = 1.0;
+		gmi->glumwexf = 1.0;
+		gmi->glumbcpf = 0.0;
+		gmi->glumbexf = 0.0;
+		gmi->glumknf = 0.0;
+		gmi->gamcpf  = 0.0;
+		gmi->gamexf  = 0.0;
+		gmi->gamknf  = 0.0;
+		gmi->gampwf  = 0.0;
+		gmi->gamswf  = 0.0;
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else if (no == 4
+	 || (as != NULL && stricmp(as,"la") == 0)) {
 
-		case 7:
-			/* Map Absolute Lab to Lab and clip out of gamut */
-			gmi->desc = "Absolute Colorimetric (Lab)";
-			gmi->usecas  = 0;			/* Don't use appearance space */
-			gmi->usemap  = 0;			/* Don't use gamut mapping */
-			gmi->greymf  = 0.0;
-			gmi->glumwcpf = 0.0;
-			gmi->glumwexf = 0.0;
-			gmi->glumbcpf = 0.0;
-			gmi->glumbexf = 0.0;
-			gmi->glumknf = 0.0;
-			gmi->gamcpf  = 0.0;
-			gmi->gamexf  = 0.0;
-			gmi->gamknf  = 0.0;
-			gmi->gampwf  = 0.0;
-			gmi->gamswf  = 0.0;
-			gmi->satenh  = 0.0;			/* No saturation enhancement */
-			break;
+		/* Map Jab to Jab, sigma map white/black points, and clip out of gamut */
+		no = 4;
+		gmi->desc = "la - Luminance axis matched Appearance";
+		gmi->icci = icRelativeColorimetric;
+		gmi->usecas  = perccas;		/* Appearance space */
+		gmi->usemap  = 1;			/* Use gamut mapping */
+		gmi->greymf  = 1.0;			/* Fully align grey axis */
+		gmi->glumwcpf = 1.0;		/* Fully compress grey axis */
+		gmi->glumwexf = 1.0;		/* Fully expand grey axis at black end */
+		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
+		gmi->glumbexf = 1.0;		/* Fully expand grey axis */
+		gmi->glumknf = 1.0;			/* Distort at white/black ends only */
+		gmi->gamcpf  = 0.0;			/* No gamut compression */
+		gmi->gamexf  = 0.0;			/* No gamut expansion */
+		gmi->gamknf  = 0.0;			/* No knee in gamut compress/expand */
+		gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
+		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else if (no == 5
+	 || no == icxDefaultGMIntent
+	 || no == icxPerceptualGMIntent
+	 || (as != NULL && stricmp(as,"p") == 0)) {
 
-		case icxIllegalGMIntent:
-		default:
-			return 1;
+		/* Map Jab to Jab, sigma map white/black, compress out of gamut */
+		/* NOTE would like to be using sigma knee on gamut in these two, */
+		/* but the current gamut mapping isn't linear enough to need extra knee :-) */
+		no = 5;
+		gmi->desc = " p - Perceptual (Preferred) [ICC Perceptual]";
+		gmi->icci = icPerceptual;
+		gmi->usecas  = perccas;		/* Appearance space */
+		gmi->usemap  = 1;			/* Use gamut mapping */
+		gmi->greymf  = 1.0;			/* Fully align grey axis */
+		gmi->glumwcpf = 1.0;		/* Fully compress grey axis at white end */
+		gmi->glumwexf = 1.0;		/* Fully expand grey axis at white end */
+		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
+		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
+		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
+		gmi->gamcpf  = 1.0;			/* Full gamut compression */
+		gmi->gamexf  = 0.0;			/* No gamut expansion */
+		gmi->gamknf  = 0.5;			/* Sigma knee in gamut compress/expand */
+		gmi->gampwf  = 1.0;			/* Full Perceptual surface weighting factor */
+		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else if (no == 6
+	 || (as != NULL && stricmp(as,"ms") == 0)) {
+
+		/* Map Jab to Jab, sigma map whole gamut */
+		no = 6;
+		gmi->desc = "ms - Saturation";
+		gmi->icci = icSaturation;
+		gmi->usecas  = perccas;		/* Appearance space */
+		gmi->usemap  = 1;			/* Use gamut mapping */
+		gmi->greymf  = 1.0;			/* Fully align grey axis */
+		gmi->glumwcpf = 1.0;		/* Fully compress grey axis at white end */
+		gmi->glumwexf = 1.0;		/* Fully expand grey axis at white end */
+		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
+		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
+		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
+		gmi->gamcpf  = 0.95;		/* Almost full gamut compression */
+		gmi->gamexf  = 1.2;			/* Excessive expansion to compensate for rspl effect */
+		gmi->gamknf  = 1.0;			/* Sigma knee in gamut compress/expand */
+		gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
+		gmi->gamswf  = 1.0;			/* Full Saturation surface weighting factor */
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else if (no == 7
+	 || no == icxSaturationGMIntent
+	 || (as != NULL && stricmp(as,"s") == 0)) {
+
+		/* Map Jab to Jab, sigma map whole gamut */
+		no = 7;
+		gmi->desc = " s - Enhanced Saturation [ICC Saturation]";
+		gmi->icci = icSaturation;
+		gmi->usecas  = perccas;		/* Appearance space */
+		gmi->usemap  = 1;			/* Use gamut mapping */
+		gmi->greymf  = 1.0;			/* Fully align grey axis */
+		gmi->glumwcpf = 1.0;		/* Fully compress grey axis at white end */
+		gmi->glumwexf = 1.0;		/* Fully expand grey axis at white end */
+		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
+		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
+		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
+		gmi->gamcpf  = 0.90;		/* Almost full gamut compression */
+		gmi->gamexf  = 1.3;			/* Excessive expansion to compensate for rspl effect */
+		gmi->gamknf  = 1.0;			/* Sigma knee in gamut compress/expand */
+		gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
+		gmi->gamswf  = 1.0;			/* Full Saturation surface weighting factor */
+		gmi->satenh  = 0.8;			/* Medium saturation enhancement */
+	}
+	else if (no == 8
+	 || (as != NULL && stricmp(as,"al") == 0)) {
+
+		/* Map Absolute Lab to Lab and clip out of gamut */
+		no = 8;
+		gmi->desc = "al - Absolute Colorimetric (Lab)";
+		gmi->icci = icAbsoluteColorimetric;
+		gmi->usecas  = 0x0;			/* Don't use appearance space, use L*a*b* */
+		gmi->usemap  = 0;			/* Don't use gamut mapping */
+		gmi->greymf  = 0.0;
+		gmi->glumwcpf = 0.0;
+		gmi->glumwexf = 0.0;
+		gmi->glumbcpf = 0.0;
+		gmi->glumbexf = 0.0;
+		gmi->glumknf = 0.0;
+		gmi->gamcpf  = 0.0;
+		gmi->gamexf  = 0.0;
+		gmi->gamknf  = 0.0;
+		gmi->gampwf  = 0.0;
+		gmi->gamswf  = 0.0;
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else if (no == 9
+	 || (as != NULL && stricmp(as,"rl") == 0)) {
+
+		/* Map Lab to Lab and clip out of gamut */
+		/* Linear transform of the neutral axis to align white */
+		no = 3;
+		gmi->desc = "rl - White Point Matched Appearance (Lab)";
+		gmi->icci = icRelativeColorimetric;
+		gmi->usecas  = 0x0;			/* Don't use appearance space, use L*a*b* */
+		gmi->usemap  = 1;			/* Use gamut mapping */
+		gmi->greymf  = 1.0;			/* And linearly map white point */
+		gmi->glumwcpf = 1.0;
+		gmi->glumwexf = 1.0;
+		gmi->glumbcpf = 0.0;
+		gmi->glumbexf = 0.0;
+		gmi->glumknf = 0.0;
+		gmi->gamcpf  = 0.0;
+		gmi->gamexf  = 0.0;
+		gmi->gamknf  = 0.0;
+		gmi->gampwf  = 0.0;
+		gmi->gamswf  = 0.0;
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else {	/* icxIllegalGMIntent */
+		return icxIllegalGMIntent;
 	}
 
-	return 0;
+	return no;
 }
 
 /* Debug: dump a Gamut Mapping specification */
@@ -1245,13 +1462,17 @@ icxGMappingIntent *gmi	/* Gamut Mapping parameters to return */
 	printf("Gamut Mapping Specification:\n");
 	if (gmi->desc != NULL)
 		printf("  Description = '%s'\n",gmi->desc);
+	printf("  Closest ICC intent = '%s'\n",icm2str(icmRenderingIntent,gmi->icci));
 
-	if (gmi->usecas == 0)
+	if ((gmi->usecas & 0xff) == 0)
 		printf("  Not using Color Apperance Space\n");
-	else if (gmi->usecas == 1)
+	else if ((gmi->usecas & 0xff) == 1)
 		printf("  Using Color Apperance Space\n");
-	else 
+	else if ((gmi->usecas & 0xff) == 2)
 		printf("  Using Absolute Color Apperance Space\n");
+
+	if ((gmi->usecas & 0x100) != 0)
+		printf("  Scaling source to avoid white point clipping\n");
 
 	if (gmi->usemap == 0)
 		printf("  Not using Mapping\n");
@@ -1273,41 +1494,82 @@ icxGMappingIntent *gmi	/* Gamut Mapping parameters to return */
 }
 
 /* ------------------------------------------------------ */
-/* Common clut table code */
 
+/* Utility function - given an open icc profile, */
+/* estmate the total ink limit and black ink limit. */
+/* Note that this is rather rough, because ICC profiles */
+/* don't have a tag for this information, and ICC profiles */
+/* don't have any straightforward way of identifying particular */
+/* color channels for > 4 color. */
+/* If there are no limits, or they are not discoverable or */
+/* applicable, return values of -1.0 */
 
+void icxGetLimits(icc *p, double *tlimit, double *klimit) {
+	int nch;
+	double max[MAX_CHAN];
+	double total;
 
-/* Default table of clut resolutions */
-/* See discussion in imdi/imdi_gen.c for ideal numbers */
-static int lut_resolutions[9][4] = {
-	/* low, med, high, vhigh */
-	{ 0,     0,    0,    0 },		/* 0 */
-	{ 256, 772, 4370, 4370 },		/* 1 */
-	{  86, 256,  256,  256 },		/* 2 */
-	{   9,  17,   33,   52 },		/* 3 */
-	{   6,   9,   18,   33 },		/* 4 */
-	{   6,   9,   16,   18 },		/* 5 */
-	{   6,   6,    9,   12 },		/* 6 */
-	{   6,   7,    7,    9 },		/* 7 */
-	{   3,   5,    5,    7 }		/* 8 */
-};
+	total = p->get_tac(p, max);
 
+	if (total < 0.0) {	/* Not valid */
+		if (tlimit != NULL)
+			*tlimit = -1.0;
+		if (klimit != NULL)
+			*klimit = -1.0;
+		return;
+	}
 
-/* return a lut resolution given the input dimesion and quality */
-/* Input dimension [0-8], quality: low, medium, high, very high. */
-/* A returned value of 0 indicates illegal.  */
-int dim_to_clutres(int dim, int quality) {
-	if (dim < 0)
-		dim = 0;
-	else if (dim > 8)
-		dim = 8;
-	if (quality < 0)
-		quality = 0;
-	if (quality > 3)
-		quality = 3;
-	return lut_resolutions[dim][quality];
+	nch = icmCSSig2nchan(p->header->colorSpace);
+
+	/* No effective limit */
+	if (tlimit != NULL) {
+		if (total >= (double)nch) {
+			*tlimit = -1.0;
+		} else {
+			*tlimit = total;
+		}
+	}
+
+	if (klimit != NULL) {
+		double black = 1.0;
+		switch (p->header->colorSpace) {
+	   	 	case icSigCmykData:
+				black = max[3];
+				break;
+			/* Hmm. It would be nice to know the black channel of other spaces */
+			/* This could be fixed by using other tags + heuristics on the profile */
+			default:
+				break;
+		}
+
+		if (black >= 1.0) {
+			*klimit = -1.0;
+		} else {
+			*klimit = black;
+		}
+	}
 }
 
+/* Using the above function, set default total and black ink values */
+void icxDefaultLimits(icc *p, double *tlout, double tlin, double *klout, double klin) {
+	if (tlin < 0.0 || klin < 0.0) { 
+		double tl, kl;
+
+		icxGetLimits(p, &tl, &kl);
+
+		if (tlin < 0.0)
+			tlin = tl;
+
+		if (klin < 0.0)
+			klin = kl;
+	}
+
+	if (tlout != NULL)
+		*tlout = tlin;
+
+	if (klout != NULL)
+		*klout = klin;
+}
 
 /* ------------------------------------------------------ */
 /* Conversion and deltaE formular that include partial */
@@ -1315,9 +1577,10 @@ int dim_to_clutres(int dim, int quality) {
 
 /* CIE XYZ to perceptual Lab with partial derivatives. */
 void icxdXYZ2Lab(icmXYZNumber *w, double *out, double dout[3][3], double *in) {
-	double wp[3] = { w->X, w->Y, w->Z };
-	double tin[3], dtin[3];
+	double wp[3], tin[3], dtin[3];
 	int i;
+
+	wp[0] = w->X, wp[1] = w->Y, wp[2] = w->Z;
 
 	for (i = 0; i < 3; i++) {
 		tin[i] = in[i]/wp[i];
@@ -1388,6 +1651,7 @@ double icxdCIE94sq(double dout[2][3], double Lab0[3], double Lab1[3]) {
 		da = Lab0[1] - Lab1[1];
 		db = Lab0[2] - Lab1[2];
 
+
 		/* Compute normal Lab delta E squared */
 		desq = dlsq + da * da + db * db;
 		_desq[0][0] =  2.0 * dl;
@@ -1405,16 +1669,21 @@ double icxdCIE94sq(double dout[2][3], double Lab0[3], double Lab1[3]) {
 		c1 = sqrt(Lab0[1] * Lab0[1] + Lab0[2] * Lab0[2]);
 		c2 = sqrt(Lab1[1] * Lab1[1] + Lab1[2] * Lab1[2]);
 		c12 = sqrt(c1 * c2);	/* Symetric chromanance */
-		tt = 0.5 * pow(c2, 0.5)/pow(c1, 1.5);
+
+		tt = 0.5 * (pow(c2, 0.5) + 1e-12)/(pow(c1, 1.5) + 1e-12);
 		_c12[0][0] = Lab0[1] * tt;
 		_c12[0][1] = Lab0[2] * tt;
-		tt = 0.5 * pow(c1, 0.5)/pow(c2, 1.5);
+		tt = 0.5 * (pow(c1, 0.5) + 1e-12)/(pow(c2, 1.5) + 1e-12);
 		_c12[1][0] = Lab1[1] * tt;
 		_c12[1][1] = Lab1[2] * tt;
 
 		/* delta chromanance squared */
 		dc = c2 - c1;
 		dcsq = dc * dc;
+		if (c1 < 1e-12 || c2 < 1e-12) {
+			c1 += 1e-12;
+			c2 += 1e-12;
+		}
 		_dcsq[0][0] = -2.0 * Lab0[1] * (c2 - c1)/c1;
 		_dcsq[0][1] = -2.0 * Lab0[2] * (c2 - c1)/c1;
 		_dcsq[1][0] =  2.0 * Lab1[1] * (c2 - c1)/c2;
@@ -1428,7 +1697,6 @@ double icxdCIE94sq(double dout[2][3], double Lab0[3], double Lab1[3]) {
 		_dhsq[0][1] = _desq[0][2] - _dcsq[0][1];
 		_dhsq[1][0] = _desq[1][1] - _dcsq[1][0];
 		_dhsq[1][1] = _desq[1][2] - _dcsq[1][1];
-
 	} else {
 		dhsq = 0.0;
 		_dhsq[0][0] = 0.0;
@@ -1457,13 +1725,11 @@ double icxdCIE94sq(double dout[2][3], double Lab0[3], double Lab1[3]) {
 		           + _dhsq[0][0]/shsq + _c12[0][0] * shf;
 		dout[0][2] = _dcsq[0][1]/scsq + _c12[0][1] * scf
 		           + _dhsq[0][1]/shsq + _c12[0][1] * shf;
-
 		dout[1][0] = _desq[1][0];
 		dout[1][1] = _dcsq[1][0]/scsq + _c12[1][0] * scf
 		           + _dhsq[1][0]/shsq + _c12[1][0] * shf;
 		dout[1][2] = _dcsq[1][1]/scsq + _c12[1][1] * scf
 		           + _dhsq[1][1]/shsq + _c12[1][1] * shf;
-
 		return rv;
 	}
 }
@@ -1484,16 +1750,6 @@ double vv			/* Source of value */
 ) {
 	double g;
 	int ord;
-
-#ifdef NEVER	/* Turn off clamping */
-	if (vv < 0.0 || vv > 1.0) {
-		if (vv < 0.0)
-			vv = 0.0;
-	 	else
-			vv = 1.0;
-		return vv;
-	}
-#endif
 
 	/* Process all the shaper orders from low to high. */
 	/* [These shapers were inspired by a Graphics Gem idea */
@@ -1529,7 +1785,50 @@ double vv			/* Source of value */
 	return vv;
 }
 
-/* Transfer function with scaling */
+/* Inverse transfer function */
+double icxInvTransFunc(
+double *v,			/* Pointer to first parameter */
+int    luord,		/* Number of parameters */
+double vv			/* Source of value */
+) {
+	double g;
+	int ord;
+
+	/* Process the shaper orders in reverse from high to low. */
+	/* [These shapers were inspired by a Graphics Gem idea */
+	/* (Gems IV, VI.3, "Fast Alternatives to Perlin's Bias and */
+	/*  Gain Functions, pp 401). */
+	/*  They have the nice properties that they are smooth, and */
+	/*  are monotonic. The control parameter has been */
+	/*  altered to have a range from -oo to +oo rather than 0.0 to 1.0 */
+	/*  so that the search space is less non-linear. */
+	for (ord = luord-1; ord >= 0; ord--) {
+		int nsec;			/* Number of sections */
+		double sec;			/* Section */
+
+		g = -v[ord];		/* Inverse parameter */
+
+		nsec = ord + 1;		/* Increase sections for each order */
+
+		vv *= (double)nsec;
+
+		sec = floor(vv);
+		if (((int)sec) & 1)
+			g = -g;				/* Alternate action in each section */
+		vv -= sec;
+		if (g >= 0.0) {
+			vv = vv/(g - g * vv + 1.0);
+		} else {
+			vv = (vv - g * vv)/(1.0 - g * vv);
+		}
+		vv += sec;
+		vv /= (double)nsec;
+	}
+
+	return vv;
+}
+
+/* Transfer function with offset and scale */
 double icxSTransFunc(
 double *v,			/* Pointer to first parameter */
 int    luord,		/* Number of parameters */
@@ -1545,6 +1844,22 @@ double max
 	return vv;
 }
 
+/* Inverse Transfer function with offset and scale */
+double icxInvSTransFunc(
+double *v,			/* Pointer to first parameter */
+int    luord,		/* Number of parameters */
+double vv,			/* Source of value */
+double min,			/* Scale values */
+double max
+) {
+	max -= min;
+
+	vv = (vv - min)/max;
+	vv = icxInvTransFunc(v, luord, vv);
+	vv = (vv * max) + min;
+	return vv;
+}
+
 /* Transfer function with partial derivative */
 /* with respect to the parameters. */
 double icxdpTransFunc(
@@ -1555,19 +1870,6 @@ double vv			/* Source of value */
 ) {
 	double g;
 	int i, ord;
-
-#ifdef NEVER
-	if (vv < 0.0 || vv > 1.0) {
-		if (vv < 0.0)
-			vv = 0.0;
-	 	else
-			vv = 1.0;
-
-		for (ord = 0; ord < luord; ord++)
-			dv[ord] = 0.0;
-		return vv;
-	}
-#endif
 
 	/* Process all the shaper orders from high to low. */
 	for (ord = 0; ord < luord; ord++) {
@@ -1613,7 +1915,7 @@ double vv			/* Source of value */
 	return vv;
 }
 
-/* Transfer function with scaling and */
+/* Transfer function with offset and scale, and */
 /* partial derivative with respect to the parameters. */
 double icxdpSTransFunc(
 double *v,			/* Pointer to first parameter */
@@ -1644,7 +1946,7 @@ int    luord,		/* Number of parameters */
 double vv			/* Source of value */
 ) {
 	double g, din;
-	int i, ord;
+	int ord;
 
 #ifdef NEVER
 	if (vv < 0.0 || vv > 1.0) {
@@ -1695,7 +1997,7 @@ double vv			/* Source of value */
 	return vv;
 }
 
-/* Transfer function with scaling and */
+/* Transfer function with offset and scale, and */
 /* partial derivative with respect to the input value. */
 double icxdiSTransFunc(
 double *v,			/* Pointer to first parameter */
@@ -1787,7 +2089,7 @@ double vv			/* Source of value */
 	return vv;
 }
 
-/* Transfer function with scaling and */
+/* Transfer function with offset and scale, and */
 /* partial derivative with respect to the */
 /* parameters and the input value. */
 double icxdpdiSTransFunc(
@@ -1879,6 +2181,7 @@ double *in			/* Input di values */
 			out[f] += gw[ee] * v[f * dip2 + ee];
 		}
 	}
+
 	/* Copy del for parameter to return array */
 	for (ee = 0; ee < dip2; ee++) {	/* For all other corners of cube */
 		dv[ee] = gw[ee];					/* del from parameter */
@@ -1916,7 +2219,79 @@ double *in			/* Input di values */
 	}
 }
 
+/* ------------------------------------------------------ */
+/* Matrix multiplication, used for device modelling. */
+/* Including partial derivative for input and parameters. */
 
+
+/* 3x3 matrix multiplication, with the matrix in a 1D array */
+/* with respect to the input and parameters. */
+void icxMulBy3x3Parm(
+	double out[3],			/* Return input multiplied by matrix */
+	double mat[9],			/* Matrix organised in [slow][fast] order */
+	double in[3]			/* Input values */
+) {
+	double *v = mat, ov[3];
+	int e, f;
+
+	/* Compute the output values */
+	for (f = 0; f < 3; f++) {
+		ov[f] = 0.0;						/* For each output value */
+		for (e = 0; e < 3; e++) {
+			ov[f] += *v++ * in[e];
+		}
+	}
+	out[0] = ov[0];
+	out[1] = ov[1];
+	out[2] = ov[2];
+}
+
+
+/* 3x3 matrix multiplication, with partial derivatives */
+/* with respect to the input and parameters. */
+void icxdpdiMulBy3x3Parm(
+	double out[3],			/* Return input multiplied by matrix */
+	double dv[3][9],		/* Return deriv for each [output] with respect to [param] */
+	double din[3][3],		/* Return deriv for each [output] with respect to [input] */
+	double mat[9],			/* Matrix organised in [slow][fast] order */
+	double in[3]			/* Input values */
+) {
+	double *v, ov[3];
+	int e, f;
+
+	/* Compute the output values */
+	v = mat;
+	for (f = 0; f < 3; f++) {
+		ov[f] = 0.0;						/* For each output value */
+		for (e = 0; e < 3; e++) {
+			ov[f] += *v++ * in[e];
+		}
+	}
+
+	/* Compute deriv. with respect to the matrix parameter % 3 */
+	/* This is pretty simple for a matrix ... */
+	for (f = 0; f < 3; f++) {
+		for (e = 0; e < 9; e++) {
+			if (e/3 ==  f)
+				dv[f][e] = in[e % 3];
+			else
+				dv[f][e] = 0.0;
+		}
+	}
+	
+	/* Compute deriv. with respect to the input values */
+	/* This is pretty simple for a matrix ... */
+	v = mat;
+	for (f = 0; f < 3; f++)
+		for (e = 0; e < 3; e++)
+			din[f][e] = *v++;
+
+	out[0] = ov[0];
+	out[1] = ov[1];
+	out[2] = ov[2];
+}
+
+#undef stricmp
 
 
 

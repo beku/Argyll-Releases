@@ -4,7 +4,7 @@
 #SubDir TOP icc ;
 
 CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	    += $(CCDEBUGFLAG) ;		# Debugging flags
+#CCFLAGS	    += -Wextra $(CCDEBUGFLAG) ;		# Debugging flags
 #CCFLAGS	+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
 LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
 
@@ -49,17 +49,21 @@ Object iccrw$(SUFOBJ) : iccrw.c ;
 MainFromObjects iccrw : iccrw$(SUFOBJ) iccstd$(SUFOBJ) ;
 LinkLibraries iccrw : libicc.lib ;
 
-#Utility to check absolute A2B and B2A accuracy
-Object fbtest$(SUFOBJ) : fbtest.c ;
-MainFromObjects fbtest : fbtest$(SUFOBJ) iccstd$(SUFOBJ) ;
-LinkLibraries fbtest : libicc.lib ;
-
 #Monotonic behaviour checker
 #Object mcheck$(SUFOBJ) : mcheck.c ;
 #MainFromObjects mcheck : mcheck$(SUFOBJ) iccstd$(SUFOBJ) ;
 #LinkLibraries mcheck : libicc.lib ;
 
 if $(BUILD_JUNK) {
+
+	Object tt$(SUFOBJ) : tt.c ;
+	MainFromObjects tt : tt$(SUFOBJ) ;
+	LinkLibraries tt : libicc.lib ;
+
+	Object mkAdobeRGB$(SUFOBJ) : mkAdobeRGB.c ;
+	MainFromObjects mkAdobeRGB : mkAdobeRGB$(SUFOBJ) iccstd$(SUFOBJ) ;
+	LinkLibraries mkAdobeRGB : libicc.lib ;
+
 	Object lab2lab$(SUFOBJ) : lab2lab.c ;
 	MainFromObjects lab2lab : lab2lab$(SUFOBJ) iccstd$(SUFOBJ) ;
 	LinkLibraries lab2lab : libicc.lib ;

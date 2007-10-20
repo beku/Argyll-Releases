@@ -60,7 +60,7 @@ static double refv[10][40] = {
 	}
 };
 
-main() {
+int main() {
 	sobol *s;
 	int i;
 	double vec[40];

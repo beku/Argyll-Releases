@@ -8,8 +8,8 @@
  * Copyright 2005 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -27,6 +27,7 @@
 #define verbo stdout
 
 #include <stdio.h>
+#include <string.h>
 #if defined(__IBMC__)
 #include <float.h>
 #endif
@@ -34,7 +35,7 @@
 #include <time.h>
 #include "copyright.h"
 #include "config.h"
-#include "numsup.h"
+#include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
 #include "insttypes.h"
@@ -43,11 +44,11 @@
 void
 usage(void) {
 	fprintf(stderr,"Split a .ti3 into two, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: splitcgats [-options] input.ti3 output1.ti3 output2.ti3\n");
 	fprintf(stderr," -v              Verbose - print each patch value\n");
 	fprintf(stderr," -n no           Put no sets in first file, and balance in second file.\n");
-	fprintf(stderr," -p percent      Put percent% sets in first file, and balance in second file. (def. 50%%)\n");
+	fprintf(stderr," -p percent      Put percent%% sets in first file, and balance in second file. (def. 50%%)\n");
 	fprintf(stderr," -r seed         Use given random seed.\n");
 	fprintf(stderr," input.ti3       File to be split up.\n");
 	fprintf(stderr," output1.ti3     First output file\n");
@@ -55,7 +56,7 @@ usage(void) {
 	exit(1);
 }
 
-main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 	int fa,nfa;				/* current argument we're looking at */
 	int verb = 0;
 	int numb = -1;			/* Number to put in first */
@@ -74,7 +75,7 @@ main(int argc, char *argv[]) {
 	cgats_set_elem *setel;		/* Array of set value elements */
 	int *flags;					/* Point to destination of set */
 
-	int i, j, n, rv = 0;
+	int i, n;
 
 	error_program = "spitcgats";
 

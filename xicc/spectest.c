@@ -8,15 +8,18 @@
  *
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  *
  */
 
 /*
  * This is some test code to test the FWA compensation
  * feature of the spectal to CIE conversion.
+ *
  */
+
+#define FILTERED_D65	/* Use Spectrolino filtered D65 instead of ideal D65 */
 
 #define DOPLOT		/* Graphs: Black = target curve */
 					/*         Red   = uncorrected curve */
@@ -33,6 +36,22 @@
 #endif
 
 
+/* Spectrolino filter "D65" illuminant */
+static xspect il_sod65 = {
+	36, 380.0, 730.0,	/* 36 bands from 380 to 730 in 10nm steps */
+	100.0,				/* Scale factor */
+	{
+		17.42, 29.51, 36.54, 38.39, 38.15,
+		39.68, 44.7,  53.6,  64.26, 74.01,
+		82.39, 89.9, 93.45, 94.05, 91.59,
+		89.4, 93.69, 100.85, 99.66, 87.12,
+		78.34, 82.95, 91.31, 98.18, 99.99,
+		104.38, 120.06, 145.35, 172.8, 190.38,
+		192.46, 181.28, 163.7, 143.14, 123.57,
+		104.67
+	}
+};
+ 
 /* Material/illuminant record */
 struct {
 	char *media;			/* Media/process identifier */
@@ -178,7 +197,7 @@ struct {
 		},
 		{
 			"Cromalin",
-			"Illuminant D65",
+			"Illuminant filtered D65",
 			icxIT_D65,
 			{	/* White */
 				36, 380.0, 730.0,	/* 36 bands from 380 to 730 in 10nm steps */
@@ -438,7 +457,7 @@ struct {
 		},
 		{
 			"Epson10K",
-			"Illuminant D65",
+			"Illuminant filtered D65",
 			icxIT_D65,
 			{	/* White */
 				36, 380.0, 730.0,	/* 36 bands from 380 to 730 in 10nm steps */
@@ -590,24 +609,35 @@ main(void) {
 		/* For each light source as primary (target/check), other as secondary (instrument) */
 		for (ps = 0; ps < 2; ps++) {
 			xsp2cie *pcon, *scon;		/* Conversions */
-			xspect *pill, *sill;		/* Illuminants */
+			xspect pill, sill;			/* Illuminants */
 
 			ss = 1 - ps;	/* Opposite */
 			
-			pill = standardIlluminant(matilum[m][ps].ill);		/* Target/check */
-			sill = standardIlluminant(matilum[m][ss].ill);		/* Instrument */
+#ifdef FILTERED_D65
+			if (matilum[m][ps].ill == icxIT_D65)
+				pill = il_sod65;
+			else
+#endif
+				standardIlluminant(&pill, matilum[m][ps].ill, 0);		/* Target/check */
+
+#ifdef FILTERED_D65
+			if (matilum[m][ss].ill == icxIT_D65)
+				sill = il_sod65;
+			else
+#endif
+				standardIlluminant(&sill, matilum[m][ss].ill, 0);		/* Instrument */
 
 			/* Create two conversions for the target/check illuminant */
-			if ((pcon = new_xsp2cie(matilum[m][ps].ill, NULL, icxOT_Shaw_Fairchild_2,
+			if ((pcon = new_xsp2cie(icxIT_custom, &pill, icxOT_Shaw_Fairchild_2,
 			                       NULL, icSigLabData)) == NULL)
 				error ("Creating conversion failed");
 
-			if ((scon = new_xsp2cie(matilum[m][ps].ill, NULL, icxOT_Shaw_Fairchild_2,
+			if ((scon = new_xsp2cie(icxIT_custom, &pill, icxOT_Shaw_Fairchild_2,
 			                       NULL, icSigLabData)) == NULL)
 				error ("Creating conversion failed");
 
 			/* Tell the secondary conversion to allow for instrument illuminant */
-			if (scon->set_fwa(scon, sill, &matilum[m][ss].white))
+			if (scon->set_fwa(scon, &sill, &matilum[m][ss].white))
 				error ("Setting FWA compensation failed");
 
 			printf("Primary (Target/Check) '%s', Secondary (Instrument)'%s'\n",
@@ -673,9 +703,9 @@ main(void) {
 					   * ((double)i/(psp.spec_n-1.0)) + psp.spec_wl_short;
 	
 					xx[i] = ww;
-					y1[i] = psp.spec[i];
-					y2[i] = ssp.spec[i];
-					y3[i] = scsp.spec[i];
+					y1[i] = ssp.spec[i];	/* Black - Input */
+					y2[i] = scsp.spec[i];	/* Red - Estimate */
+					y3[i] = psp.spec[i];	/* Green - Target */
 				}
 				do_plot(xx,y1,y2,y3,i);
 #endif /* DOPLOT */

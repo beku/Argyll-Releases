@@ -14,32 +14,50 @@ Convert one or more gamuts into a&nbsp;<a href="File_Formats.html#VRML">VRML</a>
 file. &nbsp;This allows visual comparison of several gamut surfaces.
 <h3>Usage<br>
 </h3>
-viewgam { [-c color] [-t trans] [-w|s] <span
- style="font-style: italic;">infile.gam</span> } ... <span
- style="font-style: italic;">outfile.wrl</span><br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-For each input gamut file:<br>
-&nbsp;-c <i>color</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Color to
+<small><span style="font-family: monospace;">viewgam { [-c color] [-t
+trans] [-w|s] </span><span
+ style="font-style: italic; font-family: monospace;">infile.gam</span><span
+ style="font-family: monospace;"> } ... </span><span
+ style="font-style: italic; font-family: monospace;">outfile.wrl</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+For each input gamut file:</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-c </span><i
+ style="font-family: monospace;">color</i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Color
+to
 make gamut,
-r = red, g = green, b = blue<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; c = cyan, m = magenta, y = yellow, w = white<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; n = natural color<br>
-&nbsp;-t <i>trans</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; Set
+r = red, g = green, b = blue</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+c = cyan, m = magenta, y = yellow, w = white</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+n = natural color</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-t </span><i
+ style="font-family: monospace;">trans</i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set
 transparency
-from 0.0 (opaque) to 1.0 (invisible)<br>
-&nbsp;-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; Show as a wireframe<br>
-&nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; Show as a solid surface<br>
-<i> &nbsp;infile.gam</i>&nbsp; Name
-of <i>infile</i><a href="File_Formats.html#.gam">.gam</a> file<br>
+from 0.0 (opaque) to 1.0 (invisible)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Show as a wireframe</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Show as a solid surface</span><br style="font-family: monospace;">
+<i style="font-family: monospace;"> &nbsp;infile.gam</i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp; Name
+of </span><i style="font-family: monospace;">infile</i><a
+ style="font-family: monospace;" href="File_Formats.html#.gam">.gam</a><span
+ style="font-family: monospace;"> file</span><br
+ style="font-family: monospace;">
+<br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Don't add Lab axes</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><i
+ style="font-family: monospace;">outfile.wrl</i><span
+ style="font-family: monospace;"> Name of output
+</span><i style="font-family: monospace;">outfile.wrl</i><span
+ style="font-family: monospace;"> file</span></small>
 <br>
-&nbsp;-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp; Don't add Lab axes<br>
-&nbsp;<i>outfile.wrl</i>&nbsp; Name of output
-<i>outfile.wrl</i> file<br>
 <h3>Usage Details and Discussion</h3>
 <b>viewgam</b> creates a VRML file that allows the &nbsp;viewing and
 comparing

@@ -1,0 +1,83 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>spyd2en</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>spectro/spyd2en</b></h2>
+<h3>Summary</h3>
+A special purpose utility that enables the use of a Spyder 2
+colorimeter with Argyll.<br>
+<h3>Usage summary<br>
+</h3>
+<small><span style="font-family: monospace;">spyd2en [-v] inputfile</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-v level
+&nbsp;&nbsp;&nbsp;&nbsp; Verbose<br>
+&nbsp;creates spyd2PLD.bin from vendor install files.<br
+ style="font-family: monospace;">
+</span><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span></small><br>
+<h3></h3>
+<h3>Flags and Parameters</h3>
+The <b>-v</b> parameter enables verbosity.<span
+ style="font-weight: bold;"></span><br>
+<h3>Usage Details and Discussion</h3>
+<span style="font-weight: bold;"></span>The Spyder 2 instrument cannot
+function without the presence of the instrument vendors PLD firmware
+pattern for the device. This firmware is not provided with
+Argyll, since it has not been made available under a compatible license.<br>
+<br>
+The purchaser of a Spyder 2 instrument
+should have received a copy of this firmware along with their
+instrument from the original vendor, and <span
+ style="font-weight: bold;">spyd2en</span> allows their instrument to
+work with Argyll, by locating the firmware in the users copy of the
+instrument install files.<br>
+<br>
+On Microsoft Windows or Apple OS X platforms, <span
+ style="font-weight: bold;">spyd2en</span> will look to
+see if
+the vendors drivers have been installed on the users machine, and
+locate the firmware pattern from there. If the vendors drivers have
+not been installed, or the user does not wish to install them, or no
+vendors drivers are available for the users platform (i.e. Linux), then
+<span style="font-weight: bold;">spyd2en</span> will also attempt to
+locate the Spyder 2 installation CDROM, and make use of the firmware
+pattern from there. In this case, the CDROM should be placed in a CD
+drive prior to
+running spyd2en. If your Linux system is not running
+automount, or your automount is setup to mount CDROM's somewhere other
+than <span style="font-style: italic;">/mnt/cdrom</span>, <span
+ style="font-style: italic;">/media/cdrom</span> or <span
+ style="font-style: italic;">/cdrom</span>, then you will have to mount
+the CDROM manually, and give spyd2en the path to the CDROM
+setup/setup.exe
+file as an argument.<br>
+<br>
+If the instrument firmware pattern is successfully located, then
+spyd2en will create a <span style="font-weight: bold;">spyd2PLD.bin</span>
+file in the same directory that
+spyd2en exists in, so that any other Argyll programs residing with,
+such as <span style="font-weight: bold;">spotread</span>, <span
+ style="font-weight: bold;">dispcal</span> and <span
+ style="font-weight: bold;">dispread</span>, can load the firmware into
+the instrument.<br>
+<br>
+<span style="font-weight: bold;">Note</span> that the <span
+ style="font-weight: bold;">spyd2PLD.bin</span> file created by spyd2en
+contains the
+proprietary
+and copyrighted firmware provided by the instrument vendor, and while
+the vendor has provided
+the firmware to the end
+user to facilitate the use of their purchased instrument, the
+instrument vendor (typically) does not permit the user to distribute
+such a file or
+make copies for purposes other than making use of their own instrument.<br>
+<br>
+</body>
+</html>

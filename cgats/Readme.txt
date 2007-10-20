@@ -6,7 +6,7 @@ Package contents:
 -----------------
 cgatslib.zip   ZIP archive of the following files
 Readme.txt     This file.
-Licence.txt    Important! - Permissions for use of this package.
+License.txt    Important! - Permissions for use of this package.
 cgats.c        CGATS Library source code.
 cgatsstd.c     I/O and malloc source code.
 cgats.h        CGATS Library include file. Note machine dependent defines.

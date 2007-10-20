@@ -31,7 +31,7 @@ int main() {
 #define LOC(xx) (min + (max-min) * (xx)/(res-1.0))
 
 	/* For each resolution */
-	for (i = 0; i < 10; i++, res *= 2.0) {
+	for (i = 0; i < 10; i++, res *= 2) {
 		double tse = 0.0;		/* Total squared error */
 		int j, k, m;
 

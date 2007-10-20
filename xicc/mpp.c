@@ -8,8 +8,8 @@
  *
  * Copyright 2003 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* This version (based on mpp_x1) has n * 2^(n-1) shape params, */
@@ -52,9 +52,12 @@
 /*
  * TTBD:
  * 		
- *		Should change device transfer model to include offset & scale, 		
- * 		to better match display devices.
+ *		!!!! Should change device transfer model to include offset & scale, 		
+ * 		to better match display & other devices !!!!
  * 		
+ *		Should add Jab pcs mode, so that Jab gamuts can be
+ *      written.
+ *
  *      Remove #ifndef DEBUG & replace with verbose progress bars.
  *
  *      Add support for extra profile details to create() to support
@@ -83,7 +86,7 @@
 #undef BIGBANG			/* Define to fit all parameters at once */
 #undef ISHAPE			/* define to try SVD init of shape parameters */
 #undef SHARPEN			/* use sharpened XYZ values for modeling */
-						/* (Wrecks derivative lookup at the moment, and makes
+						/* (Wrecks derivative lookup at the moment, and makes */
 						/* accuracy worse!) */
 
 						/* Transfer curve parameter (wiggle) minimisation weight */
@@ -350,7 +353,7 @@ char *inname	/* Filename to read from */
 		return 1;
 	}
 
-	if (icg->t[0].tt != tt_other || icg->t[0].oi != 0) {
+	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0) {
 		sprintf(p->err, "read_mpp: Input file '%s' isn't a MPP format file",inname);
 		return 1;
 	}
@@ -358,7 +361,6 @@ char *inname	/* Filename to read from */
 		sprintf(p->err, "Input file '%s' doesn't contain exactly one table",inname);
 		return 1;
 	}
-
 	if ((ti = icg->find_kword(icg, 0, "COLOR_REP")) < 0) {
 		sprintf(p->err, "read_mpp: Input file '%s' doesn't contain keyword COLOR_REP",inname);
 		return 1;
@@ -655,7 +657,7 @@ int           use_fwa			/* NZ to involke FWA. */
 
 	if (use_fwa) {
 		int j;
-		xspect white, *inst;
+		xspect white, inst;
 
 		white.norm = p->norm; 
 		white.spec_n = p->spec_n; 
@@ -664,10 +666,10 @@ int           use_fwa			/* NZ to involke FWA. */
 		for (j = 0; j < p->spec_n; j++)
 			white.spec[j] = p->white.band[3+j];
 			
-		if ((inst = inst_illuminant(p->itype)) == NULL)
+		if (inst_illuminant(&inst, p->itype) != 0)
 			error ("mpp->set_ilob, instrument doesn't have an FWA illuminent");
 
-		if (p->spc->set_fwa(p->spc, inst, &white))
+		if (p->spc->set_fwa(p->spc, &inst, &white))
 			error ("mpp->set_ilob, set_fwa faild");
 	}
 
@@ -874,7 +876,7 @@ double       detail		/* gamut detail level, 0.0 = def */
 	if (detail == 0.0)
 		detail = 10.0;
 
-	gam = new_gamut(detail);
+	gam = new_gamut(detail, 0);		/* Lab only at the moment */
 
 	/* Explore the gamut by itterating through */
 	/* it with sample points in device space. */
@@ -949,6 +951,73 @@ double       detail		/* gamut detail level, 0.0 = def */
 	p->get_wb(p, white, black);
 	gam->setwb(gam, white, black);
 
+	/* Set the cusp points */
+	/* Do this by scanning just 0 & 100% colorant combinations */
+
+	res = 2;
+	gam->setcusps(gam, 0, NULL);
+	DC_INIT(co);
+
+	/* Itterate over all the faces in the device space */
+	while(!DC_DONE(co)) {
+		int e, m1, m2;
+		double in[MAX_CHAN];
+		double out[3];
+		double sum;
+
+		/* Check the ink limit */
+		for (sum = 0.0, e = 0; e < p->n; e++)
+			sum += (double)co[e];
+
+		if (p->limit > 1e-4 && (sum - 1.0) > p->limit) {
+			DC_INC(co);
+			continue;		/* Skip points really over limit */
+		}
+
+		/* Scan only device surface */
+		for (m1 = 0; m1 < p->n; m1++) {
+			if (co[m1] != 0)
+				continue;
+			for (m2 = m1 + 1; m2 < p->n; m2++) {
+				int x, y;
+
+				if (co[m2] != 0)
+					continue;
+
+				for (e = 0; e < p->n; e++)
+					in[e] = (double)co[e];		/* Base value */
+
+				for (x = 0; x < res; x++) {				/* step over surface */
+					in[m1] = x/(res - 1.0);
+					for (y = 0; y < res; y++) {
+						double ssum, iin[MAX_CHAN];
+						in[m2] = y/(res - 1.0);
+						ssum = sum + in[m1] + in[m2];
+						if (p->limit > 1e-4 && (ssum - 1.0) > p->limit) {
+							continue;
+						}
+
+						for (e = 0; e < p->n; e++)
+							iin[e] = in[e];				/* Scalable copy */
+
+						/* Apply ink limit by simple scaling */
+						if (p->limit > 1e-4 && ssum > p->limit) {
+							for (e = 0; e < p->n; e++)
+								iin[e] *= p->limit/ssum;
+						}
+						
+						forward(p, NULL, out, NULL, iin);
+						gam->setcusps(gam, 1, out);
+					}
+				}
+			}
+		}
+
+		/* Increment index within block */
+		DC_INC(co);
+	}
+	gam->setcusps(gam, 2, NULL);
+
 	return gam;
 }
 
@@ -1016,7 +1085,6 @@ int n,				/* Number of inks */
 int nb				/* Number of spectral bands */
 ) {
 	int nn = (1 << n);	/* Number of ink combinations */
-	int j;
 
 	if ((p->nv = (double *)malloc(sizeof(double) * n)) == NULL) {
 		del_mppcol(p, n, nb);
@@ -1103,9 +1171,6 @@ int n,				/* Number of inks */
 int nb				/* Number of spectral bands */
 ) {
 	if (p != NULL) {
-		int nn = (1 << n);	/* Number of ink combinations */
-		int j;
-	
 		if (p->nv != NULL)
 			free (p->nv);
 
@@ -1137,8 +1202,7 @@ int n,				/* Number of inks */
 int nb				/* Number of spectral bands */
 ) {
 	mppcol *p;
-	int nn = (1 << n);	/* Number of ink combinations */
-	int i, j;
+	int i;
 
 	if ((p = (mppcol *)calloc(no, sizeof(mppcol))) == NULL) {
 		return NULL;
@@ -1162,8 +1226,7 @@ int n,				/* Number of inks */
 int nb				/* Number of spectral bands */
 ) {
 	if (p != NULL) {
-		int nn = (1 << n);	/* Number of ink combinations */
-		int i, j;
+		int i;
 	
 		for (i = 0; i < no; i++)
 			del_mppcol(&p[i], n, nb);
@@ -1501,7 +1564,7 @@ int band
 
 	/* For each test point */
 	for (i = 0; i < p->nodp; i++) {
-		double spv, ee;
+		double spv;
 		mppcol *c = &p->cols[i];
 
 		/* Compute models output */
@@ -1572,6 +1635,8 @@ double *maxse		/* Return maximum Error from spectral bands */
 /* - - - - - - - - - - - - - - - */
 /* Powell optimisation callbacks */
 
+#ifdef NEVER		// Skip efunc1 passes for now.
+
 /* Setup test point data ready for efunc1 on the given och and oba */
 static void sfunc1(mpp *p) {
 	double tcnv[MPP_MXINKS];	/* Transfer curve corrected device values */
@@ -1612,6 +1677,9 @@ static void sfunc1(mpp *p) {
 	}
 }
 
+#endif /* NEVER */
+
+#ifdef NEVER		// Skip efunc1 passes for now.
 /* Optimise a device transfer curve to minimise a particular bands error */
 /* (Assume no shape parameters) */
 static double efunc1(void *adata, double pv[]) {
@@ -1660,6 +1728,7 @@ printf("~1 efunc1 itt %d/%d chan %d band %d k0 %f returning %f\n",p->oit,p->ott,
 #endif
 	return rv;
 }
+#endif /* NEVER */
 
 /* Optimise all transfer curves simultaniously to minimise a particular bands error */
 static double efunc2(void *adata, double pv[]) {
@@ -2437,11 +2506,8 @@ static void sfunc4(mpp *p) {
 static double efunc4(void *adata, double pv[]) {
 	mpp *p = (mpp *)adata;
 	double smv = 0.0, rv = 0.0;
-	double tcnv[MPP_MXINKS];	/* Transfer curve corrected device values */
-	double tcnv1[MPP_MXINKS];	/* 1.0 - Transfer curve corrected device values */
-	double ww[MPP_MXINKS];		/* Interpolated tweak params for each channel */
 	int j = p->oba;				/* Band being optimised */
-	int i, m, k;
+	int i, k;
 
 	/* For each test point */
 	for (i = 0; i < p->nodp; i++) {
@@ -2489,11 +2555,8 @@ static double dfunc4(void *adata, double dv[], double pv[]) {
 	mpp *p = (mpp *)adata;
 	double smv = 0.0, rv = 0.0;
 	double drv[MPP_MXCCOMB];	/* Delta in rv */
-	double tcnv[MPP_MXINKS];	/* Transfer curve corrected device values */
-	double tcnv1[MPP_MXINKS];	/* 1.0 - Transfer curve corrected device values */
-	double ww[MPP_MXINKS];		/* Interpolated tweak params for each channel */
 	int j = p->oba;				/* Band being optimised */
-	int i, m, k;
+	int i, k;
 
 	for (k = 0; k < p->nn; k++) {
 		dv[k] = 0.0;
@@ -2592,6 +2655,8 @@ double *pv
 
 /* ---------------------------------------------------- */
 /* Optimise whole model in one go */
+
+#ifdef BIGBANG
 
 /* Optimise all parameters simultaniously to minimise a particular bands error */
 static double efunc0(void *adata, double pv[]) {
@@ -2960,7 +3025,7 @@ printf("~1 dfunc0 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
 	return rv;
 }
 
-#ifndef TESTDFUNC
+#ifdef TESTDFUNC
 /* Check that dfunc0 returns the right values */
 static void test_dfunc0(
 mpp *p,
@@ -2991,6 +3056,7 @@ double *pv
 	}
 }
 #endif /* TESTDFUNC */
+#endif /* BIGBANG */
 
 #ifdef ISHAPE
 /* ----------------------------------------------------- */
@@ -3063,7 +3129,7 @@ int j			/* Band being initialised */
 	if (p->nodp < (p->nn/2))		/* Nicer to return error ?? */
 		error ("Not enough data points to solve shaper parameters");
 
-printf("~1 ishape called for band %d\n",j);
+//printf("~1 ishape called for band %d\n",j);
 
 	/* First step is to compute the ideal shape values */
 	/* for each test point. */
@@ -3100,7 +3166,7 @@ printf("~1 ishape called for band %d\n",j);
 			sr[k] = 0.5;
 		}
 
-		if (powell(p->n, pv, sr, 0.001, 300, efuncS, (void *)p) < 0.0) {
+		if (powell(NULL, p->n, pv, sr, 0.001, 300, efuncS, (void *)p) != 0) {
 //printf("~1 ishape Powell failed at point %d\n",i);
 			for (k = 0; k < p->n; k++)
 				pv[k] = 0.0;
@@ -3304,6 +3370,9 @@ mpp *p
 	} else {		/* Subtractive */
 		bfinds bfs;
 		double sr[MPP_MXINKS];		/* search radius */
+		double tt[MPP_MXINKS];		/* temporary */
+		int trial;
+		double rv, brv;
 
 		/* Lookup white directly */
 		for (j = 0; j < p->n; j++)
@@ -3352,11 +3421,30 @@ mpp *p
 		bfs.ilimit = p->limit;
 		
 		/* Find the black point */
+		/* Do several trials to avoid local minima */
 		for (j = 0; j < p->n; j++) { 
-			p->black.nv[j] = 0.5;
-			sr[j] = 0.05;
+			tt[j] = p->black.nv[j] = 0.5;		/* Starting point */
+			sr[j] = 0.1;
 		}
-		if (powell(p->n, p->black.nv, sr, 0.0001, 1000, efunc6, (void *)&bfs) < 0.0)
+		brv = 1e38;
+		for (trial = 0; trial < 20; trial++) {
+
+			if (powell(&rv, p->n, tt, sr, 0.00001, 500, efunc6, (void *)&bfs) == 0) {
+				if (rv < brv) {
+					brv = rv;
+					for (j = 0; j < p->n; j++)
+						p->black.nv[j] = tt[j];
+				}
+			}
+			for (j = 0; j < p->n; j++) {
+				tt[j] = p->black.nv[j] + d_rand(-0.3, 0.3);
+				if (tt[j] < 0.0)
+					tt[j] = 0.0;
+				else if (tt[j] > 1.0)
+					tt[j] = 1.0;
+			}
+		}
+		if (brv > 1000.0)
 			error ("mpp: Black point powell failed");
 
 		for (j = 0; j < p->n; j++) { 	/* Make sure device values are in range */
@@ -3741,7 +3829,7 @@ printf("~1 best %d now %f\n",bk, p->pc[i][j]);
 
 				sfunc1(p);	/* Setup test point values for this chan and band */
 
-				if ((resid = powell(p->cord, pv, sr, 0.001, 100, efunc1, (void *)p)) < 0.0)
+				if (powell(&resid, p->cord, pv, sr, 0.001, 100, efunc1, (void *)p) != 0)
 					error ("Powell failed");
 	
 				/* Put results back into place */
@@ -3769,7 +3857,7 @@ printf("~1 best %d now %f\n",bk, p->pc[i][j]);
 	for (mode = 0;;) {
 		double pv[MPP_MXPARMS];		/* Parameter values */
 		double sr[MPP_MXPARMS];		/* search radius */
-		int lj, yj;					/* Last band, peak Y band */
+		int lj, yj = 0;				/* Last band, peak Y band */
 	
 		/* Decide which band to do next */
 		if (mode == 0) {				/* Start at the beginning */
@@ -3885,21 +3973,20 @@ printf("~1 best %d now %f\n",bk, p->pc[i][j]);
 					int n = p->c2f[i].comb;
 					p->shape[m][n][j] = sr[i];	/* Restore previous value */
 				}
-printf("~1 Starting values were best (%f && %f > %f)\n",pval,p0val,cval);
+//printf("~1 Starting values were best (%f && %f > %f)\n",pval,p0val,cval);
 			} else if (p0val >= pval) {						/* Copying all was best */
 
 				for (k = 0; k < p->n; k++)
 					p->tc[k][j][0] = p->tc[k][lj][0];		/* Back to order 0 values */
 
-printf("~1 copying all previous bands values was best (%f < %f && %f)\n",pval,cval,p0val);
+//printf("~1 copying all previous bands values was best (%f < %f && %f)\n",pval,cval,p0val);
 			} else {
-printf("~1 copying except order 0 values was best (%f < %f && %f)\n",p0val,cval,pval);
+//printf("~1 copying except order 0 values was best (%f < %f && %f)\n",p0val,cval,pval);
 			}
 		}
 
 #ifdef MULTIPASS	/* Multipass in parts */
 		for (it = 0, p->ott = maxit, thr = 1.0; it < maxit; it++, thr *= 0.2) {
-			double de, mxde;
 			double sde, mxsde;
 			double resid;
 	
@@ -3922,10 +4009,10 @@ printf("~1 copying except order 0 values was best (%f < %f && %f)\n",p0val,cval,
 			test_dfunc2(p, p->n * p->cord, pv);
 #endif /* TESTDFUNC */
 #ifdef NODDV
-			if ((resid = powell(p->n * p->cord, pv, sr, thr * 0.01, 200, efunc2, (void *)p)) < 0.0)
+			if (powell(&resid, p->n * p->cord, pv, sr, thr * 0.01, 200, efunc2, (void *)p) != 0)
 				error ("Powell failed");
 #else /* !NODDV */
-			if ((resid = conjgrad(p->n * p->cord, pv, sr, thr * 0.01, 200, efunc2, dfunc2, (void *)p)) < 0.0)
+			if (conjgrad(&resid, p->n * p->cord, pv, sr, thr * 0.01, 200, efunc2, dfunc2, (void *)p)!= 0)
 				error ("ConjGrad failed");
 #endif /* !NODDV */
 
@@ -3966,11 +4053,11 @@ printf("~1 copying except order 0 values was best (%f < %f && %f)\n",p0val,cval,
 				test_dfunc3(p, p->nnn2, pv);
 #endif /* TESTDFUNC */
 #ifdef NODDV
-				if ((resid = powell(p->nnn2, pv, sr, thr * 0.05, 2000, efunc3, (void *)p)) < 0.0)
+				if (powell(&resid, p->nnn2, pv, sr, thr * 0.05, 2000, efunc3, (void *)p) != 0)
 					error ("Powell failed");
 
 #else /* !NODDV */
-				if ((resid = conjgrad(p->nnn2, pv, sr, thr * 0.05, 2000, efunc3, dfunc3, (void *)p)) < 0.0)
+				if (conjgrad(&resid, p->nnn2, pv, sr, thr * 0.05, 2000, efunc3, dfunc3, (void *)p) != 0.0)
 					error ("ConjGrad failed");
 #endif /* !NODDV */
 
@@ -3980,7 +4067,7 @@ printf("~1 copying except order 0 values was best (%f < %f && %f)\n",p0val,cval,
 					int n = p->c2f[i].comb;
 					
 					p->shape[m][n][j] = pv[i];
-printf("~1 shape[%d][%d] = %f\n",m,n,pv[i]);
+//printf("~1 shape[%d][%d] = %f\n",m,n,pv[i]);
 				}
 
 #ifdef DEBUG
@@ -4014,10 +4101,10 @@ printf("~1 shape[%d][%d] = %f\n",m,n,pv[i]);
 			test_dfunc4(p, p->nn, pv);
 #endif /* TESTDFUNC */
 #ifdef NODDV
-			if ((resid = powell(p->nn, pv, sr, thr * 0.01, 500, efunc4, (void *)p)) < 0.0)
+			if (powell(&resid, p->nn, pv, sr, thr * 0.01, 500, efunc4, (void *)p) != 0)
 				error ("Powell failed");
 #else /* !NODDV */
-			if ((resid = conjgrad(p->nn, pv, sr, thr * 0.01, 500, efunc4, dfunc4, (void *)p)) < 0.0)
+			if (conjgrad(&resid, p->nn, pv, sr, thr * 0.01, 500, efunc4, dfunc4, (void *)p) != 0)
 				error ("ConjGrad failed");
 #endif /* !NODDV */
 
@@ -4079,7 +4166,7 @@ printf("~1 shape[%d][%d] = %f\n",m,n,pv[i]);
 			test_dfunc0(p, tparms, pv);
 #endif /* TESTDFUNC */
 
-			if ((resid = conjgrad(tparms, pv, sr, 0.001, 4000, efunc0, dfunc0, (void *)p)) < 0.0)
+			if (conjgrad(&resid, tparms, pv, sr, 0.001, 4000, efunc0, dfunc0, (void *)p) != 0)
 				error ("ConjGrad failed");
 
 			/* Put results back into place */
@@ -4116,6 +4203,7 @@ printf("~1 shape[%d][%d] = %f\n",m,n,pv[i]);
 	if (p->verb)
 #endif /* !DEBUG */
 	{
+		double de, mxde;
 		deltae(p, &de, &mxde, &sde, &mxsde);
 		printf("\nNow got avg dE of %f, max %f\n",de, mxde);
 		if (p->spec_n > 0)

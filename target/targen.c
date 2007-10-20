@@ -8,14 +8,18 @@
  * Copyright 1996 - 2004, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* This program generates a CGATS.5 compatibe file, that */
 /* containing device color test patch values. */
 
 /* TTBD:
+
+	Should add an option to quantize the device values -
+	ie. to 8 bits, so that quantizing error isn't introduced
+	through a reproduction path. Should this be a default ?
 
 	Using adaptive patch creation for grey colorspace is broken.
 	This should really be disabled for grey space, or fixed.
@@ -78,10 +82,6 @@
 
  */
 
-/* Things to be added:
-
- */
-
 #undef DEBUG
 
 #define VRML_DIAG		/* Enable option to dump a VRML of the resulting full spread points */
@@ -139,14 +139,19 @@ struct _pcpt {
 /* public: */
 	void (*del)(struct _pcpt *s);	/* We're done with it */
 
+	int (*is_specific)(struct _pcpt *s);	/* Is a specific model, not defaulte */
+
 	/* Conversions */
 	void (*dev_to_perc)(struct _pcpt *s, double *out, double *in);	/* N-chan Perceptual */
 	void (*dev_to_XYZ)(struct _pcpt *s, double *out, double *in);	/* Absolute XYZ */
-	void (*dev_to_rLab)(struct _pcpt *s, double *out, double *in);	/* Absolute Lab */
+	void (*dev_to_rLab)(struct _pcpt *s, double *out, double *in);	/* Relative Lab */
 	void (*den_to_dev)(struct _pcpt *s, double *out, double *in);	/* Density to device */
+	void (*rLab_to_dev)(struct _pcpt *s, double *out, double *in);	/* Lab to device */
 
 /* private: */
+	inkmask mask;		/* xcolorants inkmask */
 	int di;				/* Number of Device dimensions */
+	
 
 	/* ICC profile based */
 	icmFile *fp;
@@ -165,7 +170,7 @@ struct _pcpt {
 
 	/* Reverse lookup support */
 	double ilimit;			/* Ink limit (scale 1.0) */
-	double den[3];			/* Target density */
+	double den[3];			/* Target density or Lab */
 	double uniform;			/* NZ if target is uniform */	
 	int kchan;				/* Set to the K chanel (-1 if none) */
 
@@ -312,12 +317,12 @@ static double efunc(void *edata, double p[]) {
 	pcpt_to_XYZ(s, xyz, p);		/* Convert device to XYZ */
 //printf("~1 efunc got XYZ %f %f %f\n",xyz[0],xyz[1],xyz[2]);
 	icx_XYZ2Tdens(den, xyz);	/* Convert XYZ to approx statusT density */
-//printf("~1 efunc got density %f %f %f\n",den[0],den[1],den[2]);
+//printf("~1 efunc got density %f %f %f %f\n",den[0],den[1],den[2],den[3]);
 
 //printf("~1 efunc got in_dev_gamut %f\n",pcpt_in_dev_gamut(s, p));
 
 	/* Penalise for being out of gamut */
-	rv = 50000.0 * pcpt_in_dev_gamut(s, p);
+	rv = 5000.0 * pcpt_in_dev_gamut(s, p);
 
 	/* Error to density target */
 	{
@@ -332,15 +337,15 @@ static double efunc(void *edata, double p[]) {
 	}
 
 	{
-		/* Minimise the all chanels beyond the */
+		/* Minimise all channels beyond the */
 		/* (assumed) first primary 3, but don't count black. */
-		/* Minimise all chanels except black if uniform target */
+		/* Minimise all channels except black if nchan >= 4 and uniform target */
 		double ss = 0.0;
 
 		for (e = 0; e < di; e++) {
 			double tt = 0.0;
 
-			if (s->uniform && e < 3 && e != s->kchan)
+			if (di >= 4 && s->uniform && e < 3 && e != s->kchan)
 				tt = p[e];			/* Minimise primary non-black if uniform */
 //			else if (!s->uniform && (e < 3 || e == s->kchan))
 //				tt = p[e];			/* Minimise sum of primaries & black if uniform */
@@ -371,18 +376,19 @@ pcpt_den_to_dev(pcpt *s, double *out, double *in) {
 		s->den[e] = in[e];
 
 	for (e = 0; e < di; e++) {
-		sr[e] = 0.3;			/* Device space search radius */
-		out[e] = 0.1;
+		sr[e] = 0.5;			/* Device space search radius */
+		out[e] = 0.5;
 	}
 
 	if (fabs(in[0] - in[1]) < 0.1
 	 && fabs(in[0] - in[2]) < 0.1
 	 && fabs(in[1] - in[2]) < 0.1) {
 		s->uniform = 1;
+//printf("~1 uniform set\n");
 	} else
 		s->uniform = 0;
 
-	if ((tt = powell(di, out, sr,  0.0000001, 500, efunc, (void *)s)) < 0.0 || tt >= 50000.0) {
+	if (powell(&tt, di, out, sr,  0.00001, 1000, efunc, (void *)s) != 0 || tt >= 50000.0) {
 		error("targen: powell failed, tt = %f\n",tt);
 	}
 
@@ -393,6 +399,95 @@ pcpt_den_to_dev(pcpt *s, double *out, double *in) {
 		else if (out[e] > 0.999)
 			out[e] = 1.0;
 	}
+//printf("~1 returning device values %f %f %f\n",out[0],out[1],out[2]);
+}
+
+/* Optimisation function to find device values */
+/* for a target Lab value. */
+static double efunc2(void *edata, double p[]) {
+	pcpt *s = (pcpt *)edata;
+	int e, di = s->di;
+	double rv, lab[3];
+
+//printf("~1 efunc2 got dev %f %f %f %f\n",p[0],p[1],p[2],p[3]);
+//printf("~1 efunc2 got dev %f %f %f %f %f %f\n",p[0],p[1],p[2],p[3],p[4],p[5]);
+
+	pcpt_to_rLab(s, lab, p);		/* Convert device to rLab */
+//printf("~1 efunc2 got Lab %f %f %f\n",lab[0],lab[1],lab[2]);
+
+//printf("~1 efunc2 got in_dev_gamut %f\n",pcpt_in_dev_gamut(s, p));
+
+	/* Penalise for being out of gamut */
+	rv = 5000.0 * pcpt_in_dev_gamut(s, p);
+
+	/* Error to Lab target */
+	{
+		double ss = 0.0;
+		for (e = 0; e < 3; e++) {
+			double tt;
+			tt = s->den[e] - lab[e];
+			ss += tt * tt;
+		}
+		rv += ss;
+//printf("~1 efunc2 target Lab %f %f %f, err = %f, toterr %f\n",s->den[0],s->den[1],s->den[2],ss, rv);
+	}
+
+	{
+		int f;
+
+		/* Minimise all channels except K, and especially any */
+		/* beyond the first primary 3 or 4. */
+		double ss = 0.0;
+
+		if ((s->mask & ICX_CMYK) == ICX_CMYK)
+			f = 4;
+		else 
+			f = 3;
+		for (e = 0; e < di; e++) {
+			if (e >= f)
+				ss += 10.0 * p[e]; 	/* Supress non-primary */
+			else if (e < 3)
+				ss += 0.05 * p[e]; 	/* Supress first 3 primary slightly */
+		}
+		rv += ss * ss;
+//printf("~1 efunc2 sum err = %f, toterr %f\n",ss, rv);
+	}
+
+//printf("~1 efunc2 returning %f\n\n",rv);
+	return rv;
+}
+
+/* Given target Lab densities, return a suitable device value */ 
+static void
+pcpt_rLab_to_dev(pcpt *s, double *out, double *in) {
+	int e, di = s->di;
+	double tt, sr[MXTD];	/* Search radius */
+
+//printf("\n");
+//printf("#######################3\n");
+//printf("~1 targen Lab = %f %f %f\n",in[0],in[1],in[2]);
+//printf("~1 di = %d, ilimit = %f\n",s->di,s->ilimit);
+
+	for (e = 0; e < 3; e++)
+		s->den[e] = in[e];
+
+	for (e = 0; e < di; e++) {
+		sr[e] = 0.5;			/* Device space search radius */
+		out[e] = 0.5;
+	}
+
+	if (powell(&tt, di, out, sr,  0.00001, 1000, efunc2, (void *)s) != 0 || tt >= 50000.0) {
+		error("targen: powell failed, tt = %f\n",tt);
+	}
+
+	/* Filter out silly values */
+	for (e = 0; e < di; e++) {
+		if (out[e] <= 0.02)
+			out[e] = 0.0;
+		else if (out[e] >= 0.98)
+			out[e] = 1.0;
+	}
+//printf("~1 returning device values %f %f %f\n",out[0],out[1],out[2]);
 }
 
 /* Callback to setup s->nlin[e] mapping */
@@ -420,6 +515,13 @@ static void set_nlin(void *cbntx, double *out, double *in) {
 
 	/* ~~~ should we make this delta lab along locus, rather than L value ??? */
 	out[0] = lab[0];
+}
+
+/* Is a specific model, not default */
+int pcpt_is_specific(pcpt *s) {
+	if (s->luo2 != NULL || s->mlu != NULL)
+		return 1;
+	return 0;
 }
 
 /* Free the pcpt */
@@ -452,8 +554,8 @@ static void pcpt_del(pcpt *s) {
 /* Create a pcpt conversion class */
 pcpt *new_pcpt(
 char *profName,			/* ICC or MPP profile path, NULL for default, "none" for linear */
-int mask,				/* xcolorants mask */
-double *ilimit			/* ink sum limit %, -1 if default */
+inkmask mask,			/* xcolorants mask */
+double *ilimit			/* ink sum limit % input and return, -1 if default */
 ) {
 	int e;
 	pcpt *s;
@@ -465,22 +567,15 @@ double *ilimit			/* ink sum limit %, -1 if default */
 	
 	/* Initialise methods */
 	s->del          = pcpt_del;
+	s->is_specific  = pcpt_is_specific;
 	s->dev_to_perc  = pcpt_to_nLab;
 	s->dev_to_XYZ   = pcpt_to_XYZ;
 	s->dev_to_rLab  = pcpt_to_rLab;
 	s->den_to_dev   = pcpt_den_to_dev;
+	s->rLab_to_dev  = pcpt_rLab_to_dev;
 
+	s->mask = mask;
 	s->di = icx_noofinks(mask);
-	if (*ilimit < 0.0)
-		s->ilimit = (double)s->di;	/* Default to no limit */
-	else
-		s->ilimit = *ilimit/100.0;
-
-	if (s->di > 1)
-		s->kchan = icx_ink2index(mask, ICX_BLACK);
-	else
-		s->kchan = -1;
-
 	/* See if we have a profile */
 	if (profName != NULL
 	 && profName[0] != '\000'
@@ -525,6 +620,14 @@ double *ilimit			/* ink sum limit %, -1 if default */
 				error("ICC profile doesn't match device!");
 			}
 
+		/* Set the default ink limits if not set by user */
+		if (*ilimit < 0.0) {
+			icxDefaultLimits(s->icco, ilimit, *ilimit/100.0, NULL, -1.0);
+			*ilimit *= 100.0;
+			if (*ilimit >= 0.0)
+				*ilimit += 10.0;
+		}
+
 		} else {	/* Not a valid ICC */
 			/* Close out the ICC profile */
 			s->icco->del(s->icco);
@@ -550,9 +653,8 @@ double *ilimit			/* ink sum limit %, -1 if default */
 				s->mlu->del(s->mlu);
 				error("MPP profile doesn't match device!");
 			}
-			if (*ilimit < 0.0)	 {/* If not use specified, use MPP inklimit */
-				s->ilimit = dlimit;
-				*ilimit = 100.0 * dlimit;
+			if (*ilimit < 0.0)	 {/* If not user specified, use MPP inklimit */
+				*ilimit = 100.0 * dlimit + 10.0;
 			}
 		}
 	}
@@ -563,14 +665,24 @@ double *ilimit			/* ink sum limit %, -1 if default */
 	 && strcmp(profName, "none") != 0
 	 && strcmp(profName, "NONE") != 0) {
 		if ((s->clu = new_icxColorantLu(mask)) == NULL)
-				error ("Creation of xcolorant lu object failed");
+			error ("Creation of xcolorant lu object failed");
 	}
 	/* else leave pointers NULL */
+
+	if (*ilimit < 0.0)
+		s->ilimit = (double)s->di;	/* Default to no limit */
+	else
+		s->ilimit = *ilimit/100.0;
+
+	if (s->di > 1)
+		s->kchan = icx_ink2index(mask, ICX_BLACK);
+	else
+		s->kchan = -1;
 
 	/* Create extra chanel linearisation lookups */
 	for (e = 0; e < (s->di-3); e++) {
 		double inmin = 0.0, inmax = 1.0;
-		double outmin = 0.0, outmax = 100.0;
+		double outmax = 100.0;
 		int gres = 256;
 
 		if ((s->nlin[e] = new_rspl(1, 1)) == NULL)
@@ -590,7 +702,7 @@ void
 usage(int level) {
 	int i;
 	fprintf(stderr,"Generate Target deviceb test chart color values, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: targen [options] outfile\n");
 	fprintf(stderr," -v [level]      Verbose mode [optional level 1..N]\n");
 	fprintf(stderr," -d col_comb     choose colorant combination from the following:\n");
@@ -617,6 +729,7 @@ usage(int level) {
 	fprintf(stderr," -g steps        Grey axis RGB or CMY steps (default 0)\n");
 	fprintf(stderr," -m steps        Multidimensional cube steps (default 2)\n");
 	fprintf(stderr," -f patches      Add iterative & adaptive full spread patches to total (default grey 0, color 836)\n");
+	fprintf(stderr,"                 Default is Optimised Farthest Point Sampling (OFPS)\n");
 	fprintf(stderr,"  -t             Use incremental far point for full spread\n");
 	fprintf(stderr,"  -r             Use device space random for full spread\n");
 	fprintf(stderr,"  -R             Use perceptual space random for full spread\n");
@@ -624,7 +737,7 @@ usage(int level) {
 	fprintf(stderr,"  -i             Use device space body centered cubic grid for full spread\n");
 	fprintf(stderr,"  -I             Use perceptual space body centered cubic grid for full spread\n");
 	fprintf(stderr,"  -a angle       Simplex grid angle 0.0 - 0.5 for B.C.C. grid, default %f\n",DEFANGLE);
-	fprintf(stderr,"  -A adaptation  Degree of iterative adaptation for preconditioning 0.0 - 1.0 (default 0.0)\n");
+	fprintf(stderr,"  -A adaptation  Degree of adaptation for preconditioning in OFPS 0.0 - 1.0 (default 0.0)\n");
 	fprintf(stderr," -l ilimit       Total ink limit in %%(default = none) \n");
 	fprintf(stderr," -c profile      Optional device ICC or MPP pre-conditioning profile filename\n");
 	fprintf(stderr,"                 (Use \"none\" to turn off any conditioning)\n");
@@ -656,18 +769,16 @@ int dofilt(
 	return 0;
 }
 
-main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 	int i, j, k;
-	unsigned long ss = 0x65de4523;
-	int fa,nfa;				/* current argument we're looking at */
+	int fa, nfa, mfa;		/* current argument we're looking at */
 	int verb = 0;			/* Verbose flag */
 #ifdef VRML_DIAG
 	int dumpvrml = 0;		/* Dump diagnostic .wrl file */
 #endif /* VRML_DIAG */
-	int nmask = 0;			/* Ink mask combination */
+	inkmask nmask = 0;		/* Ink mask combination */
 	int di = 0;				/* Output dimensions */
 	char *ident;			/* Ink combination identifier */
-	char *desc; 			/* Description for ink combination */
 	int esteps = 4;			/* White color patches */
 	int ssteps = -1;		/* Single channel steps */
 	int gsteps = 0;			/* Composite grey wedge steps */
@@ -706,6 +817,7 @@ main(int argc, char *argv[]) {
 #endif
 
 	/* Process the arguments */
+	mfa = 1;        /* Minimum final arguments */
 	for(fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */
 		if (argv[fa][0] == '-') {		/* Look for any flags */
@@ -714,7 +826,7 @@ main(int argc, char *argv[]) {
 			if (argv[fa][2] != '\000')
 				na = &argv[fa][2];		/* next is directly after flag */
 			else {
-				if ((fa+1) < argc) {
+				if ((fa+1+mfa) < argc) {
 					if (argv[fa+1][0] != '-') {
 						nfa = fa + 1;
 						na = argv[nfa];		/* next is seperate non-flag argument */
@@ -856,7 +968,6 @@ main(int argc, char *argv[]) {
 
 			/* Simplex grid angle */
 			else if (argv[fa][1] == 'a') {
-				double tt;
 				fa = nfa;
 				if (na == NULL) usage(0);
 				simangle = atof(na);
@@ -864,7 +975,6 @@ main(int argc, char *argv[]) {
 
 			/* Degree of iterative adaptation */
 			else if (argv[fa][1] == 'A') {
-				double tt;
 				fa = nfa;
 				if (na == NULL) usage(0);
 				dadapt = atof(na);
@@ -881,7 +991,6 @@ main(int argc, char *argv[]) {
 
 			/* ICC profile for perceptual linearisation */
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
-				double tt;
 				fa = nfa;
 				if (na == NULL) usage(0);
 				strcpy (pname, na);
@@ -889,7 +998,6 @@ main(int argc, char *argv[]) {
 
 			/* Filter out samples outside given sphere */
 			else if (argv[fa][1] == 'F') {
-				int tt;
 				fa = nfa;
 				if (na == NULL) usage(0);
 				if (sscanf(na, " %lf,%lf,%lf,%lf ",&filt[0], &filt[1], &filt[2], &filt[3]) != 4)
@@ -984,11 +1092,14 @@ main(int argc, char *argv[]) {
 	pp->add_other(pp, "CTI1"); 	/* our special type is Calibration Target Information 1 */
 
 	pp->add_table(pp, tt_other, 0);	/* Add the first table for target points */
-	pp->add_table(pp, tt_other, 0);	/* Add the second table for pre-defined device values */
+	pp->add_table(pp, tt_other, 0);	/* Add the second table for density pre-defined device values */
+	pp->add_table(pp, tt_other, 0);	/* Add the second table for device pre-defined device values */
 	pp->add_kword(pp, 0, "DESCRIPTOR", "Argyll Calibration Target chart information 1",NULL);
 	pp->add_kword(pp, 1, "DESCRIPTOR", "Argyll Calibration Target chart information 1",NULL);
+	pp->add_kword(pp, 2, "DESCRIPTOR", "Argyll Calibration Target chart information 1",NULL);
 	pp->add_kword(pp, 0, "ORIGINATOR", "Argyll targen", NULL);
 	pp->add_kword(pp, 1, "ORIGINATOR", "Argyll targen", NULL);
+	pp->add_kword(pp, 2, "ORIGINATOR", "Argyll targen", NULL);
 	atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
 	pp->add_kword(pp, 0, "CREATED",atm, NULL);
 
@@ -1013,6 +1124,7 @@ main(int argc, char *argv[]) {
 
 	pp->add_field(pp, 0, "SAMPLE_ID", cs_t);
 	pp->add_field(pp, 1, "INDEX", i_t);			/* Index no. 0..7 in second table */
+	pp->add_field(pp, 2, "INDEX", i_t);			/* Index no. 0..7 in third table */
 
 	/* Setup CGATS fields */
 	{
@@ -1029,6 +1141,7 @@ main(int argc, char *argv[]) {
 
 			pp->add_field(pp, 0, fname, r_t);
 			pp->add_field(pp, 1, fname, r_t);
+			pp->add_field(pp, 2, fname, r_t);
 		}
 
 		pp->add_kword(pp, 0, "COLOR_REP", ident, NULL);
@@ -1052,6 +1165,13 @@ main(int argc, char *argv[]) {
 	pp->add_field(pp, 1, "XYZ_X", r_t);
 	pp->add_field(pp, 1, "XYZ_Y", r_t);
 	pp->add_field(pp, 1, "XYZ_Z", r_t);
+	pp->add_field(pp, 2, "XYZ_X", r_t);
+	pp->add_field(pp, 2, "XYZ_Y", r_t);
+	pp->add_field(pp, 2, "XYZ_Z", r_t);
+
+	/* Note if the expected values are expected to be accurate */
+	if (pdata->is_specific(pdata))
+		pp->add_kword(pp, 0, "ACCURATE_EXPECTED_VALUES", "true", NULL);
 
 	/* Only use optimsed full spread if <= 4 dimensions, else use ifarp */
 	if (di > 4 
@@ -1124,7 +1244,7 @@ main(int argc, char *argv[]) {
 		for (j = 0; j < di; j++) {
 			for (i = 0; i < ssteps; i++) {
 				int addp, e;
-				double val[MXTD], XYZ[3];
+				double val[MXTD];
 				cgats_set_elem ary[1 + MXTD + 3];
 
 				addp = 1;			/* Default add the point */
@@ -1549,10 +1669,13 @@ main(int argc, char *argv[]) {
 			                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 				sprintf(buf,"%d",fsteps - fxno);
 				pp->add_kword(pp, 0, "ERROR_OPTIMISED_PATCHES", buf, NULL);
-			} else {
+
+			} else {		/* Default full spread algorithm */
+// 				/* Old one */
 //				s = new_ppoint(di, ilimit, fsteps, fxlist, fxno,
 //			                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 
+				/* New one, Optimised Farthest Point Sampling */
 				s = new_ofps(di, ilimit, fsteps, dadapt, fxlist, fxno,
 			                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 				sprintf(buf,"%d",fsteps - fxno);
@@ -1625,8 +1748,9 @@ main(int argc, char *argv[]) {
 	}
 
 	/* Add the eight entries in the second table. */
-	/* These are legal device values that we think will */
-	/* give all combinations of min/max CMY density values */
+	/* These are legal device values that we think may */
+	/* give all combinations of min/max CMY density values. */
+	/* These are typically used for DTP51 and DTP41 patch separators. */
 	{
 		int i;
 
@@ -1634,9 +1758,10 @@ main(int argc, char *argv[]) {
 
 		for (i = 0; i < 8; i++) {
 			int e;
-			double den[3], val[MXTD], XYZ[3];
+			double den[4], val[MXTD], XYZ[3];
 			cgats_set_elem ary[1 + MXTD + 3];
 
+			/* Setup target density combination */
 			for (e = 0; e < 3; e++) {
 				if (i & (1 << e)) 
 					den[e] = 2.5;
@@ -1658,6 +1783,90 @@ main(int argc, char *argv[]) {
 			pp->add_setarr(pp, 1, ary);
 
 		}
+	}
+
+	/* Add the nine entries in the third table. */
+	/* These are legal device values that we calculate */
+	/* give all combinations of typical CMY device values + 50% CMY */
+	/* These are typically use for DTP20 bar coding. */
+	{
+		int i;
+	
+		icxColorantLu *ftarg = NULL;
+
+		/* If not possible to use native space, use fake CMY */
+		if ((nmask & ICX_CMYK) != ICX_CMYK
+		 && (nmask & ICX_CMY) != ICX_CMY
+		 && (nmask & ICX_RGB) != ICX_RGB) {
+			if ((ftarg = new_icxColorantLu(ICX_CMY)) == NULL)
+				error ("Creation of xcolorant lu object failed");
+		}
+		
+		pp->add_kword(pp, 2, "DEVICE_COMBINATION_VALUES", "9", NULL);
+
+		for (i = 0; i < 9; i++) {
+			int e;
+			double val[MXTD], lab[3], XYZ[3];
+			cgats_set_elem ary[1 + MXTD + 3];
+
+			for (e = 0; e < di; e++)
+				val[e] = 0.0;
+
+			/* Setup target device combination */
+			/* Order must be White, Cyan, Magenta, Blue Yellow Green Red Black */
+			if (ftarg != NULL || (nmask & ICX_CMY) == ICX_CMY) {
+				for (e = 0; e < 3; e++) {
+					if (i & (1 << e)) 
+						val[e] = 1.0;
+					else
+						val[e] = 0.0;
+				}
+				if (i == 7)
+					val[3] = 1.0;
+				if (i == 8) {
+					val[0] = val[1] = val[2] = 0.4;
+					val[3] = 0.0;
+				}
+
+			} else {	/* RGB like */
+				for (e = 0; e < 3; e++) {
+					if (i & (1 << e)) 
+						val[e] = 0.0;
+					else
+						val[e] = 1.0;
+				}
+				if (i == 8)
+					val[0] = val[1] = val[2] = 0.6;
+			}
+			
+			/* If target space isn't something we recognise, convert it */
+			if (ftarg != NULL) {
+				ftarg->dev_to_rLab(ftarg, lab, val);
+				pdata->rLab_to_dev(pdata, val, lab);	
+
+			} else if (ilimit < (double)di) {	/* Do a simple ink limit */
+				double tot = 0.0;
+				for (e = 0; e < di; e++)
+					tot += val[e];
+				if (tot > ilimit) {
+					for (e = 0; e < di; e++)
+						val[e] *= ilimit/tot;
+				}
+			}
+			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
+
+			ary[0].i = i;
+			for (e = 0; e < di; e++)
+				ary[1 + e].d = 100.0 * val[e];
+			ary[1 + di + 0].d = 100.0 * XYZ[0];
+			ary[1 + di + 1].d = 100.0 * XYZ[1];
+			ary[1 + di + 2].d = 100.0 * XYZ[2];
+
+			pp->add_setarr(pp, 2, ary);
+		}
+
+		if (ftarg != NULL)
+			ftarg->del(ftarg);
 	}
 
 	ttime = clock() - stime;

@@ -10,8 +10,8 @@
  *
  * Copyright 1995 - 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #define VERSION "1.5"
@@ -68,7 +68,7 @@ char *src
 void
 usage(void) {
 	fprintf(stderr,"Scanin, Version %s\n",VERSION);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"usage: scanin [options] input.tif recogin.cht valin.cie [diag.tif]\n");
 	fprintf(stderr,"   :- inputs 'input.tif' and outputs scanner 'input.ti3', or\n");
@@ -85,35 +85,38 @@ usage(void) {
 	fprintf(stderr,"usage: scanin -r [options] input.tif recogin.cht pbase [diag.tif]\n");
 	fprintf(stderr,"   :- inputs pbase.ti2+.ti3 and outputs pbase.ti3\n");
 	fprintf(stderr,"\n");
-	fprintf(stderr," -g                  Generate a chart reference (.cht) file\n");
-	fprintf(stderr," -o                  Output patch values in .val file\n");
-	fprintf(stderr," -c                  Use scanner as colorimeter to\n");
-	fprintf(stderr,"                      convert printer .ti2 to .ti3\n");
-	fprintf(stderr," -ca                 Same as -c, but accumulates more values to .ti3\n");
-	fprintf(stderr,"                      from subsequent pages\n");
-	fprintf(stderr," -r                  Replace device values in .ti2/.ti3\n");
-	fprintf(stderr,"                     Default is to create a scanner .ti3 file\n");
-	fprintf(stderr," -a                  Recognise chart in normal orientation only (-A fallback as is)\n");
-	fprintf(stderr,"                     Default is to recognise all possible chart angles\n");
-	fprintf(stderr," -v [n]              Verbosity level 0-9\n");
-	fprintf(stderr," -d [ihvglLrsonap]   Generate diagnostic output (try -dipn)\n");
-	fprintf(stderr,"     i               diag - B&W of input image\n");
-	fprintf(stderr,"     h               diag - Horizontal edge detection\n");
-	fprintf(stderr,"     v               diag - Vertical edge detection\n");
-	fprintf(stderr,"     g               diag - Groups detected\n");
-	fprintf(stderr,"     l               diag - Lines detected\n");
-	fprintf(stderr,"     L               diag - All lines detected\n");
-	fprintf(stderr,"     r               diag - lines rotated\n");
-	fprintf(stderr,"     s               diag - diagnostic sample boxes rotated\n");
-	fprintf(stderr,"     o               diag - sample box outlines\n");
-	fprintf(stderr,"     n               diag - sample box names\n");
-	fprintf(stderr,"     a               diag - sample box areas\n");
-	fprintf(stderr,"     p               diag - pixel areas sampled\n");
+	fprintf(stderr," -g                   Generate a chart reference (.cht) file\n");
+	fprintf(stderr," -o                   Output patch values in .val file\n");
+	fprintf(stderr," -c                   Use scanner as colorimeter to\n");
+	fprintf(stderr,"                       convert printer .ti2 to .ti3\n");
+	fprintf(stderr," -ca                  Same as -c, but accumulates more values to .ti3\n");
+	fprintf(stderr,"                       from subsequent pages\n");
+	fprintf(stderr," -r                   Replace device values in .ti2/.ti3\n");
+	fprintf(stderr,"                      Default is to create a scanner .ti3 file\n");
+	fprintf(stderr," -F x1,y1,x2,y2,x3,y3 Don't auto recognize, locate using three fiducual marks\n");
+	fprintf(stderr," -a                   Recognise chart in normal orientation only (-A fallback as is)\n");
+	fprintf(stderr,"                      Default is to recognise all possible chart angles\n");
+	fprintf(stderr," -m                   Return true mean (default is robust mean)\n");
+	fprintf(stderr," -G gamma             Approximate gamma encoding of image\n");
+	fprintf(stderr," -v [n]               Verbosity level 0-9\n");
+	fprintf(stderr," -d [ihvglLrsonap]    Generate diagnostic output (try -dipn)\n");
+	fprintf(stderr,"     i                diag - B&W of input image\n");
+	fprintf(stderr,"     h                diag - Horizontal edge/tick detection\n");
+	fprintf(stderr,"     v                diag - Vertical edge/tick detection\n");
+	fprintf(stderr,"     g                diag - Groups detected\n");
+	fprintf(stderr,"     l                diag - Lines detected\n");
+	fprintf(stderr,"     L                diag - All lines detected\n");
+	fprintf(stderr,"     r                diag - lines rotated\n");
+	fprintf(stderr,"     s                diag - diagnostic sample boxes rotated\n");
+	fprintf(stderr,"     o                diag - sample box outlines\n");
+	fprintf(stderr,"     n                diag - sample box names\n");
+	fprintf(stderr,"     a                diag - sample box areas\n");
+	fprintf(stderr,"     p                diag - pixel areas sampled\n");
 	exit(1);
 	}
 
 
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int fa,nfa;					/* current argument we're looking at */
 	static char tiffin_name[200] = { 0 };	/* TIFF Input file name (.tif) */
@@ -123,6 +126,7 @@ main(int argc, char *argv[])
 	static char prof_name[200] = { 0 };		/* scanner profile name (.cht) */
 	static char diag_name[200] = { 0 };		/* Diagnostic Output (.tif) name, if used */
 	int verb = 1;
+	int tmean = 0;		/* Return true mean, rather than robust mean */
 	int repl = 0;		/* Replace .ti3 device values from raster file */
 	int outo = 0;		/* Output the values read, rather than creating scanner .ti3 */
 	int colm = 0;		/* Use scan values as colorimter for print profile. > 1 == append */
@@ -134,17 +138,17 @@ main(int argc, char *argv[])
 	uint16 resunits;
 	float resx, resy;
 
-	icColorSpaceSignature tiffs;	/* Type of tiff color space */
+	icColorSpaceSignature tiffs = 0;	/* Type of tiff color space */
 
 	int i, j;
+	double gamma = 0.0;		/* default */
+	double _sfid[6], *sfid = NULL;		/* Specified fiducials */
 	int width, height;		/* x and y size */
 
 	scanrd *sr;				/* Scanrd object */
 	int err;	
 	char *errm;
 
-	int nreadings = 0;
-	
 	if (argc <= 1)
 		usage();
 
@@ -176,9 +180,12 @@ main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 2;
 				if (na != NULL && isdigit(na[0])) {
-					verb = atof(na);
+					verb = atoi(na);
 				}
-			} else if (argv[fa][1] == 'g' || argv[fa][1] == 'G') {
+			} else if (argv[fa][1] == 'm' || argv[fa][1] == 'M') {
+				tmean = 1;
+
+			} else if (argv[fa][1] == 'g') {
 				flags |= SI_BUILD_REF;
 				repl = 0;
 				outo = 0;
@@ -200,6 +207,24 @@ main(int argc, char *argv[])
 				colm = 1;
 				if (na != NULL && (*na == 'a' || *na == 'A'))
 					colm = 2;
+
+			/* Approximate gamma encoding of image */
+			} else if (argv[fa][1] == 'G') {
+				fa = nfa;
+				if (na == NULL) usage();
+				gamma = atof(na);
+				if (gamma < 0.0 || gamma > 5.0)
+					usage();
+
+			/* Use specified fiducials instead of auto recognition */
+			} else if (argv[fa][1] == 'F') {
+				fa = nfa;
+				if (na == NULL) usage();
+				if (sscanf(na, " %lf,%lf,%lf,%lf,%lf,%lf ", &_sfid[0], &_sfid[1], &_sfid[2], &_sfid[3], &_sfid[4], &_sfid[5]) != 6) {
+					usage();
+				}
+
+				sfid = _sfid;
 
 			/* Don't recognise rotations */
 			} else if (argv[fa][1] == 'a') {
@@ -393,6 +418,8 @@ main(int argc, char *argv[])
 		flags,			/* option flags */
 		verb,			/* verbosity level */
 
+		gamma,
+		sfid,			/* Specified fiducuals, if any */
 		width, height, depth, bps,	/* Width, Height and Depth of input in pixels */
 		read_line,		/* Read line function */
 		(void *)rh,		/* Opaque data for read_line */
@@ -424,8 +451,6 @@ main(int argc, char *argv[])
 			time_t clk = time(0);
 			struct tm *tsp = localtime(&clk);
 			char *atm = asctime(tsp); /* Ascii time */
-			int sx;				/* Sample id index */
-			int Xx, Yx, Zx;		/* XYZ_X, XYZ_Y, XYZ_Z index */
 	
 			/* Setup output cgats file */
 			ocg = new_cgats();	/* Create a CGATS structure */
@@ -454,12 +479,15 @@ main(int argc, char *argv[])
 			/* Initialise, ready to read out all the values */
 			for (j = 0; ; j++) {
 				char id[100];		/* Input patch id */
-				double P[4];		/* Robust mean values */
-				double mP[4];		/* Raw Mean values */
-				double sdP[4];		/* Standard deviation */
+				double P[4];		/* Robust/true mean values */
 
-				if (sr->read(sr, id, P, mP, sdP, NULL) != 0)
-					break;
+				if (tmean) {
+					if (sr->read(sr, id, NULL, P, NULL, NULL) != 0)
+						break;
+				} else {
+					if (sr->read(sr, id, P, NULL, NULL, NULL) != 0)
+						break;
+				}
 		
 				if (depth == 1) {
 					ocg->add_set( ocg, 0, id, P[0]);
@@ -480,7 +508,7 @@ main(int argc, char *argv[])
 			cgats *icg;			/* input .ti2 cgats structure */
 			cgats *ocg;			/* input/output .ti3 cgats structure */
 			int npat;			/* Number of test patches */
-			int dim;			/* Dimenstionality of device space */
+			int dim = 0;		/* Dimenstionality of device space */
 			int fi;				/* Field index */
 			int isi, ili;		/* Input file sample and location indexes */
 			char *dfnames[5][4] = {	/* Device colorspace names */
@@ -490,7 +518,7 @@ main(int argc, char *argv[])
 				{ "RGB_R", "RGB_G", "RGB_B" },
 				{ "CMYK_C", "CMYK_M", "CMYK_Y", "CMYK_K" }
 			};
-			int odim;			/* Output file device dimensionality */
+			int odim = 0;		/* Output file device dimensionality */
 			int dfi[5][4];		/* Output file device colorspace indexes */
 			int osi;			/* Output file sample id index */
 	
@@ -583,10 +611,13 @@ main(int argc, char *argv[])
 			/* Initialise, ready to read out all the values */
 			for (i = sr->reset(sr); i > 0; i--) {	/* For all samples in .tiff file */
 				char loc[100];		/* Target patch location */
-				double P[4];		/* Robust mean values */
+				double P[4];		/* Robust/raw mean values */
 				int k, e;
 
-				sr->read(sr, loc, P, NULL, NULL, NULL);
+				if (tmean)
+					sr->read(sr, loc, NULL, P, NULL, NULL);
+				else
+					sr->read(sr, loc, P, NULL, NULL, NULL);
 		
 				/* Search for this location in the .ti2 file */
 				for (j = 0; j < npat; j++) {
@@ -632,9 +663,9 @@ main(int argc, char *argv[])
 			struct tm *tsp = localtime(&clk);
 			char *atm = asctime(tsp); /* Ascii time */
 			int nmask = 0;		/* Device colorant mask */
-			int nchan;			/* Number of device chanels */
+			int nchan = 0;		/* Number of device chanels */
 			int npat;			/* Number of input patches (inc. padding) */
-			int nopat;			/* Number of output patches */
+			int nopat = 0;		/* Number of output patches */
 			int si;				/* Sample id index */
 			int li;				/* Location id index */
 			int ti;				/* Temp index */
@@ -877,11 +908,14 @@ main(int argc, char *argv[])
 			/* Initialise, ready to read out all the values */
 			for (i = sr->reset(sr); i > 0; i--) {	/* For all samples in .tiff file */
 				char loc[100];		/* Target patch location */
-				double P[ICX_MXINKS];	/* Robust mean values */
+				double P[ICX_MXINKS];	/* Robust/true mean values */
 				double xyz[3];			/* profile XYZ value */
 				int k, e;
 
-				sr->read(sr, loc, P, NULL, NULL, NULL);
+				if (tmean)
+					sr->read(sr, loc, NULL, P, NULL, NULL);
+				else
+					sr->read(sr, loc, P, NULL, NULL, NULL);
 		
 				/* Search for this location in the .ti2 file */
 				for (j = 0; j < npat; j++) {
@@ -997,13 +1031,15 @@ main(int argc, char *argv[])
 			/* Fields we want from input chart reference file */
 			if ((sx = icg->find_field(icg, 0, "Sample_Name")) < 0) {
 				if ((sx = icg->find_field(icg, 0, "SAMPLE_NAME")) < 0) {
-					if ((sx = icg->find_field(icg, 0, "SAMPLE_ID")) < 0) {
-						error ("Input file doesn't contain field SAMPLE_ID, Sample_Name or SAMPLE_NAME");
+					if ((sx = icg->find_field(icg, 0, "SAMPLE_LOC")) < 0) {
+						if ((sx = icg->find_field(icg, 0, "SAMPLE_ID")) < 0) {
+							error ("Input file doesn't contain field SAMPLE_ID, Sample_Name or SAMPLE_NAME");
+						}
 					}
 				}
 			}
-			if (icg->t[0].ftype[sx] != nqcs_t)
-				error ("Field SAMPLE_ID/Sample_Name is wrong type");
+			if (icg->t[0].ftype[sx] != nqcs_t && icg->t[0].ftype[sx] != cs_t)
+				error ("Field %s is wrong type", icg->t[0].fsym[sx]);
 			if ((Xx = icg->find_field(icg, 0, "XYZ_X")) < 0)
 				error ("Input file doesn't contain field XYZ_X");
 			if (icg->t[0].ftype[Xx] != r_t)
@@ -1053,11 +1089,13 @@ main(int argc, char *argv[])
 				for (i = sr->reset(sr); i > 0; i--) {
 					char tod[100];		/* Output patch id */
 					char od[100];		/* Output patch id */
-					double P[4];		/* Robust mean values */
-					double mP[4];		/* Raw Mean values */
+					double P[4];		/* Robust/true mean values */
 					double sdP[4];		/* Standard deviation */
 
-					sr->read(sr, tod, P, mP, sdP, NULL);
+					if (tmean)
+						sr->read(sr, tod, NULL, P, sdP, NULL);
+					else
+						sr->read(sr, tod, P, NULL, sdP, NULL);
 					fix_it8(od,tod);
 		
 					if (strcmp(id,od) == 0) {

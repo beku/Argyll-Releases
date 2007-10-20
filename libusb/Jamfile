@@ -1,0 +1,40 @@
+
+# This is a pretty dumb link between the Jamfile based build, and the
+# configure & make used by the distribution libusb. 
+# If you modify any sources in libusb, then jam won't rebuild them,
+# you have to run "make"
+
+#SubDir TOP libusb ;
+
+CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+LINKFLAGS	+= $(LINKDEBUGFLAG) ;
+
+if $(UNIX) {
+
+	if $(OS) = MACOSX {
+		LINKFLAGS += -framework CoreFoundation ;
+		LINKFLAGS += -framework IOKit ;
+		OSFILE = darwin ;
+	} else {
+		# Should detect BSD here!
+		OSFILE = linux ;
+	}
+
+	# Run configure if it hasn't been run before
+	Depends first : Makefile ;
+	Depends Makefile : configure ;
+	GenFileNND Makefile : "./configure ; rm -f libusb.a " ;
+	Depends libusb.lib : Makefile ;
+
+	# USB library
+	# We could run make, but it's long winded, and the resulting static
+	# lib is a bit screwed up, so build it the simple Jam way:
+	Library libusb.lib : usb.c error.c descriptors.c $(OSFILE).c ;
+	ObjectHdrs usb error descriptors $(OSFILE) : . ;
+
+	# USB test program 
+	Main testlibusb : tests/testlibusb.c ;
+	ObjectHdrs tests/testlibusb : . ;
+	LinkLibraries testlibusb : libusb.lib ;
+}

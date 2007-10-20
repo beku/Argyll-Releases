@@ -10,8 +10,8 @@
  *
  * Copyright 1995, 1996, Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -51,6 +51,8 @@
 #define SI_REF_FORMAT_ERR            0x10000005
 #define SI_PIX_DEPTH_ERR             0x10000006
 #define SI_BIT_DEPTH_ERR             0x10000007
+#define SI_NO_FIDUCIALS_ERR          0x10000008
+#define SI_BAD_FIDUCIALS_ERR         0x10000009		/* Not really file error */
 
 #define SI_MALLOC_ERR(flag) ((flag & 0xf0000000) == 0x80000000)
 #define SI_MALLOC_DIAG_RAST          0x80000001
@@ -98,6 +100,10 @@ struct _scanrd {
 scanrd *do_scanrd(
 	int flags,			/* option flags */
 	int verb,			/* verbosity level */
+
+	double gamma,		/* Approximate gamma encoding of image (0.0 = default 1.7) */
+
+	double *sfid,		/* Specified fiducuals x1,y1, x2,y2, x3,y3, NULL if auto recognition */
 
 	int w, int h, 		/* Width and Height of input raster in pixels */
 	int d, int p,		/* Plane Depth, Bit presision of input pixels */

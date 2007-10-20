@@ -7,11 +7,11 @@
 /* S.A.Teukolsky & W.T.Vetterling. */
 
 /*
- * Copyright 2000 Graeme W. Gill
+ * Copyright 2000, 2006 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* TTBD:
@@ -31,9 +31,10 @@ static double linmin(double p[], double xi[], int n, double ftol,
 	double (*func)(void *fdata, double tp[]), void *fdata);
 
 /* Standard interface for powell function */
-/* return err on sucess, -1.0 on failure */
+/* return 0 on sucess, 1 on failure due to excessive itterions */
 /* Result will be in cp */
-double powell(
+int powell(
+double *rv,				/* If not NULL, return the residual error */
 int di,					/* Dimentionality */
 double cp[],			/* Initial starting point */
 double s[],				/* Size of initial search area */
@@ -129,19 +130,23 @@ void *fdata				/* Opaque data needed by function */
 	free_dvector(spt,0,di-1);
 	free_dmatrix(dmtx, 0, di-1, 0, di-1);
 
-	if (iter < maxit)
-		return retv;
+	if (rv != NULL)
+		*rv = retv;
 
-	return -1.0;		/* Failed due to execessive itterations */
+	if (iter < maxit)
+		return 0;
+
+	return 1;		/* Failed due to execessive itterations */
 }
 
 /* -------------------------------------- */
 /* Conjugate Gradient optimiser */
-/* return err on sucess, -1.0 on failure */
+/* return 0 on sucess, 1 on failure due to excessive itterions */
 /* Result will be in cp */
 /* Note that we could use gradient in line minimiser, */
 /* but haven't bothered yet. */
-double conjgrad(
+int conjgrad(
+double *rv,				/* If not NULL, return the residual error */
 int di,					/* Dimentionality */
 double cp[],			/* Initial starting point */
 double s[],				/* Size of initial search area */
@@ -174,7 +179,6 @@ void *fdata				/* Opaque data needed by function */
 
 	/* Itterate untill we converge on a solution, or give up. */
 	for (iter = 1; iter < maxit; iter++) {
-		int j;
 		double gamden, gamnum, gam;
 		double pretv;			/* Previous function return value */
 
@@ -215,10 +219,13 @@ void *fdata				/* Opaque data needed by function */
 	free_dvector(svec,0,di-1);
 	free_dvector(ssvec,0,di-1);
 
-	if (iter < maxit)
-		return retv;
+	if (rv != NULL)
+		*rv = retv;
 
-	return -1.0;		/* Failed due to execessive itterations */
+	if (iter < maxit)
+		return 0;
+
+	return 1;		/* Failed due to execessive itterations */
 }
 
 /*------------------------------*/
@@ -384,8 +391,8 @@ void *fdata)		/* Opaque data for func() */
 		/* w is second best function value so far */
 		/* v is previous second best, or third best */
 		/* u is most recently tested point */
-		double wx, vx, ux;	/* Search vector multipliers */
-		double wf, vf, uf;	/* Function values at those points */
+		double wx, vx, ux;			/* Search vector multipliers */
+		double wf, vf = 0.0, uf;	/* Function values at those points */
 		int iter;
 		double de = 0.0;	/* Distance moved on previous step */
 		double e = 0.0;		/* Distance moved on 2nd previous step */

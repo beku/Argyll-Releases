@@ -10,8 +10,8 @@
  * Copyright 1995, 1996, 2002, Graeme W. Gill
  * All rights reserved.
  * 
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  */
 
 #define _CGATS_C_				/* Turn on implimentation code */
@@ -76,7 +76,6 @@ static int add_data_item(cgats *p, int table, void *data);
 static void unquote_cs(char *cs);
 static data_type guess_type(char *cs);
 static void real_format(double value, int nsd, char *fmt);
-static void cgats_dump(cgats *p, cgatsFile *fp);
 
 #ifdef COMBINED_STD
 static int cgats_read_name(cgats *p, char *filename);
@@ -324,6 +323,7 @@ cgats_read(cgats *p, cgatsFile *fp) {
 	int rstate = R_KWORDS;
 	int tablef = 0;		/* Current table we should be filling */
 	int expsets = 0;	/* Expected number of sets */
+	char *kw = NULL;	/* keyword symbol */
 
 	p->errc = 0;
 	p->err[0] = '\000';
@@ -339,8 +339,7 @@ cgats_read(cgats *p, cgatsFile *fp) {
 
 	/* Read in the file */
 	for (;;) {
-		char *tp;		/* Token string */
-		char *kw;		/* keyword symbol */
+		char *tp;			/* Token string */
 
 		/* Fetch the next token */
 		while ((tp = pp->get_token(pp)) == NULL) {
@@ -366,9 +365,7 @@ cgats_read(cgats *p, cgatsFile *fp) {
 		switch(rstate) {
 			case R_KWORDS: {	/* Expecting file identifier, keyword, field def or data */
 				table_type tt = tt_none;
-				int oi;		/* Index if tt_other */
-				int bd = 0;
-
+				int oi = 0;		/* Index if tt_other */
 #ifdef DEBUG
 				printf("Got keyword '%s'\n",tp);
 #endif
@@ -398,8 +395,8 @@ cgats_read(cgats *p, cgatsFile *fp) {
 						return p->errc;
 					}
 					strcpy(p->cgats_type,tp);
-				}
-				else {	/* See if it is an 'other' identifier */
+
+				} else {	/* See if it is an 'other' identifier */
 					for (oi = 0; oi < p->nothers; oi++) {
 						/* Wild card valid only if there are no tables */
 						if (p->ntables == 0 && p->others[oi][0] == '\000') {
@@ -667,6 +664,8 @@ cgats_read(cgats *p, cgatsFile *fp) {
 									unquote_cs((char *)ct->fdata[j][i]);
 									break;
 								}
+								case none_t:
+									break;
 							}
 						}
 					}
@@ -1135,7 +1134,6 @@ get_setarr(cgats *p, int table, int set_index, cgats_set_elem *args) {
 static int
 add_data_item(cgats *p, int table, void *data) {
 	cgatsAlloc *al = p->al;
-	int i;
 	cgats_table *t;
 
 	p->errc = 0;
@@ -1316,6 +1314,8 @@ cgats_write(cgats *p, cgatsFile *fp) {
 					if (fp->printf(fp,"%s\n\n",p->others[t->oi]) < 0)
 						goto write_error;
 					break;
+				case tt_none:
+					break;
 			}
 		} else {	/* At least space the next table out a bit */
 			if (table == 0) {
@@ -1332,7 +1332,7 @@ cgats_write(cgats *p, cgatsFile *fp) {
 
 		/* Then all the keywords */
 		for (i = 0; i < t->nkwords; i++) {
-			char *qs;
+			char *qs = NULL;
 
 			DBG((dbgo,"CGATS writing keyword %d\n",i));
 
@@ -1806,34 +1806,27 @@ guess_type(char *cs)
 /* We try to do this while not using the %e format for normal values. */
 /* The fmt string space is assumed to be big enough to contain the format */
 static void
-real_format(double value, int nsd, char *fmt)
-	{
+real_format(double value, int nsd, char *fmt) {
 	int ndigs;
 	int tot = nsd + 1;
 	int xtot = tot;
-	if (value == 0.0)
-		{
+	if (value == 0.0) {
 		sprintf(fmt,"%%%d.%df",tot,tot-2);
 		return;
-		}
-	if (value < 0.0)
-		{
+	}
+	if (value < 0.0) {
 		value = -value;
 		xtot++;
-		}
-	if (value < 1.0)
-		{
+	}
+	if (value < 1.0) {
 		ndigs = (int)(log10(value));
-		if (ndigs <= -2)
-			{
+		if (ndigs <= -2) {
 			sprintf(fmt,"%%%d.%de",xtot,tot-2);
 			return;
-			}
+		}
 		sprintf(fmt,"%%%d.%df",xtot-ndigs,nsd-ndigs);
 		return;
-		}
-	else
-		{
+	} else {
 		ndigs = (int)(log10(value));
 		if (ndigs >= (nsd -1))
 			{
@@ -1842,11 +1835,14 @@ real_format(double value, int nsd, char *fmt)
 			}
 		sprintf(fmt,"%%%d.%df",xtot,(nsd-1)-ndigs);
 		return;
-		}
 	}
+}
 
 /* ---------------------------------------------------------- */
-/* Debug code */
+/* Debug and test code */
+/* ---------------------------------------------------------- */
+
+#ifdef STANDALONE_TEST
 
 /* Dump the contents of a cgats structure to the given output */
 static void
@@ -1878,6 +1874,9 @@ cgats_dump(cgats *p, cgatsFile *fp) {
 				break;
 			case cgats_5:
 				fp->printf(fp,"Identifier = 'CGATS.5'\n");
+				break;
+			case cgats_X:
+				fp->printf(fp,"Identifier = '%s'\n",p->cgats_type);
 				break;
 			case tt_other:	/* User defined file identifier */
 				fp->printf(fp,"Identifier = '%s'\n",p->others[t->oi]);
@@ -1958,11 +1957,6 @@ cgats_dump(cgats *p, cgatsFile *fp) {
 		}
 	}
 }
-
-/* ---------------------------------------------------------- */
-/* Test code */
-
-#ifdef STANDALONE_TEST
 
 int
 main(int argc, char *argv[]) {

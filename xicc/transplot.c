@@ -9,7 +9,7 @@
  * Version: 1.0
  *
  * Copyright 2000 - 2003 Graeme W. Gill
- * Please refer to Licence.txt file for details.
+ * Please refer to License.txt file for details.
  */
 
 /* TTBD:

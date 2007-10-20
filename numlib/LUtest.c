@@ -4,15 +4,15 @@
  * Copyright 1999 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include "numlib.h"
 
 int test(int n, double **a, double *b);
 
-main() {
+int main() {
 	double **a;
 	double *b;
 	int n = 4;

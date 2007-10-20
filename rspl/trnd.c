@@ -8,8 +8,8 @@
  * Derived from tnd.c
  * Copyright 1999 - 2000 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 
@@ -40,7 +40,6 @@ void func(
 void *cbctx,
 double *out,
 double *in) {
-	int i, j;
 	double tt[4];
 
 #ifdef NEVER
@@ -125,8 +124,8 @@ char *argv[]
 	rss =  new_rspl(DI, FDI);
 
 	printf("Rspl allocated\n");
-	rss->set_rspl(rss, 0, (void *)NULL, func,
-	               NULL, NULL, gres, NULL, NULL);
+	rss->set_rspl(rss, 0, (void *)NULL, func, NULL, NULL, gres, NULL, NULL);
+//	rss->set_rspl(rss, RSPL_SET_APXLS, (void *)NULL, func, NULL, NULL, gres, NULL, NULL);
 
 	printf("Rspl set\n");
 

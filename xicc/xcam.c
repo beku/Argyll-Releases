@@ -10,8 +10,8 @@
  *
  * Copyright 2004 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the LICENCE.TXT file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 #include <stdio.h>
@@ -44,6 +44,8 @@ char *icxcam_description(icxCAM which) {
 			return "CIECAM97s3";
 		case cam_CIECAM02:
 			return "CIECAM02";
+		default:
+			break;
 	}
 	return "Unknown CAM";
 }
@@ -106,6 +108,8 @@ static void icx_cam_free(icxcam *s) {
 				pp->del(pp);
 				break;
 			}
+		default:
+			break;
 		}
 		free(s);
 	}
@@ -132,6 +136,8 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 			cam02 *pp = (cam02 *)s->p;
 			return pp->set_view(pp, Ev, Wxyz, Yb, La, Lv, Yf, Fxyz, hk);
 		}
+		default:
+			break;
 	}
 	return 0;
 }
@@ -151,6 +157,8 @@ double XYZ[3]
 			cam02 *pp = (cam02 *)s->p;
 			return pp->XYZ_to_cam(pp, Jab, XYZ);
 		}
+		default:
+			break;
 	}
 	return 0;
 }
@@ -169,6 +177,8 @@ double Jab[3]
 			cam02 *pp = (cam02 *)s->p;
 			return pp->cam_to_XYZ(pp, XYZ, Jab);
 		}
+		default:
+			break;
 	}
 	return 0;
 }

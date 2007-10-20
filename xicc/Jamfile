@@ -1,5 +1,4 @@
 # JAM style makefile for xicclib and friends
- 
 #SubDir TOP xicc ;
 
 CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
@@ -13,8 +12,11 @@ if $(UNIX) {
 	LINKFLAGS += -framework IOKit ;
 	LINKFLAGS += -framework CoreFoundation ;
   } else {
-	LibWin = /usr/X11R6/lib/libX11.lib ;
-	LibWinH = /usr/X11R6/include/X11 ;
+	WinDir = /usr/X11R6 ;
+	LibWinH = $(WinDir)/include/X11 ;
+	LibWinD = $(WinDir)/lib ;
+	LibWin = ;
+	LINKFLAGS += -L$(LibWinD) -lX11 -lXau -lXdmcp ;
   }
 }
 
@@ -28,10 +30,10 @@ if $(HAVE_TIFF) {	# Alternate TIFF library
 }
 
 #Products
-Libraries = libxicc libxcolorants ;
+Libraries = libxicc libxcolorants libxutils ;
 Executables = fakeCMY iccgamut mpplu revfix tiffgamut xicclu ;
 Headers = xicc.h ;
-Samples = Licence.txt ;
+Samples = License.txt ;
 
 #Install
 InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
@@ -41,19 +43,27 @@ InstallFile $(DOTDOT)$(SLASH)bin : $(Samples) ;
 
 
 # XICC library
-Objects xicc.c xlutfix.c xspect.c xsep.c xcolorants.c xdevlin.c xcam.c cam97s3.c cam02.c mpp.c ;
+Objects xicc.c xlutfix.c xspect.c xsep.c xcolorants.c xutils.c xdevlin.c
+        xcam.c cam97s3.c cam02.c mpp.c xfit1.c xfit2.c xfit3.c ;
 LibraryFromObjects libxicc : xicc$(SUFOBJ) xlutfix$(SUFOBJ) xspect$(SUFOBJ)
-                                 xsep$(SUFOBJ) xcolorants$(SUFOBJ) xdevlin$(SUFOBJ)
-                                 xcam$(SUFOBJ) cam97s3$(SUFOBJ) cam02$(SUFOBJ) mpp$(SUFOBJ) ;
+                                 xsep$(SUFOBJ) xcolorants$(SUFOBJ) xutils$(SUFOBJ) xdevlin$(SUFOBJ)
+                                 xcam$(SUFOBJ) cam97s3$(SUFOBJ) cam02$(SUFOBJ) mpp$(SUFOBJ)
+                                 xfit1$(SUFOBJ) xfit2$(SUFOBJ) xfit3$(SUFOBJ) ;
 ObjectHdrs xicc$(SUFOBJ) xlutfix$(SUFOBJ) xspect$(SUFOBJ) xsep$(SUFOBJ)
-           xcolorants$(SUFOBJ) xdevlin$(SUFOBJ) xcam$(SUFOBJ) cam97s3$(SUFOBJ) cam02$(SUFOBJ)  mpp$(SUFOBJ) :
+           xcolorants$(SUFOBJ) xutils$(SUFOBJ) xdevlin$(SUFOBJ)
+           xcam$(SUFOBJ) cam97s3$(SUFOBJ) cam02$(SUFOBJ)  mpp$(SUFOBJ)
+           xfit1$(SUFOBJ) xfit2$(SUFOBJ) xfit3$(SUFOBJ) :
            ../h ../icc ../rspl ../gamut ../numlib ../spectro ../profile
            ../cgats $(LibWinH) ../plot ;
 
-# colorant library
+# colorant library. Use instead of libxicc
 LibraryFromObjects libxcolorants : xcolorants$(SUFOBJ) ;
 ObjectHdrs xcolorants$(SUFOBJ) : $(LibWinH) ;
 DEPENDS lib : libxcolorants$(SUFLIB) ;			# Strangeness cause by KEEPOBJS
+
+# standalone utilities library. Use instead of libxicc
+LibraryFromObjects libxutils : xutils$(SUFOBJ) ;
+DEPENDS lib : libxutils$(SUFLIB) ;			# Strangeness cause by KEEPOBJS
 
 # Utilities / test programs
 
@@ -63,11 +73,11 @@ DEPENDS lib : libxcolorants$(SUFLIB) ;			# Strangeness cause by KEEPOBJS
 
 # Not created yet
 #Main xlutest : xlutest.c ;
-#LinkLibraries xlutest : libxicc.lib ../icc/libicc.lib ../numlib/libnum.lib ;
+#LinkLibraries xlutest : ../icc/libicc.lib ../numlib/libnum.lib ;
 
 # expanded version of icclu
 Main xicclu : xicclu.c ;
-ObjectHdrs xicclu$(SUFOBJ) : ../icc ../rspl ../gamut ../cgats ../spectro ../numlib
+ObjectHdrs xicclu$(SUFOBJ) : ../h ../icc ../rspl ../gamut ../cgats ../spectro ../numlib
                              ../profile ../plot ;
 LinkLibraries xicclu : libxicc.lib ../icc/libicc.lib ../rspl/librspl.lib
                            ../gamut/libgamut.lib ../cgats/libcgats.lib 
@@ -100,17 +110,10 @@ LinkLibraries revfix : libxicc.lib ../icc/libicc.lib ../rspl/librspl.lib
 Main mpplu : mpplu.c ;
 ObjectHdrs mpplu$(SUFOBJ) : ../icc ../rspl ../gamut ../cgats ../spectro ../numlib ../plot ;
 LinkLibraries mpplu : libxicc.lib libxcolorants.lib ../icc/libicc.lib
-                           ../spectro/libinst.lib ../rspl/librspl.lib 
+                           ../spectro/libinsttypes.lib ../rspl/librspl.lib 
                            ../gamut/libgamut.lib ../cgats/libcgats.lib
                            ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
 
-
-# CAM test routines
-Objects cam97test.c ;
-MainFromObjects cam97test : cam97test$(SUFOBJ) cam97s3$(SUFOBJ) ;
-
-Objects cam02test.c ;
-MainFromObjects cam02test : cam02test$(SUFOBJ) cam02$(SUFOBJ) ;
 
 # Experimental
 #Objects osatest.c ;
@@ -153,6 +156,13 @@ LinkLibraries spectest : libxicc.lib ../icc/libicc.lib ../rspl/librspl.ib
                            ../cgats/libcgats.lib 
                            ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
 
+# Test FWA in xspect 2
+Main spectest2 : spectest2.c ;
+ObjectHdrs spectest2$(SUFOBJ) : ../icc ../rspl ../cgats ../spectro ../numlib ../plot ;
+LinkLibraries spectest2 : libxicc.lib ../icc/libicc.lib ../rspl/librspl.ib
+                           ../cgats/libcgats.lib ../spectro/libinsttypes.lib 
+                           ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
+
 # transfer curve plotting
 Main transplot : transplot.c ;
 ObjectHdrs transplot$(SUFOBJ) : ../icc ../rspl ../numlib ../plot ;
@@ -168,6 +178,7 @@ LinkLibraries cgatsplot : libxicc.lib ../icc/libicc.lib ../rspl/librspl.lib
                            ../cgats/libcgats.lib ../gamut/libgamut.lib 
                            ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
 
+
 # per channel curve testing
 Main cv : cv.c ;
 ObjectHdrs cv$(SUFOBJ) : ../numlib ../plot ;
@@ -178,13 +189,114 @@ Main cvtest : cvtest.c ;
 ObjectHdrs cvtest$(SUFOBJ) : ../numlib ../plot ;
 LinkLibraries cvtest : ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
 
+# per channel curve fitting testing
+Main cvtest : cvtest.c ;
+ObjectHdrs cvtest$(SUFOBJ) : ../numlib ../plot ;
+LinkLibraries cvtest : ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
+
+
+# Generate sub sampled illuminants or observers */
+Main specsubsamp : specsubsamp.c ;
+ObjectHdrs specsubsamp$(SUFOBJ) : ../icc ../rspl ../cgats ../spectro ../numlib ;
+LinkLibraries specsubsamp : libxicc.lib ../icc/libicc.lib ../rspl/librspl.ib
+                           ../cgats/libcgats.lib ../numlib/libnum.lib 
+							../plot/libplot.lib $(LibWin) ;
+
+# Test CCT spectrum code and illuminant utility
+Main ccttest : ccttest.c ;
+ObjectHdrs ccttest$(SUFOBJ) : ../icc ../rspl ../cgats ../spectro ../numlib ../plot ;
+LinkLibraries ccttest : libxicc.lib ../icc/libicc.lib ../rspl/librspl.ib
+                           ../cgats/libcgats.lib 
+                           ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
+
+# CAM test routines
+Objects cam97test.c ;
+MainFromObjects cam97test : cam97test$(SUFOBJ) cam97s3$(SUFOBJ) ;
+
+Main cam02test : cam02test.c cam02.c ;
+ObjectHdrs cam02test$(SUFOBJ) cam02$(SUFOBJ) : ../h ../icc ../numlib ;
+LinkLibraries cam02test : ../numlib/libnum.lib ../icc/libicc.lib ;
+
+
+# Plot the gamut of spectrum locus in CAM02 Aab space */
+#Main cam02gamut : cam02gamut.c cam02.c ;
+#ObjectHdrs cam02gamut$(SUFOBJ) cam02$(SUFOBJ) : ../h ../numlib ../icc ../gamut ;
+#LinkLibraries cam02gamut : ../icc/libicc.lib ../numlib/libnum.lib
+#                           ../gamut/libgamut.lib ../cgats/libcgats.lib ;
+
+#Create test TIFF file for cam02 conversion
+Main cam02plot : cam02plot.c cam02.c ;
+ObjectHdrs cam02plot$(SUFOBJ) cam02$(SUFOBJ) : ../h ../icc ../numlib $(TIFFINC) ;
+LinkLibraries cam02plot : ../numlib/libnum.lib ../icc/libicc.lib $(TIFFLIB) ;
+
+#Main t : t.c ;
+
 if $(BUILD_JUNK) {
+
+	Main t23 : t23.c ;
+	ObjectHdrs t23$(SUFOBJ) : ../icc ../numlib ../plot ;
+	LinkLibraries t23 : ../icc/libicc.lib ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
+
+	Main t24 : t24.c cam02.c ;
+	ObjectHdrs t24$(SUFOBJ) cam02$(SUFOBJ) : ../h ../icc ../numlib $(TIFFINC) ;
+	LinkLibraries t24 : ../numlib/libnum.lib ../icc/libicc.lib $(TIFFLIB) ;
+
+	Main t1 : t1.c ;
+	ObjectHdrs t1$(SUFOBJ) : ../icc ../numlib ../plot ;
+	LinkLibraries t1 : ../icc/libicc.lib ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
+
+
+	Main t2 : t2.c ;
+	ObjectHdrs t2$(SUFOBJ) : ../icc ../numlib ;
+	LinkLibraries t2 : ../icc/libicc.lib ../numlib/libnum.lib ;
+
+	Main t22 : t22.c ;
+	ObjectHdrs t22$(SUFOBJ) : ../icc ../numlib ;
+	LinkLibraries t22 : ../icc/libicc.lib ../numlib/libnum.lib ;
+
+	Main t23 : t23.c ;
+	ObjectHdrs t23$(SUFOBJ) : ../icc ../numlib ../plot ;
+	LinkLibraries t23 : ../icc/libicc.lib ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
+
+	Main t3 : t3.c ;
+	ObjectHdrs t3$(SUFOBJ) : ../icc ../numlib ;
+	LinkLibraries t3 : ../icc/libicc.lib ../numlib/libnum.lib ;
+
+	Main test : test.c ;
+
+	Main t : t.c ;
+	ObjectHdrs t$(SUFOBJ) : ../icc ;
+	LinkLibraries t : ../icc/libicc.lib ;
+
+	# CAM97s3 matrix inversion calc
+	Main cammatrix : cammatrix.c ;
+
+	# test matrix deriv version
+	Main t : t.c ;
+	ObjectHdrs t$(SUFOBJ) : ../numlib ../icc ../rspl ../gamut ../cgats ../spectro ;
+	LinkLibraries t : libxicc.lib libxcolorants.lib ../icc/libicc.lib
+                           ../spectro/libinsttypes.lib ../rspl/librspl.lib 
+                           ../gamut/libgamut.lib ../cgats/libcgats.lib
+                           ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
+
+	# Develop conjgrad version of code for profile
+	Main tt3 : tt3.c ;
+	ObjectHdrs tt3$(SUFOBJ) : ../numlib ../icc ../rspl ../gamut ../cgats ../spectro ;
+	LinkLibraries tt3 : libxicc.lib libxcolorants.lib ../icc/libicc.lib
+                           ../spectro/libinsttypes.lib ../rspl/librspl.lib 
+                           ../gamut/libgamut.lib ../cgats/libcgats.lib
+                           ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
+
+	# test icx_icc_cv_to_colorant_comb() 
+	Main tcc : tcc.c ;
+	ObjectHdrs tcc$(SUFOBJ) : ../icc ;
+	LinkLibraries tcc : ../icc/libicc.lib libxicc.lib ;
 
 	# Develop conjgrad version of code for profile
 	Main tt4 : tt4.c ;
 	ObjectHdrs tt4$(SUFOBJ) : ../numlib ../icc ../rspl ../gamut ../cgats ../spectro ;
 	LinkLibraries tt4 : libxicc.lib libxcolorants.lib ../icc/libicc.lib
-                           ../spectro/libinst.lib ../rspl/librspl.lib 
+                           ../spectro/libinsttypes.lib ../rspl/librspl.lib 
                            ../gamut/libgamut.lib ../cgats/libcgats.lib
                            ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
 
@@ -194,24 +306,16 @@ if $(BUILD_JUNK) {
 	LinkLibraries vctest : libxicc.lib ../icc/libicc.lib ../rspl/librspl.lib
                            ../gamut/libgamut.lib ../cgats/libcgats.lib
                            ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
-	# CAM97s3 matrix inversion calc
-	Main cammatrix : cammatrix.c ;
-
-	Main test : test.c ;
-
-	Main t : t.c ;
-	ObjectHdrs t$(SUFOBJ) : ../icc ;
-	LinkLibraries t : ../icc/libicc.lib ;
 
 	# ~~~ test code
 	Main lseptest : lseptest.c ;
 	ObjectHdrs lseptest$(SUFOBJ) : ../icc ../numlib ../rspl ../gamut ../cgats ../spectro ../plot ;
-	LinkLibraries lseptest : ../icc/libicc.lib ../numlib/libnum.lib ../rspl/librspl.lib ../gamut/libgamut.lib ../spectro/libinst.lib libxicc.lib ../cgats/libcgats.lib ../plot/libplot.lib $(LibWin) ;
+	LinkLibraries lseptest : ../icc/libicc.lib ../numlib/libnum.lib ../rspl/librspl.lib ../gamut/libgamut.lib ../spectro/libinsttypes.lib libxicc.lib ../cgats/libcgats.lib ../plot/libplot.lib $(LibWin) ;
 	
 	# ~~~ test code
 	Main llseptest : llseptest.c ;
 	ObjectHdrs llseptest$(SUFOBJ) : ../icc ../numlib ../rspl ../gamut ../cgats ../spectro ../plot ;
-	LinkLibraries llseptest : ../icc/libicc.lib ../numlib/libnum.lib ../rspl/librspl.lib ../gamut/libgamut.lib ../spectro/libinst.lib libxicc.lib ../cgats/libcgats.lib ../plot/libplot.lib $(LibWin) ;
+	LinkLibraries llseptest : ../icc/libicc.lib ../numlib/libnum.lib ../rspl/librspl.lib ../gamut/libgamut.lib ../spectro/libinsttypes.lib libxicc.lib ../cgats/libcgats.lib ../plot/libplot.lib $(LibWin) ;
 	
 }
 

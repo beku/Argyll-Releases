@@ -10,8 +10,8 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /*
@@ -19,24 +19,6 @@
  * profiles from argyll cgats patch test data.
  */
 
-
-/* Profile Creation Suplimental Information structure */
-struct _profxinf {
-    icmSig manufacturer;	/* Device manufacturer ICC Sig, 0 for default */
-	char *deviceMfgDesc;	/* Manufacturer text description, NULL for none */
-
-    icmSig model;			/* Device model ICC Sig, 0 for default */
-	char *modelDesc;		/* Model text description, NULL for none */
-
-    icmSig creator;			/* Profile creator ICC Sig, 0 for default */
-
-	char *profDesc;			/* Text profile description, NULL for default */
-
-	char *copyright;		/* Copyrigh text, NULL for default */
-
-	/* Should add header attributue flags ?? */
-
-}; typedef struct _profxinf profxinf;
 
 /* Profile algorithm type */
 typedef enum {
@@ -52,10 +34,12 @@ typedef enum {
 /* Output or Display device */
 void make_output_icc(
 	prof_atype ptype,		/* Profile output type */
+	icmICCVersion iccver,	/* ICC profile version to create */
 	int verb,				/* Vebosity level, 0 = none */
 	int iquality,			/* A2B table quality, 0..2 */
 	int oquality,			/* B2A table quality, 0..2 */
 	int noiluts,			/* nz to supress creation of input (Device) shaper luts */
+	int noisluts,			/* nz to supress creation of input sub-grid (Device) shaper luts */
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
 	int verify,				/* nz to print verification */
 	icxInk *ink,			/* Ink limit/black generation setup */
@@ -84,8 +68,12 @@ void make_output_icc(
 /* Input device */
 void make_input_icc(
 	prof_atype ptype,		/* Profile output type */
+	icmICCVersion iccver,	/* ICC profile version to create */
 	int verb,				/* Vebosity level, 0 = none */
 	int iquality,			/* A2B table quality, 0..2 */
+	int noiluts,			/* nz to supress creation of input (Device) shaper luts */
+	int noisluts,			/* nz to supress creation of input sub-grid (Device) shaper luts */
+	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
 	int verify,				/* nz to print verification */
 	int nsabs,				/* nz for non-standard absolute output */
 	char *file_name,		/* output icc name */

@@ -9,8 +9,8 @@
  * Copyright 2002, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced with a free use licence:-
- * see the Licence.txt file in this directory for licencing details.
+ * This material is licensed with a free use license:-
+ * see the License.txt file in this directory for licensing details.
  *
  * These are kept in a separate file to allow them to be
  * selectively ommitted from the cgats library.
@@ -25,6 +25,8 @@
 #include <string.h>
 
 #include "cgats.h"
+
+#ifdef NEVER	/* Not sure if this is needed with some combinations */
 
 /* Implimentation function - register an error */
 /* Return the error number */
@@ -46,6 +48,8 @@ err(cgats *p, int errc, char *fmt, ...) {
 
 	return errc;
 }
+
+#endif /* NEVER */
 
 #endif /* !COMBINED_STD */
 

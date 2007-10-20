@@ -18,74 +18,129 @@ an <a href="File_Formats.html#ICC">ICC</a> or <a
 separation or color space conversion can be applied before the
 print/measure simulation.<br>
 <h3>Usage</h3>
-fakeread [-v] [-s] <i>profile.</i>[icm|mpp|ti3] <i>outfile</i><br>
-&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Verbose mode<br>
-&nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; Lookup <a
- href="File_Formats.html#MPP">MPP</a> spectral values<br>
-&nbsp;-p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use separation profile<br>
-&nbsp;-l&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Output Lab rather than XYZ<br>
-&nbsp;-0
-pow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Apply power to input device chanel 0-9 (after sep.)<br>
-&nbsp;-r
-level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Add total of &lt;level&gt; random to input device values 0.0 - 1.0
-(after sep.)<br>
-&nbsp;-R
-level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Add total of &lt;level&gt; random to output PCS values 0.0 - 100.0<br>
-&nbsp;[separation.icc]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Device link separation profile<br>
-&nbsp;<i>profile.</i>[icm|mpp|ti3] &nbsp; &nbsp; <a
- href="File_Formats.html#ICC">ICC</a>, <a href="File_Formats.html#MPP">MPP</a>
-or&nbsp;<a href="File_Formats.html#.ti3">.ti3</a>
-profile/file to use<br>
-&nbsp;<i>outfile</i>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; Base name for
-input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
- href="File_Formats.html#.ti3">.ti3</a>] file<br>
+<small><span style="font-family: monospace;">fakeread [-v] [-s] </span></small><small><span
+ style="font-family: monospace;">[<span style="font-style: italic;">separation.ic<span
+ style="font-family: monospace;">m</span></span>] </span></small><small><span
+ style="font-family: monospace;"></span><i
+ style="font-family: monospace;">profile.</i><span
+ style="font-family: monospace;">[icm|mpp|ti3] </span><i
+ style="font-family: monospace;">inoutfile</i><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; Verbose mode</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; Lookup </span><a
+ style="font-family: monospace;" href="File_Formats.html#MPP">MPP</a><span
+ style="font-family: monospace;"> spectral values</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use separation profile</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-l&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Output Lab rather than XYZ</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-0
+pow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply power to input device chanel 0-9 (after sep.)</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-r
+level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Add average random deviation of &lt;level&gt;% to input device values
+(after sep.)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-R
+level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Add average random deviation of &lt;level&gt;% to output PCS values<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;-u
+&nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Make random deviations have uniform distributions rather than normal</span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;-b
+L,a,b&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Scale black point to target Lab value</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;[<span
+ style="font-style: italic;">separation.ic<span
+ style="font-family: monospace;">m</span></span>]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Device link separation profile</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;</span><i
+ style="font-family: monospace;">profile.</i><span
+ style="font-family: monospace;">[icm|mpp|ti3] &nbsp; &nbsp; </span><a
+ style="font-family: monospace;" href="File_Formats.html#ICC">ICC</a><span
+ style="font-family: monospace;">, </span><a
+ style="font-family: monospace;" href="File_Formats.html#MPP">MPP</a><span
+ style="font-family: monospace;">
+or&nbsp;</span><a style="font-family: monospace;"
+ href="File_Formats.html#.ti3">.ti3</a><span
+ style="font-family: monospace;">
+profile/file to use</span><br style="font-family: monospace;">
+&nbsp;
+<span style="font-family: monospace;"></span><i
+ style="font-family: monospace;">inoutfile</i><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; Base name for
+input[</span><a style="font-family: monospace;"
+ href="File_Formats.html#.ti1">.ti1</a><span
+ style="font-family: monospace;">]/output[</span><a
+ style="font-family: monospace;" href="File_Formats.html#.ti3">.ti3</a><span
+ style="font-family: monospace;">] file</span></small><br>
 <b><br>
 Examples</b><br>
 <br>
 fakeread profile.icm testvalues<br>
-fakeread -p convert.icm profile.icm testvalues<br>
+fakeread -p separation.icm profile.icm testvalues<br>
 <h3>Comments<br>
 </h3>
-The -v flag does nothing at the moment.<br>
-The -s flag works only with MPP profiles that contain spectral model
+The <span style="font-weight: bold;">-v</span> flag does nothing at
+the moment.<br>
+The <span style="font-weight: bold;">-s</span> flag works only with
+MPP profiles that contain spectral model
 information.<br>
-The -p flag enables a device to device value conversion before
+The <span style="font-weight: bold;">-p</span> flag enables a device
+to device value conversion before
 converting to expected PCS values.<br>
-The -l flag causes the CIE output values to be L*a*b* rather than the
+The <span style="font-weight: bold;">-l</span> flag causes the CIE
+output values to be L*a*b* rather than the
 default XYZ values.<br>
 <br>
-The -0, -1, -2 .. -9 parameters are a way of simulating changes in the
+The <span style="font-weight: bold;">-0, -1, -2 .. -9</span>
+parameters are a way of simulating changes in the
 behaviour of the simulated printing system. The parameter supplied to
 the flag will be used to modify the device values (after any separation
 is applied) by raising them to the power of the parameter. This applies
 a transfer curve to the simulated device response.<br>
 <br>
-The -r parameter is a way of simulating instability in the behaviour of
+The <span style="font-weight: bold;">-r</span> parameter is a way of
+simulating instability in the behaviour of
 the simulated
 printing system. The parameter supplied to the flag will be used to
 scale a random offset added to the device values (after any separation
-is applied). The offset will be +/- 0.5 * &lt;level&gt;, added to the
-device value that is in the range 0.0 - 1.0. A typically value supplied
-might be 0.01 to simulate
-+/- 0.5% randomness.<br>
+is applied). The offset will be a normally distributed error with an
+average deviation of level%. A typically value supplied
+might be 1.0 to simulate 1% randomness.<br>
 <br>
-The -R parameter is a way of simulating instability in the behaviour of
+The <span style="font-weight: bold;">-R</span> parameter is a way of
+simulating instability in the behaviour of
 the simulated
 measuring system. The parameter supplied to the flag will be used to
-scale a random offset added to the PCS values. The offset will be +/-
-0.5 * &lt;level&gt;, added to the PCS value that is typically in the
-range 0.0 - 100.0 for an XYZ PCS, and 0.0 - 100.0 and -128.0 - 127.0
-for Lab. A typically value supplied might be&nbsp; 1.0 to simulate
-+/- 0.5% randomness.<br>
+scale a random offset added to the PCS values. The offset will be a
+normally distributed error with an average deviation of level%. A
+typically value supplied
+might be 1.0 to simulate 1% randomness. <br>
+<br>
+The <span style="font-weight: bold;">-u</span> flag changes the
+distribution of the random offsets applied using the <span
+ style="font-weight: bold;">-r</span> or <span
+ style="font-weight: bold;">-R</span> flags, from the default standard
+deviation, to a uniform deviation distribution. The level is still
+specified as an average deviation.<br>
+<br>
+The <span style="font-weight: bold;">-b</span> parameter is a way of
+simulating devices that have a different black point to the profile
+used. This only works if an ICC profile is used, and scales the black
+point to the parameter value. This will be done in XYZ space by
+default, and in L*a*b* space if the <span style="font-weight: bold;">-l</span>
+flag is used.<br>
 <br>
 Fakeread is useful in creating artificial test value for testing <a
  href="profile.html">profile</a>, as well as providing one path for

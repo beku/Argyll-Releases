@@ -5,9 +5,13 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
 
 /* Compute Singular Value Decomposition of A = U.W.Vt */
 /* Return status value: */
@@ -64,5 +68,9 @@ double b[],		/* B[0..m-1]  Right hand side of equation, return solution */
 int      m,		/* Number of equations */
 int      n		/* Number of unknowns */
 );
+
+#ifdef __cplusplus
+	}
+#endif
 
 #endif /* SVD_H */

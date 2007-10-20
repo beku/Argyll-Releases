@@ -2,11 +2,11 @@
 /* Integer Multi-Dimensional Interpolation */
 
 /*
- * Copyright 2000 - 2002 Graeme W. Gill
+ * Copyright 2000 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENCE :-
- * see the Licence.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
  */
 
 /* 'C' code color transform kernel code generator. */
@@ -19,29 +19,36 @@
    a per channel output lookup table, before being written.
 */
 
+/* TTBD:
+
+	* Do a floating point version
+	* Do an SSE version for int & float
+
+	  - Best strategy might be to tage cgen, strip out
+	    simplex code, and create a general vector implementation.
+	    Float version then uses vectors of length 1, while SSE
+	    uses real int or float vectors.
+
+	* Investigate in more detail, the sources of inaccuracy
+	  in the integer code.
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <stdarg.h>
 #include <string.h>
 
-#include "imdi_imp.h"
-#include "imdi_gen.h"
+#include "imdi.h"
 #include "imdi_tab.h"
 
 #undef VERBOSE
-#undef FORCESORT		/* Use sort algorithm allways */
-
-/*
- * TTBD:
- *		Need to implement g->dir
- *      Haven't used t->it_map[] or t->im_map[].
- *
- *
- */
+#define INSTHRESH 4		/* Use inserion sort of di >= INSTHRESH for best performance. */
+#undef ROUND			/* Round the division after accumulation */
+						/* Improves accuracy at the cost of a little speed */
 
 /* ------------------------------------ */
-/* Context */
+/* Generator context */
 typedef struct {
 	FILE *of;			/* Output file */
 	int indt;			/* Indent */
@@ -67,7 +74,7 @@ typedef struct {
 	/* Interpolation index */
 	int ixet;			/* Interpolation index entry type */
 	int ixvt;			/* Interpolation index variable type */
-	int ixmnb;			/* Interpolation index minimum bits (actual is ix_ab) */
+	int ixmnb;			/* Interpolation index minimum bits (actual is ix_ab ???) */
 	int ixmxres;		/* Interpolation table maximum resolution */
 
 	/* Simplex index: if(!sort && it_xs) */
@@ -113,12 +120,15 @@ typedef struct {
 } fileo;
 
 void line(fileo *f, char *fmt, ...);	/* Output one line */
-void sline(fileo *f, char *fmt, ...);	/* Output start of line line */
+void sline(fileo *f, char *fmt, ...);	/* Output start of line */
 void mline(fileo *f, char *fmt, ...);	/* Output middle of line */
 void eline(fileo *f, char *fmt, ...);	/* Output end of line */
+void niline(fileo *f, char *fmt, ...);	/* Output one line, no indent */
 void cr(fileo *f) { line(f,""); }		/* Output a blank line */
 void inc(fileo *f) { f->indt++; }		/* Increment the indent level */
 void dec(fileo *f) { f->indt--; }		/* Decrement the indent level */
+void lineinc(fileo *f, char *fmt, ...);	/* Output one line and increment indent */
+void decline(fileo *f, char *fmt, ...);	/* Decrement indent and output one line */
 /* ------------------------------------ */
 
 int findord(fileo *f, int bits);		/* Find ordinal with bits or more */
@@ -154,26 +164,33 @@ char *hmask(int bits) {
 
 /* Generate a source file to implement the specified */
 /* interpolation kernel. Fill in return values and return 0 if OK. */
-/* Return non-zero on error. */
+/* g->opt should be set to opts_splx_sort or opts_sort_splx if both */
+/* are being generated, but opts_splx is what actually chooses simplex */
+/* when available, and is not recorded in the resulting table. */
+/* Return 1 if this kernel could be generated with a simplex table algorithm, */
+/* and some other non-zero on another error. */
 int gen_c_kernel(
 	genspec *g,				/* Specification of what to generate */
+	tabspec *t,				/* Tablspec that will be filled in */
 	mach_arch *a,
 	FILE *fp,				/* File to write to */
-	int index				/* Identification index, 1 = first */
+	int index,				/* Identification index, 1 = first */
+	genspec *og,			/* Previous tables genspec (for diff) */
+	tabspec *ot				/* Previous tables tabspec (for diff) */
 ) {
+	int frv = 0;		/* Function return value */
 	unsigned char kk[] = { 0x43, 0x6F, 0x70, 0x79, 0x72, 0x69, 0x67, 0x68,
 	                       0x74, 0x20, 0x32, 0x30, 0x30, 0x34, 0x20, 0x47,
 	                       0x72, 0x61, 0x65, 0x6D, 0x65, 0x20, 0x57, 0x2E,
 	                       0x20, 0x47, 0x69, 0x6C, 0x6C, 0x00 };
 	fileo f[1];
 	int e, i;
-	tabspec tabsp, *t = &tabsp;
 	int timp = 0;		/* Flag to use temporary imp pointer. */
 						/* Seem to make x86 MSVC++ slower */
 						/* Has no effect on x86 IBMCC */
 
 	sprintf(g->kname, "imdi_k%d",index); /* Kernel routine base name */
-	strcpy(g->kkeys, kk);				 /* Kernel keys for this session */
+	strcpy(g->kkeys, (char *)kk);		 /* Kernel keys for this session */
 	
 	/* Setup the file output context */
 	f->of = fp;
@@ -182,22 +199,25 @@ int gen_c_kernel(
 	f->t = t;
 	f->a = a;
 
+	/* (prec is currently permitted to be only 8 or 16) */
 	if (g->prec == 8) {
-		if (g->id <= 4)
-			t->sort = 0;		/* Implicit sort using simplex table lookup */
-		else
+		if (g->id <= 4) {		/* Simplex table can be used */
+			frv = 1;			/* Signal caller that simplex is possible */
+			if (g->opt & opts_splx)
+				t->sort = 0;	/* Implicit sort using simplex table lookup */
+			else
+				t->sort = 1;	/* Explicit sort */
+		} else {
 			t->sort = 1;		/* Explicit sort */
+		}
 
-	} else  if (g->prec == 16) {
+	} else if (g->prec == 16) {
 		t->sort = 1;			/* Explit sort, no simplex table */
 
 	} else {
 		fprintf(stderr,"Can't cope with requested precision of %d bits\n",g->prec);
 		exit(-1);
 	}
-#ifdef FORCESORT
-	t->sort = 1;
-#endif
 
 	/* Compute input read and input table lookup stuff */
 
@@ -215,19 +235,17 @@ int gen_c_kernel(
 		}
 	}
 
-	/* Set a default input channel mapping */
-	for (e = 0; e < g->id; e++)
-		t->it_map[e] = e;
-
 	/* Do the rest of the input table size calculations after figuring */
 	/* out simplex and interpolation table sizes. */
 
-
 	/* Figure out the interpolation multi-dimentional table structure */
-	/* and output accumulation variable sizes. */
-
+	/* and output accumulation variable sizes. Note that the accumulator */
+	/* size needs to be greater than the basic precision by soem factor, */
+	/* if we are not to get rounding errors due to each value being the sum */
+	/* of di+1 parts with weighting that sum to 1.0. It's convenient in */
+	/* C code case to simply double the basic precision size. */
 	if (g->prec == 8
-	 || g->prec == 16 && a->ords[a->nords-1].bits >= (g->prec * 4)) {
+	 || (g->prec == 16 && a->ords[a->nords-1].bits >= (g->prec * 4))) {
 		int tiby;		/* Total interpolation bytes needed */
 
 		/* We assume that we can normally compute more than one */
@@ -264,7 +282,12 @@ int gen_c_kernel(
 			t->im_pn = 1;					/* Must be just 1 partial */
 			t->im_pv = (tiby * 8)/f->imovb;	/* Partial holds remaining entries */ 
 
+#ifdef NEVER	/* For better performance ??? */
 			if ((f->impvt = findnord(f, tiby * 8)) < 0) {
+#else			/* Better memory footprint - minimise multi-D entry sizes */
+				/* (but only if structure is alowed to be mis-aligned!) */
+			if ((f->impvt = findord(f, tiby * 8)) < 0) {
+#endif
 				fprintf(stderr,"Can't find partial interp table entry variable size\n");
 				exit(-1);
 			}
@@ -334,10 +357,6 @@ int gen_c_kernel(
 	/* This value is used to figure out the room needed in the input */
 	/* table to accumulate the interpolation cube base offset value. (IM_O macro) */
 	f->ixmnb = calc_bits(g->id, g->itres);
-
-	/* Set a default output channel mapping */
-	for (e = 0; e < g->od; e++)
-		t->im_map[e] = e;
 
 #ifdef VERBOSE
 	/* Summarise the interpolation table arrangements */
@@ -489,10 +508,6 @@ int gen_c_kernel(
 		/* Summarise the input table arrangements */
 		printf("\n");
 		printf("Input table structure:\n");
-		printf("  Input value re-ordering is [");
-		for (e = 0; e < g->id; e++)
-			printf("%s%d",e > 0 ? " " : "", t->it_map[e]);
-		printf("]\n");
 		printf("  Input table entry size = %d bytes\n",t->it_ts);
 		if (t->it_ix) {
 			printf("  Input table extracts value from read values\n");
@@ -663,10 +678,6 @@ int gen_c_kernel(
 		} else {
 			printf("  Value extraction read values is explicit\n");
 		}
-		printf("  Input value re-ordering is [");
-		for (e = 0; e < g->id; e++)
-			printf("%s%d",e > 0 ? " " : "", t->it_map[e]);
-		printf("]\n");
 		printf("  Input table entry size = %d bytes\n",t->it_ts);
 		if (t->it_xs) {
 			printf("  Separate Interp. and Simplex index values\n");
@@ -691,9 +702,9 @@ int gen_c_kernel(
 		f->otit = nord(f,f->otit);				/* Make temp variable natural size */
 
 		if (g->out.pint != 0)	/* Pixel interleaved */
-			f->nop = 1;
+			f->nop = 1;			/* Use same pointers for every pixel */
 		else
-			f->nop = g->od;
+			f->nop = g->od;		/* Use a separate pointer for each output value */
 	
 		/* Figure out the output pointer types */
 		f->otvt = 0;			/* Output table value type */
@@ -707,7 +718,7 @@ int gen_c_kernel(
 		}
 		t->ot_ts = a->ords[f->otvt].bits/8;	/* Output table entry size in bytes */
 
-		/* Setup information on data placement in output table enries */
+		/* Setup information on data placement in output table entries */
 		for (e = 0; e < g->od; e++) {
 			t->ot_off[e] = g->out.bov[e];		/* Transfer info from generation spec. */
 			t->ot_bits[e] = g->out.bpv[e];
@@ -716,12 +727,6 @@ int gen_c_kernel(
 
 #ifdef VERBOSE
 	/* Summarise the output table arrangements */
-	printf("  Output value re-ordering is [");
-	for (e = 0; e < g->od; e++)
-		printf("%s%d",e > 0 ? " " : "", t->im_map[e]);
-	printf("]\n");
-	printf("\n");
-
 	printf("Output table structure:\n");
 	printf("  Entry size = %d bytes\n",t->ot_ts);
 	printf("  Output value placement within each enry is:\n");
@@ -756,7 +761,7 @@ int gen_c_kernel(
 	/* We need an include file */
 	line(f,"#ifndef  IMDI_INCLUDED");
 	line(f,"#include <memory.h>");
-	line(f,"#include \"imdi_imp.h\"");
+	line(f,"#include \"imdi_utl.h\"");
 	line(f,"#define  IMDI_INCLUDED");
 	line(f,"#endif  /* IMDI_INCLUDED */");
 	cr(f);
@@ -803,15 +808,19 @@ int gen_c_kernel(
 			cr(f);
 		}
 
-		/* Macro to conditionally exchange two varibles */
-		/* Doing this in place using an xor seems to be fastest */
-		/* on most architectures. */
-		line(f,"/* Conditional exchange for sorting */");
+		/* Sort primitive macro's */
+		line(f,"/* Sorting macros */");
 		if (t->wo_xs) {
+			line(f,"#define XFR(A, AA, B, BB) A = B; AA = BB;");
 			line(f,"#define CEX(A, AA, B, BB) if (A < B) { \\");
 			line(f,"            A ^= B; B ^= A; A ^= B; AA ^= BB; BB ^= AA; AA ^= BB; }");
-		} else
+			line(f,"#define CXJ(A, B, BB, D, DD, L) if (A >= B) { D = B; DD = BB; goto L; }");
+		} else {
+			line(f,"#define XFR(A, B) A = B;");
 			line(f,"#define CEX(A, B) if (A < B) { A ^= B; B ^= A; A ^= B; }");
+			line(f,"#define CXJ(A, B, D, L) if (A >= B) { D = B; goto L; }");
+		}
+		line(f,"#define CJ(A, B, L) if (A >= B) goto L;");
 		cr(f);
 
 	} else {	/* Simplex table */
@@ -922,7 +931,9 @@ int gen_c_kernel(
 	line(f, "imdi_k%d(",index);
 	line(f, "imdi *s,			/* imdi context */");
 	line(f, "void **outp,		/* pointer to output pointers */");
+	line(f, "int  ostride,		/* optional input component stride */");
 	line(f, "void **inp,		/* pointer to input pointers */");
+	line(f, "int  istride,		/* optional input component stride */");
 	line(f, "unsigned int npix	/* Number of pixels to process */");
 	line(f, ") {");
 	inc(f);
@@ -932,19 +943,61 @@ int gen_c_kernel(
 
 	/* Declare the input pointers and init them */
 	for (e = 0; e < f->nip; e++) {
-		line(f, "%s *ip%d = (%s *)inp[%d];",
-		     a->ords[f->ipt[e]].name, e, a->ords[f->ipt[e]].name, e);
+		if (g->opt & opts_bwd) {
+			if (g->opt & opts_istride)
+				line(f, "%s *ip%d = (%s *)inp[%d] + (npix-1) * istride;",
+				     a->ords[f->ipt[e]].name, e,
+				     a->ords[f->ipt[e]].name, e);
+			else
+				line(f, "%s *ip%d = (%s *)inp[%d] + (npix-1) * %d;",
+				     a->ords[f->ipt[e]].name, e,
+				     a->ords[f->ipt[e]].name, e,
+				     g->in.chi[e]);
+		} else {
+			g->opt |= opts_fwd;			/* Make sure it's marked for what it is */
+			line(f, "%s *ip%d = (%s *)inp[%d];",
+			     a->ords[f->ipt[e]].name, e, a->ords[f->ipt[e]].name, e);
+		}
 	}
 
 	/* Declare the output pointers and init them */
 	for (e = 0; e < f->nop; e++) {
-		line(f, "%s *op%d = (%s *)outp[%d];",
-		     a->ords[f->opt[e]].name, e, a->ords[f->opt[e]].name, e);
+		if (g->opt & opts_bwd) {
+			if (g->opt & opts_ostride)
+				line(f, "%s *op%d = (%s *)outp[%d] + (npix-1) * ostride;",
+				     a->ords[f->opt[e]].name, e,
+				     a->ords[f->opt[e]].name, e);
+			else
+				line(f, "%s *op%d = (%s *)outp[%d] + (npix-1) * %d;",
+				     a->ords[f->opt[e]].name, e,
+				     a->ords[f->opt[e]].name, e,
+				     g->out.chi[e]);
+		} else {
+			line(f, "%s *op%d = (%s *)outp[%d];",
+			     a->ords[f->opt[e]].name, e, a->ords[f->opt[e]].name, e);
+		}
 	}
 
 	/* Declare and intialise the end pointer */
-	line(f, "%s *ep = ip0 + npix * %d ;",
-	        a->ords[f->ipt[0]].name, g->in.chi[0]);
+	if (g->opt & opts_bwd) {
+		if (g->opt & opts_istride)
+			line(f, "%s *ep = (%s *)inp[0] - istride ;",
+				    a->ords[f->ipt[0]].name,
+			        a->ords[f->ipt[0]].name);
+		else
+			line(f, "%s *ep = (%s *)inp[0] - %d ;",
+				    a->ords[f->ipt[0]].name,
+			        a->ords[f->ipt[0]].name, g->in.chi[0]);
+	} else {
+		if (g->opt & opts_istride)
+			line(f, "%s *ep = (%s *)inp[0] + npix * istride ;",
+				    a->ords[f->ipt[0]].name,
+			        a->ords[f->ipt[0]].name);
+		else
+			line(f, "%s *ep = (%s *)inp[0] + npix * %d ;",
+				    a->ords[f->ipt[0]].name,
+			        a->ords[f->ipt[0]].name, g->in.chi[0]);
+	}
 
 	/* Declare and initialise the input table pointers */
 	for (e = 0; e < g->id; e++)
@@ -987,11 +1040,39 @@ int gen_c_kernel(
 
 	/* Start the pixel processing loop */
 	cr(f);
-	sline(f, "for(;ip0 < ep;");
-	for (e = 0; e < f->nip; e++)
-		mline(f, " ip%d += %d,", e, g->in.chi[e]);
-	for (e = 0; e < f->nop; e++)
-		mline(f, " op%d += %d%s", e, g->out.chi[e], ((e+1) < f->nop) ? "," : "");
+	if (g->opt & opts_bwd) {
+		sline(f, "for(;ip0 != ep;");
+
+		if (g->opt & opts_istride)
+			for (e = 0; e < f->nip; e++)
+				mline(f, " ip%d -= istride,", e);
+		else
+			for (e = 0; e < f->nip; e++)
+				mline(f, " ip%d -= %d,", e, g->in.chi[e]);
+
+		if (g->opt & opts_ostride)
+			for (e = 0; e < f->nop; e++)
+				mline(f, " op%d -= ostride%s", e, ((e+1) < f->nop) ? "," : "");
+		else
+			for (e = 0; e < f->nop; e++)
+				mline(f, " op%d -= %d%s", e, g->out.chi[e], ((e+1) < f->nop) ? "," : "");
+	} else {
+		sline(f, "for(;ip0 != ep;");
+
+		if (g->opt & opts_istride)
+			for (e = 0; e < f->nip; e++)
+				mline(f, " ip%d += istride,", e);
+		else
+			for (e = 0; e < f->nip; e++)
+				mline(f, " ip%d += %d,", e, g->in.chi[e]);
+
+		if (g->opt & opts_ostride)
+			for (e = 0; e < f->nop; e++)
+				mline(f, " op%d += ostride%s", e, ((e+1) < f->nop) ? "," : "");
+		else
+			for (e = 0; e < f->nop; e++)
+				mline(f, " op%d += %d%s", e, g->out.chi[e], ((e+1) < f->nop) ? "," : "");
+	}
 	eline(f, ") {");
 	inc(f);
 
@@ -1183,16 +1264,76 @@ int gen_c_kernel(
 	/* Do the explicit sort now */
 	if (t->sort) {
 		cr(f);
-		/* Sort from largest to smallest using a selection sort */
-		/* Use simple sequence for the moment. More elaborate sequence */
-		/* may allow other optimisations. */
+		/* Sort from largest to smallest */
+		/* We can use a selection sort, or an insertions sort. */
+
 		line(f,"/* Sort weighting values and vertex offset values */");
-		for (i = 0; i < (g->id-1); i++) {
-			for (e = i+1; e < g->id; e++) {
-				if (t->wo_xs)
-					line(f,"CEX(we%d, vo%d, we%d, vo%d);",i,i,e,e);
-				else
-					line(f,"CEX(wo%d, wo%d);",i,e);
+
+		if (g->id >= INSTHRESH) {
+			/* We do an insertion sort */
+			lineinc(f,"{");
+			if (t->wo_xs) {
+				line(f,"%s wet;	/* Sort temporary */", a->ords[f->wevt].name);
+				line(f,"%s vot;	/* Sort temporary */", a->ords[f->vovt].name);
+			} else
+				line(f,"%s wot;	/* Sort temp variable */", a->ords[f->wovt].name);
+			cr(f);
+
+			for (i = 1; i < g->id; i++) {
+				int j;
+
+				j = i;
+				if (j < 2) {	/* Only test & exchange needed */
+					if (t->wo_xs)
+						line(f,"CEX(we%d, vo%d, we%d, vo%d);",j-1,j-1,j,j);
+					else
+						line(f,"CEX(wo%d, wo%d);",j-1,j);
+
+				} else {
+					if (t->wo_xs)
+						line(f,"XFR(wet, vot, we%d, vo%d);",j,j);
+					else
+						line(f,"XFR(wot, wo%d);",j);
+					while (j > 0) {
+						if (j == i) {		/* First test from i */
+							if (t->wo_xs)
+								line(f,"CJ(we%d, wet, shs%d);",j-1,i);
+							else
+								line(f,"CJ(wo%d, wot, shs%d);",j-1,i);
+							if (t->wo_xs)
+								line(f,"XFR(we%d, vo%d, we%d, vo%d);",j,j,j-1,j-1);
+							else
+								line(f,"XFR(wo%d, wo%d);",j,j-1);
+						} else {
+							if (t->wo_xs)
+								line(f,"CXJ(we%d, wet, vot, we%d, vo%d, shs%d);",j-1,j,j,i);
+							else
+								line(f,"CXJ(wo%d, wot, wo%d, shs%d);",j-1,j,i);
+							if (t->wo_xs)
+								line(f,"XFR(we%d, vo%d, we%d, vo%d);",j,j,j-1,j-1);
+							else
+								line(f,"XFR(wo%d, wo%d);",j,j-1);
+						}
+						j--;
+					}
+					if (t->wo_xs)
+						line(f,"XFR(we%d, vo%d, wet, vot);",j,j);
+					else
+						line(f,"XFR(wo%d, wot);",j);
+					niline(f,"shs%d:;",i);
+				}
+			}
+			decline(f,"}");
+
+		} else {
+			/* Use a selection sort */
+			for (i = 0; i < (g->id-1); i++) {
+				for (e = i+1; e < g->id; e++) {
+					if (t->wo_xs)
+						line(f,"CEX(we%d, vo%d, we%d, vo%d);",i,i,e,e);
+					else
+						line(f,"CEX(wo%d, wo%d);",i,e);
+				}
 			}
 		}
 	}
@@ -1343,6 +1484,8 @@ int gen_c_kernel(
 	
 		/* Declare temporary to hold index into output lookup table */
 		line(f,"%s oti;	/* Vertex offset value */",a->ords[f->otit].name);
+		if (g->oopt & OOPTS_CHECK)
+			line(f,"%s otv;	/* Output temporary value */",a->ords[f->otvt].name);
 	
 		/* For each accumulator value */
 		/* (Assume they are in output order for the moment ?) */
@@ -1356,11 +1499,12 @@ int gen_c_kernel(
 				int off, size;		/* Bits to be extracted */
 		
 				/* Extract wanted 8 bits from the 8.8 bit result in accumulator */
+				/* (or 16 bits from 16.16) */
 				off = ee * f->iaovb + (f->iaovb - g->prec);	
 				size = g->prec;
 	
 				if (e == 0 || g->out.packed == 0) {
-					if (g->out.pint != 0) 	/* Pixel interleaved */
+					if (g->out.pint != 0) 			/* Pixel interleaved */
 						sprintf(wre,"op0[%d]",e);	/* Offset from single pointer */
 					else
 						sprintf(wre,"*op%d",e);		/* Pointer per channel */
@@ -1368,21 +1512,56 @@ int gen_c_kernel(
 	
 				if (a->shfm || size > 32) {
 					/* Extract using just shifts */
+#ifdef ROUND
+					line(f,"oti = (((ova%d + (1 << %d)) << %d) >> %d);	"
+					     "/* Extract integer part of result */",
+					     i, off-1, a->ords[oat].bits - off - size, a->ords[oat].bits - size);
+#else
 					line(f,"oti = ((ova%d << %d) >> %d);	"
 					     "/* Extract integer part of result */",
 					     i, a->ords[oat].bits - off - size, a->ords[oat].bits - size);
+#endif
 				} else {
 					/* Extract using shift and mask */
+#ifdef ROUND
+					line(f,"oti = (((ova%d + 0x%x) >> %d) & %s);	"
+					     "/* Extract integer part of result */",
+					     i, (1 << off-1), off, hmask(size));
+#else
 					line(f,"oti = ((ova%d >> %d) & %s);	"
 					     "/* Extract integer part of result */",
 					     i, off, hmask(size));
+#endif
 				}
 	
-				/* Lookup in output table and write to destination */
-				if (g->out.packed != 0) {
-					line(f,"wrv %s= OT_E(ot%d, oti);", e ? "+" : "", e);
-				} else {
-					line(f,"%s = OT_E(ot%d, oti);	/* Write result */", wre, e);
+				if (g->oopt & OOPT(oopts_check,e)) {	/* Lookup with check */
+					line(f,"otv = OT_E(ot%d, oti);	/* Fetch result */", e);
+					line(f,"if (otv != p->checkv[%d])	/* Do output value check */", e);
+					line(f,"	p->checkf |= (1 << %d);	/* Set check flag */", e);
+					if (g->out.packed != 0) {
+						if (g->oopt & OOPT(oopts_skip,e))
+							return 2;		/* Error, can't skip on pixel interleaved */
+						line(f,"wrv %s= otv;", e ? "+" : "", e);
+					} else {
+						if (g->oopt & OOPT(oopts_skip,e)) {
+							line(f,"if ((p->skipf & (1 << %d)) == 0)	/* If not being skipped */", e);
+							line(f,"	%s = otv;	/* Write result */", wre);
+						} else
+							line(f,"%s = otv;	/* Write result */", wre);
+					}
+				} else {		/* Normal lookup output table */
+					/* Lookup in output table and write to destination */
+					if (g->out.packed != 0) {
+						if (g->oopt & OOPT(oopts_skip,e))
+							return 2;		/* Error, can't skip on pixel interleaved */
+						line(f,"wrv %s= OT_E(ot%d, oti);", e ? "+" : "", e);
+					} else {
+						if (g->oopt & OOPT(oopts_skip,e)) {
+							line(f,"if ((p->skipf & (1 << %d)) == 0)	/* If not being skipped */", e);
+							line(f,"	%s = OT_E(ot%d, oti);	/* Write result */", wre, e);
+						} else
+							line(f,"%s = OT_E(ot%d, oti);	/* Write result */", wre, e);
+					}
 				}
 			}
 		}
@@ -1416,6 +1595,9 @@ int gen_c_kernel(
 		} else {
 			line(f,"#undef IT_IT");
 		}
+		line(f,"#undef CXJ");
+		line(f,"#undef CJ");
+		line(f,"#undef XFR");
 		line(f,"#undef CEX");
 	} else {
 		if (t->it_xs) {
@@ -1451,87 +1633,149 @@ int gen_c_kernel(
 
 	/* =============================================== */
 
-	{
-		int sog = sizeof(genspec);	/* Size of genspec structure */
-		unsigned char *dp = (unsigned char *)g;
+	/* !genspec and tabspec delta code! */
+	/* We generate code that updates any entries in the genspec and */
+	/* tabpsec strucures that are different for this kernel, */
+	/* compared to the previously generated kernel. */
+	/* In this way, we save a lot of space, at the price */
+	/* of having to access the table of kernels sequentially. */
 
+	/* If the genspec of tabspec structures are modified, */
+	/* then corresponding changes need to be made to the code here. */
+	{
+		int i;
 		int s_stres, s_itres;	/* Save values */
+		imdi_options s_opt;
 
 		s_stres = g->stres;
 		s_itres = g->itres;
-		g->stres = f->sxmxres;		/* Set maximum values */
+		s_opt = g->opt;
+		g->stres = f->sxmxres;			/* Set maximum values */
 		g->itres = f->ixmxres;
+		g->opt &= ~opts_splx;			/* Don't care about this, only about opts_splx/sort */
+		if (frv == 0) {					/* Simplex algorithm wasn't possible */
+			g->opt &= ~opts_splx_sort;	/* Therefore we don't care about preference */
+			g->opt &= ~opts_sort_splx;
+		}
 		
-		/* Declare the generation structure data function */
+		/* Declare the genspec & tabspec update function */
 		cr(f);
 		line(f,"void");
-		line(f, "imdi_k%d_gen(",index);
-		line(f, "genspec *g			/* structure to be initialised */");
+		line(f, "imdi_k%d_gentab(",index);
+		line(f, "genspec *g,		/* structure to be updated */");
+		line(f, "tabspec *t		/* structure to be updated */");
 		line(f, ") {");
 		inc(f);
 	
-		/* Declare the genspec initialisation data */
-		line(f, "static unsigned char data[] = {");
-		inc(f);
-		for (i = 0; i < sog; i++) {
-			if ((i & 7) == 0)
-				sline(f,"");
-			mline(f, "0x%02x%s ", dp[i], (i+1) < sog ? "," : "", dp[i]);
-			if ((i & 7) == 7 || (i+1) == sog)
-				eline(f,"");
-		}
-		dec(f);
-		line(f, "};	/* Structure image */");
+#define GSET_ENTRY(KEY) if (g->KEY != og->KEY) line(f, "g->%s = %d;",#KEY,g->KEY)
+#define GSET_ARRAY(KEY,IX) if (g->KEY[IX] != og->KEY[IX]) line(f, "g->%s[%d] = %d;",#KEY,IX,g->KEY[IX])
+#define TSET_ENTRY(KEY) if (t->KEY != ot->KEY) line(f, "t->%s = %d;",#KEY,t->KEY)
+#define TSET_ARRAY(KEY,IX) if (t->KEY[IX] != ot->KEY[IX]) line(f, "t->%s[%d] = %d;",#KEY,IX,t->KEY[IX])
 
-		cr(f);
-		line(f, "memcpy(g, data, sizeof(data));	/* Initialise the structure */");
+		/* Create code that updates the genspec structure from og to g */ 
+		GSET_ENTRY(prec);
+		GSET_ENTRY(id);
+		GSET_ENTRY(od);
+		GSET_ENTRY(irep);
+		GSET_ENTRY(orep);
+		GSET_ENTRY(in_signed);
+		GSET_ENTRY(out_signed);
+
+		/* pixlayout structure */
+		for (i = 0; i < IXDIDO; i++) {
+			GSET_ARRAY(in.bpch,i);
+			GSET_ARRAY(in.chi,i);
+			GSET_ARRAY(in.bov,i);
+			GSET_ARRAY(in.bpv,i);
+		}
+		GSET_ENTRY(in.pint);
+		GSET_ENTRY(in.packed);
+
+		/* pixlayout structure */
+		for (i = 0; i < IXDIDO; i++) {
+			GSET_ARRAY(out.bpch,i);
+			GSET_ARRAY(out.chi,i);
+			GSET_ARRAY(out.bov,i);
+			GSET_ARRAY(out.bpv,i);
+		}
+		GSET_ENTRY(out.pint);
+		GSET_ENTRY(out.packed);
+		
+		GSET_ENTRY(oopt);
+		GSET_ENTRY(opt);
+		GSET_ENTRY(itres);
+		GSET_ENTRY(stres);
+
+		for (i = 0; i < 100; i++) {
+			GSET_ARRAY(kkeys,i);
+		}
+		for (i = 0; i < 100; i++) {
+			GSET_ARRAY(kdesc,i);
+		}
+		for (i = 0; i < 100; i++) {
+			GSET_ARRAY(kname,i);
+		}
+
+		/* Create code that updates the tabspec structure from og to g */ 
+		TSET_ENTRY(sort);
+		TSET_ENTRY(it_xs);
+		TSET_ENTRY(wo_xs);
+		TSET_ENTRY(it_ix);
+		TSET_ENTRY(it_ab);
+		TSET_ENTRY(it_ts);
+		TSET_ENTRY(ix_ab);
+		TSET_ENTRY(ix_es);
+		TSET_ENTRY(ix_eo);
+		TSET_ENTRY(sx_ab);
+		TSET_ENTRY(sx_es);
+		TSET_ENTRY(sx_eo);
+		TSET_ENTRY(sm_ts);
+		TSET_ENTRY(wo_ab);
+		TSET_ENTRY(wo_es);
+		TSET_ENTRY(wo_eo);
+		TSET_ENTRY(we_ab);
+		TSET_ENTRY(we_es);
+		TSET_ENTRY(we_eo);
+		TSET_ENTRY(vo_ab);
+		TSET_ENTRY(vo_es);
+		TSET_ENTRY(vo_eo);
+		TSET_ENTRY(vo_om);
+		TSET_ENTRY(im_cd);
+		TSET_ENTRY(im_ts);
+		TSET_ENTRY(im_oc);
+		TSET_ENTRY(im_fs);
+		TSET_ENTRY(im_fn);
+		TSET_ENTRY(im_fv);
+		TSET_ENTRY(im_ps);
+		TSET_ENTRY(im_pn);
+		TSET_ENTRY(im_pv);
+		TSET_ENTRY(ot_ts);
+		for (i = 0; i < IXDO; i++) {
+			TSET_ARRAY(ot_off, i);
+		}
+		for (i = 0; i < IXDO; i++) {
+			TSET_ARRAY(ot_bits,i);
+		}
+
+#undef GSET_ENTRY
+#undef GSET_ARRAY
+#undef TSET_ENTRY
+#undef TSET_ARRAY
+
 		/* The end of the function */
 		dec(f);
 		line(f, "}");
 
-		g->stres = s_stres;		/* Restore entry values */
+		g->opt = s_opt;			/* Restore entry values */
+		g->stres = s_stres;
 		g->itres = s_itres;
-	}
-
-	/* =============================================== */
-
-	{
-		int sot = sizeof(tabspec);	/* Size of tabspec structure */
-		unsigned char *dp = (unsigned char *)t;
-
-		/* Declare the generation structure data function */
-		cr(f);
-		line(f,"void");
-		line(f, "imdi_k%d_tab(",index);
-		line(f, "tabspec *t			/* structure to be initialised */");
-		line(f, ") {");
-		inc(f);
-	
-		/* Declare the genspec initialisation data */
-		line(f, "static unsigned char data[] = {");
-		inc(f);
-		for (i = 0; i < sot; i++) {
-			if ((i & 7) == 0)
-				sline(f,"");
-			mline(f, "0x%02x%s ", dp[i], (i+1) < sot ? "," : "", dp[i]);
-			if ((i & 7) == 7 || (i+1) == sot)
-				eline(f,"");
-		}
-		dec(f);
-		line(f, "};	/* Structure image */");
-
-		cr(f);
-		line(f, "memcpy(t, data, sizeof(data));	/* Initialise the structure */");
-		/* The end of the function */
-		dec(f);
-		line(f, "}");
 	}
 
 	/* =============================================== */
 
 	cr(f); cr(f); cr(f); cr(f); cr(f); cr(f);
 
-	return 0;
+	return frv;
 }
 
 
@@ -1542,7 +1786,7 @@ calc_bits(
 int dim,
 int res) {
 
-	return ceil(log((double)res) * (double)dim/log(2.0) - 1e-14);
+	return (int)ceil(log((double)res) * (double)dim/log(2.0) - 1e-14);
 }
 
 /* Return maximum resolution possible given dimensionality */
@@ -1578,7 +1822,7 @@ int esize) {
 		off = (double)esize * floor(exp(log((double)res) * dim - log(res-1.0)));
 	}
 
-	bits = ceil(log(off)/log(2.0) - 1e-14);
+	bits = (int)ceil(log(off)/log(2.0) - 1e-14);
 	return bits;
 }
 
@@ -1619,9 +1863,10 @@ doheader(
 	line(f,"/* Integer Multi-Dimensional Interpolation */");
 	line(f,"/* Interpolation Kernel Code */");
 	line(f,"/* Generated by cgen */");
-	line(f,"/* Copyright 2000 - 2002 Graeme W. Gill */");
-	line(f,"/* This material is licenced under the GNU GENERAL PUBLIC LICENCE :- */\n");
-	line(f,"/* see the Licence.txt file for licencing details.*/\n");
+	line(f,"/* Copyright 2000 - 2007 Graeme W. Gill */");
+	line(f,"/* All rights reserved. */");
+	line(f,"/* This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :- */\n");
+	line(f,"/* see the License.txt file for licencing details.*/\n");
 	cr(f);
 
 	/* - - - - - - - - - - - - */
@@ -1652,18 +1897,22 @@ doheader(
 	for (e = 0; e < g->od; e++) {
 		line(f,"   Output channel %d bits = %d",e, g->out.bpch[e]);
 		line(f,"   Output channel %d increment = %d",e, g->out.chi[e]);
+		if (g->oopt & OOPT(oopts_check,e))
+			line(f,"   Output channel %d has value check",e);
+		if (g->oopt & OOPT(oopts_skip,e))
+			line(f,"   Output channel %d has skip available",e);
 	}
 	if (g->out.pint != 0)
 		line(f,"   Output is channel interleaved");
 	else
 		line(f,"   Output is plane interleaved");
-	cr(f);
 	if (g->out.packed != 0)
 		line(f,"   Output channels are packed into one word");
 	else
 		line(f,"   Output channels are separate words");
-
+	cr(f);
 	
+	line(f,"   Basic Internal precision bits  = %d",g->prec);
 	if (t->sort)
 		line(f,"   Weight+voffset bits       = %d",t->sx_ab);
 	else
@@ -1672,6 +1921,14 @@ doheader(
 	if (!t->sort)
 		line(f,"   Simplex table max resolution = %d",f->sxmxres);
 	line(f,"   Interpolation table max resolution = %d",f->ixmxres);
+	cr(f);
+	line(f,"   Processing direction is %s",g->opt & opts_bwd ? "backwards" : "forwards" );
+	line(f,"   Input stride is %ssupported",g->opt & opts_istride ? "" : "not " );
+	line(f,"   Output stride is %ssupported",g->opt & opts_ostride ? "" : "not " );
+	if (g->opt & opts_splx_sort)
+		line(f,"   Prefer simplex over sort algorithm");
+	if (g->opt & opts_sort_splx)
+		line(f,"   Prefer sort over simplex");
 	line(f," */");
 	cr(f);
 
@@ -1834,7 +2091,6 @@ sline(fileo *f, char *fmt, ...)
 void
 mline(fileo *f, char *fmt, ...)
 {
-	int i;
 	va_list args;
 
 	va_start(args, fmt);
@@ -1846,7 +2102,6 @@ mline(fileo *f, char *fmt, ...)
 void
 eline(fileo *f, char *fmt, ...)
 {
-	int i;
 	va_list args;
 
 	va_start(args, fmt);
@@ -1854,6 +2109,53 @@ eline(fileo *f, char *fmt, ...)
 	va_end(args);
 	fprintf(f->of, "\n");
 }
+
+/* Output a line to the file (including trailing \n) */
+/* No indent */
+void
+niline(fileo *f, char *fmt, ...)
+{
+	va_list args;
+
+	va_start(args, fmt);
+	vfprintf(f->of, fmt, args);
+	va_end(args);
+	fprintf(f->of, "\n");
+}
+
+/* Output one line and increment indent */
+void lineinc(fileo *f, char *fmt, ...) {
+	int i;
+	va_list args;
+
+	/* Indent to the correct level */
+	for (i = 0; i < f->indt; i++)
+		fprintf(f->of,"	");
+	
+	va_start(args, fmt);
+	vfprintf(f->of, fmt, args);
+	va_end(args);
+	fprintf(f->of, "\n");
+	f->indt++;
+}
+
+/* Decrement indent and output one line */
+void decline(fileo *f, char *fmt, ...) {
+	int i;
+	va_list args;
+
+	f->indt--;
+	/* Indent to the correct level */
+	for (i = 0; i < f->indt; i++)
+		fprintf(f->of,"	");
+	
+	va_start(args, fmt);
+	vfprintf(f->of, fmt, args);
+	va_end(args);
+	fprintf(f->of, "\n");
+}
+
+
 /* ------------------------------------ */
 
 

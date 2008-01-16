@@ -54,7 +54,7 @@
 #include "xutils.h"
 #include "imdi.h"
 
-#undef DEBUG		/* Print extra debug info */
+#undef DEBUG		/* Print detailed debug info */
 
 void usage(char *diag, ...) {
 	fprintf(stderr,"Color Correct a TIFF file using any sequence of ICC device profiles, V%s\n",ARGYLL_VERSION_STR);
@@ -116,12 +116,13 @@ static void cvt_Lab_to_CIELAB8(double *out, double *in) {
 	out[2] = (in[2] + 128.0) * 1.0/255.0;
 }
 
+
 /* TIFF 16 bit CIELAB to standard L*a*b* */
 /* Assume that a & b have been converted from signed to offset */
 static void cvt_CIELAB16_to_Lab(double *out, double *in) {
 	out[0] = in[0] * 100.0;
-	out[1] = (in[1] - 32768.0/65535.0)/256.0;
-	out[2] = (in[2] - 32768.0/65535.0)/256.0;
+	out[1] = (in[1] - 32768.0/65535.0) * 256.0;
+	out[2] = (in[2] - 32768.0/65535.0) * 256.0;
 }
 
 /* Standard L*a*b* to TIFF 16 bit CIELAB */
@@ -146,6 +147,7 @@ static void cvt_Lab_to_ICCLAB8(double *out, double *in) {
 	out[1] = (in[1] + 128.0) * 1.0/255.0;
 	out[2] = (in[2] + 128.0) * 1.0/255.0;
 }
+
 
 /* TIFF 16 bit ICCLAB to standard L*a*b* */
 static void cvt_ICCLAB16_to_Lab(double *out, double *in) {
@@ -252,7 +254,7 @@ int extra			/* Extra Samples per pixel, if any */
 				if (ocvt != NULL)
 					*ocvt = cvt_Lab_to_CIELAB16;
 			}
-			*smsk = 0x6;				/* Tread a & b as signed */
+			*smsk = 0x6;				/* Treat a & b as signed */
 			return icSigLabData;
 
 		case PHOTOMETRIC_ICCLAB:
@@ -934,17 +936,17 @@ main(int argc, char *argv[]) {
 
 	next_intent = icmDefaultIntent;
 
-#ifdef DEBUG
-	/* Dump a description of the chain */
-	printf("Input TIFF is '%s'\n",in_name);
-	printf("There are %d profile in the sequence\n",su.nprofs);
-	for (i = 0; i < su.nprofs; i++) {
-//		printf("Profile %d is '%s' intent 0x%x\n",i+1,su.profs[i].name,su.profs[i].intent);
-		printf("Profile %d is '%s' intent %s\n",i+1,su.profs[i].name,
-		             icm2str(icmRenderingIntent, su.profs[i].intent));
+	if (su.verb) {
+		/* Dump a description of the chain */
+		printf("Input TIFF is '%s'\n",in_name);
+		printf("There are %d profile in the sequence\n",su.nprofs);
+		for (i = 0; i < su.nprofs; i++) {
+//			printf("Profile %d is '%s' intent 0x%x\n",i+1,su.profs[i].name,su.profs[i].intent);
+			printf("Profile %d is '%s' intent %s\n",i+1,su.profs[i].name,
+			             icm2str(icmRenderingIntent, su.profs[i].intent));
+		}
+		printf("Output TIFF is '%s'\n",out_name);
 	}
-	printf("Output TIFF is '%s'\n",out_name);
-#endif	/* DEBUG */
 
 /*
 
@@ -1329,39 +1331,63 @@ main(int argc, char *argv[]) {
 				int i;
 				double in[MAX_CHAN], out[MAX_CHAN];
 				
+//printf("\n");
 				if (bitspersample == 8) {
 					for (i = 0; i < su.id; i++) {
 						int v = ((unsigned char *)inbuf)[x * su.id + i];
+//printf("~1 8 bit pixel value chan %d = %d\n",i,v);
 						if (su.isign_mask & (1 << i))		/* Treat input as signed */
 							v = (v & 0x80) ? v - 0x80 : v + 0x80;
+//printf("~1 8 bit after treat as signed chan %d = %d\n",i,v);
 						in[i] = v/255.0;
+//printf("~1 8 bit fp chan %d value = %f\n",i,in[i]);
 					}
 				} else {
 					for (i = 0; i < su.id; i++) {
 						int v = ((unsigned short *)inbuf)[x * su.id + i];
+//printf("~1 16 bit pixel value chan %d = %d\n",i,v);
 						if (su.isign_mask & (1 << i))		/* Treat input as signed */
 							v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
+//printf("~1 16 bit after treat as signed chan %d = %d\n",i,v);
 						in[i] = v/65535.0;
+//printf("~1 16 bit fp chan %d value = %f\n",i,in[i]);
 					}
 				}
 
 				/* Apply the reference conversion */
 				input_curves((void *)&su, out, in);
+//for (i = 0; i < su.id; i++) printf("~1 after input curve chan %d = %f\n",i,out[i]);
 				md_table((void *)&su, out, out);
+//for (i = 0; i < su.id; i++) printf("~1 after md table chan %d = %f\n",i,out[i]);
 				output_curves((void *)&su, out, out);
+//for (i = 0; i < su.id; i++) printf("~1 after output curve chan %d = %f\n",i,out[i]);
 
 				if (bitspersample == 8) {
 					for (i = 0; i < su.od; i++) {
 						int v = (int)(out[i] * 255.0 + 0.5);
+//printf("~1 8 bit chan %d = %d\n",i,v);
+						if (v < 0)
+							v = 0;
+						else if (v > 255)
+							v = 255;
+//printf("~1 8 bit after clip curve chan %d = %d\n",i,v);
 						if (su.osign_mask & (1 << i))		/* Treat input as offset */
 							v = (v & 0x80) ? v - 0x80 : v + 0x80;
+//printf("~1 8 bit after treat as offset chan %d = %d\n",i,v);
 						((unsigned char *)precbuf)[x * su.od + i] = v;
 					}
 				} else {
 					for (i = 0; i < su.od; i++) {
 						int v = (int)(out[i] * 65535.0 + 0.5);
+//printf("~1 16 bit chan %d = %d\n",i,v);
+						if (v < 0)
+							v = 0;
+						else if (v > 65535)
+							v = 65535;
+//printf("~1 16 bit after clip curve chan %d = %d\n",i,v);
 						if (su.osign_mask & (1 << i))		/* Treat input as offset */
 							v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
+//printf("~1 16 bit after treat as offset chan %d = %d\n",i,v);
 						((unsigned short *)precbuf)[x * su.od + i] = v;
 					}
 				}

@@ -24,7 +24,7 @@
 /* Description:
 
 	This program simply generates a PostScript file containing
-	the patches layed out for an Xrite DTP51/DTP41/SpectroScan/i1pro.
+	the patches layed out for an Xrite DTP20/DTP22/DTP51/DTP41/SpectroScan/i1pro.
 	It allows them to be layed out on a choice of paper sizes,
 	with the appropriate contrasting color spacers between
 	each patch for the strip reading instruments. Unlike other
@@ -134,8 +134,8 @@ struct _col {
 	double XYZ[3];				/* Aproximate XYZ */
 	double Lab[3];				/* Aproximate Lab */
 	double den[4];				/* Approx statusT density + visual density */
-	int    dtp20_octval;		/* DTP22 octal value */
-	double dtp20_psize;			/* DTP22 patch width */
+	int    dtp20_octval;		/* DTP20 octal value */
+	double dtp20_psize;			/* DTP20 patch width */
 	double rgb[3];				/* Aproximate sRGB */
 	int n;						/* Number of colorants */
 	double dev[ICX_MXINKS];		/* Value of colorants */
@@ -1143,7 +1143,7 @@ int *p_npat			/* Return number of patches including padding */
 	double mxrowl = 0;	/* Maximum row length for patchs (including min/max patches) */
 						/* Number of patches is strip by whichever is shorter */
 	int tidrows = 0;	/* Rows on first page for target ID */
-	int tidtype = 0;	/* Target ID type. 0 = DTP22 */
+	int tidtype = 0;	/* Target ID type. 0 = DTP20 */
 	int tidminp = 0;	/* Target ID minumum number of patches */
 	int tidpad = 0;		/* Initial padding to place TID near middle */
 	int tidnpat = npat;	/* Number of test targets needed, including TID row */
@@ -1194,7 +1194,7 @@ int *p_npat			/* Return number of patches including padding */
 	mind = &pcol[0];		/* White */
 	maxd = &pcol[7];		/* Black */
 
-	/* Setup DTP22 bar code encoding for spacers. */
+	/* Setup DTP20 bar code encoding for spacers. */
 	pcol[0].dtp20_octval = 0;	/* White */
 	pcol[0].dtp20_psize  = 6.5;
 	pcol[1].dtp20_octval = 4;	/* Cyan */
@@ -1315,6 +1315,35 @@ int *p_npat			/* Return number of patches including padding */
 		dorowlabel = 1;			/* Generate row labels */
 		rlwi = 10.0;			/* Row label width */
 
+	} else if (itype == instDTP22 ) {	/* X-Rite DTP22 Digital Swatchbook */
+		domaxmin = 0;			/* Don't print max and min patches */
+		nextrap = 0;			/* Number of extra patches for max and min */
+		nmaxp = nminp = 0;		/* Extra max/min patches */
+		nextrap = nmaxp + nminp;/* Number of extra patches for max and min */
+		dorspace = 1;			/* Do a rrsp from center of last patch to cut line */
+		padlrow = 0;			/* Pad the last row with white */
+		spacer = 0;				/* No spacer */
+		usede = 1;				/* Use delta E to maximize patch/spacer conrast */
+		needpc = 1;				/* Need patch to patch contrast in a row */
+		lspa  = 8.0 + bord;		/* Leader space before first patch - allow space for text */
+		lcar  = 0.0;			/* Leading clear area before first patch */
+		plen = pscale * 8.0;	/* Patch min length */
+		hxew = hxeh = 0.0;		/* No extra padding because no hex */
+		pspa  = 0.0;			/* Inbetween Patch spacer */
+		tspa  = 0.0;			/* Clear space after last patch */
+		pwid  = pscale * 8.0;	/* Patch min width */
+		rrsp  = pscale * 8.0;	/* Row center to row center spacing */
+		pwex  = 0.0;			/* Patch width expansion between rows of a strip */
+		mxpprow = MAXPPROW;		/* Maximum patches per row permitted */
+		mxrowl = 1000.0;		/* Maximum row length */
+		tidrows = 0;			/* No rows on first page for target ID */
+		rpstrip = 999;			/* Rows per strip */
+		txhi  = 5.0;			/* Text Height */
+		docutmarks = 0;			/* Don't generate strip cut marks */
+		clwi  = 0.0;			/* Cut line width */
+		dorowlabel = 1;			/* Generate row labels */
+		rlwi = 8.0;				/* Row label width */
+
 	} else if (itype == instI1Pro ) {	/* GretagMacbeth Eye-One Pro */
 		if (bord < 26.0)
 			lbord = 26.0 - bord;	/* need this for holder to grip paper and plastic spacer */
@@ -1353,6 +1382,8 @@ int *p_npat			/* Return number of patches including padding */
 		rlwi = 0.0;				/* Row label width */
 
 	} else if (itype == instDTP20) { 	/* Xrite DTP20 */
+//		if (bord < 26.0)
+//			lbord = 26.0 - bord;	/* need this for holder to grip paper and plastic spacer */
 		hex = 0;				/* No hex for strip instruments */
 		hxew = hxeh = 0.0;		/* No extra padding because no hex */
 		domaxmin = 2;			/* Print SID patches */
@@ -1376,7 +1407,7 @@ int *p_npat			/* Return number of patches including padding */
 		mxpprow = MAXPPROW;		/* Maximum patches per row permitted (set by length) */
 		mxrowl = (240.0 - lcar - tspa);	/* Maximum row length */
 		tidrows = 1;			/* Rows on first page for target ID */
-		tidtype = 0;			/* Target ID type. 0 = DTP22 */
+		tidtype = 0;			/* Target ID type. 0 = DTP20 */
 		tidminp = 21;			/* Target ID minumum number of patches */
 		rpstrip = 999;			/* Rows per strip */
 		txhi  = 5.0;			/* Label Text Height */
@@ -2016,8 +2047,8 @@ void usage(char *diag, ...) {
 	}
 	fprintf(stderr,"usage: printtarg [-v] [-i instr] [-r] [-s] [-p size] basename\n");
 	fprintf(stderr," -v              Verbose mode\n");
-	fprintf(stderr," -i 20 | 41 | 51 | SS | i1 Select target instrument (default DTP41)\n");
-	fprintf(stderr,"                 20 = DTP20, 41 = DTP41, 51 = DTP51, SS = SpectroScan, i1 = i1Pro\n");
+	fprintf(stderr," -i 20 | 22 | 41 | 51 | SS | i1 Select target instrument (default DTP41)\n");
+	fprintf(stderr,"                 20 = DTP20, 22 = DTP22, 41 = DTP41, 51 = DTP51, SS = SpectroScan, i1 = i1Pro\n");
 	fprintf(stderr," -h              Use hexagon patches for SS\n");
 	fprintf(stderr," -a scale        Scale patch size and spacers by factor (e.g. 0.857 or 1.5 etc.)\n");
 	fprintf(stderr," -A scale        Scale spacers by additional factor (e.g. 0.857 or 1.5 etc.)\n");
@@ -2078,7 +2109,7 @@ char *argv[];
 	int nchan = 0;			/* Number of device chanels */
 	int i;
 	int si, fi, wi;			/* sample id index, field index, keyWord index */
-	char *label = "Argyll Color Management System - Test chart";
+	char label[400];		/* Space for chart label */
 	double marg = DEF_MARGINE;	/* Margin from paper edge in mm */
 	paper *pap = NULL;		/* Paper size pointer, NULL if custom */
 	double cwidth, cheight;	/* Custom paper width and height in mm */
@@ -2306,12 +2337,14 @@ char *argv[];
 				fa = nfa;
 				if (na == NULL) usage("Expected an argument to -i");
 
-				if (strcmp("51", na) == 0)
-					itype = instDTP51;
-				else if (strcmp("20", na) == 0)
+				if (strcmp("20", na) == 0)
 					itype = instDTP20;
+				else if (strcmp("22", na) == 0)
+					itype = instDTP22;
 				else if (strcmp("41", na) == 0)
 					itype = instDTP41;
+				else if (strcmp("51", na) == 0)
+					itype = instDTP51;
 				else if (strcmp("SS", na) == 0 || strcmp("ss", na) == 0)
 					itype = instSpectroScan;
 				else if (strcmp("i1", na) == 0 || strcmp("I1", na) == 0)
@@ -2641,6 +2674,9 @@ char *argv[];
 	} else
 		pcol = pcold;		/* Density spacer alues */
 
+	
+	sprintf(label, "Argyll Color Management System - Test chart \"%s\" (%s %d) %s",
+	               psname, rand ? "Random Start" : "Chart ID", rstart, atm);
 	generate_ps(itype, psname, cols, npat, label,
 	            pap != NULL ? pap->w : cwidth, pap != NULL ? pap->h : cheight,
 	            marg, rand, rstart, saix, paix,	ixord,

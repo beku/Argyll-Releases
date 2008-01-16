@@ -12,6 +12,7 @@ CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
 #CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
 LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
+
 if ! $(UNIX) {
 	
 	if $(MingW) {
@@ -29,4 +30,7 @@ if ! $(UNIX) {
 
 	# Copy the header file to the libusb directory
 	File usb.h : src/usb.h ;
+
+	# Install the DLL to the binary file
+	InstallFile $(DOTDOT)$(SLASH)bin : libusb0.dll ;
 }

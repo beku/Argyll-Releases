@@ -72,7 +72,7 @@ void usage(char *diag) {
 	fprintf(stderr," -a             show actual target values if clipped\n");
 	fprintf(stderr," -m             merge output processing into clut\n");
 	fprintf(stderr," -b             use CAM Jab for clipping\n");
-	fprintf(stderr," -S             Use internal optimised separation for inverse 4d\n");
+//	fprintf(stderr," -S             Use internal optimised separation for inverse 4d [NOT IMPLEMENTED]\n");
 
 	fprintf(stderr," -c viewcond    set viewing conditions for CIECAM97s,\n");
 	fprintf(stderr,"                either an enumerated choice, or a parameter:value changes\n");
@@ -892,19 +892,7 @@ main(int argc, char *argv[]) {
 			}
 
 			if (repYxy && ins == icSigYxyData) {
-				double Y = in[0];
-				double x = in[1];
-				double y = in[2];
-				double z = 1.0 - x - y;
-				double sum;
-				if (y < 1e-6) {
-					in[0] = in[1] = in[2] = 0.0;
-				} else {
-					sum = Y/y;
-					in[0] = x * sum;
-					in[1] = Y;
-					in[2] = z * sum;
-				}
+				icmXYZ2Yxy(in, in);
 			}
 
 			/* JCh -> Jab & LCh -> Lab */
@@ -934,17 +922,7 @@ main(int argc, char *argv[]) {
 			}
 
 			if (repYxy && outs == icSigYxyData) {
-				double X = out[0];
-				double Y = out[1];
-				double Z = out[2];
-				double sum = X + Y + Z;
-				if (sum < 1e-6) {
-					out[0] = out[1] = out[2] = 0.0;
-				} else {
-					out[0] = Y;
-					out[1] = X/sum;
-					out[2] = Y/sum;
-				}
+				icmXYZ2Yxy(out, out);
 			}
 
 			/* Jab -> JCh and Lab -> LCh */

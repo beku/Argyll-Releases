@@ -1897,7 +1897,10 @@ int read_xspect(xspect *sp, char *fname) {
 /* NOTE: Returned value isn't normalised by sp->norm */ 
 static int getval_raw_xspec_poly3(xspect *sp, double *rv, double xw) {
 	int i, rc = 1;
-	double spcing, f, w1, w2, w3;
+	double spcing, f;
+#ifdef NEVER
+	double w1, w2, w3;		/* For Hermite curves */
+#endif
 	double y[4], yw;
 	double x[4];
 
@@ -2111,7 +2114,6 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 ) {
 	double ww;
 	int i, j;
-	double aulimit;		/* A search region upper limit */
 	double aw = 0.0, bw = 0.0; /* Points wavelength */
 	double ar, br;		/* Points reflection */
 #ifdef STOCKFWA			/* Use table shape */
@@ -2229,6 +2231,8 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 			double mm;
 
 			getval_xspec(&p->instr, &Ii, ww);	/* Normalised illuminant at this wavelength */
+			if (Ii < 1e-9)
+				Ii = 1e-9;
 			getval_xspec(&FWA1_emit, &Eu, ww);	/* FWA emission at this wavelength */
 			mm = ((rr - Rl) * Ii)/Eu;
 			if (mm > Em) {
@@ -2246,9 +2250,9 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 	/* Setup spectrum to hold result over exected range */
 	/* and base media reflectance */
 	p->media = *media;		/* Take copy of media white */
-	p->emit = *media;		/* Structure copy */
+	p->emits = *media;		/* Structure copy */
 	sp_denorm(&p->media);	/* Set norm to 1.0 */
-	sp_denorm(&p->emit);
+	sp_denorm(&p->emits);
 
 	/* Copy emission spectra that explains bump over line */
 	/* plus estimated media without FWA spectrum. */
@@ -2261,10 +2265,12 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 
 		getval_xspec(&FWA1_emit, &Eu, ww);	/* FWA emission at this wavelength */
 		Eu *= Em;
-		p->emit.spec[i] = p->emit.norm * Eu;	/* Remember FWA spectrum */
+		p->emits.spec[i] = p->emits.norm * Eu;	/* Remember FWA spectrum */
 
 		Rm = p->media.spec[i]/p->media.norm; 	/* Media at this point */
 		getval_xspec(&p->instr, &Ii, ww);	/* Normalised illuminant at this wavelength */
+		if (Ii < 1e-9)
+			Ii = 1e-9;
 		Rm *= Ii;						/* Light reflected from media */
 
 		Rmb = Rm - Eu;					/* Convert media to base media */
@@ -2277,16 +2283,16 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 
 	}
 	/* Prevent silliness */
-	p->emit.spec[0] = 0.0;
-	p->emit.spec[p->emit.spec_n-1] = 0.0;
+	p->emits.spec[0] = 0.0;
+	p->emits.spec[p->emits.spec_n-1] = 0.0;
 
-#else /* Not STOCK_FWA
+#else /* Not STOCK_FWA */
 	/* Setup spectrum to hold result over exected range */
 	/* and base media reflectance */
 	p->media = *media;		/* Take copy of media white */
-	p->emit = *media;		/* Structure copy */
+	p->emits = *media;		/* Structure copy */
 	sp_denorm(&p->media);	/* Set norm to 1.0 */
-	sp_denorm(&p->emit);
+	sp_denorm(&p->emits);
 
 	/* Compute emission spectra that explains bump over line */
 	/* plus estimated media without FWA spectrum. */
@@ -2333,19 +2339,21 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 
 			p->media.spec[i] = p->media.norm * Rmb;		/* Convert media to base media */
 			getval_xspec(&p->instr, &Ii, ww);	/* Normalised illuminant at this wavelength */
+			if (Ii < 1e-9)
+				Ii = 1e-9;
 
-			p->emit.spec[i] = p->emit.norm * (Rm - Rmb) * Ii;
+			p->emits.spec[i] = p->emits.norm * (Rm - Rmb) * Ii;
 #ifdef DEBUG
-			printf("~1 ww %fnm, Rm %f, Rmb %f, Eu %f\n",ww, Rm, Rmb, p->emit.spec[i]/p->emit.norm);
+			printf("~1 ww %fnm, Rm %f, Rmb %f, Eu %f\n",ww, Rm, Rmb, p->emits.spec[i]/p->emits.norm);
 #endif
 			
 		} else {
-			p->emit.spec[i] = 0.0;
+			p->emits.spec[i] = 0.0;
 		}
 	}
 	/* Prevent silliness */
-	p->emit.spec[0] = 0.0;
-	p->emit.spec[p->emit.spec_n-1] = 0.0;
+	p->emits.spec[0] = 0.0;
+	p->emits.spec[p->emits.spec_n-1] = 0.0;
 #endif /* !STOCKFWA */
 
 	/* Compute level of UV stimulating FWA */
@@ -2355,6 +2363,8 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 		double Su;
 
 		getval_xspec(&p->instr, &Ii, ww);	/* Normalised illuminant at this wavelength */
+		if (Ii < 1e-9)
+			Ii = 1e-9;
 		getval_xspec(&FWA1_stim, &Su, ww);	/* FWA stimulation profile at this wavelength */
 		p->Sm += Su * Ii;
 	}
@@ -2364,10 +2374,10 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 
 	/* Compute FWA content of this media, for information purposes */
 	p->FWAc = 0.0;
-	for (ww = p->emit.spec_wl_short; ww <= p->emit.spec_wl_long; ww += p->bw) {
+	for (ww = p->emits.spec_wl_short; ww <= p->emits.spec_wl_long; ww += p->bw) {
 		double Eu; 
 
-		getval_xspec(&p->emit, &Eu, ww);	/* FWA emission at this wavelength */
+		getval_xspec(&p->emits, &Eu, ww);	/* FWA emission at this wavelength */
 		p->FWAc += Eu;
 	}
 	p->FWAc /= p->Sm;		/* Divided by stimulation */
@@ -2400,7 +2410,9 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 		getval_xspec(media, &Rm, ww);		/* Media at this point */
 		getval_xspec(&p->media, &Rmb, ww);	/* Base Media */ 
 		getval_xspec(&p->instr, &Ii, ww);	/* Normalised illuminant at this wavelength */
-		getval_xspec(&p->emit, &Eu, ww);	/* FWA emission at this wavelength */
+		if (Ii < 1e-9)
+			Ii = 1e-9;
+		getval_xspec(&p->emits, &Eu, ww);	/* FWA emission at this wavelength */
 
 		Rmd = ((Ii * Rmb) + Eu)/Ii;			/* Base Media plus FWA */
 #ifdef DEBUG
@@ -2464,6 +2476,11 @@ xspect *in			/* Spectrum to be converted */
 	int plix = 0;
 #endif /* DOPLOT_ALL_FWA */
 
+	tsout.spec_n = 0;
+	tsout.spec_wl_short = 0.0;
+	tsout.spec_wl_long = 0.0;
+	tsout.norm = 0.0;
+
 	/* With colorant, estimate stimulation level of FWA for instrument illuminant */
 	/* and for target illuminant. We are assuming that the stimulation sensitivity */
 	/* doesn't significantly overlap the emission spectrum. We could allow for */
@@ -2481,7 +2498,11 @@ xspect *in			/* Spectrum to be converted */
 		Rcch = sqrt(Rcch/Rmb);				/* Half reflectance estimate (valid if no FWA) */
 
 		getval_xspec(&p->instr, &Ii, ww);	/* Normalised instr. illuminant at wavelength */
+		if (Ii < 1e-9)
+			Ii = 1e-9;
 		getval_xspec(&p->illum, &It, ww);	/* Normalised target. illuminant at wavelength */
+		if (It < 1e-9)
+			It = 1e-9;
 		getval_xspec(&FWA1_stim, &Su, ww);	/* FWA stimulation sensitivity this wavelength */
 		Smc  += Su * Ii * Rcch;
 		Smct += Su * It * Rcch;
@@ -2516,13 +2537,15 @@ xspect *in			/* Spectrum to be converted */
 		double Rcch;	/* Corrected Rc colorant half reflectance */
 		double RctI;	/* Corrected Rc for target illuminant times illuminant */
 
-		getval_xspec(&p->emit, &Eu, ww);	/* FWA emission at this wavelength */
+		getval_xspec(&p->emits, &Eu, ww);	/* FWA emission at this wavelength */
 		Kc  = Emc * Eu;						/* FWA contribution under inst. illum. */
 		Kct = Emct * Eu;					/* FWA contribution under target illum. */
 
 		getval_xspec(&p->media, &Rmb, ww);	/* Base Media */
 		getval_xspec(in, &Rc, ww);			/* Media + colorant reflectance at wavelength + FWA */
 		getval_xspec(&p->instr, &Ii, ww);	/* Normalised instrument illuminant */
+		if (Ii < 1e-9)
+			Ii = 1e-9;
 
 		/* Solve for underlying colorant half reflectance, discounting FWA */
 		if (fabs(Rmb) < 1e-9) /* Hmm. */
@@ -2535,6 +2558,8 @@ xspect *in			/* Spectrum to be converted */
 #endif
 		/* Estimated reflectance times target illum. */
 		getval_xspec(&p->illum, &It, ww);	/* Normalised target illuminant */
+		if (It < 1e-9)
+			It = 1e-9;
 		RctI = (It * Rcch * Rmb + Kct) * Rcch;
 
 #ifdef DOPLOT_ALL_FWA
@@ -2603,13 +2628,15 @@ xspect *in			/* Spectrum to be converted */
 			ww = (in->spec_wl_long - in->spec_wl_short)
 			   * ((double)i/(in->spec_n-1.0)) + in->spec_wl_short;
 	
-			getval_xspec(&p->emit, &Eu, ww);	/* FWA emission at this wavelength */
+			getval_xspec(&p->emits, &Eu, ww);	/* FWA emission at this wavelength */
 			Kc  = Emc * Eu;				/* FWA contribution under inst. illum. */
 			Kct = Emct * Eu;			/* FWA contribution under target illum. */
 	
 			getval_xspec(&p->media, &Rmb, ww);	/* Base Media */
 			getval_xspec(in, &Rc, ww);	/* Media + colorant reflectance at wavelength + FWA */
 			getval_xspec(&p->instr, &Ii, ww);	/* Normalised instrument illuminant */
+			if (Ii < 1e-9)
+				Ii = 1e-9;
 	
 			if (fabs(Rmb) < 1e-9) /* Hmm. */
 				Rcch = sqrt(Rmb);
@@ -2618,6 +2645,8 @@ xspect *in			/* Spectrum to be converted */
 	
 			/* Estimated reflectance times target illum. */
 			getval_xspec(&p->illum, &It, ww);	/* Normalised target illuminant */
+			if (It < 1e-9)
+				It = 1e-9;
 			RctI = (It * Rcch * Rmb + Kct) * Rcch;
 	
 			tsout.spec[i] = tsout.norm * RctI/It;		/* Corrected reflectance */
@@ -3153,7 +3182,7 @@ static double cct_func(void *fdata, double tp[]) {
 /* return the closest correlated color temperature to the given spectrum or XYZ. */
 /* An observer type can be chosen for interpretting the spectrum of the input and */
 /* the illuminant. */
-/* Note we can use CIEDE94, rather than the traditional L*u*v* 2/3 space for CCT */
+/* Note we can use CIEDE2000, rather than the traditional L*u*v* 2/3 space for CCT */
 /* Return -1 on erorr */
 double icx_XYZ2ill_ct(
 double txyz[3],			/* If not NULL, return the XYZ of the locus temperature */

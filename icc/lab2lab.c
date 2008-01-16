@@ -9,7 +9,7 @@
  *
  * Copyright 1999 - 2005 Graeme W. Gill
  *
- * This material is licensed with a free use license:-
+ * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
  */
 

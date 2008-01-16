@@ -19,6 +19,7 @@
 /* this will function only for non-display specific types of calibration. */
 typedef struct {
 	disppath *disp;			/* display to calibrate. */
+	int blackbg;			/* NZ if whole screen should be filled with black */
 	int override;			/* Override_redirect on X11 */
 	double patsize;			/* Size of dispwin */
 	double ho, vo;			/* Position of dispwin */
@@ -36,9 +37,11 @@ inst_code inst_handle_calibrate(
 int disprd_calibration(
 instType itype,		/* Instrument type */
 int comport, 		/* COM port used */
+flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 int nocal,			/* NZ to disable auto instrument calibration */
 disppath *screen,	/* Screen to calibrate. */
+int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
 double patsize,		/* Size of dispwin */
 double ho, double vo,	/* Position of dispwin */
@@ -76,6 +79,7 @@ struct _disprd {
 	int debug;			/* Debug flag */
 	int comport; 		/* COM port used */
 	baud_rate br;
+	flow_control fc;
 	inst *it;			/* Instrument */
 	dispwin *dw;		/* Window */
 	ramdac *or;			/* Original ramdac if we set one */
@@ -117,13 +121,16 @@ disprd *new_disprd(
 int *errc,			/* Error code. May be NULL */ 
 instType itype,		/* Instrument type */
 int comport, 		/* COM port used, -99 for fake display */
+flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 int nocal,			/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */
 int donat,			/* Use ramdac for native output, else run through current or set ramdac */
 double cal[3][256],	/* Calibration set/return (cal[0][0] < 0.0 if can't/not to be used) */
 disppath *screen,	/* Screen to calibrate. */
+int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
+char *callout,		/* Shell callout on set color */
 double patsize,		/* Size of dispwin */
 double ho,			/* Horizontal offset */
 double vo,			/* Vertical offset */

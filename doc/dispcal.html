@@ -70,9 +70,14 @@ communication port from the following list (default 1)<br>
  style="font-family: monospace;">Skip</span><span
  style="font-family: monospace;"> adjustment of the monitor
 controls</span></font><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#u">-u</a>
-<a href="#u_p1">[profile.icm]</a>&nbsp;&nbsp;&nbsp;&nbsp;
-Update previous calibration [update profile with new calibration]</span><span
+&nbsp;
+<font size="-1"><span style="font-family: monospace;"><a href="#o">-o
+[profile.icm]</a><a href="#u_p1"></a>&nbsp;&nbsp;&nbsp;&nbsp; Create
+fast matrix/shaper profile [different filename to outfile.icm]<br>
+&nbsp;<a href="#O">-O description</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Fast ICC Profile Description string (Default "outfile")<br>
+&nbsp;<a href="#u">-u</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Update previous calibration and (if -o used) ICC profile VideoLUTs</span><span
  style="font-family: monospace;"></span><span
  style="font-family: monospace;"></span><br
  style="font-family: monospace;">
@@ -136,9 +141,11 @@ Position test window and scale it</span><br
 ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.</span><br
+ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.<br>
+&nbsp;<a href="#B">-B</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Fill whole screen with black background<br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
+</span><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#n">-n</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; [X11 only] Don't set override redirect on test
@@ -153,8 +160,14 @@ window<br>
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; Use high resolution spectrum mode (if
-available)</span></font><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+available)</span></font><font size="-1"><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#W">-W
+n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Disable auto calibration of instrument<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#D">-D [level]</a><span
@@ -165,17 +178,22 @@ Print debug diagnostics to stderr</span></font><br
  style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#p1"><i>inoutfile</i></a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Base name for input</span><span style="font-family: monospace;">/output[</span><a
+</span><span style="font-family: monospace;">Base name for created or
+updated </span></font><font size="-1"><a
  style="font-family: monospace;" href="cal_format.html">.cal</a><span
- style="font-family: monospace;">] file.</span></font><br>
+ style="font-family: monospace;"></span></font><font size="-1"><span
+ style="font-family: monospace;">&nbsp; and <a
+ href="File_Formats.html#ICC">.icm</a> output files</span></font><br>
 <br>
 <h3>Comments<br>
 </h3>
-This is the utility is used for calibrating a display, to reach
-specified target behaviour.&nbsp; For best results on a CRT, you should
+This is the utility is used for adjusting and calibrating a display to
+reach
+specified target behaviour, and optionally profiling it.&nbsp; For best
+results on a CRT, you should
 run this
 against a neutral grey desktop background, and avoid having any bright
-images or windows on the screen at the time you run dispcal<br>
+images or windows on the screen at the time you run dispcal.<br>
 <br>
 <a name="v"></a> The <b>-v</b> flag reports progress information, as
 well as other statistics about the progress of calibration. A numerical
@@ -289,18 +307,53 @@ if the display white point actually lies on the particular locus.<br>
 skips the usual process of adjusting the display monitor contrast,
 brightness and white point controls, and skips straight to calibration.<br>
 <br>
+<a name="0"></a><span style="font-weight: bold;">-o [</span><span
+ style="font-style: italic;">profile.icm</span><span
+ style="font-weight: bold;">]</span> Normally <span
+ style="font-weight: bold;">dispcal</span> creates just a calibration
+file, which can then be used for subsequent characterization using <a
+ href="dispread.html">dispread</a> and profiling using <a
+ href="profile.html">profile</a>. If the <span
+ style="font-weight: bold;">-o</span> flag is used, <span
+ style="font-weight: bold;">dispcal</span> will also create a
+shaper/matrix profile, if the <span style="font-weight: bold;">-o</span>
+option is used. By default it will create a profile named <span
+ style="font-weight: bold;">inoutfile.icm</span>, but a differently
+named file can be created or updated by specifying the name after the <span
+ style="font-weight: bold;">-o</span> flag. If the <span
+ style="font-weight: bold;">-u</span> flag is used with <span
+ style="font-weight: bold;">-o</span>, then the ICC profile <span
+ style="font-weight: bold;">vcgt</span> calibration curves will be
+updated.<br>
+<br>
+<a name="O"></a>The <b>-O</b> parameter allows setting of the profile
+description tag. The parameter should be a string that describes the
+device and profile. With
+most command line shells, it will be
+necessary to enclose the parameter with double quotes, so that spaces
+and other special characters are included in the parameter, and not
+mistaken for the start of another flag, or as a final command line
+parameter. Many programs that deal with ICC profiles use the
+description tag to identify a profile, rather than the profile
+filename, so using a descriptive string is important in being able to
+find a profile. By default, the profile file name will
+be used as the description.<br>
+<br>
 <a name="u"></a><span style="font-weight: bold;">-u</span> Normally <span
  style="font-weight: bold;">dispcal</span>
-creates a new calibration file, based on the requested targets, and the
+creates a new calibration file and optional profile, based on the
+requested targets and the
 response of the display. This can take a fair amount of time,
 particularly if a high quality level has been selected, so to speed up
 the process of keeping a display in calibration the <span
  style="font-weight: bold;">-u</span> flag can be used. This uses the
 same calibration targets as the previous calibration but does a smaller
 number of refinement passes, enough to improve the accuracy of the
-calibration to account for drift in the device. If a display ICC
-profile is provided as an argument to <span style="font-weight: bold;">-u</span>,
-then the vcgt tag within the profile will be updated with the new
+calibration to account for drift in the device. If the <span
+ style="font-weight: bold;">-o</span> flag is used as well, then the
+ICC
+profile <span style="font-weight: bold;"></span>will have its vcgt tag
+updated with the new
 calibration. This keeps the profile up to date with the display.
 Normally <span style="font-weight: bold;">dispcal -u</span> will use
 the same quality level that was specified in the previous calibration,
@@ -435,7 +488,11 @@ test values to test the calibration.<br>
 pass on the display as it is
 currently setup (currently installed LUT curves). This will use the
 usual input
-parameters to establish the expected (target) characteristic. You can
+parameters to establish the expected (target) characteristic. <span
+ style="font-weight: bold;">Note</span> that if the initial calibration
+was modified due to it being out
+of gamut of the display, verify will show the resulting discrepancy.
+You can
 use <a href="dispwin.html">dispwin</a> to load a <span
  style="font-weight: bold;">.cal</span> file into the display before
 running dispcal <span style="font-weight: bold;">-E</span>. Note that
@@ -443,7 +500,7 @@ on Apple OS X, you will need to run dispwin with the <a
  href="dispwin.html%20#x">-x</a> option <span
  style="font-weight: bold;"></span>to ensure that the calibration is
 retained while dispcal <span style="font-weight: bold;">-E</span> is
-run.<br>
+run. <br>
 <br>
 <a name="p"></a> The <span style="font-weight: bold;">-p</span>
 parameter allows you to position and size the test patch window. By
@@ -462,6 +519,11 @@ specified as a single string (no space between the numbers and the
 comma).<br>
 For example, to create a double sized test window at the top right of
 the screen, use <span style="font-weight: bold;">-p 1,0,2</span> .<br>
+<br>
+<a name="B"></a> The <span style="font-weight: bold;">-B</span>
+flag causes the while screen behind the test window to be masked with
+black. This can aid black accuracy when measuring CRT displays or
+projectors.<br>
 <br>
 <a name="n"></a><span style="font-weight: bold;">-n</span> When running
 on a UNIX based system that used the X11
@@ -502,6 +564,14 @@ See <a href="instruments.html">Operation of particular instruments</a>
 for more details. This may give better accuracy for display
 measurements.<br>
 <br>
+<a name="W"></a>The <b>-W</b> <span style="font-weight: bold;">n|h|x</span>
+parameter overrides the default serial communications
+flow control setting. The value <span style="font-weight: bold;">n</span>
+turns all flow control off, <span style="font-weight: bold;">h</span>
+sets hardware handshaking, and <span style="font-weight: bold;">x</span>
+sets Xon/Xoff handshaking. This commend may be useful in workaround
+serial communications issues with some systems and cables. <br>
+<br>
 <a name="D"></a>The <b>-D</b> flag causes communications
 and other instrument diagnostics to be printed to stdout. A level can
 be set between 1 .. 9, that may give progressively more verbose
@@ -512,16 +582,21 @@ down why an instrument can't connect.<br>
 <a name="p1"></a><span style="font-weight: bold;">inoutfile</span> The
 final parameter on the command line is the base
 filename for the <a href="cal_format.html">.cal</a>
-file. Normally this will be created (or an existing file will be
+file and the optional ICC profile. Normally this will be created (or an
+existing file will be
 overwritten). If the <span style="font-weight: bold;">-u</span> flag
-is used, then this file will be updated.<br>
+is used, then these files will be updated. If a different ICC profile
+name needs to be specified, do so as an argument to the <span
+ style="font-weight: bold;">-o</span> flag.<br>
 <br>
 <hr style="width: 100%; height: 2px;"><br>
 <a name="Adjustment"></a>The adjustment of the display controls
 (brightness, contrast, R, G
 &amp; B channel controls etc.) is very dependent on the particular
 monitor. Different types and brands of monitors will have different
-controls, or controls that operate in different ways.<br>
+controls, or controls that operate in different ways. Some displays
+have almost no user controls, and so you may well be best skipping
+display adjustment, and going straight to calibration.<br>
 <br>
 Almost all LCD displays lack a real <span style="font-weight: bold;">contrast</span>
 control. Those that do
@@ -537,7 +612,14 @@ neutral. The LCD <span style="font-weight: bold;">brightness</span>
 control generally adjusts the level of backlighting the display gets,
 which affects the maximum brightness, and also tends to raise or lower
 the black level in proportion, without changing the displays response
-curve shape or overall contrast ratio.<br>
+curve shape or overall contrast ratio. If your LCD display has a <span
+ style="font-weight: bold;">backlight</span> control as well as a <span
+ style="font-weight: bold;">brightness</span> control, then the
+brightness control is also probably being faked, and you are probably
+better off setting it to it's neutral setting, and using the <span
+ style="font-weight: bold;">backlight</span> control in place of <span
+ style="font-weight: bold;">brightness</span> in the following
+adjustments.<br>
 <br>
 On CRT based displays, the <span style="font-weight: bold;">brightness</span>
 control generally adjusts the black level of the display, and as a side
@@ -550,14 +632,30 @@ tend to affect the shape or gamma of the display response curve.<br>
 <br>
 Many displays have some sort of color temperature adjustment. This may
 be in the form of some pre-set color temperatures, or in the form of
-individual Red, Green and Blue channel gain adjustments. Some displays
+individual Red, Green and Blue channel gain adjustments. Some CRT
+displays
 also have R, G &amp; B channel offset adjustments that will affect the
-color temperatures near black, as well as affect the individual gun's
-curve shape. Some special LCD displays may have a white point
-adjustment that changes the color of the backlight. The color
+color temperatures near black, as well as affect the individual
+channels curve shape. The color
 temperature adjustment will generally affect the maximum brightness,
 and may also affect the black level and the shape of the display
 response curves.<br>
+<br>
+Some special (expensive) LCD displays may have a white point
+adjustment that changes the color of the backlight. If you do not have
+one of these types of LCD displays, then attempting to change the white
+point of the display (even if it appears to have a "<span
+ style="font-weight: bold;">white point selection</span>" or <span
+ style="font-weight: bold;">R/G/B</span> "<span
+ style="font-weight: bold;">gain</span>" controls") may not be a good
+idea, as once again these controls are probably being faked by
+manipulating the signal levels. Even if you do manage to change the
+white point significantly, it may do things like change the mid tone
+color too dramatically, or create a display response that is hard to
+correct with calibration, or results in side effects such as
+quantization (banding) or other undesirable effects. You may have to
+try out various controls (and your aim points for the display
+calibration), to decide what is reasonable to attempt on an LCD display.<br>
 <br>
 Due to the variety of controls as well as the interaction between them,
 it can be an iterative process to arrive at a good monitor set-up,
@@ -652,7 +750,8 @@ the Red, Green and Blue control hints show the direction to adjust the
 controls to place the white point on the locus. The control that will
 have the most direct effect on the color temperature will be the Blue,
 while the Green will most directly move the white point towards or away
-from the locus (but there is interaction).<br>
+from the locus, thereby reducing the delta E of the white point to the
+locus (but there is interaction).<br>
 <br>
 <small style="font-weight: bold;"><span style="font-family: monospace;">Adjust
 R,G &amp; B gain to desired white point. Press space when done.</span><br

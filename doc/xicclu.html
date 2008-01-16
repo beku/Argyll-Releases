@@ -126,19 +126,16 @@ black ink limit, 0 - 100% (estimate by default)</span><br
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#a">-a</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-show actual target values if clipped</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#b">-b</a><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-merge output processing into clut</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#S">-S</a><span
+show actual target values if clipped<br>
+&nbsp;<a href="#b">-b</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+use CAM Jab for clipping<br style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#m">-m</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use internal optimized separation for inverse 4d </span><span
- style="font-weight: bold; font-family: monospace;">[NOT IMPLEMENTED]</span><br
+merge output processing into clut</span><span
+ style="font-family: monospace;"></span><span
+ style="font-weight: bold; font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#c">-c viewcond</a><span
@@ -410,11 +407,13 @@ lookups, then if
 the target PCS value cannot be reproduced by the device (ie. it clips),
 then the achievable, clipped PCS value is displayed.<br>
 <br>
-<a name="b"></a> The <b>-b</b> flag turns on an internal processing
+<a name="b"></a> If the <b>-b</b> flag is used for inverse forward
+lookups, then out of gamut clipping will be performed in the CIECAM02
+Jab appearance colorspace, rather than L*a*b* colorspace.<br>
+<br>
+<a name="m"></a> The <b>-m</b> flag turns on an internal processing
 option, in which the per device curve lookup table processing is merged
 into the main multi-dimensional interpolation lut lookup.<br>
-<br>
-<a name="S"></a> The <b>-S</b> flag is not currently implemented.<br>
 <br>
 Whenever PCS values are to be specified or displayed in Jab/CIECAM02
 colorspace, a set of viewing conditions will be used to determine the

@@ -49,9 +49,8 @@
 
 #undef DEBUG
 
-#define HWFC	/* Hardware flow control */
-#undef XXFC		/* Xon/Xoff flow control */
-
+/* Default flow control */
+#define DEFFC fc_XonXOff
 
 static inst_code dtp41_interp_code(inst *pp, int ec);
 static inst_code activate_mode(dtp41 *p);
@@ -81,6 +80,7 @@ extract_ec(char *s) {
 	tt[2] = '\000';
 	if (sscanf(tt,"%x",&rv) != 1)
 		return -1;
+	rv &= 0x7f;
 	return rv;
 }
 
@@ -167,19 +167,32 @@ dtp41_command(dtp41 *p, char *in, char *out, int bsize, double to) {
 /* Use the baud rate given, and timeout in to secs */
 /* Return DTP_COMS_FAIL on failure to establish communications */
 static inst_code
-dtp41_init_coms(inst *pp, int port, baud_rate br, double tout) {
+dtp41_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	dtp41 *p = (dtp41 *)pp;
 	static char buf[MAX_MES_SIZE];
 	baud_rate brt[9] = { baud_9600, baud_19200, baud_38400, baud_57600,
 	                     baud_4800, baud_2400, baud_1200, baud_600, baud_300 };
 	char *brc[9] =     { "9600BR\r", "19200BR\r", "38400BR\r", "57600BR\r",
 	                     "4800BR\r", "2400BR\r", "1200BR\r", "600BR\r", "300BR\r" };
+	char *fcc;
 	long etime;
 	int ci, bi, i, rv;
 	inst_code ev = inst_ok;
 
 	if (p->debug)
 		p->icom->debug = p->debug;	/* Turn on debugging */
+
+	/* Deal with flow control setting */
+	if (fc == fc_nc)
+		fc = DEFFC;
+	if (fc == fc_XonXOff) {
+		fcc = "0304CF\r";
+	} else if (fc == fc_Hardware) {
+		fcc = "0104CF\r";
+	} else {
+		fc = fc_none;
+		fcc = "0004CF\r";
+	}
 
 	/* Figure DTP41 baud rate being asked for */
 	for (bi = 0; bi < 9; bi++) {
@@ -191,7 +204,7 @@ dtp41_init_coms(inst *pp, int port, baud_rate br, double tout) {
 
 	/* Figure current icoms baud rate */
 	for (ci = 0; ci < 9; ci++) {
-		if (brt[ci] == p->icom->baud)
+		if (brt[ci] == p->icom->br)
 			break;
 	}
 	if (ci >= 9)
@@ -227,7 +240,7 @@ dtp41_init_coms(inst *pp, int port, baud_rate br, double tout) {
 		return ev;
 
 	/* Set the handshaking */
-	if ((ev = dtp41_command(p, FC_INST, buf, MAX_MES_SIZE, 1.5)) != inst_ok)
+	if ((ev = dtp41_command(p, fcc, buf, MAX_MES_SIZE, 1.5)) != inst_ok)
 		return ev;
 
 	/* Change the baud rate to the rate we've been told */
@@ -237,7 +250,7 @@ dtp41_init_coms(inst *pp, int port, baud_rate br, double tout) {
 	}
 
 	/* Configure our baud rate and handshaking as well */
-	p->icom->set_ser_port(p->icom, port, FC_SERIAL, brt[bi], parity_none, stop_1, length_8);
+	p->icom->set_ser_port(p->icom, port, fc, brt[bi], parity_none, stop_1, length_8);
 
 	/* Loose a character (not sure why) */
 	p->icom->write_read(p->icom, "\r", buf, MAX_MES_SIZE, '>', 1, 0.5);
@@ -387,8 +400,11 @@ dtp41_init_inst(inst *pp) {
 		return ev;
 
 	/* Set Transmission calibration timeout to 24 Hrs */
-	if ((ev = dtp41_command(p, "1820CF\r", buf, MAX_MES_SIZE, 1.5)) != inst_ok)
-		return ev;
+	if ((ev = dtp41_command(p, "1820CF\r", buf, MAX_MES_SIZE, 1.5)) != inst_ok) {
+		/* This may fail if the firmware version is < v8212 */
+		if ((ev & inst_imask) != DTP41_PRM_RANGE_ERROR)
+			return ev;
+	}
 
 	/* - - - - - - - - - - - - - - - - - - - - - - - - */
 	/* Setup for the type of measurements we want to do */
@@ -742,7 +758,7 @@ inst_cal_type dtp41_needs_calibration(inst *pp) {
 /* Request an instrument calibration. */
 /* This is use if the user decides they want to do a calibration, */
 /* in anticipation of a calibration (needs_calibration()) to avoid */
-/* requiring one during measurement, or in response to measureing */
+/* requiring one during measurement, or in response to measuring */
 /* returning inst_needs_cal. Initially us an inst_cal_cond of inst_calc_none, */
 /* and then be prepared to setup the right conditions, or ask the */
 /* user to do so, each time the error inst_cal_setup is returned. */
@@ -813,7 +829,7 @@ dtp41_interp_error(inst *pp, int ec) {
 		case DTP41_DATA_PARSE_ERROR:
 			return "Data from DTP41 didn't parse as expected";
 		case DTP41_OK:
-			return "No error";
+			return "No device error";
 		case DTP41_MEASUREMENT_STATUS:
 			return "Measurement complete";
 		case DTP41_CALIBRATION_STATUS:

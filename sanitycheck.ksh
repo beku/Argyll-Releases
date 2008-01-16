@@ -28,8 +28,8 @@ target/targen -v -d3 -r -f500 rgbtest
 echo "############### Checking printtarg ##################"
 target/printtarg -v -iSS -S test
 
-#echo "############### Checking printread ##################"
-#spectro/printread -v test
+#echo "############### Checking chartread ##################"
+#spectro/chartread -v test
 
 echo "############### Checking dispread ##################"
 spectro/dispread -v -dfake rgbtest

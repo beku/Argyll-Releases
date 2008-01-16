@@ -28,6 +28,7 @@
 typedef enum {
 	w_2d,			/* Video style grey */
 	k_2d,			/* Printing style grey */
+	lab_2d,			/* Lab */
 	rgb_2d,			/* RGB */
 	cmyk_2d			/* CMYK */
 } colort2d;

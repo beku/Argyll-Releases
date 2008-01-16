@@ -61,7 +61,7 @@ void usage(char *diag, ...) {
 
 	fprintf(stderr,"Read a Display, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	if (setup_spyd2() == 2)
+	if (setup_spyd2(NULL) == 2)
 		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	if (diag != NULL) {
 		va_list args;
@@ -103,7 +103,7 @@ void usage(char *diag, ...) {
 					break;
 				if (strlen(paths[i]->path) >= 8
 				  && strcmp(paths[i]->path+strlen(paths[i]->path)-8, "Spyder2)") == 0
-				  && setup_spyd2() == 0)
+				  && setup_spyd2(NULL) == 0)
 					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->path);
 				else
 					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
@@ -118,12 +118,15 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -p ho,vo,ss          Position test window and scale it\n");
 	fprintf(stderr,"                      ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                      ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
+	fprintf(stderr," -B                   Fill whole screen with black background\n");
 #if defined(UNIX) && !defined(__APPLE__)
 	fprintf(stderr," -n                   Don't set override redirect on test window\n");
 #endif
 	fprintf(stderr," -K                   Run instrument calibration first (used rarely)\n");
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
+	fprintf(stderr," -C \"command\"         Invoke shell \"command\" each time a color is set\n");
+	fprintf(stderr," -W n|h|x             Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," outfile              Base name for input[ti1]/output[ti3] file\n");
 	exit(1);
@@ -137,17 +140,20 @@ int main(int argc, char *argv[])
 	double patsize = 100.0;				/* size of displayed color patch */
 	double patscale = 1.0;				/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;			/* Test window offsets, -1.0 to 1.0 */
+	int blackbg = 0;            		/* NZ if whole screen should be filled with black */
 	int verb = 0;
 	int debug = 0;
 	int fake = 0;						/* Use the fake device for testing */
 	int override = 1;					/* Override redirect on X11 */
 	int comport = COMPORT;				/* COM port used */
+	flow_control fc = fc_nc;			/* Default flow control */
 	instType itype = instUnknown;		/* Default target instrument - none */
 	int docalib = 0;					/* Do a calibration */
 	int highres = 0;					/* Use high res mode if available */
 	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
 	int nocal = 0;						/* Disable auto calibration */
 	int spectral = 0;					/* Don't save spectral information */
+	char *callout = NULL;				/* Shell callout */
 	char inname[MAXNAMEL+1] = "\000";	/* Input cgats file base name */
 	char outname[MAXNAMEL+1] = "\000";	/* Output cgats file base name */
 	char calname[MAXNAMEL+1] = "\000";	/* Calibration file name */
@@ -171,8 +177,8 @@ int main(int argc, char *argv[])
 	int errc;							/* Return value from new_disprd() */
 	int rv;
 
-	set_exe_path(argv[0]);			/* Set global exe_path and error_program */
-	setup_spyd2();					/* Load firware if available */
+	set_exe_path(argv[0]);				/* Set global exe_path and error_program */
+	setup_spyd2(NULL);					/* Load firware if available */
 
 #ifdef DEBUG_OFFSET
 	ho = 0.8;
@@ -251,7 +257,7 @@ int main(int argc, char *argv[])
 				override = 0;
 #endif /* UNIX */
 			/* COM port  */
-			} else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
+			} else if (argv[fa][1] == 'c') {
 				fa = nfa;
 				if (na == NULL) usage("Paramater expected following -c");
 				comport = atoi(na);
@@ -292,12 +298,35 @@ int main(int argc, char *argv[])
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
+			/* Black background */
+			} else if (argv[fa][1] == 'B') {
+				blackbg = 1;
+
 			} else if (argv[fa][1] == 'K') {
 				docalib = 1;
 
 			/* High res mode */
 			} else if (argv[fa][1] == 'H') {
 				highres = 1;
+
+			/* Change color callout */
+			} else if (argv[fa][1] == 'C') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expected after -C");
+				callout = na;
+
+			/* Serial port flow control */
+			} else if (argv[fa][1] == 'W') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expected after -W");
+				if (na[0] == 'n' || na[0] == 'N')
+					fc = fc_none;
+				else if (na[0] == 'h' || na[0] == 'H')
+					fc = fc_Hardware;
+				else if (na[0] == 'x' || na[0] == 'X')
+					fc = fc_XonXOff;
+				else
+					usage("-W parameter '%s' not recognised",na);
 
 			} else if (argv[fa][1] == 'D') {
 				debug = 1;
@@ -322,7 +351,8 @@ int main(int argc, char *argv[])
 	}
 
 	if (docalib) {
-		if ((rv = disprd_calibration(itype, comport, dtype, nocal, disp, override, patsize, ho, vo, verb, debug)) != 0) {
+		if ((rv = disprd_calibration(itype, comport, fc, dtype, nocal, disp, blackbg,
+		                               override, patsize, ho, vo, verb, debug)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
 		}
 	}
@@ -491,8 +521,8 @@ int main(int argc, char *argv[])
 		cal[0][0] = -1.0;	/* Not used */
 	}
 
-	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, dtype, nocal, highres, 0, cal, disp,
-	                     override, patsize, ho, vo, spectral, verb, VERBOUT, debug,
+	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, nocal, highres, 0, cal,
+	          disp, blackbg, override, callout, patsize, ho, vo, spectral, verb, VERBOUT, debug,
 	                     "fake.icm")) == NULL)
 		error("dispread failed with '%s'\n",disprd_err(errc));
 
@@ -617,8 +647,13 @@ int main(int argc, char *argv[])
 
 		free(setel);
 	}
+
+
 	if (ocg->write_name(ocg, outname))
 		error("Write error : %s",ocg->err);
+
+	if (verb)
+		printf("Written '%s'\n",outname);
 
 	free(cols);
 	ocg->del(ocg);		/* Clean up */

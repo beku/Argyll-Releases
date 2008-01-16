@@ -63,14 +63,14 @@
 	[0.0030, 0.0136, 0.9834] to [0.0000, 0.0000, 1.0000]
 	[Susstrunk & Brill, IS&T/SID 14th Color Imaging Conference Late Breaking News sublement]
 
-	The post-adaptation non-linearity response has had a straigt
+	The post-adaptation non-linearity response has had a straight
 	line negative extension added, that preserves negative values
 	but expands them more than the positive characteristic on conversion
 	to the CAM, and therefore compresses such values more on
 	coversion from the CAM back to XYZ. This helps minimise 
-	shifts int resulting color for CAM values near or just below zero.
-	The positive region has a tangential linear extension, so that the
-	range of values is not limited.
+	shifts in resulting color for CAM values near or just below zero.
+	The positive region has a tangential linear extension added, so
+	that the range of values is not limited.
 		
 	The preliminary saturation denominator value is limited to a minimum
 	value of 0.305 (the value it has for zero XYZ input), to prevent
@@ -82,6 +82,10 @@
 	denominator is also limited to the value it would have if ttA was 0.305,
 	ensuring that saturation denominator has continuity
 	with all possible values of a and b;   (???)
+
+~~~~~ Add: Re-arrange ss equation into separated effects,
+	k1, k2, k3, and then limit these to avoid divide by zero
+	and sign change errors in fwd and bwd converson.
 
 	To cope with -ve acromatic response values, rather than
 	using a symetric conversion to J, a straight line segment
@@ -744,10 +748,10 @@ struct _cam02 *s,
 double XYZ[3],
 double Jab[3]
 ) {
-	int i, j;
+	int i;
 	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbc[3];
 	double a, b, ja, jb, J, JJ, C, cC, h, e, A, ssk, ss;
-	double tt, cJ, mJ, ttA, cttA, ttd, issp;
+	double tt, cJ, mJ, ttA, cttA;
 	double k1, k2, k3;
 
 #ifdef DIAG2		/* Incase in == out */

@@ -37,8 +37,6 @@
 #include "numlib.h"
 #include "counters.h"	/* Counter macros */
 
-extern void error(char *fmt, ...), warning(char *fmt, ...);
-
 #define DEBUG
 #define VERBOSE
 
@@ -55,8 +53,9 @@ static void get_out_range(rspl *s, double *min, double *max);
 static double get_out_scale(rspl *s);
 static unsigned int get_next_touch(rspl *s);
 static int within_restrictedsize(rspl *s);
-static int interp_rspl_sx(rspl *s, co *p);
-//static int interp_rspl_nl(rspl *s, co *p);
+static int interp_rspl_sx(rspl *s, co *pp);
+static int part_interp_rspl_sx(rspl *s, co *p1, co *p2);
+static int interp_rspl_nl(rspl *s, co *p);
 int is_mono(rspl *s);
 static int set_rspl(rspl *s, int flags, void *cbctx,
                         void (*func)(void *cbctx, double *out, double *in),
@@ -84,10 +83,6 @@ void free_spline(rspl *s);
 int opt_rspl_imp(struct _rspl *s, int flags, int tdi, int adi, double **vdata,
 	double (*func)(void *fdata, double *inout, double *surav, int first, double *cw),
 	void *fdata, datai glow, datai ghigh, int gres[MXDI], datao vlow, datao vhigh);
-
-/* Implemented in gcso.c: */
-int init_gcso(rspl *s);
-void free_gcso(rspl *s);
 
 /* Convention is to use:
    i to index grid points u.a
@@ -140,11 +135,13 @@ new_rspl(
 	init_rev(s);
 	init_grid(s);
 	init_spline(s);
-	init_gcso(s);
 
 	/* Set pointers to methods in this file */
 	s->del           = free_rspl;
 	s->interp        = interp_rspl_sx;	/* Default to simplex interp */
+//printf("!!!! rspl.c using interp_rspl_nl !!!!");
+//	s->interp        = interp_rspl_nl;
+	s->part_interp   = part_interp_rspl_sx;
 	s->set_rspl      = set_rspl;
 	s->scan_rspl     = scan_rspl;
 	s->re_set_rspl   = re_set_rspl;
@@ -161,9 +158,9 @@ new_rspl(
 
 /* Free the rspl and all its contents */
 static void free_rspl(rspl *s) {
+	int e;
 
 	/* Free everying contained */
-	free_gcso(s);		/* Free any gcso data */
 	free_data(s);		/* Free any scattered data */
 	free_rev(s);		/* Free any reverse lookup data */
 	free_grid(s);		/* Free any grid data */
@@ -171,6 +168,10 @@ static void free_rspl(rspl *s) {
 	/* Free spline interpolation data ~~~~ */
 
 	/* Free structure */
+	for (e = 0; e < s->di; e++) {
+		if (s->g.iwidth[e] != NULL)
+			free(s->g.iwidth[e]);
+	}
 	if (s->g.hi != s->g.a_hi) {
 		free(s->g.hi);
 		free(s->g.fhi);
@@ -371,6 +372,9 @@ rspl *s
 /* Do a forward interpolation using an simplex interpolation method. */
 /* Return 0 if OK, 1 if input was clipped to grid */
 /* Return 0 on success, 1 if clipping occured, 2 on other error */
+// ~~999
+int rspldb = 0;
+
 static int interp_rspl_sx(
 rspl *s,
 co *p			/* Input value and returned function value */
@@ -378,7 +382,110 @@ co *p			/* Input value and returned function value */
 	int e, di  = s->di;
 	int f, fdi = s->fdi;
 	double we[MXDI];		/* Coordinate offset within the grid cell */
-	int    si[MXDI];		/* we[] Sort index, [0] = smalest */
+	int    si[MXDI];		/* we[] Sort index, [0] = smallest */
+	float *gp;				/* Pointer to grid cube base */
+	int rv = 0;				/* Register clip */
+
+	/* We are using a simplex (ie. tetrahedral for 3D input) interpolation. */
+
+if (rspldb && di == 3) printf("~1 in %f %f %f\n", p->p[0], p->p[1], p->p[2]);
+
+	/* Figure out which grid cell the point falls into */
+	{
+		gp = s->g.a;					/* Base of grid array */
+		for (e = 0; e < di; e++) {
+			int gres_1 = s->g.res[e]-1;
+			double pe, t;
+			int mi;
+			pe = p->p[e];
+			if (pe < s->g.l[e]) {		/* Clip to grid */
+				pe = s->g.l[e];
+				rv = 1;
+			}
+			if (pe > s->g.h[e]) {
+				pe = s->g.h[e];
+				rv = 1;
+			}
+			t = (pe - s->g.l[e])/s->g.w[e];
+			mi = (int)floor(t);			/* Grid coordinate */
+			if (mi < 0)					/* Limit to valid cube base index range */
+				mi = 0;
+			else if (mi >= gres_1)
+				mi = gres_1-1;
+			gp += mi * s->g.fci[e];		/* Add Index offset for grid cube base in dimen */
+			we[e] = t - (double)mi;		/* 1.0 - weight */
+if (rspldb && di == 3) printf("~1 e = %d, ix = %d, we = %f\n", e, mi, we[e]);
+		}
+	}
+
+	/* Do selection sort on coordinates */
+	{
+		for (e = 0; e < di; e++)
+			si[e] = e;						/* Initial unsorted indexes */
+		for (e = 0; e < (di-1); e++) {
+			double cosn;
+			cosn = we[si[e]];				/* Current smallest value */
+			for (f = e+1; f < di; f++) {	/* Check against rest */
+				int tt;
+				tt = si[f];
+				if (cosn > we[tt]) {
+					si[f] = si[e]; 			/* Exchange */
+					si[e] = tt;
+					cosn = we[tt];
+				}
+			}
+		}
+	}
+if (rspldb && di == 3) printf("~1 si[] = %d %d %d\n", si[0],si[1],si[2]);
+
+	/* Now compute the weightings, simplex vertices and output values */
+	{
+		double w;		/* Current vertex weight */
+
+		w = 1.0 - we[si[di-1]];		/* Vertex at base of cell */
+		for (f = 0; f < fdi; f++)
+			p->v[f] = w * gp[f];
+
+if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
+
+		for (e = di-1; e > 0; e--) {		/* Middle verticies */
+			w = we[si[e]] - we[si[e-1]];
+			gp += s->g.fci[si[e]];			/* Move to top of cell in next largest dimension */
+			for (f = 0; f < fdi; f++)
+				p->v[f] += w * gp[f];
+if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
+		}
+
+		w = we[si[0]];
+		gp += s->g.fci[si[0]];		/* Far corner from base of cell */
+		for (f = 0; f < fdi; f++)
+			p->v[f] += w * gp[f];
+if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
+if (rspldb && di == 3) printf("~1 outval  %f %f %f\n", p->v[0], p->v[1], p->v[2]);
+	}
+	return rv;
+}
+
+/* ============================================ */
+/* Do forward (partial) interpolation to allow input & output curves to be applied, */
+/* and allow input delta E to be estimated from output delta E. */
+/* Call with input value in p1[0].p[], */
+/* In order smallest to largest weight: */
+/* Return di+1 vertex values in p1[]].v[] and */
+/* 0-1 sub-cell weight values as (p1[].p[0] - p1[].p[1]). */
+/* Optionally in input channel order: */
+/* Returns di+1 partial derivatives + base value in p2[].v[], */
+/* with matching weight values for each in p2[].p[0] (last weight = 1)*/
+/* Return 0 if OK, 1 if input was clipped to grid */
+static int part_interp_rspl_sx(
+struct _rspl *s,	/* this */
+co *p1,
+co *p2			/* optional - return partial derivatives for each input channel */
+) {
+	int e, di  = s->di;
+	int f, fdi = s->fdi;
+	double we[MXDI];		/* Coordinate offset within the grid cell */
+	int    si[MXDI];		/* we[] Sort index, [0] = smallest */
 	float *gp;				/* Pointer to grid cube base */
 	int rv = 0;				/* Register clip */
 
@@ -391,7 +498,7 @@ co *p			/* Input value and returned function value */
 			int gres_1 = s->g.res[e]-1;
 			double pe, t;
 			int mi;
-			pe = p->p[e];
+			pe = p1[0].p[e];
 			if (pe < s->g.l[e]) {		/* Clip to grid */
 				pe = s->g.l[e];
 				rv = 1;
@@ -429,32 +536,129 @@ co *p			/* Input value and returned function value */
 			}
 		}
 	}
-	/* Now compute the weightings, simplex vertices and output values */
+	/* Now compute the vertex values that correspond */
+	/* to the input faction weightings + fixed value */
+	/* Scale the slopes + weights to make slopes */
+	/* valid as partial derivative of input values */
 	{
-		double w;		/* Current vertex weight */
 
-		w = 1.0 - we[si[di-1]];		/* Vertex at base of cell */
+		p1[di].p[0] = 1.0;
+		p1[di].p[1] = we[si[di-1]];		/* Vertex at base of cell */
 		for (f = 0; f < fdi; f++)
-			p->v[f] = w * gp[f];
+			p1[di].v[f] = gp[f];
 
-		for (e = di-1; e > 0; e--) {		/* Middle verticies */
-			w = we[si[e]] - we[si[e-1]];
-			gp += s->g.fci[si[e]];			/* Move to top of cell in next largest dimension */
+		if (p2 != NULL) {
 			for (f = 0; f < fdi; f++)
-				p->v[f] += w * gp[f];
+				p2[di].v[f] = gp[f];	/* Constant term @ vertex base */
+			p2[di].p[0] = 1.0;
 		}
+		
+		for (e = di-1; e >= 0; e--) {	/* Middle verticies to far vertex from base */
+			int ee = si[e];
+			float *lgp = gp;			/* Last gp[] */
 
-		w = we[si[0]];
-		gp += s->g.fci[si[0]];		/* Far corner from base of cell */
-		for (f = 0; f < fdi; f++)
-			p->v[f] += w * gp[f];
+			gp += s->g.fci[ee];			/* Move to top of cell in next largest dimension */
+
+			p1[e].p[0] = we[si[e]];
+			p1[e].p[1] = e > 0 ? we[si[e-1]] : 0.0;
+			for (f = 0; f < fdi; f++)
+				p1[e].v[f] = gp[f];
+
+			if (p2 != NULL) {
+				for (f = 0; f < fdi; f++)
+					p2[ee].v[f] = (gp[f] - lgp[f]) / s->g.w[ee];
+				p2[ee].p[0] = we[ee] * s->g.w[ee];
+			}
+		}
 	}
 	return rv;
 }
 
+#ifdef NEVER
+/* Test out part_interp_rspl_sx() */
+/* Designed to test with a CMYK->Lab lookup */
+static int interp_rspl_sx(
+rspl *s,
+co *p			/* Input value and returned function value */
+) {
+	int rv, rv2;
+	int e, f, m;
+	co p1[MXDI+1];
+	co p2[MXDI+1];
+	co p3;
+	double v1[MXDO];
+	double v2[MXDO];
+
+	for (e = 0; e < s->di; e++) {
+		p1[0].p[e] = p->p[e];
+		p3.p[e] = p->p[e];
+	}
+	
+	rv = _interp_rspl_sx(s, p);
+
+	if ((s->di != 4 || s->fdi != 3)
+	 && (s->di != 3 || s->fdi != 4))
+		return rv;
+
+	rv2 = part_interp_rspl_sx(s, p1, p2);
+
+	/* Check interpolation values returned in p1 and p2 form */
+	for (f = 0; f < s->fdi; f++)
+		v1[f] = v2[f] = 0.0;
+
+	for (e = 0; e <= s->di; e++) {
+		for (f = 0; f < s->fdi; f++) {
+			/* We could converts p1[].p[0] and p1[].p[1] through sub curve lookup, */
+			/* and p1[].v[] though inverse output curve lookup, */
+			/* then convert v1[] through output curve lookup. */
+			v1[f] += p1[e].v[f] * (p1[e].p[0] - p1[e].p[1]);
+
+			/* v2 is using base + partial derivatives */
+			v2[f] += p2[e].v[f] * p2[e].p[0];
+		}
+	}
+
+	if (s->di == 4) {
+		printf("~1 %f %f %f %f ->\n",p->p[0], p->p[1], p->p[2], p->p[3]);
+		printf("~1 ref    %d -> %f %f %f\n", rv, p->v[0], p->v[1], p->v[2]);
+		printf("~1 check1 %d -> %f %f %f\n", rv2, v1[0], v1[1], v1[2]);
+		printf("~1 check2 %d -> %f %f %f\n", rv2, v2[0], v2[1], v2[2]);
+	} else {
+		printf("~1 %f %f %f ->\n",p->p[0], p->p[1], p->p[2]);
+		printf("~1 ref    %d -> %f %f %f %f\n", rv, p->v[0], p->v[1], p->v[2], p->v[3]);
+		printf("~1 check1 %d -> %f %f %f %f\n", rv2, v1[0], v1[1], v1[2], v1[3]);
+		printf("~1 check2 %d -> %f %f %f %f\n", rv2, v2[0], v2[1], v2[2], v2[3]);
+	}
+
+	/* Check partial derivs in p2 */
+	for (m = 0; m < s->di; m++) {
+
+		p3.p[m] += 1e-5;
+
+		_interp_rspl_sx(s, &p3);
+		for (f = 0; f < s->fdi; f++)
+			p3.v[f] = (p3.v[f] - p->v[f])/1e-5;
+	
+		if (s->di == 4) {
+			printf("~1 deriv %d:\n", m);
+			printf("~1 ref del   %f %f %f\n", p3.v[0], p3.v[1], p3.v[2]);
+			printf("~1 check del %f %f %f\n", p2[m].v[0], p2[m].v[1], p2[m].v[2]);
+		} else {
+			printf("~1 deriv %d:\n", m);
+			printf("~1 ref del   %f %f %f %f\n", p3.v[0], p3.v[1], p3.v[2], p3.v[3]);
+			printf("~1 check del %f %f %f %f\n", p2[m].v[0], p2[m].v[1], p2[m].v[2], p2[m].v[3]);
+		}
+
+		p3.p[m] -= 1e-5;
+	}
+
+	return rv;
+}
+#endif
+
 /* ============================================ */
 
-#ifdef NEVER	/* Not currently used */
+/* Alternate, not currently used */
 /* Do a forward interpolation using an n-linear method. */
 /* Return 0 if OK, 1 if input was clipped to grid */
 /* Alternative to interp_rspl_sx */
@@ -536,7 +740,6 @@ co *p			/* Input value and returned function value */
 
 	return rv;
 }
-#endif
 
 /* ============================================ */
 /* Non-mono calculations */
@@ -695,7 +898,7 @@ static int set_rspl(
 	/* To make this clut function cache friendly, we use the pseudo-hilbert */
 	/* count sequence. This keeps each point close to the last in the */
 	/* multi-dimensional space. */ 
-	rpsh_init(&counter, s->di, gres, gc);	/* Initialise counter */
+	rpsh_init(&counter, s->di, (unsigned int *)gres, gc);	/* Initialise counter */
 	for (;;) {
 
 		/* Compute grid pointer and input sample values */
@@ -873,7 +1076,7 @@ int change		/* Flag - nz means change values, 0 means scan values */
 	/* To make this clut function cache friendly, we use the pseudo-hilbert */
 	/* count sequence. This keeps each point close to the last in the */
 	/* multi-dimensional space. */ 
-	rpsh_init(&counter, s->di, s->g.res, gc);	/* Initialise counter */
+	rpsh_init(&counter, s->di, (unsigned int *)s->g.res, gc);	/* Initialise counter */
 	for (;;) {
 
 		/* Compute grid pointer and input sample values */

@@ -554,6 +554,9 @@ main(int argc, char *argv[]) {
 			error ("write vrml failed on '%s'",out_name);
 	}
 
+	if (verb) {
+		printf("Total volume of gamut is %f cubic colorspace units\n",gam->volume(gam));
+	}
 	gam->del(gam);
 
 	return 0;

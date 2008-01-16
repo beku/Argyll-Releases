@@ -82,7 +82,8 @@ struct _i1disp {
 	INST_OBJ_BASE
 
 	int       dtype;			/* Device type: 0 = i1D1, 1 = i1D2 */	
-	int       lite;				/* 0 = normal, 1 = "Lite" */
+	int       lite;				/* i1D2: 0 = normal, 1 = "Lite" */
+	int       chroma4;			/* 0 = other, 1 = Sequel Chroma 4 (i1D1 based) */
 	inst_mode mode;				/* Currently selected mode */
 
 	inst_opt_mode trig;			/* Reading trigger mode */

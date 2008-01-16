@@ -12,7 +12,11 @@
 Display test patches on a monitor, read the colorimetric value result
 with the colorimeter, and create the chart readings file. The type of
 instrument is determined by the communication port
-selected. Emission and display measurement instruments are supported.
+selected. Emission and display measurement instruments are supported.<br>
+<br>
+If you want to read a display manually rather than automatically, see <a
+ href="chartread.html">chartread</a> and the <a href="chartread.html#d">-d</a>
+option.<br>
 <h3>Usage</h3>
 <small style="font-family: monospace;">dispread [-options]<i> inoutfile</i><br>
 &nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -53,7 +57,10 @@ test window and scale it<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.</font><br
+ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.<br>
+&nbsp;</font><font size="-1"><span style="font-family: monospace;"><a
+ href="#B">-B</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Fill whole screen with black background</span></font><br
  style="font-family: monospace;">
 <small style="font-family: monospace;">&nbsp;<span
  style="text-decoration: underline;"></span><a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -70,7 +77,15 @@ Disable auto calibration of instrument<br>
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; Use high resolution spectrum mode (if
-available)</span></font><br>
+available)<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="dispcal.html#C">-C "command"</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Invoke shell "command" each
+time a color is set</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="dispcal.html#W">-W n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><br>
 <small style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print debug
 diagnostics to stderr</small><br>
@@ -210,6 +225,11 @@ comma). For example, to create a double sized test window at the top
 right of the screen, use <span style="font-weight: bold;">-p 1,0,2</span>
 .<br>
 <br>
+<a name="B"></a> The <span style="font-weight: bold;">-B</span>
+flag causes the while screen behind the test window to be masked with
+black. This can aid black accuracy when measuring CRT displays or
+projectors.<br>
+<br>
 <a name="n"></a>When running on a UNIX based system that used the X11
 Windowing
 System, <b>dispread</b> normally selects the override redirect so that
@@ -250,6 +270,27 @@ each measurement session though.<br>
 turns on high resolution spectral mode, if the instrument supports it.
 See <a href="instruments.html">Operation of particular instruments</a>
 for more details.<br>
+<br>
+<a name="C"></a> The -<span style="font-weight: bold;">C</span> <span
+ style="font-weight: bold;">"command" </span>option
+allows a method of relaying each test value to some other display than
+that on the system running dispread (for instance, a photo frame, PDA
+screen etc.), by causing the given command to be invoked to the shell,
+with six arguments. The first three arguments are the RGB test color as
+integers in the range 0 to 255, the second three parameters are the RGB
+test color as floating point numbers in the range 0.0 to 1.0. The
+script or utility should relay the given color to the screen in some
+manner (e.g. by generating a raster file of the given color and sending
+it to the display being profiled), before returning. Note that a test
+window will also be creating on the system running dispread.<br>
+<br>
+<a name="W"></a>The <b>-W</b> <span style="font-weight: bold;">n|h|x</span>
+parameter overrides the default serial communications
+flow control setting. The value <span style="font-weight: bold;">n</span>
+turns all flow control off, <span style="font-weight: bold;">h</span>
+sets hardware handshaking, and <span style="font-weight: bold;">x</span>
+sets Xon/Xoff handshaking. This commend may be useful in workaround
+serial communications issues with some systems and cables. <br>
 <br>
 <a name="D"></a>The <b>-D</b> flag causes communications
 and other instrument diagnostics to be printed to stdout. A level can

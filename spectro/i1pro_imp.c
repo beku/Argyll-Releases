@@ -58,7 +58,8 @@
 
 #undef SELF_CONT		/* Use self contained spectral->XYZ, else use xicc */
 #define SINGLE_READ		/* Use a single USB read for scan to eliminate latency issues. */
-#define HIGH_RES		/* Enable high resolution spectral mode code */
+#define HIGH_RES		/* Enable high resolution spectral mode code. Dissable */
+						/* to break dependency on rspl library. */
 
 /* Debug */
 #undef DEBUG			/* Turn on debug printfs */
@@ -73,8 +74,8 @@
 #undef FAKE_AMBIENT		/* Fake the ambient mode for a Rev A */
 
 
-#define DISP_INTT 1.0			/* Seconds per reading in display spot mode */
-								/* More improves repeatability */
+#define DISP_INTT 2.0			/* Seconds per reading in display spot mode */
+								/* More improves repeatability in dark colors */
 #define EMIS_SCALE_FACTOR 0.7335 /* Emission mode scale factor */ 
 #define AMB_SCALE_FACTOR 0.7657	/* Ambient mode scale factor */ 
 								/* These are only approximate, and were derived */
@@ -574,7 +575,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->emiss = 1;
 					s->adaptive = 0;
 
-					s->inttime = DISP_INTT;		/* Integration time (typically 1.0 sec) */
+					s->inttime = DISP_INTT;		/* Integration time (typically 2.0 sec) */
 
 					s->dadaptime = 0.0;
 					s->wadaptime = 0.10;
@@ -4698,7 +4699,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 		gres[0] = 128;
 		avgdev[0] = 0.0;
 		
-		raw2wav->fit_rspl(raw2wav, 0, sd, m->nwav1+1, glow, ghigh, gres, NULL, NULL, 0.5, avgdev);
+		raw2wav->fit_rspl(raw2wav, 0, sd, m->nwav1+1, glow, ghigh, gres, NULL, NULL, 0.5, avgdev, NULL);
 	}
 
 #ifdef COMPUTE_DISPERSION
@@ -5256,7 +5257,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 				gres[0] = m->nwav2;
 				avgdev[0] = 0.0;
 				
-				trspl->fit_rspl_w(trspl, 0, sd, i, glow, ghigh, gres, NULL, NULL, 0.5, avgdev);
+				trspl->fit_rspl_w(trspl, 0, sd, i, glow, ghigh, gres, NULL, NULL, 0.5, avgdev, NULL);
 
 				if ((*ref2 = (double *)calloc(m->nwav2, sizeof(double))) == NULL) {
 					raw2wav->del(raw2wav);
@@ -6837,9 +6838,11 @@ i1pro_terminate_switch(
 		if (isdeb) fprintf(stderr,"Terminate Switch Handling done, ICOM err 0x%x\n",se);
 	}
 
-	/* In case the above didn't work, reset the end point */
+#ifdef NEVER	/* Can cause segmentation fault on Linux */
+	/* In case the above didn't work, clear halt */
 	msec_sleep(50);
-	p->icom->usb_resetep(p->icom, 0x84);
+	p->icom->usb_clearhalt(p->icom, 0x84);
+#endif
 	
 	p->icom->debug = isdeb;
 	return rv;

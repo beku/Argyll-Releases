@@ -56,6 +56,7 @@ static inst_code init_coms(
 inst *p,
 int comport,		/* Serial port number */
 baud_rate br,		/* Baud rate */
+flow_control fc,	/* Flow control */
 double tout) {		/* Timeout */
 	return inst_unsupported;
 }

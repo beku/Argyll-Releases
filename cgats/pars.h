@@ -10,7 +10,7 @@
  * Copyright 1995, 1996, 2002 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licensed with a free use license:-
+ * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
  */
 
@@ -155,8 +155,8 @@ struct _parse {
 	void (*del)(struct _parse *p);				/* Delete the object */
 	void (*reset_del)(struct _parse *p);		/* Reset the parsing delimiters */
 	void (*add_del)(struct _parse *p,			/* Add to the parsing delimiters */
-	    unsigned char *t, unsigned char *nr,
-	    unsigned char *c, unsigned char *q);
+	    char *t, char *nr,
+	    char *c, char *q);
 	int (*read_line)(struct _parse *p);			/* Read in a line. Return 0 if read failed, */
 												/* -1 on other error */
 	char *(*get_token)(struct _parse *p);		/* Return a pointer to the next token, */
@@ -174,7 +174,7 @@ struct _parse {
 	int to;			/* Token parsing offset into b */
 	char *tb;		/* Token buffer */
 	int tbs;		/* Token buffer size */
-	unsigned char delf[256];		/* Parsing delimiter flags */
+	char delf[256];		/* Parsing delimiter flags */
 	/* Parsing flags */
 #define PARS_TERM	0x01		/* Terminates a token */
 #define PARS_SKIP	0x02		/* Character is not read */

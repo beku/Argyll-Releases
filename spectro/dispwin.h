@@ -69,10 +69,11 @@ typedef struct {
 	CGDirectDisplayID ddid;
 #endif /* __APPLE__ */
 #if defined(UNIX) && !defined(__APPLE__)
-	char *name;			/* Display name */
-	int screen;			/* Screen to select */
-	int uscreen;		/* Underlying screen */
-	int rscreen;		/* Underlying RAMDAC screen */
+	char *name;				/* Display name */
+	int screen;				/* Screen to select */
+	int uscreen;			/* Underlying screen */
+	int rscreen;			/* Underlying RAMDAC screen */
+	char *icc_atom_name;	/* Name of ICC profile atom for this display */
 #endif /* UNIX */
 } disppath;
 
@@ -115,6 +116,9 @@ struct _dispwin {
 	/* Plot instance information */
 	int sx,sy;			/* Screen offset in pixels */
 	int sw,sh;			/* Screen width and height in pixels*/
+	int ww,wh;			/* Window width and height */
+	int tx,ty;			/* Test area within window offset in pixels */
+	int tw,th;			/* Test area width and height in pixels */
 
 	double rgb[3];		/* Current color (full resolution) */
 	double r_rgb[3];	/* Current color (raster value) */
@@ -122,6 +126,9 @@ struct _dispwin {
 	int donat;			/* Do native output */
 	ramdac *or;			/* Original ramdac contents */
 	ramdac *r;			/* Ramdac in use for native mode */
+	int blackbg;		/* NZ if black full screen background */
+
+	char *callout;		/* if not NULL - set color Shell callout routine */
 
 #ifdef NT
 	HDC hdc;			/* Handle to display */
@@ -138,6 +145,7 @@ struct _dispwin {
 	WindowRef mywindow;
 	CGrafPtr port;
 	CGContextRef mygc;
+	int firstdraw;			/* Flag, nz if black background has been drawn */
 	int btf;				/* Flag, nz if window has been brought to the front once */
 	int winclose;			/* Flag, set to nz if window was closed */
 #endif /* __APPLE__ */
@@ -177,6 +185,9 @@ struct _dispwin {
 	/* Return nz on error */
 	int (*set_color)(struct _dispwin *p, double r, double g, double b);
 
+	/* Set a shell set color callout command line */
+	void (*set_callout)(struct _dispwin *p, char *callout);
+
 	/* Destroy ourselves */
 	void (*del)(struct _dispwin *p);
 
@@ -189,6 +200,7 @@ dispwin *new_dispwin(
 	double hoff, double voff,		/* Offset from c. in fraction of screen, range -1.0 .. 1.0 */
 	int nowin,						/* NZ if no window should be created - RAMDAC access only */
 	int native,						/* NZ if ramdac should be bypassed instead of being used */
+	int blackbg,					/* NZ if whole screen should be filled with black */
 	int override					/* NZ if override_redirect is to be used on X11 */
 );
 

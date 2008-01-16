@@ -21,15 +21,11 @@
 #define __DRIVER_API_H__
 
 enum {
-  LIBUSB_DEBUG_ERR = 1,
-  LIBUSB_DEBUG_MSG = 2
+  LIBUSB_DEBUG_OFF,
+  LIBUSB_DEBUG_ERR,
+  LIBUSB_DEBUG_MSG,
 };
 
-
-/* #define LIBUSB_VERSION_MAJOR VERSION_MAJOR */
-/* #define LIBUSB_VERSION_MINOR VERSION_MINOR */
-/* #define LIBUSB_VERSION_MICRO VERSION_MICRO */
-/* #define LIBUSB_VERSION_NANO  VERSION_NANO */
 
 /* 64k */
 #define LIBUSB_MAX_READ_WRITE 0x10000
@@ -103,9 +99,6 @@ enum {
 #define LIBUSB_IOCTL_RELEASE_INTERFACE CTL_CODE(FILE_DEVICE_UNKNOWN,\
 0x816, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
-#define LIBUSB_IOCTL_GET_DEVICE_INFO CTL_CODE(FILE_DEVICE_UNKNOWN,\
-0x817, METHOD_BUFFERED, FILE_ANY_ACCESS)
-
 #include <pshpack1.h> 
 
 
@@ -151,6 +144,7 @@ typedef struct {
       unsigned int type;
       unsigned int index;
       unsigned int language_id;
+      unsigned int recipient;
     } descriptor;    
     struct
     {
@@ -163,13 +157,6 @@ typedef struct {
       unsigned int micro;
       unsigned int nano;
     } version;
-    struct
-    {
-      unsigned int bus;
-      unsigned int port;
-      unsigned int id;
-      unsigned int parent_id;
-    } device_info;
   };
 } libusb_request;
     

@@ -42,9 +42,7 @@
 #include "cgats.h"		/* CGAT format */	
 #include "insttypes.h"	/* Instrument type support */
 #include "mpp.h"		/* model printer profile support */
-#include "xfit1.h"		/* Input/Output per channel curve fitting support - original */
-#include "xfit2.h"		/* Input/Output per channel curve fitting support - algorithm 2 */
-#include "xfit3.h"		/* Input/Output per channel curve fitting support - algorithm 3 */
+#include "moncurve.h"	/* monotonic curve support */
 
 #define XICC_USE_HK 1	/* Set to 1 to use Helmholtz-Kohlraush in all CAM conversions */
 
@@ -207,8 +205,8 @@ struct _xicc {
 	/* "create" flags */
 #define ICX_SET_WHITE       0x0001		/* find, set and make relative to the white point */
 #define ICX_SET_BLACK       0x0002		/* find and set the black point */
-#define ICX_NO_IN_LUTS      0x0040		/* If LuLut: Don't create input (Device) curves. */
-#define ICX_NO_IN_SUBG_LUTS 0x0080		/* If LuLut: Don't create input sub-grid (Device) curves. */
+#define ICX_NO_IN_SHP_LUTS  0x0040		/* If LuLut: Don't create input (Device) shaper curves. */
+#define ICX_NO_IN_POS_LUTS  0x0080		/* If LuLut: Don't create input (Device) poistion curves. */
 #define ICX_NO_OUT_LUTS     0x0100		/* If LuLut: Don't create output (PCS) curves. */
 #define ICX_EXTRA_FIT       0x0400		/* If LuLut: Don't create output (PCS) curves. */
 #define ICX_VERBOSE         0x8000		/* Turn on verboseness during creation */
@@ -218,7 +216,7 @@ struct _xicc {
 	                                  icmLookupOrder order,		/* Search Order */
 	                                  int flags,				/* white/black point flags */
 	                                  int no,					/* Number of points */
-	                                  co *points,				/* Array of input points */
+	                                  cow *points,				/* Array of input points */
 	                                  double smooth,			/* RSPL smoothing factor, */
 	                                                                        /* -ve if raw */
 	                                  double avgdev,			/* Avge Dev. of points */
@@ -274,8 +272,8 @@ xicc *new_xicc(icc *picc);
 	icxcam      *cam;						/* CAM conversion */						\
 																						\
 	/* Attributes inhereted by ixcLu's */												\
-	int noiluts;	/* Flag - If LuLut: Don't create input (Device) curves. */			\
-	int noisluts;	/* Flag - If LuLut: Don't create input (Device) sub-grid curves. */	\
+	int noisluts;	/* Flag - If LuLut: Don't create input (Device) shaper curves. */			\
+	int noipluts;	/* Flag - If LuLut: Don't create input (Device) position curves. */	\
 	int nooluts;	/* Flag - If LuLut: Don't create output (PCS) curves. */			\
 	int nearclip;	/* Flag - If clipping occurs, return the nearest solution, */		\
 	int mergeclut;	/* Flag - If LuLut: Merge output() and out_abs() into clut(). */	\

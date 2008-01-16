@@ -40,9 +40,9 @@ int main() {
 			tse += err * err;
 //			tse += fabs(err);
 		}
-		/* Apply adjustments and corrections */
+		/* Apply adjustments and corrections to error squared */
 		tse *= pow((res-1.0), 4.0);					/* Aprox. geometric resolution factor */
-		tse /= pow((res-2.0),(double)di);	/* Average squared non-smoothness */
+		tse /= pow((res-2.0),(double)di);			/* Average squared non-smoothness */
 
 //		tse /= (di * pow((res-2.0),(double)di));	/* Average squared non-smoothness */
 		printf("Res %d, tse = %f\n",res,tse);

@@ -25,7 +25,7 @@
 
 /* NOTE NOTE NOTE: */
 /* Need to add a new instrument to new_inst() in */
-/* inst.c as well !!! *.
+/* inst.c as well !!! */
 
 /* Utility functions */
 
@@ -135,6 +135,7 @@ unsigned short idProduct) {
 
 	if (idVendor  == 0x0670) {		/* Sequel Imaging */
 		if (idProduct == 0x0001)	/* Monaco Optix / i1 Display 1 */
+									/* Sequel Chroma 4 / i1 Display 1 */
 			return instI1Display;	/* Alias to the i1 Display */
 	}
 

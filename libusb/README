@@ -16,7 +16,8 @@ A mailing list is located at:
 NOTICE
 ======
 
-This library has been modified to fix certain bugs on OS X - GWG
+This library has been modified to fix certain concurreny
+issues in darwin.c and linux.c - GWG
 
 Installation
 ============

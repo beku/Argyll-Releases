@@ -117,11 +117,11 @@ struct _xsp2cie {
 
 	/* FWA compensation */
 	double bw;		/* Intergration bandwidth */
-	xspect emit;	/* Estimated FWA emmission spectrum */
+	xspect emits;	/* Estimated FWA emmission spectrum */
 	xspect media;	/* Estimated base media (ie. minus FWA) */
 	xspect instr;	/* Normalised instrument illuminant spectrum */
 	xspect illum;	/* Normalised target illuminant spectrum */
-	double Sm;		/* FWA Stimulation level for emit contribution */
+	double Sm;		/* FWA Stimulation level for emits contribution */
 	double FWAc;	/* FWA content (informational) */
 
 	/* Public: */

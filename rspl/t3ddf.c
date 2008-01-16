@@ -223,6 +223,7 @@ int main(int argc, char *argv[]) {
 	           low, high,			/* Default data scale */
 	           1.0,					/* Smoothing */
 	           avgdev,				/* Average Deviation */
+	           NULL,				/* iwidth */
                wweight,				/* weak function weight */
 	           NULL,				/* No context */
 	           wfunc				/* Weak function */
@@ -250,6 +251,7 @@ int main(int argc, char *argv[]) {
 		           low, high,			/* Default data scale */
 		           1.0, 				/* Smoothing */
 		           avgdev,				/* Average Deviation */
+		           NULL,				/* iwidth */
                    wweight,				/* weak function weight */
 	               NULL,				/* No context */
 	               wfunc				/* Weak function */

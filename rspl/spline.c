@@ -31,7 +31,6 @@
 #include "rspl_imp.h"
 #include "numlib.h"
 
-extern void error(char *fmt, ...), warning(char *fmt, ...);
 int spline_interp_rspl(rspl *ss, co *cp);
 
 #undef DEBUG

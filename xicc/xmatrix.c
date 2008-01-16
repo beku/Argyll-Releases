@@ -227,8 +227,10 @@ alloc_icxLuMatrix(
 
 	p->nearclip = 0;				/* Set flag defaults */
 	p->mergeclut = 0;
-	p->noiluts = 0;
+	p->noisluts = 0;
+	p->noipluts = 0;
 	p->nooluts = 0;
+
 	p->intsep = 0;
 
 	p->fwd_lookup = icxLuMatrixFwd_lookup;
@@ -361,7 +363,7 @@ typedef struct {
 							/* 15, 16, 17 are 1st harmonics */
 							/* 18, 19, 20 are 2nd harmonics */
 							/* 24, 25, 26 etc. */
-	co *points;				/* List of test points as dev->Lab */
+	cow *points;			/* List of test points as dev->Lab */
 	int nodp;				/* Number of data points */
 } mxopt;
 
@@ -543,9 +545,9 @@ static double mxoptfunc(void *edata, double *v) {
 	
 		/* Accumulate total delta E squared */
 #ifdef USE_CIE94_DE
-		rv += icmCIE94sq(lab, p->points[i].v);
+		rv += p->points[i].w * icmCIE94sq(lab, p->points[i].v);
 #else
-		rv += icmLabDEsq(lab, p->points[i].v);
+		rv += p->points[i].w * icmLabDEsq(lab, p->points[i].v);
 #endif
 	}
 
@@ -580,7 +582,7 @@ xicc               *xicp,
 icmLuBase          *plu,			/* Pointer to Lu we are expanding (ours) */	
 int                flags,			/* white/black point flags */
 int                nodp,			/* Number of points */
-co                 *ipoints,		/* Array of input points in XYZ space */
+cow                *ipoints,		/* Array of input points in XYZ space */
 int                quality			/* Quality metric, 0..3 */
 ) {
 	icxLuMatrix *p;						/* Object being created */
@@ -596,7 +598,7 @@ int                quality			/* Quality metric, 0..3 */
 	int e, f, i, j;
 	int maxits = 200;					/* Optimisation stop params */
 	double stopon = 0.01;
-	co *points;			/* Copy of ipoints */
+	cow *points;		/* Copy of ipoints */
 	mxopt os;			/* Optimisation information */
 
 #ifdef DEBUG_PLOT
@@ -673,7 +675,7 @@ int                quality			/* Quality metric, 0..3 */
 	/* ------------------------------- */
 
 	/* Allocate the array passed to fit_rspl() */
-	if ((points = malloc(sizeof(co) * nodp)) == NULL) {
+	if ((points = (cow *)malloc(sizeof(cow) * nodp)) == NULL) {
 		p->pp->errc = 2;
 		sprintf(p->pp->err,"Allocation of scattered coordinate array failed");
 		p->del((icxLuBase *)p);
@@ -687,6 +689,8 @@ int                quality			/* Quality metric, 0..3 */
 		
 		for (f = 0; f < outputChan; f++)
 			points[i].v[f] = ipoints[i].v[f];
+
+		points[i].w = ipoints[i].w;
 
 		/* Make sure its Lab for delta E calculation */
 		icmXYZ2Lab(&icmD50, points[i].v, points[i].v);
@@ -968,12 +972,13 @@ else
 			os.v[0] = mat[0][0]; os.v[1] = mat[0][1]; os.v[2] = mat[0][2];
 			os.v[3] = mat[1][0]; os.v[4] = mat[1][1]; os.v[5] = mat[1][2];
 			os.v[6] = mat[2][0]; os.v[7] = mat[2][1]; os.v[8] = mat[2][2];
+			if (flags & ICX_VERBOSE) {
+				printf("After white point adjust:\n");
+				printf("Matrix = %f %f %f\n",os.v[0], os.v[1], os.v[2]);
+				printf("         %f %f %f\n",os.v[3], os.v[4], os.v[5]);
+				printf("         %f %f %f\n",os.v[6], os.v[7], os.v[8]);
+			}
 		}
-printf("After white point adjust:\n");
-printf("Matrix = %f %f %f\n",os.v[0], os.v[1], os.v[2]);
-printf("         %f %f %f\n",os.v[3], os.v[4], os.v[5]);
-printf("         %f %f %f\n",os.v[6], os.v[7], os.v[8]);
-
 	}
 
 	if (flags & ICX_VERBOSE)

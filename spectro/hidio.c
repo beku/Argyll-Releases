@@ -49,10 +49,18 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <asm/types.h>
 #include <fcntl.h>
 #include <unistd.h>
+#ifdef __FreeBSD__ 
+#include <sys/types.h> 
+#include <usbhid.h> 
+#else	/* assume Linux */ 
+#include <asm/types.h>
 #include <linux/hiddev.h>
+#endif
+#ifndef HID_MAX_USAGES		/* Workaround Linux Bug ? */
+# define HID_MAX_USAGES 1024
+#endif
 #endif
 
 #undef DEBUG
@@ -133,9 +141,10 @@ struct _icoms *p
 					p->paths[p->npaths]->vid = attr.VendorID;
 					p->paths[p->npaths]->pid = attr.ProductID;
 					p->paths[p->npaths]->dev = NULL;
-					if ((p->paths[i]->hev = (hid_device *)calloc(sizeof(hid_device), 1)) == NULL)
+					if ((p->paths[p->npaths]->hev = (hid_device *)calloc(sizeof(hid_device), 1))
+					                                                                     == NULL)
 						error("icoms: calloc failed!");
-					if ((p->paths[i]->hev->dpath = strdup(pdidd->DevicePath)) == NULL)
+					if ((p->paths[p->npaths]->hev->dpath = strdup(pdidd->DevicePath)) == NULL)
 						error("icoms: calloc failed!");
 					p->paths[p->npaths]->itype = itype;
 					if ((p->paths[p->npaths]->path = strdup(pname)) == NULL)

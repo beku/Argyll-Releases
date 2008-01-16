@@ -149,7 +149,8 @@ int main(int argc, char *argv[]) {
 	           low, high, gres,		/* Low, high, resolution of grid */
 	           NULL, NULL,			/* Default data scale */
 	           1.0,					/* Smoothing */
-	           avgdev);				/* Average Deviation */
+	           avgdev,				/* Average deviation */
+	           NULL);				/* iwidth */
                /* IT_TOL, MAX_ITS); */
 
 /*	verbose(1,"Regular spline fit error = %f\n",rss->efactor(rss,0)); */

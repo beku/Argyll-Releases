@@ -45,7 +45,7 @@
 
 /* Flow control */
 typedef enum {
-	fc_nc,
+	fc_nc = 0,			/* not configured/default */
 	fc_none,
 	fc_XonXOff,
 	fc_Hardware
@@ -178,10 +178,10 @@ struct _icoms {
 	int fd;						/* Unix file descriptor */
 #endif
 	flow_control fc;
-	baud_rate	baud;
-	parity		parity;
-	stop_bits	stop_bits;
-	word_length	word_length;
+	baud_rate	br;
+	parity		py;
+	stop_bits	sb;
+	word_length	wl;
 
 #ifdef ENABLE_USB
 	/* USB port parameters */
@@ -367,10 +367,13 @@ struct _icoms {
 		int *bwritten,			/* Bytes written */
 		double tout);			/* Timeout in seconds */
 
-	/* Reset and end point */
+	/* Reset and end point toggle state to 0 */
 	int (*usb_resetep)(struct _icoms *p,
 		int ep);				/* End point address */
 
+	/* Clear an end point halt */
+	int (*usb_clearhalt)(struct _icoms *p,
+		int ep);				/* End point address */
 
 	/* For an HID device, read a message from the device. */
 	/* Set error state on error */

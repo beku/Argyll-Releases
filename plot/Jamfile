@@ -15,6 +15,7 @@ if $(UNIX) && $(OS) != MACOSX {
 
 # PLOT library
 Library libplot.lib : plot.c ;
+ObjectHdrs plot$(SUFOBJ) : ../h ../numlib ;
 if $(UNIX) && $(OS) != MACOSX {
   ObjectHdrs plot$(SUFOBJ) : $(LibWinH) ;
 }
@@ -23,6 +24,7 @@ if $(UNIX) && $(OS) != MACOSX {
 Object sa_plot$(SUFOBJ) : plot.c ;
 MainFromObjects plot : sa_plot$(SUFOBJ) ;
 ObjectCcFlags sa_plot.c : -DSTANDALONE_TEST ;
+ObjectHdrs sa_plot$(SUFOBJ) : ../h ../numlib ;
 if $(UNIX) && $(OS) != MACOSX {
   LinkLibraries plot : $(LibWin) ;
 }

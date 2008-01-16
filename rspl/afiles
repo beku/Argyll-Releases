@@ -12,7 +12,6 @@ scat2.c
 mlbs.c
 mlbs.h
 opt.c
-gcso.c
 revbench.c
 c1.c
 c1df.c

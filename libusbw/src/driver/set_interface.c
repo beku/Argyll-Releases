@@ -25,8 +25,7 @@ NTSTATUS set_interface(libusb_device_t *dev, int interface, int altsetting,
 {
   NTSTATUS status = STATUS_SUCCESS;
   URB *urb;
-  int i, desc_size;
-  volatile int tmp_size, config_full_size;
+  int i, config_size, tmp_size;
 
   USB_CONFIGURATION_DESCRIPTOR *configuration_descriptor = NULL;
   USB_INTERFACE_DESCRIPTOR *interface_descriptor = NULL;
@@ -37,62 +36,22 @@ NTSTATUS set_interface(libusb_device_t *dev, int interface, int altsetting,
   DEBUG_MESSAGE("set_interface(): altsetting %d", altsetting);
   DEBUG_MESSAGE("set_interface(): timeout %d", timeout);
 
-  if(!dev->configuration)
+  if(!dev->config.value)
     {
-      DEBUG_ERROR("set_interface(): invalid configuration 0"); 
+      DEBUG_ERROR("release_interface(): device is not configured"); 
       return STATUS_INVALID_DEVICE_STATE;
     }
 
-  configuration_descriptor = (USB_CONFIGURATION_DESCRIPTOR *)
-    ExAllocatePool(NonPagedPool, sizeof(USB_CONFIGURATION_DESCRIPTOR));
-
+  configuration_descriptor = get_config_descriptor(dev, dev->config.value, 
+                                                   &config_size);
   if(!configuration_descriptor)
     {
       DEBUG_ERROR("set_interface(): memory_allocation error");
       return STATUS_NO_MEMORY;
-    }
-
-  status = get_descriptor(dev, configuration_descriptor,
-                          sizeof(USB_CONFIGURATION_DESCRIPTOR), 
-                          USB_CONFIGURATION_DESCRIPTOR_TYPE,
-                          dev->configuration - 1,
-                          0, &desc_size, LIBUSB_DEFAULT_TIMEOUT);
-
-  if(!NT_SUCCESS(status))
-    {
-      DEBUG_ERROR("set_interface(): getting configuration descriptor failed");
-      ExFreePool(configuration_descriptor);
-      return status;
-    }
-  
-  config_full_size = configuration_descriptor->wTotalLength;
-
-  ExFreePool(configuration_descriptor);
-
-  configuration_descriptor = (USB_CONFIGURATION_DESCRIPTOR *)
-    ExAllocatePool(NonPagedPool, config_full_size);
-  
-  if(!configuration_descriptor)
-    {
-      DEBUG_ERROR("set_interface(): memory_allocation error");
-      return STATUS_NO_MEMORY;
-    }
-
-  status = get_descriptor(dev, configuration_descriptor,
-                          config_full_size, 
-                          USB_CONFIGURATION_DESCRIPTOR_TYPE,
-                          dev->configuration - 1,
-                          0, &desc_size, LIBUSB_DEFAULT_TIMEOUT);
-
-  if(!NT_SUCCESS(status))
-    {
-      DEBUG_ERROR("set_interface(): getting configuration descriptor failed");
-      ExFreePool(configuration_descriptor);
-      return status;
     }
 
   interface_descriptor =
-    find_interface_desc(configuration_descriptor, desc_size, 
+    find_interface_desc(configuration_descriptor, config_size, 
                         interface, altsetting);
 
   if(!interface_descriptor)
@@ -108,7 +67,7 @@ NTSTATUS set_interface(libusb_device_t *dev, int interface, int altsetting,
     * sizeof(USBD_PIPE_INFORMATION);
 
 
-  urb = (URB *)ExAllocatePool(NonPagedPool, tmp_size);
+  urb = ExAllocatePool(NonPagedPool, tmp_size);
 
   if(!urb)
     {
@@ -122,13 +81,13 @@ NTSTATUS set_interface(libusb_device_t *dev, int interface, int altsetting,
   urb->UrbHeader.Function = URB_FUNCTION_SELECT_INTERFACE;
   urb->UrbHeader.Length = (USHORT)tmp_size;
 
-  urb->UrbSelectInterface.ConfigurationHandle = dev->configuration_handle;
+  urb->UrbSelectInterface.ConfigurationHandle = dev->config.handle;
   urb->UrbSelectInterface.Interface.Length =
     sizeof(struct _USBD_INTERFACE_INFORMATION);
   urb->UrbSelectInterface.Interface.NumberOfPipes = 
     interface_descriptor->bNumEndpoints;
   urb->UrbSelectInterface.Interface.Length +=
-    interface_descriptor->bNumEndpoints
+    interface_descriptor->bNumEndpoints 
     * sizeof(struct _USBD_PIPE_INFORMATION);
 
   urb->UrbSelectInterface.Interface.InterfaceNumber = (UCHAR)interface;
@@ -154,7 +113,7 @@ NTSTATUS set_interface(libusb_device_t *dev, int interface, int altsetting,
       return STATUS_UNSUCCESSFUL;
     }
 
-  update_pipe_info(dev, interface, interface_information);
+  update_pipe_info(dev, interface_information);
 
   ExFreePool(configuration_descriptor);
   ExFreePool(urb);

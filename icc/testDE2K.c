@@ -96,15 +96,24 @@ int main(void) {
 
 #ifdef NEVER		/* Test implementation in icc.c */
 
+/* From the paper "The CIEDE2000 Color-Difference Formula: Implementation Notes, */
+/* Supplementary Test Data, and Mathematical Observations", by */
+/* Gaurav Sharma, Wencheng Wu and Edul N. Dalal, */
+/* Color Res. Appl., vol. 30, no. 1, pp. 21-30, Feb. 2005. */
+
 /* Return the CIEDE2000 Delta E color difference measure squared, for two Lab values */
-double icmCIE2Ksq(double *Lab1, double *Lab2) {
+double icmCIE2Ksq(double *Lab0, double *Lab1) {
 	double C1, C2;
 	double h1, h2;
 	double dL, dC, dH;
 	double dsq;
 
-#define RAD2DEG(xx) (180.0/3.141592653589793238462643 * (xx))
-#define DEG2RAD(xx) (3.141592653589793238462643/180.0 * (xx))
+	/* The trucated value of PI is needed to ensure that the */
+	/* test cases pass, as one of them lies on the edge of */
+	/* a mathematical discontinuity. The precision is still */
+	/* enough for any practical use. */
+#define RAD2DEG(xx) (180.0/3.14159265358979 * (xx))
+#define DEG2RAD(xx) (3.14159265358979/180.0 * (xx))
 
 	/* Compute Cromanance and Hue angles */
 	{
@@ -112,20 +121,20 @@ double icmCIE2Ksq(double *Lab1, double *Lab2) {
 		double Cab, Cab7, G;
 		double a1, a2;
 
-		C1ab = sqrt(Lab1[1] * Lab1[1] + Lab1[2] * Lab1[2]);
-		C2ab = sqrt(Lab2[1] * Lab2[1] + Lab2[2] * Lab2[2]);
+		C1ab = sqrt(Lab0[1] * Lab0[1] + Lab0[2] * Lab0[2]);
+		C2ab = sqrt(Lab1[1] * Lab1[1] + Lab1[2] * Lab1[2]);
 		Cab = 0.5 * (C1ab + C2ab);
 		Cab7 = pow(Cab,7.0);
 		G = 0.5 * (1.0 - sqrt(Cab7/(Cab7 + 6103515625.0)));
-		a1 = (1.0 + G) * Lab1[1];
-		a2 = (1.0 + G) * Lab2[1];
-		C1 = sqrt(a1 * a1 + Lab1[2] * Lab1[2]);
-		C2 = sqrt(a2 * a2 + Lab2[2] * Lab2[2]);
+		a1 = (1.0 + G) * Lab0[1];
+		a2 = (1.0 + G) * Lab1[1];
+		C1 = sqrt(a1 * a1 + Lab0[2] * Lab0[2]);
+		C2 = sqrt(a2 * a2 + Lab1[2] * Lab1[2]);
 
 		if (C1 < 1e-9)
 			h1 = 0.0;
 		else {
-			h1 = RAD2DEG(atan2(Lab1[2], a1));
+			h1 = RAD2DEG(atan2(Lab0[2], a1));
 			if (h1 < 0.0)
 				h1 += 360.0;
 		}
@@ -133,7 +142,7 @@ double icmCIE2Ksq(double *Lab1, double *Lab2) {
 		if (C2 < 1e-9)
 			h2 = 0.0;
 		else {
-			h2 = RAD2DEG(atan2(Lab2[2], a2));
+			h2 = RAD2DEG(atan2(Lab1[2], a2));
 			if (h2 < 0.0)
 				h2 += 360.0;
 		}
@@ -143,14 +152,14 @@ double icmCIE2Ksq(double *Lab1, double *Lab2) {
 	{
 		double dh;
 
-		dL = Lab2[0] - Lab1[0];
+		dL = Lab1[0] - Lab0[0];
 		dC = C2 - C1;
 		if (C1 < 1e-9 || C2 < 1e-9) {
 			dh = 0.0;
 		} else {
 			dh = h2 - h1;
-			if (dh > (180.0 + 3e-14))		/* Numerical fudge to pass test case */
-				dh -= 360.0;				/* due to mathematical discontinuities ? */
+			if (dh > 180.0)
+				dh -= 360.0;
 			else if (dh < -180.0)
 				dh += 360.0;
 		}
@@ -164,14 +173,14 @@ double icmCIE2Ksq(double *Lab1, double *Lab2) {
 		double C7, RC, L50sq, SL, SC, SH, RT;
 		double dLsq, dCsq, dHsq, RCH;
 
-		L = 0.5 * (Lab1[0]  + Lab2[0]);
+		L = 0.5 * (Lab0[0]  + Lab1[0]);
 		C = 0.5 * (C1 + C2);
 		if (C1 < 1e-9 || C2 < 1e-9) {
 			h = h1 + h2;
 		} else {
 			h = h1 + h2;
-			if (fabs(h1 - h2) > (180.0 + 3e-14)) {	/* Numerical fudge to pass test case */
-				if (h < 360.0)						/* due to mathematical discontinuities ? */
+			if (fabs(h1 - h2) > 180.0) {
+				if (h < 360.0)
 					h += 360.0;
 				else if (h >= 360.0)
 					h -= 360.0;
@@ -210,8 +219,8 @@ double icmCIE2Ksq(double *Lab1, double *Lab2) {
 }
 
 /* Return the CIE2DE000 Delta E color difference measure for two Lab values */
-double icmCIE2K(double *Lab1, double *Lab2) {
-	return sqrt(icmCIE2Ksq(Lab1, Lab2));
+double icmCIE2K(double *Lab0, double *Lab1) {
+	return sqrt(icmCIE2Ksq(Lab0, Lab1));
 }
 
 #endif /* NEVER */

@@ -843,17 +843,6 @@ static int usb_bulk_transfer (usb_dev_handle *dev, int ep, char *bytes, int size
     if (CFRunLoopRunInMode(kCFRunLoopDefaultMode, (timeout+999)/1000, false) == kCFRunLoopRunTimedOut) {
       result = kIOUSBTransactionTimeout;
       (*(device->interface))->AbortPipe(device->interface, pipeRef);
-		/* This seems to be necessary for some devices to continue, */
-		/* yet other devices will hang because of the ClearPipeStall! */
-		/* For the moment I've managed to avoid doing a timeout on */
-		/* devices that need the ClearPipeStall - GWG */
-#ifdef NEVER
-#if defined (kIOUSBInterfaceInterfaceID190)
-      (*(device->interface))->ClearPipeStallBothEnds(device->interface, pipeRef);
-#else
-      (*(device->interface))->ClearPipeStall(device->interface, pipeRef);
-#endif
-#endif
       CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1, true); /* Pick up aborted callback */
       if (usb_debug)
 	fprintf(stderr, "libusb/darwin.c usb_bulk_transfer: timed out\n");
@@ -872,7 +861,7 @@ static int usb_bulk_transfer (usb_dev_handle *dev, int ep, char *bytes, int size
       error_code = darwin_to_errno (rw_arg.result);
       error_str  = darwin_error_str (rw_arg.result);
     } else {
-      error_code = darwin_to_errno (result);
+      error_code = darwin_to_errno(result);
       error_str  = darwin_error_str (result);
     }
     

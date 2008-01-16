@@ -6,6 +6,106 @@ Argyll CMS change log
 Version 0.70 changes - open version (beta)
 --------------------
 
+[Beta 8 Snapshot 2008/1/15]
+
+*	Added -S and -L options to spectro/dispwin for Unix/X11
+	systems, to allow setting and using the _ICC_PROFILE
+	root window property to store the displays profile
+	and calibration.
+
+*	Changed MSWindows and OS X dispwin/dispcal/dispread test
+	window to be title and borderless, and also have
+	an option (-B) to mask the whole screen behind the
+	test window with black.
+
+*	Added a "create intersection gamut" method
+	to the gamut class, and also added a companion
+	-i/-I flag to viewgam to print out the intersecting
+	volume of the first two gamuts, and oprionaly
+	save the intersecting gamut. Improved robustness of
+	the gamut "radial" point test methods slightly.
+
+*	Fixed spotread so that it doesn't display any
+	color information when reading the Huey ambient
+	sensor, and added an option (-T) to show
+	color temperature for each reading.
+
+*	Added gamut volume report (with -v) to tiffgamut.
+
+*	Changed spectro/spyd2setup.h to only set the
+	loaded flag after sucessfuly loaded a firmware file.
+
+*	Changed numlib/numsup.c error, warning and verbose
+	functions into function pointers so that they
+	can be overridden by callers of library functions
+	that make use of them (lprof).
+
+*	Switched icc and cgats library from
+	the "BSD like" license to the "MIT" license.
+
+*	Added better DTP22 support to driver and
+	printtarg.c (thanks to Nigel Rowe)
+
+*	Fixed spectro/ntio.c to cope gracefully with systems
+	that don't have any serial ports.
+
+*	Renamed spectro/printread to spectro/chartread.
+
+*	Fixed problem in spectro/usbio.c where on
+	some systems usb_detach_kernel_driver_np() needs
+	to be called before usb_set_configuration().
+
+*	Added option to dispread to allow a shell callout
+	with each color being tested, to allow relaying the
+	test patch value to a remote display via a script.
+
+*	Removed spectro/filmread.c and target/filmtarg.c
+	until their licensing compatibility with GPLv3 is
+	figured out.
+
+*	Added -W parameter to instrument using programs,
+	that allows overriding the default serial flow
+	control protocol. This may allow working around
+	problems caused by flow control not working
+	on certain systems.
+
+*	Added quick ICC profile creation to dispcal,
+	so that single operation calibration & profile
+	is now possible.
+
+*	Fixed some bugs in cctiff handling of Lab PCS and/or
+	-p operation.
+
+*	Added a new test chart type to render/timage, for
+	testing profile B2A tables.
+
+*	Added -V option to spectro/dispwin, that verifies
+	the currently loaded calibration.
+
+*	Added (yet another!) variation of the spectral
+	field names to support colorport output,
+	to profile/logo2cgats.
+
+*	Fixed problem with dispcal -u (and possibly
+	other cases, ie. profile) where an out of range
+	VideoLUT calibration value can wrap around
+	rather than saturating.
+
+*	Improved black point setting in dispcal,
+	so that it doesn't get lighter if the white point
+	is reset during the run. Also changed the white
+	point cliping to use the device model, rather than
+	relying in the cube clipping code, which was not
+	so accurate.
+
+*	Modified profout per channel curve algorithm
+	to be encapsulated in an independent module (xicc/xfit.c),
+	and to create input curves that adjust the curve shape and
+	clut grid locations independently of each other.
+	This has similar performance to the old code in many
+	cases, but reduces fit errors for certain types
+	of device characteristics.
+
 [Beta 7 Snapshot 2007/10/15]
 
 *	Fixed minor bug in icc.c - was double freeing while

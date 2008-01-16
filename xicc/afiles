@@ -18,12 +18,8 @@ xcolorants.c
 xcolorantslu.c
 xutils.h
 xutils.c
-xfit1.h
-xfit1.c
-xfit2.h
-xfit2.c
-xfit3.h
-xfit3.c
+xfit.h
+xfit.c
 xspect.h
 xspect.c
 ccttest.c
@@ -46,6 +42,9 @@ cam02.h
 cam02ref.h
 cam02test.c
 cam02plot.c
+moncurve.c
+moncurve.h
+monctest.c
 fbview.c
 xfbview.c
 icheck.c

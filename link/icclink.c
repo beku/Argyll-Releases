@@ -1939,7 +1939,7 @@ main(int argc, char *argv[]) {
 			grres = 256;
 			avgdev[0] = 0.005;
 
-			li.pcs2k->fit_rspl(li.pcs2k, 0, ips, 256, glow, ghigh, &grres, vlow, vhigh, 1.0, avgdev);
+			li.pcs2k->fit_rspl(li.pcs2k, 0, ips, 256, glow, ghigh, &grres, vlow, vhigh, 1.0, avgdev, NULL);
 
 			/* Fixup the white point for neutral axis to K hack */
 			{
@@ -2080,12 +2080,7 @@ main(int argc, char *argv[]) {
 		if (li.verb)
 			printf(" Creating Gamut match\n");
 
-		li.map = new_gammap(li.verb, csgam, igam, ogam, li.gmi.greymf,
-		                    li.gmi.glumwcpf, li.gmi.glumwexf, li.gmi.glumbcpf, li.gmi.glumbexf,
-		                    li.gmi.glumknf,
-		                    li.gmi.gamcpf, li.gmi.gamexf, li.gmi.gamknf,
-		                    li.gmi.gampwf, li.gmi.gamswf, li.gmi.satenh,
-		                    mapres, NULL, NULL);
+		li.map = new_gammap(li.verb, csgam, igam, ogam, &li.gmi, mapres, NULL, NULL);
 		if (li.map == NULL)
 			error ("Failed to make gamut map transform");
 

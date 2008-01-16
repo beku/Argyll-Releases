@@ -46,8 +46,8 @@
 
 #undef DEBUG
 
-#define HWFC	/* Hardware flow control */
-#undef XXFC		/* Xon/Xoff flow control */
+/* Default flow control */
+#define DEFFC fc_Hardware
 
 static inst_code interp_code(inst *pp, int ec);
 
@@ -145,34 +145,34 @@ dtp51_command(dtp51 *p, char *in, char *out, int bsize, double to) {
 	return interp_code((inst *)p, rv);
 }
 
-#if defined(XXFC) || defined(HWFC)
-# if defined(HWFC)
-#  define FC_SERIAL fc_Hardware
-#  define FC_INST "0104CF\r"
-# else
-#  define FC_SERIAL fc_XonXOff
-#  define FC_INST "0304CF\r"
-# endif
-#else
-# define FC_SERIAL fc_none
-# define FC_INST "0004CF\r"
-#endif
-
 /* Establish communications with a DTP51 */
 /* Use the baud rate given, and timeout in to secs */
 /* Return DTP_COMS_FAIL on failure to establish communications */
 static inst_code
-dtp51_init_coms(inst *pp, int port, baud_rate br, double tout) {
+dtp51_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	dtp51 *p = (dtp51 *)pp;
 	static char buf[MAX_MES_SIZE];
 	baud_rate brt[5] = { baud_9600, baud_19200, baud_4800, baud_2400, baud_1200 };
 	char *brc[5]     = { "30BR\r",  "60BR\r",   "18BR\r",  "0CBR\r",  "06BR\r" };
+	char *fcc;
 	long etime;
 	int ci, bi, i, rv;
 	inst_code ev = inst_ok;
 
 	if (p->debug)
 		p->icom->debug = p->debug;	/* Turn on debugging */
+
+	/* Deal with flow control setting */
+	if (fc == fc_nc)
+		fc = DEFFC;
+	if (fc == fc_XonXOff) {
+		fcc = "0304CF\r";
+	} else if (fc == fc_Hardware) {
+		fcc = "0104CF\r";
+	} else {
+		fc = fc_none;
+		fcc = "0004CF\r";
+	}
 
 	/* Figure DTP51 baud rate being asked for */
 	for (bi = 0; bi < 5; bi++) {
@@ -184,7 +184,7 @@ dtp51_init_coms(inst *pp, int port, baud_rate br, double tout) {
 
 	/* Figure current icoms baud rate */
 	for (ci = 0; ci < 5; ci++) {
-		if (brt[ci] == p->icom->baud)
+		if (brt[ci] == p->icom->br)
 			break;
 	}
 	if (ci >= 5)
@@ -216,7 +216,7 @@ dtp51_init_coms(inst *pp, int port, baud_rate br, double tout) {
 	}
 
 	/* Set the handshaking */
-	if ((ev = dtp51_command(p, FC_INST, buf, MAX_MES_SIZE, 1.5)) != inst_ok)
+	if ((ev = dtp51_command(p, fcc, buf, MAX_MES_SIZE, 1.5)) != inst_ok)
 		return ev;
 
 	/* Change the baud rate to the rate we've been told */
@@ -226,7 +226,7 @@ dtp51_init_coms(inst *pp, int port, baud_rate br, double tout) {
 	}
 
 	/* Configure our baud rate and handshaking as well */
-	p->icom->set_ser_port(p->icom, port, FC_SERIAL, brt[bi], parity_none, stop_1, length_8);
+	p->icom->set_ser_port(p->icom, port, fc, brt[bi], parity_none, stop_1, length_8);
 
 	/* Loose a character (not sure why) */
 	p->icom->write_read(p->icom, "\r", buf, MAX_MES_SIZE, '>', 1, 0.5);
@@ -537,7 +537,7 @@ inst_cal_type dtp51_needs_calibration(inst *pp) {
 /* Request an instrument calibration. */
 /* This is used if the user decides they want to do a calibration, */
 /* in anticipation of a calibration (needs_calibration()) to avoid */
-/* requiring one during measurement, or in response to measureing */
+/* requiring one during measurement, or in response to measuring */
 /* returning inst_needs_cal. Initially us an inst_cal_cond of inst_calc_none, */
 /* and then be prepared to setup the right conditions, or ask the */
 /* user to do so, each time the error inst_cal_setup is returned. */
@@ -590,7 +590,7 @@ dtp51_interp_error(inst *pp, int ec) {
 		case DTP51_DATA_PARSE_ERROR:
 			return "Data from DTP didn't parse as expected";
 		case DTP51_OK:
-			return "No error";
+			return "No device error";
 		case DTP51_BAD_COMMAND:
 			return "Unrecognized command";
 		case DTP51_PRM_RANGE:

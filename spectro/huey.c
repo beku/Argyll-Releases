@@ -822,7 +822,7 @@ huey_set_LEDs(
 	ibuf[0] = 0;
 	ibuf[1] = 0xf & (~mask);
 	
-	/* Do the measurement */
+	/* Do command */
 	if ((ev = huey_command(p, i1d_set_leds, ibuf, obuf, 1.0, 1.0)) != inst_ok)
 		return ev;
 
@@ -1022,7 +1022,7 @@ huey_compute_factors(
 /* If it's a serial port, use the baud rate given, and timeout in to secs */
 /* Return DTP_COMS_FAIL on failure to establish communications */
 static inst_code
-huey_init_coms(inst *pp, int port, baud_rate br, double tout) {
+huey_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	huey *p = (huey *) pp;
 	char buf[8];
 	int rsize;
@@ -1102,6 +1102,8 @@ huey_init_inst(inst *pp) {
 		p->inited = 1;
 		if (p->debug) fprintf(stderr,"huey: instrument inited OK\n");
 	}
+
+	p->itype = instHuey;
 
 	/* Flash the LEDs, just cos we can! */
 	if ((ev = huey_set_LEDs(p, 0x1)) != inst_ok)
@@ -1216,7 +1218,7 @@ huey_interp_error(inst *pp, int ec) {
 			return "User hit a Command key";
 
 		case HUEY_OK:
-			return "No error";
+			return "No device error";
 
 		case HUEY_FLOAT_NOT_SET:
 			return "Float value is not set in EEPROM";
@@ -1351,7 +1353,8 @@ inst_capability huey_capabilities(inst *pp) {
 	   | inst_emis_disp_crt
 	   | inst_emis_disp_lcd
 	   | inst_colorimeter
-	   | inst_emis_ambient;
+	   | inst_emis_ambient
+	   | inst_emis_ambient_mono;
 	     ;
 
 	return rv;
@@ -1447,7 +1450,7 @@ huey_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 		va_end(args);
 		*mask = p->led_state;
 		return inst_ok;
-	} else if (m == inst_opt_get_led_state) {
+	} else if (m == inst_opt_set_led_state) {
 		va_list args;
 		int mask = 0;
 

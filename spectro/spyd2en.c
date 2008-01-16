@@ -118,8 +118,13 @@ int locate_file_arch(archive *p, char *name) {
 	for (i = 0x10000; i < (p->asize - sl); i++) {
 		if (p->abuf[i] == name[0]) {
 			if (strncmp((char *)&p->abuf[i], name, sl) == 0) {
+				int sto;
 				/* Found it */
-				i += sl + 0x30;
+				i += sl;
+				if (i >= (p->asize - 1))
+					return 1;
+				sto = p->abuf[i];
+				i += (4 + sto) * 4;				/* This is a complete hack. */
 				if (i >= (p->asize - 4))
 					return 1;
 				p->off =  p->abuf[i + 0];
@@ -183,11 +188,15 @@ void unget_16bits() {
 }
 
 /* Save the decompressed file to the buffer */
-void write_output(unsigned char *buf, unsigned int len) {
-	if ((g_va->dsize + len) >= g_va->maxdsize)
-		error("Uncompressed file is unexpectedly large!");
+int write_output(unsigned char *buf, unsigned int len) {
+	if ((g_va->dsize + len) >= g_va->maxdsize) {
+		warning("Uncompressed buffer is unexpectedly large (%d > %d)!",
+		(g_va->dsize + len), g_va->maxdsize);
+		return 1;
+	}
 	memcpy(g_va->dbuf + g_va->dsize, buf, len);
 	g_va->dsize += len;
+	return 0;
 }
 
 /* --------------------------------------------------------- */
@@ -250,7 +259,7 @@ archive *new_arch(char *name, int verb) {
 		if (verb)
 			printf("Input file '%s' is a VISE archive file\n",name);
 		p->dsize = 0;
-		p->maxdsize = 200000;
+		p->maxdsize = 650000;
 		if ((p->dbuf = (unsigned char *)malloc(p->asize)) == NULL)
 			error("Failed to allocate buffer for VISE archive");
 
@@ -292,8 +301,7 @@ archive *new_arch(char *name, int verb) {
 		}
 
 		/* Search for start of PLD pattern */
-		for(i = 0; i < (size - rfsize) ;i++) {
-		
+		for(i = 0; (i + rfsize) < size ;i++) {
 			if (buf[i] == magic[0]) {
 				for (j = 0; j < 4; j++) {
 					if (buf[i + j] != magic[j])
@@ -303,7 +311,7 @@ archive *new_arch(char *name, int verb) {
 					break;		/* found it */
 			}
 		}
-		if (i >= (size - rfsize))
+		if ((i + rfsize) >= size)
 			error("Failed to locate Spyder 2 firmware");
 
 		if (verb)
@@ -633,31 +641,43 @@ main(int argc, char *argv[]) {
 
 #ifdef NT
 		{
+			int i;
 			char *pf = NULL;
 
-			/* Where the normal instalation goes */
-			if ((pf = getenv("PROGRAMFILES")) != NULL)
-				strcpy(in_name, pf);
-			else
-				strcpy(in_name, "C:\\Program Files");
+			char *paths[] = {		/* Typical instalation locations */
+				"\\ColorVision\\Spyder2express\\CVSpyder.dll",
+				"\\PANTONE COLORVISION\\ColorPlus\\CVSpyder.dll",
+				""
+			};
 
-			/* The MSWindows driver file */
-			/* (Note we're only looking for the entry level package. */
-			/* We should perhaps search eveything below ColorVision ?) */
-			strcat(in_name, "\\ColorVision\\Spyder2express\\CVSpyder.dll");
-			if (verb) {
-				printf("Looking for MSWindows install at '%s' .. ",in_name);
-				fflush(stdout);
+			for (i = 0;;i++) {
+				if (paths[i][0] == '\000')
+					break;
+
+				/* Where the normal instalation goes */
+				if ((pf = getenv("PROGRAMFILES")) != NULL)
+					strcpy(in_name, pf);
+				else
+					strcpy(in_name, "C:\\Program Files");
+
+				strcat(in_name, paths[i]);
+				if (verb) {
+					printf("Looking for MSWindows install at '%s' .. ",in_name);
+					fflush(stdout);
+				}
+				if (_access(in_name, 0) == 0) {
+					if (verb) printf("found\n");
+					break;
+				}
+				if (verb) printf("not found\n");
 			}
-			if (_access(in_name, 0) == 0) {
-				if (verb) printf("found\n");
-			} else {		/* Not accessible, so look for the install CDROM */
+			/* Not accessible, so look for the install CDROM */
+			if (paths[i][0] == '\000') {
 				char buf[400];
 				char vol_name[MAXNAMEL+1] = { '\000' };
 				int len, i;
 
 				in_name[0] = '\000';
-				if (verb) printf("not found\n");
 				if (verb) { printf("Looking for Spyder 2 install CDROM .. "); fflush(stdout); }
 
 				len = GetLogicalDriveStrings(400, buf);

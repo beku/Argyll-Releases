@@ -64,7 +64,8 @@ struct _mcv {
 	);
 
 	/* Return the number of parameters and the parameters in */
-	/* an allocated array. free() when done */
+	/* an allocated array. free() when done. */
+	/* The parameters are the offset, scale, then all the other parameters */
 	int (*get_params)(struct _mcv *p, double **rp);
 
 	/* Translate a value through the current curve */
@@ -74,6 +75,7 @@ struct _mcv {
 	/* Translate a value backwards through the current curve */
 	double (*inv_interp) (struct _mcv *p,
 	                  double in);	/* Input value */
+
 
 	/* Translate a value given the parametrs */
 	double (*interp_p) (struct _mcv *p,
@@ -88,14 +90,18 @@ struct _mcv {
 	/* return the shaper parameters normalising weight, with partial derivatives */ 
 	double (*dshweight_p)(struct _mcv *p, double *v, double *dv, double smooth);
 
+
   /* Private: */
 	int verb;				/* Verbose */
+	int noos;				/* flag, 2 = offset and scale not fitted */
 	int luord;				/* Lookup order including offset and scale */
 	double *pms;			/* Allocated curve parameters */
-	double *dv;				/* Work space for dv's durint optimisation */
+	double *dv;				/* Work space for dv's during optimisation */
+	double resid;			/* Residual fit error */
 
 	mcvco *d;				/* Array holding scattered initialisation data */
 	int ndp;				/* Number of data points */
+	double dra;				/* Data range */
 
 	double smooth;			/* Smoothing factor */
 
@@ -106,6 +112,10 @@ mcv *new_mcv(void);
 
 /* Create a new mcv initiated with the given parameters */
 mcv *new_mcv_p(double *pp, int np);
+
+/* Create a new, uninitialised mcv with offset and scale not to be fitted, */
+/* and defaulting to 0.0 and 1.0 */
+mcv *new_mcv_noos(void);
 
 #endif /* MCV */
 

@@ -20,10 +20,12 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include "xcam.h"
 #include "cam02.h"
 #include "tiffio.h"
+#include "icc.h"
 
 #define DEFRES 100		/* Default cube resolution */
 
@@ -68,7 +70,6 @@ static void
 XYZ2Lab(double *out, double *in) {
 	double X = in[0], Y = in[1], Z = in[2];
 	double x,y,z,fx,fy,fz;
-	double L;
 
 	x = X/0.9642;
 	y = Y/1.0000;

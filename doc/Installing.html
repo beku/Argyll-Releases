@@ -280,9 +280,31 @@ bringing their support for multi-monitors on X11 up to the same
 standards as other operating systems. When RandR V1.2 becomes more
 popular, this may also solve this problem.<br>
 <br>
+<big style="color: rgb(51, 102, 255);"><span style="font-weight: bold;">Fixing
+access to Video LUTs:</span></big><br>
+<br>
+Some users have noted that their default X11 installation doesn't
+properly enable access to the video card Video Lookup Tables (RAMDAC).
+The Video LUTs are used for display calibration purposes, and a warning
+will be issues by the <span style="font-weight: bold;">dispcal</span>
+and <span style="font-weight: bold;">dispread</span> utilities if
+there is a problem with this.<br>
+<br>
+The problem may be because certain X11 extensions aren't being loaded
+by default. You may want to check that you have<br>
+<br>
+<big style="color: rgb(51, 102, 255);"><span style="font-weight: bold;"></span></big>&nbsp;
+Load&nbsp; "extmod"
+<br>
+<br>
+in&nbsp;the&nbsp;appropriate&nbsp;(or&nbsp;any)&nbsp;section&nbsp;of
+your Xorg.conf file, to allow the XF86Video&nbsp;LUT extensions&nbsp;to
+function correctly.<br>
+<br>
 <big style="color: rgb(51, 102, 255);"><span style="font-weight: bold;">Setting
 up instrument access:</span></big><br>
-<br>
+<h5><span style="color: rgb(204, 51, 204);">Serial instruments:</span><br>
+</h5>
 If you are using a color instrument on a serial port, note that a
 serial mouse may occupy the first port (/dev/ttyS0), so you will have
 to discover which physical port maps to which tty, and that if you are
@@ -315,7 +337,7 @@ and then install it as <span style="font-weight: bold;">/etc/udev/permissions.d/
  style="font-weight: bold;">10-Argyll.permissions</span>, making sure
 it has owner root, group root, permissions 644.<br>
 <br>
-<br>
+<h5><span style="color: rgb(204, 51, 204);">USB using hotplug:</span></h5>
 Some systems appear to be setup with <span style="font-weight: bold;">udev</span>
 rules that automatically cope with <span style="font-weight: bold;">libusb</span>
 devices, making the right devices appear in the file system, and
@@ -404,7 +426,8 @@ readable.<br>
 &nbsp;&nbsp;&nbsp; fi<br>
 &nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
 <br>
-<br>
+<h5><span style="color: rgb(204, 51, 204);">USB using udev, #1:<br>
+</span></h5>
 <span style="font-weight: bold;">Newer Linux systems</span> use udev in
 preference to hotplug, so the approach
 is slightly different: Copy the file <span style="font-weight: bold;">libusb/</span><span
@@ -465,12 +488,12 @@ SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2005", PROGRAM="/bin/sh -c
 $${K#*.}'", NAME="%c",&nbsp; MODE="666"<br>
 &nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
 <br>
-Note that the "SYSFS==.." lines are one long line. You may need to run <span
+Note that the "SYSFS==.." lines are one long line. You may need to run <b>/sbin/udevtrigger</b>,&nbsp;
+<b>/sbin/udevcontrol reload_rules</b> or&nbsp; <span
  style="font-weight: bold;">/sbin/udevstart</span>
 to get the new file
 noticed.<br>
-<br>
-<br>
+<h5><span style="color: rgb(204, 51, 204);">USB using udev, #2:</span></h5>
 Other even more recent systems (Ubuntu ?) may work with a simplified
 udev rule:<br>
 <br>
@@ -512,17 +535,184 @@ SYSFS{idVendor}=="085C", SYSFS{idProduct}=="0200", GROUP="plugdev"<br>
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2005", GROUP="plugdev"<br>
 &nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
 <br>
-<br style="font-weight: bold;">
+You may want to refer to <a
+ href="http://reactivated.net/writing_udev_rules.html">this document</a>
+for more guidance on writing udev rules<br>
 <br>
+<h5><span style="color: rgb(204, 51, 204);">USB using HAL:</span></h5>
+<span style="font-weight: bold;">Even newer Linux systems</span> may be
+using HAL to set hardware attributes:<span style="font-weight: bold;"></span><span
+ style="font-weight: bold;"><br>
+</span><br>
+<span style="font-weight: bold;">/usr/share/PolicyKit/policy/color-device-file.policy<br>
+</span><br>
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;<br>
+&lt;!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy
+Configuration 1.0//EN"
+"http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd"&gt;<br>
+&lt;policyconfig&gt;<br>
+&nbsp; &lt;action id="org.freedesktop.hal.device-access.color"&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;description&gt;Directly access color meter
+devices&lt;/description&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;message&gt;System policy prevents access to the
+color meter devices&lt;/message&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;defaults&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&lt;allow_inactive&gt;no&lt;/allow_inactive&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&lt;allow_active&gt;yes&lt;/allow_active&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;/defaults&gt;<br>
+&nbsp; &lt;/action&gt;<br>
+&lt;/policyconfig&gt;<br>
 <br>
+<span style="font-weight: bold;">/usr/share/hal/fdi/10osvendor/19-color.fdi&nbsp;
+</span>should
+contain something like:<br>
 <br>
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;<br>
+&lt;deviceinfo version="0.2"&gt;<br>
+&nbsp; &lt;!-- Color meter devices known to Argyll CMS<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; FDI creation: Nicolas Mailhot
+&lt;nicolas.mailhot at laposte.net&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; with input from David Zeuthen and
+Fr&Atilde;&copy;d&Atilde;&copy;ric Crozat --&gt;<br>
+&nbsp; &lt;device&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;!-- HCFR association --&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.vendor_id" int="0x04DB"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;!-- Display colorimeter --&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.product_id"
+int="0x005B"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;append
+key="info.capabilities" type="strlist"&gt;access_control&lt;/append&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.type" type="string"&gt;color&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.file"
+type="copy_property"&gt;linux.device_file&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;!-- MonacoOPTIX --&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.vendor_id" int="0x0670"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;!-- Eye-One Display 1 - display
+colorimeter --&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.product_id"
+int="0x0001"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;append
+key="info.capabilities" type="strlist"&gt;access_control&lt;/append&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.type" type="string"&gt;color&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.file"
+type="copy_property"&gt;linux.device_file&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;!-- X-Rite --&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.vendor_id" int="0x0765"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;!-- DTP20 "Pulse" - "swipe" type
+reflective spectrometer, that can be used un-tethered. --&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.product_id"
+int="0xd020"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;append
+key="info.capabilities" type="strlist"&gt;access_control&lt;/append&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.type" type="string"&gt;color&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.file"
+type="copy_property"&gt;linux.device_file&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;!-- DTP92Q - CRT display
+colorimeter. (Not tested) --&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.product_id"
+int="0xd092"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;append
+key="info.capabilities" type="strlist"&gt;access_control&lt;/append&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.type" type="string"&gt;color&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.file"
+type="copy_property"&gt;linux.device_file&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;!-- DTP94 "Optix XR" or "Optix XR2"
+- display colorimeter --&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.product_id"
+int="0xd094"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;append
+key="info.capabilities" type="strlist"&gt;access_control&lt;/append&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.type" type="string"&gt;color&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.file"
+type="copy_property"&gt;linux.device_file&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;!-- ColorVision --&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.vendor_id" int="0x085C"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;!-- Spyder 2 - display colorimeter
+--&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.product_id"
+int="0x0200"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;append
+key="info.capabilities" type="strlist"&gt;access_control&lt;/append&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.type" type="string"&gt;color&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.file"
+type="copy_property"&gt;linux.device_file&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;!-- Gretag-Macbeth --&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.vendor_id" int="0x0971"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;!-- Eye-One Pro - spot and "swipe"
+reflective/emissive spectrometer --&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.product_id"
+int="0x2000"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;append
+key="info.capabilities" type="strlist"&gt;access_control&lt;/append&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.type" type="string"&gt;color&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.file"
+type="copy_property"&gt;linux.device_file&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;!-- Eye-One Display - display
+colorimeter --&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;match key="usb_device.product_id"
+int="0x2003"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;append
+key="info.capabilities" type="strlist"&gt;access_control&lt;/append&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.type" type="string"&gt;color&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.file"
+type="copy_property"&gt;linux.device_file&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;!-- Huey - display colorimeter<br>
+&nbsp;&nbsp;&nbsp;&nbsp; The Huey falsely declares itself as HID device
+--&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;match key="@info.parent:usb_device.vendor_id"
+int="0x0971"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;match key="info.capabilities"
+contains="usbraw"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;match
+key="@info.parent:usb_device.product_id" int="0x2005"&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;append
+key="info.capabilities" type="strlist"&gt;access_control&lt;/append&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.type" type="string"&gt;color&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;merge
+key="access_control.file"
+type="copy_property"&gt;linux.device_file&lt;/merge&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp;&nbsp;&nbsp; &lt;/match&gt;<br>
+&nbsp; &lt;/device&gt;<br>
+&lt;/deviceinfo&gt;<br>
 <br>
-<p><br>
-&nbsp;
+<span style="font-weight: bold;"><br>
 <br>
-&nbsp;
-<br>
-&nbsp;
+</span>
+<p>&nbsp;
 <br>
 &nbsp;
 <br>

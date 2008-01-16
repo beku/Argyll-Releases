@@ -888,7 +888,16 @@ double       detail		/* gamut detail level, 0.0 = def */
 
 	DC_INIT(co);
 
-	/* Itterate over all the faces in the device space */
+	/* Itterate over all the 2 faces in the device space. */
+	/* We're assuming in practice that only colors lying */
+	/* on such faces contribute to the gamut volume. */
+	/* The total number of faces explored will be */
+	/* (dim * (dim-1))/2 * 2 ^ (dim-2) */
+	/* It seems possible that a number of these faces could */
+	/* be cheaply culled by examining the PCS corner values */
+	/* for each 2^(dim-2) combinations, and skiping those. */
+	/* that cannot possibly expand the gamut ? */
+	/* ie. that they are clearly contained by other face combinations. */
 	while(!DC_DONE(co)) {
 		int e, m1, m2;
 		double in[MAX_CHAN];

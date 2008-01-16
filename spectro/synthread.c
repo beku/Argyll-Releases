@@ -10,11 +10,20 @@
  *
  * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
- * Based on fakread.c
+ *
+ * Based on fakeread.c
+ */
+
+/*
+	Implements a synthetic RGB device response based on sRGB like
+	primaries.
+
  */
 
 /*
  * TTBD: 
+ *
+ *	Add non-linear mixing model
  *
  */
 
@@ -36,15 +45,15 @@
 
 void
 usage(char *mes) {
-	fprintf(stderr,"Fake test chart reader - lookup values in ICC/MPP profile, Version %s\n",
+	fprintf(stderr,"Synthetic device model test chart reader - Version %s\n",
 	               ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (mes != NULL)
 		fprintf(stderr,"Error '%s'\n",mes);
-	fprintf(stderr,"usage: fakeread [-v] [-s] [separation.icm] profile.[icc|mpp|ti3] outfile\n");
+	fprintf(stderr,"usage: synthread [-v] [-s] [separation.icm] profile.[icc|mpp|ti3] outfile\n");
 	fprintf(stderr," -v                Verbose mode\n");
 	fprintf(stderr," -p                Use separation profile\n");
-	fprintf(stderr," -l                Output Lab rather than XYZ\n");
+	fprintf(stderr," -l                Construct and output in Lab rather than XYZ\n");
 	fprintf(stderr," -i p1,p2,p3,      Set input channel curve powers (default 1.0)\n");
 	fprintf(stderr," -k x1:y1,x2:y2,x3:y2  Set input channel inflection points (default 0.5,0.5)\n");
 	fprintf(stderr," -o p1,p2,p3,      Set output channel curve powers (default 1.0)\n");
@@ -65,9 +74,18 @@ typedef struct {
 	double ibpp[3];		/* Input breakpoint location, -ve if none */
 	double ibpv[3];		/* Input breakpoint value, -ve if none */
 	double col[3][3];	/* sRGB additive colorant values in XYZ :- [out][in]  */
-	double wnf[3];			/* White normalization factor */
+	double wnf[3];		/* White normalization factor */
 	double opow[3];		/* Output power */
+	double omax[3];		/* Output maximum that power operates into */
 } synthmodel;
+
+/* Symetrical power function */
+double spow(double val, double pp) {
+	if (val < 0.0)
+		return -pow(-val, pp);
+	else
+		return pow(val, pp);
+}
 
 /* Execute the device model */
 static void domodel(synthmodel *p, double *out, double *in) {
@@ -92,16 +110,15 @@ static void domodel(synthmodel *p, double *out, double *in) {
 		}
 	}
 	
-	/* Lookup primary values and sum them in output power space */
+	/* Lookup primary values, sum them, and then */
+	/* apply output power */
+	/* (We're not allowing for non-linear mixing yet) */
 	for (j = 0; j < 3; j++) {
 		out[j] = 0.0;
 		for (i = 0; i < 3; i++)
-			out[j] += pow(p->col[j][i] * tmp[i], p->opow[j]);
-		out[j] = pow(out[j], 1.0/p->opow[j])/p->wnf[1];
+			out[j] += p->col[j][i] * tmp[i];
+		out[j] = spow(out[j]/p->omax[j], p->opow[j]) * p->omax[j];
 	}
-
-	if (p->dolab)
-		icmXYZ2Lab(&icmD50, out, out);
 }
 
 int main(int argc, char *argv[])
@@ -182,13 +199,13 @@ int main(int argc, char *argv[])
 	md.col[2][1] = 0.119193;	/* Z from G */
 	md.col[2][2] = 0.950444;	/* Z from B */
 
-	md.wnf[0] = 1.0;
-	md.wnf[1] = 1.0;
-	md.wnf[2] = 1.0;
-
 	md.opow[0] = 1.0;
 	md.opow[1] = 1.0;
 	md.opow[2] = 1.0;
+
+	md.omax[0] = 1.0;
+	md.omax[1] = 1.0;
+	md.omax[2] = 1.0;
 
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
@@ -301,13 +318,75 @@ int main(int argc, char *argv[])
 	strcpy(outname,argv[fa]);
 	strcat(outname,".ti3");
 
-	/* Compute normalizing value to make white Y = 1.0 */
-	for (i = 0; i < 3; i++) {
-		md.wnf[i] = 0.0;
-		for (j = 0; j < 3; j++)
-			md.wnf[i] += pow(md.col[i][j], md.opow[i]);
-		md.wnf[i] = pow(md.wnf[i], 1.0/md.opow[i]);
+	/* Convert colorants to Lab, and scale white point */
+	if (md.dolab) {
+		double white[3] = { 100.0, 0, 0 };
+		double rot[3][3];
+
+printf("~1 switching to Lab\n");
+
+		for (i = 0; i < 3; i++) {
+			double val[3];
+
+			val[0] = md.col[0][i];
+			val[1] = md.col[1][i];
+			val[2] = md.col[2][i];
+printf("~1 prim XYZ %f %f %f -> ", val[0], val[1], val[2]);
+			icmXYZ2Lab(&icmD50, val, val);
+printf("Lab %f %f %f\n", val[0], val[1], val[2]);
+			md.col[0][i] = val[0];
+			md.col[1][i] = val[1];
+			md.col[2][i] = val[2];
+		}
+
+		/* Compute white sum */
+		for (i = 0; i < 3; i++) {
+			md.omax[i] = 0.0;
+			for (j = 0; j < 3; j++)
+				md.omax[i] += md.col[i][j];
+		}
+printf("~1 sum = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
+
+		/* Compute rotate and scale to map to white target */
+		icmRotMat(rot, md.omax, white);
+
+		/* Rotate and primaries to sum to white */
+		for (i = 0; i < 3; i++) {
+			double val[3];
+
+			val[0] = md.col[0][i];
+			val[1] = md.col[1][i];
+			val[2] = md.col[2][i];
+			icmMulBy3x3(val, rot, val);
+printf("~1 Scaled primary %f %f %f\n", val[0], val[1], val[2]);
+			md.col[0][i] = val[0];
+			md.col[1][i] = val[1];
+			md.col[2][i] = val[2];
+		}
+
+		/* Compute output maximum factors to set out power range */
+		for (i = 0; i < 3; i++) {
+			md.omax[i] = 0.0;
+			for (j = 0; j < 3; j++) {
+				if (i == 0)
+					md.omax[i] += md.col[i][j];
+				else {
+					if (fabs(md.col[i][j]) > md.omax[i])
+						md.omax[i] = fabs(md.col[i][j]);
+					
+				}
+			}
+		}
+	} else {
+
+		/* Compute output maximum factors to set out power range */
+		for (i = 0; i < 3; i++) {
+			md.omax[i] = 0.0;
+			for (j = 0; j < 3; j++)
+				md.omax[i] += md.col[i][j];
+		}
 	}
+printf("~1 omax = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
 
 	/* Deal with separation */
 	if (dosep) {
@@ -352,7 +431,7 @@ int main(int argc, char *argv[])
 	ocg->add_table(ocg, tt_other, 0);	/* Start the first table */
 
 	ocg->add_kword(ocg, 0, "DESCRIPTOR", "Argyll Calibration Target chart information 3",NULL);
-	ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll printread", NULL);
+	ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll synthread", NULL);
 	atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
 	ocg->add_kword(ocg, 0, "CREATED",atm, NULL);
 

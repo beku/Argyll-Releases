@@ -64,9 +64,15 @@ unsigned short idProduct);
 /* and the spectrum should be embeded in the .ti3 file, not the instrument */
 /* name. */
 
+#ifdef NOXSPECT
+#    undef NOXSPECT
+#else
+
 /* Fill in an instruments illuminant spectrum. */
 /* Return 0 on sucess, 1 if not not applicable. */
 extern int inst_illuminant(xspect *sp, instType itype);
+
+#endif
 
 #define INSTTYPES_H
 #endif /* INSTTYPES_H */

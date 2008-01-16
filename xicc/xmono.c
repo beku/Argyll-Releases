@@ -218,7 +218,8 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 	p->bwd_outpcs_relpcs = icxLuMono_bwd_outpcs_relpcs;
 	p->nearclip = 0;				/* Set flag defaults */
 	p->mergeclut = 0;
-	p->noiluts = 0;
+	p->noisluts = 0;
+	p->noipluts = 0;
 	p->nooluts = 0;
 	p->intsep = 0;
 

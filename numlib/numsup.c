@@ -10,6 +10,7 @@
 #include <windows.h>
 #endif
 #ifdef UNIX
+#include <unistd.h>
 #include <sys/param.h>
 #endif
 
@@ -104,6 +105,8 @@ void set_exe_path(char *argv0) {
 					ll = strlen(cp);
 				else
 					ll = p - cp;
+				if ((ll + 1 + strlen(exe_path) + 1) > PATH_MAX)
+					error("set_exe_path: Search path exceeds PATH_MAX");
 				strncpy(b1, cp, ll);		/* Element of path to search */
 				b1[ll] = '\000';
 				strcat(b1, "/");
@@ -112,8 +115,8 @@ void set_exe_path(char *argv0) {
 					if (access(b2, 0) == 0) {	/* See if exe exits */
 						found = 1;
 						free(exe_path);
-						if ((exe_path = malloc(sizeof(b2)+1)) == NULL)
-							error("set_exe_path: malloc %d bytes failed",sizeof(b2)+1);
+						if ((exe_path = malloc(strlen(b2)+1)) == NULL)
+							error("set_exe_path: malloc %d bytes failed",strlen(b2)+1);
 						strcpy(exe_path, b2);
 						break;
 					}
@@ -131,11 +134,11 @@ void set_exe_path(char *argv0) {
 	for (i = strlen(exe_path)-1; i >= 0; i--) {
 		if (exe_path[i] == '/') {
 			char *tpath;
-			if ((tpath = malloc(sizeof(exe_path + i))) == NULL)
-				error("set_exe_path: malloc %d bytes failed",sizeof(exe_path + i));
+			if ((tpath = malloc(strlen(exe_path + i))) == NULL)
+				error("set_exe_path: malloc %d bytes failed",strlen(exe_path + i));
 			strcpy(tpath, exe_path + i + 1);
 			error_program = tpath;				/* Set error_program to base name */
-			exe_path[i+1] = '\000';
+			exe_path[i+1] = '\000';				/* (The malloc never gets free'd) */
 			break;
 		}
 	}
@@ -153,7 +156,7 @@ void set_exe_path(char *argv0) {
 }
 
 /******************************************************************/
-/* Error/debug output routines */
+/* Default error/debug output routines */
 /******************************************************************/
 
 /* Globals - can be changed on the fly */
@@ -162,8 +165,8 @@ FILE *warn_out = NULL;
 FILE *verbose_out = NULL;
 
 /* Basic printf type error() and warning() routines */
-void
-error(char *fmt, ...) {
+static void
+error_imp(char *fmt, ...) {
 	va_list args;
 
 	if (error_out == NULL)
@@ -177,8 +180,8 @@ error(char *fmt, ...) {
 	exit (-1);
 }
 
-void
-warning(char *fmt, ...) {
+static void
+warning_imp(char *fmt, ...) {
 	va_list args;
 
 	if (warn_out == NULL)
@@ -191,8 +194,8 @@ warning(char *fmt, ...) {
 	fflush(warn_out);
 }
 
-void
-verbose(int level, char *fmt, ...) {
+static void
+verbose_imp(int level, char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
 	if (verbose_level >= level)
@@ -206,6 +209,11 @@ verbose(int level, char *fmt, ...) {
 		}
 	va_end(args);
 }
+
+/* Globals - can be changed on the fly */
+void (*error)(char *fmt, ...) = error_imp;
+void (*warning)(char *fmt, ...) = warning_imp;
+void (*verbose)(int level, char *fmt, ...) = verbose_imp;
 
 /******************************************************************/
 /* Numerical Recipes Vector/Matrix Support functions              */

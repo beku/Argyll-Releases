@@ -286,6 +286,7 @@ int main(int argc, char *argv[])
 
 		/* Not a cie file. See if it's a spectral file */
 		if (ncie->find_field(ncie, 0, "nm500") < 0
+		 && ncie->find_field(ncie, 0, "NM_500") < 0
 		 && ncie->find_field(ncie, 0, "SPECTRAL_NM_500") < 0
 		 && ncie->find_field(ncie, 0, "R_500") < 0
 		 && ncie->find_field(ncie, 0, "SPECTRAL_500") < 0)
@@ -304,6 +305,7 @@ int main(int argc, char *argv[])
 		};
 
 		if (ncie->find_field(ncie, 0, "nm500") >= 0
+		 || ncie->find_field(ncie, 0, "NM_500") < 0
 		 || ncie->find_field(ncie, 0, "SPECTRAL_NM_500") >= 0
 		 || ncie->find_field(ncie, 0, "R_500") >= 0
 		 || ncie->find_field(ncie, 0, "SPECTRAL_500") >= 0) {
@@ -329,7 +331,7 @@ int main(int argc, char *argv[])
 
 	/* Open up the input Spectral device data file */
 	if (specname[0] != '\000') {
-		char bufs[4][50];
+		char bufs[5][50];
 
 		spec = new_cgats();	/* Create a CGATS structure */
 		spec->add_other(spec, "LGOROWLENGTH"); 	/* Gretag/Logo Target file */
@@ -355,27 +357,31 @@ int main(int argc, char *argv[])
 		/* Find the spectral readings nm range */
 		for (specmin = 500; specmin >= 300; specmin -= 10) {
 			sprintf(bufs[0],"nm%03d", specmin);
-			sprintf(bufs[1],"SPECTRAL_NM_%03d", specmin);
-			sprintf(bufs[2],"R_%03d", specmin);
-			sprintf(bufs[3],"SPECTRAL_%03d", specmin);
+			sprintf(bufs[1],"NM_%03d", specmin);
+			sprintf(bufs[2],"SPECTRAL_NM_%03d", specmin);
+			sprintf(bufs[3],"R_%03d", specmin);
+			sprintf(bufs[4],"SPECTRAL_%03d", specmin);
 
 			if (spec->find_field(spec, 0, bufs[0]) < 0
 			 && spec->find_field(spec, 0, bufs[1]) < 0
 			 && spec->find_field(spec, 0, bufs[2]) < 0
-			 && spec->find_field(spec, 0, bufs[3]) < 0)	/* Not found */
+			 && spec->find_field(spec, 0, bufs[3]) < 0
+			 && spec->find_field(spec, 0, bufs[4]) < 0)	/* Not found */
 			break;
 		}
 		specmin += 10;
 		for (specmax = 500; specmax <= 900; specmax += 10) {
 			sprintf(bufs[0],"nm%03d", specmax);
-			sprintf(bufs[1],"SPECTRAL_NM_%03d", specmax);
-			sprintf(bufs[2],"R_%03d", specmax);
-			sprintf(bufs[3],"SPECTRAL_%03d", specmax);
+			sprintf(bufs[1],"NM_%03d", specmax);
+			sprintf(bufs[2],"SPECTRAL_NM_%03d", specmax);
+			sprintf(bufs[3],"R_%03d", specmax);
+			sprintf(bufs[4],"SPECTRAL_%03d", specmax);
 
 			if (spec->find_field(spec, 0, bufs[0]) < 0
 			 && spec->find_field(spec, 0, bufs[1]) < 0
 			 && spec->find_field(spec, 0, bufs[2]) < 0
-			 && spec->find_field(spec, 0, bufs[3]) < 0) /* Not found */
+			 && spec->find_field(spec, 0, bufs[3]) < 0
+			 && spec->find_field(spec, 0, bufs[4]) < 0) /* Not found */
 			break;
 		}
 		specmax -= 10;
@@ -395,14 +401,16 @@ int main(int argc, char *argv[])
 			/* Locate the fields for spectral values */
 			for (j = 0; j < specnum; j++) {
 				sprintf(bufs[0],"nm%03d", specmin + 10 * j);
-				sprintf(bufs[1],"SPECTRAL_NM_%03d", specmin + 10 * j);
-				sprintf(bufs[2],"R_%03d", specmin + 10 * j);
-				sprintf(bufs[3],"SPECTRAL_%03d", specmin + 10 * j);
+				sprintf(bufs[1],"NM_%03d", specmin + 10 * j);
+				sprintf(bufs[2],"SPECTRAL_NM_%03d", specmin + 10 * j);
+				sprintf(bufs[3],"R_%03d", specmin + 10 * j);
+				sprintf(bufs[4],"SPECTRAL_%03d", specmin + 10 * j);
 	
 				if ((spi[j] = spec->find_field(spec, 0, bufs[0])) < 0
 				 && (spi[j] = spec->find_field(spec, 0, bufs[1])) < 0
 				 && (spi[j] = spec->find_field(spec, 0, bufs[2])) < 0
-				 && (spi[j] = spec->find_field(spec, 0, bufs[3])) < 0) {	/* Not found */
+				 && (spi[j] = spec->find_field(spec, 0, bufs[3])) < 0
+				 && (spi[j] = spec->find_field(spec, 0, bufs[4])) < 0) {	/* Not found */
 					
 					spec->del(spec);
 					spec = NULL;

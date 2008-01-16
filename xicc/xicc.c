@@ -43,6 +43,8 @@
 #include "../h/sort.h"
 #include "xicc.h"		/* definitions for this library */
 
+#define USE_CAM			/* Use CIECAM02 for clipping and gamut mapping, else use Lab */
+
 #undef DEBUG			/* Plot 1d Luts */
 
 #ifdef DEBUG
@@ -56,7 +58,7 @@ icxLuBase * xicc_get_luobj(xicc *p, int flags, icmLookupFunc func, icRenderingIn
                            icColorSpaceSignature pcsor, icmLookupOrder order,
                            icxViewCond *vc, icxInk *ink);
 static icxLuBase *xicc_set_luobj(xicc *p, icmLookupFunc func, icRenderingIntent intent,
-                            icmLookupOrder order, int flags, int no, co *points,
+                            icmLookupOrder order, int flags, int no, cow *points,
                             double smooth, double avgdev,
                             icxViewCond *vc, icxInk *ink, int quality);
 static void icxLutSpaces(icxLuBase *p, icColorSpaceSignature *ins, int *inn,
@@ -77,8 +79,8 @@ int xicc_get_viewcond(xicc *p, icxViewCond *vc);
 /* and are included to keep their functions private. (static) */
 #include "xmono.c"
 #include "xmatrix.c"
-#include "xlut.c"		/* New in & out optimising based profiles */
-//#include "xlut1.c"	/* Old device curve linear with Y based profiles */
+#include "xlut.c"		/* New xfit3 in & out optimising based profiles */
+//#include "xlut1.c"	/* Old xfit1 device curve based profiles */
 
 #ifdef NT		/* You'd think there might be some standards.... */
 # ifndef __BORLANDC__
@@ -241,6 +243,8 @@ double *blk
 		case icSaturation:
 			p->plu->XYZ_Abs2Rel(p->plu,white,white);
 			p->plu->XYZ_Abs2Rel(p->plu,black,black);
+			break;
+		default:
 			break;
 	}
 
@@ -412,7 +416,7 @@ icRenderingIntent intent,	/* Intent */
 icmLookupOrder order,		/* Search Order */
 int flags,					/* white/black point flags etc. */
 int no,						/* Number of points */
-co *points,					/* Array of input points */
+cow *points,				/* Array of input points */
 double smooth,				/* RSPL smoothing factor, -ve if raw */
 double avgdev,				/* reading Average Deviation as a proportion of the input range */
 icxViewCond *vc,			/* Viewing Condition (NULL if not using CAM) */
@@ -1207,8 +1211,13 @@ icxGMappingIntent *gmi,	/* Gamut Mapping parameters to return */
 int no,					/* Enumeration selected, icxNoGMIntent for none */
 char *as				/* Alias string selector, NULL for none */
 ) {
+#ifdef USE_CAM
+	int colccas = 0x2;	/* Use cas clipping for colorimetric style intents */
 	int perccas = 0x1;	/* Use cas for perceptual style intents */
-//	int perccas = 0x0;	/* ~~~99 Use Lab for perceptual style intents */
+#else
+	int colccas = 0x0;	/* Use Lab for colorimetric style intents */
+	int perccas = 0x0;	/* Use Lab for perceptual style intents */
+#endif
 
 	/* Assert default if no guidance given */
 	if (no == icxNoGMIntent && as == NULL)
@@ -1221,7 +1230,7 @@ char *as				/* Alias string selector, NULL for none */
 		no = 0;
 		gmi->desc = " a - Absolute Colorimetric (in Jab) [ICC Absolute Colorimetric]";
 		gmi->icci = icAbsoluteColorimetric;
-		gmi->usecas  = 0x2;			/* Use absolute appearance space */
+		gmi->usecas  = colccas;		/* Use absolute appearance space */
 		gmi->usemap  = 0;			/* Don't use gamut mapping */
 		gmi->greymf  = 0.0;
 		gmi->glumwcpf = 0.0;
@@ -1248,7 +1257,7 @@ char *as				/* Alias string selector, NULL for none */
 		no = 1;
 		gmi->desc = "aw - Absolute Colorimetric (in Jab) with scaling to fit white point";
 		gmi->icci = icAbsoluteColorimetric;
-		gmi->usecas  = 0x102;		/* Absolute Appearance space with scaling */
+		gmi->usecas = 0x100 | colccas;	/* Absolute Appearance space with scaling */
 									/* to avoid clipping the source white point */
 		gmi->usemap  = 0;			/* Don't use gamut mapping */
 		gmi->greymf  = 0.0;
@@ -1455,11 +1464,12 @@ char *as				/* Alias string selector, NULL for none */
 	return no;
 }
 
+
 /* Debug: dump a Gamut Mapping specification */
 void xicc_dump_gmi(
 icxGMappingIntent *gmi	/* Gamut Mapping parameters to return */
 ) {
-	printf("Gamut Mapping Specification:\n");
+	printf(" Gamut Mapping Specification:\n");
 	if (gmi->desc != NULL)
 		printf("  Description = '%s'\n",gmi->desc);
 	printf("  Closest ICC intent = '%s'\n",icm2str(icmRenderingIntent,gmi->icci));
@@ -1629,7 +1639,6 @@ double icxdLabDEsq(double dout[2][3], double *Lab0, double *Lab1) {
 	dout[0][2] =  2.0 * tt;
 	dout[1][2] = -2.0 * tt;
 	rv += tt * tt;
-	
 	return rv;
 }
 
@@ -2215,6 +2224,80 @@ double *in			/* Input di values */
 				for (f = 0; f < fdi; f++)
 					din[f * di + e] -= v[f * dip2 + ee] * vv;
 			}
+		}
+	}
+}
+
+/* ------------------------------------------------------ */
+/* Matrix cube simplex interpolation, used for device modelling. */
+
+/* Matrix cube simplex interpolation - interpolate between 2^di output corner values. */
+/* Parameters are assumed to be fdi groups of 2^di parameters. */
+void icxCubeSxInterp(
+double *v,			/* Pointer to first parameter */
+int    fdi,			/* Number of output channels */
+int    di,			/* Number of input channels */
+double *out,		/* Resulting fdi values */
+double *in			/* Input di values */
+) {
+	int    si[MAX_CHAN];		/* in[] Sort index, [0] = smalest */
+
+// ~~999
+//{
+//	double tout[MXDO];
+//
+//	icxCubeInterp(v, fdi, di, tout, in);
+//printf("\n~1 Cube interp result = %f\n",tout[0]);
+//}
+
+//printf("~1 icxCubeSxInterp: %f %f %f\n", in[0], in[1], in[2]);
+	/* Do insertion sort on coordinates, smallest to largest. */
+	{
+		int ff, vf;
+		unsigned int e;
+		double v;
+		for (e = 0; e < di; e++)
+			si[e] = e;						/* Initial unsorted indexes */
+
+		for (e = 1; e < di; e++) {
+			ff = e;
+			v = in[si[ff]];
+			vf = ff;
+			while (ff > 0 && in[si[ff-1]] > v) {
+				si[ff] = si[ff-1];
+				ff--;
+			}
+			si[ff] = vf;
+		}
+	}
+//printf("~1 sort order %d %d %d\n", si[0], si[1], si[2]);
+//printf("         from %f %f %f\n", in[si[0]], in[si[1]], in[si[2]]);
+
+	/* Now compute the weightings, simplex vertices and output values */
+	{
+		unsigned int e, f;
+		double w;		/* Current vertex weight */
+
+		w = 1.0 - in[si[di-1]];		/* Vertex at base of cell */
+		for (f = 0; f < fdi; f++) {
+			out[f] = w * v[f * (1 << di)];
+//printf("~1 out[%d] = %f = %f * %f\n",f,out[f],w,v[f * (1 << di)]);
+		}
+
+		for (e = di-1; e > 0; e--) {	/* Middle verticies */
+			w = in[si[e]] - in[si[e-1]];
+			v += (1 << si[e]);				/* Move to top of cell in next largest dimension */
+			for (f = 0; f < fdi; f++) {
+				out[f] += w * v[f * (1 << di)];
+//printf("~1 out[%d] = %f += %f * %f\n",f,out[f],w,v[f * (1 << di)]);
+			}
+		}
+
+		w = in[si[0]];
+		v += (1 << si[0]);		/* Far corner from base of cell */
+		for (f = 0; f < fdi; f++) {
+			out[f] += w * v[f * (1 << di)];
+//printf("~1 out[%d] = %f += %f * %f\n",f,out[f],w,v[f * (1 << di)]);
 		}
 	}
 }

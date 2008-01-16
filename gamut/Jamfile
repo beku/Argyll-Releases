@@ -28,7 +28,7 @@ ObjectHdrs gamut$(SUFOBJ) : ../h ../icc ../cgats ../numlib ;
 
 # Gamut mapping library
 Library libgammap.lib : gammap.c nearsmth.c ;
-ObjectHdrs gammap$(SUFOBJ) nearsmth$(SUFOBJ) : ../h ../icc ../rspl ../numlib ../plot ;
+ObjectHdrs gammap$(SUFOBJ) nearsmth$(SUFOBJ) : ../h ../icc ../rspl ../numlib ../plot ../xicc ../cgats ../spectro ../gamut ;
 
 Main viewgam : viewgam.c ;
 ObjectHdrs viewgam$(SUFOBJ) : ../h ../icc ../cgats ../numlib ;
@@ -36,8 +36,8 @@ LinkLibraries viewgam : libgamut.lib ../icc/libicc.lib ../cgats/libcgats.lib ../
 
 # Mapping test routine
 Main maptest : maptest.c ;
-ObjectHdrs maptest : ../h ../numlib ../icc ../rspl ;
-LinkLibraries maptest : libgamut.lib libgammap.lib ../icc/libicc.lib
+ObjectHdrs maptest : ../h ../numlib ../icc ../rspl ../xicc ../cgats ../spectro ../gamut ;
+LinkLibraries maptest : libgamut.lib libgammap.lib ../xicc/libxicc.lib ../icc/libicc.lib
                         ../cgats/libcgats.lib ../rspl/librspl.lib 
 						../plot/libplot.lib ../plot/libvrml.lib ../numlib/libnum.lib ;
 

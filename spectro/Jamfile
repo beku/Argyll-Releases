@@ -37,7 +37,7 @@ KEEPOBJS = true ;	# Jam has trouble with multiple users of .obj
 
 #Products
 Libraries = libinsttypes libinst ;
-Executables = dispwin displin dispread dispcal fakeread synthread filmread printread spotread spec2cie spyd2en ;
+Executables = dispwin displin dispread dispcal fakeread synthread chartread spotread spec2cie spyd2en ;
 Headers = inst.h ;
 Samples = ColorChecker.ti2 ECI2002R.ti2 FograStrip.ti2 i1_RGB_Scan_1.4.ti2 SOtele.sp ;
 
@@ -61,11 +61,11 @@ LibraryFromObjects libinsttypes.lib : insttypes_$(SUFOBJ) ;
 Object alphix$(SUFOBJ) : ../target/alphix.c ;
 ObjectHdrs alphix$(SUFOBJ) : ../h ../numlib ;
 
-# Printed target reader program
-Object printread$(SUFOBJ) : printread.c ;
-ObjectHdrs printread : . ../h ../cgats ../icc ../numlib ../xicc ../target $(LIBUSB) ;
-MainFromObjects printread : printread$(SUFOBJ) alphix$(SUFOBJ) dispsup$(SUFOBJ) dispwin$(SUFOBJ) ;
-LinkLibraries printread : libinst.lib ../cgats/libcgats.lib
+# General target reader program
+Object chartread$(SUFOBJ) : chartread.c ;
+ObjectHdrs chartread : . ../h ../cgats ../icc ../numlib ../xicc ../target $(LIBUSB) ;
+MainFromObjects chartread : chartread$(SUFOBJ) alphix$(SUFOBJ) dispsup$(SUFOBJ) dispwin$(SUFOBJ) ;
+LinkLibraries chartread : libinst.lib ../cgats/libcgats.lib
                           ../rspl/librspl.lib
                           ../xicc/libxicc.lib ../xicc/libxcolorants.lib
                           ../numlib/libnum.lib ../icc/libicc.lib
@@ -85,14 +85,14 @@ LinkLibraries spotread : libinst.lib
                           $(HIDLIBS) ;
 
 # Gretag Spectroscan/T filmstrip reader
-Object filmread$(SUFOBJ) : filmread.c ;
-ObjectHdrs filmread : . ../h ../cgats ../icc ../numlib ../xicc $(LIBUSB) ;
-MainFromObjects filmread : filmread$(SUFOBJ) dispsup$(SUFOBJ) dispwin$(SUFOBJ) ;
-LinkLibraries filmread : libinst.lib ../cgats/libcgats.lib ../xicc/libxicc.lib
-                          ../rspl/librspl.lib
-                          ../numlib/libnum.lib ../icc/libicc ../plot/libplot.lib
-                          $(LIBUSB)/libusb.lib
-                          $(HIDLIBS) ;
+#Object filmread$(SUFOBJ) : filmread.c ;
+#ObjectHdrs filmread : . ../h ../cgats ../icc ../numlib ../xicc $(LIBUSB) ;
+#MainFromObjects filmread : filmread$(SUFOBJ) dispsup$(SUFOBJ) dispwin$(SUFOBJ) ;
+#LinkLibraries filmread : libinst.lib ../cgats/libcgats.lib ../xicc/libxicc.lib
+#                          ../rspl/librspl.lib
+#                          ../numlib/libnum.lib ../icc/libicc ../plot/libplot.lib
+#                          $(LIBUSB)/libusb.lib
+#                          $(HIDLIBS) ;
 
 # Create linear .cal
 Main displin : displin.c ;
@@ -105,7 +105,7 @@ ObjectHdrs dispcal dispwin dispsup ../target/ofps : . ../h ../cgats ../icc
                            ../numlib ../rspl ../spectro ../xicc ../spectro ../gamut
                            ../target ../plot $(LIBUSB) $(LibWinH) ;
 MainFromObjects dispcal : dispcal$(SUFOBJ) dispwin$(SUFOBJ) ../target/ofps$(SUFOBJ)
-                          moncurve$(SUFOBJ) dispsup$(SUFOBJ) ;
+                          dispsup$(SUFOBJ) ;
 LinkLibraries dispcal : libinst.lib ../cgats/libcgats.lib
                           ../rspl/librspl.lib
                           ../xicc/libxicc.lib  ../icc/libicc.lib
@@ -171,14 +171,6 @@ Main spyd2en : spyd2en.c vinflate.c ;
 ObjectHdrs spyd2en vinflate : . ../h ../numlib ;	
 LinkLibraries spyd2en : ../numlib/libnum.lib ;
 
-# Test utility for moncurve
-Main monctest : monctest.c moncurve.c ;
-ObjectHdrs monctest : . ../h ../numlib ../plot ;
-LinkLibraries monctest : ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
-
-# Support for monotonic curves for dispcal
-ObjectHdrs moncurve : . ../h ../numlib ;
-
 # Dumy ti3 file generator for testing
 #Main dumyti3 : dumyti3.c ;
 #ObjectHdrs dumyti3 : . ../h ../cgats ;
@@ -203,8 +195,8 @@ ObjectHdrs moncurve : . ../h ../numlib ;
 if $(OLD_GRETAG) && $(UNIX) && $(OS) != MACOSX {
 
 	# test for parsing a VISE archive
-	Main visetest : visetest.c inflate.c ;
-	ObjectHdrs visetest inflate : . ../h ../numlib ;	
+	Main visetest : visetest.c vinflate.c ;
+	ObjectHdrs visetest vinflate : . ../h ../numlib ;	
 	LinkLibraries visetest : ../numlib/libnum.lib ;
 
 	# Compute deconvolution filter for i1pro

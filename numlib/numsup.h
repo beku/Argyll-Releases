@@ -44,7 +44,10 @@ extern FILE *verbose_out;
 extern int verbose_level;
 
 extern void set_exe_path(char *arg0);
-extern void error(char *fmt, ...), warning(char *fmt, ...);
+//extern void error(char *fmt, ...), warning(char *fmt, ...);
+extern void (*error)(char *fmt, ...);
+extern void (*warning)(char *fmt, ...);
+extern void (*verbose)(int level, char *fmt, ...);
 
 /* Numerical recipes vector/matrix support functions */
 

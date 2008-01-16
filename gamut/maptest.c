@@ -27,6 +27,7 @@
 #include <math.h>
 #include "copyright.h"
 #include "config.h"
+#include "xicc.h"
 #include "gamut.h"
 #include "rspl.h"
 #include "numlib.h"
@@ -49,6 +50,7 @@ main(int argc, char *argv[]) {
 	char diag_name[100];
 	int verb = 0;
 	gammap *map;			/* Regular split gamut mapping */
+	icxGMappingIntent gmi;
 
 	gamut *gin, *gout;		/* Input and Output gamuts */
 
@@ -125,25 +127,29 @@ main(int argc, char *argv[]) {
 
 	/* - - - - - - - - - - - - - - - - - - - */
 
-	/* Create the gamut mapping */
 	// ~~9
+	/* Create the gamut mapping */
+	gmi.usecas = 0;
+	gmi.usemap = 1;
+	gmi.greymf = 1.0;		/* Gray axis hue matching factor, 0.0 - 1.0 */
+	gmi.glumwcpf = 1.0;		/* Grey axis luminance white compression factor, 0.0 - 1.0 */
+	gmi.glumwexf = 1.0;		/* Grey axis luminance white expansion factor, 0.0 - 1.0 */
+	gmi.glumbcpf = 1.0;		/* Grey axis luminance black compression factor, 0.0 - 1.0 */
+	gmi.glumbexf = 1.0;		/* Grey axis luminance black expansion factor, 0.0 - 1.0 */
+	gmi.glumknf = 0.7;		/* Gray axis luminance knee factor, 0.0 - 1.0 */
+	gmi.gamcpf = 1.0;		/* Gamut compression factor, 0.0 - 1.0 */
+	gmi.gamexf = 0.0;		/* Gamut expansion factor, 0.0 - 1.0 */
+	gmi.gamknf = 0.7;		/* Gamut knee factor, 0.0 - 1.0 */
+	gmi.gampwf = 1.0;		/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
+	gmi.gamswf = 0.0;		/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
+	gmi.satenh = 0.0;		/* Saturation enhancement factor */
+
 	map = new_gammap(
 		verb,
 		gin,		/* Source gamut */
 		gin,		/* Image gamut */
 		gout,		/* Destination gamut */
-		1.0,		/* Gray axis hue matching factor, 0.0 - 1.0 */
-		1.0,		/* Grey axis luminance white compression factor, 0.0 - 1.0 */
-		1.0,		/* Grey axis luminance white expansion factor, 0.0 - 1.0 */
-		1.0,		/* Grey axis luminance black compression factor, 0.0 - 1.0 */
-		1.0,		/* Grey axis luminance black expansion factor, 0.0 - 1.0 */
-		0.7,		/* Gray axis luminance knee factor, 0.0 - 1.0 */
-		1.0,		/* Gamut compression factor, 0.0 - 1.0 */
-		0.0,		/* Gamut expansion factor, 0.0 - 1.0 */
-		0.7,		/* Gamut knee factor, 0.0 - 1.0 */
-		1.0,		/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
-		0.0,		/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
-		0.0,		/* Saturation enhancement factor */
+		&gmi,
 		17,			/* rspl resolution of 17 */
 		NULL,		/* No input range override */
 		NULL

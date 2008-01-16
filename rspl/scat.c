@@ -107,8 +107,6 @@
 #include "numlib.h"
 #include "counters.h"	/* Counter macros */
 
-extern void error(char *fmt, ...), warning(char *fmt, ...);
-
 #undef DEBUG			/* Print contents of solution setup etc. */
 #undef DEBUG_PROGRESS	/* Print progress of acheiving tollerance target */
 
@@ -120,8 +118,8 @@ extern void error(char *fmt, ...), warning(char *fmt, ...);
 
 /* Experimental set: */
 
-#define TOL 1e-5		/* Tollerance of result - usually 1e-5 is best. */
-#define TOL_IMP 0.98	/* Minimum error improvement to continue - reduces accuracy */
+#define TOL 1e-12		/* Tollerance of result - usually 1e-5 is best. */
+#define TOL_IMP 1.0	/* Minimum error improvement to continue - reduces accuracy (1.0 == off) */
 #undef GRADUATED_TOL	/* Speedup attemp - use reduced tollerance for prior grids. */
 #define GRATIO 2.0		/* Multi-grid resolution ratio */
 #undef OVERRLX 		/* Use over relaxation factor when progress slows - improves accuracy */
@@ -131,12 +129,13 @@ extern void error(char *fmt, ...), warning(char *fmt, ...);
 //#define SMOOTH 0.000100	/* Set nominal smoothing (1.0) */
 #define WEAKW  0.1		/* Weak default function nominal effect (1.0) */
 
+
 #else
 
 /* Release set: */
 
 #define TOL 1e-5		/* Tollerance of result - usually 1e-5 is best. */
-#define TOL_IMP 0.98	/* Minimum error improvement to continue - reduces accuracy */
+#define TOL_IMP 0.98	/* Minimum error improvement to continue - reduces accuracy (1.0 == off) */
 #undef GRADUATED_TOL	/* Speedup attemp - use reduced tollerance for prior grids. */
 #define GRATIO 2.0		/* Multi-grid resolution ratio */
 #undef OVERRLX 		/* Use over relaxation factor when progress slows - improves accuracy */
@@ -189,6 +188,8 @@ struct _mgtmp {
 		int no;			/* Total number of points in grid = res ^ di */
 		ratai l,h,w;	/* Grid low, high, grid cell width */
 
+		double *iwidth[MXDI]; /* Optional relative grid cell width for each input dim cell */
+
 		/* Grid array offset lookups */
 		int ci[MXRI];		/* Grid coordinate increments for each dimension */
 		int hi[POW2MXRI];	/* Combination offset for sequence through cube. */
@@ -211,6 +212,11 @@ struct _mgtmp {
 	struct {
 		double **A;			/* A matrix of interpoint weights A[g.no][q.acols] */
 		int acols;			/* A matrix columns needed */
+							/* Packed indexes run from 0..acols-1 */
+							/* Sparse index allows for +/-2 offset in any one dimension */
+							/* and +/-1 offset in all dimensions, but only the +ve offset */
+							/* half of the sparse matrix is stored, due to equations */
+							/* being symetrical. */
 		int xcol[HACOMPS+8];/* A array column translation from packed to sparse index */ 
 		int *ixcol;			/* A array column translation from sparse to packed index */ 
 		double *b;			/* b vector for RHS of simultabeous equation b[g.no] */
@@ -245,18 +251,31 @@ fit_rspl_imp(
 	int gres[MXDI],	/* Spline grid resolution */
 	ratao vlow,		/* Data value low normalize, NULL = default 0.0 */
 	ratao vhigh,	/* Data value high normalize - NULL = default 1.0 */
-	double smooth,	/* Smoothing factor, nominal = 1.0 */
+	double smooth,	/* Smoothing factor, 0.0 = default 1.0 */
 					/* (if -ve, overides optimised smoothing, and sets raw smoothing */
 					/*  typically between 1e-7 .. 1e-1) */
 	double avgdev[MXDO],
 	                /* Average Deviation of function values as proportion of function range, */
 					/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
+					/* NULL = default 0.005 */
+	double *iwidth[MXDI], /* Optional relative grid cell width for each input dim cell, */
+					/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
 	double weak,	/* Weak weighting, nominal = 1.0 */
 	void *dfctx,	/* Opaque weak default function context */
 	void (*dfunc)(void *cbntx, double *out, double *in)		/* Function to set from, NULL if none. */
 ) {
 	int di = s->di, fdi = s->fdi;
 	int i, e, f;
+
+#ifdef NEVER
+printf("~1 rspl: gres = %d %d %d %d, smooth = %f, avgdev = %f %f %f\n",
+gres[0], gres[1], gres[2], gres[3], smooth, avgdev[0], avgdev[1], avgdev[2]);
+printf("~1 rspl: glow = %f %f %f %f ghigh = %f %f %f %f\n",
+glow[0], glow[1], glow[2], glow[3], ghigh[0], ghigh[1], ghigh[2], ghigh[3]);
+printf("~1 rspl: vlow = %f %f %f vhigh = %f %f %f\n",
+vlow[0], vlow[1], vlow[2], vhigh[0], vhigh[1], vhigh[2]);
+printf("~1 rspl: flags = 0x%x\n",flags);
+#endif
 
 #if defined(__IBMC__) && defined(_M_IX86)
 	_control87(EM_UNDERFLOW, EM_UNDERFLOW);
@@ -279,8 +298,13 @@ fit_rspl_imp(
 
 	/* Save smoothing factor and Average Deviation */
 	s->smooth = smooth;
-	for (f = 0; f < s->fdi; f++)
-		s->avgdev[f] = avgdev[f];
+	if (avgdev != NULL) {
+		for (f = 0; f < s->fdi; f++)
+			s->avgdev[f] = avgdev[f];
+	} else {
+		for (f = 0; f < s->fdi; f++)
+			s->avgdev[f] = 0.005;
+	}
 
 	/* Save weak default function information */
 	s->weak = weak;
@@ -380,7 +404,7 @@ fit_rspl_imp(
 			s->d.va[f] = (s->d.va[f] - 0.5)/((double)dno);
 	}
 
-	/* compute width of each grid cell */
+	/* compute (even division) width of each grid cell */
 	for (e = 0; e < s->di; e++) {
 		s->g.w[e] = (s->g.h[e] - s->g.l[e])/(double)(s->g.res[e]-1);
 	}
@@ -388,6 +412,23 @@ fit_rspl_imp(
 	/* Convert low and high to low and width data range */
 	for (f = 0; f < s->fdi; f++) {
 		s->d.vw[f] -= s->d.vl[f];
+	}
+
+	/* Save grid cell (smooth data space) width information (if any), */
+	/* and also normalize it so that it doesn't affect the overall */
+	/* smoothness balance. */
+	if (iwidth != NULL) {
+		for (e = 0; e < s->di; e++) {
+			if (iwidth[e] != NULL) {
+				if ((s->g.iwidth[e] = (double *)calloc(s->g.res[e]-1, sizeof(double))) == NULL)
+					error("rspl: malloc failed - iwidth[]");
+				for (i = 0; i < (s->g.res[e]-1); i++) {
+					s->g.iwidth[e][i] = fabs(iwidth[e][i]);
+					if (s->g.iwidth[e][i] < 1e-12)
+						error("rspl: iwidth[%d][%d] is nearly zero!",e,i);
+				}
+			}
+		}
 	}
 
 	/* Allocate the grid data */
@@ -628,12 +669,14 @@ fit_rspl(
 	ratao vlow,		/* Data value low normalize, NULL = default 0.0 */
 	ratao vhigh,	/* Data value high normalize - NULL = default 1.0 */
 	double smooth,	/* Smoothing factor, nominal = 1.0 */
-	double avgdev[MXDO]
+	double avgdev[MXDO],
 	                /* Average Deviation of function values as proportion of function range. */
+	double *iwidth[MXDI] /* Optional relative grid cell width for each input dim cell, */
+					/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
 ) {
 	/* Call implementation with (co *) data */
 	return fit_rspl_imp(s, flags, (void *)d, 0, dno, glow, ghigh, gres, vlow, vhigh,
-	                    smooth, avgdev, 1.0, NULL, NULL);
+	                    smooth, avgdev, iwidth, 1.0, NULL, NULL);
 }
 
 /* Initialise the regular spline from scattered data with weights */
@@ -650,12 +693,14 @@ fit_rspl_w(
 	ratao vlow,		/* Data value low normalize, NULL = default 0.0 */
 	ratao vhigh,	/* Data value high normalize - NULL = default 1.0 */
 	double smooth,	/* Smoothing factor, nominal = 1.0 */
-	double avgdev[MXDO]
+	double avgdev[MXDO],
 	                /* Average Deviation of function values as proportion of function range. */
+	double *iwidth[MXDI] /* Optional relative grid cell width for each input dim cell, */
+					/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
 ) {
 	/* Call implementation with (cow *) data */
 	return fit_rspl_imp(s, flags, (void *)d, 1, dno, glow, ghigh, gres, vlow, vhigh,
-	                    smooth, avgdev, 1.0, NULL, NULL);
+	                    smooth, avgdev, iwidth, 1.0, NULL, NULL);
 }
 
 /* Initialise from scattered data, with weak default function. */
@@ -674,13 +719,15 @@ fit_rspl_df(
 	double smooth,	/* Smoothing factor, nominal = 1.0 */
 	double avgdev[MXDO],
 	                /* Average Deviation of function values as proportion of function range. */
+	double *iwidth[MXDI], /* Optional relative grid cell width for each input dim cell, */
+					/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
 	double weak,	/* Weak weighting, nominal = 1.0 */
 	void *cbntx,	/* Opaque function context */
 	void (*func)(void *cbntx, double *out, double *in)		/* Function to set from */
 ) {
 	/* Call implementation with (co *) data */
 	return fit_rspl_imp(s, flags, (void *)d, 0, dno, glow, ghigh, gres, vlow, vhigh,
-	                    smooth, avgdev, weak, cbntx, func);
+	                    smooth, avgdev, iwidth, weak, cbntx, func);
 }
 
 /* Initialise from scattered data, with per point weighting and weak default function. */
@@ -699,13 +746,15 @@ fit_rspl_w_df(
 	double smooth,	/* Smoothing factor, nominal = 1.0 */
 	double avgdev[MXDO],
 	                /* Average Deviation of function values as proportion of function range. */
+	double *iwidth[MXDI], /* Optional relative grid cell width for each input dim cell, */
+					/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
 	double weak,	/* Weak weighting, nominal = 1.0 */
 	void *cbntx,	/* Opaque function context */
 	void (*func)(void *cbntx, double *out, double *in)		/* Function to set from */
 ) {
 	/* Call implementation with (cow *) data */
 	return fit_rspl_imp(s, flags, (void *)d, 1, dno, glow, ghigh, gres, vlow, vhigh,
-	                    smooth, avgdev, weak, cbntx, func);
+	                    smooth, avgdev, iwidth, weak, cbntx, func);
 }
 
 /* Add extra data points and re-fit the rspl */
@@ -1071,6 +1120,40 @@ static mgtmp *new_mgtmp(
 		nigc *= gres[e]-2;
 	}
 
+	/* Downsample iwidth arrays */
+	for (e = 0; e < s->di; e++) {
+		if (s->g.iwidth[e] != NULL) {
+//printf("~1 downsampling width[%d] from res %d to res %d\n",e,s->g.res[e],m->g.res[e]);
+
+			if ((m->g.iwidth[e] = (double *)calloc(m->g.res[e]-1, sizeof(double))) == NULL)
+				error("scat: malloc failed - iwidth[]");
+
+			/* Compute each downsampled width */
+			for (n = 0; n < (m->g.res[e]-1); n++) { 
+				double st, en;
+				double outv;
+				st = (double)n/(m->g.res[e]-1) * (s->g.res[e]-1);
+				en = (n+1.0)/(m->g.res[e]-1) * (s->g.res[e]-1);
+//printf("~1 n = %d, st = %f, en = %f\n",n,st,en);
+
+				/* Sum widths from full res */
+				for (outv = 0.0, i = (int)st; i <= (int)en; i++) {
+					double we = 1.0;
+					if (i == (int)en)
+						we = en - floor(en);
+					if (i == (int)st) {
+						we -= (st - floor(st));
+					}
+					if (we > 0.0)
+						outv += we * s->g.iwidth[e][i];
+//printf("~1 i = %d, we = %f, s->g.iwidth[%d][%d] = %f, outv = %f \n", i,we,e,i,s->g.iwidth[e][i],outv);
+				}
+				m->g.iwidth[e][n] = outv;
+//printf("~1 m->g.iwidth[%d][%d] = %f\n", e,n,m->g.iwidth[e][n]);
+			}
+		}
+	}
+
 	/* Compute curvature weighting for matching intermediate resolutions for */
 	/* the number of grid points curvature that is accuumulated, as well as the */
 	/* geometric effects of a finer fit to the target surface. */
@@ -1224,8 +1307,12 @@ mgtmp *m
 
 /* Completely free an mgtmp */
 static void free_mgtmp(mgtmp  *m) {
-	int gno = m->g.no;
+	int e, gno = m->g.no;
 
+	for (e = 0; e < m->s->di; e++) {
+		if (m->g.iwidth[e] != NULL)
+			free(m->g.iwidth[e]);
+	}
 	free_dvector(m->q.x,0,gno-1);
 	free_dvector(m->q.b,0,gno-1);
 	free((void *)m->q.ixcol);
@@ -1236,6 +1323,13 @@ static void free_mgtmp(mgtmp  *m) {
 
 /* Initialise the A[][] and b[] matricies ready to solve, given f */
 /* (Can be used to re-initialize an mgtmp for changing curve/extra fit factors) */
+/* We are setting up the matrix equation Ax = b to solve, where the aim is */
+/* to solve the energy minimization problem by setting up a series of interconnected */
+/* equations for each grid node value (x) in which the partial derivative */
+/* of the equation to be minimized is zero. The A matrix holds the dependence on */
+/* the surrounding grid points with regard to smoothness and interpolation */
+/* fit to the scattered data points, while b holds the data point determined */
+/* boundary conditions. A stores the packed sparse triangular matrix. */ 
 static void setup_solve(
 	mgtmp  *m		/* initialized grid temp structure */
 ) {
@@ -1254,10 +1348,12 @@ static void setup_solve(
 	int e, n,i,k;
 	double nbsum;				/* normb sum */
 
-	/* Allocate and init the A array column sparse packing lookup and inverse */
-	/* Note that this only works for a minumum grid resolution of 4 */
+	/* Allocate and init the A array column sparse packing lookup and inverse. */
+	/* Note that this only works for a minumum grid resolution of 4. */
+	/* The sparse di dimension region allowed for is a +/-1 cube around the point */
+	/* question, plus +/-2 offsets in axis direction only. */
 	if (A == NULL) {			/* Not been allocated previously */
-		DCOUNT(gc, MXDIDO, di, -2, -2, 3);	/* 0..2 Surounder */
+		DCOUNT(gc, MXDIDO, di, -2, -2, 3);	/* Step through +/- 2 cube offset */
 		int ix;						/* Grid point offset in grid points */
 		acols = 0;
 	
@@ -1266,7 +1362,7 @@ static void setup_solve(
 		while (!DC_DONE(gc)) {
 			int n2 = 0, nz = 0;
 	
-			/* Detect 2 and 0 elements */
+			/* Detect +/-2 and 0 elements */
 			for (k = 0; k < di; k++) {
 				if (gc[k] == 2 || gc[k] == -2)
 					n2++;
@@ -1278,12 +1374,11 @@ static void setup_solve(
 			/* or if it has exactly one +/-2 and otherwise 0 */
 			if (n2 == 0 || (n2 == 1 && nz == (di-1))) {
 				for (ix = 0, k = 0; k < di; k++)
-					ix += gc[k] * gci[k];
+					ix += gc[k] * gci[k];		/* Multi-dimension grid offset */
 				if (ix >= 0) {
-					xcol[acols++] = ix;
+					xcol[acols++] = ix;			/* We only store half, due to symetry */
 				}
 			}
-	
 			DC_INC(gc);
 		}
 
@@ -1341,14 +1436,42 @@ static void setup_solve(
 	}
 
 #ifdef ALWAYS
-	/* Accumulate curvature dependent factors */
+	/* Accumulate curvature dependent factors to the triangular A */
+	/* Because it's triangular, we compute and add in all the weighting */
+	/* factors at and to the right of each one. */
+
+	/* The iwidth[] factor is to allow for the possibility that the */
+	/* grid spacing may be non-uniform in the colorspace space where the */
+	/* function being modelled is smooth. Our curvature computation */
+	/* needs to make allowsance for this fact in computing the */
+	/* node value differences that equate to zero curvature. */ 
+	/*
+		The old curvature fixed grid spacing equation was:
+			ki * (u[i-1] - 2 * u[i] + u[i+1])^2
+		with derivatives wrt each node:
+			ki-1 *  1 * 2 * u[i-1] 
+			ki   * -2 * 2 * u[i]
+			ki+1 *  1 * 2 * u[i+1]
+
+		Allowing for scaling of each grid difference by w[i-1] and w[i],
+		where w[i-1] corresponds to the width of cell i-1 to i,
+		and w[i] corresponds to the width of cell i to i+1:
+			ki * (w[i-1] * (u[i-1] - u[i]) + w[i] * (u[i+1] - u[i[))^2
+		=	ki * (w[i-1] * u[i-1] - (w[i-1] + w[i]) * u[i]) + w[i] * u[i+1])^2
+		with derivatives wrt each node:
+			ki-1 *   w[i-1]         *   w[i-1] * u[i-1]
+			ki   * -(w[i-1] + w[i]) * -(w[i-1] + w[i]) * u[i])
+			ki+1 *   w[i]           *   w[i] * u[i+1]
+	 */
+
 	if (m->i2 == 0) {		/* If setting this up from scratch */
 		ECOUNT(gc, MXDIDO, di, gres);
 		EC_INIT(gc);
 		for (i = 0; i < gno; i++) {
 
 			for (e = 0; e < di; e++) {
-				double cw = 2.0 * m->sf.cw[e];	/* Curvature weight */
+				double w0, w1, tt;
+				double cw = 2.0 * m->sf.cw[e];	/* Overall curvature weight */
 				cw *= s->d.vw[f];				/* Scale curvature weight for data range */
 
 				/* If at least two above lower edge in this dimension */
@@ -1356,27 +1479,47 @@ static void setup_solve(
 				if ((gc[e]-2) >= 0) {
 					/* double kw = cw * gp[UO_C(e,1)].k; */	/* Cell bellow k value */
 					double kw = cw;
-
-					A[i][ixcol[0]] += kw;
+					w0 = w1 = 1.0;
+					if (m->g.iwidth[e] != NULL) {
+						w0 = m->g.iwidth[e][gc[e]-2];	
+						w1 = m->g.iwidth[e][gc[e]-1];
+						tt = sqrt(w0 * w1);		/* Normalise overall width weighting effect */
+						w1 = tt/w1;
+					}
+					A[i][ixcol[0]] += w1 * w1 * kw;
 				}
 				/* If not one from upper or lower edge in this dimension */
-				/* Add influence on Curvature of cell below */
+				/* Add influence on Curvature of this cell */
 				if ((gc[e]-1) >= 0 && (gc[e]+1) < gres[e]) {
-					/* double kw = cw * gp->k;  */
+					/* double kw = cw * gp->k;  */		/* This cells k value */
 					double kw = cw; 
-
-					A[i][ixcol[0]]      += 4.0 * kw;
-					A[i][ixcol[gci[e]]] += -2.0 * kw;
+					w0 = w1 = 1.0;
+					if (m->g.iwidth[e] != NULL) {
+						w0 = m->g.iwidth[e][gc[e]-1];	
+						w1 = m->g.iwidth[e][gc[e]];
+						tt = sqrt(w0 * w1);
+						w0 = tt/w0;
+						w1 = tt/w1;
+					}
+					A[i][ixcol[0]]      += -(w0 + w1) * -(w0 + w1) * kw;
+					A[i][ixcol[gci[e]]] += -(w0 + w1) * w1 * kw;
 				}
 				/* If at least two below the upper edge in this dimension */
 				/* Add influence on Curvature of cell above */
 				if ((gc[e]+2) < gres[e]) {
 					/* double kw = cw * gp[UO_C(e,2)].k;	*/ /* Cell above k value */
 					double kw = cw;
-
-					A[i][ixcol[0]]          += kw;
-					A[i][ixcol[gci[e]]]     += -2.0 * kw;
-					A[i][ixcol[2 * gci[e]]] += kw;
+					w0 = w1 = 1.0;
+					if (m->g.iwidth[e] != NULL) {
+						w0 = m->g.iwidth[e][gc[e]];	
+						w1 = m->g.iwidth[e][gc[e]+1];
+						tt = sqrt(w0 * w1);
+						w0 = tt/w0;
+						w1 = tt/w1;
+					}
+					A[i][ixcol[0]]          += w0 * w0 * kw;
+					A[i][ixcol[gci[e]]]     += w0 * -(w0 + w1) * kw;
+					A[i][ixcol[2 * gci[e]]] += w0 * w1 * kw;
 				}
 			}
 			EC_INC(gc);
@@ -1439,7 +1582,7 @@ static void setup_solve(
 
 #ifdef ALWAYS
 	/* Accumulate data point dependent factors */
-	for (n = 0; n < dno; n++) {	/* Go through all the data points */
+	for (n = 0; n < dno; n++) {		/* Go through all the data points */
 		int j,k;
 		int bp = m->d[n].b; 		/* index to base grid point in grid points */
 
@@ -1453,14 +1596,14 @@ static void setup_solve(
 			d = 2.0 * s->d.a[n].k * s->d.a[n].kx * w;
 			ai = bp + m->g.hi[j];			/* A matrix index */
 
-			tt = d * s->d.a[n].v[f];	/* Change in data component */
+			tt = d * s->d.a[n].v[f];		/* Change in data component */
 
 			/* If setting all data point factors for the first time, */
 			/* or just adding additional data points: */
 			if (m->i2 == 0 || n >= (dno - s->d.ano)) {
 				nbsum += (2.0 * b[ai] + tt) * tt;	/* += (b[ai] + tt)^2 - b[ai]^2 */
-				b[ai] += tt;					/* New data component value */
-				A[ai][0] += d * w;				/* dui component to itself */
+				b[ai] += tt;						/* New data component value */
+				A[ai][0] += d * w;					/* dui component to itself */
 	
 				/* For all the other simplex points ahead of this one, */
 				/* add in linear interpolation weightings */
@@ -1961,6 +2104,8 @@ one_itter2(
 			sm += A[i][k] * x[k3];
 
 		/* Left of diagonal in 4's */
+		/* (We take advantage of the symetry: what would be in the row */
+		/*  to the left is repeated in the column above.) */
 		for (k = 1, k3 = i-xcol[k+3]; (k+3) < acols && k3 >= 0; k += 4, k3 = i-xcol[k+3]) {
 			k0 = i-xcol[k+0];
 			k1 = i-xcol[k+1];

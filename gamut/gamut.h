@@ -62,6 +62,7 @@ struct _gvert {
 #define GVERT_TRI  0x0002		/* Vertex has been added to triangulation (Exclsv with _INSIDE) */
 #define GVERT_INSIDE  0x0004	/* Vertex is inside the log hull (Exclusive with _TRI) */
 #define GVERT_FAKE  0x0008		/* Fake establishment point */
+#define GVERT_ISOS  0x0010		/* Intersecting gamuts "outside other gamut" flag */
 	int k0;			/* k0 direction reference count */
 
 	double p[3];		/* Point in xyz rectangular coordinates, absolute */
@@ -258,6 +259,10 @@ struct _gamut {
 
 	double (*volume)(struct _gamut *s);
 								/* Return the total volume enclosed by the gamut */
+
+	int (*intersect)(struct _gamut *s, struct _gamut *s1, struct _gamut *s2);
+								/* Initialise this gamut with the intersection of the */
+								/* the two given gamuts. */
 
 	double (*radial)(struct _gamut *s, double out[3], double in[3]);
 								/* return point on surface in same radial direction. */

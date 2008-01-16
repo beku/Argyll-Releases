@@ -11,9 +11,9 @@
 </head>
 <body>
 <h1>
-Argyll CMS documentation index (V0.70 Beta7)<br>
+Argyll CMS documentation index (V0.70 Beta8)<br>
 </h1>
-Date:&nbsp;&nbsp; 19th October 2007
+Date:&nbsp;&nbsp; 15th January 2008
 <br>
 Author: Graeme Gill
 <h2><u>Introduction</u></h2>
@@ -38,7 +38,7 @@ Device color gamuts can also be viewed and compared using a VRML
 viewer. Comprehensive documentation is provided for each utility, and a
 general guide to using the tools for typical color management tasks is
 also available. A mailing list provides support for more advanced usage.<br>
-<p>This is Version 0.70 (Beta7). The last full release was in December
+<p>This is Version 0.70 (Beta8). The last full release was in December
 2005.
 The first public release of icclib was in November 1998, and of Argyll
 was in July 2000. Code
@@ -126,15 +126,18 @@ Sequel imaging:<br>
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 - display colorimeter<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+[The Sequel Chroma 4 may also work.]<br>
 <br>
 ColorVision:<br>
 &nbsp;&nbsp;&nbsp;&nbsp; Spyder 2 &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-- display colorimeter (Note that the user must <a href="spyd2en.html">supply</a>
-firmware)<br>
-<br>
+- display colorimeter (Note that user must <a href="spyd2en.html">supply</a>
+firmware.)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+[The Spyder 1 also seems to work..]<br>
 Other:<br>
 &nbsp;&nbsp;&nbsp; <span class="titre">Colorim&egrave;tre
 HCFR&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -202,41 +205,37 @@ as
 detailed
 in the <a href="License.txt">License.txt</a> file.
 </p>
-<p>The film recorder support (spectro/filmread.c, spm.[ch],
-gretag.[ch]) support is
-Copyright
-2001, DreamWorks LLC (Author Neil Okamoto),&nbsp;
-and is made available under the terms of the GNU General Public
-License,
-as detailed in the <a href="License2.txt">License2.txt</a> file.<br>
-</p>
 <p>The utility spectro/spec2cie.c is Copyright 2005 Gerhard Fuernkranz,
 and is
 made available under the terms of the GNU General Public
-License,
-as detailed in the <a href="License.txt">License.txt</a> file.
+License Version 2 or later,
+and is licensed here under the Version 3 license, as detailed in the <a
+ href="License.txt">License.txt</a> file.
 </p>
-<p>The icc library in icc/ and the CGATS library in cgats/ are
+&lt;&gt;The icc library in icc/ and the CGATS library in cgats/ are
 Copyright 1995 - 2007 Graeme W. Gill, and available
-according to the license granted in the icc/License.txt and
-cgats/License.txt file (a "BSD" like, free use license).
-</p>
-<p>The TIFF library included in this distribution for convenience, has
+according to the "MIT" license granted in the icc/License.txt and
+cgats/License.txt file.<br>
+<br>
+The TIFF library included in this distribution for convenience, has
 its
-own copyright and license detailed in tiff/COPYRIGHT (a "BSD" like
+own copyright and license detailed in tiff/COPYRIGHT (an "MIT"/"BSD"
+like
 license).<br>
-</p>
 <p>The UNIX USB library libusb included in this distribution for
 convenience, is copyright Johannes Erdfelt, Thomas Sailer and Brad
-Hards, and is licensed under the GNU LGPL. See&nbsp; libusb/COPYRIGHT
-for
+Hards, and is licensed under the GNU LGPL Version 2 or later. See&nbsp;
+libusb/LICENSE and libusb/COPYING for
 details. <br>
 </p>
 <p>The Win32 USB library libusb-win32, included in this distribution
 for
 convenience, is copyright Stephan Meyer,
 Johannes Erdfelt and Thomas Sailer, and is licensed under the GNU LGPL
-and GPL. See&nbsp; libusbw/COPYING*.txt for details.<br>
+Version 2 (the DLL)&nbsp;
+and GPL (the drivers, services, installer). See&nbsp;
+libusbw/License.txt, libusbw/COPYING_LGPL.txt and
+libusbw/COPYING_GPL.txt for details.<br>
 </p>
 <h2><span style="text-decoration: underline; color: rgb(51, 0, 51);">What
 sort of project is this ? (re: contributions)<br>
@@ -325,7 +324,7 @@ Linux:<br>
  href="http://www.google.com/search?q=linux+command+line+shell+tutorial">http://www.google.com/search?q=linux+command+line+shell+tutorial</a>&gt;<br>
 <br>
 </p>
-<h2><u><a href="Scenarios.html">Typical
+<h2><u><a href="Scenarios.html">Tutorial: Typical
 usage scenarios and examples</a></u></h2>
 A guided tour of the major utilities, applied to typical CMS jobs, such
 as calibrating displays, creating device profiles, linking them, and
@@ -340,16 +339,20 @@ Discussions about particular topics:<br>
 <a href="FWA.html">About Fluorescent Whitening Agent compensation</a><br>
 <br>
 <a href="instruments.html">Operation of particular instruments</a><br>
+<br>
+<a href="iccgamutmapping.html">About ICC profiles and Gamut Mapping</a><br>
+<br>
+<a href="monitorcontrols.html">About display monitor settings and
+targets</a><br>
 <span style="font-family: monospace;"></span><br>
 <h2><b><u><font size="+2">Main Utilities by category:</font></u></b></h2>
 <h3>Calibrating devices<br>
 </h3>
 <small><a style="font-family: monospace;" href="dispcal.html">dispcal</a><span
  style="font-family: monospace;">
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></small>Adjust and calibrate
-a display<small><big>,
-producing a <a href="File_Formats.html#.cal">.cal</a>
-file.</big></small><a href="filmtarg.html"><br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></small>Adjust, calibrate
+and profile
+a display<small><big>.</big></small><a href="filmtarg.html"><br>
 </a>
 <h3>Creating test targets for profiling</h3>
 <small><a style="font-family: monospace;" href="targen.html">targen</a><span
@@ -365,9 +368,9 @@ film recorder TIFF files from Argyll .ti1 file.
 a PS or EPS file to containing test patch values, ready for
 printing.</big></small>
 <h3>Obtaining test results for profiling</h3>
-<small><a style="font-family: monospace;" href="printread.html">printread</a><span
+<small><a style="font-family: monospace;" href="chartread.html">chartread</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><big>Read
-a printer test chart using an instrument to create a .ti3 data
+a test chart using an instrument to create a .ti3 data
 file.</big><span style="font-family: monospace;">
 </span><br style="font-family: monospace;">
 <a style="font-family: monospace;" href="dispread.html">dispread</a><span
@@ -487,7 +490,8 @@ image.
 <br>
 <small><a style="font-family: monospace;" href="viewgam.html">viewgam</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Convert
-one or more gamuts into a VRML 3D visualization file.
+one or more gamuts into a VRML 3D visualization file. Compute an
+intersection.<br>
 <h3>Diagnostic and test utilities</h3>
 <small><a style="font-family: monospace;" href="iccdump.html">iccdump</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Dump
@@ -537,6 +541,11 @@ to a display.<br>
  style="text-decoration: underline; font-family: monospace;"></span></small>Convert
 spectral .ti3
 readings into CIE XYZ or L*a*b* readings.<br>
+<small><a style="font-family: monospace;" href="spyd2en.html">spyd2en</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
+ style="text-decoration: underline; font-family: monospace;"></span></small>
+A special purpose utility that enables the Spyder 2
+colorimeter.<br>
 &nbsp;
 <h2><b><u><font size="+2">Main Utilities Alphabetic Listing:</font></u></b></h2>
 <small><a style="font-family: monospace;" href="cb2cgats.html">cb2cgats</a><span
@@ -549,11 +558,14 @@ format.
 </span></small>Color convert a TIFF file using a sequence of ICC
 device, device link and abstract
 profiles<br>
+<small><a style="font-family: monospace;" href="chartread.html">chartread</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Read
+a test chart using an instrument to create a .ti3 data
+file.
+<br>
 <small style="font-family: monospace;"><a href="dispcal.html">dispcal</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</small>Adjust and calibrate a
-display, producing
-a <a href="File_Formats.html#.cal">.cal</a>
-file.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </small>Adjust, calibrate and profile
+a display<small><big>.</big></small><br>
 <small><a style="font-family: monospace;" href="displin.html">displin</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create linear display
@@ -637,11 +649,6 @@ files/views.
 </span></small>Create a Model Printer Profile (MPP) from the .ti3 test
 data.
 <br>
-<small><a style="font-family: monospace;" href="printread.html">printread</a><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Read
-a printer test chart using an instrument to create a .ti3 data
-file.
-<br>
 <small><a style="font-family: monospace;" href="printtarg.html">printtarg</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create
 a PS or EPS file to containing test patch values, ready for
@@ -691,6 +698,11 @@ CGATS file (ie. a .ti3) into two parts randomly to verify profiling.
 &nbsp;&nbsp;&nbsp;&nbsp; </span></small>Use an instrument to read a
 single spot color value.
 <br>
+<small><a style="font-family: monospace;" href="spyd2en.html">spyd2en</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
+ style="text-decoration: underline; font-family: monospace;"></span></small>A
+special purpose utility that enables the Spyder 2
+colorimeter.<br>
 <small><a style="font-family: monospace;" href="synthread.html">synthread</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><big>Fake
 the reading of a device using a synthetic device model.
@@ -718,7 +730,7 @@ matching of CIE in two .ti3 files.
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></font>Convert one or more gamuts into
 a VRML 3D visualization file.
-<br>
+Compute an intersection.<br>
 <small><a style="font-family: monospace;" href="xicclu.html">xicclu</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></small>Lookup individual color values forward or inverted

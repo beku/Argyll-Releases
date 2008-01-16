@@ -31,7 +31,6 @@
 #define DEF_HEIGHT 5.0
 
 void usage(char *diag) {
-	int i;
 	fprintf(stderr,"Do gamut surface torture test\n");
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: surftest [options] npoints\n");
@@ -42,14 +41,12 @@ void usage(char *diag) {
 	fprintf(stderr," -n            Don't add VRML axes or white/black point\n");
 	fprintf(stderr," -h height     Height above sqhere (default %f)\n",DEF_HEIGHT);
 	fprintf(stderr," -f            Do segemented maxima filtering (default is not)\n");
-	fprintf(stderr," -t ntpoints   Number of test points (default %f)\n",DEF_TPOINTS);
+	fprintf(stderr," -t ntpoints   Number of test points (default %d)\n",DEF_TPOINTS);
 	fprintf(stderr," npoints       Number of random points, default %d^3\n",DEF_POINTS);
 	fprintf(stderr,"               Outputs surftest.wrl");
 	fprintf(stderr,"\n");
 	exit(1);
 }
-
-static gamut *make_scRGB_gamut();
 
 int
 main(int argc, char *argv[]) {
@@ -61,7 +58,6 @@ main(int argc, char *argv[]) {
 	gamut *gam;
 	int rand = 0;
 	int verb = 0;
-	int rv = 0;
 	int doaxes = 1;
 	int dofilt = 0;
 	int i;

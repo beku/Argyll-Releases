@@ -10,7 +10,7 @@
  * Copyright 1996, 2002 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licensed with a free use license:-
+ * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
  */
 
@@ -30,8 +30,8 @@ extern void error(char *fmt, ...), warning(char *fmt, ...);
 static void del_parse(parse *p);
 static int read_line(parse *p);
 static void reset_del(parse *p);
-static void add_del(struct _parse *p, unsigned char *t,
-                    unsigned char *nr, unsigned char *c, unsigned char *q);
+static void add_del(struct _parse *p, char *t,
+                    char *nr, char *c, char *q);
 static char *get_token(parse *p);
 
 /* Open the file, allocate and initialize the parse structure */
@@ -191,10 +191,10 @@ reset_del(parse *p) {
 static void
 add_del(
 	parse *p,				/* Parse structure */
-	unsigned char *t,		/* Terminators */
-	unsigned char *nr,		/* Not Read */
-	unsigned char *c,		/* Comment start */
-	unsigned char *q)		/* Quote characters */
+	char *t,		/* Terminators */
+	char *nr,		/* Not Read */
+	char *c,		/* Comment start */
+	char *q)		/* Quote characters */
 	{
 	int i;
 	if (t != NULL)

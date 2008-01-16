@@ -6,7 +6,7 @@
  * Author: Graeme W. Gill
  * Date:   3/10/2001
  *
- * Derived from printread.c
+ * Derived from printread.c/chartread.c
  * Was called printspot.
  *
  * Copyright 2001 - 2007 Graeme W. Gill
@@ -116,7 +116,7 @@ usage(void) {
 	icoms *icom;
 	fprintf(stderr,"Read Print Spot values, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	if (setup_spyd2() == 2)
+	if (setup_spyd2(NULL) == 2)
 		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	fprintf(stderr,"usage: spotread [-options] [logfile]\n");
 	fprintf(stderr," -v                   Verbose mode\n");
@@ -132,7 +132,7 @@ usage(void) {
 					break;
 				if (strlen(paths[i]->path) >= 8
 				  && strcmp(paths[i]->path+strlen(paths[i]->path)-8, "Spyder2)") == 0
-				  && setup_spyd2() == 0)
+				  && setup_spyd2(NULL) == 0)
 					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->path);
 				else
 					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
@@ -160,9 +160,12 @@ usage(void) {
 	fprintf(stderr,"    6                  D65\n");
 	fprintf(stderr,"    u                  U.V. Cut\n");
 	fprintf(stderr," -F extrafilterfile   Apply extra filter compensation file\n");
+	fprintf(stderr," -x                   Display Yxy instead of Lab\n");
+	fprintf(stderr," -T                   Display correlated color temperatures\n");
 //	fprintf(stderr," -K type              Run instrument calibration first\n");
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
 	fprintf(stderr," -H                   Start in high resolution spectrum mode (if available)\n");
+	fprintf(stderr," -W n|h|x             Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," logfile              Optional file to save reading results as text\n");
 	exit(1);
@@ -184,6 +187,8 @@ int main(int argc, char *argv[])
 	                                /* 3 = display white rel. */
 	int ambient = 0;				/* Use ambient emissive mode */
 	int highres = 0;				/* Use high res mode if available */
+	int doYxy= 0;					/* Display Yxy instead of Lab */
+	int doCCT= 0;					/* Display correlated color temperatures */
 	inst_mode mode = 0, smode = 0;	/* Normal mode and saved readings mode */
 	inst_opt_mode trigmode = inst_opt_unknown;	/* Chosen trigger mode */
 	inst_opt_filter fe = inst_opt_filter_unknown;
@@ -198,6 +203,7 @@ int main(int argc, char *argv[])
 	inst2_capability cap2 = inst2_unknown;	/* Instrument capabilities 2 */
 	double lx, ly;					/* Read location on xy table */
 	baud_rate br = baud_38400;		/* Target baud rate */
+	flow_control fc = fc_nc;		/* Default flow control */
 	inst *it;						/* Instrument object */
 	inst_code rv;
 	int uswitch = 0;					/* Instrument switch is enabled */
@@ -212,11 +218,12 @@ int main(int argc, char *argv[])
 	double wXYZ[3] = { -10.0, 0, 0 };/* White XYZ for display white relative */
 	double Lab[3] = { -10.0, 0, 0};	/* Last Lab */
 	double rLab[3] = { -10.0, 0, 0};	/* Reference Lab */
+	double Yxy[3] = { 0.0, 0, 0};	/* Yxy value */
 	int savdrd = 0;					/* At least one saved reading is available */
 	int ix;							/* Reading index number */
 
 	set_exe_path(argv[0]);			/* Set global exe_path and error_program */
-	setup_spyd2();					/* Load firware if available */
+	setup_spyd2(NULL);				/* Load firware if available */
 
 	for (i = 0; i < 26; i++)
 		sp2cief[i] = NULL;
@@ -324,7 +331,7 @@ int main(int argc, char *argv[])
 					usage();
 
 			/* Request transmission measurement */
-			} else if (argv[fa][1] == 't' || argv[fa][1] == 'T') {
+			} else if (argv[fa][1] == 't') {
 				emiss = 0;
 				trans = 1;
 				displ = 0;
@@ -383,6 +390,14 @@ int main(int argc, char *argv[])
 				if (na == NULL) usage();
 				strncpy(filtername,na,MAXNAMEL-1); filtername[MAXNAMEL-1] = '\000';
 
+			/* Show Yxy */
+			} else if (argv[fa][1] == 'x') {
+				doYxy = 1;
+
+			/* Show CCT etc. */
+			} else if (argv[fa][1] == 'T') {
+				doCCT = 1;
+
 			/* Manual calibration */
 			} else if (argv[fa][1] == 'K') {
 
@@ -399,6 +414,19 @@ int main(int argc, char *argv[])
 			/* High res mode */
 			} else if (argv[fa][1] == 'H') {
 				highres = 1;
+
+			/* Serial port flow control */
+			} else if (argv[fa][1] == 'W') {
+				fa = nfa;
+				if (na == NULL) usage();
+				if (na[0] == 'n' || na[0] == 'N')
+					fc = fc_none;
+				else if (na[0] == 'h' || na[0] == 'H')
+					fc = fc_Hardware;
+				else if (na[0] == 'x' || na[0] == 'X')
+					fc = fc_XonXOff;
+				else
+					usage();
 
 			} else if (argv[fa][1] == 'D') {
 				debug = 1;
@@ -435,7 +463,7 @@ int main(int argc, char *argv[])
 #endif
 
 	/* Establish communications */
-	if ((rv = it->init_coms(it, comport, br, 15.0)) != inst_ok) {
+	if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
 		printf("Failed to initialise communications with instrument\n"
 		       "or wrong instrument or bad configuration!\n"
 		       "('%s' + '%s')\n", it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -715,6 +743,8 @@ int main(int argc, char *argv[])
 	for (ix = 1;; ix++) {
 		ipatch val;
 		double XYZ[3], tXYZ[3];
+		double cct, vct, vdt;
+		double cct_de, vct_de, vdt_de;
 		int ch = '0';		/* Character */
 		int dofwa = 0;		/* Setup for FWA compensation */
 		int fidx = -1;		/* FWA compensated index, default = none */
@@ -1002,7 +1032,7 @@ int main(int argc, char *argv[])
 				break;
 			}
 			printf("\n");
-			if ((rv = it->init_coms(it, comport, br, 15.0)) != inst_ok) {
+			if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
 #ifdef DEBUG
 				printf("init_coms returned '%s' (%s)\n",
 			       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -1116,7 +1146,7 @@ int main(int argc, char *argv[])
 				sp2cief[fidx]->sconvert(sp2cief[fidx], &tsp, NULL, &tsp);
 			}
 
-			printf("Spectrum from %f yp %f nm in %d steps\n",
+			printf("Spectrum from %f to %f nm in %d steps\n",
 		                tsp.spec_wl_short, tsp.spec_wl_long, tsp.spec_n);
 
 			for (j = 0; j < tsp.spec_n; j++)
@@ -1176,7 +1206,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		if (dofwa == 0) {
+		if (dofwa == 0) {		/* Not setting up fwa */
 
 			sp = val.sp;		/* Save as last spectral reading */
 
@@ -1210,55 +1240,11 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			/* Compute D50 Lab from XYZ */
-			icmXYZ2Lab(&icmD50, Lab, XYZ);
-
-			if (displ > 1) {
-				if (wXYZ[0] < 0.0) {
-					printf("\n Making result XYZ: %f %f %f, D50 Lab: %f %f %f white reference.\n",
-					XYZ[0] * 100.0, XYZ[1] * 100.0, XYZ[2] * 100.0, Lab[0], Lab[1], Lab[2]);
-					wXYZ[0] = XYZ[0];
-					wXYZ[1] = XYZ[1];
-					wXYZ[2] = XYZ[2];
-					continue;
-				}
-				if (displ == 2) {
-					/* Normalize to white Y value */
-					XYZ[0] /= wXYZ[1];
-					XYZ[1] /= wXYZ[1];
-					XYZ[2] /= wXYZ[1];
-				} else {
-
-					/* Normalize to white */
-					XYZ[0] *= icmD50.X/wXYZ[0];
-					XYZ[1] *= icmD50.Y/wXYZ[1];
-					XYZ[2] *= icmD50.Z/wXYZ[2];
-				}
-
-				/* recompute Lab */
-				icmXYZ2Lab(&icmD50, Lab, XYZ);
-			}
-
-			/* Scale XYZ to 100 */
-			XYZ[0] *= 100.0;
-			XYZ[1] *= 100.0;
-			XYZ[2] *= 100.0;
-
-			/* Print out the XYZ and Lab */
-			printf("\n Result is XYZ: %f %f %f, D50 Lab: %f %f %f\n",
-			XYZ[0], XYZ[1], XYZ[2], Lab[0], Lab[1], Lab[2]);
-
-			if (rLab[0] >= -1.0) {
-				printf(" Delta E to reference is %f %f %f (%f, CIE94 %f)\n",
-				Lab[0] - rLab[0], Lab[1] - rLab[1], Lab[2] - rLab[2],
-				icmLabDE(Lab, rLab), icmCIE94(Lab, rLab));
-			}
-			if (ambient) {
+			/* Compute color temperatures */
+			if (ambient || doCCT) {
 				icmXYZNumber wp;
 				double nxyz[3], axyz[3];
 				double lab[3], alab[3];
-				double cct, vct, vdt;
-				double cct_de, vct_de, vdt_de;
 
 				nxyz[0] = XYZ[0] / XYZ[1];
 				nxyz[2] = XYZ[2] / XYZ[1];
@@ -1296,8 +1282,79 @@ int main(int argc, char *argv[])
 				icmXYZ2Lab(&wp, lab, nxyz);
 				icmXYZ2Lab(&wp, alab, axyz);
 				vdt_de = icmLabDE(lab, alab);
+			}
 
-				printf(" Ambient = %.1f Lux, CCT = %.0fK (Delta E %f)\n", 3.1415926 * XYZ[1],cct, cct_de);
+			/* Compute D50 Lab from XYZ */
+			icmXYZ2Lab(&icmD50, Lab, XYZ);
+
+			/* Compute Yxy from XYZ */
+			icmXYZ2Yxy(Yxy, XYZ);
+
+			if (displ > 1) {
+				if (wXYZ[0] < 0.0) {
+					printf("\n Making result XYZ: %f %f %f, D50 Lab: %f %f %f white reference.\n",
+					XYZ[0] * 100.0, XYZ[1] * 100.0, XYZ[2] * 100.0, Lab[0], Lab[1], Lab[2]);
+					wXYZ[0] = XYZ[0];
+					wXYZ[1] = XYZ[1];
+					wXYZ[2] = XYZ[2];
+					continue;
+				}
+				if (displ == 2) {
+					/* Normalize to white Y value */
+					XYZ[0] /= wXYZ[1];
+					XYZ[1] /= wXYZ[1];
+					XYZ[2] /= wXYZ[1];
+				} else {
+
+					/* Normalize to white */
+					XYZ[0] *= icmD50.X/wXYZ[0];
+					XYZ[1] *= icmD50.Y/wXYZ[1];
+					XYZ[2] *= icmD50.Z/wXYZ[2];
+				}
+
+				/* recompute Lab */
+				icmXYZ2Lab(&icmD50, Lab, XYZ);
+
+				/* recompute Yxy from XYZ */
+				icmXYZ2Yxy(Yxy, XYZ);
+			}
+
+			/* Scale XYZ to 100 */
+			XYZ[0] *= 100.0;
+			XYZ[1] *= 100.0;
+			XYZ[2] *= 100.0;
+
+			Yxy[0] *= 100.0;
+
+			if (ambient && (cap & inst_emis_ambient_mono)) {
+				printf("\n Result is Y: %f, L*: %f\n",XYZ[1], Lab[0]);
+			} else {
+				if (doYxy) {
+					/* Print out the XYZ and Yxy */
+					printf("\n Result is XYZ: %f %f %f, Yxy: %f %f %f\n",
+					XYZ[0], XYZ[1], XYZ[2], Yxy[0], Yxy[1], Yxy[2]);
+				} else {
+					/* Print out the XYZ and Lab */
+					printf("\n Result is XYZ: %f %f %f, D50 Lab: %f %f %f\n",
+					XYZ[0], XYZ[1], XYZ[2], Lab[0], Lab[1], Lab[2]);
+				}
+			}
+
+			if (rLab[0] >= -1.0) {
+				printf(" Delta E to reference is %f %f %f (%f, CIE94 %f)\n",
+				Lab[0] - rLab[0], Lab[1] - rLab[1], Lab[2] - rLab[2],
+				icmLabDE(Lab, rLab), icmCIE94(Lab, rLab));
+			}
+			if (ambient) {
+				if (cap & inst_emis_ambient_mono) {
+					printf(" Ambient = %.1f Lux\n", 3.1415926 * XYZ[1]);
+				} else {
+					printf(" Ambient = %.1f Lux, CCT = %.0fK (Delta E %f)\n", 3.1415926 * XYZ[1],cct, cct_de);
+					printf(" Closest Planckian temperature = %.0fK (Delta E %f)\n",vct, vct_de);
+					printf(" Closest Daylight temperature  = %.0fK (Delta E %f)\n",vdt, vdt_de);
+				}
+			} else if (doCCT) {
+				printf("                           CCT = %.0fK (Delta E %f)\n",cct, cct_de);
 				printf(" Closest Planckian temperature = %.0fK (Delta E %f)\n",vct, vct_de);
 				printf(" Closest Daylight temperature  = %.0fK (Delta E %f)\n",vdt, vdt_de);
 			}

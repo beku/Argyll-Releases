@@ -33,7 +33,7 @@ if $(HAVE_TIFF) {
 }
 
 #Products
-Executables = targen filmtarg printtarg ;
+Executables = targen printtarg ;
 
 #Install
 InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
@@ -60,10 +60,10 @@ LinkLibraries targen : ../rspl/librspl.lib ../cgats/libcgats.lib
                        $(LibWin) ;
 
 # Film Calibration Target File generator
-MainFromObjects filmtarg : filmtarg$(SUFOBJ) alphix$(SUFOBJ) randix$(SUFOBJ) ;
-Object filmtarg$(SUFOBJ) : filmtarg.c ;
-ObjectHdrs filmtarg$(SUFOBJ) : ../h ../numlib ../cgats $(TIFFINC) ;
-LinkLibraries filmtarg : ../cgats/libcgats.lib $(TIFFLIB) ;
+#MainFromObjects filmtarg : filmtarg$(SUFOBJ) alphix$(SUFOBJ) randix$(SUFOBJ) ;
+#Object filmtarg$(SUFOBJ) : filmtarg.c ;
+#ObjectHdrs filmtarg$(SUFOBJ) : ../h ../numlib ../cgats $(TIFFINC) ;
+#LinkLibraries filmtarg : ../cgats/libcgats.lib $(TIFFLIB) ;
 
 # Print Calibration Target Postscrip../numlib t File generator
 MainFromObjects printtarg : printtarg$(SUFOBJ) alphix$(SUFOBJ) randix$(SUFOBJ) ;

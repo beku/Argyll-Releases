@@ -421,12 +421,13 @@ to the actual values. A summary of the average and maximum Lab delta
 E's will be printed out if this flag is set. If the <b>-v</b> flag is
 also set, then information for each patch will also be printed.<br>
 <br>
-Normally Lut base profiles are generated with three major elements:-
+<a name="ni"></a><a name="no"></a>Normally Lut base profiles are
+generated with three major elements:-
 per
 device channel (shaper) curves, the multi-dimensional lut table,
-and per PCS channel (shaper) curves. <a name="ni"></a>Using the <b>-ni</b>
-flag disables the creation of the per device channel curves, <a
- name="no"></a>while using the <b>-no</b> flag disables the creation
+and per PCS channel (shaper) curves. Using the <b>-ni</b>
+flag disables the creation of the per device channel curves, while
+using the <b>-no</b> flag disables the creation
 of the per PCS channel curves.<br>
 <br>
 <a name="k"></a> -<b>k</b> parameter sets the target level of black (K)
@@ -709,12 +710,16 @@ might be advised to increase the <span style="font-weight: bold;">-r</span>
 parameter above its default value (double or perhaps 4x would be good
 starting values.) <br>
 <br>
-In order to generate perceptual and saturation intent B2A tables, it is
+<a name="S"></a><a name="s"></a>In order to generate perceptual and
+saturation intent B2A tables, it is
 necessary to specify at least one profile to define what source gamut
-should be used in the source to destination gamut mapping. <a name="S"></a>The
+should be used in the source to destination gamut mapping. [For more
+information on <span style="text-decoration: underline;">why</span> a
+source gamut is needed, see <a href="iccgamutmapping.html">About ICC
+profiles and Gamut Mapping</a>] The
 <b>-S</b> parameter is used to do this, and doing so causes perceptual
 and saturation tables to be generated. If only a perceptual
-intent is needed, <a name="s"></a>then the <b>-s</b> flag can be
+intent is needed, then the <b>-s</b> flag can be
 used,
 and the saturation intent will use the same table as the perceptual
 intent.
@@ -728,7 +733,7 @@ If a source gamut is specified, then an ICC Version 2.4.0 profile will
 be created with a full complement of B2A tags to support all
 intents.<br>
 <br>
-The <a name="g"></a><span style="font-weight: bold;">-g</span> flag
+<a name="g"></a>The <span style="font-weight: bold;">-g</span> flag
 and its argument allow the use of a source gamut to use instead of that
 of the source
 profile. This is to allow optimizing the gamut mapping to a source
@@ -746,7 +751,8 @@ conditions generally being those of the input profile viewing
 conditions. The input profile will normally be the one used to create a
 source image gamut using <span style="font-weight: bold;">tiffgamut</span>.<br>
 <br>
-The <b><a name="p"></a>-p</b> option alows specifying an abstract
+<b><a name="p"></a></b>The <b>-p</b> option alows specifying an
+abstract
 profile be applied to all of the output tables, after any gamut
 mapping. An abstract
 profile is a way of specifying a color adjustment in a device
@@ -774,12 +780,13 @@ that profile with an RGB source profile, use relative colorimetric
 intent,
 or if linking with a CMYK profile, use the perceptual intent.<br>
 <br>
-Normally, the gamut mapping used in creating the perceptual and
+<a name="t"></a><a name="T"></a>Normally, the gamut mapping used in
+creating the perceptual and
 saturation intent tables is set to perceptual and saturation gamut
 mapping (as would be expected), but it is possible to override this
 default selection for each intent using the <b>-t</b> and <b>-T</b>
-flags. <a name="t"></a>The <b>-t</b> flag can be used to set the
-gamut mapping for the perceptual table, <a name="T"></a>and the <b>-T</b>
+flags. The <b>-t</b> flag can be used to set the
+gamut mapping for the perceptual table, and the <b>-T</b>
 flag can be used to set the gamut mapping for the saturation table. A
 more detailed description of the different intents is given in <a
  href="icclink.html#i">icclink</a>. Note that selecting any of the
@@ -788,13 +795,14 @@ probably not function as expected, since the perceptual and saturation
 tables are inherently relative
 colorimetric in nature.<br>
 <br>
-Since appearance space is used in the gamut mapping (just as it
+<a name="c"></a><b><a name="d"></a></b>Since appearance space is used
+in the gamut mapping (just as it
 is in <a href="icclink.html"> icclink</a>), the viewing conditions
 for the source and destination colorspaces should really be specified.
 The
 source colorspace is the profile specified with the <b>-s</b> or <b>-S</b>
-flag, and the destination is the profile being created. The <a name="c"></a><b>-c</b>
-and <b><a name="d"></a>-d</b> options allow specification
+flag, and the destination is the profile being created. The <b>-c</b>
+and <b>-d</b> options allow specification
 of their respective, associated viewing conditions. The viewing
 condition
 information is used to map the profile PCS (Profile Connection Space,

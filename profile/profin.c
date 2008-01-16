@@ -76,8 +76,8 @@ make_input_icc(
 	icmICCVersion iccver,	/* ICC profile version to create */
 	int verb,
 	int iquality,			/* A2B table quality, 0..3 */
-	int noiluts,			/* nz to supress creation of input (Device) shaper luts */
-	int noisluts,			/* nz to supress creation of input sub-grid (Device) shaper luts */
+	int noisluts,			/* nz to supress creation of input (Device) shaper luts */
+	int noipluts,			/* nz to supress creation of input (Device) position luts */
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
 	int verify,
 	int nsabs,				/* nz for non-standard absolute output */
@@ -90,7 +90,7 @@ make_input_icc(
 	icmFile *wr_fp;
 	icc *wr_icco;
 	int npat;				/* Number of patches */
-	co *tpat;				/* Patch input values */
+	cow *tpat;				/* Patch input values */
 	int i, rv = 0;
 	int isLab = 0;			/* 0 if input is XYZ, 1 if input is Lab */
 	int wantLab = 0;		/* 0 if want is XYZ, 1 want is Lab */
@@ -359,7 +359,7 @@ make_input_icc(
 	}
 
 	/* Allocate arrays to hold test patch input and output values */
-	if ((tpat = (co *)malloc(sizeof(co) * npat)) == NULL)
+	if ((tpat = (cow *)malloc(sizeof(cow) * npat)) == NULL)
 		error("Malloc failed - tpat[]");
 
 	/* Read in the CGATs fields */
@@ -423,6 +423,7 @@ make_input_icc(
 			error ("Field CMYK_Y is wrong type - corrupted file ?");
 
 		for (i = 0; i < npat; i++) {
+			tpat[i].w = 1.0;
 			tpat[i].p[0] = *((double *)icg->t[0].fdata[i][ri]) / 100.0;
 			tpat[i].p[1] = *((double *)icg->t[0].fdata[i][gi]) / 100.0;
 			tpat[i].p[2] = *((double *)icg->t[0].fdata[i][bi]) / 100.0;
@@ -457,11 +458,11 @@ make_input_icc(
 		if ((wr_xicc = new_xicc(wr_icco)) == NULL)
 			error ("Creation of xicc failed");
 
-		if (noiluts)
-			flags |= ICX_NO_IN_LUTS;
-
 		if (noisluts)
-			flags |= ICX_NO_IN_SUBG_LUTS;
+			flags |= ICX_NO_IN_SHP_LUTS;
+
+		if (noipluts)
+			flags |= ICX_NO_IN_POS_LUTS;
 
 		if (nooluts)
 			flags |= ICX_NO_OUT_LUTS;

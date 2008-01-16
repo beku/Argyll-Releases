@@ -29,9 +29,6 @@
  *	and then linearly interpolating the white readings,
  *	and scaling them back to a reference white.
  *
- * Add interface for listing and selecting the display to profile
- * (similar to selecting a serial port).
- *
  * Should probably check the display attributes (like visual depth)
  * and complain if we aren't using 24 bit color or better. 
  *
@@ -57,6 +54,8 @@
 #include "numsup.h"
 #include "cgats.h"
 #include "dispwin.h"
+
+#define VERIFY_TOL (1.0/255.0)
 
 #undef DEBUG
 //#define STANDALONE_TEST
@@ -137,7 +136,7 @@ static BOOL CALLBACK MonitorEnumProc(
 int null_error_handler(Display *disp, XErrorEvent *ev) {
 	return 0;
 }
-#endif
+#endif	/* X11 */
 
 /* Return pointer to list of disppath. Last will be NULL. */
 /* Return NULL on failure. Call free_disppaths() to free up allocation */
@@ -411,7 +410,7 @@ disppath **get_displays() {
 			XCloseDisplay(mydisplay);
 			return NULL;
 		}
-		if (xai != NULL) {
+		if (xai != NULL) {					/* Xinerama */
 			disps[i]->screen = 0;
 			disps[i]->uscreen = i;			/* We are assuming xinerama lists screens in the same order */
 			disps[i]->rscreen = i;
@@ -428,6 +427,20 @@ disppath **get_displays() {
 			disps[i]->sw = DisplayWidth(mydisplay, disps[i]->screen);
 			disps[i]->sh = DisplayHeight(mydisplay, disps[i]->screen);
 		}
+
+		if ((disps[i]->icc_atom_name = (char *)malloc(30)) == NULL) {
+			debug("get_displays failed on malloc\n");
+			free_disppaths(disps);
+			XCloseDisplay(mydisplay);
+			return NULL;
+		}
+
+		/* Create the X11 root atom of the default screen */
+		/* that may contain the associated ICC profile */
+		if (disps[i]->uscreen == 0)
+			strcpy(disps[i]->icc_atom_name, "_ICC_PROFILE");
+		else
+			sprintf(disps[i]->icc_atom_name, "_ICC_PROFILE_%d",disps[i]->uscreen);
 
 		if (XF86VidModeQueryExtension(mydisplay, &evb, &erb) != 0) {
 			/* Some propietary multi-screen drivers (ie. TwinView & MergeFB) */
@@ -470,7 +483,7 @@ disppath **get_displays() {
 
 	XCloseDisplay(mydisplay);
 
-#endif /* UNIX */
+#endif /* UNIX X11 */
 
 	return disps;
 }
@@ -487,7 +500,9 @@ void free_disppaths(disppath **disps) {
 #if defined(UNIX) && !defined(__APPLE__)
 			if (disps[i]->name != NULL)
 				free(disps[i]->name);
-#endif
+			if (disps[i]->icc_atom_name != NULL)
+				free(disps[i]->icc_atom_name);
+#endif	/* UNIX X11 */
 			free(disps[i]);
 		}
 		free(disps);
@@ -528,11 +543,20 @@ disppath *get_a_display(int ix) {
 #if defined(UNIX) && !defined(__APPLE__)
 	if ((rv->name = strdup(paths[i]->name)) == NULL) {
 		debug("get_displays failed on malloc\n");
+		free(rv->description);
 		free(rv);
 		free_disppaths(paths);
 		return NULL;
 	}
-#endif /* UNIX */
+	if ((rv->icc_atom_name = strdup(paths[i]->icc_atom_name)) == NULL) {
+		debug("get_displays failed on malloc\n");
+		free(rv->description);
+		free(rv->name);
+		free(rv);
+		free_disppaths(paths);
+		return NULL;
+	}
+#endif	/* UNXI X11 */
 	free_disppaths(paths);
 	return rv;
 }
@@ -544,7 +568,9 @@ void free_a_disppath(disppath *path) {
 #if defined(UNIX) && !defined(__APPLE__)
 			if (path->name != NULL)
 				free(path->name);
-#endif /* UNIX */
+			if (path->icc_atom_name != NULL)
+				free(path->icc_atom_name);
+#endif	/* UNXI X11 */
 		free(path);
 	}
 }
@@ -555,7 +581,7 @@ static ramdac *dispwin_clone_ramdac(ramdac *r);
 static void dispwin_setlin_ramdac(ramdac *r);
 static void dispwin_del_ramdac(ramdac *r);
 
-/* For RAMDAC use, we assume that the number of entries in the RAMDAC */
+/* For VideoLUT/RAMDAC use, we assume that the number of entries in the RAMDAC */
 /* meshes perfectly with the display raster depth, so that we can */
 /* figure out how to apportion device values. We fail if they don't */
 /* seem to mesh. */
@@ -618,7 +644,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 #endif	/* NT */
 
 #ifdef __APPLE__
-	int nent;
+	unsigned int nent;
 	CGGammaValue vals[3][16385];
 
 	debug("dispwin_get_ramdac called\n");
@@ -742,7 +768,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 			r->v[j][i] = vals[j][i]/65535.0;
 		}
 	}
-#endif /* UNIX && !__APPLE__ */
+#endif	/* UNXI X11 */
 	return r;
 }
 
@@ -765,7 +791,12 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r) {
 
 	for (j = 0; j < 3; j++) {
 		for (i = 0; i < r->nent; i++) {
-			vals[j][i] = (int)(65535.0 * r->v[j][i] + 0.5);
+			double vv = r->v[j][i];
+			if (vv < 0.0)
+				vv = 0.0;
+			else if (vv > 1.0)
+				vv = 1.0;
+			vals[j][i] = (int)(65535.0 * vv + 0.5);
 		}
 	}
 
@@ -782,7 +813,12 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r) {
 
 	for (j = 0; j < 3; j++) {
 		for (i = 0; i < r->nent; i++) {
-			vals[j][i] = r->v[j][i];
+			double vv = r->v[j][i];
+			if (vv < 0.0)
+				vv = 0.0;
+			else if (vv > 1.0)
+				vv = 1.0;
+			vals[j][i] = vv;
 		}
 	}
 
@@ -799,7 +835,12 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r) {
 
 	for (j = 0; j < 3; j++) {
 		for (i = 0; i < r->nent; i++) {
-			vals[j][i] = (int)(r->v[j][i] * 65535.0 + 0.5);
+			double vv = r->v[j][i];
+			if (vv < 0.0)
+				vv = 0.0;
+			else if (vv > 1.0)
+				vv = 1.0;
+			vals[j][i] = (int)(vv * 65535.0 + 0.5);
 		}
 	}
 	/* Some propietary multi-screen drivers (ie. TwinView & MergedFB) */
@@ -814,7 +855,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r) {
 		return 1;
 	}
 	XSetErrorHandler(NULL);
-#endif /* UNIX && !__APPLE__ */
+#endif	/* UNXI X11 */
 
 	return 0;
 }
@@ -930,6 +971,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		HDC hdc;
 		PAINTSTRUCT ps;
 		RECT rect;
+		HRGN regn;
 		HBRUSH hbr;
 		MSG msg;
 		int vali[3];
@@ -937,8 +979,13 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		/* Stop the system going to sleep */
 		SetThreadExecutionState(ES_DISPLAY_REQUIRED);
 
+		if ((regn = CreateRectRgn(p->tx, p->ty, p->tx + p->tw, p->ty + p->th)) == NULL) {
+			debug2((errout,"CreateRectRgn failed, lasterr = %d\n",GetLastError()));
+			return 1;
+		}
+
 		/* Force a repaint with the new data */
-		if (!InvalidateRgn(p->hwnd,NULL,TRUE)) {
+		if (!InvalidateRgn(p->hwnd,regn,TRUE)) {
 			debug2((errout,"InvalidateRgn failed, lasterr = %d\n",GetLastError()));
 			return 1;
 		}
@@ -963,7 +1010,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		hbr = CreateSolidBrush(RGB(vali[0],vali[1],vali[2]));
 		SelectObject(hdc,hbr);
 
-		GetClientRect(p->hwnd, &rect);
+		SetRect(&rect, p->tx, p->ty, p->tx + p->tw, p->ty + p->th);
 		FillRect(hdc, &rect, hbr);
 
 		RestoreDC(hdc,-1);
@@ -978,6 +1025,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 			DispatchMessage(&msg);
 		}
 		DeleteDC(hdc);
+		DeleteObject(regn);
 	}
 #endif /* NT */
 
@@ -991,9 +1039,9 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	/* Cause window repaint with the new data */
 	{
 		OSStatus stat;
-		Rect wrect;
-		GetPortBounds(p->port, &wrect);
-		if ((stat = InvalWindowRect(p->mywindow, &wrect)) != noErr) {
+		Rect wRect;
+	    SetRect(&wRect,p->tx,p->ty,p->tw,p->th); /* left, top, right, bottom */
+		if ((stat = InvalWindowRect(p->mywindow, &wRect)) != noErr) {
 			debug2((errout,"InvalWindowRect failed with %d\n",stat));
 			return 1;
 		}
@@ -1034,7 +1082,6 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	{
         static time_t ltime = 0;
         time_t ttime;
-		XWindowAttributes mywattributes;
 		Colormap mycmap;
 		XColor col;
 		int vali[3];
@@ -1082,20 +1129,44 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		XAllocColor(p->mydisplay, mycmap, &col);
 		XSetForeground(p->mydisplay, p->mygc, col.pixel);
 
-		XGetWindowAttributes(p->mydisplay, p->mywindow, &mywattributes);
-
 		XFillRectangle(p->mydisplay, p->mywindow, p->mygc,
-		               0, 0, mywattributes.width, mywattributes.height);
+		               p->tx, p->ty, p->tw, p->th);
 
 		XSync(p->mydisplay, False);		/* Make sure it happens */
 	}
-#endif /* UNIX */
+#endif	/* UNXI X11 */
+
+	if (p->callout != NULL) {
+		int rv;
+		char *cmd;
+
+		if ((cmd = malloc(strlen(p->callout) + 200)) == NULL)
+			error("Malloc of command string failed");
+
+		sprintf(cmd, "%s %d %d %d %f %f %f",p->callout,
+			        (int)(r * 255.0 + 0.5),(int)(g * 255.0 + 0.5),(int)(b * 255.0 + 0.5), r, g, b);
+		if ((rv = system(cmd)) != 0)
+			warning("System command '%s' failed with %d",cmd,rv); 
+		free(cmd);
+	}
 
 	/* Allow some time for the display to update before */
-	/* a measurement can take place */
-	msec_sleep(50);
+	/* a measurement can take place. This allows for CRT */
+	/* refresh, or LCD processing/update time. */
+	msec_sleep(60);
 
 	return 0;
+}
+
+/* ----------------------------------------------- */
+/* Set the shell set color callout */
+void dispwin_set_callout(
+dispwin *p,
+char *callout
+) {
+	debug2((errout,"dispwin_set_callout called with '%s'\n",callout));
+
+	p->callout = strdup(callout);
 }
 
 /* ----------------------------------------------- */
@@ -1108,6 +1179,9 @@ dispwin *p
 
 	if (p == NULL)
 		return;
+
+	if (p->callout != NULL)
+		free(p->callout);
 
 	/* Restore original RAMDAC if we were in native mode */
 	if (p->donat && p->or != NULL) {
@@ -1172,7 +1246,7 @@ dispwin *p
 
 	XCloseDisplay(p->mydisplay);
 	debug("finished\n");
-#endif /* UNIX */
+#endif	/* UNXI X11 */
 	/* -------------------------------------------------- */
 
 	free(p);
@@ -1208,22 +1282,27 @@ void* userData
 				
 				case kEventWindowBoundsChanged: {
 					OSStatus stat;
-					Rect wrect;
+					Rect wRect;
 					debug("Event: Bounds Changed\n");
-					GetPortBounds(p->port, &wrect);
-					if ((stat = InvalWindowRect(p->mywindow, &wrect)) != noErr) {
+					GetPortBounds(p->port, &wRect);
+					if ((stat = InvalWindowRect(p->mywindow, &wRect)) != noErr) {
 						debug2((errout,"InvalWindowRect failed with %d\n",stat));
 					}
 					break;
 				}
 				case kEventWindowDrawContent: {
-					Rect rect;
 					CGRect frect;
 
 					debug("Event: Draw Content\n");
-					GetPortBounds(p->port, &rect);		/* Bounds is inclusive, global coords */
-					frect = CGRectMake(0.0, 0.0,
-					  (float)(1.0 + rect.right - rect.left), (float)(1.0 + rect.bottom - rect.top));
+					/* If we're using an overlay window, paint it all black */
+					if (p->blackbg && p->firstdraw == 0) {
+						frect = CGRectMake(0.0, 0.0, (float)p->ww, (float)p->wh);
+						CGContextSetRGBFillColor(p->mygc, 0.0, 0.0, 0.0, 1.0);
+						CGContextFillRect(p->mygc, frect);
+						p->firstdraw = 1;
+					}
+					frect = CGRectMake((float)p->tx, (float)(p->wh - p->ty - p->th - 1),
+					  (float)(1.0 + p->tw), (float)(1.0 + p->th ));
 					CGContextSetRGBFillColor(p->mygc, p->r_rgb[0], p->r_rgb[1], p->r_rgb[2], 1.0);
 					CGContextFillRect(p->mygc, frect);
 					CGContextFlush(p->mygc);		/* Force draw to display */
@@ -1248,7 +1327,7 @@ void* userData
 
 #if defined(UNIX) && !defined(__APPLE__)
 	/* None */
-#endif /* UNIX */
+#endif	/* UNXI X11 */
 
 /* ----------------------------------------------- */
 /* Create a RAMDAC access and display test window, default white */
@@ -1258,6 +1337,7 @@ double width, double height,	/* Width and height in mm */
 double hoff, double voff,		/* Offset from center in fraction of screen, range -1.0 .. 1.0 */
 int nowin,						/* NZ if no window should be created - RAMDAC access only */
 int native,						/* NZ if ramdac should be bypassed rather than used. */
+int blackbg,					/* NZ if whole screen should be filled with black */
 int override					/* NZ if override_redirect is to be used on X11 */
 ) {
 	dispwin *p = NULL;
@@ -1269,9 +1349,11 @@ int override					/* NZ if override_redirect is to be used on X11 */
 
 	p->nowin = nowin;
 	p->donat = native;
+	p->blackbg = blackbg;
 	p->get_ramdac   = dispwin_get_ramdac;
 	p->set_ramdac   = dispwin_set_ramdac;
 	p->set_color    = dispwin_set_color;
+	p->set_callout  = dispwin_set_callout;
 	p->del          = dispwin_del;
 
 	/* Basic object is initialised, so create a window */
@@ -1284,7 +1366,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		int disp_hsz, disp_vsz;		/* Display horizontal/vertical size in mm */
 		int disp_hrz, disp_vrz;		/* Display horizontal/vertical resolution in pixels */
 		int wi, he;					/* Width and height of window in pixels */
-		int ho, vo;					/* Horizontal and vertical offset from center in pixels */
+		int xo, yo;					/* Window location in pixels */
 		int bpp;
 		
 		p->AppName = "Argyll Test Window";
@@ -1302,14 +1384,33 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		disp_vsz = GetDeviceCaps(p->hdc, VERTSIZE);
 		disp_hrz = GetDeviceCaps(p->hdc, HORZRES);	/* pixels */
 		disp_vrz = GetDeviceCaps(p->hdc, VERTRES);
+
 		wi = (int)(width * (double)disp_hrz/(double)disp_hsz + 0.5);
 		if (wi > disp_hrz)
 			wi = disp_hrz;
 		he = (int)(height * (double)disp_vrz/(double)disp_vsz + 0.5);
 		if (he > disp_vrz)
 			he = disp_vrz;
-		ho = disp->sx + (int)(hoff * 0.5 * (disp_hrz - wi) + 0.5);
-		vo = disp->sy + (int)(voff * 0.5 * (disp_vrz - he) + 0.5);
+
+		if (p->blackbg) {	/* Window fills the screen, test area is within it */
+			p->tx = (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
+			p->ty = (int)((voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
+			p->tw = wi;
+			p->th = he;
+			wi = disp->sw;
+			he = disp->sh;
+			xo = disp->sx;
+			yo = disp->sy;
+		} else {			/* Test area completely fills the window */
+			p->tx = 0;
+			p->ty = 0;
+			p->tw = wi;
+			p->th = he;
+			xo = disp->sx + (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
+			yo = disp->sy + (int)((voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
+		}
+		p->ww = wi;
+		p->wh = he;
 
 		/* It's a bit difficult to know how windows defines the display */
 		/* depth. Microsofts doco is fuzzy, and typical values */
@@ -1350,12 +1451,11 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			p->rgb[0] = p->rgb[1] = p->rgb[2] = 1.0;	/* Set White */
 
 			p->hwnd = CreateWindowEx(
-				WS_EX_PALETTEWINDOW,
+				WS_EX_TOPMOST,
 				p->AppName,
 				"Argyll Display Calibration Window",
-				WS_DISABLED | WS_CAPTION | WS_THICKFRAME, 
-				(disp_hrz - wi)/2 + ho,	/* Position of top left */
-				(disp_vrz - he)/2 + vo,
+				WS_DISABLED | WS_POPUP, 
+				xo, yo,					/* Location */
 				wi, he,					/* Size */
 				NULL,					/* Handle to parent or owner */
 				NULL,					/* Handle to menu or child window */
@@ -1407,7 +1507,6 @@ int override					/* NZ if override_redirect is to be used on X11 */
 
 		CGSize sz;				/* Display size in mm */
 		int wi, he;				/* Width and height in pixels */
-		int ho, vo;				/* Horizontal and vertical offset from center in pixels */
 		int xo, yo;				/* Window location */
 	    Rect	wRect;
 		WindowClass wclass = 0;
@@ -1417,13 +1516,19 @@ int override					/* NZ if override_redirect is to be used on X11 */
 //		wclass = kAlertWindowClass;				/* Above everything else */
 //		wclass = kModalWindowClass;
 //		wclass = kFloatingWindowClass;
-		wclass = kUtilityWindowClass;
+//		wclass = kUtilityWindowClass; /* The usefule one */
+//		wclass = kHelpWindowClass;
+		wclass = kOverlayWindowClass;
+//		wclass = kSimpleWindowClass;
+
 		attr |= kWindowDoesNotCycleAttribute;
 		attr |= kWindowNoActivatesAttribute;
 //		attr |= kWindowStandardFloatingAttributes;
-		attr |= kWindowStandardHandlerAttribute;
-								/* This window has the standard Carbon Handler */
-		attr |= kWindowNoShadowAttribute;
+
+		attr |= kWindowStandardHandlerAttribute; /* This window has the standard Carbon Handler */
+		attr |= kWindowNoShadowAttribute;		/* usual */
+//		attr |= kWindowNoTitleBarAttribute;		/* usual - but not with Overlay Class */
+		attr |= kWindowIgnoreClicksAttribute;		/* usual */
 
 		sz = CGDisplayScreenSize(p->ddid);
 		debug2((errout," Display size = %f x %f mm\n",sz.width,sz.height));
@@ -1434,12 +1539,26 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		he = (int)(height * disp->sh/sz.height + 0.5);
 		if (he > disp->sh)
 			he = disp->sh;
-		xo = (int)(0.5 * (disp->sw - wi) + 0.5);
-		yo = (int)(0.5 * (disp->sh - he) + 0.5);
-		ho = (int)(hoff * 0.5 * (disp->sw - wi) + 0.5);
-		vo = (int)(voff * 0.5 * (disp->sh - he) + 0.5);
-		xo += disp->sx + ho;
-		yo += disp->sy + vo;
+
+		if (p->blackbg) {	/* Window fills the screen, test area is within it */
+			p->tx = (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
+			p->ty = (int)((voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
+			p->tw = wi;
+			p->th = he;
+			wi = disp->sw;
+			he = disp->sh;
+			xo = disp->sx;
+			yo = disp->sy;
+		} else {			/* Test area completely fills the window */
+			p->tx = 0;
+			p->ty = 0;
+			p->tw = wi;
+			p->th = he;
+			xo = disp->sx + (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
+			yo = disp->sy + (int)((voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
+		}
+		p->ww = wi;
+		p->wh = he;
 
 //printf("~1 Got size %d x %d at %d %d from %fmm x %fmm\n",wi,he,xo,yo,width,height);
 	    SetRect(&wRect,xo,yo,xo+wi,yo+he); /* left, top, right, bottom */
@@ -1454,6 +1573,12 @@ int override					/* NZ if override_redirect is to be used on X11 */
 
 		/* Set a title */
 		SetWindowTitleWithCFString(p->mywindow, CFSTR("Argyll Window"));
+
+		/* Set the window blackground color to black */
+		{
+			RGBColor col = { 0,0,0 };
+			SetWindowContentColor(p->mywindow, &col);
+		}
 
 		/* Install the event handler */
 	    stat = InstallEventHandler(
@@ -1507,7 +1632,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		/* Seems to hang because draw happens before event loop gets run ???/ */
 		/* RunApplicationEventLoop(); */
 
-//		CGDisplayHideCursor(p->ddid);
+		CGDisplayHideCursor(p->ddid);
 //		CGDisplayCapture(p->ddid);
 
 #ifdef NEVER
@@ -1592,7 +1717,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		int disp_hsz, disp_vsz;		/* Display horizontal/vertical size in mm */
 		int disp_hrz, disp_vrz;		/* Display horizontal/vertical resolution in pixels (virtual screen) */
 		int wi, he;				/* Width and height of window in pixels */
-		int ho, vo;				/* Horizontal and vertical offset from center in pixels */
+		int xo, yo;				/* Window location in pixels */
 	
 		/* open the display */
 		p->mydisplay = XOpenDisplay(disp->name);
@@ -1614,8 +1739,8 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		if (nowin == 0) {			/* Create a window */
 			rootwindow = RootWindow(p->mydisplay, p->myscreen);
 
-			mybackground = WhitePixel(p->mydisplay, p->myscreen);
-			myforeground = BlackPixel(p->mydisplay, p->myscreen);
+			myforeground = WhitePixel(p->mydisplay, p->myscreen);
+			mybackground = BlackPixel(p->mydisplay, p->myscreen);
 		
 			/* Get device context to main display */
 			disp_hsz = DisplayWidthMM(p->mydisplay, p->myscreen);
@@ -1623,21 +1748,38 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			disp_hrz = DisplayWidth(p->mydisplay, p->myscreen);
 			disp_vrz = DisplayHeight(p->mydisplay, p->myscreen);
 
-			/* Compute width from overal display in case Xinerama is active */
+			/* Compute width and offset from overal display in case Xinerama is active */
 			wi = (int)(width * (double)disp_hrz/(double)disp_hsz + 0.5);
 			if (wi > disp_hrz)
 				wi = disp_hrz;
 			he = (int)(height * (double)disp_vrz/(double)disp_vsz + 0.5);
 			if (he > disp_vrz)
 				he = disp_vrz;
-			/* Compute offset from selected screen, in case Xinerama is active */
-			ho = disp->sx + (int)(hoff * 0.5 * (disp->sw - wi) + 0.5);
-			vo = disp->sy + (int)(voff * 0.5 * (disp->sh - he) + 0.5);
+
+			if (p->blackbg) {	/* Window fills the screen, test area is within it */
+				p->tx = (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
+				p->ty = (int)((voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
+				p->tw = wi;
+				p->th = he;
+				wi = disp->sw;
+				he = disp->sh;
+				xo = disp->sx;
+				yo = disp->sy;
+			} else {			/* Test area completely fills the window */
+				p->tx = 0;
+				p->ty = 0;
+				p->tw = wi;
+				p->th = he;
+				xo = disp->sx + (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
+				yo = disp->sy + (int)((voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
+			}
+			p->ww = wi;
+			p->wh = he;
 
 			/* Setup Size Hints */
 			mysizehints.flags = PPosition | USSize;
-			mysizehints.x = (disp->sw - wi)/2 + ho;
-			mysizehints.y = (disp->sh - he)/2 + vo;
+			mysizehints.x = xo;
+			mysizehints.y = yo;
 			mysizehints.width = wi;
 			mysizehints.height = he;
 		
@@ -1660,7 +1802,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			p->mywindow = XCreateWindow(
 				p->mydisplay, rootwindow,
 				mysizehints.x,mysizehints.y,mysizehints.width,mysizehints.height,
-				5,							/* Border width */
+				0,							/* Border width */
 				CopyFromParent,				/* Depth */
 				InputOutput,				/* Class */
 				CopyFromParent,				/* Visual */
@@ -1765,12 +1907,9 @@ int override					/* NZ if override_redirect is to be used on X11 */
 				switch(myevent.type) {
 					case Expose:
 						if(myevent.xexpose.count == 0) {	/* Repare the exposed region */
-							XWindowAttributes mywattributes;
 							debug("Servicing final expose\n");
-							XGetWindowAttributes(p->mydisplay, p->mywindow, &mywattributes);
-
 							XFillRectangle(p->mydisplay, p->mywindow, p->mygc,
-							               0, 0, mywattributes.width, mywattributes.height);
+							               p->tx, p->ty, p->tw, p->th);
 							debug("Finished expose\n");
 						}
 						break;
@@ -1778,7 +1917,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			}
 		}
 	}
-#endif /* UNIX */
+#endif	/* UNXI X11 */
 	/* -------------------------------------------------- */
 
 	/* Setup for native mode */
@@ -1786,12 +1925,12 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		debug("About to setup native mode\n");
 		if ((p->or = p->get_ramdac(p)) == NULL
 		 || (p->r = p->or->clone(p->or)) == NULL) {
-			warning("Native mode can't work, no RAMDAC support");
+			warning("Native mode can't work, no VideoLUT support");
 			dispwin_del(p);
 			return NULL;
 		}
 		p->r->setlin(p->r);
-		debug("Saved original RAMDAC\n");
+		debug("Saved original VideoLUT\n");
 	}
 
 	debug("About to exit new_dispwin()\n");
@@ -1831,6 +1970,7 @@ usage(void) {
 	}
 	free_disppaths(dp);
 	fprintf(stderr," -p ho,vo,ss          Position test window and scale it\n");
+	fprintf(stderr," -B                   Fill whole screen with black background\n");
 	fprintf(stderr," -i                   Run forever with random values\n");
 	fprintf(stderr," -m                   Manually cycle through initial values\n");
 	fprintf(stderr," -f                   Test grey ramp fade\n");
@@ -1838,6 +1978,11 @@ usage(void) {
 	fprintf(stderr," -n                   Test native output (rather than through Video LUT)\n");
 	fprintf(stderr," -c                   Load a linear display calibration\n");
 	fprintf(stderr," -x                   Don't exit after loading a display calibration\n");
+	fprintf(stderr," -V                   Verify that calfile is currently loaded\n");
+#if defined(UNIX) && !defined(__APPLE__)
+	fprintf(stderr," -S                   Set X11 ICC_PROFILE property to profile\n");
+	fprintf(stderr," -L                   Load X11 ICC_PROFILE property profile into LUT\n");
+#endif	/* UNXI X11 */
 	fprintf(stderr," calfile              Load display calibration (.cal or .icm) into LUT, and exit\n");
 	exit(1);
 }
@@ -1853,6 +1998,7 @@ main(int argc, char *argv[]) {
 	disppath *disp = NULL;		/* Display being used */
 	double patscale = 1.0;		/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;	/* Test window offsets, -1.0 to 1.0 */
+	int blackbg = 0;       		/* NZ if whole screen should be filled with black */
 	int nowin = 0;				/* Don't create test window */
 	int ramd = 0;				/* Just test ramdac */
 	int fade = 0;				/* Test greyramp fade */
@@ -1860,6 +2006,11 @@ main(int argc, char *argv[]) {
 	int inf = 0;				/* Infnite patches flag */
 	int clear = 0;				/* Clear any display calibration (any calname is ignored) */
 	int noexit = 0;				/* Don't exit after loading a calibration */
+	int verify = 0;				/* Verify that calname is currently loaded */
+	int setatom = 0;			/* Set X11 ICC_PROFILE atom to profile */
+	int loadatom = 0;			/* Load X11 ICC_PROFILE atom profile into LUT */
+	int loadfile = 0;			/* Load given profile into LUT */
+	unsigned char *atomv = NULL;	/* Profile loaded from/to atom */
 	char calname[MAXNAMEL+1] = "\000";	/* Calibration file name */
 	dispwin *dw;
 	unsigned int seed = 0x56781234;
@@ -1890,7 +2041,7 @@ main(int argc, char *argv[]) {
 			if (argv[fa][1] == '?')
 				usage();
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			else if (argv[fa][1] == 'v')
 				verb = 1;
 
 			/* Display number */
@@ -1936,6 +2087,10 @@ main(int argc, char *argv[]) {
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
+			/* Black background */
+			} else if (argv[fa][1] == 'B') {
+				blackbg = 1;
+
 			} else if (argv[fa][1] == 'i' || argv[fa][1] == 'I')
 				inf = 1;
 
@@ -1957,6 +2112,16 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X')
 				noexit = 1;
 
+			else if (argv[fa][1] == 'V')
+				verify = 1;
+
+#if defined(UNIX) && !defined(__APPLE__)
+			else if (argv[fa][1] == 'S')
+				setatom = 1;
+
+			else if (argv[fa][1] == 'L')
+				loadatom = 1;
+#endif  /* UNXI X11 */
 			else
 				usage();
 		}
@@ -1969,28 +2134,42 @@ main(int argc, char *argv[]) {
 	}
 
 	/* See if there's a calibration file */
-	if (fa < argc)
+	if (fa < argc) {
 		strncpy(calname,argv[fa++],MAXNAMEL); calname[MAXNAMEL] = '\000';
+		if (setatom == 0 && loadatom == 0 && verify == 0)
+			loadfile = 1;
+	}
 
-	/* Don't create a window if just RAMDAC operations */
-	if (ramd != 0 || clear != 0 || calname[0] != '\000')
+	/* Bomb on bad combinations (not all are being detected) */
+	if (setatom && calname[0] == '\000')
+		error("Can't set X11 atom without a profile argument");
+
+	if (verify && calname[0] == '\000' && loadatom == 0)
+		error("No calibration/profile provided to verify against");
+
+	if (loadatom && setatom)
+		error("Can't load from X11 atom and set atom at the same time");
+
+	if (verify && setatom)
+		error("Can't verify and set X11 atom at the same time");
+
+	/* Don't create a window if it won't be used */
+	if (ramd != 0 || clear != 0 || verify != 0 || loadfile != 0 || setatom != 0 || loadatom != 0)
 		nowin = 1;
 
 	if (verb)
 		printf("About to open dispwin object on the display\n");
 
-	if ((dw = new_dispwin(disp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, donat, 1)) == NULL) {
+	if ((dw = new_dispwin(disp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, donat, blackbg, 1)) == NULL) {
 		printf("Error - new_dispwin failed!\n");
 		return -1;
 	}
-
-	free_a_disppath(disp);
 
 	/* Clear the display calibration curve */
 	if (clear != 0) {
 		
 		if ((r = dw->get_ramdac(dw)) == NULL) {
-			error("We don't have access to the RAMDAC");
+			error("We don't have access to the VideoLUT");
 		}
 
 		for (i = 0; i < r->nent; i++) {
@@ -2012,18 +2191,16 @@ main(int argc, char *argv[]) {
 		}
 		r->del(r);
 
-	/* Setup a display calibration curve set if we are given one */
-	/* Note this won't be permanent on OSX. To fix this, a special */
-	/* case would have to be made, to load the given profile using */
-	/* the appropriate OSX call. */
-	} else if (calname[0] != '\000') {
-		icmFile *rd_fp;
-		icc *icco;
+#if defined(UNIX) && !defined(__APPLE__)
+	/* Read in the ICC profile, then set the X11 atom value */
+	} else if (setatom != 0) {
+		icmFile *rd_fp = NULL;
+		icc *icco = NULL;
+		FILE *fp;
+		unsigned long psize, bread;
+		Display *mydisplay;
+		Atom icc_atom;
 		
-		if ((r = dw->get_ramdac(dw)) == NULL) {
-			error("We don't have access to the RAMDAC");
-		}
-
 		/* Open up the profile for reading */
 		if ((rd_fp = new_icmFileStd_name(calname,"r")) == NULL)
 			error("Can't open file '%s'",calname);
@@ -2032,7 +2209,104 @@ main(int argc, char *argv[]) {
 			error("Creation of ICC object failed");
 
 		/* Read header etc. */
-		if (icco->read(icco,rd_fp,0) == 0) {		/* Read ICC OK */
+		if (icco->read(icco, rd_fp,0) != 0) 		/* Read ICC OK */
+			error("File '%s' doesn't seem to be an ICC profile!",calname);
+
+		icco->del(icco);
+		rd_fp->del(rd_fp);
+
+#if defined(O_BINARY) || defined(_O_BINARY)
+		if ((fp = fopen(calname,"rb")) == NULL)
+#else
+		if ((fp = fopen(calname,"r")) == NULL)
+#endif
+			error ("Can't open file '%s'",calname);
+
+		/* Figure out how big it is */
+		if (fseek(fp, 0, SEEK_END))
+			error ("Seek '%s' to EOF failed",calname);
+		psize = (unsigned long)ftell(fp);
+	
+		if (fseek(fp, 0, SEEK_SET))
+			error ("Seek '%s' to SOF failed",calname);
+	
+		if ((atomv = (unsigned char *)malloc(psize)) == NULL)
+			error("Failed to allocate buffer for profile '%s'",calname);
+	
+		if ((bread = fread(atomv, 1, psize, fp)) != psize)
+			error("Failed to read profile '%s' into buffer",calname);
+		
+		fclose(fp);
+
+		if ((mydisplay = XOpenDisplay(disp->name)) == NULL)
+			error("Unable to open display '%s'",disp->name);
+
+		if ((icc_atom = XInternAtom(mydisplay, disp->icc_atom_name, False)) == None)
+			error("Unable to intern atom '%s'",disp->icc_atom_name);
+
+		XChangeProperty(mydisplay, RootWindow(mydisplay, 0), icc_atom,
+		                XA_CARDINAL, 8, PropModeReplace, atomv, psize);
+
+		XCloseDisplay(mydisplay);
+
+		free(atomv);
+		atomv = NULL;
+
+#endif  /* UNXI X11 */
+
+	/* Setup or verify a display calibration curve set if we are given one */
+	/* Note this won't be permanent on OSX. To fix this, a special */
+	/* case would have to be made, to load the given profile using */
+	/* the appropriate OSX call. */
+	} else if (loadfile != 0 || verify != 0 || loadatom != 0) {
+		icmFile *rd_fp = NULL;
+		icc *icco = NULL;
+		cgats *ccg = NULL;			/* calibration cgats structure */
+		
+		if ((r = dw->get_ramdac(dw)) == NULL) {
+			error("We don't have access to the VideoLUT");
+		}
+
+#if defined(UNIX) && !defined(__APPLE__)
+		if (loadatom) {
+			Display *mydisplay;
+			Atom icc_atom, ret_type;
+			int ret_format;
+			long ret_len, ret_togo;
+
+			if ((mydisplay = XOpenDisplay(disp->name)) == NULL)
+				error("Unable to open display '%s'",disp->name);
+
+			if ((icc_atom = XInternAtom(mydisplay, disp->icc_atom_name, False)) == None)
+				error("Unable to intern atom '%s'",disp->icc_atom_name);
+
+			/* Get the ICC profile property */
+			if (XGetWindowProperty(mydisplay, RootWindow(mydisplay, 0), icc_atom,
+			            0, 0x7ffffff, False, XA_CARDINAL, 
+                        &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) != Success || ret_len == 0)
+				error("Getting property '%s' failed",disp->icc_atom_name); 
+
+			XCloseDisplay(mydisplay);
+	
+			if ((rd_fp = new_icmFileMem((void *)atomv, ret_len)) == NULL)
+				error("Creating memory file from X11 atom failed");
+
+			strcpy(calname, disp->icc_atom_name);
+
+		} else
+#endif	  /* UNXI X11 */
+
+		{
+			/* Open up the profile for reading */
+			if ((rd_fp = new_icmFileStd_name(calname,"r")) == NULL)
+				error("Can't open file '%s'",calname);
+		} 
+
+		if ((icco = new_icc()) == NULL)
+			error("Creation of ICC object failed");
+
+		/* Read header etc. */
+		if (icco->read(icco, rd_fp,0) == 0) {		/* Read ICC OK */
 			icmVideoCardGamma *wo;
 			double iv;
 
@@ -2056,20 +2330,14 @@ main(int argc, char *argv[]) {
 			} else {
 				error("Profile '%s' vcgt tag doesn't have 1 or 3 channels",calname);
 			}
-			if (verb)
-				printf("About to set given calibration\n");
-			if (dw->set_ramdac(dw,r)) {
-				error("Failed to set ramdac");
-			}
-			icco->del(icco);
-			rd_fp->del(rd_fp);
 		} else {	/* See if it's a .cal file */
-			cgats *ccg;			/* calibration cgats structure */
 			int ncal;
 			int ii, fi, ri, gi, bi;
 			
 			icco->del(icco);			/* Don't need these now */
+			icco = NULL;
 			rd_fp->del(rd_fp);
+			rd_fp = NULL;
 
 			ccg = new_cgats();			/* Create a CGATS structure */
 			ccg->add_other(ccg, "CAL"); /* our special calibration type */
@@ -2116,23 +2384,61 @@ main(int argc, char *argv[]) {
 				r->v[1][i] = *((double *)ccg->t[0].fdata[i][gi]);
 				r->v[2][i] = *((double *)ccg->t[0].fdata[i][bi]);
 			}
-
-			if (verb)
-				printf("About to set given calibration\n");
-			if (dw->set_ramdac(dw,r)) {
-				error("Failed to set ramdac");
-			}
-
-			r->del(r);
-			ccg->del(ccg);
 		}
+
+		/* We've loaded r with the contents of calname */
+		if (verb)
+			printf("About to set given calibration\n");
+		if (verify) {
+			int ver = 1;
+			double berr = 0.0;
+			if ((or = dw->get_ramdac(dw)) == NULL)
+				error("Unable to get current VideoLUT for verify");
+		
+			for (j = 0; j < 3; j++) {
+				for (i = 0; i < r->nent; i++) {
+					double err;
+					err = fabs(r->v[j][i] - or->v[j][i]);
+					if (err > berr)
+						berr = err;
+					if (err > VERIFY_TOL) {
+						ver = 0;
+					}
+				}
+			}
+			if (ver)
+				printf("Verify: '%s' IS loaded (discrepancy %.1f%%)\n", calname, berr * 100);
+			else
+				printf("Verify: '%s' is NOT loaded (discrepancy %.1f%%)\n", calname, berr * 100);
+			or->del(or);
+		} else {
+			if (dw->set_ramdac(dw,r))
+				error("Failed to set VideoLUT");
+		}
+		r->del(r);
+
+		if (ccg != NULL)
+			ccg->del(ccg);
+		if (icco != NULL)
+			icco->del(icco);
+		if (rd_fp != NULL)
+			rd_fp->del(rd_fp);
+
+#if defined(UNIX) && !defined(__APPLE__)
+		if (loadatom && atomv != NULL)
+			XFree(atomv);
+#endif	  /* UNXI X11 */
+
+		if (verb)
+			printf("Calibration set\n");
+
 		if (noexit) {
 			for (;;) {
 				sleep(1000);
 			}
 		}
 
-	/* Window or RAMDAC test */
+	/* Window or VideoLUT test */
 	} else {
 
 		if (ramd == 0) {
@@ -2272,7 +2578,7 @@ main(int argc, char *argv[]) {
 		}
 
 		if (inf != 2) {
-			/* Test out the RAMDAC access */
+			/* Test out the VideoLUT access */
 			if ((or = dw->get_ramdac(dw)) != NULL) {
 				
 				r = or->clone(or);
@@ -2313,7 +2619,7 @@ main(int argc, char *argv[]) {
 				or->del(or);
 	
 			} else {
-				printf("We don't have access to the RAMDAC\n");
+				printf("We don't have access to the VideoLUT\n");
 			}
 	
 			/* Test out the beeps */
@@ -2334,6 +2640,8 @@ main(int argc, char *argv[]) {
 		}
 	}
 	
+	free_a_disppath(disp);
+
 	if (verb)
 		printf("About to destroy dispwin object\n");
 

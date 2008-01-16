@@ -10,7 +10,7 @@
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
- * This material is licensed with a free use license:-
+ * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
  */
 
@@ -1496,6 +1496,14 @@ extern ICCLIB_API icc *new_icc(void);				/* Default allocator */
 /* - - - - - - - - - - - - - */
 /* Some useful utilities: */
 
+/* Default ICC profile file extension string */
+
+#if defined (UNIX) || defined(__APPLE__)
+#define ICC_FILE_EXT ".icc"
+#else
+#define ICC_FILE_EXT ".icm"
+#endif
+
 /* Read a given primitive type. Return non-zero on error */
 extern ICCLIB_API int read_Primitive(icc *icpp, icmPrimType ptype, void *prim, char *p);
 
@@ -1608,6 +1616,7 @@ int icmRGBprim2matrix(
 
 /* Chromatic Adaption transform utility */
 /* Return a 3x3 chromatic adaption matrix */
+/* Use icmMulBy3x3(dst, mat, src) */
 
 #define ICM_CAM_BRADFORD	0x0001	/* Use Bradford sharpened response space */
 #define ICM_CAM_MULMATRIX	0x0002	/* Transform the given matrix */
@@ -1622,6 +1631,9 @@ void icmChromAdaptMatrix(
 /* - - - - - - - - - - - - - - */
 
 /* Note icmAry2Ary() above */
+
+/* Set a 3x3 matrix to unity */
+void icmSetUnity3x3(double mat[3][3]);
 
 /* Copy a 3x3 transform matrix */
 void icmCpy3x3(double out[3][3], double mat[3][3]);
@@ -1685,10 +1697,10 @@ void icmScale3(double out[3], double in[3], double rat);
 /* Normalise a 3 vector to the given length. Return nz if not normalisable */
 int icmNormalize3(double out[3], double in[3], double len);
 
-/* Compute the norm squared (length squared) of two point vector */
+/* Compute the norm squared (length squared) of a vector defined by two points */
 double icmNorm33sq(double in1[3], double in0[3]);
 
-/* Compute the norm (length) of two point vector */
+/* Compute the norm (length) of of a vector defined by two points */
 double icmNorm33(double in1[3], double in0[3]);
 
 /* Scale a two point vector by the given ratio */
@@ -1708,7 +1720,7 @@ int icmInverse3x3(double out[3][3], double in[3][3]);
 /* Given two 3D points, create a matrix that rotates */
 /* and scales one onto the other about the origin 0,0,0. */
 /* Use icmMulBy3x3() to apply this to other points */
-void icmRotMat(double m[3][3], double s[3], double t[3]);
+void icmRotMat(double mat[3][3], double src[3], double targ[3]);
 
 /* Multiply 3 array by 3x4 transform matrix */
 void icmMul3By3x4(double out[3], double mat[3][4], double in[3]);

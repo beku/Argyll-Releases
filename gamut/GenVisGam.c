@@ -93,7 +93,7 @@ main(int argc, char *argv[]) {
 	int i, j;
 	double Yxy[3], XYZ[3], Lab[3];
 	char out_name[100];			/* VRML output file */
-	double big[3], bc;
+	double big[3] = { 0.0, 0.0, 0.0 }, bc;
 //	double limit = 5.0;			/* Limit multiplier of light at maximum sensitivity */
 
 	double gamres = GAMRES;				/* Surface resolution */

@@ -477,7 +477,7 @@ int main(int argc, char *argv[])
 	ocg->add_table(ocg, tt_other, 0);	/* Start the first table */
 
 	ocg->add_kword(ocg, 0, "DESCRIPTOR", "Argyll Calibration Target chart information 3",NULL);
-	ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll printread", NULL);
+	ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll fakeread", NULL);
 	atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
 	ocg->add_kword(ocg, 0, "CREATED",atm, NULL);
 

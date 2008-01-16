@@ -4,7 +4,7 @@
 #SubDir TOP icc ;
 
 CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	    += -Wextra $(CCDEBUGFLAG) ;		# Debugging flags
+#CCFLAGS	    += $(CCDEBUGFLAG) ;		# Debugging flags
 #CCFLAGS	+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
 LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
 

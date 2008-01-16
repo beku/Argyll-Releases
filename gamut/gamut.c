@@ -114,6 +114,7 @@
 #define M_PI (3.1415926535897932384626433832795)
 #endif
 
+static void triangulate(gamut *s);
 static void del_gamut(gamut *s);
 static void expand_gamut(gamut *s, double in[3]);
 static double getsres(gamut *s);
@@ -142,6 +143,11 @@ static void setcusps(gamut *s, int flag, double in[3]);
 static int getcusps(gamut *s, double cusps[6][3]);
 static int compute_vector_isect(gamut *s, double *p1, double *p2, double *min, double *max, double *mint, double *maxt);
 static double log_scale(double ss);
+static int intersect(gamut *s, gamut *s1, gamut *s2);
+static int vect_intersect(gamut *s, double *rvp, double *ip, double *p1, double *p2, gtri *t);
+
+/* in isecvol.c: */
+extern double isect_volume(gamut *s1, gamut *s2);
 
 /* ------------------------------------ */
 
@@ -575,6 +581,7 @@ int isJab				/* Flag indicating Jab space */
 	s->getnexttri = getnexttri;
 	s->getvert     = getvert;
 	s->volume      = volume;
+	s->intersect   = intersect;
 	s->radial      = radial;
 	s->nradial     = nradial;
 	s->nearest     = nearest;
@@ -953,6 +960,100 @@ double pp[3]		/* rectangular coordinate of point */
 }
 
 /* ------------------------------------ */
+/* Initialise this gamut with the intersection of the */
+/* the two given gamuts. Return NZ on error. */
+/* Return 1 if gamuts are not compatible */
+/* (We assume that the gamut is currently empty) */
+static int intersect(gamut *s, gamut *sa, gamut *sb) {
+	int i, j, k;
+	gamut *s1, *s2;
+
+	if (sa->compatible(sa, sb) == 0)
+		return 1;
+
+	if IS_LIST_EMPTY(sa->tris)
+		triangulate(sa);
+	if IS_LIST_EMPTY(sb->tris)
+		triangulate(sb);
+
+	s->isJab = sa->isJab;
+	for (j = 0; j < 3; j++)
+		s->cent[j] = sa->cent[j];
+
+	/* Clear some flags */
+	s->cswbset = 0;
+	s->cswbset = 0;
+	s->dcuspixs = 0;
+
+	/* Don't filter the points (gives a more accurate result ?) */
+	s->nofilter = 1;
+
+	/* Add each source gamuts verticies that lie within */
+	/* the other gamut */
+	for (k = 0; k < 2; k++) {
+		gtri *tp1, *tp2;		/* Triangle pointers */
+
+		if (k == 0) {
+			s1 = sa;
+			s2 = sb;
+		} else {
+			s1 = sb;
+			s2 = sa;
+		}
+		for (i = 0; i < s1->nv; i++) {
+			double pl;
+	
+			if (!(s1->verts[i]->f & GVERT_TRI))
+				continue;
+	
+			pl = s2->nradial(s2, NULL, s1->verts[i]->p);
+			if (pl <= (1.0 + 1e-9)) {
+				expand_gamut(s, s1->verts[i]->p);
+				s1->verts[i]->f &= ~GVERT_ISOS;
+			} else {
+				s1->verts[i]->f |= GVERT_ISOS;
+			}
+		}
+
+		/* Now find the edges that intersect the other gamut */
+		tp1 = s1->tris;
+		FOR_ALL_ITEMS(gtri, tp1) {
+
+			for (j = 0; j < 3; j++) {
+				if ((tp1->e[j]->v[0]->f ^ tp1->e[j]->v[1]->f) & GVERT_ISOS) {
+
+					/* Exhaustive search of other triangles */
+					tp2 = s2->tris;
+					FOR_ALL_ITEMS(gtri, tp2) {
+						double pv;
+						double tt[3];
+
+						/* Do a min/max intersection elimination test */
+						for (i = 0; i < 3; i++) {
+							if (tp2->mix[1][i] < tp1->mix[0][i]
+							 || tp2->mix[0][i] > tp1->mix[1][i])
+								break;			/* min/max don't overlap */
+						}
+						if (i < 3)
+							continue;			/* Skip this triangle, it can't intersect */
+
+						if (vect_intersect(s1, &pv, tt, tp1->e[j]->v[0]->p, tp1->e[j]->v[1]->p, tp2)
+						 && pv >= (0.0 - 1e-10) && pv <= (1.0 + 1e-10)) {
+							expand_gamut(s, tt);
+						}
+					} END_FOR_ALL_ITEMS(tp2);
+				}
+			}
+
+		} END_FOR_ALL_ITEMS(tp1);
+	}
+
+	s->nofilter = 0;
+
+	return 0;
+}
+
+/* ------------------------------------ */
 /* Locate the vertices most likely to correspond to the */
 /* primary and secondary colors (cusps) */
 /*
@@ -982,7 +1083,7 @@ static void setcusps(gamut *s, int flag, double in[3]) {
 		if (s->dcuspixs > 0) {
 			double JCh[3];
 			double hues[6];
-			int r, br;
+			int r, br = 0.0;
 			double berr;
 
 			/* Figure out where to put the ones we got */
@@ -1770,8 +1871,9 @@ gvert *v		/* Vertex to insert */
 
 		/* If vertex is above the log hull surface, add triangle to the hit list. */
 		if (c < 0.0) {
+#ifdef DEBUG_TRIANG
 			int j;
-			gtri *t1, *t2;
+#endif
 			hit = 1;
 
 #ifdef DEBUG_TRIANG
@@ -2321,8 +2423,8 @@ gamut *s, struct _gamut *t) {
 	int j;
 
 	/* The same colorspace ? */
-	if (s->isJab && !t->isJab
-	 || !s->isJab && t->isJab) {
+	if ((s->isJab && !t->isJab)
+	 || (!s->isJab && t->isJab)) {
 		return 0;
 	}
 
@@ -2588,7 +2690,7 @@ double *in		/* input point (absolute)*/
 	if (s->lu_inited == 0) {
 		init_lu(s);				/* Init BSP search tree */
 	}
-//printf("~1 radial called with %f %f %f\n", in[0], in[1], in[2]);
+//if (trace) printf("~1 radial called with %f %f %f\n", in[0], in[1], in[2]);
 
 	for (j = 0; j < 3; j++)
 		nin[j] = in[j] - s->cent[j]; /* relative to gamut center */
@@ -2604,7 +2706,7 @@ double *in		/* input point (absolute)*/
 		nin[1] = nin[2] = 0.0;
 	}
 
-//printf("~1 Normalised in = %f %f %f\n", nin[0], nin[1], nin[2]);
+//if (trace) printf("~1 Normalised in = %f %f %f\n", nin[0], nin[1], nin[2]);
 	rv = radial_point(s, s->lutree, nin);
 
 	if (rv < 0.0) {
@@ -2615,14 +2717,18 @@ double *in		/* input point (absolute)*/
 	if (out != NULL) {
 		for (j = 0; j < 3; j++)
 			out[j] = nin[j] * rv + s->cent[j];		/* Scale out to surface length, absolute */
-//printf("~1 result = %f %f %f\n",out[0], out[1], out[2]);
+//if (trace) printf("~1 result = %f %f %f\n",out[0], out[1], out[2]);
 	}
 
-	if (ir != NULL)
+	if (ir != NULL) {
+//if (trace) printf("~1 input radius res = %f\n",ss);
 		*ir = ss;
+	}
 
-	if (or != NULL)
+	if (or != NULL) {
+//if (trace) printf("~1 output radius res = %f\n",rv);
 		*or = rv;
+	}
 }
 
 /* Given a point, return the point in that direction */
@@ -2724,7 +2830,7 @@ int llen		/* Number of triangles in the list */
 	int ncount;
 	int bcount;
 	int mcount;
-	double peqs[4];
+	double peqs[4] = { 0.0, 0.0, 0.0, 0.0 };
 	gtri **plist, **nlist;	/* New sub-lists */
 	int pix, nix;			/* pos/ned sublist indexes */
 	gbspn *bspn;			/* BSP decision node */
@@ -2833,7 +2939,7 @@ int llen		/* Number of triangles in the list */
 	getchar();
 #endif /* DEBUG_SPLIT_VRML */
 
-	if (ii >= llen && bcount < 0) {	/* We failed to find a split plane */
+	if (ii >= llen && bcount < 0) {	/* We failed to find a split plane. */
 		/* This is usually a result of the list being 2 or more triangles */
 		/* that do not share any edges (disconected from each other), and */
 		/* lying so that any split plane formed from an edge of one, */
@@ -2843,7 +2949,7 @@ int llen		/* Number of triangles in the list */
 		/* and let the search algorithms deal with this. */
 
 		*np = (gbsp *)new_gbspl(llen, list);
-printf("~1 lu_split returning with a non split list of %d triangles\n",llen);
+//printf("~1 lu_split returning with a non split list of %d triangles\n",llen);
 		return;
 	}
 
@@ -2909,6 +3015,7 @@ gamut *s,
 gbsp *np,		/* BSP node pointer we're at */
 double *nin		/* Normalised center relative point */
 ) {
+//if (trace) printf("~1 rad_pnt_tri: BSP 0x%x tag = %d, point %f %f %f\n", np,np->tag,nin[0],nin[1],nin[2]);
 	if (np->tag == 1) {		/* It's a BSP node */
 		gbspn *n = (gbspn *)np;
 		double ds;
@@ -2918,18 +3025,20 @@ double *nin		/* Normalised center relative point */
 	       + n->pe[2] * nin[2]
 		   + n->pe[3];
 
+//if (trace) printf("~1 checking against BSP plane, ds = %e\n",ds);
 		if (ds >= 0)
 			return radial_point_triang(s, n->po, nin);
 		else
 			return radial_point_triang(s, n->ne, nin);
 
 	} else if (np->tag == 2) {	/* It's a triangle */
+//if (trace) printf("~1 returning triangle %d\n",((gtri *)np)->n);
 		return (gtri *)np;
 
 	} else {			/* It's a triangle list */	
 		gbspl *n = (gbspl *)np;
 		int i, j;
-//printf("~1 got triangle list - radial failed to split triangles!\n");
+//if (trace) printf("~1 got triangle list - radial failed to split triangles!\n");
 
 		/* Go through the list and stop at the first triangle */
 		/* that the node lies in. */
@@ -2941,14 +3050,17 @@ double *nin		/* Normalised center relative point */
 				   + n->t[i]->ee[j][1] * nin[1]
 			       + n->t[i]->ee[j][2] * nin[2]
 				   + n->t[i]->ee[j][3];
-				if (ds > 1e-8)
+				if (ds > 1e-10)
 					break;			/* Not within triangle */
 			}
-			if (j >= 3)
+			if (j >= 3) {
+//if (trace) printf("~1 located triangle from list that we're in %d\n",n->t[i]->n);
 				return n->t[i];
+			}
 		}
 	}
 
+//if (trace) printf("~1 failed to find a triangle\n");
 	return NULL;
 }
 
@@ -2964,7 +3076,65 @@ double *nin		/* Normalised center relative point */
 	gtri *t;
 	double rv;
 
+//if (trace) printf("~1 radial_point: BSP 0x%x tag = %d, point %f %f %f\n", np,np->tag,nin[0],nin[1],nin[2]);
+
 	t = radial_point_triang(s, np, nin);
+
+	/* Due to numerical issues, the BSP accelerated result may (very occassionally) */
+	/* be in error. Double check that we've landed in the correct triangle. */
+	if (t != NULL) {
+		double ds;
+		int j;
+
+		/* Check if the closest point is within this triangle */
+		for (j = 0; j < 3; j++) {
+			double ds;
+			ds = t->ee[j][0] * nin[0]
+			   + t->ee[j][1] * nin[1]
+		       + t->ee[j][2] * nin[2]
+			   + t->ee[j][3];
+//			if (ds > 1e-10) {
+			if (1) {
+//if (trace) printf("radial: lookup point wasn't within its BSP triangle (%f) !!\n",ds);
+				t = NULL;
+				break;
+			}
+		}
+
+	}
+
+	/* If we failed to find a triangle, or the result was incorrect, do a */
+	/* brute force search to be sure of the result. */
+	if (t == NULL) {
+		gtri *tp, *btp = NULL;		/* Triangle pointer */
+		double bds = 1e38;			/* Track smallest "out of side" */
+		int j;
+
+		tp = s->tris;
+		FOR_ALL_ITEMS(gtri, tp) {
+			double tds = -1e38;		/* Track bigest "out of side" */
+
+			/* Track the triangle that the point most comfortably lands in */
+			for (j = 0; j < 3; j++) {
+				double ds;
+				ds = tp->ee[j][0] * nin[0]
+				   + tp->ee[j][1] * nin[1]
+			       + tp->ee[j][2] * nin[2]
+				   + tp->ee[j][3];
+				if (ds > tds) {
+					tds = ds;
+				}
+			}
+			if (tds < bds) {
+				bds = tds;
+				btp = tp;
+//if (trace) printf("radial: found new best triangle %d bds %f\n",tp->n,bds);
+			}
+		} END_FOR_ALL_ITEMS(tp);
+
+		if (bds < 1e-10)	/* Found an acceptable result */
+			t = btp;
+	}
 
 	if (t == NULL)
 		return -1.0;
@@ -2972,7 +3142,7 @@ double *nin		/* Normalised center relative point */
 	/* Compute the intersection of the input vector with the triangle plane */
 	/* (Since nin[] is already relative, we don't need to subtract cent[] from it) */
 	rv = -(t->pe[0] * s->cent[0] + t->pe[1] * s->cent[1] + t->pe[2] * s->cent[2] + t->pe[3])/
-	      (t->pe[0] * nin[0] + t->pe[1] * nin[1] + t->pe[2] * nin[2]);
+			      (t->pe[0] * nin[0] + t->pe[1] * nin[1] + t->pe[2] * nin[2]);
 
 #ifdef ASSERTS
 	/* check the result */
@@ -3008,6 +3178,7 @@ double *nin		/* Normalised center relative point */
 	}
 #endif /* ASSERTS */
 
+//if (trace) printf("~1 radial_point: rv = %f\n",rv);
 	return rv;
 }
 
@@ -3047,7 +3218,7 @@ double *q		/* Target point (absolute) */
 ) {
 	gnn *p;				/* Pointer to nearest neighbor structure */
 	int e, i;
-	double r[3];		/* Possible solution point */
+	double r[3] = {0.0, 0.0, 0.0 };	/* Possible solution point */
 	double out[3];		/* Current best output value */
 	int wex[3 * 2];		/* Current window edge indexes */
 	double wed[3 * 2];	/* Current window edge distances */
@@ -3337,7 +3508,7 @@ gamut *s
 	}
 
 	/* For each triangle, create the triangle bounding box values, */
-	/* and add them tothe axis lists. */
+	/* and add them to the axis lists. */
 	tp = s->tris; 
 	i = 0;
 	FOR_ALL_ITEMS(gtri, tp) {

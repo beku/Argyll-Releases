@@ -97,7 +97,8 @@ int main() {
 		           low, high, gres,	/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
 		           1.0,					/* Smoothing */
-		           avgdev);				/* Average Deviation */
+		           avgdev,				/* Average deviation */
+		           NULL);				/* iwidth */
 
 		/* Save the result */
 		for (i = 0; i < XRES; i++) {
@@ -137,7 +138,8 @@ int main() {
 		           low, high, gres,/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
 		           1.0,					/* Smoothing */
-		           avgdev);				/* Average Deviation */
+		           avgdev,				/* Average deviation */
+		           NULL);				/* iwidth */
 
 		/* Save the result */
 		for (i = 0; i < XRES; i++) {

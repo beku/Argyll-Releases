@@ -1,7 +1,7 @@
 #ifndef POWELL_H
 #define POWELL_H
 
-/* Powell multivariate minimiser */
+/* Powell and Conjugate Gradient multivariate minimiser */
 
 /*
  * Copyright 2000 Graeme W. Gill

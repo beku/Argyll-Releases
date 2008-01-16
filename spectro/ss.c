@@ -51,11 +51,10 @@
 
 #undef DEBUG
 
-#define HWFC	/* Hardware flow control */
-#undef XXFC		/* Xon/Xoff flow control */
+/* Default flow control */
+#define DEFFC fc_Hardware
 
 #include <stdarg.h>
-
 
 /* Some tables to convert between emums and text descriptions */
 
@@ -84,27 +83,11 @@ static void inc_calcount(ss *p) {
 	}
 }
 
-#if defined(XXFC) || defined(HWFC)
-# if defined(HWFC)
-#  define FC_SERIAL fc_Hardware
-#  define FC_INST1 ss_ctt_ProtokolWithHardwareHS
-#  define FC_INST2 ss_hst_Hardware
-# else
-#  define FC_SERIAL fc_XonXOff
-#  define FC_INST1 ss_ctt_ProtokolWithXonXoff
-#  define FC_INST2 ss_hst_XonXOff
-# endif
-#else
-# define FC_SERIAL fc_none
-# define FC_INST1 ss_ctt_ProtokolWithoutXonXoff
-# define FC_INST2 ss_hst_None
-#endif
-
 /* Establish communications with a Spectrolino/Spectroscan */
 /* Use the baud rate given, and timeout in to secs */
 /* Return DTP_COMS_FAIL on failure to establish communications */
 static inst_code
-ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
+ss_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	ss *p = (ss *)pp;
 	/* We're a bit stuffed if the Specrolino/scan is set to 28800, since */
 	/* this rate isn't universally supported by computer systems. */
@@ -117,6 +100,9 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 	ss_ctt sobrc[7]  = { ss_ctt_SetBaud9600, ss_ctt_SetBaud19200, ss_ctt_SetBaud57600,
 	                     ss_ctt_SetBaud2400, ss_ctt_SetBaud1200,  ss_ctt_SetBaud600,
 	                     ss_ctt_SetBaud300 };
+	char *fcc;
+	ss_ctt fcc1;
+	ss_hst fcc2;
 	long etime;
 	int ci, bi, i;
 	inst_code ev = inst_ok;
@@ -124,6 +110,22 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 #ifdef DEBUG
 	printf("Init comms called for ss\n");
 #endif
+
+	/* Deal with flow control setting */
+	if (fc == fc_nc)
+		fc = DEFFC;
+	
+	if (fc == fc_XonXOff) {
+		fcc1 = ss_ctt_ProtokolWithXonXoff;
+		fcc2 = ss_hst_XonXOff;
+	} else if (fc == fc_Hardware) {
+		fcc1 = ss_ctt_ProtokolWithHardwareHS;
+		fcc2 = ss_hst_Hardware;
+	} else {
+		fc = fc_none;
+		fcc1 = ss_ctt_ProtokolWithoutXonXoff;
+		fcc2 = ss_hst_None;
+	}
 
 	if (p->debug)
 		p->icom->debug = p->debug;	/* Turn on debugging */
@@ -138,7 +140,7 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 
 	/* Figure current icoms baud rate */
 	for (ci = 0; ci < 7; ci++) {
-		if (brt[ci] == p->icom->baud)
+		if (brt[ci] == p->icom->br)
 			break;
 	}
 	if (ci >= 7)
@@ -213,24 +215,24 @@ ss_init_coms(inst *pp, int port, baud_rate br, double tout) {
 	/* Finalise the communications */
 	if (p->itype == instSpectrolino) {
 
-		if ((ev = so_do_MeasControlDownload(p, FC_INST1)) != inst_ok)
+		if ((ev = so_do_MeasControlDownload(p, fcc1)) != inst_ok)
 			return ev;
 
 		/* Do baudrate change without checking results */
 		so_do_MeasControlDownload(p, sobrc[bi]);
-		p->icom->set_ser_port(p->icom, port, FC_SERIAL, brt[bi], parity_none, stop_1, length_8);
+		p->icom->set_ser_port(p->icom, port, fc, brt[bi], parity_none, stop_1, length_8);
 
 	} else {	/* Spectroscan */
 
 		ss_do_SetDeviceOnline(p);	/* Put the device online */
 
 		/* Make sure other communication parameters are right */
-		if ((ev = ss_do_ChangeHandshake(p, FC_INST2)) != inst_ok)
+		if ((ev = ss_do_ChangeHandshake(p, fcc2)) != inst_ok)
 			return ev;
 
 		/* Do baudrate change without checking results */
 		ss_do_ChangeBaudRate(p, ssbrc[bi]); 
-		p->icom->set_ser_port(p->icom, port, FC_SERIAL, brt[bi], parity_none, stop_1, length_8);
+		p->icom->set_ser_port(p->icom, port, fc, brt[bi], parity_none, stop_1, length_8);
 
 		/* Make sure the Spectrolino is talking to us. */
 		if ((ev = ss_do_ScanSpectrolino(p)) != inst_ok) {
@@ -1361,7 +1363,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 /* Request an instrument calibration. */
 /* This is use if the user decides they want to do a calibration, */
 /* in anticipation of a calibration (needs_calibration()) to avoid */
-/* requiring one during measurement, or in response to measureing */
+/* requiring one during measurement, or in response to measuring */
 /* returning inst_needs_cal. Initially us an inst_cal_cond of inst_calc_none, */
 /* and then be prepared to setup the right conditions, or ask the */
 /* user to do so, each time the error inst_cal_setup is returned. */
@@ -1665,6 +1667,12 @@ static inst_code
 ss_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 {
 	ss *p = (ss *)pp;
+
+	/* Ignore these modes - not applicable, but be nice. */
+	if (m == inst_opt_disp_crt
+	 || m == inst_opt_disp_lcd) {
+		return inst_ok;
+	}
 
 	if (m == inst_opt_noautocalib) {
 		p->noautocalib = 1;

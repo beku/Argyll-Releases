@@ -9,11 +9,12 @@
 <body>
 <h2><b>spectro/spyd2en</b></h2>
 <h3>Summary</h3>
-A special purpose utility that enables the use of a Spyder 2
-colorimeter with Argyll.<br>
+A special purpose utility that enables the Spyder 2
+colorimeter.<br>
 <h3>Usage summary<br>
 </h3>
-<small><span style="font-family: monospace;">spyd2en [-v] inputfile</span><br
+<small><span style="font-family: monospace;">spyd2en [-v] [<span
+ style="font-style: italic;">inputfile</span></span>]<br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-v level
 &nbsp;&nbsp;&nbsp;&nbsp; Verbose<br>
@@ -23,6 +24,10 @@ colorimeter with Argyll.<br>
  style="font-family: monospace;"></span></small><br>
 <h3></h3>
 <h3>Flags and Parameters</h3>
+The <span style="font-style: italic;">inputfile</span> argument is
+optional, and and can be used to specify the MSWindows setup.exe file,
+if spyd2en is unable to locate this file automatically.<br>
+<br>
 The <b>-v</b> parameter enables verbosity.<span
  style="font-weight: bold;"></span><br>
 <h3>Usage Details and Discussion</h3>
@@ -34,8 +39,8 @@ Argyll, since it has not been made available under a compatible license.<br>
 The purchaser of a Spyder 2 instrument
 should have received a copy of this firmware along with their
 instrument from the original vendor, and <span
- style="font-weight: bold;">spyd2en</span> allows their instrument to
-work with Argyll, by locating the firmware in the users copy of the
+ style="font-weight: bold;">spyd2en</span> enables their instrument, by
+locating the firmware in the users copy of the
 instrument install files.<br>
 <br>
 On Microsoft Windows or Apple OS X platforms, <span
@@ -56,7 +61,7 @@ than <span style="font-style: italic;">/mnt/cdrom</span>, <span
  style="font-style: italic;">/cdrom</span>, then you will have to mount
 the CDROM manually, and give spyd2en the path to the CDROM
 setup/setup.exe
-file as an argument.<br>
+file as the argument <span style="font-style: italic;">inputfile</span>.<br>
 <br>
 If the instrument firmware pattern is successfully located, then
 spyd2en will create a <span style="font-weight: bold;">spyd2PLD.bin</span>

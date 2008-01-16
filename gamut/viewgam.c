@@ -56,17 +56,19 @@ void usage(char *diag, ...) {
 		fprintf(stderr,"\n");
 	}
 	fprintf(stderr,"usage: viewgam { [-c color] [-t trans] [-w|s] infile.gam } ... outfile.wrl\n");
-	fprintf(stderr," -c color      Color to make gamut, r = red, g = green, b = blue\n"); 
-	fprintf(stderr,"               c = cyan, m = magenta, y = yellow, e = grey, w = white\n"); 
-	fprintf(stderr,"               n = natural color\n"); 
-	fprintf(stderr," -t trans      Set transparency from 0.0 (opaque) to 1.0 (invisible)\n"); 
-	fprintf(stderr," -w            Show as a wireframe\n");
-	fprintf(stderr," -s            Show as a solid surace\n");
-	fprintf(stderr," infile.gam    Name of .gam file\n");
-	fprintf(stderr,"               Repeat above for each input file\n\n");
-	fprintf(stderr," -n            Don't add Lab axes\n");
-	fprintf(stderr," -k            Add markers for prim. & sec. \"cusp\" points\n");
-	fprintf(stderr," outfile.wrl   Name of output .wrl file\n");
+	fprintf(stderr," -c color       Color to make gamut, r = red, g = green, b = blue\n"); 
+	fprintf(stderr,"                c = cyan, m = magenta, y = yellow, e = grey, w = white\n"); 
+	fprintf(stderr,"                n = natural color\n"); 
+	fprintf(stderr," -t trans       Set transparency from 0.0 (opaque) to 1.0 (invisible)\n"); 
+	fprintf(stderr," -w             Show as a wireframe\n");
+	fprintf(stderr," -s             Show as a solid surace\n");
+	fprintf(stderr," infile.gam     Name of .gam file\n");
+	fprintf(stderr,"                Repeat above for each input file\n\n");
+	fprintf(stderr," -n             Don't add Lab axes\n");
+	fprintf(stderr," -k             Add markers for prim. & sec. \"cusp\" points\n");
+	fprintf(stderr," -i             Compute and print intersecting volume of first 2 gamuts\n");
+	fprintf(stderr," -I isect.gam   Same as -i, but save intersection gamut to isect.gam\n");
+	fprintf(stderr," outfile.wrl    Name of output .wrl file\n");
 	fprintf(stderr,"\n");
 	exit(1);
 }
@@ -108,16 +110,18 @@ typedef enum {
 
 int
 main(int argc, char *argv[]) {
-	int fa,nfa;				/* argument we're looking at */
+	int fa, nfa, mfa;		/* argument we're looking at */
 	int n, ng = 0;			/* Current number of input gamuts */
-	char in_name[MXGAMTS+1][100];
+	char in_name[MXGAMTS+1][MAXNAMEL+1];
 	gam_colors in_colors[MXGAMTS+1];	/* Color enum for each input */
 	double in_trans[MXGAMTS+1];		/* Transparency for each input */
 	gam_reps in_rep[MXGAMTS+1];		/* Representation enum for each input */
 	int doaxes = 1;
 	int docusps = 0;
+	int isect = 0;
 	FILE *wrl;
-	char out_name[100];
+	char out_name[MAXNAMEL+1];
+	char iout_name[MAXNAMEL+1] = "\000";;
 	if (argc < 3)
 		usage("Too few arguments, got %d expect at least 2",argc-1);
 
@@ -162,6 +166,8 @@ main(int argc, char *argv[]) {
 		}
 	}
 
+	mfa = 1;		/* Minimum final arguments */
+
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */
@@ -171,7 +177,7 @@ main(int argc, char *argv[]) {
 			if (argv[fa][2] != '\000')
 				na = &argv[fa][2];		/* next is directly after flag */
 			else {
-				if ((fa+1) < argc) {
+				if ((fa+1+mfa) < argc) {
 					if (argv[fa+1][0] != '-') {
 						nfa = fa + 1;
 						na = argv[nfa];		/* next is seperate non-flag argument */
@@ -261,11 +267,22 @@ main(int argc, char *argv[]) {
 				docusps = 1;
 			}
 
+			/* Print intersecting volume */
+			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
+				isect = 1;
+
+				/* There is an intersection output gamut file */
+				if (argv[fa][1] == 'I' && na != NULL) {
+					fa = nfa;
+					strncpy(iout_name, na, MAXNAMEL); iout_name[MAXNAMEL] = '\000';
+				}
+			}
+
 			else 
 				usage("Unknown flag '%c'",argv[fa][1]);
 
 		} else if (argv[fa][0] != '\000') { /* Got a non-flag */
-			strcpy(in_name[ng], argv[fa]);
+			strncpy(in_name[ng],argv[fa],MAXNAMEL); in_name[ng][MAXNAMEL] = '\000';
 			ng++;
 			if (ng >= MXGAMTS)
 				break;
@@ -281,8 +298,7 @@ main(int argc, char *argv[]) {
 	if (ng < 2)
 		usage("Not enough arguments to specify output VRML files");
 
-	strcpy(out_name, in_name[--ng]);
-
+	strncpy(out_name,in_name[--ng],MAXNAMEL); out_name[MAXNAMEL] = '\000';
 
 #ifdef NEVER
 	for (n = 0; n < ng; n++) {
@@ -590,6 +606,48 @@ main(int argc, char *argv[]) {
 
 	/* Close the file */
 	fclose(wrl);
+
+	if (isect && ng >= 2) {
+		gamut *s, *s1, *s2;
+		double v1, v2, vi;
+
+		if ((s = new_gamut(0.0, 0)) == NULL)
+			error("Creating gamut object failed");
+		
+		if ((s1 = new_gamut(0.0, 0)) == NULL)
+			error("Creating gamut object failed");
+		
+		if ((s2 = new_gamut(0.0, 0)) == NULL)
+			error("Creating gamut object failed");
+		
+		if (s1->read_gam(s1, in_name[0]))
+			error("Input file '%s' read failed",in_name[0]);
+
+		if (s2->read_gam(s2, in_name[1]))
+			error("Input file '%s' read failed",in_name[1]);
+
+		v1 = s1->volume(s1);
+		v2 = s2->volume(s2);
+
+#ifdef NEVER
+		vi = s1->ivolume(s1, s2);
+#else
+		s->intersect(s, s1, s2);
+		vi = s->volume(s);
+
+		if (iout_name[0] != '\000') {
+			if (s->write_gam(s, iout_name))
+				error("Writing intersection gamut to '%s' failed",iout_name);
+		}
+#endif
+
+		printf("Intersecting volume = %.1f cubic units\n",vi);
+		printf("'%s' volume = %.1f cubic units, intersect = %.2f%%\n",in_name[0],v1,100.0 * vi/v1);
+		printf("'%s' volume = %.1f cubic units, intersect = %.2f%%\n",in_name[1],v2,100.0 * vi/v2);
+
+		s1->del(s1);
+		s2->del(s2);
+	}
 
 	return 0;
 }

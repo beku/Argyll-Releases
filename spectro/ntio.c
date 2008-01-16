@@ -243,8 +243,8 @@ icoms *p
 	/* Look in the registry */
 	if ((stat = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "HARDWARE\\DEVICEMAP\\SERIALCOMM",
 	                         0, KEY_READ, &sch)) != ERROR_SUCCESS) {
-		warning("RegOpenKeyEx failed with %d",stat);
-		return NULL;
+		if (p->debug) fprintf(stderr,"icoms: There don't appear to be any serial ports\n");
+		return p->paths;		/* Maybe they have USB ports */
 	}
 
 	/* Look at all the values in this key */
@@ -357,7 +357,15 @@ stop_bits	 stop,
 word_length	 word)
 {
 
-	if (p->debug) fprintf(stderr,"icoms: About to set serial port characteristics\n");
+	if (p->debug) {
+		fprintf(stderr,"icoms: About to set port characteristics:\n");
+		fprintf(stderr,"       Port = %d\n",port);
+		fprintf(stderr,"       Flow control = %d\n",fc);
+		fprintf(stderr,"       Baud Rate = %d\n",baud);
+		fprintf(stderr,"       Parity = %d\n",parity);
+		fprintf(stderr,"       Stop bits = %d\n",parity);
+		fprintf(stderr,"       Word length = %d\n",word);
+	}
 
 	if (port >= 1) {
 		if (p->is_open && port != p->port) {	/* If port number changes */
@@ -371,13 +379,13 @@ word_length	 word)
 		if (fc != fc_nc)
 			p->fc = fc;
 		if (baud != baud_nc)
-			p->baud = baud;
+			p->br = baud;
 		if (parity != parity_nc)
-			p->parity = parity;
+			p->py = parity;
 		if (stop != stop_nc)
-			p->stop_bits = stop;
+			p->sb = stop;
 		if (word != length_nc)
-			p->word_length = word;
+			p->wl = word;
 
 		/* Make sure the port is open */
 		if (!p->is_open) {
@@ -456,7 +464,7 @@ word_length	 word)
 				break;
 		}
 
-		switch (p->baud) {
+		switch (p->br) {
 			case baud_110:
 				dcb.BaudRate = CBR_110;
 				break;
@@ -494,12 +502,12 @@ word_length	 word)
 				dcb.BaudRate = CBR_115200;
 				break;
 			default:
-				error("nt icoms - set_ser_port: illegal baud rate! (0x%x)",p->baud);
+				error("nt icoms - set_ser_port: illegal baud rate! (0x%x)",p->br);
 				break;
 				
 		}
 
-		switch (p->parity) {
+		switch (p->py) {
 			case parity_nc:
 				error("icoms - set_ser_port: illegal parity setting!");
 				break;
@@ -519,7 +527,7 @@ word_length	 word)
 				break;
 		}
 
-		switch (p->stop_bits) {
+		switch (p->sb) {
 			case stop_nc:
 				error("icoms - set_ser_port: illegal stop bits!");
 				break;
@@ -531,7 +539,7 @@ word_length	 word)
 				break;
 		}
 
-		switch (p->word_length) {
+		switch (p->wl) {
 			case length_nc:
 				error("icoms - set_ser_port: illegal word length!");
 			case length_5:
@@ -780,10 +788,10 @@ extern icoms *new_icoms()
 	p->ppath = NULL;
 	p->port = -1;
 	p->fc = fc_nc;
-	p->baud = baud_nc;
-	p->parity = parity_nc;
-	p->stop_bits = stop_nc;
-	p->word_length = length_nc;
+	p->br = baud_nc;
+	p->py = parity_nc;
+	p->sb = stop_nc;
+	p->wl = length_nc;
 	p->tc = -1;
 	p->debug = 0;
 	

@@ -8,7 +8,7 @@
 /* Version of Argyll release */
 
 #define ARGYLL_VERSION 0x000700
-#define ARGYLL_VERSION_STR "0.70 (BETA 7)"
+#define ARGYLL_VERSION_STR "0.70 (BETA 8)"
 
 /* Maximum file path length */
 #define MAXNAMEL 512

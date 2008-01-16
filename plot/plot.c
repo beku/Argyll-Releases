@@ -15,10 +15,11 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-#ifndef NT
+#ifdef UNIX
 #include <unistd.h>
 #endif
 #include <math.h>
+#include "numlib.h"
 #include "plot.h"
 
 #undef DODEBUG				/* Print error messages & progress reports */
@@ -34,7 +35,6 @@
 
 /* Graph order is Black = Y1, Red = Y2, Green = Y3, Blue = Y4, Yellow = Y5, Purple = Y6 */
 
-extern void error(char *fmt, ...), warning(char *fmt, ...);
 double nicenum(double x, int round);
 
 /* Information defining plot */
@@ -1542,7 +1542,7 @@ plot_info *pdp
 ) {
 	int i, j;
 	int lx,ly;		/* Last x,y */
-	unsigned char dash_list[2] = {5, 1};
+	char dash_list[2] = {5, 1};
 	Colormap mycmap;
 	XColor col;
 
@@ -1731,35 +1731,6 @@ main()
 	printf("We're done\n");
 	return 0;
 	}
-
-
-/* Basic printf type error() and warning() routines */
-
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"chart: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
-}
-
-void
-warning(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"chart: Warning - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-}
-
 
 #endif /* STANDALONE_TEST */
 /* ---------------------------------------------------------------- */

@@ -21,6 +21,14 @@
 #include "config.h"
 #include "numlib.h"
 
+#undef DEBUG
+
+#ifdef DEBUG
+#define DBG(text) printf text ;
+#else
+#define DBG(text)
+#endif
+
 typedef unsigned char uch;
 typedef unsigned short ush;
 typedef unsigned int ulg;
@@ -47,7 +55,7 @@ struct huft {
 /* Interface to visetest.c */
 extern unsigned int get_16bits();
 extern void unget_16bits();
-extern void write_output(unsigned char *buf, unsigned int len);
+extern int write_output(unsigned char *buf, unsigned int len);
 
 /* Function prototypes */
 int huft_build(unsigned *, unsigned, unsigned, ush *, ush *,
@@ -74,13 +82,15 @@ int inflate(void);
 unsigned int wp;             /* current position in slide */
 uch slide[32768];
 
-void flush_output(unsigned int w) {
+int flush_output(unsigned int w) {
 	wp = w;
 
     if (wp == 0)
-		return;
-	write_output(slide, wp);
+		return 0;
+	if (write_output(slide, wp))
+		return 1;
     wp = 0;
+	return 0;
 }
 
 
@@ -473,12 +483,16 @@ int bl, bd;             /* number of bits decoded by tl[] and td[] */
   for (;;)                      /* do until end of block */
   {
     NEEDBITS((unsigned)bl)
-	if (tl == NULL)
-		return 2;
+	if (tl == NULL) {
+      DBG(("Huffman table is NULL\n"))
+	  return 2;
+    }
     if ((e = (t = tl + ((unsigned)b & ml))->e) > 16)
       do {
-        if (e == 99)
+        if (e == 99) {
+          DBG(("Huffman table returned 99\n"))
           return 1;
+        }
         DUMPBITS(t->b)
         e -= 16;
         NEEDBITS(e)
@@ -489,7 +503,10 @@ int bl, bd;             /* number of bits decoded by tl[] and td[] */
       slide[w++] = (uch)t->v.n;
       if (w == WSIZE)
       {
-        flush_output(w);
+        if (flush_output(w)) {
+          DBG(("Buffer was unexpectedly large\n"))
+          return 1;
+        }
         w = 0;
       }
     }
@@ -508,8 +525,10 @@ int bl, bd;             /* number of bits decoded by tl[] and td[] */
       NEEDBITS((unsigned)bd)
       if ((e = (t = td + ((unsigned)b & md))->e) > 16)
         do {
-          if (e == 99)
+          if (e == 99) {
+            DBG(("Huffman table returned 99\n"))
             return 1;
+          }
           DUMPBITS(t->b)
           e -= 16;
           NEEDBITS(e)
@@ -536,7 +555,10 @@ int bl, bd;             /* number of bits decoded by tl[] and td[] */
           } while (--e);
         if (w == WSIZE)
         {
-          flush_output(w);
+          if (flush_output(w)) {
+            DBG(("Buffer was unexpectedly large\n"))
+            return 1;
+          }
           w = 0;
         }
       } while (n);
@@ -580,8 +602,10 @@ int inflate_stored()
   n = ((unsigned)b & 0xffff);
   DUMPBITS(16)
   NEEDBITS(16)
-  if (n != (unsigned)((~b) & 0xffff))
+  if (n != (unsigned)((~b) & 0xffff)) {
+    DBG(("Stored block length comlpement doesn't match\n"))
     return 1;                   /* error in compressed data */
+  }
   DUMPBITS(16)
 
 
@@ -592,7 +616,10 @@ int inflate_stored()
     slide[w++] = (uch)b;
     if (w == WSIZE)
     {
-      flush_output(w);
+      if (flush_output(w)) {
+        DBG(("Buffer was unexpectedly large\n"))
+        return 1;
+      }
       w = 0;
     }
     DUMPBITS(8)
@@ -700,9 +727,11 @@ int inflate_dynamic()
 #ifdef PKZIP_BUG_WORKAROUND
   if (nl > 288 || nd > 32)
 #else
-  if (nl > 286 || nd > 30)
+  if (nl > 286 || nd > 30) {
 #endif
+    DBG(("Bad block type nl = %d, nd = %d\n",nl,nd))
     return 1;                   /* bad lengths */
+  }
 
 
   /* read in bit-length-code lengths */
@@ -722,6 +751,7 @@ int inflate_dynamic()
   {
     if (i == 1)
       huft_free(tl);
+    DBG(("Incomplete code set\n"))
     return i;                   /* incomplete code set */
   }
 
@@ -733,8 +763,10 @@ int inflate_dynamic()
   while ((unsigned)i < n)
   {
     NEEDBITS((unsigned)bl)
-	if (tl == NULL)
-		return 2; 
+	if (tl == NULL) {
+      DBG(("Huffman table is NULL\n"))
+	  return 2; 
+    }
     j = (td = tl + ((unsigned)b & m))->b;
     DUMPBITS(j)
     j = td->v.n;
@@ -745,8 +777,10 @@ int inflate_dynamic()
       NEEDBITS(2)
       j = 3 + ((unsigned)b & 3);
       DUMPBITS(2)
-      if ((unsigned)i + j > n)
+      if ((unsigned)i + j > n) {
+        DBG(("Repeat length %d is bad\n",i))
         return 1;
+      }
       while (j--)
         ll[i++] = l;
     }
@@ -755,8 +789,10 @@ int inflate_dynamic()
       NEEDBITS(3)
       j = 3 + ((unsigned)b & 7);
       DUMPBITS(3)
-      if ((unsigned)i + j > n)
+      if ((unsigned)i + j > n) {
+        DBG(("Repeat length %d is bad\n",i))
         return 1;
+      }
       while (j--)
         ll[i++] = 0;
       l = 0;
@@ -766,8 +802,10 @@ int inflate_dynamic()
       NEEDBITS(7)
       j = 11 + ((unsigned)b & 0x7f);
       DUMPBITS(7)
-      if ((unsigned)i + j > n)
+      if ((unsigned)i + j > n) {
+        DBG(("Repeat length %d is bad\n",i))
         return 1;
+      }
       while (j--)
         ll[i++] = 0;
       l = 0;
@@ -789,9 +827,9 @@ int inflate_dynamic()
   if ((i = huft_build(ll, nl, 257, cplens, cplext, &tl, &bl)) != 0)
   {
     if (i == 1) {
-//      fprintf(stderr, " incomplete literal tree\n");
       huft_free(tl);
     }
+    DBG(("Incomplete litteral tree\n"))
     return i;                   /* incomplete code set */
   }
   bd = dbits;
@@ -806,14 +844,17 @@ int inflate_dynamic()
       huft_free(td);
     }
     huft_free(tl);
+    DBG(("Incomplete code set\n"))
     return i;                   /* incomplete code set */
 #endif
   }
 
 
   /* decompress until an end-of-block code */
-  if (inflate_codes(tl, td, bl, bd))
+  if (inflate_codes(tl, td, bl, bd)) {
+    DBG(("inflate_codes failed\n"))
     return 1;
+  }
 
 
   /* free the decoding tables, return */
@@ -861,17 +902,18 @@ int *e;                 /* last block flag */
   if (t == 0)
     return inflate_stored();
 
-   /* Apparently VISE doesn't use this */
 #ifdef NEVER
-  if (t == 1)
+   /* Apparently VISE doesn't use this */
+  if (t == 1) {
+    printf("WARNING: inflate fixed found\n");
     return inflate_fixed();
+  }
 #endif
 
   /* bad block type */
+  DBG(("Bad block type %d\n",t))
   return 2;
 }
-
-
 
 /* decompress an inflated entry */
 /* return nz on error */
@@ -880,7 +922,6 @@ int inflate()
   int e;                /* last block flag */
   int r;                /* result code */
   unsigned h;           /* maximum struct huft's malloc'ed */
-
 
   /* initialize window, bit buffer */
   wp = 0;
@@ -906,7 +947,10 @@ int inflate()
   }
 
   /* flush out slide */
-  flush_output(wp);
+  if (flush_output(wp)) {
+    DBG(("Buffer was unexpectedly large\n"))
+    return 1;
+  }
 
   /* return success */
   return 0;

@@ -43,11 +43,15 @@
 
 #define INSTALLFLAG_FORCE 0x00000001
 
+/* newdev.dll exports */
 typedef BOOL (WINAPI * update_driver_for_plug_and_play_devices_t)(HWND, 
                                                                   LPCSTR, 
                                                                   LPCSTR, 
                                                                   DWORD,
                                                                   PBOOL);
+/* setupapi.dll exports */
+typedef BOOL (WINAPI * setup_copy_oem_inf_t)(PCSTR, PCSTR, DWORD, DWORD,
+                                             PSTR, DWORD, PDWORD, PSTR*);
 
 /* advapi32.dll exports */
 typedef SC_HANDLE (WINAPI * open_sc_manager_t)(LPCTSTR, LPCTSTR, DWORD);
@@ -120,9 +124,6 @@ int usb_install_service_np(void)
   char display_name[MAX_PATH];
   int ret = 0;
 
-
-  memset(display_name, 0, sizeof(display_name));
-
   /* uninstall old filter driver */
   usb_uninstall_service_np();
 
@@ -133,6 +134,8 @@ int usb_install_service_np(void)
 
   if(usb_registry_is_nt())
     {
+      memset(display_name, 0, sizeof(display_name));
+
       /* create the Display Name */
       _snprintf(display_name, sizeof(display_name) - 1,
                 "LibUsb-Win32 - Kernel Driver, Version %d.%d.%d.%d", 
@@ -152,7 +155,7 @@ int usb_install_service_np(void)
   usb_registry_insert_class_filter();
 
   /* restart the whole USB system so that the new drivers will be loaded */
-  usb_registry_restart_root_hubs(); 
+  usb_registry_restart_all_devices(); 
 
   return ret;
 }
@@ -162,7 +165,7 @@ int usb_uninstall_service_np(void)
   HANDLE win; 
   HKEY reg_key = NULL;
 
-  /* remove old system service */
+  /* older version of libusb used a system service, just remove it */
   if(usb_registry_is_nt())
     {
       usb_service_stop(LIBUSB_OLD_SERVICE_NAME_NT);
@@ -189,12 +192,14 @@ int usb_uninstall_service_np(void)
         }
     } 
 
-  /* remove old filter drivers */
-  usb_registry_remove_class_filter();
+  /* old versions used device filters that have to be removed */
   usb_registry_remove_device_filter();
 
-  /* unload old filter drivers */
-  usb_registry_restart_root_hubs(); 
+  /* remove class filter driver */
+  usb_registry_remove_class_filter();
+
+  /* unload filter drivers */
+  usb_registry_restart_all_devices(); 
 
   return 0;
 }
@@ -213,9 +218,10 @@ int usb_install_driver_np(const char *inf_file)
   char *p;
   int dev_index;
   HINSTANCE newdev_dll = NULL;
-  
-  update_driver_for_plug_and_play_devices_t UpdateDriverForPlugAndPlayDevices;
+  HMODULE setupapi_dll = NULL;
 
+  update_driver_for_plug_and_play_devices_t UpdateDriverForPlugAndPlayDevices;
+  setup_copy_oem_inf_t SetupCopyOEMInf;
   newdev_dll = LoadLibrary("newdev.dll");
 
   if(!newdev_dll)
@@ -234,6 +240,21 @@ int usb_install_driver_np(const char *inf_file)
       return -1;
     }
 
+  setupapi_dll = GetModuleHandle("setupapi.dll");
+  
+  if(!setupapi_dll)
+    {
+      usb_error("usb_install_driver(): loading setupapi.dll failed\n");
+      return -1;
+    }
+  SetupCopyOEMInf = (setup_copy_oem_inf_t)
+    GetProcAddress(setupapi_dll, "SetupCopyOEMInfA");
+  
+  if(!SetupCopyOEMInf)
+    {
+      usb_error("usb_install_driver(): loading setupapi.dll failed\n");
+      return -1;
+    }
 
   dev_info_data.cbSize = sizeof(SP_DEVINFO_DATA);
 
@@ -756,4 +777,48 @@ int usb_touch_inf_file_np(const char *inf_file)
     }
 
   return 0;
+}
+
+int usb_install_needs_restart_np(void)
+{
+  HDEVINFO dev_info;
+  SP_DEVINFO_DATA dev_info_data;
+  int dev_index = 0;
+  SP_DEVINSTALL_PARAMS install_params;
+  int ret = FALSE;
+
+  dev_info_data.cbSize = sizeof(SP_DEVINFO_DATA);
+  dev_info = SetupDiGetClassDevs(NULL, NULL, NULL,
+                                 DIGCF_ALLCLASSES | DIGCF_PRESENT);
+  
+  SetEnvironmentVariable("LIBUSB_NEEDS_REBOOT", "1");
+
+  if(dev_info == INVALID_HANDLE_VALUE)
+    {
+      usb_error("usb_install_needs_restart_np(): getting "
+                "device info set failed");
+      return ret;
+    }
+  
+  while(SetupDiEnumDeviceInfo(dev_info, dev_index, &dev_info_data))
+    {
+      memset(&install_params, 0, sizeof(SP_PROPCHANGE_PARAMS));
+      install_params.cbSize = sizeof(SP_DEVINSTALL_PARAMS);
+
+      if(SetupDiGetDeviceInstallParams(dev_info, &dev_info_data, 
+                                       &install_params))
+        {
+          if(install_params.Flags & (DI_NEEDRESTART | DI_NEEDREBOOT))
+            {
+              usb_message("usb_install_needs_restart_np(): restart needed");
+              ret = TRUE;
+            }
+        }
+      
+      dev_index++;
+    }
+  
+  SetupDiDestroyDeviceInfoList(dev_info);
+
+  return ret;
 }

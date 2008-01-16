@@ -30,8 +30,6 @@
 #include "numlib.h"
 #include "plot.h"
 
-void error(char *fmt, ...), warning(char *fmt, ...);
-
 void usage(void) {
 	fprintf(stderr,"Check CMYK/RGB/PCS->PCS/CMYK/RGB transfer response\n");
 	fprintf(stderr,"Author: Graeme W. Gill\n");

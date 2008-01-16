@@ -46,7 +46,7 @@
 #include "hcfr.h"
 
 #undef MODIFIED_HCFR	/* If modified 2.4 mm apature version being used */
-#undef MEASURE_RAW		/* Calibration - return raw RGB values */
+#define MEASURE_RAW		/* Calibration - return raw RGB values */
 #undef DEBUG
 
 static inst_code hcfr_interp_code(inst *pp, int ec);
@@ -282,8 +282,8 @@ hcfr_get_rgb(
 	return inst_ok;
 }
 
-/* Compute the calibration matricies */
-/* The basic calibration data is from my particular HCFR, measuerd */
+/* Compute the calibration matricies. */
+/* The basic calibration data is from my particular HCFR, measured */
 /* against one of my CRT and LCD displays, with the reference XYZ */
 /* derived from my DTP94. */
 inst_code
@@ -431,7 +431,7 @@ hcfr_comp_matrix(
 /* Establish communications with a I1DISP */
 /* Return HCFR_COMS_FAIL on failure to establish communications */
 static inst_code
-hcfr_init_coms(inst *pp, int port, baud_rate br, double tout) {
+hcfr_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	hcfr *p = (hcfr *) pp;
 	int rsize;
 	long etime;
@@ -704,7 +704,7 @@ hcfr_interp_error(inst *pp, int ec) {
 			return "User hit a Command key";
 
 		case HCFR_OK:
-			return "No error";
+			return "No device error";
 
 		case HCFR_BAD_READING:
 			return "Invalid reading";

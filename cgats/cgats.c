@@ -10,7 +10,7 @@
  * Copyright 1995, 1996, 2002, Graeme W. Gill
  * All rights reserved.
  * 
- * This material is licensed with a free use license:-
+ * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
  */
 
@@ -1812,6 +1812,10 @@ real_format(double value, int nsd, char *fmt) {
 	int xtot = tot;
 	if (value == 0.0) {
 		sprintf(fmt,"%%%d.%df",tot,tot-2);
+		return;
+	}
+	if (value != value) {		/* Hmm. A nan */
+		sprintf(fmt,"%%f");
 		return;
 	}
 	if (value < 0.0) {

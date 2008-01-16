@@ -46,20 +46,26 @@ UNIX2DOS = unix2dos
 
 VERSION_MAJOR = 0
 VERSION_MINOR = 1
-VERSION_MICRO = 10
-VERSION_NANO = 2
+VERSION_MICRO = 12
+VERSION_NANO = 1
 
 VERSION = $(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_MICRO).$(VERSION_NANO)
 RC_VERSION = $(VERSION_MAJOR),$(VERSION_MINOR),$(VERSION_MICRO),$(VERSION_NANO)
 RC_VERSION_STR = '\"$(VERSION)\"'
+INST_VERSION = $(VERSION)
 
 INF_DATE = $(shell date +"%m/%d/%Y")
 DATE = $(shell date +"%Y%m%d")
+
+DDK_MAKE_DIR = ./ddk_make
 
 TARGET = libusb
 DLL_TARGET = $(TARGET)$(VERSION_MAJOR)
 LIB_TARGET = $(TARGET)
 DRIVER_TARGET = $(TARGET)$(VERSION_MAJOR).sys
+
+DLL_TARGET_X64 = $(TARGET)$(VERSION_MAJOR)_x64
+DRIVER_TARGET_X64 = $(TARGET)$(VERSION_MAJOR)_x64.sys
 
 INSTALL_DIR = /usr
 DLL_OBJECTS = usb.o error.o descriptors.o windows.o resource.o install.o \
@@ -73,9 +79,9 @@ DRIVER_OBJECTS = abort_endpoint.o claim_interface.o clear_feature.o \
 	set_feature.o set_interface.o transfer.o vendor_request.o \
 	power.o driver_registry.o driver_debug.o libusb_driver_rc.o 
 
-INSTALLER_NAME = $(TARGET)-win32-filter-bin-$(VERSION).exe
-SRC_DIST_DIR = $(TARGET)-win32-src-$(VERSION)
-BIN_DIST_DIR = $(TARGET)-win32-device-bin-$(VERSION)
+INSTALLER_NAME = $(TARGET)-win32-filter-bin-$(INST_VERSION).exe
+SRC_DIST_DIR = $(TARGET)-win32-src-$(INST_VERSION)
+BIN_DIST_DIR = $(TARGET)-win32-device-bin-$(INST_VERSION)
 
 
 DIST_SOURCE_FILES = ./src
@@ -102,16 +108,16 @@ CPPFLAGS = -DVERSION_MAJOR=$(VERSION_MAJOR) \
 WINDRES_FLAGS = -I./src -DRC_VERSION='$(RC_VERSION)' \
 								-DRC_VERSION_STR=$(RC_VERSION_STR)
 
-LDFLAGS = -s -mno-cygwin -L. -lusb -lgdi32 -luser32 -lsetupapi \
-	 				-lcfgmgr32 -lcomctl32
+LDFLAGS = -s -mno-cygwin -L. -lusb -lgdi32 -luser32 -lcfgmgr32 \
+	 				-lsetupapi -lcomctl32
 WIN_LDFLAGS = $(LDFLAGS) -mwindows
 
 
-DLL_LDFLAGS = -s -mwindows -shared -mno-cygwin \
+DLL_LDFLAGS = -s -mdll -mno-cygwin \
 	-Wl,--kill-at \
 	-Wl,--out-implib,$(LIB_TARGET).a \
 	-Wl,--enable-stdcall-fixup \
-	-L. -lsetupapi -lcfgmgr32
+	-L. -lcfgmgr32 -lsetupapi 
 
 
 DRIVER_LDFLAGS = -s -shared -Wl,--entry,_DriverEntry@8 \
@@ -144,17 +150,17 @@ testlibusb.exe: testlibusb.o
 install-filter.exe: install_filter.o
 	$(CC) $(CFLAGS) -o $@ -I./src  $^ $(WIN_LDFLAGS)
 
-testlibusb-win.exe: testlibusb_win.o
+testlibusb-win.exe: testlibusb_win.o testlibusb_win_rc.o
 	$(CC) $(WIN_CFLAGS) -o $@ -I./src  $^ $(WIN_LDFLAGS)
 
-%.o: %.c
+%.o: %.c libusb_driver.h driver_api.h
 	$(CC) -c $< -o $@ $(CFLAGS) $(CPPFLAGS) $(INCLUDES) 
 
 %.o: %.rc
 	$(WINDRES) $(WINDRES_FLAGS) $< -o $@
 
 README.txt: README.in
-	sed -e 's/@VERSION@/$(VERSION)/' $< > $@
+	sed -e 's/@VERSION@/$(INST_VERSION)/' $< > $@
 
 
 .PHONY: bcc_implib
@@ -171,16 +177,19 @@ bin_dist: all
 	$(INSTALL) -d $(BIN_DIST_DIR)/lib/gcc
 	$(INSTALL) -d $(BIN_DIST_DIR)/lib/bcc
 	$(INSTALL) -d $(BIN_DIST_DIR)/lib/msvc
+	$(INSTALL) -d $(BIN_DIST_DIR)/lib/msvc_x64
 	$(INSTALL) -d $(BIN_DIST_DIR)/lib/dynamic
 	$(INSTALL) -d $(BIN_DIST_DIR)/include
 	$(INSTALL) -d $(BIN_DIST_DIR)/bin
 	$(INSTALL) -d $(BIN_DIST_DIR)/examples
 
 	$(INSTALL) $(EXE_FILES) $(BIN_DIST_DIR)/bin
-	$(INSTALL) *.manifest $(BIN_DIST_DIR)/bin
 
 	$(INSTALL) $(DRIVER_TARGET) $(BIN_DIST_DIR)/bin
 	$(INSTALL) $(DLL_TARGET).dll $(BIN_DIST_DIR)/bin
+
+	$(INSTALL) $(DDK_MAKE_DIR)/$(DRIVER_TARGET) $(BIN_DIST_DIR)/bin/$(DRIVER_TARGET_X64)
+	$(INSTALL) $(DDK_MAKE_DIR)/$(DLL_TARGET).dll $(BIN_DIST_DIR)/bin/$(DLL_TARGET_X64).dll
 
 	$(INSTALL) $(SRC_DIR)/usb.h $(BIN_DIST_DIR)/include
 	$(INSTALL) $(LIB_TARGET).a $(BIN_DIST_DIR)/lib/gcc
@@ -188,9 +197,11 @@ bin_dist: all
 	$(INSTALL) $(LIB_TARGET).lib $(BIN_DIST_DIR)/lib/bcc
 	$(MAKE) msvc_lib
 	$(INSTALL) $(LIB_TARGET).lib $(BIN_DIST_DIR)/lib/msvc
+	$(INSTALL) $(DDK_MAKE_DIR)/$(LIB_TARGET).lib $(BIN_DIST_DIR)/lib/msvc_x64
 	$(INSTALL) $(SRC_DIR)/libusb_dyn.c $(BIN_DIST_DIR)/lib/dynamic
 	$(INSTALL) $(DIST_MISC_FILES) README.txt $(BIN_DIST_DIR)
 	$(INSTALL) ./examples/*.iss $(BIN_DIST_DIR)/examples
+	$(INSTALL) ./examples/*.c $(BIN_DIST_DIR)/examples
 	$(UNIX2DOS) $(BIN_DIST_DIR)/examples/*.iss
 	$(UNIX2DOS) $(BIN_DIST_DIR)/*.txt
 
@@ -211,6 +222,7 @@ src_dist:
 	$(INSTALL) ./ddk_make/makefile $(SRC_DIST_DIR)/ddk_make
 	$(INSTALL) ./ddk_make/*.txt $(SRC_DIST_DIR)/ddk_make
 	$(INSTALL) ./ddk_make/*.bat $(SRC_DIST_DIR)/ddk_make
+	$(UNIX2DOS)	$(SRC_DIST_DIR)/ddk_make/*
 
 	$(INSTALL) $(SRC_DIR)/driver/*.h $(SRC_DIST_DIR)/src/driver
 	$(INSTALL) $(SRC_DIR)/driver/*.c $(SRC_DIST_DIR)/src/driver
@@ -218,14 +230,15 @@ src_dist:
 	$(INSTALL) $(SRC_DIR)/driver/*.rc $(SRC_DIST_DIR)/src/driver
 
 	$(INSTALL) ./tests/*.c $(SRC_DIST_DIR)/tests
-	$(INSTALL) $(DIST_MISC_FILES) *.in Makefile *.manifest *.def \
+	$(INSTALL) ./tests/*.rc $(SRC_DIST_DIR)/tests
+	$(INSTALL) $(DIST_MISC_FILES) *.in Makefile manifest.txt *.def \
 		installer_license.txt $(SRC_DIST_DIR)
 	$(UNIX2DOS) $(SRC_DIST_DIR)/*.txt
 
 
 .PHONY: dist
 dist: bin_dist src_dist
-	sed -e 's/@VERSION@/$(VERSION)/' \
+	sed -e 's/@VERSION@/$(INST_VERSION)/' \
 		-e 's/@BIN_DIST_DIR@/$(BIN_DIST_DIR)/' \
 		-e 's/@SRC_DIST_DIR@/$(SRC_DIST_DIR)/' \
 		-e 's/@INSTALLER_TARGET@/$(INSTALLER_TARGET)/' \
@@ -238,7 +251,7 @@ dist: bin_dist src_dist
 	$(RM) $(BIN_DIST_DIR)
 
 .PHONY: snapshot
-snapshot: VERSION = $(DATE)
+snapshot: INST_VERSION = $(DATE)
 snapshot: dist
 
 .PHONY: clean

@@ -122,6 +122,7 @@ typedef enum {
 	inst_emis_disp_lcd     = 0x00010000, /* Has an LCD display mode */
 	inst_emis_illum        = 0x00020000, /* Capable of illuminant emission measurement */
 	inst_emis_ambient      = 0x00040000, /* Capable of ambient measurement */
+	inst_emis_ambient_mono = 0x00080000, /* The ambient measurement is monochrome */
 	inst_emission          = 0x000FF000, /* Capable of general emission measurements */
 
 	inst_colorimeter       = 0x00100000, /* Colorimetric capability */
@@ -360,6 +361,7 @@ typedef enum {
         struct _inst *p,														\
         int comport,		/* Serial port number */							\
         baud_rate br,		/* Baud rate */										\
+        flow_control fc,	/* Flow control */									\
         double tout);		/* Timeout */										\
 																				\
 	/* Initialise or re-initialise the INST */									\

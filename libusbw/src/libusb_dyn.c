@@ -366,7 +366,7 @@ char *usb_strerror(void)
 void usb_set_debug(int level)
 {
   if(_usb_set_debug)
-    _usb_set_debug(level);
+    return _usb_set_debug(level);
 }
 
 int usb_find_busses(void)

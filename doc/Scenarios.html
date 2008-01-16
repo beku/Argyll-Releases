@@ -9,10 +9,21 @@
 <h2><u>Typical usage Scenarios and Examples</u></h2>
 Choose a task from the list below. For more details on alternative
 options, follow the links to the individual utilities being used.<br>
+<br>
+Note that by default it is assumed that ICC profile have the file
+extension <span style="font-weight: bold;">.icm</span>, but that on
+Apple OS X and Unix/Linux platforms, the <span
+ style="font-weight: bold;">.icc</span> extension is expected and
+should be used.<br>
 <h4><a href="#PM1">Profiling Displays</a></h4>
-<h4>&nbsp;&nbsp;&nbsp;&nbsp; <a href="#PM1a">Adjusting and Calibrating
+<h4>&nbsp;&nbsp;&nbsp; <a href="#PM1a">Adjusting and Calibrating
 a
-displays</a><span style="font-weight: bold;"></span></h4>
+displays</a></h4>
+<h4>&nbsp;&nbsp;&nbsp; <a href="#PM1b">Adjusting, calibrating and
+profiling in one step<br>
+</a><span style="font-weight: bold;"></span><span
+ style="font-weight: bold;"></span><span
+ style="text-decoration: underline;"></span></h4>
 <h4>&nbsp;&nbsp;&nbsp; <a href="#PM2">Creating display test values</a></h4>
 <h4> &nbsp;&nbsp;&nbsp; <a href="#PM3">Taking readings from a display</a></h4>
 <h4> &nbsp;&nbsp;&nbsp; <a href="#PM4">Creating a
@@ -147,8 +158,31 @@ adjusted and calibrated your display, you can move on to the next step.<br>
 Once you have calibrated and profiled your display, you can keep it
 calibrated using the <a href="dispcal.html#u">dispcal -u</a> option.<br>
 <br>
-<a name="PM2"></a>Creating display test values
-The first step in profiling any output device, is to create a set
+<h4><a name="PM1b"></a>Adjusting, calibrating and profiling in one step.</h4>
+For more flexibility in creating a display profile, the separate steps
+of creating characterization test values using <span
+ style="font-weight: bold;">targen</span>, reading them from the
+display using <span style="font-weight: bold;">dispread</span>, and
+then creating a profile using <span style="font-weight: bold;">profile</span>
+are used. If however, a simple matrix/shaper display profile is all
+that is desired, <span style="font-weight: bold;">dispcal</span> can
+be used to do this, permitting display adjustment, calibration and
+profiling all in one operation. This is done by using the <span
+ style="font-weight: bold;"><span style="font-weight: bold;">dispcal </span>-o</span>
+flag:<br>
+<br>
+<a href="dispcal.html">dispcal</a> <a href="dispcal.html#v">-v</a> <a
+ href="dispcal.html#o">-o</a> <a href="dispcal.html#p1">TargetA</a><br>
+<br>
+This will create both a TargetA.cal file, but also a TargetA.icm file.
+See <a href="dispcal.html#o">-o</a> and <a href="dispcal.html#O">-O</a>
+for other variations.<br>
+<br>
+<h4><a name="PM2"></a>Creating display test values</h4>
+If the <span style="font-weight: bold;">dispcal</span> has not been
+used to create a display profile at the same time as adjustment and
+calibration, then the first step in profiling any output device, is to
+create a set
 of device colorspace test values. The important parameters needed are:
 <br>
 <ul>
@@ -199,10 +233,11 @@ chart recognition purposes.<br>
 <br>
 <h4><a name="PM3"></a>Taking readings from a display</h4>
 First it is necessary to connect your measurement instrument to your
-computer, and check which serial port it is connected to. In the
+computer, and check which communication port it is connected to. In the
 following example, it is assumed that the instrument is connected to
-COM port 1, the
-default port. Invoking dispread so as to display the usage information
+the default port 1, which is either the first USB instrument found, or
+serial port found. Invoking dispread so as to display the usage
+information
 (by
 using a flag -? or --) will list the identified serial and USB ports,
 and their
@@ -337,7 +372,10 @@ of a machine, and the latter, user specific location if you want the
 profile to only be available to that user. You can then launch the
 "System Preferences-&gt;Displays-&gt;Color" utility, to select the
 profile as the one to use for your display. Note that the contents of
-the description tag will be used to identify the profile.<br>
+the description tag (the argument to the <span
+ style="font-weight: bold;"><span style="font-weight: bold;">-D</span></span>
+flag used with the <span style="font-weight: bold;">profile</span>
+utility) will be used to identify the profile.<br>
 <br>
 <br>
 On <span style="font-weight: bold;">Linux</span> and other <span
@@ -355,6 +393,25 @@ If you want the display calibration to be loaded, you should consider
 installing a utility to do so at startup, such as <a
  href="dispwin.html">dispwin</a>
 or <a href="http://freshmeat.net/projects/xcalib/">xcalib</a>.<br>
+<br>
+Alternatively, the display profile can be installed following <a
+ href="http://www.burtonini.com/computing/x-icc-profiles-spec-0.2.html">this
+convention</a>, by using a utility such as <a
+ href="http://packages.ubuntu.com/dapper/x11/xicc">xicc</a>, or using
+Argyll's dispwin utility:<br>
+<br>
+&nbsp;&nbsp;&nbsp; dispwin -S <span style="font-style: italic;">profile.icc<br>
+<br>
+</span>to install the profile into the <span style="font-weight: bold;"></span>root
+window _ICC_PROFILE property, and <br>
+<br>
+&nbsp;&nbsp;&nbsp; dispwin -L<br>
+<br>
+to use the property to set the display's Video LUTs to the contained
+calibration curves.<br>
+You can use the dispwin -d parameter in the usual way to select other
+displays to store or load the calibration using the _ICC_PROFILE
+property.<br>
 <br>
 <hr size="2" width="100%">
 <h3><a name="PS1"></a>Profiling Scanners</h3>
@@ -440,9 +497,9 @@ For the Eye-One Pro Scan Target 1.4 chart, the <span
  style="font-weight: bold;"><span style="font-weight: bold;">ref/</span>i1_RGB_Scan_1.4.cht</span>
 file should be used, and as there is no reference file accompanying
 this chart, the chart needs to be read with an instrument (usually the
-Eye-One Pro). This can be done using printread,&nbsp; making use of the
+Eye-One Pro). This can be done using chartread,&nbsp; making use of the
 chart reference file <span style="font-weight: bold;">ref/i1_RGB_Scan_1.4.ti2</span>:<br>
-&nbsp;&nbsp;&nbsp; <a href="printread.html">printread</a> -n -a
+&nbsp;&nbsp;&nbsp; <a href="chartread.html">chartread</a> -n -a
 i1_RGB_Scan_1.4<br>
 and then rename the resulting <span style="font-weight: bold;">i1_RGB_Scan_1.4.ti3</span>
 file to <span style="font-weight: bold;">i1_RGB_Scan_1.4.cie</span><br>
@@ -696,8 +753,11 @@ PrinterA.ps file containing the test chart. If the <span
 PrinterA.cht files is created to allow the <a href="scanin.html">scanin</a>
 program to recognize the chart.<br>
 <br>
-GSview is a good program to use to check what the PostScript file will
-look like, without actually printing it out.<br>
+<span style="font-weight: bold;">GSview</span> is a good program to use
+to check what the PostScript file will
+look like, without actually printing it out. You could also use <span
+ style="font-weight: bold;">Photoshop</span> or <span
+ style="font-weight: bold;">ImageMagick</span> for this purpose.<br>
 <br>
 <br>
 The last step is to print the chart out.<br>
@@ -725,19 +785,19 @@ sheet at a time. See <a href="instruments.html">instruments</a> for a
 current list.<br>
 <br>
 The instrument needs to be connected to your computer before running
-the <a href="printread.html">printread</a> command. Both serial port
+the <a href="chartread.html">chartread</a> command. Both serial port
 and USB connected Instruments are supported. A serial port to USB
 adapter
 might have to be used if your computer doesn't have any serial ports,
 and you have a serial interface connected instrument.<br>
 <br>
-If you run <a href="printread.html">printread</a> so as to print out
+If you run <a href="chartread.html">chartread</a> so as to print out
 its usage message (ie. by using a <span style="font-weight: bold;">-?</span>
 or <span style="font-weight: bold;">--</span> flags), then it will
 list any identified serial ports or USB connected instruments, and
 their corresponding number for
-the <a href="printread.html#c">-c</a> option. By default, <a
- href="printread.html">printread</a> will try to connect to the first
+the <a href="chartread.html#c">-c</a> option. By default, <a
+ href="chartread.html">chartread</a> will try to connect to the first
 available USB instrument, or an instrument on the first serial port.<br>
 <br>
 The only arguments required is
@@ -747,17 +807,17 @@ option would also be specified.<br>
 <br>
 &nbsp;e.g. for a Spectroscan on the second port:<br>
 <br>
-<a href="printread.html">printread</a> <a href="printread.html#c">-c2</a>
-<a href="printread.html#p1">PrinterA</a><br>
+<a href="chartread.html">chartread</a> <a href="chartread.html#c">-c2</a>
+<a href="chartread.html#p1">PrinterA</a><br>
 <br>
 For a DTP41 to the default serial port:<br>
 <br>
-<a href="printread.html">printread</a><a href="printread.html#i"></a>
-<a href="printread.html#p1">PrinterA</a><br>
+<a href="chartread.html">chartread</a><a href="chartread.html#i"></a>
+<a href="chartread.html#p1">PrinterA</a><br>
 <br>
-<span style="font-weight: bold;">printread</span> will interactively
+<span style="font-weight: bold;">chartread</span> will interactively
 prompt you through the process of reading each sheet or strip. See <a
- href="printread.html">printread</a> for more details on the responses
+ href="chartread.html">chartread</a> for more details on the responses
 for each type of instrument. Continue with <a href="Scenarios.html#PP5">Creating
 a printer profile</a>.<br>
 <h4><a name="PP4"></a>Reading a print test chart using a scanner</h4>

@@ -44,15 +44,15 @@ InstallFile $(DOTDOT)$(SLASH)bin : $(Samples) ;
 
 # XICC library
 Objects xicc.c xlutfix.c xspect.c xsep.c xcolorants.c xutils.c xdevlin.c
-        xcam.c cam97s3.c cam02.c mpp.c xfit1.c xfit2.c xfit3.c ;
+        xcam.c cam97s3.c cam02.c mpp.c xfit.c moncurve.c ;
 LibraryFromObjects libxicc : xicc$(SUFOBJ) xlutfix$(SUFOBJ) xspect$(SUFOBJ)
                                  xsep$(SUFOBJ) xcolorants$(SUFOBJ) xutils$(SUFOBJ) xdevlin$(SUFOBJ)
                                  xcam$(SUFOBJ) cam97s3$(SUFOBJ) cam02$(SUFOBJ) mpp$(SUFOBJ)
-                                 xfit1$(SUFOBJ) xfit2$(SUFOBJ) xfit3$(SUFOBJ) ;
+                                 xfit$(SUFOBJ) moncurve$(SUFOBJ) ;
 ObjectHdrs xicc$(SUFOBJ) xlutfix$(SUFOBJ) xspect$(SUFOBJ) xsep$(SUFOBJ)
            xcolorants$(SUFOBJ) xutils$(SUFOBJ) xdevlin$(SUFOBJ)
            xcam$(SUFOBJ) cam97s3$(SUFOBJ) cam02$(SUFOBJ)  mpp$(SUFOBJ)
-           xfit1$(SUFOBJ) xfit2$(SUFOBJ) xfit3$(SUFOBJ) :
+           xfit$(SUFOBJ) moncurve$(SUFOBJ) :
            ../h ../icc ../rspl ../gamut ../numlib ../spectro ../profile
            ../cgats $(LibWinH) ../plot ;
 
@@ -217,6 +217,11 @@ Main cam02test : cam02test.c cam02.c ;
 ObjectHdrs cam02test$(SUFOBJ) cam02$(SUFOBJ) : ../h ../icc ../numlib ;
 LinkLibraries cam02test : ../numlib/libnum.lib ../icc/libicc.lib ;
 
+
+# Test utility for moncurve
+Main monctest : monctest.c ;
+ObjectHdrs monctest : . ../h ../numlib ../plot ;
+LinkLibraries monctest : ../plot/libplot.lib ../xicc/libxicc.lib ../numlib/libnum.lib $(LibWin) ;
 
 # Plot the gamut of spectrum locus in CAM02 Aab space */
 #Main cam02gamut : cam02gamut.c cam02.c ;

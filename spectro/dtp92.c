@@ -46,8 +46,8 @@
 
 #undef DEBUG
 
-#undef HWFC	/* Hardware flow control */
-#undef XXFC		/* Xon/Xoff flow control */
+/* Default flow control */
+#define DEFFC fc_none
 
 static inst_code dtp92_interp_code(inst *pp, int ec);
 
@@ -149,28 +149,16 @@ dtp92_command(dtp92 *p, char *in, char *out, int bsize, double to) {
 	return dtp92_interp_code((inst *)p, rv);
 }
 
-#if defined(XXFC) || defined(HWFC)
-# if defined(HWFC)
-#  define FC_SERIAL fc_Hardware
-#  define FC_INST "0104CF\r"
-# else
-#  define FC_SERIAL fc_XonXOff
-#  define FC_INST "0304CF\r"
-# endif
-#else
-# define FC_SERIAL fc_none
-# define FC_INST "0004CF\r"
-#endif
-
 /* Establish communications with a DTP92 */
 /* If it's a serial port, use the baud rate given, and timeout in to secs */
 /* Return DTP_COMS_FAIL on failure to establish communications */
 static inst_code
-dtp92_init_coms(inst *pp, int port, baud_rate br, double tout) {
+dtp92_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	dtp92 *p = (dtp92 *) pp;
 	static char buf[MAX_MES_SIZE];
 	baud_rate brt[5] = { baud_9600, baud_19200, baud_4800, baud_2400, baud_1200 };
 	char *brc[5]     = { "30BR\r",  "60BR\r",   "18BR\r",  "0CBR\r",  "06BR\r" };
+	char *fcc;
 	long etime;
 	instType itype;
 	int ci, bi, i, rv;
@@ -211,6 +199,18 @@ dtp92_init_coms(inst *pp, int port, baud_rate br, double tout) {
 
 		if (p->debug) fprintf(stderr,"dtp92: About to init Serial I/O\n");
 
+		/* Deal with flow control setting */
+		if (fc == fc_nc)
+			fc = DEFFC;
+		if (fc == fc_XonXOff) {
+			fcc = "0304CF\r";
+		} else if (fc == fc_Hardware) {
+			fcc = "0104CF\r";
+		} else {
+			fc = fc_none;
+			fcc = "0004CF\r";
+		}
+
 		/* Figure DTP92 baud rate being asked for */
 		for (bi = 0; bi < 5; bi++) {
 			if (brt[bi] == br)
@@ -221,7 +221,7 @@ dtp92_init_coms(inst *pp, int port, baud_rate br, double tout) {
 
 		/* Figure current icoms baud rate */
 		for (ci = 0; ci < 5; ci++) {
-			if (brt[ci] == p->icom->baud)
+			if (brt[ci] == p->icom->br)
 				break;
 		}
 		if (ci >= 5)
@@ -257,7 +257,7 @@ dtp92_init_coms(inst *pp, int port, baud_rate br, double tout) {
 		}
 
 		/* Set the handshaking */
-		if ((ev = dtp92_command(p, FC_INST, buf, MAX_MES_SIZE, 0.2)) != inst_ok)
+		if ((ev = dtp92_command(p, fcc, buf, MAX_MES_SIZE, 0.2)) != inst_ok)
 			return ev;
 
 		/* Change the baud rate to the rate we've been told */
@@ -267,7 +267,7 @@ dtp92_init_coms(inst *pp, int port, baud_rate br, double tout) {
 		}
 
 		/* Configure our baud rate and handshaking as well */
-		p->icom->set_ser_port(p->icom, port, FC_SERIAL, brt[bi], parity_none, stop_1, length_8);
+		p->icom->set_ser_port(p->icom, port, fc, brt[bi], parity_none, stop_1, length_8);
 
 		/* Loose a character (not sure why) */
 		p->icom->write_read(p->icom, "\r", buf, MAX_MES_SIZE, '>', 1, 0.1);
@@ -667,7 +667,7 @@ dtp92_interp_error(inst *pp, int ec) {
 		case DTP92_COMS_FAIL:
 			return "Communications failure";
 		case DTP92_UNKNOWN_MODEL:
-			return "Not a DTP92 or DTP52";
+			return "Not a DTP92 or DTP94";
 		case DTP92_DATA_PARSE_ERROR:
 			return "Data from DTP didn't parse as expected";
 		case DTP92_USER_ABORT:
@@ -680,7 +680,7 @@ dtp92_interp_error(inst *pp, int ec) {
 			return "User hit a Command key";
 
 		case DTP92_OK:
-			return "No error";
+			return "No device error";
 
 		case DTP92_BAD_COMMAND:
 			return "Unrecognized command";

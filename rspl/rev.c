@@ -146,8 +146,6 @@
 
 #define	EPS (1e-10)			/* Allowance for numeric error */
 
-extern void error(char *fmt, ...), warning(char *fmt, ...);
-
 static void make_rev(rspl *s);
 
 static cell *get_rcell(schbase *b, int ix);
@@ -4288,7 +4286,7 @@ double *in
 	double iv[MXDI];
 	float *gp;			/* Pointer to grid data */
 
-	rpsh_init(&counter, s->di, s->g.res, gc);	/* Initialise counter */
+	rpsh_init(&counter, s->di, (unsigned int *)s->g.res, gc);	/* Initialise counter */
 	for (;;) {
 		double dist;
 

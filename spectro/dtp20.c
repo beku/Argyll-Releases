@@ -249,7 +249,7 @@ double top) {		/* Timout in seconds */
 /* Use the baud rate given, and timeout in to secs */
 /* Return DTP_COMS_FAIL on failure to establish communications */
 static inst_code
-dtp20_init_coms(inst *pp, int port, baud_rate br, double tout) {
+dtp20_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	dtp20 *p = (dtp20 *)pp;
 	static char buf[MAX_MES_SIZE];
 	inst_code ev = inst_ok;
@@ -988,7 +988,7 @@ inst_cal_type dtp20_needs_calibration(inst *pp) {
 /* Request an instrument calibration. */
 /* This is use if the user decides they want to do a calibration, */
 /* in anticipation of a calibration (needs_calibration()) to avoid */
-/* requiring one during measurement, or in response to measureing */
+/* requiring one during measurement, or in response to measuring */
 /* returning inst_needs_cal. Initially us an inst_cal_cond of inst_calc_none, */
 /* and then be prepared to setup the right conditions, or ask the */
 /* user to do so, each time the error inst_cal_setup is returned. */
@@ -1062,7 +1062,7 @@ dtp20_interp_error(inst *pp, int ec) {
 			return "Unexpected instrument status";
 
 		case DTP20_OK:
-			return "No error";
+			return "No device error";
 
 		case DTP20_MEASUREMENT_STATUS:
 			return "Measurement complete";

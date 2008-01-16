@@ -167,7 +167,7 @@ Categories:
 * Add support for the Gretag EyeOne (How without using their
   library, and without an instrument ?)
 
-* In printread, add RGB and Monochrome "generic"
+* In chartread, add RGB and Monochrome "generic"
   profiles, so that bad reading scan be recognised (??)
 
 * Create utility that translates between an XYZ only .ti3 and

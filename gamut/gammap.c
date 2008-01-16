@@ -59,6 +59,7 @@ struct {
 #include <math.h>
 #include "counters.h"
 #include "icc.h"
+#include "xicc.h"
 #include "gamut.h"
 #include "rspl.h"
 #include "gammap.h"
@@ -83,7 +84,6 @@ typedef struct {
 } adjustwb;
 
 static void inv_grey_func(void *pp, double *out, double *in);
-static void wfunc(void *cbntx, double *out, double *in);
 static void adjust_wb_func(void *pp, double *out, double *in);
 static void adjust_sat_func(void *pp, double *out, double *in);
 
@@ -274,18 +274,7 @@ gammap *new_gammap(
 	gamut *sc_gam,		/* Source colorspace gamut */
 	gamut *si_gam,		/* Source image gamut (NULL if none) */
 	gamut *d_gam,		/* Destination colorspace gamut */
-	double greymf,		/* Grey axis alignment factor, 0.0 - 1.0 */
-	double glumwcpf,	/* Grey axis White luminance compression factor, 0.0 - 1.0 */
-	double glumwexf,	/* Grey axis White luminance expansion factor,   0.0 - 1.0 */
-	double glumbcpf,	/* Grey axis Black luminance compression factor, 0.0 - 1.0 */
-	double glumbexf,	/* Grey axis Black luminance expansion factor,   0.0 - 1.0 */
-	double glumknf,		/* Grey axis luminance knee factor, 0.0 - 1.0 */
-	double gamcpf,		/* Gamut compression factor, 0.0 - 1.0 */
-	double gamexf,		/* Gamut expansion factor, 0.0 - 1.0 */
-	double gamknf,		/* Gamut knee factor, 0.0 - 1.0 */
-	double gampwf,		/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
-	double gamswf,		/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
-	double satenh,		/* Saturation enhancement value, 0.0 - Inf */
+	icxGMappingIntent *gmi,	/* Gamut mapping specification */
 	int    mapres,		/* Gamut map resolution, typically 9 - 33 */
 	double *mn,			/* If not NULL, set minimum mapping input range */
 	double *mx			/* for rspl grid. (May get modified) */
@@ -310,8 +299,8 @@ gammap *new_gammap(
 	double sr_cs_bp[3];	/* Source rotated colorspace black point */
 	double sr_ga_wp[3];	/* Source rotated (image) gamut white point */
 	double sr_ga_bp[3];	/* Source rotated (image) gamut black point */
-	double dr_cs_wp[3];	/* Target (greymf aligned) white point */
-	double dr_cs_bp[3];	/* Target (greymf aligned) black point */
+	double dr_cs_wp[3];	/* Target (gmi->greymf aligned) white point */
+	double dr_cs_bp[3];	/* Target (gmi->greymf aligned) black point */
 	double dr_be_bp[3];	/* Bend at end Target black point (Same as dr_cs_bp[] otherwise) */
 						/* == end target destination black point */
 
@@ -333,19 +322,7 @@ gammap *new_gammap(
 	int j;
 
 	if (verb) {
-		printf("gamut_match parameters:\n");
-		printf("Grey axis hue matching factor: %f\n",greymf);
-		printf("Grey axis luminance white compression factor: %f\n",glumwcpf);
-		printf("Grey axis luminance white expansion factor: %f\n",glumwexf);
-		printf("Grey axis luminance black compression factor: %f\n",glumbcpf);
-		printf("Grey axis luminance black expansion factor: %f\n",glumbexf);
-		printf("Grey axis luminance knee factor: %f\n",glumknf);
-		printf("Gamut compression factor: %f\n",gamcpf);
-		printf("Gamut expansion factor: %f\n",gamexf);
-		printf("Gamut knee factor: %f\n",gamknf);
-		printf("Gamut mapping Perceptual Mapping weighting factor: %f\n",gampwf);
-		printf("Gamut mapping Saturation Mapping weighting factor: %f\n",gamswf);
-		printf("Saturation enhancement factor %f\n",satenh);
+		xicc_dump_gmi(gmi);
 		printf("Gamut map resolution: %d\n",mapres);
 		if (si_gam != NULL)
 			printf("Image gamut supplied\n");
@@ -472,8 +449,8 @@ gammap *new_gammap(
 		/* colorspace. */
 
 		for (j = 0; j < 3; j++) {
-			dr_cs_wp[j] = greymf * d_cs_wp[j] + (1.0 - greymf) * sswp[j];
-			dr_cs_bp[j] = greymf * d_cs_bp[j] + (1.0 - greymf) * ssbp[j];
+			dr_cs_wp[j] = gmi->greymf * d_cs_wp[j] + (1.0 - gmi->greymf) * sswp[j];
+			dr_cs_bp[j] = gmi->greymf * d_cs_bp[j] + (1.0 - gmi->greymf) * ssbp[j];
 		}
 
 #ifdef VERBOSE
@@ -494,8 +471,8 @@ gammap *new_gammap(
 			error("gamut: vector_isect failed!");
 
 		/* To work around the problem that vector_isect() is not entirely accurate, */
-		/* special case the situation where greymf == 1.0 */
-		if (greymf > 0.99) {
+		/* special case the situation where gmi->greymf == 1.0 */
+		if (gmi->greymf > 0.99) {
 			for (j = 0; j < 3; j++) {
 				fawp[j] = d_cs_wp[j];
 				fabp[j] = d_cs_bp[j];
@@ -521,8 +498,8 @@ gammap *new_gammap(
 			error("gamut: vector_isect failed!");
 
 		/* To work around the problem that vector_isect() is not entirely accurate, */
-		/* special case the situation where greymf == 1.0 */
-		if (greymf > 0.99) {
+		/* special case the situation where gmi->greymf == 1.0 */
+		if (gmi->greymf > 0.99) {
 			for (j = 0; j < 3; j++) {
 				hawp[j] = d_cs_wp[j];
 			}
@@ -676,12 +653,12 @@ glumknf	= 1.0;
 		/* Setup white point mapping */
 		if (sr_cs_wp[0] <= dr_cs_wp[0]) {	/* Needs possible expansion */
 			swL = sr_cs_wp[0];
-			dwL = glumwexf * dr_cs_wp[0] + (1.0 - glumwexf) * sr_cs_wp[0];
+			dwL = gmi->glumwexf * dr_cs_wp[0] + (1.0 - gmi->glumwexf) * sr_cs_wp[0];
 
 		} else {
 			if (sr_ga_wp[0] > dr_cs_wp[0]) {	/* Gamut or colorspace needs compression */
 				
-				swL = (1.0 - glumwcpf) * dr_cs_wp[0] + glumwcpf * sr_ga_wp[0];
+				swL = (1.0 - gmi->glumwcpf) * dr_cs_wp[0] + gmi->glumwcpf * sr_ga_wp[0];
 				dwL = dr_cs_wp[0];
 
 			} else {	/* Neither needed */
@@ -693,12 +670,12 @@ glumknf	= 1.0;
 		/* Setup black point mapping */
 		if (sr_cs_bp[0] >= dr_cs_bp[0]) {	/* Needs possible expansion */
 			sbL = sr_cs_bp[0];
-			dbL = glumbexf * dr_cs_bp[0] + (1.0 - glumbexf) * sr_cs_bp[0];
+			dbL = gmi->glumbexf * dr_cs_bp[0] + (1.0 - gmi->glumbexf) * sr_cs_bp[0];
 
 		} else {
 			if (sr_ga_bp[0] < dr_cs_bp[0]) {	/* Gamut or colorspace needs compression */
 				
-				sbL = (1.0 - glumbcpf) * dr_cs_bp[0] + glumbcpf * sr_ga_bp[0];
+				sbL = (1.0 - gmi->glumbcpf) * dr_cs_bp[0] + gmi->glumbcpf * sr_ga_bp[0];
 				dbL = dr_cs_bp[0];
 
 			} else {	/* Neither needed */
@@ -726,7 +703,7 @@ glumknf	= 1.0;
 //printf("~1 black loc %f, val %f\n",sbL,dbL);
 
 #ifdef USE_GLUMKNF
-		if (glumknf < 0.05)
+		if (gmi->glumknf < 0.05)
 #endif /* USE_GLUMKNF */
 		{			/* make sure curve is firmly anchored */
 			lpnts[ngreyp].p[0] = 0.3 * lpnts[ngreyp-1].p[0] + 0.7 * lpnts[ngreyp-2].p[0];
@@ -790,11 +767,11 @@ glumknf	= 1.0;
 			/* Emphasise points to cause "knee" curve */
 			lpnts[ngreyp].p[0] = kwl;
 			lpnts[ngreyp].v[0] = kwv;
-			lpnts[ngreyp++].w  = glumknf * glumknf;	
+			lpnts[ngreyp++].w  = gmi->glumknf * gmi->glumknf;	
 		
 			lpnts[ngreyp].p[0] = kbl;
 			lpnts[ngreyp].v[0] = kbv;
-			lpnts[ngreyp++].w  = glumknf * glumknf;	
+			lpnts[ngreyp++].w  = gmi->glumknf * gmi->glumknf;	
 		}
 #endif /* USE_GLUMKNF */
 
@@ -869,7 +846,7 @@ glumknf	= 1.0;
 #endif
 		/* Create spline from the data points, with appropriate smoothness. */
 		avgdev[0] = 0.005;
-		if (s->grey->fit_rspl_w(s->grey, 0, lpnts, ngreyp, il, ih, &gres, ol, oh, 5.0, avgdev)) {
+		if (s->grey->fit_rspl_w(s->grey, 0, lpnts, ngreyp, il, ih, &gres, ol, oh, 5.0, avgdev, NULL)) {
 			fprintf(stderr,"Warning: Grey axis mapping is non-monotonic - may not be very smooth !\n");
 		}
 
@@ -1019,7 +996,7 @@ glumknf	= 1.0;
 		double brad = 0.0;		/* Black bend radius */
 		gammapweights xpweights[7], xsweights[7];	/* Explicit perceptial and sat. weights */
 		gammapweights xwh[7]; 	/* Structure holding blended weights */
-		double smooth;			/* Level of 3D RSPL smoothing, blend of psmooth and ssmooth */
+		double smooth = 1.0;	/* Level of 3D RSPL smoothing, blend of psmooth and ssmooth */
 
 #ifdef PLOT_GAMVEC
 		vrml *wrl;
@@ -1142,13 +1119,13 @@ typedef struct {
 		expand_weights(xsweights, sweights);
 
 		/* Create weights as blend between perceptual and saturation */
-		near_xwblend(xwh, xpweights, gampwf, xsweights, gamswf);
-		if ((gampwf + gamswf) > 0.1)
-			smooth = (gampwf * psmooth) + (gamswf * ssmooth);
+		near_xwblend(xwh, xpweights, gmi->gampwf, xsweights, gmi->gamswf);
+		if ((gmi->gampwf + gmi->gamswf) > 0.1)
+			smooth = (gmi->gampwf * psmooth) + (gmi->gamswf * ssmooth);
 
 		/* Create the near point mapping */
 		nsm = near_smooth(verb, &nnsm, scl_gam, sil_gam, d_gam, dr_be_bp, xwh, 
-		    gamcpf > 1e-6, gamexf > 1e-6);
+		    gmi->gamcpf > 1e-6, gmi->gamexf > 1e-6);
 		if (nsm == NULL) {
 			fprintf(stderr,"Creating smoothed near points failed\n");
 			free(gpnts);
@@ -1193,7 +1170,7 @@ typedef struct {
 
 				/* Compute compression destination value */
 				for (j = 0; j < 3; j++)				/* Compute compressed value */
-					div[j] = gamcpf * nsm[i].sdv[j] + (1.0 - gamcpf) * nsm[i].sv[j];
+					div[j] = gmi->gamcpf * nsm[i].sdv[j] + (1.0 - gmi->gamcpf) * nsm[i].sv[j];
 
 #ifdef NEVER
 				printf("Compression:\n");
@@ -1255,14 +1232,14 @@ typedef struct {
 						gpnts[ngamp].p[j] = (1.0 - knpos) * skp[j] + knpos * div[j];
 						gpnts[ngamp].v[j] = (1.0 - knpos) * dkp[j] + knpos * div[j];
 					}
-					gpnts[ngamp++].w = gamknf * gamknf;		/* Knee weight */
+					gpnts[ngamp++].w = gmi->gamknf * gmi->gamknf;		/* Knee weight */
 				}
 #endif /* USE_GAMKNF */
 			} else {	/* Expansion needed */
 
 				/* Compute expansion destination value */
 				for (j = 0; j < 3; j++)				/* Compute compressed value */
-					div[j] = gamexf * nsm[i].sdv[j] + (1.0 - gamexf) * nsm[i].sv[j];
+					div[j] = gmi->gamexf * nsm[i].sdv[j] + (1.0 - gmi->gamexf) * nsm[i].sv[j];
 #ifdef NEVER
 				printf("Expansion:\n");
 				printf("Src point = %f %f %f radius %f\n",nsm[i].sv[0], nsm[i].sv[1], nsm[i].sv[2], nsm[i].sr);
@@ -1321,7 +1298,7 @@ typedef struct {
 						gpnts[ngamp].p[j] = (1.0 - knpos) * skp[j] + knpos * nsm[i].sv[j];
 						gpnts[ngamp].v[j] = (1.0 - knpos) * dkp[j] + knpos * nsm[i].sv[j];
 					}
-					gpnts[ngamp++].w = gamknf * gamknf;		/* Knee weight */
+					gpnts[ngamp++].w = gmi->gamknf * gmi->gamknf;		/* Knee weight */
 				}
 #endif /* USE_GAMKNF */
 			}
@@ -1442,7 +1419,7 @@ typedef struct {
 			avgdev[0] = 0.005;
 			avgdev[1] = 0.005;
 			avgdev[2] = 0.005;
-			if (s->map->fit_rspl_w(s->map, 0, gpnts, ngamp, il, ih, gres, ol, oh, smooth, avgdev)) {
+			if (s->map->fit_rspl_w(s->map, 0, gpnts, ngamp, il, ih, gres, ol, oh, smooth, avgdev, NULL)) {
 				if (verb)
 					fprintf(stderr,"Warning: Gamut mapping is non-monotonic - may not be very smooth !\n");
 			}
@@ -1452,7 +1429,7 @@ typedef struct {
 		}
 
 		/* If requested, enhance the saturation of the output values. */
-		if (satenh > 0.0) {
+		if (gmi->satenh > 0.0) {
 			adjustsat cx;		/* Adjustment context */
 
 			/* Compute what our source white and black points actually maps to */
@@ -1460,7 +1437,7 @@ typedef struct {
 			s->domap(s, cx.bp, s_mt_bp);
 
 			cx.dst = d_gam; 
-			cx.satenh = satenh; 
+			cx.satenh = gmi->satenh; 
 
 			/* Saturation enhance the output values */
 			s->map->re_set_rspl(
@@ -1693,13 +1670,6 @@ static void inv_grey_func(
 		error("gammap: Unexpected failure to find reverse solution for grey axis lookup");
 
 	out[0] = pp[0].p[0];
-}
-
-/* Weak default function */
-static void wfunc(void *cbntx, double *out, double *in) {
-	out[0] = in[0];
-	out[1] = in[1];
-	out[2] = in[2];
 }
 
 /* Function to pass to rspl to alter output values, */

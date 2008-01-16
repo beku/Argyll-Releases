@@ -39,8 +39,8 @@
  *		Note gamut should come from psudo-dev to PCS.
  */
 
-#define DEBUG
-#define DO_TIME			/* Time the operation */
+#undef DEBUG
+#undef DO_TIME			/* Time the operation */
 
 #define verbo stdout
 
@@ -78,7 +78,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -b [lmhu]       Use low quality B2A table - optional specific B2A quality\n");
 	fprintf(stderr," -y              Verify A2B profile\n");
 	fprintf(stderr," -ni             Don't create input (Device) shaper curves\n");
-	fprintf(stderr," -ns             Don't create input sub-grid (Device) shaper curves\n");
+	fprintf(stderr," -np             Don't create input (Device) grid position curves\n");
 	fprintf(stderr," -no             Don't create output (PCS) shaper curves\n");
 	fprintf(stderr," -k zhxr         Black value target: z = zero K,\n");
 	fprintf(stderr,"                 h = 0.5 K, x = max K, r = ramp K (def.)\n");
@@ -95,6 +95,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"                 l = Lab clut (def.), x = XYZ lut\n");
 	fprintf(stderr,"                 g = gamma+matrix, s = shaper+matrix\n");
 	fprintf(stderr,"                 G = single gamma+matrix, S = single shaper+matrix\n");
+//  Development - not supported
 //	fprintf(stderr," -I ver          Set ICC profile version > 2.2.0\n");
 //	fprintf(stderr,"                 ver = 4, Enable ICC V4 creation\n");
 	fprintf(stderr," -u              If Lut input profile, make it absolute (non-standard)\n");
@@ -107,8 +108,8 @@ void usage(char *diag, ...) {
 /* Research options: */
 /*	fprintf(stderr," -rs smooth      RSPL suplimental optimised smoothing factor\n"); */
 /*	fprintf(stderr," -rr smooth      RSPL raw underlying smoothing factor\n"); */
-	fprintf(stderr," -s src.icc      Apply gamut mapping to perceptual B2A table for given source space\n");
-	fprintf(stderr," -S src.icc      Apply gamut mapping to perceptual and saturation B2A table\n");
+	fprintf(stderr," -s src%s      Apply gamut mapping to perceptual B2A table for given source space\n",ICC_FILE_EXT);
+	fprintf(stderr," -S src%s      Apply gamut mapping to perceptual and saturation B2A table\n",ICC_FILE_EXT);
 	fprintf(stderr," -g src.gam      Use source image gamut as well for gamut mapping\n");
 	fprintf(stderr," -p absprof      Incorporate abstract profile into output tables\n");
 	fprintf(stderr," -t intent       Override gamut mapping intent for perceptual table:\n");
@@ -132,7 +133,7 @@ void usage(char *diag, ...) {
 
 		fprintf(stderr,"             %s\n",vc.desc);
 	}
-	fprintf(stderr," inoutfile        Base name for input.ti3/output.icm file\n");
+	fprintf(stderr," inoutfile        Base name for input.ti3/output%s file\n",ICC_FILE_EXT);
 	exit(1);
 }
 
@@ -144,8 +145,8 @@ int main(int argc, char *argv[]) {
 	int iquality = 1;			/* A2B quality */
 	int oquality = -1;			/* B2A quality same as A2B */
 	int verify = 0;
-	int noiluts = 0;			/* No input shaper luts */
-	int noisluts = 0;			/* No input sub-grid shaper luts */
+	int noisluts = 0;			/* No input shaper luts */
+	int noipluts = 0;			/* No input position luts */
 	int nooluts = 0;			/* No output shaper luts */
 	int nsabs = 0;				/* Make non-standard absolute input lut profile */
 	int inking = 3;				/* Default K target ramp K */
@@ -327,14 +328,14 @@ int main(int argc, char *argv[]) {
 				} else {
 
 					if (na[0] != 'i' && na[0] != 'I'
-					 && na[0] != 's' && na[0] != 'S'
+					 && na[0] != 'p' && na[0] != 'P'
 					 && na[0] != 'o' && na[0] != 'O')
 						usage("Unknown argument '%c' to flag -n",na[0]);
 	
 					if (na[0] == 'i' || na[0] == 'I')
-						noiluts = 1;
-					if (na[0] == 's' || na[0] == 'S')
 						noisluts = 1;
+					if (na[0] == 'p' || na[0] == 'P')
+						noipluts = 1;
 					if (na[0] == 'o' || na[0] == 'O')
 						nooluts = 1;
 				}
@@ -672,11 +673,7 @@ int main(int argc, char *argv[]) {
 	strcpy(inname,baname);
 	strcpy(outname,baname);
 	strcat(inname,".ti3");
-#if defined (UNIX) || defined(__APPLE__)
-	strcat(outname,".icc");
-#else
-	strcat(outname,".icm");
-#endif
+	strcat(outname,ICC_FILE_EXT);
 
 	if (fwacomp && spec == 0)
 		error ("FWA compensation only works when viewer and/or illuminant selected");
@@ -811,8 +808,8 @@ int main(int argc, char *argv[]) {
 			error ("Output profile can only be a clut algorithm");
 		}
 
-		make_output_icc(ptype, iccver, verb, iquality, oquality, noiluts, noisluts, nooluts, verify,
-		                &ink, outname, icg, spec,
+		make_output_icc(ptype, iccver, verb, iquality, oquality, noisluts, noipluts, nooluts,
+		                verify, &ink, outname, icg, spec,
 		                illum, &cust_illum, observ, fwacomp, smooth, avgdev,
 		                ipname[0] != '\000' ? ipname : NULL,
 		                sgname[0] != '\000' ? sgname : NULL,
@@ -824,7 +821,7 @@ int main(int argc, char *argv[]) {
 
 		if (ptype == prof_default)
 			ptype = prof_clutLab;		/* For best possible quality */
-		make_input_icc(ptype, iccver, verb, iquality, noiluts, noisluts, nooluts, verify, nsabs,
+		make_input_icc(ptype, iccver, verb, iquality, noisluts, noipluts, nooluts, verify, nsabs,
 		               outname, icg, smooth, avgdev, &xpi);
 
 	} else if (strcmp(icg->t[0].kdata[ti],"DISPLAY") == 0) {
@@ -836,8 +833,8 @@ int main(int argc, char *argv[]) {
 			ptype = prof_clutLab;		/* ?? or should it default to prof_shamat ?? */
 
 		/* If a source gamut is provided for a Display, then a V2.4.0 profile will be created */
-		make_output_icc(ptype, iccver, verb, iquality, oquality, noiluts, noisluts, nooluts, verify,
-		                NULL, outname, icg, spec,
+		make_output_icc(ptype, iccver, verb, iquality, oquality, noisluts, noipluts, nooluts,
+		                verify, NULL, outname, icg, spec,
 		                illum, &cust_illum, observ, 0, smooth, avgdev,
 		                ipname[0] != '\000' ? ipname : NULL,
 		                sgname[0] != '\000' ? sgname : NULL,

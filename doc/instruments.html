@@ -63,6 +63,8 @@ Sequel imaging:<br>
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 - display colorimeter (Treated as an Eye-One Display 1)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+[The Sequel Chroma 4 may also work.]<br>
 <br>
 ColorVision:<br>
 &nbsp;&nbsp;&nbsp;&nbsp; <a href="#spyd2">Spyder 2</a> &nbsp; &nbsp;
@@ -72,6 +74,8 @@ ColorVision:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 - display colorimeter (Note that the user must <a href="spyd2en.html">supply</a>
 firmware)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+[The Spyder 1 also seems to work.]<br>
 <br>
 Other:<br>
 &nbsp;&nbsp;&nbsp; <span class="titre"><a href="#HCFR">Colorim&egrave;tre
@@ -91,7 +95,7 @@ When used with a <span style="font-weight: bold;">DT20</span>, <span
  style="font-weight: bold;">DTP51</span> or <span
  style="font-weight: bold;">Eye-One Pro</span> strip reading
 instrument,
-printread
+chartread
 will first establish communications with the instrument, and then set
 it
 up ready to read the strips. The strips are labeled A to ZZ, and for
@@ -140,17 +144,45 @@ misread' (Bad reading)<br>
 &nbsp;&nbsp;&nbsp; Hit Esc to give up, any other key to retry:<br>
 <br>
 If the strip is read successfully, but the patches values don't seem to
-be reasonable, you will get the following type of response:<br>
+be what is expected, you will get the following type of warning:<br>
 <br>
 &nbsp;&nbsp;&nbsp; About to read strip&nbsp; XX&nbsp; :<br>
-&nbsp;&nbsp;&nbsp; Seem to have read strip&nbsp; YY&nbsp; rather
+&nbsp;&nbsp;&nbsp; (Warning) Seem to have read strip&nbsp; YY&nbsp;
+rather
 than&nbsp;
 XX !<br>
-&nbsp;&nbsp;&nbsp; Hit Return to use it anyway, any other key to retry:<br>
+&nbsp;&nbsp;&nbsp; Hit Return to use it anyway, any other key to retry,
+Esc, ^C or Q to give up:<br>
 <br>
+This could be because you have accidentally read the wrong strip (a
+common mistake), or it could be that the device response is so
+different from what is expected that warning is erroneous, or you may
+get a lot of these sorts of warnings if you are accidentally reading
+the wrong chart. <br>
 If you are sure you lined up the correct strip, then hit return,
 otherwise
 line the appropriate strip up again, and hit some other key (ie. space).<br>
+Erroneous warnings are less likely if a previous profile for a device
+was given to targen to set more accurate expectations.<br>
+<br>
+You may also see the following type of warning:<br>
+<br>
+&nbsp;&nbsp;&nbsp; About to read strip&nbsp; XX&nbsp; :<br>
+&nbsp;&nbsp;&nbsp; (Warning) Patch error YY.YYY (&gt;35 not good,
+&gt;95 bad)<br>
+&nbsp;&nbsp; There is at least one patch with an very unexpected
+response!<br>
+&nbsp;&nbsp;&nbsp; Hit Return to use it anyway, any other key to retry,
+Esc, ^C or Q to give up:<br>
+<br>
+Similar to the previous warning, this indicates that while the right
+strip appears to have been read, one of the patch readings is quite
+different to what is expected. This may indicate an error of some sort
+(ie. damaged test chart, or bad instrument positioning), or may be
+erroneous if the actual device response is quite different to the
+expectation.<br>
+Erroneous warnings are less likely if a previous profile for a device
+was given to targen to set more accurate expectations.<br>
 <br>
 You can abort the whole process at any time by hitting Escape.<br>
 <br>
@@ -158,7 +190,7 @@ You can abort the whole process at any time by hitting Escape.<br>
 <h3><a name="xy"></a>X-Y Table instruments</h3>
 When you are using an XY table type instrument, such as a Gretag
 <span style="font-weight: bold;">SpectroScan</span>,
-&nbsp;printread will first establish communications with the
+&nbsp;chartread will first establish communications with the
 instrument,
 and then set it up ready to read the chart. You will be prompted for
 each
@@ -196,12 +228,12 @@ operate un-tethered (off line). A whole chart can be read un-tethered
 by first
 clearing any previous readings in the instrument, then reading the
 chart TID strip, before reading all the other strips. The instrument
-can then be connected up to <span style="font-weight: bold;">printread</span>,
+can then be connected up to <span style="font-weight: bold;">chartread</span>,
 which will recognize the chart, and download all the measurements.<br>
-If there is no chart in the instrument when printread connects to it,
+If there is no chart in the instrument when chartread connects to it,
 then it will use the strip by strip tethered mode, just like the other
 strip instruments. If the right number of spot readings are present in
-the instrument, these will be used by <span style="font-weight: bold;">printread</span>
+the instrument, these will be used by <span style="font-weight: bold;">chartread</span>
 too.<br>
 <br>
 Un-tethered spot measurements can also be read in using&nbsp; <span
@@ -230,7 +262,7 @@ revision instruments, and hence must be used a bit more slowly.
 Generally a higher quality set of readings will result if slower scans
 are used, since there wil then be more samples averaged for each patch.<br>
 <br>
-In <a href="printread.html">printread</a>, the -<span
+In <a href="chartread.html">chartread</a>, the -<span
  style="font-weight: bold;">T ratio</span>
 argument modifies the patch consistency tolerance threshold for the
 Eye-One Pro. In recognizing patches
@@ -254,7 +286,7 @@ sources such as illuminants and displays. The high resolution mode is
 selected by using the <span style="font-weight: bold;">-H</span> flag
 on the command line to <span style="font-weight: bold;">dispcal</span>,
 <span style="font-weight: bold;">dispread</span>, <span
- style="font-weight: bold;">printread</span>, and <span
+ style="font-weight: bold;">chartread</span>, and <span
  style="font-weight: bold;">spotread</span>. It can also be toggled on
 and off within <span style="font-weight: bold;">spotread</span> using
 the <span style="font-weight: bold;">h</span> key. The extended range

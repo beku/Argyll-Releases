@@ -144,6 +144,10 @@ struct _rspl {
 
 		datao fmin, fmax;	/* Min & max values of grid output (function) variables */
 		double fscale;		/* Overall magnitude of output values */
+		double *iwidth[MXDI]; /* Optional relative grid cell width for each input dim cell, */
+						/* gres[]-1 entries per dimension. Allows for the possibility of */
+						/* a non-uniform grid spacing, by adjusting the curvature evaluation */
+						/* appropriately. */
 		int fminmax_valid;	/* Min/max/scale cached values valid flag. */
 		int limitv_cached;	/* Flag: Ink limit values have been set in the grid array */
 
@@ -204,33 +208,6 @@ struct _rspl {
 	/* Reverse Interpolation support */
 	rev_struct rev;		/* See rev.h */
 
-	/* Grid Cell Size optimisation support */
-	struct {
-		int xi;			/* Optimization axis this rspl is for (0..di-1) */
-		int xires;		/* Resolution on this axis */
-
-		float *sy; 	 	/* Grid data of sum of output' values along xi */
-		float *sxy;  	/* Grid data of sum of output' values times input offset along xi */
-						/* Array is res[] ^ di entries float[fdi] */
-
-		/* Grid array offset lookups - in floats */
-		int ci[MXDI];		/* Grid coordinate increments for each dimension (same as g.ci[]) */
-		int fci[MXDI];		/* Grid coordinate increments for each dimension in floats */
-
-		double **de;		/* xi axis ^ 2 cache of de values for quantized [x0][x1] spans */
-		double **sde;		/* xi axis ^ 2 cache of span de values for quantized [x0][x1] spans */
-
-		int inde;				/* Compute error in input space rather than output space */
-		void *cntx;				/* Context of callbacks */
-		void (*ocurv)(void *cntx, double *out, double *in);
-								/* callback to convert fdi values from out' to out values */
-		void (*iocurv)(void *cntx, double *out, double *in);
-								/* callback to convert fdi values from out to out' values */ 
-		void *cntx2;			/* Context of to_de2 callback */
-		double (*to_de2)(void *cntx, double *in1, double *in2);
-								/* callback to convert error values to delta E squared */
-	} gcso;
-
 	/* Methods */
 
 	/* Free ourselves */
@@ -257,11 +234,14 @@ struct _rspl {
 		int gres[MXDI],	/* Spline grid resolution, ncells = gres-1 */
 		datao vlow,		/* Data value low normalize, NULL = default 0.0 */
 		datao vhigh,	/* Data value high normalize - NULL = default 1.0 */
-		double smooth,	/* Smoothing factor, nominal = 1.0 */
-		double avgdev[MXDO]
+		double smooth,	/* Smoothing factor, 0.0 = default 1.0 */
+		double avgdev[MXDO],
 		                /* Average Deviation of function values as proportion of function range, */
 						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
-	);
+						/* NULL = default 0.005 */
+		double *iwidth[MXDI] /* Optional relative grid cell width for each input dim cell, */
+						/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
+	); 
 
 	/* Initialise from scattered data, with per point weighting. RESTRICTED SIZE */
 	/* Return non-zero if result is non-monotonic */
@@ -276,10 +256,13 @@ struct _rspl {
 		int gres[MXDI],	/* Spline grid resolution, ncells = gres-1 */
 		datao vlow,		/* Data value low normalize, NULL = default 0.0 */
 		datao vhigh,	/* Data value high normalize - NULL = default 1.0 */
-		double smooth,	/* Smoothing factor, nominal = 1.0 */
-		double avgdev[MXDO]
+		double smooth,	/* Smoothing factor, 0.0 = default 1.0 */
+		double avgdev[MXDO],
 		                /* Average Deviation of function values as proportion of function range, */
 						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
+						/* NULL = default 0.005 */
+		double *iwidth[MXDI] /* Optional relative grid cell width for each input dim cell, */
+						/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
 	);
 
 	/* Initialise from scattered data, with weak default function. */
@@ -296,10 +279,13 @@ struct _rspl {
 		int gres[MXDI],	/* Spline grid resolution, ncells = gres-1 */
 		datao vlow,		/* Data value low normalize, NULL = default 0.0 */
 		datao vhigh,	/* Data value high normalize - NULL = default 1.0 */
-		double smooth,	/* Smoothing factor, nominal = 1.0 */
+		double smooth,	/* Smoothing factor, 0.0 = default 1.0 */
 		double avgdev[MXDO],
 		                /* Average Deviation of function values as proportion of function range, */
 						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
+						/* NULL = default 0.005 */
+		double *iwidth[MXDI], /* Optional relative grid cell width for each input dim cell, */
+						/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
 		double weak,	/* Weak weighting, nominal = 1.0 */
 		void *cbntx,	/* Opaque function context */
 		void (*func)(void *cbntx, double *out, double *in)		/* Function to set from */
@@ -319,10 +305,13 @@ struct _rspl {
 		int gres[MXDI],	/* Spline grid resolution, ncells = gres-1 */
 		datao vlow,		/* Data value low normalize, NULL = default 0.0 */
 		datao vhigh,	/* Data value high normalize - NULL = default 1.0 */
-		double smooth,	/* Smoothing factor, nominal = 1.0 */
+		double smooth,	/* Smoothing factor, 0.0 = default 1.0 */
 		double avgdev[MXDO],
 		                /* Average Deviation of function values as proportion of function range, */
 						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
+						/* NULL = default 0.005 */
+		double *iwidth[MXDI], /* Optional relative grid cell width for each input dim cell, */
+						/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
 		double weak,	/* Weak weighting, nominal = 1.0 */
 		void *cbntx,	/* Opaque function context */
 		void (*func)(void *cbntx, double *out, double *in)		/* Function to set from */
@@ -415,6 +404,21 @@ struct _rspl {
 		struct _rspl *s,	/* this */
 		co *p);				/* Input and output values */
 
+	/* Do forward (partial) interpolation to allow input & output curves to be applied, */
+	/* and allow input delta E to be estimated from output delta E. */
+	/* Call with input value in p1[0].p[], */
+	/* In order smallest to largest weight: */
+	/* Return di+1 vertex values in p1[]].v[] and */
+	/* 0-1 sub-cell weight values as (p1[].p[0] - p1[].p[1]). */
+	/* Optionally in input channel order: */
+	/* Returns di+1 partial derivatives + base value in p2[].v[], */
+	/* with matching weight values for each in p2[].p[0] (last weight = 1)*/
+	/* Return 0 if OK, 1 if input was clipped to grid */
+	int (*part_interp)(
+		struct _rspl *s,	/* this */
+		co *p1,
+		co *p2);			/* optional - return partial derivatives for each input channel */
+
 	/* Do splined forward interpolation. RESTRICTED SIZE */
 	/* Return 0 if OK, 1 if input was clipped to grid */
 	int (*spline_interp)(
@@ -491,31 +495,6 @@ struct _rspl {
 		double max[][MXRI]	/* Array of max[MXRI] to hold return segment maximum values. */
 	);
 
-
-	/* ------------------------------- */
-	/* Setup the gcso to return particular error etimates */
-	/* Return nz on error */
-	int (*gcso_setup)(
-		struct _rspl *s,		/* this */
-		int xi,					/* index of input axis of interest */
-		int indel,				/* Compute error in input space rather than output space */
-		void *cntx,				/* Context of callbacks */
-		void (*ocurv)(void *cntx, double *out, double *in),
-								/* callback to convert fdi values from out' to out space */ 
-		void (*iocurv)(void *cntx, double *out, double *in),
-								/* callback to convert fdi values from out to out' space */
-		void *cntx2,			/* Context of to_de2 callback */
-		double (*to_de2)(void *cntx2, double *in1, double *in2)	
-								/* callback to convert in or out values to delta E squared */
-	);
-
-	/* return the estimated delta E for the given grid span on the axis of interest */
-	double (*gcso_fwd_err)(
-		struct _rspl *s,		/* this */
-		double *spande,			/* if not NULL return the span width delta E */
-								/* as measured by delta E of the span */
-		double x0, double x1	/* Span range in input space, x0 < x1 */
-	);
 
 	/* ------------------------------- */
 

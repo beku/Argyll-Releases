@@ -41,21 +41,24 @@ NTSTATUS dispatch_ioctl(libusb_device_t *dev, IRP *irp)
   char *input_buffer = (char *)irp->AssociatedIrp.SystemBuffer;
   MDL *transfer_buffer_mdl = irp->MdlAddress;
 
-  status = remove_lock_acquire(&dev->remove_lock);
+  status = remove_lock_acquire(dev);
 
   if(!NT_SUCCESS(status))
     { 
       status = complete_irp(irp, status, 0);
-      remove_lock_release(&dev->remove_lock);
+      remove_lock_release(dev);
       return status;
     }
 
-  if(!request || input_buffer_length < sizeof(libusb_request))
+  if(!request || input_buffer_length < sizeof(libusb_request)
+     || input_buffer_length > LIBUSB_MAX_READ_WRITE
+     || output_buffer_length > LIBUSB_MAX_READ_WRITE
+     || transfer_buffer_length > LIBUSB_MAX_READ_WRITE)
     { 
       DEBUG_ERROR("dispatch_ioctl(): invalid input or output buffer\n");
 
       status = complete_irp(irp, STATUS_INVALID_PARAMETER, 0);
-      remove_lock_release(&dev->remove_lock);
+      remove_lock_release(dev);
       return status;
     }
 
@@ -147,6 +150,7 @@ NTSTATUS dispatch_ioctl(libusb_device_t *dev, IRP *irp)
                               input_buffer + sizeof(libusb_request), 
                               input_buffer_length - sizeof(libusb_request), 
                               request->descriptor.type,
+                              request->descriptor.recipient,
                               request->descriptor.index,
                               request->descriptor.language_id, 
                               &ret, request->timeout);
@@ -166,6 +170,7 @@ NTSTATUS dispatch_ioctl(libusb_device_t *dev, IRP *irp)
       status = get_descriptor(dev, output_buffer, 
                               output_buffer_length,
                               request->descriptor.type,
+                              request->descriptor.recipient,
                               request->descriptor.index,
                               request->descriptor.language_id, 
                               &ret, request->timeout);
@@ -315,27 +320,13 @@ NTSTATUS dispatch_ioctl(libusb_device_t *dev, IRP *irp)
                       request->endpoint.packet_size, transfer_buffer_mdl, 
                       transfer_buffer_length);
 
-    case LIBUSB_IOCTL_GET_DEVICE_INFO:
-
-      if(!request || output_buffer_length < sizeof(libusb_request))
-        {
-          DEBUG_ERROR("dispatch_ioctl(), get_device_info: invalid output "
-                      "buffer");
-          status = STATUS_INVALID_PARAMETER;
-          break;
-        }
-
-      status = get_device_info(dev, request, &ret);
-
-      break;
-
     default:
       
       status = STATUS_INVALID_PARAMETER;
     }
 
   status = complete_irp(irp, status, ret);  
-  remove_lock_release(&dev->remove_lock);
+  remove_lock_release(dev);
 
   return status;
 }

@@ -987,6 +987,7 @@ main(int argc, char *argv[]) {
 		           NULL, NULL,			/* Default data scale */
 		           smoothf,				/* Smoothing */
 		           avgdev,				/* Average Deviation */
+		           NULL,				/* Grid width */
                    wweight,				/* weak default function weight */
 				   NULL,				/* No context */
 		           wfunc				/* Weak function */

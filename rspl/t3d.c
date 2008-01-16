@@ -420,7 +420,8 @@ int main(int argc, char *argv[]) {
 	           low, high, gres,		/* Low, high, resolution of grid */
 	           NULL, NULL,			/* Default data scale */
 	           1.0,					/* Smoothing */
-	           avgdev);				/* Average Deviation */
+	           avgdev,				/* Average deviation */
+	           NULL);				/* iwidth */
 	if (doh) {
 
 		if (doq) {
@@ -443,7 +444,8 @@ int main(int argc, char *argv[]) {
 		           low, high, gres2,	/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
 		           1.0,					/* Smoothing */
-		           avgdev);				/* Average Deviation */
+		           avgdev,				/* Average deviation */
+		           NULL);				/* iwidth */
 	}
 
 	/* Test the interpolation with a slice in 2D */

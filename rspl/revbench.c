@@ -212,7 +212,7 @@ main(int argc, char *argv[]) {
 		for (f = 0; f < FDI; f++)
 			rgres[f] = rres;
 
-		rcount = rpsh_init(&counter, FDI, rgres, ii);	/* Initialise counter */
+		rcount = rpsh_init(&counter, FDI, (unsigned int *)rgres, ii);	/* Initialise counter */
 		
 		stime = clock();
 

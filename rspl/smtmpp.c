@@ -592,7 +592,8 @@ static void do_test(
 		           low, high, gres,		/* Low, high, resolution of grid */
 		           low, high,			/* Default data scale */
 		           smooth,				/* Smoothing */
-		           avgdev);				/* Average Deviation */
+		           avgdev,				/* Average deviation */
+		           NULL);				/* iwidth */
 
 		/* Plot out function values */
 		if (plot) {

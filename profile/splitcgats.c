@@ -49,6 +49,7 @@ usage(void) {
 	fprintf(stderr," -v              Verbose - print each patch value\n");
 	fprintf(stderr," -n no           Put no sets in first file, and balance in second file.\n");
 	fprintf(stderr," -p percent      Put percent%% sets in first file, and balance in second file. (def. 50%%)\n");
+	fprintf(stderr," -w              Put white patches in both files.\n");
 	fprintf(stderr," -r seed         Use given random seed.\n");
 	fprintf(stderr," input.ti3       File to be split up.\n");
 	fprintf(stderr," output1.ti3     First output file\n");
@@ -61,6 +62,7 @@ int main(int argc, char *argv[]) {
 	int verb = 0;
 	int numb = -1;			/* Number to put in first */
 	double prop = 0.5;		/* Proportion to put in first */
+	int dow = 0;			/* Put white patches in both files */
 	int seed = 0x12345678;
 	int doseed = 0;
 
@@ -75,7 +77,7 @@ int main(int argc, char *argv[]) {
 	cgats_set_elem *setel;		/* Array of set value elements */
 	int *flags;					/* Point to destination of set */
 
-	int i, n;
+	int i, j, n;
 
 	error_program = "spitcgats";
 
@@ -100,26 +102,28 @@ int main(int argc, char *argv[]) {
 				}
 			}
 
-			if (argv[fa][1] == '?')
+			if (argv[fa][1] == '?') {
 				usage();
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
 
-			} 
-			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
+			} else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
 				fa = nfa;
 				if (na == NULL) usage();
 				numb = atoi(na);
 				if (numb < 0) usage();
-			}
-			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+
+			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
 				fa = nfa;
 				if (na == NULL) usage();
 				numb = atoi(na);
 				if (numb < 0) usage();
-			}
-			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
+
+			} else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
+				dow = 1;
+
+			} else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
 				fa = nfa;
 				if (na == NULL) usage();
 				seed = atoi(na);
@@ -207,8 +211,145 @@ int main(int argc, char *argv[]) {
 	if (verb)
 		printf("Putting %d sets in '%s' and %d in '%s'\n",numb,out_name1,cgf->t[0].nsets-numb,out_name2);
 
-	/* Chose which of the sets go into file 1 */
-	for (n = 0; n < numb;) {
+	n = 0;
+
+	/* If dow, add white patches to both sets */
+	if (dow) {
+		int ti;
+		char *buf;
+		char *xyzfname[3] = { "XYZ_X", "XYZ_Y", "XYZ_Z" };
+		char *labfname[3] = { "LAB_L", "LAB_A", "LAB_B" };
+		char *outc;
+		int nmask;
+		int nchan;
+		char *ident;
+		int chix[ICX_MXINKS];	/* Device chanel indexes */
+		int pcsix[3];			/* Device chanel indexes */
+		int isin = 0;
+		int isadd = 0;
+		int isLab = 0;
+
+		if ((ti = cgf->find_kword(cgf, 0, "DEVICE_CLASS")) < 0)
+			error ("Input file doesn't contain keyword DEVICE_CLASS");
+
+		if (strcmp(cgf->t[0].kdata[ti],"INPUT") == 0)
+			isin = 1;
+
+		if ((ti = cgf->find_kword(cgf, 0, "COLOR_REP")) < 0)
+			error("Input file doesn't contain keyword COLOR_REPS");
+		
+		if ((buf = strdup(cgf->t[0].kdata[ti])) == NULL)
+			error("Malloc failed");
+		
+		/* Split COLOR_REP into device and PCS space */
+		if ((outc = strchr(buf, '_')) == NULL)
+			error("COLOR_REP '%s' invalid", cgf->t[0].kdata[ti]);
+		*outc++ = '\000';
+		
+		if (strcmp(outc, "XYZ") == 0) {
+			isLab = 0;
+		} else if (strcmp(outc, "LAB") == 0) {
+			isLab = 1;
+		} else
+			error("COLOR_REP '%s' invalid (Neither XYZ nor LAB)", cgf->t[0].kdata[ti]);
+	
+		if ((nmask = icx_char2inkmask(buf)) == 0) {
+			error ("File '%s' keyword COLOR_REPS has unknown device value '%s'",in_name,buf);
+		}
+
+		if (nmask & ICX_ADDITIVE)
+			isadd = 1;
+
+		nchan = icx_noofinks(nmask);
+		ident = icx_inkmask2char(nmask); 
+
+		/* Find device fields */
+		for (j = 0; j < nchan; j++) {
+			int ii, imask;
+			char fname[100];
+
+			imask = icx_index2ink(nmask, j);
+			sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : ident,
+			                      icx_ink2char(imask));
+
+			if ((ii = cgf->find_field(cgf, 0, fname)) < 0)
+				error ("Input file doesn't contain field %s",fname);
+			if (cgf->t[0].ftype[ii] != r_t)
+				error ("Field %s is wrong type",fname);
+			chix[j] = ii;
+		}
+
+		/* Find PCS fields */
+		for (j = 0; j < 3; j++) {
+			int ii;
+
+			if ((ii = cgf->find_field(cgf, 0, isLab ? labfname[j] : xyzfname[j])) < 0)
+				error ("Input file doesn't contain field %s",isLab ? labfname[j] : xyzfname[j]);
+			if (cgf->t[0].ftype[ii] != r_t)
+				error ("Field %s is wrong type",isLab ? labfname[j] : xyzfname[j]);
+			pcsix[j] = ii;
+		}
+
+		if (isin) {
+			int wix = -1;
+			double wv = -1e60;
+			int pcsy = 1;
+
+			if (isLab)
+				pcsy = 0;
+
+			/* We assume that the white point is the patch with the */
+			/* highest L* or Y value. */
+			for (i = 0; i < cgf->t[0].nsets; i++) {
+				double val;
+
+				val = *((double *)cgf->t[0].fdata[i][pcsix[pcsy]]);
+				if (val > wv) {
+					wv = val;
+					wix = i;
+				}
+			}
+			if (wix > 0) {
+				n++;
+				flags[wix] = 3;
+				if (verb)
+					printf("Found input white patch index %d\n",wix);
+			}
+
+		} else {
+
+			if (isadd) {
+				for (i = 0; i < cgf->t[0].nsets; i++) {
+					for (j = 0; j < nchan; j++) {
+						if (*((double *)cgf->t[0].fdata[i][chix[j]]) < 99.99)
+							break;
+					}
+					if (j >= nchan) {
+						n++;
+						flags[i] = 3;
+						if (verb)
+							printf("Found additive white patch index %d\n",i);
+					}
+				}
+			} else {
+				for (i = 0; i < cgf->t[0].nsets; i++) {
+					for (j = 0; j < nchan; j++) {
+						if (*((double *)cgf->t[0].fdata[i][chix[j]]) > 0.01)
+							break;
+					}
+					if (j >= nchan) {
+						n++;
+						flags[i] = 3;
+						if (verb)
+							printf("Found subtractive white patch index %d\n",i);
+					}
+				}
+			}
+		}
+	}
+
+	/* Chose which of the sets go into file 1 and 2*/
+	for (;n < numb;) {
 		i = i_rand(0, cgf->t[0].nsets-1);
 		if (flags[i] == 0) {
 			flags[i] = 1;
@@ -216,12 +357,19 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	/* Copy themn approproately */
+	/* Assume any patch not flagged goes to 2 */
+	for (i = 0; i < cgf->t[0].nsets; i++) {
+		if (flags[i] == 0)
+			flags[i] = 2;
+	}
+
+	/* Copy them approproately */
 	for (i = 0; i < cgf->t[0].nsets; i++) {
 		cgf->get_setarr(cgf, 0, i, setel);
-		if (flags[i]) {
+		if (flags[i] & 1) {
 			cg1->add_setarr(cg1, 0, setel);
-		} else {
+		}
+		if (flags[i] & 2) {
 			cg2->add_setarr(cg2, 0, setel);
 		}
 	}

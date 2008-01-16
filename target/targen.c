@@ -113,7 +113,6 @@
 #include "prand.h"
 
 #include <stdarg.h>
-void error(char *fmt, ...), warning(char *fmt, ...), verbose(int level, char *fmt, ...);
 
 #ifdef VRML_DIAG
 #undef VRML_LAB			/* Output is Lab space points */

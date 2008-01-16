@@ -25,10 +25,10 @@
 #include "numlib.h"
 #include "cam02ref.h"
 
-#undef DIAG		/* Print internal value diagnostics for each spot test conversion */
+#define DIAG		/* Print internal value diagnostics for each spot test conversion */
 					/* and print diagnostics for excessive errors, nans etc. */
 #undef VERBOSE		/* Print diagnostic values for every conversion */
-#undef SPOTTEST	/* ** Test known spot colors */
+#define SPOTTEST	/* ** Test known spot colors */
 #undef TROUBLE		/* Test trouble spot colors XYZ -> Jab -> XYZ */
 #undef TROUBLE2	/* Test trouble spot colors Jab -> XYZ -> Jab */
 #undef SPECIAL		/* Special exploration code */
@@ -47,7 +47,7 @@
 #define TRES 41		/* Grid resolution */
 //#define TRES 11		/* Grid resolution */
 #define USE_HK 0	/* Use Helmholtz-Kohlraush in testing */
-#define EXIT_ON_ERROR
+#undef EXIT_ON_ERROR
 
 #define MAX_REF_ERR 0.1	/* Maximum permitted error to reference transform in delta Jab */
 
@@ -288,19 +288,19 @@ main(void) {
 #ifdef SPOTTEST
 #define NO_SPOTS 5
 	double sp_white[6][3] = {
-		{ 0.9505, 1.000, 1.0888 },
-		{ 0.9505, 1.000, 1.0888 },
-		{ 1.0985, 1.000, 0.3558 },
-		{ 1.0985, 1.000, 0.3558 },
-		{ 0.9505, 1.000, 1.0888 },
-		{ 0.9642, 1.000, 0.8249 }	/* D50 for inversion tests */
+		{ 0.964, 1.000, 0.825 },
+		{ 0.964, 1.000, 0.825 },
+		{ 0.964, 1.000, 0.825 },
+		{ 0.964, 1.000, 0.825 },
+		{ 0.964, 1.000, 0.825 },
+		{ 0.964, 1.000, 0.825 }
 	};
-	double sp_La[6] = { 318.31, 31.83, 318.31, 31.83, 318.31, 150.0 };
+	double sp_La[6] = { 31.83, 31.83, 31.83, 31.83, 31.83 };
 
 	double sample[5][3] = {
-		{ 0.1901, 0.2000, 0.2178 },
-		{ 0.5706, 0.4306, 0.3196 },
-		{ 0.0353, 0.0656, 0.0214 },
+		{ 0.1718, 0.1125, 0.0187 },
+		{ 0.0463, 0.0442, 0.1399 },
+		{ 0.4153, 0.2812, 0.0549 },
 		{ 0.1901, 0.2000, 0.2178 },
 		{ 0.9505, 1.000, 1.0888 }		/* Check white */
 	};

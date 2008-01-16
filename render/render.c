@@ -27,6 +27,61 @@
 #include "render.h"
 
 /* ------------------------------------------------------------- */
+/* Utilities */
+
+/* Standard L*a*b* to TIFF 8 bit CIELAB */
+static void cvt_Lab_to_CIELAB8(double *out, double *in) {
+	out[0] = in[0];
+	if (out[0] < 0.0)
+		out[0] = 0.0;
+	else if (out[0] > 100.0)
+		out[0] = 100.0;
+	out[0] = out[0] / 100.0 * 255.0;
+
+	out[1] = in[1];
+	if (out[1] < -128.0)
+		out[1] = -128.0;
+	else if (out[1] > 127.0)
+		out[1] = 127.0;
+	if (out[1] < 0.0)
+		out[1] = 256.0 + out[1];
+
+	out[2] = in[2];
+	if (out[2] < -128.0)
+		out[2] = -128.0;
+	else if (out[2] > 127.0)
+		out[2] = 127.0;
+	if (out[2] < 0.0)
+		out[2] = 256.0 + out[2];
+}
+
+/* Standard L*a*b* to TIFF 16 bit CIELAB */
+static void cvt_Lab_to_CIELAB16(double *out, double *in) {
+	out[0] = in[0];
+	if (out[0] < 0.0)
+		out[0] = 0.0;
+	else if (out[0] > 100.0)
+		out[0] = 100.0;
+	out[0] = out[0] / 100.0 * 65535.0;
+
+	out[1] = in[1];
+	if (out[1] < -32768.0)
+		out[1] = -32768.0;
+	else if (out[1] > 32767.0)
+		out[1] = 32767.0;
+	if (out[1] < 0.0)
+		out[1] = 65536.0 + out[1];
+
+	out[2] = in[2];
+	if (out[2] < -32768.0)
+		out[2] = -32768.0;
+	else if (out[2] > 32767.0)
+		out[2] = 32767.0;
+	if (out[2] < 0.0)
+		out[2] = 65536.0 + out[2];
+}
+
+/* ------------------------------------------------------------- */
 /* Main class implementation */
 
 /* Free ourselves and all primitives */
@@ -92,6 +147,10 @@ static int render2d_write(render2d *s, char *filename) {
 			samplesperpixel = 1;
 			photometric = PHOTOMETRIC_MINISWHITE;
 			break;
+		case lab_2d:		/* TIFF CIE L*a*b* */
+			samplesperpixel = 3;
+			photometric = PHOTOMETRIC_CIELAB;
+			break;
 		case rgb_2d:		/* RGB */
 			samplesperpixel = 3;
 			photometric = PHOTOMETRIC_RGB;
@@ -144,7 +203,7 @@ static int render2d_write(render2d *s, char *filename) {
 	outbuf = _TIFFmalloc(TIFFScanlineSize(wh));
 
 	/* Render each line and write it */
-	/* (This could be speeded up by using a depth bufer, */
+	/* (This could be speeded up by using a depth buffer, */
 	/* tagging each primitive with its order depth to, */
 	/* allow arbitrary primitive testing, and then */
 	/* using a Y edge list to reduce the number */
@@ -172,12 +231,24 @@ static int render2d_write(render2d *s, char *filename) {
 			}
 			if (s->dpth == bpc8_2d) {
 				unsigned char *p = ((unsigned char *)outbuf) + x * s->ncc;
-				for (j = 0; j < s->ncc; j++)
-					p[j] = (int)(255.0 * rv[j] + 0.5);
+				if (s->csp == lab_2d) {
+					cvt_Lab_to_CIELAB8(rv, rv);
+					for (j = 0; j < s->ncc; j++)
+						p[j] = (int)(rv[j] + 0.5);
+				} else {
+					for (j = 0; j < s->ncc; j++)
+						p[j] = (int)(255.0 * rv[j] + 0.5);
+				}
 			} else {
 				unsigned short *p = ((unsigned short *)outbuf) + x * s->ncc;
-				for (j = 0; j < s->ncc; j++)
-					p[j] = (int)(65525.0 * rv[j] + 0.5);
+				if (s->csp == lab_2d) {
+					cvt_Lab_to_CIELAB16(rv, rv);
+					for (j = 0; j < s->ncc; j++)
+						p[j] = (int)(rv[j] + 0.5);
+				} else {
+					for (j = 0; j < s->ncc; j++)
+						p[j] = (int)(65525.0 * rv[j] + 0.5);
+				}
 			}
 		}
 

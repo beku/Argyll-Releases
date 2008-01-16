@@ -838,7 +838,8 @@ void *od				/* context for Perceptual function */
 		           pl, ph, gres,		/* Low, high, resolution of grid */
 		           vl, vh,				/* Data scale */
 		           0.3,					/* Smoothing */
-		           avgdev);				/* Average Deviation */
+		           avgdev,				/* Average Deviation */
+		           NULL);
 
 
 		/* Track closest perceptual distance to existing test points. */

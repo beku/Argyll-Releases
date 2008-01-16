@@ -188,7 +188,8 @@ inst_code inst_handle_calibrate(
 				
 					if (dwi->dw == NULL) {
 						if ((dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
-						                      dwi->ho, dwi->vo, 0, 0, dwi->override)) == NULL) {
+						                      dwi->ho, dwi->vo, 0, 0, dwi->blackbg,
+						                      dwi->override)) == NULL) {
 							DBG(("inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
 							return inst_other_error; 
 						}
@@ -213,7 +214,8 @@ inst_code inst_handle_calibrate(
 
 					if (dwi->dw == NULL) {
 						if ((dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
-						                      dwi->ho, dwi->vo, 0, 0, dwi->override)) == NULL) {
+						                      dwi->ho, dwi->vo, 0, 0, dwi->blackbg,
+						                      dwi->override)) == NULL) {
 							DBG(("inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
 							return inst_other_error; 
 						}
@@ -286,9 +288,11 @@ inst_code inst_handle_calibrate(
 int disprd_calibration(
 instType itype,			/* Instrument type (usually instUnknown) */
 int comport, 			/* COM port used */
+flow_control fc,		/* Serial flow control */
 int dtype,				/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 int nocal,				/* NZ to disable auto instrument calibration */
 disppath *disp,			/* display to calibrate. */
+int blackbg,			/* NZ if whole screen should be filled with black */
 int override,			/* Override_redirect on X11 */
 double patsize,			/* Size of dispwin */
 double ho, double vo,	/* Position of dispwin */
@@ -305,6 +309,7 @@ int debug				/* Debug flag */
 	inst2_capability cap2;
 
 	dwi.disp = disp; 
+	dwi.blackbg = blackbg;
 	dwi.override = override;
 	dwi.patsize = patsize;
 	dwi.ho = ho;
@@ -320,7 +325,7 @@ int debug				/* Debug flag */
 	}
 
 	/* Establish communications */
-	if ((rv = it->init_coms(it, comport, br, 15.0)) != inst_ok) {
+	if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
 		DBG(("init_coms returned '%s' (%s)\n",
 		       it->inst_interp_error(it, rv), it->interp_error(it, rv)))
 		it->del(it);
@@ -542,7 +547,7 @@ static int disprd_read(
 						return 1;
 					}
 					printf("\n");
-					if ((rv = p->it->init_coms(p->it, p->comport, p->br, 15.0)) != inst_ok) {
+					if ((rv = p->it->init_coms(p->it, p->comport, p->br, p->fc, 15.0)) != inst_ok) {
 						DBG(("init_coms returned '%s' (%s)\n",
 					       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
 						return 2;
@@ -776,13 +781,16 @@ disprd *new_disprd(
 int *errc,          /* Error code. May be NULL */
 instType itype,		/* Nominal instrument type (usually instUnknown) */
 int comport, 		/* COM port used. -99 == fake Display */
+flow_control fc,	/* Flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 int nocal,			/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */
 int donat,			/* Use ramdac for native output, else run through current or set ramdac */
 double cal[3][256],	/* Calibration set/return (cal[0][0] < 0.0 if can't/not to be used) */
 disppath *disp,		/* Display to calibrate. */
+int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
+char *callout,      /* Shell callout on set color */
 double patsize,		/* Size of dispwin */
 double ho,			/* Horizontal offset */
 double vo,			/* Vertical offset */
@@ -814,6 +822,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 		p->df = stdout;
 	p->comport = comport;
 	p->br = baud_19200;
+	p->fc = fc;
 
 	if (comport == -99) {
 		p->fake = 1;
@@ -856,7 +865,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 	}
 
 	/* Establish communications */
-	if ((rv = p->it->init_coms(p->it, p->comport, p->br, 15.0)) != inst_ok) {
+	if ((rv = p->it->init_coms(p->it, p->comport, p->br, p->fc, 15.0)) != inst_ok) {
 		DBG(("init_coms returned '%s' (%s)\n",
 		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
 		p->del(p);
@@ -974,11 +983,17 @@ char *fake_name		/* Name of profile to use as a fake device */
 	}
 
 	/* Open display window */
-	if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, donat, override)) == NULL) {
+	if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, donat, blackbg,
+	                                                        override)) == NULL) {
 		DBG(("Failed to creat a display window \n"))
 		p->del(p);
 		if (errc != NULL) *errc = 3;
 		return NULL;
+	}
+
+	/* Set color change callout */
+	if (callout) {
+		p->dw->set_callout(p->dw, callout);
 	}
 
 	/* Save current RAMDAC so that we can restore it */

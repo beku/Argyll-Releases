@@ -21,15 +21,25 @@
 /* proprietary Spyder firmware, as well as providing a means to */
 /* detect if the spyder driver is going to be funcional. */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern unsigned int *spyder2_pld_size;			/* in spyd2.c */
 extern unsigned char *spyder2_pld_bytes;
 
-/* Return 0 if Spyder 2 firmware is not avaialable */
+#ifdef __cplusplus
+}
+#endif
+
+/* Argument is the executable path, used to locate the spyd2PLD.bin file. */
+/* If this is NULL, then the default computed executable path will be used. */
+/* Return 0 if Spyder 2 firmware is not available */
 /* Return 1 if Spyder 2 firmware is available from an external file */
 /* Return 2 if Spyder 2 firmware is part of this executable */
-int setup_spyd2() {
+int setup_spyd2(char *ovrd_exe_path) {
+	static int loaded = 0;		/* Was loaded from a file */
 	unsigned int size, rsize;
-	static loaded = 0;		/* We attempted loading from spyd2PLD.bin */
 	FILE *fp;
 	int i;
 
@@ -44,15 +54,17 @@ int setup_spyd2() {
 	spyder2_pld_size = &pld_size; 
 	spyder2_pld_bytes = pld_bytes; 
 
-	/* If no firmware here, see if there is a binary file to load from. */
+	if (ovrd_exe_path == NULL)
+		ovrd_exe_path = exe_path;		/* Use global */
+
+	/* If no firmware compiled in, see if there is a file to load from. */
 	if ((pld_size == 0 || pld_size == 0x11223344) && loaded == 0) {
 		char binpath[MAXNAMEL+1];
-		loaded = 1;
 		
 		for (;;) {
-			if (strlen(exe_path) + strlen("spyd2PLD.bin") > MAXNAMEL)
+			if (strlen(ovrd_exe_path) + strlen("spyd2PLD.bin") > MAXNAMEL)
 				break;				/* oops */
-			strcpy(binpath, exe_path);			/* Use global */
+			strcpy(binpath, ovrd_exe_path);
 			strcat(binpath, "spyd2PLD.bin");
 	
 			/* open binary file */
@@ -83,6 +95,7 @@ int setup_spyd2() {
 				break;
 			}
 			pld_size = size;
+			loaded = 1;			/* We've loaded it from a file */
 //printf("~1 bytes = 0x%x 0x%x 0x%x 0x%x\n",
 //pld_bytes[0], pld_bytes[1], pld_bytes[2], pld_bytes[3]);
 			fclose(fp);
@@ -92,10 +105,10 @@ int setup_spyd2() {
 
 	if (pld_size != 0 && pld_size != 0x11223344) {
 		if (loaded)
-			return 1;
-		return 2;
+			return 1;			/* Was loaded from a file */
+		return 2;				/* Was compiled in */
 	}
-	return 0;
+	return 0;					/* Not available */
 }
 
 #define SPYD2SETUP_H

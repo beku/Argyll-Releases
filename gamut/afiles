@@ -5,6 +5,7 @@ afiles
 Jamfile
 gamut.c
 gamut.h
+isecvol.c
 viewgam.c
 gammap.c
 gammap.h

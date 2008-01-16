@@ -27,8 +27,6 @@
 #include "xcolorants.h"
 #include "sort.h"
 
-void error(char *fmt, ...), warning(char *fmt, ...);
-
 void usage(void) {
 	fprintf(stderr,"Simple plot of CGATS .ti3 data\n");
 	fprintf(stderr,"Author: Graeme W. Gill\n");

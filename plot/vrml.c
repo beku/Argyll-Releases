@@ -14,6 +14,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <math.h>
+#include "numlib.h"
 #include "gamut.h"
 #include "vrml.h"
 
@@ -32,7 +33,6 @@ static void del_vrml(vrml *s) {
 /* if col[] is NULL, use natural color. */
 /* Need to do this before or after start_line_set()/dd_vertex()/make_lines() ! */
 static void add_marker(vrml *s, double pos[3], double col[3]) {
-	int j;
 	double rad = 1.0;
 	double rgb[3];
 

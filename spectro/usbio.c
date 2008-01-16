@@ -397,6 +397,12 @@ icomuflags usbflags	/* Any special handling flags */
 		p->cnfg = config;
 		p->uflags = usbflags;
 
+#if LIBUSB_HAS_DETACH_KERNEL_DRIVER_NP == 1
+		if (p->uflags & icomuf_detach) {
+			usb_detach_kernel_driver_np(p->usbh, 0);
+		}
+#endif
+
 		/* (Should use bConfigurationValue ?) */
 		if ((rv = usb_set_configuration(p->usbh, p->cnfg)) < 0)
 			error("Configuring USB port '%s' to %d failed with %d (%s)",p->ppath->path,config,rv,usb_strerror());
@@ -410,14 +416,18 @@ icomuflags usbflags	/* Any special handling flags */
 		for (iface = 0; iface < p->nifce; iface++) {
 			/* (Second parameter is bInterfaceNumber) */
 
+			if ((rv = usb_claim_interface(p->usbh, iface)) < 0) {
 #if LIBUSB_HAS_DETACH_KERNEL_DRIVER_NP == 1
-			if (p->uflags & icomuf_detach) {
-				usb_detach_kernel_driver_np(p->usbh, iface);
-			}
-#endif
-
-			if ((rv = usb_claim_interface(p->usbh, iface)) < 0)
+				/* Detatch the existing interface. */
+				if (p->uflags & icomuf_detach) {
+					usb_detach_kernel_driver_np(p->usbh, iface);
+					if ((rv = usb_claim_interface(p->usbh, iface)) < 0)
+						error("Claiming USB port '%s' interface %d failed with %d",p->ppath->path,iface,rv);
+				}
+#else
 				error("Claiming USB port '%s' interface %d failed with %d",p->ppath->path,iface,rv);
+#endif
+			}
 	
 			/* Fill in the end point details */
 			ifd = &p->usbd->config[p->cnfg-1].interface[iface].altsetting[0];
@@ -979,13 +989,28 @@ icoms_usb_write(
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - */
-/* Reset an end point */
+/* Reset and enp point data toggle to 0 */
 int icoms_usb_resetep(
 	icoms *p,
 	int ep					/* End point address */
 ) {
 	int rv;
-	rv = usb_resetep(p->usbh, ep);
+	rv = usb_resetep(p->usbh, ep);			/* Not reliable ? */
+
+	if (rv == 0)
+		return ICOM_OK;
+
+	return ICOM_USBW;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Clear a halt on an end point */
+int icoms_usb_clearhalt(
+	icoms *p,
+	int ep					/* End point address */
+) {
+	int rv;
+	rv = usb_clear_halt(p->usbh, ep);
 
 	if (rv == 0)
 		return ICOM_OK;
@@ -1181,6 +1206,7 @@ icoms *p
 	p->usb_write_th   = icoms_usb_write_th;
 	p->usb_write      = icoms_usb_write;
 	p->usb_resetep    = icoms_usb_resetep;
+	p->usb_clearhalt  = icoms_usb_clearhalt;
 
 	icoms_reset_uih(p);
 }

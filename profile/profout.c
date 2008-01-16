@@ -688,8 +688,8 @@ make_output_icc(
 	int verb,				/* Vebosity level, 0 = none */
 	int iquality,			/* A2B table quality, 0..3 */
 	int oquality,			/* B2A table quality, 0..3 */
-	int noiluts,			/* nz to supress creation of input (Device) shaper luts */
-	int noisluts,			/* nz to supress creation of input sub-grid (Device) shaper luts */
+	int noisluts,			/* nz to supress creation of input (Device) shaper luts */
+	int noipluts,			/* nz to supress creation of input (Device) position luts */
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
 	int verify,				/* nz to print verification */
 	icxInk *oink,			/* Ink limit/black generation setup (NULL if n/a) */
@@ -719,7 +719,7 @@ make_output_icc(
 	icmFile *wr_fp;
 	icc *wr_icco;
 	int npat;				/* Number of patches */
-	co *tpat;				/* Patch input values */
+	cow *tpat;				/* Patch input values */
 	int i, j, rv = 0;
 	icColorSpaceSignature devspace = icmSigDefaultData;	/* The device colorspace */
 	inkmask imask = 0;		/* Device inkmask */ 
@@ -735,7 +735,7 @@ make_output_icc(
 	int b2ainres = 0;		/* B2A input (PCS) table resolution */
 	int b2ares = 0;			/* B2A clut resolution */
 	int b2aoutres = 0;		/* B2A output (device) table resolution */
-	double cal[3][256];		/* Display calibration, cal[0][0] < 0.0 if invalid */
+	double cal[3][256];		/* Display calibration, cal[0][0] == 1.0 if invalid */
 	icxInk iink;			/* Source profile ink limit values */
 
 	iink.tlimit = -1.0;		/* default to unknown */
@@ -1174,7 +1174,7 @@ make_output_icc(
 	}
 
 	/* vcgt tag */
-	if (cal[0][0] >= 0.0) {		/* We've been given vcgt information */
+	if (cal[0][0] > -1.0) {		/* We've been given vcgt information */
 		int j, i;
 		icmVideoCardGamma *wo;
 		wo = (icmVideoCardGamma *)wr_icco->add_tag(wr_icco,
@@ -1187,10 +1187,16 @@ make_output_icc(
 		wo->u.table.entryCount = 256;         /* full lut */
 		wo->u.table.entrySize = 2;            /* 16 bits */
 		wo->allocate((icmBase*)wo);
-		for (j = 0; j < 3; j++)
-			for (i = 0; i < 256; i++)
-				((unsigned short*)wo->u.table.data)[256 * j + i]
-				                                = (int)(cal[j][i] * 65535.0 + 0.5);
+		for (j = 0; j < 3; j++) {
+			for (i = 0; i < 256; i++) {
+				double cc = cal[j][i];
+				if (cc < 0.0)
+					cc = 0.0;
+				else if (cc > 1.0)
+					cc = 1.0;
+				((unsigned short*)wo->u.table.data)[256 * j + i] = (int)(cc * 65535.0 + 0.5);
+			}
+		}
 	}
 	if (isLut) {		/* Lut type profile */
 
@@ -1410,7 +1416,7 @@ make_output_icc(
 		fprintf(verbo,"No of test patches = %d\n",npat);
 
 	/* Allocate arrays to hold test patch input and output values */
-	if ((tpat = (co *)malloc(sizeof(co) * npat)) == NULL)
+	if ((tpat = (cow *)malloc(sizeof(cow) * npat)) == NULL)
 		error("Malloc failed - tpat[]");
 
 	/* Read in the CGATs fields */
@@ -1531,6 +1537,7 @@ make_output_icc(
 			}
 
 			for (i = 0; i < npat; i++) {
+				tpat[i].w = 1.0;
 				tpat[i].p[0] = *((double *)icg->t[0].fdata[i][ci]) / 100.0;
 				tpat[i].p[1] = *((double *)icg->t[0].fdata[i][mi]) / 100.0;
 				tpat[i].p[2] = *((double *)icg->t[0].fdata[i][yi]) / 100.0;
@@ -1700,6 +1707,7 @@ make_output_icc(
 
 			for (i = 0; i < npat; i++) {
 
+				tpat[i].w = 1.0;
 				tpat[i].p[0] = *((double *)icg->t[0].fdata[i][ci]) / 100.0;
 				tpat[i].p[1] = *((double *)icg->t[0].fdata[i][mi]) / 100.0;
 				tpat[i].p[2] = *((double *)icg->t[0].fdata[i][yi]) / 100.0;
@@ -1739,11 +1747,11 @@ make_output_icc(
 			if ((wr_xicc = new_xicc(wr_icco)) == NULL)
 				error("Creation of xicc failed");
 		
-			if (noiluts)
-				flags |= ICX_NO_IN_LUTS;
-
 			if (noisluts)
-				flags |= ICX_NO_IN_SUBG_LUTS;
+				flags |= ICX_NO_IN_SHP_LUTS;
+
+			if (noipluts)
+				flags |= ICX_NO_IN_POS_LUTS;
 
 			if (nooluts)
 				flags |= ICX_NO_OUT_LUTS;
@@ -2080,12 +2088,7 @@ wrl->start_line_set(wrl);
 }
 #endif /* BDEB */
 					/* setup perceptual gamut mapping */
-					cx.pmap = new_gammap(verb, csgam, igam, ogam, pgmi->greymf,
-		                    pgmi->glumwcpf, pgmi->glumwexf, pgmi->glumbcpf, pgmi->glumbexf,
-		                    pgmi->glumknf,
-		                    pgmi->gamcpf, pgmi->gamexf, pgmi->gamknf,
-		                    pgmi->gampwf, pgmi->gamswf, pgmi->satenh,
-		                    mapres, mn, mx);
+					cx.pmap = new_gammap(verb, csgam, igam, ogam, pgmi, mapres, mn, mx);
 					if (cx.pmap == NULL)
 						error ("Failed to make perceptual gamut map transform");
 
@@ -2097,12 +2100,7 @@ wrl->start_line_set(wrl);
 
 					if (sepsat) {
 						/* setup saturation gamut mapping */
-						cx.smap = new_gammap(verb, csgam, igam, ogam, sgmi->greymf,
-			                    sgmi->glumwcpf, sgmi->glumwexf, sgmi->glumbcpf, sgmi->glumbexf,
-			                    sgmi->glumknf,
-			                    sgmi->gamcpf, sgmi->gamexf, sgmi->gamknf,
-			                    sgmi->gampwf, sgmi->gamswf, sgmi->satenh,
-			                    mapres, mn, mx);
+						cx.smap = new_gammap(verb, csgam, igam, ogam, sgmi, mapres, mn, mx);
 						if (cx.smap == NULL)
 							error ("Failed to make saturation gamut map transform");
 

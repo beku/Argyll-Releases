@@ -18,7 +18,7 @@ will not support developers that they have not qualified
 and agreed to support.
 
 
-printread.exe	Is used to read the print test chart and create
+chartread.exe	Is used to read the test chart and create
 			    the chart readings file.
 
 filmread.exe	Is used to read the film test chart and create

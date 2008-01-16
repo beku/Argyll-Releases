@@ -97,7 +97,7 @@ double  *b	/* B[]   input array, returns solution X[] */
 		sum = 0.0;
 		for (j = 0; j < n; j++)
 			sum += sa[i][j] * b[j];
-printf("~~ check %d = %f, against %f\n",i,sum,sb[i]);
+//printf("~~ check %d = %f, against %f\n",i,sum,sb[i]);
 		temp = fabs(sum - sb[i]);
 		if (temp > 1e-6) {
 			free_dvector(sb, 0, n-1);

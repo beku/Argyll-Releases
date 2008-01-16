@@ -11,8 +11,9 @@
  * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
- * This is the second major version of xlut.c (originally called xlut2.c)
+ * This is the third major version of xlut.c (originally called xlut2.c)
  * Based on the old xlut.c code (preserved as xlut1.c)
+ * This version uses xfit.c to do the curve and rspl fitting.
  */
 
 /*
@@ -25,9 +26,9 @@
  *
  */
 
-#define USE_CIE94_DE	/* Use CIE94 delta E measure when creating in/out curves */
+#include "xfit.h"
 
-#define XFIT 1			/* 1, 2 or 3 */
+#define USE_CIE94_DE	/* Use CIE94 delta E measure when creating in/out curves */
 
 #undef DEBUG 			/* Verbose debug information */
 #undef DEBUG_RLUT 		/* Print values being reverse lookup up */
@@ -61,11 +62,7 @@
 #define CAT2(n1,n2) _CAT2(n1,n2)
 #endif
 
-#if XFIT == 1
-#define XFITN xfit1
-#else
-#define XFITN xfit2
-#endif
+
 
 static double icxLimitD(void *lcntx, double *in);		/* For input' */
 static double icxLimit(void *lcntx, double *in);		/* For input */
@@ -1268,8 +1265,8 @@ alloc_icxLuLut(
 	p->bwd_outpcs_relpcs = icxLuLut_bwd_outpcs_relpcs;
 	p->nearclip = 0;				/* Set flag defaults */
 	p->mergeclut = 0;
-	p->noiluts = 0;
 	p->noisluts = 0;
+	p->noipluts = 0;
 	p->nooluts = 0;
 	p->intsep = 0;
 
@@ -1754,7 +1751,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 		p->iol_ch = i;		/* Chanel */
 		p->inputTable[i]->set_rspl(p->inputTable[i], 0,
 		           (void *)p, icxLuLut_inout_func,
-		           &p->ninmin[i], &p->ninmax[i], &p->lut->inputEnt, &p->ninmin[i], &p->ninmax[i]);
+		           &p->ninmin[i], &p->ninmax[i], (int *)&p->lut->inputEnt, &p->ninmin[i], &p->ninmax[i]);
 	}
 
 	/* Setup center clip target for inversion */
@@ -1821,7 +1818,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 		p->iol_ch = i;		/* Chanel */
 		p->outputTable[i]->set_rspl(p->outputTable[i], 0,
 		           (void *)p, icxLuLut_inout_func,
-		           &p->noutmin[i], &p->noutmax[i], &p->lut->outputEnt, &p->noutmin[i], &p->noutmax[i]);
+		           &p->noutmin[i], &p->noutmax[i], (int *)&p->lut->outputEnt, &p->noutmin[i], &p->noutmax[i]);
 	}
 
 	/* Setup center clip target for inversion */
@@ -1948,15 +1945,102 @@ static double xfit_to_de2(void *cntx, double *in1, double *in2) {
 	return rv;
 }
 
-/* Context for figuring input and output curves */
+/* Same as above plus partial derivatives */
+static double xfit_to_dde2(void *cntx, double dout[2][MXDIDO], double *in1, double *in2) {
+	icxLuLut *p = (icxLuLut *)cntx;
+	double rv;
+
+	if (p->pcs == icSigLabData) {
+		int i,j,k;
+		double tdout[2][3];
+#ifdef USE_CIE94_DE
+		rv = icxdCIE94sq(tdout, in1, in2);
+#else
+		rv = icxdLabDEsq(tdout, in1, in2);
+#endif
+		for (k = 0; k < 2; k++) {
+			for (j = 0; j < 3; j++)
+				dout[k][j] = tdout[k][j];
+		}
+	} else {
+		double lab1[3], lab2[3];
+		double dout12[2][3][3];
+		double tdout[2][3];
+		int i,j,k;
+
+		icxdXYZ2Lab(&icmD50, lab1, dout12[0], in1);
+		icxdXYZ2Lab(&icmD50, lab2, dout12[1], in2);
+#ifdef USE_CIE94_DE
+		rv = icxdCIE94sq(tdout, lab1, lab2);
+#else
+		rv = icxdLabDEsq(tdout, lab1, lab2);
+#endif
+		/* Compute partial derivative (is this correct ??) */
+		for (k = 0; k < 2; k++) {
+			for (j = 0; j < 3; j++) {
+				dout[k][j] = 0.0;
+				for (i = 0; i < 3; i++) {
+					dout[k][j] += tdout[k][i] * dout12[k][i][j];
+				}
+			}
+		}
+	}
+	return rv;
+}
+
+#ifdef NEVER
+/* Check partial derivative function within xfit_to_dde2() */
+
+static double _xfit_to_dde2(void *cntx, double dout[2][MXDIDO], double *in1, double *in2) {
+	icxLuLut *pp = (icxLuLut *)cntx;
+	int k, i;
+	double rv, drv;
+	double trv;
+	
+	rv = xfit_to_de2(cntx, in1, in2);
+	drv = xfit_to_dde2(cntx, dout, in1, in2);
+
+	if (fabs(rv - drv) > 1e-6)
+		printf("######## DDE2: RV MISMATCH is %f should be %f ########\n",rv,drv);
+
+	/* Check each parameter delta */
+	for (k = 0; k < 2; k++) {
+		for (i = 0; i < 3; i++) {
+			double *in;
+			double del;
+	
+			if (k == 0)
+				in = in1;
+			else
+				in = in2;
+
+			in[i] += 1e-9;
+			trv = xfit_to_de2(cntx, in1, in2);
+			in[i] -= 1e-9;
+			
+			/* Check that del is correct */
+			del = (trv - rv)/1e-9;
+			if (fabs(dout[k][i] - del) > 0.04) {
+				printf("######## DDE2: EXCESSIVE at in[%d][%d] is %f should be %f ########\n",k,i,dout[k][i],del);
+			}
+		}
+	}
+	return rv;
+}
+
+#define xfit_to_dde2 _xfit_to_dde2
+
+#endif
+
+/* Context for rspl setting input and output curves */
 typedef struct {
 	int iix;
 	int oix;
-	XFITN *xf;		/* Optimisation structure */
+	xfit *xf;		/* Optimisation structure */
 } curvectx;
 
-/* Function to pass to rspl to set input transfer function */
-/* for xicc lookup function */
+/* Function to pass to rspl to set input and output */
+/* transfer function for xicc lookup function */
 static void
 set_linfunc(
 	void *cc,			/* curvectx structure */
@@ -1964,7 +2048,7 @@ set_linfunc(
 	double *in			/* Device input value */
 ) {
 	curvectx *c = (curvectx *)cc;		/* this */
-	XFITN *p = c->xf;
+	xfit *p = c->xf;
 
 	if (c->iix >= 0) {				/* Input curve */
 		*out = p->incurve(p, *in, c->iix);
@@ -1977,32 +2061,24 @@ set_linfunc(
 /* used for ink limiting calculation. */
 static void
 icxLuLut_invinput_func(
-	void *pp,			/* icxLuLut */
+	void *cc,			/* curvectx structure */
 	double *out,		/* Device output value */
 	double *in			/* Device input value */
 ) {
-	icxLuLut *p      = (icxLuLut *)pp;			/* this */
-	double tin[MAX_CHAN];
-	double tout[MAX_CHAN];
-	int i;
+	curvectx *c = (curvectx *)cc;		/* this */
+	xfit *p = c->xf;
 
-	for (i = 0; i < p->inputChan; i++)
-		tin[i] = 0.0;
-	tin[p->iol_ch] = in[0];
-	p->inv_input(p, tout, tin);				/* Use rspl inverse just setup */
-	out[0] = tout[p->iol_ch];
-	// ~~~ switch to using inverse xfit incurve ???
+	*out = p->invincurve(p, *in, c->iix);
 }
 
 
 /* Functions to pass to icc settables() to setup icc A2B Lut: */
-// ~~~ should use xfit curve directly ??
 
 /* Input table */
 static void set_input(void *cntx, double *out, double *in) {
 	icxLuLut *p = (icxLuLut *)cntx;
 
-	if (p->noiluts != 0 && p->noisluts != 0) {	/* Input table must be linear */
+	if (p->noisluts != 0 && p->noipluts != 0) {	/* Input table must be linear */
 		int i;
 		for (i = 0; i < p->inputChan; i++)
 			out[i] = in[i];
@@ -2058,7 +2134,6 @@ static void set_clut(void *cntx, double *out, double *in) {
 }
 
 /* output */
-// ~~~ should use xfit curve directly ??
 static void set_output(void *cntx, double *out, double *in) {
 	icxLuLut *p = (icxLuLut *)cntx;
 
@@ -2074,57 +2149,11 @@ static void set_output(void *cntx, double *out, double *in) {
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-/* Context for making clut relative to white and black points */
-typedef struct {
-	icxLuLut *x;		/* Object being created */
-	icmHeader *h;		/* Pointer to icc header */
-	double mat[3][3];	/* XYZ White point aprox relative to accurate relative transform matrix */
-} relativectx;
-
-/* Function to pass to rspl to re-set output values, */
-/* to make them relative to the white and black points */
-static void
-reset_relative_func(
-	void *pp,			/* relativectx structure */
-	double *out,		/* output value */
-	double *in			/* input value */
-) {
-	relativectx *p    = (relativectx *)pp;
-	double tt[3];
-
-	/* Convert the clut values to output values */
-	p->x->output(p->x, tt, out);	
-
-	if (p->x->pcs == icSigLabData) {	/* We are in Lab */
-
-		icmLab2XYZ(&icmD50, tt, tt);
-
-		/* Convert from aproximate to accurate Relative colorimetric */
-		out[0] = p->mat[0][0] * tt[0] + p->mat[0][1] * tt[1] + p->mat[0][2] * tt[2];
-		out[1] = p->mat[1][0] * tt[0] + p->mat[1][1] * tt[1] + p->mat[1][2] * tt[2];
-		out[2] = p->mat[2][0] * tt[0] + p->mat[2][1] * tt[1] + p->mat[2][2] * tt[2];
-
-		icmXYZ2Lab(&icmD50, out, out);
-
-	} else {	/* We are all in XYZ */
-
-		/* Convert from aproximate to accurate Relative colorimetric */
-		out[0] = p->mat[0][0] * tt[0] + p->mat[0][1] * tt[1] + p->mat[0][2] * tt[2];
-		out[1] = p->mat[1][0] * tt[0] + p->mat[1][1] * tt[1] + p->mat[1][2] * tt[2];
-		out[2] = p->mat[2][0] * tt[0] + p->mat[2][1] * tt[1] + p->mat[2][2] * tt[2];
-	}
-
-	/* And then convert them back to clut values */
-	p->x->inv_output(p->x, out, out);	
-}
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Routine to figure out a suitable black point for CMYK */
 
 /* Structure to hold optimisation information */
 typedef struct {
 	icxLuLut *p;			/* Object being created */
-	double fromAbs[3][3];	/* From abs to aprox relative */
 	double toAbs[3][3];		/* To abs from aprox relative */
 	double p1[3];			/* white pivot point in abs Lab */
 	double p2[3];			/* Point on vector towards black */
@@ -2151,13 +2180,8 @@ static double bfindfunc(void *adata, double pv[]) {
 	if (b->p->pcs != icSigXYZData) 	/* Convert PCS to XYZ */
 		icmLab2XYZ(&icmD50, bcc.v, bcc.v);
 
-	/* Convert from aproximate relative to Absolute colorimetric */
-	tt[0] = b->toAbs[0][0] * bcc.v[0] + b->toAbs[0][1] * bcc.v[1]
-	                                  + b->toAbs[0][2] * bcc.v[2];
-	tt[1] = b->toAbs[1][0] * bcc.v[0] + b->toAbs[1][1] * bcc.v[1]
-	                                  + b->toAbs[1][2] * bcc.v[2];
-	tt[2] = b->toAbs[2][0] * bcc.v[0] + b->toAbs[2][1] * bcc.v[1]
-		                              + b->toAbs[2][2] * bcc.v[2];
+	/* Convert from relative to Absolute colorimetric */
+	icmMulBy3x3(tt, b->toAbs, bcc.v);
 	icmXYZ2Lab(&icmD50, Lab, tt);	/* Convert to Lab */
 
 #ifdef DEBUG
@@ -2208,7 +2232,7 @@ icmLookupFunc      func,			/* Functionality requested */
 icRenderingIntent  intent,			/* Rendering intent */
 int                flags,			/* white/black point flags */
 int                nodp,			/* Number of points */
-co                 *ipoints,		/* Array of input points */
+cow                *ipoints,		/* Array of input points (Lab or XYZ normalized to 1.0) */
 double             smooth,			/* RSPL smoothing factor, -ve if raw */
 double             avgdev,			/* reading Average Deviation as a prop. of the input range */
 icxViewCond        *vc,				/* Viewing Condition (NULL if not using CAM) */
@@ -2224,12 +2248,12 @@ int                quality			/* Quality metric, 0..3 */
 	int maxchan;						/* max(inputChan, outputChan) */
 	int rsplflags = 0;					/* Flags for scattered data rspl */
 	int e, f, i, j;
-	cow *points;			/* Working copy of ipoints with aprox. white point adjustment */
-	double apxwp[3];		/* Aproximate XYZ White point */
-	double fromAbs[3][3];	/* From abs to aprox relative */
-	double toAbs[3][3];		/* To abs from aprox relative */
+	double dwhite[MXDI], dblack[MXDI];	/* Device white and black values */
+	double wp[3];			/* Absolute White point in XYZ */
+	double bp[3];			/* Absolute Black point in XYZ */
 	double oavgdev[MXDO];	/* Average output value deviation */
 	int gres[MXDI];			/* RSPL/CLUT resolution */
+	xfit *xf = NULL;		/* Curve fitting class instance */
 
 	if (flags & ICX_VERBOSE)
 		rsplflags |= RSPL_VERBOSE;
@@ -2244,11 +2268,11 @@ int                quality			/* Quality metric, 0..3 */
 		return NULL;
 
 	/* Set LuLut "create" specific flags: */
-	if (flags & ICX_NO_IN_LUTS)
-		p->noiluts = 1;
-
-	if (flags & ICX_NO_IN_SUBG_LUTS)
+	if (flags & ICX_NO_IN_SHP_LUTS)
 		p->noisluts = 1;
+
+	if (flags & ICX_NO_IN_POS_LUTS)
+		p->noipluts = 1;
 
 	if (flags & ICX_NO_OUT_LUTS)
 		p->nooluts = 1;
@@ -2290,6 +2314,7 @@ int                quality			/* Quality metric, 0..3 */
 	p->plu->get_lutranges(p->plu, p->ninmin, p->ninmax, p->noutmin, p->noutmax);
 	p->plu->get_ranges(p->plu, p->inmin,  p->inmax,  p->outmin,  p->outmax);
 
+	/* ??? Does this ever happen with set_icxLuLut() ??? */
 	/* If we have a Jab PCS override, reflect this in the effective icx range. */
 	/* Note that the ab ranges are nominal. They will exceed this range */
 	/* for colors representable in L*a*b* PCS */
@@ -2308,462 +2333,12 @@ int                quality			/* Quality metric, 0..3 */
 	if (flags & ICX_VERBOSE)
 		printf("Estimating white point\n");
 
-	if (flags & ICX_SET_WHITE) {
-		rspl *wpest;		/* Temporary device -> CIE interpolation */
-		co cc;
+	icmXYZ2Ary(wp, icmD50);		/* Set a default value - D50 */
+	icmXYZ2Ary(bp, icmBlack);	/* Set a default value - absolute black */
 
-		/* Allocate a temporary spline interpolation structure */
-		if ((wpest = new_rspl(p->inputChan, p->outputChan)) == NULL) {
-			p->pp->errc = 2;
-			sprintf(p->pp->err,"Creation of temporary rspl failed");
-			p->del((icxLuBase *)p);
-			return NULL;
-		}
-
-		for (e = 0; e < p->inputChan; e++)
-			gres[e] = p->lut->clutPoints > 7 ? 7 : p->lut->clutPoints;
-
-		/* Create the temporary interpolation */
-		wpest->fit_rspl(wpest,
-	               0,
-		           ipoints, nodp,
-		           p->ninmin, p->ninmax,
-	               gres,
-		           p->noutmin, p->noutmax, smooth,
-		           oavgdev);
-
-		/* Figure out the device values for white */
-		if (h->deviceClass == icSigInputClass) {
-
-			/* We assume that the input target is well behaved, */
-			/* and that it includes a white and black point patch, */
-			/* and that they have the extreme L/Y values */
-	
-			cc.v[pcsy] = -1e60;
-	
-			/* Discover the white points */
-			for (i = 0; i < nodp; i++) {
-				if (ipoints[i].v[pcsy] > cc.v[pcsy]) {
-					cc.v[0] = ipoints[i].v[0];
-					cc.v[1] = ipoints[i].v[1];
-					cc.v[2] = ipoints[i].v[2];
-					for (e = 0; e < p->inputChan; e++)
-						cc.p[e] = ipoints[i].p[e];
-				}
-			}
-
-		} else {	/* Output or Display device */
-
-			switch(h->colorSpace) {
-	
-				case icSigCmykData:
-				case icSigCmyData:
-					for (e = 0; e < p->inputChan; e++)
-						cc.p[e] = 0.0;
-					break;
-				case icSigRgbData:
-					for (e = 0; e < p->inputChan; e++)
-						cc.p[e] = 1.0;
-					break;
-	
-				case icSigGrayData: {	/* Could be additive or subtractive */
-					/* Use heuristic guess */
-					if (ipoints[0].v[pcsy] > ipoints[nodp-1].v[pcsy]) {
-						for (e = 0; e < p->inputChan; e++)
-							cc.p[e] = 0.0;	/* Subractive */
-					} else {
-						for (e = 0; e < p->inputChan; e++)
-							cc.p[e] = 1.0;		/* Additive */
-					}
-					break;
-				}
-
-				default:
-					xicp->errc = 1;
-					sprintf(xicp->err,"set_icxLuLut: can't handle color space %s",
-					                           icm2str(icmColorSpaceSignature, h->colorSpace));
-					wpest->del(wpest);
-					p->del((icxLuBase *)p);
-					return NULL;
-					break;
-			}
-		}
-
-		wpest->interp(wpest, &cc);
-
-		for (f = 0; f < p->outputChan; f++)
-			apxwp[f] = cc.v[f];
-
-		if (p->pcs != icSigXYZData) 	/* Convert white point to XYZ */
-			icmLab2XYZ(&icmD50, apxwp, apxwp);
-
-		if (flags & ICX_VERBOSE) {
-			double apxlwp[3];
-			icmXYZ2Lab(&icmD50, apxlwp, apxwp);
-			printf("Approximate White point XYZ = %f %f %f, Lab = %f %f %f\n",
-			        apxwp[0],apxwp[1],apxwp[2],apxlwp[0],apxlwp[1],apxlwp[2]);
-		}
-
-		wpest->del(wpest);		/* Done with trial white point interpolation */
-	} else {
-
-		icmXYZ2Ary(apxwp, icmD50);		/* Set a default value - D50 */
-	}
-
-	/* Setup data points that are adjusted for the approximate white point */
-	{
-		double tt[3];
-		icmXYZNumber swp;
-		double tw = 0.0;
-
-		/* Allocate the array passed to fit_rspl() */
-		if ((points = malloc(sizeof(cow) * nodp)) == NULL) {
-			p->pp->errc = 2;
-			sprintf(p->pp->err,"Allocation of scattered coordinate array failed");
-			p->del((icxLuBase *)p);
-			return NULL;
-		}
-
-		icmAry2XYZ(swp, apxwp);
-
-		/* Absolute->Aprox. Relative Adaptation matrix */
-		icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, swp, fromAbs);
-
-		/* Aproximate relative to absolute conversion matrix */
-		icmChromAdaptMatrix(ICM_CAM_BRADFORD, swp, icmD50, toAbs);
-
-		/* Setup transformed points for the device */
-		for (i = 0; i < nodp; i++) {
-			points[i].w = 1.0;				/* A default weight */
-			for (e = 0; e < p->inputChan; e++)
-				points[i].p[e] = ipoints[i].p[e];
-			for (f = 0; f < p->outputChan; f++)
-				tt[f] = ipoints[i].v[f];
-
-			if (p->pcs == icSigLabData)	/* Convert to XYZ for chromatic shift */
-				icmLab2XYZ(&icmD50, tt, tt);
-
-			/* Convert from Absolute to aproximate Relative colorimetric */
-			points[i].v[0] = fromAbs[0][0] * tt[0] + fromAbs[0][1] * tt[1] + fromAbs[0][2] * tt[2];
-			points[i].v[1] = fromAbs[1][0] * tt[0] + fromAbs[1][1] * tt[1] + fromAbs[1][2] * tt[2];
-			points[i].v[2] = fromAbs[2][0] * tt[0] + fromAbs[2][1] * tt[1] + fromAbs[2][2] * tt[2];
-
-			if (p->pcs == icSigLabData) 	/* Convert back to output space  */
-				icmXYZ2Lab(&icmD50, points[i].v, points[i].v);
-		}
-	}
-
-	if (h->colorSpace == icSigGrayData) {	/* Don't use device or PCS curves for monochrome */
-		p->noiluts = p->noisluts = p->nooluts = 1;
-	}
-
-	if ((flags & ICX_VERBOSE) && (p->noiluts == 0 || p->noisluts == 0 || p->nooluts == 0))
-		printf("Creating optimised per channel curves\n");
-
-	/* Set the target CLUT grid resolution so in/out curves can be optimised for it */
-	for (e = 0; e < p->inputChan; e++)
-		gres[e] = p->lut->clutPoints;
-
-	/* Create input and output per channel curves */
-	{
-		XFITN *xf;				/* Curve fitting class instance */
-		int xfflags = 0;		/* xfit flags */
-		double in_min[MXDI];	/* Input value scaling minimum */
-		double in_max[MXDI];	/* Input value scaling maximum */
-		double out_min[MXDO];	/* Output value scaling minimum */
-		double out_max[MXDO];	/* Output value scaling maximum */
-		int iluord, sluord, oluord;
-		int iord[MXDI];			/* Input curve orders */
-		int sord[MXDI];			/* Input sub-grid curve orders */
-		int oord[MXDO];			/* Output curve orders */
-
-#if XFIT == 1
-		optcomb tcomb = oc_imo;	/* Create all by default */
-#else
-		optcomb2 tcomb = oc2_iso;	/* Create all by default */
-#endif
-
-		if ((xf = CAT2(new_, XFITN)()) == NULL) {
-			p->pp->errc = 2;
-			sprintf(p->pp->err,"Creation of xfit object failed");
-			p->del((icxLuBase *)p);
-			return NULL;
-		}
-			
-		/* Setup for optimising run */
-		if (p->noiluts)
-			tcomb &= ~oc2_i;
-
-		if (p->noisluts)
-			tcomb &= ~oc2_s;
-
-		if (p->nooluts)
-			tcomb &= ~oc2_o;
-
-		if (flags & ICX_VERBOSE)
-			xfflags |= XFIT_VERB;
-
-		/* Use default of output space for error metric */
-
-		if (p->pcs == icSigLabData) {
-			xfflags |= XFIT_FM_LAB;			/* Output is Lab */
-			xfflags |= XFIT_OUT_ZERO;		/* Adjust a & b to zero */
-		} else {
-			xfflags |= XFIT_FM_XYZ;			/* Convert lookup from XYZ to Lab */
-		}
-
-		/* Set the curve order for input (device) */
-		if (quality >= 3) {				/* Ultra high */
-			iluord = 25;			
-			sluord = 4;			
-		} else if (quality == 2) {		/* High */
-			iluord = 20;			
-			sluord = 2;			
-		} else if (quality == 1) {		/* Medium */
-			iluord = 17;			
-			sluord = 1;			
-		} else {						/* Low */
-			iluord = 10;			
-			sluord = 1;			
-		}
-		for (e = 0; e < p->inputChan; e++) {
-			iord[e] = iluord;
-			sord[e] = sluord;
-			in_min[e] = p->inmin[e];
-			in_max[e] = p->inmax[e];
-		}
-
-		/* Set curve order for output (PCS) */
-		if (quality >= 3) {				/* Ultra high */
-			oluord = 25;			
-		} else if (quality == 2) {		/* High */
-			oluord = 20;			
-		} else if (quality == 1) {		/* Medium */
-			oluord = 17;			
-		} else {						/* Low */
-			oluord = 10;			
-		}
-		for (f = 0; f < p->outputChan; f++) {
-			oord[f] = oluord;
-			out_min[f] = p->outmin[f];
-			out_max[f] = p->outmax[f];
-
-			/* Hack to prevent a convex L curve pushing */
-			/* the clut L values above the maximum value */
-			/* that can be represented, causing clipping. */
-			/* Do this by making sure that the L curve pivots */
-			/* through 100.0 to 100.0 */
-			if (f == 0 && p->pcs == icSigLabData) {
-				if (out_min[f] < 0.0001 && out_max[f] > 100.0) {
-					out_max[f] = 100.0;	
-				}
-			}
-		}
-
-		/* Fit input and output curves to our data points */
-		if (xf->fit(xf, xfflags, p->inputChan, p->outputChan, nodp, points, gres,
-		   in_min, in_max, out_min, out_max, iord, sord, oord, tcomb,
-		   (void *)p, xfit_to_de2) != 0) {
-			p->pp->errc = 2;
-			sprintf(p->pp->err,"xfit fitting failed");
-			xf->del(xf);
-			p->del((icxLuBase *)p);
-			return NULL;
-			
-		}  
-
-		/* - - - - - - - - - - - - - - - */
-		/* Set the xicc input curve rspl */
-		for (e = 0; e < p->inputChan; e++) {
-			curvectx cx;
-	
-			cx.xf = xf;
-			cx.oix = -1;
-			cx.iix = e;
-
-			if ((p->inputTable[e] = new_rspl(1, 1)) == NULL) {
-				p->pp->errc = 2;
-				sprintf(p->pp->err,"Creation of input table rspl failed");
-				p->del((icxLuBase *)p);
-				return NULL;
-			}
-
-			p->inputTable[e]->set_rspl(p->inputTable[e], 0,
-			           (void *)&cx, set_linfunc,
-    			       &p->ninmin[e], &p->ninmax[e],
-			           &p->lut->inputEnt,
-			           &p->ninmin[e], &p->ninmax[e]);
-		}
-
-		/* - - - - - - - - - - - - - - - */
-		/* Set the xicc output curve rspl */
-
-		/* Allow for a bigger than normal input and output range, to */
-		/* give some leaway in accounting for approximate white point shifted */
-		/* profile creation. */
-		for (f = 0; f < p->outputChan; f++) {
-			double min[1], max[1], exval;
-			int entries;
-			curvectx cx;
-
-			cx.xf = xf;
-			cx.iix = -1;
-			cx.oix = f;
-
-			/* Expand in and out range by 1.05 */
-			// ~~999 does this mess up output curves though ???
-			exval = (p->noutmax[f] - p->noutmin[f]);
-			min[0] = p->noutmin[f] - exval * 0.05 * 0.5;
-			max[0] = p->noutmax[f] + exval * 0.05 * 0.5;
-  	      	entries = (int)(1.05 * (double)p->lut->outputEnt + 0.5);
-
-			if ((p->outputTable[f] = new_rspl(1, 1)) == NULL) {
-				p->pp->errc = 2;
-				sprintf(p->pp->err,"Creation of output table rspl failed");
-				p->del((icxLuBase *)p);
-				return NULL;
-			}
-
-			p->outputTable[f]->set_rspl(p->outputTable[f], 0,
-		           (void *)&cx, set_linfunc,
-					min, max, &entries, min, max);
-
-		}
-
-		xf->del(xf);
-	}
-
-	if (flags & ICX_VERBOSE)
-		printf("Creating fast inverse input lookups\n");
-
-	/* Setup center clip target for input inversion */
-	for (i = 0; i < p->inputChan; i++) {
-		p->inputClipc[i] = (p->ninmin[i] + p->ninmax[i])/2.0;
-	}
-
-	/* Create rspl based reverse input lookups used in ink limit function. */
-	for (e = 0; e < p->inputChan; e++) {
-		int res = 256;
-
-		if ((p->revinputTable[e] = new_rspl(1, 1)) == NULL) {
-			p->pp->errc = 2;
-			sprintf(p->pp->err,"Creation of reverse input table rspl failed");
-			p->del((icxLuBase *)p);
-			return NULL;
-		}
-		p->iol_out = 2;		/* Input lookup */
-		p->iol_ch = e;		/* Chanel */
-		p->revinputTable[e]->set_rspl(p->revinputTable[e], 0,
-		           (void *)p, icxLuLut_invinput_func,
-		           &p->ninmin[e], &p->ninmax[e], &res, &p->ninmin[e], &p->ninmax[e]);
-	}
-
-
-	if (flags & ICX_VERBOSE)
-		printf("Compensate scattered data for input curves\n");
-
-	/* Setup center clip target for output inversion */
-	for (i = 0; i < p->outputChan; i++) {
-		p->outputClipc[i] = (p->noutmin[i] + p->noutmax[i])/2.0;
-	}
-
-	if (flags & ICX_VERBOSE)
-		printf("Compensate scattered data for output curve\n");
-
-	/* Modify our aprox. white point adjusted test patch points for the */
-	/* effect of the input and output curves. */
-	// ~~99 should we use xfit curves directly here ?
-	for (i = 0; i < nodp; i++) {
-		double tt[3];
-		co cc;
-		int nsoln;
-		double cdir;
-
-		/* Input values forward through input curves */
-		for (e = 0; e < p->inputChan; e++) {
-			cc.p[0] = points[i].p[e];
-			p->inputTable[e]->interp(p->inputTable[e], &cc);
-			points[i].p[e] = cc.v[0];
-		}
-
-		/* Output values backwards though output curve */
-		for (f = 0; f < p->outputChan; f++) {
-			cc.v[0] = points[i].v[f];
-
-			/* Clip towards center of output range */
-			cdir = (p->noutmin[f] + p->noutmax[f]) * 0.5 - cc.v[0];
-
-			nsoln = p->outputTable[f]->rev_interp (
-				p->outputTable[f],	/* this */
-				0,					/* No flags */
-				1,					/* Maximum number of solutions allowed for */
-				NULL, 				/* No auxiliary input targets */
-				&cdir,				/* Clip vector direction and length */
-				&cc);				/* Input and output values */
-			nsoln &= RSPL_NOSOLNS;	/* Get number of solutions */
-			if (nsoln == 0)
-				error("set_icxLuLut: Unexpected failure to find reverse solution for output linearisation");
-
-			points[i].v[f] = cc.p[0];
-		}
-	}
-
-	/* ------------------------------- */
-	{
-		if (flags & ICX_VERBOSE)
-			printf("Create clut from scattered data\n");
-
-		if ((p->clutTable = new_rspl(p->inputChan, p->outputChan)) == NULL) {
-			p->pp->errc = 2;
-			sprintf(p->pp->err,"Creation of clut table rspl failed");
-			p->del((icxLuBase *)p);
-			return NULL;
-		}
-
-		/* Initialise from scattered data */
-		/* Return non-zero if result is non-monotonic */
-		/* Should we warn if non-monotonic ??? */
-		p->clutTable->fit_rspl_w(
-			p->clutTable,	/* this */
-			rsplflags,		/* Combination of flags */
-			points,			/* Array holding position and function values of data points */
-			nodp,			/* Number of data points */
-			p->ninmin,		/* Grid low scale - will expand to enclose data, NULL = default 0.0 */
-			p->ninmax,		/* Grid high scale - will expand to enclose data, NULL = default 1.0 */
-			gres,			/* Spline grid resolution, ncells = gres-1 */
-			p->noutmin,		/* Data value low normalize, NULL = default 0.0 */
-			p->noutmax,		/* Data value high normalize - NULL = default 1.0 */
-			smooth,			/* Smoothing factor, nominal = 1.0 */
-		    oavgdev			/* reading Average Deviation as a proportion of the input range */
-		);
-	}
-
-#ifdef DEBUG
-	/* Sanity check the rspl result */
-
-#endif	// DEBUG
-
-	/* Setup all the clipping, ink limiting and auxiliary stuff, */
-	/* in case a reverse call is used. Need to avoid relying on inking */
-	/* stuff that makes use of the white/black points, since they haven't */
-	/* been set up yet. */
-	if (setup_ink_icxLuLut(p, ink, 0) != 0) {
-		p->del((icxLuBase *)p);
-		return NULL;
-	}
-
-	/* Deal with white/black points */
 	if (flags & (ICX_SET_WHITE | ICX_SET_BLACK)) {
-		double dwhite[MXDI], dblack[MXDI];	/* Device white and black values */
-		double rwp[3];		/* Relative White point in XYZ */
-		double wp[3];		/* Absolute White point in XYZ */
-		double bp[3];		/* Absolute Black point in XYZ */
 
-		if (flags & ICX_VERBOSE)
-			printf("\nFind white & black points\n");
-
-		icmXYZ2Ary(wp, icmD50);		/* Set a default value - D50 */
-		icmXYZ2Ary(bp, icmBlack);	/* Set a default value - absolute black */
+		/* Figure out as best we can the device white and black points */
 
 		if (h->deviceClass == icSigInputClass) {
 			/* We assume that the input target is well behaved, */
@@ -2790,89 +2365,381 @@ int                quality			/* Quality metric, 0..3 */
 						dblack[e] = ipoints[i].p[e];
 				}
 			}
-		} else {
+			if (p->pcs != icSigXYZData) {
+				icmLab2XYZ(&icmD50, wp, wp);
+				icmLab2XYZ(&icmD50, bp, bp);
+			}
 
-			/* Assume Output or Monitor class */
-			switch(h->colorSpace) {
+		} else {	/* Output or Display device */
+			/* We assume that the output target is well behaved, */
+			/* and that it includes a white point patch. */
+			int nw = 0;
 
+			wp[0] = wp[1] = wp[2] = 0.0;
+
+			switch (h->colorSpace) {
+	
 				case icSigCmykData:
-				case icSigCmyData:
+					for (i = 0; i < nodp; i++) {
+						if (ipoints[i].p[0] < 0.001
+						 && ipoints[i].p[1] < 0.001
+						 && ipoints[i].p[2] < 0.001
+						 && ipoints[i].p[3] < 0.001) {
+							wp[0] += ipoints[i].v[0];
+							wp[1] += ipoints[i].v[1];
+							wp[2] += ipoints[i].v[2];
+							nw++;
+						}
+					}
 					for (e = 0; e < p->inputChan; e++) {
 						dwhite[e] = 0.0;
 						dblack[e] = 1.0;
 					}
 					break;
-
+				case icSigCmyData:
+					for (i = 0; i < nodp; i++) {
+						if (ipoints[i].p[0] < 0.001
+						 && ipoints[i].p[1] < 0.001
+						 && ipoints[i].p[2] < 0.001) {
+							wp[0] += ipoints[i].v[0];
+							wp[1] += ipoints[i].v[1];
+							wp[2] += ipoints[i].v[2];
+							nw++;
+						}
+					}
+					for (e = 0; e < p->inputChan; e++) {
+						dwhite[e] = 0.0;
+						dblack[e] = 1.0;
+					}
+					break;
 				case icSigRgbData:
-
+					for (i = 0; i < nodp; i++) {
+						if (ipoints[i].p[0] > 0.999
+						 && ipoints[i].p[1] > 0.999
+						 && ipoints[i].p[2] > 0.999) {
+							wp[0] += ipoints[i].v[0];
+							wp[1] += ipoints[i].v[1];
+							wp[2] += ipoints[i].v[2];
+							nw++;
+						}
+					}
 					for (e = 0; e < p->inputChan; e++) {
 						dwhite[e] = 1.0;
 						dblack[e] = 0.0;
 					}
-
 					break;
-
+	
 				case icSigGrayData: {	/* Could be additive or subtractive */
-					/* Use heuristic guess */
-					if (ipoints[0].v[pcsy] > ipoints[nodp-1].v[pcsy]) {
+					double minwp[3], maxwp[3];
+					int nminwp = 0, nmaxwp = 0;
+
+					minwp[0] = minwp[1] = minwp[2] = 0.0;
+					maxwp[0] = maxwp[1] = maxwp[2] = 0.0;
+
+					/* Look for both */
+					for (i = 0; i < nodp; i++) {
+						if (ipoints[i].p[0] < 0.001)
+							minwp[0] += ipoints[i].v[0];
+							minwp[1] += ipoints[i].v[1];
+							minwp[2] += ipoints[i].v[2]; {
+							nminwp++;
+						}
+						if (ipoints[i].p[0] > 0.999)
+							maxwp[0] += ipoints[i].v[0];
+							maxwp[1] += ipoints[i].v[1];
+							maxwp[2] += ipoints[i].v[2]; {
+							nmaxwp++;
+						}
+					}
+					if (nminwp > 0) {			/* Subtractive */
+						wp[0] = minwp[0];
+						wp[1] = minwp[1];
+						wp[2] = minwp[2];
+						nw = nminwp;
 						for (e = 0; e < p->inputChan; e++) {
-							dwhite[e] = 0.0;	/* Subractive */
+							dwhite[e] = 0.0;
 							dblack[e] = 1.0;
 						}
-					} else {
+						if (minwp[pcsy]/nminwp < (0.5 * pcsymax))
+							nw = 0;					/* Looks like a mistake */
+					}
+					if (nmaxwp > 0				/* Additive */
+					 && (nminwp == 0 || maxwp[pcsy]/nmaxwp > minwp[pcsy]/nminwp)) {
+						wp[0] = maxwp[0];
+						wp[1] = maxwp[1];
+						wp[2] = maxwp[2];
+						nw = nmaxwp;
 						for (e = 0; e < p->inputChan; e++) {
-							dwhite[e] = 1.0;		/* Additive */
+							dwhite[e] = 1.0;
 							dblack[e] = 0.0;
 						}
+						if (maxwp[pcsy]/nmaxwp < (0.5 * pcsymax))
+							nw = 0;					/* Looks like a mistake */
 					}
 					break;
 				}
+
 				default:
+					xicp->errc = 1;
+					sprintf(xicp->err,"set_icxLuLut: can't handle color space %s",
+					                           icm2str(icmColorSpaceSignature, h->colorSpace));
+					p->del((icxLuBase *)p);
+					return NULL;
 					break;
 			}
+
+			if (nw == 0) {
+				xicp->errc = 1;
+				sprintf(xicp->err,"set_icxLuLut: can't handle test points without a white patch");
+				p->del((icxLuBase *)p);
+				return NULL;
+			}
+			wp[0] /= (double)nw;
+			wp[1] /= (double)nw;
+			wp[2] /= (double)nw;
+			if (p->pcs != icSigXYZData) 	/* Convert white point to XYZ */
+				icmLab2XYZ(&icmD50, wp, wp);
 		}
 
-		if (flags & ICX_SET_WHITE	 /* White point to find */
-		 || ((flags & ICX_SET_BLACK) && (h->colorSpace == icSigCmykData))) {
-			co wcc;		/* White point to lookup */
+		if (flags & ICX_VERBOSE) {
+			double lwp[3];
+			icmXYZ2Lab(&icmD50, lwp, wp);
+			printf("Approximate White point XYZ = %f %f %f, Lab = %f %f %f\n",
+			        wp[0],wp[1],wp[2],lwp[0],lwp[1],lwp[2]);
+		}
 
-			for (e = 0; e < p->inputChan; e++)
-				wcc.p[e] = dwhite[e];
+	/* Else not ICX_SET_WHITE */
+	} else {
+		icmXYZ2Ary(wp, icmD50);		/* Set a default value - D50 */
+	}
 
-			/* Look this up through the input tables */
-			p->input(p, wcc.p, wcc.p);
+	if (h->colorSpace == icSigGrayData) {	/* Don't use device or PCS curves for monochrome */
+		p->noisluts = p->noipluts = p->nooluts = 1;
+	}
 
-			p->clutTable->interp(p->clutTable, &wcc);
+	if ((flags & ICX_VERBOSE) && (p->noisluts == 0 || p->noipluts == 0 || p->nooluts == 0))
+		printf("Creating optimised per channel curves\n");
 
-			/* Look this up through the output tables */
-			p->output(p, wcc.v, wcc.v);	
-					
-			if (p->pcs != icSigXYZData) 	/* Convert PCS to XYZ */
-				icmLab2XYZ(&icmD50, wcc.v, wcc.v);
+	/* Set the target CLUT grid resolution so in/out curves can be optimised for it */
+	for (e = 0; e < p->inputChan; e++)
+		gres[e] = p->lut->clutPoints;
 
-			rwp[0] = wcc.v[0];	/* Remember the relative XYZ white point */
-			rwp[1] = wcc.v[1];
-			rwp[2] = wcc.v[2];
+	/* Setup and then create xfit object that does most of the work */
+	{
+		int xfflags = 0;		/* xfit flags */
+		double in_min[MXDI];	/* Input value scaling minimum */
+		double in_max[MXDI];	/* Input value scaling maximum */
+		double out_min[MXDO];	/* Output value scaling minimum */
+		double out_max[MXDO];	/* Output value scaling maximum */
+		int iluord, sluord, oluord;
+		int iord[MXDI];			/* Input curve orders */
+		int sord[MXDI];			/* Input sub-grid curve orders */
+		int oord[MXDO];			/* Output curve orders */
 
-			/* Convert from aproximate relative to Absolute colorimetric */
-			wp[0] = toAbs[0][0] * wcc.v[0] + toAbs[0][1] * wcc.v[1]
-			                               + toAbs[0][2] * wcc.v[2];
-			wp[1] = toAbs[1][0] * wcc.v[0] + toAbs[1][1] * wcc.v[1]
-			                               + toAbs[1][2] * wcc.v[2];
-			wp[2] = toAbs[2][0] * wcc.v[0] + toAbs[2][1] * wcc.v[1]
-			                               + toAbs[2][2] * wcc.v[2];
+		optcomb tcomb = oc_ipo;	/* Create all by default */
 
-			if (flags & ICX_VERBOSE) {
-				double labwp[3];
-				icmXYZ2Lab(&icmD50, labwp, wp);
-				printf("White point XYZ = %f %f %f, Lab = %f %f %f\n",
-				        wp[0],wp[1],wp[2],labwp[0],labwp[1],labwp[2]);
+		if ((xf = CAT2(new_, xfit)()) == NULL) {
+			p->pp->errc = 2;
+			sprintf(p->pp->err,"Creation of xfit object failed");
+			p->del((icxLuBase *)p);
+			return NULL;
+		}
+			
+		/* Setup for optimising run */
+		if (p->noisluts)
+			tcomb &= ~oc_i;
+
+		if (p->noipluts)
+			tcomb &= ~oc_p;
+
+		if (p->nooluts)
+			tcomb &= ~oc_o;
+
+		if (flags & ICX_VERBOSE)
+			xfflags |= XFIT_VERB;
+
+		if (flags & ICX_SET_WHITE) {
+			xfflags |= XFIT_OUT_WP_REL;
+			if (p->pcs != icSigXYZData)
+				xfflags |= XFIT_OUT_LAB;
+		}
+
+		/* With current B2A code, make sure a & b curves */
+		/* pass through zero. */
+		if (p->pcs == icSigLabData) {
+			xfflags |=XFIT_OUT_ZERO;
+		}
+
+		/* Let xfit create the clut */
+		xfflags |= XFIT_MAKE_CLUT;
+
+		/* Set the curve orders for input (device) and output (PCS) */
+		if (quality >= 3) {				/* Ultra high */
+			iluord = 25;			
+			sluord = 4;			
+			oluord = 25;			
+		} else if (quality == 2) {		/* High */
+			iluord = 20;			
+			sluord = 3;			
+			oluord = 20;			
+		} else if (quality == 1) {		/* Medium */
+			iluord = 17;			
+			sluord = 2;			
+			oluord = 17;			
+		} else {						/* Low */
+			iluord = 10;			
+			sluord = 1;			
+			oluord = 10;			
+		}
+		for (e = 0; e < p->inputChan; e++) {
+			iord[e] = iluord;
+			sord[e] = sluord;
+			in_min[e] = p->inmin[e];
+			in_max[e] = p->inmax[e];
+		}
+
+		for (f = 0; f < p->outputChan; f++) {
+			oord[f] = oluord;
+			out_min[f] = p->outmin[f];
+			out_max[f] = p->outmax[f];
+
+			/* Hack to prevent a convex L curve pushing */
+			/* the clut L values above the maximum value */
+			/* that can be represented, causing clipping. */
+			/* Do this by making sure that the L curve pivots */
+			/* through 100.0 to 100.0 */
+			if (f == 0 && p->pcs == icSigLabData) {
+				if (out_min[f] < 0.0001 && out_max[f] > 100.0) {
+					out_max[f] = 100.0;	
+				}
+			}
+		}
+
+		/* Create input, sub and output per channel curves (if configured), */
+		/* adjust for white point to make relative (if configured), */
+		/* and create clut rspl using xfit class. */
+		/* The true white point for the returned curves and rspl is returned. */
+		if (xf->fit(xf, xfflags, p->inputChan, p->outputChan,
+			rsplflags, wp, dwhite, 
+		    ipoints, nodp, in_min, in_max, gres, out_min, out_max,
+		    smooth, oavgdev, iord, sord, oord, tcomb,
+		   (void *)p, xfit_to_de2, xfit_to_dde2) != 0) {
+			p->pp->errc = 2;
+			sprintf(p->pp->err,"xfit fitting failed");
+			xf->del(xf);
+			p->del((icxLuBase *)p);
+			return NULL;
+		}  
+
+		/* - - - - - - - - - - - - - - - */
+		/* Set the xicc input curve rspl */
+		for (e = 0; e < p->inputChan; e++) {
+			curvectx cx;
+	
+			cx.xf = xf;
+			cx.oix = -1;
+			cx.iix = e;
+
+			if ((p->inputTable[e] = new_rspl(1, 1)) == NULL) {
+				p->pp->errc = 2;
+				sprintf(p->pp->err,"Creation of input table rspl failed");
+				xf->del(xf);
+				p->del((icxLuBase *)p);
+				return NULL;
 			}
 
+			p->inputTable[e]->set_rspl(p->inputTable[e], 0,
+			           (void *)&cx, set_linfunc,
+    			       &p->ninmin[e], &p->ninmax[e],
+			           (int *)&p->lut->inputEnt,
+			           &p->ninmin[e], &p->ninmax[e]);
 		}
 
+		/* - - - - - - - - - - - - - - - */
+		/* Set the xicc output curve rspl */
+		for (f = 0; f < p->outputChan; f++) {
+			curvectx cx;
+
+			cx.xf = xf;
+			cx.iix = -1;
+			cx.oix = f;
+
+			if ((p->outputTable[f] = new_rspl(1, 1)) == NULL) {
+				p->pp->errc = 2;
+				sprintf(p->pp->err,"Creation of output table rspl failed");
+				xf->del(xf);
+				p->del((icxLuBase *)p);
+				return NULL;
+			}
+
+			p->outputTable[f]->set_rspl(p->outputTable[f], 0,
+		                (void *)&cx, set_linfunc,
+			            &p->noutmin[f], &p->noutmax[f],
+			            (int *)&p->lut->outputEnt,
+			            &p->noutmin[f], &p->noutmax[f]);
+
+		}
+	}
+
+	if (flags & ICX_VERBOSE)
+		printf("Creating fast inverse input lookups\n");
+
+	/* Create rspl based reverse input lookups used in ink limit function. */
+	for (e = 0; e < p->inputChan; e++) {
+		int res = 256;
+		curvectx cx;
+
+		cx.xf = xf;
+		cx.oix = -1;
+		cx.iix = e;
+
+		if ((p->revinputTable[e] = new_rspl(1, 1)) == NULL) {
+			p->pp->errc = 2;
+			sprintf(p->pp->err,"Creation of reverse input table rspl failed");
+			xf->del(xf);
+			p->del((icxLuBase *)p);
+			return NULL;
+		}
+		p->revinputTable[e]->set_rspl(p->revinputTable[e], 0,
+		           (void *)&cx, icxLuLut_invinput_func,
+		           &p->ninmin[e], &p->ninmax[e], &res, &p->ninmin[e], &p->ninmax[e]);
+	}
+
+
+	if (flags & ICX_VERBOSE)
+		printf("Compensate scattered data for input curves\n");
+
+	/* ------------------------------- */
+	/* Set clut lookup table from xfit */
+	p->clutTable = xf->clut;
+	xf->clut = NULL;
+
+	/* Setup all the clipping, ink limiting and auxiliary stuff, */
+	/* in case a reverse call is used. Need to avoid relying on inking */
+	/* stuff that makes use of the white/black points, since they haven't */
+	/* been set up properly yet. */
+	if (setup_ink_icxLuLut(p, ink, 0) != 0) {
+		xf->del(xf);
+		p->del((icxLuBase *)p);
+		return NULL;
+	}
+
+	/* Deal with finalizing white/black points */
+	if (flags & (ICX_SET_WHITE | ICX_SET_BLACK)) {
+
+		if ((flags & ICX_SET_WHITE) && (flags & ICX_VERBOSE)) {
+			double lwp[3];
+			icmXYZ2Lab(&icmD50, lwp, wp);
+			printf("White point XYZ = %f %f %f, Lab = %f %f %f\n",
+			        wp[0],wp[1],wp[2],lwp[0],lwp[1],lwp[2]);
+		}
+
+		/* Lookup the black point */
 		if (flags & ICX_SET_BLACK) { /* Black Point Tag: */
 			co bcc;
+
+			if (flags & ICX_VERBOSE)
+				printf("Find black point\n");
 
 			/* For CMYK devices, we choose a black point that is in */
 			/* the same Lab vector direction as K, with the minimum L value. */
@@ -2887,17 +2754,18 @@ int                quality			/* Quality metric, 0..3 */
 				/* Setup callback function context */
 				bfs.p = p;
 
+				/* !!! we should use an accessor funcion of xfit !!! */
 				for (i = 0; i < 3; i++) {
 					for (j = 0; j < 3; j++) {
-						bfs.fromAbs[i][j] = fromAbs[i][j];
-						bfs.toAbs[i][j]   = toAbs[i][j];
+						bfs.toAbs[i][j] = xf->toAbs[i][j];
 					}
 				}
 
 				/* Lookup abs Lab value of white point */
 				icmXYZ2Lab(&icmD50, bfs.p1, wp);
 
-				/* Now figure abs Lab value of K only */
+				/* Now figure abs Lab value of K only, as the direction */
+				/* to use for the rich black. */
 				for (e = 0; e < p->inputChan; e++)
 					bcc.p[e] = 0.0;
 				bcc.p[3] = 1.0;
@@ -2909,20 +2777,14 @@ int                quality			/* Quality metric, 0..3 */
 				if (p->pcs != icSigXYZData) 	/* Convert PCS to XYZ */
 					icmLab2XYZ(&icmD50, bcc.v, bcc.v);
 
-				/* Convert from aproximate relative to Absolute colorimetric */
-				tt[0] = toAbs[0][0] * bcc.v[0] + toAbs[0][1] * bcc.v[1]
-				                               + toAbs[0][2] * bcc.v[2];
-				tt[1] = toAbs[1][0] * bcc.v[0] + toAbs[1][1] * bcc.v[1]
-				                               + toAbs[1][2] * bcc.v[2];
-				tt[2] = toAbs[2][0] * bcc.v[0] + toAbs[2][1] * bcc.v[1]
-				                               + toAbs[2][2] * bcc.v[2];
-
+				/* Convert from relative to Absolute colorimetric */
+				icmMulBy3x3(tt, xf->toAbs, bcc.v);
 				icmXYZ2Lab(&icmD50, bfs.p2, tt); /* Convert K only black point to Lab */
  
 				if (flags & ICX_VERBOSE)
 					printf("K only value (Lab) = %f %f %f\n",bfs.p2[0], bfs.p2[1], bfs.p2[2]);
 
-				/* Find the device black point */
+				/* Find the device black point using optimization */
 				/* Do several trials to avoid local minima */
 				for (j = 0; j < p->inputChan; j++) { 
 					tt[j] = bcc.p[j] = 0.5;		/* Starting point */
@@ -2975,13 +2837,8 @@ int                quality			/* Quality metric, 0..3 */
 			if (p->pcs != icSigXYZData) 	/* Convert PCS to XYZ */
 				icmLab2XYZ(&icmD50, bcc.v, bcc.v);
 
-			/* Convert from aproximate relative to Absolute colorimetric */
-			bp[0] = toAbs[0][0] * bcc.v[0] + toAbs[0][1] * bcc.v[1]
-			                               + toAbs[0][2] * bcc.v[2];
-			bp[1] = toAbs[1][0] * bcc.v[0] + toAbs[1][1] * bcc.v[1]
-			                               + toAbs[1][2] * bcc.v[2];
-			bp[2] = toAbs[2][0] * bcc.v[0] + toAbs[2][1] * bcc.v[1]
-			                               + toAbs[2][2] * bcc.v[2];
+			/* Convert from relative to Absolute colorimetric */
+			icmMulBy3x3(bp, xf->toAbs, bcc.v);
 
 			/* Got XYZ black point in bp[] */
 			if (flags & ICX_VERBOSE) {
@@ -2999,12 +2856,14 @@ int                quality			/* Quality metric, 0..3 */
 			           icco, icSigMediaWhitePointTag)) == NULL)  {
 				xicp->errc = 1;
 				sprintf(xicp->err,"icx_set_white_black: couldn't find white tag");
+				xf->del(xf);
 				p->del((icxLuBase *)p);
 				return NULL;
 			}
 			if (wo->ttype != icSigXYZArrayType) {
 				xicp->errc = 1;
 				sprintf(xicp->err,"icx_set_white_black: white tag has wrong type");
+				xf->del(xf);
 				p->del((icxLuBase *)p);
 				return NULL;
 			}
@@ -3021,12 +2880,14 @@ int                quality			/* Quality metric, 0..3 */
 			           icco, icSigMediaBlackPointTag)) == NULL)  {
 				xicp->errc = 1;
 				sprintf(xicp->err,"icx_set_white_black: couldn't find black tag");
+				xf->del(xf);
 				p->del((icxLuBase *)p);
 				return NULL;
 				}
 			if (wo->ttype != icSigXYZArrayType) {
 				xicp->errc = 1;
 				sprintf(xicp->err,"icx_set_white_black: black tag has wrong type");
+				xf->del(xf);
 				p->del((icxLuBase *)p);
 				return NULL;
 			}
@@ -3042,75 +2903,18 @@ int                quality			/* Quality metric, 0..3 */
 			p->plu->init_wh_bk(p->plu);
 		}
 
-		/* Now fixup the clut to make this Lut exactly relative */
-		if (flags & ICX_SET_WHITE) {
-			icmXYZNumber nrwp;
-			relativectx cx;
-
-			if (flags & ICX_VERBOSE)
-				printf("Fixup clut for white point\n");
-
-			icmAry2XYZ(nrwp, rwp);
-
-			cx.x = p; 		/* Object being created */
-			cx.h = h;		/* Pointer to icc header */
-
-			/* Create aprox relative to accurate relative correction matrix */
-			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, nrwp, cx.mat);
-
-			/* Adjust the clut node values to fix white point */
-			p->clutTable->re_set_rspl(
-				p->clutTable,		/* this */
-				0,					/* Combination of flags */
-				(void *)&cx,		/* Opaque function context */
-				reset_relative_func /* Function to set from */
-			);
-
-			/* Verify the white point */
-			if (flags & ICX_VERBOSE) {
-				double chlwp[3];
-				double chwp[3];			/* Check white point */
-				double ch2Abs[3][3];	/* Check to abs from relative */
-				icmXYZNumber nwp;
-				co wcc;					/* White point to lookup */
-
-				icmAry2XYZ(nwp, wp);
-
-				/* Accurate relative to absolute conversion matrix */
-				icmChromAdaptMatrix(ICM_CAM_BRADFORD, nwp, icmD50, ch2Abs);
-	
-				for (e = 0; e < p->inputChan; e++)
-					wcc.p[e] = dwhite[e];
-
-
-				p->input(p, wcc.p, wcc.p);
-				p->clutTable->interp(p->clutTable, &wcc);
-				p->output(p, wcc.v, wcc.v);	
-						
-				if (p->pcs != icSigXYZData) 	/* Convert PCS to XYZ */
-					icmLab2XYZ(&icmD50, wcc.v, wcc.v);
-	
-				/* Convert from relative to Absolute colorimetric */
-				chwp[0] = ch2Abs[0][0] * wcc.v[0] + ch2Abs[0][1] * wcc.v[1]
-				                               + ch2Abs[0][2] * wcc.v[2];
-				chwp[1] = ch2Abs[1][0] * wcc.v[0] + ch2Abs[1][1] * wcc.v[1]
-				                               + ch2Abs[1][2] * wcc.v[2];
-				chwp[2] = ch2Abs[2][0] * wcc.v[0] + ch2Abs[2][1] * wcc.v[1]
-				                               + ch2Abs[2][2] * wcc.v[2];
-
-				icmXYZ2Lab(&icmD50, chlwp, chwp);
-
-				printf("Check White point XYZ = %f %f %f, Lab = %f %f %f\n",
-				        chwp[0],chwp[1],chwp[2],chlwp[0],chlwp[1],chlwp[2]);
-			}
-		}
-
-		/* Setup the clut clipping, ink limiting and auxiliary stuff */
-		if (setup_ink_icxLuLut(p, ink, 1) != 0) {	/* re_set_rspl will have invalidated */
+		/* Setup the clut clipping, ink limiting and auxiliary stuff again */
+		/* since re_set_rspl will have invalidated */
+		if (setup_ink_icxLuLut(p, ink, 1) != 0) {
+			xf->del(xf);
 			p->del((icxLuBase *)p);
 			return NULL;
 		}
 	}
+
+	/* Done with xfit now */
+	xf->del(xf);
+	xf = NULL;
 
 	if (setup_clip_icxLuLut(p) != 0) {
 		p->del((icxLuBase *)p);
@@ -3118,9 +2922,6 @@ int                quality			/* Quality metric, 0..3 */
 	}
 
 	/* ------------------------------- */
-
-	/* Free the coordinate lists */
-	free(points);
 
 	/* Use our rspl's to set the icc Lut AtoB table values. */
 	/* Use helper function to do the hard work. */

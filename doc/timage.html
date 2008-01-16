@@ -24,6 +24,12 @@ cube can also be created. <br>
 <br>
 <img alt="RGB rectangular surface" src="surface.jpg"
  style="width: 200px; height: 148px;"><br>
+<br>
+A third type is a set of stepped rectangles that explore the L*a*b*
+space, useful for testing profiles B2A tables (-p 6):<br>
+<br>
+<img alt="Lab steps image" src="LabSteps.jpg"
+ style="width: 150px; height: 150px;"><br>
 <h3>Usage Summary</h3>
 <small><span style="font-family: monospace;"></span><span
  style="font-family: monospace;"></span><span
@@ -32,9 +38,10 @@ cube can also be created. <br>
 <span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Verbose</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-t&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Generate rectangular boundary test chart</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-r
+Generate rectangular boundary test chart<br>
+&nbsp;-p steps&nbsp;&nbsp;&nbsp;&nbsp; Generate a colorspace step chart
+with L* steps^2<br style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;-r
 res&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Resolution
 in DPI (default 200)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -52,7 +59,9 @@ The<b> -v</b> flag increases verbosity.&nbsp;&nbsp; <br>
 <br>
 The default behaviour is to create the two hexagon plus grey wedge test
 image. If the <span style="font-weight: bold;">-t</span> flag is used,
-the alternate single rectangular surface test image&nbsp; is generated.<br>
+the alternate single rectangular surface test image&nbsp; is generated.
+If the <span style="font-weight: bold;">-p steps</span> parameter is
+given, than an L*a*b* test chart is generated.<br>
 <br>
 The dots per inch of the image can be set using the <span
  style="font-weight: bold;">-r</span> parameter. Increasing this,
@@ -68,12 +77,19 @@ Normally an 8 bit per color component image is generated. If the <span
 component image will be generated, giving smoother blends, particularly
 if a higher resolution (DPI) image is created.<br>
 <br>
-The test images are normally the surface colors of the RGB colorspace
+The hexagon and surface test images are normally the surface colors of
+the RGB colorspace
 cube. If a percentage greater than 0% is given as an argument to the <span
  style="font-weight: bold;">-g</span> option, a test chart composed of
 colors away from the RGB cube surface, towards the center grey point
 will be generated. 100% will generate a completely grey image. Values
 of 10, 20 to 50% are more usual.<br>
+<br>
+The L*a*b* step chart explores the range of L*a*b* values that are
+handled by an L*a*b* PCS B2A table, with the L* stepping from 0 to 100
+in steps from the top left to the bottom right square, while the a*
+values range from -127 to 127 left to right in each square, and the b*
+values range from -127 to 127 bottom to top in each square.<br>
 <br>
 The last argument on the command line is the name of the TIFF file to
 save the resulting image to.<br>

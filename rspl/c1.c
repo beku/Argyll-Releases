@@ -192,7 +192,8 @@ int main(int argc, char *argv[]) {
 		           low, high, gres,		/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
 		           smooth,				/* Smoothing */
-		           avgdev);				/* Average deviation */
+		           avgdev,				/* Average deviation */
+		           NULL);				/* iwidth */
 
 
 		/* Display the result */
@@ -251,7 +252,8 @@ int main(int argc, char *argv[]) {
 			           low, high, gres,		/* Low, high, resolution of grid */
 			           NULL, NULL,			/* Default data scale */
 			           smooth,				/* Smoothing */
-			           avgdev);				/* Average deviation */
+			           avgdev,				/* Average deviation */
+			           NULL);				/* iwidth */
 	
 				/* Get the result */
 				for (i = 0; i < XRES; i++) {

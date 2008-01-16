@@ -68,7 +68,7 @@ static inst_code i1pro_interp_code(i1pro *p, i1pro_code ec);
 /* If it's a serial port, use the baud rate given, and timeout in to secs */
 /* Return DTP_COMS_FAIL on failure to establish communications */
 static inst_code
-i1pro_init_coms(inst *pp, int port, baud_rate br, double tout) {
+i1pro_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	i1pro *p = (i1pro *) pp;
 	char buf[16];
 	int rsize;
@@ -206,7 +206,7 @@ inst_cal_type i1pro_needs_calibration(inst *pp) {
 /* Request an instrument calibration. */
 /* This is use if the user decides they want to do a calibration, */
 /* in anticipation of a calibration (needs_calibration()) to avoid */
-/* requiring one during measurement, or in response to measureing */
+/* requiring one during measurement, or in response to measuring */
 /* returning inst_needs_cal. Initially us an inst_cal_cond of inst_calc_none, */
 /* and then be prepared to setup the right conditions, or ask the */
 /* user to do so, each time the error inst_cal_setup is returned. */
@@ -253,7 +253,7 @@ i1pro_interp_error(inst *pp, i1pro_code ec) {
 			return "Calibration retry with correct setup is needed";
 
 		case I1PRO_OK:
-			return "No error";
+			return "No device error";
 
 		case I1PRO_DATA_COUNT:
 			return "EEProm data count unexpectedly small";
@@ -535,6 +535,12 @@ i1pro_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 	i1pro *p = (i1pro *)pp;
 	char buf[MAX_MES_SIZE];
 	inst_code ev = inst_ok;
+
+	/* Ignore these modes - not applicable, but be nice. */
+	if (m == inst_opt_disp_crt
+	 || m == inst_opt_disp_lcd) {
+		return inst_ok;
+	}
 
 	if (m == inst_opt_noautocalib) {
 		i1pro_set_noautocalib(p, 1);

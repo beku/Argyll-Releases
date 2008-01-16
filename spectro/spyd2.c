@@ -1201,7 +1201,7 @@ spyd2_download_pld(
 /* If it's a serial port, use the baud rate given, and timeout in to secs */
 /* Return DTP_COMS_FAIL on failure to establish communications */
 static inst_code
-spyd2_init_coms(inst *pp, int port, baud_rate br, double tout) {
+spyd2_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	spyd2 *p = (spyd2 *) pp;
 	char buf[16];
 	int rsize;
@@ -1299,6 +1299,8 @@ spyd2_init_inst(inst *pp) {
 		if (p->debug) fprintf(stderr,"spyd2: instrument inited OK\n");
 	}
 
+	p->itype = instSpyder2;
+
 	if (p->verb) {
 		printf("Instrument Type:   Spyder 2\n");
 		printf("Serial Number:     %s\n",p->serno);
@@ -1371,7 +1373,7 @@ inst_cal_type spyd2_needs_calibration(inst *pp) {
 /* Request an instrument calibration. */
 /* This is use if the user decides they want to do a calibration, */
 /* in anticipation of a calibration (needs_calibration()) to avoid */
-/* requiring one during measurement, or in response to measureing */
+/* requiring one during measurement, or in response to measuring */
 /* returning inst_needs_cal. Initially us an inst_cal_cond of inst_calc_none, */
 /* and then be prepared to setup the right conditions, or ask the */
 /* user to do so, each time the error inst_cal_setup is returned. */
@@ -1441,7 +1443,7 @@ spyd2_interp_error(inst *pp, int ec) {
 			return "User hit a Command key";
 
 		case SPYD2_OK:
-			return "No error";
+			return "No device error";
 
 		case SPYD2_BADSTATUS:
 			return "Too many retries waiting for status to come good";
@@ -1460,7 +1462,7 @@ spyd2_interp_error(inst *pp, int ec) {
 		case SPYD2_BAD_EE_SIZE:
 			return "Serial EEProm read size > 256";
 		case SPYD2_NO_PLD_PATTERN:
-			return "No PLD pattern is available";
+			return "No PLD firmware pattern is available (have you run spyd2en ?)";
 		case SPYD2_NO_COMS:
 			return "Communications hasn't been established";
 		case SPYD2_NOT_INITED:

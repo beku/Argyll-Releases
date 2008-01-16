@@ -71,7 +71,7 @@ Use emissive measurement mode (absolute results)</span></small><br>
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Use ambient measurement mode (absolute results)</span></small><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="y">-y
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#y">-y
 c|l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Display type, c = CRT, l = LCD</span></font><br
  style="font-family: monospace;">
@@ -125,14 +125,25 @@ u&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&
 U.V. Cut<br>
 &nbsp;<a href="#F">-F extrafilterfile</a>&nbsp;&nbsp;&nbsp; Apply extra
 filter compensation file<br>
-</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="#x">-x</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Display Yxy instead of Lab<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="#T">-T</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Display correlated color temperatures</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#H">-H</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use high resolution spectrum mode (if
-available)</span></font><br>
+available)<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="dispcal.html#W">-W n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><br>
 <small><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="printread.html#D">-D [level]</a><span
+ style="font-family: monospace;" href="chartread.html#D">-D [level]</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print
 debug diagnostics to stderr</span></small><br>
@@ -143,7 +154,7 @@ Optional file to save reading results<br style="font-family: monospace;">
  style="font-family: monospace;"></span></small><br>
 <h3>Usage Details and Discussion</h3>
 <b>spotread</b> operates in a similar fashion to <a
- href="printread.html"> printread</a>, but allows the reading of a
+ href="chartread.html"> chartread</a>, but allows the reading of a
 succession
 of single color values. This can be useful in diagnosing issues with
 profile
@@ -152,7 +163,7 @@ and operation.<br>
 <br>
 <a name="v"></a>The <b>-v</b> flag causes extra information to be
 printed out during
-printread operation.<br>
+chartread operation.<br>
 <br>
 <a name="s"></a>The <b>-s</b> flag enables the printing out spectral
 reflectance/transmittance values, if the instrument supports this.<br>
@@ -223,7 +234,8 @@ support this mode. Values returned are absolute.<br>
 allows measuring
 in ambient illumination mode using instruments that
 support this mode (i.e. Eye-One Display 2). Values returned are
-absolute, and include the color temperature. If the instrument does not
+absolute, and include the various color temperatures (see <span
+ style="font-weight: bold;">-T</span>). If the instrument does not
 support ambient mode, emissive mode will be used instead.<br>
 <br>
 <a name="y"></a>&nbsp; Display type. Some colorimeters (like the DTP94
@@ -275,10 +287,31 @@ spectral readings through a medium of some kind, when in emission mode.
 This is useful in allowing for such things as telescopic adapters that
 use a glass of acrylic lens in the optical path.<br>
 <br>
+<a name="x"></a>The <b>-x</b> option causes the reading to be
+displayed as XYZ and Yxy values, rather than the default XYZ and L*a*b*<br>
+<br>
+<a name="T"></a>The <b>-T</b> option causes various color temperatures
+to be displayed. Three color temperatures will be shown. The first is
+the classic Correlated Color Temperature, which is the black body
+(Plankian) color closest to the measured color in the CIE 1960 UCS
+color space. The second is the black body (Plankian) color that has a
+minimum CIEDE2000 error to the measured color. The last is the daylight
+color that has a minimum CIEDE2000 error to the measured color. The
+delta E between the closest temperature and the measured color is also
+shown for each.<br>
+<br>
 <a name="H"></a> The -<span style="font-weight: bold;">H</span> option
 turns on high resolution spectral mode, if the instrument supports it.
 See <a href="instruments.html">Operation of particular instruments</a>
 for more details.<br>
+<br>
+<a name="W"></a>The <b>-W</b> <span style="font-weight: bold;">n|h|x</span>
+parameter overrides the default serial communications
+flow control setting. The value <span style="font-weight: bold;">n</span>
+turns all flow control off, <span style="font-weight: bold;">h</span>
+sets hardware handshaking, and <span style="font-weight: bold;">x</span>
+sets Xon/Xoff handshaking. This commend may be useful in workaround
+serial communications issues with some systems and cables. <br>
 <br>
 <a name="D"></a>The <b>-D</b> flag causes communications
 and other instrument diagnostics to be printed to stdout. A level can

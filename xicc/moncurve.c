@@ -33,21 +33,20 @@
 #include "numlib.h"
 #include "moncurve.h"
 
-#define POWTOL 1e-4			/* Powell optimiser tollerance (was 1e-5 ?) */
+#define POWTOL 1e-5			/* Powell optimiser tollerance (was 1e-5 ?) */
 #define MAXITS 10000
 
 #undef TEST_PDE				/* Ckeck partial derivative calcs */
 
-/* SHAPE_BASE doesn't seem extremely critical.  It is centered in +/- 1 magnitude */
-/* 10 x more filters out noise reasonably heaviliy, 10 x less gives noticable */
-/* overshoot Range 0.00001 .. 0.001 */
-/* SHAPE_HBASE is more critical. */
-/* Range 0.00005 .. 0.001 */
-#define SHAPE_BASE  0.00001		/* 0 & 1 harmonic weight */
-#define SHAPE_HBASE 0.00005		/* 2nd and higher additional weight */
+/* Normalization factors for an average data point error squared, scale 100 */
+#define HW01		0.2		/* 0 & 1 harmonic weights */
+#define HBREAK	    4		/* Harmonic that has HWBR */
+#define HWBR        0.8		/* Base weight of harmonics HBREAK up */
+#define HWINC       0.4		/* Increase in weight for each harmonic above HWBR */
 
 static void mcv_del(mcv *p);
 static void mcv_fit(mcv *p, int verb, int order, mcvco *d, int ndp, double smooth);
+static void mcv_fit_2(mcv *p, int verb, int order, mcvco *d, int ndp, double smooth);
 static void mcv_force_0(mcv *p, double target);
 static void mcv_force_1(mcv *p, double target);
 static void mcv_force_scale(mcv *p, double target);
@@ -87,7 +86,20 @@ mcv *new_mcv(void) {
 	return p;
 }
 
+/* Create a new, uninitialised mcv without offset and scale parameters. */
+/* Note thate black and white points aren't allocated */
+mcv *new_mcv_noos(void) {
+	mcv *p;
+
+	if ((p = new_mcv()) == NULL)
+		return p;
+
+	p->noos = 2;
+	return p;
+}
+
 /* Create a new mcv initiated with the given parameters */
+/* (Assuming parameters always includes offset and scale) */
 mcv *new_mcv_p(double *pp, int np) {
 	int i;
 	mcv *p;
@@ -120,39 +132,42 @@ static void mcv_del(mcv *p) {
 static double mcv_opt_func(void *edata, double *v) {
 	mcv *p = (mcv *)edata;
 	double totw = 0.0;
-	double rv = 0.0, smv;
+	double ev = 0.0, rv, smv;
 	double out;
 	int i;
 
 #ifdef NEVER
 	printf("params =");
-	for (i = 0; i < p->luord; i++)
+	for (i = 0; i < p->luord-p->noos; i++)
 		printf(" %f",v[i]);
 	printf("\n");
+	printf("ndp = %d\n",p->ndp);
 #endif
 
 	/* For all our data points */
 	for (i = 0; i < p->ndp; i++) {
-		double ev;
+		double del;
 
 		/* Apply our function */
 		out = p->interp_p(p, v, p->d[i].p);
 
-		ev = out - p->d[i].v;
+		del = out - p->d[i].v;
 
-		rv += p->d[i].w * ev * ev;
+		ev += p->d[i].w * del * del;
 		totw += p->d[i].w;
 	}
 
 	/* Normalise error to be an average delta E squared */
-	rv /= totw;
+	totw = (100.0 * 100.0)/(p->dra * p->dra * totw);
+	ev *= totw;
 
 	/* Sum with shaper parameters squared, to */
 	/* minimise unsconstrained "wiggles" */
-	rv += smv = mcv_shweight_p(p, v, p->smooth);
+	smv = mcv_shweight_p(p, v, p->smooth);
+	rv = ev + smv;
 
 #ifdef NEVER
-	printf("rv = %f (%f)\n",rv,smv);
+	printf("rv = %f (er %f + sm %f)\n",rv,ev,smv);
 #endif
 	return rv;
 }
@@ -161,50 +176,52 @@ static double mcv_opt_func(void *edata, double *v) {
 static double mcv_dopt_func(void *edata, double *dv, double *v) {
 	mcv *p = (mcv *)edata;
 	double totw = 0.0;
-	double rv = 0.0, smv;
+	double ev = 0.0, rv, smv;
 	double out;
 	int i, j;
 
 #ifdef NEVER
 	printf("params =");
-	for (i = 0; i < p->luord; i++)
+	for (i = 0; i < (p->luord-p->noos); i++)
 		printf(" %f",v[i]);
 	printf("\n");
 #endif
 
 	/* Zero the dv's */
-	for (j = 0; j < p->luord; j++)
+	for (j = 0; j < (p->luord-p->noos); j++)
 		dv[j] = 0.0;
 
 	/* For all our data points */
 	for (i = 0; i < p->ndp; i++) {
-		double ev;
+		double del;
 
 		/* Apply our function with dv's */
 		out = p->dinterp_p(p, v, p->dv, p->d[i].p);
 
-		ev = out - p->d[i].v;
-		rv += p->d[i].w * ev * ev;
+		del = out - p->d[i].v;
+		ev += p->d[i].w * del * del;
 
 		/* Sum the dv's */
-		for (j = 0; j < p->luord; j++)
-			dv[j] += p->d[i].w * 2.0 * ev * p->dv[j];
+		for (j = 0; j < (p->luord-p->noos); j++)
+			dv[j] += p->d[i].w * 2.0 * del * p->dv[j];
 
 		totw += p->d[i].w;
 	}
 
 	/* Normalise error to be an average delta E squared */
-	rv /= totw;
-	for (j = 0; j < p->luord; j++)
-		dv[j] /= totw; 
+	totw = (100.0 * 100.0)/(p->dra * p->dra * totw);
+	ev *= totw;
+	for (j = 0; j < (p->luord-p->noos); j++)
+		dv[j] *= totw; 
 
 	/* Sum with shaper parameters squared, to */
 	/* minimise unsconstrained "wiggles", */
 	/* with partial derivatives */
-	rv += smv = mcv_dshweight_p(p, v, dv, p->smooth);
+	smv = mcv_dshweight_p(p, v, dv, p->smooth);
+	rv = ev + smv;
 
 #ifdef NEVER
-	printf("drv = %f (%f)\n",rv,smv);
+	printf("drv = %f (er %f + sm %f)\n",rv,ev,smv);
 #endif
 	return rv;
 }
@@ -217,7 +234,7 @@ static double mcv_dopt_func(void *edata, double *dv, double *v) {
 static double mcv_opt_func(void *edata, double *v) {
 	mcv *p = (mcv *)edata;
 	int i;
-	double dv[200];
+	double dv[500];
 	double rv, drv;
 	double trv;
 	
@@ -228,7 +245,7 @@ static double mcv_opt_func(void *edata, double *v) {
 		printf("######## RV MISMATCH is %f should be %f ########\n",rv,drv);
 
 	/* Check each parameter delta */
-	for (i = 0; i < p->luord; i++) {
+	for (i = 0; i < (p->luord-p->noos); i++) {
 		double del;
 
 		v[i] += 1e-7;
@@ -257,6 +274,7 @@ static void mcv_fit(mcv *p,
 	int i;
 	double *sa;		/* Search area */
 	double *pms;	/* Parameters to optimise */
+	double min, max;
 
 	p->verb = verb;
 	p->smooth = smooth;
@@ -273,19 +291,28 @@ static void mcv_fit(mcv *p,
 	if ((p->dv = (double *)calloc(p->luord, sizeof(double))) == NULL)
 		error ("Malloc failed");
 
-	/* Set offset and scale to reasonable values */
-	p->pms[0] = 1e38;			/* Locate min, and make that offset */
-	p->pms[1] = -1e38;			/* Locate max */
+	/* Establish the range of data values */
+	min = 1e38;			/* Locate min, and make that offset */
+	max = -1e38;			/* Locate max */
 	for (i = 0; i < ndp; i++) {
-		if (d[i].v < p->pms[0])
-			p->pms[0] = d[i].v;
-		if (d[i].v > p->pms[1])
-			p->pms[1] = d[i].v;
+		if (d[i].v < min)
+			min = d[i].v;
+		if (d[i].v > max)
+			max = d[i].v;
 #ifdef DEBUG
 		printf("point %d is %f %f\n",i,d[i].p,d[i].v);
 #endif
 	}
-	p->pms[1] -= p->pms[0];		/* make max into scale */
+
+	if (p->noos) {
+		p->pms[0] = 0.0;
+		p->pms[1] = 1.0;
+	} else {
+		/* Set offset and scale to reasonable values */
+		p->pms[0] = min;
+		p->pms[1] = max - min;
+	}
+	p->dra = max - min;
 
 	/* Use powell to minimise the sum of the squares of the */
 	/* input points to the curvem, plus a parameter damping factor. */
@@ -296,10 +323,10 @@ static void mcv_fit(mcv *p,
 		sa[i] = 0.2;
 
 #ifdef NEVER
-	if (powell(NULL, p->luord, p->pms, sa, POWTOL, MAXITS, mcv_opt_func, (void *)p) != 0)
+	if (powell(&p->resid, p->luord-p->noos, p->pms+p->noos, sa+p->noos, POWTOL, MAXITS, mcv_opt_func, (void *)p) != 0)
 		error ("Mcv fit powell failed");
 #else
-	if (conjgrad(NULL, p->luord, p->pms, sa, POWTOL, MAXITS, mcv_opt_func, mcv_dopt_func, (void *)p) != 0)
+	if (conjgrad(&p->resid, p->luord-p->noos, p->pms+p->noos, sa+p->noos, POWTOL, MAXITS, mcv_opt_func, mcv_dopt_func, (void *)p) != 0)
 		error ("Mcv fit conjgrad failed");
 #endif
 
@@ -352,7 +379,8 @@ static void mcv_force_scale(
 }
 
 /* Return the number of parameters and the parameters in */
-/* an allocated array. free() when done */
+/* an allocated array. free() when done. */
+/* The parameters are the offset, scale, then all the other parameters */
 static int mcv_get_params(mcv *p, double **rp) {
 	double *pp;
 	int np, i;
@@ -375,7 +403,7 @@ static int mcv_get_params(mcv *p, double **rp) {
 static double mcv_interp(struct _mcv *p,
 	double vv	/* Input value */
 ) {
-	return mcv_interp_p(p, p->pms, vv);
+	return mcv_interp_p(p, p->pms + p->noos, vv);
 }
 
 /* Translate a value through backwards the curve */
@@ -387,12 +415,14 @@ static double mcv_inv_interp(struct _mcv *p,
 
 	/* Process everything in reverse order to mcv_interp */
 
-	/* Do order 0 & 1, the offset and scale */
-	if (p->luord > 0)
-		vv -= p->pms[0];
-
-	if (p->luord > 1)
-		vv /= p->pms[1];
+	if (p->noos == 0) {
+		/* Do order 0 & 1, the offset and scale */
+		if (p->luord > 0)
+			vv -= p->pms[0];
+	
+		if (p->luord > 1)
+			vv /= p->pms[1];
+	}
 
 	for (ord = p->luord-1; ord > 1; ord--) {
 		int nsec;			/* Number of sections */
@@ -424,7 +454,7 @@ static double mcv_inv_interp(struct _mcv *p,
 /* using the given parameters */
 static double mcv_interp_p(
 	mcv *p,
-	double *pms,	/* Parameters to use */
+	double *pms,	/* Parameters to use - may exclude offset and scale */
 	double vv		/* Input value */
 ) {
 	double g;
@@ -438,13 +468,13 @@ static double mcv_interp_p(
 	/*  are monotonic. The control parameter has been */
 	/*  altered to have a range from -oo to +oo rather than 0.0 to 1.0 */
 	/*  so that the search space is less non-linear. */
-	for (ord = 2; ord < p->luord; ord++) {
+	for (ord = (2 - p->noos); ord < (p->luord - p->noos); ord++) {
 		int nsec;			/* Number of sections */
 		double sec;			/* Section */
 
 		g = pms[ord];	/* Parameter */
 
-		nsec = ord-1;		/* Increase sections for each order */
+		nsec = ord-1+p->noos;	/* Increase sections for each order */
 
 		vv *= (double)nsec;
 
@@ -460,18 +490,25 @@ static double mcv_interp_p(
 		vv += sec;
 		vv /= (double)nsec;
 	}
-	/* Do order 0 & 1 */
-	if (p->luord > 1)
-		vv *= pms[1];	/* Scale */
 
-	if (p->luord > 0)
-		vv += pms[0];	/* Offset */
+	if (p->noos == 0) {
+		/* Do order 0 & 1 */
+		if (p->luord > 1)
+			vv *= pms[1];	/* Scale */
+	
+		if (p->luord > 0)
+			vv += pms[0];	/* Offset */
+	}
 
 	return vv;
 }
 
 /* Return the shaper parameters regularizing weight */
-static double mcv_shweight_p(mcv *p, double *v, double smooth) {
+static double mcv_shweight_p(
+mcv *p,
+double *pms,	/* Parameters to use - may exclude offset and scale */
+double smooth) {
+
 	double smv;
 	int i;
 
@@ -479,17 +516,23 @@ static double mcv_shweight_p(mcv *p, double *v, double smooth) {
 	/* minimise unsconstrained "wiggles" */
 	/* Note:- we start at 2, to skip offset and scale. */
 	smv = 0.0;
-	for (i = 2; i < p->luord; i++) {
-		double w, tt = v[i];
-		tt = v[i];
-		tt *= tt;
+	for (i = (2-p->noos); i < (p->luord-p->noos); i++) {
+		double w, tt;
+		int cx;				/* Curve index (skips offset & scale) */
+
+		cx = i - 2 + p->noos; 
+		tt = pms[i];
 
 		/* Weigh to supress ripples */
-		if (i <= 3) {	/* First or second curves */
-			w = SHAPE_BASE;
+		if (cx <= 1) {
+			w = HW01;
+		} else if (cx <= HBREAK) {
+			double bl = (cx - 1.0)/(HBREAK - 1.0);
+			w = (1.0 - bl) * HW01 + bl * HWBR;
 		} else {
-			w = SHAPE_BASE + (i-3) * SHAPE_HBASE * smooth;
+			w = HWBR + (cx-HBREAK) * HWINC * smooth;
 		}
+		tt *= tt;
 		smv += w * tt;
 	}
 	return smv;
@@ -498,15 +541,15 @@ static double mcv_shweight_p(mcv *p, double *v, double smooth) {
 /* Transfer function with partial derivative */
 /* with respect to the given parameters. */
 double mcv_dinterp_p(mcv *p,
-double *pms,		/* Parameters to use */
-double *dv,			/* Return derivative wrt each parameter */
+double *pms,		/* Parameters to use - may exclude offset and scale */
+double *dv,			/* Return derivative wrt each parameter - may exclude offset and scale */
 double vv			/* Source of value */
 ) {
 	double g;
 	int i, ord;
 
 	/* Process all the shaper orders from low to high. */
-	for (ord = 2; ord < p->luord; ord++) {
+	for (ord = (2-p->noos); ord < (p->luord-p->noos); ord++) {
 		double dsv;		/* del for del in g */
 		double ddv;		/* del for del in vv */
 		int nsec;		/* Number of sections */
@@ -514,7 +557,7 @@ double vv			/* Source of value */
 
 		g = pms[ord];			/* Parameter */
 
-		nsec = ord-1;	/* Increase sections for each order */
+		nsec = ord-1+p->noos;	/* Increase sections for each order */
 
 		vv *= (double)nsec;
 
@@ -542,17 +585,20 @@ double vv			/* Source of value */
 			dsv = -dsv;
 
 		dv[ord] = dsv;
-		for (i = ord - 1; i >= 2; i--)
+		for (i = ord - 1; i >= (2-p->noos); i--)
 			dv[i] *= ddv;
 	}
-	/* Do order 0, the scale */
-	if (p->luord > 1) {
-		dv[1] = vv;
-		vv *= pms[1];
-	}
-	if (p->luord > 0) {
-		dv[0] = 1.0;
-		vv += pms[0];	/* Offset */
+
+	if (p->noos == 0) {
+		/* Do order 0, the scale */
+		if (p->luord > 1) {
+			dv[1] = vv;
+			vv *= pms[1];
+		}
+		if (p->luord > 0) {
+			dv[0] = 1.0;
+			vv += pms[0];	/* Offset */
+		}
 	}
 
 	return vv;
@@ -561,7 +607,11 @@ double vv			/* Source of value */
 /* Return the shaper parameters regularizing weight, */
 /* and add in partial derivatives. */
 /* Weight error and derivatrive by wht */
-static double mcv_dshweight_p(mcv *p, double *v, double *dv, double smooth) {
+static double mcv_dshweight_p(
+mcv *p,
+double *pms,	/* Parameters to use - may exclude offset and scale */
+double *dpms,
+double smooth) {
 	double smv;
 	int i;
 
@@ -569,24 +619,28 @@ static double mcv_dshweight_p(mcv *p, double *v, double *dv, double smooth) {
 	/* minimise unsconstrained "wiggles", */
 	/* with partial derivatives */
 	smv = 0.0;
-	for (i = 2; i < p->luord; i++) {
-		double w, tt = v[i];
-		tt = v[i];
+	for (i = (2-p->noos); i < (p->luord-p->noos); i++) {
+		double w, tt;
+		int cx;
+
+		cx = i - 2 + p->noos; 
+		tt = pms[i];
 
 		/* Weigh to supress ripples */
-		if (i <= 3) {	/* First or second curves */
-			w = SHAPE_BASE;
+		if (cx <= 1) {			/* First or second curves */
+			w = HW01;
+		} else if (cx <= HBREAK) {	/* First or second curves */
+			double bl = (cx - 1.0)/(HBREAK - 1.0);
+			w = (1.0 - bl) * HW01 + bl * HWBR;
 		} else {
-			w = SHAPE_BASE + (i-3) * SHAPE_HBASE * smooth;
+			w = HWBR + (cx-HBREAK) * HWINC * smooth;
 		}
-		dv[i] += 2.0 * w * tt;
+		dpms[i] += w * 2.0 * tt;
 		tt *= tt;
 		smv += w * tt;
 	}
 
 	return smv;
 }
-
-
 
 

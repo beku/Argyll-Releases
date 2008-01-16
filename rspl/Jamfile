@@ -53,9 +53,9 @@ Headers = rspl.h ;
 #InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
 
 # Multi-dimensional regular spline library
-Library librspl.lib : rspl.c $(SCAT).c rev.c spline.c opt.c gcso.c ;
+Library librspl.lib : rspl.c $(SCAT).c rev.c spline.c opt.c ;
 ObjectHdrs rspl$(SUFOBJ) $(SCAT)$(SUFOBJ) rev$(SUFOBJ) xi
-spline$(SUFOBJ) mlbs$(SUFOBJ) opt$(SUFOBJ) gcso$(SUFOBJ) : ../h ../numlib ../plot ;
+spline$(SUFOBJ) mlbs$(SUFOBJ) opt$(SUFOBJ) : ../h ../numlib ../plot ;
 
 # Test of 1D rspl library
 Main c1 : c1.c ;

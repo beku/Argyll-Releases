@@ -9,7 +9,7 @@
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
- * This material is licensed with a free use license:-
+ * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
  */
 
@@ -72,6 +72,7 @@
 
 #ifdef _MSC_VER
 #define vsnprintf _vsnprintf
+#define snprintf _snprintf
 #endif
 
 /* ========================================================== */
@@ -87,6 +88,8 @@
 
 /* ------------------------------------------------- */
 /* Memory image icmFile compatible class */
+/* Buffer is assumed to be a fixed size, and externally allocated */
+/* Writes therefore don't expand the buffer */
 
 /* Set current position to offset. Return 0 on success, nz on failure. */
 static int icmFileMem_seek(
@@ -166,7 +169,7 @@ const char *format,
 #if ((defined(__IBMC__) || defined(__BORLANDC__)) && defined(_M_IX86))
 	rv = vsprintf((char *)p->cur, format, args);	/* This could overwrite the buffer !!! */
 #else
-	rv = vsnprintf(p->cur, (p->end - p->cur), format, args);
+	rv = vsnprintf((char *)p->cur, (p->end - p->cur), format, args);
 #endif
 
 	va_end(args);
@@ -196,6 +199,7 @@ icmFile *pp
 }
 
 /* Create a memory image file access class with allocator */
+/* Buffer is used as is */
 icmFile *new_icmFileMem_a(
 void *base,			/* Pointer to base of memory buffer */
 size_t length,		/* Number of bytes in buffer */
@@ -2997,15 +3001,15 @@ static char *string_XYZNumber(icmXYZNumber *p) {
 }
 
 /* Helper: Return a string that shows the XYZ number value, */
-/* and the Lab D50 number in paren. */
+/* and the Lab D50 number in paren. Note the buffer will be re-used on every call. */
 static char *string_XYZNumber_and_Lab(icmXYZNumber *p) {
-	static char buf[50];
+	static char buf[100];
 	double lab[3];
 	lab[0] = p->X;
 	lab[1] = p->Y;
 	lab[2] = p->Z;
 	icmXYZ2Lab(&icmD50, lab, lab);
-	sprintf(buf,"%f, %f, %f    [Lab %f, %f, %f]", p->X, p->Y, p->Z, lab[0], lab[1], lab[2]);
+	snprintf(buf,sizeof(buf),"%f, %f, %f    [Lab %f, %f, %f]", p->X, p->Y, p->Z, lab[0], lab[1], lab[2]);
 	return buf;
 }
 			
@@ -3295,7 +3299,7 @@ static int icmTable_setup_bwd(
 			int nf;			/* Next free slot */
 			if (rt->rlists[j] == NULL) {	/* No allocation */
 				as = 5;						/* Start with space for 5 */
-				if ((rt->rlists[j] = (int *) icp->al->malloc(icp->al, sizeof(int) * as)) == NULL) {
+				if ((rt->rlists[j] = (unsigned int *) icp->al->malloc(icp->al, sizeof(unsigned int) * as)) == NULL) {
 					return 2;
 				}
 				rt->rlists[j][0] = as;
@@ -3305,7 +3309,7 @@ static int icmTable_setup_bwd(
 				nf = rt->rlists[j][1];	/* Next free location in list */
 				if (nf >= as) {			/* need to expand space */
 					as *= 2;
-					rt->rlists[j] = (int *) icp->al->realloc(icp->al,rt->rlists[j], sizeof(int) * as);
+					rt->rlists[j] = (unsigned int *) icp->al->realloc(icp->al,rt->rlists[j], sizeof(unsigned int) * as);
 					if (rt->rlists[j] == NULL) {
 						return 2;
 					}
@@ -4814,6 +4818,8 @@ double *in		/* Input array[outputChan] */
 	return rv;
 }
 
+#ifdef NEVER		// ~~~99 development code
+
 /* Convert normalized numbers though this Luts multi-dimensional table */
 /* using optimised simplex interpolation. */
 /* This version optimses the simplex split axis depending on the input */
@@ -4941,6 +4947,8 @@ double *in		/* Input array[outputChan] */
 	}
 	return rv;
 }
+
+#endif /* NEVER */		// ~~~99 development code
 
 
 /* Convert normalized numbers though this Luts output tables. */
@@ -10571,7 +10579,7 @@ static int icc_check_id(
 	icc *p,
 	ORD8 *rid		/* Optionaly return computed ID */
 ) {
-	char buf[128];
+	unsigned char buf[128];
 	ORD8 id[16];
 	icmMD5 *md5 = NULL;
 	unsigned int len;
@@ -11918,6 +11926,20 @@ void icmSub3(double out[3], double in1[3], double in2[3]) {
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 
+/* Set a 3x3 matrix to unity */
+void icmSetUnity3x3(double mat[3][3]) {
+	int i, j;
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 3; i++) {
+			if (i == j)
+				mat[j][i] = 1.0;
+			else
+				mat[j][i] = 0.0;
+		}
+	}
+	
+}
+
 /* Copy a 3x3 transform matrix */
 void icmCpy3x3(double dst[3][3], double src[3][3]) {
 	int i, j;
@@ -12198,7 +12220,7 @@ int icmNormalize3(double out[3], double in[3], double len) {
 	return 0;
 }
 
-/* Compute the norm (length) squared of a two point vector */
+/* Compute the norm (length) squared of a vector define by two points */
 double icmNorm33sq(double in1[3], double in0[3]) {
 	int j;
 	double rv;
@@ -12209,7 +12231,7 @@ double icmNorm33sq(double in1[3], double in0[3]) {
 	return rv;
 }
 
-/* Compute the norm (length) of a two point vector */
+/* Compute the norm (length) of a vector define by two points */
 double icmNorm33(double in1[3], double in0[3]) {
 	int j;
 	double rv;
@@ -12711,10 +12733,10 @@ double icmCIE2Ksq(double *Lab0, double *Lab1) {
 	double dL, dC, dH;
 	double dsq;
 
-/* The trucated value of PI is needed to ensure that the */
-/* test cases pass, as one of them lies on the edge of */
-/* a mathermatical discontinuity. The precision is still */
-/* enough for any practical use. */
+	/* The trucated value of PI is needed to ensure that the */
+	/* test cases pass, as one of them lies on the edge of */
+	/* a mathematical discontinuity. The precision is still */
+	/* enough for any practical use. */
 #define RAD2DEG(xx) (180.0/3.14159265358979 * (xx))
 #define DEG2RAD(xx) (3.14159265358979/180.0 * (xx))
 
@@ -12839,6 +12861,7 @@ extern ICCLIB_API double icmXYZCIE2K(icmXYZNumber *w, double *in0, double *in1) 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Chromatic adaptation transform utility */
 /* Return a 3x3 chromatic adaptation matrix */
+/* Use icmMulBy3x3(dst, mat, src) */
 void icmChromAdaptMatrix(
 	int flags,				/* Use bradford, Transform given matrix flags */
 	icmXYZNumber d_wp,		/* Destination white point */
@@ -12864,10 +12887,7 @@ void icmChromAdaptMatrix(
 
 	/* Set initial matrix to unity */
 	if (!(flags & ICM_CAM_MULMATRIX)) {
-		mat[0][0] = mat[1][1] = mat[2][2] = 1.0;
-		mat[0][1] = mat[0][2] = 0.0;
-		mat[1][0] = mat[1][2] = 0.0;
-		mat[2][0] = mat[2][1] = 0.0;
+		icmSetUnity3x3(mat);
 	}
 
 	icmXYZ2Ary(src, s_wp);
@@ -13519,12 +13539,16 @@ struct _icmLuBase *lup
 			p->errc = 1;
 			return 1;
 		}
+		p->err[0] = '\000';
+		p->errc = 0;
 		lup->whitePoint = icmD50;						/* safe value */
 	} else
 		lup->whitePoint = whitePointTag->data[0];	/* Copy structure */
 
 	if ((blackPointTag = (icmXYZArray *)p->read_tag(p, icSigMediaBlackPointTag)) == NULL
         || blackPointTag->ttype != icSigXYZType || blackPointTag->size < 1) {
+		p->err[0] = '\000';
+		p->errc = 0;
 		lup->blackPoint = icmBlack;						/* default */
 	} else 
 		lup->blackPoint = blackPointTag->data[0];	/* Copy structure */
@@ -15012,14 +15036,7 @@ icmLuLut_get_matrix (
 				m[i][j] = lut->e[i][j];	/* Copy from Lut */
 
 	} else {							/* return unity matrix */
-		for (i = 0; i < 3; i++) {
-			for (j = 0; j < 3; j++) {
-				if (i == j)
-					m[i][j] = 1.0;
-				else
-					m[i][j] = 0.0;
-			}
-		}
+		icmSetUnity3x3(m);
 	}
 }
 
@@ -15897,6 +15914,11 @@ static icmLuBase* icc_get_luobj (
 			sprintf(p->err,"icc_get_luobj: Unknown profile class");
 			p->errc = 1;
 			return NULL;
+	}
+
+	if (luobj == NULL) {
+		sprintf(p->err,"icc_get_luobj: Unable to locate usable conversion");
+		p->errc = 1;
 	}
 
 	return luobj;

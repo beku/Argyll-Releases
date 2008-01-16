@@ -22,6 +22,26 @@
 
 /* TTBD:
  *
+ * !!! fix so that this can also be used for smoothed
+ *     inversion, ie. PCS -> DevN, as well as
+ *     separation PseudoCMY/K -> DevN.
+ *
+ * Plan:
+ *		Have additional callback function used for invert,
+ *		called at grid initialisation that initialised
+ *		the target values to fixed PCS values.
+ *		For separation, these are dynamic, and adjusted by
+ *		the usual optimisation callback.
+ *		(Or can the usual callback figure out when the
+ *		 initial initialisation is needed ?)
+ *
+ *		Need to return average/extrapolated surround values
+ *		on the edge, just like fit, so smoothness can be
+ *		evaluated in inversion.
+ *		Provide another mechanism for sep to know
+ *		it is on the edge of the grid, and should expand
+ *		gamut if possible.
+ *
  * Get rid of error() calls - return status instead
  */
 
@@ -37,8 +57,6 @@
 #include "rspl_imp.h"
 #include "numlib.h"
 #include "counters.h"	/* Counter macros */
-
-extern void error(char *fmt, ...), warning(char *fmt, ...);
 
 #undef DEBUG
 
@@ -121,7 +139,7 @@ static void solve_gres(omgtp *m, double tol);
 static void init_soln(omgtp  *m1, omgtp  *m2);
 static void init_fsoln(omgtp *m, double **vdata);
 
-/* Initialise the regular spline from the optimisation callback function */
+/* Initialise the regular spline from the optimisation callback function. */
 /* The target data is auxiliary data used to "target" the optimisation */
 /* callback function. */
 /* The callback function arguments are as follows:

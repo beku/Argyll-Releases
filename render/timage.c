@@ -17,7 +17,7 @@
 /*
  * Generate TIFF image with two RGB cube surface hexagons,
  * plus a rectangular grey wedges between them, on a grey
- * background, or a rectangfular gamut surface test image.
+ * background, or a rectangular gamut surface test image.
  */
 
 /*
@@ -45,7 +45,8 @@ usage(void) {
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: timage [-options] outfile.tif\n");
 //	fprintf(stderr," -v             Verbose\n");
-	fprintf(stderr," -t             Generate rectangular boundary test chart\n");
+	fprintf(stderr," -t             Generate rectangular gamut boundary test chart\n");
+	fprintf(stderr," -p steps       Generate a colorspace step chart with L* steps^2\n");
 	fprintf(stderr," -r res         Resolution in DPI (default %d)\n",DEF_DPI);
 	fprintf(stderr," -s             Smooth blend\n");
 	fprintf(stderr," -x             16 bit output\n");
@@ -59,6 +60,7 @@ int main(int argc, char *argv[])
 	int fa,nfa;				/* current argument we're looking at */
 	int verb = 0;
 	int rchart = 0;			/* Rectangular chart */
+	int schart = 0;			/* Step chart with steps^2 */
 	int smooth = 0;			/* Use smooth blending */
 	double res = DEF_DPI;
 	depth2d depth = bpc8_2d;
@@ -68,8 +70,8 @@ int main(int argc, char *argv[])
 	double vv[4][2];
 	color2d cc[4];
 	double gbf = 1.0;		/* Grey blend factor */
-	double w, h;			/* Size of page */
-	int i;
+	double w, h;			/* Size of page in mm */
+	int i, j;
 
 	error_program = "timage";
 
@@ -101,16 +103,26 @@ int main(int argc, char *argv[])
 				verb = 1;
 
 			/* Rectangular chart */
-			else if (argv[fa][1] == 't' || argv[fa][1] == 'T')
+			else if (argv[fa][1] == 't' || argv[fa][1] == 'T') {
 				rchart = 1;
+				schart = 0;
 
 			/* Smooth blending */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S')
+			} else if (argv[fa][1] == 's' || argv[fa][1] == 'S')
 				smooth = 1;
 
 			/* 16 bit depth */
 			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X')
 				depth = bpc16_2d;
+
+			/* step chart */
+			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+				fa = nfa;
+				if (na == NULL) usage();
+				schart = atoi(na);
+				if (schart <= 0) usage();
+				rchart = 0;
+			}
 
 			/* resolution */
 			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
@@ -139,11 +151,11 @@ int main(int argc, char *argv[])
 
 	res /= 25.4;				/* Convert to DPmm */ 
 
-	/* Hexagon chart */
-	if (rchart == 0) {
+	/* RGB Hexagon chart */
+	if (rchart == 0 && schart == 0) {
 		double r3o2;			/* 0.866025 */
 		double bb = 0.07;		/* Border proportion */
-		double hh = 40.0;		/* Height of hexagon */
+		double hh = 40.0;		/* Height of hexagon in mm */
 
 		r3o2 = sqrt(3.0)/2.0;		/* Width to heigh of hexagon */
 		h = (1.0 + 2.0 * bb) * hh;
@@ -285,10 +297,10 @@ int main(int argc, char *argv[])
 		cc[3][2] = 1.0 * gbf + (1.0 - gbf) * 0.5;
 		r->add(r, new_rectvs2d((2.0 * bb + r3o2) * hh, bb * hh, 0.25 * hh, hh, cc));
 
-	/* Rectangular chart */
-	} else {
+	/* RGB Rectangular chart */
+	} else if (schart == 0) {
 		double bb = 0.07;		/* Border proportion */
-		double hh = 50.0;		/* Height of hexagon */
+		double hh = 50.0;		/* Height of hexagon in mm */
 		double sc[6][3] = {		/* Saturated color sequence */
 			{ 1, 0, 0 },
 			{ 1, 0, 1 },
@@ -357,6 +369,50 @@ int main(int argc, char *argv[])
 			r->add(r, p);
 		}
 
+	} else {	/* Lab step chart */
+		double hh = 50.0;		/* Height of hexagon in mm */
+		double bb = 0.05;		/* Border proportion */
+		double ss, bs;			/* Step size, border size */
+
+		h = hh;
+		w = hh;
+
+		bs = (bb * hh)/(schart + 1.0);
+		ss = hh * (1.0 - bb)/schart;
+	
+		if ((r = new_render2d(w, h, res, res, lab_2d, depth)) == NULL) {
+			error("new_render2d() failed");
+		}
+	
+		/* Set the default color */
+		c[0] = 0.0;
+		c[1] = 0.0;
+		c[2] = 0.0;
+		r->set_defc(r, c);
+	
+		for (i = 0; i < schart; i++) {
+			for (j = 0; j < schart; j++) {
+				double lv;
+				
+				lv = (double)(j * schart + i)/(schart * schart - 1.0) * 100.0;
+
+				cc[0][0] = lv;
+				cc[0][1] = -127.0;
+				cc[0][2] = -127.0;
+				cc[1][0] = lv;
+				cc[1][1] =  127.0;
+				cc[1][2] = -127.0;
+				cc[2][0] = lv;
+				cc[2][1] = -127.0;
+				cc[2][2] =  127.0;
+				cc[3][0] = lv;
+				cc[3][1] =  127.0;
+				cc[3][2] =  127.0;
+				r->add(r, new_rectvs2d(bs + i * (bs + ss),
+				                       bs + j * (bs + ss),
+				                       ss, ss, cc));
+			}
+		}
 	}
 
 	r->write(r, outname);

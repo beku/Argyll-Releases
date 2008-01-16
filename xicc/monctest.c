@@ -34,7 +34,9 @@ void usage(void);
 
 #define TRIALS 30	/* Number of random trials */
 #define SKIP 0		/* Number of random trials to skip */
+#define NORMONLY	/* Defined to use 0.0 - 1.0 limited curve */
 
+#undef ORDER_STEP		/* Step orders from 2 to SHAPE_ORDERS */
 #define SHAPE_ORDS 30		/* Number of order to use */
 
 #define ABS_MAX_PNTS 100
@@ -98,13 +100,18 @@ int main() {
 	_control87(EM_OVERFLOW, EM_OVERFLOW);
 #endif
 
+#ifdef NORMONLY
+	if ((p = new_mcv_noos()) == NULL)
+#else
 	if ((p = new_mcv()) == NULL)
+#endif
 		error("new_mcv failed");
 
 	for (n = 0; n < TRIALS; n++) {
 		double lrand;		/* Amount of level randomness */
 		int pnts;
 
+#ifdef NEVER
 		if (n < TSETS)	/* Standard versions */ {
 			pnts = t1p[n];
 			for (i = 0; i < pnts; i++) {
@@ -123,6 +130,28 @@ int main() {
 
 			for (i = 0; i < pnts; i++)
 				ya[i] = pow(xa[i], ex);
+
+#else	/* Put exponenial first */
+		if (n == 0) {				/* Exponential function aproximation */
+			double ex = 2.4;
+			pnts = MAX_PNTS;
+
+			printf("Trial %d, no points = %d, exponential %f\n",n,pnts,ex);
+
+			/* Create X values */
+			for (i = 0; i < pnts; i++)
+				xa[i] = i/(pnts-1.0);
+
+			for (i = 0; i < pnts; i++)
+				ya[i] = pow(xa[i], ex);
+
+		} else if (n < (TSETS+1))	/* Standard versions */ {
+			pnts = t1p[n-1];
+			for (i = 0; i < pnts; i++) {
+				xa[i] = t1xa[n-1][i];
+				ya[i] = t1ya[n-1][i];
+			}
+#endif
 
 		} else {	/* Random versions */
 			double ymax;
@@ -165,8 +194,11 @@ int main() {
 		/* Test weighting */
 		test_points[pnts-1].w = 1.0;
 
-//		for (np = 2; np <= SHAPE_ORDS; np++) {
+#ifdef ORDER_STEP
+		for (np = 2; np <= SHAPE_ORDS; np++) {
+#else	/* Full number of orders */
 		for (np = SHAPE_ORDS; np <= SHAPE_ORDS; np++) {
+#endif
 
 			/* Fit to scattered data */
 			p->fit(p,
@@ -177,6 +209,7 @@ int main() {
 			    1.0						/* Smoothing */
 			);
 	
+			printf("Residual = %f\n",p->resid);
 			printf("Number params = %d\n",np);
 			for (i = 0; i < p->luord; i++) {
 				printf("Param %d = %f\n",i,p->pms[i]);

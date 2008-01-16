@@ -16,7 +16,7 @@
  * not spec. version numbers.
  *
  * Portions of this file are Copyright 2004 - 2005 Graeme W. Gill,
- * This material is licensed with a free use license:-
+ * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
  *
  *  Graeme Gill.

@@ -6,6 +6,7 @@ Argyll.usermap
 Argyll
 45-Argyll.rules
 Argyll.kext/Info.plist
+install_kext.sh
 Makefile.am
 Makefile.in
 acinclude.m4

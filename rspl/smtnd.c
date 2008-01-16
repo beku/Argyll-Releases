@@ -215,7 +215,8 @@ static double best(int n, double *rmse, double *smv) {
 	           NULL, NULL, gres,	/* Low, high, resolution of grid */
 	           NULL, NULL,			/* Default data scale */
 	           -0.00001,			/* Underlying smoothing */
-	           avgdev);
+	           avgdev,				/* Average deviation */
+	           NULL);				/* iwidth */
 
 #ifdef NEVER
 	/* Check the fit */
@@ -891,7 +892,8 @@ static void do_test(
 		           low, high, gres,		/* Low, high, resolution of grid */
 		           low, high,			/* Default data scale */
 		           smooth,				/* Smoothing to test */
-		           avgdev);				/* Average Deviation */
+		           avgdev,				/* Average deviation */
+		           NULL);				/* iwidth */
 
 		/* Plot out function values */
 		if (plot) {

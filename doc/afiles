@@ -1,5 +1,4 @@
 License.txt
-License2.txt
 afiles
 ArgyllDoc.html
 ChangesSummary.html
@@ -15,6 +14,9 @@ Performance.html
 Scenarios.html
 FWA.html
 instruments.html
+iccgamutmapping.html
+gamutmapping1.jpg
+monitorcontrols.html
 Source.html
 cb2cgats.html
 cctiff.html
@@ -37,7 +39,7 @@ logo2cgats.html
 mppcheck.html
 mpplu.html
 mpprof.html
-printread.html
+chartread.html
 printtarg.html
 profcheck.html
 profile.html
@@ -54,6 +56,7 @@ tiffgamut.html
 timage.html
 cube.jpg
 surface.jpg
+LabSteps.jpg
 verify.html
 viewgam.html
 xicclu.html

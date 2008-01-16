@@ -9,7 +9,7 @@
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
- * This material is licensed with a free use license:-
+ * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
  */
 
@@ -219,7 +219,7 @@ int md5_test() {
 	
 	/* Standard RFC 1321 test cases */
 	struct {
-		unsigned char *s;
+		char *s;
 		ORD32 sum[4];
 	} tc[] = {
 		{ "",  { 0xd41d8cd9, 0x8f00b204, 0xe9800998, 0xecf8427e } },
@@ -245,7 +245,7 @@ int md5_test() {
 
 		m->reset(m);
 
-		m->add(m, tc[i].s, strlen(tc[i].s));
+		m->add(m, (unsigned char *)tc[i].s, strlen(tc[i].s));
 		m->get(m, chs2);
 
 		/* Convert reference to a byte stream */
@@ -550,7 +550,7 @@ int doit(
 		wo->flag = icmDataASCII;	/* Holding ASCII data */
 		wo->size = strlen(ts1)+1; 	/* Allocated and used size of text, inc null */
 		wo->allocate((icmBase *)wo);/* Allocate space */
-		strcpy(wo->data, ts1);		/* Copy the text in */
+		strcpy((char *)wo->data, ts1);		/* Copy the text in */
 	} else {
 		icmData *ro;
 
@@ -570,7 +570,7 @@ int doit(
 		if (ro->size != wo->size)
 			error ("Data size doesn't match");
 
-		rv |= strcmp(ro->data, wo->data);
+		rv |= strcmp((char *)ro->data, (char *)wo->data);
 
 		if (rv)
 			error ("Data verify failed");
@@ -1210,7 +1210,7 @@ int doit(
 			wo->data[i].device.scSize = strlen(ts3a)+1;	/* Used size of scDesc in bytes, inc null */
 			if (wo->data[i].device.scSize > 67)
 				error("ScriptCode string longer than 67");
-			strcpy(wo->data[i].device.scDesc, ts3a);	/* Copy the string in */
+			strcpy((char *)wo->data[i].device.scDesc, ts3a);	/* Copy the string in */
 
 			/* model Text description */
 			sprintf(ts1,"This is model descrption %d",i);
@@ -1228,7 +1228,7 @@ int doit(
 			wo->data[i].model.scSize = strlen(ts3b)+1;	/* Used size of scDesc in bytes, inc null */
 			if (wo->data[i].model.scSize > 67)
 				error("ScriptCode string longer than 67");
-			strcpy(wo->data[i].model.scDesc, ts3b);	/* Copy the string in */
+			strcpy((char *)wo->data[i].model.scDesc, ts3b);	/* Copy the string in */
 		}
 	} else {
 		icmProfileSequenceDesc *ro;
@@ -1264,7 +1264,7 @@ int doit(
 	
 			rv |= (ro->data[i].device.scCode != wo->data[i].device.scCode);
 			rv |= (ro->data[i].device.scSize != wo->data[i].device.scSize);
-			rv |= strcmp(ro->data[i].device.scDesc, wo->data[i].device.scDesc);
+			rv |= strcmp((char *)ro->data[i].device.scDesc, (char *)wo->data[i].device.scDesc);
 
 			/* model Text description */
 			rv |= (ro->data[i].model.size  != wo->data[i].model.size);
@@ -1276,7 +1276,7 @@ int doit(
 	
 			rv |= (ro->data[i].model.scCode != wo->data[i].model.scCode);
 			rv |= (ro->data[i].model.scSize != wo->data[i].model.scSize);
-			rv |= strcmp(ro->data[i].model.scDesc, wo->data[i].model.scDesc);
+			rv |= strcmp((char *)ro->data[i].model.scDesc, (char *)wo->data[i].model.scDesc);
 		}
 
 		if (rv)
@@ -1430,7 +1430,7 @@ int doit(
 					/* No allocations, since this has a fixed max of 67 bytes */
 		if (wo->scSize > 67)
 			error("ScriptCode string longer than 67");
-		strcpy(wo->scDesc, ts3);	/* Copy the string in */
+		strcpy((char *)wo->scDesc, ts3);	/* Copy the string in */
 	} else {
 		icmTextDescription *ro;
 
@@ -1454,7 +1454,7 @@ int doit(
 
 		rv |= (ro->scCode != wo->scCode);
 		rv |= (ro->scSize != wo->scSize);
-		rv |= strcmp(ro->scDesc, wo->scDesc);
+		rv |= strcmp((char *)ro->scDesc, (char *)wo->scDesc);
 		if (rv)
 			error ("Text Description verify failed4");
 	}

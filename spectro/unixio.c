@@ -76,13 +76,13 @@ int next_con_char(void) {
 
 	/* Configure stdin to be ready with just one character */
 	if (tcgetattr(STDIN_FILENO, &origs) < 0)
-		error("ycgetattr failed with '%s'", strerror(errno));
+		error("tcgetattr failed with '%s' on stdin", strerror(errno));
 	news = origs;
 	news.c_lflag &= ~(ICANON | ECHO);
 	news.c_cc[VTIME] = 0;
 	news.c_cc[VMIN] = 1;
 	if (tcsetattr(STDIN_FILENO,TCSANOW, &news) < 0)
-		error("next_con_char: tcsetattr failed with '%s'", strerror(errno));
+		error("next_con_char: tcsetattr failed with '%s' on stdin", strerror(errno));
 
 	/* Wait for stdin to have a character */
 	pa[0].fd = STDIN_FILENO;
@@ -103,7 +103,7 @@ int next_con_char(void) {
 
 	/* Restore stdin */
 	if (tcsetattr(STDIN_FILENO, TCSANOW, &origs) < 0)
-		error("tcsetattr failed with '%s'", strerror(errno));
+		error("tcsetattr failed with '%s' on stdin", strerror(errno));
 
 	return rv;
 }
@@ -116,13 +116,13 @@ int poll_con_char(void) {
 
 	/* Configure stdin to be ready with just one character */
 	if (tcgetattr(STDIN_FILENO, &origs) < 0)
-		error("ycgetattr failed with '%s'", strerror(errno));
+		error("tcgetattr failed with '%s' on stdin", strerror(errno));
 	news = origs;
 	news.c_lflag &= ~(ICANON | ECHO);
 	news.c_cc[VTIME] = 0;
 	news.c_cc[VMIN] = 1;
 	if (tcsetattr(STDIN_FILENO,TCSANOW, &news) < 0)
-		error("next_con_char: tcsetattr failed with '%s'", strerror(errno));
+		error("next_con_char: tcsetattr failed with '%s' on stdin", strerror(errno));
 
 	/* Wait for stdin to have a character */
 	pa[0].fd = STDIN_FILENO;
@@ -140,7 +140,7 @@ int poll_con_char(void) {
 
 	/* Restore stdin */
 	if (tcsetattr(STDIN_FILENO, TCSANOW, &origs) < 0)
-		error("tcsetattr failed with '%s'", strerror(errno));
+		error("tcsetattr failed with '%s' on stdin", strerror(errno));
 
 	return rv;
 }
@@ -686,7 +686,15 @@ word_length	 word
 	struct termios tio;
 	speed_t speed = 0;
 
-	if (p->debug) fprintf(stderr,"icoms: About to set port characteristics\n");
+	if (p->debug) {
+		fprintf(stderr,"icoms: About to set port characteristics:\n");
+		fprintf(stderr,"       Port = %d\n",port);
+		fprintf(stderr,"       Flow control = %d\n",fc);
+		fprintf(stderr,"       Baud Rate = %d\n",baud);
+		fprintf(stderr,"       Parity = %d\n",parity);
+		fprintf(stderr,"       Stop bits = %d\n",parity);
+		fprintf(stderr,"       Word length = %d\n",word);
+	}
 
 	if (port >= 1) {
 		if (p->is_open && port != p->port) {	/* If port number changes */
@@ -699,13 +707,13 @@ word_length	 word
 		if (fc != fc_nc)
 			p->fc = fc;
 		if (baud != baud_nc)
-			p->baud = baud;
+			p->br = baud;
 		if (parity != parity_nc)
-			p->parity = parity;
+			p->py = parity;
 		if (stop != stop_nc)
-			p->stop_bits = stop;
+			p->sb = stop;
 		if (word != length_nc)
-			p->word_length = word;
+			p->wl = word;
 
 		/* Make sure the port is open */
 		if (!p->is_open) {
@@ -740,7 +748,7 @@ word_length	 word
 		}
 
 		if (tcgetattr(p->fd, &tio) < 0) {
-			error("tcgetattr failed with '%s'", strerror(errno));
+			error("tcgetattr failed with '%s' on serial port '%s'", strerror(errno),p->ppath->path);
 		}
 
 		/* Clear everything in the tio, and just set what we want */
@@ -790,7 +798,7 @@ word_length	 word
 				break;
 		}
 
-		switch (p->parity) {
+		switch (p->py) {
 			case parity_nc:
 				error("icoms - set_ser_port: illegal parity setting!");
 				break;
@@ -808,7 +816,7 @@ word_length	 word
 				break;
 		}
 
-		switch (p->stop_bits) {
+		switch (p->sb) {
 			case stop_nc:
 				error("icoms - set_ser_port: illegal stop bits!");
 				break;
@@ -819,7 +827,7 @@ word_length	 word
 				break;
 		}
 
-		switch (p->word_length) {
+		switch (p->wl) {
 			case length_nc:
 				error("icoms - set_ser_port: illegal word length!");
 			case length_5:
@@ -837,7 +845,7 @@ word_length	 word
 		}
 
 		/* Set the baud rate */
-		switch (p->baud) {
+		switch (p->br) {
 			case baud_110:
 				speed = B110;
 				break;
@@ -885,7 +893,7 @@ word_length	 word
 
 		/* Make change immediately */
 		if (tcsetattr(p->fd, TCSANOW, &tio) < 0)
-			error("tcsetattr failed with '%s'", strerror(errno));
+			error("tcsetattr failed with '%s' on '%s'", strerror(errno), p->ppath->path);
 
 		tcflush(p->fd, TCIOFLUSH);			/* Discard any current in/out data */
 
@@ -919,13 +927,13 @@ double tout
 
 	/* Configure stdin to be ready with just one character */
 	if (tcgetattr(STDIN_FILENO, &origs) < 0)
-		error("tcgetattr failed with '%s'", strerror(errno));
+		error("tcgetattr failed with '%s' on stdin", strerror(errno));
 	news = origs;
 	news.c_lflag &= ~(ICANON | ECHO);
 	news.c_cc[VTIME] = 0;
 	news.c_cc[VMIN] = 1;
 	if (tcsetattr(STDIN_FILENO,TCSANOW, &news) < 0)
-		error("tcsetattr failed with '%s'", strerror(errno));
+		error("tcsetattr failed with '%s' on stdin", strerror(errno));
 
 	/* Wait for serial output not block */
 	pa[0].fd = p->fd;
@@ -989,7 +997,7 @@ double tout
 
 	/* Restore stdin */
 	if (tcsetattr(STDIN_FILENO, TCSANOW, &origs) < 0)
-		error("tcsetattr failed with '%s'", strerror(errno));
+		error("tcsetattr failed with '%s' on stdin", strerror(errno));
 
 	if (p->debug) fprintf(stderr,"ICOM err 0x%x\n",p->lerr);
 	return p->lerr;
@@ -1023,27 +1031,27 @@ double tout			/* Time out in seconds */
 		struct termios tio;
 
 		if (tcgetattr(p->fd, &tio) < 0)
-			error("ycgetattr failed with '%s'", strerror(errno));
+			error("tcgetattr failed with '%s' on '%s'", strerror(errno),p->ppath->path);
 
 		tio.c_cc[VEOL] = tc;
 
 		/* Make change immediately */
 		tcflush(p->fd, TCIFLUSH);
 		if (tcsetattr(p->fd, TCSANOW, &tio) < 0)
-			error("tcsetattr failed with '%s'", strerror(errno));
+			error("tcsetattr failed with '%s' on '%s'", strerror(errno),p->ppath->path);
 
 		p->tc = tc;
 	}
 
 	/* Configure stdin to be ready with just one character */
 	if (tcgetattr(STDIN_FILENO, &origs) < 0)
-		error("ycgetattr failed with '%s'", strerror(errno));
+		error("ycgetattr failed with '%s' on stdin", strerror(errno));
 	news = origs;
 	news.c_lflag &= ~(ICANON | ECHO);
 	news.c_cc[VTIME] = 0;
 	news.c_cc[VMIN] = 1;
 	if (tcsetattr(STDIN_FILENO,TCSANOW, &news) < 0)
-		error("tcsetattr failed with '%s'", strerror(errno));
+		error("tcsetattr failed with '%s' on stdin", strerror(errno));
 
 	/* Wait for serial input to have data */
 	pa[0].fd = p->fd;
@@ -1113,7 +1121,7 @@ double tout			/* Time out in seconds */
 
 	/* Restore stdin */
 	if (tcsetattr(STDIN_FILENO, TCSANOW, &origs) < 0)
-		error("tcsetattr failed with '%s'", strerror(errno));
+		error("tcsetattr failed with '%s' on stdin", strerror(errno));
 
 	if (p->debug) fprintf(stderr,"icoms: Read returning with 0x%x\n",p->lerr);
 
@@ -1160,10 +1168,10 @@ extern icoms *new_icoms() {
 	p->lerr = 0;
 	p->ppath = NULL;
 	p->port = -1;
-	p->baud = baud_nc;
-	p->parity = parity_nc;
-	p->stop_bits = stop_nc;
-	p->word_length = length_nc;
+	p->br = baud_nc;
+	p->py = parity_nc;
+	p->sb = stop_nc;
+	p->wl = length_nc;
 	p->debug = 0;
 	
 	p->get_paths = icoms_get_paths;

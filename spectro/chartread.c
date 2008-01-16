@@ -1,7 +1,7 @@
 
 /* 
  * Argyll Color Correction System
- * Spectrometer/Colorimeter print target chart reader
+ * Spectrometer/Colorimeter target test chart reader
  *
  * Author: Graeme W. Gill
  * Date:   4/10/96
@@ -170,11 +170,15 @@ int ixord,			/* Index order, 0 = pass then step */
 int rstart,			/* Random start/chart id */
 int hex,			/* Hexagon test patches */
 int comport, 		/* COM port used */
+flow_control fc,	/* flow control */
 double plen,		/* Patch length in mm (used by DTP20/41) */
 double glen,		/* Gap length in mm  (used by DTP20/41) */
 double tlen,		/* Trailer length in mm  (used by DTP41T) */
 int trans,			/* Use transmission mode */
 int emis,			/* Use emissive mode */
+int displ,			/* 1 = Use display emissive mode, 2 = display bright rel. */
+					/* 3 = display white rel. */
+int dtype,			/* Display type, 0 = default, 1 = CRT, 2 = LCD */
 int nocal,			/* Disable auto calibration */
 int disbidi,		/* Disable automatic bi-directional strip recognition */
 int highres,		/* Use high res spectral mode */
@@ -211,7 +215,7 @@ int debug			/* Debug level */
 			return -1;
 		}
 		/* Establish communications */
-		if ((rv = it->init_coms(it, comport, br, 15.0)) != inst_ok) {
+		if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
 			printf("Establishing communications with instrument failed with message '%s' (%s)\n",
 			       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 			it->del(it);
@@ -230,7 +234,6 @@ int debug			/* Debug level */
 		if (verb && *atype != itype)
 			printf("Warning: chart is for %s, using instrument %s\n",inst_name(itype),inst_name(*atype));
 
-
 		{
 			inst_mode mode = 0;
 
@@ -245,13 +248,49 @@ int debug			/* Debug level */
 					it->del(it);
 					return -1;
 				}
-			} else if (emis) {
-				if ((cap & (inst_emis_spot | inst_emis_strip)) == 0) {
-					printf("Need emissive spot or strip reading capability,\n");
-					printf("and instrument doesn't support it\n");
+
+			} else if (emis || displ) {
+
+				if (emis) {
+					if ((cap & (inst_emis_spot | inst_emis_strip)) == 0) {
+						printf("Need emissive spot or strip reading capability\n");
+						printf("and instrument doesn't support it\n");
+						it->del(it);
+						return -1;
+					}
+				} else {
+					/* We're assuming that the instrument capability */
+					/* will result in a spot by spot operation */
+					if ((cap & inst_emis_disp) == 0) {
+						printf("Need display spot capability\n");
+						printf("and instrument doesn't support it\n");
+						it->del(it);
+						return -1;
+					}
+				}
+
+				/* Set CRT or LCD mode */
+				if (dtype == 1 || dtype == 2) {
+					inst_opt_mode om;
+		
+					if (dtype == 1)
+						om = inst_opt_disp_crt;
+					else
+						om = inst_opt_disp_lcd;
+		
+					if ((rv = it->set_opt_mode(it,om)) != inst_ok) {
+						printf("Setting display mode %s not supported by instrument\n",
+						       dtype == 1 ? "CRT" : "LCD");
+						it->del(it);
+						return -1;
+					}
+
+				} else if (it->capabilities(it) & (inst_emis_disp_crt | inst_emis_disp_lcd)) {
+					printf("Either CRT or LCD must be selected\n");
 					it->del(it);
 					return -1;
 				}
+
 			} else {
 				if ((cap & (inst_ref_spot | inst_ref_strip | inst_ref_xy | inst_ref_chart
 				          | inst_s_ref_spot | inst_s_ref_strip
@@ -327,6 +366,10 @@ int debug			/* Debug level */
 					mode = inst_mode_trans_spot;
 					rmode = 0;
 				}
+			} else if (displ) {
+				/* We assume a display mode will always be spot by spot */
+				mode = inst_mode_emis_disp;
+				rmode = 0;
 			} else if (emis) {
 				if (pbypatch && (cap & inst_emis_spot)) {
 					mode = inst_mode_emis_spot;
@@ -867,14 +910,15 @@ int debug			/* Debug level */
 		printf("\nPlease remove last sheet from table\n"); fflush(stdout);
 
 	/* -------------------------------------------------- */
-	} else if (rmode == 1) {/* For strip mode, simply read each strip */
+	} else if (rmode == 1) {	/* For strip mode, simply read each strip */
 		int uswitch = 0;		/* 0 if switch can be used, 1 if switch or keyboard */
 		ipatch *vals;			/* Values read for a strip pass */
 		int stix;				/* Strip index */
 		int oroi;				/* Overall row index */
 
 		/* Do any needed calibration before the user places the instrument on a desired spot */
-		if (it->needs_calibration(it) & inst_calt_needs_cal_mask) {
+		if ((it->needs_calibration(it) & inst_calt_needs_cal_mask) != 0
+		 && it->needs_calibration(it) != inst_calt_crt_freq) {
 			if ((rv = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL)) != inst_ok) {
 				printf("\nCalibration failed with error :'%s' (%s)\n",
 	       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -882,7 +926,6 @@ int debug			/* Debug level */
 				return -1;
 			}
 		}
-
 
 		/* Enable switch or keyboard trigger if possible */
 		if (cap2 & inst2_keyb_switch_trig) {
@@ -1032,7 +1075,7 @@ int debug			/* Debug level */
 								return -1;
 							}
 							printf("\n");
-							if ((rv = it->init_coms(it, comport, br, 15.0)) != inst_ok) {
+							if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
 #ifdef DEBUG
 								printf("init_coms returned '%s' (%s)\n",
 							       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -1159,7 +1202,7 @@ int debug			/* Debug level */
 							if (cap2 & inst2_no_feedback)
 								bad_beep();
 							empty_con_chars();
-							printf("\nSeem to have read strip pass %s rather than %s!\n",mm,nn);
+							printf("\n(Warning) Seem to have read strip pass %s rather than %s!\n",mm,nn);
 							printf("Hit Return to use it anyway, any other key to retry, Esc, ^C or Q to give up:"); fflush(stdout);
 							free(mm);
 							if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
@@ -1182,13 +1225,13 @@ int debug			/* Debug level */
 						/* Arbitrary threshold. Good seems about 15-35, bad 95-130 */
 						if (accurate_expd != 0 && werror >= 30.0) {
 #ifdef DEBUG
-							printf("Patch error %f (>35 not good, >95 bad)\n",werror);
+							printf("(Warning) Patch error %f (>35 not good, >95 bad)\n",werror);
 #endif
 							if (cap2 & inst2_no_feedback)
 								bad_beep();
 							empty_con_chars();
 							printf("\nThere is at least one patch with an very unexpected response! (DeltaE %f)\n",werror);
-							printf("Hit Return to use it anyway, any other key to retry, Esc, ^C or  Q:"); fflush(stdout);
+							printf("Hit Return to use it anyway, any other key to retry, Esc, ^C or  Q to give up:"); fflush(stdout);
 							if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
 								printf("\n");
 								it->del(it);
@@ -1257,7 +1300,8 @@ int debug			/* Debug level */
 		if (xtern == 0) {	/* Instrument patch by patch */
 
 			/* Do any needed calibration before the user places the instrument on a desired spot */
-			if (it->needs_calibration(it) & inst_calt_needs_cal_mask) {
+			if ((it->needs_calibration(it) & inst_calt_needs_cal_mask) != 0
+			 && it->needs_calibration(it) != inst_calt_crt_freq) {
 				if ((rv = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL))
 				                                                              != inst_ok) {
 					printf("\nCalibration failed with error :'%s' (%s)\n",
@@ -1357,10 +1401,14 @@ int debug			/* Debug level */
 				}
 
 			} else {	/* Using instrument */
+
 				empty_con_chars();
+
 				printf("\nReady to read patch '%s'%s\n",scols[pix]->loc,
-				       i >= npat ? "(All patches read!)" : scols[pix]->rr ? " (Already read)" : "");
+				       i >= npat ? "(All patches read!)" : scols[pix]->rr ?
+				       " (Already read)" : "");
 				printf("hit 'f' to move forward, 'b' to move back,\n'd' when done,");
+
 				if (uswitch)
 					printf(" Instrument switch, <return> or <space> to read,");
 				else
@@ -1441,7 +1489,7 @@ int debug			/* Debug level */
 						return -1;
 					}
 					printf("\n");
-					if ((rv = it->init_coms(it, comport, br, 15.0)) != inst_ok) {
+					if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
 #ifdef DEBUG
 						printf("init_coms returned '%s' (%s)\n",
 					       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -1566,7 +1614,7 @@ int debug			/* Debug level */
 				/* Save the reading */
 				if (val.XYZ_v == 0 && val.aXYZ_v == 0)
 					error("Instrument didn't return XYZ value");
-				
+
 				if (val.XYZ_v != 0) {
 					for (j = 0; j < 3; j++)
 						scols[pix]->XYZ[j] = val.XYZ[j];
@@ -1582,7 +1630,6 @@ int debug			/* Debug level */
 				scols[pix]->rr = 1;		/* Has been read */
 				printf(" Read OK\n");
 				/* Advance to next patch. */
-
 			} else {	/* Unrecognised response */
 				pix--;
 				continue;
@@ -1598,9 +1645,9 @@ int debug			/* Debug level */
 void
 usage(void) {
 	icoms *icom;
-	fprintf(stderr,"Read Print Target Test Chart colors, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Read Target Test Chart, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	fprintf(stderr,"usage: printread [-options] outfile\n");
+	fprintf(stderr,"usage: chartread [-options] outfile\n");
 	fprintf(stderr," -v             Verbose mode\n");
 	fprintf(stderr," -c listno      Set communication port from the following list (default %d)\n",COMPORT);
 	if ((icom = new_icoms()) != NULL) {
@@ -1617,7 +1664,9 @@ usage(void) {
 		icom->del(icom);
 	}
 	fprintf(stderr," -t              Use transmission measurement mode\n");
-	fprintf(stderr," -e              Use emissive  measurement mode (absolute results)\n");
+	fprintf(stderr," -d              Use display measurement mode (white Y relative results)\n");
+	fprintf(stderr," -y c|l          Display type (if emissive), c = CRT, l = LCD\n");
+	fprintf(stderr," -e              Emissive for transparency on a light box\n");
 	fprintf(stderr," -p              Measure patch by patch rather than strip\n");
 	fprintf(stderr," -x [lx]         Take external values, either L*a*b* (-xl) or XYZ (-xx).\n");
 	fprintf(stderr," -n              Don't save spectral information (default saves spectral)\n");
@@ -1627,6 +1676,7 @@ usage(void) {
 	fprintf(stderr," -B              Disable auto bi-directional strip recognition\n");
 	fprintf(stderr," -H              Use high resolution spectrum mode (if available)\n");
 	fprintf(stderr," -T ratio        Modify strip patch consistency tollerance by ratio\n");
+	fprintf(stderr," -W n|h|x        Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]      Print debug diagnostics to stderr\n");
 	fprintf(stderr," outfile         Base name for input[ti2]/output[ti3] file\n");
 	exit(1);
@@ -1634,24 +1684,28 @@ usage(void) {
 
 int main(int argc, char *argv[]) {
 	int i, j;
-	int fa, nfa, mfa;					/* current argument we're looking at */
+	int fa, nfa, mfa;				/* current argument we're looking at */
 	int verb = 0;
 	int debug = 0;
-	int comport = COMPORT;				/* COM port used */
-	instType itype = instUnknown;		/* Instrument chart is targeted to */
-	instType atype = instUnknown;		/* Instrument used to read the chart */
-	int trans = 0;						/* Use transmission mode */
-	int emis = 0;						/* Use emissive mode */
-	int pbypatch = 0;					/* Read patch by patch */
-	int disbidi = 0;					/* Disable bi-directional strip recognition */
-	int highres = 0;					/* Use high res mode if available */
-	double scan_tol = 1.0;				/* Patch consistency tollerance modification */
-	int xtern = 0;						/* Take external values, 1 = Lab, 2 = XYZ */
-	int spectral = 1;					/* Save spectral information */
-	int accurate_expd = 0;				/* Expected value assumed to be accurate */
-	int dolab = 0;						/* Save CIE as Lab */
-	int doloc = 0;						/* Save patch locations in output */
-	int nocal = 0;						/* Disable auto calibration */
+	int comport = COMPORT;			/* COM port used */
+	flow_control fc = fc_nc;		/* Default flow control */
+	instType itype = instUnknown;	/* Instrument chart is targeted to */
+	instType atype = instUnknown;	/* Instrument used to read the chart */
+	int trans = 0;					/* Use transmission mode */
+	int emis = 0;					/* Use emissive mode */
+	int displ = 0;					/* 1 = Use display emissive mode, 2 = display bright rel. */
+	                                /* 3 = display white rel. */
+	int dtype = 0;					/* Display type, 0 = default, 1 = CRT, 2 = LCD */
+	int pbypatch = 0;				/* Read patch by patch */
+	int disbidi = 0;				/* Disable bi-directional strip recognition */
+	int highres = 0;				/* Use high res mode if available */
+	double scan_tol = 1.0;			/* Patch consistency tollerance modification */
+	int xtern = 0;					/* Take external values, 1 = Lab, 2 = XYZ */
+	int spectral = 1;				/* Save spectral information */
+	int accurate_expd = 0;			/* Expected value assumed to be accurate */
+	int dolab = 0;					/* Save CIE as Lab */
+	int doloc = 0;					/* Save patch locations in output */
+	int nocal = 0;					/* Disable auto calibration */
 	static char inname[200] = { 0 };	/* Input cgats file base name */
 	static char outname[200] = { 0 };	/* Output cgats file base name */
 	cgats *icg;					/* input cgats structure */
@@ -1674,6 +1728,7 @@ int main(int argc, char *argv[]) {
 	int stipa;					/* Steps in each Pass */
 	int totpa;					/* Total Passes Needed */
 	int runpat;					/* Rounded Up to (totpa * stipa) Number of patches */
+	int wpat;					/* Set to index of white patch for display */
 	int si;						/* Sample id index */
 	int li;						/* Location id index */
 	int ti;						/* Temp index */
@@ -1726,65 +1781,72 @@ int main(int argc, char *argv[]) {
 				if (na == NULL)
 					usage();
 				scan_tol = atof(na);
-			}
+
+			/* Serial port flow control */
+			} else if (argv[fa][1] == 'W') {
+				fa = nfa;
+				if (na == NULL) usage();
+				if (na[0] == 'n' || na[0] == 'N')
+					fc = fc_none;
+				else if (na[0] == 'h' || na[0] == 'H')
+					fc = fc_Hardware;
+				else if (na[0] == 'x' || na[0] == 'X')
+					fc = fc_XonXOff;
+				else
+					usage();
+
 
 			/* Debug coms */
-			else if (argv[fa][1] == 'D') {
+			} else if (argv[fa][1] == 'D') {
 				debug = 1;
 				if (na != NULL && na[0] >= '0' && na[0] <= '9') {
 					debug = atoi(na);
 					fa = nfa;
 				}
-			}
 
 			/* COM port  */
-			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
+			} else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
 				if (na == NULL) usage();
 				comport = atoi(na);
 				if (comport < 1 || comport > 40) usage();
-			}
-
-#ifdef NEVER
-			/* Override Target Instrument type */
-			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
-				fa = nfa;
-				if (na == NULL) usage();
-
-				if (strcmp("22", na) == 0)
-					itype = instDTP22;
-				else if (strcmp("41", na) == 0)
-					itype = instDTP41;
-				else if (strcmp("51", na) == 0)
-					itype = instDTP51;
-				else if (strcmp("SO", na) == 0 || strcmp("so", na) == 0)
-					itype = instSpectrolino;
-				else if (strcmp("SS", na) == 0 || strcmp("ss", na) == 0) {
-					itype = instSpectroScan;
-				} else
-					usage();
-			}
-#endif
 
 			/* Request transmission measurement */
-			else if (argv[fa][1] == 't') {
+			} else if (argv[fa][1] == 't') {
 				emis = 0;
 				trans = 1;
-			}
+				displ = 0;
+
+			/* Request display measurement */
+			} else if (argv[fa][1] == 'd') {
+
+				emis = 0;
+				trans = 0;
+				displ = 2;
 
 			/* Request emissive measurement */
-			else if (argv[fa][1] == 'e' || argv[fa][1] == 'E') {
+			} else if (argv[fa][1] == 'e' || argv[fa][1] == 'E') {
 				emis = 1;
 				trans = 0;
-			}
+				displ = 0;
+
+			/* Display type */
+			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
+				fa = nfa;
+				if (na == NULL) usage();
+				if (na[0] == 'c' || na[0] == 'C')
+					dtype = 1;
+				else if (na[0] == 'l' || na[0] == 'L')
+					dtype = 2;
+				else
+					usage();
 
 			/* Request patch by patch measurement */
-			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
 				pbypatch = 1;
-			}
 
 			/* Request external values */
-			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
+			} else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
 				fa = nfa;
 				if (na == NULL) usage();
 
@@ -1794,10 +1856,9 @@ int main(int argc, char *argv[]) {
 					xtern = 2;
 				else
 					usage();
-			}
 
 			/* Turn off spectral measurement */
-			else if (argv[fa][1] == 'n')
+			} else if (argv[fa][1] == 'n')
 				spectral = 0;
 
 			/* Save as Lab */
@@ -1841,10 +1902,13 @@ int main(int argc, char *argv[]) {
 	ocg->add_table(ocg, tt_other, 0);	/* Start the first table */
 
 	ocg->add_kword(ocg, 0, "DESCRIPTOR", "Argyll Calibration Target chart information 3",NULL);
-	ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll printread", NULL);
+	ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll chartread", NULL);
 	atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
 	ocg->add_kword(ocg, 0, "CREATED",atm, NULL);
-	ocg->add_kword(ocg, 0, "DEVICE_CLASS","OUTPUT", NULL);	/* What sort of device this is */
+	if (displ != 0)
+		ocg->add_kword(ocg, 0, "DEVICE_CLASS","DISPLAY", NULL);	/* What sort of device this is */
+	else
+		ocg->add_kword(ocg, 0, "DEVICE_CLASS","OUTPUT", NULL);	/* What sort of device this is */
 
 	if (itype == instUnknown) {
 		if ((ti = icg->find_kword(icg, 0, "TARGET_INSTRUMENT")) >= 0) {
@@ -2116,12 +2180,33 @@ int main(int argc, char *argv[]) {
 #define HEAP_COMPARE(A,B) (A->loci < B->loci)
 	HEAPSORT(col *, scols, npat);
 
+	/* We can't fiddle white point with spectral data, */
+	/* so turn spectral off for display with white point relative. */
+	if (displ == 2 || displ == 3) {
+		spectral = 0;
+
+		/* Check that there is a white patch, so that we can compute Y relative */
+		/* Read all the test patches in */
+		if (nmask != ICX_RGB)
+			error("Don't know how to handle non-RGB display space");
+
+		for (wpat = 0; wpat < npat; wpat++) {
+			if (cols[wpat].dev[0] > 0.9999999 && 
+			    cols[wpat].dev[1] > 0.9999999 && 
+			    cols[wpat].dev[2] > 0.9999999) {
+				break;
+			}
+		}
+		if (wpat >= npat) {	/* Create a white patch */
+			error("Can't compute white Y relative display values without a white test patch");
+		}
+	}
 
 	/* Read all of the strips in */
 	if (read_strips(itype, scols, &atype, npat, totpa, stipa, pis, paix,
-	                saix, ixord, rstart, hex, comport, plen, glen, tlen,
-	                trans, emis, nocal, disbidi, highres, scan_tol, pbypatch, xtern,
-	                spectral, accurate_expd, verb, debug) == 0) {
+	                saix, ixord, rstart, hex, comport, fc, plen, glen, tlen,
+	                trans, emis, displ, dtype, nocal, disbidi, highres, scan_tol,
+	                pbypatch, xtern, spectral, accurate_expd, verb, debug) == 0) {
 		/* And save the result */
 
 		int nsetel = 0;
@@ -2129,6 +2214,33 @@ int main(int argc, char *argv[]) {
 
 		/* Note what instrument the chart was read with */
 		ocg->add_kword(ocg, 0, "TARGET_INSTRUMENT", inst_name(atype) , NULL);
+
+		/* If we've used a display white relative mode, record the absolute white */
+		if (displ == 2 || displ == 3) {
+			double nn[3];
+			char buf[100];
+
+			sprintf(buf,"%f %f %f", cols[wpat].XYZ[0], cols[wpat].XYZ[1], cols[wpat].XYZ[2]);
+			ocg->add_kword(ocg, 0, "LUMINANCE_XYZ_CDM2",buf, NULL);
+
+			/* Normalise to white Y 100 */
+			if (displ == 2) {
+				nn[0] = 100.0 / cols[wpat].XYZ[1];
+				nn[1] = 100.0 / cols[wpat].XYZ[1];
+				nn[2] = 100.0 / cols[wpat].XYZ[1];
+			/* Normalise to the white point */
+			} else {
+				nn[0] = 100.0 * icmD50.X / cols[wpat].XYZ[0];
+				nn[1] = 100.0 * icmD50.Y / cols[wpat].XYZ[1];
+				nn[2] = 100.0 * icmD50.Z / cols[wpat].XYZ[2];
+			}
+
+			for (i = 0; i < npat; i++) {
+				cols[i].XYZ[0] *= nn[0];
+				cols[i].XYZ[1] *= nn[1];
+				cols[i].XYZ[2] *= nn[2];
+			}
+		}
 
 		nsetel += 1;		/* For id */
 		if (doloc)

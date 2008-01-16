@@ -466,18 +466,19 @@ bool_t usb_registry_remove_device_filter(void)
 static bool_t usb_registry_set_device_state(DWORD state, HDEVINFO dev_info, 
                                             SP_DEVINFO_DATA *dev_info_data)
 {
-  SP_PROPCHANGE_PARAMS params;
-  
-   memset(&params, 0, sizeof(SP_PROPCHANGE_PARAMS));
-  
-  params.ClassInstallHeader.cbSize = sizeof(SP_CLASSINSTALL_HEADER);
-  params.ClassInstallHeader.InstallFunction = DIF_PROPERTYCHANGE;
-  params.StateChange = state;
-  params.Scope = DICS_FLAG_CONFIGSPECIFIC;//DICS_FLAG_GLOBAL;
-  params.HwProfile = 0;
+  SP_PROPCHANGE_PARAMS prop_params;
+
+  memset(&prop_params, 0, sizeof(SP_PROPCHANGE_PARAMS));
+
+  prop_params.ClassInstallHeader.cbSize = sizeof(SP_CLASSINSTALL_HEADER);
+  prop_params.ClassInstallHeader.InstallFunction = DIF_PROPERTYCHANGE;
+  prop_params.StateChange = state;
+  prop_params.Scope = DICS_FLAG_CONFIGSPECIFIC;//DICS_FLAG_GLOBAL;
+  prop_params.HwProfile = 0;
 	  
+
   if(!SetupDiSetClassInstallParams(dev_info, dev_info_data,
-                                   (SP_CLASSINSTALL_HEADER *) &params,
+                                   (SP_CLASSINSTALL_HEADER *)&prop_params,
                                    sizeof(SP_PROPCHANGE_PARAMS)))
     {
       usb_error("usb_registry_set_device_state(): setting class "
@@ -486,8 +487,7 @@ static bool_t usb_registry_set_device_state(DWORD state, HDEVINFO dev_info,
     }
 	  
 
-  if(!SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, dev_info, 
-                                dev_info_data))
+  if(!SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, dev_info, dev_info_data))
     {
       usb_error("usb_registry_set_device_state(): calling class "
                 "installer failed");
@@ -746,7 +746,7 @@ int usb_registry_mz_string_size(const char *src)
       p += (strlen(p) + 1);
     }
   
-  return p - src + 1;
+  return (int)(p - src) + 1;
 }
 
 char *usb_registry_mz_string_find_sub(const char *src, const char *str)
@@ -837,54 +837,7 @@ void usb_registry_mz_string_lower(char *src)
     }
 }
 
-
-int usb_registry_get_num_busses(void)
-{
-  HDEVINFO dev_info;
-  SP_DEVINFO_DATA dev_info_data;
-  int dev_index = 0;
-  char id[MAX_PATH];
-  int ret = 0;
-
-  dev_info_data.cbSize = sizeof(SP_DEVINFO_DATA);
-
-  dev_info = SetupDiGetClassDevs(NULL, "USB", NULL,
-                                 DIGCF_ALLCLASSES | DIGCF_PRESENT);
-  
-  if(dev_info == INVALID_HANDLE_VALUE)
-    {
-      usb_error("usb_registry_get_num_busses(): getting "
-                "device info set failed");
-      return 0;
-    }
-  
-  while(SetupDiEnumDeviceInfo(dev_info, dev_index, &dev_info_data))
-    {
-      if(!usb_registry_get_property(SPDRP_HARDWAREID, dev_info, &dev_info_data,
-                                    id, sizeof(id)))
-        {
-          usb_error("usb_registry_get_num_busses(): getting hardware "
-                    "id failed");
-          dev_index++;
-          continue;
-        }
-      
-      usb_registry_mz_string_lower(id);
-      
-      /* search for USB root hubs */
-      if(usb_registry_mz_string_find_sub(id, "root_hub"))
-        {
-          ret++;
-        }
-      dev_index++;
-    }
-  
-  SetupDiDestroyDeviceInfoList(dev_info);
-
-  return ret;
-}
-
-bool_t usb_registry_restart_root_hubs(void)
+bool_t usb_registry_restart_all_devices(void)
 {
   HDEVINFO dev_info;
   SP_DEVINFO_DATA dev_info_data;
@@ -899,7 +852,7 @@ bool_t usb_registry_restart_root_hubs(void)
   
   if(dev_info == INVALID_HANDLE_VALUE)
     {
-      usb_error("usb_registry_restart_root_hubs(): getting "
+      usb_error("usb_registry_restart_all_devices(): getting "
                 "device info set failed");
       return FALSE;
     }
@@ -909,7 +862,7 @@ bool_t usb_registry_restart_root_hubs(void)
       if(!usb_registry_get_property(SPDRP_HARDWAREID, dev_info, 
                                     &dev_info_data, id, sizeof(id)))
         {
-          usb_error("usb_registry_restart_root_hubs(): getting hardware "
+          usb_error("usb_registry_restart_all_devices(): getting hardware "
                     "id failed");
           dev_index++;
           continue;
@@ -917,7 +870,7 @@ bool_t usb_registry_restart_root_hubs(void)
         
       usb_registry_mz_string_lower(id);
         
-      /* search for USB root hubs */
+      /* restart root hubs */
       if(usb_registry_mz_string_find_sub(id, "root_hub"))
         {
           usb_registry_restart_device(dev_info, &dev_info_data);

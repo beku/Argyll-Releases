@@ -292,10 +292,15 @@ if $(UNIX)
 	YACCFLAGS		default = -d ;
 	YACCFILES		default = y.tab ;
 
-	if $(OS) =  MACOSX {
+	if $(OS) = MACOSX {
 		CCFLAGS   += -Wno-sign-compare ;	# supress new gcc4 warnings
 		CCFLAGS   += -fpascal-strings ;
 		LINKFLAGS += -framework Carbon ;
+	}
+
+	if $(HOSTTYPE) = x86_64 {
+		CCFLAGS    += -m64 ;
+		C++FLAGS   += -m64 ;
 	}
 }
 else if $(NT)

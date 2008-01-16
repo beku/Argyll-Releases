@@ -1,0 +1,69 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>About display monitor settings and targets</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+</head>
+<body>
+<h2 style="text-decoration: underline; font-weight: bold;">About
+display monitor settings and
+targets</h2>
+Setting monitor controls and target behaviour for monitor calibration
+boils down to two things:<br>
+<br>
+&nbsp;&nbsp; What is the equipment capable of without introducing side
+effects ?<br>
+<br>
+&nbsp;&nbsp; What are you trying to do ?<br>
+<br>
+You can make adjustments to a display using it's controls and the video
+card LUTs. Generally the former are more powerful and have less side
+effects. There can be exceptions though, for instance LCD's have no
+native contrast control capability, only brightness, so contrast is
+usually faked by manipulating the lookup curves, which can introduce
+side effects. Same with white point control on an LCD (unless it has
+R/G/B LED back lighting). So generally LCD displays are much less
+flexible than CRT displays in targeting some non-native colorspace
+without introducing side effects.<br>
+<br>
+Brightness depends on what you are trying to do. If you are trying to
+do soft proofing for instance, you will have some brightness level in
+mind dictated by the hard proofing booth you are comparing to, or the
+ambient brightens level. For good color judgement and low fatigue it's
+desirable that the display brightness roughly match that of the ambient
+lighting.<br>
+<br>
+In terms of what you are trying to do, it comes down to what colorspace
+you want the display to be, and how far from native for that display it
+is. A CRT can be reasonably flexible in the behaviour it can be given
+without side effects, an LCD less so. If you want to minimize artefacts
+on an LCD you want to set the contrast and white points to their native
+values (ie. where the monitor is not manipulating the digital signal
+levels). It may not be easy to figure out what this is. In this
+scenario you would probably only want calibration to set the transfer
+characteristic and neutral axis, and leave the white point native.<br>
+<br>
+For typical MSWindows/Linux this would probably be the sRGB transfer
+("gamma") curve, or a gamma of about 2.2. For OS X it would probably <br>
+be a gamma of 1.8 (the defaults).<br>
+<br>
+The nominal white point of a display is D65 (set by Television
+standards), and an LCD's native white point is somewhere near there,
+but this is dictated by their backlight color. The CRT's will give
+maximum brightness with a much higher white point (9000K or so), but
+this can be reduced with fewer side effects (just reduced brightness)
+using typical CRT controls. <br>
+<br>
+If you have specific requirements (trying to do soft proofing) then you
+may want to target a specific white point and brightness, and be
+prepared to compromise other aspects of the display to achieve this. By
+all means use the controls to move the display in the direction you
+want to go, and then use the calibration curves to get there. If you
+are moving far from native (especially on an LCD) you may find the side
+effects unacceptable though.<br>
+<br>
+<br>
+<br>
+</body>
+</html>

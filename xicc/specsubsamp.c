@@ -50,7 +50,6 @@ main(
 	double wl_short = 380.0, wl_long = 730.0, wl_width = 10.0;
 	int wl_n = 0;
 	int evy5 = 0;
-	char buf[200];
 
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
@@ -118,7 +117,7 @@ main(
 			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
 				fa = nfa;
 				if (na == NULL) usage();
-				if (sscanf(na, " %f,%f,%f ",&wl_short,&wl_long,&wl_width) != 3)
+				if (sscanf(na, " %lf,%lf,%lf ",&wl_short,&wl_long,&wl_width) != 3)
 
 				if (wl_short > wl_long)
 					usage();

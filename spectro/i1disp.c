@@ -769,6 +769,8 @@ i1disp_take_raw_measurement_2(
 	return inst_ok;
 }
 
+#define ME 1
+
 /* Take a cooked measurement from the device for the i1d2 */
 static inst_code
 i1disp_take_measurement_2(
@@ -777,7 +779,7 @@ i1disp_take_measurement_2(
 	double rgb[3]			/* Return the rgb values */
 ) {
 	int i, j;
-	int edgec[3] = {1,1,1};	/* Measurement edge count for each channel */
+	int edgec[3] = {ME,ME,ME};	/* Measurement edge count for each channel */
 	int rem[3] = {1,1,1};	/* remeasure flags */
 	inst_code ev;
 
@@ -828,18 +830,18 @@ i1disp_take_measurement_2(
 			double ns;
 			if (rem[i]) {
 				if (p->clk_freq > ((2000.0 - 0.5) * rgb2[i]))
-					ns = 2000.0;
+					ns = 2000.0;			/* Maximum edge count */
 				else {
 					ns = floor(p->clk_freq/rgb2[i]) + 0.5;
-					if (ns < 1.0)
-						ns = 1.0;
+					if (ns < ME)			/* Minimum edge count */
+						ns = ME;
 				}
 				edgec[i] = (int)ns;
 			}
 		}
 	
 		/* If we compute a different edge count, read again */
-		if (edgec[0] > 1 || edgec[1] > 1 || edgec[2] > 1) {
+		if (edgec[0] > ME || edgec[1] > ME || edgec[2] > ME) {
 			double rgb3[3];		/* 2nd RGB Readings */
 	
 			if ((ev = i1disp_take_raw_measurement_2(p, edgec, rgb3)) != inst_ok)
@@ -878,6 +880,7 @@ i1disp_take_measurement_2(
 	
 	return inst_ok;
 }
+#undef ME
 
 /* . . . . . . . . . . . . . . . . . . . . . . . . */
 
@@ -924,6 +927,9 @@ i1disp_take_XYZ_measurement(
 		if ((p->mode & inst_mode_measurement_mask) == inst_mode_emis_ambient)
 			XYZ[i] *= 3.0;			/* Times magic scale factor (approx) */
 									/* (Calibrated aproximately agains the i1pro) */
+
+		if (p->chroma4)
+			XYZ[i] *= 4.0;			/* (Not sure about this factor!) */
 	}
 	DBG(("returning XYZ = %f %f %f\n",XYZ[0],XYZ[1],XYZ[2]))
 	return inst_ok;
@@ -1021,6 +1027,7 @@ i1disp_do_fcal_setit(
 	/* Read the integration time (could it be limited by instrument?) */
 	if ((ev = i1disp_rd_int_time(p, &p->int_clocks) ) != inst_ok)
 		return ev;
+	DBG(("Actual integration time = %d clocks\n",p->int_clocks))
 
 	p->itset = 1;
 	return inst_ok;
@@ -1048,6 +1055,7 @@ i1disp_check_unlock(
 		return ev;
 
 	p->lite = 0;
+	p->chroma4 = 0;
 	if ((ev & inst_imask) == I1DISP_LOCKED) {
 
 		/* Unlock it. Ignore I1DISP_NOT_READY status. */
@@ -1086,17 +1094,23 @@ i1disp_check_unlock(
 		return i1disp_interp_code((inst *)p, I1DISP_BAD_STATUS);
 	}
 
+	buf[4] = '\000';
 	ver = atof(buf);
-	DBG(("Version string = %3.1f\n",ver))
+	DBG(("Version string = %5.3f\n",ver))
 
 	/* Read register 0x79 for the model identifier */
 	if ((ev = i1disp_rdreg_byte(p, &vv, 121) ) != inst_ok) {
+		vv &= 0xff;
 		return ev;
 	}
 
 	DBG(("Version character = 0x%02x = '%c'\n",vv,vv))
 
-	if (ver >= 5.1 && ver <= 5.3 && vv == 'L') {
+	if (ver >= 4.0 && ver < 5.1 && vv == 0xff) {
+		p->dtype = 0;			/* Sequel Chroma 4 ?? */
+		p->chroma4 = 1;			/* Treat like an Eye-One Display 1 */
+								/* !!! Not fully tested !!! */
+	} else if (ver >= 5.1 && ver <= 5.3 && vv == 'L') {
 		p->dtype = 0;			/* Eye-One Display 1 */
 	} else if (ver >= 6.0 && ver <= 6.29 && vv == 'L') {
 		p->dtype = 1;			/* Eye-One Display 2 */
@@ -1139,7 +1153,7 @@ i1disp_read_all_regs(
 	/* LCD/user calibration time */
 	if ((ev = i1disp_rdreg_word(p, &p->reg50_W, 50) ) != inst_ok)
 		return ev;
-	DBG(("LCD/user calibration time = 0x%x = %s\n",p->reg50_W, ctime(&p->reg50_W)))
+	DBG(("LCD/user calibration time = 0x%x = %s\n",p->reg50_W, ctime((time_t *)&p->reg50_W)))
 
 	/* LCD/user calibration flag */
 	if ((ev = i1disp_rdreg_short(p, &p->reg126_S, 126) ) != inst_ok)
@@ -1156,7 +1170,7 @@ i1disp_read_all_regs(
 	/* CRT/factory calibration flag */
 	if ((ev = i1disp_rdreg_word(p, &p->reg90_W, 90) ) != inst_ok)
 		return ev;
-	DBG(("CRT/factory flag = 0x%x = %s\n",p->reg90_W, ctime(&p->reg90_W)))
+	DBG(("CRT/factory flag = 0x%x = %s\n",p->reg90_W, ctime((time_t *)&p->reg90_W)))
 
 
 	/* Calibration factor */
@@ -1185,7 +1199,7 @@ i1disp_read_all_regs(
 	/* unknown */
 	if ((ev = i1disp_rdreg_word(p, &p->reg98_W, 98) ) != inst_ok)
 		return ev;
-	DBG(("reg98 = 0x%x = %s\n",p->reg98_W,ctime(&p->reg98_W)))
+	DBG(("reg98 = 0x%x = %s\n",p->reg98_W,ctime((time_t *)&p->reg98_W)))
 
 	/* unknown */
 	if ((ev = i1disp_rdreg_byte(p, &p->reg102_B, 102) ) != inst_ok)
@@ -1300,8 +1314,9 @@ i1disp_compute_factors(
 
 	/* Set some defaults */
 	p->sampfreq = 60.0;		/* Display refresh rate/sample frequency */
-	p->sampno = 100;		/* Minimum sampling count */
+	p->sampno = 100;		/* Minimum sampling count. Set target integration time. */
 	p->nmeasprds = 5;		/* Number of disp refresh period measurments to average */ 
+							/* in doing frequency calibration */
 
 	return inst_ok;
 }
@@ -1312,7 +1327,7 @@ i1disp_compute_factors(
 /* If it's a serial port, use the baud rate given, and timeout in to secs */
 /* Return DTP_COMS_FAIL on failure to establish communications */
 static inst_code
-i1disp_init_coms(inst *pp, int port, baud_rate br, double tout) {
+i1disp_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	i1disp *p = (i1disp *) pp;
 	char buf[16];
 	int rsize;
@@ -1379,6 +1394,8 @@ i1disp_init_inst(inst *pp) {
 		if (p->debug) fprintf(stderr,"i1disp: instrument inited OK\n");
 	}
 
+	p->itype = instI1Display;
+
 	return ev;
 }
 
@@ -1433,7 +1450,7 @@ inst_cal_type i1disp_needs_calibration(inst *pp) {
 /* Request an instrument calibration. */
 /* This is use if the user decides they want to do a calibration, */
 /* in anticipation of a calibration (needs_calibration()) to avoid */
-/* requiring one during measurement, or in response to measureing */
+/* requiring one during measurement, or in response to measuring */
 /* returning inst_needs_cal. Initially us an inst_cal_cond of inst_calc_none, */
 /* and then be prepared to setup the right conditions, or ask the */
 /* user to do so, each time the error inst_cal_setup is returned. */
@@ -1514,7 +1531,7 @@ i1disp_interp_error(inst *pp, int ec) {
 			return "User hit a Command key";
 
 		case I1DISP_OK:
-			return "No error";
+			return "No device error";
 
 		case I1DISP_FLOAT_NOT_SET:
 			return "Float value is not set in EEPROM";

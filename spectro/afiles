@@ -1,14 +1,10 @@
 Readme.txt
 License.txt
-License2.txt
 afiles
 Jamfile
-printread.c
-filmread.c
+chartread.c
 dispread.c
 dispcal.c
-moncurve.c
-moncurve.h
 dispsup.h
 dispsup.c
 insttypes.h
@@ -62,7 +58,6 @@ displin.c
 spotread.c
 fakeread.c
 synthread.c
-monctest.c
 ColorChecker.ti2
 ECI2002R.ti2
 FograStrip.ti2

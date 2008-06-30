@@ -2030,6 +2030,7 @@ void *od				/* context for Perceptual function */
 
 #ifdef STANDALONE_TEST
 
+#ifdef NEVER
 /* Graphics Gems curve */
 static double gcurve(double vv, double g) {
 	if (g >= 0.0) {
@@ -2039,6 +2040,7 @@ static double gcurve(double vv, double g) {
 	}
 	return vv;
 }
+#endif
 
 #ifdef NEVER
 static void sa_percept(void *od, double *out, double *in) {

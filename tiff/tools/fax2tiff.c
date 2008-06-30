@@ -76,11 +76,11 @@ main(int argc, char* argv[])
 	int c;
 	int pn, npages;
 	float resY = 196.0;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 
 
-	while ((c = getopt(argc, argv, "R:X:o:1234ABLMPUW5678abcflmpsuvwz?")) != -1)
+	while ((c = tiff_getopt(argc, argv, "R:X:o:1234ABLMPUW5678abcflmpsuvwz?")) != -1)
 		switch (c) {
 			/* input-related options */
 		case '3':		/* input is g3-encoded */
@@ -118,10 +118,10 @@ main(int argc, char* argv[])
 			fillorder_in = FILLORDER_MSB2LSB;
 			break;
 		case 'R':		/* input resolution */
-			resY = atof(optarg);
+			resY = atof(tiff_optarg);
 			break;
 		case 'X':		/* input width */
-			xsize = atof(optarg);
+			xsize = atof(tiff_optarg);
 			break;
 
 			/* output-related options */
@@ -154,11 +154,11 @@ main(int argc, char* argv[])
 			fillorder_out = FILLORDER_LSB2MSB;
 			break;
 		case 'o':
-			out = TIFFOpen(optarg, "w");
+			out = TIFFOpen(tiff_optarg, "w");
 			if (out == NULL) {
 				fprintf(stderr,
 				    "%s: Can not create or open %s\n",
-				    argv[0], optarg);
+				    argv[0], tiff_optarg);
 				return EXIT_FAILURE;
 			}
 			break;
@@ -187,7 +187,7 @@ main(int argc, char* argv[])
 			usage();
 			/*NOTREACHED*/
 		}
-	npages = argc - optind;
+	npages = argc - tiff_optind;
 	if (npages < 1)
 		usage();
 
@@ -235,16 +235,16 @@ main(int argc, char* argv[])
 		TIFFSetField(faxTIFF, TIFFTAG_GROUP3OPTIONS, group3options_in);
 	else if (compression_in == COMPRESSION_CCITTFAX4)
 		TIFFSetField(faxTIFF, TIFFTAG_GROUP4OPTIONS, group4options_in);
-	for (pn = 0; optind < argc; pn++, optind++) {
-		in = fopen(argv[optind], "r" BINMODE);
+	for (pn = 0; tiff_optind < argc; pn++, tiff_optind++) {
+		in = fopen(argv[tiff_optind], "r" BINMODE);
 		if (in == NULL) {
 			fprintf(stderr,
-			    "%s: %s: Can not open\n", argv[0], argv[optind]);
+			    "%s: %s: Can not open\n", argv[0], argv[tiff_optind]);
 			continue;
 		}
 		faxTIFF->tif_fd = fileno(in);
 		faxTIFF->tif_clientdata = (thandle_t) faxTIFF->tif_fd;
-		faxTIFF->tif_name = argv[optind];
+		faxTIFF->tif_name = argv[tiff_optind];
 		TIFFSetField(out, TIFFTAG_IMAGEWIDTH, xsize);
 		TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, 1);
 		TIFFSetField(out, TIFFTAG_COMPRESSION, compression_out);
@@ -292,7 +292,7 @@ main(int argc, char* argv[])
 		TIFFSetField(out, TIFFTAG_IMAGELENGTH, rows);
 
 		if (verbose) {
-			fprintf(stderr, "%s:\n", argv[optind]);
+			fprintf(stderr, "%s:\n", argv[tiff_optind]);
 			fprintf(stderr, "%d rows in input\n", rows);
 			fprintf(stderr, "%ld total bad rows\n",
 			    (long) badfaxlines);

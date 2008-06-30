@@ -14,38 +14,54 @@
 <u>Performance Tuning</u></h2>
 <br>
 Some operations in Argyll can be particularly slow, so it is worth
-examining ways of<br>
-improving performance.<br>
-<br>
-<h3>Creating Profiles:</h3>
-&nbsp;&nbsp;&nbsp; (To be added).<br>
-<br>
-&nbsp;See also "Creating Device Links" for how to increase the reverse
-cache size, if creating the B2A table is particularly slow.<br>
-<br>
-<h3>Creating Device Links:</h3>
-Just as in creating the B2A tables of profiles, the execution time of
-creating device links is often dominated by the inversion of forward
-color lookup values. A memory cache is employed to speed up this
+examining ways of improving performance, or trading memory consumption
+for performance.<br>
+<h3>Creating Device Links and Profiles<br>
+</h3>
+In creating device links or the B2A tables of profiles, the execution
+time is often dominated by the inversion of forward
+color lookup values. An in-memory cache is employed to speed up this
 operation, by keeping computed values in case they can be used more
 than once. The amount of memory used for caching these values is
-pre-set within the inversion code, and on typical problems<br>
-uses 50-100 Mbytes of memory. If you have more memory available in your
-system, you can try increasing the cache size<br>
-(particularly if you get a "Warning - Reverse Cell Cache exhausted,
-processing in chunks" message during processing).<br>
+pre-set within the inversion code, and by default is set to use half of
+the available RAM on the system, with a minimum of 50 Mbytes.<br>
 <br>
-This can be done by setting an environment variable
-ARGYLL_REV_CACHE_MULT to a number greater than 1. This<br>
-will multiply the size of the cache by that number (i.e. 2 would double
-the cache size).<br>
+The reverse cache size can be changed by setting an environment
+variable
+<span style="font-weight: bold;">ARGYLL_REV_CACHE_MULT</span> to a
+number greater or less than than 1.0 This will multiply the size of the
+cache by that number (i.e. 1.5 would increase the cache size by 50%,
+0.5 would halve it).<br>
 <br>
-If you do this, take care that you don't make the cache too big, and
-cause your system to run out of memory.<br>
+If you have a lot of memory available, you can try increasing the
+cache size to use more of the available RAM (particularly if you get a
+"Warning - Reverse Cell Cache exhausted,
+processing in chunks" message during processing), but if you set it to
+a value too near 2.0 you risk disk swapping, which can slow progress to
+a crawl.<br>
 <br>
-To do this in a Windows DOS shell, either use set, e.g.;<br>
+A second adjustment that can make a great difference to the time taken
+in creating B2A tables is the resolution of the inverse lookup
+acceleration grid. The finer the grid, the <br>
+less searching is needed to locate the input colorspace values that
+correspond to a target output color value, but the greater the memory
+used in this
+structure, and the greater the setup time needed to initialize the
+acceleration grid. The <span style="font-weight: bold;">ARGYLL_REV_ACC_GRID_RES_MULT</span>
+environment variable can alter the default resolution by a scale
+factor. A value of 0.5 for instance, would halve the resolution
+(typically meaning 1/8 th. the total number of grid entries and
+memory), while a value of 2.0 would double it, typically resulting in 8
+times the memory usage. Increasing the resolution too much will reduce
+the available memory for the reverse cache, and greatly increase setup
+time.<br>
 <br>
-&nbsp;&nbsp;&nbsp; set ARGYLL_REV_CACHE_MULT=2<br>
+<h3>Setting an environment variable:</h3>
+<br>
+To set an environment variable an MSWindows DOS shell, either use set,
+e.g.;<br>
+<br>
+&nbsp;&nbsp;&nbsp; set ARGYLL_REV_CACHE_MULT=1.5<br>
 <br>
 which will set the value for that session, or set it in<br>
 <br>
@@ -57,11 +73,11 @@ For OS X or Linux, the exact procedure will depend on the shell you are
 running, but<br>
 is usually something like:<br>
 <br>
-&nbsp;&nbsp;&nbsp; export ARGYLL_REV_CACHE_MULT=2<br>
+&nbsp;&nbsp;&nbsp; export ARGYLL_REV_CACHE_MULT=1.5<br>
 or<br>
-&nbsp;&nbsp;&nbsp; set ARGYLL_REV_CACHE_MULT=2<br>
+&nbsp;&nbsp;&nbsp; set ARGYLL_REV_CACHE_MULT=1.5<br>
 or<br>
-&nbsp;&nbsp;&nbsp; ARGYLL_REV_CACHE_MULT=2<br>
+&nbsp;&nbsp;&nbsp; ARGYLL_REV_CACHE_MULT=1.5<br>
 <br>
 and may need separately exporting, something like:<br>
 <br>

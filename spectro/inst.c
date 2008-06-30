@@ -41,7 +41,9 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "usbio.h"
+#include "hidio.h"
 #include "inst.h"
 #include "insttypeinst.h"
 
@@ -254,7 +256,7 @@ char *filtername) {		/* File containing compensating filter */
 /* Poll for a user abort, terminate, trigger or command. */
 /* Wait for a key rather than polling, if wait != 0 */
 /* Return: */
-/* inst_ok if no key has been hit, */
+/* inst_ok if no key has been hit or key is to be ignored, */
 /* inst_user_abort if User abort has been hit, */
 /* inst_user_term if User terminate has been hit. */
 /* inst_user_trig if User trigger has been hit */
@@ -389,7 +391,7 @@ int verb			/* Verbosity flag */
 	else if ((itype == instSpectrolino  && atype == instSpectrolino) ||
 			 (itype == instSpectroScan  && atype == instSpectroScan) ||
 			 (itype == instSpectroScanT && atype == instSpectroScanT))
-		p = (inst *)new_gretag(icom, debug, verb);
+		p = (inst *)new_ss(icom, debug, verb);
 /* NYI
 	else if (itype == instSpectrocam && atype == instSpectrocam)
 		p = (inst *)new_spc(icom, debug, verb);
@@ -492,7 +494,8 @@ static instType ser_inst_type(
 		return instUnknown;
 
 #ifdef ENABLE_USB
-	if (p->paths[port-1]->dev != NULL)
+	if (p->paths[port-1]->dev != NULL
+	 || p->paths[port-1]->hev != NULL)
 		return instUnknown;
 #endif /* ENABLE_USB */
 
@@ -504,7 +507,7 @@ static instType ser_inst_type(
 	/* The tick to give up on */
 	etime = msec_time() + (long)(1000.0 * 20.0 + 0.5);
 
-	if (p->debug) fprintf(stderr,"instType: Trying different baud rates (%d msec to go)\n",etime - msec_time());
+	if (p->debug) fprintf(stderr,"instType: Trying different baud rates (%lu msec to go)\n",etime - msec_time());
 
 	/* Until we time out, find the correct baud rate */
 	for (i = bi; msec_time() < etime; i++) {

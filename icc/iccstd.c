@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
 #include <ctype.h>
@@ -192,6 +193,11 @@ icmAlloc *new_icmAllocStd() {
 /* ------------------------------------------------- */
 /* Standard Stream file I/O icmFile compatible class */
 
+/* Get the size of the file (Only valid for reading file. */
+static size_t icmFileStd_get_size(icmFile *pp) {
+	return pp->size;
+}
+
 /* Set current position to offset. Return 0 on success, nz on failure. */
 static int icmFileStd_seek(
 icmFile *pp,
@@ -287,11 +293,12 @@ icmAlloc *al		/* heap allocator, NULL for default */
 ) {
 	icmFileStd *p;
 	int del_al = 0;
+	struct stat sbuf;
 
 	if (al == NULL) {	/* None provided, create default */
 		if ((al = new_icmAllocStd()) == NULL)
 			return NULL;
-		del_al = 1;		/* We need to delete it */
+		del_al = 1;		/* We need to delete the allocator we created */
 	}
 
 	if ((p = (icmFileStd *) al->calloc(al, 1, sizeof(icmFileStd))) == NULL) {
@@ -299,14 +306,21 @@ icmAlloc *al		/* heap allocator, NULL for default */
 			al->del(al);
 		return NULL;
 	}
-	p->al     = al;				/* Heap allocator */
-	p->del_al = del_al;			/* Flag noting whether we delete it */
-	p->seek   = icmFileStd_seek;
-	p->read   = icmFileStd_read;
-	p->write  = icmFileStd_write;
-	p->printf = icmFileStd_printf;
-	p->flush  = icmFileStd_flush;
-	p->del    = icmFileStd_delete;
+	p->al       = al;				/* Heap allocator */
+	p->del_al   = del_al;			/* Flag noting whether we delete it */
+	p->get_size = icmFileStd_get_size;
+	p->seek     = icmFileStd_seek;
+	p->read     = icmFileStd_read;
+	p->write    = icmFileStd_write;
+	p->printf   = icmFileStd_printf;
+	p->flush    = icmFileStd_flush;
+	p->del      = icmFileStd_delete;
+
+	if (fstat(fileno(fp), &sbuf) == 0) {
+		p->size = sbuf.st_size;
+	} else {
+		p->size = 0;
+	}
 
 	p->fp = fp;
 	p->doclose = 0;

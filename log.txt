@@ -3,8 +3,226 @@ Argyll CMS change log
 =====================
 
 
-Version 0.70 changes - open version (beta)
+Version 1.00 changes
 --------------------
+
+*	Changed input device profile creation to create B2A table
+	by default. This can be disabled with the -b option.
+
+*	Changed scanin to pass spectral information from reference file
+	to .ti3 file, and also changed coloprof to honour observer and
+	illuminant options for input profile creation.
+
+* 	Added check to using libusb to check that it has
+	been patched to work properly with Argyll supported instruments. 
+
+*	Remove termination character setting from ntio.c and unixio.c
+	to work around problem with Prolific 2302 USB<->Serial converted.
+
+*	Fixed bug in MingW build that caused a run time
+	"(null) DLL cannot be found" error, for any
+	program that linked to the libusb library.
+
+*	Modified profile/logo2cgats to output the sample name,
+	to make it more useful. Added -n flag to spectro/spec2cie
+	to optionaly suppress spectral output. Documented spec2cie-p
+	(plot spectrum) flag.
+
+*	Modified gamut/nearsmth.c to change optimization search
+	from 3D to 2D to improve speed.
+
+*	Added experimental "Daemon" mode to dispwin, so that it
+	monitors an X11 server and keeps each screen up to date
+	with the corresponding profile and calibration using XRandR 1.2.
+
+*	Tweaked dispcal to try and improve behaviour and resulting
+	smoothness of curves. Added black brightness option -B.
+	Added extra report to -R to show VideoLUT entry bits of significance.
+
+*	The i1pro fixed integration time of 2.0 seconds for display 
+	calibration turns out to be too long for some very bright
+	displays. To cope, an alternat 1.0 second integration
+	time is calibrated, and switched to if the display
+	is bright enough.
+
+*	Changed distribution archives so that they have a top
+	level directory. Changed OS X and Linux to gzip'd tar
+	archives rather than .zip, so as to preserve the
+	UNIX style permissions better.
+
+*	Modified rspl/rev.c to add improved nearest acceleration
+	lookup grid structure, to tackle performance issues.
+	Changed aceleration grids to only hold fwd cells that
+	are within the ink limit. Changes sub-simplex handling
+	to make common face sub-simplexes shared between cells.
+	Fixed bug in ink limit bug that was causing many sub-simplexes
+	to be treated as if they straddled the ink boundary, slowing
+	down inversions with ink limits applied. Changed reverse
+	memory size accounting from cells to bytes, for more
+	accurate containtment of memory usage below the swap
+	threshold. Made default memory limit automatically adapt
+	to available system RAM. Increased default reverse
+	acceleration grid resolution to be twice the forward grid
+	resolution, for much improved speed. Added another performance
+	tuning environment variable ARGYLL_REV_ACC_GRID_RES_MULT to
+	allow altering the reverse acceleration grid resolution.
+
+*	Fixed cctiff so that it will copy a tiff file
+	with no color transformation. This allows embedding
+	an ICC profile in the output. Note that the TIFF file
+	will have been modified, the format may have changed,
+	and tags may be lost (ie., this is not the same as
+	an "in place" embedding).
+
+*	Added a simple utility "extracticc" to extract
+	embedded ICC profiles from TIF files.
+
+*	Modify tiffgamut, cctiff colprof and collink so that a TIFF file
+	with an embeded profile may be used to supply ICC profiles.
+	Also added an option to cctiff of embedding a profile in the
+	destination raster file.
+
+*	Added a micro cmm to Linux port, to supord recording
+	the installed display profile to monitor association
+	in the file system. dispwin uses this for installing
+	display profiles, as well as setting a display
+	to the currently installed profile.
+
+*	Changed dispwin operation on OS X to be able 
+	to set the display calibration in a semi-persistent
+	way that is similar to the behaviour on other systems.
+
+*	Fixed imdi/cctiff and link/collink so that they
+    no longer rely on a Matrix profile device space
+	being roughtly perceptualy linear - instead
+	use the per channel curves and convert them
+	to an L* type space for indexing the CLUT grid,
+	and also make a Matrix output space L* like
+	for interpolation.
+
+*	Changed colprof to extract the source gamuts
+	for the perceptual and saturation gamut
+	mapping from the perceptual and saturation
+	A2B tables of the source profile (if they exist).
+	This makes for a better match of the gamut
+	mapping to that particular source profile
+	when subsequently linked with a CMM that
+	chooses the same intent table for source
+	and destination profiles. Changed iccgamut, tiffgamut
+	and xicclu to correspond - make Jab appearance space
+	selection orthogonal to intent table used.
+
+*	Checked and adjsted ambient calibration (Lux etc.).
+	The Eye-One pro, Huey etc. now give reasonable readings.
+
+*	Changed dispcal to make handling of input and/or
+	output black offset consistent across all calibration
+	curve selections, as well as make it selectable/blendable.
+	Added some other standard video calibration curves.
+	Added a viewing conditions transform based on CIECAM02
+	to adjust for the effect of ambient light on display
+	visual contrast, plus option of measuring the ambient
+	light with the instrument.
+
+*	Made cam02 set_view() argument order consistent.
+
+*	Added battery status report to spotread and chartread
+	for DTP20.
+
+*	Enhanced dispwin to take care of installing
+	and uninstalling profiles for a chosen display.
+	Also allow setting the display calibration to the
+	appropriate installed profile.
+
+*	Changed colprof so that the .ti3 data is
+	included in a 'DevD' and 'CIED' text tag in the profile.
+
+*	Added X11 RandR 1.2 support, and use this in
+	preference to Xinerama and XF86VidMode extensions.
+	Support the _ICC_PROFILE atom in the Xrandr output
+	object, as well as the usual RootWindow properties.
+
+*	Added TIFF file output support to target/printtarg,
+	as well as an identification string on each page.
+
+*	Enhance argyll/render to support text (using Hershey fonts),
+	solid and dotted lines, improve speed, plus add
+	anti-aliased output. This is in order to make
+	it usable with printtarg.
+
+*	Completely re-wrote the Jambase & Jamfiles to make
+	a build system thaht works from the top and within
+	sub-directories, as well as cleaning up the Jamfiles
+	and improving the build system capabilities.
+	This solves the circular dependency issues,
+	makes a full build faster and cleaner,
+	and makes it easier to ensure that a full
+	build has consistent build flags and completes
+	sucessfuly. The system TIFF library will
+	now be used if available. Argyll project setup
+	is now in "Jamtop" in the project root directory.
+
+*	Added ability to dispwin to display test patches
+	from a CGATS file, so that it can be used for manual
+	patch measurement.
+
+*	Improved ability of cctiff to cope with input
+	files that have extra planes.
+
+*	Changed tiffgamut to accept Lab encoded TIFF files without
+	using an ICC profile, as well as accepting a colorspace
+	ICC profile.
+
+*	Removed limititation that VideoLUTs have exactly 256 entries.
+
+*	Fixed problem with accuracy of dispcal -o profiles.
+	[There were two issues, one being that the fitting was
+	 weighting smoothness to the detrement of accuracy,
+	 and the other being that there are unconstrained
+ 	 parameters that allow the model curves not to
+	 go through 1,1]
+
+*	Fixed problem with Linux PolicyKit/Hal permission
+	files not enabling serial ports and Huey.
+
+*	Fixed and verified that the major Linux/X11 screensavers
+	(X11 saver, xscreensaver, gnome & kde screensavers) and DPMS
+	are disabled properly, and now we avoid doing an exec()
+	every 60 seconds!
+
+*	Modified libusb to address Linux intr/bulk polling
+	and reliability issues.
+
+*	Improved install documentation in the light of current
+	Linux distributions, and MSWindows versions.
+
+*	Renamed "profile" to "colprof", and "icclink" to "collink"
+	to avoid clashes that have arisen with other executable names.
+
+*	Fixed bug in scanin/scanrd.c that sometimes caused
+	a double free crash on Linux. (Thanks to Guy K. Kloss)
+
+*	Modified dispwin to open a device context to a particular
+	MSWindows display differently, for better compatibility with
+	MS Vista.
+
+*	Changed dispwin to allow several of the commands
+	to operate in one call. Clearing the LUT,
+	setting the X11 ICC_PROFILE, loading the profile or
+	X11 ICC_PROFILE can now be done with one
+	invokation of dispwin.
+
+*	Fixed bug in dispcal that affected black level
+	adjustment and calibration. Symptom was a black
+	level not quite as low as it should be.
+	[Thanks to Hal V. Engel for noticing this]
+
+*   Made sure that display profiles have the luminance tag
+    value set, so that it's possible to recover the
+    actual instrument reading.
+
+*	Fixed dispcal and dispread -dfake so that
+	they will take notice of a -kcal file.
 
 [Beta 8 Snapshot 2008/1/15]
 
@@ -1322,7 +1540,7 @@ Version 0.5 changes
     to be stored as an absolute profile.
     This is non-standard, but very useful for
     avoiding Lab range clipping when using
-	a scanner as a colorimiter.
+	a image as a colorimiter.
 
 *   Added hack program profile/logo4 to
     convert four separate spectral files read
@@ -1367,13 +1585,13 @@ Version 0.5 changes
 
 *   Added support in scanin.c and scanrd.c for
     processing 16 bit TIFFs, allowing for higher
-    precision scans (useful when using the scanner as
-    a crude colorimeter).
+    precision scans (useful when using the image to
+    measure color).
 
 *   Added support in scanin.c and scanrd.c for
     using a scan of a print test chart, plus a
-    profile for the scanner, to act as a crude
-    colorimeter in printer calibration. This
+    profile for the scanner, to be able to measure
+    color for printer calibration. This
 	new mode handles multi-page test charts.
 
 *   Added support in printtarg, for producing a scan

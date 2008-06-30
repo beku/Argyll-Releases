@@ -6,7 +6,7 @@
  * Author: Graeme W. Gill
  * Date:   4/10/96
  *
- * Copyright 1998 - 2007, Graeme W. Gill
+ * Copyright 1998 - 2008, Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
@@ -44,8 +44,11 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include <signal.h>
 #ifndef NT
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #endif
 #include <time.h>
 #include "copyright.h"
@@ -53,16 +56,21 @@
 #include "icc.h"
 #include "numsup.h"
 #include "cgats.h"
+#include "conv.h"
 #include "dispwin.h"
+#if defined(UNIX) && !defined(__APPLE__)
+#include "ucmm.h"
+#endif
 
 #define VERIFY_TOL (1.0/255.0)
+#undef DISABLE_RANDR				/* Disable XRandR code */
 
 #undef DEBUG
 //#define STANDALONE_TEST
 
 #ifdef DEBUG
 # define errout stderr
-# define debug(xx)	fprintf(stderr, xx )
+# define debug(xx)	fprintf(errout, xx )
 # define debug2(xx)	fprintf xx
 #else
 # define debug(xx)
@@ -116,16 +124,75 @@ static BOOL CALLBACK MonitorEnumProc(
 		return FALSE;
 	}
 
-	strcpy(disps[ndisps]->name, pmi.szDevice);
-	disps[ndisps]->description = NULL;
+	if ((disps[ndisps]->name = strdup(pmi.szDevice)) == NULL) {
+		debug("malloc failed\n");
+		return FALSE;
+	}
+	disps[ndisps]->prim = (pmi.dwFlags & MONITORINFOF_PRIMARY) ? 1 : 0;
 
 	disps[ndisps]->sx = lprcMonitor->left;
 	disps[ndisps]->sy = lprcMonitor->top;
 	disps[ndisps]->sw = lprcMonitor->right - lprcMonitor->left;
 	disps[ndisps]->sh = lprcMonitor->bottom - lprcMonitor->top;
 
+	disps[ndisps]->description = NULL;
+
 	*pdisps = disps;
 	return TRUE;
+}
+
+/* Dynamically linked function support */
+
+int dyn_inited = 0;
+
+BOOL (WINAPI* pEnumDisplayDevices)(PVOID,DWORD,PVOID,DWORD) = NULL;
+
+#if !defined(NTDDI_LONGHORN) || NTDDI_VERSION < NTDDI_LONGHORN
+
+typedef enum {
+	WCS_PROFILE_MANAGEMENT_SCOPE_SYSTEM_WIDE,
+	WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER
+} WCS_PROFILE_MANAGEMENT_SCOPE;
+
+BOOL (WINAPI* pWcsAssociateColorProfileWithDevice)(WCS_PROFILE_MANAGEMENT_SCOPE,PCWSTR,PCWSTR) = NULL;
+BOOL (WINAPI* pWcsDisassociateColorProfileFromDevice)(WCS_PROFILE_MANAGEMENT_SCOPE,PCWSTR,PCWSTR) = NULL;
+
+#endif  /* NTDDI_VERSION < NTDDI_LONGHORN */
+
+/* See if we can get the wanted function calls */
+static void setup_dyn_calls() {
+
+	if (dyn_inited == 0) {
+
+		/* EnumDisplayDevicesA was left out of lib32.lib on earlier SDK's ... */
+		pEnumDisplayDevices = (BOOL (WINAPI*)(PVOID,DWORD,PVOID,DWORD)) GetProcAddress(LoadLibrary("USER32"), "EnumDisplayDevicesA");
+
+		/* Vista calls */
+#if !defined(NTDDI_LONGHORN) || NTDDI_VERSION < NTDDI_LONGHORN
+		pWcsAssociateColorProfileWithDevice = (BOOL (WINAPI*)(WCS_PROFILE_MANAGEMENT_SCOPE,PCWSTR,PCWSTR)) GetProcAddress(LoadLibrary("mscms"), "WcsAssociateColorProfileWithDevice");
+		pWcsDisassociateColorProfileFromDevice = (BOOL (WINAPI*)(WCS_PROFILE_MANAGEMENT_SCOPE,PCWSTR,PCWSTR)) GetProcAddress(LoadLibrary("mscms"), "WcsDisassociateColorProfileFromDevice");
+#endif  /* NTDDI_VERSION < NTDDI_LONGHORN */
+	}
+	dyn_inited = 1;
+}
+
+/* Simple up conversion from char string to wchar string */
+/* Return NULL if malloc fails */
+/* ~~~ Note, should probably replace this with mbstowcs() ???? */
+static unsigned short *char2wchar(char *s) {
+	unsigned char *cp;
+	unsigned short *w, *wp;
+
+	if ((w = malloc(sizeof(unsigned short) * (strlen(s) + 1))) == NULL)
+		return w;
+
+	for (cp = (unsigned char *)s, wp = w; ; cp++, wp++) {
+		*wp = *cp;		/* Zero extend */
+		if (*cp == 0)
+			break;
+	}
+
+	return w;
 }
 
 #endif /* NT */
@@ -144,14 +211,11 @@ disppath **get_displays() {
 	disppath **disps = NULL;
 
 #ifdef NT
-	BOOL (WINAPI* pEnumDisplayDevices)(PVOID,DWORD,PVOID,DWORD);
 	DISPLAY_DEVICE dd;
 	char buf[200];
 	int i, j;
 
-	/* EnumDisplayDevicesA was left out of lib32.lib on earlier SDK's ... */
-//	(FARPROC)pEnumDisplayDevices = GetProcAddress(LoadLibrary("USER32"), "EnumDisplayDevicesA");
-	pEnumDisplayDevices = (BOOL (WINAPI*)(PVOID,DWORD,PVOID,DWORD)) GetProcAddress(LoadLibrary("USER32"), "EnumDisplayDevicesA");
+	setup_dyn_calls();
 
 	if (EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)&disps) == 0) {
 		free_disppaths(disps);
@@ -159,40 +223,72 @@ disppath **get_displays() {
 		return NULL;
 	}
 
-	/* Now locate the displays */
+	/* Now locate detailed information about displays */
 	for (i = 0; ; i++) {
 		if (disps[i] == NULL)
 			break;
 
-		/* Find the matching device, and get further information */
-		dd.cb = sizeof(DISPLAY_DEVICE);
-		for (j = 0; ; j++) {
-			if ((*pEnumDisplayDevices)(NULL, j, &dd, 0) == 0)
-				break;
-			/* (Could add dd.DeviceString, which is the graphics card name) */
-			if (strcmp(disps[i]->name, dd.DeviceName) == 0) {
-				sprintf(buf,"%s, at %d, %d, width %d, height %d%s",dd.DeviceName+4,
-				        disps[i]->sx, disps[i]->sy, disps[i]->sw, disps[i]->sh,
-				        dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE ? " (Primary Display)" : "");
+		dd.cb = sizeof(dd);
 
-				if ((disps[i]->description = strdup(buf)) == NULL) {
-					debug("get_displays failed on malloc\n");
+		/* Get monitor information */
+		for (j = 0; ; j++) {
+			if ((*pEnumDisplayDevices)(disps[i]->name, j, &dd, 0) == 0) {
+				if (j == 0) {
 					free_disppaths(disps);
+					debug2((errout,"EnumDisplayDevices failed on '%s'\n",disps[i]->name));
 					return NULL;
 				}
+				break;
+			}
+#ifdef NEVER
+			printf("Mon %d, name '%s'\n",j,dd.DeviceName);
+			printf("Mon %d, string '%s'\n",j,dd.DeviceString);
+			printf("Mon %d, flags 0x%x\n",j,dd.StateFlags);
+			printf("Mon %d, id '%s'\n",j,dd.DeviceID);
+			printf("Mon %d, key '%s'\n",j,dd.DeviceKey);
+#endif
+			if (j == 0) {
+				strcpy(disps[i]->monname, dd.DeviceName);
+				strcpy(disps[i]->monid, dd.DeviceID);
 			}
 		}
-		if (disps[i]->description == NULL) {
-			if ((disps[i]->description = strdup("Unknown")) == NULL) {
-				free_disppaths(disps);
-				debug("get_displays malloc failed\n");
-				return NULL;
-			}
+
+		sprintf(buf,"%s, at %d, %d, width %d, height %d%s",disps[i]->name+4,
+	        disps[i]->sx, disps[i]->sy, disps[i]->sw, disps[i]->sh,
+	        disps[i]->prim ? " (Primary Display)" : "");
+
+		if ((disps[i]->description = strdup(buf)) == NULL) {
+			debug("get_displays failed on malloc\n");
+			free_disppaths(disps);
+			return NULL;
 		}
+
+		/* Note that calling EnumDisplayDevices(NULL, j, ..) for the adapter can return other */
+		/* intformation, such as the graphics card name, and additional state flags. */
+		/* EnumDisplaySettings() can also be called to get information such as display depth etc. */
 	}
+
+#ifdef NEVER
+	/* Explore adapter information */
+	for (j = 0; ; j++) {
+		/* Get adapater information */
+		if ((*pEnumDisplayDevices)(NULL, j, &dd, 0) == 0)
+			break;
+		printf("Adapt %d, name '%s'\n",j,dd.DeviceName);
+		printf("Adapt %d, string '%s'\n",j,dd.DeviceString);
+		printf("Adapt %d, flags 0x%x\n",j,dd.StateFlags);
+		printf("Adapt %d, id '%s'\n",j,dd.DeviceID);
+		printf("Adapt %d, key '%s'\n",j,dd.DeviceKey);
+	}
+#endif /* NEVER */
+
 #endif /* NT */
 
 #ifdef __APPLE__
+	/* Note :- some recent releases of OS X have a feature which */
+	/* automatically adjusts the screen brigtness with ambient level. */
+	/* We may have to find a way of disabling this during calibration and profiling. */
+	/* See the "pset -g" command. */
 	int i;
 	CGDisplayErr dstat;
 	CGDisplayCount dcount;		/* Number of display IDs */
@@ -332,7 +428,8 @@ disppath **get_displays() {
 	        disps[i]->sx, disps[i]->sy, disps[i]->sw, disps[i]->sh,
 	        CGDisplayIsMain(dids[i]) ? " (Primary Display)" : "");
 
-		if ((disps[i]->description = strdup(buf)) == NULL) {
+		if ((disps[i]->name = strdup(dp)) == NULL
+		 || (disps[i]->description = strdup(buf)) == NULL) {
 			debug("get_displays failed on malloc\n");
 			free_disppaths(disps);
 			free(dids);
@@ -344,139 +441,407 @@ disppath **get_displays() {
 #endif /* __APPLE__ */
 
 #if defined(UNIX) && !defined(__APPLE__)
-	int i, j;
-	int dcount;		/* Number of screens */
+	int i, j, k;
+	int defsix = 0;		/* default screen index */
+	int dcount;			/* Number of screens */
 	char *dname;
-	char buf[100];
+	char dnbuf[100];
 	int evb = 0, erb = 0;
+	int majv, minv;			/* Version */
 	Display *mydisplay;
-	disppath *tdispp;
+	int ndisps = 0;
 	XineramaScreenInfo *xai = NULL;
+	char desc1[100], desc2[200];
 
 	/* There seems to be no way of getting the available displays */
 	/* on an X11 system. Attempting to open them in sequence */
 	/* takes too long. We just rely on the user supplying the */
 	/* right display. We can enumerate screens though. */
+
+	/* Open the base display, and then enumerate all the screens */
 	if ((dname = getenv("DISPLAY")) != NULL) {
-		strncpy(buf,dname,99); buf[99] = '\000';
+		char *pp;
+		strncpy(dnbuf,dname,99); dnbuf[99] = '\000';
+		if ((pp = strrchr(dnbuf, ':')) != NULL) {
+			if ((pp = strchr(pp, '.')) == NULL)
+				strcat(dnbuf,".0");
+			else  {
+				if (pp[1] == '\000')
+					strcat(dnbuf,"0");
+				else {
+					pp[1] = '0';
+					pp[2] = '\000';
+				}
+			}
+		}
 	} else
-		strcpy(buf,":0.0");
+		strcpy(dnbuf,":0.0");
 
-	if ((mydisplay = XOpenDisplay(buf)) == NULL) {
-		debug2((errout, "failed to open display '%s'\n",buf));
+	if ((mydisplay = XOpenDisplay(dnbuf)) == NULL) {
+		debug2((errout, "failed to open display '%s'\n",dnbuf));
 		return NULL;
 	}
 
-	if (XineramaQueryExtension(mydisplay, &evb, &erb) != 0
-	 && XineramaIsActive(mydisplay)) {
+#if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
+	/* Use Xrandr 1.2 if it's available */
+	if (XRRQueryExtension(mydisplay, &evb, &erb) != 0
+	 && XRRQueryVersion(mydisplay, &majv, &minv)
+	 && majv == 1 && minv >= 2) {
 
-		xai = XineramaQueryScreens(mydisplay, &dcount);
-
-		if (xai == NULL || dcount == 0) {
-			debug("XineramaQueryScreens failed\n");
+		if (XSetErrorHandler(null_error_handler) == 0) {
+			debug("get_displays failed on XSetErrorHandler\n");
 			XCloseDisplay(mydisplay);
+			free_disppaths(disps);
 			return NULL;
 		}
-		j = 0;
-	} else {
+
 		dcount = ScreenCount(mydisplay);
-		j = DefaultScreen(mydisplay);
-	}
 
-	/* Allocate our list */
-	if ((disps = (disppath **)calloc(sizeof(disppath *), dcount + 1)) == NULL) {
-		debug("get_displays failed on malloc\n");
-		XCloseDisplay(mydisplay);
-		return NULL;
-	}
-	for (i = 0; i < dcount; i++) {
-		if ((disps[i] = calloc(sizeof(buf), 1)) == NULL) {
-			debug("get_displays failed on malloc\n");
-			free_disppaths(disps);
-			XCloseDisplay(mydisplay);
-			return NULL;
+		/* Go through all the screens */
+		for (i = 0; i < dcount; i++) {
+			XRRScreenResources *scrnres;
+
+			if ((scrnres = XRRGetScreenResources(mydisplay, RootWindow(mydisplay,i))) == NULL) {
+				debug("XRRGetScreenResources failed\n");
+				XCloseDisplay(mydisplay);
+				free_disppaths(disps);
+				return NULL;
+			}
+
+			/* Look at all the screens outputs */
+			for (j = 0; j < scrnres->noutput; j++) {
+				XRROutputInfo *outi;
+				XRRCrtcInfo *crtci;
+	
+				if ((outi = XRRGetOutputInfo(mydisplay, scrnres, scrnres->outputs[j])) == NULL) {
+					debug("XRRGetOutputInfo failed\n");
+					XRRFreeScreenResources(scrnres);
+					XCloseDisplay(mydisplay);
+					free_disppaths(disps);
+					return NULL;
+				}
+	
+				if (outi->connection == RR_Disconnected) {
+					continue;
+				}
+#ifdef NEVER
+				{
+					Atom *oprops;
+					int noprop;
+
+					/* Get a list of the properties of the output */
+					oprops = XRRListOutputProperties(mydisplay, scrnres->outputs[j], &noprop);
+
+					printf("num props = %d\n", noprop);
+					for (k = 0; k < noprop; k++) {
+						printf("%d: atom 0x%x, name = '%s'\n", k, oprops[k], XGetAtomName(mydisplay, oprops[k]));
+					}
+				}
+#endif /* NEVER */
+
+				if ((crtci = XRRGetCrtcInfo(mydisplay, scrnres, outi->crtc)) != NULL) {
+					char *pp;
+
+					/* Add the output to the list */
+					if (disps == NULL) {
+						if ((disps = (disppath **)calloc(sizeof(disppath *), 1 + 1)) == NULL) {
+							debug("get_displays failed on malloc\n");
+							XRRFreeCrtcInfo(crtci);
+							XRRFreeScreenResources(scrnres);
+							XCloseDisplay(mydisplay);
+							return NULL;
+						}
+					} else {
+						if ((disps = (disppath **)realloc(disps,
+						                     sizeof(disppath *) * (ndisps + 2))) == NULL) {
+							debug("get_displays failed on malloc\n");
+							XRRFreeCrtcInfo(crtci);
+							XRRFreeScreenResources(scrnres);
+							XCloseDisplay(mydisplay);
+							return NULL;
+						}
+						disps[ndisps+1] = NULL;	/* End marker */
+					}
+					/* ndisps is current display we're filling in */
+					if ((disps[ndisps] = calloc(sizeof(disppath),1)) == NULL) {
+						debug("get_displays failed on malloc\n");
+						XRRFreeCrtcInfo(crtci);
+						XRRFreeScreenResources(scrnres);
+						XCloseDisplay(mydisplay);
+						free_disppaths(disps);
+						return NULL;
+					}
+
+					disps[ndisps]->screen = i;
+					disps[ndisps]->uscreen = i;
+					disps[ndisps]->rscreen = i;
+					disps[ndisps]->sx = crtci->x;
+					disps[ndisps]->sy = crtci->y;
+					disps[ndisps]->sw = crtci->width;
+					disps[ndisps]->sh = crtci->height;
+					disps[ndisps]->crtc = outi->crtc;				/* XID of crtc */
+					disps[ndisps]->output = scrnres->outputs[j];	/* XID of output */		
+
+					sprintf(desc1,"Screen %d, Output %s",ndisps+1,outi->name);
+					sprintf(desc2,"%s at %d, %d, width %d, height %d",desc1,
+				        disps[ndisps]->sx, disps[ndisps]->sy, disps[ndisps]->sw, disps[ndisps]->sh);
+
+					/* See if it is a clone */
+					for (k = 0; 0 < ndisps; k++) {
+						if (disps[k]->crtc == disps[ndisps]->crtc) {
+							sprintf(desc1, "[ Clone of %d ]",k+1);
+							strcat(desc2, desc1);
+						}
+					}
+					if ((disps[ndisps]->description = strdup(desc2)) == NULL) {
+						debug("get_displays failed on malloc\n");
+						XRRFreeCrtcInfo(crtci);
+						XRRFreeScreenResources(scrnres);
+						XCloseDisplay(mydisplay);
+						free_disppaths(disps);
+						return NULL;
+					}
+	
+					/* Form the display name */
+					if ((pp = strrchr(dnbuf, ':')) != NULL) {
+						if ((pp = strchr(pp, '.')) != NULL) {
+							sprintf(pp,".%d",i);
+						}
+					}
+					if ((disps[ndisps]->name = strdup(dnbuf)) == NULL) {
+						debug("get_displays failed on malloc\n");
+						XRRFreeCrtcInfo(crtci);
+						XRRFreeScreenResources(scrnres);
+						XCloseDisplay(mydisplay);
+						free_disppaths(disps);
+						return NULL;
+					}
+					debug2((errout, "Display %d name = '%s'\n",ndisps,disps[ndisps]->name));
+	
+					/* Create the X11 root atom of the default screen */
+					/* that may contain the associated ICC profile */
+					/* (The _%d variant will probably break with non-Xrandr */
+					/* aware software Xrandr were configured to have more than */
+					/* a single virtual screen. */
+					if (j == 0)
+						strcpy(desc1, "_ICC_PROFILE");
+					else
+						sprintf(desc1, "_ICC_PROFILE_%d",j);
+
+					if ((disps[ndisps]->icc_atom = XInternAtom(mydisplay, desc1, False)) == None)
+						error("Unable to intern atom '%s'",desc1);
+
+					/* Create the atom of the output that may contain the associated ICC profile */
+					if ((disps[ndisps]->icc_out_atom = XInternAtom(mydisplay, "_ICC_PROFILE", False)) == None)
+						error("Unable to intern atom '%s'","_ICC_PROFILE");
+		
+					/* Grab the EDID from the output */
+					{
+						Atom edid_atom, ret_type;
+						int ret_format;
+						long ret_len = 0, ret_togo;
+						unsigned char *atomv = NULL;
+
+						/* Get the atom for the EDID data */
+						if ((edid_atom = XInternAtom(mydisplay, "EDID_DATA", True)) == None)
+							error("Unable to intern atom '%s'","EDID_DATA");
+
+						/* Get the EDID_DATA */
+						if (XRRGetOutputProperty(mydisplay, scrnres->outputs[j], edid_atom,
+						            0, 0x7ffffff, False, False, XA_INTEGER, 
+   	                                &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) == Success
+						            && (ret_len == 128 || ret_len == 256)) {
+							if ((disps[ndisps]->edid = malloc(sizeof(unsigned char) * ret_len)) == NULL) {
+								debug("get_displays failed on malloc\n");
+								XRRFreeCrtcInfo(crtci);
+								XRRFreeScreenResources(scrnres);
+								XCloseDisplay(mydisplay);
+								free_disppaths(disps);
+								return NULL;
+							}
+							memcpy(disps[ndisps]->edid, atomv, ret_len);
+							disps[ndisps]->edid_len = ret_len;
+							XFree(atomv);
+							debug2((errout, "Got EDID for display\n"));
+						} else {
+							debug2((errout, "Failed to get EDID for display\n"));
+						}
+					}
+		
+					ndisps++;		/* Now it's number of displays */
+					XRRFreeCrtcInfo(crtci);
+				}
+				XRRFreeOutputInfo(outi);
+			}
+	
+			XRRFreeScreenResources(scrnres);
 		}
-	}
+		XSetErrorHandler(NULL);
+		defsix = DefaultScreen(mydisplay);
 
-	/* Create a description for each screen */
-	for (i = 0; i < dcount; i++) {
-		char desc1[100], desc2[200];
-	    XF86VidModeMonitor monitor;
-		int evb = 0, erb = 0;
+	} else
+#endif /* randr >= V 1.2 */
+	{		/* Use Older style identification */
+		if (XineramaQueryExtension(mydisplay, &evb, &erb) != 0
+		 && XineramaIsActive(mydisplay)) {
 
-		if ((disps[i]->name = strdup(buf)) == NULL) {
-			debug("get_displays failed on malloc\n");
-			free_disppaths(disps);
-			XCloseDisplay(mydisplay);
-			return NULL;
-		}
-		if (xai != NULL) {					/* Xinerama */
-			disps[i]->screen = 0;
-			disps[i]->uscreen = i;			/* We are assuming xinerama lists screens in the same order */
-			disps[i]->rscreen = i;
-			disps[i]->sx = xai[i].x_org;
-			disps[i]->sy = xai[i].y_org;
-			disps[i]->sw = xai[i].width;
-			disps[i]->sh = xai[i].height;
+			xai = XineramaQueryScreens(mydisplay, &dcount);
+
+			if (xai == NULL || dcount == 0) {
+				debug("XineramaQueryScreens failed\n");
+				XCloseDisplay(mydisplay);
+				return NULL;
+			}
+			defsix = 0;
 		} else {
-			disps[i]->screen = i;
-			disps[i]->uscreen = i;
-			disps[i]->rscreen = i;
-			disps[i]->sx = 0;			/* Must be 0 */
-			disps[i]->sy = 0;
-			disps[i]->sw = DisplayWidth(mydisplay, disps[i]->screen);
-			disps[i]->sh = DisplayHeight(mydisplay, disps[i]->screen);
+			dcount = ScreenCount(mydisplay);
+			defsix = DefaultScreen(mydisplay);
 		}
 
-		if ((disps[i]->icc_atom_name = (char *)malloc(30)) == NULL) {
+		/* Allocate our list */
+		if ((disps = (disppath **)calloc(sizeof(disppath *), dcount + 1)) == NULL) {
 			debug("get_displays failed on malloc\n");
-			free_disppaths(disps);
 			XCloseDisplay(mydisplay);
 			return NULL;
 		}
-
-		/* Create the X11 root atom of the default screen */
-		/* that may contain the associated ICC profile */
-		if (disps[i]->uscreen == 0)
-			strcpy(disps[i]->icc_atom_name, "_ICC_PROFILE");
-		else
-			sprintf(disps[i]->icc_atom_name, "_ICC_PROFILE_%d",disps[i]->uscreen);
-
-		if (XF86VidModeQueryExtension(mydisplay, &evb, &erb) != 0) {
-			/* Some propietary multi-screen drivers (ie. TwinView & MergeFB) */
-			/* don't implement the XVidMode extension properly. */
-			if (XSetErrorHandler(null_error_handler) == 0) {
-				debug("get_displays failed on XSetErrorHandler\n");
-				if (xai != NULL)
-					XFree(xai);
+		for (i = 0; i < dcount; i++) {
+			if ((disps[i] = calloc(sizeof(disppath), 1)) == NULL) {
+				debug("get_displays failed on malloc\n");
 				free_disppaths(disps);
 				XCloseDisplay(mydisplay);
 				return NULL;
 			}
-			monitor.model = NULL;
-			if (XF86VidModeGetMonitor(mydisplay, disps[i]->uscreen, &monitor) != 0
-			 && monitor.model != NULL && monitor.model[0] != '\000')
-				sprintf(desc1, "%s",monitor.model);
-			else
-				sprintf(desc1,"Screen %d",i+1);
-			XSetErrorHandler(NULL);
-		} else
-			sprintf(desc1,"Screen %d",i+1);
+		}
 
-		sprintf(desc2,"%s at %d, %d, width %d, height %d",desc1,
-	        disps[i]->sx, disps[i]->sy, disps[i]->sw, disps[i]->sh);
-		if ((disps[i]->description = strdup(desc2)) == NULL) {
-			debug("get_displays failed on malloc\n");
-			free_disppaths(disps);
-			XCloseDisplay(mydisplay);
-			return NULL;
+		/* Create a description for each screen */
+		for (i = 0; i < dcount; i++) {
+		    XF86VidModeMonitor monitor;
+			int evb = 0, erb = 0;
+			char *pp;
+
+			/* Form the display name */
+			if ((pp = strrchr(dnbuf, ':')) != NULL) {
+				if ((pp = strchr(pp, '.')) != NULL) {
+					sprintf(pp,".%d",i);
+				}
+			}
+			if ((disps[i]->name = strdup(dnbuf)) == NULL) {
+				debug("get_displays failed on malloc\n");
+				free_disppaths(disps);
+				XCloseDisplay(mydisplay);
+				return NULL;
+			}
+	
+			debug2((errout, "Display %d name = '%s'\n",i,disps[i]->name));
+			if (xai != NULL) {					/* Xinerama */
+				disps[i]->screen = 0;			/* We are asuming Xinerame creates a single virtual screen */
+				disps[i]->uscreen = i;			/* We are assuming xinerama lists screens in the same order */
+				disps[i]->rscreen = i;
+				disps[i]->sx = xai[i].x_org;
+				disps[i]->sy = xai[i].y_org;
+				disps[i]->sw = xai[i].width;
+				disps[i]->sh = xai[i].height;
+			} else {
+				disps[i]->screen = i;
+				disps[i]->uscreen = i;
+				disps[i]->rscreen = i;
+				disps[i]->sx = 0;			/* Must be 0 */
+				disps[i]->sy = 0;
+				disps[i]->sw = DisplayWidth(mydisplay, disps[i]->screen);
+				disps[i]->sh = DisplayHeight(mydisplay, disps[i]->screen);
+			}
+
+			/* Create the X11 root atom of the default screen */
+			/* that may contain the associated ICC profile */
+			if (disps[i]->uscreen == 0)
+				strcpy(desc1, "_ICC_PROFILE");
+			else
+				sprintf(desc1, "_ICC_PROFILE_%d",disps[i]->uscreen);
+
+			if ((disps[i]->icc_atom = XInternAtom(mydisplay, desc1, False)) == None)
+				error("Unable to intern atom '%s'",desc1);
+
+			/* See if we can locate the EDID of the monitor for this screen */
+			for (j = 0; j < 2; j++) { 
+				char edid_name[50];
+				Atom edid_atom, ret_type;
+				int ret_format = 8;
+				long ret_len, ret_togo;
+				unsigned char *atomv = NULL;
+
+				if (disps[i]->uscreen == 0) {
+					if (j == 0)
+						strcpy(edid_name,"XFree86_DDC_EDID1_RAWDATA");
+					else
+						strcpy(edid_name,"XFree86_DDC_EDID2_RAWDATA");
+				} else {
+					if (j == 0)
+						sprintf(edid_name,"XFree86_DDC_EDID1_RAWDATA_%d",disps[i]->uscreen);
+					else
+						sprintf(edid_name,"XFree86_DDC_EDID2_RAWDATA_%d",disps[i]->uscreen);
+				}
+
+				if ((edid_atom = XInternAtom(mydisplay, edid_name, True)) == None)
+					continue;
+				if (XGetWindowProperty(mydisplay, RootWindow(mydisplay, disps[i]->uscreen), edid_atom,
+				            0, 0x7ffffff, False, XA_INTEGER, 
+				            &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) == Success
+				            && (ret_len == 128 || ret_len == 256)) {
+					if ((disps[i]->edid = malloc(sizeof(unsigned char) * ret_len)) == NULL) {
+						debug("get_displays failed on malloc\n");
+						free_disppaths(disps);
+						XCloseDisplay(mydisplay);
+						return NULL;
+					}
+					memcpy(disps[i]->edid, atomv, ret_len);
+					disps[i]->edid_len = ret_len;
+					XFree(atomv);
+					debug2((errout, "Got EDID for display\n"));
+					break;
+				} else {
+					debug2((errout, "Failed to get EDID for display\n"));
+				}
+			}
+
+			if (XF86VidModeQueryExtension(mydisplay, &evb, &erb) != 0) {
+				/* Some propietary multi-screen drivers (ie. TwinView & MergeFB) */
+				/* don't implement the XVidMode extension properly. */
+				if (XSetErrorHandler(null_error_handler) == 0) {
+					debug("get_displays failed on XSetErrorHandler\n");
+					if (xai != NULL)
+						XFree(xai);
+					free_disppaths(disps);
+					XCloseDisplay(mydisplay);
+					return NULL;
+				}
+				monitor.model = NULL;
+				if (XF86VidModeGetMonitor(mydisplay, disps[i]->uscreen, &monitor) != 0
+				 && monitor.model != NULL && monitor.model[0] != '\000')
+					sprintf(desc1, "%s",monitor.model);
+				else
+					sprintf(desc1,"Screen %d",i+1);
+				XSetErrorHandler(NULL);
+			} else
+				sprintf(desc1,"Screen %d",i+1);
+
+			sprintf(desc2,"%s at %d, %d, width %d, height %d",desc1,
+		        disps[i]->sx, disps[i]->sy, disps[i]->sw, disps[i]->sh);
+			if ((disps[i]->description = strdup(desc2)) == NULL) {
+				debug("get_displays failed on malloc\n");
+				free_disppaths(disps);
+				XCloseDisplay(mydisplay);
+				return NULL;
+			}
 		}
 	}
 
 	/* Put the screen given by the display name at the top */
-	tdispp = disps[j];
-	disps[j] = disps[0];
-	disps[0] = tdispp;
+	{
+		disppath *tdispp;
+		tdispp = disps[defsix];
+		disps[defsix] = disps[0];
+		disps[0] = tdispp;
+	}
 
 	if (xai != NULL)
 		XFree(xai);
@@ -495,14 +860,14 @@ void free_disppaths(disppath **disps) {
 			if (disps[i] == NULL)
 				break;
 
+			if (disps[i]->name != NULL)
+				free(disps[i]->name);
 			if (disps[i]->description != NULL)
 				free(disps[i]->description);
 #if defined(UNIX) && !defined(__APPLE__)
-			if (disps[i]->name != NULL)
-				free(disps[i]->name);
-			if (disps[i]->icc_atom_name != NULL)
-				free(disps[i]->icc_atom_name);
-#endif	/* UNIX X11 */
+			if (disps[i]->edid != NULL)
+				free(disps[i]->edid);
+#endif
 			free(disps[i]);
 		}
 		free(disps);
@@ -534,13 +899,6 @@ disppath *get_a_display(int ix) {
 		return NULL;
 	}
 	*rv = *paths[i];		/* Structure copy */
-	if ((rv->description = strdup(paths[i]->description)) == NULL) {
-		debug("get_displays failed on malloc\n");
-		free(rv);
-		free_disppaths(paths);
-		return NULL;
-	}
-#if defined(UNIX) && !defined(__APPLE__)
 	if ((rv->name = strdup(paths[i]->name)) == NULL) {
 		debug("get_displays failed on malloc\n");
 		free(rv->description);
@@ -548,29 +906,38 @@ disppath *get_a_display(int ix) {
 		free_disppaths(paths);
 		return NULL;
 	}
-	if ((rv->icc_atom_name = strdup(paths[i]->icc_atom_name)) == NULL) {
+	if ((rv->description = strdup(paths[i]->description)) == NULL) {
 		debug("get_displays failed on malloc\n");
-		free(rv->description);
-		free(rv->name);
 		free(rv);
 		free_disppaths(paths);
 		return NULL;
 	}
-#endif	/* UNXI X11 */
+#if defined(UNIX) && !defined(__APPLE__)
+	if (paths[i]->edid != NULL) {
+		if ((rv->edid = malloc(sizeof(unsigned char) * 128)) == NULL) {
+			debug("get_displays failed on malloc\n");
+			free(rv);
+			free_disppaths(paths);
+			return NULL;
+		}
+		rv->edid_len = paths[i]->edid_len;
+		memcpy(rv->edid, paths[i]->edid, rv->edid_len );
+	}
+#endif
 	free_disppaths(paths);
 	return rv;
 }
 
 void free_a_disppath(disppath *path) {
 	if (path != NULL) {
+		if (path->name != NULL)
+			free(path->name);
 		if (path->description != NULL)
 			free(path->description);
 #if defined(UNIX) && !defined(__APPLE__)
-			if (path->name != NULL)
-				free(path->name);
-			if (path->icc_atom_name != NULL)
-				free(path->icc_atom_name);
-#endif	/* UNXI X11 */
+		if (path->edid != NULL)
+			free(path->edid);
+#endif
 		free(path);
 	}
 }
@@ -597,7 +964,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 
 	debug("dispwin_get_ramdac called\n");
 
-#ifdef NEVER	/* GetDeviceCaps(COLORMGMTCAPS) doesn't work for hdc from CreateDC() ! */
+#ifdef NEVER	/* Doesn't seem to return correct information on win2K systems */
 	if ((GetDeviceCaps(p->hdc, COLORMGMTCAPS) & CM_GAMMA_RAMP) == 0) {
 		debug("dispwin_get_ramdac failed on GetDeviceCaps(CM_GAMMA_RAMP)\n");
 		return NULL;
@@ -628,7 +995,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 
 	/* GetDeviceGammaRamp() is hard coded for 3 x 256 entries */
 	if (r->nent != 256) {
-		debug("GetDeviceGammaRamp() is hard coded for nent == 256\n");
+		debug2((errout,"GetDeviceGammaRamp() is hard coded for nent == 256, and we've got nent = %d!\n",r->nent));
 		return NULL;
 	}
 
@@ -649,9 +1016,6 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 
 	debug("dispwin_get_ramdac called\n");
 
-	/* Could try and use the ColorSync CMSetGammaByAVID() and */
-	/* CMGetGammaByAVID() routines instead - they may be persistent */
-	/* after the application exits ? */
 	if (CGGetDisplayTransferByTable(p->ddid, 163845, vals[0], vals[1], vals[2], &nent) != 0) {
 		debug("CGGetDisplayTransferByTable failed\n");
 		return NULL;
@@ -703,42 +1067,90 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 
 	debug("dispwin_get_ramdac called\n");
 
-	if (XF86VidModeQueryExtension(p->mydisplay, &evb, &erb) == 0) {
-		debug("XF86VidModeQueryExtension failed\n");
-		return NULL;
-	}
-	/* Some propietary multi-screen drivers (ie. TwinView & MergedFB) */
-	/* don't implement the XVidMode extenstion properly. */
-	if (XSetErrorHandler(null_error_handler) == 0) {
-		debug("get_displays failed on XSetErrorHandler\n");
-		return NULL;
-	}
-	nent = -1;
-	if (XF86VidModeGetGammaRampSize(p->mydisplay, p->myrscreen, &nent) == 0
-	 || nent == -1) {
-		XSetErrorHandler(NULL);
-		debug("XF86VidModeGetGammaRampSize failed\n");
-		return NULL;
-	}
-	XSetErrorHandler(NULL);		/* Restore handler */
-	if (nent == 0) {
-		debug("XF86VidModeGetGammaRampSize returned 0 size\n");
-		return NULL;
-	}
+#if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
+	if (p->crtc != 0) {		/* Using Xrandr 1.2 */
+		XRRCrtcGamma *crtcgam;
+		int nz = 0;
 
-	if (nent > 16384) {
-		debug("XF86VidModeGetGammaRampSize has more entries than we can handle\n");
-		return NULL;
-	}
+		debug("Getting gamma using Randr 1.2\n");
 
-	if (XF86VidModeGetGammaRamp(p->mydisplay, p->myrscreen, nent,  vals[0], vals[1], vals[2]) == 0) {
-		debug("XF86VidModeGetGammaRamp failed\n");
-		return NULL;
-	}
+		if ((crtcgam = XRRGetCrtcGamma(p->mydisplay, p->crtc)) == NULL) {
+			debug("XRRGetCrtcGamma failed\n");
+			return NULL;
+		}
 
-	if (nent != (1 << p->pdepth)) {
-		debug("CGGetDisplayTransferByTable number of entries mismatches screen depth\n");
-		return NULL;
+		nent = crtcgam->size;
+
+		if (nent > 16384) {
+			debug("XRRGetCrtcGammaSize  has more entries than we can handle\n");
+			return NULL;
+		}
+
+		if (nent != (1 << p->pdepth)) {
+			debug2((errout,"XRRGetCrtcGammaSize number of entries %d mismatches screen depth %d\n",nent,(1 << p->pdepth)));
+			return NULL;
+		}
+
+		/* Check for XRandR 1.2 startup bug */
+		for (i = 0; i < nent; i++) {
+			vals[0][i] = crtcgam->red[i];
+			vals[1][i] = crtcgam->green[i];
+			vals[2][i] = crtcgam->blue[i];
+			nz = vals[0][i] | vals[1][i] | vals[2][i];
+		}
+
+		/* Compensate for XRandR 1.2 startup bug */
+		if (nz == 0) {
+			debug("Detected XRandR 1.2 bug ? Assuming linear ramp!\n");
+			for (i = 0; i < nent; i++) {
+				for (j = 0; j < 3; j++)
+					vals[j][i] = (int)(65535.0 * i/(nent-1.0) + 0.5);
+			}
+		}
+
+		XRRFreeGamma(crtcgam);
+
+	} else
+#endif /* randr >= V 1.2 */
+	{
+
+		if (XF86VidModeQueryExtension(p->mydisplay, &evb, &erb) == 0) {
+			debug("XF86VidModeQueryExtension failed\n");
+			return NULL;
+		}
+		/* Some propietary multi-screen drivers (ie. TwinView & MergedFB) */
+		/* don't implement the XVidMode extenstion properly. */
+		if (XSetErrorHandler(null_error_handler) == 0) {
+			debug("get_displays failed on XSetErrorHandler\n");
+			return NULL;
+		}
+		nent = -1;
+		if (XF86VidModeGetGammaRampSize(p->mydisplay, p->myrscreen, &nent) == 0
+		 || nent == -1) {
+			XSetErrorHandler(NULL);
+			debug("XF86VidModeGetGammaRampSize failed\n");
+			return NULL;
+		}
+		XSetErrorHandler(NULL);		/* Restore handler */
+		if (nent == 0) {
+			debug("XF86VidModeGetGammaRampSize returned 0 size\n");
+			return NULL;
+		}
+
+		if (nent > 16384) {
+			debug("XF86VidModeGetGammaRampSize has more entries than we can handle\n");
+			return NULL;
+		}
+
+		if (XF86VidModeGetGammaRamp(p->mydisplay, p->myrscreen, nent,  vals[0], vals[1], vals[2]) == 0) {
+			debug("XF86VidModeGetGammaRamp failed\n");
+			return NULL;
+		}
+
+		if (nent != (1 << p->pdepth)) {
+			debug2((errout,"CGGetDisplayTransferByTable number of entries %d mismatches screen depth %d\n",nent,(1 << p->pdepth)));
+			return NULL;
+		}
 	}
 
 	/* Allocate a ramdac */
@@ -763,8 +1175,8 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 		}
 	}
 
-	for (j = 0; j < 3; j++) {
-		for (i = 0; i < r->nent; i++) {
+	for (i = 0; i < r->nent; i++) {
+		for (j = 0; j < 3; j++) {
 			r->v[j][i] = vals[j][i]/65535.0;
 		}
 	}
@@ -772,9 +1184,49 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 	return r;
 }
 
+#ifdef __APPLE__
+
+/* Given a location, return a string for it's path */
+static char *plocpath(CMProfileLocation *ploc) {
+
+	if (ploc->locType == cmFileBasedProfile) {
+		FSRef newRef;
+  		UInt8 path[256] = "";
+
+		/* Note that there is no non-deprecated equivalent to this. */
+		/* Apple need to remove the cmFileBasedProfile type from the */
+		/* CMProfileLocation to do away with it. */
+		if (FSpMakeFSRef(&ploc->u.fileLoc.spec, &newRef) == noErr) {
+			OSStatus stus;
+			if ((stus = FSRefMakePath(&newRef, path, 256)) == 0 || stus == fnfErr)
+				return strdup((char *)path);
+			return NULL;
+		} 
+	} else if (ploc->locType == cmPathBasedProfile) {
+		return strdup(ploc->u.pathLoc.path);
+	}
+	return NULL;
+}
+
+/* Ugh! ColorSync doesn't take care of endian issues !! */
+static void cs_w32(unsigned long *p, unsigned long val) {
+	((char *)p)[0] = (char)(val >> 24);
+	((char *)p)[1] = (char)(val >> 16);
+	((char *)p)[2] = (char)(val >> 8);
+	((char *)p)[3] = (char)(val);
+}
+
+static void cs_w16(unsigned short *p, unsigned short val) {
+	((char *)p)[0] = (char)(val >> 8);
+	((char *)p)[1] = (char)(val);
+}
+
+#endif /* __APPLE__ */
+
 /* Set the RAMDAC values. */
 /* Return nz if not possible */
-static int dispwin_set_ramdac(dispwin *p, ramdac *r) {
+/* Return 2 for OS X when the current profile is a system profile */
+static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 	int i, j;
 
 #ifdef NT
@@ -782,7 +1234,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r) {
 
 	debug("dispwin_set_ramdac called\n");
 
-#ifdef NEVER	/* GetDeviceCaps(COLORMGMTCAPS) doesn't work for hdc from CreateDC() ! */
+#ifdef NEVER	/* Doesn't seem to return correct information on win2K systems */
 	if ((GetDeviceCaps(p->hdc, COLORMGMTCAPS) & CM_GAMMA_RAMP) == 0) {
 		debug("dispwin_set_ramdac failed on GetDeviceCaps(CM_GAMMA_RAMP)\n");
 		return 1;
@@ -807,26 +1259,180 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r) {
 #endif	/* NT */
 
 #ifdef __APPLE__
-	CGGammaValue vals[3][16384];
+	{		/* Transient first */
+		CGGammaValue vals[3][16384];
+	
+		debug("dispwin_set_ramdac called\n");
 
-	debug("dispwin_set_ramdac called\n");
-
-	for (j = 0; j < 3; j++) {
-		for (i = 0; i < r->nent; i++) {
-			double vv = r->v[j][i];
-			if (vv < 0.0)
-				vv = 0.0;
-			else if (vv > 1.0)
-				vv = 1.0;
-			vals[j][i] = vv;
+		for (j = 0; j < 3; j++) {
+			for (i = 0; i < r->nent; i++) {
+				double vv = r->v[j][i];
+				if (vv < 0.0)
+					vv = 0.0;
+				else if (vv > 1.0)
+					vv = 1.0;
+				vals[j][i] = vv;
+			}
 		}
+
+		if (CGSetDisplayTransferByTable(p->ddid, r->nent, vals[0], vals[1], vals[2]) != 0) {
+			debug("CGSetDisplayTransferByTable failed\n");
+			return 1;
+		}
+
 	}
 
-	if (CGSetDisplayTransferByTable(p->ddid, r->nent, vals[0], vals[1], vals[2]) != 0) {
-		debug("CGSetDisplayTransferByTable failed\n");
-		return 1;
+	/* By default the OSX RAMDAC access is transient, lasting only as long */
+	/* as the process setting it. To set a temporary but persistent beyond this process */
+	/* calibration, we fake up a profile and install it in such a way that it will disappear, */
+	/* restoring the previous display profile whenever the current ColorSync display profies */
+	/* is restored to the screen. NOTE that this trick will fail if it is not possible */
+	/* to rename the currently selected profile file, ie. because it is a system profile. */
+	if (persist) {					/* Persistent */
+		CMError ev;
+		CMProfileRef prof;			/* Current AVID profile */
+		CMProfileLocation ploc;		/* Current profile location */
+		UInt32 plocsz = sizeof(CMProfileLocation);
+		char *ppath;				/* Current/renamed profiles path */
+		char *tpath;				/* Temporary profiles/original profiles path */
+		CMProfileRef tprof;			/* Temporary profile */
+		CMProfileLocation tploc;	/* Temporary profile */
+		CMVideoCardGammaType *vcgt = NULL;	/* vcgt tag */
+		int size;
+		int i, j;
+
+		debug("Set_ramdac persist\n");
+
+		/* Get the current installed profile */
+		if ((ev = CMGetProfileByAVID((CMDisplayIDType)p->ddid, &prof)) != noErr) {
+			debug2((errout,"CMGetProfileByAVID() failed for display '%s' with error %d\n",p->name,ev));
+			return 1;
+		}
+
+		/* Get the current installed  profile's location */
+		if ((ev = NCMGetProfileLocation(prof, &ploc, &plocsz)) != noErr) {
+			debug2((errout,"NCMGetProfileLocation() failed for display '%s' with error %d\n",p->name,ev));
+			return 1;
+		}
+
+		debug2((errout, "Current profile path = '%s'\n",plocpath(&ploc)));
+
+		if ((tpath = plocpath(&ploc)) == NULL) {
+			debug2((errout,"plocpath failed for display '%s'\n",p->name));
+			return 1;
+		}
+
+		if (strlen(tpath) > 255) {
+			debug2((errout,"current profile path is too long\n"));
+			return 1;
+		}
+		if ((ppath = malloc(strlen(tpath) + 6)) == NULL) {
+			debug2((errout,"malloc failed for display '%s'\n",p->name));
+			free(tpath);
+			return 1;
+		}
+		strcpy(ppath,tpath);
+		strcat(ppath,".orig");
+
+		/* Rename the currently installed profile temporarily */
+		if (rename(tpath, ppath) != 0) {
+			debug2((errout,"Renaming existing profile '%s' failed\n",ppath));
+			return 2;
+		}
+		debug2((errout,"Renamed current profile '%s' to '%s'\n",tpath,ppath));
+
+		/* Make a copy of the renamed current profile back to it's true name */
+		tploc.locType = cmPathBasedProfile;
+		strncpy(tploc.u.pathLoc.path, tpath, 255);
+		tploc.u.pathLoc.path[255] = '\000';
+
+		/* Make the temporary copy */
+		if ((ev = CMCopyProfile(&tprof, &tploc, prof)) != noErr) {
+			debug2((errout,"CMCopyProfile() failed for display '%s' with error %d\n",p->name,ev));
+			CMCloseProfile(prof);
+			unlink(tpath);
+			rename(ppath, tpath);
+			return 1;
+		}
+		CMCloseProfile(prof);
+
+		if ((ev = CMSetProfileDescriptions(tprof, "Dispwin Temp", 13, NULL, 0, NULL, 0)) != noErr) {
+			debug2((errout,"cmVideoCardGammaTag`() failed for display '%s' with error %d\n",p->name,ev));
+			CMCloseProfile(tprof);
+			unlink(tpath);
+			rename(ppath, tpath);
+			return 1;
+		}
+		
+		/* Change the description and set the vcgt tag to the calibration */
+		if ((vcgt = malloc(size = (sizeof(CMVideoCardGammaType) - 1 + 3 * 2 * r->nent))) == NULL) {
+			debug2((errout,"malloc of vcgt tag failed for display '%s' with error %d\n",p->name,ev));
+			CMCloseProfile(tprof);
+			unlink(tpath);
+			rename(ppath, tpath);
+			return 1;
+		}
+		cs_w32(&vcgt->typeDescriptor, cmSigVideoCardGammaType);
+		cs_w32(&vcgt->gamma.tagType, cmVideoCardGammaTableType);	/* Table, not formula */
+		cs_w16(&vcgt->gamma.u.table.channels, 3);
+		cs_w16(&vcgt->gamma.u.table.entryCount, r->nent);
+		cs_w16(&vcgt->gamma.u.table.entrySize, 2);
+
+		for (i = 0; i < r->nent; i++) {
+			for (j = 0; j < 3; j++) {
+				double vv = r->v[j][i];
+				int ivv;
+				if (vv < 0.0)
+					vv = 0.0;
+				else if (vv > 1.0)
+					vv = 1.0;
+				ivv = (int)(vv * 65535.0 + 0.5);
+				cs_w16(((unsigned short *)vcgt->gamma.u.table.data) + ((j * r->nent) + i), ivv);
+			}
+		}
+
+		/* Replace or add a vcgt tag */
+		if ((ev = CMSetProfileElement(tprof, cmVideoCardGammaTag, size, vcgt)) != noErr) {
+			debug2((errout,"CMSetProfileElement vcgt tag failed with error %d\n",ev));
+			free(vcgt);
+			CMCloseProfile(tprof);
+			unlink(tpath);
+			rename(ppath, tpath);
+			return 1;
+		}
+		free(vcgt);
+
+		if ((ev = CMUpdateProfile(tprof)) != noErr) {
+			debug2((errout,"CMUpdateProfile failed with error %d\n",ev));
+			CMCloseProfile(tprof);
+			unlink(tpath);
+			rename(ppath, tpath);
+			return 1;
+		}
+
+		/* Make temporary file the current profile - updates LUTs */
+		if ((ev = CMSetProfileByAVID((CMDisplayIDType)p->ddid, tprof)) != noErr) {
+			debug2((errout,"CMSetProfileByAVID() failed for display '%s' with error %d\n",p->name,ev));
+			CMCloseProfile(tprof);
+			unlink(tpath);
+			rename(ppath, tpath);
+			return 1;
+		}
+		CMCloseProfile(tprof);
+		debug2((errout,"Set display to use temporary profile '%s'\n",tpath));
+
+		/* Delete the temporary profile */
+		unlink(tpath);
+
+		/* Rename the current profile back to it's correct name */
+		if (rename(ppath, tpath) != 0) {
+			debug2((errout,"Renaming existing profile '%s' failed\n",ppath));
+			return 1;
+		}
+		debug2((errout,"Restored '%s' back to '%s'\n",ppath,tpath));
 	}
 #endif /* __APPLE__ */
+
 
 #if defined(UNIX) && !defined(__APPLE__)
 	unsigned short vals[3][16384];
@@ -843,18 +1449,46 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r) {
 			vals[j][i] = (int)(vv * 65535.0 + 0.5);
 		}
 	}
-	/* Some propietary multi-screen drivers (ie. TwinView & MergedFB) */
-	/* don't implement the XVidMode extenstion properly. */
-	if (XSetErrorHandler(null_error_handler) == 0) {
-		debug("get_displays failed on XSetErrorHandler\n");
-		return 1;
-	}
-	if (XF86VidModeSetGammaRamp(p->mydisplay, p->myrscreen, r->nent, vals[0], vals[1], vals[2]) == 0) {
+
+#if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
+	if (p->crtc != 0) {		/* Using Xrandr 1.2 */
+		XRRCrtcGamma *crtcgam;
+
+		debug("Setting gamma using Randr 1.2\n");
+
+		if ((crtcgam = XRRAllocGamma(r->nent)) == NULL) {
+			debug(" XRRAllocGamma failed\n");
+			return 1;
+		}
+
+		for (i = 0; i < r->nent; i++) {
+			crtcgam->red[i]   = vals[0][i];
+			crtcgam->green[i] = vals[1][i];
+			crtcgam->blue[i]  = vals[2][i];
+		}
+
+		XRRSetCrtcGamma(p->mydisplay, p->crtc, crtcgam);
+		XSync(p->mydisplay, False);		/* Flush the change out */
+
+		XRRFreeGamma(crtcgam);
+
+	} else
+#endif /* randr >= V 1.2 */
+	{
+		/* Some propietary multi-screen drivers (ie. TwinView & MergedFB) */
+		/* don't implement the XVidMode extenstion properly. */
+		if (XSetErrorHandler(null_error_handler) == 0) {
+			debug("get_displays failed on XSetErrorHandler\n");
+			return 1;
+		}
+		if (XF86VidModeSetGammaRamp(p->mydisplay, p->myrscreen, r->nent, vals[0], vals[1], vals[2]) == 0) {
+			XSetErrorHandler(NULL);
+			debug("XF86VidModeSetGammaRamp failed\n");
+			return 1;
+		}
+		XSync(p->mydisplay, False);		/* Flush the change out */
 		XSetErrorHandler(NULL);
-		debug("XF86VidModeSetGammaRamp failed\n");
-		return 1;
 	}
-	XSetErrorHandler(NULL);
 #endif	/* UNXI X11 */
 
 	return 0;
@@ -915,11 +1549,802 @@ static void dispwin_del_ramdac(ramdac *r) {
 
 	debug("dispwin_del_ramdac called\n");
 
-	for (j = 0; j < 3; j++)
+	for (j = 0; j < 3; j++) {
 		free(r->v[j]);
+	}
 
 	free(r);
 }
+
+/* ----------------------------------------------- */
+/* Useful function for X11 profie atom settings */
+
+#if defined(UNIX) && !defined(__APPLE__)
+/* Return NZ on error */
+static int set_X11_atom(dispwin *p, char *fname) {
+	FILE *fp;
+	unsigned long psize, bread;
+	unsigned char *atomv;
+
+	/* Read in the ICC profile, then set the X11 atom value */
+#if defined(O_BINARY) || defined(_O_BINARY)
+	if ((fp = fopen(fname,"rb")) == NULL)
+#else
+	if ((fp = fopen(fname,"r")) == NULL)
+#endif
+	{
+		debug2((errout,"Can't open file '%s'\n",fname));
+		return 1;
+	}
+
+	/* Figure out how big it is */
+	if (fseek(fp, 0, SEEK_END)) {
+		debug2((errout,"Seek '%s' to EOF failed\n",fname));
+		return 1;
+	}
+	psize = (unsigned long)ftell(fp);
+
+	if (fseek(fp, 0, SEEK_SET)) {
+		debug2((errout,"Seek '%s' to SOF failed\n",fname));
+		return 1;
+	}
+
+	if ((atomv = (unsigned char *)malloc(psize)) == NULL) {
+		debug2((errout,"Failed to allocate buffer for profile '%s'\n",fname));
+		return 1;
+	}
+
+	if ((bread = fread(atomv, 1, psize, fp)) != psize) {
+		debug2((errout,"Failed to read profile '%s' into buffer\n",fname));
+		return 1;
+	}
+	
+	fclose(fp);
+
+	XChangeProperty(p->mydisplay, RootWindow(p->mydisplay, 0), p->icc_atom,
+	                XA_CARDINAL, 8, PropModeReplace, atomv, psize);
+
+#if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
+	/* If Xrandr 1.2, set property on output */
+	if (p->icc_out_atom != 0) {
+		XRRChangeOutputProperty(p->mydisplay, p->output, p->icc_out_atom,
+	                XA_CARDINAL, 8, PropModeReplace, atomv, psize);
+	}
+#endif /* randr >= V 1.2 */
+	free(atomv);
+
+	return 0;
+}
+#endif  /* UNXI X11 */
+
+/* ----------------------------------------------- */
+/* Install a display profile and make */
+/* it the default for this display. */
+/* Set the display to the calibration in the profile */
+/* (r == NULL if no calibration) */
+/* (We assume that the caller has checked that it's an ICC profile) */
+/* Return nz if failed */
+int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
+#ifdef NT
+	{
+		char *fullpath;
+		char *basename;
+		char colpath[MAX_PATH];
+		unsigned long colpathlen = MAX_PATH;
+		WCS_PROFILE_MANAGEMENT_SCOPE wcssc;
+		unsigned short *wpath, *wbname, *wmonid;
+
+		debug2((errout,"dispwin_install_profile got '%s'\n",fname));
+
+		if (GetColorDirectory(NULL, colpath, &colpathlen) == 0) {
+			debug2((errout,"Getting color directory failed\n"));
+			return 1;
+		}
+
+		if ((fullpath = _fullpath(NULL, fname, 0)) == NULL) {
+			debug2((errout,"_fullpath() failed\n"));
+			return 1;
+		}
+
+		if ((basename = PathFindFileName(fullpath)) == NULL) {
+			debug2((errout,"Locating base name in '%s' failed\n",fname));
+			free(fullpath);
+			return 1;
+		}
+
+		if ((strlen(colpath) + strlen(basename) + 2) > MAX_PATH) {
+			debug2((errout,"Installed profile path too long\n"));
+			free(fullpath);
+			return 1;
+		}
+		strcat(colpath, "\\");
+		strcat(colpath, basename);
+
+		/* Setup in case we're on Vista */
+		if (scope == p_scope_user)
+			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER;
+		else 
+			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER;
+
+		if ((wpath = char2wchar(fullpath)) == NULL) { 
+			debug2((errout,"char2wchar failed\n"));
+			free(fullpath);
+			return 1;
+		}
+
+		if ((wbname = char2wchar(basename)) == NULL) { 
+			debug2((errout,"char2wchar failed\n"));
+			free(wpath);
+			free(fullpath);
+			return 1;
+		}
+
+		if ((wmonid = char2wchar(p->monid)) == NULL) {
+			debug2((errout,"char2wchar failed\n"));
+			free(wbname);
+			free(wpath);
+			free(fullpath);
+			return 1;
+		}
+
+		debug2((errout,"Installing '%s'\n",fname));
+		
+		/* Install doesn't replace an existing installed profile, */
+		/* so we need to try and delete this profile first */
+		if (pWcsDisassociateColorProfileFromDevice != NULL) {
+			(*pWcsDisassociateColorProfileFromDevice)(wcssc, wbname, wmonid);
+		} else {
+			DisassociateColorProfileFromDevice(NULL, basename, p->monid);
+		}
+		if (UninstallColorProfile(NULL,  basename, TRUE) == 0) {
+			/* UninstallColorProfile fails on Win2K */
+			_unlink(colpath);
+		}
+
+		if (InstallColorProfile(NULL, fullpath) == 0) {
+			debug2((errout,"InstallColorProfile() failed for file '%s' with error %d\n",fname,GetLastError()));
+			free(wmonid);
+			free(wbname);
+			free(wpath);
+			free(fullpath);
+			return 1;
+		}
+
+		debug2((errout,"Associating '%s' with '%s'\n",fullpath,p->monid));
+		if (pWcsAssociateColorProfileWithDevice != NULL) {
+			debug("Using Vista Associate\n");
+			if ((*pWcsAssociateColorProfileWithDevice)(wcssc, wpath, wmonid) == 0) {
+				debug2((errout,"WcsAssociateColorProfileWithDevice() failed for file '%s' with error %d\n",fullpath,GetLastError()));
+				free(wmonid);
+				free(wbname);
+				free(wpath);
+				free(fullpath);
+				return 1;
+			}
+		} else {
+			if (AssociateColorProfileWithDevice(NULL, fullpath, p->monid) == 0) {
+				debug2((errout,"AssociateColorProfileWithDevice() failed for file '%s' with error %d\n",fullpath,GetLastError()));
+				free(wmonid);
+				free(wbname);
+				free(wpath);
+				free(fullpath);
+				return 1;
+			}
+		}
+
+		free(wmonid);
+		free(wbname);
+		free(wpath);
+		free(fullpath);
+		/* The default profile will be the last one associated */
+
+		/* MSWindows doesn't generally set the display to the current profile calibration, */
+		/* so we do it. */
+		if (p->set_ramdac(p,r,1))
+			error("Failed to set VideoLUT");
+
+		return 0;
+	}
+#endif /* NT */
+
+#ifdef __APPLE__
+	{
+		CMError ev;
+		short vref;
+		FSRef dirref;
+		char dpath[FILENAME_MAX];
+		char *basename;
+	
+		CMProfileLocation ploc;		/* Source profile location */
+		CMProfileRef prof;			/* Source profile */
+		CMProfileLocation dploc;	/* Destinaion profile location */
+		CMProfileRef dprof;			/* Destinaion profile */
+
+		if (scope == p_scope_network)
+			vref = kNetworkDomain;
+		else if (scope == p_scope_system)
+			vref = kSystemDomain;
+		else if (scope == p_scope_local)
+			vref = kLocalDomain;
+		else 
+			vref = kUserDomain;
+
+		/* Locate the appropriate ColorSync path */
+		if ((ev = FSFindFolder(vref, kColorSyncProfilesFolderType, kCreateFolder, &dirref)) != noErr) {
+			debug2((errout,"FSFindFolder() failed with error %d\n",ev));
+			return 1;
+		}
+
+		/* Convert to POSIX path */
+		if ((ev = FSRefMakePath(&dirref, (unsigned char *)dpath, FILENAME_MAX)) != noErr) {
+			debug2((errout,"FSRefMakePath failed with error %d\n",ev));
+			return 1;
+		}
+
+		/* Locate the base filename in the fname */
+		for (basename = fname + strlen(fname);  ; basename--) {
+			if (basename <= fname || basename[-1] == '/')
+				break;
+		}
+
+		/* Append the basename to the ColorSync directory path */
+		if ((strlen(dpath) + strlen(basename) + 2) > FILENAME_MAX
+		 || (strlen(dpath) + strlen(basename) + 2) > 256) {
+			debug2((errout,"ColorSync dir + profile name too long\n"));
+			return 1;
+		}
+		strcat(dpath, "/");
+		strcat(dpath, basename);
+		debug2((errout,"Destination profile '%s'\n",dpath));
+
+		/* Open the profile we want to install */
+		ploc.locType = cmPathBasedProfile;
+		strncpy(ploc.u.pathLoc.path, fname, 255);
+		ploc.u.pathLoc.path[255] = '\000';
+
+		debug2((errout,"Source profile '%s'\n",fname));
+		if ((ev = CMOpenProfile(&prof, &ploc)) != noErr) {
+			debug2((errout,"CMOpenProfile() failed for file '%s' with error %d\n",fname,ev));
+			return 1;
+		}
+
+		/* Delete any current profile */
+		unlink(dpath);
+
+		/* Make a copy of it to the ColorSync directory */
+		dploc.locType = cmPathBasedProfile;
+		strncpy(dploc.u.pathLoc.path, dpath, 255);
+		dploc.u.pathLoc.path[255] = '\000';
+
+		if ((ev = CMCopyProfile(&dprof, &dploc, prof)) != noErr) {
+			debug2((errout,"CMCopyProfile() failed for file '%s' with error %d\n",dpath,ev));
+			return 1;
+		}
+		
+		/* Make it the current profile - updates LUTs */
+		if ((ev = CMSetProfileByAVID((CMDisplayIDType)p->ddid, dprof)) != noErr) {
+			debug2((errout,"CMSetProfileByAVID() failed for file '%s' with error %d\n",fname,ev));
+			return 1;
+		}
+		CMCloseProfile(prof);
+		CMCloseProfile(dprof);
+
+		return 0;
+	}
+#endif /*  __APPLE__ */
+
+#if defined(UNIX) && !defined(__APPLE__)
+	{
+		ucmm_error ev;
+		ucmm_scope sc;
+		FILE *fp;
+		unsigned long psize, bread;
+		unsigned char *atomv;
+		int rv;
+
+		if (scope == p_scope_network
+		 || scope == p_scope_system
+		 || scope == p_scope_local)
+			sc = ucmm_local_system;
+		else 
+			sc = ucmm_user;
+
+		if ((ev = ucmm_install_monitor_profile(sc, p->edid, p->edid_len, p->name, fname)) != ucmm_ok) {
+			debug2((errout,"Installing profile '%s' failed with error %d\n",fname,ev));
+			return 1;
+		} 
+
+		if ((rv = set_X11_atom(p, fname)) != 0) {
+			debug2((errout,"Setting X11 atom failed"));
+			return 1;
+		}
+
+		/* X11 doesn't set the display to the current profile calibration, */
+		/* so we do it. */
+		if (p->set_ramdac(p,r,1)) {
+			debug2((errout,"Failed to set VideoLUT"));
+			return 1;
+		}
+		return 0;
+	}
+#endif  /* UNXI X11 */
+
+	return 1;
+}
+
+/* Un-Install a display profile */
+/* Return nz if failed, */
+/* 1 if not sucessfully deleted */
+/* 2 if profile not found */
+int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
+#ifdef NT
+	{
+		char *fullpath;
+		char *basename;
+		char colpath[MAX_PATH];
+		unsigned long colpathlen = MAX_PATH;
+		WCS_PROFILE_MANAGEMENT_SCOPE wcssc;
+		unsigned short *wbname, *wmonid;
+
+		debug2((errout,"Uninstalling '%s'\n", fname));
+
+		if (GetColorDirectory(NULL, colpath, &colpathlen) == 0) {
+			debug2((errout,"Getting color directory failed\n"));
+			return 1;
+		}
+
+		if ((fullpath = _fullpath(NULL, fname, 0)) == NULL) {
+			debug2((errout,"_fullpath() failed\n"));
+			return 1;
+		}
+
+		if ((basename = PathFindFileName(fullpath)) == NULL) {
+			debug2((errout,"Locating base name in '%s' failed\n",fname));
+			free(fullpath);
+			return 1;
+		}
+
+		if ((strlen(colpath) + strlen(basename) + 2) > MAX_PATH) {
+			debug2((errout,"Installed profile path too long\n"));
+			free(fullpath);
+			return 1;
+		}
+		strcat(colpath, "\\");
+		strcat(colpath, basename);
+
+		/* Setup in case we're on Vista */
+		if (scope == p_scope_user)
+			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER;
+		else 
+			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER;
+
+		if ((wbname = char2wchar(basename)) == NULL) { 
+			debug2((errout,"char2wchar failed\n"));
+			free(fullpath);
+			return 1;
+		}
+
+		if ((wmonid = char2wchar(p->monid)) == NULL ) {
+			debug2((errout,"char2wchar failed\n"));
+			free(wbname);
+			free(fullpath);
+			return 1;
+		}
+
+		debug2((errout,"Disassociating '%s' from '%s'\n",basename,p->monid));
+
+		if (pWcsDisassociateColorProfileFromDevice != NULL) {
+			debug("Using Vista Disassociate\n");
+			/* Ignore error if profile is already disasociated or doesn't exist */
+			if ((*pWcsDisassociateColorProfileFromDevice)(wcssc, wbname, wmonid) == 0
+			 && GetLastError() != 2015 && GetLastError() != 2011) {
+				debug2((errout,"WcsDisassociateColorProfileWithDevice() failed for file '%s' with error %d\n",basename,GetLastError()));
+				free(wmonid);
+				free(wbname);
+				free(fullpath);
+				return 1;
+			}
+		} else {
+			/* Ignore error if profile is already disasociated or doesn't exist */
+			if (DisassociateColorProfileFromDevice(NULL, basename, p->monid) == 0
+			 && GetLastError() != 2015 && GetLastError() != 2011) {
+				debug2((errout,"DisassociateColorProfileWithDevice() failed for file '%s' with error %d\n",basename,GetLastError()));
+				free(wmonid);
+				free(wbname);
+				free(fullpath);
+				return 1;
+			}
+		}
+
+		if (UninstallColorProfile(NULL, basename, TRUE) == 0) {
+			int ev;
+			debug2((errout,"Warning, uninstallColorProfile() failed for file '%s' with error %d\n", basename,GetLastError()));
+			/* Hmm. This seems to happen on Win2K. Force the issue. */
+			if ((ev = _unlink(colpath)) != 0) {
+				debug2((errout,"unlink() failed for file '%s' with error %d\n", colpath,errno));
+				free(wmonid);
+				free(wbname);
+				free(fullpath);
+				return 2;
+			}
+		}
+
+		free(wmonid);
+		free(wbname);
+		free(fullpath);
+
+		return 0;
+	}
+#endif /* NT */
+
+#ifdef __APPLE__
+	{
+		CMError ev;
+		short vref;
+		char dpath[FILENAME_MAX];
+		char *basename;
+		FSRef dirref;
+		struct stat sbuf;
+
+		if (scope == p_scope_network)
+			vref = kNetworkDomain;
+		else if (scope == p_scope_system)
+			vref = kSystemDomain;
+		else if (scope == p_scope_local)
+			vref = kLocalDomain;
+		else 
+			vref = kUserDomain;
+
+		/* Locate the appropriate ColorSync path */
+		if ((ev = FSFindFolder(vref, kColorSyncProfilesFolderType, kCreateFolder, &dirref)) != noErr) {
+			debug2((errout,"FSFindFolder() failed with error %d\n",ev));
+			return 1;
+		}
+
+		/* Convert to POSIX path */
+		if ((ev = FSRefMakePath(&dirref, (unsigned char *)dpath, FILENAME_MAX)) != noErr) {
+			debug2((errout,"FSRefMakePath failed with error %d\n",ev));
+			return 1;
+		}
+
+		/* Locate the base filename in the fname */
+		for (basename = fname + strlen(fname);  ; basename--) {
+			if (basename <= fname || basename[-1] == '/')
+				break;
+		}
+
+		/* Append the basename to the ColorSync directory path */
+		if ((strlen(dpath) + strlen(basename) + 2) > FILENAME_MAX
+		 || (strlen(dpath) + strlen(basename) + 2) > 256) {
+			debug2((errout,"ColorSync dir + profile name too long\n"));
+			return 1;
+		}
+		strcat(dpath, "/");
+		strcat(dpath, basename);
+		debug2((errout,"Profile to delete '%s'\n",dpath));
+
+		if (stat(dpath,&sbuf) != 0) {
+			debug2((errout,"delete '%s' profile doesn't exist\n",dpath));
+			return 2;
+		}
+		if ((ev = unlink(dpath)) != 0) {
+			debug2((errout,"delete '%s' failed with %d\n",dpath,ev));
+			return 1;
+		}
+
+		return 0;
+	}
+#endif /*  __APPLE__ */
+
+#if defined(UNIX) && !defined(__APPLE__)
+	{
+		ucmm_error ev;
+		ucmm_scope sc;
+
+		if (scope == p_scope_network
+		 || scope == p_scope_system
+		 || scope == p_scope_local)
+			sc = ucmm_local_system;
+		else 
+			sc = ucmm_user;
+
+		if ((ev = ucmm_uninstall_monitor_profile(sc, p->edid, p->edid_len, p->name, fname)) != ucmm_ok) {
+			debug2((errout,"Installing profile '%s' failed with error %d\n",fname,ev));
+			return 1;
+		} 
+
+		XDeleteProperty(p->mydisplay, RootWindow(p->mydisplay, 0), p->icc_atom);
+
+#if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
+		/* If Xrandr 1.2, set property on output */
+		if (p->icc_out_atom != 0) {
+			XRRDeleteOutputProperty(p->mydisplay, p->output, p->icc_out_atom);
+		}
+#endif /* randr >= V 1.2 */
+		return 0;
+	}
+#endif  /* UNXI X11 */
+
+	return 1;
+}
+
+/* Get the currently installed display profile. */
+/* Copy a name to name up to mxlen chars, excluding nul */
+/* Return NULL if failed. */
+icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
+		icmFile *rd_fp = NULL;
+
+#ifdef NT
+	{
+		char buf[MAX_PATH];
+		DWORD blen = MAX_PATH;
+
+		if (GetICMProfile(p->hdc, &blen, buf) == 0) {
+			debug2((errout, "GetICMProfile failed, lasterr = %d\n",GetLastError()));
+			return NULL;
+		}
+
+		debug2((errout,"Loading default profile '%s'\n",buf));
+		if ((rd_fp = new_icmFileStd_name(buf,"r")) == NULL)
+			debug2((errout,"Can't open file '%s'",buf));
+
+		return rd_fp;
+	}
+#endif /* NT */
+
+#ifdef __APPLE__
+	{
+		CMError ev;
+		CMProfileRef prof, dprof;		/* Source profile */
+		CMProfileLocation dploc;		/* Destinaion profile location */
+		CMAppleProfileHeader hdr;
+		icmAlloc *al;
+
+#ifdef NEVER
+		/* Get the current display profile */
+		if ((ev = CMGetProfileByAVID((CMDisplayIDType)p->ddid, &prof)) != noErr) {
+			debug2((errout,"CMGetProfileByAVID() failed with error %d\n",ev));
+			return NULL;
+		}
+#else
+		CMDeviceProfileID curID;	/* Current Device Default profile ID */
+		CMProfileLocation cploc;	/* Current profile location */
+
+		/* Get the default ID for the display */
+		if ((ev = CMGetDeviceDefaultProfileID(cmDisplayDeviceClass, (CMDeviceID)p->ddid, &curID)) != noErr) {
+			debug2((errout,"CMGetDeviceDefaultProfileID() failed with error %d\n",ev));
+			return NULL;
+		}
+
+		/* Get the displays profile */
+		if ((ev = CMGetDeviceProfile(cmDisplayDeviceClass, (CMDeviceID)p->ddid, curID, &cploc)) != noErr) {
+			debug2((errout,"CMGetDeviceDefaultProfileID() failed with error %d\n",ev));
+			return NULL;
+		}
+
+		if ((ev = CMOpenProfile(&prof, &cploc)) != noErr) {
+			debug2((errout,"CMOpenProfile() failed with error %d\n",ev));
+			return NULL;
+		}
+#endif
+
+		/* Get the profile size */
+		if ((ev = CMGetProfileHeader(prof, &hdr)) != noErr) {
+			debug2((errout,"CMGetProfileHeader() failed with error %d\n",ev));
+			return NULL;
+		}
+
+		/* Make a copy of the profile to a memory buffer */
+		dploc.locType = cmBufferBasedProfile;
+		dploc.u.bufferLoc.size = hdr.cm1.size;
+		if ((al = new_icmAllocStd()) == NULL) {
+			debug("new_icmAllocStd failed\n");
+		    return NULL;
+		}
+		if ((dploc.u.bufferLoc.buffer = al->malloc(al, dploc.u.bufferLoc.size)) == NULL) {
+			debug("malloc of profile buffer failed\n");
+		    return NULL;
+		}
+
+		if ((ev = CMCopyProfile(&dprof, &dploc, prof)) != noErr) {
+			debug2((errout,"CMCopyProfile() failed for AVID to buffer with error %d\n",ev));
+			return NULL;
+		}
+
+		/* Memory File fp that will free the buffer when deleted: */
+		if ((rd_fp = new_icmFileMem_ad((void *)dploc.u.bufferLoc.buffer, dploc.u.bufferLoc.size, al)) == NULL) {
+			debug("Creating memory file from CMProfileLocation failed");
+			al->free(al, dploc.u.bufferLoc.buffer);
+			al->del(al);
+			CMCloseProfile(prof);
+			CMCloseProfile(dprof);
+			return NULL;
+		}
+
+		if (name != NULL) {
+			strncpy(name, "Display", mxlen);
+			name[mxlen] = '\000';
+		}
+
+		CMCloseProfile(prof);
+		CMCloseProfile(dprof);
+
+		return rd_fp;
+	}
+#endif /*  __APPLE__ */
+
+#if defined(UNIX) && !defined(__APPLE__)
+	/* Try and get the currently installed profile from ucmm */
+	{
+		ucmm_error ev;
+		char *profile = NULL;
+
+		debug2((errout,"dispwin_get_profile called\n"));
+
+		if ((ev =  ucmm_get_monitor_profile(p->edid, p->edid_len, p->name, &profile)) == ucmm_ok) {
+
+			if (name != NULL) {
+				strncpy(name, profile, mxlen);
+				name[mxlen] = '\000';
+			}
+
+			debug2((errout,"Loading current profile '%s'\n",profile));
+			if ((rd_fp = new_icmFileStd_name(profile,"r")) == NULL) {
+				debug2((errout,"Can't open file '%s'",profile));
+				free(profile);
+				return NULL;
+			}
+
+			/* Implicitly we set the X11 atom to be the profile we just got */ 
+			debug2((errout,"Setting X11 atom to current profile '%s'\n",profile));
+			if (set_X11_atom(p, profile) != 0) {
+				debug2((errout,"Setting X11 atom to profile '%s' failed",profile));
+				/* Hmm. We ignore this error */
+			}
+			return rd_fp;
+		} 
+		if (ev != ucmm_no_profile) {
+			debug2((errout,"Got ucmm error %d\n",ev));
+			return NULL;
+		}
+		debug2((errout,"Failed to get configured profile, so use X11 atom\n"));
+		/* Drop through to using the X11 root window atom */
+	}
+	{
+		Atom ret_type;
+		int ret_format;
+		long ret_len, ret_togo;
+		char aname[30];
+		unsigned char *atomv = NULL;	/* Profile loaded from/to atom */
+		unsigned char *buf;
+		icmAlloc *al;
+
+		atomv = NULL;
+
+		strcpy(aname, "_ICC_PROFILE");
+
+#if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
+		/* If Xrandr 1.2, get property on output */
+		if (p->icc_out_atom != 0) {
+
+			/* Get the ICC profile property */
+			if (XRRGetOutputProperty(p->mydisplay, p->output, p->icc_out_atom,
+			            0, 0x7ffffff, False, False, XA_CARDINAL, 
+   	                     &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) != Success || ret_len == 0) {
+				debug("Failed to read ICC_PROFILE property from Xranr output\n");
+			}
+
+		}
+#endif /* randr >= V 1.2 */
+
+		if (atomv == NULL) {
+			if (p->myuscreen != 0)
+				sprintf(aname, "_ICC_PROFILE_%d",p->myuscreen);
+	
+			/* Get the ICC profile property */
+			if (XGetWindowProperty(p->mydisplay, RootWindow(p->mydisplay, 0), p->icc_atom,
+			            0, 0x7ffffff, False, XA_CARDINAL, 
+   	                     &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) != Success || ret_len == 0) {
+				debug2((errout,"Getting property '%s' from RootWindow\n", aname)); 
+				return NULL;
+			}
+		}
+
+		/* This is a bit of a fiddle to keep the memory allocations */
+		/* straight. (We can't assume that X11 and icc are using the */
+		/* same allocators) */
+		if ((al = new_icmAllocStd()) == NULL) {
+			debug("new_icmAllocStd failed\n");
+		    return NULL;
+		}
+		if ((buf = al->malloc(al, ret_len)) == NULL) {
+			debug("malloc of profile buffer failed\n");
+		    return NULL;
+		}
+		memcpy(buf, atomv, ret_len);
+		XFree(atomv);
+
+		/* Memory File fp that will free the buffer when deleted: */
+		if ((rd_fp = new_icmFileMem_ad((void *)buf, ret_len, al)) == NULL) {
+			debug("Creating memory file from X11 atom failed");
+			al->free(al, buf);
+			al->del(al);
+			return NULL;
+		}
+
+		if (name != NULL) {
+			strncpy(name, aname, mxlen);
+			name[mxlen] = '\000';
+		}
+		return rd_fp;
+	}
+#endif	  /* UNXI X11 */
+}
+
+/* ----------------------------------------------- */
+
+#if defined(UNIX) && !defined(__APPLE__)
+
+/* Restore the screensaver state */
+static void restore_ssaver(dispwin *p) {
+
+#if ScreenSaverMajorVersion >= 1 && ScreenSaverMinorVersion >= 1	/* X11R7.1 */
+	if (p->xsssuspend) {
+		XScreenSaverSuspend(p->mydisplay, False);
+		p->xsssuspend = 0;
+	}
+#endif
+	if (p->xssvalid) {
+		/* Restore the X11 screen saver state */
+		XSetScreenSaver(p->mydisplay, p->timeout, p->interval,
+	                p->prefer_blanking, p->allow_exposures);
+	}
+
+	/* Restore the xscreensaver */
+	if (p->xssrunning) {
+		system("xscreensaver -nosplash 2>/dev/null >/dev/null&");
+	}
+
+	if (p->gnomessrunning && p->gnomepid != -1) {
+		kill(p->gnomepid, SIGKILL);		/* Kill the process inhibiting the screen saver */
+	}
+
+	/* Restore the KDE screen saver state */
+	if (p->kdessrunning) {
+		system("dcop kdesktop KScreensaverIface enable true 2>&1 >/dev/null");
+	}
+
+	/* Restore DPMS */
+	if (p->dpmsenabled) {
+		DPMSEnable(p->mydisplay);
+	}
+}
+	
+/* ----------------------------------------------- */
+/* On something killing our process, deal with ScreenSaver cleanup */
+
+static void (*dispwin_hup)(int sig) = SIG_DFL;
+static void (*dispwin_int)(int sig) = SIG_DFL;
+static void (*dispwin_term)(int sig) = SIG_DFL;
+
+/* Display screensaver was saved on */
+static dispwin *ssdispwin = NULL;
+
+static void dispwin_sighandler(int arg) {
+	dispwin *p;
+	if ((p = ssdispwin) != NULL) {
+		restore_ssaver(p);
+	}
+	if (arg == SIGHUP && dispwin_hup != SIG_DFL && dispwin_hup != SIG_IGN) 
+		dispwin_hup(arg);
+	if (arg == SIGINT && dispwin_int != SIG_DFL && dispwin_int != SIG_IGN) 
+		dispwin_int(arg);
+	if (arg == SIGTERM && dispwin_term != SIG_DFL && dispwin_term != SIG_IGN) 
+		dispwin_term(arg);
+	exit(0);
+}
+
+#endif /* UNIX && !APPLE */
 
 /* ----------------------------------------------- */
 /* Change the window color. */
@@ -959,7 +2384,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 			p->r_rgb[j] = (double)tt/prange;	/* Quantized value */
 //printf(" cell[%d], val %f, rast val %f\n",tt, p->rgb[j], p->r_rgb[j]);
 		}
-		if (p->set_ramdac(p,p->r)) {
+		if (p->set_ramdac(p,p->r, 0)) {
 			debug("set_ramdac() failed\n");
 			return 1;
 		}
@@ -1036,17 +2461,6 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	/* Stop the system going to sleep */
     UpdateSystemActivity(OverallAct);
 
-	/* Cause window repaint with the new data */
-	{
-		OSStatus stat;
-		Rect wRect;
-	    SetRect(&wRect,p->tx,p->ty,p->tw,p->th); /* left, top, right, bottom */
-		if ((stat = InvalWindowRect(p->mywindow, &wRect)) != noErr) {
-			debug2((errout,"InvalWindowRect failed with %d\n",stat));
-			return 1;
-		}
-	}
-
 	/* Make sure our window is brought to the front at least once, */
 	/* but not every time, in case the user wants to kill the application. */
 	if (p->btf == 0){
@@ -1064,12 +2478,21 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 				debug2((errout,"SetFrontProcess returned error %d\n",stat));
 			}
 		}
+		/* Hide the cursor once too */
+		CGDisplayHideCursor(p->ddid);
 		p->btf = 1;
 	}
 
-	/* Run the event loop until refreshed */
-	RunApplicationEventLoop();
+	/* Draw the color to our test rectangle */
+	{
+		CGRect frect;
 
+		frect = CGRectMake((float)p->tx, (float)(p->wh - p->ty - p->th - 1),
+		  (float)(1.0 + p->tw), (float)(1.0 + p->th ));
+		CGContextSetRGBFillColor(p->mygc, p->rgb[0], p->rgb[1], p->rgb[2], 1.0);
+		CGContextFillRect(p->mygc, frect);
+		CGContextFlush(p->mygc);		/* Force draw to display */
+	}
 	if (p->winclose) {
 		return 2;
 	}
@@ -1080,43 +2503,12 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 
 #if defined(UNIX) && !defined(__APPLE__)
 	{
-        static time_t ltime = 0;
-        time_t ttime;
 		Colormap mycmap;
 		XColor col;
 		int vali[3];
 
-        /* Because this is really slow, we do it every 60 seconds */
-        if (p->sssuspend == 0 && (ttime = time(NULL)) - ltime > 60) {
-			if (fork() == 0) {
-				if (fork() == 0) {
-					/* Try and stop xscreensaver messing things up */
-					/* It's a pitty xscreensaver isn't more cooperative with X11... */
-					freopen("/dev/null", "r", stdin);
-					freopen("/dev/null", "a", stdout);		/* Hide output */
-					freopen("/dev/null", "a", stderr);
-					execlp("xscreensaver-command", "xscreensaver-command", "-deactivate", NULL);
-					/* exec won't normally return */
-					_exit(0);
-
-				} else {
-					sleep(5);		/* Stagger this a little */
-
-					/* Try and stop GnomeScreensaver messing things up */
-					/* It's a pitty GnomeScreensaver isn't more cooperative with X11 too... */
-					if (fork() == 0) {
-						freopen("/dev/null", "r", stdin);
-						freopen("/dev/null", "a", stdout);		/* Hide output */
-						freopen("/dev/null", "a", stderr);
-						execlp("dbus-send", "dbus-send", "--dest=org.gnome.ScreenSaver", "--type=method_call", "/org/gnome/ScreenSaver", "org.gnome.ScreenSaver.SimulateUserActivity", NULL);
-						/* exec won't normally return */
-						_exit(0);
-					}
-				}
-				_exit(0);
-			}
-            ltime = ttime;
-		}
+		/* Indicate that we've got activity to the X11 Screensaver */
+		XResetScreenSaver(p->mydisplay);
 
 		/* Convert to 16 bit color */
 		for (j = 0; j < 3; j++)
@@ -1184,8 +2576,8 @@ dispwin *p
 		free(p->callout);
 
 	/* Restore original RAMDAC if we were in native mode */
-	if (p->donat && p->or != NULL) {
-		p->set_ramdac(p, p->or);
+	if (!p->nowin && p->donat && p->or != NULL) {
+		p->set_ramdac(p, p->or, 0);
 		p->or->del(p->or);
 		p->r->del(p->r);
 		debug("Restored original ramdac\n");
@@ -1226,25 +2618,16 @@ dispwin *p
 #if defined(UNIX) && !defined(__APPLE__)
 	debug("About to close display\n");
 
-	if (p->nowin == 0) {	/* We have a window up */
-
-		/* Restore the screensaver state */
-#if ScreenSaverMajorVersion >= 1 && ScreenSaverMinorVersion >= 1	/* X11R7.1 */
-		if (p->sssuspend) {
-			XScreenSaverSuspend(p->mydisplay, False);
-			p->sssuspend = 0;
-		}
-#endif
-		if (p->ssvalid) {
-			XSetScreenSaver(p->mydisplay, p->timeout, p->interval,
-		                p->prefer_blanking, p->allow_exposures);
-		}
+	if (p->mydisplay != NULL) {
+		if (p->nowin == 0) {	/* We have a window up */
 	
-		XFreeGC(p->mydisplay, p->mygc);
-		XDestroyWindow(p->mydisplay, p->mywindow);
+			restore_ssaver(p);
+	
+			XFreeGC(p->mydisplay, p->mygc);
+			XDestroyWindow(p->mydisplay, p->mywindow);
+		}
+		XCloseDisplay(p->mydisplay);
 	}
-
-	XCloseDisplay(p->mydisplay);
 	debug("finished\n");
 #endif	/* UNXI X11 */
 	/* -------------------------------------------------- */
@@ -1262,6 +2645,7 @@ dispwin *p
 #ifdef __APPLE__
 
 /* The OSX event handler */
+/* We arn't actually letting this run ? */
 pascal OSStatus HandleEvent(
 EventHandlerCallRef nextHandler,
 EventRef theEvent,
@@ -1284,31 +2668,10 @@ void* userData
 					OSStatus stat;
 					Rect wRect;
 					debug("Event: Bounds Changed\n");
-					GetPortBounds(p->port, &wRect);
+					GetWindowPortBounds(p->mywindow, &wRect);
 					if ((stat = InvalWindowRect(p->mywindow, &wRect)) != noErr) {
 						debug2((errout,"InvalWindowRect failed with %d\n",stat));
 					}
-					break;
-				}
-				case kEventWindowDrawContent: {
-					CGRect frect;
-
-					debug("Event: Draw Content\n");
-					/* If we're using an overlay window, paint it all black */
-					if (p->blackbg && p->firstdraw == 0) {
-						frect = CGRectMake(0.0, 0.0, (float)p->ww, (float)p->wh);
-						CGContextSetRGBFillColor(p->mygc, 0.0, 0.0, 0.0, 1.0);
-						CGContextFillRect(p->mygc, frect);
-						p->firstdraw = 1;
-					}
-					frect = CGRectMake((float)p->tx, (float)(p->wh - p->ty - p->th - 1),
-					  (float)(1.0 + p->tw), (float)(1.0 + p->th ));
-					CGContextSetRGBFillColor(p->mygc, p->r_rgb[0], p->r_rgb[1], p->r_rgb[2], 1.0);
-					CGContextFillRect(p->mygc, frect);
-					CGContextFlush(p->mygc);		/* Force draw to display */
-					QuitApplicationEventLoop();		/* Break out of event loop after draw */
-					SelectWindow(p->mywindow);
-					result = noErr;
 					break;
 				}
 			}
@@ -1350,11 +2713,16 @@ int override					/* NZ if override_redirect is to be used on X11 */
 	p->nowin = nowin;
 	p->donat = native;
 	p->blackbg = blackbg;
-	p->get_ramdac   = dispwin_get_ramdac;
-	p->set_ramdac   = dispwin_set_ramdac;
-	p->set_color    = dispwin_set_color;
-	p->set_callout  = dispwin_set_callout;
-	p->del          = dispwin_del;
+	p->get_ramdac      = dispwin_get_ramdac;
+	p->set_ramdac      = dispwin_set_ramdac;
+	p->install_profile = dispwin_install_profile;
+	p->uninstall_profile = dispwin_uninstall_profile;
+	p->get_profile     = dispwin_get_profile;
+	p->set_color       = dispwin_set_color;
+	p->set_callout     = dispwin_set_callout;
+	p->del             = dispwin_del;
+
+	p->rgb[0] = p->rgb[1] = p->rgb[2] = 0.5;	/* Set Grey as the initial test color */
 
 	/* Basic object is initialised, so create a window */
 
@@ -1374,11 +2742,20 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		debug2((errout, "About to open display '%s'\n",disp->name));
 
 		/* Get device context to main display */
-		if ((p->hdc = CreateDC(disp->name, disp->name, NULL, NULL)) == NULL) {
+		/* (This is the recommended way of doing this, and works on Vista) */
+		if ((p->hdc = CreateDC(disp->name, NULL, NULL, NULL)) == NULL) {
 			debug2((errout, "CreateDC failed, lasterr = %d\n",GetLastError()));
 			dispwin_del(p);
 			return NULL;
 		}
+
+		if ((p->name = strdup(disp->name)) == NULL) {
+			debug2((errout, "Malloc failed\n"));
+			dispwin_del(p);
+			return NULL;
+		}
+		strcpy(p->monname, disp->monname);
+		strcpy(p->monid, disp->monid);
 
 		disp_hsz = GetDeviceCaps(p->hdc, HORZSIZE);	/* mm */
 		disp_vsz = GetDeviceCaps(p->hdc, VERTSIZE);
@@ -1448,8 +2825,6 @@ int override					/* NZ if override_redirect is to be used on X11 */
 				return NULL;
 			}
 
-			p->rgb[0] = p->rgb[1] = p->rgb[2] = 1.0;	/* Set White */
-
 			p->hwnd = CreateWindowEx(
 				WS_EX_TOPMOST,
 				p->AppName,
@@ -1492,6 +2867,11 @@ int override					/* NZ if override_redirect is to be used on X11 */
 	/* -------------------------------------------------- */
 #ifdef __APPLE__
 
+	if ((p->name = strdup(disp->name)) == NULL) {
+		debug2((errout,"Malloc failed\n"));
+		dispwin_del(p);
+		return NULL;
+	}
 	p->ddid = disp->ddid;		/* Display we're working on */
 	p->pdepth = CGDisplayBitsPerSample(p->ddid);
 
@@ -1516,9 +2896,9 @@ int override					/* NZ if override_redirect is to be used on X11 */
 //		wclass = kAlertWindowClass;				/* Above everything else */
 //		wclass = kModalWindowClass;
 //		wclass = kFloatingWindowClass;
-//		wclass = kUtilityWindowClass; /* The usefule one */
+//		wclass = kUtilityWindowClass; /* The useful one */
 //		wclass = kHelpWindowClass;
-		wclass = kOverlayWindowClass;
+		wclass = kOverlayWindowClass;	/* Borderless and full screenable */
 //		wclass = kSimpleWindowClass;
 
 		attr |= kWindowDoesNotCycleAttribute;
@@ -1561,7 +2941,10 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		p->wh = he;
 
 //printf("~1 Got size %d x %d at %d %d from %fmm x %fmm\n",wi,he,xo,yo,width,height);
-	    SetRect(&wRect,xo,yo,xo+wi,yo+he); /* left, top, right, bottom */
+		wRect.left = xo;
+		wRect.top = yo;
+		wRect.right = xo+wi;
+		wRect.bottom = yo+he;
 
 		/* Create invisible new window of given class, attributes and size */
 	    stat = CreateNewWindow(wclass, attr, &wRect, &p->mywindow);
@@ -1604,35 +2987,32 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			return NULL;
 		}
 		p->winclose = 0;
-		p->rgb[0] = p->rgb[1] = p->rgb[2] = 1.0;	/* Set White */
 
 		/* Activate the window */
-
-#ifdef NEVER
-		/* Make window pop to the top */
-		{
-			ProcessSerialNumber cpsn;
-			if ((stat = GetCurrentProcess(&cpsn)) != noErr) {
-				debug2((errout,"GetCurrentProcess returned error %d\n",stat));
-			} else {
-				if ((stat = SetFrontProcess(&cpsn)) != noErr) {
-					debug2((errout,"SetFrontProcess returned error %d\n",stat));
-				}
-			}
-		}
-#endif /* NEVER */
 //		BringToFront(p->mywindow);
 		ShowWindow(p->mywindow);	/* Makes visible and triggers update event */
 //		ActivateWindow(p->mywindow, false);
 		SendBehind(p->mywindow, NULL);
 //		SelectWindow(p->mywindow);
 
-//printf("~1 created window, about to enter event loop\n");
-		/* Run the event loop ?? */
-		/* Seems to hang because draw happens before event loop gets run ???/ */
-		/* RunApplicationEventLoop(); */
+		/* Make sure overlay window alpha is set initialy */
+		{
+			CGRect frect;
 
-		CGDisplayHideCursor(p->ddid);
+			/* If we're using an overlay window, paint it all black */
+			if (p->blackbg) {
+				frect = CGRectMake(0.0, 0.0, (float)p->ww, (float)p->wh);
+				CGContextSetRGBFillColor(p->mygc, 0.0, 0.0, 0.0, 1.0);
+				CGContextFillRect(p->mygc, frect);
+			}
+			frect = CGRectMake((float)p->tx, (float)(p->wh - p->ty - p->th - 1),
+			  (float)(1.0 + p->tw), (float)(1.0 + p->th ));
+			CGContextSetRGBFillColor(p->mygc, p->rgb[0], p->rgb[1], p->rgb[2], 1.0);
+			CGContextFillRect(p->mygc, frect);
+			CGContextFlush(p->mygc);		/* Force draw to display */
+		}
+
+//printf("~1 created window, about to enter event loop\n");
 //		CGDisplayCapture(p->ddid);
 
 #ifdef NEVER
@@ -1703,7 +3083,14 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		   24 bit etc.
 		 */
 
+		if(ssdispwin != NULL) {
+			debug2((errout,"Attempting to open more than one dispwin!\n"));
+			dispwin_del(p);
+			return NULL;
+		}
+
 		/* stuff for X windows */
+		char *pp, *bname;               /* base display name */
 		Window rootwindow;
 		char *appname = "TestWin";
 		Visual *myvisual;
@@ -1719,18 +3106,54 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		int wi, he;				/* Width and height of window in pixels */
 		int xo, yo;				/* Window location in pixels */
 	
-		/* open the display */
-		p->mydisplay = XOpenDisplay(disp->name);
-		if(!p->mydisplay) {
-			debug2((errout,"Unable to open display '%s'\n",disp->name));
+		/* Create the base display name (in case of Xinerama, XRandR) */
+		if ((bname = strdup(disp->name)) == NULL) {
+			debug2((errout,"Malloc failed\n"));
 			dispwin_del(p);
 			return NULL;
 		}
+		if ((pp = strrchr(bname, ':')) != NULL) {
+			if ((pp = strchr(pp, '.')) != NULL) {
+				sprintf(pp,".%d",disp->screen);
+			}
+		}
+
+		/* open the display */
+		p->mydisplay = XOpenDisplay(bname);
+		if(!p->mydisplay) {
+			debug2((errout,"Unable to open display '%s'\n",bname));
+			dispwin_del(p);
+			free(bname);
+			return NULL;
+		}
+		free(bname);
 		debug("Opened display OK\n");
 
+		if ((p->name = strdup(disp->name)) == NULL) {
+			debug2((errout,"Malloc failed\n"));
+			dispwin_del(p);
+			return NULL;
+		}
 		p->myscreen = disp->screen;
 		p->myuscreen = disp->uscreen;
 		p->myrscreen = disp->rscreen;
+
+#if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
+		p->icc_atom = disp->icc_atom;
+		p->crtc = disp->crtc;
+		p->output = disp->output;
+		p->icc_out_atom = disp->icc_out_atom;
+#endif /* randr >= V 1.2 */
+
+		if (disp->edid != NULL) {
+			if ((p->edid = malloc(sizeof(unsigned char) * 128)) == NULL) {
+				debug2((errout,"Malloc failed\n"));
+				dispwin_del(p);
+				return NULL;
+			}
+			p->edid_len = disp->edid_len;
+			memcpy(p->edid, disp->edid, p->edid_len);
+		}
 
 		//p->pdepth = DefaultDepth(p->mydisplay, p->myscreen)/3;
 		myvisual = DefaultVisual(p->mydisplay, p->myscreen);
@@ -1739,7 +3162,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		if (nowin == 0) {			/* Create a window */
 			rootwindow = RootWindow(p->mydisplay, p->myscreen);
 
-			myforeground = WhitePixel(p->mydisplay, p->myscreen);
+			myforeground = BlackPixel(p->mydisplay, p->myscreen);
 			mybackground = BlackPixel(p->mydisplay, p->myscreen);
 		
 			/* Get device context to main display */
@@ -1877,27 +3300,94 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			XMapRaised(p->mydisplay,p->mywindow);
 			debug("Raised window\n");
 		
+			/* ------------------------------------------------------- */
 			/* Suspend any screensavers if we can */
+
+			ssdispwin = p;
+
+			/* Install the signal handler to ensure cleanup */
+			dispwin_hup = signal(SIGHUP, dispwin_sighandler);
+			dispwin_int = signal(SIGINT, dispwin_sighandler);
+			dispwin_term = signal(SIGTERM, dispwin_sighandler);
 
 #if ScreenSaverMajorVersion >= 1 && ScreenSaverMinorVersion >= 1	/* X11R7.1 ??? */
 
+			/* Disable any screensavers that work properly with XScreenSaverSuspend() */
 			if (XScreenSaverQueryExtension (p->mydisplay, &evb, &erb) != 0) {
 				int majv, minv;
 				XScreenSaverSuspend(p->mydisplay, True);
-					p->sssuspend = 1;
+				p->xsssuspend = 1;
 
 				/* Else we'd have to register as a screensaver to */
 				/* prevent another one activating ?? */
 			}
 #endif	/* X11R7.1 screensaver extension */
 
-			/* ~~~ Look into running xdg-screensaver suspend, resume ~~~ */
-			if (p->sssuspend == 0) {
+			/* Disable the native X11 screensaver */
+			if (p->xsssuspend == 0) {
+
 				/* Save the screensaver state, and then disable it */
 				XGetScreenSaver(p->mydisplay, &p->timeout, &p->interval,
 				                &p->prefer_blanking, &p->allow_exposures);
 				XSetScreenSaver(p->mydisplay, 0, 0, DefaultBlanking, DefaultExposures);
-				p->ssvalid = 1;
+				p->xssvalid = 1;
+			}
+
+			/* Disable xscreensaver if it is running */
+			if (p->xssrunning == 0) {
+				p->xssrunning = (system("xscreensaver-command -version 2>/dev/null >/dev/null") == 0);
+				if (p->xssrunning)
+					system("xscreensaver-command -exit 2>/dev/null >/dev/null");
+			}
+
+			/* Disable gnomescreensaver if it is running */
+			if (p->gnomessrunning == 0) {
+				p->gnomessrunning = (system("gnome-screensaver-command -q "
+				                     "2>/dev/null >/dev/null") == 0);
+				if (p->gnomessrunning) {
+					sigset_t nsm, osm;
+					/* Ensure that other process doesn't get the signals we want to catch */
+					sigemptyset(&nsm);
+					sigaddset(&nsm,SIGHUP);
+					sigaddset(&nsm,SIGINT);
+					sigaddset(&nsm,SIGTERM);
+					sigprocmask(SIG_BLOCK, &nsm, &osm);
+
+					if ((p->gnomepid = fork()) == 0) {
+						freopen("/dev/null", "r", stdin);
+						freopen("/dev/null", "a", stdout);		/* Hide output */
+						freopen("/dev/null", "a", stderr);
+						execlp("gnome-screensaver-command", "gnome-screensaver-command","-i","-n","argyll","-r","measuring screen",NULL); 
+ 
+						_exit(0);
+					}
+					sigprocmask(SIG_SETMASK, &osm, NULL);		/* restore the signals */
+				}
+			}
+		
+			/* kscreensaver > 3.5.9 obeys XResetScreenSaver(), but earlier versions don't. */
+			/* Disable any KDE screen saver if it's active */
+			if (p->kdessrunning == 0) {
+				/* dcop is very slow if we're not actually running kde. */
+				/* Check that kde is running first */
+				if (system("ps -e 2>/dev/null | grep kdesktop 2>/dev/null >/dev/null") == 0) {
+					p->kdessrunning = (system("dcop kdesktop KScreensaverIface isEnabled "
+			                "2>/dev/null | grep true 2>/dev/null >/dev/null") == 0);
+				}
+				if (p->kdessrunning) {
+					system("dcop kdesktop KScreensaverIface enable false 2>&1 >/dev/null");
+				}
+			}
+
+			/* If DPMS is enabled, disable it */
+			if (DPMSQueryExtension(p->mydisplay, &evb, &erb) != 0) {
+				CARD16 power_level;
+				BOOL state;
+
+				if (DPMSInfo(p->mydisplay, &power_level, &state)) {
+					if ((p->dpmsenabled = state) != 0)
+						DPMSDisable(p->mydisplay);
+				}
 			}
 		
 			/* Deal with any pending events */
@@ -1917,27 +3407,248 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			}
 		}
 	}
-#endif	/* UNXI X11 */
+#endif	/* UNIX X11 */
 	/* -------------------------------------------------- */
 
-	/* Setup for native mode */
-	if (p->donat) {
-		debug("About to setup native mode\n");
-		if ((p->or = p->get_ramdac(p)) == NULL
-		 || (p->r = p->or->clone(p->or)) == NULL) {
-			warning("Native mode can't work, no VideoLUT support");
-			dispwin_del(p);
-			return NULL;
+	if (!p->nowin) {
+		/* Setup for native mode */
+		if (p->donat) {
+			debug("About to setup native mode\n");
+			if ((p->or = p->get_ramdac(p)) == NULL
+			 || (p->r = p->or->clone(p->or)) == NULL) {
+				warning("Native mode can't work, no VideoLUT support");
+				dispwin_del(p);
+				return NULL;
+			}
+			p->r->setlin(p->r);
+			debug("Saved original VideoLUT\n");
 		}
-		p->r->setlin(p->r);
-		debug("Saved original VideoLUT\n");
+	
+		/* Make sure initial test color is displayed */
+		dispwin_set_color(p, p->rgb[0], p->rgb[1], p->rgb[2]);
 	}
 
 	debug("About to exit new_dispwin()\n");
 	return p;
 }
 
-/* ---------------------------------------------------------------- */
+/* ================================================================ */
+#if defined(UNIX) && !defined(__APPLE__)
+/* Process to continuously monitor XRandR events, */
+/* and load the appropriate calibration and profiles */
+/* for each monitor. */
+int x11_daemon_mode(disppath *disp, int verb) {
+
+#if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
+	char *dname;
+	char *pp;
+	char dnbuf[100];
+	Display *mydisplay;
+	int majv, minv;			/* Version */
+	int evb = 0, erb = 0;
+	int dopoll = 1;
+	XEvent myevent;
+	int update_profiles = 1;	/* Do it on entry */ 
+
+	/* Open the base display */
+	strncpy(dnbuf,disp->name,99); dnbuf[99] = '\000';
+	if ((pp = strrchr(dnbuf, ':')) != NULL) {
+		if ((pp = strchr(pp, '.')) == NULL)
+			strcat(dnbuf,".0");
+		else  {
+			if (pp[1] == '\000')
+				strcat(dnbuf,"0");
+			else {
+				pp[1] = '0';
+				pp[2] = '\000';
+			}
+		}
+	}
+
+	if ((mydisplay = XOpenDisplay(dnbuf)) == NULL) {
+		debug2((errout, "x11_daemon_mode: failed to open display '%s'\n",dnbuf));
+		return -1;
+	}
+
+	if (verb) printf("Opened display '%s'\n",dnbuf);
+
+	/* !!!! we want to create a test here, to see if we have to poll, */
+	/* !!!! or whether we spontainously get events when the EDID changes. */
+
+	/* Use Xrandr 1.2 if it's available */
+	if (XRRQueryExtension(mydisplay, &evb, &erb) != 0
+	 && XRRQueryVersion(mydisplay, &majv, &minv)
+	 && majv == 1 && minv >= 2) {
+		if (verb) printf("Found XRandR 1.2 or latter\n");
+
+		XRRSelectInput(mydisplay,RootWindow(mydisplay,0),
+				RRScreenChangeNotifyMask
+			|	RRCrtcChangeNotifyMask
+			|	RROutputChangeNotifyMask
+			|	RROutputPropertyNotifyMask
+		);
+
+		/* Deal with any pending events */
+		if (verb) printf("About to enter main loop waiting for XRandR changes\n");
+		for(;;) {
+
+			if (update_profiles == 0) {
+				if (dopoll) {
+					for (;;) {
+						XRRGetScreenResources(mydisplay, RootWindow(mydisplay,0));
+						if(XPending(mydisplay) > 0)
+							break;
+						sleep(2);
+					}
+				} else {
+					/* Sleep until there is an event */
+					XPeekEvent(mydisplay, &myevent);
+				}
+			}
+	
+			/* Get all our events until we run out */
+			while (XPending(mydisplay) > 0) {
+				XNextEvent(mydisplay, &myevent);
+				if (myevent.type == evb + RRScreenChangeNotify) {
+//					printf("~1 Got RRScreenChangeNotify\n");
+					update_profiles = 1; 
+				} else if (myevent.type == evb + RRNotify) {
+					update_profiles = 1; 
+					XRRNotifyEvent *rrne = (XRRNotifyEvent *)(&myevent);
+					if (rrne->subtype == RRNotify_CrtcChange) {
+//						printf("~1 Got RRCrtcChangeNotify\n");
+					}
+					else if (rrne->subtype == RRNotify_OutputChange) {
+//						printf("~1 Got RROutputChangeNotify\n");
+					}
+					else if (rrne->subtype == RRNotify_OutputProperty) {
+//						printf("~1 Got RROutputPropertyNotify\n");
+					}
+				}
+			}
+
+			if (update_profiles) {
+				disppath **dp;
+				ramdac *r = NULL;
+
+				if (verb) printf("Updating profiles for display '%s'\n",dnbuf);
+
+				dp = get_displays();
+				if (dp == NULL || dp[0] == NULL) {
+					if (verb) printf("Failed to enumerate all the screens for display '%s'\n",dnbuf);
+						continue;
+				} else {
+					int i, j;
+					dispwin *dw;
+					char calname[MAXNAMEL+1] = "\000";	/* Calibration file name */
+					icmFile *rd_fp = NULL;
+					icc *icco = NULL;
+					icmVideoCardGamma *wo;
+					double iv;
+
+					for (i = 0; ; i++) {
+						if (dp[i] == NULL)
+							break;
+						if (verb) printf("Updating display %d = '%s'\n",i+1,dp[i]->description);
+		
+						if ((dw = new_dispwin(dp[i], 0.0, 0.0, 0.0, 0.0, 1, 0, 0, 0)) == NULL) {
+							if (verb) printf("Failed to access screen %d of display '%s'\n",i+1,dnbuf);
+							continue;
+						}
+						if ((r = dw->get_ramdac(dw)) == NULL) {
+							if (verb) printf("Failed to access VideoLUT of screen %d for display '%s'\n",i+1,dnbuf);
+							dw->del(dw);
+							continue;
+						}
+
+						/* Grab the installed profile from the ucmm */
+						if ((rd_fp = dw->get_profile(dw, calname, MAXNAMEL)) == NULL) {
+							if (verb) printf("Failed to find profile of screen %d for display '%s'\n",i+1,dnbuf);
+							r->del(r);
+							dw->del(dw);
+							continue;
+						}
+
+						if ((icco = new_icc()) == NULL) {
+							if (verb) printf("Failed to create profile object for screen %d for display '%s'\n",i+1,dnbuf);
+							rd_fp->del(rd_fp);
+							r->del(r);
+							dw->del(dw);
+							continue;
+						}
+
+						/* Read header etc. */
+						if (icco->read(icco, rd_fp,0) != 0) {		/* Read ICC OK */
+							if (verb) printf("Failed to read profile for screen %d for display '%s'\n",i+1,dnbuf);
+							icco->del(icco);
+							rd_fp->del(rd_fp);
+							r->del(r);
+							dw->del(dw);
+							continue;
+						}
+
+						if ((wo = (icmVideoCardGamma *)icco->read_tag(icco, icSigVideoCardGammaTag)) == NULL) {
+							if (verb) printf("Failed to fined vcgt tagd in profile for screen %d for display '%s' so setting linear\n",i+1,dnbuf);
+							for (j = 0; j < r->nent; j++) {
+								iv = j/(r->nent-1.0);
+								r->v[0][j] = iv;
+								r->v[1][j] = iv;
+								r->v[2][j] = iv;
+							}
+						} else {
+							if (wo->u.table.channels == 3) {
+								for (j = 0; j < r->nent; j++) {
+									iv = j/(r->nent-1.0);
+									r->v[0][j] = wo->lookup(wo, 0, iv);
+									r->v[1][j] = wo->lookup(wo, 1, iv);
+									r->v[2][j] = wo->lookup(wo, 2, iv);
+								}
+							} else if (wo->u.table.channels == 1) {
+								for (j = 0; j < r->nent; j++) {
+									iv = j/(r->nent-1.0);
+									r->v[0][j] = 
+									r->v[1][j] = 
+									r->v[2][j] = wo->lookup(wo, 0, iv);
+								}
+								debug("Got monochrom vcgt calibration\n");
+							} else {
+								if (verb) printf("vcgt tag is unrecognized in profile for screen %d for display '%s'\n",i+1,dnbuf);
+								icco->del(icco);
+								rd_fp->del(rd_fp);
+								r->del(r);
+								dw->del(dw);
+								continue;
+							}
+						}
+						if (dw->set_ramdac(dw,r,1) != 0) {
+							if (verb) printf("Unable to set vcgt tag for screen %d for display '%s'\n",i+1,dnbuf);
+							icco->del(icco);
+							rd_fp->del(rd_fp);
+							r->del(r);
+							dw->del(dw);
+							continue;
+						}
+						if (verb) printf("Loaded profile and calibration for screen %d for display '%s'\n",i+1,dnbuf);
+						icco->del(icco);
+						rd_fp->del(rd_fp);
+						r->del(r);
+						dw->del(dw);
+					}
+				}
+				free_disppaths(dp);
+				update_profiles = 0;
+			}
+		}
+	} else
+#endif /* randr >= V 1.2 */
+
+	if (verb) printf("XRandR 1.2 is not available - quitting\n");
+	return -1;
+}
+
+#endif
+
+/* ================================================================ */
 #ifdef STANDALONE_TEST
 /* test code */
 
@@ -1946,7 +3657,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 static void
 usage(void) {
 	disppath **dp;
-	fprintf(stderr,"Test display patch window & test display LUT access, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Test display patch window, Set Video LUTs, Install profiles, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: dispwin [options] [calfile] \n");
 	fprintf(stderr," -v                   Verbose mode\n");
@@ -1970,20 +3681,24 @@ usage(void) {
 	}
 	free_disppaths(dp);
 	fprintf(stderr," -p ho,vo,ss          Position test window and scale it\n");
-	fprintf(stderr," -B                   Fill whole screen with black background\n");
+	fprintf(stderr," -F                   Fill whole screen with black background\n");
 	fprintf(stderr," -i                   Run forever with random values\n");
+	fprintf(stderr," -G filename          Display RGB colors from CGATS file\n");
 	fprintf(stderr," -m                   Manually cycle through initial values\n");
 	fprintf(stderr," -f                   Test grey ramp fade\n");
 	fprintf(stderr," -r                   Test just Video LUT loading\n");
 	fprintf(stderr," -n                   Test native output (rather than through Video LUT)\n");
 	fprintf(stderr," -c                   Load a linear display calibration\n");
-	fprintf(stderr," -x                   Don't exit after loading a display calibration\n");
-	fprintf(stderr," -V                   Verify that calfile is currently loaded\n");
+	fprintf(stderr," -V                   Verify that calfile/profile cal. is currently loaded in LUT\n");
+	fprintf(stderr," -I                   Install profile for display and use it's calibration\n");
+	fprintf(stderr," -U                   Un-install profile for display\n");
+	fprintf(stderr," -S d                 Specify the install/uninstall scope for OS X [nlu] or X11/Vista [lu]\n");
+	fprintf(stderr,"                      d is one of: n = network, l = local system, u = user (default)\n");
+	fprintf(stderr," -L                   Load installed profiles cal. into Video LUT\n");
 #if defined(UNIX) && !defined(__APPLE__)
-	fprintf(stderr," -S                   Set X11 ICC_PROFILE property to profile\n");
-	fprintf(stderr," -L                   Load X11 ICC_PROFILE property profile into LUT\n");
-#endif	/* UNXI X11 */
-	fprintf(stderr," calfile              Load display calibration (.cal or .icm) into LUT, and exit\n");
+	fprintf(stderr," -D                   Run in daemon loader mode for given X11 server\n");
+#endif /* X11 */
+	fprintf(stderr," calfile              Load calibration (.cal or %s) into Video LUT\n",ICC_FILE_EXT);
 	exit(1);
 }
 
@@ -2003,19 +3718,21 @@ main(int argc, char *argv[]) {
 	int ramd = 0;				/* Just test ramdac */
 	int fade = 0;				/* Test greyramp fade */
 	int donat = 0;				/* Test native output */
-	int inf = 0;				/* Infnite patches flag */
+	int inf = 0;				/* Infnite/manual patches flag */
+	char pcname[MAXNAMEL+1] = "\000";	/* CGATS patch color name */
 	int clear = 0;				/* Clear any display calibration (any calname is ignored) */
-	int noexit = 0;				/* Don't exit after loading a calibration */
 	int verify = 0;				/* Verify that calname is currently loaded */
-	int setatom = 0;			/* Set X11 ICC_PROFILE atom to profile */
-	int loadatom = 0;			/* Load X11 ICC_PROFILE atom profile into LUT */
+	int installprofile = 0;		/* Install (1) or uninstall (2) a profile for display */
+	int loadprofile = 0;		/* Load displays profile calibration into LUT */
 	int loadfile = 0;			/* Load given profile into LUT */
-	unsigned char *atomv = NULL;	/* Profile loaded from/to atom */
+	p_scope scope = p_scope_user;	/* Scope of profile instalation/un-instalation */
+	int daemonmode = 0;			/* X11 daemin loader mode */
 	char calname[MAXNAMEL+1] = "\000";	/* Calibration file name */
 	dispwin *dw;
 	unsigned int seed = 0x56781234;
 	int i, j;
-	ramdac *or, *r;
+	ramdac *or = NULL, *r = NULL;
+	int is_ok_icc = 0;			/* The profile is OK */
 
 	error_program = "Dispwin";
 
@@ -2049,6 +3766,7 @@ main(int argc, char *argv[]) {
 #if defined(UNIX) && !defined(__APPLE__)
 				int ix, iv;
 
+				/* X11 type display name. */
 				if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
 					if (++fa >= argc || argv[fa][0] == '-') usage();
 					setenv("DISPLAY", argv[fa], 1);
@@ -2059,6 +3777,8 @@ main(int argc, char *argv[]) {
 						ix = atoi(na);
 						iv = 0;
 					}
+					if (disp != NULL)
+						free_a_disppath(disp);
 					if ((disp = get_a_display(ix-1)) == NULL)
 						usage();
 					if (iv > 0)
@@ -2069,6 +3789,8 @@ main(int argc, char *argv[]) {
 				if (na == NULL) usage();
 				fa = nfa;
 				ix = atoi(na);
+				if (disp != NULL)
+					free_a_disppath(disp);
 				if ((disp = get_a_display(ix-1)) == NULL)
 					usage();
 #endif
@@ -2088,16 +3810,22 @@ main(int argc, char *argv[]) {
 				vo = 2.0 * vo - 1.0;
 
 			/* Black background */
-			} else if (argv[fa][1] == 'B') {
+			} else if (argv[fa][1] == 'F') {
 				blackbg = 1;
 
-			} else if (argv[fa][1] == 'i' || argv[fa][1] == 'I')
+			} else if (argv[fa][1] == 'i')
 				inf = 1;
 
 			else if (argv[fa][1] == 'm' || argv[fa][1] == 'M')
 				inf = 2;
 
-			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F')
+			/* CGATS patch color file */
+			else if (argv[fa][1] == 'G') {
+				fa = nfa;
+				if (na == NULL) usage();
+				strncpy(pcname,na,MAXNAMEL); pcname[MAXNAMEL] = '\000';
+			}
+			else if (argv[fa][1] == 'f')
 				fade = 1;
 
 			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R')
@@ -2109,19 +3837,31 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C')
 				clear = 1;
 
-			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X')
-				noexit = 1;
-
 			else if (argv[fa][1] == 'V')
 				verify = 1;
 
-#if defined(UNIX) && !defined(__APPLE__)
-			else if (argv[fa][1] == 'S')
-				setatom = 1;
+			else if (argv[fa][1] == 'I')
+				installprofile = 1;
+
+			else if (argv[fa][1] == 'U')
+				installprofile = 2;
 
 			else if (argv[fa][1] == 'L')
-				loadatom = 1;
-#endif  /* UNXI X11 */
+				loadprofile = 1;
+
+			else if (argv[fa][1] == 'D')
+				daemonmode = 1;
+
+			else if (argv[fa][1] == 'S') {
+				fa = nfa;
+				if (na == NULL) usage();
+					if (na[0] == 'n' || na[0] == 'N')
+						scope = p_scope_network;
+					else if (na[0] == 'l' || na[0] == 'L')
+						scope = p_scope_local;
+					else if (na[0] == 'u' || na[0] == 'U')
+						scope = p_scope_user;
+			}
 			else
 				usage();
 		}
@@ -2129,32 +3869,53 @@ main(int argc, char *argv[]) {
 			break;
 	}
 
-	if (disp == NULL && (disp = get_a_display(0)) == NULL) {
-		error("Unable to open the default display");
+	/* No explicit display has been set */
+	if (disp == NULL) {
+		int ix = 0;
+#if defined(UNIX) && !defined(__APPLE__)
+		char *dn, *pp;
+
+		if ((dn = getenv("DISPLAY")) != NULL) {
+			if ((pp = strrchr(dn, ':')) != NULL) {
+				if ((pp = strchr(pp, '.')) != NULL) {
+					if (pp[1] != '\000')
+						ix = atoi(pp+1);
+				}
+			}
+		}
+#endif
+		if ((disp = get_a_display(ix)) == NULL)
+			error("Unable to open the default display");
 	}
 
 	/* See if there's a calibration file */
 	if (fa < argc) {
 		strncpy(calname,argv[fa++],MAXNAMEL); calname[MAXNAMEL] = '\000';
-		if (setatom == 0 && loadatom == 0 && verify == 0)
+		if (installprofile == 0 && loadprofile == 0 && verify == 0)
 			loadfile = 1;
 	}
 
-	/* Bomb on bad combinations (not all are being detected) */
-	if (setatom && calname[0] == '\000')
-		error("Can't set X11 atom without a profile argument");
+#if defined(UNIX) && !defined(__APPLE__)
+	if (daemonmode) {
+		return x11_daemon_mode(disp, verb);
+	}
+#endif
 
-	if (verify && calname[0] == '\000' && loadatom == 0)
+	/* Bomb on bad combinations (not all are being detected) */
+	if (installprofile && calname[0] == '\000')
+		error("Can't install or uninstall a displays profile without profile argument");
+
+	if (verify && calname[0] == '\000' && loadprofile == 0)
 		error("No calibration/profile provided to verify against");
 
-	if (loadatom && setatom)
-		error("Can't load from X11 atom and set atom at the same time");
+	if (verify && installprofile == 1)
+		error("Can't verify and install a displays profile at the same time");
 
-	if (verify && setatom)
-		error("Can't verify and set X11 atom at the same time");
+	if (verify && installprofile == 2)
+		error("Can't verify and uninstall a displays profile at the same time");
 
 	/* Don't create a window if it won't be used */
-	if (ramd != 0 || clear != 0 || verify != 0 || loadfile != 0 || setatom != 0 || loadatom != 0)
+	if (ramd != 0 || clear != 0 || verify != 0 || loadfile != 0 || installprofile != 0 || loadprofile != 0)
 		nowin = 1;
 
 	if (verb)
@@ -2167,6 +3928,7 @@ main(int argc, char *argv[]) {
 
 	/* Clear the display calibration curve */
 	if (clear != 0) {
+		int rv;
 		
 		if ((r = dw->get_ramdac(dw)) == NULL) {
 			error("We don't have access to the VideoLUT");
@@ -2180,85 +3942,37 @@ main(int argc, char *argv[]) {
 		}
 		if (verb)
 			printf("About to clear the calibration\n");
-		if (dw->set_ramdac(dw,r)) {
-			error("Failed to set ramdac");
+		if ((rv = dw->set_ramdac(dw,r,1)) != 0) {
+			if (rv == 2)
+				error("Failed to set VideoLUTs persistently due to current System Profile");
+			else
+				error("Failed to set VideoLUTs");
 		}
 
-		if (noexit) {
-			for (;;) {
-				sleep(1000);
-			}
-		}
 		r->del(r);
+		r = NULL;
 
-#if defined(UNIX) && !defined(__APPLE__)
-	/* Read in the ICC profile, then set the X11 atom value */
-	} else if (setatom != 0) {
-		icmFile *rd_fp = NULL;
-		icc *icco = NULL;
-		FILE *fp;
-		unsigned long psize, bread;
-		Display *mydisplay;
-		Atom icc_atom;
-		
-		/* Open up the profile for reading */
-		if ((rd_fp = new_icmFileStd_name(calname,"r")) == NULL)
-			error("Can't open file '%s'",calname);
+		/* Fall through, as we may want to do other stuff too */
+	}
 
-		if ((icco = new_icc()) == NULL)
-			error("Creation of ICC object failed");
+	/* Un-Install the profile from the display */
+	if (installprofile == 2) {
+		int rv;
+		if ((rv = dw->uninstall_profile(dw, calname, scope))) {
+			if (rv == 2)
+				warning("Profile '%s' not found to uninstall!",calname);
+			else
+				error("Error trying to uninstall profile '%s'!",calname);
+		}
+		if (verb) {
+			printf("Un-Installed '%s'\n",calname);
+		}
+	}
 
-		/* Read header etc. */
-		if (icco->read(icco, rd_fp,0) != 0) 		/* Read ICC OK */
-			error("File '%s' doesn't seem to be an ICC profile!",calname);
-
-		icco->del(icco);
-		rd_fp->del(rd_fp);
-
-#if defined(O_BINARY) || defined(_O_BINARY)
-		if ((fp = fopen(calname,"rb")) == NULL)
-#else
-		if ((fp = fopen(calname,"r")) == NULL)
-#endif
-			error ("Can't open file '%s'",calname);
-
-		/* Figure out how big it is */
-		if (fseek(fp, 0, SEEK_END))
-			error ("Seek '%s' to EOF failed",calname);
-		psize = (unsigned long)ftell(fp);
-	
-		if (fseek(fp, 0, SEEK_SET))
-			error ("Seek '%s' to SOF failed",calname);
-	
-		if ((atomv = (unsigned char *)malloc(psize)) == NULL)
-			error("Failed to allocate buffer for profile '%s'",calname);
-	
-		if ((bread = fread(atomv, 1, psize, fp)) != psize)
-			error("Failed to read profile '%s' into buffer",calname);
-		
-		fclose(fp);
-
-		if ((mydisplay = XOpenDisplay(disp->name)) == NULL)
-			error("Unable to open display '%s'",disp->name);
-
-		if ((icc_atom = XInternAtom(mydisplay, disp->icc_atom_name, False)) == None)
-			error("Unable to intern atom '%s'",disp->icc_atom_name);
-
-		XChangeProperty(mydisplay, RootWindow(mydisplay, 0), icc_atom,
-		                XA_CARDINAL, 8, PropModeReplace, atomv, psize);
-
-		XCloseDisplay(mydisplay);
-
-		free(atomv);
-		atomv = NULL;
-
-#endif  /* UNXI X11 */
-
-	/* Setup or verify a display calibration curve set if we are given one */
-	/* Note this won't be permanent on OSX. To fix this, a special */
-	/* case would have to be made, to load the given profile using */
-	/* the appropriate OSX call. */
-	} else if (loadfile != 0 || verify != 0 || loadatom != 0) {
+	/* Get any calibration from the provided .cal file or .profile, */
+	/* or calibration from the current default display profile, */
+	/* and put it in r */
+	if (loadfile != 0 || verify != 0 || loadprofile != 0 || installprofile == 1) {
 		icmFile *rd_fp = NULL;
 		icc *icco = NULL;
 		cgats *ccg = NULL;			/* calibration cgats structure */
@@ -2267,40 +3981,18 @@ main(int argc, char *argv[]) {
 			error("We don't have access to the VideoLUT");
 		}
 
-#if defined(UNIX) && !defined(__APPLE__)
-		if (loadatom) {
-			Display *mydisplay;
-			Atom icc_atom, ret_type;
-			int ret_format;
-			long ret_len, ret_togo;
+		if (loadprofile) {
+			/* Get the current displays profile */
+			debug2((errout,"Loading calibration from display profile '%s'\n",dw->name));
+			if ((rd_fp = dw->get_profile(dw, calname, MAXNAMEL)) == NULL)
+				error("Failed to get the displays current ICC profile\n");
+		} else {
 
-			if ((mydisplay = XOpenDisplay(disp->name)) == NULL)
-				error("Unable to open display '%s'",disp->name);
-
-			if ((icc_atom = XInternAtom(mydisplay, disp->icc_atom_name, False)) == None)
-				error("Unable to intern atom '%s'",disp->icc_atom_name);
-
-			/* Get the ICC profile property */
-			if (XGetWindowProperty(mydisplay, RootWindow(mydisplay, 0), icc_atom,
-			            0, 0x7ffffff, False, XA_CARDINAL, 
-                        &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) != Success || ret_len == 0)
-				error("Getting property '%s' failed",disp->icc_atom_name); 
-
-			XCloseDisplay(mydisplay);
-	
-			if ((rd_fp = new_icmFileMem((void *)atomv, ret_len)) == NULL)
-				error("Creating memory file from X11 atom failed");
-
-			strcpy(calname, disp->icc_atom_name);
-
-		} else
-#endif	  /* UNXI X11 */
-
-		{
 			/* Open up the profile for reading */
+			debug2((errout,"Loading calibration from file '%s'\n",calname));
 			if ((rd_fp = new_icmFileStd_name(calname,"r")) == NULL)
 				error("Can't open file '%s'",calname);
-		} 
+		}
 
 		if ((icco = new_icc()) == NULL)
 			error("Creation of ICC object failed");
@@ -2310,29 +4002,44 @@ main(int argc, char *argv[]) {
 			icmVideoCardGamma *wo;
 			double iv;
 
-			if ((wo = (icmVideoCardGamma *)icco->read_tag(icco, icSigVideoCardGammaTag)) == NULL)
-				error("Profile '%s' has no vcgt tag",calname);
+			is_ok_icc = 1;			/* The profile is OK */
 
-			if (wo->u.table.channels == 3) {
+			if ((wo = (icmVideoCardGamma *)icco->read_tag(icco, icSigVideoCardGammaTag)) == NULL) {
+				warning("No vcgt tag found in profile - using linear\n");
 				for (i = 0; i < r->nent; i++) {
 					iv = i/(r->nent-1.0);
-					r->v[0][i] = wo->lookup(wo, 0, iv);
-					r->v[1][i] = wo->lookup(wo, 1, iv);
-					r->v[2][i] = wo->lookup(wo, 2, iv);
-				}
-			} else if (wo->u.table.channels == 1) {
-				for (i = 0; i < r->nent; i++) {
-					iv = i/(r->nent-1.0);
-					r->v[0][i] = 
-					r->v[1][i] = 
-					r->v[2][i] = wo->lookup(wo, 0, iv);
+					r->v[0][i] = iv;
+					r->v[1][i] = iv;
+					r->v[2][i] = iv;
 				}
 			} else {
-				error("Profile '%s' vcgt tag doesn't have 1 or 3 channels",calname);
+				
+				if (wo->u.table.channels == 3) {
+					for (i = 0; i < r->nent; i++) {
+						iv = i/(r->nent-1.0);
+						r->v[0][i] = wo->lookup(wo, 0, iv);
+						r->v[1][i] = wo->lookup(wo, 1, iv);
+						r->v[2][i] = wo->lookup(wo, 2, iv);
+//printf("~1 entry %d = %f %f %f\n",i,r->v[0][i],r->v[1][i],r->v[2][i]);
+					}
+					debug("Got color vcgt calibration\n");
+				} else if (wo->u.table.channels == 1) {
+					for (i = 0; i < r->nent; i++) {
+						iv = i/(r->nent-1.0);
+						r->v[0][i] = 
+						r->v[1][i] = 
+						r->v[2][i] = wo->lookup(wo, 0, iv);
+					}
+					debug("Got monochrom vcgt calibration\n");
+				} else {
+					r->del(r);
+					r = NULL;
+				}
 			}
 		} else {	/* See if it's a .cal file */
 			int ncal;
 			int ii, fi, ri, gi, bi;
+			double cal[3][256];
 			
 			icco->del(icco);			/* Don't need these now */
 			icco = NULL;
@@ -2380,66 +4087,100 @@ main(int argc, char *argv[]) {
 			if (ccg->t[0].ftype[bi] != r_t)
 				error("Field RGB_B in file '%s' is wrong type",calname);
 			for (i = 0; i < ncal; i++) {
-				r->v[0][i] = *((double *)ccg->t[0].fdata[i][ri]);
-				r->v[1][i] = *((double *)ccg->t[0].fdata[i][gi]);
-				r->v[2][i] = *((double *)ccg->t[0].fdata[i][bi]);
+				cal[0][i] = *((double *)ccg->t[0].fdata[i][ri]);
+				cal[1][i] = *((double *)ccg->t[0].fdata[i][gi]);
+				cal[2][i] = *((double *)ccg->t[0].fdata[i][bi]);
 			}
-		}
 
-		/* We've loaded r with the contents of calname */
-		if (verb)
-			printf("About to set given calibration\n");
-		if (verify) {
-			int ver = 1;
-			double berr = 0.0;
-			if ((or = dw->get_ramdac(dw)) == NULL)
-				error("Unable to get current VideoLUT for verify");
-		
-			for (j = 0; j < 3; j++) {
-				for (i = 0; i < r->nent; i++) {
-					double err;
-					err = fabs(r->v[j][i] - or->v[j][i]);
-					if (err > berr)
-						berr = err;
-					if (err > VERIFY_TOL) {
-						ver = 0;
-					}
+			/* Interpolate from cal value to RAMDAC entries */
+			for (i = 0; i < r->nent; i++) {
+				double val, w;
+				unsigned int ix;
+	
+				val = (ncal-1.0) * i/(r->nent-1.0);
+				ix = (unsigned int)floor(val);		/* Coordinate */
+				if (ix > (ncal-2))
+					ix = (ncal-2);
+				w = val - (double)ix;		/* weight */
+				for (j = 0; j < 3; j++) {
+					val = cal[j][ix];
+					r->v[j][i] = val + w * (cal[j][ix+1] - val);
 				}
 			}
-			if (ver)
-				printf("Verify: '%s' IS loaded (discrepancy %.1f%%)\n", calname, berr * 100);
-			else
-				printf("Verify: '%s' is NOT loaded (discrepancy %.1f%%)\n", calname, berr * 100);
-			or->del(or);
-		} else {
-			if (dw->set_ramdac(dw,r))
-				error("Failed to set VideoLUT");
+			debug("Got cal file calibration\n");
 		}
-		r->del(r);
-
 		if (ccg != NULL)
 			ccg->del(ccg);
 		if (icco != NULL)
 			icco->del(icco);
 		if (rd_fp != NULL)
 			rd_fp->del(rd_fp);
+	}
 
-#if defined(UNIX) && !defined(__APPLE__)
-		if (loadatom && atomv != NULL)
-			XFree(atomv);
-#endif	  /* UNXI X11 */
+	/* Install the profile into the display and set as the default */
+	if (installprofile == 1) {
+		if (is_ok_icc == 0)
+			error("File '%s' doesn't seem to be an ICC profile!",calname);
 
 		if (verb)
-			printf("Calibration set\n");
-
-		if (noexit) {
-			for (;;) {
-				sleep(1000);
-			}
+			printf("About to install '%s' as display's default profile\n",calname);
+		if (dw->install_profile(dw, calname, r, scope)) {
+			error("Failed to install profile '%s'!",calname);
+		}
+		if (verb) {
+			printf("Installed '%s' and made it the default\n",calname);
 		}
 
-	/* Window or VideoLUT test */
-	} else {
+	/* load the LUT with the calibration from the given file or the current display profile. */
+	/* (But don't load profile calibration if we're verifying against it) */
+	} else if (loadfile != 0 || (loadprofile != 0 && verify == 0)) {
+		int rv;
+
+		if (r == NULL)
+			error("ICC profile '%s' has no vcgt calibration table",calname);
+		if (verb)
+			printf("About to set display to given calibration\n");
+		if ((rv = dw->set_ramdac(dw,r,1)) != 0) {
+			if (rv == 2)
+				error("Failed to set VideoLUTs persistently due to current System Profile");
+			else
+				error("Failed to set VideoLUTs");
+		}
+		if (verb)
+			printf("Calibration set\n");
+	}
+
+	if (verify != 0) {
+		int ver = 1;
+		double berr = 0.0;
+		if ((or = dw->get_ramdac(dw)) == NULL)
+			error("Unable to get current VideoLUT for verify");
+	
+		for (j = 0; j < 3; j++) {
+			for (i = 0; i < r->nent; i++) {
+				double err;
+				err = fabs(r->v[j][i] - or->v[j][i]);
+				if (err > berr)
+					berr = err;
+				if (err > VERIFY_TOL) {
+					ver = 0;
+				}
+			}
+		}
+		if (ver)
+			printf("Verify: '%s' IS loaded (discrepancy %.1f%%)\n", calname, berr * 100);
+		else
+			printf("Verify: '%s' is NOT loaded (discrepancy %.1f%%)\n", calname, berr * 100);
+		or->del(or);
+		or = NULL;
+	}
+	if (r != NULL) {
+		r->del(r);
+		r = NULL;
+	}
+
+	/* If no other command selected, do a Window or VideoLUT test */
+	if (clear == 0 && installprofile == 0 && loadfile == 0 && verify == 0 && loadprofile == 0) {
 
 		if (ramd == 0) {
 
@@ -2453,6 +4194,73 @@ main(int argc, char *argv[]) {
 					msec_sleep(20);
 					printf("Val = %f\n",tt);
 				}
+
+			/* Patch colors from a CGATS file */
+			} else if (pcname[0] != '\000') {
+				cgats *icg;
+				int i, npat;
+				int ri, gi, bi;
+				int si = -1;
+				
+				if ((icg = new_cgats()) == NULL)
+					error("new_cgats() failed\n");
+				icg->add_other(icg, "");		/* Allow any signature file */
+
+				if (icg->read_name(icg, pcname))
+					error("File '%s' read error : %s",pcname, icg->err);
+
+				if (icg->ntables < 1)		/* We don't use second table at the moment */
+					error ("Input file '%s' doesn't contain at least one table",pcname);
+
+				if ((npat = icg->t[0].nsets) <= 0)
+					error ("File '%s has no sets of data in the first table",pcname);
+
+				si = icg->find_field(icg, 0, "SAMPLE_ID");
+				if (si >= 0 && icg->t[0].ftype[si] != nqcs_t)
+					error("In file '%s' field SAMPLE_ID is wrong type",pcname);
+
+				if ((ri = icg->find_field(icg, 0, "RGB_R")) < 0)
+					error ("Input file '%s' doesn't contain field RGB_R",pcname);
+				if (icg->t[0].ftype[ri] != r_t)
+					error ("In file '%s' field RGB_R is wrong type",pcname);
+				if ((gi = icg->find_field(icg, 0, "RGB_G")) < 0)
+					error ("Input file '%s' doesn't contain field RGB_G",pcname);
+				if (icg->t[0].ftype[gi] != r_t)
+					error ("In file '%s' field RGB_G is wrong type",pcname);
+				if ((bi = icg->find_field(icg, 0, "RGB_B")) < 0)
+					error ("Input file '%s' doesn't contain field RGB_B",pcname);
+				if (icg->t[0].ftype[bi] != r_t)
+					error ("In file '%s' field RGB_B is wrong type",pcname);
+
+				if (inf == 2)
+					printf("\nHit return to advance each color\n");
+
+					if (inf == 2) {
+						printf("\nHit return to start\n");
+						getchar();				
+					}
+				for (i = 0; i < npat; i++) {
+					double r, g, b;
+					r = *((double *)icg->t[0].fdata[i][ri]) / 100.0;
+					g = *((double *)icg->t[0].fdata[i][gi]) / 100.0;
+					b = *((double *)icg->t[0].fdata[i][bi]) / 100.0;
+
+					if (si >= 0)
+						printf("Patch id '%s'",((char *)icg->t[0].fdata[i][si]));
+					else
+						printf("Patch no %d",i+1);
+					printf(" color %f %f %f\n",r,g,b);
+				
+					dw->set_color(dw, r, g, b);
+
+					if (inf == 2)
+						getchar();				
+					else
+						sleep(2);
+				}
+				icg->del(icg);
+
+			/* Preset and random patch colors */
 			} else {
 
 				if (inf == 2)
@@ -2590,9 +4398,9 @@ main(int argc, char *argv[]) {
 					}
 				}
 				printf("Darkening screen\n");
-				if (dw->set_ramdac(dw,r)) {
-					dw->set_ramdac(dw,or);
-					error("Failed to set ramdac");
+				if (dw->set_ramdac(dw,r,0)) {
+					dw->set_ramdac(dw,or,0);
+					error("Failed to set VideoLUTs");
 				}
 				sleep(1);
 	
@@ -2603,16 +4411,16 @@ main(int argc, char *argv[]) {
 					}
 				}
 				printf("Lightening screen\n");
-				if (dw->set_ramdac(dw,r)) {
-					dw->set_ramdac(dw,or);
-					error("Failed to set ramdac");
+				if (dw->set_ramdac(dw,r,0)) {
+					dw->set_ramdac(dw,or,0);
+					error("Failed to set VideoLUTs");
 				}
 				sleep(1);
 	
 				/* restor it */
 				printf("Restoring screen\n");
-				if (dw->set_ramdac(dw,or)) {
-					error("Failed to set ramdac");
+				if (dw->set_ramdac(dw,or,0)) {
+					error("Failed to set VideoLUTs");
 				}
 	
 				r->del(r);
@@ -2653,7 +4461,7 @@ main(int argc, char *argv[]) {
 #endif /* STANDALONE_TEST */
 
 /* ---------------------------------------------------------------- */
-/* Unused code */
+/* Unused Apple code */
 
 #ifdef NEVER
 	/* Got displays, now have a look through them */
@@ -2691,3 +4499,294 @@ main(int argc, char *argv[]) {
 		free(keys);
 	}
 #endif
+
+
+#ifdef NEVER
+/* How to install profiles for devices. */
+
+/* Callback to locate a profile ID. */
+struct idp_rec {
+	CMDeviceID ddid;			/* Device ID */
+//	char *fname;				/* Profile we're trying to find */
+	CMDeviceProfileID id;		/* Corresponding ID */
+	CMDeviceScope dsc;			/* Matching device scope */
+	int found;					/* Flag indicating it's been found */
+};
+
+OSErr ItDevProfProc (
+const CMDeviceInfo *di,
+const NCMDeviceProfileInfo *pi,
+void *refCon) 
+{
+	CMError ev;
+	struct idp_rec *r = (struct idp_rec *)refCon;
+	CMDeviceProfileID id;
+
+	if (di->deviceClass != cmDisplayDeviceClass
+	 || di->deviceID != r->ddid) {
+		return noErr;
+	}
+
+	/* We'd qualify on the device mode too (deviceState ??), */
+	/* if we wanted to replace a profile for a particular mode. */
+
+	/* Assume this is a display with only one mode, and return */
+	/* the profile id and device scope */
+	r->id = pi->profileID;
+	r->dsc = di->deviceScope;
+	r->found = 1;
+	return noErr;
+//printf("~1 got match\n");
+
+/* Callback to locate a profile ID. */
+struct idp_rec {
+	CMDeviceID ddid;			/* Device ID */
+	CMDeviceProfileID id;		/* Corresponding ID */
+	CMDeviceScope dsc;			/* Matching device scope */
+	int found;					/* Flag indicating it's been found */
+};
+
+OSErr ItDevProfProc (
+const CMDeviceInfo *di,
+const NCMDeviceProfileInfo *pi,
+void *refCon) 
+{
+	CMError ev;
+	struct idp_rec *r = (struct idp_rec *)refCon;
+	CMDeviceProfileID id;
+
+	if (di->deviceClass != cmDisplayDeviceClass
+	 || di->deviceID != r->ddid) {
+		return noErr;
+	}
+
+	/* Assume this is a display with only one mode, and return */
+	/* the profile id and device scope */
+	r->id = pi->profileID;
+	r->dsc = di->deviceScope;
+	r->found = 1;
+	return noErr;
+}
+
+#ifndef NEVER
+
+/* Given a location, return a string for it's path */
+static char *plocpath(CMProfileLocation *ploc) {
+
+	if (ploc->locType == cmFileBasedProfile) {
+		FSRef newRef;
+  		static UInt8 path[256] = "";
+printf("~1 converted spec file location\n");
+
+		if (FSpMakeFSRef(&ploc->u.fileLoc.spec, &newRef) == noErr) {
+			OSStatus stus;
+			if ((stus = FSRefMakePath(&newRef, path, 256)) == 0 || stus == fnfErr) {
+				return path;
+			}
+		} 
+		return strdup(path);
+	} else if (ploc->locType == cmPathBasedProfile) {
+		return strdup(ploc->u.pathLoc.path);
+	}
+	return NULL;
+}
+
+#else
+
+/* fss2path takes the FSSpec of a file, folder or volume and returns it's POSIX (?) path. */
+/* Return NULL on error. Free returned string */
+static char *fss2path(FSSpec *fss) {
+	int i, l;						 /* fss->name contains name of last item in path */
+	char *path;
+
+	l = fss->name[0];
+	if ((path = malloc(l + 1)) == NULL)
+		return NULL;
+	for (i = 0; i < l; i++) {
+		if (fss->name[i+1] == '/')
+			path[i] = ':';
+		else
+			path[i] = fss->name[i+1];
+	}
+	path[i] = '\000';
+printf("~1 path = '%s', l = %d\n",path,l);
+
+	if(fss->parID != fsRtParID) { /* path is more than just a volume name */
+		FSSpec tfss;
+//		CInfoPBRec pb;
+		FSRefParam pb;
+		int tl;
+		char *tpath;
+		
+		memcpy(&tfss, fss, sizeof(FSSpec));		/* Copy so we can modify */
+		memset(&pb, 0, sizeof(FSRefParam));
+		pb.ioNamePtr = tfss.name;
+		pb.ioVRefNum = tfss.vRefNum;
+		pb.ioDrParID = tfss.parID;
+		do {
+			pb.ioFDirIndex = -1;	/* get parent directory name */
+			pb.ioDrDirID = pb.dirInfo.ioDrParID;	
+			if(PBGetCatlogInfoSync(&pb) != noErr) {
+				free(path);
+				return NULL;
+			}
+
+			/* Pre-pend the directory name separated by '/' */
+			if (pb.dirInfo.ioDrDirID == fsRtDirID) {
+				tl = 0;			/* Don't pre-pend volume name */
+			} else {
+				tl = tfss.name[0];
+			}
+			if ((tpath = malloc(tl + l + 1)) == NULL) {
+				free(path);
+			 	return NULL;
+			}
+			for (i = 0; i < tl; i++) {
+				if (tfss.name[i+1] == '/')
+					tpath[i] = ':';
+				else
+					tpath[i] = tfss.name[i+1];
+			}
+			tpath[i] = '/';
+			for (i = 0; i < l; i++)
+				tpath[tl+1+i] = path[i];
+			tpath[tl+1+i] = '\000';
+			free(path);
+			path = tpath;
+			l = tl + 1 + l;
+printf("~1 path = '%s', l = %d\n",path,l);
+		} while(pb.dirInfo.ioDrDirID != fsRtDirID); /* while more directory levels */
+	}
+
+	return path;
+}
+
+/* Return a string containing the profiles path. */
+/* Return NULL on error. Free the string after use. */
+static char *plocpath(CMProfileLocation *ploc) {
+	if (ploc->locType == cmFileBasedProfile) {
+		return fss2path(&ploc->u.fileLoc.spec);
+	} else if (ploc->locType == cmPathBasedProfile) {
+		return strdup(ploc->u.pathLoc.path);
+	}
+	return NULL;
+}
+
+#endif
+
+/* Test code that checks what the current display default profile is, three ways */
+static void pcurpath(dispwin *p) {
+		CMProfileRef xprof;			/* Current AVID profile */
+		CMProfileLocation xploc;		/* Current profile location */
+		UInt32 xplocsz = sizeof(CMProfileLocation);
+		struct idp_rec cb;
+		CMError ev;
+
+		/* Get the current installed profile */
+		if ((ev = CMGetProfileByAVID((CMDisplayIDType)p->ddid, &xprof)) != noErr) {
+			debug2((errout,"CMGetProfileByAVID() failed with error %d\n",ev));
+			goto skip;
+		}
+
+		/* Get the current installed  profile's location */
+		if ((ev = NCMGetProfileLocation(xprof, &xploc, &xplocsz)) != noErr) {
+			debug2((errout,"NCMGetProfileLocation() failed with error %d\n",ev));
+			goto skip;
+		}
+
+printf("~1 Current profile by AVID = '%s'\n",plocpath(&xploc));
+
+		/* Get the current CMDeviceProfileID and device scope */
+		cb.ddid = (CMDeviceID)p->ddid;			/* Display Device ID */
+		cb.found = 0;
+
+		if ((ev = CMIterateDeviceProfiles(ItDevProfProc, NULL, NULL, cmIterateAllDeviceProfiles, (void *)&cb)) != noErr) {
+			debug2((errout,"CMIterateDeviceProfiles() failed with error %d\n",ev));
+			goto skip;
+		}
+		if (cb.found == 0) {
+			debug2((errout,"Failed to find exsiting profiles ID\n"));
+			goto skip;
+		}
+		/* Got cb.id */
+
+		if ((ev = CMGetDeviceProfile(cmDisplayDeviceClass, (CMDeviceID)p->ddid, cb.id, &xploc)) != noErr) {
+			debug2((errout,"Failed to GetDeviceProfile\n"));
+			goto skip;
+		}
+printf("~1 Current profile by Itterate = '%s'\n",plocpath(&xploc));
+
+		/* Get the default ID for the display */
+		if ((ev = CMGetDeviceDefaultProfileID(cmDisplayDeviceClass, (CMDeviceID)p->ddid, &cb.id)) != noErr) {
+			debug2((errout,"CMGetDeviceDefaultProfileID() failed with error %d\n",ev));
+			goto skip;
+		}
+
+		/* Get the displays default profile */
+		if ((ev = CMGetDeviceProfile(cmDisplayDeviceClass, (CMDeviceID)p->ddid, cb.id, &xploc)) != noErr) {
+			debug2((errout,"CMGetDeviceDefaultProfileID() failed with error %d\n",ev));
+			goto skip;
+		}
+printf("~1 Current profile by get default = '%s'\n",plocpath(&xploc));
+
+	skip:;
+}
+	/* If we want the path to the profile, we'd do this: */
+
+	printf("id = 0x%x\n",pi->profileID);
+	if (pi->profileLoc.locType == cmFileBasedProfile) {
+		FSRef newRef;
+  		UInt8 path[256] = "";
+
+		if (FSpMakeFSRef(&pi->profileLoc.u.fileLoc.spec, &newRef) == noErr) {
+			OSStatus stus;
+			if ((stus = FSRefMakePath(&newRef, path, 256)) == 0 || stus == fnfErr) {
+				printf("file = '%s'\n",path);
+				if (strcmp(r->fname, (char *)path) == 0) {
+					r->id = pi->profileID;
+					r->found = 1;
+					printf("got match\n");
+				}
+			}
+		} 
+	} else if (pi->profileLoc.locType == cmPathBasedProfile) {
+		if (strcmp(r->fname, pi->profileLoc.u.pathLoc.path) == 0) {
+			r->id = pi->profileID;
+			r->dsc = di->deviceScope;
+			r->found = 1;
+			printf("got match\n");
+		}
+	}
+
+
+	{
+		struct idp_rec cb;
+
+		/* The CMDeviceProfileID wll always be 1 for a display, because displays have only one mode, */
+		/* so the Iterate could be avoided for it. */
+
+		cb.ddid = (CMDeviceID)p->ddid;			/* Display Device ID */
+//		cb.fname = dpath;
+		cb.found = 0;
+
+		if ((ev = CMIterateDeviceProfiles(ItDevProfProc, NULL, NULL, cmIterateAllDeviceProfiles, (void *)&cb)) != noErr) {
+			debug2((errout,"CMIterateDeviceProfiles() failed with error %d\n",dpath,ev));
+			return 1;
+		}
+		if (cb.found == 0) {
+			debug2((errout,"Failed to find exsiting  profiles ID, so ca't set it as default\n"));
+			return 1;
+		}
+		if ((ev = CMSetDeviceProfile(cmDisplayDeviceClass, (CMDeviceID)p->ddid, &cb.dsc, cb.id, &dploc)) != noErr) {
+			debug2((errout,"CMSetDeviceProfile() failed for file '%s' with error %d\n",dpath,ev));
+			return 1;
+		}
+		/* There is no point in doing the following, because displays only have one mode. */
+		/* Make it the default for the display */
+		if ((ev = CMSetDeviceDefaultProfileID(cmDisplayDeviceClass, (CMDeviceID)p->ddid, cb.id)) != noErr) {
+			debug2((errout,"CMSetDeviceDefaultProfileID() failed for file '%s' with error %d\n",dpath,ev));
+			return 1;
+		}
+
+#endif /* NEVER */
+

@@ -41,76 +41,76 @@ static char sccsid[] = "@(#)getopt.c	4.13 (Berkeley) 2/23/91";
 /*
  * get option letter from argument vector
  */
-int	opterr = 1,		/* if error message should be printed */
-	optind = 1,		/* index into parent argv vector */
-	optopt;			/* character checked for validity */
-char	*optarg;		/* argument associated with option */
+int	tiff_opterr = 1,		/* if error message should be printed */
+	tiff_optind = 1,		/* index into parent argv vector */
+	tiff_optopt;			/* character checked for validity */
+char	*tiff_optarg;		/* argument associated with option */
 
 #define	BADCH	(int)'?'
 #define	EMSG	""
 
 int
-getopt(int nargc, char** nargv, char* ostr)
+tiff_getopt(int nargc, char** nargv, char* ostr)
 {
 	static char *place = EMSG;		/* option letter processing */
 	register char *oli;			/* option letter list index */
 	char *p;
 
 	if (!*place) {				/* update scanning pointer */
-		if (optind >= nargc || *(place = nargv[optind]) != '-') {
+		if (tiff_optind >= nargc || *(place = nargv[tiff_optind]) != '-') {
 			place = EMSG;
 			return(EOF);
 		}
 		if (place[1] && *++place == '-') {	/* found "--" */
-			++optind;
+			++tiff_optind;
 			place = EMSG;
 			return(EOF);
 		}
 	}					/* option letter okay? */
-	if ((optopt = (int)*place++) == (int)':' ||
-	    !(oli = strchr(ostr, optopt))) {
+	if ((tiff_optopt = (int)*place++) == (int)':' ||
+	    !(oli = strchr(ostr, tiff_optopt))) {
 		/*
 		 * if the user didn't specify '-' as an option,
 		 * assume it means EOF.
 		 */
-		if (optopt == (int)'-')
+		if (tiff_optopt == (int)'-')
 			return(EOF);
 		if (!*place)
-			++optind;
-		if (opterr) {
+			++tiff_optind;
+		if (tiff_opterr) {
 			if (!(p = strrchr(*nargv, '/')))
 				p = *nargv;
 			else
 				++p;
 			(void)fprintf(stderr, "%s: illegal option -- %c\n",
-			    p, optopt);
+			    p, tiff_optopt);
 		}
 		return(BADCH);
 	}
 	if (*++oli != ':') {			/* don't need argument */
-		optarg = NULL;
+		tiff_optarg = NULL;
 		if (!*place)
-			++optind;
+			++tiff_optind;
 	}
 	else {					/* need an argument */
 		if (*place)			/* no white space */
-			optarg = place;
-		else if (nargc <= ++optind) {	/* no arg */
+			tiff_optarg = place;
+		else if (nargc <= ++tiff_optind) {	/* no arg */
 			place = EMSG;
 			if (!(p = strrchr(*nargv, '/')))
 				p = *nargv;
 			else
 				++p;
-			if (opterr)
+			if (tiff_opterr)
 				(void)fprintf(stderr,
 				    "%s: option requires an argument -- %c\n",
-				    p, optopt);
+				    p, tiff_optopt);
 			return(BADCH);
 		}
 	 	else				/* white space */
-			optarg = nargv[optind];
+			tiff_optarg = nargv[tiff_optind];
 		place = EMSG;
-		++optind;
+		++tiff_optind;
 	}
-	return(optopt);				/* dump back option letter */
+	return(tiff_optopt);				/* dump back option letter */
 }

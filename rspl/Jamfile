@@ -1,128 +1,48 @@
-# Regular spline library
 
-#SubDir TOP rspl ;
+# Regular spline library
 
 # Optimization and Debug flags
 
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
-#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
-#CCFLAGS		+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;      # Link with debug info
-
-if $(UNIX) {
-  if $(OS) = MACOSX {
-	LINKFLAGS += -framework IOKit ;
-	LINKFLAGS += -framework CoreFoundation ;
-  } else {
-	WinDir = /usr/X11R6 ;
-	LibWinH = $(WinDir)/include/X11 ;
-	LibWinD = $(WinDir)/lib ;
-	LibWin = ;
-	LINKFLAGS += -L$(LibWinD) -lX11 -lXau -lXdmcp ;
-  }
-}
+#PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#PREF_LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+#PREF_CCFLAGS		+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;      # Link with debug info
 
 SCAT = scat ;	# Use thps scattered interpolation library
-
-if $(HAVE_TIFF) {	# Alternate TIFF library
-	TIFFLIB = ;
-	TIFFINC = ;
-	LINKLIBS on c1$(SUFEXE)
-				c1df$(SUFEXE)
-				c1i$(SUFEXE)
-				t2d$(SUFEXE)
-				t2dfw$(SUFEXE)
-				t3d$(SUFEXE)
-				t3ddf$(SUFEXE)
-				tnd$(SUFEXE)
-				trnd$(SUFEXE)
-				revbench$(SUFEXE) = -ltiff $(LINKLIBS) ;
-} else {
-	TIFFLIB = ../tiff/libtiff.lib ;
-	TIFFINC = ../tiff ;
-}
 
 #Products
 Libraries = librspl ;
 Headers = rspl.h ;
 
 #Install
-#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
-#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
+#InstallLib ../lib : $(Libraries) ;
+#InstallFile ../h : $(Headers) ;
 
 # Multi-dimensional regular spline library
-Library librspl.lib : rspl.c $(SCAT).c rev.c spline.c opt.c ;
-ObjectHdrs rspl$(SUFOBJ) $(SCAT)$(SUFOBJ) rev$(SUFOBJ) xi
-spline$(SUFOBJ) mlbs$(SUFOBJ) opt$(SUFOBJ) : ../h ../numlib ../plot ;
+Library librspl : rspl.c $(SCAT).c rev.c spline.c opt.c : : : ../h ../numlib ../plot ;
 
-# Test of 1D rspl library
-Main c1 : c1.c ;
-ObjectHdrs c1 : ../h ../numlib ../plot $(TIFFINC) ;
-LinkLibraries c1 : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+HDRS = ../h ../numlib ../plot $(TIFFINC) ;
+LINKLIBS = librspl ../numlib/libnum ../plot/libplot $(TIFFLIB) ;
 
-# Test of 1D rspl library with incremental
-Main c1i : c1i.c ;
-ObjectHdrs c1i : ../h ../numlib ../plot $(TIFFINC) ;
-LinkLibraries c1i : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+# Test programs
+MainsFromSources revbench.c c1.c c1i.c c1df.c t2d.c t2ddf.c t3d.c t3ddf.c tnd.c trnd.c ;
 
-# Test of 1D rspl library with weak default function
-Main c1df : c1df.c ;
-ObjectHdrs c1df : ../h ../numlib ../plot $(TIFFINC) ;
-LinkLibraries c1df : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
+if $(BUILD_TESTS) {
 
-# Test of rspl in 2d
-Main t2d : t2d.c ;
-ObjectHdrs t2d : ../h ../numlib ../plot $(TIFFINC) ;
-LinkLibraries t2d : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
-
-# Test of rspl in 2d with weak default function
-Main t2ddf : t2ddf.c ;
-ObjectHdrs t2ddf : ../h ../numlib ../plot $(TIFFINC) ;
-LinkLibraries t2ddf : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
-
-# Test of rspl in 3d
-Main t3d : t3d.c ;
-ObjectHdrs t3d : ../h ../numlib ../plot $(TIFFINC) ;
-LinkLibraries t3d : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
-
-# Test of rspl in 3d with weak default function
-Main t3ddf : t3ddf.c ;
-ObjectHdrs t3ddf : ../h ../numlib ../plot $(TIFFINC) ;
-LinkLibraries t3ddf : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
-
-# Test of regspl in up to 4d
-Main tnd : tnd.c ;
-ObjectHdrs tnd : ../h ../numlib ../plot $(TIFFINC) ;
-LinkLibraries tnd : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
-
-# Test of rev regspl in 3 or 4d
-Main trnd : trnd.c ;
-ObjectHdrs trnd : ../h ../numlib ../plot $(TIFFINC) ;
-LinkLibraries trnd : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
-
-# Benchmark of rev regspl 
-Main revbench : revbench.c ;
-ObjectHdrs revbench : ../h ../numlib ../plot $(TIFFINC) ;
-LinkLibraries revbench : librspl.lib ../numlib/libnum.lib ../plot/libplot.lib $(TIFFLIB) $(LibWin) ;
-
-if 1 || $(BUILD_TESTS) {
+	HDRS = ../h ../numlib ../plot ../icc ../rspl ../xicc ../gamut ../cgats ../spectro $(TIFFINC) ;
+	LINKLIBS = ../spectro/libinsttypes ../xicc/libxicc ../gamut/libgamut librspl
+	           ../cgats/libcgats ../icc/libicc ../plot/libplot ../numlib/libnum $(TIFFLIB) ;
 
 	# Smoothness factor tuning test in Nd.
 	Main smtnd : smtnd.c ;
-	ObjectHdrs smtnd : ../h ../numlib ../rspl ../xicc ../icc ../gamut ../cgats ../spectro ../plot $(TIFFINC) ;
-	LinkLibraries smtnd : librspl.lib ../xicc/libxicc.lib ../spectro/libinsttypes.lib ../icc/libicc.lib
-                      ../gamut/libgamut.lib ../cgats/libcgats.lib
-                      ../plot/libplot.lib ../numlib/libnum.lib $(LibWin) ;
 
 	# Smoothness factor tuning test in Nd.
 	Main smtmpp : smtmpp.c ;
-	ObjectHdrs smtmpp : ../h ../numlib ../rspl ../xicc ../icc ../gamut ../cgats ../spectro ../plot $(TIFFINC) ;
-	LinkLibraries smtmpp : librspl.lib ../xicc/libxicc.lib ../spectro/libinsttypes.lib ../icc/libicc.lib
-                      ../xicc/libxcolorants.lib
-                      ../gamut/libgamut.lib ../cgats/libcgats.lib
-                      ../plot/libplot.lib ../numlib/libnum.lib $(LibWin) ;
+
+	HDRS = ;
+	LINKLIBS = ;
 
 	Main sm1 : sm1.c ;
 	Main sm2 : sm2.c ;
@@ -131,25 +51,16 @@ if 1 || $(BUILD_TESTS) {
 
 if $(BUILD_JUNK) {
 
+	HDRS = ../h ../numlib ;
+	LINKLIBS = ..//numlib/libnum ;
+
 	Main t : t.c ;
-	ObjectHdrs t : ../h ../numlib ;
-	LinkLibraries t : ../numlib/libnum.lib ;
 
 	#Main temp : temp.c ;
 
-	#Main prime : prime.c ;
-
-	#Main combo : combo.c ;
-	#Main combo2 : combo2.c ;
-	#Main combo3 : combo3.c ;
-	#Main combo4 : combo4.c ;
-	#Main combo5 : combo5.c ;
-	#Main combo9 : combo9.c ;
-	#ObjectHdrs combo combo2 combo3 combo4 combo5 combo9 : ../numlib ;
+	MainsFromSources prime.c combo.c combo2.c combo3.c combo4.c combo5.c combo9.c ; 
 
 	#Main cache : cache.c ;
-	#ObjectHdrs cache$(SUFOBJ) : ../h ../numlib ;
-	#LinkLibraries cache : ../numlib/libnum.lib $(LibWin) ;
 
 	# Nearest point test code
 	Main nptest : nptest.c ;
@@ -159,8 +70,5 @@ if $(BUILD_JUNK) {
 
 	#direct mlbs scattered interpolation test
 	Main mlbs_test : mlbs_test.c ;
-	ObjectHdrs mlbs_test$(SUFOBJ) : ../h ../numlib ;
-	LinkLibraries mlbs_test : ../numlib/libnum.lib librspl.lib ;
-
 }
 

@@ -42,6 +42,10 @@
 
 #define COMPORT 1		/* Default com port 1..4 */
 
+#ifdef __MINGW32__
+# define WINVER 0x0500
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -58,6 +62,9 @@
 #include "insttypes.h"
 #include "icoms.h"
 #include "inst.h"
+#include "conv.h"
+#include "dispwin.h"
+#include "dispsup.h"
 #include "alphix.h"
 #include "sort.h"
 #include "icc.h"
@@ -104,7 +111,7 @@ static double xyzLabDE(double ynorm, double *pat, double *ref) {
 	return icmLabDE(Lab1, Lab2);
 }
 
-/* A color structure */
+/* A chart read color structure */
 /* This can hold all representations simultaniously */
 typedef struct {
 	char *id;					/* Id string (e.g. "1") */
@@ -119,7 +126,7 @@ typedef struct {
 	double XYZ[3];				/* Colorimeter readings (100.0 scale) */
 
 	xspect sp;					/* Spectrum. sp.spec_n > 0 if valid */
-} col;
+} chcol;
 
 /* Convert a base 62 character into a number */
 /* (This is used for converting the PASSES_IN_STRIPS string */
@@ -158,7 +165,7 @@ static int ierror(inst *it, inst_code ic) {
 static int
 read_strips(
 instType itype,		/* Chart instrument type */
-col **scols,		/* Location sorted pointers to cols (return values) */
+chcol **scols,		/* Location sorted pointers to cols (return values) */
 instType *atype,	/* Return the instrument type used to read the chart */
 int npat,			/* Total valid patches */
 int totpa, 			/* Total passes (rows) */
@@ -202,7 +209,7 @@ int debug			/* Debug level */
 	int	nextrap = 0;	/* Number of extra patches for max and min */
 	int ch;
 
-	if (xtern == 0) {
+	if (xtern == 0) {		/* Use user supplied values */
 
 		/* Instrument that the chart is set up for */
 		if (itype == instDTP51) {
@@ -315,6 +322,18 @@ int debug			/* Debug level */
 					it->del(it);
 					return -1;
 				}
+			}
+
+			/* If it battery powered, show the status of the battery */
+			if ((cap2 & inst2_has_battery)) {
+				double batstat = 0.0;
+				if ((rv = it->get_status(it, inst_stat_battery, &batstat)) != inst_ok) {
+					printf("\nGetting instrument battery status failed with error :'%s' (%s)\n",
+			       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
+					it->del(it);
+					return -1;
+				}
+				printf("The battery charged level is %.0f%%\n",batstat * 100.0);
 			}
 
 			/* Set it to the appropriate mode */
@@ -918,7 +937,8 @@ int debug			/* Debug level */
 
 		/* Do any needed calibration before the user places the instrument on a desired spot */
 		if ((it->needs_calibration(it) & inst_calt_needs_cal_mask) != 0
-		 && it->needs_calibration(it) != inst_calt_crt_freq) {
+		 && it->needs_calibration(it) != inst_calt_crt_freq
+		 && it->needs_calibration(it) != inst_calt_disp_int_time) {
 			if ((rv = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL)) != inst_ok) {
 				printf("\nCalibration failed with error :'%s' (%s)\n",
 	       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -983,7 +1003,7 @@ int debug			/* Debug level */
 			for (pai = 0, paist = pis[stix]; pai < paist; pai++, oroi++) {
 				char *nn = NULL;	/* Pass name */
 				int guide;
-				col **scb;
+				chcol **scb;
 				int boff = 0;			/* Best offset */
 				int bdir = 0;			/* Best overall direction */
 
@@ -1172,7 +1192,7 @@ int debug			/* Debug level */
 									}
 									corr /= (double)n;
 #ifdef DEBUG
-									printf("  Strip %d offset %d correlation = %f\n",choroi,off,corr);
+									printf("  Strip %d offset %d correlation = %f\n",choroi,toff,corr);
 
 #endif
 									if (choroi == oroi && corr < xbcorr) { 
@@ -1293,7 +1313,7 @@ int debug			/* Debug level */
 	/* Spot mode. This will be used if xtern != 0 */
 	} else {
 		int pix = -1;
-		int uswitch = 0;			/* nz if switch can be used */
+		int uswitch = 0;		/* nz if switch can be used */
 		inst_opt_mode omode;	/* The option mode used */
 		ipatch val;
 
@@ -1301,7 +1321,8 @@ int debug			/* Debug level */
 
 			/* Do any needed calibration before the user places the instrument on a desired spot */
 			if ((it->needs_calibration(it) & inst_calt_needs_cal_mask) != 0
-			 && it->needs_calibration(it) != inst_calt_crt_freq) {
+			 && it->needs_calibration(it) != inst_calt_crt_freq
+			 && it->needs_calibration(it) != inst_calt_disp_int_time) {
 				if ((rv = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL))
 				                                                              != inst_ok) {
 					printf("\nCalibration failed with error :'%s' (%s)\n",
@@ -1720,8 +1741,8 @@ int main(int argc, char *argv[]) {
 	time_t clk = time(0);
 	struct tm *tsp = localtime(&clk);
 	char *atm = asctime(tsp); /* Ascii time */
-	col *cols;					/* Internal storage of all the patch colors */
-	col **scols;				/* Location sorted pointers to cols */
+	chcol *cols;				/* Internal storage of all the patch colors */
+	chcol **scols;				/* Location sorted pointers to cols */
 	int nchan = 0;				/* Number of device chanels */
 	int npat;					/* Number of overall patches */
 	int *pis;					/* Passes in eachstrip, zero terminated */
@@ -2055,9 +2076,9 @@ int main(int argc, char *argv[]) {
 
 	totpa = (npat + stipa -1)/stipa;	/* Total passes for all strips */
 	runpat = stipa * totpa;				/* Rounded up totao number of patches */
-	if ((cols = (col *)malloc(sizeof(col) * runpat)) == NULL)
+	if ((cols = (chcol *)malloc(sizeof(chcol) * runpat)) == NULL)
 		error("Malloc failed!");
-	if ((scols = (col **)calloc(sizeof(col *), runpat)) == NULL)
+	if ((scols = (chcol **)calloc(sizeof(chcol *), runpat)) == NULL)
 		error("Malloc failed!");
 
 	/* Figure out the color space */
@@ -2178,7 +2199,7 @@ int main(int argc, char *argv[]) {
 	}
 
 #define HEAP_COMPARE(A,B) (A->loci < B->loci)
-	HEAPSORT(col *, scols, npat);
+	HEAPSORT(chcol *, scols, npat);
 
 	/* We can't fiddle white point with spectral data, */
 	/* so turn spectral off for display with white point relative. */
@@ -2209,17 +2230,30 @@ int main(int argc, char *argv[]) {
 	                pbypatch, xtern, spectral, accurate_expd, verb, debug) == 0) {
 		/* And save the result */
 
+		int nrpat;				/* Number of read patches */
+		int vpix = 0;			/* Valid patch index, if nrpatch > 0 */
 		int nsetel = 0;
 		cgats_set_elem *setel;	/* Array of set value elements */
 
 		/* Note what instrument the chart was read with */
 		ocg->add_kword(ocg, 0, "TARGET_INSTRUMENT", inst_name(atype) , NULL);
 
+		/* Count patches actually read */
+		for (nrpat = i = 0; i < npat; i++) {
+			if (cols[i].rr) {
+				vpix = i;
+				nrpat++;
+			}
+		}
+
 		/* If we've used a display white relative mode, record the absolute white */
 		if (displ == 2 || displ == 3) {
 			double nn[3];
 			char buf[100];
 
+			if (cols[wpat].rr == 0) {
+				error("Can't compute white Y relative display values without reading a  white test patch");
+			}
 			sprintf(buf,"%f %f %f", cols[wpat].XYZ[0], cols[wpat].XYZ[1], cols[wpat].XYZ[2]);
 			ocg->add_kword(ocg, 0, "LUMINANCE_XYZ_CDM2",buf, NULL);
 
@@ -2236,9 +2270,11 @@ int main(int argc, char *argv[]) {
 			}
 
 			for (i = 0; i < npat; i++) {
-				cols[i].XYZ[0] *= nn[0];
-				cols[i].XYZ[1] *= nn[1];
-				cols[i].XYZ[2] *= nn[2];
+				if (cols[i].rr) {
+					cols[i].XYZ[0] *= nn[0];
+					cols[i].XYZ[1] *= nn[1];
+					cols[i].XYZ[2] *= nn[2];
+				}
 			}
 		}
 
@@ -2249,24 +2285,24 @@ int main(int argc, char *argv[]) {
 		nsetel += 3;		/* For XYZ or Lab */
 
 		/* If we have spectral information, output it too */
-		if (npat > 0 && cols[0].sp.spec_n > 0) {
+		if (nrpat > 0 && cols[vpix].sp.spec_n > 0) {
 			char buf[100];
 
-			nsetel += cols[0].sp.spec_n;		/* Spectral values */
-			sprintf(buf,"%d", cols[0].sp.spec_n);
+			nsetel += cols[vpix].sp.spec_n;		/* Spectral values */
+			sprintf(buf,"%d", cols[vpix].sp.spec_n);
 			ocg->add_kword(ocg, 0, "SPECTRAL_BANDS",buf, NULL);
-			sprintf(buf,"%f", cols[0].sp.spec_wl_short);
+			sprintf(buf,"%f", cols[vpix].sp.spec_wl_short);
 			ocg->add_kword(ocg, 0, "SPECTRAL_START_NM",buf, NULL);
-			sprintf(buf,"%f", cols[0].sp.spec_wl_long);
+			sprintf(buf,"%f", cols[vpix].sp.spec_wl_long);
 			ocg->add_kword(ocg, 0, "SPECTRAL_END_NM",buf, NULL);
 
 			/* Generate fields for spectral values */
-			for (i = 0; i < cols[0].sp.spec_n; i++) {
+			for (i = 0; i < cols[vpix].sp.spec_n; i++) {
 				int nm;
 		
 				/* Compute nearest integer wavelength */
-				nm = (int)(cols[0].sp.spec_wl_short + ((double)i/(cols[0].sp.spec_n-1.0))
-				            * (cols[0].sp.spec_wl_long - cols[0].sp.spec_wl_short) + 0.5);
+				nm = (int)(cols[vpix].sp.spec_wl_short + ((double)i/(cols[vpix].sp.spec_n-1.0))
+				            * (cols[vpix].sp.spec_wl_long - cols[vpix].sp.spec_wl_short) + 0.5);
 				
 				sprintf(buf,"SPEC_%03d",nm);
 				ocg->add_field(ocg, 0, buf, r_t);
@@ -2280,7 +2316,8 @@ int main(int argc, char *argv[]) {
 		for (i = 0; i < npat; i++) {
 			int k = 0;
 
-			if (strcmp(cols[i].id, "0") == 0)	/* This is a padding patch */
+			if (cols[i].rr == 0					/* or this patch wasn't read */
+			 || strcmp(cols[i].id, "0") == 0)	/* This is a padding patch */
 				continue;			/* Skip it */
 
 			setel[k++].c = cols[i].id;

@@ -43,14 +43,13 @@ if = inverted forward, ib = inverted backwards</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#i">-i intent</a><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; p
-= perceptual, r = relative colorimetric,</span><br
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; a =
+absolute, r = relative colorimetric,</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-s = saturation, a = absolute, j = Appearance
-CIECAM02</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-k = Absolute Appearance CIECAM02</span><br
+</span></small><small><span style="font-family: monospace;"> p =
+perceptual, </span></small><small><span style="font-family: monospace;">s
+= saturation</span><span style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#o">-o order</a><span
@@ -63,9 +62,10 @@ lut)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#p">-p oride</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; x
-= XYZ_PCS, X = XYZ * 100, l = Lab_PCS, L = LCh, y = Yxy, j = Jab, J =
-JCh</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
+= XYZ_PCS, X = XYZ * 100, l = Lab_PCS, L = LCh, y = Yxy,<br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; j = CIECAM02
+Appearance Jab, J = CIECAM02 Appearance JCh<br>
+</span><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#S">-s scale</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Scale device range 0.0 - scale rather than 0.0 - 1.0</span><br
@@ -271,12 +271,10 @@ table, and the other is to invert the backward table. For non Lut based
 profiles, -fif is equivalent to -fb, and -fib is equivalent to -ff.
 Note that the -fib combination may not be fully supported.<br>
 <br>
-<a name="i"></a> The <b>-i</b> flag selects the intent for a lut based
-profile. In addition to the usual 4 ICC based intents, two other
-options
-are available: CIECAM02 Jab appearance space, and a version of Jab with
-a fixed white reference, which emulates an absolute CIECAM02 Jab
-appearance space.<br>
+<a name="i"></a> The <b>-i</b> flag selects the intent table used for
+a lut based
+profile. It also selects between relative and absolute colorimetric for
+non-lut base profiles.<br>
 <br>
 <a name="o"></a> A profile is allowed to contain more than the minimum
 number of elements or table needed to describe a certain transform, and
@@ -287,14 +285,24 @@ present. The <b>-o</b> flag, reverses this order.&nbsp;&nbsp;&nbsp; <br>
 <br>
 <a name="p"></a> Normally the native PCS (Profile Connection Space) of
 a device or abstract profile is used, but the <b>-p</b> flag allows
-this to be overridden, and <span style="font-weight: bold;">-x</span>:
-XYZ (scaled to 1.0), <span style="font-weight: bold;">-X</span>: XYZ
-scaled to 100, <span style="font-weight: bold;">-l</span>: L*a*b*, <span
- style="font-weight: bold;">-L</span>: LCh, <span
- style="font-weight: bold;">-y</span>: Yxy space, <span
- style="font-weight: bold;">-j</span>: Jab
-(CIECAM02) or <span style="font-weight: bold;">-J</span>: JCh space to
-be substituted.<br>
+this to be overridden: <span style="font-weight: bold;">-px</span>:
+XYZ (scaled to 1.0), <span style="font-weight: bold;">-pX</span>: XYZ
+scaled to 100, <span style="font-weight: bold;">-pl</span>: L*a*b*, <span
+ style="font-weight: bold;">-pL</span>: LCh, <span
+ style="font-weight: bold;">-py</span>: Yxy space, <span
+ style="font-weight: bold;">-pj</span>: CIECAM02 appearance space Jab,
+or <span style="font-weight: bold;">-pJ</span>: CIECAM02 appearance
+space JCh.<span style="font-weight: bold;"><br>
+</span>Note that the CIECAM02 output space selection by default uses
+the colorimetric table of the profile, but that the perceptual or
+saturation tables may be used by selecting them using the <span
+ style="font-weight: bold;">-i</span> parameter. If the absolute
+colorimetric intent is chosen using <span style="font-weight: bold;">-ia</span>
+in combinations with <span style="font-weight: bold;">-pj</span>,
+then&nbsp; Jab with
+a fixed white reference is used, which emulates an absolute CIECAM02
+Jab
+appearance space. <br>
 <br>
 <a name="s"></a> Usually device values are processed and displayed
 using a normalized value range between 0.0 and 1.0 Sometimes other
@@ -308,8 +316,8 @@ instance, if your device values have a range between 0 and 255, use <span
 flag), an input PCS value can have many possible CMYK solutions. To be
 able to return a unique solution, a black level (or black inking rule)
 should be chosen. The choice here reflect similar choices in black
-generation available in other utilities (eg. <a href="profile.html">profile</a>,
-<a href="icclink.html"> icclink</a>), with the addition of two extra
+generation available in other utilities (eg. <a href="colprof.html">colprof</a>,
+<a href="collink.html"> collink</a>), with the addition of two extra
 options.<br>
 <br>
 &nbsp;Possible arguments to the <b>-k</b> option are:<br>
@@ -395,12 +403,12 @@ values.<br>
 <b><a name="l"></a>-l</b> <i>tlimit</i>&nbsp; &nbsp;&nbsp; Sets the
 total ink limit (TAC, Total Area Coverage) for the CMYK inverse forward
 lookup, as a total percentage from 0% to 400%. If none is provided, it
-will be estimated from the profile.<br>
+will be estimated from the profile relcolor B2A table.<br>
 <br>
 <b><a name="L"></a>-L</b> <i>klimit</i>&nbsp; &nbsp; Sets the black
 ink limit for the CMYK inverse forward lookup, as a total percentage
 from 0% to 100%. If none is provided, it will be estimated from the
-profile.<br>
+profile relcolor B2A table.<br>
 <br>
 <a name="a"></a> If the <b>-a</b> flag is used for inverse forward
 lookups, then if

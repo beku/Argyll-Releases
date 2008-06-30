@@ -20,12 +20,11 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
+#include "copyright.h"
+#include "config.h"
+#include "numlib.h"
 #include "icc.h"
 #include "xicc.h"
-
-#ifndef NUMSUP_H
-void error(char *fmt, ...), warning(char *fmt, ...);
-#endif
 
 #define RW 0.5		/* Device Delta */ 
 
@@ -58,7 +57,7 @@ double absdiff(double in1[3], double in2[3]) {
 /* ---------------------------------------- */
 
 void usage(void) {
-	fprintf(stderr,"View inv fwd table device interp of an ICC file, V1.23\n");
+	fprintf(stderr,"View inv fwd table device interp of an ICC file, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: fbtest [options] infile\n");
 	fprintf(stderr," -v          verbose\n");
@@ -98,10 +97,7 @@ main(
 	int rv = 0;
 	icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
 
-	
-#ifdef NUMSUP_H
-	error_program = "xfbtest";
-#endif
+	error_program = argv[0];
 
 	if (argc < 2)
 		usage();
@@ -520,9 +516,9 @@ main(
 			icxLuBase *luoB;
 
 			/* Get a PCS to Device conversion object */
-			if ((luoB = xicco->get_luobj(xicco, 0, icmBwd, icAbsoluteColorimetric,
+			if ((luoB = xicco->get_luobj(xicco, ICX_CLIP_NEAREST, icmBwd, icAbsoluteColorimetric,
 			                             icSigLabData, icmLuOrdNorm, NULL, &ink)) == NULL) {
-				if ((luoB = xicco->get_luobj(xicco, 0, icmBwd, icmDefaultIntent,
+				if ((luoB = xicco->get_luobj(xicco, ICX_CLIP_NEAREST, icmBwd, icmDefaultIntent,
 				                             icSigLabData, icmLuOrdNorm, NULL, &ink)) == NULL)
 					error ("%d, %s",rd_icco->errc, rd_icco->err);
 			}
@@ -599,9 +595,9 @@ main(
 			icxLuBase *luoB;
 
 			/* Get a PCS to Device conversion object */
-			if ((luoB = xicco->get_luobj(xicco, 0, icmBwd, icAbsoluteColorimetric,
+			if ((luoB = xicco->get_luobj(xicco, ICX_CLIP_NEAREST, icmBwd, icAbsoluteColorimetric,
 			                             icSigLabData, icmLuOrdNorm, NULL, &ink)) == NULL) {
-				if ((luoB = xicco->get_luobj(xicco, 0, icmBwd, icmDefaultIntent,
+				if ((luoB = xicco->get_luobj(xicco, ICX_CLIP_NEAREST, icmBwd, icmDefaultIntent,
 				                             icSigLabData, icmLuOrdNorm, NULL, &ink)) == NULL)
 					error ("%d, %s",rd_icco->errc, rd_icco->err);
 			}
@@ -704,32 +700,3 @@ main(
 	return 0;
 }
 
-/* ------------------------------------------------ */
-/* Basic printf type error() and warning() routines */
-
-#ifndef NUMSUP_H
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"icctest: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
-}
-
-void
-warning(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"icctest: Warning - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-}
-#endif

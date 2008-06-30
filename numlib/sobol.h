@@ -21,6 +21,7 @@ struct _sobol {
 	/* Methods */
 
 	/* Get the next sobol vector, return nz if we've run out */
+	/* Values are between 0.0 and 1.0 */
 	int (*next)(struct _sobol *s, double *v);
 
 	/* Rest to the begining of the sequence */

@@ -1,0 +1,402 @@
+<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+  <meta http-equiv="Content-Type"
+ content="text/html; charset=iso-8859-1">
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="GENERATOR"
+ content="Mozilla/4.73 [en] (WinNT; I) [Netscape]">
+  <title>Argyll Installation on Microsoft Windows</title>
+</head>
+<body style="color: rgb(0, 0, 0);" alink="#ee0000" link="#0000ee"
+ vlink="#551a8b">
+<h1>
+<u>Installing the software on Microsoft Windows<br>
+</u></h1>
+<h3 style="background-color: rgb(255, 255, 255);"><span
+ style="color: rgb(51, 153, 153);">Unpacking the .zip archive:</span></h3>
+You will
+need
+to unzip the downloaded file in the location you have chosen to hold
+the
+executable files (perhaps somewhere like \bin). I would <span
+ style="font-weight: bold;">NOT</span> put them in <span
+ style="font-style: italic;">\Program Files</span>,
+since spaces in directory or file names and command line environments
+are a very bad mix, and will cause you endless problems. The
+archive will create a <span style="font-weight: bold;"></span> top
+level directory <span style="font-weight: bold;">Argyll_VX.X.X</span>,
+where X.X.X is the version number, and the executables will be in <span
+ style="font-weight: bold;">Argyll_VX.X.X/bin</span>.
+<h3><span style="color: rgb(51, 153, 153);">Making the utilities
+accessible:</span></h3>
+You should
+also configure your %PATH%
+environment
+variable to give access to the executables from your command line
+environment.<br>
+<br>
+For <span style="font-weight: bold;">Vista</span>, look in<br>
+&nbsp;&nbsp;&nbsp; Start Menu -&gt; Control Panel -&gt; System And
+Maintenance -&gt; System -&gt; Change Settings -&gt; Advanced -&gt;
+Environment Variables<br>
+<br>
+For <span style="font-weight: bold;">XP and 2000 </span>look in<br>
+&nbsp;&nbsp;&nbsp;
+Start-&gt;Settings-&gt;ControlPanel-&gt;System-&gt;Advanced-&gt;EnvironmentVariables<br>
+<br>
+For <span style="font-weight: bold;">NT 4</span> look in<br>
+&nbsp;&nbsp;&nbsp;
+Start-&gt;Settings-&gt;ControlPanel-&gt;System-&gt;Environment<br>
+<br>
+You want to add the directory you've chosen to your %PATH%, which is a
+System Variable. Normally you would add this to the end of the current
+setting, separated by a ';'.&nbsp; <br>
+<br>
+&nbsp;So if the current value of PATH is
+"%SystemRoot%\system32;%SystemRoot%" and you unpacked Argyll
+version 1.0.0 in <span style="font-weight: bold;">d:\bin\</span>, then
+you
+would modify PATH to be
+"%SystemRoot%\system32;%SystemRoot%;d:\bin\Argyll_V1.0.0\bin". The
+change will
+take effect when you start a new command shell, which you start from
+Start Menu-&gt;Accessories-&gt;Command Prompt, or Start
+Menu-&gt;Programs-&gt;Accessories-&gt;Command Prompt. You can check
+that the environment variable has been set by running the command "echo
+%PATH%" in the command shell.<br>
+<br>
+The .zip file also contains several useful reference files
+(such as
+scanner
+chart recognition templates, sample illumination spectrum etc.) in the
+ref sub-directory, all the current documentation in a doc
+sub-directory, and instrument USB drivers in the libusbw directory.<br>
+<h3><span style="color: rgb(51, 153, 153);">Serial Instruments:</span><br>
+</h3>
+If you are using a serial connected instrument, then there is nothing
+special to do to enable this.<br>
+<h3><span style="color: rgb(51, 153, 153);">USB Instruments:</span></h3>
+If you are using a USB connected instrument, then suitable USB drivers
+may need to be installed:<br>
+<br>
+<span style="color: rgb(51, 153, 153);"><span
+ style="color: rgb(0, 0, 0); text-decoration: underline;">Fresh Install
+of USB drivers:</span><br>
+<br>
+</span>If you currently don't have any applications that talk to your
+instrument using USB, then it is relatively simple to use the drivers
+provided with Argyll. On plugging the instrument in, MSWindows should
+pop up a "New Hardware" dialog, and ask you for drivers for the
+particular USB instrument.<br>
+<br>
+<a name="V_FNH"></a>In <span style="font-weight: bold;">Vista</span> a
+"Found new
+hardware" window will pop up.<br>
+&nbsp; Select the top "Locate and install driver software
+(recommended)"&nbsp; button.<br>
+&nbsp; A "User Account Control" window will probably then pop up, and
+you should "Continue".<br>
+&nbsp; A "Found New Hardware" window should pop up. Select the last
+"Don't Search online" button.<br>
+&nbsp; In the next screen select the "I don't have the disc. Show me
+other options." button.<br>
+&nbsp; In the next screen, select the "Browse my computer for driver
+software (advanced)" button.<br>
+&nbsp; On the next screen use the brows dialog to locate the directory <span
+ style="font-weight: bold;">argyll\libusbw </span>below where you
+installed Argyll. Click "next".<br>
+&nbsp; The screen should change to "Installing driver software...", and
+a "Windows Security" window should pop up.<br>
+&nbsp;&nbsp; In the "Windows Security"&nbsp; window choose the "Install
+this driver software anyway" button.<br>
+&nbsp;&nbsp; You should get the final screen "The software for this
+device has been successfully installed". Click "Close".<br>
+<span style="font-weight: bold;"><span style="font-weight: bold;"><br>
+</span></span><a name="X_FNH"></a>In<span style="font-weight: bold;"> XP</span>
+a "Welcome
+to the Found New Hardware Wizard" window will pop up.<br>
+&nbsp; For "Can Windows connect to Windows Update to search for
+software ?"&nbsp; Select "No, not this time" and "Next"<br>
+&nbsp; Select "Install from a list or specific location (Advanced) "
+then "Next"<br>
+&nbsp; Select "Search for the best driver in these locations", "Include
+this location in the search" and "Brows"<br>
+&nbsp; Brows to locate the directory <span style="font-weight: bold;">argyll\libusbw</span>
+below where you installed Argyll. Click "next".<br>
+&nbsp; The screen should change to "Installing driver software...", <br>
+&nbsp; You should get the final screen "Completing the Found New
+Hardware Wizard". Click "Finish".<br>
+<br>
+<a name="2_FNH"></a>In<span style="font-weight: bold;"> 2000</span> a
+"Welcome
+to the Found New Hardware Wizard" window will pop up.<br>
+&nbsp; Click "Next"<br>
+&nbsp; Select "Search for a suitable driver for my device
+(recommended)"
+then "Next"<br>
+&nbsp; Tick the "Specify a location" box and then "Next"<br>
+&nbsp; A "Found New Hardware Wizard" dialog should pop up with "Insert
+the manufacturer's installation disk<br>
+&nbsp;&nbsp;&nbsp; into the driver selected, and then clock OK'.&nbsp;
+Select "Browse...".<br>
+&nbsp; Brows to locate the directory <span style="font-weight: bold;">argyll\libusbw</span>
+below where you installed Argyll, and select the <span
+ style="font-weight: bold;">.inf</span> file that<br>
+&nbsp;&nbsp;&nbsp; corresponds&nbsp; to the device (ie.
+DTP94.inf, i1Disp.inf etc.). Click "Open".<br>
+&nbsp; Click "OK".<br>
+&nbsp; The screen should change to "Windows found a driver for this
+device. To install the driver Windows found, click Next",<br>
+&nbsp;&nbsp;&nbsp;&nbsp; and the path to the file you selected should
+be shown bellow this. Click "Next".<br>
+&nbsp; You should get the final screen "Completing the Found New
+Hardware Wizard". Click "Finish".<span style="font-weight: bold;"><span
+ style="font-weight: bold;"></span></span><span
+ style="font-weight: bold;"><br>
+<br>
+</span>Note that the "Huey" colorimeter appears as an HID (USB Human
+Interface
+Device Class) device, and hence will be assigned to the default
+MSWindows HID driver, rather than popping a "New Hardware" dialog. You
+don't normally need to install an Argyll <span
+ style="font-weight: bold;">libusbw</span> driver for the Huey.<br>
+If
+however your version of Argyll does not have HID driver support (no
+DDK available when the software was built), then you will need to
+change the "Huey" from the HID
+driver to a <span style="font-weight: bold;">libusbw</span> driver
+(see below).<br>
+<br>
+<span style="color: rgb(51, 153, 153);"><span
+ style="color: rgb(0, 0, 0); text-decoration: underline;">Adding Argyll
+drivers to existing drivers:</span></span><br>
+<br>
+If you currently have applications other than Argyll accessing your USB
+connected instrument, then you won't automatically be prompted to
+install the drivers needed to access the instrument. You
+have to manually install the drivers, and then switch back and forth
+between the Argyll and other drivers if you want to switch between
+applications. <br>
+<br>
+<a name="V_IAD"></a>In <span style="font-weight: bold;">Vista</span>:<br>
+&nbsp; Plug the instrument that you want to install the the computer.<br>
+&nbsp; Right click on the "My Computer" item in the Start menu and
+select "Manage".<br>
+&nbsp; Click on "Device Manager"<br>
+&nbsp; Locate the device in the device manager. It may be underneath
+one of the top level "USB" items. <br>
+&nbsp; Right click on the device and choose "Update Driver Software..."<br>
+&nbsp; In the next screen, select the "Browse my computer for driver
+software" button.<br>
+&nbsp; On the next screen use the brows dialog to locate the directory <span
+ style="font-weight: bold;">argyll\libusbw </span>below where you
+installed Argyll. Click "next".<br>
+&nbsp; The screen should change to "Installing driver software...", and
+a "Windows Security" window should pop up.<br>
+&nbsp; In the "Windows Security"&nbsp; window choose the "Install
+this driver software anyway" button.<br>
+&nbsp; You should get the final screen "The software for this
+device has been successfully installed". Click "Close".<br>
+&nbsp; The Argyll driver will now be used to access the device.<br>
+<br>
+<a name="V_SD"></a>To switch between drivers:<br>
+&nbsp; Plug the instrument that you want to install the the computer.<br>
+&nbsp; Right click on the "My Computer" item in the Start menu and
+select Manage.<br>
+&nbsp; Click on "Device Manager"<br>
+&nbsp; Locate the device in the device manager. It may be underneath
+one of the top level "USB" items. <br>
+&nbsp; Right click on the device and choose "Update Driver Software..."<br>
+&nbsp; In the next screen, select the "Let me pick from a list of
+device drivers on my computer" button.<br>
+&nbsp; On the next screen make sure that the "Show compatible hardware"
+checkbox is ticked, and choose which<br>
+&nbsp; driver you want to use, and press "Next". All Argyll drivers
+have (Argyll) at the end of them.<br>
+&nbsp; You should get the final screen "The software for this
+device has been successfully installed". Click "Close".<br>
+<br>
+<span style="font-weight: bold;"><span style="font-weight: bold;"><span
+ style="font-weight: bold;"></span></span></span><a name="X_IAD"></a>In
+<span style="font-weight: bold;">XP</span><span
+ style="font-weight: bold;"></span>:<br>
+&nbsp; Plug the instrument that you want to install the the computer.<br>
+&nbsp; Right click on the "My Computer" item in the Start menu and
+select "Manage".<br>
+&nbsp; Click on "Device Manager"<br>
+&nbsp; Locate the device in the device manager. It may be underneath
+one of the top level "USB" items. <br>
+&nbsp; Right click on the device and choose "Update Driver Software..."<br>
+&nbsp; For "Can Windows connect to Windows Update to search for
+software ?"&nbsp; Select "No, not this time" and "Next"<br>
+&nbsp; Select "Install from a list or specific location (Advanced) "
+then "Next"<br>
+&nbsp; In the next screen, select the "Don't search. I will choose the
+driver to install" button, then click "Next".<br>
+&nbsp; On the next screen "Select the device driver you want to install
+for this hardware", the existing driver for the device should be
+listed. Click "Have Disk".<br>
+&nbsp; On the next screen use the brows dialog to locate the directory <span
+ style="font-weight: bold;">argyll\libusbw </span>below where you
+installed Argyll, and select<br>
+&nbsp;&nbsp; the appropriate .inf file for the device. Click "Open".<br>
+&nbsp; Back on the "Install From Disk" dialog, click "OK".<br>
+&nbsp; Back in the "Select the device driver you want to install for
+this hardware", click "Next".<br>
+&nbsp; A "Please wait while the wizard installs the software" dialog
+will be shown.<br>
+&nbsp; You should get the final screen "Completing the Hardware Update
+Wizard". Click "Finish".<br>
+&nbsp; The Argyll driver will now be used to access the device.<br>
+<br>
+<a name="X_SD"></a>To switch between drivers:<br>
+&nbsp; Plug the instrument that you want to install the the computer.<br>
+&nbsp; Right click on the "My Computer" item in the Start menu and
+select "Manage".<br>
+&nbsp; Click on "Device Manager"<br>
+&nbsp; Locate the device in the device manager. It may be underneath
+one of the top level "USB" items. <br>
+&nbsp; Right click on the device and choose "Update Driver Software..."<br>
+&nbsp; For "Can Windows connect to Windows Update to search for
+software ?"&nbsp; Select "No, not this time" and "Next"<br>
+&nbsp; Select "Install from a list or specific location (Advanced) "
+then "Next"<br>
+&nbsp; In the next screen, select the "Don't search. I will choose the
+driver to install" button, then click "Next".<br>
+&nbsp; On the next screen "Select the device driver you want to install
+for
+this hardware", the Argyll driver and any alternative<br>
+&nbsp;&nbsp; driver for the device should be listed.
+Choose the driver you want to switch to, and then Click "Next".<br>
+&nbsp; A "Please wait while the wizard installs the software" dialog
+will be shown.<br>
+&nbsp; You should get the final screen "Completing the Hardware Update
+Wizard". Click "Finish".<br>
+&nbsp; The Argyll driver will now be used to access the device.<br>
+<br>
+<a name="2_IAD"></a>In <span style="font-weight: bold;">2000</span>:<br>
+&nbsp; Plug the instrument that you want to install the the computer.<br>
+&nbsp; Right click on the "My Computer" item in the Start menu and
+select "Manage".<br>
+&nbsp; Click on "Device Manager"<br>
+&nbsp; Locate the device in the device manager. It may be underneath
+one of the top level "USB" items. <br>
+&nbsp; Right click on the device and choose "Properties..."<br>
+&nbsp; Select the "Driver" Tab.<br>
+&nbsp; Select "Update Driver..."<br>
+&nbsp; A "Welcome
+to the Upgrade Device Driver Wizard" window will pop up.<br>
+&nbsp; Click "Next"<br>
+&nbsp; Select "Search for a suitable driver for my device
+(recommended)"
+then "Next"<br>
+&nbsp; Tick the "Specify a location" box&nbsp; and untick all other
+boxes. Click "Next"<br>
+&nbsp; A "Upgrade Device Driver Wizard" dialog should pop up with
+"Insert the manufacturer's installation disk<br>
+&nbsp;&nbsp;&nbsp; into the driver selected, and then clock OK'.&nbsp;
+Select "Browse...".<br>
+&nbsp; Brows to locate the directory <span style="font-weight: bold;">argyll\libusbw</span>
+below where you installed Argyll, and select the <span
+ style="font-weight: bold;">.inf</span> file that<br>
+&nbsp;&nbsp;&nbsp; corresponds&nbsp; to the device (ie.
+DTP94.inf, i1Disp.inf etc.). Click "Open".<br>
+&nbsp; Click "OK".<br>
+&nbsp; Wait while the wizard also searches other locations.<br>
+&nbsp; The wizard should then display screen titled "Driver Files
+Search Results".<br>
+&nbsp; Tick the "Install one of the other drivers" box and then "Next"<br>
+&nbsp;&nbsp; A list of available drivers should then be displayed.
+Select the Argyll driver for the device then "Next".<br>
+&nbsp; You should get the final screen "Completing the Upgrade Device
+Driver Wizard". Click "Finish".<br>
+<br>
+<a name="2_SD"></a>To switch between drivers:<br>
+&nbsp; Plug the instrument that you want to install the the computer.<br>
+&nbsp; Right click on the "My Computer" item in the Start menu and
+select Manage.<br>
+&nbsp; Click on "Device Manager"<br>
+&nbsp; Locate the device in the device manager. It may be underneath
+one of the top level "USB" items. <br>
+&nbsp; Right click on the device and choose "Properties".<br>
+&nbsp; Select the "Drivers" tab.<br>
+&nbsp; Select "Update Driver".<br>
+&nbsp; On the "Welcome to the Update Device Driver Wizard" click "Next".<br>
+&nbsp; On the "Install Hardware Device Drivers" dialog, select the
+"Display a list of known drivers for this device so that I can choose a
+specific driver", then click "Next".<br>
+&nbsp; The next dialog called "Select a Device Driver" should list the
+Argyll driver and any alternative<br>
+&nbsp;&nbsp; driver for the device.
+Choose the driver you want to switch to, and then Click "Next".<br>
+&nbsp;&nbsp; On the next dialog called "Start Device Driver
+Installation" click "Next".<br>
+&nbsp; You should get the final screen "Completing the Upgrade Device
+Driver Wizard". Click "Finish".<span style="font-weight: bold;"></span><br>
+<br>
+[ The alternative to switching to the Argyll drivers is to go to the
+libusb-win32 web site, and download and
+then install the "filter drivers", - see
+&lt;http://libusb-win32.sourceforge.net./#downloads&gt;. This may then
+let you access the device using Argyll, without disabling access by
+existing applications. (I haven't tried this, so I'm not sure how well
+it works). You don't make use of the Argyll <span
+ style="font-weight: bold;">.inf</span>
+file using this approach. ]<br>
+<br>
+<span style="color: rgb(51, 153, 153);"><span
+ style="color: rgb(0, 0, 0); text-decoration: underline;">Updating
+Argyll drivers:</span></span><br>
+<br>
+<span style="font-weight: bold;">NOTE</span> that if you are updating
+to a new version of Argyll, that it may be necessary to uninstall all
+the Argyll USB devices, and re-install them, to update the relevant
+libusb-win32 system driver and dll. (This is true for updating to
+Argyll Version 1.0.0). To do this you need to<br>
+<br>
+<a name="V_UD"></a>In <span style="font-weight: bold;">Vista</span> <br>
+&nbsp; Plug an instrument that has been installed into the computer.<br>
+&nbsp; Right click on the "My Computer" item in the Start menu and
+select "Manage".<br>
+&nbsp; Click on "Device Manager"<br>
+&nbsp; Locate the device under "LibUSB-Win32 Device"<br>
+&nbsp; Right click on the device and choose "Uninstall"<br>
+&nbsp; In the "Confirm Device Removal" window select the "Delete the
+driver software for this device" checkbox and then choose "OK"<br>
+&nbsp; In the "Action" menu of the window choose "Scan for hardware
+changes"<br>
+&nbsp; A "Found New Hardware Wizard" window should pop up.<br>
+&nbsp; Follow the same directions as <a href="#V_FNH">above</a> for
+installing the drivers..<br>
+<br>
+<a name="X_UD"></a><a name="2_UD"></a>In <span
+ style="font-weight: bold;">XP</span> and <span
+ style="font-weight: bold;">2000</span>:<br>
+&nbsp; Plug an instrument that has been installed into the computer.<br>
+&nbsp; Right click on the "My Computer" icon on the desktop or start
+menu and select Manage.<br>
+&nbsp; Click on "Device Manager"<br>
+&nbsp; Locate the device under "LibUSB-Win32 Device"<br>
+&nbsp; Right click on the device and choose "Uninstall"<br>
+&nbsp; On the "Confirm Device Removal" window choose "OK"<br>
+&nbsp; In the "Action" menu of the window choose "Scan for hardware
+changes"<br>
+&nbsp; A "Found New Hardware Wizard" window should pop up.<br>
+&nbsp; Follow the same directions as above (<a href="#X_FNH">XP</a>, <a
+ href="#2_FNH">2000</a>) for installing the drivers.<br>
+<br>
+<p><br>
+&nbsp;
+<br>
+&nbsp;
+<br>
+&nbsp;
+<br>
+&nbsp;
+<br>
+&nbsp;
+</p>
+</body>
+</html>

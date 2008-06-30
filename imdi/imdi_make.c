@@ -31,6 +31,10 @@
 #include "imdi.h"
 #include "imdi_tab.h"
 
+#ifndef MAXNAMEL
+# define MAXNAMEL 512	/* Maximum command line filename lengths */
+#endif
+
 #undef VERBOSE
 #undef TEST1		/* Generate one test case */
 
@@ -93,7 +97,8 @@ gendesc descs[] = {
 		{pixint8, pixint8,  pixint16, pixint16, pixint16, 0 },	/* + Output pixel representation */
 
 		{
-		 opts_splx_sort,						/*   (both, but default to simple algorithm) */
+		 opts_splx_sort,						/* (both, but default to simple alg, no stride) */
+		 opts_istride | opts_ostride,			/* + (Sort only with stride) */
 		 opts_end }								/* * Direction & stride combinations */
 	}
 #endif	/* !TEST1 */
@@ -124,6 +129,7 @@ new_knamestr(char *name, char *desc) {
 void usage(void) {
 	fprintf(stderr,"Make imdi kernel code Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"usage: imdi_make [-i]\n");
+	fprintf(stderr," -d dir        Directory to create them in (default .)\n");
 	fprintf(stderr," -i            Individial Files\n");
 	exit(1);
 }
@@ -139,6 +145,8 @@ main(int argc, char *argv[]) {
 	mach_arch ar;
 	int ix = 1;				/* kernel index */
 	knamestr *list = NULL, *lp = NULL;
+	char dirname[MAXNAMEL+1+1] = "";   /* Output directory name */
+	char temp[MAXNAMEL+100+1];		/* Buffer to compose filenames in */
 	FILE *kcode = NULL;	/* Kernel routine code file */
 	FILE *kheader;		/* Kernel routine header file */
 
@@ -168,6 +176,18 @@ main(int argc, char *argv[]) {
 			if (argv[fa][1] == '?')
 				usage();
 
+			/* Destination directory */
+			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D') {
+				int len;
+				fa = nfa;
+				if (na == NULL) usage();
+				strncpy(dirname,na,MAXNAMEL); dirname[MAXNAMEL] = '\000';
+				len = strlen(dirname);
+				if (len > 0) {
+					if (dirname[len-1] != '/' && dirname[len-1] != '\\')
+						strcat(dirname, "/");
+				}
+			}
 			/* Individual files */
 			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
 				indiv = 1;
@@ -181,14 +201,16 @@ main(int argc, char *argv[]) {
 	set_architecture(&ar);
 
 	/* Open the file for kernel routine declaration header */
-	if ((kheader = fopen("imdi_k.h", "w")) == NULL) {
-		fprintf(stderr,"imdi_make: unable to open file 'imdi_k.h'\n");
+	sprintf(temp, "%simdi_k.h",dirname);
+	if ((kheader = fopen(temp, "w")) == NULL) {
+		fprintf(stderr,"imdi_make: unable to open file '%s'\n",temp);
 		exit(-1);
 	}
 
 	if (!indiv) {
-		if ((kcode = fopen("imdi_k.c", "w")) == NULL) {
-			fprintf(stderr,"imdi_make: unable to open file 'imdi_k.c'\n");
+		sprintf(temp, "%simdi_k.c",dirname);
+		if ((kcode = fopen(temp, "w")) == NULL) {
+			fprintf(stderr,"imdi_make: unable to open file '%s'\n",temp);
 			exit(-1);
 		}
 	}
@@ -221,8 +243,9 @@ main(int argc, char *argv[]) {
 			ncb = set_genspec(&gs, &descs[dn], cb, &ar);
 
 			if (indiv) {
-				if ((kcode = fopen(ofname, "w")) == NULL) {
-					fprintf(stderr,"imdi_make: unable to open file '%s'\n",ofname);
+				sprintf(temp, "%s%s.c",dirname,ofname);
+				if ((kcode = fopen(temp, "w")) == NULL) {
+					fprintf(stderr,"imdi_make: unable to open file '%s'\n",temp);
 					exit(-1);
 				}
 			}

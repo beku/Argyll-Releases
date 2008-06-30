@@ -219,6 +219,7 @@ ink limit in %(default = none, or estimated from profile)</span><br
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Optional device ICC or MPP pre-conditioning profile filename</span><br
  style="font-family: monospace;">
+&nbsp;
 <a style="font-family: monospace;" href="#F">-F L,a,b,rad</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; Filter out
 samples
@@ -226,9 +227,15 @@ outside Lab sphere.</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#w">-w</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Dump diagnostic outfile.wrl file</span><br
+Dump diagnostic outfile.wrl file (Lab locations)<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="targen.html#W">-W</a><span
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Dump diagnostic outfile.wrl file (Device locations)</span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#p1">outfile</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Base name for output(.ti1)</span></small>
@@ -443,7 +450,10 @@ For this reason, the -f N -q method is probably the easiest to use.<br>
 which the test points are plotted as small spheres in L*a*b*
 colorspace. Note that for a CMYK device, the point spacing may seem
 strange, since the extra K dimension is compressed into the 3
-dimensional L*a*b* space.<br>
+dimensional L*a*b* space. <a name="W"></a>If the <span
+ style="font-weight: bold;">-W</span> flag is given, the plot will be
+in device space, with only the first 3 dimensions of each point being
+plotted.<br>
 <br>
 <a name="p1"></a> The final parameter on the command line is the base
 filename for the <a href="File_Formats.html#.ti1">.ti1</a> output
@@ -459,111 +469,163 @@ the last row or paper size, in an iterative fashion.<br>
 &nbsp;
 No. Patches<br>
 <br>
-&nbsp; DTP41:<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 110x200&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp; &nbsp;105<br>
-&nbsp;&nbsp; &nbsp;&nbsp; A3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 304<br>
-&nbsp; &nbsp; &nbsp; Letter &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;368<br>
-&nbsp; &nbsp; &nbsp; A4 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;
-&nbsp; &nbsp;375<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 115x645&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;
-&nbsp; &nbsp;494<br>
-&nbsp; &nbsp; &nbsp; 11x17 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 819<br>
-&nbsp; &nbsp; &nbsp; A3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; 836<br>
-&nbsp; &nbsp; &nbsp; 210x600&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
-&nbsp;&nbsp; 855<br>
-&nbsp; &nbsp; &nbsp; 420x645&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;1984<br>
-&nbsp; &nbsp; &nbsp; 575x500&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;2024<br>
-&nbsp; &nbsp; &nbsp; 687x590&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;2968<br>
-&nbsp; &nbsp; &nbsp; 630x645&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;2976<br>
-&nbsp; &nbsp;&nbsp; &nbsp;830x950&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;
-6016<br>
-<br>
 DTP20:<br>
 <br>
-&nbsp; &nbsp; &nbsp; 1xA4&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 540<br>
-&nbsp; &nbsp; &nbsp; 2xA4 &nbsp; &nbsp; &nbsp; 1110<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 3xA4&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; 1680<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 4xA4&nbsp; &nbsp;
-&nbsp;&nbsp; 2250<br>
+&nbsp; &nbsp; &nbsp; 1 x A4&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 540<br>
+&nbsp; &nbsp; &nbsp; 2 x A4 &nbsp; &nbsp; &nbsp; 1080<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 3 x A4&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; 1620<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 4 x A4&nbsp; &nbsp;
+&nbsp;&nbsp; 2160<br>
 <br>
-&nbsp;&nbsp;&nbsp; &nbsp; 1xLetter &nbsp; 570<br>
-&nbsp; &nbsp; &nbsp; 2xLetter&nbsp;&nbsp; 1170<br>
-&nbsp; &nbsp;&nbsp; &nbsp;3xLetter&nbsp;&nbsp; 1770<br>
-&nbsp; &nbsp; &nbsp; 4xLetter&nbsp;&nbsp; 2370<br>
+&nbsp;&nbsp;&nbsp; &nbsp; 1 x Letter &nbsp;&nbsp; 570<br>
+&nbsp; &nbsp; &nbsp; 2 x Letter&nbsp;&nbsp; 1140<br>
+&nbsp; &nbsp;&nbsp; &nbsp;3 x Letter&nbsp;&nbsp; 1710<br>
+&nbsp; &nbsp; &nbsp; 4 x Letter&nbsp;&nbsp; 2280<br>
+<br>
+DTP 22:<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1 x A4&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 782<br>
+&nbsp; &nbsp; &nbsp; 2 x A4 &nbsp; &nbsp; &nbsp; 1564<br>
+<br>
+&nbsp;&nbsp;&nbsp; &nbsp; 1 x Letter &nbsp;&nbsp; 736<br>
+&nbsp; &nbsp; &nbsp; 2 x Letter&nbsp;&nbsp; 1472<br>
+<br>
+&nbsp; DTP41:<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1 x A4 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp; &nbsp; 375<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2 x A4 &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp; 750<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3 x A4 &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp; 1125<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 4 x A4 &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp; 1500<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1 x Letter &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp; 345<br>
+&nbsp; &nbsp; &nbsp; 2 x Letter &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;
+690<br>
+&nbsp; &nbsp; &nbsp; 3 x Letter &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;
+1035<br>
+&nbsp; &nbsp; &nbsp; 4 x Letter &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;
+1380<br>
+<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 1 x A3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; 836<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 2 x A3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 1672<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1 x 11x17 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp; 780<br>
+&nbsp; &nbsp; &nbsp; 2 x 11x17 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; 1560<br>
+<br>
+<br>
+&nbsp; DTP51:<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1 x A4 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp; 266<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2 x A4 &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp; 532<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3 x A4 &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp; 798<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 4 x A4 &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp;
+&nbsp;
+&nbsp;&nbsp; 1064<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1 x Letter &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;
+252<br>
+&nbsp; &nbsp; &nbsp; 2 x Letter &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;
+504<br>
+&nbsp; &nbsp; &nbsp; 3 x Letter &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;
+756<br>
+&nbsp; &nbsp; &nbsp; 4 x Letter &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; 1008<br>
+<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 1 x A3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 580<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 2 x A3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp; 1160<br>
+<br>
+&nbsp; &nbsp; &nbsp; 1 x 11x17 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; 570<br>
+&nbsp; &nbsp; &nbsp; 2 x 11x17 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
+1140<br>
 <br>
 &nbsp; SpectroScan with square patches:<br>
 <br>
-&nbsp; &nbsp; &nbsp; 1xA4R&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 1053<br>
-&nbsp; &nbsp; &nbsp; 2xA4R &nbsp; &nbsp; &nbsp; 2106<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 3xA4R&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; 3159<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 4xA4R&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; 4212<br>
+&nbsp; &nbsp; &nbsp; 1 x A4R&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 1014<br>
+&nbsp; &nbsp; &nbsp; 2 x A4R &nbsp; &nbsp; &nbsp; 2028<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 3 x A4R&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; 3042<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 4 x A4R&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; 4056<br>
 <br>
-&nbsp;&nbsp;&nbsp; &nbsp; 1xLetterR &nbsp; 1008<br>
-&nbsp; &nbsp; &nbsp; 2xLetterR&nbsp;&nbsp; 2016<br>
-&nbsp; &nbsp;&nbsp; &nbsp;3xLetterR&nbsp;&nbsp; 3024<br>
-&nbsp; &nbsp; &nbsp; 4xLetterR&nbsp;&nbsp; 4032<br>
+&nbsp;&nbsp;&nbsp; &nbsp; 1 x LetterR &nbsp;&nbsp; 999<br>
+&nbsp; &nbsp; &nbsp; 2 x LetterR&nbsp;&nbsp; 1998<br>
+&nbsp; &nbsp;&nbsp; &nbsp;3 x LetterR&nbsp;&nbsp; 2997<br>
+&nbsp; &nbsp; &nbsp; 4 x LetterR&nbsp;&nbsp; 3996<br>
 <br>
 &nbsp; SpectroScan with hexagonal patches:<br>
 <br>
-&nbsp; &nbsp; &nbsp; 1xA4R&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 1178<br>
-&nbsp; &nbsp; &nbsp; 2xA4R &nbsp; &nbsp; &nbsp; 2356<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 3xA4R&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; 3534<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 4xA4R&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; 4712<br>
+&nbsp; &nbsp; &nbsp; 1 x A4R&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 1170<br>
+&nbsp; &nbsp; &nbsp; 2 x A4R &nbsp; &nbsp; &nbsp; 2340<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 3 x A4R&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; 3510<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 4 x A4R&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; 4680<br>
 <br>
-&nbsp;&nbsp;&nbsp; &nbsp; 1xLetterR&nbsp;&nbsp; 1152<br>
-&nbsp; &nbsp; &nbsp; 2xLetterR&nbsp;&nbsp; 2304<br>
-&nbsp; &nbsp;&nbsp; &nbsp;3xLetterR&nbsp;&nbsp; 3456<br>
-&nbsp; &nbsp; &nbsp; 4xLetterR&nbsp;&nbsp; 4608<br>
-<br>
-&nbsp; SpectroScan with square patches:<br>
-<br>
-&nbsp; &nbsp; &nbsp; 1xA4&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 504<br>
-&nbsp; &nbsp; &nbsp; 2xA4 &nbsp; &nbsp; &nbsp; 1008<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 3xA4&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; 1512<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 4xA4&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; 2016<br>
-<br>
-&nbsp;&nbsp;&nbsp; &nbsp; 1xLetter &nbsp; 525<br>
-&nbsp; &nbsp; &nbsp; 2xLetter&nbsp;&nbsp; 1050<br>
-&nbsp; &nbsp;&nbsp; &nbsp;3xLetter&nbsp;&nbsp; 2475<br>
-&nbsp; &nbsp; &nbsp; 4xLetter&nbsp;&nbsp; 3300<br>
+&nbsp;&nbsp;&nbsp; &nbsp; 1 x LetterR&nbsp;&nbsp; 1092<br>
+&nbsp; &nbsp; &nbsp; 2 x LetterR&nbsp;&nbsp; 2184<br>
+&nbsp; &nbsp;&nbsp; &nbsp;3 x LetterR&nbsp;&nbsp; 3276<br>
+&nbsp; &nbsp; &nbsp; 4 x LetterR&nbsp;&nbsp; 4368<br>
 <br>
 &nbsp; Eye-One Pro:<br>
 <br>
-&nbsp; &nbsp; &nbsp; 1xA4&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; 462<br>
-&nbsp; &nbsp; &nbsp; 2xA4 &nbsp; &nbsp; &nbsp; 924<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 3xA4&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; 1386<br>
-&nbsp;&nbsp; &nbsp;&nbsp; 4xA4&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; 1848<br>
+&nbsp; &nbsp; &nbsp; 1 x A4&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 441<br>
+&nbsp; &nbsp; &nbsp; 2 x A4 &nbsp; &nbsp; &nbsp;&nbsp; 882<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 3 x A4&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; 1323<br>
+&nbsp;&nbsp; &nbsp;&nbsp; 4 x A4&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; 1764<br>
 <br>
-&nbsp;&nbsp;&nbsp; &nbsp; 1xLetter &nbsp; 462<br>
-&nbsp; &nbsp; &nbsp; 2xLetter&nbsp;&nbsp; 924<br>
-&nbsp; &nbsp;&nbsp; &nbsp;3xLetter&nbsp;&nbsp; 1386<br>
-&nbsp; &nbsp; &nbsp; 4xLetter&nbsp;&nbsp; 1848<br>
+&nbsp;&nbsp;&nbsp; &nbsp; 1 x Letter &nbsp;&nbsp; 462<br>
+&nbsp; &nbsp; &nbsp; 2 x Letter&nbsp;&nbsp;&nbsp; 924<br>
+&nbsp; &nbsp;&nbsp; &nbsp;3 x Letter&nbsp;&nbsp; 1386<br>
+&nbsp; &nbsp; &nbsp; 4 x Letter&nbsp;&nbsp; 1848<br>
 <br>
 &nbsp; Scanner (printtarg with -iSS -s options):<br>
 <br>
-&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 1xA4R &nbsp; &nbsp;&nbsp; 1026<br>
-&nbsp; &nbsp; &nbsp; &nbsp;2xA4R &nbsp; &nbsp;&nbsp; 2052<br>
-&nbsp; &nbsp; &nbsp; &nbsp;3xA4R &nbsp; &nbsp;&nbsp; 3078<br>
-&nbsp; &nbsp; &nbsp; &nbsp;4xA4R &nbsp; &nbsp;&nbsp; 4104<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 1 x A4R &nbsp; &nbsp;&nbsp; 1014<br>
+&nbsp; &nbsp; &nbsp; &nbsp;2 x A4R &nbsp; &nbsp;&nbsp; 2028<br>
+&nbsp; &nbsp; &nbsp; &nbsp;3 x A4R &nbsp; &nbsp;&nbsp; 3042<br>
+&nbsp; &nbsp; &nbsp; &nbsp;4 x A4R &nbsp; &nbsp;&nbsp; 4056<br>
 <br>
-&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 1xLetterR&nbsp; 1008<br>
-&nbsp; &nbsp; &nbsp; &nbsp;2xLetterR&nbsp; 2016<br>
-&nbsp; &nbsp; &nbsp; &nbsp;3xLetterR&nbsp; 3024<br>
-&nbsp; &nbsp; &nbsp; &nbsp;4xLetterR&nbsp; 4032<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; 1 x LetterR&nbsp;&nbsp; 962<br>
+&nbsp; &nbsp; &nbsp; &nbsp;2 x LetterR&nbsp; 1924<br>
+&nbsp; &nbsp; &nbsp; &nbsp;3 x LetterR&nbsp; 2886<br>
+&nbsp; &nbsp; &nbsp; &nbsp;4 x LetterR&nbsp; 3848<br>
 &nbsp; &nbsp; &nbsp; &nbsp;<br>
 <br>
 <br>

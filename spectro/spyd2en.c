@@ -650,6 +650,11 @@ main(int argc, char *argv[]) {
 				""
 			};
 
+			char *vols[] = {		/* Typical volume names the CDROM may have */
+				"ColorVision",
+				""
+			};
+
 			for (i = 0;;i++) {
 				if (paths[i][0] == '\000')
 					break;
@@ -675,7 +680,7 @@ main(int argc, char *argv[]) {
 			if (paths[i][0] == '\000') {
 				char buf[400];
 				char vol_name[MAXNAMEL+1] = { '\000' };
-				int len, i;
+				int len, i, j;
 
 				in_name[0] = '\000';
 				if (verb) { printf("Looking for Spyder 2 install CDROM .. "); fflush(stdout); }
@@ -689,14 +694,21 @@ main(int argc, char *argv[]) {
 					if (GetDriveType(buf+i) == DRIVE_CDROM) {
 						DWORD maxvoll, fsflags;
 						if (GetVolumeInformation(buf + i, vol_name, MAXNAMEL,
-						                     NULL, &maxvoll, &fsflags, NULL, 0) != 0
-						  && strcmp(vol_name, "ColorVision") == 0) {
-							/* Found the instalation CDROM */
-							strcpy(in_name, buf+i);
-							strcat(in_name, "setup\\setup.exe");
-							if (verb)
-								printf("found '%s'\n",in_name);
-							break;
+						                     NULL, &maxvoll, &fsflags, NULL, 0) != 0) {
+							for(j = 0;;j++) {
+								if (vols[j][0] == '\000'
+						  		 || strcmp(vol_name, vols[j]) == 0) {
+									break;
+								}
+							}
+							if (vols[j][0] != '\000') {
+								/* Found the instalation CDROM */
+								strcpy(in_name, buf+i);
+								strcat(in_name, "setup\\setup.exe");
+								if (verb)
+									printf("found Vol '%s' file '%s'\n",vols[j], in_name);
+								break;
+							}
 						}
 					}
 					i += strlen(buf + i) + 1;
@@ -769,6 +781,7 @@ main(int argc, char *argv[]) {
 			/* Since there is no vendor driver instalation for Linux, we */
 			/* must look for the CDROM. */
 			char *vols[] = {		/* Typical volumes the CDROM could be mounted under */
+				"/media/ColorVision",
 				"/mnt/cdrom",
 				"/media/cdrom",
 				"/cdrom",
@@ -799,7 +812,7 @@ main(int argc, char *argv[]) {
 	}
 	if (in_name[0] == '\000') {
 		if(amount) umiso();
-		error("No install file to process");
+		error("No CD present, or install file to process");
 	}
 
 	/* Locate the firmware in the driver or install file */

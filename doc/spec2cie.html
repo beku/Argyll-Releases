@@ -38,11 +38,13 @@ F8, F10 or file.sp</span><br style="font-family: monospace;">
 &nbsp;&nbsp; Choose CIE Observer for spectral
 data:</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; 1931_2, 1964_10, S&amp;B
-1955_2, 1964_10c, shaw, J&amp;V 1978_2 (def.)</span><br
+&nbsp; &nbsp; &nbsp; 1931_2 </span></small><small><span
+ style="font-family: monospace;"> (def.)</span></small><small><span
+ style="font-family: monospace;">, 1964_10, S&amp;B
+1955_2, 1964_10c, shaw, J&amp;V 1978_2</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp; </span><a
- style="font-family: monospace;" href="profile.html#f">-f</a><span
+ style="font-family: monospace;" href="colprof.html#f">-f</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp; Use
 Fluorescent Whitening Agent compensation</span><br
@@ -58,9 +60,15 @@ F8, F10 or file.sp</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 (only used in conjunction with </span><span
  style="font-weight: bold; font-family: monospace;">-f</span><span
- style="font-family: monospace;">)</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><span
+ style="font-family: monospace;">)<br>
+&nbsp;<a href="#p">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Don't output spectral values<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;<a
+ href="#p">-p</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Plot
+each values spectrum</span></small><br style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;</span><span
  style="font-style: italic; font-family: monospace;">input.ti3</span><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Measurement file</span><br style="font-family: monospace;">
@@ -119,7 +127,8 @@ and observer.<br>
 <a name="o"></a> The <b>-o</b> flag allows specifying a tristimulus
 observer, and is used to compute PCS (Profile Connection Space)
 tristimulus values. The following choices are available:<br>
-<b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer.<br>
+<b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer
+(the default).<br>
 &nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree observer.<br>
 &nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
 observer<br>
@@ -162,6 +171,13 @@ filament lamp 2848K<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; F10 CIE Fluorescent 5000K,
 CRI 81<br>
 <br>
+<a name="n"></a>The <span style="font-weight: bold;">-n</span> flag
+disables the output of the spectral values. If just the XYZ and L*a*b*
+values are needed, this makes for a smaller, easier to read file.<br>
+<br>
+<a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
+causes each spectrum to be plotted. If FWA compensation is used, then
+the before/after compensation spectrums will be shown.<br>
 <br>
 <br>
 <br>

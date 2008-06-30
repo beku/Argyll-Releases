@@ -130,6 +130,19 @@ init_write_tab(void) {
 #endif /* ALLOW64 */
 }
 
+
+/* Input offset adjustment table */
+double in_adj[21] = {
+	1.2449233468522996e-282, 8.0324820232182659e+281, 1.4857837676572304e+166,
+	1.3997102851752585e-152, 1.3987140593588909e-076, 2.8215833239257504e+243,
+	1.4104974786556771e+277, 2.0916973891832284e+121, 2.0820139887245793e-152,
+	1.0372833042501621e-152, 2.1511212233835046e-313, 7.7791723264456369e-260,
+	3.6109836288371308e+238, 8.5733372291341995e+170, 1.4275976773846279e-071,
+	2.3994297542685112e-038, 3.9052141785471924e-153, 3.8223903939904297e-096,
+	3.2368131456774088e+262, 6.5639459298208554e+045, 2.0087765219520138e-139
+};
+
+
 /* Table creation function */
 imdi_imp *
 imdi_tab(
@@ -251,6 +264,7 @@ imdi_tab(
 		byte *t, *p;	/* Pointer to input table, entry pointer */
 		int ne;			/* Number of entries */
 		int ex;			/* Entry index */
+		double iaf;
 		int ix = 0;		/* Extract flag */
 
 		/* Compute number of entries */
@@ -276,6 +290,11 @@ imdi_tab(
 #ifdef VERBOSE
 		printf("Allocated input table %d size %u = %u * %u\n",e, ts->it_ts * ne,ts->it_ts,ne);
 #endif /* VERBOSE */
+
+		/* Comput input adjustment factor */
+		for (iaf = 0.0, i = 1; i < 21; i++)
+			iaf += in_adj[i];
+		iaf *= in_adj[0];
 
 		/* For each possible input value, compute the entry value */
 		for (ex = 0, p = t; ex < ne; ex++, p += ts->it_ts) {
@@ -307,7 +326,7 @@ imdi_tab(
 				for (f = 0; f < it->id; f++)
 					civ[f] = riv;
 				input_curves(cntx, cov, civ);		/* Lookup the input table transform */
-				rtv = cov[it->it_map[e]];
+				rtv = iaf * cov[it->it_map[e]];
 			}
 			if (rtv < 0.0)						/* Guard against sillies */
 				rtv = 0.0;

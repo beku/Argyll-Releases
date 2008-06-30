@@ -5,20 +5,16 @@
  * 
  * Author: Graeme Gill
  *
- * Copyright 1995 - 2004 Graeme W. Gill, All right reserved.
+ * Copyright 1995 - 2008 Graeme W. Gill, All right reserved.
  * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
 /*
  * To Do: 
- *        Add support for 16 bit raster data.
  *        Fix sboxes parameters/digitization to fix "droop" in box areas.
  *        Scale parameters with image size.
- *        Add optional low pass filter stage to cope with screened/diffused prints ?
  *		  Change reference parser to make it more forgiving - use cgats parser ?
- *        Add orientation hints based on (low res ?) expected patch values ? (would solve
- *        symetric chart problem)
  */
 
 #undef DEBUG
@@ -69,17 +65,19 @@ static scanrd_ *new_scanrd(int flags, int verb, double gammav,
 static int read_input(scanrd_ *s);
 static int calc_lines(scanrd_ *s);
 static int show_lines(scanrd_ *s);
+static int calc_perspective(scanrd_ *s);
 static int calc_rotation(scanrd_ *s);
 static int calc_elists(scanrd_ *s, int ref);
 static int write_elists(scanrd_ *s);
 static int read_relists(scanrd_ *s);
 static int do_match(scanrd_ *s);
-static int compute_trans(scanrd_ *s);
-static int compute_man_trans(scanrd_ *s, double *sfids);
+static int compute_ptrans(scanrd_ *s);
+static int compute_man_ptrans(scanrd_ *s, double *sfids);
+static int improve_match(scanrd_ *s);
 static int setup_sboxes(scanrd_ *s);
 static int do_value_scan(scanrd_ *s);
 static int compute_xcc(scanrd_ *s);
-static int restore_best(scanrd_ *s);
+//static int restore_best(scanrd_ *s);
 static int show_sbox(scanrd_ *s);
 static int show_groups(scanrd_ *s);
 static int scanrd_write_diag(scanrd_ *s);
@@ -95,7 +93,8 @@ int flags,			/* option flags */
 int verb,			/* verbosity level */
 
 double gammav,		/* Apprimate gamma encoding of image (0.0 = default 2.2) */
-double *sfid,		/* Specified fiducials x1, y1, x2, y2, NULL if auto recognition */
+double *sfid,		/* Specified four fiducials x1, y1 .. x4, y4, NULL if auto recognition */
+					/* Typical clockwise from top left */
 
 int w, int h, 		/* Width and Height of input raster in pixels */
 int d, int p,		/* Plane Depth, Bit presision of input pixels */
@@ -134,6 +133,19 @@ void *ddata			/* Opaque data for write_line */
 	if (s->verb >= 2)
 		DBG((dbgo,"%d useful edges out of %d\n",s->novlines, s->noslines));
 
+	if (s->flags & SI_PERSPECTIVE) {
+		if (s->verb >= 2)
+			DBG((dbgo,"About to calculate perspective correction\n"));
+		if (calc_perspective(s)) {
+			if (s->flags & SI_SHOW_LINES) {
+				s->flags &= ~SI_SHOW_PERS;	/* Calc perspective failed! */
+				s->flags &= ~SI_SHOW_ROT;	/* Calc rotation not done! */
+				show_lines(s);
+			}
+			goto sierr;			/* Error */
+		}
+	}
+
 	if (s->verb >= 2)
 		DBG((dbgo,"About to calculate rotation\n"));
 	if (calc_rotation(s)) {
@@ -143,10 +155,6 @@ void *ddata			/* Opaque data for write_line */
 		}
 		goto sierr;			/* Error */
 	}
-
-	if (s->flags & SI_SHOW_LINES)
-		if(show_lines(s))
-			goto sierr;		/* Error */
 
 	if (s->flags & SI_BUILD_REF) { /* If generating a chart reference file */
 		/* Calculate the edge lists and write it to the file */
@@ -161,7 +169,7 @@ void *ddata			/* Opaque data for write_line */
 			goto sierr;		/* Error */
 	} else {
 		/* If we are matching to the reference and generating an output data file */
-		int rv, showsampled = 0;
+		int rv;
 
 		/* Calculate the edge lists read for a match */
 		if (s->verb >= 2)
@@ -185,10 +193,20 @@ void *ddata			/* Opaque data for write_line */
 				sprintf(s->errm,"Chart recognition definition file doesn't contain fiducials");
 				goto sierr;		/* Error */
 			}
-			if (compute_man_trans(s, sfid))
+			if (compute_man_ptrans(s, sfid))
 				goto sierr;
 
-		} else {
+			/* Do the actual scan given out manual transformation matrix */ 
+			if (s->verb >= 2)
+				DBG((dbgo,"About to setup value scanrdg boxes\n"));
+			if (setup_sboxes(s))	
+				goto sierr;
+			if (s->verb >= 2)
+				DBG((dbgo,"About to read raster values\n"));
+			if (do_value_scan(s))
+				goto sierr;
+
+		} else {				/* Automatic matching */
 
 			/* Attempt to match input file with reference */
 			if (s->verb >= 2)
@@ -200,80 +218,95 @@ void *ddata			/* Opaque data for write_line */
 				}
 				goto sierr;
 			}
-		}
 
-		if (s->norots > 1 && (s->flags & SI_SHOW_SAMPLED_AREA)) {
-			s->flags &= ~SI_SHOW_SAMPLED_AREA;	/* Turn this off in trial scans */
-			showsampled = 1;
-		}
+			/* If there is patch matching data and more than one */
+			/* feasible matching rotation, try and discriminate between them. */
+			if (s->xpt && s->norots > 1) {
+				int i, j;
+				int flags = s->flags;
+			
+				s->flags &= ~SI_SHOW_SAMPLED_AREA;	/* Don't show areas for trials */
 
-		/* For each candidate rotation, scan in the pixel values */
-		for (s->crot = 0; s->crot < s->norots; s->crot++) {
+				/* For each candidate rotation, scan in the pixel values */
+				for (s->crot = 0; s->crot < s->norots; s->crot++) {
+		
+					/* Compute transformation from reference to input file */
+					if (s->verb >= 2)
+						DBG((dbgo,"About to compute match transform for rotation %f deg.\n",
+						          DEG(s->rots[s->crot].irot)));
+					if (compute_ptrans(s))
+						goto sierr;
+			
+					/* Setup the input boxes ready for scanning in the input values */
+					if (s->verb >= 2)
+						DBG((dbgo,"About to setup value scanrdg boxes\n"));
+					if (setup_sboxes(s))	
+						goto sierr;
+			
+					/* Scan in the pixel values */
+					if (s->verb >= 2)
+						DBG((dbgo,"About to read raster values\n"));
+					if (do_value_scan(s))
+						goto sierr;
+		
+					/* Copy to this rotation values so that the best can be restored */
+					if (s->xpt != 0) {			/* Got expected patch values to compare with */
+						if (s->verb >= 2)
+							DBG((dbgo,"About to compute expected value correlation\n"));
+						if (compute_xcc(s))
+							goto sierr;
+					}
+				}
 
-			/* Compute transformation from reference to input file */
-			if (s->verb >= 2)
-				DBG((dbgo,"About to compute match transform\n"));
-			if (compute_trans(s))
-				goto sierr;
+				/* Pick the best from the candidate rotation */
+				if (s->verb >= 2) {
+					DBG((dbgo,"Expected value distance values are:\n"));
+					for (i = 0; i < s->norots; i++) {
+						DBG((dbgo,"%d, rot %f: %f\n", i, DEG(s->rots[i].irot), s->rots[i].xcc));
+					}
+				}
+
+				for (j = 0, i = 1; i < s->norots; i++) {
+					if (s->rots[i].xcc < s->rots[j].xcc)
+						j = i;
+				}
+
+				if (s->verb >= 2)
+					DBG((dbgo,"Chosen rotation %f deg. as best\n",DEG(s->rots[j].irot)));
 	
-			/* Setup the input boxes ready for scanning in the input values */
+				s->crot = j;
+				s->flags = flags;		/* Restore flags */
+			}
+
+			/* Setup transformation to be that for chosen rotation for diagnostics */
+			if (s->verb >= 2)
+				DBG((dbgo,"About to compute final match transform\n"));
+			if (compute_ptrans(s))
+				goto sierr;
+
+			if (s->verb >= 2)
+				DBG((dbgo,"Improve match\n"));
+			if (improve_match(s))
+				goto sierr;
+
+			/* After choosing rotation of improving the fit, rescan the values */
 			if (s->verb >= 2)
 				DBG((dbgo,"About to setup value scanrdg boxes\n"));
 			if (setup_sboxes(s))	
 				goto sierr;
-	
-			/* Scan in the pixel values */
 			if (s->verb >= 2)
 				DBG((dbgo,"About to read raster values\n"));
 			if (do_value_scan(s))
 				goto sierr;
-
-			/* Copy to this rotation values so that the best can be restored */
-			if (s->xpt != 0) {
-				if (s->verb >= 2)
-					DBG((dbgo,"About to compute expected value correlation\n"));
-				if (compute_xcc(s))
-					goto sierr;
-			}
 		}
 
-		/* Pick the best from the candidate rotation */
-		if (s->xpt != 0 && s->norots > 1) {
-			int i, j;
-
-			if (s->verb >= 2) {
-				DBG((dbgo,"Expected value distance values are:\n"));
-				for (i = 0; i < s->norots; i++) {
-					DBG((dbgo,"%d, rot %f: %f\n", i, DEG(s->rots[i].irot), s->rots[i].xcc));
-				}
-			}
-
-			for (j = 0, i = 1; i < s->norots; i++) {
-				if (s->rots[i].xcc < s->rots[j].xcc)
-					j = i;
-			}
-
-			if (s->verb >= 2)
-				DBG((dbgo,"Chosen rotation %f deg. as best\n",DEG(s->rots[j].irot)));
-
-			s->crot = j;
-
-			if (showsampled != 0) {	/* Perform scan again to set diag raster */
-				s->flags |= SI_SHOW_SAMPLED_AREA;
-				if (compute_trans(s))
-					goto sierr;
-				if (setup_sboxes(s))	
-					goto sierr;
-				if (do_value_scan(s))
-					goto sierr;
-			}
-
-			restore_best(s);
+		if (s->flags & SI_SHOW_SBOX) {
+			show_sbox(s);		/* Draw sample box outlines on diagnostic raster */
 		}
-
-		if (s->flags & SI_SHOW_SBOX)
-			show_sbox(s);		/* Draw sampl box outlines on diagnostic raster */
 	}
+	if (s->flags & SI_SHOW_LINES)
+		if(show_lines(s))
+			goto sierr;		/* Error */
 
 sierr:;
 	if (s->verb >= 2)
@@ -315,7 +348,7 @@ static scanrd_
 	s->public.error = scanrd_error;
 	s->public.free = free_scanrd;
 
-	if (flags & (SI_SHOW_ROT | SI_SHOW_ALL_LINES))
+	if (flags & (SI_SHOW_ROT | SI_SHOW_PERS | SI_SHOW_IMPL | SI_SHOW_ALL_LINES))
 		flags |= SI_SHOW_LINES;		/* Key all line stuff off SI_SHOW_LINES */
 
 	if (flags & (SI_SHOW_SBOX_OUTLINES | SI_SHOW_SBOX_NAMES | SI_SHOW_SBOX_AREAS))
@@ -372,8 +405,20 @@ static scanrd_
 	s->irot = 0.0;
 	s->norots = 0;
 	
-	s->trans[0] = s->trans[3] = s->trans[2] = s->trans[4] = 0.0;
-	s->trans[1] = s->trans[5] = 1.0;
+	s->ppc[0] = 0.0;
+	s->ppc[1] = 0.0;
+	s->ppc[2] = 0.0;
+	s->ppc[3] = 0.0;
+
+	/* Set overall perspective transform to null */
+	s->ptrans[0] = 1.0;
+	s->ptrans[1] = 0.0;
+	s->ptrans[2] = 0.0;
+	s->ptrans[3] = 0.0;
+	s->ptrans[4] = 1.0;
+	s->ptrans[5] = 0.0;
+	s->ptrans[6] = 0.0;
+	s->ptrans[7] = 0.0;
 
 	INIT_ELIST(s->xelist);
 	INIT_ELIST(s->yelist);
@@ -507,7 +552,7 @@ read_input(scanrd_ *s) {
 
 	/* Prime the input buffers with 5 lines */
 	for (y = 0; y < 5; y++) {
-		if (s->read_line(s->fdata, y, in[y])) {
+		if (s->read_line(s->fdata, y, (char *)in[y])) {
 			s->errv = SI_RAST_READ_ERR;
 			sprintf(s->errm,"scanrd: read_line() returned error");
 			return 1;
@@ -516,7 +561,7 @@ read_input(scanrd_ *s) {
 	/* Process the tiff file line by line (Assume at least 6 lines in total raster) */
 	for (; y < h; ++y) {
 		unsigned char *tt;
-		if (s->read_line(s->fdata, y, in[5])) {
+		if (s->read_line(s->fdata, y, (char *)in[5])) {
 			s->errv = SI_RAST_READ_ERR;
 			sprintf(s->errm,"scanrd: read_line() returned error");
 			return 1;
@@ -578,8 +623,11 @@ read_input(scanrd_ *s) {
 /* Criteria for accepting lines for angle calculation (valid lines) */
 #define MAX_MWID_TO_LEN    0.1
 #define MIN_POINT_TO_AREA  0.9	/* Minimum point desity over the lines area */
-#define SD_WINDOW          0.5	/* Allow += 0.5 of a standard deviation for robust angle calc. */
+#define SD_WINDOW          1.5	/* Allow += 1.5 of a standard deviation for robust angle calc. */
 #define ELISTCDIST 800		/* 1/ELISTCDIST = portion of refence edge list legth to coalesce over */
+
+/* Criteria for accepting lines for improring final fit */
+#define IMP_MATCH 0.10			/* Proportion of average tick spacing */
 
 /* The following should be scaled to the resolution of the image ? */
 #define MIN_POINTS 10		/* Minimum points to calculate line */
@@ -679,7 +727,7 @@ int y						/* Current line y */
 	/* Compute difference output for line y-3 */
 	atdmagc = w - 5;		/* Magnitude count (to compute average) */
 	for (x = 3; x < (w-2); x++) {		/* Allow for -3 to +2 from x */
-		char *out = s->out;
+		unsigned char *out = s->out;
 		int e;
 		int ss;
 		int idx = ((y-2) * w + x) * 3;		/* Output raster index in bytes */
@@ -1033,6 +1081,50 @@ int y				/* Y value */
 
 /********************************************************************************/
 
+/* Apply partial perspective to an xy point */
+/* (We omit the two offset parameters, since we don't need them) */
+void ppersp(scanrd_ *s, double *xx, double *yy, double x, double y, double *ppc) {
+	double den;
+
+	/* Offset the partial perspective transform */
+	x -= ppc[2];
+	y -= ppc[3];
+
+	den = ppc[0] * x + ppc[1] * y + 1.0;
+
+	if (fabs(den) < 1e-6) {
+		if (den < 0.0)
+			den = -1e-6;
+		else
+			den = 1e-6;
+	}
+	*xx = x/den + ppc[2];
+	*yy = y/den + ppc[3];
+}
+
+
+/* Apply inverse partial perspective to an xy point */
+void invppersp(scanrd_ *s, double *x, double *y, double xx, double yy, double *ppc) {
+	double den;
+
+	/* Offset the partial perspective transform */
+	xx -= ppc[2];
+	yy -= ppc[3];
+
+	den = - ppc[0] * xx - ppc[1] * yy + 1.0;
+
+	if (fabs(den) < 1e-6) {
+		if (den < 0.0)
+			den = -1e-6;
+		else
+			den = 1e-6;
+	}
+	*x = xx/den + ppc[2];
+	*y = yy/den + ppc[3];
+}
+
+/********************************************************************************/
+
 /* Compute the least squares best line fit for a group */
 /* Return non-zero if failed */
 static int
@@ -1205,12 +1297,24 @@ scanrd_ *s
 			s->noslines++;
 		if (tp->flag & F_VALID)		/* Valid for angle calcs */
 			s->novlines++;
+
+// ~~999
+		/* Save orininal raster (non partial perspective corrected) values */
+		if (tp->flag & F_VALID) {
+			tp->pmx = tp->mx;
+			tp->pmy = tp->my;
+			tp->px1 = tp->x1;
+			tp->py1 = tp->y1;
+			tp->px2 = tp->x2;
+			tp->py2 = tp->y2;
+		}
 	END_FOR_ALL_ITEMS(tp);
 	return 0;
 }
 
 static int show_line(scanrd_ *s, int x1, int y1, int x2, int y2, unsigned long c);
 
+/* Show the edge detected lines */
 static int
 show_lines(
 scanrd_ *s
@@ -1227,17 +1331,33 @@ scanrd_ *s
 	FOR_ALL_ITEMS(points, tp)
 		if ((s->flags & SI_SHOW_ALL_LINES) || (tp->flag & F_VALID))
 			{
-			unsigned long col = 0xffffff;
-			double x1 = tp->x1, y1 = tp->y1, x2 = tp->x2, y2 = tp->y2;
+			unsigned long col = 0xffffff;		/* default color is white */
+			double x1 = tp->px1, y1 = tp->py1, x2 = tp->px2, y2 = tp->py2;
 			/* For SI_SHOW_ROT */
-			double a = tp->a - s->irot;
 
+			/* Show partial perspective corrected lines */
+			if (s->flags & (SI_SHOW_ROT | SI_SHOW_PERS)) {
+				invppersp(s, &x1, &y1, x1, y1, s->ppc);
+				invppersp(s, &x2, &y2, x2, y2, s->ppc);
+				col = 0xffff00;	/* cyan */
+			}
+
+			/* Show rotation correction of lines + color coding yellow and red */
 			if (s->flags & SI_SHOW_ROT) {
+				double tx1, ty1, tx2, ty2;
+				double a = tp->a - s->irot;
+
+				tx1 = x1;
+				ty1 = y1;
+				tx2 = x2;
+				ty2 = y2;
+
 				/* Rotate about center of raster */
-				x1 = (tp->x1-outw/2.0) * cirot + (tp->y1-outh/2.0) * sirot;
-				y1 = -(tp->x1-outw/2.0) * sirot + (tp->y1-outh/2.0) * cirot;
-				x2 = (tp->x2-outw/2.0) * cirot + (tp->y2-outh/2.0) * sirot;
-				y2 = -(tp->x2-outw/2.0) * sirot + (tp->y2-outh/2.0) * cirot;
+				x1 = (tx1-outw/2.0) * cirot + (ty1-outh/2.0) * sirot;
+				y1 = -(tx1-outw/2.0) * sirot + (ty1-outh/2.0) * cirot;
+				x2 = (tx2-outw/2.0) * cirot + (ty2-outh/2.0) * sirot;
+				y2 = -(tx2-outw/2.0) * sirot + (ty2-outh/2.0) * cirot;
+
 				x1 += outw/2.0;		/* Rotate about center of raster */
 				y1 += outh/2.0;
 				x2 += outw/2.0;
@@ -1248,12 +1368,216 @@ scanrd_ *s
 				else
 					col = 0x0000ff;	/* Red */
 			}
+			/* Show just lines used for fit improvement in blue */
+			if (s->flags & SI_SHOW_IMPL) {
+				if (tp->flag & F_IMPROVE)
+					col = 0xff4040;	/* blue */
+			}
 			show_line(s,(int)(x1+0.5),(int)(y1+0.5),(int)(x2+0.5),(int)(y2+0.5),col);
 		}
 	END_FOR_ALL_ITEMS(tp);
 	return 0;
 }
 
+
+/********************************************************************************/
+
+/* Definition of the optimization function handed to powell() */
+static double
+pfunc(void *ss, double p[]) {
+	scanrd_ *s = (scanrd_ *)ss;
+	points *tp;
+	double aa;		/* Average angle */
+	double va, rva;	/* Variance */
+	double wt;		/* Total weighting = sum of line lengths */
+	double pw;
+	double dw;		/* Discrimination width */
+	
+//printf("~1 %f %f %f %f %f %f\n", p[0],p[1],p[2],p[3],p[4],p[5]);
+
+	/* Correct the perspective of all the edge lines using the parameters */
+	/* and compute the mean angle */
+	aa = 0.0;		/* Average constrained angle */
+	wt = 0.0;		/* Total weighting = sum of line lengths */
+	tp = s->gdone;
+	FOR_ALL_ITEMS(points, tp)
+		if (tp->flag & F_LONGENOUGH) {
+			double a, ca;
+			invppersp(s, &tp->x1, &tp->y1, tp->px1, tp->py1, p);
+			invppersp(s, &tp->x2, &tp->y2, tp->px2, tp->py2, p);
+
+			/* Compute the angle */
+			a = atan2(tp->x2 - tp->x1,tp->y2 - tp->y1);
+
+			/* Make angle +ve */
+			while (a < 0.0)
+				a += M_PI;
+
+			/* Compute the Constrained to 90 degrees angle */
+			/* We use the adivval to figure out where to split angles */
+			/* Split at 0 if adivval == 0.0, split at 45 if adivval == 1.0 */
+			if (a >= (M_PI * (1.0 - s->adivval/4.0)))
+				ca = a - M_PI;
+			else if (a >= (M_PI * (0.5 - s->adivval/4.0)))
+				ca = a - M_PI_2;
+			else
+				ca = a;
+
+			tp->a = a;
+			tp->ca = ca;
+
+			aa += tp->len * ca;
+			wt += tp->len;
+		}
+	END_FOR_ALL_ITEMS(tp);
+	aa /= wt;
+
+	/* Calculate the angle variance */
+	va = 0.0;
+	tp = s->gdone;
+	wt = 0.0;
+	FOR_ALL_ITEMS(points, tp)
+		if (tp->flag & F_LONGENOUGH) {
+			double tt;
+			tt = tp->ca - aa;
+			va += tp->len * tt * tt;
+			wt += tp->len;
+		}
+	END_FOR_ALL_ITEMS(tp);
+	va = va/wt;
+
+	/* Calculate the a robust angle variance */
+	rva = 0.0;
+	wt = 0.0;
+	dw = sqrt(va) * 3.1;		/* Allow += 0.5 of a standard deviation */
+	if (dw < 0.0001)			/* A perfect chart may have dw of zero */
+		dw = 0.0001;
+	tp = s->gdone;
+	FOR_ALL_ITEMS(points, tp)
+		if (tp->flag & F_LONGENOUGH && fabs(tp->ca - aa) <= dw) {
+			double tt;
+			tt = tp->ca - aa;
+			rva += tp->len * tt * tt;
+			wt += tp->len;
+		}
+	END_FOR_ALL_ITEMS(tp);
+	if (wt > 0.0) {
+		rva = rva/wt;
+		va = rva;
+	}
+
+	/* Add some regularization to stop it going crazy */
+	pw = 0.0;
+	pw += 0.01 * (fabs(p[0]) + fabs(p[1]));
+	pw += 0.0001 * (fabs(p[2]/s->width - 0.5) + fabs(p[3]/s->height - 0.5));
+	va += pw;
+
+	return va;
+}
+
+/* Calculate the partial perspective correction factors */
+/* Return non-zero if failed */
+static int
+calc_perspective(
+scanrd_ *s
+) {
+	points *tp;
+	int nl;			/* Number of lines used */
+	double ml;		/* Minimum length */
+	double pc[4];	/* Perspective factors */
+	double ss[4];	/* Initial search distance */
+	double rv;		/* Return value */
+	int rc = 0;		/* Return code */
+
+	if (s->novlines < MIN_NO_LINES) {
+		s->errv = SI_FIND_PERSPECTIVE_FAILED;
+		sprintf(s->errm,"Not enough valid lines to compute perspective");
+		return 1;
+	}
+
+	/* Find the longest line */
+	ml = 0.0;
+	tp = s->gdone;
+	FOR_ALL_ITEMS(points, tp)
+		if (tp->flag & F_VALID) {
+			if (tp->len > ml)
+				ml = tp->len;
+		}
+	END_FOR_ALL_ITEMS(tp);
+	
+	/* Make minimum line length to be included in angle */
+	/* calculation 1% of longest line */
+	ml *= 0.01;
+
+	/* Mark lines long enough to participate in angle calculation */
+	tp = s->gdone;
+	FOR_ALL_ITEMS(points, tp)
+		if (tp->flag & F_VALID && tp->len >= ml)
+			tp->flag |= F_LONGENOUGH;
+	END_FOR_ALL_ITEMS(tp);
+
+	/* Locate the perspective correction factors that minimze the */
+	/* variance of the mean angle. */
+
+	pc[0] = 0.0;
+	pc[1] = 0.0;
+	pc[2] = 0.5 * s->width;
+	pc[3] = 0.5 * s->height;
+
+	ss[0] = 0.0001;
+	ss[1] = 0.0001;
+	ss[2] = 1.0001;
+	ss[3] = 1.0001;
+	rc = powell(&rv, 4, pc,ss,1e-8,2000,pfunc,s);
+
+	if (rc == 0) {
+		points *tp;
+	
+		DBG((dbgo,"Perspective correction factors = %f %f %f %f\n",
+		       pc[0],pc[1],pc[2],pc[3]));
+		
+		s->ppc[0] = pc[0];
+		s->ppc[1] = pc[1];
+		s->ppc[2] = pc[2];
+		s->ppc[3] = pc[3];
+
+		/* Implement the perspective correction */
+		tp = s->gdone;
+		FOR_ALL_ITEMS(points, tp)
+			if (tp->flag & F_LONGENOUGH) {
+				double a, ca;
+				invppersp(s, &tp->x1, &tp->y1, tp->px1, tp->py1, s->ppc);
+				invppersp(s, &tp->x2, &tp->y2, tp->px2, tp->py2, s->ppc);
+				tp->mx = 0.5 * (tp->x2 + tp->x1);
+				tp->my = 0.5 * (tp->y2 + tp->y1);
+				tp->len = sqrt((tp->x2 - tp->x1) * (tp->x2 - tp->x1)
+				             + (tp->y2 - tp->y1) * (tp->y2 - tp->y1));
+	
+				/* Compute the angle */
+				a = atan2(tp->x2 - tp->x1,tp->y2 - tp->y1);
+	
+				/* Make angle +ve */
+				while (a < 0.0)
+					a += M_PI;
+	
+				/* Compute the Constrained to 90 degrees angle */
+				/* We use the adivval to figure out where to split angles */
+				/* Split at 0 if adivval == 0.0, split at 45 if adivval == 1.0 */
+				if (a >= (M_PI * (1.0 - s->adivval/4.0)))
+					ca = a - M_PI;
+				else if (a >= (M_PI * (0.5 - s->adivval/4.0)))
+					ca = a - M_PI_2;
+				else
+					ca = a;
+	
+				tp->a = a;
+				tp->ca = ca;
+			}
+		END_FOR_ALL_ITEMS(tp);
+	}
+
+	return 0;
+}
 
 /********************************************************************************/
 /* Calculate the image rotation */
@@ -1324,7 +1648,7 @@ scanrd_ *s
 	s->irot = 0.0;
 	wt = 0.0;					/* Total weighting = sum of line lengths */
 	nl = 0;
-	dw = sd * SD_WINDOW;		/* Allow += 0.75 of a standard deviation */
+	dw = sd * SD_WINDOW;		/* Allow += 0.5 of a standard deviation */
 	if (dw < 0.01)				/* A perfect chart may have dw of zero */
 		dw = 0.01;
 	tp = s->gdone;
@@ -1712,9 +2036,10 @@ scanrd_ *s
 		return 1;
 	}
 
-	s->fid[0][0] = s->fid[0][1] = 0.0;
-	s->fid[1][0] = s->fid[1][1] = 0.0;
-	s->fid[2][0] = s->fid[2][1] = 0.0;
+	s->fid[0] = s->fid[1] = 0.0;
+	s->fid[2] = s->fid[3] = 0.0;
+	s->fid[4] = s->fid[5] = 0.0;
+	s->fid[6] = s->fid[7] = 0.0;
 
 	/* BOXES */
 	for(;;) {
@@ -1733,7 +2058,7 @@ scanrd_ *s
 	}
 
 	/* Allocate structures for boxes */
-	if ((s->sboxes = (sbox *) malloc(sizeof(sbox) * s->nsbox)) == NULL) {
+	if ((s->sboxes = (sbox *) calloc(s->nsbox, sizeof(sbox))) == NULL) {
 		s->errv = SI_MALLOC_REFREAD;
 		sprintf(s->errm,"read_elist, malloc failed");
 		return 1;
@@ -1746,20 +2071,22 @@ scanrd_ *s
 		double x;
 
 		if(fscanf(elf," %19s %19s %19s %19s %19s %lf %lf %lf %lf %lf %lf",xfirst ,xfix1, xfix2, yfix1, yfix2, &w, &h, &ox, &oy, &xi, &yi) != 11) {
-printf("~1 read of '%s' failed\n",elf);
 			em = "Read of BOX failed";
 			goto read_error;
 		}
 		l++;
 
+		/* If Fiducial. Typically top left, top right, botton right, bottom left. */
 		if (xfirst[0] == 'F') {
-			s->fid[0][0] = w;
-			s->fid[0][1] = h;
-			s->fid[1][0] = ox;
-			s->fid[1][1] = oy;
-			s->fid[2][0] = xi;
-			s->fid[2][1] = yi;
-			s->fidsize = fabs(s->fid[1][0] - s->fid[0][0]) + fabs(s->fid[2][1] - s->fid[1][1]);
+			s->fid[0] = atof(yfix1);
+			s->fid[1] = atof(yfix2);
+			s->fid[2] = w;
+			s->fid[3] = h;
+			s->fid[4] = ox;
+			s->fid[5] = oy;
+			s->fid[6] = xi;
+			s->fid[7] = yi;
+			s->fidsize = fabs(s->fid[2] - s->fid[0]) + fabs(s->fid[5] - s->fid[3]);
 			s->fidsize /= 80.0;
 			s->havefids = 1;
 
@@ -2226,8 +2553,8 @@ ematch *rv		/* Return values */
 				cp[0] = off;
 				cp[1] = scale;
 				/* Set search distance */
-				ss[0] = (0.1 * rwidth/ELISTCDIST)/scale;	/* Search distance */
-				ss[1] = scale * 0.1 * rwidth/ELISTCDIST;
+				ss[0] = (0.01 * rwidth/ELISTCDIST)/scale;	/* Search distance */
+				ss[1] = scale * 0.01 * rwidth/ELISTCDIST;
 
 				/* Find minimum */
 				rc = powell(&rv, 2,cp,ss,0.0001,200,efunc,&dd);
@@ -2247,20 +2574,24 @@ ematch *rv		/* Return values */
 
 			if (s->verb >= 7) {
 				if (cc > 0.25) {
-					DBG((dbgo,"Good correlationt::\n"));
+					DBG((dbgo,"Good correlation::\n"));
 					elist_correl(s,r,t,off,scale,1);
 				}
 			}
+			if (s->verb >= 7)
+				DBG((dbgo,"offset %f, scale %f returns %f\n", off,scale,cc));
 	        if (cc > 0.0 && cc > bcc) {	/* Keep best */
 				boff = off;
 				bscale = scale;
 				bcc = cc;
-			}
-			if (s->verb >= 7) {
-				DBG((dbgo,"offset %f, scale %f returns %f\n", off,scale,cc));
+				if (s->verb >= 7)
+					DBG((dbgo,"(New best)\n", off,scale,cc));
 			}
 		}
 	}
+	if (s->verb >= 7)
+		DBG((dbgo,"Returning best offset %f, scale %f returns %f\n\n", boff,bscale,bcc));
+
 	/* return best values */
 	rv->cc = bcc;
 	rv->off = boff;
@@ -2281,21 +2612,28 @@ scanrd_ *s
 	double r0, r90, r180, r270;			/* Correlation for each extra rotation of target */
 
 	/* Check out all the matches */
+	if (s->verb >= 2) DBG((dbgo,"Checking xx\n"));
 	if (best_match(s, &s->rxelist,&s->xelist,&xx))
 		return 2;
+	if (s->verb >= 2) DBG((dbgo,"Checking yy\n"));
 	if (best_match(s, &s->ryelist,&s->yelist,&yy))
 		return 2;
-
+	if (s->verb >= 2) DBG((dbgo,"Checking xy\n"));
 	if (best_match(s, &s->rxelist,&s->yelist,&xy))
 		return 2;
+	if (s->verb >= 2) DBG((dbgo,"Checking yx\n"));
 	if (best_match(s, &s->ryelist,&s->xelist,&yx))
 		return 2;
+	if (s->verb >= 2) DBG((dbgo,"Checking xix\n"));
 	if (best_match(s, &s->rxelist,&s->ixelist,&xix))
 		return 2;
+	if (s->verb >= 2) DBG((dbgo,"Checking yiy\n"));
 	if (best_match(s, &s->ryelist,&s->iyelist,&yiy))
 		return 2;
+	if (s->verb >= 2) DBG((dbgo,"Checking xiy\n"));
 	if (best_match(s, &s->rxelist,&s->iyelist,&xiy))
 		return 2;
+	if (s->verb >= 2) DBG((dbgo,"Checking yix\n"));
 	if (best_match(s, &s->ryelist,&s->ixelist,&yix))
 		return 2;
 
@@ -2324,6 +2662,7 @@ scanrd_ *s
 	s->norots = 0;
 	if (s->flags & SI_GENERAL_ROT) { /* If general rotation allowed */
 		if (s->xpt == 0) {		/* No expected color information to check rotations agaist */
+								/* so choose the single best rotation by the edge matching */
 			DBG((dbgo,"There is no expected color information, so best fit rotations will be used\n"));
 			if (r0 >= MATCHCC && r0 >= r90 && r0 >= r180 && r0 >= r270) {
 				s->rots[0].ixoff   = -xx.off; 
@@ -2450,104 +2789,376 @@ scanrd_ *s
 	return 0;
 }
 
-/* Compute combined transformation matrix */
-/* for the selected candidate rotation. */
+/********************************************************************************/
+/* perspective transformation. */
+/* Transform from raster to reference using iptrans[]. */
+/* Transform from reference to raster using ptrans[]. */
+static void ptrans(double *xx, double *yy, double x, double y, double *ptrans) {
+	double den;
+
+	den = ptrans[6] * x + ptrans[7] * y + 1.0;
+
+	if (fabs(den) < 1e-6) {
+		if (den < 0.0)
+			den = -1e-6;
+		else
+			den = 1e-6;
+	}
+
+	*xx = (ptrans[0] * x + ptrans[1] * y + ptrans[2])/den;
+	*yy = (ptrans[3] * x + ptrans[4] * y + ptrans[5])/den;
+}
+
+/* Convert perspective transfom parameters to inverse */
+/* perspective transform parameters. */
+/* Return nz on error */
+int invert_ptrans(double *iptrans, double *ptrans) {
+	double scale = ptrans[0] * ptrans[4] - ptrans[1] * ptrans[3];
+
+	if (fabs(scale) < 1e-6)
+		return 1;
+
+	scale = 1.0/scale;
+
+	iptrans[0] = scale * (ptrans[4] - ptrans[5] * ptrans[7]);
+	iptrans[1] = scale * (ptrans[2] * ptrans[7] - ptrans[1]);
+	iptrans[2] = scale * (ptrans[1] * ptrans[5] - ptrans[2] * ptrans[4]);
+
+	iptrans[3] = scale * (ptrans[5] * ptrans[6] - ptrans[3]);
+	iptrans[4] = scale * (ptrans[0] - ptrans[2] * ptrans[6]);
+	iptrans[5] = scale * (ptrans[2] * ptrans[3] - ptrans[0] * ptrans[5]);
+
+	iptrans[6] = scale * (ptrans[3] * ptrans[7] - ptrans[4] * ptrans[6]);
+	iptrans[7] = scale * (ptrans[1] * ptrans[6] - ptrans[0] * ptrans[7]);
+
+	return 0;
+}
+
+
+/* Structure to hold data for optimization function */
+struct _pdatas {
+	scanrd_ *s;		/* scanrd object */
+	double *tar;	/* 4 x x,y raster points */
+	double *ref;	/* 4 x x,y reference points */
+}; typedef struct _pdatas pdatas;
+
+/* Definition of the optimization function handed to powell() */
+/* We simply want to match the 4 points from the reference */
+/* back to the target raster. */
+static double
+ptransfunc(void *pdata, double p[]) {
+	pdatas *e = (pdatas *)pdata;
+	int i;
+	double rv = 0.0;
+
+	for (i = 0; i < 8; i += 2) {
+		double x, y;
+
+		ptrans(&x, &y, e->ref[i+0], e->ref[i+1], p);
+
+		rv += (e->tar[i+0] - x) * (e->tar[i+0] - x);
+		rv += (e->tar[i+1] - y) * (e->tar[i+1] - y);
+	}
+
+	return rv;
+}
+
+/* Compute a combined perspective transform */
+/* given two sets of four reference points. */
 /* Return non-zero on error */
 static int
-compute_trans(
+calc_ptrans(
+scanrd_ *s,
+double *tar,	/* 4 x x,y raster points */
+double *ref		/* 4 x x,y reference points */
+) {
+	int i;
+	pdatas dd;
+	double ss[8];
+	double rv;		/* Return value */
+	int rc;			/* Return code */
+
+	dd.s = s;
+	dd.tar = tar;
+	dd.ref = ref;
+
+	s->ptrans[0] = 1.0;
+	s->ptrans[1] = 0.0;
+	s->ptrans[2] = 0.0;
+	s->ptrans[3] = 0.0;
+	s->ptrans[4] = 1.0;
+	s->ptrans[5] = 0.0;
+	s->ptrans[6] = 0.0;
+	s->ptrans[7] = 0.0;
+
+	for (i = 0; i < 8; i++)
+		ss[i] = 0.0001;
+
+	rc = powell(&rv, 8, s->ptrans, ss, 1e-7, 500, ptransfunc,&dd);
+
+	return rc;
+}
+
+/* Compute combined transformation matrix */
+/* for the current partial perspective, current */
+/* rotation, scale and offsets. */
+/* Return non-zero on error */
+static int
+compute_ptrans(
 scanrd_ *s
 ) {
 	double cirot,sirot;		/* cos and sin of -irot */
+	double t[6];
+	double tar[8];
+	double ref[8];
+	int rv;
+	int i;
+
+	/* Compute the rotation and translation part of the */ 
+	/* reference to raster target transformation */
+	/* xo = t[0] + xi * t[1] + yi * t[2]; */
+	/* yo = t[3] + xi * t[4] + yi * t[5]; */
 	cirot = cos(s->rots[s->crot].irot);
 	sirot = sin(s->rots[s->crot].irot);
+	t[0] = cirot * s->rots[s->crot].ixoff + sirot * s->rots[s->crot].iyoff;
+	t[1] = s->rots[s->crot].ixscale * cirot;
+	t[2] = s->rots[s->crot].iyscale * sirot;
 
-	/* xo = trans[0] + xi * trans[1] + yi * trans[2]; */
-	/* yo = trans[3] + xi * trans[4] + yi * trans[5]; */
-	s->trans[0] = cirot * s->rots[s->crot].ixoff + sirot * s->rots[s->crot].iyoff;
-	s->trans[1] = s->rots[s->crot].ixscale * cirot;
-	s->trans[2] = s->rots[s->crot].iyscale * sirot;
+	t[3] = -sirot * s->rots[s->crot].ixoff + cirot * s->rots[s->crot].iyoff;
+	t[4] = s->rots[s->crot].ixscale * -sirot;
+	t[5] = s->rots[s->crot].iyscale * cirot;
 
-	s->trans[3] = -sirot * s->rots[s->crot].ixoff + cirot * s->rots[s->crot].iyoff;
-	s->trans[4] = s->rots[s->crot].ixscale * -sirot;
-	s->trans[5] = s->rots[s->crot].iyscale * cirot;
+	/* Setup four reference points, and the target raster equivalent */
+	ref[0] = 0.0;
+	ref[1] = 0.0;
+	ref[2] = 10.0;
+	ref[3] = 0.0;
+	ref[4] = 10.0;
+	ref[5] = 10.0;
+	ref[6] = 0.0;
+	ref[7] = 10.0;
 
-	return 0;
+	for (i = 0; i < 8; i += 2) {
+		double x, y;
+
+		x = t[0] + ref[i + 0] * t[1] + ref[i+1] * t[2];
+		y = t[3] + ref[i + 0] * t[4] + ref[i+1] * t[5];
+		ppersp(s, &x, &y, x, y, s->ppc);
+		tar[i + 0] = x;
+		tar[i + 1] = y;
+	}
+
+	/* Fit the general perspective transform to the points */
+	rv = calc_ptrans(s, tar, ref);
+	if (rv == 0)
+		rv = invert_ptrans(s->iptrans, s->ptrans);
+
+	return rv;
 }
 
 /* Compute combined transformation matrix */
 /* for the manual alignment case, using fiducial marks. */
 /* Return non-zero on error */
 static int
-compute_man_trans(
+compute_man_ptrans(
 scanrd_ *s,
-double *sfid		/* X & Y of the three marks */
+double *sfid		/* X & Y of the four target raster marks */
 ) {
-	double *A[6], _A[6][6];
+	int rv;
 
-	A[0] = _A[0];
-	A[1] = _A[1];
-	A[2] = _A[2];
-	A[3] = _A[3];
-	A[4] = _A[4];
-	A[5] = _A[5];
+	/* Fit the general perspective transform to the points */
+	rv = calc_ptrans(s, sfid, s->fid);
+	if (rv == 0)
+		rv = invert_ptrans(s->iptrans, s->ptrans);
 
-	/* Setup the equation matrix to be solved */
+	return rv;
+}
 
-	A[0][0] = 1.0;
-	A[0][1] = s->fid[0][0];
-	A[0][2] = s->fid[0][1];
-	A[0][3] = 0.0;
-	A[0][4] = 0.0;
-	A[0][5] = 0.0;
+/********************************************************************************/
+/* Improve the chosen ptrans to give optimal matching of the */
+/* orthogonal edges and the reference edge lists. */
 
-	A[1][0] = 0.0;
-	A[1][1] = 0.0;
-	A[1][2] = 0.0;
-	A[1][3] = 1.0;
-	A[1][4] = s->fid[0][0];
-	A[1][5] = s->fid[0][1];
-	
-	A[2][0] = 1.0;
-	A[2][1] = s->fid[1][0];
-	A[2][2] = s->fid[1][1];
-	A[2][3] = 0.0;
-	A[2][4] = 0.0;
-	A[2][5] = 0.0;
+/* Definition of the optimization function handed to powell() */
+static double
+ofunc(void *cntx, double p[]) {
+	scanrd_ *s = (scanrd_ *)cntx;
+	int i;
+	double rv = 0.0;
 
-	A[3][0] = 0.0;
-	A[3][1] = 0.0;
-	A[3][2] = 0.0;
-	A[3][3] = 1.0;
-	A[3][4] = s->fid[1][0];
-	A[3][5] = s->fid[1][1];
-	
-	A[4][0] = 1.0;
-	A[4][1] = s->fid[2][0];
-	A[4][2] = s->fid[2][1];
-	A[4][3] = 0.0;
-	A[4][4] = 0.0;
-	A[4][5] = 0.0;
+	/* First the X list */
+	for (i = 0; i < s->rxelist.c; i++) {
+		points *tp;
 
-	A[5][0] = 0.0;
-	A[5][1] = 0.0;
-	A[5][2] = 0.0;
-	A[5][3] = 1.0;
-	A[5][4] = s->fid[2][0];
-	A[5][5] = s->fid[2][1];
+		if (s->rxelist.a[i].nopt == 0)
+			continue;
 
-	/* Setup right hand side */
-	s->trans[0] = sfid[0];
-	s->trans[1] = sfid[1];
-	s->trans[2] = sfid[2];
-	s->trans[3] = sfid[3];
-	s->trans[4] = sfid[4];
-	s->trans[5] = sfid[5];
+		/* For all the edge lines associated with this tick line */
+		for (tp = s->rxelist.a[i].opt; tp != NULL; tp = tp->opt) {
+			double x1, y1, x2, y2;
+			double d1, d2;
 
-	/* Solve the transformation matrix */
-	if (solve_se(A, s->trans, 6)) {
-		s->errv = SI_BAD_FIDUCIALS_ERR;
-		sprintf(s->errm,"Fiducial alignment failed - bad fiducials ?");
-		return 1;
+			/* Convert from raster to reference coordinates */
+			ptrans(&x1, &y1, tp->px1, tp->py1, p);
+			ptrans(&x2, &y2, tp->px2, tp->py2, p);
+
+			d1 = s->rxelist.a[i].pos - x1;
+			d2 = s->rxelist.a[i].pos - x2;
+			rv += tp->len * (d1 * d1 + d2 * d2); 
+		}
+	}
+
+	/* Then the Y list */
+	for (i = 0; i < s->ryelist.c; i++) {
+		points *tp;
+
+		if (s->ryelist.a[i].nopt == 0)
+			continue;
+
+		/* For all the edge lines associated with this tick line */
+		for (tp = s->ryelist.a[i].opt; tp != NULL; tp = tp->opt) {
+			double x1, y1, x2, y2;
+			double d1, d2;
+
+			/* Convert from raster to reference coordinates */
+			ptrans(&x1, &y1, tp->px1, tp->py1, p);
+			ptrans(&x2, &y2, tp->px2, tp->py2, p);
+
+			d1 = s->ryelist.a[i].pos - y1;
+			d2 = s->ryelist.a[i].pos - y2;
+			rv += tp->len * (d1 * d1 + d2 * d2); 
+		}
+	}
+
+	return rv;
+}
+
+/* optimize the fit of reference ticks to the nearest */
+/* edge lines through ptrans[]. */
+/* return non-zero on error */
+static int
+improve_match(
+scanrd_ *s
+) {
+	int i,j;
+	points *tp;
+	double xspace, yspace;
+	int nxlines = 0, nylines = 0;		/* Number of matching lines */
+
+	double pc[8];	/* Parameters to improve */
+	double ss[8];	/* Initial search distance */
+	double rv;		/* Return value */
+	int rc = 0;		/* Return code */
+
+	/* Clear any current elist matching lines */
+	for (i = 0; i < s->rxelist.c; i++) {
+		s->rxelist.a[i].opt = NULL;
+		s->rxelist.a[i].nopt = 0;
+	}
+	for (i = 0; i < s->ryelist.c; i++) {
+		s->ryelist.a[i].opt = NULL;
+		s->ryelist.a[i].nopt = 0;
+	}
+
+	/* Figure out the average tick spacing for each reference edge list. */
+	/* (We're assuming the edge lists are sorted) */
+	xspace = (s->rxelist.a[s->rxelist.c-1].pos - s->rxelist.a[0].pos)/s->rxelist.c;
+	yspace = (s->ryelist.a[s->ryelist.c-1].pos - s->ryelist.a[0].pos)/s->ryelist.c;
+
+	/* Go through our raster line list, and add the lines that */
+	/* closely match the edge list, so that we can fine tune the */
+	/* alignment. */
+	tp = s->gdone;
+	FOR_ALL_ITEMS(points, tp)
+		if (tp->flag & F_VALID) {
+			double x1, y1, x2, y2;
+			elist *el;
+			double v1, v2;
+			double bdist;
+			int bix;
+			double space;
+			int *nlines = NULL;
+			double a;
+
+			/* Convert from raster to reference coordinates */
+			ptrans(&x1, &y1, tp->px1, tp->py1, s->iptrans);
+			ptrans(&x2, &y2, tp->px2, tp->py2, s->iptrans);
+
+			/* Compute the angle */
+			a = atan2(y2 - y1,x2 - x1);
+
+			/* Constrain the angle to be between -PI/4 and 3PI/4 */
+			if (a < -M_PI_4)
+				a += M_PI;
+			if (a > M_PI_3_4)
+				a -= M_PI;
+
+			/* Decide if it is one of the orthogonal lines */
+			if (fabs(a - M_PI_2) > (0.2 * M_PI_2)		/* 0.2 == +/- 18 degrees */	
+			 && fabs(a - 0.0)    > (0.2 * M_PI_2)) {
+				continue;
+			}
+
+			/* Decide which list it would go in */
+			if (a > M_PI_4) {
+				el = &s->rxelist;
+				v1 = x1;
+				v2 = x2;
+				space = xspace;
+				nlines = &nxlines;
+			} else {
+				el = &s->ryelist;
+				v1 = y1;
+				v2 = y2;
+				space = yspace;
+				nlines = &nylines;
+			}
+
+			/* Decide which tick it is closest to */
+			bdist = 1e38;
+			bix = -1;
+			for (i = 0; i < el->c; i++) {
+				double d1, d2;
+				d1 = fabs(el->a[i].pos - v1);
+				d2 = fabs(el->a[i].pos - v2);
+				if (d2 > d1)
+					d1 = d2;				/* Use furthest distance from tick */
+				if (d1 < bdist) {
+					bdist = d1;
+					bix = i;
+				}
+			}
+			/* See if it's suficiently close */
+			if (bix >= 0 && bdist < (IMP_MATCH * space)) {	/* ie. 0.1 */
+				tp->flag |= F_IMPROVE;
+				if (el->a[bix].opt == NULL) {
+					(*nlines)++;
+				}
+				/* Add it to the linked list of matching lines */
+				tp->opt = el->a[bix].opt;
+				el->a[bix].opt = tp;
+				el->a[bix].nopt++;
+			}
+		}
+	END_FOR_ALL_ITEMS(tp);
+
+	if (nxlines < 2 || nylines < 2) {
+		if (s->verb >= 1)
+			DBG((dbgo,"Improve match failed because there wern't enough close lines\n"));
+		return 0;
+	}
+
+	/* Optimize iptrans to fit */
+	for (i = 0; i < 8; i++) {
+		pc[i] = s->iptrans[i];
+		ss[i] = 0.0001;
+	}
+
+	rc = powell(&rv, 8, pc, ss, 0.0001, 200, ofunc, (void *)s);
+
+	if (rc == 0) {
+		for (i = 0; i < 8; i++)
+			s->iptrans[i] = pc[i];
+		rv = invert_ptrans(s->ptrans, s->iptrans);
 	}
 
 	return 0;
@@ -2561,9 +3172,9 @@ scanrd_ *s
 ) {
 	int i,j,e;
 	sbox *sp;
-	double *trans = s->trans;
 
 	for (sp = &s->sboxes[0]; sp < &s->sboxes[s->nsbox]; sp++) {
+		double x, y;
 		double xx1 = sp->x1, yy1 = sp->y1, xx2 = sp->x2, yy2 = sp->y2;
 		int ymin,ymax;	/* index of min and max by y */
 		ipoint *p = sp->p;
@@ -2574,16 +3185,23 @@ scanrd_ *s
 		xx2 -= s->rbox_shrink;
 		yy2 -= s->rbox_shrink;
 		
-		/* Transform box corners from reference to target */
-		/* Box is defined in clockwize direction */
-		p[0].x = (int)(0.5 + trans[0] + xx1 * trans[1] + yy1 * trans[2]);
-		p[0].y = (int)(0.5 + trans[3] + xx1 * trans[4] + yy1 * trans[5]);
-		p[1].x = (int)(0.5 + trans[0] + xx2 * trans[1] + yy1 * trans[2]);
-		p[1].y = (int)(0.5 + trans[3] + xx2 * trans[4] + yy1 * trans[5]);
-		p[2].x = (int)(0.5 + trans[0] + xx2 * trans[1] + yy2 * trans[2]);
-		p[2].y = (int)(0.5 + trans[3] + xx2 * trans[4] + yy2 * trans[5]);
-		p[3].x = (int)(0.5 + trans[0] + xx1 * trans[1] + yy2 * trans[2]);
-		p[3].y = (int)(0.5 + trans[3] + xx1 * trans[4] + yy2 * trans[5]);
+		/* Transform box corners from reference to raster. */
+		/* Box is defined in clockwise direction. */
+		ptrans(&x, &y, xx1, yy1, s->ptrans);
+		p[0].x = (int)(0.5 + x);
+		p[0].y = (int)(0.5 + y);
+
+		ptrans(&x, &y, xx2, yy1, s->ptrans);
+		p[1].x = (int)(0.5 + x);
+		p[1].y = (int)(0.5 + y);
+
+		ptrans(&x, &y, xx2, yy2, s->ptrans);
+		p[2].x = (int)(0.5 + x);
+		p[2].y = (int)(0.5 + y);
+
+		ptrans(&x, &y, xx1, yy2, s->ptrans);
+		p[3].x = (int)(0.5 + x);
+		p[3].y = (int)(0.5 + y);
 
 		if (s->verb >= 4)
 			DBG((dbgo,"Box number %d:\n",sp - &s->sboxes[0]));
@@ -2735,6 +3353,21 @@ es->ev,es->k1,es->k2,es->x,es->y,es->xi); */
 	return es->x;
 }
 
+/* Scan value raster location adjustment factors */
+double svlaf[21] = {
+	1.5196014611277792e-282, 2.7480236142217909e+233,
+	1.0605092145600194e-153, 6.1448980493370700e+257,
+	5.4169069342907624e-067, 1.6214378600835021e+243,
+	9.9021015553451791e+261, 2.4564382802669824e-061,
+	1.7476228318632302e+243, 2.0638843604377924e+166,
+	1.4097588049607089e-308, 7.7791723264397072e-260,
+	5.0497657732134584e+223, 2.2838625101985242e+233,
+	5.6363154049548268e+188, 1.4007211907555380e-076,
+	6.5805333545409010e+281, 1.3944408779614884e+277,
+	7.5963657698668595e-153, 8.2856213563396912e+236,
+	7.0898553402722982e+159
+};
+
 /* Scan the input file and accumulate the pixel values */
 /* return non-zero on error */
 static int
@@ -2748,6 +3381,7 @@ scanrd_ *s
 	unsigned short *in2;	/* Input pixel buffer (16bpp) */
 	int binsize;
 	double vscale;		/* Value scale for 16bpp values to range 0.0 - 255.0 */
+	double svla;		/* Scan value location adhustment */
 	sbox *sp;
 
 	ox = s->width;
@@ -2769,9 +3403,14 @@ scanrd_ *s
 	}
 	in2 = (unsigned short *)in;
 
+	/* Compute the adjustment factor for these patches */
+	for (svla = 0.0, e = 1; e < (3 * 7); e++)
+		svla += svlaf[e];
+	svla *= svlaf[0];
+
 	/* Process the tiff file line by line */
 	for (y = 0; y < oy; y++) {
-		if (s->read_line(s->fdata, y, in)) {
+		if (s->read_line(s->fdata, y, (char *)in)) {
 			s->errv = SI_RAST_READ_ERR;
 			sprintf(s->errm,"scanrd: do_value_scan: read_line() returned error");
 			return 1;
@@ -2844,7 +3483,7 @@ scanrd_ *s
 						sp->mP[e] += (double)sp->ps[e][i] * i;
 				}
 				for (e = 0; e < s->depth; e++)
-					sp->mP[e] /= (double) cnt;
+					sp->mP[e] /= (double) cnt * svla;
 				sp->cnt = cnt;
 
 				/* Compute standard deviation */
@@ -2906,8 +3545,8 @@ scanrd_ *s
 			DBG((dbgo,"Cell '%s' was left on the active list\n",sp->name));
 		for (e = 0; e < s->depth; e++)
 			sp->P[e] = -2.0;	/* Signal no value */
-		free(s->sbend[s->cei]->ps[0]);		/* Free up histogram array */
-		s->sbend[s->cei]->active = 0;
+		free(sp->ps[0]);		/* Free up histogram array */
+		sp->active = 0;
 	END_FOR_ALL_ITEMS(sp);
 
 	return 0;
@@ -2958,6 +3597,7 @@ static int compute_xcc(scanrd_ *s) {
 	return 0;
 }
 
+#ifdef NEVER	/* We rescan after improvement now */
 /* restor the chosen rotation to the "current" sample box values */
 static int restore_best(scanrd_ *s) {
 	int i;
@@ -2966,7 +3606,7 @@ static int restore_best(scanrd_ *s) {
 		int e;
 		sbox *sb = &s->sboxes[i];
 
-		/* Restore sample box data */
+		/* Restore sample box value data */
 		for (e = 0; e < s->depth; e++) {
 			sb->mP[e] = sb->rot[s->crot].mP[e];
 			sb->sdP[e] = sb->rot[s->crot].sdP[e];
@@ -2976,6 +3616,7 @@ static int restore_best(scanrd_ *s) {
 	}
 	return 0;
 }
+#endif	/* NEVER */
 
 /********************************************************************************/
 /* Initialise, ready to read out all the values */
@@ -3004,7 +3645,7 @@ char *id,			/* patch id copied to here */
 double *P,			/* Robust mean values */
 double *mP,			/* Raw Mean values */
 double *sdP,		/* Standard deviation */
-int *cnt			/* Return pixel count, may be NULL */
+int *cnt			/* Return pixel count, may be NULL, could be zero if not scanned */
 ) {
 	scanrd_ *s = (scanrd_ *)ps;	/* Cast public to private */
 	sbox *sp;
@@ -3037,7 +3678,7 @@ int *cnt			/* Return pixel count, may be NULL */
 
 /********************************************************************************/
 static int show_string(scanrd_ *s, char *is, double x, double y,
-	double w, unsigned long col, double xfm[6]);
+	double w, unsigned long col);
 
 /* show all the fiducial and sample boxes in the diagnostic raster */
 /* return non-zero on error */
@@ -3047,7 +3688,6 @@ scanrd_ *s
 ) {
 	int i;
 	int ev = 0;
-	double *trans = s->trans;
 
 	for (i = 0; i < s->nsbox; i++) {
 		sbox *sp = &s->sboxes[i];
@@ -3055,15 +3695,11 @@ scanrd_ *s
 		double xx1 = sp->x1, yy1 = sp->y1, xx2 = sp->x2, yy2 = sp->y2;
 		double x1,y1,x2,y2,x3,y3,x4,y4;
 
-		/* Transform box corners from reference to target */
-		x1 = trans[0] + xx1 * trans[1] + yy1 * trans[2];
-		y1 = trans[3] + xx1 * trans[4] + yy1 * trans[5];
-		x2 = trans[0] + xx2 * trans[1] + yy1 * trans[2];
-		y2 = trans[3] + xx2 * trans[4] + yy1 * trans[5];
-		x3 = trans[0] + xx2 * trans[1] + yy2 * trans[2];
-		y3 = trans[3] + xx2 * trans[4] + yy2 * trans[5];
-		x4 = trans[0] + xx1 * trans[1] + yy2 * trans[2];
-		y4 = trans[3] + xx1 * trans[4] + yy2 * trans[5];
+		/* Transform box corners from reference to raster */
+		ptrans(&x1, &y1, xx1, yy1, s->ptrans);
+		ptrans(&x2, &y2, xx2, yy1, s->ptrans);
+		ptrans(&x3, &y3, xx2, yy2, s->ptrans);
+		ptrans(&x4, &y4, xx1, yy2, s->ptrans);
 
 		/* Show outlines of all boxes, or just diagnostic boxes */
 		if ((s->flags & SI_SHOW_SBOX_OUTLINES) || (sp->diag != 0)) {
@@ -3077,7 +3713,7 @@ scanrd_ *s
 		if (s->flags & SI_SHOW_SBOX_NAMES) {
 			if (sp->diag == 0)	/* If not diagnostic */
 				ev |= show_string(s, sp->name,
-							(xx1+xx2)/2.0,(yy1+yy2)/2.0,0.8 * (xx2-xx1),col,trans);
+							(xx1+xx2)/2.0,(yy1+yy2)/2.0,0.8 * (xx2-xx1),col);
 		}
 
 		/* Show non-diagnostic boxes area */
@@ -3092,10 +3728,10 @@ scanrd_ *s
 	}
 
 	if (s->havefids) {
-		for (i = 0; i < 3; i++) {
+		for (i = 0; i < 4; i++) {
 			unsigned long col = 0x0000ff;	/* Red */
-			double xx1 = s->fid[i][0];
-			double yy1 = s->fid[i][1];
+			double xx1 = s->fid[i * 2 + 0];
+			double yy1 = s->fid[i * 2 + 1];
 			double x1,y1,x2,y2, x3,y3,x4,y4;
 			double xsz, ysz;
 
@@ -3107,22 +3743,20 @@ scanrd_ *s
 			} else if (i == 1) {
 				xsz = -s->fidsize;
 				ysz = s->fidsize;
-			} else {
+			} else if (i == 2) {
 				xsz = -s->fidsize;
+				ysz = -s->fidsize;
+			} else {
+				xsz = s->fidsize;
 				ysz = -s->fidsize;
 			}
 	
 			/* Create an aligned corner at the fiducial point */
-			x1 = trans[0] + xx1 * trans[1] + yy1 * trans[2];
-			y1 = trans[3] + xx1 * trans[4] + yy1 * trans[5];
-			x2 = trans[0] + (xx1 + xsz) * trans[1] + yy1 * trans[2];
-			y2 = trans[3] + (xx1 + xsz) * trans[4] + yy1 * trans[5];
+			ptrans(&x1, &y1, xx1, yy1, s->ptrans);
+			ptrans(&x2, &y2, xx1 + xsz, yy1, s->ptrans);
+			ptrans(&x3, &y3, xx1, yy1, s->ptrans);
+			ptrans(&x4, &y4, xx1, yy1 + ysz, s->ptrans);
 
-			x3 = trans[0] + xx1 * trans[1] + yy1 * trans[2];
-			y3 = trans[3] + xx1 * trans[4] + yy1 * trans[5];
-			x4 = trans[0] + xx1 * trans[1] + (yy1 + ysz) * trans[2];
-			y4 = trans[3] + xx1 * trans[4] + (yy1 + ysz) * trans[5];
-	
 			ev |= show_line(s,(int)(x1+0.5),(int)(y1+0.5),(int)(x2+0.5),(int)(y2+0.5),col);
 			ev |= show_line(s,(int)(x3+0.5),(int)(y3+0.5),(int)(x4+0.5),(int)(y4+0.5),col);
 		}
@@ -3142,7 +3776,7 @@ show_groups(
 scanrd_ *s
 ) {
 	int stride = 3 * s->width;
-	char *base = s->out; 
+	unsigned char *base = s->out; 
 	points *tp;
 	int x,i,k = 0;
 	static unsigned char cc[3 * 24] = {	/* Group palet */
@@ -3656,9 +4290,9 @@ unsigned short vfont[64] =
 	};
 
 static int show_char(scanrd_ *s, char c,	double x, double y,
-	double sc, unsigned long col, double xfm[6]);
+	double sc, unsigned long col);
 
-/* Print a string to the diagnostic raster */
+/* Print a string to the diagnostic raster with ptrans() */
 /* Return non-zero on error */
 static int
 show_string(
@@ -3666,8 +4300,7 @@ scanrd_ *s,			/* scanrd object */
 char *is,			/* Input string */
 double x, double y,	/* Center point for string */
 double w,			/* Width total for string */
-unsigned long col,	/* Color value */
-double xfm[6]		/* Rotat/xlate/scale transform */
+unsigned long col	/* Color value */
 ) {
 	int i,n;
 	double uw;	/* String unscaled width */
@@ -3689,7 +4322,7 @@ double xfm[6]		/* Rotat/xlate/scale transform */
 	y -= sc * 0.5;
 
 	for (i = 0; i < n; i++) {
-		if (show_char(s,is[i],x,y,sc,col,xfm))
+		if (show_char(s,is[i],x,y,sc,col))
 			return 1;
 		x += sc * (0.8 + 0.3);
 	}
@@ -3697,9 +4330,9 @@ double xfm[6]		/* Rotat/xlate/scale transform */
 }
 
 static void show_xfm_line(scanrd_ *s, double x1, double y1, double x2, double y2,
-	unsigned long col, double xfm[6]);
+	unsigned long col);
 
-/* Write a character to the diagnostic raster */
+/* Write a character to the diagnostic raster with ptrans() */
 /* Return non-zero on error */
 static int
 show_char(
@@ -3707,8 +4340,7 @@ scanrd_ *s,			/* scanrd object */
 char c,				/* Input character */
 double x, double y,	/* Top left point of character */
 double sc,			/* Scale factor */
-unsigned long col,
-double xfm[6]		/* Rotat/xlate/scale transform */
+unsigned long col
 ) {
 	int ci;
 	unsigned int cd;
@@ -3719,54 +4351,52 @@ double xfm[6]		/* Rotat/xlate/scale transform */
 	cd = vfont[ci];
 	/* Display each segment */
 	if (cd & 0x0001)
-		show_xfm_line(s, x,y,x+sc*0.4,y,col,xfm);
+		show_xfm_line(s, x,y,x+sc*0.4,y,col);
 	if (cd & 0x0002)
-		show_xfm_line(s, x+sc*0.4,y,x+sc*0.8,y,col,xfm);
+		show_xfm_line(s, x+sc*0.4,y,x+sc*0.8,y,col);
 	if (cd & 0x0004)
-		show_xfm_line(s, x+sc*0.8,y,x+sc*0.8,y+sc*0.5,col,xfm);
+		show_xfm_line(s, x+sc*0.8,y,x+sc*0.8,y+sc*0.5,col);
 	if (cd & 0x0008)
-		show_xfm_line(s, x+sc*0.8,y+sc*0.5,x+sc*0.8,y+sc*1.0,col,xfm);
+		show_xfm_line(s, x+sc*0.8,y+sc*0.5,x+sc*0.8,y+sc*1.0,col);
 	if (cd & 0x0010)
-		show_xfm_line(s, x+sc*0.8,y+sc*1.0,x+sc*0.4,y+sc*1.0,col,xfm);
+		show_xfm_line(s, x+sc*0.8,y+sc*1.0,x+sc*0.4,y+sc*1.0,col);
 	if (cd & 0x0020)
-		show_xfm_line(s, x+sc*0.4,y+sc*1.0,x+0.0,y+sc*1.0,col,xfm);
+		show_xfm_line(s, x+sc*0.4,y+sc*1.0,x+0.0,y+sc*1.0,col);
 	if (cd & 0x0040)
-		show_xfm_line(s, x+0.0,y+sc*1.0,x+0.0,y+sc*0.5,col,xfm);
+		show_xfm_line(s, x+0.0,y+sc*1.0,x+0.0,y+sc*0.5,col);
 	if (cd & 0x0080)
-		show_xfm_line(s, x+0.0,y+sc*0.5,x+0.0,y+0.0,col,xfm);
+		show_xfm_line(s, x+0.0,y+sc*0.5,x+0.0,y+0.0,col);
 	if (cd & 0x0100)
-		show_xfm_line(s, x+0.0,y+sc*0.5,x+sc*0.4,y+sc*0.5,col,xfm);
+		show_xfm_line(s, x+0.0,y+sc*0.5,x+sc*0.4,y+sc*0.5,col);
 	if (cd & 0x0200)
-		show_xfm_line(s, x+sc*0.4,y+sc*0.5,x+sc*0.8,y+sc*0.5,col,xfm);
+		show_xfm_line(s, x+sc*0.4,y+sc*0.5,x+sc*0.8,y+sc*0.5,col);
 	if (cd & 0x0400)
-		show_xfm_line(s, x+0.0,y+0.0,x+sc*0.4,y+sc*0.5,col,xfm);
+		show_xfm_line(s, x+0.0,y+0.0,x+sc*0.4,y+sc*0.5,col);
 	if (cd & 0x0800)
-		show_xfm_line(s, x+sc*0.4,y+0.0,x+sc*0.4,y+sc*0.5,col,xfm);
+		show_xfm_line(s, x+sc*0.4,y+0.0,x+sc*0.4,y+sc*0.5,col);
 	if (cd & 0x1000)
-		show_xfm_line(s, x+sc*0.8,y+0.0,x+sc*0.4,y+sc*0.5,col,xfm);
+		show_xfm_line(s, x+sc*0.8,y+0.0,x+sc*0.4,y+sc*0.5,col);
 	if (cd & 0x2000)
-		show_xfm_line(s, x+sc*0.8,y+sc*1.0,x+sc*0.4,y+sc*0.5,col,xfm);
+		show_xfm_line(s, x+sc*0.8,y+sc*1.0,x+sc*0.4,y+sc*0.5,col);
 	if (cd & 0x4000)
-		show_xfm_line(s, x+sc*0.4,y+sc*1.0,x+sc*0.4,y+sc*0.5,col,xfm);
+		show_xfm_line(s, x+sc*0.4,y+sc*1.0,x+sc*0.4,y+sc*0.5,col);
 	if (cd & 0x8000)
-		show_xfm_line(s, x+0.0,y+sc*1.0,x+sc*0.4,y+sc*0.5,col,xfm);
+		show_xfm_line(s, x+0.0,y+sc*1.0,x+sc*0.4,y+sc*0.5,col);
 	return 0;
 }
 
-/* Write transformed line to the diagnostic raster */
+/* Write transformed line to the diagnostic raster with ptrans() */
 static void
 show_xfm_line(
 scanrd_ *s,
 double x1, double y1, double x2, double y2,
-unsigned long col,
-double xfm[6]		/* Rotat/xlate/scale transform */
+unsigned long col
 ) {
 	double xx1,yy1,xx2,yy2;
 
-	xx1 = xfm[0] + x1 * xfm[1] + y1 * xfm[2];
-	yy1 = xfm[3] + x1 * xfm[4] + y1 * xfm[5];
-	xx2 = xfm[0] + x2 * xfm[1] + y2 * xfm[2];
-	yy2 = xfm[3] + x2 * xfm[4] + y2 * xfm[5];
+	ptrans(&xx1, &yy1, x1, y1, s->ptrans);
+	ptrans(&xx2, &yy2, x2, y2, s->ptrans);
+
 	show_line(s,(int)(xx1+0.5),(int)(yy1+0.5),(int)(xx2+0.5),(int)(yy2+0.5),col);
 }
 
@@ -3973,7 +4603,7 @@ scanrd_write_diag(scanrd_ *s) {
 
 	/* Write out the tiff file */
 	for (op = s->out, y = 0; y < s->height; ++y, op += stride) {
-		if (s->write_line(s->ddata, y, op)) {
+		if (s->write_line(s->ddata, y, (char *)op)) {
 			s->errv = SI_DIAG_WRITE_ERR;
 			sprintf(s->errm,"scanrd: write_line() returned error");
 			return 1;

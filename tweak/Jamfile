@@ -1,33 +1,26 @@
 # JAM style makefile for tweak tools
  
-#SubDir TOP tweak ;
-
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	    += $(CCDEBUGFLAG) ;		# Debugging flags
-#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
-#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
-#CCFLAGS	+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
-
-if $(UNIX) {
-  if $(OS) = MACOSX {
-	LINKFLAGS += -framework IOKit ;
-  }
-}
+PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#PREF_CCFLAGS	    += $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#PREF_LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+#PREF_CCFLAGS	+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
 
 #Products
 Executables = refine ;
 
 #Install
-InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
+InstallBin ../bin : $(Executables) ;
+
+HDRS = ../h ../icc ../cgats ../xicc ../spectro ../gamut
+       ../rspl ../numlib ../plot ;
+LINKLIBS = ../icc/libicc ../xicc/libxicc
+           ../spectro/libinsttypes ../gamut/libgamut
+           ../gamut/libgammap ../rspl/librspl 
+           ../cgats/libcgats ../numlib/libnum
+           ../plot/libplot $(LibWin) ;
 
 # Profile refiner
 Main refine : refine.c ;
-ObjectHdrs refine$(SUFOBJ) : ../h ../icc ../cgats ../xicc ../spectro ../gamut ../rspl
-                              ../numlib ../plot ;
-LinkLibraries refine : ../icc/libicc.lib ../xicc/libxicc.lib
-                        ../spectro/libinsttypes.lib ../gamut/libgamut.lib
-                        ../gamut/libgammap.lib ../rspl/librspl.lib 
-                        ../cgats/libcgats.lib ../numlib/libnum.lib
-                        ../plot/libplot.lib $(LibWin) ;
 

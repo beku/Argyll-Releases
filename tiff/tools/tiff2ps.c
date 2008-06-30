@@ -154,26 +154,26 @@ main(int argc, char* argv[])
 	float pageWidth = 0;
 	float pageHeight = 0;
 	uint32 diroff = 0;
-	extern char *optarg;
-	extern int optind;
+	extern char *tiff_optarg;
+	extern int tiff_optind;
 	FILE* output = stdout;
 
-	while ((c = getopt(argc, argv, "b:d:h:H:L:i:w:l:o:O:acelmrxyzps1238DT")) != -1)
+	while ((c = tiff_getopt(argc, argv, "b:d:h:H:L:i:w:l:o:O:acelmrxyzps1238DT")) != -1)
 		switch (c) {
 		case 'b':
-			bottommargin = atof(optarg);
+			bottommargin = atof(tiff_optarg);
 			break;
 		case 'c':
 			centered = 1;
 			break;
 		case 'd':
-			dirnum = atoi(optarg);
+			dirnum = atoi(tiff_optarg);
 			break;
 		case 'D':
 			PSduplex = TRUE;
 			break;
 		case 'i':
-			interpolate = atoi(optarg) ? TRUE:FALSE;
+			interpolate = atoi(tiff_optarg) ? TRUE:FALSE;
 			break;
 		case 'T':
 			PStumble = TRUE;
@@ -183,32 +183,32 @@ main(int argc, char* argv[])
 			generateEPSF = TRUE;
 			break;
 		case 'h':
-			pageHeight = atof(optarg);
+			pageHeight = atof(tiff_optarg);
 			break;
 		case 'H':
-			maxPageHeight = atof(optarg);
+			maxPageHeight = atof(tiff_optarg);
 			if (pageHeight==0) pageHeight = maxPageHeight;
 			break;
 		case 'L':
-			splitOverlap = atof(optarg);
+			splitOverlap = atof(tiff_optarg);
 			break;
 		case 'm':
 			useImagemask = TRUE;
 			break;
 		case 'o':
-			diroff = (uint32) strtoul(optarg, NULL, 0);
+			diroff = (uint32) strtoul(tiff_optarg, NULL, 0);
 			break;
 		case 'O':		/* XXX too bad -o is already taken */
-			output = fopen(optarg, "w");
+			output = fopen(tiff_optarg, "w");
 			if (output == NULL) {
 				fprintf(stderr,
 				    "%s: %s: Cannot open output file.\n",
-				    argv[0], optarg);
+				    argv[0], tiff_optarg);
 				exit(-2);
 			}
 			break;
 		case 'l':
-			leftmargin = atof(optarg);
+			leftmargin = atof(tiff_optarg);
 			break;
 		case 'a':
 			printAll = TRUE;
@@ -223,7 +223,7 @@ main(int argc, char* argv[])
 			printAll = FALSE;
 			break;
 		case 'w':
-			pageWidth = atof(optarg);
+			pageWidth = atof(tiff_optarg);
 			break;
 		case 'z':
 			PSavoiddeadzone = FALSE;
@@ -253,8 +253,8 @@ main(int argc, char* argv[])
 		case '?':
 			usage(-1);
 		}
-	for (; argc - optind > 0; optind++) {
-		TIFF* tif = TIFFOpen(filename = argv[optind], "r");
+	for (; argc - tiff_optind > 0; tiff_optind++) {
+		TIFF* tif = TIFFOpen(filename = argv[tiff_optind], "r");
 		if (tif != NULL) {
 			if (dirnum != -1 && !TIFFSetDirectory(tif, dirnum))
 				return (-1);

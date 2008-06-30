@@ -24,21 +24,20 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
+#include "copyright.h"
+#include "config.h"
+#include "numlib.h"
 #include "icc.h"
 #include "xicc.h"
 #include "cgats.h"
 #include "targen.h"
-
-#ifndef NUMSUP_H
-void error(char *fmt, ...), warning(char *fmt, ...);
-#endif
 
 #define EXTRA_NEUTRAL 50		/* Crude way of increasing weighting */
 
 /* ---------------------------------------- */
 
 void usage(char *diag) {
-	fprintf(stderr,"Create a fake CMY data file from a CMYK profile\n");
+	fprintf(stderr,"Create a fake CMY data file from a CMYK profile, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: fakeCMY [option] profile.icm fake.ti3\n");
 	if (diag != NULL)
@@ -137,9 +136,7 @@ main(
 
 	int i, j;
 	
-#ifdef NUMSUP_H
-	error_program = "fakeCMY";
-#endif
+	error_program = argv[0];
 
 	if (argc < 2)
 		usage("Not enough arguments");
@@ -493,32 +490,3 @@ main(
 	return 0;
 }
 
-/* ------------------------------------------------ */
-/* Basic printf type error() and warning() routines */
-
-#ifndef NUMSUP_H
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"icctest: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
-}
-
-void
-warning(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"icctest: Warning - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-}
-#endif

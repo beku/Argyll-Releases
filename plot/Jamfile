@@ -1,35 +1,19 @@
 
-#SubDir TOP plot ;
+# Jamfile for plot library and test program
 
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;
-
-if $(UNIX) && $(OS) != MACOSX {
-	WinDir = /usr/X11R6 ;
-	LibWinH = $(WinDir)/include ;
-	LibWinD = $(WinDir)/lib ;
-	LibWin = ;
-	LINKFLAGS += -L$(LibWinD) -lX11 -lXau -lXdmcp ;
-}
+PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
+#PREF_CCFLAGS	= $(CCDEBUGFLAG) ;		# Debugging flags
+PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
 
 # PLOT library
-Library libplot.lib : plot.c ;
-ObjectHdrs plot$(SUFOBJ) : ../h ../numlib ;
+Library libplot : plot.c : : : ../h ../numlib ;
 if $(UNIX) && $(OS) != MACOSX {
-  ObjectHdrs plot$(SUFOBJ) : $(LibWinH) ;
+  ObjectHdrs plot : $(LibWinH) ;
 }
 
 # Individual stand alone test of plot library
-Object sa_plot$(SUFOBJ) : plot.c ;
-MainFromObjects plot : sa_plot$(SUFOBJ) ;
-ObjectCcFlags sa_plot.c : -DSTANDALONE_TEST ;
-ObjectHdrs sa_plot$(SUFOBJ) : ../h ../numlib ;
-if $(UNIX) && $(OS) != MACOSX {
-  LinkLibraries plot : $(LibWin) ;
-}
+MainVariant plot : plot.c : : STANDALONE_TEST : ../h ../numlib ;
 
 # VRML plot library
-Library libvrml.lib : vrml.c ;
-ObjectHdrs vrml$(SUFOBJ) : ../h ../icc ../cgats ../numlib ../gamut ;
+Library libvrml : vrml.c : : : ../h ../icc ../cgats ../numlib ../gamut ;
 

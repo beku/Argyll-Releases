@@ -1,0 +1,51 @@
+
+# This holds the common definitions for Argyll that all the
+# subdirectory jam's will include (even if run in the sub directory) 
+
+Echo "Argyll Jamrules has been read" ;
+
+# Information for compiling and linking GUI programs
+
+if $(UNIX) {
+	if $(OS) = MACOSX {
+		LINKFLAGS += -framework IOKit ;
+		LINKFLAGS += -framework CoreFoundation ;
+
+	} else {
+		if [ GLOB /usr/X11R6/include/X11 : X.h ] {
+			LibWinH = /usr/X11R6/include ;
+			LibWinD = /usr/X11R6/lib ;
+		} else if [ GLOB /usr/include/X11 : X.h ] {
+			LibWinH = /usr/include ;
+			LibWinD = /usr/lib ;
+		} else {
+			EXIT Unable to locate the X11 include files ;
+		}
+		LINKFLAGS += -L$(LibWinD) -ldl -lX11 -lXext -lXxf86vm -lXinerama -lXrandr -lXau -lXdmcp -lXss ;
+	}
+}
+
+# See if we have a system TIFF library.
+if ! $(BUILTIN_TIFF) && $(UNIX) {
+	if [ GLOB /usr/include : tiffio.h ]  {
+		if  [ GLOB /usr/lib : libtiff.so ] 
+		 || [ GLOB /usr/lib : libtiff.a ]  {
+			echo "Using system TIFF library" ;
+			TIFFLIB = ;
+			TIFFINC = ;
+			LINKFLAGS += $(LINKFLAG)tiff ;
+			HAVE_TIFF = true ;
+		}
+	}
+}
+
+# If nothing else, use Argyll supplied TIFF library
+if ! $(HAVE_TIFF) || $(BUILTIN_TIFF) {
+	echo "Using built in TIFF library" ;
+	TIFFLIB = ../tiff/libtiff.lib ;
+	TIFFINC = ../tiff ../tiff/libtiff ;
+}
+
+# testing
+#DSTDIR = var ;
+#SRCDIR = .. ;

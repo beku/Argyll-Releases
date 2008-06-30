@@ -61,33 +61,33 @@ main(int argc, char* argv[])
 {
 	TIFF *in, *out;
 	int c;
-	extern int optind;
-	extern char *optarg;
+	extern int tiff_optind;
+	extern char *tiff_optarg;
 
-	while ((c = getopt(argc, argv, "c:h:r:v:z")) != -1)
+	while ((c = tiff_getopt(argc, argv, "c:h:r:v:z")) != -1)
 		switch (c) {
 		case 'c':
-			if (streq(optarg, "none"))
+			if (streq(tiff_optarg, "none"))
 			    compression = COMPRESSION_NONE;
-			else if (streq(optarg, "packbits"))
+			else if (streq(tiff_optarg, "packbits"))
 			    compression = COMPRESSION_PACKBITS;
-			else if (streq(optarg, "lzw"))
+			else if (streq(tiff_optarg, "lzw"))
 			    compression = COMPRESSION_LZW;
-			else if (streq(optarg, "jpeg"))
+			else if (streq(tiff_optarg, "jpeg"))
 			    compression = COMPRESSION_JPEG;
-			else if (streq(optarg, "zip"))
+			else if (streq(tiff_optarg, "zip"))
 			    compression = COMPRESSION_ADOBE_DEFLATE;
 			else
 			    usage(-1);
 			break;
 		case 'h':
-			horizSubSampling = atoi(optarg);
+			horizSubSampling = atoi(tiff_tiff_optarg);
 			break;
 		case 'v':
-			vertSubSampling = atoi(optarg);
+			vertSubSampling = atoi(tiff_optarg);
 			break;
 		case 'r':
-			rowsperstrip = atoi(optarg);
+			rowsperstrip = atoi(tiff_optarg);
 			break;
 		case 'z':	/* CCIR Rec 601-1 w/ headroom/footroom */
 			refBlackWhite[0] = 16.;
@@ -101,14 +101,14 @@ main(int argc, char* argv[])
 			usage(0);
 			/*NOTREACHED*/
 		}
-	if (argc - optind < 2)
+	if (argc - tiff_optind < 2)
 		usage(-1);
 	out = TIFFOpen(argv[argc-1], "w");
 	if (out == NULL)
 		return (-2);
 	setupLumaTables();
-	for (; optind < argc-1; optind++) {
-		in = TIFFOpen(argv[optind], "r");
+	for (; tiff_optind < argc-1; tiff_optind++) {
+		in = TIFFOpen(argv[tiff_optind], "r");
 		if (in != NULL) {
 			do {
 				if (!tiffcvt(in, out) ||

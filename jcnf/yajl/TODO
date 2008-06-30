@@ -1,0 +1,8 @@
+* line and char offsets in the lexer and in error messages
+* numbers at eof bug. (lth: still pertinent?)
+* testing:
+  a. the permuter
+  b. some performance comparison against json_checker.
+* doxygen setup and compelete documentation
+* investigate pull instead of push parsing
+* make install step

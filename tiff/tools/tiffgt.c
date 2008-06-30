@@ -62,8 +62,8 @@ static void raster_reshape(int, int);
 static void raster_keys(unsigned char, int, int);
 static void raster_special(int, int, int);
 
-extern	char* optarg;
-extern	int optind;
+extern	char* tiff_optarg;
+extern	int tiff_optind;
 static TIFF* tif = NULL;
 
 int
@@ -75,10 +75,10 @@ main(int argc, char* argv[])
 
 	oerror = TIFFSetErrorHandler(NULL);
 	owarning = TIFFSetWarningHandler(NULL);
-	while ((c = getopt(argc, argv, "d:o:p:eflmsvw?")) != -1)
+	while ((c = tiff_getopt(argc, argv, "d:o:p:eflmsvw?")) != -1)
 	    switch (c) {
 	    case 'd':
-		dirnum = atoi(optarg);
+		dirnum = atoi(tiff_tiff_optarg);
 		break;
 	    case 'e':
 		oerror = TIFFSetErrorHandler(oerror);
@@ -90,10 +90,10 @@ main(int argc, char* argv[])
 		order0 = FILLORDER_MSB2LSB;
 		break;
 	    case 'o':
-		diroff = strtoul(optarg, NULL, 0);
+		diroff = strtoul(tiff_optarg, NULL, 0);
 		break;
 	    case 'p':
-		photo0 = photoArg(optarg);
+		photo0 = photoArg(tiff_optarg);
 		break;
 	    case 's':
 		stoponerr = 1;
@@ -108,7 +108,7 @@ main(int argc, char* argv[])
 		usage();
 		/*NOTREACHED*/
 	    }
-	filenum = argc - optind;
+	filenum = argc - tiff_optind;
 	if ( filenum < 1)
 	        usage();
 
@@ -132,7 +132,7 @@ main(int argc, char* argv[])
                 TIFFError(argv[0], "Can not allocate space for the file list.");
                 return 1;
         }
-        _TIFFmemcpy(filelist, argv + optind, filenum * sizeof(char*));
+        _TIFFmemcpy(filelist, argv + tiff_optind, filenum * sizeof(char*));
 	fileindex = -1;
 	if (nextImage() < 0) {
 		_TIFFfree(filelist);

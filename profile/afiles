@@ -2,10 +2,11 @@ Readme.txt
 License.txt
 afiles
 Jamfile
+printcal.c
 prof.h
 profin.c
 profout.c
-profile.c
+colprof.c
 profcheck.c
 invprofcheck.c
 verify.c

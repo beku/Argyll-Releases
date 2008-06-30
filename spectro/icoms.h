@@ -35,10 +35,6 @@
 #include "usb.h"
 #endif /* ENABLE_USB */
 
-#if defined (UNIX) || defined(__APPLE__)
-#include <pthread.h>
-#endif
-
 #undef QUIET_MEMCHECKERS		/* #define to memset coms read buffers before reading */
 
 /* Serial related stuff */
@@ -129,7 +125,7 @@ typedef enum {
 
 /* Store information about a possible instrument communication path */
 typedef struct {
-	char *path;					/* Serial port path, or USB device description */
+	char *path;					/* Serial port path, or USB/HID device description */
 #ifdef ENABLE_USB
 	unsigned int vid, pid; 		/* USB vendor and product id's */
 	struct usb_device *dev;		/* USB port, NULL if not USB */
@@ -408,16 +404,6 @@ extern icoms *new_icoms(void);
 /* Return NULL if function fails */
 icompath **icoms_get_paths(icoms *p); 
 
-/* - - - - - - - - - - - - - - - - - - -- */
-/* System dependent convenience functions */
-/* Should probably move these to somewhere more accessible.. */
-
-/* wait for and then return the next character from the keyboard */
-int next_con_char(void);
-
-/* If there is one, return the next character from the keyboard, else return 0 */
-int poll_con_char(void);
-
 /* Poll for a user abort, terminate, trigger or command. */
 /* Wait for a key rather than polling, if wait != 0 */
 /* Return: */
@@ -428,73 +414,11 @@ int poll_con_char(void);
 /* ICOM_CMND if User command has been hit */
 int icoms_poll_user(icoms *p, int wait);
 
-/* Empty the console of any pending characters */
-void empty_con_chars(void);
-
-/* Sleep for the given number of msec */
-void msec_sleep(unsigned int msec);
-
-/* Return the current time in msec since */
-/* the process started. */
-unsigned int msec_time();
-
-/* Activate the system beeper after a delay */
-/* (Note frequancy and duration may not be honoured on all systems) */
-void msec_beep(int delay, int freq, int msec);
-
-void normal_beep(); /* Emit a "normal" beep */
-void good_beep(); /* Emit a "good" beep */
-void bad_beep(); /* Emit a "bad" double beep */
-
-/* - - - - - - - - - - - - - - - - - - -- */
-
-#ifdef NEVER	/* Not currently needed, or effective */
-
-/* Set the current threads priority */
-/* return nz if this fails */
-int set_interactive_priority();
-
-int set_normal_priority();
-
-#endif /* NEVER */
-
-/* - - - - - - - - - - - - - - - - - - -- */
-
-/* An Argyll thread. */
-struct _athread {
-#if defined (NT)
-	HANDLE th;				/* Thread */
-	DWORD thid;				/* Thread ID */
-#endif
-#if defined (UNIX) || defined(__APPLE__)
-	pthread_t thid;			/* Thread ID */
-#endif
-	int result;				/* Return code from thread function */
-
-	/* Thread function to call */
-	int (*function)(void *context);
-
-	/* And the context to call it with */
-	void *context;
-
-    /* Kill the thread and delete the object */
-    void (*del)(struct _athread *p);
-
-}; typedef struct _athread athread;
-
-/* Create and start a thread */
-/* Thread function should only return on completion or error. */
-/* It should return 0 on completion or exit, nz on error. */
-athread *new_athread(int (*function)(void *context), void *context);
-
-/* Delete a file */
-void delete_file(char *fname);
-
 /* - - - - - - - - - - - - - - - - - - -- */
 /* Utilities */
 
 /* Convert control chars to ^[A-Z] notation in a string */
-char *icoms_fix(unsigned char *s);
+char *icoms_fix(char *s);
 
 /* Convert a limited binary buffer to a list of hex */
 char *icoms_tohex(unsigned char *s, int len);

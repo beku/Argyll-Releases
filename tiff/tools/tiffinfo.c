@@ -47,18 +47,18 @@ main(int argc, char* argv[])
 	int dirnum = -1, multiplefiles, c;
 	uint16 order = 0;
 	TIFF* tif;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 	long flags = 0;
 	uint32 diroff = 0;
 	int chopstrips = 0;		/* disable strip chopping */
 
-	while ((c = getopt(argc, argv, "f:o:cdDSjlmrsvwz0123456789")) != -1)
+	while ((c = tiff_getopt(argc, argv, "f:o:cdDSjlmrsvwz0123456789")) != -1)
 		switch (c) {
 		case '0': case '1': case '2': case '3':
 		case '4': case '5': case '6': case '7':
 		case '8': case '9':
-			dirnum = atoi(&argv[optind-1][1]);
+			dirnum = atoi(&argv[tiff_optind-1][1]);
 			break;
 		case 'd':
 			showdata++;
@@ -70,9 +70,9 @@ main(int argc, char* argv[])
 			flags |= TIFFPRINT_COLORMAP | TIFFPRINT_CURVES;
 			break;
 		case 'f':		/* fill order */
-			if (streq(optarg, "lsb2msb"))
+			if (streq(tiff_optarg, "lsb2msb"))
 				order = FILLORDER_LSB2MSB;
-			else if (streq(optarg, "msb2lsb"))
+			else if (streq(tiff_optarg, "msb2lsb"))
 				order = FILLORDER_MSB2LSB;
 			else
 				usage();
@@ -81,7 +81,7 @@ main(int argc, char* argv[])
 			stoponerr = 0;
 			break;
 		case 'o':
-			diroff = strtoul(optarg, NULL, 0);
+			diroff = strtoul(tiff_optarg, NULL, 0);
 			break;
 		case 'j':
 			flags |= TIFFPRINT_JPEGQTABLES |
@@ -104,13 +104,13 @@ main(int argc, char* argv[])
 			usage();
 			/*NOTREACHED*/
 		}
-	if (optind >= argc)
+	if (tiff_optind >= argc)
 		usage();
-	multiplefiles = (argc - optind > 1);
-	for (; optind < argc; optind++) {
+	multiplefiles = (argc - tiff_optind > 1);
+	for (; tiff_optind < argc; tiff_optind++) {
 		if (multiplefiles)
-			printf("%s:\n", argv[optind]);
-		tif = TIFFOpen(argv[optind], chopstrips ? "rC" : "rc");
+			printf("%s:\n", argv[tiff_optind]);
+		tif = TIFFOpen(argv[tiff_optind], chopstrips ? "rC" : "rc");
 		if (tif != NULL) {
 			if (dirnum != -1) {
 				if (TIFFSetDirectory(tif, dirnum))

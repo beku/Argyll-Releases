@@ -62,6 +62,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "spyd2.h"
 
 #undef DEBUG

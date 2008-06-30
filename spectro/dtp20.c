@@ -47,6 +47,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "dtp20.h"
 
 #undef DEBUG
@@ -118,10 +119,10 @@ static int icoms2dtp20_err(int se) {
 static inst_code
 dtp20_command(
 dtp20 *p,
-char *in,			/* In string */
-char *out,			/* Out string buffer */
-int bsize,			/* Out buffer size */
-double to) {		/* Timout in seconts */
+char *in,		/* In string */
+char *out,		/* Out string buffer */
+int bsize,				/* Out buffer size */
+double to) {			/* Timout in seconts */
 	char tc = '>';			/* Terminating character */
 	int ntc = 1;			/* Number of terminating characters */
 	int rv, se, insize;
@@ -136,7 +137,7 @@ double to) {		/* Timout in seconts */
 
 	insize = strlen(in);
 	if (insize > 0) {
-		if ((se = p->icom->usb_control(p->icom, 0x41, 0x00, 0x00, 0x00, in, insize, to)) != ICOM_OK) {
+		if ((se = p->icom->usb_control(p->icom, 0x41, 0x00, 0x00, 0x00, (unsigned char *)in, insize, to)) != ICOM_OK) {
 			if (isdeb) fprintf(stderr,"send failed ICOM err 0x%x\n",se);
 			/* If something other than a user terminat, trigger or command */
 			if ((se & ~ICOM_USERM) != ICOM_OK || (se & ICOM_USERM) == ICOM_USER) {
@@ -165,7 +166,7 @@ double to) {		/* Timout in seconts */
 			rv &= inst_imask;
 			if (rv != DTP20_OK) {	/* Clear the error */
 				char buf[MAX_MES_SIZE];
-				p->icom->usb_control(p->icom, 0x41, 0x00, 0x00, 0x00, "CE\r", 3, 0.5);
+				p->icom->usb_control(p->icom, 0x41, 0x00, 0x00, 0x00, (unsigned char *)"CE\r", 3, 0.5);
 				p->icom->read(p->icom, buf, MAX_MES_SIZE, tc, ntc, 0.5);
 			}
 		}
@@ -201,7 +202,7 @@ double top) {		/* Timout in seconds */
 
 	insize = strlen(in);
 	if (insize > 0) {
-		if ((se = p->icom->usb_control(p->icom, 0x41, 0x00, 0x00, 0x00, in, insize, top)) != ICOM_OK) {
+		if ((se = p->icom->usb_control(p->icom, 0x41, 0x00, 0x00, 0x00, (unsigned char *)in, insize, top)) != ICOM_OK) {
 			if (isdeb) fprintf(stderr,"send failed ICOM err 0x%x\n",se);
 			/* If something other than a user terminat, trigger or command */
 			if ((se & ~ICOM_USERM) != ICOM_OK || (se & ICOM_USERM) == ICOM_USER) {
@@ -221,7 +222,7 @@ double top) {		/* Timout in seconds */
 			rsize = bsize;
 //printf("~1 doing %d, %d to go\n",rsize, bsize);
 
-		if ((se = p->icom->usb_read(p->icom, 0x81, op, rsize, &bread, top)) != ICOM_OK) {
+		if ((se = p->icom->usb_read(p->icom, 0x81, (unsigned char *)op, rsize, &bread, top)) != ICOM_OK) {
 			if (se == ICOM_SHORT)
 				if (isdeb) fprintf(stderr,"response failed expected %d got %d ICOM err 0x%x\n",rsize,bread,se);
 			else
@@ -240,7 +241,7 @@ double top) {		/* Timout in seconds */
 
 	rv = DTP20_OK;
 
-	if (isdeb) fprintf(stderr,"response '%s' ICOM err 0x%x\n",icoms_tohex(out, bread),rv);
+	if (isdeb) fprintf(stderr,"response '%s' ICOM err 0x%x\n",icoms_tohex((unsigned char *)out, bread),rv);
 	p->icom->debug = isdeb;
 	return dtp20_interp_code((inst *)p, rv);
 }
@@ -251,7 +252,7 @@ double top) {		/* Timout in seconds */
 static inst_code
 dtp20_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	dtp20 *p = (dtp20 *)pp;
-	static char buf[MAX_MES_SIZE];
+	char buf[MAX_MES_SIZE];
 	inst_code ev = inst_ok;
 
 	if (p->debug) {
@@ -371,7 +372,7 @@ double twid			/* Trailer length in mm (For DTP41T) */
 static inst_code
 dtp20_init_inst(inst *pp) {
 	dtp20 *p = (dtp20 *)pp;
-	static char tbuf[100], buf[MAX_MES_SIZE];
+	char tbuf[100], buf[MAX_MES_SIZE];
 	inst_code rv = inst_ok;
 
 	if (p->gotcoms == 0)
@@ -455,7 +456,7 @@ int chid,			/* Chart ID number */
 ipatch *vals) {		/* Pointer to array of values */
 	dtp20 *p = (dtp20 *)pp;
 	inst_code ev = inst_ok;
-	static char buf[MAX_RD_SIZE];
+	char buf[MAX_RD_SIZE];
 	int cs, sl, ttlp;
 	double pw, gw;
 	int u[10];
@@ -605,7 +606,7 @@ double twid,		/* Trailer length in mm (For DTP41T) */
 ipatch *vals) {		/* Pointer to array of instrument patch values */
 	dtp20 *p = (dtp20 *)pp;
 	char tbuf[200], *tp;
-	static char buf[MAX_RD_SIZE];
+	char buf[MAX_RD_SIZE];
 	int i, cs, se;
 	inst_code ev = inst_ok;
 	int user_trig = 0;
@@ -1296,7 +1297,6 @@ dtp20_del(inst *pp) {
 
 /* Interogate the device to discover its capabilities */
 static void	discover_capabilities(dtp20 *p) {
-	static char buf[MAX_MES_SIZE];
 	inst_code rv = inst_ok;
 
 	p->cap = inst_ref_spot
@@ -1311,6 +1311,7 @@ static void	discover_capabilities(dtp20 *p) {
 	        | inst2_prog_trig
 		    | inst2_keyb_switch_trig
 	        | inst2_keyb_trig
+	        | inst2_has_battery
 	        ;
 }
 
@@ -1376,7 +1377,6 @@ dtp20_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 {
 	dtp20 *p = (dtp20 *)pp;
 	inst_code rv = inst_ok;
-	static char buf[MAX_MES_SIZE];
 
 	/* Record the trigger mode */
 	if (m == inst_opt_trig_prog
@@ -1533,6 +1533,41 @@ inst_status_type m,	/* Requested status type */
 					return inst_protocol_error;
 			}
 		}
+
+		return inst_ok;
+	}
+
+	/* Return the charged status of the battery */
+	if (m == inst_stat_battery) {
+		int ev;
+		char cmd[10];
+		char buf[MAX_MES_SIZE];
+		double *pbchl;
+		va_list args;
+		int cs;
+
+		va_start(args, m);
+		pbchl = va_arg(args, double *);
+		va_end(args);
+
+		*pbchl = -1.0;
+
+		/* See how charged the battery is */
+		if ((ev = dtp20_command(p, "06BA\r", buf, MAX_MES_SIZE, 0.5)) != inst_ok)
+			return ev;
+		if (sscanf(buf," %d ", &cs) != 1)
+			return inst_protocol_error;
+
+		if (cs == 4)
+			*pbchl = 1.0;
+		else if (cs == 3)
+			*pbchl = 0.75;
+		else if (cs == 2)
+			*pbchl = 0.50;
+		else if (cs == 1)
+			*pbchl = 0.25;
+		else
+			*pbchl = 0.0;
 
 		return inst_ok;
 	}

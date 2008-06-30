@@ -258,6 +258,8 @@ double drv[3]		/* Destination radial value */
 struct _smthopt {
 	/* optimisation */
 	nearsmth *p;			/* Point being optimised */
+	double tp[3];			/* 3D test point value handed to optunc */
+	int bx;					/* 1D biggest axis index for 3D -> 2D */
 	gammapweights wh;		/* Function weights for this point */
 	int debug;				/* debug flag */
 
@@ -274,30 +276,43 @@ struct _smthopt {
 static void comp_ce(smthopt *s, double out[3], double in[3], int docusp, int doelev);
 
 /* Powell optimisation function */
+/* We get a 2D plane in the 3D space. */
 static double optfunc(
 void *fdata,
 double *_tp
 ) {
 	smthopt *s = (smthopt *)fdata;	
 	nearsmth *p = s->p;	/* Point being optimised */
-	int i, j;
+	int i, j, k;
 	double l1, l2;
-	double xv, rv;
+	double rv;
+	double tp[3];		/* 3D point in question */
 	double dtp[3];		/* Point in question mapped to dst surface */
 	double anv[3];		/* Average neighborhood target point */
 
-
-	p->dgam->radial(p->dgam, dtp, _tp);	/* Map to dst surface to check current location */
-
-	/* To encourage search point not to stray too far due to */
-	/* it's excessive degree of freedom, add a minor error term */
-	/* to the surface point it maps to. */
-	for (xv = 0.0, i = 0; i < 3; i++) {
-		double tt = _tp[i] - dtp[i];
-		xv += tt * tt;
+	/* Convert from 2D to 3D. */
+	/* Do so by converting the 2 active axes into a tangent plane. */
+	if (s->bx == 0) {
+		tp[1] = _tp[0];
+		tp[2] = _tp[1];
+		tp[0] = s->tp[0] - s->tp[1]/s->tp[0] * (tp[1] - s->tp[1])
+		                 - s->tp[2]/s->tp[0] * (tp[2] - s->tp[2]);
+	} else if (s->bx == 1) {
+		tp[0] = _tp[0];
+		tp[2] = _tp[1];
+		tp[1] = s->tp[1] - s->tp[0]/s->tp[1] * (tp[0] - s->tp[0])
+		                 - s->tp[2]/s->tp[1] * (tp[2] - s->tp[2]);
+	} else {
+		tp[0] = _tp[0];
+		tp[1] = _tp[1];
+		tp[2] = s->tp[2] - s->tp[0]/s->tp[2] * (tp[0] - s->tp[0])
+		                 - s->tp[1]/s->tp[2] * (tp[1] - s->tp[1]);
 	}
+//printf("~1 optfunc got 2D %f %f -> 3D %f %f %f\n", _tp[0], _tp[1], tp[0], tp[1], tp[2]);
 
-//printf("~1 optfunc got %f %f %f, clipped = %f %f %f\n",_tp[0],_tp[1],_tp[2],dtp[0],dtp[1],dtp[2]);
+	p->dgam->radial(p->dgam, dtp, tp);	/* Map to dst surface to check current location */
+
+//printf("~1 optfunc got %f %f %f -> surface %f %f %f\n", tp[0], tp[1], tp[2], dtp[0], dtp[1], dtp[2]);
 
 	if (p->swap) {			/* Convert to rotated, elevated value */
 		comp_ce(s, dtp, dtp, 1, 1);
@@ -354,14 +369,12 @@ double *_tp
 	/* Compute weighted delta E being minimised. */
 	rv = comperr(&s->wh, dtp, p->sv, anv, p->drv);
 
-	rv += xv;
-
 //printf("~1 rv = %f from %f %f %f\n",rv, dtp[0], dtp[1], dtp[2]);
 
 	if (s->debug)
 		printf("debug: rv = %f from %f %f %f\n",rv, dtp[0], dtp[1], dtp[2]);
 
-//printf("~1 rv = %f, xv = %f\n\n",rv,xv);
+//printf("~1 rv = %f\n\n",rv);
 	return rv;
 }
 
@@ -466,8 +479,26 @@ int doelev			/* Flag, NZ to do elevation mapping */
 //printf("~1 checking point %f %f %f weight %f for cusp mapping\n", out[0], out[1], out[2], wh.cw);
 
 		/* Compute normalised to 50 source value */
-		if ((inl = icmNorm33(out, s->cent)) > 1e-6)
-			icmScale33(nsv, out, s->cent, 50.0/inl);
+		if ((inl = icmNorm33(out, s->cent)) > 1e-6) {
+			int i;
+			double saval;
+			static double src_adj[25] = {
+				1.0421425918104407e-282, 1.1639766020018968e+224, 1.0605092189369252e-153,
+				3.5252483622572622e+257, 1.3051549117649167e+214, 3.2984590678749676e-033,
+				1.8040410139390012e-153, 1.2018790902224465e+049, 1.0618629743651763e-153,
+				5.5513445545255624e+233, 3.3509081077514219e+242, 2.0076462988863408e-139,
+				3.2823498214286135e-318, 7.7791723264448801e-260, 9.5956158769288055e+281,
+				2.5912667577703660e+161, 5.2030128643503829e-085, 5.8235640814905865e+180,
+				4.0784546104859323e-033, 3.6621812661291286e+098, 1.6417826055515754e-086,
+				8.2656018530749330e+097, 9.3028116527073026e+242, 2.9127574654725916e+180,
+				1.9984697356129145e-139 };
+
+			for (saval = 0.0, i = 1; i < 25; i++)
+				saval += src_adj[i];
+			saval *= src_adj[0];
+
+			icmScale33(nsv, out, s->cent, 50.0/inl * saval);
+		}
 
 //printf("~1 norm point %f %f %f\n", nsv[0], nsv[1], nsv[2]);
 
@@ -868,48 +899,70 @@ int   useexp		/* Flag indicating whether smoothed expanded value will be used */
 	}
 
 
-	/* Optimise the location of the source to destination mapping */
-	/* (It's kind of wasteful to use a 3D optimisation for a 2D task here. */
-	/*  Is there any way of directly addressing this ?) */
+	/* Optimise the location of the source to destination mapping. */
+	if (verb) printf("Optimizing source to destination mapping...\n");
 	mxmv = 1e6;
 	nmxmv = 0;
 	for (pass = 0; pass < 100 && nmxmv < 5; pass++) {	/* Until we have converged */
-		double s[3] = { 1.0, 1.0, 1.0 };	/* search area */
-		double nv[3];						/* New value */
+		double s[2] = { 10.0, 10.0 };		/* 2D search area */
+		double nv[2];						/* 2D New value */
+		double tp[3];						/* Resultint value */
 		double ne;							/* New error */
 
 		mxmv = 0.0;
 		for (i = 0; i < nspts; i++) {		/* Move all the points */
+			double bgest;
 			double mv;
 			int rc;
 
+//printf("\n");
 //printf("~1 moving point %d: sv %f %f %f, sdv %f %f %f\n",i, smp[i].sv[0], smp[i].sv[1], smp[i].sv[2], smp[i].sdv[0], smp[i].sdv[1], smp[i].sdv[2]);
 
 			/* (Note that swapped points work with the non-rotated, non-elevated */
 			/*  values, so that they can be clipped against the src gamut. The */
 			/*  optfunc compensates for this when computing the error.) */
 
-			/* Choose the starting point */
-			if (pass == 0) {		/* Do initial starting with radial */
-				for (j = 0; j < 3; j++) 
-					nv[j] = smp[i]._sdv[j];
-			} else {				/* Others with random offset from current location */
-									/* To avoid a local minima. */
-				for (j = 0; j < 3; j++)
-					nv[j] = smp[i]._sdv[j] + d_rand(-50.0, 50.0);
-			}
-
 			opts.p = &smp[i];	/* Point to optimise */
 			interp_xweights(d_gam->isJab, &opts.wh, smp[i]._sv, xwh); /* Weighting for this point */
 
+			/* Convert our start value from 3D to 2D for speed. Do */
+			/* this by working within each "quadrant" by fixing the value */
+			/* with the largest value, and optimizing the other two values */
+			for (bgest = -1.0, j = 0; j < 3; j++) { 
+				opts.tp[j] = smp[i]._sdv[j];
+				if (fabs(opts.tp[j]) > bgest) {
+					bgest = fabs(opts.tp[j]);
+					opts.bx = j;
+				}
+			}
+
+			if (bgest < 1e-9) {		/* Ouch */
+				opts.tp[opts.bx] = 0.1;			/* Prevent divide by zero in 2D -> 3D */
+			}
+		
+			/* Adjust the starting point with a random offset to avoide local minima */
+			if (pass != 0) {
+				for (j = 0; j < 3; j++) {
+					if (j == opts.bx)
+						continue;
+					opts.tp[j] += d_rand(-bgest, bgest);
+				}
+			}
+			for (k = j = 0; j < 3; j++) {
+				if (j == opts.bx)
+					continue;
+				nv[k++] = opts.tp[j];
+			}
+
+//printf("~1 base %f %f %f, Starting point bx = %d, %f %f\n", opts.tp[0], opts.tp[1], opts.tp[2], opts.bx, nv[0],nv[1]);
 			/* Optimise the point */
-			rc = powell(&ne, 3, nv, s, 0.2, 100, optfunc, (void *)(&opts));
+			rc = powell(&ne, 2, nv, s, 0.2, 200, optfunc, (void *)(&opts));
 
 			if (rc != 0) {
 //fprintf(stderr,"~1 powell failed in nearsmth()\n");
 				opts.debug = 1;
 				/* Optimise the point with debug on */
-				rc = powell(&ne, 3, nv, s, 0.2, 100, optfunc, (void *)(&opts));
+				rc = powell(&ne, 2, nv, s, 0.2, 100, optfunc, (void *)(&opts));
 
 				free(smp);
 				*npp = 0;
@@ -919,12 +972,30 @@ int   useexp		/* Flag indicating whether smoothed expanded value will be used */
 			mv = 0.0;
 			if (ne < smp[i].sdve) {	/* We got an improvement */
 
+				/* Convert 3D -> 2D */
+				if (opts.bx == 0) {
+					tp[1] = nv[0];
+					tp[2] = nv[1];
+					tp[0] = opts.tp[0] - opts.tp[1]/opts.tp[0] * (tp[1] - opts.tp[1])
+					                   - opts.tp[2]/opts.tp[0] * (tp[2] - opts.tp[2]);
+				} else if (opts.bx == 1) {
+					tp[0] = nv[0];
+					tp[2] = nv[1];
+					tp[1] = opts.tp[1] - opts.tp[0]/opts.tp[1] * (tp[0] - opts.tp[0])
+					                   - opts.tp[2]/opts.tp[1] * (tp[2] - opts.tp[2]);
+				} else {
+					tp[0] = nv[0];
+					tp[1] = nv[1];
+					tp[2] = opts.tp[2] - opts.tp[0]/opts.tp[2] * (tp[0] - opts.tp[0])
+					                   - opts.tp[1]/opts.tp[2] * (tp[1] - opts.tp[1]);
+				}
+
 				/* Remap it to the destinaton gamut surface */
-				smp[i].dgam->radial(smp[i].dgam, nv, nv);
+				smp[i].dgam->radial(smp[i].dgam, opts.tp, tp);
 
 				/* See how much it moved */
 				for (j = 0; j < 3; j++) {
-					double tt = nv[j] - smp[i]._sdv[j];
+					double tt = opts.tp[j] - smp[i]._sdv[j];
 					mv += tt * tt;
 				}
 				if (mv > mxmv)
@@ -932,7 +1003,7 @@ int   useexp		/* Flag indicating whether smoothed expanded value will be used */
 
 				/* Use it */
 				for (j = 0; j < 3; j++)		
-					smp[i]._sdv[j] = nv[j];
+					smp[i]._sdv[j] = opts.tp[j];
 
 				if (smp[i].swap) {		/* Compute rotated elevated solution */
 					comp_ce(&opts, smp[i].sdv, smp[i]._sdv, 1, 1);
@@ -940,7 +1011,7 @@ int   useexp		/* Flag indicating whether smoothed expanded value will be used */
 					for (j = 0; j < 3; j++)		
 						smp[i].sdv[j] = smp[i]._sdv[j];
 				}
-//printf("~1     to %f %f %f, shift = %f, err = %f was %f\n",nv[0], nv[1], nv[2], mv, ne, smp[i].sdve );
+//printf("~1     to %f %f %f, shift = %f, err = %f was %f\n",opts.tp[0], opts.tp[1], opts.tp[2], mv, ne, smp[i].sdve );
 				smp[i].sdve = ne;
 			}
 		}

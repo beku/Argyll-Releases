@@ -1,0 +1,35 @@
+# udev rule to recognize instruments and make them accessible to user applications.
+# Copy to /etc/udev/rules.d/55-Argyll.rules
+
+# Enable serial port connected instruments connected on first two ports.
+KERNEL=="ttyS[01]", MODE="666"
+
+# Enable serial port connected instruments on USB serial converteds connected on first two ports.
+KERNEL=="ttyUSB[01]", MODE="666"
+
+# DTP20
+SYSFS{idVendor}=="0765", SYSFS{idProduct}=="d020", MODE="666"
+
+# DTP92Q (not testedt)
+SYSFS{idVendor}=="0765", SYSFS{idProduct}=="d092", MODE="666"
+
+# DTP94
+SYSFS{idVendor}=="0765", SYSFS{idProduct}=="d094", MODE="666"
+
+# MonacoOPTIX (Same as i1 Display 1)
+SYSFS{idVendor}=="0670", SYSFS{idProduct}=="0001", MODE="666"
+
+# i1Display
+SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2003", MODE="666"
+
+# i1Pro
+SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2000", MODE="666"
+
+# Colorimtre HCFR
+SYSFS{idVendor}=="04DB", SYSFS{idProduct}=="005B", MODE="666"
+
+# Spyder 2
+SYSFS{idVendor}=="085C", SYSFS{idProduct}=="0200", MODE="666"
+
+# Huey
+SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2005", MODE="666"

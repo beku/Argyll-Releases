@@ -13,17 +13,17 @@
  * see the License.txt file for licencing details.
  */
 
-/* This program generates a PostScript print target file. */
+/* This program generates a PostScript or TIFF print target file, */
 /* containing color test patches, given the .ti1 file specifying */
 /* what the colors are. */
 
 /* The output is designed to suite a general XY spectrometer (such as */
 /* the Gretag SpectrScan), a handheld, manual instrument, or */
-/* an Xrite DTP51, or an Xrite DTP41 strip spectrometer. */
+/* an Xrite DTP51, DTP41 or Eye-One strip spectrometer. */
 
 /* Description:
 
-	This program simply generates a PostScript file containing
+	This program simply generates a PostScripto or TIFF file containing
 	the patches layed out for an Xrite DTP20/DTP22/DTP51/DTP41/SpectroScan/i1pro.
 	It allows them to be layed out on a choice of paper sizes,
 	with the appropriate contrasting color spacers between
@@ -74,8 +74,6 @@
 
 /* TTBD:
  *
- *    Add pixmap output support (ie. TIFF)
- *
  *    Improve EPS support to add a preview to each eps file.
  */
 
@@ -100,6 +98,7 @@
 #include "icc.h"
 #include "xicc.h"
 #include "insttypes.h"
+#include "render.h"
 #include "randix.h"
 #include "alphix.h"
 #include "rspl.h"
@@ -150,6 +149,7 @@ struct _col {
 #define max3(a,b,c)  (max2((a), max2((b),(c))))
 
 /* Declare edge tracking functions */
+void et_init(void);
 void et_height(double height);
 void et_media(double *rgb);
 void et_color(double *rgb);
@@ -159,158 +159,774 @@ void et_fiducial(double x, double y);
 void et_write(char *fname, col *cols, int *rix, int si, int ei);
 void et_clear(void);
 
-/* Generate PS file prolog */
-void
-gen_prolog(
-FILE *of,			/* Output stream */
-int npages,			/* Number of pages needed */
-int nmask,			/* Non zero if we are doing a DeviceN chart */
-double pw, double ph,	/* Page width and height in mm */
-int eps,			/* EPS flag */
-int rand,			/* randomize */
-int rstart			/* Random start number/chart ID */
-) {
-	time_t clk = time(0);
-	struct tm *tsp = localtime(&clk);
-	int ipw, iph;
+/* ====================================================== */
+/* Calibration Target rendering class */
+/* Outputs either PostScript or TIFF raster */
+/* test charts. */
+/* We just do an error() if something goes wrong */
 
-	ipw = (int)ceil(mm2pnt(pw));
-	iph = (int)ceil(mm2pnt(ph));
-	if (eps)
-		fprintf(of,"%%!PS-Adobe-3.0 EPSF-3.0\n");
-	else
-		fprintf(of,"%%!PS-Adobe-3.0\n");
-	fprintf(of,"%%%%Title: Argyll Color Calibration Target\n");
-#ifdef FORCEN
-	if (1) {
-#else
-	if (nmask != ICX_W		/* If not a Gray, RGB or CMYK device space */
-	 && nmask != ICX_K
-	 && nmask != ICX_RGB
-	 && nmask != ICX_CMYK) {
-#endif
-		fprintf(of,"%%%%LanguageLevel: 3\n");
+/* Common class structure */
+#define TREND_STRUCT																	\
+	/* Start a page */ 																	\
+	void (*startpage)(struct _trend *s, int pn);										\
+	/* End a page */ 																	\
+	void (*endpage)(struct _trend *s);													\
+	/* set the color */ 																\
+	void (*setcolor)(struct _trend *s, col *c);											\
+	/* A rectangle, with optional edge tracking */										\
+	void (*rectangle)(struct _trend *s,					/* Render a rectangle */		\
+		double x, double y,		/* Top left corner of rectangle in mm from origin */	\
+		double w, double h,		/* Width and height */									\
+		char *id,				/* Patch id, NULL if not a diagnostic mark */			\
+		int et					/* nz if use edge tracking on this */					\
+	);																					\
+	/* A testpad hexagon. */															\
+	void (*hexagon)(struct _trend *s,													\
+		double x, double y,		/* Top left vertex of hex mm from origin */				\
+		double w, double h,		/* Width and height */									\
+		int step,               /* Step number from 0 to figure odd/even */				\
+		char *id				/* Patch id, NULL if not a diagnostic mark */			\
+	);																					\
+	/* A centered string */																\
+	void (*string)(struct _trend *s,													\
+		double x, double y,		/* Bot Left Corner of rectangle in mm from origin */	\
+		double w, double h,		/* Width and height */									\
+		char *str				/* String */											\
+	);																					\
+	/* A vertically centered string */													\
+	void (*vstring)(struct _trend *s,													\
+		double x, double y,		/* Bot Right Corner of rectangle in mm from origin */	\
+		double w, double h,		/* Width and height */									\
+		char *str				/* String */											\
+	);																					\
+	/* A dotted line */																	\
+	void (*dline)(struct _trend *s,														\
+		double x0, double y0,		/* Start of line */									\
+		double x1, double y1,		/* End of line */									\
+		double w					/* Width */											\
+	);																					\
+	/* Delete the object */ 															\
+	void (*del)(struct _trend *s);														\
+
+struct _trend {
+	TREND_STRUCT
+}; typedef struct _trend trend;
+
+/* ------------------------------------ */
+/* PostScript output class */
+
+struct _ps_trend {
+	TREND_STRUCT
+	FILE *of;			/* Postscript output file */
+	int eps;			/* EPS flag */
+	char *fname;
+}; typedef struct _ps_trend ps_trend;
+
+/* Start a page */
+static void ps_startpage(trend *ss, int pagen) {
+	ps_trend *s = (ps_trend *)ss; 
+
+	fprintf(s->of,"%%%%Page: (Page %d) %d\n",pagen,pagen);
+}
+
+/* End a page */
+static void ps_endpage(trend *ss) {
+	ps_trend *s = (ps_trend *)ss; 
+
+	fprintf(s->of,"showpage\n");
+	fprintf(s->of,"\n");
+}
+
+/* Set a device N color with fallback */
+static void
+gen_ncolor(ps_trend *s, col *c) {
+	int i;
+
+	/* define the colorspace */
+	fprintf(s->of,"[ /DeviceN [ ");
+	for (i = 0; i < c->n; i++) {
+		int imask = icx_index2ink(c->nmask, i);
+		fprintf(s->of,"/%s ", icx_ink2psstring(imask));
+	}
+
+	if (c->t & T_NFB) {		/* Use color fallback */
+		fprintf(s->of,"] /DeviceRGB ");	/* Fallback to RGB */
+		fprintf(s->of,"{ ");
+		for (i = 0; i < c->n; i++)		/* Remove N values */
+			fprintf(s->of,"pop ");
+		for (i = 0; i < 3; i++)			/* Set RGB values */
+			fprintf(s->of,"%f ",c->rgb[i]);
 	} else {
-		fprintf(of,"%%%%LanguageLevel: 1\n");
-		if (nmask == ICX_CMYK)
-			fprintf(of,"%%%%Extensions: CMYK\n");
+		fprintf(s->of,"] /DeviceGray ");	/* Fallback to Gray */
+		fprintf(s->of,"{ ");
+		for (i = 0; i < c->n; i++)		/* Remove N values */
+			fprintf(s->of,"pop ");
+		fprintf(s->of,"%f ",(c->rgb[0] + c->rgb[1] + c->rgb[2])/3.0); /* Set Gray value */
 	}
 
-	fprintf(of,"%%%%Creator: Argyll target chart generator\n");
-	fprintf(of,"%%%%For: The user who wants accurate color\n");
-//	fprintf(of,"%%%%Version: %s\n",VERSION);
-	fprintf(of,"%%%%CreationDate: %s",asctime(tsp));
-	fprintf(of,"%%%%DocumentData: Clean7Bit\n");
-	if (eps)
-		fprintf(of,"%%%%Pages: %d\n",1);
-	else
-		fprintf(of,"%%%%Pages: %d\n",npages);
-	fprintf(of,"%%%%PageOrder: Ascend\n");
-	fprintf(of,"%%%%BoundingBox: %d %d %d %d\n",0,0,ipw-1,iph-1);
-	fprintf(of,"%%%%Orientation: Portrait\n");		/* Rows are always virtical */
-	fprintf(of,"%%%%EndComments\n");
-	fprintf(of,"\n");
-	if (!eps) {
-		fprintf(of,"<< /PageSize [%d %d] >> setpagedevice\n",ipw, iph);
-		fprintf(of,"\n");
+	fprintf(s->of," } ] setcolorspace\n");
+
+	/* Set the color */
+	for (i = 0; i < c->n; i++)
+		fprintf(s->of,"%f ",c->dev[i]);
+	fprintf(s->of,"setcolor\n");
+}
+
+
+/* Set a device color */
+/* Set it by the rep with most components */
+static	void ps_setcolor(trend *ss, col *c) {
+	ps_trend *s = (ps_trend *)ss; 
+
+	if ((c->t & T_N) == 0)
+		error("ps_setcolor with no device values set");
+	
+#ifndef FORCEN
+	if (c->nmask == ICX_W) {
+		if ((c->t & T_PRESET) == 0)
+			fprintf(s->of,"%% Ref %s %s %f\n",c->id, c->loc, 100.0 * c->dev[0]);
+
+		if (c->pgreyt == 0) {	/* DeviceGray */
+			fprintf(s->of,"%f setgray\n",c->dev[0]);
+		} else if (c->pgreyt == 4) {	/* DeviceRGB */
+			fprintf(s->of,"%f %f %f setrgbcolor\n",c->dev[0],c->dev[0],c->dev[0]);
+		} else if (c->pgreyt == 5) {	/* Separation */
+			fprintf(s->of,"[ /Separation (White) /DeviceGray { pop %f } ] setcolorspace\n",
+			           c->dev[0]);
+			fprintf(s->of,"%f setcolor\n",c->dev[0]);
+		} else if (c->pgreyt == 6) {	/* DeviceN */
+			gen_ncolor(s, c);
+		} else {
+			error("Device white encoding not approproate!");
+		}
+
+	} else if (c->nmask == ICX_K) {
+		if ((c->t & T_PRESET) == 0)
+			fprintf(s->of,"%% Ref %s %s %f\n",c->id, c->loc, 100.0 * c->dev[0]);
+		if (c->pgreyt == 0) {	/* DeviceGray */
+			fprintf(s->of,"%f setgray\n",1.0 - c->dev[0]);
+		} else if (c->pgreyt == 1) {	/* DeviceCMYK */
+			fprintf(s->of,"0.0 0.0 0.0 %f setcmykcolor\n",c->dev[0]);
+		} else if (c->pgreyt == 2) {	/* Separation */
+			fprintf(s->of,"[ /Separation (Black) /DeviceGray { pop %f } ] setcolorspace\n",
+			           1.0 - c->dev[0]);
+			fprintf(s->of,"%f setcolor\n",c->dev[0]);
+		} else if (c->pgreyt == 3) {	/* DeviceN */
+			gen_ncolor(s, c);
+		} else {
+			error("Device black encoding not approproate!");
+		}
+
+	} else if (c->nmask == ICX_RGB) {
+		if ((c->t & T_PRESET) == 0)
+			fprintf(s->of,"%% Ref %s %s %f %f %f\n",c->id, c->loc,
+			       100.0 * c->dev[0], 100.0 *c->dev[1], 100.0 *c->dev[2]);
+		fprintf(s->of,"%f %f %f setrgbcolor\n",c->dev[0],c->dev[1],c->dev[2]);
+
+	} else if (c->nmask == ICX_CMYK) {
+		if ((c->t & T_PRESET) == 0)
+			fprintf(s->of,"%% Ref %s %s %f %f %f %f\n", c->id, c->loc,
+			        100.0 * c->dev[0], 100.0 * c->dev[1], 100.0 * c->dev[2], 100.0 * c->dev[3]);
+		fprintf(s->of,"%f %f %f %f setcmykcolor\n",c->dev[0],c->dev[1],c->dev[2],c->dev[3]);
+
+	} else
+#endif /* !FORCEN */
+	       {	/* Device N */
+		int i;
+		if ((c->t & T_PRESET) == 0) {
+			fprintf(s->of,"%% Ref %s %s",c->id, c->loc);
+			for (i = 0; i < c->n; i++)
+				fprintf(s->of,"%f ", 100.0 * c->dev[i]);
+			fprintf(s->of,"\n");
+		}
+		gen_ncolor(s, c);
 	}
-	fprintf(of,"%%%%BeginProlog\n\n");
-#ifdef NEVER
-	fprintf(of,"%% Duplicate nth element of stack\n");
-	fprintf(of,"%% arguments: n, the offset from the element bellow the n\n");
-	fprintf(of,"/dupn { 2 add dup -1 roll dup 3 -1 roll 1 roll } bind def\n");
-	fprintf(of,"\n");
-#endif
-	fprintf(of,"%% arbitrary rectangle\n");
-	fprintf(of,"%% arguments: w h x y\n");
-	fprintf(of,"/rect { gsave \n");
-	fprintf(of,"newpath\n");
-	fprintf(of,"moveto\n");
-	fprintf(of,"dup 0.0 exch rlineto\n");
-	fprintf(of,"exch 0.0  rlineto\n");
-	fprintf(of,"0.0 exch neg rlineto\n");
-	fprintf(of,"closepath\n");
-	fprintf(of,"fill\n");
-	fprintf(of,"grestore } bind def\n");
-	fprintf(of,"\n");
-	fprintf(of,"%% hexagon with bottom left origin\n");
-	fprintf(of,"%% arguments: w h x y\n");
-	fprintf(of,"/hex { gsave \n");
-	fprintf(of,"newpath\n");
-	fprintf(of,"moveto\n");
-	fprintf(of,"0 1 index rlineto\n");
-	fprintf(of,"1 index 2 div 1 index 2 div rlineto\n");
-	fprintf(of,"1 index 2 div 1 index 2 div neg rlineto\n");
-	fprintf(of,"0 1 index neg rlineto\n");
-	fprintf(of,"1 index 2 div neg 1 index 2 div neg rlineto\n");
-	fprintf(of,"pop pop\n");
-	fprintf(of,"closepath\n");
-	fprintf(of,"fill\n");
-	fprintf(of,"grestore } bind def\n");
-	fprintf(of,"\n");
-	fprintf(of,"%% set times-roman font\n");
-	fprintf(of,"%% argument: scale\n");
-	fprintf(of,"/scaleTimes {\n");
-	fprintf(of,"/Times-Roman findfont\n");
-	fprintf(of,"exch scalefont\n");
-	fprintf(of,"setfont } bind def\n");
-	fprintf(of,"\n");
-	fprintf(of,"%% Print a centered string\n");
-	fprintf(of,"%% argument: string, x, y\n");
-	fprintf(of,"/centerShow {\n");
-	fprintf(of,"gsave translate\n");
-	fprintf(of,"newpath 0.0 0.0 moveto dup true charpath pathbbox\n");
-	fprintf(of,"3 -1 roll sub exch 3 -1 roll sub\n");
-	fprintf(of,"-0.5 mul exch -0.5 mul\n");
-	fprintf(of,"moveto show grestore} bind def\n");
-	fprintf(of,"\n");
-	fprintf(of,"%% Print a vertically centered string\n");
-	fprintf(of,"%% argument: string, x, y\n");
-	fprintf(of,"/vcenterShow {\n");
-	fprintf(of,"gsave translate 90.0 rotate\n");
-	fprintf(of,"newpath 0.0 0.0 moveto dup true charpath pathbbox\n");
-	fprintf(of,"3 -1 roll sub exch 3 -1 roll sub\n");
-	fprintf(of,"-0.5 mul exch -0.5 mul\n");
-	fprintf(of,"moveto show grestore} bind def\n");
 
-	fprintf(of,"%%%%EndProlog\n");
-	fprintf(of,"\n");
-
-	if (rand != 0)
-		fprintf(of,"%% RandomStart %d\n",rstart);
-	else
-		fprintf(of,"%% ChartID %d\n",rstart);
-	fprintf(of,"\n");
+	/* Remember edge tracking color */
+	et_color(c->rgb);
 }
 
-/* Generate PS file epilog */
-void
-gen_epilog(
-FILE *of)			/* Output stream */
-{
-	fprintf(of,"\n");
-	fprintf(of,"%%%%EOF\n");
+/* Generate a rectangle, with optional edge tracking */
+/* Note the page coordinate origin is bottom left. */
+static void ps_rectangle(trend *ss,
+	double x, double y,		/* Top left corner of rectangle in mm from origin */
+	double w, double h,		/* Width and height */
+	char *id,				/* Patch id, NULL if not a diagnostic mark */
+	int et					/* nz if use edge tracking on this */
+) {
+	ps_trend *s = (ps_trend *)ss; 
+
+	if (w < 1e-6 || h < 1e-6)
+		return;			/* Skip zero sized rectangle */
+	y -= h;				/* Convert to bottom left corner */
+	x = mm2pnt(x);
+	y = mm2pnt(y);
+	w = mm2pnt(w);
+	h = mm2pnt(h);
+	fprintf(s->of,"%f %f %f %f rect\n",w,h,x,y);
+
+	if (et) {
+		et_patch(id, x, y, w, h);
+		et_edge(1, 0, x, y, y + h);
+		et_edge(1, 1, x + w, y, y + h);
+		et_edge(0, 0, y, x, x + w); 
+		et_edge(0, 1, y + h, x, x + w);
+	}
 }
 
+/* Generate one testpad hexagon. */
+/* Note the page coordinate origin is bottom left. */
+/* The hex always has left/right sides */
+/* and peaks at the top and the bottom. */
+static void ps_hexagon(trend *ss,
+	double x, double y,		/* Top left vertex of hex mm from origin */
+	double w, double h,		/* Width and height */
+	int step,               /* Step number from 0 to figure odd/even */
+	char *id				/* Patch id, NULL if not a diagnostic mark */
+) {
+	ps_trend *s = (ps_trend *)ss; 
 
-/* Generate PS file prolog */
-void
-gen_startpage(
-FILE *of,			/* Output stream */
-int pagen)			/* Pages number */
-{
-	fprintf(of,"%%%%Page: (Page %d) %d\n",pagen,pagen);
+	if (w < 1e-6 || h < 1e-6)
+		return;			/* Skip zero sized rectangle */
+	if ((step & 1) == 0) /* Even so left side of stagger */
+		x -= 0.25 * w;
+	else 				 /* Odd so right side of stagger */
+		x += 0.25 * w;
+	y = y - 5.0/6.0 * h;
+	h *= 2.0/3.0;		/* Convert to hex side length */
+	x = mm2pnt(x);
+	y = mm2pnt(y);
+	w = mm2pnt(w);
+	h = mm2pnt(h);
+	fprintf(s->of,"%f %f %f %f hex\n",w,h,x,y);
 }
 
-/* Generate PS file end of page */
-void
-gen_endpage(
-FILE *of)			/* Output stream */
+/* A centered string */
+static void ps_string(trend *ss,
+	double x, double y,		/* Bot Left Corner of rectangle in mm from origin */
+	double w, double h,		/* Width and height */
+	char *str				/* String */
+) {
+	ps_trend *s = (ps_trend *)ss; 
+
+	if (fabs(w) < 1e-6 || fabs(h) < 1e-6)
+		return;			/* Skip zero sized string */
+	x = mm2pnt(x);
+	y = mm2pnt(y);
+	w = mm2pnt(w);
+	h = mm2pnt(h);
+	fprintf(s->of,"%f scaleTimes\n",h * 0.75);
+	fprintf(s->of,"(%s) %f %f centerShow\n",str,x+w/2.0,y+h/2.0);
+}
+
+/* A vertically centered string */
+static void ps_vstring(trend *ss,
+	double x, double y,		/* Bot Right Corner of rectangle in mm from origin */
+	double w, double h,		/* Width and height */
+	char *str				/* String */
+) {
+	ps_trend *s = (ps_trend *)ss; 
+
+	if (fabs(w) < 1e-6 || fabs(h) < 1e-6)
+		return;			/* Skip zero sized string */
+	x = mm2pnt(x);
+	y = mm2pnt(y);
+	w = mm2pnt(w);
+	h = mm2pnt(h);
+	fprintf(s->of,"%f scaleTimes\n",w * 0.75);
+	fprintf(s->of,"(%s) %f %f vcenterShow\n",str,x-w/2.0,y+h/2.0);
+}
+
+/* A dotted line */
+static void ps_dline(trend *ss,
+	double x1, double y1,		/* Start of line */
+	double x2, double y2,		/* End of line */
+	double w					/* Width */
+) {
+	ps_trend *s = (ps_trend *)ss; 
+
+	if (fabs(w) < 1e-6 || fabs(y2 - y1) < 1e-6)
+		return;			/* Skip zero sized line */
+	x1 = mm2pnt(x1);
+	x2 = mm2pnt(x2);
+	y1 = mm2pnt(y1);
+	y2 = mm2pnt(y2);
+	w = mm2pnt(w);
+	fprintf(s->of,"[%f %f] %f setdash\n",mm2pnt(1.0),mm2pnt(2.0),mm2pnt(0.0));
+	fprintf(s->of,"%f setlinewidth\n",w);
+	fprintf(s->of,"newpath %f %f moveto %f %f lineto stroke\n",x1,y1,x2,y2);
+}
+
+/* Complete operations, then delete the object */ 
+static void ps_del(trend *ss) {
+	ps_trend *s = (ps_trend *)ss; 
+
+	if (s->of) {
+		fprintf(s->of,"\n");
+		fprintf(s->of,"%%%%EOF\n");
+
+		if (fclose(s->of))
+			error ("Unable to close output file '%s'",s->fname);
+	}
+	if (s->fname)
+		free(s->fname);
+
+	free(s);
+}
+
+trend *new_ps_trend(
+	char *fname,			/* File name */
+	int npages,				/* Number of pages needed */
+	int nmask,				/* Non zero if we are doing a DeviceN chart */
+	double pw, double ph,	/* Page width and height in mm */
+	int eps,				/* EPS flag */
+	int rand,				/* randomize */
+	int rstart				/* Random start number/chart ID */
+) {
+	ps_trend *s;
+
+	if ((s = (ps_trend *)calloc(1, sizeof(ps_trend))) == NULL) {
+		return NULL;
+	}
+
+	s->startpage = ps_startpage;
+	s->endpage = ps_endpage;
+	s->setcolor = ps_setcolor;
+	s->rectangle = ps_rectangle;
+	s->hexagon = ps_hexagon;
+	s->string = ps_string;
+	s->vstring = ps_vstring;
+	s->dline = ps_dline;
+	s->del = ps_del;
+
+	s->eps = eps;
+
+	if ((s->of = fopen(fname,"w")) == NULL) {
+		error ("Unable to open output file '%s'",fname);
+	}
+
+	if ((s->fname = strdup(fname)) == NULL)
+		error("stdup of fname failed");
+	
+	/* Generate PS file prolog */
 	{
-	fprintf(of,"showpage\n");
-	fprintf(of,"\n");
+		time_t clk = time(0);
+		struct tm *tsp = localtime(&clk);
+		int ipw, iph;
+
+		ipw = (int)ceil(mm2pnt(pw));
+		iph = (int)ceil(mm2pnt(ph));
+		if (eps)
+			fprintf(s->of,"%%!PS-Adobe-3.0 EPSF-3.0\n");
+		else
+			fprintf(s->of,"%%!PS-Adobe-3.0\n");
+		fprintf(s->of,"%%%%Title: Argyll Color Calibration Target\n");
+#ifdef FORCEN
+		if (1) {
+#else
+		if (nmask != ICX_W		/* If not a Gray, RGB or CMYK device space */
+		 && nmask != ICX_K
+		 && nmask != ICX_RGB
+		 && nmask != ICX_CMYK) {
+#endif
+			fprintf(s->of,"%%%%LanguageLevel: 3\n");
+		} else {
+			fprintf(s->of,"%%%%LanguageLevel: 1\n");
+			if (nmask == ICX_CMYK)
+				fprintf(s->of,"%%%%Extensions: CMYK\n");
+		}
+
+		fprintf(s->of,"%%%%Creator: Argyll target chart generator\n");
+		fprintf(s->of,"%%%%For: The user who wants accurate color\n");
+//	fprintf(s->of,"%%%%Version: %s\n",VERSION);
+		fprintf(s->of,"%%%%CreationDate: %s",asctime(tsp));
+		fprintf(s->of,"%%%%DocumentData: Clean7Bit\n");
+		if (eps)
+			fprintf(s->of,"%%%%Pages: %d\n",1);
+		else
+			fprintf(s->of,"%%%%Pages: %d\n",npages);
+		fprintf(s->of,"%%%%PageOrder: Ascend\n");
+		fprintf(s->of,"%%%%BoundingBox: %d %d %d %d\n",0,0,ipw-1,iph-1);
+		fprintf(s->of,"%%%%Orientation: Portrait\n");		/* Rows are always virtical */
+		fprintf(s->of,"%%%%EndComments\n");
+		fprintf(s->of,"\n");
+		if (!eps) {
+			fprintf(s->of,"<< /PageSize [%d %d] >> setpagedevice\n",ipw, iph);
+			fprintf(s->of,"\n");
+		}
+		fprintf(s->of,"%%%%BeginProlog\n\n");
+#ifdef NEVER
+		fprintf(s->of,"%% Duplicate nth element of stack\n");
+		fprintf(s->of,"%% arguments: n, the offset from the element bellow the n\n");
+		fprintf(s->of,"/dupn { 2 add dup -1 roll dup 3 -1 roll 1 roll } bind def\n");
+		fprintf(s->of,"\n");
+#endif
+		fprintf(s->of,"%% arbitrary rectangle\n");
+		fprintf(s->of,"%% arguments: w h x y\n");
+		fprintf(s->of,"/rect { gsave \n");
+		fprintf(s->of,"newpath\n");
+		fprintf(s->of,"moveto\n");
+		fprintf(s->of,"dup 0.0 exch rlineto\n");
+		fprintf(s->of,"exch 0.0  rlineto\n");
+		fprintf(s->of,"0.0 exch neg rlineto\n");
+		fprintf(s->of,"closepath\n");
+		fprintf(s->of,"fill\n");
+		fprintf(s->of,"grestore } bind def\n");
+		fprintf(s->of,"\n");
+		fprintf(s->of,"%% hexagon with bottom left origin\n");
+		fprintf(s->of,"%% arguments: w h x y\n");
+		fprintf(s->of,"/hex { gsave \n");
+		fprintf(s->of,"newpath\n");
+		fprintf(s->of,"moveto\n");
+		fprintf(s->of,"0 1 index rlineto\n");
+		fprintf(s->of,"1 index 2 div 1 index 2 div rlineto\n");
+		fprintf(s->of,"1 index 2 div 1 index 2 div neg rlineto\n");
+		fprintf(s->of,"0 1 index neg rlineto\n");
+		fprintf(s->of,"1 index 2 div neg 1 index 2 div neg rlineto\n");
+		fprintf(s->of,"pop pop\n");
+		fprintf(s->of,"closepath\n");
+		fprintf(s->of,"fill\n");
+		fprintf(s->of,"grestore } bind def\n");
+		fprintf(s->of,"\n");
+		fprintf(s->of,"%% set times-roman font\n");
+		fprintf(s->of,"%% argument: scale\n");
+		fprintf(s->of,"/scaleTimes {\n");
+		fprintf(s->of,"/Times-Roman findfont\n");
+		fprintf(s->of,"exch scalefont\n");
+		fprintf(s->of,"setfont } bind def\n");
+		fprintf(s->of,"\n");
+		fprintf(s->of,"%% Print a centered string\n");
+		fprintf(s->of,"%% argument: string, x, y\n");
+		fprintf(s->of,"/centerShow {\n");
+		fprintf(s->of,"gsave translate\n");
+		fprintf(s->of,"newpath 0.0 0.0 moveto dup true charpath pathbbox\n");
+		fprintf(s->of,"3 -1 roll sub exch 3 -1 roll sub\n");
+		fprintf(s->of,"-0.5 mul exch -0.5 mul\n");
+		fprintf(s->of,"moveto show grestore} bind def\n");
+		fprintf(s->of,"\n");
+		fprintf(s->of,"%% Print a vertically centered string\n");
+		fprintf(s->of,"%% argument: string, x, y\n");
+		fprintf(s->of,"/vcenterShow {\n");
+		fprintf(s->of,"gsave translate 90.0 rotate\n");
+		fprintf(s->of,"newpath 0.0 0.0 moveto dup true charpath pathbbox\n");
+		fprintf(s->of,"3 -1 roll sub exch 3 -1 roll sub\n");
+		fprintf(s->of,"-0.5 mul exch -0.5 mul\n");
+		fprintf(s->of,"moveto show grestore} bind def\n");
+
+		fprintf(s->of,"%%%%EndProlog\n");
+		fprintf(s->of,"\n");
+
+		if (rand != 0)
+			fprintf(s->of,"%% RandomStart %d\n",rstart);
+		else
+			fprintf(s->of,"%% ChartID %d\n",rstart);
+		fprintf(s->of,"\n");
 	}
 
+	return (trend *)s;
+}
+
+/* ------------------------------------ */
+/* Vertex shaded rectange */
+struct _tiff_trend {
+	TREND_STRUCT
+	
+	render2d *r;		/* Raster renderer object */
+	char *fname;
+	color2d c;			/* Last set color */
+	int comp;			/* Flag, use compression */
+
+}; typedef struct _tiff_trend tiff_trend;
+
+/* Start a page */
+static void tiff_startpage(trend *ss, int pn) {
+	tiff_trend *s = (tiff_trend *)ss; 
+
+	/* Nothing to do */
+}
+
+/* End a page */
+static void tiff_endpage(trend *ss) {
+	tiff_trend *s = (tiff_trend *)ss; 
+
+	/* Nothing to do */
+}
+
+/* set the color */
+static	void tiff_setcolor(trend *ss, col *c) {
+	tiff_trend *s = (tiff_trend *)ss; 
+	int j;
+
+	if ((c->t & T_N) == 0)
+		error("tiff_setcolor with no device values set");
+
+	if (c->nmask == ICX_W) {
+		if (c->pgreyt == 0) {	/* DeviceGray */
+			s->c[0] = c->dev[0];
+		} else if (c->pgreyt == 4) {	/* DeviceRGB */
+			s->c[0] = c->dev[0];
+			s->c[1] = c->dev[0];
+			s->c[2] = c->dev[0];
+		} else if (c->pgreyt == 5) {	/* Separation */
+			s->c[0] = c->dev[0];
+		} else if (c->pgreyt == 6) {	/* DeviceN single channel */
+			s->c[0] = c->dev[0];
+		} else {
+			error("Device white encoding not approproate!");
+		}
+
+	} else if (c->nmask == ICX_K) {
+		if (c->pgreyt == 0) {	/* DeviceGray */
+			s->c[0] = c->dev[0];
+		} else if (c->pgreyt == 1) {	/* DeviceCMYK */
+			s->c[0] = 0.0;
+			s->c[0] = 0.0;
+			s->c[0] = 0.0;
+			s->c[3] = c->dev[0];
+		} else if (c->pgreyt == 2) {	/* Separation */
+			s->c[0] = c->dev[0];
+		} else if (c->pgreyt == 3) {	/* DeviceN single channel */
+			s->c[0] = c->dev[0];
+		} else {
+			error("Device black encoding not approproate!");
+		}
+
+	} else {
+		for (j = 0; j < s->r->ncc; j++)
+			s->c[j] = c->dev[j];
+	}
+
+	/* Remember edge tracking color */
+	et_color(c->rgb);
+}
+
+/* A rectangle, with optional edge tracking */
+static void tiff_rectangle(trend *ss,
+	double x, double y,		/* Top left corner of rectangle in mm from origin */
+	double w, double h,		/* Width and height */
+	char *id,				/* Patch id, NULL if not a diagnostic mark */
+	int et					/* nz if use edge tracking on this */
+) {
+	tiff_trend *s = (tiff_trend *)ss; 
+
+	y -= h;				/* Convert to bottom left corner */
+	s->r->add(s->r, new_rect2d(s->r, x, y, w, h, s->c));
+
+	if (et) {
+		et_patch(id, x, y, w, h);
+		et_edge(1, 0, x, y, y + h);
+		et_edge(1, 1, x + w, y, y + h);
+		et_edge(0, 0, y, x, x + w); 
+		et_edge(0, 1, y + h, x, x + w);
+	}
+}
+
+/* A testpad hexagon. */
+static void tiff_hexagon(trend *ss,
+	double x, double y,		/* Top left vertex of hex mm from origin */
+	double w, double h,		/* Width and height */
+	int step,               /* Step number from 0 to figure odd/even */
+	char *id				/* Patch id, NULL if not a diagnostic mark */
+) {
+	tiff_trend *s = (tiff_trend *)ss; 
+	double vv[3][2];
+	color2d cc[3];
+	int i, j;
+
+	if ((step & 1) == 0) /* Even so left side of stagger */
+		x -= 0.25 * w;
+	else 				 /* Odd so right side of stagger */
+		x += 0.25 * w;
+	y = y - 5.0/6.0 * h;
+	h *= 2.0/3.0;		/* Convert to hex side length */
+
+	/* Triangle color */
+	for (i = 0; i < 3; i++)
+		for (j = 0; j < s->r->ncc; j++)
+			cc[i][j] = s->c[j];
+
+	/* Top triangle */
+	vv[0][0] = x;
+	vv[0][1] = y + h;
+	vv[1][0] = x + w;
+	vv[1][1] = y + h;
+	vv[2][0] = x + 0.5 * w;
+	vv[2][1] = y + 1.5 * h;
+	s->r->add(s->r, new_trivs2d(s->r, vv, cc));
+	
+	/* Center rectangle */
+	s->r->add(s->r, new_rect2d(s->r, x, y, w, h, s->c));
+
+	/* Bottom triangle */
+	vv[0][0] = x;
+	vv[0][1] = y;
+	vv[1][0] = x + w;
+	vv[1][1] = y;
+	vv[2][0] = x + 0.5 * w;
+	vv[2][1] = y - 0.5 * h;
+	s->r->add(s->r, new_trivs2d(s->r, vv, cc));
+}
+
+/* A centered string */
+static void tiff_string(trend *ss,
+	double x, double y,		/* Bot Left Corner of rectangle in mm from origin */
+	double w, double h,		/* Width and height */
+	char *str				/* String */
+) {
+	tiff_trend *s = (tiff_trend *)ss; 
+	double sw = 0.0, sh = 0.0;
+
+	sh = h * 0.57;
+	meas_string2d(s->r,&sw,NULL,timesr_b,str,sh,0);
+	/* Center the string within the recangle */
+	x += 0.5 * (w - sw);
+	y += 0.5 * (h - sh);
+	add_string2d(s->r,NULL,NULL,timesr_b,str,x,y,sh,0,s->c);
+}
+
+/* A vertically centered string */
+static void tiff_vstring(trend *ss,
+	double x, double y,		/* Bot Right Corner of rectangle in mm from origin */
+	double w, double h,		/* Width and height */
+	char *str				/* String */
+) {
+	tiff_trend *s = (tiff_trend *)ss; 
+	double sw = 0.0, sh = 0.0;
+
+	x -= w;		/* Make it bot left corner */
+	sw = w * 0.57;
+	meas_string2d(s->r,NULL, &sh,timesr_b,str,sw,3);
+	/* Center the string within the recangle */
+	x += 0.5 * (w + sw);
+	y += 0.5 * (h - sh);
+	add_string2d(s->r,NULL,NULL,timesr_b,str,x,y,sw,3,s->c);
+}
+
+/* A dotted line */
+static void tiff_dline(trend *ss,
+	double x0, double y0,		/* Start of line */
+	double x1, double y1,		/* End of line */
+	double w					/* Width */
+) {
+	tiff_trend *s = (tiff_trend *)ss; 
+
+	add_dashed_line2d(s->r,x0,y0,x1,y1,w,1.0,2.0,0,s->c);
+}
+
+/* Complete operations, then delete the object */ 
+static void tiff_del(trend *ss) {
+	tiff_trend *s = (tiff_trend *)ss; 
+
+	if (s->r != NULL) {
+		s->r->write(s->r, s->fname, s->comp);
+		s->r->del(s->r);
+	}
+	if (s->fname != NULL)
+		free(s->fname);
+	free(s);
+}
+
+trend *new_tiff_trend(
+	char *fname,				/* File name */
+	int nmask,					/* Non zero if we are doing a DeviceN chart */
+	depth2d dpth,				/* 8 or 16 bit */
+	double pw, double ph,		/* Page width and height in mm */
+	double hres, double vres,	/* Resolution */
+	int pgreyt,					/* printer grey representation type 0..6 */
+	int ncha,					/* flag, use nchannel alpha */
+	int comp					/* flag, use compression */
+) {
+	tiff_trend *s;
+	color2d c;					/* Background color */
+	colort2d csp;
+	int nc = 0;
+	int j;
+
+	if ((s = (tiff_trend *)calloc(1, sizeof(tiff_trend))) == NULL) {
+		error("Failed to create a tiff target rendering object");
+	}
+
+	s->startpage = tiff_startpage;
+	s->endpage = tiff_endpage;
+	s->setcolor = tiff_setcolor;
+	s->rectangle = tiff_rectangle;
+	s->hexagon = tiff_hexagon;
+	s->string = tiff_string;
+	s->vstring = tiff_vstring;
+	s->dline = tiff_dline;
+	s->del = tiff_del;
+
+	if (nmask == ICX_W) {
+		if (pgreyt == 0		/* DeviceGray */
+		 || pgreyt == 5) {	/* Separation single channel */
+			csp = w_2d;
+			nc = 1;
+		} else if (pgreyt == 4) {	/* DeviceRGB */
+			csp = rgb_2d;
+			nc = 3;
+		} else if (pgreyt == 6) {	/* DeviceN single channel */
+			csp = ncol_2d;
+			nc = icx_noofinks(nmask);
+			nc = 1;
+		} else {
+			error("Device white encoding not approproate");
+		}
+
+	} else if (nmask == ICX_K) {
+		if (pgreyt == 0		/* DeviceGray */
+		 || pgreyt == 2) {	/* Separation single channel */
+			csp = k_2d;
+			nc = 1;
+		} else if (pgreyt == 1) {	/* DeviceCMYK */
+			csp = cmyk_2d;
+			nc = 4;
+		} else if (pgreyt == 3) {	/* DeviceN single channel */
+			csp = ncol_2d;
+			nc = icx_noofinks(nmask);
+			nc = 1;
+		} else {
+			error("Device black encoding not approproate");
+		}
+
+	} else if (nmask == ICX_RGB) {
+		csp = rgb_2d;
+		nc = 3;
+	} else if (nmask == ICX_CMYK) {
+		csp = cmyk_2d;
+		nc = 4;
+	} else {	/* Device N */
+		if (ncha)
+			csp = ncol_a_2d;
+		else
+			csp = ncol_2d;
+		nc = icx_noofinks(nmask);
+	}
+
+	if ((s->r = new_render2d(pw, ph, hres, vres,  csp, nc, dpth)) == NULL) {
+		error("Failed to create a render2d object for tiff output");
+	} 
+
+	/* We're goin to assume this is all printed output, so */
+	/* the background should be white. */
+	if (nmask & ICX_ADDITIVE) {
+		for (j = 0; j < nc; j++)
+			c[j] = 1.0;
+	} else {
+		for (j = 0; j < nc; j++)
+			c[j] = 0.0;
+	}
+	s->r->set_defc(s->r, c);
+
+	s->comp = comp;
+
+	if ((s->fname = strdup(fname)) == NULL)
+		error("stdup of fname failed");
+
+	return (trend *)s;
+}
+
+
+/* ====================================================== */
 
 /* Convert XYZ represention into Lab, XYZ density and RGB */
 void
@@ -347,240 +963,6 @@ col_convert(col *cp, double *wp) {
 		icx_XYZ2sRGB(cp->rgb, wp, cp->XYZ);
 		cp->t |= T_RGB;
 	}
-}
-
-/* Set a device N color with fallback */
-void
-gen_ncolor(
-FILE *of,			/* Output stream */
-col *c) {
-	int i;
-
-	/* define the colorspace */
-	fprintf(of,"[ /DeviceN [ ");
-	for (i = 0; i < c->n; i++) {
-		int imask = icx_index2ink(c->nmask, i);
-		fprintf(of,"/%s ", icx_ink2psstring(imask));
-	}
-
-	if (c->t & T_NFB) {		/* Use color fallback */
-		fprintf(of,"] /DeviceRGB ");	/* Fallback to RGB */
-		fprintf(of,"{ ");
-		for (i = 0; i < c->n; i++)		/* Remove N values */
-			fprintf(of,"pop ");
-		for (i = 0; i < 3; i++)			/* Set RGB values */
-			fprintf(of,"%f ",c->rgb[i]);
-	} else {
-		fprintf(of,"] /DeviceGray ");	/* Fallback to Gray */
-		fprintf(of,"{ ");
-		for (i = 0; i < c->n; i++)		/* Remove N values */
-			fprintf(of,"pop ");
-		fprintf(of,"%f ",(c->rgb[0] + c->rgb[1] + c->rgb[2])/3.0); /* Set Gray value */
-	}
-
-	fprintf(of," } ] setcolorspace\n");
-
-	/* Set the color */
-	for (i = 0; i < c->n; i++)
-		fprintf(of,"%f ",c->dev[i]);
-	fprintf(of,"setcolor\n");
-}
-
-
-/* Set a device color */
-/* Set it by the rep with most components */
-void
-gen_color(
-FILE *of,			/* Output stream */
-col *c) {
-
-	if ((c->t & T_N) == 0)
-		error("gen_color given color with no device values set");
-	
-#ifndef FORCEN
-	if (c->nmask == ICX_W) {
-		if ((c->t & T_PRESET) == 0)
-			fprintf(of,"%% Ref %s %s %f\n",c->id, c->loc, 100.0 * c->dev[0]);
-
-		if (c->pgreyt == 0) {	/* DeviceGray */
-			fprintf(of,"%f setgray\n",c->dev[0]);
-		} else if (c->pgreyt == 4) {	/* DeviceRGB */
-			fprintf(of,"%f %f %f setrgbcolor\n",c->dev[0],c->dev[0],c->dev[0]);
-		} else if (c->pgreyt == 5) {	/* Separation */
-			fprintf(of,"[ /Separation (White) /DeviceGray { pop %f } ] setcolorspace\n",
-			           c->dev[0]);
-			fprintf(of,"%f setcolor\n",c->dev[0]);
-		} else if (c->pgreyt == 6) {	/* DeviceN */
-			gen_ncolor(of, c);
-		} else {
-			error("Device white encoding not approproate!");
-		}
-
-	} else if (c->nmask == ICX_K) {
-		if ((c->t & T_PRESET) == 0)
-			fprintf(of,"%% Ref %s %s %f\n",c->id, c->loc, 100.0 * c->dev[0]);
-		if (c->pgreyt == 0) {	/* DeviceGray */
-			fprintf(of,"%f setgray\n",1.0 - c->dev[0]);
-		} else if (c->pgreyt == 1) {	/* DeviceCMYK */
-			fprintf(of,"0.0 0.0 0.0 %f setcmykcolor\n",c->dev[0]);
-		} else if (c->pgreyt == 2) {	/* Separation */
-			fprintf(of,"[ /Separation (Black) /DeviceGray { pop %f } ] setcolorspace\n",
-			           1.0 - c->dev[0]);
-			fprintf(of,"%f setcolor\n",c->dev[0]);
-		} else if (c->pgreyt == 3) {	/* DeviceN */
-			gen_ncolor(of, c);
-		} else {
-			error("Device black encoding not approproate!");
-		}
-
-	} else if (c->nmask == ICX_RGB) {
-		if ((c->t & T_PRESET) == 0)
-			fprintf(of,"%% Ref %s %s %f %f %f\n",c->id, c->loc,
-			       100.0 * c->dev[0], 100.0 *c->dev[1], 100.0 *c->dev[2]);
-		fprintf(of,"%f %f %f setrgbcolor\n",c->dev[0],c->dev[1],c->dev[2]);
-
-	} else if (c->nmask == ICX_CMYK) {
-		if ((c->t & T_PRESET) == 0)
-			fprintf(of,"%% Ref %s %s %f %f %f %f\n", c->id, c->loc,
-			        100.0 * c->dev[0], 100.0 * c->dev[1], 100.0 * c->dev[2], 100.0 * c->dev[3]);
-		fprintf(of,"%f %f %f %f setcmykcolor\n",c->dev[0],c->dev[1],c->dev[2],c->dev[3]);
-
-	} else
-#endif /* !FORCEN */
-	       {	/* Device N */
-		int i;
-		if ((c->t & T_PRESET) == 0) {
-			fprintf(of,"%% Ref %s %s",c->id, c->loc);
-			for (i = 0; i < c->n; i++)
-				fprintf(of,"%f ", 100.0 * c->dev[i]);
-			fprintf(of,"\n");
-		}
-		gen_ncolor(of, c);
-	}
-
-	/* Remember edge tracking color */
-	et_color(c->rgb);
-}
-
-/* Generate a rectangle, with optional edge tracking */
-/* Note the page coordinate origin is bottom left. */
-void
-gen_rect_o(
-FILE *of,				/* Output stream */
-double x, double y,		/* Top left corner of rectangle in mm from origin */
-double w, double h,		/* Width and height */
-char *id,				/* Patch id, NULL if not a diagnostic mark */
-int et					/* nz if use edge tracking on this */
-) {
-	if (w < 1e-6 || h < 1e-6)
-		return;			/* Skip zero sized rectangle */
-	y -= h;				/* Convert to bottom left corner */
-	x = mm2pnt(x);
-	y = mm2pnt(y);
-	w = mm2pnt(w);
-	h = mm2pnt(h);
-	fprintf(of,"%f %f %f %f rect\n",w,h,x,y);
-
-	if (et) {
-		et_patch(id, x, y, w, h);
-		et_edge(1, 0, x, y, y + h);
-		et_edge(1, 1, x + w, y, y + h);
-		et_edge(0, 0, y, x, x + w); 
-		et_edge(0, 1, y + h, x, x + w);
-	}
-}
-
-/* Generate one testpad square */
-/* Note the page coordinate origin is bottom left. */
-void
-gen_rect(
-FILE *of,				/* Output stream */
-double x, double y,		/* Top left corner of rectangle in mm from origin */
-double w, double h,		/* Width and height */
-char *id				/* Patch id, NULL if a diagnostic mark */
-) {
-	gen_rect_o(of, x, y, w, h, id, 1);
-}
-
-/* Generate one testpad hexagon. */
-/* Note the page coordinate origin is bottom left. */
-/* The hex always has left/right sides */
-/* and peaks at the top and the bottom. */
-void
-gen_hex(
-FILE *of,				/* Output stream */
-double x, double y,		/* Top left vertex of hex in mm from origin */
-double w, double h,		/* Width and height */
-int step,				/* Step number from 0 to figure odd/even */
-char *id				/* Patch id, NULL if not a test patch */
-) {
-	if (w < 1e-6 || h < 1e-6)
-		return;			/* Skip zero sized rectangle */
-	if ((step & 1) == 0) /* Even so left side of stagger */
-		x -= 0.25 * w;
-	else 				 /* Odd so right side of stagger */
-		x += 0.25 * w;
-	y = y - 5.0/6.0 * h;
-	h *= 2.0/3.0;		/* Convert to hex side length */
-	x = mm2pnt(x);
-	y = mm2pnt(y);
-	w = mm2pnt(w);
-	h = mm2pnt(h);
-	fprintf(of,"%f %f %f %f hex\n",w,h,x,y);
-}
-
-/* Generate a centered string */
-void
-gen_string(
-FILE *of,				/* Output stream */
-double x, double y,		/* Bot Left Corner of rectangle in mm from origin */
-double w, double h,		/* Width and height */
-char *s)				/* String */
-{
-	if (fabs(w) < 1e-6 || fabs(h) < 1e-6)
-		return;			/* Skip zero sized string */
-	x = mm2pnt(x);
-	y = mm2pnt(y);
-	w = mm2pnt(w);
-	h = mm2pnt(h);
-	fprintf(of,"%f scaleTimes\n",h * 0.75);
-	fprintf(of,"(%s) %f %f centerShow\n",s,x+w/2.0,y+h/2.0);
-}
-
-/* Generate a vertically centered string */
-void
-gen_vstring(
-FILE *of,				/* Output stream */
-double x, double y,		/* Bot Right Corner of rectangle in mm from origin */
-double w, double h,		/* Width and height */
-char *s)				/* String */
-{
-	if (fabs(w) < 1e-6 || fabs(h) < 1e-6)
-		return;			/* Skip zero sized string */
-	x = mm2pnt(x);
-	y = mm2pnt(y);
-	w = mm2pnt(w);
-	h = mm2pnt(h);
-	fprintf(of,"%f scaleTimes\n",w * 0.75);
-	fprintf(of,"(%s) %f %f vcenterShow\n",s,x-w/2.0,y+h/2.0);
-}
-
-void
-gen_dotted_line(
-FILE *of,
-double x,
-double y1,
-double y2,
-double w) {
-	if (fabs(w) < 1e-6 || fabs(y2 - y1) < 1e-6)
-		return;			/* Skip zero sized line */
-	x = mm2pnt(x);
-	y1 = mm2pnt(y1);
-	y2 = mm2pnt(y2);
-	w = mm2pnt(w);
-	fprintf(of,"[%f %f] %f setdash\n",mm2pnt(1.0),mm2pnt(2.0),mm2pnt(0.0));
-	fprintf(of,"%f setlinewidth\n",w);
-	fprintf(of,"newpath %f %f moveto %f %f lineto stroke\n",x,y1,x,y2);
 }
 
 /* return the middle of 3 values */
@@ -1057,11 +1439,12 @@ slist[0]->nc[1]->i,slist[0]->nc[1]->id,slist[0]->nc[1]->loc);
 			}
 		}
 
-		if (verb)
+		if (verb) {
 			if (usede)
 				printf("\r100%%\nAfter optimisation, worst delta E = %f\n", slist[0]->wnd);
 			else
 				printf("\r100%%\nAfter optimisation, density contrast = %f\n", slist[0]->wnd);
+		}
 
 		free(slist);
 	}
@@ -1071,7 +1454,7 @@ slist[0]->nc[1]->i,slist[0]->nc[1]->id,slist[0]->nc[1]->loc);
 #define MAXPPROW 400	/* Absolute maximum patches per pass/row permitted */
 
 void
-generate_ps(
+generate_file(
 instType itype,		/* Target instrument type */
 char *bname,		/* Output file basename */
 col *cols,			/* Array of colors to be put on target chart */
@@ -1090,9 +1473,14 @@ double sscale,		/* Spacers scale factor */
 int hex,			/* Hexagon patches flag */
 int verb,			/* Verbose flag */
 int scanc,			/* Scan compatible bits, 1 = .cht gen, 2 = wide first row */
-int eps,			/* EPS output flag */
+int oft,			/* PS/EPS/TIFF select (0,1,2) */
+depth2d tiffdpth,	/* TIFF pixel depth */
+double tiffres,		/* TIFF resolution in DPI */
+int ncha,			/* flag, use nchannel alpha */
+int tiffcomp,		/* flag, nz to use TIFF compression */
 int spacer,			/* Spacer code, -1 = default, 0 = None, 1 = b&w, 2 = colored */
 int nmask,			/* DeviceN mask */
+int pgreyt,			/* printer grey representation type 0..6 */
 col *pcol,			/* 8 spacer colors or 8 barcode colors for DTP20 */
 double *wp,			/* Approximate white XYZ point */
 int *ptpprow,		/* Return Test sample patches per row */
@@ -1102,8 +1490,8 @@ double *p_gaplen,	/* Return gap length in mm */
 double *p_taplen,	/* Return trailer length in mm */
 int *p_npat			/* Return number of patches including padding */
 ) {
-	char psname[200];		/* Name of output file */
-	FILE *of = NULL;		/* File to write the PS to */
+	char psname[MAXNAMEL+20];		/* Name of output file */
+	trend *tro = NULL;		/* Target rendering object */
 	double x1, y1, x2, y2;	/* Bounding box in mm */
 	double iw, ih;			/* Imagable areas width and height in mm */
 	double arowl;			/* Available row length */
@@ -1117,7 +1505,9 @@ int *p_npat			/* Return number of patches including padding */
 	int nminp = 0;		/* Number of min (trailer) patches for max/min/sid */
 	int nextrap = 0;	/* Number of extra patches for max and min = nmaxp + nminp */
 	int needpc = 0;		/* Need patch to patch contrast in a row */
-	int dorspace = 0;	/* Do a rrsp from center of last patch to cut line */
+	int dorspace = 0;	/* Do a rrsp from center of last patch to cut line & print label. */
+	int dopglabel = 0;	/* Write a per page label */	
+	double pglth = 0.0;	/* Page Label text height */
 	int padlrow = 0;	/* flag - Pad the last row with white */
 	double lspa = 0.0;	/* Leader space before first patch containint border, label, SID etc. */
 	double lcar = 0.0;	/* Leading clear area before first patch. Will be white */
@@ -1132,7 +1522,7 @@ int *p_npat			/* Return number of patches including padding */
 	int dorowlabel = 0;	/* Generate a set of row labels */
 	double rlwi = 0.0;	/* Row label test width */
 
-	double hxew = 0.0;	/* Hexagon chart extra width padding around patches */
+	double hxew = 0.0;	/* Hexagon chart extra width padding to the right of patches */
 	double hxeh = 0.0;	/* Hexagon chart extra height padding around patches */
 
 	double pwid = 0.0;	/* Patch min width */
@@ -1213,41 +1603,81 @@ int *p_npat			/* Return number of patches including padding */
 	pcol[7].dtp20_psize  = 13.0;
 
 	/* Setup .cht edge tracking information */
-	et_height(mm2pnt(ph));
+	et_init();
+	et_height(oft != 2 ? mm2pnt(ph) : ph);
 	et_media(media->rgb);
 
 	/* Set Instrument specific parameters */
-	if (itype == instDTP51) { 	/* Xrite DTP51 */
+	if (itype == instDTP20) { 	/* Xrite DTP20 */
+//		if (bord < 26.0)
+//			lbord = 26.0 - bord;	/* need this for holder to grip paper and plastic spacer */
 		hex = 0;				/* No hex for strip instruments */
 		hxew = hxeh = 0.0;		/* No extra padding because no hex */
-		domaxmin = 1;			/* Print max and min patches */
-		nmaxp = nminp = 1;		/* Extra max/min patches */
+		domaxmin = 2;			/* Print SID patches */
+		nmaxp = 4;				/* Extra header patches */
+		nminp = 1;				/* Extra trailer patches */
 		nextrap = nmaxp + nminp;/* Number of extra patches for max and min */
-		dorspace = 1;			/* Do a rrsp from center of last patch to cut line */
+		dorspace = 0;			/* Maximise number of rows */
+		dopglabel = 1;			/* Write a per page label */
 		padlrow = 1;			/* Pad the last row with white */
-		if (spacer < 0)
-			spacer = 2;			/* Colored Spacer */
-		needpc = 1;				/* Need patch to patch contrast in a row */
-		lspa  = inch2mm(1.2);	/* Leader space before first patch */
-		lcar  = inch2mm(0.25);	/* Leading clear area before first patch */
-		plen  = pscale * inch2mm(0.4);	/* Patch min length */
-		if (spacer > 0)
-			pspa  = pscale * sscale * inch2mm(0.07);	/* Inbetween Patch spacer */
-		else
-			pspa  = 0.0;		/* No spacer */
-		tspa  = inch2mm(0.0);	/* Clear space after last patch */
-		pwid  = inch2mm(0.4);	/* Patch min width */
-		rrsp  = inch2mm(0.5);	/* Row center to row center spacing */
-		pwex  = (rrsp - pwid)/2.0;	/* Patch width expansion between rows of a strip */
-		mxpprow = 72;			/* Maximum patches per row permitted */
-		mxrowl = inch2mm(40.0);	/* Maximum row length */
-		tidrows = 0;			/* No rows on first page for target ID */
-		rpstrip = 6;			/* Rows per strip */
-		txhi  = 5.0;			/* Text Height */
-		docutmarks = 1;			/* Generate strip cut marks */
-		clwi  = 0.3;			/* Cut line width */
+		spacer = 0;				/* No Spacer between patches */
+		pspa  = 0.0;			/* No spacer width */
+		usede = 1;				/* Use delta E to maximize patch/spacer conrast */
+		needpc = 1;				/* Helps to have patch to patch contrast in a row ? */
+		lspa  = bord + 5.0 + 5.0;	/* Leader space before first patch - bord + pcar + yxhi */
+		lcar  = 5.0;			/* Leading clear area before first patch */
+		plen  = 6.5;			/* Patch length. Can't vary. */
+		tplen = 6.0;			/* TID Patch length. Can't vary. */
+		tspa  = 5.0;			/* Clear space after last patch */
+		pwid  = 10.0;			/* Patch min width. (The guide slot is 12mm ?) */
+		rrsp  = 10.0;			/* Row center to row center spacing */
+		pwex  = 0.0;			/* Patch width expansion between rows of a strip */
+		mxpprow = MAXPPROW;		/* Maximum patches per row permitted (set by length) */
+		mxrowl = (240.0 - lcar - tspa);	/* Maximum row length */
+		tidrows = 1;			/* Rows on first page for target ID */
+		tidtype = 0;			/* Target ID type. 0 = DTP20 */
+		tidminp = 21;			/* Target ID minumum number of patches */
+		rpstrip = 999;			/* Rows per strip */
+		txhi  = 5.0;			/* Label Text Height */
+		docutmarks = 0;			/* Don't generate strip cut marks */
+		clwi  = 0.0;			/* Cut line width */
 		dorowlabel = 0;			/* Don't generate row labels */
 		rlwi = 0.0;				/* Row label width */
+		pglth = 5.0;			/* Page Label text height */
+
+		if (npat > 4095)
+			error ("Number of patchs %d exceeds maximum of 4095 for DTP20");
+
+	} else if (itype == instDTP22 ) {	/* X-Rite DTP22 Digital Swatchbook */
+		domaxmin = 0;			/* Don't print max and min patches */
+		nextrap = 0;			/* Number of extra patches for max and min */
+		nmaxp = nminp = 0;		/* Extra max/min patches */
+		nextrap = nmaxp + nminp;/* Number of extra patches for max and min */
+		dorspace = 0;			/* Do a rrsp from center of last patch to cut line */
+		dopglabel = 1;			/* Write a per page label */
+		padlrow = 0;			/* Pad the last row with white */
+		spacer = 0;				/* No spacer */
+		usede = 1;				/* Use delta E to maximize patch/spacer conrast */
+		needpc = 1;				/* Need patch to patch contrast in a row */
+		lspa  = 8.0 + bord;		/* Leader space before first patch - allow space for text */
+		lcar  = 0.0;			/* Leading clear area before first patch */
+		plen = pscale * 8.0;	/* Patch min length */
+		hxew = hxeh = 0.0;		/* No extra padding because no hex */
+		pspa  = 0.0;			/* Inbetween Patch spacer */
+		tspa  = 0.0;			/* Clear space after last patch */
+		pwid  = pscale * 8.0;	/* Patch min width */
+		rrsp  = pscale * 8.0;	/* Row center to row center spacing */
+		pwex  = 0.0;			/* Patch width expansion between rows of a strip */
+		mxpprow = MAXPPROW;		/* Maximum patches per row permitted */
+		mxrowl = 1000.0;		/* Maximum row length */
+		tidrows = 0;			/* No rows on first page for target ID */
+		rpstrip = 999;			/* Rows per strip */
+		txhi  = 5.0;			/* Text Height */
+		docutmarks = 0;			/* Don't generate strip cut marks */
+		clwi  = 0.0;			/* Cut line width */
+		dorowlabel = 1;			/* Generate row labels */
+		rlwi = 8.0;				/* Row label width */
+		pglth = 5.0;			/* Page Label text height */
 
 	} else if (itype == instDTP41) {	/* Xrite DTP41 */
 		hex = 0;				/* No hex for strip instruments */
@@ -1256,6 +1686,7 @@ int *p_npat			/* Return number of patches including padding */
 		nmaxp = nminp = 0;		/* Extra max/min patches */
 		nextrap = nmaxp + nminp;/* Number of extra patches for max and min */
 		dorspace = 0;			/* Maximise number of rows */
+		dopglabel = 1;			/* Write a per page label */
 		padlrow = 1;			/* Pad the last row with white */
 		if (spacer < 0)
 			spacer = 2;			/* Colored Spacer */
@@ -1280,6 +1711,41 @@ int *p_npat			/* Return number of patches including padding */
 		clwi  = 0.3;			/* Cut line width */
 		dorowlabel = 0;			/* Don't generate row labels */
 		rlwi = 0.0;				/* Row label width */
+		pglth = 5.0;			/* Page Label text height */
+
+	} else if (itype == instDTP51) { 	/* Xrite DTP51 */
+		hex = 0;				/* No hex for strip instruments */
+		hxew = hxeh = 0.0;		/* No extra padding because no hex */
+		domaxmin = 1;			/* Print max and min patches */
+		nmaxp = nminp = 1;		/* Extra max/min patches */
+		nextrap = nmaxp + nminp;/* Number of extra patches for max and min */
+		dorspace = 1;			/* Do a rrsp from center of last patch to cut line */
+		dopglabel = 0;			/* No need for a per page label */
+		padlrow = 1;			/* Pad the last row with white */
+		if (spacer < 0)
+			spacer = 2;			/* Colored Spacer */
+		needpc = 1;				/* Need patch to patch contrast in a row */
+		lspa  = inch2mm(1.2);	/* Leader space before first patch */
+		lcar  = inch2mm(0.25);	/* Leading clear area before first patch */
+		plen  = pscale * inch2mm(0.4);	/* Patch min length */
+		if (spacer > 0)
+			pspa  = pscale * sscale * inch2mm(0.07);	/* Inbetween Patch spacer */
+		else
+			pspa  = 0.0;		/* No spacer */
+		tspa  = inch2mm(0.0);	/* Clear space after last patch */
+		pwid  = inch2mm(0.4);	/* Patch min width */
+		rrsp  = inch2mm(0.5);	/* Row center to row center spacing */
+		pwex  = (rrsp - pwid)/2.0;	/* Patch width expansion between rows of a strip */
+		mxpprow = 72;			/* Maximum patches per row permitted */
+		mxrowl = inch2mm(40.0);	/* Maximum row length */
+		tidrows = 0;			/* No rows on first page for target ID */
+		rpstrip = 6;			/* Rows per strip */
+		txhi  = 5.0;			/* Text Height */
+		docutmarks = 1;			/* Generate strip cut marks */
+		clwi  = 0.3;			/* Cut line width */
+		dorowlabel = 0;			/* Don't generate row labels */
+		rlwi = 0.0;				/* Row label width */
+		pglth = 5.0;			/* Page Label text height */
 
 	} else if (itype == instSpectroScan ) {	/* GretagMacbeth SpectroScan */
 		domaxmin = 0;			/* Don't print max and min patches */
@@ -1287,6 +1753,7 @@ int *p_npat			/* Return number of patches including padding */
 		nmaxp = nminp = 0;		/* Extra max/min patches */
 		nextrap = nmaxp + nminp;/* Number of extra patches for max and min */
 		dorspace = 0;			/* Maximise number of rows */
+		dopglabel = 1;			/* Write a per page label */
 		padlrow = 0;			/* Pad the last row with white */
 		spacer = 0;				/* No spacer */
 		needpc = 0;				/* Don't need patch to patch contrast in a row */
@@ -1309,40 +1776,12 @@ int *p_npat			/* Return number of patches including padding */
 		mxrowl = 1000.0;		/* Maximum row length */
 		tidrows = 0;			/* No rows on first page for target ID */
 		rpstrip = 999;			/* Rows per strip */
-		txhi  = 5.0;			/* Text Height */
+		txhi  = 5.0;			/* Row/Column Text Height */
 		docutmarks = 0;			/* Don't generate strip cut marks */
 		clwi  = 0.0;			/* Cut line width */
 		dorowlabel = 1;			/* Generate row labels */
-		rlwi = 10.0;			/* Row label width */
-
-	} else if (itype == instDTP22 ) {	/* X-Rite DTP22 Digital Swatchbook */
-		domaxmin = 0;			/* Don't print max and min patches */
-		nextrap = 0;			/* Number of extra patches for max and min */
-		nmaxp = nminp = 0;		/* Extra max/min patches */
-		nextrap = nmaxp + nminp;/* Number of extra patches for max and min */
-		dorspace = 1;			/* Do a rrsp from center of last patch to cut line */
-		padlrow = 0;			/* Pad the last row with white */
-		spacer = 0;				/* No spacer */
-		usede = 1;				/* Use delta E to maximize patch/spacer conrast */
-		needpc = 1;				/* Need patch to patch contrast in a row */
-		lspa  = 8.0 + bord;		/* Leader space before first patch - allow space for text */
-		lcar  = 0.0;			/* Leading clear area before first patch */
-		plen = pscale * 8.0;	/* Patch min length */
-		hxew = hxeh = 0.0;		/* No extra padding because no hex */
-		pspa  = 0.0;			/* Inbetween Patch spacer */
-		tspa  = 0.0;			/* Clear space after last patch */
-		pwid  = pscale * 8.0;	/* Patch min width */
-		rrsp  = pscale * 8.0;	/* Row center to row center spacing */
-		pwex  = 0.0;			/* Patch width expansion between rows of a strip */
-		mxpprow = MAXPPROW;		/* Maximum patches per row permitted */
-		mxrowl = 1000.0;		/* Maximum row length */
-		tidrows = 0;			/* No rows on first page for target ID */
-		rpstrip = 999;			/* Rows per strip */
-		txhi  = 5.0;			/* Text Height */
-		docutmarks = 0;			/* Don't generate strip cut marks */
-		clwi  = 0.0;			/* Cut line width */
-		dorowlabel = 1;			/* Generate row labels */
-		rlwi = 8.0;				/* Row label width */
+		rlwi = 7.5;				/* Row label width */
+		pglth = 5.0;			/* Page Label text height */
 
 	} else if (itype == instI1Pro ) {	/* GretagMacbeth Eye-One Pro */
 		if (bord < 26.0)
@@ -1354,6 +1793,7 @@ int *p_npat			/* Return number of patches including padding */
 		nmaxp = nminp = 0;		/* Extra max/min patches */
 		nextrap = nmaxp + nminp;/* Number of extra patches for max and min */
 		dorspace = 0;			/* Maximise number of rows */
+		dopglabel = 1;			/* Write a per page label */
 		padlrow = 1;			/* Don't need to pad the last row for the i1, */
 								/* but the strip read logic can't handle it. */
 		if (spacer < 0)
@@ -1380,44 +1820,7 @@ int *p_npat			/* Return number of patches including padding */
 		clwi  = 0.0;			/* Cut line width */
 		dorowlabel = 0;			/* Don't generate row labels */
 		rlwi = 0.0;				/* Row label width */
-
-	} else if (itype == instDTP20) { 	/* Xrite DTP20 */
-//		if (bord < 26.0)
-//			lbord = 26.0 - bord;	/* need this for holder to grip paper and plastic spacer */
-		hex = 0;				/* No hex for strip instruments */
-		hxew = hxeh = 0.0;		/* No extra padding because no hex */
-		domaxmin = 2;			/* Print SID patches */
-		nmaxp = 4;				/* Extra header patches */
-		nminp = 1;				/* Extra trailer patches */
-		nextrap = nmaxp + nminp;/* Number of extra patches for max and min */
-		dorspace = 0;			/* Maximise number of rows */
-		padlrow = 1;			/* Pad the last row with white */
-		spacer = 0;				/* No Spacer between patches */
-		pspa  = 0.0;			/* No spacer width */
-		usede = 1;				/* Use delta E to maximize patch/spacer conrast */
-		needpc = 1;				/* Helps to have patch to patch contrast in a row ? */
-		lspa  = bord + 5.0 + 5.0;	/* Leader space before first patch - bord + pcar + yxhi */
-		lcar  = 5.0;			/* Leading clear area before first patch */
-		plen  = 6.5;			/* Patch length. Can't vary. */
-		tplen = 6.0;			/* TID Patch length. Can't vary. */
-		tspa  = 5.0;			/* Clear space after last patch */
-		pwid  = 10.0;			/* Patch min width. (The guide slot is 12mm ?) */
-		rrsp  = 10.0;			/* Row center to row center spacing */
-		pwex  = 0.0;			/* Patch width expansion between rows of a strip */
-		mxpprow = MAXPPROW;		/* Maximum patches per row permitted (set by length) */
-		mxrowl = (240.0 - lcar - tspa);	/* Maximum row length */
-		tidrows = 1;			/* Rows on first page for target ID */
-		tidtype = 0;			/* Target ID type. 0 = DTP20 */
-		tidminp = 21;			/* Target ID minumum number of patches */
-		rpstrip = 999;			/* Rows per strip */
-		txhi  = 5.0;			/* Label Text Height */
-		docutmarks = 0;			/* Don't generate strip cut marks */
-		clwi  = 0.0;			/* Cut line width */
-		dorowlabel = 0;			/* Don't generate row labels */
-		rlwi = 0.0;				/* Row label width */
-
-		if (npat > 4095)
-			error ("Number of patchs %d exceeds maximum of 4095 for DTP20");
+		pglth = 5.0;			/* Page Label text height */
 
 	} else {
 		error("Unsupported intrument type");
@@ -1483,14 +1886,14 @@ int *p_npat			/* Return number of patches including padding */
 	else
 		swid = (rpstrip-1) * rrsp + pwid + clwi;	/* set gutter is 0, but allow for cut line */
 		
-	/* Compute strips per page */
-	sppage = (int)((iw - rlwi - sxwi - 2.0 * hxew)/swid) + 1; /* Number of whole strips + partial strips */
+	/* Compute strips per page.  Number of whole strips + partial strips */
+	sppage = (int)((iw - rlwi - sxwi - 2.0 * hxew - (dopglabel ? pglth : 0.0))/swid) + 1;
 
 	/* Compute rows per partial strip on whole page */
 	if (dorspace)
-		rppstrip = (int)((iw - rlwi - sxwi - 2.0 * hxew - swid * (sppage-1) - pwid/2.0)/rrsp);
+		rppstrip = (int)((iw - rlwi - sxwi - 2.0 * hxew - (dopglabel ? pglth : 0.0) - swid * (sppage-1) - pwid/2.0)/rrsp);
 	else
-		rppstrip = (int)((iw - rlwi - sxwi - 2.0 * hxew - swid * (sppage-1) - pwid + rrsp)/rrsp);
+		rppstrip = (int)((iw - rlwi - sxwi - 2.0 * hxew - (dopglabel ? pglth : 0.0) - swid * (sppage-1) - pwid + rrsp)/rrsp);
 	if (rppstrip < 0)
 		rppstrip = 0;
 	if (rppstrip == 0) {	/* Make last partial strip a full strip */
@@ -1515,7 +1918,7 @@ int *p_npat			/* Return number of patches including padding */
 	lrpstrip = (rem + tpprow - 1)/tpprow;
 										/* Last strips whole & partial rows per strip */
 
-	rem -= (lrpstrip - 1) * tpprow;		 /* remaining patches to be printed in last row */
+	rem -= (lrpstrip - 1) * tpprow;		/* remaining patches to be printed in last row */
 
 	lpprow = rem + nextrap;				/* Patches in last row of last strip of last page */
 
@@ -1523,9 +1926,9 @@ int *p_npat			/* Return number of patches including padding */
 		fprintf(stderr,"Patches = %d\n",npat);
 		fprintf(stderr,"Test patches per row = %d\n",tpprow);
 		if (sppage == 1)
-			fprintf(stderr,"Rows per page = %d, patches per page = %d\n",rppstrip, tpprow * rppstrip);
+			fprintf(stderr,"Rows per page = %d, patches per page = %d\n",rppstrip, pppage);
 		else
-			fprintf(stderr,"Strips per page = %d, rows per partial strip = %d\n",sppage, rppstrip);
+			fprintf(stderr,"Strips per page = %d, rows per partial strip = %d, patches per page = %d\n",sppage, rppstrip, pppage);
 		if (tidrows > 0)
 			fprintf(stderr,"Target ID rows in first page = %d\n", tidrows);
 		fprintf(stderr,"Rows in last strip = %d, patches in last row = %d\n", lrpstrip, lpprow-nextrap);
@@ -1647,24 +2050,31 @@ int *p_npat			/* Return number of patches including padding */
 			if (flags & IS_FRIS) {							/* Start of strip */
 				if (flags & IS_FSIP) {						/* Start of page */
 					x = x1;									/* Start at leftmost position */
-					if (eps) {	/* EPS */
-						if (npages > 1)
-							sprintf(psname,"%s%d.eps",bname,pif);
-						else
-							sprintf(psname,"%s.eps",bname);
-						if ((of = fopen(psname,"w")) == NULL)
-							error ("Unable to open output file '%s'",psname);
-						gen_prolog(of,npages,nmask,pw,ph,eps,rand,rstart);
-					} else {	/* PS */
-
+					if (oft == 0) {	/* PS */
 						if (flags & IS_FPIF) {					/* First page */
 							sprintf(psname,"%s.ps",bname);
-							if ((of = fopen(psname,"w")) == NULL)
-								error ("Unable to open output file '%s'",psname);
-							gen_prolog(of,npages,nmask,pw,ph,eps,rand,rstart);
+							if ((tro = new_ps_trend(psname,npages,nmask,pw,ph,oft,rand,rstart)) == NULL)
+								error ("Unable to create output rendering object file '%s'",psname);
 						}
+					} else if (oft == 1) {	/* EPS */
+						if (npages > 1)
+							sprintf(psname,"%s_%02d.eps",bname,pif);
+						else
+							sprintf(psname,"%s.eps",bname);
+						if ((tro = new_ps_trend(psname,npages,nmask,pw,ph,oft,rand,rstart)) == NULL)
+							error ("Unable to create output rendering object file '%s'",psname);
+					} else {	/* TIFF */
+						double res;		/* pix/mm */
+						if (npages > 1)
+							sprintf(psname,"%s_%02d.tif",bname,pif);
+						else
+							sprintf(psname,"%s.tif",bname);
+
+						res = tiffres/25.4; 
+						if ((tro = new_tiff_trend(psname,nmask,tiffdpth,pw,ph,res,res,pgreyt,ncha,tiffcomp)) == NULL)
+							error ("Unable to create output rendering object file '%s'",psname);
 					}
-					gen_startpage(of,pif);
+					tro->startpage(tro,pif);
 
 					/* Print all the row labels */
 					if (dorowlabel) {
@@ -1677,8 +2087,8 @@ int *p_npat			/* Return number of patches including padding */
 								char *rlabl;
 								if ((rlabl = paix->aix(paix, tpir - nmaxp)) == NULL)
 									error ("Patch in row label %d out of range",tpir);
-								gen_color(of, mark);
-								gen_string(of, x, ty-plen, rlwi, plen, rlabl);
+								tro->setcolor(tro, mark);
+								tro->string(tro, x, ty-plen, rlwi, plen, rlabl);
 								free(rlabl);
 							}
 						
@@ -1688,7 +2098,7 @@ int *p_npat			/* Return number of patches including padding */
 						x += rlwi;
 					}
 
-					x += hxew;		/* Allow space for extra bits of hexagons */
+					x += hxew; /* Extra space on left for bits of hex */
 
 					/* Clear edge list tracking */
 					et_clear();
@@ -1701,16 +2111,16 @@ int *p_npat			/* Return number of patches including padding */
 			/* Print strip label */
 			if ((lspa - lcar - bord) >= txhi) {	/* There is room for label */
 				if (slix < 0) {	/* TID */
-					gen_color(of, mark);
-					gen_string(of,x,y2-txhi,w,txhi,"TID");
+					tro->setcolor(tro, mark);
+					tro->string(tro,x,y2-txhi,w,txhi,"TID");
 				} else {		/* Not TID */
 					if (slab != NULL)
 						free(slab);
 					if ((slab = saix->aix(saix, slix)) == NULL)
 						error("strip index %d out of range",slix);
 		
-					gen_color(of, mark);
-					gen_string(of,x,y2-txhi,w,txhi,slab);
+					tro->setcolor(tro, mark);
+					tro->string(tro,x,y2-txhi,w,txhi,slab);
 				}
 			}
 
@@ -1836,8 +2246,8 @@ int *p_npat			/* Return number of patches including padding */
 		/* Print a spacer in front of patch if requested */
 		if (spacer > 0) {
 			setup_spacer(&sc, pp, cp, pcol, spacer, usede);
-			gen_color(of, sc);
-			gen_rect(of, x, y, w, pspa, NULL);
+			tro->setcolor(tro, sc);
+			tro->rectangle(tro, x, y, w, pspa, NULL,1);
 			y -= pspa;
 		}
 
@@ -1849,21 +2259,21 @@ int *p_npat			/* Return number of patches including padding */
 				wplen = tplen;	/* TID can have a different length patch */
 			}
 
-			gen_color(of, cp);
+			tro->setcolor(tro, cp);
 			if (hex) {
 				int apir = pir - nmaxp;		/* Adjusted pir for max/min patches */
-				gen_hex(of, x, y, w, wplen, apir-1, sp);
+				tro->hexagon(tro, x, y, w, wplen, apir-1, sp);
 			} else {
 				if (cpf == 1) {				/* DTP20 start bit */
-					gen_rect(of, x, y, w, 1.0, sp);
-					gen_color(of, mind);
-					gen_rect(of, x, y - 1.0, w, wplen - 1.0, sp);
+					tro->rectangle(tro, x, y, w, 1.0, sp,1);
+					tro->setcolor(tro, mind);
+					tro->rectangle(tro, x, y - 1.0, w, wplen - 1.0, sp,1);
 				} else if (cpf == 2) {		/* DTP20 stop bit */
-					gen_rect(of, x, y, w, wplen - 3.0, sp);
-					gen_color(of, &pcol[8]);		/* 50 % */
-					gen_rect(of, x, y - wplen + 3.0, w, 3.0, sp);
+					tro->rectangle(tro, x, y, w, wplen - 3.0, sp,1);
+					tro->setcolor(tro, &pcol[8]);		/* 50 % */
+					tro->rectangle(tro, x, y - wplen + 3.0, w, 3.0, sp,1);
 				} else {					/* Normal patch */
-					gen_rect(of, x, y, w, wplen, sp);
+					tro->rectangle(tro, x, y, w, wplen, sp,1);
 				}
 			}
 			y -= wplen;
@@ -1883,8 +2293,8 @@ int *p_npat			/* Return number of patches including padding */
 			cp = media;
 			if (spacer > 0) {
 				setup_spacer(&sc, pp, cp, pcol, spacer, usede);
-				gen_color(of, sc);
-				gen_rect(of, x, y, w, pspa, NULL);
+				tro->setcolor(tro, sc);
+				tro->rectangle(tro, x, y, w, pspa, NULL,1);
 				y -= pspa;
 			}
 		}
@@ -1921,64 +2331,85 @@ int *p_npat			/* Return number of patches including padding */
 				sip++;
 				
 				/* Print end of strip crop line */
-				gen_color(of, mark);
+				tro->setcolor(tro, mark);
 				if (docutmarks)			/* Generate strip cut marks */
-					gen_dotted_line(of,x-0.3/2.0,y1,y2,0.3);	/* 0.3 wide dotted line */
+					tro->dline(tro,x-0.3/2.0,y1,x-0.3/2.0,y2,0.3); /* 0.3 wide dotted line */
 
-				/* Print end of strip identification if there is space */
+				/* Print end of strip identification if we've allowed space */
 				if (dorspace)
-					gen_vstring(of,x,y1,rrsp-pwid/2.0-pwex,y2-y1,label);
+					tro->vstring(tro,x,y1,rrsp-pwid/2.0-pwex,y2-y1,label);
 
 				if (flags & IS_LSIP) {						/* End of page */
 					sip = 1;
+
+					x += hxew;		/* Allow space for extra bits of hexagons */
+
+					/* Print per page label if we've allowed for it */
+					if (dopglabel) {
+						//tro->vstring(tro,x2,y1,pglth,y2-y1,label); /* At end of page */
+						tro->vstring(tro,x+pglth,y1,pglth,y2-y1,label);	/* After last strip */
+					}
 
 					/* If we expect to scan this chart in, add some fiducial marks at the corners */
 					if (scanc & 1) {
 						double lw = 0.5;			/* Line width */
 						double ll = 5.0;			/* Line length */
 
-						fprintf(of,"%% Fiducial marks\n");
+//						fprintf(of,"%% Fiducial marks\n");
 
-						gen_color(of, mark);
+						tro->setcolor(tro, mark);
 				
-						gen_rect_o(of, x1, y2, ll, lw, NULL, 0);			/* Top left */
-						gen_rect_o(of, x1, y2, lw, ll, NULL, 0);
-						et_fiducial(mm2pnt(x1 + 0.5 * lw), mm2pnt(y2 - 0.5 * lw));
+						tro->rectangle(tro, x1, y2, ll, lw, NULL, 0);			/* Top left */
+						tro->rectangle(tro, x1, y2, lw, ll, NULL, 0);
+						if (oft != 2)
+							et_fiducial(mm2pnt(x1 + 0.5 * lw), mm2pnt(y2 - 0.5 * lw));
+						else
+							et_fiducial(x1 + 0.5 * lw, y2 - 0.5 * lw);
 				
-						gen_rect_o(of, x2 - ll, y2, ll, lw, NULL, 0);	/* Top right */
-						gen_rect_o(of, x2 - lw, y2, lw, ll, NULL, 0);
-						et_fiducial(mm2pnt(x2 - 0.5 * lw), mm2pnt(y2 - 0.5 * lw));
+						tro->rectangle(tro, x2 - ll, y2, ll, lw, NULL, 0);		/* Top right */
+						tro->rectangle(tro, x2 - lw, y2, lw, ll, NULL, 0);
+						if (oft != 2)
+							et_fiducial(mm2pnt(x2 - 0.5 * lw), mm2pnt(y2 - 0.5 * lw));
+						else
+							et_fiducial(x2 - 0.5 * lw, y2 - 0.5 * lw);
 				
-						gen_rect_o(of, x2 - ll, y1 + lw, ll, lw, NULL, 0);	/* Bottom right */
-						gen_rect_o(of, x2 - lw, y1 + ll, lw, ll, NULL, 0);
-						et_fiducial(mm2pnt(x2 - 0.5 * lw), mm2pnt(y1 + 0.5 * lw));
+						tro->rectangle(tro, x2 - ll, y1 + lw, ll, lw, NULL, 0);	/* Bottom right */
+						tro->rectangle(tro, x2 - lw, y1 + ll, lw, ll, NULL, 0);
+						if (oft != 2)
+							et_fiducial(mm2pnt(x2 - 0.5 * lw), mm2pnt(y1 + 0.5 * lw));
+						else
+							et_fiducial(x2 - 0.5 * lw, y1 + 0.5 * lw);
+				
+						tro->rectangle(tro, x1, y1 + lw, ll, lw, NULL, 0);		/* Bottom left */
+						tro->rectangle(tro, x1, y1 + ll, lw, ll, NULL, 0);
+						if (oft != 2)
+							et_fiducial(mm2pnt(x1 + 0.5 * lw), mm2pnt(y1 + 0.5 * lw));
+						else
+							et_fiducial(x1 + 0.5 * lw, y1 + 0.5 * lw);
 					}
 
-					gen_endpage(of);
-					if (eps) {
-						gen_epilog(of);
-						if (fclose(of))
-							error ("Unable to close output file '%s'",psname);
+					tro->endpage(tro);
+					if (oft != 0) {		/* EPS or TIFF */
+						tro->del(tro);
 					}
 					if (flags & IS_LPIF) {					/* Last page in file */
-						if (!eps) {
-							gen_epilog(of);
-							if (fclose(of))
-								error ("Unable to close output file '%s'",psname);
+						if (oft == 0) {	/* PS */
+							tro->del(tro);
 						}
 					}
 
-					/* If we are anticipating scanner input, create the */
-					/* scanner recognition file for this page. */
+					/* If we are anticipating that scanin may be used with the */
+					/* chart, create the scanin recognition file for this page. */
 					if (scanc & 1) {
-						char chtname[200];	/* Name of .cht file */
+						char chtname[MAXNAMEL+20];	/* Name of .cht file */
 
 						if (npages > 1)
-							sprintf(chtname,"%s%d.cht",bname,pif);
+							sprintf(chtname,"%s_%02d.cht",bname,pif);
 						else
 							sprintf(chtname,"%s.cht",bname);
 						et_write(chtname, cols, rix, l_si, i);
 					}
+
 					l_si = i;		/* New last start i */
 
 					if (flags & IS_LPIF) {					/* Last page in file */
@@ -2058,11 +2489,15 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -c              Force colored spacers\n");
 	fprintf(stderr," -b              Force B&W spacers\n");
 	fprintf(stderr," -n              Force no spacers\n");
-	fprintf(stderr," -f              Create DeviceN Color fallback\n");
+	fprintf(stderr," -f              Create PostSCript DeviceN Color fallback\n");
 	fprintf(stderr," -w g|r|s|n      White test encoding DeviceGray (def), DeviceRGB, Separation or DeviceN\n");            
 	fprintf(stderr," -k g|c|s|n      Black test encoding DeviceGray (def), DeviceCMYK, Separation or DeviceN\n");            
 	fprintf(stderr," -e              Output EPS compatible file\n");
-	fprintf(stderr," -t rsnum        Use given random start number\n");
+	fprintf(stderr," -t [res]        Output 8 bit TIFF raster file, optional res DPI (default 100)\n");
+	fprintf(stderr," -T [res]        Output 16 bit TIFF raster file, optional res DPI (default 100)\n");
+	fprintf(stderr," -C              Don't use TIFF compression\n");
+	fprintf(stderr," -N              Use TIFF alpha N channels more than 4\n");
+	fprintf(stderr," -R rsnum        Use given random start number\n");
 	fprintf(stderr," -x pattern      Use given strip indexing pattern (Default = \"%s\")\n",DEF_SIXPAT);
 	fprintf(stderr," -y pattern      Use given patch indexing pattern (Default = \"%s\")\n",DEF_PIXPAT);
 	fprintf(stderr," -m margin       Set a page margin in mm (default %3.1f mm)\n",DEF_MARGINE);       
@@ -2071,7 +2506,7 @@ void usage(char *diag, ...) {
 		fprintf(stderr,"                 %s	[%.1f x %.1f mm]%s\n", pp->name, pp->w, pp->h,
 		pp->def ? " (default)" : "");
 	fprintf(stderr," -p WWWxHHH      Custom size, WWW mm wide by HHH mm high\n");
-	fprintf(stderr," basname         Base name for input(.ti1)/output(.ti2)\n");
+	fprintf(stderr," basname         Base name for input(.ti1), output(.ti2) and output(.ps/.eps/.tif)\n");
 	exit(1);
 	}
 
@@ -2080,13 +2515,17 @@ main(argc,argv)
 int argc;
 char *argv[];
 {
-	int fa,nfa;				/* current argument we're looking at */
+	int fa, nfa, mfa;		/* argument we're looking at */
 	int verb = 0;
 	int hex = 0;			/* Hexagon patches */
 	double pscale = 1.0;	/* Patch size scale */
 	double sscale = 1.0;	/* Spacer size scale */
 	int rand = 1;
-	int eps = 0;
+	int oft = 0;			/* Ouput File type, 0 = PS, 1 = EPS , 2 = TIFF */
+	depth2d tiffdpth = bpc8_2d;	/* TIFF pixel depth */
+	double tiffres = 100.0;	/* TIFF resolution in DPI */
+	int ncha = 0;			/* flag, use nchannel alpha */
+	int tiffcomp = 1;		/* flag, use TIFF compression */
 	int spacer = -1;		/* -1 = default for instrument */
 							/* 0 = forse no spacer, 1 = Force B&W spacers */
 							/* 2 = Force colored spacer */
@@ -2098,10 +2537,9 @@ char *argv[];
 	int scanc = 0;			/* Scan compatible bits, 1 = .cht, 2 = wide first row */
 	int devnfb = 0;			/* Add device N fallback colors */
 	int pgreyt = 0;			/* Device K/W color type 0..6 */
-	static char inname[200] = { 0 };		/* Input cgats file base name */
-	static char outname[200] = { 0 };		/* Output cgats file base name */
-	static char psname[200] = { 0 };		/* Output postscrip file base name */
-	static char sname[200] = { 0 };			/* Output scanner .cht file name */
+	static char inname[MAXNAMEL+20] = { 0 };	/* Input cgats file name */
+	static char psname[MAXNAMEL+1] = { 0 };		/* Output postscrip file base name */
+	static char outname[MAXNAMEL+20] = { 0 };	/* Output cgats file name */
 	cgats *icg;				/* input cgats structure */
 	cgats *ocg;				/* output cgats structure */
 	instType itype = instDTP41;		/* Default target instrument */
@@ -2152,6 +2590,7 @@ char *argv[];
 		error ("Internal - can't find default paper size");
 
 	/* Process the arguments */
+	mfa = 1;						/* Minimum final arguments */
 	for(fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */
 		if (argv[fa][0] == '-')	{	/* Look for any flags */
@@ -2160,7 +2599,7 @@ char *argv[];
 			if (argv[fa][2] != '\000')
 				na = &argv[fa][2];		/* next is directly after flag */
 			else {
-				if ((fa+1) < argc) {
+				if ((fa+1+mfa) < argc) {
 					if (argv[fa+1][0] != '-') {
 						nfa = fa + 1;
 						na = argv[nfa];		/* next is seperate non-flag argument */
@@ -2205,7 +2644,7 @@ char *argv[];
 				scanc = 1;
 
 			/* Force colored spacer */
-			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C')
+			else if (argv[fa][1] == 'c')
 				spacer = 2;
 
 			/* Force B&W spacer */
@@ -2213,12 +2652,21 @@ char *argv[];
 				spacer = 1;
 
 			/* No spacer */
-			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N')
+			else if (argv[fa][1] == 'n')
 				spacer = 0;
 
-			/* Randomisation */
-			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R')
+			/* Randomisation off */
+			else if (argv[fa][1] == 'r')
 				rand = 0;
+
+			/* Specify random seed */
+			else if (argv[fa][1] == 'R') {
+				fa = nfa;
+				if (na == NULL) usage("Expected argument to -t");
+				rstart = atoi(na);
+				if (rstart < 0)
+					usage("Argument to -t must be positive");
+			}
 
 			/* Enable DeviceN color fallback */
 			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F')
@@ -2278,15 +2726,30 @@ char *argv[];
 
 			/* EPS */
 			else if (argv[fa][1] == 'e' || argv[fa][1] == 'E')
-				eps = 1;
+				oft = 1;
 
-			/* Specify random seed */
+			/* TIFF */
 			else if (argv[fa][1] == 't' || argv[fa][1] == 'T') {
-				fa = nfa;
-				if (na == NULL) usage("Expected argument to -t");
-				rstart = atoi(na);
-				if (rstart < 0)
-					usage("Argument to -t must be positive");
+				oft = 2;
+				if (argv[fa][1] == 'T')
+					tiffdpth = bpc16_2d;
+				else
+					tiffdpth = bpc8_2d;
+
+				if (na != NULL) {	/* Found an optional resolution */
+					fa = nfa;
+					tiffres = atof(na);
+					if (tiffres <= 1.0 || tiffres > 1e6)
+						usage("TIFF resolution is out of range");
+				}
+			}
+			/* use Nchannel alpha for TIFF  */
+			else if (argv[fa][1] == 'N') {
+				ncha = 1;
+			}
+			/* Don't use TIFF compression */
+			else if (argv[fa][1] == 'C') {
+				tiffcomp = 0;
 			}
 
 			/* Specify strip index pattern */
@@ -2360,13 +2823,11 @@ char *argv[];
 
 	/* Get the file name argument */
 	if (fa >= argc || argv[fa][0] == '-') usage("Expecting basename argument");
-	strcpy(inname,argv[fa]);
+	strncpy(inname,argv[fa],MAXNAMEL); inname[MAXNAMEL] = '\000';
+	strcpy(outname,inname);
+	strcpy(psname,inname);
 	strcat(inname,".ti1");
-	strcpy(outname,argv[fa]);
 	strcat(outname,".ti2");
-	strcpy(psname,argv[fa]);
-	strcpy(sname,argv[fa]);
-	strcat(sname,".cht");
 
 	if (hex && itype != instSpectroScan) {
 		if (verb)
@@ -2677,10 +3138,11 @@ char *argv[];
 	
 	sprintf(label, "Argyll Color Management System - Test chart \"%s\" (%s %d) %s",
 	               psname, rand ? "Random Start" : "Chart ID", rstart, atm);
-	generate_ps(itype, psname, cols, npat, label,
+	generate_file(itype, psname, cols, npat, label,
 	            pap != NULL ? pap->w : cwidth, pap != NULL ? pap->h : cheight,
 	            marg, rand, rstart, saix, paix,	ixord,
-	            pscale, sscale, hex, verb, scanc, eps, spacer, nmask, pcol, wp,
+	            pscale, sscale, hex, verb, scanc, oft, tiffdpth, tiffres, ncha, tiffcomp,
+	            spacer, nmask, pgreyt, pcol, wp,
 	            &sip, &pis, &plen, &glen, &tlen, &nppat);
 
 	if (itype == instDTP20
@@ -2830,9 +3292,9 @@ struct {
 	double mrgb[3];	/* Media RGB */	
 	double rgb[3];	/* Currently set RGB */	
 
-	int nfid;		/* Number of fiducial marks. Must be 3 to cause output */
-	double fx[3];	/* Fiducial mark X coordinates */
-	double fy[3];	/* Fiducial mark Y coordinates */
+	int nfid;		/* Number of fiducial marks. Must be 4 to cause output */
+	double fx[4];	/* Fiducial mark X coordinates */
+	double fy[4];	/* Fiducial mark Y coordinates */
 
 	/* Raw half edge lists, [vertical, horizontal] */
 	int nhe[2];
@@ -2848,23 +3310,12 @@ struct {
 	int nel[2];		/* Number of edge positions */
 	elist *el[2];	/* Head of edge linked list */
 	elist **nelp;	/* Next edge to append to */
+} et;
 
-} et = {
-	0.0,					/* Height */
-	{ 1.0, 1.0, 1.0 } ,		/* media RGB */
-	{ 1.0, 1.0, 1.0 } ,		/* Current RGB */
-	0,						/* No fiducials */
-	{ 0.0, 0.0, 0.0 },		/* Fiducial X's */
-	{ 0.0, 0.0, 0.0 },		/* Fiducial Y's */
-	{ 0, 0 },
-	{ NULL, NULL }, 
-	0, NULL,
-	{ NULL, NULL },
-	{ 0, 0 },				/* No edge positions */
-	{ NULL, NULL },			/* Head of edge linked list */
-	NULL
-};
-
+/* Initialise the structure */
+void et_init(void) {
+	memset(&et, 0, sizeof(et));
+}
 
 /* Tell et of the height, so the Y coordinate can be flipped */
 void et_height(double height) {
@@ -2973,12 +3424,13 @@ double h
 }
 
 /* Add a fiducial mark location */
-/* It is an error to add more than 3 */
+/* It is an error to add more than 4, */
+/* and exactly 4 have to be added to cause fiducials to be output. */
 void et_fiducial(
 double x,		/* Bottom left of the rectangle */
 double y
 ) {
-	if (et.nfid >= 3)
+	if (et.nfid >= 4)
 		error("et_fiducial: too many fiducial marks");
 	et.fx[et.nfid] = x;
 	et.fy[et.nfid] = et.height - y;		/* Flip Y */
@@ -3061,6 +3513,7 @@ h == 0 ? 'Y' : 'X', et.she[h][i]->mi0, et.she[h][i]->mi1);
 					nj = k;
 
 #ifdef NEVER
+fprintf(stderr,"i = %d, j = %d\n",i,j);
 fprintf(stderr,"%s %d at %c = %f from %c = %f to %f, half %s\n",
 h == 0 ? "Vert" : "Horiz", i,
 h == 0 ? 'X' : 'Y', et.she[h][j]->mj,
@@ -3203,9 +3656,9 @@ et.she[h][k]->negh ? "Neg" : "Pos");
 
 
 	/* Locate fiducials if they've been added to chart */
-	if (et.nfid == 3) {
-		fprintf(of, "  F _ _ _ _ %f %f %f %f %f %f\n",
-		        et.fx[0], et.fy[0], et.fx[1], et.fy[1], et.fx[2], et.fy[2]);
+	if (et.nfid == 4) {
+		fprintf(of, "  F _ _ %f %f %f %f %f %f %f %f\n",
+		        et.fx[0], et.fy[0], et.fx[1], et.fy[1], et.fx[2], et.fy[2], et.fx[3], et.fy[3]);
 	}
 
 	{

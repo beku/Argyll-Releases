@@ -377,16 +377,18 @@ main(int argc, char* argv[])
     FILE* fd;
     char* outputfile;
     int c;
-    extern int optind;
-    extern char* optarg;
+    extern int tiff_optind;
+    extern char* tiff_optarg;
 
-    while ((c = getopt(argc, argv, "c:s:bp")) != -1)
+//printf("~1 got %d args\n",argc);
+    while ((c = tiff_getopt(argc, argv, "c:s:bp")) != -1)
 	switch (c) {
 	case 'c':
-	    const_class = optarg;
+	    const_class = tiff_optarg;
+//printf("~1 got c arg = '%s'\n",tiff_optarg);
 	    break;
 	case 's':
-	    storage_class = optarg;
+	    storage_class = tiff_optarg;
 	    break;
 	case 'p':
 	    packoutput = 0;
@@ -401,7 +403,9 @@ main(int argc, char* argv[])
 		argv[0]);
 	    return (-1);
 	}
-    outputfile = optind < argc ? argv[optind] : "g3states.h";
+//printf("~1 got tiff_optind = %d, argc = %d\n",tiff_optind,argc);
+    outputfile = tiff_optind < argc ? argv[tiff_optind] : "g3states.h";
+//printf("~1 got outputfile = '%s'\n",outputfile);
     fd = fopen(outputfile, "w");
     if (fd == NULL) {
 	fprintf(stderr, "%s: %s: Cannot create output file.\n",

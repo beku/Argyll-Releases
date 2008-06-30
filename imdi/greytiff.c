@@ -307,7 +307,7 @@ main(int argc, char *argv[]) {
 		error("Profile isn't a device profile");
 
 	/* Get a expanded color conversion object */
-	if ((su.flu = xicco->get_luobj(xicco, 0, icmFwd, icRelativeColorimetric, pcsor, icmLuOrdNorm, NULL, NULL)) == NULL)
+	if ((su.flu = xicco->get_luobj(xicco, ICX_CLIP_NEAREST, icmFwd, icRelativeColorimetric, pcsor, icmLuOrdNorm, NULL, NULL)) == NULL)
 		error ("%d, %s",xicco->errc, xicco->err);
 
 	/* Get details of conversion (Arguments may be NULL if info not needed) */
@@ -317,7 +317,7 @@ main(int argc, char *argv[]) {
 	su.od = inn;
 
 	/* Get a bwd conversion object */
-	if ((su.blu = xicco->get_luobj(xicco, 0, icmBwd, icRelativeColorimetric, pcsor, icmLuOrdNorm, NULL, NULL)) == NULL)
+	if ((su.blu = xicco->get_luobj(xicco, ICX_CLIP_NEAREST, icmBwd, icRelativeColorimetric, pcsor, icmLuOrdNorm, NULL, NULL)) == NULL)
 		error ("%d, %s",xicco->errc, xicco->err);
 
 	/* - - - - - - - - - - - - - - - */

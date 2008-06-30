@@ -25,6 +25,7 @@
 #include <math.h>
 #include "xicc.h"
 #include "numlib.h"
+#include "counters.h"
 
 void usage(void) {
 	fprintf(stderr,"Translate colors through an MPP profile, V1.00\n");
@@ -90,6 +91,8 @@ main(int argc, char *argv[]) {
 
 	icColorSpaceSignature pcsor = icSigLabData;	/* Default */
 	
+	error_program = argv[0];
+
 	if (argc < 2)
 		usage();
 
@@ -563,43 +566,6 @@ main(int argc, char *argv[]) {
 
 
 /* -------------------------------------------- */
-
-/* Macros for an arbitrary dimensional counter */
-/* Declare the counter name nn, dimensions di, & count */
-
-#define DCOUNT(nn, di, start, reset, count) 				\
-	int nn[MAX_CHAN];	/* counter value */						\
-	int nn##_di = (di);		/* Number of dimensions */		\
-	int nn##_stt = (start);	/* start count value */			\
-	int nn##_rst = (reset);	/* reset on carry value */		\
-	int nn##_res = (count);	/* last count +1 */				\
-	int nn##_e				/* dimension index */
-
-/* Set the counter value to 0 */
-#define DC_INIT(nn) 								\
-{													\
-	for (nn##_e = 0; nn##_e < nn##_di; nn##_e++)	\
-		nn[nn##_e] = nn##_stt;						\
-	nn##_e = 0;										\
-}
-
-/* Increment the counter value */
-#define DC_INC(nn)									\
-{													\
-	for (nn##_e = 0; nn##_e < nn##_di; nn##_e++) {	\
-		nn[nn##_e]++;								\
-		if (nn[nn##_e] < nn##_res)					\
-			break;	/* No carry */					\
-		nn[nn##_e] = nn##_rst;						\
-	}												\
-}
-
-/* After increment, expression is TRUE if counter is done */
-#define DC_DONE(nn)									\
-	(nn##_e >= nn##_di)
-	
-
-/* -------------------------------------------- */
 /* Code for special gamut surface plot */
 
 #define GAMUT_LCENT 50
@@ -627,7 +593,7 @@ char *outname		/* Output VRML file */
 		{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
 	};
 	int vix;						/* Vertex index */
-	DCOUNT(coa, p->n, 0, 0, 2);
+	DCOUNT(coa, MAX_CHAN, p->n, 0, 0, 2);
 	double col[MPP_MXCCOMB][3];		/* Color asigned to each major vertex */
 	int res;
 
@@ -1201,7 +1167,7 @@ printf("~1 sorted oweight[%d] = %f\n",j,rs.oweight[rs.sord[j]]);
 		int mxstart;
 		int steps = 4;
 
-		DCOUNT(dix, inn, 0, 0, steps);
+		DCOUNT(dix, MAX_CHAN, inn, 0, 0, steps);
 
 printf("~1 initing start point array\n");
 		for (mxstart = 1, j = 0; j < inn; j++) 		/* Compute maximum entries */

@@ -1,5 +1,6 @@
-echo Simple batch file to invoke Jam in all the subdirectories
+echo Simple batch file to invoke Jam from the top
 echo (Hope you've unzip'd tiff/tiff.zip ?)
-rem Note that running xicc twice is a hack to workaround a circular dependency
-rem with regard to spectro/libinst.lib
-for %%i in (numlib tiff libusb libusbw plot icc cgats rspl gamut xicc spectro xicc imdi target scanin profile link tweak render spectro) do cd %%i& jam -f..\Jambase -j%NUMBER_OF_PROCESSORS%& cd ..
+jam -q -fJambase -j%NUMBER_OF_PROCESSORS%
+rem If you have trouble with the parallel build, try the
+rem version with only one thread.
+rem jam -q -fJambase 

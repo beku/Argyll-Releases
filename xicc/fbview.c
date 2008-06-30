@@ -21,11 +21,12 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
+#include "copyright.h"
+#include "config.h"
+#include "numlib.h"
 #include "icc.h"
 
 #define TRES 43
-
-void error(char *fmt, ...), warning(char *fmt, ...);
 
 /* - - - - - - - - - - - - - */
 
@@ -56,7 +57,7 @@ double absdiff(double in1[3], double in2[3]) {
 /* ---------------------------------------- */
 
 void usage(void) {
-	fprintf(stderr,"View bwd table clipping of an ICC file, V1.23\n");
+	fprintf(stderr,"View bwd table clipping of an ICC file, , Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: fbtest [-v] infile\n");
 	fprintf(stderr," -v        verbose\n");
@@ -82,6 +83,8 @@ main(
 	int co[4];
 	double in[4], out[4], check[4], temp[4];
 	
+	error_program = argv[0];
+
 	if (argc < 2)
 		usage();
 
@@ -307,30 +310,3 @@ main(
 	return 0;
 }
 
-/* ------------------------------------------------ */
-/* Basic printf type error() and warning() routines */
-
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"icctest: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
-}
-
-void
-warning(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"icctest: Warning - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-}

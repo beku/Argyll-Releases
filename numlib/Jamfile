@@ -1,42 +1,28 @@
 
-#SubDir TOP numlib ;
+# Jamfile for the numlib and other general utilities
 
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;
-#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
-#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+# Optization state and configuration. Overridden by parent-Jamfiles
 
-#Products
+PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
+#PREF_CCFLAGS	= $(CCDEBUGFLAG) ;		# Debugging flags
+PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
+#PREF_CCFLAGS 	= $(CCPROFFLAG) ;		# Profile flags
+#PREF_LINKFLAGS	= $(LINKPROFFLAG) ;    # Profile flags
+
+# Products
 Libraries = libnum ;
 Headers = numlib.h ;
 
 #Install
-#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
-#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+#InstallFile ../h : $(Headers) ;
+#InstallLib ../lib : $(Libraries) ;
 
 # Numeric library
-Library libnum.lib : numsup.c dnsq.c powell.c dhsx.c  ludecomp.c svd.c zbrent.c rand.c sobol.c ;
+Library libnum.lib : numsup.c dnsq.c powell.c dhsx.c ludecomp.c svd.c zbrent.c rand.c sobol.c ;
 
-# Utilities / test programs
-Main dnsqtest : dnsqtest.c ;
-LinkLibraries dnsqtest : libnum.lib ;
+# Link all utilities with libnum
+LINKLIBS = libnum ;
 
-Main tpowell : tpowell.c ;
-LinkLibraries tpowell : libnum.lib ;
-
-Main tdhsx : tdhsx.c ;
-LinkLibraries tdhsx : libnum.lib ;
-
-Main LUtest : LUtest.c ;
-LinkLibraries LUtest : libnum.lib ;
-
-Main svdtest : svdtest.c ;
-LinkLibraries svdtest : libnum.lib ;
-
-Main zbrenttest : zbrenttest.c ;
-LinkLibraries zbrenttest : libnum.lib ;
-
-Main soboltest : soboltest.c ;
-LinkLibraries soboltest : libnum.lib ;
+# All test programs are made from a single source file
+MainsFromSources dnsqtest.c tpowell.c tdhsx.c LUtest.c svdtest.c zbrenttest.c soboltest.c ;
 

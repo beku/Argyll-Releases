@@ -38,7 +38,7 @@
 
 void usage(char *diag) {
 	int i;
-	fprintf(stderr,"Translate colors through an xicc, V1.00\n");
+	fprintf(stderr,"Translate colors through an xicc, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: xicclu [-options] profile\n");
 	if (diag != NULL)
@@ -47,12 +47,13 @@ void usage(char *diag) {
 	fprintf(stderr," -g             Plot neutral axis instead of looking colors up.\n");
 	fprintf(stderr," -f function    f = forward, b = backwards, g = gamut, p = preview\n");
 	fprintf(stderr,"                if = inverted forward, ib = inverted backwards\n");
-	fprintf(stderr," -i intent      p = perceptual, r = relative colorimetric,\n");
-	fprintf(stderr,"                s = saturation, a = absolute, j = Appearance %s\n",icxcam_description(cam_default));
-	fprintf(stderr,"                k = Absolute Appearance %s\n",icxcam_description(cam_default));
+	fprintf(stderr," -i intent      a = absolute, r = relative colorimetric\n");
+	fprintf(stderr,"                p = perceptual, s = saturation\n");
+//  fprintf(stderr,"                P = absolute perceptual, S = absolute saturation\n");
 	fprintf(stderr," -o order       n = normal (priority: lut > matrix > monochrome)\n");
 	fprintf(stderr,"                r = reverse (priority: monochrome > matrix > lut)\n");
-	fprintf(stderr," -p oride       x = XYZ_PCS, X = XYZ * 100, l = Lab_PCS, L = LCh, y = Yxy, j = Jab, J = JCh\n");
+	fprintf(stderr," -p oride       x = XYZ_PCS, X = XYZ * 100, l = Lab_PCS, L = LCh, y = Yxy\n");
+	fprintf(stderr,"                j = %s Appearance Jab, J = %s Appearance JCh\n",icxcam_description(cam_default),icxcam_description(cam_default));
 	fprintf(stderr," -s scale       Scale device range 0.0 - scale rather than 0.0 - 1.0\n");
 	fprintf(stderr," -k [zhxrlv]    Black value target: z = zero K,\n");
 	fprintf(stderr,"                h = 0.5 K, x = max K, r = ramp K (def.)\n");
@@ -135,7 +136,7 @@ main(int argc, char *argv[]) {
 	double scale = 0.0;		/* Device value scale factor */
 	int rv = 0;
 	char buf[200];
-	double oin[MAX_CHAN], in[MAX_CHAN], out[MAX_CHAN];
+	double uin[MAX_CHAN], in[MAX_CHAN], out[MAX_CHAN], uout[MAX_CHAN];
 
 	icxLuBase *luo, *aluo = NULL;
 	icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
@@ -266,32 +267,24 @@ main(int argc, char *argv[]) {
 				if (na == NULL) usage("No parameter after flag -i");
     			switch (na[0]) {
 					case 'p':
-					case 'P':
 						intent = icPerceptual;
 						break;
 					case 'r':
-					case 'R':
 						intent = icRelativeColorimetric;
 						break;
 					case 's':
-					case 'S':
 						intent = icSaturation;
 						break;
 					case 'a':
-					case 'A':
 						intent = icAbsoluteColorimetric;
 						break;
-					case 'j':
-						intent = icxAppearance;
-						repJCh = 0;
+					/* Argyll special intents to check spaces underlying */
+					/* icxPerceptualAppearance & icxSaturationAppearance */
+					case 'P':
+						intent = icmAbsolutePerceptual;
 						break;
-					case 'J':
-						intent = icxAppearance;
-						repJCh = 1;
-						break;
-					case 'k':
-					case 'K':
-						intent = icxAbsAppearance;
+					case 'S':
+						intent = icmAbsoluteSaturation;
 						break;
 					default:
 						usage("Unknown parameter after flag -i");
@@ -708,7 +701,7 @@ main(int argc, char *argv[]) {
 	if (actual != 0) {
 		if (invert == 0) {
 			if (func == icmFwd || func == icmBwd) {
-				if ((aluo = xicco->get_luobj(xicco, 0,
+				if ((aluo = xicco->get_luobj(xicco, ICX_CLIP_NEAREST,
 				     func == icmFwd ? icmBwd : icmFwd, intent, pcsor, order, &vc, &ink)) == NULL)
 				error ("%d, %s",xicco->errc, xicco->err);
 			}
@@ -861,7 +854,7 @@ main(int argc, char *argv[]) {
 			/* For each input number */
 			for (bp = buf-1, nbp = buf, i = 0; i < MAX_CHAN; i++) {
 				bp = nbp;
-				out[i] = in[i] = oin[i] = strtod(bp, &nbp);
+				uout[i] = out[i] = in[i] = uin[i] = strtod(bp, &nbp);
 				if (nbp == bp)
 					break;			/* Failed */
 			}
@@ -898,10 +891,10 @@ main(int argc, char *argv[]) {
 			/* JCh -> Jab & LCh -> Lab */
 			if ((repJCh && ins == icxSigJChData) 
 			 || (repLCh && ins == icxSigLChData)) {
-				double C = out[1];
-				double h = out[2];
-				out[1] = C * cos(3.14159265359/180.0 * h);
-				out[2] = C * sin(3.14159265359/180.0 * h);
+				double C = in[1];
+				double h = in[2];
+				in[1] = C * cos(3.14159265359/180.0 * h);
+				in[2] = C * sin(3.14159265359/180.0 * h);
 			}
 
 			/* Do conversion */
@@ -914,11 +907,14 @@ main(int argc, char *argv[]) {
 				if ((rv = luo->lookup(luo, out, in)) > 1)
 					error ("%d, %s",xicco->errc,xicco->err);
 			}
+			/* Copy conversion out value so that we can create user values */
+			for (i = 0; i < MAX_CHAN; i++)
+				uout[i] = out[i];
 
 			if (repXYZ100 && outs == icSigXYZData) {
-				out[0] *= 100.0;
-				out[1] *= 100.0;
-				out[2] *= 100.0;
+				uout[0] *= 100.0;
+				uout[1] *= 100.0;
+				uout[2] *= 100.0;
 			}
 
 			if (repYxy && outs == icSigYxyData) {
@@ -928,11 +924,11 @@ main(int argc, char *argv[]) {
 			/* Jab -> JCh and Lab -> LCh */
 			if ((repJCh && outs == icxSigJChData) 
 			 || (repLCh && outs == icxSigLChData)) {
-				double a = out[1];
-				double b = out[2];
-				out[1] = sqrt(a * a + b * b);
-			    out[2] = (180.0/3.14159265359) * atan2(b, a);
-				out[2] = (out[2] < 0.0) ? out[2] + 360.0 : out[2];
+				double a = uout[1];
+				double b = uout[2];
+				uout[1] = sqrt(a * a + b * b);
+			    uout[2] = (180.0/3.14159265359) * atan2(b, a);
+				uout[2] = (uout[2] < 0.0) ? uout[2] + 360.0 : uout[2];
 			}
 
 			/* If device data and scale */
@@ -948,7 +944,7 @@ main(int argc, char *argv[]) {
 			 && outs != icSigHsvData
 			 && outs != icSigHlsData) {
 				for (i = 0; i < MAX_CHAN; i++) {
-					out[i] *= scale;
+					uout[i] *= scale;
 				}
 			}
 
@@ -956,9 +952,9 @@ main(int argc, char *argv[]) {
 			if (verb > 0) {
 				for (j = 0; j < inn; j++) {
 					if (j > 0)
-						fprintf(stdout," %f",oin[j]);
+						fprintf(stdout," %f",uin[j]);
 					else
-						fprintf(stdout,"%f",oin[j]);
+						fprintf(stdout,"%f",uin[j]);
 				}
 				printf(" [%s] -> %s -> ", icx2str(icmColorSpaceSignature, ins),
 				                          icm2str(icmLuAlg, alg));
@@ -966,9 +962,9 @@ main(int argc, char *argv[]) {
 
 			for (j = 0; j < outn; j++) {
 				if (j > 0)
-					fprintf(stdout," %f",out[j]);
+					fprintf(stdout," %f",uout[j]);
 				else
-					fprintf(stdout,"%f",out[j]);
+					fprintf(stdout,"%f",uout[j]);
 			}
 			if (verb > 0)
 				printf(" [%s]", icx2str(icmColorSpaceSignature, outs));
@@ -984,6 +980,10 @@ main(int argc, char *argv[]) {
 				fprintf(stdout,"\n");
 			else {
 				fprintf(stdout," (clip)\n");
+
+				/* This probably isn't right - we need to convert */
+				/* in[] to Lab to Jab if it is not in that space, */
+				/* so we can do a delta E on it. */
 				if (actual && aluo != NULL) {
 					double cin[MAX_CHAN], de;
 					if ((rv = aluo->lookup(aluo, cin, out)) > 1)

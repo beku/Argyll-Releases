@@ -1,5 +1,5 @@
 
-/* Convert the proposed ISO 12640-3 Reference Medium Gamut to Argyll Gamut */
+/* Convert the proposed ISO 12640-3 Reference Medium Gamut to Argyll Lab Gamut */
 /* Copyright 2005 by Graeme W. Gill */
 /* All rights reserved. */
 
@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
+#include "config.h"
 #include "numlib.h"
 #include "icc.h"
 #include "gamut.h"
@@ -735,7 +736,7 @@ double cpoints[6][3] = {
 int
 main(int argc, char *argv[]) {
 	int i;
-	char out_name[100];			/* VRML output file */
+	char out_name[MAXNAMEL+1];			/* VRML output file */
 
 	double gamres = GAMRES;				/* Surface resolution */
 	gamut *gam;
@@ -745,7 +746,11 @@ main(int argc, char *argv[]) {
 	_control87(EM_UNDERFLOW, EM_UNDERFLOW);
 #endif
 
-	strcpy(out_name, "RefMediumGamut.gam");
+	if (argc < 2) {
+		strcpy(out_name, "RefMediumGamut.gam");
+	} else {
+		strncpy(out_name,argv[1],MAXNAMEL); out_name[MAXNAMEL] = '\000';
+	}
 
 	/* Creat a gamut surface */
 	gam = new_gamut(gamres, 0);

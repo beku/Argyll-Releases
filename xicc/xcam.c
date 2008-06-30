@@ -22,8 +22,8 @@
 #include "cam02.h"
 
 static void icx_cam_free(icxcam *s);
-static int icx_set_view(icxcam *s, ViewingCondition Ev, double Wxyz[3], double Yb,
-                        double La, double Lv, double Yf, double Fxyz[3],
+static int icx_set_view(icxcam *s, ViewingCondition Ev, double Wxyz[3],
+                        double La, double Yb, double Lv, double Yf, double Fxyz[3],
 						int hk);
 static int icx_XYZ_to_cam(struct _icxcam *s, double Jab[3], double XYZ[3]);
 static int icx_cam_to_XYZ(struct _icxcam *s, double XYZ[3], double Jab[3]);
@@ -119,8 +119,8 @@ static int icx_set_view(
 icxcam *s,
 ViewingCondition Ev,	/* Enumerated Viewing Condition */
 double Wxyz[3],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
-double Yb,		/* Relative Luminance of Background to reference white */
 double La,		/* Adapting/Surround Luminance cd/m^2 */
+double Yb,		/* Relative Luminance of Background to reference white */
 double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
@@ -130,11 +130,11 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	switch(s->tag) {
 		case cam_CIECAM97s3: {
 			cam97s3 *pp = (cam97s3 *)s->p;
-			return pp->set_view(pp, Ev, Wxyz, Yb, La, Lv, Yf, Fxyz, hk);
+			return pp->set_view(pp, Ev, Wxyz, La, Yb, Lv, Yf, Fxyz, hk);
 		}
 		case cam_CIECAM02: {
 			cam02 *pp = (cam02 *)s->p;
-			return pp->set_view(pp, Ev, Wxyz, Yb, La, Lv, Yf, Fxyz, hk);
+			return pp->set_view(pp, Ev, Wxyz, La, Yb, Lv, Yf, Fxyz, hk);
 		}
 		default:
 			break;

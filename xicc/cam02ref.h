@@ -1,6 +1,7 @@
 
 /* 
- * cam02, unoptimised, reference version for testing.
+ * cam02, unoptimised, untweaked reference version for testing.
+ * with optional trace/range error flags.
  *
  * Color Appearance Model.
  *
@@ -24,6 +25,8 @@
 #undef DIAG			/* Print internal value diagnostics for each conversion */
 
 /* ---------------------------------- */
+
+#ifdef NEVER
 
 struct _cam02ref {
 /* Public: */
@@ -80,10 +83,17 @@ struct _cam02ref {
 	/* Option flags */
 	int hk;				/* Use Helmholtz-Kohlraush effect */
 	int trace;			/* Trace internal values */
-	double nnlimit;		/* Return error if nlinear is less than this */
-	double jlimit;		/* Return error if J is less than this */
+	double range;		/* Return error if there is a range error */
+	double nldlimit;		/* range error if nlinear is less than this */
+	double jlimit;		/* range error if J is less than this */
 
 }; typedef struct _cam02ref cam02ref;
+
+#else
+
+typedef struct _cam02 cam02ref;
+
+#endif
 
 /* ---------------------------------- */
 
@@ -109,14 +119,14 @@ double Lv		/* Luminence of white in the Viewing/Scene/Image field (cd/m^2) */
 }
 
 static void cam02ref_free(cam02ref *s);
-static int cam02ref_set_view(struct _cam02ref *s, ViewingCondition Ev, double Wxyz[3],
+static int cam02ref_set_view(cam02ref *s, ViewingCondition Ev, double Wxyz[3],
                     double Yb, double La, double Lv, double Yf, double Fxyz[3], int hk);
-static int cam02ref_XYZ_to_cam(struct _cam02ref *s, double *Jab, double *xyz);
+static int cam02ref_XYZ_to_cam(cam02ref *s, double *Jab, double *xyz);
+static int cam02ref_cam_to_XYZ(cam02ref *s, double XYZ[3], double Jab[3]);
 
 /* Create a cam02 conversion object, with default viewing conditions */
 cam02ref *new_cam02ref(void) {
 	cam02ref *s;
-	double D50[3] = { 0.9642, 1.0000, 0.8249 };
 
 	if ((s = (cam02ref *)malloc(sizeof(cam02ref))) == NULL) {
 		fprintf(stderr,"cam02: malloc failed allocating object\n");
@@ -127,6 +137,7 @@ cam02ref *new_cam02ref(void) {
 	s->del      = cam02ref_free;
 	s->set_view = cam02ref_set_view;
 	s->XYZ_to_cam = cam02ref_XYZ_to_cam;
+	s->cam_to_XYZ = cam02ref_cam_to_XYZ;
 
 	return s;
 }
@@ -297,12 +308,18 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	return 0;
 }
 
+/* A version of the pow() function that preserves the */
+/* sign of its first argument. */
+static double spow(double x, double y) {
+    return x < 0.0 ? -pow(-x,y) : pow(x,y);
+}
+
 
 #define REFTRACE(xxxx) if (s->trace) printf xxxx ;
 
 /* Conversion. Returns NZ and -1, -1, -1 if input is out of range */
 static int cam02ref_XYZ_to_cam(
-struct _cam02ref *s,
+cam02ref *s,
 double Jab[3],
 double XYZ[3]
 ) {
@@ -344,19 +361,19 @@ double XYZ[3]
 
 	/* Post-adapted cone response of sample. */
 	/* rgba[] has a minimum value of 0.1 for XYZ[] = 0 and no flare. */
-	/* We add a symetric negative compression region, plus linear segments at */
-	/* the ends of this conversion to allow numerical handling of a */
-	/* very wide range of values. */
+	/* We add a symetric negative compression region */
 	for (i = 0; i < 3; i++) {
-		if (rgbp[i] < 0.0 || rgbp[i] < s->nnlimit) {
+		if (s->range && rgbp[i] < 0.0 || rgbp[i] < s->nldlimit) {
 			Jab[0] = Jab[1] = Jab[2] = -1.0;
 			return 1; 
+		}
+		if (rgbp[i] < 0.0) {
+			tt = pow(s->Fl * -rgbp[i], 0.42);
+			rgba[i] = (2.713 - 397.387 * tt) / (tt + 27.13);
+
 		} else {
 			tt = pow(s->Fl * rgbp[i], 0.42);
-			if (tt < 10824.87)
-				rgba[i] = (400.1 * tt + 2.713) / (tt + 27.13);
-			else
-				rgba[i] = (tt + 2.713) / 27.13;
+			rgba[i] = (400.1 * tt + 2.713) / (tt + 27.13);
 		}
 	}
 
@@ -390,7 +407,7 @@ double XYZ[3]
 	/* Eccentricity factor */
 	e = (cos(h * DBL_PI/180.0 + 2.0) + 3.8);
 
-	if (J < DBL_EPSILON || J < s->jlimit || ttd < DBL_EPSILON) {
+	if (s->range && (J < DBL_EPSILON || J < s->jlimit || ttd < DBL_EPSILON)) {
 		REFTRACE(("J = %f, ttd = %f, exit with error\n", J, ttd))
 		Jab[0] = Jab[1] = Jab[2] = -1.0;
 		return 1; 
@@ -398,7 +415,7 @@ double XYZ[3]
 
 	ss = (12500.0/13.0 * s->Nc * s->Ncb * rS * e) / ttd;
 
-	/* Chroma - Keep C +ve and make sure J doesn't force it to 0  */
+	/* Chroma */
 	C = pow(ss, 0.9) * sqrt(J) * s->nn;
 	
 	REFTRACE(("ss = %f, C = %f\n", ss, C))
@@ -448,5 +465,151 @@ double XYZ[3]
 	return 0;
 }
 
+static int cam02ref_cam_to_XYZ(
+cam02ref *s,
+double XYZ[3],
+double Jab[3]
+) {
+	int i;
+	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbaW[3], rgbc[3], rgbcW[3];
+	double ja, jb, aa, ab, a, b, J, C, h, e, A, ss;
+	double tt, ttA, tte;
+
+	J = Jab[0] * 0.01;	/* J/100 */
+	ja = Jab[1];
+	jb = Jab[2];
+
+	/* Compute hue angle */
+    h = (180.0/DBL_PI) * atan2(jb, ja);
+	h = (h < 0.0) ? h + 360.0 : h;
+	
+	/* Compute chroma value */
+	C = sqrt(ja * ja + jb * jb);		/* Must be Always +ve */
+
+ 	/* Helmholtz-Kohlraush effect */
+	if (s->hk && J < 1.0) {
+		double kk = C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
+		if (kk > 0.9)		/* Limit kk to a reasonable range */
+			kk = 0.9;
+		J = (J - kk)/(1.0 - kk);
+	}
+
+	/* Eccentricity factor */
+	e = (cos(h * DBL_PI/180.0 + 2.0) + 3.8);
+
+	/* Achromatic response */
+	A = spow(J, 1.0/(s->C * s->z)) * s->Aw;				/* Keep sign of J */
+
+	/* Preliminary Saturation - keep +ve */
+	tt = fabs(J);
+	ss = pow(C/(sqrt(tt) * s->nn), 1.0/0.9);	/* keep +ve */
+
+	/* Compute a & b, taking care of numerical problems */
+	aa = fabs(ja);
+	ab = fabs(jb);
+    ttA = (A/s->Nbb)+0.305;						/* Common factor */
+	tte = 12500.0/13.0 * e * s->Nc * s->Ncb;	/* Common factor */
+
+	if (aa < 1e-10 && ab < 1e-10) {
+		a = ja;
+		b = jb;
+	} else if (aa > ab) {
+		double tanh = jb/ja;
+		double sign = (h > 90.0 && h <= 270.0) ? -1.0 : 1.0;
+	
+		if (ttA < 0.0)
+			sign = -sign;
+
+		a = (ss * ttA)
+		  / (sign * sqrt(1.0 + tanh * tanh) * tte + (ss * (11.0/23.0 + (108.0/23.0) * tanh)));
+		b = a * tanh;
+
+	} else {	/* ab > aa */
+		double itanh = ja/jb;
+		double sign = (h > 180.0 && h <= 360.0) ? -1.0 : 1.0;
+
+		if (ttA < 0.0)
+			sign = -sign;
+
+		b = (ss * ttA)
+		  / (sign * sqrt(1.0 + itanh * itanh) * tte + (ss * (108.0/23.0 + (11.0/23.0) * itanh)));
+		a = b * itanh;
+	}
+
+	/* Post-adapted cone response of sample */
+    rgba[0] = (20.0/61.0) * ttA
+	        + ((41.0 * 11.0)/(61.0 * 23.0)) * a
+	        + ((288.0 * 1.0)/(61.0 * 23.0)) * b;
+    rgba[1] = (20.0/61.0) * ttA
+	        - ((81.0 * 11.0)/(61.0 * 23.0)) * a
+	        - ((261.0 * 1.0)/(61.0 * 23.0)) * b;
+    rgba[2] = (20.0/61.0) * ttA
+	        - ((20.0 * 11.0)/(61.0 * 23.0)) * a
+	        - ((20.0 * 315.0)/(61.0 * 23.0)) * b;
+
+	/* Hunt-Pointer_Estevez cone space */
+	tt = 1.0/s->Fl;
+	for (i = 0; i < 3; i++) {
+		if (rgba[i] < 0.1) {
+			double ta = rgba[i] > -396.387 ? rgba[i] : -396.387;
+			rgbp[i] = -tt * pow((2.713 - 27.13 * rgba[i] )/(397.387 + ta), 1.0/0.42);
+		} else {
+			double ta = rgba[i] < 399.1 ? rgba[i] : 399.1;
+			rgbp[i] =  tt * pow((27.13 * rgba[i] -2.713)/(400.1 - ta), 1.0/0.42);
+		}
+	}
+
+	/* Chromaticaly transformed sample value */
+	rgbc[0] =  1.5591523979049677 * rgbp[0]
+	        -  0.5447226796590880 * rgbp[1]
+	        -  0.0144453097698588 * rgbp[2];
+	rgbc[1] = -0.7143267176368630 * rgbp[0]
+	        +  1.8503099728895096 * rgbp[1]
+	        -  0.1359761119854705 * rgbp[2];
+	rgbc[2] =  0.0107755117023383 * rgbp[0]
+	        +  0.0052187662221759 * rgbp[1]
+	        +  0.9840056143203700 * rgbp[2];
+
+	/* Spectrally sharpened cone responses */
+	rgb[0]  =  rgbc[0]/s->Drgb[0];
+	rgb[1]  =  rgbc[1]/s->Drgb[1];
+	rgb[2]  =  rgbc[2]/s->Drgb[2];
+
+	/* XYZ values */
+	xyz[0] =  1.0961238208355140 * rgb[0]
+	       -  0.2788690002182872 * rgb[1]
+	       +  0.1827451793827730 * rgb[2];
+	xyz[1] =  0.4543690419753590 * rgb[0]
+	       +  0.4735331543074120 * rgb[1]
+	       +  0.0720978037172291 * rgb[2];
+	xyz[2] = -0.0096276087384294 * rgb[0]
+	       -  0.0056980312161134 * rgb[1]
+	       +  1.0153256399545427 * rgb[2];
+
+	/* Subtract flare */
+	XYZ[0] = s->Fisc * (xyz[0] - s->Fsxyz[0]);
+	XYZ[1] = s->Fisc * (xyz[1] - s->Fsxyz[1]);
+	XYZ[2] = s->Fisc * (xyz[2] - s->Fsxyz[2]);
+
+#ifdef DIAG
+	printf("Processing:\n");
+	printf("Jab = %f %f %f\n", Jab[0], Jab[1], Jab[2]);
+	printf("Chroma C = %f\n", C);
+	printf("Preliminary Saturation ss = %f\n", ss);
+	printf("Lightness J = %f\n", J * 100.0);
+	printf("Achromatic response A = %f\n", A);
+	printf("Eccentricity factor e = %f\n", e);
+	printf("Hue angle h = %f\n", h);
+	printf("Prelim red green a = %f, b = %f\n", a, b);
+	printf("Post adapted cone response rgba = %f %f %f\n", rgba[0], rgba[1], rgba[2]);
+	printf("Hunt-P-E cone space rgbp = %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]);
+	printf("Chromatically transformed sample value rgbc = %f %f %f\n", rgbc[0], rgbc[1], rgbc[2]);
+	printf("Sharpened cone sample rgb = %f %f %f\n", rgb[0], rgb[1], rgb[2]);
+	printf("Including flare XYZ = %f %f %f\n", xyz[0], xyz[1], xyz[2]);
+	printf("XYZ = %f %f %f\n", XYZ[0], XYZ[1], XYZ[2]);
+	printf("\n");
+#endif
+	return 0;
+}
 
 

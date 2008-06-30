@@ -33,7 +33,7 @@ struct _imdi {
 	/* Stride is only obeyed if the appropriate option flag was set */
 	/* in new_imdi, and is in pixel components, and effectively defaults */
 	/* to 1 for plane interleaved, and id and od (adjusted for skip) for pixel interleave, */
-	/* so warp is in components (NOT bytes) */
+	/* so stride is in color components (NOT bytes) */
 	/* Output pointers and data must only reference non-skipped output channels. */
 	void (*interp)(struct _imdi *s, void **outp, int outst,		/* Ouput pointers and stride */
 	                                void **inp, int inst,		/* Input pointers and stride */

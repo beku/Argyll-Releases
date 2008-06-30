@@ -1,222 +1,137 @@
 
-#SubDir TOP spectro ;
 
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS    += $(CCDEBUGFLAG) ;		# Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;
+#PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS    += $(CCDEBUGFLAG) ;		# Debugging flags
+PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
+# Setup the right hardware access libraries
 if $(NT) {
 	if $(DDK_INC_PATH) && $(DDK_LIB_PATH) {		# We can use HID access
-		CCFLAGS += $(DEFFLAG) ENABLE_NT_HID ;
-		HIDLIBS = $(DDK_LIB_PATH)\\hid.lib $(DDK_LIB_PATH)\\setupapi.lib ;
-		HDRS += $(STDHDRS) ;					# hack to force search of STDHDRS before DDK
+		DEFINES += ENABLE_NT_HID ;
+		HIDLIBS = $(DDK_LIB_PATH)\\hid $(DDK_LIB_PATH)\\setupapi ;
+		HID_HDRS = $(STDHDRS) $(DDK_INC_PATH) ;			# hack to force search of STDHDRS before DDK
 	}
 	IOFILE = ntio.c ;
 	LIBUSB = ../libusbw ;
 }
-
 if $(UNIX) {
 	IOFILE = unixio.c pollem.c ;
 	LIBUSB = ../libusb ;
 }
 
-if $(UNIX) {
-  if $(OS) = MACOSX {
-	LINKFLAGS += -framework IOKit ;
-	LINKFLAGS += -framework CoreFoundation ;
-  } else {
-	WinDir = /usr/X11R6 ;
-	LibWinH = $(WinDir)/include ;
-	LibWinD = $(WinDir)/lib ;
-	LibWin = ;
-	LINKFLAGS += -L$(LibWinD) -lX11 -lXext -lXxf86vm -lXinerama -lXau -lXdmcp -lXss -ldl ;
-  }
-}
-
-KEEPOBJS = true ;	# Jam has trouble with multiple users of .obj
-
 #Products
 Libraries = libinsttypes libinst ;
-Executables = dispwin displin dispread dispcal fakeread synthread chartread spotread spec2cie spyd2en ;
+Executables = dispwin synthcal dispread dispcal fakeread synthread
+              chartread spotread spec2cie average spyd2en ;
 Headers = inst.h ;
-Samples = ColorChecker.ti2 ECI2002R.ti2 FograStrip.ti2 i1_RGB_Scan_1.4.ti2 SOtele.sp ;
+Samples = ColorChecker.ti2 ECI2002R.ti2 FograStrip.ti2 i1_RGB_Scan_1.4.ti2
+          SOtele.sp strange.cal ;
 
 #Install
-InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
-InstallFile $(DOTDOT)$(SLASH)ref : $(Samples) ;
-#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
-#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+InstallBin ../bin : $(Executables) ;
+InstallFile ../ref : $(Samples) ;
+#InstallFile ../h : $(Headers) ;
+#InstallLib ../lib : $(Libraries) ;
+
+if $(UNIX) && $(OS) != MACOSX {
+	# Micro Unix CMM for handling monitor profile association
+	CMMHDRS = ../ucmm ;
+	CMMLIBS = ../ucmm/libucmm ../jcnf/libjcnf ../jcnf/yajl/libyajl ;
+}
+
+HDRS = ../h ../numlib ../icc ../cgats ../rspl ../xicc ../gamut ../spectro
+       ../plot $(HID_HDRS) $(LIBUSB) $(CMMHDRS) ;
 
 # Instrument access library library
-Library libinst.lib : inst.c insttypes.c dtp20.c dtp22.c dtp41.c dtp51.c dtp92.c i1disp.c i1pro.c i1pro_imp.c ss.c ss_imp.c hcfr.c spyd2.c huey.c $(IOFILE) usbio.c hidio.c ;
-ObjectHdrs inst insttypes dtp20 dtp22 dtp41 dtp51 dtp92 i1disp i1pro i1pro_imp ss ss_imp hcfr spyd2 huey $(IOFILE) usbio.c hidio.c : . ../h ../numlib ../icc ../rspl ../xicc ../plot $(DDK_INC_PATH) $(LIBUSB) ;
+Library libinst : inst.c insttypes.c dtp20.c dtp22.c dtp41.c dtp51.c dtp92.c i1disp.c i1pro.c i1pro_imp.c ss.c ss_imp.c hcfr.c spyd2.c huey.c $(IOFILE) usbio.c hidio.c ;
+
+# Display access library 
+Library libdisp : dispsup.c dispwin.c : : : $(LibWinH) ;
 
 # Instrument types utility functions library. Use this instead of libinst */
-# (hack to re-use insttypes.c in this library)
-Object insttypes_$(SUFOBJ) : insttypes.c ;
-ObjectHdrs insttypes_ : . ../h ../icc ../xicc ;
-LibraryFromObjects libinsttypes.lib : insttypes_$(SUFOBJ) ;
+# (Note we're working around a bug in Jam caused by objects shared between libraries)
+Object insttypes2 : insttypes.c ;
+LibraryFromObjects libinsttypes : insttypes2 ;
+
+#Object insttypes2 : insttypes.c ;
+#LibraryFromObjects libinsttypes : insttypes2 ;
 
 # Support file
-Object alphix$(SUFOBJ) : ../target/alphix.c ;
-ObjectHdrs alphix$(SUFOBJ) : ../h ../numlib ;
+#Object alphix : ../target/alphix.c ;
+
+LINKLIBS = libinst $(LIBUSB)/libusb $(HIDLIBS)
+           ../xicc/libxcolorants ../xicc/libxicc
+           ../gamut/libgamut
+           ../rspl/librspl ../cgats/libcgats
+           ../icc/libicc ../plot/libplot ../numlib/libnum
+           $(CMMLIBS) ;
 
 # General target reader program
-Object chartread$(SUFOBJ) : chartread.c ;
-ObjectHdrs chartread : . ../h ../cgats ../icc ../numlib ../xicc ../target $(LIBUSB) ;
-MainFromObjects chartread : chartread$(SUFOBJ) alphix$(SUFOBJ) dispsup$(SUFOBJ) dispwin$(SUFOBJ) ;
-LinkLibraries chartread : libinst.lib ../cgats/libcgats.lib
-                          ../rspl/librspl.lib
-                          ../xicc/libxicc.lib ../xicc/libxcolorants.lib
-                          ../numlib/libnum.lib ../icc/libicc.lib
-                          ../plot/libplot.lib $(LIBUSB)/libusb.lib
-                          $(HIDLIBS) ;
+Main chartread : chartread.c ../target/alphix.c : : : ../target : : libdisp ;
 
 # Printed target spot reader utility
-Object spotread$(SUFOBJ) : spotread.c ;
-ObjectHdrs spotread : . ../h ../cgats ../icc ../numlib ../rspl ../xicc ../gamut
-                      ../spectro ../plot $(LIBUSB) ;
-MainFromObjects spotread : spotread$(SUFOBJ) dispsup$(SUFOBJ) dispwin$(SUFOBJ) ;
-LinkLibraries spotread : libinst.lib
-                          ../rspl/librspl.lib ../xicc/libxicc.lib
-                          ../icc/libicc.lib ../gamut/libgamut.lib ../cgats/libcgats.lib
-                          ../plot/libplot.lib ../numlib/libnum.lib
-                          $(LIBUSB)/libusb.lib $(LibWin)
-                          $(HIDLIBS) ;
+Main spotread : spotread.c : : : : : libdisp ;
 
 # Gretag Spectroscan/T filmstrip reader
-#Object filmread$(SUFOBJ) : filmread.c ;
-#ObjectHdrs filmread : . ../h ../cgats ../icc ../numlib ../xicc $(LIBUSB) ;
-#MainFromObjects filmread : filmread$(SUFOBJ) dispsup$(SUFOBJ) dispwin$(SUFOBJ) ;
-#LinkLibraries filmread : libinst.lib ../cgats/libcgats.lib ../xicc/libxicc.lib
-#                          ../rspl/librspl.lib
-#                          ../numlib/libnum.lib ../icc/libicc ../plot/libplot.lib
-#                          $(LIBUSB)/libusb.lib
-#                          $(HIDLIBS) ;
+#Main filmread : filmread.c : : : : : libdisp ;
 
-# Create linear .cal
-Main displin : displin.c ;
-ObjectHdrs displin : . ../h ../cgats ../numlib ;
-LinkLibraries displin : ../cgats/libcgats.lib ../numlib/libnum.lib ;
+# Create synthetic .cal
+Main synthcal : synthcal.c ;
 
 # Display calibration program
-Object dispcal$(SUFOBJ) : dispcal.c ;
-ObjectHdrs dispcal dispwin dispsup ../target/ofps : . ../h ../cgats ../icc
-                           ../numlib ../rspl ../spectro ../xicc ../spectro ../gamut
-                           ../target ../plot $(LIBUSB) $(LibWinH) ;
-MainFromObjects dispcal : dispcal$(SUFOBJ) dispwin$(SUFOBJ) ../target/ofps$(SUFOBJ)
-                          dispsup$(SUFOBJ) ;
-LinkLibraries dispcal : libinst.lib ../cgats/libcgats.lib
-                          ../rspl/librspl.lib
-                          ../xicc/libxicc.lib  ../icc/libicc.lib
-                          ../rspl/librspl.lib ../numlib/libnum.lib  
-                          ../gamut/libgamut.lib ../plot/libplot.lib 
-                          $(LIBUSB)/libusb.lib $(LibWin)
-                          $(HIDLIBS) ;
+Main dispcal : dispcal.c : : : ../target : : libdisp ;
 
 # Display tester program
-Main dispread : dispread.c dispwin.c dispsup.c ;
-ObjectHdrs dispread dispwin dispsup : . ../h ../cgats ../icc ../numlib ../xicc $(LIBUSB) $(LibWinH) ;
-LinkLibraries dispread : libinst.lib ../cgats/libcgats.lib
-                          ../rspl/librspl.lib
-                          ../xicc/libxicc.lib  ../icc/libicc.lib
-                          ../numlib/libnum.lib ../plot/libplot.lib
-                          $(LIBUSB)/libusb.lib $(LibWin)
-                          $(HIDLIBS) ;
+Main dispread : dispread.c : : : : : libdisp ;
 
-
-# ~~~999
 #display test window test/Lut loader utility
-Object sa_dispwin$(SUFOBJ) : dispwin.c ;
-ObjectHdrs sa_dispwin : . ../h ../numlib ../cgats ../icc $(LibWinH) ;
-MainFromObjects dispwin : sa_dispwin$(SUFOBJ) ;
-ObjectCcFlags sa_dispwin.c : -DSTANDALONE_TEST ;
-LinkLibraries dispwin : libinst.lib ../cgats/libcgats.lib
-                         ../xicc/libxicc.lib  ../icc/libicc.lib
-                         ../numlib/libnum.lib ../plot/libplot.lib
-                         $(LIBUSB)/libusb.lib $(LibWin)
-                         $(HIDLIBS) ;
+# [ Could avoid need for libisnt libusb etc.
+#   by separating system dependent utils to a separate library .] 
+MainVariant dispwin : dispwin.c : : STANDALONE_TEST : : : $(LibWin) ;
+
+LINKLIBS = libinsttypes ../xicc/libxicc ../gamut/libgamut ../rspl/librspl
+           ../cgats/libcgats ../icc/libicc ../numlib/libnum ../plot/libplot ;
 
 # Fake device print/read utility using ICC profile
 Main fakeread : fakeread.c ;
-ObjectHdrs fakeread : . ../h ../cgats ../xicc ../spectro ../rspl ../numlib ../gamut ../plot ../icc ;	
-LinkLibraries fakeread : libinsttypes.lib ../icc/libicc.lib
-                        ../xicc/libxicc.lib ../xicc/libxcolorants.lib
-						../gamut/libgamut.lib ../cgats/libcgats.lib
-                        ../rspl/librspl.lib ../numlib/libnum.lib
-                        ../plot/libplot.lib
-                        $(LIBUSB)/libusb.lib $(LibWin) ;
 
 # Synthetic device print/read utility
 Main synthread : synthread.c ;
-ObjectHdrs synthread : . ../h ../cgats ../xicc ../spectro ../rspl ../numlib ../gamut ../plot ../icc ;	
-LinkLibraries synthread : libinsttypes.lib ../icc/libicc.lib
-                        ../xicc/libxicc.lib ../xicc/libxcolorants.lib
-						../gamut/libgamut.lib ../cgats/libcgats.lib
-                        ../rspl/librspl.lib ../numlib/libnum.lib
-                        ../plot/libplot.lib
-                        $(LIBUSB)/libusb.lib $(LibWin) ;
 
 # Add CIE values to a spectral reading file
 Main spec2cie : spec2cie.c ;
-ObjectHdrs spec2cie : . ../h ../cgats ../xicc ../spectro ../rspl ../numlib ../gamut ../icc ../plot  $(LIBUSB) ;	
-LinkLibraries spec2cie : libinsttypes.lib ../icc/libicc.lib
-                        ../xicc/libxicc.lib ../xicc/libxcolorants.lib
-						../gamut/libgamut.lib ../numlib/libnum.lib
-                        ../cgats/libcgats.lib ../plot/libplot.lib 
-                        $(LIBUSB)/libusb.lib $(LibWin) ;
+
+# Average RGB or CMYK .ti3 files
+Main average : average.c ;
 
 # Utility to enable the Spyder 2 instrument */
 Main spyd2en : spyd2en.c vinflate.c ;
-ObjectHdrs spyd2en vinflate : . ../h ../numlib ;	
-LinkLibraries spyd2en : ../numlib/libnum.lib ;
+
+# Generate strange.cal example/diagnostic
+GenFileND strange.cal : synthcal -s 0.7,1.0,0.9 -p 1.7,0.8,0.7 [ NormPaths strange ] ;
 
 # Dumy ti3 file generator for testing
 #Main dumyti3 : dumyti3.c ;
-#ObjectHdrs dumyti3 : . ../h ../cgats ;
-#LinkLibraries dumyti3 : ../cgats/libcgats.lib ;
 
 # Test utility for XYZ matrix spectral correction
 #Main xyzfix : xyzfix.c ;
-#ObjectHdrs xyzfix : . ../h ../numlib ../icc ../cgats ;
-#LinkLibraries xyzfix : ../numlib/libnum.lib ../icc/libicc.lib ../cgats/libcgats.lib ;
-
-# Experimental RAMDAC loader
-# Main vgamma : vgamma.c ;
 
 # fp conversion code test
 #Main fp : fp.c ;
 
 # test code
-#Main tt : tt.c 
-#ObjectHdrs tt : . ../numlib ../plot ;
-#LinkLibraries tt : ../numlib/libnum.lib ../plot/libplot.lib ;
+#Main t : t.c ;
+#Main tt : tt.c ;
 
 if $(OLD_GRETAG) && $(UNIX) && $(OS) != MACOSX {
 
 	# test for parsing a VISE archive
 	Main visetest : visetest.c vinflate.c ;
-	ObjectHdrs visetest vinflate : . ../h ../numlib ;	
-	LinkLibraries visetest : ../numlib/libnum.lib ;
 
 	# Compute deconvolution filter for i1pro
 	#Main i1deconv : i1deconv.c ;
-	#ObjectHdrs i1deconv : . ../numlib ../rspl ../plot ;
-	#LinkLibraries i1deconv : ../numlib/libnum.lib ../rspl/librspl.lib ../plot/libplot.lib ;
 
 	# Compute stray light calibration for i1pro
 	#Main i1stray : i1stray.c ;
-	#ObjectHdrs i1stray : . ../numlib ../rspl ../plot ../icc ../xicc ;
-	#LinkLibraries i1stray : ../numlib/libnum.lib ../rspl/librspl.lib ../plot/libplot.lib ;
-
-	# test gretag interface
-	Object gt_gretag$(SUFOBJ) : gretag.c ;
-	ObjectCcFlags gt_gretag.c : -DSTANDALONE_TEST ;
-    ObjectHdrs gt_gretag.c : . ../h ../icc ../xicc ;
-	MainFromObjects gt_test : gt_gretag$(SUFOBJ) spm$(SUFOBJ) $(IOFILE:S=$(SUFOBJ)) ;
-	LinkLibraries gt_test : libinst.lib ../xicc/libxicc.lib ../cgats/libcgats.lib
-                            ../icc/libicc.lib $(LIBUSB)/libusb.lib $(LibWin) ;
-	LINKFLAGS on gt_test += -L$(LibWinD) ;
-	LINKLIBS on gt_test += -lglut -lGL -lGLU -lX11 -lXext -lXmu -lXi -lm ;
 }
 

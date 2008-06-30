@@ -60,44 +60,44 @@ main(int argc, char* argv[])
 	IMAGE *in;
 	TIFF *out;
 	int c;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 
-	while ((c = getopt(argc, argv, "c:p:r:")) != -1)
+	while ((c = tiff_getopt(argc, argv, "c:p:r:")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(optarg))
+			if (!processCompressOptions(tiff_optarg))
 				usage();
 			break;
 		case 'f':		/* fill order */
-			if (streq(optarg, "lsb2msb"))
+			if (streq(tiff_optarg, "lsb2msb"))
 				fillorder = FILLORDER_LSB2MSB;
-			else if (streq(optarg, "msb2lsb"))
+			else if (streq(tiff_optarg, "msb2lsb"))
 				fillorder = FILLORDER_MSB2LSB;
 			else
 				usage();
 			break;
 		case 'p':		/* planar configuration */
-			if (streq(optarg, "separate"))
+			if (streq(tiff_optarg, "separate"))
 				config = PLANARCONFIG_SEPARATE;
-			else if (streq(optarg, "contig"))
+			else if (streq(tiff_optarg, "contig"))
 				config = PLANARCONFIG_CONTIG;
 			else
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(optarg);
+			rowsperstrip = atoi(tiff_optarg);
 			break;
 		case '?':
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - optind != 2)
+	if (argc - tiff_optind != 2)
 		usage();
-	in = iopen(argv[optind], "r");
+	in = iopen(argv[tiff_optind], "r");
 	if (in == NULL)
 		return (-1);
-	out = TIFFOpen(argv[optind+1], "w");
+	out = TIFFOpen(argv[tiff_optind+1], "w");
 	if (out == NULL)
 		return (-2);
 	TIFFSetField(out, TIFFTAG_IMAGEWIDTH, (uint32) in->xsize);

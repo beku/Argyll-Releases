@@ -33,15 +33,17 @@
   Viewing/Scene/Image field is the area of the whole image or
 	display surface that the stimulus is part of.
 
-  Background field is 10-12 degree field surrounding the stimulus field.
+  Background field is 10-12 degree field immediately surrounding the stimulus field.
 	This may be within, overlap or encompass the Viewing/Scene/Image field.
 
-  Surround/Adapting field is the visual field minus the background field.
+  Surround/Adapting field is the visual field minus the background field,
+  and is what is assumed to be setting the viewers light adaptation level.
 
   Visual field is the 130 degree angular field that is seen by the eyes.
 
   Illuminating field is the field that illuminates the reflective
-  Scene/Image. It may be the same as the Ambient field.
+  Scene/Image. It may be the same as the Ambient field or it could
+  be a specific light source that is directed to the viewing scene..
 
   Ambient field is the whole surrounding environmental light field.
 
@@ -52,19 +54,25 @@
 */
 
 /* Rules of Thumb: */
-/* Ambient Luminance (Lat, cd/m^2) is Ambient Illuminance (Lux) divided by PI. */
-/* i.e. Lat = Iat/PI */	/* (1 foot candle = 0.0929 lux) */
 
-/* The Adapting/Surround Luminance is often taken to be */
-/* the 20% of the Ambient Luminance. (gray world) */
-/* i.e. La = Lat/5 = Iat/15.7 */
+/* Ambient Luminance (Lamb, cd/m^2) is Ambient Illuminance (Eamb, Lux) divided by PI. */
+/* i.e. Lamb = Eamb/PI */	/* (1 foot candle = 0.0929 lux) */
+
+/* Illuminating field Luminance (Li, cd/m^2) is the Illuminating field Illuminance (Ei, Lux) */
+/* divide by PI. i.e. Li - Ei/PI */
+
+/* The Adapting/Surround Luminance is La often taken to be */
+/* the 20% of the Ambient Luminance (gray world, 50% perceptual) */
+/* i.e. La = Lamb/5 = Eamb/15.7 */
+/* If the Illuminating field covers the surround, the it will be 20% of the */
+/* Illuminating field. */
 
 /* For a reflective print, the Viewing/Scene/Image luminance (Lv, cd/m^2), */
-/* will be the Illuminating Luminance (Li, cd/m^2) reflected by the */
-/* media white point (Yw) */
+/* will be the Illuminating Luminance (Li, cd/m^2) or the Ambient Luminance (Lamb, cd/m^2) */
+/* reflected by the media white point (Yw) */
 
 /* If there is no special illumination for a reflective print, */
-/* then the Illuminating Luminance (Li) will be the Ambient Luminance (Lat) */
+/* then the Illuminating Luminance (Li) will be the Ambient Luminance (Lamb) */
 
 /* An emisive display will have an independently determined Lv. */
 
@@ -82,27 +90,33 @@
 
 /* The source of flare light depends on the type of display system. */
 /* For a CRT, it will be the Ambient light reflecting off the glass surface. */
-/* (This implies Yf = Lat * reflectance/Lv) */
-/* For a reflection print, it will be the Illuminant reflecting from the media */
+/* (This implies Yf = Lamb * reflectance/Lv) */
+/* For a reflection print, it will be the Illuminant or Ambient reflecting from the media */
 /* surface. (Yf = Li * reflectance) */
 /* For a projected image, it will be stray projector light, scattered by the */
 /* surround, screen and air particles. (Yf = Li * reflectance_and_scattering) */
 
 /*
 
-  Typical Ambient Illuminance brightness
-  (Lux)   La  Condition 
-    11     1  Twilight
-    32     2  Subdued indoor lighting
-    64     4  Less than typical office light; sometimes recommended for
-              display-only workplaces (sRGB)
-   350    22  Typical Office (sRGB annex D)
-   500    32  Practical print evaluationa (ISO-3664 P2)
-  1000    64  Good Print evaluation (CIE 116-1995)
-  1000    64  Overcast Outdoors
-  2000   127  Critical print evaluation (ISO-3664 P1)
- 10000   637  Typical outdoors, full daylight 
- 50000  3185  Bright summers day 
+Typical adapting field luminances and white luminance in reflective setup:
+
+E = illuminance in Lux
+Lv = White luminance assuming 100% reflectance
+La = Adapting field luminance in cd/m^2, assuming 20% reflectance from surround
+    
+    E     La     Lv   Condition 
+    11     0.7    4   Twilight
+    32     2     10   Subdued indoor lighting
+    64     4     20   Less than typical office light; sometimes recommended for
+                      display-only workplaces (sRGB)
+   350    22    111   Typical Office (sRGB annex D)
+   500    32    160   Practical print evaluationa (ISO-3664 P2)
+  1000    64    318   Good Print evaluation (CIE 116-1995)
+  1000    64    318   Television Studio lighting
+  1000    64    318   Overcast Outdoors
+  2000   127    637   Critical print evaluation (ISO-3664 P1)
+ 10000   637   3183   Typical outdoors, full daylight 
+ 50000  3185  15915   Bright summers day 
 
 */
 
@@ -132,9 +146,9 @@ struct _cam02 {
 /* Private: */
 	/* Scene parameters */
 	ViewingCondition Ev;	/* Enumerated Viewing Condition */
+	double La;		/* Adapting/Surround Luminance cd/m^2 */
 	double Wxyz[3];	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
 	double Yb;		/* Relative Luminance of Background to reference white (Y range 0.0 .. 1.0) */
-	double La;		/* Adapting/Surround Luminance cd/m^2 */
 	double Yf;		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 	double Fxyz[3];	/* The Flare white coordinates (typically the Ambient color) */
 
@@ -164,22 +178,23 @@ struct _cam02 {
 	double Aw;			/* Achromatic response of white */
 	double nldxval;		/* Non-linearity value at lower crossover to linear */
 	double nldxslope;	/* Non-linearity slope at lower crossover to linear */
-	double nlxval;		/* Non-linearity value at uppper crossover to linear */
-	double nlxslope;	/* Non-linearity slope at uppper crossover to linear */
+	double nluxval;		/* Non-linearity value at uppper crossover to linear */
+	double nluxslope;	/* Non-linearity slope at uppper crossover to linear */
 	double lA;			/* JLIMIT Limited A */
 
-	/* Option flags */
+	/* Option flags, code not always enabled */
 	int hk;				/* Use Helmholtz-Kohlraush effect */
 	int trace;			/* Trace values through computation */
 	int retss;			/* Return ss rather than Jab */
+	int range;			/* (for cam02ref.h) return on range error */ 
 
-	double nldlimit;	/* value of NLDLIMIT */
-	double nlulimit;	/* value of NLULIMIT */
-	double ddllimit;	/* value of DDLLIMIT */
-	double ddulimit;	/* value of DDULIMIT */
-	double ssminj;		/* value of SSMINJ */
-	double jlimit;		/* value of JLIMIT */
-	double hklimit;		/* value of HKLIMIT */
+	double nldlimit;	/* value of NLDLIMIT, sets non-linearity lower limit (implies slope) */
+	double nlulimit;	/* value of NLULIMIT, sets non-linearity upper limit (tangent) */
+	double ddllimit;	/* value of DDLLIMIT, sets fwd k3 to k2 limit  */
+	double ddulimit;	/* value of DDULIMIT, sets bwd k3 to k1 limit */
+	double ssmincj;		/* value of SSMINJ, sets cJ minimum value */
+	double jlimit;		/* value of JLIMIT, sets cutover to straight line for J point */
+	double hklimit;		/* value of HKLIMIT, sets HK factor upper limit */
 
 }; typedef struct _cam02 cam02;
 

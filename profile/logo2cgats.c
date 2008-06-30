@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
 	static char outname[200] = { 0 };		/* Output cgats .ti3 file base name */
 	static char outname2[200] = { 0 };		/* Output cgats .ti2 file base name */
 	cgats *cmy = NULL;		/* Input RGB/CMYK reference file */
-	int f_id1, f_c, f_m, f_y, f_k = 0;	/* Field indexes */
+	int f_id1 = -1, f_c, f_m, f_y, f_k = 0;	/* Field indexes */
 	cgats *ncie = NULL;		/* Input CIE readings file (may be Dev & spectral too) */
 	int f_id2, f_cie[3];	/* Field indexes */
 	cgats *spec = NULL;		/* Input spectral readings (NULL if none) */
@@ -187,7 +187,7 @@ int main(int argc, char *argv[])
 	if (cmy->read_name(cmy, devname))
 		error ("Read: Can't read dev file '%s'. Unknown format or corrupted file ?",devname);
 	if (cmy->ntables != 1)
-		fprintf(stderr,"Input file '%s' doesn't contain exactly one table",devname);
+		warning("Input file '%s' doesn't contain exactly one table",devname);
 
 	if ((npat = cmy->t[0].nsets) <= 0)
 		error("No patches");
@@ -267,7 +267,7 @@ int main(int argc, char *argv[])
 	if (ncie->read_name(ncie, ciename))
 		error ("Read: Can't read cie file '%s'. Unknown format or corrupted file ?",ciename);
 	if (ncie->ntables != 1)
-		fprintf(stderr,"Input file '%s' doesn't contain exactly one table",ciename);
+		warning("Input file '%s' doesn't contain exactly one table",ciename);
 
 	if (npat != ncie->t[0].nsets)
 		error("Number of patches between '%s' and '%s' doesn't match",devname,ciename);
@@ -340,7 +340,7 @@ int main(int argc, char *argv[])
 		if (spec->read_name(spec, specname))
 			error ("Read: Can't read spec file '%s'. Unknown format or corrupted file ?",specname);
 		if (spec->ntables != 1)
-			fprintf(stderr,"Input file '%s' doesn't contain exactly one table",specname);
+			warning("Input file '%s' doesn't contain exactly one table",specname);
 
 		if (npat != spec->t[0].nsets)
 			error("Number of patches between '%s' and '%s' doesn't match",specname);
@@ -444,6 +444,8 @@ int main(int argc, char *argv[])
 
 	/* Fields we want */
 	ocg->add_field(ocg, 0, "SAMPLE_ID", nqcs_t);
+	if (f_id1 >= 0) 
+		ocg->add_field(ocg, 0, "SAMPLE_NAME", cs_t);
 
 	if (isrgb) {
 		ocg->add_field(ocg, 0, "RGB_R", r_t);
@@ -540,8 +542,13 @@ int main(int argc, char *argv[])
 				}
 			}
 
+			/* SAMPLE ID */
 			sprintf(id, "%d", i+1);
 			setel[k++].c = id;
+
+			/* SAMPLE NAME */
+			if (f_id1 >= 0) 
+				setel[k++].c = (char *)cmy->t[0].fdata[i][f_id1];
 			
 			if (isrgb) {
 				setel[k++].d = 100.0/255.0 * *((double *)cmy->t[0].fdata[i][f_c]);

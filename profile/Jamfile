@@ -1,160 +1,78 @@
 
-#SubDir TOP profile ;
-
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-#CCFLAGS	+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;
-
-if $(UNIX) {
-  if $(OS) = MACOSX {
-	LINKFLAGS += -framework IOKit ;
-	LINKFLAGS += -framework CoreFoundation ;
-  } else {
-	WinDir = /usr/X11R6 ;
-	LibWinH = $(WinDir)/include/X11 ;
-	LibWinD = $(WinDir)/lib ;
-	LibWin = ;
-	LINKFLAGS += -L$(LibWinD) -lX11 -lXau -lXdmcp ;
-  }
-}
+#PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS	+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 #Products
 Libraries = libprof ;
 Executables = cb2cgats kodak2cgats logo2cgats splitcgats mppcheck mpprof
-              profcheck invprofcheck verify profile sepgen ;
+              profcheck invprofcheck verify colprof sepgen ;
 Headers = prof.h ;
 Samples = example.sp example121.sp 3dap5k.sp GTIPlus.sp Office.sp Trulux.sp TruluxPlus.sp
 		D50_0.0.sp D50_0.3.sp D50_0.5.sp D50_0.7.sp D50_1.0.sp D50_1.2.sp
 		D50_1.5.sp D50_1.7.sp D50_2.0.sp D50_2.5.sp D50_3.0.sp ;
 
 #Install
-InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
-InstallFile $(DOTDOT)$(SLASH)ref : $(Samples) ;
-#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
-#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+InstallBin ../bin : $(Executables) ;
+InstallFile ../ref : $(Samples) ;
+#InstallFile ../h : $(Headers) ;
+#InstallLib ../lib : $(Libraries) ;
+
+HDRS = ../h ../icc ../cgats ../rspl
+       ../numlib ../gamut ../xicc ../spectro ../plot ;
 
 # PROF library
-Library libprof.lib : profin.c profout.c ;
-ObjectHdrs profin$(SUFOBJ) profout$(SUFOBJ) : ../h ../icc ../cgats ../rspl
-                                    ../numlib ../gamut ../xicc ../spectro ../plot ;
+Library libprof : profin.c profout.c ;
+
+
+LINKLIBS = ../rspl/librspl ../icc/libicc ../cgats/libcgats ../numlib/libnum ;
 
 # Simple profile generator
 Main simpprof : simpprof.c ;
-ObjectHdrs simpprof : ../h ../icc ../cgats ../rspl ../numlib ;
-LinkLibraries simpprof : ../icc/libicc.lib ../cgats/libcgats.lib
-                      ../rspl/librspl.lib ../numlib/libnum.lib ;
-
-# Full profile generator
-Main profile : profile.c ;
-ObjectHdrs profile : ../h ../icc ../cgats ../rspl ../numlib
-                         ../gamut ../xicc ../spectro ../plot ;	
-LinkLibraries profile : libprof.lib ../icc/libicc.lib ../xicc/libxicc.lib
-                            ../cgats/libcgats.lib ../rspl/librspl.lib
-                            ../gamut/libgamut.lib ../gamut/libgammap.lib
-                            ../numlib/libnum.lib ../spectro/libinsttypes.lib
-                            ../xicc/libxicc.lib ../xicc/libxcolorants.lib
-							../plot/libplot.lib ../plot/libvrml.lib
-							$(LibWin) ;
-
-# Model Printer Profile generator
-Main mpprof : mpprof.c ;
-ObjectHdrs mpprof : ../h ../icc ../cgats ../rspl ../numlib
-                         ../gamut ../xicc ../spectro ../plot ;
-LinkLibraries mpprof : libprof.lib ../icc/libicc.lib ../spectro/libinsttypes.lib 
-                            ../xicc/libxicc.lib ../xicc/libxcolorants.lib
-                            ../cgats/libcgats.lib ../rspl/librspl.lib
-                            ../gamut/libgamut.lib ../numlib/libnum.lib
-                            ../plot/libplot.lib $(LibWin) ;
-
-# Model Printer Profile checker
-Main mppcheck : mppcheck.c ;
-ObjectHdrs mppcheck : ../h ../icc ../cgats ../rspl ../numlib
-                         ../gamut ../xicc ../spectro ../plot ;
-LinkLibraries mppcheck : libprof.lib ../icc/libicc.lib ../spectro/libinsttypes.lib 
-                            ../xicc/libxicc.lib ../xicc/libxcolorants.lib
-                            ../cgats/libcgats.lib ../rspl/librspl.lib
-                            ../gamut/libgamut.lib ../numlib/libnum.lib
-                            ../plot/libplot.lib $(LibWin) ;
-
-# Optimised Separation Generator
-Main sepgen : sepgen.c ;
-ObjectHdrs sepgen : ../h ../icc ../cgats ../rspl ../numlib
-                         ../gamut ../xicc ../spectro ../plot ;
-LinkLibraries sepgen : libprof.lib ../icc/libicc.lib
-                            ../xicc/libxicc.lib ../xicc/libxcolorants.lib
-                            ../spectro/libinsttypes.lib  ../rspl/librspl.lib
-                            ../cgats/libcgats.lib ../gamut/libgamut.lib
-                            ../numlib/libnum.lib ../plot/libplot.lib ;
-
-
-# Profile checker
-Main profcheck : profcheck.c ;
-ObjectHdrs profcheck : ../h ../icc ../cgats ../rspl ../numlib ../spectro
-                         ../gamut ../xicc ../plot ;
-LinkLibraries profcheck : libprof.lib ../icc/libicc.lib ../xicc/libxicc.lib
-                            ../cgats/libcgats.lib ../spectro/libinsttypes.lib
-                            ../rspl/librspl.lib ../numlib/libnum.lib
-                            ../gamut/libgamut.lib ../plot/libplot.lib $(LibWin) ;
-
-# Reverse Profile checker
-Main invprofcheck : invprofcheck.c ;
-ObjectHdrs invprofcheck : ../h ../icc ../cgats ../rspl ../numlib ../spectro
-                         ../gamut ../xicc ../plot ;
-LinkLibraries invprofcheck : libprof.lib ../icc/libicc.lib ../xicc/libxicc.lib
-                            ../spectro/libinsttypes.lib
-                            ../rspl/librspl.lib ../numlib/libnum.lib
-                            ../gamut/libgamut.lib
-                            ../cgats/libcgats.lib
-                            ../plot/libplot.lib $(LibWin) ;
-
-# Verifyer 
-Main verify : verify.c ;
-ObjectHdrs verify : ../h ../icc ../cgats ../rspl ../numlib ../spectro
-                         ../gamut ../xicc ../plot ;
-LinkLibraries verify : libprof.lib ../icc/libicc.lib ../xicc/libxicc.lib
-                            ../spectro/libinsttypes.lib
-                            ../rspl/librspl.lib
-                            ../gamut/libgamut.lib
-                            ../cgats/libcgats.lib
-                            ../plot/libplot.lib
-                            ../numlib/libnum.lib $(LibWin) ;
 
 #Kodak raw profile data to Argyll CGATS format converter
 Main kodak2cgats : kodak2cgats.c ;
-ObjectHdrs kodak2cgats : ../h ../cgats ../xicc ../gamut ../icc ;
-LinkLibraries kodak2cgats : ../cgats/libcgats.lib ../icc/libicc.lib ;
 
 #Colorblind raw profile data to Argyll CGATS format converter
 Main cb2cgats : cb2cgats.c ;
-ObjectHdrs cb2cgats : ../h ../cgats ../xicc ../gamut ;
-LinkLibraries cb2cgats : ../cgats/libcgats.lib ;
+
+# the gcc linker is retarded, and can't link to things it's gone past, hence 2 x libxicc...
+LINKLIBS = ../xicc/libxicc ../spectro/libinsttypes ../xicc/libxicc ../gamut/libgamut $(LINKLIBS) ;
 
 #Gretag/Logo raw CMYK profile data to Argyll CGATS format converter
 Main logo2cgats : logo2cgats.c ;
-ObjectHdrs logo2cgats : ../h ../numlib ../cgats ../xicc ../gamut ../spectro ../icc ../plot ;
-LinkLibraries logo2cgats : ../cgats/libcgats.lib ../spectro/libinsttypes.lib 
-	../xicc/libxicc.lib ../icc/libicc.lib ../plot/libplot.lib ../numlib/libnum.lib
-	../xicc/libxcolorants.lib ;
 
 #Split a .ti3 into two pieces randomly
 Main splitcgats : splitcgats.c ;
-ObjectHdrs splitcgats : ../h ../numlib ../cgats ../xicc ../rspl ../gamut ../spectro ../icc ../plot ;
-LinkLibraries splitcgats : ../cgats/libcgats.lib ../spectro/libinsttypes.lib 
-	../xicc/libxicc.lib ../icc/libicc.lib ../plot/libplot.lib ../numlib/libnum.lib ;
 
+# Profile checker
+Main profcheck : profcheck.c ;
 
+# Reverse Profile checker
+Main invprofcheck : invprofcheck.c ;
 
+# Model Printer Profile generator
+Main mpprof : mpprof.c ;
 
+# Model Printer Profile checker
+Main mppcheck : mppcheck.c ;
+
+LINKLIBS = ../plot/libvrml $(LINKLIBS) ;
+
+# Verifyer 
+Main verify : verify.c ;
+
+LINKLIBS = libprof ../gamut/libgammap $(LINKLIBS) $(TIFFLIB) ;
+
+# Full profile generator
+Main colprof : colprof.c : : : $(TIFFINC) ;
+
+# Optimised Separation Generator
+Main sepgen : sepgen.c ;
 
 # ~~ hack 
 #Main denmat : denmat.c ;
-#ObjectHdrs denmat : ../h ../icc ../cgats ../rspl ../numlib
-#                         ../gamut ../xicc ;
-#LinkLibraries denmat : libprof.lib ../icc/libicc.lib ../xicc/libxicc.lib
-#                            ../cgats/libcgats.lib ../rspl/librspl.lib
-#                            ../numlib/libnum.lib
-#                            ../plot/libplot.lib $(LibWin) ;
 
 
 

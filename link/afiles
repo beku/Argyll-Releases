@@ -2,6 +2,6 @@ Readme.txt
 License.txt
 afiles
 Jamfile
-icclink.c
+collink.c
 monoplot.c
 pathplot.c

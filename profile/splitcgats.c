@@ -117,8 +117,9 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
 				fa = nfa;
 				if (na == NULL) usage();
-				numb = atoi(na);
-				if (numb < 0) usage();
+				prop = atoi(na);
+				if (prop < 0) usage();
+				prop = prop / 100.0;
 
 			} else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
 				dow = 1;

@@ -10,7 +10,9 @@
 <h2><b>imdi/cctiff</b></h2>
 <h3>Summary</h3>
 Color convert a TIFF file using a sequence of compatible ICC device
-profiles, abstract profiles and device link profiles.<br>
+profiles, abstract profiles and device link profiles. The sequence may
+be zero length, facilitating format conversion and ICC profile
+embedding without otherwise altering the pixel values.<br>
 <h3>Usage<br>
 </h3>
 <small><span style="font-family: monospace;"></span><i
@@ -72,17 +74,29 @@ output encoding from 1..n<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp; &nbsp;&nbsp; Read and Write planes &gt; 4 as alpha
 planes<br>
-</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+</span></small><small><span style="font-family: monospace;">&nbsp;<a
+ href="cctiff.html#I">-I</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Ignore any file or profile colorspace mismatches</span></small><br>
+<small><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#l">-l</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; &nbsp; This flag is ignored for backwards
 compatibility<br>
-<br>
+&nbsp;</span></small><small><a style="font-family: monospace;" href="#d"><i>-d
+profile.[ic<span style="font-family: monospace;">m | tiff]</span></i></a><span
+ style="font-family: monospace;"></span></small><small><span
+ style="font-family: monospace;">&nbsp; Optionally embed a profile in
+the destination TIFF file.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span></small><small><span style="font-family: monospace;">This may be
+an ICC file or a TIFF file with embedded profile.</span></small><br>
+<small><span style="font-family: monospace;"><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Then for each profile in sequence:<br style="font-family: monospace;">
+Then for each profile in the linked sequence:<br
+ style="font-family: monospace;">
 </span></small><small><span style="font-family: monospace;"></span></small><small><span
  style="font-family: monospace;"></span><span
- style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;">&nbsp; </span><a
  style="font-family: monospace;" href="#i">-i <span
  style="font-style: italic;">intent</span></a><span
  style="font-family: monospace;">&nbsp;
@@ -100,14 +114,20 @@ saturation, a = absolute colorimetric</span><span
  style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp; </span><a
- style="font-family: monospace;" href="#p1"><i>profile.icm</i></a><span
- style="font-family: monospace;"> &nbsp; &nbsp; &nbsp;&nbsp;&nbsp; A
-Device, Link or Abstract profile.</span><span
+ style="font-family: monospace;" href="#p1"><i>profile.[ic<span
+ style="font-family: monospace;">m | tiff]</span></i></a><span
+ style="font-family: monospace;">&nbsp; A
+Device, Link or Abstract profile. This may be an ICC file<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+or a TIFF file with embedded profile.<br>
+</span><span style="font-family: monospace;"></span><span
  style="font-family: monospace;"></span><span
- style="font-family: monospace;"></span><span
- style="font-family: monospace;"></span><br
+ style="font-family: monospace;"></span><br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp;&nbsp; Then finally:<br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp; </span><a
+&nbsp;<span style="font-family: monospace;"></span><a
  style="font-family: monospace;" href="#p2"><i>infile.tif</i></a><span
  style="font-family: monospace;"> &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
 A </span><a style="font-family: monospace;"
@@ -115,7 +135,7 @@ A </span><a style="font-family: monospace;"
  style="font-family: monospace;">
 Raster file that will be the input raster to be transformed.</span><br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp; </span><a
+&nbsp;<span style="font-family: monospace;"></span><a
  style="font-family: monospace;" href="#p3"><i>outfile.tif</i></a><span
  style="font-family: monospace;"> &nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp; A </span><a style="font-family: monospace;"
@@ -126,14 +146,31 @@ transform.</span></small><b><br>
 </b><b><br>
 Examples</b><br>
 <br>
-cctiff -ir sRGB.icm -ir CMYKprinter.icm infile.tif outfile.tif<br>
+Convert an RGB file to a CMYK file using perceptual intent:<br>
 <br>
-cctiff devicelink.icm infile.tif outfile.tif<br>
+&nbsp;&nbsp;&nbsp; cctiff -ip sRGB.icm -i cmyk.icm rgbinfile.tif
+cmykoutfile.tif<br>
 <br>
-cctiff -ir sRGB.icm abstract.icm -ir CMYK.icm devlink.icm infile.tif
+Same as above, but use the source file embedded profile, and embed the
+resulting colorspace profile in the output:<br>
+<br>
+&nbsp;&nbsp;&nbsp; cctiff -d cmyk.icm -ip rgbfile.tif -ip
+cmyk.icm&nbsp; rgbinfile.tif cmyout.tif<br>
+<br>
+Convert a raster file using a device link:<br>
+<br>
+&nbsp;&nbsp;&nbsp; cctiff devicelink.icm infile.tif outfile.tif<br>
+<br>
+Convert an RGB source to CMYK via an abstract adjustment, and then
+convert the CMYK to CMYK using a device link:<br>
+<br>
+&nbsp;&nbsp;&nbsp; cctiff -ir sRGB.icm abstract.icm -ir CMYK.icm
+devlink.icm infile.tif
 outfile.tif<br>
 <br>
-cctiff -ir sRGB.icm rgbfile.tif labfile.tif
+Convert an RGB source file into an L*a*b* PCS raster file:<br>
+<br>
+&nbsp;&nbsp;&nbsp; cctiff -ir sRGB.icm rgbfile.tif labfile.tif<br>
 <h3>Comments<br>
 </h3>
 <a name="v"></a> The <span style="font-weight: bold;">-v</span> flag
@@ -152,10 +189,13 @@ sets the intent of the last profile in the chain.<br>
 <br>
 <a name="e"></a>Some colorspaces can be encoded in more than one way.
 If there is a choice, the choice should be specified the <span
- style="font-weight: bold;">-o</span> parameter.
+ style="font-weight: bold;">-e</span> parameter.
 If the parameter is needed, then cctiff will issue an error that
 describes
-the possible choices (ie. TIFF LAB encoding).<br>
+the possible choices (ie. TIFF LAB encoding). For instance, for an LAB
+output there are usually two choices, <span style="font-weight: bold;">1</span>
+for CIELab encoding, and <span style="font-weight: bold;">2</span> for
+ICCLab encoding.<br>
 <br>
 <a name="a"></a>Normally colorspaces that have more than 4 channels
 will be read and written as multichannel TIFF files. These are not
@@ -164,8 +204,19 @@ handled well by all applications, so the <span
 above 4 to be stored as alpha planes, providing more flexibility in
 using such files.<br>
 <br>
-<a name="l"></a>The <span style="font-weight: bold;">-l</span> option
+<a name="I"></a>The <span style="font-weight: bold;">-I</span> flag
+causes any mismatch between the color spaces of the image files and
+each profile in the sequence to be ignored. The results might be
+unpredictable unless you know exactly what you are doing.<br>
+<br>
+<a name="l"></a>The <span style="font-weight: bold;">-l</span> flag
 is just for backwards compatibility.<br>
+<br>
+<small><a name="d"></a></small><small>The <span
+ style="font-weight: bold;">-d profile.[icm | tiff]</span> option
+allows an ICC profile to be embedded in the </small>destination TIFF
+file. The profile may either be an <small>ICC file or a TIFF file with
+embedded profile.</small><br>
 <br>
 Following these global options, you should specify the chain of
 profiles you want to apply. Each link of the chain consists of the
@@ -175,15 +226,25 @@ with the input TIFF file, and each profiles output space must be
 compatible with the next profiles input space. An error will result if
 this is not the case.<br>
 <br>
-<a name="p1"></a>The <span style="font-weight: bold;">-i</span>
+<div style="margin-left: 40px;"><a name="i"></a>The <span
+ style="font-weight: bold;">-i</span>
 parameters
 selects the intent for the following device profile. Normally
-the same intent should be used for all device profiles.<br>
+the same intent should be used for all device profiles, but other
+combinations allow special uses such as mixed proofing workflows.<br>
+<br>
+<a name="p1"></a>The file that will be the source of the ICC profile.
+This can be either an ICC profile or a TIFF file that contains an
+embedded profile. Typically the first profile in the chain might be
+taken from an embedded profile from the source TIFF file.<span
+ style="font-weight: bold;"></span><br>
+</div>
 <br>
 <a name="p2"></a>The second last argument should be the name of the
-TIFF file that is to be processed.<br>
+source TIFF file that is to be processed.<br>
 <br>
-<a name="p3"></a>The last argument should be the name of the TIFF file
+<a name="p3"></a>The last argument should be the name of the
+destination TIFF file
 to hold the results.<br>
 <br>
 <span style="font-weight: bold;">cctiff</span> uses very fast integer

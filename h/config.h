@@ -6,9 +6,12 @@
 
 
 /* Version of Argyll release */
+/* Bug fix = 4 bits */
+/* minor number = 8 bits */
+/* major number = 8 bits */
 
-#define ARGYLL_VERSION 0x000700
-#define ARGYLL_VERSION_STR "0.70 (BETA 8)"
+#define ARGYLL_VERSION 0x01000
+#define ARGYLL_VERSION_STR "1.0.0"
 
 /* Maximum file path length */
 #define MAXNAMEL 512

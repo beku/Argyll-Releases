@@ -22,12 +22,15 @@
 /*
  * TTBD:
  *
- *       Some of the error handling is crude. Shouldn't use
- *       error(), should return status.
+ *      Some of the error handling is crude. Shouldn't use
+ *      error(), should return status.
  *
  *		Should allow for offset in curves - this will greatly improve
  *		profile quality on non-calibrated displays. See spectro/dispcal.c
  *		spectro/moncurve.c. Use conjgrad() instead of powell() to speed things up.
+ *      Note that if curves have scale, the scale will have to be
+ *      normalized bacl to zero by scaling the matrix before storing
+ *      the result in the ICC profile.
  */
 
 #define USE_CIE94_DE	/* Use CIE94 delta E measure when creating fit */
@@ -287,7 +290,7 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 		else
 			xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0);	/* Use a default */
 		p->cam = new_icxcam(cam_default);
-		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.Yb, p->vc.La, p->vc.Lv, p->vc.Yf, p->vc.Fxyz, XICC_USE_HK);
+		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf, p->vc.Fxyz, XICC_USE_HK);
 	} else {
 		p->cam = NULL;
 	}
@@ -583,6 +586,7 @@ icmLuBase          *plu,			/* Pointer to Lu we are expanding (ours) */
 int                flags,			/* white/black point flags */
 int                nodp,			/* Number of points */
 cow                *ipoints,		/* Array of input points in XYZ space */
+double             dispLuminance,	/* > 0.0 if display luminance value and is known */
 int                quality			/* Quality metric, 0..3 */
 ) {
 	icxLuMatrix *p;						/* Object being created */
@@ -765,6 +769,7 @@ int                quality			/* Quality metric, 0..3 */
 	if (os.verb)
 		printf("\n");
 
+#ifdef NEVER
 printf("Matrix = %f %f %f\n",os.v[0], os.v[1], os.v[2]);
 printf("         %f %f %f\n",os.v[3], os.v[4], os.v[5]);
 printf("         %f %f %f\n",os.v[6], os.v[7], os.v[8]);
@@ -786,6 +791,7 @@ else
 			                                           os.v[14 + j * 3]);
 	}
 }
+#endif /* NEVER */
 
 	/* Deal with white/black points */
 	if (flags & (ICX_SET_WHITE | ICX_SET_BLACK)) {
@@ -832,58 +838,48 @@ else
 			switch(h->colorSpace) {
 
 				case icSigCmyData: {
-					if (flags & ICX_SET_WHITE) { /* Find White Point */
-						double cmy[3];
+					double cmy[3];
 
-						/* Lookup white value */
-						for (e = 0; e < inputChan; e++)
-							cmy[e] = 0.0;
+					/* Lookup white value */
+					for (e = 0; e < inputChan; e++)
+						cmy[e] = 0.0;
 
-						mxmfunc(&os, os.v, wp, cmy);
+					mxmfunc(&os, os.v, wp, cmy);
 
-						if (flags & ICX_VERBOSE)
-							printf("White point = %f %f %f\n",wp[0],wp[1],wp[2]);
-					}
-					if (flags & ICX_SET_BLACK) { /* Find Black Point */
-						double cmy[3];
+					if (flags & ICX_VERBOSE)
+						printf("Initial white point = %f %f %f\n",wp[0],wp[1],wp[2]);
 
-						/* Lookup black value */
-						for (e = 0; e < inputChan; e++)
-							cmy[e] = 1.0;
+					/* Lookup black value */
+					for (e = 0; e < inputChan; e++)
+						cmy[e] = 1.0;
 
-						mxmfunc(&os, os.v, bp, cmy);
+					mxmfunc(&os, os.v, bp, cmy);
 
-						if (flags & ICX_VERBOSE)
-							printf("Black point = %f %f %f\n",bp[0],bp[1],bp[2]);
-					}
+					if (flags & ICX_VERBOSE)
+						printf("Initial black point = %f %f %f\n",bp[0],bp[1],bp[2]);
 					break;
 				}
 
 				case icSigRgbData: {
-					if (flags & ICX_SET_WHITE) { /* Find White Point */
-						double rgb[3];
+					double rgb[3];
 
-						/* Lookup white value */
-						for (e = 0; e < inputChan; e++)
-							rgb[e] = 1.0;
+					/* Lookup white value */
+					for (e = 0; e < inputChan; e++)
+						rgb[e] = 1.0;
 
-						mxmfunc(&os, os.v, wp, rgb);
+					mxmfunc(&os, os.v, wp, rgb);
 
-						if (flags & ICX_VERBOSE)
-							printf("White point = %f %f %f\n",wp[0],wp[1],wp[2]);
-					}
-					if (flags & ICX_SET_BLACK) { /* Find Black Point */
-						double rgb[3];
+					if (flags & ICX_VERBOSE)
+						printf("Initial white point = %f %f %f\n",wp[0],wp[1],wp[2]);
 
-						/* Lookup black value */
-						for (e = 0; e < inputChan; e++)
-							rgb[e] = 0.0;
+					/* Lookup black value */
+					for (e = 0; e < inputChan; e++)
+						rgb[e] = 0.0;
 
-						mxmfunc(&os, os.v, bp, rgb);
-						
-						if (flags & ICX_VERBOSE)
-							printf("Black point = %f %f %f\n",bp[0],bp[1],bp[2]);
-					}
+					mxmfunc(&os, os.v, bp, rgb);
+					
+					if (flags & ICX_VERBOSE)
+						printf("Initial black point = %f %f %f\n",bp[0],bp[1],bp[2]);
 					break;
 				}
 
@@ -898,7 +894,53 @@ else
 			}
 		}
 
-		/* And write them */
+		/* If this is a display, adjust the white point to be */
+		/* exactly Y = 1.0, and compensate the matrix, dispLuminance */
+		/* and black point accordingly. */
+		if (h->deviceClass == icSigDisplayClass) {
+			double scale = 1.0/wp[1];
+			int i;
+
+			for (i = 0; i < 9; i++) {
+				os.v[i] *= scale;
+			}
+
+			dispLuminance *= wp[1];
+
+			for (i = 0; i < 3; i++) {
+				wp[i] *= scale;
+				bp[i] *= scale;
+			}
+		}
+
+		if (h->deviceClass == icSigDisplayClass
+		 && dispLuminance > 0.0) {
+			icmXYZArray *wo;
+			if ((wo = (icmXYZArray *)icco->read_tag(
+			           icco, icSigLuminanceTag)) == NULL)  {
+				xicp->errc = 1;
+				sprintf(xicp->err,"icx_set_luminance: couldn't find luminance tag");
+				p->del((icxLuBase *)p);
+				return NULL;
+			}
+			if (wo->ttype != icSigXYZArrayType) {
+				xicp->errc = 1;
+				sprintf(xicp->err,"luminance: tag has wrong type");
+				p->del((icxLuBase *)p);
+				return NULL;
+			}
+
+			wo->size = 1;
+			wo->allocate((icmBase *)wo);	/* Allocate space */
+			wo->data[0].X = 0.0;
+			wo->data[0].Y = dispLuminance;
+			wo->data[0].Z = 0.0;
+
+			if (flags & ICX_VERBOSE)
+				printf("Display Luminance = %f\n", wo->data[0].Y);
+		}
+
+		/* Write white and black tags */
 		if (flags & ICX_SET_WHITE) { /* White Point Tag: */
 			icmXYZArray *wo;
 			if ((wo = (icmXYZArray *)icco->read_tag(
@@ -917,9 +959,9 @@ else
 
 			wo->size = 1;
 			wo->allocate((icmBase *)wo);	/* Allocate space */
-			wo->data[0].X = wp[0];
-			wo->data[0].Y = wp[1];
-			wo->data[0].Z = wp[2];
+			wo->data[0].X = wp[0]/wp[1];
+			wo->data[0].Y = wp[1]/wp[1];
+			wo->data[0].Z = wp[2]/wp[1];
 
 			if (flags & ICX_VERBOSE)
 				printf("White point XYZ = %f %f %f\n",wp[0],wp[1],wp[2]);

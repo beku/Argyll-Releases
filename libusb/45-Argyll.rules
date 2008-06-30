@@ -1,7 +1,13 @@
-# udev rule to change permissions so that the USB instruments can be accessed by argyll
-# Copy to /etc/udev/rules.d/10-Argyll.rules
+# udev rule to change permissions so that the USB instruments can be accessed by Argyll
+# Copy to /etc/udev/rules.d/45-Argyll.rules
 # (MODE="660", GROUP="argyll" would be better here)
 	
+# Enable serial port connected instruments connected on first two ports.
+KERNEL=="ttyS[01]", MODE="666"
+
+# Enable serial port connected instruments on USB serial converteds connected on first two ports.
+KERNEL=="ttyUSB[01]", MODE="666"
+
 # DTP20
 SYSFS{idVendor}=="0765", SYSFS{idProduct}=="d020", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c",  MODE="666"
 

@@ -35,6 +35,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "usbio.h"
 
 #include "usb.h"
@@ -136,11 +137,11 @@ struct _icoms *p
 							error("icoms: realloc failed!");
 						p->paths[p->npaths+1] = NULL;
 					}
-					if ((p->paths[p->npaths] = malloc(sizeof(icompath))) == NULL)
-						error("icoms: malloc failed!");
+					if ((p->paths[p->npaths] = calloc(sizeof(icompath), 1)) == NULL)
+						error("icoms: calloc failed!");
 					p->paths[p->npaths]->vid = attr.VendorID;
 					p->paths[p->npaths]->pid = attr.ProductID;
-					p->paths[p->npaths]->dev = NULL;
+					p->paths[p->npaths]->dev = NULL;		/* Make sure it's NULL */
 					if ((p->paths[p->npaths]->hev = (hid_device *)calloc(sizeof(hid_device), 1))
 					                                                                     == NULL)
 						error("icoms: calloc failed!");
@@ -220,6 +221,7 @@ struct _icoms *p
 							error("icoms: calloc failed!");
 
 						p->paths[i]->hev->ioob = ioob;
+						usb_del_usb_device(p->paths[i]->dev);	/* Done with this */
 						p->paths[i]->dev = NULL;	/* (Points to libusb allocation) */
 						ioob = 0;
 						break;
@@ -417,8 +419,8 @@ icomuflags hidflags	/* Any special handling flags */
 		if (p->paths[port-1]->hev == NULL)
 			error("icoms - hid_open_port: Not an HID port!");
 
-		if ((p->ppath = malloc(sizeof(icompath))) == NULL)
-			error("malloc() failed on com port path");
+		if ((p->ppath = calloc(sizeof(icompath), 1)) == NULL)
+			error("calloc() failed on com port path");
 		*p->ppath = *p->paths[port-1];				/* Structure copy */
 		if ((p->ppath->path = strdup(p->paths[port-1]->path)) == NULL)
 			error("strdup() failed on com port path");

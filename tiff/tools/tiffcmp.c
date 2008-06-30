@@ -50,16 +50,16 @@ main(int argc, char* argv[])
 {
 	TIFF *tif1, *tif2;
 	int c, dirnum;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 
-	while ((c = getopt(argc, argv, "ltz:")) != -1)
+	while ((c = tiff_getopt(argc, argv, "ltz:")) != -1)
 		switch (c) {
 		case 'l':
 			stopondiff = 0;
 			break;
 		case 'z':
-			stopondiff = atoi(optarg);
+			stopondiff = atoi(tiff_optarg);
 			break;
 		case 't':
 			stoponfirsttag = 0;
@@ -68,12 +68,12 @@ main(int argc, char* argv[])
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - optind < 2)
+	if (argc - tiff_optind < 2)
 		usage();
-	tif1 = TIFFOpen(argv[optind], "r");
+	tif1 = TIFFOpen(argv[tiff_optind], "r");
 	if (tif1 == NULL)
 		return (-1);
-	tif2 = TIFFOpen(argv[optind+1], "r");
+	tif2 = TIFFOpen(argv[tiff_optind+1], "r");
 	if (tif2 == NULL)
 		return (-2);
 	dirnum = 0;

@@ -60,7 +60,7 @@
 #undef DEBUG_PLOT 		/* Plot in & out curves */
 #undef SPECIAL_FORCE	/* Check rspl nodes against linear XYZ model */
 #undef SPECIAL_FORCE_GAMMA		/* Force correct gamma shaper curves */
-#define SPECIAL_TEST_GAMMA		/* Use gamma on reference model */
+#undef SPECIAL_TEST_GAMMA		/* Use gamma on reference model */
 #undef SPECIAL_TEST_LAB	
 
 #define USE_CIE94_DE	/* Use CIE94 delta E measure when creating in/out curves */
@@ -86,6 +86,9 @@
  */
 
 /* - - - - - - - - - - - - - - - - - */
+
+#ifdef NEVER	/* Not currently used */
+
 /* Lookup a value though an input position curve */
 static double xfit_poscurve(xfit *p, double in, int chan) {
 	double rv = in;
@@ -129,6 +132,7 @@ static void xfit_invposcurves(xfit *p, double *out, double *in) {
 		out[e] = val;
 	}
 }
+#endif /* NEVER */
 
 /* - - - - - - - - - - - - - - - - - */
 /* Lookup a value though input shape curve */
@@ -155,6 +159,7 @@ static double xfit_shpcurve(xfit *p, double in, int chan) {
 	return rv;
 }
 
+#ifdef NEVER	/* Not currently used */
 /* Lookup a value though shape curves */
 static void xfit_shpcurves(xfit *p, double *out, double *in) {
 	int e;
@@ -167,6 +172,7 @@ static void xfit_shpcurves(xfit *p, double *out, double *in) {
 		out[e] = val;
 	}
 }
+#endif /* NEVER */
 
 /* Inverse Lookup a value though a shape curve */
 static double xfit_invshpcurve(xfit *p, double in, int chan) {
@@ -192,6 +198,7 @@ static double xfit_invshpcurve(xfit *p, double in, int chan) {
 	return rv;
 }
 
+#ifdef NEVER	/* Not currently used */
 /* Inverse Lookup a value though shape curves */
 static void xfit_invshpcurves(xfit *p, double *out, double *in) {
 	int e;
@@ -204,6 +211,7 @@ static void xfit_invshpcurves(xfit *p, double *out, double *in) {
 		out[e] = val;
 	}
 }
+#endif /* NEVER */
 
 /* - - - - - - - - - - - - - - - - - */
 
@@ -226,7 +234,7 @@ static void xfit_shmatsh(xfit *p, double *out, double *in) {
 /* - - - - - - - - - - - - - - - - - - - - */
 /* Combined input positioning & shaper transfer curve functions */
 
-int db = 0;
+//int db = 0;
 
 /* Lookup a value though the input positioning and shaper curves */
 static double xfit_inpscurve(xfit *p, double in, int chan) {
@@ -248,7 +256,7 @@ static double xfit_inpscurve(xfit *p, double in, int chan) {
 		/* Normalize */
 		nin = (in - p->in_min[chan])/(p->in_max[chan] - p->in_min[chan]);
 
-if (db) printf("\n~1 inpscurve: cha %d, input value %f, norm %f\n",chan,in,nin);
+//if (db) printf("\n~1 inpscurve: cha %d, input value %f, norm %f\n",chan,in,nin);
 
 		/* Locate the span the input point will be in after positioning lookup */
 		npind = icxTransFunc(p->v + p->pos_offs[chan], p->iluord[chan], nin); 
@@ -262,13 +270,13 @@ if (db) printf("\n~1 inpscurve: cha %d, input value %f, norm %f\n",chan,in,nin);
 		npind0 = six / (p->gres[chan]-1.0);
 		npind1 = (six + 1.0) / (p->gres[chan]-1.0);
 
-if (db) printf("~1 npind %f, six %d, npind0 %f, npind1 %f\n",npind,six,npind0,npind1);
+//if (db) printf("~1 npind %f, six %d, npind0 %f, npind1 %f\n",npind,six,npind0,npind1);
 
 		/* Compute span in values */
 		npin0 = icxInvTransFunc(p->v + p->pos_offs[chan], p->iluord[chan], npind0); 
 		npin1 = icxInvTransFunc(p->v + p->pos_offs[chan], p->iluord[chan], npind1); 
 	
-if (db) printf("~1 npin0 %f, npin1 %f\n",npin0,npin1);
+//if (db) printf("~1 npin0 %f, npin1 %f\n",npin0,npin1);
 
 		/* Compute shaper space values of in' and spane */
 #ifdef NEVER
@@ -281,16 +289,16 @@ if (db) printf("~1 npin0 %f, npin1 %f\n",npin0,npin1);
 		nsind1 = xfit_shpcurve(p, npin1, chan); 
 #endif
 
-if (db) printf("~1 nsind %f, nsind0 %f, nsind1 %f\n",nsind,nsind0,nsind1);
+//if (db) printf("~1 nsind %f, nsind0 %f, nsind1 %f\n",nsind,nsind0,nsind1);
 
 		/* Offset and scale shaper in' value to match position span */
 		rv = (nsind - nsind0)/(nsind1 - nsind0) * (npind1 - npind0) + npind0;
 
-if (db) printf("~1 scale offset ind %f\n",rv);
+//if (db) printf("~1 scale offset ind %f\n",rv);
 
 		/* de-normalize */
 		rv = rv * (p->in_max[chan] - p->in_min[chan]) + p->in_min[chan];
-if (db) printf("~1 returning \n",rv);
+//if (db) printf("~1 returning %d\n",rv);
 	
 	/* Just positioning curve */
 	} else if ((p->tcomb & oc_ip) == oc_p) {
@@ -330,7 +338,7 @@ static double xfit_invinpscurve(xfit *p, double in, int chan) {
 		/* Normalize */
 		nind = (in - p->in_min[chan])/(p->in_max[chan] - p->in_min[chan]);
 
-if (db) printf("\n~1 invinpscurve: cha %d, input value %f, norm %f\n",chan,in,nind);
+//if (db) printf("\n~1 invinpscurve: cha %d, input value %f, norm %f\n",chan,in,nind);
 
 		/* Quantize to grid */
 		six = (int)floor(nind * (p->gres[chan]-1.0));
@@ -341,13 +349,13 @@ if (db) printf("\n~1 invinpscurve: cha %d, input value %f, norm %f\n",chan,in,ni
 		npind0 = six / (p->gres[chan]-1.0);
 		npind1 = (six + 1.0) / (p->gres[chan]-1.0);
 
-if (db) printf("~1 six %d, npind0 %f, npind1 %f\n",six,npind0,npind1);
+//if (db) printf("~1 six %d, npind0 %f, npind1 %f\n",six,npind0,npind1);
 
 		/* Lookup span in values through position curve */
 		npin0 = icxInvTransFunc(p->v + p->pos_offs[chan], p->iluord[chan], npind0); 
 		npin1 = icxInvTransFunc(p->v + p->pos_offs[chan], p->iluord[chan], npind1); 
 	
-if (db) printf("~1 npin0 %f, npin1 %f\n",npin0,npin1);
+//if (db) printf("~1 npin0 %f, npin1 %f\n",npin0,npin1);
 
 		/* Compute span shaper in' values */
 #ifdef NEVER
@@ -361,7 +369,7 @@ if (db) printf("~1 npin0 %f, npin1 %f\n",npin0,npin1);
 		/* Offset and scale position in' value to match shaper span */
 		nsind = (nind - npind0)/(npind1 - npind0) * (nsind1 - nsind0) + nsind0;
 
-if (db) printf("~1 nsind %f, nsind0 %f, nsind1 %f\n",nsind,nsind0,nsind1);
+//if (db) printf("~1 nsind %f, nsind0 %f, nsind1 %f\n",nsind,nsind0,nsind1);
 
 		/* Invert through shaper curve */
 #ifdef NEVER
@@ -373,7 +381,7 @@ if (db) printf("~1 nsind %f, nsind0 %f, nsind1 %f\n",nsind,nsind0,nsind1);
 		/* de-normalize */
 		rv = nin * (p->in_max[chan] - p->in_min[chan]) + p->in_min[chan];
 
-if (db) printf("\n~1 nin = %f, returning %f\n",nin,rv);
+//if (db) printf("\n~1 nin = %f, returning %f\n",nin,rv);
 	
 	/* Just positioning curve */
 	} else if ((p->tcomb & oc_ip) == oc_p) {
@@ -731,7 +739,6 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 		if (p->flags & XFIT_FM_INPUT) {
 			double tdout_de[2][MXDIDO];
 			double pp[MXDI];
-			int n,j,k;
 			for (e = 0; e < di; e++)
 				pp[e] = p->rpoints[i].p[e];
 			for (f = 0; f < fdi; f++) {
@@ -875,7 +882,7 @@ static double _xfitfunc(void *edata, double *v) {
 }
 
 #define xfitfunc _xfitfunc
-#endif
+#endif	/* NEVER */
 
 /* - - - - - - - - - */
 
@@ -1149,6 +1156,7 @@ static void domodel(double *out, double *in) {
 	}
 }
 
+#ifdef SPECIAL_FORCE
 /* Function to pass to rspl to set nodes against */
 /* synthetic model. */
 static void
@@ -1184,7 +1192,7 @@ printf("~1 changing %f %f %f -> %f %f %f\n", out[0], out[1], out[2], tout[0], to
 	out[2] = tout[2];
 }
 
-//#endif /* SPECIAL_TEST */
+#endif /* SPECIAL_FORCE */
 
 /* - - - - - - - - - */
 /* Do the fitting. */
@@ -1457,10 +1465,10 @@ dump_xfit(p);
 
 #ifdef NODDV
 		if (powell(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
-			warning("set_icxLuLut: Powell failed to converge");
+			warning("xfit_fit: Powell failed to converge");
 #else
 		if (conjgrad(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
-			warning("set_icxLuLut: Conjgrad failed to converge");
+			warning("xfit_fit: Conjgrad failed to converge");
 #endif
 		for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 			p->v[p->opt_off + i] = p->wv[i];
@@ -1486,10 +1494,10 @@ dump_xfit(p);
 		setup_xfit(p, p->wv, p->sa, 0.5, 0.3); 
 #ifdef NODDV
 		if (powell(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
-			warning("set_icxLuLut: Powell failed to converge");
+			warning("xfit_fit: Powell failed to converge");
 #else
 		if (conjgrad(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
-			warning("set_icxLuLut: Conjgrad failed to converge");
+			warning("xfit_fit: Conjgrad failed to converge");
 #endif
 		for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 			p->v[p->opt_off + i] = p->wv[i];
@@ -1514,10 +1522,10 @@ dump_xfit(p);
 		setup_xfit(p, p->wv, p->sa, 0.3, 0.3); 
 #ifdef NODDV
 		if (powell(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
-			warning("set_icxLuLut: Powell failed to converge");
+			warning("xfit_fit: Powell failed to converge");
 #else
 		if (conjgrad(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
-			warning("set_icxLuLut: Conjgrad failed to converge");
+			warning("xfit_fit: Conjgrad failed to converge");
 #endif
 		for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 			p->v[p->opt_off + i] = p->wv[i];
@@ -1541,10 +1549,10 @@ dump_xfit(p);
 			setup_xfit(p, p->wv, p->sa, 0.2, 0.2); 
 #ifdef NODDV
 			if (powell(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
-				warning("set_icxLuLut: Powell failed to converge");
+				warning("xfit_fit: Powell failed to converge");
 #else
 			if (conjgrad(NULL, p->opt_cnt, p->v, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
-				warning("set_icxLuLut: Conjgrad failed to converge");
+				warning("xfit_fit: Conjgrad failed to converge");
 #endif
 			for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 				p->v[p->opt_off + i] = p->wv[i];
@@ -1569,7 +1577,7 @@ dump_xfit(p);
 			p->opt_msk = oc_imo;
 			setup_xfit(p, p->wv, p->sa, 0.1, 0.1); 
 			if (conjgrad(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
-				warning("set_icxLuLut: Conjgrad failed to converge");
+				warning("xfit_fit: Conjgrad failed to converge");
 			for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 				p->v[p->opt_off + i] = p->wv[i];
 
@@ -1597,7 +1605,7 @@ dump_xfit(p);
 				p->wv[0] = p->v[p->out_offs[f]];	/* Current parameter value */
 				p->sa[0] = 0.1;					/* Search radius */
 				if (powell(NULL, 1, p->wv, p->sa, 0.0000001, 1000, symoptfunc, (void *)p) != 0)
-					error("set_icxLuLut: Powell failed to converge");
+					error("xfit_fit: Powell failed to converge");
 				p->v[p->out_offs[f]] = p->wv[0];	/* Copy results back */
 			}
 		}
@@ -1874,7 +1882,7 @@ dump_xfit(p);
 printf("~1 about to setup iwidth\n");
 #endif
 		for (e = 0; e < p->di; e++) {
-			double lv, cv;
+			double lv = 0.0, cv;
 //printf("~1 e = %d\n",e);
 			if ((iwidth[e] = (double *)malloc((p->gres[e]-1) * sizeof(double))) == NULL)
 				return 1;
@@ -1946,6 +1954,13 @@ printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
 
 //printf("~1 XYZ white %f %f %f\n", wcc.v[0], wcc.v[1], wcc.v[2]);
 
+			if (p->verb) {
+				double labwp[3];
+				icmXYZ2Lab(&icmD50, labwp, wcc.v);
+				printf("Before fine tune, WP = XYZ %f %f %f, Lab %f %f %f\n",
+				wcc.v[0], wcc.v[1],wcc.v[2], labwp[0], labwp[1], labwp[2]);
+			}
+
 			/* Fixup conversion matricies so that they transform */
 			/* the absolute input values to perfect relative. */
 			icmAry2XYZ(_wp, wcc.v);
@@ -1960,13 +1975,6 @@ printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
 			icmXYZ2Ary(p->wp, icmD50);
 			icmMulBy3x3(p->wp, p->toAbs, p->wp);
 
-			if (p->verb) {
-				double labwp[3];
-				icmXYZ2Lab(&icmD50, labwp, wcc.v);
-				printf("Before fine tune, WP = XYZ %f %f %f, Lab %f %f %f\n",
-				wcc.p[0], wcc.p[1],wcc.p[2], labwp[0], labwp[1], labwp[2]);
-			}
-
 			/* Matrix needed to correct from approximate to exact D50 */
 			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->cmat);
 	
@@ -1976,6 +1984,13 @@ printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
 				(void *)p,		/* Opaque function context */
 				conv_rspl_out	/* Function to set from */
 			);
+
+			if (p->verb) {
+				double labwp[3];
+				icmXYZ2Lab(&icmD50, labwp, p->wp);
+				printf("After fine tune, WP = XYZ %f %f %f, Lab %f %f %f\n",
+				p->wp[0], p->wp[1],p->wp[2], labwp[0], labwp[1], labwp[2]);
+			}
 		}
 
 #ifdef SPECIAL_FORCE

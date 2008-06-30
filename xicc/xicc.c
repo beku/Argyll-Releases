@@ -59,7 +59,7 @@ icxLuBase * xicc_get_luobj(xicc *p, int flags, icmLookupFunc func, icRenderingIn
                            icxViewCond *vc, icxInk *ink);
 static icxLuBase *xicc_set_luobj(xicc *p, icmLookupFunc func, icRenderingIntent intent,
                             icmLookupOrder order, int flags, int no, cow *points,
-                            double smooth, double avgdev,
+                            double dispLuminance, double smooth, double avgdev,
                             icxViewCond *vc, icxInk *ink, int quality);
 static void icxLutSpaces(icxLuBase *p, icColorSpaceSignature *ins, int *inn,
                          icColorSpaceSignature *outs, int *outn,
@@ -106,6 +106,14 @@ const char *icx2str(icmEnumType etype, int enumval) {
 			return "icxAppearance";
 		else if (((icRenderingIntent)enumval) == icxAbsAppearance)
 			return "icxAbsAppearance";
+		else if (((icRenderingIntent)enumval) == icxPerceptualAppearance)
+			return "icxPerceptualAppearance";
+		else if (((icRenderingIntent)enumval) == icxAbsPerceptualAppearance)
+			return "icxAbsPerceptualAppearance";
+		else if (((icRenderingIntent)enumval) == icxSaturationAppearance)
+			return "icxSaturationAppearance";
+		else if (((icRenderingIntent)enumval) == icxAbsSaturationAppearance)
+			return "icxAbsSaturationAppearance";
 	}
 	return icm2str(etype, enumval);
 }
@@ -332,21 +340,46 @@ icxInk *ink					/* inking details (NULL for default) */
 	_control87(EM_OVERFLOW, EM_OVERFLOW);
 #endif
 
-	/* Appearance model selected */
+	/* Ensure that appropriate PCS is slected for an appearance intent */
 	if (intent == icxAppearance
-	 || intent == icxAbsAppearance) {
-		pcsor = icxSigJabData;		/* If one, make sure it's both */
+	 || intent == icxAbsAppearance
+	 || intent == icxPerceptualAppearance
+	 || intent == icxAbsPerceptualAppearance
+	 || intent == icxSaturationAppearance
+	 || intent == icxAbsSaturationAppearance) {
+		pcsor = icxSigJabData;
+
+	/* Translate non-Jab intents to the equivalent appearance "intent" if pcsor == Jab. */
+	/* This is how we get these when the UI's don't list all the apperances intents, */
+	/* we select the analogous non-apperance intent with pcsor = Jab. */
+	/* Note that Abs/non-abs selects between Apperance and AbsAppearance. */
+	} else if (pcsor == icxSigJabData) {
+		if (intent == icRelativeColorimetric)
+			intent = icxAppearance;
+		else if (intent == icAbsoluteColorimetric)
+			intent = icxAbsAppearance;
+		else if (intent == icPerceptual)
+			intent = icxPerceptualAppearance;
+		else if (intent == icmAbsolutePerceptual)
+			intent = icxAbsPerceptualAppearance;
+		else if (intent == icSaturation)
+			intent = icxSaturationAppearance;
+		else if (intent == icmAbsoluteSaturation)
+			intent = icxAbsSaturationAppearance;
+		else
+			intent = icxAppearance;
 	}
 
-	if (pcsor == icxSigJabData
-	  && intent != icxAppearance
-	  && intent != icxAbsAppearance) {
-		intent = icxAppearance;	/* If one, make sure it's both */
-	}
-
-	if (intent == icxAppearance
-	 || intent == icxAbsAppearance)
+	/* Translate intent asked for into intent needed icclib */
+	if      (intent == icxAppearance
+	      || intent == icxAbsAppearance)
 		n_intent = icAbsoluteColorimetric;
+	else if (intent == icxPerceptualAppearance
+	      || intent == icxAbsPerceptualAppearance)
+		n_intent = icmAbsolutePerceptual;
+	else if (intent == icxSaturationAppearance
+	      || intent == icxAbsSaturationAppearance)
+		n_intent = icmAbsoluteSaturation;
 
 	if (pcsor != icmSigDefaultData)
 		n_pcs = pcsor;			/* There is an icclib override */
@@ -364,7 +397,11 @@ icxInk *ink					/* inking details (NULL for default) */
 	/* Figure out what the algorithm is */
 	plu->spaces(plu, NULL, NULL, NULL, NULL, &alg, NULL, NULL, &n_pcs);
 
-	if (vc!= NULL && intent == icxAbsAppearance) {	/* make sure its "Abs CAM" */
+	/* make sure its "Abs CAM" */
+	if (vc!= NULL
+	 && (intent == icxAbsAppearance
+	  || intent == icxAbsPerceptualAppearance
+	  || intent == icxAbsSaturationAppearance)) {	/* make sure its "Abs CAM" */
 		/* Set white point and flare color to D50 */
 		vc->Wxyz[0] = icmD50.X/icmD50.Y;
 		vc->Wxyz[1] = icmD50.Y/icmD50.Y;	// Normalise white reference to Y = 1 ?
@@ -417,6 +454,7 @@ icmLookupOrder order,		/* Search Order */
 int flags,					/* white/black point flags etc. */
 int no,						/* Number of points */
 cow *points,				/* Array of input points */
+double dispLuminance,		/* > 0.0 if display luminance value and is known */
 double smooth,				/* RSPL smoothing factor, -ve if raw */
 double avgdev,				/* reading Average Deviation as a proportion of the input range */
 icxViewCond *vc,			/* Viewing Condition (NULL if not using CAM) */
@@ -459,12 +497,12 @@ int quality					/* Quality metric, 0..3 */
 			break;
 
     	case icmMatrixFwdType:
-			xplu = set_icxLuMatrix(p, plu, flags, no, points, quality);
+			xplu = set_icxLuMatrix(p, plu, flags, no, points, dispLuminance, quality);
 			break;
 
     	case icmLutType:
 			/* ~~~ Should add check that it is a fwd profile ~~~ */
-			xplu = set_icxLuLut(p, plu, intent, func, flags, no, points, smooth, avgdev, vc, ink, quality);
+			xplu = set_icxLuLut(p, plu, intent, func, flags, no, points, dispLuminance, smooth, avgdev, vc, ink, quality);
 			break;
 
 		default:
@@ -713,8 +751,8 @@ icxViewCond *vc		/* Viewing parameters to return */
 	
 	/* See if the viewing conditions are completely defined as ICC can do it */
 	if (Wxyz[0] >= 0.0 && Wxyz[1] >= 0.0 && Wxyz[2] >= 0.0
-	 && Yb >= 0.0
 	 && La >= 0.0
+	 && Yb >= 0.0
 	 && Lv >= 0.0
 	 && Yf >= 0.0
 	 && Fxyz[0] >= 0.0 && Fxyz[1] >= 0.0 && Fxyz[2] >= 0.0) {
@@ -723,8 +761,8 @@ icxViewCond *vc		/* Viewing parameters to return */
 		vc->Wxyz[0] = Wxyz[0];
 		vc->Wxyz[1] = Wxyz[1];
 		vc->Wxyz[2] = Wxyz[2];
-		vc->Yb = Yb;
 		vc->La = La;
+		vc->Yb = Yb;
 		vc->Lv = Lv;
 		vc->Yf = Yf;
 		vc->Fxyz[0] = Fxyz[0];	
@@ -753,10 +791,10 @@ icxViewCond *vc		/* Viewing parameters to return */
 		/* We will assume that the print is the original. */
 		case icSigReflectiveScanner:
 			{
-				if (Yb < 0.0)	/* No background relative luminance */
-					Yb = 0.2;	/* Assume grey world */
 				if (La < 0.0)	/* No adapting luminance */
 					La = 34.0;	/* Use a practical print evaluation number */
+				if (Yb < 0.0)	/* No background relative luminance */
+					Yb = 0.2;	/* Assume grey world */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
@@ -772,10 +810,10 @@ icxViewCond *vc		/* Viewing parameters to return */
 		/* We will assume a compromise media original, natural scene */
 		case icSigFilmScanner:
 			{
-				if (Yb < 0.0)	/* No background relative luminance */
-					Yb = 0.2;	/* Assume grey world */
 				if (La < 0.0)	/* No adapting luminance */
 					La = 50.0;	/* Use bright indoors, dull outdoors */
+				if (Yb < 0.0)	/* No background relative luminance */
+					Yb = 0.2;	/* Assume grey world */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
@@ -789,10 +827,10 @@ icxViewCond *vc		/* Viewing parameters to return */
 		case icSigDigitalCamera:
 		case icSigVideoCamera:
 			{
-				if (Yb < 0.0)	/* No background relative luminance */
-					Yb = 0.2;	/* Assume grey world */
 				if (La < 0.0)	/* No adapting luminance */
 					La = 110.0;	/* Use very bright indoors, usual outdoors */
+				if (Yb < 0.0)	/* No background relative luminance */
+					Yb = 0.2;	/* Assume grey world */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
@@ -806,10 +844,10 @@ icxViewCond *vc		/* Viewing parameters to return */
 		/* Assume a video monitor is in a darker environment than a CRT */
 		case icSigVideoMonitor:
 			{
-				if (Yb < 0.0)	/* No background relative luminance */
-					Yb = 0.2;	/* Assume grey world */
 				if (La < 0.0)	/* No adapting luminance */
 					La = 4.0;	/* Darkened work environment */
+				if (Yb < 0.0)	/* No background relative luminance */
+					Yb = 0.2;	/* Assume grey world */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_dim;	/* Assume dim viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
@@ -825,10 +863,10 @@ icxViewCond *vc		/* Viewing parameters to return */
 		case icSigPMDisplay:
 		case icSigAMDisplay:
 			{
-				if (Yb < 0.0)	/* No background relative luminance */
-					Yb = 0.2;	/* Assume grey world */
 				if (La < 0.0)	/* No adapting luminance */
 					La = 33.0;	/* Typical work environment */
+				if (Yb < 0.0)	/* No background relative luminance */
+					Yb = 0.2;	/* Assume grey world */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
@@ -842,10 +880,10 @@ icxViewCond *vc		/* Viewing parameters to return */
 		/* (It represents original scene colors) */
 		case icSigPhotoCD:
 			{
-				if (Yb < 0.0)	/* No background relative luminance */
-					Yb = 0.2;	/* Assume grey world */
 				if (La < 0.0)	/* No adapting luminance */
 					La = 320.0;	/* Bright outdoors */
+				if (Yb < 0.0)	/* No background relative luminance */
+					Yb = 0.2;	/* Assume grey world */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
@@ -860,10 +898,10 @@ icxViewCond *vc		/* Viewing parameters to return */
 		/* Assume darkened room, little background */
 		case icSigProjectionTelevision:
 			{
-				if (Yb < 0.0)	/* No background relative luminance */
-					Yb = 0.1;	/* Assume little background */
 				if (La < 0.0)	/* No adapting luminance */
 					La = 7.0;	/* Dark environment */
+				if (Yb < 0.0)	/* No background relative luminance */
+					Yb = 0.1;	/* Assume little background */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_dim;	/* Dim environment */
 				if (Yf < 0.0)	/* No flare figure */
@@ -875,10 +913,10 @@ icxViewCond *vc		/* Viewing parameters to return */
 		/* Assume very darkened room, no background */
 		case icSigFilmWriter:
 			{
-				if (Yb < 0.0)	/* No background relative luminance */
-					Yb = 0.0;	/* Assume no background */
 				if (La < 0.0)	/* No adapting luminance */
 					La = 7.0;	/* Dark environment */
+				if (Yb < 0.0)	/* No background relative luminance */
+					Yb = 0.0;	/* Assume no background */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_dark;	/* Dark environment */
 				if (Yf < 0.0)	/* No flare figure */
@@ -902,10 +940,10 @@ icxViewCond *vc		/* Viewing parameters to return */
 		case icSigSilkscreen:
 		case icSigFlexography:
 			{
-				if (Yb < 0.0)	/* No background relative luminance */
-					Yb = 0.2;	/* Assume grey world */
 				if (La < 0.0)	/* No adapting luminance */
 					La = 40.0;	/* Use a practical print evaluation number */
+				if (Yb < 0.0)	/* No background relative luminance */
+					Yb = 0.2;	/* Assume grey world */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
@@ -972,21 +1010,29 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		}
 	}
 
-/*
-  Typical Ambient Illuminance brightness
-  (Lux)   La  Condition 
-    11     1  Twilight
-    32     2  Subdued indoor lighting
-    64     4  Less than typical office light; sometimes recommended for
-              display-only workplaces (sRGB)
-   350    22  Typical Office (sRGB annex D)
-   500    32  Practical print viewing environment (ISO-3664 P2)
-  1000    64  Print evaluation (CIE 116-1995)
-  1000    64  Overcast Outdoors
-  2000   127  Critical print evaluation (ISO-3664 P1)
- 10000   637  Typical outdoors, full daylight 
- 50000  3185  Bright summers day 
-*/
+	/*
+
+	Typical adapting field luminances and white luminance in reflective setup:
+
+	E = illuminance in Lux
+	Lv = White luminance assuming 100% reflectance
+	La = Adapting field luminance in cd/m^2, assuming 20% reflectance from surround
+    
+	    E     La     Lv   Condition 
+	    11     0.7    4   Twilight
+	    32     2     10   Subdued indoor lighting
+	    64     4     20   Less than typical office light; sometimes recommended for
+	                      display-only workplaces (sRGB)
+	   350    22    111   Typical Office (sRGB annex D)
+	   500    32    160   Practical print evaluationa (ISO-3664 P2)
+	  1000    64    318   Good Print evaluation (CIE 116-1995)
+	  1000    64    318   Television Studio lighting
+	  1000    64    318   Overcast Outdoors
+	  2000   127    637   Critical print evaluation (ISO-3664 P1)
+	 10000   637   3183   Typical outdoors, full daylight 
+	 50000  3185  15915   Bright summers day 
+
+	*/
 
 	if (no == -1
 	 || (as != NULL && stricmp(as,"d") == 0)) {
@@ -995,8 +1041,8 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		if (vc != NULL) {
 			vc->desc = "  d: Default Viewing Condition";
 			vc->Ev = vc_average;	/* Average viewing conditions */
+			vc->La = 50.0;			/* Practical to Good lighting */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->La = 50.0;			/* Compromise brightness */
 			vc->Yf = 0.01;			/* 1% flare */
 		}
 	}
@@ -1007,8 +1053,8 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		if (vc != NULL) {
 			vc->desc = " pp - Practical Reflection Print";
 			vc->Ev = vc_average;	/* Average viewing conditions */
-			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 32.0;			/* Use a practical print evaluation number */
+			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.01;			/* 1% flare */
 		}
 	}
@@ -1019,8 +1065,8 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		if (vc != NULL) {
 			vc->desc = " pe - Print evaluation environment";
 			vc->Ev = vc_average;	/* Average viewing conditions */
+			vc->La = 64.0;			/* Good */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->La = 64.0;			/* Bright */
 			vc->Yf = 0.01;			/* 1% flare */
 		}
 	}
@@ -1031,8 +1077,8 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		if (vc != NULL) {
 			vc->desc = " mt - Monitor in typical work environment";
 			vc->Ev = vc_average;	/* Average viewing conditions */
-			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 22.0;			/* Typical work environment */
+			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.02;			/* 2% flare */
 		}
 	}
@@ -1041,10 +1087,10 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 
 		no = 3;
 		if (vc != NULL) {
-			vc->desc = " mb - Monitor in bright work environment";
+			vc->desc = " mb - Bright monitor in bright work environment";
 			vc->Ev = vc_average;	/* Average viewing conditions */
-			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 42.0;			/* Bright work environment */
+			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.02;			/* 2% flare */
 		}
 	}
@@ -1055,8 +1101,8 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		if (vc != NULL) {
 			vc->desc = " md - Monitor in darkened work environment";
 			vc->Ev = vc_dim;		/* Dim viewing conditions */
-			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 4.0;			/* Darkened work environment */
+			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.01;			/* 1% flare */
 		}
 	}
@@ -1067,8 +1113,8 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		if (vc != NULL) {
 			vc->desc = " jm - Projector in dim environment";
 			vc->Ev = vc_dim;		/* Dim viewing conditions */
-			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 10.0;			/* Adaptation is from display */
+			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.01;			/* 1% flare */
 		}
 	}
@@ -1079,8 +1125,8 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		if (vc != NULL) {
 			vc->desc = " jd - Projector in dark environment";
 			vc->Ev = vc_dark;		/* Dark viewing conditions */
-			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 10.0;			/* Adaptation is from display */
+			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.01;			/* 1% flare ? */
 		}
 	}
@@ -1091,8 +1137,8 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		if (vc != NULL) {
 			vc->desc = "pcd - Photo CD - original scene outdoors";
 			vc->Ev = vc_average;	/* Average viewing conditions */
-			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 320.0;			/* Typical outdoors, 1600 cd/m^2 */
+			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.00;			/* 0% flare */
 		}
 	}
@@ -1103,8 +1149,8 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		if (vc != NULL) {
 			vc->desc = " ob - Original scene - Bright Outdoors";
 			vc->Ev = vc_average;	/* Average viewing conditions */
-			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 2000.0;		/* Bright Outdoors */
+			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.00;			/* 0% flare */
 		}
 	}
@@ -1115,8 +1161,8 @@ int desc			/* NZ - Just return a description of this enumeration in vc */
 		if (vc != NULL) {
 			vc->desc = " cx - Cut Sheet Transparencies on a viewing box";
 			vc->Ev = vc_cut_sheet;	/* Cut sheet viewing conditions */
-			vc->Yb = 0.2;			/* Grey world */
 			vc->La = 53.0;			/* Dim, adapted to slide ? */
+			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.01;			/* 1% flare ? */
 		}
 	}
@@ -1217,6 +1263,7 @@ char *as				/* Alias string selector, NULL for none */
 #else
 	int colccas = 0x0;	/* Use Lab for colorimetric style intents */
 	int perccas = 0x0;	/* Use Lab for perceptual style intents */
+	fprintf(stderr,"!!!!!! Warning, USE_CAM is off in xicc.c !!!!!!\n");
 #endif
 
 	/* Assert default if no guidance given */

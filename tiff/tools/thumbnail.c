@@ -56,8 +56,8 @@ static	int generateThumbnail(TIFF*, TIFF*);
 static	void initScale();
 static	void usage(void);
 
-extern	char* optarg;
-extern	int optind;
+extern	char* tiff_optarg;
+extern	int tiff_optind;
 
 int
 main(int argc, char* argv[])
@@ -66,29 +66,29 @@ main(int argc, char* argv[])
     TIFF* out;
     int c;
 
-    while ((c = getopt(argc, argv, "w:h:c:")) != -1) {
+    while ((c = tiff_getopt(argc, argv, "w:h:c:")) != -1) {
 	switch (c) {
-	case 'w':	tnw = strtoul(optarg, NULL, 0); break;
-	case 'h':	tnh = strtoul(optarg, NULL, 0); break;
-	case 'c':	contrast = streq(optarg, "exp50") ? EXP50 :
-				   streq(optarg, "exp60") ? EXP60 :
-				   streq(optarg, "exp70") ? EXP70 :
-				   streq(optarg, "exp80") ? EXP80 :
-				   streq(optarg, "exp90") ? EXP90 :
-				   streq(optarg, "exp")   ? EXP :
-				   streq(optarg, "linear")? LINEAR :
+	case 'w':	tnw = strtoul(tiff_optarg, NULL, 0); break;
+	case 'h':	tnh = strtoul(tiff_optarg, NULL, 0); break;
+	case 'c':	contrast = streq(tiff_optarg, "exp50") ? EXP50 :
+				   streq(tiff_optarg, "exp60") ? EXP60 :
+				   streq(tiff_optarg, "exp70") ? EXP70 :
+				   streq(tiff_optarg, "exp80") ? EXP80 :
+				   streq(tiff_optarg, "exp90") ? EXP90 :
+				   streq(tiff_optarg, "exp")   ? EXP :
+				   streq(tiff_optarg, "linear")? LINEAR :
 							    EXP;
 			break;
 	default:	usage();
 	}
     }
-    if (argc-optind != 2)
+    if (argc-tiff_optind != 2)
 	usage();
     thumbnail = (uint8*) _TIFFmalloc(tnw * tnh);
-    out = TIFFOpen(argv[optind+1], "w");
+    out = TIFFOpen(argv[tiff_optind+1], "w");
     if (out == NULL)
 	return (-2);
-    in = TIFFOpen(argv[optind], "r");
+    in = TIFFOpen(argv[tiff_optind], "r");
     if (in != NULL) {
 	initScale();
 	do {

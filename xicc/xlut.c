@@ -446,9 +446,8 @@ double *in
 		if (kval > val)
 			val = kval;
 	}
-
 	/* Compute amount outside device value limits 0.0 - 1.0 */
-	for (ovr = 0.0, e = 0; e < p->inputChan; e++) {
+	for (ovr = -1.0, e = 0; e < p->inputChan; e++) {
 		if (in[e] < 0.0) {
 			if (-in[e] > ovr)
 				ovr = -in[e];
@@ -1459,8 +1458,14 @@ icxLuLut *p			/* Object being initialised */
 		p->clip.nearclip = 1;
 
 	} else {		/* Vector clip */
+		/* !!!! NOTE NOTE NOTE !!!! */
+		/* We should re-write this to avoid calling p->clutTable->rev_interp(), */
+		/* since this sets up all the rev acceleration tables for two calls, */
+		/* if this lut is being setup from scattered data, and never used */
+		/* for rev lookup */
 		icColorSpaceSignature clutos = p->natos;
 
+		fprintf(stderr, "!!!!! setup_clip_icxLuLut with vector clip - possibly unessary rev setup !!!!\n");
 		p->clip.nearclip = 0;
 		p->clip.LabLike = 0;
 		p->clip.fdi = p->clutTable->fdi;
@@ -1680,7 +1685,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 		else
 			xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0);	/* Use a default */
 		p->cam = new_icxcam(cam_default);
-		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.Yb, p->vc.La, p->vc.Lv, p->vc.Yf, p->vc.Fxyz, XICC_USE_HK);
+		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf, p->vc.Fxyz, XICC_USE_HK);
 	} else {
 		p->cam = NULL;
 	}
@@ -1951,7 +1956,7 @@ static double xfit_to_dde2(void *cntx, double dout[2][MXDIDO], double *in1, doub
 	double rv;
 
 	if (p->pcs == icSigLabData) {
-		int i,j,k;
+		int j,k;
 		double tdout[2][3];
 #ifdef USE_CIE94_DE
 		rv = icxdCIE94sq(tdout, in1, in2);
@@ -2230,9 +2235,10 @@ xicc               *xicp,
 icmLuBase          *plu,			/* Pointer to Lu we are expanding (ours) */	
 icmLookupFunc      func,			/* Functionality requested */
 icRenderingIntent  intent,			/* Rendering intent */
-int                flags,			/* white/black point flags */
+int                flags,			/* white/black point flags etc. */
 int                nodp,			/* Number of points */
 cow                *ipoints,		/* Array of input points (Lab or XYZ normalized to 1.0) */
+double             dispLuminance,	/* > 0.0 if display luminance value and is known */
 double             smooth,			/* RSPL smoothing factor, -ve if raw */
 double             avgdev,			/* reading Average Deviation as a prop. of the input range */
 icxViewCond        *vc,				/* Viewing Condition (NULL if not using CAM) */
@@ -2266,6 +2272,10 @@ int                quality			/* Quality metric, 0..3 */
 	/* Do basic creation and initialisation */
 	if ((p = alloc_icxLuLut(xicp, plu, luflags)) == NULL)
 		return NULL;
+
+	/* Set LuLut "use" specific creation flags: */
+	if (flags & ICX_CLIP_NEAREST)
+		p->nearclip = 1;
 
 	/* Set LuLut "create" specific flags: */
 	if (flags & ICX_NO_IN_SHP_LUTS)
@@ -2336,8 +2346,7 @@ int                quality			/* Quality metric, 0..3 */
 	icmXYZ2Ary(wp, icmD50);		/* Set a default value - D50 */
 	icmXYZ2Ary(bp, icmBlack);	/* Set a default value - absolute black */
 
-	if (flags & (ICX_SET_WHITE | ICX_SET_BLACK)) {
-
+	{
 		/* Figure out as best we can the device white and black points */
 
 		if (h->deviceClass == icSigInputClass) {
@@ -2507,10 +2516,6 @@ int                quality			/* Quality metric, 0..3 */
 			printf("Approximate White point XYZ = %f %f %f, Lab = %f %f %f\n",
 			        wp[0],wp[1],wp[2],lwp[0],lwp[1],lwp[2]);
 		}
-
-	/* Else not ICX_SET_WHITE */
-	} else {
-		icmXYZ2Ary(wp, icmD50);		/* Set a default value - D50 */
 	}
 
 	if (h->colorSpace == icSigGrayData) {	/* Don't use device or PCS curves for monochrome */
@@ -2725,7 +2730,7 @@ int                quality			/* Quality metric, 0..3 */
 	}
 
 	/* Deal with finalizing white/black points */
-	if (flags & (ICX_SET_WHITE | ICX_SET_BLACK)) {
+	{
 
 		if ((flags & ICX_SET_WHITE) && (flags & ICX_VERBOSE)) {
 			double lwp[3];
@@ -2735,7 +2740,7 @@ int                quality			/* Quality metric, 0..3 */
 		}
 
 		/* Lookup the black point */
-		if (flags & ICX_SET_BLACK) { /* Black Point Tag: */
+		{ /* Black Point Tag: */
 			co bcc;
 
 			if (flags & ICX_VERBOSE)
@@ -2849,7 +2854,34 @@ int                quality			/* Quality metric, 0..3 */
 			}
 		}
 
-		/* And write them */
+		if (h->deviceClass == icSigDisplayClass
+		 && dispLuminance > 0.0) {
+			icmXYZArray *wo;
+			if ((wo = (icmXYZArray *)icco->read_tag(
+			           icco, icSigLuminanceTag)) == NULL)  {
+				xicp->errc = 1;
+				sprintf(xicp->err,"icx_set_luminance: couldn't find luminance tag");
+				p->del((icxLuBase *)p);
+				return NULL;
+			}
+			if (wo->ttype != icSigXYZArrayType) {
+				xicp->errc = 1;
+				sprintf(xicp->err,"luminance: tag has wrong type");
+				p->del((icxLuBase *)p);
+				return NULL;
+			}
+
+			wo->size = 1;
+			wo->allocate((icmBase *)wo);	/* Allocate space */
+			wo->data[0].X = 0.0;
+			wo->data[0].Y = dispLuminance * wp[1];
+			wo->data[0].Z = 0.0;
+
+			if (flags & ICX_VERBOSE)
+				printf("Display Luminance = %f\n", wo->data[0].Y);
+		}
+
+		/* Write white and black points */
 		if (flags & ICX_SET_WHITE) { /* White Point Tag: */
 			icmXYZArray *wo;
 			if ((wo = (icmXYZArray *)icco->read_tag(
@@ -2945,7 +2977,7 @@ int                quality			/* Quality metric, 0..3 */
 	else
 		xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0);	/* Use a default */
 	p->cam = new_icxcam(cam_default);
-	p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.Yb, p->vc.La, p->vc.Lv, p->vc.Yf, p->vc.Fxyz, XICC_USE_HK);
+	p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf, p->vc.Fxyz, XICC_USE_HK);
 	
 	if (flags & ICX_VERBOSE)
 		printf("Done A to B table creation\n");
@@ -3223,6 +3255,7 @@ double       detail		/* gamut detail level, 0.0 = def */
 	} else { /* Must be icmBwd */
 		lutgamctx cx;
 	
+#ifdef NEVER	/* Not sure why this code is here. */
 		/* Get an appropriate device to PCS conversion */
 		switch (intent) {
 			/* If it is relative */
@@ -3240,7 +3273,8 @@ double       detail		/* gamut detail level, 0.0 = def */
 			default:
 				break;
 		}
-		if ((cx.flu = p->get_luobj(p, 0, icmFwd, intent, pcs, icmLuOrdNorm,
+#endif /* NEVER */
+		if ((cx.flu = p->get_luobj(p, ICX_CLIP_NEAREST , icmFwd, intent, pcs, icmLuOrdNorm,
 		                              &plu->vc, NULL)) == NULL) {
 			return NULL;	/* oops */
 		}

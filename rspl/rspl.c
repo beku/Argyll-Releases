@@ -139,8 +139,10 @@ new_rspl(
 	/* Set pointers to methods in this file */
 	s->del           = free_rspl;
 	s->interp        = interp_rspl_sx;	/* Default to simplex interp */
-//printf("!!!! rspl.c using interp_rspl_nl !!!!");
-//	s->interp        = interp_rspl_nl;
+#ifdef NEVER
+printf("!!!! rspl.c using interp_rspl_nl !!!!");
+	s->interp        = interp_rspl_nl;
+#endif
 	s->part_interp   = part_interp_rspl_sx;
 	s->set_rspl      = set_rspl;
 	s->scan_rspl     = scan_rspl;
@@ -224,7 +226,7 @@ alloc_grid(rspl *s) {
 	EC_INIT(gc);
 	for (i = 0, gp = s->g.a; !EC_DONE(gc); i++, gp += s->g.pss) {
 		gp[-1] = L_UNINIT;	/* Init Ink limit function value to -1e38 */
-		I_FL(gp);		/* Init all flags to zero */
+		I_FL(gp);			/* Init all flags to zero */
 		for (e = 0; e < di; e++) {
 			int e1,e2;
 			e1 = gc[e];				/* Dist to bottom edge */
@@ -658,6 +660,7 @@ co *p			/* Input value and returned function value */
 
 /* ============================================ */
 
+#ifdef NEVER
 /* Alternate, not currently used */
 /* Do a forward interpolation using an n-linear method. */
 /* Return 0 if OK, 1 if input was clipped to grid */
@@ -740,6 +743,7 @@ co *p			/* Input value and returned function value */
 
 	return rv;
 }
+#endif /* NEVER */
 
 /* ============================================ */
 /* Non-mono calculations */
@@ -810,7 +814,8 @@ rspl *s
 /* values are set to exactly the value returned fy func(), unless the */
 /* RSPL_SET_APXLS flag is set, in which case an attempt is made to have */
 /* the grid points represent a least squares aproximation to the underlying */
-/* surface. */
+/* surface, by using extra samples in the middle of grid cells. */
+/* RSPL_SET_APXLS tends to improve the fit to the underlying function. */
 /* Grid index values are supplied "under" in[] at *((int*)&iv[-e-1]), */
 /* but if RSPL_SET_APXLS is set, the grid index will be the base of */
 /* the cell the center point is sampled from every second sample. */
@@ -920,7 +925,7 @@ static int set_rspl(
 				 s->g.fmax[f] = gp[f];
 		}
 
-		/* Get the center of the cell values */
+		/* For RSPL_SET_APXLS, get the center of the cell values as well. */
 		if (cc != NULL) {
 			float *ccp;
 
@@ -947,9 +952,8 @@ static int set_rspl(
 			break;
 	}
 
-	/* Deal with cell center value, aproximate least squares adjustment */
+	/* For RSPL_SET_APXLS, deal with cell center value, aproximate least squares adjustment */
 	if (cc != NULL) {
-		int ti;					/* Table index */
 		int ee;
 		double cw = 1.0/(double)(1 << s->di);		/* Weight for each cube corner */
 		float *ccp;

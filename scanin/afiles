@@ -7,9 +7,12 @@ scanrd.c
 scanrd.h
 scanrd_.h
 it8.cht
+ColorChecker.cht 
+ColorChecker.cie 
 ColorCheckerDC.cht 
 ColorCheckerSG.cht 
 Hutchcolor.cht 
 i1_RGB_Scan_1.4.cht
 QPcard_201.cht
 QPcard_201.cie
+CMP_DT_003.cht

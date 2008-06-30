@@ -48,6 +48,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "ss.h"
 
 /* ------------------------------------------- */

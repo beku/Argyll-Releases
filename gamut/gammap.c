@@ -21,15 +21,16 @@
  *       Improve error handling.
  */
 
-#undef PLOT_LMAP	/* Plot L map */
 #define VERBOSE		/* Print out extra interesting information when verbose */
 #define XRES 100	/* Res of plot */
-#define PLOT_GAMVEC	/* Save the gamut mapping points as "gammap.wrl" */
-#define PLOT_GAMUTS	/* Save (part mapped) input and output gamuts as */
+#undef PLOT_LMAP	/* Plot L map */
+#undef PLOT_GAMVEC	/* Save the gamut mapping points as "gammap.wrl" */
+#undef PLOT_GAMUTS	/* Save (part mapped) input and output gamuts as */
 					/* src.wrl, img.wrl, dst.wrl, gmsrc.wrl */
 #undef PLOT_3DKNEES	/* Plot the 3D compression knees */
 
-#ifdef PLOT_GAMVEC	/* optional marker points for diagnosotics */
+
+/* Optional marker points for gamut mapping diagnosotic */
 struct {
 	int type;		/* 1 = src point (xlate), 2 = dst point (no xlate), 0 = end marker */
 	double pos[3];	/* Position, (usually in Jab space) */
@@ -43,7 +44,6 @@ struct {
 	{ 2, { 61.661622, -38.164411, -18.090824 }, { 1.0, 0.3, 0.3 } },	/* CMYK destination (Red) */
 	{ 0 }								/* End marker */
 };
-#endif /* PLOT_GAMVEC */
 
 #define USE_GLUMKNF			/* Enable luminence knee function points */
 #define USE_GAMKNF			/* Enable gamut boundary knee function points */
@@ -64,11 +64,9 @@ struct {
 #include "rspl.h"
 #include "gammap.h"
 #include "nearsmth.h"
+#include "vrml.h"
 #ifdef PLOT_LMAP
 #include "plot.h"
-#endif
-#if defined(PLOT_GAMVEC)
-#include "vrml.h"
 #endif
 
 /* Callback context for enhancing the saturation of the clut values */
@@ -100,8 +98,10 @@ gammapweights pweights[] = {
 			1.0,	/* Absolute error overall weight */
 			{
 				1.6,	/* Absolute luminance error weight */
-				1.0,	/* Absolute chroma error weight */
-				1.0		/* Absolute hue error weight */
+//				1.0,	/* (V0.7) Absolute chroma error weight */
+//				1.0		/* (V0.7) Absolute hue error weight */
+				0.8,	/* Absolute chroma error weight */
+				1.4		/* Absolute hue error weight */
 			}
 		},
 		{		/* Weighting of relative error of destination points to each */
@@ -123,7 +123,8 @@ gammapweights pweights[] = {
 			}
 		},
 	
-		0.18,			/* Cusp alignment weighting */
+//		0.18,			/* (V0.7) Cusp alignment weighting */
+		0.10,			/* Cusp alignment weighting */
 		60.0,			/* Cusp alignment minimum radius */
 
 		5.0				/* Extra elevation */
@@ -277,7 +278,8 @@ gammap *new_gammap(
 	icxGMappingIntent *gmi,	/* Gamut mapping specification */
 	int    mapres,		/* Gamut map resolution, typically 9 - 33 */
 	double *mn,			/* If not NULL, set minimum mapping input range */
-	double *mx			/* for rspl grid. (May get modified) */
+	double *mx,			/* for rspl grid. (May get modified) */
+	char *diagname		/* If non-NULL, write a gamut mapping diagnostic WRL */
 ) {
 	gmm_BPmap bph = gmm_bendBP;		/* Preffered algorithm */
 //	gmm_BPmap bph = gmm_clipBP;		/* Alternatives tried */
@@ -320,6 +322,10 @@ gammap *new_gammap(
 	cow *gpnts;			/* Mapping points to create gamut mapping */
 	int ngamp = 0;		/* Number of gamut mapping points */
 	int j;
+
+#if defined(PLOT_LMAP) || defined(PLOT_GAMVEC) || defined(PLOT_GAMUTS) || defined(PLOT_3DKNEES)
+	fprintf(stderr,"##### A gammap.c PLOT is #defined ####\n");
+#endif
 
 	if (verb) {
 		xicc_dump_gmi(gmi);
@@ -912,7 +918,7 @@ glumknf	= 1.0;
 
 #ifdef VERBOSE
 		if (verb) {
-			printf("Mapped  source grey axis wp/bp %f %f %f, %f %f %f\n",
+			printf("Mapped source grey axis wp/bp  %f %f %f, %f %f %f\n",
 				sl_cs_wp[0], sl_cs_wp[1], sl_cs_wp[2], sl_cs_bp[0], sl_cs_bp[1], sl_cs_bp[2]);
 		}
 #endif
@@ -997,10 +1003,7 @@ glumknf	= 1.0;
 		gammapweights xpweights[7], xsweights[7];	/* Explicit perceptial and sat. weights */
 		gammapweights xwh[7]; 	/* Structure holding blended weights */
 		double smooth = 1.0;	/* Level of 3D RSPL smoothing, blend of psmooth and ssmooth */
-
-#ifdef PLOT_GAMVEC
-		vrml *wrl;
-#endif
+		vrml *wrl = NULL;
 
 #ifdef PLOT_3DKNEES
 typedef struct {
@@ -1138,29 +1141,36 @@ typedef struct {
 			return NULL;
 		}
 
+		
+		if (diagname != NULL)
+			wrl = new_vrml(diagname, 1);
 #ifdef PLOT_GAMVEC
-		wrl = new_vrml("gammap.wrl", 1);
-		for (i = 0; ; i++) {	/* Add diagnostic markers */
-			double pp[3];
-			co cp;
-			if (markers[i].type == 0)
-				break;
-
-			if (markers[i].type == 1) {
-				/* Rotate and map marker points the same as the src gamuts */
-				icmMul3By3x4(pp, s->grot, markers[i].pos);
-				cp.p[0] = pp[0];			/* L value */
-				s->grey->interp(s->grey, &cp);
-				pp[0] = cp.v[0];
-			} else {
-				pp[0] = markers[i].pos[0];
-				pp[1] = markers[i].pos[1];
-				pp[2] = markers[i].pos[2];
-			}
-			wrl->add_marker(wrl, pp, markers[i].col);
-		}
-		wrl->start_line_set(wrl);
+		else
+			wrl = new_vrml("gammap.wrl", 1);
 #endif 
+
+		if (wrl != NULL) {
+			for (i = 0; ; i++) {	/* Add diagnostic markers */
+				double pp[3];
+				co cp;
+				if (markers[i].type == 0)
+					break;
+	
+				if (markers[i].type == 1) {
+					/* Rotate and map marker points the same as the src gamuts */
+					icmMul3By3x4(pp, s->grot, markers[i].pos);
+					cp.p[0] = pp[0];			/* L value */
+					s->grey->interp(s->grey, &cp);
+					pp[0] = cp.v[0];
+				} else {
+					pp[0] = markers[i].pos[0];
+					pp[1] = markers[i].pos[1];
+					pp[2] = markers[i].pos[2];
+				}
+				wrl->add_marker(wrl, pp, markers[i].col, 1.0);
+			}
+			wrl->start_line_set(wrl);
+		}
 
 		for (i = 0; i < nnsm; i++) {
 			double div[3];
@@ -1186,11 +1196,11 @@ typedef struct {
 				}
 				gpnts[ngamp++].w  = 1.0;
 
-#ifdef PLOT_GAMVEC
-				wrl->add_vertex(wrl, nsm[i].sv);		/* Source value */
-//				wrl->add_vertex(wrl, div);			/* Blended destination value */
-				wrl->add_vertex(wrl, nsm[i].sdv);	/* Full compression dest. value */
-#endif
+				if (wrl != NULL) {
+					wrl->add_vertex(wrl, nsm[i].sv);	/* Source value */
+//					wrl->add_vertex(wrl, div);			/* Blended destination value */
+					wrl->add_vertex(wrl, nsm[i].sdv);	/* Full compression dest. value */
+				}
 
 #ifdef USE_GAMKNF
 				/* Create a "knee" point */
@@ -1254,11 +1264,11 @@ typedef struct {
 				}
 				gpnts[ngamp++].w  = 1.0;
 	
-#ifdef PLOT_GAMVEC
-				wrl->add_vertex(wrl, nsm[i].sv);		/* Source value */
-//				wrl->add_vertex(wrl, div);			/* Blended destination value */
-				wrl->add_vertex(wrl, nsm[i].sdv);	/* Full compression dest. value */
-#endif
+				if (wrl != NULL) {
+					wrl->add_vertex(wrl, nsm[i].sv);		/* Source value */
+//					wrl->add_vertex(wrl, div);			/* Blended destination value */
+					wrl->add_vertex(wrl, nsm[i].sdv);	/* Full compression dest. value */
+				}
 	
 #ifdef USE_GAMKNF
 				/* Create a "knee" point */
@@ -1306,21 +1316,18 @@ typedef struct {
 
 		free(nsm);
 
-#ifdef PLOT_GAMVEC
-		{
+		if (wrl != NULL) {
 			double cc[3] = { 0.7, 0.7, 0.7 }; 
 
 			wrl->make_lines(wrl, 2);
 	
-#ifdef PLOT_GAMUTS
 			wrl->make_gamut_surface(wrl, sil_gam, 0.6, cc);
 			cc[0] = -1.0;
 			wrl->make_gamut_surface(wrl, d_gam, 0.2, cc);
-#endif
 
 			wrl->del(wrl);
+			wrl = NULL;
 		}
-#endif
 
 		/* --------------------------- */
 		/* Compute the bounding values */

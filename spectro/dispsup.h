@@ -65,6 +65,10 @@ typedef struct {
 	xspect sp;			/* Spectrum. sp.spec_n > 0 if valid */
 } col;
 
+
+/* Maximum number of entries to setup for calibration */
+#define MAX_CAL_ENT 4096
+
 /* Display reading context */
 struct _disprd {
 
@@ -75,15 +79,21 @@ struct _disprd {
 	char *fake_name;	/* Fake profile name */
 	icmFile *fake_fp;
 	icc *fake_icc;		/* NZ if ICC profile is being used for fake */
+	double cal[3][MAX_CAL_ENT];	/* Calibration being worked through (cal[0][0] < 0.0 if not used */
+	int ncal;			/* Number of entries used in cal[] */
 	icmLuBase *fake_lu;
 	int debug;			/* Debug flag */
 	int comport; 		/* COM port used */
 	baud_rate br;
 	flow_control fc;
 	inst *it;			/* Instrument */
+	instType itype;		/* Instrument type */
+	int dtype;			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
+	int spectral;		/* Spectral values requested/used */
+	int nocal;			/* No automatic instrument calibration */
+	int highres;		/* Use high res mode if available */
 	dispwin *dw;		/* Window */
 	ramdac *or;			/* Original ramdac if we set one */
-	int spectral;		/* Spectral values requested */
 
 /* public: */
 
@@ -106,6 +116,18 @@ struct _disprd {
 		int tc			/* If nz, termination key */
 	);
 
+	/* Take an ambient reading if the instrument has the capability. */
+	/* return nz on fail/abort */
+	/* 1 = user aborted */
+	/* 2 = instrument access failed */
+	/* 3 = no ambient capability */ 
+	/* 4 = user hit terminate key */
+	/* 5 = system error */
+	int (*ambient)(struct _disprd *p,
+		double *ambient,	/* return ambient in cd/m^2 */
+		int tc				/* If nz, termination key */
+	);
+
 }; typedef struct _disprd disprd;
 
 /* Create a display reading object. */
@@ -126,7 +148,8 @@ int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 int nocal,			/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */
 int donat,			/* Use ramdac for native output, else run through current or set ramdac */
-double cal[3][256],	/* Calibration set/return (cal[0][0] < 0.0 if can't/not to be used) */
+double cal[3][MAX_CAL_ENT],	/* Calibration set/return (cal[0][0] < 0.0 if can't/not to be used) */
+int ncal,			/* number of entries use in cal */
 disppath *screen,	/* Screen to calibrate. */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */

@@ -63,31 +63,31 @@ main(int argc, char* argv[])
 	uint16 config = PLANARCONFIG_CONTIG;
 	uint32 rowsperstrip = (uint32) -1;
 	int c;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 
-	while ((c = getopt(argc, argv, "c:r:h")) != -1)
+	while ((c = tiff_getopt(argc, argv, "c:r:h")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(optarg))
+			if (!processCompressOptions(tiff_optarg))
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(optarg);
+			rowsperstrip = atoi(tiff_optarg);
 			break;
 		case 'h':
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - optind != 2)
+	if (argc - tiff_optind != 2)
 		usage();
-	in = fopen(argv[optind], "r" BINMODE);
+	in = fopen(argv[tiff_optind], "r" BINMODE);
 	if (in == NULL) {
-		fprintf(stderr, "%s: Can not open.\n", argv[optind]);
+		fprintf(stderr, "%s: Can not open.\n", argv[tiff_optind]);
 		return (-1);
 	}
 	if (fread(&h, sizeof (h), 1, in) != 1) {
-		fprintf(stderr, "%s: Can not read header.\n", argv[optind]);
+		fprintf(stderr, "%s: Can not read header.\n", argv[tiff_optind]);
 		return (-2);
 	}
 	if (strcmp(h.ras_magic, RAS_MAGIC) == 0) {
@@ -111,10 +111,10 @@ main(int argc, char* argv[])
 			TIFFSwabLong(&h.ras_maplength);
 #endif
 	} else {
-		fprintf(stderr, "%s: Not a rasterfile.\n", argv[optind]);
+		fprintf(stderr, "%s: Not a rasterfile.\n", argv[tiff_optind]);
 		return (-3);
 	}
-	out = TIFFOpen(argv[optind+1], "w");
+	out = TIFFOpen(argv[tiff_optind+1], "w");
 	if (out == NULL)
 		return (-4);
 	TIFFSetField(out, TIFFTAG_IMAGEWIDTH, (uint32) h.ras_width);
@@ -136,14 +136,14 @@ main(int argc, char* argv[])
 		}
 		if (fread(buf, h.ras_maplength, 1, in) != 1) {
 			fprintf(stderr, "%s: Read error on colormap.\n",
-			    argv[optind]);
+			    argv[tiff_optind]);
 			return (-6);
 		}
 		mapsize = 1<<h.ras_depth; 
 		if (h.ras_maplength > mapsize*3) {
 			fprintf(stderr,
 			    "%s: Huh, %d colormap entries, should be %d?\n",
-			    argv[optind], h.ras_maplength, mapsize*3);
+			    argv[tiff_optind], h.ras_maplength, mapsize*3);
 			return (-7);
 		}
 		red = (uint16*)_TIFFmalloc(mapsize * 3 * sizeof (uint16));
@@ -202,7 +202,7 @@ main(int argc, char* argv[])
 	for (row = 0; row < h.ras_height; row++) {
 		if (fread(buf, linebytes, 1, in) != 1) {
 			fprintf(stderr, "%s: scanline %lu: Read error.\n",
-			    argv[optind], (unsigned long) row);
+			    argv[tiff_optind], (unsigned long) row);
 			break;
 		}
 		if (h.ras_type == RT_STANDARD && h.ras_depth == 24) {

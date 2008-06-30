@@ -190,7 +190,7 @@ reset_del(parse *p) {
 /* Add to the parsing characters */
 static void
 add_del(
-	parse *p,				/* Parse structure */
+	parse *p,		/* Parse structure */
 	char *t,		/* Terminators */
 	char *nr,		/* Not Read */
 	char *c,		/* Comment start */
@@ -199,16 +199,16 @@ add_del(
 	int i;
 	if (t != NULL)
 		for (i = 0; t[i] != '\000'; i++)
-			p->delf[t[i]] |= PARS_TERM;
+			p->delf[(int)t[i]] |= PARS_TERM;
 	if (nr != NULL)
 		for (i = 0; nr[i] != '\000'; i++)
-			p->delf[nr[i]] |= PARS_SKIP;
+			p->delf[(int)nr[i]] |= PARS_SKIP;
 	if (c != NULL)
 		for (i = 0; c[i] != '\000'; i++)
-			p->delf[c[i]] |= PARS_COMM;
+			p->delf[(int)c[i]] |= PARS_COMM;
 	if (q != NULL)
 		for (i = 0; q[i] != '\000'; i++)
-			p->delf[q[i]] |= PARS_QUOTE;
+			p->delf[(int)q[i]] |= PARS_QUOTE;
 	}
 
 /* Using the current token delimiter table and the current line, */
@@ -250,7 +250,8 @@ get_token(parse *p) {
 			}
 		}
 
-		if (p->q != 0		/* If quoted, store unconditionally */
+		if ((p->q != 0 && (p->q != c || (p->delf[c] & PARS_SKIP) == 0))
+				/* If quoted, store if trigger quite is not being skipped */
 		 || (!(tbo == 0 && (p->delf[c] & PARS_TERM) != 0 && (p->delf[c] & PARS_SKIP) != 0)
 											/* Skip initial non-reader terminators */
 		   && (p->delf[c] & PARS_SKIP) == 0))	/* Skip non-readers */

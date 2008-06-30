@@ -35,7 +35,6 @@
 
 static unsigned int imdi_get_check(imdi *im);
 static void imdi_reset_check(imdi *im);
-static unsigned long imdi_into(imdi *im);
 static void imdi_info(imdi *s, unsigned long *size, int *gres, int *sres);
 static void imdi_del(imdi *im);
 static void interp_match(imdi *s, void **outp, int outst, void **inp, int inst,

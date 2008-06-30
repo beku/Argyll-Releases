@@ -1,35 +1,37 @@
- 
-#SubDir TOP cgats ;
 
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;
+# Jamfile for cgats library
+ 
+PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
+#PREF_CCFLAGS	= $(CCDEBUGFLAG) ;		# Debugging flags
+PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
 
 #if stdio is not wanted in icclib:
-#CCFLAGS	+= $(DEFFLAG)SEPARATE_STD ;
+#DEFINES = SEPARATE_STD ;
 
 #Products
 Libraries = libcgats ;
 Headers = cgats.h ;
 
 #Install
-#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
-#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
+#InstallLib ../lib : $(Libraries ;
+#InstallFile ../h : $(Headers) ;
+
+# Stop objects that are in more than one library from being
+# prematurely deleted:
+ObjectKeep cgats pars ;
 
 # CGATS library
-Library libcgats.lib : pars.c cgats.c ;
+Library libcgats : pars.c cgats.c ;
+
+# Executable support if SEPARATED_STD
+if SEPARATE_STD in $(DEFINES) {
+	Objects parsstd.c cgatsstd.c ;
+	LINKOBJS = cgatsstd parsstd ;		# Link all tests here with these
+}
 
 # Individual stand alone test of parser
-MainFromObjects pars : sa_pars$(SUFOBJ) e_parsstd$(SUFOBJ) ;
-Object e_parsstd$(SUFOBJ) : parsstd.c ;
-Object sa_pars$(SUFOBJ) : pars.c ;
-ObjectCcFlags sa_pars.c : -DSTANDALONE_TEST ;
+MainVariant pars : pars.c : : STANDALONE_TEST ;
 
 # Individual stand alone test of cgats i/o
-MainFromObjects cgats : sa_cgats$(SUFOBJ) e_pars$(SUFOBJ) e_cgatsstd$(SUFOBJ) e_parsstd$(SUFOBJ) ;
-Object e_pars$(SUFOBJ) : pars.c ;
-Object e_parsstd$(SUFOBJ) : parsstd.c ;
-Object e_cgatsstd$(SUFOBJ) : cgatsstd.c ;
-Object sa_cgats$(SUFOBJ) : cgats.c ;
-ObjectCcFlags sa_cgats.c : -DSTANDALONE_TEST ;
+MainVariant cgats : cgats.c : : STANDALONE_TEST : : pars ;
 

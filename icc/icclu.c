@@ -43,6 +43,7 @@ void usage(void) {
 	fprintf(stderr," -f function   f = forward, b = backwards, g = gamut, p = preview\n");
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"               s = saturation, a = absolute\n");
+//	fprintf(stderr,"               P = absolute perceptual, S = absolute saturation\n");
 	fprintf(stderr," -p oride      x = XYZ_PCS, l = Lab_PCS, y = Yxy,\n");
 	fprintf(stderr," -o order      n = normal (priority: lut > matrix > monochrome)\n");
 	fprintf(stderr,"               r = reverse (priority: monochrome > matrix > lut)\n");
@@ -151,20 +152,23 @@ main(int argc, char *argv[]) {
 				if (na == NULL) usage();
     			switch (na[0]) {
 					case 'p':
-					case 'P':
 						intent = icPerceptual;
 						break;
 					case 'r':
-					case 'R':
 						intent = icRelativeColorimetric;
 						break;
 					case 's':
-					case 'S':
 						intent = icSaturation;
 						break;
 					case 'a':
-					case 'A':
 						intent = icAbsoluteColorimetric;
+						break;
+					/* Special function icclib intents */
+					case 'P':
+						intent = icmAbsolutePerceptual;
+						break;
+					case 'S':
+						intent = icmAbsoluteSaturation;
 						break;
 					default:
 						usage();

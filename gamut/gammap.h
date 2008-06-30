@@ -50,7 +50,8 @@ gammap *new_gammap(
 	icxGMappingIntent *gmi, /* Gamut mapping specification */
 	int    mapres,		/* Gamut map resolution, typically 9 - 33 */
 	double *mn,			/* If not NULL, set minimum mapping input range */
-	double *mx			/* for rspl grid (May get modified) */
+	double *mx,			/* for rspl grid (May get modified) */
+	char *diagname		/* If non-NULL, write a gamut mapping diagnostic WRL */
 );
 
 

@@ -1,15 +1,13 @@
  
 # JAM style makefile for icclib and friends
 
-#SubDir TOP icc ;
-
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	    += $(CCDEBUGFLAG) ;		# Debugging flags
-#CCFLAGS	+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
+#PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS    = $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS	= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;	# Link debugging flags
 
 #if stdio is not wanted in icclib:
-#CCFLAGS	+= $(DEFFLAG)SEPARATE_STD ;
+#DEFINES	= SEPARATE_STD ;
 
 #Products
 Libraries = libicc ;
@@ -17,65 +15,40 @@ Executables = iccdump icclu ;
 Headers = icc.h ;
 
 #Install
-InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
-#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
-#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+InstallBin ../bin : $(Executables) ;
+#InstallFile ./h : $(Headers) ;
+#InstallLib ./lib : $(Libraries) ;
 
 # ICC library
-Library libicc.lib : icc.c ;
+Library libicc : icc.c ;
 
-# Executable support
-Object iccstd$(SUFOBJ) : iccstd.c ;
+# Executable support if SEPARATED_STD
+if SEPARATE_STD in $(DEFINES) {
+	Objects iccstd.c ;
+	LINKOBJS = iccstd ;		# Link all utilities here with iccstd
+}
 
-# Utilities / test programs
-# Main icctest : icctest.c ;
-Object icctest$(SUFOBJ) : icctest.c ;
-MainFromObjects icctest : icctest$(SUFOBJ) iccstd$(SUFOBJ) ;
-LinkLibraries icctest : libicc.lib ;
+# Link all utilities here with libicc
+LINKLIBS = libicc ;
 
-Object lutest$(SUFOBJ) : lutest.c ;
-MainFromObjects lutest : lutest$(SUFOBJ) iccstd$(SUFOBJ) ;
-LinkLibraries lutest : libicc.lib ;
-
-Object iccdump$(SUFOBJ) : iccdump.c ;
-MainFromObjects iccdump : iccdump$(SUFOBJ) iccstd$(SUFOBJ) ;
-LinkLibraries iccdump : libicc.lib ;
-
-Object icclu$(SUFOBJ) : icclu.c ;
-MainFromObjects icclu : icclu$(SUFOBJ) iccstd$(SUFOBJ) ;
-LinkLibraries icclu : libicc.lib ;
-
-Object iccrw$(SUFOBJ) : iccrw.c ;
-MainFromObjects iccrw : iccrw$(SUFOBJ) iccstd$(SUFOBJ) ;
-LinkLibraries iccrw : libicc.lib ;
-
-#Monotonic behaviour checker
-#Object mcheck$(SUFOBJ) : mcheck.c ;
-#MainFromObjects mcheck : mcheck$(SUFOBJ) iccstd$(SUFOBJ) ;
-#LinkLibraries mcheck : libicc.lib ;
+# All utils are made from a single source file 
+MainsFromSources icctest.c lutest.c iccdump.c icclu.c iccrw.c ;
 
 if $(BUILD_JUNK) {
 
-	Object tt$(SUFOBJ) : tt.c ;
-	MainFromObjects tt : tt$(SUFOBJ) ;
-	LinkLibraries tt : libicc.lib ;
-
-	Object mkAdobeRGB$(SUFOBJ) : mkAdobeRGB.c ;
-	MainFromObjects mkAdobeRGB : mkAdobeRGB$(SUFOBJ) iccstd$(SUFOBJ) ;
-	LinkLibraries mkAdobeRGB : libicc.lib ;
-
-	Object lab2lab$(SUFOBJ) : lab2lab.c ;
-	MainFromObjects lab2lab : lab2lab$(SUFOBJ) iccstd$(SUFOBJ) ;
-	LinkLibraries lab2lab : libicc.lib ;
-
-	Main icm2ary : icm2ary.c ;
+	MainsFromSources tt.c ;
+	MainsFromSources mkAdobeRGB.c ;
+	MainsFromSources lab2lab.c ;
+	MainsFromSources icm2ary.c ;
 
 	# Check library is compatible with C++
 	Main cppcheck : cppcheck.cpp ;
 
 	# chech CIEDE2000
-	Main testDE2K : testDE2K.c ;
-	LinkLibraries testDE2K : libicc.lib ;
+	MainsFromSources testDE2K.c ;
+
+	#Monotonic behaviour checker
+	MainsFromSources mcheck.c ;
 }
 
 

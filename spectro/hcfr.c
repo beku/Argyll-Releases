@@ -43,6 +43,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "hcfr.h"
 
 #undef MODIFIED_HCFR	/* If modified 2.4 mm apature version being used */
@@ -302,31 +303,6 @@ hcfr_comp_matrix(
 	/* improve the directional behaviour. */
 
 	/* Red test patch, sensor then reference */
-	tmat[0][0] = 1298.37;
-	tmat[1][0] = 156.55;
-	tmat[2][0] = 51.11;
-	xmat[0][0] = 52.23;
-	xmat[1][0] = 27.95;
-	xmat[2][0] = 2.02;
-
-	/* Green test patch, sensor then reference */
-	tmat[0][1] = 178.90;
-	tmat[1][1] = 849.02;
-	tmat[2][1] = 374.79;
-	xmat[0][1] = 36.22;
-	xmat[1][1] = 76.01;
-	xmat[2][1] = 13.54;
-
-	/* Blue test patch, sensor then reference */
-	tmat[0][2] = 54.59;
-	tmat[1][2] = 172.56;
-	tmat[2][2] = 889.12;
-	xmat[0][2] = 24.49;
-	xmat[1][2] = 11.03;
-	xmat[2][2] = 127.11;
-
-#else	/* Normal wide apature */
-	/* Red test patch, sensor then reference */
 	tmat[0][0] = 6250.00;
 	tmat[1][0] = 743.54;
 	tmat[2][0] = 279.32;
@@ -349,6 +325,30 @@ hcfr_comp_matrix(
 	xmat[0][2] = 6.15;
 	xmat[1][2] = 2.63;
 	xmat[2][2] = 32.04;
+#else	/* Normal wide apature */
+	/* Red test patch, sensor then reference */
+	tmat[0][0] = 1298.37;
+	tmat[1][0] = 156.55;
+	tmat[2][0] = 51.11;
+	xmat[0][0] = 52.23;
+	xmat[1][0] = 27.95;
+	xmat[2][0] = 2.02;
+
+	/* Green test patch, sensor then reference */
+	tmat[0][1] = 178.90;
+	tmat[1][1] = 849.02;
+	tmat[2][1] = 374.79;
+	xmat[0][1] = 36.22;
+	xmat[1][1] = 76.01;
+	xmat[2][1] = 13.54;
+
+	/* Blue test patch, sensor then reference */
+	tmat[0][2] = 54.59;
+	tmat[1][2] = 172.56;
+	tmat[2][2] = 889.12;
+	xmat[0][2] = 24.49;
+	xmat[1][2] = 11.03;
+	xmat[2][2] = 127.11;
 #endif
 
 	/* Compute the inverse */
@@ -439,7 +439,9 @@ hcfr_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	inst_code ev = inst_ok;
 	icomuflags usbflags = icomuf_no_open_clear | icomuf_detach;
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(__APPLE__) && defined(__i386__)
+	/* Except on Intel OS X 10.4/5 for some reasone. */
+	/* It would be good if the HCFR had a better USB implementation... */
 	usbflags &= ~icomuf_no_open_clear;
 #endif
 

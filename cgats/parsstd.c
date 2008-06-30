@@ -318,16 +318,16 @@ cgatsAlloc *al		/* heap allocator, NULL for default */
 			al->del(al);
 		return NULL;
 	}
-	p->al     = al;				/* Heap allocator */
-	p->del_al = del_al;			/* Flag noting whether we delete it */
-	p->seek   = cgatsFileStd_seek;
-	p->read   = cgatsFileStd_read;
-	p->getch  = cgatsFileStd_getch;
-	p->write  = cgatsFileStd_write;
-	p->printf = cgatsFileStd_printf;
-	p->flush  = cgatsFileStd_flush;
-	p->fname  = cgatsFileStd_fname;
-	p->del    = cgatsFileStd_delete;
+	p->al      = al;				/* Heap allocator */
+	p->del_al  = del_al;			/* Flag noting whether we delete it */
+	p->seek    = cgatsFileStd_seek;
+	p->read    = cgatsFileStd_read;
+	p->getch   = cgatsFileStd_getch;
+	p->write   = cgatsFileStd_write;
+	p->gprintf = cgatsFileStd_printf;
+	p->flush   = cgatsFileStd_flush;
+	p->fname   = cgatsFileStd_fname;
+	p->del     = cgatsFileStd_delete;
 
 	p->fp = fp;
 	p->doclose = 0;

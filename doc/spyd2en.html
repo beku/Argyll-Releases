@@ -25,10 +25,12 @@ colorimeter.<br>
 <h3></h3>
 <h3>Flags and Parameters</h3>
 The <span style="font-style: italic;">inputfile</span> argument is
-optional, and and can be used to specify the MSWindows setup.exe file,
+optional, and and can be used to specify the MSWindows setup.exe file
+from the installation CD,
 if spyd2en is unable to locate this file automatically.<br>
 <br>
-The <b>-v</b> parameter enables verbosity.<span
+The <b>-v</b> parameter enables verbosity. This may be of use in
+figuring out what went wrong if it doesn't work.<span
  style="font-weight: bold;"></span><br>
 <h3>Usage Details and Discussion</h3>
 <span style="font-weight: bold;"></span>The Spyder 2 instrument cannot
@@ -56,7 +58,8 @@ pattern from there. In this case, the CDROM should be placed in a CD
 drive prior to
 running spyd2en. If your Linux system is not running
 automount, or your automount is setup to mount CDROM's somewhere other
-than <span style="font-style: italic;">/mnt/cdrom</span>, <span
+than <span style="font-style: italic;">/media</span>,<span
+ style="font-style: italic;"> /mnt/cdrom</span>, <span
  style="font-style: italic;">/media/cdrom</span> or <span
  style="font-style: italic;">/cdrom</span>, then you will have to mount
 the CDROM manually, and give spyd2en the path to the CDROM
@@ -66,7 +69,8 @@ file as the argument <span style="font-style: italic;">inputfile</span>.<br>
 If the instrument firmware pattern is successfully located, then
 spyd2en will create a <span style="font-weight: bold;">spyd2PLD.bin</span>
 file in the same directory that
-spyd2en exists in, so that any other Argyll programs residing with,
+the spyd2en executable exists in, so that any other Argyll programs
+residing with,
 such as <span style="font-weight: bold;">spotread</span>, <span
  style="font-weight: bold;">dispcal</span> and <span
  style="font-weight: bold;">dispread</span>, can load the firmware into

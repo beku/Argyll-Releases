@@ -42,5 +42,8 @@ void usb_install_signal_handlers(icoms *p);
 /* (used inside usb_close_port(), hid_close_port() */
 void usb_delete_from_cleanup_list(icoms *p);
 
+/* Cleanup and then free a usb dev entry */
+void usb_del_usb_device(struct usb_device *dev);
+
 #define USBIO_H
 #endif /* USBIO_H */

@@ -68,6 +68,8 @@ main(
 	pval *pat;					/* patch values */
 	int i, j;
 	
+	error_program = argv[0];
+
 	if (argc < 2)
 		usage();
 

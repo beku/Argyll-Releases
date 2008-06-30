@@ -117,6 +117,8 @@ main(
 	icxIllumeType ilType;
 	char buf[200];
 
+	error_program = argv[0];
+
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */

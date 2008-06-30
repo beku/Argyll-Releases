@@ -41,7 +41,7 @@ endif
 endif
 endif
 
-AM_CFLAGS += $(AM_CFLAGS_EXT)
+AM_CFLAGS += $(AM_CFLAGS_EXT) -pthread
 
 AM_CPPFLAGS = -I.
 AM_CXXFLAGS = 

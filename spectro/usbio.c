@@ -32,6 +32,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "usbio.h"
 
 #include "usb.h"
@@ -99,6 +100,10 @@ struct _icoms *p
 
 	/* Scan the USB busses for instruments we recognise */
 	/* We're not expecting any of our unstruments to be an interface on a device. */
+
+	if (usb_argyll_patched() < 1)
+		error("usblib hasn't been patched to work with Argyll");
+
    	usb_init();
    	usb_find_busses();
    	usb_find_devices();
@@ -110,6 +115,17 @@ struct _icoms *p
 		}
    	}
 #endif /* ENABLE_USB */
+}
+
+
+/* Cleanup and then free a usb dev entry */
+void usb_del_usb_device(struct usb_device *dev) {
+
+	if (dev == NULL)
+		return;
+
+	/* The dev entry is allocated by libusb, */
+	/* so we don't actually free it */
 }
 
 
@@ -146,8 +162,8 @@ static icoms *icoms_list = NULL;
 /* Note - this isn't perfectly thread safe */
 static int in_usb_rw = 0;
 
-/* Clean up any open USB ports and exit */
-static void icoms_cleanupandexit() {
+/* Clean up any open USB ports ready for exit */
+static void icoms_cleanup() {
 	icoms *pp, *np;
 //printf("~1 icoms_cleanipandexit invoked\n");
 
@@ -174,24 +190,42 @@ static void icoms_cleanupandexit() {
 		else if (pp->is_hid)
 			hid_close_port(pp);
 	}
-	exit(0);
 }
+
+#ifdef NT
+void (__cdecl *usbio_int)(int sig) = SIG_DFL;
+void (__cdecl *usbio_term)(int sig) = SIG_DFL;
+#endif
+#ifdef UNIX
+void (*usbio_hup)(int sig) = SIG_DFL;
+void (*usbio_int)(int sig) = SIG_DFL;
+void (*usbio_term)(int sig) = SIG_DFL;
+#endif
 
 /* On something killing our process, deal with USB cleanup */
 static void icoms_sighandler(int arg) {
 //printf("~1 signal handler invoked\n");
 	if (in_usb_rw != 0)
 		in_usb_rw = -1;
-	icoms_cleanupandexit();
+	icoms_cleanup();
+#ifdef UNIX
+	if (arg == SIGHUP && usbio_hup != SIG_DFL && usbio_hup != SIG_IGN) 
+		usbio_hup(arg);
+#endif /* UNIX */
+	if (arg == SIGINT && usbio_int != SIG_DFL && usbio_int != SIG_IGN) 
+		usbio_int(arg);
+	if (arg == SIGTERM && usbio_term != SIG_DFL && usbio_term != SIG_IGN) 
+		usbio_term(arg);
+	exit(0);
 }
 
 /* Our versions of usblib read/write, that exit if a signal was caught */
 /* This is so that MSWindows works properly */
-static int icoms_usb_interrupt_write(usb_dev_handle *dev, int ep, char *bytes, int size, int timeout) {
+static int icoms_usb_interrupt_write(usb_dev_handle *dev, int ep, unsigned char *bytes, int size, int timeout) {
 	int rv;
 
 	in_usb_rw++;
-	rv = usb_interrupt_write(dev, ep, bytes, size, timeout);
+	rv = usb_interrupt_write(dev, ep, (char *)bytes, size, timeout);
 	if (in_usb_rw < 0)
 		exit(0);
 
@@ -199,11 +233,11 @@ static int icoms_usb_interrupt_write(usb_dev_handle *dev, int ep, char *bytes, i
 	return rv;
 }
 
-static int icoms_usb_interrupt_read(usb_dev_handle *dev, int ep, char *bytes, int size, int timeout) {
+static int icoms_usb_interrupt_read(usb_dev_handle *dev, int ep, unsigned char *bytes, int size, int timeout) {
 	int rv;
 
 	in_usb_rw++;
-	rv = usb_interrupt_read(dev, ep, bytes, size, timeout);
+	rv = usb_interrupt_read(dev, ep, (char *)bytes, size, timeout);
 	if (in_usb_rw < 0)
 		exit(0);
 
@@ -211,11 +245,11 @@ static int icoms_usb_interrupt_read(usb_dev_handle *dev, int ep, char *bytes, in
 	return rv;
 }
 
-static int icoms_usb_bulk_write(usb_dev_handle *dev, int ep, char *bytes, int size, int timeout) {
+static int icoms_usb_bulk_write(usb_dev_handle *dev, int ep, unsigned char *bytes, int size, int timeout) {
 	int rv;
 
 	in_usb_rw++;
-	rv = usb_bulk_write(dev, ep, bytes, size, timeout);
+	rv = usb_bulk_write(dev, ep, (char *)bytes, size, timeout);
 	if (in_usb_rw < 0)
 		exit(0);
 
@@ -223,11 +257,11 @@ static int icoms_usb_bulk_write(usb_dev_handle *dev, int ep, char *bytes, int si
 	return rv;
 }
 
-static int icoms_usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes, int size, int timeout) {
+static int icoms_usb_bulk_read(usb_dev_handle *dev, int ep, unsigned char *bytes, int size, int timeout) {
 	int rv;
 
 	in_usb_rw++;
-	rv = usb_bulk_read(dev, ep, bytes, size, timeout);
+	rv = usb_bulk_read(dev, ep, (char *)bytes, size, timeout);
 	if (in_usb_rw < 0)
 		exit(0);
 
@@ -260,10 +294,10 @@ void usb_install_signal_handlers(icoms *p) {
 	if (icoms_list == NULL) {
 //printf("~1 installing signal handler\n");
 #if defined(UNIX)
-		signal(SIGHUP, icoms_sighandler);
+		usbio_hup = signal(SIGHUP, icoms_sighandler);
 #endif /* UNIX */
-		signal(SIGINT, icoms_sighandler);
-		signal(SIGTERM, icoms_sighandler);
+		usbio_int = signal(SIGINT, icoms_sighandler);
+		usbio_term = signal(SIGTERM, icoms_sighandler);
 	}
 
 	/* Add it to our static list, to allow automatic cleanup on signal */
@@ -274,7 +308,6 @@ void usb_install_signal_handlers(icoms *p) {
 /* Delete an icoms from our static signal cleanup list */
 void usb_delete_from_cleanup_list(icoms *p) {
 
-#ifdef ENABLE_USB
 	/* Find it and delete it from our static cleanup list */
 	if (icoms_list != NULL) {
 		if (icoms_list == p) {
@@ -282,10 +315,10 @@ void usb_delete_from_cleanup_list(icoms *p) {
 			if (icoms_list == NULL) {
 //printf("~1 removing signal handler\n");
 #if defined(UNIX)
-				signal(SIGHUP, SIG_DFL);
+				signal(SIGHUP, usbio_hup);
 #endif /* UNIX */
-				signal(SIGINT, SIG_DFL);
-				signal(SIGTERM, SIG_DFL);
+				signal(SIGINT, usbio_int);
+				signal(SIGTERM, usbio_term);
 			}
 		} else {
 			icoms *pp;
@@ -297,7 +330,6 @@ void usb_delete_from_cleanup_list(icoms *p) {
 			}
 		}
 	}
-#endif /* ENABLE_USB */
 }
 
 /*  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -512,9 +544,9 @@ double tout)
 //printf("~1 write: attempting to write %d bytes to usb top = %d, i = %d\n",len,top,i);
 
 		if (bulk)
-			wbytes = icoms_usb_bulk_write(p->usbh, ep, wbuf, len, top);
+			wbytes = icoms_usb_bulk_write(p->usbh, ep, (unsigned char *)wbuf, len, top);
 		else
-			wbytes = icoms_usb_interrupt_write(p->usbh, ep, wbuf, len, top);
+			wbytes = icoms_usb_interrupt_write(p->usbh, ep, (unsigned char *)wbuf, len, top);
 		if (wbytes < 0) {
 //printf("~1 usb_interrupt_write failed with %d = '%s'\n",wbytes,usb_strerror());
 #if defined(UNIX)
@@ -615,9 +647,9 @@ for (i = 0; i < bsize; i++) rbuf[i] = 0;
 		/* We read one read quanta at a time (usually 8 bytes), to avoid */
 		/* problems with libusb loosing characters whenever it times out. */
 		if (bulk)
-			rbytes = icoms_usb_bulk_read(p->usbh, ep, rbuf, rsize, top);
+			rbytes = icoms_usb_bulk_read(p->usbh, ep, (unsigned char *)rbuf, rsize, top);
 		else
-			rbytes = icoms_usb_interrupt_read(p->usbh, ep, rbuf, rsize, top);
+			rbytes = icoms_usb_interrupt_read(p->usbh, ep, (unsigned char *)rbuf, rsize, top);
 		if (rbytes < 0) {
 //printf("~1 usb_interrupt_read failed with %d = '%s'\n",rbytes,usb_strerror());
 //printf("~1 rbuf = '%s'\n",icoms_fix(rrbuf));
@@ -774,7 +806,7 @@ icoms_usb_read_th(icoms *p,
 	int lerr;				/* Last error */
 	int bread, qa;
 	long top;			/* Timeout period */
-	char *rrbuf = rbuf;		/* Start of return buffer */
+	unsigned char *rrbuf = rbuf;	/* Start of return buffer */
 	int bulk = 0;			/* nz if bulk rather than interrupt read */
 
 #ifdef QUIET_MEMCHECKERS
@@ -1165,7 +1197,7 @@ static int icoms_get_uih_char(icoms *p) {
 /* Poll for a user abort, terminate, trigger or command. */
 /* Wait for a key rather than polling, if wait != 0 */
 /* Return: */
-/* ICOM_OK if no key has been hit, */
+/* ICOM_OK if no key was hit or the key has no meaning. */
 /* ICOM_USER if User abort has been hit, */
 /* ICOM_TERM if User terminate has been hit. */
 /* ICOM_TRIG if User trigger has been hit */
@@ -1173,14 +1205,21 @@ static int icoms_get_uih_char(icoms *p) {
 int icoms_poll_user(icoms *p, int wait) {
 	int c;
 
-	if (wait)
-		c = next_con_char();
-	else
+	if (wait) {
+		int rv;
+		for (;;) {
+			c = next_con_char();
+			p->cut = c;
+			rv = p->uih[c];
+			if (rv != ICOM_OK)
+				return rv;
+		}
+	} else {
 		c = poll_con_char();
-		
-	if (c != 0) {
-		p->cut = c;
-		return p->uih[c];
+		if (c != 0) {
+			p->cut = c;
+			return p->uih[c];
+		}
 	}
 	return ICOM_OK;
 }
@@ -1236,9 +1275,10 @@ void bad_beep() {
 
 /* Convert control chars to ^[A-Z] notation in a string */
 char *
-icoms_fix(unsigned char *s) {
+icoms_fix(char *ss) {
 	static unsigned char buf[1005];
 	unsigned char *d;
+	unsigned char *s = (unsigned char *)ss;
 	for(d = buf; (d - buf) < 1000;) {
 		if (*s < ' ' && *s > '\000') {
 			*d++ = '^';
@@ -1258,7 +1298,7 @@ icoms_fix(unsigned char *s) {
 	*d++ = '.';
 	*d++ = '.';
 	*d++ = '\000';
-	return buf;
+	return (char *)buf;
 }
 
 /* Convert a limited binary buffer to a list of hex */

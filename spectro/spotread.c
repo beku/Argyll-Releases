@@ -40,6 +40,7 @@
 #include "cgats.h"
 #include "xicc.h"
 #include "icoms.h"
+#include "conv.h"
 #include "inst.h"
 #include "sort.h"
 #include "plot.h"
@@ -101,7 +102,7 @@ typedef struct {
 	int loci;			/* Location integer = pass * 256 + step */
 } col;
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__POWERPC__)
 
 /* Workaround for a ppc gcc 3.3 optimiser bug... */
 static int gcc_bug_fix(int i) {
@@ -206,7 +207,7 @@ int main(int argc, char *argv[])
 	flow_control fc = fc_nc;		/* Default flow control */
 	inst *it;						/* Instrument object */
 	inst_code rv;
-	int uswitch = 0;					/* Instrument switch is enabled */
+	int uswitch = 0;				/* Instrument switch is enabled */
 	int spec = 0;					/* Use spectral data flag */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;				/* Custom illumination spectrum */
@@ -665,6 +666,18 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		/* If it batter powered, show the status of the battery */
+		if ((cap2 & inst2_has_battery)) {
+			double batstat = 0.0;
+			if ((rv = it->get_status(it, inst_stat_battery, &batstat)) != inst_ok) {
+				printf("\nGetting instrument battery status failed with error :'%s' (%s)\n",
+		       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
+				it->del(it);
+				return -1;
+			}
+			printf("The battery charged level is %.0f%%\n",batstat * 100.0);
+		}
+
 		/* If it's an instrument that need positioning do trigger via keyboard */
 		/* in spotread, else enable switch or keyboard trigger if possible. */
 		if ((cap2 & inst2_xy_locate) && (cap2 & inst2_xy_position)) {
@@ -833,6 +846,7 @@ int main(int argc, char *argv[])
 
 			/* Do any needed calibration before the user places the instrument on a desired spot */
 			if ((it->needs_calibration(it) & inst_calt_needs_cal_mask) != 0
+			 && (it->needs_calibration(it) & inst_calt_needs_cal_mask) != inst_calt_disp_int_time
 			 && (it->needs_calibration(it) & inst_calt_needs_cal_mask) != inst_calt_crt_freq) {
 				inst_code ev;
 
@@ -1180,7 +1194,7 @@ int main(int argc, char *argv[])
 					error("Got > %d spectral values (%d)",XSPECT_MAX_BANDS,nn);
 
 				for (j = 0; j < nn; j++) {
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__POWERPC__)
 					gcc_bug_fix(j);
 #endif
 					xx[j] = ss->spec_wl_short
@@ -1347,7 +1361,7 @@ int main(int argc, char *argv[])
 			}
 			if (ambient) {
 				if (cap & inst_emis_ambient_mono) {
-					printf(" Ambient = %.1f Lux\n", 3.1415926 * XYZ[1]);
+					printf(" Ambient = %.1f Lux\n", 3.141592658 * XYZ[1]);
 				} else {
 					printf(" Ambient = %.1f Lux, CCT = %.0fK (Delta E %f)\n", 3.1415926 * XYZ[1],cct, cct_de);
 					printf(" Closest Planckian temperature = %.0fK (Delta E %f)\n",vct, vct_de);

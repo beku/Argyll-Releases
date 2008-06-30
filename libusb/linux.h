@@ -69,7 +69,7 @@ struct usb_urb {
 	int number_of_packets;
 	int error_count;
 	unsigned int signr;  /* signal to be sent on error, -1 if none should be sent */
-	void *usercontext;
+	volatile void *usercontext;
 	struct usb_iso_packet_desc iso_frame_desc[0];
 };
 

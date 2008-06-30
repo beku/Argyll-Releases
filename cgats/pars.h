@@ -96,7 +96,7 @@ cgatsAlloc *new_cgatsAllocStd(void);
 	size_t (*write)(struct _cgatsFile *p, void *buffer, size_t size, size_t count);			\
 																							\
 	/* printf to the file */																\
-	int (*printf)(struct _cgatsFile *p, const char *format, ...);							\
+	int (*gprintf)(struct _cgatsFile *p, const char *format, ...);							\
 																							\
 	/* flush all write data out to secondary storage. Return nz on failure. */				\
 	int (*flush)(struct _cgatsFile *p);														\

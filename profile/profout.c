@@ -67,6 +67,10 @@
 #include "vrml.h"
 #endif /* BDEB */
 
+#ifndef MAX_CAL_ENT
+#define MAX_CAL_ENT 4096
+#endif
+
 /*
    Basic algorithm outline:
 
@@ -174,8 +178,9 @@ typedef struct {
 	int ochan;				/* Number of output channels for B2A */
 	gammap *pmap;			/* Perceptual CAM to CAM Gamut mapping, NULL if no mapping */
 	gammap *smap;			/* Saturation CAM to CAM Gamut mapping, NULL if no mapping */
-	icxLuBase *ix;			/* Source profile std PCS to CAM conversion */
+	icxLuBase *ixp;			/* Source profile perceptual PCS to CAM conversion */
 	icxLuBase *ox;			/* Destination profile CAM to std PCS conversion */
+							/* (This is NOT used for the colorimetric B2A table creation!) */
 
 	icRenderingIntent abs_intent;	/* Desired abstract profile rendering intent */
 	icxLuBase *abs_luo;		/* abstract profile transform in PCS, NULL if none */
@@ -441,7 +446,7 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 		DBG(("convert PCS' to PCS got %f %f %f\n",in1[0],in1[1],in1[2]))
 
 		/* Convert from PCS to CAM/Gamut mapping space */
-		p->ix->fwd_relpcs_outpcs(p->ix, p->pcsspace, in1, in1);
+		p->ixp->fwd_relpcs_outpcs(p->ixp, p->pcsspace, in1, in1);
 
 		DBG(("convert PCS to CAM got %f %f %f\n",in1[0],in1[1],in1[2]))
 
@@ -691,8 +696,13 @@ make_output_icc(
 	int noisluts,			/* nz to supress creation of input (Device) shaper luts */
 	int noipluts,			/* nz to supress creation of input (Device) position luts */
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
+	int nocied,				/* nz to supress inclusion of .ti3 data in profile */
+	int noptop,				/* nz to use colorimetic source gamut to make perceptual table */ 
+	int nostos,				/* nz to use colorimetic source gamut to make saturation table */
+	int gamdiag,			/* Make gamut mapping diagnostic wrl plots */
 	int verify,				/* nz to print verification */
 	icxInk *oink,			/* Ink limit/black generation setup (NULL if n/a) */
+	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
 	cgats *icg,				/* input cgats structure */
 	int spec,				/* Use spectral data flag */
@@ -715,6 +725,7 @@ make_output_icc(
 	profxinf *xpi			/* Optional Profile creation extra data */
 ) {
 	int isdisp;				/* nz if this is a display device, 0 if output */
+	double dispLuminance = 0.0;	/* Display luminance. 0 if not known */
 	int allintents;			/* nz if all intents should possibly be created */
 	icmFile *wr_fp;
 	icc *wr_icco;
@@ -735,7 +746,8 @@ make_output_icc(
 	int b2ainres = 0;		/* B2A input (PCS) table resolution */
 	int b2ares = 0;			/* B2A clut resolution */
 	int b2aoutres = 0;		/* B2A output (device) table resolution */
-	double cal[3][256];		/* Display calibration, cal[0][0] == 1.0 if invalid */
+	double cal[3][MAX_CAL_ENT];		/* Display calibration, cal[0][0] == 1.0 if invalid */
+	int ncal;				/* Number of cal[] entries */
 	icxInk iink;			/* Source profile ink limit values */
 
 	iink.tlimit = -1.0;		/* default to unknown */
@@ -772,6 +784,16 @@ make_output_icc(
 		} else {
 			isdisp = 0;
 			allintents = 1;
+		}
+	}
+
+	/* See if display luminance data is present */
+	if (isdisp) {
+		int ti;
+
+		if ((ti = icg->find_kword(icg, 0, "LUMINANCE_XYZ_CDM2")) >= 0) {
+			if (sscanf(icg->t[0].kdata[ti], " %*lf %lf %*lf ",&dispLuminance) != 1)
+				dispLuminance = 0.0;
 		}
 	}
 
@@ -954,14 +976,13 @@ make_output_icc(
 	/* Read a display calibration set if we are given one */
 	/* It will be in the second table with other type "CAL" */
 	if (isdisp && icg->ntables >= 2 && icg->t[1].tt == tt_other && icg->t[0].oi != 1) {
-		int ncal;
 		int fi, ii, ri, gi, bi;
 		
 		if ((ncal = icg->t[1].nsets) <= 0)
 			error ("No display calibration set data in .ti3");
 	
-		if (ncal != 256)
-			error ("Expect 256 data sets in file '%s'");
+		if (ncal > MAX_CAL_ENT)
+			error ("Got %d data sets in .ti3, and maximum is %d",ncal,MAX_CAL_ENT);
 	
 		if ((fi = icg->find_kword(icg, 1, "DEVICE_CLASS")) < 0)
 			error ("Display calibration doesn't contain keyword COLOR_REPS");
@@ -1122,6 +1143,22 @@ make_output_icc(
 		wo->allocate((icmBase *)wo);/* Allocate space */
 		strcpy(wo->desc, dst);		/* Copy the string in */
 	}
+	/* Display Luminance tag */
+	if (isdisp && dispLuminance > 0.0) {
+		{
+			icmXYZArray *wo;;
+	
+			if ((wo = (icmXYZArray *)wr_icco->add_tag(
+			           wr_icco, icSigLuminanceTag, icSigXYZArrayType)) == NULL) 
+				error("add_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
+
+			wo->size = 1;
+			wo->allocate((icmBase *)wo);	/* Allocate space */
+			wo->data[0].X = 0.0;			/* Set a default value */
+			wo->data[0].Y = dispLuminance;	/* Set a default value */
+			wo->data[0].Z = 0.0;			/* Set a default value */
+		}
+	}
 	/* White Point Tag: */
 	{
 		icmXYZArray *wo;
@@ -1183,18 +1220,18 @@ make_output_icc(
 			error("add_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
 
 		wo->tagType = icmVideoCardGammaTableType;
-		wo->u.table.channels = 3;             /* rgb */
-		wo->u.table.entryCount = 256;         /* full lut */
-		wo->u.table.entrySize = 2;            /* 16 bits */
+		wo->u.table.channels = 3;			/* rgb */
+		wo->u.table.entryCount = ncal;		/* full lut */
+		wo->u.table.entrySize = 2;			/* 16 bits */
 		wo->allocate((icmBase*)wo);
 		for (j = 0; j < 3; j++) {
-			for (i = 0; i < 256; i++) {
+			for (i = 0; i < ncal; i++) {
 				double cc = cal[j][i];
 				if (cc < 0.0)
 					cc = 0.0;
 				else if (cc > 1.0)
 					cc = 1.0;
-				((unsigned short*)wo->u.table.data)[256 * j + i] = (int)(cc * 65535.0 + 0.5);
+				((unsigned short*)wo->u.table.data)[ncal * j + i] = (int)(cc * 65535.0 + 0.5);
 			}
 		}
 	}
@@ -1202,7 +1239,7 @@ make_output_icc(
 
 		/* Up to and including ICC Version 2.3, Display LUT profiles were assumed */
 		/* to have AtoB0 with no interpretation of the intent, which */
-		/* presumably implies Relative Colorimetric. */
+		/* implies Relative Colorimetric. */
 
 		/* 16 bit dev -> pcs lut: (A2B) */
 		{
@@ -1407,6 +1444,42 @@ make_output_icc(
 
 			/* icxMatrix will set curve values */
 		}
+	}
+	/* Sample data use to create profile: */
+	if (nocied == 0) {
+		icmText *wo;
+		char *crt;
+		FILE *fp;
+
+		if ((wo = (icmText *)wr_icco->add_tag(
+		           wr_icco, icmMakeTag('D','e','v','D'), icSigTextType)) == NULL) 
+			error("add_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
+
+
+#if defined(O_BINARY) || defined(_O_BINARY)
+	    if ((fp = fopen(in_name, "rb")) == NULL)
+#else
+	    if ((fp = fopen(in_name, "r")) == NULL)
+#endif
+			error("Unable to open input file '%s' for reading",in_name);
+
+		if (fseek(fp, 0, SEEK_END))
+			error("Unable to seek to end of file '%s'",in_name);
+		wo->size = ftell(fp) + 1;		/* Size needed + null */
+		wo->allocate((icmBase *)wo);/* Allocate space */
+
+		if (fseek(fp, 0, SEEK_SET))
+			error("Unable to seek to end of file '%s'",in_name);
+
+		if (fread(wo->data, 1, wo->size-1, fp) != wo->size-1)
+			error("Failed to read file '%s'",in_name);
+		wo->data[wo->size-1] = '\000';
+		fclose(fp);
+
+		/* Duplicate as CIE data */
+		if (wr_icco->link_tag(
+		         wr_icco, icmMakeTag('C','I','E','D'), icmMakeTag('D','e','v','D')) == NULL) 
+			error("link_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
 	}
 
 	if ((npat = icg->t[0].nsets) <= 0)
@@ -1747,6 +1820,8 @@ make_output_icc(
 			if ((wr_xicc = new_xicc(wr_icco)) == NULL)
 				error("Creation of xicc failed");
 		
+			flags |= ICX_CLIP_NEAREST;		/* This will avoid clip caused rev setup */
+
 			if (noisluts)
 				flags |= ICX_NO_IN_SHP_LUTS;
 
@@ -1767,7 +1842,8 @@ make_output_icc(
 			               (iquality >= 1 ? ICX_EXTRA_FIT : 0) |	/* Extra if medium or higher */
 #endif
 			               flags | ICX_SET_WHITE | ICX_SET_BLACK, 		/* Flags */
-			               npat, tpat, smooth, avgdev, NULL, oink, iquality)) == NULL)
+			               npat, tpat, dispLuminance, smooth, avgdev,
+			               NULL, oink, iquality)) == NULL)
 				error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
 			AtoB->del(AtoB);		/* Done with lookup */
@@ -1775,7 +1851,6 @@ make_output_icc(
 
 		/* Create B2A clut */
 		{
-			icmFile *fp = NULL;
 			icc *src_icco = NULL;
 			xicc *src_xicc = NULL;	/* Source profile */
 			icxViewCond ivc;		/* Input Viewing Condition for CAM */
@@ -1788,19 +1863,13 @@ make_output_icc(
 			out_b2a_callback cx;
 
 			if (verb)
-				printf("Creating B to A tables\n");
+				printf("Setting up B to A table lookup\n");
 
 			if (ipname != NULL) {		/* There is a source profile to determine gamut mapping */
 
 				/* Open up the profile for reading */
-				if ((fp = new_icmFileStd_name(ipname,"r")) == NULL)
+				if ((src_icco = read_embeded_icc(ipname)) == NULL)
 					error ("Can't open file '%s'",ipname);
-
-				if ((src_icco = new_icc()) == NULL)
-					error ("Creation of ICC object failed");
-
-				if ((rv = src_icco->read(src_icco,fp,0)) != 0)
-					error ("%d, %s",rv,src_icco->err);
 
 				/* Wrap with an expanded icc */
 				if ((src_xicc = new_xicc(src_icco)) == NULL)
@@ -1904,7 +1973,7 @@ make_output_icc(
 			cx.devspace = devspace;
 			cx.x = (icxLuLut *)AtoB;		/* A2B icxLuLut created from scattered data */
 
-			cx.ix = NULL;		/* PCS to CAM conversion */
+			cx.ixp = NULL;		/* Perceptual PCS to CAM conversion */
 			cx.ox = NULL;		/* CAM to PCS conversion */
 			cx.pmap = NULL;		/* perceptual gamut map */
 			cx.smap = NULL;		/* Saturation gamut map */
@@ -1940,7 +2009,8 @@ make_output_icc(
 
 				/* The abstract profile intent is assumed to determine how it gets applied. */
 				/* Make abstract PCS XYZ if icAbsoluteColorimetric is needed. */
-				if ((cx.abs_luo = abs_xicc->get_luobj(abs_xicc, 0, icmFwd, cx.abs_intent,
+				if ((cx.abs_luo = abs_xicc->get_luobj(abs_xicc, ICX_CLIP_NEAREST, icmFwd,
+				                  cx.abs_intent,
 			        (cx.pcsspace == icSigLabData && cx.abs_intent == icRelativeColorimetric)
 					             ? icSigLabData : icSigXYZData,
 					icmLuOrdNorm, NULL, NULL)) == NULL)
@@ -1968,8 +2038,13 @@ wrl->start_line_set(wrl);
 				cx.ntables = 1;
 
 				if (src_xicc) {		/* Creating separate perceptual and Saturation tables */
-					icRenderingIntent intent;		/* Gamut mapping space selection */
-					gamut *csgam, *igam = NULL, *ogam;
+					icRenderingIntent intentp;	/* Gamut mapping space perceptual selection */
+					icRenderingIntent intents;	/* Gamut mapping space saturation selection */
+					icRenderingIntent intento;	/* Gamut mapping space output selection */
+					gamut *csgamp;			/* Incoming colorspace perceptual gamut */
+					gamut *csgams;			/* Incoming colorspace saturation gamut */
+					gamut *igam = NULL;		/* Incoming image gamut */
+					gamut *ogam;			/* Destination colorspace gamut */
 					double gres;			/* Gamut surface feature resolution */
 					int    mapres;			/* Mapping rspl resolution */
 					double mn[3] = { 0.0, -150.0, -150.0 };	/* Set Jab mapping range */
@@ -1980,13 +2055,13 @@ wrl->start_line_set(wrl);
 			
 					if (oquality == 3) {	/* Ultra High */
 			  	 		gres = 8.0;
-			  	 		mapres = 45;
+			  	 		mapres = 41;
 					} else if (oquality == 2) {	/* High */
 			  	 		gres = 9.0;
-			  	 		mapres = 41;
+			  	 		mapres = 35;
 					} else if (oquality == 1) {	/* Medium */
 			  	 		gres = 10.0;
-			  	 		mapres = 33;
+			  	 		mapres = 27;
 					} else if (oquality == 0) {	/* Low quality */
 			  	 		gres = 12.0;
 			  	 		mapres = 21;
@@ -1996,19 +2071,36 @@ wrl->start_line_set(wrl);
 					}
 
 					/* We could lift this restriction by allowing for separate */
-					/* cx.ix and cx.ox for each intent. */
+					/* cx.ix and cx.ox for each intent, but that would be expensive!. */
 					if (sepsat && (pgmi->usecas & 0xff) != (sgmi->usecas & 0xff))
 						error("Can't handle percept and sat table intents with different CAM spaces");
-					/* Default gamut mapping space is absolute colorimetric */
-					intent = icAbsoluteColorimetric;
+					/* Default perceptual input gamut mapping space is absolute perceptual */
+					intentp = noptop ? icAbsoluteColorimetric : icmAbsolutePerceptual;
 
 					/* But override this for apperance space gamut mapping */
 					if ((pgmi->usecas & 0xff) != 0x0) {
-						intent = icxAppearance;
+						intentp = noptop ? icxAppearance : icxPerceptualAppearance;
 					}
+					if (sepsat) {
+						/* Default saturation gamut mapping space is absolute saturation */
+						intents = nostos ? icAbsoluteColorimetric : icmAbsoluteSaturation;
+
+						/* But override this for apperance space gamut mapping */
+						if ((sgmi->usecas & 0xff) != 0x0) {
+							intents = nostos ? icxAppearance : icxSaturationAppearance;
+						}
+					}
+					/* Default output gamut mapping space is absolute colorimetric */
+					intento = icAbsoluteColorimetric;
+
+					/* But override this for apperance space gamut mapping */
+					if ((pgmi->usecas & 0xff) != 0x0) {
+						intento = icxAppearance;
+					}
+
 					if ((pgmi->usecas & 0xff) == 0x2) {
 						double mxw;
-						intent = icxAbsAppearance;
+						intentp = intents = intento = icxAbsAppearance;
 
 						/* Make absolute common white point average between the two */
 						ivc.Wxyz[0] = 0.5 * (ivc.Wxyz[0] + ovc.Wxyz[0]);
@@ -2032,31 +2124,44 @@ wrl->start_line_set(wrl);
 					                               &iink.klimit, iink.klimit);
 
 					/* Get lookup object simply for fwd_relpcs_outpcs() */
-					/* and input gamut shell creation */
+					/* and perceptual input gamut shell creation */
 					/* Note that the intent=Appearance will trigger Jab CAM, */
 					/* overriding icSigLabData.. */
-					if ((cx.ix = src_xicc->get_luobj(src_xicc, 0, icmFwd, intent, icSigLabData,
-	                                  icmLuOrdNorm, &ivc, &iink)) == NULL)
+					if ((cx.ixp = src_xicc->get_luobj(src_xicc, ICX_CLIP_NEAREST, icmFwd, intentp,
+					                  icSigLabData, icmLuOrdNorm, &ivc, &iink)) == NULL)
 						error ("%d, %s",src_xicc->errc, src_xicc->err);
-
-					/* Get lookup object for bwd_outpcs_relpcs(), */
-					/* and output gamut shell creation */
-					/* Note that the intent=Appearance will trigger Jab CAM, */
-					/* overriding icSigLabData.. */
-					if ((cx.ox = wr_xicc->get_luobj(wr_xicc, 0, icmFwd, intent, icSigLabData,
-	                                  icmLuOrdNorm, &ovc, oink)) == NULL)
-						error ("%d, %s",wr_xicc->errc, wr_xicc->err);
 
 					/* Create the source colorspace gamut surface */
 					if (verb)
-						printf(" Finding Source Colorspace Gamut\n");
+						printf(" Finding Source Colorspace Perceptual Gamut\n");
 			
-					if ((csgam = cx.ix->get_gamut(cx.ix, gres)) == NULL)
+					if ((csgamp = cx.ixp->get_gamut(cx.ixp, gres)) == NULL)
 						error ("%d, %s",src_xicc->errc, src_xicc->err);
 			
+					if (sepsat) {
+						icxLuBase *ixs = NULL;	/* Source profile saturation lookup for gamut */
+						/* Get lookup object for saturation input gamut shell creation */
+						/* Note that the intent=Appearance will trigger Jab CAM, */
+						/* overriding icSigLabData.. */
+						if ((ixs = src_xicc->get_luobj(src_xicc, ICX_CLIP_NEAREST, icmFwd, intents,
+						              icSigLabData, icmLuOrdNorm, &ivc, &iink)) == NULL)
+						error ("%d, %s",src_xicc->errc, src_xicc->err);
+
+						if (verb)
+							printf(" Finding Source Colorspace Saturation Gamut\n");
+
+						if ((csgams = ixs->get_gamut(ixs, gres)) == NULL)
+							error ("%d, %s",src_xicc->errc, src_xicc->err);
+						ixs->del(ixs);
+					}
+
 					/* Read image source gamut if provided */
 					if (sgname != NULL) {	/* Optional source gamut - ie. from an images */
+						int isJab = 0;
 			
+						if ((pgmi->usecas & 0xff) != 0)
+							isJab = 1;
+
 						if (verb)
 							printf(" Loading Image Source Gamut '%s'\n",sgname);
 			
@@ -2065,8 +2170,22 @@ wrl->start_line_set(wrl);
 						if (igam->read_gam(igam, sgname))
 							error("Reading source gamut '%s' failed",sgname);
 
-						/* ~~~~ should we check igam->isJab here, for mismatch ? */
+						if (igam->getisjab(igam) != isJab) {
+							/* Should really convert to/from Jab here! */
+							warning("Image gamut is wrong colorspace for gamut mapping (Lab != Jab)");
+							/* This will actually error in the gamut mapping code */
+							/* Note that we're not checking relative/absolute colorspace here. */
+							/* At the moment it's up to the user to get this right. */
+						}
 					}
+
+					/* Get lookup object for bwd_outpcs_relpcs(), */
+					/* and output gamut shell creation */
+					/* Note that the intent=Appearance will trigger Jab CAM, */
+					/* overriding icSigLabData.. */
+					if ((cx.ox = wr_xicc->get_luobj(wr_xicc, ICX_CLIP_NEAREST, icmFwd, intento,
+					                  icSigLabData, icmLuOrdNorm, &ovc, oink)) == NULL)
+						error ("%d, %s",wr_xicc->errc, wr_xicc->err);
 
 					/* Creat the destination gamut surface */
 					if (verb)
@@ -2077,7 +2196,6 @@ wrl->start_line_set(wrl);
 			
 					if (verb)
 						printf(" Creating Gamut match\n");
-
 #ifdef BDEB
 {
 double cc[3] = { -1.0, 0.7, 0.7 };
@@ -2088,7 +2206,8 @@ wrl->start_line_set(wrl);
 }
 #endif /* BDEB */
 					/* setup perceptual gamut mapping */
-					cx.pmap = new_gammap(verb, csgam, igam, ogam, pgmi, mapres, mn, mx);
+					cx.pmap = new_gammap(verb, csgamp, igam, ogam, pgmi, mapres, mn, mx,
+					                                    gamdiag ? "gammap_p.wrl" : NULL);
 					if (cx.pmap == NULL)
 						error ("Failed to make perceptual gamut map transform");
 
@@ -2100,7 +2219,8 @@ wrl->start_line_set(wrl);
 
 					if (sepsat) {
 						/* setup saturation gamut mapping */
-						cx.smap = new_gammap(verb, csgam, igam, ogam, sgmi, mapres, mn, mx);
+						cx.smap = new_gammap(verb, csgams, igam, ogam, sgmi, mapres, mn, mx,
+					                                        gamdiag ? "gammap_s.wrl" : NULL);
 						if (cx.smap == NULL)
 							error ("Failed to make saturation gamut map transform");
 
@@ -2110,8 +2230,12 @@ wrl->start_line_set(wrl);
 							error("read_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
 						cx.ntables = 3;
 					}
-					csgam->del(csgam);
-					csgam = NULL;
+					csgamp->del(csgamp);
+					csgamp = NULL;
+					if (sepsat) {
+						csgams->del(csgams);
+						csgams = NULL;
+					}
 					if (igam != NULL) {
 						igam->del(igam);
 						igam = NULL;
@@ -2137,7 +2261,7 @@ wrl->start_line_set(wrl);
 				double xyzscale[1], sa[1];
 
 				/* Grab the source white point in CAM space */
-				cx.ix->rel_wh_bk_points(cx.ix, swcam, NULL);
+				cx.ixp->rel_wh_bk_points(cx.ixp, swcam, NULL);
 
 				/* Convert it to destination XYZ */
 				/* We're being bad in delving inside the xluo, but we'll fix it latter */
@@ -2164,6 +2288,7 @@ wrl->start_line_set(wrl);
 				}
 			}
 
+			/* DEVELOPMENT CODE */
 			/* Setup optimised B2A per channel curves */
 // ~~99
 #ifdef NEVER
@@ -2351,6 +2476,7 @@ wrl->start_line_set(wrl);
 				for (extra = 1, ui = 0; ui < wo[0]->inputChan; ui++, extra *= (wo[0]->clutPoints-1))
 					;
 				cx.total += extra;
+				printf("Creating B to A tables\n");
 				printf(" 0%%"); fflush(stdout);
 			}
 
@@ -2392,8 +2518,8 @@ wrl->start_line_set(wrl);
 				abs_fp->del(abs_fp);
 			}
 
-			if (cx.ix != NULL)
-				cx.ix->del(cx.ix), cx.ix = NULL;
+			if (cx.ixp != NULL)
+				cx.ixp->del(cx.ixp), cx.ixp = NULL;
 			if (cx.ox != NULL)
 				cx.ox->del(cx.ox), cx.ox = NULL;
 
@@ -2401,8 +2527,6 @@ wrl->start_line_set(wrl);
 				src_xicc->del(src_xicc), src_xicc = NULL;
 			if (src_icco != NULL)
 				src_icco->del(src_icco), src_icco = NULL;
-			if (fp != NULL)
-				fp->del(fp), fp = NULL;
 
 			if (verb)
 				printf("Done B to A tables\n");
@@ -2527,7 +2651,8 @@ wrl->start_line_set(wrl);
 		               wr_xicc, icmFwd, isdisp ? icmDefaultIntent : icRelativeColorimetric,
 		               icmLuOrdNorm,
 		               flags | ICX_SET_WHITE | ICX_SET_BLACK, 		/* Flags */
-		               npat, tpat, smooth, avgdev, NULL, oink, iquality)) == NULL)
+		               npat, tpat, dispLuminance, smooth, avgdev,
+		               NULL, oink, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
 		/* Free up xicc stuff */
@@ -2540,8 +2665,9 @@ wrl->start_line_set(wrl);
 			double dv[MAX_CHAN];
 
 			/* Get lookup object simply for fwd_relpcs_outpcs() */
-			if ((xluo = wr_xicc->get_luobj(wr_xicc, 0, icmFwd, icRelativeColorimetric,
-			                     icmSigDefaultData, icmLuOrdNorm, NULL, NULL)) == NULL)
+			if ((xluo = wr_xicc->get_luobj(wr_xicc, ICX_CLIP_NEAREST, icmFwd,
+			                     icRelativeColorimetric, icmSigDefaultData,
+			                     icmLuOrdNorm, NULL, NULL)) == NULL)
 				error ("%d, %s",wr_xicc->errc, wr_xicc->err);
 
 			if ((wo = (icmColorantTable *)wr_icco->read_tag(
@@ -2651,5 +2777,7 @@ wrl->start_line_set(wrl);
 		rd_icco->del(rd_icco);
 		rd_fp->del(rd_fp);
 	}
+
+	free(tpat);
 }
 

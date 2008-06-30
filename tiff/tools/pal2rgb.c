@@ -71,58 +71,58 @@ main(int argc, char* argv[])
 	int cmap = -1;
 	TIFF *in, *out;
 	int c;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 
-	while ((c = getopt(argc, argv, "C:c:p:r:")) != -1)
+	while ((c = tiff_getopt(argc, argv, "C:c:p:r:")) != -1)
 		switch (c) {
 		case 'C':		/* force colormap interpretation */
-			cmap = atoi(optarg);
+			cmap = atoi(tiff_optarg);
 			break;
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(optarg))
+			if (!processCompressOptions(tiff_optarg))
 				usage();
 			break;
 		case 'p':		/* planar configuration */
-			if (streq(optarg, "separate"))
+			if (streq(tiff_optarg, "separate"))
 				config = PLANARCONFIG_SEPARATE;
-			else if (streq(optarg, "contig"))
+			else if (streq(tiff_optarg, "contig"))
 				config = PLANARCONFIG_CONTIG;
 			else
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(optarg);
+			rowsperstrip = atoi(tiff_optarg);
 			break;
 		case '?':
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - optind != 2)
+	if (argc - tiff_optind != 2)
 		usage();
-	in = TIFFOpen(argv[optind], "r");
+	in = TIFFOpen(argv[tiff_optind], "r");
 	if (in == NULL)
 		return (-1);
 	if (!TIFFGetField(in, TIFFTAG_PHOTOMETRIC, &shortv) ||
 	    shortv != PHOTOMETRIC_PALETTE) {
 		fprintf(stderr, "%s: Expecting a palette image.\n",
-		    argv[optind]);
+		    argv[tiff_optind]);
 		return (-1);
 	}
 	if (!TIFFGetField(in, TIFFTAG_COLORMAP, &rmap, &gmap, &bmap)) {
 		fprintf(stderr,
 		    "%s: No colormap (not a valid palette image).\n",
-		    argv[optind]);
+		    argv[tiff_optind]);
 		return (-1);
 	}
 	bitspersample = 0;
 	TIFFGetField(in, TIFFTAG_BITSPERSAMPLE, &bitspersample);
 	if (bitspersample != 8) {
 		fprintf(stderr, "%s: Sorry, can only handle 8-bit images.\n",
-		    argv[optind]);
+		    argv[tiff_optind]);
 		return (-1);
 	}
-	out = TIFFOpen(argv[optind+1], "w");
+	out = TIFFOpen(argv[tiff_optind+1], "w");
 	if (out == NULL)
 		return (-2);
 	cpTags(in, out);

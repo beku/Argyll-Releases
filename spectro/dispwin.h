@@ -21,6 +21,8 @@ int do_plot(double *x, double *y1, double *y2, double *y3, int n);
 #ifdef NT
 #define OEMRESOURCE
 #include <windows.h>
+#include <shlwapi.h>
+#include <icm.h>
 
 #if(WINVER < 0x0500)
 #error Require WINVER >= 0x500 to compile (multi-monitor API needed)
@@ -51,29 +53,52 @@ int do_plot(double *x, double *y1, double *y2, double *y3, int n);
 #include <X11/extensions/xf86vmode.h>
 #include <X11/extensions/dpms.h>
 #include <X11/extensions/Xinerama.h>
+#include <X11/extensions/Xrandr.h>
 #include <X11/extensions/scrnsaver.h>
+#include <X11/extensions/dpms.h>
 #endif /* UNIX */
+
+/* - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Profile instalation/association scope */
+typedef enum {
+	p_scope_user     = 0,		/* (user profiles) OS X & Vista */
+	p_scope_local    = 1,		/* (local system profiles) OS X  & vista */
+	p_scope_system   = 2,		/* (system profiles) OS X */
+	p_scope_network  = 3		/* (shared network profiles) OS X */
+} p_scope;
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 /* Enumerate and list all the available displays */
 
 /* Structure to store infomation about possible displays */
 typedef struct {
+	char *name;			/* Display name */
 	char *description;	/* Description of display */
 	int sx,sy;			/* Displays offset in pixels */
 	int sw,sh;			/* Displays width and height in pixels*/
 #ifdef NT
-	char name[CCHDEVICENAME];	/* Display path */
+	char monname[32];	/* Monitor Name */
+	char monid[128];	/* Monitor ID */
+	int prim;			/* NZ if primary display monitor */
 #endif /* NT */
 #ifdef __APPLE__
 	CGDirectDisplayID ddid;
 #endif /* __APPLE__ */
 #if defined(UNIX) && !defined(__APPLE__)
-	char *name;				/* Display name */
 	int screen;				/* Screen to select */
 	int uscreen;			/* Underlying screen */
 	int rscreen;			/* Underlying RAMDAC screen */
-	char *icc_atom_name;	/* Name of ICC profile atom for this display */
+	Atom icc_atom;			/* ICC profile root atom for this display */
+	unsigned char *edid;	/* 128 or 256 bytes of monitor EDID, NULL if none */
+	int edid_len;			/* 128 or 256 */
+
+#if RANDR_MAJOR == 1 && RANDR_MINOR >= 2
+	/* Xrandr stuff - output is connected 1:1 to a display */
+	RRCrtc crtc;				/* Associated crtc */
+	RROutput output;			/* Associated output */
+	Atom icc_out_atom;			/* ICC profile atom for this output */
+#endif /* randr >= V 1.2 */
 #endif /* UNIX */
 } disppath;
 
@@ -113,6 +138,9 @@ struct _ramdac {
 struct _dispwin {
 
 /* private: */
+	char *name;			/* Display path (ie. '\\.\DISPLAY1') */
+						/* or "10.0.0.1:0.0" */
+
 	/* Plot instance information */
 	int sx,sy;			/* Screen offset in pixels */
 	int sw,sh;			/* Screen width and height in pixels*/
@@ -131,6 +159,8 @@ struct _dispwin {
 	char *callout;		/* if not NULL - set color Shell callout routine */
 
 #ifdef NT
+	char monname[32];	/* Monitor Name (ie. '\\.\DISPLAY1\Monitor0') */
+	char monid[128];	/* Monitor ID (ie. 'Monitor\MEA1773\{4D36E96E-E325-11CE-BFC1-08002BE10318}\0015'*/
 	HDC hdc;			/* Handle to display */
 	char *AppName;
 	HWND hwnd;			/* Window handle */
@@ -145,7 +175,6 @@ struct _dispwin {
 	WindowRef mywindow;
 	CGrafPtr port;
 	CGContextRef mygc;
-	int firstdraw;			/* Flag, nz if black background has been drawn */
 	int btf;				/* Flag, nz if window has been brought to the front once */
 	int winclose;			/* Flag, set to nz if window was closed */
 #endif /* __APPLE__ */
@@ -155,18 +184,37 @@ struct _dispwin {
 	int myscreen;			/* Usual or virtual screen with Xinerama */
 	int myuscreen;			/* Underlying screen */
 	int myrscreen;			/* Underlying RAMDAC screen */
+	Atom icc_atom;			/* ICC profile root atom for this display */
+	unsigned char *edid;	/* 128 or 256 bytes of monitor EDID, NULL if none */
+	int edid_len;			/* 128 or 256 */
+
+#if RANDR_MAJOR == 1 && RANDR_MINOR >= 2
+	/* Xrandr stuff - output is connected 1:1 to a display */
+	RRCrtc crtc;				/* Associated crtc */
+	RROutput output;			/* Associated output */
+	Atom icc_out_atom;			/* ICC profile atom for this output */
+#endif /* randr >= V 1.2 */
+
+	/* Test windo access */
 	Window mywindow;
 	GC mygc;
 
     /* Screensaver state */
-	int sssuspend;				/* Was able to suspend the screensaver */
+	int xsssuspend;				/* Was able to suspend the screensaver using XScreenSaverSuspend */
 
-	int ssvalid;				/* Was able to save & disable screensaver */
+	int xssvalid;				/* Was able to save & disable X screensaver using XSetScreenSaver */
 	int timeout, interval;
 	int prefer_blanking;
 	int allow_exposures;
 
-	int dpmsdisabled;			/* monitor disabled by DPM */
+	int xssrunning;				/* Disabled xscreensaver */
+
+	int gnomessrunning;			/* Disabled gnome screensaver and is was enabled */
+	pid_t gnomepid;				/* gnome-screensaver-command -i pid */
+
+	int kdessrunning;			/* Disabled kde screensaver and is was enabled */
+
+	int dpmsenabled;			/* DPMS is enabled */
 	
 #endif /* UNIX */
 
@@ -179,7 +227,20 @@ struct _dispwin {
 
 	/* Set the RAMDAC values. */
 	/* Return nz if not possible */
-	int (*set_ramdac)(struct _dispwin *p, ramdac *r);
+	int (*set_ramdac)(struct _dispwin *p, ramdac *r, int persist);
+
+	/* Install a display profile and make */
+	/* it the defult for this display. */
+	/* Return nz if failed */
+	int (*install_profile)(struct _dispwin *p, char *fname, ramdac *r, p_scope scope);
+
+	/* Un-install a display profile. */
+	/* Return nz if failed */
+	int (*uninstall_profile)(struct _dispwin *p, char *fname, p_scope scope);
+
+	/* Get the currently installed default display profile */
+	/* Return NULL if failed */
+	icmFile *(*get_profile)(struct _dispwin *p, char *name, int mxlen);
 
 	/* Set a color (values 0.0 - 1.0) */
 	/* Return nz on error */

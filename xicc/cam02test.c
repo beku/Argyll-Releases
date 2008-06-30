@@ -20,12 +20,13 @@
 
 #include <stdio.h>
 #include <math.h>
+#include "icc.h"
 #include "xcam.h"
 #include "cam02.h"
 #include "numlib.h"
 #include "cam02ref.h"
 
-#define DIAG		/* Print internal value diagnostics for each spot test conversion */
+#undef DIAG		/* Print internal value diagnostics for each spot test conversion */
 					/* and print diagnostics for excessive errors, nans etc. */
 #undef VERBOSE		/* Print diagnostic values for every conversion */
 #define SPOTTEST	/* ** Test known spot colors */
@@ -36,11 +37,11 @@
 #define LOCUSTEST	/* ** Test spectrum locus points */
 #define LOCUSRAND	/* ** Test random spectrum locus points */
 
-#undef INVTEST		/* ** -100 -> 100 XYZ cube to Jab to XYZ */
+#define INVTEST		/* ** -100 -> 100 XYZ cube to Jab to XYZ */
 #undef INVTEST1		/* Single value */
 #undef INVTEST2		/* Powell search for invers */
 
-#undef TESTINV		/* ** Jab cube to XYZ to Jab */
+#define TESTINV		/* ** Jab cube to XYZ to Jab */
 #undef TESTINV1		/* Single Jab value */
 #undef TESTINV2		/* J = 0 test values */
 
@@ -56,6 +57,7 @@
 #define _finite(x) ((x) == (x))
 #endif /* _isnan */
 
+#ifdef INVTEST1
 static void
 Lab2XYZ(double *out, double *in) {
 	double L = in[0], a = in[1], b = in[2];
@@ -85,6 +87,7 @@ Lab2XYZ(double *out, double *in) {
 	out[1] = y * 1.0000;
 	out[2] = z * 0.8249;
 }
+#endif /* INVTEST1 */
 
 /* CIE XYZ to perceptual Lab */
 static void
@@ -165,6 +168,8 @@ double maxxyzdiff(double i1[3], double i2[3]) {
 	return rv;
 }
 
+#ifdef INVTEST2
+
 /* Powell callback function and struct */
 typedef struct {
 	cam02 *cam;
@@ -186,6 +191,8 @@ static double opt1(void *fdata, double tp[]) {
 	rv += tt * tt;
 	return rv;
 }
+
+#endif /* INVTEST2 */
 
 /* 2 degree spectrum locus in xy coordinates */
 /* nm, x, y, Y CMC */
@@ -288,19 +295,19 @@ main(void) {
 #ifdef SPOTTEST
 #define NO_SPOTS 5
 	double sp_white[6][3] = {
-		{ 0.964, 1.000, 0.825 },
-		{ 0.964, 1.000, 0.825 },
-		{ 0.964, 1.000, 0.825 },
-		{ 0.964, 1.000, 0.825 },
-		{ 0.964, 1.000, 0.825 },
-		{ 0.964, 1.000, 0.825 }
+		{ 0.9505, 1.000, 1.0888 },
+		{ 0.9505, 1.000, 1.0888 },
+		{ 1.0985, 1.000, 0.3558 },
+		{ 1.0985, 1.000, 0.3558 },
+		{ 0.9505, 1.000, 1.0888 },
+		{ 0.9642, 1.000, 0.8249 }	/* D50 for inversion tests */
 	};
-	double sp_La[6] = { 31.83, 31.83, 31.83, 31.83, 31.83 };
+	double sp_La[6] = { 318.31, 31.83, 318.31, 31.83, 318.31, 150.0 };
 
 	double sample[5][3] = {
-		{ 0.1718, 0.1125, 0.0187 },
-		{ 0.0463, 0.0442, 0.1399 },
-		{ 0.4153, 0.2812, 0.0549 },
+		{ 0.1901, 0.2000, 0.2178 },
+		{ 0.5706, 0.4306, 0.3196 },
+		{ 0.0353, 0.0656, 0.0214 },
 		{ 0.1901, 0.2000, 0.2178 },
 		{ 0.9505, 1.000, 1.0888 }		/* Check white */
 	};
@@ -370,6 +377,7 @@ main(void) {
 
 	cam = new_cam02();
 	camr = new_cam02ref();
+	camr->range = 1;		/* Return on range error */
 #ifdef VERBOSE
 	cam->trace = 1;
 	camr->trace = 1;
@@ -386,8 +394,8 @@ main(void) {
 			camr,
 			tVc[c],		/* Enumerated Viewing Condition */
 			twhite[c],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
-			0.20,		/* Relative Luminance of Background to reference white */
 			tLa[c],		/* Adapting/Surround Luminance cd/m^2 */
+			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			tFlair[c],	/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			twhite[c],	/* The Flare color coordinates (typically the Ambient color) */
@@ -397,14 +405,14 @@ main(void) {
 			cam,
 			tVc[c],		/* Enumerated Viewing Condition */
 			twhite[c],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
-			0.20,		/* Relative Luminance of Background to reference white */
 			tLa[c],		/* Adapting/Surround Luminance cd/m^2 */
+			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			tFlair[c],	/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			twhite[c],	/* The Flare color coordinates (typically the Ambient color) */
 			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
-		camr->nnlimit = cam->nldlimit;
+		camr->nldlimit = cam->nldlimit;
 		camr->jlimit = cam->jlimit;
 
 #ifdef DIAG
@@ -479,7 +487,7 @@ main(void) {
 #endif /* DIAG */
 
 			if (maxdiff(tsample[c], xyz) > 1e-5) {
-				printf("Spottest: Excessive error in inversion %f\n",maxdiff(tsample[c], xyz));
+				printf("Spottest trouble 1: Excessive error in inversion %f\n",maxdiff(tsample[c], xyz));
 				printf("Is        %f %f %f\n",xyz[0],xyz[1],xyz[2]);
 				printf("Should be %f %f %f\n",tsample[c][0],tsample[c][1],tsample[c][2]);
 				ok = 0;
@@ -512,7 +520,7 @@ main(void) {
 #endif /* DIAG */
 
 			if (maxdiff(tsample2[c], Jab) > 1e-3) {
-				printf("Spottest: Excessive error in inversion %f\n",maxdiff(tsample2[c], Jab));
+				printf("Spottest trouble2: Excessive error in inversion %f\n",maxdiff(tsample2[c], Jab));
 				printf("Is        %f %f %f\n",Jab[0],Jab[1],Jab[2]);
 				printf("Should be %f %f %f\n",tsample2[c][0],tsample2[c][1],tsample2[c][2]);
 				ok = 0;
@@ -538,8 +546,8 @@ main(void) {
 			camr,
 			vc_average,	/* Enumerated Viewing Condition */
 			sp_white[c],/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
-			0.20,		/* Relative Luminance of Background to reference white */
 			sp_La[c],	/* Adapting/Surround Luminance cd/m^2 */
+			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			sp_white[c],/* The Flare color coordinates (typically the Ambient color) */
@@ -550,15 +558,15 @@ main(void) {
 			cam,
 			vc_average,	/* Enumerated Viewing Condition */
 			sp_white[c],/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
-			0.20,		/* Relative Luminance of Background to reference white */
 			sp_La[c],	/* Adapting/Surround Luminance cd/m^2 */
+			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			sp_white[c],/* The Flare color coordinates (typically the Ambient color) */
 			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 
-		camr->nnlimit = cam->nldlimit;
+		camr->nldlimit = cam->nldlimit;
 		camr->jlimit = cam->jlimit;
 
 #ifdef DIAG
@@ -604,8 +612,6 @@ main(void) {
 					target[2] = correct[c][3];
 			}
 
-			cam->cam_to_XYZ(cam, res, Jab);
-
 			if (maxdiff(JCh, target) > 0.05) {
 				printf("Spottest: Excessive error for %f %f %f\n",sample[c][0],sample[c][1],sample[c][2]);
 				printf("Spottest: Excessive error in conversion to CAM %f\n",maxdiff(JCh, target));
@@ -622,6 +628,9 @@ main(void) {
 				exit(-1);
 #endif /* EXIT_ON_ERROR */
 			}
+
+			cam->cam_to_XYZ(cam, res, Jab);
+
 			if (maxdiff(sample[c], res) > 1e-5) {
 				printf("Spottest: Excessive error in inversion %f\n",maxdiff(sample[c], res));
 				ok = 0;
@@ -659,17 +668,16 @@ main(void) {
 	printf("Locus: next white reference\n");
 	for (d = 0; d < NO_LAS; d++) {
 	for (e = 0; e < NO_VCS; e++) {
-		int i, j, k;
-		int co0, co1, co2;		/* (using co[3] triggers compiler bug) */
-		double Yxy[3], xyz[3], Lab[3], Jab[3], jabr[3], checkxyz[3];
+		int i, j;
+		double Yxy[3], xyz[3], Jab[3], jabr[3], checkxyz[3];
 		double mxd;
 
 		camr->set_view(
 			camr,
 			Vc[e],		/* Enumerated Viewing Condition */
 			white[c],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) = D50 */
-			0.20,		/* Relative Luminance of Background to reference white */
 			La[d],		/* Adapting/Surround Luminance cd/m^2 */
+			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
@@ -680,8 +688,8 @@ main(void) {
 			cam,
 			Vc[e],		/* Enumerated Viewing Condition */
 			white[c],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) = D50 */
-			0.20,		/* Relative Luminance of Background to reference white */
 			La[d],		/* Adapting/Surround Luminance cd/m^2 */
+			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
@@ -689,7 +697,7 @@ main(void) {
 		);
 		
 		/* Make reference return error where it's going to disagree with implementation */
-		camr->nnlimit = cam->nldlimit;
+		camr->nldlimit = cam->nldlimit;
 		camr->jlimit = cam->jlimit;
 
 		/* The monochromic boundary with a unit energy monochromic source */
@@ -890,8 +898,8 @@ main(void) {
 				cam,
 				vc_average,	/* Enumerated Viewing Condition */
 				white[c],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) = D50 */
-				0.20,		/* Relative Luminance of Background to reference white */
 				34.0,		/* Adapting/Surround Luminance cd/m^2 */
+				0.20,		/* Relative Luminance of Background to reference white */
 				0.0,		/* Luminance of white in image - not used */
 				0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 				white[c],	/* The Flare color coordinates (typically the Ambient color) */
@@ -965,17 +973,17 @@ main(void) {
 #endif /* INVTEST2 */
 
 #ifdef INVTEST
-			/* itterate through -100 to +100 XYZ cube space */
+			/* itterate through -100 to +120 XYZ cube space */
 			for (co0 = 0; co0 < TRES; co0++) {
 				xyz[0] = co0/(TRES-1.0);
-				xyz[0] = xyz[0] * 2.0 - 1.0;
+				xyz[0] = xyz[0] * 2.2 - 1.0;
 				for (co1 = 0; co1 < TRES; co1++) {
 					xyz[1] = co1/(TRES-1.0);
-					xyz[1] = xyz[1] * 2.0 - 1.0;
+					xyz[1] = xyz[1] * 2.2 - 1.0;
 					for (co2 = 0; co2 < TRES; co2++) {
 						int i;
 						xyz[2] = co2/(TRES-1.0);
-						xyz[2] = xyz[2] * 2.0 - 1.0;
+						xyz[2] = xyz[2] * 2.2 - 1.0;
 		
 						for (i = 0; i < 3; i++) {
 							if (xyz[i] < xmin[i])
@@ -1066,8 +1074,8 @@ main(void) {
 				cam,
 				vc_average,	/* Enumerated Viewing Condition */
 				white[c],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) = D50 */
-				0.20,		/* Relative Luminance of Background to reference white */
 				34.0,		/* Adapting/Surround Luminance cd/m^2 */
+				0.20,		/* Relative Luminance of Background to reference white */
 				0.0,		/* Luminance of white in image - not used */
 				0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 				white[c],	/* The Flare color coordinates (typically the Ambient color) */

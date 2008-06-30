@@ -166,7 +166,7 @@ static int usb_urb_transfer(usb_dev_handle *dev, int ep, int urbtype,
   int bytesdone = 0, requested;
   struct timeval tv, tv_ref, tv_now;
   struct usb_urb *context;
-  int ret, waiting;
+  int ret, tdout, rc;
 
   /*
    * HACK: The use of urb.usercontext is a hack to get threaded applications
@@ -184,7 +184,6 @@ static int usb_urb_transfer(usb_dev_handle *dev, int ep, int urbtype,
   gettimeofday(&tv_ref, NULL);
   tv_ref.tv_sec = tv_ref.tv_sec + timeout / 1000;
   tv_ref.tv_usec = tv_ref.tv_usec + (timeout % 1000) * 1000;
-
   if (tv_ref.tv_usec > 1000000) {
     tv_ref.tv_usec -= 1000000;
     tv_ref.tv_sec++;
@@ -216,68 +215,67 @@ static int usb_urb_transfer(usb_dev_handle *dev, int ep, int urbtype,
     FD_ZERO(&writefds);
     FD_SET(dev->fd, &writefds);
 
-restart:
-    waiting = 1;
-    context = NULL;
-    while (!urb.usercontext && ((ret = ioctl(dev->fd, IOCTL_USB_REAPURBNDELAY, &context)) == -1) && waiting) {
-      tv.tv_sec = 0;
-      tv.tv_usec = 1000; // 1 msec
-      select(dev->fd + 1, NULL, &writefds, NULL, &tv); //sub second wait
-
-      if (timeout) {
-        /* compare with actual time, as the select timeout is not that precise */
-        gettimeofday(&tv_now, NULL);
-
-        if ((tv_now.tv_sec > tv_ref.tv_sec) ||
-            ((tv_now.tv_sec == tv_ref.tv_sec) && (tv_now.tv_usec >= tv_ref.tv_usec)))
-          waiting = 0;
+    /* Now wait for our urb to turn up */
+    tdout = 0;
+    for (;;) {
+      ret = 0;
+      if (urb.usercontext) {
+	break;				/* Another thread found our URB for us */
       }
+      context = NULL;
+      ret = ioctl(dev->fd, IOCTL_USB_REAPURBNDELAY, &context);
+      if (ret == 0 && context) {	/* Found something */
+        if (context == &urb) {		/* Got the URB we were waiting for */
+	  break;
+	}
+	/* Must be some other threads. Mark it and keep waiting for ours */
+        context->usercontext = URB_USERCONTEXT_COOKIE;
+      } else {
+	if (errno != EAGAIN) {
+          fprintf(stderr, "error reaping URB: %s", strerror(errno));
+	  break;
+	}
+	/* We are still waiting. See if we've timed out */
+        gettimeofday(&tv_now, NULL);
+        if ((tv_now.tv_sec > tv_ref.tv_sec) ||
+            ((tv_now.tv_sec == tv_ref.tv_sec) && (tv_now.tv_usec >= tv_ref.tv_usec))) {
+	  if (tdout) {	/* Second time we've timed out. Discard must have failed */
+	    break;
+	  }
+          tdout = 1;
+	  /* Discard our URB and continue waiting a while for it to turn up */	
+	  ret = ioctl(dev->fd, IOCTL_USB_DISCARDURB, &urb);
+          if (ret < 0 && errno != EINVAL && usb_debug >= 1) {
+            fprintf(stderr, "error discarding URB: %s", strerror(errno));
+          }
+	  /* Allow another 100msec for discard to occur. Should normally happen faster than this. */
+          tv_ref.tv_sec = tv_now.tv_sec + 100 / 1000;
+          tv_ref.tv_usec = tv_now.tv_usec + (100 % 1000) * 1000;
+          if (tv_ref.tv_usec > 1000000) {
+            tv_ref.tv_usec -= 1000000;
+            tv_ref.tv_sec++;
+          }
+        }
+      }
+      /* Sleep for 2msec to wait for things to happen */
+      tv.tv_sec = 0;
+      tv.tv_usec = 2000; 	/* 2 msec */
+      select(dev->fd + 1, NULL, &writefds, NULL, &tv); 
     }
 
-    if (waiting && context && context != &urb) {
-      context->usercontext = URB_USERCONTEXT_COOKIE;
-      /* We need to restart since we got a successful URB, but not ours */
-      goto restart;
-    }
-
-    /*
-     * If there was an error, that wasn't EAGAIN (no completion), then
-     * something happened during the reaping and we should return that
-     * error now
-     */
-    if (ret < 0 && !urb.usercontext && errno != EAGAIN)
-      USB_ERROR_STR(-errno, "error reaping URB: %s", strerror(errno));
+    if (ret < 0 || tdout)	/* We didn't get a sucessful URB back */
+      break;
 
     bytesdone += urb.actual_length;
-  } while ((ret == 0 || urb.usercontext) && waiting && bytesdone < size && urb.actual_length == requested);
+  } while (bytesdone < size && urb.actual_length == requested);
 
-  /* If the URB didn't complete in success or error, then let's unlink it */
-  if ((!waiting || ret < 0) && !urb.usercontext) {
-    int rc;
-
-    if (!waiting)
-      rc = -ETIMEDOUT;
-    else
-      rc = urb.status;
-
-    ret = ioctl(dev->fd, IOCTL_USB_DISCARDURB, &urb);
-    if (ret < 0 && errno != EINVAL && usb_debug >= 1)
-      fprintf(stderr, "error discarding URB: %s", strerror(errno));
-
-    /*
-     * When the URB is unlinked, it gets moved to the completed list and
-     * then we need to reap it or else the next time we call this function,
-     * we'll get the previous completion and exit early
-     */
-    ioctl(dev->fd, IOCTL_USB_REAPURB, &context);
-
-    return rc;
-  }
-
-  if (!waiting)
-    return -ETIMEDOUT;
-
-  return bytesdone;
+  if (tdout)
+    rc = -ETIMEDOUT;
+  else if (ret < 0)
+    rc = urb.status;
+  else
+    rc = bytesdone; 
+  return rc;
 }
 
 int usb_bulk_write(usb_dev_handle *dev, int ep, char *bytes, int size,

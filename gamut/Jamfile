@@ -1,14 +1,13 @@
 
-#SubDir TOP gamut ;
 
 # Optimization and Debug flags
 
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-#CCFLAGS		+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;      # Link with debug info
-#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
-#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+#PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS		+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;      # Link with debug info
+#PREF_CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#PREF_LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
 
 #Products
 Libraries = libgamut libgammap ;
@@ -17,88 +16,70 @@ Samples = RefMediumGamut.gam ;
 Headers = gammap.h gamut.h ;
 
 #Install
-InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
-InstallFile $(DOTDOT)$(SLASH)bin : $(Samples) ;
-#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
-#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+InstallBin ../bin : $(Executables) ;
+InstallFile ../ref : $(Samples) ;
+#InstallFile ../h : $(Headers) ;
+#InstallLib ./lib : $(Libraries) ;
+
+# Header search path
+HDRS = ../h ../icc ../rspl ../numlib ../plot ../xicc ../cgats ../spectro ../gamut ;
 
 # Gamut handling library
-Library libgamut.lib : gamut.c ;
-ObjectHdrs gamut$(SUFOBJ) : ../h ../icc ../cgats ../numlib ;
+Library libgamut : gamut.c ;
 
 # Gamut mapping library
-Library libgammap.lib : gammap.c nearsmth.c ;
-ObjectHdrs gammap$(SUFOBJ) nearsmth$(SUFOBJ) : ../h ../icc ../rspl ../numlib ../plot ../xicc ../cgats ../spectro ../gamut ;
+Library libgammap : gammap.c nearsmth.c ;
 
+LINKLIBS = libgammap libgamut ../icc/libicc ../cgats/libcgats ../numlib/libnum ;
+
+# Utilities
 Main viewgam : viewgam.c ;
-ObjectHdrs viewgam$(SUFOBJ) : ../h ../icc ../cgats ../numlib ;
-LinkLibraries viewgam : libgamut.lib ../icc/libicc.lib ../cgats/libcgats.lib ../numlib/libnum.lib  ;
 
-# Mapping test routine
-Main maptest : maptest.c ;
-ObjectHdrs maptest : ../h ../numlib ../icc ../rspl ../xicc ../cgats ../spectro ../gamut ;
-LinkLibraries maptest : libgamut.lib libgammap.lib ../xicc/libxicc.lib ../icc/libicc.lib
-                        ../cgats/libcgats.lib ../rspl/librspl.lib 
-						../plot/libplot.lib ../plot/libvrml.lib ../numlib/libnum.lib ;
+# Link all the tests and utils with these libraries
 
 # Smoothed nearpoint test routine
-Main  smthtest :  smthtest.c ;
-ObjectHdrs  smthtest : ../h ../icc ../numlib ;
-LinkLibraries  smthtest : libgamut.lib libgammap.lib ../cgats/libcgats.lib 
-                          ../icc/libicc.lib ../numlib/libnum.lib ;
-
-
-# Surfacing test routine
-Main surftest : surftest.c ;
-ObjectHdrs surftest : ../h ../numlib ../icc ../rspl ;
-LinkLibraries surftest : libgamut.lib libgammap.lib ../icc/libicc.lib
-                        ../cgats/libcgats.lib ../rspl/librspl.lib 
-						../plot/libplot.lib ../plot/libvrml.lib ../numlib/libnum.lib ;
+Main smthtest :  smthtest.c ;
 
 # Preliminary ICC V4 Reference Medium Gamut
 Main GenRMGam : GenRMGam.c ;
-ObjectHdrs GenRMGam : ../h ../icc ../gamut ../numlib ../cgats ;
-LinkLibraries GenRMGam : libgamut.lib ../icc/libicc.lib ../cgats/libcgats.lib
-                              ../numlib/libnum.lib ;
+
 # Generate referenec medium gamut the kernel files
 GenFile RefMediumGamut.gam : GenRMGam ;
 
 # Visual gamut
 Main GenVisGam : GenVisGam.c ;
-ObjectHdrs GenVisGam : ../h ../icc ../gamut ../numlib ../cgats ;
-LinkLibraries GenVisGam : libgamut.lib ../icc/libicc.lib ../cgats/libcgats.lib
-                              ../numlib/libnum.lib ;
 
 # Develop hue sensitive parameter interpolation */
 #Main tttt : tttt.c ;
-#ObjectHdrs tttt$(SUFOBJ) : ../h ../icc ../numlib ;
-#LinkLibraries tttt : ../icc/libicc.lib ../numlib/libnum.lib ;
+
+LINKLIBS = libgammap libgamut ../icc/libicc ../cgats/libcgats ../xicc/libxicc
+           ../rspl/librspl ../numlib/libnum ../plot/libplot ../plot/libvrml ;
+
+# Mapping test routine
+Main maptest : maptest.c ;
+
+# Surfacing test routine
+Main surftest : surftest.c ;
+
+# Filtering test cpde
+#Main filt : filt.c ;
 
 if $(BUILD_JUNK) {
 
 	# Gamut creation test routine
 	Main gamtest : gamtest.c ;
-	ObjectHdrs gamtest : ../h ../numlib ../icc ../rspl ;
-	LinkLibraries gamtest : libgamut.lib ../icc/libicc.lib
-                        ../cgats/libcgats.lib ../numlib/libnum.lib ;
 
 	# Group finding test.
 	Main gtest : gtest.c ;
-	ObjectHdrs gtest : ../h ../numlib ../plot ;
-	LinkLibraries gtest : ../numlib/libnum.lib ../plot/libplot.lib ../plot/libvrml.lib ;
 
 	# Test routine
 	Main test : test.c ;
-	#ObjectHdrs test : ../rspl ;
-	LinkLibraries test : libgamut.lib ;
+
+	Main tt : tt.c ;
 
 	# Atan aproximation test
 	Main xtan : xtan.c ;
 
 	# Bit vector class test
 	Main bvtest : bvtest.c ;
-
-	Main tt : tt.c ;
-	ObjectHdrs tt$(SUFOBJ) : ../numlib ;
-	LinkLibraries tt : ../numlib/libnum.lib ;
 }

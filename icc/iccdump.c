@@ -39,7 +39,8 @@ void usage(void) {
 	exit(1);
 }
 
-#define MXTGNMS 10
+#define MXTGNMS 30
+
 int
 main(int argc, char *argv[]) {
 	int fa,nfa;				/* argument we're looking at */
@@ -92,7 +93,7 @@ main(int argc, char *argv[]) {
 				if (ntag_names >= MXTGNMS)
 					usage();
 				strncpy(tag_names[ntag_names],na,4);
-				tag_names[ntag_names++][5] = '\000';
+				tag_names[ntag_names++][4] = '\000';
 			}
 			/* Search */
 			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {

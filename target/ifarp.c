@@ -594,7 +594,7 @@ double *q		/* Target point location */
 //ee, s->sax[ee/2][ii] - s->nodes, ii, bw);
 
 			if (bw == NN_INF || bw > bdist) {
-				break;		/* Can't got any further, or further points will be worse */
+				break;		/* Can't go any further, or further points will be worse */
 			}
 
 #ifdef ASSERTS

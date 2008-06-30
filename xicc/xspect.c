@@ -2385,7 +2385,6 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 	printf("~1 FWA content = %f\n",p->FWAc); fflush(stdout);
 #endif
 
-
 	/* Turn on FWA compensation */
 	p->convert  = xsp2cie_fwa_convert;
 	p->sconvert = xsp2cie_fwa_sconvert;
@@ -2428,6 +2427,7 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 #endif
 	}
 #ifdef DOPLOT
+	printf("Estimated vs. real media spectrum\n");
 	do_plot(xx,y1,y2,y3,i);
 #endif
 	}
@@ -2604,6 +2604,7 @@ xspect *in			/* Spectrum to be converted */
 #endif /* DEBUG */
 
 #ifdef DOPLOT_ALL_FWA
+	printf("FWA compensated spectrum for sample\n");
 	do_plot(xx,y1,y2,y3,plix);
 #endif /* DOPLOT_ALL_FWA */
 

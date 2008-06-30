@@ -80,8 +80,8 @@ char*	floatfmt = "%s%g";		/* FLOAT */
 char*	doublefmt = "%s%g";		/* DOUBLE */
 
 static	void dump(int, uint32);
-extern	int optind;
-extern	char* optarg;
+extern	int tiff_optind;
+extern	char* tiff_optarg;
 
 void
 usage()
@@ -100,7 +100,7 @@ main(int argc, char* argv[])
 	bigendian = (*(char *)&one == 0);
 
 	appname = argv[0];
-	while ((c = getopt(argc, argv, "m:o:h")) != -1) {
+	while ((c = tiff_getopt(argc, argv, "m:o:h")) != -1) {
 		switch (c) {
 		case 'h':			/* print values in hex */
 			shortfmt = "%s%#x";
@@ -109,26 +109,26 @@ main(int argc, char* argv[])
 			slongfmt = "%s%#lx";
 			break;
 		case 'o':
-			diroff = (uint32) strtoul(optarg, NULL, 0);
+			diroff = (uint32) strtoul(tiff_optarg, NULL, 0);
 			break;
 		case 'm':
-			maxitems = strtoul(optarg, NULL, 0);
+			maxitems = strtoul(tiff_optarg, NULL, 0);
 			break;
 		default:
 			usage();
 		}
 	}
-	if (optind >= argc)
+	if (tiff_optind >= argc)
 		usage();
-	for (; optind < argc; optind++) {
-		fd = open(argv[optind], O_RDONLY|O_BINARY, 0);
+	for (; tiff_optind < argc; tiff_optind++) {
+		fd = open(argv[tiff_optind], O_RDONLY|O_BINARY, 0);
 		if (fd < 0) {
 			perror(argv[0]);
 			return (-1);
 		}
 		if (multiplefiles)
-			printf("%s:\n", argv[optind]);
-		curfile = argv[optind];
+			printf("%s:\n", argv[tiff_optind]);
+		curfile = argv[tiff_optind];
 		swabflag = 0;
 		dump(fd, diroff);
 		close(fd);

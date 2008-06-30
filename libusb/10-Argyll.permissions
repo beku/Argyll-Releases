@@ -1,0 +1,6 @@
+# Config file for serial ports using hotplug & udev
+# Change "ttyS0" to whatever ttySx or ttyUSBx your instruments will be on.
+# This file goes at /etc/udev/permissions.d/10-Argyll.permissions
+# Should have an "argyll" group, but do it crudely for now,
+ttyS0:root:uucp:0666
+ttyUSB0:root:uucp:0666

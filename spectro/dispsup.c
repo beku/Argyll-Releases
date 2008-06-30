@@ -31,6 +31,7 @@
 #include "insttypes.h"
 #include "icoms.h"
 #include "inst.h"
+#include "conv.h"
 #include "dispwin.h"
 #include "dispsup.h"
 
@@ -42,7 +43,8 @@
 #define DBG(xxx) 
 #endif
 
-#define FAKE_NOISE 0.0		/* Add noise to fake devices XYZ */
+#define FAKE_NOISE 0.01		/* Add noise to fake devices XYZ */
+#define FAKE_BITS 9			/* Number of bits of significance of fake device */
 
 /* -------------------------------------------------------- */
 
@@ -151,7 +153,8 @@ inst_code inst_handle_calibrate(
 					break;
 
 				case inst_calc_man_em_dark:
-					printf("Place the instrument on a dark surface,\n");
+					printf("Place cap on the instrument, or place in on a dark surface,\n");
+					printf("or place on the white calibration reference,\n");
 					printf(" and then hit any key to continue,\n"); 
 					printf(" or hit Esc, ^C or Q to abort:"); 
 					break;
@@ -281,8 +284,8 @@ inst_code inst_handle_calibrate(
 
 /* -------------------------------------------------------- */
 /* User requested calibration of the display instrument */
-/* (Not supporting inst_crt_freq_cal since this */
-/*  is done automatically in dispsup.) */
+/* (Not supporting inst_crt_freq_cal or inst_calt_disp_int_time */
+/*  since these are done automatically in dispsup.) */
 /* Should add an argument to be able to select type of calibration, */
 /* rather than guessing what the user wants ? */
 int disprd_calibration(
@@ -396,6 +399,9 @@ int debug				/* Debug flag */
 	} else if (cap2 & inst2_cal_crt_freq) {
 		/* Frequency calibration for CRT */
 		calt = inst_calt_crt_freq;
+	} else if (cap2 & inst2_cal_disp_int_time) {
+		/* Integration time calibration for display mode */
+		calt = inst_calt_disp_int_time;
 	}
 	
 	/* Do the calibration */
@@ -442,11 +448,11 @@ static int disprd_read(
 	/* Setup user termination character */
 	p->it->icom->set_uih(p->it->icom, tc, tc, ICOM_TERM);
 
-	/* See if we should do a frequency calibration first */
+	/* See if we should do a frequency calibration or display intergaation time cal. first */
 	if ((p->it->capabilities2(p->it) & inst2_cal_crt_freq) != 0
 	 && p->it->needs_calibration(p->it) == inst_calt_crt_freq
 	 && npat > 0
-	 && (cols[0].r != 1.0 || cols[1].r != 1.0 || cols[1].r != 1.0)) {
+	 && (cols[0].r != 1.0 || cols[0].g != 1.0 || cols[0].b != 1.0)) {
 		col tc;
 		inst_cal_cond calc = inst_calc_disp_white;
 
@@ -460,6 +466,23 @@ static int disprd_read(
 				      p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
 		}
 	}
+
+	/* See if we should do a display integration calibration first */
+	if ((p->it->capabilities2(p->it) & inst2_cal_disp_int_time) != 0
+	 && p->it->needs_calibration(p->it) == inst_calt_disp_int_time) {
+		col tc;
+		inst_cal_cond calc = inst_calc_disp_white;
+
+		if ((rv = p->dw->set_color(p->dw, 1.0, 1.0, 1.0)) != 0) {
+			DBG(("set_color() returned %s\n",rv))
+			return 3;
+		}
+		/* Do calibrate, but ignore return code. Press on regardless. */
+		if ((rv = p->it->calibrate(p->it, inst_calt_disp_int_time, &calc, id)) != inst_ok) {
+			DBG(("warning, display integration calibrate failed with '%s' (%s)\n",
+				      p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+		}
+	} 
 
 	for (patch = 0; patch < npat; patch++) {
 		col *scb = &cols[patch];
@@ -588,8 +611,196 @@ static int disprd_read(
 	return 0;
 }
 
+static int config_inst_displ(disprd *p);
+
+/* Take an ambient reading if the instrument has the capability. */
+/* return nz on fail/abort */
+/* 1 = user aborted */
+/* 2 = instrument access failed */
+/* 4 = user hit terminate key */
+/* 5 = system error */
+/* 8 = no ambient capability */ 
+int disprd_ambient(struct _disprd *p,
+	double *ambient,		/* return ambient in cd/m^2 */
+	int tc					/* If nz, termination key */
+) {
+	inst_capability cap = 0;
+	inst2_capability cap2 = 0;
+	inst_opt_mode trigmode = inst_opt_unknown;  /* Chosen trigger mode */
+	int uswitch = 0;                /* Instrument switch is enabled */
+	ipatch val;
+	int verb = p->verb;
+	int rv;
+
+	if (p->it != NULL) { /* Not fake */
+		cap = p->it->capabilities(p->it);
+		cap2 = p->it->capabilities2(p->it);
+	}
+	
+	if ((cap & inst_emis_ambient) == 0) {
+		printf("Need ambient measurement capability,\n");
+		printf("but instrument doesn't support it\n");
+		return 8;
+	}
+
+	printf("\nPlease make sure the instrument is fitted with\n");
+	printf("the appropriate ambient light measuring head.\n");
+	
+	if ((rv = p->it->set_mode(p->it, inst_mode_emis_ambient)) != inst_ok) {
+		DBG(("set_mode returned '%s' (%s)\n",
+		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+		return 2;
+	}
+	
+	/* Select a reasonable trigger mode */
+	if (cap2 & inst2_keyb_switch_trig) {
+		trigmode = inst_opt_trig_keyb_switch;
+		uswitch = 1;
+
+	/* Or go for keyboard trigger */
+	} else if (cap2 & inst2_keyb_trig) {
+		trigmode = inst_opt_trig_keyb;
+
+	/* Or something is wrong with instrument capabilities */
+	} else {
+		printf("No reasonable trigger mode avilable for this instrument\n");
+		return 2;
+	}
+
+	if ((rv = p->it->set_opt_mode(p->it, trigmode)) != inst_ok) {
+		printf("\nSetting trigger mode failed with error :'%s' (%s)\n",
+       	       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
+		return 2;
+	}
+
+	/* Prompt on trigger */
+	if ((rv = p->it->set_opt_mode(p->it, inst_opt_trig_return)) != inst_ok) {
+		printf("Setting trigger mode failed with error :'%s' (%s)\n",
+       	       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
+		return 2;
+	}
+
+	/* Setup the keyboard trigger to return our commands */
+	p->it->icom->reset_uih(p->it->icom);
+	p->it->icom->set_uih(p->it->icom, 0x0, 0xff, ICOM_TRIG);
+	p->it->icom->set_uih(p->it->icom, 'q', 'q', ICOM_USER);
+	p->it->icom->set_uih(p->it->icom, 'Q', 'Q', ICOM_USER);
+	p->it->icom->set_uih(p->it->icom, 0x03, 0x03, ICOM_USER);		/* ^c */
+	p->it->icom->set_uih(p->it->icom, 0x1b, 0x1b, ICOM_USER);		/* Esc */
+
+	/* Setup user termination character */
+	p->it->icom->set_uih(p->it->icom, tc, tc, ICOM_TERM);
+
+	/* Until we give up retrying */
+	for (;;) {
+		char ch;
+		val.XYZ_v = 0;		/* No readings are valid */
+		val.aXYZ_v = 0;
+		val.sp.spec_n = 0;
+
+		printf("\nPlace the ambient on a horizontal surface beside the display,\n");
+		if (uswitch)
+			printf("Hit ESC, ^C or Q to exit, instrument switch or any other key to take a reading: ");
+		else
+			printf("Hit ESC, ^C or Q to exit, any other key to take a reading: ");
+		fflush(stdout);
+
+		if ((rv = p->it->read_sample(p->it, "AMBIENT", &val)) != inst_ok
+		     && (rv & inst_mask) != inst_user_trig) {
+			DBG(("read_sample returned '%s' (%s)\n",
+		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+
+			/* Deal with a user terminate */
+			if ((rv & inst_mask) == inst_user_term) {
+				return 4;
+
+			/* Deal with a user abort */
+			} else if ((rv & inst_mask) == inst_user_abort) {
+				empty_con_chars();
+				printf("\nMeasure stopped at user request!\n");
+				printf("Hit Esc, ^C or Q to give up, any other key to retry:"); fflush(stdout);
+				if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+					printf("\n");
+					return 1;
+				}
+				printf("\n");
+				continue;
+
+			/* Deal with a misread or needs calibration */
+			} else if ((rv & inst_mask) == inst_needs_cal) {
+				disp_win_info dwi;
+				dwi.dw = p->dw;		/* Set window to use */
+				printf("\nSample read failed because instruments needs calibration\n");
+				rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none, &dwi);
+				if (rv != inst_ok) {	/* Abort or fatal error */
+					return 1;
+				}
+				continue;
+
+			/* Deal with a misread */
+			} else if ((rv & inst_mask) == inst_misread) {
+				empty_con_chars();
+				printf("\nMeasurement failed due to misread\n");
+				printf("Hit Esc, ^C or Q to give up, any other key to retry:"); fflush(stdout);
+				if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+					printf("\n");
+					return 1;
+				}
+				printf("\n");
+				continue;
+
+			/* Deal with a communications error */
+			} else if ((rv & inst_mask) == inst_coms_fail) {
+				int tt = p->it->last_comerr(p->it);
+				if (tt & (ICOM_BRK | ICOM_FER | ICOM_PER | ICOM_OER)) {
+					if (p->br == baud_19200) p->br = baud_9600;
+					else if (p->br == baud_9600) p->br = baud_4800;
+					else if (p->br == baud_2400) p->br = baud_1200;
+					else p->br = baud_1200;
+				}
+				/* Communication problem, allow retrying at a lower baud rate */
+				empty_con_chars();
+				printf("\nMeasurement read failed due to communication problem.\n");
+				printf("Hit Esc, ^C or Q to give up, any other key to retry:"); fflush(stdout);
+				if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+					printf("\n");
+					return 1;
+				}
+				printf("\n");
+				if ((rv = p->it->init_coms(p->it, p->comport, p->br, p->fc, 15.0)) != inst_ok) {
+					DBG(("init_coms returned '%s' (%s)\n",
+				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+					return 2;
+				}
+			continue;
+			}
+		} else {
+			break;		/* Sucesful reading */
+		}
+	}
+
+	if (val.aXYZ_v == 0) {
+		printf("Unexpected failure to get measurement\n");
+		return 2;
+	}
+
+	DBG(("Measured ambient of %f\n",val.aXYZ[1]));
+	if (ambient != NULL)
+		*ambient = val.aXYZ[1];
+	
+	/* Configure the instrument mode back to reading the display */
+	if ((rv = config_inst_displ(p)) != 0)
+		return rv;
+
+	printf("\nPlace the instrument back on the test window\n");
+	fflush(stdout);
+
+	return 0;
+}
+
 
 /* Test without a spectrometer using a fake device */
+/* Return nz on error */
 static int disprd_fake_read(disprd *p,
 	col *cols,		/* Array of patch colors to be tested */
 	int npat, 		/* Number of patches to be tested */
@@ -606,7 +817,8 @@ static int disprd_fake_read(disprd *p,
 	double mat[3][3];		/* Destination matrix */
 	double ooff[3];			/* XYZ offsets */
 	double rgb[3];
-	double br = 35.4;		/* Overall brightness */
+//	double br = 35.4;		/* Overall brightness */
+	double br = 120.0;		/* Overall brightness */
 	int patch, j;
 	int ttpat = tpat;
 
@@ -632,8 +844,8 @@ static int disprd_fake_read(disprd *p,
 	doff[2] = 0.08;
 	/* Output offset - equivalent to flare */
 	ooff[0] = 0.04;
-	ooff[1] = 0.09;
-	ooff[2] = 0.16;
+	ooff[1] = 0.16;
+	ooff[2] = 0.09;
 
 	if (icmRGBprim2matrix(white, red, green, blue, mat))
 		error("Fake read unexpectedly got singular matrix\n");
@@ -646,6 +858,46 @@ static int disprd_fake_read(disprd *p,
 		rgb[0] = cols[patch].r;
 		rgb[1] = cols[patch].g;
 		rgb[2] = cols[patch].b;
+
+		/* If we have a test window, display the patch color */
+		if (p->dw) {
+			inst_code rv;
+			if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
+				DBG(("set_color() returned %s\n",rv))
+				return 3;
+			}
+		}
+
+		/* If we have a RAMDAC, apply it to the color */
+		if (p->cal[0][0] >= 0.0) {
+			double inputEnt_1 = (double)(p->ncal-1);
+
+			for (j = 0; j < 3; j++) {
+				unsigned int ix;
+				double val, w;
+				val = rgb[j] * inputEnt_1;
+				if (val < 0.0) {
+					val = 0.0;
+				} else if (val > inputEnt_1) {
+					val = inputEnt_1;
+				}
+				ix = (unsigned int)floor(val);		/* Coordinate */
+				if (ix > (p->ncal-2))
+					ix = (p->ncal-2);
+				w = val - (double)ix;		/* weight */
+				val = p->cal[j][ix];
+				rgb[j] = val + w * (p->cal[j][ix+1] - val);
+			}
+		}
+
+		/* Apply the fake devices level of quantization */
+#ifdef FAKE_BITS
+		for (j = 0; j < 3; j++) {
+			int vv;
+			vv = (int) (rgb[j] * ((1 << FAKE_BITS) - 1.0) + 0.5);
+			rgb[j] =  vv/((1 << FAKE_BITS) - 1.0);
+		}
+#endif
 
 		/* Apply device offset */
 		for (j = 0; j < 3; j++) {
@@ -671,6 +923,15 @@ static int disprd_fake_read(disprd *p,
 		for (j = 0; j < 3; j++)
 			cols[patch].aXYZ[j] += ooff[j];
 
+#ifdef FAKE_NOISE
+		cols[patch].aXYZ[0] += 2.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
+		cols[patch].aXYZ[1] += FAKE_NOISE * d_rand(-1.0, 1.0);
+		cols[patch].aXYZ[2] += 4.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
+		for (j = 0; j < 3; j++) { 
+			if (cols[patch].aXYZ[j] < 0.0)
+				cols[patch].aXYZ[j] = 0.0;
+		}
+#endif
 		cols[patch].aXYZ_v = 1;
 	}
 	if (acr && p->verb && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
@@ -703,6 +964,38 @@ static int disprd_fake_read_lu(disprd *p,
 		rgb[0] = cols[patch].r;
 		rgb[1] = cols[patch].g;
 		rgb[2] = cols[patch].b;
+
+		/* If we have a test window, display the patch color */
+		if (p->dw) {
+			inst_code rv;
+			if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
+				DBG(("set_color() returned %s\n",rv))
+				return 3;
+			}
+		}
+
+		/* If we have a RAMDAC, apply it to the color */
+		if (p->cal[0][0] >= 0.0) {
+			double inputEnt_1 = (double)(p->ncal-1);
+
+			for (j = 0; j < 3; j++) {
+				unsigned int ix;
+				double val, w;
+
+				val = rgb[j] * inputEnt_1;
+				if (val < 0.0) {
+					val = 0.0;
+				} else if (val > inputEnt_1) {
+					val = inputEnt_1;
+				}
+				ix = (unsigned int)floor(val);		/* Coordinate */
+				if (ix > (p->ncal-2))
+					ix = (p->ncal-2);
+				w = val - (double)ix;		/* weight */
+				val = p->cal[j][ix];
+				rgb[j] = val + w * (p->cal[j][ix+1] - val);
+			}
+		}
 
 		p->fake_lu->lookup(p->fake_lu, cols[patch].aXYZ, rgb); 
 		for (j = 0; j < 3; j++) 
@@ -740,6 +1033,8 @@ char *disprd_err(int en) {
 			return "System Error";
 		case 7:
 			return "Either CRT or LCD must be selected";
+		case 8:
+			return "Instrument has no ambient measurement capability";
 	}
 	return "Unknown";
 }
@@ -747,7 +1042,8 @@ char *disprd_err(int en) {
 static void disprd_del(disprd *p) {
 
 	/* The user may remove the instrument */
-	printf("The instrument can be removed from the screen.\n");
+	if (p->dw != NULL)
+		printf("The instrument can be removed from the screen.\n");
 
 	if (p->fake_lu != NULL)
 		p->fake_lu->del(p->fake_lu);
@@ -760,15 +1056,117 @@ static void disprd_del(disprd *p) {
 		p->it->del(p->it);
 	if (p->dw != NULL) {
 		if (p->or != NULL)
-			p->dw->set_ramdac(p->dw,p->or);
+			p->dw->set_ramdac(p->dw,p->or, 0);
 		p->dw->del(p->dw);
 	}
 	free(p);
 }
 
+/* Helper to configure the instrument mode ready */
+/* for reading the display */
+/* return new_disprd() error code */
+static int config_inst_displ(disprd *p) {
+	inst_capability cap;
+	inst2_capability cap2;
+	inst_mode mode = 0;
+	int verb = p->verb;
+	int rv;
+	
+	cap = p->it->capabilities(p->it);
+	cap2 = p->it->capabilities2(p->it);
+	
+	if ((cap & inst_emis_disp) == 0) {
+		printf("Need emissive measurement capability,\n");
+		printf("but instrument doesn't support it\n");
+		return 2;
+	}
+	
+	if (p->spectral && (cap & inst_spectral) == 0) {
+		printf("Spectral information was requested,\n");
+		printf("but instrument doesn't support it\n");
+		p->spectral = 0;
+	}
+	
+	mode = inst_mode_emis_disp;
+	
+	if (p->spectral) {
+		mode |= inst_mode_spectral;
+		p->spectral = 1;
+	} else {
+		p->spectral = 0;
+	}
+	
+	/* Set CRT or LCD mode */
+	if ((cap & (inst_emis_disp_crt | inst_emis_disp_lcd))
+	 && (p->dtype == 1 || p->dtype == 2)) {
+		inst_opt_mode om;
+	
+		if (p->dtype == 1)
+			om = inst_opt_disp_crt;
+		else
+			om = inst_opt_disp_lcd;
+	
+		if ((rv = p->it->set_opt_mode(p->it, om)) != inst_ok) {
+			DBG(("Setting display type failed failed with '%s' (%s)\n",
+		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+			return 2;
+		}
+	} else if (cap & (inst_emis_disp_crt | inst_emis_disp_lcd)) {
+		printf("Either CRT or LCD must be selected\n");
+		return 7;
+	}
+	
+	/* Disable autocalibration of machine if selected */
+	if (p->nocal != 0) {
+		if ((rv = p->it->set_opt_mode(p->it,inst_opt_noautocalib)) != inst_ok) {
+			DBG(("Setting no-autocalibrate failed failed with '%s' (%s)\n",
+		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+			return 2;
+		}
+	}
+	
+	if (p->highres) {
+		if (cap & inst_highres) {
+			inst_code ev;
+			if ((ev = p->it->set_opt_mode(p->it, inst_opt_highres)) != inst_ok) {
+				DBG(("\nSetting high res mode failed with error :'%s' (%s)\n",
+		       	       p->it->inst_interp_error(p->it, ev), p->it->interp_error(p->it, ev)))
+				return 2;
+			}
+		} else if (p->verb) {
+			printf("high resolution ignored - instrument doesn't support high res. mode\n");
+		}
+	}
+	if ((rv = p->it->set_mode(p->it, mode)) != inst_ok) {
+		DBG(("set_mode returned '%s' (%s)\n",
+		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+		return 2;
+	}
+	
+	/* Set the trigger mode to program triggered */
+	if ((rv = p->it->set_opt_mode(p->it,inst_opt_trig_prog)) != inst_ok) {
+		DBG(("Setting program trigger mode failed failed with '%s' (%s)\n",
+	       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+		return 2;
+	}
+
+	/* No prompt on trigger */
+	if ((rv = p->it->set_opt_mode(p->it, inst_opt_trig_no_return)) != inst_ok) {
+		DBG(("\nSetting trigger mode failed with error :'%s' (%s)\n",
+	       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+		return 2;
+	}
+
+	/* Reset key meanings */
+	p->it->icom->reset_uih(p->it->icom);
+
+	return 0;
+}
+
 /* Create a display reading object. */
 /* Return NULL if error */
 /* Set *errc to code: */
+/* 0 = no error */
 /* 1 = user aborted */
 /* 2 = instrument access failed */
 /* 3 = window access failed */ 
@@ -786,8 +1184,9 @@ int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 int nocal,			/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */
 int donat,			/* Use ramdac for native output, else run through current or set ramdac */
-double cal[3][256],	/* Calibration set/return (cal[0][0] < 0.0 if can't/not to be used) */
-disppath *disp,		/* Display to calibrate. */
+double cal[3][MAX_CAL_ENT],	/* Calibration set/return (cal[0][0] < 0.0 if can't/not to be used) */
+int ncal,			/* Number of cal[] entries */
+disppath *disp,		/* Display to calibrate. NULL if fake and no dispwin */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
 char *callout,      /* Shell callout on set color */
@@ -813,9 +1212,15 @@ char *fake_name		/* Name of profile to use as a fake device */
 	}
 	p->del = disprd_del;
 	p->read = disprd_read;
+	p->ambient = disprd_ambient;
 	p->fake_name = fake_name;
 
 	p->verb = verb;
+	p->itype = itype;
+	p->spectral = spectral;
+	p->dtype = dtype;
+	p->nocal = nocal;
+	p->highres = highres;
 	if (df)
 		p->df = df;
 	else
@@ -823,6 +1228,20 @@ char *fake_name		/* Name of profile to use as a fake device */
 	p->comport = comport;
 	p->br = baud_19200;
 	p->fc = fc;
+
+	/* Save this in case we are using a fake device */
+	if (cal != NULL && cal[0][0] >= 0.0) {
+		int j, i;
+		for (j = 0; j < 3; j++) {
+			for (i = 0; i < ncal; i++) {
+				p->cal[j][i] = cal[j][i];
+			}
+		}
+		p->ncal = ncal;
+	} else {
+		p->cal[0][0] =  -1.0;
+		p->ncal = 0;
+	}
 
 	if (comport == -99) {
 		p->fake = 1;
@@ -852,132 +1271,45 @@ char *fake_name		/* Name of profile to use as a fake device */
 			p->read = disprd_fake_read_lu;
 		} else
 			p->read = disprd_fake_read;
-		return p;
-	}
 
-	if (verb)
-		fprintf(p->df,"Setting up the instrument\n");
+		if (disp == NULL)
+			return p;
 
-	if ((p->it = new_inst(comport, itype, debug, verb)) == NULL) {
-		p->del(p);
-		if (errc != NULL) *errc = 2;
-		return NULL;
-	}
-
-	/* Establish communications */
-	if ((rv = p->it->init_coms(p->it, p->comport, p->br, p->fc, 15.0)) != inst_ok) {
-		DBG(("init_coms returned '%s' (%s)\n",
-		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-		p->del(p);
-		if (errc != NULL) *errc = 2;
-		return NULL;
-	}
-
-	/* Initialise the instrument */
-	if ((rv = p->it->init_inst(p->it)) != inst_ok) {
-		DBG(("init_inst returned '%s' (%s)\n",
-		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-		p->del(p);
-		if (errc != NULL) *errc = 2;
-		return NULL;
-	}
-	itype = p->it->get_itype(p->it);			/* Actual type */
-
-	/* Configure the instrument mode */
-	{
-		inst_capability cap;
-		inst2_capability cap2;
-		inst_mode mode = 0;
-
-		cap = p->it->capabilities(p->it);
-		cap2 = p->it->capabilities2(p->it);
-
-		if ((cap & inst_emis_disp) == 0) {
-			printf("Need emissive measurement capability,\n");
-			printf("but instrument doesn't support it\n");
+	/* Setup the instrument */
+	} else {
+	
+		if (verb)
+			fprintf(p->df,"Setting up the instrument\n");
+	
+		if ((p->it = new_inst(comport, p->itype, debug, verb)) == NULL) {
 			p->del(p);
 			if (errc != NULL) *errc = 2;
 			return NULL;
-		}
-
-		if (spectral && (cap & inst_spectral) == 0) {
-			printf("Spectral information was requested,\n");
-			printf("but instrument doesn't support it\n");
-			spectral = 0;
-		}
-
-		mode = inst_mode_emis_disp;
-
-		if (spectral) {
-			mode |= inst_mode_spectral;
-			p->spectral = 1;
-		} else {
-			p->spectral = 0;
 		}
 	
-
-		/* Set CRT or LCD mode */
-		if ((cap & (inst_emis_disp_crt | inst_emis_disp_lcd))
-		 && (dtype == 1 || dtype == 2)) {
-			inst_opt_mode om;
-
-			if (dtype == 1)
-				om = inst_opt_disp_crt;
-			else
-				om = inst_opt_disp_lcd;
-
-			if ((rv = p->it->set_opt_mode(p->it, om)) != inst_ok) {
-				DBG(("Setting display type failed failed with '%s' (%s)\n",
-			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-				p->del(p);
-				if (errc != NULL) *errc = 2;
-				return NULL;
-			}
-		} else if (cap & (inst_emis_disp_crt | inst_emis_disp_lcd)) {
-			printf("Either CRT or LCD must be selected\n");
-			p->del(p);
-			if (errc != NULL) *errc = 7;
-			return NULL;
-		}
-
-		/* Disable autocalibration of machine if selected */
-		if (nocal != 0){
-			if ((rv = p->it->set_opt_mode(p->it,inst_opt_noautocalib)) != inst_ok) {
-				DBG(("Setting no-autocalibrate failed failed with '%s' (%s)\n",
-			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-				p->del(p);
-				if (errc != NULL) *errc = 2;
-				return NULL;
-			}
-		}
-
-		if (highres) {
-			if (cap & inst_highres) {
-				inst_code ev;
-				if ((ev = p->it->set_opt_mode(p->it, inst_opt_highres)) != inst_ok) {
-					printf("\nSetting high res mode failed with error :'%s' (%s)\n",
-			       	       p->it->inst_interp_error(p->it, ev), p->it->interp_error(p->it, ev));
-					if (errc != NULL) *errc = 2;
-					return NULL;
-				}
-			} else if (p->verb) {
-				printf("high resolution ignored - instrument doesn't support high res. mode\n");
-			}
-		}
-		if ((rv = p->it->set_mode(p->it, mode)) != inst_ok) {
-			DBG(("set_mode returned '%s' (%s)\n",
+		/* Establish communications */
+		if ((rv = p->it->init_coms(p->it, p->comport, p->br, p->fc, 15.0)) != inst_ok) {
+			DBG(("init_coms returned '%s' (%s)\n",
 			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
 			p->del(p);
 			if (errc != NULL) *errc = 2;
 			return NULL;
 		}
-
-		/* Set the trigger mode to program triggered */
-		if ((rv = p->it->set_opt_mode(p->it,inst_opt_trig_prog)) != inst_ok) {
-			DBG(("Setting program trigger mode failed failed with '%s' (%s)\n",
-		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+	
+		/* Initialise the instrument */
+		if ((rv = p->it->init_inst(p->it)) != inst_ok) {
+			DBG(("init_inst returned '%s' (%s)\n",
+			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
 			p->del(p);
 			if (errc != NULL) *errc = 2;
+			return NULL;
+		}
+		p->itype = p->it->get_itype(p->it);			/* Actual type */
+	
+		/* Configure the instrument mode for reading the display */
+		if ((rv = config_inst_displ(p)) != 0) {
+			p->del(p);
+			if (errc != NULL) *errc = rv;
 			return NULL;
 		}
 	}
@@ -1004,75 +1336,89 @@ char *fake_name		/* Name of profile to use as a fake device */
 	/* Set the given RAMDAC so we can characterise through it */
 	if (cal != NULL && cal[0][0] >= 0.0 && p->or != NULL) {
 		ramdac *r;
+		int j, i;
 		
 		r = p->or->clone(p->or);
-		if (r->nent != 256) {
-			if (p->verb)
-				fprintf(p->df,"Can't currently use a RAMDAC which doesn't have 256 entries");
-		} else {
-			int j, i;
-			/* Set the ramdac contents */
+
+		/* Set the ramdac contents. */
+		/* We linearly interpolate from cal[ncal] to RAMDAC[nent] resolution */
+		for (i = 0; i < r->nent; i++) {
+			double val, w;
+			unsigned int ix;
+
+			val = (ncal-1.0) * i/(r->nent-1.0);
+			ix = (unsigned int)floor(val);		/* Coordinate */
+			if (ix > (ncal-2))
+				ix = (ncal-2);
+			w = val - (double)ix;		/* weight */
 			for (j = 0; j < 3; j++) {
-				for (i = 0; i < r->nent; i++) {
-					r->v[j][i] = cal[j][i];
-				}
+				val = cal[j][ix];
+				r->v[j][i] = val + w * (cal[j][ix+1] - val);
 			}
-			if (p->dw->set_ramdac(p->dw, r)) {
-				if (p->verb) {
-					fprintf(p->df,"Failed to set RAMDAC to desired calibration.\n");
-					fprintf(p->df,"Perhaps the operating system is being fussy ?\n");
-				}
-				r->del(r);
-				p->del(p);
-				if (errc != NULL) *errc = 4;
-				return NULL;
+		}
+		if (p->dw->set_ramdac(p->dw, r, 0)) {
+			if (p->verb) {
+				fprintf(p->df,"Failed to set RAMDAC to desired calibration.\n");
+				fprintf(p->df,"Perhaps the operating system is being fussy ?\n");
 			}
 			r->del(r);
+			p->del(p);
+			if (errc != NULL) *errc = 4;
+			return NULL;
 		}
+		r->del(r);
 	}
 
 	/* Return the ramdac being used */
 	if (p->or != NULL && cal != NULL) {
 		ramdac *r;
+		int j, i;
 		
 		if ((r = p->dw->get_ramdac(p->dw)) == NULL) {
 			if (p->verb)
 				fprintf(p->df,"Failed to read current RAMDAC");
-		} else {
-			if (r->nent != 256) {
-				if (p->verb)
-					fprintf(p->df,"Can't currently read a RAMDAC which doesn't have 256 entries");
-
-			} else {
-				int j, i;
-
-				/* Get the ramdac contents */
-				for (j = 0; j < 3; j++) {
-					for (i = 0; i < r->nent; i++) {
-						cal[j][i] = r->v[j][i];
-					}
-				}
-			}
-			r->del(r);
+			p->del(p);
+			if (errc != NULL) *errc = 4;
+			return NULL;
 		}
+		/* Get the ramdac contents. */
+		/* We linearly interpolate from RAMDAC[nent] to cal[ncal] resolution */
+		for (i = 0; i < ncal; i++) {
+			double val, w;
+			unsigned int ix;
+
+			val = (r->nent-1.0) * i/(ncal-1.0);
+			ix = (unsigned int)floor(val);		/* Coordinate */
+			if (ix > (r->nent-2))
+				ix = (r->nent-2);
+			w = val - (double)ix;		/* weight */
+			for (j = 0; j < 3; j++) {
+				val = r->v[j][ix];
+				cal[j][i] = val + w * (r->v[j][ix+1] - val);
+			}
+		}
+		r->del(r);
 	}
 	
-	/* Do a calibration up front, so as not to get in the users way, */
-	/* but ignore a CRT frequency calibration, since it will be done */
-	/* automatically. */
-	if ((p->it->needs_calibration(p->it) & inst_calt_needs_cal_mask) != 0
-	 && p->it->needs_calibration(p->it) != inst_calt_crt_freq) {
-		disp_win_info dwi;
-		dwi.dw = p->dw;		/* Set window to use */
-
-		rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none, &dwi);
-		printf("\n");
-		if (rv != inst_ok) {	/* Abort or fatal error */
-			printf("Calibrate failed with '%s' (%s)\n",
-			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
-			p->del(p);
-			if (errc != NULL) *errc = 2;
-			return NULL;
+	if (p->it != NULL) {
+		/* Do a calibration up front, so as not to get in the users way, */
+		/* but ignore a CRT frequency or display integration calibration, */
+		/* since these will be done automatically. */
+		if ((p->it->needs_calibration(p->it) & inst_calt_needs_cal_mask) != 0
+		 && p->it->needs_calibration(p->it) != inst_calt_crt_freq
+		 && p->it->needs_calibration(p->it) != inst_calt_disp_int_time) {
+			disp_win_info dwi;
+			dwi.dw = p->dw;		/* Set window to use */
+	
+			rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none, &dwi);
+			printf("\n");
+			if (rv != inst_ok) {	/* Abort or fatal error */
+				printf("Calibrate failed with '%s' (%s)\n",
+				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
+				p->del(p);
+				if (errc != NULL) *errc = 2;
+				return NULL;
+			}
 		}
 	}
 

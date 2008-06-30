@@ -70,18 +70,18 @@ with the following usage:<br>
 &nbsp;&nbsp; &nbsp;<b>kl</b> is a key letter.<br>
 <br>
 &nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">F</span>
-is used to define three fiducial marks that may be used for manual
-alignment of an image to the target. The three marks are nominally a
-top left mark, a top right mark, and a bottom right mark. <b>lxs lxe
-lys lye</b> are not used, and should a '_' character should be used as
-a place holder. <span style="font-weight: bold;">w</span> should be
-the X co-ordinate of the first fiducial mark, <span
- style="font-weight: bold;">h</span> the Y co-ordinate, <span
- style="font-weight: bold;">xo</span> the X co-ordinate of the second
-fiducial mark, <span style="font-weight: bold;">yo</span> the Y
-co-ordinate, <span style="font-weight: bold;">xi</span> is the X
-co-ordinate of the third fiducial mark, <span
- style="font-weight: bold;">yi</span> the Y co-ordinate.<span
+is used to define four fiducial mZarks that may be used for manual
+alignment of an image to the target. The four marks are nominally a
+top left mark, a top right mark, bottom right mark and a bottom left
+mark. The parameters are labeled as follows:<br>
+&nbsp;<b><br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; </b><b>F _ _ x0 y0 x1 y1 x2 y2
+x3 y3<br>
+<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; </b>Where the first two
+parameters are not used, and a '_' character should be used as
+a place holder, and the follows the X and Y coordinates for the four
+fiducial marks.<span style="font-weight: bold;"></span><span
  style="font-weight: bold;"></span> Typically fiducial marks are chosen
 to be at the corners of the overall bounding box, or at corner cross
 marks on the chart etc. Fiducial marks may be omitted, but in this case
@@ -129,7 +129,7 @@ direction).<br>
 &nbsp;&nbsp; &nbsp;<b>w</b>,<b> h</b> are the width and height of each
 box in the array.<br>
 <br>
-&nbsp;&nbsp; &nbsp;<b>xo</b>, <b>yo</b> are the offsets of the top
+&nbsp;&nbsp; &nbsp;<b>xo</b>, <b>yo</b> are the origin of the top
 left
 of the array.<br>
 <br>
@@ -195,7 +195,8 @@ The <b>YLIST</b> is same format and details as the <b>XLIST</b>, used
 for
 horizontal edges.<br>
 <br>
-The <b>EXPECTED</b> keyword introduces an optional list of expected
+The <b>EXPECTED</b> keyword introduces an optional list of aproximate
+expected
 sample
 box color values, allowing better identification of the possible
 rotation
@@ -212,14 +213,17 @@ the sample box label, which should correspond to one of those defined
 by
 the <b>BOXES</b> entry above. It is an error if no corresponding box
 has
-been defined. The remaining three values are the approximate XYZ or
+been defined. The remaining three values are the <span
+ style="text-decoration: underline;">approximate</span> XYZ or
 L*a*b*
 color value expected for that sample box. The XYZ values are assumed to
 be
 scaled to a maximum Y value of 100. An expected color value doesn't
 have
 to be provided for every defined sample box, nor is it expected to be
-accurate - it just has to represent the approximate expected color.<br>
+accurate - it just has to represent the approximate expected color.
+(Actual chart reference values are provided as a separate CGATS file to
+<a href="scanin.html"><span style="font-weight: bold;">scanin</span></a>).<br>
 <br>
 A blank line should follow the last <b>EXPECTED</b> box value.<br>
 <br>

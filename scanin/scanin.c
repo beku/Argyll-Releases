@@ -14,8 +14,6 @@
  * see the License.txt file for licencing details.
  */
 
-#define VERSION "1.5"
-
 #include <stdio.h>
 #include <fcntl.h>		/* In case DOS binary stuff is needed */
 #include <ctype.h>
@@ -27,12 +25,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include "copyright.h"
+#include "config.h"
 #include "cgats.h"
 #include "scanrd.h"
-#include <numsup.h>
-#include <tiffio.h>
-#include <icc.h>
-#include <xcolorants.h>
+#include "numsup.h"
+#include "tiffio.h"
+#include "icc.h"
+#include "xcolorants.h"
+#include "xspect.h"
 
 void fix_it8(char *o, char *i);
 
@@ -67,7 +68,7 @@ char *src
 
 void
 usage(void) {
-	fprintf(stderr,"Scanin, Version %s\n",VERSION);
+	fprintf(stderr,"Scanin, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"usage: scanin [options] input.tif recogin.cht valin.cie [diag.tif]\n");
@@ -87,25 +88,28 @@ usage(void) {
 	fprintf(stderr,"\n");
 	fprintf(stderr," -g                   Generate a chart reference (.cht) file\n");
 	fprintf(stderr," -o                   Output patch values in .val file\n");
-	fprintf(stderr," -c                   Use scanner as colorimeter to\n");
-	fprintf(stderr,"                       convert printer .ti2 to .ti3\n");
+	fprintf(stderr," -c                   Use image to measure color to convert printer .ti2 to .ti3\n");
 	fprintf(stderr," -ca                  Same as -c, but accumulates more values to .ti3\n");
 	fprintf(stderr,"                       from subsequent pages\n");
 	fprintf(stderr," -r                   Replace device values in .ti2/.ti3\n");
 	fprintf(stderr,"                      Default is to create a scanner .ti3 file\n");
-	fprintf(stderr," -F x1,y1,x2,y2,x3,y3 Don't auto recognize, locate using three fiducual marks\n");
+	fprintf(stderr," -F x1,y1,x2,y2,x3,y3,x4,y4\n");
+	fprintf(stderr,"                      Don't auto recognize, locate using four fiducual marks\n");
+	fprintf(stderr," -p                   Compensate for perspective distortion\n");
 	fprintf(stderr," -a                   Recognise chart in normal orientation only (-A fallback as is)\n");
 	fprintf(stderr,"                      Default is to recognise all possible chart angles\n");
 	fprintf(stderr," -m                   Return true mean (default is robust mean)\n");
 	fprintf(stderr," -G gamma             Approximate gamma encoding of image\n");
 	fprintf(stderr," -v [n]               Verbosity level 0-9\n");
-	fprintf(stderr," -d [ihvglLrsonap]    Generate diagnostic output (try -dipn)\n");
+	fprintf(stderr," -d [ihvglLIcrsonap]    Generate diagnostic output (try -dipn)\n");
 	fprintf(stderr,"     i                diag - B&W of input image\n");
 	fprintf(stderr,"     h                diag - Horizontal edge/tick detection\n");
 	fprintf(stderr,"     v                diag - Vertical edge/tick detection\n");
 	fprintf(stderr,"     g                diag - Groups detected\n");
 	fprintf(stderr,"     l                diag - Lines detected\n");
 	fprintf(stderr,"     L                diag - All lines detected\n");
+	fprintf(stderr,"     I                diag - lines used to improve fit\n");
+	fprintf(stderr,"     c                diag - lines perspective corrected\n");
 	fprintf(stderr,"     r                diag - lines rotated\n");
 	fprintf(stderr,"     s                diag - diagnostic sample boxes rotated\n");
 	fprintf(stderr,"     o                diag - sample box outlines\n");
@@ -129,12 +133,13 @@ int main(int argc, char *argv[])
 	int tmean = 0;		/* Return true mean, rather than robust mean */
 	int repl = 0;		/* Replace .ti3 device values from raster file */
 	int outo = 0;		/* Output the values read, rather than creating scanner .ti3 */
-	int colm = 0;		/* Use scan values as colorimter for print profile. > 1 == append */
+	int colm = 0;		/* Use inage values to measure color for print profile. > 1 == append */
 	int flags = SI_GENERAL_ROT;	/* Default allow all rotations */
 
 	TIFF *rh = NULL, *wh = NULL;
 	uint16 depth, bps;
 	uint16 pconfig, photometric;
+	int gotres = 0;
 	uint16 resunits;
 	float resx, resy;
 
@@ -142,12 +147,13 @@ int main(int argc, char *argv[])
 
 	int i, j;
 	double gamma = 0.0;		/* default */
-	double _sfid[6], *sfid = NULL;		/* Specified fiducials */
+	double _sfid[8], *sfid = NULL;		/* Specified fiducials */
 	int width, height;		/* x and y size */
 
 	scanrd *sr;				/* Scanrd object */
 	int err;	
 	char *errm;
+	int pnotscan = 0;		/* Number of patches that wern't scanned */
 
 	if (argc <= 1)
 		usage();
@@ -220,11 +226,17 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'F') {
 				fa = nfa;
 				if (na == NULL) usage();
-				if (sscanf(na, " %lf,%lf,%lf,%lf,%lf,%lf ", &_sfid[0], &_sfid[1], &_sfid[2], &_sfid[3], &_sfid[4], &_sfid[5]) != 6) {
+				if (sscanf(na, " %lf,%lf,%lf,%lf,%lf,%lf,%lf,%lf ",
+				    &_sfid[0], &_sfid[1], &_sfid[2], &_sfid[3],
+				    &_sfid[4], &_sfid[5], &_sfid[6], &_sfid[7]) != 8) {
 					usage();
 				}
 
 				sfid = _sfid;
+
+			/* Compensate for perspective */
+			} else if (argv[fa][1] == 'p') {
+				flags |= SI_PERSPECTIVE;
 
 			/* Don't recognise rotations */
 			} else if (argv[fa][1] == 'a') {
@@ -256,6 +268,12 @@ int main(int argc, char *argv[])
 							break;
 						case 'L':
 							flags |= SI_SHOW_ALL_LINES;
+							break;
+						case 'I':
+							flags |= SI_SHOW_IMPL;
+							break;
+						case 'c':
+							flags |= SI_SHOW_PERS;
 							break;
 						case 'r':
 							flags |= SI_SHOW_ROT;
@@ -318,7 +336,7 @@ int main(int argc, char *argv[])
 			/* Data file */
 			strcpy(datin_name,argv[fa]);
 		}
-		if (repl != 0 || colm > 0) {	/* Colorimter emulation or replacing .ti3 device data */
+		if (repl != 0 || colm > 0) {	/* Color from image or replacing .ti3 device data */
 			strcpy(datin_name,argv[fa]);
 			strcat(datin_name,".ti2");
 			strcpy(datout_name,argv[fa]);
@@ -346,20 +364,20 @@ int main(int argc, char *argv[])
 
 	TIFFGetField(rh, TIFFTAG_BITSPERSAMPLE, &bps);
 	if (bps != 8 && bps != 16)
-		error("TIFF Input file must be 8 or 16 bits/channel");
+		error("TIFF Input file '%s' must be 8 or 16 bits/channel",tiffin_name);
 
 	TIFFGetField(rh, TIFFTAG_SAMPLESPERPIXEL, &depth);
 	if (depth != 1 && depth != 3 && depth != 4)
-		error("Input must be a Grey, RGB or CMYK tiff file");
+		error("Input '%s' must be a Grey, RGB or CMYK tiff file",tiffin_name);
 
 	TIFFGetField(rh, TIFFTAG_PHOTOMETRIC, &photometric);
 	if (depth == 1 && photometric != PHOTOMETRIC_MINISBLACK
 	               && photometric != PHOTOMETRIC_MINISWHITE)
-		error("1 chanel input must be a Grey tiff file");
+		error("1 chanel input '%s' must be a Grey tiff file",tiffin_name);
 	else if (depth == 3 && photometric != PHOTOMETRIC_RGB)
-		error("3 chanel input must be an RGB tiff file");
+		error("3 chanel input '%s' must be an RGB tiff file",tiffin_name);
 	else if (depth == 4 && photometric != PHOTOMETRIC_SEPARATED)
-		error("4 chanel input must be a CMYK tiff file");
+		error("4 chanel input '%s' must be a CMYK tiff file",tiffin_name);
 
 	if (depth == 1)
 		tiffs = icSigGrayData;
@@ -370,11 +388,18 @@ int main(int argc, char *argv[])
 
 	TIFFGetField(rh, TIFFTAG_PLANARCONFIG, &pconfig);
 	if (pconfig != PLANARCONFIG_CONTIG)
-		error ("TIFF Input file must be planar");
+		error("TIFF Input file '%s' must be planar",tiffin_name);
 
-	TIFFGetField(rh, TIFFTAG_RESOLUTIONUNIT, &resunits);
-	TIFFGetField(rh, TIFFTAG_XRESOLUTION, &resx);
-	TIFFGetField(rh, TIFFTAG_YRESOLUTION, &resy);
+
+	if (TIFFGetField(rh, TIFFTAG_RESOLUTIONUNIT, &resunits) != 0) {
+		TIFFGetField(rh, TIFFTAG_XRESOLUTION, &resx);
+		TIFFGetField(rh, TIFFTAG_YRESOLUTION, &resy);
+
+		if (resunits == RESUNIT_NONE		/* If it looks valid */
+		 || resunits == RESUNIT_INCH
+		 || resunits == RESUNIT_CENTIMETER)
+			gotres = 1;
+	}
 
 	/* -------------------------- */
 	/* setup the diag output file */
@@ -390,9 +415,11 @@ int main(int argc, char *argv[])
 		TIFFSetField(wh, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 		TIFFSetField(wh, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
 		TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
-		TIFFSetField(wh, TIFFTAG_RESOLUTIONUNIT, resunits);
-		TIFFSetField(wh, TIFFTAG_XRESOLUTION, resx);
-		TIFFSetField(wh, TIFFTAG_YRESOLUTION, resy);
+		if (gotres) {
+			TIFFSetField(wh, TIFFTAG_RESOLUTIONUNIT, resunits);
+			TIFFSetField(wh, TIFFTAG_XRESOLUTION, resx);
+			TIFFSetField(wh, TIFFTAG_YRESOLUTION, resy);
+		}
 		TIFFSetField(wh, TIFFTAG_IMAGEDESCRIPTION, "Scanin diagnosis output");
 	}
 
@@ -431,13 +458,13 @@ int main(int argc, char *argv[])
 	)) == NULL) {
 		if (flags & SI_SHOW_FLAGS)
 			TIFFClose(wh);
-		error ("Unable to allocate scanrd object");
+		error("Unable to allocate scanrd object");
 	}
 
 	if ((err = sr->error(sr, &errm)) != 0) {
 		if ((flags & SI_SHOW_FLAGS) && err != SI_DIAG_WRITE_ERR)
 			TIFFClose(wh);		/* Close diagnostic file */
-		error ("Code 0x%x, %s",err,errm);
+		error("Scanin failed with code 0x%x, %s",err,errm);
 	}
 
 	/* Read an output the values */
@@ -480,15 +507,19 @@ int main(int argc, char *argv[])
 			for (j = 0; ; j++) {
 				char id[100];		/* Input patch id */
 				double P[4];		/* Robust/true mean values */
+				int pixcnt;			/* PIxel count */
 
 				if (tmean) {
-					if (sr->read(sr, id, NULL, P, NULL, NULL) != 0)
+					if (sr->read(sr, id, NULL, P, NULL, &pixcnt) != 0)
 						break;
 				} else {
-					if (sr->read(sr, id, P, NULL, NULL, NULL) != 0)
+					if (sr->read(sr, id, P, NULL, NULL, &pixcnt) != 0)
 						break;
 				}
 		
+				if (pixcnt == 0)
+					pnotscan++;
+
 				if (depth == 1) {
 					ocg->add_set( ocg, 0, id, P[0]);
 				} else if (depth == 3) {
@@ -499,7 +530,7 @@ int main(int argc, char *argv[])
 			}
 	
 			if (ocg->write_name(ocg, datout_name))
-				error("Write error : %s",ocg->err);
+				error("Write error to '%s' : %s",datout_name,ocg->err);
 	
 			ocg->del(ocg);		/* Clean up */
 
@@ -526,20 +557,20 @@ int main(int argc, char *argv[])
 			icg = new_cgats();			/* Create a CGATS structure */
 			icg->add_other(icg, "CTI2"); 	/* Calibration Target Information 2 */
 			if (icg->read_name(icg, datin_name))
-				error("CGATS file read error : %s",icg->err);
+				error("CGATS file '%s' read error : %s",datin_name,icg->err);
 	
 			if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
-				error ("Input file '%s' isn't a CTI2 format file",datin_name);
+				error("Input file '%s' isn't a CTI2 format file",datin_name);
 
 			if (icg->ntables != 1)
-				error ("Input file '%s' doesn't contain exactly one table",datin_name);
+				error("Input file '%s' doesn't contain exactly one table",datin_name);
 	
 			if ((npat = icg->t[0].nsets) <= 0)
-				error ("Input file '%s' doesn't contain any data sets",datin_name);
+				error("Input file '%s' doesn't contain any data sets",datin_name);
 	
 			/* Figure out the color space */
 			if ((fi = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
-				error ("Input file '%s' doesn't contain keyword COLOR_REP",datin_name);
+				error("Input file '%s' doesn't contain keyword COLOR_REP",datin_name);
 
 			if (strcmp(icg->t[0].kdata[fi],"CMYK") == 0) {
 				dim = 4;
@@ -548,41 +579,41 @@ int main(int argc, char *argv[])
 			} else if (strcmp(icg->t[0].kdata[fi],"W") == 0) {
 				dim = 1;
 			} else
-				error ("Input file '%s' keyword COLOR_REP has unknown value",datin_name);
+				error("Input file '%s' keyword COLOR_REP has unknown value",datin_name);
 
 			/* Find fields we want in the input file */
 			if ((isi = icg->find_field(icg, 0, "SAMPLE_ID")) < 0)
-				error ("Input file '%s' doesn't contain field SAMPLE_ID", datin_name);
+				error("Input file '%s' doesn't contain field SAMPLE_ID",datin_name);
 			if (icg->t[0].ftype[isi] != nqcs_t)
-				error ("Field SAMPLE_ID is wrong type");
+				error("Input file '%s' Field SAMPLE_ID is wrong type",datin_name);
 		
 			if ((ili = icg->find_field(icg, 0, "SAMPLE_LOC")) < 0)
-				error ("Input file '%s' doesn't contain field SAMPLE_LOC", datin_name);
+				error("Input file '%s' doesn't contain field SAMPLE_LOC",datin_name);
 			if (icg->t[0].ftype[ili] != cs_t
 			 && icg->t[0].ftype[ili] != nqcs_t)
-				error ("Field SAMPLE_LOC is wrong type");
+				error("Input file '%s' Field SAMPLE_LOC is wrong type",datin_name);
 
 			/* Setup input/output .ti3 file */
 			ocg = new_cgats();			/* Create a CGATS structure */
 			ocg->add_other(ocg, "CTI3"); 	/* Calibration Target Information 3 */
 			if (ocg->read_name(ocg, datout_name))
-				error("CGATS file read error : %s",ocg->err);
+				error("CGATS file '%s' read error : %s",datout_name,ocg->err);
 	
 			if (ocg->t[0].tt != tt_other || ocg->t[0].oi != 0)
-				error ("Input file '%s' isn't a CTI3 format file",datout_name);
+				error("Input file '%s' isn't a CTI3 format file",datout_name);
 
 			if (ocg->ntables != 1)
-				error ("Input file '%s' doesn't contain exactly one table",datout_name);
+				error("Input file '%s' doesn't contain exactly one table",datout_name);
 	
 			if (npat != ocg->t[0].nsets)
-				error ("Input file '%s' doesn't contain same number of data sets",datout_name);
+				error("Input file '%s' doesn't contain same number of data sets",datout_name);
 	
 
 			/* Find the fields we want in the output file */
 
 			/* Figure out the color space */
 			if ((fi = ocg->find_kword(ocg, 0, "COLOR_REP")) < 0)
-				error ("Input file '%s' doesn't contain keyword COLOR_REP",datin_name);
+				error("Input file '%s' doesn't contain keyword COLOR_REP",datout_name);
 
 			if (strncmp(ocg->t[0].kdata[fi],"CMYK",4) == 0) {
 				odim = 4;
@@ -591,34 +622,38 @@ int main(int argc, char *argv[])
 			} else if (strncmp(ocg->t[0].kdata[fi],"W",1) == 0) {
 				odim = 1;
 			} else
-				error ("Input file '%s' keyword COLOR_REP has unknown value",datout_name);
+				error("Input file '%s' keyword COLOR_REP has unknown value",datout_name);
 
 			if (odim != dim)
-				error ("File '%s' has different device space to '%s'",datin_name, datout_name);
+				error("File '%s' has different device space to '%s'",datin_name, datout_name);
 
 			if ((osi = ocg->find_field(ocg, 0, "SAMPLE_ID")) < 0)
-				error ("Input file doesn't contain field SAMPLE_ID");
+				error("Input file '%s' doesn't contain field SAMPLE_ID",datout_name);
 			if (ocg->t[0].ftype[osi] != nqcs_t)
-				error ("Field SAMPLE_ID is wrong type");
+				error("Input file '%s' Field SAMPLE_ID is wrong type",datout_name);
 	
 			for (i = 0; i < dim; i++) {
 				if ((dfi[dim][i] = ocg->find_field(ocg, 0, dfnames[dim][i])) < 0)
-					error ("Input file doesn't contain field %s", datout_name, dfnames[dim][i]);
+					error("Input '%s' file doesn't contain field %s", datout_name, dfnames[dim][i]);
 				if (ocg->t[0].ftype[dfi[dim][i]] != r_t)
-					error ("Field %s is wrong type",dfnames[dim][i]);
+					error("Input '%s' Field %s is wrong type",datout_name,dfnames[dim][i]);
 			}
 	
 			/* Initialise, ready to read out all the values */
 			for (i = sr->reset(sr); i > 0; i--) {	/* For all samples in .tiff file */
 				char loc[100];		/* Target patch location */
 				double P[4];		/* Robust/raw mean values */
+				int pixcnt;			/* Pixel count */
 				int k, e;
 
 				if (tmean)
-					sr->read(sr, loc, NULL, P, NULL, NULL);
+					sr->read(sr, loc, NULL, P, NULL, &pixcnt);
 				else
-					sr->read(sr, loc, P, NULL, NULL, NULL);
+					sr->read(sr, loc, P, NULL, NULL, &pixcnt);
 		
+				if (pixcnt == 0)
+					pnotscan++;
+
 				/* Search for this location in the .ti2 file */
 				for (j = 0; j < npat; j++) {
 					if (strcmp(loc, (char *)icg->t[0].fdata[j][ili]) == 0) {
@@ -646,17 +681,17 @@ int main(int argc, char *argv[])
 	
 			/* Flush our changes */
 			if (ocg->write_name(ocg, datout_name))
-				error("Write error : %s",ocg->err);
+				error("Write error to file '%s' : %s",datout_name,ocg->err);
 	
 			ocg->del(ocg);		/* Clean up */
 			icg->del(icg);		/* Clean up */
 
 		/* ---------------------------------------------------------- */
-		} else if (colm > 0) {	/* Using the scanner as a colorimeter */
+		} else if (colm > 0) {	/* Using the image to measure color */
 			/* All this needs to track the code in spectro/printread.c */
 			cgats *icg;			/* input .ti2 cgats structure */
 			cgats *ocg;			/* input/output .ti3 cgats structure */
-			icmFile *rd_fp;		/* Scanner to CIE lookup */
+			icmFile *rd_fp;		/* Image to CIE lookup */
 			icc *rd_icco;
 			icmLuBase *luo;
 			time_t clk = time(0);
@@ -675,15 +710,15 @@ int main(int argc, char *argv[])
 			icg->add_other(icg, "CTI2"); 	/* special type Calibration Target Information 2 */
 		
 			if (icg->read_name(icg, datin_name))
-				error("CGATS file read error : %s",icg->err);
+				error("CGATS file '%s' read error : %s",datin_name,icg->err);
 		
 			if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
-				error ("Input file isn't a CTI2 format file");
+				error("Input file '%s' isn't a CTI2 format file",datin_name);
 			if (icg->ntables != 1)
-				error ("Input file doesn't contain exactly one table");
+				error("Input file '%s' doesn't contain exactly one table",datin_name);
 		
 			if ((npat = icg->t[0].nsets) <= 0)
-				error ("No sets of data");
+				error("Input file '%s' has no sets of data",datin_name);
 		
 			/* Setup output cgats file */
 			ocg = new_cgats();			/* Create a CGATS structure */
@@ -695,11 +730,11 @@ int main(int argc, char *argv[])
 					error("CGATS file read error on '%s': %s",datout_name, ocg->err);
 		
 				if (ocg->t[0].tt != tt_other || ocg->t[0].oi != 0)
-					error ("Input file isn't a CTI3 format file");
+					error("Input file '%s' isn't a CTI3 format file",datout_name);
 				if (ocg->ntables != 1)
-					error ("Input .TI3 file doesn't contain exactly one table");
+					error("Input file '%s' doesn't contain exactly one table",datout_name);
 				if ((nopat = ocg->t[0].nsets) <= 0)
-					error ("No existing sets of .TI3 data");
+					error("Input file '%s' has no existing sets of data",datout_name);
 
 			} else {			/* Creating .ti3 */
 
@@ -727,27 +762,27 @@ int main(int argc, char *argv[])
 			}
 
 			if ((si = icg->find_field(icg, 0, "SAMPLE_ID")) < 0)
-				error ("Input file doesn't contain field SAMPLE_ID");
+				error("Input file '%s' doesn't contain field SAMPLE_ID",datin_name);
 			if (icg->t[0].ftype[si] != nqcs_t)
-				error ("Field SAMPLE_ID is wrong type");
+				error("Input file '%s' Field SAMPLE_ID is wrong type",datin_name);
 		
 			/* Fields we want */
 			if (colm > 1) {		/* Appending information to .ti3 */
 				if ((ti = ocg->find_field(ocg, 0, "SAMPLE_ID")) != 0)
-					error ("Field SAMPLE_ID (%d) not in expected location (%d) in '%s'",
-					       ti, 0, datout_name);
+					error("Input file '%s' field SAMPLE_ID (%d) not in expected location (%d)",
+					       datout_name, ti, 0);
 			} else {
 				ocg->add_field(ocg, 0, "SAMPLE_ID", nqcs_t);
 			}
 		
 			if ((li = icg->find_field(icg, 0, "SAMPLE_LOC")) < 0)
-				error ("Input file doesn't contain field SAMPLE_LOC");
+				error("Input file '%s' doesn't contain field SAMPLE_LOC",datin_name);
 			if (icg->t[0].ftype[li] != cs_t)
-				error ("Field SAMPLE_LOC is wrong type");
+				error("Input file '%s' field SAMPLE_LOC is wrong type",datin_name);
 		
 			/* Figure out the color space */
 			if ((fi = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
-				error ("Input file doesn't contain keyword COLOR_REPS");
+				error("Input file '%s' doesn't contain keyword COLOR_REPS",datin_name);
 		
 			if ((nmask = icx_char2inkmask(icg->t[0].kdata[fi])) != 0) {
 				int i, j, ii;
@@ -769,13 +804,13 @@ int main(int argc, char *argv[])
 					                      icx_ink2char(imask));
 		
 					if ((ii = icg->find_field(icg, 0, fname)) < 0)
-						error ("Input file doesn't contain field %s",fname);
+						error("Input file '%s' doesn't contain field %s",datin_name,fname);
 					if (icg->t[0].ftype[ii] != r_t)
-						error ("Field %s is wrong type",fname);
+						error("Field %s is wrong type",fname);
 			
 					if (colm > 1) {		/* Appending information to .ti3 */
 						if (ocg->find_field(ocg, 0, fname) != 1 + j)
-							error ("Field %s not in expected location in '%s'",fname, datout_name);
+							error("Input file '%s' field %s not in expected location",datout_name,fname);
 					} else {
 						ocg->add_field(ocg, 0, fname, r_t);
 					}
@@ -787,13 +822,13 @@ int main(int argc, char *argv[])
 					if ((ii = icg->find_field(icg, 0, xyzfname[j])) >= 0) {
 
 						if (icg->t[0].ftype[ii] != r_t)
-							error ("Field %s is wrong type",xyzfname[j]);
+							error("Input file '%s' field %s is wrong type",datin_name,xyzfname[j]);
 					}
 			
 					if (colm > 1) {		/* Appending information to .ti3 */
 						if (ocg->find_field(ocg, 0, xyzfname[j]) != 1 + nchan + j)
-							error ("Field %s not in expected location in '%s'"
-							                            ,xyzfname[j], datout_name);
+							error("Input file '%s' field %s not in expected location",
+							                            datout_name,xyzfname[j]);
 					} else {
 						ocg->add_field(ocg, 0, xyzfname[j], r_t);
 					}
@@ -817,7 +852,7 @@ int main(int argc, char *argv[])
 						/* Id's */
 						if (strcmp (((char *)icg->t[0].fdata[i][si]),
 								    ((char *)ocg->t[0].fdata[ii][si])) != 0)
-							error (".TI2 and .Ti3 field id's don't match at patch %d\n",i+1);
+							error("'%s' and '%s' field id's don't match at patch %d\n",datin_name,datout_name,i+1);
 
 						/* device values */
 						for (j = 0; j < nchan; j++) {
@@ -825,12 +860,12 @@ int main(int argc, char *argv[])
 							ival = *((double *)icg->t[0].fdata[i][chix[j]]);
 							oval = *((double *)ocg->t[0].fdata[ii][1 + j]);
 							if (fabs(ival - oval) > 0.001)
-								error (".TI2 and .Ti3 device values (%f %f) don't match at patch %d %d\n",ival, oval, i+1, ii+1);
+								error("'%s' and '%s' device values (%f %f) don't match at patch %d %d\n",datin_name,datout_name,ival, oval, i+1, ii+1);
 						}
 						ii++;
 					}
 					if (ii != nopat)
-						error("Different number of patches in .ti3 (%d) to expected(%d)",nopat,ii);
+						error("Different number of patches in '%s' (%d) to expected(%d)",datout_name,nopat,ii);
 
 				} else { /* Read all the test patches in, and create output slots */
 					cgats_set_elem *setel;	/* Array of set value elements */
@@ -868,9 +903,9 @@ int main(int argc, char *argv[])
 				free(ident);
 
 			} else
-				error ("Input file keyword COLOR_REPS has unknown value");
+				error("Input file '%s' keyword COLOR_REPS has unknown value",datin_name);
 		
-			/* Setup scanner RGB to XYZ conversion */
+			/* Setup RGB to XYZ conversion */
 			{
 				int inn, outn;			/* Chanels for input and output spaces */
 				icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
@@ -885,11 +920,11 @@ int main(int argc, char *argv[])
 		
 				/* Read the header and tag list */
 				if ((rv = rd_icco->read(rd_icco,rd_fp,0)) != 0)
-					error("Read: %d, %s",rv,rd_icco->err);
+					error("File '%s' read: %d, %s",prof_name,rv,rd_icco->err);
 		
 				/* Check that this is an input profile */
 				if (rd_icco->header->deviceClass != icSigInputClass)
-					error ("ICC profile is expected to be an input profile");
+					error("ICC profile '%s' is expected to be an input profile",prof_name);
 
 				/* Get the Fwd table, absolute with XYZ override */
 				if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, icAbsoluteColorimetric,
@@ -902,7 +937,7 @@ int main(int argc, char *argv[])
 
 				/* Check that it matches what we expect */
 				if (inn != depth || tiffs != ins)
-					error ("ICC profile doesn't match TIFF file type");
+					error("ICC profile '%s' doesn't match TIFF file type",prof_name);
 			}
 
 			/* Initialise, ready to read out all the values */
@@ -910,13 +945,17 @@ int main(int argc, char *argv[])
 				char loc[100];		/* Target patch location */
 				double P[ICX_MXINKS];	/* Robust/true mean values */
 				double xyz[3];			/* profile XYZ value */
+				int pixcnt;				/* Pixel count */
 				int k, e;
 
 				if (tmean)
-					sr->read(sr, loc, NULL, P, NULL, NULL);
+					sr->read(sr, loc, NULL, P, NULL, &pixcnt);
 				else
-					sr->read(sr, loc, P, NULL, NULL, NULL);
+					sr->read(sr, loc, P, NULL, NULL, &pixcnt);
 		
+				if (pixcnt == 0)
+					pnotscan++;
+
 				/* Search for this location in the .ti2 file */
 				for (j = 0; j < npat; j++) {
 					if (strcmp(loc, (char *)icg->t[0].fdata[j][li]) == 0) {	/* Got location */
@@ -946,7 +985,7 @@ int main(int argc, char *argv[])
 									double ev = *((double *)ocg->t[0].fdata[k][1 + nchan + e]);
 
 									if (ev != -1.0)
-										error("Found an existing value in .ti3 file (%f)",ev);
+										error("Found an existing value in '%s' file (%f)",datout_name,ev);
 
 									*((double *)ocg->t[0].fdata[k][1 + nchan + e]) = 100.0 * xyz[e];
 								}
@@ -982,7 +1021,7 @@ int main(int argc, char *argv[])
 			}
 
 			if (ocg->write_name(ocg, datout_name))
-				error("Write error : %s",ocg->err);
+				error("File '%s' write error : %s",datout_name,ocg->err);
 		
 			luo->del(luo);
 			rd_icco->del(rd_icco);
@@ -998,22 +1037,30 @@ int main(int argc, char *argv[])
 			time_t clk = time(0);
 			struct tm *tsp = localtime(&clk);
 			char *atm = asctime(tsp); /* Ascii time */
+			int ti;				/* Temp index */
 			int sx;				/* Sample id index */
+			int isLab = 0;		/* D50 Lab reference */
 			int Xx, Yx, Zx;		/* XYZ_X, XYZ_Y, XYZ_Z index */
+			int spec_n = 0;		/* Number of spectral bands */
+			double spec_wl_short;/* First reading wavelength in nm (shortest) */
+			double spec_wl_long; /* Last reading wavelength in nm (longest) */
+			int spi[XSPECT_MAX_BANDS];  /* CGATS indexes for each wavelength */
 			int npat;			/* Number of test patches in it8 chart */
+			int nsetel = 0;		/* Number of output set elements */
+			cgats_set_elem *setel;  /* Array of set value elements */
 	
 			icg = new_cgats();			/* Create a CGATS structure */
 			icg->add_other(icg, ""); 	/* Accept any type */
 			if (icg->read_name(icg, datin_name))
-				error("CGATS file read error : %s",icg->err);
+				error("CGATS file '%s' read error : %s",datin_name,icg->err);
 	
 			/* ~~ should accept ti2 file and convert RGB to XYZ using    */
 			/*    device cal., to make W/RGB/CMYK ->XYZ reading chart ~~ */
 			if (icg->ntables < 1)
-				error ("Input file doesn't contain at least one table");
+				error("Input file '%s' doesn't contain at least one table",datin_name);
 	
 			if ((npat = icg->t[0].nsets) <= 0)
-				error ("No sets of data in first table");
+				error("File '%s' no sets of data in first table",datin_name);
 	
 			/* Setup output cgats file */
 			ocg = new_cgats();	/* Create a CGATS structure */
@@ -1033,30 +1080,100 @@ int main(int argc, char *argv[])
 				if ((sx = icg->find_field(icg, 0, "SAMPLE_NAME")) < 0) {
 					if ((sx = icg->find_field(icg, 0, "SAMPLE_LOC")) < 0) {
 						if ((sx = icg->find_field(icg, 0, "SAMPLE_ID")) < 0) {
-							error ("Input file doesn't contain field SAMPLE_ID, Sample_Name or SAMPLE_NAME");
+							error("Input file '%s' doesn't contain field SAMPLE_ID, Sample_Name or SAMPLE_NAME",datin_name);
 						}
 					}
 				}
 			}
 			if (icg->t[0].ftype[sx] != nqcs_t && icg->t[0].ftype[sx] != cs_t)
-				error ("Field %s is wrong type", icg->t[0].fsym[sx]);
-			if ((Xx = icg->find_field(icg, 0, "XYZ_X")) < 0)
-				error ("Input file doesn't contain field XYZ_X");
-			if (icg->t[0].ftype[Xx] != r_t)
-				error ("Field XYZ_X is wrong type");
-			if ((Yx = icg->find_field(icg, 0, "XYZ_Y")) < 0)
-				error ("Input file doesn't contain field XYZ_Y");
-			if (icg->t[0].ftype[Yx] != r_t)
-				error ("Field XYZ_Y is wrong type");
-			if ((Zx = icg->find_field(icg, 0, "XYZ_Z")) < 0)
-				error ("Input file doesn't contain field XYZ_Z");
-			if (icg->t[0].ftype[Zx] != r_t)
-				error ("Field XYZ_Z is wrong type");
-	
+				error("Input file '%s' field %s is wrong type", datin_name, icg->t[0].fsym[sx]);
+
+			if ((Xx = icg->find_field(icg, 0, "XYZ_X")) < 0) {
+				if ((Xx = icg->find_field(icg, 0, "LAB_L")) < 0)
+					error("Input file '%s' doesn't contain field XYZ_X or LAB_L",datin_name);
+				
+				isLab = 1;
+				if (icg->t[0].ftype[Xx] != r_t)
+					error("Input file '%s' field LAB_L is wrong type",datin_name);
+				if ((Yx = icg->find_field(icg, 0, "LAB_A")) < 0)
+					error("Input file doesn't contain field LAB_A",datin_name);
+				if (icg->t[0].ftype[Yx] != r_t)
+					error("Input file '%s' field LAB_A is wrong type",datin_name);
+				if ((Zx = icg->find_field(icg, 0, "LAB_B")) < 0)
+					error("Input file '%s' doesn't contain field LAB_B",datin_name);
+				if (icg->t[0].ftype[Zx] != r_t)
+					error("Input file '%s' field LAB_B is wrong type",datin_name);
+			} else {
+				if (icg->t[0].ftype[Xx] != r_t)
+					error("Input file '%s' field XYZ_X is wrong type",datin_name);
+				if ((Yx = icg->find_field(icg, 0, "XYZ_Y")) < 0)
+					error("Input file '%s' doesn't contain field XYZ_Y",datin_name);
+				if (icg->t[0].ftype[Yx] != r_t)
+					error("Input file '%s' field XYZ_Y is wrong type",datin_name);
+				if ((Zx = icg->find_field(icg, 0, "XYZ_Z")) < 0)
+					error("Input file '%s' doesn't contain field XYZ_Z",datin_name);
+				if (icg->t[0].ftype[Zx] != r_t)
+					error("Input file '%s' field XYZ_Z is wrong type",datin_name);
+			}
+
+			/* Find possible spectral fields in reference */
+			if ((ti = icg->find_kword(icg, 0, "SPECTRAL_BANDS")) >= 0) {
+				spec_n = atoi(icg->t[0].kdata[ti]);
+				if ((ti = icg->find_kword(icg, 0, "SPECTRAL_START_NM")) < 0)
+					error ("Input file '%s' doesn't contain keyword SPECTRAL_START_NM",datin_name);
+				spec_wl_short = atof(icg->t[0].kdata[ti]);
+				if ((ti = icg->find_kword(icg, 0, "SPECTRAL_END_NM")) < 0)
+					error ("Input file '%s' doesn't contain keyword SPECTRAL_END_NM",datin_name);
+				spec_wl_long = atof(icg->t[0].kdata[ti]);
+		
+				/* Find the fields for spectral values */
+				for (i = 0; i < spec_n; i++) {
+					char buf[100];
+					int nm;
+			
+					/* Compute nearest integer wavelength */
+					nm = (int)(spec_wl_short + ((double)i/(spec_n-1.0))
+					            * (spec_wl_long - spec_wl_short) + 0.5);
+					
+					sprintf(buf,"SPEC_%03d",nm);
+		
+					if ((spi[i] = icg->find_field(icg, 0, buf)) < 0)
+						error("Input file doesn't contain field %s",datin_name);
+				}
+			}
+
 			ocg->add_field(ocg, 0, "SAMPLE_ID", nqcs_t);
+			nsetel += 1;
 			ocg->add_field(ocg, 0, "XYZ_X", r_t);
 			ocg->add_field(ocg, 0, "XYZ_Y", r_t);
 			ocg->add_field(ocg, 0, "XYZ_Z", r_t);
+			nsetel += 3;
+
+			/* If we have spectral information, output it too */
+			if (spec_n > 0) {
+				char buf[100];
+	
+				nsetel += spec_n;       /* Spectral values */
+				sprintf(buf,"%d", spec_n);
+				ocg->add_kword(ocg, 0, "SPECTRAL_BANDS",buf, NULL);
+				sprintf(buf,"%f", spec_wl_short);
+				ocg->add_kword(ocg, 0, "SPECTRAL_START_NM",buf, NULL);
+				sprintf(buf,"%f", spec_wl_long);
+				ocg->add_kword(ocg, 0, "SPECTRAL_END_NM",buf, NULL);
+	
+				/* Generate fields for spectral values */
+				for (i = 0; i < spec_n; i++) {
+					int nm;
+			
+					/* Compute nearest integer wavelength */
+					nm = (int)(spec_wl_short + ((double)i/(spec_n-1.0))
+					            * (spec_wl_long - spec_wl_short) + 0.5);
+					
+					sprintf(buf,"SPEC_%03d",nm);
+					ocg->add_field(ocg, 0, buf, r_t);
+				}
+			}
+
 			if (depth == 1) {
 				ocg->add_field(ocg, 0, "GREY", r_t);
 				ocg->add_field(ocg, 0, "STDEV_GREY", r_t);
@@ -1077,7 +1194,11 @@ int main(int argc, char *argv[])
 				ocg->add_field(ocg, 0, "STDEV_Y", r_t);
 				ocg->add_field(ocg, 0, "STDEV_K", r_t);
 			}
+			nsetel += 2 * depth;
 	
+			if ((setel = (cgats_set_elem *)malloc(sizeof(cgats_set_elem) * nsetel)) == NULL)
+				error("Malloc failed!");
+
 			/* Initialise, ready to read out all the values */
 			for (j = 0; j < npat; j++) {
 				char id[100];				/* Input patch id */
@@ -1091,37 +1212,51 @@ int main(int argc, char *argv[])
 					char od[100];		/* Output patch id */
 					double P[4];		/* Robust/true mean values */
 					double sdP[4];		/* Standard deviation */
+					int pixcnt;			/* Pixel count */
 
 					if (tmean)
-						sr->read(sr, tod, NULL, P, sdP, NULL);
+						sr->read(sr, tod, NULL, P, sdP, &pixcnt);
 					else
-						sr->read(sr, tod, P, NULL, sdP, NULL);
+						sr->read(sr, tod, P, NULL, sdP, &pixcnt);
+
+					if (pixcnt == 0)
+						pnotscan++;
+
 					fix_it8(od,tod);
 		
 					if (strcmp(id,od) == 0) {
-						if (depth == 1) {
-							ocg->add_set( ocg, 0, id, 
-						        *((double *)icg->t[0].fdata[j][Xx]),
-						        *((double *)icg->t[0].fdata[j][Yx]),
-						        *((double *)icg->t[0].fdata[j][Zx]),
-								P[0] * 100.0/255.0, sdP[0] * 100.0/255.0);
-						} else if (depth == 3) {
-							ocg->add_set( ocg, 0, id, 
-						        *((double *)icg->t[0].fdata[j][Xx]),
-						        *((double *)icg->t[0].fdata[j][Yx]),
-						        *((double *)icg->t[0].fdata[j][Zx]),
-								P[0] * 100.0/255.0, P[1] * 100.0/255.0, P[2] * 100.0/255.0,
-								sdP[0] * 100.0/255.0, sdP[1] * 100.0/255.0, sdP[2] * 100.0/255.0);
-						} else if (depth == 4) {
-							ocg->add_set( ocg, 0, id, 
-						        *((double *)icg->t[0].fdata[j][Xx]),
-						        *((double *)icg->t[0].fdata[j][Yx]),
-						        *((double *)icg->t[0].fdata[j][Zx]),
-								P[0] * 100.0/255.0, P[1] * 100.0/255.0,
-							    P[2] * 100.0/255.0, P[3] * 100.0/255.0,
-								sdP[0] * 100.0/255.0, sdP[1] * 100.0/255.0,
-							    sdP[2] * 100.0/255.0, sdP[3] * 100.0/255.0);
+						int k = 0, m;
+						double XYZ[3];
+
+						setel[k++].c = id;
+
+				        XYZ[0] = *((double *)icg->t[0].fdata[j][Xx]);
+				        XYZ[1] = *((double *)icg->t[0].fdata[j][Yx]);
+				        XYZ[2] = *((double *)icg->t[0].fdata[j][Zx]);
+						if (isLab) {
+							icmLab2XYZ(&icmD50, XYZ, XYZ);
+							XYZ[0] *= 100.0;
+							XYZ[1] *= 100.0;
+							XYZ[2] *= 100.0;
 						}
+
+						setel[k++].d = XYZ[0];
+						setel[k++].d = XYZ[1];
+						setel[k++].d = XYZ[2];
+
+						if (spec_n > 0) {
+							for (m = 0; m < spec_n; m++) {
+								setel[k++].d = *((double *)icg->t[0].fdata[j][spi[m]]);
+							}
+						}
+
+						for (m = 0; m < depth; m++) 
+							setel[k++].d = P[m] * 100.0/255.0;
+						for (m = 0; m < depth; m++) 
+							setel[k++].d = sdP[m] * 100.0/255.0;
+
+						ocg->add_setarr(ocg, 0, setel);
+
 						break;
 					}
 				}
@@ -1130,13 +1265,18 @@ int main(int argc, char *argv[])
 			}
 	
 			if (ocg->write_name(ocg, datout_name))
-				error("Write error : %s",ocg->err);
+				error("Output file '%s' write error : %s",datout_name, ocg->err);
 	
+			free(setel);
+
 			ocg->del(ocg);		/* Clean up */
 			icg->del(icg);		/* Clean up */
 
 		}
 	}
+
+	if (pnotscan > 0)
+		warning("A total of %d patches had no value set!",pnotscan);
 
 	/* Clean up */
 	sr->free(sr);
@@ -1167,60 +1307,3 @@ void fix_it8(char *o, char *i) {
 }
 
 /********************************************************************************/
-#ifdef NEVER
-/* Basic printf type error() and warning() routines */
-
-#ifdef	__STDC__
-void
-error(char *fmt, ...)
-#else
-void
-error(va_alist) 
-va_dcl
-#endif
-{
-	va_list args;
-#ifndef	__STDC__
-	char *fmt;
-#endif
-
-	fprintf(stderr,"scanin: Error - ");
-#ifdef	__STDC__
-	va_start(args, fmt);
-#else
-	va_start(args);
-	fmt = va_arg(args, char *);
-#endif
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
-}
-
-#ifdef	__STDC__
-void
-warning(char *fmt, ...)
-#else
-void
-warning(va_alist) 
-va_dcl
-#endif
-{
-	va_list args;
-#ifndef	__STDC__
-	char *fmt;
-#endif
-
-	fprintf(stderr,"scanin: Warning - ");
-#ifdef	__STDC__
-	va_start(args, fmt);
-#else
-	va_start(args);
-	fmt = va_arg(args, char *);
-#endif
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-}
-
-#endif /* NEVER */

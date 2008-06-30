@@ -59,6 +59,7 @@
 #include "insttypes.h"
 #include "icoms.h"
 #include "inst.h"
+#include "conv.h"
 #include "dispwin.h"
 #include "dispsup.h"
 #include "rspl.h"
@@ -70,28 +71,38 @@
 
 #include "spyd2setup.h"			/* Enable Spyder 2 access */
 
-#undef RES_TEST		/* See if we can detect better than 8 bit operation */
-
 #undef DEBUG
 #undef DEBUG_OFFSET		/* Keep test window out of the way */
 #undef DEBUG_PLOT		/* Plot curve each time around */
 #undef CHECK_MODEL		/* Do readings to check the accuracy of our model */
+#undef SHOW_WINDOW_ONFAKE	/* Display a test window up for a fake device */
 
 /* Invoke with -dfake for testing with a fake device. */
-/* Will use a fake.icm profile if present, or a built in fake */
+/* Will use a fake.icm/.icc profile if present, or a built in fake */
 /* device behaviour if not. */
 
 #define COMPORT 1			/* Default com port 1..4 */
 #define REFINE_GAIN 0.80	/* Refinement correction damping/gain */
-#define MAX_RPTS 15			/* Maximum tries at making a sample meet the current threshold */
+#define MAX_RPTS 12			/* Maximum tries at making a sample meet the current threshold */
 #define VER_RES 100			/* Verification resolution */
 #define NEUTRAL_BLEND_RATE 8.0		/* Suddenness of transition for -k factor < 1.0 */
 #define ADJ_JACOBIAN		/* Adjust the Jacobian predictor matrix each time */
-#define JAC_COR_FACT 0.5	/* Amount to correct Jacobian by (to filter noise) */
-#define MOD_DIST_POW 1.4	/* Power used to distribute test samples for model building */
-#define REFN_DIST_POW 1.4	/* Power used to distribute test samples for grey axis refinement */
-#define CHECK_DIST_POW 1.4	/* Power used to distribute test samples for grey axis refinement */
+#define JAC_COR_FACT 0.4	/* Amount to correct Jacobian by (to filter noise) */
+#define REMEAS_JACOBIAN		/* Re-measure Jacobian */
+#define MOD_DIST_POW 1.6	/* Power used to distribute test samples for model building */
+#define REFN_DIST_POW 1.6	/* Power used to distribute test samples for grey axis refinement */
+#define CHECK_DIST_POW 1.6	/* Power used to distribute test samples for grey axis checking */
+#define THRESH_SCALE_POW 0.5 /* Amount to loosen threshold for first itterations */
+#define CAL_RES 256			/* Resolution of calibration table to produce. */
 #define CLIP				/* Clip RGB during refinement */
+#define RDAC_SMOOTH 0.3		/* RAMDAC curve fitting smoothness */
+#define MEAS_RES			/* Measure the RAMNDAC entry size */ 
+
+#if defined(__APPLE__)
+#define DEF_GAMMA 1.8		/* Apple artificial value */
+#else
+#define DEF_GAMMA 2.4		/* Typical CRT gamma */
+#endif
 
 #define VERBOUT stdout
 
@@ -99,44 +110,13 @@
 #include "plot.h"
 #endif
 
-#if defined(__APPLE__)
-#define DEF_GAMMA 1.8
+#if defined(DEBUG)
+
+#define DBG(xxx) fprintf xxx ;
+#define dbgo stderr
 #else
-#define DEF_GAMMA 2.2
-#endif
-
-#define VLENGTH(aa) (sqrt(aa[0] * aa[0] + aa[1] * aa[1] + aa[2] * aa[2]))
-
-/* Compute approximate technical gamma from black/50% grey/white readings, */
-/* (assumes an input offset gamma curve shape) */
-static double tech_gamma(double bY, double gY, double wY) {
-	int i;
-	double grat, brat, gioff, gvv, gamma = 2.2;
-
-	grat = gY/wY;
-	brat = bY/wY;
-	
-	/* Iterative solution */
-	for (i = 0; i < 5; i++) {
-		gioff = pow(brat, 1.0/gamma);
-		gvv = 0.5 + (1.0 - 0.5) * gioff;
-		gamma = log(grat) / log(gvv);
-	}
-	return gamma;
-}
-
-/* Compute approximate popular gamma from black/50% grey/white readings, */
-/* (assumes a zero based gamma curve shape) */
-static double pop_gamma(double bY, double gY, double wY) {
-	int i;
-	double grat, brat, gioff, gvv, gamma = 2.2;
-
-	grat = gY/wY;
-	brat = bY/wY;
-	
-	gamma = log(grat) / log(0.5);
-	return gamma;
-}
+#define DBG(xxx) 
+#endif	/* DEBUG */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Sample points used in initial device model optimisation */
@@ -150,18 +130,35 @@ typedef struct {
 /* - - - - - - - - - - - - - - - - - - - */
 /* device RGB inverse solution code */
 
+/* Selected transfer curve */
+typedef enum {
+	gt_power     = 0,	/* A simple power */
+	gt_Lab       = 1,	/* The L* curve */
+	gt_sRGB      = 2,	/* The sRGB curve */
+	gt_Rec709    = 3,	/* REC 709 video standard */
+	gt_SMPTE240M = 4	/* SMTPE 240M video standard */
+} gammatype;
+
 /* Context for calibration solution */
 typedef struct {
 	double wh[3];		/* White absolute XYZ value */
 	double bk[3];		/* Black absolute XYZ value */
 
 	/* Target model */
-	int gammat;			/* Gamma type, 0 = number, 1 = Lab, 2 = sRGB */
-	double tgamma;		/* Technical Gamma target */
+	gammatype gammat;	/* Transfer curve type */
+	double egamma;		/* Effective Gamma target */
+	double oofff;		/* proportion of output offset vs input offset (default 0.0) */
 	double gioff;		/* Gamma curve input zero offset */
-	double tooff;		/* Target output offset */
+	double gooff;		/* Target output offset (normalised to Y max of 1.0) */
 	int nat;			/* Flag - nz if native white target */
 
+	/* Viewing  conditions adjustment */
+	int vc;				/* Flag, nz to enable viewing conditions adjustment */
+	icxcam *svc;		/* Source viewing conditions */
+	icxcam *dvc;		/* Destination viewing conditions */
+	double vn0, vn1;	/* Normalisation values */
+
+	double nwh[3];		/* Target white normalised XYZ value (Y = 1.0) */
 	double twh[3];		/* Target white absolute XYZ value */
 	icmXYZNumber twN;	/* Same as above as XYZNumber */
 
@@ -184,6 +181,229 @@ typedef struct {
 	optref *rp;			/* reference points */
 	double *dtin_iv;	/* Temporary array :- dp for input curves */
 } cctx;
+
+/* - - - - - - - - - - - - - - - - - - - */
+/* Ideal target curve definitions */
+
+/* Convert ideal device (0..1) to target Y value (0..1) */
+static double dev2Y(cctx *x, double egamma, double vv) {
+
+	switch(x->gammat) {
+		case gt_power: {
+			vv = pow(vv, egamma);
+			break;
+		}
+		case gt_Lab: {
+			vv = icmL2Y(vv * 100.0);
+			break;
+		}
+		case gt_sRGB: {
+			if (vv <= 0.03928)
+				vv = vv/12.92;
+			else
+				vv = pow((0.055 + vv)/1.055, 2.4);
+			break;
+		}
+		case gt_Rec709: {
+			if (vv <= 0.081)
+				vv = vv/4.5;
+			else
+				vv = pow((0.099 + vv)/1.099, 1.0/0.45);
+			break;
+		}
+		case gt_SMPTE240M: {
+			if (vv <= 0.0913)
+				vv = vv/4.0;
+			else
+				vv = pow((0.1115 + vv)/1.1115, 1.0/0.45);
+			break;
+		} 
+		default:
+			error("Unknown gamma type");
+	}
+	return vv;
+}
+
+/* Convert target Y value (0..1) to ideal device (0..1) */
+static double Y2dev(cctx *x, double egamma, double vv) {
+
+	switch(x->gammat) {
+		case gt_power: {
+			vv = pow(vv, 1.0/egamma);
+			break;
+		}
+		case gt_Lab: {
+			vv = icmY2L(vv) * 0.01;
+			break;
+		}
+		case gt_sRGB: {
+			if (vv <= 0.00304)
+				vv = vv * 12.92;
+			else
+				vv = pow(vv, 1.0/2.4) * 1.055 - 0.055;
+			break;
+		}
+		case gt_Rec709: {
+			if (vv <= 0.018)
+				vv = vv * 4.5;
+			else
+				vv = pow(vv, 0.45) * 1.099 - 0.099;
+			break;
+		}
+		case gt_SMPTE240M: {
+			if (vv <= 0.0228)
+				vv = vv * 4.0;
+			else
+				vv = pow(vv, 0.45) * 1.1115 - 0.1115;
+			break;
+		} 
+		default:
+			error("Unknown gamma type");
+	}
+	return vv;
+}
+
+/* - - - - - - - - - - - - - - - - - - - */
+/* Compute a viewing environment Y transform */
+
+static double view_xform(cctx *x, double in) {
+	double out = in;
+
+	if (x->vc != 0) {
+		double xyz[3], Jab[3];
+
+		xyz[0] = in * x->nwh[0];				/* Compute value on neutral axis */
+		xyz[1] = in * x->nwh[1];
+		xyz[2] = in * x->nwh[2];
+		x->svc->XYZ_to_cam(x->svc, Jab, xyz);
+		x->dvc->cam_to_XYZ(x->dvc, xyz, Jab);
+
+		out = xyz[1] * x->vn1 + x->vn0;
+	}
+	return out;
+}
+
+/* - - - - - - - - - - - - - - - - - - - */
+
+/* Info for optimization */
+typedef struct {
+	double thyr;		/* 50% input target */
+	double roo;			/* 0% input target */
+} gam_fits;
+
+/* gamma + input offset function handed to powell() */
+static double gam_fit(void *dd, double *v) {
+	gam_fits *gf = (gam_fits *)dd;
+	double gamma = v[0];
+	double ioff = v[1];
+	double rv = 0.0;
+	double tt;
+
+	if (gamma < 0.0) {
+		rv += 100.0 * -gamma;
+		gamma = 0.0;
+	}
+	if (ioff < 0.0) {
+		rv += 100.0 * -ioff;
+		ioff = 0.0;
+	} else if (ioff > 0.999) {
+		rv += 100.0 * (ioff - 0.999);
+		ioff = 0.999;
+	}
+	tt = gf->roo - pow(ioff, gamma);
+	rv += tt * tt;
+	tt = gf->thyr - pow(0.5 + (1.0 - 0.5) * ioff, gamma);
+	rv += tt * tt;
+	
+//printf("~1 gam_fit %f %f returning %f\n",ioff,gamma,rv);
+	return rv;
+}
+
+
+/* Given the advertised gamma and the output offset, compute the */
+/* effective gamma and input offset needed. */
+/* Return the expected output value for 50% input. */
+/* (It's assumed that gooff is normalised the target brightness) */
+static double tech_gamma(
+	cctx *x,
+	double *pegamma,		/* return effective gamma needed */
+	double *pooff,			/* return output offset needed */
+	double *pioff,			/* return input offset needed */
+	double egamma,			/* effective gamma needed (> 0.0 if valid, overrides gamma) */
+	double gamma,			/* advertised gamma needed */
+	double tooff			/* Total ouput offset needed */
+) {
+	int i;
+	double rv;
+	double gooff = 0.0;		/* The output offset applied */
+	double gioff = 0.0;		/* The input offset applied */
+	double roo;				/* Remaining output offset accounted for by input offset */
+
+	/* Compute the output offset that will be applied */
+	gooff = tooff * x->oofff;
+	roo = (tooff - gooff)/(1.0 - gooff);
+
+//printf("~1 gooff = %f, roo = %f\n",gooff,roo);
+
+	/* Now compute the input offset that will be needed */
+	if (x->gammat == gt_power && egamma <= 0.0) {
+		gam_fits gf;
+		double op[2], sa[2], rv;
+
+		gf.thyr = pow(0.5, gamma);					/* Advetised 50% target */
+		gf.thyr = (gf.thyr - gooff)/(1.0 - gooff);	/* Target before gooff is added */
+		gf.roo = roo;
+
+		op[0] = gamma;
+		op[1] = pow(roo, 1.0/gamma);
+		sa[0] = 0.1;
+		sa[1] = 0.01;
+
+		if (powell(&rv, 2, op, sa, 1e-6, 500, gam_fit, (void *)&gf) != 0)
+			warning("Computing effective gamma and input offset is inaccurate");
+
+		if (rv > 1e-5) {
+			warning("Computing effective gamma and input offset is inaccurate (%f)",rv);
+		}
+		egamma = op[0];
+		gioff = op[1];  
+
+//printf("~1 Result gioff %f, gooff %f, egamma %f\n",gioff, gooff, egamma);
+//printf("~1 Verify 0.0 in -> out = %f, tooff = %f\n",gooff + dev2Y(x, egamma, gioff) * (1.0 - gooff),tooff);
+//printf("~1 Verify 0.5 out = %f, target %f\n",gooff + dev2Y(x, egamma, gioff + 0.5 * (1.0 - gioff)) * (1.0 - gooff), pow(0.5, gamma));
+
+	} else {
+		gioff = Y2dev(x, egamma, roo);
+//printf("~1 Result gioff %f, gooff %f\n",gioff, gooff);
+//printf("~1 Verify 0.0 in -> out = %f, tooff = %f\n",gooff + dev2Y(x, egamma, gioff) * (1.0 - gooff),tooff);
+	}
+
+	/* Compute the 50% output value */
+	rv = gooff + dev2Y(x, egamma, gioff + 0.5 * (1.0 - gioff)) * (1.0 - gooff);
+
+	if (pegamma != NULL)
+		*pegamma = egamma;
+	if (pooff != NULL)
+		*pooff = gooff;
+	if (pioff != NULL)
+		*pioff = gioff;
+	return rv;
+}
+
+/* Compute approximate advertised gamma from black/50% grey/white readings, */
+/* (assumes a zero based gamma curve shape) */
+static double pop_gamma(double bY, double gY, double wY) {
+	int i;
+	double grat, brat, gioff, gvv, gamma;
+
+	grat = gY/wY;
+	brat = bY/wY;
+	
+	gamma = log(grat) / log(0.5);
+	return gamma;
+}
+
+/* - - - - - - - - - - - - - - - - - - - */
 
 /* Return the xyz that is predicted by our aproximate device model */
 /* by the given device RGB. */
@@ -281,8 +501,10 @@ static double *dev_get_params(cctx *x) {
 }
 
 /* Given a set of parameters, put them back into the model */
+/* Normalize them so that the curve maximum is 1.0 too. */
 static void dev_put_params(cctx *x, double *p) {
 	int i, j;
+	double scale[3];
 
 	for (i = 0; i < 3; i++)
 		for (j = 0; j < 3; j++)
@@ -290,6 +512,17 @@ static void dev_put_params(cctx *x, double *p) {
 	for (i = 0; i < 3; i++)
 		for (j = 0; j < x->dcvs[i]->luord; j++)
 			x->dcvs[i]->pms[j] = *p++;
+
+	/* Figure out how we have to scale the curves */
+	for (j = 0; j < 3; j++) {
+		scale[j] = x->dcvs[j]->interp(x->dcvs[j], 1.0);
+		x->dcvs[j]->force_scale(x->dcvs[j], 1.0);
+	}
+
+	/* Scale the matrix to compensate */
+	for (i = 0; i < 3; i++)
+		for (j = 0; j < 3; j++)
+			x->fm[i][j] *= scale[j];
 }
 
 /* Device model optimisation function handed to powell() */
@@ -311,6 +544,7 @@ static double dev_opt_func(void *edata, double *v) {
 	for (i = 0; i < x->nrp; i++) {
 		double lrgb[3];		/* Linear light RGB */
 		double xyz[3], lab[3];
+		double de;
 
 		/* Convert through device curves */
 		for (j = 0; j < 3; j++)
@@ -323,14 +557,17 @@ static double dev_opt_func(void *edata, double *v) {
 		icmXYZ2Lab(&x->twN, lab, xyz);
 	
 		/* Compute delta E squared */
-//printf("~1 point %d: Lab is %f %f %f, should be %f %f %f\n",
-//i, lab[0], lab[1], lab[2], x->rp[i].lab[0], x->rp[i].lab[1], x->rp[i].lab[2]);
-		rv += icmCIE94sq(lab, x->rp[i].lab) * x->rp[i].w;
+		de = icmCIE94sq(lab, x->rp[i].lab) * x->rp[i].w;
+#ifdef NEVER
+	printf("point %d DE %f, Lab is %f %f %f, should be %f %f %f\n",
+i, sqrt(de), lab[0], lab[1], lab[2], x->rp[i].lab[0], x->rp[i].lab[1], x->rp[i].lab[2]);
+#endif
+		rv += de;
 		tw += x->rp[i].w;
 	}
 
 	/* Normalise error to be a weighted average delta E squared and scale smoothing */
-	rv /= (tw * 1200.0);
+	rv /= (tw * 5.0);
 
 	/* Sum with shaper parameters squared, to */
 	/* minimise unsconstrained "wiggles" */
@@ -523,7 +760,7 @@ typedef struct {
 } sxyz;
 
 /* ------------------------------------------------------------------- */
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__POWERPC__)
 
 /* Workaround for a ppc gcc 3.3 optimiser bug... */
 static int gcc_bug_fix(int i) {
@@ -545,8 +782,10 @@ typedef struct {
 	double tXYZ[3];		/* Target XYZ */
 	double XYZ[3];		/* Read XYZ */
 	double deXYZ[3];	/* Delta XYZ wanted to target */
-	double de;			/* Delta Lab to target */
-	double dc;			/* Delta XYZ to target */
+	double de;			/* Delta Lab to neutral target */
+	double dc;			/* Delta XYZ to neutral target */
+	double peqde;		/* Delta Lab to previous point value (last pass) */
+	double hde;			/* Hybrid de composed of de and peqde */
 
 	double pXYZ[3];		/* Previous measured XYZ */
 	double pdXYZ[3];	/* Delta XYZ intended from previous measure */
@@ -585,7 +824,7 @@ static void init_csamp_v(csamp *p, cctx *x, int psrand) {
 	for (i = 0; i < p->no; i++) {
 		double vv;
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__POWERPC__)
 		gcc_bug_fix(i);
 #endif
 		if (so != NULL) {
@@ -611,7 +850,7 @@ static void init_csamp_v(csamp *p, cctx *x, int psrand) {
 }
 
 /* Initialise txyz values from v values */
-static void init_csamp_txyz(csamp *p, cctx *x) {
+static void init_csamp_txyz(csamp *p, cctx *x, int fixdev) {
 	int i, j;
 	double tbL[3];		/* tbk as Lab */
 
@@ -622,41 +861,21 @@ static void init_csamp_txyz(csamp *p, cctx *x) {
 	/* Set the sample points targets */
 	for (i = 0; i < p->no; i++) {
 		double y, vv;
+		double XYZ[3];			/* Existing XYZ value */
 		double Lab[3];
 		double bl;
 
 		vv = p->s[i].v;
 
-		/* Compute target Y value for this device inpute */
-		if (x->gammat == 0) {			/* Power curve */
-			/* Allow for zero input offset */
-			y = x->gioff + (1.0 - x->gioff) * vv;
-			y = pow(y, x->tgamma);
-		} else if (x->gammat == 2) {	/* sRGB curve */
-			if (vv <= 0.03928)
-				y = vv/12.92;
-			else
-				y = pow((0.055 + vv)/1.055, 2.4);
-			/* Allow for zero output offset */
-			y = x->tooff + (1.0 - x->tooff) * y;
-		} else {	/* L* curve */
-			y = 100.0 * vv;				/* L* target value */
+		/* Compute target relative Y value for this device input. */
+		/* We allow for any input and/or output offset */
+		y = x->gooff + dev2Y(x, x->egamma, x->gioff + vv * (1.0 - x->gioff)) * (1.0 - x->gooff);
 
-			/* Convert L* to Y */
-			y = (y + 16.0)/116.0;
-			if (y > 24.0/116.0)
-				y = pow(y,3.0);
-			else
-				y = (y - 16.0/116.0)/7.787036979;
-			/* Allow for zero output offset */
-			y = x->tooff + (1.0 - x->tooff) * y;
-		}
+		/* Add viewing environment transform */
+		y = view_xform(x, y);
+
 		/* Convert Y to L* */
-		if (y > 0.008856451586)
-			y = pow(y,1.0/3.0);
-		else
-			y = 7.787036979 * y + 16.0/116.0;
-		Lab[0] = 116.0 * y - 16.0;
+		Lab[0] = icmY2L(y);
 		Lab[1] = Lab[2] = 0.0;	/* Target is neutral */
 
 		/* Compute blended neutral target a* b* */
@@ -664,7 +883,8 @@ static void init_csamp_txyz(csamp *p, cctx *x) {
 		Lab[1] = bl * tbL[1];
 		Lab[2] = bl * tbL[2];
 
-		icmLab2XYZ(&x->twN, p->s[i].tXYZ, Lab);		/* XYZ Value to aim for */
+		icmAry2Ary(XYZ, p->s[i].tXYZ);				/* Save the existing values */
+		icmLab2XYZ(&x->twN, p->s[i].tXYZ, Lab);		/* New XYZ Value to aim for */
 
 #ifdef DEBUG
 		printf("%d: target XYZ %.2f %.2f %.2f, Lab %.2f %.2f %.2f\n",i, p->s[i].tXYZ[0],p->s[i].tXYZ[1],p->s[i].tXYZ[2], Lab[0],Lab[1],Lab[2]);
@@ -685,13 +905,13 @@ static void init_csamp(csamp *p, cctx *x, int doupdate, int verify, int psrand, 
 
 	/* Compute v and txyz */
 	init_csamp_v(p, x, psrand);
-	init_csamp_txyz(p, x);
+	init_csamp_txyz(p, x, 0);
 
 	/* Generate the sample points */
 	for (i = 0; i < no; i++) {
 		double dd, vv;
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__POWERPC__)
 		gcc_bug_fix(i);
 #endif
 		vv = p->s[i].v;
@@ -744,8 +964,7 @@ static void init_csamp(csamp *p, cctx *x, int doupdate, int verify, int psrand, 
 				p->s[i].rgb[j] -= dd;
 			}
 			if (icmInverse3x3(p->s[i].ij, p->s[i].j)) {
-				warning("dispcal: inverting Jacobian failed (1)");
-				*((char *)0) = 55;
+				error("dispcal: inverting Jacobian failed (1)");
 			}
 		}
 	}
@@ -829,13 +1048,34 @@ static void reinit_csamp(csamp *p, cctx *x, int verify, int psrand, int no) {
 			p->s[i].pXYZ[k] = b * os[j+1].pXYZ[k] + (1.0 - b) * os[j].pXYZ[k];
 			p->s[i].pdrgb[k] = b * os[j+1].pdrgb[k] + (1.0 - b) * os[j].pdrgb[k];
 			p->s[i].dXYZ[k] = b * os[j+1].dXYZ[k] + (1.0 - b) * os[j].dXYZ[k];
+#ifdef INTERP_JAC
 			for (m = 0; m < 3; m++) 
 				p->s[i].j[k][m] = b * os[j+1].j[k][m] + (1.0 - b) * os[j].j[k][m];
+#endif
 
 		}
+#ifndef INTERP_JAC
+		/* Create a Jacobian at this location from our forward model */
+		{
+			double dd, refXYZ[3], delXYZ[3];
+			fwddev(x, refXYZ, p->s[i].rgb);
+			if (vv < 0.5)
+				dd = 0.02;
+			else
+				dd = -0.02;
+			/* Matrix organization is J[XYZ][RGB] for del RGB->del XYZ*/
+			for (j = 0; j < 3; j++) {
+				p->s[i].rgb[j] += dd;
+				fwddev(x, delXYZ, p->s[i].rgb);
+				p->s[i].j[0][j] = (delXYZ[0] - refXYZ[0]) / dd;
+				p->s[i].j[1][j] = (delXYZ[1] - refXYZ[1]) / dd;
+				p->s[i].j[2][j] = (delXYZ[2] - refXYZ[2]) / dd;
+				p->s[i].rgb[j] -= dd;
+			}
+		}
+#endif
 		if (icmInverse3x3(p->s[i].ij, p->s[i].j)) {
-			warning("dispcal: inverting Jacobian failed (2)");
-			*((char *)0) = 55;
+			error("dispcal: inverting Jacobian failed (2)");
 		}
 		/* Compute expected delta XYZ using new Jacobian */
 		icmMulBy3x3(p->s[i].pdXYZ, p->s[i].j, p->s[i].pdrgb);
@@ -851,9 +1091,9 @@ static void reinit_csamp(csamp *p, cctx *x, int verify, int psrand, int no) {
 
 #ifdef NEVER
 /* Do a linear interp of the ramdac */
-static void interp_ramdac(double cal[256][3], double drgb[3], double rgb[3]) {
+static void interp_ramdac(double cal[CAL_RES][3], double drgb[3], double rgb[3]) {
 	int i, j;
-	int gres = 256;
+	int gres = CAL_RES;
 	double w;
 
 	/* For r,g & b */
@@ -932,7 +1172,7 @@ void usage(char *diag, ...) {
 #else
 	fprintf(stderr," -d n                 Choose the display from the following list (default 1)\n");
 #endif
-//	fprintf(stderr," -d fake              Use a fake display device for testing, fake.icm if present\n");
+//	fprintf(stderr," -d fake              Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	dp = get_displays();
 	if (dp == NULL || dp[0] == NULL)
 		fprintf(stderr,"    ** No displays found **\n");
@@ -978,17 +1218,23 @@ void usage(char *diag, ...) {
 #ifdef NEVER	/* Not worth confusing people about this */
 	fprintf(stderr," -L                   Show CCT/CDT rather than VCT/VDT during native white point adjustment\n");
 #endif
-	fprintf(stderr," -b bright            Set the target brightness in cd/m^2\n");
-	fprintf(stderr," -g gamma             Set the target response curve gamma (Def. %3.1f)\n",DEF_GAMMA);
+	fprintf(stderr," -b bright            Set the target white brightness in cd/m^2\n");
+	fprintf(stderr," -g gamma             Set the target response curve advertised gamma (Def. %3.1f)\n",DEF_GAMMA);
 	fprintf(stderr,"                      Use \"-gl\" for L*a*b* curve\n");
 	fprintf(stderr,"                      Use \"-gs\" for sRGB curve\n");
-	fprintf(stderr," -k factor            Amount to try and correct black point. Default 1.0, LCD default 0.0\n");
+	fprintf(stderr,"                      Use \"-g709\" for REC 709 curve (should use -a as well!)\n");
+	fprintf(stderr,"                      Use \"-g240\" for SMPTE 240M curve (should use -a as well!)\n");
+	fprintf(stderr," -G gamma             Set the target response curve actual technical gamma\n");
+	fprintf(stderr," -f [degree]          Amount of black level accounted for with output offset (default all input offset)\n");
+	fprintf(stderr," -a ambient           Use viewing condition adjustment for ambient in Lux\n");
+	fprintf(stderr," -k factor            Amount to try and correct black point hue. Default 1.0, LCD default 0.0\n");
+	fprintf(stderr," -B blkbright         Set the target black brightness in cd/m^2\n");
 	fprintf(stderr," -e [n]               Run n verify passes on final curves\n");
 	fprintf(stderr," -E                   Run only verify pass on installed calibration curves\n");
 	fprintf(stderr," -p ho,vo,ss          Position test window and scale it\n");
 	fprintf(stderr,"                      ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                      ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
-	fprintf(stderr," -B                   Fill whole screen with black background\n");
+	fprintf(stderr," -F                   Fill whole screen with black background\n");
 #if defined(UNIX) && !defined(__APPLE__)
 	fprintf(stderr," -n                   Don't set override redirect on test window\n");
 #endif
@@ -1037,13 +1283,18 @@ int main(int argc, char *argv[])
 	int planckian = 0;					/* 0 = Daylight, 1 = Planckian color locus */
 	int dovct = 1;						/* Show VXT rather than CXT for adjusting white point */
 	double wpx = 0.0, wpy = 0.0;		/* White point xy (native) */
-	double tbright = 0.0;				/* Target brightness ( 0.0 == max)  */
-	double gamma = DEF_GAMMA;			/* Popular Gamma target */
+	double tbright = 0.0;				/* Target white brightness ( 0.0 == max)  */
+	double gamma = DEF_GAMMA;			/* Advertised Gamma target */
+	double egamma = 0.0;				/* Effective Gamma target, NZ if set */
+	double ambient = 0.0;				/* NZ if viewing cond. adjustment to be used (cd/m^2) */
 	double bkcorrect = -1.0;			/* Level of black point correction */ 
+	double bkbright = 0.0;				/* Target black brightness ( 0.0 == min)  */
 	int quality = -99;					/* Quality level, -2 = v, -1 = l, 0 = m, 1 = h, 2 = u */
 	int isteps = 22;					/* Initial measurement steps/3 (medium) */
 	int rsteps = 64;					/* Refinement measurement steps (medium) */
 	double errthr = 1.5;				/* Error threshold for refinement steps (medium) */
+	int thrfail = 0;					/* Set to NZ if failed to meet threshold target */
+	double failerr = 0.0;				/* Delta E of worst failed target */
 	int mxits = 3;						/* maximum iterations (medium) */
 	int verify = 0;						/* Do a verify after last refinement, 2 = do only verify. */
 	int nver = 0;						/* Number of verify passes after refinement */
@@ -1052,19 +1303,24 @@ int main(int argc, char *argv[])
 	char iccoutname[MAXNAMEL+1] = { 0 };/* Output icc file base name */
 	int spectral = 0;					/* Want spectral data from instrument */
 	disprd *dr = NULL;					/* Display patch read object */
-	cctx x;								/* Context for calibration solution */
 	csamp asgrey;						/* Main calibration loop test points */
+	double dispLum = 0.0;				/* Display luminence reading */
 	int it;								/* verify & refine iteration */
 	int rv;
 	int fitord = 30;					/* More seems to make curves smoother */
 	int donat;							/* Set native device colors ? (else via hw lut) */
 	int errc;							/* Return value from new_disprd() */
+	cctx x;								/* Context for calibration solution */
 
 	set_exe_path(argv[0]);				/* Set global exe_path and error_program */
 	setup_spyd2(NULL);					/* Load firware if available */
 
-	x.gammat = 0 ;						/* Default gamma type */
-	x.tgamma = 0.0;						/* Default technical gamma */
+	x.gammat = gt_power ;				/* Default gamma type */
+	x.egamma = 0.0;						/* Default effective gamma none */
+	x.oofff = 0.0;						/* Default is all input ofset */
+	x.vc = 0;							/* No viewing conditions adjustment */
+	x.svc = NULL;
+	x.dvc = NULL;
 
 #ifdef DEBUG_OFFSET
 	ho = 0.8;
@@ -1126,6 +1382,8 @@ int main(int argc, char *argv[])
 							ix = atoi(na);
 							iv = 0;
 						}
+						if (disp != NULL)
+							free_a_disppath(disp);
 						if ((disp = get_a_display(ix-1)) == NULL)
 							usage("-d parameter %d out of range",ix);
 						if (iv > 0)
@@ -1140,6 +1398,8 @@ int main(int argc, char *argv[])
 					fake = 1;
 				} else {
 					ix = atoi(na);
+					if (disp != NULL)
+						free_a_disppath(disp);
 					if ((disp = get_a_display(ix-1)) == NULL)
 						usage("-d parameter %d out of range",ix);
 				}
@@ -1306,26 +1566,66 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'L') {
 				dovct = 0;
 
-			/* Brightness */
+			/* White brightness */
 			} else if (argv[fa][1] == 'b') {
 				fa = nfa;
 				if (na == NULL) usage("Parameter expected after -b");
 				tbright = atof(na);
 				if (tbright <= 0.0 || tbright > 100000.0) usage("-b parameter %f out of range",tbright);
 
-			/* Gamma */
-			} else if (argv[fa][1] == 'g' || argv[fa][1] == 'G') {
+			/* Target transfer curve */
+			} else if (argv[fa][1] == 'g') {
 				fa = nfa;
 				if (na == NULL) usage("Parameter expected after -g");
 				if ((na[0] == 'l' || na[0] == 'L') && na[1] == '\000')
-					x.gammat = 1;
+					x.gammat = gt_Lab;
 				else if ((na[0] == 's' || na[0] == 'S') && na[1] == '\000')
-					x.gammat = 2;
+					x.gammat = gt_sRGB;
+				else if (strcmp(na, "709") == 0)
+					x.gammat = gt_Rec709;
+				else if (strcmp(na, "240") == 0)
+					x.gammat = gt_SMPTE240M;
 				else {
 					gamma = atof(na);
 					if (gamma <= 0.0 || gamma > 10.0) usage("-g parameter %f out of range",gamma);
-					x.gammat = 0;
+					x.gammat = gt_power;
 				}
+
+			/* Effective gamma power */
+			} else if (argv[fa][1] == 'G') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expected after -G");
+				egamma = atof(na);
+				if (egamma <= 0.0 || egamma > 10.0) usage("-G parameter %f out of range",egamma);
+				x.gammat = gt_power;
+
+			/* Black brightness */
+			} else if (argv[fa][1] == 'B') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expected after -B");
+				bkbright = atof(na);
+				if (bkbright <= 0.0 || bkbright > 100000.0) usage("-B parameter %f out of range",bkbright);
+
+			/* Degree of output offset */
+			} else if (argv[fa][1] == 'f') {
+				fa = nfa;
+				if (na == NULL) {
+					x.oofff = 1.0;
+				} else {
+					x.oofff = atof(na);
+					if (x.oofff < 0.0 || x.oofff > 1.0)
+						usage("-f parameter %f out of range",x.oofff);
+				}
+
+			/* Ambient light level */
+			} else if (argv[fa][1] == 'a') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expected after -a");
+				ambient = atof(na);
+				if (ambient < 0.0)
+					usage("-a parameter %f out of range",ambient);
+				ambient /= 3.141592654;	/* Convert from Lux to cd/m^2 */
+
 			/* Test patch offset and size */
 			} else if (argv[fa][1] == 'p') {
 				fa = nfa;
@@ -1340,7 +1640,7 @@ int main(int argc, char *argv[])
 				vo = 2.0 * vo - 1.0;
 
 			/* Black background */
-			} else if (argv[fa][1] == 'B') {
+			} else if (argv[fa][1] == 'F') {
 				blackbg = 1;
 
 			} else 
@@ -1350,7 +1650,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (bkcorrect < 0.0) {
-		if (dtype == 2)		/* LCD */
+		if (dtype == 2)			/* LCD */
 			bkcorrect = 0.0;	/* Default to no black point correction for LCD */
 		else
 			bkcorrect = 1.0;	/* Default to full black point correction for other displays */
@@ -1358,8 +1658,27 @@ int main(int argc, char *argv[])
 
 	patsize *= patscale;
 
-	if (!fake && disp == NULL && (disp = get_a_display(0)) == NULL) {
-		error("Unable to open the display");
+	/* No explicit display has been set */
+	if (
+#ifndef SHOW_WINDOW_ONFAKE
+	!fake && 
+#endif
+	 disp == NULL) {
+		int ix = 0;
+#if defined(UNIX) && !defined(__APPLE__)
+		char *dn, *pp;
+
+		if ((dn = getenv("DISPLAY")) != NULL) {
+			if ((pp = strrchr(dn, ':')) != NULL) {
+				if ((pp = strchr(pp, '.')) != NULL) {
+					if (pp[1] != '\000')
+						ix = atoi(pp+1);
+				}
+			}
+		}
+#endif
+		if ((disp = get_a_display(ix)) == NULL)
+			error("Unable to open the default display");
 	}
 
 	if (docalib) {
@@ -1398,8 +1717,8 @@ int main(int argc, char *argv[])
 	if (verify == 2 || doreport == 2)
 		donat = 0;	/* But measure calibrated response of verify or report calibrated */ 
 	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, nocal, highres, donat,
-	                     NULL, disp, blackbg, override, callout, patsize, ho, vo,
-	                     spectral, verb, VERBOUT, debug, "fake.icm")) == NULL)
+	                     NULL, 0, disp, blackbg, override, callout, patsize, ho, vo,
+	                     spectral, verb, VERBOUT, debug, "fake" ICC_FILE_EXT)) == NULL)
 		error("dispread failed with '%s'\n",disprd_err(errc));
 
 	/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -1413,7 +1732,8 @@ int main(int argc, char *argv[])
 		double cdt, cdt_de;
 		double vct, vct_de;
 		double vdt, vdt_de;
-		double gamma, w[3], wp[2];
+		double cgamma, w[3], wp[2];
+		int sigbits;	/* Number of significant bits in VideoLUT/display/instrument */
 
 		if ((rv = dr->read(dr, tcols, 3, 1, 3, 1, 0)) != 0) {
 			dr->del(dr);
@@ -1435,8 +1755,132 @@ int main(int argc, char *argv[])
 		vct = comp_ct(&vct_de, NULL, 1, 1, w);	/* Compute VCT */
 		vdt = comp_ct(&vdt_de, NULL, 0, 1, w);	/* Compute VDT */
 
-		/* Approximate Gamma - use the gross curve shape for robustness */
-		gamma = pop_gamma(tcols[0].aXYZ[1], tcols[1].aXYZ[1], tcols[2].aXYZ[1]);
+		/* Compute advertised current gamma - use the gross curve shape for robustness */
+		cgamma = pop_gamma(tcols[0].aXYZ[1], tcols[1].aXYZ[1], tcols[2].aXYZ[1]);
+
+#ifdef MEAS_RES
+		/* See if we can detect what sort of precision the LUT entries */
+		/* have. Our ability to detect this may be limited by the instrument */
+		/* (ie. Huey and Spyder 2) */
+		if (doreport == 1) {
+#define MAX_RES_SAMPS 24
+			col ttt[MAX_RES_SAMPS];
+			int res_samps = 6;
+			double a0, a1, a2, dd;
+			int n;
+			int issig = 0;
+
+			if (verb)
+				printf("Measuring VideoLUT table entry precision.\n");
+
+			/* Run a small state machine until we come to a conclusion */
+			sigbits = 8;
+			for (issig = 0; issig < 2; ) {
+
+				DBG((dbgo,"Trying %d bits\n",sigbits));
+				/* Do the test */
+				for (n = 0; n < res_samps; n++) {
+					double v;
+					v = (5 << (sigbits-3))/((1 << sigbits) - 1.0);
+					if ((n % 3) == 2)
+						v += 1.0/((1 << sigbits) - 1.0);
+					else if ((n % 3) == 1)
+						v += 0.0/((1 << sigbits) - 1.0);
+					else
+						v += -1.0/((1 << sigbits) - 1.0);
+					ttt[n].r = ttt[n].g = ttt[n].b = v; 
+				}
+				if ((rv = dr->read(dr, ttt, res_samps, 1, res_samps, 1, 0)) != 0) {
+					dr->del(dr);
+					error("display read failed with '%s'\n",disprd_err(rv));
+				} 
+				a0 = a1 = a2 = 0.0;
+				for (n = 0; n < res_samps; n++) {
+					double v = ttt[n].aXYZ[1];
+					if ((n % 3) == 2) {
+						a2 += v;
+					} else if ((n % 3) == 1) {
+						a1 += v;
+					} else {
+						a0 += v;
+					}
+				}
+				a0 /= (res_samps / 3.0);
+				a1 /= (res_samps / 3.0);
+				a2 /= (res_samps / 3.0);
+				dd = 0.0;
+				for (n = 0; n < res_samps; n++) {
+					double tt;
+					if ((n % 3) == 2)
+						tt = fabs(a2 - ttt[n].aXYZ[1]);
+					else if ((n % 3) == 1)
+						tt = fabs(a1 - ttt[n].aXYZ[1]);
+					else
+						tt = fabs(a0 - ttt[n].aXYZ[1]);
+					dd += tt * tt;
+				}
+				dd /= res_samps;
+				dd = sqrt(dd);
+				if (fabs(a1 - a0) > (2.0 * dd) && fabs(a2 - a1) > (2.0 * dd))
+					issig = 1;
+				else
+					issig = 0;
+				DBG((dbgo,"Bits %d: Between = %f, %f within = %f, sig = %s\n",sigbits, fabs(a1 - a0), fabs(a2 - a1),dd, issig ? "yes" : "no"));
+
+				switch(sigbits) {
+					case 8:				/* Do another trial */
+						if (issig) {
+							sigbits = 10;
+							res_samps = 6;
+						} else {
+							sigbits = 6;
+						}
+						break;
+					case 6:				/* Do another trial or give up */
+						if (issig) {
+							sigbits = 7;
+						} else {
+							sigbits = 0;
+							issig = 2;	/* Give up */
+						}
+						break;
+					case 7:				/* Terminal */
+						if (!issig)
+							sigbits = 6;
+						issig = 2;		/* Stop here */
+						break;
+					case 10:			/* Do another trial */
+						if (issig) {
+							sigbits = 12;
+							res_samps = 9;
+						} else {
+							sigbits = 9;
+						}
+						break;
+					case 12:			/* Do another trial or give up */
+						if (issig) {
+							issig = 2;	/* Stop here */
+						} else {
+							sigbits = 11;
+						}
+						break;
+					case 11:			/* Terminal */
+						if (!issig)
+							sigbits = 10;
+						issig = 2;		/* Stop here */
+						break;
+					case 9:				/* Terminal */
+						if (!issig)
+							sigbits = 8;
+						issig = 2;		/* Stop here */
+						break;
+
+					default:
+						error("Unexpected number of bits in depth test (bits)",sigbits);
+				}
+			}
+		}
+#endif	/* MEAS_RES */
 
 		if (doreport == 2)
 			printf("Current calibration response:\n");
@@ -1444,13 +1888,20 @@ int main(int argc, char *argv[])
 			printf("Uncalibrated response:\n");
 		printf("Black level = %.2f cd/m^2\n",tcols[0].aXYZ[1]);
 		printf("White level = %.2f cd/m^2\n",tcols[2].aXYZ[1]);
-		printf("Aprox. gamma = %.2f\n",gamma);
+		printf("Aprox. gamma = %.2f\n",cgamma);
 		printf("Contrast ratio = %.0f:1\n",tcols[2].aXYZ[1]/tcols[0].aXYZ[1]);
 		printf("White chromaticity coordinates %.4f, %.4f\n",wp[0],wp[1]);
 		printf("White    Correlated Color Temperature = %.0fK, DE to locus = %4.1f\n",cct,cct_de);
 		printf("White Correlated Daylight Temperature = %.0fK, DE to locus = %4.1f\n",cdt,cdt_de);
 		printf("White        Visual Color Temperature = %.0fK, DE to locus = %4.1f\n",vct,vct_de);
 		printf("White     Visual Daylight Temperature = %.0fK, DE to locus = %4.1f\n",vdt,vdt_de);
+#ifdef	MEAS_RES
+		if (sigbits == 0) {
+			warning("Unable to determine LUT entry bit depth - problems ?");
+		} else if (verb) {
+			printf("Effective LUT entry depth seems to be %d bits\n",sigbits);
+		}
+#endif	/* MEAS_RES */
 		dr->del(dr);
 		exit(0);
 	}
@@ -1533,17 +1984,40 @@ int main(int argc, char *argv[])
 			error ("Can't update '%s' - can't find field 'TARGET_GAMMA'",outname);
 		}
 		if (strcmp(icg->t[0].kdata[fi], "L_STAR") == 0)
-			x.gammat = 1;
+			x.gammat = gt_Lab;
 		else if (strcmp(icg->t[0].kdata[fi], "sRGB") == 0)
-			x.gammat = 2;
+			x.gammat = gt_sRGB;
+		else if (strcmp(icg->t[0].kdata[fi], "REC709") == 0)
+			x.gammat = gt_Rec709;
+		else if (strcmp(icg->t[0].kdata[fi], "SMPTE240M") == 0)
+			x.gammat = gt_SMPTE240M;
 		else {
 			x.gammat = 0;
 			gamma = atof(icg->t[0].kdata[fi]);
-			if (gamma < 0.1 || gamma > 5.0) {
+			
+			if (fabs(gamma) < 0.1 || fabs(gamma) > 5.0) {
 				dr->del(dr);
-				error ("Can't update '%s' - field 'TARGET_GAMMA' has bad value %f",outname,gamma);
+				error ("Can't update '%s' - field 'TARGET_GAMMA' has bad value %f",outname,fabs(gamma));
+			}
+			if (gamma < 0.0) {	/* Effective gamma = actual power value */
+				egamma = -gamma;
 			}
 		}
+		if ((fi = icg->find_kword(icg, 0, "DEGREE_OF_BLACK_OUTPUT_OFFSET")) < 0) {
+			/* Backward compatibility */
+			if (x.gammat == gt_Lab || x.gammat == gt_sRGB)
+				x.oofff = 1.0;
+			else
+				x.oofff = 0.0;
+		} else {
+			x.oofff = atof(icg->t[0].kdata[fi]);
+		}
+		if ((fi = icg->find_kword(icg, 0, "TARGET_BLACK_BRIGHTNESS")) < 0) {
+			bkbright = 0.0;		/* Native */
+		} else {
+			bkbright = atof(icg->t[0].kdata[fi]);
+		}
+
 //printf("~1 dealt with target gamma\n");
 
 		if ((fi = icg->find_kword(icg, 0, "BLACK_POINT_CORRECTION")) < 0) {
@@ -1602,7 +2076,7 @@ int main(int argc, char *argv[])
 		}
 //printf("~1 allocated calibration curve objects\n");
 
-		/* Read the current calibration curve points (usually 256 of them) */
+		/* Read the current calibration curve points (usually CAL_RES of them) */
 		for (k = 0; k < 4; k++) {
 			char *fnames[4] = { "RGB_I", "RGB_R", "RGB_G", "RGB_B" };
 
@@ -1629,7 +2103,7 @@ int main(int argc, char *argv[])
 		}
 //printf("~1 Read calibration curve data points\n");
 		for (k = 0; k < 3; k++) {
-			x.rdac[k]->fit(x.rdac[k], 0, fitord, rdv[k], nsamp, 1.0);
+			x.rdac[k]->fit(x.rdac[k], 0, fitord, rdv[k], nsamp, RDAC_SMOOTH);
 			free (rdv[k]);
 		}
 //printf("~1 Fitted calibration curves\n");
@@ -1708,12 +2182,12 @@ int main(int argc, char *argv[])
 			isteps = 3;
 			rsteps = 9;
 			mxits = 1;
-			errthr = 2.5;
+			errthr = 2.0;
 			break;
 		case -2:				/* Very low */
 			isteps = 10;
 			rsteps = 16;
-			errthr = 2.0;
+			errthr = 1.5;
 			if (doupdate)
 				mxits = 1;
 			else
@@ -1725,7 +2199,7 @@ int main(int argc, char *argv[])
 			else
 				isteps = 12;
 			rsteps = 32;
-			errthr = 1.2;
+			errthr = 0.9;
 			if (doupdate)
 				mxits = 1;
 			else
@@ -1739,7 +2213,7 @@ int main(int argc, char *argv[])
 			else
 				isteps = 16;
 			rsteps = 64;
-			errthr = 0.8;
+			errthr = 0.6;
 			if (doupdate)
 				mxits = 1;
 			else
@@ -1751,7 +2225,7 @@ int main(int argc, char *argv[])
 			else
 				isteps = 20;
 			rsteps = 96;
-			errthr = 0.5;
+			errthr = 0.4;
 			if (doupdate)
 				mxits = 1;
 			else
@@ -1763,7 +2237,7 @@ int main(int argc, char *argv[])
 			else
 				isteps = 24;
 			rsteps = 128;
-			errthr = 0.3;
+			errthr = 0.25;
 			if (doupdate)
 				mxits = 1;
 			else
@@ -1801,17 +2275,37 @@ int main(int argc, char *argv[])
 				printf("Target white = native white point\n");
 	
 			if (tbright > 0.0)
-				printf("Target brightness = %f cd/m^2\n",tbright);
+				printf("Target white brightness = %f cd/m^2\n",tbright);
 			else
-				printf("Target brightness = native brightness\n");
+				printf("Target white brightness = native brightness\n");
+			if (bkbright > 0.0)
+				printf("Target black brightness = %f cd/m^2\n",bkbright);
+			else
+				printf("Target black brightness = native brightness\n");
 		}
 
-		if (x.gammat == 0)
-			printf("Target gamma = %f\n",gamma);
-		else if (x.gammat == 1)
-			printf("Target gamma = L* curve\n");
-		else if (x.gammat == 2)
-			printf("Target gamma = sRGB curve\n");
+		switch(x.gammat) {
+			case gt_power:
+				if (egamma > 0.0)
+					printf("Target effective gamma = %f\n",egamma);
+				else
+					printf("Target advertised gamma = %f\n",gamma);
+				break;
+			case gt_Lab:
+				printf("Target gamma = L* curve\n");
+				break;
+			case gt_sRGB:
+				printf("Target gamma = sRGB curve\n");
+				break;
+			case gt_Rec709:
+				printf("Target gamma = REC 709 curve\n");
+				break;
+			case gt_SMPTE240M:
+				printf("Target gamma = SMPTE 240M curve\n");
+				break;
+			default:
+				error("Unknown gamma type");
+		}
 	}
 
 	/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -1827,13 +2321,14 @@ int main(int argc, char *argv[])
 
 			/* Print the menue of adjustments */
 			printf("\nPress 1 .. 7\n");
-			printf("1) Black level (CRT: Brightness)\n");
-			printf("2) White point (Color temperature, R,G,B, Gain)\n");
-			printf("3) White level (CRT: Contrast, LCD: Brightness)\n");
-			printf("4) Black point (R,G,B, Offset)\n");
+			printf("1) Black level (CRT: Offset/Brightness)\n");
+			printf("2) White point (Color temperature, R,G,B, Gain/Contrast)\n");
+			printf("3) White level (CRT: Gain/Contrast, LCD: Brightness/Backlight)\n");
+			printf("4) Black point (R,G,B, Offset/Brightness)\n");
 			printf("5) Check all\n");
-			printf("6) Continue on to calibration\n");
-			printf("7) Exit\n");
+			printf("6) Measure and set ambient for viewing condition adjustment\n");
+			printf("7) Continue on to calibration\n");
+			printf("8) Exit\n");
 
 			empty_con_chars();
 			c = next_con_char();
@@ -1869,7 +2364,7 @@ int main(int argc, char *argv[])
 					                                         tcols[2].aXYZ[1], tcols[2].aXYZ[2]);
 				}
 
-				/* Popular Gamma - Gross curve shape */
+				/* Advertised Gamma - Gross curve shape */
 				mgamma = pop_gamma(tcols[0].aXYZ[1], tcols[1].aXYZ[1], tcols[2].aXYZ[1]);
 
 				dev1 = pow(0.01, 1.0/mgamma);
@@ -1888,9 +2383,10 @@ int main(int argc, char *argv[])
 						dr->del(dr);
 						error("display read failed with '%s'\n",disprd_err(rv));
 					} 
+					/* Scale 1% values by ratio of Y to white XYZ */
 					sv[0] = tcols[1].aXYZ[0] * tcols[2].aXYZ[1]/tcols[2].aXYZ[0];
 					sv[1] = tcols[1].aXYZ[1];
-					sv[2] = tcols[1].aXYZ[2] * tcols[2].aXYZ[2]/tcols[2].aXYZ[2];
+					sv[2] = tcols[1].aXYZ[2] * tcols[2].aXYZ[1]/tcols[2].aXYZ[2];
 //printf("~1 scaled readings = %f %f %f\n",sv[0],sv[1],sv[2]);
 					val1 = sv[1];
 					if (sv[0] > val1)
@@ -1982,10 +2478,10 @@ int main(int argc, char *argv[])
 				/* Note we're not taking the device gamut into account here */
 				if (tbright > 0.0) {			/* Given brightness */
 					tarw = tbright;
-printf("~1 set tarw %f from tbright\n",tarw);
+//printf("~1 set tarw %f from tbright\n",tarw);
 				} else {						/* Native/maximum brightness */
 					tarw = tcols[0].aXYZ[1];
-printf("~1 set tarw %f from tcols[1]\n",tarw);
+//printf("~1 set tarw %f from tcols[1]\n",tarw);
 				}
 
 				if (!nat) {	/* Target is a specified white */
@@ -2228,7 +2724,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 					                                         tcols[2].aXYZ[1], tcols[2].aXYZ[2]);
 				}
 				
-				/* Popular Gamma - Gross curve shape */
+				/* Advertised Gamma - Gross curve shape */
 				mgamma = pop_gamma(tcols[0].aXYZ[1], tcols[1].aXYZ[1], tcols[2].aXYZ[1]);
 
 				dev1 = pow(0.01, 1.0/mgamma);
@@ -2272,16 +2768,17 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 						error("display read failed with '%s'\n",disprd_err(rv));
 					} 
 				
-					/* Compute 1% direction */
+					/* Scale 1% values by ratio of Y to white XYZ */
 					sv[0] = tcols[1].aXYZ[0] * tcols[2].aXYZ[1]/tcols[2].aXYZ[0];
 					sv[1] = tcols[1].aXYZ[1];
-					sv[2] = tcols[1].aXYZ[2] * tcols[2].aXYZ[2]/tcols[2].aXYZ[2];
+					sv[2] = tcols[1].aXYZ[2] * tcols[2].aXYZ[1]/tcols[2].aXYZ[2];
 					val1 = sv[1];
 					if (sv[0] > val1)
 						val1 = sv[0];
 					if (sv[2] > val1)
 						val1 = sv[2];
 
+					/* Compute 1% direction */
 					dir = tar1 - val1;
 					if (fabs(dir) < 0.01)
 						dir = 0.0;
@@ -2352,6 +2849,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 				double tYxy[3];				/* Target white chromaticities */
 				double sv[3], val1;			/* Scaled values */
 				double mgamma, tarw, tar1, dev1, tarh;
+				double gooff;				/* Aproximate output offset needed */
 				icmXYZNumber tXYZ;
 				double tLab[3], wYxy[3], wLab[3], bYxy[3], bLab[3];
 				double ct, ct_de;			/* Color temperature & delta E to white locus */
@@ -2389,9 +2887,10 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 					                                         tcols[3].aXYZ[1], tcols[3].aXYZ[2]);
 				}
 				
+				/* Scale 1% values by ratio of Y to white XYZ */
 				sv[0] = tcols[3].aXYZ[0] * tcols[2].aXYZ[1]/tcols[2].aXYZ[0];
 				sv[1] = tcols[3].aXYZ[1];
-				sv[2] = tcols[3].aXYZ[2] * tcols[2].aXYZ[2]/tcols[2].aXYZ[2];
+				sv[2] = tcols[3].aXYZ[2] * tcols[2].aXYZ[1]/tcols[2].aXYZ[2];
 				val1 = sv[1];
 				if (sv[0] > val1)
 					val1 = sv[0];
@@ -2426,31 +2925,11 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 				}
 
 				/* Figure out the target 50% device output value */
-				x.tooff = tcols[0].aXYZ[1]/tcols[2].aXYZ[1];	/* Aprox. black output offset */
-				if (x.gammat == 0 || x.gammat == 2) {
-					if (x.gammat == 0) {
-						tarh = pow(0.5, gamma);
-					} else {
-						if (0.5 <= 0.03928)
-							tarh = 0.5/12.92;
-						else
-							tarh = pow((0.055 + 0.5)/1.055, 2.4);
-						/* Allow for zero output offset */
-						tarh = x.tooff + (1.0 - x.tooff) * tarh;
-					}
+				gooff = tcols[0].aXYZ[1]/tcols[2].aXYZ[1];	/* Aprox. normed black output offset */
 
-				} else {	/* L* curve */
-					tarh = 50.0;
-	
-					/* Convert L* to Y */
-					tarh = (tarh + 16.0)/116.0;
-					if (tarh > 24.0/116.0)
-						tarh = pow(tarh,3.0);
-					else
-						tarh = (tarh - 16.0/116.0)/7.787036979;
-					/* Allow for zero output offset */
-					tarh = x.tooff + (1.0 - x.tooff) * tarh;
-				}
+				/* Use tech_gamma() to do the hard work */
+				tarh = tech_gamma(&x, NULL, NULL, NULL, egamma, gamma, gooff);
+
 				/* Convert from Y fraction to absolute Y */
 				tarh = tarh * tcols[2].aXYZ[1];
 
@@ -2506,7 +2985,21 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 				printf("  Target black = x %.4f, y %.4f, Current = x %.4f, y %.4f, error = %5.2f DE\n",
 				       tYxy[1], tYxy[2], bYxy[1], bYxy[2], icmCIE2K(tLab, bLab));
 
+			
+			/* Measure and set ambient for viewing condition adjustment */
 			} else if (c == '6') {
+				if ((rv = dr->ambient(dr, &ambient, 1)) != 0) {
+					if (rv == 8) {
+						printf("Instrument doesn't have an ambient reading capability\n");
+					} else {
+						dr->del(dr);
+						error("ambient measure failed with '%s'\n",disprd_err(rv));
+					}
+				} else {
+					printf("Measured ambient level = %.1f Lux\n",ambient * 3.141592654);
+				}
+
+			} else if (c == '7') {
 				if (!verb) {		/* Tell user command has been accepted */
 					if (verify == 2)
 						printf("Commencing device verification\n");
@@ -2514,7 +3007,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 						printf("Commencing device calibration\n");
 				}
 				break;
-			} else if (c == '7' || c == 0x03 || c == 0x1b) {
+			} else if (c == '8' || c == 0x03 || c == 0x1b) {
 				printf("Exiting\n");
 				dr->del(dr);
 				exit(0);
@@ -2526,30 +3019,6 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 	/* Take a small number of readings, and compute basic */
 	/* informations such as black & white, white target, */
 	/* aproximate matrix based display forward and reverse model. */
-#ifdef RES_TEST
-	printf("Running 8 bit res test.\n");
-	/* See if we can detect whether the LUT's have better than 8 bit precision */
-	{
-		col ttt[3] = {	/* Base set of test colors */
-			{ 220.0/255.0, 220.0/255.0, 220.0/255.0 },
-			{ 220.5/255.0, 220.5/255.0, 220.5/255.0 },
-			{ 221.0/255.0, 221.0/255.0, 221.0/255.0 }
-		};
-		double L1 = 0.0, L_5 = 0.0, L_1 = 0.0;
-		int n;
-		for (n = 1; n < 30; n++) {
-			if ((rv = dr->read(dr, ttt, 3, 0, 1, 0)) != 0) {
-				dr->del(dr);
-				error("display read failed with '%s'\n",disprd_err(rv));
-			} 
-			L_1 += ttt[0].aXYZ[1];
-			L_5 += ttt[1].aXYZ[1];
-			L1  += ttt[2].aXYZ[1];
-			printf("Measured %f %f %f, average over %d = %f, %f, %f\n",
-			        ttt[0].aXYZ[1], ttt[1].aXYZ[1], ttt[2].aXYZ[1], n, L_1/n, L_5/n, L1/n);
-		}
-	}
-#endif
 
 	/* Read the base test set */
 	{
@@ -2597,6 +3066,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 		}
 
 		/* Copy other readings into place */
+		dispLum = base[4].aXYZ[1];				/* White Y */
 		icmAry2Ary(x.bk, base[0].aXYZ);
 		icmAry2Ary(x.wh, base[4].aXYZ);
 		icmAry2XYZ(x.twN, x.wh);	/* Use this as Lab reference white until we establish target */
@@ -2644,7 +3114,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 		for (i = 0; i < isteps; i++) {
 			double vv, v[4];
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__POWERPC__)
 			gcc_bug_fix(i);
 #endif
 			vv = i/(isteps - 1.0);
@@ -2684,7 +3154,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 			double *sa;		/* Search area */
 			double re;		/* Residual error */
 
-			/* Transform measured  black back to linearised RGB values */
+			/* Transform measured black back to linearised RGB values */
 			icmMulBy3x3(blrgb, x.bm, x.bk);
 //printf("~1 model black should be %f %f %f\n", x.bk[0], x.bk[1], x.bk[2]);
 //printf("~1 linearised RGB should be %f %f %f\n", blrgb[0], blrgb[1], blrgb[2]);
@@ -2696,7 +3166,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 			for (k = 0; k < 3; k++) {	/* Create the model curves */
 				for (i = 0; i < isteps; i++) {
 					sdv[i].p = asrgb[k][i].v;
-					sdv[i].v = VLENGTH(asrgb[k][i].xyz);
+					sdv[i].v = ICMNORM3(asrgb[k][i].xyz);
 					sdv[i].w = 1.0;
 //printf("~1 chan %d, entry %d, p = %f, v = %f from XYZ %f %f %f\n",
 //k,i,x.sdv[k][i].p,x.sdv[k][i].v, asrgb[k][i].xyz[0], asrgb[k][i].xyz[1], asrgb[k][i].xyz[2]);
@@ -2754,10 +3224,10 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 
 			/* Do optimisation */
 #ifdef NEVER
-			if (powell(&re, x.np, op, sa, 1e-5, 2000, dev_opt_func, (void *)&x) != 0)
+			if (powell(&re, x.np, op, sa, 1e-5, 3000, dev_opt_func, (void *)&x) != 0)
 				error ("Model powell failed, re = %f",re);
 #else
-			if (conjgrad(&re, x.np, op, sa, 1e-5, 2000, dev_opt_func, dev_dopt_func, (void *)&x) != 0) {
+			if (conjgrad(&re, x.np, op, sa, 1e-5, 3000, dev_opt_func, dev_dopt_func, (void *)&x) != 0) {
 				if (re > 1e-2)
 					error("Model conjgrad failed, residual error = %f",re);
 				else
@@ -2769,9 +3239,10 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 			dev_put_params(&x, op);
 
 			free(x.rp);
-			free(x.dtin_iv);		/* Free temporary arrays */
 			x.rp = NULL;
 			x.nrp = 0;
+			free(x.dtin_iv);		/* Free temporary arrays */
+			x.dtin_iv = NULL;
 			free(sa);
 			free(op);
 		}
@@ -2835,12 +3306,15 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 			}
 			anerr += de;
 			
+			printf("RGB %.3f -> XYZ %.2f %.2f %.2f, model %.2f %.2f %.2f\n",
+			vv, set[0].aXYZ[0], set[0].aXYZ[1], set[0].aXYZ[2], mxyz[0], mxyz[1], mxyz[2]);
+
 			printf("RGB %.3f -> Lab %.2f %.2f %.2f, model %.2f %.2f %.2f, DE %f\n",
 			vv, alab[0], alab[1], alab[2], mlab[0], mlab[1], mlab[2],de);
 		}
 		anerr /= (double)nn;
-		printf("Maximum error (@ %f) = %f deltaE\n",mnv, mnerr);
-		printf("Average error = %f deltaE\n",anerr);
+		printf("Model maximum error (@ %f) = %f deltaE\n",mnv, mnerr);
+		printf("Model average error = %f deltaE\n",anerr);
 	}
 #endif /* CHECK_MODEL */
 
@@ -2864,9 +3338,9 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 				error("Failed to compute XYZ of target color temperature %f\n",temp);
 //printf("~1 Raw target from temp %f XYZ = %f %f %f\n",temp,x.twh[0],x.twh[1],x.twh[2]);
 		} else {						/* Native white */
-			x.twh[0] = x.wh[0]/x.wh[1];
-			x.twh[1] = x.wh[1]/x.wh[1];
-			x.twh[2] = x.wh[2]/x.wh[1];
+			x.twh[0] = x.nwh[0] = x.wh[0]/x.wh[1];
+			x.twh[1] = x.nwh[1] = x.wh[1]/x.wh[1];
+			x.twh[2] = x.nwh[2] = x.wh[2]/x.wh[1];
 		}
 
 		/* Convert it to absolute white target */
@@ -2916,11 +3390,34 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 
 		icmXYZ2Lab(&x.twN, tbkLab, x.bk);	/* Convert measured black to Lab */
 	
+//printf("~1 black point Lab = %f %f %f\n", tbkLab[0], tbkLab[1], tbkLab[2]);
+
 		/* Now blend the a* b* with that of the target white point */
 		tbL[0] = tbkLab[0];
-		tbL[1] = bkcorrect * 0.0   + (1.0 - bkcorrect) * tbkLab[1];
-		tbL[2] = bkcorrect * 0.0   + (1.0 - bkcorrect) * tbkLab[2];
+		tbL[1] = bkcorrect * 0.0 + (1.0 - bkcorrect) * tbkLab[1];
+		tbL[2] = bkcorrect * 0.0 + (1.0 - bkcorrect) * tbkLab[2];
+
+//printf("~1 blended black Lab = %f %f %f\n", tbL[0], tbL[1], tbL[2]);
 	
+		if (bkbright > 0.0 && bkbright <= x.bk[1] || (2.0 * bkbright) >= x.twh[1])
+			warning("Black brigtness ignored because it is out of range");
+		else if (bkbright > 0.0) {
+			double bkbxyz[3], bkbLab[3], vv, bl;
+			/* Figure out the L value of the target brightness */
+			bkbxyz[0] = 0.0;
+			bkbxyz[1] = bkbright;
+			bkbxyz[2] = 0.0;
+			icmXYZ2Lab(&x.twN, bkbLab, bkbxyz);
+			
+			/* Do crossover to white neutral */
+			vv = bkbLab[0] / (100.0 - tbL[0]);
+			bl = pow((1.0 - vv), NEUTRAL_BLEND_RATE);		/* Crossover near the black */
+			tbL[0] = bkbLab[0];
+			tbL[1] = (1.0 - bl) * 0.0 + bl * tbL[1];
+			tbL[2] = (1.0 - bl) * 0.0 + bl * tbL[2];
+//printf("~1 brighted black Lab = %f %f %f\n", tbL[0], tbL[1], tbL[2]);
+		}
+
 		/* And make this the black hue to aim for */
 		icmLab2XYZ(&x.twN, x.tbk, tbL);
 		icmAry2XYZ(x.tbN, x.tbk);
@@ -2933,11 +3430,10 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 	/* that will give us the black level we actually have. */
 	{
 		double yy, tby;			/* Target black y */
-		double thyr;			/* Target 50 % y ratio */
 		
 		/* Make target black Y as high as necessary */
 		/* to get the black point hue */
-		// ~~~~9999 should do this by increasing L* until XYZ > x.bk ??? */
+		/* ????? should do this by increasing L* until XYZ > x.bk ????? */
 		tby = x.bk[1];
 //printf("Target Y from Y = %f\n",tby);
 		yy = x.bk[0] * x.tbk[1]/x.tbk[0];
@@ -2949,6 +3445,9 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 		if (yy > tby)
 			tby = yy;
 
+		if (x.tbk[1] > tby)		/* If target is already high enough */
+			tby = x.tbk[1];
+
 		if (verb) {
 			double tbp[3], tbplab[3];
 	        tbp[0] = x.tbk[0] * tby/x.tbk[1];
@@ -2959,26 +3458,108 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 			        tbp[0], tbp[1], tbp[2], tbplab[0], tbplab[1], tbplab[2]);
 		}
 
-		/* Figure out the x.gioff and tgamma needed to get this x.tooff and gamma */
-		/* (x.gioff and tgamma are only used for x.gammat == 0, ie. a power) */ 
-		x.tooff = tby / x.twh[1];			/* Convert to relative */
-		thyr = pow(0.5, gamma);
-		x.tgamma = gamma;
+		/* Figure out the x.gioff and egamma needed to get this x.gooff and gamma */
+		x.gooff = tby / x.twh[1];			/* Convert to relative */
 
-//printf("~1 x.tooff = %f, thyr = %f\n",x.tooff,thyr);
-		/* Iterative solution */
-		for (i = 0; i < 6; i++) {
-			double gvv;
-			x.gioff = pow(x.tooff, 1.0/x.tgamma);
-			gvv = 0.5 + (1.0 - 0.5) * x.gioff;
-			x.tgamma = log(thyr) / log(gvv);
-		}
-//printf("~1 x.gioff = %f, x.tgamma = %f\n",x.gioff,x.tgamma);
-
+		/* tech_gamma() does the hard work */
+		tech_gamma(&x, &x.egamma, &x.gooff, &x.gioff, egamma, gamma, x.gooff);
 	}
 
 	if (verb)
-		printf("Current gamma curve offset = %f, Gamma curve power = %f\n",x.gioff,x.tgamma);
+		printf("Gamma curve input offset = %f, output offset = %f, power = %f\n",x.gioff,x.gooff,x.egamma);
+
+	if (ambient > 0.0) {
+		double xyz[3], Jab[3];
+		double t1, t0, a1, a0;
+
+		/* Setup default source viewing conditions */
+		if ((x.svc = new_icxcam(cam_default)) == NULL
+		 || (x.dvc = new_icxcam(cam_default)) == NULL) {
+			error("Failed to create source and destination CAMs");
+		}
+	
+		switch(x.gammat) {
+			case gt_power:	/* There's nothing obvious for these cases, */
+			case gt_Lab:	/* So default to a computerish source viewing condition */
+
+			case gt_sRGB:	/* sRGB standard viewing conditions */
+				x.svc->set_view(x.svc, vc_none,
+					x.nwh,					/* Display normalised white point */
+					0.2 * 80.0,				/* Adapting luminence, 20% of display 80 cd/m^2 */
+					0.2,					/* Background relative to reference white */
+					80.0,					/* Display is 80 cd/m^2 */
+			        0.01, x.nwh,			/* 1% flare same white point */
+					0);
+				break;
+
+			case gt_Rec709:
+			case gt_SMPTE240M:	/* Television studio conditions */
+				x.svc->set_view(x.svc, vc_none,
+					x.nwh,		/* Display normalised white point */
+					0.2 * 1000.0/3.1415,	/* Adapting luminence, 20% of 1000 lux in cd/m^2 */
+					0.2,					/* Background relative to reference white */
+					1000.0/3.1415,			/* Luminance of white in the Image field (cd/m^2) */
+			        0.01, x.nwh,			/* 1% flare same white point */
+					0);
+				break;
+
+			default:
+				error("Unknown gamma type");
+		}
+		/* The display we're calibratings situation */
+		x.dvc->set_view(x.dvc, vc_none,
+			x.nwh,		/* Display normalised white point */
+			0.2 * ambient,			/* Adapting luminence, 20% of ambient in cd/m^2 */
+			0.2,					/* Background relative to reference white */
+			x.twh[1],				/* Target white level (cd/m^2) */
+	        0.01, x.nwh,			/* 1% flare same white point */
+			0);
+
+		/* Compute the normalisation values */
+		x.svc->XYZ_to_cam(x.svc, Jab, x.nwh);		/* Relative white point */
+		x.dvc->cam_to_XYZ(x.dvc, xyz, Jab);
+		t1 = x.nwh[1];
+		a1 = xyz[1];
+
+		xyz[0] = x.tbk[1]/x.twh[1] * x.nwh[0];
+		xyz[1] = x.tbk[1]/x.twh[1] * x.nwh[1];
+		xyz[2] = x.tbk[1]/x.twh[1] * x.nwh[2];
+		t0 = xyz[1];
+		x.svc->XYZ_to_cam(x.svc, Jab, xyz);		/* Relative black Y */
+		x.dvc->cam_to_XYZ(x.dvc, xyz, Jab);
+		a0 = xyz[1];
+
+//printf("~1 t1 = %f, t0 = %f\n",t1,t0);
+//printf("~1 a1 = %f, a0 = %f\n",a1,a0);
+		x.vn1 = (t1 - t0)/(a1 - a0);		/* Scale factor */
+		x.vn0 = t0 - (a0 * x.vn1);			/* Then offset */
+//printf("~1 vn1 = %f, vn0 = %f\n",x.vn1, x.vn0);
+//printf("~1 fix a1 = %f, should be = %f\n",a1 * x.vn1 + x.vn0, t1);
+//printf("~1 fix a0 = %f, should be = %f\n",a0 * x.vn1 + x.vn0, t0);
+
+		x.vc = 1;
+
+		/* Compute aproximate power of viewing transform */
+		if (verb) {
+			double v;
+			v = view_xform(&x, 0.5);
+			v = log(v) / log(0.5);
+			printf("Viewing conditions adjustment aprox. power = %f\n",v);
+		}
+#ifdef NEVER
+{
+	int i;
+
+	printf("~1 viewing xtranform:\n");
+	for (i = 0; i <= 10; i++) {
+		double w, v = i/10.0;
+		
+		w = view_xform(&x, v);
+		printf("~1 in %f -> %f\n",v,w); 
+	}
+}
+#endif /* NEVER */
+	}
 
 	/* - - - - - - - - - - - - - - - - - - - - - */
 	/* Start with a scaled down number of test points and refine threshold, */
@@ -2991,7 +3572,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 		errthr = 0.0;
 	} else {
 		rsteps /= (1 << (mxits-1));
-		errthr *= (double)(1 << (mxits-1));
+		errthr *= pow((double)(1 << (mxits-1)), THRESH_SCALE_POW);
 	}
 
 	/* Setup the initial calibration test point values */
@@ -3032,7 +3613,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 
 		/* Create an initial set of RAMDAC curves */
 		for (j = 0; j < 3; j++)
-			x.rdac[j]->fit(x.rdac[j], 0, fitord, sdv[j], rsteps, 1.0);
+			x.rdac[j]->fit(x.rdac[j], 0, fitord, sdv[j], rsteps, RDAC_SMOOTH);
 
 		/* Make sure that if we are using native brightness and white point, */
 		/* that the curves go to a perfect 1.0 ... */
@@ -3046,7 +3627,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 	}
 
 #ifdef DEBUG_PLOT
-	/* Plot the current curves */
+	/* Plot the initial curves */
 	if (verify != 2) {
 		#define	XRES 255
 		double xx[XRES];
@@ -3064,20 +3645,24 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 			y2[i] = drgb[1];
 			y3[i] = drgb[2];
 		}
-		printf("Current ramdac curves\n");
+		printf("Initial ramdac curves\n");
 		do_plot(xx,y1,y2,y3,XRES);
 		#undef XRES
 	}
 #endif
 
 	/* Now we go into the main verify & refine loop */
-	for (it = verify == 2 ? mxits : 0; it < mxits || verify != 0; rsteps *= 2, errthr /= 2.0, it++)  {
-
-		col set[2];				/* Variable to read one or two value from the display */
+	for (it = verify == 2 ? mxits : 0; it < mxits || verify != 0;
+	     rsteps *= 2, errthr /= (it < mxits) ? pow(2.0,THRESH_SCALE_POW) : 1.0, it++)  {
+		int totmeas = 0;		/* Total number of measurements in this pass */
+		col set[3];				/* Variable to read one to three values from the display */
 
 		/* Verify pass */
 		if (it >= mxits)
 			rsteps = VER_RES;		/* Fixed verification resolution */
+		else
+			thrfail = 0; /* Not verify pass */
+
 
 		/* re-init asgrey if the number of test points has changed */
 		reinit_csamp(&asgrey, &x, verify, (verify == 2 || it >= mxits) ? 1 : 0, rsteps);
@@ -3093,11 +3678,32 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 		/* Do this white to black to track drift in native white point */
 		for (i = rsteps-1; i >= 0; i--) {
 			double rpt;
+			double peqXYZ[3];		/* Previous steps equivalent aim point */
 			double bestrgb[3];		/* In case we fail */
 			double bestxyz[3];
+			double prevde = 1e7;
 			double bestde = 1e7;
 			double bestdc = 1e7;
-			double rgain = REFINE_GAIN;		/* Scale down if lots of repeats */
+			double bestpeqde = 1e7;
+			double besthde = 1e7;
+			double rgain = REFINE_GAIN;	/* Scale down if lots of repeats */
+			int mjac = 0;				/* We measured the Jacobian */
+
+			/* Setup a second termination threshold chriteria based on */
+			/* the delta E to the previous step point for the last pass. */
+			if (i == (rsteps-1) || it < (mxits-1)) {
+				icmAry2Ary(peqXYZ, asgrey.s[i].tXYZ);	/* Its own aim point */
+			} else {
+				double Lab1[3], Lab2[3], Lab3[3];
+				icmXYZ2Lab(&x.twN, Lab1, asgrey.s[i+1].XYZ);
+				icmXYZ2Lab(&x.twN, Lab2, asgrey.s[i].tXYZ);
+				Lab3[0] = Lab2[0];
+				Lab3[1] = 0.5 * (Lab1[1] + Lab2[1]);	/* Compute aim point between actual target */
+				Lab3[2] = 0.5 * (Lab1[2] + Lab2[2]);	/* and previous point. */
+				icmLab2XYZ(&x.twN, asgrey.s[i].tXYZ, Lab3);
+				Lab1[0] = Lab2[0];		/* L of current target with ab of previous as 2nd threshold */
+				icmLab2XYZ(&x.twN, peqXYZ, Lab1);
+			}
 
 			/* Until we meet the necessary accuracy or give up */
 			for (rpt = 0;rpt < MAX_RPTS; rpt++) {
@@ -3114,6 +3720,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 					dr->del(dr);
 					error("display read failed with '%s'\n",disprd_err(rv));
 				} 
+				totmeas++;
 	
 				icmAry2Ary(asgrey.s[i].pXYZ, asgrey.s[i].XYZ);	/* Remember previous XYZ */
 				icmAry2Ary(asgrey.s[i].XYZ, set[0].aXYZ);		/* Transfer current reading */
@@ -3126,19 +3733,21 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 					icmAry2Ary(x.twh, asgrey.s[i].XYZ);	/* Set current white */
 					icmAry2XYZ(x.twN, x.twh);			/* Need this for Lab conversions */
 														/* Recompute txyz */
-					init_csamp_txyz(&asgrey, &x);
+					init_csamp_txyz(&asgrey, &x, 1);
 //printf("~1 Just reset target white to native white\n");
+					icmAry2Ary(peqXYZ, asgrey.s[i].tXYZ);	/* Its own aim point */
 				}
 
 				/* Compute the current change wanted to hit target */
 				icmSub3(asgrey.s[i].deXYZ, asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
 				asgrey.s[i].de = icmXYZLabDE(&x.twN, asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
+				asgrey.s[i].peqde = icmXYZLabDE(&x.twN, peqXYZ, asgrey.s[i].XYZ);
+				asgrey.s[i].hde = 0.8 * asgrey.s[i].de + 0.2 * asgrey.s[i].peqde;
 				/* Eudclidian difference of XYZ, because this doesn't always track Lab */
 				asgrey.s[i].dc = icmLabDE(asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
 
 				/* Compute change from last XYZ */
 				icmSub3(asgrey.s[i].dXYZ, asgrey.s[i].XYZ, asgrey.s[i].pXYZ);
-
 
 #ifdef DEBUG
 				printf("\n\nTest point %d, v = %f\n",rsteps - i,asgrey.s[i].v);
@@ -3159,7 +3768,6 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 				if (it < mxits) {		/* Not verify, apply correction */
 					int impj = 0;		/* We improved the Jacobian */
 					int dclip = 0;		/* We clipped the new RGB */
-
 #ifdef ADJ_JACOBIAN
 					int isclipped = 0;
 
@@ -3175,10 +3783,72 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 					}
 #endif /* !CLIP */
 
+#ifdef REMEAS_JACOBIAN
+					/* If the de hasn't improved, measure the Jacobian */
+					if (it < (rsteps-1) && mjac == 0 && asgrey.s[i].de > (0.8 * prevde)) {
+						double dd;
+						if (asgrey.s[i].v < 0.5)
+							dd = 0.05;
+						else
+							dd= -0.05;
+						set[0].r = asgrey.s[i].rgb[0] + dd;
+						set[0].g = asgrey.s[i].rgb[1];
+						set[0].b = asgrey.s[i].rgb[2];
+						set[0].id = NULL;
+						set[1].r = asgrey.s[i].rgb[0];
+						set[1].g = asgrey.s[i].rgb[1] + dd;
+						set[1].b = asgrey.s[i].rgb[2];
+						set[1].id = NULL;
+						set[2].r = asgrey.s[i].rgb[0];
+						set[2].g = asgrey.s[i].rgb[1];
+						set[2].b = asgrey.s[i].rgb[2] + dd;
+						set[2].id = NULL;
+
+						if ((rv = dr->read(dr, set, 1, rsteps-i, rsteps, 0, 0)) != 0
+						 || (rv = dr->read(dr, set+1, 1, rsteps-i, rsteps, 0, 0)) != 0
+						 || (rv = dr->read(dr, set+2, 1, rsteps-i, rsteps, 0, 0)) != 0) {
+							dr->del(dr);
+							error("display read failed with '%s'\n",disprd_err(rv));
+						} 
+						totmeas += 3;
+
+						/* Matrix organization is J[XYZ][RGB] for del RGB->del XYZ*/
+						for (j = 0; j < 3; j++) {
+							asgrey.s[i].j[0][j] = (set[j].aXYZ[0] - asgrey.s[i].XYZ[0]) / dd;
+							asgrey.s[i].j[1][j] = (set[j].aXYZ[1] - asgrey.s[i].XYZ[1]) / dd;
+							asgrey.s[i].j[2][j] = (set[j].aXYZ[2] - asgrey.s[i].XYZ[2]) / dd;
+						}
+						if (icmInverse3x3(asgrey.s[i].ij, asgrey.s[i].j)) {
+							/* Should repeat with bigger dd ? */
+//printf("~1 matrix =\n");
+//printf("~1    %f %f %f\n", asgrey.s[i].j[0][0], asgrey.s[i].j[0][1], asgrey.s[i].j[0][2]);
+//printf("~1    %f %f %f\n", asgrey.s[i].j[1][0], asgrey.s[i].j[1][1], asgrey.s[i].j[1][2]);
+//printf("~1    %f %f %f\n", asgrey.s[i].j[2][0], asgrey.s[i].j[2][1], asgrey.s[i].j[2][2]);
+							warning("dispcal: inverting Jacobian failed (3)");
+						}
+						/* Restart at the best we've had */
+						if (asgrey.s[i].hde > besthde) {
+							asgrey.s[i].de = bestde;
+							asgrey.s[i].dc = bestdc;
+							asgrey.s[i].peqde = bestpeqde;
+							asgrey.s[i].hde = besthde;
+							asgrey.s[i].rgb[0] = bestrgb[0];
+							asgrey.s[i].rgb[1] = bestrgb[1];
+							asgrey.s[i].rgb[2] = bestrgb[2];
+							asgrey.s[i].XYZ[0] = bestxyz[0];
+							asgrey.s[i].XYZ[1] = bestxyz[1];
+							asgrey.s[i].XYZ[2] = bestxyz[2];
+							icmSub3(asgrey.s[i].deXYZ, asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
+						}
+						mjac = 1;
+						impj = 1;
+					}
+#endif /* REMEAS_JACOBIAN */
+
 					/* Compute a correction to the Jacobian if we can. */
 					/* (Don't do this unless we have a solid previous */
 					/* reading for this patch) */ 
-					if (rpt > 0 && isclipped == 0) {
+					if (impj == 0 && rpt > 0 && isclipped == 0) {
 						double nsdrgb;			/* Norm squared of pdrgb */
 						double spdrgb[3];		/* Scaled previous delta rgb */
 						double dXYZerr[3];		/* Error in previous prediction */
@@ -3190,7 +3860,9 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 						icmSub3(dXYZerr, asgrey.s[i].dXYZ, asgrey.s[i].pdXYZ);
 //printf("~1 Jacobian error = %f %f %f\n", dXYZerr[0], dXYZerr[1], dXYZerr[2]);
 						nsdrgb = icmNorm3sq(asgrey.s[i].pdrgb);
-						if (nsdrgb > 1e-4) {
+						/* If there was sufficient change in device values */
+						/* to be above any noise: */ 
+						if (nsdrgb >= (0.005 * 0.005)) {
 							icmScale3(spdrgb, asgrey.s[i].pdrgb, 1.0/nsdrgb);
 							icmTensMul3(jadj, dXYZerr, spdrgb);
 
@@ -3217,15 +3889,17 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 							}
 //else printf("~1 ij failed\n");
 						}
-//else printf("~1 nsdrgb was 0\n");
+//else printf("~1 nsdrgb was below threshold\n");
 					}
 //else if (isclipped) printf("~1 no j update: rgb is clipped\n");
 #endif	/* ADJ_JACOBIAN */
 
 					/* Track the best solution we've found */
-					if (asgrey.s[i].de <= bestde) {
+					if (asgrey.s[i].hde <= besthde) {
 						bestde = asgrey.s[i].de;
 						bestdc = asgrey.s[i].dc;
+						bestpeqde = asgrey.s[i].peqde;
+						besthde = asgrey.s[i].hde;
 						bestrgb[0] = asgrey.s[i].rgb[0];
 						bestrgb[1] = asgrey.s[i].rgb[1];
 						bestrgb[2] = asgrey.s[i].rgb[2];
@@ -3239,9 +3913,11 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 						wde = asgrey.s[i].de;
 
 						/* If we've wandered too far, return to best we found */
-						if (asgrey.s[i].de > (3.0 * bestde)) {
+						if (asgrey.s[i].hde > (3.0 * besthde)) {
 							asgrey.s[i].de = bestde;
 							asgrey.s[i].dc = bestdc;
+							asgrey.s[i].peqde = bestpeqde;
+							asgrey.s[i].hde = besthde;
 							asgrey.s[i].rgb[0] = bestrgb[0];
 							asgrey.s[i].rgb[1] = bestrgb[1];
 							asgrey.s[i].rgb[2] = bestrgb[2];
@@ -3258,26 +3934,46 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 					}
 
 					/* See if we need to repeat */
-					if (asgrey.s[i].de <= errthr) {	
+					if (asgrey.s[i].de <= errthr && asgrey.s[i].peqde < errthr) {	
 						if (verb > 1)
-							printf("Point %d Delta E %f, OK\n",rsteps - i,asgrey.s[i].de);
+							if (it < (mxits-1))
+								printf("Point %d Delta E %f, OK\n",rsteps - i,asgrey.s[i].de);
+							else
+								printf("Point %d Delta E %f, peqDE %f, OK\n",rsteps - i,asgrey.s[i].de, asgrey.s[i].peqde);
 						break;	/* No more retries */
 					}
 					if ((rpt+1) >= MAX_RPTS) {
 						asgrey.s[i].de = bestde;			/* Restore to best we found */
 						asgrey.s[i].dc = bestdc;
+						asgrey.s[i].peqde = bestpeqde;		/* Restore to best we found */
+						asgrey.s[i].hde = besthde;			/* Restore to best we found */
 						asgrey.s[i].rgb[0] = bestrgb[0];
 						asgrey.s[i].rgb[1] = bestrgb[1];
 						asgrey.s[i].rgb[2] = bestrgb[2];
+						asgrey.s[i].XYZ[0] = bestxyz[0];
+						asgrey.s[i].XYZ[1] = bestxyz[1];
+						asgrey.s[i].XYZ[2] = bestxyz[2];
 						if (verb > 1)
-							printf("Point %d Delta E %f, Fail\n",rsteps - i,asgrey.s[i].de);
+							if (it < (mxits-1))
+								printf("Point %d Delta E %f, Fail\n",rsteps - i,asgrey.s[i].de);
+							else
+								printf("Point %d Delta E %f, peqDE %f, Fail\n",rsteps - i,asgrey.s[i].de,asgrey.s[i].peqde);
+						thrfail = 1;						/* Failed to meet target */
+						if (bestde > failerr)
+							failerr = bestde;				/* Worst failed delta E */
 						break;	/* No more retries */
 					}
 					if (verb > 1) {
 						if (gworse)
-							printf("Point %d Delta E %f, Repeat (got worse)\n", rsteps - i, wde);
+							if (it < (mxits-1))
+								printf("Point %d Delta E %f, Repeat (got worse)\n", rsteps - i, wde);
+							else
+								printf("Point %d Delta E %f, peqDE %f, Repeat (got worse)\n", rsteps - i, wde,asgrey.s[i].peqde);
 						else
-							printf("Point %d Delta E %f, Repeat\n", rsteps - i,asgrey.s[i].de);
+							if (it < (mxits-1))
+								printf("Point %d Delta E %f, Repeat\n", rsteps - i,asgrey.s[i].de);
+							else
+								printf("Point %d Delta E %f, peqDE %f, Repeat\n", rsteps - i,asgrey.s[i].de,asgrey.s[i].peqde);
 					}
 				
 					/* Compute refinement of rgb */
@@ -3313,7 +4009,6 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 
 					/* Save expected change in XYZ */
 					icmMulBy3x3(asgrey.s[i].pdXYZ, asgrey.s[i].j, asgrey.s[i].pdrgb);
-
 #ifdef DEBUG
 					printf("New rgb %f %f %f from expected del XYZ %f %f %f\n",
 					       asgrey.s[i].rgb[0], asgrey.s[i].rgb[1], asgrey.s[i].rgb[2],
@@ -3323,6 +4018,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 					break;
 				}
 
+				prevde = asgrey.s[i].de;
 			}	/* Next repeat */
 		}		/* Next resolution step */
 		if (verb)
@@ -3375,9 +4071,13 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 			/* We're checking against our given brightness and */
 			/* white point target. */
 			mnerr = anerr = 0.0;
+			init_csamp_txyz(&asgrey, &x, 0);		/* In case the targets were tweaked */
 			for (i = 0; i < asgrey.no; i++) {
-				double err = asgrey.s[i].de;
+				double err;
 
+				/* Re-compute de in case last pass had tweaked targets */
+				asgrey.s[i].de = icmXYZLabDE(&x.twN, asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
+				err = asgrey.s[i].de;
 //printf("RGB %.3f -> Lab %.2f %.2f %.2f, target %.2f %.2f %.2f, DE %f\n",
 //asgrey.s[i].v, lab2[0], lab2[1], lab2[2], lab1[0], lab1[1], lab1[2], err);
 				if (err > mnerr) {
@@ -3395,6 +4095,9 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 				printf("White point error = %f deltaE\n",cterr);
 				printf("Maximum neutral error (@ %f) = %f deltaE\n",mnv, mnerr);
 				printf("Average neutral error = %f deltaE\n",anerr);
+				if (it < mxits && thrfail)
+					printf("Failed to meet target %f delta E, got worst case %f\n",errthr,failerr);
+				printf("Number of measurements taken = %d\n",totmeas);
 			}
 		}
 
@@ -3433,7 +4136,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 				sdv[0][rsteps-1].w = sdv[1][rsteps-1].w = sdv[2][rsteps-1].w = 10.0;
 
 			for (j = 0; j < 3; j++)
-				x.rdac[j]->fit(x.rdac[j], 0, fitord, sdv[j], asgrey.no, 1.0);
+				x.rdac[j]->fit(x.rdac[j], 0, fitord, sdv[j], asgrey.no, RDAC_SMOOTH);
 
 			/* Make sure that if we are using native brightness and white point, */
 			/* that the curves go to a perfect 1.0 ... */
@@ -3476,7 +4179,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 
 	/* Write out the resulting calibration file */
 	if (verify != 2) {
-		int calres = 256;				/* 256 steps in calibration */
+		int calres = CAL_RES;			/* steps in calibration table saved */
 		cgats *ocg;						/* output cgats structure */
 		time_t clk = time(0);
 		struct tm *tsp = localtime(&clk);
@@ -3507,10 +4210,40 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 		sprintf(buf,"%f %f %f", x.twh[0], x.twh[1], x.twh[2]);
 		ocg->add_kword(ocg, 0, "TARGET_WHITE_XYZ",buf, NULL);
 
-		sprintf(buf,"%f", gamma);
-		ocg->add_kword(ocg, 0, "TARGET_GAMMA",x.gammat == 0 ? buf : x.gammat == 1 ? "L_STAR" : "sRGB", NULL);
+		switch(x.gammat) {
+			case gt_power:
+				if (egamma > 0.0)
+					sprintf(buf,"%f", -egamma);
+				else
+					sprintf(buf,"%f", gamma);
+				break;
+			case gt_Lab:
+				strcpy(buf,"L_STAR");
+				break;
+			case gt_sRGB:
+				strcpy(buf,"sRGB");
+				break;
+			case gt_Rec709:
+				strcpy(buf,"REC709");
+				break;
+			case gt_SMPTE240M:
+				strcpy(buf,"SMPTE240M");
+				break;
+			default:
+				error("Unknown gamma type");
+		}
+		ocg->add_kword(ocg, 0, "TARGET_GAMMA",buf, NULL);
+
+		sprintf(buf,"%f", x.oofff);
+		ocg->add_kword(ocg, 0, "DEGREE_OF_BLACK_OUTPUT_OFFSET",buf, NULL);
+		
 		sprintf(buf,"%f", bkcorrect);
 		ocg->add_kword(ocg, 0, "BLACK_POINT_CORRECTION", buf, NULL);
+
+		if (bkbright > 0.0) {
+			sprintf(buf,"%f", bkbright);
+			ocg->add_kword(ocg, 0, "TARGET_BLACK_BRIGHTNESS",buf, NULL);
+		}
 
 		/* Write rest of setup */
 	    switch (quality) {
@@ -3549,7 +4282,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 		for (i = 0; i < calres; i++) {
 			double vv, rgb[3];
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__POWERPC__)
 			gcc_bug_fix(i);
 #endif
 			vv = i/(calres-1.0);
@@ -3653,19 +4386,19 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 			      iccoutname, icco->errc,icco->err);
 
 		wo->tagType = icmVideoCardGammaTableType;
-		wo->u.table.channels = 3;             /* rgb */
-		wo->u.table.entryCount = 256;         /* full lut */
-		wo->u.table.entrySize = 2;            /* 16 bits */
+		wo->u.table.channels = 3;			/* rgb */
+		wo->u.table.entryCount = CAL_RES;	/* full lut */
+		wo->u.table.entrySize = 2;			/* 16 bits */
 		wo->allocate((icmBase*)wo);
 		for (j = 0; j < 3; j++) {
-			for (i = 0; i < 256; i++) {
-				double cc, vv = i/(256-1.0);
+			for (i = 0; i < CAL_RES; i++) {
+				double cc, vv = i/(CAL_RES-1.0);
 				cc = x.rdac[j]->interp(x.rdac[j], vv);
 				if (cc < 0.0)
 					cc = 0.0;
 				else if (cc > 1.0)
 					cc = 1.0;
-				((unsigned short*)wo->u.table.data)[256 * j + i] = (int)(cc * 65535.0 + 0.5);
+				((unsigned short*)wo->u.table.data)[CAL_RES * j + i] = (int)(cc * 65535.0 + 0.5);
 			}
 		}
 
@@ -3683,12 +4416,20 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 		icco->del(icco);
 
 	/* Create a fast matrix/shaper profile */
+	/*
+	     [ Another way of doing this would be to run all the
+	     measured points through the calibration curves, and
+	     then re-fit the curve/matrix to the calibrated points.
+	     This might be more accurate ?]
+	 */
+
 	} else if (verify != 2 && doprofile) {
 		icmFile *wr_fp;
 		icc *wr_icco;
-		double wp[3];	/* Absolute White point in XYZ */
-		double bp[3];	/* Absolute Black point in XYZ */
-		double mat[3][3];		/* Device to XYZ matrix */
+		double uwp[3];		/* Absolute Uncalibrated White point in XYZ */
+		double wp[3];		/* Absolute White point in XYZ */
+		double bp[3];		/* Absolute Black point in XYZ */
+		double mat[3][3];	/* Device to XYZ matrix */
 
 		/* Lookup white and black points */
 		{
@@ -3697,6 +4438,9 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 
 			rgb[0] = rgb[1] = rgb[2] = 1.0;
 
+			fwddev(&x, uwp, rgb);
+
+			/* Through calibration */
 			for (j = 0; j < 3; j++) {
 				rgb[j] = x.rdac[j]->interp(x.rdac[j], rgb[j]);
 				if (rgb[j] < 0.0)
@@ -3708,6 +4452,7 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 
 			rgb[0] = rgb[1] = rgb[2] = 0.0;
 
+			/* Through calibration */
 			for (j = 0; j < 3; j++) {
 				rgb[j] = x.rdac[j]->interp(x.rdac[j], rgb[j]);
 				if (rgb[j] < 0.0)
@@ -3825,6 +4570,23 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 			wo->allocate((icmBase *)wo);/* Allocate space */
 			strcpy(wo->desc, dst);		/* Copy the string in */
 		}
+		/* Luminance tag */
+		{
+			icmXYZArray *wo;;
+	
+			if ((wo = (icmXYZArray *)wr_icco->add_tag(
+			           wr_icco, icSigLuminanceTag, icSigXYZArrayType)) == NULL) 
+				error("add_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
+
+			wo->size = 1;
+			wo->allocate((icmBase *)wo);	/* Allocate space */
+			wo->data[0].X = 0.0;
+			wo->data[0].Y = wp[1] * dispLum/uwp[1];	/* Compensate for model error */
+			wo->data[0].Z = 0.0;
+
+			if (verb)
+				printf("Luminance XYZ = %f %f %f\n", wo->data[0].X, wo->data[0].Y, wo->data[0].Z);
+		}
 		/* White Point Tag: */
 		{
 			icmXYZArray *wo;
@@ -3869,19 +4631,19 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 				error("add_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
 
 			wo->tagType = icmVideoCardGammaTableType;
-			wo->u.table.channels = 3;             /* rgb */
-			wo->u.table.entryCount = 256;         /* full lut */
-			wo->u.table.entrySize = 2;            /* 16 bits */
+			wo->u.table.channels = 3;				/* rgb */
+			wo->u.table.entryCount = CAL_RES;		/* full lut */
+			wo->u.table.entrySize = 2;				/* 16 bits */
 			wo->allocate((icmBase*)wo);
 			for (j = 0; j < 3; j++) {
-				for (i = 0; i < 256; i++) {
-					double cc, vv = i/(256-1.0);
+				for (i = 0; i < CAL_RES; i++) {
+					double cc, vv = i/(CAL_RES-1.0);
 					cc = x.rdac[j]->interp(x.rdac[j], vv);
 					if (cc < 0.0)
 						cc = 0.0;
 					else if (cc > 1.0)
 						cc = 1.0;
-					((unsigned short*)wo->u.table.data)[256 * j + i] = (int)(cc * 65535.0 + 0.5);
+					((unsigned short*)wo->u.table.data)[CAL_RES * j + i] = (int)(cc * 65535.0 + 0.5);
 				}
 			}
 		}
@@ -3934,10 +4696,14 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 				double in, rgb[3];
 	
 				for (j = 0; j < 3; j++) {
+#if defined(__APPLE__) && defined(__POWERPC__)
+					gcc_bug_fix(ui);
+#endif
 					in = (double)ui / (wor->size - 1.0);
 		
 					/* Lookup RAMDAC value */
 					in = x.rdac[j]->interp(x.rdac[j], in);
+
 					if (in < 0.0)
 						in = 0.0;
 					else if (in > 1.0)
@@ -3976,6 +4742,15 @@ printf("~1 set tarw %f from tcols[1]\n",tarw);
 	
 		for (k = 0; k < 3; k++)
 			x.dcvs[k]->del(x.dcvs[k]);
+	}
+
+	if (x.svc != NULL) {
+		x.svc->del(x.svc);
+		x.svc = NULL;
+	}
+	if (x.dvc != NULL) {
+		x.dvc->del(x.svc);
+		x.dvc = NULL;
 	}
 
 	free_a_disppath(disp);

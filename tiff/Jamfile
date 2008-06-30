@@ -1,36 +1,32 @@
 
-#SubDir TOP tiff ;
-
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;
-
-SEARCH_SOURCE = port ;
+PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
+#PREF_CCFLAGS	= $(CCDEBUGFLAG) ;		# Debugging flags
+PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
 
 # Run configure if it seems to be needed
 if $(UNIX) {
-	Depends libtiff/port.h : configure ;
-	GenFileNND libtiff/port.h : "./configure" ;
-	Depends first : libtiff/port.h ;
+	DEFINES += "unix" ;			# libtiff assumes this
+	NDepends libtiff/port.h : configure ;
+	GenFileNND libtiff/port.h : "(cd $(SUBDIR); chmod +x configure ; ./configure)" ;
 }
 
+ObjectKeep port/getopt.c ;
+
 # support library for generation utilities
-Library libport.lib : getopt.c strcasecmp.c strtoul.c ;
+Library libport.lib : [ CatPaths port : getopt.c strcasecmp.c strtoul.c ] ;
 
 # generation utilities
-SEARCH_SOURCE = libtiff ;
-Main mkg3states$(SUFEXE) : mkg3states.c ;
-LinkLibraries mkg3states$(SUFEXE) : libport.lib ;
-GenFileND tif_fax3sm.c : mkg3states$(SUFEXE) "-c const tif_fax3sm.c" ;
+Main mkg3states : libtiff/mkg3states.c ;
+LinkLibraries mkg3states : libport.lib ;
+GenFileND libtiff/tif_fax3sm.c : mkg3states -c const [ NormPaths libtiff/tif_fax3sm.c ] ;
 
 # version file
-Main mkversion$(SUFEXE) : libtiff/mkversion.c ;
-GenFileND version.h : mkversion "-v VERSION -a dist/tiff.alpha libtiff/version.h" ;
+Main mkversion : libtiff/mkversion.c ;
+GenFileND libtiff/tiffvers.h : mkversion -v [ NormSrcPaths VERSION ]
+                                         -r [ NormSrcPaths RELEASE-DATE ]
+                                            [ NormPaths libtiff/tiffvers.h ] ;
 
 # tiff library
-
-IPATH on libtiff =	../jpeg ;
-
 LIBSRCS = tif_fax3.c tif_aux.c tif_close.c tif_codec.c tif_fax3sm.c tif_predict.c
         tif_compress.c tif_dir.c tif_dirinfo.c tif_dirread.c tif_dirwrite.c 
         tif_dumpmode.c tif_error.c tif_getimage.c tif_flush.c tif_luv.c
@@ -46,12 +42,13 @@ if $(UNIX) {
 
 # tif_jpeg.c
 # tif_zip.c
-
-ObjectHdrs libtiff.lib : $(IPATH) ;
-Library libtiff.lib : $(LIBSRCS) ;
+Library libtiff.lib : [ CatPaths libtiff : $(LIBSRCS) ] ;
 
 # copy header file to lib directory
-File tiff.h : libtiff/tiff.h ;
-File tiffio.h : libtiff/tiffio.h ;
+File tiff.h :     libtiff/tiff.h ;
+File tiffio.h :   libtiff/tiffio.h ;
 File tiffvers.h : libtiff/tiffvers.h ;
+
+# Compile some of the tools
+SubInclude tools ;
 

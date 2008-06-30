@@ -21,12 +21,15 @@
  * not depend on other modules.
  */
 
-
 /* Return a lut resolution given the input dimesion and quality */
 /* Input dimension [0-8], quality: low, medium, high, very high. */
 /* A returned value of 0 indicates illegal.  */
 int dim_to_clutres(int dim, int quality);
 
+
+/* Open an ICC file or an TIFF file with an embeded ICC profile for reading. */
+/* Return NULL on error */
+icc *read_embeded_icc(char *file_name);
 
 #endif /* XUTILS_H */
 

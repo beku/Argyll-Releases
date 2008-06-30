@@ -95,7 +95,7 @@ double tp[]			/* Multivriate input value */
 		err += tt * tt;
 	}
 	err = sqrt(err);
-// printf("Returning %16.14f\n",err);
+//printf("Returning %16.14f\n",err);
 	return err;
 }
 

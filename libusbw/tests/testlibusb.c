@@ -10,6 +10,8 @@
 
 int verbose = 0;
 
+#define snprintf _snprintf
+
 void print_endpoint(struct usb_endpoint_descriptor *endpoint)
 {
   printf("      bEndpointAddress: %02xh\n", endpoint->bEndpointAddress);
@@ -133,8 +135,10 @@ int main(int argc, char *argv[])
 {
   struct usb_bus *bus;
 
-  if (argc > 1 && !strcmp(argv[1], "-v"))
+  if (argc > 1 && !strcmp(argv[1], "-v")) {
     verbose = 1;
+	printf("~1 verbos is on\n");
+  }
 
   usb_init();
   usb_set_debug(0);
@@ -144,12 +148,13 @@ int main(int argc, char *argv[])
 
   for (bus = usb_get_busses(); bus; bus = bus->next) {
     if (bus->root_dev && !verbose)
-      print_device(bus->root_dev, 0);
+      print_device(bus->root_dev, 9);
     else {
       struct usb_device *dev;
 
-      for (dev = bus->devices; dev; dev = dev->next)
-        print_device(dev, 0);
+      for (dev = bus->devices; dev; dev = dev->next) {
+        print_device(dev, 9);
+	  }
     }
   }
 

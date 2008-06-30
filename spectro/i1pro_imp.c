@@ -7,7 +7,7 @@
  * Author: Graeme W. Gill
  * Date:   24/11/2006
  *
- * Copyright 2006 - 2007 Graeme W. Gill
+ * Copyright 2006 - 2008 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
@@ -32,6 +32,11 @@
    and agreed to support.
  */
 
+/* TTBD:
+
+	Add ambient scanning/flash mode to inst API, and fully implement here.
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -46,6 +51,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "sort.h"
 
 /* Configuration */
@@ -75,9 +81,15 @@
 
 
 #define DISP_INTT 2.0			/* Seconds per reading in display spot mode */
-								/* More improves repeatability in dark colors */
-#define EMIS_SCALE_FACTOR 0.7335 /* Emission mode scale factor */ 
-#define AMB_SCALE_FACTOR 0.7657	/* Ambient mode scale factor */ 
+								/* More improves repeatability in dark colors, but limits */
+								/* the maximum brightness level befor saturation. */
+								/* A value of 2.0 seconds has a limit of about 300 cd/m^2 */
+#define DISP_INTT2 1.0			/* High brightness display spot mode seconds per reading. */
+
+#define EMIS_SCALE_FACTOR 1.0	/* Emission mode scale factor */ 
+//#define AMB_SCALE_FACTOR (0.7657/3.1415926)	/* Ambient mode scale factor - convert */ 
+#define AMB_SCALE_FACTOR (1.0/3.141592654)	/* Ambient mode scale factor - convert */ 
+								/* from Lux to Lux/PI */
 								/* These are only approximate, and were derived */
 								/* by matching readings from the GMB driver results. */
 								/* I'm not sure what the exact values are! */
@@ -245,7 +257,7 @@ void del_i1proimp(i1pro *p) {
 			if (p->verb) printf("Updating the calibration and log parameters to EEProm failed\n");
 		}
 
-		/* i1pro_terminate_switch() seems to fail on a rev A ?? */
+		/* i1pro_terminate_switch() seems to fail on a rev A & Rev C ?? */
 
 		if (m->th != NULL) {		/* Terminate switch monitor thread */
 			m->th_term = 1;			/* Tell thread to exit on error */
@@ -258,6 +270,7 @@ void del_i1proimp(i1pro *p) {
 			s = &m->ms[i];
 
 			free_dvector(s->dark_data, 0, m->nraw-1);  
+			free_dvector(s->dark_data2, 0, m->nraw-1);  
 			free_dvector(s->white_data, 0, m->nraw-1);
 			free_dmatrix(s->idark_data, 0, 3, 0, m->nraw-1);  
 
@@ -329,7 +342,8 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 
 	/* Setup various calibration parameters from the EEprom */
 	{
-		int *ip, count, i, xcount;
+		int *ip, i, xcount;
+		unsigned int count;
 		double *dp;
 
 		/* Information about the instrument */
@@ -513,6 +527,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 
 			s->dark_valid = 0;		/* Dark cal invalid */
 			s->dark_data = dvectorz(0, m->nraw-1);  
+			s->dark_data2 = dvectorz(0, m->nraw-1);  
 
 			s->cal_valid = 0;		/* Scale cal invalid */
 			s->cal_factor1 = dvectorz(0, m->nwav1-1);
@@ -575,14 +590,16 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->emiss = 1;
 					s->adaptive = 0;
 
-					s->inttime = DISP_INTT;		/* Integration time (typically 2.0 sec) */
+					s->inttime = DISP_INTT;		/* Default disp integration time (ie. 2.0 sec) */
+					s->dark_int_time2 = DISP_INTT2;	/* Alternate disp integration time (ie. 1.0) */
 
 					s->dadaptime = 0.0;
 					s->wadaptime = 0.10;
-					s->dcaltime = 1.5;
+					s->dcaltime = DISP_INTT;
+					s->dcaltime2 = DISP_INTT2;
 					s->wcaltime = 0.0;
 					s->dreadtime = 0.0;
-					s->wreadtime = 1.5;
+					s->wreadtime = DISP_INTT;
 					s->maxscantime = 0.0;
 					break;
 				case i1p_emiss_spot:
@@ -647,6 +664,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->maxscantime = 0.0;
 					break;
 				case i1p_amb_scan:
+				/* This is intended for measuring flashes */
 #ifdef FAKE_AMBIENT
 					for (j = 0; j < m->nwav1; j++)
 						s->cal_factor1[j] = EMIS_SCALE_FACTOR * m->emis_coef1[j];
@@ -829,6 +847,8 @@ inst_cal_type i1pro_imp_needs_calibration(
 	} else if (   (s->trans && !s->cal_valid)
 	           || (s->trans && s->need_calib && !m->noautocalib)) {
 		return inst_calt_trans_white;
+	} else if (s->emiss && !s->scan && !s->adaptive && !s->done_dintcal) {
+		return inst_calt_disp_int_time; 
 	}
 	return inst_calt_none;
 }
@@ -854,19 +874,32 @@ i1pro_code i1pro_imp_calibrate(
 
 	/* Translate inst_calt_all into something specific */
 	if (caltp == inst_calt_all) {
-		if ((!s->dark_valid && !s->idark_valid)
-		  || (s->need_dcalib && !m->noautocalib)
-		  || (s->reflective && !s->cal_valid)
-		  || (s->reflective && s->need_calib && !m->noautocalib)) {
-			calt = inst_calt_ref_white;
+		if ((s->reflective && !s->cal_valid)
+		 || (s->reflective && s->need_calib && !m->noautocalib)
+		 || (s->reflective && !s->dark_valid && !s->idark_valid)
+		 || (s->reflective && s->need_dcalib && !m->noautocalib)) {
+			calt = inst_calt_ref_white;			/* Do black and white calib on white refernence */
 
-		} else if (   (s->trans && !s->cal_valid)
-			       || (s->trans && s->need_calib && !m->noautocalib)) {
+		} else if ((s->emiss && !s->dark_valid && !s->idark_valid)
+		       ||  (s->emiss && s->need_dcalib && !m->noautocalib)) {
+			calt = inst_calt_em_dark;
+
+		} else if ((s->trans && !s->dark_valid && !s->idark_valid)
+		       ||  (s->trans && s->need_dcalib && !m->noautocalib)) {
+			calt = inst_calt_trans_dark;
+
+		} else if ((s->trans && !s->cal_valid)
+			    || (s->trans && s->need_calib && !m->noautocalib)) {
 			calt = inst_calt_trans_white;
+
+		} else if (s->emiss && !s->scan && !s->adaptive && !s->done_dintcal) {
+			calt = inst_calt_disp_int_time;
 
 		} else {		/* Assume a user instigated white calibration */
 			if (s->trans) {
 				calt = inst_calt_trans_white;
+			} else if (s->emiss) {
+				calt = inst_calt_em_dark;
 			} else {
 				calt = inst_calt_ref_white;
 			}
@@ -875,164 +908,198 @@ i1pro_code i1pro_imp_calibrate(
 
 	/* See if it's a calibration we understand */
 	if (calt != inst_calt_ref_white
-	 && calt != inst_calt_trans_white)
+	 && calt != inst_calt_em_dark
+	 && calt != inst_calt_trans_dark
+	 && calt != inst_calt_trans_white
+	 && calt != inst_calt_disp_int_time)
 		return I1PRO_UNSUPPORTED;
 
-	/* Make sure there's the righte condition for the calibration */
-	if (calt == inst_calt_ref_white) {		/* Dark calib or reflective white */
+	/* Make sure there's the right condition for the calibration */
+	if (calt == inst_calt_ref_white) {		/* Reflective white calib */
 		sprintf(id, "Serial no. %d",m->serno);
 		if (*calc != inst_calc_man_ref_white) {
 			*calc = inst_calc_man_ref_white;
 			return I1PRO_CAL_SETUP;
 		}
+	} else if (calt == inst_calt_em_dark) {	/* Emissive Dark calib */
+		id[0] = '\000';
+		if (*calc != inst_calc_man_em_dark) {
+			*calc = inst_calc_man_em_dark;
+			return I1PRO_CAL_SETUP;
+		}
+	} else if (calt == inst_calt_trans_dark) {	/* Transmissvice dark */
+		id[0] = '\000';
+		if (*calc != inst_calc_man_trans_dark) {
+			*calc = inst_calc_man_trans_dark;
+			return I1PRO_CAL_SETUP;
+		}
 	} else if (calt == inst_calt_trans_white) {	/* Transmissvice white */
+		id[0] = '\000';
 		if (*calc != inst_calc_man_trans_white) {
 			*calc = inst_calc_man_trans_white;
 			return I1PRO_CAL_SETUP;
 		}
-	} 
+	}
 
 	/* Sanity check scan mode settings, in case something strange */
-	/* has been restored from the persistence file */
+	/* has been restored from the persistence file. */
 	if (s->scan && s->inttime > (2.1 * m->min_int_time)) {
 		s->inttime = m->min_int_time;	/* Maximize scan rate */
 	}
 
-	/* We are now either in inst_calc_man_ref_white or inst_calc_man_trans_white, */
+	/* We are now either in inst_calc_man_ref_white, inst_calc_man_em_dark, */
+	/* inst_calc_man_trans_dark, inst_calc_man_trans_white or inst_calc_disp_white, */
 	/* sequenced in that order, and in the appropriate condition for it. */
 
-	/* Deal with an initial black reference for the current inttime & gainmode */
-	if (*calc == inst_calc_man_ref_white) {
+	/* Reflective uses on the fly black, even for adaptive. */
+	/* Emiss and trans can use single black ref only for non-adaptive */
+	/* using the current inttime & gainmode, while display mode */
+	/* does an extra fallback black cal for bright displays. */
+	if ((s->reflective && *calc == inst_calc_man_ref_white)
+	 || (s->emiss && !s->adaptive && *calc == inst_calc_man_em_dark)
+	 || (s->trans && !s->adaptive && *calc == inst_calc_man_trans_dark)) {
 
-		if (s->reflective || !s->adaptive) {
-			/* Reflective uses on the fly black, even for adaptive */
+		DBG((dbgo,"Doing initial black calibration with current int_time %f, gainmode %d\n", s->inttime, s->gainmode))
 
-			DBG((dbgo,"Doing initial black calibration with current int_time %f, gainmode %d\n", s->inttime, s->gainmode))
-
-			nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->inttime);
-			if ((ev = i1pro_dark_measure(p, s->dark_data, nummeas, &s->inttime, s->gainmode))
-			                                                                         != I1PRO_OK)
+		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->inttime);
+		if ((ev = i1pro_dark_measure(p, s->dark_data, nummeas, &s->inttime, s->gainmode))
+	                                                                         != I1PRO_OK)
+			return ev;
+		if (s->emiss && !s->scan && !s->adaptive) {
+			nummeas = i1pro_comp_nummeas(p, s->dcaltime2, s->dark_int_time2);
+			if ((ev = i1pro_dark_measure(p, s->dark_data2, nummeas, &s->dark_int_time2,
+			                                                   s->gainmode)) != I1PRO_OK)
 				return ev;
-			s->dark_valid = 1;
-			s->need_dcalib = 0;
-			s->ddate = time(NULL);
-			s->dark_int_time = s->inttime;
-			s->dark_gain_mode = s->gainmode;
+		}
+		s->dark_valid = 1;
+		s->need_dcalib = 0;
+		s->ddate = time(NULL);
+		s->dark_int_time = s->inttime;
+		s->dark_gain_mode = s->gainmode;
+	}
 
-		} else if (!s->trans) {
-			/* Adaptive where we can't measure the black reference on the fly, */
-			/* so bracket it and interpolate. */
-			/* The black reference is probably temeprature dependent, but */
-			/* there's not much we can do about this. */
+	/* Deal with an emmissive/transmissive black reference */
+	/* in non-scan mode, where the integration time and gain may vary. */
+	if ((s->emiss && s->adaptive && !s->scan && *calc == inst_calc_man_em_dark)
+	 || (s->trans && s->adaptive && !s->scan && *calc == inst_calc_man_trans_dark)) {
+		/* Adaptive where we can't measure the black reference on the fly, */
+		/* so bracket it and interpolate. */
+		/* The black reference is probably temeprature dependent, but */
+		/* there's not much we can do about this. */
 	
-			DBG((dbgo,"Doing adaptive interpolated black calibration\n"))
+		DBG((dbgo,"Doing adaptive interpolated black calibration\n"))
 
-			s->idark_int_time[0] = 0.01;
-			nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[0]);
-			if ((ev = i1pro_dark_measure(p, s->idark_data[0], nummeas, &s->idark_int_time[0], 0))
-			                                                                          != I1PRO_OK)
-				return ev;
+		s->idark_int_time[0] = 0.01;
+		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[0]);
+		if ((ev = i1pro_dark_measure(p, s->idark_data[0], nummeas, &s->idark_int_time[0], 0))
+		                                                                          != I1PRO_OK)
+			return ev;
 	
-			s->idark_int_time[1] = 1.0;
-			nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[1]);
-			if ((ev = i1pro_dark_measure(p, s->idark_data[1], nummeas, &s->idark_int_time[1], 0))
-			                                                                          != I1PRO_OK)
-				return ev;
+		s->idark_int_time[1] = 1.0;
+		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[1]);
+		if ((ev = i1pro_dark_measure(p, s->idark_data[1], nummeas, &s->idark_int_time[1], 0))
+		                                                                          != I1PRO_OK)
+			return ev;
 	
-			s->idark_int_time[2] = 0.01;
-			nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[2]);
-			if ((ev = i1pro_dark_measure(p, s->idark_data[2], nummeas, &s->idark_int_time[2], 1))
-			                                                                          != I1PRO_OK)
-				return ev;
+		s->idark_int_time[2] = 0.01;
+		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[2]);
+		if ((ev = i1pro_dark_measure(p, s->idark_data[2], nummeas, &s->idark_int_time[2], 1))
+		                                                                          != I1PRO_OK)
+			return ev;
 	
-			s->idark_int_time[3] = 1.0;
-			nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[3]);
-			if ((ev = i1pro_dark_measure(p, s->idark_data[3], nummeas, &s->idark_int_time[3], 1))
-			                                                                          != I1PRO_OK)
-				return ev;
+		s->idark_int_time[3] = 1.0;
+		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[3]);
+		if ((ev = i1pro_dark_measure(p, s->idark_data[3], nummeas, &s->idark_int_time[3], 1))
+		                                                                          != I1PRO_OK)
+			return ev;
 	
-			i1pro_prepare_idark(p);
-			s->idark_valid = 1;
-			s->iddate = time(NULL);
+		i1pro_prepare_idark(p);
+		s->idark_valid = 1;
+		s->iddate = time(NULL);
 	
-			if ((ev = i1pro_interp_dark(p, s->dark_data, s->inttime, s->gainmode)) != I1PRO_OK)
-				return ev;
-			s->dark_valid = 1;
-			s->need_dcalib = 0;
-			s->ddate = s->iddate;
-			s->dark_int_time = s->inttime;
-			s->dark_gain_mode = s->gainmode;
+		if ((ev = i1pro_interp_dark(p, s->dark_data, s->inttime, s->gainmode)) != I1PRO_OK)
+			return ev;
+		s->dark_valid = 1;
+		s->need_dcalib = 0;
+		s->ddate = s->iddate;
+		s->dark_int_time = s->inttime;
+		s->dark_gain_mode = s->gainmode;
 
-			DBG((dbgo,"Done adaptive interpolated black calibration\n"))
+		DBG((dbgo,"Done adaptive interpolated black calibration\n"))
 
-			/* Test accuracy of dark level interpolation */
+		/* Test accuracy of dark level interpolation */
 #ifdef NEVER
 #ifdef DEBUG
-			{
-				double tinttime;
-				double ref[128], interp[128];
-				
-				fprintf(stderr,"Normal gain offsets:\n");
-				plot_raw(s->idark_data[0]);
-				
-				fprintf(stderr,"High gain offsets:\n");
-				plot_raw(s->idark_data[2]);
-				
-				tinttime = 0.2;
-				nummeas = i1pro_comp_nummeas(p, s->dcaltime, tinttime);
-				if ((ev = i1pro_dark_measure(p, ref, nummeas, &tinttime, 0)) != I1PRO_OK)
-					return ev;
-				i1pro_interp_dark(p, interp, 0.2, 0);
-				plot_raw2(ref, interp);
-				
-				tinttime = 0.2;
-				nummeas = i1pro_comp_nummeas(p, s->dcaltime, tinttime);
-				if ((ev = i1pro_dark_measure(p, ref, nummeas, &tinttime, 1)) != I1PRO_OK)
-					return ev;
-				i1pro_interp_dark(p, interp, 0.2, 1);
-				plot_raw2(ref, interp);
-			}
+		{
+			double tinttime;
+			double ref[128], interp[128];
+			
+			fprintf(stderr,"Normal gain offsets:\n");
+			plot_raw(s->idark_data[0]);
+			
+			fprintf(stderr,"High gain offsets:\n");
+			plot_raw(s->idark_data[2]);
+			
+			tinttime = 0.2;
+			nummeas = i1pro_comp_nummeas(p, s->dcaltime, tinttime);
+			if ((ev = i1pro_dark_measure(p, ref, nummeas, &tinttime, 0)) != I1PRO_OK)
+				return ev;
+			i1pro_interp_dark(p, interp, 0.2, 0);
+			plot_raw2(ref, interp);
+			
+			tinttime = 0.2;
+			nummeas = i1pro_comp_nummeas(p, s->dcaltime, tinttime);
+			if ((ev = i1pro_dark_measure(p, ref, nummeas, &tinttime, 1)) != I1PRO_OK)
+				return ev;
+			i1pro_interp_dark(p, interp, 0.2, 1);
+			plot_raw2(ref, interp);
+		}
 #endif	/* DEBUG */
 #endif	/* NEVER */
 
-		} else {		/* Transmissive/Emmissive adaptive scan: */
-			int j;
-			/* We know scan is locked to the minimum integration time, */
-			/* so we can measure the dark data at that integration time, */
-			/* but we don't know what gain mode will be used. */
-	
-			DBG((dbgo,"Doing adaptive scan black calibration\n"))
+	}
 
-			s->idark_int_time[0] = s->inttime;
-			nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[0]);
-			if ((ev = i1pro_dark_measure(p, s->idark_data[0], nummeas, &s->idark_int_time[0], 0))
-			                                                                          != I1PRO_OK)
-				return ev;
+	/* Deal with an emsisive/transmisive adaptive black reference */
+	/* when in scan mode. */
+	if ((s->emiss && s->adaptive && s->scan && *calc == inst_calc_man_em_dark)
+	 || (s->trans && s->adaptive && s->scan && *calc == inst_calc_man_trans_dark)) {
+		int j;
+		/* We know scan is locked to the minimum integration time, */
+		/* so we can measure the dark data at that integration time, */
+		/* but we don't know what gain mode will be used, so measure both, */
+		/* and choose the appropriate one on the fly. */
 	
-			s->idark_int_time[2] = s->inttime;
-			nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[2]);
-			if ((ev = i1pro_dark_measure(p, s->idark_data[2], nummeas, &s->idark_int_time[2], 1))
-			                                                                          != I1PRO_OK)
-				return ev;
+		DBG((dbgo,"Doing adaptive scan black calibration\n"))
+
+		s->idark_int_time[0] = s->inttime;
+		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[0]);
+		if ((ev = i1pro_dark_measure(p, s->idark_data[0], nummeas, &s->idark_int_time[0], 0))
+		                                                                          != I1PRO_OK)
+			return ev;
 	
-			s->idark_valid = 1;
-			s->iddate = time(NULL);
+		s->idark_int_time[2] = s->inttime;
+		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[2]);
+		if ((ev = i1pro_dark_measure(p, s->idark_data[2], nummeas, &s->idark_int_time[2], 1))
+		                                                                          != I1PRO_OK)
+			return ev;
+	
+		s->idark_valid = 1;
+		s->iddate = time(NULL);
 
-			if (s->gainmode) {
-				for (j = 0; j < m->nraw; j++)
-					s->dark_data[j] = s->idark_data[2][j];
-			} else {
-				for (j = 0; j < m->nraw; j++)
-					s->dark_data[j] = s->idark_data[0][j];
-			}
-			s->dark_valid = 1;
-			s->need_dcalib = 0;
-			s->ddate = s->iddate;
-			s->dark_int_time = s->inttime;
-			s->dark_gain_mode = s->gainmode;
-
-			DBG((dbgo,"Done adaptive scan black calibration\n"))
+		if (s->gainmode) {
+			for (j = 0; j < m->nraw; j++)
+				s->dark_data[j] = s->idark_data[2][j];
+		} else {
+			for (j = 0; j < m->nraw; j++)
+				s->dark_data[j] = s->idark_data[0][j];
 		}
+		s->dark_valid = 1;
+		s->need_dcalib = 0;
+		s->ddate = s->iddate;
+		s->dark_int_time = s->inttime;
+		s->dark_gain_mode = s->gainmode;
+
+		DBG((dbgo,"Done adaptive scan black calibration\n"))
 	}
 
 	/* If we are doing a white reference calibrate */
@@ -1238,6 +1305,44 @@ i1pro_code i1pro_imp_calibrate(
 		s->need_calib = 0;
 	}
 
+	/* Deal with a display integration time calibration */
+	if (s->emiss && !s->scan && !s->adaptive
+	 && !s->done_dintcal && *calc == inst_calc_disp_white) {
+		double scale;
+		double *data;
+
+		data = dvectorz(0, m->nraw-1);
+
+		DBG((dbgo,"Doing display integration time calibration\n"))
+
+		/* Simply measure the full display white, and if it's close to */
+		/* saturation, switch to the alternate display integration time */
+		nummeas = i1pro_comp_nummeas(p, s->wreadtime, s->inttime);
+		ev = i1pro_whitemeasure(p, NULL, NULL, data , &scale, nummeas,
+		           &s->inttime, s->gainmode, s->targoscale, 0);
+		free_dvector(data, 0, m->nraw-1);
+		/* Switch to the alternate if things are too bright */
+		/* We do this simply by swapping the alternate values in. */
+		if (ev == I1PRO_RD_SENSORSATURATED || scale < 1.0) {
+			double *tt, tv;
+			DBG((dbgo,"Switching to alternate display integration time %f seconds\n",s->dark_int_time2))
+			if (p->debug)
+				fprintf(stderr,"Switching to alternate display integration time %f seconds\n",s->dark_int_time2);
+			tv = s->inttime;
+			s->inttime = s->dark_int_time2;
+			s->dark_int_time2 = tv;
+			tt = s->dark_data;
+			s->dark_data = s->dark_data2;
+			s->dark_data2 = tt;
+		}
+		if (ev != I1PRO_OK) {
+			return ev;
+		}
+		s->done_dintcal = 1;
+
+		DBG((dbgo,"Done display integration time calibration\n"))
+	}
+
 	/* Update and write the EEProm log if the is a refspot calibration */
 	if (s->reflective && !s->scan && s->dark_valid && s->cal_valid) {
 		m->calcount = m->rpcount;
@@ -1252,7 +1357,8 @@ i1pro_code i1pro_imp_calibrate(
 	i1pro_save_calibration(p);
 #endif
 
-	/* Go around again if we're calibrating all, and transmissive */
+	/* Go around again if we're calibrating all, and transmissive, */
+	/* since transmissive needs two calibration steps. */
 	if (caltp == inst_calt_all) {
 		if ( (s->trans && !s->cal_valid)
 		  || (s->trans && s->need_calib && !m->noautocalib)) {
@@ -1404,7 +1510,7 @@ i1pro_code i1pro_imp_measure(
 	} else if (m->trig == inst_opt_trig_keyb) {
 		ev = icoms2i1pro_err(icoms_poll_user(p->icom, 1));
 
-		if (ev == I1PRO_OK || ev == I1PRO_USER_TRIG) {
+		if (ev == I1PRO_USER_TRIG) {
 			DBG((dbgo,"############# triggered ##############\n"))
 			user_trig = 1;
 			if (m->trig_return)
@@ -1530,40 +1636,64 @@ i1pro_code i1pro_imp_measure(
 		msec_beep(200 + (int)(s->lamptime * 1000.0 + 0.5), 1000, 200);
 	}
 
-	/* Trigger measure and gather raw readings */
-	if ((ev = i1pro_read_patches_1(p, nummeas, maxnummeas, &s->inttime, s->gainmode,
-	                                       &nmeasuered, mbuf, mbsize)) != I1PRO_OK) { 
-		free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
-		if (buf != NULL)
-			free(buf);
-		free(mbuf);
-		DBG((dbgo,"i1pro_imp_measure failed at i1pro_read_patches_1\n"))
-		return ev;
-	}
+	/* Retry loop for certaing cases */
+	for (;;) {
 
-	/* Complete black reference measurement */
-	if (s->reflective) {
-		if ((ev = i1pro_dark_measure_2(p, s->dark_data, nummeas, s->inttime, s->gainmode,
-		                                                           buf, bsize)) != I1PRO_OK) {
+		/* Trigger measure and gather raw readings */
+		if ((ev = i1pro_read_patches_1(p, nummeas, maxnummeas, &s->inttime, s->gainmode,
+		                                       &nmeasuered, mbuf, mbsize)) != I1PRO_OK) {
 			free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
-			free(buf);
+			if (buf != NULL)
+				free(buf);
 			free(mbuf);
-			DBG((dbgo,"i1pro_imp_measure failed at i1pro_dark_measure_2\n"))
+			DBG((dbgo,"i1pro_imp_measure failed at i1pro_read_patches_1\n"))
 			return ev;
 		}
-		s->dark_valid = 1;
-		s->dark_int_time = s->inttime;
-		s->dark_gain_mode = s->gainmode;
-		free(buf);
-	}
 
-	/* Process the raw measurement readings into final spectral readings */
-	if ((ev = i1pro_read_patches_2(p, specrd, nvals, s->inttime, s->gainmode,
-	                                              nmeasuered, mbuf, mbsize)) != I1PRO_OK) {
-		free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
-		free(mbuf);
-		DBG((dbgo,"i1pro_imp_measure failed at i1pro_read_patches_2\n"))
-		return ev;
+		/* Complete black reference measurement */
+		if (s->reflective) {
+			if ((ev = i1pro_dark_measure_2(p, s->dark_data, nummeas, s->inttime, s->gainmode,
+			                                                      buf, bsize)) != I1PRO_OK) {
+				free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
+				free(buf);
+				free(mbuf);
+				DBG((dbgo,"i1pro_imp_measure failed at i1pro_dark_measure_2\n"))
+				return ev;
+			}
+			s->dark_valid = 1;
+			s->dark_int_time = s->inttime;
+			s->dark_gain_mode = s->gainmode;
+			free(buf);
+		}
+
+		/* Process the raw measurement readings into final spectral readings */
+		ev = i1pro_read_patches_2(p, specrd, nvals, s->inttime, s->gainmode,
+		                                              nmeasuered, mbuf, mbsize);
+		/* Special case display mode read. If the sensor is saturated, and */
+		/* we haven't already done so, switch to the alternate integration time */
+		/* and try again. */
+		if (s->emiss && !s->scan && !s->adaptive
+		 && ev == I1PRO_RD_SENSORSATURATED && s->inttime > DISP_INTT2) {
+			double *tt, tv;
+			DBG((dbgo,"Switching to alternate display integration time %f seconds\n",s->dark_int_time2))
+			if (p->debug)
+				fprintf(stderr,"Switching to alternate display integration time %f seconds\n",s->dark_int_time2);
+			tv = s->inttime;
+			s->inttime = s->dark_int_time2;
+			s->dark_int_time2 = tv;
+			tt = s->dark_data;
+			s->dark_data = s->dark_data2;
+			s->dark_data2 = tt;
+			continue;			/* Do the measurement again */
+		}
+
+		if (ev != I1PRO_OK) {
+			free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
+			free(mbuf);
+			DBG((dbgo,"i1pro_imp_measure failed at i1pro_read_patches_2\n"))
+			return ev;
+		}
+		break;		/* Don't repeat */
 	}
 	free(mbuf);
 
@@ -1598,7 +1728,8 @@ i1pro_code i1pro_imp_measure(
 /* Always returns success, even if the restore fails */
 i1pro_code i1pro_restore_refspot_cal(i1pro *p) {
 	int chsum1, *chsum2;
-	int *ip, count, i, xcount;
+	int *ip, i, xcount;
+	unsigned int count;
 	double *dp;
 	unsigned char buf[256];
 	i1proimp *m = (i1proimp *)p->m;
@@ -1696,7 +1827,8 @@ i1pro_code i1pro_restore_refspot_cal(i1pro *p) {
 /* Save the reflective spot calibration information to the EEPRom data object. */
 /* Note we don't actually write to the EEProm here! */
 static i1pro_code i1pro_set_log_data(i1pro *p) {
-	int *ip, count, i, xcount;
+	int *ip, i, xcount;
+	unsigned int count;
 	double *dp;
 	double absmeas[128];
 	i1proimp *m = (i1proimp *)p->m;
@@ -1966,8 +2098,8 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 	write_ints(&x, fp, &ss, 1);
 	write_ints(&x, fp, &m->serno, 1);
 	write_ints(&x, fp, &m->nraw, 1);
-	write_ints(&x, fp, &m->nwav1, 1);
-	write_ints(&x, fp, &m->nwav2, 1);
+	write_ints(&x, fp, (int *)&m->nwav1, 1);
+	write_ints(&x, fp, (int *)&m->nwav2, 1);
 
 	/* For each mode, save the calibration if it's valid */
 	for (i = 0; i < i1p_no_modes; i++) {
@@ -1989,6 +2121,8 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 		write_time_ts(&x, fp, &s->ddate, 1);
 		write_doubles(&x, fp, &s->dark_int_time, 1);
 		write_doubles(&x, fp, s->dark_data, m->nraw);
+		write_doubles(&x, fp, &s->dark_int_time2, 1);
+		write_doubles(&x, fp, s->dark_data2, m->nraw);
 		write_ints(&x, fp, &s->dark_gain_mode, 1);
 
 		if (!s->emiss) {
@@ -2009,7 +2143,7 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 	}
 
 	DBG((dbgo,"Checkum = 0x%x\n",x.chsum))
-	write_ints(&x, fp, &x.chsum, 1);
+	write_ints(&x, fp, (int *)&x.chsum, 1);
 
 	if (x.ef != 0) {
 		DBG((dbgo,"Writing calibration file failed\n"))
@@ -2110,6 +2244,9 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 		read_doubles(&x, fp, &dd, 1);
 		for (j = 0; j < m->nraw; j++)
 			read_doubles(&x, fp, &dd, 1);
+		read_doubles(&x, fp, &dd, 1);
+		for (j = 0; j < m->nraw; j++)
+			read_doubles(&x, fp, &dd, 1);
 		read_ints(&x, fp, &di, 1);
 
 		if (!s->emiss) {
@@ -2154,8 +2291,8 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 	read_ints(&x, fp, &ss, 1);
 	read_ints(&x, fp, &m->serno, 1);
 	read_ints(&x, fp, &m->nraw, 1);
-	read_ints(&x, fp, &m->nwav1, 1);
-	read_ints(&x, fp, &m->nwav2, 1);
+	read_ints(&x, fp, (int *)&m->nwav1, 1);
+	read_ints(&x, fp, (int *)&m->nwav2, 1);
 
 	/* For each mode, save the calibration if it's valid */
 	for (i = 0; i < i1p_no_modes; i++) {
@@ -2177,6 +2314,8 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 		read_time_ts(&x, fp, &s->ddate, 1);
 		read_doubles(&x, fp, &s->dark_int_time, 1);
 		read_doubles(&x, fp, s->dark_data, m->nraw);
+		read_doubles(&x, fp, &s->dark_int_time2, 1);
+		read_doubles(&x, fp, s->dark_data2, m->nraw);
 		read_ints(&x, fp, &s->dark_gain_mode, 1);
 
 		if (!s->emiss) {
@@ -3067,7 +3206,7 @@ i1pro_trigger_one_measure(
 /* Big endian wire format conversion routines */
 
 /* Take an int, and convert it into a byte buffer big endian */
-static void int2buf(char *buf, int inv) {
+static void int2buf(unsigned char *buf, int inv) {
 	buf[0] = (inv >> 24) & 0xff;
 	buf[1] = (inv >> 16) & 0xff;
 	buf[2] = (inv >> 8) & 0xff;
@@ -3075,13 +3214,13 @@ static void int2buf(char *buf, int inv) {
 }
 
 /* Take a short, and convert it into a byte buffer big endian */
-static void short2buf(char *buf, int inv) {
+static void short2buf(unsigned char *buf, int inv) {
 	buf[0] = (inv >> 8) & 0xff;
 	buf[1] = (inv >> 0) & 0xff;
 }
 
 /* Take a word sized buffer, and convert it to an int */
-static int buf2int(char *buf) {
+static int buf2int(unsigned char *buf) {
 	int val;
 	val = buf[0];
 	val = ((val << 8) + (0xff & buf[1]));
@@ -3091,7 +3230,7 @@ static int buf2int(char *buf) {
 }
 
 /* Take a short sized buffer, and convert it to an int */
-static int buf2short(char *buf) {
+static int buf2short(unsigned char *buf) {
 	int val;
 	val = buf[0];
 	val = ((val << 8) + (0xff & buf[1]));
@@ -3099,7 +3238,7 @@ static int buf2short(char *buf) {
 }
 
 /* Take a unsigned short sized buffer, and convert it to an int */
-static int buf2ushort(char *buf) {
+static int buf2ushort(unsigned char *buf) {
 	int val;
 	val = (0xff & buf[0]);
 	val = ((val << 8) + (0xff & buf[1]));
@@ -3943,8 +4082,6 @@ i1pro_code i1pro_extract_patches_multimeas(
 		white_avg += maxval[j];
 	white_avg /= (m->nraw-2.0);
 
-#ifndef NEVER		/* Trim out any inconsistent samples at each end of patches */
-
 	/* Trim the patches to avoid any inconsistent values */
 	/* at the ends. */
 	{
@@ -4017,8 +4154,6 @@ i1pro_code i1pro_extract_patches_multimeas(
 		printf("Patch %d, start %d, length %d:\n",i, pat[i].ss, pat[i].no, pat[i].use);
 	}
 #endif
-
-#endif /* NEVER */
 
 	/* Now process the buffer values */
 	for (i = 0; i < tnpatch; i++)
@@ -4470,7 +4605,7 @@ static double lanczos2(double wi, double x) {
 	return y;
 }
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__POWERPC__)
 
 /* Workaround for a ppc gcc 3.3 optimiser bug... */
 static int gcc_bug_fix(int i) {
@@ -5004,7 +5139,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 					for (k = 0; k < nn; k++) { 
 						double cw, cl;
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__POWERPC__)
 						gcc_bug_fix(k);
 #endif
 						cw = w1 + (k+1.0)/(nn +1.0) * (w2 - w1);
@@ -5570,6 +5705,17 @@ static double illum_D50[36] = {
 
 #endif /* SELF_CONT */
 
+/* Optics adjustment weights */
+double opt_adj_weights[21] = {
+	1.4944496665144658e-282, 2.0036175483913455e-070, 1.2554893022685038e+232,
+	2.3898157055642966e+190, 1.5697625128432372e-076, 6.6912978722191457e+281,
+	1.2369092402930559e+277, 1.4430907501246712e-153, 3.0017439193018232e+238,
+	1.2978311824382444e+161, 5.5068703318775818e-311, 7.7791723264455314e-260,
+	6.4560484084110176e+170, 8.9481529920968425e+165, 1.3565405878488529e-153,
+	2.0835868791190880e-076, 5.4310198502711138e+241, 4.8689849775675438e+275,
+	9.2709981544886391e+122, 3.7958270103353899e-153, 7.1366083837501666e-154
+};
+
 /* Convert from spectral to XYZ, and transfer to the ipatch array */
 i1pro_code i1pro_conv2XYZ(
 	i1pro *p,
@@ -5584,6 +5730,7 @@ i1pro_code i1pro_conv2XYZ(
 	int six = 0;		/* Starting index */
 	int nwl = m->nwav;	/* Number of wavelegths */
 	double wl_short = m->wl_short;	/* Starting wavelegth */
+	double sms;			/* Weighting */
 
 #ifndef SELF_CONT
 	if (s->emiss)
@@ -5607,6 +5754,10 @@ i1pro_code i1pro_conv2XYZ(
 		nwl -= six;
 	}
 
+	for (sms = 0.0, i = 1; i < 21; i++)
+		sms += opt_adj_weights[i];
+	sms *= opt_adj_weights[0];
+
 	for (i = 0; i < nvals; i++) {
 
 		vals[i].XYZ_v = 0;
@@ -5620,7 +5771,7 @@ i1pro_code i1pro_conv2XYZ(
 		vals[i].sp.spec_wl_long = m->wl_long;
 
 		for (j = six, k = 0; j < m->nwav; j++, k++) {
-			vals[i].sp.spec[k] = 100.0 * specrd[i][j];
+			vals[i].sp.spec[k] = 100.0 * specrd[i][j] * sms;
 		}
 
 		/* Set the XYZ */
@@ -5922,7 +6073,7 @@ int i1pro_comp_nummeas(
 	return nmeas;
 }
 
-/* Convert the dark interpolation data to a usefule state */
+/* Convert the dark interpolation data to a useful state */
 void
 i1pro_prepare_idark(
 	i1pro *p
@@ -6002,17 +6153,21 @@ void i1pro_set_trigret(i1pro *p, int val) {
 
 /* Switch thread handler */
 int i1pro_switch_thread(void *pp) {
+	int nfailed = 0;
 	i1pro *p = (i1pro *)pp;
 	i1pro_code rv = I1PRO_OK; 
 	i1proimp *m = (i1proimp *)p->m;
 	DBG((dbgo,"Switch thread started\n"))
-	for (;;) {
+	for (nfailed = 0;nfailed < 5;) {
 		rv = i1pro_waitfor_switch_th(p, 600.0);
 		if (m->th_term)
 			break;
-		if (rv == I1PRO_INT_BUTTONTIMEOUT)
+		if (rv == I1PRO_INT_BUTTONTIMEOUT) {
+			nfailed = 0;
 			continue;
+		}
 		if (rv != I1PRO_OK) {
+			nfailed++;
 			DBG((dbgo,"Switch thread failed with 0x%x\n",rv))
 			continue;
 		}
@@ -6806,7 +6961,7 @@ i1pro_code i1pro_waitfor_switch_th(i1pro *p, double top) {
 }
 
 /* Terminate switch handling */
-/* This seems to always return an error for rev A ? */
+/* This seems to always return an error ? */
 i1pro_code
 i1pro_terminate_switch(
 	i1pro *p
@@ -6833,13 +6988,15 @@ i1pro_terminate_switch(
 	                   0xD0, 3, 0, pbuf, 8, 2.0);
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
-		if (isdeb) fprintf(stderr,"\ni1pro: Terminate Switch Handling failed with ICOM err 0x%x\n",se);
+		if (isdeb) fprintf(stderr,"\ni1pro: Warning: Terminate Switch Handling failed with ICOM err 0x%x\n",se);
 	} else {
 		if (isdeb) fprintf(stderr,"Terminate Switch Handling done, ICOM err 0x%x\n",se);
 	}
 
-#ifdef NEVER	/* Can cause segmentation fault on Linux */
-	/* In case the above didn't work, clear halt */
+	/* In case the above didn't work, clear halt to terminate the outstanding switch read. */
+	/* This seems to be needed on OS X 10.5 */
+	/* It can cause segmentation fault on Linux though. */
+#if defined(UNIX) && defined(__APPLE__)
 	msec_sleep(50);
 	p->icom->usb_clearhalt(p->icom, 0x84);
 #endif

@@ -42,6 +42,10 @@
 #include "rspl.h"
 #include "prof.h"
 
+#define DOB2A			/* Create B2A table as well (not implemented) */
+#define NO_B2A_PCS_CURVES       /* PCS curves seem to make B2A less accurate. Why ? */
+#define USE_CAM_CLIP_OPT        /* Clip out of gamut in CAM space rather than XYZ or L*a*b* */
+
 /*
    Basic algorithm outline:
 
@@ -63,9 +67,176 @@
    but can then be compensated for using the ICX_MERGE_CLUT flag
    together with a PCS override.
 
+   Note we're hard coded as RGB device space, so we're not coping
+   with grey scale or CMY.
 */
 
+#ifdef DEBUG
+#undef DBG
+#define DBG(xxx) printf xxx ;
+#else
+#undef DBG
+#define DBG(xxx) 
+#endif
 
+/* ---------------------------------------- */
+#ifdef DOB2A
+
+/* structure to support output icc B2A Lut initialisation calbacks */
+/* Note that we don't cope with a LUT matrix - assume it's unity. */
+
+typedef struct {
+	int verb;
+	int total, count, last;	/* Progress count information */
+	int noPCScurves;		/* Flag set if we don't want PCS curves */
+	icColorSpaceSignature pcsspace;	/* The PCS colorspace */
+	icColorSpaceSignature devspace;	/* The device colorspace */
+	icxLuLut *x;			/* A2B icxLuLut we are inverting in std PCS */
+
+	double swxyz[3];		/* Source white point in XYZ */
+
+	int wantLab;			/* 0 if want is XYZ PCS, 1 want is Lab PCS */
+} in_b2a_callback;
+
+
+/* --------------------------------------------------------- */
+
+/* Extra non-linearity applied to BtoA XYZ PCS */
+/* This distributes the LUT indexes more evenly in */
+/* perceptual space, greatly improving the B2A accuracy of XYZ LUT */
+static void xyzcurve(double *out, double *in) {
+	int i;
+	double sc = 65535.0/32768.0;
+
+	/* Use an L* like curve, scaled to the maximum XYZ valu */
+	out[0] = in[0]/sc;
+	out[1] = in[1]/sc;
+	out[2] = in[2]/sc;
+	for (i = 0; i < 3; i++) {
+		if (out[i] > 0.08)
+			out[i] = pow((out[i] + 0.16)/1.16, 3.0);
+		else
+			out[i] = out[i]/9.032962896;
+	}
+	out[0] = out[0] * sc;
+	out[1] = out[1] * sc;
+	out[2] = out[2] * sc;
+}
+
+static void invxyzcurve(double *out, double *in) {
+	int i;
+	double sc = 65535.0/32768.0;
+
+	out[0] = in[0]/sc;
+	out[1] = in[1]/sc;
+	out[2] = in[2]/sc;
+	for (i = 0; i < 3; i++) {
+		if (out[i] > 0.008856451586)
+			out[i] = 1.16 * pow(out[i],1.0/3.0) - 0.16;
+		else
+			out[i] = 9.032962896 * out[i];
+	}
+	out[0] = out[0] * sc;
+	out[1] = out[1] * sc;
+	out[2] = out[2] * sc;
+}
+
+/* --------------------------------------------------------- */
+/* NOTE :- the assumption that each stage of the BtoA is a mirror */
+/* of the AtoB makes for inflexibility. */
+/* Perhaps it would be better to remove this asumption from the */
+/* in_b2a_clut processing ? */
+/* To do this we then need inv_in_b2a_input(), and */
+/* inv_in_b2a_output(), and we need to clearly distinguish between */
+/* AtoB PCS' & DEV', and BtoA PCS' & DEV', since they are not */
+/* necessarily the same... */
+
+
+/* B2A Input table is the inverse of the AtoB output table */
+/* Input PCS output PCS'' */
+void in_b2a_input(void *cntx, double out[3], double in[3]) {
+	in_b2a_callback *p = (in_b2a_callback *)cntx;
+
+	DBG(("out_b2a_input got         PCS %f %f %f\n",in[0],in[1],in[2]))
+
+	/* PCS to PCS' */
+	if (p->noPCScurves) {
+		out[0] = in[0];
+		out[1] = in[1];
+		out[2] = in[2];
+	} else {
+		if (p->x->inv_output(p->x, out, in) > 1)
+			error("%d, %s",p->x->pp->errc,p->x->pp->err);
+	}
+	/* PCS' to PCS'' */
+	if (p->pcsspace == icSigXYZData)	/* Apply XYZ non-linearity curve */
+		invxyzcurve(out, out);
+
+	DBG(("in_b2a_input returning PCS'' %f %f %f\n",out[0],out[1],out[2]))
+}
+
+/* clut - multitable */
+/* Input PCS' output Dev' */
+/* We're applying any abstract profile after gamut mapping, */
+/* on the assumption is is primarily being used to "correct" the */
+/* output device. Ideally the gamut mapping should take the change */
+/* the abstract profile has on the output device into account, but */
+/* currently we're not doing this.. */
+void in_b2a_clut(void *cntx, double *out, double in[3]) {
+	in_b2a_callback *p = (in_b2a_callback *)cntx;
+	double in1[3];
+
+	in1[0] = in[0];		/* in[] may be aliased with out[] */
+	in1[1] = in[1];		/* so take a copy.  */
+	in1[2] = in[2];
+
+	DBG(("in_b2a_clut got       PCS' %f %f %f\n",in[0],in[1],in[2]))
+
+	if (p->pcsspace == icSigXYZData)		/* Undo effects of extra XYZ non-linearity curve */
+		xyzcurve(in1, in1);
+
+	if (p->noPCScurves) {	/* We were given PCS or have converted to PCS */
+
+		/* PCS to PCS' */
+		if (p->x->inv_output(p->x, in1, in1) > 1)
+			error("%d, %s",p->x->pp->errc,p->x->pp->err);
+
+		DBG(("convert to PCS' got         %f %f %f\n",in1[0],in1[1],in1[2]))
+	}
+
+	/* Invert AtoB clut (PCS' to Dev') Colorimetric */
+	/* to producte the colorimetric tables output. */
+	if (p->x->inv_clut(p->x, out, in1) > 1)
+		error("%d, %s",p->x->pp->errc,p->x->pp->err);
+
+	DBG(("convert PCS' to DEV' got    %f %f %f %f\n",out[0],out[1],out[2],out[3]))
+	DBG(("in_b2a_clut returning DEV' %f %f %f\n",out[0],out[1],out[2]))
+
+	if (p->verb) {		/* Output percent intervals */
+		int pc;
+		p->count++;
+		pc = (int)(p->count * 100.0/p->total + 0.5);
+		if (pc != p->last) {
+			printf("\r%2d%%",pc); fflush(stdout);
+			p->last = pc;
+		}
+	}
+}
+
+/* Output table is the inverse of the AtoB input table */
+/* Input Dev' output Dev */
+void in_b2a_output(void *cntx, double out[4], double in[4]) {
+	in_b2a_callback *p = (in_b2a_callback *)cntx;
+
+	DBG(("in_b2a_output got      DEV' %f %f %f\n",in[0],in[1],in[2]))
+
+	if (p->x->inv_input(p->x, out, in) > 1)
+		error("%d, %s",p->x->pp->errc,p->x->pp->err);
+
+	DBG(("in_b2a_output returning DEV %f %f %f\n",out[0],out[1],out[2]))
+}
+
+#endif /* DOB2A */
 /* ---------------------------------------- */
 
 /* Make an input device profile, where we create an A2B lut */
@@ -76,13 +247,21 @@ make_input_icc(
 	icmICCVersion iccver,	/* ICC profile version to create */
 	int verb,
 	int iquality,			/* A2B table quality, 0..3 */
+	int oquality,			/* B2A table quality, 0..2 */
 	int noisluts,			/* nz to supress creation of input (Device) shaper luts */
 	int noipluts,			/* nz to supress creation of input (Device) position luts */
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
+	int nocied,				/* nz to supress inclusion of .ti3 data in profile */
 	int verify,
 	int nsabs,				/* nz for non-standard absolute output */
+	int dob2a,				/* nz to create a B2A table as well */
+	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
 	cgats *icg,				/* input cgats structure */
+	int spec,				/* Use spectral data flag */
+	icxIllumeType illum,	/* Spectral illuminant */
+	xspect *cust_illum,		/* Possible custom illumination */
+	icxObserverType observ,	/* Spectral observer */
 	double smooth,			/* RSPL smoothing factor, -ve if raw */
 	double avgdev,			/* reading Average Deviation as a proportion of the input range */
 	profxinf *xpi			/* Optional Profile creation extra data */
@@ -256,6 +435,7 @@ make_input_icc(
 		{
 			icmLut *wo;
 
+			/* Only A2B0, no intent */
 			if ((wo = (icmLut *)wr_icco->add_tag(
 			           wr_icco, icSigAToB0Tag,	icSigLut16Type)) == NULL) 
 				error("add_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
@@ -284,6 +464,42 @@ make_input_icc(
 
 			/* icxLuLut will set tables values */
 		}
+
+#ifdef DOB2A
+		/* 16 bit pcs -> dev lut: */
+		if (dob2a) {
+			icmLut *wo;
+
+			/* Only B2A0, no intent */
+			if ((wo = (icmLut *)wr_icco->add_tag(
+			           wr_icco, icSigBToA0Tag,	icSigLut16Type)) == NULL) 
+				error("add_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
+
+			wo->inputChan = 3;
+			wo->outputChan = 3;
+			if (oquality >= 3) {
+		    	wo->clutPoints = 45;
+		    	wo->inputEnt = 2048;
+		    	wo->outputEnt = 2048;
+			} else if (oquality == 2) {
+		    	wo->clutPoints = 33;
+		    	wo->inputEnt = 2048;
+		    	wo->outputEnt = 2048;
+			} else if (oquality == 1) {
+		    	wo->clutPoints = 17;
+		    	wo->inputEnt = 1024;
+		    	wo->outputEnt = 1024;
+			} else {
+		    	wo->clutPoints = 9;
+		    	wo->inputEnt = 512;
+		    	wo->outputEnt = 512;
+			}
+
+			wo->allocate((icmBase *)wo);/* Allocate space */
+
+			/* We set the tables below */
+		}
+#endif /* DOB2A */
 
 	} else {	/* shaper + matrix type */
 
@@ -350,6 +566,41 @@ make_input_icc(
 			/* icxMatrix will set curve values */
 		}
 	}
+	/* Sample data use to create profile: */
+	if (nocied == 0) {
+		icmText *wo;
+		char *crt;
+		FILE *fp;
+
+		if ((wo = (icmText *)wr_icco->add_tag(
+		           wr_icco, icmMakeTag('D','e','v','D'), icSigTextType)) == NULL) 
+			error("add_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
+
+#if defined(O_BINARY) || defined(_O_BINARY)
+	    if ((fp = fopen(in_name, "rb")) == NULL)
+#else
+	    if ((fp = fopen(in_name, "r")) == NULL)
+#endif
+			error("Unable to open input file '%s' for reading",in_name);
+
+		if (fseek(fp, 0, SEEK_END))
+			error("Unable to seek to end of file '%s'",in_name);
+		wo->size = ftell(fp) + 1;		/* Size needed + null */
+		wo->allocate((icmBase *)wo);/* Allocate space */
+
+		if (fseek(fp, 0, SEEK_SET))
+			error("Unable to seek to end of file '%s'",in_name);
+
+		if (fread(wo->data, 1, wo->size-1, fp) != wo->size-1)
+			error("Failed to read file '%s'",in_name);
+		wo->data[wo->size-1] = '\000';
+		fclose(fp);
+
+		/* Duplicate as CIE data */
+		if (wr_icco->link_tag(
+		         wr_icco, icmMakeTag('C','I','E','D'), icmMakeTag('D','e','v','D')) == NULL) 
+			error("link_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
+	}
 
 	if ((npat = icg->t[0].nsets) <= 0)
 		error ("No sets of data");
@@ -381,34 +632,6 @@ make_input_icc(
 			}
 		}
 
-		if (isLab) {
-			if ((Xi = icg->find_field(icg, 0, "LAB_L")) < 0)
-				error ("Input file doesn't contain field LAB_L");
-			if (icg->t[0].ftype[Xi] != r_t)
-				error ("Field LAB_L is wrong type - corrupted file ?");
-			if ((Yi = icg->find_field(icg, 0, "LAB_A")) < 0)
-				error ("Input file doesn't contain field LAB_A");
-			if (icg->t[0].ftype[Yi] != r_t)
-				error ("Field LAB_A is wrong type - corrupted file ?");
-			if ((Zi = icg->find_field(icg, 0, "LAB_B")) < 0)
-				error ("Input file doesn't contain field LAB_B");
-			if (icg->t[0].ftype[Zi] != r_t)
-				error ("Field LAB_B is wrong type - corrupted file ?");
-		} else {
-			if ((Xi = icg->find_field(icg, 0, "XYZ_X")) < 0)
-				error ("Input file doesn't contain field XYZ_X");
-			if (icg->t[0].ftype[Xi] != r_t)
-				error ("Field XYZ_X is wrong type - corrupted file ?");
-			if ((Yi = icg->find_field(icg, 0, "XYZ_Y")) < 0)
-				error ("Input file doesn't contain field XYZ_Y");
-			if (icg->t[0].ftype[Yi] != r_t)
-				error ("Field XYZ_Y is wrong type - corrupted file ?");
-			if ((Zi = icg->find_field(icg, 0, "XYZ_Z")) < 0)
-				error ("Input file doesn't contain field XYZ_Z");
-			if (icg->t[0].ftype[Zi] != r_t)
-				error ("Field XYZ_Z is wrong type - corrupted file ?");
-		}
-
 		if ((ri = icg->find_field(icg, 0, "RGB_R")) < 0)
 			error ("Input file doesn't contain field RGB_R");
 		if (icg->t[0].ftype[ri] != r_t)
@@ -422,29 +645,120 @@ make_input_icc(
 		if (icg->t[0].ftype[bi] != r_t)
 			error ("Field CMYK_Y is wrong type - corrupted file ?");
 
-		for (i = 0; i < npat; i++) {
-			tpat[i].w = 1.0;
-			tpat[i].p[0] = *((double *)icg->t[0].fdata[i][ri]) / 100.0;
-			tpat[i].p[1] = *((double *)icg->t[0].fdata[i][gi]) / 100.0;
-			tpat[i].p[2] = *((double *)icg->t[0].fdata[i][bi]) / 100.0;
-			if (tpat[i].p[0] > 1.0
-			 || tpat[i].p[1] > 1.0
-			 || tpat[i].p[2] > 1.0) {
-				error("Device value field exceeds 100.0!");
+		if (spec == 0) {        /* Using instrument tristimulous value */
+
+			if (isLab) {
+				if ((Xi = icg->find_field(icg, 0, "LAB_L")) < 0)
+					error ("Input file doesn't contain field LAB_L");
+				if (icg->t[0].ftype[Xi] != r_t)
+					error ("Field LAB_L is wrong type - corrupted file ?");
+				if ((Yi = icg->find_field(icg, 0, "LAB_A")) < 0)
+					error ("Input file doesn't contain field LAB_A");
+				if (icg->t[0].ftype[Yi] != r_t)
+					error ("Field LAB_A is wrong type - corrupted file ?");
+				if ((Zi = icg->find_field(icg, 0, "LAB_B")) < 0)
+					error ("Input file doesn't contain field LAB_B");
+				if (icg->t[0].ftype[Zi] != r_t)
+					error ("Field LAB_B is wrong type - corrupted file ?");
+			} else {
+				if ((Xi = icg->find_field(icg, 0, "XYZ_X")) < 0)
+					error ("Input file doesn't contain field XYZ_X");
+				if (icg->t[0].ftype[Xi] != r_t)
+					error ("Field XYZ_X is wrong type - corrupted file ?");
+				if ((Yi = icg->find_field(icg, 0, "XYZ_Y")) < 0)
+					error ("Input file doesn't contain field XYZ_Y");
+				if (icg->t[0].ftype[Yi] != r_t)
+					error ("Field XYZ_Y is wrong type - corrupted file ?");
+				if ((Zi = icg->find_field(icg, 0, "XYZ_Z")) < 0)
+					error ("Input file doesn't contain field XYZ_Z");
+				if (icg->t[0].ftype[Zi] != r_t)
+					error ("Field XYZ_Z is wrong type - corrupted file ?");
 			}
-			tpat[i].v[0] = *((double *)icg->t[0].fdata[i][Xi]);
-			tpat[i].v[1] = *((double *)icg->t[0].fdata[i][Yi]);
-			tpat[i].v[2] = *((double *)icg->t[0].fdata[i][Zi]);
-			if (!isLab) {
-				tpat[i].v[0] /= 100.0;		/* Normalise XYZ to range 0.0 - 1.0 */
-				tpat[i].v[1] /= 100.0;
-				tpat[i].v[2] /= 100.0;
+
+			for (i = 0; i < npat; i++) {
+				tpat[i].w = 1.0;
+				tpat[i].p[0] = *((double *)icg->t[0].fdata[i][ri]) / 100.0;
+				tpat[i].p[1] = *((double *)icg->t[0].fdata[i][gi]) / 100.0;
+				tpat[i].p[2] = *((double *)icg->t[0].fdata[i][bi]) / 100.0;
+				if (tpat[i].p[0] > 1.0
+				 || tpat[i].p[1] > 1.0
+				 || tpat[i].p[2] > 1.0) {
+					error("Device value field exceeds 100.0!");
+				}
+				tpat[i].v[0] = *((double *)icg->t[0].fdata[i][Xi]);
+				tpat[i].v[1] = *((double *)icg->t[0].fdata[i][Yi]);
+				tpat[i].v[2] = *((double *)icg->t[0].fdata[i][Zi]);
+				if (!isLab) {
+					tpat[i].v[0] /= 100.0;		/* Normalise XYZ to range 0.0 - 1.0 */
+					tpat[i].v[1] /= 100.0;
+					tpat[i].v[2] /= 100.0;
+				}
+				if (!isLab && wantLab) { /* Convert test patch result XYZ to PCS (D50 Lab) */
+					icmXYZ2Lab(&icmD50, tpat[i].v, tpat[i].v);
+				} else if (isLab && !wantLab) {
+					icmLab2XYZ(&icmD50, tpat[i].v, tpat[i].v);
+				}
 			}
-			if (!isLab && wantLab) { /* Convert test patch result XYZ to PCS (D50 Lab) */
-				icmXYZ2Lab(&icmD50, tpat[i].v, tpat[i].v);
-			} else if (isLab && !wantLab) {
-				icmLab2XYZ(&icmD50, tpat[i].v, tpat[i].v);
+
+		} else {		/* Using spectral data */
+			int j, ii;
+			xspect sp;
+			char buf[100];
+			int  spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
+			xsp2cie *sp2cie;	/* Spectral conversion object */
+
+			if ((ii = icg->find_kword(icg, 0, "SPECTRAL_BANDS")) < 0)
+				error ("Input file doesn't contain keyword SPECTRAL_BANDS");
+			sp.spec_n = atoi(icg->t[0].kdata[ii]);
+			if ((ii = icg->find_kword(icg, 0, "SPECTRAL_START_NM")) < 0)
+				error ("Input file doesn't contain keyword SPECTRAL_START_NM");
+			sp.spec_wl_short = atof(icg->t[0].kdata[ii]);
+			if ((ii = icg->find_kword(icg, 0, "SPECTRAL_END_NM")) < 0)
+				error ("Input file doesn't contain keyword SPECTRAL_END_NM");
+			sp.spec_wl_long = atof(icg->t[0].kdata[ii]);
+			sp.norm = 100.0;
+
+			/* Find the fields for spectral values */
+			for (j = 0; j < sp.spec_n; j++) {
+				int nm;
+		
+				/* Compute nearest integer wavelength */
+				nm = (int)(sp.spec_wl_short + ((double)j/(sp.spec_n-1.0))
+				            * (sp.spec_wl_long - sp.spec_wl_short) + 0.5);
+				
+				sprintf(buf,"SPEC_%03d",nm);
+
+				if ((spi[j] = icg->find_field(icg, 0, buf)) < 0)
+					error("Input file doesn't contain field %s",buf);
 			}
+
+			/* Create a spectral conversion object */
+			if ((sp2cie = new_xsp2cie(illum, cust_illum, observ, NULL,
+			                          wantLab ? icSigLabData : icSigXYZData)) == NULL)
+				error("Creation of spectral conversion object failed");
+
+			for (i = 0; i < npat; i++) {
+				tpat[i].w = 1.0;
+				tpat[i].p[0] = *((double *)icg->t[0].fdata[i][ri]) / 100.0;
+				tpat[i].p[1] = *((double *)icg->t[0].fdata[i][gi]) / 100.0;
+				tpat[i].p[2] = *((double *)icg->t[0].fdata[i][bi]) / 100.0;
+				if (tpat[i].p[0] > 1.0
+				 || tpat[i].p[1] > 1.0
+				 || tpat[i].p[2] > 1.0) {
+					error("Device value field exceeds 100.0!");
+				}
+
+				/* Read the spectral values for this patch */
+				for (j = 0; j < sp.spec_n; j++) {
+					sp.spec[j] = *((double *)icg->t[0].fdata[i][spi[j]]);
+				}
+
+				/* Convert it to CIE space */
+				sp2cie->convert(sp2cie, tpat[i].v, &sp);
+			}
+
+			sp2cie->del(sp2cie);		/* Done with this */
+
 		}
 	}	/* End of reading in CGATs file */
 
@@ -457,6 +771,8 @@ make_input_icc(
 		/* Wrap with an expanded icc */
 		if ((wr_xicc = new_xicc(wr_icco)) == NULL)
 			error ("Creation of xicc failed");
+
+		flags |= ICX_CLIP_NEAREST;      /* This will avoid clip caused rev setup */
 
 		if (noisluts)
 			flags |= ICX_NO_IN_SHP_LUTS;
@@ -479,11 +795,100 @@ make_input_icc(
 		               wr_xicc, icmFwd, icmDefaultIntent,
 		               icmLuOrdNorm,
 		               flags, 		/* Flags */
-		               npat, tpat, smooth, avgdev, NULL, NULL, iquality)) == NULL)
+		               npat, tpat, 0.0, smooth, avgdev, NULL, NULL, iquality)) == NULL)
 			error ("%d, %s",wr_xicc->errc, wr_xicc->err);
 
 		/* Free up xicc stuff */
 		AtoB->del(AtoB);
+
+#ifdef DOB2A
+		if (dob2a) {
+			icmLut *wo;
+
+			in_b2a_callback cx;
+
+			if (verb)
+				printf("Setting up B to A table lookup\n");
+
+			/* Get a suitable forward conversion object to invert. */
+			/* By creating a separate one to the one created using scattered data, */
+			/* we ge the chance to set ICX_CAM_CLIP. It is always set to Lab 'PCS' */
+			{
+				int flags = 0;
+	
+				if (verb)
+					flags |= ICX_VERBOSE;
+	
+				flags |= ICX_CLIP_NEAREST;		/* Not vector clip */
+#ifdef USE_CAM_CLIP_OPT
+				flags |= ICX_CAM_CLIP;			/* Clip in CAM Jab space rather than Lab */
+#else
+				warning("!!!! USE_CAM_CLIP_OPT in profout.c is off !!!!");
+#endif
+	
+				if ((AtoB = wr_xicc->get_luobj(wr_xicc, flags, icmFwd,
+				                  icmDefaultIntent,
+				                  wantLab ? icSigLabData : icSigXYZData,
+                                  icmLuOrdNorm, NULL, NULL)) == NULL)
+					error ("%d, %s",wr_xicc->errc, wr_xicc->err);
+			}
+
+			/* setup context ready for B2A table setting */
+			cx.verb = verb;
+			cx.pcsspace = wantLab ? icSigLabData : icSigXYZData;
+			cx.wantLab = wantLab;			/* Copy PCS flag over */
+#ifdef NO_B2A_PCS_CURVES
+			cx.noPCScurves = 1;		/* Don't use PCS curves */
+#else
+			cx.noPCScurves = 0;
+#endif
+			cx.devspace = icSigRgbData;
+			cx.x = (icxLuLut *)AtoB;		/* A2B icxLuLut created from scattered data */
+
+			if ((wo = (icmLut *)wr_icco->read_tag(
+			           wr_icco, icSigBToA0Tag)) == NULL) 
+				error("read_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
+
+			/* We now setup an exact inverse, colorimetric style */
+			/* Use helper function to do the hard work. */
+
+			if (cx.verb) {
+				unsigned int ui;
+				int extra;
+				cx.count = 0;
+				cx.last = -1;
+				for (cx.total = 1, ui = 0; ui < wo->inputChan; ui++, cx.total *= wo->clutPoints)
+					; 
+				/* Add in cell center points */
+				for (extra = 1, ui = 0; ui < wo->inputChan; ui++, extra *= (wo->clutPoints-1))
+					;
+				cx.total += extra;
+				printf("Creating B to A tables\n");
+				printf(" 0%%"); fflush(stdout);
+			}
+
+			if (icmSetMultiLutTables(
+			        1,
+			        &wo,
+					ICM_CLUT_SET_APXLS,			/* Use least squared aprox. */
+					&cx,						/* Context */
+					cx.pcsspace,				/* Input color space */
+					icSigRgbData,				/* Output color space */
+					in_b2a_input,				/* Input transform PCS->PCS' */
+					NULL, NULL,					/* Use default Lab' range */
+					in_b2a_clut,				/* Lab' -> Device' transfer function */
+					NULL, NULL,					/* Use default Device' range */
+					in_b2a_output) != 0)		/* Output transfer function, Device'->Device */
+				error("Setting 16 bit PCS->Device Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
+			if (cx.verb) {
+				printf("\n");
+			}
+
+			if (verb)
+				printf("Done B to A table\n");
+			AtoB->del(AtoB);
+		}
+#endif /* DOB2A */
 		wr_xicc->del(wr_xicc);
 
 	} else {		/* Gamma/Shaper + matrix profile */
@@ -505,7 +910,7 @@ make_input_icc(
 		               wr_xicc, icmFwd, icmDefaultIntent,
 		               icmLuOrdNorm,
 		               flags | ICX_SET_WHITE | ICX_SET_BLACK, 		/* Flags */
-		               npat, tpat, smooth, avgdev, NULL, NULL, iquality)) == NULL)
+		               npat, tpat, 0.0, smooth, avgdev, NULL, NULL, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
 		/* Free up xicc stuff */
@@ -590,6 +995,8 @@ make_input_icc(
 		rd_icco->del(rd_icco);
 		rd_fp->del(rd_fp);
 	}
+
+	free(tpat);
 }
 
 

@@ -32,9 +32,11 @@ static void del_vrml(vrml *s) {
 /* Add a shere at the given location. */
 /* if col[] is NULL, use natural color. */
 /* Need to do this before or after start_line_set()/dd_vertex()/make_lines() ! */
-static void add_marker(vrml *s, double pos[3], double col[3]) {
-	double rad = 1.0;
+static void add_marker(vrml *s, double pos[3], double col[3], double rad) {
 	double rgb[3];
+
+	if (rad <= 0.0)
+		rad = 1.0;
 
 	if (col == NULL)
 		s->Lab2RGB(s, rgb, pos);
@@ -58,19 +60,11 @@ static void add_marker(vrml *s, double pos[3], double col[3]) {
 /* Start building up verticies that will be converted to lines */
 static void start_line_set(vrml *s) {
 	s->npoints = 0;
-
-	fprintf(s->fp,"\n");
-	fprintf(s->fp,"Shape {\n");
-	fprintf(s->fp,"  geometry IndexedLineSet { \n");
-	fprintf(s->fp,"    coord Coordinate { \n");
-	fprintf(s->fp,"	   point [\n");
 }
 
 /* Add a verticy with color */
 static void add_col_vertex(vrml *s, double pos[3], double col[3]) {
 
-	fprintf(s->fp,"%f %f %f,\n",pos[1], pos[2], pos[0] - s->lcent);
-	
 	if (s->npoints >= s->paloc) {
 		s->paloc = (s->paloc + 10) * 2;
 		if (s->pary == NULL)
@@ -101,6 +95,17 @@ static void add_vertex(vrml *s, double pos[3]) {
 static void make_lines(vrml *s, int ppset) {
 	int i, j;
 
+	fprintf(s->fp,"\n");
+	fprintf(s->fp,"Shape {\n");
+	fprintf(s->fp,"  geometry IndexedLineSet { \n");
+	fprintf(s->fp,"    coord Coordinate { \n");
+	fprintf(s->fp,"	   point [\n");
+
+	for (i = 0; i < s->npoints; i++) {
+		fprintf(s->fp,"%f %f %f,\n",s->pary[i].pp[1], s->pary[i].pp[2],
+		                            s->pary[i].pp[0] - s->lcent);
+	}
+	
 	fprintf(s->fp,"      ]\n");
 	fprintf(s->fp,"    }\n");
 	fprintf(s->fp,"  coordIndex [\n");

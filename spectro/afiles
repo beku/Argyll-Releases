@@ -43,6 +43,8 @@ vinflate.c
 huey.c
 huey.h
 spec2cie.c
+average.c
+conv.h
 icoms.h
 usbio.h
 usbio.c
@@ -54,7 +56,7 @@ pollem.h
 pollem.c
 dispwin.c
 dispwin.h
-displin.c
+synthcal.c
 spotread.c
 fakeread.c
 synthread.c
@@ -64,3 +66,4 @@ FograStrip.ti2
 i1_RGB_Scan_1.4.ti2
 linear.sp
 SOtele.sp
+strange.cal

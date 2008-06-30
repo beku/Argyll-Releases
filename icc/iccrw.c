@@ -27,8 +27,9 @@
 
 #undef TEST_VIDGAMTAG		/* Add ColorSync 2.5 VideoCardGamma tag with linear table */
 #undef TEST_SRGB_FIX		/* Some test code */
-#undef WP_PATCH			/* Overwrite the white point */
+#undef WP_PATCH				/* Overwrite the white point */
 #undef INVERT_GRAY			/* Invert single TRC gray profile */
+#undef MOD_A2B /* 0 */		/* Modify A2B RGB tables */
 
 void error(char *fmt, ...), warning(char *fmt, ...);
 
@@ -231,6 +232,40 @@ main(int argc, char *argv[]) {
 	}
 
 #endif
+
+#ifdef MOD_A2B
+	{
+		icmLut *ro;
+		unsigned long size;
+		unsigned int i, j;
+		icTagSignature sig;
+
+		if (MOD_A2B == 0)
+			sig = icSigAToB0Tag;
+		else if (MOD_A2B == 1)
+			sig = icSigAToB1Tag;
+		else 
+			sig = icSigAToB2Tag;
+
+		/* Try and read the tag from the file */
+		ro = (icmLut *)icco->read_tag(icco, sig);
+		if (ro == NULL) 
+			error("Failed to read A2B tag");
+
+		/* Need to check that the cast is appropriate. */
+		if (ro->ttype != icSigLut16Type)
+			error("A2B is not 16 bitg");
+	
+		/* Simply apply a gamma to the corresponding input curve */
+		for (i = 0; i < ro->inputChan; i++) {				/* Input tables */
+			double val;
+			j = MOD_A2B;
+			val = ro->inputTable[i * ro->inputEnt + j];
+			val = pow(val, 2.0);
+			ro->inputTable[i * ro->inputEnt + j] = val;
+		}
+	}
+#endif /* MOD_A2B */
 
 	/* ======================================= */
 	

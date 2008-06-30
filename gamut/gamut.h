@@ -61,8 +61,9 @@ struct _gvert {
 #define GVERT_SET  0x0001		/* Value has been set */
 #define GVERT_TRI  0x0002		/* Vertex has been added to triangulation (Exclsv with _INSIDE) */
 #define GVERT_INSIDE  0x0004	/* Vertex is inside the log hull (Exclusive with _TRI) */
-#define GVERT_FAKE  0x0008		/* Fake establishment point */
-#define GVERT_ISOS  0x0010		/* Intersecting gamuts "outside other gamut" flag */
+#define GVERT_ISOS  0x0008		/* Intersecting gamuts "outside other gamut" flag */
+#define GVERT_ESTP  0x0010		/* Non-fake establishment point */
+#define GVERT_FAKE  0x0020		/* Fake establishment point */
 	int k0;			/* k0 direction reference count */
 
 	double p[3];		/* Point in xyz rectangular coordinates, absolute */

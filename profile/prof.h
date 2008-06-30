@@ -41,8 +41,13 @@ void make_output_icc(
 	int noiluts,			/* nz to supress creation of input (Device) shaper luts */
 	int noisluts,			/* nz to supress creation of input sub-grid (Device) shaper luts */
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
+	int nocied,				/* nz to supress inclusion of .ti3 data in profile */
+	int noptop,				/* nz to use colorimetic source gamut to make perceptual table */ 
+	int nostos,				/* nz to use colorimetic source gamut to make perceptual table */
+	int gamdiag,			/* Make gamut mapping diagnostic wrl plots */
 	int verify,				/* nz to print verification */
 	icxInk *ink,			/* Ink limit/black generation setup */
+	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
 	cgats *icg,				/* input cgats structure */
 	int spec,				/* Use spectral data flag */
@@ -71,13 +76,21 @@ void make_input_icc(
 	icmICCVersion iccver,	/* ICC profile version to create */
 	int verb,				/* Vebosity level, 0 = none */
 	int iquality,			/* A2B table quality, 0..2 */
+	int oquality,			/* B2A table quality, 0..2 */
 	int noiluts,			/* nz to supress creation of input (Device) shaper luts */
 	int noisluts,			/* nz to supress creation of input sub-grid (Device) shaper luts */
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
+	int nocied,				/* nz to supress inclusion of .ti3 data in profile */
 	int verify,				/* nz to print verification */
 	int nsabs,				/* nz for non-standard absolute output */
+	int dob2a,				/* nz to create a B2A table as well */
+	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
 	cgats *icg,				/* input cgats structure */
+	int spec,				/* Use spectral data flag */
+	icxIllumeType illum,	/* Spectral illuminant */
+	xspect *cust_illum,		/* Possible custom illumination */
+	icxObserverType observ,	/* Spectral observer */
 	double smooth,			/* RSPL smoothing factor, -ve if raw */
 	double avgdev,			/* reading Average Deviation as a proportion of the input range */
 	profxinf *pi			/* Optional Profile creation extra data */

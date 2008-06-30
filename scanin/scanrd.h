@@ -8,7 +8,7 @@
  * Author: Graeme W. Gill
  * Date:   28/9/96
  *
- * Copyright 1995, 1996, Graeme W. Gill
+ * Copyright 1995, 1996, 2008, Graeme W. Gill
  * All rights reserved.
  * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -20,8 +20,9 @@
 
 /* Operation flags */
 #define SI_BUILD_REF 	      0x10000	/* Build the reference file */
-#define SI_GENERAL_ROT 	      0x20000	/* Allow general rotation, else assume zero degrees */
-#define SI_ASISIFFAIL 	      0x40000	/* Read patch values "as is" if everything else failes */
+#define SI_PERSPECTIVE 	      0x20000	/* Allow perspective correction */
+#define SI_GENERAL_ROT 	      0x40000	/* Allow general rotation, else assume zero degrees */
+#define SI_ASISIFFAIL 	      0x80000	/* Read patch values "as is" if everything else failes */
 
 /* Scanrd diagnostic flags */
 #define SI_SHOW_FLAGS         0xffff	/* Mask for all SHOW flags */
@@ -30,18 +31,21 @@
 #define SI_SHOW_DIFFSV	      0x0004	/* Show the vertical edges detected  */
 #define SI_SHOW_GROUPS	      0x0008	/* Show the groups detected */
 #define SI_SHOW_LINES         0x0010	/* Show the lines detected */
-#define SI_SHOW_ROT           0x0020	/* Show the lines rotated */
-#define SI_SHOW_ALL_LINES     0x0040	/* Show all lines, valid and invalid */
-#define SI_SHOW_SBOX          0x0080	/* Show aligned sample box info in diagnostic raster */
-#define SI_SHOW_SBOX_OUTLINES 0x0100	/* Show the sample box outlines */
-#define SI_SHOW_SBOX_NAMES    0x0200	/* Show sample boxes names */
-#define SI_SHOW_SBOX_AREAS    0x0400	/* Show sample boxes sample areas */
-#define SI_SHOW_SAMPLED_AREA  0x0800	/* Show pixels areas sampled */
+#define SI_SHOW_PERS          0x0020	/* Show the lines un-perspective */
+#define SI_SHOW_ROT           0x0040	/* Show the lines rotated */
+#define SI_SHOW_IMPL          0x0080	/* Show the lines used for improvements */
+#define SI_SHOW_ALL_LINES     0x0100	/* Show all lines, valid and invalid */
+#define SI_SHOW_SBOX          0x0200	/* Show aligned sample box info in diagnostic raster */
+#define SI_SHOW_SBOX_OUTLINES 0x0400	/* Show the sample box outlines */
+#define SI_SHOW_SBOX_NAMES    0x0800	/* Show sample boxes names */
+#define SI_SHOW_SBOX_AREAS    0x1000	/* Show sample boxes sample areas */
+#define SI_SHOW_SAMPLED_AREA  0x2000	/* Show pixels areas sampled */
 
 /* Error flags */
 #define SI_QUAL_ERR(flag) ((flag & 0xf0000000) == 0)
-#define SI_FIND_ROTATION_FAILED      0x00000001
-#define SI_POOR_MATCH                0x00000002
+#define SI_FIND_PERSPECTIVE_FAILED   0x00000001
+#define SI_FIND_ROTATION_FAILED      0x00000002
+#define SI_POOR_MATCH                0x00000003
 
 #define SI_FILE_ERR(flag) ((flag & 0xf0000000) == 0x10000000)
 #define SI_RAST_READ_ERR             0x10000001
@@ -103,7 +107,8 @@ scanrd *do_scanrd(
 
 	double gamma,		/* Approximate gamma encoding of image (0.0 = default 1.7) */
 
-	double *sfid,		/* Specified fiducuals x1,y1, x2,y2, x3,y3, NULL if auto recognition */
+	double *sfid,		/* Specified fiducuals x1,y1, x2,y2, x3,y3, x4,y4,  */
+						/* Typically clockwise from top left, NULL if auto recognition */
 
 	int w, int h, 		/* Width and Height of input raster in pixels */
 	int d, int p,		/* Plane Depth, Bit presision of input pixels */

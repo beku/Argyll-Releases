@@ -157,16 +157,16 @@ main(int argc, char* argv[])
 	char mode[10];
 	char* mp = mode;
 	int c;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 
 	*mp++ = 'w';
 	*mp = '\0';
-	while ((c = getopt(argc, argv, ",:b:c:f:l:o:z:p:r:w:aistBILMC")) != -1)
+	while ((c = tiff_getopt(argc, argv, ",:b:c:f:l:o:z:p:r:w:aistBILMC")) != -1)
 		switch (c) {
                 case ',':
-                        if (optarg[0] != '=') usage();
-                        comma = optarg[1];
+                        if (tiff_optarg[0] != '=') usage();
+                        comma = tiff_optarg[1];
                         break;
                 case 'b':   /* this file is bias image subtracted from others */
                         if (bias) {
@@ -175,7 +175,7 @@ main(int argc, char* argv[])
                         }
                         {
                           uint16    samples = (uint16) -1;
-                          char **biasFn = &optarg;
+                          char **biasFn = &tiff_optarg;
                           bias = openSrcImage (biasFn);
                           if (!bias) exit (-5);
                           if (TIFFIsTiled (bias)) {
@@ -193,13 +193,13 @@ main(int argc, char* argv[])
 			mode[0] = 'a';
 			break;
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(optarg))
+			if (!processCompressOptions(tiff_optarg))
 				usage();
 			break;
 		case 'f':		/* fill order */
-			if (streq(optarg, "lsb2msb"))
+			if (streq(tiff_optarg, "lsb2msb"))
 				deffillorder = FILLORDER_LSB2MSB;
-			else if (streq(optarg, "msb2lsb"))
+			else if (streq(tiff_optarg, "msb2lsb"))
 				deffillorder = FILLORDER_MSB2LSB;
 			else
 				usage();
@@ -209,21 +209,21 @@ main(int argc, char* argv[])
 			break;
 		case 'l':		/* tile length */
 			outtiled = TRUE;
-			deftilelength = atoi(optarg);
+			deftilelength = atoi(tiff_optarg);
 			break;
 		case 'o':		/* initial directory offset */
-			diroff = strtoul(optarg, NULL, 0);
+			diroff = strtoul(tiff_optarg, NULL, 0);
 			break;
 		case 'p':		/* planar configuration */
-			if (streq(optarg, "separate"))
+			if (streq(tiff_optarg, "separate"))
 				defconfig = PLANARCONFIG_SEPARATE;
-			else if (streq(optarg, "contig"))
+			else if (streq(tiff_optarg, "contig"))
 				defconfig = PLANARCONFIG_CONTIG;
 			else
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			defrowsperstrip = atol(optarg);
+			defrowsperstrip = atol(tiff_optarg);
 			break;
 		case 's':		/* generate stripped output */
 			outtiled = FALSE;
@@ -233,7 +233,7 @@ main(int argc, char* argv[])
 			break;
 		case 'w':		/* tile width */
 			outtiled = TRUE;
-			deftilewidth = atoi(optarg);
+			deftilewidth = atoi(tiff_optarg);
 			break;
 		case 'I':
 			invertbw = 1;
@@ -254,15 +254,15 @@ main(int argc, char* argv[])
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - optind < 2)
+	if (argc - tiff_optind < 2)
 		usage();
 	out = TIFFOpen(argv[argc-1], mode);
 	if (out == NULL)
 		return (-2);
-	if ((argc - optind) == 2)
+	if ((argc - tiff_optind) == 2)
 	  pageNum = -1;
-	for (; optind < argc-1 ; optind++) {
-                char *imageCursor = argv[optind];
+	for (; tiff_optind < argc-1 ; tiff_optind++) {
+                char *imageCursor = argv[tiff_optind];
 		in = openSrcImage (&imageCursor);
 		if (in == NULL)
 			return (-3);

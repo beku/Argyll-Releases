@@ -25,10 +25,10 @@
 
 #define DIAG		/* Print internal value diagnostics for each conversion */
 #define SPOTTEST	/* Test known spot colors */
-#define INVTEST		/* Lab cube to XYZ to Jab to XYZ */
-#define INVTEST2	/* Jab cube to XYZ to Jab */
+#undef INVTEST		/* Lab cube to XYZ to Jab to XYZ */
+#undef INVTEST2	/* Jab cube to XYZ to Jab */
 #define TRES 33
-#define USE_HK 1	/* Use Helmholtz-Kohlraush */
+#define USE_HK 0	/* Use Helmholtz-Kohlraush */
 
 #ifndef _isnan
 #define _isnan(x) ((x) != (x))
@@ -209,8 +209,8 @@ main(void) {
 			cam,
 			vc_average,	/* Enumerated Viewing Condition */
 			white[c],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
-			0.20,		/* Relative Luminance of Background to reference white */
 			La[c],		/* Adapting/Surround Luminance cd/m^2 */
+			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
@@ -279,8 +279,8 @@ main(void) {
 			cam,
 			vc_average,	/* Enumerated Viewing Condition */
 			white[c],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) = D50 */
-			0.20,		/* Relative Luminance of Background to reference white */
 			34.0,		/* Adapting/Surround Luminance cd/m^2 */
+			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
@@ -368,8 +368,8 @@ main(void) {
 			cam,
 			vc_average,	/* Enumerated Viewing Condition */
 			white[c],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) = D50 */
-			0.20,		/* Relative Luminance of Background to reference white */
 			34.0,		/* Adapting/Surround Luminance cd/m^2 */
+			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */

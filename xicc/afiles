@@ -54,3 +54,4 @@ spectest.c
 spectest2.c
 cv.c
 cvtest.c
+extracticc.c

@@ -57,6 +57,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
 #include <ctype.h>
@@ -89,7 +90,12 @@
 /* ------------------------------------------------- */
 /* Memory image icmFile compatible class */
 /* Buffer is assumed to be a fixed size, and externally allocated */
-/* Writes therefore don't expand the buffer */
+/* Writes therefore don't expand the buffer. */
+
+/* Get the size of the file (Only valid for reading file). */
+static size_t icmFileMem_get_size(icmFile *pp) {
+	return pp->size;
+}
 
 /* Set current position to offset. Return 0 on success, nz on failure. */
 static int icmFileMem_seek(
@@ -192,6 +198,8 @@ icmFile *pp
 	icmAlloc *al = p->al;
 	int del_al   = p->del_al;
 
+	if (p->del_buf)		/* Free the memoryt buffer */
+		al->free(al, p->start);
 	al->free(al, p);	/* Free object */
 	if (del_al)			/* We are responsible for deleting allocator */
 		al->del(al);
@@ -199,7 +207,7 @@ icmFile *pp
 }
 
 /* Create a memory image file access class with allocator */
-/* Buffer is used as is */
+/* Buffer is used as is. */
 icmFile *new_icmFileMem_a(
 void *base,			/* Pointer to base of memory buffer */
 size_t length,		/* Number of bytes in buffer */
@@ -210,19 +218,34 @@ icmAlloc *al		/* heap allocator */
 	if ((p = (icmFileMem *) al->calloc(al, 1, sizeof(icmFileMem))) == NULL) {
 		return NULL;
 	}
-	p->al     = al;				/* Heap allocator */
-	p->seek   = icmFileMem_seek;
-	p->read   = icmFileMem_read;
-	p->write  = icmFileMem_write;
-	p->printf = icmFileMem_printf;
-	p->flush  = icmFileMem_flush;
-	p->del    = icmFileMem_delete;
+	p->al       = al;				/* Heap allocator */
+	p->get_size = icmFileMem_get_size;
+	p->seek     = icmFileMem_seek;
+	p->read     = icmFileMem_read;
+	p->write    = icmFileMem_write;
+	p->printf   = icmFileMem_printf;
+	p->flush    = icmFileMem_flush;
+	p->del      = icmFileMem_delete;
 
 	p->start = (unsigned char *)base;
 	p->cur = p->start;
 	p->end = p->start + length;
 
+	p->size = length;
+
 	return (icmFile *)p;
+}
+
+/* Create a memory image file access class with given allocator */
+/* and delete base when icmFile is deleted. */
+icmFile *new_icmFileMem_ad(void *base, size_t length, icmAlloc *al) {
+	icmFile *fp;
+
+	if ((fp = new_icmFileMem_a(base, length, al)) != NULL) {	
+		((icmFileMem *)fp)->del_buf = 1;
+	}
+
+	return fp;
 }
 
 /* ========================================================== */
@@ -1456,7 +1479,11 @@ static const char *string_RenderingIntent(icRenderingIntent sig) {
     		return "Saturation";
 		case icAbsoluteColorimetric:
     		return "Absolute Colorimetric";
-		case icmDefaultIntent:
+		case icmAbsolutePerceptual:				/* icclib specials */
+			return "Absolute Perceptual";
+		case icmAbsoluteSaturation:				/* icclib specials */
+			return "Absolute Saturation";
+		case icmDefaultIntent:					/* icclib specials */
     		return "Default Intent";
 		default:
 			sprintf(buf,"Unrecognized - 0x%x",sig);
@@ -5839,6 +5866,8 @@ static int icmLut_write(
 		return icp->errc = rv;
 	}
 
+	write_UInt8Number(0, bp+11);		/* Set padding to 0 */
+
 	/* Write 3x3 transform matrix */
 	for (j = 0; j < 3; j++) {		/* Rows */
 		for (i = 0; i < 3; i++) {	/* Columns */
@@ -8950,7 +8979,7 @@ static int icmVideoCardGamma_read(
 			icp->al->free(icp->al, buf);
 			return icp->errc = rv;
 		}
-		/* ~~~~ This should be a table of doules like the rest of icclib ! ~~~~ */
+		/* ~~~~ This should be a table of doubles like the rest of icclib ! ~~~~ */
 		pchar = (ORD8 *)p->u.table.data;
 		pshort = (ORD16 *)p->u.table.data;
 		for (c=0, bp=bp+18; c<p->u.table.channels*p->u.table.entryCount; c++) {
@@ -10383,6 +10412,10 @@ static struct {
 
 /* ------------------------------------------------------------- */
 
+/* Return the current read fp (if any) */
+static icmFile *icc_get_rfp(icc *p) {
+	return p->fp;
+}
 
 /* Change the version to be non-default (ie. not 2.2.0), */
 /* e.g. ICC V4 (used for creation) */
@@ -10497,16 +10530,20 @@ static int check_icc_legal(
 
 /* read the object, return 0 on success, error code on fail */
 /* NOTE: this doesn't read the tag types, they should be read on demand. */
-static int icc_read(
+/* NOTE: fp ownership is taken even if the function fails. */
+static int icc_read_x(
 	icc *p,
 	icmFile *fp,			/* File to read from */
-	unsigned long of		/* File offset to read from */
+	unsigned long of,		/* File offset to read from */
+	int take_fp				/* NZ if icc is to take ownership of fp */
 ) {
 	char tcbuf[4];			/* Tag count read buffer */
 	unsigned int i, len;
 	int er = 0;				/* Error code */
 	
 	p->fp = fp;
+	if (take_fp)
+		p->del_fp = 1;
 	p->of = of;
 	if (p->header == NULL) {
 		sprintf(p->err,"icc_read: No header defined");
@@ -10570,6 +10607,17 @@ static int icc_read(
 	}	/* p->count > 0 */
 
 	return er;
+}
+
+/* read the object, return 0 on success, error code on fail */
+/* NOTE: this doesn't read the tag types, they should be read on demand. */
+/* (backward compatible version) */
+static int icc_read(
+	icc *p,
+	icmFile *fp,			/* File to read from */
+	unsigned long of		/* File offset to read from */
+) {
+	return icc_read_x(p, fp, of, 0);
 }
 
 /* Check the profiles ID. We assume the file has already been read. */
@@ -10706,16 +10754,23 @@ static unsigned int icc_get_size(
 }
 
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
-static int icc_write(
+/* NOTE: fp ownership is taken even if the function fails. */
+static int icc_write_x(
 	icc *p,
 	icmFile *fp,		/* File to write to */
-	unsigned long of	/* File offset to write to */
+	unsigned long of,	/* File offset to write to */
+	int take_fp			/* NZ if icc is to take ownership of fp */
 ) {
 	char *bp, *buf;		/* tag table buffer */
 	unsigned int len;
 	int rv = 0;
 	unsigned int i, size = 0;
 	unsigned char pbuf[ALIGN_SIZE];
+
+	p->fp = fp;			/* Open file pointer */
+	if (take_fp)
+		p->del_fp = 1;
+	p->of = of;			/* Offset of ICC profile */
 
 	for (i = 0; i < ALIGN_SIZE; i++)
 		pbuf[i] = 0;
@@ -10724,9 +10779,6 @@ static int icc_write(
 	if ((rv = check_icc_legal(p)) != 0) {
 		return rv;
 	}
-
-	p->fp = fp;			/* Open file pointer */
-	p->of = of;			/* Offset of ICC profile */
 
 	/* Compute the total size and tag element data offsets */
 	if (p->header == NULL) {
@@ -10932,6 +10984,17 @@ static int icc_write(
 
 	return rv;
 }
+
+/* Write the contents of the object. Return 0 on sucess, error code on failure */
+/* (backwards compatible version) */
+static int icc_write(
+	icc *p,
+	icmFile *fp,		/* File to write to */
+	unsigned long of	/* File offset to write to */
+) {
+	return icc_write_x(p, fp, of, 0);
+}
+
 #undef ALIGN_SIZE
 #undef DO_ALIGN
 
@@ -10950,7 +11013,7 @@ static icmBase *icc_add_tag(
 ) {
 	icmBase *tp;
 	icmBase *nob;
-	int i, ok = 1;
+	int i = 0, ok = 1;
 	unsigned int j;
 
 	if (ttype != icmSigUnknownType) {   /* Check only for possibly known types */
@@ -11417,6 +11480,10 @@ static void icc_delete(
 	/* Free tag table */
 	al->free(al, p->data);
 
+	/* We are responsible for deleting the file object */
+	if (p->del_fp && p->fp != NULL)
+		p->fp->del(p->fp);
+
 	/* This object */
 	al->free(al, p);
 
@@ -11742,6 +11809,9 @@ static struct {
 	ICC V4 Lab encoding should be used in all PCS encodings in
 	all other situations, and can be used for Lab encoding in
 	device spaces for all other situtaions.
+
+	[ Since the ICC spec. doesn't cover device spaces labeled as Lab,
+      these are ripe for mis-matches between different implementations.]
 
 	This logic has yet to be fully implemented here.
 */
@@ -12404,6 +12474,29 @@ void icmVecRotMat(double m[3][4], double s1[3], double s0[3], double t1[3], doub
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* CIE Y (range 0 .. 1) to perceptual CIE 1976 L* (range 0 .. 100) */
+double
+icmY2L(double val) {
+	if (val > 0.008856451586)
+		val = pow(val,1.0/3.0);
+	else
+		val = 7.787036979 * val + 16.0/116.0;
+
+	val = (116.0 * val - 16.0);
+	return val;
+}
+
+/* Perceptual CIE 1976 L* (range 0 .. 100) to CIE Y (range 0 .. 1) */
+double
+icmL2Y(double val) {
+	val = (val + 16.0)/116.0;
+
+	if (val > 24.0/116.0)
+		val = pow(val,3.0);
+	else
+		val = (val - 16.0/116.0)/7.787036979;
+	return val;
+}
 
 /* CIE XYZ to perceptual CIE 1976 L*a*b* */
 void
@@ -13331,6 +13424,11 @@ icmMD5 *new_icmMD5(icmAlloc *al) {
 
 /* Dumy icmFile used to compute MD5 checksum on write */
 
+/* Get the size of the file (Only valid for reading file. */
+static size_t icmFileMD5_get_size(icmFile *pp) {
+	return pp->size;
+}
+
 /* Set current position to offset. Return 0 on success, nz on failure. */
 /* Seek can't be supported for MD5, so and seek must be to current location. */
 static int icmFileMD5_seek(
@@ -13422,14 +13520,15 @@ icmAlloc *al		/* heap allocator */
 	if ((p = (icmFileMD5 *) al->calloc(al, 1, sizeof(icmFileMD5))) == NULL) {
 		return NULL;
 	}
-	p->md5    = md5;			/* MD5 compute object */
-	p->al     = al;				/* Heap allocator */
-	p->seek   = icmFileMD5_seek;
-	p->read   = icmFileMD5_read;
-	p->write  = icmFileMD5_write;
-	p->printf = icmFileMD5_printf;
-	p->flush  = icmFileMD5_flush;
-	p->del    = icmFileMD5_delete;
+	p->md5      = md5;			/* MD5 compute object */
+	p->al       = al;			/* Heap allocator */
+	p->get_size = icmFileMD5_get_size;
+	p->seek     = icmFileMD5_seek;
+	p->read     = icmFileMD5_read;
+	p->write    = icmFileMD5_write;
+	p->printf   = icmFileMD5_printf;
+	p->flush    = icmFileMD5_flush;
+	p->del      = icmFileMD5_delete;
 	p->get_errc = icmFileMD5_geterrc;
 
 	p->of = 0;
@@ -13534,7 +13633,9 @@ struct _icmLuBase *lup
 	if ((whitePointTag = (icmXYZArray *)p->read_tag(p, icSigMediaWhitePointTag)) == NULL
         || whitePointTag->ttype != icSigXYZType || whitePointTag->size < 1) {
 		if (p->header->deviceClass != icSigLinkClass 
-		 && lup->intent == icAbsoluteColorimetric) {
+		 && (lup->intent == icAbsoluteColorimetric
+		  || lup->intent == icmAbsolutePerceptual
+		  || lup->intent == icmAbsoluteSaturation)) {
 			sprintf(p->err,"icc_lookup: Profile is missing Media White Point Tag");
 			p->errc = 1;
 			return 1;
@@ -13671,7 +13772,9 @@ double *in			/* Vector of input values in Native PCS */
 	}
 
 	/* Do absolute conversion */
-	if (p->intent == icAbsoluteColorimetric) {
+	if (p->intent == icAbsoluteColorimetric
+	 || p->intent == icmAbsolutePerceptual
+	 || p->intent == icmAbsoluteSaturation) {
 
 		if (p->pcs == icSigLabData) 	/* Convert L to Y */
 			icmLab2XYZ(&p->pcswht, out, out);
@@ -13772,7 +13875,9 @@ double *in			/* Vector of input values in Effective PCS */
 	if (p->e_pcs == icSigLabData) {
 		double wp[3];
 
-		if (p->intent == icAbsoluteColorimetric) {
+		if (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation) {
 			wp[0] = p->whitePoint.X;
 			wp[1] = p->whitePoint.Y;
 			wp[2] = p->whitePoint.Z;
@@ -13786,7 +13891,9 @@ double *in			/* Vector of input values in Effective PCS */
 		out[2] = out[0]/wp[0] * wp[2];
 
 	} else {
-		if (p->intent == icAbsoluteColorimetric) {
+		if (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation) {
 			out[0] = out[1]/p->whitePoint.Y * p->whitePoint.X;
 			out[2] = out[1]/p->whitePoint.Y * p->whitePoint.Z;
 		} else {
@@ -13796,7 +13903,9 @@ double *in			/* Vector of input values in Effective PCS */
 	}
 
 	/* Do absolute conversion, and conversion to effective PCS */
-	if (p->intent == icAbsoluteColorimetric) {
+	if (p->intent == icAbsoluteColorimetric
+	 || p->intent == icmAbsolutePerceptual
+	 || p->intent == icmAbsoluteSaturation) {
 
 		if (p->e_pcs == icSigLabData)
 			icmLab2XYZ(&p->pcswht, out, out);
@@ -14110,7 +14219,9 @@ double *in			/* Vector of input values */
 	}
 
 	/* If required, convert from Relative to Absolute colorimetric */
-	if (p->intent == icAbsoluteColorimetric) {
+	if (p->intent == icAbsoluteColorimetric
+	 || p->intent == icmAbsolutePerceptual
+	 || p->intent == icmAbsoluteSaturation) {
 		icmMulBy3x3(out, p->toAbs, out);
 	}
 
@@ -14198,7 +14309,9 @@ double *in			/* Vector of input values */
 		icmLab2XYZ(&p->pcswht, out, out);
 
 	/* If required, convert from Absolute to Relative colorimetric */
-	if (p->intent == icAbsoluteColorimetric) {
+	if (p->intent == icAbsoluteColorimetric
+	 || p->intent == icmAbsolutePerceptual
+	 || p->intent == icmAbsoluteSaturation) {
 		icmMulBy3x3(out, p->fromAbs, out);
 	}
 
@@ -14495,7 +14608,9 @@ static int icmLuLut_in_abs(icmLuLut *p, double *out, double *in) {
 
 	/* If Bwd Lut, take care of Absolute color space and effective input space */
 	if ((p->function == icmBwd || p->function == icmGamut || p->function == icmPreview)
-		&& p->intent == icAbsoluteColorimetric) {
+		&& (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation)) {
 	
 		if (p->e_inSpace == icSigLabData)
 			icmLab2XYZ(&p->pcswht, out, out);
@@ -14580,7 +14695,9 @@ static int icmLuLut_out_abs(icmLuLut *p, double *out, double *in) {
 	/* If Fwd Lut, take care of Absolute color space */
 	/* and convert from native to effective out PCS */
 	if ((p->function == icmFwd || p->function == icmPreview)
-		&& p->intent == icAbsoluteColorimetric) {
+		&& (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation)) {
 
 		if (p->outSpace == icSigLabData)
 			icmLab2XYZ(&p->pcswht, out, out);
@@ -14676,7 +14793,9 @@ double *in			/* Vector of input values */
 
 	/* If in_abs() or matrix() are active, then we can't have a per component input curve */
 	if (((p->function == icmBwd || p->function == icmGamut || p->function == icmPreview)
-		&& p->intent == icAbsoluteColorimetric)
+		&& (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation))
 	 || (p->e_inSpace != p->inSpace)
 	 || (p->usematrix)) {
 		unsigned int i;
@@ -14699,7 +14818,9 @@ double *in			/* Vector of input values */
 
 	/* If in_abs() or matrix() are active, then we have to do the per component input curve here */
 	if (((p->function == icmBwd || p->function == icmGamut || p->function == icmPreview)
-		&& p->intent == icAbsoluteColorimetric)
+		&& (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation))
 	 || (p->e_inSpace != p->inSpace)
 	 || (p->usematrix)) {
 		double temp[MAX_CHAN];
@@ -14713,7 +14834,9 @@ double *in			/* Vector of input values */
 
 	/* If out_abs() is active, then we can't have do per component out curve here */
 	if (((p->function == icmFwd || p->function == icmPreview)
-		&& p->intent == icAbsoluteColorimetric)
+		&& (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation))
 	 || (p->outSpace != p->e_outSpace)) {
 		rv |= p->output(p,out,out);
 		rv |= p->out_abs(p,out,out);
@@ -14734,7 +14857,9 @@ double *in			/* Vector of input values */
 
 	/* If out_abs() is active, then we can't have a per component out curve */
 	if (((p->function == icmFwd || p->function == icmPreview)
-		&& p->intent == icAbsoluteColorimetric)
+		&& (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation))
 	 || (p->outSpace != p->e_outSpace)) {
 		unsigned int i;
 		for (i = 0; i < lut->outputChan; i++)
@@ -14759,7 +14884,9 @@ double *in			/* Vector of input values */
 
 	/* If in_abs() or matrix() are active, then we can't have a per component input curve */
 	if (((p->function == icmBwd || p->function == icmGamut || p->function == icmPreview)
-		&& p->intent == icAbsoluteColorimetric)
+		&& (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation))
 	 || (p->e_inSpace != p->inSpace)
 	 || (p->usematrix)) {
 		unsigned int i;
@@ -14789,7 +14916,9 @@ static int icmLuLut_inv_out_abs(icmLuLut *p, double *out, double *in) {
 	/* and convert from effective to native inverse output PCS */
 	/* OutSpace must be PCS: XYZ or Lab */
 	if ((p->function == icmFwd || p->function == icmPreview)
-		&& p->intent == icAbsoluteColorimetric) {
+		&& (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation)) {
 
 		if (p->e_outSpace == icSigLabData)
 			icmLab2XYZ(&p->pcswht, out, out);
@@ -14910,7 +15039,9 @@ static int icmLuLut_inv_in_abs(icmLuLut *p, double *out, double *in) {
 	/* If Bwd Lut, take care of Absolute color space, and */
 	/* convert from native to effective input space */
 	if ((p->function == icmBwd || p->function == icmGamut || p->function == icmPreview)
-		&& p->intent == icAbsoluteColorimetric) {
+		&& (p->intent == icAbsoluteColorimetric
+		 || p->intent == icmAbsolutePerceptual
+		 || p->intent == icmAbsoluteSaturation)) {
 
 		if (p->inSpace == icSigLabData)
 			icmLab2XYZ(&p->pcswht, out, out);
@@ -15097,7 +15228,7 @@ new_icmLuLut(
 	p->inv_out_abs  = icmLuLut_inv_out_abs;
 
 	p->pcswht   = icp->header->illuminant;
-	p->intent   = intent;
+	p->intent   = intent;			/* used to trigger absolute processing */
 	p->function = func;
 	p->inSpace  = inSpace;
 	p->outSpace = outSpace;
@@ -15437,6 +15568,16 @@ static icmLuBase* icc_get_luobj (
 							fbtag = icSigAToB0Tag;
 							fbintent = icmDefaultIntent;
 							break;
+		    			case icmAbsolutePerceptual:		/* Special icclib intent */
+							ttag = icSigAToB0Tag;
+							fbtag = icSigAToB0Tag;
+							fbintent = intent;
+							break;
+		    			case icmAbsoluteSaturation:		/* Special icclib intent */
+							ttag = icSigAToB2Tag;
+							fbtag = icSigAToB0Tag;
+							fbintent = intent;
+							break;
 						default:
 							sprintf(p->err,"icc_get_luobj: Unknown intent");
 							p->errc = 1;
@@ -15527,6 +15668,16 @@ static icmLuBase* icc_get_luobj (
 							ttag = icSigBToA2Tag;
 							fbtag = icSigBToA0Tag;
 							fbintent = icmDefaultIntent;
+							break;
+		    			case icmAbsolutePerceptual:		/* Special icclib intent */
+							ttag = icSigBToA0Tag;
+							fbtag = icSigBToA0Tag;
+							fbintent = intent;
+							break;
+		    			case icmAbsoluteSaturation:		/* Special icclib intent */
+							ttag = icSigBToA2Tag;
+							fbtag = icSigBToA0Tag;
+							fbintent = intent;
 							break;
 						default:
 							sprintf(p->err,"icc_get_luobj: Unknown intent");
@@ -15623,9 +15774,11 @@ static icmLuBase* icc_get_luobj (
 								ttag = icSigAToB1Tag;
 							break;
 		    			case icPerceptual:
+		    			case icmAbsolutePerceptual:		/* Special icclib intent */
 								ttag = icSigAToB0Tag;
 							break;
 		    			case icSaturation:
+		    			case icmAbsoluteSaturation:		/* Special icclib intent */
 								ttag = icSigAToB2Tag;
 							break;
 						default:
@@ -15691,9 +15844,11 @@ static icmLuBase* icc_get_luobj (
 								ttag = icSigBToA1Tag;
 							break;
 		    			case icPerceptual:
+		    			case icmAbsolutePerceptual:		/* Special icclib intent */
 								ttag = icSigBToA0Tag;
 							break;
 		    			case icSaturation:
+		    			case icmAbsoluteSaturation:		/* Special icclib intent */
 								ttag = icSigBToA2Tag;
 							break;
 						default:
@@ -15759,6 +15914,8 @@ static icmLuBase* icc_get_luobj (
 #else				/* Be more forgiving */
 					switch (intent) {
 		    			case icAbsoluteColorimetric:
+		    			case icmAbsolutePerceptual:		/* Special icclib intent */
+		    			case icmAbsoluteSaturation:		/* Special icclib intent */
 							break;
 						case icmDefaultIntent:
 		    			case icRelativeColorimetric:
@@ -15793,6 +15950,8 @@ static icmLuBase* icc_get_luobj (
 								ttag = icSigPreview2Tag;
 							break;
 		    			case icAbsoluteColorimetric:
+		    			case icmAbsolutePerceptual:		/* Special icclib intent */
+		    			case icmAbsoluteSaturation:		/* Special icclib intent */
 							sprintf(p->err,"icc_get_luobj: Intent is inappropriate for preview table");
 							p->errc = 1;
 							return NULL;
@@ -16045,10 +16204,13 @@ icmAlloc *al			/* Memory allocator */
 
 	p->al = al;			/* Heap allocator */
 
+	p->get_rfp       = icc_get_rfp;
 	p->set_version   = icc_set_version;
 	p->get_size      = icc_get_size;
 	p->read          = icc_read;
+	p->read_x        = icc_read_x;
 	p->write         = icc_write;
+	p->write_x       = icc_write_x;
 	p->dump          = icc_dump;
 	p->del           = icc_delete;
 	p->add_tag       = icc_add_tag;

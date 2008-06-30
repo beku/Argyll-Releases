@@ -24,7 +24,7 @@
 
 #define LIBUSB_DLL_NAME "libusb0.dll"
 
-
+typedef int (*usb_argyll_patched_t)(void);
 typedef usb_dev_handle * (*usb_open_t)(struct usb_device *dev);
 typedef int (*usb_close_t)(usb_dev_handle *dev);
 typedef int (*usb_get_string_t)(usb_dev_handle *dev, int index, int langid, 
@@ -78,6 +78,7 @@ typedef int (*usb_reap_async_t)(void *context, int timeout);
 typedef int (*usb_free_async_t)(void **context);
 
 
+static usb_argyll_patched_t _usb_argyll_patched = NULL;
 static usb_open_t _usb_open = NULL;
 static usb_close_t _usb_close = NULL;
 static usb_get_string_t _usb_get_string = NULL;
@@ -124,6 +125,8 @@ void usb_init(void)
   if(!libusb_dll)
     return;
 
+  _usb_argyll_patched = (usb_argyll_patched_t)
+    GetProcAddress(libusb_dll, "usb_argyll_patched");
   _usb_open = (usb_open_t)
     GetProcAddress(libusb_dll, "usb_open");
   _usb_close = (usb_close_t)
@@ -197,6 +200,14 @@ void usb_init(void)
 
   if(_usb_init)
     _usb_init();
+}
+
+int usb_argyll_patched(void)
+{
+  if(_usb_argyll_patched)
+    return _usb_argyll_patched();
+  else
+    return NULL;
 }
 
 usb_dev_handle *usb_open(struct usb_device *dev)

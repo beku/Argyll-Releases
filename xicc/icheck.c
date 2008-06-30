@@ -22,12 +22,13 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
+#include "numlib.h"
+#include "copyright.h"
+#include "config.h"
 #include "icc.h"
 
-void error(char *fmt, ...), warning(char *fmt, ...);
-
 void usage(void) {
-	fprintf(stderr,"Check PCS->Device Interpolation faults of ICC file, V1.00\n");
+	fprintf(stderr,"Check PCS->Device Interpolation faults of ICC file, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: icheck [-v] [-w] infile\n");
 	fprintf(stderr," -v        verbose\n");
@@ -66,6 +67,8 @@ main(
 	icmLuAlgType alg;
 	FILE *wrl = NULL;
 	
+	error_program = argv[0];
+
 	if (argc < 2)
 		usage();
 
@@ -527,31 +530,3 @@ Lab2RGB(double *out, double *in) {
 	out[2] = B;
 }
 
-
-/* ------------------------------------------------ */
-/* Basic printf type error() and warning() routines */
-
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"icctest: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
-}
-
-void
-warning(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"icctest: Warning - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-}

@@ -45,6 +45,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "i1pro.h"
 #include "i1pro_imp.h"
 
@@ -90,7 +91,7 @@ i1pro_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 
 	if (p->debug) fprintf(stderr,"i1pro: About to init USB\n");
 
-/* Linix + i1pro rev D. bug workaround */
+/* Linix + i1pro bug workaround */
 /* Note that the i1pro rev D seems to crash on any get_configuration, */
 /* and is slow to release_interface under Linux (several seconds). */
 /* It also dissapears if closed under Linux, so a reset is used instead. */
@@ -148,6 +149,7 @@ i1pro_init_inst(inst *pp) {
 
 	p->cap2 = inst2_cal_ref_white
 	        | inst2_cal_trans_white 
+	        | inst2_cal_disp_int_time 
 	        | inst2_prog_trig 
 			| inst2_keyb_trig
 			| inst2_keyb_switch_trig

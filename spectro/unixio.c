@@ -34,6 +34,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "usbio.h"
 
 #undef DEBUG
@@ -439,8 +440,12 @@ icoms *p
 		for (i = 0; i < p->npaths; i++) {
 			if (p->paths[i]->path != NULL)
 				free(p->paths[i]->path);
+#ifdef ENABLE_USB
+			if (p->paths[i]->dev != NULL)
+				usb_del_usb_device(p->paths[i]->dev);
 			if (p->paths[i]->hev != NULL)
 				hid_del_hid_device(p->paths[i]->hev);
+#endif /* ENABLE_USB */
 			free(p->paths[i]);
 		}
 		free(p->paths);
@@ -573,7 +578,7 @@ icoms *p
 		char *dirn = "/dev/";
 	
 		if ((dd = opendir(dirn)) == NULL) {
-			DBGF(("failed to open directory \"%s\"\n",dirn));
+			DBGF((errout,"failed to open directory \"%s\"\n",dirn));
 			return p->paths;
 		}
 
@@ -692,7 +697,7 @@ word_length	 word
 		fprintf(stderr,"       Flow control = %d\n",fc);
 		fprintf(stderr,"       Baud Rate = %d\n",baud);
 		fprintf(stderr,"       Parity = %d\n",parity);
-		fprintf(stderr,"       Stop bits = %d\n",parity);
+		fprintf(stderr,"       Stop bits = %d\n",stop);
 		fprintf(stderr,"       Word length = %d\n",word);
 	}
 
@@ -1027,6 +1032,9 @@ double tout			/* Time out in seconds */
 	if (bsize < 3)
 		error("icoms_read given too small a buffer");
 
+#ifdef NEVER
+	/* The Prolific 2303 USB<->serial seems to choke on this, */
+	/* so we just put up with the 100msec delay at the end of each reply. */
 	if (tc != p->tc) {	/* Set the termination char */
 		struct termios tio;
 
@@ -1042,6 +1050,7 @@ double tout			/* Time out in seconds */
 
 		p->tc = tc;
 	}
+#endif
 
 	/* Configure stdin to be ready with just one character */
 	if (tcgetattr(STDIN_FILENO, &origs) < 0)
@@ -1143,8 +1152,12 @@ icoms_del(icoms *p) {
 		for (i = 0; i < p->npaths; i++) {
 			if (p->paths[i]->path != NULL)
 				free(p->paths[i]->path);
+#ifdef ENABLE_USB
+			if (p->paths[i]->dev != NULL)
+				usb_del_usb_device(p->paths[i]->dev);
 			if (p->paths[i]->hev != NULL)
 				hid_del_hid_device(p->paths[i]->hev);
+#endif /* ENABLE_USB */
 			free(p->paths[i]);
 		}
 		free(p->paths);

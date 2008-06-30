@@ -9,7 +9,7 @@
  * Author: Graeme W. Gill
  * Date:   15/3/2001
  *
- * Copyright 2001 - 2007 Graeme W. Gill
+ * Copyright 2001 - 2008 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
@@ -37,6 +37,7 @@
 
 #include "insttypes.h"		/* libinst Includes this functionality */
 #include "icoms.h"			/* libinst Includes this functionality */
+#include "conv.h"
 
 /* ------------------------------------------------- */
 /* Structure for holding an instrument patch reading */
@@ -50,7 +51,7 @@ struct _ipatch {
 	double XYZ[3];		/* XYZ values, 0.0 .. 100.0 */
 
 	int aXYZ_v;			/* Absolute XYZ valid */
-	double aXYZ[3];		/* XYZ values in cd/m^2 */
+	double aXYZ[3];		/* XYZ values in cd/m^2 or Lux/PI*/
 
 	int Lab_v;			/* Lab valid */
 	double Lab[3];		/* Lab value */
@@ -146,6 +147,7 @@ typedef enum {
 	inst2_cal_disp_offset   = 0x00000100, /* Uses a display offset/black calibration */
 	inst2_cal_disp_ratio    = 0x00000200, /* Uses a display ratio calibration */
 	inst2_cal_crt_freq      = 0x00000400, /* Uses a display CRT scan frequency calibration */
+	inst2_cal_disp_int_time = 0x00000800, /* Uses a display integration time calibration */
 
 	inst2_prog_trig         = 0x00001000, /* Progromatic trigger measure capability */
 	inst2_keyb_trig         = 0x00002000, /* Keyboard trigger measure capability */
@@ -157,7 +159,9 @@ typedef enum {
 	inst2_has_scan_toll     = 0x00080000, /* Instrument will honour modified scan tollerance */
 	inst2_no_feedback       = 0x00100000, /* Instrument doesn't give any user feedback */
 
-	inst2_has_leds          = 0x00200000  /* Instrument has some user viewable indicator LEDs */
+	inst2_has_leds          = 0x00200000, /* Instrument has some user viewable indicator LEDs */
+
+	inst2_has_battery       = 0x00400000  /* Instrument is battery powered */
 
 } inst2_capability;
 
@@ -245,7 +249,7 @@ typedef enum {
 
 } inst_opt_mode;
 
-/* Instrument status to return for get_status() */
+/* Instrument status commands for get_status() */
 typedef enum {
 	inst_stat_unknown           = 0x0000,	/* Status type not specified */
 
@@ -259,10 +263,13 @@ typedef enum {
 	inst_stat_s_xy              = 0x0004,	/* Return saved strip details */
 											/* [args: int *no_sheets, int *no_patches, */
 	                                        /*        int *no_rows, int *pat_per_row] */
-	inst_stat_s_chart           = 0x0005	/* Return number saved chart details */
+	inst_stat_s_chart           = 0x0005,	/* Return number saved chart details */
 											/* [args: int *no_patches, int *no_rows    */
 	                                        /*        int *pat_per_row, int *chart_id, */
 											/*        int *missing_row ]               */
+
+	inst_stat_battery           = 0x0006	/* Return charged status of battery */
+											/* [1 argument type *double : range 0.0 - 1.0 ] */
 } inst_status_type;
 
 
@@ -305,8 +312,10 @@ typedef enum {
 	inst_calt_disp_offset    = 0x40, 	/* Display offset/black calibration (dark surface) */
 	inst_calt_disp_ratio     = 0x50, 	/* Display ratio calibration */
 	inst_calt_crt_freq       = 0x60, 	/* Display CRT scan frequency calibration */
-	inst_calt_trans_white    = 0x70,	/* Transmissive white reference calibration */
-	inst_calt_trans_dark     = 0x80,	/* Transmissive dark reference calibration */
+	inst_calt_disp_int_time  = 0x70, 	/* Display integration time */
+	inst_calt_em_dark        = 0x80, 	/* Emissive dark calibration (in dark) */
+	inst_calt_trans_white    = 0x90,	/* Transmissive white reference calibration */
+	inst_calt_trans_dark     = 0xA0,	/* Transmissive dark reference calibration */
 
 	inst_calt_needs_cal_mask = 0xF0		/* One of the calibrations in needed */
 
@@ -326,7 +335,7 @@ typedef enum {
 	inst_calc_man_ref_white    = 0x00000010, /* place instrument on reflective white reference */
 	inst_calc_man_ref_whitek   = 0x00000020, /* click instrument on reflective white reference */
 	inst_calc_man_ref_dark     = 0x00000030, /* place instrument in dark, not close to anything */
-	inst_calc_man_em_dark      = 0x00000040, /* place instrument on dark surface */
+	inst_calc_man_em_dark      = 0x00000040, /* place cap on instrument, put on dark surface or white ref. */
 	inst_calc_man_trans_white  = 0x00000050, /* place instrument on transmissive white reference */
 	inst_calc_man_trans_dark   = 0x00000060, /* place instrument on transmissive dark reference */
 	inst_calc_man_man_mask     = 0x000000F0, /* user configured calibration mask */ 
@@ -356,10 +365,11 @@ typedef enum {
 	int cal_gy_count;	/* Display calibration test window state */				\
 																				\
 	/* Establish communications at the indicated baud rate. */					\
+	/* (Serial parameters are ignored for USB instrument) */					\
 	/* Timout in to seconds, and return non-zero error code */					\
 	inst_code (*init_coms)(														\
         struct _inst *p,														\
-        int comport,		/* Serial port number */							\
+        int comport,		/* icom communication port number */				\
         baud_rate br,		/* Baud rate */										\
         flow_control fc,	/* Flow control */									\
         double tout);		/* Timeout */										\
@@ -487,6 +497,9 @@ typedef enum {
 																				\
 	/* Read a single sample (applicable to spot instruments) */					\
 	/* Obeys the trigger mode set, and may return user trigger code */			\
+	/* Values are in XYZ 0..100 for reflective transmissive, */					\
+	/* aXYZ in cd/m^2 for emissive, amd Lux/3.1415926 for ambient. */			\
+	/* Spectral will be analogous to the XYZ/aXYZ. */							\
 	/* Return the inst error code */											\
 	inst_code (*read_sample)(													\
 		struct _inst *p,														\
@@ -564,18 +577,12 @@ struct _inst {
 	}; typedef struct _inst inst;
 
 /* Constructor */
-extern inst *new_inst(int comport, instType itype, int debug, int verb);
-
-#ifdef ENABLE_USB
-
-/* Given a USB vendor and product ID, */
-/* return the matching instrument type, or */
-/* instUnknown if none match. */
-extern instType inst_usb_match(
-unsigned short idVendor,
-unsigned short idProduct);
-
-#endif /* ENABLE_USB */
+extern inst *new_inst(
+	int comport,		/* icom communication port number */
+	instType itype,		/* Usually instUnknown to auto detect type of instrument */
+	int debug,			/* Debug level, 0 = off */
+	int verb			/* Verbose level, 0  = off */
+);
 
 #define INST_H
 #endif /* INST_H */

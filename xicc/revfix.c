@@ -38,7 +38,7 @@
 #undef DEBUG		/* Print each value changed */
 
 void usage(void) {
-	fprintf(stderr,"Invert AtoB1 to make BtoA1 for CMYK profiles, V1.20\n");
+	fprintf(stderr,"Invert AtoB1 to make BtoA1 for CMYK profiles, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: revfix [-options] iccin iccout\n");
 	fprintf(stderr," -v             Verbose\n");
@@ -636,7 +636,7 @@ main(int argc, char *argv[]) {
 
 			/* The abstract profile intent is assumed to determine how it gets applied. */
 			/* Make abstract PCS XYZ if icAbsoluteColorimetric is needed. */
-			if ((cb.abs_luo = abs_xicc->get_luobj(abs_xicc, 0, icmFwd, cb.abs_intent,
+			if ((cb.abs_luo = abs_xicc->get_luobj(abs_xicc, ICX_CLIP_NEAREST, icmFwd, cb.abs_intent,
 		        (cb.pcsspace == icSigLabData && cb.abs_intent == icRelativeColorimetric)
 				             ? icSigLabData : icSigXYZData,
 				icmLuOrdNorm, NULL, NULL)) == NULL)
@@ -675,7 +675,7 @@ main(int argc, char *argv[]) {
 				cb.AtoB = cb.AtoB1;
 			} else {
 				/* Setup CMYK -> Lab conversion (Fwd) object */
-				if ((cb.AtoB = (icxLuLut *)xicco->get_luobj(xicco, 0, icmFwd, intent,
+				if ((cb.AtoB = (icxLuLut *)xicco->get_luobj(xicco, ICX_CLIP_NEAREST, icmFwd, intent,
 				                         icmSigDefaultData, icmLuOrdNorm, NULL, NULL)) == NULL)
 					error ("%d, %s",xicco->errc, xicco->err);
 	
@@ -685,7 +685,7 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Setup Lab -> CMYK conversion (Bwd) object */
-			if ((cb.BtoA = (icxLuLut *)xicco->get_luobj(xicco, 0, icmBwd, intent,
+			if ((cb.BtoA = (icxLuLut *)xicco->get_luobj(xicco, ICX_CLIP_NEAREST, icmBwd, intent,
 			                           icmSigDefaultData, icmLuOrdNorm, NULL, NULL)) == NULL)
 				error ("%d, %s",xicco->errc, xicco->err);
 
@@ -736,8 +736,13 @@ main(int argc, char *argv[]) {
 	
 				if (cb.verb) {
 					unsigned int ui;
+					int extra;
 					for (cb.total = 1, ui = 0; ui < wo->inputChan; ui++, cb.total *= wo->clutPoints)
 						; 
+					/* Add in cell center points */
+					for (extra = 1, ui = 0; ui < wo->inputChan; ui++, extra *= (wo->clutPoints-1))
+						;
+					cb.total += extra;
 					printf(" 0%%"), fflush(stdout);
 				}
 				/* Use helper function to do the hard work. */

@@ -24,6 +24,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "usbio.h"
 
 #undef DEBUG
@@ -222,13 +223,19 @@ icoms *p
 	LONG stat;
 	HKEY sch;		/* Serial coms handle */
 
+	DBG("icoms_get_paths: called\n");
+
 	/* Free any old list */
 	if (p->paths != NULL) {
 		for (i = 0; i < p->npaths; i++) {
 			if (p->paths[i]->path != NULL)
 				free(p->paths[i]->path);
+#ifdef ENABLE_USB
+			if (p->paths[i]->dev != NULL)
+				usb_del_usb_device(p->paths[i]->dev);
 			if (p->paths[i]->hev != NULL)
 				hid_del_hid_device(p->paths[i]->hev);
+#endif /* ENABLE_USB */
 			free(p->paths[i]);
 		}
 		free(p->paths);
@@ -236,18 +243,24 @@ icoms *p
 		p->paths = NULL;
 	}
 	
+	DBG("icoms_get_paths: about to call usb_get_paths()\n");
 	usb_get_paths(p);
+	DBGF((errout,"icoms_get_paths: up to %d, about to call hid_get_paths()\n",p->npaths));
 	hid_get_paths(p);
 	usbend = p->npaths;
+
+	DBGF((errout,"icoms_get_paths: up to %d, about to lookup the registry for serial ports\n",p->npaths));
 
 	/* Look in the registry */
 	if ((stat = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "HARDWARE\\DEVICEMAP\\SERIALCOMM",
 	                         0, KEY_READ, &sch)) != ERROR_SUCCESS) {
+		DBGF((errout,"icoms_get_paths: there is not SERIALCOMM entry, returning %d paths\n",p->npaths));
 		if (p->debug) fprintf(stderr,"icoms: There don't appear to be any serial ports\n");
 		return p->paths;		/* Maybe they have USB ports */
 	}
 
 	/* Look at all the values in this key */
+	DBG("icoms_get_paths: about to look through all the values in the SERIALCOMM key\n");
 	for (i = 0; ; i++) {
 		char valname[100];
 		DWORD vnsize = 100;
@@ -266,9 +279,11 @@ icoms *p
 			&vsize		/* Address of value buffer size */
 		);
 		if (stat == ERROR_NO_MORE_ITEMS) {
+			DBG("icoms_get_paths: got ERROR_NO_MORE_ITEMS\n");
 			break;
 		}
 		if (stat != ERROR_SUCCESS) {
+			DBG("icoms_get_paths: got !ERROR_SUCCESS\n");
 			warning("RegEnumValue failed with %d",stat);
 			break;
 		}
@@ -276,6 +291,7 @@ icoms *p
 		value[100-1] = '\000';
 
 		if (vtype != REG_SZ) {
+			DBG("icoms_get_paths: got !REG_SZ\n");
 			warning("RegEnumValue didn't return stringz type");
 			continue;
 		}
@@ -298,13 +314,17 @@ icoms *p
 		p->paths[p->npaths]->dev = NULL;
 		p->paths[p->npaths]->hev = NULL;
 #endif /* ENABLE_USB */
+		DBGF((errout,"icoms_get_paths: Added path '%s'\n",p->paths[p->npaths]->path));
 		p->npaths++;
 		p->paths[p->npaths] = NULL;
 	}
-	if ((stat = RegCloseKey(sch)) != ERROR_SUCCESS)
+	if ((stat = RegCloseKey(sch)) != ERROR_SUCCESS) {
+		DBG("icoms_get_paths: RegCloseKey failed\n");
 		warning("RegCloseKey failed with %d\n",stat);
+	}
 
 	/* Sort the COM keys so people don't get confused... */
+	DBGF((errout,"icoms_get_paths: we now have %d entries and are about to sort them\n",p->npaths));
 	for (i = usbend; i < (p->npaths-1); i++) {
 		for (j = i+1; j < p->npaths; j++) {
 			if (strcmp(p->paths[i]->path, p->paths[j]->path) > 0) {
@@ -315,6 +335,7 @@ icoms *p
 		}
 	}
 
+	DBG("icoms_get_paths: about to return\n");
 	return p->paths;
 }
 
@@ -363,7 +384,7 @@ word_length	 word)
 		fprintf(stderr,"       Flow control = %d\n",fc);
 		fprintf(stderr,"       Baud Rate = %d\n",baud);
 		fprintf(stderr,"       Parity = %d\n",parity);
-		fprintf(stderr,"       Stop bits = %d\n",parity);
+		fprintf(stderr,"       Stop bits = %d\n",stop);
 		fprintf(stderr,"       Word length = %d\n",word);
 	}
 
@@ -402,7 +423,7 @@ word_length	 word)
 			if (port <= 0 || port > p->npaths)
 				error("icoms - set_ser_port: port number out of range!");
 
-			if (p->paths[port-1]->dev != NULL)
+			if (p->paths[port-1]->dev != NULL || p->paths[port-1]->hev != NULL)
 				error("icoms - set_ser_port: USB port sent to set_serial!");
 
 			if ((p->ppath = malloc(sizeof(icompath))) == NULL)
@@ -674,6 +695,10 @@ double tout)		/* Time out in seconds */
 	if (bsize < 3)
 		error("icoms_read given too small a buffer");
 
+#ifdef NEVER
+	/* The Prolific 2303 USB<->serial seems to choke on this, */ 
+	/* so we just put up with a 100msec delay at the end of each */
+	/* reply. */
 	if (GetCommState(p->phandle, &dcb) == FALSE)
 		error("Reading Comm State failed");
 
@@ -681,6 +706,7 @@ double tout)		/* Time out in seconds */
 
 	if (!SetCommState(p->phandle, &dcb))
 		error("SetCommState failed");
+#endif
 	p->tc = tc;
 
 	p->lerr = 0;
@@ -761,8 +787,12 @@ icoms_del(icoms *p) {
 		for (i = 0; i < p->npaths; i++) {
 			if (p->paths[i]->path != NULL)
 				free(p->paths[i]->path);
+#ifdef ENABLE_USB
+			if (p->paths[i]->dev != NULL)
+				usb_del_usb_device(p->paths[i]->dev);
 			if (p->paths[i]->hev != NULL)
 				hid_del_hid_device(p->paths[i]->hev);
+#endif /* ENABLE_USB */
 			free(p->paths[i]);
 		}
 		free(p->paths);

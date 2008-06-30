@@ -37,21 +37,31 @@ Add markers for prim. &amp; sec. "cusp" points</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-f function&nbsp;&nbsp; f =
 forward*, b = backwards</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-i
-intent&nbsp;&nbsp;&nbsp;&nbsp; p = perceptual, r
-= relative colorimetric,</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-s = saturation, a = absolute*,</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-j = Appearance CIECAM02, d = default</span><br
+&nbsp;
+<span style="font-family: monospace;"></span></small><small><span
+ style="font-family: monospace;">-i
+intent&nbsp;&nbsp;&nbsp;&nbsp; p =
+perceptual, r = relative colorimetric,</span><br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-o
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+s = saturation, a = absolute (default), d = profile default</span></small><small><span
+ style="font-family: monospace;"></span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;-o
 order&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; n = normal
 (priority: lut &gt; matrix &gt; monochrome)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-r = reverse (priority: monochrome &gt; matrix &gt;
-lut)</span><br style="font-family: monospace;">
+r = reverse (priority: monochrome &gt;
+matrix &gt; lut)<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><span
+ style="font-family: monospace;">-p oride</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; l =
+Lab_PCS (default), j = CIECAM02 Appearance Jab</span></small><small><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span><br
+ style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-l
 tlimit&nbsp;&nbsp;&nbsp;&nbsp; set total
 ink limit, 0 - 400% (estimate by default)</span><br
@@ -127,9 +137,11 @@ light % of image luminance (default 1)</span><br
 f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as
 XYZ (default media white)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as x, y</span><br
+f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as x, y<br>
+&nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create special cube surface topology plot<br
  style="font-family: monospace;">
-<i style="font-family: monospace;">profile</i><span
+</span><i style="font-family: monospace;">profile</i><span
  style="font-family: monospace;"> &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; The
 name of the </span><a style="font-family: monospace;"
  href="File_Formats.html#ICC">ICC</a><span
@@ -171,12 +183,12 @@ plotting the gamut. The backwards tables generally incorporate gamut
 compression, and therefore don't reflect the native capabilities of the
 device.<br>
 <br>
-The <b>-i</b> parameter allows choosing the table being used by its
-intent.
-Anything other than colorimetric may not represent the native
-capabilities of the device. A&nbsp; parameter value of <span
- style="font-weight: bold;">j</span> interprets the absolute
-colorimetric table in terms of CIECAM02 appearance space Jab values.<br>
+The <b>-i</b> flag selects the intent transform used for a lut based
+profile. It also selects between relative and absolute colorimetric for
+non-lut base profiles. Note that anything other than colorimetric may
+not represent the
+native capabilities of the device. The default intent will be absolute
+colorimetic for L*a*b* output, and CIECAM02 appearance for Jab output.<br>
 <br>
 An ICC profile is allowed to contain more than the minimum number of
 elements or table needed to describe a certain transform, and may
@@ -186,6 +198,29 @@ information, and only using
 monochrome information if it is all that is present. The <b>-o</b>
 flag,
 reverses this order.&nbsp;&nbsp;&nbsp; <br>
+<br>
+<span style="font-weight: bold;">-p</span>: By default the gamut will
+be created in L*a*b* colorspace. If&nbsp; <span
+ style="font-weight: bold;">-pj</span> is selected, then CIECAM02
+appearance space Jab will be used for the output, and the viewing
+conditions will be taken into account. Jab space is what is normally
+needed to be compatible with the default intents used in <a
+ href="colprof.html">colprof</a>. <span style="font-weight: bold;"><br>
+</span>Note that the CIECAM02 output space selection by default uses
+the colorimetric transform of the profile resulting in the appearance
+of the native device, but that the perceptual or
+saturation transforms may be used by selecting them using the <span
+ style="font-weight: bold;">-i</span> parameter, which may give a
+different result with some profiles. This may be desirable if an image
+is to be transformed through the perceptual or saturation tables of a
+profile as part of a link with an Argyll generated output profile,
+since it will then represent the apparent gamut of the image when
+subject to these tables. If the absolute colorimetric intent is chosen
+using <span style="font-weight: bold;">-ia</span> in combinations with
+<span style="font-weight: bold;">-pj</span>, then&nbsp; Jab with
+a fixed white reference is used, which emulates an absolute CIECAM02
+Jab
+appearance space. <br>
 <br>
 The <b>-l</b> parameter allows setting a total ink limit (TAC) for
 printing
@@ -205,6 +240,10 @@ The <b>-c</b> parameter allows setting the CIECAM02 viewing
 conditions,
 either by choosing a typical viewing environment, or controlling
 particular viewing condition parameters.<br>
+<br>
+The <span style="font-weight: bold;">-s</span> flag creates a special
+hyper-cube surface plot that is artificially colored. This can be
+useful for identifying the topology of the black ink color response.<br>
 <h3>Example<br>
 </h3>
 To create a view in L*a*b* of the absolute gamut of a CMYK file with an

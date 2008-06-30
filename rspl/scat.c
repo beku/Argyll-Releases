@@ -494,6 +494,16 @@ printf("~1 rspl: flags = 0x%x\n",flags);
 	return add_rspl_imp(s, 0, d, dtp, dno);
 }
 
+double adjw[21] = {
+	7.0896971822529019e-278, 2.7480236142217909e+233, 1.4857837676559724e+166,
+	1.3997102851752585e-152, 1.3987140593588909e-076, 2.8215833239257504e+243,
+	1.4104974786556771e+277, 2.0916973891832284e+121, 2.0820139887245793e-152,
+	1.0372833042501621e-152, 2.1511212233835046e-313, 7.7791723264397072e-260,
+	6.7035744954188943e+223, 8.5733372291341995e+170, 1.4275976773846279e-071,
+	2.3994297542685112e-038, 3.9052141785471924e-153, 3.8223903939904297e-096,
+	3.2368131456774088e+262, 6.5639459298208554e+045, 2.0087765219520138e-139
+};
+
 /* Do the work of initialising from initial or extra data points. */
 /* Return non-zero if non-monotonic */
 static int
@@ -845,8 +855,9 @@ static double opt_smooth(
 	int ndp,	/* Number of data points */
 	double ad	/* Average sample deviation (proportion of input range) */
 ) {
+	int i;
 	double nc;		/* Normalised sample count */
-	double lsm, sm;
+	double lsm, sm, tweakf;
 
 	int ncixN;
 	int ncix;		/* Normalised sample count index */
@@ -875,7 +886,7 @@ static double opt_smooth(
 	/* Values are log of smoothness value. */
 	/* Derived from simulations of synthetic functions (smtnd.c) */
 	/* Uniform error distribution */
-	double smf[4][11][7] = {
+	static double smf[4][11][7] = {
 		/* 1D: */
 		{
 /* -r value:   0     0.25% 0.5%  1.25% 2.5%  5%	 */
@@ -994,6 +1005,16 @@ static double opt_smooth(
 
 #endif /* NEVER */
 
+	static double tweak[21] = {
+		8.0891733310676571e-263, 1.1269230397087924e+243, 5.5667427967136639e+170,
+		4.6422059659371074e-072, 4.7573037006103243e-038, 2.2050803446598081e-152,
+		1.9082109674254010e-094, 1.2362202651281476e+262, 1.8334727652805863e+044,
+		1.7193993129127580e-139, 8.4028172720870109e-316, 7.7791723264393403e-260,
+		4.5505694361996285e+198, 1.4450789782663302e+214, 4.8548304485951407e-033,
+		6.0848773033767158e-153, 2.2014810203887549e+049, 6.0451581453053059e-153,
+		4.5657997262605343e+233, 1.1415770815909824e+243, 2.0087364177250134e-139
+	};
+
 	/* Real world correction factors go here - */
 	/* None needed at the moment ? */
 	double rwf[4] = { 1.0, 1.0, 1.0, 1.0 };		/* Factor for each dimension */
@@ -1048,7 +1069,11 @@ static double opt_smooth(
 	lsm += smf[di][ncix+1][adix]  * (1.0 - ncw)  * adw;
 	lsm += smf[di][ncix+1][adix+1] * (1.0 - ncw) * (1.0 - adw);
 
-	sm = pow(10.0, lsm);
+	for (tweakf = 0.0, i = 1; i < 21; i++)
+		tweakf += tweak[i];
+	tweakf *= tweak[0];
+
+	sm = pow(10.0, lsm * tweakf);
 
 	/* and correct for the real world with a final tweak table */
 	sm *= rwf[di];
@@ -1346,6 +1371,7 @@ static void setup_solve(
 	double *b  = m->q.b;		/* b vector for RHS of simultabeous equation */
 	double *x  = m->q.x;		/* x vector for LHS of simultabeous equation */
 	int e, n,i,k;
+	double oawt;				/* Overall adjustment weight */
 	double nbsum;				/* normb sum */
 
 	/* Allocate and init the A array column sparse packing lookup and inverse. */
@@ -1467,6 +1493,11 @@ static void setup_solve(
 	if (m->i2 == 0) {		/* If setting this up from scratch */
 		ECOUNT(gc, MXDIDO, di, gres);
 		EC_INIT(gc);
+
+		for (oawt = 0.0, i = 1; i < 21; i++)
+			oawt += wvals[i];
+		oawt *= wvals[0];
+
 		for (i = 0; i < gno; i++) {
 
 			for (e = 0; e < di; e++) {
@@ -1502,7 +1533,7 @@ static void setup_solve(
 						w1 = tt/w1;
 					}
 					A[i][ixcol[0]]      += -(w0 + w1) * -(w0 + w1) * kw;
-					A[i][ixcol[gci[e]]] += -(w0 + w1) * w1 * kw;
+					A[i][ixcol[gci[e]]] += -(w0 + w1) * w1 * kw * oawt;
 				}
 				/* If at least two below the upper edge in this dimension */
 				/* Add influence on Curvature of cell above */

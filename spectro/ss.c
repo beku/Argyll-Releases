@@ -37,6 +37,16 @@
    and agreed to support.
  */
 
+/*
+	TTBD:
+
+	There is a bug or limitation with using -N to skip the calibration
+	when using any of the emissive modes - the readings end up being nearly zero.
+
+	You can't trigger a calibration readsing using the instrument switch.
+
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -47,6 +57,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "ss.h"
 
 #undef DEBUG
@@ -279,8 +290,9 @@ ss_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 			printf("Got target type '%d'\n",tt);
 			printf("Start wl %d, no wl %d, wl space %d\n",fswl, nosw, dsw);
 #endif
+			/* "Spectrolino" and "Spectrolino 8mm" are known */
 			if (tt != ss_ttt_Spectrolino
-			  || strcmp(devn, "Spectrolino") != 0)
+			  || strncmp(devn, "Spectrolino",11) != 0)
 				return inst_unknown_model;
 	
 			if (p->itype == instUnknown)	/* No SpectrScan */
@@ -1744,7 +1756,7 @@ ss_del(inst *pp) {
 }
 
 /* Constructor */
-extern ss *new_gretag(icoms *icom, int debug, int verb) {
+extern ss *new_ss(icoms *icom, int debug, int verb) {
 	ss *p;
 	if ((p = (ss *)calloc(sizeof(ss),1)) == NULL)
 		error("ss: malloc failed!");

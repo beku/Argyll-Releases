@@ -19,95 +19,91 @@ executable package, then the executables don't need to be compiled, and
 the following instructions are not relevant.<br>
 <h5><span style="text-decoration: underline;">First&nbsp; setup JAM:</span><br>
 </h5>
-Argyll makes use of an unconventional build system called <a
- href="http://www.perforce.com/jam/jam.html">Jam/MR</a>. This
-can make it a little tricky to build.
-<p>You need to have the Jam/MR build utility installed on your system.
-(If you don't want to install/use Jam, then you are going to need to
-write
-a number of makefiles in whatever build system you prefer. Check on the
-Argyll download page if any other packagings are available.) The
-Jambase
-I am using is included in the Argyll archive, and it is recommended
-that
-you use this, or at least do a diff with your current Jambase, and make
-appropriate changes. A typical problem with not using a properly
-configured
-Jambase, is that the maths library isn't linked in on some UNIX
-systems.
-Jam/MR is available from <a href="http://www.perforce.com/jam/jam.html">&lt;http://www.perforce.com/jam/jam.html&gt;</a>
+Argyll makes use of a build system called <a
+ href="http://www.perforce.com/jam/jam.html">Jam/MR</a>. Jam is cross
+platform, highly customizable and flexible. It uses a concise, scalable
+and platform neutral configuration files, and is fast.<br>
+<p>If you do not already have Jam 2.5 on your system, you will need to
+install it. [It may be available as an RPM for Linux systems.] Jam/MR
+is available from <a href="ftp://ftp.perforce.com/pub/jam/jam-2.5.zip">&lt;ftp://ftp.perforce.com/pub/jam/&gt;</a>
 You'll
-want to bootstrap it up using its Makefile, and then use it with the
-Jambase
-provided in Argyll, perhaps using the -f flag (like the default scripts
-do), creating an alias of jam
-that invokes jam using the -f flag, or modify the makeall scripts in
-Argyll
-to invoke Jam with the -f flag. (The Jam I'm using has been modified to
-look for a Jambase specified by a JAMBASE environment variable). Note
-that Apple OSX is a UNIX based system, and you'll simply want to use
-"make" to build Jam.<br>
+want to bootstrap it up using its Makefile - see the <span
+ style="font-weight: bold;">README</span> file that comes with Jam for
+more information. You may want to apply the patch <span
+ style="font-weight: bold;">jam.patch</span> included in Argyll to <span
+ style="font-weight: bold;">jam.c</span> so that it uses the
+environment variable <span style="font-weight: bold;">JAMBASE</span>,
+and then setting this environment variable to point to the Argyll
+Jambase. The patch also fixes a non-critical bug that affects building
+using MingW. Note that building jam results in an executable <span
+ style="font-weight: bold;">jam0</span> that you will want to rename
+and install in an appropriate place on your system. A <span
+ style="font-weight: bold;">pre-patched</span> archive of Jam is
+available <a href="http://www.argyllcms.com/ajam-2.5.2.zip">here</a>.<br>
 </p>
-<p>If you're using MINGW on MSWindows, you will need to make sure that
-the Jam Makefile has CFLAGS = -DNT when building Jam (rather than<br>
-CFLAGS = -DMINGW) otherwise the resulting Jam executable won't know
-it's on a Windows NT type system (this seems to be a compatibility bug
-in Jam. I've tried to work around this in my Jambase, but this may not
-work completely).<br>
+<p>An alternative to the original Jam may be <a
+ href="http://freetype.sourceforge.net/jam/index.html">ftjam</a>, which
+is appears to be backwards compatible with the original Jam/MR.</p>
+<p>The
+<span style="font-weight: bold;">Jambase</span>
+I am using for Argyll is different to the default Jambase provided with
+Jam and compiled into it,&nbsp; and you need to arrange to use this
+when you compile Argyll. You can tell Jam to use an alternate Jambase
+using the <span style="font-weight: bold;">-f</span> option, or by
+setting the environment variable <span style="font-weight: bold;">JAMBASE</span>
+to point to the Argyll Jambase if you applied the Argyll patch to jam.
+Another method would be to create a shell alias of jam
+that invokes jam using the -f flag, or to create a script that provides
+the -f option to point to the Argyll Jambase. Argyll will not build
+properly if you use the wrong Jambase.
 </p>
-<p>If you are running on Mac OSX, then even though OSX comes with a
+If you are running on Mac OSX, then even though OSX comes with a
 version
 of Jam/MR in the development system, you will need to download, build
 and
-install a normal version of Jam/MR Version 2.4 or later from perforce,
+install a normal version of Jam/MR Version 2.5 or later from perforce,
 to be able to build Argyll. This is due to Apple changing their version
-of Jam sufficiently to make it incompatible with normal Jamfiles :-(.
-The
-current release was built using OSX 10.3, although there is no
-particular
-reason it shouldn't compile on earlier or later OSX versions).
-</p>
+of Jam sufficiently to make it incompatible with normal Jamfiles :-(.<br>
 <p>On OSX what I did was to name the "normal" Jam ajam, and then setup
 a jam shell script to invoke it something like this: "ajam
 -f~/src/argyll/Jambase
 $*", and to make sure that my script is ahead of Apples jam in my
 $PATH.&nbsp;
-The makeall.ksh script will run Jam with the -f flag.</p>
+The makeall.ksh script or Makefile will run Jam with the -f flag.</p>
 <p>You may also have to set the appropriate environment variable to
 tell the Jambase which compiler you are using.<br>
 </p>
 <h5><span style="text-decoration: underline;">Then compile Argyll:</span><br>
 </h5>
 <p>Once you've got a working Jam, you simply have to unzip the
-argyll.zip file in a directory you have created
-for it, and then run the top level makeall script. On an MSWindows
-system, run makeall.bat, and if you are on a
-Linux/OSX/Unix-like
-system, run makeall.ksh (i.e. <span style="color: rgb(102, 0, 204);">sh
-makeall.ksh</span>). You may have to <span
- style="color: rgb(102, 0, 204);">chmod +x makeall.ksh</span> if the
-unzip has not restored executable status.<br>
+argyll.zip file, and it will create a top level directory <span
+ style="font-weight: bold;">Argyll_VX.X.X</span>, where X.X.X is the
+version number, and you can then cd into this directory and run <span
+ style="font-weight: bold;">jam</span>. <span
+ style="color: rgb(102, 0, 204);"></span><span
+ style="color: rgb(102, 0, 204);"></span>For a faster build on a
+multiprocessor system you may like to use the -j option&nbsp; to do a
+parallel build, e.g. <span style="font-weight: bold;">jam -j3</span>.
+To install the executables in the bin directory and the sample files
+into the <span style="font-weight: bold;">ref</span> directory, run <span
+ style="font-weight: bold;">jam install</span>. To remove everything
+that has been built, run <span style="font-weight: bold;">jam clean</span>.<br>
 </p>
-<p>You will have to watch the compile process to pick up any build
-failures in
-each sub-directory (The Jamfiles are setup for development in a
-particular
-directory, rather than for building the whole system in one hit. I
-haven't found an easy way yet to make it do both.)
-</p>
-<p>Another thing to watch on the Intel versions of OS X, is that your
+<p>Something to watch on the Intel versions of OS X 10.4, is that your
 shell environment variable $MACHTYPE may be incorrect. On Intel 10.4 it
 should be i386-apple-darwin8.0, but there are bugs in Apples
 distribution.</p>
 <p>If&nbsp; you are on MSWindows and have the DDK installed, then it is
 worth setting the environment variables %DDK_INC_PATH% and
 %DDK_LIB_PATH% to the header and DDK library directories, so that the
-MSWindows HID driver inteface will get enabled. This allows accessing
+MSWindows HID driver interface will get enabled. This allows accessing
 USB instruments&nbsp;
 that are labeled as HID devices (such as the Gretag Huey) , without
-having to install the libusb kernel drivers.<br>
-&nbsp;
-<br>
+having to install the libusb kernel drivers, and this will also allow
+the Huey to be accessed on Vista 64.<br>
+</p>
+<p>To build a particular sub directory only, cd to the directory and
+simply run <span style="font-weight: bold;">jam.</span><br>
 &nbsp;
 <br>
 &nbsp;

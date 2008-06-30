@@ -27,14 +27,14 @@
 #include <math.h>
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "xicc.h"
 #include "gamut.h"
 #include "rspl.h"
-#include "numlib.h"
 #include "gammap.h"
 
 void usage(void) {
-	fprintf(stderr,"Map bteween two gamuts\n");
+	fprintf(stderr,"Map bteween two gamuts, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: maptest [options] ingamut outgamut diag_gamut\n");
 	fprintf(stderr," -v            Verbose\n");
@@ -152,7 +152,8 @@ main(int argc, char *argv[]) {
 		&gmi,
 		17,			/* rspl resolution of 17 */
 		NULL,		/* No input range override */
-		NULL
+		NULL,
+		"gammap.wrl"	/* Diagnostic plot */
 	);
 
 printf("~9 got gamut mapping\n");

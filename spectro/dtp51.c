@@ -42,6 +42,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "dtp51.h"
 
 #undef DEBUG

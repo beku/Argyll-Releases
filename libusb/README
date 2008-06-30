@@ -17,7 +17,8 @@ NOTICE
 ======
 
 This library has been modified to fix certain concurreny
-issues in darwin.c and linux.c - GWG
+issues in darwin.c and linux.c, and a flag has been added
+to indicate that these fixes are present. - GWG
 
 Installation
 ============

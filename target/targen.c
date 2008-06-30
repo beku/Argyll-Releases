@@ -100,6 +100,7 @@
 #include "copyright.h"
 #include "config.h"
 #include "numlib.h"
+#include "vrml.h"
 #include "rspl.h"
 #include "cgats.h"
 #include "icc.h"
@@ -113,15 +114,6 @@
 #include "prand.h"
 
 #include <stdarg.h>
-
-#ifdef VRML_DIAG
-#undef VRML_LAB			/* Output is Lab space points */
-FILE *start_vrml(char *name, int doaxes);
-void start_point_set(FILE *wrl);
-void add_vertex(FILE *wrl, double pp[3], double cc[3], double rad);
-void end_point_set(FILE *wrl);
-void end_vrml(FILE *wrl);
-#endif /* VRML_DIAG */
 
 #define min2(a,b) ((a) < (b) ? (a) : (b))
 #define min3(a,b,c)  (min2((a), min2((b),(c))))
@@ -742,7 +734,8 @@ usage(int level) {
 	fprintf(stderr,"                 (Use \"none\" to turn off any conditioning)\n");
 	fprintf(stderr," -F L,a,b,rad    Filter out samples outside Lab sphere.\n");
 #ifdef VRML_DIAG
-	fprintf(stderr," -w              Dump diagnostic outfile.wrl file\n");
+	fprintf(stderr," -w              Dump diagnostic outfile.wrl file (Lab locations)\n");
+	fprintf(stderr," -W              Dump diagnostic outfile.wrl file (Device locations)\n");
 #endif /* VRML_DIAG */
 	fprintf(stderr," outfile         Base name for output(.ti1)\n");
 	exit(1);
@@ -1005,8 +998,10 @@ int main(int argc, char *argv[]) {
 			}
 
 #ifdef VRML_DIAG
-			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W')
+			else if (argv[fa][1] == 'w')
 				dumpvrml = 1;
+			else if (argv[fa][1] == 'W')
+				dumpvrml = 2;
 #endif /* VRML_DIAG */
 			else 
 				usage(0);
@@ -1883,38 +1878,32 @@ int main(int argc, char *argv[]) {
 
 #ifdef VRML_DIAG		/* Dump a VRML of the resulting points */
 	if (dumpvrml != 0) {
-   		int nsets = pp->t[0].nsets;		/* Number of cols addded so far */
-		double dev[MXTD];
-		double Lab[3];
-		FILE *vp;
+		vrml *wrl;
+		int nsets = pp->t[0].nsets;
 		double rad;
+		double dev[MXTD], Lab[3], col[3];
+
+		wrl = new_vrml(wname, dumpvrml == 2 ? 0 : 1);
 
 		/* Fudge sphere diameter */
-		rad = 25.0/pow(nsets, 1.0/(double)(di <= 3 ? di : 3));
-
-		vp = start_vrml(wname, 1);
-		start_point_set(vp);
+		rad = 15.0/pow(nsets, 1.0/(double)(di <= 3 ? di : 3));
 
 		for (i = 0; i < nsets; i++) {
-			for (j = 0; j < di; j++) {
+			for (j = 0; j < di; j++)
 				dev[j] = 0.01 * *((double *)pp->t[0].fdata[i][j + 1]);
-			}
-#ifdef VRML_LAB
 			pdata->dev_to_rLab(pdata, Lab, dev);
-//printf("~1 dev %f %f %f -> Lab %f %f %f\n",dev[0], dev[1], dev[2], Lab[0], Lab[1], Lab[2]);
-#else
-			/* Fudge device values */
-			Lab[0] = 100.0 * dev[0];
-			Lab[1] = 100.0 * dev[1] - 50.0;
-			Lab[2] = 100.0 * dev[2] - 50.0;
-#endif
-			add_vertex(vp, Lab, dev, rad);
+			wrl->Lab2RGB(wrl, col, Lab);
+
+			/* Fudge device values into Lab space */
+			if (dumpvrml == 2) {
+				Lab[0] = 100.0 * dev[0];
+				Lab[1] = 100.0 * dev[1] - 50.0;
+				Lab[2] = 100.0 * dev[2] - 50.0;
+			}
+			wrl->add_marker(wrl, Lab, col, rad);
 		}
-
-		end_point_set(vp);
-		end_vrml(vp);
+		wrl->del(wrl);		/* Write file and delete */
 	}
-
 #endif /* VRML_DIAG */
 
 	pdata->del(pdata);	/* Cleanup perceptual conversion */
@@ -1927,147 +1916,6 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
-
-/******************************************************************/
-/* Error/debug output routines */
-/******************************************************************/
-
-#ifdef NEVER
-
-/* Basic printf type error() and warning() routines */
-
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"targen: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
-}
-
-void
-warning(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"targen: Warning - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-}
-
-#endif /* NEVER */
-
-
-/* **************************************************************** */
-#ifdef VRML_DIAG		/* Dump a VRML of the resulting points */
-
-/* ------------------------------------------------ */
-/* Some simple functions to do basic VRML work */
-
-#define GAMUT_LCENT 50.0
-
-FILE *start_vrml(char *name, int doaxes) {
-	FILE *wrl;
-	struct {
-		double x, y, z;
-		double wx, wy, wz;
-		double r, g, b;
-	} axes[5] = {
-		{ 0, 0,  50-GAMUT_LCENT,  2, 2, 100,  .7, .7, .7 },	/* L axis */
-		{ 50, 0,  0-GAMUT_LCENT,  100, 2, 2,   1,  0,  0 },	/* +a (red) axis */
-		{ 0, -50, 0-GAMUT_LCENT,  2, 100, 2,   0,  0,  1 },	/* -b (blue) axis */
-		{ -50, 0, 0-GAMUT_LCENT,  100, 2, 2,   0,  1,  0 },	/* -a (green) axis */
-		{ 0,  50, 0-GAMUT_LCENT,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
-	};
-	int i;
-	
-	if ((wrl = fopen(name,"w")) == NULL)
-		error("Error opening VRML file '%s'\n",name);
-
-	fprintf(wrl,"#VRML V2.0 utf8\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"Transform {\n");
-	fprintf(wrl,"children [\n");
-	fprintf(wrl,"	NavigationInfo {\n");
-	fprintf(wrl,"		type \"EXAMINE\"        # It's an object we examine\n");
-	fprintf(wrl,"	} # We'll add our own light\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    DirectionalLight {\n");
-	fprintf(wrl,"        direction 0 0 -1      # Light illuminating the scene\n");
-	fprintf(wrl,"        direction 0 -1 0      # Light illuminating the scene\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	fprintf(wrl,"    Viewpoint {\n");
-	fprintf(wrl,"        position 0 0 340      # Position we view from\n");
-	fprintf(wrl,"    }\n");
-	fprintf(wrl,"\n");
-	if (doaxes != 0) {
-		fprintf(wrl,"# Lab axes as boxes:\n");
-		for (i = 0; i < 5; i++) {
-			fprintf(wrl,"Transform { translation %f %f %f\n", axes[i].x, axes[i].y, axes[i].z);
-			fprintf(wrl,"\tchildren [\n");
-			fprintf(wrl,"\t\tShape{\n");
-			fprintf(wrl,"\t\t\tgeometry Box { size %f %f %f }\n",
-			                  axes[i].wx, axes[i].wy, axes[i].wz);
-			fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
-			fprintf(wrl,"{ diffuseColor %f %f %f} }\n", axes[i].r, axes[i].g, axes[i].b);
-			fprintf(wrl,"\t\t}\n");
-			fprintf(wrl,"\t]\n");
-			fprintf(wrl,"}\n");
-		}
-		fprintf(wrl,"\n");
-	}
-
-	return wrl;
-}
-
-void
-start_point_set(FILE *wrl) {
-
-}
-
-void add_vertex(FILE *wrl, double pp[3], double cc[3], double rad) {
-	int j;
-	double dd[3];
-
-	/* ~~~ should convert from Lab to sRGB !!!! */
-	for (j = 0; j < 3; j++) {
-		dd[j] = (cc[j] + 0.2)/1.2;
-	}
-
-	fprintf(wrl,"Transform { translation %f %f %f\n", pp[1], pp[2], pp[0]-GAMUT_LCENT);
-	fprintf(wrl,"\tchildren [\n");
-	fprintf(wrl,"\t\tShape{\n");
-	fprintf(wrl,"\t\t\tgeometry Box { size %f %f %f }\n", 1.0, 1.0, 1.0);
-	fprintf(wrl,"\t\t\tgeometry Sphere { radius %f}\n", rad);
-	fprintf(wrl,"\t\t\tappearance Appearance { material Material ");
-	fprintf(wrl,"{ diffuseColor %f %f %f} }\n", dd[0], dd[1], dd[2]);
-	fprintf(wrl,"\t\t}\n");
-	fprintf(wrl,"\t]\n");
-	fprintf(wrl,"}\n");
-}
-
-
-void end_point_set(FILE *wrl) {
-}
-
-void end_vrml(FILE *wrl) {
-
-	fprintf(wrl,"\n");
-	fprintf(wrl,"  ] # end of children for world\n");
-	fprintf(wrl,"}\n");
-
-	if (fclose(wrl) != 0)
-		error("Error closing VRML file\n");
-}
-
-#endif /* VRML_DIAG */
 
 
 

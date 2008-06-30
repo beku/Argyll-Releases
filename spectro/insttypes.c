@@ -70,7 +70,7 @@ char *inst_name(instType itype) {
 
 /* Given an instrument identification name, return the matching */
 /* instType, or instUnknown if not matched */
-extern instType inst_enum(char *name) {
+instType inst_enum(char *name) {
 
 	if (strcmp(name, "Xrite DTP20") == 0)
 		return instDTP20;
@@ -111,7 +111,7 @@ extern instType inst_enum(char *name) {
 /* Given a USB vendor and product ID, */
 /* return the matching instrument type, or */
 /* instUnknown if none match. */
-extern instType inst_usb_match(
+instType inst_usb_match(
 unsigned short idVendor,
 unsigned short idProduct) {
 

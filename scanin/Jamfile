@@ -1,40 +1,30 @@
 
-#SubDir TOP scanin ;
 
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;
-
-if $(HAVE_TIFF) {
-	TIFFLIB = ;
-	TIFFINC = ;
-	LINKLIBS on scanin$(SUFEXE) = -ltiff $(LINKLIBS) ;
-} else {
-	TIFFLIB = ../tiff/libtiff.lib ;
-	TIFFINC = ../tiff ;
-}
+#PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 #Products
 Libraries = libscanrd ;
 Executables = scanin ;
 Headers = scanrd.h ;
-Samples = it8.cht ColorCheckerDC.cht ColorCheckerSG.cht Hutchcolor.cht i1_RGB_Scan_1.4.cht QPcard_201.cht QPcard_201.cie ;
+Samples = it8.cht ColorChecker.cht ColorChecker.cie ColorCheckerDC.cht
+          ColorCheckerSG.cht Hutchcolor.cht i1_RGB_Scan_1.4.cht
+          QPcard_201.cht QPcard_201.cie CMP_DT_003.cht ;
 
 #Install
-InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
-InstallFile $(DOTDOT)$(SLASH)ref : $(Samples) ;
-#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
-#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+InstallBin ../bin : $(Executables) ;
+InstallFile ../ref : $(Samples) ;
+#InstallFile ../h : $(Headers) ;
+#InstallLib ../lib : $(Libraries) ;
 
 # Chart recognition library
-Library libscanrd.lib : scanrd.c ;
-ObjectHdrs scanrd : ../numlib ;	# icc bug workaround
+Library libscanrd : scanrd.c : : : ../numlib ;
 
 # IT8 chart reader - sucks in tiff file and spits out cgats file
 Main scanin : scanin.c ;
-ObjectHdrs scanin : ../cgats ../numlib ../icc ../xicc $(TIFFINC) ;	# icc bug workaround
-LinkLibraries scanin : libscanrd.lib ../numlib/libnum.lib
-                           $(TIFFLIB) ../cgats/libcgats.lib
-                           ../icc/libicc.lib ../xicc/libxcolorants.lib ;
-
+ObjectHdrs scanin : ../h ../cgats ../numlib ../icc ../xicc $(TIFFINC) ;
+LinkLibraries scanin : libscanrd ../xicc/libxcolorants
+                       ../numlib/libnum ../cgats/libcgats
+                       ../icc/libicc $(TIFFLIB) ;
 

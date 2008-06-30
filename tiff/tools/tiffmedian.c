@@ -114,18 +114,18 @@ main(int argc, char* argv[])
 	float floatv;
 	uint32 longv;
 	int c;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 
 	num_colors = MAX_CMAP_SIZE;
-	while ((c = getopt(argc, argv, "c:C:r:f")) != -1)
+	while ((c = tiff_getopt(argc, argv, "c:C:r:f")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(optarg))
+			if (!processCompressOptions(tiff_optarg))
 				usage();
 			break;
 		case 'C':		/* set colormap size */
-			num_colors = atoi(optarg);
+			num_colors = atoi(tiff_optarg);
 			if (num_colors > MAX_CMAP_SIZE) {
 				fprintf(stderr,
 				   "-c: colormap too big, max %d\n",
@@ -137,15 +137,15 @@ main(int argc, char* argv[])
 			dither = 1;
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(optarg);
+			rowsperstrip = atoi(tiff_optarg);
 			break;
 		case '?':
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - optind != 2)
+	if (argc - tiff_optind != 2)
 		usage();
-	in = TIFFOpen(argv[optind], "r");
+	in = TIFFOpen(argv[tiff_optind], "r");
 	if (in == NULL)
 		return (-1);
 	TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &imagewidth);
@@ -154,18 +154,18 @@ main(int argc, char* argv[])
 	TIFFGetField(in, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
 	if (bitspersample != 8 && bitspersample != 16) {
 		fprintf(stderr, "%s: Image must have at least 8-bits/sample\n",
-		    argv[optind]);
+		    argv[tiff_optind]);
 		return (-3);
 	}
 	if (!TIFFGetField(in, TIFFTAG_PHOTOMETRIC, &photometric) ||
 	    photometric != PHOTOMETRIC_RGB || samplesperpixel < 3) {
-		fprintf(stderr, "%s: Image must have RGB data\n", argv[optind]);
+		fprintf(stderr, "%s: Image must have RGB data\n", argv[tiff_optind]);
 		return (-4);
 	}
 	TIFFGetField(in, TIFFTAG_PLANARCONFIG, &config);
 	if (config != PLANARCONFIG_CONTIG) {
 		fprintf(stderr, "%s: Can only handle contiguous data packing\n",
-		    argv[optind]);
+		    argv[tiff_optind]);
 		return (-5);
 	}
 
@@ -234,7 +234,7 @@ main(int argc, char* argv[])
 	/*
 	 * STEP 6: scan image, match input values to table entries
 	 */
-	out = TIFFOpen(argv[optind+1], "w");
+	out = TIFFOpen(argv[tiff_optind+1], "w");
 	if (out == NULL)
 		return (-2);
 

@@ -51,6 +51,8 @@ main(
 	int wl_n = 0;
 	int evy5 = 0;
 
+	error_program = argv[0];
+
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */

@@ -46,7 +46,6 @@
 
 static void mcv_del(mcv *p);
 static void mcv_fit(mcv *p, int verb, int order, mcvco *d, int ndp, double smooth);
-static void mcv_fit_2(mcv *p, int verb, int order, mcvco *d, int ndp, double smooth);
 static void mcv_force_0(mcv *p, double target);
 static void mcv_force_1(mcv *p, double target);
 static void mcv_force_scale(mcv *p, double target);

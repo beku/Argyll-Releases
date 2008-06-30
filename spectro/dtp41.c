@@ -45,6 +45,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "dtp41.h"
 
 #undef DEBUG
@@ -150,19 +151,6 @@ dtp41_command(dtp41 *p, char *in, char *out, int bsize, double to) {
 	return dtp41_interp_code((inst *)p, rv);
 }
 
-#if defined(XXFC) || defined(HWFC)
-# if defined(HWFC)
-#  define FC_SERIAL fc_Hardware
-#  define FC_INST "0104CF\r"
-# else
-#  define FC_SERIAL fc_XonXOff
-#  define FC_INST "0304CF\r"
-# endif
-#else
-# define FC_SERIAL fc_none
-# define FC_INST "0004CF\r"
-#endif
-
 /* Establish communications with a DTP41 */
 /* Use the baud rate given, and timeout in to secs */
 /* Return DTP_COMS_FAIL on failure to establish communications */
@@ -239,11 +227,13 @@ dtp41_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 	if ((ev = dtp41_command(p, "0012CF\r", buf, MAX_MES_SIZE, 1.5)) != inst_ok)
 		return ev;
 
-	/* Set the handshaking */
-	if ((ev = dtp41_command(p, fcc, buf, MAX_MES_SIZE, 1.5)) != inst_ok)
-		return ev;
+	/* Set the handshaking (cope with coms breakdown) */
+	if ((rv = p->icom->write_read(p->icom, fcc, buf, MAX_MES_SIZE, '>', 1, 1.5)) != 0) {
+		if (extract_ec(buf) != DTP41_OK)
+			return inst_coms_fail;
+	}
 
-	/* Change the baud rate to the rate we've been told */
+	/* Change the baud rate to the rate we've been told (cope with coms breakdown) */
 	if ((rv = p->icom->write_read(p->icom, brc[bi], buf, MAX_MES_SIZE, '>', 1, 1.5)) != 0) {
 		if (extract_ec(buf) != DTP41_OK)
 			return inst_coms_fail;

@@ -205,8 +205,8 @@ main(
 #endif	/* !USE_JAB */
 
 	/* Device to PCS conversion object */
-	if ((in_lu = in_xicco->get_luobj(in_xicco, 0, icmFwd, icAbsoluteColorimetric, pcsor, icmLuOrdNorm, ivc, NULL)) == NULL) {
-		if ((in_lu = in_xicco->get_luobj(in_xicco, 0, icmBwd, icmDefaultIntent, pcsor, icmLuOrdNorm, ivc, NULL)) == NULL)
+	if ((in_lu = in_xicco->get_luobj(in_xicco, ICX_CLIP_NEAREST, icmFwd, icAbsoluteColorimetric, pcsor, icmLuOrdNorm, ivc, NULL)) == NULL) {
+		if ((in_lu = in_xicco->get_luobj(in_xicco, ICX_CLIP_NEAREST, icmBwd, icmDefaultIntent, pcsor, icmLuOrdNorm, ivc, NULL)) == NULL)
 			error ("%d, %s",in_xicco->errc, in_xicco->err);
 	}
 
@@ -215,8 +215,8 @@ main(
 		error ("%d, %s",link_icco->errc, link_icco->err);
 
 	/* Get a Device to PCS conversion object */
-	if ((out_lu = out_xicco->get_luobj(out_xicco, 0, icmFwd, icAbsoluteColorimetric, pcsor, icmLuOrdNorm, ovc, NULL)) == NULL) {
-		if ((out_lu = out_xicco->get_luobj(out_xicco, 0, icmFwd, icmDefaultIntent, pcsor, icmLuOrdNorm, ovc, NULL)) == NULL)
+	if ((out_lu = out_xicco->get_luobj(out_xicco, ICX_CLIP_NEAREST, icmFwd, icAbsoluteColorimetric, pcsor, icmLuOrdNorm, ovc, NULL)) == NULL) {
+		if ((out_lu = out_xicco->get_luobj(out_xicco, ICX_CLIP_NEAREST, icmFwd, icmDefaultIntent, pcsor, icmLuOrdNorm, ovc, NULL)) == NULL)
 			error ("%d, %s",out_xicco->errc, out_xicco->err);
 	}
 

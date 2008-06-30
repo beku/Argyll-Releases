@@ -812,6 +812,19 @@ int dowait		/* Wait for a user key */
 		    Rect	wRect;
 			WindowClass wclass = 0;
 			WindowAttributes attr = kWindowNoAttributes;
+			ProcessSerialNumber psn = { 0, 0 };
+
+			if ((stat = GetCurrentProcess(&psn)) != noErr) {
+#ifdef DEBUG
+				printf("GetCurrentProcess returned error %d\n",stat);
+#endif
+			}
+
+			/* Transform the process so that the desktop interacts with it properly. */
+			/* We don't need resources or a bundle if we do this. */
+			if (psn.lowLongOfPSN != 0 && (stat = TransformProcessType(&psn, kProcessTransformToForegroundApplication)) != noErr) {
+				debugf(("TransformProcess failed with code %d\n",stat));
+			}
 
 			/* Choose the windows class and attributes */
 			wclass = kDocumentWindowClass;		/* document windows*/
@@ -848,19 +861,10 @@ int dowait		/* Wait for a user key */
 				return(-1);
 			}
 			/* make window come to the front at start */
-			{
-				ProcessSerialNumber cpsn;
-				if ((stat = GetCurrentProcess(&cpsn)) != noErr) {
+			if (psn.lowLongOfPSN != 0 && (stat = SetFrontProcess(&psn)) != noErr) {
 #ifdef DEBUG
-					printf("GetCurrentProcess returned error %d\n",stat);
+				printf("SetFrontProcess returned error %d\n",stat);
 #endif
-				} else {
-				if ((stat = SetFrontProcess(&cpsn)) != noErr) {
-#ifdef DEBUG
-						printf("SetFrontProcess returned error %d\n",stat);
-#endif
-					}
-				}
 			}
 
 			/* Activate the window */
@@ -870,7 +874,7 @@ int dowait		/* Wait for a user key */
 			/* Cause window repaint with the new data */
 			Rect wrect;
 			debugf(("Causing Window Repaint ?\n"));
-			GetPortBounds(GetWindowPort(myWindow), &wrect);
+			GetWindowPortBounds(myWindow, &wrect);
 			if ((stat = InvalWindowRect(myWindow, &wrect)) != noErr) {
 				debugf(("InvalWindowRect failed with %d\n",stat));
 			}
@@ -906,7 +910,7 @@ void* userData
 					OSStatus stat;
 					Rect wrect;
 					debugf(("Event: Bounds Changed\n"));
-					GetPortBounds(GetWindowPort(myWindow), &wrect);
+					GetWindowPortBounds(myWindow, &wrect);
 					if ((stat = InvalWindowRect(myWindow, &wrect)) != noErr) {
 						debugf(("InvalWindowRect failed with %d\n",stat));
 					}
@@ -1163,7 +1167,7 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 	float dash_list[2] = {7.0, 2.0};
 
 	port = GetWindowPort(win);
-	GetPortBounds(port, &rect);		/* Bounds is inclusive, global coords */
+	GetWindowPortBounds(win, &rect);		/* Bounds is inclusive, global coords */
 
 	/* Setup the plot info structure for this drawing */
 	/* Note port rect is raster like, pdp/Quartz2D is Postscript like */

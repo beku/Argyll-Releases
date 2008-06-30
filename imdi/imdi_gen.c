@@ -110,7 +110,6 @@ gendesc *gd,		/* Input description */
 int comb,			/* Combination index */
 mach_arch *a		/* Machine architecture */
 ) {
-	int e;
 	int nc = 1;			/* Number of combinations */
 	int nidc, id;		/* Number of input dimension combinations, current index */
 	int nodc, od;		/* Number of output dimension combinations, current index */

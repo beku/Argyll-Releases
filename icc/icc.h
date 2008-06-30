@@ -151,6 +151,9 @@ icmAlloc *new_icmAllocStd(void);
 #define ICM_FILE_BASE																		\
 	/* Public: */																			\
 																							\
+	/* Get the size of the file (Only valid for reading file). */							\
+	size_t (*get_size) (struct _icmFile *p);												\
+																							\
 	/* Set current position to offset. Return 0 on success, nz on failure. */				\
 	int    (*seek) (struct _icmFile *p, long int offset);									\
 																							\
@@ -168,7 +171,9 @@ icmAlloc *new_icmAllocStd(void);
 																							\
 	/* we're done with the file object, return nz on failure */								\
 	int (*del)(struct _icmFile *p);															\
-
+																							\
+	/* Private: */																			\
+	size_t size;	/* Size of the file */													\
 
 /* Common file interface class */
 struct _icmFile {
@@ -197,7 +202,7 @@ icmFile *new_icmFileStd_name(char *name, char *mode);
 /* Create given a (binary) FILE* */
 icmFile *new_icmFileStd_fp(FILE *fp);
 
-/* Create given a file name and allocator */
+/* Create given a file name with allocator */
 icmFile *new_icmFileStd_name_a(char *name, char *mode, icmAlloc *al);
 
 /* Create given a (binary) FILE* and allocator */
@@ -212,12 +217,17 @@ struct _icmFileMem {
 	/* Private: */
 	icmAlloc *al;		/* Heap allocator */
 	int      del_al;	/* NZ if heap allocator should be deleted */
+	int      del_buf;	/* NZ if memory file buffer should be deleted */
 	unsigned char *start, *cur, *end;
 
 }; typedef struct _icmFileMem icmFileMem;
 
-/* Create a memory image file access class with allocator */
+/* Create a memory image file access class with given allocator */
 icmFile *new_icmFileMem_a(void *base, size_t length, icmAlloc *al);
+
+/* Create a memory image file access class with given allocator */
+/* and delete base when icmFile is deleted. */
+icmFile *new_icmFileMem_ad(void *base, size_t length, icmAlloc *al);
 
 /* This is avalailable if SEPARATE_STD is not defined: */
 
@@ -1316,8 +1326,14 @@ typedef struct {
 
 /* Pseudo enumerations valid as parameter to get_luobj(): */
 
+/* Special purpose Perceptual intent */
+#define icmAbsolutePerceptual ((icRenderingIntent)97)
+
+/* Special purpose Saturation intent */
+#define icmAbsoluteSaturation ((icRenderingIntent)98)
+
 /* To be specified where an intent is not appropriate */
-#define icmDefaultIntent ((icRenderingIntent)98)
+#define icmDefaultIntent ((icRenderingIntent)99)
 
 /* Pseudo PCS colospace used to indicate the native PCS */
 #define icmSigDefaultData ((icColorSpaceSignature) 0x0)
@@ -1337,11 +1353,14 @@ typedef enum {
 /* The ICC object */
 struct _icc {
   /* Public: */
+	icmFile     *(*get_rfp)(struct _icc *p);			/* Return the current read fp (if any) */
 	int          (*set_version)(struct _icc *p, icmICCVersion ver);
 	                                                       /* For creation, use ICC V4 etc. */
 	unsigned int (*get_size)(struct _icc *p);				/* Return total size needed, 0 = err. */
 	int          (*read)(struct _icc *p, icmFile *fp, unsigned long of);	/* Returns error code */
+	int          (*read_x)(struct _icc *p, icmFile *fp, unsigned long of, int take_fp);
 	int          (*write)(struct _icc *p, icmFile *fp, unsigned long of);/* Returns error code */
+	int          (*write_x)(struct _icc *p, icmFile *fp, unsigned long of, int take_fp);
 	void         (*dump)(struct _icc *p, icmFile *op, int verb);	/* Dump whole icc */
 	void         (*del)(struct _icc *p);						/* Free whole icc */
 	int          (*find_tag)(struct _icc *p, icTagSignature sig);
@@ -1379,6 +1398,7 @@ struct _icc {
 	icmAlloc        *al;				/* Heap allocator */
 	int              del_al;			/* NZ if heap allocator should be deleted */
 	icmFile         *fp;				/* File associated with object */
+	int              del_fp;			/* NZ if File should be deleted */
 	unsigned long    of;				/* Offset of the profile within the file */
     unsigned int     count;				/* Num tags in the profile */
     icmTag          *data;    			/* The tagTable and tagData */
@@ -1548,6 +1568,12 @@ extern ICCLIB_API unsigned int icmCSSig2chanNames( icColorSpaceSignature sig, ch
 /* Simple macro to transfer an 3array to 3array */
 #define icmAry2Ary(d_ary, s_ary) ((d_ary)[0] = (s_ary)[0], (d_ary)[1] = (s_ary)[1], \
                                   (d_ary)[2] = (s_ary)[2])
+
+/* CIE Y (range 0 .. 1) to perceptual CIE 1976 L* (range 0 .. 100) */
+double icmY2L(double val);
+
+/* Perceptual CIE 1976 L* (range 0 .. 100) to CIE Y (range 0 .. 1) */
+double icmL2Y(double val);
 
 /* CIE XYZ to perceptual Lab */
 extern ICCLIB_API void icmXYZ2Lab(icmXYZNumber *w, double *out, double *in);

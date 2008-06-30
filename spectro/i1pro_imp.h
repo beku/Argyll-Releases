@@ -80,8 +80,8 @@ struct _i1pro_state {
 	double dadaptime;	/* Target adaptive dark read time - sets number of readings */
 	double wadaptime;	/* Target adaptive white/sample read time - sets number of readings */
 
-	double dcaltime;	/* Target dark calibrattion time - sets number of readings */
-	double wcaltime;	/* Target white calibrattion time - sets number of readings */
+	double dcaltime;	/* Target dark calibration time - sets number of readings */
+	double wcaltime;	/* Target white calibration time - sets number of readings */
 
 	double dreadtime;	/* Target dark on-the-fly cal time - sets number of readings */
 	double wreadtime;	/* Target white/sample reading time - sets number of readings */
@@ -114,6 +114,12 @@ struct _i1pro_state {
 
 	int need_calib;			/* White calibration needed anyway */
 	int need_dcalib;		/* Dark Calibration needed anyway */
+
+	/* Display mode calibration state (emmis && !scan && !adaptive) */
+	double done_dintcal;	/* A display integration time cal has been done */
+	double dcaltime2;		/* Target dark calibration time - sets number of readings */
+	double dark_int_time2;	/* Integration time used for dark data 2 */
+	double *dark_data2;		/* [nraw] of dark level to subtract for dark_int_time2. */
 
 }; typedef struct _i1pro_state i1pro_state;
  
@@ -184,13 +190,13 @@ struct _i1proimp {
 	double wl_short;		/* Cooked spectrum bands short wavelength, usually 380 */
 	double wl_long;			/* Cooked spectrum bands short wavelength, usually 730 */
 
-	int nwav1, nwav2;		/* Available bands for standard and high-res modes */
+	unsigned int nwav1, nwav2;	/* Available bands for standard and high-res modes */
 	double wl_short1, wl_short2, wl_long1, wl_long2;
 
-	int nlin0;				/* Number in array */
+	unsigned int nlin0;		/* Number in array */
 	double *lin0;			/* Array of linearisation polinomial factors, normal gain. */
 
-	int nlin1;				/* Number in array */
+	unsigned int nlin1;		/* Number in array */
 	double *lin1;			/* Array of linearisation polinomial factors, high gain. */
 		
 	double min_int_time;	/* Minimum integration time (secs) */

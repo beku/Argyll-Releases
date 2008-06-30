@@ -56,28 +56,28 @@ int
 main(int argc, char* argv[])
 {
 	int c;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 
-	while ((c = getopt(argc, argv, "c:p:r:")) != -1)
+	while ((c = tiff_getopt(argc, argv, "c:p:r:")) != -1)
 		switch (c) {
 		case 'b':		/* save as b&w */
 			photometric = PHOTOMETRIC_MINISBLACK;
 			break;
 		case 'c':		/* compression scheme */
-			if (streq(optarg, "none"))
+			if (streq(tiff_optarg, "none"))
 				compression = COMPRESSION_NONE;
-			else if (streq(optarg, "packbits"))
+			else if (streq(tiff_optarg, "packbits"))
 				compression = COMPRESSION_PACKBITS;
-			else if (strneq(optarg, "jpeg", 4)) {
-				char* cp = strchr(optarg, ':');
+			else if (strneq(tiff_optarg, "jpeg", 4)) {
+				char* cp = strchr(tiff_optarg, ':');
 				if (cp && isdigit(cp[1]))
 					quality = atoi(cp+1);
 				if (cp && strchr(cp, 'r'))
 					jpegcolormode = JPEGCOLORMODE_RAW;
 				compression = COMPRESSION_JPEG;
-			} else if (strneq(optarg, "lzw", 3)) {
-				char* cp = strchr(optarg, ':');
+			} else if (strneq(tiff_optarg, "lzw", 3)) {
+				char* cp = strchr(tiff_optarg, ':');
 				if (cp)
 					predictor = atoi(cp+1);
 				compression = COMPRESSION_LZW;
@@ -85,33 +85,33 @@ main(int argc, char* argv[])
 				usage();
 			break;
 		case 'p':		/* planar configuration */
-			if (streq(optarg, "separate"))
+			if (streq(tiff_optarg, "separate"))
 				config = PLANARCONFIG_SEPARATE;
-			else if (streq(optarg, "contig"))
+			else if (streq(tiff_optarg, "contig"))
 				config = PLANARCONFIG_CONTIG;
 			else
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(optarg);
+			rowsperstrip = atoi(tiff_optarg);
 			break;
 		case '?':
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - optind != 1 && argc - optind != 5)
+	if (argc - tiff_optind != 1 && argc - tiff_optind != 5)
 		usage();
 	xmaxscreen = getgdesc(GD_XPMAX)-1;
 	ymaxscreen = getgdesc(GD_YPMAX)-1;
 	foreground();
 	noport();
 	winopen("tiffsv");
-	if (argc - optind == 5)
-		tiffsv(argv[optind],
-		    atoi(argv[optind+1]), atoi(argv[optind+2]),
-		    atoi(argv[optind+3]), atoi(argv[optind+4]));
+	if (argc - tiff_optind == 5)
+		tiffsv(argv[tiff_optind],
+		    atoi(argv[tiff_optind+1]), atoi(argv[tiff_optind+2]),
+		    atoi(argv[tiff_optind+3]), atoi(argv[tiff_optind+4]));
 	else
-		tiffsv(argv[optind], 0, xmaxscreen, 0, ymaxscreen);
+		tiffsv(argv[tiff_optind], 0, xmaxscreen, 0, ymaxscreen);
 	return (0);
 }
 

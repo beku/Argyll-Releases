@@ -1,138 +1,67 @@
+
 # Print Calibration Target Data File generator
 
-#SubDir TOP target ;
-
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
-#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
-#CCFLAGS     += $(CCHEAPDEBUG) ;     # Heap Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
-
-if $(UNIX) {
-  if $(OS) = MACOSX {
-	LINKFLAGS += -framework IOKit ;
-	LINKFLAGS += -framework CoreFoundation ;
-  } else {
-	WinDir = /usr/X11R6 ;
-	LibWinH = $(WinDir)/include/X11 ;
-	LibWinD = $(WinDir)/lib ;
-	LibWin = ;
-	LINKFLAGS += -L$(LibWinD) -lX11 -lXau -lXdmcp ;
-  }
-}
-
-if $(HAVE_TIFF) {
-	TIFFLIB = ;
-	TIFFINC = ;
-	LINKLIBS on targen$(SUFEXE)
-				filmtarg$(SUFEXE) = -ltiff $(LINKLIBS) ;
-} else {
-	TIFFLIB = ../tiff/libtiff.lib ;
-	TIFFINC = ../tiff ;
-}
+#PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#PREF_LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+#PREF_CCFLAGS     += $(CCHEAPDEBUG) ;     # Heap Debugging flags
+PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
 
 #Products
 Executables = targen printtarg ;
 
 #Install
-InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
+InstallBin ../bin : $(Executables) ;
 
-Object alphix$(SUFOBJ) : alphix.c ;
-ObjectHdrs alphix$(SUFOBJ) : ../h ../numlib ;
+HDRS = ../h ../numlib ;
 
-Object randix$(SUFOBJ) : randix.c ;
-ObjectHdrs randix$(SUFOBJ) : ../h ../numlib ;
+Objects alphix.c randix.c ;
+
+HDRS += ../plot ../rspl ../cgats ../icc ../gamut ../xicc ../spectro ../render $(TIFFINC) ;
+
+LINKLIBS = ../xicc/libxcolorants ../xicc/libxicc ../spectro/libinsttypes
+           ../gamut/libgamut ../rspl/librspl ../render/librender ../cgats/libcgats
+           ../icc/libicc ../plot/libplot ../plot/libvrml ../numlib/libnum 
+           $(TIFFLIB) $(LibWin) ;
+
 
 #target generator
 Main targen : targen.c ppoint.c ofps.c ifarp.c simplat.c simdlat.c prand.c ;
-ObjectHdrs ppoint$(SUFOBJ) : ../h ../numlib ../plot ../icc ../rspl ../xicc ; 
-ObjectHdrs ofps$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ; 
-ObjectHdrs ifarp$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ;
-ObjectHdrs simplat$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ;
-ObjectHdrs simdlat$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ;
-ObjectHdrs prand$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ;
-ObjectHdrs targen$(SUFOBJ) : ../h ../numlib ../rspl ../cgats ../icc ../gamut ../xicc ../spectro ;
-LinkLibraries targen : ../rspl/librspl.lib ../cgats/libcgats.lib
-                       ../icc/libicc.lib ../plot/libplot.lib ../xicc/libxicc.lib
-                       ../xicc/libxcolorants.lib ../gamut/libgamut.lib
-                       ../numlib/libnum.lib ../spectro/libinsttypes.lib 
-                       $(LibWin) ;
 
 # Film Calibration Target File generator
-#MainFromObjects filmtarg : filmtarg$(SUFOBJ) alphix$(SUFOBJ) randix$(SUFOBJ) ;
-#Object filmtarg$(SUFOBJ) : filmtarg.c ;
-#ObjectHdrs filmtarg$(SUFOBJ) : ../h ../numlib ../cgats $(TIFFINC) ;
-#LinkLibraries filmtarg : ../cgats/libcgats.lib $(TIFFLIB) ;
+#Main filmtarg : filmtarg.c : : : $(TIFFINC) : alphix randix : $(TIFFLIB) ;
 
-# Print Calibration Target Postscrip../numlib t File generator
-MainFromObjects printtarg : printtarg$(SUFOBJ) alphix$(SUFOBJ) randix$(SUFOBJ) ;
-Object printtarg$(SUFOBJ) : printtarg.c ;
-ObjectHdrs printtarg$(SUFOBJ) : ../h ../numlib ../cgats ../spectro ../rspl ../icc ../xicc
-                                ../gamut ;
-LinkLibraries printtarg : ../cgats/libcgats.lib ../xicc/libxicc.lib
-                          ../xicc/libxcolorants.lib ../icc/libicc.lib
-                          ../numlib/libnum.lib ../spectro/libinsttypes.lib
-                          ../plot/libplot.lib $(LibWin) ;
+# Print Calibration Target Postscript File generator
+Main printtarg : printtarg.c : : : : alphix randix : ;
 
 # Individual stand alone test of sample point classes
 
 # Percepttual point distribution
-MainFromObjects ppoint : sa_ppoint$(SUFOBJ) ;
-Object sa_ppoint$(SUFOBJ) : ppoint.c ;
-ObjectCcFlags sa_ppoint$(SUFOBJ) : -DSTANDALONE_TEST ;
-ObjectHdrs sa_ppoint$(SUFOBJ) : ../h ../numlib ../plot ../icc ../rspl ../xicc ; 
-LinkLibraries ppoint : ../plot/libplot.lib ../rspl/librspl.lib ../numlib/libnum.lib $(LibWin) ;
+MainVariant ppoint : ppoint.c : : STANDALONE_TEST ;
 
 # Optimised farthest point sampling class
-MainFromObjects ofps : sa_ofps$(SUFOBJ) ;
-Object sa_ofps$(SUFOBJ) : ofps.c ;
-ObjectCcFlags sa_ofps$(SUFOBJ) : -DSTANDALONE_TEST ;
-ObjectHdrs sa_ofps$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ; 
-LinkLibraries ofps : ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
+MainVariant ofps : ofps.c : : STANDALONE_TEST ;
 
 # Incremental far point class
-MainFromObjects ifarp : sa_ifarp$(SUFOBJ) ;
-Object sa_ifarp$(SUFOBJ) : ifarp.c ;
-ObjectCcFlags sa_ifarp$(SUFOBJ) : -DSTANDALONE_TEST ;
-ObjectHdrs sa_ifarp$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ; 
-LinkLibraries ifarp : ../numlib/libnum.lib ../plot/libplot.lib
-                        ../xicc/libxcolorants.lib ../icc/libicc.lib $(LibWin) ;
+MainVariant ifarp : ifarp.c : : STANDALONE_TEST ;
 
 # Perceptual space simplex lattice
-MainFromObjects simplat : sa_simplat$(SUFOBJ) ;
-Object sa_simplat$(SUFOBJ) : simplat.c ;
-ObjectCcFlags sa_simplat$(SUFOBJ) : -DSTANDALONE_TEST ;
-ObjectHdrs sa_simplat$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ; 
-LinkLibraries simplat : ../numlib/libnum.lib ../plot/libplot.lib
-                        ../xicc/libxcolorants.lib ../icc/libicc.lib $(LibWin) ;
+MainVariant ifarp : ifarp.c : : STANDALONE_TEST ;
+
+MainVariant simplat : simplat.c : : STANDALONE_TEST ;
 
 # Device space simplex lattice
-MainFromObjects simdlat : sa_simdlat$(SUFOBJ) ;
-Object sa_simdlat$(SUFOBJ) : simdlat.c ;
-ObjectCcFlags sa_simdlat$(SUFOBJ) : -DSTANDALONE_TEST ;
-ObjectHdrs sa_simdlat$(SUFOBJ) : ../h ../numlib ../plot ../icc ../xicc ; 
-LinkLibraries simdlat : ../numlib/libnum.lib ../plot/libplot.lib
-                        ../xicc/libxcolorants.lib ../icc/libicc.lib $(LibWin) ;
+MainVariant simdlat : simdlat.c : : STANDALONE_TEST ;
 
 if $(BUILD_JUNK) {
 
 	# Test program
-	MainFromObjects test : test$(SUFOBJ) alphix$(SUFOBJ) ;
-	Object test$(SUFOBJ) : test.c ;
-	ObjectHdrs test$(SUFOBJ) : ../h ../numlib ; 
-	LinkLibraries test : ../numlib/libnum.lib ;
+	Main test : test.c : : : : alphix ;
 
 	# Test program
-	MainFromObjects temp : temp$(SUFOBJ) ;
-	Object temp$(SUFOBJ) : temp.c ;
-	ObjectHdrs temp$(SUFOBJ) : ../h ../numlib ../plot ; 
-	LinkLibraries temp : ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
+	Main temp : temp.c ;
 
 	# Test lmean experiment
-	MainFromObjects lmean : lmean$(SUFOBJ) ;
-	Object lmean$(SUFOBJ) : lmean.c ;
-	ObjectHdrs lmean$(SUFOBJ) : ../h ../numlib ../plot ; 
-	LinkLibraries lmean : ../numlib/libnum.lib ../plot/libplot.lib $(LibWin) ;
-
+	Main lmean : lmean.c ;
 }

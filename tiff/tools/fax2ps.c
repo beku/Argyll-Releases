@@ -310,29 +310,29 @@ static	void usage(int code);
 int
 main(int argc, char** argv)
 {
-    extern int optind;
-    extern char* optarg;
+    extern int tiff_optind;
+    extern char* tiff_optarg;
     int c, pageNumber;
     int* pages = 0, npages = 0;
     int dowarnings = 0;		/* if 1, enable library warnings */
     TIFF* tif;
 
-    while ((c = getopt(argc, argv, "l:p:x:y:W:H:wS")) != -1)
+    while ((c = tiff_getopt(argc, argv, "l:p:x:y:W:H:wS")) != -1)
 	switch (c) {
 	case 'H':		/* page height */
-	    pageHeight = atof(optarg);
+	    pageHeight = atof(tiff_optarg);
 	    break;
 	case 'S':		/* scale to page */
 	    scaleToPage = 1;
 	    break;
 	case 'W':		/* page width */
-	    pageWidth = atof(optarg);
+	    pageWidth = atof(tiff_optarg);
 	    break;
 	case 'p':		/* print specific page */
-	    pageNumber = atoi(optarg);
+	    pageNumber = atoi(tiff_optarg);
 	    if (pageNumber < 1) {
 		fprintf(stderr, "%s: Invalid page number (must be > 0).\n",
-		    optarg);
+		    tiff_optarg);
 		usage(-1);
 	    }
 	    if (pages)
@@ -345,13 +345,13 @@ main(int argc, char** argv)
 	    dowarnings = 1;
 	    break;
 	case 'x':
-	    defxres = atof(optarg);
+	    defxres = atof(tiff_optarg);
 	    break;
 	case 'y':
-	    defyres = atof(optarg);
+	    defyres = atof(tiff_optarg);
 	    break;
 	case 'l':
-	    maxline = atoi(optarg);
+	    maxline = atoi(tiff_optarg);
 	    break;
 	case '?':
 	    usage(-1);
@@ -360,16 +360,16 @@ main(int argc, char** argv)
 	qsort(pages, npages, sizeof (int), pcompar);
     if (!dowarnings)
 	TIFFSetWarningHandler(0);
-    if (optind < argc) {
+    if (tiff_optind < argc) {
 	do {
-	    tif = TIFFOpen(argv[optind], "r");
+	    tif = TIFFOpen(argv[tiff_optind], "r");
 	    if (tif) {
-		fax2ps(tif, npages, pages, argv[optind]);
+		fax2ps(tif, npages, pages, argv[tiff_optind]);
 		TIFFClose(tif);
 	    } else
 		fprintf(stderr, "%s: Can not open, or not a TIFF file.\n",
-		    argv[optind]);
-	} while (++optind < argc);
+		    argv[tiff_optind]);
+	} while (++tiff_optind < argc);
     } else {
 	int n;
 	FILE* fd;

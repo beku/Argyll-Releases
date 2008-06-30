@@ -1,3 +1,4 @@
+
 /* 
  * Argyll Color Correction System
  * Multi-dimensional regularized spline data structure
@@ -7,7 +8,7 @@
  * Author: Graeme W. Gill
  * Date:   30/1/00
  *
- * Copyright 1999 - 2004 Graeme W. Gill
+ * Copyright 1999 - 2008 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
@@ -52,7 +53,6 @@
 
  */
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -60,10 +60,16 @@
 #include <memory.h>
 #include <time.h>
 
-						/* Just search within closest cell returned by nn_find, */
-						/* rather that doing a complete expanding sphere search */
-						/* for clipping situation */
-#undef SSS				/* SSS turns on an exapanding square search */		
+#ifdef NT 
+#include <windows.h>
+#else
+#ifdef __APPLE__
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#else
+#include <unistd.h>
+#endif
+#endif
 
 #define INKSCALE 5000.0	/* For ink limit weighting to fudge SVD least squares solution */
 
@@ -76,10 +82,23 @@
 //#include "dmalloc.h"
 //#undef DMALLOC_GLOBALS
 
-#undef DEBUG
+#undef DEBUG1			/* Higher level code */
+#undef DEBUG2			/* Lower lecel code */
+
+/* Debug memory usage accounting */
+#ifdef NEVER
+#define INCSZ(s, bbb) (s)->rev.sz += (bbb);	\
+                     printf("%s, %d: rev.sz += %d\n",__FILE__, __LINE__, bbb)
+#define DECSZ(s, bbb) (s)->rev.sz -= (bbb);	\
+                     printf("%s, %d: rev.sz -= %d\n",__FILE__, __LINE__, bbb)
+#else
+#define INCSZ(s, bbb) (s)->rev.sz += (bbb)
+#define DECSZ(s, bbb) (s)->rev.sz -= (bbb)
+#endif
+
+/* Set STATS in rev.h */
 
 #define DOSORT				/* Cell sort */
-#define ALLOC_ALL_CACHE		/* Allocate the maximum cell cache at the start */
 
 /* Print a vectors value */
 #define DBGVI(text, dim, out, vec, end)			\
@@ -106,6 +125,7 @@
 /* Do an arbitrary printf */
 #define DBGI(text) printf text ;
 
+#undef DEBUG
 #undef DBG
 #undef DBGV
 #undef DBGM
@@ -113,18 +133,18 @@
 #undef NEVER
 #define ALWAYS
 
-#undef DEBUG	// ~~1
-
-#ifdef DEBUG
+#ifdef DEBUG1
 #undef DBGS
 #undef DBG
 #undef DBGV
 #undef DBGM
+#define DEBUG
 #define DBGS(xxx) xxx
 #define DBG(xxx) DBGI(xxx)
 #define DBGV(xxx) DBGVI xxx
 #define DBGM(xxx) DBGMI xxx
 #else
+#undef DEBUG
 #undef DBGS
 #undef DBG
 #undef DBGV
@@ -147,10 +167,12 @@
 #define	EPS (1e-10)			/* Allowance for numeric error */
 
 static void make_rev(rspl *s);
+static void init_revaccell(rspl *s);
 
 static cell *get_rcell(schbase *b, int ix);
 static void uncache_rcell(revcache *r, cell *cp);
 #define unget_rcell(r, cp) uncache_rcell(r, cp)		/* These are the same */
+static void invalidate_revaccell(rspl *s);
 static void invalidate_revcache(revcache *rc);
 
 /* ====================================================== */
@@ -165,28 +187,11 @@ static void free_search(schbase *b);
 
 static int *calc_fwd_cell_list(rspl *s, double *v);
 
+static int *calc_fwd_nn_cell_list(rspl *s, double *v);
+
 static void init_line_eq(schbase *b, double st[MXRO], double de[MXRO]);
 static int *init_line(rspl *s, line *l, double st[MXRO], double de[MXRO]);
 static int *next_line_cell(line *l);
-
-#ifdef SSS
-/* Structure to hold clip sphere state information */
-typedef struct {
-	struct _rspl *s;	/* Pointer to parent rspl */
-	int ix[MXRO];		/* Offset counter */
-	int c;				/* layer */
-	int base[MXRO];		/* base grid location */
-	double off[MXRO];	/* offset within base cell */
-	int loc[MXRO];		/* Current location */
-	double cdist;		/* Best possible cell distance */
-	double ldist;		/* Best possible layer distance */
-} sphere;
-
-static int *init_sphere(rspl *s, sphere *l, double st[MXRO]);
-static int *next_sphere_cell(sphere *l);
-#endif /* SSS */
-
-static int *get_nearest_list(rspl *s, double *v);
 
 static void search_list(schbase *b, int *rip, unsigned int tcount);
 
@@ -200,7 +205,7 @@ static char *opnames[6] = { "exact", "clipv", "clipn", "auxil", "locus" };
 
 /* ====================================================== */
 /* Set the ink limit information for any reverse interpolation. */
-/* Calling this will clear the reverse interpolaton cache. */
+/* Calling this will clear the reverse interpolaton cache and acceleration structures. */
 static void
 rev_set_limit_rspl(
 	rspl *s,		/* this */
@@ -212,6 +217,7 @@ rev_set_limit_rspl(
 ) {
 	schbase *b;
 
+	DBG(("rev: setting ink limit function 0x%x and limit %f\n",limit,limitv));
 	/* This is a restricted size function */
 	if (s->di > MXRI)
 		error("rspl: rev_set_limit can't handle di = %d",s->di);
@@ -220,11 +226,12 @@ rev_set_limit_rspl(
 
 	b = set_search_limit(s, limit, lcntx, limitv);	/* Init and set limit info */
 
-	if (s->rev.inited) {		/* If cache has been allocated */
+	if (s->rev.inited) {		/* If cache and acceleration has been allocated */
+		invalidate_revaccell(s);		/* Invalidate the reverse cache */
 		invalidate_revcache(s->rev.cache);		/* Invalidate the reverse cache */
 	}
 
-	/* Invalidate any ink limit values cached with the grid data */
+	/* Invalidate any ink limit values cached with the fwd grid data */
 	clear_limitv(s);
 }
 
@@ -251,7 +258,7 @@ rev_get_limit_rspl(
 	} else {
 		*limit = b->limit;
 		*lcntx = b->cntx;
-		*limitv = b->limitv/ INKSCALE;
+		*limitv = b->limitv/INKSCALE;
 	}
 }
 
@@ -404,92 +411,29 @@ rev_interp_rspl(
 	/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 	/* If the exact search failed, and we should look for a nearest solution */
 	if (b->nsoln == 0 && (flags & RSPL_NEARCLIP)) {
-#ifndef NEVER 	// ~~~~999999 debug testing
-		unsigned int tcount;	/* grid touch count for this opperation */
-
-		adjust_search(s, flags, NULL, clipn);
-		tcount = s->get_next_touch(s);		/* Get next grid touched generation count */
+		DBG(("Trying nearest search\n"));
 
 #ifdef STATS
 		s->rev.st[b->op].searchcalls++;
 #endif	/* STATS */
+
 		/* We get returned a list of cube base indexes of all cubes that have */
 		/* the closest valid vertex value to the target value. */
 		/* (This may not result in the true closest point if the geometry of */
 		/* the vertex values is localy non-smooth or self intersecting, */
 		/* but seems to return a good result in most realistic situations ?) */
 
-#ifdef NEVER
-		rip = calc_fwd_cell_list(s, cpp[0].v);		/* Try proximity of target */
-		if (rip != NULL)
-			search_list(b, rip, tcount);
-#endif /* NEVER */
-	
-#ifdef SSS
-		{
-		sphere sh;				/* Structure to hold sphere context */
-		unsigned int tcount;	/* grid touch count for this opperation */
-
-		DBG(("Starting a clipping nearest search now!!\n"));
-
 		adjust_search(s, flags, NULL, clipn);
 
-		tcount = s->get_next_touch(s);		/* Get next grid touched generation count */
-
-#ifdef STATS
-		s->rev.st[b->op].searchcalls++;
-#endif	/* STATS */
-		/* We need to search reverse grid cells in an expanding sphere, */
-		/* until we run out of cells, or we have looked at all cells that */
-		/* are as close or closer to the current best solution. */
-
-#ifdef NEVER
-		rip = init_sphere(s, &sh, cpp[0].v);	/* Init the sphere cell searcher */
-		for (; sh.ldist <= b->cdist ;
-		                    rip = next_sphere_cell(&sh)) {
-			if (rip == NULL || sh.cdist > b->cdist) {
-				DBG(("Got NULL list or worse possible for this reverse cell\n"));
-				continue;
-			}
-
-			/* Setup, sort and search the list */
-			search_list(b, rip, tcount);
-		}
-#else
-		{	/* Exaustive search */
-		int **rpp;
-		for (rpp = s->rev.rev; rpp < (s->rev.rev + s->rev.no); rpp++) {
-			rip = *rpp;
-			if (rip != NULL) {
-				search_list(b, rip, tcount);
-			}
-		}
-		}
-#endif
-
-		}
-#else /* !SSS */
 		/* Get list of cells enclosing nearest vertex */
-		if ((rip = get_nearest_list(s, cpp[0].v)) != NULL)
-			search_list(b, rip, tcount); /* Setup, sort and search the list */
-#endif
+		if ((rip = calc_fwd_nn_cell_list(s, cpp[0].v)) != NULL) {
+			search_list(b, rip, s->get_next_touch(s)); /* Setup, sort and search the list */
+		} else {
+			DBG(("Got NULL list! (point inside gamut \?\?) for nearest search\n"));
+		}
 
 		if (b->nsoln > 0)
 			didclip = RSPL_DIDCLIP;
-#else /* !NEVER */
-static void debug_find_closest_rev(rspl *s, double *out, double *in);
-
-		debug_find_closest_rev(s, cpp[0].p, cpp[0].v);
-		b->nsoln = 1;
-		didclip = RSPL_DIDCLIP;
-printf("~1 debug_find_closest_rev returned %f %f %f from %f %f %f\n",
-		cpp[0].p[0],
-		cpp[0].p[1],
-		cpp[0].p[2],
-		cpp[0].v[0],
-		cpp[0].v[1],
-		cpp[0].v[2]);
-#endif	/* !NEVER */
 	}
 
 	/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -511,8 +455,7 @@ printf("~1 debug_find_closest_rev returned %f %f %f from %f %f %f\n",
 		init_line_eq(b, b->v, cdir);				/* Init the implicit line equation */
 		rip = init_line(s, &ln, cpp[0].v, cdir);	/* Init the line cell dda */
 //~~1 HACK!!! should be <= 1.0 !!!
-		for (; ln.t <= 2.0;
-		                    rip = next_line_cell(&ln)) {
+		for (; ln.t <= 2.0; rip = next_line_cell(&ln)) {
 			if (rip == NULL) {
 				DBG(("Got NULL list for this reverse cell\n"));
 				continue;
@@ -806,9 +749,8 @@ rev_locus_rspl(
 
 /* ------------------------------------------------------------------------------------ */
 
-#undef DEBUG	// ~~1
-
-#ifdef DEBUG
+#ifdef DEBUG2
+#define DEBUG
 #undef DBG
 #undef DBGV
 #undef DBGM
@@ -816,6 +758,7 @@ rev_locus_rspl(
 #define DBGV(xxx) DBGVI xxx
 #define DBGM(xxx) DBGMI xxx
 #else
+#undef DEBUG
 #undef DBG
 #undef DBGV
 #undef DBGM
@@ -852,12 +795,21 @@ alloc_sb(rspl *s) {
 	schbase *b;
 	if ((b = s->rev.sb = (schbase *)calloc(1, sizeof(schbase))) == NULL)
 		error("rspl malloc failed - rev.sb structure");
+	INCSZ(s, sizeof(schbase));
 
 	b->s     = s;				/* rsp */
 	b->pauxcell =				/* Previous solution cell indexes */
 	b->plmaxcell = 
 	b->plmincell = -1;
+
 	return b;
+}
+
+/* Free the search base structure */
+static void
+free_sb(schbase *b) {
+	DECSZ(b->s, sizeof(schbase));
+	free(b);
 }
 
 /* Do the basic search type independent initialization */
@@ -881,10 +833,10 @@ init_search(
 
 	DBG(("Initializing search\n"));
 
-	if (s->rev.inited == 0) 		/* Compute reverse info if it doesn't exist */
+	if (s->rev.inited == 0) 	/* Compute reverse info if it doesn't exist */
 		make_rev(s);
 
-	/* If first time initialisation (Third section init) */
+	/* If first time initialisation (Fourth section init) */
 	if ((b = s->rev.sb) == NULL) {
 		b = alloc_sb(s);
 	}
@@ -1125,7 +1077,7 @@ set_search_limit(
 ) {
 	schbase *b = NULL;		/* Pointer to search base information structure */
 
-	/* If sb info needs initialising (Third section init) */
+	/* If sb info needs initialising (Fourth section init) */
 	if ((b = s->rev.sb) == NULL) {
 		b = alloc_sb(s);
 	}
@@ -1133,15 +1085,15 @@ set_search_limit(
 	b->limit = limit;			/* Input limit function */
 	b->cntx  = lcntx; 			/* Context passed to limit() */
 	b->limitv= INKSCALE * limitv; 	/* Context passed to values not to be exceedded by limit() */
-	if (limit != NULL)
+	if (limit != NULL) {
 		b->limiten = 1;				/* enable limiting by default */
-	else
+	} else
 		b->limiten = 0;				/* No limit function, so limiting not enabled. */
 
 	return b;
 }
 
-/* Free any search specific data */
+/* Free any search specific data, plus the search base. */
 static void
 free_search(
 schbase *b	/* Base search information */
@@ -1157,7 +1109,8 @@ schbase *b	/* Base search information */
 
 	/* Auxiliary segment list */
 	if (b->axisl > 0) {
-		free (b->axisl);
+		free(b->axisl);
+		DECSZ(b->s, b->axislz * sizeof(axisec));
 		b->axisl = NULL;
 		b->axislz = 0;
 		b->axisln = 0;
@@ -1165,29 +1118,27 @@ schbase *b	/* Base search information */
 
 	/* Sorted cell list */
 	if (b->lclistz > 0) {
-		free (b->lclist);
+		free(b->lclist);
+		DECSZ(b->s, b->lclistz * sizeof(cell *));
 		b->lclist = NULL;
 		b->lclistz = 0;
 	}
 
 	/* Simplex filter list */
 	if (b->lsxfilt > 0) {
-		free (b->sxfilt);
+		free(b->sxfilt);
+		DECSZ(b->s, b->lsxfilt * sizeof(char));
 		b->sxfilt = NULL;
 		b->lsxfilt = 0;
 	}
 
-	/* nn cell list */
-	if (b->nnlistz > 0) {
-		free (b->nnlist);
-		b->nnlist = NULL;
-		b->nnlistz = 0;
-	}
-	free(b);
+	free_sb(b);
 }
 
 /* Return the pointer to the list of fwd cells given */
-/* the target output values. Return NULL if none in list. */
+/* the target output values. The pointer will be to the first */
+/* index in the list (ie. list address + 2) */
+/* Return NULL if none in list (out of gamut). */
 static int *
 calc_fwd_cell_list(
 	rspl *s,		/* this */
@@ -1197,17 +1148,21 @@ calc_fwd_cell_list(
 	int **rpp;
 	int rgres_1 = s->rev.res - 1;
 
+	if (s->rev.rev_valid == 0)
+		init_revaccell(s);
+		
 	for (rpp = s->rev.rev, f = 0; f < fdi; f++) {
 		int mi;
-		double gw = s->rev.gw[f];
-		double t = (v[f] - s->rev.gl[f])/gw;
+		double t = (v[f] - s->rev.gl[f])/s->rev.gw[f];
 		mi = (int)floor(t);				/* Grid coordinate */
 		if (mi < 0 || mi > rgres_1) { 	/* If outside valid reverse range */
 			return NULL;
 		}
 		rpp += mi * s->rev.coi[f];	/* Accumulate reverse grid pointer */
 	}
-	return *rpp;
+	if (*rpp == NULL)
+		return NULL;
+	return (*rpp) + 2;
 }
 
 void alloc_simplexes(cell *c, int nsdi);
@@ -1218,31 +1173,62 @@ void alloc_simplexes(cell *c, int nsdi);
 static void
 search_list(
 schbase *b,				/* Base search information */
-int     *rip,			/* Pointer to base of cell list, entry 0 = allocated space */
-unsigned int tcount		/* grid touch count for this opperation */
+int     *rip,			/* Pointer to first index in cell list */
+unsigned int tcount		/* grid touch count for this operation */
 ) {
 	rspl *s = b->s;
 	int nsdi;
 	int i;
 	int nilist;			/* Number in cell list */
+	unsigned int stouch;	/* Simplex touch count */
 	
 	DBG(("search_list called\n"));
 
-	/* (rip[0] contains number of fwd cells in the list) */
-	if (b->lclistz < rip[0]) {	/* Allocate more space if needed */
+	/* (rip[-2] contains number of fwd cells in the list) */
+	/* (rip[-1] contains the reference count for the list) */
+	if (b->lclistz < rip[-2]) {	/* Allocate more space if needed */
 
 		if (b->lclistz > 0) {	/* Free old space before allocating new */
-			free (b->lclist);
+			free(b->lclist);
+			DECSZ(b->s, b->lclistz * sizeof(cell *));
 		}
 		b->lclistz = 0;
 		/* Allocate enough space for all the candidate cells */
-		if ((b->lclist = (cell **)malloc(rip[0] * sizeof(cell *))) == NULL)
-			error("rev: malloc failed - candidate cell list, count %d",rip[0]);
-		b->lclistz = rip[0];	/* Current allocated space */
+		if ((b->lclist = (cell **)malloc(rip[-2] * sizeof(cell *))) == NULL)
+			error("rev: malloc failed - candidate cell list, count %d",rip[-2]);
+		b->lclistz = rip[-2];	/* Current allocated space */
+		INCSZ(b->s, b->lclistz * sizeof(cell *));
 	}
 		
+	/* Get the next simplex touch count, so that we don't search shared */
+	/* face simplexes more than once in this pass through the cells. */
+	if ((stouch = ++s->rev.stouch) == 0) {	/* If touch count rolls over */
+		cell *cp;
+		stouch = s->rev.stouch = 1;
+
+		DBG(("touch has rolled over, resetting it\n"));
+		/* For all of the cells */
+		for (cp = s->rev.cache->mrubot; cp != NULL; cp = cp->mruup) {
+			int nsdi;
+	
+			if (cp->s == NULL)	/* Cell has never been used */
+				continue;
+
+			/* For all the simplexes in the cell */
+			for (nsdi = 0; nsdi <= s->di; nsdi++) {
+				if (cp->sx[nsdi] != NULL) {
+					int si;
+
+					for (si = 0; si < cp->sxno[nsdi]; si++) {
+						cp->sx[nsdi][si]->touch = 0;
+					}
+				}
+			}
+		}
+	}
+
 	/* For each chunk of the list that we can fit in the rcache: */
-	for(rip++; *rip != -1;)  {
+	for(; *rip != -1;)  {
 
 		/* Go through all the candidate fwd cells, and build up the list of search cells */
 		for(nilist = 0; *rip != -1; rip++)  {
@@ -1262,6 +1248,9 @@ unsigned int tcount		/* grid touch count for this opperation */
 					warned = 1;
 				}
 				DBG(("revcache is exausted, do search in chunks\n"));
+				if (nilist == 0) {
+					error("Not enough memory to process in chunks");
+				}
 				break;		/* cache has run out of room, so abandon, and do it next time */
 			}
 
@@ -1361,14 +1350,15 @@ unsigned int tcount		/* grid touch count for this opperation */
 				/* For each simplex in a cell */
 				nospx = c->sxno[nsdi];	/* Number of nsdi simplexes */
 				for (j = 0; j < nospx; j++) {
-					simplex *x = &c->sx[nsdi][j];
+					simplex *x = c->sx[nsdi][j];
+
+					if (x->touch >= stouch) {
+						continue;						/* We've already seen this one */
+					}
 
 					if (b->limiten == 0) {
 						if (x->flags & SPLX_CLIPSX)		/* If limiting is disabled, we're */
 							continue;					/* not interested in clip plane simplexes */
-					} else  {
-						if (x->flags & SPLX_OVLIMIT)	/* If limiting is enabled, we're */
-							continue;					/* not interested in simplexes over the limit */
 					}
 		
 #ifdef STATS
@@ -1378,6 +1368,8 @@ unsigned int tcount		/* grid touch count for this opperation */
 						DBG(("search aborted by compute\n"));
 						break;					/* Found enough solutions */
 					}
+					x->touch = stouch;			/* Don't look at it again */
+
 				}	/* Next Simplex */
 			}	/* Next cell */
 
@@ -1445,8 +1437,7 @@ init_line(
 
 	/* Figure out the starting cell */
 	for (rpp = s->rev.rev, f = 0; f < fdi; f++) {
-		double gw = s->rev.gw[f];
-		double t = l->st[f]/gw;
+		double t = l->st[f]/s->rev.gw[f];
 		l->ci[f] = (int)floor(t);					/* Grid coordinate */
 		if (l->ci[f] < 0 || l->ci[f] > rgres_1) 	/* If outside valid reverse range */
 			nvalid = 1;
@@ -1467,7 +1458,9 @@ printf("\n");
 #endif	/* DEBUG */
 	if (nvalid)
 		return NULL;
-	return *rpp;
+	if (*rpp == NULL)
+		return NULL;
+	return *rpp + 2;
 }
 
 /* Get the next cell on the line. */
@@ -1485,9 +1478,8 @@ next_line_cell(
 	/* See which axis cell crossing we will hit next */
 	for (f = 0; f < fdi; f++) {
 		double t;
-		double gw = s->rev.gw[f];
 		if (l->de[f] != 0) {
-			t = ((l->ci[f] + l->di[f]) * gw - l->st[f])/l->de[f];
+			t = ((l->ci[f] + l->di[f]) * s->rev.gw[f] - l->st[f])/l->de[f];
 			DBG(("t for dim %d = %f\n",f,t));
 			if (t < bt) {
 				bt = t;
@@ -1523,174 +1515,48 @@ printf("\n");
 		}
 		rpp += l->ci[f] * s->rev.coi[f];	/* Accumulate reverse grid pointer */
 	}
-	return *rpp;
+	if (*rpp == NULL)
+		return NULL;
+	return *rpp + 2;
 }
 
 /* ------------------------------------- */
 /* Clip nearest support. */
 
-int rev_nnfind(rspl *s, double rad, double *v);
-
-/* Using the reverse nearest neighbor vertex search function, */
-/* construct a reverse search list */
-static int *get_nearest_list(
-rspl *s,			/* RSPL that we are part of */
-double *v			/* Target output values */
-) {
-	double vv[MXRO];			/* Closest vertex output value */
-	int f, fdi = s->fdi;
-	float *fcb;					/* Pointer to base float of fwd cell */
-	int ix;
-
-	if ((ix = rev_nnfind(s, 0.0, v)) < 0) 
-		return NULL;
-
-	fcb = s->g.a + ix * s->g.pss;	/* Pointer to grid output value */
-
-	for (f = 0; f < fdi; f++)
-		vv[f] = fcb[f];				/* Convert from float to double */
-
-	return calc_fwd_cell_list(s, vv);	/* return list of cells enclosing this */
-}
-
-#ifdef SSS
-/* "Spherical" search in output space support */
-
-/* Initialise the "sphere" counter to the first location */
-static int *init_sphere(
-rspl *s,			/* RSPL that we are part of */
-sphere *sh,			/* Pointer to sphere counter object */
-double *base		/* Real base grid cell index */
-) {
-	int fdi  = s->fdi;
-	int gres = s->rev.res;
-	int **rpp;
-	int f;
-
-	sh->s     = s;
-	sh->c     = 0;		/* Start at layer 0 */
-
-	sh->cdist = 0.0;		/* We are in the target cell */
-	sh->ldist = 0.0;
-
-	/* Figure out the starting cell */
-	for (rpp = s->rev.rev, f = 0; f < fdi; f++) {
-		double gw = s->rev.gw[f];
-		double t = (base[f] - s->rev.gl[f])/gw;
-		sh->loc[f] = sh->base[f] = (int)floor(t);	/* Grid coordinate */
-		sh->off[f] = t - (double)sh->base[f];		/* Offset within grid */
-		sh->ix[f] = 0;
-		if (sh->loc[f] < 0 || sh->loc[f] >= gres) {	/* If outside valid reverse range */
-			sh->cdist = 2 * INF_DIST;		/* Give up - can't cope */
-			sh->ldist = 2 * INF_DIST;
-			DBG(("init_sphere search failed because target is outside grid\n"));
-			return NULL;
-		}
-		rpp += sh->loc[f] * s->rev.coi[f];	/* Accumulate reverse grid pointer */
-	}
-	DBGV(("first sphere cell = ", fdi, " %d", sh->loc, "\n")); 
-	return *rpp;
-}
-
-/* Return the next reverse list pointer. */
-/* set ridiculously large sh.ldist if we reached end */
+/* Return the pointer to the list of nearest fwd cells given */
+/* the target output values. The pointer will be to the first */
+/* index in the list (ie. list address + 2) */
+/* Return NULL if none in list (out of gamut). */
 static int *
-next_sphere_cell(sphere *sh) {
-	rspl *s  = sh->s;
-	int fdi  = s->fdi;
-	int gres = s->rev.res;
+calc_fwd_nn_cell_list(
+	rspl *s,		/* this */
+	double *v		/* Output values */
+) {
+	int f, fdi = s->fdi, ix;
 	int **rpp;
-	int f;
+	int rgres_1 = s->rev.res - 1;
 
-	do {	/* while locations are not within grid, or we're not at the end */
+	if (s->rev.rev_valid == 0)
+		init_revaccell(s);
 
-		/* Increment counter */
-		for (f = 0; f < fdi; f++) {
-			int j;
-
-			if (f == 0) {
-				/* See if any non-ls counters are +/- c */
-				for (j = f+1; j < fdi; j++) {
-					if (sh->ix[j] <= -sh->c || sh->ix[j] >= sh->c)
-						break;			/* Found one that is */
-				}
-				if (j < fdi)					/* Found one that is */
-					sh->ix[f]++;				/* Itterate through center */
-				else
-					sh->ix[f] += 2 * sh->c;		/* Skip center section */
-			} else {
-				sh->ix[f]++;					/* All non ls increment steadily */
-			}
-			sh->loc[f] = sh->base[f] + sh->ix[f];
-
-			if (sh->ix[f] <= sh->c)
-				break;						/* No carry yet */ 
-			sh->ix[f] = -sh->c;
-			sh->loc[f] = sh->base[f] + sh->ix[f];
-		}
-		
-		if (f >= fdi) {	/* Carry to layer */
-
-			/* Increment layer */
-			sh->c++;
-
-			if (sh->c >= gres) {
-				sh->cdist = 2 * INF_DIST;		/* Give up - can't cope */
-				sh->ldist = 2 * INF_DIST;
-				return NULL;			/* We're at the end */
-			}
-
-			for (f = 0; f < fdi; f++) {
-				sh->ix[f] = -sh->c;
-				sh->loc[f] = sh->base[f] + sh->ix[f];
-			}
-
-			/* Compute the best possible distance for this layer */
-			for (f = 0; f < fdi; f++) {
-				double tt;
-				tt = sh->off[f] < 0.5 ? sh->off[f] : 1.0 - sh->off[f];	/* Closest axis */
-				tt += (double)sh->c - 1.0;								/* plus other layers */
-				tt = tt * s->rev.gw[f] + s->rev.gl[f];		/* Scale back to output space coords */
-				if (f == 0 || tt < sh->ldist)
-					sh->ldist = tt;
-			}
-		
-		}
-
-		/* Check if this offset is within the grid */
-		for (f = 0; f < fdi; f++) {
-			if (sh->loc[f] < 0 || sh->loc[f] >= gres)
-				break;			/* No its not */
-		}
-	} while(f < fdi);		/* Until we get one in the grid */
-
-	/* Compute the best possible distance for this cell */
-	sh->cdist = 0.0;
-	for (f = 0; f < fdi; f++) {
-
-		double tt;
-		if (sh->ix[f] > 0)
-			tt = (double)sh->ix[f] - sh->off[f];
-		else if (sh->ix[f] < 0)
-			tt = sh->off[f] - (double)sh->ix[f] - 1.0;
-		else	/* == 0 */
-			tt = 0.0;
-		tt = tt * s->rev.gw[f] + s->rev.gl[f];		/* Scale back to output space coords */
-		sh->cdist += tt * tt;
+	for (ix = 0, f = 0; f < fdi; f++) {
+		int mi;
+		double t = (v[f] - s->rev.gl[f])/s->rev.gw[f];
+		mi = (int)floor(t);			/* Grid coordinate */
+		if (mi < 0) 				/* Clip to reverse range, so we always return a result  */
+			mi = 0;
+		else if (mi > rgres_1)
+			mi = rgres_1;
+		ix += mi * s->rev.coi[f];	/* Accumulate reverse grid index */
 	}
-	sh->cdist = sqrt(sh->cdist);
-
-	DBGV(("current sphere cell = ", fdi, " %d", sh->loc, "\n")); 
-
-	/* Compute reverse cell index */
-	for (rpp = s->rev.rev, f = 0; f < fdi; f++) {
-		rpp += sh->loc[f] * s->rev.coi[f];	/* Accumulate reverse grid pointer */
+	rpp = s->rev.nnrev + ix;
+	if (*rpp == NULL)				/* fall back to in-gamut lookup */ 
+		rpp = s->rev.rev + ix;
+	if (*rpp == NULL) {
+		return NULL;
 	}
-
-	return *rpp;
+	return (*rpp) + 2;
 }
-
-#endif /* SSS */
 
 /* =================================================== */
 /* The cell and simplex solver top level routines */
@@ -1751,8 +1617,8 @@ static int exact_compute(schbase *b, simplex *x) {
 #ifdef DEBUG
 	/* Sanity check */
 	if (sdi != fdi || sdi != di || x->efdi != fdi) {
-printf("di = %d, fdi = %d\n",di,fdi);
-printf("sdi = %d, efdi = %d\n",sdi,x->efdi);
+		printf("di = %d, fdi = %d\n",di,fdi);
+		printf("sdi = %d, efdi = %d\n",sdi,x->efdi);
 		error("rspl exact reverse interp called with sdi != fdi, sdi != di, efdi != fdi");
 		/* !!! could switch to SVD solution if di != fdi ?? !!! */
 	}
@@ -1765,7 +1631,7 @@ printf("sdi = %d, efdi = %d\n",sdi,x->efdi);
 
 	/* Check that the target lies within the simplex bounding cube */
 	for (f = 0; f < fdi; f++) {
-		if (b->v[f] < *x->min[f] || b->v[f] > *x->max[f]) {
+		if (b->v[f] < x->min[f] || b->v[f] > x->max[f]) {
 			DBG(("Simplex is rejected - bounding cube\n"));
 			return 0;
 		}
@@ -1841,9 +1707,7 @@ static int auxil_setsort(schbase *b, cell *c) {
 
 	DBG(("Reverse auxiliary search, evaluate and set sort key on cell\n"));
 
-	if (b->s->di <= fdi) {	/* Assert ~1 */
-// ~~9999
-*((char *)0) = 55;
+	if (b->s->di <= fdi) {	/* Assert */
 		error("rspl auxiliary reverse interp called with di <= fdi (%d %d)", b->s->di, fdi);
 	}
 
@@ -1911,7 +1775,6 @@ static int auxil_check(schbase *b, cell *c) {
 /* Return 1 if search should be aborted */
 static int auxil_compute(schbase *b, simplex *x) {
 	rspl *s     = b->s;
-	cell *c     = x->c;
 	int e, di   = s->di;
 	int f, fdi  = s->fdi;
 	datai xp;		/* solution in simplex relative coord order */
@@ -1923,7 +1786,7 @@ static int auxil_compute(schbase *b, simplex *x) {
 
 	/* Check that the target lies within the simplex bounding cube */
 	for (f = 0; f < fdi; f++) {
-		if (b->v[f] < *x->min[f] || b->v[f] > *x->max[f]) {
+		if (b->v[f] < x->min[f] || b->v[f] > x->max[f]) {
 			DBG(("Simplex is rejected - bounding cube\n"));
 			return 0;
 		}
@@ -1932,8 +1795,8 @@ static int auxil_compute(schbase *b, simplex *x) {
 	/* Check if this cell could possible improve b->idist */
 	for (e = 0; e < b->naux; e++) {
 		int ei = b->auxi[e];					/* pmin/max[] is indexed in input space */
-		if (*x->pmin[ei] >= (b->av[ei] + b->idist)
-		 || *x->pmax[ei] <= (b->av[ei] - b->idist)) {
+		if (x->pmin[ei] >= (b->av[ei] + b->idist)
+		 || x->pmax[ei] <= (b->av[ei] - b->idist)) {
 			DBG(("Simplex doesn't contain solution that will be closer to auxiliary goal\n"));
 			return 0;
 		}
@@ -1983,7 +1846,7 @@ static int auxil_compute(schbase *b, simplex *x) {
 		b->cpp[0].v[f] = b->v[f];	/* Assumed to be an exact solution */
 	b->idist = idist;
 	b->nsoln = 1;
-	b->pauxcell = c->ix;
+	b->pauxcell = x->ix;
 	if (wsrv == 2)					/* Is above (disabled) ink limit */
 		b->iclip = 1;
 
@@ -2070,7 +1933,7 @@ static int locus_compute(schbase *b, simplex *x) {
 
 	/* Check that the target lies within the simplex bounding cube */
 	for (f = 0; f < fdi; f++) {
-		if (b->v[f] < *x->min[f] || b->v[f] > *x->max[f]) {
+		if (b->v[f] < x->min[f] || b->v[f] > x->max[f]) {
 			DBG(("Simplex is rejected - bounding cube\n"));
 			return 0;
 		}
@@ -2078,7 +1941,7 @@ static int locus_compute(schbase *b, simplex *x) {
 
 	/* Check if simplex could possible improve the locus min/max */
 	if (b->asegs == 0) {	/* If we aren't find all segments of the locus */
-		if (*x->pmin[lxi] >= b->min && *x->pmax[lxi] <= b->max ) {
+		if (x->pmin[lxi] >= b->min && x->pmax[lxi] <= b->max ) {
 			DBG(("Simplex doesn't contain solution that will expand the locus\n"));
 			return 0;
 		}
@@ -2282,7 +2145,7 @@ static int clipn_compute(schbase *b, simplex *x) {
 	double err;				/* output error of solution */
 	int wsrv;	/* Within simplex return value */
 
-	DBG(("Clipn: computing possible solution\n"));
+	DBG(("Clipn: computing possible solution  simplex %d, sdi = %d, efdi = %d\n",x->si,x->sdi,x->efdi));
 
 	/* Compute a solution value */
 	if ((wsrv = nnearest_clip_solve(b, x, p, v, &err)) == 0) {
@@ -2326,7 +2189,6 @@ simplex *x,
 double *xp		/* Return solution xp[sdi] */
 ) {
 	rspl *s = b->s;
-	cell *c  = x->c;
 	int ee, e, di = s->di, sdi = x->sdi; 
 	int f, efdi = x->efdi; 
 	int dof = sdi-efdi;			 /* Degree of freedom of simplex locus */
@@ -2374,7 +2236,7 @@ double *xp		/* Return solution xp[sdi] */
 		int ei = icomb[e];		/* Simplex coord */
 
 		if (ei >= 0 &&  b->auxm[e] != 0) {
-			auxt[ei] = (b->av[e] - c->p[0][e])/s->g.w[e];	/* Only sets those needed */
+			auxt[ei] = (b->av[e] - x->p0[e])/s->g.w[e];	/* Only sets those needed */
 		}
 	}
 
@@ -2460,7 +2322,6 @@ schbase *b,
 simplex *x
 ) {
 	rspl *s = b->s;
-	cell *c  = x->c;
 	int sdi = x->sdi; 
 	int f, efdi = x->efdi; 
 	double pp[MXRI];
@@ -2469,7 +2330,7 @@ simplex *x
 	DBG(("axuil_locus called\n"));
 
 	if (sdi != efdi)
-		error("Internal error - auxil_locus got sdi != efdi (%d < %d)",sdi, efdi);
+		warning("Internal error - auxil_locus got sdi != efdi (%d < %d)",sdi, efdi);
 
 	/* Init the RHS B[] vector (note sdi == efdi) */
 	for (f = 0; f < efdi; f++) {
@@ -2488,7 +2349,7 @@ simplex *x
 		DBG(("Got locus solution within simplex\n"));
 
 		/* Compute auxiliary value for this solution (absolute space) */
-		xval = c->p[0][lxi];
+		xval = x->p0[lxi];
 		if (xlxi >= 0)				/* Simplex param value */
 			xval += s->g.w[lxi] * pp[xlxi];
 		else if (xlxi == -2)		/* 1 value */
@@ -2501,17 +2362,20 @@ simplex *x
 					b->axislz = 10;
 					if ((b->axisl = (axisec *)malloc(b->axislz * sizeof(axisec))) == NULL)
 						error("rev: malloc failed - Auxiliary intersect list size %d",b->axislz);
+					INCSZ(b->s, b->axislz * sizeof(axisec));
 				} else {
+					DECSZ(b->s, b->axislz * sizeof(axisec));
 					b->axislz *= 2;
 					if ((b->axisl = (axisec *)realloc(b->axisl, b->axislz * sizeof(axisec)))
 					    == NULL)
 						error("rev: realloc failed - Auxiliary intersect list size %d",b->axislz);
+					INCSZ(b->s, b->axislz * sizeof(axisec));
 				}
 			}
 			b->axisl[b->axisln].xval = xval;
 			b->axisl[b->axisln].nv = x->sdi + 1;
 			for (f = 0; f <= x->sdi; f++) {
-				b->axisl[b->axisln].vix[f] = c->ix + s->g.hi[x->psxi->offs[f]];
+				b->axisl[b->axisln].vix[f] = x->vix[f];
 			}
 			b->axisln++;
 		}
@@ -2520,12 +2384,12 @@ simplex *x
 		if (xval < b->min) {
 			DBG(("######## Improving minimum to %f\n",xval));
 			b->min = xval;
-			b->plmincell = c->ix;
+			b->plmincell = x->ix;
 		}
 		if (xval > b->max) {
 			DBG(("######## Improving maximum to %f\n",xval));
 			b->max = xval;
-			b->plmaxcell = c->ix;
+			b->plmaxcell = x->ix;
 		}
 	} else {
 		DBG(("Solution wasn't within the simplex\n"));
@@ -2550,7 +2414,6 @@ double *xp,		/* Return solution (simplex parameter space) */
 double *xv,		/* Return solution (output space) */
 double *err		/* Output error distance at solution point */
 ) {
-	DBGS(cell *c = x->c;)
 	rspl *s = b->s;
 	int e, sdi = x->sdi; 
 	int f, fdi = s->fdi, efdi = x->efdi; 
@@ -2646,7 +2509,6 @@ double *xp,		/* Return solution (simplex parameter space) */
 double *xv,		/* Return solution (output space) */
 double *err		/* Output error distance at solution point */
 ) {
-	DBGS(cell *c = x->c;)
 	rspl *s = b->s;
 	int e, sdi = x->sdi; 
 	int f, fdi = s->fdi, efdi = x->efdi; 
@@ -2661,7 +2523,7 @@ double *err		/* Output error distance at solution point */
 		for (f = 0; f < efdi; f++)
 			xv[f] = x->v[sdi][f]; 		/* Copy vertex value */
 		if (x->v[sdi][fdi] > b->limitv) {
-			if (b->limiten)				/* (is this needed ? simplex will have SPLX_OVLIMIT ?) */
+			if (b->limiten) 			/* Needded when limiten == 0 */
 				return 0;				/* Over ink limit - no good */
 			wsrv = 2;					/* Would be over */
 		}
@@ -2840,14 +2702,14 @@ double de[MXRO]		/* Delta */
 static double get_limitv(
 schbase *b,			/* Base search information */
 int ix,				/* fwd index of cell */
-float *fcb,			/* Pointer to base of vertex value array (can be NULL) */
+float *fcb,			/* Pointer to base of vertex value array (ix is used if NULL) */
 double *p			/* Array of input values (can be NULL to compute) */
 ) {
 	rspl *s = b->s;
 	float *base = fcb;
 	double lv;
 	if (base == NULL)
-		base = b->s->g.a + ix * b->s->g.pss;
+		base = s->g.a + ix * s->g.pss;
 	lv = base[-1];					/* Fetch existing ink limit function value */
 	if ((float)lv == L_UNINIT) {			/* Not been computed yet */
 		if (p != NULL) {
@@ -2891,7 +2753,7 @@ rspl *s
 
 /* Cell code */
 
-static void free_cell_info(cell *c);
+static void free_cell_contents(cell *c);
 static cell *cache_rcell(revcache *r, int ix);
 static void uncache_rcell(revcache *r, cell *cp);
 
@@ -2918,16 +2780,6 @@ int ix				/* fwd index of cell */
 	if (!(c->flags & CELL_FLAG_1)) {			/* Have to (re)initialize cell & simplexes */
 		int tix;								/* Temp fwd cell index */
 		float *fcb = s->g.a + ix * s->g.pss;	/* Pointer to base float of fwd cell */
-
-		/* Free any existing simplexes, since the number or use migh change */
-		free_cell_info(c);
-
-		/* Setup lower edge flags */
-		c->lwredge = 0;
-		for (e = 0; e < di; e++) {		/* Transfer cell verticy values from grid */
-			if (G_FL(fcb, e) == 4)		/* Cell is on lower edge of grid */
-				c->lwredge |= (1 << e);	/* Set flag */
-		}
 
 		/* Compute basic Cell info and vertex output values */
 		for (ee = 0; ee < p2di; ee++) {
@@ -3051,18 +2903,23 @@ int ix				/* fwd index of cell */
 
 void free_simplex_info(cell *c, int dof);
 
-/* Free up any allocated information in a cell */
+/* Free up any allocated simplexes in a cell, */
+/* and set the pointers to NULL. */
+/* Nothing else is changed (ie. it's NOT removed from */
+/* the cache index or unthrheaded from the mru list). */
 static void
-free_cell_info(
+free_cell_contents(
 cell *c
 ) {
 	int nsdi;
 	
 	/* Free up all the simplexes */
-	for (nsdi = 0; nsdi <= c->s->di; nsdi++) {
-		if (c->sx[nsdi] != NULL) {
-			free_simplex_info(c, nsdi);
-			c->sx[nsdi] = NULL;
+	if (c->s != NULL) {
+		for (nsdi = 0; nsdi <= c->s->di; nsdi++) {
+			if (c->sx[nsdi] != NULL) {
+				free_simplex_info(c, nsdi);
+				c->sx[nsdi] = NULL;
+			}
 		}
 	}
 	/* ~~ free any other cell information */
@@ -3071,6 +2928,37 @@ cell *c
 /* - - - - - -  */
 /* Simplex code */
 
+/* Simplex and Cell hash index size increments */
+int primes[] = {
+	367,
+	853,
+	1489,
+	3373,
+	3373,
+	6863,
+	12919,
+	23333,
+	43721,
+	97849,
+	146221,
+	254941,
+	-1
+};
+
+/* Compute a simplex hash index */
+unsigned int simplex_hash(revcache *rc, int sdi, int efdi, int *vix) {
+	unsigned int hash = 0;
+	int i;
+
+	for (i = 0; i <= sdi; i++)
+		hash = hash * 17 + vix[i];
+	hash = hash * 17 + sdi;
+	hash = hash * 17 + efdi;
+
+	hash %= rc->spx_hash_size;
+	return hash;
+}
+
 /* Allocate and do the basic initialisation for a DOF list of simplexes */
 void alloc_simplexes(
 cell *c,
@@ -3078,6 +2966,7 @@ int nsdi			/* Non limited sub simplex dimensionality */
 ) {
 	rspl *s = c->s;
 	schbase *b = s->rev.sb;
+	revcache *rc = s->rev.cache;
 	int ee, e, di = s->di;
 	int f, fdi = s->fdi;
 	int lsdi;			/* Ink limited Sub-simplex sdi */
@@ -3090,28 +2979,31 @@ int nsdi			/* Non limited sub simplex dimensionality */
 		error("rspl rev, internal, trying allocate already allocated simplexes\n");
 
 	/* Figure out how many simplexes will be at this nsdi */
-	lsdi = nsdi + 1;	/* Limit simplexes sdi */
+	lsdi = nsdi + 1;	/* Ink limit simplexes sdi */
 
 	tsxno = nsxno = s->rev.sspxi[nsdi].nospx;
+
 	if (b->limit != NULL && lsdi <= di)
-		tsxno += s->rev.sspxi[lsdi].nospx;
+		tsxno += s->rev.sspxi[lsdi].nospx;		/* Second set with extra input dimension */
 
 	/* Make sure there is enough space in temp simplex filter list */
 	if (b->lsxfilt < tsxno) {	/* Allocate more space if needed */
 
 		if (b->lsxfilt > 0) {	/* Free old space before allocating new */
-			free (b->sxfilt);
+			free(b->sxfilt);
+			DECSZ(b->s, b->lsxfilt * sizeof(char));
 		}
 		b->lsxfilt = 0;
 		/* Allocate enough space for all the candidate cells */
 		if ((b->sxfilt = (char *)malloc(tsxno * sizeof(char))) == NULL)
 			error("rev: malloc failed - temp simplex filter list, count %d",tsxno);
 		b->lsxfilt = tsxno;	/* Current allocated space */
+		INCSZ(b->s, b->lsxfilt * sizeof(char));
 	}
 		
 	/* Figure out the number of simplexes that will actually be needed */
 	for (si = so = 0; si < tsxno; si++) {
-		psxinfo *psxi;
+		psxinfo *psxi = NULL;
 		int *icomb, *offs;
 		int sdi = nsdi;
 		int efdi = fdi;
@@ -3129,22 +3021,12 @@ int nsdi			/* Non limited sub simplex dimensionality */
 
 		b->sxfilt[si] = 0;				/* Assume simplex won't be used */
 
-		/* See if simplex can be ignored because it is accounted for in another cell */
-		for (e = 0; e < di; e++) {
-			if (icomb[e] == -1 && !(c->lwredge & (1 << e))) {
-				break;	/* Simplex is on lower edge of cell,  */
-						/* while cell is not on lower edge of grid */
-			}
-		}
-		if (e < di) {
-			continue;	/* Skip this simplex */
-		}
-
-		/* Check if ink limit is relevant */
+		/* Check if simplex should be discared due to the ink limit */
 		if (b->limit != NULL) {
 			double max = -INF_DIST;
 			double min =  INF_DIST;
 
+			/* Find the range of ink limit values covered by simplex */
 			for (e = 0; e <= sdi; e++) {		/* For all the simplex verticies */
 				int i = offs[e];
 				double vv = c->v[i][fdi];		/* Ink limit value */
@@ -3153,16 +3035,16 @@ int nsdi			/* Non limited sub simplex dimensionality */
 				if (vv > max)
 					max = vv;
 			}
-
 			
-			if (isclip) {
-				if (max < b->limitv || min > b->limitv) {
-					continue;	/* Discard this simplex - it can't straddle the ink limit */
-				}
+//if ((max - min) > EPS) printf("~1 Found simplex sdi %d, efdi %d, min = %f, max = %f, limitv = %f\n", sdi, efdi, min,max,b->limitv);
+			if (isclip) {	/* Limit clipped simplex */
+				/* (Make sure it straddles the limit boundary) */
+				if (max < b->limitv || min > b->limitv)
+					continue;		/* Discard this simplex - it can't straddle the ink limit */
+//printf("~1 using sub simplex sdi %d, efdi %d, min = %f, max = %f, limitv = %f\n", sdi, efdi, min,max,b->limitv);
 			} else {
-				if (min > b->limitv) {
-					continue;				/* Discard this simplex - it is above the ink limit */
-				}
+				if (min > b->limitv)
+					continue;		/* Discard this simplex - it is above the ink limit */
 			}
 		}
 
@@ -3172,26 +3054,27 @@ int nsdi			/* Non limited sub simplex dimensionality */
 
 	DBG(("There are %d level %d sub simplexes\n",so, nsdi));
 	/* Allocate space for all the DOF simplexes that will be used */
-	if (so > 0 && (c->sx[nsdi] = (simplex *) malloc(so * sizeof(simplex))) == NULL)
-		error("rspl malloc failed - reverse cell simplexes");
+	if (so > 0) {
+		if ((c->sx[nsdi] = (simplex **) calloc(so, sizeof(simplex *))) == NULL)
+			error("rspl malloc failed - reverse cell simplexes");
+		INCSZ(s, so * sizeof(simplex *));
+	}
 
 	/* Setup SPLX_FLAG_1 level information in the simplex */
 	for (si = so = 0; si < tsxno; si++) {
 		simplex *x;
-		psxinfo *psxi;
+		psxinfo *psxi = NULL;
 		int *icomb;
 		int sdi, efdi;
 		int ssi;
+		int vix[MXRI+1];            /* fwd cell vertex indexes of this simplex [sdi+1] */
 
-		if (b->sxfilt[si] == 0)		/* Don't use this one */
+		if (b->sxfilt[si] == 0)		/* Decided not to use this one */
 			continue;
 
 #ifdef STATS
 		s->rev.st[b->op].sinited++;
 #endif /* STATS */
-
-		x = &c->sx[nsdi][so];
-		x->flags = 0;
 
 		sdi = nsdi;
 		efdi = fdi;
@@ -3200,56 +3083,142 @@ int nsdi			/* Non limited sub simplex dimensionality */
 			sdi++;						/* One more dimension */
 			efdi++;						/* One more constraint */
 			ssi -= nsxno;				/* In second half of list */
-			x->flags |= SPLX_CLIPSX;	/* Limit clipped simplex */
 		}
-
-		if (b->sxfilt[si] == 3)		/* Don't use this one */
-			x->flags |= SPLX_OVLIMIT;	/* This one is over the ink limit */
 
 		psxi = &s->rev.sspxi[sdi].spxi[ssi];
 		icomb = psxi->icomb;
 
-		/* Fill in the other simplex details */
-		x->psxi = psxi;					/* Pointer to constant per simplex info */
-		x->c    = c;					/* Parent cell */
-		x->si   = so;					/* Diagnostic, simplex offset in list */
-		x->sdi  = sdi;					/* Copy of simplex dimensionaity */
-		x->efdi = efdi;					/* Copy of effective output dimensionality */
+		/* Compute simplex vertexes so we can match it in the cache */
+		for (e = 0; e <= sdi; e++) 
+			vix[e] = c->ix + s->g.hi[psxi->offs[e]];
 
-		/* Compute pointers to simplex vertex output and limit values */
+		x = c->sx[nsdi][so];
 
-		for (e = 0; e <= sdi; e++) {		/* For all the simplex verticies */
-			int i = x->psxi->offs[e];
-			x->v[e] = c->v[i];
-
-			/* Setup output bounding box value pointers (the hard way) */
-			if (e == 0) {					/* Init to first vertex of simplex */
-				for (f = 0; f <= fdi; f++)				/* Output space */
-					x->min[f] = x->max[f] = &c->v[i][f];
-			} else {
-				for (f = 0; f <= fdi; f++) {			/* Output space + ink sum */
-					double vv, *vp;
-					if (f == fdi && b->limit == NULL)
-						continue;			/* Skip ink */
-					vp = &c->v[i][f];
-					vv = *vp;
-					if (vv < *x->min[f])
-						x->min[f] = vp;
-					else if (vv > *x->max[f])
-						x->max[f] = vp;
+		/* If this is a shared simplex, see if we already have it in another cell */
+		if (x == NULL && psxi->face) {
+			unsigned int hash;
+//printf("~1 looking for existing simplex nsdi = %d\n",nsdi);
+			hash = simplex_hash(rc, sdi, efdi, vix);
+			for (x = rc->spxhashtop[hash]; x != NULL; x = x->hlink) {
+				if (x->sdi != sdi
+				 || x->efdi != efdi)
+					continue;			/* miss */
+				for (e = 0; e <= sdi; e++) {
+					if (x->vix[e] != vix[e])
+						break;			/* miss */
 				}
+				if (e > sdi)
+					break;				/* hit */
+			}
+			if (x != NULL) {
+				x->refcount++;
+//printf("~1 found hit in simplex face list hash %d, refcount = %d\n",hash,x->refcount);
 			}
 		}
+		if (x == NULL) {
+			if ((x = (simplex *) calloc(1, sizeof(simplex))) == NULL)
+				error("rspl malloc failed - reverse cell simplexes");
+			INCSZ(s, sizeof(simplex));
+			x->refcount = 1;
+			x->touch = s->rev.stouch-1;
+			x->flags = 0;
 
-		/* Setup input bounding box value pointers (the easy way) */
-		for (ee = 0; ee < di; ee++) {
-			x->pmin[ee] = &c->p[x->psxi->pmino[ee]][ee];
-			x->pmax[ee] = &c->p[x->psxi->pmaxo[ee]][ee];
+			if (si >= nsxno) {				/* If limit boundary simplex */
+				x->flags |= SPLX_CLIPSX;	/* Limit clipped simplex */
+			}
+
+			/* Fill in the other simplex details */
+			x->s    = s;					/* Parent rspl */
+			x->ix   = c->ix;				/* Construction cube base index */
+			for (e = 0; e <= sdi; e++)		/* Indexs of fwd verticies that make up this simplex */
+				x->vix[e] = vix[e];
+			x->psxi = psxi;					/* Pointer to constant per simplex info */
+//printf("~1 set simplex 0x%x psxi = 0x%x\n",x,x->psxi);
+			x->si   = so;					/* Diagnostic, simplex offset in list */
+			x->sdi  = sdi;					/* Copy of simplex dimensionaity */
+			x->efdi = efdi;					/* Copy of effective output dimensionality */
+
+			/* Copy cell simplex vertex output and limit values */
+			for (e = 0; e <= sdi; e++) {		/* For all the simplex verticies */
+				int i = x->psxi->offs[e];
+
+				for (f = 0; f <= fdi; f++)		/* Copy vertex value + ink sum */
+					x->v[e][f] = c->v[i][f];
+
+				/* Setup output bounding box values (the hard way) */
+				if (e == 0) {						/* Init to first vertex of simplex */
+					for (f = 0; f <= fdi; f++)		/* Output space */
+						x->min[f] = x->max[f] = c->v[i][f];
+				} else {
+					for (f = 0; f <= fdi; f++) {	/* Output space + ink sum */
+						double vv;
+//						if (f == fdi && b->limit == NULL)
+//							continue;			/* Skip ink */
+						vv = c->v[i][f];
+						if (vv < x->min[f])
+							x->min[f] = vv;
+						else if (vv > x->max[f])
+							x->max[f] = vv;
+					}
+				}
+			}
+
+			/* Setup input bounding box value pointers (the easy way) */
+			for (ee = 0; ee < di; ee++) {
+				x->p0[ee]   = c->p[0][ee];		/* Construction base cube origin */
+				x->pmin[ee] = c->p[x->psxi->pmino[ee]][ee];
+				x->pmax[ee] = c->p[x->psxi->pmaxo[ee]][ee];
+			}
+
+			x->flags |= SPLX_FLAG_1;		/* vv & iv done, nothing else */
+
+			x->aloc2 = x->aloc5 = NULL;		/* Matrix allocations not done yet */
+
+			/* Add it to the face shared simplex hash index */
+			if (x->psxi->face) {
+				unsigned int hash;
+				int i;
+				/* See if we should re-size the simplex hash index */
+				if (++rc->nspx > (HASH_FILL_RATIO * rc->spx_hash_size)) {
+					for (i = 0; primes[i] > 0 && primes[i] <= rc->spx_hash_size; i++)
+						;
+					if (primes[i] > 0) {
+						int spx_hash_size = rc->spx_hash_size;	/* Old */
+						simplex **spxhashtop = rc->spxhashtop;
+
+						rc->spx_hash_size = primes[i];
+
+						DBG(("Increasing face simplex hash index to %d\n",spx_hash_size));
+//printf("~1 increasing simplex hash index size to %d\n",spx_hash_size);
+						/* Allocate a new index */
+						if ((rc->spxhashtop = (simplex **) calloc(rc->spx_hash_size,
+						                                   sizeof(simplex *))) == NULL)
+							error("rspl malloc failed - reverse simplex cache index");
+						INCSZ(s, rc->spx_hash_size * sizeof(simplex *));
+
+						/* Transfer all the simplexes to the new index */
+						for (i = 0; i < spx_hash_size; i++) {
+							simplex *x, *nx;
+							for (x = spxhashtop[i]; x != NULL; x = nx) {
+								nx = x->hlink;
+								hash = simplex_hash(rc, x->sdi, x->efdi, x->vix);	/* New hash */
+								x->hlink = rc->spxhashtop[hash];	/* Add to new hash index */
+								rc->spxhashtop[hash] = x;
+							}
+						}
+						free(spxhashtop); /* Done with old index */
+						DECSZ(s, spx_hash_size * sizeof(simplex *));
+					}
+				}
+				hash = simplex_hash(rc, sdi, efdi, vix);
+
+				/* Add this to hash index */
+				x->hlink = rc->spxhashtop[hash];
+				rc->spxhashtop[hash] = x;
+//printf("~1 Added simplex to hash %d, rc->nspx = %d\n",hash,rc->nspx);
+			}
 		}
-
-		x->flags |= SPLX_FLAG_1;		/* vv & iv done, nothing else */
-
-		x->aloc2 = x->aloc5 = NULL;		/* Matrix allocations not done yet */
+		c->sx[nsdi][so] = x;
 		so++;
 	}
 	c->sxno[nsdi] = so;				/* Record actual number in list */
@@ -3265,18 +3234,75 @@ int nsdi			/* non limit sub simplex dimensionaity */
 	int si, sxno = c->sxno[nsdi];	/* Number of simplexes */
 
 	for (si = 0; si < sxno; si++) { /* For all the simplexes */
-		simplex *x = &c->sx[nsdi][si];
+		simplex *x = c->sx[nsdi][si];
+		int dof = x->sdi - x->efdi;
 
-		if (x->aloc2 != NULL)
-			free(x->aloc2);
+//printf("~1 freeing simplex, refcount = %d\n",x->refcount);
+		if (--x->refcount <= 0) {		/* Last reference to this simplex */
 
-		if (x->aloc5 != NULL)
-			free(x->aloc5);
+//printf("~1 freeing simplex 0x%x psxi = 0x%x\n",x,x->psxi);
+			if (x->psxi->face) {
+				unsigned int hash;
+				revcache *rc = c->s->rev.cache;
+				
+				hash = simplex_hash(rc, x->sdi, x->efdi, x->vix);
 
-		/* ~~ free any other simplex information */
+				/* Free it from the hash list */
+				if (rc->spxhashtop[hash] == x) {
+					rc->spxhashtop[hash] = x->hlink;
+					rc->nspx--;
+//printf("~1 removed simplex from hash %d, nspx now = %d\n",hash,rc->nspx);
+				} else {
+					simplex *xx;
+					for (xx = rc->spxhashtop[hash]; xx != NULL && xx->hlink != x; xx = xx->hlink)
+						;
+					if (xx != NULL) {		/* Found it */
+						xx->hlink = x->hlink;
+						rc->nspx--;
+//printf("~1 removed simplex from hash %d, nspx now = %d\n",hash,rc->nspx);
+					}
+//else
+//printf("~1 warning, failed to find face simplex hash %d, sdi = %d in cache index (nspx = %d)!!\n",hash,x->sdi,rc->nspx);
+				}
+			}
+			if (x->aloc2 != NULL) {
+				int adof = dof >= 0 ? dof : 0;		/* Allocation dof */
+				int asize;
+				if (dof == 0)
+					asize = sizeof(double) * (x->efdi * x->sdi)
+				          + sizeof(double *) * x->efdi 
+				          + sizeof(int) * x->sdi;
+				else
+					asize = sizeof(double) * (x->sdi * (x->efdi + x->sdi + adof + 2) + x->efdi)
+				          + sizeof(double *) * (x->efdi + 2 * x->sdi);
+				free(x->aloc2);
+				DECSZ(x->s, asize);
+			}
+
+			if (x->aloc5 != NULL) {
+				int asize;
+				if (x->naux == dof)
+					asize = sizeof(double *) * x->naux
+				          + sizeof(double) * (x->naux * dof)
+				          + sizeof(int) * dof;
+				else
+					asize = sizeof(double *) * (x->naux + dof) 
+					      + sizeof(double) * (dof * (x->naux + dof + 1));
+				free(x->aloc5);
+				DECSZ(x->s, asize);
+			}
+
+			/* ~~ free any other simplex information */
+
+			free(x);
+			DECSZ(c->s, sizeof(simplex));
+			c->sx[nsdi][si] = NULL;
+		}
 	}
 	free(c->sx[nsdi]);
+	DECSZ(c->s, c->sxno[nsdi] * sizeof(simplex *));
 	c->sx[nsdi] = NULL;
+	c->sxno[nsdi] = 0;
 
 	/* ~~ free any other cell information */
 }
@@ -3292,8 +3318,7 @@ within_simplex(
 simplex *x,				/* Simplex */
 double *p				/* Input coords in simplex space */
 ) {
-	cell *c = x->c;
-	rspl *s = c->s;
+	rspl *s = x->s;
 	schbase *b = s->rev.sb;
 	int    fdi = s->fdi;
 	int e, sdi = x->sdi;		/* simplex dimensionality */
@@ -3306,11 +3331,11 @@ double *p				/* Input coords in simplex space */
 	/* Check we are within baricentric limits */
 	for (lp = 0.0, e = 0; e < sdi; e++) {
 		cp = p[e];
-		if ((cp+EPS) < lp)		/* Outside baricentric or not in correct */
+		if ((cp+EPS) < lp) 		/* Outside baricentric or not in correct */
 			return 0;			/* order for this simplex  */
 		lp = cp;
 	}
-	if ((1.0+EPS) < lp)			/* outside baricentric range */
+	if ((1.0+EPS) < lp) 		/* outside baricentric range */
 		return 0;
 
 	/* Compute limit using interp. - assume simplex would have been trivially rejected */
@@ -3320,11 +3345,10 @@ double *p				/* Input coords in simplex space */
 			sum += p[e] * (x->v[e][fdi] - x->v[e+1][fdi]);
 		sum += x->v[sdi][fdi];
 		if (sum > b->limitv) {
-			if (b->limiten != 0) {
+			if (b->limiten != 0)
 	 			return 0;			/* Exceeds ink limit */
-			} else {
+			else
 				rv = 2;				/* would have exceeded limit */
-			}
 		}
 	}
 
@@ -3340,19 +3364,18 @@ double *p				/* Input coords in simplex space */
 	return rv;
 }
 
-/* Convert vector from simplex space to absolute space */
+/* Convert vector from simplex space to absolute cartesian space */
 static void simplex_to_abs(
 simplex *x,
 double *out,	/* output in absolute space */
 double *in		/* Input in simplex space */
 ) {
-	cell *c     = x->c;
-	rspl *s     = c->s;
+	rspl *s     = x->s;
 	int e, di   = s->di;
 	int *icomb  = x->psxi->icomb;	/* Coord combination order */
 
 	for (e = 0; e < di; e++) {		/* For each absolute coord */
-		double ov = c->p[0][e];		/* Base value */
+		double ov = x->p0[e];		/* Base value */
 		int ee = icomb[e];			/* Simplex param index */
 		if (ee >= 0)				/* Simplex param value */
 			ov += s->g.w[e] * in[ee];
@@ -3488,6 +3511,7 @@ add_lu_svd(simplex *x) {
 
 				if ((x->aloc2 = mem = (char *) malloc(asize)) == NULL)
 					error("rspl malloc failed - reverse cell sub-simplex matricies");
+				INCSZ(x->s, asize);
 
 				/* Allocate biggest to smallest (double, pointers, ints) */
 				/* to make sure that items lie on the natural boundaries. */
@@ -3519,6 +3543,7 @@ add_lu_svd(simplex *x) {
 
 				if ((x->aloc2 = mem = (char *) malloc(asize)) == NULL)
 					error("rspl malloc failed - reverse cell sub-simplex matricies");
+				INCSZ(x->s, asize);
 
 				/* Allocate biggest to smallest (double, pointers, ints) */
 				/* to make sure that items lie on the natural boundaries. */
@@ -3564,7 +3589,7 @@ add_lu_svd(simplex *x) {
 		if (dof == 0) {	/* compute LU */
 			double rip;
 #ifdef STATS
-			x->c->s->rev.st[x->c->s->rev.sb->op].sinited2a++;
+			x->s->rev.st[x->s->rev.sb->op].sinited2a++;
 #endif /* STATS */
 			if (lu_decomp(x->d_u, sdi, (int *)x->d_w, &rip)) {
 				x->flags |= SPLX_FLAG_2F;	/* Failed */
@@ -3574,7 +3599,7 @@ add_lu_svd(simplex *x) {
 //printf("~~ Creating SVD decomp, sdi = %d, efdi = %d\n", sdi, efdi);
 
 #ifdef STATS
-			x->c->s->rev.st[x->c->s->rev.sb->op].sinited2b++;
+			x->s->rev.st[x->s->rev.sb->op].sinited2b++;
 #endif /* STATS */
 			if (svdecomp(x->d_u, x->d_w, x->d_v, efdi, sdi)) {
 				x->flags |= SPLX_FLAG_2F;	/* Failed */
@@ -3627,7 +3652,7 @@ simplex *x
 	int doback = 0;
 
 #ifdef STATS
-	x->c->s->rev.st[x->c->s->rev.sb->op].sinited4++;
+	x->s->rev.st[x->s->rev.sb->op].sinited4++;
 #endif /* STATS */
 	/* Use output of svdcmp() to solve overspecified and/or */
 	/* singular equation A.x = b */
@@ -3644,7 +3669,7 @@ simplex *x
 	
 #ifdef STATS
 	if (doback && (x->flags & SPLX_FLAG_4))
-		x->c->s->rev.st[x->c->s->rev.sb->op].sinited4i++;
+		x->s->rev.st[x->s->rev.sb->op].sinited4i++;
 #endif /* STATS */
 
 	/* Compute locus */
@@ -3660,6 +3685,7 @@ simplex *x
 /* Simplex solution info #5 */
 
 /* Compute LU or SVD decomp of lo_l */
+/* Allocates the memory for the various matricies */
 /* Return non-zero if this canot be calculated. */
 static int
 add_auxil_lu_svd(
@@ -3673,13 +3699,22 @@ simplex *x
 
 #ifdef STATS
 	if (x->aaux != b->naux || x->auxbm != b->auxbm)
-		x->c->s->rev.st[x->c->s->rev.sb->op].sinited5i++;
+		x->s->rev.st[x->s->rev.sb->op].sinited5i++;
 #endif /* STATS */
 
 	if (x->aaux != b->naux) {	/* Number of auxiliaries has changed */
 		if (x->aloc5 != NULL) {
+			int asize;
+			if (x->naux == dof)
+				asize = sizeof(double *) * x->naux
+			          + sizeof(double) * (x->naux * dof)
+			          + sizeof(int) * dof;
+			else
+				asize = sizeof(double *) * (x->naux + dof) 
+				      + sizeof(double) * (dof * (x->naux + dof + 1));
 			free(x->aloc5);
 			x->aloc5 = NULL;
+			DECSZ(x->s, asize);
 		}
 		x->flags &= ~(SPLX_FLAG_5 | SPLX_FLAG_5F);	/* Force recompute */
 	}
@@ -3705,6 +3740,7 @@ simplex *x
 
 				if ((x->aloc5 = mem = (char *) malloc(asize)) == NULL)
 					error("rspl malloc failed - reverse cell sub-simplex matricies");
+				INCSZ(x->s, asize);
 
 				/* Allocate biggest to smallest (double, pointers, ints) */
 				/* to make sure that items lie on the natural boundaries. */
@@ -3733,6 +3769,7 @@ simplex *x
 
 				if ((x->aloc5 = mem = (char *) malloc(asize)) == NULL)
 					error("rspl malloc failed - reverse cell sub-simplex matricies");
+				INCSZ(x->s, asize);
 
 				/* Allocate biggest to smallest (double, pointers, ints) */
 				/* to make sure that items lie on the natural boundaries. */
@@ -3778,7 +3815,7 @@ simplex *x
 			double rip;
 
 #ifdef STATS
-			x->c->s->rev.st[x->c->s->rev.sb->op].sinited5a++;
+			x->s->rev.st[x->s->rev.sb->op].sinited5a++;
 #endif /* STATS */
 			if (lu_decomp(x->ax_u, dof, (int *)x->ax_w, &rip)) {
 				x->flags |= SPLX_FLAG_5F;
@@ -3788,7 +3825,7 @@ simplex *x
 		} else if (naux > 0) {			/* Use SVD to solve least squares */
 
 #ifdef STATS
-			x->c->s->rev.st[x->c->s->rev.sb->op].sinited5b++;
+			x->s->rev.st[x->s->rev.sb->op].sinited5b++;
 #endif /* STATS */
 			if (svdecomp(x->ax_u, x->ax_w, x->ax_v, naux, dof)) {
 				x->flags |= SPLX_FLAG_5F;
@@ -3810,7 +3847,7 @@ simplex *x
 static void
 init_ssimplex_info(
 rspl *s,
-int sdi					/* Sub-simplex dimensionality (range 0 - di) */
+int sdi						/* Sub-simplex dimensionality (range 0 - di) */
 ) {
 	int e, di = s->di;		/* Dimensionality */
 	ssxinfo *xip;			/* Pointer to sub-simplex info structure */
@@ -3821,7 +3858,7 @@ int sdi					/* Sub-simplex dimensionality (range 0 - di) */
 	if (xip->spxi != NULL)	/* Assert */
 		error("rspl rev, internal, init_ssimplex_info called on already init'd\n");
 
-//printf("~~ init_ssimplex_info called with sdi = %d\n",sdi);
+	DBG(("init_ssimplex_info called with sdi = %d\n",sdi));
 	/* First count the number of sub-simplexes */
 	nospx = 0;
 	XCB_INIT(vcmb);
@@ -3834,15 +3871,17 @@ int sdi					/* Sub-simplex dimensionality (range 0 - di) */
 	xip->nospx = nospx;
 	if ((xip->spxi = (psxinfo *) calloc(nospx, sizeof(psxinfo))) == NULL)
 		error("rspl malloc failed - reverse cell sub-simplex info array");
+	INCSZ(s, nospx * sizeof(psxinfo));
 	
-//printf("~~ no subsimplex = %d\n",nospx);
+	DBG(("Number of subsimplex = %d\n",nospx));
 	/* For all sub-simplexes */
 	XCB_INIT(vcmb);
 	for (vi = 0; vi < nospx; vi++) {
 		psxinfo *x = &xip->spxi[vi];
 		int i;
+		int andm, orm;
 
-		/* XCOMB generates verticies in order from max to min offest */
+		/* XCOMB generates verticies in order from max to min offset */
 
 		/* Compute Absolute -> Parameter mapping */
 		for (e = 0; e < di; e++) {				/* For each absolute axis */
@@ -3890,23 +3929,39 @@ int sdi					/* Sub-simplex dimensionality (range 0 - di) */
 			}
 		}
 
-#ifdef NEVER
-printf("~~Verticies   = ");
-for (i = 0; i <= sdi; i++)
-	printf("%d ",vcmb[i]);
-printf("\n");
+		/* See if the sub-simplex lies on a cube face */
+		andm = ~0;
+		orm = 0;
+		for (i = 0; i <= sdi; i++) {	/* For each verticy */
+			andm &= vcmb[i];
+			orm  |= vcmb[i];
+		}
+		/* If one coordinate is common (all 0 or all 1) to the verticies, */
+		/* they must all be on the same cube face. */
+		if (andm != 0 || orm != ((1 << di)-1))
+			x->face = 1;
+		else
+			x->face = 0;
 
-printf("~~Abs -> Parm = ");
-for (e = 0; e < di; e++)
-	printf("%d ",x->icomb[e]);
-printf("\n");
-
-printf("~~Offset      = ");
-for (e = 0; e <= sdi; e++)
-	printf("%d ",x->foffs[e]);
-printf("\n");
-printf("\n");
-#endif /* NEVER */
+#ifdef DEBUG
+		printf("Verticies   = ");
+		for (i = 0; i <= sdi; i++)
+			printf("%d ",vcmb[i]);
+		printf("\n");
+		
+		printf("Face        = %s\n",x->face ? "True" : "False");
+		
+		printf("Abs -> Parm = ");
+		for (e = 0; e < di; e++)
+			printf("%d ",x->icomb[e]);
+		printf("\n");
+		
+		printf("Offset      = ");
+		for (e = 0; e <= sdi; e++)
+			printf("%d ",x->foffs[e]);
+		printf("\n");
+		printf("\n");
+#endif /* DEBUG */
 
 		/* Increment the counter value */
 		XCB_INC(vcmb);
@@ -3926,13 +3981,12 @@ int sdi					/* Sub-simplex dimensionality (range 1 - di) */
 		return;
 
 	free(xip->spxi);
-	xip->spxi = 0;
+	DECSZ(s, xip->nospx * sizeof(psxinfo));
+	xip->spxi = NULL;
 }
 
 /* ====================================================== */
 /* Reverse cell cache code                                */
-
-static int increase_revcache(revcache *rc);
 
 /* Allocate and initialise the reverse cell cache */
 static revcache *
@@ -3940,34 +3994,27 @@ alloc_revcache(
 rspl *s
 ) {
 	revcache *rc;
-	char *ev;
 
+	DBG(("alloc_revcache called\n"));
 	if ((rc = (revcache *) calloc(1, sizeof(revcache))) == NULL)
 		error("rspl malloc failed - reverse cell cache");
+	INCSZ(s, sizeof(revcache));
 	
 	rc->s = s;		/* For stats */
 
-	/* Check for environment variable tweak */
-	rc->rae = REV_ALLOC_ENTRIES;
-	if ((ev = getenv("ARGYLL_REV_CACHE_MULT")) != NULL) {
-		double mm;
-		mm = atof(ev);
-		if (mm > 0.1 && mm < 20.0)
-			rc->rae = (int)(rc->rae * mm + 0.5);
-	}
-//printf("~1 reverse cache entries = %d\n",rc->rae);
+	/* Allocate an initial cell hash index */
+	rc->cell_hash_size = primes[0];
 
-	/* Allocate the initial number of blocks of entries */
-	if ((rc->cells = (cell **)malloc(rc->rae * sizeof(cell *))) == NULL)
-		error("rspl malloc failed - reverse cell cache cells array");
-	rc->ncells = rc->rae;
+	if ((rc->hashtop = (cell **) calloc(rc->cell_hash_size, sizeof(cell *))) == NULL)
+		error("rspl malloc failed - reverse cell cache index");
+	INCSZ(s, rc->cell_hash_size * sizeof(cell *));
 
-	rc->lrutop = rc->lrubot = NULL;		/* Nothing in lru list */
+	/* Allocate an initial simplex face match hash index */
+	rc->spx_hash_size = primes[0];
 
-#ifdef ALLOC_ALL_CACHE
-	while (rc->nextalloc < rc->rae)
-		increase_revcache(rc);
-#endif
+	if ((rc->spxhashtop = (simplex **) calloc(rc->spx_hash_size, sizeof(simplex *))) == NULL)
+		error("rspl malloc failed - reverse simplex cache index");
+	INCSZ(s, rc->spx_hash_size * sizeof(simplex *));
 
 	return rc;
 }
@@ -3976,69 +4023,97 @@ rspl *s
 static void
 free_revcache(revcache *rc) {
 	int i;
-	cell *cp;
+	cell *cp, *ncp;
 
-	/* Free any stuff allocated in the cell contents */
-	for (cp = rc->lrubot; cp != NULL; cp = cp->lruup) {
-		free_cell_info(cp);
+	/* Free any stuff allocated in the cell contents, and the cell itself. */
+	for (cp = rc->mrubot; cp != NULL; cp = ncp) {
+		ncp = cp->mruup;
+		free_cell_contents(cp);
+		free(cp);
+		DECSZ(rc->s, sizeof(cell));
 	}
 
-	/* Free cell allocations */
-	for (i = 0; i < rc->nextalloc; i++) {
-		free(rc->cells[i]);
-	}
+	/* Free the hash indexes */
+	free(rc->hashtop);
+	DECSZ(rc->s, rc->cell_hash_size * sizeof(cell *));
+	free(rc->spxhashtop);
+	DECSZ(rc->s, rc->spx_hash_size * sizeof(simplex *));
 
-	free(rc->cells);
+	DECSZ(rc->s, sizeof(revcache));
 	free(rc);
 }
 
-/* Allocate another block of cells, and add them to the cache. */
-/* Return non-zero if we ran out of room to lock another cell */
-static int
+#define HASH(xx, yy) ((yy) % xx->cell_hash_size)
+
+/* Allocate another cell, and add it to the cache. */
+/* This may re-size the hash index too. */
+/* Return the pointer to the new cell, */
+/* or NULL if we have reache the memory limit */
+static cell *
 increase_revcache(
 revcache *rc
 ) {
-	cell *nxcells;
+	cell *nxcell;		/* Newly allocated cell */
 	int i;
 
-	if (rc->nextalloc >= rc->ncells) {
-		return 1;
+	DBG(("Adding another chunk of cells to cache\n"));
+	if (rc->s->rev.sz >= rc->s->rev.max_sz)
+		return NULL;
 
-#ifdef NEVER
-/*		error("rspl cell cache exausted!"); */
-		/* We need to re-allocate some more. */
-		rc->ncells += rc->rae;
-		if ((rc->cells = (cell **)realloc(rc->cells, rc->ncells * sizeof(cell *))) == NULL)
-			error("rspl realloc failed - reverse cell cache cells array");
-#endif
-	}
-
-	if ((nxcells = (cell *) calloc(REV_CACHE_INC, sizeof(cell))) == NULL)
+	if ((nxcell = (cell *) calloc(1, sizeof(cell))) == NULL)
 		error("rspl malloc failed - reverse cache cells");
+	INCSZ(rc->s, sizeof(cell));
 
-	/* Add cells to the cache lru linked list */
-	if (rc->lrutop == NULL)				/* List was empty */
-		rc->lrutop = &nxcells[0];
+	nxcell->s = rc->s;
+
+	/* Add cell to the bottom of the cache mru linked list */
+	if (rc->mrutop == NULL)					/* List was empty */
+		rc->mrutop = nxcell;
 	else {
-		rc->lrubot->lrudown = &nxcells[0];	/* Splice into bottom */
-		nxcells[0].lruup = rc->lrubot;
+		rc->mrubot->mrudown = nxcell;	/* Splice into bottom */
+		nxcell->mruup = rc->mrubot;
 	}
+	rc->mrubot = nxcell;
+	rc->nacells++;
 
-	nxcells[0].s = rc->s;
-	for (i = 1; i < REV_CACHE_INC; i++) {
-		nxcells[i-1].lrudown = &nxcells[i];
-		nxcells[i].lruup     = &nxcells[i-1];
-		nxcells[i].s = rc->s;
+	DBG(("cache is now %d cells\n",rc->nacells));
+
+	/* See if the hash index should be re-sized */
+	if (rc->nacells > (HASH_FILL_RATIO * rc->cell_hash_size)) {
+		for (i = 0; primes[i] > 0 && primes[i] <= rc->cell_hash_size; i++)
+			;
+		if (primes[i] > 0) {
+			int cell_hash_size = rc->cell_hash_size;	/* Old */
+			cell **hashtop = rc->hashtop;
+
+			rc->cell_hash_size = primes[i];
+
+			DBG(("Increasing cell cache hash index to %d\n",cell_hash_size));
+			/* Allocate a new index */
+			if ((rc->hashtop = (cell **) calloc(rc->cell_hash_size, sizeof(cell *))) == NULL)
+				error("rspl malloc failed - reverse cell cache index");
+			INCSZ(rc->s, rc->cell_hash_size * sizeof(cell *));
+
+			/* Transfer all the cells to the new index */
+			for (i = 0; i < cell_hash_size; i++) {
+				cell *c, *nc;
+				for (c = hashtop[i]; c != NULL; c = nc) {
+					int hash;
+					nc = c->hlink;
+					hash = HASH(rc, c->ix); 		/* New hash */
+					c->hlink = rc->hashtop[hash];	/* Add to new hash index */
+					rc->hashtop[hash] = c;
+				}
+			}
+
+			/* Done with old index */
+			free(hashtop);
+			DECSZ(rc->s, cell_hash_size * sizeof(cell *));
+		}
 	}
-	rc->lrubot = &nxcells[REV_CACHE_INC-1];
-
-	rc->cells[rc->nextalloc++] = nxcells;
 	
-//printf("~1 cache is now %d cells\n",rc->nextalloc * REV_CACHE_INC);
-	return 0;
+	return nxcell;
 }
-
-#define HASH(xx) ((xx) % REV_HASH_SIZE)
 
 /* Return a pointer to an appropriate reverse cell */
 /* cache structure. cell->flags will be 0 if the cell */
@@ -4049,75 +4124,109 @@ revcache *rc
 /* released with uncache_rcell() when it's no longer needed. */
 /* return NULL if we ran out of room in the cache */
 static cell *cache_rcell(
-revcache *r,		/* Reverse cache structure */
+revcache *rc,		/* Reverse cache structure */
 int ix				/* fwd index of cell */
 ) {
 	int hit = 0;
 	int hash;
 	cell *cp;
 	
-	hash = HASH(ix);		/* Compute hash of fwd cell index */
+	hash = HASH(rc,ix);		/* Compute hash of fwd cell index */
 
 	/* See if we get a cache hit */
-	for (cp = r->hashtop[hash]; cp != NULL; cp = cp->hlink) {
+	for (cp = rc->hashtop[hash]; cp != NULL; cp = cp->hlink) {
 		if (ix == cp->ix) {	/* Hit */
 			hit = 1;
 #ifdef STATS
-			r->s->rev.st[r->s->rev.sb->op].chits++;
+			rc->s->rev.st[rc->s->rev.sb->op].chits++;
 #endif /* STATS */
 			break;
 		}
 	}
-	if (!hit) {			/* Re-use the least recently used cell */
+	if (!hit) {			/* No hit, use new cell or the least recently used cell */
 		int ohash;
-		cell *c;
 
-		for (cp = NULL; cp == NULL; ) {
-			/* Find the least recently used, non-referenced cell */
-			for (cp = r->lrubot; cp != NULL && cp->refcount > 0; cp = cp->lruup)
-				;
-		
-			if (cp == NULL) {
-				if (increase_revcache(r))	/* Allocate more cache entries */
-					return NULL;			/* Can't lock any more into cache */
+		/* If we haven't used all our memeory allocate another cell */
+		if (rc->s->rev.sz < rc->s->rev.max_sz) {
+			cp = increase_revcache(rc);
+			hash = HASH(rc,ix);			/* Re-compute hash in case hash size changed */
+//printf("~1 using new cell\n");
+		} else {
+//printf("~1 memory limit has been reached, using old cell\n");
+
+			for (;;) {
+				/* Use the least recently used unlocked cell */
+				for (cp = rc->mrubot; cp != NULL && cp->refcount > 0; cp = cp->mruup)
+					;
+	
+				/* Run out of unlocked cells */
+				if (cp == NULL) {
+//printf("~1 none available\n");
+					return NULL;
+				}
+	
+				/* If it has been used before, free up the simplexes */
+				free_cell_contents(cp);
+
+				/* Remove from current hash index (if it is in it) */
+				ohash = HASH(rc,cp->ix);			/* Old hash */
+				if (rc->hashtop[ohash] == cp) {
+					rc->hashtop[ohash] = cp->hlink;
+				} else {
+					cell *c;
+					for (c = rc->hashtop[ohash]; c != NULL && c->hlink != cp; c = c->hlink)
+						;
+					if (c != NULL)
+						c->hlink = cp->hlink;
+				}
+
+				/* If we're under the memory limit, use this cell */
+				if (rc->s->rev.sz < rc->s->rev.max_sz) {
+					break;
+				}
+
+//printf("~1 freeing a cell\n");
+				/* Free up this cell and look for another one */
+				/* Remove it from LRU list */
+				if (rc->mrutop == cp)
+					rc->mrutop = cp->mrudown;
+				if (rc->mrubot == cp)
+					rc->mrubot = cp->mruup;
+				if (cp->mruup != NULL)
+					cp->mruup->mrudown = cp->mrudown;
+				if (cp->mrudown != NULL)
+					cp->mrudown->mruup = cp->mruup;
+				cp->mruup = cp->mrudown = NULL;
+				free(cp);
+				DECSZ(rc->s, sizeof(cell));
+				rc->nacells--;
 			}
 		}
 
 #ifdef STATS
-		r->s->rev.st[r->s->rev.sb->op].cmiss++;
+		rc->s->rev.st[rc->s->rev.sb->op].cmiss++;
 #endif /* STATS */
 
-		/* Remove from current hash index */
-		ohash = HASH(cp->ix);			/* Old hash */
-		if (r->hashtop[ohash] == cp) {
-			r->hashtop[ohash] = cp->hlink;
-		} else {
-			for (c = r->hashtop[ohash]; c != NULL && c->hlink != cp; c = c->hlink)
-				;
-			if (c != NULL)
-				c->hlink = cp->hlink;
-		}
-
-		/* Add this to hash index */
-		cp->hlink = r->hashtop[hash];
-		r->hashtop[hash] = cp;	/* Add to hash table and list */
+		/* Add this cell to hash index */
+		cp->hlink = rc->hashtop[hash];
+		rc->hashtop[hash] = cp;	/* Add to hash table and list */
 
 		cp->ix = ix;
 		cp->flags = 0;			/* Contents needs re-initializing */
 	}
 	
-	/* Move slected cell to the top of the lru list */
-	if (cp->lruup != NULL) {		/* This one wasn't already at top */
-		cp->lruup->lrudown = cp->lrudown;
-		if (cp->lrudown == NULL)	/* This was bottom */
-			r->lrubot = cp->lruup;	/* New bottom */
+	/* Move slected cell to the top of the mru list */
+	if (cp->mruup != NULL) {		/* This one wasn't already at top */
+		cp->mruup->mrudown = cp->mrudown;
+		if (cp->mrudown == NULL)	/* This was bottom */
+			rc->mrubot = cp->mruup;	/* New bottom */
 		else
-			cp->lrudown->lruup = cp->lruup;
+			cp->mrudown->mruup = cp->mruup;
 		/* Put this one at the top */
-		r->lrutop->lruup = cp;
-		cp->lrudown = r->lrutop;
-		r->lrutop = cp;
-		cp->lruup = NULL;
+		rc->mrutop->mruup = cp;
+		cp->mrudown = rc->mrutop;
+		rc->mrutop = cp;
+		cp->mruup = NULL;
 	}
 	cp->refcount++;
 
@@ -4133,14 +4242,15 @@ revcache *rc)
 	cell *cp;
 
 	/* Free any stuff allocated in the cell contents */
-	for (cp = rc->lrubot; cp != NULL; cp = cp->lruup) {
-		free_cell_info(cp);
+	for (cp = rc->mrubot; cp != NULL; cp = cp->mruup) {
+		free_cell_contents(cp);
 		cp->refcount = 0;		/* Make sure they can now be reused */
 		cp->ix = 0;
+		cp->flags = 0;			/* Contents needs re-initializing */
 	}
 
 	/* Clear the hash table so they can't be hit */
-	for (i = 0; i < REV_HASH_SIZE; i++) {
+	for (i = 0; i < rc->cell_hash_size; i++) {
 		rc->hashtop[i] = NULL;
 	}
 }
@@ -4160,13 +4270,10 @@ cell *cp
 /* ====================================================== */
 /* Reverse rspl setup functions                           */
 
-static void free_rev_nn(rspl *s);
-
-/* Initialise all three sections of the rev data in rspl. */
+/* Called by rspl initialisation */
 /* Note that reverse cell lookup tables are not */
 /* allocated & created until the first call */
-/* to a reverse interpolation function */
-/* Init reverse interp elements in rspl */
+/* to a reverse interpolation function. */
 void
 init_rev(rspl *s) {
 
@@ -4174,15 +4281,20 @@ init_rev(rspl *s) {
 	s->rev.inited = 0;
 	s->rev.res = 0;
 	s->rev.no = 0;
+	s->rev.rev_valid = 0;
 	s->rev.rev = NULL;
-	s->rev.cache = NULL;
 
 	/* Second section */
-	s->rev.touch = NULL;
+	s->rev.rev_valid = 0;
+	s->rev.nnrev = NULL;
 
 	/* Third section */
+	s->rev.cache = NULL;
+
+	/* Fourth section */
 	s->rev.sb = NULL;
 
+	/* Methods */
 	s->rev_set_limit   = rev_set_limit_rspl;
 	s->rev_get_limit   = rev_get_limit_rspl;
 	s->rev_interp      = rev_interp_rspl;
@@ -4190,19 +4302,16 @@ init_rev(rspl *s) {
 	s->rev_locus_segs  = rev_locus_segs_rspl;
 }
 
-/* Free up all the three sections of the reverse interpolation info */
+/* Free up all the reverse interpolation info */
 void free_rev(
 rspl *s		/* Pointer to rspl grid */
 ) {
 	int e, di = s->di;
-	int **rpp;
+	int **rpp, *rp;
 		
-	/* If first section has been initialised */
-	if (s->rev.inited != 0)	 {
-
 #ifdef STATS
-		{
-		int totcalls = 0;
+	{
+		int i, totcalls = 0;
 		for (i = 0; i < 5; i++) {
 			totcalls += s->rev.st[i].searchcalls;
 		}
@@ -4234,46 +4343,68 @@ rspl *s		/* Pointer to rspl grid */
 					100.0 * s->rev.st[i].chits/(double)(s->rev.st[i].chits + s->rev.st[i].cmiss));
 		}
 		printf("\n===============================\n");
-		}
+	}
 #endif /* STATS */
+
+	/* Free up Fourth section */
+	if (s->rev.sb != NULL) {
+		free_search(s->rev.sb);
+		s->rev.sb = NULL;
+	}
+	/* Free up the Third section */
+	if (s->rev.cache != NULL) {
+		free_revcache(s->rev.cache);	/* Reverse cell cache */
+		s->rev.cache = NULL;
+	}
+
+	/* Free up the Second section */
+	if (s->rev.nnrev != NULL) {
+		/* Free arrays at grid points, taking care of reference count */
+		for (rpp = s->rev.nnrev; rpp < (s->rev.nnrev + s->rev.no); rpp++) {
+			if ((rp = *rpp) != NULL && --rp[1] <= 0) {
+				DECSZ(s, rp[0] * sizeof(int));
+				free(*rpp);
+				*rpp = NULL;
+			}
+		}
+		free(s->rev.nnrev);
+		DECSZ(s, s->rev.no * sizeof(int *));
+		s->rev.nnrev = NULL;
+	}
+	s->rev.rev_valid = 0;
+
+	if (s->rev.rev != NULL) {
+		/* Free arrays at grid points, taking care of reference count */
+		for (rpp = s->rev.rev; rpp < (s->rev.rev + s->rev.no); rpp++) {
+			if ((rp = *rpp) != NULL && --rp[1] <= 0) {
+				DECSZ(s, rp[0] * sizeof(int));
+				free(*rpp);
+				*rpp = NULL;
+			}
+		}
+		free(s->rev.rev);
+		DECSZ(s, s->rev.no * sizeof(int *));
+		s->rev.rev = NULL;
+	}
+
+	/* If first section has been initialised */
+	if (s->rev.inited != 0)	 {
 
 		/* Sub-simplex information */
 		for (e = 0; e <= di; e++) {
 			free_ssimplex_info(s, e);
 		}
-
-		if (s->rev.rev != NULL) {
-			/* Free arrays at grid points */
-			for (rpp = s->rev.rev; rpp < (s->rev.rev + s->rev.no); rpp++) {
-				if (*rpp != NULL)
-					free(*rpp);
-			}
-			free(s->rev.rev);
-			s->rev.rev = NULL;
-		}
 		s->rev.res = 0;
 		s->rev.no = 0;
-
-		free_revcache(s->rev.cache);	/* Reverse cell cache */
-		s->rev.cache = NULL;
-
 		s->rev.inited = 0;
 	}
-
-	/* Free up second section */
-	free_rev_nn(s);					/* Free reverse nearest neighbor stuff */
-
-	/* Free up third section */
-	if (s->rev.sb != NULL) {
-		free_search(s->rev.sb);
-		s->rev.sb = NULL;
-	}
+	DBG(("rev allocation left after free = %d bytes\n",s->rev.sz));
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - */
-// ~~~~~99999 debug - RGB only !!!
 
-
+#ifdef NEVER	/* Test code */
+/* Reverse closest find using exaustive pseudo hilbert search */
 static void debug_find_closest_rev(
 rspl *s,
 double *out,
@@ -4313,104 +4444,147 @@ double *in
 			break;
 	}
 }
+#endif /* NEVER */
+
+/* ========================================================== */
+/* reverse lookup acceleration structure initialisation code */
+
+/* The reverse lookup relies on a search of the fwd interpolation tables. */
+/* To eliminate out of gamut points quickly, to provide a starting point for */
+/* the search, and to guarantee that all possible reverse solutions are discovered, */
+/* a spatial indexing structure is used to provide a list of starting candidate */
+/* forward indexes for a given output value. (rev.rev[]) */
+/* The reverse structure contains an fdi dimensional cell grid, each element of the */
+/* cell grid holding the indexes of the forward interpolation grid, which intersect */
+/* that ranges of output values. A reverse cell will be empty if there is no */
+/* potential exact solution. */
+/* Note that unlike the forward grid which is composed of verticies, */
+/* this grid is composed of cells (there is an extra row allocated */
+/* during construction using verticies, that are not used when converted. */
+/* to cells) */
+/* For fast lookup of the nearest lookup, a parrallel reverse grid is */
+/* constructed that holds lists of forward grid cells that may hold the */
+/* nearest point within the gamut. These lists may be empty if we are within */
+/* gamut - ie. the rev.nnrev[] array is the complement of the rev.rev[] array. */
+/* During construction of rev.nnrev[], it is initially filled with lists for */
+/* the potential nearest cell list for each vertex (hence the extra rows allocated */
+/* for rev[] and nnrev[]), and these are then merged down to form the list */
+/* for each cell extent. The nnrev[] array is filled using a seed fill algorithm, */
+/* starting from the edges of the filled cells in rev[]. */
+/* Since many of the cells map to the same surface region, many of the fwd cell lists */
+/* are shared. */
+
+/* rev.nnrev[] cache entry record */
+struct _nncache{
+	int min[MXRO];			/* bwd vertex extent covered by this list */
+	int max[MXRO];		
+	int *rip;				/* Fwd cell list */
+	struct _nncache *next;	/* Link list for this cache key */
+}; typedef struct _nncache nncache;
+
+/* Structure to hold prime seed vertex information */
+struct _primevx{
+	int ix;						/* Index of prime seed */
+	int gc[MXRO];				/* coordinate of the prime seed vertex */
+	struct _primevx *next;		/* Linked list for final conversion */
+	int *clist;					/* Cell list generated for prime cell */
+}; typedef struct _primevx primevx;
+
+/* Structure to hold temporary nn reverse vertex propogation information */
+struct _propvx{
+	int ix;						/* Index of this secondary seed */
+	int gc[MXRO];				/* coordinate of this secondary seed */
+	int cix;					/* Index of the closest surface nnrev vertex */
+	double dsq;					/* Distance to the closest point squared */
+	int pass;					/* Propogation pass */
+	struct _propvx *next;		/* Linked list for next seeds */
+}; typedef struct _propvx propvx;
 
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - */
-/* Make reverse index list (rev First section init) */
-/* This is called by a reverse interpolation call */
-/* that discovers that the reverse index list haven't */
-/* been initialised. */
-static void make_rev(
+/* Initialise the rev Second section acceleration information. */
+/* This is called when it is discovered on a call that s->rev.rev_valid == 0 */
+static void init_revaccell(
 rspl *s
 ) {
-	int e,f;
+	int i, j;		/* Index of fwd grid point */
+	int e, f, ee, ff;
 	int di = s->di;
 	int fdi = s->fdi;
-	int rgno, gno = s->g.no;
-	int rgres;
-	int rgres_1;	/* rgres -1 == maximum base coord value */
-	datao rgmin, rgmax;
-	int i;			/* Index of fwd grid point */
+	int gno = s->g.no;
+	int rgno = s->rev.no;
+	int argres = s->rev.ares;		/* Allocation rgres, = no bwd cells +1 */
+	int rgres = s->rev.res;			/* no bwd cells */
+	int rgres_1 = rgres-1;			/* rgres -1 == maximum base coord value */
+
+	schbase *b = s->rev.sb;		/* Base search information */
+	char *vflag;	/* Per vertex flag used during construction of nnrev */
 	float *gp;		/* Pointer to fwd grid points */
-	
-	DBG(("make_rev called\n"));
+	primevx *plist = NULL, *ptail = NULL;	/* Prime seed list for last pass */
+	propvx *alist = NULL;				/* Linked list of active secondary seeds */
+	propvx *nlist = NULL;				/* Linked list of next secondary seeds */
+	DCOUNT(gg, MXRO, fdi, 0, 0, argres);/* Track the prime seed coordinate */
+	DCOUNT(cc, MXRO, fdi, -1, -1, 2);	/* Neighborhood offset counter */
+	int nn[MXRO];						/* Neighbor coordinate */
+	int pass = 0;						/* Propogation pass */
+	int nncsize;	/* Size of the rev.nnrev construction cache index */
+	nncache **nnc;	/* nn cache index, used during construction of nnrev */
+	unsigned hashk;							/* Hash key */
+	nncache *ncp;	/* Hash entry pointer */ 
+	int nskcells = 0;					/* Number of skiped cells (debug) */
+#ifdef DEBUG
+	int cellinrevlist = 0;
+	int fwdcells = 0;
+#endif
 
-	/* Reverse cell cache allocation */
-	s->rev.cache = alloc_revcache(s);
+	DBG(("init_revaccell called, di = %d, fdi = %d, mgres = %d\n",di,fdi,(int)s->g.mres));
 
-	/* Sub-simplex information */
-	for (e = 0; e <= di; e++) {
-		init_ssimplex_info(s, e);
-	}
-
-	/* The reverse lookup relies on a search of the fwd interpolation tables. */
-	/* To eliminate out of gamut points quickly, to provide */
-	/* a starting point for the search, and to guarantee */
-	/* that all possible reverse solutions are discovered, a spatial indexing */
-	/* structure is used to provide a list of starting candidate forward indexes */
-	/* for a given output value. */
-	/* The reverse structure contains an fdi dimensional cell grid, each element of the */
-	/* cell grid holding the indexes of the forward interpolation grid, which intersect */
-	/* that ranges of output values. */
-	/* Note that unlike the forward grid which us composed of verticies, */
-	/* this grid is composed of cells. */
-
-	s->get_out_range(s, rgmin, rgmax);	/* overall output min/max */
-
-	/* Expand out range to encompass declared range */
-	for (f = 0; f < fdi; f++) {
-		if ((s->d.vl[f] + s->d.vw[f]) > rgmax[f])
-				rgmax[f] = s->d.vl[f] + s->d.vw[f];
-		if (s->d.vl[f] < rgmin[f])
-				rgmin[f] = s->d.vl[f];
-	}
-
-	/* Expand out range slightly to allow for out of gamut points */
-	for (f = 0; f < fdi; f++) {
-		double del = (rgmax[f] - rgmin[f]) * 0.10;	/* Expand by +/- 10% */
-		rgmax[f] += del;
-		rgmin[f] -= del;
-	}
-//printf("~~got output range\n");
-
-	/* Heuristic - main grid resolution ? */
-	if ((rgres = (int)s->g.mres + 1) < 4)
-		rgres = 4;
-	s->rev.res = rgres;			/* == number of cells per side */
-	rgres_1 = rgres-1;
-
-	for (rgno = 1, f = 0; f < fdi; f++, rgno *= rgres);	/* Number of elements in the rev.grid */
-	s->rev.no = rgno;
-
-	/* Compute coordinate increments */
-	s->rev.coi[0] = 1;
-	for (f = 1; f < fdi; f++)
-		s->rev.coi[f] = s->rev.coi[f-1] * rgres;
-
-	for (f = 0; f < fdi; f++) {
-		s->rev.gl[f] = rgmin[f];
-		s->rev.gh[f] = rgmax[f];
-		s->rev.gw[f] = (rgmax[f] - rgmin[f])/(double)rgres;
-	}
-
-	if ((s->rev.rev = (int **) calloc(rgno, sizeof(int *))) == NULL)
-		error("rspl malloc failed - rev.grid points");
+	/* Per bwd vertex/cell flag */
+	if ((vflag = (char *) calloc(rgno, sizeof(char))) == NULL)
+		error("rspl malloc failed - rev.vflag points");
 
 	/*
-	 * The grid contains pointers to lists of grid cube base indexes.
+	 * The rev[] and nnrev[] grids contain pointers to lists of grid cube base indexes.
 	 * If the pointer is NULL, then there are no base indexes in that list.
 	 * A non NULL list uses the first element to indicate the alocation
 	 * of the list. The last used entry for the list is always -1.
 	 */
 
-//printf("~~filling in reverse grid\n");
-	/* For all grid points, form the cube with that point at its base, */
-	/* and determine the bounding box of the output values that could */
-	/* in that cube. */
+	/* We won't include any fwd cells that are over the ink limit, */
+	/* so makes sure that the fwd cell nodes all have an ink limit value. */ 
+	if (b != NULL && b->limiten) {
+		ECOUNT(gc, MXDIDO, s->di, s->g.res);    /* coordinates */
+		double iv[MXDO];				/* Input value corresponding to grid */
+
+		DBG(("Looking up fwd vertex ink limit values\n"));
+		/* Calling the limit function for each fwd vertex could be bad */
+		/* if the limit function is slow. Maybe an octree type algorithm */
+		/* could be used if this is a problem ? */
+		EC_INIT(gc);
+		for (i = 0, gp = s->g.a; i < s->g.no; i++, gp += s->g.pss) {
+			if (gp[-1] == L_UNINIT) {
+				for (e = 0; e < di; e++)
+					iv[e] = s->g.l[e] + gc[e] * s->g.w[e];  /* Input sample values */
+				gp[-1] = (float)(INKSCALE * b->limit(b->cntx, iv));
+			}
+			EC_INC(gc);
+		}
+		s->g.limitv_cached = 1;
+	}
+
+	/* We then fill in the in-gamut reverse grid lookups, */
+	/* and identify nnrev prime seed verticies */
+
+	DBG(("filling in rev.rev[] grid\n"));
+	
+	/* To create rev.rev[], for all fwd grid points, form the cube with that */
+	/* point at its base, and determine the bounding box of the output values */
+	/* that could intersect that cube. */
+	/* As a start for creating rev.nnrevp[], flag which bwd verticies are */
+	/* covered by the fwd grid output range. */
 	for (gp = s->g.a, i = 0; i < gno; gp += s->g.pss, i++) {
-		int ee;
-		datao min,max;
+		datao min, max;
 		int imin[MXRO], imax[MXRO], gc[MXRO];
+		int uil;			/* One is under the ink limit */
 
 //printf("~~~ i = %d/%d\n",i,gno);
 		/* Skip cubes that are on the outside edge of the grid */
@@ -4423,13 +4597,19 @@ rspl *s
 		}
 
 		/* Find the output value bounding box values for this grid cell */
+		uil = 0;
 		for (f = 0; f < fdi; f++)	/* Init output min/max */
 			min[f] = max[f] = gp[f];
+		if (b == NULL || !b->limiten || gp[-1] <= b->limitv)
+			uil = 1;
 	
 		/* For all other grid points in the cube */
 		for (ee = 1; ee < (1 << di); ee++) {
 			float *gt = gp + s->g.fhi[ee];	/* Pointer to cube vertex */
 			
+			if (b == NULL || !b->limiten || gt[-1] <= b->limitv)
+				uil = 1;
+
 			/* Update bounding box for this grid point */
 			for (f = 0; f < fdi; f++) {
 				if (min[f] > gt[f])	
@@ -4439,19 +4619,26 @@ rspl *s
 			}
 		}
 
+		/* Skip any fwd cells that are over the ink limit */
+		if (!uil) {
+			nskcells++;
+			continue;
+		}
+
 		/* Figure out intersection range in reverse grid */
 		for (f = 0; f < fdi; f++) {
 			double t;
 			int mi;
 			double gw = s->rev.gw[f];
-			t = (min[f] - s->rev.gl[f])/gw;
+			double gl = s->rev.gl[f];
+			t = (min[f] - gl)/gw;
 			mi = (int)floor(t);			/* Grid coordinate */
 			if (mi < 0)					/* Limit to valid cube base index range */
 				mi = 0;
 			else if (mi > rgres_1)
 				mi = rgres_1;
 			imin[f] = mi;	
-			t = (max[f] - s->rev.gl[f])/gw;
+			t = (max[f] - gl)/gw;
 			mi = (int)floor(t);			/* Grid coordinate */
 			if (mi < 0)					/* Limit to valid cube base index range */
 				mi = 0;
@@ -4460,18 +4647,15 @@ rspl *s
 			imax[f] = mi;	
 		}
 
-/* ~1 */
-/*
-printf("Scanning over grid:\n");
-for (f = 0; f < fdi; f++) {
-printf("Min[%d] = %d -> Max[%d] = %d\n",f,imin[f],f,imax[f]);
-}
-*/
-		/* Now register forward index and vector with all the reverse grid cells */
+//printf("Scanning over grid:\n");
+//for (f = 0; f < fdi; f++)
+//printf("Min[%d] = %d -> Max[%d] = %d\n",f,imin[f],f,imax[f]);
+
+		/* Now create forward index and vector with all the reverse grid cells */
 		for (f = 0; f < fdi; f++)
 			gc[f] = imin[f];	/* init coords */
 
-		for (f=0; f < fdi;) {	/* For all of intersect cube */
+		for (f = 0; f < fdi;) {	/* For all of intersect cube */
 			int **rpp, *rp;
 			
 			/* Compute pointer to grid cell */
@@ -4479,26 +4663,26 @@ printf("Min[%d] = %d -> Max[%d] = %d\n",f,imin[f],f,imax[f]);
 				rpp += gc[f] * s->rev.coi[f];
 			rp = *rpp;
 
-/* ~1 */
-/*
-printf("Currently at grid:\n");
-for (f = 0; f < fdi; f++) {
-printf("gc[%d] = %d\n",f,gc[f]);
-}
-*/
+//printf("Currently at grid:\n");
+//for (f = 0; f < fdi; f++)
+//printf("gc[%d] = %d\n",f,gc[f]);
+
 			if (rp == NULL) {
-				if ((rp = (int *) malloc(sizeof(int) * 5)) == NULL)
+				if ((rp = (int *) malloc(6 * sizeof(int))) == NULL)
 					error("rspl malloc failed - rev.grid entry");
+				INCSZ(s, 6 * sizeof(int));
 				*rpp = rp;
-				rp[0] = 5;		/* Actual allocation */
-				rp[1] = i;
-				rp[2] = -1;
+				rp[0] = 6;		/* Allocation */
+				rp[1] = 1;		/* Reference count */
+				rp[2] = i;
+				rp[3] = -1;
 			} else {
 				int z, ll = rp[0];
-				for (z = 1; z < ll; z++)	/* Find place to put next entry */
+				for (z = 2; z < ll; z++)	/* Find place to put next entry */
 					if (rp[z] == -1)
 						break;
 				if (z >= (ll-1)) {			/* Not enough space */
+					INCSZ(s, ll * sizeof(int));
 					ll *= 2;
 					if ((rp = (int *) realloc(rp, sizeof(int) * ll)) == NULL)
 						error("rspl realloc failed - rev.grid entry");
@@ -4516,250 +4700,1038 @@ printf("gc[%d] = %d\n",f,gc[f]);
 				gc[f] = imin[f];
 			}
 		}	/* Next reverse grid point in intersecting cube */
+
+		/* Now also register which grid points are in-gamut and are part of cells */
+		/* than have a rev.rev[] list. */
+
+		/* Figure out intersection range in reverse nn (construction) vertex grid */
+		/* This range may be empty if a grid isn't stradled by the fwd cell output */
+		/* range. */
+		for (f = 0; f < fdi; f++) {
+			double t;
+			int mi;
+			double gw = s->rev.gw[f];
+			double gl = s->rev.gl[f];
+			t = (min[f] - gl)/gw;
+			mi = (int)ceil(t);			/* Grid coordinate */
+			if (mi < 0)					/* Limit to valid cube base index range */
+				mi = 0;
+			else if (mi >= argres)
+				mi = rgres;
+			imin[f] = mi;	
+			t = (max[f] - gl)/gw;
+			mi = (int)floor(t);			/* Grid coordinate */
+			if (mi < 0)					/* Limit to valid cube base index range */
+				mi = 0;
+			else if (mi >= argres)
+				mi = rgres;
+			imax[f] = mi;	
+			if (imax[f] < imin[f])
+				break;					/* Doesn't straddle any verticies */
+		}
+
+		if (f >= fdi) {					/* There are seed verticies to mark */
+
+//printf("~1 marking prime seed vertex %d\n",i);
+
+			/* Mark an initial seed point nnrev vertex, and */
+			/* create a surface point propogation record for it */
+			for (f = 0; f < fdi; f++)
+				gc[f] = imin[f];	/* init coords */
+
+			for (f = 0; f < fdi;) {	/* For all of intersect cube */
+				int **rpp, *rp;
+				char *fpp;
+				
+				/* Compute pointer to grid cell */
+				for (rpp = s->rev.nnrev, fpp = vflag, f = 0; f < fdi; f++) {
+					int inc = gc[f] * s->rev.coi[f];
+					rpp += inc;
+					fpp += inc;
+				}
+				rp = *rpp;
+
+				*fpp = 3;		/* Initial seed point */
+	
+				/* Increment index */
+				for (f = 0; f < fdi; f++) {
+					gc[f]++;
+					if (gc[f] <= imax[f])
+						break;	/* No carry */
+					gc[f] = imin[f];
+				}
+			}
+		}
 	}	/* Next base grid point */
-//printf("~~filled in reverse grid\n");
 
-	s->rev.inited = 1;
+	DBG(("We skipped %d cells that were over the limit\n",nskcells));
 
-	DBG(("make_rev finished\n"));
-}
+	/* The next step is to use all the prime seed grid points to set and propogate */
+	/* the index of the closest fwd vertex through the revnn[] array. */
+	/* (This doesn't work perfectly. Sometimes a vertex is not linked to it's closest */
+	/*  prime. I'm not sure if this is due to a bug here, or is a quirk of geometrym */
+	/*  that a prime that is closest to a vertex isn't closest for any of its neighbors.) */
+	DBG(("filling in rev.nnrev[] grid\n"));
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
-/* Make reverse nearest neighbor acceleration structures */
-static void make_rev_nn(
-rspl *s
-) {
-	int k1;
+	/* For all the primary seed points */
+	DC_INIT(gg);
+	for (i = 0; i < rgno; i++) {
+		int **rpp;
+		primevx *prime= NULL;				/* prime cell information structure */
 
-	/* The reverse clip nearest lookup relies on being able to quicly find the */
-	/* nearest valid vertex value. We use an acceleration structure that minimised */
-	/* the number of verticies examined in any detail. */
-	/* We create fdi sorted axis projection lists, that allow us to */
-	/* sweep an expanding cubic window centered on the target output value. */
-	/* The touch bookkeeping tracks which verticy value are in the cube. */
-	/* Hash randomization to improve hit rate: */
-	static unsigned char key[] = { 0x43, 0x6F, 0x70, 0x79, 0x72, 0x69, 0x67, 0x68,
-	                               0x74, 0x20, 0x32, 0x30, 0x30, 0x34, 0x20, 0x47,
-	                               0x72, 0x61, 0x65, 0x6D, 0x65, 0x20, 0x57, 0x2E,
-        	                       0x20, 0x47, 0x69, 0x6C, 0x6C, 0x00 };
-
-	rev_struct *rs = &s->rev;
-	int f, fdi = s->fdi;
-	float *gbase = s->g.a;		/* Grid base address */
-	int    gpss  = s->g.pss;	/* Grid increment between values */
-	int gno = s->g.no;
-	int i;			/* Index of fwd grid point */
-	
-	for (k1 = i = 0; key[i] != 0 ; i++)
-		k1 -= key[i];
-
-	DBG(("make_rev_nn called\n"));
-
-	/* Allocate the arrays spaces */
-	for (f = 0; f < fdi; f++) {
-		if ((rs->sax[f] = (float **)malloc(sizeof(float *) * gno)) == NULL)
-			error("rspl rev malloc failed - make_rev_nn allocate sorted index array");
-	}
-	if ((rs->touch = (unsigned int *)calloc(sizeof(unsigned int), gno)) == NULL)
-		error("rspl rev malloc failed - make_rev_nn allocate touch array");
-
-	for (i = 0; key[i] != 0 ; i++)
-		k1 += key[i];
-
-	/* Fill out the axis arrays */
-	for (i = 0; i < gno; i++) {
-		for (f = 0; f < fdi; f++) {
-			rs->sax[f][i] = gbase + i * (k1 + gpss);	/* Address of point vector */
+		if (vflag[i] != 3) {			/* Not a prime seed point */
+			goto next_seed_point;
 		}
-	}
+		
+		rpp = s->rev.nnrev + i;
 
-	/* Sort them */
-	for (f = 0; f < fdi; f++) {
-#define 	HEAP_COMPARE(A,B) (A[f] < B[f])
-			HEAPSORT(float *, &rs->sax[f][0], gno)
-#undef 		HEAP_COMPARE
-	}
-
-	DBG(("make_rev_nn finished\n"));
-}
-
-#define NN_INF 1e307
-
-/* Return index of closest point to target */
-/* Return -1 if not found */
-int rev_nnfind(
-rspl *s,
-double rad,		/* If 0.0, return closest. If > 0.0 return next within radius squared */
-double *q) {	/* Target point */
-	rev_struct *rs = &s->rev;
-	schbase *b = rs->sb;
-	int f, fdi = s->fdi;
-	float *gbase = s->g.a;		/* Grid base address */
-	int    gpss  = s->g.pss;	/* Grid increment between values */
-	int    gno = s->g.no;
-	int e, i;
-
-	if (rs->touch == NULL) {
-		make_rev_nn(s);			/* Init search structure */
-	}
-	if (rad == 0.0 || rad != b->crad) {	/* Init search */
-
-		rs->tbase += fdi;			/* Increment after last search */
-
-		if ((rs->tbase + fdi) < rs->tbase) {	/* Overflow of touch count */
-			memset((void *)rs->touch, 0, sizeof(unsigned int) * gno);
-			rs->tbase = 0;
-		}
-
-		/* Find starting indexes within each axis array, */
-		/* using binary search. */
-		for (f = 0; f < fdi; f++) {
-			int    i0, i1, i2;
-			double v0, v1, v2;
-			double ww;
+//printf("~1 potential rev.nnrev[] prime seed %d, about to scan neibors\n",i);
+		/* For all the neigbors of this seed */
+		DC_INIT(cc);
+		while (!DC_DONE(cc)) {
+			propvx *prop;					/* neighor cell propogation structure */
+			int nix = 0;					/* Neighbor cell index */
+			char *fpp = vflag;
+			int **nrpp = s->rev.nnrev;
+			double dsq;
 	
-			i0 = 0;
-			i2 = gno - 1;
-			v0 = rs->sax[f][i0][f];
-			v2 = rs->sax[f][i2][f];
-			if (q[f] <= v0) {
-				i2 = i0;
-				v2 = v0;
+			for (f = 0; f < fdi; f++) {
+				nn[f] = gg[f] + cc[f];
+				if (nn[f] < 0 || nn[f] >= argres)
+					break;					/* Out of bounds */
+				nix += nn[f] * s->rev.coi[f];
 			}
-			else if (q[f] >= v2) {
-				i0 = i2;
-				v0 = v2;
+			fpp = vflag + nix;
+
+			/* If neighbor out of bounds, or is a prime seed point, skip it */
+			if (f < fdi || *fpp == 3) {
+				goto next_neighbor;
 			}
-			for (; (i2 - i0) > 1; ) {
-				i1 = (i2 + i0)/2;		/* Trial point */
-				v1 = rs->sax[f][i1][f];	/* Value at trial */
-				if (v1 < q[f]) {
-					i0 = i1;			/* Take top half */
-					v0 = v1;
+
+//printf("~1 identified prime seed %d with neighbor %d\n",i,nix);
+			/* We now know that this prime seed will propogate, */
+			/* so get/create the temporary information record for it */
+			if (prime == NULL) {
+
+				/* If this prime seed hasn't be seup before */
+				if (*rpp != NULL) {
+					prime = *((primevx **)rpp);
 				} else {
-					i2 = i1;			/* Take bottom half */
-					v2 = v1;
-				}
-			}
-	
-			b->wex[f * 2 + 0] = i0;
-			b->wex[f * 2 + 1] = i2;
-	
-			ww = v0 - q[f];
-			b->wed[f * 2 + 0] = ww * ww;
-			ww = v2 - q[f];
-			b->wed[f * 2 + 1] = ww * ww;
-		}
-		b->bw = 0.0;		/* Current window distance */
-		b->crad = rad;
-	}
-
-	/* Expand a fdi dimenstional cube centered on the target point, */
-	/* jumping to the next nearest point on any axis, discovering */
-	/* any points within the expanding window using the touch bookkeeping. */
-
-	/* The first point found establishes the initial best distance. */
-	/* When the window expands beyond the best distance, stop */
-
-	{
-		double bdist = 1e308;
-		int bpoint = -1;
-
-		/* Until we're done */
-		for (;;) {
-			int ee;			/* Axis & direction */
-			int ff;			/* Axis */
-			int ii;			/* Index of chosen point */
-			float *fcb;		/* Pointer to chosen point */
-
-			/* find next window increment */
-			ee = 0;
-			ii = b->wex[ee];
-			b->bw = b->wed[ee];
-			for (e = 1; e < (2 * fdi); e++) {
-				if (b->wed[e] < b->bw) {
-					ee = e;
-					ii = b->wex[e];
-					b->bw = b->wed[e];
+					/* Allocate a primevx if there isn't one */
+					if ((prime = (primevx *) calloc(1, sizeof(primevx))) == NULL)
+						error("rspl malloc failed - rev.nnrev prime info structs");
+					*((primevx **)rpp) = prime;
+					prime->ix = i;
+					for (f = 0; f < fdi; f++)
+						prime->gc[f] = gg[f];
+//if (fdi > 1) printf("~1 setting prime %d, gc = %d, %d, %d\n", i, prime->gc[0], prime->gc[1], prime->gc[2]);
 				}
 			}
 
-			if (b->bw == NN_INF)
-				break;				/* Can't expand any more */
+			/* Pointer to nnrev vertex neighbor point */
+			nrpp = s->rev.nnrev + nix;
 
-			/* Chosen point on ee axis/direction, index ii */
-			ff = ee / 2;			/* Axis only */
-
-			/* Touch this new window boundary point */
-			fcb = rs->sax[ff][ii];
-			i = (fcb - gbase)/gpss;
-			rs->touch[i] = (rs->touch[i] < rs->tbase ? rs->tbase : rs->touch[i]) + 1;
-
-			/* Check the point out */
-			if (rs->touch[i] == (rs->tbase + fdi)) {	/* Is within window on all axes */
-				double tdist;
-
-				for (tdist = 0.0, f = 0; f < fdi; f++) {
-					double ww = rs->sax[ff][ii][f] - q[f];
-					tdist += ww * ww;
-				}
-				if (tdist < bdist		/* Possible new best point */
-				 && (b->limiten == 0 || get_limitv(b, i, fcb, NULL) <= b->limitv)) {
-					bpoint = i;
-					bdist = tdist;
-					if (rad > 0.0 && tdist <= rad)		/* Return this next point */
-						break;
-				}
+			/* Compute the distance squared from this prime seed to this neighbor */
+			for (dsq = 0.0, f = 0; f < fdi; f++) {
+				double tt = (gg[f] - nn[f]) * s->rev.gw[f];
+				dsq += tt * tt;
 			}
 
-			if (b->bw > bdist) {
-				break;					/* Any further points will be worse, so done */
-			}
-
-			/* Increment next window edge candidate, and figure new edge distance */
-			if (ee & 1) {					/* Top */
-				if (++b->wex[ee] >= gno) {
-					b->wed[ee] = NN_INF;
-				} else {
-					double ww = rs->sax[ff][b->wex[ee]][ff] - q[ff];
-					b->wed[ee] = ww * ww;
+			/* Get or allocate a prop structure for it */
+			if (*nrpp != NULL) {
+				prop = *((propvx **)nrpp);
+				if ((dsq + 1e-6) < prop->dsq) {		/* This prime is closer than previous */
+					prop->cix = i;			/* The index of the closest prime */
+					prop->dsq = dsq;		/* Distance squared to closest prime */
 				}
 			} else {
-				if (--b->wex[ee] < 0) {
-					b->wed[ee] = NN_INF;
+				if ((prop = (propvx *) calloc(1, sizeof(propvx))) == NULL)
+					error("rspl malloc failed - rev.nnrev propogation structs");
+				*((propvx **)nrpp) = prop;
+				prop->ix = nix;
+				for (f = 0; f < fdi; f++)
+					prop->gc[f] = nn[f];	/* This neighbors coord */
+				prop->cix = i;
+				prop->dsq = dsq;
+				prop->pass = pass;
+				prop->next = nlist;			/* Add new seed to list of next seeds */
+				nlist = prop;
+				*fpp = 1;
+
+			}
+			next_neighbor:;
+			DC_INC(cc);
+		}
+
+		next_seed_point:;
+		DC_INC(gg);
+	}
+
+//printf("~1 about to propogate secondary seeds\n");
+	/* Now we propogate the secondary seed points until there are no more left */
+	while(nlist != NULL) {
+		propvx *next;
+		propvx *tlp;
+
+		if ((pass += 2) < 0)
+			error("Assert rev: excessive propogation passes");
+//printf("~1 about to do a round of propogation pass %d\n",(pass+2)/2);
+
+		/* Mark all seed points on the current list with pass-1 */
+		for (tlp = nlist; tlp != NULL; tlp = tlp->next) {
+			*(vflag + tlp->ix) = 2;
+			tlp->pass = pass-1;
+		}
+
+		/* Go through each secondary seed in the active list, propogating them */
+		for (alist = nlist, nlist = NULL; alist != NULL; alist = next) {
+			int **rpp;
+			primevx *prime= NULL;			/* prime cell information structure */
+
+			next = alist->next;				/* Next unless we re-insert one */
+			
+			/* Grab this seed points coodinate and index */
+			for (i = f = 0; f < fdi; f++) {
+				gg[f] = alist->gc[f];
+				i += gg[f] * s->rev.coi[f];
+			}
+
+//printf("\n~1 propogating from seed %d\n",i);
+			/* rpp = s->rev.nnrev + i; */
+			
+			/* Grab the corresponding prime seed information record */
+			prime = *((primevx **)(s->rev.nnrev + alist->cix));
+
+			/* For all the neigbors of this seed */
+			DC_INIT(cc);
+			while (!DC_DONE(cc)) {
+				propvx *prop;				/* neighor cell propogation structure */
+				int nix;					/* Neighbor cell index */
+				char *fpp = vflag;
+				int **nrpp = s->rev.nnrev;
+				double dsq;
+	
+				for (nix = f = 0; f < fdi; f++) {
+					nn[f] = gg[f] + cc[f];
+					if (nn[f] < 0 || nn[f] >= argres)
+						break;					/* Out of bounds */
+					nix += nn[f] * s->rev.coi[f];
+				}
+				fpp = vflag + nix;
+//printf("~1 neighbor ix %d, flag %d\n",nix,*fpp);
+
+				/* If neighbor out of bounds, current vertex or prime, skip it */
+				if (f < fdi || i == nix || *fpp >= 3) {
+//printf("~1 skipping neighbour %d\n",nix);
+					goto next_neighbor2;
+				}
+
+				/* Pointer to nnrev vertex neighbor point */
+				nrpp = s->rev.nnrev + nix;
+
+				/* Compute the distance squared from the prime seed to this neighbor */
+				for (dsq = 0.0, f = 0; f < fdi; f++) {
+					double tt = (prime->gc[f] - nn[f]) * s->rev.gw[f];
+					dsq += tt * tt;
+				}
+
+				/* Get or allocate a prop structure for it */
+				if (*nrpp != NULL) {
+					prop = *((propvx **)nrpp);
+//if (prop->ix != nix) error ("Assert: prop index %d doesn't match index %d",prop->ix, nix);
+
+					if ((dsq + 1e-6) < prop->dsq) {		/* This prime is closer than previous */
+//printf("~1 updating %d to prime %d, dsq = %f from %f\n",nix, prime->ix, dsq, prop->dsq);
+						prop->cix = prime->ix;	/* The index of the new closest prime */
+						prop->dsq = dsq;		/* Distance squared to closest prime */
+						/* If this is a vertex from previous pass that has changed, */
+						/* and it's not ahead of us in the current list, */
+						/* put it next on the current list. */
+						if (*fpp == 2 && prop->pass != (pass-1)) {
+//printf("~1 re-shedule %d (%d) for next propogate\n",nix,prop->ix);
+//if (next == NULL)
+//printf("Before insert, next = NULL\n");
+//else
+//printf("Before insert, next = %d\n",next->ix);
+							prop->pass = pass-1;	/* Re-shedule once only */
+							prop->next = next;
+							next = prop;
+						}
+					}
 				} else {
-					double ww = rs->sax[ff][b->wex[ee]][ff] - q[ff];
-					b->wed[ee] = ww * ww;
+					if ((prop = (propvx *) calloc(1, sizeof(propvx))) == NULL)
+						error("rspl malloc failed - rev.nnrev propogation structs");
+					*((propvx **)nrpp) = prop;
+					prop->ix = nix;
+					for (f = 0; f < fdi; f++)
+						prop->gc[f] = nn[f];	/* This neighbors coord */
+					prop->cix = prime->ix;
+					prop->dsq = dsq;
+//printf("~1 propogating to new, %d, dsq = %f, prime %d\n",nix, dsq, prime->ix);
+					prop->pass = pass;
+					prop->next = nlist;		 /* Add new seed to list of next seeds */
+					nlist = prop;
+					*fpp = 1;
+				}
+
+				next_neighbor2:;
+				DC_INC(cc);
+			}
+			alist->pass = pass;
+		}
+	}
+
+#ifdef DEBUG
+	DBG(("checking that every vertex is now touched\n"));
+	for (i = 0; i < rgno; i++) {
+		if (vflag[i] < 2) {
+			printf("~1 problem: vertex %d flag = %d\n",i, vflag[i]);
+		}
+		if (vflag[i] == 2 && *(s->rev.nnrev + i) == NULL) {
+			printf("~1 problem: vertex %d flag = %d and struct = NULL\n",i, vflag[i]);
+		}
+	}
+#endif /* DEBUG */
+
+#ifdef NEVER
+DC_INIT(gg);
+for (i = 0; i < rgno; i++) {		/* For all the verticies */
+	if (vflag[i] == 2) {
+		propvx *prop = (propvx *) *(s->rev.nnrev + i);
+		for (j = 0; j < rgno; j++) {	/* For all the primes */
+			if (vflag[j] == 3) {
+				primevx *prime = (primevx *) *(s->rev.nnrev + j);
+				double dsq;
+				if (prime == NULL)
+					continue;
+				for (dsq = 0.0, f = 0; f < fdi; f++) {
+					double tt = (prime->gc[f] - prop->gc[f]) * s->rev.gw[f];
+					dsq += tt * tt;
+				}
+				if ((dsq + 1e-6) < prop->dsq) {
+					warning("~1 vertex %d prime %d, dsq = %f, is closer to prime %d, dsq %f\n", i,prop->cix, prop->dsq, j, dsq);
+					/* See if any of the neighbors have the closer prime */
+					DC_INIT(cc); /* For all the neigbors of this seed */
+					while (!DC_DONE(cc)) {
+						propvx *nprop;				/* neighor cell propogation structure */
+						int nix;					/* Neighbor cell index */
+						char *fpp = vflag;
+						int **nrpp = s->rev.nnrev;
+						double dsq;
+			
+						for (nix = f = 0; f < fdi; f++) {
+							nn[f] = gg[f] + cc[f];
+							if (nn[f] < 0 || nn[f] >= argres)
+								break;					/* Out of bounds */
+							nix += nn[f] * s->rev.coi[f];
+						}
+						fpp = vflag + nix;
+//printf("~1 neighbor ix %d, flag %d\n",nix,*fpp);
+
+						/* If neighbor out of bounds, current vertex or prime, skip it */
+						if (f < fdi || i == nix || *fpp != 2) {
+//printf("~1 skipping neighbour %d\n",nix);
+							goto next_neighbor3;
+						}
+
+						/* Pointer to nnrev vertex neighbor point */
+						nrpp = s->rev.nnrev + nix;
+						if ((nprop = *((propvx **)nrpp)) != NULL) {
+//printf("~1 neighbor %d %d %d has prime %d dsq %f\n",cc[0],cc[1],cc[2],nprop->cix,nprop->dsq);
+							if (nprop->cix == j) {
+//warning("~1 but neighbor has this prime point!\n");
+
+							}
+						}
+						next_neighbor3:;
+						DC_INC(cc);
+					}
+//					prop->cix = j;			/* Fix it and see what happens */
+//					prop->dsq = dsq;
 				}
 			}
 		}
-
-		return bpoint;
 	}
+	DC_INC(gg);
 }
 
-static void free_rev_nn(
-rspl *s
-) {
-	rev_struct *rs = &s->rev;
-	int f, fdi = s->fdi;
+#endif /* NEVER */
 
-	if (rs->touch != NULL) {		/* Has been initialised */
 
+	DBG(("about to do convert vertex values to cell lists\n"));
+	/* Setup a cache for the fwd cell lists created, so that we can */
+	/* avoid the list creation and memory allocation for identical lists */
+	nncsize = s->rev.ares * s->rev.ares;
+	if ((nnc = (nncache **) calloc(nncsize, sizeof(nncache *))) == NULL)
+		error("rspl malloc failed - rev.nnc cache entries");
+
+	/* Now convert the nnrev secondary vertex points to pointers to fwd cell lists */
+	/* Do this in order, so that we don't need the verticies after */
+	/* they are converted to cell lists. */
+	DC_INIT(gg);
+	for (i = 0; i < rgno; i++) {
+		int **rpp, *rp;
+		propvx *prop = NULL;			/* vertex information structure */
+		primevx *prime= NULL;			/* prime cell information structure */
+		int imin[MXRO], imax[MXRO];		/* Prime vertex range for each axis */
+		double rmin[MXRO], rmax[MXRO];	/* Float prime vertex value range */
+		unsigned int tcount;			/* grid touch count for this opperation */
+		datao min, max;					/* Fwd cell output range */
+		int lpix;						/* Last prime index seen */
+
+//if (fdi > 1) printf("~1 converting vertex %d\n",i);
+//if (fdi > 1) printf("~1 coord %d %d %d\n",gg[0],gg[1],gg[2]); 
+
+		rpp = s->rev.nnrev + i;
+		if (vflag[i] == 3) {			/* Cell base is prime */
+			prime = (primevx *) *rpp;
+
+			if (prime != NULL) {			/* It's a propogating prime */
+				/* Add prime to the end of the ptime linked list */
+				prime->next = NULL;
+				if (plist == NULL) {
+					plist = ptail = prime;
+				} else {
+					ptail->next = prime;
+					ptail = prime;
+				}
+			}
+		} else if (vflag[i] == 2) {		/* Cell base is secondary */
+			prop = (propvx *)*rpp;
+		} else {								/* Hmm */
+			error("rev: bwd vertex %d is not prime or secondary",i);
+		}
+	
+		/* Setup to scan of cube corners, and check that base is within cube grid */
 		for (f = 0; f < fdi; f++) {
-			if (rs->sax[f] != NULL) {
-				free(rs->sax[f]);
-				rs->sax[f] = NULL;
+			if (gg[f] > rgres_1) {		/* Vertex outside bwd cell range, */
+				if (prop != NULL && prime == NULL) {
+					free(prop);
+					*rpp = NULL;
+				}
+//printf("~1 done vertex %d because its out of cell bounds\n",i);
+				goto next_vertex;
+			}
+			imin[f] = 0x7fffffff;
+			imax[f] = -1;
+		}
+
+		/* For all the vertex points in the nnrev cube starting at this base (i), */
+		/* Check if any of them are secondary seed points */
+		for (ff = 0; ff < (1 << fdi); ff++) {
+			if (vflag[i + s->rev.hoi[ff]] == 2)
+				break;
+		}
+
+		/* If not a cell that we want to create a nearest fwd cell list for */
+		if (ff >= (1 << fdi)) {
+			/* Don't free anything, because we leave a prime in place, */
+			/* and it can't be a prop. */
+			goto next_vertex;
+		}
+
+		/* For all the vertex points in the nnrev cube starting at this base (i), */
+		/* accumulate the range they cover */
+		lpix = -1;
+		for (f = 0; f < fdi; f++) {
+			imin[f] = 0x7fffffff;
+			imax[f] = -1;
+		}
+		for (ff = 0; ff < (1 << fdi); ff++) {
+			int ii = i + s->rev.hoi[ff];	/* cube vertex index */
+			primevx *tprime= NULL;
+			
+			/* Grab vertex info and corresponding prime vertex info */
+			if (vflag[ii] == 3) {								/* Corner is a prime */
+				tprime = (primevx *) *(s->rev.nnrev + ii);		/* Use itself */
+				if (tprime == NULL)
+					continue;				/* Not a propogated in-gamut vertex */
+			} else if (vflag[ii] == 2) {
+				propvx *tprop = (propvx *) *(s->rev.nnrev + ii);	/* Use propogated prime */
+				tprime = (primevx *) *(s->rev.nnrev + tprop->cix);
+			} else {
+				continue;		/* Hmm */
+			}
+			if (tprime->ix == lpix)
+				continue;		/* Don't waste time */
+
+//if (fdi > 1) printf("~1 corner %d, ix %d, prime %d gc = %d, %d, %d\n", ff, ii, tprime->ix, tprime->gc[0], tprime->gc[1], tprime->gc[2]);
+
+			/* Update bounding box for this prime grid point */
+			for (f = 0; f < fdi; f++) {
+				if (tprime->gc[f] < imin[f])
+					 imin[f] = tprime->gc[f];
+				if (tprime->gc[f] > imax[f])
+					 imax[f] = tprime->gc[f];
+			}
+			lpix = tprime->ix;
+		}
+
+//if (fdi > 1) printf("~1 prime vertex index range = %d - %d, %d - %d, %d - %d\n", imin[0], imax[0], imin[1], imax[1], imin[2], imax[2]);
+
+		/* See if a list matching this range is in the cache */
+		hashk = 0;
+		for (hashk = f = 0; f < fdi; f++)
+			hashk = hashk * 97 + imin[f] + 43 * (imax[f] - imin[f]);
+		hashk = hashk % nncsize;
+//if (fdi > 1) printf("~1 hashk = %d from %d - %d %d - %d %d - %d\n", hashk, imin[0], imax[0], imin[1], imax[1], imin[2], imax[2]);
+
+		/* See if we can locate an existing list for this range */
+		for (ncp = nnc[hashk]; ncp != NULL; ncp = ncp->next) {
+//if (fdi > 1) printf("~1 checking %d - %d %d - %d %d - %d\n", ncp->min[0], ncp->max[0], ncp->min[1], ncp->max[1], ncp->min[2], ncp->max[2]);
+			for (f = 0; f < fdi; f++) {
+				if (ncp->min[f] != imin[f]
+				 || ncp->max[f] != imax[f]) {
+//if (fdi > 1) printf("~1 not a match\n");
+					break;
+				}
+			}
+			if (f >= fdi) {
+//if (fdi > 1) printf("~1 got a match\n");
+				break;			/* Found a matching cache entry */
 			}
 		}
 
-		free(rs->touch);
-		rs->touch = NULL;
+		if (ncp != NULL) {
+			rp = ncp->rip;
+//if (fdi > 1) printf("~1 got cache hit hashk = %d, with ref count %d\n\n",hashk, rp[1]);
+			rp[1]++;			/* Increase reference count */
+
+		} else {
+			/* This section seems to be the most time consuming part of the nnrev setup. */
+
+			/* Allocate a cache entry and place it */
+			if ((ncp = (nncache *)calloc(1, sizeof(nncache))) == NULL)
+				error("rspl malloc failed - rev.nn cach record");
+
+			for (f = 0; f < fdi; f++) {
+				ncp->min[f] = imin[f];
+				ncp->max[f] = imax[f];
+			}
+			ncp->next = nnc[hashk];
+			nnc[hashk] = ncp;
+
+			/* Convert the nn destination vertex range into an output value range. */
+			for (f = 0; f < fdi; f++) {
+				double gw = s->rev.gw[f];
+				double gl = s->rev.gl[f];
+				rmin[f] = gl + imin[f] * gw;
+				rmax[f] = gl + imax[f] * gw;
+			}
+
+			/* Do any adjustment of the range needed to acount for the inacuracies */
+			/* caused by the vertex quantization. */
+			/* (I don't really understand the need for the extra avggw expansion, */
+			/*  but there are artefacts without this. This size of this sampling */
+			/*  expansion has a great effect on the performance.) */
+			{
+				double avggw = 0.0;
+				for (f = 0; f < fdi; f++) 
+					avggw += s->rev.gw[f];
+				avggw /= (double)fdi;
+				for (f = 0; f < fdi; f++) {		/* Quantizing range plus extra */
+					double gw = s->rev.gw[f];
+					rmin[f] -= (0.5 * gw + 0.99 * avggw);
+					rmax[f] += (0.5 * gw + 0.99 * avggw);
+				}
+			}
+//if (fdi > 1) printf("~1 prime vertex value adjusted range = %f - %f, %f - %f, %f - %fn", rmin[0], rmax[0], rmin[1], rmax[1], rmin[2], rmax[2]);
+
+			/* computue the rev.rev cell grid range we will need to cover to */
+			/* get all the cell output ranges that could touch our nn reverse range */
+			for (f = 0; f < fdi; f++) {
+				double gw = s->rev.gw[f];
+				double gl = s->rev.gl[f];
+				imin[f] = (int)floor((rmin[f] - gl)/gw);
+				if (imin[f] < 0)
+					imin[f] = 0;
+				else if (imin[f] > rgres_1)
+					 imin[f] = rgres_1;
+				imax[f] = (int)floor((rmax[f] - gl)/gw);
+				if (imax[f] < 0)
+					imax[f] = 0;
+				else if (imax[f] > rgres_1)
+					 imax[f] = rgres_1;
+				cc[f] = imin[f];				/* Set grid starting value */
+			}
+			tcount = s->get_next_touch(s);		/* Get next grid touched generation count */
+
+//if (fdi > 1) printf("~1 Cells to scan = %d - %d, %d - %d, %d - %d\n", imin[0], imax[0], imin[1], imax[1], imin[2], imax[2]);
+
+			rp = NULL;							/* We always allocate a new list initially */
+			for (f = 0; f < fdi;) {		/* For all the cells in the min/max range */
+				int ii;
+				int **nrpp, *nrp;	/* Pointer to base of cell list, entry 0 = allocated space */
+
+				/* Get pointer to rev.rev[] cell list */
+				for (nrpp = s->rev.rev, f = 0; f < fdi; f++)
+					nrpp += cc[f] * s->rev.coi[f];
+
+				if ((nrp = *nrpp) == NULL)
+					goto next_range_list;		/* This rev.rev[] cell is empty */
+
+
+//if (fdi > 1) printf("~1 adding list from cell %d, list length %d\n",nrpp - s->rev.rev, nrp[0]);
+				/* For all the fwd cells in the rev.rev[] list */
+				for(nrp++; *nrp != -1; nrp++)  {
+					int ix = *nrp;			/* Fwd cell index */
+					float *fcb = s->g.a + ix * s->g.pss; /* Pntr to base float of fwd cell */
+
+					if (TOUCHF(fcb) >= tcount) {	/* If we seen visited this fwd cell before */
+//if (fdi > 1) printf("~1 skipping cell %d because we alread have it\n",ix);
+						continue;
+					}
+					TOUCHF(fcb) = tcount;			/* Touch it so we will skip it next time */
+
+					/* Compute the range of output values this cell covers */
+					for (f = 0; f < fdi; f++)	/* Init output min/max */
+						min[f] = max[f] = fcb[f];
+
+					/* For all other grid points in the fwd cell cube */
+					for (ee = 1; ee < (1 << di); ee++) {
+						float *gt = fcb + s->g.fhi[ee];	/* Pointer to cube vertex */
+						
+						/* Update bounding box for this grid point */
+						for (f = 0; f < fdi; f++) {
+							if (min[f] > gt[f])	
+								 min[f] = gt[f];
+							if (max[f] < gt[f])
+								 max[f] = gt[f];
+						}
+					}
+
+//if (fdi > 1) printf("~1 cell %d range = %f - %f, %f - %f, %f - %f\n", ix, min[0], max[0], min[1], max[1], min[2], max[2]);
+
+					/* See if this fwd cell output values overlaps our region of interest */
+					for (f = 0; f < fdi; f++) {
+						if (min[f] > rmax[f]
+						 || max[f] < rmin[f]) {
+							break;				/* Doesn't overlap */
+						}
+					}
+
+					if (f < fdi) {
+//if (fdi > 1) printf("~1 skipping cell %d because we doesn't overlap\n",ix);
+						continue;				/* It doesn't overlap */
+					}
+
+//if (fdi > 1) printf("~1 adding fwd index %d to list\n",ix);
+//if (fdi > 1) printf("~1 cell %d range = %f - %f, %f - %f, %f - %f\n", ix, min[0], max[0], min[1], max[1], min[2], max[2]);
+#ifdef DEBUG
+					fwdcells++;
+#endif
+					/* It does, add it to our new list */
+					if (rp == NULL) {
+						if ((rp = (int *) malloc(6 * sizeof(int))) == NULL)
+							error("rspl malloc failed - rev.nngrid entry");
+						INCSZ(s, 6 * sizeof(int));
+						rp[0] = 6;		/* Allocation */
+						rp[1] = 1;		/* reference count */
+						rp[2] = ix;
+						rp[3] = -1;
+					} else {
+						int z, ll = rp[0];
+						for (z = 2; z < ll; z++)	/* Find place to put next entry */
+							if (rp[z] == -1)
+								break;
+						if (z >= (ll-1)) {			/* Not enough space */
+							INCSZ(s, ll * sizeof(int));
+							ll *= 2;
+							if ((rp = (int *) realloc(rp, sizeof(int) * ll)) == NULL)
+								error("rspl realloc failed - rev.grid entry");
+							rp[0] = ll;
+						}
+						rp[z] = ix;
+						rp[z+1] = -1;
+					}
+				}			/* Next fwd cell in list */
+
+				/* Increment index */
+				next_range_list:;
+				for (f = 0; f < fdi; f++) {
+					if (++cc[f] <= imax[f])
+						break;	/* No carry */
+					cc[f] = imin[f];
+				}
+			}
+
+			ncp->rip = rp;		/* record nnrev cell in cache */
+#ifdef DEBUG
+			cellinrevlist++;
+#endif
+//if (fdi > 1) printf("~1 adding cache entry with hashk = %d\n\n",hashk);
+		}
+
+		/* Put the resulting list in place */
+		if (prime != NULL)
+			prime->clist = rp;	/* Save it untill we get rid of the primes */
+		else
+			*rpp = rp;
+
+//if (*rpp == NULL) printf("~1 problem: we ended up with no list or prime struct at cell %d\n",i);
+
+#ifdef NEVER
+/* Sanity check the list, to see if the list cells corner contain an output value */
+/* that is at least closer to the target than the prime. */
+if (prop != NULL) {
+	int *tp = rp;
+	double bdist = 1e60;
+	double bdist2 = 1e60;
+	double vx[MXRO];		/* Vertex location */
+	double px[MXRO];		/* Prime location */
+	double cl[MXRO];		/* Closest output value from list */
+	double acl[MXRO];		/* Absolute closest output value */
+	double dst;				/* Distance to prime */
+	int ti;
+
+	primevx *prm = (primevx *) *(s->rev.nnrev + prop->cix);
+	for (f = 0; f < fdi; f++) {
+	double gw = s->rev.gw[f];
+	double gl = s->rev.gl[f];
+	vx[f] = gl + prop->gc[f] * gw;
+	px[f] = gl + prm->gc[f] * gw;
 	}
+
+	for(tp++; *tp != -1; tp++)  {
+	int ix = *tp;			/* Fwd cell index */
+	float *fcb = s->g.a + ix * s->g.pss; /* Pntr to base float of fwd cell */
+
+	for (ee = 0; ee < (1 << di); ee++) {
+		double ss;
+		float *gt = fcb + s->g.fhi[ee];	/* Pointer to cube vertex */
+					
+		for (ss = 0.0, f = 0; f < fdi; f++) {
+			double tt = vx[f] - gt[f];
+			ss += tt * tt;
+		}
+		if (ss < bdist) {
+			bdist = ss;
+			for (f = 0; f < fdi; f++)
+				cl[f] = gt[f];
+		}
+	}
+	}
+	bdist = sqrt(bdist);
+	dst = sqrt(prop->dsq);
+
+	/* Lookup best distance to any output value */
+	if (dst < bdist) {
+	float *gt;
+	for (ti = 0, gt = s->g.a; ti < s->g.no; ti++, gt += s->g.pss) {
+		double ss;
+					
+		for (ss = 0.0, f = 0; f < fdi; f++) {
+			double tt = vx[f] - gt[f];
+			ss += tt * tt;
+		}
+		if (ss < bdist2) {
+			bdist2 = ss;
+			for (f = 0; f < fdi; f++)
+				acl[f] = gt[f];
+		}
+	}
+	}
+	bdist2 = sqrt(bdist2);
+
+	if (dst < bdist) {
+	printf("~1 vertex %d has worse distance to values than prime\n",i);
+	printf("~1 vertex loc %f %f %f\n", vx[0], vx[1], vx[2]);
+	printf("~1 prime loc %f %f %f, dist %f\n", px[0], px[1], px[2],dst);
+	printf("~1 closest loc %f %f %f, dist %f\n", cl[0], cl[1], cl[2],bdist);
+	printf("~1 abs clst loc %f %f %f, dist %f\n", acl[0], acl[1], acl[2], bdist2);
+	}
+}
+#endif // NEVER
+
+		if (prop != NULL && prime == NULL) {
+			free(prop);
+		}
+
+		next_vertex:;
+		DC_INC(gg);
+	}
+
+	DBG(("freeing up the prime seed structurs\n"));
+	/* Finaly convert all the prime verticies to cell lists */
+	/* Free up all the prime seed structures */
+	for (;plist != NULL; ) {
+		primevx *prime, *next = plist->next;
+		int **rpp;
+
+		rpp = s->rev.nnrev + plist->ix;
+		if ((prime = (primevx *)(*rpp)) != NULL) {
+			if (prime->clist != NULL) 		/* There is a nn list for this cell */
+				*rpp = prime->clist;
+			else
+				*rpp = NULL;
+			free(prime); 
+		} else {
+			error("assert, prime cell %d was empty",plist->ix);
+		}
+		plist = next;
+	}
+
+#ifdef DEBUG
+	DBG(("sanity check that all rev accell cells are filled\n"));
+	DC_INIT(gg);
+	for (i = 0; i < rgno; i++) {
+		for (f = 0; f < fdi; f++) {
+			if (gg[f] > rgres_1) {	/* Vertex outside bwd cell range, */
+				goto next_vertex3;
+			}
+		}
+
+		if (*(s->rev.nnrev + i) == NULL
+		 && *(s->rev.rev + i) == NULL) {
+//			printf("~1 warning, cell %d [ %d %d %d] has a NULL list\n",i, gg[0],gg[1],gg[2]);
+			error("cell %d has a NULL list\n",i);
+		}
+		next_vertex3:;
+		DC_INC(gg);
+	}
+#endif /* DEBUG */
+
+	/* Free up flag array used for construction */
+	if (vflag != NULL) {
+		free(vflag);
+	}
+	/* Free up nn list cache indexing structure */
+	if (nnc != 0) {
+		for (i = 0; i < nncsize; i++) {
+			nncache *nncp;
+			/* Run through linked list freeing entries */
+			for (ncp = nnc[i]; ncp != NULL; ncp = nncp) {
+				nncp = ncp->next;
+				free(ncp);
+			}
+		}
+		free(nnc);
+		nnc = NULL;
+	}
+
+	s->rev.rev_valid = 1;
+
+#ifdef DEBUG
+	if (fdi > 1) printf("%d cells in rev nn list\n",cellinrevlist);
+	if (fdi > 1) printf("%d fwd cells in rev nn list\n",fwdcells);
+	if (fdi > 1) printf("Avg list size = %f\n",(double)fwdcells/cellinrevlist);
+#endif
+
+	DBG(("init_revaccell finished\n"));
+}
+
+/* Invalidate the reverse acceleration structures (section Two) */
+static void invalidate_revaccell(
+rspl *s		/* Pointer to rspl grid */
+) {
+	int e, di = s->di;
+	int **rpp, *rp;
+		
+	/* Free up the contents of rev.rev[] and rev.nnrev[] */
+	if (s->rev.rev != NULL) {
+		for (rpp = s->rev.rev; rpp < (s->rev.rev + s->rev.no); rpp++) {
+			if ((rp = *rpp) != NULL && --rp[1] <= 0) {
+				DECSZ(s, rp[0] * sizeof(int));
+				free(*rpp);
+				*rpp = NULL;
+			}
+		}
+	}
+	if (s->rev.nnrev != NULL) {
+		for (rpp = s->rev.nnrev; rpp < (s->rev.nnrev + s->rev.no); rpp++) {
+			if ((rp = *rpp) != NULL && --rp[1] <= 0) {
+				DECSZ(s, rp[0] * sizeof(int));
+				free(*rpp);
+				*rpp = NULL;
+			}
+		}
+	}
+	s->rev.rev_valid = 0;
 }
 
 /* ====================================================== */
 
+/* Initialise the rev First section, basic information that doesn't change */
+/* This is called on initial setup when s->rev.inited == 0 */
+static void make_rev_one(
+rspl *s
+) {
+	int i, j;		/* Index of fwd grid point */
+	int e, f, ee, ff;
+	int di = s->di;
+	int fdi = s->fdi;
+	int rgno, gno = s->g.no;
+	int argres;		/* Allocation rgres, = no cells +1 */
+	int rgres;
+	int rgres_1;	/* rgres -1 == maximum base coord value */
+	datao rgmin, rgmax;
+
+	DBG(("make_rev_one called, di = %d, fdi = %d, mgres = %d\n",di,fdi,(int)s->g.mres));
+
+//printf("~1 nnb = %d\n",nnb);
+
+	s->get_out_range(s, rgmin, rgmax);	/* overall output min/max */
+
+	/* Expand out range to encompass declared range */
+	/* The declared range is assumed to be the range over which */
+	/* we may want an reasonably accurate nearest reverse lookup. */
+	for (f = 0; f < fdi; f++) {
+		if ((s->d.vl[f] + s->d.vw[f]) > rgmax[f])
+				rgmax[f] = s->d.vl[f] + s->d.vw[f];
+		if (s->d.vl[f] < rgmin[f])
+				rgmin[f] = s->d.vl[f];
+	}
+
+	/* Expand out range slightly to allow for out of gamut points */
+	for (f = 0; f < fdi; f++) {
+		double del = (rgmax[f] - rgmin[f]) * 0.10;	/* Expand by +/- 10% */
+		rgmax[f] += del;
+		rgmin[f] -= del;
+	}
+//printf("~~got output range\n");
+
+	/* Heuristic - reverse grid acceleration resolution ? */
+	/* Should this really be adapted to be constant in output space ? */
+	/* (ie. make the gw aprox equal ?) Would complicate code rev accell */
+	/* indexing thoug. */
+	{
+		char *ev;
+		double gresmul = REV_ACC_GRES_MUL;
+		/* Allow the user to override if it causes memory consumption problems */
+		if ((ev = getenv("ARGYLL_REV_ACC_GRID_RES_MULT")) != NULL) {
+			double mm;
+			mm = atof(ev);
+			if (mm > 0.1 && mm < 20.0)
+				gresmul *= mm;
+		}
+		if ((rgres = (int) gresmul * s->g.mres) < 4)
+			rgres = 4;
+	}
+	argres = rgres+1;
+	s->rev.ares = argres;		/* == number of verticies per side, used for construction */
+	s->rev.res = rgres;			/* == number of cells per side */
+	rgres_1 = rgres-1;
+
+	/* Number of elements in the rev.grid, including construction extra rows */
+	for (rgno = 1, f = 0; f < fdi; f++, rgno *= argres);
+	s->rev.no = rgno;
+
+//printf("~1 argres = %d\n",argres);
+	/* Compute coordinate increments */
+	s->rev.coi[0] = 1;
+//printf("~1 coi[0] = %d\n",s->rev.coi[0]);
+	for (f = 1; f < fdi; f++) {
+		s->rev.coi[f] = s->rev.coi[f-1] * argres;
+//printf("~1 coi[%d] = %d\n",f,s->rev.coi[f]);
+	}
+
+	/* Compute index offsets from base of cube to other corners. */
+
+	for (s->rev.hoi[0] = f = 0, j = 1; f < fdi; j *= 2, f++) {
+		for (i = 0; i < j; i++)
+			s->rev.hoi[j+i] = s->rev.hoi[i] + s->rev.coi[f];	/* In grid points */
+	}
+//for (ff = 0; ff < (1 << fdi); ff++)
+//printf("~1 hoi[%d] = %d\n",ff,s->rev.hoi[ff]);
+
+	/* Conversion from output value to cell indexes */
+	for (f = 0; f < fdi; f++) {
+		s->rev.gl[f] = rgmin[f];
+		s->rev.gh[f] = rgmax[f];
+		s->rev.gw[f] = (rgmax[f] - rgmin[f])/(double)rgres;
+	}
+
+	if ((s->rev.rev = (int **) calloc(rgno, sizeof(int *))) == NULL)
+		error("rspl malloc failed - rev.grid points");
+	INCSZ(s, rgno * sizeof(int *));
+
+	if ((s->rev.nnrev = (int **) calloc(rgno, sizeof(int *))) == NULL)
+		error("rspl malloc failed - rev.nngrid points");
+	INCSZ(s, rgno * sizeof(int *));
+
+	s->rev.inited = 1;
+
+	s->rev.stouch = 1;
+
+	DBG(("make_rev_one finished\n"));
+}
+
+/* ====================================================== */
+
+/* First section of rev_struct init. */
+/* Initialise the reverse cell cache, sub simplex information */
+/* and reverse lookup acceleration structures. */
+/* This is called by a reverse interpolation call */
+/* that discovers that the reverse index list haven't */
+/* been initialised. */
+static void make_rev(
+rspl *s
+) {
+	int e, di = s->di;
+	char *ev;
+	size_t avail_ram = 500 * 1000000;	/* Default assumed RAM in the system */
+
+	DBG(("make_rev called, di = %d, fdi = %d, mgres = %d\n",di,s->fdi,(int)s->g.mres));
+
+#ifdef NT 
+	{
+		MEMORYSTATUS mstat;
+
+		mstat.dwLength = sizeof(MEMORYSTATUS);
+		GlobalMemoryStatus(&mstat);
+		avail_ram = mstat.dwTotalPhys;
+	}
+#else
+#ifdef __APPLE__
+	{
+		long long memsize;
+		size_t memsize_sz = sizeof(long long);
+		if (sysctlbyname("hw.memsize", &memsize, &memsize_sz, NULL, 0) == 0) {
+			avail_ram = memsize;
+		} else {
+			warning("Unable to get system memory size");
+		}
+		
+	}
+#else	/* Linux */
+	{
+		avail_ram = sysconf(_SC_PAGESIZE) * sysconf(_SC_PHYS_PAGES);
+	}
+#endif
+#endif
+	DBG(("System RAM = %d Mbytes\n",avail_ram/1000000));
+
+	/* Make it sane */
+	if (avail_ram < (100 * 1000000))
+		avail_ram = 100 * 1000000;
+
+	/* Default maximum reverse memory (typically 20% per rev + overhead ~= 50% total) */
+	s->rev.max_sz = (size_t)(REV_MAX_MEM_RATIO * avail_ram);
+
+	/* Check for environment variable tweak  */
+	if ((ev = getenv("ARGYLL_REV_CACHE_MULT")) != NULL) {
+		double mm;
+		mm = atof(ev);
+		if (mm > 0.1 && mm < 20.0)
+			s->rev.max_sz = (size_t)(s->rev.max_sz * mm + 0.5);
+	}
+	DBG(("reverse cache max memory = %d Mbytes\n",s->rev.max_sz/1000000));
+
+	make_rev_one(s);
+
+	/* Reverse cell cache allocation */
+	s->rev.cache = alloc_revcache(s);
+
+	/* Sub-simplex information */
+	for (e = 0; e <= di; e++) {
+		init_ssimplex_info(s, e);
+	}
+
+	DBG(("make_rev finished\n"));
+}
+/* ====================================================== */
+
+#undef DEBUG
 #undef DBGV
 #undef DBG
 #define DBGV(xxx)

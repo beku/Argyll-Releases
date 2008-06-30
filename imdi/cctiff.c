@@ -24,18 +24,43 @@
 	embedding them in the outgoing TIFF.
 	Add flag to ignore inkname mismatches.
 
+
+	Should add support for using and embedding ICC profiles in the TIFF.
+	For reading and writing use:
+
+		TIFFGetField(tif, TIFFTAG_ICCPROFILE, &icclen, &iccinfo);
+		TIFFSetField(tif, TIFFTAG_ICCPROFILE, icclen, iccinfo);
+
+
+	Should add support for transfering any extra alpha
+	planes from input to output, rather than simply ignoring them.
+
+
 	Question: Should this be changed to also function as
 	          a dedicated simple linker, capable of outputing
 	          a device link formed from a sequence ?
 	          If argyll functionality was properly modularized,
 	          it would be possible to have a single arbitrary
 	          smart link sequence for both purposes.
+
+
+	There's the sugggestion that the CIELab and ICCLab encodings
+	have different white points (D65 and D50 respecively -
+	see <http://www.asmail.be/msg0055212264.html>). Should
+    we convert the white point to D65 for CIELab, or make this
+	an option ? Probably a bad idea if we regard the Lab in/out
+	as relative colorimetric representation ??
+
+	Ideally should automatically generate optimized per channel
+	input and output curves, rather than depending on
+	reasonable behaviour from the profiles.
+
  */
 
 /*
 	This program is a framework that exercises the
 	IMDI code, as well as a demonstration of profile linking.
-	 It can also do the conversion using the
+	It can also do the raster data conversion using the
     floating point code in ICCLIB as a reference.
 
  */
@@ -78,11 +103,13 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -a              Read and Write planes > 4 as alpha planes\n");
 	fprintf(stderr," -I              Ignore any file or profile colorspace mismatches\n");
 	fprintf(stderr," -l              This flag is ignored for backwards compatibility\n");
+	fprintf(stderr," -d profile.[icm | tiff]  Optionally embed a profile in the destination TIFF file.\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"                 Then for each profile in sequence:\n");
 	fprintf(stderr,"   -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"                 s = saturation, a = absolute colorimetric\n");
-	fprintf(stderr,"   profile.icm   Device, Link or Abstract profile.\n");
+	fprintf(stderr,"   profile.[icm | tiff]  Device, Link or Abstract profile.\n");
+	fprintf(stderr,"                 May be embeded profile in TIFF file.\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr," infile.tif      Input TIFF file in appropriate color space\n");
 	fprintf(stderr," outfile.tif     Output TIFF file\n");
@@ -94,7 +121,7 @@ void usage(char *diag, ...) {
 /* Conversion functions from direct binary 0..n^2-1 == 0.0 .. 1.0 range */
 /* to ICC luo input range, and the reverse. */
 /* Note that all these functions are per-component, */
-/* so they can be included in per-component input or output curves, */
+/* so the can be included in per-component input or output curves, */
 /* if they PCS values were rescaled to be within the range 0.0 .. 1.0. */
 /* Since we're not currently doing this, we always set i/ocpmbine */
 /* if the input/output is PCS, so that real PCS values don't */
@@ -184,8 +211,8 @@ int extra			/* Extra Samples per pixel, if any */
 	if (smsk != NULL)
 		*smsk = 0x0;
 
-	if (extra > 0 && pmtc != PHOTOMETRIC_SEPARATED)
-		return 0x0;						/* We don't handle this */
+//	if (extra > 0 && pmtc != PHOTOMETRIC_SEPARATED)
+//		return 0x0;						/* We don't handle this */
 		
 	switch (pmtc) {
 		case PHOTOMETRIC_MINISWHITE:	/* Subtractive Gray */
@@ -520,7 +547,6 @@ int pmtc
 /* Information needed from a single profile */
 struct _profinfo {
 	char name[MAXNAMEL+1];
-	icmFile *fp;
 	icc *c;
 	icmHeader *h;
 	icRenderingIntent intent;			/* Rendering intent chosen */
@@ -544,6 +570,8 @@ typedef struct {
 	int osign_mask;			/* Output sign mask */
 	int icombine;			/* Non-zero if input curves are to be combined */
 	int ocombine;			/* Non-zero if output curves are to be combined */
+	int ilcurve;			/* Non-zero if input curves are to be concatenated with Y->L* curve */
+	int olcurve;			/* Non-zero if output curves are to be concatenated with L*->Y curve */
 	void (*icvt)(double *out, double *in);	/* If non-NULL, Input format conversion */
 	void (*ocvt)(double *out, double *in);	/* If non-NULL, Output format conversion */
 
@@ -567,11 +595,24 @@ static void input_curves(
 		out_vals[i] = in_vals[i];
 
 	if (rx->icombine == 0) {
+		/* TIFF input format conversion */
 		if (rx->icvt != NULL) {					/* (Never used because PCS < 0.0 > 1.0) */
 			rx->icvt(out_vals, out_vals);
 		}
 		/* (icombine is set if input is PCS) */
 		rx->profs[0].luo->lookup_in(rx->profs[0].luo, out_vals, out_vals);
+
+		/* If input curve converts to Y type space, apply Y->L* curve */
+		/* so as to index CLUT perceptually. */
+		if (rx->ilcurve != 0) {
+			for (i = 0; i < rx->id; i++) {
+				if (out_vals[i] > 0.008856451586)
+					out_vals[i] = pow(out_vals[i],1.0/3.0);
+				else
+					out_vals[i] = 7.787036979 * out_vals[i] + 16.0/116.0;
+				out_vals[i] = (1.16 * out_vals[i] - 0.16);
+			}
+		}
 	}
 //printf("~1 incurve out %f %f %f %f\n",out_vals[0],out_vals[1],out_vals[2],out_vals[3]);
 }
@@ -595,7 +636,7 @@ double *in_vals
 	prs = rx->ins;
 
 	/* Any needed file format conversion */
-	if (rx->icombine != 0  && rx->icvt != NULL) {
+	if (rx->icombine != 0 && rx->icvt != NULL) {
 		rx->icvt(vals, vals);
 //printf("~1 md_table after icvt %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
 	}
@@ -604,12 +645,10 @@ double *in_vals
 	for (j = 0; j < rx->nprofs; j++) {
 
 		/* Convert PCS for this profile */
-		if (prs == icSigXYZData
-		 && rx->profs[j].ins == icSigLabData) {
+		if (prs == icSigXYZData && rx->profs[j].ins == icSigLabData) {
 			icmXYZ2Lab(&icmD50, vals, vals);
 //printf("~1 md_table after XYZ2Lab %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
-		} else if (prs == icSigLabData 
-		      && rx->profs[j].ins == icSigXYZData) {
+		} else if (prs == icSigLabData && rx->profs[j].ins == icSigXYZData) {
 			icmLab2XYZ(&icmD50, vals, vals);
 //printf("~1 md_table after Lab2XYZ %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
 		}
@@ -619,12 +658,30 @@ double *in_vals
 			if (j != 0 || rx->icombine) {
 				rx->profs[j].luo->lookup_in(rx->profs[j].luo, vals, vals);
 //printf("~1 md_table after input curve %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+			} else if (j == 0 && rx->ilcurve) {
+				/* Apply L*->Y curve to compensate for curve applied after input curve */
+				for (i = 0; i < rx->id; i++) {
+					vals[i] = (vals[i] + 0.16)/1.16;
+					if (vals[i] > 24.0/116.0)
+						vals[i] = pow(vals[i],3.0);
+					else
+						vals[i] = (vals[i] - 16.0/116.0)/7.787036979;
+				}
 			}
 			rx->profs[j].luo->lookup_core(rx->profs[j].luo, vals, vals);
 //printf("~1 md_table after core %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
 			if (j != (rx->nprofs-1) || rx->ocombine) {
 				rx->profs[j].luo->lookup_out(rx->profs[j].luo, vals, vals);
 //printf("~1 md_table after output curve %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+			} else if (j == (rx->nprofs-1) && rx->olcurve) {
+				/* Add Y->L* curve to cause interpolation in perceptual space */
+				for (i = 0; i < rx->id; i++) {
+					if (vals[i] > 0.008856451586)
+						vals[i] = pow(vals[i],1.0/3.0);
+					else
+						vals[i] = 7.787036979 * vals[i] + 16.0/116.0;
+					vals[i] = (1.16 * vals[i] - 0.16);
+				}
 			}
 
 		/* Middle of chain */
@@ -671,6 +728,16 @@ static void output_curves(
 		out_vals[i] = in_vals[i];
 
 	if (rx->ocombine == 0) {
+		/* Apply L* -> Y curve to undo curve applied at CLUT output. */
+		if (rx->olcurve != 0) {
+			for (i = 0; i < rx->od; i++) {
+				out_vals[i] = (out_vals[i] + 0.16)/1.16;
+				if (out_vals[i] > 24.0/116.0)
+					out_vals[i] = pow(out_vals[i],3.0);
+				else
+					out_vals[i] = (out_vals[i] - 16.0/116.0)/7.787036979;
+			}
+		}
 		rx->profs[j].luo->lookup_out(rx->profs[j].luo, out_vals, out_vals);
 //printf("~1 md_table after out curve %f %f %f %f\n",out_vals[0],out_vals[1],out_vals[2],out_vals[3]);
 
@@ -723,8 +790,11 @@ main(int argc, char *argv[]) {
 	int fa, nfa;							/* argument we're looking at */
 	char in_name[MAXNAMEL+1] = "";			/* Input raster file name */
 	char out_name[MAXNAMEL+1] = "";			/* Output raster file name */
+	char dst_pname[MAXNAMEL+1] = "";		/* Destination embeded profile file name */
+	icc *deicc = NULL;						/* Destination embedded profile (if any) */
 	icRenderingIntent next_intent;			/* Rendering intent for next profile */
 	icRenderingIntent last_intent;			/* Rendering intent for next profile */
+	int last_dim;							/* Next dimentionality between conversions */
 	icColorSpaceSignature last_colorspace;	/* Next colorspace between conversions */
 	int slow = 0;			/* Slow and precice (float) */
 	int check = 0;			/* Check fast (int) against slow (float) */
@@ -751,10 +821,10 @@ main(int argc, char *argv[]) {
 
 	/* IMDI */
 	imdi *s = NULL;
-	sucntx su;		/* Setup context */
+	sucntx su;				/* Setup context */
 	unsigned char *inp[MAX_CHAN];
 	unsigned char *outp[MAX_CHAN];
-	int clutres = 0;
+	int clutres = 0;		/* Default */
 
 	/* Error check */
 	int mxerr = 0;
@@ -768,6 +838,8 @@ main(int argc, char *argv[]) {
 	su.verb = 0;
 	su.icombine = 0;
 	su.ocombine = 0;
+	su.ilcurve = 0;
+	su.olcurve = 0;
 
 	su.nprofs = 0;
 	su.profs = NULL;
@@ -825,8 +897,8 @@ main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -r flag");
 				clutres = atoi(na);
-				if (clutres < 3)
-					usage("-r argument must be >= 3");
+				if (clutres < 2)
+					usage("-r argument must be >= 2");
 			}
 
 			/* Output photometric choice */
@@ -834,6 +906,12 @@ main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -e flag");
 				ochoice = atoi(na);
+			}
+			/* Destination TIFF embedded profile */
+			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D') {
+				fa = nfa;
+				if (na == NULL) usage("Expect profile name argument to -d flag");
+				strncpy(dst_pname,na, MAXNAMEL); dst_pname[MAXNAMEL] = '\000';
 			}
 			/* Next profile Intent */
 			else if (argv[fa][1] == 'i') {
@@ -922,31 +1000,20 @@ main(int argc, char *argv[]) {
 
 	/* The last two "profiles" are actually the input and output TIFF filenames */
 	/* Unwind them */
-
-	if (su.nprofs < 3)
+	if (su.nprofs < 2)
 		usage("Not enough arguments to specify input and output TIFF files");
 
 	strncpy(out_name,su.profs[--su.nprofs].name, MAXNAMEL); out_name[MAXNAMEL] = '\000';
 	strncpy(in_name,su.profs[--su.nprofs].name, MAXNAMEL); in_name[MAXNAMEL] = '\000';
 
 	/* Implement the "last intent" option */
-	if (su.profs[su.nprofs-1].intent == icmDefaultIntent
-	 && last_intent != icmDefaultIntent)
-		su.profs[su.nprofs-1].intent = last_intent;
+	if (su.nprofs > 0) {
+		if (su.profs[su.nprofs-1].intent == icmDefaultIntent
+		 && last_intent != icmDefaultIntent)
+			su.profs[su.nprofs-1].intent = last_intent;
+	}
 
 	next_intent = icmDefaultIntent;
-
-	if (su.verb) {
-		/* Dump a description of the chain */
-		printf("Input TIFF is '%s'\n",in_name);
-		printf("There are %d profile in the sequence\n",su.nprofs);
-		for (i = 0; i < su.nprofs; i++) {
-//			printf("Profile %d is '%s' intent 0x%x\n",i+1,su.profs[i].name,su.profs[i].intent);
-			printf("Profile %d is '%s' intent %s\n",i+1,su.profs[i].name,
-			             icm2str(icmRenderingIntent, su.profs[i].intent));
-		}
-		printf("Output TIFF is '%s'\n",out_name);
-	}
 
 /*
 
@@ -1002,8 +1069,8 @@ main(int argc, char *argv[]) {
 	}
 
 	TIFFGetFieldDefaulted(rh, TIFFTAG_EXTRASAMPLES, &rextrasamples, &rextrainfo);
-	if (rextrasamples > 0 && alpha == 0)
-		error("TIFF Input file has extra samples per pixel - cctif can't handle that");
+//	if (rextrasamples > 0 && alpha == 0)
+//		error("TIFF Input file has extra samples per pixel - cctiff can't handle that");
 		
 	TIFFGetField(rh, TIFFTAG_PHOTOMETRIC, &rphotometric);
 	TIFFGetField(rh, TIFFTAG_SAMPLESPERPIXEL, &rsamplesperpixel);
@@ -1012,6 +1079,7 @@ main(int argc, char *argv[]) {
 	if ((su.ins = TiffPhotometric2ColorSpaceSignature(NULL, &su.icvt, &su.isign_mask, rphotometric,
 	                                     bitspersample, rsamplesperpixel, rextrasamples)) == 0)
 		error("Can't handle TIFF file photometric %s", Photometric2str(rphotometric));
+	su.id = rsamplesperpixel;
 
 	TIFFGetField(rh, TIFFTAG_PLANARCONFIG, &pconfig);
 	if (pconfig != PLANARCONFIG_CONTIG)
@@ -1021,14 +1089,8 @@ main(int argc, char *argv[]) {
 	TIFFGetField(rh, TIFFTAG_XRESOLUTION, &resx);
 	TIFFGetField(rh, TIFFTAG_YRESOLUTION, &resy);
 
+	last_dim = su.id;
 	last_colorspace = su.ins;
-
-	if (su.verb) {
-		printf("Input TIFF file '%s'\n",in_name);
-		printf("TIFF file colorspace is %s\n",icm2str(icmColorSpaceSignature,su.ins));
-		printf("TIFF file photometric is %s\n",Photometric2str(rphotometric));
-		printf("\n");
-	}
 
 	/* - - - - - - - - - - - - - - - */
 	/* Check and setup the sequence of ICC profiles */
@@ -1038,14 +1100,9 @@ main(int argc, char *argv[]) {
 	for (i = 0; i < su.nprofs; i++) {
 
 		/* Open up the profile for reading */
-		if ((su.profs[i].fp = new_icmFileStd_name(su.profs[i].name,"r")) == NULL)
-			error ("Can't open profile '%s'",su.profs[i].name);
+		if ((su.profs[i].c = read_embeded_icc(su.profs[i].name)) == NULL)
+			error ("Can't read profile from file '%s'",su.profs[i].name);
 	
-		if ((su.profs[i].c = new_icc()) == NULL)
-			error ("Creation of ICC object for '%s' failed",su.profs[i].name);
-	
-		if ((rv = su.profs[i].c->read(su.profs[i].c, su.profs[i].fp, 0)) != 0)
-			error ("%d, %s from '%s'",rv,su.profs[i].c->err,su.profs[i].name);
 		su.profs[i].h = su.profs[i].c->header;
 
 		/* Deal with different profile classes */
@@ -1100,21 +1157,6 @@ main(int argc, char *argv[]) {
 		} else 
 			su.profs[i].clutres = 0;
 
-		if (su.verb) {
-			icmFile *op;
-			if ((op = new_icmFileStd_fp(stdout)) == NULL)
-				error ("Can't open stdout");
-			printf("Profile %d '%s':\n",i,su.profs[i].name);
-			su.profs[i].h->dump(su.profs[i].h, op, 1);
-			op->del(op);
-
-			printf("Direction = %s\n",icm2str(icmTransformLookupFunc, su.profs[i].func));
-			printf("Intent = %s\n",icm2str(icmRenderingIntent, su.profs[i].intent));
-			printf("Input space = %s\n",icm2str(icmColorSpaceSignature, su.profs[i].ins));
-			printf("Output space = %s\n",icm2str(icmColorSpaceSignature, su.profs[i].outs));
-			printf("\n");
-		}
-
 		/* Check that we can join to previous correctly */
 		if (!ignoremm && !CSMatch(last_colorspace, su.profs[i].ins))
 			error("Last colorspace %s doesn't match input space %s of profile %s",
@@ -1122,9 +1164,11 @@ main(int argc, char *argv[]) {
 				      icm2str(icmColorSpaceSignature,su.profs[i].h->colorSpace),
 				      su.profs[i].name);
 
+		last_dim = icmCSSig2nchan(su.profs[i].outs);
 		last_colorspace = su.profs[i].outs;
 	}
 	
+	su.od = last_dim;
 	su.outs = last_colorspace;
 
 	/* - - - - - - - - - - - - - - - */
@@ -1132,8 +1176,7 @@ main(int argc, char *argv[]) {
 	if ((wh = TIFFOpen(out_name, "w")) == NULL)
 		error("Can\'t create TIFF file '%s'!",out_name);
 	
-	wsamplesperpixel = su.profs[su.nprofs-1].od;
-	su.od = wsamplesperpixel;
+	wsamplesperpixel = su.od;
 
 	wextrasamples = 0;
 	if (alpha && wsamplesperpixel > 4) {
@@ -1169,7 +1212,7 @@ main(int argc, char *argv[]) {
 	
 		if (no_pmtc > 1) {		/* Need to choose a photometric */
 			if (ochoice < 1 || ochoice > no_pmtc ) {
-				printf("Possible photometrics for output colorspace %s are:\n",
+				printf("Possible photometrics (Output Encodings) for output colorspace %s are:\n",
 				        icm2str(icmColorSpaceSignature,last_colorspace));
 				for (i = 0; i < no_pmtc; i++)
 					printf("%d: %s\n",i+1, Photometric2str(pmtc[i]));
@@ -1181,8 +1224,6 @@ main(int argc, char *argv[]) {
 		} else {
 			wphotometric = pmtc[0];
 		}
-		if (su.verb)
-			printf("Using TIFF photometric '%s'\n",Photometric2str(wphotometric));
 	}
 
 	/* Lookup what we need to handle this. */
@@ -1210,7 +1251,111 @@ main(int argc, char *argv[]) {
 		}
 	}
 
+	/* - - - - - - - - - - - - - - - */
+	/* Setup the destination embedded profile */
+	if (dst_pname[0] != '\000') {
+		icmFile *fp;		/* Read fp for the profile */
+		unsigned char *buf;
+		int size;
+
+		if ((deicc = read_embeded_icc(dst_pname)) == NULL)
+			error("Unable to open profile for destination embedding '%s'",dst_pname);
+
+		/* Check that it is compatible with the destination TIFF */
+		if (deicc->header->deviceClass != icSigColorSpaceClass
+		 && deicc->header->deviceClass != icSigInputClass
+		 && deicc->header->deviceClass != icSigDisplayClass
+		 && deicc->header->deviceClass != icSigOutputClass) {
+			error("Destination embedded profile is wrong device class for embedding");
+		}
+
+		if (deicc->header->colorSpace != su.outs
+		 || (deicc->header->pcs != icSigXYZData 
+		  && deicc->header->pcs != icSigLabData)) {
+			error("Destination embedded profile colorspaces don't match TIFF");
+		}
+
+		if ((fp = deicc->get_rfp(deicc)) == NULL)
+			error("Failed to be able to read destination embedded profile");
+
+		if ((size = fp->get_size(fp)) == 0)
+			error("Failed to be able to get size of destination embedded profile");
+
+		if ((buf = malloc(size)) == NULL)
+			error("malloc failed on destination embedded profile size %d",size);
+
+		if (fp->seek(fp,0))
+			error("rewind on destination embedded profile failed");
+
+		if (fp->read(fp, buf, 1, size) != size)
+			error("reading destination embedded profile failed");
+
+		/* (For iccv4 we would now fp->del(fp) because we got a reference) */
+
+		if (TIFFSetField(wh, TIFFTAG_ICCPROFILE, size, buf) == 0)
+			error("setting TIFF embedded ICC profiel field failed");
+
+		free(buf);
+		deicc->del(deicc);
+	}
+
+	/* - - - - - - - - - - - - - - - */
+	/* Setup input/output curve use. */
+	if (su.ins == icSigLabData || su.ins == icSigXYZData) {
+		su.icombine = 1;		/* CIE can't be conveyed through 0..1 domain lookup */
+
+	}
+
+	if (su.icombine == 0
+	 && su.profs[0].natpcs == icSigXYZData && su.profs[0].alg == icmMatrixFwdType) {
+		su.ilcurve = 1;			/* Index CLUT with L* curve rather than Y */
+	}
+
+	j = su.nprofs-1;
+	if (su.outs == icSigLabData || su.outs == icSigXYZData) {
+		su.ocombine = 1;			/* CIE can't be conveyed through 0..1 domain lookup */
+	}
+
+	if (su.ocombine == 0
+	 && su.profs[j].natpcs == icSigXYZData && su.profs[j].alg == icmMatrixBwdType) {
+		su.olcurve = 1;			/* Interpolate in L* space rather than Y */
+	}
+
+	/* - - - - - - - - - - - - - - - */
+	/* Report the connection sequence details */
+
 	if (su.verb) {
+
+		printf("Input TIFF file '%s'\n",in_name);
+		printf("TIFF file colorspace is %s\n",icm2str(icmColorSpaceSignature,su.ins));
+		printf("TIFF file photometric is %s\n",Photometric2str(rphotometric));
+		printf("\n");
+
+		printf("There are %d profile in the sequence\n",su.nprofs);
+
+		for (i = 0; i < su.nprofs; i++) {
+			icmFile *op;
+			if ((op = new_icmFileStd_fp(stdout)) == NULL)
+				error ("Can't open stdout");
+			printf("Profile %d '%s':\n",i,su.profs[i].name);
+			su.profs[i].h->dump(su.profs[i].h, op, 1);
+			op->del(op);
+
+			printf("Direction = %s\n",icm2str(icmTransformLookupFunc, su.profs[i].func));
+			printf("Intent = %s\n",icm2str(icmRenderingIntent, su.profs[i].intent));
+			if (i == 0 && su.icombine)
+				printf("Input curves being combined\n");
+			if (i == 0 && su.ilcurve)
+				printf("Input curves being post-converted to L*\n");
+			printf("Input space = %s\n",icm2str(icmColorSpaceSignature, su.profs[i].ins));
+			printf("Output space = %s\n",icm2str(icmColorSpaceSignature, su.profs[i].outs));
+			if (i == (su.nprofs-1) && su.olcurve)
+				printf("Output curves being pre-converted from L*\n");
+			if (i == (su.nprofs-1) && su.ocombine)
+				printf("Output curves being combined\n");
+			printf("\n");
+		}
+
 		printf("Output TIFF file '%s'\n",out_name);
 		printf("TIFF file colorspace is %s\n",icm2str(icmColorSpaceSignature,su.outs));
 		printf("TIFF file photometric is %s\n",Photometric2str(wphotometric));
@@ -1218,49 +1363,39 @@ main(int argc, char *argv[]) {
 	}
 
 	/* - - - - - - - - - - - - - - - */
-	/* Setup input/output curve use. */
-	if (su.profs[0].natpcs == icSigXYZData		/* XYZ is too non-linear to be a benefit */
-	 || su.ins == icSigLabData || su.ins == icSigXYZData)		/* or CIE input */
-		su.icombine = 1;			/* device to XYZ is too non-linear to be a benefit, */
-									/* and CIE can't be conveyed through 0..1 */
-
-	j = su.nprofs-1;
-	if (su.profs[j].natpcs == icSigXYZData /* XYZ is too non-linear to be a benefit */
-	 || su.outs == icSigLabData || su.outs == icSigXYZData)		/* or CIE input */
-		su.ocombine = 1;			/* XYZ to device is too non-linear to be a benefit */
-									/* and CIE can't be conveyed through 0..1 */
-
-	if (su.verb) {
-		if (su.icombine)
-			printf("Input per-channel curves are being combined\n");
-		if (su.ocombine)
-			printf("Output per-channel curves are being combined\n");
-	}
-
-	/* - - - - - - - - - - - - - - - */
 	/* Setup the imdi */
 
-	/* Setup the input and output dimensions */
-	su.id = icmCSSig2nchan(su.profs[0].ins);
-	su.od = icmCSSig2nchan(su.profs[j].outs);
+	{
+		int aclutres = 0;	/* Automatically set res */
 
-	/* Setup the imdi resolution */
-	/* Choose the resolution from the highest lut resolution in the sequence, */
-	/* or choose a default. */
-	if (clutres == 0) {
+		/* Setup the imdi resolution */
+		/* Choose the resolution from the highest lut resolution in the sequence, */
+		/* or choose a default. */
 		for (i = 0; i < su.nprofs; i++) {
-			if (su.profs[i].clutres > clutres)
-				clutres = su.profs[i].clutres;
+			if (su.profs[i].clutres > aclutres)
+				aclutres = su.profs[i].clutres;
 		}
-	}
-	if (clutres == 0) {
-		clutres = dim_to_clutres(su.id, 2);
+		if (aclutres == 0) {
+			aclutres = dim_to_clutres(su.id, 2);			/* High quality */
+
+		} else if (aclutres < dim_to_clutres(su.id, 1)) {	/* Worse than medium */
+			aclutres = dim_to_clutres(su.id, 1);
+		}
+
+		if (clutres == 0)
+			clutres = aclutres;
 	}
 
-	if (su.verb)
+	if (su.verb && su.nprofs > 0)
 		printf("Using CLUT resolution %d\n",clutres);
 
-	if (!slow) {
+	if (!slow && su.nprofs > 0) {
+		imdi_options opts = opts_none;
+
+		if (rextrasamples > 0) {		/* We need to skip the alpha */
+			opts |= opts_istride;
+		}
+
 		s = new_imdi(
 			su.id,			/* Number of input dimensions */
 			su.od,			/* Number of output dimensions */
@@ -1276,7 +1411,7 @@ main(int argc, char *argv[]) {
 			clutres,		/* Desired table resolution */
 			oopts_none,		/* Desired per channel output options */
 			NULL,			/* Output channel check values */
-			opts_none,		/* Desired processing direction and stride support */
+			opts,			/* Desired processing direction and stride support */
 			input_curves,	/* Callback functions */
 			md_table,
 			output_curves,
@@ -1301,13 +1436,12 @@ main(int argc, char *argv[]) {
 	/* Process colors to translate */
 	/* (Should fix this to process a group of lines at a time ?) */
 
-
 	if (check)
 		slow = 0;
 
 	inbuf  = _TIFFmalloc(TIFFScanlineSize(rh));
 	outbuf = _TIFFmalloc(TIFFScanlineSize(wh));
-	if (slow || check)
+	if (slow || check || su.nprofs == 0)
 		precbuf = _TIFFmalloc(TIFFScanlineSize(wh));
 
 	inp[0] = (unsigned char *)inbuf;
@@ -1319,13 +1453,12 @@ main(int argc, char *argv[]) {
 		if (TIFFReadScanline(rh, inbuf, y, 0) < 0)
 			error ("Failed to read TIFF line %d",y);
 
-		if (!slow) {
-
+		if (!slow && su.nprofs > 0) {
 			/* Do fast conversion */
-			s->interp(s, (void **)outp, 0, (void **)inp, 0, width);
+			s->interp(s, (void **)outp, 0, (void **)inp, rsamplesperpixel, width);
 		}
 		
-		if (slow || check) {
+		if (slow || check || su.nprofs == 0) {
 			/* Do floating point conversion */
 			for (x = 0; x < width; x++) {
 				int i;
@@ -1333,8 +1466,8 @@ main(int argc, char *argv[]) {
 				
 //printf("\n");
 				if (bitspersample == 8) {
-					for (i = 0; i < su.id; i++) {
-						int v = ((unsigned char *)inbuf)[x * su.id + i];
+					for (i = 0; i < rsamplesperpixel; i++) {
+						int v = ((unsigned char *)inbuf)[x * rsamplesperpixel + i];
 //printf("~1 8 bit pixel value chan %d = %d\n",i,v);
 						if (su.isign_mask & (1 << i))		/* Treat input as signed */
 							v = (v & 0x80) ? v - 0x80 : v + 0x80;
@@ -1343,8 +1476,8 @@ main(int argc, char *argv[]) {
 //printf("~1 8 bit fp chan %d value = %f\n",i,in[i]);
 					}
 				} else {
-					for (i = 0; i < su.id; i++) {
-						int v = ((unsigned short *)inbuf)[x * su.id + i];
+					for (i = 0; i < rsamplesperpixel; i++) {
+						int v = ((unsigned short *)inbuf)[x * rsamplesperpixel + i];
 //printf("~1 16 bit pixel value chan %d = %d\n",i,v);
 						if (su.isign_mask & (1 << i))		/* Treat input as signed */
 							v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
@@ -1354,13 +1487,18 @@ main(int argc, char *argv[]) {
 					}
 				}
 
-				/* Apply the reference conversion */
-				input_curves((void *)&su, out, in);
+				if (su.nprofs > 0) {
+					/* Apply the reference conversion */
+					input_curves((void *)&su, out, in);
 //for (i = 0; i < su.id; i++) printf("~1 after input curve chan %d = %f\n",i,out[i]);
-				md_table((void *)&su, out, out);
-//for (i = 0; i < su.id; i++) printf("~1 after md table chan %d = %f\n",i,out[i]);
-				output_curves((void *)&su, out, out);
-//for (i = 0; i < su.id; i++) printf("~1 after output curve chan %d = %f\n",i,out[i]);
+					md_table((void *)&su, out, out);
+//for (i = 0; i < su.od; i++) printf("~1 after md table chan %d = %f\n",i,out[i]);
+					output_curves((void *)&su, out, out);
+//for (i = 0; i < su.od; i++) printf("~1 after output curve chan %d = %f\n",i,out[i]);
+				} else {
+					for (i = 0; i < su.od; i++)
+						 out[i] = in[i];
+				}
 
 				if (bitspersample == 8) {
 					for (i = 0; i < su.od; i++) {
@@ -1411,7 +1549,7 @@ main(int argc, char *argv[]) {
 			}
 		}
 			
-		if (slow) {	/* Use the results of the f.p. conversion */
+		if (slow || su.nprofs == 0) {	/* Use the results of the f.p. conversion */
 			if (TIFFWriteScanline(wh, precbuf, y, 0) < 0)
 				error ("Failed to write TIFF line %d",y);
 		} else {
@@ -1440,10 +1578,15 @@ main(int argc, char *argv[]) {
 		s->del(s);
 
 	TIFFClose(rh);		/* Close Input file */
-
-	/* ~~~ free up all the profiles etc in sequence */
-
 	TIFFClose(wh);		/* Close Output file */
+
+	/* Free up all the profiles etc. in the sequence. */
+	for (i = 0; i < su.nprofs; i++) {
+		su.profs[i].luo->del(su.profs[i].luo);
+		su.profs[i].c->del(su.profs[i].c);
+	}
+
+	
 
 	return 0;
 }

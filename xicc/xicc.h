@@ -59,11 +59,25 @@
 
 /* Pseudo intents, valid as parameter to xicc get_luobj(): */
 
-/* Default Color Appearance Space */
-#define icxAppearance ((icRenderingIntent)999)
+/* Default Color Appearance Space, based on absolute colorimetric */
+#define icxAppearance ((icRenderingIntent)994)
 
 /* Represents icAbsoluteColorimetric, converted to Color Appearance space */
-#define icxAbsAppearance ((icRenderingIntent)998)	/* Fixed D50 white point */
+#define icxAbsAppearance ((icRenderingIntent)995)	/* Fixed D50 white point */
+
+/* Special Color Appearance Space, based on "absolute" perceptual */
+#define icxPerceptualAppearance ((icRenderingIntent)996)
+
+/* Default Color Appearance Space, based on "absolute" saturation */
+#define icxSaturationAppearance ((icRenderingIntent)997)
+
+/* These two are for completeness, they are unlikely to be useful: */
+/* Special Color Appearance Space, based on "absolute" perceptual */
+#define icxAbsPerceptualAppearance ((icRenderingIntent)998)
+
+/* Default Color Appearance Space, based on "absolute" saturation */
+#define icxAbsSaturationAppearance ((icRenderingIntent)999)
+
 
 /* Pseudo PCS colospace returned as PCS for intent icxAppearanceJab */
 #define icxSigJabData ((icColorSpaceSignature) icmMakeTag('J','a','b',' '))
@@ -128,8 +142,8 @@ struct _icxClip {
 typedef struct {
 	ViewingCondition Ev;/* Enumerated Viewing Condition */
 	double Wxyz[3];		/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
-	double Yb;			/* Relative Luminance of Background to reference white */
 	double La;			/* Adapting/Surround Luminance cd/m^2 */
+	double Yb;			/* Relative Luminance of Background to reference white */
 	double Lv;			/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 						/* Ignored if Ev is set to other than vc_none */
 	double Yf;			/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
@@ -217,6 +231,8 @@ struct _xicc {
 	                                  int flags,				/* white/black point flags */
 	                                  int no,					/* Number of points */
 	                                  cow *points,				/* Array of input points */
+	                                  double dispLuminance,		/* > 0.0 if display luminance */
+	                                                                    /* value and is known */
 	                                  double smooth,			/* RSPL smoothing factor, */
 	                                                                        /* -ve if raw */
 	                                  double avgdev,			/* Avge Dev. of points */

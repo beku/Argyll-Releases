@@ -115,34 +115,34 @@ main(int argc, char* argv[])
 	unsigned char *inbuf, *outbuf;
 	char thing[1024];
 	int c;
-	extern int optind;
-	extern char *optarg;
+	extern int tiff_optind;
+	extern char *tiff_optarg;
 
-	while ((c = getopt(argc, argv, "c:r:R:G:B:")) != -1)
+	while ((c = tiff_getopt(argc, argv, "c:r:R:G:B:")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(optarg))
+			if (!processCompressOptions(tiff_optarg))
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(optarg);
+			rowsperstrip = atoi(tiff_optarg);
 			break;
 		case 'R':
-			RED = PCT(atoi(optarg));
+			RED = PCT(atoi(tiff_optarg));
 			break;
 		case 'G':
-			GREEN = PCT(atoi(optarg));
+			GREEN = PCT(atoi(tiff_optarg));
 			break;
 		case 'B':
-			BLUE = PCT(atoi(optarg));
+			BLUE = PCT(atoi(tiff_optarg));
 			break;
 		case '?':
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - optind < 2)
+	if (argc - tiff_optind < 2)
 		usage();
-	in = TIFFOpen(argv[optind], "r");
+	in = TIFFOpen(argv[tiff_optind], "r");
 	if (in == NULL)
 		return (-1);
 	photometric = 0;
@@ -150,26 +150,26 @@ main(int argc, char* argv[])
 	if (photometric != PHOTOMETRIC_RGB && photometric != PHOTOMETRIC_PALETTE ) {
 		fprintf(stderr,
 	    "%s: Bad photometric; can only handle RGB and Palette images.\n",
-		    argv[optind]);
+		    argv[tiff_optind]);
 		return (-1);
 	}
 	TIFFGetField(in, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
 	if (samplesperpixel != 1 && samplesperpixel != 3) {
 		fprintf(stderr, "%s: Bad samples/pixel %u.\n",
-		    argv[optind], samplesperpixel);
+		    argv[tiff_optind], samplesperpixel);
 		return (-1);
 	}
 	TIFFGetField(in, TIFFTAG_BITSPERSAMPLE, &bitspersample);
 	if (bitspersample != 8) {
 		fprintf(stderr,
-		    " %s: Sorry, only handle 8-bit samples.\n", argv[optind]);
+		    " %s: Sorry, only handle 8-bit samples.\n", argv[tiff_optind]);
 		return (-1);
 	}
 	TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &w);
 	TIFFGetField(in, TIFFTAG_IMAGELENGTH, &h);
 	TIFFGetField(in, TIFFTAG_PLANARCONFIG, &config);
 
-	out = TIFFOpen(argv[optind+1], "w");
+	out = TIFFOpen(argv[tiff_optind+1], "w");
 	if (out == NULL)
 		return (-1);
 	cpTags(in, out);
@@ -191,7 +191,7 @@ main(int argc, char* argv[])
 		}
 	}
 	TIFFSetField(out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
-	sprintf(thing, "B&W version of %s", argv[optind]);
+	sprintf(thing, "B&W version of %s", argv[tiff_optind]);
 	TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, thing);
 	TIFFSetField(out, TIFFTAG_SOFTWARE, "tiff2bw");
 	outbuf = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(out));

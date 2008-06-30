@@ -22,7 +22,7 @@
 #undef DEBUG_OFFSET	/* Keep test window out of the way */
 
 /* Invoke with -dfake for testing with a fake device */
-/* Will use fake.icm if present */
+/* Will use fake.icm/.icc if present */
 
 #define COMPORT 1		/* Default com port 1..4 */
 #define VERBOUT stdout
@@ -46,6 +46,7 @@
 #include "insttypes.h"
 #include "icoms.h"
 #include "inst.h"
+#include "conv.h"
 #include "dispwin.h"
 #include "dispsup.h"
 #include "sort.h"
@@ -80,7 +81,7 @@ void usage(char *diag, ...) {
 #else
 	fprintf(stderr," -d n                 Choose the display from the following list (default 1)\n");
 #endif
-//	fprintf(stderr," -d fake              Use a fake display device for testing, fake.icm if present\n");
+//	fprintf(stderr," -d fake              Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	dp = get_displays();
 	if (dp == NULL || dp[0] == NULL)
 		fprintf(stderr,"    ** No displays found **\n");
@@ -118,7 +119,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -p ho,vo,ss          Position test window and scale it\n");
 	fprintf(stderr,"                      ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                      ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
-	fprintf(stderr," -B                   Fill whole screen with black background\n");
+	fprintf(stderr," -F                   Fill whole screen with black background\n");
 #if defined(UNIX) && !defined(__APPLE__)
 	fprintf(stderr," -n                   Don't set override redirect on test window\n");
 #endif
@@ -157,7 +158,8 @@ int main(int argc, char *argv[])
 	char inname[MAXNAMEL+1] = "\000";	/* Input cgats file base name */
 	char outname[MAXNAMEL+1] = "\000";	/* Output cgats file base name */
 	char calname[MAXNAMEL+1] = "\000";	/* Calibration file name */
-	double cal[3][256];					/* Display calibration */
+	double cal[3][MAX_CAL_ENT];			/* Display calibration */
+	int ncal = 256;						/* number of cal entries used */
 	cgats *icg;							/* input cgats structure */
 	cgats *ocg;							/* output cgats structure */
 	time_t clk = time(0);
@@ -191,6 +193,9 @@ int main(int argc, char *argv[])
 
 	if (argc <= 1)
 		usage("Too few arguments");
+
+	if (ncal > MAX_CAL_ENT)
+		error("Internal, ncal = %d > MAX_CAL_ENT %d\n",ncal,MAX_CAL_ENT);
 
 	/* Process the arguments */
 	mfa = 1;        /* Minimum final arguments */
@@ -234,6 +239,8 @@ int main(int argc, char *argv[])
 							ix = atoi(na);
 							iv = 0;
 						}
+						if (disp != NULL)
+							free_a_disppath(disp);
 						if ((disp = get_a_display(ix-1)) == NULL)
 							usage("-d parameter %d out of range",ix);
 						if (iv > 0)
@@ -248,6 +255,8 @@ int main(int argc, char *argv[])
 					fake = 1;
 				} else {
 					ix = atoi(na);
+					if (disp != NULL)
+						free_a_disppath(disp);
 					if ((disp = get_a_display(ix-1)) == NULL)
 						usage("-d parameter %d out of range",ix);
 				}
@@ -299,7 +308,7 @@ int main(int argc, char *argv[])
 				vo = 2.0 * vo - 1.0;
 
 			/* Black background */
-			} else if (argv[fa][1] == 'B') {
+			} else if (argv[fa][1] == 'F') {
 				blackbg = 1;
 
 			} else if (argv[fa][1] == 'K') {
@@ -346,8 +355,23 @@ int main(int argc, char *argv[])
 
 	patsize *= patscale;
 
-	if (!fake && disp == NULL && (disp = get_a_display(0)) == NULL) {
-		error("Unable to open the display");
+	/* No explicit display has been set */
+	if (!fake && disp == NULL) {
+		int ix = 0;
+#if defined(UNIX) && !defined(__APPLE__)
+		char *dn, *pp;
+
+		if ((dn = getenv("DISPLAY")) != NULL) {
+			if ((pp = strrchr(dn, ':')) != NULL) {
+				if ((pp = strchr(pp, '.')) != NULL) {
+					if (pp[1] != '\000')
+						ix = atoi(pp+1);
+				}
+			}
+		}
+#endif
+		if ((disp = get_a_display(ix)) == NULL)
+			error("Unable to open the default display");
 	}
 
 	if (docalib) {
@@ -470,7 +494,6 @@ int main(int argc, char *argv[])
 	/* Setup a display calibration set if we are given one */
 	if (calname[0] != '\000') {
 		cgats *ccg;			/* calibration cgats structure */
-		int ncal;
 		int ii, ri, gi, bi;
 		
 		ccg = new_cgats();			/* Create a CGATS structure */
@@ -489,6 +512,8 @@ int main(int argc, char *argv[])
 	
 		if (ncal != 256)
 			error ("Expect 256 data sets in file '%s'",calname);
+		if (ncal > MAX_CAL_ENT)
+			error ("Cant handle %d data sets in file '%s', max is %d",ncal,calname,MAX_CAL_ENT);
 	
 		if ((fi = ccg->find_kword(ccg, 0, "DEVICE_CLASS")) < 0)
 			error ("Calibration file '%s' doesn't contain keyword COLOR_REPS",calname);
@@ -521,9 +546,10 @@ int main(int argc, char *argv[])
 		cal[0][0] = -1.0;	/* Not used */
 	}
 
-	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, nocal, highres, 0, cal,
-	          disp, blackbg, override, callout, patsize, ho, vo, spectral, verb, VERBOUT, debug,
-	                     "fake.icm")) == NULL)
+	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, nocal, highres, 0,
+	          cal, ncal, disp, blackbg, override, callout, patsize, ho, vo, spectral,
+	          verb, VERBOUT, debug,
+	                     "fake" ICC_FILE_EXT)) == NULL)
 		error("dispread failed with '%s'\n",disprd_err(errc));
 
 	/* Test the CRT with all of the test points */
@@ -616,8 +642,6 @@ int main(int argc, char *argv[])
 
 	/* Write out the calibration if we have it */
 	if (cal[0][0] >= 0.0) {
-		int calres = 256;	/* 256 steps in calibration */
-
 		ocg->add_other(ocg, "CAL"); 		/* our special type is Calibration file */
 		ocg->add_table(ocg, tt_other, 1);	/* Add another table for RAMDAC values */
 		ocg->add_kword(ocg, 1, "DESCRIPTOR", "Argyll Device Calibration State",NULL);
@@ -634,8 +658,8 @@ int main(int argc, char *argv[])
 		if ((setel = (cgats_set_elem *)malloc(sizeof(cgats_set_elem) * 4)) == NULL)
 			error("Malloc failed!");
 
-		for (i = 0; i < calres; i++) {
-			double vv = i/(calres-1.0);
+		for (i = 0; i < ncal; i++) {
+			double vv = i/(ncal-1.0);
 
 			setel[0].d = vv;
 			setel[1].d = cal[0][i];
@@ -647,7 +671,6 @@ int main(int argc, char *argv[])
 
 		free(setel);
 	}
-
 
 	if (ocg->write_name(ocg, outname))
 		error("Write error : %s",ocg->err);

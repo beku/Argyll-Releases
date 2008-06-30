@@ -24,13 +24,10 @@ of TIFF files for the film chart.<br>
 <br>
 <b>SPECTRO</b><br>
 <br>
-This directory contains the routines to read a print test chart with an
-Xrite DTP51 or DTP41, Gretag Spectroscan, a film test chart using a
-Gretag SpectroscanT, or a
-monitor adjustment and calibration using an Xrite DTP92 or DTP94 or
-Gretag Spectrolino, and
-create an appropriate CGATS
-file containing the raw printer calibration information. <br>
+This directory contains the implementation of all the instrument
+drivers, as well as the utilities to calibrate a display, take readings
+from a display, or read a test chart. It also contains the utility that
+supports installing and uninstalling display profiles.<br>
 <br>
 <b> PROFILE</b><br>
 <br>
@@ -150,9 +147,8 @@ and output the patch values using the CGATS file format. Typically this
 is
 used to get the patch information from a scan of an IT8 calibration
 chart.
-It also has a mode to use the scanner as a crude colorimeter, and
-convert
-a print test chart into approximate CIE values.<br>
+It also has a mode to use a scanned image to measure color, and
+convert a print test chart into approximate CIE values.<br>
 <br>
 <b>GAMUT</b><br>
 <br>
@@ -181,7 +177,6 @@ purposes.<br>
 <br>
 Where project common #include files live.<br>
 <br>
-<br>
 <span style="font-weight: bold;">BIN</span><br>
 <br>
 Where the main executables are copied to, when install.ksh or
@@ -199,8 +194,19 @@ is the only member.<br>
 <br>
 <span style="font-weight: bold;">RENDER</span><br>
 <span style="font-weight: bold;"></span><br>
-This is a library and set of tools for rendering to raster images.
-Currently it supports creating a couple of test images.<br>
+This is a library and set of tools for rendering to raster images. It
+supports creating a test images, and the raster output of <span
+ style="font-weight: bold;">printtarg</span>. <br>
+<br>
+<span style="font-weight: bold;">JCNF</span><br>
+<br>
+Implementation of color configuration file format using JSON, used by <span
+ style="font-weight: bold;">ucmm</span>.<br>
+<br>
+<span style="font-weight: bold;">UCMM</span><br>
+<br>
+Unix micro Color Management Module implementation, for supporting the
+installation and access to display profiles.<br>
 <br>
 <span style="font-weight: bold;">REF</span><br>
 <br>

@@ -11,9 +11,9 @@
 </head>
 <body>
 <h1>
-Argyll CMS documentation index (V0.70 Beta8)<br>
+Argyll CMS documentation index (V1.0.0)<br>
 </h1>
-Date:&nbsp;&nbsp; 15th January 2008
+Date:&nbsp;&nbsp; 27th June 2008
 <br>
 Author: Graeme Gill
 <h2><u>Introduction</u></h2>
@@ -38,8 +38,8 @@ Device color gamuts can also be viewed and compared using a VRML
 viewer. Comprehensive documentation is provided for each utility, and a
 general guide to using the tools for typical color management tasks is
 also available. A mailing list provides support for more advanced usage.<br>
-<p>This is Version 0.70 (Beta8). The last full release was in December
-2005.
+<p>This is Version 1.00. The last full release was in December
+2005, with V0.7 Beta releases in between.
 The first public release of icclib was in November 1998, and of Argyll
 was in July 2000. Code
 development
@@ -53,16 +53,26 @@ code.
 <p>The latest source code is available from <a
  href="http://www.argyllcms.com/">here</a>.
 </p>
-<p>Argyll is known to compile and run in at least four environments:
+<p>Argyll is known to compile and run in at least six environments:
 </p>
-1) MSWindows 2K system running the Microsoft VC++ 6.0 compiler and
-Jam/MR <br>
-2) MSWindows 2K system running the MingW port of the GCC compiler
-and Jam/MR
+1) MSWindows 2K system running the Microsoft VC++ 6.0 compiler<br>
+2) MSWindows 2K system running the MingW port of the GCC compiler<br>
+3) Linux on Fedora Core 8, 32 bit using gcc
 <br>
-3) Linux on Whitebox V4 x86 using gcc and Jam/MR
+4) Linux on Fedora Core 8, 64 bit using gcc<br>
+4) Apple OSX 10.3 PPC using gcc<br>
+5) Apple OSX 10.4 Intel using&nbsp; gcc<br>
+6) Apple OSX 10.5 Intel using&nbsp; gcc<br>
 <br>
-4) Apple OSX 10.3 gcc and Jam/MR
+It is also known to run on:<br>
+<br>
+&nbsp;MSWindows 2000, XP &amp; Vista<br>
+&nbsp;MSWindows Vista 64 (But most USB instruments won't work)<br>
+&nbsp;Linux Ubuntu 7.10<br>
+&nbsp;Linux Kubuntu 7.10<br>
+&nbsp;Linux Mandriva 2008.0<br>
+&nbsp;Linux OpenSuSE 10.3<br>
+&nbsp;Linux Whitebox 4.2/2<br>
 <p>but may well compile and run correctly in many more than this.
 </p>
 This is a <span style="font-weight: bold;">command line
@@ -72,77 +82,96 @@ should consult an appropriate tutorial for their environment if they
 are interested in using this software. See the listing of <a
  href="#cltutes">tutorials</a> below.<br>
 <br>
-It still has an amount of debugging turned on.<br>
-<p>It directly supports the following color measurement instruments:<br>
-</p>
+The following instruments are directly supported:<br>
+<br>
 X-Rite:<br>
-&nbsp;&nbsp;&nbsp; DTP20
-"Pulse"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-- "swipe" type reflective spectrometer, that can be used un-tethered.<br>
-&nbsp;&nbsp;&nbsp; DTP22 Digital
-Swatchbook&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; <a href="instruments.html#DTP20">DTP20
+"Pulse"</a>&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+- "swipe" type reflective spectrometer, that can be used untethered.<br>
+&nbsp;&nbsp;&nbsp; <a href="instruments.html#DTP22">DTP22 Digital
+Swatchbook</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 - spot type reflective spectrometer.<br>
 &nbsp;&nbsp;&nbsp;
-DTP41&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="instruments.html#DTP41">DTP41</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 - spot and strip reading reflective spectrometer.<br>
-&nbsp;&nbsp;&nbsp; DTP41T &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; <a href="instruments.html#DTP41">DTP41T</a> &nbsp;
+&nbsp; &nbsp;
+&nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-- spot and strip reading reflective/tranmissive spectrometer.<br>
+- spot and strip reading reflective/transmissive spectrometer.<br>
 &nbsp;&nbsp;&nbsp;
-DTP51&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="instruments.html#dtp51">DTP51</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 - strip reading reflective colorimeter.<br>
 &nbsp;&nbsp;&nbsp;
-DTP92,
-DTP92Q&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href="instruments.html#DTP92">DTP92</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 - CRT display colorimeter.<br>
-&nbsp;&nbsp;&nbsp; DTP94 <font size="-1">"Optix XR"</font> or "Optix
-XR2"&nbsp; - display colorimeter.<br>
+&nbsp;&nbsp;&nbsp; <a href="instruments.html#DTP94">DTP94</a> <font
+ size="-1">"Optix
+XR"</font> or "Optix
+XR2"
+or "Optix Pro"- display colorimeter.<br>
 <br>
-Gretag-Macbeth:<br>
-&nbsp; &nbsp; Spectrolino &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+Gretag-Macbeth (now X-Rite):<br>
+&nbsp; &nbsp; <a href="instruments.html#sl">Spectrolino</a> &nbsp;
+&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp; - spot reflective/emissive spectrometer<br>
-&nbsp; &nbsp; SpectroScan &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; <a href="instruments.html#ss">SpectroScan</a> &nbsp;
+&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; -
 spot reflective/emissive, XY table reflective spectrometer&nbsp; <br>
-&nbsp; &nbsp; SpectroScanT &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; <a href="instruments.html#ss">SpectroScanT</a> &nbsp;
+&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - spot
 reflective/emissive/transmissive, XY table reflective spectrometer<br>
-&nbsp; &nbsp; Eye-One Pro &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; <a href="instruments.html#i1p">Eye-One Pro</a> &nbsp;
+&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; -
 spot and "swipe" reflective/emissive spectrometer<br>
-&nbsp;&nbsp;&nbsp; Eye-One Display
+&nbsp;&nbsp;&nbsp; <a href="instruments.html#i1d">Eye-One Display
 1 or
-2&nbsp; or LT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+2&nbsp; or LT</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 - display colorimeter<br>
-&nbsp;&nbsp;&nbsp; Huey &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; <a href="instruments.html#Huey">Huey</a> &nbsp;
+&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 - display colorimeter<br>
 <br>
-Sequel imaging:<br>
-&nbsp;&nbsp;&nbsp;&nbsp; MonacoOPTIX &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+Sequel imaging (Now X-Rite):<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="instruments.html#mox">MonacoOPTIX</a>
+&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-- display colorimeter<br>
+- display colorimeter (Treated as an Eye-One Display 1)<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 [The Sequel Chroma 4 may also work.]<br>
 <br>
-ColorVision:<br>
-&nbsp;&nbsp;&nbsp;&nbsp; Spyder 2 &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
+DataColor ColorVision:<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="instruments.html#spyd2">Spyder 2</a>
+&nbsp; &nbsp;
+&nbsp; &nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-- display colorimeter (Note that user must <a href="spyd2en.html">supply</a>
-firmware.)<br>
+- display colorimeter (Note that the user must <a href="spyd2en.html">supply</a>
+firmware)<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-[The Spyder 1 also seems to work..]<br>
-Other:<br>
-&nbsp;&nbsp;&nbsp; <span class="titre">Colorim&egrave;tre
-HCFR&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-- display colorimeter<br>
+[The Spyder 1 also seems to work.]<br>
 <br>
+Other:<br>
+&nbsp;&nbsp;&nbsp; <span class="titre"><a href="instruments.html#HCFR">Colorim&egrave;tre
+HCFR</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+- display colorimeter</span><a href="instruments.html#xy"></a><br>
+<span style="font-weight: bold;"></span><span class="titre"><br>
 See </span><a href="instruments.html">Operation of particular
 instruments</a> for more instrument specific detail.<br>
 <br>
@@ -199,7 +228,7 @@ using Argyll, are not subject to any claims or restrictions of Argyll's
 author(s), but are assumed to be the copyright property of the person
 who gathers the
 characterization data, and causes the profiles to be created.
-<p>The Argyll CMS is Copyright 1995 - 2007 Graeme W. Gill, and is made
+<p>The Argyll CMS is Copyright 1995 - 2008 Graeme W. Gill, and is made
 available under the terms of the GNU General Public License Version 3,
 as
 detailed
@@ -210,32 +239,45 @@ and is
 made available under the terms of the GNU General Public
 License Version 2 or later,
 and is licensed here under the Version 3 license, as detailed in the <a
- href="License.txt">License.txt</a> file.
+ href="License.txt">License.txt</a> file.<br>
 </p>
-&lt;&gt;The icc library in icc/ and the CGATS library in cgats/ are
-Copyright 1995 - 2007 Graeme W. Gill, and available
-according to the "MIT" license granted in the icc/License.txt and
-cgats/License.txt file.<br>
-<br>
-The TIFF library included in this distribution for convenience, has
-its
-own copyright and license detailed in tiff/COPYRIGHT (an "MIT"/"BSD"
-like
-license).<br>
-<p>The UNIX USB library libusb included in this distribution for
-convenience, is copyright Johannes Erdfelt, Thomas Sailer and Brad
+<p>The utility spectro/average.c is Copyright 2008 Jordi Nodal and
+Graeme W. Gill,
+and is
+made available under the terms of the GNU General Public
+License Version 3 or later, as detailed in the <a href="License.txt">License.txt</a>
+file.
+</p>
+<p>The UNIX USB library libusb included in this distribution, is
+copyright Johannes Erdfelt, Thomas Sailer and Brad
 Hards, and is licensed under the GNU LGPL Version 2 or later. See&nbsp;
 libusb/LICENSE and libusb/COPYING for
 details. <br>
 </p>
-<p>The Win32 USB library libusb-win32, included in this distribution
-for
-convenience, is copyright Stephan Meyer,
+<p>The Win32 USB library libusb-win32, included in this distribution,
+is copyright Stephan Meyer,
 Johannes Erdfelt and Thomas Sailer, and is licensed under the GNU LGPL
 Version 2 (the DLL)&nbsp;
 and GPL (the drivers, services, installer). See&nbsp;
 libusbw/License.txt, libusbw/COPYING_LGPL.txt and
 libusbw/COPYING_GPL.txt for details.<br>
+<br>
+</p>
+<p>The icc library in<span style="font-weight: bold;"> icc</span>/, the
+CGATS library in <span style="font-weight: bold;">cgats</span>/, the
+jcnf
+library
+in <span style="font-weight: bold;">jcnf</span>/, and the ucmm library
+in <span style="font-weight: bold;">ucmm</span>/ are
+Copyright 1995 - 2008 Graeme W. Gill, and available
+according to the "MIT" license granted in the icc/License.txt and
+cgats/License.txt files, and the source files in jcnf/ and ucmm/.<br>
+<br>
+The TIFF library included in this distribution for convenience, has
+its
+own copyright and license detailed in tiff/COPYRIGHT (an "MIT"/"BSD"
+like
+license).
 </p>
 <h2><span style="text-decoration: underline; color: rgb(51, 0, 51);">What
 sort of project is this ? (re: contributions)<br>
@@ -245,7 +287,7 @@ GNU licensing conditions. Because I license my code under other
 licenses as well, there is a limit to what I will accept in the way of
 code contributions back into this project. For me to accept
 contributions into this distribution, it either has to be a
-non-essential side
+non-core side
 project, or has to be offered to me with copyright conditions that are
 compatible with my other uses (i.e.. a "BSD" like license, or assigning
 or licensing
@@ -258,9 +300,10 @@ from everyone and
 would essentially be a "fork" of this code base.<br>
 <br>
 <h1><u><a href="Compiling.html">Compiling</a></u></h1>
-How to build the software from the source.<br>
+How to <a href="Compiling.html">build the software</a> from the source.<br>
 <h1 style="color: rgb(51, 204, 0);"><u><a href="Installing.html">Installing</a></u></h1>
-Important notes on installing the software on various platforms.<br>
+Important notes on <a href="Installing.html">installing the software</a>
+on various platforms.<br>
 <br>
 <h2 style="color: rgb(51, 0, 51);"><u>Main Utilities and the command
 line<br>
@@ -274,7 +317,58 @@ possible arguments and usage of any of the utilities, run it with just
 an "-?" argument, i.e.
 <b>targen -? </b>(or some other unrecognized flag,
 if the "?" character is treated specially in your shell, i.e. try
-"--" on OS X).
+"--" on OS X zsh).<br>
+<br>
+Note that in general the arguments consist of possible flags or options
+followed by file name arguments. All arguments need to be separated by
+whitespace.&nbsp; (If you need to specify a string with embedded white
+space, double quote the string). A flag consists of a dash attached to
+a single letter, the letter identifying the flag, and is usually case
+sensitive. An option is a flag that has an associated parameter or
+parameters. The parameter can be separated from the flag by white
+space, or may come directly after the flag. So if a utility has a usage
+that looks like this:<br>
+<br>
+&nbsp; utility -?<br>
+&nbsp; usage: utility [options] infile outfile<br>
+&nbsp;&nbsp;
+-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose mode<br>
+&nbsp;&nbsp; -d
+n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Choose a depth 0-4<br>
+&nbsp;&nbsp; -r
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use a random depth<br>
+&nbsp;&nbsp; -f
+[nn]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use full range. nn optional range 0 - 100.<br>
+&nbsp;&nbsp; -M
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Manual<br>
+&nbsp;&nbsp; infile
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Input file<br>
+&nbsp;&nbsp; outfile
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Output file<br>
+<br>
+then there are&nbsp; 5 flags/options, and two filename arguments.
+Notice that square braces [] denote optional items. The first
+flag/option is a flag. The second is an option that has a numerical
+argument in the range 0 to 4. The third is a flag. the fourth is an
+option with an optional argument. The fourth is a flag.&nbsp; The flags
+and options can generally be in any order, but must be before the file
+name arguments. (For a few special utilities you actually specify a
+sequence of flags and files where the flags apply just to the following
+file.) So
+example invocations may look like:<br>
+<br>
+&nbsp; utility -v testin testout<br>
+&nbsp; utility -d3 -M testin1 testout2<br>
+&nbsp; utility -f infile outfile<br>
+&nbsp; utility -f 45 infile outfile<br>
+&nbsp; utility -d 3 -f67 infile outfile<br>
 <p>In order to make use of the tools, it is necessary to keep track of
 where various files are, and what they are called. There are many
 possible
@@ -326,7 +420,8 @@ Linux:<br>
 </p>
 <h2><u><a href="Scenarios.html">Tutorial: Typical
 usage scenarios and examples</a></u></h2>
-A guided tour of the major utilities, applied to typical CMS jobs, such
+A <a href="Scenarios.html">guided tour</a> of the major utilities,
+applied to typical CMS jobs, such
 as calibrating displays, creating device profiles, linking them, and
 converting color spaces
 of raster files.
@@ -365,7 +460,7 @@ film recorder TIFF files from Argyll .ti1 file.
 </big><br style="font-family: monospace;">
 <a style="font-family: monospace;" href="printtarg.html">printtarg</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><big>Create
-a PS or EPS file to containing test patch values, ready for
+a PS, EPS or TIFF file containing test patch values, ready for
 printing.</big></small>
 <h3>Obtaining test results for profiling</h3>
 <small><a style="font-family: monospace;" href="chartread.html">chartread</a><span
@@ -415,9 +510,12 @@ format.
 <a style="font-family: monospace;" href="fakeCMY.html">fakeCMY</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><big>Create
 a fake Argyll .ti3 CMY data file from a CMYK profile, as a basis
-of creating a CMY to CMYK separation</big></small>
+of creating a CMY to CMYK separation<br>
+</big></small><small><a style="font-family: monospace;"
+ href="average.html">average</a><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span><big>Average / Merge two measurement data files</big></small><br>
 <h3>Creating Device Profiles</h3>
-<small><a style="font-family: monospace;" href="profile.html">profile</a><span
+<small><a style="font-family: monospace;" href="colprof.html">colprof</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create
 an ICC profile from the .ti3 test data.
 <br>
@@ -436,7 +534,7 @@ separation.
 </span></small>Regenerate a device profiles B2A table data by inverting
 the A2B table.
 <h3>Linking Profiles</h3>
-<small><a style="font-family: monospace;" href="icclink.html">icclink</a><span
+<small><a style="font-family: monospace;" href="collink.html">collink</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Link
 two device ICC profiles to create a device link profile.
 <h3>Converting colors</h3>
@@ -524,30 +622,37 @@ single spot color value.
 <small><a style="font-family: monospace;" href="verify.html">verify</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Verify matching of
-CIE in two .ti3 files.
-<br>
-<small><a style="font-family: monospace;" href="displin.html">displin</a><span
+CIE in two .ti3 files (also view differences as VRML)<br>
+<small><a style="font-family: monospace;" href="synthcal.html">synthcal</a><span
  style="font-family: monospace;">
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create linear display
+&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create a synthetic display
 calibration (<a href="File_Formats.html#.cal">.cal</a>)file.
 <h3>Other Utilities</h3>
+<small><a style="font-family: monospace;" href="extracticc.html">extracticc</a><span
+ style="font-family: monospace;"></span></small><small><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </span>Extract an
+embedded ICC profile from a TIFF file.</small><br>
 <small><a style="font-family: monospace;" href="dispwin.html">dispwin</a><span
  style="font-family: monospace;"></span></small><small><span
- style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp; </span></small>Load
-Video LUT from profile or .cal file, or test dispcal and dispwin access
+ style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp; </span></small>Install
+or uninstall display profile, set display calibration from profile or
+.cal file, test displace and dispwin access
 to a display.<br>
 <small><a style="font-family: monospace;" href="spec2cie.html">spec2cie</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
  style="text-decoration: underline; font-family: monospace;"></span></small>Convert
 spectral .ti3
-readings into CIE XYZ or L*a*b* readings.<br>
+readings into CIE XYZ or L*a*b* readings. Apply FWA, plot spectrums.<br>
 <small><a style="font-family: monospace;" href="spyd2en.html">spyd2en</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
- style="text-decoration: underline; font-family: monospace;"></span></small>
-A special purpose utility that enables the Spyder 2
+ style="text-decoration: underline; font-family: monospace;"></span></small>A
+special purpose utility that enables the Spyder 2
 colorimeter.<br>
 &nbsp;
 <h2><b><u><font size="+2">Main Utilities Alphabetic Listing:</font></u></b></h2>
+<small><a style="font-family: monospace;" href="average.html">average</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><big>Average
+/ Merge two measurement data files</big></small><br>
 <small><a style="font-family: monospace;" href="cb2cgats.html">cb2cgats</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Convert
 Colorblind format CMY/RGB test chart into Argyll .ti3 CGATS
@@ -563,22 +668,31 @@ profiles<br>
 a test chart using an instrument to create a .ti3 data
 file.
 <br>
+<small><a style="font-family: monospace;" href="collink.html">collink</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Link
+two device ICC profiles to create a device link profile.
+<br>
+<small><a style="font-family: monospace;" href="colprof.html">colprof</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create
+an ICC profile from the .ti3 test data.
+<br>
 <small style="font-family: monospace;"><a href="dispcal.html">dispcal</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </small>Adjust, calibrate and profile
 a display<small><big>.</big></small><br>
-<small><a style="font-family: monospace;" href="displin.html">displin</a><span
- style="font-family: monospace;">
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create linear display
-calibration (<a href="File_Formats.html#.cal">.cal</a>)file.<br>
 <small><a style="font-family: monospace;" href="dispread.html">dispread</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Test
 and read colorimetric values from a display
 <br>
 <small><a style="font-family: monospace;" href="dispwin.html">dispwin</a><span
  style="font-family: monospace;"></span></small><small><span
- style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp; </span></small>Load
-Video LUT from profile or .cal file, or test dispcal and dispwin access
-to display.<br>
+ style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp; </span></small>Install
+or uninstall display profile, set display calibration from profile or
+.cal file, test displace and dispwin access
+to a display.<br>
+<small><a style="font-family: monospace;" href="extracticc.html">extracticc</a><span
+ style="font-family: monospace;"></span></small><small><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </span>Extract an
+embedded ICC profile from a TIFF file.</small><br>
 <small><a style="font-family: monospace;" href="fakeCMY.html">fakeCMY</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create
 a fake Argyll .ti3 CMY data file from a CMYK profile, as a basis
@@ -607,10 +721,6 @@ the contents of an ICC profile as text.
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create
 a gamut file or VRML file of the color gamut of an ICC
 profile.
-<br>
-<small><a style="font-family: monospace;" href="icclink.html">icclink</a><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Link
-two device ICC profiles to create a device link profile.
 <br>
 <small><a style="font-family: monospace;" href="icclu.html">icclu&nbsp;</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -650,17 +760,12 @@ files/views.
 data.
 <br>
 <small><a style="font-family: monospace;" href="printtarg.html">printtarg</a><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create
-a PS or EPS file to containing test patch values, ready for
-printing.
-<br>
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span></small><small><big>Create
+a PS, EPS or TIFF file containing test patch values, ready for
+printing.</big></small><br>
 <small><a style="font-family: monospace;" href="profcheck.html">profcheck</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Check
 an ICC profile against .ti3 test chart data.
-<br>
-<small><a style="font-family: monospace;" href="profile.html">profile</a><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create
-an ICC profile from the .ti3 test data.
 <br>
 <small><a style="font-family: monospace;" href="refine.html">refine</a><span
  style="font-family: monospace;">
@@ -687,7 +792,7 @@ separation.
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><span
  style="text-decoration: underline; font-family: monospace;"></span></small>Convert
 spectral .ti3
-readings into CIE XYZ or L*a*b* readings.<br>
+readings into CIE XYZ or L*a*b* readings. Apply FWA, plot spectrums.<br>
 <small><a style="font-family: monospace;" href="splitcgats.html">splitscgats</a><span
  style="font-family: monospace;">
 &nbsp; </span></small>Split a
@@ -703,6 +808,10 @@ single spot color value.
  style="text-decoration: underline; font-family: monospace;"></span></small>A
 special purpose utility that enables the Spyder 2
 colorimeter.<br>
+<small><a style="font-family: monospace;" href="synthcal.html">synthcal</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create a synthetic display
+calibration (<a href="File_Formats.html#.cal">.cal</a>)file.<br>
 <small><a style="font-family: monospace;" href="synthread.html">synthread</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><big>Fake
 the reading of a device using a synthetic device model.
@@ -723,9 +832,8 @@ images.
 <br>
 <font size="-1"><a style="font-family: monospace;" href="verify.html">verify</a><span
  style="font-family: monospace;">
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></font>Verify
-matching of CIE in two .ti3 files.
-<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></font>Verify matching of
+CIE in two .ti3 files (also view differences as VRML)<br>
 <font size="-1"><a style="font-family: monospace;" href="viewgam.html">viewgam</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></font>Convert one or more gamuts into
@@ -738,7 +846,12 @@ though an ICC
 profile
 table.
 <br>
-&nbsp;
+<br>
+<h2><u><a href="Performance.html">Performance Tuning<br>
+</a></u></h2>
+<span style="text-decoration: underline;"><span
+ style="font-weight: bold;"></span></span> Performance hints.
+<br>
 <h2><u><a href="Overview.html">Overview</a></u></h2>
 Overview of the software and its aims and functionality.<br>
 <h2><u><a href="Limitations.html">Limitations</a></u></h2>
@@ -753,12 +866,7 @@ it is based on. (Very incomplete.)
 A very brief description of minor utilities and test harnesses.
 <br>
 <br>
-<h2><u><a href="Performance.html">Performance Tuning<br>
-</a></u></h2>
-<span style="text-decoration: underline;"><span
- style="font-weight: bold;"></span></span> Performance hints.
 <br>
-&nbsp;
 <h2><u><a href="File_Formats.html">File formats that Argyll uses</a></u></h2>
 Argyll uses a number of file formats for its operation, some that are
 external
@@ -803,6 +911,9 @@ Tag Image File Format raster files.
 <a href="File_Formats.html#VRML">VRML</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Virtual Reality Modelling Language 3D file format.
 <br>
+<br>
+<a href="ucmm.html">ucmm</a> &nbsp; &nbsp;&nbsp;&nbsp; Unix micro Color
+Management Module convention and configuration file format.<br>
 &nbsp;
 <h2><u>Errors, Corrections and Omissions:</u></h2>
 <script language="JavaScript">

@@ -47,6 +47,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "huey.h"
 
 #undef DEBUG
@@ -60,10 +61,10 @@
 static inst_code huey_interp_code(inst *pp, int ec);
 static inst_code huey_check_unlock(huey *p);
 
-#define AMB_SCALE_FACTOR 0.0196528	/* Ambient mode scale factor */ 
-								/* This is only approximate, and were derived */
-								/* by matching readings from the i1pro. */
-								/* I'm not sure what the exact values are! */
+#define CALFACTOR 3.428         /* Emissive magic calibration factor */
+#define AMB_SCALE_FACTOR 7.806e-3	/* Ambient mode scale factor */ 
+									/* This is only approximate, and were derived */
+									/* by matching readings from the i1pro. */
 
 /* ------------------------------------------------------------------------ */
 /* Implementation */
@@ -186,7 +187,8 @@ huey_command(
 
 	/* Turn off low level debug messages, and sumarise them here */
 	isdeb = p->icom->debug;
-	p->icom->debug = 0;
+	if (isdeb <= 2)
+		p->icom->debug = 0;
 	
 	if (isdeb) fprintf(stderr,"huey: Sending cmd '%s' args '%s'",inst_desc(cc), icoms_tohex(in, 7));
 
@@ -297,7 +299,7 @@ huey_command(
 }
 
 /* Take an int, and convert it into a byte buffer */
-static void int2buf(char *buf, int inv) {
+static void int2buf(unsigned char *buf, int inv) {
 	buf[0] = (inv >> 24) & 0xff;
 	buf[1] = (inv >> 16) & 0xff;
 	buf[2] = (inv >> 8) & 0xff;
@@ -305,13 +307,13 @@ static void int2buf(char *buf, int inv) {
 }
 
 /* Take a short, and convert it into a byte buffer */
-static void short2buf(char *buf, int inv) {
+static void short2buf(unsigned char *buf, int inv) {
 	buf[0] = (inv >> 8) & 0xff;
 	buf[1] = (inv >> 0) & 0xff;
 }
 
 /* Take a word sized return buffer, and convert it to an int */
-static int buf2int(char *buf) {
+static int buf2int(unsigned char *buf) {
 	int val;
 	val = buf[0];
 	val = ((val << 8) + (0xff & buf[1]));
@@ -327,7 +329,7 @@ huey_rdreg_byte(
 	int *outp,				/* Where to write value */
 	int addr				/* Register Address, 0 - 255 */
 ) {
-	char buf[8];
+	unsigned char buf[8];
 	int rsize;
 	inst_code ev;
 
@@ -435,7 +437,7 @@ huey_wrreg_byte(
 	int addr				/* Register Address, 0 - 127 */
 ) {
 	int cval;
-	char ibuf[8], obuf[8];
+	unsigned char ibuf[8], obuf[8];
 	int rsize;
 	inst_code ev;
 
@@ -501,7 +503,7 @@ huey_rd_int_time(
 	huey *p,				/* Object */
 	int *outp				/* Where to write value */
 ) {
-	char buf[8];
+	unsigned char buf[8];
 	int rsize;
 	inst_code ev;
 
@@ -520,7 +522,7 @@ huey_wr_int_time(
 	huey *p,				/* Object */
 	int inv					/* Value to write */
 ) {
-	char buf[16];
+	unsigned char buf[16];
 	int rsize;
 	inst_code ev;
 
@@ -540,8 +542,8 @@ huey_take_first_raw_measurement_2(
 	double rgb[3]			/* Return the RGB values */
 ) {
 	int i;
-	char ibuf[8];
-	char obuf[8];
+	unsigned char ibuf[8];
+	unsigned char obuf[8];
 	inst_code ev;
 
 	/* Do the measurement, and return the Red value */
@@ -571,8 +573,8 @@ huey_take_raw_measurement_2(
 	double rgb[3]		/* Return the RGB values */
 ) {
 	int i;
-	char ibuf[16];
-	char obuf[16];
+	unsigned char ibuf[16];
+	unsigned char obuf[16];
 	int rsize;
 	inst_code ev;
 
@@ -608,8 +610,8 @@ huey_take_raw_measurement_3(
 	double rgb[3]		/* Return the RGB values */
 ) {
 	int i;
-	char ibuf[16];
-	char obuf[16];
+	unsigned char ibuf[16];
+	unsigned char obuf[16];
 	int rsize;
 	inst_code ev;
 
@@ -758,8 +760,8 @@ huey_take_amb_measurement_1(
 	int *rb				/* Returned byte */
 ) {
 	int i;
-	char ibuf[16];
-	char obuf[16];
+	unsigned char ibuf[16];
+	unsigned char obuf[16];
 	int rsize;
 	inst_code ev;
 
@@ -812,8 +814,8 @@ huey_set_LEDs(
 	int mask			/* 8 bit LED mask */
 ) {
 	int i;
-	char ibuf[8];
-	char obuf[8];
+	unsigned char ibuf[8];
+	unsigned char obuf[8];
 	inst_code ev;
 
 	mask &= 0xf;
@@ -862,7 +864,7 @@ huey_take_XYZ_measurement(
 			for (j = 0; j < 3; j++) {
 				XYZ[i] += mat[i * 3 + j] * rgb[j]; 
 			}
-			XYZ[i] *= 3.425014379251237;	/* Times magic scale factor */
+			XYZ[i] *= CALFACTOR;	/* Times magic scale factor */
 		}
 	}
 	DBG(("returning XYZ = %f %f %f\n",XYZ[0],XYZ[1],XYZ[2]))
@@ -876,7 +878,7 @@ static inst_code
 huey_check_unlock(
 	huey *p				/* Object */
 ) {
-	char buf[8];
+	unsigned char buf[8];
 	int rsize;
 	inst_code ev;
 	int vv;
@@ -888,8 +890,8 @@ huey_check_unlock(
 	if ((ev = huey_command(p, i1d_status, buf, buf, 1.0,1.0)) != inst_ok)
 		return ev;
 
-	if (strncmp(buf, "Locked", 6) == 0) {
-		strcpy(buf,"GrMb");
+	if (strncmp((char *)buf, "Locked", 6) == 0) {
+		strcpy((char *)buf,"GrMb");
 
 		if ((ev = huey_command(p, i1d_unlock, buf, buf, 1.0,1.0)) != inst_ok)
 			return ev;
@@ -898,7 +900,7 @@ huey_check_unlock(
 			return ev;
 	}
 
-	if (strncmp(buf, "Cir001", 6) != 0) {
+	if (strncmp((char *)buf, "Cir001", 6) != 0) {
 		return huey_interp_code((inst *)p, HUEY_UNKNOWN_MODEL);
 	}
 
@@ -1024,7 +1026,7 @@ huey_compute_factors(
 static inst_code
 huey_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	huey *p = (huey *) pp;
-	char buf[8];
+	unsigned char buf[8];
 	int rsize;
 	long etime;
 	int bi, i, rv;
@@ -1156,8 +1158,9 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	}
 
 	/* Read the XYZ value */
-	if ((rv = huey_take_XYZ_measurement(p, val->aXYZ)) != inst_ok)
+	if ((rv = huey_take_XYZ_measurement(p, val->aXYZ)) != inst_ok) {
 		return rv;
+	}
 
 	val->XYZ_v = 0;
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings ? */

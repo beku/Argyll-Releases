@@ -14,27 +14,51 @@
 </head>
 <body>
 <h1> Summary of Argyll CMS Changes since last release</h1>
-<h1>[V0.60 -&gt; V0.70 Beta] <br>
+<h1>[V0.70 Beta 8 -&gt; V1.0.0] <br>
 </h1>
 <br>
 Apart from numerous bug fixes and many minor feature additions and
 improvements, the main changes to this version compared to the previous
 one are:<br>
 <ul>
-  <li>Support for the Eye-One Display and Eye-One Pro instruments.</li>
-  <li>Support for the DTP20 "Pulse" Instrument</li>
-  <li>Support for the <span class="titre">Colorim&egrave;tre
-HCFR instrument.</span></li>
-  <li><span class="titre">Support for the DTP22/Digital Swatchbook</span></li>
-  <li><span class="titre">Serial port instrument types are now
-automatically recognized, just like USB instruments. You still have to
-specify the serial port though.<br>
-    </span></li>
+  <li>Speedup in profile and device link generation (inversion code),
+and better memory usage.<br>
+  </li>
+  <li>Support for embedded profiles in TIFF files.</li>
+  <li>Support for installing and uninstalling and loading of display
+profiles for all operating systems, and a micro CMM system for X11/Linux<br>
+  </li>
+  <li>Improved display calibration and profiling, including ambient
+light adjustment.</li>
+  <li>X11 XRandR 1.2 support added.</li>
+  <li>Raster test charts now supported, as well as PS and EPS.<br>
+  </li>
+  <li>Guidance for installing on a wider range of systems.</li>
+  <li>Fixed luminance and ambient calibration issues with various
+instruments.</li>
+  <li>Renamed "profile" to "colprof", and "icclink" to "collink" to
+avoid clashes that have arisen with other executable names.</li>
+  <li>Streamlined source code build system, for much easier building.<br>
+  </li>
+  <li>Installation archives now include a top directory, and gzip/tar
+format for OS X and Linux.</li>
 </ul>
 As usual, a more detailed description of all changes is in the <b>log.txt</b>
 file that accompanies the
 source
 code.
+<h1>[V0.60 -&gt; V0.70 Beta 8] </h1>
+<ul>
+  <li>Added quick display ICC profile creation as part of calibration.</li>
+  <li>Added support for the Huey, Spyder 2, DTP20, Eye-One Pro,
+DTP22/Digital Swatchbook, Eye-One Display 1 and 2 instruments.</li>
+  <li>Changed to GPL Version 3 license.</li>
+  <li>Countless other bug fixes and feature enhancements.<br>
+  </li>
+</ul>
+<br>
+<br>
+<br>
 <p><br>
 &nbsp; <br>
 &nbsp; <br>

@@ -19,22 +19,23 @@ colorspace, and can also represent the gamut as a VRML file. This
 can be used for visualizing and comparing the gamut of an image to the
 colorspace it is
 in, or a colorspace it might get transformed into, and can also be used
-to create an image source gamut for use with <a href="icclink.html">
-icclink</a>.<br>
+to create an image source gamut for use with <a href="collink.html">
+collink</a>.<br>
 <br>
 <span style="font-weight: bold;">NOTE</span> that if you are creating
-an image gamut suitable for use with the <a href="icclink.html">icclink</a>
-<a href="icclink.html#g">-g</a> or <a href="icclink.html#G">-G</a>
-flags, or <a href="profile.html#g">profile
+an image gamut suitable for use with the <a href="collink.html">collink</a>
+<a href="collink.html#g">-g</a> or <a href="collink.html#G">-G</a>
+flags, or <a href="colprof.html#g">colprof
 -g</a>, use the Jab appearance space intent for appearance space gamut
 mappings, and the same input viewing
-conditions to be used in <span style="font-weight: bold;">icclink</span>
-or <span style="font-weight: bold;">profile</span>
+conditions to be used in <span style="font-weight: bold;">collink</span>
+or <span style="font-weight: bold;">colprof</span>
 using
 the -c flag, i.e. "tiffgamut -ij -c2 sRGB.icm image.tif"<br>
 <h3>Usage Summary</h3>
 <small><span style="font-family: monospace;">tiffgamut [-v level]
-profile.icm infile.tif</span><br style="font-family: monospace;">
+[profile.icm | embedded.tif] infile.tif</span><br
+ style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Verbose</span><br style="font-family: monospace;">
 &nbsp;
@@ -55,16 +56,24 @@ intent&nbsp;&nbsp;&nbsp;&nbsp; p =
 perceptual, r = relative colorimetric,</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-s = saturation, a = absolute, j = Appearance
-CIECAM02</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-o
+s = saturation, a = absolute (default), d = profile default</span></small><small><span
+ style="font-family: monospace;"></span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;-o
 order&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; n = normal
 (priority: lut &gt; matrix &gt; monochrome)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 r = reverse (priority: monochrome &gt;
-matrix &gt; lut)</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-c viewcond&nbsp;&nbsp; set
+matrix &gt; lut)<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><span
+ style="font-family: monospace;">-p oride</span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; l =
+Lab_PCS (default), j = CIECAM02 Appearance Jab</span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;-c viewcond&nbsp;&nbsp; set
 appearance mode and viewing conditions for CIECAM02,</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;"></span><span
@@ -161,12 +170,12 @@ each of the primary and secondary "cusp" points (Red, Yellow, Green,
 Cyan, Blue &amp; Magenta). No markers will be displayed if the cusps
 cannot be determined.<br>
 <br>
-The <b>-i</b> parameter allows choosing the ICC profile table being
-used by
-its intent. Anything other than colorimetric may not represent the
-native capabilities of the device. The j parameter interprets the
-absolute colorimetric table in terms of CIECAM02 appearance space Jab
-values.<br>
+The <b>-i</b> flag selects the intent transform used for a lut based
+profile. It also selects between relative and absolute colorimetric for
+non-lut base profiles. Note that anything other than colorimetric may
+not represent the
+native capabilities of the device. The default intent will be absolute
+colorimetic for L*a*b* output, and CIECAM02 appearance for Jab output.<br>
 <br>
 An ICC profile is allowed to contain more than the minimum number of
 elements or table needed to describe a certain transform, and may
@@ -177,12 +186,52 @@ information if it is all that is present. The <b>-o</b> flag, reverses
 this
 order.&nbsp;&nbsp;&nbsp; <br>
 <br>
+<span style="font-weight: bold;">-p</span>: By default the gamut will
+be created in L*a*b* colorspace. If&nbsp; <span
+ style="font-weight: bold;">-pj</span> is selected, then CIECAM02
+appearance space Jab will be used for the output, and the viewing
+conditions will be taken into account. Jab space is what is normally
+needed to be compatible with the default intents used in <a
+ href="colprof.html">colprof</a>. <span style="font-weight: bold;"><br>
+</span>Note that the CIECAM02 output space selection by default uses
+the colorimetric transform of the profile resulting in the appearance
+of the native device, but that the perceptual or
+saturation transforms may be used by selecting them using the <span
+ style="font-weight: bold;">-i</span> parameter, which may give a
+different result with some profiles. This may be desirable if an image
+is to be transformed through the perceptual or saturation tables of a
+profile as part of a link with an Argyll generated output profile,
+since it will then represent the apparent gamut of the image when
+subject to these tables. If the absolute colorimetric intent is chosen
+using <span style="font-weight: bold;">-ia</span> in combinations with
+<span style="font-weight: bold;">-pj</span>, then&nbsp; Jab with
+a fixed white reference is used, which emulates an absolute CIECAM02
+Jab
+appearance space. <br>
+<br>
 The <span style="font-weight: bold;">-c</span> parameter sets the
 output space to CIECAM02 appearance Jab values, and also allows
 choosing
 a set of viewing conditions, either by choosing a typical viewing
 environment, or controlling
-particular viewing condition parameters.<br>
+particular viewing condition parameters. This is only functional if an
+ICC profile is provided.<br>
+<br>
+If the TIFF file is in a device space (ie. RGB, CMYK etc.), then it is
+necessary to supply an ICC profile to translate the device space values
+to a CIE space value such as L*a*b* or CIECAM02 Jab space for creating
+a gamut surface. For the ICC profile provided it is then possible to
+select exactly what type of conversion is used. A TIFF file with an
+embeded ICC profile may be supplied as the profile argument - e.g. to
+get the gamut of a tiff file that contains an embedded profile use
+something like:<br>
+<br>
+&nbsp;&nbsp;&nbsp; tiffgamut image.tif image.tif<br>
+<br>
+If a TIFF file is
+already in a CIE space such as CIELab or ICCLab, then it is not
+necessary to select an ICC profile,&nbsp; although a PCS to PCS
+colorspace profile may be chosen.<br>
 <span style="font-weight: bold;"></span><br>
 <br>
 <br>

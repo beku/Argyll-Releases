@@ -133,29 +133,29 @@ void	rasterize(int, char*);
 int
 main(int argc, char* argv[])
 {
-    extern int optind;
-    extern char *optarg;
+    extern int tiff_optind;
+    extern char *tiff_optarg;
     int c, status;
 
-    while ((c = getopt(argc, argv, "c:r:")) != -1)
+    while ((c = tiff_getopt(argc, argv, "c:r:")) != -1)
 	    switch (c) {
 	    case 'c':		/* compression scheme */
-		    if (!processCompressOptions(optarg))
+		    if (!processCompressOptions(tiff_optarg))
 			    usage();
 		    break;
 	    case 'r':		/* rows/strip */
-		    rowsperstrip = atoi(optarg);
+		    rowsperstrip = atoi(tiff_optarg);
 		    break;
 	    case '?':
 		    usage();
 		    /*NOTREACHED*/
 	    }
-    if (argc - optind != 2)
+    if (argc - tiff_optind != 2)
 	    usage();
 
     makegamtab(GIFGAMMA);
-    filename = argv[optind];
-    imagename = argv[optind+1];
+    filename = argv[tiff_optind];
+    imagename = argv[tiff_optind+1];
     if ((infile = fopen(imagename, "r" BINMODE)) != NULL) {
 	int c;
 	fclose(infile);

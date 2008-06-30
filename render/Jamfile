@@ -1,14 +1,12 @@
 
-#SubDir TOP render ;
-
 # Optimization and Debug flags
 
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-#CCFLAGS		+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;      # Link with debug info
-#CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
-#LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
+#PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS		+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;      # Link with debug info
+#PREF_CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#PREF_LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
 
 #Products
 Libraries = librender ;
@@ -16,17 +14,16 @@ Executables = timage ;
 Headers = render.h ;
 
 #Install
-InstallBin $(DOTDOT)$(SLASH)bin : $(Executables)$(SUFEXE) ;
-#InstallFile $(DOTDOT)$(SLASH)h : $(Headers) ;
-#InstallLib $(DOTDOT)$(SLASH)lib : $(Libraries)$(SUFLIB) ;
+InstallBin ../bin : $(Executables) ;
+#InstallFile ../h : $(Headers) ;
+#InstallLib ../lib : $(Libraries) ;
+
+HDRS = ../h ../numlib $(TIFFINC) ;
 
 # 2D Rendering library
-Library librender.lib : render.c ;
-ObjectHdrs render$(SUFOBJ) : ../h ../numlib ../tiff ;
+Library librender : render.c ;
 
-Main timage : timage.c ;
-ObjectHdrs timage$(SUFOBJ) : ../h ../numlib ../tiff ;
-LinkLibraries timage : librender.lib ../numlib/libnum.lib ../tiff/libtiff.lib ;
+Main timage : timage.c : : : : : librender ../numlib/libnum $(TIFFLIB) ;
 
 if $(BUILD_JUNK) {
 

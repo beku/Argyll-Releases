@@ -354,9 +354,8 @@ int main(int argc, char *argv[])
 				if ((spi[j] = icg->find_field(icg, 0, buf)) < 0)
 					error("Input file doesn't contain field %s",buf);
 			}
-		}
 
-		if (ospec) {			/* Record spectral parameters */
+			/* Record spectral parameters */
 			spec_n = sp.spec_n;
 			spec_wl_short = sp.spec_wl_short;
 			spec_wl_long = sp.spec_wl_long;

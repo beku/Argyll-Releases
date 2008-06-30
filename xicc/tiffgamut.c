@@ -20,8 +20,6 @@
  *		icclink can be detected or allowed for.
  *
  *       Need to cope with profile not having black point.
- *
- *       Should handle L*a*b* TIFF files.
  */
 
 
@@ -31,8 +29,10 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
-#include "tiffio.h"
+#include "copyright.h"
+#include "config.h"
 #include "numlib.h"
+#include "tiffio.h"
 #include "icc.h"
 #include "gamut.h"
 #include "xicc.h"
@@ -43,16 +43,18 @@ void error(char *fmt, ...), warning(char *fmt, ...);
 
 void usage(void) {
 	int i;
-	fprintf(stderr,"Create VRML image of the gamut surface of a TIFF, V2.00\n");
+	fprintf(stderr,"Create VRML image of the gamut surface of a TIFF, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	fprintf(stderr,"usage: tiffgamut [-v level] profile.icm infile.tif\n");
+	fprintf(stderr,"usage: tiffgamut [-v level] [profile.icm | embeded.tif] infile.tif\n");
 	fprintf(stderr," -v            Verbose\n");
 	fprintf(stderr," -d sres       Surface resolution details 1.0 - 50.0\n");
 	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .gam file\n");
 	fprintf(stderr," -n            Don't add VRML axes or white/black point\n");
 	fprintf(stderr," -k            Add markers for prim. & sec. \"cusp\" points\n");
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
-	fprintf(stderr,"               s = saturation, a = absolute, j = Appearance %s\n",icxcam_description(cam_default));
+	fprintf(stderr,"               s = saturation, a = absolute (default), d = profile default\n");
+//  fprintf(stderr,"               P = absolute perceptual, S = absolute saturation\n");
+	fprintf(stderr," -p oride      l = Lab_PCS (default), j = %s Appearance Jab\n",icxcam_description(cam_default),icxcam_description(cam_default));
 	fprintf(stderr," -o order      n = normal (priority: lut > matrix > monochrome)\n");
 	fprintf(stderr,"               r = reverse (priority: monochrome > matrix > lut)\n");
 	fprintf(stderr," -c viewcond   set appearance mode and viewing conditions for %s,\n",icxcam_description(cam_default));
@@ -78,54 +80,151 @@ void usage(void) {
 
 #define GAMRES 15.0		/* Default surface resolution */
 
-/* Convert an ICC colorspace to the corresponding TIFF Photometric tag */
-/* return 0xffff if not possible. */
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-int
-ColorSpaceSignature2TiffPhotometric(
-icColorSpaceSignature cspace
-) {
-	switch(cspace) {
-		case icSigGrayData:
-			return PHOTOMETRIC_MINISBLACK;
-		case icSigRgbData:
-			return PHOTOMETRIC_RGB;
-		case icSigCmykData:
-			return PHOTOMETRIC_SEPARATED;
-		case icSigYCbCrData:
-			return PHOTOMETRIC_YCBCR;
-		case icSigLabData:
-			return PHOTOMETRIC_CIELAB;
+/* Conversion functions from direct binary 0..n^2-1 == 0.0 .. 1.0 range */
+/* to ICC luo input range. */
+/* It is assumed that the binary has been sign corrected to be */
+/* contiguous (ie CIELab). */
 
-		case icSigXYZData:
-		case icSigLuvData:
-		case icSigYxyData:
-		case icSigHsvData:
-		case icSigHlsData:
-		case icSigCmyData:
-		case icSig2colorData:
-		case icSig3colorData:
-		case icSig4colorData:
-		case icSig5colorData:
-		case icSigMch5Data:
-		case icSig6colorData:
-		case icSigMch6Data:
-		case icSig7colorData:
-		case icSigMch7Data:
-		case icSig8colorData:
-		case icSigMch8Data:
-		case icSig9colorData:
-		case icSig10colorData:
-		case icSig11colorData:
-		case icSig12colorData:
-		case icSig13colorData:
-		case icSig14colorData:
-		case icSig15colorData:
-		default:
-			return 0xffff;
-	}
-	return 0xffff;
+/* TIFF 8 bit CIELAB to standard L*a*b* */
+/* Assume that a & b have been converted from signed to offset */
+static void cvt_CIELAB8_to_Lab(double *out, double *in) {
+	out[0] = in[0] * 100.0;
+	out[1] = in[1] * 255.0 - 128.0;
+	out[2] = in[2] * 255.0 - 128.0;
 }
+
+/* TIFF 16 bit CIELAB to standard L*a*b* */
+/* Assume that a & b have been converted from signed to offset */
+static void cvt_CIELAB16_to_Lab(double *out, double *in) {
+	out[0] = in[0] * 100.0;
+	out[1] = (in[1] - 32768.0/65535.0) * 256.0;
+	out[2] = (in[2] - 32768.0/65535.0) * 256.0;
+}
+
+/* TIFF 8 bit ICCLAB to standard L*a*b* */
+static void cvt_ICCLAB8_to_Lab(double *out, double *in) {
+	out[0] = in[0] * 100.0;
+	out[1] = (in[1] * 255.0) - 128.0;
+	out[2] = (in[2] * 255.0) - 128.0;
+}
+
+/* TIFF 16 bit ICCLAB to standard L*a*b* */
+static void cvt_ICCLAB16_to_Lab(double *out, double *in) {
+	out[0] = in[0] * (100.0 * 65535.0)/65280.0;
+	out[1] = (in[1] * (255.0 * 65535.0)/65280) - 128.0;
+	out[2] = (in[2] * (255.0 * 65535.0)/65280) - 128.0;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Convert a TIFF Photometric tag to an ICC colorspace. */
+/* return 0 if not possible or applicable. */
+icColorSpaceSignature 
+TiffPhotometric2ColorSpaceSignature(
+void (**icvt)(double *out, double *in),	/* Return read conversion function, NULL if none */
+int *smsk,			/* Return signed handling mask, 0x0 if none */
+int pmtc,			/* Input TIFF photometric */
+int bps,			/* Input Bits per sample */
+int spp,			/* Input Samples per pixel */
+int extra			/* Extra Samples per pixel, if any */
+) {
+	if (icvt != NULL)
+		*icvt = NULL;		/* Default return values */
+	if (smsk != NULL)
+		*smsk = 0x0;
+
+	switch (pmtc) {
+		case PHOTOMETRIC_MINISWHITE:	/* Subtractive Gray */
+			return icSigGrayData;
+
+		case PHOTOMETRIC_MINISBLACK:	/* Additive Gray */
+			return icSigGrayData;
+
+		case PHOTOMETRIC_RGB:
+			return icSigRgbData;
+
+		case PHOTOMETRIC_PALETTE:
+			return 0x0;
+
+		case PHOTOMETRIC_MASK:
+			return 0x0;
+
+		case PHOTOMETRIC_SEPARATED:
+			/* Should look at the colorant names to figure out if this is CMY, CMYK */
+			/* Should at least return both Cmy/3 or Cmyk/4 ! */
+			switch(spp) {
+				case 2:
+					return icSig2colorData;
+				case 3:
+//					return icSig3colorData;
+					return icSigCmyData;
+				case 4:
+//					return icSig4colorData;
+					return icSigCmykData;
+				case 5:
+					return icSig5colorData;
+				case 6:
+					return icSig6colorData;
+				case 7:
+					return icSig7colorData;
+				case 8:
+					return icSig8colorData;
+				case 9:
+					return icSig9colorData;
+				case 10:
+					return icSig10colorData;
+				case 11:
+					return icSig11colorData;
+				case 12:
+					return icSig12colorData;
+				case 13:
+					return icSig13colorData;
+				case 14:
+					return icSig14colorData;
+				case 15:
+					return icSig15colorData;
+			}
+
+		case PHOTOMETRIC_YCBCR:
+			return icSigYCbCrData;
+
+		case PHOTOMETRIC_CIELAB:
+			if (bps == 8) {
+				if (icvt != NULL)
+					*icvt = cvt_CIELAB8_to_Lab;
+			} else {
+				if (icvt != NULL)
+					*icvt = cvt_CIELAB16_to_Lab;
+			}
+			*smsk = 0x6;				/* Treat a & b as signed */
+			return icSigLabData;
+
+		case PHOTOMETRIC_ICCLAB:
+			if (bps == 8) {
+				if (icvt != NULL)
+					*icvt = cvt_ICCLAB8_to_Lab;
+			} else {
+				if (icvt != NULL)
+					*icvt = cvt_ICCLAB16_to_Lab;
+			}
+			return icSigLabData;
+
+		case PHOTOMETRIC_ITULAB:
+			return 0x0;					/* Could add this with a conversion function */
+										/* but have to allow for variable ITU gamut */
+										/* (Tag 433, "Decode") */
+
+		case PHOTOMETRIC_LOGL:
+			return 0x0;					/* Could add this with a conversion function */
+
+		case PHOTOMETRIC_LOGLUV:
+			return 0x0;					/* Could add this with a conversion function */
+	}
+	return 0x0;
+}
+
 
 char *
 Photometric2str(
@@ -144,30 +243,38 @@ int pmtc
 		case PHOTOMETRIC_MASK:
 			return "Transparency Mask";
 		case PHOTOMETRIC_SEPARATED:
-			return "CMYK";
+			return "Separated";
 		case PHOTOMETRIC_YCBCR:
 			return "YCbCr";
 		case PHOTOMETRIC_CIELAB:
 			return "CIELab";
+		case PHOTOMETRIC_ICCLAB:
+			return "ICCLab";
+		case PHOTOMETRIC_ITULAB:
+			return "ITULab";
 		case PHOTOMETRIC_LOGL:
 			return "CIELog2L";
 		case PHOTOMETRIC_LOGLUV:
 			return "CIELog2Luv";
 	}
-	sprintf(buf,"Unknown Tag %d",pmtc);
+	sprintf(buf,"Unknown Photometric Tag %d",pmtc);
 	return buf;
 }
 
 int
 main(int argc, char *argv[]) {
 	int fa,nfa;					/* argument we're looking at */
-	char prof_name[100];		/* Icc profile name */
+	char prof_name[100] = { '\000' };	/* ICC profile name, "" if none */
 	char in_name[100];			/* TIFF input file */
 	char *xl, out_name[100];	/* VRML output file */
+	int verb = 0;
+	int vrml = 0;
+	int doaxes = 1;
+	int docusps = 0;
+	int rv = 0;
 
-	icmFile *p_fp;
-	icc *icco;
-	xicc *xicco;
+	icc *icco = NULL;
+	xicc *xicco = NULL;
 	icxViewCond vc;				/* Viewing Condition for CIECAM */
 	int vc_e = -1;				/* Enumerated viewing condition */
 	int vc_s = -1;				/* Surround override */
@@ -178,11 +285,14 @@ main(int argc, char *argv[]) {
 	double vc_f = -1.0;			/* Flare % overid */
 	double vc_fXYZ[3] = {-1.0, -1.0, -1.0};	/* Flare color override in XYZ */
 	double vc_fxy[2] = {-1.0, -1.0};		/* Flare color override in x,y */
-	int verb = 0;
-	int vrml = 0;
-	int doaxes = 1;
-	int docusps = 0;
-	int rv = 0;
+	icxLuBase *luo = NULL;					/* Generic lookup object */
+	icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
+	int inn, outn;						/* Number of components */
+	icmLuAlgType alg;					/* Type of lookup algorithm */
+	icmLookupFunc     func   = icmFwd;				/* Must be */
+	icRenderingIntent intent = -1;					/* Default */
+	icColorSpaceSignature pcsor = icSigLabData;		/* Default */
+	icmLookupOrder    order  = icmLuOrdNorm;		/* Default */
 
 	TIFF *rh = NULL;
 	int x, y, width, height;					/* Size of image */
@@ -191,21 +301,17 @@ main(int argc, char *argv[]) {
 	uint16 resunits;
 	float resx, resy;
 	tdata_t *inbuf;
+	void (*cvt)(double *out, double *in);		/* TIFF conversion function, NULL if none */
+	icColorSpaceSignature tcs;					/* TIFF colorspace */
+	uint16 extrasamples;						/* Extra "alpha" samples */
+	uint16 *extrainfo;							/* Info about extra samples */
+	int sign_mask;								/* Handling of encoding sign */
 
 	double gamres = GAMRES;				/* Surface resolution */
 	gamut *gam;
-
-	icxLuBase *luo;						/* Generic lookup object */
-	icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
-	int inn, outn;						/* Number of components */
-	icmLuAlgType alg;					/* Type of lookup algorithm */
-
-	/* Lookup parameters */
-	icmLookupFunc     func   = icmFwd;				/* Must be */
-	icRenderingIntent intent = icAbsoluteColorimetric;	/* Default */
-	icColorSpaceSignature pcsor = icSigLabData;		/* Default */
-	icmLookupOrder    order  = icmLuOrdNorm;		/* Default */
 	
+	error_program = argv[0];
+
 	if (argc < 2)
 		usage();
 
@@ -239,26 +345,28 @@ main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage();
     			switch (na[0]) {
+					case 'd':
+						intent = icmDefaultIntent;
+						break;
+					case 'a':
+						intent = icAbsoluteColorimetric;
+						break;
 					case 'p':
-					case 'P':
 						intent = icPerceptual;
 						break;
 					case 'r':
-					case 'R':
 						intent = icRelativeColorimetric;
 						break;
 					case 's':
-					case 'S':
 						intent = icSaturation;
 						break;
-					case 'a':
-					case 'A':
-						intent = icAbsoluteColorimetric;
+					/* Argyll special intents to check spaces underlying */
+					/* icxPerceptualAppearance & icxSaturationAppearance */
+					case 'P':
+						intent = icmAbsolutePerceptual;
 						break;
-					case 'j':
-					case 'J':
-						intent = icxAppearance;
-						pcsor = icxSigJabData;
+					case 'S':
+						intent = icmAbsoluteSaturation;
 						break;
 					default:
 						usage();
@@ -283,13 +391,28 @@ main(int argc, char *argv[]) {
 				}
 			}
 
+			/* PCS override */
+			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+				fa = nfa;
+				if (na == NULL) usage();
+    			switch (na[0]) {
+					case 'l':
+						pcsor = icSigLabData;
+						break;
+					case 'j':
+						pcsor = icxSigJabData;
+						break;
+					default:
+						usage();
+				}
+			}
+
 			/* Viewing conditions */
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
 				if (na == NULL) usage();
 
 				/* Switch to Jab automatically */
-				intent = icxAppearance;
 				pcsor = icxSigJabData;
 
 				/* Set the viewing conditions */
@@ -365,87 +488,18 @@ main(int argc, char *argv[]) {
 	}
 
 	if (fa >= argc || argv[fa][0] == '-') usage();
-	strcpy(prof_name,argv[fa++]);
+	if (fa < (argc-1))
+		strcpy(prof_name,argv[fa++]);
 
 	if (fa >= argc || argv[fa][0] == '-') usage();
 	strcpy(in_name,argv[fa++]);
 
-	/* - - - - - - - - - - - - - - - - */
-	/* Open up the profile for reading */
-	if ((p_fp = new_icmFileStd_name(prof_name,"r")) == NULL)
-		error ("Can't open file '%s'",prof_name);
-
-	if ((icco = new_icc()) == NULL)
-		error ("Creation of ICC object failed");
-
-	if ((rv = icco->read(icco,p_fp,0)) != 0)
-		error ("%d, %s",rv,icco->err);
-
-	if (verb) {
-		icmFile *op;
-		if ((op = new_icmFileStd_fp(stdout)) == NULL)
-			error ("Can't open stdout");
-		icco->header->dump(icco->header, op, 1);
-		op->del(op);
+	if (intent == -1) {
+		if (pcsor == icxSigJabData)
+			intent = icRelativeColorimetric;	/* Default to icxAppearance */
+		else
+			intent = icAbsoluteColorimetric;	/* Default to icAbsoluteColorimetric */
 	}
-
-	/* Check that the profile is appropriate */
-	if (icco->header->deviceClass != icSigInputClass
-	 && icco->header->deviceClass != icSigDisplayClass
-	 && icco->header->deviceClass != icSigOutputClass)
-		error("Profile isn't a device profile");
-
-	/* Wrap with an expanded icc */
-	if ((xicco = new_xicc(icco)) == NULL)
-		error ("Creation of xicc failed");
-
-	/* Setup the default viewing conditions */
-	if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0) == -999)
-		error ("%d, %s",xicco->errc, xicco->err);
-
-	if (vc_e != -1)
-		if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0) == -999)
-			error ("%d, %s",xicco->errc, xicco->err);
-	if (vc_s >= 0)
-		vc.Ev = vc_s;
-	if (vc_wXYZ[1] > 0.0) {
-		/* Normalise it to current media white */
-		vc.Wxyz[0] = vc_wXYZ[0]/vc_wXYZ[1] * vc.Wxyz[1];
-		vc.Wxyz[2] = vc_wXYZ[2]/vc_wXYZ[1] * vc.Wxyz[1];
-	} 
-	if (vc_wxy[0] >= 0.0) {
-		double x = vc_wxy[0];
-		double y = vc_wxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
-		double z = 1.0 - x - y;
-		vc.Wxyz[0] = x/y * vc.Wxyz[1];
-		vc.Wxyz[2] = z/y * vc.Wxyz[1];
-	}
-	if (vc_a >= 0.0)
-		vc.La = vc_a;
-	if (vc_b >= 0.0)
-		vc.Yb = vc_b/100.0;
-	if (vc_f >= 0.0)
-		vc.Yf = vc_f/100.0;
-	if (vc_fXYZ[1] > 0.0) {
-		/* Normalise it to current media white */
-		vc.Fxyz[0] = vc_fXYZ[0]/vc_fXYZ[1] * vc.Fxyz[1];
-		vc.Fxyz[2] = vc_fXYZ[2]/vc_fXYZ[1] * vc.Fxyz[1];
-	}
-	if (vc_fxy[0] >= 0.0) {
-		double x = vc_fxy[0];
-		double y = vc_fxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
-		double z = 1.0 - x - y;
-		vc.Fxyz[0] = x/y * vc.Fxyz[1];
-		vc.Fxyz[2] = z/y * vc.Fxyz[1];
-	}
-
-	/* Get a expanded color conversion object */
-	if ((luo = xicco->get_luobj(xicco, 0
-	   | ICX_CLIP_NEAREST
-	           , func, intent, pcsor, order, &vc, NULL)) == NULL)
-		error ("%d, %s",xicco->errc, xicco->err);
-
-	luo->spaces(luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL);
 
 	/* - - - - - - - - - - - - - - - */
 	/* Open up input tiff file ready for reading */
@@ -456,22 +510,17 @@ main(int argc, char *argv[]) {
 	TIFFGetField(rh, TIFFTAG_IMAGEWIDTH,  &width);
 	TIFFGetField(rh, TIFFTAG_IMAGELENGTH, &height);
 
+	TIFFGetField(rh, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
 	TIFFGetField(rh, TIFFTAG_BITSPERSAMPLE, &bitspersample);
 	if (bitspersample != 8 && bitspersample != 16)
 		error("TIFF Input file must be 8 bit/channel");
 
+	TIFFGetFieldDefaulted(rh, TIFFTAG_EXTRASAMPLES, &extrasamples, &extrainfo);
 	TIFFGetField(rh, TIFFTAG_PHOTOMETRIC, &photometric);
-	if  ((pmtc = ColorSpaceSignature2TiffPhotometric(ins)) == 0xffff)
-		error("ICC  input colorspace '%s' can't be handled by a TIFF file!",
-		      icm2str(icmColorSpaceSignature, ins));
-	if (pmtc != photometric)
-		error("ICC  input colorspace '%s' doesn't match TIFF photometric '%s'!",
-		      icm2str(icmColorSpaceSignature,ins), Photometric2str(photometric));
 
-	TIFFGetField(rh, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
-	if (inn != samplesperpixel)
-		error ("TIFF Input file has %d input chanels mismatched to colorspace '%s'",
-		       samplesperpixel, icm2str(icmColorSpaceSignature, ins));
+	if ((tcs = TiffPhotometric2ColorSpaceSignature(&cvt, &sign_mask, photometric,
+	                                     bitspersample, samplesperpixel, extrasamples)) == 0)
+		error("Can't handle TIFF file photometric %s", Photometric2str(photometric));
 
 	TIFFGetField(rh, TIFFTAG_PLANARCONFIG, &pconfig);
 	if (pconfig != PLANARCONFIG_CONTIG)
@@ -480,6 +529,99 @@ main(int argc, char *argv[]) {
 	TIFFGetField(rh, TIFFTAG_RESOLUTIONUNIT, &resunits);
 	TIFFGetField(rh, TIFFTAG_XRESOLUTION, &resx);
 	TIFFGetField(rh, TIFFTAG_YRESOLUTION, &resy);
+
+	if (verb) {
+		printf("Input TIFF file '%s'\n",in_name);
+		printf("TIFF file colorspace is %s\n",icm2str(icmColorSpaceSignature,tcs));
+		printf("TIFF file photometric is %s\n",Photometric2str(photometric));
+		printf("\n");
+	}
+
+	/* - - - - - - - - - - - - - - - - */
+	/* If we were provided an ICC profile to use */
+	if (prof_name[0] != '\000') {
+
+		/* Open up the profile or TIFF embedded profile for reading */
+		if ((icco = read_embeded_icc(prof_name)) == NULL)
+			error ("Can't open profile in file '%s'",prof_name);
+	
+		if (verb) {
+			icmFile *op;
+			if ((op = new_icmFileStd_fp(stdout)) == NULL)
+				error ("Can't open stdout");
+			icco->header->dump(icco->header, op, 1);
+			op->del(op);
+		}
+	
+		/* Check that the profile is appropriate */
+		if (icco->header->deviceClass != icSigInputClass
+		 && icco->header->deviceClass != icSigDisplayClass
+		 && icco->header->deviceClass != icSigOutputClass
+		 && icco->header->deviceClass != icSigColorSpaceClass)
+			error("Profile type isn't device or colorspace");
+	
+		/* Wrap with an expanded icc */
+		if ((xicco = new_xicc(icco)) == NULL)
+			error ("Creation of xicc failed");
+	
+		/* Setup the default viewing conditions */
+		if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0) == -999)
+			error ("%d, %s",xicco->errc, xicco->err);
+	
+		if (vc_e != -1)
+			if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0) == -999)
+				error ("%d, %s",xicco->errc, xicco->err);
+		if (vc_s >= 0)
+			vc.Ev = vc_s;
+		if (vc_wXYZ[1] > 0.0) {
+			/* Normalise it to current media white */
+			vc.Wxyz[0] = vc_wXYZ[0]/vc_wXYZ[1] * vc.Wxyz[1];
+			vc.Wxyz[2] = vc_wXYZ[2]/vc_wXYZ[1] * vc.Wxyz[1];
+		} 
+		if (vc_wxy[0] >= 0.0) {
+			double x = vc_wxy[0];
+			double y = vc_wxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
+			double z = 1.0 - x - y;
+			vc.Wxyz[0] = x/y * vc.Wxyz[1];
+			vc.Wxyz[2] = z/y * vc.Wxyz[1];
+		}
+		if (vc_a >= 0.0)
+			vc.La = vc_a;
+		if (vc_b >= 0.0)
+			vc.Yb = vc_b/100.0;
+		if (vc_f >= 0.0)
+			vc.Yf = vc_f/100.0;
+		if (vc_fXYZ[1] > 0.0) {
+			/* Normalise it to current media white */
+			vc.Fxyz[0] = vc_fXYZ[0]/vc_fXYZ[1] * vc.Fxyz[1];
+			vc.Fxyz[2] = vc_fXYZ[2]/vc_fXYZ[1] * vc.Fxyz[1];
+		}
+		if (vc_fxy[0] >= 0.0) {
+			double x = vc_fxy[0];
+			double y = vc_fxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
+			double z = 1.0 - x - y;
+			vc.Fxyz[0] = x/y * vc.Fxyz[1];
+			vc.Fxyz[2] = z/y * vc.Fxyz[1];
+		}
+	
+		/* Get a expanded color conversion object */
+		if ((luo = xicco->get_luobj(xicco, ICX_CLIP_NEAREST
+		           , func, intent, pcsor, order, &vc, NULL)) == NULL)
+			error ("%d, %s",xicco->errc, xicco->err);
+	
+		luo->spaces(luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL);
+	
+		if (inn != (samplesperpixel-extrasamples))
+			error ("TIFF Input file has %d input chanels mismatched to colorspace '%s'",
+			       samplesperpixel, icm2str(icmColorSpaceSignature, ins));
+	
+		if (ins != tcs)
+			error("ICC  input colorspace '%s' doesn't match TIFF photometric '%s'!",
+			      icm2str(icmColorSpaceSignature,ins), Photometric2str(photometric));
+
+	} else if (tcs != icSigLabData) {
+		error("An ICC profile must be supplied unless the TIFF file is LAB encoded");
+	}
 
 	/* - - - - - - - - - - - - - - - */
 	/* Creat a gamut surface */
@@ -503,28 +645,40 @@ main(int argc, char *argv[]) {
 			double in[MAX_CHAN], out[MAX_CHAN];
 			
 			if (bitspersample == 8) {
-				for (i = 0; i < inn; i++) {
-					in[i] = ((unsigned char *)inbuf)[x * inn + i]/255.0;
+				for (i = 0; i < samplesperpixel; i++) {
+					int v = ((unsigned char *)inbuf)[x * samplesperpixel + i];
+					if (sign_mask & (1 << i))		/* Treat input as signed */
+						v = (v & 0x80) ? v - 0x80 : v + 0x80;
+					in[i] = v/255.0;
 				}
 			} else {
-				for (i = 0; i < inn; i++) {
-					int v = ((unsigned short *)inbuf)[x * inn + i];
+				for (i = 0; i < samplesperpixel; i++) {
+					int v = ((unsigned short *)inbuf)[x * samplesperpixel + i];
+					if (sign_mask & (1 << i))		/* Treat input as signed */
+						v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
 					in[i] = v/65535.0;
 				}
 			}
-			
-			if ((rv = luo->lookup(luo, out, in)) > 1)
-				error ("%d, %s",icco->errc,icco->err);
-			
-			if (outs == icSigXYZData)	/* Convert to Lab */
-				icmXYZ2Lab(&icco->header->illuminant, out, out);
+			if (cvt != NULL) {	/* Undo TIFF encoding */
+				cvt(in, in);
+			}
+			if (luo != NULL) {
+				if ((rv = luo->lookup(luo, out, in)) > 1)
+					error ("%d, %s",icco->errc,icco->err);
+				
+				if (outs == icSigXYZData)	/* Convert to Lab */
+					icmXYZ2Lab(&icco->header->illuminant, out, out);
+			} else {
+				for (i = 0; i < samplesperpixel; i++)
+					out[i] = in[i];
+			}
 
 			gam->expand(gam, out);
 		}
 	}
 
 	/* Get White and Black points from the profile, and set them in the gamut */
-	{
+	if (luo != NULL) {
 		double wp[3], bp[3];
 
 		luo->rel_wh_bk_points(luo, wp, bp);
@@ -532,10 +686,11 @@ main(int argc, char *argv[]) {
 	}
 
 	/* Done with lookup object */
-	luo->del(luo);
-	xicco->del(xicco);		/* Expansion wrapper */
-	icco->del(icco);		/* Icc */
-	p_fp->del(p_fp);
+	if (luo != NULL) {
+		luo->del(luo);
+		xicco->del(xicco);		/* Expansion wrapper */
+		icco->del(icco);		/* Icc */
+	}
 
 	TIFFClose(rh);		/* Close Input file */
 

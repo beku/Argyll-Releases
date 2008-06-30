@@ -188,29 +188,29 @@ main(int argc, char* argv[])
 	int onestrip = 0;
 	uint16 fillorder = 0;
 	int c;
-	extern int optind;
-	extern char *optarg;
+	extern int tiff_optind;
+	extern char *tiff_optarg;
 
-	while ((c = getopt(argc, argv, "c:f:r:t:")) != -1)
+	while ((c = tiff_getopt(argc, argv, "c:f:r:t:")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(optarg))
+			if (!processCompressOptions(tiff_optarg))
 				usage();
 			break;
 		case 'f':		/* fill order */
-			if (streq(optarg, "lsb2msb"))
+			if (streq(tiff_optarg, "lsb2msb"))
 				fillorder = FILLORDER_LSB2MSB;
-			else if (streq(optarg, "msb2lsb"))
+			else if (streq(tiff_optarg, "msb2lsb"))
 				fillorder = FILLORDER_MSB2LSB;
 			else
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(optarg);
+			rowsperstrip = atoi(tiff_optarg);
 			onestrip = 0;
 			break;
 		case 't':
-			threshold = atoi(optarg);
+			threshold = atoi(tiff_optarg);
 			if (threshold < 0)
 				threshold = 0;
 			else if (threshold > 255)
@@ -220,9 +220,9 @@ main(int argc, char* argv[])
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - optind < 2)
+	if (argc - tiff_optind < 2)
 		usage();
-	in = TIFFOpen(argv[optind], "r");
+	in = TIFFOpen(argv[tiff_optind], "r");
 	if (in == NULL)
 		return (-1);
 	TIFFGetField(in, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
@@ -236,7 +236,7 @@ main(int argc, char* argv[])
 		    " %s: Sorry, only handle 8-bit samples.\n", argv[0]);
 		return (-1);
 	}
-	out = TIFFOpen(argv[optind+1], "w");
+	out = TIFFOpen(argv[tiff_optind+1], "w");
 	if (out == NULL)
 		return (-1);
 	CopyField(TIFFTAG_IMAGEWIDTH, imagewidth);
@@ -251,7 +251,7 @@ main(int argc, char* argv[])
 		TIFFSetField(out, TIFFTAG_FILLORDER, fillorder);
 	else
 		CopyField(TIFFTAG_FILLORDER, shortv);
-	sprintf(thing, "Dithered B&W version of %s", argv[optind]);
+	sprintf(thing, "Dithered B&W version of %s", argv[tiff_optind]);
 	TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, thing);
 	CopyField(TIFFTAG_ORIENTATION, shortv);
 	CopyField(TIFFTAG_XRESOLUTION, floatv);

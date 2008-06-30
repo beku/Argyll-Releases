@@ -74,7 +74,7 @@ gammapweights weights[] = {
 #define OVERSHOOT 1.0
 
 void usage(void) {
-	fprintf(stderr,"Create smoothed near mapping between two gamuts\n");
+	fprintf(stderr,"Create smoothed near mapping between two gamuts, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: smthtest [options] ingamut outgamut diag_vrml\n");
 	fprintf(stderr," -v            Verbose\n");

@@ -516,6 +516,8 @@ struct _rspl {
 	unsigned int (*get_next_touch)(
 		struct _rspl *s);			/* this */
 
+#   define wvals ad##jw
+
 	/* Return non-zero if this rspl can be */
 	/* used with Restricted Size functions. */
 	int (*within_restrictedsize)(

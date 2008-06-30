@@ -73,47 +73,47 @@ main(int argc, char* argv[])
 	uint32 row, col, band;
 	int	c;
 	unsigned char *buf = NULL, *buf1 = NULL;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 	
 
-	while ((c = getopt(argc, argv, "c:r:H:w:l:b:d:LMp:si:o:h")) != -1)
+	while ((c = tiff_getopt(argc, argv, "c:r:H:w:l:b:d:LMp:si:o:h")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(optarg))
+			if (!processCompressOptions(tiff_optarg))
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(optarg);
+			rowsperstrip = atoi(tiff_optarg);
 			break;
 		case 'H':		/* size of input image file header */
-			hdr_size = atoi(optarg);
+			hdr_size = atoi(tiff_optarg);
 			break;
 		case 'w':		/* input image width */
-			width = atoi(optarg);
+			width = atoi(tiff_optarg);
 			break;
 		case 'l':		/* input image length */
-			length = atoi(optarg);
+			length = atoi(tiff_optarg);
 			break;
 		case 'b':		/* number of bands in input image */
-			nbands = atoi(optarg);
+			nbands = atoi(tiff_optarg);
 			break;
 		case 'd':		/* type of samples in input image */
-			if (strncmp(optarg, "byte", 4) == 0)
+			if (strncmp(tiff_optarg, "byte", 4) == 0)
 				dtype = TIFF_BYTE;
-			else if (strncmp(optarg, "short", 5) == 0)
+			else if (strncmp(tiff_optarg, "short", 5) == 0)
 				dtype = TIFF_SHORT;
-			else if  (strncmp(optarg, "long", 4) == 0)
+			else if  (strncmp(tiff_optarg, "long", 4) == 0)
 				dtype = TIFF_LONG;
-			else if  (strncmp(optarg, "sbyte", 5) == 0)
+			else if  (strncmp(tiff_optarg, "sbyte", 5) == 0)
 				dtype = TIFF_SBYTE;
-			else if  (strncmp(optarg, "sshort", 6) == 0)
+			else if  (strncmp(tiff_optarg, "sshort", 6) == 0)
 				dtype = TIFF_SSHORT;
-			else if  (strncmp(optarg, "slong", 5) == 0)
+			else if  (strncmp(tiff_optarg, "slong", 5) == 0)
 				dtype = TIFF_SLONG;
-			else if  (strncmp(optarg, "float", 5) == 0)
+			else if  (strncmp(tiff_optarg, "float", 5) == 0)
 				dtype = TIFF_FLOAT;
-			else if  (strncmp(optarg, "double", 6) == 0)
+			else if  (strncmp(tiff_optarg, "double", 6) == 0)
 				dtype = TIFF_DOUBLE;
 			else
 				dtype = TIFF_BYTE;
@@ -126,21 +126,21 @@ main(int argc, char* argv[])
 			fillorder = FILLORDER_MSB2LSB;
 			break;
 		case 'p':		/* photometric interpretation */
-			if (strncmp(optarg, "miniswhite", 10) == 0)
+			if (strncmp(tiff_optarg, "miniswhite", 10) == 0)
 				photometric = PHOTOMETRIC_MINISWHITE;
-			else if (strncmp(optarg, "minisblack", 10) == 0)
+			else if (strncmp(tiff_optarg, "minisblack", 10) == 0)
 				photometric = PHOTOMETRIC_MINISBLACK;
-			else if (strncmp(optarg, "rgb", 3) == 0)
+			else if (strncmp(tiff_optarg, "rgb", 3) == 0)
 				photometric = PHOTOMETRIC_RGB;
-			else if (strncmp(optarg, "cmyk", 4) == 0)
+			else if (strncmp(tiff_optarg, "cmyk", 4) == 0)
 				photometric = PHOTOMETRIC_SEPARATED;
-			else if (strncmp(optarg, "ycbcr", 5) == 0)
+			else if (strncmp(tiff_optarg, "ycbcr", 5) == 0)
 				photometric = PHOTOMETRIC_YCBCR;
-			else if (strncmp(optarg, "cielab", 6) == 0)
+			else if (strncmp(tiff_optarg, "cielab", 6) == 0)
 				photometric = PHOTOMETRIC_CIELAB;
-			else if (strncmp(optarg, "icclab", 6) == 0)
+			else if (strncmp(tiff_optarg, "icclab", 6) == 0)
 				photometric = PHOTOMETRIC_ICCLAB;
-			else if (strncmp(optarg, "itulab", 6) == 0)
+			else if (strncmp(tiff_optarg, "itulab", 6) == 0)
 				photometric = PHOTOMETRIC_ITULAB;
 			else
 				photometric = PHOTOMETRIC_MINISBLACK;
@@ -149,27 +149,27 @@ main(int argc, char* argv[])
 			swab = 1;
 			break;
 		case 'i':		/* type of interleaving */
-			if (strncmp(optarg, "pixel", 4) == 0)
+			if (strncmp(tiff_optarg, "pixel", 4) == 0)
 				interleaving = PIXEL;
-			else if  (strncmp(optarg, "band", 6) == 0)
+			else if  (strncmp(tiff_optarg, "band", 6) == 0)
 				interleaving = BAND;
 			else
 				interleaving = 0;
 			break;
 		case 'o':
-			outfilename = optarg;
+			outfilename = tiff_optarg;
 			break;
 		case 'h':
 			usage();
 		default:
 			break;
 		}
-	if (argc - optind < 2)
+	if (argc - tiff_optind < 2)
 		usage();
-	in = fopen(argv[optind], "rb");
+	in = fopen(argv[tiff_optind], "rb");
 	if (in == NULL) {
 		fprintf(stderr, "%s: %s: Cannot open input file.\n",
-			argv[0], argv[optind]);
+			argv[0], argv[tiff_optind]);
 		return (-1);
 	}
 
@@ -177,7 +177,7 @@ main(int argc, char* argv[])
 		return 1;
 
 	if (outfilename == NULL)
-		outfilename = argv[optind+1];
+		outfilename = argv[tiff_optind+1];
 	out = TIFFOpen(outfilename, "w");
 	if (out == NULL) {
 		fprintf(stderr, "%s: %s: Cannot open file for output.\n",
@@ -253,7 +253,7 @@ main(int argc, char* argv[])
 				if (fread(buf, linebytes, 1, in) != 1) {
 					fprintf(stderr,
 					"%s: %s: scanline %lu: Read error.\n",
-					argv[0], argv[optind],
+					argv[0], argv[tiff_optind],
 					(unsigned long) row);
 				break;
 				}
@@ -269,7 +269,7 @@ main(int argc, char* argv[])
 			if (fread(buf1, bufsize, 1, in) != 1) {
 				fprintf(stderr,
 					"%s: %s: scanline %lu: Read error.\n",
-					argv[0], argv[optind],
+					argv[0], argv[tiff_optind],
 					(unsigned long) row);
 				break;
 			}

@@ -3,27 +3,24 @@
 # and leaves it and usb.h in ../libusbw ready for any
 # other component of Argyll to use it.
 
-# If we're MingW, we can actually build the drivers too
+# If we're MingW, we can actually build the driver and dll too
 # by running gmake, but we're not doing so at the moment.
 
-#SubDir TOP libusbw ;
-
-CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-LINKFLAGS	+= $(LINKDEBUGFLAG) ;
-
+PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+#PREF_CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
+PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 if ! $(UNIX) {
 	
-	if $(MingW) {
-		Depends all : libusb.lib ;
-		Depends libusb.lib : libusb0.def ;
-		GenFileNND libusb.lib : dlltool "-d libusb0.def -l libusb.lib" ;
+	NDepends lib : libusb.lib ;
+	NDepends libusb.lib : libusb0.def ;
+	local LIBUSB_LIB = [ NormDstPaths libusb.lib ] ;
+	local LIBUSB0_DEF = [ NormSrcPaths libusb0.def ] ;
+	if $(MINGW) {
+		GenFileNND libusb.lib : dlltool "-D libusb0.dll -d $(LIBUSB0_DEF) -l $(LIBUSB_LIB)" ;
 	} else if $(MSVCDir) {
-		FWD = / ;
-		Depends all : libusb.lib ;
-		Depends libusb.lib : libusb0.def ;
-		GenFileNND libusb.lib : "lib /machine:i386 /def:libusb0.def /out:libusb.lib &/" ;
+		GenFileNND libusb.lib : lib "/nologo /machine:i386 /def:$(LIBUSB0_DEF) /out:$(LIBUSB_LIB)" ;
+		Clean clean : $(LIBUSB_LIB:S=.exp) ;
 	} else {
 		EXIT "Unknown compiler !" ;
 	}
@@ -31,6 +28,10 @@ if ! $(UNIX) {
 	# Copy the header file to the libusb directory
 	File usb.h : src/usb.h ;
 
-	# Install the DLL to the binary file
-	InstallFile $(DOTDOT)$(SLASH)bin : libusb0.dll ;
+	# Install the DLL to the binary directory
+	InstallFile ../bin : libusb0.dll ;
+
+	# Fake x64 versions of files
+	File libusb0_x64.sys : libusb0.sys ;
+	File libusb0_x64.dll : libusb0.dll ;
 }

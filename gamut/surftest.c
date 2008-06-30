@@ -21,6 +21,8 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
+#include "copyright.h"
+#include "config.h"
 #include "numlib.h"
 #include "icc.h"
 //#include "xicc.h"
@@ -31,7 +33,7 @@
 #define DEF_HEIGHT 5.0
 
 void usage(char *diag) {
-	fprintf(stderr,"Do gamut surface torture test\n");
+	fprintf(stderr,"Do gamut surface torture test, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: surftest [options] npoints\n");
 	if (diag != NULL)

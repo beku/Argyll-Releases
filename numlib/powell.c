@@ -2,7 +2,7 @@
 /* Multi-dimentional minizer using Powell or Conjugate Gradient methods */
 /* This is good for smoother, well behaved functions. */
 
-/* Code is an expression of the algorithms decsribed in */
+/* Code is an original expression of the algorithms decsribed in */
 /* "Numerical Recipes in C", by W.H.Press, B.P.Flannery, */
 /* S.A.Teukolsky & W.T.Vetterling. */
 
@@ -109,7 +109,7 @@ void *fdata				/* Opaque data needed by function */
 		/* Function value at extrapolated point */
 		lretv = (*func)(fdata, xpt);
 
-		if (lretv < pretv) {			/* Extrapolation keeps improving */
+		if (lretv < pretv) {			/* If extrapolation is an improvement */
 			double t, t1, t2;
 
 			t1 = pretv - retv - del;
@@ -119,11 +119,13 @@ void *fdata				/* Opaque data needed by function */
 				/* Move to the minimum of the new direction */
 				retv = linmin(cp, svec, di, ftol, func, fdata);
 
-				for (i = 0; i < di; i++)		/* Save the new direction */
+				for (i = 0; i < di; i++) 		/* Save the new direction */
 					dmtx[i][ibig] = svec[i];
 			}
 		}
 	}
+
+//printf("~1 iters = %d\n",iter);
 	/* Free up all the temporary vectors and matrix */
 	free_dvector(svec,0,di-1);
 	free_dvector(xpt,0,di-1);

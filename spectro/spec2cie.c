@@ -49,6 +49,7 @@
 #include "xicc.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "inst.h"
 #ifdef ALLOW_PLOT
 #include "plot.h"
@@ -71,6 +72,7 @@ usage (void)
 	fprintf (stderr, " -I illum    Override instrument illuminant in .ti3 file:\n");
 	fprintf (stderr, "             A, D50, D65, F5, F8, F10 or file.sp\n");
 	fprintf (stderr, "             (only used in conjunction with -f)\n");
+	fprintf (stderr, " -n          Don't output spectral values\n"); 
 #ifdef ALLOW_PLOT
 	fprintf (stderr, " -p          Plot each values spectrum\n"); 
 #endif
@@ -84,6 +86,7 @@ main(int argc, char *argv[])
 {
 	int fa, nfa;					/* current argument we're looking at */
 	int verb = 0;
+	int nospec = 0;					/* NZ if not to output spectral values */
 	char *in_ti3_name;
 	char *out_ti3_name;
 	cgats *icg;						/* input cgats structure */
@@ -105,7 +108,7 @@ main(int argc, char *argv[])
 
 	int npat;						/* Number of patches */
 	char *kw;
-	int i, j;
+	int i, j, jj, k;
 
 #if defined(__IBMC__)
 	_control87 (EM_UNDERFLOW, EM_UNDERFLOW);
@@ -139,6 +142,10 @@ main(int argc, char *argv[])
 			/* Verbose */
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
 				verb = 1;
+
+			/* Don't output spectral */
+			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N')
+				nospec = 1;
 
 			/* Plot each patch spectral value */
 			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P')
@@ -286,12 +293,6 @@ main(int argc, char *argv[])
 			ocg->add_kword (ocg, 0, kw,
 							icg->t[0].kdata[i], icg->t[0].kcom[i]);
 		}
-	}
-
-	/* copy fields to output file */
-
-	for (i = 0; i < icg->t[0].nfields; i++) {
-		ocg->add_field (ocg, 0, icg->t[0].fsym[i], icg->t[0].ftype[i]);
 	}
 
 	/* Figure out what sort of device it is */
@@ -448,6 +449,17 @@ main(int argc, char *argv[])
 			illum = icxIT_none;		/* Displays are assumed to be self luminous */
 		}
 
+		/* copy fields to output file (except spectral if nospec) */
+	
+		for (i = 0; i < icg->t[0].nfields; i++) {
+			for (j = 0; nospec && j < sp.spec_n; j++) {
+				if (spi[j] == i)
+					break;
+			}
+			if (nospec == 0 || j >= sp.spec_n)
+				ocg->add_field (ocg, 0, icg->t[0].fsym[i], icg->t[0].ftype[i]);
+		}
+
 		/* create field for XYZ and Lab if not present */
 
 		if ((Xi = icg->find_field(icg, 0, "XYZ_X")) < 0)
@@ -598,24 +610,31 @@ main(int argc, char *argv[])
 
 			xspect corr_sp;
 
-			/* copy all input colums to output */
+			/* copy all input colums to output (except spectral if nospec) */
 
-			for (j = 0; j < icg->t[0].nfields; j++) {
+			for (jj = j = 0; j < icg->t[0].nfields; j++) {
+				for (k = 0; nospec && k < sp.spec_n; k++) {
+					if (spi[k] == j)
+						break;
+				}
+				if (nospec == 0 || k >= sp.spec_n) {
 					switch (icg->t[0].ftype[j]) {
-					case r_t:
-						elems[j].d = *((double *) icg->t[0].fdata[i][j]);
-						break;
-					case i_t:
-						elems[j].i = *((int *) icg->t[0].fdata[i][j]);
-						break;
-					default:
-						elems[j].c = (char *) icg->t[0].fdata[i][j];
+						case r_t:
+							elems[jj].d = *((double *) icg->t[0].fdata[i][j]);
+							break;
+						case i_t:
+							elems[jj].i = *((int *) icg->t[0].fdata[i][j]);
+							break;
+						default:
+							elems[jj].c = (char *) icg->t[0].fdata[i][j];
+					}
+					jj++;
 				}
 			}
 
 			/* Read the spectral values for this patch */
 			for (j = 0; j < sp.spec_n; j++) {
-				sp.spec[j] = elems[spi[j]].d;
+				sp.spec[j] = *((double *)icg->t[0].fdata[i][spi[j]]);
 			}
 
 			if (fwacomp) {
@@ -625,8 +644,10 @@ main(int argc, char *argv[])
 				sp2cie->sconvert (sp2cie, &corr_sp, XYZ, &sp);
 
 				/* Write the corrected spectral values for this patch */
-				for (j = 0; j < sp.spec_n; j++) {
-					elems[spi[j]].d = corr_sp.spec[j] * 100;
+				if (nospec == 0) {
+					for (j = 0; j < sp.spec_n; j++) {
+						elems[spi[j]].d = corr_sp.spec[j] * 100;
+					}
 				}
 #ifdef ALLOW_PLOT
 				if (doplot) {

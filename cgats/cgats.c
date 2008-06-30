@@ -1285,33 +1285,33 @@ cgats_write(cgats *p, cgatsFile *fp) {
 		if (!t->sup_id)	/* If not suppressed */ {
 			switch(t->tt) {
 				case it8_7_1:
-					if (fp->printf(fp,"IT8.7/1\n\n") < 0)
+					if (fp->gprintf(fp,"IT8.7/1\n\n") < 0)
 						goto write_error;
 					break;
 				case it8_7_2:
-					if (fp->printf(fp,"IT8.7/2\n\n") < 0)
+					if (fp->gprintf(fp,"IT8.7/2\n\n") < 0)
 						goto write_error;
 					break;
 				case it8_7_3:
-					if (fp->printf(fp,"IT8.7/3\n\n") < 0)
+					if (fp->gprintf(fp,"IT8.7/3\n\n") < 0)
 						goto write_error;
 					break;
 				case it8_7_4:
-					if (fp->printf(fp,"IT8.7/4\n\n") < 0)
+					if (fp->gprintf(fp,"IT8.7/4\n\n") < 0)
 						goto write_error;
 					break;
 				case cgats_5:
-					if (fp->printf(fp,"CGATS.5\n\n") < 0)
+					if (fp->gprintf(fp,"CGATS.5\n\n") < 0)
 						goto write_error;
 					break;
 				case cgats_X:				/* variable CGATS type */
 					if (p->cgats_type == NULL)
 						goto write_error;
-					if (fp->printf(fp,"%s\n\n", p->cgats_type) < 0)
+					if (fp->gprintf(fp,"%s\n\n", p->cgats_type) < 0)
 						goto write_error;
 					break;
 				case tt_other:	/* User defined file identifier */
-					if (fp->printf(fp,"%s\n\n",p->others[t->oi]) < 0)
+					if (fp->gprintf(fp,"%s\n\n",p->others[t->oi]) < 0)
 						goto write_error;
 					break;
 				case tt_none:
@@ -1326,7 +1326,7 @@ cgats_write(cgats *p, cgatsFile *fp) {
 				al->free(al, sfield);
 				return err(p,-1,"cgats_write(), ID should not be suppressed when table %d type is not the same as previous table",table);
 			}
-			if (fp->printf(fp,"\n\n") < 0)
+			if (fp->gprintf(fp,"\n\n") < 0)
 				goto write_error;
 		}
 
@@ -1343,7 +1343,7 @@ cgats_write(cgats *p, cgatsFile *fp) {
 						al->free(al, sfield);
 						return err(p,-2,"quote_cs() malloc failed!");
 					}
-					if (fp->printf(fp,"KEYWORD %s\n",qs) < 0) {
+					if (fp->gprintf(fp,"KEYWORD %s\n",qs) < 0) {
 						al->free(al, qs);
 						goto write_error;
 					}
@@ -1354,7 +1354,7 @@ cgats_write(cgats *p, cgatsFile *fp) {
 					al->free(al, sfield);
 					return err(p,-2,"quote_cs() malloc failed!");
 				}
-				if (fp->printf(fp,"%s %s%s",t->ksym[i],qs,
+				if (fp->gprintf(fp,"%s %s%s",t->ksym[i],qs,
 				    t->kcom[i] == NULL ? "\n":"\t") < 0) {
 					al->free(al, qs);
 					goto write_error;
@@ -1363,7 +1363,7 @@ cgats_write(cgats *p, cgatsFile *fp) {
 			}
 			/* Comment if its present */
 			if (t->kcom[i] != NULL) {
-				if (fp->printf(fp,"# %s\n",t->kcom[i]) < 0) {
+				if (fp->gprintf(fp,"# %s\n",t->kcom[i]) < 0) {
 					al->free(al, qs);
 					goto write_error;
 				}
@@ -1372,7 +1372,7 @@ cgats_write(cgats *p, cgatsFile *fp) {
 
 		/* Then the field specification */
 		if (!t->sup_fields) {	/* If not suppressed */
-			if (fp->printf(fp,"\n") < 0)
+			if (fp->gprintf(fp,"\n") < 0)
 				goto write_error;
 	
 			/* Declare any non-standard fields */
@@ -1383,7 +1383,7 @@ cgats_write(cgats *p, cgatsFile *fp) {
 						al->free(al, sfield);
 						return err(p,-2,"quote_cs() malloc failed!");
 					}
-					if (fp->printf(fp,"KEYWORD %s\n",qs) < 0) {
+					if (fp->gprintf(fp,"KEYWORD %s\n",qs) < 0) {
 						al->free(al, qs);
 						goto write_error;
 					}
@@ -1391,16 +1391,16 @@ cgats_write(cgats *p, cgatsFile *fp) {
 				}
 			}
 	
-			if (fp->printf(fp,"NUMBER_OF_FIELDS %d\n",t->nfields) < 0)
+			if (fp->gprintf(fp,"NUMBER_OF_FIELDS %d\n",t->nfields) < 0)
 				goto write_error;
-			if (fp->printf(fp,"BEGIN_DATA_FORMAT\n") < 0)
+			if (fp->gprintf(fp,"BEGIN_DATA_FORMAT\n") < 0)
 				goto write_error;
 			for (field = 0; field < t->nfields; field ++) {
 				DBG((dbgo,"CGATS writing field %d\n",field));
-				if (fp->printf(fp,"%s ",t->fsym[field]) < 0)
+				if (fp->gprintf(fp,"%s ",t->fsym[field]) < 0)
 					goto write_error;
 			}
-			if (fp->printf(fp,"\nEND_DATA_FORMAT\n") < 0)
+			if (fp->gprintf(fp,"\nEND_DATA_FORMAT\n") < 0)
 				goto write_error;
 		} else { /* Check that it is safe to suppress fields */
 			cgats_table *pt = &p->t[table-1];
@@ -1421,9 +1421,9 @@ cgats_write(cgats *p, cgatsFile *fp) {
 		}
 
 		/* Then the actual data */
-		if (fp->printf(fp,"\nNUMBER_OF_SETS %d\n",t->nsets) < 0)
+		if (fp->gprintf(fp,"\nNUMBER_OF_SETS %d\n",t->nsets) < 0)
 			goto write_error;
-		if (fp->printf(fp,"BEGIN_DATA\n") < 0)
+		if (fp->gprintf(fp,"BEGIN_DATA\n") < 0)
 			goto write_error;
 		for (set = 0; set < t->nsets; set++) {
 			DBG((dbgo,"CGATS writing set %d\n",set));
@@ -1434,10 +1434,10 @@ cgats_write(cgats *p, cgatsFile *fp) {
 					double val = *((double *)t->fdata[set][field]);
 					real_format(val, REAL_SIGDIG, fmt);
  					strcat(fmt," ");
-					if (fp->printf(fp,fmt,val) < 0)
+					if (fp->gprintf(fp,fmt,val) < 0)
 						goto write_error;
 				} else if (t->ftype[field] == i_t) {
-					if (fp->printf(fp,"%d ",*((int *)t->fdata[set][field])) < 0)
+					if (fp->gprintf(fp,"%d ",*((int *)t->fdata[set][field])) < 0)
 						goto write_error;
 				} else if (t->ftype[field] == nqcs_t
 				      && !cs_has_ws((char *)t->fdata[set][field])
@@ -1446,7 +1446,7 @@ cgats_write(cgats *p, cgatsFile *fp) {
 					/* We can only print a non-quote string if it doesn't contain white space, */
 					/* quote or comment characters, and if it is a standard field or */
 					/* can't be mistaken for a number. */
-					if (fp->printf(fp,"%s ",(char *)t->fdata[set][field]) < 0)
+					if (fp->gprintf(fp,"%s ",(char *)t->fdata[set][field]) < 0)
 						goto write_error;
 				} else if (t->ftype[field] == nqcs_t
 				      || t->ftype[field] == cs_t) {
@@ -1455,7 +1455,7 @@ cgats_write(cgats *p, cgatsFile *fp) {
 						al->free(al, sfield);
 						return err(p,-2,"quote_cs() malloc failed!");
 					}
-					if (fp->printf(fp,"%s ",qs) < 0) {
+					if (fp->gprintf(fp,"%s ",qs) < 0) {
 						al->free(al, qs);
 						goto write_error;
 					}
@@ -1465,10 +1465,10 @@ cgats_write(cgats *p, cgatsFile *fp) {
 					return err(p,-1,"cgats_write(), illegal data type found");
 				}
 			}
-			if (fp->printf(fp,"\n") < 0)
+			if (fp->gprintf(fp,"\n") < 0)
 				goto write_error;
 		}
-		if (fp->printf(fp,"END_DATA\n") < 0)
+		if (fp->gprintf(fp,"END_DATA\n") < 0)
 			goto write_error;
 
 		if (sfield != NULL)
@@ -1853,60 +1853,60 @@ static void
 cgats_dump(cgats *p, cgatsFile *fp) {
 	int tn;
 
-	fp->printf(fp,"Number of tables = %d\n",p->ntables);
+	fp->gprintf(fp,"Number of tables = %d\n",p->ntables);
 	for (tn = 0; tn < p->ntables; tn++) {
 		cgats_table *t;
 		int i,j;
 		t = &p->t[tn];
 
 	
-		fp->printf(fp,"\nTable %d:\n",tn);
+		fp->gprintf(fp,"\nTable %d:\n",tn);
 
 		switch(t->tt)	/* Table identifier */
 			{
 			case it8_7_1:
-				fp->printf(fp,"Identifier = 'IT8.7/1'\n");
+				fp->gprintf(fp,"Identifier = 'IT8.7/1'\n");
 				break;
 			case it8_7_2:
-				fp->printf(fp,"Identifier = 'IT8.7/2'\n");
+				fp->gprintf(fp,"Identifier = 'IT8.7/2'\n");
 				break;
 			case it8_7_3:
-				fp->printf(fp,"Identifier = 'IT8.7/3'\n");
+				fp->gprintf(fp,"Identifier = 'IT8.7/3'\n");
 				break;
 			case it8_7_4:
-				fp->printf(fp,"Identifier = 'IT8.7/4'\n");
+				fp->gprintf(fp,"Identifier = 'IT8.7/4'\n");
 				break;
 			case cgats_5:
-				fp->printf(fp,"Identifier = 'CGATS.5'\n");
+				fp->gprintf(fp,"Identifier = 'CGATS.5'\n");
 				break;
 			case cgats_X:
-				fp->printf(fp,"Identifier = '%s'\n",p->cgats_type);
+				fp->gprintf(fp,"Identifier = '%s'\n",p->cgats_type);
 				break;
 			case tt_other:	/* User defined file identifier */
-				fp->printf(fp,"Identifier = '%s'\n",p->others[t->oi]);
+				fp->gprintf(fp,"Identifier = '%s'\n",p->others[t->oi]);
 				break;
 			default:
-				fp->printf(fp,"**ILLEGAL**\n");
+				fp->gprintf(fp,"**ILLEGAL**\n");
 				break;
 			}
 
-		fp->printf(fp,"\nNumber of keywords = %d\n",t->nkwords);
+		fp->gprintf(fp,"\nNumber of keywords = %d\n",t->nkwords);
 		
 		/* Dump all the keyword symbols and values */
 		for (i = 0; i < t->nkwords; i++) {
 			if (t->ksym[i] != NULL && t->kdata[i] != NULL)
 				{
 				if (t->kcom[i] != NULL)
-					fp->printf(fp,"Keyword '%s' has value '%s' and comment '%s'\n",
+					fp->gprintf(fp,"Keyword '%s' has value '%s' and comment '%s'\n",
 					        t->ksym[i],t->kdata[i],t->kcom[i]);
 				else
-					fp->printf(fp,"Keyword '%s' has value '%s'\n",t->ksym[i],t->kdata[i]);
+					fp->gprintf(fp,"Keyword '%s' has value '%s'\n",t->ksym[i],t->kdata[i]);
 				}
 			if (t->kcom[i] != NULL)
-				fp->printf(fp,"Comment '%s'\n",t->kcom[i]);
+				fp->gprintf(fp,"Comment '%s'\n",t->kcom[i]);
 		}
 			
-		fp->printf(fp,"\nNumber of field defs = %d\n",t->nfields);
+		fp->gprintf(fp,"\nNumber of field defs = %d\n",t->nfields);
 
 		/* Dump all the field symbols */
 		for (i = 0; i < t->nfields; i++) {		
@@ -1928,10 +1928,10 @@ cgats_dump(cgats *p, cgatsFile *fp) {
 					fname = "illegal";
 					break;
 			}
-			fp->printf(fp,"Field '%s' has type '%s'\n",t->fsym[i],fname);
+			fp->gprintf(fp,"Field '%s' has type '%s'\n",t->fsym[i],fname);
 		}
 
-		fp->printf(fp,"\nNumber of sets = %d\n",t->nsets);
+		fp->gprintf(fp,"\nNumber of sets = %d\n",t->nsets);
 
 		/* Dump all the set values */
 		for (j = 0; j < t->nsets; j++) {
@@ -1942,22 +1942,22 @@ cgats_dump(cgats *p, cgatsFile *fp) {
 						double val = *((double *)t->fdata[j][i]);
 						fmt[0] = ' ';
 						real_format(val, REAL_SIGDIG, fmt+1);
-						fp->printf(fp,fmt,*((double *)t->fdata[j][i]));
+						fp->gprintf(fp,fmt,*((double *)t->fdata[j][i]));
 						break;
 					}
 					case i_t:
-						fp->printf(fp," %d",*((int *)t->fdata[j][i]));
+						fp->gprintf(fp," %d",*((int *)t->fdata[j][i]));
 						break;
 					case cs_t:
 					case nqcs_t:
-						fp->printf(fp," %s",((char *)t->fdata[j][i]));
+						fp->gprintf(fp," %s",((char *)t->fdata[j][i]));
 						break;
 					default:
-						fp->printf(fp," illegal");
+						fp->gprintf(fp," illegal");
 						break;
 				}
 			}
-			fp->printf(fp,"\n");
+			fp->gprintf(fp,"\n");
 		}
 	}
 }

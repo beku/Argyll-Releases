@@ -149,7 +149,7 @@ int poi[] = {
 #endif /* DEBUG3 */
 
 void usage(char *diag, ...) {
-	fprintf(stderr,"Create abstract correction profile given table of absolute CIE correction values\n");
+	fprintf(stderr,"Create abstract correction profile given table of absolute CIE correction values, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
@@ -731,7 +731,7 @@ main(int argc, char *argv[]) {
 			error ("Creation of xicc failed");
 
 		/* Get a expanded color conversion object suitable for gamut */
-		if ((dev_luo = dev_xicc->get_luobj(dev_xicc, 0, icmFwd, icAbsoluteColorimetric, icSigLabData, icmLuOrdNorm, NULL, &ink)) == NULL)
+		if ((dev_luo = dev_xicc->get_luobj(dev_xicc, ICX_CLIP_NEAREST, icmFwd, icAbsoluteColorimetric, icSigLabData, icmLuOrdNorm, NULL, &ink)) == NULL)
 			error ("%d, %s",dev_xicc->errc, dev_xicc->err);
 	
 		/* Creat a gamut surface */

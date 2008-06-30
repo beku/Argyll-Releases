@@ -9,7 +9,7 @@
  * Author: Graeme W. Gill
  * Date:   28/9/96
  *
- * Copyright 1995, 1996, Graeme W. Gill
+ * Copyright 1995, 1996, 2008, Graeme W. Gill
  * All rights reserved.
  * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -23,13 +23,16 @@
 #define M_PI		3.1415926535897932384626433832795028841971693993751
 #endif
 #ifndef M_PI_2
-#define M_PI_2      1.57079632679489661923
+#define M_PI_2      (0.5 * M_PI)
 #endif
 #ifndef M_PI_4
-#define M_PI_4      0.78539816339744830962
+#define M_PI_4      (0.25 * M_PI)
+#endif
+#ifndef M_PI_3_4
+#define M_PI_3_4    (0.75 * M_PI)
 #endif
 #ifndef M_2_PI
-#define M_2_PI      0.63661977236758134308
+#define M_2_PI      (2.0/M_PI)
 #endif
 #ifndef M_SQRT_2
 #define M_SQRT_2	1.4142135623730950488016887242096980785696718753769
@@ -57,41 +60,49 @@ struct _points {
 	/* Line stats */
 	int flag;
 	int nop;			/* Number of points */
+	double mw,len;		/* mean width, length */
 	double mx,my;		/* Mean point */
 	double a;			/* Angle */
 	double ca;			/* Constrained Angle (constrained to 90 degrees about 0 */
-	double mw,len;		/* mean width, length */
 	double x1,y1,x2,y2;	/* Start/end point of fitted line */
-	}; typedef struct _points points;
 
-#define F_LINESTATS 0x01		/* Line stats valid */
-#define F_VALID		0x02		/* Line passes valid criteria */
+	double pmx, pmy;			/* Raster (Perspective affected) mean point */
+	double px1, py1, px2, py2;	/* Raster (Perspective affected) line start/end points */
+	struct _points *opt;		/* Next in improvement list */
+}; typedef struct _points points;
+
+#define F_LINESTATS 	0x01		/* Line stats valid */
+#define F_VALID			0x02		/* Line passes valid criteria */
+#define F_LONGENOUGH	0x04		/* Line is long enough to be included in angle calc */
+#define F_IMPROVE	    0x08		/* Line was used to improve fit */
 
 /* Structure to hold an aggregation region description */
 struct _region {
 	int lx,hx;	/* Region covers values of lx <= x < hx */
 	points *p;	/* Head of points linked list associated with region */
-	}; typedef struct _region region;
+}; typedef struct _region region;
 
 /* Structure to hold a 2D real point */
 struct _point {
 	double x,y;
-	}; typedef struct _point point;
+}; typedef struct _point point;
 
 /* Structure to hold one entry in an edge list */
 struct _epoint {
-	double pos;		/* Position of entry allong edge */
+	double pos;		/* Position of entry along edge */
 	double len;		/* (Maximum normalized) Total length */
 	double p1,p2;	/* Start and end of line in orthogonal direction */
 	double ccount;	/* (Maximum normalized) Crossing count */
-	}; typedef struct _epoint epoint;
+	struct _points *opt;	/* Linked list of feature lines to optimize to */
+	int    nopt;
+}; typedef struct _epoint epoint;
 
 /* Structure of an edge list */
 struct _elist {
 	epoint *a;		/* Array of edge points */
 	int c;			/* Count */
 	double lennorm;	/* Total of max. normalized lengths of edge list */
-	}; typedef struct _elist elist;
+}; typedef struct _elist elist;
 
 #define INIT_ELIST(e) { \
 	e.a = NULL;         \
@@ -108,7 +119,7 @@ typedef struct {
 /* An integer point */
 struct _ipoint {
 	int x,y;
-	}; typedef struct _ipoint ipoint;
+}; typedef struct _ipoint ipoint;
 
 /* An edge scan structure */
 struct _escan {
@@ -117,7 +128,7 @@ struct _escan {
 	int ev,k1,k2;		/* Bresenham constants */
 	int y;				/* Current y value */
 	int xi,x;			/* X increment, current x value */
-	}; typedef struct _escan escan;
+}; typedef struct _escan escan;
 
 /* Structure of a sample box */
 #define SBOX_NAME_SZ 20
@@ -139,7 +150,7 @@ struct _sbox {
 	unsigned int cnt;				/* Total pixels in cell */
 	LINKSTRUCT(struct _sbox);		/* Active edge linked list structure */
 
-	/* Pixel values for alternate rotations */
+	/* Pixel values for alternate rotations, created if we have expected values */
 	struct {
 		double mP[MXDE];				/* Mean Pixel values (0.0 - 255.0) */
 		double sdP[MXDE];				/* Standard deviations */
@@ -181,9 +192,13 @@ struct _scanrd_ {
 	int novlines;			/* Number of valid lines */
 	points *gdone;			/* Head of done point linked list groups */
 
+	double ppc[4];			/* Partial perspective correction values. */
+							/* persp() applies perspective distortion, */
+							/* invpersp() applies perspective correction. */
+
 	double irot;			/* Base image rotation value in radians (clockwize) */
 	int norots;				/* Number of rotations to explore */
-	int crot;				/* Current rotation being scanned */
+	int crot;				/* Current or best rotation being scanned */
 	struct {
 		double irot;		/* Image rotation value in radians (clockwize) for this rotation */
 		double ixoff,iyoff,ixscale,iyscale;	/* Image offset and scale factors */
@@ -191,19 +206,21 @@ struct _scanrd_ {
 		double xcc;			/* Expected value correlation, smaller is better */
 	} rots[4];
 	
-	double trans[6];		/* Combined transform of irot, i[xy]off and i[xy]scale, */
-							/* from reference to target coordinates for crot */
-							/* xo = trans[0] + xi * trans[1] + yi * trans[2]; */
-							/* yo = trans[3] + xi * trans[4] + yi * trans[5]; */
+	double ptrans[8];		/* Combined transform of partial perspective, */
+							/* irot, i[xy]off and i[xy]scale. */
+							/* Use ptrans(ptrans[]) to transform from reference to raster. */
+	double iptrans[8];		/* Inverse transform of ptrans[] */
+							/* Use ptrans(iptrans[]) to transform from raster to reference */
 	
-	elist xelist, yelist;	/* X and Y edge lists array */
-	elist ixelist, iyelist;	/* Inverted direction X and Y edge lists array */
+	elist xelist, yelist;	/* X and Y raster edge lists array */
+	elist ixelist, iyelist;	/* Inverted direction X and Y raster edge lists array */
 	
-	elist rxelist, ryelist;	/* X and Y reference edge lists array */
+	elist rxelist, ryelist;	/* X and Y .cht reference edge lists array */
+
 	double rbox_shrink;		/* Reference box shrink factor */
 	int xpt;				/* NZ if got expected reference values */
 	
-	double fid[3][2];		/* Three fiducial locations */
+	double fid[8];			/* Four fiducial locations, typicall clockwise from top left */
 	double fidsize;			/* Fiducial diagnostic cross size */
 	double havefids;		/* NZ if there are fiducials */
 	int nsbox;				/* Number of sample boxes */
@@ -249,7 +266,7 @@ struct _scanrd_ {
 							/* Write RGB line of diag file, non-zero on error */
 	void *ddata;			/* Opaque data for callback */
 
-	}; typedef struct _scanrd_ scanrd_;
+}; typedef struct _scanrd_ scanrd_;
 
 /*************************************************************************/
 /* Heapsort macro */

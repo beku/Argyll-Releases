@@ -1,4 +1,5 @@
 EXPORTS
+    usb_argyll_patched
     usb_open
     usb_close
     usb_get_string

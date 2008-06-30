@@ -32,7 +32,7 @@
  *
  * This file is based on cam97s3.c by Graeme Gill.
  *
- * Copyright 2004 - 2007 Graeme W. Gill
+ * Copyright 2004 - 2008 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
  * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -72,17 +72,7 @@
 	The positive region has a tangential linear extension added, so
 	that the range of values is not limited.
 		
-	The preliminary saturation denominator value is limited to a minimum
-	value of 0.305 (the value it has for zero XYZ input), to prevent
-	the saturation rising to infinity, or going negative, or flipping the
-	hue angle. It is also limited to a maximum ration to ttA of 2.5, which
-	ensures that the same problems do not occur in the reverse
-	conversion. 
-	In regions with a ttA value less than 0.305, the saturation
-	denominator is also limited to the value it would have if ttA was 0.305,
-	ensuring that saturation denominator has continuity
-	with all possible values of a and b;   (???)
-
+	~~ stuff mising
 ~~~~~ Add: Re-arrange ss equation into separated effects,
 	k1, k2, k3, and then limit these to avoid divide by zero
 	and sign change errors in fwd and bwd converson.
@@ -110,8 +100,9 @@
 #include "cam02.h"
 #include "numlib.h"
 
-#undef ENTRACE				/* Enable internal value runtime tracing if s->trace != 0 */
-#define DISABLE_SS			/* Disable overall ss limit values (?) */
+// ~~~
+#define ENTRACE				/* Enable internal value runtime tracing if s->trace != 0 */
+#define DISABLE_SS			/* Disable overall ss limit values (not the scheme used) */
 
 #undef DIAG1				/* Print internal value diagnostics for conditions setup */
 #undef DIAG2				/* Print internal value diagnostics for each conversion */
@@ -135,7 +126,7 @@
 #define DDULIMIT 0.9993		/* ab component k3:k1 ratio limit (must be < 1.0) */
 //#define DDLLIMIT 0.9999	/* ab component -k3:k2 ratio limit (must be < 1.0) */
 //#define DDULIMIT 0.9999	/* ab component k3:k1 ratio limit (must be < 1.0) */
-#define SSMINJ 0.005		/* Minumum ab scale k1 component J value */
+#define SSMINcJ 0.005		/* ab scale cJ minimum value */
 #define JLIMIT 0.005		/* J encoding cutover point straight line (0 - 1.0 range) */
 #define HKLIMIT 0.5			/* Maximum Helmholtz-Kohlraush lift */
 
@@ -154,30 +145,9 @@ double minj = 1e38, maxj = -1e38;
 #define TRACE(xxxx) 
 #endif
 
-/* Utility function */
-/* Return a viewing condition enumeration from the given Ambient and */
-/* Adapting/Surround Luminance. */
-static ViewingCondition cam02_Ambient2VC(
-double La,		/* Ambient Luminance (cd/m^2) */
-double Lv		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
-) {
-	double r;
-
-	if (fabs(La) < 1e-10) 		/* Hmm. */
-		r = 1.0;
-	else
-		r = La/Lv;
-
-	if (r < 0.01)
-		return vc_dark;
-	if (r < 0.2)
-		return vc_dim;
-	return vc_average;
-}
-
 static void cam_free(cam02 *s);
 static int set_view(struct _cam02 *s, ViewingCondition Ev, double Wxyz[3],
-	                double Yb, double La, double Lv, double Yf, double Fxyz[3],
+	                double La, double Yb, double Lv, double Yf, double Fxyz[3],
 					int hk);
 static int XYZ_to_cam(struct _cam02 *s, double *Jab, double *xyz);
 static int cam_to_XYZ(struct _cam02 *s, double *xyz, double *Jab);
@@ -203,12 +173,12 @@ cam02 *new_cam02(void) {
 	s->nlulimit = NLULIMIT;
 	s->ddllimit = DDLLIMIT;
 	s->ddulimit = DDULIMIT;
-	s->ssminj = SSMINJ;
+	s->ssmincj = SSMINcJ;
 	s->jlimit = JLIMIT;
 	s->hklimit = HKLIMIT;
 
 	/* Set a default viewing condition ?? */
-	/* set_view(s, vc_average, D50, 0.2, 33.0, 0.0, 0.0, D50, 0); */
+	/* set_view(s, vc_average, D50, 33, 0.2, 0.0, 0.0, D50, 0); */
 
 #ifdef TRACKMINMAX
 	{
@@ -242,12 +212,13 @@ static void cam_free(cam02 *s) {
 		free(s);
 }
 
+/* Return value is always 0 */
 static int set_view(
 cam02 *s,
 ViewingCondition Ev,	/* Enumerated Viewing Condition */
 double Wxyz[3],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
-double Yb,		/* Relative Luminance of Background to reference white */
 double La,		/* Adapting/Surround Luminance cd/m^2 */
+double Yb,		/* Relative Luminance of Background to reference white (range 0.0 .. 1.0) */
 double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
@@ -256,8 +227,62 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 ) {
 	double tt, t1, t2, t3;
 
-	if (Ev == vc_none)		/* Compute enumerated viewing condition */
-		Ev = cam02_Ambient2VC(La, Lv);
+	if (Ev == vc_none) {
+		/* Compute the internal parameters by interpolation */
+		int i;
+		double r, bf;
+		/* Dark, dim, average, above average */
+		double t_C[4]  = { 0.525, 0.59, 0.69, 1.0 }; 
+		double t_Nc[4] = { 0.800, 0.95, 1.00, 1.0 }; 
+		double t_F[4]  = { 0.800, 0.90, 1.00, 1.0 }; 
+
+		if (La < 1e-10) 		/* Hmm. */
+			La = 1e-10;
+		r = La/Lv;
+		if (r < 0.0)
+			r = 0.0;
+		else if (r > 1.0)
+			r = 1.0;
+	
+		if (r < 0.1) {			/* Dark to Dim */
+			i = 0;
+			bf = r/0.1;
+		} else if (r < 0.2) {	/* Dim to Average */
+			i = 1;
+			bf = (r - 0.1)/0.1;
+		} else {				/* Average to above average */
+			i = 2;
+			bf = (r - 0.2)/0.8;
+		}
+		s->C  = t_C[i] * (1.0 - bf)  + t_C[i+1] * bf;
+		s->Nc = t_Nc[i] * (1.0 - bf) + t_Nc[i+1] * bf;
+		s->F  = t_F[i] * (1.0 - bf)  + t_F[i+1] * bf;
+	} else {
+		/* Compute the internal parameters by category */
+		switch(s->Ev) {
+			case vc_dark:
+				s->C = 0.525;
+				s->Nc = 0.8;
+				s->F = 0.8;
+				break;
+			case vc_dim:
+				s->C = 0.59;
+				s->Nc = 0.95;
+				s->F = 0.9;
+				break;
+			case vc_cut_sheet:
+				s->C = 0.41;
+				s->Nc = 0.8;
+				s->F = 0.8;
+				break;
+			default:	/* average */
+				s->C = 0.69;
+				s->Nc = 1.0;
+				s->F = 1.0;
+				break;
+		}
+	}
+
 	/* Transfer parameters to the object */
 	s->Ev = Ev;
 	s->Wxyz[0] = Wxyz[0];
@@ -270,30 +295,6 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->Fxyz[1] = Fxyz[1];
 	s->Fxyz[2] = Fxyz[2];
 	s->hk = hk;
-
-	/* Compute the internal parameters by category */
-	switch(s->Ev) {
-		case vc_dark:
-			s->C = 0.525;
-			s->Nc = 0.8;
-			s->F = 0.8;
-			break;
-		case vc_dim:
-			s->C = 0.59;
-			s->Nc = 0.95;
-			s->F = 0.9;
-			break;
-		case vc_cut_sheet:
-			s->C = 0.41;
-			s->Nc = 0.8;
-			s->F = 0.8;
-			break;
-		default:	/* average */
-			s->C = 0.69;
-			s->Nc = 1.0;
-			s->F = 1.0;
-			break;
-	}
 
 	/* The rgba vectors */
 	s->Va[0] = 1.0;
@@ -308,6 +309,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->VttA[1] = 1.0;
 	s->VttA[2] = 1.0/20.0;
 
+	/* (Not used) */
 	s->Vttd[0] = 1.0;
 	s->Vttd[1] = 1.0;
 	s->Vttd[2] = 21.0/20.0;
@@ -398,19 +400,19 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	tt = pow(s->Fl * s->nldlimit, 0.42);
 	s->nldxval = 400.0 * tt / (tt + 27.13) + 0.1;
 
-	/* Non-linearity lower crossover slope */
+	/* Non-linearity lower crossover slope, passes through 0 */
 	s->nldxslope = (s->nldxval-0.1)/s->nldlimit;
 //printf("~1 nldxval = %f, nlxdslope = %f\n",s->nldxval,s->nldxslope);
 
 	/* Non-linearity upper crossover value */
 	tt = pow(s->Fl * s->nlulimit, 0.42);
-	s->nlxval = 400.0 * tt / (tt + 27.13) + 0.1;
+	s->nluxval = 400.0 * tt / (tt + 27.13) + 0.1;
 
-	/* Non-linearity upper crossover slope */
+	/* Non-linearity upper crossover slope, set to asymtope */
 	t1 = s->Fl * s->nlulimit;
 	t2 = 0.42 * s->Fl * 400.0;
 	t3 = pow(t1, 0.42) + 27.13;
-	s->nlxslope = t2/(pow(t1,0.58) * t3) - t2/(pow(t1,0.16) * t3 * t3);
+	s->nluxslope = t2/(pow(t1,0.58) * t3) - t2/(pow(t1,0.16) * t3 * t3);
 
 	/* Limited A value at J = JLIMIT */
 	s->lA = pow(s->jlimit, 1.0/(s->C * s->z)) * s->Aw;
@@ -456,8 +458,8 @@ double XYZ[3]
 ) {
 	int i;
 	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbc[3];
-	double a, b, ja, jb, J, JJ, C, h, e, A, ssk, ss;
-	double ttA, rS, cJ, mJ, tt;
+	double a, b, ja, jb, J, JJ, C, h, e, A, ss;
+	double ttA, rS, cJ, tt;
 	double k1, k2, k3;
 	int clip = 0;			// ~~999
 
@@ -526,7 +528,7 @@ double XYZ[3]
 				tt = pow(s->Fl * rgbp[i], 0.42);
 				rgba[i] = 400.0 * tt / (tt + 27.13) + 0.1;
 			} else {
-				rgba[i] = s->nlxval + s->nlxslope * (rgbp[i] - s->nlulimit);
+				rgba[i] = s->nluxval + s->nluxslope * (rgbp[i] - s->nlulimit);
 			}
 		}
 	}
@@ -553,44 +555,42 @@ double XYZ[3]
 	a = s->Va[0] * rgba[0] + s->Va[1] * rgba[1] + s->Va[2] * rgba[2];
 	b = s->Vb[0] * rgba[0] + s->Vb[1] * rgba[1] + s->Vb[2] * rgba[2];
 
-	/* constrained raw Saturation to stop divide by zero */
+	/* restricted Saturation to stop divide by zero */
+	/* (The exact value isn't important because the numerator dominates as a,b aproach 0 */
 	rS = sqrt(a * a + b * b);
 	if (rS < DBL_EPSILON)
 		rS = DBL_EPSILON;
-
 	TRACE(("ttA = %f, a = %f, b = %f, rS = %f, A = %f\n", ttA,a,b,rS,A))
 
-	/* Lightness, Derived directly from Acromatic response. */
-	/* Use straight line segment when A < 0.1, */
+	/* Lightness J, Derived directly from Acromatic response. */
+	/* Cuttover to a straight line segment when J < 0.005, */
 	if (A >= s->lA) {
 		J = pow(A/s->Aw, s->C * s->z);		/* J/100  - keep Sign */
 	} else {
-		J = s->jlimit/s->lA * A;				/* Straight line */
+		J = s->jlimit/s->lA * A;			/* Straight line */
 		TRACE(("limited Acromatic to straight line\n"))
 	}
 
-	/* Constraied (+ve) J */
-	if (A > 0.0)
+	/* Constraied (+ve, non-zero) J */
+	if (A > 0.0) {
 		cJ = pow(A/s->Aw, s->C * s->z);
-	else
-		cJ = 0.0;
+		if (cJ < s->ssmincj)
+			cJ = s->ssmincj;
+	} else {
+		cJ = s->ssmincj;
+	}
 
-	mJ = cJ;
-	if (mJ < s->ssminj)
-		mJ = s->ssminj;
-
-	TRACE(("J = %f, cJ = %f, mJ = \n",J,cJ,mJ))
+	TRACE(("J = %f, cJ = %f\n",J,cJ))
 
 	/* Final hue angle */
 	h = (180.0/DBL_PI) * atan2(b,a);
 	h = (h < 0.0) ? h + 360.0 : h;
 
-	/* Eccentricity factor and saturation constant */
-	e = (cos(h * DBL_PI/180.0 + 2.0) + 3.8);
-	ssk = (12500.0/13.0 * s->Nc * s->Ncb * e);
+	/* Eccentricity factor */
+	e = (12500.0/13.0 * s->Nc * s->Ncb * (cos(h * DBL_PI/180.0 + 2.0) + 3.8));
 
 	/* ab scale components */
-	k1 = pow(s->nn, 1.0/0.9) * ssk * pow(mJ, 1.0/1.8)/pow(rS, 1.0/9.0);
+	k1 = pow(s->nn, 1.0/0.9) * e * pow(cJ, 1.0/1.8)/pow(rS, 1.0/9.0);
 	k2 = pow(cJ, 1.0/(s->C * s->z)) * s->Aw/s->Nbb + 0.305;
 	k3 = s->dcomp[1] * a + s->dcomp[2] * b;
 
@@ -633,6 +633,7 @@ double XYZ[3]
 #ifdef DISABLE_TTD 
 	ss = pow((k1/k2), 0.9);
 #else
+
 	/* Limit ratio of k3 to k2 to stop zero or -ve ss */
 	if (-k3 > (k2 * s->ddllimit)) {
 		k3 = -k2 * s->ddllimit;
@@ -750,8 +751,8 @@ double Jab[3]
 ) {
 	int i;
 	double xyz[3], rgb[3], rgbp[3], rgba[3], rgbc[3];
-	double a, b, ja, jb, J, JJ, C, cC, h, e, A, ssk, ss;
-	double tt, cJ, mJ, ttA, cttA;
+	double a, b, ja, jb, J, JJ, C, rC, h, e, A, ss;
+	double tt, cJ, ttA;
 	double k1, k2, k3;
 
 #ifdef DIAG2		/* Incase in == out */
@@ -778,9 +779,12 @@ double Jab[3]
 	
 	/* Compute chroma value */
 	C = sqrt(ja * ja + jb * jb);	/* Must be Always +ve, Can be NZ even if J == 0 */
-	cC = C;
-	if (cC < DBL_EPSILON)			/* Constrained value to avoid divide by zero */
-		cC = DBL_EPSILON;
+
+	/* Preliminary Restricted chroma, always +ve and NZ */
+	/* (The exact value isn't important because the numerator dominates as a,b aproach 0) */
+	rC = C;
+	if (rC < DBL_EPSILON)
+		rC = DBL_EPSILON;
 
 	J = JJ;
 #ifndef DISABLE_HHKR
@@ -809,23 +813,18 @@ double Jab[3]
 
 	if (A > 0.0) {
 		cJ = pow(A/s->Aw, s->C * s->z);
-		cttA = ttA;
+		if (cJ < s->ssmincj)
+			cJ = s->ssmincj;
 	} else {
-		cJ = 0.0;
-		cttA = 0.305;
+		cJ = s->ssmincj;
 	}
 	TRACE(("C = %f, A = %f from J = %f, cJ = %f\n",C, A,J,cJ))
 
-	mJ = cJ;
-	if (mJ < s->ssminj)
-		mJ = s->ssminj;
-
-	/* Eccentricity factor and saturation constant */
-	e = (cos(h * DBL_PI/180.0 + 2.0) + 3.8);
-	ssk = (12500.0/13.0 * s->Nc * s->Ncb * e);		/* Saturation constant */
+	/* Eccentricity factor */
+	e = (12500.0/13.0 * s->Nc * s->Ncb * (cos(h * DBL_PI/180.0 + 2.0) + 3.8));
 
 	/* ab scale components */
-	k1 = pow(s->nn, 1.0/0.9) * ssk * pow(mJ, 1.0/1.8)/pow(C, 1.0/9.0);
+	k1 = pow(s->nn, 1.0/0.9) * e * pow(cJ, 1.0/1.8)/pow(rC, 1.0/9.0);
 	k2 = pow(cJ, 1.0/(s->C * s->z)) * s->Aw/s->Nbb + 0.305;
 	k3 = s->dcomp[1] * ja + s->dcomp[2] * jb;
 
@@ -897,11 +896,11 @@ double Jab[3]
 	for (i = 0; i < 3; i++) {
 		if (rgba[i] < s->nldxval) {
 			rgbp[i] = (rgba[i] - 0.1)/s->nldxslope;
-		} else if (rgba[i] <= s->nlxval) {
+		} else if (rgba[i] <= s->nluxval) {
 			tt = rgba[i] - 0.1;
 			rgbp[i] = pow((27.13 * tt)/(400.0 - tt), 1.0/0.42)/s->Fl;
 		} else {
-			rgbp[i] = s->nlulimit + (rgba[i] - s->nlxval)/s->nlxslope;
+			rgbp[i] = s->nlulimit + (rgba[i] - s->nluxval)/s->nluxslope;
 		}
 	}
 #endif /* !DISABLE_NONLIN */

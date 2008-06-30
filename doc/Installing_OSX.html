@@ -1,0 +1,121 @@
+<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+  <meta http-equiv="Content-Type"
+ content="text/html; charset=iso-8859-1">
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="GENERATOR"
+ content="Mozilla/4.73 [en] (WinNT; I) [Netscape]">
+  <title>Argyll Installation on Apple OS X</title>
+</head>
+<body>
+<h1>
+<u>Installing the software on Apple OS X<br>
+</u></h1>
+<br>
+You
+will need to unpack the downloaded file in the location you have chosen
+to hold the executable files. Typically this might be in <span
+ style="font-style: italic;">/usr/bin</span>, or perhaps <span
+ style="font-style: italic;">$HOME/bin/</span>. You would then unpack
+the files using <span style="font-weight: bold;">tar -zxf</span> <span
+ style="font-weight: bold;">archivename.tgz</span>, which will create a
+directory <span style="font-weight: bold;">Argyll_VX.X.X</span>, where
+X.X.X is the version number, and the executables will be in <span
+ style="font-weight: bold;">Argyll_VX.X.X/bin</span> You will also
+have to
+configure your $PATH environment variable to give access to the
+executables from your command line environment. If you are unfamiliar
+with how to do this, consult an appropriate tutorial, e.g. &lt;<a
+ href="http://heather.cs.ucdavis.edu/%7Ematloff/UnixAndC/Unix/ShellIntro.html#tth_sEc1">ShellIntro</a>&gt;.
+The .tgz file also contains several useful reference files (such as
+scanner chart recognition templates, sample illumination spectrum
+etc.) in the ref sub-directory, as well as
+all the current documentation in a doc sub-directory.<br>
+<br>
+For most devices there is nothing special to do. Plug in and go. For
+some devices though (specifically, if you want to use the HCFR
+colorimeter), the default OS X class
+drivers will grab the device, preventing Argyll from accessing it. To
+overcome this, you need to install a codeless kernel extension if you
+wish to use the HCFR colorimeter, that
+prevents this from happening. From the command line you need to create
+a directory called Argyll.kext somewhere convenient, and then place in
+it one file called Info.plist, containing the following:<br>
+<br>
+&nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
+&nbsp;&nbsp; &lt;?xml version="1.0" encoding="UTF-8"?&gt;<br>
+&nbsp;&nbsp; &lt;!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST
+1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"&gt;<br>
+&nbsp;&nbsp; &lt;plist version="1.0"&gt;<br>
+&nbsp;&nbsp; &lt;dict&gt;<br>
+&nbsp; &nbsp;&nbsp; &nbsp;
+&lt;key&gt;CFBundleDevelopmentRegion&lt;/key&gt;
+&lt;string&gt;English&lt;/string&gt;<br>
+&nbsp;&nbsp; &nbsp; &nbsp; &lt;key&gt;CFBundleGetInfoString&lt;/key&gt;
+&lt;string&gt;Libusb USB device Shield&lt;/string&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&lt;key&gt;CFBundleIdentifier&lt;/key&gt;
+&lt;string&gt;com.libusb.USB_Shield&lt;/string&gt;<br>
+&nbsp;&nbsp; &nbsp; &nbsp;
+&lt;key&gt;CFBundleInfoDictionaryVersion&lt;/key&gt;
+&lt;string&gt;6.0&lt;/string&gt;<br>
+&nbsp; &nbsp; &nbsp;&nbsp; &lt;key&gt;CFBundleName&lt;/key&gt;
+&lt;string&gt;Libusb USB device Shield&lt;/string&gt;<br>
+&nbsp; &nbsp; &nbsp;&nbsp; &lt;key&gt;CFBundlePackageType&lt;/key&gt;
+&lt;string&gt;KEXT&lt;/string&gt;<br>
+&nbsp;&nbsp; &nbsp; &nbsp; &lt;key&gt;CFBundleSignature&lt;/key&gt;
+&lt;string&gt;????&lt;/string&gt;<br>
+&nbsp; &nbsp; &nbsp;&nbsp; &lt;key&gt;CFBundleVersion&lt;/key&gt;
+&lt;string&gt;6.0&lt;/string&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&lt;key&gt;IOKitPersonalities&lt;/key&gt;<br>
+&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &lt;dict&gt;<br>
+&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
+&lt;key&gt;HCFR&lt;/key&gt;<br>
+&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &lt;dict&gt;<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;
+&lt;key&gt;CFBundleIdentifier&lt;/key&gt;
+&lt;string&gt;com.apple.driver.AppleUSBComposite&lt;/string&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp;
+&lt;key&gt;IOClass&lt;/key&gt;
+&lt;string&gt;AppleUSBComposite&lt;/string&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; &nbsp;
+&lt;key&gt;IOProviderClass&lt;/key&gt;
+&lt;string&gt;IOUSBDevice&lt;/string&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp;&nbsp; &lt;key&gt;idVendor&lt;/key&gt;
+&lt;integer&gt;1243&lt;/integer&gt;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &lt;key&gt;idProduct&lt;/key&gt;
+&lt;integer&gt;91&lt;/integer&gt;<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &lt;/dict&gt;<br>
+&nbsp;&nbsp; &nbsp; &nbsp; &lt;/dict&gt;<br>
+&nbsp; &nbsp; &nbsp;&nbsp;
+&lt;key&gt;OSBundleCompatibleVersion&lt;/key&gt;
+&lt;string&gt;1.8&lt;/string&gt;<br>
+&nbsp;&nbsp; &nbsp; &nbsp; &lt;key&gt;OSBundleLibraries&lt;/key&gt;<br>
+&nbsp; &nbsp; &nbsp;&nbsp; &lt;dict&gt;<br>
+&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
+&lt;key&gt;com.apple.kernel.iokit&lt;/key&gt;
+&lt;string&gt;6.0&lt;/string&gt;<br>
+&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &lt;/dict&gt;<br>
+&nbsp;&nbsp; &lt;/dict&gt;<br>
+&nbsp;&nbsp; &lt;/plist&gt;<br>
+&nbsp; &nbsp; ----------------- cut here ---------------------<br>
+<br>
+(You can also copy this from the source installation in
+libusb/Argyll.kext)<br>
+<br>
+You then need to install it by using:<br>
+<br>
+&nbsp; sudo cp -R Argyll.kext /System/Library/Extensions<br>
+<br>
+supplying the appropriate root password when prompted.<br>
+Reboot the system to activate the extension.<br>
+<br>
+<p><br>
+</p>
+</body>
+</html>

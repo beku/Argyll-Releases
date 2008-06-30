@@ -197,8 +197,8 @@ using the errors between the target chart and the measured values,
 refine attempts to improve the match between the proofing system and
 its target.<br>
 <br>
-There is facility in <a href="icclink.html">icclink</a>, <a
- href="profile.html">profile</a> and <a href="revfix.html">revfix</a>
+There is facility in <a href="collink.html">collink</a>, <a
+ href="colprof.html">colprof</a> and <a href="revfix.html">revfix</a>
 to incorporate an abstract profile. <br>
 <br>
 For systems using two device profiles or a device
@@ -234,17 +234,17 @@ target to proofing device link (choose one of the three options below,
 depending whether you are using the proofer profile and just want to
 alter its colorimetric B2A table using <span style="font-weight: bold;">revfix</span>,
 whether you are going to recreate the proofer file from the original
-measurement data using&nbsp; <span style="font-weight: bold;">profile</span>,
+measurement data using&nbsp; <span style="font-weight: bold;">colprof</span>,
 or whether you are using a device link profile created using <span
- style="font-weight: bold;">icclink</span>):<br>
+ style="font-weight: bold;">collink</span>):<br>
 <br>
 &nbsp;&nbsp;&nbsp; revfix -v -1 -ke -p fix1.icm proofer.icm
 proofer_fix1.icm<br>
 or<br>
 &nbsp;&nbsp;&nbsp; copy proofer.ti3 proofer_fix1.ti3<br>
-&nbsp;&nbsp;&nbsp; profile -v -p fix1.icm proofer_fix1<br>
+&nbsp;&nbsp;&nbsp; colprof -v -p fix1.icm proofer_fix1<br>
 or<br>
-&nbsp;&nbsp;&nbsp; icclink -v -s -ia -oa -p fix1.icm target.icm
+&nbsp;&nbsp;&nbsp; collink -v -s -ia -oa -p fix1.icm target.icm
 proofer.icm target_proofer_fix1.icm<br>
 <br>
 Note that the above example is a simple one - you should use all the
@@ -282,9 +282,9 @@ proofing device profile or link again:<br>
 proofer_fix2.icm<br>
 or<br>
 &nbsp;&nbsp;&nbsp; copy proofer.ti3 proofer_fix2.ti3<br>
-&nbsp;&nbsp;&nbsp; profile -v -p fix2.icm proofer_fix2<br>
+&nbsp;&nbsp;&nbsp; colprof -v -p fix2.icm proofer_fix2<br>
 or<br>
-&nbsp;&nbsp;&nbsp; icclink -v -s -ia -oa -p fix2.icm target.icm
+&nbsp;&nbsp;&nbsp; collink -v -s -ia -oa -p fix2.icm target.icm
 proofer.icm target_proofer_fix2.icm<br>
 <br>
 Use the <span style="font-weight: bold;">proofer_fix2.icm</span> or <span

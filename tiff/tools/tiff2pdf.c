@@ -462,8 +462,8 @@ tsize_t t2p_write_pdf_trailer(T2P*, TIFF*);
 
 int main(int argc, char** argv){
 
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 	T2P* t2p = NULL;
 	TIFF* input = NULL;
 	TIFF* output = NULL;
@@ -479,15 +479,15 @@ int main(int argc, char** argv){
 		goto failexit;
 	}
 
-	while ((c = getopt(argc, argv, "o:q:u:x:y:w:l:r:p:e:c:a:t:s:k:jzndifh")) != -1){
+	while ((c = tiff_getopt(argc, argv, "o:q:u:x:y:w:l:r:p:e:c:a:t:s:k:jzndifh")) != -1){
 		switch (c) {
 			case 'o': 
-				output=TIFFOpen(optarg, "w");
+				output=TIFFOpen(tiff_optarg, "w");
 				if(output==NULL){
 					TIFFError(
 						TIFF2PDF_MODULE, 
 						"Can't open output file %s for writing", 
-						optarg);
+						tiff_optarg);
 					goto failfreet2p;
 				}
 				if(output->tif_seekproc != NULL){
@@ -519,7 +519,7 @@ int main(int argc, char** argv){
 				break;
 #endif
 			case 'q': 
-				t2p->pdf_defaultcompressionquality=atoi(optarg);
+				t2p->pdf_defaultcompressionquality=atoi(tiff_optarg);
 				break;
 			case 'n': 
 				t2p->pdf_nopassthrough=1;
@@ -528,30 +528,30 @@ int main(int argc, char** argv){
 				t2p->pdf_defaultcompression=T2P_COMPRESS_NONE;
 				break;
 			case 'u': 
-				if(optarg[0]=='m'){
+				if(tiff_optarg[0]=='m'){
 					t2p->pdf_centimeters=1;
 				}
 				break;
 			case 'x': 
 				t2p->pdf_defaultxres = 
-					atof(optarg) / (t2p->pdf_centimeters?2.54:1.0);
+					atof(tiff_optarg) / (t2p->pdf_centimeters?2.54:1.0);
 				break;
 			case 'y': 
 				t2p->pdf_defaultyres = 
-					atof(optarg) / (t2p->pdf_centimeters?2.54:1.0);
+					atof(tiff_optarg) / (t2p->pdf_centimeters?2.54:1.0);
 				break;
 			case 'w': 
 				t2p->pdf_overridepagesize=1;
 				t2p->pdf_defaultpagewidth = 
-					(atof(optarg) * 72) / (t2p->pdf_centimeters?2.54:1.0);
+					(atof(tiff_optarg) * 72) / (t2p->pdf_centimeters?2.54:1.0);
 				break;
 			case 'l': 
 				t2p->pdf_overridepagesize=1;
 				t2p->pdf_defaultpagelength = 
-					(atof(optarg) * 72) / (t2p->pdf_centimeters?2.54:1.0);
+					(atof(tiff_optarg) * 72) / (t2p->pdf_centimeters?2.54:1.0);
 				break;
 			case 'r': 
-				if(optarg[0]=='o'){
+				if(tiff_optarg[0]=='o'){
 					t2p->pdf_overrideres=1;
 				}
 				break;
@@ -559,13 +559,13 @@ int main(int argc, char** argv){
 				if(tiff2pdf_match_paper_size(
 					&(t2p->pdf_defaultpagewidth), 
 					&(t2p->pdf_defaultpagelength), 
-					optarg)){
+					tiff_optarg)){
 					t2p->pdf_overridepagesize=1;
 				} else {
 					TIFFWarning(
 						TIFF2PDF_MODULE, 
 						"Unknown paper size %s, ignoring option",
-						optarg);
+						tiff_optarg);
 				}
 				break;
 			case 'i':
@@ -582,10 +582,10 @@ int main(int argc, char** argv){
 						17); 
 					goto failcloseoutput;
 				}
-				if(strlen(optarg)==0){
+				if(strlen(tiff_optarg)==0){
 					t2p->pdf_datetime[0]=0;
 				} else {
-					if(strlen(optarg)>14){optarg[14]=0;}
+					if(strlen(tiff_optarg)>14){optarg[14]=0;}
 					t2p->pdf_datetime[0]='D';
 					t2p->pdf_datetime[1]=':';
 					strcpy(&(t2p->pdf_datetime[2]), optarg);
@@ -661,13 +661,13 @@ int main(int argc, char** argv){
 
 	t2p_validate(t2p);
 
-	if(argc>optind){
-		input = TIFFOpen(argv[optind++], "r");
+	if(argc>tiff_optind){
+		input = TIFFOpen(argv[tiff_optind++], "r");
 		if(input==NULL){
 			TIFFError(
 				TIFF2PDF_MODULE, 
 				"Can't open input file %s for reading", 
-				argv[optind-1]);
+				argv[tiff_optind-1]);
 			goto failcloseoutput;
 		}
 	} else {
@@ -678,7 +678,7 @@ int main(int argc, char** argv){
 		goto failcloseoutput;
 	}
 
-	if(argc>optind){
+	if(argc>tiff_optind){
 		TIFFError(
 			TIFF2PDF_MODULE, 
 			"No support for multiple input files"); 
@@ -711,7 +711,7 @@ int main(int argc, char** argv){
 			TIFFError(
 				TIFF2PDF_MODULE, 
 				"Can't open temporary output file for writing to stdout", 
-				argv[optind-1]);
+				argv[tiff_optind-1]);
 			goto failcloseinput;
 		}
 		TIFFFlush(output);

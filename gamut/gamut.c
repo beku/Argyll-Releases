@@ -543,8 +543,9 @@ int isJab				/* Flag indicating Jab space */
 		sres = 15.0;
 	s->sres = sres;
 
-	if (isJab != 0)
+	if (isJab != 0) {
 		s->isJab = 1;
+	}
 
 	/* Center point for radial values, surface creation etc. */
 	/* To compare two gamuts using radial values, their cent must */
@@ -820,12 +821,15 @@ double pp[3]		/* rectangular coordinate of point */
 				xx += tt * tt;
 			}
 			if (xx < (1e-4 * 1e-4)) {
+				if (s->doingfake)
+					s->verts[i]->f |= GVERT_ESTP;
 				return;			/* Ignore duplicate */
 			}
 		}
 		
 		/* Create a vertex for the point we're possibly adding */
-		new_gvert(s, NULL, 0, GVERT_SET | (s->doingfake ? GVERT_FAKE : 0), pp, rr, lrr0, sp, ch);
+		new_gvert(s, NULL, 0, GVERT_SET | (s->doingfake ? (GVERT_FAKE | GVERT_ESTP) : 0),
+		             pp, rr, lrr0, sp, ch);
 
 		return;
 	}
@@ -2058,6 +2062,7 @@ gamut *s
 
 		/* Delete any current fake verticies */
 		for (j = i = 0; i < s->nv; i++) {
+			s->verts[i]->f &= ~GVERT_ESTP;		/* Unmark  non-fake establishment points */
 			if (!(s->verts[i]->f & GVERT_FAKE))
 				s->verts[j++] = s->verts[i];
 			else
@@ -2082,10 +2087,15 @@ gamut *s
 
 		/* Locate them for initial triangulation */
 		for (j = i = 0; i < s->nv && j < 4; i++) {
-			if (s->verts[i]->f & GVERT_FAKE) {
+			if (s->verts[i]->f & GVERT_ESTP) {
 				tvs[j++] = s->verts[i];
 			}
 		}
+		if (j != 4) {
+			fprintf(stderr,"gamut: internal error - failed to find the 4 fake initial verticies!\n");
+			exit (-1);
+		}
+			
 #else	/* !USE_FAKE_SEED */
 		/* Tetrahedral target points, outside log surface */
 		/* (Assuming input values are < 1000) */
@@ -2608,8 +2618,6 @@ int v[3]		/* Return indexes for same order as getvert() */
 /* ===================================================== */
 
 /* Return the total volume of the gamut */
-/* [Could we subtract the volumes of two gamuts by substracting */
-/*  the dotproductarea of the two sufaces ??] */
 static double volume(
 gamut *s
 ) {
@@ -3083,7 +3091,6 @@ double *nin		/* Normalised center relative point */
 	/* Due to numerical issues, the BSP accelerated result may (very occassionally) */
 	/* be in error. Double check that we've landed in the correct triangle. */
 	if (t != NULL) {
-		double ds;
 		int j;
 
 		/* Check if the closest point is within this triangle */
@@ -3218,8 +3225,8 @@ double *q		/* Target point (absolute) */
 ) {
 	gnn *p;				/* Pointer to nearest neighbor structure */
 	int e, i;
-	double r[3] = {0.0, 0.0, 0.0 };	/* Possible solution point */
-	double out[3];		/* Current best output value */
+	double r[3] = {0.0, 0.0, 0.0 };		/* Possible solution point */
+	double out[3] = {0.0, 0.0, 0.0};	/* Current best output value */
 	int wex[3 * 2];		/* Current window edge indexes */
 	double wed[3 * 2];	/* Current window edge distances */
 						/* Indexes are axis * 2 +0 for lower edge, */
@@ -3472,6 +3479,17 @@ exit(0);
 	}
 }
 
+/* Perturb the containment points to avoid */
+/* numerical co-incidence */
+double perturb[21] = {
+	8.9919295344233395e-283, 1.1639766020018968e+224, 1.2554893023590904e+232,
+	2.3898157055642966e+190, 1.5697612415774029e-076, 6.6912978722191457e+281,
+	1.2369092402930559e+277, 1.4430907501246712e-153, 3.0017439193018232e+238,
+	1.2978311824382444e+161, 5.5068703318775818e-311, 7.7791723264448801e-260,
+	4.4296571592384350e+281, 8.9481529920968425e+165, 1.2845894914769635e-153,
+	2.0835868791190880e-076, 5.4310198502711138e+241, 4.8689849775675438e+275,
+	9.2709981544886391e+122, 3.7958270103353899e-153, 7.1366083837501666e-154
+};
 
 /* Setup the nearest function acceleration structure */
 static void
@@ -3482,6 +3500,7 @@ gamut *s
 	int i, k;
 	gtri *tp;		/* Triangle pointer */
 	int ntris;
+	double psf;
 
 //printf("~1 init_ne called\n");
 
@@ -3507,6 +3526,11 @@ gamut *s
 			error("Failed to allocate sorted index array");
 	}
 
+	/* Compute pertbation factor */
+	for (psf = 0.0, i = 1; i < 21; i++)
+		psf += perturb[i];
+	psf *= perturb[0];
+
 	/* For each triangle, create the triangle bounding box values, */
 	/* and add them to the axis lists. */
 	tp = s->tris; 
@@ -3520,9 +3544,9 @@ gamut *s
 		for (k = 0; k < 3; k++) {
 			for (j = 0; j < 3; j++) {
 				if (tp->v[k]->p[j] < tp->mix[0][j])		/* New min */
-					tp->mix[0][j] = tp->v[k]->p[j];
+					tp->mix[0][j] = psf * tp->v[k]->p[j];
 				if (tp->v[k]->p[j] > tp->mix[1][j])		/* New max */
-					tp->mix[1][j] = tp->v[k]->p[j];
+					tp->mix[1][j] = psf * tp->v[k]->p[j];
 			}
 			p->sax[k * 2 + 0][i] = tp;
 			p->sax[k * 2 + 1][i] = tp;

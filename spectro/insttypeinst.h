@@ -11,3 +11,4 @@
 #include "i1pro.h"
 #include "hcfr.h"
 #include "spyd2.h"
+#include "huey.h"

@@ -14,7 +14,7 @@ paper manufactures often employ a couple of different techniques. One
 technique is to add "shading agents" to the paper, that absorb a little
 of the middle wavelengths, thereby changing the color of the paper to
 be a little less green. By far the most powerful way of making the
-paper appear more white, is to add Fluorescent Whitener Additive (FWA)
+paper appear more white is to add Fluorescent Whitener Additive (FWA)
 to the paper. This is basically a fluorescent material that absorbs
 light at Ultra Violet (U.V.) wavelengths, and re-emits it at a slightly
 longer blue wavelengths. Subjectively something that appears more blue,
@@ -56,7 +56,7 @@ into tri-stimulus values using an observer model.<br>
 Notice that a key assumption in all of this is that the light that
 impinges on the sample at a given wavelength is reflected back at
 exactly the same wavelength at a diminished intensity. Notice also
-that any sort of fluorescent material (such as FWA), breaks this model,
+that any sort of fluorescent material (such as FWA) breaks this model,
 since fluorescent materials emit light a different wavelengths to which
 they absorb it.<br>
 <br>
@@ -83,6 +83,22 @@ characteristic, which must include the levels of U.V. in the
 illuminant. Given these two things, Argyll can calculate how much
 effect the FWA will have on the light being reflected and emitted by
 the media under the intended illumination.<br>
+<br>
+Ideally the level of FWA would be measured by comparing the paper
+spectrum with and without U.V. present in the instruments illumination.
+Because few if any instruments allow these two measurements to be done
+without some sort of manual intervention, Argyll avoids the need for an
+FWA inactive (UV cut) measurement by employing a heuristic to estimate
+the FWA inactive spectrum from the spectrum of the paper with FWA
+active. Being a heuristic, it can sometimes be fooled by certain paper
+colors into estimating more or less FWA content than is actual present.
+The heuristic works best with high quality papers with an essentially
+flat non-FWA enhanced spectrum. Papers with colored tints or
+particularly off white appearance may not work well with FWA
+compensation.<br>
+<br>
+<img alt="Graph showing FWA effect on UV vs. UV cut measurement."
+ src="FWA_measure.jpg" style="width: 387px; height: 284px;"><br>
 <br>
 Note that typically in Argyll, if a viewing illuminant is specified,
 then it is used for computing the appearance under that illumination,
@@ -136,16 +152,26 @@ all media is being viewed under D50 illumination. The implication of
 this is that to be fully interchangeable, it's not really possible to
 make the profile for your actual viewing environment. Note that the D50
 values that are calculated without FWA compensation do not actually
-reflect the appearance of a media under D50, because they fail to take
+reflect the appearance of a media under real D50, because they fail to
+take
 into account the different levels of FWA activity between the
-illumination using by the instrument to measure the media, and D50. To
-allow for this and actually meet the ICC specifications, FWA
+illumination using by the instrument to measure the media, and real
+D50. To
+allow for this and actually meet letter of the ICC specifications, FWA
 compensation should ideally be used when building a interchangeable ICC
-profile, by selecting the D50 illuminant, and the 1931_2 observer model.<br>
+profile, by selecting the D50 illuminant, and the 1931_2 observer
+model. Note however that this is likely to make profiles less
+interchangeable rather than more, since few if any other profiles will
+represent the appearance under real D50, since few if any instruments
+use a real D50 illuminant that will trigger the correct level of FWA
+response, and few if any other packages will compensate for the
+differences in FWA activity between the instrument illuminant used and
+real D50.<br>
 <br>
 Similarly, the effects of viewing the media in an environment with a UV
 filter fitted over the D50 illuminant can be simulated by using FWA
-compensation with the ref/D50_0.0.sp illuminant, and the 1931_2
+compensation with the provided ref/D50_0.0.sp illuminant, and the
+1931_2
 observer, thereby simulating the results one would get if the media had
 been measured with a "UV cut" type instrument, although such profiles
 are not technically ICC compatible.<br>

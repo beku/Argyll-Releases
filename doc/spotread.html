@@ -132,7 +132,10 @@ Display Yxy instead of Lab<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#T">-T</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Display correlated color temperatures</span></font><br>
+Display correlated color temperatures<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="dispcal.html#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Disable auto calibration of instrument</span></font><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#H">-H</a><span
  style="font-family: monospace;">
@@ -299,6 +302,13 @@ minimum CIEDE2000 error to the measured color. The last is the daylight
 color that has a minimum CIEDE2000 error to the measured color. The
 delta E between the closest temperature and the measured color is also
 shown for each.<br>
+<br>
+<a name="N"></a>The <b>-N</b> option disables the automatic
+calibration
+of an instrument if it is possible to do so. Sometimes it is awkward to
+have to re-calibrate and instrument every time a utility starts, and
+unnecessary if the instrument has recently been calibration, and this
+switch prevents it happening.<br>
 <br>
 <a name="H"></a> The -<span style="font-weight: bold;">H</span> option
 turns on high resolution spectral mode, if the instrument supports it.

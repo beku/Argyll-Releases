@@ -13,6 +13,10 @@
 
 #include "usbi.h"
 
+int usb_argyll_patched(void) {
+    return 1;
+}
+
 int usb_debug = 0;
 struct usb_bus *_usb_busses = NULL;
 

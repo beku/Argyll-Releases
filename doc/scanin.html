@@ -13,7 +13,7 @@ Convert an 8 or 16 bit per component <a href="File_Formats.html#TIFF">TIFF</a>
 image of a
 test chart into&nbsp;<a href="File_Formats.html#.ti3">.ti3</a> device
 values
-using automatic pattern recognition.<br>
+using automatic pattern recognition, or manual chart alignment.<br>
 Performs other tasks associated with turning a TIFF raster of test
 patches into numeric values. <br>
 <h3>Usage Summary<br>
@@ -70,9 +70,9 @@ Output patch values in .val file</span><br
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#c">-c</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use scanner as colorimeter to</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-convert printer .ti2 to .ti3</span><br style="font-family: monospace;">
+Use image to measure color to convert printer .ti2 to .ti3</span><span
+ style="font-family: monospace;"></span><br
+ style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#ca">-ca</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -87,10 +87,13 @@ Replace device values in .ti3</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Default is to create a scanner .ti3 file<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#F">-F x1,y1,x2,y2,x3,y3</a><span
- style="font-family: monospace;"> Don't auto recognize, locate using
-three fiducual marks</span></small><br style="font-family: monospace;">
-<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;" href="#F">-F x1,y1,x2,y2,x3,y3,x4,y4</a><span
+ style="font-family: monospace;"> <br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Don't auto recognize, locate using four fiducual marks<br>
+&nbsp;<a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Compensate for perspective distortion<br style="font-family: monospace;">
+</span></small><small><span style="font-family: monospace;"></span><span
  style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#a">-a</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -113,8 +116,7 @@ gamma encoding of image</span></small><br
 Verbosity level 0-9</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#d">-d</a><span
- style="font-family: monospace;"> [ihvglLrsonap]&nbsp;&nbsp;&nbsp;
-Generate
+ style="font-family: monospace;"> [ihvglLIcrsonap]&nbsp;&nbsp; generate
 diagnostic output (try -dipn)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
  style="font-family: monospace;" href="#di">i</a><span
@@ -140,8 +142,18 @@ diag - Lines detected</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
  style="font-family: monospace;" href="#dL">L</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-diag - All lines detected</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
+diag - All lines detected<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;
+</span><span style="font-family: monospace;"><a href="#dI">I</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - lines used to improve fit<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;
+</span><a style="font-family: monospace;" href="dc">c</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+diag - lines perspective corrected</span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><a
  style="font-family: monospace;" href="#dr">r</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 diag - lines rotated</span><br style="font-family: monospace;">
@@ -184,13 +196,13 @@ before submitting the file to scanin.<br>
 There are 5 basic modes that <b>scanin</b> operates in.<br>
 <ul>
   <li><a name="_"></a>When no special argument is given scanin is
-assumed to be scanning an input device characterization chart (ie. an
+assumed to be parsing an input device characterization chart (ie. an
 IT8.7/2 chart), for the purpose of creating a <a
  href="File_Formats.html#.ti3">.ti3</a> data file containing
 the CIE test values and the corresponding RGB scanner values. The <a
  href="File_Formats.html#.ti3">.ti3</a> file can then be used for
 creating
-an input profile using <a href="profile.html">profile</a>. The file
+an input profile using <a href="colprof.html">colprof</a>. The file
 arguments are: <a name="_p1"></a>The TIFF file that is to be
 processed, <a name="_p2"></a>the image recognition template file, <a
  name="_p3"></a>the CIE reference value definitions for the test chart
@@ -226,22 +238,26 @@ are: <a name="op1"></a>The TIFF file that is to be processed, <a
 to be created, <a name="op3"></a>and an optional name for the image
 recognition diagnostic
 output.</li>
-  <li><a name="c"></a>If the <b>-c</b> flag is used, then the scanned
-file can be used
+  <><a name="c"></a>If the <b>-c</b> flag is used, then an input image
+of a print test chart can be used
 in combination with an input profile, to estimate the CIE tristimulus
-values represented by the scanned patch values. This allows an RGB
-scanner to be used as a "poor mans" colorimeter. The icc profile has
+values of the patches. This allows RGB
+input devices to be used as a crude replacement for a color measuring
+instrument. The icc profile has
 (presumably) been
-created by scanning an IT8.7/2 chart (or similar) through the scanner,
+created by scanning an IT8.7/2 chart (or similar) through the RGB input
+device,
 and
-then using scanin to create the .ti3 file needed to feed to profile to
+then using scanin to create the .ti3 file needed to feed to colprof to
 create
-the scanner profile. The file arguments in -c mode are: <a name="cp1"></a>The
+the input device profile. The file arguments in -c mode are: <a
+ name="cp1"></a>The
 TIFF file that
-is to be processed containing a scanned image of a print test chart, <a
+is to be processed containing the image of a print test chart, <a
  name="cp2"></a>the image recognition template file for the test chart
 generated by the <a href="printtarg.html"> printtarg</a> utility, <a
- name="cp3"></a>the scanner ICC profile, <a name="cp4"></a>the base
+ name="cp3"></a>the input device ICC profile, <a name="cp4"></a>the
+base
 name for the .ti2 file containing the
 test chart printer device
 values and their patch identifiers and the base name for the resulting
@@ -257,8 +273,8 @@ used
 for all pages after the first,
 as this then adds that pages test values to the .ti3 file, rather than
 creating
-a .ti3 file that contains only that pages test values.</li>
-  <li><a name="r"></a>If the -r flag is used, then the input TIFF value
+a .ti3 file that contains only that pages test values.</> <li><a
+ name="r"></a>If the -r flag is used, then the input TIFF value
 is used as a source of device values to replace any existing device
 values in the given .ti3
 file. This is intended for use in the situation in which the device
@@ -311,13 +327,24 @@ rotation".<br>
 <a name="F"></a>Normally scanin will use automatic chart recognition to
 identify the location of the test patches and extract their values. If
 the chart <a href="cht_format.html">CHT file</a>&nbsp;
-has three fiducial marks defined, then the chart can be manually
-aligned by specifying the pixel location of the three marks as
+has four fiducial marks defined, then the chart can be manually
+aligned by specifying the pixel location of the four marks as
 arguments to the <span style="font-weight: bold;"><span
  style="font-weight: bold;">-F</span></span> flag. The top left, top
-right and bottom right fiducial marks X and Y co-ordinates should be
+right, bottom right and bottom left fiducial marks X and Y co-ordinates
+should be
 specified as a single concatenated argument, separated by comma's, e.g:
--F 10,20,435,22,432,239&nbsp; The coodinates may be fractional.<br>
+-F 10,20,435,22,432,239,10,239&nbsp; The coodinates may be fractional.
+Four fiducial marks allows for compensation for perspective distortion.<br>
+<br>
+<a name="p"></a>By default the automatic chart recognition copes with
+rotation, scale and stretch in the chart image, making it suitable for
+charts that have been scanned, or shot squarely with a camera. If a
+chart has been shot not exactly facing the camera (perhaps to avoid
+reflection, or to get more even lighting), then it will suffer from
+perspective distortion as well. The <span style="font-weight: bold;"><span
+ style="font-weight: bold;">-p</span></span> flag enables automatic
+compensation for perspective distortion.<br>
 <br>
 <a name="m"></a>Normally scanin computes an average of the pixel values
 within a sample square, using a "robust" mean, that discards pixel
@@ -369,6 +396,11 @@ estimated from the vertical and horizontal pixel groups, in white.<br>
 <b><a name="dL"></a>L</b>&nbsp;&nbsp;&nbsp; will show all lines (valid
 and invalid) estimated from the vertical and horizontal pixel groups,
 in white.<br>
+<b><a name="dI"></a>I</b> &nbsp;&nbsp; will show valid lines lines used
+to improve the final fit,
+in blue.<br>
+<b><a name="dc"></a>c</b> &nbsp;&nbsp; will show the lines with
+perspective correction applied in cyan.<br>
 <b><a name="dr"></a>r</b>&nbsp;&nbsp;&nbsp; will show the lines rotated
 to the reference
 chart orientation, in yellow.<br>

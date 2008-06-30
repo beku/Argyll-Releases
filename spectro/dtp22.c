@@ -40,9 +40,11 @@
 #include <stdarg.h>
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "dtp22.h"
 
 #undef DEBUG
@@ -208,7 +210,7 @@ dtp22_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 
 	while (msec_time() < etime) {
 
-		if (p->debug) fprintf(stderr,"dtp22: Trying different baud rates (%d msec to go)\n",etime - msec_time());
+		if (p->debug) fprintf(stderr,"dtp22: Trying different baud rates (%lu msec to go)\n",etime - msec_time());
 
 		/* Until we time out, find the correct baud rate */
 		for (i = ci; msec_time() < etime;) {

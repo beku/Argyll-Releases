@@ -68,6 +68,8 @@ main(
 	int labout = 0;		/* Flag */
 	int rgbout = 0;		/* Flag */
 	
+	error_program = argv[0];
+
 	if (argc < 2)
 		usage();
 

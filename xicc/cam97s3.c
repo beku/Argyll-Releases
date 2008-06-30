@@ -68,7 +68,7 @@ double Lv		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 
 static void cam_free(cam97s3 *s);
 static int set_view(struct _cam97s3 *s, ViewingCondition Ev, double Wxyz[3],
-                    double Yb, double La, double Lv, double Yf, double Fxyz[3],
+                    double La, double Yb, double Lv, double Yf, double Fxyz[3],
 					int hk);
 static int XYZ_to_cam(struct _cam97s3 *s, double *Jab, double *xyz);
 static int cam_to_XYZ(struct _cam97s3 *s, double *xyz, double *Jab);
@@ -90,7 +90,7 @@ cam97s3 *new_cam97s3(void) {
 	s->cam_to_XYZ = cam_to_XYZ;
 
 	/* Set a default viewing condition ?? */
-	/* set_view(s, vc_average, D50, 0.2, 33.0, 0.0, 0.0, D50, 0); */
+	/* set_view(s, vc_average, D50, 33.0, 0.2, 0.0, 0.0, D50, 0); */
 
 	return s;
 }
@@ -110,8 +110,8 @@ static int set_view(
 cam97s3 *s,
 ViewingCondition Ev,	/* Enumerated Viewing Condition */
 double Wxyz[3],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
-double Yb,		/* Relative Luminance of Background to reference white */
 double La,		/* Adapting/Surround Luminance cd/m^2 */
+double Yb,		/* Relative Luminance of Background to reference white */
 double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */

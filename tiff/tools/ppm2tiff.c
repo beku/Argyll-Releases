@@ -71,31 +71,31 @@ main(int argc, char* argv[])
 	int prec;
 	char *infile;
 	int c;
-	extern int optind;
-	extern char* optarg;
+	extern int tiff_optind;
+	extern char* tiff_optarg;
 
 	if ( argc < 2 ) {
 	    fprintf(stderr, "%s: Too few arguments\n", argv[0]);
 	    usage();
 	}
-	while ((c = getopt(argc, argv, "c:r:R:")) != -1)
+	while ((c = tiff_getopt(argc, argv, "c:r:R:")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(optarg))
+			if (!processCompressOptions(tiff_optarg))
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(optarg);
+			rowsperstrip = atoi(tiff_optarg);
 			break;
 		case 'R':		/* resolution */
-			resolution = atof(optarg);
+			resolution = atof(tiff_optarg);
 			break;
 		case '?':
 			usage();
 			/*NOTREACHED*/
 		}
 
-	if ( optind + 2 < argc ) {
+	if ( tiff_optind + 2 < argc ) {
 	    fprintf(stderr, "%s: Too many arguments\n", argv[0]);
 	    usage();
 	}
@@ -104,8 +104,8 @@ main(int argc, char* argv[])
 	 * If only one file is specified, read input from
 	 * stdin; otherwise usage is: ppm2tiff input output.
 	 */
-	if (argc - optind > 1) {
-		infile = argv[optind++];
+	if (argc - tiff_optind > 1) {
+		infile = argv[tiff_optind++];
 		in = fopen(infile, "r" BINMODE);
 		if (in == NULL) {
 			fprintf(stderr, "%s: Can not open.\n", infile);
@@ -159,7 +159,7 @@ main(int argc, char* argv[])
 	if (fgetc(in) != '\n' || w <= 0 || h <= 0 || prec != 255)
 		BadPPM(infile);
 
-	out = TIFFOpen(argv[optind], "w");
+	out = TIFFOpen(argv[tiff_optind], "w");
 	if (out == NULL)
 		return (-4);
 	TIFFSetField(out, TIFFTAG_IMAGEWIDTH,  w);

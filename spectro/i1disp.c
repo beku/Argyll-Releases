@@ -45,6 +45,7 @@
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
+#include "conv.h"
 #include "i1disp.h"
 
 #undef DEBUG
@@ -61,6 +62,8 @@ static inst_code i1disp_check_unlock(i1disp *p);
 
 #define MAX_MES_SIZE 500		/* Maximum normal message reply size */
 #define MAX_RD_SIZE 5000		/* Maximum reading messagle reply size */
+
+#define CALFACTOR 3.428			/* Emissive magic calibration factor */
 
 /* ------------------------------------------------------------------------ */
 /* Implementation */
@@ -220,7 +223,7 @@ i1disp_command_1(
 		rv = i1disp_interp_code((inst *)p, I1DISP_NOT_READY);
 
 	/* Instrument returns "LOCK" to any instruction if it is locked */
-	if (rv == inst_ok && *rsize == 5 && strncmp(out,"LOCK",4) == 0) {
+	if (rv == inst_ok && *rsize == 5 && strncmp((char *)out,"LOCK",4) == 0) {
 		rv = i1disp_interp_code((inst *)p, I1DISP_LOCKED);
 	}
 
@@ -255,7 +258,7 @@ i1disp_command(
 }
 
 /* Take an int, and convert it into a byte buffer */
-static void int2buf(char *buf, int inv) {
+static void int2buf(unsigned char *buf, int inv) {
 	buf[0] = (inv >> 24) & 0xff;
 	buf[1] = (inv >> 16) & 0xff;
 	buf[2] = (inv >> 8) & 0xff;
@@ -263,15 +266,15 @@ static void int2buf(char *buf, int inv) {
 }
 
 /* Take a short, and convert it into a byte buffer */
-static void short2buf(char *buf, int inv) {
+static void short2buf(unsigned char *buf, int inv) {
 	buf[0] = (inv >> 8) & 0xff;
 	buf[1] = (inv >> 0) & 0xff;
 }
 
 /* Take a word sized return buffer, and convert it to an int */
-static int buf2int(char *buf) {
+static int buf2int(unsigned char *buf) {
 	int val;
-	val = buf[0];
+	val = (signed char)buf[0];
 	val = ((val << 8) + (0xff & buf[1]));
 	val = ((val << 8) + (0xff & buf[2]));
 	val = ((val << 8) + (0xff & buf[3]));
@@ -285,7 +288,7 @@ i1disp_rdreg_byte(
 	int *outp,				/* Where to write value */
 	int addr				/* Register Address, 0 - 127 */
 ) {
-	char c, buf[16];
+	unsigned char c, buf[16];
 	int rsize;
 	inst_code ev;
 
@@ -400,7 +403,7 @@ i1disp_wrreg_byte(
 	int addr				/* Register Address, 0 - 127 */
 ) {
 	int cval;
-	char ibuf[16], obuf[16];
+	unsigned char ibuf[16], obuf[16];
 	int rsize;
 	inst_code ev;
 
@@ -490,7 +493,7 @@ i1disp_rd_int_time(
 	i1disp *p,				/* Object */
 	int *outp				/* Where to write value */
 ) {
-	char buf[16];
+	unsigned char buf[16];
 	int rsize;
 	inst_code ev;
 
@@ -512,7 +515,7 @@ i1disp_wr_int_time(
 	i1disp *p,				/* Object */
 	int inv					/* Value to write */
 ) {
-	char buf[16];
+	unsigned char buf[16];
 	int rsize;
 	inst_code ev;
 
@@ -530,7 +533,7 @@ i1disp_rd_meas_period(
 	i1disp *p,				/* Object */
 	int *outp				/* Where to write value */
 ) {
-	char buf[16];
+	unsigned char buf[16];
 	int rsize;
 	inst_code ev;
 
@@ -558,8 +561,8 @@ i1disp_take_raw_measurement_1(
 	double rgb[3]			/* Return the RGB A/D values */
 ) {
 	int i;
-	char ibuf[16];
-	char obuf[16];
+	unsigned char ibuf[16];
+	unsigned char obuf[16];
 	int rsize;
 	inst_code ev;
 
@@ -687,8 +690,8 @@ i1disp_take_first_raw_measurement_2(
 	double rgb[3]			/* Return the RGB values */
 ) {
 	int i;
-	char ibuf[16];
-	char obuf[16];
+	unsigned char ibuf[16];
+	unsigned char obuf[16];
 	int rsize;
 	inst_code ev;
 
@@ -728,8 +731,8 @@ i1disp_take_raw_measurement_2(
 	double rgb[3]		/* Return the RGB values */
 ) {
 	int i;
-	char ibuf[16];
-	char obuf[16];
+	unsigned char ibuf[16];
+	unsigned char obuf[16];
 	int rsize;
 	inst_code ev;
 
@@ -923,13 +926,12 @@ i1disp_take_XYZ_measurement(
 		for (j = 0; j < 3; j++) {
 			XYZ[i] += mat[i * 3 + j] * rgb[j]; 
 		}
-		XYZ[i] *= 3.425014379251237;	/* Times magic scale factor */
-		if ((p->mode & inst_mode_measurement_mask) == inst_mode_emis_ambient)
-			XYZ[i] *= 3.0;			/* Times magic scale factor (approx) */
-									/* (Calibrated aproximately agains the i1pro) */
+		XYZ[i] *= CALFACTOR;		/* Times magic scale factor */
 
+#ifdef NEVER
 		if (p->chroma4)
-			XYZ[i] *= 4.0;			/* (Not sure about this factor!) */
+			XYZ[i] *= 4.0/3.0;			/* (Not sure about this factor!) */
+#endif
 	}
 	DBG(("returning XYZ = %f %f %f\n",XYZ[0],XYZ[1],XYZ[2]))
 	return inst_ok;
@@ -1041,7 +1043,7 @@ static inst_code
 i1disp_check_unlock(
 	i1disp *p				/* Object */
 ) {
-	char buf[16];
+	unsigned char buf[16];
 	int rsize;
 	inst_code ev;
 	int vv;
@@ -1059,7 +1061,7 @@ i1disp_check_unlock(
 	if ((ev & inst_imask) == I1DISP_LOCKED) {
 
 		/* Unlock it. Ignore I1DISP_NOT_READY status. */
-		if (((ev = i1disp_command_1(p, i1d_unlock, "GrMb", 4,
+		if (((ev = i1disp_command_1(p, i1d_unlock, (unsigned char *)"GrMb", 4,
 		         buf, 8, &rsize, 0.5)) & inst_mask) != inst_ok
 		                 && (ev & inst_imask) != I1DISP_LOCKED)
 			return ev;
@@ -1074,7 +1076,7 @@ i1disp_check_unlock(
 		/* Still locked. See if it's an i1display2LT */
 
 		/* Unlock it. Ignore I1DISP_NOT_READY status. */
-		if (((ev = i1disp_command_1(p, i1d_unlock, "Lite", 4,
+		if (((ev = i1disp_command_1(p, i1d_unlock, (unsigned char *)"Lite", 4,
 		         buf, 8, &rsize, 0.5)) & inst_mask) != inst_ok
 		                 && (ev & inst_imask) != I1DISP_LOCKED)
 			return ev;
@@ -1095,14 +1097,14 @@ i1disp_check_unlock(
 	}
 
 	buf[4] = '\000';
-	ver = atof(buf);
+	ver = atof((char *)buf);
 	DBG(("Version string = %5.3f\n",ver))
 
 	/* Read register 0x79 for the model identifier */
 	if ((ev = i1disp_rdreg_byte(p, &vv, 121) ) != inst_ok) {
-		vv &= 0xff;
 		return ev;
 	}
+	vv &= 0xff;
 
 	DBG(("Version character = 0x%02x = '%c'\n",vv,vv))
 
@@ -1329,7 +1331,7 @@ i1disp_compute_factors(
 static inst_code
 i1disp_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	i1disp *p = (i1disp *) pp;
-	char buf[16];
+	unsigned char buf[16];
 	int rsize;
 	long etime;
 	int bi, i, rv;

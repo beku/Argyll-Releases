@@ -49,9 +49,13 @@ struct usb_device *dev
 ) {
 	instType itype;
 
+	if (p->debug) fprintf(stderr,"usb_check_and_add() called with VID 0x%x, PID 0x%x\n",dev->descriptor.idVendor, dev->descriptor.idProduct);
+
 	if ((itype = inst_usb_match(dev->descriptor.idVendor, dev->descriptor.idProduct))
 	                                                                != instUnknown) {
 		char pname[400];
+
+		if (p->debug) fprintf(stderr,"usb_check_and_add() found known instrument\n");
 
 		/* Create a path/identification */
 		/* (devnum doesn't seem valid ?) */
@@ -98,18 +102,26 @@ struct _icoms *p
 #ifdef ENABLE_USB
 	struct usb_bus *bus;
 
+	/* Check that we've got an up to date version of libusb */
+	if (usb_argyll_patched() < 2)
+		error("usblib isn't up to date to work with this version of Argyll");
+
+// ~~99
+//	if (p->debug)
+//		usb_set_debug(p->debug);
+
 	/* Scan the USB busses for instruments we recognise */
 	/* We're not expecting any of our unstruments to be an interface on a device. */
-
-	if (usb_argyll_patched() < 1)
-		error("usblib hasn't been patched to work with Argyll");
 
    	usb_init();
    	usb_find_busses();
    	usb_find_devices();
     
+	if (p->debug) fprintf(stderr,"usb_get_paths about to look through buses:\n");
+
    	for (bus = usb_get_busses(); bus != NULL; bus = bus->next) {
 		struct usb_device *dev;
+		if (p->debug) fprintf(stderr,"usb_get_paths about to look through devices:\n");
    		for (dev = bus->devices; dev != NULL; dev = dev->next) {
 			usb_check_and_add(p, dev);
 		}
@@ -1136,7 +1148,8 @@ icomuflags usbflags	/* Any special handling flags */
 	if (p->debug) fprintf(stderr,"icoms: usb port characteristics set ok\n");
 
 	// ~~~999
-//	usb_set_debug(8);
+//	if (p->debug)
+//		usb_set_debug(p->debug);
 }
 
 /* Reset user interrupt handling to default (Esc, ^C, q or 'Q' = Abort) */

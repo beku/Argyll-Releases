@@ -430,6 +430,8 @@ main(int argc, char *argv[]) {
 		vc.Fxyz[2] = z/y * vc.Fxyz[1];
 	}
 
+	fl |= ICX_CLIP_NEAREST;		/* Don't setup rev uncessarily */
+
 #ifdef USE_CAM_CLIP_OPT
 	 fl |= ICX_CAM_CLIP;
 #endif

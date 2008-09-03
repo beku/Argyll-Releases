@@ -62,21 +62,30 @@ When working with a multi-monitor X11 configuration, note that you will
 only be able to individually calibrate monitors if the multi-window
 extension you are using (if any), supports access to the individual
 screen Video LUT tables that are used for calibration. The native X11
-multi-screen addressing supports this, as does the Xinerama extension.<br>
+multi-screen addressing supports this, as does the Xinerama extension,
+and XRandR V1.2.<br>
 <br>
 The proprietary NVidia TwinView and ATI MergeFB extensions do not
-support access to the individual screen Video LUTs, so calibration of
+currently support access to the individual screen Video LUTs, so
+calibration of
 each screen independently is impossible if either of these extensions
 are running. You can try doing a calibration for the screens that do
 have accessible Video LUTs with these proprietary extensions, or ignore
 calibration and rely purely on display profiling. Use the dispwin
-utility to figure out what works on your system.<br>
+utility to figure out what works on your system. The NVidia ATI binary
+drivers do not seem to properly support XRandR V1.2 either, even though
+they claim to do so. You may have to set the <span
+ style="font-weight: bold;"></span><span style="font-weight: bold;">ARGYLL_IGNORE_XRANDR1_2</span>
+environment variable if the XRandR V1.2 extension is faulty.<br>
+<br>
 If these limitations trouble you, then as a valuable customer of NVidia
-or ATI,
+or AMD/ATI,
 perhaps you should contact them and urge them to fix the problems with
-Video LUT access in their proprietary multi-monitor extensions,
+Video LUT access in their proprietary multi-monitor extensions and
+XRandR implementation,
 bringing their support for multi-monitors on X11 up to the same
-standards as other operating systems. Urge them to add support for the
+standards as other operating systems. Urge them to add full and correct
+support for the
 XRandR V1.2 extension.<br>
 <br>
 <big style="color: rgb(51, 102, 255);"><span style="font-weight: bold;">Fixing
@@ -104,7 +113,7 @@ function correctly.<br>
 up instrument access:<br>
 <br>
 </span></big>By default most Linux based systems make devices
-inaccessible to user mode programs, so it is nessessary to make some
+inaccessible to user mode programs, so it is necessary to make some
 modification to the permissions for Color Measurement Instrument
 devices to allow Argyll utilities to access them. In order from newest
 to oldest, the following sub-systems may need to be configured to
@@ -116,18 +125,18 @@ device configuration needed:</a><span
  style="font-weight: bold; text-decoration: underline;"><br>
 <br>
 </span>&nbsp;&nbsp;&nbsp; <a href="#None">Mandriva 2008.0 default
-instalation</a><br>
+installation</a><br>
 <h5>&nbsp; <a href="#PolicyKit">PolicyKit + HAL:</a></h5>
 &nbsp;&nbsp;&nbsp; <a href="#PolicyKit">Fedora Core 8</a><br>
 &nbsp;&nbsp;&nbsp; <a href="#PolicyKit">Mandriva 2008.1</a><br>
 <br>
-<h5>&nbsp; <a href="udev1">udev with libusb devices already present:</a></h5>
+<h5>&nbsp; <a href="#udev1">udev with libusb devices already present:</a></h5>
 &nbsp;&nbsp;&nbsp; <a href="#udev1">OpenSuSE 10.3</a><br>
 &nbsp;&nbsp;&nbsp; <a href="#udev1">Ubuntu 7.1</a><br>
 &nbsp;&nbsp;&nbsp; <a href="#udev1">Kubuntu 7.1</a><br>
 &nbsp;&nbsp;&nbsp; <a href="#udev1">Debian 4.0</a><br>
 <a href="Installing.html#udev1"></a>
-<h5>&nbsp; <a href="udev1">udev without default libusb devices</a></h5>
+<h5>&nbsp; <a href="#udev2">udev without default libusb devices</a></h5>
 <h5>&nbsp; <a href="#hotplug">hotplug and udev:</a></h5>
 &nbsp;&nbsp; <a href="#hotplug">Red Hat 4.0</a><br>
 <br>
@@ -382,10 +391,10 @@ actually does this. If your system does <span
 the libusb
 devices, skip to the <a href="#udev2">next udev configuration section</a>.<br>
 <br>
-[The following proceedure simply changes the permissions on all the
+[The following procedure simply changes the permissions on all the
 color instrument devices and serial ports that might be used for color
 instruments to world writable. A more sophisticated approach would be
-to create, or use a group for this, asign the instruments to this group
+to create or use a group for this, assign the instruments to this group
 using&nbsp; GROUP="argyllgroup" rather than MODE="666", and making
 appropriate users members of this group.]<br>
 <br>
@@ -415,7 +424,7 @@ applications.<br>
 #Enable serial port connected instruments connected on first two ports.<br>
 KERNEL=="ttyS[01]", MODE="666"<br>
 <br>
-#Enable serial port connected instruments on USB serial converteds
+#Enable serial port connected instruments on USB serial converted
 connected on first two ports.<br>
 KERNEL=="ttyUSB[01]", MODE="666"<br>
 <br>
@@ -438,10 +447,10 @@ SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2003", MODE="666"<br>
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2000", MODE="666"<br>
 <br>
 # Colorimtre HCFR<br>
-SYSFS{idVendor}=="04DB", SYSFS{idProduct}=="005B", MODE="666"<br>
+SYSFS{idVendor}=="04db", SYSFS{idProduct}=="005b", MODE="666"<br>
 <br>
 # Spyder 2<br>
-SYSFS{idVendor}=="085C", SYSFS{idProduct}=="0200", MODE="666"<br>
+SYSFS{idVendor}=="085c", SYSFS{idProduct}=="0200", MODE="666"<br>
 <br>
 # Huey<br>
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2005", MODE="666"<br>
@@ -455,10 +464,11 @@ device entries for <span style="font-weight: bold;">libusb</span>
 devices, then you need to add a rule to do so, as well as making the
 devices available to Argyll.<br>
 <br>
-[The following proceedure simply changes the permissions on all the
+[The following procedure simply changes the permissions on all the
 color instrument devices and serial ports that might be used for color
 instruments to world writable. A more sophisticated approach would be
-to create, or use a group for this, asign the instruments to this group
+to create, or use a group for this, assign the instruments to this
+group
 using&nbsp; GROUP="argyllgroup" rather than MODE="666", and making
 appropriate users members of this group.]<br>
 <br>
@@ -487,7 +497,7 @@ can be accessed by argyll<br>
 # Enable serial port connected instruments connected on first two ports.<br>
 KERNEL=="ttyS[01]", MODE="666"<br>
 <br>
-# Enable serial port connected instruments on USB serial converteds
+# Enable serial port connected instruments on USB serial converted
 connected on first two ports.<br>
 KERNEL=="ttyUSB[01]", MODE="666"<br>
 <br>
@@ -522,12 +532,12 @@ SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2000", PROGRAM="/bin/sh -c
 $${K#*.}'", NAME="%c",&nbsp; MODE="666"<br>
 <br>
 # Colorimtre HCFR<br>
-SYSFS{idVendor}=="04DB", SYSFS{idProduct}=="005B", PROGRAM="/bin/sh -c
+SYSFS{idVendor}=="04db", SYSFS{idProduct}=="005b", PROGRAM="/bin/sh -c
 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*}
 $${K#*.}'", NAME="%c",&nbsp; MODE="666"<br>
 <br>
 # Spyder 2<br>
-SYSFS{idVendor}=="085C", SYSFS{idProduct}=="0200", PROGRAM="/bin/sh -c
+SYSFS{idVendor}=="085c", SYSFS{idProduct}=="0200", PROGRAM="/bin/sh -c
 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*}
 $${K#*.}'", NAME="%c",&nbsp; MODE="666"<br>
 <br>
@@ -552,10 +562,11 @@ the <span style="font-weight: bold;">/etc/hotplug</span> directory
 exists on
 your system.<br>
 <br>
-[The following proceedure simply changes the permissions on all the
+[The following procedure simply changes the permissions on all the
 color instrument devices and serial ports that might be used for color
 instruments to world writable. A more sophisticated approach would be
-to create, or use a group for this, asign the instruments to this group
+to create, or use a group for this, assign the instruments to this
+group
 using&nbsp; chgrp argyllgroup "${DEVICE}" and chmod 664
 "${DEVICE}"&nbsp; rather than chmod 666 "${DEVICE}", and making
 appropriate users members of this group.]<br>
@@ -638,7 +649,7 @@ udev:</span><br>
 On older Linux systems using hotplug and udev, the serial ports are
 being
 created by the <span style="font-weight: bold;">udev</span> system, so
-modifying the udev permissioins is one way of making the serial ports
+modifying the udev permissions is one way of making the serial ports
 accessible to Argyll.<span style="font-weight: bold;"></span><br>
 <br>
 Copy the file <span style="font-weight: bold;">libusb/</span><span

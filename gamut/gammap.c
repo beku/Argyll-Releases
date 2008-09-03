@@ -21,13 +21,18 @@
  *       Improve error handling.
  */
 
-#define VERBOSE		/* Print out extra interesting information when verbose */
-#define XRES 100	/* Res of plot */
-#undef PLOT_LMAP	/* Plot L map */
-#undef PLOT_GAMVEC	/* Save the gamut mapping points as "gammap.wrl" */
-#undef PLOT_GAMUTS	/* Save (part mapped) input and output gamuts as */
-					/* src.wrl, img.wrl, dst.wrl, gmsrc.wrl */
-#undef PLOT_3DKNEES	/* Plot the 3D compression knees */
+#define VERBOSE			/* Print out extra interesting information when verbose */
+#define XRES 100		/* Res of plot */
+#undef PLOT_LMAP		/* Plot L map */
+#undef PLOT_GAMVEC		/* Save the gamut mapping points as "gammap.wrl" */
+#undef PLOT_GAMUTS		/* Save (part mapped) input and output gamuts as */
+						/* src.wrl, img.wrl, dst.wrl, gmsrc.wrl */
+#undef PLOT_3DKNEES		/* Plot the 3D compression knees */
+#define CHECK_NEARMAP	/* Check how accurately near map vectors are represented by rspl */
+
+#define USE_GLUMKNF			/* Enable luminence knee function points */
+#define USE_GAMKNF			/* Enable gamut boundary knee function points */
+#define USE_BOUND			/* Enable grid boundary anchor points */
 
 
 /* Optional marker points for gamut mapping diagnosotic */
@@ -44,9 +49,6 @@ struct {
 	{ 2, { 61.661622, -38.164411, -18.090824 }, { 1.0, 0.3, 0.3 } },	/* CMYK destination (Red) */
 	{ 0 }								/* End marker */
 };
-
-#define USE_GLUMKNF			/* Enable luminence knee function points */
-#define USE_GAMKNF			/* Enable gamut boundary knee function points */
 
 /* Degree to which the hue & saturation of the black point axes should be aligned: */
 #define GREYBPHSMF 0.0
@@ -97,7 +99,7 @@ gammapweights pweights[] = {
 		{		/* Weighting of absolute error of destination from source */
 			1.0,	/* Absolute error overall weight */
 			{
-				1.6,	/* Absolute luminance error weight */
+				1.4,	/* Absolute luminance error weight */
 //				1.0,	/* (V0.7) Absolute chroma error weight */
 //				1.0		/* (V0.7) Absolute hue error weight */
 				0.8,	/* Absolute chroma error weight */
@@ -135,7 +137,7 @@ gammapweights pweights[] = {
 		{		/* Weighting of absolute error of destination from source */
 			1.0,	/* Absolute error overall weight */
 			{
-				1.5,	/* Absolute luminance error weight */
+				1.3,	/* Absolute luminance error weight */
 				1.6,	/* Absolute chroma error weight */
 				1.0		/* Absolute hue error weight */
 			}
@@ -178,7 +180,7 @@ gammapweights sweights[] = {
 		{		/* Weighting of absolute error of destination from source */
 			1.0,	/* Absolute error overall weight */
 			{
-				1.5,	/* Absolute luminance error weight */
+				1.3,	/* Absolute luminance error weight */
 				1.5,	/* Absolute chroma error weight */
 				0.5		/* Absolute hue error weight */
 			}
@@ -213,7 +215,7 @@ gammapweights sweights[] = {
 		{		/* Weighting of absolute error of destination from source */
 			1.0,	/* Absolute error overall weight */
 			{
-				1.5,	/* Absolute luminance error weight */
+				1.3,	/* Absolute luminance error weight */
 				3.0,	/* Absolute chroma error weight */
 				0.5		/* Absolute hue error weight */
 			}
@@ -246,7 +248,7 @@ gammapweights sweights[] = {
 		gmm_end
 	}
 };
-double ssmooth = 3.0;		/* Level of RSPL smoothing for saturation */
+double ssmooth = 1.8;		/* Level of RSPL smoothing for saturation */
 
 /*
  * Notes:
@@ -278,10 +280,10 @@ gammap *new_gammap(
 	icxGMappingIntent *gmi,	/* Gamut mapping specification */
 	int    mapres,		/* Gamut map resolution, typically 9 - 33 */
 	double *mn,			/* If not NULL, set minimum mapping input range */
-	double *mx,			/* for rspl grid. (May get modified) */
+	double *mx,			/* for rspl grid. */
 	char *diagname		/* If non-NULL, write a gamut mapping diagnostic WRL */
 ) {
-	gmm_BPmap bph = gmm_bendBP;		/* Preffered algorithm */
+	gmm_BPmap bph = gmm_bendBP;		/* Prefered algorithm */
 //	gmm_BPmap bph = gmm_clipBP;		/* Alternatives tried */
 //	gmm_BPmap bph = gmm_BPadpt;
 //	gmm_BPmap bph = gmm_noBPadpt;
@@ -314,7 +316,7 @@ gammap *new_gammap(
 	double d_mt_wp[3];	/* Overall destination mapping white point (used for finetune) */
 	double d_mt_bp[3];	/* Overall destination mapping black point (used for finetune) */
 
-	int defrgrid = 0;	/* mapping range surface default anchor point resolution */
+	int defrgrid = 6;	/* mapping range surface default anchor point resolution */
 	int nres = 512;		/* Neutral axis resolution */
 	cow lpnts[10];		/* Mapping points to create grey axis map */
 	int revrspl = 0;	/* Reverse grey axis rspl construction */
@@ -338,14 +340,6 @@ gammap *new_gammap(
 			case gmm_bendBP:	printf("Neutral axis no-adapt extend and bend\n"); break;
 			case gmm_noBPadpt:	printf("Neutral axis no-adapt\n"); break;
 		}
-	}
-
-	/* if the caller is setting an input range bounding box (ie */
-	/* because this is for an ICC profile B2A table), then makes sure */
-	/* we settup some anchor points at the outer boundaries of this box. */
-	if (mn != NULL && mx != NULL) {
-		defrgrid = 6;			/* 0 = none, minimum grid = 2 */
-								/* keep odd to avoid points at neutral axis ends */
 	}
 
 	/* Allocate the object */
@@ -836,7 +830,7 @@ glumknf	= 1.0;
 
 		/* Create a 1D rspl, that is used to */
 		/* form the overall L compression mapping. */
-		s->grey = new_rspl(1, 1);	/* Allocate 1D -> 1D */
+		s->grey = new_rspl(RSPL_NOFLAGS, 1, 1);	/* Allocate 1D -> 1D */
 	
 		il[0] = -1.0;		/* Set possible input range */
 		ih[0] = 101.0;
@@ -862,7 +856,7 @@ glumknf	= 1.0;
 		ol[0] = 0.0;		/* Set normalisation output range */
 		oh[0] = 100.0;
 
-		s->igrey = new_rspl(1, 1);	/* Allocate 1D -> 1D */
+		s->igrey = new_rspl(RSPL_NOFLAGS, 1, 1);	/* Allocate 1D -> 1D */
 		/* Create it from inverse lookups of s->grey */
 		s->igrey->set_rspl(s->igrey, 0, (void *)s->grey, inv_grey_func, il, ih, &gres, ol, oh);
 
@@ -996,6 +990,7 @@ glumknf	= 1.0;
 		int i, j;
 		datai il, ih;
 		datao ol, oh;
+		int gres[MXDI];
 		double avgdev[MXDO];
 		nearsmth *nsm;			/* Returned list of near smooth points */
 		int nnsm;				/* Number of near smoothed points */
@@ -1108,7 +1103,7 @@ typedef struct {
 			gpnts[ngamp].p[0], gpnts[ngamp].p[1], gpnts[ngamp].p[2],
 			gpnts[ngamp].v[0], gpnts[ngamp].v[1], gpnts[ngamp].v[2]);
 #endif
-			gpnts[ngamp++].w  = 5.0;		/* Weighting grey axis */
+			gpnts[ngamp++].w = 1.0;		/* Weighting grey axis */
 		}
 
 		/* ---------------------------------------------------- */
@@ -1126,7 +1121,8 @@ typedef struct {
 		if ((gmi->gampwf + gmi->gamswf) > 0.1)
 			smooth = (gmi->gampwf * psmooth) + (gmi->gamswf * ssmooth);
 
-		/* Create the near point mapping */
+		/* Create the near point mapping, which is our fundamental gamut */
+		/* hull to gamut hull mapping. */
 		nsm = near_smooth(verb, &nnsm, scl_gam, sil_gam, d_gam, dr_be_bp, xwh, 
 		    gmi->gamcpf > 1e-6, gmi->gamexf > 1e-6);
 		if (nsm == NULL) {
@@ -1140,7 +1136,6 @@ typedef struct {
 			free(s);
 			return NULL;
 		}
-
 		
 		if (diagname != NULL)
 			wrl = new_vrml(diagname, 1);
@@ -1172,13 +1167,125 @@ typedef struct {
 			wrl->start_line_set(wrl);
 		}
 
+		/* --------------------------- */
+		/* Compute the input bounding values */
+		for (j = 0; j < 3; j++) {
+			il[j] = ol[j] =  1e60;
+			ih[j] = oh[j] = -1e60;
+		}
+		/* From grey axis points */
+		for (i = 0; i < ngamp; i++) {
+			for (j = 0; j < 3; j++) {
+				if (gpnts[i].p[j] < il[j])
+					il[j] = gpnts[i].p[j];
+				if (gpnts[i].p[j] > ih[j])
+					ih[j] = gpnts[i].p[j];
+			}
+		}
+
+		/* From source gamut boundary of near point mapping, */
+		/* we compute the input range here, so that we can add */
+		/* mapping points on the surface of the range cube. */
 		for (i = 0; i < nnsm; i++) {
-			double div[3];
+			for (j = 0; j < 3; j++) {
+				if (nsm[i].sv[j] < il[j])
+					il[j] = nsm[i].sv[j];;
+				if (nsm[i].sv[j] > ih[j])
+					ih[j] = nsm[i].sv[j];
+			}
+		}
+
+#ifdef NEVER
+		if (verb) {
+			fprintf(stderr,"Input bounding box after grey axis and source mapping points:\n");
+			fprintfstderr,("%f -> %f, %f -> %f, %f -> %f\n",
+			il[0], ih[0], il[1], ih[1], il[2], ih[2]);
+		}
+#endif
+		/* Expand to make sure grid covers the entire source gamut */
+		{
+			double tmx[3], tmn[3];
+			sc_gam->getrange(sc_gam, tmn, tmx);
+			for (j = 0; j < 3; j++) {
+				if (tmn[j] < il[j])
+					il[j] = tmn[j];
+				if (tmx[j] > ih[j])
+					ih[j] = tmx[j];
+			}
+		}
+
+#ifdef NEVER
+		if (verb) {
+			fprintf(stderr,"Input bounding box after input colorspace boundary:\n");
+			fprintf(stderr,"%f -> %f, %f -> %f, %f -> %f\n",
+			il[0], ih[0], il[1], ih[1], il[2], ih[2]);
+		}
+#endif
+
+		/* Expand to input range given as input arguments */ 
+		if (mn != NULL && mx != NULL) {
+
+			for (j = 0; j < 3; j++) {
+				if (mn[j] < il[j])
+					il[j] = mn[j];
+				if (mx[j] > ih[j])
+					ih[j] = mx[j];
+			}
+
+#ifdef NEVER
+			if (verb) {
+				fprintf(stderr,"After ovverride, input bounding box for 3D gamut mapping is:\n");
+				fprintf(stderr,"%f -> %f, %f -> %f, %f -> %f\n",
+				il[0], ih[0], il[1], ih[1], il[2], ih[2]);
+			}
+#endif
+		}
+
+		/* Now expand the bounding box by aprox 5% margin, but scale grid res */
+		/* to match, so that the natural or given boundary still lies on the grid. */
+		{
+			int xmapres;
+			double scale;
+
+			xmapres = (int) ((mapres-1) * 0.05 + 0.5);
+			if (xmapres < 1)
+				xmapres = 1;
+
+			scale = (double)(mapres-1 + xmapres)/(double)(mapres-1);
+
+			for (j = 0; j < 3; j++) {
+				double low, high;
+				high = ih[j];
+				low = il[j];
+				ih[j] = (scale * (high - low)) + low;
+				il[j] = (scale * (low - high)) + high;
+			}
+
+			mapres += 2 * xmapres;
+#ifdef NEVER
+			if (verb) {
+				fprintf(stderr,"After incresing mapres to %d, input bounding box for 3D gamut mapping is:\n",mapres);
+				fprintf(stderr,"%f -> %f, %f -> %f, %f -> %f\n",
+				il[0], ih[0], il[1], ih[1], il[2], ih[2]);
+			}
+#endif
+		}
+
+		/* --------------------------- */
+		/* Now computue our 3D mapping points from the near point mapping */
+		/* NOTE: the knee points aren't directly connected with the gamut shell point, */
+		/* since they are positioned at a constant L from them, rather than */
+		/* in the gamut mapping direction or spherically, it's just a convenient way */
+		/* of locating a set of inner shell points that have a weaker 1:1 mapping */
+		/* that (hopefully) makes any compression/expansion progressive, rather than linear. */
+		for (i = 0; i < nnsm; i++) {
+			double div[3];			/* sdv moderated by gamcpf */
 			double knpos = 0.8;		/* Gamut Knee position */
 
 			if (nsm[i].sr >= nsm[i].dr) {		/* Compression needed */
 
-				/* Compute compression destination value */
+				/* Compute compression destination value which is a blend */
+				/* between the source value and the fully mapped destination value. */
 				for (j = 0; j < 3; j++)				/* Compute compressed value */
 					div[j] = gmi->gamcpf * nsm[i].sdv[j] + (1.0 - gmi->gamcpf) * nsm[i].sv[j];
 
@@ -1189,7 +1296,7 @@ typedef struct {
 				printf("Blended dst point = %f %f %f\n",div[0], div[1], div[2]);
 				printf("\n");
 #endif	/* NEVER */
-				/* Set the mapping point */
+				/* Set the main gamut hull mapping point */
 				for (j = 0; j < 3; j++) {
 					gpnts[ngamp].p[j] = nsm[i].sv[j];
 					gpnts[ngamp].v[j] = div[j];
@@ -1202,13 +1309,13 @@ typedef struct {
 					wrl->add_vertex(wrl, nsm[i].sdv);	/* Full compression dest. value */
 				}
 
-#ifdef USE_GAMKNF
-				/* Create a "knee" point */
+				/* Create an inner "knee" point and an outer boundary point. */
 				/* (Given the large smoothness factor used for the 3D */
 				/*  mapping, the "knee" is probably not being very effective here ?) */
 				{
 					double t;
-					double skp[3], dkp[3];
+					double sxkp[3], dxkp[3];	/* Axis intercept of knee point direction */
+					double skp[3], dkp[3];		/* Inner knee point */
 
 					/* Since the div is an associated point within both gamuts, */
 					/* we're going to use it as a basis for the "half way" knee point. */
@@ -1218,33 +1325,41 @@ typedef struct {
 					/* Find the div's corresponding point on the source L axis */
 					t = (div[0] - sl_cs_bp[0])/(sl_cs_wp[0] - sl_cs_bp[0]);
 					for (j = 0; j < 3; j++)
-						skp[j] = sl_cs_bp[j] + t * (sl_cs_wp[j] - sl_cs_bp[j]);
+						sxkp[j] = sl_cs_bp[j] + t * (sl_cs_wp[j] - sl_cs_bp[j]);
 			
-					dkp[0] = skp[0];	/* sil_gam is already L mapped */
+					dxkp[0] = sxkp[0];	/* sil_gam is already L mapped */
 
 					/* Figure destination point on destination grey axis */
-					t = (dkp[0] - dr_cs_bp[0])/(dr_cs_wp[0] - dr_cs_bp[0]);
+					t = (dxkp[0] - dr_cs_bp[0])/(dr_cs_wp[0] - dr_cs_bp[0]);
 					for (j = 1; j < 3; j++)
-						dkp[j] = dr_cs_bp[j] + t * (dr_cs_wp[j] - dr_cs_bp[j]);
+						dxkp[j] = dr_cs_bp[j] + t * (dr_cs_wp[j] - dr_cs_bp[j]);
 					
 #ifdef PLOT_3DKNEES
-					p3dk_locus[p3dk_ix].v0[0] = skp[0]; 
-					p3dk_locus[p3dk_ix].v0[1] = skp[1]; 
-					p3dk_locus[p3dk_ix].v0[2] = skp[2]; 
+					p3dk_locus[p3dk_ix].v0[0] = sxkp[0]; 
+					p3dk_locus[p3dk_ix].v0[1] = sxkp[1]; 
+					p3dk_locus[p3dk_ix].v0[2] = sxkp[2]; 
 					p3dk_locus[p3dk_ix].v1[0] = nsm[i].sv[0]; 
 					p3dk_locus[p3dk_ix].v1[1] = nsm[i].sv[1]; 
 					p3dk_locus[p3dk_ix].v1[2] = nsm[i].sv[2]; 
 					p3dk_ix++;
 #endif /* PLOT_3DKNEES */
 
-					/* Make mapping point at knpos towards div from corresponding grey axis point */
+					/* Compute the knee point const. L plane radially inwards from div[] */
 					for (j = 0; j < 3; j++) {
-						gpnts[ngamp].p[j] = (1.0 - knpos) * skp[j] + knpos * div[j];
-						gpnts[ngamp].v[j] = (1.0 - knpos) * dkp[j] + knpos * div[j];
+						skp[j] = (1.0 - knpos) * sxkp[j] + knpos * div[j];
+						dkp[j] = (1.0 - knpos) * dxkp[j] + knpos * div[j];
 					}
-					gpnts[ngamp++].w = gmi->gamknf * gmi->gamknf;		/* Knee weight */
-				}
+#ifdef USE_GAMKNF
+					/* Add this knee point only if there is some room for it */
+					if ((skp[1] * skp[1] + skp[2] * skp[2]) > (5.0 * 5.0)) {	/* > 5 DE */
+						for (j = 0; j < 3; j++) {
+							gpnts[ngamp].p[j] = skp[j];
+							gpnts[ngamp].v[j] = dkp[j];
+						}
+						gpnts[ngamp++].w = gmi->gamknf * gmi->gamknf;		/* Knee weight */
+					}
 #endif /* USE_GAMKNF */
+				}
 			} else {	/* Expansion needed */
 
 				/* Compute expansion destination value */
@@ -1270,11 +1385,11 @@ typedef struct {
 					wrl->add_vertex(wrl, nsm[i].sdv);	/* Full compression dest. value */
 				}
 	
-#ifdef USE_GAMKNF
 				/* Create a "knee" point */
 				{
 					double t;
-					double skp[3], dkp[3];
+					double sxkp[3], dxkp[3];	/* Axis intercept of knee point direction */
+					double skp[3], dkp[3];		/* Inner knee point */
 	
 					/* Since the sv is an associated point within both gamuts, */
 					/* we're going to use it as a basis for the "half way" knee point. */
@@ -1284,37 +1399,43 @@ typedef struct {
 					/* Find the sv's corresponding point on the source L axis */
 					t = (nsm[i].sv[0] - sl_cs_bp[0])/(sl_cs_wp[0] - sl_cs_bp[0]);
 					for (j = 0; j < 3; j++)
-						skp[j] = sl_cs_bp[j] + t * (sl_cs_wp[j] - sl_cs_bp[j]);
+						sxkp[j] = sl_cs_bp[j] + t * (sl_cs_wp[j] - sl_cs_bp[j]);
 			
-					dkp[0] = skp[0];	/* sl is already L mapped */
+					dxkp[0] = sxkp[0];	/* sl is already L mapped */
 			
 					/* Figure destination point on destination grey axis */
-					t = (dkp[0] - dr_cs_bp[0])/(dr_cs_wp[0] - dr_cs_bp[0]);
+					t = (dxkp[0] - dr_cs_bp[0])/(dr_cs_wp[0] - dr_cs_bp[0]);
 					for (j = 1; j < 3; j++)
-						dkp[j] = dr_cs_bp[j] + t * (dr_cs_wp[j] - dr_cs_bp[j]);
+						dxkp[j] = dr_cs_bp[j] + t * (dr_cs_wp[j] - dr_cs_bp[j]);
 					
 #ifdef PLOT_3DKNEES
-					p3dk_locus[p3dk_ix].v0[0] = skp[0]; 
-					p3dk_locus[p3dk_ix].v0[1] = skp[1]; 
-					p3dk_locus[p3dk_ix].v0[2] = skp[2]; 
+					p3dk_locus[p3dk_ix].v0[0] = sxkp[0]; 
+					p3dk_locus[p3dk_ix].v0[1] = sxkp[1]; 
+					p3dk_locus[p3dk_ix].v0[2] = sxkp[2]; 
 					p3dk_locus[p3dk_ix].v1[0] = nsm[i].sv[0]; 
 					p3dk_locus[p3dk_ix].v1[1] = nsm[i].sv[1]; 
 					p3dk_locus[p3dk_ix].v1[2] = nsm[i].sv[2]; 
 					p3dk_ix++;
 #endif /* PLOT_3DKNEES */
 
-					/* Make mapping point at knpos towards div from corresponding grey axis point */
+					/* Compute the knee point const. L plane radially inwards from sv[] */
 					for (j = 0; j < 3; j++) {
-						gpnts[ngamp].p[j] = (1.0 - knpos) * skp[j] + knpos * nsm[i].sv[j];
-						gpnts[ngamp].v[j] = (1.0 - knpos) * dkp[j] + knpos * nsm[i].sv[j];
+						skp[j] = (1.0 - knpos) * sxkp[j] + knpos * nsm[i].sv[j];
+						dkp[j] = (1.0 - knpos) * dxkp[j] + knpos * nsm[i].sv[j];
 					}
-					gpnts[ngamp++].w = gmi->gamknf * gmi->gamknf;		/* Knee weight */
-				}
+#ifdef USE_GAMKNF
+					/* Add this knee point only if there is some room for it */
+					if ((skp[1] * skp[1] + skp[2] * skp[2]) > (5.0 * 5.0)) {	/* > 5 DE */
+						for (j = 0; j < 3; j++) {
+							gpnts[ngamp].p[j] = skp[j];
+							gpnts[ngamp].v[j] = dkp[j];
+						}
+						gpnts[ngamp++].w = gmi->gamknf * gmi->gamknf;		/* Knee weight */
+					}
 #endif /* USE_GAMKNF */
+				}
 			}
 		}
-
-		free(nsm);
 
 		if (wrl != NULL) {
 			double cc[3] = { 0.7, 0.7, 0.7 }; 
@@ -1329,18 +1450,83 @@ typedef struct {
 			wrl = NULL;
 		}
 
-		/* --------------------------- */
-		/* Compute the bounding values */
-		for (j = 0; j < 3; j++) {
-			il[j] = ol[j] =  1e60;
-			ih[j] = oh[j] = -1e60;
+		/* Create preliminary gamut mapping rspl, without grid boundary values. */
+		/* We use this to lookup the mapping for points on the source space gamut */
+		/* that result from clipping our grid boundary points */
+		for (j = 0; j < 3; j++) {		/* Set resolution for all axes */
+			gres[j] = mapres;
+			avgdev[j] = 0.005;
 		}
+#ifdef USE_BOUND
+		s->map = new_rspl(RSPL_NOFLAGS, 3, 3);	/* Allocate 3D -> 3D */
+		s->map->fit_rspl_w(s->map, 0, gpnts, ngamp, il, ih, gres, ol, oh, smooth, avgdev, NULL);
+
+		/* Add input range grid surface anchor points to improve clipping behaviour. */
+		if (defrgrid >= 2) {
+			DCOUNT(gc, 3, 3, 0, 0, defrgrid);
+			double cent[3];
+
+			sc_gam->getcent(d_gam, cent);
+
+			DC_INIT(gc);
+			for (;;) {
+				/* If point is on the grid surface */
+				if (   gc[0] == 0 || gc[0] == (defrgrid-1)
+					|| gc[1] == 0 || gc[1] == (defrgrid-1)
+					|| gc[2] == 0 || gc[2] == (defrgrid-1)) {
+					double grid2gamut, gamut2cent, ww;
+					co cp;
+
+					/* Clip the point to the closest location on the source */
+					/* colorspace gamut. */
+					for (j = 0; j < 3; j++)
+						gpnts[ngamp].p[j] = il[j] + gc[j]/(defrgrid-1.0) * (ih[j] - il[j]);
+					sc_gam->nearest(sc_gam, cp.p, gpnts[ngamp].p);
+
+					/* Then lookup the equivalent gamut mapped value */
+					s->map->interp(s->map, &cp);
+
+					for (j = 0; j < 3; j++)
+						gpnts[ngamp].v[j] = cp.v[j];
+
+					/* Compute the distance of the grid surface point to the to the */
+					/* source colorspace gamut, as well as the distance from there */
+					/* to the gamut center point. */
+					for (grid2gamut = gamut2cent = 0.0, j = 0; j < 3; j++) {
+						double tt;
+						tt = gpnts[ngamp].p[j] - cp.p[j];
+						grid2gamut += tt * tt;
+						tt = cp.p[j] - cent[j];
+						gamut2cent += tt * tt;
+					}
+					grid2gamut = sqrt(grid2gamut);
+					gamut2cent = sqrt(gamut2cent);
+					
+					/* Make the weighting inversely related to distance, */
+					/* to reduce influence on in gamut mapping shape, */
+					/* while retaining some influence at the edge of the */
+					/* grid. */
+					ww = grid2gamut / gamut2cent;
+					if (ww > 1.0)
+						ww = 1.0;
+					
+					/* A low weight seems to be enough ? */
+					/* the lower the better in terms of geting best hull mapping fidelity */
+					gpnts[ngamp++].w = 0.1 * ww;
+				}
+				DC_INC(gc);
+				if (DC_DONE(gc))
+					break;
+			}
+		}
+#endif /* USE_BOUND */
+
+		/* --------------------------- */
+		/* Compute the output bounding values, and check input range hasn't changed */
 		for (i = 0; i < ngamp; i++) {
 			for (j = 0; j < 3; j++) {
-				if (gpnts[i].p[j] < il[j])
-					il[j] = gpnts[i].p[j];
-				if (gpnts[i].p[j] > ih[j])
-					ih[j] = gpnts[i].p[j];
+				if (gpnts[i].p[j] < (il[j]-1e-5) || gpnts[i].p[j] > (ih[j]+1e-5))
+					warning("gammap internal: input bounds has changed! %f <> %f <> %f",il[j],gpnts[i].p[j],ih[j]);
 				if (gpnts[i].v[j] < ol[j])
 					ol[j] = gpnts[i].v[j];
 				if (gpnts[i].v[j] > oh[j])
@@ -1348,92 +1534,66 @@ typedef struct {
 			}
 		}
 
-#ifdef NEVER
-		printf("Computed input bounding box for 3D gamut mapping is:\n");
-		printf("%f -> %f, %f -> %f, %f -> %f\n",
-		il[0], ih[0], il[1], ih[1], il[2], ih[2]);
-#endif
-
-		/* Expand to argument input range */ 
-		if (mn != NULL && mx != NULL) {
-			/* Make sure argument input range encloses needed range */
-			/* by a minumum amount in ab plane */
-			if ((il[1] - 20.0) < mn[1])
-				mn[1] = il[1] - 20.0;
-			if ((ih[1] + 20.0) > mx[1])
-				mx[1] = ih[1] + 20.0;
-			if ((il[2] - 20.0) < mn[2])
-				mn[2] = il[2] - 20.0;
-			if ((ih[2] + 20.0) > mx[2])
-				mx[2] = ih[2] + 20.0;
-
-			/* Then expand range rspl will cover */
-			for (j = 0; j < 3; j++) {
-				if (mn[j] < il[j])
-					il[j] = mn[j];
-				if (mx[j] > ih[j])
-					ih[j] = mx[j];
-			}
-#ifdef NEVER
-		printf("After ovverride, input bounding box for 3D gamut mapping is:\n");
-		printf("%f -> %f, %f -> %f, %f -> %f\n",
-		il[0], ih[0], il[1], ih[1], il[2], ih[2]);
-#endif
-		}
-
-		/* Add input range surface anchor points */
-		if (defrgrid >= 2) {
-			DCOUNT(co, 3, 3, 0, 0, defrgrid);
-
-			DC_INIT(co);
-			for (;;) {
-				/* If point is on the surface */
-				if (   co[0] == 0 || co[0] == (defrgrid-1)
-					|| co[1] == 0 || co[1] == (defrgrid-1)
-					|| co[2] == 0 || co[2] == (defrgrid-1)) {
-
-					/* We use a 1:1 mapping on the input range surface */
-					for (j = 0; j < 3; j++) {
-						gpnts[ngamp].p[j] = 
-						gpnts[ngamp].v[j] = mn[j] + co[j]/(defrgrid-1.0) * (mx[j] - mn[j]);
-					}
-					gpnts[ngamp++].w = 0.4;
-				}
-				DC_INC(co);
-				if (DC_DONE(co))
-					break;
-			}
-		}
-
-		/* Create the gamut mapping rspl. */
-		s->map = new_rspl(3, 3);	/* Allocate 3D -> 3D */
-		{
-			int gres[MXDI];
+		/* --------------------------- */
 
 #ifdef NEVER		/* Dump out all the mapping points */
-			{
-				for (i = 0; i < ngamp; i++) {
-					printf("%d: %f %f %f -> %f %f %f\n",i,
-						gpnts[i].p[0], gpnts[i].p[1], gpnts[i].p[2],
-						gpnts[i].v[0], gpnts[i].v[1], gpnts[i].v[2]);
-				}
+		{
+			for (i = 0; i < ngamp; i++) {
+				printf("%d: %f %f %f -> %f %f %f\n",i,
+					gpnts[i].p[0], gpnts[i].p[1], gpnts[i].p[2],
+					gpnts[i].v[0], gpnts[i].v[1], gpnts[i].v[2]);
 			}
-#endif
-			for (j = 0; j < 3; j++)		/* Set resolution for all axes */
-				gres[j] = mapres;
-
-			/* Create 3D->3D spline from the data points */
-			avgdev[0] = 0.005;
-			avgdev[1] = 0.005;
-			avgdev[2] = 0.005;
-			if (s->map->fit_rspl_w(s->map, 0, gpnts, ngamp, il, ih, gres, ol, oh, smooth, avgdev, NULL)) {
-				if (verb)
-					fprintf(stderr,"Warning: Gamut mapping is non-monotonic - may not be very smooth !\n");
-			}
-
-			/* return the min and max of the input values valid in the grid */
-			s->map->get_in_range(s->map, s->imin, s->imax); 
 		}
+#endif
+
+		/* Create the final gamut mapping rspl. */
+		if (s->map != NULL)
+			s->map->del(s->map);
+		s->map = new_rspl(RSPL_NOFLAGS, 3, 3);	/* Allocate 3D -> 3D */
+		if (s->map->fit_rspl_w(s->map, 0, gpnts, ngamp, il, ih, gres, ol, oh, smooth, avgdev, NULL)) {
+			if (verb)
+				fprintf(stderr,"Warning: Gamut mapping is non-monotonic - may not be very smooth !\n");
+		}
+
+		/* return the min and max of the input values valid in the grid */
+		s->map->get_in_range(s->map, s->imin, s->imax); 
+
+#ifdef CHECK_NEARMAP
+		/* Check how accurate gamut shell mapping is against nsm */
+		if (verb) {
+			double de, avgde = 0.0, maxde = 0.0;		/* DE stats */
+			for (i = 0; i < nnsm; i++) {
+				double div[3];			/* Ref destination nearmap value */
+				co cp;
+
+				if (nsm[i].sr >= nsm[i].dr) {		/* Compression needed */
+
+					for (j = 0; j < 3; j++) {			/* Compute compressed value */
+						cp.p[j] = nsm[i].sv[j];
+						div[j] = gmi->gamcpf * nsm[i].sdv[j] + (1.0 - gmi->gamcpf) * nsm[i].sv[j];
+					}
+
+				} else {	/* Expansion needed */
+
+					/* Compute expansion destination value */
+					for (j = 0; j < 3; j++) {
+						cp.p[j] = nsm[i].sv[j];
+						div[j] = gmi->gamexf * nsm[i].sdv[j] + (1.0 - gmi->gamexf) * nsm[i].sv[j];
+					}
+				}
+				s->map->interp(s->map, &cp);
+				
+				de = icmLabDE(div, cp.v);
+				avgde += de;
+				if (de > maxde)
+					maxde = de;
+			}
+			avgde /= nnsm;
+			fprintf(stderr,"Gamut hull mapping errors: = avg %f, max %f\n",avgde,maxde);
+		}
+#endif /* CHECK_NEARMAP */
+
+		free(nsm);
 
 		/* If requested, enhance the saturation of the output values. */
 		if (gmi->satenh > 0.0) {
@@ -1555,14 +1715,13 @@ typedef struct {
 #endif /* PLOT_3DKNEES */
 	}
 
-// ~~~999
 #ifdef NEVER
 	/* Test some ProPhoto trouble values */
 	{
 		int i;
 		double vals[2][3] = {
 			{ 37.1, -100.3, -58.0 },	/* Comes out too white */
-			{ 36.9, -97.6,  -59.6 }	/* Comes out as blue */
+			{ 36.9, -97.6,  -59.6 }		/* Comes out as blue */
 		};
 		for (i = 0; i < 2; i++) {
 			double mm[3];

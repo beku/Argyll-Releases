@@ -522,11 +522,15 @@ created!<br>
 <a name="G"></a><span style="font-weight: bold;">-G gamma</span>&nbsp;
 As explained above, the gamma value provided to the <span
  style="font-weight: bold;">-g</span> option is used to set and actual
-response curve in light of the non-zero black of the actual display
-that has the same relative output at 50% input as the ideal gamma power
-curve. The <span style="font-weight: bold;">-G</span> option allows
-the actual power to be specified instead, meaning that after the actual
-displays non-zero black is accounted for, the response at 50% input
+response curve that makes an allowance for the non-zero black of the
+actual display, and will have the same relative output at 50% input as
+the ideal gamma power
+curve, and so best matches typical expectations. The <span
+ style="font-weight: bold;">-G</span> option is an alternative that
+allows
+the <span style="font-weight: bold;">actual</span> power to be
+specified instead, meaning that when combined with the displays
+non-zero black value, the response at 50% input
 will probably not match that of the ideal power curve with that gamma
 value.<br>
 <br>
@@ -577,17 +581,22 @@ levels. <br>
 <a name="k"></a><span style="font-weight: bold;">-k</span> Normally
 dispcal will attempt to make all colors
 down the neutral axis (R=G=B) have the same hue as the chosen white
-point. Near the black point, red, green or blue can only be added, not
+point (equivalent to <span style="font-weight: bold;">-k 1.0</span>).
+Near the black point, red, green or blue can only be added, not
 subtracted from zero, so the process of making the near black colors
-have the desired hue, will lighten them to some extent. For a device
+have the desired hue, will <span style="font-weight: bold;">lighten</span>
+them to some extent. For a device
 with a good contrast ratio or a black point that has nearly the same
 hue as the white, this is not a problem. If the device contrast ratio
 is not so good, and the black hue is noticeably different to that of
 the chosen white point (which is often the case for <span
- style="font-weight: bold;">LCD</span> type displays), this could have
+ style="font-weight: bold;">LCD</span> type displays, or <span
+ style="font-weight: bold;">CRT</span> type displays with one channel
+which has a poor level of black), this could have
 a noticeably detrimental effect
-on an already limited contrast ratio. The <span
- style="font-weight: bold;">-k</span> flag allows the amount of black
+on an already limited contrast ratio, and result in a black that is not
+as good as it can be. The <span style="font-weight: bold;">-k</span>
+flag allows the amount of black
 point hue correction to be controlled. By default a factor of <span
  style="font-weight: bold;">1.0</span> will be used, which is usually
 good for <span style="font-weight: bold;">CRT</span> and also by
@@ -598,7 +607,8 @@ option allows overriding these with a custom value between 0.0 (no
 correction) to 1.0 (full correction). If less than full correction is
 chosen, then the resulting calibration curves will have the target
 white point down most of the curve, but will then cross over to the
-native or compromise black point.<br>
+native or compromise black point that is blacker, but not of the right
+hue.<br>
 <br>
 <a name="B"></a><span style="font-weight: bold;">-B</span>&nbsp; Set
 the
@@ -734,6 +744,13 @@ overwritten). If the <span style="font-weight: bold;">-u</span> flag
 is used, then these files will be updated. If a different ICC profile
 name needs to be specified, do so as an argument to the <span
  style="font-weight: bold;">-o</span> flag.<br>
+<br>
+<span style="font-weight: bold;">NOTE</span> that on an X11 system, if
+the environment variable <span style="font-weight: bold;">ARGYLL_IGNORE_XRANDR1_2</span>
+is set (ie. set it to "yes"), then the presence of the XRandR 1.2
+extension will be ignored, and other extensions such as Xinerama and
+XF86VidMode extension will be used. This may be a way to work around
+buggy XRandR 1.2 implementations.<br>
 <br>
 <hr style="width: 100%; height: 2px;"><br>
 <a name="Adjustment"></a>The adjustment of the display controls

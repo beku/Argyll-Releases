@@ -3,8 +3,151 @@ Argyll CMS change log
 =====================
 
 
-Version 1.00 changes
---------------------
+Version 1.0.3 bug fix release  (3rd September 2008)
+-----------------------------
+
+*	Modified tiffgamut so that it processes an arbitrary number
+	of raster files. Also added a filter option, that filters out
+	little used colors from the raster gamut.
+
+*	Changed gamut mapping to fix problem in which the gamut
+	mapping for profiles didn't match that in collink by
+	fixeing out of gamut mapping to make extended source
+	gamut of B2A table more sensible without afecting
+	primary gamut hull fidelity. Tweaked the gamut mapping
+	to de-emphasise luminence matching slightly, resulting
+	in more saturated but darker primaries for the typical
+	RGB->CMYK gamut mapping.
+
+*	Fixed problem with i1display in which it would
+	time out for some particular inputs (low level dynamic
+	input ?) 
+
+*	Fixed MSWindows screensaver reset to work on
+	Vista by adding fake mouse move event.
+
+*	Changes rspl/rev to have a "fast setup" mode
+	that trades a faster setup time for slower
+	reverse lookups. This is to improve the
+	responsiveness of xicclu.
+
+*	Fixed bug in dispcal when using -a with -t
+
+*	Added -L option to printtarg to suppress the i1pro target holder
+	clip margin.
+
+* 	Fix yet another PPC GCC optimizer bug in spectro/dispread.c
+
+*	Modifed rspl/rev cache allocation to make sure
+	that it is somewhat less than the maximum virtual
+	memory that a process can allocate. On some systems
+	with lots of RAM, it is possible to have malloc() fail
+	due to this.
+
+* 	Added support for i1 Monitor instrument,
+	which is an i1pro without reflective capability.
+
+Version 1.0.2 bug fix release
+-----------------------------
+
+*	Fixed two typo bugs in colprof (xicc/xfit.c) to do with output
+	per curve optimization - the symptoms were gcc based compiles
+	taking a long time to create the A2B tables.
+
+*	Added workaround to strange i1pro Rev A upgrade/Rev B quirk,
+	that causes extra time to be taken for reads.
+
+*	Added some extra verbose output when creating profiles (rspl/rev)
+	to show the system RAM detected and the limit imposed on
+	each rev cache. Also changed code to prevent failure when
+	there is not enough memory to allocate a single cell
+	to search, and to fix memory limit setting for systems that
+	may have 4 Gbytes or more of memory.
+
+*	Added new option to collink -fk, that forces 000K input
+	to K only output.
+
+*	Fix dispwin.c so that -K option (calibrate instrument)
+	doesn't fail when it thinks two dispwin's are being requested.
+
+*	Change spectro/hidio.c so that HidD_GetAttributes() fail is ignored.
+
+*	Fixed bug in dispcal which causes a numerical fault if a Yxy white point
+	is specified and ambient correction is used.
+
+*	Changed colprof -bn to be the same effect as -B (ie. a minimal resolution
+	B2A table).
+
+*	Fixed dispwin -R "Effective LUT entry depth" report to work without -v.
+
+*	Modified MSWindows display enumeration to not ignore displays
+	that have EnumDisplayDevices() fail, but ignore displays
+	with a name \\.\\DISPLAYV*. This us to get it working under VMWARE. 
+
+*	Added device target value quantization option to
+	target/printtarg, as well as making it default for TIFF output files.
+
+*	Fixed a bad memory leak in render/render.c, that was
+	affecting target/printtarg. Probably improved the
+	anti-aliased rendering speed too.
+
+*	Fix typo in spectro/dispwin.c that sometimes causes a crash
+	when the system has XRandR 1.2.
+
+*	Fix latent bug in xicc/xfit.c that could affect
+	profiles that are not white point corrected (ie. colorof -u inputdevice). 
+
+*	Fixed problem with an i1pro that has had it's
+	EEProm reset after a firmware upgrade - a previous
+	calibration EEPRom integration time of 0.0 is increased
+	to the minimum integration time to prevent divide by zero etc.
+
+*	Added Argyll version number to the i1pro calibration file,	
+	to try and make sure that old files are invalidated with
+	each potentialy incompatible update.
+
+*	Fix LUT entry depth reporting bug, and add yet another
+	workaround for the GCC/PPC optimizer bug.
+
+Version 1.0.1 bug fix release (14th July 2008) 
+-----------------------------
+
+*	Changed XRandR code to index the _ICC_PROFILE property
+    such than inactive displays are ignored.
+
+*	Fixed problem in rspl/rev.c where the memory consuption
+	was sometimes exceeding the maximum RAM limit.
+
+*	Changed XRandR code to fall back to other extensions
+	if it fails simple VideoLUT access tests.
+*	Add environment variable "ARGYLL_IGNORE_XRANDR1_2" to
+	cause XRandR 1.2 to be ignored on X11 systems
+	that have buggy XRandR 1.2 implementation.
+
+*	Fixed problem with locating displays on MSWindows with
+	some particular configurations.
+
+*	Fixed bug introduced into cam02.c that ignored
+	enumerated viewing condition.
+
+*	Changed udev USB matches to lower case, since
+	apparently udev does a text match rather than matching
+	the integers...
+
+*	Fixed malloc size bug in profile/logo2cgats.c
+	(thanks to Steven Greaves).
+
+*   Fix dispwin so that the lack of an EDID_DATA atome is
+	not a fatal error.
+
+*	Fixed jcnf so that the temporary file is in the same directory
+	as the file it will be renamed to.
+
+*	Added debug option to dispwin/ucmm to help with diagnosis of
+	locating displays.
+
+Version 1.0.0 changes	(1st July 2008)
+---------------------
 
 *	Changed input device profile creation to create B2A table
 	by default. This can be disabled with the -b option.

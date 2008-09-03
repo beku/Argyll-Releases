@@ -451,7 +451,7 @@ xicc *p,					/* this */
 icmLookupFunc func,			/* Functionality */
 icRenderingIntent intent,	/* Intent */
 icmLookupOrder order,		/* Search Order */
-int flags,					/* white/black point flags etc. */
+int flags,					/* white/black point, verbose flags etc. */
 int no,						/* Number of points */
 cow *points,				/* Array of input points */
 double dispLuminance,		/* > 0.0 if display luminance value and is known */

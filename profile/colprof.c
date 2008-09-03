@@ -103,7 +103,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
 	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
-	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, Shaw, J&V 1978_2\n");
+	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
 	fprintf(stderr," -r avgdev       Average deviation of device+instrument readings as a percentage (default %4.2f%%)\n",DEFAVGDEV);
 /* Research options: */
@@ -320,6 +320,7 @@ int main(int argc, char *argv[]) {
 							break;
 						case 'n':				/* No B2A for input device */
 						case 'N':
+							oquality = -2;
 							doinb2a = 0;
 							break;
 						default:
@@ -329,8 +330,10 @@ int main(int argc, char *argv[]) {
 					oquality = 0;
 			}
 
-			else if (argv[fa][1] == 'B')
+			else if (argv[fa][1] == 'B') {
 				oquality = -2;
+				doinb2a = 0;
+			}
 
 			else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y')
 				verify = 1;
@@ -515,7 +518,7 @@ int main(int argc, char *argv[]) {
 				} else if (strcmp(na, "1978_2") == 0) {		/* Judd and Voss 1978 2 degree */
 					spec = 1;
 					observ = icxOT_Judd_Voss_2;
-				} else if (strcmp(na, "Shaw") == 0) {		/* Shaw and Fairchilds 1997 2 degree */
+				} else if (strcmp(na, "shaw") == 0) {		/* Shaw and Fairchilds 1997 2 degree */
 					spec = 1;
 					observ = icxOT_Shaw_Fairchild_2;
 				} else

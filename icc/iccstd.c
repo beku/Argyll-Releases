@@ -312,7 +312,7 @@ icmAlloc *al		/* heap allocator, NULL for default */
 	p->seek     = icmFileStd_seek;
 	p->read     = icmFileStd_read;
 	p->write    = icmFileStd_write;
-	p->printf   = icmFileStd_printf;
+	p->gprintf  = icmFileStd_printf;
 	p->flush    = icmFileStd_flush;
 	p->del      = icmFileStd_delete;
 

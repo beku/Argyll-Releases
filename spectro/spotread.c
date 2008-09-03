@@ -113,7 +113,7 @@ static int gcc_bug_fix(int i) {
 #endif	/* APPLE */
 
 void
-usage(void) {
+usage(int debug) {
 	icoms *icom;
 	fprintf(stderr,"Read Print Spot values, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
@@ -126,6 +126,8 @@ usage(void) {
 	fprintf(stderr," -c listno            Set communication port from the following list (default %d)\n",COMPORT);
 	if ((icom = new_icoms()) != NULL) {
 		icompath **paths;
+		if (debug)
+			icom->debug = debug;
 		if ((paths = icom->get_paths(icom)) != NULL) {
 			int i;
 			for (i = 0; ; i++) {
@@ -251,7 +253,7 @@ int main(int argc, char *argv[])
 			}
 
 			if (argv[fa][1] == '?') {
-				usage();
+				usage(debug);
 
 			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
@@ -265,25 +267,25 @@ int main(int argc, char *argv[])
 			/* COM port  */
 			} else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(debug);
 				comport = atoi(na);
-				if (comport < 1 || comport > 40) usage();
+				if (comport < 1 || comport > 40) usage(debug);
 
 			/* Display type */
 			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(debug);
 				if (na[0] == 'c' || na[0] == 'C')
 					dtype = 1;
 				else if (na[0] == 'l' || na[0] == 'L')
 					dtype = 2;
 				else
-					usage();
+					usage(debug);
 
 			/* Spectral Illuminant type */
 			} else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(debug);
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
@@ -306,13 +308,13 @@ int main(int argc, char *argv[])
 					spec = 1;
 					illum = icxIT_custom;
 					if (read_xspect(&cust_illum, na) != 0)
-						usage();
+						usage(debug);
 				}
 
 			/* Spectral Observer type */
 			} else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(debug);
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
 					spec = 1;
 					observ = icxOT_CIE_1931_2;
@@ -329,7 +331,7 @@ int main(int argc, char *argv[])
 					spec = 1;
 					observ = icxOT_Shaw_Fairchild_2;
 				} else
-					usage();
+					usage(debug);
 
 			/* Request transmission measurement */
 			} else if (argv[fa][1] == 't') {
@@ -353,7 +355,7 @@ int main(int argc, char *argv[])
 					else if (na[0] == 'w' || na[0] == 'W')
 						displ = 3;
 					else
-						usage();
+						usage(debug);
 				}
 
 			/* Request emissive measurement */
@@ -373,7 +375,7 @@ int main(int argc, char *argv[])
 			/* Filter configuration */
 			} else if (argv[fa][1] == 'f') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(debug);
 				if (na[0] == 'n' || na[0] == 'N')
 					fe = inst_opt_filter_none;
 				else if (na[0] == 'p' || na[0] == 'P')
@@ -383,12 +385,12 @@ int main(int argc, char *argv[])
 				else if (na[0] == 'u' || na[0] == 'U')
 					fe = inst_opt_filter_UVCut;
 				else
-					usage();
+					usage(debug);
 
 			/* Extra filter compensation file */
 			} else if (argv[fa][1] == 'F') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(debug);
 				strncpy(filtername,na,MAXNAMEL-1); filtername[MAXNAMEL-1] = '\000';
 
 			/* Show Yxy */
@@ -406,7 +408,7 @@ int main(int argc, char *argv[])
 					docalib = atoi(na);
 					fa = nfa;
 				} else
-					usage();
+					usage(debug);
 
 			/* No auto calibration */
 			} else if (argv[fa][1] == 'N') {
@@ -419,7 +421,7 @@ int main(int argc, char *argv[])
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(debug);
 				if (na[0] == 'n' || na[0] == 'N')
 					fc = fc_none;
 				else if (na[0] == 'h' || na[0] == 'H')
@@ -427,7 +429,7 @@ int main(int argc, char *argv[])
 				else if (na[0] == 'x' || na[0] == 'X')
 					fc = fc_XonXOff;
 				else
-					usage();
+					usage(debug);
 
 			} else if (argv[fa][1] == 'D') {
 				debug = 1;
@@ -436,7 +438,7 @@ int main(int argc, char *argv[])
 					fa = nfa;
 				}
 			} else 
-				usage();
+				usage(debug);
 		}
 		else
 			break;
@@ -453,7 +455,7 @@ int main(int argc, char *argv[])
 	/* Setup the instrument ready to do reads */
 	if ((it = new_inst(comport, itype, debug, verb)) == NULL) {
 		warning("Unknown, inappropriate or no instrument detected");
-		usage();
+		usage(debug);
 	}
 
 	if (verb)
@@ -509,15 +511,15 @@ int main(int argc, char *argv[])
 
 		if (trans == 0 && emiss == 0 && (cap & inst_reflection) == 0) {
 			/* This will fail. Switch to a mode the instrument has */
-			if ((cap & inst_transmission) != 0 && (cap & inst_emission) == 0) {
-				if (verb)
-					printf("Defaulting to transmission measurement\n");
-				trans = 1;
-			}
-			if ((cap & inst_transmission) == 0 && (cap & inst_emission) != 0) {
+			if ((cap & inst_emission) != 0) {
 				if (verb)
 					printf("Defaulting to emission measurement\n");
 				emiss = 1;
+
+			} else if ((cap & inst_transmission) != 0) {
+				if (verb)
+					printf("Defaulting to transmission measurement\n");
+				trans = 1;
 			}
 		}
 

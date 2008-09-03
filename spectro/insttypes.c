@@ -54,6 +54,8 @@ char *inst_name(instType itype) {
 			return "Spectrocam";
 		case instI1Display:
 			return "GretagMacbeth i1 Display";
+		case instI1Monitor:
+			return "GretagMacbeth i1 Monitor";
 		case instI1Pro:
 			return "GretagMacbeth i1 Pro";
 		case instHCFR:
@@ -94,6 +96,8 @@ instType inst_enum(char *name) {
 		return instSpectrocam;
 	else if (strcmp(name, "GretagMacbeth i1 Display") == 0)
 		return instI1Display;
+	else if (strcmp(name, "GretagMacbeth i1 Monitor") == 0)
+		return instI1Monitor;
 	else if (strcmp(name, "GretagMacbeth i1 Pro") == 0)
 		return instI1Pro;
 	else if (strcmp(name, "Colorimtre HCFR") == 0)
@@ -127,6 +131,8 @@ unsigned short idProduct) {
 	if (idVendor  == 0x0971) {		/* Gretag Macbeth */
 		if (idProduct == 0x2000)	/* i1 Pro */
 			return instI1Pro;
+		if (idProduct == 0x2001)	/* i1 Monitor */
+			return instI1Monitor;
 		if (idProduct == 0x2003)	/* i1 Display */
 			return instI1Display;
 		if (idProduct == 0x2005)	/* Huey */
@@ -199,6 +205,9 @@ int inst_illuminant(xspect *sp, instType itype) {
 			return standardIlluminant(sp, icxIT_Spectrocam, 0);   /* Spectrocam Xenon Lamp */
 
 		case instI1Display:
+			return 1;										/* Not applicable */
+
+		case instI1Monitor:
 			return 1;										/* Not applicable */
 
 		case instI1Pro:

@@ -688,6 +688,7 @@ main(int argc, char *argv[]) {
 	   | (intsep ? ICX_INT_SEPARATE : 0)
 	   | (merge ? ICX_MERGE_CLUT : 0)
 	   | (camclip ? ICX_CAM_CLIP : 0)
+	   | ICX_FAST_SETUP
 	                                  , func, intent, pcsor, order, &vc, &ink)) == NULL)
 		error ("%d, %s",xicco->errc, xicco->err);
 

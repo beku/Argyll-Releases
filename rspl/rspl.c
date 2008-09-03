@@ -44,7 +44,7 @@
 #define ALWAYS
 
 /* Implemeted in this file: */
-rspl *new_rspl(int di, int fdi);
+rspl *new_rspl(int flags, int di, int fdi);
 static void free_rspl(rspl *s);
 static void init_grid(rspl *s);
 static void free_grid(rspl *s);
@@ -97,6 +97,7 @@ int opt_rspl_imp(struct _rspl *s, int flags, int tdi, int adi, double **vdata,
 /* Allocate an empty rspl object. */
 rspl *
 new_rspl(
+	int flags,
 	int di,
 	int fdi
 ) {
@@ -120,6 +121,12 @@ new_rspl(
 		error("rspl: can't handle output dimension %d",fdi);
 	s->fdi = fdi;
 
+	/* And appropriate flags */
+	if (flags & RSPL_VERBOSE)	/* Turn on progress messages to stdout */
+		s->verbose = 1;
+	if (flags & RSPL_NOVERBOSE)	/* Turn off progress messages to stdout */
+		s->verbose = 0;
+
 	/* Allocate space for cube offset arrays */
 	s->g.hi = s->g.a_hi;
 	s->g.fhi = s->g.a_fhi;
@@ -135,6 +142,11 @@ new_rspl(
 	init_rev(s);
 	init_grid(s);
 	init_spline(s);
+
+	if (flags & RSPL_FASTREVSETUP)
+		s->rev.fastsetup = 1;
+	else
+		s->rev.fastsetup = 0;
 
 	/* Set pointers to methods in this file */
 	s->del           = free_rspl;
@@ -375,7 +387,7 @@ rspl *s
 /* Return 0 if OK, 1 if input was clipped to grid */
 /* Return 0 on success, 1 if clipping occured, 2 on other error */
 // ~~999
-int rspldb = 0;
+//int rspldb = 0;
 
 static int interp_rspl_sx(
 rspl *s,
@@ -390,7 +402,7 @@ co *p			/* Input value and returned function value */
 
 	/* We are using a simplex (ie. tetrahedral for 3D input) interpolation. */
 
-if (rspldb && di == 3) printf("~1 in %f %f %f\n", p->p[0], p->p[1], p->p[2]);
+//if (rspldb && di == 3) printf("~1 in %f %f %f\n", p->p[0], p->p[1], p->p[2]);
 
 	/* Figure out which grid cell the point falls into */
 	{
@@ -416,7 +428,7 @@ if (rspldb && di == 3) printf("~1 in %f %f %f\n", p->p[0], p->p[1], p->p[2]);
 				mi = gres_1-1;
 			gp += mi * s->g.fci[e];		/* Add Index offset for grid cube base in dimen */
 			we[e] = t - (double)mi;		/* 1.0 - weight */
-if (rspldb && di == 3) printf("~1 e = %d, ix = %d, we = %f\n", e, mi, we[e]);
+//if (rspldb && di == 3) printf("~1 e = %d, ix = %d, we = %f\n", e, mi, we[e]);
 		}
 	}
 
@@ -438,7 +450,7 @@ if (rspldb && di == 3) printf("~1 e = %d, ix = %d, we = %f\n", e, mi, we[e]);
 			}
 		}
 	}
-if (rspldb && di == 3) printf("~1 si[] = %d %d %d\n", si[0],si[1],si[2]);
+//if (rspldb && di == 3) printf("~1 si[] = %d %d %d\n", si[0],si[1],si[2]);
 
 	/* Now compute the weightings, simplex vertices and output values */
 	{
@@ -448,22 +460,22 @@ if (rspldb && di == 3) printf("~1 si[] = %d %d %d\n", si[0],si[1],si[2]);
 		for (f = 0; f < fdi; f++)
 			p->v[f] = w * gp[f];
 
-if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
+//if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
 
 		for (e = di-1; e > 0; e--) {		/* Middle verticies */
 			w = we[si[e]] - we[si[e-1]];
 			gp += s->g.fci[si[e]];			/* Move to top of cell in next largest dimension */
 			for (f = 0; f < fdi; f++)
 				p->v[f] += w * gp[f];
-if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
+//if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
 		}
 
 		w = we[si[0]];
 		gp += s->g.fci[si[0]];		/* Far corner from base of cell */
 		for (f = 0; f < fdi; f++)
 			p->v[f] += w * gp[f];
-if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
-if (rspldb && di == 3) printf("~1 outval  %f %f %f\n", p->v[0], p->v[1], p->v[2]);
+//if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
+//if (rspldb && di == 3) printf("~1 outval  %f %f %f\n", p->v[0], p->v[1], p->v[2]);
 	}
 	return rv;
 }
@@ -839,6 +851,11 @@ static int set_rspl(
 	double _iv[2 * MXDI], *iv = &_iv[MXDI];	/* Real index value/table value */
 	double ov[MXDO];
 
+	if (flags & RSPL_VERBOSE)	/* Turn on progress messages to stdout */
+		s->verbose = 1;
+	if (flags & RSPL_NOVERBOSE)	/* Turn off progress messages to stdout */
+		s->verbose = 0;
+
 	/* transfer desired grid range to structure */
 	s->g.mres = 1.0;
 	s->g.bres = 0;
@@ -1066,6 +1083,11 @@ int change		/* Flag - nz means change values, 0 means scan values */
 	double _iv[2 * MXDI], *iv = &_iv[MXDI];	/* Real index value/table value */
 	double ov[MXDO];
 
+	if (flags & RSPL_VERBOSE)	/* Turn on progress messages to stdout */
+		s->verbose = 1;
+	if (flags & RSPL_NOVERBOSE)	/* Turn off progress messages to stdout */
+		s->verbose = 0;
+
 	if (change) {
 		/* Reset output min/max */
 		for (f = 0; f < s->fdi; f++) {
@@ -1183,6 +1205,11 @@ void (*func)(void *cbntx, float **out, double *in, int cvi) /* Function to set f
 	int pow3di = 1;
 	float **svals;			/* Pointer to surrounding output values */
 	float *a_svals[DEF3MXDI];/* default allocation for svals */
+
+	if (flags & RSPL_VERBOSE)	/* Turn on progress messages to stdout */
+		s->verbose = 1;
+	if (flags & RSPL_NOVERBOSE)	/* Turn off progress messages to stdout */
+		s->verbose = 0;
 
 	/* Allocate svals array */
 	svals = a_svals;

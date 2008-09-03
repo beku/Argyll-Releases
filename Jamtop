@@ -4,6 +4,10 @@
 
 Echo "Argyll Jamrules has been read" ;
 
+# Tell standalone libraries that they are part of Argyll:
+
+DEFINES += ARGYLLCMS ;
+
 # Information for compiling and linking GUI programs
 
 if $(UNIX) {

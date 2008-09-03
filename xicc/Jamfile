@@ -16,10 +16,6 @@ InstallFile ../bin : $(Samples) ;
 #InstallFile ../h : $(Headers) ;
 #InstallLib ../lib : $(Libraries) ;
 
-# Stop objects that are in more than one library from being
-# prematurely deleted:
-ObjectKeep xcolorants xutils cam97s3 cam02 ;
-
 HDRS = ../h ../icc ../rspl ../cgats ../numlib ../gamut ../spectro ../profile
        ../plot $(TIFFINC) $(LibWinH) ;
 
@@ -28,10 +24,12 @@ Library libxicc :  xicc.c xlutfix.c xspect.c xsep.c xcolorants.c xutils.c xdevli
         xcam.c cam97s3.c cam02.c mpp.c xfit.c moncurve.c ;
 
 # colorant library. Use instead of libxicc
-LibraryFromObjects libxcolorants : xcolorants ;
+Object xcolorants2 : xcolorants.c ;
+LibraryFromObjects libxcolorants : xcolorants2 ;
 
 # standalone utilities library. Use instead of libxicc
-LibraryFromObjects libxutils : xutils ;
+Object xutils2 : xutils.c ;
+LibraryFromObjects libxutils : xutils2 ;
 
 # Utilities / test programs
 
@@ -61,10 +59,6 @@ Main mpplu : mpplu.c ;
 
 # Embedded ICC profile extractor
 Main extracticc : extracticc.c : : : $(TIFFINC) : : $(TIFFLIB) ;
-
-# Experimental
-#Objects osatest.c ;
-#MainFromObjects osatest : osatest cam02 ;
 
 # xcolorant lookup test
 Main xcolorantslu : xcolorantslu.c ;
@@ -113,8 +107,11 @@ Main cam02test : cam02test.c ;
 # Test utility for moncurve
 Main monctest : monctest.c ;
 
-#Create test TIFF file for cam02 conversion
-Main cam02plot : cam02plot.c : : : $(TIFFINC) : : $(TIFFLIB) ;
+if $(HOME) = "d:\\usr\\graeme" {
+	#Create test TIFF file for cam02 conversion
+	Main cam02plot : cam02plot.c : : : $(TIFFINC) : : $(TIFFLIB) ;
+	Main cam02logplot : cam02logplot.c : : : $(TIFFINC) : : $(TIFFLIB) ;
+}
 
 #Main t : t.c ;
 

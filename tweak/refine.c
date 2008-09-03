@@ -970,7 +970,7 @@ main(int argc, char *argv[]) {
 		mn[0] =   0.0, mn[1] = mn[2] = -128.0;			/* Allow for 16 bit grid range */
 		mx[0] = 100.0, mx[1] = mx[2] =  (65535.0 * 255.0)/65280.0 - 128.0;
 		cb.verb = verb;
-		if ((cb.r = new_rspl(3, 3)) == NULL)
+		if ((cb.r = new_rspl(RSPL_NOFLAGS, 3, 3)) == NULL)
 			error("new_rspl failed");
 
 		for (e = 0; e < 3; e++)

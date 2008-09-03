@@ -2,7 +2,7 @@
 /* 
  * Argyll Color Correction System
  *
- * Gretag i1Pro related functions
+ * Gretag i1Monitor & i1Pro related functions
  *
  * Author: Graeme W. Gill
  * Date:   24/11/2006
@@ -125,13 +125,11 @@ i1pro_init_inst(inst *pp) {
 	if ((ev = i1pro_imp_init(p)) != I1PRO_OK)
 		return i1pro_interp_code(p, ev);
 
-	/* Set the capabilities mask */
-	p->cap = inst_ref_spot
-	       |  inst_emis_spot
+	/* Set the base Monitor/Pro capabilities mask */
+	p->cap =  inst_emis_spot
 	       |  inst_emis_disp
 	       |  inst_emis_illum
 	       |  inst_trans_spot		/* Support this manually using a light table */
-	       |  inst_ref_strip
 	       |  inst_trans_strip 
 	       |  inst_emis_strip		/* Also likely to be light table reading */
 	       |  inst_colorimeter
@@ -139,16 +137,7 @@ i1pro_init_inst(inst *pp) {
 	       |  inst_highres
 	       ;
 
-	if (i1pro_imp_highres(p))
-		p->cap |= inst_highres;
-
-	if (i1pro_imp_ambient(p)) {
-		p->cap |= inst_emis_ambient;
-		/* ambient scan ? */
-	}
-
-	p->cap2 = inst2_cal_ref_white
-	        | inst2_cal_trans_white 
+	p->cap2 = inst2_cal_trans_white 
 	        | inst2_cal_disp_int_time 
 	        | inst2_prog_trig 
 			| inst2_keyb_trig
@@ -157,6 +146,24 @@ i1pro_init_inst(inst *pp) {
 			| inst2_has_scan_toll
 			| inst2_no_feedback
 	        ;
+
+	/* Set the Pro capabilities mask */
+	if (p->itype == instI1Pro) {
+		p->cap |= inst_ref_spot
+		       |  inst_ref_strip
+		       ;
+
+		p->cap2 |= inst2_cal_ref_white
+		        ;
+	}
+
+	if (i1pro_imp_highres(p))
+		p->cap |= inst_highres;
+
+	if (i1pro_imp_ambient(p)) {
+		p->cap |= inst_emis_ambient;
+		/* ambient scan ? */
+	}
 
 	return i1pro_interp_code(p, ev);
 }

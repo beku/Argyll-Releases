@@ -223,6 +223,8 @@ struct _gamut {
 	double dcusps[6][3];/* Entered cusp values to setcusps(, 3, ) */
 	double cusps[6][3];	/* Cusp values for red, yellow, green, cyan, blue & magenta */ 
 
+	double mx[3], mn[3];	/* Range covered by input points */
+
 	gtri *nexttri;		/* Context for getnexttri() */
 
 /* Public: */
@@ -232,6 +234,10 @@ struct _gamut {
 	void (*expand)(struct _gamut *s, double in[3]);		/* Expand the gamut surface */
 
 	int (*getisjab)(struct _gamut *s);	/* Return the isJab flag value */
+
+	void (*getcent)(struct _gamut *s, double *cent);	/* Return the gamut center location */
+
+	void (*getrange)(struct _gamut *s, double *min, double *max);	/* Return the gamut range */
 
 	double (*getsres)(struct _gamut *s);	/* Return the surface resolution */
 

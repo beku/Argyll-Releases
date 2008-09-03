@@ -66,6 +66,14 @@
 
 #undef DEBUG
 
+
+#if defined(DEBUG)
+#define DBG(xxx) fprintf xxx ;
+#define dbgo stderr
+#else
+#define DBG(xxx) 
+#endif	/* DEBUG */
+
 /* Add paths to USB connected instruments, to the existing */
 /* icompath paths in the icoms structure. */
 void hid_get_paths(
@@ -117,8 +125,11 @@ struct _icoms *p
                               0, NULL)) != INVALID_HANDLE_VALUE) {
 				instType itype;
 
-				if (HidD_GetAttributes(fh, &attr) == 0)
-					error("HidD_GetAttributes failed");
+				if (HidD_GetAttributes(fh, &attr) == 0) {
+					DBG((stderr,"HidD_GetAttributes failed for device %d",i))
+					CloseHandle(fh);
+					continue;
+				}
 
 				/* If it's a device we're looking for */
 				if ((itype = inst_usb_match(attr.VendorID, attr.ProductID)) != instUnknown) {

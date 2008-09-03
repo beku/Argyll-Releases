@@ -152,7 +152,7 @@ main(int argc, char *argv[]) {
 
 	printf("Started benchmark\n");
 	/* Create the object */
-	rss =  new_rspl(DI, FDI);
+	rss =  new_rspl(RSPL_NOFLAGS, DI, FDI);
 
 	for (e = 0; e < DI; e++)
 		gres[e] = clutres;

@@ -1168,7 +1168,7 @@ spyd2_download_pld(
 	if (p->debug) fprintf(stderr,"spyd2: about to download the PLD pattern\n");
 
 	if (*spyder2_pld_size == 0 || *spyder2_pld_size == 0x11223344) {
-		if (p->debug) fprintf(stderr,"spyd2: No PLD pattern available!\n");
+		if (p->debug) fprintf(stderr,"spyd2: No PLD pattern available! (have you run spyd2en ?)\n");
 		return spyd2_interp_code((inst *)p, SPYD2_NO_PLD_PATTERN) ;
 	}
 		

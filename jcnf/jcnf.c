@@ -217,7 +217,7 @@ static jc_error jcnf_add_key_internal(
 	jc_error ev;
 	jc_key *kp;
 
-	if (key == NULL || type != jc_null && (data == NULL || dataSize == 0))
+	if (key == NULL || (type != jc_null && (data == NULL || dataSize == 0)))
 		return jc_bad_addkey_params;
 
 	if (p->nkeys >= p->akeys) {	 /* Need more pointer space */
@@ -804,7 +804,7 @@ static jc_error jcnf_write(
 	jcnf *p
 ) {
 	FILE *fp;		/* For temporary file */
-	char tname[100];
+	char *tname = NULL;
     yajl_gen_config conf = { 1, "  " };
 	yajl_gen g;
     yajl_status stat;
@@ -823,21 +823,36 @@ static jc_error jcnf_write(
 	{
 		int fh;
 
+		if ((tname = malloc(strlen(p->fname) + 8)) == NULL)
+			return jc_malloc;
+
 		/* Create temporary file, open it and lock it LOCK_EX */
-		strcpy(tname, "/tmp/jcnf-XXXXXX");
-		if ((fh = mkstemp(tname)) == -1)
+		strcpy(tname, p->fname);
+		strcat(tname,"-XXXXXX");
+		if ((fh = mkstemp(tname)) == -1) {
+			free(tname);
 			return jc_write_open;
-		if (fchmod(fh, 0644) != 0)
+		}
+		if (fchmod(fh, 0644) != 0) {
+			free(tname);
 			return jc_write_open;
-		if ((fp = fdopen(fh, "w")) == NULL)
+		}
+		if ((fp = fdopen(fh, "w")) == NULL) {
+			free(tname);
 			return jc_write_open;
+		}
 	}
 #else
 	/* Open a temporary file in the same directory to write to */
+	if ((tname = malloc(strlen(p->fname) + 8)) == NULL)
+		return jc_malloc;
+
 	if (tmpnam(tname) == NULL) { 
+		free(tname);
 		return jc_write_open;
 	}
 	if ((fp = fopen(tname, "w")) == NULL) {
+		free(tname);
 		return jc_write_open;
 	}
 #endif
@@ -934,8 +949,10 @@ static jc_error jcnf_write(
 				yajl_gen_string(g, (char *)p->keys[i]->data, p->keys[i]->dataSize-1);
 				break;
 
-			default:
+			default: {
+				free(tname);
 				return jc_unknown_key_type; 
+			}
 		}
 
 		if (p->keys[i]->comment != NULL) {
@@ -953,7 +970,8 @@ static jc_error jcnf_write(
 		/* Do some writing */
 		yajl_gen_get_buf(g, &buf, &len);
 		if (len >=  BUF_SIZE) {
-			fwrite(buf, 1, len, fp);
+			if (fwrite(buf, 1, len, fp) != len)
+				return jc_write_fail;
 			yajl_gen_clear(g);
 		}
 	} 
@@ -965,12 +983,15 @@ static jc_error jcnf_write(
 	
 	yajl_gen_get_buf(g, &buf, &len);
 	if (len > 0) {
-		fwrite(buf, 1, len, fp);
+		if (fwrite(buf, 1, len, fp) != len)
+			return jc_write_fail;
 		yajl_gen_clear(g);
 	}
 	yajl_gen_free(g);
-	if (fflush(fp) != 0)
+	if (fflush(fp) != 0) {
+		free(tname);
 		return jc_write_close;
+	}
 
 #ifdef NT
 	/* MSWindows rename won't replace existing or open files. */
@@ -989,19 +1010,25 @@ static jc_error jcnf_write(
 //printf("~1 about to rename '%s' to '%s'\n",tname,p->fname);
 	/* Now atomicaly rename the file to replace the file we read */
 	if (rename(tname, p->fname) != 0) {
+		free(tname);
 		return jc_write_close;
 	}
 
 //printf("~1 closing files\n");
 	/* Close our files and release the locks */
-	if (fp != NULL && fclose(fp) != 0)
+	if (fp != NULL && fclose(fp) != 0) {
+		free(tname);
 		return jc_write_close;
-	if (p->fp != NULL && fclose(p->fp) != 0)
+	}
+	if (p->fp != NULL && fclose(p->fp) != 0) {
+		free(tname);
 		return jc_write_close;
+	}
 	p->fp = NULL;
 	p->locked = 0;
 	p->modify = 0;
 
+	free(tname);
 	return jc_ok;
 }
 

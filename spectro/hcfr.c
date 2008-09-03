@@ -40,6 +40,7 @@
 #include <stdarg.h>
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"

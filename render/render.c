@@ -162,10 +162,14 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 	int noix;					/* Number in x list */
 	color2d *pixv0, *_pixv0;	/* Storage for pixel values around current */
 	color2d *pixv1, *_pixv1;
+	sobol *so;					/* Random sampler for anti-aliasing */
 	int i, j;
 
 	double rx0, rx1, ry0, ry1;	/* Box being processed, newest sample is rx1, ry1 */
 	int x, y;				/* Pixel x & y index */
+
+	if ((so = new_sobol(2)) == NULL)
+		return 1;
 
 	switch (s->csp) {
 		case w_2d:			/* Video style grey */
@@ -369,14 +373,12 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 				cc[PRIX2D] = pixv1[x][PRIX2D];
 
 				/* See if anti aliasing is needed */
-				if (pixv0[x+0][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv0[x+0], cc)
-				 || pixv0[x-1][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv0[x-1], cc)
-				 || pixv1[x-1][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv1[x-1], cc)) {
+				if ((pixv0[x+0][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv0[x+0], cc))
+				 || (pixv0[x-1][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv0[x-1], cc))
+				 || (pixv1[x-1][PRIX2D] != cc[PRIX2D] && colordiff(s, pixv1[x-1], cc))) {
 					double nn = 0;
-					sobol *so;
 
-					if ((so = new_sobol(2)) == NULL)
-						return 1;
+					so->reset(so);
 
 					for (j = 0; j < s->ncc; j++)
 						cc[j] = 0.0;
@@ -418,7 +420,6 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 					cc[1] = 0.0;
 					cc[2] = 1.0;
 #endif
-
 				} else {
 
 					/* Compute output value as mean of surrounding samples */
@@ -451,7 +452,7 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 							p[j] = (int)(cc[j] + 0.5);
 					} else {
 						for (j = 0; j < s->ncc; j++)
-							p[j] = (int)(65525.0 * cc[j] + 0.5);
+							p[j] = (int)(65535.0 * cc[j] + 0.5);
 					}
 				}
 			}
@@ -478,6 +479,8 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 
 	_TIFFfree(outbuf);
 	TIFFClose(wh);		/* Close Output file */
+
+	so->del(so);
 
 	return 0;
 }

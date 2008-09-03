@@ -812,7 +812,7 @@ void *od				/* context for Perceptual function */
 		/* The interpolation grid mimics the operation of the profile */
 		/* package creating a device to CIE mapping for the device from */
 		/* the given test points. */
-		s->g = new_rspl(di, di);
+		s->g = new_rspl(RSPL_NOFLAGS, di, di);
 
 		for (e = 0; e < di; e++) {
 			pl[e] = 0.0;
@@ -845,7 +845,7 @@ void *od				/* context for Perceptual function */
 		/* Track closest perceptual distance to existing test points. */
 		/* To save looking up the perceptual value for every grid location */
 		/* every time a point is added, cache this values in the grid too. */
-		s->pd = new_rspl(di, di+1);
+		s->pd = new_rspl(RSPL_NOFLAGS, di, di+1);
 
 		/* Initialise the pd grid ready for the first points. */
 		pdd.s = s;

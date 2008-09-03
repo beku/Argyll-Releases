@@ -36,6 +36,11 @@
  *
  *       Improve error handling.
  *       Merge with gammap ?
+ *
+ * 
+ *		Major defect with some gamut combinations is "button" around
+ *		cusps. Not sure what the mechanism is, since it's not obvious
+ *		from the 3D vector plots what the cause is.
  */
 
 #include <stdio.h>

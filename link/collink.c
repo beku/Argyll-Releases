@@ -79,6 +79,11 @@
 	to intents, even without allowing the user to set the intent
 	of the abstract profile.
 
+	The K only hacks should ideally be replaced by a more general mechanism :-
+	say a device to device gamut map rspl that has an extra output "weight"
+	(and perhaps "power") that determines a blend between the direct mapping
+	and the color mapping. 
+
  */
 
 #undef USE_MERGE_CLUT_OPT	/* When using inverse A2B table, merge the output luts */
@@ -132,6 +137,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -r res          Override clut res. set by -q\n");
 	fprintf(stderr," -n              Don't preserve device linearization curves in result\n");
 	fprintf(stderr," -f              Special :- Force neutral colors to be K only output\n");
+	fprintf(stderr," -fk             Special :- Force K only neutral colors to be K only output\n");
 	fprintf(stderr," -F              Special :- Force all colors to be K only output\n");
 	fprintf(stderr," -p absprof      Include abstract profile in link\n");
 	fprintf(stderr," -s              Simple Mode (default)\n");
@@ -228,7 +234,8 @@ struct _link {
 
 	icColorSpaceSignature pcsor;	/* PCS to use between in & out profiles */
 
-	int nhack;		/* 0 = off, 1 = hack to map input neutrals to output K only, 2 = all to K */
+	int nhack;		/* 0 = off, 1 = hack to map input neutrals to output K only, */
+					/* 2 = map 000K to output K only, 3 = all to K */
 	rspl *pcs2k;	/* PCS to K lookup for nhack */
 	int wphack;		/* 0 = off, 1 = hack to map input wp to output wp, 2 = to hwp[] */
 	double hwp[3];	/* hack destination white point in PCS space */
@@ -348,7 +355,8 @@ void devip_devop(void *cntx, double *out, double *in) {
 #endif
 
 	/* Handle neutral recognition/output K only hack */
-	if (p->nhack == 1) {
+	/* (see discussion at top of file for generalization of this idea) */
+	if (p->nhack == 1 || p->nhack == 2) {
 		double thr = (KHACKWIDTH + 0.5)/(p->clutres-1.0); /* Match threshold */
 
 		/* We want to see if the input colors are equal (Or a=b= 0.0 ??) */
@@ -356,9 +364,14 @@ void devip_devop(void *cntx, double *out, double *in) {
 		/* input space device values here. It also made sure that there are at */
 		/* least 3 input channels. */
 
-		if (fabs(in[0] - in[1]) < thr
-		 && fabs(in[1] - in[2]) < thr
-		 && fabs(in[2] - in[0]) < thr) {
+		if ((p->nhack == 1
+		    && fabs(in[0] - in[1]) < thr
+		    && fabs(in[1] - in[2]) < thr
+		    && fabs(in[2] - in[0]) < thr)
+		|| (p->nhack == 2
+		    && in[0] < thr
+		    && in[1] < thr
+		    && in[2] < thr)) {
 			ntrig = 1;			/* Is neutral flag */
 		}
 	}
@@ -601,7 +614,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 	}
 
 	/* Do PCS -> DevOut' */
-	if (p->nhack == 2	
+	if (p->nhack == 3	
 	 || (p->nhack && ntrig)) { /* Neutral to K only hack has triggered */
 		co pp;
 		pp.p[0] = pcsv[0];		/* Input L value */
@@ -617,8 +630,12 @@ void devip_devop(void *cntx, double *out, double *in) {
 		if (p->verb)
 #endif
 		if (ntrig) {
-			printf("Neutral hack mapped %f %f %f to 0 0 0 %f\n",
-   		    win[0], win[1], win[2], out[3]); 
+			if (p->in.chan == 4) 
+				printf("Neutral hack mapped %f %f %f %f to 0 0 0 %f\n",
+	   		    win[0], win[1], win[2], win[3], out[3]); 
+			else
+				printf("Neutral hack mapped %f %f %f to 0 0 0 %f\n",
+	   		    win[0], win[1], win[2], out[3]); 
 			fflush(stdout);
 		}
 		
@@ -1039,11 +1056,18 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'f') {
 				li.nhack = 1;
 				li.in.nocurve = 1;		/* Disable input curve to preserve input equality */
+
+				if (na != NULL) {		/* 000K hack */
+					fa = nfa;
+					if (na[0] != 'k' && na[0] != 'K')
+						usage("Unexpected argument '%c' to -f flag",na[0]);
+					li.nhack = 2;
+				}
 			}
 
 			/* Hack to force all input colors to K only output */
 			else if (argv[fa][1] == 'F') {
-				li.nhack = 2;
+				li.nhack = 3;
 			}
 
 			/* Quality */
@@ -1499,7 +1523,7 @@ main(int argc, char *argv[]) {
 		error("Output profile isn't a device profile");
 
 	/* Set the default ink limits if not set on command line */
-	icxDefaultLimits(li.out.c, &li.in.ink.tlimit, li.in.ink.tlimit, &li.in.ink.klimit, li.in.ink.klimit);
+	icxDefaultLimits(li.out.c, &li.out.ink.tlimit, li.out.ink.tlimit, &li.out.ink.klimit, li.out.ink.klimit);
 
 	if (li.verb) {
 		if (li.out.ink.tlimit >= 0.0)
@@ -1865,12 +1889,15 @@ main(int argc, char *argv[]) {
 			double avgdev[MXDO];
 
 			if (li.out.h->colorSpace != icSigCmykData)
-				error("Netral Axis K only requested with non CMYK output profile");
+				error("Neutral Axis K only requested with non CMYK output profile");
 
 			if (li.in.chan < 3)
-				error("Netral Axis K only requested with input profile with less than 3 channels");
+				error("Neutral Axis K only requested with input profile with less than 3 channels");
 
-			if ((li.pcs2k = new_rspl(1, 1)) == NULL) {
+			if (li.nhack == 2 && li.in.h->colorSpace != icSigCmykData)
+				error("Neutral Axis 000K only requested with input profile that is not CMYK");
+
+			if ((li.pcs2k = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 				error("Failed to create an rspl object");
 			}
 
@@ -2002,22 +2029,24 @@ main(int argc, char *argv[]) {
 		if (li.verb)
 			printf("Creating Gamut Mapping\n");
 
-		if (li.quality == 0) {			/* Low quality */
-  	 		sgres = 10.0;
-  	 		dgres = 9.0;
-  	 		mapres = 17;
-		} else if (li.quality == 1) {	/* Medium */
+		/* Gamut mapping will extend given grid res to encompas */
+		/* source gamut by a margin. */
+		if (li.quality == 3) {			/* Ultra High */
   	 		sgres = 8.0;
-  	 		dgres = 7.0;
-  	 		mapres = 25;
+  	 		dgres = 8.0;
+  	 		mapres = 41;
 		} else if (li.quality == 2) {	/* High */
-  	 		sgres = 7.0;
-  	 		dgres = 6.0;
+  	 		sgres = 9.0;
+  	 		dgres = 9.0;
   	 		mapres = 33;
-		} else { 						/* Ultra High */
-  	 		sgres = 6.0;
-  	 		dgres = 5.0;
-  	 		mapres = 43;
+		} else if (li.quality == 1) {	/* Medium */
+  	 		sgres = 10.0;
+  	 		dgres = 10.0;
+  	 		mapres = 25;
+		} else {						/* Low quality */
+  	 		sgres = 12.0;
+  	 		dgres = 12.0;
+  	 		mapres = 17;
 		}
 
 		/* Creat the source colorspace gamut surface */
@@ -2560,17 +2589,17 @@ main(int argc, char *argv[]) {
 			if (li.verb)
 				printf("Filling in Lut table\n");
 #ifdef DEBUG_ONE
-#define DBGNO 2		/* Up to 10 */
+#define DBGNO 1		/* Up to 10 */
 
-#ifdef NEVER
+#ifndef NEVER
 			/* Test a single given rgb/cmyk -> cmyk value */
 			{
 				double in[10][MAX_CHAN];
 				double out[MAX_CHAN];
-				in[0][0] = 1.0;
-				in[0][1] = 1.0;
+				in[0][0] = 0.0;
+				in[0][1] = 0.0;
 				in[0][2] = 1.0;
-				in[0][3] = 1.0;
+				in[0][3] = 0.0;
 
 				in[1][0] = 1.0;
 				in[1][1] = 1.0;
@@ -2586,29 +2615,6 @@ main(int argc, char *argv[]) {
 				}
 			}
 #endif /* NEVER */
-#ifdef NEVER
-			/* Test a single given rgb -> rgb value */
-			{
-				double in[10][MAX_CHAN];
-				double out[MAX_CHAN];
-				in[0][0] = 0.102;
-				in[0][1] = 0.1137;
-				in[0][2] = 0.8;
-
-				in[1][0] = 0.102;
-				in[1][1] = 0.102;
-				in[1][2] = 0.8667;
-
-				for (i = 0; i < DBGNO; i++) {
-					printf("Input %f %f %f\n",in[i][0], in[i][1], in[i][2]);
-					devi_devip((void *)&li, out, in[i]);
-					devip_devop((void *)&li, out, out);
-					devop_devo((void *)&li, out, out);
-					printf("Output %f %f %f\n\n",out[0], out[1], out[2]);
-				}
-			}
-
-#endif	/* NEVER */
 
 #else	/* !DEBUG_ONE */
 			/* Use helper function to do the hard work. */

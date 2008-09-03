@@ -20,6 +20,9 @@
 
 /* TTBD
 
+	Add a "delta E" number to the interactive adjustments,
+	so the significance of the error can be judged ?
+
 	We could improve the robustnes against LCD warm up
 	effects by reading the white every N readings,
 	and then linearly interpolating the white readings,
@@ -763,6 +766,9 @@ typedef struct {
 #if defined(__APPLE__) && defined(__POWERPC__)
 
 /* Workaround for a ppc gcc 3.3 optimiser bug... */
+/* It seems to cause a segmentation fault instead of */
+/* converting an integer loop index into a float, */
+/* when there are sufficient variables in play. */
 static int gcc_bug_fix(int i) {
 	static int nn;
 	nn += i;
@@ -1443,6 +1449,7 @@ int main(int argc, char *argv[])
 					debug = atoi(na);
 					fa = nfa;
 				}
+				callback_ddebug = 1;		/* dispwin global */
 
 			} else if (argv[fa][1] == 'k') {
 				fa = nfa;
@@ -1719,7 +1726,7 @@ int main(int argc, char *argv[])
 	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, nocal, highres, donat,
 	                     NULL, 0, disp, blackbg, override, callout, patsize, ho, vo,
 	                     spectral, verb, VERBOUT, debug, "fake" ICC_FILE_EXT)) == NULL)
-		error("dispread failed with '%s'\n",disprd_err(errc));
+		error("new_disprd() failed with '%s'\n",disprd_err(errc));
 
 	/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 	if (doreport) {
@@ -1733,7 +1740,7 @@ int main(int argc, char *argv[])
 		double vct, vct_de;
 		double vdt, vdt_de;
 		double cgamma, w[3], wp[2];
-		int sigbits;	/* Number of significant bits in VideoLUT/display/instrument */
+		int sigbits = 0;	/* Number of significant bits in VideoLUT/display/instrument */
 
 		if ((rv = dr->read(dr, tcols, 3, 1, 3, 1, 0)) != 0) {
 			dr->del(dr);
@@ -1781,6 +1788,9 @@ int main(int argc, char *argv[])
 				/* Do the test */
 				for (n = 0; n < res_samps; n++) {
 					double v;
+#if defined(__APPLE__) && defined(__POWERPC__)
+					gcc_bug_fix(sigbits);
+#endif
 					v = (5 << (sigbits-3))/((1 << sigbits) - 1.0);
 					if ((n % 3) == 2)
 						v += 1.0/((1 << sigbits) - 1.0);
@@ -1896,10 +1906,12 @@ int main(int argc, char *argv[])
 		printf("White        Visual Color Temperature = %.0fK, DE to locus = %4.1f\n",vct,vct_de);
 		printf("White     Visual Daylight Temperature = %.0fK, DE to locus = %4.1f\n",vdt,vdt_de);
 #ifdef	MEAS_RES
-		if (sigbits == 0) {
-			warning("Unable to determine LUT entry bit depth - problems ?");
-		} else if (verb) {
-			printf("Effective LUT entry depth seems to be %d bits\n",sigbits);
+		if (doreport == 1) {
+			if (sigbits == 0) {
+				warning("Unable to determine LUT entry bit depth - problems ?");
+			} else {
+				printf("Effective LUT entry depth seems to be %d bits\n",sigbits);
+			}
 		}
 #endif	/* MEAS_RES */
 		dr->del(dr);
@@ -1968,6 +1980,10 @@ int main(int argc, char *argv[])
 			dr->del(dr);
 			error ("Can't update '%s' - reading field 'TARGET_WHITE_XYZ' failed",outname);
 		}
+		x.nwh[0] = x.twh[0] / x.twh[1];
+		x.nwh[1] = x.twh[1] / x.twh[1];
+		x.nwh[2] = x.twh[2] / x.twh[1];
+
 		if ((fi = icg->find_kword(icg, 0, "NATIVE_TARGET_WHITE")) >= 0) {
 			wpx = wpy = 0.0;
 			temp = 0.0;
@@ -3338,10 +3354,13 @@ int main(int argc, char *argv[])
 				error("Failed to compute XYZ of target color temperature %f\n",temp);
 //printf("~1 Raw target from temp %f XYZ = %f %f %f\n",temp,x.twh[0],x.twh[1],x.twh[2]);
 		} else {						/* Native white */
-			x.twh[0] = x.nwh[0] = x.wh[0]/x.wh[1];
-			x.twh[1] = x.nwh[1] = x.wh[1]/x.wh[1];
-			x.twh[2] = x.nwh[2] = x.wh[2]/x.wh[1];
+			x.twh[0] = x.wh[0]/x.wh[1];
+			x.twh[1] = x.wh[1]/x.wh[1];
+			x.twh[2] = x.wh[2]/x.wh[1];
 		}
+		x.nwh[0] = x.twh[0];
+		x.nwh[1] = x.twh[1];
+		x.nwh[2] = x.twh[2];
 
 		/* Convert it to absolute white target */
 		if (tbright > 0.0) {			/* Given brightness */
@@ -3495,7 +3514,7 @@ int main(int argc, char *argv[])
 			case gt_Rec709:
 			case gt_SMPTE240M:	/* Television studio conditions */
 				x.svc->set_view(x.svc, vc_none,
-					x.nwh,		/* Display normalised white point */
+					x.nwh,					/* Display normalised white point */
 					0.2 * 1000.0/3.1415,	/* Adapting luminence, 20% of 1000 lux in cd/m^2 */
 					0.2,					/* Background relative to reference white */
 					1000.0/3.1415,			/* Luminance of white in the Image field (cd/m^2) */
@@ -3508,11 +3527,11 @@ int main(int argc, char *argv[])
 		}
 		/* The display we're calibratings situation */
 		x.dvc->set_view(x.dvc, vc_none,
-			x.nwh,		/* Display normalised white point */
-			0.2 * ambient,			/* Adapting luminence, 20% of ambient in cd/m^2 */
-			0.2,					/* Background relative to reference white */
-			x.twh[1],				/* Target white level (cd/m^2) */
-	        0.01, x.nwh,			/* 1% flare same white point */
+			x.nwh,				/* Display normalised white point */
+			0.2 * ambient,		/* Adapting luminence, 20% of ambient in cd/m^2 */
+			0.2,				/* Background relative to reference white */
+			x.twh[1],			/* Target white level (cd/m^2) */
+	        0.01, x.nwh,		/* 1% flare same white point */
 			0);
 
 		/* Compute the normalisation values */
@@ -3529,13 +3548,13 @@ int main(int argc, char *argv[])
 		x.dvc->cam_to_XYZ(x.dvc, xyz, Jab);
 		a0 = xyz[1];
 
-//printf("~1 t1 = %f, t0 = %f\n",t1,t0);
-//printf("~1 a1 = %f, a0 = %f\n",a1,a0);
+printf("~1 t1 = %f, t0 = %f\n",t1,t0);
+printf("~1 a1 = %f, a0 = %f\n",a1,a0);
 		x.vn1 = (t1 - t0)/(a1 - a0);		/* Scale factor */
 		x.vn0 = t0 - (a0 * x.vn1);			/* Then offset */
-//printf("~1 vn1 = %f, vn0 = %f\n",x.vn1, x.vn0);
-//printf("~1 fix a1 = %f, should be = %f\n",a1 * x.vn1 + x.vn0, t1);
-//printf("~1 fix a0 = %f, should be = %f\n",a0 * x.vn1 + x.vn0, t0);
+printf("~1 vn1 = %f, vn0 = %f\n",x.vn1, x.vn0);
+printf("~1 fix a1 = %f, should be = %f\n",a1 * x.vn1 + x.vn0, t1);
+printf("~1 fix a0 = %f, should be = %f\n",a0 * x.vn1 + x.vn0, t0);
 
 		x.vc = 1;
 

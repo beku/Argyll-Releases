@@ -100,8 +100,7 @@
 #include "cam02.h"
 #include "numlib.h"
 
-// ~~~
-#define ENTRACE				/* Enable internal value runtime tracing if s->trace != 0 */
+#undef ENTRACE				/* Enable internal value runtime tracing if s->trace != 0 */
 #define DISABLE_SS			/* Disable overall ss limit values (not the scheme used) */
 
 #undef DIAG1				/* Print internal value diagnostics for conditions setup */
@@ -116,16 +115,19 @@
 #define NLULIMIT 1e5		/* Non-linearity upper crossover to straight line */
 
 #ifndef DISABLE_SS
+#ifdef TRACKMINMAX
+#define SSLLIMIT 0.000001	/* ab scale lower limit */
+#define SSULIMIT 100000.0	/* ab scale upper limit */
+#else
 #define SSLLIMIT 0.5		/* Overall ab scale lower limit */
 #define SSULIMIT 450.0      /* Overall ab scale upper limit */
-//#define SSLLIMIT 0.000001	/* ab scale lower limit */
-//#define SSULIMIT 100000.0	/* ab scale upper limit */
+#endif
 #endif /* DISABLE_SS */
 
-#define DDLLIMIT 0.55		/* ab component -k3:k2 ratio limit (must be < 1.0) */
-#define DDULIMIT 0.9993		/* ab component k3:k1 ratio limit (must be < 1.0) */
 //#define DDLLIMIT 0.9999	/* ab component -k3:k2 ratio limit (must be < 1.0) */
 //#define DDULIMIT 0.9999	/* ab component k3:k1 ratio limit (must be < 1.0) */
+#define DDLLIMIT 0.55		/* ab component -k3:k2 ratio limit (must be < 1.0) */
+#define DDULIMIT 0.9993		/* ab component k3:k1 ratio limit (must be < 1.0) */
 #define SSMINcJ 0.005		/* ab scale cJ minimum value */
 #define JLIMIT 0.005		/* J encoding cutover point straight line (0 - 1.0 range) */
 #define HKLIMIT 0.5			/* Maximum Helmholtz-Kohlraush lift */
@@ -259,7 +261,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 		s->F  = t_F[i] * (1.0 - bf)  + t_F[i+1] * bf;
 	} else {
 		/* Compute the internal parameters by category */
-		switch(s->Ev) {
+		switch(Ev) {
 			case vc_dark:
 				s->C = 0.525;
 				s->Nc = 0.8;

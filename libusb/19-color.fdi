@@ -63,6 +63,12 @@
     </match>
     <!-- Gretag-Macbeth -->
     <match key="usb_device.vendor_id" int="0x0971">
+      <!-- Eye-One Monitor - spot emissive spectrometer -->
+      <match key="usb_device.product_id" int="0x2001">
+        <append key="info.capabilities" type="strlist">access_control</append>
+        <merge key="access_control.type" type="string">color</merge>
+        <merge key="access_control.file" type="copy_property">linux.device_file</merge>
+      </match>
       <!-- Eye-One Pro - spot and "swipe" reflective/emissive spectrometer -->
       <match key="usb_device.product_id" int="0x2000">
         <append key="info.capabilities" type="strlist">access_control</append>

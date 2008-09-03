@@ -341,6 +341,18 @@ display, use<br>
 As per usual, you can select the appropriate display using the <a
  href="dispwin.html#d">-d</a> flag.<br>
 <br>
+If you are using Microsoft <span style="font-weight: bold;">Vista</span>,
+there is a known bug in Vista that resets the calibration every time a
+fade-in effect is executed, which happens if you lock and unlock the
+computer, resume from sleep or hibernate, or User Access Control is
+activated. Using <a href="dispwin.html">dispwin</a> <a
+ href="dispwin.html#L">-L</a> may not restore the calibration, because
+Vista filters out setting (what it thinks) is a calibration that is
+already loaded. Use <a href="dispwin.html">dispwin</a> <a
+ href="dispwin.html#c">-c</a> <a href="dispwin.html#L">-L</a><span
+ style="font-family: monospace;"></span> as a workaround, as this will
+first clear the calibration, then re-load the current calibration.<br>
+<br>
 This can be automated on MSWindows and X11/Linux by adding this command
 to an appropriate startup script.<br>
 More system specific details, including how to create such startup
@@ -803,10 +815,14 @@ prompt you through the process of reading each sheet or strip. See <a
  href="chartread.html">chartread</a> for more details on the responses
 for each type of instrument. Continue with <a href="Scenarios.html#PP5">Creating
 a printer profile</a>.<br>
-<h4><a name="PP4"></a>Reading a print test chart using a scanner</h4>
 <br>
-Argyll supports using a scanner as a substitute for a colorimeter.
-While a scanner is no replacement for a color measurement
+<h4><a name="PP4"></a>Reading a print test chart using a scanner or
+camera<br>
+</h4>
+<br>
+Argyll supports using a scanner or even a camera as a substitute for a
+colorimeter.
+While a scanner or camera is no replacement for a color measurement
 instrument, it may give acceptable results in some situations, and may
 give better results than a generic profile for a printing device.<br>
 <br>
@@ -823,29 +839,39 @@ color errors. <br>
 * The IT8 chart gamut may be so much smaller than the printers that the
 scanner profile is too inaccurate. <br>
 <br>
+As well as some of the above, a camera may not be suitable if it
+automatically adjusts exposure or white point when taking a picture,
+and this behavior cannot be disabled.<br>
+<br>
 The end result is often a profile that has a slight color cast to,
 compared to a profile created using a colorimeter or spectrometer..<br>
 <br>
-It is assumed that you have created a scanner profile following the <a
- href="#PS1">procedure</a> outline above. For best possible results it
-is advisable to both profile the scanner, and use it in scanning the
+It is assumed that you have created a scanner or camera profile
+following the <a href="http://www.argyllcms.com/doc/Scenarios.html#PS1">procedure</a>
+outline above. For best possible results it
+is advisable to both profile the scanner or camera, and use it in
+scanning the
 printed test chart, in as "raw" mode as possible (i.e. using 16 bits
-per component scans, if the scanner is
-capable of doing so; not setting white or black points). It is
-generally advisable to create a LUT type
-scanner profile, and use the <a href="colprof.html#u">-u</a> flag to
-avoid clipping scanned value whiter than the scanner calibration chart.<br>
+per component images, if the scanner or camera is
+capable of doing so; not setting white or black points, using a fixed
+exposure etc.). It is
+generally advisable to create a LUT type input profile, and use the <a
+ href="http://www.argyllcms.com/doc/colprof.html#u">-u</a> flag to
+avoid clipping scanned value whiter than the input calibration chart.<br>
 <br>
-Scan your printer chart (or charts) on the scanner previously profiled.
+Scan or photograph your printer chart (or charts) on the scanner or
+camera previously profiled.
 <big><span style="font-weight: bold;">The
-scanner must be configured and used exactly the same as it was when it
+scanner or camera must be configured and used exactly the same as it
+was when it
 was profiled.</span></big><br>
 <br>
-I will assume the resulting scan file is called <span
+I will assume the resulting scan/photo input file is called <span
  style="font-weight: bold;">PrinterB.tif</span> (or <span
  style="font-weight: bold;">PrinterB1.tif</span>, <span
  style="font-weight: bold;">PrinterB2.tif</span> etc. in the case of
-multiple charts). As with profiling the scanner, the raster file need
+multiple charts). As with profiling the scanner or camera, the raster
+file need
 only be roughly cropped so as to contain the test chart.<br>
 <br>
 The scanner recognition files
@@ -1143,7 +1169,9 @@ mapping between source and destination is tailored to the specific
 gamuts of the two profiles, and the intent parameter supplied to <span
  style="font-weight: bold;">collink</span>. Additionally, source and
 destination viewing conditions should be provided, to allow the color
-appearance space conversion to work as intended:<br>
+appearance space conversion to work as intended. The colorimetric B2A
+table in the destination profile is used, and this will determine any
+black generation and ink limiting:<br>
 <br>
 <a href="collink.html">collink</a> <a href="collink.html#v">-v</a> <a
  href="collink.html#q">-qm</a> <a href="collink.html#g">-g</a> <a
@@ -1158,10 +1186,11 @@ the pre-computed intent mappings inside the profiles are not used, but
 instead the gamut mapping between source and destination is tailored to
 the specific gamuts of the two profiles, and the intent parameter
 supplied to <span style="font-weight: bold;">collink</span>. In
-addition, the B2A table is not used in the destination profile, but the
+addition, the B2A table is <span style="font-weight: bold;">not</span>
+used in the destination profile, but the
 A2B table is instead inverted, leading to improved transform accuracy,
 and in CMYK devices, allowing the ink limiting and black generation
-parameters to be set.<br>
+parameters to be set:<br>
 <br>
 For a CLUT table based RGB printer destination profile, the following
 would be appropriate:<br>
@@ -1186,7 +1215,7 @@ specified:<br>
 <a href="collink.html#p2">CMYKDestinationProfile.icm</a>
 <a href="collink.html#p3">Source2Destination.icm</a><br>
 <br>
-Note that you should adjust the source (<a href="collink.html#c">-c</a>)
+Note that you should set the source (<a href="collink.html#c">-c</a>)
 and
 destination (<a href="collink.html#d">-d</a>)
 viewing conditions for the type of device the profile represents, and

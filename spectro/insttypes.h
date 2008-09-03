@@ -30,7 +30,8 @@ typedef enum {
     instSpectroScan, 			/* GretagMacbeth SpectroScan */
     instSpectroScanT, 			/* GretagMacbeth SpectroScanT */
 	instSpectrocam,				/* Avantes Spectrocam */
-	instI1Display,				/* GretagMacbeth i1 display */
+	instI1Display,				/* GretagMacbeth i1 Display */
+	instI1Monitor,				/* GretagMacbeth i1 Monitor */
 	instI1Pro,					/* GretagMacbeth i1 Pro */
 	instHCFR,					/* Colorimtre HCFR */
 	instSpyder2,				/* ColorVision Spyder2 */

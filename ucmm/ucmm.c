@@ -990,6 +990,43 @@ ucmm_error ucmm_get_monitor_profile(
 }
 	
 
+/* Return an ASCII error message string interpretation of an error number */
+char *ucmm_error_string(ucmm_error erno) { 
+	
+	switch (erno) {
+		case ucmm_ok:
+			return "OK";
+		case ucmm_resource:
+			return "Resource failure (e.g. out of memory)";
+		case ucmm_invalid_profile:
+			return "Profile is not a valid display ICC profile";
+		case ucmm_no_profile:
+			return "There is no associated profile";
+		case ucmm_no_home:
+			return "There is no HOME environment variable defined";
+		case ucmm_no_edid_or_display:
+			return "There is no edid or display name";
+		case ucmm_profile_copy:
+			return "There was an error copying the profile";
+		case ucmm_open_config:
+			return "There was an error opening the config file";
+		case ucmm_access_config:
+			return "There was an error accessing the config information";
+		case ucmm_set_config:
+			return "There was an error setting the config file";
+		case ucmm_save_config:
+			return "There was an error saving the config file";
+		case ucmm_monitor_not_found:
+			return "The EDID or display wasn't matched";
+		case ucmm_delete_key:
+			return "Delete_key failed";
+		case ucmm_delete_profile:
+			return "Delete_key failed";
+	}
+	return "Unknown error number";
+}
+
+
 /* ============================================================= */
 
 /*
@@ -1105,3 +1142,4 @@ static unsigned int
 fnv_32_buf(void *buf, size_t len) {
 	return fnv_32_buf_cont(buf, len, FNV1_32_INIT);
 }
+

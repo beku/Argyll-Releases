@@ -86,7 +86,7 @@ int main() {
 		gres[0] = GRES;
 
 		/* Create the object */
-		rss =  new_rspl(1, 1);				/* di */
+		rss =  new_rspl(RSPL_NOFLAGS, 1, 1);		/* di */
 
 		/* Fit to scattered data */
 		rss->fit_rspl(rss,
@@ -118,7 +118,7 @@ int main() {
 		rss->del(rss);
 
 		/* Create the object */
-		rss = new_rspl(1, 1);				/* di */
+		rss = new_rspl(RSPL_NOFLAGS, 1, 1);				/* di */
 
 		/* Do second run with 8 points */
 		pnts = PNTS2;

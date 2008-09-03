@@ -22,14 +22,17 @@ SYSFS{idVendor}=="0670", SYSFS{idProduct}=="0001", MODE="666"
 # i1Display
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2003", MODE="666"
 
+# i1Monitor
+SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2001", MODE="666"
+
 # i1Pro
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2000", MODE="666"
 
 # Colorimtre HCFR
-SYSFS{idVendor}=="04DB", SYSFS{idProduct}=="005B", MODE="666"
+SYSFS{idVendor}=="04db", SYSFS{idProduct}=="005b", MODE="666"
 
 # Spyder 2
-SYSFS{idVendor}=="085C", SYSFS{idProduct}=="0200", MODE="666"
+SYSFS{idVendor}=="085c", SYSFS{idProduct}=="0200", MODE="666"
 
 # Huey
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2005", MODE="666"

@@ -291,10 +291,13 @@ printf("~1 rspl: flags = 0x%x\n",flags);
 	s->debug = (flags >> 24);
 
 	/* Init other flags */
+	if (flags & RSPL_VERBOSE)	/* Turn on progress messages to stdout */
+		s->verbose = 1;
+	if (flags & RSPL_NOVERBOSE)	/* Turn off progress messages to stdout */
+		s->verbose = 0;
 	s->xf = (flags & RSPL_EXTRAFIT) ? 1 : 0;		/* Enable extra fitting effort */
 	s->symdom = (flags & RSPL_SYMDOMAIN) ? 1 : 0;	/* Turn on symetric smoothness with gres */
 	s->inc = (flags & RSPL_INCREMENTAL) ? 1 : 0;	/* Enable incremental scattered mode */
-	s->verbose = (flags & RSPL_VERBOSE) ? 1 : 0;	/* Turn on progress messages to stdout */
 
 	/* Save smoothing factor and Average Deviation */
 	s->smooth = smooth;
@@ -521,6 +524,11 @@ add_rspl_imp(
 
 	if (s->sinit == 0)
 		first = 1;
+
+	if (flags & RSPL_VERBOSE)	/* Turn on progress messages to stdout */
+		s->verbose = 1;
+	if (flags & RSPL_NOVERBOSE)	/* Turn off progress messages to stdout */
+		s->verbose = 0;
 
 	if ((flags & RSPL_FINAL) || !s->inc)
 		last = 1;

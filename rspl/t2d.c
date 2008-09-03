@@ -456,7 +456,7 @@ int main(int argc, char *argv[]) {
 		flags |= RSPL_SYMDOMAIN;
 
 	/* Create the object */
-	rss =  new_rspl(2, 1);
+	rss =  new_rspl(RSPL_NOFLAGS, 2, 1);
 
 	/* Fit to scattered data */
 	rss->fit_rspl(rss,
@@ -478,7 +478,7 @@ int main(int argc, char *argv[]) {
 			gres2[1] = gres[1]/2;
 		}
 
-		rss2 =  new_rspl(2, 1);
+		rss2 =  new_rspl(RSPL_NOFLAGS, 2, 1);
 
 		/* Fit to scattered data */
 		rss2->fit_rspl(rss2,

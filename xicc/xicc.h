@@ -199,6 +199,8 @@ struct _xicc {
 									/* with an optimised internal separation pass, rather */
 									/* than a point by point inverse locus lookup . */
 									/* NOT IMPLEMENTED YET */
+#define ICX_FAST_SETUP   0x0800		/* Improve initial setup speed at the cost of throughput */
+#define ICX_VERBOSE      0x8000		/* Turn on verboseness during creation */
 
 	                                /* Returm a lookup object from the icc */
 	struct _icxLuBase *  (*get_luobj) (struct _xicc *p,
@@ -223,7 +225,7 @@ struct _xicc {
 #define ICX_NO_IN_POS_LUTS  0x0080		/* If LuLut: Don't create input (Device) poistion curves. */
 #define ICX_NO_OUT_LUTS     0x0100		/* If LuLut: Don't create output (PCS) curves. */
 #define ICX_EXTRA_FIT       0x0400		/* If LuLut: Don't create output (PCS) curves. */
-#define ICX_VERBOSE         0x8000		/* Turn on verboseness during creation */
+/* And  ICX_VERBOSE         0x8000 */	/* Turn on verboseness during creation */
 	struct _icxLuBase * (*set_luobj) (struct _xicc *p,
 	                                  icmLookupFunc func,		/* Functionality to set */
 	                                  icRenderingIntent intent,	/* Intent to set */
@@ -295,6 +297,7 @@ xicc *new_xicc(icc *picc);
 	int mergeclut;	/* Flag - If LuLut: Merge output() and out_abs() into clut(). */	\
 	int camclip;	/* Flag - If LuLut: Use CIECAM for clut reverse lookup clipping */ \
 	int intsep;		/* Flag - If LuLut: Do internal separation for 4d device */			\
+	int fastsetup;	/* Flag - If LuLut: Do fast setup at cost of slower throughput */	\
 																						\
 	/* Public: */																		\
 	void    (*del)(struct _icxLuBase *p);												\

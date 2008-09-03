@@ -10,10 +10,12 @@
 <h2><b>xicc/tiffgamut</b></h2>
 <h3>Summary</h3>
 Create a gamut file or VRML file of the color gamut of the
-contents of a TIFF image.<br>
+contents of a set of TIFF image.<br>
+<br>
 <span style="font-weight: bold;">tiffgamut</span> allows creation of
 gamut files from the pixel values in a
-TIFF raster image, as defined by an ICC profile, in L*a*b* or CIECAM02
+set of TIFF raster images, as defined by an ICC profile, in L*a*b* or
+CIECAM02
 Jab
 colorspace, and can also represent the gamut as a VRML file. This
 can be used for visualizing and comparing the gamut of an image to the
@@ -31,10 +33,10 @@ mappings, and the same input viewing
 conditions to be used in <span style="font-weight: bold;">collink</span>
 or <span style="font-weight: bold;">colprof</span>
 using
-the -c flag, i.e. "tiffgamut -ij -c2 sRGB.icm image.tif"<br>
+the -c flag, i.e. "tiffgamut -pj -cmt sRGB.icm image.tif"<br>
 <h3>Usage Summary</h3>
 <small><span style="font-family: monospace;">tiffgamut [-v level]
-[profile.icm | embedded.tif] infile.tif</span><br
+[profile.icm | embedded.tif] infile1.tif [infile2.tif ...]</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Verbose</span><br style="font-family: monospace;">
@@ -49,9 +51,10 @@ emit VRML .wrl file as well as CGATS .gam file</span><br
 Don't add VRML axes or white/black point</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-k&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Add markers for prim. &amp; sec. "cusp" points</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-i
+Add markers for prim. &amp; sec. "cusp" points<br>
+&nbsp;-f perc&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Filter by popularity,
+perc = percent to use<br style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;-i
 intent&nbsp;&nbsp;&nbsp;&nbsp; p =
 perceptual, r = relative colorimetric,</span><br
  style="font-family: monospace;">
@@ -170,6 +173,20 @@ each of the primary and secondary "cusp" points (Red, Yellow, Green,
 Cyan, Blue &amp; Magenta). No markers will be displayed if the cusps
 cannot be determined.<br>
 <br>
+The <span style="font-weight: bold;">-f</span> <span
+ style="font-weight: bold;">perc</span> parameter turns on filtering of
+the raster colors. The colors from the image are clustered, and then
+sorted according to popularity, and then the <span
+ style="font-weight: bold;">perc</span> most common percentage of
+colors are used to create the gamut surface. This may be useful in
+creating a source gamut mapping surface that favors the important
+colors within an image, and doesn't attempt to compress the color
+reproduction in order to reproduce the little used colors. A value of <span
+ style="font-weight: bold;">perc</span> of 90 or 80 may be a good place
+to start. Note that the filtering is performed independently on each
+raster image processed, with the final gamut being the union of all the
+filtered image gamuts.<br>
+<br>
 The <b>-i</b> flag selects the intent transform used for a lut based
 profile. It also selects between relative and absolute colorimetric for
 non-lut base profiles. Note that anything other than colorimetric may
@@ -217,7 +234,8 @@ environment, or controlling
 particular viewing condition parameters. This is only functional if an
 ICC profile is provided.<br>
 <br>
-If the TIFF file is in a device space (ie. RGB, CMYK etc.), then it is
+If the TIFF files are in a device space (ie. RGB, CMYK etc.), then it
+is
 necessary to supply an ICC profile to translate the device space values
 to a CIE space value such as L*a*b* or CIECAM02 Jab space for creating
 a gamut surface. For the ICC profile provided it is then possible to
@@ -232,6 +250,13 @@ If a TIFF file is
 already in a CIE space such as CIELab or ICCLab, then it is not
 necessary to select an ICC profile,&nbsp; although a PCS to PCS
 colorspace profile may be chosen.<br>
+<br>
+One or more TIFF files may be specified, and the gamut is the union of
+the gamuts of each file. This is useful for creating an image specific
+gamut mapping that can be applied to a set of images with consistent
+results between the images. Note that the output gamut file name will
+be taken from the last TIFF file specified, and that all the TIFF files
+must be in the same colorspace.<br>
 <span style="font-weight: bold;"></span><br>
 <br>
 <br>

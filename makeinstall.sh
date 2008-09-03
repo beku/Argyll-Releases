@@ -4,7 +4,7 @@ echo "binaries in the ./bin directory and samples into the ref ./directory"
 
 if [ X$OS != "XWindows_NT" ] ; then
 	# Fixup issues with the .zip format
-	chmod +x *.ksh
+	chmod +x *.sh
 	chmod +x tiff/configure
 	chmod +x libusb/configure
 fi

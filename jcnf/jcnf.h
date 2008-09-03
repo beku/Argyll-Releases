@@ -56,6 +56,7 @@ typedef enum {
 	jc_read_fail,				/* Failure to read from the file */
 	jc_parse_fail,				/* Failure to parse from the file */
 	jc_write_open,				/* Failed to open file for writing */
+	jc_write_fail,				/* Failed to write to file */
 	jc_write_close,				/* Failed to close file after writing */
 	jc_update_nomod,			/* Attempt to update file that wasn't opened for modifications */
 	jc_bad_addkey_params,		/* Bad add_key() parameters */

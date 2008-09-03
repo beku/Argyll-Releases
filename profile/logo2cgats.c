@@ -516,7 +516,7 @@ int main(int argc, char *argv[])
 		cgats_set_elem *setel;	/* Array of set value elements */
 
 		if ((setel = (cgats_set_elem *)malloc(
-		     sizeof(cgats_set_elem) * (1 + (isrgb ? 3 : 4) + 3 + (spec != NULL ? specnum : 0)))) == NULL)
+		     sizeof(cgats_set_elem) * ocg->t[0].nfields)) == NULL)
 			error("Malloc failed!");
 
 		/* Write out the patch info to the output CGATS file */

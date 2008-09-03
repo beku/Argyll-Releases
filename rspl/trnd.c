@@ -121,7 +121,7 @@ char *argv[]
 
 	printf("Started test\n");
 	/* Create the object */
-	rss =  new_rspl(DI, FDI);
+	rss =  new_rspl(RSPL_NOFLAGS, DI, FDI);
 
 	printf("Rspl allocated\n");
 	rss->set_rspl(rss, 0, (void *)NULL, func, NULL, NULL, gres, NULL, NULL);

@@ -306,6 +306,13 @@ input file, and the <a href="File_Formats.html#.ti3">.ti3</a> output
 file. <b>dispread</b> will add the .ti1 and .ti3 extensions
 automatically.<br>
 <br>
+<span style="font-weight: bold;">NOTE</span> that on an X11 system, if
+the environment variable <span style="font-weight: bold;">ARGYLL_IGNORE_XRANDR1_2</span>
+is set (ie. set it to "yes"), then the presence of the XRandR 1.2
+extension will be ignored, and other extensions such as Xinerama and
+XF86VidMode extension will be used. This may be a way to work around
+buggy XRandR 1.2 implementations.<br>
+<br>
 <hr style="width: 100%; height: 2px;"><br>
 If a large number of patches is being read, the screensaver on many
 systems can interfere with the operation of dispread. It is therefore

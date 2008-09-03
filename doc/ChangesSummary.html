@@ -14,6 +14,44 @@
 </head>
 <body>
 <h1> Summary of Argyll CMS Changes since last release</h1>
+<br>
+<h1>[V1.0.2 -&gt; V1.0.3]</h1>
+<ul>
+  <li>Added multi-TIFF and popularity filtering to <span
+ style="font-weight: bold;">tiffgamut</span>.<br>
+  </li>
+  <li>Modified gamut mapping in <span style="font-weight: bold;">colprof</span>
+and <span style="font-weight: bold;">collink</span> to be consistent,
+and have higher perceptual intent saturation.<br>
+  </li>
+  <li>Fixed timeout problem with the Eye-One Display colorimeter.<br>
+  </li>
+  <li>Fix segmentation fault in <span style="font-weight: bold;">dispread</span>.</li>
+  <li>Fix out of memory error in <span style="font-weight: bold;">colprof
+    </span>for systems with &gt; 3Gig Ram.</li>
+  <li>Add support for the Eye-One Monitor spectrometer.</li>
+  <li>Added -L option to <span style="font-weight: bold;">printtarg</span>
+to suppress the i1pro target holder clip margin.<br>
+  </li>
+  <li>Fixed bug in <span style="font-weight: bold;">dispcal</span>
+when using -a with -t<br>
+  </li>
+</ul>
+<h1>[V1.0.1 -&gt; V1.0.2]</h1>
+Various bug fixes, the main ones being:<br>
+<ul>
+  <li>Fixed some <span style="font-weight: bold;">colprof </span>performance
+and memory usage issues.</li>
+  <li>Fixed issues with Eye-One Pro Rev B timeouts.</li>
+  <li>Added new option to collink -fk, that forces 000K input to K only
+output.</li>
+  <li>Added device target value quantization option to <span
+ style="font-weight: bold;">printtarg</span>, as well as making it
+default for
+TIFF output files.put files.</li>
+  <li>Fixed leak that was affecting <span style="font-weight: bold;">printtarg</span>.<br>
+  </li>
+</ul>
 <h1>[V0.70 Beta 8 -&gt; V1.0.0] <br>
 </h1>
 <br>
@@ -42,6 +80,8 @@ avoid clashes that have arisen with other executable names.</li>
   </li>
   <li>Installation archives now include a top directory, and gzip/tar
 format for OS X and Linux.</li>
+  <li>Added B2A table to input device LUT profiles by default.<br>
+  </li>
 </ul>
 As usual, a more detailed description of all changes is in the <b>log.txt</b>
 file that accompanies the

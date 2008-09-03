@@ -23,14 +23,17 @@ SYSFS{idVendor}=="0670", SYSFS{idProduct}=="0001", PROGRAM="/bin/sh -c 'K=%k; K=
 # i1Display
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2003", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c",  MODE="666"
 
+# i1Monitor
+SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2001", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c",  MODE="666"
+
 # i1Pro
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2000", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c",  MODE="666"
 
 # Colorimtre HCFR
-SYSFS{idVendor}=="04DB", SYSFS{idProduct}=="005B", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c",  MODE="666"
+SYSFS{idVendor}=="04db", SYSFS{idProduct}=="005b", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c",  MODE="666"
 
 # Spyder 2
-SYSFS{idVendor}=="085C", SYSFS{idProduct}=="0200", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c",  MODE="666"
+SYSFS{idVendor}=="085c", SYSFS{idProduct}=="0200", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c",  MODE="666"
 
 # Huey
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2005", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c",  MODE="666"

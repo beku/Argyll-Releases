@@ -223,7 +223,7 @@ icmAlloc *al		/* heap allocator */
 	p->seek     = icmFileMem_seek;
 	p->read     = icmFileMem_read;
 	p->write    = icmFileMem_write;
-	p->printf   = icmFileMem_printf;
+	p->gprintf  = icmFileMem_printf;
 	p->flush    = icmFileMem_flush;
 	p->del      = icmFileMem_delete;
 
@@ -1772,8 +1772,8 @@ static void icmUnknown_dump(
 	if (verb <= 1)
 		return;
 
-	op->printf(op,"Unknown:\n");
-	op->printf(op,"  Payload size in bytes = %u\n",p->size);
+	op->gprintf(op,"Unknown:\n");
+	op->gprintf(op,"  Payload size in bytes = %u\n",p->size);
 
 	/* Print one row of binary and ASCII interpretation if verb == 2, All if == 3 */
 	/* else print all of it. */
@@ -1783,35 +1783,35 @@ static void icmUnknown_dump(
 
 		c = 1;
 		if (ph != 0) {	/* Print ASCII under binary */
-			op->printf(op,"           ");
+			op->gprintf(op,"           ");
 			i = ii;				/* Swap */
 			c += 11;
 		} else {
-			op->printf(op,"    0x%04lx: ",i);
+			op->gprintf(op,"    0x%04lx: ",i);
 			ii = i;				/* Swap */
 			c += 10;
 		}
 		while (i < p->size && c < 75) {
 			if (ph == 0) 
-				op->printf(op,"%02x ",p->data[i]);
+				op->gprintf(op,"%02x ",p->data[i]);
 			else {
 				if (isprint(p->data[i]))
-					op->printf(op," %c ",p->data[i]);
+					op->gprintf(op," %c ",p->data[i]);
 				else
-					op->printf(op,"   ",p->data[i]);
+					op->gprintf(op,"   ",p->data[i]);
 			}
 			c += 3;
 			i++;
 		}
 		if (ph == 0 || i < p->size)
-			op->printf(op,"\n");
+			op->gprintf(op,"\n");
 
 		if (ph == 1 && i >= p->size) {
-			op->printf(op,"\n");
+			op->gprintf(op,"\n");
 			break;
 		}
 		if (ph == 1 && r > 1 && verb < 3) {
-			op->printf(op,"    ...\n");
+			op->gprintf(op,"    ...\n");
 			break;			/* Print 1 row if not verbose */
 		}
 
@@ -2002,12 +2002,12 @@ static void icmUInt8Array_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"UInt8Array:\n");
-	op->printf(op,"  No. elements = %lu\n",p->size);
+	op->gprintf(op,"UInt8Array:\n");
+	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
 		unsigned long i;
 		for (i = 0; i < p->size; i++)
-			op->printf(op,"    %lu:  %u\n",i,p->data[i]);
+			op->gprintf(op,"    %lu:  %u\n",i,p->data[i]);
 	}
 }
 
@@ -2189,12 +2189,12 @@ static void icmUInt16Array_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"UInt16Array:\n");
-	op->printf(op,"  No. elements = %lu\n",p->size);
+	op->gprintf(op,"UInt16Array:\n");
+	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
 		unsigned long i;
 		for (i = 0; i < p->size; i++)
-			op->printf(op,"    %lu:  %u\n",i,p->data[i]);
+			op->gprintf(op,"    %lu:  %u\n",i,p->data[i]);
 	}
 }
 
@@ -2376,12 +2376,12 @@ static void icmUInt32Array_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"UInt32Array:\n");
-	op->printf(op,"  No. elements = %lu\n",p->size);
+	op->gprintf(op,"UInt32Array:\n");
+	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
 		unsigned long i;
 		for (i = 0; i < p->size; i++)
-			op->printf(op,"    %lu:  %u\n",i,p->data[i]);
+			op->gprintf(op,"    %lu:  %u\n",i,p->data[i]);
 	}
 }
 
@@ -2563,12 +2563,12 @@ static void icmUInt64Array_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"UInt64Array:\n");
-	op->printf(op,"  No. elements = %lu\n",p->size);
+	op->gprintf(op,"UInt64Array:\n");
+	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
 		unsigned long i;
 		for (i = 0; i < p->size; i++)
-			op->printf(op,"    %lu:  h=%lu, l=%lu\n",i,p->data[i].h,p->data[i].l);
+			op->gprintf(op,"    %lu:  h=%lu, l=%lu\n",i,p->data[i].h,p->data[i].l);
 	}
 }
 
@@ -2750,12 +2750,12 @@ static void icmU16Fixed16Array_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"U16Fixed16Array:\n");
-	op->printf(op,"  No. elements = %lu\n",p->size);
+	op->gprintf(op,"U16Fixed16Array:\n");
+	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
 		unsigned long i;
 		for (i = 0; i < p->size; i++)
-			op->printf(op,"    %lu:  %f\n",i,p->data[i]);
+			op->gprintf(op,"    %lu:  %f\n",i,p->data[i]);
 	}
 }
 
@@ -2937,12 +2937,12 @@ static void icmS15Fixed16Array_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"S15Fixed16Array:\n");
-	op->printf(op,"  No. elements = %lu\n",p->size);
+	op->gprintf(op,"S15Fixed16Array:\n");
+	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
 		unsigned long i;
 		for (i = 0; i < p->size; i++)
-			op->printf(op,"    %lu:  %f\n",i,p->data[i]);
+			op->gprintf(op,"    %lu:  %f\n",i,p->data[i]);
 	}
 }
 
@@ -3166,12 +3166,12 @@ static void icmXYZArray_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"XYZArray:\n");
-	op->printf(op,"  No. elements = %lu\n",p->size);
+	op->gprintf(op,"XYZArray:\n");
+	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
 		unsigned long i;
 		for (i = 0; i < p->size; i++) {
-			op->printf(op,"    %lu:  %s\n",i,string_XYZNumber_and_Lab(&p->data[i]));
+			op->gprintf(op,"    %lu:  %s\n",i,string_XYZNumber_and_Lab(&p->data[i]));
 			
 		}
 	}
@@ -3640,18 +3640,18 @@ static void icmCurve_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"Curve:\n");
+	op->gprintf(op,"Curve:\n");
 
 	if (p->flag == icmCurveLin) {
-		op->printf(op,"  Curve is linear\n");
+		op->gprintf(op,"  Curve is linear\n");
 	} else if (p->flag == icmCurveGamma) {
-		op->printf(op,"  Curve is gamma of %f\n",p->data[0]);
+		op->gprintf(op,"  Curve is gamma of %f\n",p->data[0]);
 	} else {
-		op->printf(op,"  No. elements = %lu\n",p->size);
+		op->gprintf(op,"  No. elements = %lu\n",p->size);
 		if (verb >= 2) {
 			unsigned long i;
 			for (i = 0; i < p->size; i++)
-				op->printf(op,"    %3lu:  %f\n",i,p->data[i]);
+				op->gprintf(op,"    %3lu:  %f\n",i,p->data[i]);
 		}
 	}
 }
@@ -3892,68 +3892,68 @@ static void icmData_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"Data:\n");
+	op->gprintf(op,"Data:\n");
 	switch(p->flag) {
 		case icmDataASCII:
-			op->printf(op,"  ASCII data\n");
+			op->gprintf(op,"  ASCII data\n");
 			size = p->size > 0 ? p->size-1 : 0;
 			break;
 		case icmDataBin:
-			op->printf(op,"  Binary data\n");
+			op->gprintf(op,"  Binary data\n");
 			size = p->size;
 			break;
 		case icmDataUndef:
-			op->printf(op,"  Undefined data\n");
+			op->gprintf(op,"  Undefined data\n");
 			size = p->size;
 			break;
 	}
-	op->printf(op,"  No. elements = %lu\n",p->size);
+	op->gprintf(op,"  No. elements = %lu\n",p->size);
 
 	ii = i = 0;
 	for (r = 1;; r++) {		/* count rows */
 		if (i >= size) {
-			op->printf(op,"\n");
+			op->gprintf(op,"\n");
 			break;
 		}
 		if (r > 1 && verb < 2) {
-			op->printf(op,"...\n");
+			op->gprintf(op,"...\n");
 			break;			/* Print 1 row if not verbose */
 		}
 
 		c = 1;
 		if (ph != 0) {	/* Print ASCII under binary */
-			op->printf(op,"           ");
+			op->gprintf(op,"           ");
 			i = ii;
 			c += 11;
 		} else {
-			op->printf(op,"    0x%04lx: ",i);
+			op->gprintf(op,"    0x%04lx: ",i);
 			ii = i;
 			c += 10;
 		}
 		while (i < size && c < 75) {
 			if (p->flag == icmDataASCII) {
 				if (isprint(p->data[i])) {
-					op->printf(op,"%c",p->data[i]);
+					op->gprintf(op,"%c",p->data[i]);
 					c++;
 				} else {
-					op->printf(op,"\\%03o",p->data[i]);
+					op->gprintf(op,"\\%03o",p->data[i]);
 					c += 4;
 				}
 			} else {
 				if (ph == 0) 
-					op->printf(op,"%02x ",p->data[i]);
+					op->gprintf(op,"%02x ",p->data[i]);
 				else {
 					if (isprint(p->data[i]))
-						op->printf(op," %c ",p->data[i]);
+						op->gprintf(op," %c ",p->data[i]);
 					else
-						op->printf(op,"   ",p->data[i]);
+						op->gprintf(op,"   ",p->data[i]);
 				}
 				c += 3;
 			}
 			i++;
 		}
 		if (i < size)
-			op->printf(op,"\n");
+			op->gprintf(op,"\n");
 		if (verb > 2 && p->flag != icmDataASCII && ph == 0)
 			ph = 1;
 		else
@@ -4143,35 +4143,35 @@ static void icmText_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"Text:\n");
-	op->printf(op,"  No. chars = %lu\n",p->size);
+	op->gprintf(op,"Text:\n");
+	op->gprintf(op,"  No. chars = %lu\n",p->size);
 
 	size = p->size > 0 ? p->size-1 : 0;
 	i = 0;
 	for (r = 1;; r++) {		/* count rows */
 		if (i >= size) {
-			op->printf(op,"\n");
+			op->gprintf(op,"\n");
 			break;
 		}
 		if (r > 1 && verb < 2) {
-			op->printf(op,"...\n");
+			op->gprintf(op,"...\n");
 			break;			/* Print 1 row if not verbose */
 		}
 		c = 1;
-		op->printf(op,"    0x%04lx: ",i);
+		op->gprintf(op,"    0x%04lx: ",i);
 		c += 10;
 		while (i < size && c < 75) {
 			if (isprint(p->data[i])) {
-				op->printf(op,"%c",p->data[i]);
+				op->gprintf(op,"%c",p->data[i]);
 				c++;
 			} else {
-				op->printf(op,"\\%03o",p->data[i]);
+				op->gprintf(op,"\\%03o",p->data[i]);
 				c += 4;
 			}
 			i++;
 		}
 		if (i < size)
-			op->printf(op,"\n");
+			op->gprintf(op,"\n");
 	}
 }
 
@@ -4476,8 +4476,8 @@ static void icmDateTimeNumber_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"DateTimeNumber:\n");
-	op->printf(op,"  Date = %s\n", string_DateTimeNumber(p));
+	op->gprintf(op,"DateTimeNumber:\n");
+	op->gprintf(op,"  Date = %s\n", string_DateTimeNumber(p));
 }
 
 /* Allocate variable sized data elements */
@@ -5988,34 +5988,34 @@ static void icmLut_dump(
 		return;
 
 	if (p->ttype == icSigLut8Type) {
-		op->printf(op,"Lut8:\n");
+		op->gprintf(op,"Lut8:\n");
 	} else {
-		op->printf(op,"Lut16:\n");
+		op->gprintf(op,"Lut16:\n");
 	}
-	op->printf(op,"  Input Channels = %u\n",p->inputChan);
-	op->printf(op,"  Output Channels = %u\n",p->outputChan);
-	op->printf(op,"  CLUT resolution = %u\n",p->clutPoints);
-	op->printf(op,"  Input Table entries = %u\n",p->inputEnt);
-	op->printf(op,"  Output Table entries = %u\n",p->outputEnt);
-	op->printf(op,"  XYZ matrix =  %f, %f, %f\n",p->e[0][0],p->e[0][1],p->e[0][2]);
-	op->printf(op,"                %f, %f, %f\n",p->e[1][0],p->e[1][1],p->e[1][2]);
-	op->printf(op,"                %f, %f, %f\n",p->e[2][0],p->e[2][1],p->e[2][2]);
+	op->gprintf(op,"  Input Channels = %u\n",p->inputChan);
+	op->gprintf(op,"  Output Channels = %u\n",p->outputChan);
+	op->gprintf(op,"  CLUT resolution = %u\n",p->clutPoints);
+	op->gprintf(op,"  Input Table entries = %u\n",p->inputEnt);
+	op->gprintf(op,"  Output Table entries = %u\n",p->outputEnt);
+	op->gprintf(op,"  XYZ matrix =  %f, %f, %f\n",p->e[0][0],p->e[0][1],p->e[0][2]);
+	op->gprintf(op,"                %f, %f, %f\n",p->e[1][0],p->e[1][1],p->e[1][2]);
+	op->gprintf(op,"                %f, %f, %f\n",p->e[2][0],p->e[2][1],p->e[2][2]);
 
 	if (verb >= 2) {
 		unsigned int i, j, size;
 		unsigned int ii[MAX_CHAN];	/* maximum no of input channels */
 
-		op->printf(op,"  Input table:\n");
+		op->gprintf(op,"  Input table:\n");
 		for (i = 0; i < p->inputEnt; i++) {
-			op->printf(op,"    %3u: ",i);
+			op->gprintf(op,"    %3u: ",i);
 			for (j = 0; j < p->inputChan; j++)
-				op->printf(op," %1.10f",p->inputTable[j * p->inputEnt + i]);
-			op->printf(op,"\n");
+				op->gprintf(op," %1.10f",p->inputTable[j * p->inputEnt + i]);
+			op->gprintf(op,"\n");
 		}
 
-		op->printf(op,"\n  CLUT table:\n");
+		op->gprintf(op,"\n  CLUT table:\n");
 		if (p->inputChan > MAX_CHAN) {
-			op->printf(op,"  !!Can't dump > %d input channel CLUT table!!\n",MAX_CHAN);
+			op->gprintf(op,"  !!Can't dump > %d input channel CLUT table!!\n",MAX_CHAN);
 		} else {
 			size = (p->outputChan * uipow(p->clutPoints,p->inputChan));
 			for (j = 0; j < p->inputChan; j++)
@@ -6023,14 +6023,14 @@ static void icmLut_dump(
 			for (i = 0; i < size;) {
 				unsigned int k;
 				/* Print table entry index */
-				op->printf(op,"   ");
+				op->gprintf(op,"   ");
 				for (j = p->inputChan-1; j < p->inputChan; j--)
-					op->printf(op," %2u",ii[j]);
-				op->printf(op,":");
+					op->gprintf(op," %2u",ii[j]);
+				op->gprintf(op,":");
 				/* Print table entry contents */
 				for (k = 0; k < p->outputChan; k++, i++)
-					op->printf(op," %1.10f",p->clutTable[i]);
-				op->printf(op,"\n");
+					op->gprintf(op," %1.10f",p->clutTable[i]);
+				op->gprintf(op,"\n");
 			
 				for (j = 0; j < p->inputChan; j++) { /* Increment index */
 					ii[j]++;
@@ -6041,12 +6041,12 @@ static void icmLut_dump(
 			}
 		}
 
-		op->printf(op,"\n  Output table:\n");
+		op->gprintf(op,"\n  Output table:\n");
 		for (i = 0; i < p->outputEnt; i++) {
-			op->printf(op,"    %3u: ",i);
+			op->gprintf(op,"    %3u: ",i);
 			for (j = 0; j < p->outputChan; j++)
-				op->printf(op," %1.10f",p->outputTable[j * p->outputEnt + i]);
-			op->printf(op,"\n");
+				op->gprintf(op," %1.10f",p->outputTable[j * p->outputEnt + i]);
+			op->gprintf(op,"\n");
 		}
 
 	}
@@ -6356,12 +6356,12 @@ static void icmMeasurement_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"Measurement:\n");
-	op->printf(op,"  Standard Observer = %s\n", string_StandardObserver(p->observer));
-	op->printf(op,"  XYZ for Measurement Backing = %s\n", string_XYZNumber_and_Lab(&p->backing));
-	op->printf(op,"  Measurement Geometry = %s\n", string_MeasurementGeometry(p->geometry));
-	op->printf(op,"  Measurement Flare = %5.1f%%\n", p->flare * 100.0);
-	op->printf(op,"  Standard Illuminant = %s\n", string_Illuminant(p->illuminant));
+	op->gprintf(op,"Measurement:\n");
+	op->gprintf(op,"  Standard Observer = %s\n", string_StandardObserver(p->observer));
+	op->gprintf(op,"  XYZ for Measurement Backing = %s\n", string_XYZNumber_and_Lab(&p->backing));
+	op->gprintf(op,"  Measurement Geometry = %s\n", string_MeasurementGeometry(p->geometry));
+	op->gprintf(op,"  Measurement Flare = %5.1f%%\n", p->flare * 100.0);
+	op->gprintf(op,"  Standard Illuminant = %s\n", string_Illuminant(p->illuminant));
 }
 
 /* Allocate variable sized data elements */
@@ -6839,45 +6839,45 @@ static void icmNamedColor_dump(
 		return;
 
 	if (p->ttype == icSigNamedColorType)
-		op->printf(op,"NamedColor:\n");
+		op->gprintf(op,"NamedColor:\n");
 	else
-		op->printf(op,"NamedColor2:\n");
-	op->printf(op,"  Vendor Flag = 0x%x\n",p->vendorFlag);
-	op->printf(op,"  No. colors  = %u\n",p->count);
-	op->printf(op,"  No. dev. coords = %u\n",p->nDeviceCoords);
-	op->printf(op,"  Name prefix = '%s'\n",p->prefix);
-	op->printf(op,"  Name suffix = '%s'\n",p->suffix);
+		op->gprintf(op,"NamedColor2:\n");
+	op->gprintf(op,"  Vendor Flag = 0x%x\n",p->vendorFlag);
+	op->gprintf(op,"  No. colors  = %u\n",p->count);
+	op->gprintf(op,"  No. dev. coords = %u\n",p->nDeviceCoords);
+	op->gprintf(op,"  Name prefix = '%s'\n",p->prefix);
+	op->gprintf(op,"  Name suffix = '%s'\n",p->suffix);
 	if (verb >= 2) {
 		unsigned long i, n;
 		icmNamedColorVal *vp;
 		for (i = 0; i < p->count; i++) {
 			vp = p->data + i;
-			op->printf(op,"    Color %lu:\n",i);
-			op->printf(op,"      Name root = '%s'\n",vp->root);
+			op->gprintf(op,"    Color %lu:\n",i);
+			op->gprintf(op,"      Name root = '%s'\n",vp->root);
 
 			if (p->ttype == icSigNamedColor2Type) {
 				switch(icp->header->pcs) {
 					case icSigXYZData:
-							op->printf(op,"      XYZ = %f, %f, %f\n",
+							op->gprintf(op,"      XYZ = %f, %f, %f\n",
 							        vp->pcsCoords[0],vp->pcsCoords[1],vp->pcsCoords[2]);
 						break;
 			    	case icSigLabData:
-							op->printf(op,"      Lab = %f, %f, %f\n",
+							op->gprintf(op,"      Lab = %f, %f, %f\n",
 							        vp->pcsCoords[0],vp->pcsCoords[1],vp->pcsCoords[2]);
 						break;
 					default:
-							op->printf(op,"      Unexpected PCS\n");
+							op->gprintf(op,"      Unexpected PCS\n");
 						break;
 				}
 			}
 			if (p->nDeviceCoords > 0) {
-				op->printf(op,"      Device Coords = ");
+				op->gprintf(op,"      Device Coords = ");
 				for (n = 0; n < p->nDeviceCoords; n++) {
 					if (n > 0)
-						op->printf(op,", ");
-					op->printf(op,"%f",vp->deviceCoords[n]);
+						op->gprintf(op,", ");
+					op->gprintf(op,"%f",vp->deviceCoords[n]);
 				}
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 			}
 		}
 	}
@@ -7177,28 +7177,28 @@ static void icmColorantTable_dump(
 		return;
 
 	if (p->ttype == icSigColorantTableType)
-		op->printf(op,"ColorantTable:\n");
-	op->printf(op,"  No. colorants  = %u\n",p->count);
+		op->gprintf(op,"ColorantTable:\n");
+	op->gprintf(op,"  No. colorants  = %u\n",p->count);
 	if (verb >= 2) {
 		unsigned long i;
 		icmColorantTableVal *vp;
 		for (i = 0; i < p->count; i++) {
 			vp = p->data + i;
-			op->printf(op,"    Colorant %lu:\n",i);
-			op->printf(op,"      Name = '%s'\n",vp->name);
+			op->gprintf(op,"    Colorant %lu:\n",i);
+			op->gprintf(op,"      Name = '%s'\n",vp->name);
 
 			if (p->ttype == icSigColorantTableType) {
 				switch(pcs) {
 					case icSigXYZData:
-							op->printf(op,"      XYZ = %f, %f, %f\n",
+							op->gprintf(op,"      XYZ = %f, %f, %f\n",
 							        vp->pcsCoords[0],vp->pcsCoords[1],vp->pcsCoords[2]);
 						break;
 			    	case icSigLabData:
-							op->printf(op,"      Lab = %f, %f, %f\n",
+							op->gprintf(op,"      Lab = %f, %f, %f\n",
 							        vp->pcsCoords[0],vp->pcsCoords[1],vp->pcsCoords[2]);
 						break;
 					default:
-							op->printf(op,"      Unexpected PCS\n");
+							op->gprintf(op,"      Unexpected PCS\n");
 						break;
 				}
 			}
@@ -7596,98 +7596,98 @@ static void icmTextDescription_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"TextDescription:\n");
+	op->gprintf(op,"TextDescription:\n");
 
 	if (p->size > 0) {
 		unsigned long size = p->size > 0 ? p->size-1 : 0;
-		op->printf(op,"  ASCII data, length %lu chars:\n",p->size);
+		op->gprintf(op,"  ASCII data, length %lu chars:\n",p->size);
 
 		i = 0;
 		for (r = 1;; r++) {		/* count rows */
 			if (i >= size) {
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 				break;
 			}
 			if (r > 1 && verb < 2) {
-				op->printf(op,"...\n");
+				op->gprintf(op,"...\n");
 				break;			/* Print 1 row if not verbose */
 			}
 			c = 1;
-			op->printf(op,"    0x%04lx: ",i);
+			op->gprintf(op,"    0x%04lx: ",i);
 			c += 10;
 			while (i < size && c < 75) {
 				if (isprint(p->desc[i])) {
-					op->printf(op,"%c",p->desc[i]);
+					op->gprintf(op,"%c",p->desc[i]);
 					c++;
 				} else {
-					op->printf(op,"\\%03o",p->desc[i]);
+					op->gprintf(op,"\\%03o",p->desc[i]);
 					c += 4;
 				}
 				i++;
 			}
 			if (i < size)
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 		}
 	} else {
-		op->printf(op,"  No ASCII data\n");
+		op->gprintf(op,"  No ASCII data\n");
 	}
 
 	/* Can't dump Unicode or ScriptCode as text with portable code */
 	if (p->ucSize > 0) {
 		unsigned long size = p->ucSize;
-		op->printf(op,"  Unicode Data, Language code 0x%x, length %lu chars\n",
+		op->gprintf(op,"  Unicode Data, Language code 0x%x, length %lu chars\n",
 		        p->ucLangCode, p->ucSize);
 		i = 0;
 		for (r = 1;; r++) {		/* count rows */
 			if (i >= size) {
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 				break;
 			}
 			if (r > 1 && verb < 2) {
-				op->printf(op,"...\n");
+				op->gprintf(op,"...\n");
 				break;			/* Print 1 row if not verbose */
 			}
 			c = 1;
-			op->printf(op,"    0x%04lx: ",i);
+			op->gprintf(op,"    0x%04lx: ",i);
 			c += 10;
 			while (i < size && c < 75) {
-				op->printf(op,"%04x ",p->ucDesc[i]);
+				op->gprintf(op,"%04x ",p->ucDesc[i]);
 				c += 5;
 				i++;
 			}
 			if (i < size)
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 		}
 	} else {
-		op->printf(op,"  No Unicode data\n");
+		op->gprintf(op,"  No Unicode data\n");
 	}
 	if (p->scSize > 0) {
 		unsigned long size = p->scSize;
-		op->printf(op,"  ScriptCode Data, Code 0x%x, length %lu chars\n",
+		op->gprintf(op,"  ScriptCode Data, Code 0x%x, length %lu chars\n",
 		        p->scCode, p->scSize);
 		i = 0;
 		for (r = 1;; r++) {		/* count rows */
 			if (i >= size) {
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 				break;
 			}
 			if (r > 1 && verb < 2) {
-				op->printf(op,"...\n");
+				op->gprintf(op,"...\n");
 				break;			/* Print 1 row if not verbose */
 			}
 			c = 1;
-			op->printf(op,"    0x%04lx: ",i);
+			op->gprintf(op,"    0x%04lx: ",i);
 			c += 10;
 			while (i < size && c < 75) {
-				op->printf(op,"%02x ",p->scDesc[i]);
+				op->gprintf(op,"%02x ",p->scDesc[i]);
 				c += 3;
 				i++;
 			}
 			if (i < size)
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 		}
 	} else {
-		op->printf(op,"  No ScriptCode data\n");
+		op->gprintf(op,"  No ScriptCode data\n");
 	}
 }
 
@@ -7879,15 +7879,15 @@ static void icmDescStruct_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"DescStruct %u:\n",index);
+	op->gprintf(op,"DescStruct %u:\n",index);
 	if (verb >= 1) {
-		op->printf(op,"  Dev. Mnfctr.    = %s\n",tag2str(p->deviceMfg));	/* ~~~ */
-		op->printf(op,"  Dev. Model      = %s\n",tag2str(p->deviceModel));	/* ~~~ */
-		op->printf(op,"  Dev. Attrbts    = %s\n", string_DeviceAttributes(p->attributes.l));
-		op->printf(op,"  Dev. Technology = %s\n", string_TechnologySignature(p->technology));
+		op->gprintf(op,"  Dev. Mnfctr.    = %s\n",tag2str(p->deviceMfg));	/* ~~~ */
+		op->gprintf(op,"  Dev. Model      = %s\n",tag2str(p->deviceModel));	/* ~~~ */
+		op->gprintf(op,"  Dev. Attrbts    = %s\n", string_DeviceAttributes(p->attributes.l));
+		op->gprintf(op,"  Dev. Technology = %s\n", string_TechnologySignature(p->technology));
 		p->device.dump((icmBase *)&p->device, op,verb);
 		p->model.dump((icmBase *)&p->model, op,verb);
-		op->printf(op,"\n");
+		op->gprintf(op,"\n");
 	}
 }
 
@@ -8068,8 +8068,8 @@ static void icmProfileSequenceDesc_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"ProfileSequenceDesc:\n");
-	op->printf(op,"  No. elements = %u\n",p->count);
+	op->gprintf(op,"ProfileSequenceDesc:\n");
+	op->gprintf(op,"  No. elements = %u\n",p->count);
 	if (verb >= 2) {
 		unsigned long i;
 		for (i = 0; i < p->count; i++)
@@ -8249,8 +8249,8 @@ static void icmSignature_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"Signature\n");
-	op->printf(op,"  Technology = %s\n", string_TechnologySignature(p->sig));
+	op->gprintf(op,"Signature\n");
+	op->gprintf(op,"  Technology = %s\n", string_TechnologySignature(p->sig));
 }
 
 /* Allocate variable sized data elements */
@@ -8457,16 +8457,16 @@ static void icmScreening_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"Screening:\n");
-	op->printf(op,"  Flags = %s\n", string_ScreenEncodings(p->screeningFlag));
-	op->printf(op,"  No. channels = %u\n",p->channels);
+	op->gprintf(op,"Screening:\n");
+	op->gprintf(op,"  Flags = %s\n", string_ScreenEncodings(p->screeningFlag));
+	op->gprintf(op,"  No. channels = %u\n",p->channels);
 	if (verb >= 2) {
 		unsigned long i;
 		for (i = 0; i < p->channels; i++) {
-			op->printf(op,"    %lu:\n",i);
-			op->printf(op,"      Frequency:  %f\n",p->data[i].frequency);
-			op->printf(op,"      Angle:      %f\n",p->data[i].angle);
-			op->printf(op,"      Spot shape: %s\n", string_SpotShape(p->data[i].spotShape));
+			op->gprintf(op,"    %lu:\n",i);
+			op->gprintf(op,"      Frequency:  %f\n",p->data[i].frequency);
+			op->gprintf(op,"      Angle:      %f\n",p->data[i].angle);
+			op->gprintf(op,"      Spot shape: %s\n", string_SpotShape(p->data[i].spotShape));
 		}
 	}
 }
@@ -8757,64 +8757,64 @@ static void icmUcrBg_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"Undercolor Removal Curve & Black Generation:\n");
+	op->gprintf(op,"Undercolor Removal Curve & Black Generation:\n");
 
 	if (p->UCRcount == 0) {
-		op->printf(op,"  UCR: Not specified\n");
+		op->gprintf(op,"  UCR: Not specified\n");
 	} else if (p->UCRcount == 1) {
-		op->printf(op,"  UCR: %f%%\n",p->UCRcurve[0]);
+		op->gprintf(op,"  UCR: %f%%\n",p->UCRcurve[0]);
 	} else {
-		op->printf(op,"  UCR curve no. elements = %u\n",p->UCRcount);
+		op->gprintf(op,"  UCR curve no. elements = %u\n",p->UCRcount);
 		if (verb >= 2) {
 			unsigned long i;
 			for (i = 0; i < p->UCRcount; i++)
-				op->printf(op,"  %3lu:  %f\n",i,p->UCRcurve[i]);
+				op->gprintf(op,"  %3lu:  %f\n",i,p->UCRcurve[i]);
 		}
 	}
 	if (p->BGcount == 0) {
-		op->printf(op,"  BG: Not specified\n");
+		op->gprintf(op,"  BG: Not specified\n");
 	} else if (p->BGcount == 1) {
-		op->printf(op,"  BG: %f%%\n",p->BGcurve[0]);
+		op->gprintf(op,"  BG: %f%%\n",p->BGcurve[0]);
 	} else {
-		op->printf(op,"  BG curve no. elements = %u\n",p->BGcount);
+		op->gprintf(op,"  BG curve no. elements = %u\n",p->BGcount);
 		if (verb >= 2) {
 			unsigned long i;
 			for (i = 0; i < p->BGcount; i++)
-				op->printf(op,"  %3lu:  %f\n",i,p->BGcurve[i]);
+				op->gprintf(op,"  %3lu:  %f\n",i,p->BGcurve[i]);
 		}
 	}
 
 	{
 		unsigned long i, r, c, size;
-		op->printf(op,"  Description:\n");
-		op->printf(op,"    No. chars = %lu\n",p->size);
+		op->gprintf(op,"  Description:\n");
+		op->gprintf(op,"    No. chars = %lu\n",p->size);
 	
 		size = p->size > 0 ? p->size-1 : 0;
 		i = 0;
 		for (r = 1;; r++) {		/* count rows */
 			if (i >= size) {
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 				break;
 			}
 			if (r > 1 && verb < 2) {
-				op->printf(op,"...\n");
+				op->gprintf(op,"...\n");
 				break;			/* Print 1 row if not verbose */
 			}
 			c = 1;
-			op->printf(op,"      0x%04lx: ",i);
+			op->gprintf(op,"      0x%04lx: ",i);
 			c += 10;
 			while (i < size && c < 73) {
 				if (isprint(p->string[i])) {
-					op->printf(op,"%c",p->string[i]);
+					op->gprintf(op,"%c",p->string[i]);
 					c++;
 				} else {
-					op->printf(op,"\\%03o",p->string[i]);
+					op->gprintf(op,"\\%03o",p->string[i]);
 					c += 4;
 				}
 				i++;
 			}
 			if (i < size)
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 		}
 	}
 }
@@ -9171,37 +9171,37 @@ static void icmVideoCardGamma_dump(
 		return;
 
 	if (p->tagType == icmVideoCardGammaTableType) {
-		op->printf(op,"VideoCardGammaTable:\n");
-		op->printf(op,"  channels  = %d\n", p->u.table.channels);
-		op->printf(op,"  entries   = %d\n", p->u.table.entryCount);
-		op->printf(op,"  entrysize = %d\n", p->u.table.entrySize);
+		op->gprintf(op,"VideoCardGammaTable:\n");
+		op->gprintf(op,"  channels  = %d\n", p->u.table.channels);
+		op->gprintf(op,"  entries   = %d\n", p->u.table.entryCount);
+		op->gprintf(op,"  entrysize = %d\n", p->u.table.entrySize);
 		if (verb >= 2) {
 			/* dump array contents also */
 			for (c=0; c<p->u.table.channels; c++) {
-				op->printf(op,"  channel #%d\n",c);
+				op->gprintf(op,"  channel #%d\n",c);
 				for (i=0; i<p->u.table.entryCount; i++) {
 					if (p->u.table.entrySize == 1) {
-						op->printf(op,"    %d: %d\n",i,((ORD8 *)p->u.table.data)[c*p->u.table.entryCount+i]);
+						op->gprintf(op,"    %d: %d\n",i,((ORD8 *)p->u.table.data)[c*p->u.table.entryCount+i]);
 					}
 					else if (p->u.table.entrySize == 2) {
-						op->printf(op,"    %d: %d\n",i,((ORD16 *)p->u.table.data)[c*p->u.table.entryCount+i]);
+						op->gprintf(op,"    %d: %d\n",i,((ORD16 *)p->u.table.data)[c*p->u.table.entryCount+i]);
 					}
 				}
 			}
 		}
 	} else if (p->tagType == icmVideoCardGammaFormulaType) {
-		op->printf(op,"VideoCardGammaFormula:\n");
-		op->printf(op,"  red gamma   = %f\n", p->u.formula.redGamma);
-		op->printf(op,"  red min     = %f\n", p->u.formula.redMin);
-		op->printf(op,"  red max     = %f\n", p->u.formula.redMax);
-		op->printf(op,"  green gamma = %f\n", p->u.formula.greenGamma);
-		op->printf(op,"  green min   = %f\n", p->u.formula.greenMin);
-		op->printf(op,"  green max   = %f\n", p->u.formula.greenMax);
-		op->printf(op,"  blue gamma  = %f\n", p->u.formula.blueGamma);
-		op->printf(op,"  blue min    = %f\n", p->u.formula.blueMin);
-		op->printf(op,"  blue max    = %f\n", p->u.formula.blueMax);
+		op->gprintf(op,"VideoCardGammaFormula:\n");
+		op->gprintf(op,"  red gamma   = %f\n", p->u.formula.redGamma);
+		op->gprintf(op,"  red min     = %f\n", p->u.formula.redMin);
+		op->gprintf(op,"  red max     = %f\n", p->u.formula.redMax);
+		op->gprintf(op,"  green gamma = %f\n", p->u.formula.greenGamma);
+		op->gprintf(op,"  green min   = %f\n", p->u.formula.greenMin);
+		op->gprintf(op,"  green max   = %f\n", p->u.formula.greenMax);
+		op->gprintf(op,"  blue gamma  = %f\n", p->u.formula.blueGamma);
+		op->gprintf(op,"  blue min    = %f\n", p->u.formula.blueMin);
+		op->gprintf(op,"  blue max    = %f\n", p->u.formula.blueMax);
 	} else {
-		op->printf(op,"  Unknown tag format\n");
+		op->gprintf(op,"  Unknown tag format\n");
 	}
 }
 
@@ -9484,10 +9484,10 @@ static void icmViewingConditions_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"Viewing Conditions:\n");
-	op->printf(op,"  XYZ value of illuminant in cd/m^2 = %s\n", string_XYZNumber(&p->illuminant));
-	op->printf(op,"  XYZ value of surround in cd/m^2   = %s\n", string_XYZNumber(&p->surround));
-	op->printf(op,"  Illuminant type = %s\n", string_Illuminant(p->stdIlluminant));
+	op->gprintf(op,"Viewing Conditions:\n");
+	op->gprintf(op,"  XYZ value of illuminant in cd/m^2 = %s\n", string_XYZNumber(&p->illuminant));
+	op->gprintf(op,"  XYZ value of surround in cd/m^2   = %s\n", string_XYZNumber(&p->surround));
+	op->gprintf(op,"  Illuminant type = %s\n", string_Illuminant(p->stdIlluminant));
 }
 
 /* Allocate variable sized data elements */
@@ -9734,69 +9734,69 @@ static void icmCrdInfo_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"PostScript Product name and CRD names:\n");
+	op->gprintf(op,"PostScript Product name and CRD names:\n");
 
-	op->printf(op,"  Product name:\n");
-	op->printf(op,"    No. chars = %lu\n",p->ppsize);
+	op->gprintf(op,"  Product name:\n");
+	op->gprintf(op,"    No. chars = %lu\n",p->ppsize);
 	
 	size = p->ppsize > 0 ? p->ppsize-1 : 0;
 	i = 0;
 	for (r = 1;; r++) {		/* count rows */
 		if (i >= size) {
-			op->printf(op,"\n");
+			op->gprintf(op,"\n");
 			break;
 		}
 		if (r > 1 && verb < 2) {
-			op->printf(op,"...\n");
+			op->gprintf(op,"...\n");
 			break;			/* Print 1 row if not verbose */
 		}
 		c = 1;
-		op->printf(op,"      0x%04lx: ",i);
+		op->gprintf(op,"      0x%04lx: ",i);
 		c += 10;
 		while (i < size && c < 73) {
 			if (isprint(p->ppname[i])) {
-				op->printf(op,"%c",p->ppname[i]);
+				op->gprintf(op,"%c",p->ppname[i]);
 				c++;
 			} else {
-				op->printf(op,"\\%03o",p->ppname[i]);
+				op->gprintf(op,"\\%03o",p->ppname[i]);
 				c += 4;
 			}
 			i++;
 		}
 		if (i < size)
-			op->printf(op,"\n");
+			op->gprintf(op,"\n");
 	}
 
 	for (t = 0; t < 4; t++) {	/* For all 4 intents */
-		op->printf(op,"  CRD%ld name:\n",t);
-		op->printf(op,"    No. chars = %lu\n",p->crdsize[t]);
+		op->gprintf(op,"  CRD%ld name:\n",t);
+		op->gprintf(op,"    No. chars = %lu\n",p->crdsize[t]);
 		
 		size = p->crdsize[t] > 0 ? p->crdsize[t]-1 : 0;
 		i = 0;
 		for (r = 1;; r++) {		/* count rows */
 			if (i >= size) {
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 				break;
 			}
 			if (r > 1 && verb < 2) {
-				op->printf(op,"...\n");
+				op->gprintf(op,"...\n");
 				break;			/* Print 1 row if not verbose */
 			}
 			c = 1;
-			op->printf(op,"      0x%04lx: ",i);
+			op->gprintf(op,"      0x%04lx: ",i);
 			c += 10;
 			while (i < size && c < 73) {
 				if (isprint(p->crdname[t][i])) {
-					op->printf(op,"%c",p->crdname[t][i]);
+					op->gprintf(op,"%c",p->crdname[t][i]);
 					c++;
 				} else {
-					op->printf(op,"\\%03o",p->crdname[t][i]);
+					op->gprintf(op,"\\%03o",p->crdname[t][i]);
 					c += 4;
 				}
 				i++;
 			}
 			if (i < size)
-				op->printf(op,"\n");
+				op->gprintf(op,"\n");
 		}
 	}
 }
@@ -10108,36 +10108,36 @@ static void icmHeader_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"Header:\n");
-	op->printf(op,"  size         = %d bytes\n",p->size);
-	op->printf(op,"  CMM          = %s\n",tag2str(p->cmmId));
-	op->printf(op,"  Version      = %d.%d.%d\n",p->majv, p->minv, p->bfv);
-	op->printf(op,"  Device Class = %s\n", string_ProfileClassSignature(p->deviceClass));
-	op->printf(op,"  Color Space  = %s\n", string_ColorSpaceSignature(p->colorSpace));
-	op->printf(op,"  Conn. Space  = %s\n", string_ColorSpaceSignature(p->pcs));
-	op->printf(op,"  Date, Time   = %s\n", string_DateTimeNumber(&p->date));
-	op->printf(op,"  Platform     = %s\n", string_PlatformSignature(p->platform));
-	op->printf(op,"  Flags        = %s\n", string_ProfileHeaderFlags(p->flags));
-	op->printf(op,"  Dev. Mnfctr. = %s\n", tag2str(p->manufacturer));	/* ~~~ */
-	op->printf(op,"  Dev. Model   = %s\n", tag2str(p->model));	/* ~~~ */
-	op->printf(op,"  Dev. Attrbts = %s\n", string_DeviceAttributes(p->attributes.l));
-	op->printf(op,"  Rndrng Intnt = %s\n", string_RenderingIntent(p->renderingIntent));
-	op->printf(op,"  Illuminant   = %s\n", string_XYZNumber_and_Lab(&p->illuminant));
-	op->printf(op,"  Creator      = %s\n", tag2str(p->creator));	/* ~~~ */
+	op->gprintf(op,"Header:\n");
+	op->gprintf(op,"  size         = %d bytes\n",p->size);
+	op->gprintf(op,"  CMM          = %s\n",tag2str(p->cmmId));
+	op->gprintf(op,"  Version      = %d.%d.%d\n",p->majv, p->minv, p->bfv);
+	op->gprintf(op,"  Device Class = %s\n", string_ProfileClassSignature(p->deviceClass));
+	op->gprintf(op,"  Color Space  = %s\n", string_ColorSpaceSignature(p->colorSpace));
+	op->gprintf(op,"  Conn. Space  = %s\n", string_ColorSpaceSignature(p->pcs));
+	op->gprintf(op,"  Date, Time   = %s\n", string_DateTimeNumber(&p->date));
+	op->gprintf(op,"  Platform     = %s\n", string_PlatformSignature(p->platform));
+	op->gprintf(op,"  Flags        = %s\n", string_ProfileHeaderFlags(p->flags));
+	op->gprintf(op,"  Dev. Mnfctr. = %s\n", tag2str(p->manufacturer));	/* ~~~ */
+	op->gprintf(op,"  Dev. Model   = %s\n", tag2str(p->model));	/* ~~~ */
+	op->gprintf(op,"  Dev. Attrbts = %s\n", string_DeviceAttributes(p->attributes.l));
+	op->gprintf(op,"  Rndrng Intnt = %s\n", string_RenderingIntent(p->renderingIntent));
+	op->gprintf(op,"  Illuminant   = %s\n", string_XYZNumber_and_Lab(&p->illuminant));
+	op->gprintf(op,"  Creator      = %s\n", tag2str(p->creator));	/* ~~~ */
 	if (p->icp->ver) {	/* V4.0+ feature */
 		for (i = 0; i < 16; i++) {		/* Check if ID has been set */
 			if (p->id[i] != 0)
 				break;
 		}
 		if (i < 16)
-			op->printf(op,"  ID           = %02X%02X%02X%02X%02X%02X%02X%02X"
+			op->gprintf(op,"  ID           = %02X%02X%02X%02X%02X%02X%02X%02X"
 			                               "%02X%02X%02X%02X%02X%02X%02X%02X\n",
 				p->id[0], p->id[1], p->id[2], p->id[3], p->id[4], p->id[5], p->id[6], p->id[7],
 				p->id[8], p->id[9], p->id[10], p->id[11], p->id[12], p->id[13], p->id[14], p->id[15]);
 		else
-			op->printf(op,"  ID           = <Not set>\n");
+			op->gprintf(op,"  ID           = <Not set>\n");
 	}
-	op->printf(op,"\n");
+	op->gprintf(op,"\n");
 }
 
 static void icmHeader_delete(
@@ -11420,7 +11420,7 @@ static void icc_dump(
 	if (verb <= 0)
 		return;
 
-	op->printf(op,"icc:\n");
+	op->gprintf(op,"icc:\n");
 
 	/* Dump the header */
 	if (p->header != NULL)
@@ -11430,21 +11430,21 @@ static void icc_dump(
 	for (i = 0; i < p->count; i++) {	/* For all the tag element data */
 		icmBase *ob;
 		int tr;
-		op->printf(op,"tag %d:\n",i);
-		op->printf(op,"  sig      %s\n",tag2str(p->data[i].sig)); 
-		op->printf(op,"  type     %s\n",tag2str(p->data[i].ttype)); 
-		op->printf(op,"  offset   %d\n", p->data[i].offset);
-		op->printf(op,"  size     %d\n", p->data[i].size);
+		op->gprintf(op,"tag %d:\n",i);
+		op->gprintf(op,"  sig      %s\n",tag2str(p->data[i].sig)); 
+		op->gprintf(op,"  type     %s\n",tag2str(p->data[i].ttype)); 
+		op->gprintf(op,"  offset   %d\n", p->data[i].offset);
+		op->gprintf(op,"  size     %d\n", p->data[i].size);
 		tr = 0;
 		if ((ob = p->data[i].objp) == NULL) {
 			/* The object is not loaded, so load it then free it */
 			if ((ob = p->read_tag(p, p->data[i].sig)) == NULL) {
-				op->printf(op,"Unable to read: %d, %s\n",p->errc,p->err);
+				op->gprintf(op,"Unable to read: %d, %s\n",p->errc,p->err);
 			}
 			tr = 1;
 		}
 		if (ob != NULL) {
-			/* op->printf(op,"  refcount %d\n", ob->refcount); */
+			/* op->gprintf(op,"  refcount %d\n", ob->refcount); */
 			ob->dump(ob,op,verb-1);
 
 			if (tr != 0) {		/* Cleanup if temporary */
@@ -11453,7 +11453,7 @@ static void icc_dump(
 				p->data[i].objp = NULL;
 			}
 		}
-		op->printf(op,"\n");
+		op->gprintf(op,"\n");
 	}
 }
 
@@ -13526,7 +13526,7 @@ icmAlloc *al		/* heap allocator */
 	p->seek     = icmFileMD5_seek;
 	p->read     = icmFileMD5_read;
 	p->write    = icmFileMD5_write;
-	p->printf   = icmFileMD5_printf;
+	p->gprintf   = icmFileMD5_printf;
 	p->flush    = icmFileMD5_flush;
 	p->del      = icmFileMD5_delete;
 	p->get_errc = icmFileMD5_geterrc;

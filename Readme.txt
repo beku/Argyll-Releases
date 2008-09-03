@@ -1,8 +1,8 @@
 
-Argyll CMS README file - Version 1.0.0
+Argyll CMS README file - Version 1.0.3
 --------------------------------------
 
-Date:   27th June 2008
+Date:   3rd September 2008
 Author: Graeme Gill
 
 Argyll is an open source, ICC compatible color management system. It supports
@@ -20,7 +20,8 @@ documentation is provided for each utility, and a general guide to using
 the tools for typical color management tasks is also available. A mailing
 list provides support for more advanced usage.
 
-This is Version 1.00. The last full release was in December 2005,
+This is Version 1.0.3, a bug fix update to 1.0.0 released in
+July 2008. The last full release was in December 2005,
 with V0.7 Beta releases in between. The first public release of
 icclib was in November 1998, and of Argyll was in July 2000.
 Code development commenced in 1995. See Changes Summary for an

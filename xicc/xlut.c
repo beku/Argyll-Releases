@@ -1465,7 +1465,7 @@ icxLuLut *p			/* Object being initialised */
 		/* for rev lookup */
 		icColorSpaceSignature clutos = p->natos;
 
-		fprintf(stderr, "!!!!! setup_clip_icxLuLut with vector clip - possibly unessary rev setup !!!!\n");
+		fprintf(stderr, "!!!!! setup_clip_icxLuLut with vector clip - possibly unnecessary rev setup !!!!\n");
 		p->clip.nearclip = 0;
 		p->clip.LabLike = 0;
 		p->clip.fdi = p->clutTable->fdi;
@@ -1495,7 +1495,7 @@ icxLuLut *p			/* Object being initialised */
 				/* PCS -> Device with clipping */
 				nsoln = p->clutTable->rev_interp(
 					p->clutTable, 	/* rspl object */
-					0,				/* No flags - might be in gamut, might vector clip */
+					0,				/* No hint flags - might be in gamut, might vector clip */
 					1,			 	/* Maxumum solutions to return */
 					p->auxm, 		/* Auxiliary input targets */
 					cdir,			/* Clip vector direction and length */
@@ -1660,12 +1660,14 @@ icxInk                *ink			/* inking details (NULL for default) */
 		return NULL;
 
 	/* Set LuLut "use" specific creation flags: */
-	if (flags & ICX_CLIP_NEAREST) {
+	if (flags & ICX_CLIP_NEAREST)
 		p->nearclip = 1;
-	}
 
 	if (flags & ICX_MERGE_CLUT)
 		p->mergeclut = 1;
+
+	if (flags & ICX_FAST_SETUP)
+		p->fastsetup = 1;
 
 	/* We're only implementing this under specific conditions. */
 	if (flags & ICX_CAM_CLIP
@@ -1746,7 +1748,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 	/* ------------------------------- */
 	/* Create rspl based input lookups */
 	for (i = 0; i < p->inputChan; i++) {
-		if ((p->inputTable[i] = new_rspl(1, 1)) == NULL) {
+		if ((p->inputTable[i] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 			p->pp->errc = 2;
 			sprintf(p->pp->err,"Creation of input table rspl failed");
 			p->del((icxLuBase *)p);
@@ -1754,7 +1756,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 		}
 		p->iol_out = 0;		/* Input lookup */
 		p->iol_ch = i;		/* Chanel */
-		p->inputTable[i]->set_rspl(p->inputTable[i], 0,
+		p->inputTable[i]->set_rspl(p->inputTable[i], RSPL_NOFLAGS,
 		           (void *)p, icxLuLut_inout_func,
 		           &p->ninmin[i], &p->ninmax[i], (int *)&p->lut->inputEnt, &p->ninmin[i], &p->ninmax[i]);
 	}
@@ -1767,7 +1769,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 	/* Create rspl based reverse input lookups used in ink limit function. */
 	for (i = 0; i < p->inputChan; i++) {
 		int gres = 256;
-		if ((p->revinputTable[i] = new_rspl(1, 1)) == NULL) {
+		if ((p->revinputTable[i] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 			p->pp->errc = 2;
 			sprintf(p->pp->err,"Creation of reverse input table rspl failed");
 			p->del((icxLuBase *)p);
@@ -1775,7 +1777,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 		}
 		p->iol_out = 2;		/* Input lookup */
 		p->iol_ch = i;		/* Chanel */
-		p->revinputTable[i]->set_rspl(p->revinputTable[i], 0,
+		p->revinputTable[i]->set_rspl(p->revinputTable[i], RSPL_NOFLAGS,
 		           (void *)p, icxLuLut_inout_func,
 		           &p->ninmin[i], &p->ninmax[i], &gres, &p->ninmin[i], &p->ninmax[i]);
 	}
@@ -1788,7 +1790,9 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 			gres[i] = p->lut->clutPoints;
 
 		/* Create rspl based multi-dim table */
-		if ((p->clutTable = new_rspl(p->inputChan, p->outputChan)) == NULL) {
+		if ((p->clutTable = new_rspl(p->fastsetup ? RSPL_FASTREVSETUP : RSPL_NOFLAGS
+		                             | flags & ICX_VERBOSE ? RSPL_VERBOSE : RSPL_NOFLAGS,
+		                             p->inputChan, p->outputChan)) == NULL) {
 			p->pp->errc = 2;
 			sprintf(p->pp->err,"Creation of clut table rspl failed");
 			p->del((icxLuBase *)p);
@@ -1796,13 +1800,13 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 		}
 
 		if (p->mergeclut == 0) {	/* Do this if it's not merged with clut, */
-			p->clutTable->set_rspl(p->clutTable, 0, (void *)luluto,
-			           (void (*)(void *, double *, double *))luluto->clut,
+			p->clutTable->set_rspl(p->clutTable, RSPL_NOFLAGS,
+			           (void *)luluto, (void (*)(void *, double *, double *))luluto->clut,
 		               p->ninmin, p->ninmax, gres, p->noutmin, p->noutmax);
 
 		} else {	/* If mergeclut */
-			p->clutTable->set_rspl(p->clutTable, 0, (void *)p,
-			           icxLuLut_clut_merge_func,
+			p->clutTable->set_rspl(p->clutTable, RSPL_NOFLAGS,
+			           (void *)p, icxLuLut_clut_merge_func,
 		               p->ninmin, p->ninmax, gres, p->noutmin, p->noutmax);
 
 		}
@@ -1813,7 +1817,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 	/* ------------------------------- */
 	/* Create rspl based output lookups */
 	for (i = 0; i < p->outputChan; i++) {
-		if ((p->outputTable[i] = new_rspl(1, 1)) == NULL) {
+		if ((p->outputTable[i] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 			p->pp->errc = 2;
 			sprintf(p->pp->err,"Creation of output table rspl failed");
 			p->del((icxLuBase *)p);
@@ -1821,7 +1825,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 		}
 		p->iol_out = 1;		/* Output lookup */
 		p->iol_ch = i;		/* Chanel */
-		p->outputTable[i]->set_rspl(p->outputTable[i], 0,
+		p->outputTable[i]->set_rspl(p->outputTable[i], RSPL_NOFLAGS,
 		           (void *)p, icxLuLut_inout_func,
 		           &p->noutmin[i], &p->noutmax[i], (int *)&p->lut->outputEnt, &p->noutmin[i], &p->noutmax[i]);
 	}
@@ -1894,7 +1898,8 @@ icxLuLut *p) {
 	}
 
 	/* Create CAM rspl based multi-dim table */
-	if ((p->cclutTable = new_rspl(p->inputChan, p->outputChan)) == NULL) {
+	if ((p->cclutTable = new_rspl(p->fastsetup ? RSPL_FASTREVSETUP : RSPL_NOFLAGS,
+	                              p->inputChan, p->outputChan)) == NULL) {
 		p->pp->errc = 2;
 		sprintf(p->pp->err,"Creation of clut table rspl failed");
 		return p->pp->errc;
@@ -1904,7 +1909,7 @@ icxLuLut *p) {
 		gres[e] = p->lut->clutPoints;
 
 	/* Setup our special CAM space rspl */
-	p->cclutTable->set_rspl(p->cclutTable, 0, (void *)p,
+	p->cclutTable->set_rspl(p->cclutTable, RSPL_NOFLAGS, (void *)p,
 	           icxLuLut_clut_camclip_func,
                p->ninmin, p->ninmax, gres, cmin, cmax);
 
@@ -2252,7 +2257,7 @@ int                quality			/* Quality metric, 0..3 */
 	double pcsymax;						/* Effective PCS L or Y maximum value */
 	icmHeader *h = icco->header;		/* Pointer to icc header */
 	int maxchan;						/* max(inputChan, outputChan) */
-	int rsplflags = 0;					/* Flags for scattered data rspl */
+	int rsplflags = RSPL_NOFLAGS;		/* Flags for scattered data rspl */
 	int e, f, i, j;
 	double dwhite[MXDI], dblack[MXDI];	/* Device white and black values */
 	double wp[3];			/* Absolute White point in XYZ */
@@ -2645,7 +2650,7 @@ int                quality			/* Quality metric, 0..3 */
 			cx.oix = -1;
 			cx.iix = e;
 
-			if ((p->inputTable[e] = new_rspl(1, 1)) == NULL) {
+			if ((p->inputTable[e] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 				p->pp->errc = 2;
 				sprintf(p->pp->err,"Creation of input table rspl failed");
 				xf->del(xf);
@@ -2653,7 +2658,7 @@ int                quality			/* Quality metric, 0..3 */
 				return NULL;
 			}
 
-			p->inputTable[e]->set_rspl(p->inputTable[e], 0,
+			p->inputTable[e]->set_rspl(p->inputTable[e], RSPL_NOFLAGS,
 			           (void *)&cx, set_linfunc,
     			       &p->ninmin[e], &p->ninmax[e],
 			           (int *)&p->lut->inputEnt,
@@ -2669,7 +2674,7 @@ int                quality			/* Quality metric, 0..3 */
 			cx.iix = -1;
 			cx.oix = f;
 
-			if ((p->outputTable[f] = new_rspl(1, 1)) == NULL) {
+			if ((p->outputTable[f] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 				p->pp->errc = 2;
 				sprintf(p->pp->err,"Creation of output table rspl failed");
 				xf->del(xf);
@@ -2677,7 +2682,7 @@ int                quality			/* Quality metric, 0..3 */
 				return NULL;
 			}
 
-			p->outputTable[f]->set_rspl(p->outputTable[f], 0,
+			p->outputTable[f]->set_rspl(p->outputTable[f], RSPL_NOFLAGS,
 		                (void *)&cx, set_linfunc,
 			            &p->noutmin[f], &p->noutmax[f],
 			            (int *)&p->lut->outputEnt,
@@ -2698,14 +2703,14 @@ int                quality			/* Quality metric, 0..3 */
 		cx.oix = -1;
 		cx.iix = e;
 
-		if ((p->revinputTable[e] = new_rspl(1, 1)) == NULL) {
+		if ((p->revinputTable[e] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 			p->pp->errc = 2;
 			sprintf(p->pp->err,"Creation of reverse input table rspl failed");
 			xf->del(xf);
 			p->del((icxLuBase *)p);
 			return NULL;
 		}
-		p->revinputTable[e]->set_rspl(p->revinputTable[e], 0,
+		p->revinputTable[e]->set_rspl(p->revinputTable[e], RSPL_NOFLAGS,
 		           (void *)&cx, icxLuLut_invinput_func,
 		           &p->ninmin[e], &p->ninmax[e], &res, &p->ninmin[e], &p->ninmax[e]);
 	}
@@ -3128,7 +3133,7 @@ double       detail		/* gamut detail level, 0.0 = def */
 
 		luluto->clutTable->scan_rspl(
 			luluto->clutTable,	/* this */
-			0,					/* Combination of flags */
+			RSPL_NOFLAGS,		/* Combination of flags */
 			(void *)&cx,		/* Opaque function context */
 			lutfwdgam_func		/* Function to set from */
 		);
@@ -3285,7 +3290,7 @@ double       detail		/* gamut detail level, 0.0 = def */
 
 		luluto->clutTable->scan_rspl(
 			luluto->clutTable,	/* this */
-			0,					/* Combination of flags */
+			RSPL_NOFLAGS,		/* Combination of flags */
 			(void *)&cx,		/* Opaque function context */
 			lutbwdgam_func		/* Function to set from */
 		);

@@ -1,5 +1,7 @@
 
-/* General Numerical routines support functions */
+/* General Numerical routines support functions, */
+/* and common Argyll support functions. */
+/* (Perhaps these should be moved out of numlib at some stange ?) */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +36,21 @@ int verbose_level = 6;			/* Current verbosity level */
 								/* !0 = diagnostics */
 
 #undef RETURN_NULL_ON_MALLOC	/* Else error out here */
+
+/******************************************************************/
+/* Malloc interception routines. */
+/******************************************************************/
+/* All ArgyllCMS code should use these routines instead of the */
+/* usual ones, so that memory failures can be intercepted, and */
+/* (for instance) cache memory freed before re-trying. */
+/* These names also make for an easy target for memory leak checking. */
+
+// ~~999
+// amalloc
+// acalloc
+// arealloc
+// afree
+// g_amalloc_fail_callback = NULL;
 
 /******************************************************************/
 /* Executable path routine. Sets default error_program too. */

@@ -186,7 +186,7 @@ icxScat cat[MXDO]	/* Device channel control and function category */
 	/* This will rely on the opt_rspl method of the rspl class */
 
 	/* Create the rspl that maps CMYx -> Device values */
-	if ((sep = new_rspl(pdi, ddi)) == NULL) {
+	if ((sep = new_rspl(RSPL_NOFLAGS, pdi, ddi)) == NULL) {
 		free(p);
 		return NULL;
 	}

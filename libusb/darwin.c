@@ -3,6 +3,8 @@
  *
  * (c) 2002-2005 Nathan Hjelm <hjelmn@users.sourceforge.net>
  *
+ * (08/28/2008):	GWG
+ *   - mod usb_get_next_device to continue itterating after errors.
  * (01/30/2007):	GWG
  *   - Fix problem with timeout handling
  * (04/17/2005):
@@ -251,27 +253,45 @@ static usb_device_t **usb_get_next_device (io_iterator_t deviceIterator, UInt32 
   io_service_t usbDevice;
   long result, score;
 
-  if (!IOIteratorIsValid (deviceIterator) || !(usbDevice = IOIteratorNext(deviceIterator)))
-    return NULL;
-  
-  result = IOCreatePlugInInterfaceForService(usbDevice, kIOUSBDeviceUserClientTypeID,
-					     kIOCFPlugInInterfaceID, &plugInInterface,
-					     &score);
-  
-  result = IOObjectRelease(usbDevice);
-  if (result || !plugInInterface)
-    return NULL;
-  
-  (*plugInInterface)->QueryInterface(plugInInterface, CFUUIDGetUUIDBytes(DeviceInterfaceID),
-				     (LPVOID)&device);
-  
-  (*plugInInterface)->Stop(plugInInterface);
-  IODestroyPlugInInterface (plugInInterface);
-  plugInInterface = NULL;
-  
-  (*(device))->GetLocationID(device, locationp);
+  for (;;) {	/* Retry loop */
 
-  return device;
+    if (!IOIteratorIsValid (deviceIterator) || !(usbDevice = IOIteratorNext(deviceIterator)))
+      return NULL;
+    
+    result = IOCreatePlugInInterfaceForService(usbDevice, kIOUSBDeviceUserClientTypeID,
+  					     kIOCFPlugInInterfaceID, &plugInInterface,
+  					     &score);
+    
+    if (result) {
+      if (usb_debug > 2)
+        fprintf(stderr, "libusb/darwin.c usb_get_next_device: IOCreatePlugInInterfaceForService: %s\n", darwin_error_str(result));
+      continue;
+    }
+    if (!plugInInterface) {
+      if (usb_debug > 2)
+        fprintf(stderr, "libusb/darwin.c usb_get_next_device: IOCreatePlugInInterfaceForService: !plugInInterface\n");
+      continue;
+    }
+    
+    result = IOObjectRelease(usbDevice);
+    if (result) {
+      if (usb_debug > 2)
+        fprintf(stderr,"libusb/darwin.c usb_get_next_device: IOObjectRelease: %s\n", darwin_error_str(result));
+      continue;
+    }
+    
+    (*plugInInterface)->QueryInterface(plugInInterface, CFUUIDGetUUIDBytes(DeviceInterfaceID),
+  				     (LPVOID)&device);
+    
+    (*plugInInterface)->Stop(plugInInterface);
+    IODestroyPlugInInterface (plugInInterface);
+    plugInInterface = NULL;
+    
+    (*(device))->GetLocationID(device, locationp);
+  
+    return device;
+  }
+  return NULL;
 }
 
 int usb_os_open(usb_dev_handle *dev)

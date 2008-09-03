@@ -41,6 +41,8 @@
 #undef BDEB			/* ~~99 Blue problem debug */
 
 #undef DEBUG				/* Print B2A processing information */
+#undef DEBUG_ONE			/* Test a particular value */
+
 #define verbo stdout
 
 #define IMP_MONO			/* Turn on development code */
@@ -56,6 +58,7 @@
 #include "icc.h"
 #include "xicc.h"
 #include "numlib.h"
+#include "counters.h"
 #include "rspl.h"
 #include "insttypes.h"
 #include "prof.h"
@@ -485,9 +488,11 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 			}
 
 			if (tn == 1) {
+				DBG(("percep gamut map in %f %f %f\n",in2[0],in2[1],in2[2]))
 				p->pmap->domap(p->pmap, in2, in2);	/* Perceptual mapping */
-				DBG(("percep gamut map got %f %f %f\n",in2[0],in2[1],in2[2]))
+				DBG(("percep gamut map out %f %f %f\n",in2[0],in2[1],in2[2]))
 			} else {
+				DBG(("sat gamut map in %f %f %f\n",in2[0],in2[1],in2[2]))
 				p->smap->domap(p->smap, in2, in2);	/* Saturation mapping */
 				DBG(("sat gamut map got %f %f %f\n",in2[0],in2[1],in2[2]))
 			}
@@ -870,7 +875,7 @@ make_output_icc(
 			error("Output device input file has unhandled color representation '%s'",
 			                                                     icg->t[0].kdata[ti]);
 		/* Figure out some suitable table sizes */
-		if (devchan >= 4) {
+		if (devchan >= 4) {			/* devchan == 4 or greater */
 			if (iquality >= 3) {
 		    	a2binres = 2048;
 		    	a2bres = 23;
@@ -888,7 +893,7 @@ make_output_icc(
 		    	a2bres = 5;
 		    	a2boutres = 512;
 			}
-		} else if (devchan >= 2) {
+		} else if (devchan >= 2) {		/* devchan == 2 or 3 */
 			if (iquality >= 3) {
 		    	a2binres = 2048;
 		    	a2bres = 45;
@@ -2047,27 +2052,27 @@ wrl->start_line_set(wrl);
 					gamut *ogam;			/* Destination colorspace gamut */
 					double gres;			/* Gamut surface feature resolution */
 					int    mapres;			/* Mapping rspl resolution */
-					double mn[3] = { 0.0, -150.0, -150.0 };	/* Set Jab mapping range */
-					double mx[3] = { 100.0, 150.0, 150.0 };
 			
 					if (verb)
 						printf("Creating Gamut Mapping\n");
 			
+					/* Gamut mapping will extend given grid res to encompas */
+					/* source gamut by a margin. */
 					if (oquality == 3) {	/* Ultra High */
 			  	 		gres = 8.0;
 			  	 		mapres = 41;
 					} else if (oquality == 2) {	/* High */
 			  	 		gres = 9.0;
-			  	 		mapres = 35;
+			  	 		mapres = 33;
 					} else if (oquality == 1) {	/* Medium */
 			  	 		gres = 10.0;
-			  	 		mapres = 27;
+			  	 		mapres = 25;
 					} else if (oquality == 0) {	/* Low quality */
 			  	 		gres = 12.0;
-			  	 		mapres = 21;
+			  	 		mapres = 17;
 					} else {					/* Extremely low */
 			  	 		gres = 15.0;
-			  	 		mapres = 13;
+			  	 		mapres = 9;
 					}
 
 					/* We could lift this restriction by allowing for separate */
@@ -2124,9 +2129,16 @@ wrl->start_line_set(wrl);
 					                               &iink.klimit, iink.klimit);
 
 					/* Get lookup object simply for fwd_relpcs_outpcs() */
-					/* and perceptual input gamut shell creation */
+					/* and perceptual input gamut shell creation. */
 					/* Note that the intent=Appearance will trigger Jab CAM, */
 					/* overriding icSigLabData.. */
+#ifdef NEVER
+					printf("~1 input space flags = 0x%x\n",ICX_CLIP_NEAREST);
+					printf("~1 input space intent = %s\n",icx2str(icmRenderingIntent,intentp));
+					printf("~1 input space pcs = %s\n",icx2str(icmColorSpaceSignature,icSigLabData));
+					printf("~1 input space viewing conditions =\n"); xicc_dump_viewcond(&ivc);
+					printf("~1 input space inking =\n"); xicc_dump_inking(&iink);
+#endif
 					if ((cx.ixp = src_xicc->get_luobj(src_xicc, ICX_CLIP_NEAREST, icmFwd, intentp,
 					                  icSigLabData, icmLuOrdNorm, &ivc, &iink)) == NULL)
 						error ("%d, %s",src_xicc->errc, src_xicc->err);
@@ -2205,8 +2217,17 @@ wrl->make_gamut_surface(wrl, ogam, 0.2, cc);
 wrl->start_line_set(wrl);
 }
 #endif /* BDEB */
+
+					/* The real range of Lab 0..100,-128..128,1-28..128 cube */
+					/* when mapped to CAM is ridiculously large (ie. */
+					/* 0..100, -288..265, -112..533), so we don't attempt to */
+					/* set a gamut mapping grid range based on this. Instead */
+					/* rely on the gamut map code to set a reasonable grid range */
+					/* around the source gamut, and to cope reasonably with */
+					/* values outside the grid range. */
+
 					/* setup perceptual gamut mapping */
-					cx.pmap = new_gammap(verb, csgamp, igam, ogam, pgmi, mapres, mn, mx,
+					cx.pmap = new_gammap(verb, csgamp, igam, ogam, pgmi, mapres, NULL, NULL,
 					                                    gamdiag ? "gammap_p.wrl" : NULL);
 					if (cx.pmap == NULL)
 						error ("Failed to make perceptual gamut map transform");
@@ -2219,7 +2240,7 @@ wrl->start_line_set(wrl);
 
 					if (sepsat) {
 						/* setup saturation gamut mapping */
-						cx.smap = new_gammap(verb, csgams, igam, ogam, sgmi, mapres, mn, mx,
+						cx.smap = new_gammap(verb, csgams, igam, ogam, sgmi, mapres, NULL, NULL,
 					                                        gamdiag ? "gammap_s.wrl" : NULL);
 						if (cx.smap == NULL)
 							error ("Failed to make saturation gamut map transform");
@@ -2288,10 +2309,10 @@ wrl->start_line_set(wrl);
 				}
 			}
 
-			/* DEVELOPMENT CODE */
-			/* Setup optimised B2A per channel curves */
-// ~~99
 #ifdef NEVER
+// ~~99
+			/* DEVELOPMENT CODE - not complete */
+			/* Setup optimised B2A per channel curves */
 			{
 				xfit *xf;				/* Curve fitting class instance */
 				int xfflags = 0;		/* xfit flags */
@@ -2416,7 +2437,7 @@ wrl->start_line_set(wrl);
 						return NULL;
 					}
 
-					p->inputTable[e]->set_rspl(p->inputTable[e], 0,
+					p->inputTable[e]->set_rspl(p->inputTable[e], RSPL_NOFLAGS,
 					           (void *)&cx, set_linfunc,
     			       &p->ninmin[e], &p->ninmax[e],
 					           &p->lut->inputEnt,
@@ -2451,7 +2472,7 @@ wrl->start_line_set(wrl);
 						return NULL;
 					}
 
-					p->outputTable[f]->set_rspl(p->outputTable[f], 0,
+					p->outputTable[f]->set_rspl(p->outputTable[f], RSPL_NOFLAGS,
 				           (void *)&cx, set_linfunc,
 							min, max, &entries, min, max);
 
@@ -2480,6 +2501,27 @@ wrl->start_line_set(wrl);
 				printf(" 0%%"); fflush(stdout);
 			}
 
+#ifdef DEBUG_ONE
+#define DBGNO 1		/* Up to 10 */
+
+			/* Test a single given PCS (Rel D50 Lab) -> cmyk value */
+			{
+				double in[10][MAX_CHAN];
+				double out[MAX_CHAN];
+				in[0][0] = 29.565320;			/* sRGB blue */
+				in[0][1] = 68.301300;
+				in[0][2] = -112.049899;
+
+				for (i = 0; i < DBGNO; i++) {
+					printf("Input %f %f %f %f\n",in[i][0], in[i][1], in[i][2], in[i][3]);
+					out_b2a_input((void *)&cx, out, in[i]);
+					out_b2a_clut((void *)&cx, out, out);
+					out_b2a_output((void *)&cx, out, out);
+					printf("Output %f %f %f %f\n\n",out[0], out[1], out[2], out[3]);
+				}
+			}
+#else /* !DEBUG_ONE */
+
 			if (icmSetMultiLutTables(
 			        cx.ntables,
 			        wo,
@@ -2496,6 +2538,8 @@ wrl->start_line_set(wrl);
 			if (cx.verb) {
 				printf("\n");
 			}
+#endif /* !DEBUG_ONE */
+
 #ifdef BDEB
 {
 	int i;
@@ -2608,6 +2652,7 @@ wrl->start_line_set(wrl);
 					; 
 				printf(" 0%%"); fflush(stdout);
 			}
+#ifndef DEBUG_ONE	/* Skip this when debugging */
 			if (wo->set_tables(wo,
 					ICM_CLUT_SET_EXACT,
 					&cx,				/* Context */
@@ -2619,6 +2664,7 @@ wrl->start_line_set(wrl);
 					NULL, NULL,			/* Use default Device' range */
 					gamut_output) != 0)	/* Boundary distance to out of gamut value */
 				error("Setting 16 bit PCS->Device Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
+#endif /* !DEBUG_ONE */
 			if (cx.verb) {
 				printf("\n");
 			}

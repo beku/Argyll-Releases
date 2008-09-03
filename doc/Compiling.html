@@ -87,7 +87,9 @@ parallel build, e.g. <span style="font-weight: bold;">jam -j3</span>.
 To install the executables in the bin directory and the sample files
 into the <span style="font-weight: bold;">ref</span> directory, run <span
  style="font-weight: bold;">jam install</span>. To remove everything
-that has been built, run <span style="font-weight: bold;">jam clean</span>.<br>
+that has been built, run <span style="font-weight: bold;">jam clean</span>.
+On Linux/OS X you could also just try running make, and the makefile
+will invoke jam.<br>
 </p>
 <p>Something to watch on the Intel versions of OS X 10.4, is that your
 shell environment variable $MACHTYPE may be incorrect. On Intel 10.4 it
@@ -103,7 +105,9 @@ having to install the libusb kernel drivers, and this will also allow
 the Huey to be accessed on Vista 64.<br>
 </p>
 <p>To build a particular sub directory only, cd to the directory and
-simply run <span style="font-weight: bold;">jam.</span><br>
+simply run <span style="font-weight: bold;">jam</span>, although be
+aware that the local Jamfile compile time options may be different to
+those in the top level Jamfile used when compiling from the top.<br>
 &nbsp;
 <br>
 &nbsp;

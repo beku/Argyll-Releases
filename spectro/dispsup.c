@@ -31,6 +31,7 @@
 #include "insttypes.h"
 #include "icoms.h"
 #include "inst.h"
+#include "spyd2.h"
 #include "conv.h"
 #include "dispwin.h"
 #include "dispsup.h"
@@ -40,7 +41,7 @@
 #ifdef DEBUG
 #define DBG(xxx) printf xxx ;
 #else
-#define DBG(xxx) 
+#define DBG(xxx) if (p != NULL && p->debug) printf xxx ;
 #endif
 
 #define FAKE_NOISE 0.01		/* Add noise to fake devices XYZ */
@@ -192,7 +193,7 @@ inst_code inst_handle_calibrate(
 					if (dwi->dw == NULL) {
 						if ((dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
 						                      dwi->ho, dwi->vo, 0, 0, dwi->blackbg,
-						                      dwi->override)) == NULL) {
+						                      dwi->override, p->debug)) == NULL) {
 							DBG(("inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
 							return inst_other_error; 
 						}
@@ -218,7 +219,7 @@ inst_code inst_handle_calibrate(
 					if (dwi->dw == NULL) {
 						if ((dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
 						                      dwi->ho, dwi->vo, 0, 0, dwi->blackbg,
-						                      dwi->override)) == NULL) {
+						                      dwi->override, p->debug)) == NULL) {
 							DBG(("inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
 							return inst_other_error; 
 						}
@@ -302,7 +303,7 @@ double ho, double vo,	/* Position of dispwin */
 int verb,				/* Verbosity flag */
 int debug				/* Debug flag */
 ) {
-	inst *it;
+	inst *p = NULL;
 	int c;
 	inst_code rv;
 	baud_rate br = baud_19200;
@@ -322,35 +323,35 @@ int debug				/* Debug flag */
 	if (verb)
 		printf("Setting up the instrument\n");
 
-	if ((it = new_inst(comport, itype, debug, verb)) == NULL) {
+	if ((p = new_inst(comport, itype, debug, verb)) == NULL) {
 		DBG(("new_inst failed\n"))
 		return -1;
 	}
 
 	/* Establish communications */
-	if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
+	if ((rv = p->init_coms(p, comport, br, fc, 15.0)) != inst_ok) {
 		DBG(("init_coms returned '%s' (%s)\n",
-		       it->inst_interp_error(it, rv), it->interp_error(it, rv)))
-		it->del(it);
+		       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
+		p->del(p);
 		return -1;
 	}
 
 	/* Initialise the instrument */
-	if ((rv = it->init_inst(it)) != inst_ok) {
+	if ((rv = p->init_inst(p)) != inst_ok) {
 		DBG(("init_inst returned '%s' (%s)\n",
-		       it->inst_interp_error(it, rv), it->interp_error(it, rv)))
-		it->del(it);
+		       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
+		p->del(p);
 		return -1;
 	}
 
-	itype = it->get_itype(it);			/* Actual type */
-	cap  = it->capabilities(it);
-	cap2 = it->capabilities2(it);
+	itype = p->get_itype(p);			/* Actual type */
+	cap  = p->capabilities(p);
+	cap2 = p->capabilities2(p);
 
 	/* Set to emission mode to read a display */
-	if ((rv = it->set_mode(it, inst_mode_emis_disp)) != inst_ok) {
+	if ((rv = p->set_mode(p, inst_mode_emis_disp)) != inst_ok) {
 		DBG(("Set_mode failed with '%s' (%s)\n",
-		       it->inst_interp_error(it, rv), it->interp_error(it, rv)))
+		       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
 		return -1;
 	}
 
@@ -364,24 +365,24 @@ int debug				/* Debug flag */
 		else
 			om = inst_opt_disp_lcd;
 
-		if ((rv = it->set_opt_mode(it,om)) != inst_ok) {
+		if ((rv = p->set_opt_mode(p,om)) != inst_ok) {
 			DBG(("Setting display type failed failed with '%s' (%s)\n",
-			       it->inst_interp_error(it, rv), it->interp_error(it, rv)))
-			it->del(it);
+			       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
+			p->del(p);
 			return -1;
 		}
 	} else if (cap & (inst_emis_disp_crt | inst_emis_disp_lcd)) {
 		printf("Either CRT or LCD must be selected\n");
-		it->del(it);
+		p->del(p);
 		return -1;
 	}
 
 	/* Disable autocalibration of machine if selected */
 	if (nocal != 0){
-		if ((rv = it->set_opt_mode(it,inst_opt_noautocalib)) != inst_ok) {
+		if ((rv = p->set_opt_mode(p,inst_opt_noautocalib)) != inst_ok) {
 			DBG(("Setting no-autocalibrate failed failed with '%s' (%s)\n",
-			       it->inst_interp_error(it, rv), it->interp_error(it, rv)))
-			it->del(it);
+			       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
+			p->del(p);
 			return -1;
 		}
 	}
@@ -405,18 +406,18 @@ int debug				/* Debug flag */
 	}
 	
 	/* Do the calibration */
-	rv = inst_handle_calibrate(it, calt, inst_calc_none, &dwi);
+	rv = inst_handle_calibrate(p, calt, inst_calc_none, &dwi);
 	if (rv == inst_unsupported) {
 		printf("No calibration available for instrument in this mode\n");
 	} else if (rv != inst_ok) {	/* Abort or fatal error */
 		printf("Calibrate failed with '%s' (%s)\n",
-	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
-		it->del(it);
+	       p->inst_interp_error(p, rv), p->interp_error(p, rv));
+		p->del(p);
 		return -1;
 	}
 
 	/* clean up */
-	it->del(it);
+	p->del(p);
 
 	return 0;
 }
@@ -620,6 +621,7 @@ static int config_inst_displ(disprd *p);
 /* 4 = user hit terminate key */
 /* 5 = system error */
 /* 8 = no ambient capability */ 
+/* Use disprd_err() to interpret it */
 int disprd_ambient(struct _disprd *p,
 	double *ambient,		/* return ambient in cd/m^2 */
 	int tc					/* If nz, termination key */
@@ -1023,6 +1025,8 @@ char *disprd_err(int en) {
 			return "User Aborted";
 		case 2:
 			return "Instrument Access Failed";
+		case 22:
+			return "Instrument Access Failed (No PLD Pattern - have you run spyd2en ?)";
 		case 3:
 			return "Window Access Failed";
 		case 4:
@@ -1169,6 +1173,7 @@ static int config_inst_displ(disprd *p) {
 /* 0 = no error */
 /* 1 = user aborted */
 /* 2 = instrument access failed */
+/* 22 = instrument access failed  - no PLD pattern */
 /* 3 = window access failed */ 
 /* 4 = RAMDAC access failed */ 
 /* 5 = user hit terminate key */
@@ -1199,11 +1204,11 @@ FILE *df,			/* Verbose output - NULL = stdout */
 int debug,			/* Debug flag */
 char *fake_name		/* Name of profile to use as a fake device */
 ) {
-	disprd *p;
+	disprd *p = NULL;
 	int ch;
 	inst_code rv;
 	
-	if (errc != NULL) *errc = 0;
+	if (errc != NULL) *errc = 0;		/* default return code = no error */
 
 	/* Allocate a disprd */
 	if ((p = (disprd *)calloc(sizeof(disprd), 1)) == NULL) {
@@ -1216,6 +1221,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 	p->fake_name = fake_name;
 
 	p->verb = verb;
+	p->debug = debug;
 	p->itype = itype;
 	p->spectral = spectral;
 	p->dtype = dtype;
@@ -1301,7 +1307,11 @@ char *fake_name		/* Name of profile to use as a fake device */
 			DBG(("init_inst returned '%s' (%s)\n",
 			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
 			p->del(p);
-			if (errc != NULL) *errc = 2;
+			if (errc != NULL) {
+				*errc = 2;
+				if ((rv & inst_imask) == SPYD2_NO_PLD_PATTERN)
+					*errc = 22;
+			}
 			return NULL;
 		}
 		p->itype = p->it->get_itype(p->it);			/* Actual type */
@@ -1316,7 +1326,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 
 	/* Open display window */
 	if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, donat, blackbg,
-	                                                        override)) == NULL) {
+	                                                        override, debug)) == NULL) {
 		DBG(("Failed to creat a display window \n"))
 		p->del(p);
 		if (errc != NULL) *errc = 3;

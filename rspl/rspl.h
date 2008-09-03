@@ -214,12 +214,15 @@ struct _rspl {
 	void (*del)(struct _rspl *ss);
 
 	/* Combination lags used by various functions */
-#define RSPL_EXTRAFIT    0x0002		/* Enable extra fitting effort by relaxing smoothing */
-#define RSPL_SYMDOMAIN   0x0004		/* Maintain symetric smoothness with nonsym. resolution */
-#define RSPL_INCREMENTAL 0x0008		/* Enable adding more data points */ 
-#define RSPL_FINAL       0x0010		/* Signal to add_rspl() that this is the last points */
-#define RSPL_SET_APXLS   0x0020		/* For set_rspl, adjust samples for aproximate least squares */
-#define RSPL_VERBOSE     0x8000		/* Print progress messages */
+#define RSPL_NOFLAGS      0x0000
+#define RSPL_EXTRAFIT     0x0002	/* Enable extra fitting effort by relaxing smoothing */
+#define RSPL_SYMDOMAIN    0x0004	/* Maintain symetric smoothness with nonsym. resolution */
+#define RSPL_INCREMENTAL  0x0008	/* Enable adding more data points */ 
+#define RSPL_FINAL        0x0010	/* Signal to add_rspl() that this is the last points */
+#define RSPL_SET_APXLS    0x0020	/* For set_rspl, adjust samples for aproximate least squares */
+#define RSPL_FASTREVSETUP 0x0010	/* Do a fast reverse setup at the cost of subsequent speed */
+#define RSPL_VERBOSE      0x8000	/* Turn on print progress messages */
+#define RSPL_NOVERBOSE    0x4000	/* Turn off print progress messages */
 
 	/* Initialise from scattered data. RESTRICTED SIZE */
 	/* Return non-zero if result is non-monotonic */
@@ -455,6 +458,7 @@ struct _rspl {
 									/* absolute. Implies EXACTAUX hint. */
 #define RSPL_NEARCLIP 0x0008		/* If clipping occurs, return the nearest solution, */
 									/* rather than the one in the clip direction. */
+
 	/* Return value masks */
 #define RSPL_DIDCLIP 0x8000		/* If this bit is set, at least one soln. and clipping occured */
 #define RSPL_NOSOLNS 0x7fff		/* And return value with this mask to get number of solutions */
@@ -526,7 +530,7 @@ struct _rspl {
 }; typedef struct _rspl rspl;
 
 /* Create a new, empty rspl object */
-rspl *new_rspl(int di, int fdi);	/* Input and output dimentiality */
+rspl *new_rspl(int flags, int di, int fdi);	/* Input and output dimentiality */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 

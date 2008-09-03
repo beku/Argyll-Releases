@@ -36,21 +36,25 @@
 #include "icc.h"
 #include "gamut.h"
 #include "xicc.h"
+#include "sort.h"
 
-#ifdef NEVER
-void error(char *fmt, ...), warning(char *fmt, ...);
-#endif
+void set_fminmax(double min[3], double max[3]);
+void reset_filter();
+void add_fpixel(double val[3]);
+void flush_filter(int verb, gamut *gam, double filtperc);
+void del_filter();
 
 void usage(void) {
 	int i;
 	fprintf(stderr,"Create VRML image of the gamut surface of a TIFF, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	fprintf(stderr,"usage: tiffgamut [-v level] [profile.icm | embeded.tif] infile.tif\n");
+	fprintf(stderr,"usage: tiffgamut [-v level] [profile.icm | embeded.tif] infile1.tif [infile2.tif ...] \n");
 	fprintf(stderr," -v            Verbose\n");
 	fprintf(stderr," -d sres       Surface resolution details 1.0 - 50.0\n");
 	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .gam file\n");
 	fprintf(stderr," -n            Don't add VRML axes or white/black point\n");
 	fprintf(stderr," -k            Add markers for prim. & sec. \"cusp\" points\n");
+	fprintf(stderr," -f perc       Filter by popularity, perc = percent to use\n");
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"               s = saturation, a = absolute (default), d = profile default\n");
 //  fprintf(stderr,"               P = absolute perceptual, S = absolute saturation\n");
@@ -264,13 +268,16 @@ int pmtc
 int
 main(int argc, char *argv[]) {
 	int fa,nfa;					/* argument we're looking at */
-	char prof_name[100] = { '\000' };	/* ICC profile name, "" if none */
-	char in_name[100];			/* TIFF input file */
-	char *xl, out_name[100];	/* VRML output file */
+	int ffa, lfa;				/* First, last input file argument */
+	char prof_name[MAXNAMEL+1] = { '\000' };	/* ICC profile name, "" if none */
+	char in_name[MAXNAMEL+1];			/* TIFF input file */
+	char *xl, out_name[MAXNAMEL+4+1];	/* VRML output file */
 	int verb = 0;
 	int vrml = 0;
 	int doaxes = 1;
 	int docusps = 0;
+	int filter = 0;
+	double filtperc = 100.0;
 	int rv = 0;
 
 	icc *icco = NULL;
@@ -286,7 +293,7 @@ main(int argc, char *argv[]) {
 	double vc_fXYZ[3] = {-1.0, -1.0, -1.0};	/* Flare color override in XYZ */
 	double vc_fxy[2] = {-1.0, -1.0};		/* Flare color override in x,y */
 	icxLuBase *luo = NULL;					/* Generic lookup object */
-	icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
+	icColorSpaceSignature ins = icSigLabData, outs;	/* Type of input and output spaces */
 	int inn, outn;						/* Number of components */
 	icmLuAlgType alg;					/* Type of lookup algorithm */
 	icmLookupFunc     func   = icmFwd;				/* Must be */
@@ -309,7 +316,7 @@ main(int argc, char *argv[]) {
 
 	double gamres = GAMRES;				/* Surface resolution */
 	gamut *gam;
-	
+
 	error_program = argv[0];
 
 	if (argc < 2)
@@ -480,6 +487,15 @@ main(int argc, char *argv[]) {
 				if (na == NULL) usage();
 				gamres = atof(na);
 			}
+			/* Filtering */
+			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F') {
+				fa = nfa;
+				if (na == NULL) usage();
+				filtperc = atof(na);
+				if (filtperc < 0.0 || filtperc> 100.0)
+					usage();
+				filter = 1;
+			}
 
 			else 
 				usage();
@@ -489,52 +505,27 @@ main(int argc, char *argv[]) {
 
 	if (fa >= argc || argv[fa][0] == '-') usage();
 	if (fa < (argc-1))
-		strcpy(prof_name,argv[fa++]);
+		strncpy(prof_name,argv[fa++],MAXNAMEL); prof_name[MAXNAMEL] = '\000';
 
-	if (fa >= argc || argv[fa][0] == '-') usage();
-	strcpy(in_name,argv[fa++]);
+	for (ffa = fa; fa < argc; fa++)
+		if (fa >= argc || argv[fa][0] == '-') usage();
+	lfa = fa-1;
+	if (verb)
+		printf("There are %d raster files to process\n",lfa - ffa + 1);
+
+	strncpy(out_name,argv[lfa],MAXNAMEL); out_name[MAXNAMEL] = '\000';
+	if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
+		xl = out_name + strlen(out_name);
+	strcpy(xl,".gam");
+
+	if (verb)
+		printf("Gamut output files is '%s'\n",out_name);
 
 	if (intent == -1) {
 		if (pcsor == icxSigJabData)
 			intent = icRelativeColorimetric;	/* Default to icxAppearance */
 		else
 			intent = icAbsoluteColorimetric;	/* Default to icAbsoluteColorimetric */
-	}
-
-	/* - - - - - - - - - - - - - - - */
-	/* Open up input tiff file ready for reading */
-	/* Got arguments, so setup to process the file */
-	if ((rh = TIFFOpen(in_name, "r")) == NULL)
-		error("error opening read file '%s'",in_name);
-
-	TIFFGetField(rh, TIFFTAG_IMAGEWIDTH,  &width);
-	TIFFGetField(rh, TIFFTAG_IMAGELENGTH, &height);
-
-	TIFFGetField(rh, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
-	TIFFGetField(rh, TIFFTAG_BITSPERSAMPLE, &bitspersample);
-	if (bitspersample != 8 && bitspersample != 16)
-		error("TIFF Input file must be 8 bit/channel");
-
-	TIFFGetFieldDefaulted(rh, TIFFTAG_EXTRASAMPLES, &extrasamples, &extrainfo);
-	TIFFGetField(rh, TIFFTAG_PHOTOMETRIC, &photometric);
-
-	if ((tcs = TiffPhotometric2ColorSpaceSignature(&cvt, &sign_mask, photometric,
-	                                     bitspersample, samplesperpixel, extrasamples)) == 0)
-		error("Can't handle TIFF file photometric %s", Photometric2str(photometric));
-
-	TIFFGetField(rh, TIFFTAG_PLANARCONFIG, &pconfig);
-	if (pconfig != PLANARCONFIG_CONTIG)
-		error ("TIFF Input file must be planar");
-
-	TIFFGetField(rh, TIFFTAG_RESOLUTIONUNIT, &resunits);
-	TIFFGetField(rh, TIFFTAG_XRESOLUTION, &resx);
-	TIFFGetField(rh, TIFFTAG_YRESOLUTION, &resy);
-
-	if (verb) {
-		printf("Input TIFF file '%s'\n",in_name);
-		printf("TIFF file colorspace is %s\n",icm2str(icmColorSpaceSignature,tcs));
-		printf("TIFF file photometric is %s\n",Photometric2str(photometric));
-		printf("\n");
 	}
 
 	/* - - - - - - - - - - - - - - - - */
@@ -611,72 +602,160 @@ main(int argc, char *argv[]) {
 	
 		luo->spaces(luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL);
 	
-		if (inn != (samplesperpixel-extrasamples))
-			error ("TIFF Input file has %d input chanels mismatched to colorspace '%s'",
-			       samplesperpixel, icm2str(icmColorSpaceSignature, ins));
-	
-		if (ins != tcs)
-			error("ICC  input colorspace '%s' doesn't match TIFF photometric '%s'!",
-			      icm2str(icmColorSpaceSignature,ins), Photometric2str(photometric));
+	}
 
-	} else if (tcs != icSigLabData) {
-		error("An ICC profile must be supplied unless the TIFF file is LAB encoded");
+	/* Establish the PCS range if we are filtering */
+	if (filter) {
+		double pcsmin[3], pcsmax[3];		/* PCS range for filter stats array */
+	
+		if (luo) {
+			gamut *csgam;
+
+			if ((csgam = luo->get_gamut(luo, 20.0)) == NULL)
+				error("Getting the gamut of the source colorspace failed");
+			
+			csgam->getrange(csgam, pcsmin, pcsmax);
+			csgam->del(csgam);
+		} else {
+			pcsmin[0] = 0.0;
+			pcsmax[0] = 100.0;
+			pcsmin[1] = -128.0;
+			pcsmax[1] = 128.0;
+			pcsmin[2] = -128.0;
+			pcsmax[2] = 128.0;
+		}
+
+		if (verb)
+			printf("PCS range = %f..%f, %f..%f. %f..%f\n\n", pcsmin[0], pcsmax[0], pcsmin[1], pcsmax[1], pcsmin[2], pcsmax[2]);
+
+		/* Allocate and initialize the filter */
+		set_fminmax(pcsmin, pcsmax);
 	}
 
 	/* - - - - - - - - - - - - - - - */
 	/* Creat a gamut surface */
 	gam = new_gamut(gamres, pcsor == icxSigJabData);
 
-	/* - - - - - - - - - - - - - - - */
-	/* Process colors to translate */
-	/* (Should fix this to process a group of lines at a time ?) */
+	/* Process all the tiff files */
+	for (fa = ffa; fa <= lfa; fa++) {
 
-	inbuf  = _TIFFmalloc(TIFFScanlineSize(rh));
+		/* - - - - - - - - - - - - - - - */
+		/* Open up input tiff file ready for reading */
+		/* Got arguments, so setup to process the file */
 
-	for (y = 0; y < height; y++) {
+		strncpy(in_name,argv[fa],MAXNAMEL); in_name[MAXNAMEL] = '\000';
+		if ((rh = TIFFOpen(in_name, "r")) == NULL)
+			error("error opening read file '%s'",in_name);
 
-		/* Read in the next line */
-		if (TIFFReadScanline(rh, inbuf, y, 0) < 0)
-			error ("Failed to read TIFF line %d",y);
+		TIFFGetField(rh, TIFFTAG_IMAGEWIDTH,  &width);
+		TIFFGetField(rh, TIFFTAG_IMAGELENGTH, &height);
 
-		/* Do floating point conversion */
-		for (x = 0; x < width; x++) {
-			int i;
-			double in[MAX_CHAN], out[MAX_CHAN];
-			
-			if (bitspersample == 8) {
-				for (i = 0; i < samplesperpixel; i++) {
-					int v = ((unsigned char *)inbuf)[x * samplesperpixel + i];
-					if (sign_mask & (1 << i))		/* Treat input as signed */
-						v = (v & 0x80) ? v - 0x80 : v + 0x80;
-					in[i] = v/255.0;
-				}
-			} else {
-				for (i = 0; i < samplesperpixel; i++) {
-					int v = ((unsigned short *)inbuf)[x * samplesperpixel + i];
-					if (sign_mask & (1 << i))		/* Treat input as signed */
-						v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
-					in[i] = v/65535.0;
-				}
-			}
-			if (cvt != NULL) {	/* Undo TIFF encoding */
-				cvt(in, in);
-			}
-			if (luo != NULL) {
-				if ((rv = luo->lookup(luo, out, in)) > 1)
-					error ("%d, %s",icco->errc,icco->err);
+		TIFFGetField(rh, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
+		TIFFGetField(rh, TIFFTAG_BITSPERSAMPLE, &bitspersample);
+		if (bitspersample != 8 && bitspersample != 16)
+			error("TIFF Input file must be 8 bit/channel");
+
+		TIFFGetFieldDefaulted(rh, TIFFTAG_EXTRASAMPLES, &extrasamples, &extrainfo);
+		TIFFGetField(rh, TIFFTAG_PHOTOMETRIC, &photometric);
+
+		if (inn != (samplesperpixel-extrasamples))
+			error ("TIFF Input file has %d input chanels mismatched to colorspace '%s'",
+			       samplesperpixel, icm2str(icmColorSpaceSignature, ins));
+
+		if ((tcs = TiffPhotometric2ColorSpaceSignature(&cvt, &sign_mask, photometric,
+		                                     bitspersample, samplesperpixel, extrasamples)) == 0)
+			error("Can't handle TIFF file photometric %s", Photometric2str(photometric));
+
+		if (tcs != ins) {
+			if (luo != NULL)
+				error("TIFF photometric '%s' doesn't match ICC input colorspace '%s' !",
+				      Photometric2str(photometric), icm2str(icmColorSpaceSignature,ins));
+			else
+				error("No profile provided and TIFF photometric '%s' isn't Lab !",
+				      Photometric2str(photometric));
+		}
+
+		TIFFGetField(rh, TIFFTAG_PLANARCONFIG, &pconfig);
+		if (pconfig != PLANARCONFIG_CONTIG)
+			error ("TIFF Input file must be planar");
+
+		TIFFGetField(rh, TIFFTAG_RESOLUTIONUNIT, &resunits);
+		TIFFGetField(rh, TIFFTAG_XRESOLUTION, &resx);
+		TIFFGetField(rh, TIFFTAG_YRESOLUTION, &resy);
+
+		if (verb) {
+			printf("Input TIFF file '%s'\n",in_name);
+			printf("TIFF file colorspace is %s\n",icm2str(icmColorSpaceSignature,tcs));
+			printf("TIFF file photometric is %s\n",Photometric2str(photometric));
+			printf("\n");
+		}
+
+		/* - - - - - - - - - - - - - - - */
+		/* Process colors to translate */
+		/* (Should fix this to process a group of lines at a time ?) */
+
+		inbuf  = _TIFFmalloc(TIFFScanlineSize(rh));
+
+		for (y = 0; y < height; y++) {
+
+			/* Read in the next line */
+			if (TIFFReadScanline(rh, inbuf, y, 0) < 0)
+				error ("Failed to read TIFF line %d",y);
+
+			/* Do floating point conversion */
+			for (x = 0; x < width; x++) {
+				int i;
+				double in[MAX_CHAN], out[MAX_CHAN];
 				
-				if (outs == icSigXYZData)	/* Convert to Lab */
-					icmXYZ2Lab(&icco->header->illuminant, out, out);
-			} else {
-				for (i = 0; i < samplesperpixel; i++)
-					out[i] = in[i];
-			}
+				if (bitspersample == 8) {
+					for (i = 0; i < samplesperpixel; i++) {
+						int v = ((unsigned char *)inbuf)[x * samplesperpixel + i];
+						if (sign_mask & (1 << i))		/* Treat input as signed */
+							v = (v & 0x80) ? v - 0x80 : v + 0x80;
+						in[i] = v/255.0;
+					}
+				} else {
+					for (i = 0; i < samplesperpixel; i++) {
+						int v = ((unsigned short *)inbuf)[x * samplesperpixel + i];
+						if (sign_mask & (1 << i))		/* Treat input as signed */
+							v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
+						in[i] = v/65535.0;
+					}
+				}
+				if (cvt != NULL) {	/* Undo TIFF encoding */
+					cvt(in, in);
+				}
+				if (luo != NULL) {
+					if ((rv = luo->lookup(luo, out, in)) > 1)
+						error ("%d, %s",icco->errc,icco->err);
+					
+					if (outs == icSigXYZData)	/* Convert to Lab */
+						icmXYZ2Lab(&icco->header->illuminant, out, out);
+				} else {
+					for (i = 0; i < samplesperpixel; i++)
+						out[i] = in[i];
+				}
 
-			gam->expand(gam, out);
+				if (filter)
+					add_fpixel(out);
+				else
+					gam->expand(gam, out);
+			}
+		}
+
+		_TIFFfree(inbuf);
+
+		TIFFClose(rh);		/* Close Input file */
+
+		/* If filtering, flush filtered points to the gamut */
+		if (filter) {
+			flush_filter(verb, gam, filtperc);
 		}
 	}
 
+	if (filter)
+		del_filter();
+	
 	/* Get White and Black points from the profile, and set them in the gamut */
 	if (luo != NULL) {
 		double wp[3], bp[3];
@@ -692,14 +771,7 @@ main(int argc, char *argv[]) {
 		icco->del(icco);		/* Icc */
 	}
 
-	TIFFClose(rh);		/* Close Input file */
-
 	/* Create the VRML file */
-	strcpy(out_name, in_name);
-	if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
-		xl = out_name + strlen(out_name);
-
-	strcpy(xl,".gam");
 	if (gam->write_gam(gam,out_name))
 		error ("write gamut failed on '%s'",out_name);
 
@@ -718,32 +790,155 @@ main(int argc, char *argv[]) {
 }
 
 
-#ifdef NEVER
-/* Basic printf type error() and warning() routines */
+/* A pixel value filter module. We quantize the pixel values and keep statistics */
+/* on them, so as to filter out low frequency colors. */
 
-void
-error(char *fmt, ...)
-{
-	va_list args;
+#define FILTBITS 6		/* Total = 2 ^ (3 * FILTBITS) entries  = 33Mbytes*/
+#define FILTSIZE (1 << FILTBITS)
 
-	fprintf(stderr,"cctiff: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	exit (-1);
+/* A filtered cell entry */
+typedef struct {
+	int   count;		/* Count of pixels that fall in this cell */
+	float pcs[3];		/* Most extreme PCS value that fell in this cell */
+} fent;
+
+struct _ffilter {
+	double min[3], max[3];		/* PCS range */
+
+	fent cells[FILTSIZE][FILTSIZE][FILTSIZE];		/* Quantized pixels stats */
+	fent *scells[FILTSIZE * FILTSIZE * FILTSIZE];	/* Sorted order */
+	
+}; typedef struct _ffilter ffilter;
+
+
+
+/* Use a global object */
+ffilter *ff = NULL;
+
+/* Set the min and max values and init the filter */
+void set_fminmax(double min[3], double max[3]) {
+
+	if (ff == NULL) {
+	    if ((ff = (ffilter *) calloc(1,sizeof(ffilter))) == NULL)
+	        error("ffilter: calloc failed");
+	}
+
+	ff->min[0] = min[0];
+	ff->min[1] = min[1];
+	ff->min[2] = min[2];
+	ff->max[0] = max[0];
+	ff->max[1] = max[1];
+	ff->max[2] = max[2];
 }
 
-void
-warning(char *fmt, ...)
-{
-	va_list args;
+/* Add another pixel to the filter */
+void add_fpixel(double val[3]) {
+	int j;
+	int qv[3];
+	fent *fe;
+	double cent[3] = { 50.0, 0.0, 0.0 }; 	/* Assumed center */
+	double tt, cdist, ndist;
 
-	fprintf(stderr,"cctiff: Warning - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
+	if (ff == NULL)
+		error("ffilter not initialized");
+
+	/* Quantize the values */
+	for (j = 0; j < 3; j++) {
+		double vv;
+
+		vv = (val[j] - ff->min[j])/(ff->max[j] - ff->min[j]);
+		qv[j] = (int)(vv * (FILTSIZE - 1) + 0.5);
+	}
+
+//printf("~1 color %f %f %f -> Cell %d %d %d\n", val[0], val[1], val[2], qv[0], qv[1], qv[2]);
+
+	/* Find the appropriate cell */
+	fe = &ff->cells[qv[0]][qv[1]][qv[2]];
+
+	/* See if this is the new most distant value in this cell */
+	for (cdist = ndist = 0.0, j = 0; j < 3; j++) {
+		tt = fe->pcs[j] - cent[j];
+		cdist += tt * tt;
+		tt = val[j] - cent[j];
+		ndist += tt * tt;
+	}
+	if (fe->count == 0 || ndist > cdist) {
+		fe->pcs[0] = val[0];
+		fe->pcs[1] = val[1];
+		fe->pcs[2] = val[2];
+//printf("Updated pcs to %f %f %f\n", val[0],val[1],val[2]);
+	}
+	fe->count++;
+//printf("Cell count = %d\n",fe->count);
 }
 
-#endif /* NEVER */
+/* Flush the filter contents to the gamut, and then reset it */
+void flush_filter(int verb, gamut *gam, double filtperc) {
+	int i, j;
+	int totcells = FILTSIZE * FILTSIZE * FILTSIZE;
+	int used, hasone;
+	double cuml, avgcnt;
+
+	if (ff == NULL)
+		error("ffilter not initialized");
+
+	/* Sort the cells by popularity from most to least */
+	for (used = hasone = avgcnt = i = 0; i < totcells; i++) {
+		ff->scells[i] = (fent *)ff->cells + i;
+		if (ff->scells[i]->count > 0) {
+			used++;
+			if (ff->scells[i]->count == 1)
+				hasone++;
+			avgcnt += ff->scells[i]->count;
+		}
+	}
+	avgcnt /= used; 
+
+#define HEAP_COMPARE(A,B) A->count > B->count 
+	HEAPSORT(fent *,ff->scells, totcells)
+
+	if (verb) {
+		printf("Total of %d cells out of %d were hit (%.1f%%)\n",used,totcells,used * 100.0/totcells);
+		printf("%.1f%% have a count of 1\n",hasone * 100.0/used);
+		printf("Average cell count = %f\n",avgcnt);
+		printf("\n");
+	}
+
+	/* Add the populated cells in order */
+	filtperc /= 100.0;
+	for (cuml = 0.0, i = j = 0; cuml < filtperc && i < totcells; i++) {
+		
+		if (ff->scells[i]->count > 0) {
+			double val[3];
+			val[0] = ff->scells[i]->pcs[0];	/* float -> double */
+			val[1] = ff->scells[i]->pcs[1];
+			val[2] = ff->scells[i]->pcs[2];
+//printf("~1 adding %f %f %f to gamut\n", val[0], val[1], val[2]);
+			gam->expand(gam, val);
+			j++;
+			cuml = j/(used-1.0);
+		}
+
+	}
+
+	/* Reset it to empty */
+	{
+		double min[3], max[3];
+
+		for (j = 0; j < 3; j++) {
+			min[j] = ff->min[j];
+			max[j] = ff->max[j];
+		}
+		memset(ff, 0, sizeof(ffilter));
+		for (j = 0; j < 3; j++) {
+			ff->min[j] = min[j];
+			ff->max[j] = max[j];
+		}
+	}
+}
+
+/* Free up the filter structure */
+void del_filter() {
+
+	free(ff);
+}

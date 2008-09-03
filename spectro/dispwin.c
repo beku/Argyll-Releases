@@ -34,10 +34,6 @@
  *
  */
 
-#ifdef __MINGW32__
-# define WINVER 0x0500
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -69,16 +65,27 @@
 //#define STANDALONE_TEST
 
 #ifdef DEBUG
-# define errout stderr
+#define errout stderr
 # define debug(xx)	fprintf(errout, xx )
 # define debug2(xx)	fprintf xx
+# define debugr(xx)	fprintf(errout, xx )
+# define debugr2(xx)	fprintf xx
+# define debugrr(xx)	fprintf(errout, xx )
+# define debugrr2(xx)	fprintf xx
 #else
-# define debug(xx)
+#define errout stderr
+# define debug(xx) 
 # define debug2(xx)
+# define debugr(xx) if (p->ddebug) fprintf(errout, xx ) 
+# define debugr2(xx) if (p->ddebug) fprintf xx
+# define debugrr(xx) if (callback_ddebug) fprintf(errout, xx ) 
+# define debugrr2(xx) if (callback_ddebug) fprintf xx
 #endif
 
 /* ----------------------------------------------- */
 /* Dealing with locating displays */
+
+int callback_ddebug = 0;			/* Diagnostic global for get_displays() and get_a_display() */  
 
 #ifdef NT
 
@@ -95,10 +102,25 @@ static BOOL CALLBACK MonitorEnumProc(
 	MONITORINFOEX pmi;
 	int ndisps = 0;
 	
+	debugrr2((errout, "MonitorEnumProc() called with hMonitor = 0x%x\n",hMonitor));
+
+	/* Get some more information */
+	pmi.cbSize = sizeof(MONITORINFOEX);
+	if (GetMonitorInfo(hMonitor, (MONITORINFO *)&pmi) == 0) {
+		debugrr("get_displays failed GetMonitorInfo - ignoring display\n");
+		return TRUE;
+	}
+
+	/* See if it seems to be a pseudo-display */
+	if (strncmp(pmi.szDevice, "\\\\.\\DISPLAYV", 12) == 0) {
+		debugrr("Seems to be invisible pseudo-display - ignoring it\n");
+		return TRUE;
+	}
+
 	/* Add the display to the list */
 	if (disps == NULL) {
 		if ((disps = (disppath **)calloc(sizeof(disppath *), 1 + 1)) == NULL) {
-			debug("get_displays failed on malloc\n");
+			debugrr("get_displays failed on malloc\n");
 			return FALSE;
 		}
 	} else {
@@ -107,25 +129,19 @@ static BOOL CALLBACK MonitorEnumProc(
 			;
 		if ((disps = (disppath **)realloc(disps,
 		                     sizeof(disppath *) * (ndisps + 2))) == NULL) {
-			debug("get_displays failed on malloc\n");
+			debugrr("get_displays failed on malloc\n");
 			return FALSE;
 		}
 		disps[ndisps+1] = NULL;	/* End marker */
 	}
 
 	if ((disps[ndisps] = calloc(sizeof(disppath),1)) == NULL) {
-		debug("get_displays failed on malloc\n");
-		return FALSE;
-	}
-
-	pmi.cbSize = sizeof(MONITORINFOEX);
-	if (GetMonitorInfo(hMonitor, (MONITORINFO *)&pmi) == 0) {
-		debug("get_displays failed GetMonitorInfo\n");
+		debugrr("get_displays failed on malloc\n");
 		return FALSE;
 	}
 
 	if ((disps[ndisps]->name = strdup(pmi.szDevice)) == NULL) {
-		debug("malloc failed\n");
+		debugrr("malloc failed\n");
 		return FALSE;
 	}
 	disps[ndisps]->prim = (pmi.dwFlags & MONITORINFOF_PRIMARY) ? 1 : 0;
@@ -136,6 +152,8 @@ static BOOL CALLBACK MonitorEnumProc(
 	disps[ndisps]->sh = lprcMonitor->bottom - lprcMonitor->top;
 
 	disps[ndisps]->description = NULL;
+
+	debugrr2((errout, "MonitorEnumProc() set initial monitor info: %d,%d %d,%d name '%s'\n",disps[ndisps]->sx,disps[ndisps]->sy,disps[ndisps]->sw,disps[ndisps]->sh, disps[ndisps]->name));
 
 	*pdisps = disps;
 	return TRUE;
@@ -217,38 +235,40 @@ disppath **get_displays() {
 
 	setup_dyn_calls();
 
+	/* Create an initial list of monitors */
+	/* (It might be better to call pEnumDisplayDevices(NULL, i ..) instead ??, */
+	/* then we can use the StateFlags to distingish monitors not attached to the desktop etc.) */
 	if (EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)&disps) == 0) {
+		debugrr("EnumDisplayMonitors failed\n");
 		free_disppaths(disps);
-		debug("EnumDisplayMonitors failed\n");
 		return NULL;
 	}
 
 	/* Now locate detailed information about displays */
 	for (i = 0; ; i++) {
-		if (disps[i] == NULL)
+		if (disps == NULL || disps[i] == NULL)
 			break;
 
 		dd.cb = sizeof(dd);
 
+		debugrr2((errout, "get_displays about to get monitor information for %d\n",i));
 		/* Get monitor information */
-		for (j = 0; ; j++) {
+		for (j = 0; ;j++) {
 			if ((*pEnumDisplayDevices)(disps[i]->name, j, &dd, 0) == 0) {
+				debugrr2((errout,"EnumDisplayDevices failed on '%s' Mon = %d\n",disps[i]->name,j));
 				if (j == 0) {
-					free_disppaths(disps);
-					debug2((errout,"EnumDisplayDevices failed on '%s'\n",disps[i]->name));
-					return NULL;
+					strcpy(disps[i]->monid, "");		/* We won't be able to set a profile */
 				}
 				break;
 			}
-#ifdef NEVER
-			printf("Mon %d, name '%s'\n",j,dd.DeviceName);
-			printf("Mon %d, string '%s'\n",j,dd.DeviceString);
-			printf("Mon %d, flags 0x%x\n",j,dd.StateFlags);
-			printf("Mon %d, id '%s'\n",j,dd.DeviceID);
-			printf("Mon %d, key '%s'\n",j,dd.DeviceKey);
-#endif
+			if (callback_ddebug) {
+				fprintf(errout,"Mon %d, name '%s'\n",j,dd.DeviceName);
+				fprintf(errout,"Mon %d, string '%s'\n",j,dd.DeviceString);
+				fprintf(errout,"Mon %d, flags 0x%x\n",j,dd.StateFlags);
+				fprintf(errout,"Mon %d, id '%s'\n",j,dd.DeviceID);
+				fprintf(errout,"Mon %d, key '%s'\n",j,dd.DeviceKey);
+			}
 			if (j == 0) {
-				strcpy(disps[i]->monname, dd.DeviceName);
 				strcpy(disps[i]->monid, dd.DeviceID);
 			}
 		}
@@ -258,13 +278,15 @@ disppath **get_displays() {
 	        disps[i]->prim ? " (Primary Display)" : "");
 
 		if ((disps[i]->description = strdup(buf)) == NULL) {
-			debug("get_displays failed on malloc\n");
+			debugrr("get_displays failed on malloc\n");
 			free_disppaths(disps);
 			return NULL;
 		}
 
+		debugrr2((errout, "get_displays added description '%s' to display %d\n",disps[i]->description,i));
+
 		/* Note that calling EnumDisplayDevices(NULL, j, ..) for the adapter can return other */
-		/* intformation, such as the graphics card name, and additional state flags. */
+		/* information, such as the graphics card name, and additional state flags. */
 		/* EnumDisplaySettings() can also be called to get information such as display depth etc. */
 	}
 
@@ -295,31 +317,31 @@ disppath **get_displays() {
 	CGDirectDisplayID *dids;	/* Array of display IDs */
 
 	if ((dstat = CGGetActiveDisplayList(0, NULL, &dcount)) != kCGErrorSuccess || dcount < 1) {
-		debug("CGGetActiveDisplayList #1 returned error\n");
+		debugrr("CGGetActiveDisplayList #1 returned error\n");
 		return NULL;
 	}
 	if ((dids = (CGDirectDisplayID *)malloc(dcount * sizeof(CGDirectDisplayID))) == NULL) {
-		debug("malloc of CGDirectDisplayID's failed\n");
+		debugrr("malloc of CGDirectDisplayID's failed\n");
 		return NULL;
 	}
 	if ((dstat = CGGetActiveDisplayList(dcount, dids, &dcount)) != kCGErrorSuccess) {
-		debug("CGGetActiveDisplayList #2 returned error\n");
+		debugrr("CGGetActiveDisplayList #2 returned error\n");
 		free(dids);
 		return NULL;
 	}
 
 	/* Found dcount displays */
-	debug2((errout,"Found %d screens\n",dcount));
+	debugrr2((errout,"Found %d screens\n",dcount));
 
 	/* Allocate our list */
 	if ((disps = (disppath **)calloc(sizeof(disppath *), dcount + 1)) == NULL) {
-		debug("get_displays failed on malloc\n");
+		debugrr("get_displays failed on malloc\n");
 		free(dids);
 		return NULL;
 	}
 	for (i = 0; i < dcount; i++) {
 		if ((disps[i] = calloc(sizeof(disppath), 1)) == NULL) {
-			debug("get_displays failed on malloc\n");
+			debugrr("get_displays failed on malloc\n");
 			free_disppaths(disps);
 			free(dids);
 			return NULL;
@@ -344,7 +366,7 @@ disppath **get_displays() {
 			
 		/* Try and get some information about the display */
 		if ((dport = CGDisplayIOServicePort(dids[i])) == MACH_PORT_NULL) {
-			debug("CGDisplayIOServicePort returned error\n");
+			debugrr("CGDisplayIOServicePort returned error\n");
 			free_disppaths(disps);
 			free(dids);
 			return NULL;
@@ -354,7 +376,7 @@ disppath **get_displays() {
 		{
 			io_name_t name;
 			if (IORegistryEntryGetName(dport, name) != KERN_SUCCESS) {
-				debug("IORegistryEntryGetName returned error\n");
+				debugrr("IORegistryEntryGetName returned error\n");
 				free_disppaths(disps);
 				free(dids);
 				return NULL;
@@ -363,13 +385,13 @@ disppath **get_displays() {
 		}
 #endif
 		if ((ddr = IODisplayCreateInfoDictionary(dport, 0)) == NULL) {
-			debug("IODisplayCreateInfoDictionary returned NULL\n");
+			debugrr("IODisplayCreateInfoDictionary returned NULL\n");
 			free_disppaths(disps);
 			free(dids);
 			return NULL;
 		}
 		if ((pndr = CFDictionaryGetValue(ddr, CFSTR(kDisplayProductName))) == NULL) {
-			debug("CFDictionaryGetValue returned NULL\n");
+			debugrr("CFDictionaryGetValue returned NULL\n");
 			CFRelease(ddr);
 			free_disppaths(disps);
 			free(dids);
@@ -387,7 +409,7 @@ disppath **get_displays() {
 					free(keys);
 				if (values != NULL)
 					free(values);
-				debug("malloc failed\n");
+				debugrr("malloc failed\n");
 				CFRelease(ddr);
 				free_disppaths(disps);
 				free(dids);
@@ -430,7 +452,7 @@ disppath **get_displays() {
 
 		if ((disps[i]->name = strdup(dp)) == NULL
 		 || (disps[i]->description = strdup(buf)) == NULL) {
-			debug("get_displays failed on malloc\n");
+			debugrr("get_displays failed on malloc\n");
 			free_disppaths(disps);
 			free(dids);
 			return NULL;
@@ -478,18 +500,19 @@ disppath **get_displays() {
 		strcpy(dnbuf,":0.0");
 
 	if ((mydisplay = XOpenDisplay(dnbuf)) == NULL) {
-		debug2((errout, "failed to open display '%s'\n",dnbuf));
+		debugrr2((errout, "failed to open display '%s'\n",dnbuf));
 		return NULL;
 	}
 
 #if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
-	/* Use Xrandr 1.2 if it's available */
-	if (XRRQueryExtension(mydisplay, &evb, &erb) != 0
+	/* Use Xrandr 1.2 if it's available, and if it's not disabled */
+	if (getenv("ARGYLL_IGNORE_XRANDR1_2") == NULL
+	 && XRRQueryExtension(mydisplay, &evb, &erb) != 0
 	 && XRRQueryVersion(mydisplay, &majv, &minv)
 	 && majv == 1 && minv >= 2) {
 
 		if (XSetErrorHandler(null_error_handler) == 0) {
-			debug("get_displays failed on XSetErrorHandler\n");
+			debugrr("get_displays failed on XSetErrorHandler\n");
 			XCloseDisplay(mydisplay);
 			free_disppaths(disps);
 			return NULL;
@@ -500,21 +523,22 @@ disppath **get_displays() {
 		/* Go through all the screens */
 		for (i = 0; i < dcount; i++) {
 			XRRScreenResources *scrnres;
+			int jj;		/* Screen index */
 
 			if ((scrnres = XRRGetScreenResources(mydisplay, RootWindow(mydisplay,i))) == NULL) {
-				debug("XRRGetScreenResources failed\n");
+				debugrr("XRRGetScreenResources failed\n");
 				XCloseDisplay(mydisplay);
 				free_disppaths(disps);
 				return NULL;
 			}
 
 			/* Look at all the screens outputs */
-			for (j = 0; j < scrnres->noutput; j++) {
+			for (jj = j = 0; j < scrnres->noutput; j++) {
 				XRROutputInfo *outi;
 				XRRCrtcInfo *crtci;
 	
 				if ((outi = XRRGetOutputInfo(mydisplay, scrnres, scrnres->outputs[j])) == NULL) {
-					debug("XRRGetOutputInfo failed\n");
+					debugrr("XRRGetOutputInfo failed\n");
 					XRRFreeScreenResources(scrnres);
 					XCloseDisplay(mydisplay);
 					free_disppaths(disps);
@@ -523,6 +547,24 @@ disppath **get_displays() {
 	
 				if (outi->connection == RR_Disconnected) {
 					continue;
+				}
+
+				/* Check that the VideoLUT's are accessible */
+				{
+					XRRCrtcGamma *crtcgam;
+			
+					debugrr("Checking XRandR 1.2 VideoLUT access\n");
+					if ((crtcgam = XRRGetCrtcGamma(mydisplay, outi->crtc)) == NULL
+					 || crtcgam->size == 0) {
+						fprintf(stderr,"XRandR 1.2 is faulty - falling back to older extensions\n");
+						if (crtcgam != NULL)
+							XRRFreeGamma(crtcgam);
+						free_disppaths(disps);
+						disps = NULL;
+						j = scrnres->noutput;
+						i = dcount;
+						continue;				/* Abort XRandR 1.2 */
+					}
 				}
 #ifdef NEVER
 				{
@@ -545,7 +587,7 @@ disppath **get_displays() {
 					/* Add the output to the list */
 					if (disps == NULL) {
 						if ((disps = (disppath **)calloc(sizeof(disppath *), 1 + 1)) == NULL) {
-							debug("get_displays failed on malloc\n");
+							debugrr("get_displays failed on malloc\n");
 							XRRFreeCrtcInfo(crtci);
 							XRRFreeScreenResources(scrnres);
 							XCloseDisplay(mydisplay);
@@ -554,7 +596,7 @@ disppath **get_displays() {
 					} else {
 						if ((disps = (disppath **)realloc(disps,
 						                     sizeof(disppath *) * (ndisps + 2))) == NULL) {
-							debug("get_displays failed on malloc\n");
+							debugrr("get_displays failed on malloc\n");
 							XRRFreeCrtcInfo(crtci);
 							XRRFreeScreenResources(scrnres);
 							XCloseDisplay(mydisplay);
@@ -564,7 +606,7 @@ disppath **get_displays() {
 					}
 					/* ndisps is current display we're filling in */
 					if ((disps[ndisps] = calloc(sizeof(disppath),1)) == NULL) {
-						debug("get_displays failed on malloc\n");
+						debugrr("get_displays failed on malloc\n");
 						XRRFreeCrtcInfo(crtci);
 						XRRFreeScreenResources(scrnres);
 						XCloseDisplay(mydisplay);
@@ -587,14 +629,14 @@ disppath **get_displays() {
 				        disps[ndisps]->sx, disps[ndisps]->sy, disps[ndisps]->sw, disps[ndisps]->sh);
 
 					/* See if it is a clone */
-					for (k = 0; 0 < ndisps; k++) {
+					for (k = 0; k < ndisps; k++) {
 						if (disps[k]->crtc == disps[ndisps]->crtc) {
 							sprintf(desc1, "[ Clone of %d ]",k+1);
 							strcat(desc2, desc1);
 						}
 					}
 					if ((disps[ndisps]->description = strdup(desc2)) == NULL) {
-						debug("get_displays failed on malloc\n");
+						debugrr("get_displays failed on malloc\n");
 						XRRFreeCrtcInfo(crtci);
 						XRRFreeScreenResources(scrnres);
 						XCloseDisplay(mydisplay);
@@ -609,24 +651,24 @@ disppath **get_displays() {
 						}
 					}
 					if ((disps[ndisps]->name = strdup(dnbuf)) == NULL) {
-						debug("get_displays failed on malloc\n");
+						debugrr("get_displays failed on malloc\n");
 						XRRFreeCrtcInfo(crtci);
 						XRRFreeScreenResources(scrnres);
 						XCloseDisplay(mydisplay);
 						free_disppaths(disps);
 						return NULL;
 					}
-					debug2((errout, "Display %d name = '%s'\n",ndisps,disps[ndisps]->name));
+					debugrr2((errout, "Display %d name = '%s'\n",ndisps,disps[ndisps]->name));
 	
 					/* Create the X11 root atom of the default screen */
 					/* that may contain the associated ICC profile */
 					/* (The _%d variant will probably break with non-Xrandr */
-					/* aware software Xrandr were configured to have more than */
-					/* a single virtual screen. */
-					if (j == 0)
+					/* aware software if Xrandr is configured to have more than */
+					/* a single virtual screen.) */
+					if (jj == 0)
 						strcpy(desc1, "_ICC_PROFILE");
 					else
-						sprintf(desc1, "_ICC_PROFILE_%d",j);
+						sprintf(desc1, "_ICC_PROFILE_%d",jj);
 
 					if ((disps[ndisps]->icc_atom = XInternAtom(mydisplay, desc1, False)) == None)
 						error("Unable to intern atom '%s'",desc1);
@@ -643,31 +685,34 @@ disppath **get_displays() {
 						unsigned char *atomv = NULL;
 
 						/* Get the atom for the EDID data */
-						if ((edid_atom = XInternAtom(mydisplay, "EDID_DATA", True)) == None)
-							error("Unable to intern atom '%s'","EDID_DATA");
-
-						/* Get the EDID_DATA */
-						if (XRRGetOutputProperty(mydisplay, scrnres->outputs[j], edid_atom,
-						            0, 0x7ffffff, False, False, XA_INTEGER, 
-   	                                &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) == Success
-						            && (ret_len == 128 || ret_len == 256)) {
-							if ((disps[ndisps]->edid = malloc(sizeof(unsigned char) * ret_len)) == NULL) {
-								debug("get_displays failed on malloc\n");
-								XRRFreeCrtcInfo(crtci);
-								XRRFreeScreenResources(scrnres);
-								XCloseDisplay(mydisplay);
-								free_disppaths(disps);
-								return NULL;
-							}
-							memcpy(disps[ndisps]->edid, atomv, ret_len);
-							disps[ndisps]->edid_len = ret_len;
-							XFree(atomv);
-							debug2((errout, "Got EDID for display\n"));
+						if ((edid_atom = XInternAtom(mydisplay, "EDID_DATA", True)) == None) {
+							debugrr2((errout, "Unable to intern atom 'EDID_DATA'\n"));
 						} else {
-							debug2((errout, "Failed to get EDID for display\n"));
+
+							/* Get the EDID_DATA */
+							if (XRRGetOutputProperty(mydisplay, scrnres->outputs[j], edid_atom,
+							            0, 0x7ffffff, False, False, XA_INTEGER, 
+   		                            &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) == Success
+						            && (ret_len == 128 || ret_len == 256)) {
+								if ((disps[ndisps]->edid = malloc(sizeof(unsigned char) * ret_len)) == NULL) {
+									debugrr("get_displays failed on malloc\n");
+									XRRFreeCrtcInfo(crtci);
+									XRRFreeScreenResources(scrnres);
+									XCloseDisplay(mydisplay);
+									free_disppaths(disps);
+									return NULL;
+								}
+								memcpy(disps[ndisps]->edid, atomv, ret_len);
+								disps[ndisps]->edid_len = ret_len;
+								XFree(atomv);
+								debugrr2((errout, "Got EDID for display\n"));
+							} else {
+								debugrr2((errout, "Failed to get EDID for display\n"));
+							}
 						}
 					}
 		
+					jj++;			/* Next enabled index */
 					ndisps++;		/* Now it's number of displays */
 					XRRFreeCrtcInfo(crtci);
 				}
@@ -678,17 +723,25 @@ disppath **get_displays() {
 		}
 		XSetErrorHandler(NULL);
 		defsix = DefaultScreen(mydisplay);
-
-	} else
+	}
 #endif /* randr >= V 1.2 */
-	{		/* Use Older style identification */
+
+	if (disps == NULL) {	/* Use Older style identification */
+		debugrr("get_displays checking for Xinerama\n");
+
+		if (XSetErrorHandler(null_error_handler) == 0) {
+			debugrr("get_displays failed on XSetErrorHandler\n");
+			XCloseDisplay(mydisplay);
+			return NULL;
+		}
+
 		if (XineramaQueryExtension(mydisplay, &evb, &erb) != 0
 		 && XineramaIsActive(mydisplay)) {
 
 			xai = XineramaQueryScreens(mydisplay, &dcount);
 
 			if (xai == NULL || dcount == 0) {
-				debug("XineramaQueryScreens failed\n");
+				debugrr("XineramaQueryScreens failed\n");
 				XCloseDisplay(mydisplay);
 				return NULL;
 			}
@@ -700,13 +753,13 @@ disppath **get_displays() {
 
 		/* Allocate our list */
 		if ((disps = (disppath **)calloc(sizeof(disppath *), dcount + 1)) == NULL) {
-			debug("get_displays failed on malloc\n");
+			debugrr("get_displays failed on malloc\n");
 			XCloseDisplay(mydisplay);
 			return NULL;
 		}
 		for (i = 0; i < dcount; i++) {
 			if ((disps[i] = calloc(sizeof(disppath), 1)) == NULL) {
-				debug("get_displays failed on malloc\n");
+				debugrr("get_displays failed on malloc\n");
 				free_disppaths(disps);
 				XCloseDisplay(mydisplay);
 				return NULL;
@@ -726,13 +779,13 @@ disppath **get_displays() {
 				}
 			}
 			if ((disps[i]->name = strdup(dnbuf)) == NULL) {
-				debug("get_displays failed on malloc\n");
+				debugrr("get_displays failed on malloc\n");
 				free_disppaths(disps);
 				XCloseDisplay(mydisplay);
 				return NULL;
 			}
 	
-			debug2((errout, "Display %d name = '%s'\n",i,disps[i]->name));
+			debugrr2((errout, "Display %d name = '%s'\n",i,disps[i]->name));
 			if (xai != NULL) {					/* Xinerama */
 				disps[i]->screen = 0;			/* We are asuming Xinerame creates a single virtual screen */
 				disps[i]->uscreen = i;			/* We are assuming xinerama lists screens in the same order */
@@ -788,7 +841,7 @@ disppath **get_displays() {
 				            &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) == Success
 				            && (ret_len == 128 || ret_len == 256)) {
 					if ((disps[i]->edid = malloc(sizeof(unsigned char) * ret_len)) == NULL) {
-						debug("get_displays failed on malloc\n");
+						debugrr("get_displays failed on malloc\n");
 						free_disppaths(disps);
 						XCloseDisplay(mydisplay);
 						return NULL;
@@ -796,43 +849,35 @@ disppath **get_displays() {
 					memcpy(disps[i]->edid, atomv, ret_len);
 					disps[i]->edid_len = ret_len;
 					XFree(atomv);
-					debug2((errout, "Got EDID for display\n"));
+					debugrr2((errout, "Got EDID for display\n"));
 					break;
 				} else {
-					debug2((errout, "Failed to get EDID for display\n"));
+					debugrr2((errout, "Failed to get EDID for display\n"));
 				}
 			}
 
 			if (XF86VidModeQueryExtension(mydisplay, &evb, &erb) != 0) {
 				/* Some propietary multi-screen drivers (ie. TwinView & MergeFB) */
 				/* don't implement the XVidMode extension properly. */
-				if (XSetErrorHandler(null_error_handler) == 0) {
-					debug("get_displays failed on XSetErrorHandler\n");
-					if (xai != NULL)
-						XFree(xai);
-					free_disppaths(disps);
-					XCloseDisplay(mydisplay);
-					return NULL;
-				}
 				monitor.model = NULL;
 				if (XF86VidModeGetMonitor(mydisplay, disps[i]->uscreen, &monitor) != 0
 				 && monitor.model != NULL && monitor.model[0] != '\000')
 					sprintf(desc1, "%s",monitor.model);
 				else
 					sprintf(desc1,"Screen %d",i+1);
-				XSetErrorHandler(NULL);
 			} else
 				sprintf(desc1,"Screen %d",i+1);
 
 			sprintf(desc2,"%s at %d, %d, width %d, height %d",desc1,
 		        disps[i]->sx, disps[i]->sy, disps[i]->sw, disps[i]->sh);
 			if ((disps[i]->description = strdup(desc2)) == NULL) {
-				debug("get_displays failed on malloc\n");
+				debugrr("get_displays failed on malloc\n");
 				free_disppaths(disps);
 				XCloseDisplay(mydisplay);
 				return NULL;
 			}
 		}
+		XSetErrorHandler(NULL);
 	}
 
 	/* Put the screen given by the display name at the top */
@@ -853,6 +898,7 @@ disppath **get_displays() {
 	return disps;
 }
 
+/* Free a whole list of display paths */
 void free_disppaths(disppath **disps) {
 	if (disps != NULL) {
 		int i;
@@ -873,7 +919,38 @@ void free_disppaths(disppath **disps) {
 		free(disps);
 	}
 }
-	
+
+/* Delete a single display from the list of display paths */
+void del_disppath(disppath **disps, int ix) {
+	if (disps != NULL) {
+		int i, j, k;
+		for (i = 0; ; i++) {
+			if (disps[i] == NULL)
+				break;
+
+			if (i == ix) {	/* One to delete */
+				if (disps[i]->name != NULL)
+					free(disps[i]->name);
+				if (disps[i]->description != NULL)
+					free(disps[i]->description);
+#if defined(UNIX) && !defined(__APPLE__)
+				if (disps[i]->edid != NULL)
+					free(disps[i]->edid);
+#endif
+				free(disps[i]);
+
+				/* Shuffle the rest down */
+				for (j = i, k = i + 1; ;j++, k++) {
+					disps[j] = disps[k];
+					if (disps[k] == NULL)
+						break;
+				}
+				return;
+			}
+		}
+	}
+}
+
 /* ----------------------------------------------- */
 /* Deal with selecting a display */
 
@@ -894,20 +971,20 @@ disppath *get_a_display(int ix) {
 			break;
 	}
 	if ((rv = malloc(sizeof(disppath))) == NULL) {
-		debug("get_a_display failed malloc\n");
+		debugrr("get_a_display failed malloc\n");
 		free_disppaths(paths);
 		return NULL;
 	}
 	*rv = *paths[i];		/* Structure copy */
 	if ((rv->name = strdup(paths[i]->name)) == NULL) {
-		debug("get_displays failed on malloc\n");
+		debugrr("get_displays failed on malloc\n");
 		free(rv->description);
 		free(rv);
 		free_disppaths(paths);
 		return NULL;
 	}
 	if ((rv->description = strdup(paths[i]->description)) == NULL) {
-		debug("get_displays failed on malloc\n");
+		debugrr("get_displays failed on malloc\n");
 		free(rv);
 		free_disppaths(paths);
 		return NULL;
@@ -915,7 +992,7 @@ disppath *get_a_display(int ix) {
 #if defined(UNIX) && !defined(__APPLE__)
 	if (paths[i]->edid != NULL) {
 		if ((rv->edid = malloc(sizeof(unsigned char) * 128)) == NULL) {
-			debug("get_displays failed on malloc\n");
+			debugrr("get_displays failed on malloc\n");
 			free(rv);
 			free_disppaths(paths);
 			return NULL;
@@ -962,18 +1039,18 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 #ifdef NT
 	WORD vals[3][256];		/* 16 bit elements */
 
-	debug("dispwin_get_ramdac called\n");
+	debugr("dispwin_get_ramdac called\n");
 
 #ifdef NEVER	/* Doesn't seem to return correct information on win2K systems */
 	if ((GetDeviceCaps(p->hdc, COLORMGMTCAPS) & CM_GAMMA_RAMP) == 0) {
-		debug("dispwin_get_ramdac failed on GetDeviceCaps(CM_GAMMA_RAMP)\n");
+		debugr("dispwin_get_ramdac failed on GetDeviceCaps(CM_GAMMA_RAMP)\n");
 		return NULL;
 	}
 #endif
 
 	/* Allocate a ramdac */
 	if ((r = (ramdac *)calloc(sizeof(ramdac), 1)) == NULL) {
-		debug("dispwin_get_ramdac failed on malloc()\n");
+		debugr("dispwin_get_ramdac failed on malloc()\n");
 		return NULL;
 	}
 	r->pdepth = p->pdepth;
@@ -988,19 +1065,19 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 			for (j--; j >= 0; j--)
 				free(r->v[j]);
 			free(r);
-			debug("dispwin_get_ramdac failed on malloc()\n");
+			debugr("dispwin_get_ramdac failed on malloc()\n");
 			return NULL;
 		}
 	}
 
 	/* GetDeviceGammaRamp() is hard coded for 3 x 256 entries */
 	if (r->nent != 256) {
-		debug2((errout,"GetDeviceGammaRamp() is hard coded for nent == 256, and we've got nent = %d!\n",r->nent));
+		debugr2((errout,"GetDeviceGammaRamp() is hard coded for nent == 256, and we've got nent = %d!\n",r->nent));
 		return NULL;
 	}
 
 	if (GetDeviceGammaRamp(p->hdc, vals) == 0) {
-		debug("dispwin_get_ramdac failed on GetDeviceGammaRamp()\n");
+		debugr("dispwin_get_ramdac failed on GetDeviceGammaRamp()\n");
 		return NULL;
 	}
 	for (j = 0; j < 3; j++) {
@@ -1014,26 +1091,26 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 	unsigned int nent;
 	CGGammaValue vals[3][16385];
 
-	debug("dispwin_get_ramdac called\n");
+	debugr("dispwin_get_ramdac called\n");
 
 	if (CGGetDisplayTransferByTable(p->ddid, 163845, vals[0], vals[1], vals[2], &nent) != 0) {
-		debug("CGGetDisplayTransferByTable failed\n");
+		debugr("CGGetDisplayTransferByTable failed\n");
 		return NULL;
 	}
 
 	if (nent == 16385) {	/* oops - we didn't provide enought space! */
-		debug("CGGetDisplayTransferByTable has more entries than we can handle\n");
+		debugr("CGGetDisplayTransferByTable has more entries than we can handle\n");
 		return NULL;
 	}
 
 	if (nent != (1 << p->pdepth)) {
-		debug("CGGetDisplayTransferByTable number of entries mismatches screen depth\n");
+		debugr("CGGetDisplayTransferByTable number of entries mismatches screen depth\n");
 		return NULL;
 	}
 
 	/* Allocate a ramdac */
 	if ((r = (ramdac *)calloc(sizeof(ramdac), 1)) == NULL) {
-		debug("dispwin_get_ramdac failed on malloc()\n");
+		debugr("dispwin_get_ramdac failed on malloc()\n");
 		return NULL;
 	}
 
@@ -1048,7 +1125,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 			for (j--; j >= 0; j--)
 				free(r->v[j]);
 			free(r);
-			debug("dispwin_get_ramdac failed on malloc()\n");
+			debugr("dispwin_get_ramdac failed on malloc()\n");
 			return NULL;
 		}
 	}
@@ -1065,29 +1142,29 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 	int nent = 0;
 	int evb = 0, erb = 0;
 
-	debug("dispwin_get_ramdac called\n");
+	debugr("dispwin_get_ramdac called\n");
 
 #if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
 	if (p->crtc != 0) {		/* Using Xrandr 1.2 */
 		XRRCrtcGamma *crtcgam;
 		int nz = 0;
 
-		debug("Getting gamma using Randr 1.2\n");
+		debugr("Getting gamma using Randr 1.2\n");
 
 		if ((crtcgam = XRRGetCrtcGamma(p->mydisplay, p->crtc)) == NULL) {
-			debug("XRRGetCrtcGamma failed\n");
+			debugr("XRRGetCrtcGamma failed\n");
 			return NULL;
 		}
 
 		nent = crtcgam->size;
 
 		if (nent > 16384) {
-			debug("XRRGetCrtcGammaSize  has more entries than we can handle\n");
+			debugr("XRRGetCrtcGammaSize  has more entries than we can handle\n");
 			return NULL;
 		}
 
 		if (nent != (1 << p->pdepth)) {
-			debug2((errout,"XRRGetCrtcGammaSize number of entries %d mismatches screen depth %d\n",nent,(1 << p->pdepth)));
+			debugr2((errout,"XRRGetCrtcGammaSize number of entries %d mismatches screen depth %d\n",nent,(1 << p->pdepth)));
 			return NULL;
 		}
 
@@ -1101,7 +1178,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 
 		/* Compensate for XRandR 1.2 startup bug */
 		if (nz == 0) {
-			debug("Detected XRandR 1.2 bug ? Assuming linear ramp!\n");
+			debugr("Detected XRandR 1.2 bug ? Assuming linear ramp!\n");
 			for (i = 0; i < nent; i++) {
 				for (j = 0; j < 3; j++)
 					vals[j][i] = (int)(65535.0 * i/(nent-1.0) + 0.5);
@@ -1115,47 +1192,47 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 	{
 
 		if (XF86VidModeQueryExtension(p->mydisplay, &evb, &erb) == 0) {
-			debug("XF86VidModeQueryExtension failed\n");
+			debugr("XF86VidModeQueryExtension failed\n");
 			return NULL;
 		}
 		/* Some propietary multi-screen drivers (ie. TwinView & MergedFB) */
 		/* don't implement the XVidMode extenstion properly. */
 		if (XSetErrorHandler(null_error_handler) == 0) {
-			debug("get_displays failed on XSetErrorHandler\n");
+			debugr("get_displays failed on XSetErrorHandler\n");
 			return NULL;
 		}
 		nent = -1;
 		if (XF86VidModeGetGammaRampSize(p->mydisplay, p->myrscreen, &nent) == 0
 		 || nent == -1) {
 			XSetErrorHandler(NULL);
-			debug("XF86VidModeGetGammaRampSize failed\n");
+			debugr("XF86VidModeGetGammaRampSize failed\n");
 			return NULL;
 		}
 		XSetErrorHandler(NULL);		/* Restore handler */
 		if (nent == 0) {
-			debug("XF86VidModeGetGammaRampSize returned 0 size\n");
+			debugr("XF86VidModeGetGammaRampSize returned 0 size\n");
 			return NULL;
 		}
 
 		if (nent > 16384) {
-			debug("XF86VidModeGetGammaRampSize has more entries than we can handle\n");
+			debugr("XF86VidModeGetGammaRampSize has more entries than we can handle\n");
 			return NULL;
 		}
 
 		if (XF86VidModeGetGammaRamp(p->mydisplay, p->myrscreen, nent,  vals[0], vals[1], vals[2]) == 0) {
-			debug("XF86VidModeGetGammaRamp failed\n");
+			debugr("XF86VidModeGetGammaRamp failed\n");
 			return NULL;
 		}
 
 		if (nent != (1 << p->pdepth)) {
-			debug2((errout,"CGGetDisplayTransferByTable number of entries %d mismatches screen depth %d\n",nent,(1 << p->pdepth)));
+			debugr2((errout,"CGGetDisplayTransferByTable number of entries %d mismatches screen depth %d\n",nent,(1 << p->pdepth)));
 			return NULL;
 		}
 	}
 
 	/* Allocate a ramdac */
 	if ((r = (ramdac *)calloc(sizeof(ramdac), 1)) == NULL) {
-		debug("dispwin_get_ramdac failed on malloc()\n");
+		debugr("dispwin_get_ramdac failed on malloc()\n");
 		return NULL;
 	}
 
@@ -1170,7 +1247,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 			for (j--; j >= 0; j--)
 				free(r->v[j]);
 			free(r);
-			debug("dispwin_get_ramdac failed on malloc()\n");
+			debugr("dispwin_get_ramdac failed on malloc()\n");
 			return NULL;
 		}
 	}
@@ -1232,11 +1309,11 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 #ifdef NT
 	WORD vals[3][256];		/* 16 bit elements */
 
-	debug("dispwin_set_ramdac called\n");
+	debugr("dispwin_set_ramdac called\n");
 
 #ifdef NEVER	/* Doesn't seem to return correct information on win2K systems */
 	if ((GetDeviceCaps(p->hdc, COLORMGMTCAPS) & CM_GAMMA_RAMP) == 0) {
-		debug("dispwin_set_ramdac failed on GetDeviceCaps(CM_GAMMA_RAMP)\n");
+		debugr("dispwin_set_ramdac failed on GetDeviceCaps(CM_GAMMA_RAMP)\n");
 		return 1;
 	}
 #endif
@@ -1253,7 +1330,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 	}
 
 	if (SetDeviceGammaRamp(p->hdc, vals) == 0) {
-		debug("dispwin_set_ramdac failed on SetDeviceGammaRamp()\n");
+		debugr("dispwin_set_ramdac failed on SetDeviceGammaRamp()\n");
 		return 1;
 	}
 #endif	/* NT */
@@ -1262,7 +1339,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 	{		/* Transient first */
 		CGGammaValue vals[3][16384];
 	
-		debug("dispwin_set_ramdac called\n");
+		debugr("dispwin_set_ramdac called\n");
 
 		for (j = 0; j < 3; j++) {
 			for (i = 0; i < r->nent; i++) {
@@ -1276,7 +1353,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 		}
 
 		if (CGSetDisplayTransferByTable(p->ddid, r->nent, vals[0], vals[1], vals[2]) != 0) {
-			debug("CGSetDisplayTransferByTable failed\n");
+			debugr("CGSetDisplayTransferByTable failed\n");
 			return 1;
 		}
 
@@ -1301,33 +1378,33 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 		int size;
 		int i, j;
 
-		debug("Set_ramdac persist\n");
+		debugr("Set_ramdac persist\n");
 
 		/* Get the current installed profile */
 		if ((ev = CMGetProfileByAVID((CMDisplayIDType)p->ddid, &prof)) != noErr) {
-			debug2((errout,"CMGetProfileByAVID() failed for display '%s' with error %d\n",p->name,ev));
+			debugr2((errout,"CMGetProfileByAVID() failed for display '%s' with error %d\n",p->name,ev));
 			return 1;
 		}
 
 		/* Get the current installed  profile's location */
 		if ((ev = NCMGetProfileLocation(prof, &ploc, &plocsz)) != noErr) {
-			debug2((errout,"NCMGetProfileLocation() failed for display '%s' with error %d\n",p->name,ev));
+			debugr2((errout,"NCMGetProfileLocation() failed for display '%s' with error %d\n",p->name,ev));
 			return 1;
 		}
 
-		debug2((errout, "Current profile path = '%s'\n",plocpath(&ploc)));
+		debugr2((errout, "Current profile path = '%s'\n",plocpath(&ploc)));
 
 		if ((tpath = plocpath(&ploc)) == NULL) {
-			debug2((errout,"plocpath failed for display '%s'\n",p->name));
+			debugr2((errout,"plocpath failed for display '%s'\n",p->name));
 			return 1;
 		}
 
 		if (strlen(tpath) > 255) {
-			debug2((errout,"current profile path is too long\n"));
+			debugr2((errout,"current profile path is too long\n"));
 			return 1;
 		}
 		if ((ppath = malloc(strlen(tpath) + 6)) == NULL) {
-			debug2((errout,"malloc failed for display '%s'\n",p->name));
+			debugr2((errout,"malloc failed for display '%s'\n",p->name));
 			free(tpath);
 			return 1;
 		}
@@ -1336,10 +1413,10 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 
 		/* Rename the currently installed profile temporarily */
 		if (rename(tpath, ppath) != 0) {
-			debug2((errout,"Renaming existing profile '%s' failed\n",ppath));
+			debugr2((errout,"Renaming existing profile '%s' failed\n",ppath));
 			return 2;
 		}
-		debug2((errout,"Renamed current profile '%s' to '%s'\n",tpath,ppath));
+		debugr2((errout,"Renamed current profile '%s' to '%s'\n",tpath,ppath));
 
 		/* Make a copy of the renamed current profile back to it's true name */
 		tploc.locType = cmPathBasedProfile;
@@ -1348,7 +1425,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 
 		/* Make the temporary copy */
 		if ((ev = CMCopyProfile(&tprof, &tploc, prof)) != noErr) {
-			debug2((errout,"CMCopyProfile() failed for display '%s' with error %d\n",p->name,ev));
+			debugr2((errout,"CMCopyProfile() failed for display '%s' with error %d\n",p->name,ev));
 			CMCloseProfile(prof);
 			unlink(tpath);
 			rename(ppath, tpath);
@@ -1357,7 +1434,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 		CMCloseProfile(prof);
 
 		if ((ev = CMSetProfileDescriptions(tprof, "Dispwin Temp", 13, NULL, 0, NULL, 0)) != noErr) {
-			debug2((errout,"cmVideoCardGammaTag`() failed for display '%s' with error %d\n",p->name,ev));
+			debugr2((errout,"cmVideoCardGammaTag`() failed for display '%s' with error %d\n",p->name,ev));
 			CMCloseProfile(tprof);
 			unlink(tpath);
 			rename(ppath, tpath);
@@ -1366,7 +1443,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 		
 		/* Change the description and set the vcgt tag to the calibration */
 		if ((vcgt = malloc(size = (sizeof(CMVideoCardGammaType) - 1 + 3 * 2 * r->nent))) == NULL) {
-			debug2((errout,"malloc of vcgt tag failed for display '%s' with error %d\n",p->name,ev));
+			debugr2((errout,"malloc of vcgt tag failed for display '%s' with error %d\n",p->name,ev));
 			CMCloseProfile(tprof);
 			unlink(tpath);
 			rename(ppath, tpath);
@@ -1393,7 +1470,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 
 		/* Replace or add a vcgt tag */
 		if ((ev = CMSetProfileElement(tprof, cmVideoCardGammaTag, size, vcgt)) != noErr) {
-			debug2((errout,"CMSetProfileElement vcgt tag failed with error %d\n",ev));
+			debugr2((errout,"CMSetProfileElement vcgt tag failed with error %d\n",ev));
 			free(vcgt);
 			CMCloseProfile(tprof);
 			unlink(tpath);
@@ -1403,7 +1480,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 		free(vcgt);
 
 		if ((ev = CMUpdateProfile(tprof)) != noErr) {
-			debug2((errout,"CMUpdateProfile failed with error %d\n",ev));
+			debugr2((errout,"CMUpdateProfile failed with error %d\n",ev));
 			CMCloseProfile(tprof);
 			unlink(tpath);
 			rename(ppath, tpath);
@@ -1412,24 +1489,24 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 
 		/* Make temporary file the current profile - updates LUTs */
 		if ((ev = CMSetProfileByAVID((CMDisplayIDType)p->ddid, tprof)) != noErr) {
-			debug2((errout,"CMSetProfileByAVID() failed for display '%s' with error %d\n",p->name,ev));
+			debugr2((errout,"CMSetProfileByAVID() failed for display '%s' with error %d\n",p->name,ev));
 			CMCloseProfile(tprof);
 			unlink(tpath);
 			rename(ppath, tpath);
 			return 1;
 		}
 		CMCloseProfile(tprof);
-		debug2((errout,"Set display to use temporary profile '%s'\n",tpath));
+		debugr2((errout,"Set display to use temporary profile '%s'\n",tpath));
 
 		/* Delete the temporary profile */
 		unlink(tpath);
 
 		/* Rename the current profile back to it's correct name */
 		if (rename(ppath, tpath) != 0) {
-			debug2((errout,"Renaming existing profile '%s' failed\n",ppath));
+			debugr2((errout,"Renaming existing profile '%s' failed\n",ppath));
 			return 1;
 		}
-		debug2((errout,"Restored '%s' back to '%s'\n",ppath,tpath));
+		debugr2((errout,"Restored '%s' back to '%s'\n",ppath,tpath));
 	}
 #endif /* __APPLE__ */
 
@@ -1437,7 +1514,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 #if defined(UNIX) && !defined(__APPLE__)
 	unsigned short vals[3][16384];
 
-	debug("dispwin_set_ramdac called\n");
+	debugr("dispwin_set_ramdac called\n");
 
 	for (j = 0; j < 3; j++) {
 		for (i = 0; i < r->nent; i++) {
@@ -1454,10 +1531,10 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 	if (p->crtc != 0) {		/* Using Xrandr 1.2 */
 		XRRCrtcGamma *crtcgam;
 
-		debug("Setting gamma using Randr 1.2\n");
+		debugr("Setting gamma using Randr 1.2\n");
 
 		if ((crtcgam = XRRAllocGamma(r->nent)) == NULL) {
-			debug(" XRRAllocGamma failed\n");
+			debugr(" XRRAllocGamma failed\n");
 			return 1;
 		}
 
@@ -1478,12 +1555,12 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 		/* Some propietary multi-screen drivers (ie. TwinView & MergedFB) */
 		/* don't implement the XVidMode extenstion properly. */
 		if (XSetErrorHandler(null_error_handler) == 0) {
-			debug("get_displays failed on XSetErrorHandler\n");
+			debugr("get_displays failed on XSetErrorHandler\n");
 			return 1;
 		}
 		if (XF86VidModeSetGammaRamp(p->mydisplay, p->myrscreen, r->nent, vals[0], vals[1], vals[2]) == 0) {
 			XSetErrorHandler(NULL);
-			debug("XF86VidModeSetGammaRamp failed\n");
+			debugr("XF86VidModeSetGammaRamp failed\n");
 			return 1;
 		}
 		XSync(p->mydisplay, False);		/* Flush the change out */
@@ -1573,29 +1650,29 @@ static int set_X11_atom(dispwin *p, char *fname) {
 	if ((fp = fopen(fname,"r")) == NULL)
 #endif
 	{
-		debug2((errout,"Can't open file '%s'\n",fname));
+		debugr2((errout,"Can't open file '%s'\n",fname));
 		return 1;
 	}
 
 	/* Figure out how big it is */
 	if (fseek(fp, 0, SEEK_END)) {
-		debug2((errout,"Seek '%s' to EOF failed\n",fname));
+		debugr2((errout,"Seek '%s' to EOF failed\n",fname));
 		return 1;
 	}
 	psize = (unsigned long)ftell(fp);
 
 	if (fseek(fp, 0, SEEK_SET)) {
-		debug2((errout,"Seek '%s' to SOF failed\n",fname));
+		debugr2((errout,"Seek '%s' to SOF failed\n",fname));
 		return 1;
 	}
 
 	if ((atomv = (unsigned char *)malloc(psize)) == NULL) {
-		debug2((errout,"Failed to allocate buffer for profile '%s'\n",fname));
+		debugr2((errout,"Failed to allocate buffer for profile '%s'\n",fname));
 		return 1;
 	}
 
 	if ((bread = fread(atomv, 1, psize, fp)) != psize) {
-		debug2((errout,"Failed to read profile '%s' into buffer\n",fname));
+		debugr2((errout,"Failed to read profile '%s' into buffer\n",fname));
 		return 1;
 	}
 	
@@ -1634,26 +1711,26 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 		WCS_PROFILE_MANAGEMENT_SCOPE wcssc;
 		unsigned short *wpath, *wbname, *wmonid;
 
-		debug2((errout,"dispwin_install_profile got '%s'\n",fname));
+		debugr2((errout,"dispwin_install_profile got '%s'\n",fname));
 
 		if (GetColorDirectory(NULL, colpath, &colpathlen) == 0) {
-			debug2((errout,"Getting color directory failed\n"));
+			debugr2((errout,"Getting color directory failed\n"));
 			return 1;
 		}
 
 		if ((fullpath = _fullpath(NULL, fname, 0)) == NULL) {
-			debug2((errout,"_fullpath() failed\n"));
+			debugr2((errout,"_fullpath() failed\n"));
 			return 1;
 		}
 
 		if ((basename = PathFindFileName(fullpath)) == NULL) {
-			debug2((errout,"Locating base name in '%s' failed\n",fname));
+			debugr2((errout,"Locating base name in '%s' failed\n",fname));
 			free(fullpath);
 			return 1;
 		}
 
 		if ((strlen(colpath) + strlen(basename) + 2) > MAX_PATH) {
-			debug2((errout,"Installed profile path too long\n"));
+			debugr2((errout,"Installed profile path too long\n"));
 			free(fullpath);
 			return 1;
 		}
@@ -1667,27 +1744,27 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER;
 
 		if ((wpath = char2wchar(fullpath)) == NULL) { 
-			debug2((errout,"char2wchar failed\n"));
+			debugr2((errout,"char2wchar failed\n"));
 			free(fullpath);
 			return 1;
 		}
 
 		if ((wbname = char2wchar(basename)) == NULL) { 
-			debug2((errout,"char2wchar failed\n"));
+			debugr2((errout,"char2wchar failed\n"));
 			free(wpath);
 			free(fullpath);
 			return 1;
 		}
 
 		if ((wmonid = char2wchar(p->monid)) == NULL) {
-			debug2((errout,"char2wchar failed\n"));
+			debugr2((errout,"char2wchar failed\n"));
 			free(wbname);
 			free(wpath);
 			free(fullpath);
 			return 1;
 		}
 
-		debug2((errout,"Installing '%s'\n",fname));
+		debugr2((errout,"Installing '%s'\n",fname));
 		
 		/* Install doesn't replace an existing installed profile, */
 		/* so we need to try and delete this profile first */
@@ -1702,7 +1779,7 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 		}
 
 		if (InstallColorProfile(NULL, fullpath) == 0) {
-			debug2((errout,"InstallColorProfile() failed for file '%s' with error %d\n",fname,GetLastError()));
+			debugr2((errout,"InstallColorProfile() failed for file '%s' with error %d\n",fname,GetLastError()));
 			free(wmonid);
 			free(wbname);
 			free(wpath);
@@ -1710,11 +1787,11 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 			return 1;
 		}
 
-		debug2((errout,"Associating '%s' with '%s'\n",fullpath,p->monid));
+		debugr2((errout,"Associating '%s' with '%s'\n",fullpath,p->monid));
 		if (pWcsAssociateColorProfileWithDevice != NULL) {
-			debug("Using Vista Associate\n");
+			debugr("Using Vista Associate\n");
 			if ((*pWcsAssociateColorProfileWithDevice)(wcssc, wpath, wmonid) == 0) {
-				debug2((errout,"WcsAssociateColorProfileWithDevice() failed for file '%s' with error %d\n",fullpath,GetLastError()));
+				debugr2((errout,"WcsAssociateColorProfileWithDevice() failed for file '%s' with error %d\n",fullpath,GetLastError()));
 				free(wmonid);
 				free(wbname);
 				free(wpath);
@@ -1723,7 +1800,7 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 			}
 		} else {
 			if (AssociateColorProfileWithDevice(NULL, fullpath, p->monid) == 0) {
-				debug2((errout,"AssociateColorProfileWithDevice() failed for file '%s' with error %d\n",fullpath,GetLastError()));
+				debugr2((errout,"AssociateColorProfileWithDevice() failed for file '%s' with error %d\n",fullpath,GetLastError()));
 				free(wmonid);
 				free(wbname);
 				free(wpath);
@@ -1771,13 +1848,13 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 
 		/* Locate the appropriate ColorSync path */
 		if ((ev = FSFindFolder(vref, kColorSyncProfilesFolderType, kCreateFolder, &dirref)) != noErr) {
-			debug2((errout,"FSFindFolder() failed with error %d\n",ev));
+			debugr2((errout,"FSFindFolder() failed with error %d\n",ev));
 			return 1;
 		}
 
 		/* Convert to POSIX path */
 		if ((ev = FSRefMakePath(&dirref, (unsigned char *)dpath, FILENAME_MAX)) != noErr) {
-			debug2((errout,"FSRefMakePath failed with error %d\n",ev));
+			debugr2((errout,"FSRefMakePath failed with error %d\n",ev));
 			return 1;
 		}
 
@@ -1790,21 +1867,21 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 		/* Append the basename to the ColorSync directory path */
 		if ((strlen(dpath) + strlen(basename) + 2) > FILENAME_MAX
 		 || (strlen(dpath) + strlen(basename) + 2) > 256) {
-			debug2((errout,"ColorSync dir + profile name too long\n"));
+			debugr2((errout,"ColorSync dir + profile name too long\n"));
 			return 1;
 		}
 		strcat(dpath, "/");
 		strcat(dpath, basename);
-		debug2((errout,"Destination profile '%s'\n",dpath));
+		debugr2((errout,"Destination profile '%s'\n",dpath));
 
 		/* Open the profile we want to install */
 		ploc.locType = cmPathBasedProfile;
 		strncpy(ploc.u.pathLoc.path, fname, 255);
 		ploc.u.pathLoc.path[255] = '\000';
 
-		debug2((errout,"Source profile '%s'\n",fname));
+		debugr2((errout,"Source profile '%s'\n",fname));
 		if ((ev = CMOpenProfile(&prof, &ploc)) != noErr) {
-			debug2((errout,"CMOpenProfile() failed for file '%s' with error %d\n",fname,ev));
+			debugr2((errout,"CMOpenProfile() failed for file '%s' with error %d\n",fname,ev));
 			return 1;
 		}
 
@@ -1817,13 +1894,13 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 		dploc.u.pathLoc.path[255] = '\000';
 
 		if ((ev = CMCopyProfile(&dprof, &dploc, prof)) != noErr) {
-			debug2((errout,"CMCopyProfile() failed for file '%s' with error %d\n",dpath,ev));
+			debugr2((errout,"CMCopyProfile() failed for file '%s' with error %d\n",dpath,ev));
 			return 1;
 		}
 		
 		/* Make it the current profile - updates LUTs */
 		if ((ev = CMSetProfileByAVID((CMDisplayIDType)p->ddid, dprof)) != noErr) {
-			debug2((errout,"CMSetProfileByAVID() failed for file '%s' with error %d\n",fname,ev));
+			debugr2((errout,"CMSetProfileByAVID() failed for file '%s' with error %d\n",fname,ev));
 			return 1;
 		}
 		CMCloseProfile(prof);
@@ -1850,19 +1927,19 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 			sc = ucmm_user;
 
 		if ((ev = ucmm_install_monitor_profile(sc, p->edid, p->edid_len, p->name, fname)) != ucmm_ok) {
-			debug2((errout,"Installing profile '%s' failed with error %d\n",fname,ev));
+			debugr2((errout,"Installing profile '%s' failed with error %d '%s'\n",fname,ev,ucmm_error_string(ev)));
 			return 1;
 		} 
 
 		if ((rv = set_X11_atom(p, fname)) != 0) {
-			debug2((errout,"Setting X11 atom failed"));
+			debugr2((errout,"Setting X11 atom failed"));
 			return 1;
 		}
 
 		/* X11 doesn't set the display to the current profile calibration, */
 		/* so we do it. */
 		if (p->set_ramdac(p,r,1)) {
-			debug2((errout,"Failed to set VideoLUT"));
+			debugr2((errout,"Failed to set VideoLUT"));
 			return 1;
 		}
 		return 0;
@@ -1886,26 +1963,26 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 		WCS_PROFILE_MANAGEMENT_SCOPE wcssc;
 		unsigned short *wbname, *wmonid;
 
-		debug2((errout,"Uninstalling '%s'\n", fname));
+		debugr2((errout,"Uninstalling '%s'\n", fname));
 
 		if (GetColorDirectory(NULL, colpath, &colpathlen) == 0) {
-			debug2((errout,"Getting color directory failed\n"));
+			debugr2((errout,"Getting color directory failed\n"));
 			return 1;
 		}
 
 		if ((fullpath = _fullpath(NULL, fname, 0)) == NULL) {
-			debug2((errout,"_fullpath() failed\n"));
+			debugr2((errout,"_fullpath() failed\n"));
 			return 1;
 		}
 
 		if ((basename = PathFindFileName(fullpath)) == NULL) {
-			debug2((errout,"Locating base name in '%s' failed\n",fname));
+			debugr2((errout,"Locating base name in '%s' failed\n",fname));
 			free(fullpath);
 			return 1;
 		}
 
 		if ((strlen(colpath) + strlen(basename) + 2) > MAX_PATH) {
-			debug2((errout,"Installed profile path too long\n"));
+			debugr2((errout,"Installed profile path too long\n"));
 			free(fullpath);
 			return 1;
 		}
@@ -1919,26 +1996,26 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER;
 
 		if ((wbname = char2wchar(basename)) == NULL) { 
-			debug2((errout,"char2wchar failed\n"));
+			debugr2((errout,"char2wchar failed\n"));
 			free(fullpath);
 			return 1;
 		}
 
 		if ((wmonid = char2wchar(p->monid)) == NULL ) {
-			debug2((errout,"char2wchar failed\n"));
+			debugr2((errout,"char2wchar failed\n"));
 			free(wbname);
 			free(fullpath);
 			return 1;
 		}
 
-		debug2((errout,"Disassociating '%s' from '%s'\n",basename,p->monid));
+		debugr2((errout,"Disassociating '%s' from '%s'\n",basename,p->monid));
 
 		if (pWcsDisassociateColorProfileFromDevice != NULL) {
-			debug("Using Vista Disassociate\n");
+			debugr("Using Vista Disassociate\n");
 			/* Ignore error if profile is already disasociated or doesn't exist */
 			if ((*pWcsDisassociateColorProfileFromDevice)(wcssc, wbname, wmonid) == 0
 			 && GetLastError() != 2015 && GetLastError() != 2011) {
-				debug2((errout,"WcsDisassociateColorProfileWithDevice() failed for file '%s' with error %d\n",basename,GetLastError()));
+				debugr2((errout,"WcsDisassociateColorProfileWithDevice() failed for file '%s' with error %d\n",basename,GetLastError()));
 				free(wmonid);
 				free(wbname);
 				free(fullpath);
@@ -1948,7 +2025,7 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 			/* Ignore error if profile is already disasociated or doesn't exist */
 			if (DisassociateColorProfileFromDevice(NULL, basename, p->monid) == 0
 			 && GetLastError() != 2015 && GetLastError() != 2011) {
-				debug2((errout,"DisassociateColorProfileWithDevice() failed for file '%s' with error %d\n",basename,GetLastError()));
+				debugr2((errout,"DisassociateColorProfileWithDevice() failed for file '%s' with error %d\n",basename,GetLastError()));
 				free(wmonid);
 				free(wbname);
 				free(fullpath);
@@ -1958,10 +2035,10 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 
 		if (UninstallColorProfile(NULL, basename, TRUE) == 0) {
 			int ev;
-			debug2((errout,"Warning, uninstallColorProfile() failed for file '%s' with error %d\n", basename,GetLastError()));
+			debugr2((errout,"Warning, uninstallColorProfile() failed for file '%s' with error %d\n", basename,GetLastError()));
 			/* Hmm. This seems to happen on Win2K. Force the issue. */
 			if ((ev = _unlink(colpath)) != 0) {
-				debug2((errout,"unlink() failed for file '%s' with error %d\n", colpath,errno));
+				debugr2((errout,"unlink() failed for file '%s' with error %d\n", colpath,errno));
 				free(wmonid);
 				free(wbname);
 				free(fullpath);
@@ -1997,13 +2074,13 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 
 		/* Locate the appropriate ColorSync path */
 		if ((ev = FSFindFolder(vref, kColorSyncProfilesFolderType, kCreateFolder, &dirref)) != noErr) {
-			debug2((errout,"FSFindFolder() failed with error %d\n",ev));
+			debugr2((errout,"FSFindFolder() failed with error %d\n",ev));
 			return 1;
 		}
 
 		/* Convert to POSIX path */
 		if ((ev = FSRefMakePath(&dirref, (unsigned char *)dpath, FILENAME_MAX)) != noErr) {
-			debug2((errout,"FSRefMakePath failed with error %d\n",ev));
+			debugr2((errout,"FSRefMakePath failed with error %d\n",ev));
 			return 1;
 		}
 
@@ -2016,19 +2093,19 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 		/* Append the basename to the ColorSync directory path */
 		if ((strlen(dpath) + strlen(basename) + 2) > FILENAME_MAX
 		 || (strlen(dpath) + strlen(basename) + 2) > 256) {
-			debug2((errout,"ColorSync dir + profile name too long\n"));
+			debugr2((errout,"ColorSync dir + profile name too long\n"));
 			return 1;
 		}
 		strcat(dpath, "/");
 		strcat(dpath, basename);
-		debug2((errout,"Profile to delete '%s'\n",dpath));
+		debugr2((errout,"Profile to delete '%s'\n",dpath));
 
 		if (stat(dpath,&sbuf) != 0) {
-			debug2((errout,"delete '%s' profile doesn't exist\n",dpath));
+			debugr2((errout,"delete '%s' profile doesn't exist\n",dpath));
 			return 2;
 		}
 		if ((ev = unlink(dpath)) != 0) {
-			debug2((errout,"delete '%s' failed with %d\n",dpath,ev));
+			debugr2((errout,"delete '%s' failed with %d\n",dpath,ev));
 			return 1;
 		}
 
@@ -2049,7 +2126,7 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 			sc = ucmm_user;
 
 		if ((ev = ucmm_uninstall_monitor_profile(sc, p->edid, p->edid_len, p->name, fname)) != ucmm_ok) {
-			debug2((errout,"Installing profile '%s' failed with error %d\n",fname,ev));
+			debugr2((errout,"Installing profile '%s' failed with error %d '%s'\n",fname,ev,ucmm_error_string(ev)));
 			return 1;
 		} 
 
@@ -2080,13 +2157,13 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 		DWORD blen = MAX_PATH;
 
 		if (GetICMProfile(p->hdc, &blen, buf) == 0) {
-			debug2((errout, "GetICMProfile failed, lasterr = %d\n",GetLastError()));
+			debugr2((errout, "GetICMProfile failed, lasterr = %d\n",GetLastError()));
 			return NULL;
 		}
 
-		debug2((errout,"Loading default profile '%s'\n",buf));
+		debugr2((errout,"Loading default profile '%s'\n",buf));
 		if ((rd_fp = new_icmFileStd_name(buf,"r")) == NULL)
-			debug2((errout,"Can't open file '%s'",buf));
+			debugr2((errout,"Can't open file '%s'",buf));
 
 		return rd_fp;
 	}
@@ -2103,7 +2180,7 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 #ifdef NEVER
 		/* Get the current display profile */
 		if ((ev = CMGetProfileByAVID((CMDisplayIDType)p->ddid, &prof)) != noErr) {
-			debug2((errout,"CMGetProfileByAVID() failed with error %d\n",ev));
+			debugr2((errout,"CMGetProfileByAVID() failed with error %d\n",ev));
 			return NULL;
 		}
 #else
@@ -2112,25 +2189,25 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 
 		/* Get the default ID for the display */
 		if ((ev = CMGetDeviceDefaultProfileID(cmDisplayDeviceClass, (CMDeviceID)p->ddid, &curID)) != noErr) {
-			debug2((errout,"CMGetDeviceDefaultProfileID() failed with error %d\n",ev));
+			debugr2((errout,"CMGetDeviceDefaultProfileID() failed with error %d\n",ev));
 			return NULL;
 		}
 
 		/* Get the displays profile */
 		if ((ev = CMGetDeviceProfile(cmDisplayDeviceClass, (CMDeviceID)p->ddid, curID, &cploc)) != noErr) {
-			debug2((errout,"CMGetDeviceDefaultProfileID() failed with error %d\n",ev));
+			debugr2((errout,"CMGetDeviceDefaultProfileID() failed with error %d\n",ev));
 			return NULL;
 		}
 
 		if ((ev = CMOpenProfile(&prof, &cploc)) != noErr) {
-			debug2((errout,"CMOpenProfile() failed with error %d\n",ev));
+			debugr2((errout,"CMOpenProfile() failed with error %d\n",ev));
 			return NULL;
 		}
 #endif
 
 		/* Get the profile size */
 		if ((ev = CMGetProfileHeader(prof, &hdr)) != noErr) {
-			debug2((errout,"CMGetProfileHeader() failed with error %d\n",ev));
+			debugr2((errout,"CMGetProfileHeader() failed with error %d\n",ev));
 			return NULL;
 		}
 
@@ -2138,22 +2215,22 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 		dploc.locType = cmBufferBasedProfile;
 		dploc.u.bufferLoc.size = hdr.cm1.size;
 		if ((al = new_icmAllocStd()) == NULL) {
-			debug("new_icmAllocStd failed\n");
+			debugr("new_icmAllocStd failed\n");
 		    return NULL;
 		}
 		if ((dploc.u.bufferLoc.buffer = al->malloc(al, dploc.u.bufferLoc.size)) == NULL) {
-			debug("malloc of profile buffer failed\n");
+			debugr("malloc of profile buffer failed\n");
 		    return NULL;
 		}
 
 		if ((ev = CMCopyProfile(&dprof, &dploc, prof)) != noErr) {
-			debug2((errout,"CMCopyProfile() failed for AVID to buffer with error %d\n",ev));
+			debugr2((errout,"CMCopyProfile() failed for AVID to buffer with error %d\n",ev));
 			return NULL;
 		}
 
 		/* Memory File fp that will free the buffer when deleted: */
 		if ((rd_fp = new_icmFileMem_ad((void *)dploc.u.bufferLoc.buffer, dploc.u.bufferLoc.size, al)) == NULL) {
-			debug("Creating memory file from CMProfileLocation failed");
+			debugr("Creating memory file from CMProfileLocation failed");
 			al->free(al, dploc.u.bufferLoc.buffer);
 			al->del(al);
 			CMCloseProfile(prof);
@@ -2179,35 +2256,35 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 		ucmm_error ev;
 		char *profile = NULL;
 
-		debug2((errout,"dispwin_get_profile called\n"));
+		debugr2((errout,"dispwin_get_profile called\n"));
 
-		if ((ev =  ucmm_get_monitor_profile(p->edid, p->edid_len, p->name, &profile)) == ucmm_ok) {
+		if ((ev = ucmm_get_monitor_profile(p->edid, p->edid_len, p->name, &profile)) == ucmm_ok) {
 
 			if (name != NULL) {
 				strncpy(name, profile, mxlen);
 				name[mxlen] = '\000';
 			}
 
-			debug2((errout,"Loading current profile '%s'\n",profile));
+			debugr2((errout,"Loading current profile '%s'\n",profile));
 			if ((rd_fp = new_icmFileStd_name(profile,"r")) == NULL) {
-				debug2((errout,"Can't open file '%s'",profile));
+				debugr2((errout,"Can't open file '%s'",profile));
 				free(profile);
 				return NULL;
 			}
 
 			/* Implicitly we set the X11 atom to be the profile we just got */ 
-			debug2((errout,"Setting X11 atom to current profile '%s'\n",profile));
+			debugr2((errout,"Setting X11 atom to current profile '%s'\n",profile));
 			if (set_X11_atom(p, profile) != 0) {
-				debug2((errout,"Setting X11 atom to profile '%s' failed",profile));
+				debugr2((errout,"Setting X11 atom to profile '%s' failed",profile));
 				/* Hmm. We ignore this error */
 			}
 			return rd_fp;
 		} 
 		if (ev != ucmm_no_profile) {
-			debug2((errout,"Got ucmm error %d\n",ev));
+			debugr2((errout,"Got ucmm error %d '%s'\n",ev,ucmm_error_string(ev)));
 			return NULL;
 		}
-		debug2((errout,"Failed to get configured profile, so use X11 atom\n"));
+		debugr2((errout,"Failed to get configured profile, so use X11 atom\n"));
 		/* Drop through to using the X11 root window atom */
 	}
 	{
@@ -2231,7 +2308,7 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 			if (XRRGetOutputProperty(p->mydisplay, p->output, p->icc_out_atom,
 			            0, 0x7ffffff, False, False, XA_CARDINAL, 
    	                     &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) != Success || ret_len == 0) {
-				debug("Failed to read ICC_PROFILE property from Xranr output\n");
+				debugr("Failed to read ICC_PROFILE property from Xranr output\n");
 			}
 
 		}
@@ -2245,7 +2322,7 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 			if (XGetWindowProperty(p->mydisplay, RootWindow(p->mydisplay, 0), p->icc_atom,
 			            0, 0x7ffffff, False, XA_CARDINAL, 
    	                     &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) != Success || ret_len == 0) {
-				debug2((errout,"Getting property '%s' from RootWindow\n", aname)); 
+				debugr2((errout,"Getting property '%s' from RootWindow\n", aname)); 
 				return NULL;
 			}
 		}
@@ -2254,11 +2331,11 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 		/* straight. (We can't assume that X11 and icc are using the */
 		/* same allocators) */
 		if ((al = new_icmAllocStd()) == NULL) {
-			debug("new_icmAllocStd failed\n");
+			debugr("new_icmAllocStd failed\n");
 		    return NULL;
 		}
 		if ((buf = al->malloc(al, ret_len)) == NULL) {
-			debug("malloc of profile buffer failed\n");
+			debugr("malloc of profile buffer failed\n");
 		    return NULL;
 		}
 		memcpy(buf, atomv, ret_len);
@@ -2266,7 +2343,7 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 
 		/* Memory File fp that will free the buffer when deleted: */
 		if ((rd_fp = new_icmFileMem_ad((void *)buf, ret_len, al)) == NULL) {
-			debug("Creating memory file from X11 atom failed");
+			debugr("Creating memory file from X11 atom failed");
 			al->free(al, buf);
 			al->del(al);
 			return NULL;
@@ -2355,7 +2432,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 ) {
 	int j;
 
-	debug("dispwin_set_color called\n");
+	debugr("dispwin_set_color called\n");
 
 	if (p->nowin)
 		return 1;
@@ -2385,7 +2462,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 //printf(" cell[%d], val %f, rast val %f\n",tt, p->rgb[j], p->r_rgb[j]);
 		}
 		if (p->set_ramdac(p,p->r, 0)) {
-			debug("set_ramdac() failed\n");
+			debugr("set_ramdac() failed\n");
 			return 1;
 		}
 	}
@@ -2400,18 +2477,31 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		HBRUSH hbr;
 		MSG msg;
 		int vali[3];
+		INPUT fip;
 
 		/* Stop the system going to sleep */
-		SetThreadExecutionState(ES_DISPLAY_REQUIRED);
 
+		/* This used to work OK in reseting the screen saver, but not in Vista :-( */
+		SetThreadExecutionState(ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
+
+		/* So we use a fake mouse non-movement reset the Vista screensaver. */
+		SystemParametersInfo(SPI_SETBLOCKSENDINPUTRESETS, FALSE, NULL, 0);
+		fip.type = INPUT_MOUSE;
+		fip.mi.dx = 0;
+		fip.mi.dy = 0;
+		fip.mi.dwFlags = MOUSEEVENTF_MOVE;
+		fip.mi.time = 0;
+		fip.mi.dwExtraInfo = 0;
+		SendInput(1, &fip, sizeof(INPUT));
+		
 		if ((regn = CreateRectRgn(p->tx, p->ty, p->tx + p->tw, p->ty + p->th)) == NULL) {
-			debug2((errout,"CreateRectRgn failed, lasterr = %d\n",GetLastError()));
+			debugr2((errout,"CreateRectRgn failed, lasterr = %d\n",GetLastError()));
 			return 1;
 		}
 
 		/* Force a repaint with the new data */
 		if (!InvalidateRgn(p->hwnd,regn,TRUE)) {
-			debug2((errout,"InvalidateRgn failed, lasterr = %d\n",GetLastError()));
+			debugr2((errout,"InvalidateRgn failed, lasterr = %d\n",GetLastError()));
 			return 1;
 		}
 
@@ -2467,15 +2557,15 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		OSStatus stat;
 		ProcessSerialNumber cpsn;
 		if ((stat = GetCurrentProcess(&cpsn)) != noErr) {
-			debug2((errout,"GetCurrentProcess returned error %d\n",stat));
+			debugr2((errout,"GetCurrentProcess returned error %d\n",stat));
 		} else {
 #if MAC_OS_X_VERSION_MAX_ALLOWED >= 1030
 			if ((stat = TransformProcessType(&cpsn, kProcessTransformToForegroundApplication)) != noErr) {
-				debug2((errout,"TransformProcessType returned error %d\n",stat));
+				debugr2((errout,"TransformProcessType returned error %d\n",stat));
 			}
 #endif /* OS X 10.3 */
 			if ((stat = SetFrontProcess(&cpsn)) != noErr) {
-				debug2((errout,"SetFrontProcess returned error %d\n",stat));
+				debugr2((errout,"SetFrontProcess returned error %d\n",stat));
 			}
 		}
 		/* Hide the cursor once too */
@@ -2556,7 +2646,7 @@ void dispwin_set_callout(
 dispwin *p,
 char *callout
 ) {
-	debug2((errout,"dispwin_set_callout called with '%s'\n",callout));
+	debugr2((errout,"dispwin_set_callout called with '%s'\n",callout));
 
 	p->callout = strdup(callout);
 }
@@ -2567,7 +2657,7 @@ static void dispwin_del(
 dispwin *p
 ) {
 
-	debug("dispwin_del called\n");
+	debugr("dispwin_del called\n");
 
 	if (p == NULL)
 		return;
@@ -2580,14 +2670,14 @@ dispwin *p
 		p->set_ramdac(p, p->or, 0);
 		p->or->del(p->or);
 		p->r->del(p->r);
-		debug("Restored original ramdac\n");
+		debugr("Restored original ramdac\n");
 	}
 
 	/* -------------------------------------------------- */
 #ifdef NT
 	if (p->hwnd != NULL) {
 		if (!DestroyWindow(p->hwnd)) {
-			debug2((errout, "DestroyWindow failed, lasterr = %d\n",GetLastError()));
+			debugr2((errout, "DestroyWindow failed, lasterr = %d\n",GetLastError()));
 		}	
 //		DestroyCursor(p->curs); 
 	}
@@ -2616,7 +2706,7 @@ dispwin *p
 
 	/* -------------------------------------------------- */
 #if defined(UNIX) && !defined(__APPLE__)
-	debug("About to close display\n");
+	debugr("About to close display\n");
 
 	if (p->mydisplay != NULL) {
 		if (p->nowin == 0) {	/* We have a window up */
@@ -2628,7 +2718,9 @@ dispwin *p
 		}
 		XCloseDisplay(p->mydisplay);
 	}
-	debug("finished\n");
+	ssdispwin = NULL;
+	debugr("finished\n");
+
 #endif	/* UNXI X11 */
 	/* -------------------------------------------------- */
 
@@ -2701,7 +2793,8 @@ double hoff, double voff,		/* Offset from center in fraction of screen, range -1
 int nowin,						/* NZ if no window should be created - RAMDAC access only */
 int native,						/* NZ if ramdac should be bypassed rather than used. */
 int blackbg,					/* NZ if whole screen should be filled with black */
-int override					/* NZ if override_redirect is to be used on X11 */
+int override,					/* NZ if override_redirect is to be used on X11 */
+int ddebug						/* >0 to print debug statements to stderr */
 ) {
 	dispwin *p = NULL;
 
@@ -2713,6 +2806,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 	p->nowin = nowin;
 	p->donat = native;
 	p->blackbg = blackbg;
+	p->ddebug = ddebug;
 	p->get_ramdac      = dispwin_get_ramdac;
 	p->set_ramdac      = dispwin_set_ramdac;
 	p->install_profile = dispwin_install_profile;
@@ -2739,22 +2833,21 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		
 		p->AppName = "Argyll Test Window";
 		
-		debug2((errout, "About to open display '%s'\n",disp->name));
+		debugr2((errout, "About to open display '%s'\n",disp->name));
 
 		/* Get device context to main display */
 		/* (This is the recommended way of doing this, and works on Vista) */
 		if ((p->hdc = CreateDC(disp->name, NULL, NULL, NULL)) == NULL) {
-			debug2((errout, "CreateDC failed, lasterr = %d\n",GetLastError()));
+			debugr2((errout, "CreateDC failed, lasterr = %d\n",GetLastError()));
 			dispwin_del(p);
 			return NULL;
 		}
 
 		if ((p->name = strdup(disp->name)) == NULL) {
-			debug2((errout, "Malloc failed\n"));
+			debugr2((errout, "Malloc failed\n"));
 			dispwin_del(p);
 			return NULL;
 		}
-		strcpy(p->monname, disp->monname);
 		strcpy(p->monid, disp->monid);
 
 		disp_hsz = GetDeviceCaps(p->hdc, HORZSIZE);	/* mm */
@@ -2820,7 +2913,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			ShowCursor(FALSE);
 
 			if ((p->arv = RegisterClass(&wc)) == 0) {
-				debug2((errout, "RegisterClass failed, lasterr = %d\n",GetLastError()));
+				debugr2((errout, "RegisterClass failed, lasterr = %d\n",GetLastError()));
 				dispwin_del(p);
 				return NULL;
 			}
@@ -2838,7 +2931,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 				NULL);					/* pointer to window creation data */
 
 			if (!p->hwnd) {
-				debug2((errout, "CreateWindow failed, lasterr = %d\n",GetLastError()));
+				debugr2((errout, "CreateWindow failed, lasterr = %d\n",GetLastError()));
 				dispwin_del(p);
 				return NULL;
 			}
@@ -2868,7 +2961,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 #ifdef __APPLE__
 
 	if ((p->name = strdup(disp->name)) == NULL) {
-		debug2((errout,"Malloc failed\n"));
+		debugr2((errout,"Malloc failed\n"));
 		dispwin_del(p);
 		return NULL;
 	}
@@ -2911,7 +3004,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		attr |= kWindowIgnoreClicksAttribute;		/* usual */
 
 		sz = CGDisplayScreenSize(p->ddid);
-		debug2((errout," Display size = %f x %f mm\n",sz.width,sz.height));
+		debugr2((errout," Display size = %f x %f mm\n",sz.width,sz.height));
 
 		wi = (int)(width * disp->sw/sz.width + 0.5);
 		if (wi > disp->sw)
@@ -2949,7 +3042,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		/* Create invisible new window of given class, attributes and size */
 	    stat = CreateNewWindow(wclass, attr, &wRect, &p->mywindow);
 		if (stat != noErr || p->mywindow == nil) {
-			debug2((errout,"CreateNewWindow failed with code %d\n",stat));
+			debugr2((errout,"CreateNewWindow failed with code %d\n",stat));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -2973,7 +3066,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			&fHandler						/* Event handler reference return value */
 		);
 		if (stat != noErr) {
-			debug2((errout,"InstallEventHandler failed with code %d\n",stat));
+			debugr2((errout,"InstallEventHandler failed with code %d\n",stat));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -2982,7 +3075,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		p->port = GetWindowPort(p->mywindow);
 
 		if ((stat = QDBeginCGContext(p->port, &p->mygc)) != noErr) {
-			debug2((errout,"QDBeginCGContext returned error %d\n",stat));
+			debugr2((errout,"QDBeginCGContext returned error %d\n",stat));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3084,7 +3177,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		 */
 
 		if(ssdispwin != NULL) {
-			debug2((errout,"Attempting to open more than one dispwin!\n"));
+			debugr2((errout,"Attempting to open more than one dispwin!\n"));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3108,7 +3201,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 	
 		/* Create the base display name (in case of Xinerama, XRandR) */
 		if ((bname = strdup(disp->name)) == NULL) {
-			debug2((errout,"Malloc failed\n"));
+			debugr2((errout,"Malloc failed\n"));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3121,16 +3214,16 @@ int override					/* NZ if override_redirect is to be used on X11 */
 		/* open the display */
 		p->mydisplay = XOpenDisplay(bname);
 		if(!p->mydisplay) {
-			debug2((errout,"Unable to open display '%s'\n",bname));
+			debugr2((errout,"Unable to open display '%s'\n",bname));
 			dispwin_del(p);
 			free(bname);
 			return NULL;
 		}
 		free(bname);
-		debug("Opened display OK\n");
+		debugr("Opened display OK\n");
 
 		if ((p->name = strdup(disp->name)) == NULL) {
-			debug2((errout,"Malloc failed\n"));
+			debugr2((errout,"Malloc failed\n"));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3147,7 +3240,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 
 		if (disp->edid != NULL) {
 			if ((p->edid = malloc(sizeof(unsigned char) * 128)) == NULL) {
-				debug2((errout,"Malloc failed\n"));
+				debugr2((errout,"Malloc failed\n"));
 				dispwin_del(p);
 				return NULL;
 			}
@@ -3221,7 +3314,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			else
 				myattr.override_redirect = False;
 
-			debug("Opening window\n");
+			debugr("Opening window\n");
 			p->mywindow = XCreateWindow(
 				p->mydisplay, rootwindow,
 				mysizehints.x,mysizehints.y,mysizehints.width,mysizehints.height,
@@ -3241,7 +3334,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 			if (XGetWindowAttributes(
 				p->mydisplay, p->mywindow,
 				&mywattributes) == 0) {
-				debug("XGetWindowAttributes failed\n");
+				debugr("XGetWindowAttributes failed\n");
 				dispwin_del(p);
 				return NULL;
 			}
@@ -3437,7 +3530,7 @@ int override					/* NZ if override_redirect is to be used on X11 */
 /* Process to continuously monitor XRandR events, */
 /* and load the appropriate calibration and profiles */
 /* for each monitor. */
-int x11_daemon_mode(disppath *disp, int verb) {
+int x11_daemon_mode(disppath *disp, int verb, int ddebug) {
 
 #if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
 	char *dname;
@@ -3475,8 +3568,9 @@ int x11_daemon_mode(disppath *disp, int verb) {
 	/* !!!! we want to create a test here, to see if we have to poll, */
 	/* !!!! or whether we spontainously get events when the EDID changes. */
 
-	/* Use Xrandr 1.2 if it's available */
-	if (XRRQueryExtension(mydisplay, &evb, &erb) != 0
+	/* Use Xrandr 1.2 if it's available and not disabled */
+	if (getenv("ARGYLL_IGNORE_XRANDR1_2") == NULL
+	 && XRRQueryExtension(mydisplay, &evb, &erb) != 0
 	 && XRRQueryVersion(mydisplay, &majv, &minv)
 	 && majv == 1 && minv >= 2) {
 		if (verb) printf("Found XRandR 1.2 or latter\n");
@@ -3551,7 +3645,7 @@ int x11_daemon_mode(disppath *disp, int verb) {
 							break;
 						if (verb) printf("Updating display %d = '%s'\n",i+1,dp[i]->description);
 		
-						if ((dw = new_dispwin(dp[i], 0.0, 0.0, 0.0, 0.0, 1, 0, 0, 0)) == NULL) {
+						if ((dw = new_dispwin(dp[i], 0.0, 0.0, 0.0, 0.0, 1, 0, 0, 0, ddebug)) == NULL) {
 							if (verb) printf("Failed to access screen %d of display '%s'\n",i+1,dnbuf);
 							continue;
 						}
@@ -3698,6 +3792,7 @@ usage(void) {
 #if defined(UNIX) && !defined(__APPLE__)
 	fprintf(stderr," -D                   Run in daemon loader mode for given X11 server\n");
 #endif /* X11 */
+	fprintf(stderr," -E [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," calfile              Load calibration (.cal or %s) into Video LUT\n",ICC_FILE_EXT);
 	exit(1);
 }
@@ -3710,6 +3805,7 @@ int
 main(int argc, char *argv[]) {
 	int fa, nfa, mfa;			/* current argument we're looking at */
 	int verb = 0;				/* Verbose flag */
+	int ddebug = 0;				/* debug level */
 	disppath *disp = NULL;		/* Display being used */
 	double patscale = 1.0;		/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;	/* Test window offsets, -1.0 to 1.0 */
@@ -3760,6 +3856,16 @@ main(int argc, char *argv[]) {
 
 			else if (argv[fa][1] == 'v')
 				verb = 1;
+
+			/* Debug */
+			else if (argv[fa][1] == 'E') {
+				ddebug = 1;
+				if (na != NULL && na[0] >= '0' && na[0] <= '9') {
+					ddebug = atoi(na);
+					fa = nfa;
+				}
+				callback_ddebug = 1;		/* dispwin global */
+			}
 
 			/* Display number */
 			else if (argv[fa][1] == 'd') {
@@ -3897,7 +4003,7 @@ main(int argc, char *argv[]) {
 
 #if defined(UNIX) && !defined(__APPLE__)
 	if (daemonmode) {
-		return x11_daemon_mode(disp, verb);
+		return x11_daemon_mode(disp, verb, ddebug);
 	}
 #endif
 
@@ -3921,7 +4027,7 @@ main(int argc, char *argv[]) {
 	if (verb)
 		printf("About to open dispwin object on the display\n");
 
-	if ((dw = new_dispwin(disp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, donat, blackbg, 1)) == NULL) {
+	if ((dw = new_dispwin(disp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, donat, blackbg, 1, ddebug)) == NULL) {
 		printf("Error - new_dispwin failed!\n");
 		return -1;
 	}
@@ -4576,7 +4682,7 @@ static char *plocpath(CMProfileLocation *ploc) {
 	if (ploc->locType == cmFileBasedProfile) {
 		FSRef newRef;
   		static UInt8 path[256] = "";
-printf("~1 converted spec file location\n");
+//printf("~1 converted spec file location\n");
 
 		if (FSpMakeFSRef(&ploc->u.fileLoc.spec, &newRef) == noErr) {
 			OSStatus stus;
@@ -4609,7 +4715,7 @@ static char *fss2path(FSSpec *fss) {
 			path[i] = fss->name[i+1];
 	}
 	path[i] = '\000';
-printf("~1 path = '%s', l = %d\n",path,l);
+//printf("~1 path = '%s', l = %d\n",path,l);
 
 	if(fss->parID != fsRtParID) { /* path is more than just a volume name */
 		FSSpec tfss;
@@ -4654,7 +4760,7 @@ printf("~1 path = '%s', l = %d\n",path,l);
 			free(path);
 			path = tpath;
 			l = tl + 1 + l;
-printf("~1 path = '%s', l = %d\n",path,l);
+//printf("~1 path = '%s', l = %d\n",path,l);
 		} while(pb.dirInfo.ioDrDirID != fsRtDirID); /* while more directory levels */
 	}
 
@@ -4694,7 +4800,7 @@ static void pcurpath(dispwin *p) {
 			goto skip;
 		}
 
-printf("~1 Current profile by AVID = '%s'\n",plocpath(&xploc));
+//printf("~1 Current profile by AVID = '%s'\n",plocpath(&xploc));
 
 		/* Get the current CMDeviceProfileID and device scope */
 		cb.ddid = (CMDeviceID)p->ddid;			/* Display Device ID */
@@ -4714,7 +4820,7 @@ printf("~1 Current profile by AVID = '%s'\n",plocpath(&xploc));
 			debug2((errout,"Failed to GetDeviceProfile\n"));
 			goto skip;
 		}
-printf("~1 Current profile by Itterate = '%s'\n",plocpath(&xploc));
+//printf("~1 Current profile by Itterate = '%s'\n",plocpath(&xploc));
 
 		/* Get the default ID for the display */
 		if ((ev = CMGetDeviceDefaultProfileID(cmDisplayDeviceClass, (CMDeviceID)p->ddid, &cb.id)) != noErr) {
@@ -4727,7 +4833,7 @@ printf("~1 Current profile by Itterate = '%s'\n",plocpath(&xploc));
 			debug2((errout,"CMGetDeviceDefaultProfileID() failed with error %d\n",ev));
 			goto skip;
 		}
-printf("~1 Current profile by get default = '%s'\n",plocpath(&xploc));
+//printf("~1 Current profile by get default = '%s'\n",plocpath(&xploc));
 
 	skip:;
 }

@@ -62,7 +62,8 @@ static inst_code huey_interp_code(inst *pp, int ec);
 static inst_code huey_check_unlock(huey *p);
 
 #define CALFACTOR 3.428         /* Emissive magic calibration factor */
-#define AMB_SCALE_FACTOR 7.806e-3	/* Ambient mode scale factor */ 
+//#define AMB_SCALE_FACTOR 7.806e-3	/* Ambient mode scale factor */ 
+#define AMB_SCALE_FACTOR 5.772e-3	/* Ambient mode scale factor */ 
 									/* This is only approximate, and were derived */
 									/* by matching readings from the i1pro. */
 

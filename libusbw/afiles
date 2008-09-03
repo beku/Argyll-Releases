@@ -19,6 +19,9 @@ MonacoOptix_x64.cat
 i1Disp.inf
 i1Disp.cat
 i1Disp_x64.cat
+i1Monitor.inf
+i1Monitor.cat
+i1Monitor_x64.cat
 i1Pro.inf
 i1Pro.cat
 i1Pro_x64.cat
@@ -31,6 +34,7 @@ spyd2_x64.cat
 huey.inf
 huey.cat
 huey_x64.cat
+manifest.txt
 AUTHORS.txt
 LICENSE.txt
 COPYING_GPL.txt
@@ -104,3 +108,4 @@ src/windows.c
 testlibusb-win.exe.manifest
 tests/testlibusb.c
 tests/testlibusb_win.c
+tests/testlibusb_win_rc.rc

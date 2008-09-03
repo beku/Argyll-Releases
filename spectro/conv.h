@@ -20,6 +20,9 @@
  */
 
 #if defined (NT)
+#if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0501
+# define _WIN32_WINNT 0x0501
+#endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif

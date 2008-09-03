@@ -119,6 +119,8 @@ static void del_gamut(gamut *s);
 static void expand_gamut(gamut *s, double in[3]);
 static double getsres(gamut *s);
 static int getisjab(gamut *s);
+void getcent(gamut *s, double *cent);
+void getrange(gamut *s, double *min, double *max);
 static int compatible(gamut *s, gamut *t);
 static int nrawverts(gamut *s);
 static int getrawvert(gamut *s, double pos[3], int ix);
@@ -554,6 +556,13 @@ int isJab				/* Flag indicating Jab space */
 	s->cent[1] = 0.0;
 	s->cent[2] = 0.0;
 
+	s->mx[0] = -1e38;
+	s->mx[1] = -1e38;
+	s->mx[2] = -1e38;
+	s->mn[0] = 1e38;
+	s->mn[1] = 1e38;
+	s->mn[2] = 1e38;
+
 	/* Create top level quadtree nodes */
 	s->tl = new_gquad2(-M_PI, 0.0, -M_PI/2.0, M_PI/2.0);	/* Left one */
 	s->tr = new_gquad2(0.0, M_PI, -M_PI/2.0, M_PI/2.0);	/* Right one */
@@ -571,6 +580,8 @@ int isJab				/* Flag indicating Jab space */
 	s->expand      = expand_gamut;
 	s->getsres     = getsres;
 	s->getisjab    = getisjab;
+	s->getcent     = getcent;
+	s->getrange    = getrange;
 	s->compatible  = compatible;
 	s->nrawverts   = nrawverts;
 	s->getrawvert  = getrawvert;
@@ -779,6 +790,14 @@ double pp[3]		/* rectangular coordinate of point */
 
 	if (s->doingfake == 0)
 		s->cu_inited = 0;		/* Invalidate cust info */
+
+	/* Tracl bounding range */
+	for (j = 0; j < 3; j++) {
+		if (pp[j] > s->mx[j])
+			s->mx[j] = pp[j];
+		if (pp[j] < s->mn[j])
+			s->mn[j] = pp[j];
+	}
 
 	/* Convert to radial coords */
 	gamut_rect2radial(s, rr, pp);
@@ -2425,6 +2444,28 @@ static int getisjab(
 gamut *s
 ) {
 	return s->isJab;
+}
+
+/* return the gamut center value */
+void getcent(gamut *s, double *cent) {
+	cent[0] = s->cent[0];
+	cent[1] = s->cent[1];
+	cent[2] = s->cent[2];
+}
+
+/* Return the gamut min/max range */
+void getrange(gamut *s, double *min, double *max) {
+
+	if (min != NULL) {
+		min[0] = s->mn[0];
+		min[1] = s->mn[1];
+		min[2] = s->mn[2];
+	}
+	if (max != NULL) {
+		max[0] = s->mx[0];
+		max[1] = s->mx[1];
+		max[2] = s->mx[2];
+	}
 }
 
 /* return nz if the two gamut are compatible */

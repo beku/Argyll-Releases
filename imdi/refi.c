@@ -89,7 +89,7 @@ void *cntx		/* Context to callbacks */
 
 	/* Create some input interpolations */
 	for (e = 0; e < id; e++) {
-		if ((r->in[e] = new_rspl(1, 1)) == NULL) {
+		if ((r->in[e] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 			fprintf(stderr,"new_rspl failed\n");
 			exit (-1);
 		}
@@ -98,7 +98,7 @@ void *cntx		/* Context to callbacks */
 	}
 
 	/* Clut */
-	if ((r->clut = new_rspl(id, od)) == NULL) {
+	if ((r->clut = new_rspl(RSPL_NOFLAGS, id, od)) == NULL) {
 		fprintf(stderr,"new_rspl failed\n");
 		exit (-1);
 	}
@@ -108,7 +108,7 @@ void *cntx		/* Context to callbacks */
 	
 	/* Create some output interpolations */
 	for (e = 0; e < od; e++) {
-		if ((r->out[e] = new_rspl(1, 1)) == NULL) {
+		if ((r->out[e] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 			fprintf(stderr,"new_rspl failed\n");
 			exit (-1);
 		}

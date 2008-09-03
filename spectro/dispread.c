@@ -56,6 +56,23 @@
 
 #include "spyd2setup.h"			/* Enable Spyder 2 access */
 
+/* ------------------------------------------------------------------- */
+#if defined(__APPLE__) && defined(__POWERPC__)
+
+/* Workaround for a PPC gcc 3.3 optimiser bug... */
+/* It seems to cause a segmentation fault instead of */
+/* converting an integer loop index into a float, */
+/* when there are sufficient variables in play. */
+static int gcc_bug_fix(int i) {
+	static int nn;
+	nn += i;
+	return nn;
+}
+#endif	/* APPLE */
+
+/* ------------------------------------------------------------------- */
+
+
 void usage(char *diag, ...) {
 	disppath **dp;
 	icoms *icom;
@@ -343,6 +360,7 @@ int main(int argc, char *argv[])
 					debug = atoi(na);
 					fa = nfa;
 				}
+				callback_ddebug = 1;		/* dispwin global */
 			} else if (argv[fa][1] == 'N') {
 				nocal = 1;
 
@@ -550,7 +568,7 @@ int main(int argc, char *argv[])
 	          cal, ncal, disp, blackbg, override, callout, patsize, ho, vo, spectral,
 	          verb, VERBOUT, debug,
 	                     "fake" ICC_FILE_EXT)) == NULL)
-		error("dispread failed with '%s'\n",disprd_err(errc));
+		error("new_disprd failed with '%s'\n",disprd_err(errc));
 
 	/* Test the CRT with all of the test points */
 	if ((rv = dr->read(dr, cols, npat + xpat, 1, npat + xpat, 1, 0)) != 0) {
@@ -659,7 +677,12 @@ int main(int argc, char *argv[])
 			error("Malloc failed!");
 
 		for (i = 0; i < ncal; i++) {
-			double vv = i/(ncal-1.0);
+			double vv;
+
+#if defined(__APPLE__) && defined(__POWERPC__)
+			gcc_bug_fix(i);
+#endif
+			vv = i/(ncal-1.0);
 
 			setel[0].d = vv;
 			setel[1].d = cal[0][i];

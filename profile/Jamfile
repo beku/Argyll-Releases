@@ -26,7 +26,7 @@ HDRS = ../h ../icc ../cgats ../rspl
 Library libprof : profin.c profout.c ;
 
 
-LINKLIBS = ../rspl/librspl ../icc/libicc ../cgats/libcgats ../numlib/libnum ;
+LINKLIBS = ../rspl/librspl ../icc/libicc ../cgats/libcgats ../numlib/libnum ../plot/libplot ;
 
 # Simple profile generator
 Main simpprof : simpprof.c ;

@@ -27,7 +27,7 @@
 #           as as the rest of Jam, as detailed above.
 #           Moved to a "Normalized" scheme, where Jamfile UNIX style target paths
 #			are converted to platform specific, Jamfile relative, Gristed/SEARCH/LOCATE
-#			form. Creating the tree is simplified by eliminating the SubDir
+#			form internally. Creating the tree is simplified by eliminating the SubDir
 #           rule. Better support for MingW, OS X. More comprehensive ruleset.
 #           Renamed Jamrules to Jamtop.
 #
@@ -138,7 +138,7 @@
 # be picked up by subsequent rules that set target relationships and
 # creation rules. They are added to any Parent-Jamfile variables,
 # and become the Parent-Jamfile variables of any SubIncludes.
-# Relative file/path variables are anchiored by the Jamfile location.
+# Relative file/path variables are anchored by the Jamfile location.
 #
 # ASFLAGS      - Flags for the assembler.
 # CCFLAGS      - Flags for the C compiler.
@@ -802,6 +802,9 @@ else if $(UNIX)
 		CCFLAGS	   += -m64 ;
 		C++FLAGS   += -m64 ;
 	}
+
+	# Adding --hash-style=sysv to the compiler options
+	# might improve Linux compatibility with FC5 ?
 }
 
 #
@@ -1244,10 +1247,10 @@ rule _NormPaths
 
 # Normalize a set of targets. 
 # This is the same as NormPaths except it
-# then strips the path out uses it to set the
+# then strips the path out and uses it to set the
 # Grist, NOMLOC, LOCATE and SEARCH on the target.
 # If the optional dir is present, use it to
-# locate thie targets rather than SUBDIR.
+# locate the targets rather than SUBDIR.
 # Ignore SRCDIR if present.
 # paths = NormTargets paths [ : dir ] ;
 rule NormISrcTargets
@@ -1257,10 +1260,10 @@ rule NormISrcTargets
 
 # Normalize a set of targets. 
 # This is the same as NormPaths except it
-# then strips the path out uses it to set the
+# then strips the path out and uses it to set the
 # Grist, NOMLOC, LOCATE and SEARCH on the target.
 # If the optional dir is present, use it to
-# locate thie targets rather than SUBDIR.
+# locate the targets rather than SUBDIR.
 # se DSTDIR if present.
 # paths = NormTargets paths [ : dir ] ;
 rule NormIDstTargets
@@ -1270,10 +1273,10 @@ rule NormIDstTargets
 
 # Normalize a set of targets. 
 # This is the same as NormPaths except it
-# then strips the path out uses it to set the
+# then strips the path out and uses it to set the
 # Grist, NOMLOC, LOCATE and SEARCH on the target.
 # If the optional dir is present, use it to
-# locate thie targets rather than SUBDIR.
+# locate the targets rather than SUBDIR.
 # Use SRCDIR if present.
 # paths = NormTargets paths [ : dir ] ;
 rule NormSrcTargets
@@ -1283,10 +1286,10 @@ rule NormSrcTargets
 
 # Normalize a set of targets. 
 # This is the same as NormPaths except it
-# then strips the path out uses it to set the
+# then strips the path out and uses it to set the
 # Grist, NOMLOC, LOCATE and SEARCH on the target.
 # If the optional dir is present, use it to
-# locate thie targets rather than SUBDIR.
+# locate the targets rather than SUBDIR.
 # Use DSTDIR if present.
 # paths = NormTargets paths [ : dir ] ;
 rule NormDstTargets
@@ -1296,10 +1299,10 @@ rule NormDstTargets
 
 # Normalize a set of targets. 
 # This is the same as NormPaths except it
-# then strips the path out uses it to set the
+# then strips the path out and uses it to set the
 # Grist, NOMLOC, LOCATE and SEARCH on the target.
 # If the optional dir is present, use it to
-# locate thie targets rather than SUBDIR.
+# locate the targets rather than SUBDIR.
 # paths = NormTargets paths : dir : type ;
 rule _NormTargets
 {
@@ -1683,7 +1686,7 @@ rule FindTop
 }
 
 # Given a path relative to CWD, return the inverse direction
-# path. Return nothing of the path is absolute.
+# path. Return nothing if the path is absolute.
 # [ we're using a hack here, since Jam 2.5 doesn't have
 #   any functions that will simply resolve a path relative
 #   to CWD into an absolute path. ]

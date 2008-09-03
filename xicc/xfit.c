@@ -87,7 +87,7 @@
 
 /* - - - - - - - - - - - - - - - - - */
 
-#ifdef NEVER	/* Not currently used */
+#ifdef DEBUG_PLOT	/* Not currently used in runtime code*/
 
 /* Lookup a value though an input position curve */
 static double xfit_poscurve(xfit *p, double in, int chan) {
@@ -132,7 +132,7 @@ static void xfit_invposcurves(xfit *p, double *out, double *in) {
 		out[e] = val;
 	}
 }
-#endif /* NEVER */
+#endif /* DEBUG_PLOT */
 
 /* - - - - - - - - - - - - - - - - - */
 /* Lookup a value though input shape curve */
@@ -482,6 +482,10 @@ static void xfit_abs_to_rel(xfit *p, double *out, double *in) {
 		} else {
 			icmMulBy3x3(out, p->fromAbs, in);
 		}
+	} else {
+		out[0] = in[0];
+		out[1] = in[1];
+		out[2] = in[2];
 	}
 }
 
@@ -611,6 +615,8 @@ double *dav			/* Sum del's */
 }
 
 
+int xfitfunc_trace = 1;
+
 /* Shaper+Matrix optimisation function handed to powell() */
 static double xfitfunc(void *edata, double *v) {
 	xfit *p = (xfit *)edata;
@@ -661,7 +667,6 @@ static double xfitfunc(void *edata, double *v) {
 		} else {
 			del = p->to_de2(p->cntx2, out, p->rpoints[i].v);
 		}
-
 		tw += p->rpoints[i].w;
 		ev += p->rpoints[i].w * del;
 	}
@@ -675,7 +680,8 @@ static double xfitfunc(void *edata, double *v) {
 	rv = ev + smv;
 
 #ifdef DEBUG
-printf("~1(sm %f, ev %f)xfitfunc returning %f\n",smv,ev,rv);
+if (xfitfunc_trace)
+fprintf(stdout,"~1(sm %f, ev %f)xfitfunc returning %f\n",smv,ev,rv);
 #endif
 
 #ifdef NODDV
@@ -708,8 +714,10 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 	int i, jj, k, e, ee, f, ff;
 
 	/* Copy the parameters being optimised into xfit structure */
-	for (i = 0; i < p->opt_cnt; i++)
+	for (i = 0; i < p->opt_cnt; i++) {
+//printf("~1 param %d = %f\n",i,v[i]);
 		p->v[p->opt_off + i] = v[i];
+	}
 
 	/* Zero the accumulated partial derivatives */
 	/* We compute deriv for all parameters (not just current optimised) */
@@ -766,16 +774,6 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 		tw += p->rpoints[i].w;
 		ev += p->rpoints[i].w * del;
 
-		for (ff = 0; ff < fdi; ff++) {				/* Parameter output chanel */
-			for (k = 0; k < p->oluord[ff]; k++) {	/* Param within channel */
-				double vv = 0.0;
-				jj = p->out_offs[ff] - p->out_off + k;	/* Overall output trans param */
-
-				vv += dout_de[0][ff] * dout_ov[jj];
-				dav[p->out_off + jj] += p->rpoints[i].w * vv;
-			}
-		}
-
 		/* Compute and accumulate partial difference values for each parameter value */
 		if (p->opt_msk & oc_i) {
 			/* Input transfer parameters */
@@ -793,8 +791,8 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 			}
 		}
 
-		/* Matrix parameters */
 		if (p->opt_msk & oc_m) {
+			/* Matrix parameters */
 			for (ff = 0; ff < fdi; ff++) {				/* Parameter output chanel */
 				for (ee = 0; ee < (1 << di); ee++) {	/* Matrix input combination chanel */
 					double vv = 0.0;
@@ -835,7 +833,7 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 		dv[i] = dav[p->opt_off + i];
 
 #ifdef DEBUG
-printf("~1(sm %f, ev %f)dxfitfunc returning %f\n",smv,ev,rv);
+fprintf(stdout,"~1(sm %f, ev %f)dxfitfunc returning %f\n",smv,ev,rv);
 #endif
 
 	if (p->verb)
@@ -844,7 +842,7 @@ printf("~1(sm %f, ev %f)dxfitfunc returning %f\n",smv,ev,rv);
 }
 
 #ifdef NEVER
-/* Check partial derivative function within xfitfunc() */
+/* Check partial derivative function within xfitfunc() [Intensive check] */
 
 static double _xfitfunc(void *edata, double *v) {
 	xfit *p = (xfit *)edata;
@@ -864,6 +862,7 @@ static double _xfitfunc(void *edata, double *v) {
 		printf("######## RV MISMATCH is %f should be %f ########\n",rv,drv);
 
 	/* Check each parameter delta */
+	xfitfunc_trace = 0;
 	for (i = 0; i < p->opt_cnt; i++) {
 		double del;
 
@@ -878,10 +877,63 @@ static double _xfitfunc(void *edata, double *v) {
 			printf("######## EXCESSIVE at v[%d] is %f should be %f ########\n",i,dv[i],del);
 		}
 	}
+	xfitfunc_trace = 1;
 	return rv;
 }
 
 #define xfitfunc _xfitfunc
+#endif	/* NEVER */
+
+#ifdef NEVER
+/* Check partial derivative function within dxfitfunc() [Less intensive check] */
+
+static double _dxfitfunc(void *edata, double *dv, double *v) {
+	xfit *p = (xfit *)edata;
+	int i;
+	double rv, drv;
+	double trv;
+	int verb;
+	int exec = 0;
+	
+	rv = xfitfunc(edata, v);
+	verb = p->verb;
+	p->verb = 0;
+	drv = dxfitfunc(edata, dv, v);
+	p->verb = verb;
+
+	if (fabs(rv - drv) > 1e-6)
+		printf("######## RV MISMATCH is %f should be %f ########\n",rv,drv);
+
+	/* Check each parameter delta */
+	xfitfunc_trace = 0;
+	for (i = 0; i < p->opt_cnt; i++) {
+		double del;
+
+		v[i] += 1e-7;
+		trv = xfitfunc(edata, v);
+		v[i] -= 1e-7;
+		
+		/* Check that del is correct */
+		del = (trv - rv)/1e-7;
+		if (fabs(dv[i] - del) > 0.04) {
+//printf("~1 del = %f from (trv %f - rv %f)/0.1\n",del,trv,rv);
+			printf("######## EXCESSIVE at v[%d] is %f should be %f ########\n",i,dv[i],del);
+			exec = 1;
+		}
+	}
+#ifdef NEVER
+	if (exec) {
+		printf("~1 parameters are:\n");
+		for (i = 0; i < p->opt_cnt; i++)
+			printf("p->wv[%d] = %f;\n",i,v[i]);
+		exit(1);
+	}
+#endif
+	xfitfunc_trace = 1;
+	return rv;
+}
+
+#define dxfitfunc _dxfitfunc
 #endif	/* NEVER */
 
 /* - - - - - - - - - */
@@ -1384,13 +1436,11 @@ int xfit_fit(
 					break;			/* Don't bother looking further */
 			}
 		}
-
 		xfit_abs_to_rel(p, ov, p->ipoints[bk].v);
 
 		for (f = 0; f < fdi; f++)
 			b[f * (1 << di) + e] = ov[f];
 	}
-
 
 	/* Setup output curves to be linear initially */
 	b = p->v + p->out_off;
@@ -1443,9 +1493,9 @@ int xfit_fit(
 
 	/* Do the fitting one part at a time, then together */
 	/* Shaper curves are created if poistion or shaper curves are requested */
-
 	if ((p->tcomb & oc_ipo) != 0
 	 && (p->tcomb & oc_m) == oc_m) {	/* Only bother with matrix if in and/or out */
+		double rerr;
 
 		if (p->verb)
 			printf("About to optimise temporary matrix\n");
@@ -1464,11 +1514,11 @@ dump_xfit(p);
 		setup_xfit(p, p->wv, p->sa, 0.0, 0.5); 
 
 #ifdef NODDV
-		if (powell(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
-			warning("xfit_fit: Powell failed to converge");
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
+			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #else
-		if (conjgrad(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
-			warning("xfit_fit: Conjgrad failed to converge");
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
+			warning("xfit_fit: Conjgrad failed to converge, residual error = %f", rerr);
 #endif
 		for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 			p->v[p->opt_off + i] = p->wv[i];
@@ -1481,6 +1531,7 @@ dump_xfit(p);
 
 	/* Optimise input and matrix together */
 	if ((p->tcomb & oc_im) == oc_im) {
+		double rerr;
 
 		if (p->verb)
 			printf("\nAbout to optimise input curves and matrix\n");
@@ -1492,13 +1543,22 @@ dump_xfit(p);
 		p->opt_ch = -1;
 		p->opt_msk = oc_im;
 		setup_xfit(p, p->wv, p->sa, 0.5, 0.3); 
+		/* Supress the warnings the first time through - it's better to cut off the */
+		/* itterations and move on to the output curve, and worry about it not */
+		/* converging the second time through. */
 #ifdef NODDV
-		if (powell(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
-			warning("xfit_fit: Powell failed to converge");
-#else
-		if (conjgrad(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
-			warning("xfit_fit: Conjgrad failed to converge");
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0) {
+#ifdef DEBUG
+			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #endif
+		}
+#else
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0) {
+#ifdef DEBUG
+			warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
+#endif
+		}
+#endif	/* !NODDV */
 		for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 			p->v[p->opt_off + i] = p->wv[i];
 #ifdef DEBUG
@@ -1509,6 +1569,7 @@ dump_xfit(p);
 
 	/* Optimise the matrix and output curves together */
 	if ((p->tcomb & oc_mo) == oc_mo) {
+		double rerr;
 
 		if (p->verb)
 			printf("\nAbout to optimise output curves and matrix\n");
@@ -1521,11 +1582,11 @@ dump_xfit(p);
 		p->opt_msk = oc_mo;
 		setup_xfit(p, p->wv, p->sa, 0.3, 0.3); 
 #ifdef NODDV
-		if (powell(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
-			warning("xfit_fit: Powell failed to converge");
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
+			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #else
-		if (conjgrad(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
-			warning("xfit_fit: Conjgrad failed to converge");
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
+			warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
 #endif
 		for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 			p->v[p->opt_off + i] = p->wv[i];
@@ -1548,11 +1609,11 @@ dump_xfit(p);
 			p->opt_msk = oc_im;
 			setup_xfit(p, p->wv, p->sa, 0.2, 0.2); 
 #ifdef NODDV
-			if (powell(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
-				warning("xfit_fit: Powell failed to converge");
+			if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
+				warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #else
-			if (conjgrad(NULL, p->opt_cnt, p->v, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
-				warning("xfit_fit: Conjgrad failed to converge");
+			if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
+				warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
 #endif
 			for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 				p->v[p->opt_off + i] = p->wv[i];
@@ -1576,8 +1637,8 @@ dump_xfit(p);
 			p->opt_ch = -1;
 			p->opt_msk = oc_imo;
 			setup_xfit(p, p->wv, p->sa, 0.1, 0.1); 
-			if (conjgrad(NULL, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
-				warning("xfit_fit: Conjgrad failed to converge");
+			if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
+				warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
 			for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 				p->v[p->opt_off + i] = p->wv[i];
 
@@ -1604,8 +1665,8 @@ dump_xfit(p);
 				p->opt_ch = f;
 				p->wv[0] = p->v[p->out_offs[f]];	/* Current parameter value */
 				p->sa[0] = 0.1;					/* Search radius */
-				if (powell(NULL, 1, p->wv, p->sa, 0.0000001, 1000, symoptfunc, (void *)p) != 0)
-					error("xfit_fit: Powell failed to converge");
+				if (powell(&rerr, 1, p->wv, p->sa, 0.0000001, 1000, symoptfunc, (void *)p) != 0)
+					error("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 				p->v[p->out_offs[f]] = p->wv[0];	/* Copy results back */
 			}
 		}
@@ -1692,10 +1753,10 @@ dump_xfit(p);
 			omin[0] = 0.0;
 			omax[0] = 0.0;
 			
-			if ((resid = new_rspl(1, 1)) == NULL)
+			if ((resid = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL)
 				return 1;
 
-			resid->fit_rspl_w(resid, 0, p->rpoints, p->nodp, imin, imax, resres,
+			resid->fit_rspl_w(resid, RSPL_NOFLAGS, p->rpoints, p->nodp, imin, imax, resres,
 				omin, omax, 2.0, NULL, NULL);
 
 #ifdef DEBUG_PLOT
@@ -1867,7 +1928,6 @@ dump_xfit(p);
 				p->rpoints[i].v[f] = p->ipoints[i].v[f];
 			xfit_abs_to_rel(p, p->rpoints[i].v, p->rpoints[i].v);
 			xfit_invoutcurves(p, p->rpoints[i].v, p->rpoints[i].v);
-// ~~999
 //printf("~1 point %d, w %f, %f %f %f %f -> %f %f %f\n",
 //i,p->rpoints[i].w,p->rpoints[i].p[0], p->rpoints[i].p[1], p->rpoints[i].p[2], p->rpoints[i].p[3],
 //p->rpoints[i].v[0], p->rpoints[i].v[1], p->rpoints[i].v[2]);
@@ -1917,14 +1977,11 @@ printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
 
 		if (p->clut != NULL)
 			p->clut->del(p->clut);
-		if ((p->clut = new_rspl(di, fdi)) == NULL)
+		if ((p->clut = new_rspl(RSPL_NOFLAGS, di, fdi)) == NULL)
 			return 1;
 
 		if (p->verb)
 			printf("Create final clut from scattered data\n");
-
-// ~~~999
-//out_max[0] = 100.390625;
 
 		p->clut->fit_rspl_w(p->clut, rsplflags, p->rpoints, p->nodp, in_min, in_max, gres,
 			out_min, out_max, smooth, oavgdev, iwidth);
@@ -2079,7 +2136,7 @@ printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
 				maxe = ev;
 			avee += ev;
 		}
-		printf("Max err = %f, avg err = %f\n",maxe, avee/(double)p->nodp);
+		printf("Max resid err = %f, avg err = %f\n",maxe, avee/(double)p->nodp);
 
 		/* Evaluate each input axis in turn */
 		for (ee = 0; ee < p->di; ee++) {
@@ -2097,7 +2154,7 @@ printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
 			omin[0] = 0.0;
 			omax[0] = 0.0;
 			
-			if ((resid = new_rspl(1, 1)) == NULL)
+			if ((resid = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL)
 				return 1;
 
 			resid->fit_rspl_w(resid, 0, p->rpoints, p->nodp, imin, imax, resres,

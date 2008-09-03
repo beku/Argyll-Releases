@@ -173,6 +173,7 @@ i1disp_command_1(
 
 	/* For each byte to be sent */
 	for (i = 0; i < tsize; i++) {
+		unsigned int smsec;
 
 		/* Control message to read 8 bytes */
 		requesttype = USB_ENDPOINT_IN | USB_TYPE_VENDOR | USB_RECIP_ENDPOINT;
@@ -186,12 +187,18 @@ i1disp_command_1(
 		index = (tsize - i - 1);	/* Decrementing count */
 		rwsize = 8;
 		
+		smsec = msec_time();
 		if ((se = p->icom->usb_control(p->icom, requesttype, request, value, index,
 		                                                        buf, rwsize, to)) != 0) {
 			if (se & ICOM_USERM)
 				ua = (se & ICOM_USERM);
 			if (se & ~ICOM_USERM) {
-				if (isdeb) fprintf(stderr,"\ni1disp: Message send failed with ICOM err 0x%x\n",se);
+				if (isdeb) {
+					fprintf(stderr,"\ni1disp: Message send failed with ICOM err 0x%x\n",se);
+					if (se & ICOM_TO)
+						fprintf(stderr,"\ni1disp: Timeout %f sec, Took %f sec.\n",to, (msec_time() - smsec)/1000.0);
+
+				}
 				p->icom->debug = isdeb;
 				return i1disp_interp_code((inst *)p, I1DISP_COMS_FAIL);
 			}
@@ -747,7 +754,7 @@ i1disp_take_raw_measurement_2(
 
 	/* Do the measurement, and return the Red value */
 	if ((ev = i1disp_command(p, i1d_m_rgb_edge_2, ibuf, 0,
-		         obuf, 8, &rsize, 30.0)) != inst_ok)
+		         obuf, 8, &rsize, 120.0)) != inst_ok)
 		return ev;
 	if (rsize != 5)
 		return i1disp_interp_code((inst *)p, I1DISP_UNEXPECTED_RET_SIZE);

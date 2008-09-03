@@ -49,7 +49,8 @@ Main cctiff : cctiff.c : : : ../xicc $(TIFFINC) : : ../xicc/libxutils $(TIFFLIB)
 # TIFF file monochrome conversion utlity
 #Main greytiff : greytiff.c ;
 Main greytiff : greytiff.c : : : ../spectro ../xicc ../gamut ../rspl ../cgats $(TIFFINC)
-              : : ../xicc/libxicc ../gamut/libgamut ../rspl/librspl ../cgats/libcgats $(TIFFLIB) ;
+              : : ../xicc/libxicc ../gamut/libgamut ../rspl/librspl ../cgats/libcgats
+                  ../plot/libplot $(TIFFLIB) ;
 
 # ssort generation code
 #Main ssort : ssort.c ;

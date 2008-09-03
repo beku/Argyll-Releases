@@ -56,7 +56,7 @@ setting, separated by a ';'.&nbsp; <br>
 <br>
 &nbsp;So if the current value of PATH is
 "%SystemRoot%\system32;%SystemRoot%" and you unpacked Argyll
-version 1.0.0 in <span style="font-weight: bold;">d:\bin\</span>, then
+version 1.0.3 in <span style="font-weight: bold;">d:\bin\</span>, then
 you
 would modify PATH to be
 "%SystemRoot%\system32;%SystemRoot%;d:\bin\Argyll_V1.0.0\bin". The
@@ -182,7 +182,7 @@ applications. <br>
 <br>
 <a name="V_IAD"></a>In <span style="font-weight: bold;">Vista</span>:<br>
 &nbsp; Plug the instrument that you want to install the the computer.<br>
-&nbsp; Right click on the "My Computer" item in the Start menu and
+&nbsp; Right click on the "Computer" item in the Start menu and
 select "Manage".<br>
 &nbsp; Click on "Device Manager"<br>
 &nbsp; Locate the device in the device manager. It may be underneath
@@ -203,7 +203,7 @@ device has been successfully installed". Click "Close".<br>
 <br>
 <a name="V_SD"></a>To switch between drivers:<br>
 &nbsp; Plug the instrument that you want to install the the computer.<br>
-&nbsp; Right click on the "My Computer" item in the Start menu and
+&nbsp; Right click on the "Computer" item in the Start menu and
 select Manage.<br>
 &nbsp; Click on "Device Manager"<br>
 &nbsp; Locate the device in the device manager. It may be underneath
@@ -223,7 +223,7 @@ device has been successfully installed". Click "Close".<br>
 <span style="font-weight: bold;">XP</span><span
  style="font-weight: bold;"></span>:<br>
 &nbsp; Plug the instrument that you want to install the the computer.<br>
-&nbsp; Right click on the "My Computer" item in the Start menu and
+&nbsp; Right click on the "My Computer" item on the desktop and
 select "Manage".<br>
 &nbsp; Click on "Device Manager"<br>
 &nbsp; Locate the device in the device manager. It may be underneath
@@ -253,7 +253,7 @@ Wizard". Click "Finish".<br>
 <br>
 <a name="X_SD"></a>To switch between drivers:<br>
 &nbsp; Plug the instrument that you want to install the the computer.<br>
-&nbsp; Right click on the "My Computer" item in the Start menu and
+&nbsp; Right click on the "My Computer" item on the desk top and
 select "Manage".<br>
 &nbsp; Click on "Device Manager"<br>
 &nbsp; Locate the device in the device manager. It may be underneath
@@ -278,7 +278,7 @@ Wizard". Click "Finish".<br>
 <br>
 <a name="2_IAD"></a>In <span style="font-weight: bold;">2000</span>:<br>
 &nbsp; Plug the instrument that you want to install the the computer.<br>
-&nbsp; Right click on the "My Computer" item in the Start menu and
+&nbsp; Right click on the "My Computer" item on the desktop and
 select "Manage".<br>
 &nbsp; Click on "Device Manager"<br>
 &nbsp; Locate the device in the device manager. It may be underneath
@@ -315,7 +315,7 @@ Driver Wizard". Click "Finish".<br>
 <br>
 <a name="2_SD"></a>To switch between drivers:<br>
 &nbsp; Plug the instrument that you want to install the the computer.<br>
-&nbsp; Right click on the "My Computer" item in the Start menu and
+&nbsp; Right click on the "My Computer" item on the desktop and
 select Manage.<br>
 &nbsp; Click on "Device Manager"<br>
 &nbsp; Locate the device in the device manager. It may be underneath
@@ -344,7 +344,11 @@ let you access the device using Argyll, without disabling access by
 existing applications. (I haven't tried this, so I'm not sure how well
 it works). You don't make use of the Argyll <span
  style="font-weight: bold;">.inf</span>
-file using this approach. ]<br>
+file using this approach. <br>
+<span style="font-weight: bold;">NOTE</span> that a potential problem
+with this approach is that the filter drivers haven't been modified to
+have a longer USB control transaction timeout, and this may cause
+failures for certain instruments when measuring dark colors.]<br>
 <br>
 <span style="color: rgb(51, 153, 153);"><span
  style="color: rgb(0, 0, 0); text-decoration: underline;">Updating
@@ -354,11 +358,15 @@ Argyll drivers:</span></span><br>
 to a new version of Argyll, that it may be necessary to uninstall all
 the Argyll USB devices, and re-install them, to update the relevant
 libusb-win32 system driver and dll. (This is true for updating to
-Argyll Version 1.0.0). To do this you need to<br>
+Argyll Version 1.0.0). You may get an error when trying to run updated
+programs that access instrumments that "<span style="font-weight: bold;">The
+procedure entry point usb_argyll_patched could not be located in the
+dynamic link library libusb0.dll</span>", an indication that the USB
+drivers need updating. To do this you need to<br>
 <br>
 <a name="V_UD"></a>In <span style="font-weight: bold;">Vista</span> <br>
 &nbsp; Plug an instrument that has been installed into the computer.<br>
-&nbsp; Right click on the "My Computer" item in the Start menu and
+&nbsp; Right click on the "Computer" item in the Start menu and
 select "Manage".<br>
 &nbsp; Click on "Device Manager"<br>
 &nbsp; Locate the device under "LibUSB-Win32 Device"<br>
@@ -369,7 +377,7 @@ driver software for this device" checkbox and then choose "OK"<br>
 changes"<br>
 &nbsp; A "Found New Hardware Wizard" window should pop up.<br>
 &nbsp; Follow the same directions as <a href="#V_FNH">above</a> for
-installing the drivers..<br>
+installing the updated drivers..<br>
 <br>
 <a name="X_UD"></a><a name="2_UD"></a>In <span
  style="font-weight: bold;">XP</span> and <span
@@ -385,7 +393,7 @@ menu and select Manage.<br>
 changes"<br>
 &nbsp; A "Found New Hardware Wizard" window should pop up.<br>
 &nbsp; Follow the same directions as above (<a href="#X_FNH">XP</a>, <a
- href="#2_FNH">2000</a>) for installing the drivers.<br>
+ href="#2_FNH">2000</a>) for installing the updated drivers.<br>
 <br>
 <p><br>
 &nbsp;

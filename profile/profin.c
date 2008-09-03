@@ -247,7 +247,7 @@ make_input_icc(
 	icmICCVersion iccver,	/* ICC profile version to create */
 	int verb,
 	int iquality,			/* A2B table quality, 0..3 */
-	int oquality,			/* B2A table quality, 0..2 */
+	int oquality,			/* B2A table quality, 0..3 */
 	int noisluts,			/* nz to supress creation of input (Device) shaper luts */
 	int noipluts,			/* nz to supress creation of input (Device) position luts */
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
@@ -489,11 +489,15 @@ make_input_icc(
 		    	wo->clutPoints = 17;
 		    	wo->inputEnt = 1024;
 		    	wo->outputEnt = 1024;
-			} else {
+            } else if (oquality >= 0) {
 		    	wo->clutPoints = 9;
 		    	wo->inputEnt = 512;
 		    	wo->outputEnt = 512;
-			}
+            } else {                /* Special, Extremely low quality */
+		    	wo->clutPoints = 3;
+		    	wo->inputEnt = 64;
+		    	wo->outputEnt = 64;
+            }
 
 			wo->allocate((icmBase *)wo);/* Allocate space */
 

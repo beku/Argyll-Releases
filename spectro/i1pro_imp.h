@@ -150,8 +150,13 @@ struct _i1proimp {
 
 	/* Current state of hardware, to avoid uncessary operations */
 	double c_inttime;			/* Integration time */
+	double l_inttime;			/* Last Integration time (for Rev A+/B quirk fix) */
 	double c_lamptime;			/* Lamp turn on time */
-	int c_measmodeflags;		/* measurement mode flags */
+	int c_mcmode;				/* special clock mode we're in (if rev >= 301) */
+	int c_intclocks;			/* Number of integration clocks (set using setmeasparams() */
+	int c_lampclocks;			/* Number of integration clocks (set using setmeasparams() */
+	int c_nummeas;				/* Number of measurements (set using setmeasparams() */
+	int c_measmodeflags;		/* Measurement mode flags (set using setmeasparams() */
 	unsigned int slamponoff;	/* The second last time the lamp was switched from on to off */
 	unsigned int llampoffon;	/* The last time the lamp was switched from off to on, in msec */
 	unsigned int llamponoff;	/* The last time the lamp was switched from on to off, in msec */
@@ -160,11 +165,11 @@ struct _i1proimp {
 	/* Values read from GetMisc() */
 	int fwrev;					/* int - Firmware revision number, from getmisc() */
 								/* Used for internal switching ?? */
-								/* 101 = Rev A, 202 = Rev ?, 302 = Rev B, 502 = Rev D */
+								/* 101 = Rev A, 202 = Rev A update, 302 = Rev B, 502 = Rev D */
 
 	int cpldrev;				/* int - CPLD revision number in EEProm */
 								/* Not used internaly ???? */
-								/* 101 = Rev A, 2 = Rev ?, 301 = Rev B, 999 = Rev D */
+								/* 101 = Rev A, 2 = Rev A update, 301 = Rev B, 999 = Rev D */
 
 	int maxpve;					/* Maximum +ve value of Sensor Data + 1 */
 	int powmode;				/* Power mode status, 0 = high, 8 = low */
@@ -245,7 +250,7 @@ struct _i1proimp {
 							/* 2->3 = time to between end trigger and start of first read */
 							/* 3->4 = time to exectute first read */
 							/* 6->5 = time between end of second last read and start of last read */
-	int trig_se;		/* Delayed trigger icoms error */
+	int trig_se;			/* Delayed trigger icoms error */
 	i1pro_code trig_rv;		/* Delayed trigger result */
 
 	int dumy[2];			/* Dummy to alter structure size to invalidate NV save */
@@ -583,47 +588,6 @@ i1pro_code i1pro_abssens_to_meas(
 	int gainmode			/* Gain mode, 0 = normal, 1 = high */
 );
 
-/* Calibrate ref_scan lamp turn on compensation */
-static void i1pro_setup_lamptocomp(
-	i1pro *p,
-	double cool1,			/* Cooldown time before first measurement */
-	double **abssens1,		/* measurement 1 [nummeas][nraw] values */
-
-	double cool2,			/* Cooldown time before second measurement */
-	double **abssens2,		/* measurement 2 [nummeas][nraw] values */
-
-	double cool3,			/* Cooldown time before third measurement */
-	double **abssens3,		/* measurement 3 [nummeas][nraw] values */
-
-	int nummeas,			/* Number of readings of measurements */
-
-	double inttime 			/* Integration time used (for time cal) */
-);
-
-/* Apply the lamp turn on compensation by scaling the data */
-/* by the difference between the average white reference value */
-/* and the dynamic one */
-static void i1pro_apply_ltoc(
-	i1pro *p,
-	int nummeas,			/* Number of readings measured */
-	double **abssens,		/* Array of [nummeas][nraw] value to created comp. from */
-	double inttime, 		/* Integration time used (for time cal) */
-	double *white_data		/* white reference data */
-);
-
-/* Calibrate ref_spot lamp thermal drift compensation */
-static i1pro_code i1pro_setup_lamthcomp(
-	i1pro *p,
-	double *inttime, 		/* Integration time to use/used */
-	int gainmode			/* Gain mode to use, 0 = normal, 1 = high */
-);
-
-/* Adjust the reflective spot calibration ready after a spot reading. */
-/* (because the lamp on/off times are recorded as we go, we can do */
-/*  this after the reading) */
-static void i1pro_do_lamthcomp(
-	i1pro *p
-);
 
 /* Average a set of measurements into one. */
 /* Return zero if readings are consistent and not saturated. */

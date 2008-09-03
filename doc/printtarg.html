@@ -95,7 +95,9 @@ Output 16 bit TIFF raster file, optional res DPI (default 200)<br>
  href="#C">-C</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Don't use TIFF compression</span></small><br>
 <small><span style="font-family: monospace;">&nbsp;<a href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use TIFF alpha N channels more than 4<br style="font-family: monospace;">
+Use TIFF alpha N channels more than 4<br>
+&nbsp;<a href="#Q">-Q nbits</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Quantize test values to fit in nbits<br style="font-family: monospace;">
 </span><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#R">-R rsnum</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -116,8 +118,10 @@ patch indexing pattern (Default = "0-9,@-9,@-9;1-999")</span><br
  style="font-family: monospace;" href="#m">-m margin</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Set a page margin in
-mm (default 6.0 mm)</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
+mm (default 6.0 mm)<br>
+&nbsp;<a href="#L">-L</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Supress any left paper clip border<br style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#p">-p size</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Select page size from:</span><br style="font-family: monospace;">
@@ -320,6 +324,22 @@ presented in this manner, and the <span style="font-weight: bold;">-N</span>
 flag causes all the channels greater than 4 to be labelled as "Alpha"
 channels, which may be more palatable.<br>
 <br>
+<a name="Q"></a><span style="font-weight: bold;">-Q:</span> Normally
+the target device values are floating point numbers that may get
+rounded and quantized in the process of printing them or reproducing
+them on the printing or display device. If some of this quantization
+can be accounted for, it may improve the accuracy of the resulting
+profile, and the <span style="font-weight: bold;">Q</span> parameter
+allows this quantization to be specified. The parameter is the number
+of binary digits (bits) that the device values should be quantized to.
+In many systems the right value would be 8 bits. Note that if 8 bit TIFF<span
+ style="font-weight: bold;"></span> output is selected (<span
+ style="font-weight: bold;">-t</span>) that the values will by default
+be quanized to 8 bits, and that if 16 bit TIFF<span
+ style="font-weight: bold;"></span> output is selected (<span
+ style="font-weight: bold;">-T</span>) that the values will by default
+be quanized to 16 bits.<br>
+<br>
 <a name="R"></a> The <b>-R</b> parameter allows setting the random
 layout seed. Normally the seed is chosen at random, but sometimes it is
 useful to be able to generate a chart with the same layout, so a
@@ -397,7 +417,15 @@ sheet, the devices printable area may be smaller than the default
 assumed by <span style="font-weight: bold;">printtarg</span>.&nbsp;
 Increasing this from the default of 6 mm to 10 or 15 mm, may alleviate
 this problem. (Note that
-the number of patches per page may be reduced as a consequence.)<br>
+the number of patches per page may be reduced as a consequence.)
+Decreasing the margin below 6 mm may be possible for printers that have
+smaller or no margins, increasing the number of patches possible on
+each page.<br>
+<br>
+<a name="L"></a> The <b>-L</b> flag supresses the left margin that is
+added for instruments that have a paper holder that has a clip to hold
+the chart in place, while it is being read. (Currently this is only the
+Eye-One Pro).<br>
 <br>
 <a name="p"></a> The <b>-p</b> parameter specifies the paper size. The
 size can either be one of the default sizes, <a name="pp"></a>or can

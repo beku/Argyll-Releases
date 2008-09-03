@@ -26,6 +26,15 @@
 #include "powell.h"
 
 #undef SLOPE_SANITY_CHECK		/* exermental */
+#undef DEBUG					/* Some debugging printfs (not comprehensive) */
+
+#ifdef DEBUG
+#undef DBG
+#define DBG(xxx) printf xxx ;
+#else
+#undef DBG
+#define DBG(xxx) 
+#endif
 
 static double linmin(double p[], double xi[], int n, double ftol,
 	double (*func)(void *fdata, double tp[]), void *fdata);
@@ -184,6 +193,7 @@ void *fdata				/* Opaque data needed by function */
 		double gamden, gamnum, gam;
 		double pretv;			/* Previous function return value */
 
+		DBG(("conjrad: about to do linmin\n"))
 		pretv = retv;
 		retv = linmin(cp, ssvec, di, 5.0 * ftol, func, fdata);
 
@@ -193,6 +203,7 @@ void *fdata				/* Opaque data needed by function */
 			break;
 		}
 
+		DBG(("conjrad: recomputing direction\n"))
 		(*dfunc)(fdata, svec, cp);
 
 		/* Compute gamma */
@@ -202,10 +213,12 @@ void *fdata				/* Opaque data needed by function */
 		}
 
 		if (gamden == 0.0) {		/* Gradient is exactly zero */
+			DBG(("conjrad: gradient is exactly zero\n"))
 			break;
 		}
 
 		gam = gamnum/gamden;
+		DBG(("conjrad: gamma = %f = %f/%f\n",gam,gamnum,gamden))
 
 		/* Adjust seach direction */
 		for (i = 0; i < di; i++) {
@@ -258,6 +271,8 @@ void *fdata)		/* Opaque data for func() */
 	/* -------------------------- */
 	/* First bracket the solution */
 
+	DBG(("linmin: Bracketing solution\n"))
+
 	/* The line is measured as startpoint + offset * search vector */
 	/* Start with ax being vector offset 0.0 */
 	ax = 0.0;
@@ -271,24 +286,29 @@ void *fdata)		/* Opaque data for func() */
 		xt[i] = cp[i] + xx * xi[i];
 	xf = (*func)(fdata, xt);
 
+	DBG(("linmin: Initial points a:%f:%f -> b:%f:%f\n",ax,af,xx,xf))
+
 	/* Fix it so that we are decreasing from point a -> x */
 	if (xf > af) {
 		double tt;
 		tt = ax; ax = xx; xx = tt;
 		tt = af; af = xf; xf = tt;
 	}
+	DBG(("linmin: Ordered Initial points a:%f:%f -> b:%f:%f\n",ax,af,xx,xf))
 
 	bx = xx + POWELL_GOLD * (xx-ax);	/* Guess b beyond a -> x */
 	for (i = 0; i < di; i++)
 		xt[i] = cp[i] + bx * xi[i];
 	bf = (*func)(fdata, xt);
 
+	DBG(("linmin: Initial bracket a:%f:%f x:%f:%f b:%f:%f\n",ax,af,xx,xf,bx,bf))
+
 #ifdef SLOPE_SANITY_CHECK
 	/* If we're not seeing a slope indicitive of progress */
 	/* of order ftol, give up straight away */
 	if (2000.0 * fabs(xf - bf) <= ftol * (fabs(xf) + fabs(bf))
 	 && 2000.0 * fabs(af - xf) <= ftol * (fabs(af) + fabs(xf))) {
-//printf("~1 giving up because slope is too shallow\n");
+		DBG(("linmin: giving up because slope is too shallow\n"))
 		if (xt != XT)
 			free_dvector(xt,0,di-1);
 
@@ -304,13 +324,15 @@ void *fdata)		/* Opaque data for func() */
 	}
 #endif /* SLOPE_SANITY_CHECK */
 
+
 	/* While not bracketed */
 	while (xf > bf) {
 		double ulim, ux, uf;
 		double tt, r, q;
 
-//printf("~1 bracketing because xf %f > bf %f\n",xf, bf);
-//printf("~1 ax = %f, xx = %f, bx = %f\n",ax,xx,bx);
+		DBG(("linmin: Not bracketer a:%f:%f x:%f%f b:%f:%f\n",ax,af,xx,xf,bx,bf))
+//		DBG(("linmin: Not bracketed because xf %f > bf %f\n",xf, bf))
+//		DBG(("        ax = %f, xx = %f, bx = %f\n",ax,xx,bx))
 
 		/* Compute ux by parabolic interpolation from a, x & b */
 		q = (xx - bx) * (xf - af);
@@ -382,6 +404,7 @@ void *fdata)		/* Opaque data for func() */
 		bx = ux; bf = uf;
 //printf("~1 move along to the right (a<-x, x<-b, b-<u)\n");
 	}
+	DBG(("linmin: Got bracket a:%f:%f x:%f:%f b:%f:%f\n",ax,af,xx,xf,bx,bf))
 	/* Got bracketed minimum between a -> x -> b */
 //printf("~1 got bracketed minimum at %f (%f), %f (%f), %f (%f)\n",ax,af,xx,xf,bx,bf);
 
@@ -414,9 +437,12 @@ void *fdata)		/* Opaque data for func() */
 			double tol1 = ftol * fabs(xx) + 1e-10;
 			double tol2 = 2.0 * tol1;
 
+			DBG(("linmin: Got bracket a:%f:%f x:%f:%f b:%f:%f\n",ax,af,xx,xf,bx,bf))
+
 			/* See if we're done */
 //printf("~1 linmin check %f <= %f\n",fabs(xx - mx), tol2 - 0.5 * (bx - ax));
 			if (fabs(xx - mx) <= (tol2 - 0.5 * (bx - ax))) {
+				DBG(("linmin: We're done because %f <= %f\n",fabs(xx - mx), tol2 - 0.5 * (bx - ax)))
 				break;
 			}
 
@@ -433,11 +459,13 @@ void *fdata)		/* Opaque data for func() */
 				te = e;				/* Save previous e value */
 				e = de;				/* Previous steps distance moved */
 
+				DBG(("linmin: Trial parabolic fit\n" ))
+
 				if (fabs(p) >= fabs(0.5 * q * te) || p <= q * (ax-xx) || p >= q * (bx-xx)) {
 					/* Give up on the parabolic fit, and use the golden section search */
 					e = ((xx >= mx) ? ax-xx : bx-xx);	/* Override previous distance moved */
 					de = POWELL_CGOLD * e;
-
+					DBG(("linmin: Moving to golden section search\n" ))
 				} else {	/* Use parabolic fit */
 					de = p/q;			/* Change in xb */
 					ux = xx + de;		/* Trial point according to parabolic fit */
@@ -447,19 +475,25 @@ void *fdata)		/* Opaque data for func() */
 						else
 							de = -tol1;
 					}
+					DBG(("linmin: Using parabolic fit\n" ))
 				}
 			} else {	/* Keep using the golden section search */
 				e = ((xx >= mx) ? ax-xx : bx-xx);	/* Override previous distance moved */
 				de = POWELL_CGOLD * e;
+				DBG(("linmin: Continuing golden section search\n" ))
 			}
 
-			if (fabs(de) >= tol1)	/* If de moves as much as tol1 would */
-				ux = xx + de;		/* use it */
-			else {					/* else move by tol1 in direction de */
-				if (de > 0.0)
+			if (fabs(de) >= tol1) {		/* If de moves as much as tol1 would */
+				ux = xx + de;			/* use it */
+				DBG(("linmin: ux = %f = xx %f + de %f\n",ux,xx,de))
+			} else {					/* else move by tol1 in direction de */
+				if (de > 0.0) {
 					ux = xx + tol1;
-				else
+					DBG(("linmin: ux = %f = xx %f + tol1 %f\n",ux,xx,tol1))
+				} else {
 					ux = xx - tol1;
+					DBG(("linmin: ux = %f = xx %f - tol1 %f\n",ux,xx,tol1))
+				}
 			}
 
 			/* Evaluate function */
@@ -476,6 +510,7 @@ void *fdata)		/* Opaque data for func() */
 				vx = wx; vf = wf;			/* New previous 2nd best solution */
 				wx = xx; wf = xf;			/* New 2nd best solution from previous best */
 				xx = ux; xf = uf;			/* New best solution from latest */
+				DBG(("linmin: found new best solution\n"))
 			} else {						/* Found a worse solution */
 				if (ux < xx) {
 					ax = ux; af = uf;		/* New lower bracket */
@@ -488,6 +523,7 @@ void *fdata)		/* Opaque data for func() */
 				} else if (uf <= vf || vx == xx || vx == wx) {	/* New 3rd best, or equal 1st & 2nd */
 					vx = ux; vf = uf;		/* New previous 2nd best from latest */
 				}
+				DBG(("linmin: found new worse solution\n"))
 			}
 		}
 		/* !!! should do something if iter > POWELL_MAXIT !!!! */

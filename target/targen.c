@@ -17,15 +17,15 @@
 
 /* TTBD:
 
-	Should add an option to quantize the device values -
-	ie. to 8 bits, so that quantizing error isn't introduced
-	through a reproduction path. Should this be a default ?
+	Should add an option to generate grey and near grey
+	test points based on the previous profile.
 
 	Using adaptive patch creation for grey colorspace is broken.
 	This should really be disabled for grey space, or fixed.
 
 	Adaptive only does a first go placement, itterative improvement
 	is turned off, because the algorithm doesn't work.
+	It would be good to figure out a way of fixing this.
 	The useful level for the -A parameter (degree of adapatation)
 	hasn't been determined.
 
@@ -676,7 +676,7 @@ double *ilimit			/* ink sum limit % input and return, -1 if default */
 		double outmax = 100.0;
 		int gres = 256;
 
-		if ((s->nlin[e] = new_rspl(1, 1)) == NULL)
+		if ((s->nlin[e] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL)
 			error("RSPL creation failed");
 
 		s->e = e;	/* Chanel to set */
@@ -718,7 +718,7 @@ usage(int level) {
 	fprintf(stderr," -e patches      White test patches (default 4)\n");
 	fprintf(stderr," -s steps        Single channel steps (default grey 50, color 0)\n");
 	fprintf(stderr," -g steps        Grey axis RGB or CMY steps (default 0)\n");
-	fprintf(stderr," -m steps        Multidimensional cube steps (default 2)\n");
+	fprintf(stderr," -m steps        Multidimensional device space cube steps (default 2)\n");
 	fprintf(stderr," -f patches      Add iterative & adaptive full spread patches to total (default grey 0, color 836)\n");
 	fprintf(stderr,"                 Default is Optimised Farthest Point Sampling (OFPS)\n");
 	fprintf(stderr,"  -t             Use incremental far point for full spread\n");

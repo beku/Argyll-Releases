@@ -20,6 +20,12 @@ int do_plot(double *x, double *y1, double *y2, double *y3, int n);
 
 #ifdef NT
 #define OEMRESOURCE
+#if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0501
+#define _WIN32_WINNT 0x0501
+#endif
+#if !defined(WINVER) || WINVER < 0x0501
+#define WINVER 0x0501
+#endif
 #include <windows.h>
 #include <shlwapi.h>
 #include <icm.h>
@@ -78,7 +84,6 @@ typedef struct {
 	int sx,sy;			/* Displays offset in pixels */
 	int sw,sh;			/* Displays width and height in pixels*/
 #ifdef NT
-	char monname[32];	/* Monitor Name */
 	char monid[128];	/* Monitor ID */
 	int prim;			/* NZ if primary display monitor */
 #endif /* NT */
@@ -109,11 +114,15 @@ disppath **get_displays();
 
 void free_disppaths(disppath **paths);
 
+/* Delete the display at the given index from the paths */
+void del_disppath(disppath **paths, int ix);
+
 /* Return the given display given its index 0..n-1 */
 disppath *get_a_display(int ix);
 
 void free_a_disppath(disppath *path);
 
+extern int callback_ddebug;		/* Diagnostic global for get_displays() and get_a_display() */  
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 /* Structure to handle RAMDAC values */
@@ -159,7 +168,6 @@ struct _dispwin {
 	char *callout;		/* if not NULL - set color Shell callout routine */
 
 #ifdef NT
-	char monname[32];	/* Monitor Name (ie. '\\.\DISPLAY1\Monitor0') */
 	char monid[128];	/* Monitor ID (ie. 'Monitor\MEA1773\{4D36E96E-E325-11CE-BFC1-08002BE10318}\0015'*/
 	HDC hdc;			/* Handle to display */
 	char *AppName;
@@ -218,6 +226,8 @@ struct _dispwin {
 	
 #endif /* UNIX */
 
+	int ddebug;					/* >0 to print debug to stderr */
+
 /* public: */
 	int pdepth;				/* Plane depth of display */
 
@@ -262,7 +272,8 @@ dispwin *new_dispwin(
 	int nowin,						/* NZ if no window should be created - RAMDAC access only */
 	int native,						/* NZ if ramdac should be bypassed instead of being used */
 	int blackbg,					/* NZ if whole screen should be filled with black */
-	int override					/* NZ if override_redirect is to be used on X11 */
+	int override,					/* NZ if override_redirect is to be used on X11 */
+	int ddebug						/* >0 to print debug statements to stderr */
 );
 
 

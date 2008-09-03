@@ -62,7 +62,7 @@ usage(void) {
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
 	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
-	fprintf(stderr,"                 1931_2 (def.), 1964_10, S&B 1955_2, J&V 1978_2\n");
+	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
 	fprintf(stderr," data.ti3        Test data file\n");
 	fprintf(stderr," iccprofile.icm  Profile to check against\n");
@@ -744,16 +744,18 @@ int main(int argc, char *argv[])
 
 			if (verb) {
 				if (devspace == icSigCmykData) {
-					printf("[%f] %f %f %f %f -> %f %f %f should be %f %f %f\n",
+					printf("[%f] %s: %f %f %f %f -> %f %f %f should be %f %f %f\n",
 					       cie2k ? icmCIE2K(tpat[i].v, out) : 
 					               cie94 ? icmCIE94(tpat[i].v, out) : icmLabDE(tpat[i].v, out),
+					       tpat[i].sid,
 					       tpat[i].p[0],tpat[i].p[1],tpat[i].p[2],tpat[i].p[3],
 					       out[0],out[1],out[2],
 					       tpat[i].v[0],tpat[i].v[1],tpat[i].v[2]);
 				} else {	/* Assume RGB/CMY */
-					printf("[%f] %f %f %f -> %f %f %f should be %f %f %f\n",
+					printf("[%f] %s: %f %f %f -> %f %f %f should be %f %f %f\n",
 					       cie2k ? icmCIE2K(tpat[i].v, out) : 
 					               cie94 ? icmCIE94(tpat[i].v, out) : icmLabDE(tpat[i].v, out),
+					       tpat[i].sid,
 					       tpat[i].p[0],tpat[i].p[1],tpat[i].p[2],
 					       out[0],out[1],out[2],
 					       tpat[i].v[0],tpat[i].v[1],tpat[i].v[2]);

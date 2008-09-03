@@ -87,12 +87,9 @@
 #define DISP_INTT2 1.0			/* High brightness display spot mode seconds per reading. */
 
 #define EMIS_SCALE_FACTOR 1.0	/* Emission mode scale factor */ 
-//#define AMB_SCALE_FACTOR (0.7657/3.1415926)	/* Ambient mode scale factor - convert */ 
 #define AMB_SCALE_FACTOR (1.0/3.141592654)	/* Ambient mode scale factor - convert */ 
 								/* from Lux to Lux/PI */
-								/* These are only approximate, and were derived */
-								/* by matching readings from the GMB driver results. */
-								/* I'm not sure what the exact values are! */
+								/* These factors get the same behaviour as the GMB drivers. */
 
 #include "i1pro.h"
 #include "i1pro_imp.h"
@@ -229,8 +226,11 @@ void plot_wav2(i1proimp *m, double *data) {
 i1pro_code add_i1proimp(i1pro *p) {
 	i1proimp *m;
 
-	if ((m = (i1proimp *)calloc(1, sizeof(i1proimp))) == NULL)
-		I1PRO_INT_MALLOC;
+	if ((m = (i1proimp *)calloc(1, sizeof(i1proimp))) == NULL) {
+		DBG((dbgo,"add_i1proimp malloc %d bytes failed (1)\n",sizeof(i1proimp)))
+		if (p->verb) printf("Malloc %d bytes failed (1)\n",sizeof(i1proimp));
+		return I1PRO_INT_MALLOC;
+	}
 	m->p = p;
 
 	/* EEProm data store */
@@ -307,7 +307,12 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 
 	DBG((dbgo,"i1pro_init:\n"))
 
-	p->itype = instI1Pro;
+	if (p->prelim_itype == instI1Monitor)
+		p->itype = instI1Monitor;
+	else if (p->prelim_itype == instI1Pro)
+		p->itype = instI1Pro;
+	else
+		return I1PRO_UNKNOWN_MODEL;
 
 	m->trig = inst_opt_trig_keyb;
 	m->scan_toll_ratio = 1.0;
@@ -423,8 +428,11 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 			return I1PRO_HW_CALIBINFO;
 
 		if ((m->white_ref1 = m->data->get_doubles(m->data, &count, key_white_ref)) == NULL
-		                                                                   || count != m->nwav1)
-			return I1PRO_HW_CALIBINFO;
+		                                                                   || count != m->nwav1) {
+			if (p->itype != instI1Monitor)
+				return I1PRO_HW_CALIBINFO;
+			m->white_ref1 = NULL;
+		}
 
 		if ((m->emis_coef1 = m->data->get_doubles(m->data, &count, key_emis_coef)) == NULL
 		                                                                   || count != m->nwav1)
@@ -550,7 +558,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 				case i1p_refl_spot:
 					s->reflective = 1;
 					s->adaptive = 1;
-					s->inttime = 0.02366;		/* Should get this from the log */ 
+					s->inttime = 0.02366;		/* Should get this from the log ?? */ 
 
 					s->dadaptime = 0.10;
 					s->wadaptime = 0.10;
@@ -595,8 +603,8 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 
 					s->dadaptime = 0.0;
 					s->wadaptime = 0.10;
-					s->dcaltime = DISP_INTT;
-					s->dcaltime2 = DISP_INTT2;
+					s->dcaltime = DISP_INTT;		/* ie. determines number of measurements */
+					s->dcaltime2 = DISP_INTT2 * 2;	/* Make it 2 seconds (ie, 2 x 1 seconds) */
 					s->wcaltime = 0.0;
 					s->dreadtime = 0.0;
 					s->wreadtime = DISP_INTT;
@@ -731,10 +739,12 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 		}
 	}
 
-	/* Restore the previous reflective spot calibration from the EEProm */
-	/* Get ready to operate the instrument */
-	if ((ev = i1pro_restore_refspot_cal(p)) != I1PRO_OK)
-		return ev; 
+	if (p->itype != instI1Monitor) {
+		/* Restore the previous reflective spot calibration from the EEProm */
+		/* Get ready to operate the instrument */
+		if ((ev = i1pro_restore_refspot_cal(p)) != I1PRO_OK)
+			return ev; 
+	}
 
 #ifdef ENABLE_NONVCAL
 	/* Restore the all modes calibration from the local system */
@@ -795,6 +805,9 @@ i1pro_code i1pro_imp_set_mode(
 	switch(mmode) {
 		case i1p_refl_spot:
 		case i1p_refl_scan:
+			if (p->itype != instI1Pro)
+				return I1PRO_INT_ILLEGALMODE;		/* i1Monitor */
+			/* Fall through */
 		case i1p_disp_spot:
 		case i1p_emiss_spot:
 		case i1p_emiss_scan:
@@ -958,18 +971,26 @@ i1pro_code i1pro_imp_calibrate(
 	if ((s->reflective && *calc == inst_calc_man_ref_white)
 	 || (s->emiss && !s->adaptive && *calc == inst_calc_man_em_dark)
 	 || (s->trans && !s->adaptive && *calc == inst_calc_man_trans_dark)) {
-
-		DBG((dbgo,"Doing initial black calibration with current int_time %f, gainmode %d\n", s->inttime, s->gainmode))
+		int stm;
 
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->inttime);
+
+		DBG((dbgo,"Doing initial black calibration with dcaltime %f, int_time %f, nummeas %d, gainmode %d\n", s->dcaltime, s->inttime, nummeas, s->gainmode))
+		stm = msec_time();
 		if ((ev = i1pro_dark_measure(p, s->dark_data, nummeas, &s->inttime, s->gainmode))
 	                                                                         != I1PRO_OK)
 			return ev;
+		if (p->debug) fprintf(stderr,"Execution time of dark calib time %f sec = %d msec\n",s->inttime,msec_time() - stm);
+
+		/* Special display mode alternate integration time black measurement */
 		if (s->emiss && !s->scan && !s->adaptive) {
 			nummeas = i1pro_comp_nummeas(p, s->dcaltime2, s->dark_int_time2);
+			DBG((dbgo,"Doing 2nd initial black calibration with dcaltime2 %f, dark_int_time2 %f, nummeas %d, gainmode %d\n", s->dcaltime2, s->dark_int_time2, nummeas, s->gainmode))
+			stm = msec_time();
 			if ((ev = i1pro_dark_measure(p, s->dark_data2, nummeas, &s->dark_int_time2,
 			                                                   s->gainmode)) != I1PRO_OK)
 				return ev;
+			if (p->debug) fprintf(stderr,"Execution time of 2nd dark calib time %f sec = %d msec\n",s->inttime,msec_time() - stm);
 		}
 		s->dark_valid = 1;
 		s->need_dcalib = 0;
@@ -984,30 +1005,32 @@ i1pro_code i1pro_imp_calibrate(
 	 || (s->trans && s->adaptive && !s->scan && *calc == inst_calc_man_trans_dark)) {
 		/* Adaptive where we can't measure the black reference on the fly, */
 		/* so bracket it and interpolate. */
-		/* The black reference is probably temeprature dependent, but */
+		/* The black reference is probably temperature dependent, but */
 		/* there's not much we can do about this. */
-	
-		DBG((dbgo,"Doing adaptive interpolated black calibration\n"))
 
 		s->idark_int_time[0] = 0.01;
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[0]);
+		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[0] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[0], nummeas, s->gainmode))
 		if ((ev = i1pro_dark_measure(p, s->idark_data[0], nummeas, &s->idark_int_time[0], 0))
 		                                                                          != I1PRO_OK)
 			return ev;
 	
 		s->idark_int_time[1] = 1.0;
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[1]);
+		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[1] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[1], nummeas, s->gainmode))
 		if ((ev = i1pro_dark_measure(p, s->idark_data[1], nummeas, &s->idark_int_time[1], 0))
 		                                                                          != I1PRO_OK)
 			return ev;
 	
 		s->idark_int_time[2] = 0.01;
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[2]);
+		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[2] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[2], nummeas, s->gainmode))
 		if ((ev = i1pro_dark_measure(p, s->idark_data[2], nummeas, &s->idark_int_time[2], 1))
 		                                                                          != I1PRO_OK)
 			return ev;
 	
 		s->idark_int_time[3] = 1.0;
+		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[3] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[3], nummeas, s->gainmode))
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[3]);
 		if ((ev = i1pro_dark_measure(p, s->idark_data[3], nummeas, &s->idark_int_time[3], 1))
 		                                                                          != I1PRO_OK)
@@ -1059,7 +1082,7 @@ i1pro_code i1pro_imp_calibrate(
 
 	}
 
-	/* Deal with an emsisive/transmisive adaptive black reference */
+	/* Deal with an emissive/transmisive adaptive black reference */
 	/* when in scan mode. */
 	if ((s->emiss && s->adaptive && s->scan && *calc == inst_calc_man_em_dark)
 	 || (s->trans && s->adaptive && s->scan && *calc == inst_calc_man_trans_dark)) {
@@ -1069,16 +1092,17 @@ i1pro_code i1pro_imp_calibrate(
 		/* but we don't know what gain mode will be used, so measure both, */
 		/* and choose the appropriate one on the fly. */
 	
-		DBG((dbgo,"Doing adaptive scan black calibration\n"))
 
 		s->idark_int_time[0] = s->inttime;
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[0]);
+		DBG((dbgo,"Doing adaptive scan black calibration, dcaltime %f, idark_int_time[0] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[0], nummeas, s->gainmode))
 		if ((ev = i1pro_dark_measure(p, s->idark_data[0], nummeas, &s->idark_int_time[0], 0))
 		                                                                          != I1PRO_OK)
 			return ev;
 	
 		s->idark_int_time[2] = s->inttime;
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[2]);
+		DBG((dbgo,"Doing adaptive scan black calibration, dcaltime %f, idark_int_time[2] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[2], nummeas, s->gainmode))
 		if ((ev = i1pro_dark_measure(p, s->idark_data[2], nummeas, &s->idark_int_time[2], 1))
 		                                                                          != I1PRO_OK)
 			return ev;
@@ -1143,9 +1167,8 @@ i1pro_code i1pro_imp_calibrate(
 						s->cal_valid = 0;
 
 					if (*calc == inst_calc_man_ref_white) {
-						DBG((dbgo,"Doing another black calibration with min inttime %f, gainmode %d\n",
-						                                                  s->inttime,s->gainmode))
 						nummeas = i1pro_comp_nummeas(p, s->dadaptime, s->inttime);
+						DBG((dbgo,"Doing another black calibration with dadaptime %f, min inttime %f, nummeas %d, gainmode %d\n", s->dadaptime, s->inttime, nummeas, s->gainmode))
 						if ((ev = i1pro_dark_measure(p, s->dark_data, nummeas, &s->inttime,
 						                                              s->gainmode)) != I1PRO_OK)
 							return ev;
@@ -1183,9 +1206,8 @@ i1pro_code i1pro_imp_calibrate(
 				                                                      s->inttime,s->gainmode))
 			
 				if (*calc == inst_calc_man_ref_white) {
-					DBG((dbgo,"Doing final black calibration with opt inttime %f, gainmode %d\n",
-					                                                s->inttime,s->gainmode))
 					nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->inttime);
+					DBG((dbgo,"Doing final black calibration with dcaltime %f, opt inttime %f, nummeas %d, gainmode %d\n", s->dcaltime, s->inttime, nummeas, s->gainmode))
 					if ((ev = i1pro_dark_measure(p, s->dark_data, nummeas, &s->inttime,
 					                                              s->gainmode)) != I1PRO_OK)
 						return ev;
@@ -1251,9 +1273,8 @@ i1pro_code i1pro_imp_calibrate(
 			}
 
 			if (*calc == inst_calc_man_ref_white) {
-				DBG((dbgo,"Doing final black calibration with opt inttime %f, gainmode %d\n",
-				                                                s->inttime,s->gainmode))
 				nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->inttime);
+				DBG((dbgo,"Doing final black calibration with dcaltime %f, opt inttime %f, nummeas %d, gainmode %d\n", s->dcaltime, s->inttime, nummeas, s->gainmode))
 				if ((ev = i1pro_dark_measure(p, s->dark_data, nummeas, &s->inttime,
 				                                              s->gainmode)) != I1PRO_OK)
 					return ev;
@@ -1456,7 +1477,8 @@ i1pro_code i1pro_imp_measure(
 	if (s->reflective) {
 		bsize = 256 * nummeas;
 		if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL) {
-			DBG((dbgo,"i1pro_imp_measure malloc failed\n"))
+			DBG((dbgo,"i1pro_imp_measure malloc %d bytes failed (5)\n",bsize))
+			if (p->verb) printf("Malloc %d bytes failed (5)\n",bsize);
 			return I1PRO_INT_MALLOC;
 		}
 	}
@@ -1469,7 +1491,8 @@ i1pro_code i1pro_imp_measure(
 	if ((mbuf = (unsigned char *)malloc(sizeof(unsigned char) * mbsize)) == NULL) {
 		if (buf != NULL)
 			free(buf);
-		DBG((dbgo,"i1pro_imp_measure malloc failed\n"))
+		DBG((dbgo,"i1pro_imp_measure malloc %d bytes failed (6)\n",mbsize))
+		if (p->verb) printf("Malloc %d bytes failed (6)\n",mbsize);
 		return I1PRO_INT_MALLOC;
 	}
 	specrd = dmatrix(0, nvals-1, 0, m->nwav-1);
@@ -1602,7 +1625,8 @@ i1pro_code i1pro_imp_measure(
 		mbsize = 256 * maxnummeas;
 		if ((mbuf = (unsigned char *)malloc(sizeof(unsigned char) * mbsize)) == NULL) {
 			free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
-			DBG((dbgo,"i1pro_imp_measure malloc failed\n"))
+			DBG((dbgo,"i1pro_imp_measure malloc %d bytes failed (7)\n",mbsize))
+			if (p->verb) printf("Malloc %d bytes failed (7)\n",mbsize);
 			return I1PRO_INT_MALLOC;
 		}
 
@@ -1610,7 +1634,7 @@ i1pro_code i1pro_imp_measure(
 
 		DISDPLOT
 
-		DBG((dbgo,"Doing on the fly black calibration with nummeas %d int_time %f, gainmode %d\n",
+		DBG((dbgo,"Doing on the fly black calibration_1 with nummeas %d int_time %f, gainmode %d\n",
 		                                                   nummeas, s->inttime, s->gainmode))
 
 		if ((ev = i1pro_dark_measure_1(p, nummeas, &s->inttime, s->gainmode, buf, bsize))
@@ -1652,6 +1676,7 @@ i1pro_code i1pro_imp_measure(
 
 		/* Complete black reference measurement */
 		if (s->reflective) {
+			DBG((dbgo,"Doing black calibration_2 with nummeas %d, inttime %f, gainmode %d\n", nummeas, s->inttime,s->gainmode))
 			if ((ev = i1pro_dark_measure_2(p, s->dark_data, nummeas, s->inttime, s->gainmode,
 			                                                      buf, bsize)) != I1PRO_OK) {
 				free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
@@ -1737,6 +1762,8 @@ i1pro_code i1pro_restore_refspot_cal(i1pro *p) {
 	i1key offst = 0;							/* Offset to copy to use */
 	i1pro_code ev = I1PRO_OK;
 
+	DBG((dbgo,"Doing Restoring reflective spot calibration information from the EEProm\n"))
+
 	chsum1 = m->data->checksum(m->data, 0);
 	if ((chsum2 = m->data->get_int(m->data, key_checksum, 0)) == NULL || chsum1 != *chsum2) {
 		offst = key_2logoff;
@@ -1764,6 +1791,8 @@ i1pro_code i1pro_restore_refspot_cal(i1pro *p) {
 		return I1PRO_OK;
 	}
 	s->inttime = dp[0];
+	if (s->inttime < m->min_int_time)	/* Hmm. EEprom is occasionaly screwed up */
+		s->inttime = m->min_int_time;
 
 	/* Get the dark data */
 	if ((ip = m->data->get_ints(m->data, &count, key_darkreading + offst)) == NULL
@@ -1779,11 +1808,16 @@ i1pro_code i1pro_restore_refspot_cal(i1pro *p) {
 	}
 
 	/* Convert to calibration data */
+	DBG((dbgo,"Doing black calibration_2 with nummeas %d, inttime %f, gainmode %d\n", 1, s->inttime,s->gainmode))
 	if ((ev = i1pro_dark_measure_2(p, s->dark_data, 1, s->inttime, s->gainmode,
 		                                                 buf, 256)) != I1PRO_OK) {
 		if (p->verb) printf("Failed to convert EEProm dark data to calibration\n");
 		return I1PRO_OK;
 	}
+
+	/* We've sucessfully restored the dark calibration */
+	s->dark_valid = 1;
+	s->ddate = m->caldate;
 
 	/* Get the white calibration data */
 	if ((ip = m->data->get_ints(m->data, &count, key_whitereading + offst)) == NULL
@@ -1816,8 +1850,6 @@ i1pro_code i1pro_restore_refspot_cal(i1pro *p) {
 	                           s->cal_factor2, m->white_ref2, s->cal_factor2);
 
 	/* We've sucessfully restored the calibration */
-	s->dark_valid = 1;
-	s->ddate = m->caldate;
 	s->cal_valid = 1;
 	s->cfdate = m->caldate;
 
@@ -2068,6 +2100,7 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 	FILE *fp;
 	i1pnonv x;
 	int ss;
+	int argyllversion = ARGYLL_VERSION;
 
 	strcpy(nmode, "w");
 #if defined(O_BINARY) || defined(_O_BINARY)
@@ -2095,6 +2128,7 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 	ss = sizeof(i1pro_state) + sizeof(i1proimp);
 
 	/* Some file identification */
+	write_ints(&x, fp, &argyllversion, 1);
 	write_ints(&x, fp, &ss, 1);
 	write_ints(&x, fp, &m->serno, 1);
 	write_ints(&x, fp, &m->nraw, 1);
@@ -2168,6 +2202,7 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 	char *path;
 	FILE *fp;
 	i1pnonv x;
+	int argyllversion;
 	int ss, serno, nraw, nwav1, nwav2, chsum1, chsum2;
 
 	strcpy(nmode, "r");
@@ -2193,12 +2228,14 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 	x.chsum = 0;
 
 	/* Check the file identification */
+	read_ints(&x, fp, &argyllversion, 1);
 	read_ints(&x, fp, &ss, 1);
 	read_ints(&x, fp, &serno, 1);
 	read_ints(&x, fp, &nraw, 1);
 	read_ints(&x, fp, &nwav1, 1);
 	read_ints(&x, fp, &nwav2, 1);
 	if (x.ef != 0
+	 || argyllversion != ARGYLL_VERSION
 	 || ss != (sizeof(i1pro_state) + sizeof(i1proimp))
 	 || serno != m->serno
 	 || nraw != m->nraw
@@ -2288,6 +2325,7 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 	rewind(fp);
 
 	/* Read the identification */
+	read_ints(&x, fp, &argyllversion, 1);
 	read_ints(&x, fp, &ss, 1);
 	read_ints(&x, fp, &m->serno, 1);
 	read_ints(&x, fp, &m->nraw, 1);
@@ -2361,6 +2399,7 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 
 /* Some sort of configuration needed get instrument ready. */
 /* Does it have a sleep mode that we need to deal with ?? */
+/* Note this always does a reset. */
 i1pro_code
 i1pro_establish_high_power(i1pro *p) {
 	i1pro_code ev = I1PRO_OK;
@@ -2506,8 +2545,11 @@ i1pro_code i1pro_dark_measure(
 	unsigned int bsize;
 
 	bsize = 256 * nummeas;
-	if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL)
+	if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL) {
+		DBG((dbgo,"i1pro_dark_measure malloc %d bytes failed (8)\n",bsize))
+		if (p->verb) printf("Malloc %d bytes failed (8)\n",bsize);
 		return I1PRO_INT_MALLOC;
+	}
 
 	if ((ev = i1pro_dark_measure_1(p, nummeas, inttime, gainmode, buf, bsize)) != I1PRO_OK) {
 		free(buf);
@@ -2515,7 +2557,7 @@ i1pro_code i1pro_dark_measure(
 	}
 
 	if ((ev = i1pro_dark_measure_2(p, abssens, nummeas, *inttime, gainmode, buf, bsize))
-	                                                                         != I1PRO_OK) {
+	                                                                           != I1PRO_OK) {
 		free(buf);
 		return ev;
 	}
@@ -2555,9 +2597,11 @@ i1pro_code i1pro_whitemeasure(
 			
 		/* Allocate temporaries */
 		bsize = 256 * nummeas;
-		if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL)
+		if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL) {
+			DBG((dbgo,"i1pro_whitemeasure malloc %d bytes failed (10)\n",bsize))
+			if (p->verb) printf("Malloc %d bytes failed (10)\n",bsize);
 			return I1PRO_INT_MALLOC;
-		
+		}
 	
 		DBG((dbgo,"Triggering measurement cycle, nummeas %d, inttime %f, gainmode %d\n",
 		                                              nummeas, *inttime, gainmode))
@@ -2960,8 +3004,11 @@ i1pro_code i1pro_read_patches(
 		
 	/* Allocate temporaries */
 	bsize = 256 * maxnummeas;
-	if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL)
+	if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL) {
+		DBG((dbgo,"i1pro_read_patches malloc %d bytes failed (11)\n",bsize))
+		if (p->verb) printf("Malloc %d bytes failed (11)\n",bsize);
 		return I1PRO_INT_MALLOC;
+	}
 
 	/* Trigger measure and gather raw readings */
 	if ((ev = i1pro_read_patches_1(p, minnummeas, maxnummeas, inttime, gainmode,
@@ -3012,8 +3059,11 @@ i1pro_code i1pro_trialmeasure(
 		
 	/* Allocate temporaries */
 	bsize = 256 * nummeas;
-	if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL)
+	if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL) {
+		DBG((dbgo,"i1pro_trialmeasure malloc %d bytes failed (12)\n",bsize))
+		if (p->verb) printf("Malloc %d bytes failed (12)\n",bsize);
 		return I1PRO_INT_MALLOC;
+	}
 	multimes = dmatrix(0, nummeas-1, 0, m->nraw-1);
 	abssens = dvector(0, m->nraw-1);
 
@@ -3147,6 +3197,7 @@ i1pro_trigger_one_measure(
 					return I1PRO_INT_INTTOOSMALL;
 				}
 			}
+			m->c_mcmode = mcmode;
 			m->intclkp = intclkusec * 1e-6;
 			if (p->debug > 1)
 				fprintf(stderr,"Switched to perfect mode, subtmode flag = 0x%x\n",subtmodeflags & 0x01);
@@ -3180,18 +3231,34 @@ i1pro_trigger_one_measure(
 	if (gainmode == 0)
 		measmodeflags |= I1PRO_MMF_GAINMODE;	/* Normal gain mode */
 
-	/* Set the hardware for measurement */
-	if ((ev = i1pro_setmeasparams(p, intclocks, lampclocks, nummeas, measmodeflags)) != I1PRO_OK)
-		return ev;
+	/* Do a setmeasparams */
+#ifdef NEVER
+	if (intclocks != m->c_intclocks				/* If any parameters have changed */
+	 || lampclocks != m->c_lampclocks
+	 || nummeas != m->c_nummeas
+	 || measmodeflags != m->c_measmodeflags)
+#endif /* NEVER */
+	{
 
-	m->c_inttime = *inttime;		/* Special harware is configured */
-	m->c_lamptime = s->lamptime;
-	m->c_measmodeflags = measmodeflags;
+		/* Set the hardware for measurement */
+		if ((ev = i1pro_setmeasparams(p, intclocks, lampclocks, nummeas, measmodeflags)) != I1PRO_OK)
+			return ev;
+	
+		m->c_intclocks = intclocks;
+		m->c_lampclocks = lampclocks;
+		m->c_nummeas = nummeas;
+		m->c_measmodeflags = measmodeflags;
+
+		m->c_inttime = *inttime;		/* Special harware is configured */
+		m->c_lamptime = s->lamptime;
+	}
 
 	/* If the lamp needs to be off, make sure at least 1.5 seconds */
 	/* have elapsed since it was last on, to make sure it's dark. */
 	if ((measmodeflags & I1PRO_MMF_NOLAMP)
 	 && (timssinceoff = (msec_time() - m->llamponoff)) < LAMP_OFF_TIME) {
+		if (p->debug >= 2)
+			fprintf(stderr,"Sleep %d msec for lamp cooldown\n",LAMP_OFF_TIME - timssinceoff);
 		msec_sleep(LAMP_OFF_TIME - timssinceoff);	/* Make sure time adds up to 1.5 seconds */
 	}
 
@@ -3421,8 +3488,11 @@ i1pro_code i1pro_abssens_to_meas(
 	double *polys;		/* the coeficients */
 	double scale;		/* Absolute scale value */
 
-	if (m->subtmode)
+	if (m->subtmode) {
+		DBG((dbgo,"i1pro_abssens_to_meas subtmode set\n"))
+		if (p->verb) printf("i1pro_abssens_to_meas subtmode set\n");
 		return I1PRO_INT_MALLOC;
+	}
 
 	if (gainmode) {
 		gain = m->highgain;
@@ -4820,7 +4890,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 		int gres[1];
 		double avgdev[1];
 
-		if ((raw2wav = new_rspl(1, 1)) == NULL) {
+		if ((raw2wav = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 			DBG((dbgo,"i1pro: creating rspl for high res conversion failed"))
 			return I1PRO_INT_NEW_RSPL_FAILED;
 		}
@@ -5339,7 +5409,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 			int ii;
 			co pp;
 	
-			if ((trspl = new_rspl(1, 1)) == NULL) {
+			if ((trspl = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 				DBG((dbgo,"i1pro: creating rspl for high res conversion failed"))
 				raw2wav->del(raw2wav);
 				return I1PRO_INT_NEW_RSPL_FAILED;
@@ -5360,6 +5430,9 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 					ref1 = m->amb_coef1;
 					ref2 = &m->amb_coef2;
 				}
+
+				if (ref1 == NULL)
+					continue;		/* The instI1Monitor doesn't have a reflective cal */
 
 				for (i = 0; i < m->nwav1; i++) {
 
@@ -6190,6 +6263,7 @@ i1pro_reset(
 				/* 0x1f = normal resent */
 				/* 0x01 = establish high power mode */
 ) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read or written */
 	unsigned char pbuf[1];	/* 1 bytes to write */
 	int se, rv = I1PRO_OK;
@@ -6214,6 +6288,12 @@ i1pro_reset(
 	msec_sleep(100);
 
 	p->icom->debug = isdeb;
+
+	/* Make sure that we re-initialize the measurement mode */
+	m->c_intclocks = 0;
+	m->c_lampclocks = 0;
+	m->c_nummeas = 0;
+	m->c_measmodeflags = 0;
 
 	return rv;
 }
@@ -6494,6 +6574,21 @@ i1pro_getmeasparams(
 
 /* Set the current measurement parameters */
 /* Return pointers may be NULL if not needed. */
+/* Quirks:
+
+	Rev. A upgrade:
+	Rev. B:
+		Appears to have a bug where the measurement time
+		is the sum of the previous measurement plus the current measurement.
+		It doesn't seem to alter the integration time though.
+		There is no obvious way of fixing this (ie. reseting the instrument
+		doesn't work).
+
+	Rev. D:
+		It appears that setting intclocks to 0, toggles to/from
+		a half clock speed mode. (?)
+*/
+
 i1pro_code
 i1pro_setmeasparams(
 	i1pro *p,
@@ -6636,7 +6731,14 @@ i1pro_readmeasurement(
 
 	if (isdeb) fprintf(stderr,"\ni1pro: Read measurement results inummeas %d, scanflag %d, address 0x%x bsize 0x%x\n",inummeas, scanflag, buf, bsize);
 
-	extra = 1.0;		/* Extra timeout margine */
+	extra = 1.0;		/* Extra timeout margin */
+
+	/* Deal with Rev A+ & Rev B quirk: */
+	if ((m->fwrev >= 200 && m->fwrev < 300)
+	 || (m->fwrev >= 300 && m->fwrev < 400))
+		extra += m->l_inttime;
+	m->l_inttime = m->c_inttime;
+
 #ifdef SINGLE_READ
 	if (scanflag == 0)
 		nmeas = inummeas;

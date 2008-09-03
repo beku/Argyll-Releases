@@ -70,9 +70,16 @@ Don't preserve device curves in result</span><br
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Special
-:- Force neutral colors to be K only output.</span><br
+:- Force neutral colors to be K only output.<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="collink.html#fk">-fk</a><span
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; Special
+:- Force K only neutral colors to be K only output</span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#F">-F</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -403,13 +410,18 @@ option disables this. This can be useful if the device linearisation
 curves
 are inappropriate in nature.<br>
 <br>
-<a name="f"></a><a name="F"></a> The <b>-f</b> option is a special
+<a name="f"></a><a name="F"></a><a name="fk"></a> The <b>-f</b> option
+is a special
 purpose flag useful
-only for 3 component (RGB or CMY) input to CMYK output linking, that
+only for 3 or 4 component (RGB, CMY or CMYK) input to CMYK output
+linking, that
 causes the output to be
 K only for neutral axis input. Neutral axis input is assumed for R=G=B
 or
-C=M=Y input values. If the <b>-F</b> flag is used,
+C=M=Y input values. If the <span style="font-weight: bold;">-fk</span>
+option is used, then C=M=Y=0 are regarded as neutral colors, so that K
+only input will be mapped to K only output. If the <b>-F</b> flag is
+used,
 then all colors will
 be converted to K only output.<br>
 <br>

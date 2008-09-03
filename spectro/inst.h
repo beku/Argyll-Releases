@@ -357,7 +357,8 @@ typedef enum {
 																				\
 	int debug;		/* debug level, 1..9 */										\
 	int verb;		/* Verbosity level */                                       \
-	instType  itype;															\
+	instType  prelim_itype;	/* Instrument type determined by cons/USB */		\
+	instType  itype;	/* Instrument type determined by driver */				\
 	icoms *icom;	/* Instrument coms object */								\
 	int gotcoms;	/* Coms established flag */                                 \
 	int inited;		/* Initialised flag */                                      \

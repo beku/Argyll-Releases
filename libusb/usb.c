@@ -14,7 +14,7 @@
 #include "usbi.h"
 
 int usb_argyll_patched(void) {
-	return 1;
+	return 2;
 }
 
 int usb_debug = 0;

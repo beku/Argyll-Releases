@@ -164,7 +164,7 @@ icmAlloc *new_icmAllocStd(void);
 	size_t (*write)(struct _icmFile *p, void *buffer, size_t size, size_t count);			\
 																							\
 	/* printf to the file */																\
-	int (*printf)(struct _icmFile *p, const char *format, ...);								\
+	int (*gprintf)(struct _icmFile *p, const char *format, ...);								\
 																							\
 	/* flush all write data out to secondary storage. Return nz on failure. */				\
 	int (*flush)(struct _icmFile *p);														\

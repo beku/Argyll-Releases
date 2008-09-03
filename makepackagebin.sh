@@ -13,7 +13,7 @@ echo "Script to invoke Jam and then package the binary release."
 #
 #	OS X i386 10.4 [bash]			darwin8.0	i386-apple-darwin8.0	i386
 #
-#	OS X i386 10.5 [bash]			darwin9.0	i386-apple-darwin8.0	i386
+#	OS X i386 10.5 [bash]			darwin9.0	i386-apple-darwin9.0	i386
 #
 #	Linux RH 4.0 [bash]				linux-gnu	i686-redhat-linux-gnu	i686
 #
@@ -22,7 +22,10 @@ echo "Script to invoke Jam and then package the binary release."
 #	Linux Fedora 7.1 64 bit [bash]	linux-gnu	x86_64-redhat-linux-gnu	x86_64
 #
 
-VERSION=1.0.0
+# Set the environment string VERSION from the #define, ie 1.0.0
+VERSION=`grep ARGYLL_VERSION_STR h/config.h | sed 's/#define ARGYLL_VERSION_STR //' | sed 's/"//g'`
+
+echo "About to make Argyll binary distribution $PACKAGE"
 
 TOPDIR=Argyll_V$VERSION
 
@@ -36,7 +39,11 @@ fi
 rm -f bin/*.exe bin/*.dll
 rm -f ref/*.sp ref/*.cht ref/*.ti2
 
-jam -q -fJambase -j${NUMBER_OF_PROCESSORS:-2} -sBUILTIN_TIFF=true install 
+# Make sure it's built and installed
+if ! jam -q -fJambase -j${NUMBER_OF_PROCESSORS:-2} -sBUILTIN_TIFF=true install ; then
+	echo "Build failed!"
+	exit 1
+fi 
 
 # Maybe we could get Jam to do the following ?
 
@@ -62,7 +69,7 @@ else if [ X$OSTYPE = "Xdarwin8.0" ] ; then
 	unset USBDIR
 	USETAR=true
 else if [ X$OSTYPE = "Xdarwin9.0" ] ; then
-	if [ X$MACHTYPE = "Xi386-apple-darwin8.0" ] ; then
+	if [ X$MACHTYPE = "Xi386-apple-darwin9.0" ] ; then
 		echo "We're on OSX 10.5 i386!"
 		PACKAGE=Argyll_V${VERSION}_osx10.5_i86_bin.tgz
 	fi
@@ -127,4 +134,5 @@ fi
 rm -rf $TOPDIR
 echo "Done GNU Argyll binary distribution $PACKAGE"
 
+exit 0
 

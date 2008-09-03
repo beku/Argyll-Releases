@@ -376,39 +376,44 @@ int verb			/* Verbosity flag */
 		atype = itype;
 	}
 
-	/* itype and atype will be the same now */
-	if (itype == instDTP20 && atype == instDTP20)
+	/* itype and atype will be the same now, so use itype */
+	if (itype == instDTP20)
 		p = (inst *)new_dtp20(icom, debug, verb);
-	else if (itype == instDTP22 && atype == instDTP22)
+	else if (itype == instDTP22)
 		p = (inst *)new_dtp22(icom, debug, verb);
-	else if (itype == instDTP41 && atype == instDTP41)
+	else if (itype == instDTP41)
 		p = (inst *)new_dtp41(icom, debug, verb);
-	else if (itype == instDTP51 && atype == instDTP51)
+	else if (itype == instDTP51)
 		p = (inst *)new_dtp51(icom, debug, verb);
-	else if ((itype == instDTP92 && atype == instDTP92) || 
-	         (itype == instDTP94 && atype == instDTP94))
+	else if ((itype == instDTP92) || 
+	         (itype == instDTP94))
 		p = (inst *)new_dtp92(icom, debug, verb);
-	else if ((itype == instSpectrolino  && atype == instSpectrolino) ||
-			 (itype == instSpectroScan  && atype == instSpectroScan) ||
-			 (itype == instSpectroScanT && atype == instSpectroScanT))
+	else if ((itype == instSpectrolino ) ||
+			 (itype == instSpectroScan ) ||
+			 (itype == instSpectroScanT))
 		p = (inst *)new_ss(icom, debug, verb);
 /* NYI
-	else if (itype == instSpectrocam && atype == instSpectrocam)
+	else if (itype == instSpectrocam)
 		p = (inst *)new_spc(icom, debug, verb);
 */
-	else if (itype == instI1Display && atype == instI1Display)
+	else if (itype == instI1Display)
 		p = (inst *)new_i1disp(icom, debug, verb);
-	else if (itype == instI1Pro && atype == instI1Pro)
+	else if (itype == instI1Monitor)
 		p = (inst *)new_i1pro(icom, debug, verb);
-	else if (itype == instHCFR && atype == instHCFR)
+	else if (itype == instI1Pro)
+		p = (inst *)new_i1pro(icom, debug, verb);
+	else if (itype == instHCFR)
 		p = (inst *)new_hcfr(icom, debug, verb);
-	else if (itype == instSpyder2 && atype == instSpyder2)
+	else if (itype == instSpyder2)
 		p = (inst *)new_spyd2(icom, debug, verb);
-	else if (itype == instHuey && atype == instHuey)
+	else if (itype == instHuey)
 		p = (inst *)new_huey(icom, debug, verb);
 	else {
 		return NULL;
 	}
+
+	/* Tell driver the perported instrument type */
+	p->prelim_itype = itype;
 
 	/* Add default methods if constructor did not supply them */
 	if (p->init_coms == NULL)

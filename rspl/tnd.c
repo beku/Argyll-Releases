@@ -117,7 +117,7 @@ int main(int argc, char *argv[]) {
 	avgdev[3] = 0.0;
 
 	/* Create the object */
-	rss =  new_rspl(DI,				/* di */
+	rss =  new_rspl(RSPL_NOFLAGS, DI,				/* di */
 	                  FDI);				/* fdi */
 
 #ifdef TEST_RANDOM_POINTS

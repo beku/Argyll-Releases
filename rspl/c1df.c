@@ -164,7 +164,7 @@ int main(int argc, char *argv[]) {
 			continue;
 
 		/* Create the object */
-		rss =  new_rspl(1,				/* di */
+		rss =  new_rspl(RSPL_NOFLAGS, 1,				/* di */
 		                  1);				/* fdi */
 
 		for (i = 0; i < pnts; i++) {

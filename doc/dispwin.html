@@ -110,9 +110,13 @@ installed profiles cal. into Video LUT<br>
  href="#D">-D</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 [<span style="font-weight: bold;">X11
-only</span>] Run in daemon loader mode for given X11 server </span></font><font
- size="-1"><span style="font-family: monospace;"></span></font><font
- size="-1"><span style="font-family: monospace;"></span><span
+only</span>] Run in daemon loader mode for given X11 server <br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#E">-E [level]</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Print debug diagnostics to stderr</span></font><font size="-1"><span
+ style="font-family: monospace;"></span></font><font size="-1"><span
+ style="font-family: monospace;"></span><span
  style="font-family: monospace;"><br>
 &nbsp;</span></font><a style="font-family: monospace;" href="#p1"><font
  size="-1"><span style="font-family: monospace;"></span></font></a><font
@@ -319,6 +323,13 @@ given, it will emit messages to stdout to show what it is doing. When
 it is first invoked, it will load the installed profiles of all the
 screens of the given X11 server.<br>
 <br>
+<a name="E"></a>The <b>-E</b> flag causes diagnostics to be printed to
+stdout. A level can
+be set between 1 .. 9, that may give progressively more verbose
+information. This can be useful in
+tracking
+down why an operation fails.<br>
+<br>
 <a name="p1"></a> The final optional parameter on the command line is
 the name of an ICC profile that contains a Video LUT <span
  style="font-weight: bold;">vcgt</span> tag, or an Argyll <a
@@ -335,6 +346,13 @@ startup, although a better way may be to install the profile (<span
 interpretation within Argyll is
 consistent with that of the originators of the tag. Other ICC profile
 vcgt implementations may not be so consistent.<br>
+<br>
+<span style="font-weight: bold;">NOTE</span> that on an X11 system, if
+the environment variable <span style="font-weight: bold;">ARGYLL_IGNORE_XRANDR1_2</span>
+is set (ie. set it to "yes"), then the presence of the XRandR 1.2
+extension will be ignored, and other extensions such as Xinerama and
+XF86VidMode extension will be used. This may be a way to work around
+buggy XRandR 1.2 implementations.<br>
 <br>
 <br>
 <br>

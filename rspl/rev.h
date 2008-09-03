@@ -230,10 +230,9 @@ struct _cell {
 
 #define REV_ACC_GRES_MUL 2.0		/* Reverse accelleration grid resolution */
 									/* multiplier over fwd grid resolution */
-#define REV_MAX_MEM_RATIO 0.2		/* Limit of memory allocated to an instance of */
+#define REV_MAX_MEM_RATIO 0.45		/* Proportion of first 1G of Ram to use */
+#define REV_MAX_MEM_RATIO2 0.75		/* Proportion of rest of Ram to use */
 									/* rev as a fraction of the System RAM. */
-									/* Typical usage will be 2.5 times this amount, */
-									/* ie. half the system RAM. */
 #define HASH_FILL_RATIO 3			/* Ratio of entries to hash size */
 
 /* The structure where cells are allocated and cached. */
@@ -242,6 +241,7 @@ struct _cell {
 typedef struct {
 	struct _rspl *s;			/* Pointer to parent rspl */
 	int nacells;				/* Number of allocated cells */
+	int nunlocked;				/* Number of unlocked cells that could be freed */
 	int cell_hash_size;			/* Current size of cell hash list */
 	cell **hashtop;				/* Top of hash list [cell_hash_size] */
 	cell *mrutop, *mrubot;		/* Top and bottom pointers of mru list */
@@ -374,9 +374,14 @@ struct _rev_struct {
 
 	int inited;			/* Non-zero if first section has been initialised */
 						/* All other sections depend on this. */
+	int fastsetup;		/* Flag - NZ if fast setup at cost of slow throughput */
 
+	struct _rev_struct *next;	/* Linked list of instances sharing memory */
 	size_t max_sz;		/* Maximum size permitted */
 	size_t sz;			/* Total memory current allocated by rev */
+#ifdef NEVER
+	int thissz, lastsz;	/* Debug reporting */
+#endif
 
 	/* Reverse grid lookup information */
 	int ares;			/* Reverse grid allocated resolution, = res + 1, */
@@ -410,7 +415,7 @@ struct _rev_struct {
 	/* Has been initialise if sb != NULL */
 	schbase *sb;		/* Structure holding calculated per-search call information */
 
-	unsigned int stouch;	/* Simplex touch count to avoid searching shared simplexs twice */
+	unsigned int stouch; /* Simplex touch count to avoid searching shared simplexs twice */
 #ifdef STATS
 	stats st[5];	/* Set of stats info indexed by enum ops */
 #endif	/* STATS */

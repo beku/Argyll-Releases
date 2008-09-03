@@ -183,7 +183,11 @@ opt_rspl_imp(
 	/* set debug level */
 	s->debug = (flags >> 24);
 
-	s->verbose = (flags & RSPL_VERBOSE) ? 1 : 0;	/* Turn on progress messages to stdout */
+	if (flags & RSPL_VERBOSE)	/* Turn on progress messages to stdout */
+		s->verbose = 1;
+	if (flags & RSPL_NOVERBOSE)	/* Turn off progress messages to stdout */
+		s->verbose = 0;
+
 	s->symdom = (flags & RSPL_SYMDOMAIN) ? 1 : 0;	/* Turn on symetric smoothness with gres */
 
 	if (tdi >= MXDI)

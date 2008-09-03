@@ -1463,6 +1463,7 @@ char *label,		/* Per strip label */
 double pw,			/* Page width */
 double ph,			/* Page height */
 double bord, 		/* Border in mm */
+int nolpcbord,		/* NZ to supress left paper clip border */
 int rand,			/* Randomise flag */
 int rstart,			/* Starting index for random */
 alphix *saix,		/* Strip alpha index object */
@@ -1609,7 +1610,7 @@ int *p_npat			/* Return number of patches including padding */
 
 	/* Set Instrument specific parameters */
 	if (itype == instDTP20) { 	/* Xrite DTP20 */
-//		if (bord < 26.0)
+//		if (nolpcbord == 0 && bord < 26.0)
 //			lbord = 26.0 - bord;	/* need this for holder to grip paper and plastic spacer */
 		hex = 0;				/* No hex for strip instruments */
 		hxew = hxeh = 0.0;		/* No extra padding because no hex */
@@ -1784,7 +1785,7 @@ int *p_npat			/* Return number of patches including padding */
 		pglth = 5.0;			/* Page Label text height */
 
 	} else if (itype == instI1Pro ) {	/* GretagMacbeth Eye-One Pro */
-		if (bord < 26.0)
+		if (nolpcbord == 0 && bord < 26.0)
 			lbord = 26.0 - bord;	/* need this for holder to grip paper and plastic spacer */
 		hex = 0;				/* No hex for strip instruments */
 		hxew = hxeh = 0.0;		/* No extra padding because no hex */
@@ -2497,10 +2498,12 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -T [res]        Output 16 bit TIFF raster file, optional res DPI (default 100)\n");
 	fprintf(stderr," -C              Don't use TIFF compression\n");
 	fprintf(stderr," -N              Use TIFF alpha N channels more than 4\n");
+	fprintf(stderr," -Q nbits        Quantize test values to fit in nbits\n");
 	fprintf(stderr," -R rsnum        Use given random start number\n");
 	fprintf(stderr," -x pattern      Use given strip indexing pattern (Default = \"%s\")\n",DEF_SIXPAT);
 	fprintf(stderr," -y pattern      Use given patch indexing pattern (Default = \"%s\")\n",DEF_PIXPAT);
 	fprintf(stderr," -m margin       Set a page margin in mm (default %3.1f mm)\n",DEF_MARGINE);       
+	fprintf(stderr," -L              Supress any left paper clip border\n");       
 	fprintf(stderr," -p size         Select page size from:\n");
 	for (pp = psizes; pp->name != NULL; pp++)
 		fprintf(stderr,"                 %s	[%.1f x %.1f mm]%s\n", pp->name, pp->w, pp->h,
@@ -2521,6 +2524,7 @@ char *argv[];
 	double pscale = 1.0;	/* Patch size scale */
 	double sscale = 1.0;	/* Spacer size scale */
 	int rand = 1;
+	int qbits = 0;			/* Quantization bits */
 	int oft = 0;			/* Ouput File type, 0 = PS, 1 = EPS , 2 = TIFF */
 	depth2d tiffdpth = bpc8_2d;	/* TIFF pixel depth */
 	double tiffres = 100.0;	/* TIFF resolution in DPI */
@@ -2549,6 +2553,7 @@ char *argv[];
 	int si, fi, wi;			/* sample id index, field index, keyWord index */
 	char label[400];		/* Space for chart label */
 	double marg = DEF_MARGINE;	/* Margin from paper edge in mm */
+	int nolpcbord = 0;		/* NZ to supress left paper clip border */
 	paper *pap = NULL;		/* Paper size pointer, NULL if custom */
 	double cwidth, cheight;	/* Custom paper width and height in mm */
 	col *cols;				/* test patch colors */
@@ -2662,10 +2667,10 @@ char *argv[];
 			/* Specify random seed */
 			else if (argv[fa][1] == 'R') {
 				fa = nfa;
-				if (na == NULL) usage("Expected argument to -t");
+				if (na == NULL) usage("Expected argument to -R");
 				rstart = atoi(na);
 				if (rstart < 0)
-					usage("Argument to -t must be positive");
+					usage("Argument to -R must be positive");
 			}
 
 			/* Enable DeviceN color fallback */
@@ -2752,6 +2757,15 @@ char *argv[];
 				tiffcomp = 0;
 			}
 
+			/* Specify quantization bits */
+			else if (argv[fa][1] == 'Q') {
+				fa = nfa;
+				if (na == NULL) usage("Expected argument to -Q");
+				qbits = atoi(na);
+				if (qbits < 1 || qbits > 32)
+					usage("Argument to -Q must be between 1 and 32");
+			}
+
 			/* Specify strip index pattern */
 			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
 				fa = nfa;
@@ -2773,6 +2787,11 @@ char *argv[];
 				marg = atof(na);
 				if (marg < 0.0 || marg > 50.0)
 					usage("Border margin %f is outside expected range",marg);
+			}
+
+			/* Supress left paper clip border */
+			else if (argv[fa][1] == 'L') {
+				nolpcbord = 1;
 			}
 
 			/* Page size */
@@ -2828,6 +2847,14 @@ char *argv[];
 	strcpy(psname,inname);
 	strcat(inname,".ti1");
 	strcat(outname,".ti2");
+
+	/* Set default qantization for known output */
+	if (qbits == 0 && oft == 2) { 
+		if (tiffdpth == bpc16_2d)
+			qbits = 16;
+		else if (tiffdpth == bpc8_2d)
+			qbits = 8;
+	}
 
 	if (hex && itype != instSpectroScan) {
 		if (verb)
@@ -2923,6 +2950,7 @@ char *argv[];
 		int xyzix[3];			/* XYZ chanel indexes */
 		char *ident;
 		char *xyzfname[3] = { "XYZ_X", "XYZ_Y", "XYZ_Z" };
+		double qscale = (1 << qbits) - 1.0;
 
 		if ((ii = icg->find_kword(icg, 0, "TOTAL_INK_LIMIT")) >= 0)
 			ocg->add_kword(ocg, 0, "TOTAL_INK_LIMIT",icg->t[0].kdata[ii], NULL);
@@ -2959,7 +2987,7 @@ char *argv[];
 
 		ocg->add_kword(ocg, 0, "COLOR_REP", ident, NULL);
 
-		/* Read all the test patches in */
+		/* Read all the test patches in, and quantize them */
 		for (i = 0; i < npat; i++) {
 			cols[i].i = i;
 			cols[i].t = T_N | T_XYZ;
@@ -2970,8 +2998,17 @@ char *argv[];
 			cols[i].n  = nchan;
 			cols[i].id = ((char *)icg->t[0].fdata[i][si]);
 			sprintf(cols[i].loc, "???");
-			for (j = 0; j < nchan; j++)
-				cols[i].dev[j] = *((double *)icg->t[0].fdata[i][chix[j]]) / 100.0;
+			for (j = 0; j < nchan; j++) {
+				double vr, vv = *((double *)icg->t[0].fdata[i][chix[j]]) / 100.0;
+				if (qbits > 0) {
+					vv *= qscale;
+					vr = floor(vv + 0.5);
+					if ((vr - vv) == 0.5 && (((int)vr) & 1) != 0) /* Round to even */
+						vr -= 1.0;
+					vv = vr/qscale;
+				}
+				cols[i].dev[j] = vv;
+			}
 			for (j = 0; j < 3; j++)
 				cols[i].XYZ[j] = *((double *)icg->t[0].fdata[i][xyzix[j]]) / 100.0;
 			col_convert(&cols[i], wp);	/* Ensure other representations */
@@ -3140,7 +3177,7 @@ char *argv[];
 	               psname, rand ? "Random Start" : "Chart ID", rstart, atm);
 	generate_file(itype, psname, cols, npat, label,
 	            pap != NULL ? pap->w : cwidth, pap != NULL ? pap->h : cheight,
-	            marg, rand, rstart, saix, paix,	ixord,
+	            marg, nolpcbord, rand, rstart, saix, paix,	ixord,
 	            pscale, sscale, hex, verb, scanc, oft, tiffdpth, tiffres, ncha, tiffcomp,
 	            spacer, nmask, pgreyt, pcol, wp,
 	            &sip, &pis, &plen, &glen, &tlen, &nppat);

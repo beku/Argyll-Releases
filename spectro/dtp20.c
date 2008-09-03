@@ -223,10 +223,11 @@ double top) {		/* Timout in seconds */
 //printf("~1 doing %d, %d to go\n",rsize, bsize);
 
 		if ((se = p->icom->usb_read(p->icom, 0x81, (unsigned char *)op, rsize, &bread, top)) != ICOM_OK) {
-			if (se == ICOM_SHORT)
+			if (se == ICOM_SHORT) {
 				if (isdeb) fprintf(stderr,"response failed expected %d got %d ICOM err 0x%x\n",rsize,bread,se);
-			else
+			} else {
 				if (isdeb) fprintf(stderr,"response failed ICOM err 0x%x\n",se);
+			}
 			p->icom->debug = isdeb;
 			return dtp20_interp_code((inst *)p, icoms2dtp20_err(se));
 		}
@@ -628,7 +629,7 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 		if (cs == 2 || cs == 3)
 			return (inst_misread | DTP20_NOT_EMPTY);	/* Has onffline patches */	
 		if (i < 20) {
-			if (cs == 4 || cs == 5 || cs == 8 || cs == 9 || cs == 10 || cs == 11 | cs == 12) {
+			if (cs == 4 || cs == 5 || cs == 8 || cs == 9 || cs == 10 || cs == 11 || cs == 12) {
 				msec_sleep(200);
 				continue;
 			}

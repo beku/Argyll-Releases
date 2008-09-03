@@ -216,7 +216,7 @@ void (*lookup) (void *lucntx, double *lin, double *dev)
 	double y1[XRES];
 #endif /* DEBUG */
 
-		if ((p->curves[ee] = new_rspl(1, 1)) == NULL) {
+		if ((p->curves[ee] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 			error("Creation of rspl failed in xdevlin");
 		}
 

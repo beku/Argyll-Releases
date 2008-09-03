@@ -92,4 +92,7 @@ ucmm_error ucmm_get_monitor_profile(
 	char **profile		/* Return path to profile. free() afterwards. */
 );
 
+/* Return an ASCII error message string interpretation of an error number */
+char *ucmm_error_string(ucmm_error erno);
+
 #endif /* UCMM_H */

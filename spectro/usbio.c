@@ -10,7 +10,7 @@
  * Copyright 2006 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -149,7 +149,7 @@ instType usb_is_usb_portno(
 ) {
 	
 	if (p->paths == NULL)
-		icoms_get_paths(p);
+		p->get_paths(p);
 
 	if (port <= 0 || port > p->npaths)
 		error("icoms - set_ser_port: port number out of range!");
@@ -393,7 +393,8 @@ int    port,		/* USB com port, 1 - N, 0 for no change. */
 int    config,		/* Configuration */
 int    wr_ep,		/* Write end point */
 int    rd_ep,		/* Read end point */
-icomuflags usbflags	/* Any special handling flags */
+icomuflags usbflags,/* Any special handling flags */
+int retries			/* > 0 if we should retry set_configuration (100msec) */ 
 ) {
 	if (p->debug) fprintf(stderr,"icoms: About to open the USB port\n");
 
@@ -417,7 +418,7 @@ icomuflags usbflags	/* Any special handling flags */
 		}
 
 		if (p->paths == NULL)
-			icoms_get_paths(p);
+			p->get_paths(p);
 
 		if (port <= 0 || port > p->npaths)
 			error("icoms - usb_open_port: port number out of range!");
@@ -434,22 +435,36 @@ icomuflags usbflags	/* Any special handling flags */
 
 		if (p->debug) fprintf(stderr,"icoms: About to open USB port '%s'\n",p->ppath->path);
 
-		if ((p->usbh = usb_open(p->ppath->dev)) == NULL)
-			error("Opening USB port '%s' failed (%s) (Permissions ?)",p->ppath->path,config,usb_strerror());
-		p->usbd = p->ppath->dev;
+		/* Do open retries */
+		do {
+			if ((p->usbh = usb_open(p->ppath->dev)) == NULL) {
+				if (retries <= 0)
+					error("Opening USB port '%s' config %d failed (%s) (Permissions ?)",p->ppath->path,config,usb_strerror());
+				msec_sleep(100);
+				continue;
+			}
+			p->usbd = p->ppath->dev;
 
-		p->cnfg = config;
-		p->uflags = usbflags;
+			p->cnfg = config;
+			p->uflags = usbflags;
 
 #if LIBUSB_HAS_DETACH_KERNEL_DRIVER_NP == 1
-		if (p->uflags & icomuf_detach) {
-			usb_detach_kernel_driver_np(p->usbh, 0);
-		}
+			if (p->uflags & icomuf_detach) {
+				usb_detach_kernel_driver_np(p->usbh, 0);
+			}
 #endif
 
-		/* (Should use bConfigurationValue ?) */
-		if ((rv = usb_set_configuration(p->usbh, p->cnfg)) < 0)
-			error("Configuring USB port '%s' to %d failed with %d (%s)",p->ppath->path,config,rv,usb_strerror());
+			/* (Should use bConfigurationValue ?) */
+			if ((rv = usb_set_configuration(p->usbh, p->cnfg)) < 0) {
+				if (retries <= 0)
+					error("Configuring USB port '%s' to %d failed with %d (%s)",p->ppath->path,config,rv,usb_strerror());
+				usb_close(p->usbh);
+				msec_sleep(100);
+				continue;
+			}
+			/* We're done */
+			break;
+		} while (retries-- > 0);
 
 		/* Claim all interfaces of this configuration */
 		p->nifce = p->usbd->config->bNumInterfaces;
@@ -849,8 +864,10 @@ icoms_usb_read_th(icoms *p,
 #ifdef ENABLE_USB
 
 	/* Bug workaround - on some OS's for some devices */
-	if (p->uflags & icomuf_resetep_before_read)
+	if (p->uflags & icomuf_resetep_before_read) {
 		p->usb_resetep(p, ep);
+		msec_sleep(1);		/* Let device recover (ie. Spyder 3) */
+	}
 
 	/* Until data is all read, we get a short read, we time out, or the user aborts */
 //printf("~1 usb_read of %d bytes, timout %f\n",bsize,tout);
@@ -1126,11 +1143,12 @@ double tout
 static void
 icoms_set_usb_port(
 icoms *p, 
-int    port,		/* USB com port, 1 - N, 0 for no change. */
-int    config,		/* Configuration */
-int    wr_ep,		/* "Serial" Write end point */
-int    rd_ep,		/* "Serial" Read end point */
-icomuflags usbflags	/* Any special handling flags */
+int    port,			/* USB com port, 1 - N, 0 for no change. */
+int    config,			/* Configuration */
+int    wr_ep,			/* "Serial" Write end point */
+int    rd_ep,			/* "Serial" Read end point */
+icomuflags usbflags,	/* Any special handling flags */
+int retries				/* > 0 if we should retry set_configuration (100msec) */ 
 ) {
 	if (p->debug) fprintf(stderr,"icoms: About to set usb port characteristics\n");
 
@@ -1139,7 +1157,7 @@ icomuflags usbflags	/* Any special handling flags */
 
 	if (p->is_usb_portno(p, port) != instUnknown) {
 
-		usb_open_port(p, port, config, wr_ep, rd_ep, usbflags);
+		usb_open_port(p, port, config, wr_ep, rd_ep, usbflags, retries);
 
 		p->write = icoms_usb_ser_write;
 		p->read = icoms_usb_ser_read;

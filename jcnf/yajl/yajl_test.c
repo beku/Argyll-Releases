@@ -1,5 +1,5 @@
 /*
- * Copyright 2007, Lloyd Hilaiel.
+ * Copyright 2007-2009, Lloyd Hilaiel.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -37,38 +37,76 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <assert.h>
+
+/* memory debugging routines */
+typedef struct 
+{
+    unsigned int numFrees;
+    unsigned int numMallocs;    
+    /* XXX: we really need a hash table here with per-allocation
+     *      information */ 
+} yajlTestMemoryContext;
+
+/* cast void * into context */
+#define TEST_CTX(vptr) ((yajlTestMemoryContext *) (vptr))
+
+static void yajlTestFree(void * ctx, void * ptr)
+{
+    assert(ptr != NULL);
+    TEST_CTX(ctx)->numFrees++;
+    free(ptr);
+}
+
+static void * yajlTestMalloc(void * ctx, unsigned int sz)
+{
+    assert(sz != 0);
+    TEST_CTX(ctx)->numMallocs++;
+    return malloc(sz);
+}
+
+static void * yajlTestRealloc(void * ctx, void * ptr, unsigned int sz)
+{
+    if (ptr == NULL) {
+        assert(sz != 0);
+        TEST_CTX(ctx)->numMallocs++;        
+    } else if (sz == 0) {
+        TEST_CTX(ctx)->numFrees++;                
+    }
+
+    return realloc(ptr, sz);
+}
+
+
+/* begin parsing callback routines */
 #define BUF_SIZE 2048
 
-int test_yajl_null(void *ctx)
+static int test_yajl_null(void *ctx)
 {
     printf("null\n");
     return 1;
 }
 
-int test_yajl_boolean(void * ctx, int boolVal)
+static int test_yajl_boolean(void * ctx, int boolVal)
 {
     printf("bool: %s\n", boolVal ? "true" : "false");
     return 1;
 }
 
-int test_yajl_integer(void *ctx, longlong integerVal)
+static int test_yajl_integer(void *ctx, long integerVal)
 {
-#ifdef NT
-    printf("integer: %I64d\n", integerVal);
-#else
-    printf("integer: %lld\n", integerVal);
-#endif
+    printf("integer: %ld\n", integerVal);
     return 1;
 }
 
-int test_yajl_double(void *ctx, double doubleVal)
+static int test_yajl_double(void *ctx, double doubleVal)
 {
-    printf("double: %lf\n", doubleVal);
+    printf("double: %g\n", doubleVal);
     return 1;
 }
 
-int test_yajl_string(void *ctx, const unsigned char * stringVal,
-                     unsigned int stringLen)
+static int test_yajl_string(void *ctx, const unsigned char * stringVal,
+                            unsigned int stringLen)
 {
     printf("string: '");
     fwrite(stringVal, 1, stringLen, stdout);
@@ -76,19 +114,8 @@ int test_yajl_string(void *ctx, const unsigned char * stringVal,
     return 1;
 }
 
-int test_yajl_comment(void *ctx, const unsigned char * stringVal,
-                     unsigned int stringLen)
-{
-#ifdef NEVER		/* Test don't expect comments */
-    printf("comment: '");
-    fwrite(stringVal, 1, stringLen, stdout);
-    printf("'\n");    
-#endif
-    return 1;
-}
-
-int test_yajl_map_key(void *ctx, const unsigned char * stringVal,
-                     unsigned int stringLen)
+static int test_yajl_map_key(void *ctx, const unsigned char * stringVal,
+                             unsigned int stringLen)
 {
     char * str = (char *) malloc(stringLen + 1);
     str[stringLen] = 0;
@@ -98,26 +125,26 @@ int test_yajl_map_key(void *ctx, const unsigned char * stringVal,
     return 1;
 }
 
-int test_yajl_start_map(void *ctx)
+static int test_yajl_start_map(void *ctx)
 {
     printf("map open '{'\n");
     return 1;
 }
 
 
-int test_yajl_end_map(void *ctx)
+static int test_yajl_end_map(void *ctx)
 {
     printf("map close '}'\n");
     return 1;
 }
 
-int test_yajl_start_array(void *ctx)
+static int test_yajl_start_array(void *ctx)
 {
     printf("array open '['\n");
     return 1;
 }
 
-int test_yajl_end_array(void *ctx)
+static int test_yajl_end_array(void *ctx)
 {
     printf("array close ']'\n");
     return 1;
@@ -128,8 +155,10 @@ static yajl_callbacks callbacks = {
     test_yajl_boolean,
     test_yajl_integer,
     test_yajl_double,
+    NULL,
     test_yajl_string,
-    test_yajl_comment,
+    NULL,
+    NULL,
     test_yajl_start_map,
     test_yajl_map_key,
     test_yajl_end_map,
@@ -157,7 +186,22 @@ main(int argc, char ** argv)
     yajl_status stat;
     size_t rd;
     yajl_parser_config cfg = { 0, 1 };
-    int i, j;
+    int i, j, done;
+
+    /* memory allocation debugging: allocate a structure which collects
+     * statistics */
+    yajlTestMemoryContext memCtx = { 0,0 };
+
+    /* memory allocation debugging: allocate a structure which holds
+     * allocation routines */
+    yajl_alloc_funcs allocFuncs = {
+        yajlTestMalloc,
+        yajlTestRealloc,
+        yajlTestFree,
+        (void *) NULL
+    };
+
+    allocFuncs.ctx = (void *) &memCtx;
 
     /* check arguments.  We expect exactly one! */
     for (i=1;i<argc;i++) {
@@ -198,33 +242,52 @@ main(int argc, char ** argv)
     fileName = argv[argc-1];
 
     /* ok.  open file.  let's read and parse */
-    hand = yajl_alloc(&callbacks, &cfg, NULL);
+    hand = yajl_alloc(&callbacks, &cfg, &allocFuncs, NULL);
 
-	for(;;) {
+    done = 0;
+	while (!done) {
         rd = fread((void *) fileData, 1, bufSize, stdin);
         
         if (rd == 0) {
             if (!feof(stdin)) {
                 fprintf(stderr, "error reading from '%s'\n", fileName);
-            }
-            break;
-        } else {
-            /* read file data, pass to parser */
-            stat = yajl_parse(hand, fileData, rd);
-            if (stat != yajl_status_insufficient_data &&
-                stat != yajl_status_ok)
-            {
-                unsigned char * str = yajl_get_error(hand, 0, fileData, rd);
-                fflush(stdout);
-                fprintf(stderr, (char *) str);
-                yajl_free_error(str);
                 break;
             }
+            done = 1;
+        }
+
+        if (done)
+            /* parse any remaining buffered data */
+            stat = yajl_parse_complete(hand);
+        else
+            /* read file data, pass to parser */
+            stat = yajl_parse(hand, fileData, rd);
+        
+        if (stat != yajl_status_insufficient_data &&
+            stat != yajl_status_ok)
+        {
+            unsigned char * str = yajl_get_error(hand, 0, fileData, rd);
+            fflush(stdout);
+            fprintf(stderr, "%s", (char *) str);
+            yajl_free_error(hand, str);
+            break;
         }
     } 
 
     yajl_free(hand);
     free(fileData);
+
+    /* finally, print out some memory statistics */
+
+/* (lth) only print leaks here, as allocations and frees may vary depending
+ *       on read buffer size, causing false failures.
+ *
+ *  printf("allocations:\t%u\n", memCtx.numMallocs);
+ *  printf("frees:\t\t%u\n", memCtx.numFrees);
+*/
+    fflush(stderr);
+    fflush(stdout);
+    printf("memory leaks:\t%u\n", memCtx.numMallocs - memCtx.numFrees);    
 
     return 0;
 }

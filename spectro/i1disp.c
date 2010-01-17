@@ -10,7 +10,7 @@
  * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -1064,6 +1064,7 @@ i1disp_check_unlock(
 		return ev;
 
 	p->lite = 0;
+	p->munki = 0;
 	p->chroma4 = 0;
 	if ((ev & inst_imask) == I1DISP_LOCKED) {
 
@@ -1093,6 +1094,22 @@ i1disp_check_unlock(
 		                 && (ev & inst_imask) != I1DISP_LOCKED)
 			return ev;
 		p->lite = 1;
+	}
+	if ((ev & inst_imask) == I1DISP_LOCKED) {
+
+		/* Still locked. See if it's an ColorMunki Create */
+
+		/* Unlock it. Ignore I1DISP_NOT_READY status. */
+		if (((ev = i1disp_command_1(p, i1d_unlock, (unsigned char *)"Munk", 4,
+		         buf, 8, &rsize, 0.5)) & inst_mask) != inst_ok
+		                 && (ev & inst_imask) != I1DISP_LOCKED)
+			return ev;
+
+		if ((ev = i1disp_command_1(p, i1d_status, NULL, 0,
+		           buf, 8, &rsize, 0.5)) != inst_ok
+		                 && (ev & inst_imask) != I1DISP_LOCKED)
+			return ev;
+		p->munki = 1;
 	}
 	if ((ev & inst_imask) == I1DISP_LOCKED) {
 		return i1disp_interp_code((inst *)p, I1DISP_BAD_STATUS);
@@ -1227,7 +1244,7 @@ i1disp_read_all_regs(
 	}
 
 	/* Unknown byte */
-	if ((ev = i1disp_rdreg_byte(p, &p->reg115_B, 121) ) != inst_ok)
+	if ((ev = i1disp_rdreg_byte(p, &p->reg115_B, 115) ) != inst_ok)
 		return ev;
 	DBG(("Unknown 115 byte = 0x%x\n",p->reg115_B))
 
@@ -1290,7 +1307,14 @@ i1disp_compute_factors(
 
 	if (p->reg50_W == 0xffffffff)
 		return i1disp_interp_code((inst *)p, I1DISP_BAD_LCD_CALIBRATION);
-	if (p->reg126_S == 0xffffffff || p->reg126_S < 7)
+
+	/* The value stored in reg126_S seems hard to interpret. */
+	/* For the i1display 1&2, it has a value of 0xd. */
+	/* Value 0x7 seems to be for a "user calibration" */
+	/* Values 3 & 6 seem to always "errors" as does a value */
+	/* <7 in most circumstances. But the Heidelberg Viewmaker */
+	/* (from Sequel Imaging) colorimeter seems to have a value of 2. */
+	if (p->reg126_S == 0xffffffff || (p->reg126_S < 7 && p->reg126_S != 2))
 		return i1disp_interp_code((inst *)p, I1DISP_BAD_LCD_CALIBRATION);
 
 	if (p->reg90_W == 0xffffffff)
@@ -1358,7 +1382,7 @@ i1disp_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout)
 
 	/* Set config, interface, write end point, read end point */
 	/* ("serial" end points aren't used - the i1display uses USB control messages) */
-	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, icomuf_none); 
+	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, icomuf_none, 0); 
 
 	/* Check instrument is responding */
 	if ((ev = i1disp_command_1(p, i1d_status, NULL, 0, buf, 8, &rsize, 0.5)) != inst_ok
@@ -1438,6 +1462,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings ? */
 	val->Lab_v = 0;
 	val->sp.spec_n = 0;
+	val->duration = 0.0;
 
 	if (user_trig)
 		return inst_user_trig;

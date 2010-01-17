@@ -1,5 +1,7 @@
 Readme.txt
 License.txt
+License2.txt
+License3.txt
 afiles
 Jamfile
 chartread.c
@@ -32,6 +34,10 @@ i1pro.h
 i1pro.c
 i1pro_imp.h
 i1pro_imp.c
+munki.h
+munki.c
+munki_imp.h
+munki_imp.c
 hcfr.c
 hcfr.h
 spyd2.c
@@ -45,6 +51,7 @@ huey.h
 spec2cie.c
 average.c
 conv.h
+conv.c
 icoms.h
 usbio.h
 usbio.c

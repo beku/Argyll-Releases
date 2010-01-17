@@ -1,5 +1,5 @@
 [Version]
-Signature = "$Chicago$"
+Signature = "$Windows NT$"
 provider  = ArgyllCMS
 DriverVer = 11/21/2007,0.1.12.1
 CatalogFile = i1Monitor.cat
@@ -20,7 +20,7 @@ HKR,,,,"LibUSB-Win32 Devices"
 HKR,,Icon,,"-20"
 
 [Manufacturer]
-%manufacturer%=Devices,NT,NTAMD64
+%manufacturer%=Devices,NTX86,NTAMD64
 
 ;--------------------------------------------------------------------------
 ; Files

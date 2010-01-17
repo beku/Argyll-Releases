@@ -14,7 +14,80 @@
 </head>
 <body>
 <h1> Summary of Argyll CMS Changes since last release</h1>
-<br>
+<h3>For detailed change list please see the log.txt file.</h3>
+<h1>[V1.0.4 -&gt; V1.1.0]</h1>
+<ul>
+  <li>Spyder3 and ColorMunki Design, Photo and Create instrument
+support.</li>
+  <li>Added a complete printer calibration system. This can work either
+with a print system that supports per channel print calibration curves,
+or purely using ICC profiling mechanisms.</li>
+  <li>Default targen (OFPS) test point distribution has been re-written
+to generate test points on the gamut surface, refine the point
+locations when using a guide profile, and use a better error estimate
+model to determine the test point locations. <br>
+  </li>
+  <li>Changed chartread strip reading mode to allow navigating about
+the strips, saving a partially read chart, and resuming a partially
+read chart.<br>
+  </li>
+  <li>Improved and re-tuned
+gamut mapping. This is noticeably smoother and better retains source
+image detail.</li>
+  <li>Re-tuned the cLUT profile creation smoothness vs.
+accuracy.</li>
+  <li>Fixed viewgam so that the number of gamuts that can be viewed is
+unlimited. Also added error when computing intersecting volume if the
+two gamuts are incompatible.</li>
+  <li>Improved CMYK black generation control and smoothness near the
+black point.</li>
+  <li>Improved collink special black and colorant handling so that the
+gamut mapping is consistent&nbsp; with the special black and colorant
+mapping</li>
+  <li>Changed profile/colprof to generate matrix tags for Display XYZ
+PCS cLUT profiles, to improve compatibility with other CMMs.<br>
+By default (-ax) the matrix tags will be a dummy transform that swaps
+red and green, while using -aX will create real matrix tags.</li>
+  <li>Added -V option to dispcal and dispread to allow use of i1pro
+adaptive mode to give better low level consistency.</li>
+  <li>Changed dispcal to default to -f 1.0 (assume black is all output
+offset) to make it work in more sympathy to a typical display response.
+Also changed default gamma to 2.4 for OS X 10.6 systems.<br>
+  </li>
+  <li>Improved X11 XRandR CRTC detection.</li>
+  <li>Added spotread option to save spectral reading of an illuminant
+to a .sp file.</li>
+  <li>Added Color Rendering Index (Ra) to spotread measurement results.</li>
+  <li>Added i1pro &amp; ColorMunki flash measurement
+support.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <br>
+  </li>
+  <li>Improve reliability of detecting backwards read i1pro/Munki
+strips.</li>
+  <li>Fixed bug in i1pro driver that subtly affected accuracy.</li>
+  <li>Modified xicc/cam02 to clip the blue to avoid crazy behavior
+outside the spectrum locus.</li>
+  <li>Simplified the Linux installation instructions, particularly with
+regard to USB and serial permissions.</li>
+  <li>Added working MSWindows 64 bit libusb drivers, which will work on
+Vista 64 and MSWindows 7 64 bit. Because of Microsoft's driver signing
+requirements though, they won't be usable unless a driver code signing
+workaround is used.</li>
+  <li>Changed printtarg so that the TIFF output has the paper margin
+subtracted from it. This is so that the resulting TIFF can be placed on
+that sized paper without clipping or scaling. Set the margin to zero to
+get a TIFF that exactly fits into the specified paper size</li>
+</ul>
+<h1>[V1.0.3 -&gt; V1.0.4]</h1>
+<ul>
+  <li>Modify icc/icclib to protect against integer overflow exploits,
+and fixes to minor bugs. Bump icclib version to 2.11 to reflect this.<br>
+  </li>
+  <li>Fix bug in spectro/hidio.c that can cause a crash (bus error) on
+OS X for any program that accesses the instruments.</li>
+  <li>Fix bug in xicc/xfit.c where too little memory was being
+allocated.<br>
+  </li>
+</ul>
 <h1>[V1.0.2 -&gt; V1.0.3]</h1>
 <ul>
   <li>Added multi-TIFF and popularity filtering to <span

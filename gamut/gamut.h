@@ -13,7 +13,7 @@
  * Copyright 2000-2006 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -98,8 +98,9 @@ struct _gquad {
 /* ------------------------------------ */
 
 /* Common base class of BSP nodes */
-#define BSP_STRUCT													\
-	int tag;		/* Type of node, 1 = bsp node, 2 = triangle, 3 = list */
+#define BSP_STRUCT																			\
+	int tag;		/* Type of node, 1 = bsp node, 2 = triangle, 3 = list */				\
+	double rs0, rs1;	/* min/max radius squared from origin of all contained triangles */ 
 
 struct _gbsp {
 	BSP_STRUCT
@@ -137,7 +138,8 @@ struct _gtri {
 	int           ei[3];		/* Index within edge structure of this triangle [0..1] */
 
 	double pe[4];		/* Vertex plane equation (absolute) */
-						/* (The first three elements is the unit normal vector to the plane) */
+						/* (The first three elements is the unit normal vector to the plane, */
+						/*  which points inward ?) */
 	double che[4];		/* convex hull testing triangle plane equation (relative) */
 	double spe[4];		/* sphere mapped triangle plane equation (relative) */
 	double ee[3][4];	/* sphere sp[] Edge triangle plane equations for opposite edge (relative) */
@@ -147,6 +149,9 @@ struct _gtri {
 
 	unsigned int touch;	/* nn: Per value touch count */
 	double mix[2][3];	/* nn: Bounding box min and max */
+
+	double area;		/* Area - computed by nssverts() */
+	int    ssverts;		/* Number of stratified sampling verts needed - computed by nssverts() */
 
 	LINKSTRUCT(struct _gtri);	/* Linked list structure */
 }; typedef struct _gtri gtri;
@@ -210,20 +215,26 @@ struct _gamut {
 	gbsp  *lutree;		/* Lookup function BSP tree root */
 	gnn   *nns;			/* nearest neighbor acceleration structure */
 
-	int cswbset;		/* Flag to indicate that the colorspace white and */
-						/* black point information has been set */
+	int cswbset;		/* Flag to indicate that the cs white & black points are set */
 	double cs_wp[3];	/* Color spaces white point */
 	double cs_bp[3];	/* Color spaces black point */
-	int gawbset;		/* Flag to indicate that the gamut white and */
-						/* black point information has been set */
+	double cs_kp[3];	/* Color spaces K only black point */
+	int gawbset;		/* Flag to indicate that the gamut white & black points are set */
 	double ga_wp[3];	/* Gamut white point */
 	double ga_bp[3];	/* Gamut black point */
+	double ga_kp[3];	/* Gamut K only black point */
 
 	int dcuspixs;		/* Cusp we're up to */
 	double dcusps[6][3];/* Entered cusp values to setcusps(, 3, ) */
 	double cusps[6][3];	/* Cusp values for red, yellow, green, cyan, blue & magenta */ 
+						/* if cu_inited nz */
 
 	double mx[3], mn[3];	/* Range covered by input points */
+
+	double xvra;		/* Extra vertex ratio - set/used by nssverts() */
+	int    ssnverts;	/* total ss verticies - set/used by nssverts() */
+	int	   ssvertn;		/* Number of verts created for current triangle */
+	sobol *ss;			/* Sibol ss generator currently being used */
 
 	gtri *nexttri;		/* Context for getnexttri() */
 
@@ -231,7 +242,7 @@ struct _gamut {
 	/* Methods */
 	void (*del)(struct _gamut *s);						/* Free ourselves */
 
-	void (*expand)(struct _gamut *s, double in[3]);		/* Expand the gamut surface */
+	gvert *(*expand)(struct _gamut *s, double in[3]);		/* Expand the gamut surface */
 
 	int (*getisjab)(struct _gamut *s);	/* Return the isJab flag value */
 
@@ -257,12 +268,24 @@ struct _gamut {
 	int (*nverts)(struct _gamut *s); /* Return the number of surface verticies */
 
 	int (*getvert)(struct _gamut *s, double *rad, double pos[3], int ix);
-									/* Return the surface verticies location and radius */
+								/* Return the surface triangle verticies location and radius */
+								/* start at 0, and returns value is next index or -1 if last */
+
+	int (*nssverts)(struct _gamut *s, double vpua);
+								/* Return the number of stratified sampling surface verticies, */
+								/* for the given verticies per unit area parameter. */
+
+	int (*getssvert)(struct _gamut *s, double *rad, double pos[3], double norn[3], int ix);
+								/* Return the stratified sampling surface verticies */
+								/* location and radius. nssverts() sets vpua */
+								/* norm will contain the normal of the triangle */
+								/* the point originates from. */
 
 	void (*startnexttri)(struct _gamut *s); /* Reset indexing through triangles for getnexttri() */
 
 	int (*getnexttri)(struct _gamut *s, int v[3]);
-									/* Return the next surface triange, nz on no more */
+								/* Return the next surface triange, nz on no more */
+								/* Index v[] corresponds to order of getvert() */ 
 
 	double (*volume)(struct _gamut *s);
 								/* Return the total volume enclosed by the gamut */
@@ -270,6 +293,11 @@ struct _gamut {
 	int (*intersect)(struct _gamut *s, struct _gamut *s1, struct _gamut *s2);
 								/* Initialise this gamut with the intersection of the */
 								/* the two given gamuts. */
+
+	int (*expandbydiff)(struct _gamut *s, struct _gamut *s1, struct _gamut *s2, struct _gamut *s3, int docomp);
+								/* Initialise this gamut with a gamut which is s1 expanded */
+								/* (but never reduced) by the distance from s2 to s3. */
+								/* If docomp != 0, make gamut trace s3 if it's smaller than s1 */ 
 
 	double (*radial)(struct _gamut *s, double out[3], double in[3]);
 								/* return point on surface in same radial direction. */
@@ -285,23 +313,26 @@ struct _gamut {
 	                          /* return point on surface closest to input */
 
 	int (*vector_isect)(struct _gamut *s, double *p1, double *p2, double *min, double *max,
-	                                                               double *mint, double *maxt);
+	                                                               double *mint, double *maxt,
+	                                                               gtri **mntri, gtri **mxtri);
 							/* Compute the intersection of the vector p1->p2 with */
 							/* the gamut surface. min is the intersection in the p1 direction, */
 							/* max is intersection in the p2 direction. mint and maxt are */
 							/* the parameter values at the two intersection points, a value of 0 */
-							/* being at p1 and 1 being at p2. min, max, mint & maxt may be NULL */
+							/* being at p1 and 1 being at p2. mintri and maxtri return the */
+							/* intersection triangles.  min, max, mint, maxt, */
+							/* mintri & maxtri  may be NULL */
 							/* Return 0 if there is no intersection with the gamut. */
 
-	void (*setwb)(struct _gamut *s, double *wp, double *bp);	/* Define the colorspaces */
-	                                                         	/* white and black point. */
-	                                                         	/* May be NULL if unknown. */
-	                                                            /* Same colorspace as gamut */
+	void (*setwb)(struct _gamut *s, double *wp, double *bp, double *kp);
+							/* Define the colorspaces white, black and K only black points. */
+							/* May be NULL if unknown, and will be set to a default. */
+	                        /* Same colorspace as gamut */
 
-	int (*getwb)(struct _gamut *s, double *cswp, double *csbp,	/* Get the gamut white & black */
-	             double *gawp, double *gabp);                   /* points. Return non-zero if */
-	                                                            /* not possible. */
-	                                                            /* Same colorspace as gamut */
+	int (*getwb)(struct _gamut *s, double *cswp, double *csbp, double *cskp,
+	                               double *gawp, double *gabp, double *gakp);
+							/* Get the colorspace and gamut white, black and K only black points. */
+							/* Return non-zero if not possible. Same colorspace as gamut */
 
 	void (*setcusps)(struct _gamut *s, int flag, double in[3]);	/* Set potential cusp values. */
 																/* flag == 0 = reset, */
@@ -320,7 +351,7 @@ struct _gamut {
 	int (*write_gam)(struct _gamut *s, char *filename);		/* Write to a CGATS .gam file */
 	int (*read_gam)(struct _gamut *s, char *filename);		/* Read from a CGATS .gam file */
 
-	int (*write_trans_vrml)(struct _gamut *s, char *filename, /* Write to a VRML .wrl file */
+	int (*write_trans_vrml)(struct _gamut *s, char *filename, /* Write transformed VRML .wrl */
 		int doaxes, int docusps, void (*transform)(void *cntx, double out[3], double in[3]), /* with xform */
 		void *cntx);
 
@@ -333,7 +364,7 @@ gamut *new_gamut(double sres, int isJab);		/* Surface resolution, 0.0 = default 
 void gamut_rect2radial(gamut *s, double out[3], double in[3]);
 void gamut_radial2rect(gamut *s, double out[3], double in[3]);
 void gamut_Lab2RGB(double *in, double *out);
-extern double gam_hues[2][7];	/* Lab & Jab color hues in degrees */
+extern double gam_hues[2][7];	/* Generic Lab & Jab color hues in degrees */
 
 
 #endif /* GAMUT_H */

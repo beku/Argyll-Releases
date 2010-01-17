@@ -10,7 +10,7 @@
  * Copyright 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -47,8 +47,7 @@
 #include "conv.h"
 #include "hcfr.h"
 
-#undef MODIFIED_HCFR	/* If modified 2.4 mm apature version being used */
-#define MEASURE_RAW		/* Calibration - return raw RGB values */
+#undef MEASURE_RAW		/* To facilitie calibration - return raw RGB values */
 #undef DEBUG
 
 static inst_code hcfr_interp_code(inst *pp, int ec);
@@ -287,7 +286,7 @@ hcfr_get_rgb(
 /* Compute the calibration matricies. */
 /* The basic calibration data is from my particular HCFR, measured */
 /* against one of my CRT and LCD displays, with the reference XYZ */
-/* derived from my DTP94. */
+/* derived from my i1pro. */
 inst_code
 hcfr_comp_matrix(
 	hcfr *p
@@ -298,59 +297,32 @@ hcfr_comp_matrix(
 
 	/* CRT */
 
-#ifdef MODIFIED_HCFR
-	/* NOTE :- this calibration is with a 2.4 mm apature placed */
-	/* over the sensors on the surface of the box, to try and */
-	/* improve the directional behaviour. */
-
 	/* Red test patch, sensor then reference */
-	tmat[0][0] = 6250.00;
-	tmat[1][0] = 743.54;
-	tmat[2][0] = 279.32;
-	xmat[0][0] = 19.99;
-	xmat[1][0] = 10.99;
-	xmat[2][0] = 1.10;
+	tmat[0][0] = 7171.880890;
+	tmat[1][0] = 853.740337;
+	tmat[2][0] = 308.216218;
+
+	xmat[0][0] = 21.988601;
+	xmat[1][0] = 12.131219;
+	xmat[2][0] = 1.312786;
 
 	/* Green test patch, sensor then reference */
-	tmat[0][1] = 594.74;
-	tmat[1][1] = 3487.67;
-	tmat[2][1] = 1476.11;
-	xmat[0][1] = 13.46;
-	xmat[1][1] = 28.67;
-	xmat[2][1] = 5.32;
+	tmat[0][1] = 626.299108; 
+	tmat[1][1] = 3749.843127;
+	tmat[2][1] = 1591.104086;
+
+	xmat[0][1] = 13.677691;
+	xmat[1][1] = 28.870823;
+	xmat[2][1] = 5.636190;
 
 	/* Blue test patch, sensor then reference */
-	tmat[0][2] = 122.07;
-	tmat[1][2] = 417.95;
-	tmat[2][2] = 2427.61;
-	xmat[0][2] = 6.15;
-	xmat[1][2] = 2.63;
-	xmat[2][2] = 32.04;
-#else	/* Normal wide apature */
-	/* Red test patch, sensor then reference */
-	tmat[0][0] = 1298.37;
-	tmat[1][0] = 156.55;
-	tmat[2][0] = 51.11;
-	xmat[0][0] = 52.23;
-	xmat[1][0] = 27.95;
-	xmat[2][0] = 2.02;
+	tmat[0][2] = 130.620298; 
+	tmat[1][2] = 462.894673;
+	tmat[2][2] = 2757.654019;
 
-	/* Green test patch, sensor then reference */
-	tmat[0][1] = 178.90;
-	tmat[1][1] = 849.02;
-	tmat[2][1] = 374.79;
-	xmat[0][1] = 36.22;
-	xmat[1][1] = 76.01;
-	xmat[2][1] = 13.54;
-
-	/* Blue test patch, sensor then reference */
-	tmat[0][2] = 54.59;
-	tmat[1][2] = 172.56;
-	tmat[2][2] = 889.12;
-	xmat[0][2] = 24.49;
-	xmat[1][2] = 11.03;
-	xmat[2][2] = 127.11;
-#endif
+	xmat[0][2] = 6.387302;
+	xmat[1][2] = 2.755360;
+	xmat[2][2] = 33.588242;
 
 	/* Compute the inverse */
 	if (icmInverse3x3(itmat, tmat))
@@ -359,62 +331,34 @@ hcfr_comp_matrix(
 	/* Multiply by target values */
 	icmMul3x3_2(p->crt, xmat, itmat);
 
-#ifdef MODIFIED_HCFR
 	/* LCD */
-	/* NOTE :- this calibration is with a 2.4 mm apature placed */
-	/* over the sensors on the surface of the box, to try and */
-	/* improve the directional behaviour. */
 
 	/* Red test patch, sensor then reference */
-	tmat[0][0] = 594.49;
-	tmat[1][0] = 148.67;
-	tmat[2][0] = 80.70;
-	xmat[0][0] = 41.31;
-	xmat[1][0] = 24.34;
-	xmat[2][0] = 4.81;
+	tmat[0][0] = 3994.356609;
+	tmat[1][0] = 1159.679928;
+	tmat[2][0] = 818.430397;
+
+	xmat[0][0] = 51.875052;
+	xmat[1][0] = 30.640815;
+	xmat[2][0] = 4.712397;
 
 	/* Green test patch, sensor then reference */
-	tmat[0][1] = 228.91;
-	tmat[1][1] = 648.59;
-	tmat[2][1] = 323.71;
-	xmat[0][1] = 36.94;
-	xmat[1][1] = 63.21;
-	xmat[2][1] = 16.83;
+	tmat[0][1] = 1445.920285;
+	tmat[1][1] = 3382.116329;
+	tmat[2][1] = 1764.558523;
+
+	xmat[0][1] = 37.482638;
+	xmat[1][1] = 64.670821;
+	xmat[2][1] = 14.554874;
 
 	/* Blue test patch, sensor then reference */
-	tmat[0][2] = 89.41;
-	tmat[1][2] = 248.63;
-	tmat[2][2] = 635.95;
-	xmat[0][2] = 19.88;
-	xmat[1][2] = 16.89;
-	xmat[2][2] = 90.72;
+	tmat[0][2] = 829.727493;
+	tmat[1][2] = 1795.182031;
+	tmat[2][2] = 3820.123872;
 
-
-#else 	/* Normal wide apature */
-	/* Red test patch, sensor then reference */
-	tmat[0][0] = 3259.68;
-	tmat[1][0] = 913.52;
-	tmat[2][0] = 639.35;
-	xmat[0][0] = 41.89;
-	xmat[1][0] = 24.69;
-	xmat[2][0] = 4.82;
-
-	/* Green test patch, sensor then reference */
-	tmat[0][1] = 1263.63;
-	tmat[1][1] = 3517.23;
-	tmat[2][1] = 1802.88;
-	xmat[0][1] = 37.33;
-	xmat[1][1] = 64.30;
-	xmat[2][1] = 16.87;
-
-	/* Blue test patch, sensor then reference */
-	tmat[0][2] = 567.43;
-	tmat[1][2] = 1392.41;
-	tmat[2][2] = 3340.17;
-	xmat[0][2] = 19.93;
-	xmat[1][2] = 17.12;
-	xmat[2][2] = 90.64;
-#endif
+	xmat[0][2] = 25.098392;
+	xmat[1][2] = 23.719352;
+	xmat[2][2] = 108.134087;
 
 	/* Compute the inverse */
 	if (icmInverse3x3(itmat, tmat))
@@ -423,13 +367,12 @@ hcfr_comp_matrix(
 	/* Multiply by target values */
 	icmMul3x3_2(p->lcd, xmat, itmat);
 
-
 	return inst_ok;
 }
 
 /* ==================================================================== */
 
-/* Establish communications with a I1DISP */
+/* Establish communications with a HCFR */
 /* Return HCFR_COMS_FAIL on failure to establish communications */
 static inst_code
 hcfr_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
@@ -461,7 +404,7 @@ hcfr_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 
 	/* Set config, interface, "Serial" write & read end points */
 	/* Note if we clear halt the interface hangs */
-	p->icom->set_usb_port(p->icom, port, 1, 0x03, 0x83, usbflags); 
+	p->icom->set_usb_port(p->icom, port, 1, 0x03, 0x83, usbflags, 0); 
 
 	if ((ev = hcfr_break(p)) != inst_ok) {
 		if (p->debug) fprintf(stderr,"hcfr: Error doing break\n");
@@ -641,6 +584,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	val->XYZ_v = 0;
 	val->Lab_v = 0;
 	val->sp.spec_n = 0;
+	val->duration = 0.0;
 
 	if (user_trig)
 		return inst_user_trig;

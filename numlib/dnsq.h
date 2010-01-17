@@ -3,10 +3,10 @@
 
 /* dnsq non-linear equation solver public interface definition */
 /*
- * This concatenation Copyright 1998 Graeme Gill
+ * This concatenation Copyright 1998 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -57,6 +57,7 @@ int dnsq(
 	double epsfcn,	/* determines suitable step for forward-difference approximation */
 	double diag[],	/* Optional scaling factors, use NULL for internal scaling */
 	double factor,	/* Determines the initial step bound */
+	double maxstep, /* Determines the maximum subsequent step bound (0.0 for none) */
 	int nprint, 	/* Turn on debugging printouts from func() every nprint itterations */
 	int *nfev,		/* RETURNs the number of calls to fcn() */ 
 	int *njev		/* RETURNs the number of calls to jac() */
@@ -94,8 +95,11 @@ int dnsqe(
 					/* Optional function to compute jacobian, NULL if not used */
 	int n,			/* Number of functions and variables */
 	double x[],		/* Initial solution estimate, RETURNs final solution */
+	double ss,		/* Initial search area */
 	double fvec[],	/* Array that will be RETURNed with thefunction values at the solution */
-	double tol,		/* Desired tollerance of the solution */
+	double dtol,	/* Desired tollerance of the solution */
+	double tol,		/* Desired tollerance of root */
+	int maxfev,		/* Maximum number of function calls. set to 0 for automatic */
 	int nprint	 	/* Turn on debugging printouts from func() every nprint itterations */
 );
 

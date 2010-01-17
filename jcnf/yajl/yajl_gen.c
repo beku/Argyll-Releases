@@ -1,5 +1,5 @@
 /*
- * Copyright 2007, Lloyd Hilaiel.
+ * Copyright 2007-2009, Lloyd Hilaiel.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -56,21 +56,42 @@ struct yajl_gen_t
     const char * indentString;
     yajl_gen_state state[YAJL_MAX_DEPTH];
     yajl_buf buf;
-	unsigned char *pendingComment;
-	unsigned int pendingLen;			/* Length of pending comment */
-	int pendingCpp;				/* NZ if comment is C++ style, Z if C */
+    unsigned char *pendingComment;
+    unsigned int pendingLen;            /* Length of pending comment */
+    int pendingCpp;                     /* NZ if comment is C++ style, Z if C */
+    /* memory allocation routines */
+    yajl_alloc_funcs alloc;
 };
 
 yajl_gen
-yajl_gen_alloc(const yajl_gen_config * config)
+yajl_gen_alloc(const yajl_gen_config * config,
+               const yajl_alloc_funcs * afs)
 {
-    yajl_gen g = (yajl_gen) malloc(sizeof(struct yajl_gen_t));
+    yajl_gen g = NULL;
+    yajl_alloc_funcs afsBuffer;
+
+    /* first order of business is to set up memory allocation routines */
+    if (afs != NULL) {
+        if (afs->malloc == NULL || afs->realloc == NULL || afs->free == NULL)
+        {
+            return NULL;
+        }
+    } else {
+        yajl_set_default_alloc_funcs(&afsBuffer);
+        afs = &afsBuffer;
+    }
+
+    g = (yajl_gen) YA_MALLOC(afs, sizeof(struct yajl_gen_t));
     memset((void *) g, 0, sizeof(struct yajl_gen_t));
+    /* copy in pointers to allocation routines */
+    memcpy((void *) &(g->alloc), (void *) afs, sizeof(yajl_alloc_funcs));
+
     if (config) {
         g->pretty = config->beautify;
         g->indentString = config->indentString ? config->indentString : "  ";
     }
-    g->buf = yajl_buf_alloc();
+    g->buf = yajl_buf_alloc(&(g->alloc));
+
     return g;
 }
 
@@ -78,18 +99,18 @@ void
 yajl_gen_free(yajl_gen g)
 {
     yajl_buf_free(g->buf);
-    free(g);
+    YA_FREE(&(g->alloc), g);
 }
 
-#define INSERT_EOL												\
-	if (g->pretty || g->pendingComment != NULL)					\
-		yajl_insert_eol(g);
-		
+#define INSERT_EOL                                              \
+    if (g->pretty || g->pendingComment != NULL)                 \
+        yajl_insert_eol(g);
+
 #define INSERT_SEP \
     if (g->state[g->depth] == yajl_gen_map_key ||               \
         g->state[g->depth] == yajl_gen_in_array) {              \
         yajl_buf_append(g->buf, ",", 1);                        \
-        INSERT_EOL;												\
+        INSERT_EOL;                                             \
     } else if (g->state[g->depth] == yajl_gen_map_val) {        \
         yajl_buf_append(g->buf, ":", 1);                        \
         if (g->pretty) yajl_buf_append(g->buf, " ", 1);         \
@@ -98,8 +119,8 @@ yajl_gen_free(yajl_gen g)
 #define INSERT_WHITESPACE                                               \
     if (g->pretty) {                                                    \
         if (g->state[g->depth] != yajl_gen_map_val) {                   \
-            unsigned int i;                                             \
-            for (i=0;i<g->depth;i++)                                    \
+            unsigned int _i;                                            \
+            for (_i=0;_i<g->depth;_i++)                                 \
                 yajl_buf_append(g->buf, g->indentString,                \
                                 strlen(g->indentString));               \
         }                                                               \
@@ -108,8 +129,8 @@ yajl_gen_free(yajl_gen g)
 #define INSERT_SOME_WHITESPACE                                          \
     if (g->pretty) {                                                    \
         if (g->state[g->depth] != yajl_gen_map_val) {                   \
-			yajl_buf_append(g->buf, g->indentString,                	\
-                            strlen(g->indentString));               	\
+            yajl_buf_append(g->buf, g->indentString,                    \
+                            strlen(g->indentString));                   \
         }                                                               \
     }
 
@@ -149,60 +170,55 @@ yajl_gen_free(yajl_gen g)
             break;                                  \
     }                                               \
 
-#define FINAL_NEWLINE                                       \
-    if (g->state[g->depth] == yajl_gen_complete) 			\
-        INSERT_EOL											\
+#define FINAL_NEWLINE                                        \
+    if (g->pretty && g->state[g->depth] == yajl_gen_complete) \
+        INSERT_EOL
     
 /* Insert an end of line, and take care of any */
 /* pending comments */
 static void yajl_insert_eol(yajl_gen g) {
-	if (g->pendingComment != NULL) {
-		INSERT_SOME_WHITESPACE;
-		if (g->pendingCpp)
-		    yajl_buf_append(g->buf, "//", 2);
-		else
-		    yajl_buf_append(g->buf, "/*", 2);
-	    yajl_string_encode(g->buf, g->pendingComment, g->pendingLen);
-		if (!g->pendingCpp)
-		    yajl_buf_append(g->buf, "*/", 2);
-		free(g->pendingComment);
-		g->pendingComment = NULL;
-		g->pendingLen = 0;
-		g->pendingCpp = 0;
-	}
-	yajl_buf_append(g->buf, "\n", 1);
+    if (g->pendingComment != NULL) {
+        INSERT_SOME_WHITESPACE;
+        if (g->pendingCpp)
+            yajl_buf_append(g->buf, "//", 2);
+        else
+            yajl_buf_append(g->buf, "/*", 2);
+        yajl_string_encode(g->buf, g->pendingComment, g->pendingLen);
+        if (!g->pendingCpp)
+            yajl_buf_append(g->buf, "*/", 2);
+        free(g->pendingComment);
+        g->pendingComment = NULL;
+        g->pendingLen = 0;
+        g->pendingCpp = 0;
+    }
+    yajl_buf_append(g->buf, "\n", 1);
 }
 
 /* Insert a comment at the end of the line. Append if there is already */
 /* one pending. */
 static void yajl_insert_pending_comment(
 yajl_gen g, const unsigned char * str, unsigned int len, int cpp) {
-	if (g->pendingComment != NULL) {
-		unsigned int tlen = g->pendingLen + 0 + len;
-		unsigned char *pendingComment;
-	    pendingComment = (unsigned char *) realloc(g->pendingComment, sizeof(char) * tlen);
-//		pendingComment[g->pendingLen] = ' ';
-		memcpy(pendingComment + g->pendingLen + 0, str, len);
-		g->pendingComment = pendingComment;
-		g->pendingLen = tlen;
-	} else {
-	    g->pendingComment = (unsigned char *) malloc(sizeof(char) * len);
-		memcpy(g->pendingComment, str, len);
-		g->pendingLen = len;
-	}
-	g->pendingCpp = cpp;
+    if (g->pendingComment != NULL) {
+        unsigned int tlen = g->pendingLen + 0 + len;
+        unsigned char *pendingComment;
+        pendingComment = (unsigned char *) realloc(g->pendingComment, sizeof(char) * tlen);
+        memcpy(pendingComment + g->pendingLen + 0, str, len);
+        g->pendingComment = pendingComment;
+        g->pendingLen = tlen;
+    } else {
+        g->pendingComment = (unsigned char *) malloc(sizeof(char) * len);
+        memcpy(g->pendingComment, str, len);
+        g->pendingLen = len;
+    }
+    g->pendingCpp = cpp;
 }
 
 yajl_gen_status
-yajl_gen_integer(yajl_gen g, longlong number)
+yajl_gen_integer(yajl_gen g, long int number)
 {
     char i[32];
     ENSURE_VALID_STATE; ENSURE_NOT_KEY; INSERT_SEP; INSERT_WHITESPACE;
-#ifdef NT
-    sprintf(i, "%I64d", number);
-#else
-    sprintf(i, "%lld", number);
-#endif
+    sprintf(i, "%ld", number);
     yajl_buf_append(g->buf, i, strlen(i));
     APPENDED_ATOM;
     FINAL_NEWLINE;
@@ -214,9 +230,20 @@ yajl_gen_double(yajl_gen g, double number)
 {
     char i[32];
     ENSURE_VALID_STATE; ENSURE_NOT_KEY; INSERT_SEP; INSERT_WHITESPACE;
-    sprintf(i, "%lf", number);
+    sprintf(i, "%g", number);
     yajl_buf_append(g->buf, i, strlen(i));
     APPENDED_ATOM;
+    FINAL_NEWLINE;
+    return yajl_gen_status_ok;
+}
+
+yajl_gen_status
+yajl_gen_number(yajl_gen g, const char * s, unsigned int l)
+{
+    ENSURE_VALID_STATE; ENSURE_NOT_KEY; INSERT_SEP; INSERT_WHITESPACE;
+    yajl_buf_append(g->buf, s, l);
+    APPENDED_ATOM;
+    FINAL_NEWLINE;
     return yajl_gen_status_ok;
 }
 
@@ -248,7 +275,7 @@ yajl_gen_bool(yajl_gen g, int boolean)
 {
     const char * val = boolean ? "true" : "false";
 
-	ENSURE_VALID_STATE; ENSURE_NOT_KEY; INSERT_SEP; INSERT_WHITESPACE;
+    ENSURE_VALID_STATE; ENSURE_NOT_KEY; INSERT_SEP; INSERT_WHITESPACE;
     yajl_buf_append(g->buf, val, strlen(val));
     APPENDED_ATOM;
     FINAL_NEWLINE;
@@ -311,19 +338,19 @@ yajl_gen_c_comment(yajl_gen g, const unsigned char * str,
                 unsigned int len, int dlytoeol)
 {
     ENSURE_VALID_STATE;
-	if (dlytoeol) {
-		yajl_insert_pending_comment(g, str, len, 0);
-	} else {
-		if (g->pretty)
-			yajl_buf_append(g->buf, " /*", 3);
-		else
-			yajl_buf_append(g->buf, "/*", 2);
-		yajl_string_encode(g->buf, str, len);
-		if (g->pretty)
-			yajl_buf_append(g->buf, "*/ ", 3);
-		else
-			yajl_buf_append(g->buf, "*/", 2);
-	}
+    if (dlytoeol) {
+        yajl_insert_pending_comment(g, str, len, 0);
+    } else {
+        if (g->pretty)
+            yajl_buf_append(g->buf, " /*", 3);
+        else
+            yajl_buf_append(g->buf, "/*", 2);
+        yajl_string_encode(g->buf, str, len);
+        if (g->pretty)
+            yajl_buf_append(g->buf, "*/ ", 3);
+        else
+            yajl_buf_append(g->buf, "*/", 2);
+    }
     FINAL_NEWLINE;
     return yajl_gen_status_ok;
 }
@@ -333,7 +360,7 @@ yajl_gen_cpp_comment(yajl_gen g, const unsigned char * str,
                 unsigned int len)
 {
     ENSURE_VALID_STATE;
-	yajl_insert_pending_comment(g, str, len, 1);
+    yajl_insert_pending_comment(g, str, len, 1);
     FINAL_NEWLINE;
     return yajl_gen_status_ok;
 }

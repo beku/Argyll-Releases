@@ -1,5 +1,4 @@
 /* A set of linked list utilities, implimented as macros. */
-/* !!! Modified version !!! */
 /* Copyright 1995, 2000 Graeme W. Gill */
 
 #ifndef _LLIST_H_

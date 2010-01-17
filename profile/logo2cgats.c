@@ -14,7 +14,7 @@
  * Copyright 2000 - 2006, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -48,10 +48,10 @@ usage(char *mes) {
 	fprintf(stderr," -2            Create dummy .ti2 file as well\n");
 	fprintf(stderr," -l limit      set ink limit, 0 - 400%% (default max in file)\n");
 	fprintf(stderr," -d            Set type of device as Display, not Output\n");
-	fprintf(stderr," [devfile]     Device CMYK target .txt file\n");
-	fprintf(stderr," infile        Input CIE, Spectral or Device & Spectral.txt file\n");
-	fprintf(stderr," [specfile]    Input Spectral .txt file\n");
-	fprintf(stderr," outfile       Output file basename\n");
+	fprintf(stderr," [devfile]     Input Device CMYK target file (typically file.txt)\n");
+	fprintf(stderr," infile        Input CIE, Spectral or Device & Spectral file (typically file.txt)\n");
+	fprintf(stderr," [specfile]    Input Spectral file (typically file.txt)\n");
+	fprintf(stderr," outbasename   Output file basename for .ti3 and .ti2\n");
 	exit(1);
 	}
 
@@ -415,8 +415,12 @@ int main(int argc, char *argv[])
 					spec->del(spec);
 					spec = NULL;
 					specname[0] = '\000';
-					break;
+					error("Failed to find spectral band %d nm in file '%s'\n",specmin + 10 * j,specname);
+				} else {
+					if (spec->t[0].ftype[spi[j]] != r_t)
+						error("Field '%s' from file '%s' is wrong type",spec->t[0].fsym[spi[j]], specname);
 				}
+
 			}
 		}
 	}
@@ -503,11 +507,11 @@ int main(int argc, char *argv[])
 					maxv = vv;
 			}
 		}
-		if (maxv < 2.0) {
+		if (maxv < 10.0) {
 			spec_scale = 100.0;
-			if (verb) printf("Spectral value scale = 100.0\n");
+			if (verb) printf("Spectral max found = %f, scale by 100.0\n",maxv);
 		} else {
-			if (verb) printf("Spectral value scale = 1.0\n");
+			if (verb) printf("Spectral max found = %f, scale by 1.0\n",maxv);
 		}
 	}
 

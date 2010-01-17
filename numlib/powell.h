@@ -7,7 +7,7 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -27,7 +27,10 @@ double s[],				/* Size of initial search area */
 double ftol,			/* Tollerance of error change to stop on */
 int maxit,				/* Maximum iterations allowed */
 double (*funk)(void *fdata, double tp[]),		/* Error function to evaluate */
-void *fdata);			/* Opaque data needed by function */
+void *fdata,			/* Opaque data needed by func() */
+void (*prog)(void *pdata, int perc),		/* Optional progress percentage callback */
+void *pdata				/* Opaque data needed by prog() */
+);
 
 /* Conjugate Gradient optimiser */
 /* return 0 on sucess, 1 on failure due to excessive itterations */
@@ -41,7 +44,9 @@ double ftol,			/* Tollerance of error change to stop on */
 int maxit,				/* Maximum iterations allowed */
 double (*func)(void *fdata, double tp[]),		/* Error function to evaluate */
 double (*dfunc)(void *fdata, double dp[], double tp[]),		/* Gradient function to evaluate */
-void *fdata				/* Opaque data needed by function */
+void *fdata,			/* Opaque data needed by function */
+void (*prog)(void *pdata, int perc),		/* Optional progress percentage callback */
+void *pdata				/* Opaque data needed by prog() */
 );
 
 /* Example user function declarations */

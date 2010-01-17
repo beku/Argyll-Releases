@@ -33,6 +33,18 @@ number greater or less than than 1.0 This will multiply the size of the
 cache by that number (i.e. 1.5 would increase the cache size by 50%,
 0.5 would halve it).<br>
 <br>
+If you find that <span style="font-weight: bold;">colprof</span>
+or&nbsp; <span style="font-weight: bold;">collink</span>
+are working very slowly, but that your CPU's are nearly idle, then this
+is a sign of disk swapping, and that too much memory is being
+requested.&nbsp; This can be because other applications are also using
+memory, or Argyll's default setting tries to use more memory than is
+actually available. You can try shutting down other applications when
+this happens, or you can <span style="font-weight: bold;">lower</span>
+the amount of memory Argyll uses by setting <span
+ style="font-weight: bold;">ARGYLL_REV_CACHE_MULT</span> to a value
+less than 1.0 (ie. try 0.5). <br>
+<br>
 If you have a lot of memory available, you can try increasing the
 cache size to use more of the available RAM (particularly if you get a
 "Warning - Reverse Cell Cache exhausted,
@@ -40,10 +52,11 @@ processing in chunks" message during processing), but if you set it to
 a value too near 2.0 you risk disk swapping, which can slow progress to
 a crawl.<br>
 <br>
-A second adjustment that can make a great difference to the time taken
+If you have a lot of memory available, then a second adjustment that
+can make a great difference to the time taken
 in creating B2A tables is the resolution of the inverse lookup
-acceleration grid. The finer the grid, the <br>
-less searching is needed to locate the input colorspace values that
+acceleration grid. The finer the grid, the less searching is needed to
+locate the input colorspace values that
 correspond to a target output color value, but the greater the memory
 used in this
 structure, and the greater the setup time needed to initialize the

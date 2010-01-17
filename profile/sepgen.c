@@ -9,7 +9,7 @@
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -34,6 +34,7 @@
 #include "copyright.h"
 #include "config.h"
 #include "cgats.h"
+#include "numlib.h"
 #include "xicc.h"
 #include "prof.h"
 
@@ -68,7 +69,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"                 shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0 convex\n");
 	fprintf(stderr," -K parameters   Same as -k, but target is K locus rather than K value itself\n");
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral MPP profile:\n");
-	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr,"                 A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral MPP profile:\n");
 	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation for spectral MPP profile\n");
@@ -104,7 +105,7 @@ int main(int argc, char *argv[]) {
 	int inn = 4;				/* Input number of components */
 	int iimask = ICX_CMYK;		/* Input ink mask */
 	int outn;					/* Output number of components */
-	int oimask;					/* Output ink mask */
+	inkmask oimask;				/* Output ink mask */
 //	xsep *xsepo;				/* Separation object */
 //	icc *sep_icco;				/* Output icc */
 
@@ -257,6 +258,9 @@ int main(int argc, char *argv[]) {
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
+				} else if (strcmp(na, "C") == 0) {
+					spec = 1;
+					illum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
@@ -338,7 +342,7 @@ int main(int argc, char *argv[]) {
 			error ("%d, %s",icco->errc, icco->err);
 	
 		/* Get details of conversion (Arguments may be NULL if info not needed) */
-		luo->spaces(luo, &outs, &outn, NULL, NULL, NULL, NULL, NULL, NULL);
+		luo->spaces(luo, &outs, &outn, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 
 		switch(outs) {
 			case icSigCmykData:
@@ -380,10 +384,10 @@ int main(int argc, char *argv[]) {
 
 
 	if (verb) {
-		char *ochars = icx_inkmask2char(oimask);
+		char *ident = icx_inkmask2char(oimask, 1);
 		printf("Creating separation from pseudo-%s to %s device spaces\n",
-		        iimask == ICX_CMY ? "CMY" : iimask == ICX_RGB ? "RGB" : "CMYK", ochars);
-		free(ochars);
+		        iimask == ICX_CMY ? "CMY" : iimask == ICX_RGB || iimask == ICX_IRGB ? "RGB" : "CMYK", ident);
+		free(ident);
 	}
 
 	/* Configure ink limits */
@@ -409,6 +413,13 @@ int main(int argc, char *argv[]) {
 
 	/* Configure black generation */
 	/* This will be ignored if the pseudo input is CMYK */
+
+	ink.KonlyLmin = 0;				/* Use normal black Lmin for locus */
+	ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
+	ink.c.Kskew = ICXINKDEFSKEW;	/* default curve skew */
+	ink.x.Ksmth = ICXINKDEFSMTH;
+	ink.x.Kskew = ICXINKDEFSKEW;
+
 	if (inking == 0) {			/* Use minimum */
 		ink.k_rule = locus ? icxKluma5 : icxKluma5k;
 		ink.c.Kstle = 0.0;

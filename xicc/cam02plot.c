@@ -8,7 +8,7 @@
  *
  * Copyright 2000-2004 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -42,7 +42,7 @@
 
 #ifndef _isnan
 #define _isnan(x) ((x) != (x))
-#define _finite(x) ((x) == (x))
+#define _finite(x) ((x) == 0.0 || (x) * 1.0000001 != (x))
 #endif
 
 static void
@@ -413,7 +413,7 @@ void usage(char *diag) {
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (diag != NULL)
 		fprintf(stderr,"Diagnostic '%s'\n",diag);
-	fprintf(stderr,"usage: cam02plot [-options] [x y]\n");
+	fprintf(stderr,"usage: cam02plot [-options] x y\n");
 	fprintf(stderr,"'cam02plot -l -o' shows problem best\n");
 	fprintf(stderr," -v level Verbosity level 0 - 2 (default = 1)\n");
 	fprintf(stderr," -n       Don't use Helmholtz-Kohlraush flag\n"); 

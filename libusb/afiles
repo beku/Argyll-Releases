@@ -4,11 +4,8 @@ Jamfile
 configure
 Argyll.usermap
 Argyll
-10-Argyll.permissions
 45-Argyll.rules
 55-Argyll.rules
-color-device-file.policy
-19-color.fdi
 Argyll.kext/Info.plist
 install_kext.sh
 Makefile.am

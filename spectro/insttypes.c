@@ -9,7 +9,7 @@
  * Copyright 2001 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -58,10 +58,14 @@ char *inst_name(instType itype) {
 			return "GretagMacbeth i1 Monitor";
 		case instI1Pro:
 			return "GretagMacbeth i1 Pro";
+		case instColorMunki:
+			return "X-Rite ColorMunki";
 		case instHCFR:
 			return "Colorimtre HCFR";
 		case instSpyder2:
 			return "ColorVision Spyder2";
+		case instSpyder3:
+			return "Datacolor Spyder3";
 		case instHuey:
 			return "GretagMacbeth Huey";
 		default:
@@ -100,10 +104,14 @@ instType inst_enum(char *name) {
 		return instI1Monitor;
 	else if (strcmp(name, "GretagMacbeth i1 Pro") == 0)
 		return instI1Pro;
+	else if (strcmp(name, "X-Rite ColorMunki") == 0)
+		return instColorMunki;
 	else if (strcmp(name, "Colorimtre HCFR") == 0)
 		return instHCFR;
 	else if (strcmp(name, "ColorVision Spyder2") == 0)
 		return instSpyder2;
+	else if (strcmp(name, "Datacolor Spyder3") == 0)
+		return instSpyder3;
 	else if (strcmp(name, "GretagMacbeth Huey") == 0)
 		return instHuey;
 
@@ -126,6 +134,8 @@ unsigned short idProduct) {
 			return instDTP92;
 	  	if (idProduct == 0xD094)	/* DTP94 */
 			return instDTP94;
+//	  	if (idProduct == 0x5001)	/* HueyPro */
+//			return instHuey;
 	}
 
 	if (idVendor  == 0x0971) {		/* Gretag Macbeth */
@@ -137,6 +147,8 @@ unsigned short idProduct) {
 			return instI1Display;
 		if (idProduct == 0x2005)	/* Huey */
 			return instHuey;
+		if (idProduct == 0x2007)	/* ColorMunki */
+			return instColorMunki;
 	}
 
 	if (idVendor  == 0x0670) {		/* Sequel Imaging */
@@ -153,6 +165,8 @@ unsigned short idProduct) {
 	if (idVendor  == 0x085C) {
 		if (idProduct == 0x0200)	/* ColorVison Spyder2 */
 			return instSpyder2;
+		if (idProduct == 0x0300)	/* ColorVison Spyder3 */
+			return instSpyder3;
 	}
 
 	/* Add other instruments here */
@@ -213,10 +227,16 @@ int inst_illuminant(xspect *sp, instType itype) {
 		case instI1Pro:
 			return standardIlluminant(sp, icxIT_A, 0);		/* Standard A type assumed */
 
+		case instColorMunki:
+			return 1;										/* No U.V. */
+
 		case instHCFR:
 			return 1;										/* Not applicable */
 
 		case instSpyder2:
+			return 1;										/* Not applicable */
+
+		case instSpyder3:
 			return 1;										/* Not applicable */
 
 		case instHuey:

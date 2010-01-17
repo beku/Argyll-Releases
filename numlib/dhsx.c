@@ -2,10 +2,17 @@
 /* This is better for stocastic optimisation, where the function */
 /* being evaluated may have a random component, or is not smooth. */
 
+/*
+ * Copyright 1999 Graeme W. Gill
+ * All rights reserved.
+ *
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
+ */
 
 /* A general purpose downhill simplex multivariate optimser, */
 /* based on the Nelder and Mead algorithm. */
-/* Code is an expression of the algorithms decsribed in */
+/* Code is an original expression of the algorithms decsribed in */
 /* "Numerical Recipes in C", by W.H.Press, B.P.Flannery, */
 /* S.A.Teukolsky & W.T.Vetterling. */
 
@@ -35,10 +42,11 @@ static double trypoint(int di,double *cp, double **p, double *y, int hix, double
 
 
 /* Down hill simplex function */
-/* return err on sucess, -1.0 on failure */
+/* return 0 on sucess, 1 on failure due to excessive itterations */
 /* Result will be in cp */
 /* Arrays start at 0 */
-double dhsx(
+int dhsx(
+double *rv,				/* If not NULL, return the residual error */
 int di,					/* Dimentionality */
 double *cp,				/* Initial starting point */
 double *s,				/* Size of initial search area */
@@ -115,7 +123,7 @@ void *fdata				/* Data needed by function */
 #endif
 			tryy = (*funk)(fdata,cp);		/* Compute error function */
 
-			if (tryy > y[lox]) {		/* Center point is not the best */
+			if (tryy > y[lox]) {			/* Center point is not the best */
 				tryy = y[lox];
 				for (j = 0; j < di; j++)
 					cp[j] = p[lox][j];
@@ -124,7 +132,9 @@ void *fdata				/* Data needed by function */
 			free_dvector(tryp, 0, di-1);
 			free_dvector(y, 0, di);
 printf("~1 itterations = %d\n",nit);
-			return tryy;
+			if (rv != NULL)
+				*rv = tryy;
+			return 0;
 		}
 
 		if (nit > NONEXP) {	/* Only try expanding after a couple of iterations */
@@ -186,7 +196,9 @@ printf("~1 itterations = %d\n",nit);
 	free_dmatrix(p, 0, di+1, 0, di);
 	free_dvector(tryp, 0, di-1);
 	free_dvector(y, 0, di);
-	return -1.0;	/* Failed */
+	if (rv != NULL)
+		*rv = tryy;
+	return 1;	/* Failed */
 }
 
 /* Try moving the high point through the opposite face */

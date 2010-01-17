@@ -1,7 +1,0 @@
-
-Changes made to yajl-0.3.0:
-
-	Flattened source code layout
-	Removed cmake files, and added Jamfile
-	Fixed long long declarations to make them portable to MSWindows
-	Added callback to return comments

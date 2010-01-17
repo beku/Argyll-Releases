@@ -10,7 +10,7 @@
  * Copyright 1996 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Derived from DTP41.c
@@ -266,7 +266,7 @@ dtp20_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 		if (p->debug) fprintf(stderr,"dtp20: About to init USB\n");
 
 		/* Set config, interface, write end point, read end point, read quanta */
-		p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x81, icomuf_none); 
+		p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x81, icomuf_none, 0); 
 
 		/* Blind reset it twice - it seems to sometimes hang up */
 		/* otherwise under OSX */
@@ -473,8 +473,15 @@ ipatch *vals) {		/* Pointer to array of values */
 		return ev;
 	if (sscanf(buf," %d ", &cs) != 1)
 		return inst_protocol_error;
-	if (cs != 3)
-		return inst_nonesaved;
+	if (cs != 3) {
+		/* Seems to be no chart saved, but double check, in case of old firmware ( < 1.03) */
+		if ((ev = dtp20_command(p, "00TS\r", buf, MAX_RD_SIZE, 0.5)) != inst_ok)
+			return inst_nonesaved;
+		if (sscanf(buf," %d ", &cs) != 1)
+			return inst_nonesaved;
+		if (cs == 0)
+			return inst_nonesaved;
+	}
 
 	/* Get the TID */
 	if ((ev = dtp20_command(p, "ST\r", buf, MAX_RD_SIZE, 0.5)) != inst_ok)
@@ -546,6 +553,7 @@ ipatch *vals) {		/* Pointer to array of values */
 			tvals[i].aXYZ_v = 0;
 			tvals[i].Lab_v = 0;
 			tvals[i].sp.spec_n = 0;
+			tvals[i].duration = 0.0;
 			tp += strlen(tp) + 1;
 		}
 
@@ -576,6 +584,7 @@ ipatch *vals) {		/* Pointer to array of values */
 				tvals[i].sp.spec_n = 31;
 				tvals[i].sp.spec_wl_short = 400.0;
 				tvals[i].sp.spec_wl_long = 700.0;
+				tvals[i].sp.norm = 100.0;
 			}
 
 			/* Set to ASCII */
@@ -640,8 +649,11 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 	/* Send strip definition */
 	build_strip(p, tbuf, name, npatch, pname, sguide, pwid, gwid, twid);
 
-	if ((ev = dtp20_command(p, tbuf, buf, MAX_MES_SIZE, 1.5)) != inst_ok)
+	if ((ev = dtp20_command(p, tbuf, buf, MAX_MES_SIZE, 1.5)) != inst_ok) {
+		if (p->verb)
+			printf("Interactive strip reading won't work on Firmware earlier than V1.03 !\n");
 		return ev;
+	}
 
 	if (p->trig == inst_opt_trig_keyb_switch) {
 		int touts = 0;
@@ -726,6 +738,7 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 		vals[i].aXYZ_v = 0;
 		vals[i].Lab_v = 0;
 		vals[i].sp.spec_n = 0;
+		vals[i].duration = 0.0;
 		tp += strlen(tp) + 1;
 	}
 
@@ -757,6 +770,7 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 			vals[i].sp.spec_n = 31;
 			vals[i].sp.spec_wl_short = 400.0;
 			vals[i].sp.spec_wl_long = 700.0;
+			vals[i].sp.norm = 100.0;
 		}
 
 		/* Set to ASCII */
@@ -912,6 +926,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	val->aXYZ_v = 0;
 	val->Lab_v = 0;
 	val->sp.spec_n = 0;
+	val->duration = 0.0;
 
 	if (p->mode & inst_mode_spectral) {
 		int j;
@@ -940,6 +955,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 		val->sp.spec_n = 31;
 		val->sp.spec_wl_short = 400.0;
 		val->sp.spec_wl_long = 700.0;
+		val->sp.norm = 100.0;
 
 		/* Set to ASCII */
 		if ((ev = dtp20_command(p, "001BCF\r", buf, MAX_MES_SIZE, 0.5)) != inst_ok)
@@ -1433,8 +1449,18 @@ inst_status_type m,	/* Requested status type */
 			return ev;
 		if (sscanf(buf," %d ", &cs) != 1)
 			return inst_protocol_error;
-		if (cs == 2 || cs == 3)
+		if (0 && (cs == 2 || cs == 3)) {
 			*fe |= inst_stat_savdrd_chart;
+		} else {
+			/* Seems to be no chart saved, but double check, in case of old firmware */
+			if ((ev = dtp20_command(p, "00TS\r", buf, MAX_MES_SIZE, 0.5)) == inst_ok) {
+				if (sscanf(buf," %d ", &cs) == 1) {
+					if (cs != 0) {
+						*fe |= inst_stat_savdrd_chart;
+					}
+				}
+			}
+		}
 		return inst_ok;
 	}
 

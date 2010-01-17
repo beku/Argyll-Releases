@@ -3,14 +3,20 @@
  * Scattered Data Interpolation
  * with multilevel B-splines
  * research.
- */
-
-/*
+ *
  * This is from the paper
  * "Scattered Data Interpolation with Multilevel B-Splines"
  * by Seungyong Lee, George Wolberg and Sung Yong Shin,
+ */
+
+/*
+ * Author: Graeme W. Gill
+ * Date:   2001/1/1
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * Copyright 2000 - 2001 Graeme W. Gill
+ * All rights reserved.
+ *
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 

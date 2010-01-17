@@ -142,7 +142,7 @@ main(
 	}
 
 	/* Get details of conversion (for B2A direction) */
-	luob->spaces(luob, &outs, NULL, &ins, &inn, &alg, NULL, NULL, NULL);
+	luob->spaces(luob, &outs, NULL, &ins, &inn, &alg, NULL, NULL, NULL, NULL);
 
 	if (alg != icmLutType) {
 		error("Expecting Lut based profile");

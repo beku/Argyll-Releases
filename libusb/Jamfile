@@ -20,6 +20,8 @@ if $(OS) = MACOSX {
 NDepends usb.h : configure ;
 GenFileNND usb.h : "(cd $(SUBDIR); chmod +x configure ; ./configure ; rm -f libusb.a )" ;
 
+HDR = . ;
+
 # USB library
 # We could run make, but it's long winded, and the resulting static
 # lib is a bit screwed up, so build it the simple Jam way:

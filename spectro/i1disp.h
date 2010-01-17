@@ -11,7 +11,7 @@
  * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -83,6 +83,7 @@ struct _i1disp {
 
 	int       dtype;			/* Device type: 0 = i1D1, 1 = i1D2 */	
 	int       lite;				/* i1D2: 0 = normal, 1 = "Lite" */
+	int       munki;			/* i1D2: 0 = normal, 1 = "Munk" */
 	int       chroma4;			/* 0 = other, 1 = Sequel Chroma 4 (i1D1 based) */
 	inst_mode mode;				/* Currently selected mode */
 

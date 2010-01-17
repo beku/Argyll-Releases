@@ -11,7 +11,7 @@
  * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -345,7 +345,7 @@ int write_header(char *name, unsigned char *fbuf, unsigned int fsize, int verb) 
 	fprintf(ofp, "/* Spyder 2 Colorimeter Xilinx  XCS05XL firmware pattern, */\n");
 	fprintf(ofp, "/* transfered from the Spyder 2 vendor instalation by spyden. */\n");
 	fprintf(ofp, "\n");
-	fprintf(ofp, "/* This firmware pattern is (presumably) Copyright DataColor Inc., */\n");
+	fprintf(ofp, "/* This firmware pattern is (presumably) Copyright Datacolor Inc., */\n");
 	fprintf(ofp, "/* and cannot be distributed without their permision. */\n");
 	fprintf(ofp, "\n");
 	fprintf(ofp, "static unsigned int pld_size = %d;  /* Number of bytes to download */\n",fsize);
@@ -652,6 +652,7 @@ main(int argc, char *argv[]) {
 
 			char *vols[] = {		/* Typical volume names the CDROM may have */
 				"ColorVision",
+				"Datacolor",
 				""
 			};
 

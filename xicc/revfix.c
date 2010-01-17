@@ -32,6 +32,7 @@
 #include <math.h>
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "xicc.h"
 
 #define USE_CAM_CLIP_OPT		/* Clip in CAM Jab space rather than Lab */
@@ -152,7 +153,7 @@ void Labp_CMYKp(void *cntx, double out[4], double in[3]) {
 	printf("Got Lab' %f %f %f\n",in[0],in[1],in[2]);
 #endif
 
-	if (p->inking == 0) {	/* If we are copying existing K */
+	if (p->inking == 0) {	/* If we are copying existing K value */
 		
 		/* Figure out what K value was previously here */
 		if (p->AtoB != p->AtoB1) {
@@ -160,6 +161,10 @@ void Labp_CMYKp(void *cntx, double out[4], double in[3]) {
 			/* Figure out what DEV' K value the BtoA table currently has for this PCS' */
 			if (p->BtoA->clut(p->BtoA, temp, in) > 1)
 				error ("%d, %s",p->BtoA->pp->errc,p->BtoA->pp->err);
+
+			/* Convert DEV' to DEV */
+			if (p->BtoA->output(p->BtoA, temp, temp) > 1)
+				error ("%d, %s",p->BtoA->pp->errc,p->AtoB->pp->err);
 		} else {
 			/* More complicated because old BtoA in/out tables are different */
 			/* from the new ones. */
@@ -172,15 +177,10 @@ void Labp_CMYKp(void *cntx, double out[4], double in[3]) {
 			/* Figure out what DEV K value the BtoA table currently has for this PCS */
 			if (((icxLuBase *)p->BtoA)->lookup((icxLuBase *)p->BtoA, temp, temp) > 1)
 				error ("%d, %s",p->BtoA->pp->errc,p->BtoA->pp->err);
-	
-			/* Convert DEV to DEV' */
-			if (p->AtoB->input(p->AtoB, temp, temp) > 1)
-				error ("%d, %s",p->AtoB->pp->errc,p->AtoB->pp->err);
 		}
-
 		targetk = temp[3];
 #ifdef DEBUG
-		printf("Got existing CMYK' %f %f %f %f\n",temp[0],temp[1],temp[2],temp[3]);
+		printf("Got existing CMYK %f %f %f %f\n",temp[0],temp[1],temp[2],temp[3]);
 #endif
 	}
 
@@ -199,15 +199,6 @@ void Labp_CMYKp(void *cntx, double out[4], double in[3]) {
 		/* Convert PCS -> PCS' for colorimetric */
 		if (p->AtoB1->inv_output(p->AtoB1, temp, temp) > 1)
 			error ("%d, %s",p->AtoB->pp->errc,p->AtoB->pp->err);
-
-		/* Need to correct target k value */
-		tt[0] = tt[1] = tt[2] = 0.5;
-		tt[3] = targetk;
-		/* DEV->DEV' for this table */
-		p->BtoA->output(p->BtoA, tt, tt);
-		/* DEV -> DEV' for colorimetric */
-		p->AtoB1->input(p->AtoB1, tt, tt);
-		targetk = tt[3];
 	}
 
 	/* Abstract profile applied before inversion */
@@ -217,7 +208,8 @@ void Labp_CMYKp(void *cntx, double out[4], double in[3]) {
 
 	/* Invert AtoB1 clut, using set inking policy */
 	out[3] = targetk;
-	/* PCS' -> DEV' colorimetric */
+
+	/* PCS' -> DEV' colorimetric (aux target is DEV space) */
 	if ((rv = p->AtoB1->inv_clut(p->AtoB1, out, temp)) > 1)
 		error ("%d, %s",p->AtoB1->pp->errc,p->AtoB1->pp->err);
 
@@ -537,7 +529,7 @@ main(int argc, char *argv[]) {
 		/* Setup CMYK -> Lab conversion (Fwd) object */
 
 		/* Set the default ink limits if not set on command line */
-		icxDefaultLimits(icco, &ink.tlimit, tlimit, &ink.klimit, klimit);
+		icxDefaultLimits(xicco, &ink.tlimit, tlimit, &ink.klimit, klimit);
 
 		if (verb) {
 			if (!do0 && !do1 && !do2)
@@ -548,7 +540,12 @@ main(int argc, char *argv[]) {
 				printf("Black ink limit assumed is %3.0f%%\n",100.0 * ink.klimit);
 		}
 
+		ink.KonlyLmin = 0;		/* Use normal black Lmin for locus */
+
 		ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
+		ink.c.Kskew = ICXINKDEFSKEW;	/* default curve skew */
+		ink.x.Ksmth = ICXINKDEFSMTH;
+		ink.x.Kskew = ICXINKDEFSKEW;
 
 		if (inking == 0) {
 			ink.k_rule = icxKvalue;		/* K is auxiliary target */

@@ -12,7 +12,7 @@
  * Copyright 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -24,7 +24,7 @@ struct _prnode {
 }; typedef struct _prnode prnode;
 
 
-/* Main simplex latice object */
+/* Main object */
 struct _prand {
 /* private: */
 	int di;			/* Point dimensionality */
@@ -39,6 +39,10 @@ struct _prand {
 	void (*percept)(void *od, double *out, double *in);
 	void *od;		/* Opaque data for perceptual point */
 	
+	/* Unbounded perceptual model */
+	double *pmod;
+	int pmod_init;		/* It's been initialised */
+
 	/* Other info */
 	int rix;			/* Next read index */
 
@@ -57,7 +61,7 @@ struct _prand {
 
 /* Constructor */
 extern prand *new_prand(int di, double ilimit, int npoints,
-	fxpos *fxlist, int fxno,
+	fxpos *fxlist, int fxno, int quasi,
 	void (*percept)(void *od, double *out, double *in), void *od);
 
 #define PRAND_H

@@ -1,5 +1,5 @@
 /*
- * Copyright 2007, Lloyd Hilaiel.
+ * Copyright 2007-2009, Lloyd Hilaiel.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -39,7 +39,7 @@
 
 static void CharToHex(unsigned char c, char * hexBuf)
 {
-    const char * hexchar = "0123456789ABCDE";
+    const char * hexchar = "0123456789ABCDEF";
     hexBuf[0] = hexchar[c >> 4];
     hexBuf[1] = hexchar[c & 0x0F];
 }
@@ -55,7 +55,7 @@ yajl_string_encode(yajl_buf buf, const unsigned char * str,
     hexBuf[6] = 0;
 
     while (end < len) {
-        char * escaped = NULL;
+        const char * escaped = NULL;
         switch (str[end]) {
             case '\r': escaped = "\\r"; break;
             case '\n': escaped = "\\n"; break;

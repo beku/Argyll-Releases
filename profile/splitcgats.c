@@ -8,7 +8,7 @@
  * Copyright 2005 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
 		char *outc;
 		int nmask;
 		int nchan;
-		char *ident;
+		char *bident;
 		int chix[ICX_MXINKS];	/* Device chanel indexes */
 		int pcsix[3];			/* Device chanel indexes */
 		int isin = 0;
@@ -262,7 +262,7 @@ int main(int argc, char *argv[]) {
 			isadd = 1;
 
 		nchan = icx_noofinks(nmask);
-		ident = icx_inkmask2char(nmask); 
+		bident = icx_inkmask2char(nmask, 0); 
 
 		/* Find device fields */
 		for (j = 0; j < nchan; j++) {
@@ -270,7 +270,7 @@ int main(int argc, char *argv[]) {
 			char fname[100];
 
 			imask = icx_index2ink(nmask, j);
-			sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : ident,
+			sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : bident,
 			                      icx_ink2char(imask));
 
 			if ((ii = cgf->find_field(cgf, 0, fname)) < 0)
@@ -347,6 +347,7 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		}
+		free(bident);
 	}
 
 	/* Chose which of the sets go into file 1 and 2*/

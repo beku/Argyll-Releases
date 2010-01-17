@@ -10,7 +10,7 @@
  * Copyright 2006 - 2008 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -34,7 +34,12 @@
 
 /* TTBD:
 
-	Add ambient scanning/flash mode to inst API, and fully implement here.
+	Some things probably aren't quite correct:
+	The way the sensor saturation and optimal target is
+	computed probably doesn't account for the dark level
+	correctly, since the targets are in raw sensor value,
+	but the comparison is done after subtracting black ??
+	See the Munki implementation for an approach to fix this ??
 */
 
 #include <stdio.h>
@@ -61,6 +66,7 @@
 #define ENABLE_NONVCAL	/* Enable saving calibration state between program runs in a file */
 #define CALTOUT (24 * 60 * 60)	/* Calibration timeout in seconds */
 #define MAXSCANTIME 15.0	/* MAximum scan time in seconds */
+#define SW_THREAD_TIMEOUT	(10 * 60.0) 	/* Switch read thread timeout */
 
 #undef SELF_CONT		/* Use self contained spectral->XYZ, else use xicc */
 #define SINGLE_READ		/* Use a single USB read for scan to eliminate latency issues. */
@@ -72,7 +78,7 @@
 #undef PLOT_DEBUG		/* Use plot to show readings & processing */
 #undef DUMP_SCANV		/* Dump scan readings to a file "i1pdump.txt" */
 #undef APPEND_MEAN_EMMIS_VAL /* Append averaged uncalibrated reading to file "i1pdump.txt" */
-#undef PREC_DEBUG		/* Print patch recognition information */
+#undef PATREC_DEBUG		/* Print & Plot patch/flash recognition information */
 #undef RAWR_DEBUG		/* Print out raw reading processing values */
 #undef IGNORE_WHITE_INCONS	/* Ignore define reference reading inconsistency */
 #undef HIGH_RES_DEBUG
@@ -83,13 +89,24 @@
 #define DISP_INTT 2.0			/* Seconds per reading in display spot mode */
 								/* More improves repeatability in dark colors, but limits */
 								/* the maximum brightness level befor saturation. */
-								/* A value of 2.0 seconds has a limit of about 300 cd/m^2 */
-#define DISP_INTT2 1.0			/* High brightness display spot mode seconds per reading. */
+								/* A value of 2.0 seconds has a limit of about 110 cd/m^2 */
+#define DISP_INTT2 0.8			/* High brightness display spot mode seconds per reading, */
+								/* Should be good up to 275 cd/m^2 */
+#define DISP_INTT3 0.3			/* High brightness display spot mode seconds per reading, */
+								/* Should be good up to 700 cd/m^2 */
+
+#define ADARKINT_MIN 0.01		/* Min cal time for adaptive dark cal */
+#define ADARKINT_MAX 1.0		/* Max cal time for adaptive dark cal */
 
 #define EMIS_SCALE_FACTOR 1.0	/* Emission mode scale factor */ 
 #define AMB_SCALE_FACTOR (1.0/3.141592654)	/* Ambient mode scale factor - convert */ 
 								/* from Lux to Lux/PI */
 								/* These factors get the same behaviour as the GMB drivers. */
+
+/* High res mode settings */
+#define HIGHRES_SHORT 350
+#define HIGHRES_LONG  750
+#define HIGHRES_WIDTH  (10.0/3.0) /* (The 3.3333 spacing and lanczos2 seems a good combination) */
 
 #include "i1pro.h"
 #include "i1pro_imp.h"
@@ -101,13 +118,13 @@
 
 /* - - - - - - - - - - - - - - - - - - */
 
-#if defined(DEBUG) || defined(PLOT_DEBUG) || defined(PREC_DEBUG)
+#if defined(DEBUG) || defined(PLOT_DEBUG) || defined(PATREC_DEBUG)
 # include <plot.h>
 #endif
 
 
-#if defined(DEBUG) || defined(HIGH_RES_PLOT)
-int disdebplot = 0;
+#if defined(DEBUG) || defined(PLOT_DEBUG) || defined(HIGH_RES_PLOT)
+static int disdebplot = 0;
 
 #define DBG(xxx) fprintf xxx ;
 #define dbgo stderr
@@ -227,8 +244,8 @@ i1pro_code add_i1proimp(i1pro *p) {
 	i1proimp *m;
 
 	if ((m = (i1proimp *)calloc(1, sizeof(i1proimp))) == NULL) {
-		DBG((dbgo,"add_i1proimp malloc %d bytes failed (1)\n",sizeof(i1proimp)))
-		if (p->verb) printf("Malloc %d bytes failed (1)\n",sizeof(i1proimp));
+		DBG((dbgo,"add_i1proimp malloc %ld bytes failed (1)\n",sizeof(i1proimp)))
+		if (p->verb) printf("Malloc %ld bytes failed (1)\n",sizeof(i1proimp));
 		return I1PRO_INT_MALLOC;
 	}
 	m->p = p;
@@ -258,7 +275,6 @@ void del_i1proimp(i1pro *p) {
 		}
 
 		/* i1pro_terminate_switch() seems to fail on a rev A & Rev C ?? */
-
 		if (m->th != NULL) {		/* Terminate switch monitor thread */
 			m->th_term = 1;			/* Tell thread to exit on error */
 			i1pro_terminate_switch(p);
@@ -271,6 +287,7 @@ void del_i1proimp(i1pro *p) {
 
 			free_dvector(s->dark_data, 0, m->nraw-1);  
 			free_dvector(s->dark_data2, 0, m->nraw-1);  
+			free_dvector(s->dark_data3, 0, m->nraw-1);  
 			free_dvector(s->white_data, 0, m->nraw-1);
 			free_dmatrix(s->idark_data, 0, 3, 0, m->nraw-1);  
 
@@ -385,6 +402,11 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 		m->wl_short1 = 380.0;
 		m->wl_long1 = 730.0;
 
+		/* Fill this in here too */
+		m->wl_short2 = HIGHRES_SHORT;
+		m->wl_long2 = HIGHRES_LONG;
+		m->nwav2 = (int)((m->wl_long2-m->wl_short2)/HIGHRES_WIDTH) + 1;	
+
 		/* Default to standard resolution */
 		m->nwav = m->nwav1;
 		m->wl_short = m->wl_short1;
@@ -440,7 +462,8 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 
 		if ((m->amb_coef1 = m->data->get_doubles(m->data, &count, key_amb_coef)) == NULL
 		                                                                   || count != m->nwav1) {
-			if (m->capabilities & 0x6000)		/* Expect ambient calibration */
+			if (p->itype != instI1Monitor
+			 && m->capabilities & 0x6000)		/* Expect ambient calibration */
 				return I1PRO_HW_CALIBINFO;
 			m->amb_coef1 = NULL;
 		}
@@ -522,6 +545,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 		i1pro_state *s;
 
 		/* First set state to basic configuration */
+		/* (We assume it's been zero'd) */
 		for (i = 0; i < i1p_no_modes; i++) {
 			s = &m->ms[i];
 
@@ -536,9 +560,11 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 			s->dark_valid = 0;		/* Dark cal invalid */
 			s->dark_data = dvectorz(0, m->nraw-1);  
 			s->dark_data2 = dvectorz(0, m->nraw-1);  
+			s->dark_data3 = dvectorz(0, m->nraw-1);  
 
 			s->cal_valid = 0;		/* Scale cal invalid */
 			s->cal_factor1 = dvectorz(0, m->nwav1-1);
+			s->cal_factor2 = dvectorz(0, m->nwav2-1);
 			s->cal_factor = s->cal_factor1; /* Default to standard resolution */
 			s->white_data = dvectorz(0, m->nraw-1);
 
@@ -546,6 +572,13 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 			s->idark_data = dmatrixz(0, 3, 0, m->nraw-1);  
 
 			s->min_wl = 0.0;		/* No minimum by default */
+
+			s->dark_int_time  = DISP_INTT;	/* 2.0 */
+			s->dark_int_time2 = DISP_INTT2;	/* 0.8 */
+			s->dark_int_time3 = DISP_INTT3;	/* 0.3 */
+
+			s->idark_int_time[0] = s->idark_int_time[2] = ADARKINT_MIN;	/* 0.01 */
+			s->idark_int_time[1] = s->idark_int_time[3] = ADARKINT_MAX; /* 1.0 */
 
 			s->need_calib = 1;		/* By default always need a calibration at start */
 			s->need_dcalib = 1;
@@ -559,6 +592,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->reflective = 1;
 					s->adaptive = 1;
 					s->inttime = 0.02366;		/* Should get this from the log ?? */ 
+					s->dark_int_time = s->inttime;
 
 					s->dadaptime = 0.10;
 					s->wadaptime = 0.10;
@@ -575,6 +609,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->scan = 1;
 					s->adaptive = 1;
 					s->inttime = m->min_int_time;	/* Maximize scan rate */
+					s->dark_int_time = s->inttime;
 					if (m->fwrev >= 301)			/* (We're not using scan targoscale though) */
 						s->targoscale = 0.25;
 					else
@@ -599,12 +634,15 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->adaptive = 0;
 
 					s->inttime = DISP_INTT;		/* Default disp integration time (ie. 2.0 sec) */
-					s->dark_int_time2 = DISP_INTT2;	/* Alternate disp integration time (ie. 1.0) */
+					s->dark_int_time = s->inttime;
+					s->dark_int_time2 = DISP_INTT2;	/* Alternate disp integration time (ie. 0.8) */
+					s->dark_int_time3 = DISP_INTT3;	/* Alternate disp integration time (ie. 0.3) */
 
 					s->dadaptime = 0.0;
 					s->wadaptime = 0.10;
 					s->dcaltime = DISP_INTT;		/* ie. determines number of measurements */
-					s->dcaltime2 = DISP_INTT2 * 2;	/* Make it 2 seconds (ie, 2 x 1 seconds) */
+					s->dcaltime2 = DISP_INTT2 * 2;	/* Make it 1.6 seconds (ie, 2 x 0.8 seconds) */
+					s->dcaltime3 = DISP_INTT3 * 3;	/* Make it 0.9 seconds (ie, 3 x 0.3 seconds) */
 					s->wcaltime = 0.0;
 					s->dreadtime = 0.0;
 					s->wreadtime = DISP_INTT;
@@ -633,6 +671,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->scan = 1;
 					s->adaptive = 1;
 					s->inttime = m->min_int_time;	/* Maximize scan rate */
+					s->dark_int_time = s->inttime;
 					if (m->fwrev >= 301)
 						s->targoscale = 0.25;		/* (We're not using scan targoscale though) */
 					else
@@ -671,7 +710,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->wreadtime = 1.0;
 					s->maxscantime = 0.0;
 					break;
-				case i1p_amb_scan:
+				case i1p_amb_flash:
 				/* This is intended for measuring flashes */
 #ifdef FAKE_AMBIENT
 					for (j = 0; j < m->nwav1; j++)
@@ -687,8 +726,10 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->emiss = 1;
 					s->ambient = 1;
 					s->scan = 1;
-					s->adaptive = 1;
+					s->flash = 1;
+					s->adaptive = 0;
 					s->inttime = m->min_int_time;	/* Maximize scan rate */
+					s->dark_int_time = s->inttime;
 					if (m->fwrev >= 301)
 						s->targoscale = 0.25;		/* (We're not using scan targoscale though) */
 					else
@@ -720,6 +761,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->trans = 1;
 					s->scan = 1;
 					s->inttime = m->min_int_time;	/* Maximize scan rate */
+					s->dark_int_time = s->inttime;
 					if (m->fwrev >= 301)			/* (We're not using scan targoscale though) */
 						s->targoscale = 0.25;
 					else
@@ -812,7 +854,7 @@ i1pro_code i1pro_imp_set_mode(
 		case i1p_emiss_spot:
 		case i1p_emiss_scan:
 		case i1p_amb_spot:
-		case i1p_amb_scan:
+		case i1p_amb_flash:
 		case i1p_trans_spot:
 		case i1p_trans_scan:
 			m->mmode = mmode;
@@ -882,6 +924,7 @@ i1pro_code i1pro_imp_calibrate(
 	int nummeas = 0;
 	int transwarn = 0;
 	int ltocmode = 0;			/* 1 = Lamp turn on compensation mode */
+	int i, j, k;
 
 	DBG((dbgo,"i1pro_imp_calibrate called with calp 0x%x, calc 0x%x\n",caltp, *calc))
 
@@ -969,7 +1012,7 @@ i1pro_code i1pro_imp_calibrate(
 	/* using the current inttime & gainmode, while display mode */
 	/* does an extra fallback black cal for bright displays. */
 	if ((s->reflective && *calc == inst_calc_man_ref_white)
-	 || (s->emiss && !s->adaptive && *calc == inst_calc_man_em_dark)
+	 || (s->emiss && !s->adaptive && !s->scan && *calc == inst_calc_man_em_dark)
 	 || (s->trans && !s->adaptive && *calc == inst_calc_man_trans_dark)) {
 		int stm;
 
@@ -991,6 +1034,15 @@ i1pro_code i1pro_imp_calibrate(
 			                                                   s->gainmode)) != I1PRO_OK)
 				return ev;
 			if (p->debug) fprintf(stderr,"Execution time of 2nd dark calib time %f sec = %d msec\n",s->inttime,msec_time() - stm);
+
+			nummeas = i1pro_comp_nummeas(p, s->dcaltime3, s->dark_int_time3);
+			DBG((dbgo,"Doing 3rd initial black calibration with dcaltime3 %f, dark_int_time3 %f, nummeas %d, gainmode %d\n", s->dcaltime3, s->dark_int_time3, nummeas, s->gainmode))
+			nummeas = i1pro_comp_nummeas(p, s->dcaltime3, s->dark_int_time3);
+			stm = msec_time();
+			if ((ev = i1pro_dark_measure(p, s->dark_data3, nummeas, &s->dark_int_time3,
+			                                                   s->gainmode)) != I1PRO_OK)
+				return ev;
+			if (p->debug) fprintf(stderr,"Execution time of 3rd dark calib time %f sec = %d msec\n",s->inttime,msec_time() - stm);
 		}
 		s->dark_valid = 1;
 		s->need_dcalib = 0;
@@ -999,38 +1051,75 @@ i1pro_code i1pro_imp_calibrate(
 		s->dark_gain_mode = s->gainmode;
 	}
 
+	/* Emsissive scan (flash) uses the fastest possible scan rate (??) */
+	if (s->emiss && !s->adaptive && s->scan && *calc == inst_calc_man_em_dark) {
+		int stm;
+
+		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->inttime);
+
+		DBG((dbgo,"Doing display black calibration with dcaltime %f, int_time %f, nummeas %d, gainmode %d\n", s->dcaltime, s->inttime, nummeas, s->gainmode))
+		stm = msec_time();
+		if ((ev = i1pro_dark_measure(p, s->dark_data, nummeas, &s->inttime, s->gainmode))
+	                                                                         != I1PRO_OK) {
+			return ev;
+		}
+		if (p->debug) fprintf(stderr,"Execution time of dark calib time %f sec = %d msec\n",s->inttime,msec_time() - stm);
+
+		s->dark_valid = 1;
+		s->need_dcalib = 0;
+		s->ddate = time(NULL);
+		s->dark_int_time = s->inttime;
+		s->dark_gain_mode = s->gainmode;
+
+		/* Save the calib to all similar modes */
+		for (i = 0; i < i1p_no_modes; i++) {
+			i1pro_state *ss = &m->ms[i];
+			if (ss == s)
+				continue;
+			if (ss->emiss && !ss->adaptive && s->scan) {
+				ss->dark_valid = s->dark_valid;
+				ss->ddate = s->ddate;
+				for (k = 0; k < m->nraw; k++) {
+					ss->dark_data[k] = s->dark_data[k];
+				}
+			}
+		}
+	}
+
 	/* Deal with an emmissive/transmissive black reference */
 	/* in non-scan mode, where the integration time and gain may vary. */
 	if ((s->emiss && s->adaptive && !s->scan && *calc == inst_calc_man_em_dark)
 	 || (s->trans && s->adaptive && !s->scan && *calc == inst_calc_man_trans_dark)) {
+		int i, j, k;
+
 		/* Adaptive where we can't measure the black reference on the fly, */
 		/* so bracket it and interpolate. */
 		/* The black reference is probably temperature dependent, but */
 		/* there's not much we can do about this. */
 
-		s->idark_int_time[0] = 0.01;
+		s->idark_int_time[0] = ADARKINT_MIN; /* 0.01 */
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[0]);
-		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[0] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[0], nummeas, s->gainmode))
+		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[0] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[0], nummeas, 0))
 		if ((ev = i1pro_dark_measure(p, s->idark_data[0], nummeas, &s->idark_int_time[0], 0))
 		                                                                          != I1PRO_OK)
 			return ev;
 	
-		s->idark_int_time[1] = 1.0;
+		s->idark_int_time[1] = ADARKINT_MAX; /* 1.0 */
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[1]);
-		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[1] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[1], nummeas, s->gainmode))
+		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[1] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[1], nummeas, 0))
 		if ((ev = i1pro_dark_measure(p, s->idark_data[1], nummeas, &s->idark_int_time[1], 0))
 		                                                                          != I1PRO_OK)
 			return ev;
 	
-		s->idark_int_time[2] = 0.01;
+		s->idark_int_time[2] = ADARKINT_MIN; /* 0.01 */
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[2]);
-		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[2] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[2], nummeas, s->gainmode))
+		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[2] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[2], nummeas, 1))
 		if ((ev = i1pro_dark_measure(p, s->idark_data[2], nummeas, &s->idark_int_time[2], 1))
 		                                                                          != I1PRO_OK)
 			return ev;
 	
-		s->idark_int_time[3] = 1.0;
-		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[3] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[3], nummeas, s->gainmode))
+		s->idark_int_time[3] = ADARKINT_MAX; /* 1.0 */
+		DBG((dbgo,"Doing adaptive interpolated black calibration, dcaltime %f, idark_int_time[3] %f, nummeas %d, gainmode %d\n", s->dcaltime, s->idark_int_time[3], nummeas, 1))
 		nummeas = i1pro_comp_nummeas(p, s->dcaltime, s->idark_int_time[3]);
 		if ((ev = i1pro_dark_measure(p, s->idark_data[3], nummeas, &s->idark_int_time[3], 1))
 		                                                                          != I1PRO_OK)
@@ -1047,6 +1136,23 @@ i1pro_code i1pro_imp_calibrate(
 		s->ddate = s->iddate;
 		s->dark_int_time = s->inttime;
 		s->dark_gain_mode = s->gainmode;
+
+		/* Save the calib to all similar modes */
+		for (i = 0; i < i1p_no_modes; i++) {
+			i1pro_state *ss = &m->ms[i];
+			if (ss == s)
+				continue;
+			if ((ss->emiss && ss->adaptive)
+			 || ss->trans) {
+				ss->idark_valid = s->idark_valid;
+				ss->iddate = s->iddate;
+				for (j = 0; j < 4; j++) {
+					ss->idark_int_time[j] = s->idark_int_time[j];
+					for (k = 0; k < m->nraw; k++)
+						ss->idark_data[j][k] = s->idark_data[j][k];
+				}
+			}
+		}
 
 		DBG((dbgo,"Done adaptive interpolated black calibration\n"))
 
@@ -1341,7 +1447,6 @@ i1pro_code i1pro_imp_calibrate(
 		nummeas = i1pro_comp_nummeas(p, s->wreadtime, s->inttime);
 		ev = i1pro_whitemeasure(p, NULL, NULL, data , &scale, nummeas,
 		           &s->inttime, s->gainmode, s->targoscale, 0);
-		free_dvector(data, 0, m->nraw-1);
 		/* Switch to the alternate if things are too bright */
 		/* We do this simply by swapping the alternate values in. */
 		if (ev == I1PRO_RD_SENSORSATURATED || scale < 1.0) {
@@ -1349,13 +1454,32 @@ i1pro_code i1pro_imp_calibrate(
 			DBG((dbgo,"Switching to alternate display integration time %f seconds\n",s->dark_int_time2))
 			if (p->debug)
 				fprintf(stderr,"Switching to alternate display integration time %f seconds\n",s->dark_int_time2);
-			tv = s->inttime;
-			s->inttime = s->dark_int_time2;
-			s->dark_int_time2 = tv;
-			tt = s->dark_data;
-			s->dark_data = s->dark_data2;
-			s->dark_data2 = tt;
+			tv = s->inttime; s->inttime = s->dark_int_time2; s->dark_int_time2 = tv;
+			tt = s->dark_data; s->dark_data = s->dark_data2; s->dark_data2 = tt;
+			s->dispswap = 1;
+
+			/* Do another measurement of the full display white, and if it's close to */
+			/* saturation, switch to the 3rd alternate display integration time */
+			nummeas = i1pro_comp_nummeas(p, s->wreadtime, s->inttime);
+			ev = i1pro_whitemeasure(p, NULL, NULL, data , &scale, nummeas,
+			           &s->inttime, s->gainmode, s->targoscale, 0);
+			/* Switch to the 3rd alternate if things are too bright */
+			/* We do this simply by swapping the alternate values in. */
+			if (ev == I1PRO_RD_SENSORSATURATED || scale < 1.0) {
+				double *tt, tv;
+				DBG((dbgo,"Switching to 3rd alternate display integration time %f seconds\n",s->dark_int_time3))
+				if (p->debug)
+					fprintf(stderr,"Switching to alternate display integration time %f seconds\n",s->dark_int_time3);
+				/* Undo previous swap */
+				tv = s->inttime; s->inttime = s->dark_int_time2; s->dark_int_time2 = tv;
+				tt = s->dark_data; s->dark_data = s->dark_data2; s->dark_data2 = tt;
+				/* swap in 2nd alternate */
+				tv = s->inttime; s->inttime = s->dark_int_time3; s->dark_int_time3 = tv;
+				tt = s->dark_data; s->dark_data = s->dark_data3; s->dark_data3 = tt;
+				s->dispswap = 2;
+			}
 		}
+		free_dvector(data, 0, m->nraw-1);
 		if (ev != I1PRO_OK) {
 			return ev;
 		}
@@ -1444,6 +1568,7 @@ i1pro_code i1pro_imp_measure(
 	int nummeas = 0, maxnummeas = 0;
 	int nmeasuered = 0;			/* Number actually measured */
 	double **specrd = NULL;		/* Cooked spectral patch values */
+	double duration = 0.0;		/* Possible flash duration value */
 	int user_trig = 0;
 
 	DBG((dbgo,"i1pro_imp_measure called\n"))
@@ -1452,6 +1577,7 @@ i1pro_code i1pro_imp_measure(
 		        s->emiss ? "Emission" : s->trans ? "Trans" : "Refl", 
 		        s->emiss && s->ambient ? " Ambient" : "",
 		        s->scan ? " Scan" : "",
+		        s->flash ? " Flash" : "",
 		        s->adaptive ? " Adaptive" : "");
 
 
@@ -1600,12 +1726,6 @@ i1pro_code i1pro_imp_measure(
 		DBG((dbgo,"Computed optimal emiss inttime %f and gainmode %d\n",s->inttime,s->gainmode))
 
 		DBG((dbgo,"Interpolate dark calibration reference\n"))
-		if (!s->idark_valid) {
-			free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
-			free(mbuf);
-			DBG((dbgo,"i1pro_imp_measure adaptive but idark not valid!\n"))
-			return ev;
-		}
 		if ((ev = i1pro_interp_dark(p, s->dark_data, s->inttime, s->gainmode)) != I1PRO_OK) {
 			free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
 			free(mbuf);
@@ -1676,7 +1796,7 @@ i1pro_code i1pro_imp_measure(
 
 		/* Complete black reference measurement */
 		if (s->reflective) {
-			DBG((dbgo,"Doing black calibration_2 with nummeas %d, inttime %f, gainmode %d\n", nummeas, s->inttime,s->gainmode))
+			DBG((dbgo,"Calling black calibration_2 calc with nummeas %d, inttime %f, gainmode %d\n", nummeas, s->inttime,s->gainmode))
 			if ((ev = i1pro_dark_measure_2(p, s->dark_data, nummeas, s->inttime, s->gainmode,
 			                                                      buf, bsize)) != I1PRO_OK) {
 				free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
@@ -1692,23 +1812,48 @@ i1pro_code i1pro_imp_measure(
 		}
 
 		/* Process the raw measurement readings into final spectral readings */
-		ev = i1pro_read_patches_2(p, specrd, nvals, s->inttime, s->gainmode,
+		ev = i1pro_read_patches_2(p, &duration, specrd, nvals, s->inttime, s->gainmode,
 		                                              nmeasuered, mbuf, mbsize);
 		/* Special case display mode read. If the sensor is saturated, and */
 		/* we haven't already done so, switch to the alternate integration time */
 		/* and try again. */
 		if (s->emiss && !s->scan && !s->adaptive
-		 && ev == I1PRO_RD_SENSORSATURATED && s->inttime > DISP_INTT2) {
+		 && ev == I1PRO_RD_SENSORSATURATED
+		 && s->dispswap < 2) {
 			double *tt, tv;
-			DBG((dbgo,"Switching to alternate display integration time %f seconds\n",s->dark_int_time2))
-			if (p->debug)
-				fprintf(stderr,"Switching to alternate display integration time %f seconds\n",s->dark_int_time2);
-			tv = s->inttime;
-			s->inttime = s->dark_int_time2;
-			s->dark_int_time2 = tv;
-			tt = s->dark_data;
-			s->dark_data = s->dark_data2;
-			s->dark_data2 = tt;
+
+			if (s->dispswap == 0) {
+				DBG((dbgo,"Switching to alternate display integration time %f seconds\n",s->dark_int_time2))
+				if (p->debug)
+					fprintf(stderr,"Switching to alternate display integration time %f seconds\n",s->dark_int_time2);
+				tv = s->inttime; s->inttime = s->dark_int_time2; s->dark_int_time2 = tv;
+				tt = s->dark_data; s->dark_data = s->dark_data2; s->dark_data2 = tt;
+				s->dispswap = 1;
+			} else if (s->dispswap == 1) {
+				DBG((dbgo,"Switching to 2nd alternate display integration time %f seconds\n",s->dark_int_time3))
+				if (p->debug)
+					fprintf(stderr,"Switching to alternate display integration time %f seconds\n",s->dark_int_time3);
+				/* Undo first swap */
+				tv = s->inttime; s->inttime = s->dark_int_time2; s->dark_int_time2 = tv;
+				tt = s->dark_data; s->dark_data = s->dark_data2; s->dark_data2 = tt;
+				/* Do 2nd swap */
+				tv = s->inttime; s->inttime = s->dark_int_time3; s->dark_int_time3 = tv;
+				tt = s->dark_data; s->dark_data = s->dark_data3; s->dark_data3 = tt;
+				s->dispswap = 2;
+			}
+			/* Recompute number of measurements and realloc measurement buffer */
+			free(mbuf);
+			nummeas = i1pro_comp_nummeas(p, s->wreadtime, s->inttime);
+			maxnummeas = i1pro_comp_nummeas(p, s->maxscantime, s->inttime);
+			if (maxnummeas < nummeas)
+				maxnummeas = nummeas;
+			mbsize = 256 * maxnummeas;
+			if ((mbuf = (unsigned char *)malloc(sizeof(unsigned char) * mbsize)) == NULL) {
+				free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
+				DBG((dbgo,"i1pro_imp_measure malloc %d bytes failed (7)\n",mbsize))
+				if (p->verb) printf("Malloc %d bytes failed (7)\n",mbsize);
+				return I1PRO_INT_MALLOC;
+			}
 			continue;			/* Do the measurement again */
 		}
 
@@ -1729,6 +1874,9 @@ i1pro_code i1pro_imp_measure(
 		return ev;
 	}
 	free_dmatrix(specrd, 0, nvals-1, 0, m->nwav-1);
+	
+	if (nvals > 0)
+		vals[0].duration = duration;	/* Possible flash duration */
 	
 	/* Update log counters */
 	if (s->reflective) {
@@ -1808,7 +1956,7 @@ i1pro_code i1pro_restore_refspot_cal(i1pro *p) {
 	}
 
 	/* Convert to calibration data */
-	DBG((dbgo,"Doing black calibration_2 with nummeas %d, inttime %f, gainmode %d\n", 1, s->inttime,s->gainmode))
+	DBG((dbgo,"Calling black calibration_2 calc with nummeas %d, inttime %f, gainmode %d\n", 1, s->inttime,s->gainmode))
 	if ((ev = i1pro_dark_measure_2(p, s->dark_data, 1, s->inttime, s->gainmode,
 		                                                 buf, 256)) != I1PRO_OK) {
 		if (p->verb) printf("Failed to convert EEProm dark data to calibration\n");
@@ -2143,6 +2291,8 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 		write_ints(&x, fp, &s->emiss, 1);
 		write_ints(&x, fp, &s->trans, 1);
 		write_ints(&x, fp, &s->reflective, 1);
+		write_ints(&x, fp, &s->scan, 1);
+		write_ints(&x, fp, &s->flash, 1);
 		write_ints(&x, fp, &s->ambient, 1);
 		write_ints(&x, fp, &s->adaptive, 1);
 
@@ -2157,6 +2307,8 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 		write_doubles(&x, fp, s->dark_data, m->nraw);
 		write_doubles(&x, fp, &s->dark_int_time2, 1);
 		write_doubles(&x, fp, s->dark_data2, m->nraw);
+		write_doubles(&x, fp, &s->dark_int_time3, 1);
+		write_doubles(&x, fp, s->dark_data3, m->nraw);
 		write_ints(&x, fp, &s->dark_gain_mode, 1);
 
 		if (!s->emiss) {
@@ -2195,7 +2347,7 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 i1pro_code i1pro_restore_calibration(i1pro *p) {
 	i1proimp *m = (i1proimp *)p->m;
 	i1pro_code ev = I1PRO_OK;
-	i1pro_state *s;
+	i1pro_state *s, ts;
 	int i, j;
 	char fname[MAXNAMEL+1];
 	char nmode[10];
@@ -2246,12 +2398,11 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 	}
 
 	/* Do a dummy read to check the checksum */
-
 	for (i = 0; i < i1p_no_modes; i++) {
 		int di;
 		double dd;
 		time_t dt;
-		int emiss, trans, reflective, ambient, adaptive;
+		int emiss, trans, reflective, ambient, scan, flash, adaptive;
 
 		s = &m->ms[i];
 
@@ -2259,17 +2410,10 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 		read_ints(&x, fp, &emiss, 1);
 		read_ints(&x, fp, &trans, 1);
 		read_ints(&x, fp, &reflective, 1);
+		read_ints(&x, fp, &scan, 1);
+		read_ints(&x, fp, &flash, 1);
 		read_ints(&x, fp, &ambient, 1);
 		read_ints(&x, fp, &adaptive, 1);
-
-		if (emiss != s->emiss
-		 || trans != s->trans
-		 || reflective != s->reflective
-		 || ambient != s->ambient
-		 || adaptive != s->adaptive) {
-			DBG((dbgo,"Mode setup doesn't match\n"));
-			goto reserr;
-		}
 
 		/* Configuration calibration is valid for */
 		read_ints(&x, fp, &di, 1);
@@ -2278,6 +2422,9 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 		/* Calibration information */
 		read_ints(&x, fp, &di, 1);
 		read_time_ts(&x, fp, &dt, 1);
+		read_doubles(&x, fp, &dd, 1);
+		for (j = 0; j < m->nraw; j++)
+			read_doubles(&x, fp, &dd, 1);
 		read_doubles(&x, fp, &dd, 1);
 		for (j = 0; j < m->nraw; j++)
 			read_doubles(&x, fp, &dd, 1);
@@ -2324,6 +2471,16 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 
 	rewind(fp);
 
+	/* Allocate space in temp structure */
+
+	ts.dark_data = dvectorz(0, m->nraw-1);  
+	ts.dark_data2 = dvectorz(0, m->nraw-1);  
+	ts.dark_data3 = dvectorz(0, m->nraw-1);  
+	ts.cal_factor1 = dvectorz(0, m->nwav1-1);
+	ts.cal_factor2 = dvectorz(0, m->nwav2-1);
+	ts.white_data = dvectorz(0, m->nraw-1);
+	ts.idark_data = dmatrixz(0, 3, 0, m->nraw-1);  
+
 	/* Read the identification */
 	read_ints(&x, fp, &argyllversion, 1);
 	read_ints(&x, fp, &ss, 1);
@@ -2334,55 +2491,138 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 
 	/* For each mode, save the calibration if it's valid */
 	for (i = 0; i < i1p_no_modes; i++) {
+		double dd, inttime;
 		s = &m->ms[i];
 
 		/* Mode identification */
-		read_ints(&x, fp, &s->emiss, 1);
-		read_ints(&x, fp, &s->trans, 1);
-		read_ints(&x, fp, &s->reflective, 1);
-		read_ints(&x, fp, &s->ambient, 1);
-		read_ints(&x, fp, &s->adaptive, 1);
+		read_ints(&x, fp, &ts.emiss, 1);
+		read_ints(&x, fp, &ts.trans, 1);
+		read_ints(&x, fp, &ts.reflective, 1);
+		read_ints(&x, fp, &ts.scan, 1);
+		read_ints(&x, fp, &ts.flash, 1);
+		read_ints(&x, fp, &ts.ambient, 1);
+		read_ints(&x, fp, &ts.adaptive, 1);
 
 		/* Configuration calibration is valid for */
-		read_ints(&x, fp, &s->gainmode, 1);
-		read_doubles(&x, fp, &s->inttime, 1);
+		read_ints(&x, fp, &ts.gainmode, 1);
+		read_doubles(&x, fp, &ts.inttime, 1);
 
-		/* Calibration information */
-		read_ints(&x, fp, &s->dark_valid, 1);
-		read_time_ts(&x, fp, &s->ddate, 1);
-		read_doubles(&x, fp, &s->dark_int_time, 1);
-		read_doubles(&x, fp, s->dark_data, m->nraw);
-		read_doubles(&x, fp, &s->dark_int_time2, 1);
-		read_doubles(&x, fp, s->dark_data2, m->nraw);
-		read_ints(&x, fp, &s->dark_gain_mode, 1);
+		/* Calibration information: */
 
-		if (!s->emiss) {
-			read_ints(&x, fp, &s->cal_valid, 1);
-			read_time_ts(&x, fp, &s->cfdate, 1);
-			read_doubles(&x, fp, s->cal_factor1, m->nwav1);
-			read_doubles(&x, fp, s->cal_factor2, m->nwav2);
-			read_doubles(&x, fp, s->white_data, m->nraw);
+		/* Static Dark */
+		read_ints(&x, fp, &ts.dark_valid, 1);
+		read_time_ts(&x, fp, &ts.ddate, 1);
+		read_doubles(&x, fp, &ts.dark_int_time, 1);
+		read_doubles(&x, fp, ts.dark_data, m->nraw);
+		read_doubles(&x, fp, &ts.dark_int_time2, 1);
+		read_doubles(&x, fp, ts.dark_data2, m->nraw);
+		read_doubles(&x, fp, &ts.dark_int_time3, 1);
+		read_doubles(&x, fp, ts.dark_data3, m->nraw);
+		read_ints(&x, fp, &ts.dark_gain_mode, 1);
+
+		if (!ts.emiss) {
+			/* Reflective */
+			read_ints(&x, fp, &ts.cal_valid, 1);
+			read_time_ts(&x, fp, &ts.cfdate, 1);
+			read_doubles(&x, fp, ts.cal_factor1, m->nwav1);
+			read_doubles(&x, fp, ts.cal_factor2, m->nwav2);
+			read_doubles(&x, fp, ts.white_data, m->nraw);
 		}
 		
-		read_ints(&x, fp, &s->idark_valid, 1);
-		read_time_ts(&x, fp, &s->iddate, 1);
-		read_doubles(&x, fp, s->idark_int_time, 4);
-		read_doubles(&x, fp, s->idark_data[0], m->nraw);
-		read_doubles(&x, fp, s->idark_data[1], m->nraw);
-		read_doubles(&x, fp, s->idark_data[2], m->nraw);
-		read_doubles(&x, fp, s->idark_data[3], m->nraw);
-	}
+		/* Adaptive Dark */
+		read_ints(&x, fp, &ts.idark_valid, 1);
+		read_time_ts(&x, fp, &ts.iddate, 1);
+		read_doubles(&x, fp, ts.idark_int_time, 4);
+		read_doubles(&x, fp, ts.idark_data[0], m->nraw);
+		read_doubles(&x, fp, ts.idark_data[1], m->nraw);
+		read_doubles(&x, fp, ts.idark_data[2], m->nraw);
+		read_doubles(&x, fp, ts.idark_data[3], m->nraw);
 
-	if (x.ef != 0) {  /* oops - got an error some where */
-		for (i = 0; i < i1p_no_modes; i++) {
-			s = &m->ms[i];
+		/* If the configuration for this mode matches */
+		/* that of the calibration, restore the calibration */
+		/* for this mode. */
+		if (x.ef == 0				/* No read error */
+		 &&	s->emiss == ts.emiss
+		 && s->trans == ts.trans
+		 && s->reflective == ts.reflective
+		 && s->scan == ts.scan
+		 && s->flash == ts.flash
+		 && s->ambient == ts.ambient
+		 && s->adaptive == ts.adaptive
+		 && (s->adaptive || fabs(s->inttime - ts.inttime) < 0.01)
+		 && (s->adaptive || fabs(s->dark_int_time - ts.dark_int_time) < 0.01)
+		 && (s->adaptive || fabs(s->dark_int_time2 - ts.dark_int_time2) < 0.01)
+		 && (s->adaptive || fabs(s->dark_int_time3 - ts.dark_int_time3) < 0.01)
+		 && (!s->adaptive || fabs(s->idark_int_time[0] - ts.idark_int_time[0]) < 0.01)
+		 && (!s->adaptive || fabs(s->idark_int_time[1] - ts.idark_int_time[1]) < 0.01)
+		 && (!s->adaptive || fabs(s->idark_int_time[2] - ts.idark_int_time[2]) < 0.01)
+		 && (!s->adaptive || fabs(s->idark_int_time[3] - ts.idark_int_time[3]) < 0.01)
+		) {
+			/* Copy all the fields read above */
+			s->emiss = ts.emiss;
+			s->trans = ts.trans;
+			s->reflective = ts.reflective;
+			s->scan = ts.scan;
+			s->flash = ts.flash;
+			s->ambient = ts.ambient;
+			s->adaptive = ts.adaptive;
 
-			s->dark_valid = 0;
-			if (!s->emiss)
-				s->cal_valid = 0;
-			s->idark_valid = 0;
+			s->gainmode = ts.gainmode;
+			s->inttime = ts.inttime;
+			s->dark_valid = ts.dark_valid;
+			s->ddate = ts.ddate;
+			s->dark_int_time = ts.dark_int_time;
+			for (j = 0; j < m->nraw; j++)
+				s->dark_data[j] = ts.dark_data[j];
+			s->dark_int_time2 = ts.dark_int_time2;
+			for (j = 0; j < m->nraw; j++)
+				s->dark_data2[j] = ts.dark_data2[j];
+			s->dark_int_time3 = ts.dark_int_time3;
+			for (j = 0; j < m->nraw; j++)
+				s->dark_data3[j] = ts.dark_data3[j];
+			s->dark_gain_mode = ts.dark_gain_mode;
+			if (!ts.emiss) {
+				s->cal_valid = ts.cal_valid;
+				s->cfdate = ts.cfdate;
+				for (j = 0; j < m->nwav1; j++)
+					s->cal_factor1[j] = ts.cal_factor1[j];
+				for (j = 0; j < m->nwav2; j++)
+					s->cal_factor2[j] = ts.cal_factor2[j];
+				for (j = 0; j < m->nraw; j++)
+					s->white_data[j] = ts.white_data[j];
+			}
+			s->idark_valid = ts.idark_valid;
+			s->iddate = ts.iddate;
+			for (j = 0; j < 4; j++)
+				s->idark_int_time[j] = ts.idark_int_time[j];
+			for (j = 0; j < m->nraw; j++)
+				s->idark_data[0][j] = ts.idark_data[0][j];
+			for (j = 0; j < m->nraw; j++)
+				s->idark_data[1][j] = ts.idark_data[1][j];
+			for (j = 0; j < m->nraw; j++)
+				s->idark_data[2][j] = ts.idark_data[2][j];
+			for (j = 0; j < m->nraw; j++)
+				s->idark_data[3][j] = ts.idark_data[3][j];
+
+		} else {
+			DBG((dbgo,"Not restoring cal for mode %d since params don't match:\n",i));
+			DBG((dbgo,"emis = %d : %d, trans = %d : %d, ref = %d : %d\n",s->emiss,ts.emiss,s->trans,ts.trans,s->reflective,ts.reflective));
+			DBG((dbgo,"scan = %d : %d, flash = %d : %d, ambi = %d : %d, adapt = %d : %d\n",s->scan,ts.scan,s->flash,ts.flash,s->ambient,ts.ambient,s->adaptive,ts.adaptive));
+			DBG((dbgo,"inttime = %f : %f\n",s->inttime,ts.inttime));
+			DBG((dbgo,"darkit1 = %f : %f, 2 = %f : %f, 3 = %f : %f\n",s->dark_int_time,ts.dark_int_time,s->dark_int_time2,ts.dark_int_time2,s->dark_int_time3,ts.dark_int_time3));
+			DBG((dbgo,"idarkit0 = %f : %f, 1 = %f : %f, 2 = %f : %f, 3 = %f : %f\n",s->idark_int_time[0],ts.idark_int_time[0],s->idark_int_time[1],ts.idark_int_time[1],s->idark_int_time[2],ts.idark_int_time[2],s->idark_int_time[3],ts.idark_int_time[3]));
 		}
 	}
+
+	/* Free up temporary space */
+	free_dvector(ts.dark_data, 0, m->nraw-1);  
+	free_dvector(ts.dark_data2, 0, m->nraw-1);  
+	free_dvector(ts.dark_data3, 0, m->nraw-1);  
+	free_dvector(ts.white_data, 0, m->nraw-1);
+	free_dmatrix(ts.idark_data, 0, 3, 0, m->nraw-1);  
+
+	free_dvector(ts.cal_factor1, 0, m->nwav1-1);
+	free_dvector(ts.cal_factor2, 0, m->nwav2-1);
 
 	DBG((dbgo,"i1pro_restore_calibration done\n"))
  reserr:;
@@ -2510,7 +2750,7 @@ i1pro_code i1pro_dark_measure_2(
 	/* Return the highest individual element. */
 	/* Return the overall average. */
 	rv = i1pro_average_multimeas(p, abssens, multimes, nummeas, NULL, &sensavg,
-	                                                         satthresh, darkthresh);     
+	                                                       satthresh, darkthresh);     
 	free_dmatrix(multimes, 0, nummeas-1, 0, m->nraw-1);
 
 #ifdef PLOT_DEBUG
@@ -2595,18 +2835,20 @@ i1pro_code i1pro_whitemeasure(
 		if (nummeas <= 0)
 			return I1PRO_INT_ZEROMEASURES;
 			
-		/* Allocate temporaries */
+		/* Allocate temporaries up front to avoid delay between trigger and read */
 		bsize = 256 * nummeas;
 		if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL) {
 			DBG((dbgo,"i1pro_whitemeasure malloc %d bytes failed (10)\n",bsize))
 			if (p->verb) printf("Malloc %d bytes failed (10)\n",bsize);
 			return I1PRO_INT_MALLOC;
 		}
+		multimes = dmatrix(0, nummeas-1, 0, m->nraw-1);
 	
 		DBG((dbgo,"Triggering measurement cycle, nummeas %d, inttime %f, gainmode %d\n",
 		                                              nummeas, *inttime, gainmode))
 	
 		if ((ev = i1pro_trigger_one_measure(p, nummeas, inttime, gainmode, 1, 0)) != I1PRO_OK) {
+			free_dmatrix(multimes, 0, nummeas-1, 0, m->nraw-1);
 			free(buf);
 			return ev;
 		}
@@ -2614,11 +2856,11 @@ i1pro_code i1pro_whitemeasure(
 		DBG((dbgo,"Gathering readings\n"))
 	
 		if ((ev = i1pro_readmeasurement(p, nummeas, 0, buf, bsize, NULL, 1, 0)) != I1PRO_OK) {
+			free_dmatrix(multimes, 0, nummeas-1, 0, m->nraw-1);
 			free(buf);
 			return ev;
 		}
 	
-		multimes = dmatrix(0, nummeas-1, 0, m->nraw-1);
 
 		/* Take a buffer full of raw readings, and convert them to */
 		/* absolute linearised sensor values. */
@@ -2633,12 +2875,11 @@ i1pro_code i1pro_whitemeasure(
 		i1pro_sub_abssens(p, nummeas, multimes, s->dark_data);
 	}
 
-	free(buf);
-
 	/* Convert linearised white value into output wavelength white reference */
 	ev = i1pro_whitemeasure_3(p, abswav1, abswav2, absraw, optscale, nummeas,
 	                                             *inttime, gainmode, targoscale, multimes);
 
+	free(buf);
 	free_dmatrix(multimes, 0, nummeas-1, 0, m->nraw-1);
 
 	return ev;
@@ -2726,7 +2967,7 @@ i1pro_code i1pro_whitemeasure_3(
 	/* Return the highest individual element. */
 	/* Return the overall average. */
 	rv = i1pro_average_multimeas(p, absraw, multimes, nummeas, &highest, &sensavg,
-	                                                              satthresh, darkthresh);     
+	                                                           satthresh, darkthresh);     
 #ifdef PLOT_DEBUG
 	printf("Average absolute sensor readings, average = %f, satthresh %f:\n",sensavg, satthresh);
 	plot_raw(absraw);
@@ -2770,8 +3011,9 @@ i1pro_code i1pro_whitemeasure_3(
 			lhighest = 1.0;
 
 		/* Compute correction factor to make sensor optimal */
-		opttarget = (double)m->sens_target * targoscale;
-		opttarget = i1pro_raw_to_abssens(p, opttarget, inttime, gainmode);  
+		opttarget = i1pro_raw_to_abssens(p, (double)m->sens_target, inttime, gainmode);  
+		opttarget *= targoscale;
+	
 	
 		DBG((dbgo,"Optimal target = %f, amount to scale = %f\n",opttarget, opttarget/lhighest))
 
@@ -2822,6 +3064,7 @@ i1pro_code i1pro_read_patches_1(
 /* Converts to completely processed output readings. */
 i1pro_code i1pro_read_patches_2(
 	i1pro *p,
+	double *duration,		/* Return flash duration */
 	double **specrd,		/* Return array [numpatches][nwav] of spectral reading values */
 	int numpatches,			/* Number of patches to return */
 	double inttime, 		/* Integration time to used */
@@ -2838,6 +3081,9 @@ i1pro_code i1pro_read_patches_2(
 	double satthresh;		/* Saturation threshold */
 	double darkthresh;		/* Dark threshold (for consistency checking) */
 	int rv = 0;
+
+	if (duration != NULL)
+		*duration = 0.0;	/* default value */
 
 	/* Allocate temporaries */
 	multimes = dmatrix(0, nmeasuered-1, 0, m->nraw-1);
@@ -2896,24 +3142,42 @@ i1pro_code i1pro_read_patches_2(
 		/* Return the highest individual element. */
 		/* Return the overall average. */
 		rv = i1pro_average_multimeas(p, abssens[0], multimes, nmeasuered, NULL, NULL,
-	                                                              satthresh, darkthresh);     
+	                                                            satthresh, darkthresh);     
 	} else {
-		DBG((dbgo,"Number of patches measured = %d\n",nmeasuered))
+		if (s->flash) {
+
+			if (numpatches != 1) {
+				free_dmatrix(abssens, 0, numpatches-1, 0, m->nraw-1);
+				free_dmatrix(multimes, 0, nmeasuered-1, 0, m->nraw-1);
+				DBG((dbgo,"i1pro_read_patches_2 spot read failed because numpatches != 1\n"))
+				return I1PRO_INT_WRONGPATCHES;
+			}
+			if ((ev = i1pro_extract_patches_flash(p, &rv, duration, abssens[0], multimes,
+			                                                 nmeasuered, inttime)) != I1PRO_OK) {
+				free_dmatrix(abssens, 0, numpatches-1, 0, m->nraw-1);
+				free_dmatrix(multimes, 0, nmeasuered-1, 0, m->nraw-1);
+				DBG((dbgo,"i1pro_read_patches_2 spot read failed at i1pro_extract_patches_flash\n"))
+				return ev;
+			}
+
+		} else {
+			DBG((dbgo,"Number of patches measured = %d\n",nmeasuered))
 
 
-		/* Recognise the required number of ref/trans patch locations, */
-		/* and average the measurements within each patch. */
-		/* Return zero if readings are consistent and not saturated. */
-		/* Return nz with bit 1 set if the readings are not consistent */
-		/* Return nz with bit 2 set if the readings are saturated */
-		/* Return the highest individual element. */
-		/* (Note white_data is just for normalization) */
-		if ((ev = i1pro_extract_patches_multimeas(p, &rv, abssens, numpatches, multimes, nmeasuered,
-		                                NULL, satthresh, inttime)) != I1PRO_OK) {
-			free_dmatrix(multimes, 0, nmeasuered-1, 0, m->nraw-1);
-			free_dmatrix(abssens, 0, numpatches-1, 0, m->nraw-1);
-			DBG((dbgo,"i1pro_read_patches_2 spot read failed at i1pro_extract_patches_multimeas\n"))
-			return ev;
+			/* Recognise the required number of ref/trans patch locations, */
+			/* and average the measurements within each patch. */
+			/* Return zero if readings are consistent and not saturated. */
+			/* Return nz with bit 1 set if the readings are not consistent */
+			/* Return nz with bit 2 set if the readings are saturated */
+			/* Return the highest individual element. */
+			/* (Note white_data is just for normalization) */
+			if ((ev = i1pro_extract_patches_multimeas(p, &rv, abssens, numpatches, multimes,
+			                            nmeasuered, NULL, satthresh, inttime)) != I1PRO_OK) {
+				free_dmatrix(multimes, 0, nmeasuered-1, 0, m->nraw-1);
+				free_dmatrix(abssens, 0, numpatches-1, 0, m->nraw-1);
+				DBG((dbgo,"i1pro_read_patches_2 spot read failed at i1pro_extract_patches_multimeas\n"))
+				return ev;
+			}
 		}
 	}
 	free_dmatrix(multimes, 0, nmeasuered-1, 0, m->nraw-1);
@@ -2935,7 +3199,7 @@ i1pro_code i1pro_read_patches_2(
 	free_dmatrix(abssens, 0, numpatches-1, 0, m->nraw-1);
 
 #ifdef APPEND_MEAN_EMMIS_VAL
-	/* Appen averaged emission reading to file "i1pdump.txt" */
+	/* Append averaged emission reading to file "i1pdump.txt" */
 	{
 		int i, j;
 		FILE *fp;
@@ -2980,6 +3244,7 @@ i1pro_code i1pro_read_patches_2(
 /* Converts to completely processed output readings. */
 i1pro_code i1pro_read_patches(
 	i1pro *p,
+	double *duration,		/* Return flash duration */
 	double **specrd,		/* Return array [numpatches][nwav] of spectral reading values */
 	int numpatches,			/* Number of patches to return */
 	int minnummeas,			/* Minimum number of measurements to take */
@@ -3018,7 +3283,7 @@ i1pro_code i1pro_read_patches(
 	}
 
 	/* Process the raw readings */
-	if ((ev = i1pro_read_patches_2(p, specrd, numpatches, *inttime, gainmode,
+	if ((ev = i1pro_read_patches_2(p, duration, specrd, numpatches, *inttime, gainmode,
 	                                              nmeasuered, buf, bsize)) != I1PRO_OK) {
 		free(buf);
 		return ev;
@@ -3030,6 +3295,7 @@ i1pro_code i1pro_read_patches(
 
 /* Take a trial measurement reading using the current mode. */
 /* Used to determine if sensor is saturated, or not optimal */
+/* in adaptive emission mode. */
 i1pro_code i1pro_trialmeasure(
 	i1pro *p,
 	int *saturated,			/* Return nz if sensor is saturated */
@@ -3057,7 +3323,7 @@ i1pro_code i1pro_trialmeasure(
 	if (nummeas <= 0)
 		return I1PRO_INT_ZEROMEASURES;
 		
-	/* Allocate temporaries */
+	/* Allocate up front to avoid delay between trigger and read */
 	bsize = 256 * nummeas;
 	if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL) {
 		DBG((dbgo,"i1pro_trialmeasure malloc %d bytes failed (12)\n",bsize))
@@ -3089,7 +3355,18 @@ i1pro_code i1pro_trialmeasure(
 	/* Take a buffer full of raw readings, and convert them to */
 	/* absolute linearised sensor values. */
 	i1pro_meas_to_abssens(p, multimes, buf, nmeasuered, *inttime, gainmode);
-	free(buf);
+
+	/* Comute dark subtraction for this trial's parameters */
+	if ((ev = i1pro_interp_dark(p, s->dark_data, s->inttime, s->gainmode)) != I1PRO_OK) {
+		free_dvector(abssens, 0, m->nraw-1);
+		free_dmatrix(multimes, 0, nummeas-1, 0, m->nraw-1);
+		free(buf);
+		DBG((dbgo,"i1pro_imp_measure interplate dark ref failed\n"))
+		return ev;
+	}
+
+	/* Subtract the black level */
+	i1pro_sub_abssens(p, nummeas, multimes, s->dark_data);
 
 	if (gainmode == 0)
 		satthresh = m->sens_sat0;
@@ -3109,9 +3386,7 @@ i1pro_code i1pro_trialmeasure(
 	/* Return the highest individual element. */
 	/* Return the overall average. */
 	rv = i1pro_average_multimeas(p, abssens, multimes, nmeasuered, &highest, &sensavg,
-	                                                              satthresh, darkthresh);     
-	free_dmatrix(multimes, 0, nummeas-1, 0, m->nraw-1);
-
+	                                                            satthresh, darkthresh);     
 #ifdef PLOT_DEBUG
 	printf("Average absolute sensor readings, average = %f, satthresh %f:\n",sensavg, satthresh);
 	plot_raw(abssens);
@@ -3135,6 +3410,10 @@ i1pro_code i1pro_trialmeasure(
 
 		*optscale = opttarget/lhighest; 
 	}
+
+	free_dmatrix(multimes, 0, nummeas-1, 0, m->nraw-1);
+	free_dvector(abssens, 0, m->nraw-1);
+	free(buf);
 
 	return ev;
 }
@@ -3598,7 +3877,8 @@ int i1pro_average_multimeas(
 	if (poallavg != NULL)
 		*poallavg = oallavg;
 
-	if (satthresh > 0.0 && avgoverth >= 10.0)
+//	if (satthresh > 0.0 && avgoverth >= 10.0)	/* Too generous */
+	if (satthresh > 0.0 && avgoverth > 0.0)
 		rv |= 2;
 
 	norm = fabs(0.5 * (maxavg+minavg));
@@ -3615,14 +3895,14 @@ int i1pro_average_multimeas(
 }
 
 
-#ifdef PREC_DEBUG
+#ifdef PATREC_DEBUG
 #define PRDBG(xxx) fprintf xxx ;
 #ifndef dbgo
 #define dbgo stdout
 #endif
 #else
 #define PRDBG(xxx) 
-#endif	/* PREC_DEBUG */
+#endif	/* PATREC_DEBUG */
 
 #define MIN_SAMPLES 3
 
@@ -3671,7 +3951,7 @@ i1pro_code i1pro_extract_patches_multimeas(
 	double white_avg;			/* Average of (aproximate) white data */
 	int rv = 0;
 	double patch_cons_thr = PATCH_CONS_THR * m->scan_toll_ratio;
-#ifdef PREC_DEBUG
+#ifdef PATREC_DEBUG
 	double **plot;
 #endif
 
@@ -3694,11 +3974,11 @@ i1pro_code i1pro_extract_patches_multimeas(
 			maxval[j] = 1.0;
 	}
 
-#ifdef PREC_DEBUG
+#ifdef PATREC_DEBUG
 	/* Plot out 6 lots of 6 values each */ 
 	plot = dmatrixz(0, 6, 0, nummeas-1);  
-//	for (j = 1; j < (m->nraw-6); j += 6) {			/* Plot all the bands */
-//	for (j = 45; j < (m->nraw-6); j += 100) {		/* Do just one band */
+//	for (j = 1; j < (m->nraw-6); j += 6) 			/* Plot all the bands */
+//	for (j = 45; j < (m->nraw-6); j += 100) 		/* Do just one band */
 	for (j = 5; j < (m->nraw-6); j += 30) {		/* Do four bands */
 		for (k = 0; k < 6; k ++) {
 			for (i = 0; i < nummeas; i++) { 
@@ -3954,7 +4234,7 @@ i1pro_code i1pro_extract_patches_multimeas(
 	}
 #endif
 
-#ifdef PREC_DEBUG
+#ifdef PATREC_DEBUG
 	printf("Slope filter output\n");
 	for (i = 0; i < nummeas; i++) { 
 		int jj;
@@ -3977,7 +4257,7 @@ i1pro_code i1pro_extract_patches_multimeas(
 	free_dvector(fslope, 0, nummeas-1);  
 	free_dmatrix(sslope, 0, nummeas-1, 0, m->nraw-1);  
 
-#ifdef PREC_DEBUG
+#ifdef PATREC_DEBUG
 	free_dmatrix(plot, 0, 6, 0, nummeas-1);  
 #endif
 
@@ -4030,7 +4310,7 @@ i1pro_code i1pro_extract_patches_multimeas(
 	}
 	avglegth /= (double)npat;
 
-#ifdef PREC_DEBUG
+#ifdef PATREC_DEBUG
 	for (i = 0; i < npat; i++) {
 		printf("Raw patch %d, start %d, length %d\n",i, pat[i].ss, pat[i].no);
 	}
@@ -4127,7 +4407,7 @@ i1pro_code i1pro_extract_patches_multimeas(
 		return I1PRO_RD_NOTENOUGHPATCHES;
 	}
 
-#ifdef PREC_DEBUG
+#ifdef PATREC_DEBUG
 	printf("Got %d patches out of potentional %d:\n",tnpatch, npat);
 	printf("Average patch legth %f\n",avglegth);
 	for (i = 1; i < (npat-1); i++) {
@@ -4216,7 +4496,7 @@ i1pro_code i1pro_extract_patches_multimeas(
 		}
 	}
 
-#ifdef PREC_DEBUG
+#ifdef PATREC_DEBUG
 	printf("After trimming got:\n");
 	for (i = 1; i < (npat-1); i++) {
 		if (pat[i].use == 0)
@@ -4315,7 +4595,223 @@ i1pro_code i1pro_extract_patches_multimeas(
 	return I1PRO_OK;
 }
 
-#ifdef PREC_DEBUG
+/* Recognise any flashes in the readings, and */
+/* and average their values together as well as summing their duration. */
+/* Return nz on an error */
+i1pro_code i1pro_extract_patches_flash(
+	i1pro *p,
+	int *flags,				/* return flags */
+	double *duration,		/* return duration */
+	double *pavg,			/* return patch average [nraw] */
+	double **multimeas,		/* Array of [nummeas][nraw] value to extract from */
+	int nummeas,			/* number of readings made */
+	double inttime			/* Integration time (used to compute duration) */
+) {
+	i1proimp *m = (i1proimp *)p->m;
+	int i, j, k, pix;
+	double minval, maxval;		/* min and max input value at wavelength of maximum input */
+	double mean;				/* Mean of the max wavelength band */
+	int maxband;				/* Band of maximum value */
+	double thresh;				/* Level threshold */
+	int fsampl;					/* Index of the first sample over the threshold */
+	int nsampl;					/* Number of samples over the threshold */
+	double *aavg;				/* ambient average [nraw] */
+	double finttime;			/* Flash integration time */
+	int rv = 0;
+#ifdef PATREC_DEBUG
+	double **plot;
+#endif
+
+	DBG((dbgo,"i1pro_extract_patches_flash\n"))
+	if (p->debug >= 1) fprintf(stderr,"Patch recognition looking flashes in %d measurements\n",nummeas);
+
+	/* Discover the maximum input value for flash dection */
+	maxval = -1e6;
+	for (j = 0; j < m->nraw; j ++) {
+		for (i = 0; i < nummeas; i++) {
+			if (multimeas[i][j] > maxval) {
+				maxval = multimeas[i][j];
+				maxband = j;
+			}
+		}
+	}
+
+	if (maxval <= 0.0) {
+		if (p->debug >= 1) fprintf(stderr,"No flashes found in measurement\n");
+		return I1PRO_RD_NOFLASHES;
+	}
+
+	minval = 1e6;
+	mean = 0.0;
+	for (i = 0; i < nummeas; i++) {
+		mean += multimeas[i][maxband];
+		if (multimeas[i][maxband] < minval)
+			minval = multimeas[i][maxband];
+	}
+	mean /= (double)nummeas;
+
+	/* Set the threshold at 5% from mean towards max */
+	thresh = (3.0 * mean + maxval)/4.0;
+	PRDBG((dbgo,"i1pro_extract_patches_flash band %d minval %f maxval %f, mean = %f, thresh = %f\n",maxband,minval,maxval,mean, thresh))
+
+#ifdef PATREC_DEBUG
+	/* Plot out 6 lots of 6 values each */ 
+	plot = dmatrixz(0, 6, 0, nummeas-1);  
+	for (j = maxband -3; j>= 0 && j < (m->nraw-6); j += 100)		/* Do one set around max */
+	{
+		for (k = 0; k < 6; k ++) {
+			for (i = 0; i < nummeas; i++) { 
+				plot[k][i] = multimeas[i][j+k]/maxval;
+			}
+		}
+		for (i = 0; i < nummeas; i++)
+			plot[6][i] = (double)i;
+		printf("Bands %d - %d\n",j,j+5);
+		do_plot6(plot[6], plot[0], plot[1], plot[2], plot[3], plot[4], plot[5], nummeas);
+	}
+	free_dmatrix(plot,0,6,0,nummeas-1);
+#endif
+
+#ifdef PATREC_DEBUG
+	/* Plot just the pulses */
+	{
+		int start, end;
+
+		plot = dmatrixz(0, 6, 0, nummeas-1);  
+
+		for(j = 0, start = -1, end = 0;;) {
+
+			for (start = -1, i = end; i < nummeas; i++) {
+				if (multimeas[i][maxband] >= thresh) {
+					if (start < 0)
+						start = i;
+				} else if (start >= 0) {
+					end = i;
+					break;
+				}
+			}
+			if (start < 0)
+				break;
+			start -= 3;
+			if (start < 0)
+				start = 0;
+			end += 4;
+			if (end > nummeas)
+				end = nummeas;
+	
+			for (i = start; i < end; i++, j++) { 
+				int q;
+
+				plot[6][j] = (double)j;
+#ifdef NEVER	/* Plot +/-3 around maxband */
+				for (q = 0, k = maxband -3; k < (maxband+3) && k >= 0 && k < m->nraw; k++, q++) {
+					plot[q][j] = multimeas[i][k]/maxval;
+				}
+#else
+				/* plot max of bands in 6 segments */
+				for (q = 0; q < 6; q++) {
+					int ss, ee;
+
+					plot[q][j] = -1e60;
+					ss = q * (m->nraw/6);
+					ee = (q+1) * (m->nraw/6);
+					for (k = ss; k < ee; k++) {
+						if (multimeas[i][k]/maxval > plot[q][j])
+							plot[q][j] = multimeas[i][k]/maxval;
+					} 
+				}
+#endif
+			}
+		}
+		do_plot6(plot[6], plot[0], plot[1], plot[2], plot[3], plot[4], plot[5], j);
+		free_dmatrix(plot,0,6,0,nummeas-1);
+	}
+#endif
+
+	/* Locate the first sample over the threshold, and the */
+	/* total number of samples in the pulses. */
+	fsampl = -1;
+	for (nsampl = i = 0; i < nummeas; i++) {
+		for (j = 0; j < m->nraw-1; j++) {
+			if (multimeas[i][j] >= thresh)
+				break;
+		}
+		if (j < m->nraw-1) {
+			if (fsampl < 0)
+				fsampl = i;
+			nsampl++;
+		}
+	}
+	PRDBG((dbgo,"Number of flash patches = %d\n",nsampl))
+	if (nsampl == 0)
+		return I1PRO_RD_NOFLASHES;
+
+	/* See if there are as many samples before the first flash */
+	if (nsampl < 6)
+		nsampl = 6;
+
+	/* Average nsample samples of ambient */
+	i = (fsampl-3-nsampl);
+	if (i < 0)
+		return I1PRO_RD_NOAMBB4FLASHES;
+	PRDBG((dbgo,"Ambient samples %d to %d \n",i,fsampl-3))
+	aavg = dvectorz(0, m->nraw-1);  
+	for (nsampl = 0; i < (fsampl-3); i++) {
+		for (j = 0; j < m->nraw-1; j++)
+			aavg[j] += multimeas[i][j];
+		nsampl++;
+	}
+
+	/* Average all the values over the threshold, */
+	/* and also one either side of flash */
+	for (j = 0; j < m->nraw-1; j++)
+		pavg[j] = 0.0;
+
+	for (k = 0, i = 1; i < (nummeas-1); i++) {
+		int sample = 0;
+		for (j = 0; j < m->nraw-1; j++) {
+			if (multimeas[i-1][j] >= thresh) {
+				sample = 1;
+				break;
+			}
+			if (multimeas[i][j] >= thresh) {
+				sample = 1;
+				break;
+			}
+			if (multimeas[i+1][j] >= thresh) {
+				sample = 1;
+				break;
+			}
+		}
+		if (j < m->nraw-1) {
+			PRDBG((dbgo,"Integrating flash sample no %d \n",i))
+			for (j = 0; j < m->nraw-1; j++)
+				pavg[j] += multimeas[i][j];
+			k++;
+		}
+	}
+	for (j = 0; j < m->nraw-1; j++)
+		pavg[j] = pavg[j]/(double)k - aavg[j]/(double)nsampl;
+
+	PRDBG((dbgo,"Number of flash patches integrated = %d\n",k))
+
+	finttime = inttime * (double)k;
+	if (duration != NULL)
+		*duration = finttime;
+
+	/* Convert to cd/m^2 seconds */
+	for (j = 0; j < m->nraw-1; j++)
+		pavg[j] *= finttime;
+
+	if (flags != NULL)
+		*flags = rv;
+
+	free_dvector(aavg, 0, m->nraw-1);  
+
+	return I1PRO_OK;
+}
+
+#ifdef PATREC_DEBUG
 #undef PRDBG
 #endif
 
@@ -4712,7 +5208,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 				error("i1pro: number of filter coeefs is > 16");
 
 			coeff[j][k].ix = sx;
-			coeff[j][k].we = m->mtx_coef[cx];
+			coeff[j][k].we = m->mtx_coef1[cx];
 		}
 	}
 
@@ -4758,6 +5254,8 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 //printf("~1 checking %d, %d: %d = %d, %d = %d\n",j,k, coeff[i][j].ix, coeff[i+1][k].ix, coeff[i][j+1].ix, coeff[i+1][k+1].ix);
 				if (coeff[i][j].ix == coeff[i+1][k].ix
 				 && coeff[i][j+1].ix == coeff[i+1][k+1].ix
+				 && coeff[i][j].we > 0.0 && coeff[i][j+1].we > 0.0
+				 && coeff[i][k].we > 0.0 && coeff[i][k+1].we > 0.0
 				 && ((   coeff[i][j].we >= coeff[i+1][k].we
 				 	 && coeff[i][j+1].we <= coeff[i+1][k+1].we)
 				  || (   coeff[i][j].we <= coeff[i+1][k].we
@@ -5105,14 +5603,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 		double twidth;
 
 		/* Construct a set of filters that uses more CCD values */
-		/* (The 3.3333 spacing and lanczos2 seems a good combination) */
-		m->wl_short2 = 350;
-		m->wl_long2 = 750;
-//		twidth = 5.0;
-		twidth = 10.0/3.0;
-//		twidth = 2.0;
-//		twidth = 1.0;
-		m->nwav2 = (int)((m->wl_long2-m->wl_short2)/twidth) + 1;	
+		twidth = HIGHRES_WIDTH;
 
 		if (m->nwav2 > 500)		/* Assert */
 			error("High res filter has too many bands");
@@ -5186,7 +5677,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 				double we;
 
 				cwl = m->wl_short2 + (double)j * (m->wl_long2 - m->wl_short2)/(m->nwav2-1.0);
-				rwl = wl - cwl;			/* relative wavelgth to filter */
+				rwl = wl - cwl;			/* relative wavelength to filter */
 
 				if (fabs(w1 - cwl) > fshmax && fabs(w2 - cwl) > fshmax)
 					continue;		/* Doesn't fall into this filter */
@@ -5240,7 +5731,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 
 				coeff2[j][m->mtx_nocoef2[j]].ix = i;
 				coeff2[j][m->mtx_nocoef2[j]++].we = we; 
-//printf("~1 filter %d, cwl %f, rwl %f, ix %d, we %f\n",j,cwl,rwl,i,we);
+//printf("~1 filter %d, cwl %f, rwl %f, ix %d, we %f, nocoefs %d\n",j,cwl,rwl,i,we,m->mtx_nocoef2[j]-1);
 			}
 		}
 
@@ -5569,7 +6060,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 					break;
 	
 				case i1p_amb_spot:
-				case i1p_amb_scan:
+				case i1p_amb_flash:
 #ifdef FAKE_AMBIENT
 					for (j = 0; j < m->nwav2; j++)
 						s->cal_factor2[j] = EMIS_SCALE_FACTOR * m->emis_coef2[j];
@@ -5779,7 +6270,7 @@ static double illum_D50[36] = {
 #endif /* SELF_CONT */
 
 /* Optics adjustment weights */
-double opt_adj_weights[21] = {
+static double opt_adj_weights[21] = {
 	1.4944496665144658e-282, 2.0036175483913455e-070, 1.2554893022685038e+232,
 	2.3898157055642966e+190, 1.5697625128432372e-076, 6.6912978722191457e+281,
 	1.2369092402930559e+277, 1.4430907501246712e-153, 3.0017439193018232e+238,
@@ -5806,9 +6297,9 @@ i1pro_code i1pro_conv2XYZ(
 	double sms;			/* Weighting */
 
 #ifndef SELF_CONT
-	if (s->emiss)
+	if (s->emiss) {
 		conv = new_xsp2cie(icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigXYZData);
-	else
+	} else
 		conv = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigXYZData);
 	if (conv == NULL)
 		return I1PRO_INT_CIECONVFAIL;
@@ -5837,14 +6328,22 @@ i1pro_code i1pro_conv2XYZ(
 		vals[i].aXYZ_v = 0;
 		vals[i].Lab_v = 0;
 		vals[i].sp.spec_n = 0;
+		vals[i].duration = 0.0;
 	
-		vals[i].sp.norm = 1.0;
 		vals[i].sp.spec_n = nwl;
 		vals[i].sp.spec_wl_short = wl_short;
 		vals[i].sp.spec_wl_long = m->wl_long;
 
-		for (j = six, k = 0; j < m->nwav; j++, k++) {
-			vals[i].sp.spec[k] = 100.0 * specrd[i][j] * sms;
+		if (s->emiss) {
+			for (j = six, k = 0; j < m->nwav; j++, k++) {
+				vals[i].sp.spec[k] = specrd[i][j] * sms;
+			}
+			vals[i].sp.norm = 1.0;
+		} else {
+			for (j = six, k = 0; j < m->nwav; j++, k++) {
+				vals[i].sp.spec[k] = 100.0 * specrd[i][j] * sms;
+			}
+			vals[i].sp.norm = 100.0;
 		}
 
 		/* Set the XYZ */
@@ -5855,6 +6354,9 @@ i1pro_code i1pro_conv2XYZ(
 		} else {
 			conv->convert(conv, vals[i].XYZ, &vals[i].sp);
 			vals[i].XYZ_v = 1;
+			vals[i].XYZ[0] *= 100.0;
+			vals[i].XYZ[1] *= 100.0;
+			vals[i].XYZ[2] *= 100.0;
 		}
 
 #else	/* SELF_CONT */
@@ -5864,11 +6366,7 @@ i1pro_code i1pro_conv2XYZ(
 		if (s->emiss) {
 			double norm;
 
-			/* Compute 1931 2 degree XYZ */
-			for (norm = 0.0, j = 0; j < 36; j++) {
-				norm += obsv[0][1][j];
-			}
-			norm = 100.0/norm;
+			norm = 0.683;		/* mW/m^2 -> Lumens/m^2 */
 			
 			for (k = 0; k < 3; k++)
 				vals[i].aXYZ[k] = 0.0;
@@ -5887,7 +6385,7 @@ i1pro_code i1pro_conv2XYZ(
 			for (norm = 0.0, j = 0; j < 36; j++) {
 				norm += obsv[0][1][j] * illum_D50[j];
 			}
-			norm = 100.0/norm;
+			norm = 100.0/norm;		/* Return value is 0 .. 100 */
 			
 			for (k = 0; k < 3; k++)
 				vals[i].XYZ[k] = 0.0;
@@ -6232,7 +6730,7 @@ int i1pro_switch_thread(void *pp) {
 	i1proimp *m = (i1proimp *)p->m;
 	DBG((dbgo,"Switch thread started\n"))
 	for (nfailed = 0;nfailed < 5;) {
-		rv = i1pro_waitfor_switch_th(p, 600.0);
+		rv = i1pro_waitfor_switch_th(p, SW_THREAD_TIMEOUT);
 		if (m->th_term)
 			break;
 		if (rv == I1PRO_INT_BUTTONTIMEOUT) {
@@ -6667,7 +7165,7 @@ i1pro_delayed_trigger(void *pp) {
 
 /* Trigger a measurement after the nominated delay */
 /* The actual return code will be in m->trig_rv after the delay. */
-/* This allows us to start the measurement read before the thrigger, */
+/* This allows us to start the measurement read before the trigger, */
 /* ensuring that process scheduling latency can't cause the read to fail. */
 i1pro_code
 i1pro_triggermeasure(i1pro *p, int delay) {
@@ -6697,10 +7195,10 @@ i1pro_triggermeasure(i1pro *p, int delay) {
 
 /* Read a measurements results. */
 /* A buffer full of bytes is returned. */
-/* (This will fail if there is more than about a 40 msec delay */
+/* (This will fail on a Rev. A if there is more than about a 40 msec delay */
 /* between triggering the measurement and starting this read. */
-/* It appears though that the read can be pending before triggering. */
-/* Scan reads will also stop if there is too great a delay beteween each read.) */
+/* It appears though that the read can be pending before triggering though. */
+/* Scan reads will also terminate if there is too great a delay beteween each read.) */
 i1pro_code
 i1pro_readmeasurement(
 	i1pro *p,
@@ -6720,6 +7218,7 @@ i1pro_readmeasurement(
 	int se, rv = I1PRO_OK;
 	int treadings = 0;
 	int isdeb = 0;
+//	int gotshort = 0;			/* nz when got a previous short reading */
 
 	if ((bsize & 0xff) != 0) {
 		return I1PRO_INT_ODDREADBUF;
@@ -6743,21 +7242,21 @@ i1pro_readmeasurement(
 	if (scanflag == 0)
 		nmeas = inummeas;
 	else
-		nmeas = bsize / 256;		/* Use a single read */
+		nmeas = bsize / 256;		/* Use a single large read */
 #else
-	nmeas = inummeas;
+	nmeas = inummeas;				/* Smaller initial number of measurements */
 #endif
 
 	top = extra + m->c_inttime * nmeas;
 	if ((m->c_measmodeflags & I1PRO_MMF_NOLAMP) == 0)	/* Lamp is on */
 		top += m->c_lamptime;
 
-	/* NOTE :- for a scan, if we don't read fast enough the Eye-One will assume */
-	/* it should stop sending, even though the user has the switch pressed. */
+	/* NOTE :- for a scan on Rev. A, if we don't read fast enough the Eye-One will */
+	/* assume it should stop sending, even though the user has the switch pressed. */
 	/* For the rev A, this is quite a small margin (aprox. 1 msec ?) */
 	/* The Rev D has a lot more buffering, and is quite robust. */
-	/* By using the delayed trigger and a single read, this problem should */
-	/* be eliminated. */
+	/* By using the delayed trigger and a single read, this problem is usually */
+	/* eliminated. */
 	/* An unexpected short read seems to lock the instrument up. Not currently */
 	/* sure what sequence would recover it for a retry of the read. */
 	for (;;) {
@@ -6783,7 +7282,17 @@ i1pro_readmeasurement(
 			m->tr_t4 = m->tr_t7;	/* Diagnostic, end of first read */
 		}
 
-		if (se == ICOM_SHORT) {		/* Expect this to terminate scan reading */
+#ifdef NEVER		/* Use short + timeout to terminate scan */
+		if (gotshort != 0 && se == ICOM_TO) {	/* We got a timeout after a short read. */ 
+			if (isdeb)  {
+				fprintf(stderr,"Read timed out in %f secs after getting short read\n",top);
+				fprintf(stderr,"(Trig & rd times %d %d %d %d)\n",
+				    m->tr_t2-m->tr_t1, m->tr_t3-m->tr_t2, m->tr_t4-m->tr_t3, m->tr_t6-m->tr_t5);
+			}
+			break;		/* We're done */
+		} else
+#endif
+		  if (se == ICOM_SHORT) {		/* Expect this to terminate scan reading */
 			if (isdeb)  {
 				fprintf(stderr,"Short read, read %d bytes, asked for %d\n",rwbytes,size);
 				fprintf(stderr,"(Trig & rd times %d %d %d %d)\n",
@@ -6825,10 +7334,21 @@ i1pro_readmeasurement(
 			break;	/* And we're done */
 		}
 
-		/* We're scanning, so keep on reading until we get less bytes than we asked for */
-		if (rwbytes != size) {		/* Scan has finished */
+#ifdef NEVER		/* Use short + timeout to terminate scan */
+		/* We expect to get a short read at the end of a scan, */
+		/* or we might have the USB transfer truncated by somethinge else. */
+		/* Note the short read, and keep reading until we get a time out */
+		if (rwbytes != size) {
+			gotshort = 1;
+		} else {
+			gotshort = 0;
+		}
+#else				/* Use short to terminate scan */
+		/* We're scanning and expect to get a short read at the end of the scan. */
+		if (rwbytes != size) {
 			break;
 		}
+#endif
 
 		if (bsize == 0) {		/* oops, no room for more scanning read */
 			unsigned char tbuf[256];
@@ -6841,7 +7361,7 @@ i1pro_readmeasurement(
 			return I1PRO_INT_MEASBUFFTOOSMALL;
 		}
 
-		/* Read a bunch more readings until the read times out */
+		/* Read a bunch more readings until the read is short or times out */
 		nmeas = bsize / 256;
 		if (nmeas > 64)
 			nmeas = 64;
@@ -6862,7 +7382,7 @@ i1pro_readmeasurement(
 	if (treadings < inummeas) {
 		if (isdeb) fprintf(stderr,"\ni1pro: Read failed, bytes read 0x%x, ICOM err 0x%x\n",rwbytes, se);
 		p->icom->debug = isdeb;
-		return I1PRO_COMS_FAIL;
+		return I1PRO_RD_SHORTMEAS;
 	} 
 
 	if (isdeb >= 3) {

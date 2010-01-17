@@ -9,7 +9,7 @@
  * Copyright 1996 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -499,6 +499,7 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 		vals[i].aXYZ_v = 0
 		vals[i].Lab_v = 1;
 		vals[i].sp.spec_n = 0;
+		vals[i].duration = 0.0;
 #else /* XYZ */
 		if (sscanf(tp, " X %lf Y %lf Z %lf ",
 		           &vals[i].XYZ[0], &vals[i].XYZ[1], &vals[i].XYZ[2]) != 3) {
@@ -511,6 +512,7 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 		vals[i].aXYZ_v = 0;
 		vals[i].Lab_v = 0;
 		vals[i].sp.spec_n = 0;
+		vals[i].duration = 0.0;
 #endif
 		tp += strlen(tp) + 1;
 	}

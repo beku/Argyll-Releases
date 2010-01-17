@@ -8,7 +8,7 @@
  *
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -71,8 +71,8 @@ main(int argc, char *argv[]) {
 	double in[MAX_CHAN], out[MAX_CHAN];
 	int inn, outn = 3;
 	icxColorantLu *luo;
-	char *isig;
-	char *osig;
+	char *ident;
+	char *odent;
 
 	if (argc < 2)
 		usage();
@@ -134,11 +134,11 @@ main(int argc, char *argv[]) {
 	if ((luo = new_icxColorantLu(mask)) == NULL)
 		error ("Creating xcolorant lookup failed\n");
 
-	isig = icx_inkmask2char(mask); 
+	ident = icx_inkmask2char(mask, 1); 
 	if (xyz)
-		osig = "XYZ";
+		odent = "XYZ";
 	else
-		osig = "Lab";
+		odent = "Lab";
 
 	/* Process colors to translate */
 	for (;;) {
@@ -175,7 +175,7 @@ main(int argc, char *argv[]) {
 			else
 				fprintf(stdout,"%f",in[j]);
 		}
-		printf(" [%s] -> ", isig);
+		printf(" [%s] -> ", ident);
 
 		for (j = 0; j < outn; j++) {
 			if (j > 0)
@@ -183,7 +183,7 @@ main(int argc, char *argv[]) {
 			else
 				fprintf(stdout,"%f",out[j]);
 		}
-		printf(" [%s]", osig);
+		printf(" [%s]", odent);
 
 		if (rv == 0)
 			fprintf(stdout,"\n");
@@ -194,7 +194,7 @@ main(int argc, char *argv[]) {
 
 	/* Done with lookup object */
 	luo->del(luo);
-	free(isig);
+	free(ident);
 
 	return 0;
 }

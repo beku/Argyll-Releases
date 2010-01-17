@@ -1,9 +1,4 @@
 
-// Version that computes ab scale factor using decomposition
-// into independent factors, and then limits the ratio between
-// the two factors that form the denominator of the scale/unscale.
-// Works best of all schemes so far ???
-
 /* 
  * cam02
  *
@@ -34,7 +29,7 @@
  *
  * Copyright 2004 - 2008 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -72,14 +67,9 @@
 	The positive region has a tangential linear extension added, so
 	that the range of values is not limited.
 		
-	~~ stuff mising
-~~~~~ Add: Re-arrange ss equation into separated effects,
+	Re-arrange ss equation into separated effects,
 	k1, k2, k3, and then limit these to avoid divide by zero
 	and sign change errors in fwd and bwd converson.
-
-	To cope with -ve acromatic response values, rather than
-	using a symetric conversion to J, a straight line segment
-	is used below A values of 0.1.
 
 	To avoid chroma and hue angle information being lost when the
 	J value used to scale the chroma is 0, and to ensure
@@ -100,41 +90,56 @@
 #include "cam02.h"
 #include "numlib.h"
 
-#undef ENTRACE				/* Enable internal value runtime tracing if s->trace != 0 */
-#define DISABLE_SS			/* Disable overall ss limit values (not the scheme used) */
+#define ENABLE_DDL			/* Enable k1,k2,k3 overall ss limit values (seems to be the best scheme) */
+#undef ENABLE_SS			/* Disable overall ss limit values (not the scheme used) */
 
+#undef ENTRACE				/* Enable internal value runtime tracing if s->trace != 0 */
 #undef DIAG1				/* Print internal value diagnostics for conditions setup */
 #undef DIAG2				/* Print internal value diagnostics for each conversion */
-#undef TRACKMINMAX			/* Track min/max limit values */
+#undef TRACKMINMAX			/* Track min/max DD & SS limit values (run with locus cam02test) */
 #undef DISABLE_MATRIX		/* Debug - wire XYZ to rgba */
 #undef DISABLE_NONLIN		/* Debug - wire rgbp to rgba */
 #undef DISABLE_TTD			/* Debug - disable ttd vector 'tilt' */
 #undef DISABLE_HHKR			/* Debug - disable Helmholtz-Kohlraush */
+#undef DISABLE_BLUECLIP		/* Debug - disable blue clipping  */
 
+#define BLUECLIMIT 1.3		/* Blue clipping max ratio of z to x+y */
+
+#ifdef NEVER
 #define NLDLIMIT 0.005		/* Non-linearity lower crossover to straight line */
+#define NLDLSLOPE 400.0		/* Lower slope if NLDLIMIT == 0.0 */
+#define NLDLPOW 2.0			/* Lower power. < 1 improves black->blue problem */
+
+#else	/* Another approach to improve -ve black goes to blue problem ?? */
+
+#define NLDLIMIT 0.0		/* Non-linearity lower crossover to straight line */
+#define NLDLSLOPE 0.01		/* Lower slope if NLDLIMIT == 0.0 */
+							/* (Smaller improves black->blue problem) */
+#define NLDLPOW 2.0			/* Lower power. < 1 improves black->blue problem ? */
+
+#endif	/* NEVER */
+
 #define NLULIMIT 1e5		/* Non-linearity upper crossover to straight line */
 
-#ifndef DISABLE_SS
-#ifdef TRACKMINMAX
-#define SSLLIMIT 0.000001	/* ab scale lower limit */
-#define SSULIMIT 100000.0	/* ab scale upper limit */
-#else
-#define SSLLIMIT 0.5		/* Overall ab scale lower limit */
-#define SSULIMIT 450.0      /* Overall ab scale upper limit */
-#endif
-#endif /* DISABLE_SS */
+#ifdef ENABLE_SS
+#define SSLLIMIT 0.22		/* Overall ab scale lower limit */
+#define SSULIMIT 580.0      /* Overall ab scale upper limit */
+#endif /* ENABLE_SS */
 
-//#define DDLLIMIT 0.9999	/* ab component -k3:k2 ratio limit (must be < 1.0) */
-//#define DDULIMIT 0.9999	/* ab component k3:k1 ratio limit (must be < 1.0) */
 #define DDLLIMIT 0.55		/* ab component -k3:k2 ratio limit (must be < 1.0) */
-#define DDULIMIT 0.9993		/* ab component k3:k1 ratio limit (must be < 1.0) */
+// NEED 0.9993 to match reference CIECAM02 behaviour within the spectrum locus. */
+// The value 0.60 limits the blue turning black problem though. */
+//#define DDULIMIT 0.9993		/* ab component k3:k1 ratio limit (must be < 1.0) */
+#define DDULIMIT 0.90		/* ab component k3:k1 ratio limit (must be < 1.0) */
 #define SSMINcJ 0.005		/* ab scale cJ minimum value */
 #define JLIMIT 0.005		/* J encoding cutover point straight line (0 - 1.0 range) */
 #define HKLIMIT 0.5			/* Maximum Helmholtz-Kohlraush lift */
 
 #ifdef TRACKMINMAX
-double minss = 0.0;
-double maxss = 0.0;
+double minss = 1e60;
+double maxss = -1e60;
+double minlrat = 0.0;
+double maxurat = 0.0;
 #define noslots 103
 double slotsd[noslots];
 double slotsu[noslots];
@@ -150,9 +155,16 @@ double minj = 1e38, maxj = -1e38;
 static void cam_free(cam02 *s);
 static int set_view(struct _cam02 *s, ViewingCondition Ev, double Wxyz[3],
 	                double La, double Yb, double Lv, double Yf, double Fxyz[3],
-					int hk);
+					int hk, int noclip);
 static int XYZ_to_cam(struct _cam02 *s, double *Jab, double *xyz);
 static int cam_to_XYZ(struct _cam02 *s, double *xyz, double *Jab);
+
+static double spow(double val, double pp) {
+	if (val < 0.0)
+		return -pow(-val, pp);
+	else
+		return pow(val, pp);
+}
 
 /* Create a cam02 conversion object, with default viewing conditions */
 cam02 *new_cam02(void) {
@@ -172,12 +184,14 @@ cam02 *new_cam02(void) {
 
 	/* Set default range handling limits */
 	s->nldlimit = NLDLIMIT;
+	s->nldxslope = NLDLSLOPE;
+	s->nldpow = NLDLPOW;
 	s->nlulimit = NLULIMIT;
 	s->ddllimit = DDLLIMIT;
 	s->ddulimit = DDULIMIT;
 	s->ssmincj = SSMINcJ;
 	s->jlimit = JLIMIT;
-	s->hklimit = HKLIMIT;
+	s->hklimit = 1.0 / HKLIMIT;
 
 	/* Set a default viewing condition ?? */
 	/* set_view(s, vc_average, D50, 33, 0.2, 0.0, 0.0, D50, 0); */
@@ -207,6 +221,8 @@ static void cam_free(cam02 *s) {
 	
 		printf("minss = %f\n",minss);
 		printf("maxss = %f\n",maxss);
+		printf("minlrat = %f\n",minlrat);
+		printf("maxurat = %f\n",maxurat);
 	}
 #endif /* TRACKMINMAX */
 
@@ -225,9 +241,10 @@ double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
-int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
+int hk,			/* Flag, NZ to use Helmholtz-Kohlraush effect */
+int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
 ) {
-	double tt, t1, t2, t3;
+	double tt, t1, t2;
 
 	if (Ev == vc_none) {
 		/* Compute the internal parameters by interpolation */
@@ -297,6 +314,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->Fxyz[1] = Fxyz[1];
 	s->Fxyz[2] = Fxyz[2];
 	s->hk = hk;
+	s->noclip = noclip;
 
 	/* The rgba vectors */
 	s->Va[0] = 1.0;
@@ -403,7 +421,9 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->nldxval = 400.0 * tt / (tt + 27.13) + 0.1;
 
 	/* Non-linearity lower crossover slope, passes through 0 */
-	s->nldxslope = (s->nldxval-0.1)/s->nldlimit;
+	if (s->nldlimit > 0.0) {
+		s->nldxslope = (s->nldxval-0.1)/s->nldlimit;
+	}
 //printf("~1 nldxval = %f, nlxdslope = %f\n",s->nldxval,s->nldxslope);
 
 	/* Non-linearity upper crossover value */
@@ -412,9 +432,9 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 
 	/* Non-linearity upper crossover slope, set to asymtope */
 	t1 = s->Fl * s->nlulimit;
-	t2 = 0.42 * s->Fl * 400.0;
-	t3 = pow(t1, 0.42) + 27.13;
-	s->nluxslope = t2/(pow(t1,0.58) * t3) - t2/(pow(t1,0.16) * t3 * t3);
+	t2 = pow(t1, 0.42) + 27.13;
+	s->nluxslope = 0.42 * s->Fl * 400.0 * 27.13 / (pow(t1,0.58) * t2 * t2);
+
 
 	/* Limited A value at J = JLIMIT */
 	s->lA = pow(s->jlimit, 1.0/(s->C * s->z)) * s->Aw;
@@ -452,7 +472,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	return 0;
 }
 
-/* Conversions */
+/* Conversions. Return values are always 0 */
 static int XYZ_to_cam(
 struct _cam02 *s,
 double Jab[3],
@@ -489,10 +509,34 @@ double XYZ[3]
 	xyz[1] = s->Fsc * XYZ[1] + s->Fsxyz[1];
 	xyz[2] = s->Fsc * XYZ[2] + s->Fsxyz[2];
 
-	/* Spectrally sharpened cone responses */
-	rgb[0] =  0.7328 * xyz[0] + 0.4296 * xyz[1] - 0.1624 * xyz[2];
-	rgb[1] = -0.7036 * xyz[0] + 1.6975 * xyz[1] + 0.0061 * xyz[2];
-	rgb[2] =  0.0000 * xyz[0] + 0.0000 * xyz[1] + 1.0000 * xyz[2];
+	/* Try and prevent crazy blue behaviour */
+#ifndef DISABLE_BLUECLIP
+	if (s->noclip == 0) {
+		double lz, lxy;
+
+		lz = xyz[2];
+		lxy = 0.7328/0.1624 * xyz[0] + 0.4296/0.1624 * xyz[1];
+
+		if (lxy > 1e-6 && lz > 1e-6) {
+			lxy = BLUECLIMIT * lxy;		/* Set limit */
+			lxy = 1.0/(lxy * lxy);
+			lz = 1.0/sqrt(lxy + 1.0/(lz * lz));
+		}
+		
+		/* Spectrally sharpened cone responses */
+		rgb[0] =  0.7328 * xyz[0] + 0.4296 * xyz[1] - 0.1624 * lz;
+		rgb[1] = -0.7036 * xyz[0] + 1.6975 * xyz[1] + 0.0061 * lz;
+		rgb[2] =  0.0000 * xyz[0] + 0.0000 * xyz[1] + 1.0000 * lz;
+
+	} else
+#endif /* !DISABLE_BLUECLIP */
+	{
+		/* Spectrally sharpened cone responses */
+		rgb[0] =  0.7328 * xyz[0] + 0.4296 * xyz[1] - 0.1624 * xyz[2];
+		rgb[1] = -0.7036 * xyz[0] + 1.6975 * xyz[1] + 0.0061 * xyz[2];
+		rgb[2] =  0.0000 * xyz[0] + 0.0000 * xyz[1] + 1.0000 * xyz[2];
+	}
+
 	
 	/* Chromaticaly transformed sample value */
 	rgbc[0] = s->Drgb[0] * rgb[0];
@@ -524,7 +568,7 @@ double XYZ[3]
 
 	for (i = 0; i < 3; i++) {
 		if (rgbp[i] < s->nldlimit) {
-			rgba[i] = 0.1 + s->nldxslope * rgbp[i];
+			rgba[i] = 0.1 + s->nldxslope * spow(rgbp[i], s->nldpow);
 		} else {
 			if (rgbp[i] <= s->nlulimit) {
 				tt = pow(s->Fl * rgbp[i], 0.42);
@@ -566,12 +610,21 @@ double XYZ[3]
 
 	/* Lightness J, Derived directly from Acromatic response. */
 	/* Cuttover to a straight line segment when J < 0.005, */
+#ifdef NEVER		/* Cut to a straight line */
 	if (A >= s->lA) {
 		J = pow(A/s->Aw, s->C * s->z);		/* J/100  - keep Sign */
 	} else {
 		J = s->jlimit/s->lA * A;			/* Straight line */
 		TRACE(("limited Acromatic to straight line\n"))
 	}
+#else			/* Symetric */
+	if (A >= 0.0) {
+		J = pow(A/s->Aw, s->C * s->z);		/* J/100  - keep Sign */
+	} else {
+		J = -pow(-A/s->Aw, s->C * s->z);		/* J/100  - keep Sign */
+		TRACE(("symetric Acromatic\n"))
+	}
+#endif
 
 	/* Constraied (+ve, non-zero) J */
 	if (A > 0.0) {
@@ -605,12 +658,17 @@ double XYZ[3]
 
 		ss = pow(k1/(k2 + k3), 0.9);
 
+		if (ss < minss)
+			minss = ss;
+		if (ss > maxss)
+			maxss = ss;
+
 		lrat = -k3/k2;
 		urat =  k3 * pow(ss, 10.0/9.0) / k1; 
-		if (lrat > minss)
-			minss = lrat;
-		if (urat > maxss)
-			maxss = urat;
+		if (lrat > minlrat)
+			minlrat = lrat;
+		if (urat > maxurat)
+			maxurat = urat;
 
 		/* Record distribution of ss min/max vs. J for */
 		/* regions outside a,b == 0 */
@@ -634,33 +692,59 @@ double XYZ[3]
 
 #ifdef DISABLE_TTD 
 	ss = pow((k1/k2), 0.9);
-#else
 
+#else	/* !TRACKMINMAX */
+
+#ifdef ENABLE_DDL	
+
+#ifndef NEVER
 	/* Limit ratio of k3 to k2 to stop zero or -ve ss */
-	if (-k3 > (k2 * s->ddllimit)) {
+	if (k3 < -k2 * s->ddllimit) {
 		k3 = -k2 * s->ddllimit;
 		TRACE(("k3 limited to %f due to k3:k2 ratio, ss = %f\n",k3,pow(k1/(k2 + k3), 0.9)))
 		clip = 1;
 	}
+#else
+	/* Alternative to above ?? */
+	/* Limit ratio of k2 to k3 to stop zero or -ve ss */
+	if (k2 < -k3/s->ddllimit) {
+		k2 = -k3/s->ddllimit;
+		TRACE(("k2 limited to %f due to k3:k2 ratio, ss = %f\n",k2,pow(k1/(k2 + k3), 0.9)))
+		clip = 1;
+	}
+#endif 	/* NEVER */
 
-	/* Compute preliminary ab scale factor */
-	ss = pow(k1/(k2 + k3), 0.9);
-
-	/* See if there is going to be a problem in bwd */
-	if ((ss * k3) > (s->ddulimit * k1/pow(ss, 1.0/9.0))) {
-		/* Adjust ss to allow for bwd limited computation */
-		ss = pow(k1 * (1.0 - s->ddulimit)/k2, 0.9);
-		TRACE(("ss set to %f to allow for bk3:bk1 bwd limit\n",ss))
+#ifndef NEVER
+	/* See if there is going to be a problem in bwd, and limit k3 if there is */
+	if (k3 > (k2 * s->ddulimit/(1.0 - s->ddulimit))) {
+		k3 = (k2 * s->ddulimit/(1.0 - s->ddulimit));
+		TRACE(("k3 limited to %f to allow for bk3:bk1 bwd limit\n",k3, ss))
+		clip = 1;
+	}
+#else
+	/* Alternative to above ?? */
+	NO = should limit k1 as alternative !
+	/* See if there is going to be a problem in bwd, and limit k2 if ther is */
+	if (k2 < k3 * (1.0 - s->ddulimit)/s->ddulimit) {
+		k2 = k3 * (1.0 - s->ddulimit)/s->ddulimit;
+		TRACE(("k2 limited to %f to allow for bk3:bk1 bwd limit\n",k2, ss))
 		clip = 1;
 	}
 #endif
 
-#ifndef DISABLE_SS
+#endif /* ENABLE_DDL */	
+
+	/* Compute the ab scale factor */
+	ss = pow(k1/(k2 + k3), 0.9);
+
+#endif	/* !TRACKMINMAX */
+
+#ifdef ENABLE_SS
 	if (ss < SSLLIMIT)
 		ss = SSLLIMIT;
 	else if (ss > SSULIMIT)
 		ss = SSULIMIT;
-#endif /* DISABLE_SS */
+#endif /* ENABLE_SS */
 
 #ifdef NEVER
 // -------------------------------------------
@@ -696,8 +780,8 @@ double XYZ[3]
  	/* Helmholtz-Kohlraush effect */
 	if (s->hk && J < 1.0) {
 		double kk = C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
-		if (kk > s->hklimit)		/* Limit kk to a reasonable range */
-			kk = s->hklimit;
+		if (kk > 1e-6) 	/* Limit kk to a reasonable range */
+			kk = 1.0/(s->hklimit + 1.0/kk);
 		JJ = J + (1.0 - (J > 0.0 ? J : 0.0)) * kk;
 		TRACE(("JJ = %f from J = %f, kk = %f\n",JJ,J,kk))
 	}
@@ -793,8 +877,8 @@ double Jab[3]
  	/* Undo Helmholtz-Kohlraush effect */
 	if (s->hk && J < 1.0) {
 		double kk = C/300.0 * sin(DBL_PI * fabs(0.5 * (h - 90.0))/180.0);
-		if (kk > s->hklimit)		/* Limit kk to a reasonable range */
-			kk = s->hklimit;
+		if (kk > 1e-6) 	/* Limit kk to a reasonable range */
+			kk = 1.0/(s->hklimit + 1.0/kk);
 		J = (JJ - kk)/(1.0 - kk);
 		if (J < 0.0)
 			J = JJ - kk;
@@ -803,12 +887,21 @@ double Jab[3]
 #endif /* DISABLE_HHKR */
 
 	/* Achromatic response */
+#ifdef NEVER	/* cut to straight line */
 	if (J >= s->jlimit) {
 		A = pow(J, 1.0/(s->C * s->z)) * s->Aw;
 	} else {	/* In the straight line segment */
 		A = s->lA/s->jlimit * J;
 		TRACE(("Undo Acromatic straight line\n"))
 	}
+#else			/* Symetric */
+	if (J >= 0.0) {
+		A = pow(J, 1.0/(s->C * s->z)) * s->Aw;
+	} else {	/* In the straight line segment */
+		A = -pow(-J, 1.0/(s->C * s->z)) * s->Aw;
+		TRACE(("Undo symetric Acromatic\n"))
+	}
+#endif
 
 	/* Preliminary Acromatic response +ve */ 
 	ttA = (A/s->Nbb)+0.305;
@@ -834,30 +927,54 @@ double Jab[3]
 
 #ifdef DISABLE_TTD 
 	ss = k1/k2;
-#else
+#else	/* !DISABLE_TTD */
+#ifdef ENABLE_DDL	
+
+#ifndef NEVER
 	/* Limit ratio of k3 to k1 to stop zero or -ve ss */
 	if (k3 > (k1 * s->ddulimit)) {
 		k3 = k1 * s->ddulimit;
 		TRACE(("k3 limited to %f due to k3:k1 ratio, ss = %f\n",k3,(k1 - k3)/k2))
 	}
-
-	/* Compute preliminary ab scale factor */
-	ss = (k1 - k3)/k2;
-
-	/* See if there is going to be a problem in fwd */
-	if (-k3 > (ss * k2 * s->ddllimit)) {
-		/* Adjust ss to allow for fwd limitd computation */
-		ss = k1/(k2 * (1.0 - s->ddllimit));
-		TRACE(("ss set to %f to allow for fk3:fk2 fwd limit\n",ss))
+#else
+	/* Alternate to above ?? */
+	/* Limit ratio of k2 to k3 to stop zero or -ve ss */
+	if (k1 < (k3 / s->ddulimit)) {
+		k1 = (k3 / s->ddulimit);
+		TRACE(("k1 limited to %f due to k3:k1 ratio, ss = %f\n",k1,(k1 - k3)/k2))
 	}
 #endif
 
-#ifndef DISABLE_SS
+#ifndef NEVER
+	/* See if there is going to be a problem in fwd */
+	if (k3 < -k1 * s->ddllimit/(1.0 - s->ddllimit)) {
+		/* Adjust ss to allow for fwd limitd computation */
+		k3 = -k1 * s->ddllimit/(1.0 - s->ddllimit);
+		TRACE(("k3 set to %f to allow for fk3:fk2 fwd limit\n",k3))
+	}
+#else
+	/* Alternate to above ?? */
+	/* See if there is going to be a problem in fwd */
+	NO, should limit k2 as alternate to above
+	if (k1 < -k3 * (1.0 - s->ddllimit)/s->ddllimit) {
+		/* Adjust ss to allow for fwd limitd computation */
+		k1 = -k3 * (1.0 - s->ddllimit)/s->ddllimit;
+		TRACE(("k1 set to %f to allow for fk3:fk2 fwd limit\n",k1))
+	}
+#endif
+#endif /* ENABLE_DDL */	
+
+	/* Compute the ab scale factor */
+	ss = (k1 - k3)/k2;
+
+#endif	/* !DISABLE_TTD */
+
+#ifdef ENABLE_SS
 	if (ss < SSLLIMIT)
 		ss = SSLLIMIT;
 	else if (ss > SSULIMIT)
 		ss = SSULIMIT;
-#endif /* DISABLE_SS */
+#endif /* ENABLE_SS */
 
 	/* Unscale a and b */
 	a = ja / ss;
@@ -897,7 +1014,7 @@ double Jab[3]
 	/* (with linear segment at the +ve end) */
 	for (i = 0; i < 3; i++) {
 		if (rgba[i] < s->nldxval) {
-			rgbp[i] = (rgba[i] - 0.1)/s->nldxslope;
+			rgbp[i] = spow((rgba[i] - 0.1)/s->nldxslope, 1.0/s->nldpow);
 		} else if (rgba[i] <= s->nluxval) {
 			tt = rgba[i] - 0.1;
 			rgbp[i] = pow((27.13 * tt)/(400.0 - tt), 1.0/0.42)/s->Fl;
@@ -965,7 +1082,4 @@ double Jab[3]
 #endif
 	return 0;
 }
-
-
-
 

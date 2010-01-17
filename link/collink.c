@@ -11,7 +11,7 @@
  * Copyright 2000 - 2005 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -74,31 +74,27 @@
 	(for better modularity), it then creates problems in applying
 	an abstact transform. The abstract transform can't really be
 	applied to a gamut surface, it really needs to be applied
-	to the image data before gamut surfac extraction. This is yet
+	to the image data before gamut surface extraction. This is yet
 	another avenue for user & implementor confusion, with regard
 	to intents, even without allowing the user to set the intent
 	of the abstract profile.
 
-	The K only hacks should ideally be replaced by a more general mechanism :-
-	say a device to device gamut map rspl that has an extra output "weight"
-	(and perhaps "power") that determines a blend between the direct mapping
-	and the color mapping. 
-
  */
 
-#undef USE_MERGE_CLUT_OPT	/* When using inverse A2B table, merge the output luts */
+#undef USE_MERGE_CLUT_OPT	/* [Undef] When using inverse A2B table, merge the output luts */
 							/* with the clut for faster operation, and clipping in */
 							/* Jab space. Turned off because it affects the accuracy too much, */
 							/* and xicc handles Jab clip without this now. */
 
-#define USE_CAM_CLIP_OPT	/* Clip out of gamut in CAM space rather than XYZ or L*a*b* */
-
-#define KHACKWIDTH 0		/* Number of grid points outside diagonal to force to K only */ 
+#define USE_CAM_CLIP_OPT	/* [Define] Clip out of gamut in CAM space rather than XYZ or L*a*b* */
+#define ENKHACK				/* [Define] Enable K hack code */
+#undef WARN_CLUT_CLIPPING	/* [Undef] Print warning if setting clut clips */
 
 #undef DEBUG		/* Report values of each sample transformed */
 #undef DEBUGC 		/* ie "if (tt)" */		/* Debug condition */
 #undef DEBUG_ONE	/* test a single value out. Look for DBGNO to set value. */
 #undef NEUTKDEBUG	/* print info about neutral L -> K mapping */
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -120,13 +116,13 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
-		fprintf(stderr,"Diagnostic: ");
+		fprintf(stderr,"  Diagnostic: ");
 		va_start(args, diag);
 		vfprintf(stderr, diag, args);
 		va_end(args);
 		fprintf(stderr,"\n");
 	}
-	fprintf(stderr,"usage: collink [options] inprofile outprofile linkedprofile\n");
+	fprintf(stderr,"usage: collink [options] srcprofile dstprofile linkedprofile\n");
 	fprintf(stderr," -v              Verbose\n");
 	fprintf(stderr," -A manufacturer Manufacturer description string\n");
 	fprintf(stderr," -M model        Model description string\n");
@@ -138,6 +134,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -n              Don't preserve device linearization curves in result\n");
 	fprintf(stderr," -f              Special :- Force neutral colors to be K only output\n");
 	fprintf(stderr," -fk             Special :- Force K only neutral colors to be K only output\n");
+	fprintf(stderr," -fcmy           Special :- Force 100%% C,M or Y only to stay pure \n");
 	fprintf(stderr," -F              Special :- Force all colors to be K only output\n");
 	fprintf(stderr," -p absprof      Include abstract profile in link\n");
 	fprintf(stderr," -s              Simple Mode (default)\n");
@@ -158,14 +155,14 @@ void usage(char *diag, ...) {
 		fprintf(stderr,"              %s\n",gmi.desc);
 	}
 	fprintf(stderr," -w [J,a,b]      Use forced whitepoint hack [optional target point]\n");
-//	fprintf(stderr," -WJ,a,b         Forced whitepoint adjustment by delta Jab\n");
-	fprintf(stderr," -c viewcond     set input viewing conditions for %s,\n",icxcam_description(cam_default));
+//	fprintf(stderr," -W J,a,b        Forced whitepoint adjustment by delta Jab\n");
+	fprintf(stderr," -c viewcond     set source viewing conditions for %s,\n",icxcam_description(cam_default));
 	fprintf(stderr,"                 either an enumerated choice, or a parameter\n");
-	fprintf(stderr," -d viewcond     set output viewing conditions for %s,\n",icxcam_description(cam_default));
+	fprintf(stderr," -d viewcond     set destination viewing conditions for %s,\n",icxcam_description(cam_default));
 	fprintf(stderr,"                 either an enumerated choice, or parameter:value changes\n");
 	for (i = 0; ; i++) {
 		icxViewCond vc;
-		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1) == -999)
+		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1, NULL) == -999)
 			break;
 
 		fprintf(stderr,"            %s\n",vc.desc);
@@ -179,19 +176,19 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 1)\n");
 	fprintf(stderr,"         f:X:Y:Z       Flare color as XYZ (default media white)\n");
 	fprintf(stderr,"         f:x:y         Flare color as x, y\n");
-	fprintf(stderr," -t tlimit       set input total ink limit, 0 - 400%% (estimate by default)\n");
-	fprintf(stderr," -T klimit       set input black ink limit, 0 - 100%% (estimate by default)\n");
+	fprintf(stderr," -t tlimit       set source total ink limit, 0 - 400%% (estimate by default)\n");
+	fprintf(stderr," -T klimit       set source black ink limit, 0 - 100%% (estimate by default)\n");
 	fprintf(stderr," Inverse outprofile A2B Options:\n");
 	fprintf(stderr," -k tezhxr       CMYK Black generation\n");
-	fprintf(stderr,"                 t = transfer K from input to output, e = retain K of output B2A table\n");
+	fprintf(stderr,"                 t = transfer K from source to destination, e = retain K of destination B2A table\n");
 	fprintf(stderr,"                 z = zero K, h = 0.5 K, x = maximum K, r = ramp K (default)\n");
 	fprintf(stderr," -k p stle stpo enpo enle shape\n");
 	fprintf(stderr,"                 p = black target generation curve parameters\n");
 	fprintf(stderr," -k q stle0 stpo0 enpo0 enle0 shape0 stle2 stpo2 enpo2 enle2 shape2\n");
-	fprintf(stderr,"                 q = transfer input K to dual curve limits\n");
+	fprintf(stderr,"                 q = transfer source K to dual curve limits\n");
 	fprintf(stderr," -K parameters   Same as -k, but target is K locus rather than K value itself\n");
-	fprintf(stderr," -l tlimit       set output total ink limit, 0 - 400%% (estimate by default)\n");
-	fprintf(stderr," -L klimit       set output black ink limit, 0 - 100%% (estimate by default)\n");
+	fprintf(stderr," -l tlimit       set destination total ink limit, 0 - 400%% (estimate by default)\n");
+	fprintf(stderr," -L klimit       set destination black ink limit, 0 - 100%% (estimate by default)\n");
 	fprintf(stderr," -P              Create gamut gammap_p.wrl and gammap_s.wrl diagostics\n");
 	exit(1);
 }
@@ -206,6 +203,7 @@ struct _profinfo {
 	icxViewCond vc;				/* Viewing Condition for CAM */
 	int inking;					/* k inking algorithm, 0 = input, 1 = min, */
 								/* 2 = 0.5, 3 = max, 4 = ramp, 5 = curve, 6 = dual curve */
+								/* 7 = outpupt profile K value */
 	int locus;					/* 0 = K target value, 1 = K locus value */
 	icxInk ink;					/* Ink parameters */
 
@@ -231,15 +229,20 @@ struct _link {
 	int mode;		/* 0 = simple mode, 1 = mapping mode, 2 = mapping mode with inverse A2B */
 	int quality;	/* 0 = low, 1 = medium, 2 = high, 3 = ultra */
 	int clutres;	/* 0 = quality default, !0 = override, then actual during link */
+	int src_kbp;	/* nz = Use K only black point as src gamut black point */
+	int dst_kbp;	/* nz = Use K only black point as dst gamut black point */
+	int dst_cmymap;	/* masks C = 1, M = 2, Y = 4 to force 100% cusp map */
 
 	icColorSpaceSignature pcsor;	/* PCS to use between in & out profiles */
 
 	int nhack;		/* 0 = off, 1 = hack to map input neutrals to output K only, */
 					/* 2 = map 000K to output K only, 3 = all to K */
-	rspl *pcs2k;	/* PCS to K lookup for nhack */
+	int cmyhack;	/* CMY 100% colorant map though hack, 1 = C, 2 = M, 4 = Y */
+	rspl *pcs2k;	/* PCS L to K' lookup for nhack */
 	int wphack;		/* 0 = off, 1 = hack to map input wp to output wp, 2 = to hwp[] */
 	double hwp[3];	/* hack destination white point in PCS space */
 	int wphacked;	/* Operation flag, set nz if white point was translated */
+	int rel_oride;	/* Relative override flag */
 
 	icmFile *abs_fp;	/* Abstract profile transform */
 	icRenderingIntent abs_intent;
@@ -253,7 +256,9 @@ struct _link {
 
 	icxGMappingIntent gmi;
 	gammap *map;	/* Gamut mapping */
+	gammap *Kmap;	/* Gamut mapping K in to K out nhack == 2 and K in to K out */
 	
+
 	/* Per profile setup information */
 	profinfo in;
 	profinfo out;
@@ -340,10 +345,13 @@ void devi_devip(void *cntx, double *out, double *in) {
 /* clut, DevIn' -> DevOut' */
 void devip_devop(void *cntx, double *out, double *in) {
 	double win[MAX_CHAN];			/* working input values */
-	double pcsv[MAX_CHAN];			/* PCS intermediate value */
+	double pcsv[MAX_CHAN];			/* PCS intermediate value, pre-gamut map */
+	double pcsvm[MAX_CHAN];			/* PCS intermediate value, post-gamut map */
 	double locus[MAX_CHAN];			/* Auxiliary locus values */
-	int wptrig = 0;		/* White point hack triggered */
-	int ntrig = 0;		/* Neutral K only hack triggered */
+	int wptrig = 0;				/* White point hack triggered */
+	double konlyness = 0.0;		/* Degree of K onlyness */
+	int ntrig = 0;				/* K only output hack triggered */
+	int cmytrig = 0;			/* CMY output hack triggered */
 	int i, rv = 0;
 	link *p = (link *)cntx;
 
@@ -354,27 +362,89 @@ void devip_devop(void *cntx, double *out, double *in) {
 	printf("DevIn'->DevOut' got %f %f %f %f\n",in[0], in[1], in[2], in[3]); fflush(stdout);
 #endif
 
+#ifdef ENKHACK
 	/* Handle neutral recognition/output K only hack */
 	/* (see discussion at top of file for generalization of this idea) */
 	if (p->nhack == 1 || p->nhack == 2) {
-		double thr = (KHACKWIDTH + 0.5)/(p->clutres-1.0); /* Match threshold */
+		double thr = (0.5)/(p->clutres-1.0); /* Match threshold */
 
-		/* We want to see if the input colors are equal (Or a=b= 0.0 ??) */
-		/* li.nhack should have set p->in.nocurve, so we should be getting raw */
-		/* input space device values here. It also made sure that there are at */
-		/* least 3 input channels. */
+		if (p->nhack == 1) {
+			/* We want to see if the input colors are equal (Or a=b= 0.0 ??) */
+			/* li.nhack should have set p->in.nocurve, so we should be getting raw */
+			/* input space device values here. It also made sure that there are at */
+			/* least 3 input channels. */
 
-		if ((p->nhack == 1
-		    && fabs(in[0] - in[1]) < thr
-		    && fabs(in[1] - in[2]) < thr
-		    && fabs(in[2] - in[0]) < thr)
-		|| (p->nhack == 2
-		    && in[0] < thr
-		    && in[1] < thr
-		    && in[2] < thr)) {
-			ntrig = 1;			/* Is neutral flag */
+		    if (fabs(in[0] - in[1]) < thr
+		     && fabs(in[1] - in[2]) < thr
+		     && fabs(in[2] - in[0]) < thr)
+				ntrig = 1;			/* K only output triggered flag */
+
+		} else if (p->nhack == 2) {
+			double maxcmy;		/* Comute a degree of source "K onlyness" */
+			double maxcmyk;
+
+			maxcmy = in[0];			/* Compute minimum of CMY */
+			if (in[1] > maxcmy)
+				maxcmy = in[1];
+			if (in[2] > maxcmy)
+				maxcmy = in[2];
+
+			maxcmyk = maxcmy;		/* Compute minimum of all inks */
+			if (in[3] > maxcmyk)
+				maxcmyk = in[3];
+
+//printf("~1 maxcmy = %f, maxcmyk = %f, in[3] = %f\n",maxcmy,maxcmyk,in[3]);
+			if (in[3] <= 0.0 || maxcmy > in[3]) {
+				konlyness = 0.0;
+			} else {
+				konlyness = (in[3] - maxcmy)/in[3];	
+			}
+
+			/* As we approach no colorant, blend towards no Konlyness */
+			if (maxcmyk < 0.2)
+				konlyness *= maxcmyk/0.2;
+
+			/* We want to see if the input colors are exactly K only. */
+		    if (in[0] < thr
+		     && in[1] < thr
+		     && in[2] < thr)
+				ntrig = 1;			/* K only output triggered flag */
+#ifdef DEBUG
+#ifdef DEBUGC
+			DEBUGC
+#endif
+			printf("konlyness set to %f\n",konlyness);
+#endif
+
 		}
 	}
+	/* Handle 100% CMY hack */
+	if (p->cmyhack != 0) {
+		double thr = (0.5)/(p->clutres-1.0); /* Match threshold */
+
+		if (p->cmyhack & 1) {
+		    if (in[0] > (1.0 - thr)
+		     && in[1] < thr
+		     && in[2] < thr
+		     && (p->in.chan < 4 || in[3] < thr))
+				cmytrig |= 1;
+		}
+		if (p->cmyhack & 2) {
+		    if (in[0] < thr
+		     && in[1] > (1.0 - thr)
+		     && in[2] < thr
+		     && (p->in.chan < 4 || in[3] < thr))
+				cmytrig |= 2;
+		}
+		if (p->cmyhack & 4) {
+		    if (in[0] < thr
+		     && in[1] < thr
+		     && in[2] > (1.0 - thr)
+		     && (p->in.chan < 4 || in[3] < thr))
+				cmytrig |= 4;
+		}
+	}
+#endif /* ENKHACK */
 
 	if (p->in.nocurve == 0 && p->in.lcurve) {	/* Apply L* to Y */
 		for (i = 0; i < p->in.chan; i++) {
@@ -384,9 +454,22 @@ void devip_devop(void *cntx, double *out, double *in) {
 			else
 				win[i] = (win[i] - 16.0/116.0)/7.787036979;
 		}
+#ifdef DEBUG
+#ifdef DEBUGC
+	DEBUGC
+#endif
+	printf("win[] set to L* value %f %f %f %f\n",win[0], win[1], win[2], win[3]); fflush(stdout);
+#endif
+
 	} else {
 		for (i = 0; i < p->in.chan; i++)
 			win[i] = in[i];
+#ifdef DEBUG
+#ifdef DEBUGC
+	DEBUGC
+#endif
+	printf("win[] set to in[] value %f %f %f %f\n",win[0], win[1], win[2], win[3]); fflush(stdout);
+#endif
 	}
 
 	/* Do DevIn' -> PCS */
@@ -417,24 +500,34 @@ void devip_devop(void *cntx, double *out, double *in) {
 		}
 	    case icmLutType: {
 			icxLuLut *lu = (icxLuLut *)p->in.luo;	/* Safe to coerce */
-			if (p->in.nocurve) {	/* No explicit curve, so do implicit here */
+			if (p->in.nocurve) {	/* No explicit curve, so we've got Dev */
 				/* Since not PCS, in_abs and matrix cannot be valid, */
-				/* so input curve on won is ok to use. */
-				rv |= lu->input(lu, pcsv, win);
-				rv |= lu->clut(lu, pcsv, pcsv);
-			} else {
-				rv |= lu->clut(lu, pcsv, win);
+				/* so input curve on own is ok to use. */
+				rv |= lu->input(lu, pcsv, win);		/* Dev  -> Dev' */
+				rv |= lu->clut(lu, pcsv, pcsv);		/* Dev' -> PCS' */
+			} else {	/* We've got Dev' */
+				rv |= lu->clut(lu, pcsv, win);		/* Dev' -> PCS' */
 			}
+			/* We've got the input profile PCS' at this point. */
+
 			/* If we're transfering the K value from the input profile to the */
 			/* output, copy it into locus[], which will be given to the inverse */
 			/* lookup function, else the inverse lookup will generate a K using */
 			/* the curve parameters. */  
+//printf("~1 out.inking = %d\n",p->out.inking);
 			if (p->out.inking == 0 || p->out.inking == 6) {
-				if (p->out.locus)
+				if (p->out.locus) {
+					/* Converts PCS' to K locus proportion */
 					lu->clut_locus(lu, locus, pcsv, win);	/* Compute possible locus values */
-				else {
-					for (i = 0; i < p->in.chan; i++)		/* Target is K value */
+//printf("~1 looked up locus value\n");
+				} else {
+					for (i = 0; i < p->in.chan; i++)		/* Target is K input value */
 						locus[i] = win[i];
+					/* Convert K' to K value ready for aux target */
+					if (!p->in.nocurve) {	/* we have an input curve, so convert Dev' -> Dev */
+						lu->inv_input(lu, locus, locus);
+					}
+//printf("~1 copied win to locus\n");
 				}
 #ifdef DEBUG
 #ifdef DEBUGC
@@ -443,8 +536,8 @@ void devip_devop(void *cntx, double *out, double *in) {
 				printf("Got possible K %s of %f %f %f %f\n",p->out.locus ? "locus" : "value", locus[0],locus[1],locus[2],locus[3]);
 #endif
 			}
-			rv |= lu->output(lu, pcsv, pcsv);
-			rv |= lu->out_abs(lu, pcsv, pcsv);
+			rv |= lu->output(lu, pcsv, pcsv);	/* PCS' ->     */
+			rv |= lu->out_abs(lu, pcsv, pcsv);	/*         PCS */
 			break;
 		}
 		default:
@@ -460,6 +553,9 @@ void devip_devop(void *cntx, double *out, double *in) {
 	 *			Absolute Lab
 	 *		or
 	 *			Jab derived from absolute XYZ via the in/out viewing conditions
+     *
+     *	and locus[] contains any auxiliar target values if the
+	 *  auxiliary is not being created by a rule applied to the PCS.
 	 */
 
 	/*
@@ -545,19 +641,51 @@ void devip_devop(void *cntx, double *out, double *in) {
 #endif
 	}
 
+
 	/* Do gamut mapping */
 	if (wptrig == 0 && p->mode > 0 && p->gmi.usemap) {
-		
 		/* We've used pcsor to ensure PCS space is appropriate */
-		p->map->domap(p->map, pcsv, pcsv);
+		
+		/* Doing XXXK -> XXXK */
+		if (p->nhack == 2) {
+			/* Ideally we would create a 4D PCSK -> PCSK gamut mapping */
+			/* to smoothly and accurately cope with the changing source */
+			/* and destination gamuts acording to their degree of "K onlyness". */
+			/* In practice we're going to simply interpolated between */
+			/* two extremes: unrestricted gamut and K only black gamut. */
+			double map0[3], map1[3];
+
+			/* Compute blend of normal gamut map and Konly to Konly gamut map */	
+			p->map->domap(p->map, map0, pcsv);
+			p->Kmap->domap(p->Kmap, map1, pcsv);
+			icmBlend3(pcsvm, map0, map1, konlyness);
 
 #ifdef DEBUG
 #ifdef DEBUGC
 	DEBUGC
 #endif
-		printf("PCS after map %f %f %f\n",pcsv[0], pcsv[1], pcsv[2]); fflush(stdout);
+			printf("PCS after map0 %f %f %f map1 %f %f %f\n", map0[0], map0[1], map0[2], map1[0], map1[1], map1[2]);
 #endif
+
+		/* Normal gamut mapping */
+		} else {
+			p->map->domap(p->map, pcsvm, pcsv);
+		}
+
+
+#ifdef DEBUG
+#ifdef DEBUGC
+		DEBUGC
+#endif
+		printf("PCS after map %f %f %f\n",pcsvm[0], pcsvm[1], pcsvm[2]); fflush(stdout);
+#endif
+	} else {
+		pcsvm[0] = pcsv[0];
+		pcsvm[1] = pcsv[1];
+		pcsvm[2] = pcsv[2];
 	}
+
+	/* Gamut mapped PCS value is now in pcsvm[] */
 
 	/* Abstract profile transform, PCS -> PCS */
 	/* pcsor -> abstract -> pcsor conversion */
@@ -573,34 +701,38 @@ void devip_devop(void *cntx, double *out, double *in) {
 		/* We should really run the source through the abstract profile before */
 		/* creating the gamut mapping, to be able to use abstract with gamut */
 		/* mapping properly. */
-		p->abs_luo->lookup(p->abs_luo, pcsv, pcsv);
+		p->abs_luo->lookup(p->abs_luo, pcsvm, pcsvm);
 #ifdef DEBUG
 #ifdef DEBUGC
 	DEBUGC
 #endif
-		printf("PCS after abstract %f %f %f\n",pcsv[0], pcsv[1], pcsv[2]); fflush(stdout);
+		printf("PCS after abstract %f %f %f\n",pcsvm[0], pcsvm[1], pcsvm[2]); fflush(stdout);
 #endif
 	}
 
-	/* Use existing B2A inking to determine K */
+	/* If we're using the existing B2A inking to determine K, */
+	/* lookup the output profiles K value for this PCS */
 	if (p->mode >= 2 && p->out.inking == 7) {
 		double tdevv[MAX_CHAN];	
-		icxLuLut *tlu = (icxLuLut *)p->out.b2aluo;	/* Safe to coerce */
 
+//printf("~1 dealing with out.inking = %d\n",p->out.inking);
 		if (p->out.alg != icmLutType || p->out.c->header->colorSpace != icSigCmykData)
 			error ("Attempting to use non-CMYK output profile to determine K inking");
 
-		/* Lookup PCS in B2A of output profile to get target K' value */  
-		tlu->in_abs(tlu, tdevv, pcsv);
-		tlu->matrix(tlu, tdevv, tdevv);
-		tlu->input(tlu, tdevv, tdevv);
-		tlu->clut(tlu, tdevv, tdevv);
-		if (p->out.nocurve) {	/* No explicit curve, so do implicit here */
-			rv |= tlu->output(tlu, tdevv, tdevv);
-		}
+		/* Lookup PCS in B2A of output profile to get target K value */  
+//printf("~1 looking up pcs %f %f %f in B2A\n", pcsvm[0], pcsvm[1], pcsvm[2]);
+		p->out.b2aluo->lookup(p->out.b2aluo, tdevv, pcsvm);
+//printf("~1 resulting dev %f %f %f %f\n", tdevv[0], tdevv[1], tdevv[2], tdevv[3]);
+
 		if (p->out.locus) {
+			double tpcsv[MAX_CHAN];	
 			icxLuLut *lu = (icxLuLut *)p->out.luo;		/* Safe to coerce */
-			lu->clut_locus(lu, locus, pcsv, tdevv);	/* Compute locus values */
+
+			/* Convert PCS to PCS' ready for locus lookup */
+			lu->in_abs(lu, tpcsv, pcsvm);
+			lu->matrix(lu, tpcsv, tpcsv);
+			lu->input(lu, tpcsv, tpcsv);
+			lu->clut_locus(lu, locus, tpcsv, tdevv);	/* Compute locus values */
 		} else {
 			for (i = 0; i < p->out.chan; i++)		/* Target is K value */
 				locus[i] = tdevv[i];
@@ -614,38 +746,58 @@ void devip_devop(void *cntx, double *out, double *in) {
 	}
 
 	/* Do PCS -> DevOut' */
-	if (p->nhack == 3	
-	 || (p->nhack && ntrig)) { /* Neutral to K only hack has triggered */
-		co pp;
-		pp.p[0] = pcsv[0];		/* Input L value */
-		p->pcs2k->interp(p->pcs2k, &pp);
-		out[0] = out[1] = out[2] = 0.0;		/* We know output is CMYK */
-		out[3] = pp.v[0];
-		if (out[3] < 0.0)		/* rspl might have extrapolated */
-			out[3] = 0.0;
-		else if (out[3] > 1.0)
-			out[3] = 1.0;
+	if (p->nhack == 3		/* All to K only */
+	 || ntrig	 			/* Neutral or K only to K only hack has triggered */
+	 || cmytrig) {			/* 100% CMY rough hack has triggered */
+
+		if (p->nhack == 3 || ntrig) { /* Neutral to K only hack has triggered */
+			co pp;
+			pp.p[0] = pcsvm[0];					/* Input L value */
+			p->pcs2k->interp(p->pcs2k, &pp);	/* L -> K' */
+			if (pp.v[0] < 0.0)		/* rspl might have extrapolated */
+				pp.v[0] = 0.0;
+			else if (pp.v[0] > 1.0)
+				pp.v[0] = 1.0;
+			out[0] = out[1] = out[2] = 0.0;		/* We know output is CMYK' */
+			out[3] = pp.v[0];
 
 #ifndef DEBUG
-		if (p->verb)
+			if (p->verb)
 #endif
-		if (ntrig) {
-			if (p->in.chan == 4) 
-				printf("Neutral hack mapped %f %f %f %f to 0 0 0 %f\n",
-	   		    win[0], win[1], win[2], win[3], out[3]); 
-			else
-				printf("Neutral hack mapped %f %f %f to 0 0 0 %f\n",
-	   		    win[0], win[1], win[2], out[3]); 
-			fflush(stdout);
+			if (ntrig) {
+				printf("Neutral hack mapped %s to 0 0 0 %f\n", icmPdv(p->in.chan,win), out[3]); 
+				fflush(stdout);
+			}
+		} else if (cmytrig) { /* 100% CMY rough hack has triggered */
+			if (cmytrig & 1) {
+				out[0] = 1.0;
+				out[1] = out[2] = out[3] = 0.0;
+			}
+			if (cmytrig & 2) {
+				out[1] = 1.0;
+				out[0] = out[2] = out[3] = 0.0;
+			}
+			if (cmytrig & 4) {
+				out[2] = 1.0;
+				out[0] = out[1] = out[3] = 0.0;
+			}
+
+#ifndef DEBUG
+			if (p->verb)
+#endif
+			if (cmytrig != 0) {
+				if (p->in.chan == 4) 
+					printf("CMY hack mapped %s to %s\n",icmPdv(p->in.chan, win), icmPdv(p->out.chan, out));
+				fflush(stdout);
+			}
 		}
-		
 	} else {	/* Neutral to K hack has NOT triggered */
 		switch(p->out.alg) {
 		    case icmMonoBwdType: {
 				icxLuMono *lu = (icxLuMono *)p->out.luo;	/* Safe to coerce */
 
-				rv |= lu->bwd_abs(lu, pcsv, pcsv);
-				rv |= lu->bwd_map(lu, out, pcsv);
+				rv |= lu->bwd_abs(lu, pcsvm, pcsvm);
+				rv |= lu->bwd_map(lu, out, pcsvm);
 				if (p->out.nocurve) {	/* No explicit curve, so do implicit here */
 					rv |= lu->bwd_curve(lu, out, out);
 				}
@@ -654,8 +806,8 @@ void devip_devop(void *cntx, double *out, double *in) {
 		    case icmMatrixBwdType: {
 				icxLuMatrix *lu = (icxLuMatrix *)p->out.luo;	/* Safe to coerce */
 
-				rv |= lu->bwd_abs(lu, pcsv, pcsv);
-				rv |= lu->bwd_matrix(lu, out, pcsv);
+				rv |= lu->bwd_abs(lu, pcsvm, pcsvm);
+				rv |= lu->bwd_matrix(lu, out, pcsvm);
 				if (p->out.nocurve) {	/* No explicit curve, so do implicit here */
 					rv |= lu->bwd_curve(lu, out, out);
 				}
@@ -665,10 +817,10 @@ void devip_devop(void *cntx, double *out, double *in) {
 				icxLuLut *lu = (icxLuLut *)p->out.luo;	/* Safe to coerce */
 
 				if (p->mode < 2) {	/* Using B2A table */
-					rv |= lu->in_abs(lu, pcsv, pcsv);
-					rv |= lu->matrix(lu, pcsv, pcsv);
-					rv |= lu->input(lu, pcsv, pcsv);
-					rv |= lu->clut(lu, out, pcsv);
+					rv |= lu->in_abs(lu, pcsvm, pcsvm);
+					rv |= lu->matrix(lu, pcsvm, pcsvm);
+					rv |= lu->input(lu, pcsvm, pcsvm);
+					rv |= lu->clut(lu, out, pcsvm);
 					if (p->out.nocurve) {	/* No explicit curve, so do implicit here */
 						rv |= lu->output(lu, out, out);
 					}
@@ -679,29 +831,31 @@ void devip_devop(void *cntx, double *out, double *in) {
 					/* Because we have used the ICX_MERGE_CLUT flag, we don't need */
 					/* to call inv_out_abs() and inv_output() */
 #else
-					rv |= lu->inv_out_abs(lu, pcsv, pcsv);
-					rv |= lu->inv_output(lu, pcsv, pcsv);
+					rv |= lu->inv_out_abs(lu, pcsvm, pcsvm);
+					rv |= lu->inv_output(lu, pcsvm, pcsvm);
 #endif
 
 #ifdef DEBUG
 #ifdef DEBUGC
 					DEBUGC
 #endif
-				printf("Calling inv_clut with K aux targets %f %f %f %f and pcsv %f %f %f %f\n",
-				locus[0],locus[1],locus[2],locus[3],pcsv[0],pcsv[1],pcsv[2],pcsv[3]);
+					printf("Calling inv_clut with K aux targets %f %f %f %f and pcsvm %f %f %f %f\n",
+					locus[0],locus[1],locus[2],locus[3],pcsvm[0],pcsvm[1],pcsvm[2],pcsvm[3]);
 #endif
 
-					rv |= lu->inv_clut(lu, locus, pcsv);
-#ifdef DEBUG
-#ifdef DEBUGC
-					DEBUGC
-#endif
-				printf("Got result %f %f %f %f\n", locus[0],locus[1],locus[2],locus[3]);
-#endif
-
-					/* Use locus as out[], in case we have auxiliary targets to give to inv_clut */
+					/* locus[] contains possible K target or locus value, */
+					/* so copy it to out[] so that inv_clut will use it. */
 					for (i = 0; i < p->out.chan; i++)
-						out[i] = locus[i];		/* Copy result */
+						out[i] = locus[i];
+
+					rv |= lu->inv_clut(lu, out, pcsvm);
+#ifdef DEBUG
+#ifdef DEBUGC
+					DEBUGC
+#endif
+					printf("Got result %f %f %f %f\n", out[0],out[1],out[2],out[3]);
+#endif
+
 					
 					if (p->out.nocurve) {	/* No explicit curve, so do implicit here */
 						rv |= lu->inv_input(lu, out, out);
@@ -727,6 +881,15 @@ void devip_devop(void *cntx, double *out, double *in) {
 		}
 	}
 
+
+#ifdef DEBUG
+#ifdef DEBUGC
+	DEBUGC
+#endif
+	printf("DevIn'->DevOut' ret %f %f %f %f\n\n",out[0], out[1], out[2], out[3]); fflush(stdout);
+#endif
+
+
 	if (p->verb) {		/* Output percent intervals */
 		int pc;
 		p->count++;
@@ -736,13 +899,6 @@ void devip_devop(void *cntx, double *out, double *in) {
 			p->last = pc;
 		}
 	}
-
-#ifdef DEBUG
-#ifdef DEBUGC
-	DEBUGC
-#endif
-	printf("DevIn'->DevOut' ret %f %f %f %f\n\n",out[0], out[1], out[2], out[3]); fflush(stdout);
-#endif
 }
 
 /* - - - - - - - - - - - - - - - - */
@@ -816,7 +972,8 @@ void devop_devo(void *cntx, double *out, double *in) {
 }
 
 /* ------------------------------------------- */
-/* Fixup L -> K only lookup table white and black values */
+/* Fixup L -> K only lookup table white and black values, */
+/* to compensate for inexact rspl fitting */
 
 /* Context for fixup */
 typedef struct {
@@ -835,8 +992,8 @@ fix_pcs2k_white(
 	double f;
 	pcs2k_ctx *p = (pcs2k_ctx *)pp;
 
-	/* Set white K value to zero, without affecting K max */
-	f = 1.0/(p->kmax - p->kmin) * (out[0] - p->kmin);
+	/* Scale so that kmin->hmax becomes 0 to 1 */
+	f = (out[0] - p->kmin)/(p->kmax - p->kmin);
 
 	out[0] = f;
 }
@@ -921,6 +1078,10 @@ main(int argc, char *argv[]) {
 	char out_name[MAXNAMEL+1];
 	char link_name[MAXNAMEL+1];
 	int verify = 0;				/* Do verify pass */
+	int outinkset = 0;			/* The user specfied an output inking */
+	int intentset = 0;			/* The user specified an intent */
+	int vcset = 0;				/* Viewing conditions were set by user */
+	int modeset = 0;			/* The gamut mapping mode was set by the user */
 	int rv = 0;
 	icxViewCond ivc, ovc;		/* Viewing Condition Overrides for in and out profiles */
 	int ivc_e = -1, ovc_e = -1;	/* Enumerated viewing condition */
@@ -933,15 +1094,17 @@ main(int argc, char *argv[]) {
 
 	error_program = argv[0];
 	memset((void *)&xpi, 0, sizeof(profxinf));	/* Init extra profile info to defaults */
+	memset((void *)&li, 0, sizeof(link));
 
 	/* Set defaults */
 	li.verb = 0;
 	li.count = 0;
 	li.last = -1;
-	li.mode = 0;
+	li.mode = 0;						/* Default simple link mode */
 	li.quality = 1;						/* Medium quality */
 	li.clutres = 0;						/* No resolution override */	
 	li.nhack = 0;
+	li.cmyhack = 0;						/* Mask for 100% purity through mapping of CMY */
 	li.pcs2k = NULL;
 	li.wphack = 0;
 	li.wphacked = 0;
@@ -949,6 +1112,7 @@ main(int argc, char *argv[]) {
 	li.xyzscale = 1.0;					/* No XYZ scaling */
 	li.hwp[0] = li.hwp[1] = li.hwp[2] = 0.0;
 	li.map = NULL;
+	li.Kmap = NULL;
 	li.in.intent  = icmDefaultIntent;	/* Default */
 	li.in.ink.tlimit = -1.0;			/* Default no total limit */
 	li.in.ink.klimit = -1.0;			/* Default no black limit */
@@ -959,10 +1123,15 @@ main(int argc, char *argv[]) {
 	li.out.intent = icmDefaultIntent;	/* Default */
 	li.out.ink.tlimit = -1.0;			/* Default no total limit */
 	li.out.ink.klimit = -1.0;			/* Default no black limit */
+	li.out.ink.KonlyLmin = 0;			/* Use normal black Lmin for locus */
+	li.out.ink.c.Ksmth = ICXINKDEFSMTH;	/* default curve smoothing */
+	li.out.ink.c.Kskew = ICXINKDEFSKEW;	/* default curve skew */
+	li.out.ink.x.Ksmth = ICXINKDEFSMTH;
+	li.out.ink.x.Kskew = ICXINKDEFSKEW;
 	li.out.inking  = 4;					/* Default ramp K */
 	li.out.locus   = 0;					/* Default K value target */
 	li.out.nocurve = 0;					/* Preserve device linearisation curve */
-	li.in.lcurve = 0;					/* Don't apply an L* to Y curve before device curve */
+	li.out.lcurve = 0;					/* Don't apply an L* to Y curve before device curve */
 	li.out.b2aluo = NULL;				/* B2A lookup for inking == 7 */
 
 	xicc_enum_gmapintent(&li.gmi, icxDefaultGMIntent, NULL);	/* Set default overall intent */
@@ -1053,21 +1222,34 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Hack to force input neutrals to K only output */
-			else if (argv[fa][1] == 'f') {
-				li.nhack = 1;
-				li.in.nocurve = 1;		/* Disable input curve to preserve input equality */
+			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F') {
 
-				if (na != NULL) {		/* 000K hack */
-					fa = nfa;
-					if (na[0] != 'k' && na[0] != 'K')
-						usage("Unexpected argument '%c' to -f flag",na[0]);
-					li.nhack = 2;
+				if (argv[fa][1] == 'f') {
+					if (na != NULL) {		/* XXXK -> XXXK hack */
+						int j;
+						fa = nfa;
+						for (j = 0; ; j++) {
+							if (na[j] == '\000')
+								break;
+							if (na[j] == 'k' || na[j] == 'K')
+								li.nhack = 2;
+							else if (na[j] == 'c' || na[j] == 'C')
+								li.cmyhack |= 0x1;
+							else if (na[j] == 'm' || na[j] == 'M')
+								li.cmyhack |= 0x2;
+							else if (na[j] == 'y' || na[j] == 'Y')
+								li.cmyhack |= 0x4;
+							else
+								usage("Unexpected argument '%c' to -f flag",na[j]);
+						}
+
+					} else {				/* Neutral -> 000K hack */
+						li.nhack = 1;
+						li.in.nocurve = 1;	/* Disable input curve to preserve input equality */
+					}
+				} else {
+					li.nhack = 3;			/* All -> 000K Hack */
 				}
-			}
-
-			/* Hack to force all input colors to K only output */
-			else if (argv[fa][1] == 'F') {
-				li.nhack = 3;
 			}
 
 			/* Quality */
@@ -1114,8 +1296,9 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Simple mode */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+			else if (argv[fa][1] == 's') {
 				li.mode = 0;
+				modeset = 1;
 			}
 
 			/* Maping mode */
@@ -1129,8 +1312,9 @@ main(int argc, char *argv[]) {
 					fa = nfa;
 					strncpy(sgam_name,na,MAXNAMEL); sgam_name[MAXNAMEL] = '\000';
 				}
-
+				modeset = 1;
 			}
+
 			/* White point hack */
 			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
 				li.wphack = 1;
@@ -1141,10 +1325,6 @@ main(int argc, char *argv[]) {
 					} else
 						usage("Couldn't parse hack white point (-w) value '%s'",na);
 				}
-				if ((li.gmi.usecas & 0x100) != 0)
-					usage("Can't use 'white point hack' and Luminence scaling intent together");
-				if (li.mode < 1)	/* Set minimum link mode */
-					li.mode = 1;
 			}
 			/* Input profile Intent or Mapping mode intent */
 			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
@@ -1172,23 +1352,9 @@ main(int argc, char *argv[]) {
 						li.in.intent = icMaxEnumIntent;		/* Detect error later */
 				}
 				/* Record it for gamut mapping mode */
-#ifdef NEVER
-				if (na[0] >= '0' && na[0] <= '9') {
-					int i = atoi(na);
-					if (xicc_enum_gmapintent(&li.gmi, i, NULL) == -999)
-						usage("Input intent (-i) argument '%s' isn't recognised",na);
-					if (li.in.intent == icMaxEnumIntent && li.mode < 1)	/* Set minimum link mode */
-						li.mode = 1;
-				} else
-#endif
-				{
-					if (xicc_enum_gmapintent(&li.gmi, icxNoGMIntent, na) == -999)
-						usage("Input intent (-i) argument '%s' isn't recognised",na);
-					if (li.in.intent == icMaxEnumIntent && li.mode < 1)	/* Set minimum link mode */
-						li.mode = 1;
-				}
-				if (li.wphack != 0 && (li.gmi.usecas & 0x100) != 0)
-					usage("Can't use 'white point hack' and Luminence scaling intent together");
+				if (xicc_enum_gmapintent(&li.gmi, icxNoGMIntent, na) == -999)
+					usage("Input intent (-i) argument '%s' isn't recognised",na);
+				intentset = 1;
 			}
 
 			/* Output profile Intent */
@@ -1240,10 +1406,10 @@ main(int argc, char *argv[]) {
 #endif
 				if (na[1] != ':') {
 					if (vc == &ivc) {
-						if ((ivc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
+						if ((ivc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1, NULL)) == -999)
 							usage("Unrecognised viewing condition enumeration '%s'",na);
 					} else {
-						if ((ovc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
+						if ((ovc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1, NULL)) == -999)
 							usage("Unrecognised viewing condition enumeration '%s'",na);
 					}
 				} else if (na[0] == 's' || na[0] == 'S') {
@@ -1287,8 +1453,7 @@ main(int argc, char *argv[]) {
 						usage("Viewing condition (-[cd]f) unrecognised flare '%s'",na+1);
 				} else
 					usage("Viewing condition (-[cd]) unrecognised sub flag '%c'",na[0]);
-				if (li.mode < 1)	/* Set minimum link mode */
-					li.mode = 1;
+				vcset = 1;			/* Viewing conditions were set by user */
 			}
 
 			/* Inking rule */
@@ -1378,8 +1543,7 @@ main(int argc, char *argv[]) {
 					default:
 						usage("Inking rule (-k) unknown sub flag '%c'",na[0]);
 				}
-				if (li.mode < 2)	/* Set minimum link mode */
-					li.mode = 2;
+				outinkset = 1;		/* The user set an inking */
 			}
 			/* Input ink limits */
 			else if (argv[fa][1] == 't') {
@@ -1454,11 +1618,185 @@ main(int argc, char *argv[]) {
 		printf("Got options\n");
 
 	/* - - - - - - - - - - - - - - - - - - - */
-	/* Sanity checking of options */
+#ifndef ENKHACK				/* Enable K hack code */
+	warning("!!!!!! linkl/collink.c ENKHACK not enabled !!!!!!");
+#endif
+	/* - - - - - - - - - - - - - - - - - - - */
+	/* Sanity checking/defaulting of options */
+
+	/* Deal with options that need link mode -g */
+	if (li.mode < 1
+	 && (li.in.intent == icMaxEnumIntent		/* User set a smart linking intent */
+	  || vcset								/* Viewing conditions were set by user */
+	  || li.wphack)) {
+		if (modeset) {
+			if (li.in.intent == icMaxEnumIntent)
+				warning("Complex intent can't work with -s linking mode");
+			else if (vcset)
+				warning("Viewing conditions are ignored with -s linking mode");
+			else if (li.wphack)
+				warning("White point hack is ignored with -s linking mode");
+		} else  {
+			if (li.verb) {
+				if (li.in.intent == icMaxEnumIntent)
+					printf("Setting -g to enable Gamut Mapping mode intent\n");
+				else if (vcset)
+					printf("Setting -g to enable viewing conditions\n");
+				else if (li.wphack)
+					printf("Setting -g to enable white point hack\n");
+			}
+			li.mode = 1;
+		}
+	}
+
+	/* Deal with options that need link mode -G */
+	if (li.mode < 2
+	  && (outinkset						/* The user set a K inking rule */
+	   || li.out.ink.tlimit >= 0.0		/* The user set an output total limit */
+	   || li.out.ink.klimit >= 0.0)) {	/* The user set an output black limit */
+		if (modeset) {
+			if (outinkset)
+				warning("Black inking can't work with -s or -g linking mode");
+			else if (li.out.ink.tlimit >= 0.0 || li.out.ink.klimit >= 0.0)
+				warning("Ink limiting can't work with -s linking mode");
+		} else {
+			if (li.verb) {
+				if (outinkset)
+					printf("Setting -G to enable black inking\n");
+				else if (li.out.ink.tlimit >= 0.0 || li.out.ink.klimit >= 0.0)
+					printf("Setting -G to enable ink limiting\n");
+			}
+			li.mode = 2;
+		}
+	}
+
+	/* Deal with options that complement -f -F */
+	if (li.nhack || li.cmyhack) {
+
+		/* Ideally we need to set K inking and map to K only black point, which require -G mode */
+		if (li.mode < 2) {
+			if (li.nhack == 1) {		/* All neutrals to K only */
+				if (modeset) {
+					warning("-f will give best result with -G mode");
+				} else {
+					if (li.verb)
+						printf("Setting -G mode to complement -f option\n");
+					li.mode = 2;
+				}
+			} else if (li.nhack == 2) {	/* K only in to K only out */
+				if (modeset) {
+					warning("For better results use -G mode with -fk option");
+				} else {
+					if (li.verb)
+						printf("Setting -G mode to complement -fk option\n");
+					li.mode = 2;
+				}
+			} else if (li.nhack == 3) {	/* All to K only out */
+				if (modeset) {
+					warning("For better results use -G mode with -F option");
+				} else {
+					if (li.verb)
+						printf("Setting -G mode to complement -F option\n");
+					li.mode = 2;
+				}
+			}
+			if (li.cmyhack != 0) {	/* Map pure 100% CMY to pure CMY */
+				if (modeset) {
+					warning("For better results use -G mode with -fcmy options");
+				} else {
+					if (li.verb)
+						printf("Setting -G mode to complement -fcmy options\n");
+					li.mode = 2;
+				}
+			}
+		}
+
+		/* Ideally we should use an appropriate K inking */ 
+		if (li.mode >= 2) {											/* Gammut mapping mode */
+			if (li.nhack == 1 && li.out.inking != 3) {		/* All neutrals to K only */
+				if (outinkset) {
+					warning("For better results use -kx with -f option");
+				} else {
+					if (li.verb)
+						printf("Setting -kx to complement -f option\n");
+					li.out.inking = 3;			/* Use maximum K */
+				}
+			} else if (li.nhack == 2 && li.out.inking != 0) {	/* K only in to K only out */
+				if (outinkset) {
+					warning("For better results use -kt with -fk option");
+				} else {
+					if (li.verb)
+						printf("Setting -kt to complement -fk option\n");
+					li.out.inking = 0;		/* Use input K value for output */
+				}
+			} else if (li.nhack == 3 && li.out.inking != 3) {		/* All colors to K only */
+				if (modeset) {
+					warning("For better results use -kx with -F option");
+				} else {
+					if (li.verb)
+						printf("Setting -kx to complement -f option\n");
+					li.out.inking = 3;			/* Use maximum K */
+				}
+			}
+		}
+
+		/* Ideally we should use an appropriate gamut mapping */
+		if (li.mode >= 1) {											/* Gammut mapping mode */
+
+			if (li.gmi.usemap == 0 || li.gmi.greymf < 1.0			/* Not mapping black point */
+		     || li.gmi.glumbcpf < 1.0 || li.gmi.glumbexf < 1.0) {
+				if (li.nhack == 1) {		/* All neutrals to K only */
+					if (intentset) {
+						warning("For better results use an intent that maps black point with -f option");
+					} else {
+						if (li.verb)
+							printf("Setting -ip intent to complement -f option\n");
+						if (xicc_enum_gmapintent(&li.gmi, icxNoGMIntent, "p") == -999)
+							usage("Internal, intent 'p' isn't recognised");
+						li.dst_kbp = 1;				/* Map to K only black point */
+						li.out.ink.KonlyLmin = 1;	/* Use K only black Lmin for locus */
+					}
+				} else if (li.nhack == 3) {	/* All to K only out */
+					if (intentset) {
+						warning("For better results use an intent that maps black point with -F option");
+					} else {
+						if (li.verb)
+							printf("Setting -ip intent to complement -F option\n");
+						if (xicc_enum_gmapintent(&li.gmi, icxNoGMIntent, "p") == -999)
+							usage("Internal, intent 'p' isn't recognised");
+						li.dst_kbp = 1;				/* Map to K only black point */
+						li.out.ink.KonlyLmin = 1;	/* Use K only black Lmin for locus */
+					}
+				}
+
+			/* Got an appropriate intent, so set mapping to K only black point */
+			} else if (li.nhack == 1 || li.nhack == 3) {
+				li.dst_kbp = 1;				/* Map to K only black point */
+				li.out.ink.KonlyLmin = 1;	/* Use K only black Lmin for locus */
+			}
+			if (li.cmyhack != 0) {	/* Map pure 100% CMY to pure CMY */
+				if (intentset) {
+					if (strcmp(li.gmi.as, "s") != 0)
+						warning("For better results use -is with -fcmy options");
+				} else {
+					if (li.verb)
+						printf("Setting -is intent to complement -fcmy options\n");
+					if (xicc_enum_gmapintent(&li.gmi, icxNoGMIntent, "s") == -999)
+						usage("Internal, intent 's' isn't recognised");
+					li.dst_cmymap = li.cmyhack;
+				}
+			}
+		}
+	}
+
 	if (li.mode == 0) {
 		if (li.in.intent == icMaxEnumIntent)
-			usage("Input intent (-i) argument isn't recognised");
+			usage("Input intent (-i) argument isn't recognised for simple mapping mode");
 	}
+
+	if (li.wphack && (li.gmi.usecas & 0x100) != 0)
+		usage("Can't use 'white point hack' and Luminence scaling intent together");
+
 	/* - - - - - - - - - - - - - - - - - - - */
 	/* Open up the input device profile for reading, and read header etc. */
 	if ((li.in.c = read_embeded_icc(in_name)) == NULL)
@@ -1470,10 +1808,14 @@ main(int argc, char *argv[]) {
 	 && li.in.h->deviceClass != icSigDisplayClass
 	 && li.in.h->deviceClass != icSigOutputClass
 	 && li.in.h->deviceClass != icSigColorSpaceClass)	/* For sRGB etc. */
-		error("Input profile isn't a device profile");
+		error("Input profile '%s' isn't a device profile",in_name);
+
+	/* Wrap with an expanded icc */
+	if ((li.in.x = new_xicc(li.in.c)) == NULL)
+		error ("Creation of input profile xicc failed");
 
 	/* Set the default ink limits if not set on command line */
-	icxDefaultLimits(li.in.c, &li.in.ink.tlimit, li.in.ink.tlimit, &li.in.ink.klimit, li.in.ink.klimit);
+	icxDefaultLimits(li.in.x, &li.in.ink.tlimit, li.in.ink.tlimit, &li.in.ink.klimit, li.in.ink.klimit);
 
 	if (li.verb) {
 		if (li.in.ink.tlimit >= 0.0)
@@ -1481,10 +1823,6 @@ main(int argc, char *argv[]) {
 		if (li.in.ink.klimit >= 0.0)
 			printf("Input black ink limit assumed is %3.0f%%\n",100.0 * li.in.ink.klimit);
 	}
-
-	/* Wrap with an expanded icc */
-	if ((li.in.x = new_xicc(li.in.c)) == NULL)
-		error ("Creation of input profile xicc failed");
 
 	/* - - - - - - - - - - - - - - - - - - - */
 	/* Open up the abstract profile if requested */
@@ -1522,8 +1860,12 @@ main(int argc, char *argv[]) {
 	 && li.out.h->deviceClass != icSigColorSpaceClass)	/* For sRGB etc. */
 		error("Output profile isn't a device profile");
 
+	/* Wrap with an expanded icc */
+	if ((li.out.x = new_xicc(li.out.c)) == NULL)
+		error ("Creation of output profile xicc failed");
+
 	/* Set the default ink limits if not set on command line */
-	icxDefaultLimits(li.out.c, &li.out.ink.tlimit, li.out.ink.tlimit, &li.out.ink.klimit, li.out.ink.klimit);
+	icxDefaultLimits(li.out.x, &li.out.ink.tlimit, li.out.ink.tlimit, &li.out.ink.klimit, li.out.ink.klimit);
 
 	if (li.verb) {
 		if (li.out.ink.tlimit >= 0.0)
@@ -1532,18 +1874,8 @@ main(int argc, char *argv[]) {
 			printf("Output black ink limit assumed is %3.0f%%\n",100.0 * li.out.ink.klimit);
 	}
 
-	/* Wrap with an expanded icc */
-	if ((li.out.x = new_xicc(li.out.c)) == NULL)
-		error ("Creation of output profile xicc failed");
-
-	/* - - - - - - - - - - - - - - - - - - - */
-	/* Deal with setting up all the options */
-
 	/* deal with output black generation. */
 	/* Ink limits will have been set in option parsing */
-
-	li.out.ink.c.Ksmth = ICXINKDEFSMTH;		/* default curve smoothing */
-	li.out.ink.x.Ksmth = ICXINKDEFSMTH;
 
 	switch (li.out.inking) {
 		case 0:			/* Use input profile K level or locus */
@@ -1616,12 +1948,12 @@ main(int argc, char *argv[]) {
 		}
 		
 		/* Set the default */
-		xicc_enum_viewcond(x, vc, -1, NULL, 0);
+		xicc_enum_viewcond(x, vc, -1, NULL, 0, NULL);
 
 		/* Override the viewing conditions */
 		/* (?? Could move this code into xicc_enum_viewcond() as an option ??) */
 		if (es != -1) {
-			if (xicc_enum_viewcond(x, vc, es, NULL, 0) == -999)
+			if (xicc_enum_viewcond(x, vc, es, NULL, 0, NULL) == -999)
 				error ("%d, %s",x->errc, x->err);
 		}
 		if (v->Ev >= 0)
@@ -1668,7 +2000,7 @@ main(int argc, char *argv[]) {
 	{
 		icmLuAlgType oalg;				/* Native output algorithm */
 		icColorSpaceSignature natpcs;	/* Underlying native output PCS */
-		int fl = 0;						/* luobj flags */
+		int flb = 0, fl = 0;			/* luobj flags */
 		
 		li.pcsor = icSigLabData;			/* Default use Lab as PCS */
 
@@ -1711,9 +2043,13 @@ main(int argc, char *argv[]) {
 		if (li.verb)
 			printf("Loading input A2B table\n");
 
-		/* Get an input profile xicc conversion object */
+		/* default flags for all xicc luobj's */
+		flb = ICX_CLIP_NEAREST;
+		if (li.verb)
+			flb |= ICX_VERBOSE;
 
-		fl = ICX_CLIP_NEAREST;
+		/* Get an input profile xicc conversion object */
+		fl = flb;
 #ifdef USE_MERGE_CLUT_OPT
 		fl |= ICX_MERGE_CLUT;
 #endif
@@ -1746,7 +2082,7 @@ main(int argc, char *argv[]) {
 		}
 
 		/* Grab the white point in case the wphack or xyzscale needs it */
-		li.in.luo->rel_wh_bk_points(li.in.luo, li.in.wp, NULL);
+		li.in.luo->efv_wh_bk_points(li.in.luo, li.in.wp, NULL, NULL);
 
 		/* Get native PCS space */
 		li.in.luo->lutspaces(li.in.luo, NULL, NULL, &natpcs, NULL, NULL);
@@ -1755,7 +2091,7 @@ main(int argc, char *argv[]) {
 		  && (li.in.alg == icmMatrixFwdType || li.in.alg == icmMatrixBwdType)) {
 			li.in.lcurve = 1;		/* Use Y to L* and L* to Y for input */
 			if (li.verb)
-				printf("Usinge Y to L* and L* to Y curves for input\n");
+				printf("Using Y to L* and L* to Y curves for input\n");
 		}
 
 		/* Setup any abstract profile to match the chosen PCS */
@@ -1764,7 +2100,7 @@ main(int argc, char *argv[]) {
 		/* that the user knows what they're doing! */
 		if (abs_name[0] != '\000') {
 
-			if ((li.abs_luo = li.abs_xicc->get_luobj(li.abs_xicc, ICX_CLIP_NEAREST, icmFwd, li.abs_intent,
+			if ((li.abs_luo = li.abs_xicc->get_luobj(li.abs_xicc, flb, icmFwd, li.abs_intent,
 			        li.pcsor, icmLuOrdNorm, &li.out.vc, NULL)) == NULL)
 					error ("%d, %s",li.abs_icc->errc, li.abs_icc->err);
 		}
@@ -1781,7 +2117,7 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Check what the algorithm is */
-			plu->spaces(plu, NULL, NULL, NULL, NULL, &oalg, NULL, NULL, NULL);
+			plu->spaces(plu, NULL, NULL, NULL, NULL, &oalg, NULL, NULL, NULL, NULL);
 
 			/* release the icm lookup */
 			plu->del(plu);
@@ -1792,11 +2128,10 @@ main(int argc, char *argv[]) {
 			if (li.verb)
 				printf("Loading output B2A table\n");
 
-			if ((li.out.luo = li.out.x->get_luobj(li.out.x, ICX_CLIP_NEAREST, icmBwd, li.out.intent,
-			                              li.pcsor, icmLuOrdNorm, &li.out.vc, NULL)) == NULL) {
+			if ((li.out.luo = li.out.x->get_luobj(li.out.x, flb, icmBwd, li.out.intent,
+			                              li.pcsor, icmLuOrdNorm, &li.out.vc, &li.out.ink)) == NULL) {
 				error("get xlookup object failed: %d, %s",li.out.x->errc,li.out.x->err);
 			}
-		
 			/* Get details of overall conversion */
 			li.out.luo->spaces(li.out.luo, NULL, NULL, NULL, &li.out.chan, &li.out.alg,
 			                   NULL, NULL, NULL);
@@ -1813,15 +2148,14 @@ main(int argc, char *argv[]) {
 			}
 	
 			/* Grab the white point in case the wphack or xyzscale needs it */
-			li.out.luo->rel_wh_bk_points(li.out.luo, li.out.wp, NULL);
+			li.out.luo->efv_wh_bk_points(li.out.luo, li.out.wp, NULL, NULL);
 
 			/* Get native PCS space */
 			li.out.luo->lutspaces(li.out.luo, &natpcs, NULL, NULL, NULL, NULL);
 
 		} else {	/* Using inverse A2B Lut for output conversion */
-			int fl = 0;
 
-			fl = ICX_CLIP_NEAREST;
+			fl = flb;
 #ifdef USE_MERGE_CLUT_OPT
 			fl |= ICX_MERGE_CLUT;
 #endif
@@ -1861,21 +2195,25 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Grab the white point in case the wphack or xyzscale needs it */
-			li.out.luo->rel_wh_bk_points(li.out.luo, li.out.wp, NULL);
+			li.out.luo->efv_wh_bk_points(li.out.luo, li.out.wp, NULL, NULL);
 
 			/* Get native PCS space */
 			li.out.luo->lutspaces(li.out.luo, NULL, NULL, &natpcs, NULL, NULL);
 
 			/* If we need a B2A lookup to get the existing K */
 			if (li.out.inking == 7) {
-				if ((li.out.b2aluo = li.out.x->get_luobj(li.out.x, ICX_CLIP_NEAREST, icmBwd,
+				if ((li.out.b2aluo = li.out.x->get_luobj(li.out.x, flb, icmBwd,
 					li.out.intent, li.pcsor, icmLuOrdNorm, &li.out.vc, NULL)) == NULL) {
 					error("get B2A xlookup object failed: %d, %s",li.out.x->errc,li.out.x->err);
 				}
 			}
 		}
 		
-		/* If we need an PCS'->K' mapping for the neutral axis to K hack */
+		/* If we need an PCS->K' mapping for the neutral axis to K hack. */
+		/* What we do is lookup the L for K values from 0 to 1, */
+		/* and then invert this to create an L to K lookup. */
+		/* If the gamut mapping is set to map to the K only black point, */
+		/* it should all work well... */
 		if (li.nhack) {
 			icxLuBase *luo;		/* Base XLookup type object */
 			icmLuAlgType alg;	/* Type of lookup algorithm */
@@ -1902,13 +2240,13 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Get a device to PCS lookup object to use to lookup K->PCS */
-			if ((luo = li.out.x->get_luobj(li.out.x, ICX_CLIP_NEAREST,
+			if ((luo = li.out.x->get_luobj(li.out.x, flb,
 			                  icmFwd, li.out.intent, li.pcsor, icmLuOrdNorm, &li.out.vc,
 			                  NULL)) == NULL) {
 				error("get xlookup object failed: %d, %s",li.out.x->errc,li.out.x->err);
 			}
 			/* Get details of overall conversion */
-			li.out.luo->spaces(li.out.luo, NULL, NULL, NULL, NULL, &alg, NULL, NULL, NULL);
+			luo->spaces(luo, NULL, NULL, NULL, NULL, &alg, NULL, NULL, NULL);
 			if (alg != icmLutType)
 				error ("Unexpected algorithm type for CMYK output profile");
 
@@ -1917,13 +2255,13 @@ main(int argc, char *argv[]) {
 			Lmin = 1000.0;
 			for (i = 0; i < 256; i++) {
 				icxLuLut *lu = (icxLuLut *)luo;	/* Safe to coerce */
-				double in[4], pcsv[3];
+				double in[4], pcsv[4];
 				in[0] = in[1] = in[2] = 0.0;
 				in[3] = i/(255.0);
 
-				/* Want to do dev' -> PCS conversion to match */
-				/* the normal inverse PCS-> dev' */
-				if (li.in.nocurve) {	/* No explicit curve, so do implicit here */
+				/* Want to do dev' -> PCS conversion to match the */
+				/* normal inverse PCS-> dev' used in devip_devop() */
+				if (li.out.nocurve) {	/* No explicit curve, so do implicit here */
 					/* Since not PCS, in_abs and matrix cannot be valid, */
 					/* so input curve on own is ok to use. */
 					lu->input(lu, pcsv, in);
@@ -1938,10 +2276,10 @@ main(int argc, char *argv[]) {
 				ips[i].p[0] = pcsv[0];		/* PCS as input */
 				ips[i].v[0] = in[3];		/* K as output */
 #ifdef NEUTKDEBUG
-				printf("L %f -> K %f\n",pcsv[0], in[3]);
+				printf("L %f -> K' %f\n",pcsv[0], in[3]);
 #endif /* NEUTKDEBUG */
 
-				if (pcsv[0] > Lmax)			/* Track min and max values */
+				if (pcsv[0] > Lmax)			/* Track min and max L values */
 					Lmax = pcsv[0];
 				if (pcsv[0] < Lmin)
 					Lmin = pcsv[0];
@@ -1956,52 +2294,54 @@ main(int argc, char *argv[]) {
 
 			li.pcs2k->fit_rspl(li.pcs2k, 0, ips, 256, glow, ghigh, &grres, vlow, vhigh, 1.0, avgdev, NULL);
 
-			/* Fixup the white point for neutral axis to K hack */
+			/* Fixup the white and black points for neutral axis to K hack. */
+			/* This is to make sure that they exactly match the fwd mapping */
+			/* after the rspl is fitted. */
 			{
 				pcs2k_ctx cx;		/* White point fixup context */
 				co pp;				/* Lookup the min and max K values */
 
 				pp.p[0] = Lmax;
 				li.pcs2k->interp(li.pcs2k, &pp);
-				cx.kmin = pp.v[0];
+				cx.kmin = pp.v[0];	/* Ideally would be 0 */
 				pp.p[0] = Lmin;
 				li.pcs2k->interp(li.pcs2k, &pp);
-				cx.kmax = pp.v[0];
+				cx.kmax = pp.v[0];	/* Ideally would be 1 */
 
 #ifdef NEUTKDEBUG
-				printf("Lmax %f, Lmin %f, Kmin %f, Kmax %f\n",Lmax, Lmin, cx.kmin, cx.kmax);
+				printf("Before fix: Lmax %f, Lmin %f, Kmin %f, Kmax %f\n",Lmax, Lmin, cx.kmin, cx.kmax);
 #endif /* NEUTKDEBUG */
 
 				li.pcs2k->re_set_rspl(li.pcs2k, 0, (void *)&cx, fix_pcs2k_white);
-			}
-
 #ifdef NEUTKDEBUG
-			{
-				co pp;
-			
-				printf("\n");
-				pp.p[0] = 94.925292;		/* Input L value */
+				pp.p[0] = Lmax;
 				li.pcs2k->interp(li.pcs2k, &pp);
-				printf("L %f -> K %f\n",pp.p[0], pp.v[0]);
-			
-				pp.p[0] = 94.925180;		/* Input L value */
+				cx.kmin = pp.v[0];	/* Ideally would be 0 */
+				pp.p[0] = Lmin;
 				li.pcs2k->interp(li.pcs2k, &pp);
-				printf("L %f -> K %f\n",pp.p[0], pp.v[0]);
-			
-				pp.p[0] = 17.699968;		/* Input L value */
-				li.pcs2k->interp(li.pcs2k, &pp);
-				printf("L %f -> K %f\n",pp.p[0], pp.v[0]);
-			}
+				cx.kmax = pp.v[0];	/* Ideally would be 1 */
+				printf("After fix: Lmax %f, Lmin %f, Kmin %f, Kmax %f\n",Lmax, Lmin, cx.kmin, cx.kmax);
 #endif /* NEUTKDEBUG */
+			}
 
 		}	/* end if neutral axis to K hack */
+
+		if (li.cmyhack != 0) {
+			if (li.in.h->colorSpace != icSigCmyData
+			 && li.in.h->colorSpace != icSigCmykData)
+				error("100% CMY mapping requested with non CMY or CMYK input profile");
+
+			if (li.out.h->colorSpace != icSigCmyData
+			 && li.out.h->colorSpace != icSigCmykData)
+				error("100% CMY mapping requested with non CMY or CMYK output profile");
+		}
 
 			
 		if (li.out.nocurve == 0 && natpcs == icSigXYZData
 		  && (li.out.alg == icmMatrixFwdType || li.out.alg == icmMatrixBwdType)) {
 			li.out.lcurve = 1;		/* Use Y to L* and L* to Y for output */
 			if (li.verb)
-				printf("Usinge Y to L* and L* to Y curves for output\n");
+				printf("Using Y to L* and L* to Y curves for output\n");
 		}
 	}
 
@@ -2020,7 +2360,7 @@ main(int argc, char *argv[]) {
 	/* lab or Jab space, with the given in/out viewing conditions */
 	/* for the latter. The xluo->get_gamut work in the set li.pcsor */
 	/* for each xluo. */
-	if (li.mode > 0  && li.gmi.usemap) {
+	if (li.mode > 0 && li.gmi.usemap) {
 		gamut *csgam, *igam, *ogam;
 		double sgres;			/* Source gamut surface feature resolution */
 		double dgres;			/* Destination gamut surface feature resolution */
@@ -2032,12 +2372,12 @@ main(int argc, char *argv[]) {
 		/* Gamut mapping will extend given grid res to encompas */
 		/* source gamut by a margin. */
 		if (li.quality == 3) {			/* Ultra High */
-  	 		sgres = 8.0;
-  	 		dgres = 8.0;
+  	 		sgres = 7.0;
+  	 		dgres = 7.0;
   	 		mapres = 41;
 		} else if (li.quality == 2) {	/* High */
-  	 		sgres = 9.0;
-  	 		dgres = 9.0;
+  	 		sgres = 8.0;
+  	 		dgres = 8.0;
   	 		mapres = 33;
 		} else if (li.quality == 1) {	/* Medium */
   	 		sgres = 10.0;
@@ -2091,10 +2431,24 @@ main(int argc, char *argv[]) {
 		if (li.verb)
 			printf(" Creating Gamut match\n");
 
-		li.map = new_gammap(li.verb, csgam, igam, ogam, &li.gmi, mapres, NULL, NULL,
-		                                           li.gamdiag ? "gammap.wrl" : NULL);
+		li.map = new_gammap(li.verb, csgam, igam, ogam, &li.gmi,
+		                    li.src_kbp, li.dst_kbp, li.cmyhack, li.rel_oride,
+		                    mapres, NULL, NULL, li.gamdiag ? "gammap.wrl" : NULL
+		);
 		if (li.map == NULL)
 			error ("Failed to make gamut map transform");
+
+		if (li.nhack == 2) {
+			if (li.verb)
+				printf(" Creating K only black to K only black Gamut match\n");
+
+			li.Kmap = new_gammap(li.verb, csgam, igam, ogam, &li.gmi,
+			                    1, 1, li.cmyhack, li.rel_oride,
+			                    mapres, NULL, NULL, li.gamdiag ? "gammap.wrl" : NULL
+			);
+			if (li.Kmap == NULL)
+				error ("Failed to make K only gamut map transform");
+		}
 
 		ogam->del(ogam);
 		if (igam != NULL)
@@ -2124,7 +2478,7 @@ main(int argc, char *argv[]) {
 		/* that doesn't clip the li.swxyz[] on the destination gamut */
 		sa[0] = 0.1;
 		xyzscale[0] = 0.5;
-		if (powell(NULL, 1, xyzscale, sa, 1e-6, 2000, xyzoptfunc, (void *)&li) != 0) {
+		if (powell(NULL, 1, xyzscale, sa, 1e-6, 2000, xyzoptfunc, (void *)&li, NULL, NULL) != 0) {
 			warning("set_icxLuLut: XYZ scale powell failed to converge - set scale to 1.0");
 		} else {
 			li.xyzscale = xyzscale[0];
@@ -2356,8 +2710,10 @@ main(int argc, char *argv[]) {
 		{
 			int i;
 			unsigned int j;
+			int repclip = 0;
 
 			/* For the first and last profile in the chain */
+			/* (Note that we're assuming that the link output PCS is always Lab) */ 
 			for (i = 0; i < 2; i++) {
 				icc *iccs;
 				icmHeader *sh;
@@ -2391,10 +2747,19 @@ main(int argc, char *argv[]) {
 
 					for (j = 0; j < wo->count; j++) {
 						strcpy(wo->data[j].name, ro->data[j].name);
-						if (sh->pcs != icSigLabData)
+						if (sh->pcs != icSigLabData) {
 							icmXYZ2Lab(&icmD50, wo->data[j].pcsCoords, ro->data[j].pcsCoords);
-						else
+							/* For device links the colorant table must be Lab PCS, */
+							/* but embarassingly, XYZ profiles can have colorant values */
+							/* not representable in the Lab PCS range. */
+							if (icmClipLab(wo->data[j].pcsCoords, wo->data[j].pcsCoords)) {
+								if (repclip)
+									warning("Colorant Tag Lab value was clipped");
+								repclip = 1;
+							}
+						} else {
 							icmAry2Ary(wo->data[j].pcsCoords, ro->data[j].pcsCoords);
+						}
 					}
 
 				} else {	/* Do this the hard way */
@@ -2418,15 +2783,19 @@ main(int argc, char *argv[]) {
 						dv[j] = 1.0;
 						luo->lookup(luo, cvals[j], dv);
 						/* For device links the colorant table must be Lab PCS, */
-						/* but embarassingly XYZ profiles can have colorant values */
+						/* but embarassingly, XYZ profiles can have colorant values */
 						/* not representable in the Lab PCS range. */
-						icmClipLab(cvals[j], cvals[j]);
+						if (icmClipLab(cvals[j], cvals[j])) {
+							if (repclip)
+								warning("Colorant Tag Lab value was clipped");
+							repclip = 1;
+						}
 						dv[j] = 0.0;
 					}
 					luo->del(luo);
 
 					/* Lookup colorant names */
-					if ((imask = icx_icc_cv_to_colorant_comb(sh->colorSpace, cvals)) == 0)
+					if ((imask = icx_icc_cv_to_colorant_comb(sh->colorSpace, iccs->header->deviceClass, cvals)) == 0)
 						goto skip_coloranttable;
 
 					/* Create a ColorantTable in the output device link */
@@ -2458,17 +2827,10 @@ main(int argc, char *argv[]) {
 		}
 		/* 16 bit input device -> output device lut: */
 		{
+			int inputEnt, outputEnt, clutPoints;
 			icmLut *wo;
-			int inputEnt, outputEnt;
 
-			/* Link Lut = AToB0 */
-			if ((wo = (icmLut *)wr_icc->add_tag(
-			           wr_icc, icSigAToB0Tag,	icSigLut16Type)) == NULL) 
-				error("add_tag failed: %d, %s",wr_icc->errc,wr_icc->err);
-
-			wo->inputChan = li.in.chan;
-			wo->outputChan = li.out.chan;
-
+			/* Setup the cLUT resolutions */
 			if (li.quality >= 3)
 	    		inputEnt = 4096;
 			else if (li.quality == 2)
@@ -2481,83 +2843,85 @@ main(int argc, char *argv[]) {
 			if (in_curve_res > inputEnt)
 				inputEnt = in_curve_res;
 
-    		wo->inputEnt = inputEnt;
-			
 			/* See discussion in imdi/imdi_gen.c for ideal numbers */
 			switch (li.in.chan) {
 				case 0:
 					error ("Illegal number of input chanels");
 				case 1:
 					if (li.quality >= 3)
-			  		  	wo->clutPoints = 255;
+			  		  	clutPoints = 255;
 					else if (li.quality == 2)
-			  		  	wo->clutPoints = 255;
+			  		  	clutPoints = 255;
 					else
-			  		  	wo->clutPoints = 255;
+			  		  	clutPoints = 255;
 					break;
 
 				case 2:
 					if (li.quality >= 2)
-		  		  		wo->clutPoints = 255;
+		  		  		clutPoints = 255;
 					else
-		  		  		wo->clutPoints = 86;
+		  		  		clutPoints = 86;
 					break;
 				case 3:
 					if (li.quality >= 3)
-		  		  		wo->clutPoints = 52;
+		  		  		clutPoints = 52;
 					else if (li.quality == 2)
-		  		  		wo->clutPoints = 33;
+		  		  		clutPoints = 33;
 					else if (li.quality == 1)
-		  		  		wo->clutPoints = 17;
+		  		  		clutPoints = 17;
 					else
-		  		  		wo->clutPoints = 9;
+		  		  		clutPoints = 9;
 					break;
 				case 4:
 					if (li.quality >= 3)
-		  		  		wo->clutPoints = 33;
+		  		  		clutPoints = 33;
 					else if (li.quality == 2)
-		  		  		wo->clutPoints = 18;
+		  		  		clutPoints = 18;
 					else if (li.quality == 1)
-		  		  		wo->clutPoints = 9;
+		  		  		clutPoints = 9;
 					else
-		  		  		wo->clutPoints = 6;
+		  		  		clutPoints = 6;
 					break;
 				case 5:
 					if (li.quality >= 3)
-		  		  		wo->clutPoints = 18;
+		  		  		clutPoints = 18;
 					else if (li.quality == 2)
-		  		  		wo->clutPoints = 16;
+		  		  		clutPoints = 16;
 					else 
-						wo->clutPoints = 9;
+						clutPoints = 9;
 					break;
 				case 6:
 					if (li.quality >= 3)
-		  		  		wo->clutPoints = 12;
+		  		  		clutPoints = 12;
 					else if (li.quality == 2)
-		  		  		wo->clutPoints = 9;
+		  		  		clutPoints = 9;
 					else 
-						wo->clutPoints = 6;
+						clutPoints = 6;
 					break;
 				case 7:
 					if (li.quality >= 3)
-		  		  		wo->clutPoints = 8;
+		  		  		clutPoints = 8;
 					else if (li.quality == 2)
-		  		  		wo->clutPoints = 7;
+		  		  		clutPoints = 7;
 					else 
-						wo->clutPoints = 6;
+						clutPoints = 6;
 					break;
 				case 8:
 					if (li.quality >= 3)
-		  		  		wo->clutPoints = 7;
+		  		  		clutPoints = 7;
 					else if (li.quality == 2)
-		  		  		wo->clutPoints = 6;
+		  		  		clutPoints = 6;
 					else 
-						wo->clutPoints = 5;
+						clutPoints = 5;
 					break;
 				default: /* > 8 chan */
-					wo->clutPoints = 3;
+					clutPoints = 3;
 					break;
 			}	
+
+			if (li.clutres > 0)		/* clut resolution override */
+  		  		clutPoints = li.clutres;
+			li.clutres = clutPoints;	/* Actual resolution */
 
 			if (li.quality >= 3)
 	    		outputEnt = 4096;
@@ -2571,11 +2935,20 @@ main(int argc, char *argv[]) {
 			if (out_curve_res > outputEnt)
 				outputEnt = out_curve_res;
 
+
+			/* Link Lut = AToB0 */
+			if ((wo = (icmLut *)wr_icc->add_tag(
+			           wr_icc, icSigAToB0Tag,	icSigLut16Type)) == NULL) 
+				error("add_tag failed: %d, %s",wr_icc->errc,wr_icc->err);
+
+			wo->inputChan = li.in.chan;
+			wo->outputChan = li.out.chan;
+
+			/* Setup the tables resolutions */
+    		wo->inputEnt = inputEnt;
+  		  	wo->clutPoints = clutPoints;
 	  		wo->outputEnt = outputEnt;
 
-			if (li.clutres > 0)		/* clut resolution override */
-  		  		wo->clutPoints = li.clutres;
-			li.clutres = wo->clutPoints;	/* Actual resolution */
 			if (wo->allocate((icmBase *)wo) != 0)	/* Allocate space */
 				error("allocate failed: %d, %s",wr_icc->errc,wr_icc->err);
 
@@ -2585,6 +2958,8 @@ main(int argc, char *argv[]) {
 				icxLuLut *lu = (icxLuLut *)li.in.luo;
 				lu->get_matrix(lu, wo->e);		/* Copy it across */
 			}
+
+
 
 			if (li.verb)
 				printf("Filling in Lut table\n");
@@ -2596,8 +2971,8 @@ main(int argc, char *argv[]) {
 			{
 				double in[10][MAX_CHAN];
 				double out[MAX_CHAN];
-				in[0][0] = 0.0;
-				in[0][1] = 0.0;
+				in[0][0] = 1.0;
+				in[0][1] = 1.0;
 				in[0][2] = 1.0;
 				in[0][3] = 0.0;
 
@@ -2621,17 +2996,20 @@ main(int argc, char *argv[]) {
 			if (li.verb) {
 				unsigned int ui;
 				int itotal;
-				for (itotal = 1, ui = 0; ui < wo->inputChan; ui++, itotal *= wo->clutPoints)
+				for (itotal = 1, ui = 0; ui < li.in.chan; ui++, itotal *= clutPoints)
 					; 
 				li.total = itotal;
 				/* Allow for extra lookups due to ICM_CLUT_SET_APXLS */
-				for (itotal = 1, ui = 0; ui < wo->inputChan; ui++, itotal *= (wo->clutPoints-1))
+				for (itotal = 1, ui = 0; ui < li.in.chan; ui++, itotal *= (clutPoints-1))
 					; 
 				li.total += itotal;
+				li.count = 0;
 				printf(" 0%%"); fflush(stdout);
 			}
-			if (wo->set_tables(wo,
-				ICM_CLUT_SET_APXLS,
+			if (icmSetMultiLutTables(
+				1,
+				&wo,
+				ICM_CLUT_SET_APXLS,			/* Use aproximate least squares */
 				&li,						/* Context */
 				li.in.h->colorSpace,		/* Input color space */
 				li.out.h->colorSpace,		/* Output color space */
@@ -2645,7 +3023,13 @@ main(int argc, char *argv[]) {
 			if (li.verb) {
 				printf("\n");
 			}
+#ifdef WARN_CLUT_CLIPPING
+			if (wr_icc->warnc)
+				warning("Values clipped in setting device link LUT");
+#endif /* WARN_CLUT_CLIPPING */
+
 #endif	/* !DEBUG_ONE */
+
 		}
 
 		if (li.verb && li.wphack && li.wphacked == 0)
@@ -2714,7 +3098,7 @@ main(int argc, char *argv[]) {
 			error ("%d, %s",rd_icc->errc, rd_icc->err);
 
 		/* Get details of conversion (Arguments may be NULL if info not needed) */
-		luo->spaces(luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL);
+		luo->spaces(luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL, NULL);
 
 		if (alg != icmLutType)
 			error ("DeviceLink profile doesn't have Lut !");
@@ -2813,6 +3197,8 @@ main(int argc, char *argv[]) {
 
 	if (li.map != NULL)
 		li.map->del(li.map);
+	if (li.Kmap != NULL)
+		li.Kmap->del(li.Kmap);
 
 	if (li.abs_luo != NULL) {		/* Free up abstract transform */
 		li.abs_luo->del(li.abs_luo);

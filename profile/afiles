@@ -10,6 +10,7 @@ colprof.c
 profcheck.c
 invprofcheck.c
 verify.c
+applycal.c
 mpprof.c
 mppcheck.c
 sepgen.c
@@ -25,7 +26,9 @@ Trulux.sp
 TruluxPlus.sp
 example.sp
 example121.sp
+CIE_C.sp
 D50_0.0.sp
+D50_0.1.sp
 D50_0.3.sp
 D50_0.5.sp
 D50_0.7.sp

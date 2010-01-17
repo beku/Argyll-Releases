@@ -17,7 +17,7 @@
  *
  * Copyright 2000, 2002 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -69,7 +69,7 @@ double Lv		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 static void cam_free(cam97s3 *s);
 static int set_view(struct _cam97s3 *s, ViewingCondition Ev, double Wxyz[3],
                     double La, double Yb, double Lv, double Yf, double Fxyz[3],
-					int hk);
+					int hk, int noclip);
 static int XYZ_to_cam(struct _cam97s3 *s, double *Jab, double *xyz);
 static int cam_to_XYZ(struct _cam97s3 *s, double *xyz, double *Jab);
 
@@ -116,7 +116,8 @@ double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
-int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
+int hk,			/* Flag, NZ to use Helmholtz-Kohlraush effect */
+int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
 ) {
 	double tt;
 
@@ -134,6 +135,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->Fxyz[1] = Fxyz[1];
 	s->Fxyz[2] = Fxyz[2];
 	s->hk = hk;
+	s->noclip = noclip;
 
 	/* Compute the internal parameters by category */
 	switch(s->Ev) {

@@ -9,7 +9,7 @@
  * Copyright 2002, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -34,6 +34,8 @@
 #include "numlib.h"
 #include "gamut.h"
 #include "nearsmth.h"
+
+double m21po[3] = { 2.0, 1.0, 2.0 };    /* Many to 1 filter mixing power LCh (theoretically 2) */
 
 /* Mapping weights */
 gammapweights weights[] = {
@@ -103,7 +105,7 @@ main(int argc, char *argv[]) {
 	int nnsm;				/* Number of near smoothed points */
 	FILE *wrl;				/* VRML output file */
 
-	gammapweights xweights[7];
+	gammapweights xweights[14];
 
 	int i;
 
@@ -195,7 +197,7 @@ main(int argc, char *argv[]) {
 	expand_weights(xweights, weights);
 
 	/* Create the near point mapping */
-	nsm = near_smooth(verb, &nnsm, gin, gin, gout, NULL, xweights, 1, 1);
+	nsm = near_smooth(verb, &nnsm, gin, gin, gout, 0, 0, NULL, xweights, 0.1, 0.1, 1, 1, 2.0, 17, 0.0);
 	if (nsm == NULL)
 		error("Creating smoothed near points failed");
 
@@ -210,16 +212,16 @@ main(int argc, char *argv[]) {
 
 	for (i = 0; i < nnsm; i++) {
 		add_vertex(wrl, nsm[i].sv);			/* Source gamut point */
-		add_vertex(wrl, nsm[i].sdv);		/* Smoother destination value */
+		add_vertex(wrl, nsm[i].dv);			/* Smoother destination value */
 
-//		add_vertex(wrl, nsm[i].dnv);		/* Near points */
 //		add_vertex(wrl, nsm[i].drv);		/* Radial points */
 	} 
 	make_lines(wrl, 2);
 	end_vrml(wrl);
 
 	/* Clean up */
-	free(nsm);
+	free_nearsmth(nsm, nnsm);
+
 	gout->del(gout);
 	gin->del(gin);
 

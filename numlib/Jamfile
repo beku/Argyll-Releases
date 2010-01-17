@@ -6,8 +6,8 @@
 PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
 #PREF_CCFLAGS	= $(CCDEBUGFLAG) ;		# Debugging flags
 PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
-#PREF_CCFLAGS 	= $(CCPROFFLAG) ;		# Profile flags
-#PREF_LINKFLAGS	= $(LINKPROFFLAG) ;    # Profile flags
+PREF_CCFLAGS 	= $(CCPROFFLAG) ;		# Profile flags
+PREF_LINKFLAGS	= $(LINKPROFFLAG) ;    # Profile flags
 
 # Products
 Libraries = libnum ;
@@ -18,7 +18,7 @@ Headers = numlib.h ;
 #InstallLib ../lib : $(Libraries) ;
 
 # Numeric library
-Library libnum.lib : numsup.c dnsq.c powell.c dhsx.c ludecomp.c svd.c zbrent.c rand.c sobol.c ;
+Library libnum.lib : numsup.c dnsq.c powell.c dhsx.c ludecomp.c svd.c zbrent.c rand.c sobol.c aatree.c ;
 
 # Link all utilities with libnum
 LINKLIBS = libnum ;

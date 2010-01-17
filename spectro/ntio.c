@@ -10,7 +10,7 @@
  * Copyright 1997 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -21,6 +21,7 @@
 #include <conio.h>
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -38,183 +39,22 @@
 # define DBGF(xx)
 #endif
 
-
-void error(char *fmt, ...), warning(char *fmt, ...), verbose(int level, char *fmt, ...);
-
-#ifdef __BORLANDC__
-#define _kbhit kbhit
-#endif
-
-/* wait for and then return the next character from the keyboard */
-int next_con_char(void) {
-	return _getch();
-}
-
-/* If here is one, return the next character from the keyboard, else return 0 */
-int poll_con_char(void) {
-	if (_kbhit() != 0) {
-		int c = _getch();
-		return c;
-	}
-	return 0; 
-}
-
-/* Suck all characters from the keyboard */
-void empty_con_chars(void) {
-	Sleep(50);					/* _kbhit seems to have a bug */
-	while (_kbhit()) {
-		if (_getch() == 0x3)	/* ^C Safety */
-			break;
-	}
-}
-
-/* Sleep for the given number of seconds */
-void sleep(unsigned int secs) {
-	Sleep(secs * 1000);
-}
-
-/* Sleep for the given number of msec */
-void msec_sleep(unsigned int msec) {
-	Sleep(msec);
-}
-
-/* Return the current time in msec since */
-/* the process started. */
-unsigned int msec_time() {
-	return GetTickCount();
-}
-
-static athread *beep_thread = NULL;
-static int beep_delay;
-static int beep_freq;
-static int beep_msec;
-
-/* Delayed beep handler */
-static int delayed_beep(void *pp) {
-	msec_sleep(beep_delay);
-	Beep(beep_freq, beep_msec);
-	return 0;
-}
-
-/* Activate the system beeper */
-void msec_beep(int delay, int freq, int msec) {
-	if (delay > 0) {
-		if (beep_thread != NULL)
-			beep_thread->del(beep_thread);
-		beep_delay = delay;
-		beep_freq = freq;
-		beep_msec = msec;
-		if ((beep_thread = new_athread(delayed_beep, NULL)) == NULL)
-			error("Delayed beep failed to create thread");
-	} else {
-		Beep(freq, msec);
-	}
-}
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
-
-#ifdef NEVER    /* Not currently needed, or effective */
-
-/* Set the current threads priority */
-int set_interactive_priority() {
-	if (SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST) == 0)
-		return 1;
-	return 0;
-}
-
-int set_normal_priority() {
-	if (SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_NORMAL) == 0)
-		return 1;
-	return 0;
-}
-
-#endif /* NEVER */
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
-
-/* Destroy the thread */
-static void athread_del(
-athread *p
+/* Return the port type */
+static icom_type icoms_port_type(
+icoms *p
 ) {
-	DBG("athread_del called\n");
-
-	if (p == NULL)
-		return;
-
-	if (p->th != NULL) {
-		CloseHandle(p->th);
-	}
-
-	free(p);
+	if (p->is_hid)
+		return icomt_hid;
+	if (p->is_usb)
+		return icomt_usb;
+	return icomt_serial;
 }
-
-/* _beginthread doesn't leak memory, but */
-/* needs to be linked to a different library */
-#ifdef NEVER
-/* Thread function */
-static void __cdecl threadproc(
-	void *lpParameter
-) {
-#else
-DWORD WINAPI threadproc(
-	LPVOID lpParameter
-) {
-#endif
-	athread *p = (athread *)lpParameter;
-
-	p->result = p->function(p->context);
-#ifdef NEVER
-#else
-	return 0;
-#endif
-}
- 
-
-athread *new_athread(
-	int (*function)(void *context),
-	void *context
-) {
-	athread *p = NULL;
-
-	DBG("new_athread called\n");
-	if ((p = (athread *)calloc(sizeof(athread), 1)) == NULL)
-		return NULL;
-
-	p->function = function;
-	p->context = context;
-	p->del = athread_del;
-
-	/* Create a thread */
-#ifdef NEVER
-	p->th = _beginthread(threadproc, 0, (void *)p);
-	if (p->th == -1) {
-#else
-	p->th = CreateThread(NULL, 0, threadproc, (void *)p, 0, NULL);
-	if (p->th == NULL) {
-#endif
-		DBG("Failed to create thread\n");
-		athread_del(p);
-		return NULL;
-	}
-
-	DBG("About to exit new_athread()\n");
-	return p;
-}
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
-
-/* Delete a file */
-void delete_file(char *fname) {
-	_unlink(fname);
-}
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Create and return a list of available serial ports or USB instruments for this system. */
 /* We look at the registry key "HKEY_LOCAL_MACHINE\HARDWARE\DEVICEMAP\SERIALCOMM" */
 /* to determine serial ports, and use libusb to discover USB instruments. */
 /* Return NULL if function fails */
-icompath **
+static icompath **
 icoms_get_paths(
 icoms *p 
 ) {
@@ -262,11 +102,11 @@ icoms *p
 	/* Look at all the values in this key */
 	DBG("icoms_get_paths: about to look through all the values in the SERIALCOMM key\n");
 	for (i = 0; ; i++) {
-		char valname[100];
-		DWORD vnsize = 100;
+		char valname[500];
+		DWORD vnsize = 500;
 		DWORD vtype;
-		char value[100];
-		DWORD vsize = 100;
+		char value[500];
+		DWORD vsize = 500;
 
 		stat = RegEnumValue(
 			sch,		/* handle to key to enumerate */
@@ -282,13 +122,14 @@ icoms *p
 			DBG("icoms_get_paths: got ERROR_NO_MORE_ITEMS\n");
 			break;
 		}
-		if (stat != ERROR_SUCCESS) {
+		if (stat == ERROR_MORE_DATA		/* Hmm. Should expand buffer size */
+		 || stat != ERROR_SUCCESS) {
 			DBG("icoms_get_paths: got !ERROR_SUCCESS\n");
 			warning("RegEnumValue failed with %d",stat);
 			break;
 		}
-		valname[100-1] = '\000';
-		value[100-1] = '\000';
+		valname[500-1] = '\000';
+		value[500-1] = '\000';
 
 		if (vtype != REG_SZ) {
 			DBG("icoms_get_paths: got !REG_SZ\n");
@@ -632,7 +473,7 @@ double tout)
 		error("SetCommTimouts failed");
 
 	/* Until data is all written, we time out, or the user aborts */
-	for(i = toc; i > 0 && len > 0;) {
+	for (i = toc; i > 0 && len > 0;) {
 		if (!WriteFile(p->phandle, wbuf, len, &wbytes, NULL)) {
 			DWORD errs;
 			if (!ClearCommError(p->phandle,&errs,NULL))
@@ -825,6 +666,7 @@ extern icoms *new_icoms()
 	p->tc = -1;
 	p->debug = 0;
 	
+	p->port_type = icoms_port_type;
 	p->get_paths = icoms_get_paths;
 	p->set_ser_port = icoms_set_ser_port;
 

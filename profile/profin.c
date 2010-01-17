@@ -9,7 +9,7 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -25,6 +25,8 @@
 /*
  * TTBD:
  *      Need to make this more of a library:
+ *  ** By default limit matrix primaries to have +ve XYZ
+ *     Add flag to override this.
  *  Fix error handling
  *  fix verbose output
  *  hand icc object back rather than writing file ?
@@ -35,16 +37,19 @@
 #define verbo stdout
 
 #include <stdio.h>
-#include "cgats.h"
-#include "icc.h"
-#include "xicc.h"
 #include "numlib.h"
+#include "icc.h"
+#include "cgats.h"
+#include "xicc.h"
 #include "rspl.h"
 #include "prof.h"
 
 #define DOB2A			/* Create B2A table as well (not implemented) */
 #define NO_B2A_PCS_CURVES       /* PCS curves seem to make B2A less accurate. Why ? */
 #define USE_CAM_CLIP_OPT        /* Clip out of gamut in CAM space rather than XYZ or L*a*b* */
+#undef USE_EXTRA_FITTING       /* Turn on data point error compensation */
+#define USE_2ASS_SMOOTHING      /* Turn on Gaussian smoothing */
+#undef WARN_CLUT_CLIPPING	/* Print warning if setting clut clips */
 
 /*
    Basic algorithm outline:
@@ -254,6 +259,7 @@ make_input_icc(
 	int nocied,				/* nz to supress inclusion of .ti3 data in profile */
 	int verify,
 	int nsabs,				/* nz for non-standard absolute output */
+	double wpscale,			/* >= 0.0 for media white point scale factor */
 	int dob2a,				/* nz to create a B2A table as well */
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
@@ -577,7 +583,7 @@ make_input_icc(
 		FILE *fp;
 
 		if ((wo = (icmText *)wr_icco->add_tag(
-		           wr_icco, icmMakeTag('D','e','v','D'), icSigTextType)) == NULL) 
+		           wr_icco, icmMakeTag('t','a','r','g'), icSigTextType)) == NULL) 
 			error("add_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
 
 #if defined(O_BINARY) || defined(_O_BINARY)
@@ -600,9 +606,12 @@ make_input_icc(
 		wo->data[wo->size-1] = '\000';
 		fclose(fp);
 
-		/* Duplicate as CIE data */
+		/* Duplicate for compatibility */
 		if (wr_icco->link_tag(
-		         wr_icco, icmMakeTag('C','I','E','D'), icmMakeTag('D','e','v','D')) == NULL) 
+		         wr_icco, icmMakeTag('D','e','v','D'), icmMakeTag('t','a','r','g')) == NULL) 
+			error("link_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
+		if (wr_icco->link_tag(
+		         wr_icco, icmMakeTag('C','I','E','D'), icmMakeTag('t','a','r','g')) == NULL) 
 			error("link_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
 	}
 
@@ -687,7 +696,7 @@ make_input_icc(
 				if (tpat[i].p[0] > 1.0
 				 || tpat[i].p[1] > 1.0
 				 || tpat[i].p[2] > 1.0) {
-					error("Device value field exceeds 100.0!");
+					error("At %d device values %f %f %f field exceeds 100.0!",i,100.0 * tpat[i].p[0],100.0 * tpat[i].p[1],100.0 * tpat[i].p[2]);
 				}
 				tpat[i].v[0] = *((double *)icg->t[0].fdata[i][Xi]);
 				tpat[i].v[1] = *((double *)icg->t[0].fdata[i][Yi]);
@@ -798,8 +807,15 @@ make_input_icc(
 		if ((AtoB = wr_xicc->set_luobj(
 		               wr_xicc, icmFwd, icmDefaultIntent,
 		               icmLuOrdNorm,
+#ifdef USE_EXTRA_FITTING
+			               ICX_EXTRA_FIT |
+#endif
+#ifdef USE_2PASSSMTH
+			               ICX_2PASSSMTH |
+#endif
 		               flags, 		/* Flags */
-		               npat, tpat, 0.0, smooth, avgdev, NULL, NULL, iquality)) == NULL)
+		               npat, tpat, 0.0, wpscale, smooth, avgdev,
+			           NULL, NULL, NULL, iquality)) == NULL)
 			error ("%d, %s",wr_xicc->errc, wr_xicc->err);
 
 		/* Free up xicc stuff */
@@ -829,7 +845,6 @@ make_input_icc(
 #else
 				warning("!!!! USE_CAM_CLIP_OPT in profout.c is off !!!!");
 #endif
-	
 				if ((AtoB = wr_xicc->get_luobj(wr_xicc, flags, icmFwd,
 				                  icmDefaultIntent,
 				                  wantLab ? icSigLabData : icSigXYZData,
@@ -887,6 +902,10 @@ make_input_icc(
 			if (cx.verb) {
 				printf("\n");
 			}
+#ifdef WARN_CLUT_CLIPPING
+			if (wr_icco->warnc)
+				warning("Values clipped in setting LUT");
+#endif /* WARN_CLUT_CLIPPING */
 
 			if (verb)
 				printf("Done B to A table\n");
@@ -914,7 +933,8 @@ make_input_icc(
 		               wr_xicc, icmFwd, icmDefaultIntent,
 		               icmLuOrdNorm,
 		               flags | ICX_SET_WHITE | ICX_SET_BLACK, 		/* Flags */
-		               npat, tpat, 0.0, smooth, avgdev, NULL, NULL, iquality)) == NULL)
+		               npat, tpat, 0.0, wpscale, smooth, avgdev,
+		               NULL, NULL, NULL, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
 		/* Free up xicc stuff */

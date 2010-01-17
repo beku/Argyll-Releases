@@ -7,4 +7,8 @@ if [ X$OS != "XWindows_NT" ] ; then
 	chmod +x tiff/configure
 	chmod +x libusb/configure
 fi
+
+# Make sure that some environment variable are visible to Jam:
+export OSTYPE MACHTYPE HOSTTYPE
+
 jam -q -fJambase -j${NUMBER_OF_PROCESSORS:-2}

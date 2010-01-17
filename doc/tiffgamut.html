@@ -144,9 +144,10 @@ light % of image luminance (default 1)</span><br
 f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as
 XYZ (default media white)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as x, y</span><br
- style="font-family: monospace;">
-</small><br>
+f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as x, y<br>
+&nbsp;-O outputfile Override the default output filename &amp;
+extension.<br style="font-family: monospace;">
+</span></small><br>
 <h3>Usage Details and Discussion<br>
 </h3>
 The<b> -v</b> flag dumps out the ICC profile header information.<br>
@@ -234,6 +235,12 @@ environment, or controlling
 particular viewing condition parameters. This is only functional if an
 ICC profile is provided.<br>
 <br>
+The <span style="font-weight: bold;">-O</span> parameter allows the
+output file name &amp; extension to be specified independently of the
+last tiff
+filename. Note that the full filename must be specified, including the
+extension.<br>
+<br>
 If the TIFF files are in a device space (ie. RGB, CMYK etc.), then it
 is
 necessary to supply an ICC profile to translate the device space values
@@ -249,14 +256,28 @@ something like:<br>
 If a TIFF file is
 already in a CIE space such as CIELab or ICCLab, then it is not
 necessary to select an ICC profile,&nbsp; although a PCS to PCS
-colorspace profile may be chosen.<br>
+colorspace profile may be chosen. All the TIFF files
+must be in the same colorspace.<br>
 <br>
 One or more TIFF files may be specified, and the gamut is the union of
 the gamuts of each file. This is useful for creating an image specific
 gamut mapping that can be applied to a set of images with consistent
 results between the images. Note that the output gamut file name will
-be taken from the last TIFF file specified, and that all the TIFF files
-must be in the same colorspace.<br>
+by default be taken from the last TIFF file specified, with the .gam
+extension added automatically. The <span style="font-weight: bold;">-O</span>
+parameter will override this default.<br>
+<br>
+<span style="font-weight: bold;">NOTES</span><br>
+<br>
+The white and black points put in the gamut are the colorspace white
+and black points. For the purposes of latter gamut mapping, it is
+assumed that the image should retain it's position within the
+colorspace dynamic range. For an L*a*b* image, the values value 100,0,0
+and 0,0,0 for white and black are assumed. An image in L*a*b* should be
+adjusted be neutral to, and sit within the dynamic range of those white
+and black points.<br>
+<br>
+<br>
 <span style="font-weight: bold;"></span><br>
 <br>
 <br>

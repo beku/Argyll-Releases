@@ -1,5 +1,5 @@
 /*
- * Copyright 2007, Lloyd Hilaiel.
+ * Copyright 2007-2009, Lloyd Hilaiel.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -74,17 +74,35 @@ extern "C" {
      *  All callbacks return an integer.  If non-zero, the parse will
      *  continue.  If zero, the parse will be canceled and
      *  yajl_status_client_canceled will be returned from the parse.
+     *
+     *  Note about handling of numbers:
+     *    yajl will only convert numbers that can be represented in a double
+     *    or a long int.  All other numbers will be passed to the client
+     *    in string form using the yajl_number callback.  Furthermore, if
+     *    yajl_number is not NULL, it will always be used to return numbers,
+     *    that is yajl_integer and yajl_double will be ignored.  If
+     *    yajl_number is NULL but one of yajl_integer or yajl_double are
+     *    defined, parsing of a number larger than is representable
+     *    in a double or long int will result in a parse error.
      */
     typedef struct {
         int (* yajl_null)(void * ctx);
         int (* yajl_boolean)(void * ctx, int boolVal);
-        int (* yajl_integer)(void * ctx, longlong integerVal);
+        int (* yajl_integer)(void * ctx, long integerVal);
         int (* yajl_double)(void * ctx, double doubleVal);
+        /** A callback which passes the string representation of the number
+         *  back to the client.  Will be used for all numbers when present */
+        int (* yajl_number)(void * ctx, const char * numberVal,
+                            unsigned int numberLen);
+
         /** strings are returned as pointers into the JSON text when,
          * possible, as a result, they are _not_ null padded */
         int (* yajl_string)(void * ctx, const unsigned char * stringVal,
                             unsigned int stringLen);
-        int (* yajl_comment)(void * ctx, const unsigned char * stringVal,
+        int (* yajl_c_comment)(void * ctx, const unsigned char * stringVal,
+                            unsigned int stringLen);
+
+        int (* yajl_cpp_comment)(void * ctx, const unsigned char * stringVal,
                             unsigned int stringLen);
 
         int (* yajl_start_map)(void * ctx);
@@ -116,6 +134,7 @@ extern "C" {
      */
     yajl_handle YAJL_API yajl_alloc(const yajl_callbacks * callbacks,
                                     const yajl_parser_config * config,
+                                    const yajl_alloc_funcs * allocFuncs,
                                     void * ctx);
 
     /** free a parser handle */    
@@ -130,6 +149,17 @@ extern "C" {
                                     const unsigned char * jsonText,
                                     unsigned int jsonTextLength);
 
+    /** Parse any remaining buffered json.
+     *  Since yajl is a stream-based parser, without an explicit end of
+     *  input, yajl sometimes can't decide if content at the end of the
+     *  stream is valid or not.  For example, if "1" has been fed in,
+     *  yajl can't know whether another digit is next or some character
+     *  that would terminate the integer token.
+     *
+     *  \param hand - a handle to the json parser allocated with yajl_alloc
+     */
+    yajl_status yajl_parse_complete(yajl_handle hand);
+    
     /** get an error string describing the state of the
      *  parse.
      *
@@ -145,10 +175,10 @@ extern "C" {
                                             unsigned int jsonTextLength);
 
     /** free an error returned from yajl_get_error */
-    void YAJL_API yajl_free_error(unsigned char * str);
+    void YAJL_API yajl_free_error(yajl_handle hand, unsigned char * str);
 
 #ifdef __cplusplus
-};
+}
 #endif    
 
 #endif

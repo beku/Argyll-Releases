@@ -10,7 +10,7 @@
  *
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -65,7 +65,7 @@ struct _mpp {
 	               int quality,				/* Profile quality, 0..3 */
 	               int display,				/* non-zero if display device */
 	               double limit,			/* Total ink limit (not %) (if not display) */
-	               int    imask,			/* Inkmask describing device colorspace */
+	               inkmask imask,			/* Inkmask describing device colorspace */
 	               int    spec_n,			/* Number of spectral bands, 0 if not valid */
 	               double spec_wl_short,	/* First reading wavelength in nm (shortest) */
 	               double spec_wl_long,		/* Last reading wavelength in nm (longest) */
@@ -74,12 +74,12 @@ struct _mpp {
 	               int no,					/* Number of points */
 	               mppcol *points);			/* Array of input points */
 
-	int (*write_mpp)(struct _mpp *p, char *filename);	/* write to a CGATS .mpp file */
+	int (*write_mpp)(struct _mpp *p, char *filename, int lab);	/* write to a CGATS .mpp file */
 	int (*read_mpp)(struct _mpp *p, char *filename);	/* read from a CGATS .mpp file */
 
 	/* Get various types of information about the mpp */
 	void (*get_info) (struct _mpp *p,
-	                  int *imask,			/* Inkmask, describing device colorspace */
+	                  inkmask *imask,		/* Inkmask, describing device colorspace */
 	                  int *nodchan,			/* Number of device channels */
 	                  double *limit,		/* Total ink limit (0.0 .. devchan) */
 	                  int *spec_n,			/* Number of spectral bands, 0 if none */
@@ -102,7 +102,8 @@ struct _mpp {
 	/* Get the white and black points for this profile (default XYZ) */
 	void (*get_wb) (struct _mpp *p,
 	                  double *white,
-	                  double *black);
+	                  double *black,
+	                  double *kblack);
 
 
 	/* Lookup an XYZ or Lab color (default XYZ) */
@@ -131,7 +132,7 @@ struct _mpp {
 
 	/* General model information */
 	int    display;			/* Non-zero if display profile rather than output */
-	int    imask;			/* Inkmask describing device space */
+	inkmask imask;			/* Inkmask describing device space */
 	double limit;			/* Total ink limit (If output device) */
 	int    spec_n;			/* Number of spectral bands, 0 if not valid */
 	double spec_wl_short;	/* First reading wavelength in nm (shortest) */
@@ -139,6 +140,7 @@ struct _mpp {
 	double norm;			/* Normalising scale value (will be 1.0) */
 	instType itype;			/* Spectral instrument type (If output device) */
 	mppcol white, black;	/* White and black points */
+	mppcol kblack;			/* K only black point */
 
 	/* Foward model parameters */
 	int n;					/* Number of chanels */

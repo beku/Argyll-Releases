@@ -12,14 +12,14 @@
  *
  * Copyright 1995, 1996 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
 #undef DIAG
 #undef DIAG2
 #undef GLOB_CHECK
-#define RES2			/* Do multiple test at various resolutions */
+#undef RES2			/* Do multiple test at various resolutions */
 #define AVGDEV 0.0		/* Average deviation of function data */
 
 #include <stdio.h>
@@ -49,11 +49,35 @@ double ya[MAX_PNTS];
 
 #define XRES 100
 
-#define PNTS 10
-#define GRES 400
+#define PNTS1 10
+#define GRES1 400
 //#define GRES 800
-double t1xa[PNTS] = { 0.2, 0.25, 0.30, 0.35,  0.40,  0.44, 0.48, 0.51,  0.64,  0.75  };
-double t1ya[PNTS] = { 0.3, 0.35, 0.4,  0.41,  0.42,  0.46, 0.5,  0.575, 0.48,  0.75  };
+double t1xa[PNTS1] = { 0.2, 0.25, 0.30, 0.35,  0.40,  0.44, 0.48, 0.51,  0.64,  0.75  };
+double t1ya[PNTS1] = { 0.3, 0.35, 0.4,  0.41,  0.42,  0.46, 0.5,  0.575, 0.48,  0.75  };
+
+#ifndef NEVER
+
+// Reverse in x */
+#define PNTS2 10
+#define GRES2 400
+double t2xa[PNTS2] = { 0.25, 0.36, 0.49, 0.52, 0.56, 0.60, 0.65, 0.70, 0.75, 0.8 };
+double t2ya[PNTS2] = { 0.75, 0.48, 0.575, 0.5, 0.46, 0.42, 0.41, 0.4, 0.35, 0.3 };
+
+#else
+
+#define PNTS2 10
+#define GRES2 400
+// reverse in y
+double t2xa[PNTS2] = { 0.2, 0.25, 0.30, 0.35,  0.40,  0.44, 0.48, 0.51,  0.64,  0.75  };
+double t2ya[PNTS2] = { 0.7, 0.65, 0.6,  0.59,  0.58,  0.54, 0.5,  0.425, 0.52,  0.25  };
+
+#endif /* NEVER */
+
+//#define PNTS2 2
+//#define GRES2 5
+//double t2xa[PNTS2] = { 0.0, 1.0  };
+//double t2ya[PNTS2] = { 0.33, 0.66  };
+
 co test_points[MAX_PNTS];
 
 double lin(double x, double xa[], double ya[], int n);
@@ -63,6 +87,7 @@ void usage(void) {
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: c1 [options]\n");
 	fprintf(stderr," -s smooth     Use given smoothness (default 1.0)\n");
+	fprintf(stderr," -2            Use two pass smoothing\n");
 	fprintf(stderr," -x            Use extra fitting\n");
 	exit(1);
 }
@@ -77,6 +102,7 @@ int main(int argc, char *argv[]) {
 	datai low,high;
 	int gres[MXDI];
 	double smooth = 1.0;
+	int twopass = 0;
 	int extra = 0;
 	double avgdev[MXDO];
 
@@ -113,10 +139,13 @@ int main(int argc, char *argv[]) {
 				smooth = atof(na);
 			}
 
+			else if (argv[fa][1] == '2') {
+				twopass = 1;
+			}
 			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
 				extra = 1;
-
-			} else 
+			}
+			else 
 				usage();
 		} else
 			break;
@@ -138,13 +167,21 @@ int main(int argc, char *argv[]) {
 				ya[i * 2 + 1] = t1ya[i];
 			}
 #else
-			pnts = PNTS;
-			fres = GRES; 
+			pnts = PNTS1;
+			fres = GRES1; 
 			for (i = 0; i < pnts; i++) {
 				xa[i] = t1xa[i];
 				ya[i] = t1ya[i];
 			}
 #endif
+			printf("Trial %d, points = %d, res = %d, level randomness = %f\n",n,pnts,fres,lrand);
+		} else if (n == 1) {	/* Second test versions */
+			pnts = PNTS2;
+			fres = GRES2; 
+			for (i = 0; i < pnts; i++) {
+				xa[i] = t2xa[i];
+				ya[i] = t2ya[i];
+			}
 			printf("Trial %d, points = %d, res = %d, level randomness = %f\n",n,pnts,fres,lrand);
 		} else {	/* Random versions */
 			lrand = d_rand(0.0,0.1);		/* Amount of level randomness */
@@ -187,7 +224,8 @@ int main(int argc, char *argv[]) {
 #endif
 		/* Fit to scattered data */
 		rss->fit_rspl(rss,
-		           0 | extra ? RSPL_EXTRAFIT : 0 ,
+		           0 | (twopass ? RSPL_2PASSSMTH : 0)
+		             | (extra   ? RSPL_EXTRAFIT2 : 0) ,
 		           test_points,			/* Test points */
 		           pnts,	/* Number of test points */
 		           low, high, gres,		/* Low, high, resolution of grid */
@@ -244,9 +282,8 @@ int main(int argc, char *argv[]) {
 				gresses[j] = gres[0];
 	
 				rss->fit_rspl(rss,
-#ifdef EXTRAFIT
-		           RSPL_EXTRAFIT |		/* Extra fit flag */
-#endif
+			           0 | (twopass ? RSPL_2PASSSMTH : 0)
+			             | (extra   ? RSPL_EXTRAFIT2 : 0) ,
 			           0,
 			           test_points,			/* Test points */
 			           pnts,	/* Number of test points */
@@ -282,6 +319,7 @@ int main(int argc, char *argv[]) {
 }
 
 
+/* Simple linear interpolation */
 double
 lin(
 double x,
@@ -352,6 +390,6 @@ rspl *rss;
 		cp[j] = rss->u[j].v;
 		s[j] = 0.1;
 		}
-	powell(rss->nig,cp,s,0.0000001,1000,efunc2,(void *)rss);
+	powell(rss->nig,cp,s,1e-7,1000,efunc2,(void *)rss);
 	}
 #endif /* GLOB_CHECK */

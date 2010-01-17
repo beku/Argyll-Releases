@@ -4,7 +4,7 @@
  *
  * Author:  Graeme W. Gill
  * Date:    2002/10/24
- * Version: 2.05
+ * Version: 2.12
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
@@ -40,6 +40,14 @@
 
 #if defined(SEPARATE_STD) || defined(COMBINED_STD)
 
+#ifdef _MSC_VER
+#define fileno _fileno
+#endif
+
+#ifndef SIZE_MAX
+# define SIZE_MAX ((size_t)(-1))
+#endif
+
 /* ------------------------------------------------- */
 /* Standard Heap allocator icmAlloc compatible class */
 /* Just call the standard system function */
@@ -72,8 +80,7 @@ size_t size,
 char *name,
 int line
 ) {
-	size_t tot = num * size;
-	if (tot < num || tot < size)
+	if (size != 0 && num > (SIZE_MAX/size))
 		return NULL;
 	calloc(num, size);
 }
@@ -143,9 +150,8 @@ struct _icmAlloc *pp,
 size_t num,
 size_t size
 ) {
-	size_t tot = num * size;
-	if (tot < num || tot < size)
-		return NULL;		/* Overflow */
+	if (size != 0 && num > (SIZE_MAX/size))
+		return NULL;
 	return calloc(num, size);
 }
 
@@ -201,7 +207,7 @@ static size_t icmFileStd_get_size(icmFile *pp) {
 /* Set current position to offset. Return 0 on success, nz on failure. */
 static int icmFileStd_seek(
 icmFile *pp,
-long int offset
+unsigned int offset
 ) {
 	icmFileStd *p = (icmFileStd *)pp;
 

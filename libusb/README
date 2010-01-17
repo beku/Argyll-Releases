@@ -17,7 +17,8 @@ NOTICE
 ======
 
 This library has been modified to fix certain concurreny
-issues in darwin.c and linux.c, and a flag has been added
+issues in darwin.c and linux.c, and some performance
+issues in linux.c, and a flag has been added
 to indicate that these fixes are present.
 Extra debug output has been added to darwin.c in the bus
 itteration routine.

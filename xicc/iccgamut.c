@@ -10,7 +10,7 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -23,7 +23,7 @@
 #define SURFACE_ONLY
 #define GAMRES 10.0		/* Default surface resolution */
 
-#define USE_CAM_CLIP_OPT
+#define USE_CAM_CLIP_OPT		/* Use CAM space to clip in */
 
 #define RGBRES 33	/* 33 */
 #define CMYKRES 17	/* 17 */
@@ -56,7 +56,7 @@ void usage(char *diag) {
 	fprintf(stderr," -d sres       Surface resolution details 1.0 - 50.0\n");
 	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .gam file\n");
 	fprintf(stderr," -n            Don't add VRML axes or white/black point\n");
-	fprintf(stderr," -k            Add markers for prim. & sec. \"cusp\" points\n");
+	fprintf(stderr," -k            Add VRML markers for prim. & sec. \"cusp\" points\n");
 	fprintf(stderr," -f function   f = forward*, b = backwards\n");
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"               s = saturation, a = absolute (default), d = profile default\n");
@@ -70,7 +70,7 @@ void usage(char *diag) {
 	fprintf(stderr,"               either an enumerated choice, or a series of parameter:value changes\n");
 	for (i = 0; ; i++) {
 		icxViewCond vc;
-		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1) == -999)
+		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1, NULL) == -999)
 			break;
 
 		fprintf(stderr,"           %s\n",vc.desc);
@@ -246,11 +246,11 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
 				vrml = 1;
 			}
-			/* No axis output */
+			/* No axis output in vrml */
 			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
 				doaxes = 0;
 			}
-			/* Do cusp markers */
+			/* Do cusp markers in vrml */
 			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
 				docusps = 1;
 			}
@@ -289,7 +289,7 @@ main(int argc, char *argv[]) {
 				} else
 #endif
 				if (na[1] != ':') {
-					if ((vc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
+					if ((vc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1, NULL)) == -999)
 						usage("Urecognised Enumerated Viewing conditions");
 				} else if (na[0] == 's' || na[0] == 'S') {
 					if (na[1] != ':')
@@ -372,7 +372,7 @@ main(int argc, char *argv[]) {
 		error ("Creation of xicc failed");
 
 	/* Set the ink limits */
-	icxDefaultLimits(icco, &ink.tlimit, tlimit/100.0, &ink.klimit, klimit/100.0);
+	icxDefaultLimits(xicco, &ink.tlimit, tlimit/100.0, &ink.klimit, klimit/100.0);
 
 	if (verb) {
 		if (ink.tlimit >= 0.0)
@@ -382,8 +382,10 @@ main(int argc, char *argv[]) {
 	}
 
 	/* Setup a safe ink generation (not used) */
+	ink.KonlyLmin = 0;		/* Use normal black Lmin for locus */
 	ink.k_rule = icxKluma5k;
 	ink.c.Ksmth = ICXINKDEFSMTH;	/* Default smoothing */
+	ink.c.Kskew = ICXINKDEFSKEW;	/* default curve skew */
 	ink.c.Kstle = 0.0;		/* Min K at white end */
 	ink.c.Kstpo = 0.0;		/* Start of transition is at white */
 	ink.c.Kenle = 1.0;		/* Max K at black end */
@@ -391,11 +393,11 @@ main(int argc, char *argv[]) {
 	ink.c.Kshap = 1.0;		/* Linear transition */
 
 	/* Setup the default viewing conditions */
-	if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0) == -2)
+	if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0, NULL) == -2)
 		error ("%d, %s",xicco->errc, xicco->err);
 
 	if (vc_e != -1)
-		if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0) == -2)
+		if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0, NULL) == -2)
 			error ("%d, %s",xicco->errc, xicco->err);
 	if (vc_s >= 0)
 		vc.Ev = vc_s;

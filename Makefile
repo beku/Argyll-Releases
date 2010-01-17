@@ -1,4 +1,4 @@
-# default Makefile to involke Jam
+# default Makefile to invoke Jam
 
 all::
 	jam -q -fJambase -j 3
@@ -6,5 +6,5 @@ all::
 clean::
 	jam clean
 
-install:;
+install::
 	jam -q -fJambase -j 3 install

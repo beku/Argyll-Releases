@@ -8,6 +8,8 @@ xmono.c
 xmatrix.c
 xlut.c
 xlutfix.c
+xcal.h
+xcal.c
 mpp.h
 mpp.c
 mpplu.c
@@ -20,9 +22,11 @@ xutils.h
 xutils.c
 xfit.h
 xfit.c
+xdgb.h
+xdgb.c
 xspect.h
 xspect.c
-ccttest.c
+specplot.c
 specsubsamp.c
 xdevlin.h
 xdevlin.c
@@ -30,6 +34,7 @@ example.sp
 xicclu.c
 iccgamut.c
 tiffgamut.c
+tiffgmts.c
 revfix.c
 fakeCMY.c
 xcam.h
@@ -52,6 +57,8 @@ transplot.c
 cgatsplot.c
 spectest.c
 spectest2.c
+ccttest.c
 cv.c
 cvtest.c
 extracticc.c
+extractttag.c

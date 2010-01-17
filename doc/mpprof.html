@@ -27,8 +27,10 @@ Generate spectral model too</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-m&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Generate ink mixing model</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Verify profile</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><i
+Verify profile<br>
+&nbsp;-L&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Output
+Lab values<br style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;</span><i
  style="font-family: monospace;">inoutfile</i><span
  style="font-family: monospace;">&nbsp;&nbsp; Base name for input</span><a
  style="font-family: monospace;" href="File_Formats.html#.ti3">.ti3</a><span
@@ -80,6 +82,9 @@ well as the tri-stimulus model.<br>
 The <b>-m</b> flag is currently not implemented.<br>
 <br>
 The <b>-y</b> flag causes each test value and its error to be printed.<br>
+<br>
+The <b>-L</b> flag causes the CGATS output file to contain D50 L*a*b*
+parameters rather than XYZ.<br>
 <br>
 The <i>inoutfile</i> parameters should be the base name of the .ti3
 file, and mpprof will output an mpp that has the same basename and the

@@ -1,5 +1,4 @@
 afiles
-CHANGES
 COPYING
 ChangeLog
 Jamfile
@@ -13,8 +12,11 @@ json_verify.c
 rfc4627.txt
 run_tests.sh
 yajl.c
+yajl_alloc.c
+yajl_alloc.h
 yajl_buf.c
 yajl_buf.h
+yajl_bytestack.h
 yajl_common.h
 yajl_encode.c
 yajl_encode.h

@@ -23,10 +23,13 @@ card LUTs. Generally the former are more powerful and have less side
 effects. There can be exceptions though, for instance LCD's have no
 native contrast control capability, only brightness, so contrast is
 usually faked by manipulating the lookup curves, which can introduce
-side effects. Same with white point control on an LCD (unless it has
+side effects. The same applies to white point control on an LCD (unless
+it has
 R/G/B LED back lighting). So generally LCD displays are much less
 flexible than CRT displays in targeting some non-native colorspace
-without introducing side effects.<br>
+without introducing side effects, so it is generally best to set all
+the LCD controls except back lighting brightness to their default
+settings.<br>
 <br>
 Brightness depends on what you are trying to do. If you are trying to
 do soft proofing for instance, you will have some brightness level in
@@ -48,7 +51,8 @@ characteristic and neutral axis, and leave the white point native.<br>
 For typical MSWindows/Linux this would probably be the typical CRT
 transfer
 ("gamma") curve, or a gamma of about 2.4. For OS X it would probably <br>
-be a gamma of 1.8 (the defaults).<br>
+be a gamma of 1.8 for versions 10.5 or earlier, or 2.4 for 10.6 or
+latter ("Snow Leopard").<br>
 <br>
 The nominal white point of a display is D65 (set by Television
 standards), and an LCD's native white point is somewhere near there,

@@ -15,11 +15,11 @@ Link two ICC device profiles to create an ICC device link profile.<br>
 either in a simple fashion using the standard ICC forward and reverse
 tables of the specified intent, or using color appearance space and
 true gamut mapping, together with possibly inverting the forward
-profile,&nbsp; to allow black ink regeneration or to retain the input
-black characteristic from the input profile.<br>
+profile,&nbsp; to allow black ink regeneration or to retain the source
+black characteristic from the source profile.<br>
 <h3>Usage Summary</h3>
-<small><span style="font-family: monospace;">collink [-options]
-<span style="font-style: italic;">inprofile outprofile linkedprofile</span></span><br
+<small><span style="font-family: monospace;">collink [-options] <span
+ style="font-style: italic;">srcprofile dstprofile linkedprofile</span></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#v">-v</a><span
@@ -72,11 +72,16 @@ Don't preserve device curves in result</span><br
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Special
 :- Force neutral colors to be K only output.<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="collink.html#fk">-fk</a><span
+ style="font-family: monospace;" href="#fk">-fk</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; Special
-:- Force K only neutral colors to be K only output</span></small><br
+:- Force K only neutral colors to be K only output<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#fcmy">-fcmy</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; Special :- Force 100% C,M or Y only to stay pure</span></small><br
  style="font-family: monospace;">
 <small><span style="font-family: monospace;"></span><span
  style="font-family: monospace;">&nbsp;</span><a
@@ -168,7 +173,7 @@ whitepoint hack [optional color to map the white to]</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#c">-c <i>viewcond</i></a><span
- style="font-family: monospace;">&nbsp; &nbsp; set input
+ style="font-family: monospace;">&nbsp; &nbsp; set source
 viewing conditions for CIECAM02,</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -176,7 +181,7 @@ viewing conditions for CIECAM02,</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#d">-d <i>viewcond</i></a><span
- style="font-family: monospace;">&nbsp; &nbsp; set output
+ style="font-family: monospace;">&nbsp; &nbsp; set destination
 viewing conditions for CIECAM02,</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -251,15 +256,14 @@ as XYZ (default media white)</span><br style="font-family: monospace;">
 f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as x,
 y</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="collink.html#t">-t <i>tlimit</i></a><span
+ style="font-family: monospace;" href="#t">-t <i>tlimit</i></a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-set input total ink limit, 0 - 400% (estimate by default)</span><br
+set source total ink limit, 0 - 400% (estimate by default)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="collink.html#T">-T <i>klimit</i></a><span
+ style="font-family: monospace;" href="#T">-T <i>klimit</i></a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-set
-input total ink limit, 0 - 100% (estimate by default)</span><br
+set source total ink limit, 0 - 100% (estimate by default)</span><br
  style="font-family: monospace;">
 <br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp; &nbsp; &nbsp;&nbsp; </span><u
@@ -272,8 +276,8 @@ CMYK
 Black
 generation</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; t = transfer K from input to output, e = retain K of
-output B2A table</span><br style="font-family: monospace;">
+&nbsp;&nbsp; t = transfer K from source to destination, e = retain K of
+destination B2A table</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp; z = zero K, h = 0.5 K, x = maximum
 K, r = ramp K (default)</span><br style="font-family: monospace;">
@@ -288,10 +292,10 @@ shape</a><br style="font-family: monospace;">
 enle0 shape0 stle2 stpo2
 enpo2 enle2 shape2</a><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; q = transfer input K to dual curve limits</span><br
+&nbsp;&nbsp; q = transfer source K to dual curve limits</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="xicclu.html#K">-K parameters</a><span
+ style="font-family: monospace;" href="#K">-K parameters</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Same as
 -k, but
 target is K locus rather than K value itself</span><br
@@ -299,28 +303,29 @@ target is K locus rather than K value itself</span><br
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#l">-l <i>tlimit</i></a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-set
-output total ink limit, 0 - 400% (estimate by default)</span><br
+set destination total ink limit, 0 - 400% (estimate by default)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#L">-L <i>klimit</i></a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-set
-output total ink limit, 0 - 100% (estimate by default)<br>
+set destination total ink limit, 0 - 100% (estimate by default)<br>
 </span></small>&nbsp;&nbsp;<small><span style="font-family: monospace;"><a
- href="colprof.html#P">-P</a>
+ href="#P">-P</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Create gamut gammap_p.wrl and gammap_s.wrl diagostics</span></small><small><br>
 <br>
 <span style="font-family: monospace;"></span></small><span
- style="font-family: monospace;">&nbsp;</span><a href="#p1"><i
- style="font-family: monospace;">inprofile</i></a><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ style="font-family: monospace;">&nbsp;<span
+ style="text-decoration: underline;"><span style="font-style: italic;"></span></span></span><a
+ href="#p1"><i style="font-family: monospace;">srcprofile</i></a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 source ICC profile. A </span><small><span
  style="font-family: monospace;">TIFF file with embedded profile may be
 used here.</span></small><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;<a href="#p2">o</a></span><a
- href="#p2"><i style="font-family: monospace;">utprofile</i></a><span
+&nbsp;
+<span style="font-family: monospace;"><span
+ style="text-decoration: underline;"><span style="font-style: italic;"></span></span></span><a
+ href="#p2"><i style="font-family: monospace;">dstprofile</i></a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 destination ICC profile. </span><span style="font-family: monospace;">A
 </span><small><span style="font-family: monospace;">TIFF file with
@@ -404,29 +409,92 @@ been evaluated. <span style="font-weight: bold;">-qu</span> should
 almost never be used, except to prove that it should almost never be
 used.<br>
 <br>
-Normally the per channel device curves in the input and output profiles
+<a name="n"></a>Normally the per channel device curves in the source
+and destination
+profiles
 are preserved in the resulting device link profile, but the <b>-n</b>
 option disables this. This can be useful if the device linearisation
 curves
 are inappropriate in nature.<br>
 <br>
-<a name="f"></a><a name="F"></a><a name="fk"></a> The <b>-f</b> option
+<a name="f"></a> The <b>-f</b> option
 is a special
 purpose flag useful
-only for 3 or 4 component (RGB, CMY or CMYK) input to CMYK output
+only for 3 or 4 component (RGB, CMY or CMYK) source to CMYK destination
 linking, that
-causes the output to be
-K only for neutral axis input. Neutral axis input is assumed for R=G=B
+causes the destination to be
+<span style="font-weight: bold;">K only</span> for neutral axis input.
+Neutral axis input is assumed for R=G=B
 or
-C=M=Y input values. If the <span style="font-weight: bold;">-fk</span>
-option is used, then C=M=Y=0 are regarded as neutral colors, so that K
-only input will be mapped to K only output. If the <b>-F</b> flag is
-used,
-then all colors will
-be converted to K only output.<br>
+C=M=Y input values. So as to get a smooth mapping from the source to
+the K only destination, by default the gamut mapping will be adjusted
+to target
+the destination K only black, and Perceptual gamut mapping
+will be selected along with maximum K inking. If other options are
+selected that conflict with achieving a smooth mapping, warnings
+messages will
+be emitted.<br>
+<br>
+<a name="F"></a> The <b>-F</b> option
+is a special
+purpose flag useful
+only mapping to a CMYK destination, that
+causes the destination to be
+converted to K only monochrome. So as to get a smooth mapping from the
+source to
+the K only destination, by default the gamut mapping will be adjusted
+to target
+the destination K only black, and Perceptual gamut mapping
+will be selected along with maximum K inking. If other options are
+selected that conflict with achieving a smooth mapping, warnings
+messages will
+be emitted.<br>
+<br>
+<a name="fk"></a>&nbsp;The <b>-fk</b> option
+is a special
+purpose flag useful
+only for CMYK source to CMYK destination
+linking, that
+causes K only source values to map to K only destination values. This
+is often useful in re-targeting CMYK material while preserving K only
+text and graphics. So as to get a smooth mapping from the source to
+the K only destination, by default the gamut mapping will be adjusted
+to assume K only black source to destination K only black for K only
+values, and Perceptual gamut mapping
+will be selected along with a black generation rule (<span
+ style="font-weight: bold;">-kt</span>) that preserves the black level
+from source to destination. If other options are
+selected that conflict with achieving a smooth mapping, warnings
+messages will
+be emitted.<br>
+<br>
+<a name="fcmy"></a>&nbsp;The <b>-fcmy</b> options
+are special
+purpose flags useful
+only for CMY or CMYK source to CMY or CMYK destination
+linking. The <span style="font-weight: bold;">cmy</span> flags may be
+used independently or in combination (ie. <span
+ style="font-weight: bold;">-fc, -fm, -fy, -fcm, -fcy, -fmy, -fcmy</span>)
+or combined with the <span style="font-weight: bold;">-fk</span>
+option.&nbsp; These flags ensure that the pure 100% primary colorant
+source values map to 100% pure colorant destination values, and may be
+useful in some situations where CMYK material is being re-targeted. <span
+ style="font-weight: bold;">Note</span> that forcing the 100% colorant
+values to map this way largely works against the aims of color
+management in preserving colors appearance.&nbsp; So as to get a smooth
+mapping from the source to&nbsp; destination, by default the gamut
+mapping will a Saturation intent with 100 percept alignment of the
+selected C, M and/or Y cusp values. A Saturation intent is often what
+is desired in such CMYK to CMYK re-renderings, as it makes best use of
+the (usually quite similar sized) destination gamut. If other options
+are
+selected that conflict with achieving a smooth mapping, warnings
+messages will
+be emitted.<br>
 <br>
 <a name="p"></a> The <b>-p</b> option alows specifying an abstract
-profile be applied between the input and output profiles. An abstract
+profile be applied between the source and destination profiles. An
+abstract
 profile is a way of specifying a color adjustment in a device
 independent way. The abstract profile might have been created using one
 of the <span style="font-weight: bold;">tweak</span> tools, such as <a
@@ -439,13 +507,15 @@ or <b>-G</b> flags. The three behaviors are:<br>
 mapping is performed, the selected intent AtoB and BtoA tables are
 simply concatenated to create the output link, with the gamut mapping
 behavior being determined solely by the BtoA table. The -i and -o
-options allow selection of the input and output ICC intents. This is
+options allow selection of the source and destination ICC intents. This
+is
 typically how other CMS do ICC linking. <a href="#ss">Details</a>.<br>
 <br>
 <a name="g"></a> &nbsp;<b>-g</b>&nbsp;&nbsp; Gamut mapping mode. In
 this mode, the absolute colorimetric AtoB and BtoA tables are used to
 perform the link, and the intermediate linking color space is
-(generally) the CIECAM02 Jab appearance space. The input and output
+(generally) the CIECAM02 Jab appearance space. The source and
+destination
 viewing conditions can be selected using the <b>-c</b> and <b>-d</b>
 options. A gamut mapping is performed between the two spaces,
 using&nbsp; the intent selected by the <b>-i</b> option. There is an
@@ -477,8 +547,9 @@ same colorspace that <span style="font-weight: bold;">collink</span>
 is using internally to connect the two profiles. For all intents except
 the last one (no. <span style="font-weight: bold;">7</span>),
 the space should be Jab appearance space, with the viewing
-conditions generally being those of the input profile viewing
-conditions. The input profile will normally be the one used to create a
+conditions generally being those of the source profile viewing
+conditions. The source profile will normally be the one used to create
+a
 source image gamut using <span style="font-weight: bold;">tiffgamut</span>.<br>
 &nbsp;<br>
 <u><a name="ss"></a> Simple mode gamut mapping options:</u><br>
@@ -509,8 +580,8 @@ only a single overall intent. The intent is selected using the 1 two
 letter option parameter, the standard ICC profile being a subset of the
 available selections.<br>
 <br>
-<a name="ia"></a>The No.<b>&nbsp;</b> <span style="font-weight: bold;">a</span>
-intent, Absolute Colorimetric is
+<a name="ia"></a>The <span style="font-weight: bold;">a</span>
+intent, Absolute Colorimetric, is
 intended to reproduce
 colors exactly, irrespective of the white point of the each medium.
 This
@@ -518,8 +589,8 @@ is done using CIECAM02 Jab appearance colorspace by forcing the source
 and
 destination to have a common white point (but other aspects of the
 individual viewing conditions are active), and colors are mapped
-directly from
-input to output, clipping any out of gamut colors to the closest match.
+directly from source to destination, clipping any out of gamut colors
+to the closest match.
 This is equivalent to the ICC <span style="font-weight: bold;">Absolute
 Colorimetric</span> intent, and is often used for proofing purposes. <br>
 <br>
@@ -540,7 +611,8 @@ displayed during execution.<br>
 <a name="iaa"></a>The <span style="font-weight: bold;">aa</span>
 intent, Absolute Appearance, simply
 maps the Jab
-colors directly from input to output, clipping any out of gamut colors
+colors directly from source to destination, clipping any out of gamut
+colors
 to the closest match. This attempts to match the exact appearance of
 colors as closely as possible, but may not exactly map the white point
 of the source to the destination, depending on how different the
@@ -549,23 +621,26 @@ viewing conditions are.<br>
 <a name="ir"></a>The&nbsp;<span style="font-weight: bold;">r</span>
 intent is like Absolute
 Appearance mode, but maps the
-white point from input to output
-precisely, and otherwise maps the Jab colors directly from input to
-output, clipping any out of gamut colors to the closest match. This is
+white point from source to destination
+precisely, and otherwise maps the Jab colors directly from source to
+destination, clipping any out of gamut colors to the closest match.
+This is
 equivalent to the ICC <span style="font-weight: bold;">Relative
 Colorimetric</span> intent.<br>
 <br>
 <a name="ila"></a>The <span style="font-weight: bold;">la</span>
 intent, Luminance matched
 appearance, linearly
-compresses or expands the the luminance axis to match the input to the
-output space, while not otherwise altering the gamut, clipping any out
+compresses or expands the the luminance axis to match the source to the
+destination space, while not otherwise altering the gamut, clipping any
+out
 of gamut colors to the closest match.<br>
 <br>
 <a name="ip"></a>The&nbsp; <span style="font-weight: bold;">p</span>
 intent, Perceptual, uses "knee"
 type 3 Dimensional compression to
-make the input gamut fit within the output gamut. As much as possible,
+make the source gamut fit within the destination gamut. As much as
+possible,
 clipping is avoided, hues and the overall appearance is maintained.
 This is equivalent to the ICC <span style="font-weight: bold;">Perceptual</span>
 intent.<br>
@@ -573,8 +648,9 @@ intent.<br>
 <a name="ims"></a>The <span style="font-weight: bold;">ms</span>
 intent, Saturation, uses 3 Dimensional
 compression
-and expansion to
-try and make the input gamut exactly match the output gamut, and also
+and <span style="text-decoration: underline;">expansion</span> to
+try and make the source gamut exactly match the destination gamut, and
+also
 favours higher saturation over hue or lightness preservation.<br>
 <br>
 <a name="is"></a>The <span style="font-weight: bold;"></span><span
@@ -592,7 +668,7 @@ is similar to
 intent <span style="font-weight: bold;">a</span>, but L*a*b*
 colorspace is used rather than CIECAM02 Jab
 appearance space. This often leads to poor reproduction of blue and red
-hues.<br>
+hues, but can be useful as a reference mapping.<br>
 <br>
 <a name="w"></a> The <b>-w</b> flag forces the white points to be
 mapped from source to destination, irrespective of the intent chosen.
@@ -602,7 +678,7 @@ The <b>-w</b> flag can optionally be followed by three numbers, that
 specify a color that white should be mapped to. This will be in the
 colorspace used during linking (typically Jab space, which
 has similar characteristics to L*a*b* space). This options can be
-useful in fine tuning paper emulation is absolute
+useful in fine tuning paper emulation in absolute
 colorimetric mapping mode.<br>
 <br>
 <a name="c"></a><a name="d"></a> The <b>-c</b> and <b>-d</b> options
@@ -623,18 +699,18 @@ its parameters will
 then be individually overridden.<br>
 <br>
 <a name="t"></a> The <b>-t</b> <i>tlimit</i> parameter sets the total
-ink limit (TAC, Total Area Coverage) for a CMYK input profile, as a
+ink limit (TAC, Total Area Coverage) for a CMYK source profile, as a
 total
 percentage from 0% to 400%. This affects the gamut assumed for the
-input profile. By default, a total ink limit will
-be estimated from the output profile tables.<br>
+source profile. By default, a total ink limit will
+be estimated from the source profile B2A table.<br>
 <br>
 <a name="T"></a> The <b>-T</b> <i>klimit</i> parameter sets the black
-channel ink limit for a CMYK input profile, as a total percentage from
+channel ink limit for a CMYK source profile, as a total percentage from
 0%
-to 100%. This affects the gamut assumed for the input profile. By
+to 100%. This affects the gamut assumed for the source profile. By
 default, a black ink limit will
-be estimated from the profile tables.<br>
+be estimated from the source profile B2A table.<br>
 <br>
 <br>
 <u> <a name="GG"></a>Inverse outprofile A2B Options:</u><br>
@@ -659,14 +735,19 @@ removal.&nbsp; These set the target black level:<br>
 <b> -kr</b> selects a linear level ramp, starting at minimum black for
 highlight, and maximum black for shadow (equivalent to -kp 0 0 1 1 1).
 This is the default.<br>
-<b>-kt</b>, will preserve the black amount from the input (CMYK)
-profile to the output&nbsp; (CMYK) profile as much as possible. This
+<b>-kt</b>, will preserve the black amount from the source (CMYK)
+profile to the destination&nbsp; (CMYK) profile as much as possible.
+This
 may
 be most useful in creating a CMYK to CMYK conversion between two
 different
 press conditions, while preserving as much as possible the &nbsp;black
-only use for text etc. in anything converted.<br>
-<b>-ke</b>, will preserve the black amount from the output profile B2A
+only use for text etc. in anything converted. Note that if the source
+black point is darker than the destination, composite black will still
+be generated for K only input. The <span style="font-weight: bold;">-fk</span>
+option can be used to avoid this behavior.<br>
+<b>-ke</b>, will preserve the black amount from the destination profile
+B2A
 table (CMYK).<br>
 <br>
 <b><a name="kp"></a>-k p stle stpo enpo enle shape</b>&nbsp; allows an
@@ -749,7 +830,8 @@ desired density of color). <br>
 ink limit (TAC, Total Area Coverage) for the CMYK separation, as a
 total
 percentage from 0% to 400%. This affects the gamut assumed for the
-output profile, as well as the ink limit in the generated device link.
+destination profile, as well as the ink limit in the generated device
+link.
 The limit value should generally be set
 a little below the value used in the test chart generation, to avoid
 the
@@ -762,19 +844,23 @@ colors
 will not be reproduced. Values are between 220% and 300% for typical
 printing
 devices. By default, a total ink limit will
-be estimated from the output profile tables.<br>
+be estimated from the destination profile B2A table. The ink limit
+will be in final calibrated device values if the profile includes
+calibration information.<br>
 <br>
 <a name="L"></a> The <b>-L</b> <i>klimit</i> parameter sets the black
 channel ink limit for the CMYK separation, as a total percentage from
 0%
-to 100%. This affects the gamut assumed for the output profile, as well
+to 100%. This affects the gamut assumed for the source profile, as well
 as the ink limit in the generated device link. For printing press like
 devices, this can be used to prevent
 the
 black channel screening pattern "filling in". Typical values might be
 from
 95% to 99%. By default, a black ink limit will
-be estimated from the profile tables.<br>
+be estimated from the source profile B2A table. The ink limit
+will be in final calibrated device values if the profile includes
+calibration information.<br>
 <br>
 <b><a name="P"></a></b>The <b>-P</b> option causes a diagnostic 3D <a
  href="File_Formats.html#VRML">VRML</a> plots to be created that
@@ -793,8 +879,8 @@ file with embedded profile may be used here.</small><br>
 <br>
 <a name="p3"></a>The <i><b>linkedprofile</b></i> argument specifies
 the resulting device link
-profile. This profile will contain the color transform from the input
-space to output space.<br>
+profile. This profile will contain the color transform from the source
+space to destination space.<br>
 <br>
 For information on typical usage, see the <a href="Scenarios.html">Typical
 Usage Scenarios</a> page.<br>

@@ -12,7 +12,7 @@
  * Copyright 2002 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -202,7 +202,7 @@ double *p			/* Given perceptual value */
 	for (e = 0; e < di; e++) {
 		sr[e] = drad;			/* Device space search radius */
 	}
-	if (powell(&tt, di, d, sr,  ptol, 500, efunc, (void *)&ed) != 0 || tt >= 50000.0) {
+	if (powell(&tt, di, d, sr,  ptol, 500, efunc, (void *)&ed, NULL, NULL) != 0 || tt >= 50000.0) {
 		error("simplat: powell failed, tt = %f\n",tt);
 	}
 	snap_to_gamut(s, d);

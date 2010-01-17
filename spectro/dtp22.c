@@ -10,7 +10,7 @@
  * Copyright 1996 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -53,12 +53,27 @@
 #define DEFFC fc_XonXOff
 
 static inst_code dtp22_interp_code(inst *pp, int ec);
-static int comp_password(char *out, char *in);
+static int comp_password(char *out, char *in, unsigned char key[4]);
 static inst_code activate_mode(dtp22 *p);
 static inst_code dtp22_set_opt_mode(inst *pp, inst_opt_mode m, ...);
 
 #define MAX_MES_SIZE 500		/* Maximum normal message reply size */
 #define MAX_RD_SIZE 5000		/* Maximum reading messagle reply size */
+
+/* Known DTP22 challenge/response keys for each OEM */
+/* (This is a 24 bit key - only the xor of the middle 2 bytes is significant) */
+/* The keys seem to be base 6/36, using nibbles with 2+2 bits: 3 5 6 9 A C */
+/* The last digit corresponds to the OEM serial number (ie. 6C + 9base6 = A6) */
+/* Possibly each digit is offset byt the oemsn if counted in the right sequence ? - */
+/* ie. base 40 sequence or so ? Need more examples of keys to tell. */
+struct {
+	int oemsn;	
+	unsigned char key[4];
+} keys[] = {
+	{  0, { 0x39, 0xa6, 0x55, 0x6c }},	/* Standard DTP22 */
+	{  9, { 0x5a, 0x66, 0xcc, 0xa6 }},	/* ColorMark calibrator - MacDermid GRAPHICARTS ColorSpan */
+	{ -1, }								/* End marker */
+};
 
 /* Extract an error code from a reply string */
 /* Return -1 if no error code can be found */
@@ -280,6 +295,7 @@ dtp22_init_inst(inst *pp) {
 	dtp22 *p = (dtp22 *)pp;
 	char buf[MAX_MES_SIZE], *bp;
 	inst_code ev = inst_ok;
+	int i;
 
 	if (p->debug) fprintf(stderr,"dtp22: About to init instrument\n");
 
@@ -328,12 +344,18 @@ dtp22_init_inst(inst *pp) {
 	if ((ev = dtp22_command(p, "GI\r", buf, MAX_MES_SIZE, 0.2)) != inst_ok)
 		return ev;
 
-	/* Extract both of these */
+	/* Extract some of these */
 	if ((bp = strstr(buf, "Serial Number:")) != NULL) {
 		bp += strlen("Serial Number:");
 		p->serno = atoi(bp);
 	} else {
 		p->serno = -1;
+	}
+	if ((bp = strstr(buf, "OEM Serial #:")) != NULL) {
+		bp += strlen("OEM Serial #:");
+		p->oemsn = atoi(bp);
+	} else {
+		p->oemsn = -1;
 	}
 	if ((bp = strstr(buf, "Cal Plaque Serial #:")) != NULL) {
 		bp += strlen("Cal Plaque Serial #:");
@@ -393,6 +415,19 @@ dtp22_init_inst(inst *pp) {
 //	if ((ev = dtp22_command(p, "0LC\r", buf, MAX_MES_SIZE, 10.2)) != inst_ok)
 //		return ev;
 
+	/* See that we have the correct challenge/response key */
+	for (i = 0; keys[i].oemsn >= 0; i++) {
+		if (keys[i].oemsn == p->oemsn) {
+			p->key[0] = keys[i].key[0];
+			p->key[1] = keys[i].key[1];
+			p->key[2] = keys[i].key[2];
+			p->key[3] = keys[i].key[3];
+			break;
+		}
+	}
+	if (keys[i].oemsn < 0)
+		return inst_unknown_model | DTP22_UNKN_OEM;
+
 	if (ev == inst_ok) {
 		p->inited = 1;
 		if (p->debug) fprintf(stderr,"dtp22: instrument inited OK\n");
@@ -425,20 +460,20 @@ ipatch *val) {		/* Pointer to instrument patch value */
 		return inst_needs_cal;		/* Get user to calibrate */
 	}
 
-	/* Give the password, so we can get readings */
+	/* Request challenge, so that we can return the response */
 	if ((ev = dtp22_command(p, "GP\r", buf, MAX_MES_SIZE, 0.2)) != inst_ok)
 		return ev;
-
-	if (comp_password(buf2, buf))
+	
+	if (comp_password(buf2, buf, p->key))
 		return inst_internal_error | DTP22_INTERNAL_ERROR;
 
 	/* Validate the password */
 	strcat(buf2, "VD\r");
 	if ((ev = dtp22_command(p, buf2, buf, MAX_MES_SIZE, 0.2)) != inst_ok)
 		return ev;
-
+	
 	if (strncmp(buf,"PASS", 4) != 0)
-		 return inst_unknown_model | DTP22_BAD_PASSWORD;
+		return inst_unknown_model | DTP22_BAD_PASSWORD;
 
 	if (p->trig == inst_opt_trig_keyb_switch) {
 
@@ -515,6 +550,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	val->aXYZ_v = 0;
 	val->Lab_v = 0;
 	val->sp.spec_n = 0;
+	val->duration = 0.0;
 
 	if (p->mode & inst_mode_spectral) {
 		int j;
@@ -541,6 +577,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 		val->sp.spec_n = 31;
 		val->sp.spec_wl_short = 400.0;
 		val->sp.spec_wl_long = 700.0;
+		val->sp.norm = 100.0;
 	}
 
 	if (user_trig)
@@ -690,6 +727,8 @@ dtp22_interp_error(inst *pp, int ec) {
 			return "User hit Trigger key";
 		case DTP22_USER_CMND:
 			return "User hit a Command key";
+		case DTP22_UNKN_OEM:
+			return "Instrument is an unknown OEM version";
 		case DTP22_BAD_PASSWORD:
 			return "Instrument password was rejected";
 
@@ -775,6 +814,7 @@ dtp22_interp_code(inst *pp, int ec) {
 			return inst_coms_fail | ec;
 
 		case DTP22_UNKNOWN_MODEL:
+		case DTP22_UNKN_OEM:
 		case DTP22_BAD_PASSWORD:
 			return inst_unknown_model | ec;
 
@@ -973,8 +1013,8 @@ extern dtp22 *new_dtp22(icoms *icom, int debug, int verb)
 
 /* Compute the DTP22/Digital Swatchbook password response. */
 /* Return NZ if there was an error */
-static int comp_password(char *out, char *in) {
-	unsigned char inv[5];
+static int comp_password(char *out, char *in, unsigned char key[4]) {
+	unsigned int inv[5];
 	unsigned short outv;
 	unsigned short check;
 
@@ -985,10 +1025,10 @@ static int comp_password(char *out, char *in) {
 		return 1;
 
 	/* X-Rite magic... */
-	inv[0] ^= 0x39;
-	inv[1] ^= 0xa6;
-	inv[2] ^= 0x55;
-	inv[4] ^= 0x6c;
+	inv[0] ^= key[0];		/* All seen to have 2 bits set in each nibble. */
+	inv[1] ^= key[1];		/* ie. taken from set 3,5,6,9,A,C ? */
+	inv[2] ^= key[2];
+	inv[4] ^= key[3];
 	outv = ((inv[0] * 256 + inv[2]) ^ (inv[4] * 256 + inv[1])) + inv[4];
 
 	sprintf(out, "%04x", outv);

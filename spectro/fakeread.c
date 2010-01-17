@@ -8,7 +8,7 @@
  * Copyright 2002 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -33,22 +33,30 @@
 #include "xicc.h"
 #include "icc.h"
 
-void
-usage(char *mes) {
+void usage(char *diag, ...) {
 	fprintf(stderr,"Fake test chart reader - lookup values in ICC/MPP profile, Version %s\n",
 	               ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	if (mes != NULL)
-		fprintf(stderr,"Error '%s'\n",mes);
+	if (diag != NULL) {
+		va_list args;
+		fprintf(stderr,"  Diagnostic: ");
+		va_start(args, diag);
+		vfprintf(stderr, diag, args);
+		va_end(args);
+		fprintf(stderr,"\n");
+	}
 	fprintf(stderr,"usage: fakeread [-v] [-s] [separation.icm] profile.[icc|mpp|ti3] outfile\n");
 	fprintf(stderr," -v                Verbose mode\n");
 	fprintf(stderr," -s                Lookup MPP spectral values\n");
 	fprintf(stderr," -p                Use separation profile\n");
 	fprintf(stderr," -l                Output Lab rather than XYZ\n");
-	fprintf(stderr," -0 pow            Apply power to input device chanel 0-9 (after sep.)\n");
-	fprintf(stderr," -r level          Add average random deviation of <level>%% to input device values (after sep.)\n");
+	fprintf(stderr," -k file.cal       Apply calibration (after sep.) and include in .ti3\n");
+	fprintf(stderr," -i file.cal       Include calibration in .ti3 (but don't apply it)\n");
+	fprintf(stderr," -r level          Add average random deviation of <level>%% to input device values (after sep. & cal.)\n");
+	fprintf(stderr," -0 pow            Apply power to input device chanel 0-9 (after sep. cal. & rand)\n");
 	fprintf(stderr," -R level          Add average random deviation of <level>%% to output PCS values\n");
 	fprintf(stderr," -u                Make random deviations have uniform distributions rather than normal\n");
+	fprintf(stderr," -S seed           Set random seed\n");
 	fprintf(stderr," -b L,a,b          Scale black point to target Lab value\n");
 	fprintf(stderr," [separation.icm]  Device link separation profile\n");
 	fprintf(stderr," profile.[icc|mpp|ti3] ICC, MPP profile or TI3 to use\n");
@@ -65,11 +73,14 @@ int main(int argc, char *argv[])
 	int dolab = 0;		/* Output Lab rather than XYZ */
 	int gfudge = 0;		/* Do grey fudge, 1 = W->RGB, 2 = K->xxxK */
 	double chpow[10] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
-	double rdlevel = 0.0;	/* Random device average deviation level */
-	double rplevel = 0.0;	/* Random PCS level */
+	double rdlevel = 0.0;	/* Random device average deviation level (0.0 - 1.0) */
+	double rplevel = 0.0;	/* Random PCS average deviation level (0.0 - 1.0) */
 	int unidist = 0;		/* Use uniform distribution of errors */
+	unsigned int seed = time(NULL);	/* Random seed value */
 	double tbp[3] = { -1.0, 0.0, 0.0 };	/* Target black point */
+	int applycal = 0;		/* NZ to apply calibration */
 	static char sepname[500] = { 0 };	/* ICC separation profile */
+	static char calname[500] = { 0 };	/* device calibration */
 	static char profname[500] = { 0 };	/* ICC or MPP Profile name */
 	static char inname[500] = { 0 };	/* Input cgats file base name */
 	static char outname[500] = { 0 };	/* Output cgats file base name */
@@ -91,6 +102,9 @@ int main(int argc, char *argv[])
 	inkmask sep_nmask = 0;		/* Colorant mask for separation input */
 	double wp[3], bp[3];		/* ICC profile Lab white and black points */
 	double bpt[3][3];			/* Black point transform matrix (Lab->Lab) */
+
+	/* Calibration */
+	xcal *cal = NULL;			/* calibration */ 
 
 	/* ICC profile based */
 	icmFile *icc_fp = NULL;	/* Color profile file */
@@ -116,7 +130,7 @@ int main(int argc, char *argv[])
 	int rv = 0;
 	int inn, outn;		/* Number of channels for conversion input, output */
 	icColorSpaceSignature ins, outs;	/* Type of conversion input and output spaces */
-	int cnv_nmask = 0;	/* Conversion input nmask */ 
+	inkmask cnv_nmask = 0;	/* Conversion input nmask */ 
 	time_t clk = time(0);
 	struct tm *tsp = localtime(&clk);
 	char *atm = asctime(tsp); /* Ascii time */
@@ -155,7 +169,7 @@ int main(int argc, char *argv[])
 				verb = 1;
 
 			/* Spectral MPP lookup */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S')
+			else if (argv[fa][1] == 's')
 				dospec = 1;
 
 			/* Separation */
@@ -170,27 +184,48 @@ int main(int argc, char *argv[])
 			else if (argv[fa][1] == 'u' || argv[fa][1] == 'U')
 				unidist = 1;
 
+			/* Random seed value */
+			else if (argv[fa][1] == 'S') {
+				fa = nfa;
+				if (na == NULL) usage("Expect argument to -S");
+				if (sscanf(na, " %lu ",&seed) != 1)
+					usage("Couldn't parse argument to -S");
+			}
+
+			/* calibration to device values */
+			else if (argv[fa][1] == 'k' || argv[fa][1] == 'i') {
+				if (argv[fa][1] == 'k')
+					applycal = 1;
+				else
+					applycal = 0;
+				fa = nfa;
+				if (na == NULL) usage("Expected an argument to -%c",argv[fa][1]);
+				strncpy(calname,na,MAXNAMEL); calname[MAXNAMEL] = '\000';
+			}
+
 			/* Random addition to device levels */
 			else if (argv[fa][1] == 'r') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -r");
-				rdlevel = atof(na);
-				rand32(time(NULL));		/* Init seed randomly */
+				rdlevel = atof(na) * 0.01;
+			}
+
+			/* Power applied to device channels */
+			else if (argv[fa][1] >= '0' && argv[fa][1] <= '9') {
+				int ch;
+				if (na == NULL) usage("Expect argument to -[0-9]");
+				ch = argv[fa][1]-'0';
+				if (ch < 0 || ch > 9)
+					usage("Channel no. %d is out of range\n",ch);
+				chpow[ch] = atof(na);
+				fa = nfa;
 			}
 
 			/* Random addition to PCS levels */
 			else if (argv[fa][1] == 'R') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -R");
-				rplevel = atof(na);
-				rand32(time(NULL));		/* Init seed randomly */
-			}
-
-			/* Power applied to device channels */
-			else if (argv[fa][1] >= '0' && argv[fa][1] <= '9') {
-				fa = nfa;
-				if (na == NULL) usage("Expect argument to -[0-9]");
-				chpow[argv[fa][1]-'0'] = atof(na);
+				rplevel = atof(na) * 0.01;
 			}
 
 			/* Black point scale */
@@ -226,6 +261,7 @@ int main(int argc, char *argv[])
 	strcpy(outname,argv[fa]);
 	strcat(outname,".ti3");
 
+	rand32(seed);		/* Init seed */
 	/* Deal with separation */
 	if (dosep) {
 		if ((sep_fp = new_icmFileStd_name(sepname,"r")) == NULL)
@@ -243,9 +279,22 @@ int main(int argc, char *argv[])
 			}
 	
 			/* Get details of conversion */
-			sep_luo->spaces(sep_luo, &sep_ins, &sep_inn, &sep_outs, NULL, NULL, NULL, NULL, NULL);
-			sep_nmask = icx_icc_to_colorant_comb(sep_ins);
+			sep_luo->spaces(sep_luo, &sep_ins, &sep_inn, &sep_outs, NULL, NULL, NULL, NULL, NULL, NULL);
+			sep_nmask = icx_icc_to_colorant_comb(sep_ins, sep_icco->header->deviceClass);
 		}
+	}
+
+	/* Deal with calibration */
+	if (calname[0] != '\000') {
+		if ((cal = new_xcal()) == NULL)
+			error("new_xcal failed");
+		if ((cal->read(cal, calname)) != 0)
+			error("%s",cal->err);
+		if (verb)
+			if (applycal)
+				printf("Applying calibration curves from '%s'\n",calname);
+			else
+				printf("Embedding calibration curves from '%s' in output\n",calname);
 	}
 
 	/* Deal with ICC profile */
@@ -258,6 +307,15 @@ int main(int argc, char *argv[])
 	/* Deal with ICC profile */
 	if ((rv = icc_icco->read(icc_icco,icc_fp,0)) == 0) {
 
+		/* Embed any calibration in the output if it's present */
+		if (cal == NULL) {
+			applycal = 0;
+			cal = xiccReadCalTag(icc_icco);
+
+			if (verb && cal != NULL)
+				printf("Embedding calibration curves from ICC profile in output\n");
+		}
+
 		/* Get a Device to PCS conversion object */
 		if ((icc_luo = icc_icco->get_luobj(icc_icco, icmFwd, icAbsoluteColorimetric,
 		                           dolab ? icSigLabData : icSigXYZData, icmLuOrdNorm)) == NULL) {
@@ -267,19 +325,16 @@ int main(int argc, char *argv[])
 		}
 
 		/* Get details of conversion */
-		icc_luo->spaces(icc_luo, &ins, &inn, &outs, &outn, NULL, NULL, NULL, NULL);
-		cnv_nmask = icx_icc_to_colorant_comb(ins);
+		icc_luo->spaces(icc_luo, &ins, &inn, &outs, &outn, NULL, NULL, NULL, NULL, NULL);
+		cnv_nmask = icx_icc_to_colorant_comb(ins, icc_icco->header->deviceClass);
 
 		if (dospec)
 			error("Can't lookup spectral values for ICC profile");
 
 		if (tbp[0] >= 0.0) {
-			icmXYZNumber wht, blk;
 			double ss[3], tt[3];
 	
-			icc_luo->wh_bk_points(icc_luo, &wht, &blk);
-			icmXYZ2Ary(wp, wht);
-			icmXYZ2Ary(bp, blk);
+			icc_luo->wh_bk_points(icc_luo, wp, bp);
 			if (dolab) {
 				icmXYZ2Lab(&icmD50, wp, wp);
 				icmXYZ2Lab(&icmD50, bp, bp);
@@ -343,7 +398,7 @@ int main(int argc, char *argv[])
 	/* If we don't have an ICC or MPP lookup object, look for a TI3 */
 	if (icc_luo == NULL && mlu == NULL) {
 		char *buf, *outc;
-		char *ti3_ident;
+		char *ti3_bident;
 		int ti3_nchan;
 
 		ti3 = new_cgats();			/* Create a CGATS structure */
@@ -394,7 +449,7 @@ int main(int argc, char *argv[])
 			error ("No sets of data in reference TI3 file");
 
 		ti3_nchan = icx_noofinks(cnv_nmask);
-		ti3_ident = icx_inkmask2char(cnv_nmask); 
+		ti3_bident = icx_inkmask2char(cnv_nmask, 0); 
 
 		/* Find device fields */
 		for (j = 0; j < ti3_nchan; j++) {
@@ -402,7 +457,7 @@ int main(int argc, char *argv[])
 			char fname[100];
 
 			imask = icx_index2ink(cnv_nmask, j);
-			sprintf(fname,"%s_%s",cnv_nmask == ICX_W || cnv_nmask == ICX_K ? "GRAY" : ti3_ident,
+			sprintf(fname,"%s_%s",cnv_nmask == ICX_W || cnv_nmask == ICX_K ? "GRAY" : ti3_bident,
 			                      icx_ink2char(imask));
 
 			if ((ii = ti3->find_field(ti3, 0, fname)) < 0)
@@ -450,11 +505,27 @@ int main(int argc, char *argv[])
 
 		if (dospec && spec_n <= 0)
 			error("Can't lookup spectral values for non-spectral TI3 file");
+
+		free(ti3_bident);
 	}
 
 	/* Some sanity checking */
 	if (tbp[0] >= 0.0 && icc_luo == NULL)
 		error("Black scaling only works with ICC profile");
+
+	if (verb) {
+//		printf("Random seed is %u\n",seed);
+
+		if (rdlevel > 0.0)
+			printf("Adding %.3f%% average deviation %s noise to device values\n",rdlevel * 100.0,unidist ? "uniform" : "normal");
+		for (j = 0; j < inn && j < 10; j++) {
+			if (chpow[j] != 1.0)
+				printf("Appluing chan %d power %f\n",j,chpow[j]);
+		}
+		if (rplevel > 0.0)
+			printf("Adding %.3f%% average deviation %s noise to %s PCS values\n",rplevel * 100.0,unidist ? "uniform" : "normal", dolab ? "L*a*b*": "XYZ");
+		fflush(stdout);
+	}
 
 	/* Deal with input CGATS files */
 	icg = new_cgats();			/* Create a CGATS structure */
@@ -531,9 +602,13 @@ int main(int argc, char *argv[])
 	{
 		int i, j, ii;
 		int chix[ICX_MXINKS];	/* Device chanel indexes */
-		char *ident;
+		char *ident, *bident;
 		int nsetel = 0;
 		cgats_set_elem *setel;	/* Array of set value elements */
+
+		nchan = icx_noofinks(nmask);
+		ident = icx_inkmask2char(nmask, 1); 
+		bident = icx_inkmask2char(nmask, 0); 
 
 		/* Sanity check what we're going to do */
 		if (dosep) {
@@ -546,7 +621,7 @@ int main(int argc, char *argv[])
 			else if (icx_colorant_comb_match_icc(nmask, sep_ins) == 0) {
 				error("Separation ICC device space '%s' dosen't match TI1 '%s'",
 				       icm2str(icmColorSpaceSignature, sep_ins),
-				       icx_inkmask2char(nmask));	/* Should free(). */
+				       ident);	/* Should free(). */
 			}
 
 			/* Check if separation ICC output is compatible with ICC/MPP/TI3 conversion */ 
@@ -560,13 +635,13 @@ int main(int argc, char *argv[])
 				/* Check if mpp is compatible with .ti1 */
 				if (icx_colorant_comb_match_icc(cnv_nmask, sep_outs) == 0)
 					error("MPP device space '%s' doesn't match Separation ICC '%s'",
-					       icx_inkmask2char(cnv_nmask),	/* Should free(). */
+					       icx_inkmask2char(cnv_nmask, 1),	/* Should free(). */
 					       icm2str(icmColorSpaceSignature, sep_outs));
 			} else if (ti3 != NULL) {
 				/* Check if .ti3 is compatible with .ti1 */
 				if (icx_colorant_comb_match_icc(cnv_nmask, sep_outs) == 0)
 					error("TI3 device space '%s' doesn't match Separation ICC '%s'",
-					       icx_inkmask2char(cnv_nmask),	/* Should free(). */
+					       icx_inkmask2char(cnv_nmask, 1),	/* Should free(). */
 					       icm2str(icmColorSpaceSignature, sep_outs));
 			}
 		} else if (icc_luo != NULL) {
@@ -578,7 +653,7 @@ int main(int argc, char *argv[])
 			else if (icx_colorant_comb_match_icc(nmask, ins) == 0) {
 				error("ICC device space '%s' dosen't match TI1 '%s'",
 				       icm2str(icmColorSpaceSignature, ins),
-				       icx_inkmask2char(nmask));	// Should free().
+				       ident);	// Should free().
 			}
 		} else if (mlu != NULL) {
 			/* Check if mpp is compatible with .ti1 */
@@ -588,7 +663,7 @@ int main(int argc, char *argv[])
 				gfudge = 2;
 			else if (cnv_nmask != nmask)
 				error("MPP device space '%s' doesn't match TI1 '%s'",
-				       icx_inkmask2char(cnv_nmask), icx_inkmask2char(nmask));	// Should free().
+				       icx_inkmask2char(cnv_nmask, 1), ident);	// Should free().
 		} else if (ti3 != NULL) {
 			/* Check if .ti3 is compatible with .ti1 */
 			if (nmask == ICX_W && cnv_nmask == ICX_RGB)
@@ -597,14 +672,11 @@ int main(int argc, char *argv[])
 				gfudge = 2;
 			else if (cnv_nmask != nmask)
 				error("TI3 device space '%s' doesn't match TI1 '%s'",
-				       icx_inkmask2char(cnv_nmask), icx_inkmask2char(nmask));	// Should free().
+				       icx_inkmask2char(cnv_nmask, 1), ident);	// Should free().
 		}
 
 		if ((ii = icg->find_kword(icg, 0, "TOTAL_INK_LIMIT")) >= 0)
 			ocg->add_kword(ocg, 0, "TOTAL_INK_LIMIT",icg->t[0].kdata[ii], NULL);
-
-		nchan = icx_noofinks(nmask);
-		ident = icx_inkmask2char(nmask); 
 
 		nsetel += 1;		/* For id */
 		nsetel += nchan;	/* For device values */
@@ -615,7 +687,7 @@ int main(int argc, char *argv[])
 			char fname[100];
 
 			imask = icx_index2ink(nmask, j);
-			sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : ident,
+			sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : bident,
 			                      icx_ink2char(imask));
 
 			if ((ii = icg->find_field(icg, 0, fname)) < 0)
@@ -721,23 +793,28 @@ int main(int argc, char *argv[])
 				if (sep_luo->lookup(sep_luo, sep, dev) > 1)
 					error ("%d, %s",icc_icco->errc,icc_icco->err);
 
-			/* Add randomness and non-linearity */
+			/* Do calibration */
+			if (applycal && cal != NULL)
+				cal->interp(cal, sep, sep);
+
+			/* Add randomness and non-linearity to device values. */
+			/* rdlevel = avg. dev. */
 			/* Note dev/sep is 0-1.0 at this stage */
 			for (j = 0; j < inn; j++) {
 				double dv = sep[j];
 				if (rdlevel > 0.0) {
 					double rr;
 					if (unidist)
-						rr = 0.01 * d_rand(-2.0 * rdlevel, 2.0 * rdlevel);
+						rr =  d_rand(-2.0 * rdlevel, 2.0 * rdlevel);
 					else
-						rr = 0.01 * 1.773 * rdlevel * norm_rand();
+						rr = 1.2533 * rdlevel * norm_rand();
 					dv += rr;
 					if (dv < 0.0)
 						dv = 0.0;
 					else if (dv > 1.0)
 						dv = 1.0;
 				}
-				if (chpow[j] != 1.0) {
+				if (j < 10 && chpow[j] != 1.0) {
 					dv = pow(dv, chpow[j]);
 				}
 				sep[j] = dv;
@@ -817,16 +894,18 @@ int main(int argc, char *argv[])
 				PCS[2] *= 100.0;
 			}
 
-			/* Add randomness */
+			/* Add randomness. rplevel is avg. dev. */
 			/* Note PCS is 0..100 XYZ or Lab at this point */
 			if (rplevel > 0.0) {
+				double opcs[3];
 				for (j = 0; j < 3; j++) {
 					double dv = PCS[j];
 					double rr;
+					opcs[j] = dv;
 					if (unidist)
-						rr = d_rand(-2.0 * rplevel, 2.0 * rplevel);
+						rr = 100.0 * d_rand(-2.0 * rplevel, 2.0 * rplevel);
 					else
-						rr = 1.773 * rplevel * norm_rand();
+						rr = 100.0 * 1.2533 * rplevel * norm_rand();
 					dv += rr;
 
 					/* Don't let L*, X, Y or Z go negative */
@@ -834,6 +913,7 @@ int main(int argc, char *argv[])
 						dv = 0.0;
 					PCS[j] = dv;
 				}
+//printf("~1 pcs %f %f %f -> %f %f %f\n", opcs[0], opcs[1], opcs[2], PCS[0], PCS[1], PCS[2]);
 			}
 
 			setel[k++].d = PCS[0];
@@ -851,6 +931,7 @@ int main(int argc, char *argv[])
 
 		free(setel);
 		free(ident);
+		free(bident);
 	}
 
 	if (sep_luo != NULL) {
@@ -858,6 +939,15 @@ int main(int argc, char *argv[])
 		sep_icco->del(sep_icco);
 		sep_fp->del(sep_fp);
 	}
+
+	/* If there is a calibration, append it to the .ti3 file */
+	if (cal != NULL) {
+		if (cal->write_cgats(cal, ocg) != 0)
+			error("Writing cal error : %s",cal->err);
+	}
+	
+	if (cal != NULL)
+		cal->del(cal);
 
 	if (icc_luo != NULL) {
 		/* Cleanup ICC profile */

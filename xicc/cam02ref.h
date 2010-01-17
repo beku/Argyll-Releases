@@ -13,7 +13,7 @@
  *
  * Copyright 2004, 2007 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -82,9 +82,10 @@ struct _cam02ref {
 
 	/* Option flags */
 	int hk;				/* Use Helmholtz-Kohlraush effect */
+	int noclip;			/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
 	int trace;			/* Trace internal values */
 	double range;		/* Return error if there is a range error */
-	double nldlimit;		/* range error if nlinear is less than this */
+	double nldlimit;	/* range error if nlinear is less than this */
 	double jlimit;		/* range error if J is less than this */
 
 }; typedef struct _cam02ref cam02ref;
@@ -120,7 +121,7 @@ double Lv		/* Luminence of white in the Viewing/Scene/Image field (cd/m^2) */
 
 static void cam02ref_free(cam02ref *s);
 static int cam02ref_set_view(cam02ref *s, ViewingCondition Ev, double Wxyz[3],
-                    double Yb, double La, double Lv, double Yf, double Fxyz[3], int hk);
+                double Yb, double La, double Lv, double Yf, double Fxyz[3], int hk, int noclip);
 static int cam02ref_XYZ_to_cam(cam02ref *s, double *Jab, double *xyz);
 static int cam02ref_cam_to_XYZ(cam02ref *s, double XYZ[3], double Jab[3]);
 
@@ -151,13 +152,14 @@ static int cam02ref_set_view(
 cam02ref *s,
 ViewingCondition Ev,	/* Enumerated Viewing Condition */
 double Wxyz[3],	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
-double Yb,		/* Relative Luminence of Background to reference white */
 double La,		/* Adapting/Surround Luminance cd/m^2 */
+double Yb,		/* Relative Luminence of Background to reference white */
 double Lv,		/* Luminence of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
-int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
+int hk,			/* Flag, NZ to use Helmholtz-Kohlraush effect */
+int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
 ) {
 	double tt;
 
@@ -175,6 +177,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->Fxyz[1] = Fxyz[1];
 	s->Fxyz[2] = Fxyz[2];
 	s->hk = hk;
+	s->noclip = noclip;
 
 	/* Compute the internal parameters by category */
 	switch(s->Ev) {
@@ -277,7 +280,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
     s->Aw = (2.0 * s->rgbaW[0] + s->rgbaW[1] + (1.0/20.0) * s->rgbaW[2] - 0.305) * s->Nbb;
 
 #ifdef DIAG
-	printf("Scene parameters:\n");
+	printf("Ref. Scene parameters:\n");
 	printf("Viewing condition Ev = %d\n",s->Ev);
 	printf("Ref white Wxyz = %f %f %f\n", s->Wxyz[0], s->Wxyz[1], s->Wxyz[2]);
 	printf("Relative liminance of background Yb = %f\n", s->Yb);
@@ -336,16 +339,22 @@ double XYZ[3]
 	xyz[1] = s->Fsc * XYZ[1] + s->Fsxyz[1];
 	xyz[2] = s->Fsc * XYZ[2] + s->Fsxyz[2];
 
+	REFTRACE(("Including flare XYZ = %f %f %f\n", xyz[0], xyz[1], xyz[2]))
+
 	/* Spectrally sharpened cone responses */
 	rgb[0] =  0.7328 * xyz[0] + 0.4296 * xyz[1] - 0.1624 * xyz[2];
 	rgb[1] = -0.7036 * xyz[0] + 1.6975 * xyz[1] + 0.0061 * xyz[2];
 	rgb[2] =  0.0000 * xyz[0] + 0.0000 * xyz[1] + 1.0000 * xyz[2];
 	
+	REFTRACE(("Sharpened cone sample rgb = %f %f %f\n", rgb[0], rgb[1], rgb[2]))
+
 	/* Chromaticaly transformed sample value */
 	rgbc[0] = s->Drgb[0] * rgb[0];
 	rgbc[1] = s->Drgb[1] * rgb[1];
 	rgbc[2] = s->Drgb[2] * rgb[2];
 	
+	REFTRACE(("Chromatically transformed sample value rgbc = %f %f %f\n", rgb[0], rgb[1], rgb[2]))
+
 	/* Transform from spectrally sharpened, to Hunt-Pointer_Estevez cone space */
 	rgbp[0] =  0.7409744840453773 * rgbc[0]
 	        +  0.2180245944753982 * rgbc[1]
@@ -363,7 +372,7 @@ double XYZ[3]
 	/* rgba[] has a minimum value of 0.1 for XYZ[] = 0 and no flare. */
 	/* We add a symetric negative compression region */
 	for (i = 0; i < 3; i++) {
-		if (s->range && rgbp[i] < 0.0 || rgbp[i] < s->nldlimit) {
+		if (s->range && (rgbp[i] < 0.0 || rgbp[i] < s->nldlimit)) {
 			Jab[0] = Jab[1] = Jab[2] = -1.0;
 			return 1; 
 		}

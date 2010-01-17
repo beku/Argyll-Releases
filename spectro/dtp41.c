@@ -10,7 +10,7 @@
  * Copyright 1996 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Derived from DTP51.c
@@ -56,7 +56,7 @@
 static inst_code dtp41_interp_code(inst *pp, int ec);
 static inst_code activate_mode(dtp41 *p);
 
-#define MAX_MES_SIZE 500		/* Maximum normal message reply size */
+#define MAX_MES_SIZE 1000		/* Maximum normal message reply size */
 #define MAX_RD_SIZE 100000		/* Maximum reading messagle reply size */
 
 /* Extract an error code from a reply string */
@@ -432,6 +432,14 @@ dtp41_init_inst(inst *pp) {
 	if ((ev = dtp41_command(p, tbuf, buf, MAX_MES_SIZE, 1.5)) != inst_ok)
 		return ev;
 
+#ifndef NEVER
+	/* See what the transmission mode is up to */
+	dtp41_command(p, "DEVELOPERPW\r", buf, MAX_MES_SIZE, 1.5);
+	dtp41_command(p, "0119CF\r", buf, MAX_MES_SIZE, 1.5);
+	dtp41_command(p, "36OD\r", buf, MAX_MES_SIZE, 1.5);
+	dtp41_command(p, "1422OD\r", buf, MAX_MES_SIZE, 1.5);
+#endif
+
 	/* We are configured in this mode now */
 	p->mode = inst_mode_ref_strip;
 
@@ -534,6 +542,7 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 		vals[i].aXYZ_v = 0;
 		vals[i].Lab_v = 0;
 		vals[i].sp.spec_n = 0;
+		vals[i].duration = 0.0;
 		tp += strlen(tp) + 1;
 	}
 
@@ -569,6 +578,7 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 			vals[i].sp.spec_n = 31;
 			vals[i].sp.spec_wl_short = 400.0;
 			vals[i].sp.spec_wl_long = 700.0;
+			vals[i].sp.norm = 100.0;
 			tp += strlen(tp) + 1;
 		}
 	}
@@ -672,6 +682,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	val->aXYZ_v = 0;
 	val->Lab_v = 0;
 	val->sp.spec_n = 0;
+	val->duration = 0.0;
 
 	if (p->mode & inst_mode_spectral) {
 		int j;
@@ -716,6 +727,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 		val->sp.spec_n = 31;
 		val->sp.spec_wl_short = 400.0;
 		val->sp.spec_wl_long = 700.0;
+		val->sp.norm = 100.0;
 	}
 
 	/* Set back to dynamic measurement mode */

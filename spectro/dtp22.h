@@ -11,7 +11,7 @@
  * Copyright 2001 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -47,7 +47,8 @@
 #define DTP22_USER_TERM		    		0x66		/* User hit terminate */
 #define DTP22_USER_TRIG 		    	0x67		/* User hit trigger */
 #define DTP22_USER_CMND		    		0x68		/* User hit command */
-#define DTP22_BAD_PASSWORD	    		0x69		/* Password wasn't accepted */
+#define DTP22_UNKN_OEM		    		0x69		/* Unrecognized OEM */
+#define DTP22_BAD_PASSWORD	    		0x6A		/* Password wasn't accepted */
 
 /* Real error code */
 #define DTP22_OK   						0x00
@@ -87,7 +88,10 @@ struct _dtp22 {
 	INST_OBJ_BASE
 
 	/* *** DTP41 private data **** */
+	unsigned char key[4];		/* Challenge/response key */
+	int keyvalid;				/* nz if key is valid */
 	int serno;					/* Serial number of instrument */
+	int oemsn;					/* Serial number of OEM */
 	int plaqueno;				/* Serial number of calibration plaque */
 	inst_mode    mode;			/* Currently instrument mode */
 	inst_mode    lastmode;		/* Last requested mode */

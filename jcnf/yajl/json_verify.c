@@ -1,5 +1,5 @@
 /*
- * Copyright 2007, Lloyd Hilaiel.
+ * Copyright 2007-2009, Lloyd Hilaiel.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -56,7 +56,7 @@ main(int argc, char ** argv)
     yajl_handle hand;
     static unsigned char fileData[65536];
     int quiet = 0;
-	int retval = 0;
+	int retval = 0, done = 0;
     yajl_parser_config cfg = { 0, 1 };
 
     /* check arguments.*/
@@ -80,39 +80,42 @@ main(int argc, char ** argv)
     }
     
     /* allocate a parser */
-    hand = yajl_alloc(NULL, &cfg, NULL);
+    hand = yajl_alloc(NULL, &cfg, NULL, NULL);
         
-    for (;;) {
+	while (!done) {
         rd = fread((void *) fileData, 1, sizeof(fileData) - 1, stdin);
 
         retval = 0;
         
         if (rd == 0) {
-            if (feof(stdin)) {
-                break;
-            } else {
+            if (!feof(stdin)) {
                 if (!quiet) {
                     fprintf(stderr, "error encountered on file read\n");
                 }
                 retval = 1;
                 break;
             }
-        } else {
-            fileData[rd] = 0;
-            
+            done = 1;
+        }
+        fileData[rd] = 0;
+        
+        if (done)
+            /* parse any remaining buffered data */
+            stat = yajl_parse_complete(hand);
+        else
             /* read file data, pass to parser */
             stat = yajl_parse(hand, fileData, rd);
-            if (stat != yajl_status_ok &&
-                stat != yajl_status_insufficient_data)
-            {
-                if (!quiet) {
-                    unsigned char * str = yajl_get_error(hand, 1, fileData, rd);
-                    fprintf(stderr, (const char *) str);
-                    yajl_free_error(str);
-                }
-                retval = 1;
-                break;
+
+        if (stat != yajl_status_ok &&
+            stat != yajl_status_insufficient_data)
+        {
+            if (!quiet) {
+                unsigned char * str = yajl_get_error(hand, 1, fileData, rd);
+                fprintf(stderr, "%s", (const char *) str);
+                yajl_free_error(hand, str);
             }
+            retval = 1;
+            break;
         }
     }
     

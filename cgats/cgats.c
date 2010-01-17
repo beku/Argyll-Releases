@@ -35,7 +35,7 @@
 #endif
 
 #ifdef STANDALONE_TEST
-extern void error(char *fmt, ...), warning(char *fmt, ...);
+extern void error(const char *fmt, ...), warning(const char *fmt, ...);
 #endif
 
 #include <sys/types.h>
@@ -48,14 +48,15 @@ extern void error(char *fmt, ...), warning(char *fmt, ...);
 #define REAL_SIGDIG 5		/* Number of significant digits in real representation */
 
 static int cgats_read(cgats *p, cgatsFile *fp);
-static int find_kword(cgats *p, int table, char *ksym);
-static int find_field(cgats *p, int table, char *fsym);
+static int find_kword(cgats *p, int table, const char *ksym);
+static int find_field(cgats *p, int table, const char *fsym);
 static int add_table(cgats *p, table_type tt, int oi);
 static int set_table_flags(cgats *p, int table, int sup_id, int sup_kwords, int sup_fields);
-static int set_cgats_type(cgats *p, char *osym);
-static int add_other(cgats *p, char *osym);
-static int add_kword(cgats *p, int table, char *ksym, char *kdata, char *kcom);
-static int add_field(cgats *p, int table, char *fsym, data_type ftype);
+static int set_cgats_type(cgats *p, const char *osym);
+static int add_other(cgats *p, const char *osym);
+static int get_oi(cgats *p, const char *osym);
+static int add_kword(cgats *p, int table, const char *ksym, const char *kdata, const char *kcom);
+static int add_field(cgats *p, int table, const char *fsym, data_type ftype);
 static int add_set(cgats *p, int table, ...);
 static int add_setarr(cgats *p, int table, cgats_set_elem *args);
 static int get_setarr(cgats *p, int table, int set_index, cgats_set_elem *args);
@@ -65,24 +66,24 @@ static void cgats_del(cgats *p);
 
 static void cgats_table_free(cgats_table *t);
 static void *alloc_copy_data_type(cgatsAlloc *al, data_type ktype, void *dpoint);
-static int reserved_kword(char *ksym);
-static int standard_kword(char *ksym);
-static data_type standard_field(char *fsym);
-static int cs_has_ws(char *cs);
-static char *quote_cs(cgatsAlloc *al, char *cs);
+static int reserved_kword(const char *ksym);
+static int standard_kword(const char *ksym);
+static data_type standard_field(const char *fsym);
+static int cs_has_ws(const char *cs);
+static char *quote_cs(cgatsAlloc *al, const char *cs);
 static int clear_fields(cgats *p, int table);
-static int add_kword_at(cgats *p, int table, int  pos, char *ksym, char *kdatak, char *kcom);
+static int add_kword_at(cgats *p, int table, int  pos, const char *ksym, const char *kdatak, const char *kcom);
 static int add_data_item(cgats *p, int table, void *data);
 static void unquote_cs(char *cs);
-static data_type guess_type(char *cs);
+static data_type guess_type(const char *cs);
 static void real_format(double value, int nsd, char *fmt);
 
 #ifdef COMBINED_STD
-static int cgats_read_name(cgats *p, char *filename);
-static int cgats_write_name(cgats *p, char *filename);
+static int cgats_read_name(cgats *p, const char *filename);
+static int cgats_write_name(cgats *p, const char *filename);
 #endif
 
-static char *data_type_desc[] =
+static const char *data_type_desc[] =
 	{ "real", "integer", "char string", "non-quoted char string", "no type" };
 
 /* Create an empty cgats object */
@@ -105,6 +106,7 @@ cgatsAlloc *al			/* memory allocator */
 	p->set_table_flags = set_table_flags;
 	p->set_cgats_type  = set_cgats_type;
 	p->add_other  = add_other;
+	p->get_oi     = get_oi;
 	p->add_kword  = add_kword;
 	p->add_field  = add_field;
 	p->add_set    = add_set;
@@ -125,7 +127,7 @@ cgatsAlloc *al			/* memory allocator */
 	return p;
 }
 
-static int err(cgats *p, int errc, char *fmt, ...);
+static int err(cgats *p, int errc, const char *fmt, ...);
 
 /* new_cgats() with default malloc allocator */
 
@@ -137,11 +139,12 @@ static int err(cgats *p, int errc, char *fmt, ...);
 #undef COMBINED_STD
 #endif /* SEPARATE_STD */
 
+/* ------------------------------------------- */
 
 /* Implimentation function - register an error */
 /* Return the error number */
 static int
-err(cgats *p, int errc, char *fmt, ...) {
+err(cgats *p, int errc, const char *fmt, ...) {
 	va_list args;
 
 	p->errc = errc;
@@ -174,6 +177,8 @@ char **mes
 	}
 	return 0;
 }
+
+/* ------------------------------------------- */
 
 /* Free the cgats object */
 static void
@@ -262,7 +267,7 @@ cgats_table_free(cgats_table *t) {
 /* Return index of the keyword, -1 on fail */
 /* -2 on illegal table index, message in err & errc */
 static int
-find_kword(cgats *p, int table, char *ksym) {
+find_kword(cgats *p, int table, const char *ksym) {
 	int i;
 	cgats_table *t;
 
@@ -288,7 +293,7 @@ find_kword(cgats *p, int table, char *ksym) {
 /* Return index of the field, -1 on fail */
 /* -2 on illegal table index, message in err & errc */
 static int
-find_field(cgats *p, int table, char *fsym) {
+find_field(cgats *p, int table, const char *fsym) {
 	int i;
 	cgats_table *t;
 
@@ -431,7 +436,7 @@ cgats_read(cgats *p, cgatsFile *fp) {
 				/* causes a new table to be created. */
 				if (p->ntables == tablef) {
 					if (tt != tt_none) {		/* New or first ID */
-	        			if (add_table(p, tt, oi) != 0) {
+	        			if (add_table(p, tt, oi) < 0) {
 							pp->del(pp);
 							DBG((dbgo,"Add table failed\n"));
 							return p->errc;
@@ -441,7 +446,7 @@ cgats_read(cgats *p, cgatsFile *fp) {
 						cgats_table *pt;
 						int ct;
 
-	        			if (add_table(p, p->t[p->ntables-1].tt, p->t[p->ntables-1].oi) != 0) {
+	        			if (add_table(p, p->t[p->ntables-1].tt, p->t[p->ntables-1].oi) < 0) {
 							pp->del(pp);
 							DBG((dbgo,"Add table failed\n"));
 							return p->errc;
@@ -701,7 +706,7 @@ cgats_read(cgats *p, cgatsFile *fp) {
 /* Define the (one) variable CGATS type */
 /* Return -2 & set errc and err on system error */
 static int
-set_cgats_type(cgats *p, char *osym) {
+set_cgats_type(cgats *p, const char *osym) {
 	cgatsAlloc *al = p->al;
 
 	p->errc = 0;
@@ -714,11 +719,11 @@ set_cgats_type(cgats *p, char *osym) {
 	return 0;
 }
 
-/* Add an 'other' file identifier string. */
+/* Add an 'other' file identifier string, and return the oi. */
 /* Use a zero length string to indicate a wildcard. */
 /* Return -2 & set errc and err on system error */
 static int
-add_other(cgats *p, char *osym) {
+add_other(cgats *p, const char *osym) {
 	cgatsAlloc *al = p->al;
 
 	p->errc = 0;
@@ -730,10 +735,26 @@ add_other(cgats *p, char *osym) {
 	                      (char *)al->malloc(al, (strlen(osym)+1) * sizeof(char))) == NULL)
 		return err(p,-2,"cgats.add_other(), malloc failed!");
 	strcpy(p->others[p->nothers-1],osym);
-	return 0;
+	return p->nothers-1;
+}
+
+/* Return the oi of the given other type */
+/* return -ve and errc and err set on error */
+static int get_oi(cgats *p, const char *osym) {
+	int oi;
+
+	p->errc = 0;
+	p->err[0] = '\000';
+
+	for (oi = 0; oi < p->nothers; oi++) {
+		if (strcmp(p->others[oi], osym) == 0)
+			return oi;
+	}
+	return err(p,-1,"cgats.get_oi(), failed to find '%s'!",osym);
 }
 
 /* Add a new (empty) table to the structure */
+/* Return the index of the table. */
 /* tt defines the table type, and oi is used if tt = tt_other */
 /* Return -2 & set errc and err on system error */
 static int
@@ -753,7 +774,7 @@ add_table(cgats *p, table_type tt, int oi) {
 	t->tt = tt;
 	t->oi = oi;
 
-	return 0;
+	return p->ntables-1;
 }
 
 /* set or reset table flags */
@@ -788,7 +809,7 @@ static int set_table_flags(cgats *p, int table, int sup_id, int sup_kwords, int 
 /* NULL values for ksym and kdata, and the comment in kcom */
 /* Return the index of the new keyword, or -1, err & errc on error */
 static int
-add_kword(cgats *p, int table, char *ksym, char *kdata, char *kcom) {
+add_kword(cgats *p, int table, const char *ksym, const char *kdata, const char *kcom) {
 	cgats_table *t;
 
 	p->errc = 0;
@@ -808,7 +829,7 @@ add_kword(cgats *p, int table, char *ksym, char *kdata, char *kcom) {
 /* NULL values for ksym and kdata, and the comment in kcom */
 /* Return the index of the keyword, or -1, err & errc on error */
 static int
-add_kword_at(cgats *p, int table, int pos, char *ksym, char *kdata, char *kcom) {
+add_kword_at(cgats *p, int table, int pos, const char *ksym, const char *kdata, const char *kcom) {
 	cgatsAlloc *al = p->al;
 	cgats_table *t;
 
@@ -877,7 +898,7 @@ add_kword_at(cgats *p, int table, int pos, char *ksym, char *kdata, char *kcom) 
 /* Return the index of the field */
 /* return -1 or -2, errc & err on error */
 static int
-add_field(cgats *p, int table, char *fsym, data_type ftype) {
+add_field(cgats *p, int table, const char *fsym, data_type ftype) {
 	cgatsAlloc *al = p->al;
 	cgats_table *t;
 	data_type st;
@@ -1307,11 +1328,11 @@ cgats_write(cgats *p, cgatsFile *fp) {
 				case cgats_X:				/* variable CGATS type */
 					if (p->cgats_type == NULL)
 						goto write_error;
-					if (fp->gprintf(fp,"%s\n\n", p->cgats_type) < 0)
+					if (fp->gprintf(fp,"%-7s\n\n", p->cgats_type) < 0)
 						goto write_error;
 					break;
 				case tt_other:	/* User defined file identifier */
-					if (fp->gprintf(fp,"%s\n\n",p->others[t->oi]) < 0)
+					if (fp->gprintf(fp,"%-7s\n\n",p->others[t->oi]) < 0)
 						goto write_error;
 					break;
 				case tt_none:
@@ -1521,7 +1542,7 @@ alloc_copy_data_type(cgatsAlloc *al, data_type dtype, void *dpoint) {
 /* See if the keyword name is a standard one */
 /* Return non-zero if it is standard */
 static int
-standard_kword(char *ksym) {
+standard_kword(const char *ksym) {
 	if (ksym == NULL)
 		return 0;
 	if (strcmp(ksym,"ORIGINATOR") == 0)
@@ -1551,7 +1572,7 @@ standard_kword(char *ksym) {
 /* (code generates it automatically) */
 /* Return non-zero if it is reserved */
 static int
-reserved_kword(char *ksym) {
+reserved_kword(const char *ksym) {
 	if (ksym == NULL)
 		return 0;
 	if (strcmp(ksym,"NUMBER_OF_FIELDS") == 0)
@@ -1574,7 +1595,7 @@ reserved_kword(char *ksym) {
 /* See if the field name is a standard one */
 /* with an expected data type */
 static data_type
-standard_field(char *fsym) {
+standard_field(const char *fsym) {
 	if (strcmp(fsym,"SAMPLE_ID") == 0)
 		return nqcs_t;
 	if (strcmp(fsym,"STRING") == 0)
@@ -1683,7 +1704,7 @@ standard_field(char *fsym) {
 /* Return non-zero if char string has an embedded */
 /* white space, quote or comment character. */
 static int
-cs_has_ws(char *cs)
+cs_has_ws(const char *cs)
 	{
 	int i;
 	for (i = 0; cs[i] != '\000'; i++)
@@ -1706,7 +1727,7 @@ cs_has_ws(char *cs)
 /* Return NULL if malloc failed */
 /* (Returned string should be free()'d after use) */
 static char *
-quote_cs(cgatsAlloc *al, char *cs) {
+quote_cs(cgatsAlloc *al, const char *cs) {
 	int i,j;
 	char *rs;
 	/* see how much space we need for returned string */
@@ -1754,7 +1775,7 @@ unquote_cs(char *cs) {
 
 /* Guess the data type from the string */
 static data_type
-guess_type(char *cs)
+guess_type(const char *cs)
 	{
 	int i;
 	int rf = 0;
@@ -2080,7 +2101,7 @@ main(int argc, char *argv[]) {
 /* Basic printf type error() and warning() routines */
 
 void
-error(char *fmt, ...) {
+error(const char *fmt, ...) {
 	va_list args;
 
 	fprintf(stderr,"cgats: Error - ");
@@ -2092,7 +2113,7 @@ error(char *fmt, ...) {
 }
 
 void
-warning(char *fmt, ...) {
+warning(const char *fmt, ...) {
 	va_list args;
 
 	fprintf(stderr,"cgats: Warning - ");

@@ -11,16 +11,18 @@
 </head>
 <body>
 <h1>
-Argyll CMS documentation index (V1.0.3)<br>
+Argyll CMS documentation index (V1.1.0)<br>
 </h1>
-Date:&nbsp;&nbsp; 3rd September 2008
+Date:&nbsp;&nbsp; 16th. January 2010
 <br>
 Author: Graeme Gill
-<h2><u>Introduction</u></h2>
-Argyll is an open source, ICC compatible color management
-system. It supports accurate ICC profile creation for scanners, CMYK
-printers,
-film recorders and calibration and profiling of displays.
+<h2><u><a name="Intro"></a>Introduction</u></h2>
+ArgyllCMS is an ICC compatible color management
+system, available as Open Source. It supports accurate ICC profile
+creation for scanners, cameras
+and film recorders, and calibration and profiling of displays and RGB
+&amp; CMYK
+printers.
 Spectral sample data is supported,
 allowing a selection of illuminants observer types, and paper
 fluorescent
@@ -29,7 +31,8 @@ specific
 gamut mappings for perceptual and saturation intents. Gamut mapping and
 profile linking uses the CIECAM02 appearance model, a unique gamut
 mapping
-algorithm, and a wide selection of rendering intents. It also includes
+algorithm, and a wide selection of rendering intents. Device Link can
+be created with a wide variety of advanced options. It also includes
 code for the fastest portable 8 bit raster color conversion engine
 available
 anywhere, as well as support for fast, fully accurate 16 bit
@@ -38,10 +41,9 @@ Device color gamuts can also be viewed and compared using a VRML
 viewer. Comprehensive documentation is provided for each utility, and a
 general guide to using the tools for typical color management tasks is
 also available. A mailing list provides support for more advanced usage.<br>
-<p>This is Version 1.0.3, a bug fix release for V1.0.0 release on July
-1 2008. The last full release was in December
-2005, with V0.7 Beta releases in between.
-The first public release of icclib was in November 1998, and of Argyll
+<p>This is Version 1.1.0, a feature and bug fix release
+following the V1.0.4 release on 30th June 2009. The first public
+release of icclib was in November 1998, and of Argyll
 was in July 2000. Code
 development
 commenced in 1995. See <a href="ChangesSummary.html">Changes Summary</a>
@@ -54,26 +56,32 @@ code.
 <p>The latest source code is available from <a
  href="http://www.argyllcms.com/">here</a>.
 </p>
-<p>Argyll is known to compile and run in at least six environments:
+<p>Argyll is known to compile and run in at least nine environments:
 </p>
-1) MSWindows 2K system running the Microsoft VC++ 6.0 compiler<br>
-2) MSWindows 2K system running the MingW port of the GCC compiler<br>
-3) Linux on Fedora Core 8, 32 bit using gcc
+1) MSWindows 2K system using Microsoft VC++ 6.0 compiler<br>
+2) MSWindows 2K system using Microsoft VC++ 8.0 Express compiler +
+Platform SDK Feb. 2003<br>
+3) MSWindows 2K system using Microsoft VC++ 9.0 Express compiler +
+Platform SDK Feb. 2003<br>
+4) MSWindows 2K system using the MingW port of the GCC compiler<br>
+5) Linux on Fedora Core 8, 32 bit using gcc
 <br>
-4) Linux on Fedora Core 8, 64 bit using gcc<br>
-4) Apple OSX 10.3 PPC using gcc<br>
-5) Apple OSX 10.4 Intel using&nbsp; gcc<br>
-6) Apple OSX 10.5 Intel using&nbsp; gcc<br>
+6) Linux on Fedora Core 8, 64 bit using gcc<br>
+7) Apple OSX 10.3 PPC using gcc<br>
+8) Apple OSX 10.4 Intel using&nbsp; gcc<br>
+9) Apple OSX 10.5 Intel using&nbsp; gcc<br>
 <br>
 It is also known to run on:<br>
 <br>
-&nbsp;MSWindows 2000, XP &amp; Vista<br>
-&nbsp;MSWindows Vista 64 (But most USB instruments won't work)<br>
+&nbsp;MSWindows 2000, XP, Vista &amp; Windows 7 32 bit.<br>
+&nbsp;MSWindows Vista 64bit &amp; Windows 7 64bit (But a code signing
+workaround is needed to make USB instruments accessible.)<br>
 &nbsp;Linux Ubuntu 7.10<br>
 &nbsp;Linux Kubuntu 7.10<br>
 &nbsp;Linux Mandriva 2008.0<br>
 &nbsp;Linux OpenSuSE 10.3<br>
 &nbsp;Linux Whitebox 4.2/2<br>
+&nbsp;Apple OSX 10.6 Intel<br>
 <p>but may well compile and run correctly in many more than this.
 </p>
 This is a <span style="font-weight: bold;">command line
@@ -81,11 +89,9 @@ terminal</span>
 only environment. Those unfamiliar with command line environments
 should consult an appropriate tutorial for their environment if they
 are interested in using this software. See the listing of <a
- href="#cltutes">tutorials</a> below. <span style="font-weight: bold;">If
-you're looking for "point and shoot" software, you need to look
-elsewhere.</span><br>
+ href="#cltutes">tutorials</a> below.<span style="font-weight: bold;"></span><br>
 <br>
-The following instruments are directly supported:<br>
+The following color measuring instruments are directly supported:<br>
 <br>
 X-Rite:<br>
 &nbsp;&nbsp;&nbsp; <a href="instruments.html#DTP20">DTP20
@@ -115,44 +121,52 @@ Swatchbook</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 XR"</font> or "Optix
 XR2"
 or "Optix Pro"- display colorimeter.<br>
+&nbsp;&nbsp;&nbsp; <a href="instruments.html#ColorMunki"><span
+ style="text-decoration: underline;">ColorMunki</span></a>
+Design or Photo&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+-
+spot and "swipe" reflective/emissive spectrometer (UV cut only).<br>
+&nbsp;&nbsp;&nbsp; <a href="instruments.html#i1d"><span
+ style="text-decoration: underline;">ColorMunki</span></a> Create
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+- display colorimeter.<br>
 <br>
 Gretag-Macbeth (now X-Rite):<br>
 &nbsp; &nbsp; <a href="instruments.html#sl">Spectrolino</a> &nbsp;
 &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp; - spot reflective/emissive spectrometer<br>
+&nbsp; - spot reflective/emissive spectrometer.<br>
 &nbsp; &nbsp; <a href="instruments.html#ss">SpectroScan</a> &nbsp;
 &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; -
-spot reflective/emissive, XY table reflective spectrometer&nbsp; <br>
+spot reflective/emissive, XY table reflective spectrometer&nbsp; .<br>
 &nbsp; &nbsp; <a href="instruments.html#ss">SpectroScanT</a> &nbsp;
 &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; - spot
-reflective/emissive/transmissive, XY table reflective spectrometer<br>
-&nbsp; &nbsp; <a href="instruments.html#i1p">Eye-One Pro</a> &nbsp;
-&nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; -
-spot and "swipe" reflective/emissive spectrometer<br>
+reflective/emissive/transmissive, XY table reflective spectrometer.<br>
+&nbsp; &nbsp; <a href="instruments.html#i1p">Eye-One Pro</a> "EFI
+ES-1000" &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; -
+spot and "swipe" reflective/emissive spectrometer.<br>
 &nbsp; &nbsp; <a href="instruments.html#i1m">Eye-One Monitor</a>
 &nbsp;
 &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; -
-spot and "swipe" emissive spectrometer<br>
+spot and "swipe" emissive spectrometer.<br>
 &nbsp;&nbsp;&nbsp; <a href="instruments.html#i1d">Eye-One Display
 1 or
 2&nbsp; or LT</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-- display colorimeter<br>
+- display colorimeter.<br>
 &nbsp;&nbsp;&nbsp; <a href="instruments.html#Huey">Huey</a> &nbsp;
 &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-- display colorimeter<br>
+- display colorimeter.<br>
 <br>
 Sequel imaging (Now X-Rite):<br>
 &nbsp;&nbsp;&nbsp;&nbsp; <a href="instruments.html#mox">MonacoOPTIX</a>
@@ -174,7 +188,14 @@ DataColor ColorVision:<br>
 - display colorimeter (Note that the user must <a href="spyd2en.html">supply</a>
 firmware)<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-[The Spyder 1 also seems to work.]<br>
+[The Spyder 1 has also been reported as working.]<br>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="instruments.html#spyd3">Spyder 3</a>
+&nbsp; &nbsp;
+&nbsp; &nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+- display colorimeter.<br>
 <br>
 Other:<br>
 &nbsp;&nbsp;&nbsp; <span class="titre"><a href="instruments.html#HCFR">Colorim&egrave;tre
@@ -196,24 +217,29 @@ please let the dealer and manufacturer know that "<span
 problems regarding operation of color instruments in combination with
 Argyll, to the Author(s) of Argyll, and not to any other party.
 </p>
-<h2><span style="text-decoration: underline; color: rgb(51, 0, 51);">Copyright
+<h2><span style="text-decoration: underline; color: rgb(51, 0, 51);"><a
+ name="Copyright"></a>Copyright
 and Licensing:</span><br>
 </h2>
 <p>Most of the source code and provided executable files
 are copyrighted works, licensed under
-the <span style="font-weight: bold;">GNU Version 3 license</span>, and
+the <span style="font-weight: bold;">Affero GNU Version 3 license</span>,
+and
 therefore
-they (or works derived from them) can't be copied or sold without
+they (or works derived from them) can't be copied, sold or made
+available to users interacting with them remotely through a computer
+network, without
 providing the
 source
-code. Nothing other than your agreement and compliance with the GNU
-License,
+code. Nothing other than your agreement and compliance with the Affero
+GNU
+License
 grants you permission to use, modify or distribute Argyll source code,
 executables
 or
 its derivative works. You could be sued for copyright infringement if
-you distribute Argyll without a valid license. The <span
- style="font-weight: bold;">GNU</span> license
+you use or distribute Argyll without a valid license. The <span
+ style="font-weight: bold;">Affero GNU</span> license
 <span style="font-weight: bold;">prohibits</span> combining these
 utilities
 into any sort of <span style="font-weight: bold;">package</span> (i.e.
@@ -222,7 +248,8 @@ that
 make use of, depend on, or work with the Argyll code) and distributing
 them,
 unless the other
-elements of the package are also licensed under the GPL, since such
+elements of the package are also made available under a GPL compatible
+license,&nbsp; since such
 packages are derived works. It is
 permissible
 to provide Argyll utilities with other non GPL components, if the
@@ -237,24 +264,33 @@ using Argyll, are not subject to any claims or restrictions of Argyll's
 author(s), but are assumed to be the copyright property of the person
 who gathers the
 characterization data, and causes the profiles to be created.
-<p>The Argyll CMS is Copyright 1995 - 2008 Graeme W. Gill, and is made
-available under the terms of the GNU General Public License Version 3,
+<p>The Argyll CMS is Copyright 1995 - 2009 Graeme W. Gill, and is made
+available under the terms of the Affero GNU General Public License
+Version 3,
 as
 detailed
-in the <a href="License.txt">License.txt</a> file.
+in the <a href="License.txt">License.txt</a> file. Documentation is
+licensed under the terms of the GNU Free Documentation License, Version
+1.3. The author asserts his moral rights over this material in
+relationship to the attribution and integrity of these works. In
+particular, if these works are modified in a way that materially
+changes their functionality, then the modified works should be renamed
+in a way that clearly distinguishes them from "Argyll" or "ArgyllCMS"
+so that the effects of such changes do not reflect on the original
+works integrity or the original authors reputation.<br>
 </p>
 <p>The utility spectro/spec2cie.c is Copyright 2005 Gerhard Fuernkranz,
 and is
 made available under the terms of the GNU General Public
 License Version 2 or later,
 and is licensed here under the Version 3 license, as detailed in the <a
- href="License.txt">License.txt</a> file.<br>
+ href="License3.txt">License3.txt</a> file.<br>
 </p>
 <p>The utility spectro/average.c is Copyright 2008 Jordi Nodal and
 Graeme W. Gill,
 and is
 made available under the terms of the GNU General Public
-License Version 3 or later, as detailed in the <a href="License.txt">License.txt</a>
+License Version 3 or later, as detailed in the <a href="License3.txt">License3.txt</a>
 file.
 </p>
 <p>The UNIX USB library libusb included in this distribution, is
@@ -266,11 +302,11 @@ details. <br>
 <p>The Win32 USB library libusb-win32, included in this distribution,
 is copyright Stephan Meyer,
 Johannes Erdfelt and Thomas Sailer, and is licensed under the GNU LGPL
-Version 2 (the DLL)&nbsp;
-and GPL (the drivers, services, installer). See&nbsp;
+Version 2 or latter (the DLL)&nbsp;
+and GNU GPL Version 2 or later (the drivers, services, installer).
+See&nbsp;
 libusbw/License.txt, libusbw/COPYING_LGPL.txt and
 libusbw/COPYING_GPL.txt for details.<br>
-<br>
 </p>
 <p>The icc library in<span style="font-weight: bold;"> icc</span>/, the
 CGATS library in <span style="font-weight: bold;">cgats</span>/, the
@@ -278,25 +314,33 @@ jcnf
 library
 in <span style="font-weight: bold;">jcnf</span>/, and the ucmm library
 in <span style="font-weight: bold;">ucmm</span>/ are
-Copyright 1995 - 2008 Graeme W. Gill, and available
+Copyright 1995 - 2009 Graeme W. Gill, and available
 according to the "MIT" license granted in the icc/License.txt and
-cgats/License.txt files, and the source files in jcnf/ and ucmm/.<br>
-<br>
+cgats/License.txt files, and the licenses at the top of ucmm/ucmm.c and
+jcnf/jcnf.c.<br>
+</p>
+<p>The yajl library in <span style="font-weight: bold;">jcnf/yajl</span>
+is Copyright 2007-2009, Lloyd Hilaiel and is licensed according to the
+Berkeley-style License granted in the jcnf/yajl/COPYING files. The yajl
+library has been repackaged and modified slightly for convenience.<br>
+</p>
+<p>
 The TIFF library included in this distribution for convenience, has
 its
 own copyright and license detailed in tiff/COPYRIGHT (an "MIT"/"BSD"
 like
 license).
 </p>
-<h2><span style="text-decoration: underline; color: rgb(51, 0, 51);">What
+<h2><span style="text-decoration: underline; color: rgb(51, 0, 51);"><a
+ name="ProjType"></a>What
 sort of project is this ? (re: contributions)<br>
 </span></h2>
 This is essentially my private project, that I've made available under
 GNU licensing conditions. Because I license my code under other
 licenses as well, there is a limit to what I will accept in the way of
 code contributions back into this project. For me to accept
-contributions into this distribution, it either has to be a
-non-core side
+contributions into the distribution, it either has to be a
+non-core (side)
 project, or has to be offered to me with copyright conditions that are
 compatible with my other uses (i.e.. a "BSD" like license, or assigning
 or licensing
@@ -318,7 +362,8 @@ Important notes on <a href="Installing.html">installing the binary
 software</a>
 on various platforms.<br>
 <br>
-<h2 style="color: rgb(51, 0, 51);"><u>Main Utilities and the command
+<h2 style="color: rgb(51, 0, 51);"><u><a name="CmdLine"></a>Main
+Utilities and the command
 line<br>
 </u></h2>
 These are all command line ("DOS" shell) utilities, and each tool
@@ -392,8 +437,18 @@ for each source profile type. Similarly the device profiles could be
 stored
 in a hierarchy of directories ordered by device type, media,
 resolution,
-device mode etc.
-<br>
+device mode etc. Naturally you will want to set your $PATH so that you
+can run the tools from whichever directory you are in, as well as
+specify any necessary directory paths for file arguments so that the
+tools are able to open them.<br>
+</p>
+<p>Note that there are two ways the Argyll utilities deal with filename
+extensions. In one you supply the extension (ie. you supply the whole
+file name), so the extension is up to you. In the other (used where one
+name is used for input and output
+files, or where there are multiple output files), the program adds the
+extension. In the documentation this should be indicated by calling it
+a "base name".<br>
 </p>
 <p><a name="cltutes"></a>Those unfamiliar with command line
 environments
@@ -428,20 +483,28 @@ Linux:<br>
  href="http://www.ee.surrey.ac.uk/Teaching/Unix/">http://www.ee.surrey.ac.uk/Teaching/Unix/</a>&gt;<br>
 <br>
 &nbsp;&nbsp;&nbsp; To find more: &lt;<a
- href="http://www.google.com/search?q=linux+command+line+shell+tutorial">http://www.google.com/search?q=linux+command+line+shell+tutorial</a>&gt;<br>
-<br>
+ href="http://www.google.com/search?q=linux+command+line+shell+tutorial">http://www.google.com/search?q=linux+command+line+shell+tutorial</a>&gt;</p>
+<p><br>
+<span style="font-weight: bold;">Note</span> that since OS X is based
+on UNIX, there is much in common between the OS X and Linux command
+line environments, and many of the UNIX tutorials may be useful:<br>
+</p>
+<p>&nbsp;&nbsp;&nbsp; &lt;<a
+ href="http://www.rain.org/%7Emkummel/unix.html">http://www.rain.org/~mkummel/unix.html</a>&gt;<br>
 </p>
 <h2><u><a href="Scenarios.html">Tutorial: Typical
 usage scenarios and examples</a></u></h2>
 A <a href="Scenarios.html">guided tour</a> of the major utilities,
 applied to typical CMS jobs, such
-as calibrating displays, creating device profiles, linking them, and
+as calibrating displays, creating device profiles, calibrating
+printers, linking profiles, and
 converting color spaces
 of raster files.
 <br>
 &nbsp;
 <br>
-<h3 style="color: rgb(0, 0, 0);"><u>Topical Discussions</u></h3>
+<h3 style="color: rgb(0, 0, 0);"><u><a name="Topics"></a>Topical
+Discussions</u></h3>
 Discussions about particular topics:<br>
 <br>
 <a href="FWA.html">About Fluorescent Whitening Agent compensation</a><br>
@@ -452,17 +515,31 @@ Discussions about particular topics:<br>
 <br>
 <a href="monitorcontrols.html">About display monitor settings and
 targets</a><br>
+<br>
+<a href="gamma.html">About display "Gamma"</a><br>
+<br>
+<a href="calvschar.html">What's the difference between Calibration and
+Characterization ?</a><br>
 <span style="font-family: monospace;"></span><br>
-<h2><b><u><font size="+2">Main Utilities by category:</font></u></b></h2>
+<a href="CrushedDisplyBlacks.html">My blacks get crushed on my display
+- why ? How do I fix it ?</a><br>
+<br>
+<h2><b><u><font size="+2"><a name="CatList"></a>Main Utilities by
+category:</font></u></b></h2>
 <h3>Calibrating devices<br>
 </h3>
 <small><a style="font-family: monospace;" href="dispcal.html">dispcal</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></small>Adjust, calibrate
 and profile
-a display<small><big>.</big></small><a href="filmtarg.html"><br>
-</a>
-<h3>Creating test targets for profiling</h3>
+a display<small><big>.<br>
+</big></small><small><a style="font-family: monospace;"
+ href="printcal.html">printcal</a><span style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create a printer calibration
+.cal file from a .ti3 data file<small><big>.</big></small><br>
+<a href="filmtarg.html"></a>
+<h3>Creating test targets for profiling or print calibration<br>
+</h3>
 <small><a style="font-family: monospace;" href="targen.html">targen</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span><big>Generate a profiling test target values .ti1 file.
@@ -475,7 +552,8 @@ film recorder TIFF files from Argyll .ti1 file.
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><big>Create
 a PS, EPS or TIFF file containing test patch values, ready for
 printing.</big></small>
-<h3>Obtaining test results for profiling</h3>
+<h3>Obtaining test results for profiling or print calibration<br>
+</h3>
 <small><a style="font-family: monospace;" href="chartread.html">chartread</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><big>Read
 a test chart using an instrument to create a .ti3 data
@@ -546,17 +624,21 @@ separation.
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></small>Regenerate a device profiles B2A table data by inverting
 the A2B table.
-<h3>Linking Profiles</h3>
+<h3>Creating Device Link Profiles</h3>
 <small><a style="font-family: monospace;" href="collink.html">collink</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Link
 two device ICC profiles to create a device link profile.
-<h3>Converting colors</h3>
+<h3>Converting colors or applying print calibration<br>
+</h3>
 <small><a style="font-family: monospace;" href="cctiff.html">cctiff</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></small>Color convert a TIFF file using a sequence of ICC
-device, device link and abstract
-profiles
+device, device link, abstract
+profiles and calibration files.
 <br>
+<small><a style="font-family: monospace;" href="applycal.html">applycal</a><span
+ style="font-family: monospace;"> &nbsp;&nbsp;&nbsp;&nbsp;
+</span></small>Apply calibration curves to an ICC profile.<br>
 <small><a style="font-family: monospace;" href="icclu.html">icclu&nbsp;</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></small>Lookup individual color values through any ICC profile
@@ -638,15 +720,22 @@ single spot color value.
 CIE in two .ti3 files (also view differences as VRML)<br>
 <small><a style="font-family: monospace;" href="synthcal.html">synthcal</a><span
  style="font-family: monospace;">
-&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create a synthetic display
-calibration (<a href="File_Formats.html#.cal">.cal</a>)file.
+&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create a synthetic input,
+display
+or output calibration (<a href="File_Formats.html#.cal">.cal</a>)file.
 <h3>Other Utilities</h3>
-<small><a style="font-family: monospace;" href="extracticc.html">extracticc</a><span
+<small></small><small><a style="font-family: monospace;"
+ href="extracticc.html">extracticc</a><span
  style="font-family: monospace;"></span></small><small><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </span>Extract an
-embedded ICC profile from a TIFF file.</small><br>
-<small><a style="font-family: monospace;" href="dispwin.html">dispwin</a><span
+embedded ICC profile from a TIFF file.<br>
+</small><small><a style="font-family: monospace;"
+ href="extractttag.html">extractttag</a><span
  style="font-family: monospace;"></span></small><small><span
+ style="font-family: monospace;">&nbsp;&nbsp; </span>Extract a text
+tag (ie. CGATS .ti3 data or CAL) from an ICC profile.</small><br>
+<small></small><small><a style="font-family: monospace;"
+ href="dispwin.html">dispwin</a><span style="font-family: monospace;"></span></small><small><span
  style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp; </span></small>Install
 or uninstall display profile, set display calibration from profile or
 .cal file, test displace and dispwin access
@@ -662,7 +751,11 @@ readings into CIE XYZ or L*a*b* readings. Apply FWA, plot spectrums.<br>
 special purpose utility that enables the Spyder 2
 colorimeter.<br>
 &nbsp;
-<h2><b><u><font size="+2">Main Utilities Alphabetic Listing:</font></u></b></h2>
+<h2><b><u><font size="+2"><a name="AlphList"></a>Main Utilities
+Alphabetic Listing:</font></u></b></h2>
+<small><a style="font-family: monospace;" href="applycal.html">applycal</a><span
+ style="font-family: monospace;"> &nbsp;&nbsp;&nbsp;&nbsp;
+</span></small>Apply calibration curves to an ICC profile.<br>
 <small><a style="font-family: monospace;" href="average.html">average</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><big>Average
 / Merge two measurement data files</big></small><br>
@@ -674,8 +767,8 @@ format.
 <small><a style="font-family: monospace;" href="cctiff.html">cctiff</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></small>Color convert a TIFF file using a sequence of ICC
-device, device link and abstract
-profiles<br>
+device, device link, abstract
+profiles and calibration files.<br>
 <small><a style="font-family: monospace;" href="chartread.html">chartread</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Read
 a test chart using an instrument to create a .ti3 data
@@ -705,7 +798,12 @@ to a display.<br>
 <small><a style="font-family: monospace;" href="extracticc.html">extracticc</a><span
  style="font-family: monospace;"></span></small><small><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp; </span>Extract an
-embedded ICC profile from a TIFF file.</small><br>
+embedded ICC profile from a TIFF file.<br>
+</small><small><a style="font-family: monospace;"
+ href="extractttag.html">extractttag</a><span
+ style="font-family: monospace;"></span></small><small><span
+ style="font-family: monospace;">&nbsp;&nbsp; </span>Extract a text
+tag (ie. CGATS .ti3 data or CAL) from an ICC profile.</small><br>
 <small><a style="font-family: monospace;" href="fakeCMY.html">fakeCMY</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create
 a fake Argyll .ti3 CMY data file from a CMYK profile, as a basis
@@ -772,6 +870,10 @@ files/views.
 </span></small>Create a Model Printer Profile (MPP) from the .ti3 test
 data.
 <br>
+<small><a style="font-family: monospace;" href="printcal.html">printcal</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create a printer calibration
+.cal file from a .ti3 data file<small><big>.</big></small><br>
 <small><a style="font-family: monospace;" href="printtarg.html">printtarg</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span></small><small><big>Create
 a PS, EPS or TIFF file containing test patch values, ready for
@@ -823,8 +925,9 @@ special purpose utility that enables the Spyder 2
 colorimeter.<br>
 <small><a style="font-family: monospace;" href="synthcal.html">synthcal</a><span
  style="font-family: monospace;">
-&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create a synthetic display
-calibration (<a href="File_Formats.html#.cal">.cal</a>)file.<br>
+&nbsp;&nbsp;&nbsp;&nbsp; </span></small>Create a synthetic input,
+display
+or output calibration (<a href="File_Formats.html#.cal">.cal</a>)file.<br>
 <small><a style="font-family: monospace;" href="synthread.html">synthread</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; </span><big>Fake
 the reading of a device using a synthetic device model.
@@ -880,7 +983,8 @@ A very brief description of minor utilities and test harnesses.
 <br>
 <br>
 <br>
-<h2><u><a href="File_Formats.html">File formats that Argyll uses</a></u></h2>
+<h2><u><a name="FFormats"></a><a href="File_Formats.html">File formats
+that Argyll uses</a></u></h2>
 Argyll uses a number of file formats for its operation, some that are
 external
 standards, and some that are unique to Argyll. <br>

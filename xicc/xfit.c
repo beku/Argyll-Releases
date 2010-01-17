@@ -9,10 +9,23 @@
  *
  * Copyright 2000 - 2007 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Based on the xlut.c code.
+ */
+
+/*
+ * TTBD:
+ *
+ *		Need to use this for B2A tables rather than inverting
+ *		A2B curves. Need to add grid sizing to cover just gamut range
+ *      (including level axis gamut, but watch out for devices that
+ *      have values belowe the black point), 3x3 matrix optimization,
+ *      and white point to grid node mapping for XYZ.
+ *
+ *		Note that one quandry is that the curve fitting doesn't
+ *		fit well when the input data has an offset and/or plateaus.
  */
 
 /*
@@ -63,27 +76,26 @@
 #undef SPECIAL_TEST_GAMMA		/* Use gamma on reference model */
 #undef SPECIAL_TEST_LAB	
 
-#define USE_CIE94_DE	/* Use CIE94 delta E measure when creating in/out curves */
-#undef NODDV			/* Use slow non d/dv powell */
+#define RSPLFLAGS (0 /* | RSPL_2PASSSMTH */ /* | RSPL_EXTRAFIT2 */)
 
-#define POWTOL 5e-4			/* Shaper Powell optimiser tollerance */
+#undef NODDV				/* Use slow non d/dv powell else use conjgrad */
+#define CURVEPOW 1.0    	/* Power to raise deltaE squared to in setting in/out curves */
+							/* This provides a means of punishing high maximum errors. */
+
+#define POWTOL 1e-4			/* Shaper Powell optimiser tollerance in delta E squared ^ CURVEPOW */
 #define MAXITS 2000			/* Shaper number of itterations before giving up */
 #define PDDEL  1e-6			/* Fake partial derivative del */
 
 /* Weights for shaper in/out curve parameters, to minimise unconstrained "wiggles" */
 #define SHAPE_WEIGHT	1.0		/* Overal shaper weight contribution - err on side of smoothness */
-#define SHAPE_HW01		0.2		/* 0 & 1 harmonic weights */
+#define SHAPE_HW01		0.1		/* 0 & 1 harmonic weights */
 #define SHAPE_HBREAK    4		/* Harmonic that has HWBR */
-#define SHAPE_HWBR  	0.8		/* Base weight of harmonics HBREAK up */
-#define SHAPE_HWINC  	0.4		/* Increase in weight for each harmonic above HWBR */
+#define SHAPE_HWBR  	20.0		/* Base weight of harmonics HBREAK up */
+#define SHAPE_HWINC  	60.0		/* Increase in weight for each harmonic above HWBR */
 
 /* Weights for the positioning curve parameters */
 #define PSHAPE_MINE 0.02		/* Minum background residual error level */
-
-/*
- * TTBD:
- *
- */
+#define PSHAPE_DIST 1.0			/* Agressivness of grid distribution */
 
 /* - - - - - - - - - - - - - - - - - */
 
@@ -492,7 +504,7 @@ static void xfit_abs_to_rel(xfit *p, double *out, double *in) {
 /* - - - - - - - - - */
 
 /* return a weighting for the magnitude of the in and out */
-/* shaping parameters. This is to reduce unconstrained "wiggles" */
+/* shaping parameters squared. This is to reduce unconstrained "wiggles" */
 static double shapmag(
 xfit  *p			/* Base of optimisation structure */
 ) {
@@ -515,11 +527,13 @@ xfit  *p			/* Base of optimisation structure */
 				} else if (k <= SHAPE_HBREAK) {
 					double bl = (k - 1.0)/(SHAPE_HBREAK - 1.0);
 					w = (1.0 - bl) * SHAPE_HW01 + bl * SHAPE_HWBR;
+					w *= p->shp_smooth[e];
 				} else {
 					w = SHAPE_HWBR + (k-SHAPE_HBREAK) * SHAPE_HWINC;
+					w *= p->shp_smooth[e];
 				}
 				tt = *b++;
-				tt *= tt;
+				tt *= tt;		/* Squared */
 				iparam += w * tt;
 			}
 		}
@@ -536,11 +550,13 @@ xfit  *p			/* Base of optimisation structure */
 				} else if (k <= SHAPE_HBREAK) {
 					double bl = (k - 1.0)/(SHAPE_HBREAK - 1.0);
 					w = (1.0 - bl) * SHAPE_HW01 + bl * SHAPE_HWBR;
+					w *= p->out_smooth[f];
 				} else {
 					w = SHAPE_HWBR + (k-SHAPE_HBREAK) * SHAPE_HWINC;
+					w *= p->out_smooth[f];
 				}
 				tt = *b++;
-				tt *= tt;
+				tt *= tt;		/* Squared */
 				oparam += w * tt;
 			}
 		}
@@ -576,12 +592,14 @@ double *dav			/* Sum del's */
 				} else if (k <= SHAPE_HBREAK) {	
 					double bl = (k - 1.0)/(SHAPE_HBREAK - 1.0);
 					w = (1.0 - bl) * SHAPE_HW01 + bl * SHAPE_HWBR;
+					w *= p->shp_smooth[e];
 				} else {
 					w = SHAPE_HWBR + (k-SHAPE_HBREAK) * SHAPE_HWINC;
+					w *= p->shp_smooth[e];
 				}
 				tt = *b++;
 				*c++ += 2.0 * dd * w * tt;
-				tt *= tt;
+				tt *= tt;			/* Squared */
 				iparam += w * tt;
 				
 			}
@@ -600,12 +618,14 @@ double *dav			/* Sum del's */
 				} else if (k <= SHAPE_HBREAK) {
 					double bl = (k - 1.0)/(SHAPE_HBREAK - 1.0);
 					w = (1.0 - bl) * SHAPE_HW01 + bl * SHAPE_HWBR;
+					w *= p->out_smooth[f];
 				} else {
 					w = SHAPE_HWBR + (k-SHAPE_HBREAK) * SHAPE_HWINC;
+					w *= p->out_smooth[f];
 				}
 				tt = *b++;
 				*c++ += 2.0 * dd * w * tt;
-				tt *= tt;
+				tt *= tt;			/* Squared */
 				oparam += w * tt;
 			}
 		}
@@ -614,10 +634,54 @@ double *dav			/* Sum del's */
 	return iparam + oparam;
 }
 
+/* Scale the shaper derivatives */
+static void dshapscale(
+xfit  *p,			/* Base of optimisation structure */
+double *dav,		/* del's */
+double scale		/* Scale factor */
+) {
+	double tt, w;
+	double *b, *c;			/* Base of parameters for this section */
+	int di =  p->di;
+	int fdi = p->fdi;
+	int e, f, k;
+
+	if (p->opt_msk & oc_i) {
+		c = dav + p->shp_off;
+		for (e = 0; e < di; e++) {
+			for (k = 0; k < p->iluord[e]; k++) {
+				*c++ *= scale;
+			}
+		}
+	}
+
+	if (p->opt_msk & oc_o) {
+		c = dav + p->out_off;
+		for (f = 0; f < fdi; f++) {
+			for (k = 0; k < p->oluord[f]; k++) {
+				*c++ *= scale;
+			}
+		}
+	}
+}
+
+/* Progress function */
+static void xfitprog(void *pdata, int perc) {
+	xfit *p = (xfit *)pdata;
+
+	if (p->verb) {
+		printf("\r% 3d%%",perc); 
+		if (perc == 100)
+			printf("\n");
+		fflush(stdout);
+	}
+}
+
 
 int xfitfunc_trace = 1;
 
 /* Shaper+Matrix optimisation function handed to powell() */
+/* We simply minimize the total delta E squared, consistent with smoothness */
 static double xfitfunc(void *edata, double *v) {
 	xfit *p = (xfit *)edata;
 	double tw = 0.0;				/* Total weight */
@@ -667,6 +731,8 @@ static double xfitfunc(void *edata, double *v) {
 		} else {
 			del = p->to_de2(p->cntx2, out, p->rpoints[i].v);
 		}
+		if (CURVEPOW > 1.0)
+			del = pow(del, CURVEPOW);
 		tw += p->rpoints[i].w;
 		ev += p->rpoints[i].w * del;
 	}
@@ -677,6 +743,8 @@ static double xfitfunc(void *edata, double *v) {
 	/* Sum with shaper parameters squared, to */
 	/* minimise unsconstrained "wiggles" */
 	smv = shapmag(p);
+	if (CURVEPOW > 1.0)
+		smv = pow(smv, CURVEPOW);
 	rv = ev + smv;
 
 #ifdef DEBUG
@@ -684,10 +752,6 @@ if (xfitfunc_trace)
 fprintf(stdout,"~1(sm %f, ev %f)xfitfunc returning %f\n",smv,ev,rv);
 #endif
 
-#ifdef NODDV
-	if (p->verb)
-		printf("."), fflush(stdout);
-#endif
 	return rv;
 }
 
@@ -700,6 +764,7 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 	double tin[MXDI], out[MXDO];
 
 	double dav[MXPARMS];				/* Overall del due to del param vals */
+	double sdav[MXPARMS];				/* Overall del due to del smooth param vals */
 
 	double dtin_iv[MXDI * MXLUORD];		/* Del in itrans out due to del itrans param vals */
 	double dmato_mv[1 << MXDI];			/* Del in mat out due to del in matrix param vals */
@@ -758,8 +823,15 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 					pp[e] += t1 * p->piv[i].ide[f][e];
 			}
 			del = p->to_dde2(p->cntx2, tdout_de, pp, p->rpoints[i].p);
+			if (CURVEPOW > 1.0) {
+				double dadj;
+				dadj = CURVEPOW * pow(del, CURVEPOW - 1.0); /* Adjust derivative accordingly */
+				del = pow(del, CURVEPOW);
+				for (e = 0; e < di; e++)
+					tdout_de[0][e] *= dadj;
+			}
 
-			/* Compute partial derivative (is this correct ??) */
+			/* Compute partial derivative */
 			for (e = 0; e < di; e++) {
 				dout_de[0][e] = 0.0;
 				for (f = 0; f < fdi; f++) {
@@ -768,6 +840,13 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 			}
 		} else {
 			del = p->to_dde2(p->cntx2, dout_de, out, p->rpoints[i].v);
+			if (CURVEPOW > 1.0) {
+				double dadj;
+				dadj = CURVEPOW * pow(del, CURVEPOW - 1.0); /* Adjust derivative accordingly */
+				del = pow(del, CURVEPOW);
+				for (f = 0; f < fdi; f++)
+					dout_de[0][f] *= dadj;
+			}
 		}
 
 		/* Accumulate total weighted delta E squared */
@@ -782,7 +861,8 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 					double vv = 0.0;
 					jj = p->shp_offs[ee] - p->shp_off + k;	/* Overall input trans param */
 
-					for (ff = 0; ff < 3; ff++) {		/* Lab channels */
+//					for (ff = 0; ff < 3; ff++) {		/* Lab channels */
+					for (ff = 0; ff < fdi; ff++) {		/* Output channels */
 						vv += dout_de[0][ff] * dout_mato[ff]
 						    * dmato_tin[ff * di + ee] * dtin_iv[jj];
 					}
@@ -820,24 +900,31 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 
 	/* Normalise error to be an average delta E squared */
 	ev /= tw;
-	for (i = 0; i < p->tot_cnt; i++)
+	for (i = 0; i < p->tot_cnt; i++) {
 		dav[i] /= tw;
+		sdav[i] = 0.0;
+	}
 
 	/* Sum with shaper parameters squared, to */
 	/* minimise unsconstrained "wiggles" */
-	smv = dshapmag(p, dav);
+	/* Compute partial derivative wrt those parameters too */
+	smv = dshapmag(p, sdav);
+	if (CURVEPOW > 1.0) {
+		double dadj;
+		dadj = CURVEPOW * pow(smv, CURVEPOW - 1.0); /* Adjust derivative accordingly */
+		smv = pow(smv, CURVEPOW);
+		dshapscale(p, sdav, dadj);		/* Scale the partial derivatives */
+	}
 	rv = ev + smv;
 
-	/* Copy the del for parameters being optimised to return array */
+	/* Sum the del for parameters being optimised and copy to return array */
 	for (i = 0; i < p->opt_cnt; i++)
-		dv[i] = dav[p->opt_off + i];
+		dv[i] = dav[p->opt_off + i] + sdav[p->opt_off + i];
 
 #ifdef DEBUG
 fprintf(stdout,"~1(sm %f, ev %f)dxfitfunc returning %f\n",smv,ev,rv);
 #endif
 
-	if (p->verb)
-		printf("."), fflush(stdout);
 	return rv;
 }
 
@@ -1259,6 +1346,7 @@ int xfit_fit(
 	double *wp,				/* if flags & XFIT_OUT_WP_REL, */
 							/* Initial white point, returns final wp */
 	double *dw,				/* Device white value to adjust to be D50 */
+	double wpscale,			/* If >= 0.0 scale final wp */  
 	cow *ipoints,			/* Array of data points to fit - referece taken */
 	int nodp,				/* Number of data points */
 	double in_min[MXDI],	/* Input value scaling/domain minimum */
@@ -1271,6 +1359,8 @@ int xfit_fit(
 	int iord[],				/* Order of input pos/shaper curve for each dimension */
 	int sord[],				/* Order of input sub-grid shaper curve (not used) */
 	int oord[],				/* Order of output shaper curve for each dimension */
+	double shp_smooth[MXDI],/* Smoothing factors for each curve, nom = 1.0 */
+	double out_smooth[MXDO],
 	optcomb tcomb,			/* Flag - target elements to fit. */
 	void *cntx2,			/* Context of callbacks */
 							/* Callback to convert two fit values delta E squared */
@@ -1304,12 +1394,13 @@ int xfit_fit(
 	p->to_dde2 = to_dde2;
 
 #ifdef DEBUG
-	printf("xfitc called with flags = 0x%x, di = %d, fdi = %d, nodp = %d, tcomb = 0x%x\n",flags,di,fdi,nodp,tcomb);
+	printf("xfit_fit called with flags = 0x%x, di = %d, fdi = %d, nodp = %d, tcomb = 0x%x\n",flags,di,fdi,nodp,tcomb);
 #endif
 
 //printf("~1 out min = %f %f %f max = %f %f %f\n", out_min[0], out_min[1], out_min[2], out_max[0], out_max[1], out_max[2]);
 
-	/* Sanity protect shaper orders and save scaling factors. */
+	/* Sanity protect shaper orders */
+	/* and save scaling and smoothness factors. */
 	for (e = 0; e < di; e++) {
 		if (iord[e] > MXLUORD)
 			p->iluord[e] = MXLUORD;
@@ -1317,6 +1408,7 @@ int xfit_fit(
 			p->iluord[e] = iord[e];
 		p->in_min[e] = in_min[e];
 		p->in_max[e] = in_max[e];
+		p->shp_smooth[e] = shp_smooth[e];
 	}
 	for (f = 0; f < fdi; f++) {
 		if (oord[f] > MXLUORD)
@@ -1325,7 +1417,9 @@ int xfit_fit(
 			p->oluord[f] = oord[f];
 		p->out_min[f] = out_min[f];
 		p->out_max[f] = out_max[f];
+		p->out_smooth[f] = out_smooth[f];
 	}
+
 
 	/* Compute parameter offset and count information */
 	p->shp_off = 0;
@@ -1514,10 +1608,12 @@ dump_xfit(p);
 		setup_xfit(p, p->wv, p->sa, 0.0, 0.5); 
 
 #ifdef NODDV
-		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		                                 xfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #else
-		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		                       xfitfunc, dxfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 			warning("xfit_fit: Conjgrad failed to converge, residual error = %f", rerr);
 #endif
 		for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
@@ -1534,7 +1630,7 @@ dump_xfit(p);
 		double rerr;
 
 		if (p->verb)
-			printf("\nAbout to optimise input curves and matrix\n");
+			printf("About to optimise input curves and matrix\n");
 
 		/* Setup pseudo-inverse if we need it */
 		if (p->flags & XFIT_FM_INPUT)
@@ -1543,17 +1639,19 @@ dump_xfit(p);
 		p->opt_ch = -1;
 		p->opt_msk = oc_im;
 		setup_xfit(p, p->wv, p->sa, 0.5, 0.3); 
-		/* Supress the warnings the first time through - it's better to cut off the */
+		/* Suppress the warnings the first time through - it's better to cut off the */
 		/* itterations and move on to the output curve, and worry about it not */
 		/* converging the second time through. */
 #ifdef NODDV
-		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0) {
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		                                xfitfunc, (void *)p, xfitprog, (void *)p) != 0) {
 #ifdef DEBUG
 			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #endif
 		}
 #else
-		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0) {
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		                     xfitfunc, dxfitfunc, (void *)p, xfitprog, (void *)p) != 0) {
 #ifdef DEBUG
 			warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
 #endif
@@ -1572,7 +1670,7 @@ dump_xfit(p);
 		double rerr;
 
 		if (p->verb)
-			printf("\nAbout to optimise output curves and matrix\n");
+			printf("About to optimise output curves and matrix\n");
 
 		/* Setup pseudo-inverse if we need it */
 		if (p->flags & XFIT_FM_INPUT)
@@ -1582,10 +1680,12 @@ dump_xfit(p);
 		p->opt_msk = oc_mo;
 		setup_xfit(p, p->wv, p->sa, 0.3, 0.3); 
 #ifdef NODDV
-		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		                                    xfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #else
-		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc,
+		                                   dxfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 			warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
 #endif
 		for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
@@ -1599,7 +1699,7 @@ dump_xfit(p);
 		if ((p->tcomb & oc_im) == oc_im) {
 
 			if (p->verb)
-				printf("\nAbout to optimise input curves and matrix again\n");
+				printf("About to optimise input curves and matrix again\n");
 
 			/* Setup pseudo-inverse if we need it */
 			if (p->flags & XFIT_FM_INPUT)
@@ -1609,10 +1709,12 @@ dump_xfit(p);
 			p->opt_msk = oc_im;
 			setup_xfit(p, p->wv, p->sa, 0.2, 0.2); 
 #ifdef NODDV
-			if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, (void *)p) != 0)
+			if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+			                               xfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 				warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 #else
-			if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
+			if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+			                           xfitfunc, dxfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 				warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
 #endif
 			for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
@@ -1628,7 +1730,7 @@ dump_xfit(p);
 		if ((p->tcomb & oc_imo) == oc_imo) {
 
 			if (p->verb)
-				printf("\nAbout to optimise input, matrix and output together\n");
+				printf("About to optimise input, matrix and output together\n");
 
 			/* Setup pseudo-inverse if we need it */
 			if (p->flags & XFIT_FM_INPUT)
@@ -1637,7 +1739,8 @@ dump_xfit(p);
 			p->opt_ch = -1;
 			p->opt_msk = oc_imo;
 			setup_xfit(p, p->wv, p->sa, 0.1, 0.1); 
-			if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS, xfitfunc, dxfitfunc, (void *)p) != 0)
+			if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+			                    xfitfunc, dxfitfunc, (void *)p, xfitprog, (void *)p) != 0)
 				warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
 			for (i = 0; i < p->opt_cnt; i++)		/* Copy optimised values back */
 				p->v[p->opt_off + i] = p->wv[i];
@@ -1659,13 +1762,14 @@ dump_xfit(p);
 		if (p->flags & XFIT_OUT_ZERO) {
 
 			if (p->verb)
-				printf("\nAbout to adjust a and b output curves for white point\n");
+				printf("About to adjust a and b output curves for white point\n");
 
 			for (f = 1; f < 3 && f < p->fdi; f++) {
 				p->opt_ch = f;
 				p->wv[0] = p->v[p->out_offs[f]];	/* Current parameter value */
 				p->sa[0] = 0.1;					/* Search radius */
-				if (powell(&rerr, 1, p->wv, p->sa, 0.0000001, 1000, symoptfunc, (void *)p) != 0)
+				if (powell(&rerr, 1, p->wv, p->sa, 0.0000001, 1000,
+				                                   symoptfunc, (void *)p, NULL, NULL) != 0)
 					error("xfit_fit: Powell failed to converge, residual error = %f",rerr);
 				p->v[p->out_offs[f]] = p->wv[0];	/* Copy results back */
 			}
@@ -1674,7 +1778,7 @@ dump_xfit(p);
 
 	/* In case we don't generate position curves, */
 	/* copy the input curves to the position, so that */
-	/* iwidth is computed correctly */
+	/* ipos is computed correctly */
 	{
 		double *bb;
 		
@@ -1693,7 +1797,7 @@ dump_xfit(p);
 		int ee;
 
 		if (p->verb)
-			printf("\nAbout to create grid position input curves\n");
+			printf("About to create grid position input curves\n");
 
 		/* Allocate in->rout duplicate point set */
 		if (p->rpoints == NULL) {
@@ -1756,7 +1860,7 @@ dump_xfit(p);
 			if ((resid = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL)
 				return 1;
 
-			resid->fit_rspl_w(resid, RSPL_NOFLAGS, p->rpoints, p->nodp, imin, imax, resres,
+			resid->fit_rspl_w(resid, RSPLFLAGS, p->rpoints, p->nodp, imin, imax, resres,
 				omin, omax, 2.0, NULL, NULL);
 
 #ifdef DEBUG_PLOT
@@ -1799,7 +1903,7 @@ dump_xfit(p);
 					vv = 0.0;
 				vv = pow(vv, 0.5);		/* Convert from error^2 to error */
 				vv += PSHAPE_MINE;		/* In case error is near zero */
-				vv = pow(vv, 1.00);		/* Agressivness of grid distribution */
+				vv = pow(vv, PSHAPE_DIST);		/* Agressivness of grid distribution */
 
 				if (i == 0)
 					pgp[i].v = vv;
@@ -1851,11 +1955,8 @@ dump_xfit(p);
 		}
 	}
 
-	if (p->verb)
-		printf("\n");
-
 #ifdef DEBUG
-printf("\nFinal parameters:\n");
+printf("Final parameters:\n");
 dump_xfit(p);
 #endif
 
@@ -1914,7 +2015,7 @@ dump_xfit(p);
 	/* Create final clut rspl using the established pos/shape/output curves */
 	/* and white point */ 
 	if (flags & XFIT_MAKE_CLUT) {
-		double *iwidth[MXDI];
+		double *ipos[MXDI];
 
 		/* Create an in' -> rout' scattered test point set */
 		if (p->rpoints == NULL) {
@@ -1933,21 +2034,21 @@ dump_xfit(p);
 //p->rpoints[i].v[0], p->rpoints[i].v[1], p->rpoints[i].v[2]);
 		}
 
-		/* Create iwidth[] arrays, that hold the shaper space */
-		/* grid spacing due to the poistioning curves. */
+		/* Create ipos[] arrays, that hold the shaper space */
+		/* grid position due to the positioning curves. */
 		/* This tells the rspl scattered data interpolator */
 		/* the grid spacing that smoothness should be */
 		/* measured against. */
 #ifdef DEBUG
-printf("~1 about to setup iwidth\n");
+printf("~1 about to setup ipos\n");
 #endif
 		for (e = 0; e < p->di; e++) {
-			double lv = 0.0, cv;
 //printf("~1 e = %d\n",e);
-			if ((iwidth[e] = (double *)malloc((p->gres[e]-1) * sizeof(double))) == NULL)
+			if ((ipos[e] = (double *)malloc((p->gres[e]) * sizeof(double))) == NULL)
 				return 1;
 //printf("~1 about to do %d spans\n",p->gres[e]);
 			for (i = 0; i < p->gres[e]; i++) {
+				double cv;
 				cv = (double)i/p->gres[e];
 
 //printf("~1 i = %d, pos space = %f\n",i,cv);
@@ -1960,18 +2061,10 @@ printf("~1 about to setup iwidth\n");
 				/* to give value in shape linearized space. */
 				cv = icxTransFunc(p->v + p->shp_offs[e], p->iluord[e], cv); 
 //printf("~1 shape space = %f\n",cv);
-
-				if (i > 0) {
-					double wi = cv - lv;
-					if (wi < 1e-5)
-						wi = 1e-5;		/* Hmm. */
-//wi = 1.0;
-					iwidth[e][i-1] = wi;
+				ipos[e][i] = cv;
 #ifdef DEBUG
-printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
+printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 #endif
-				}
-				lv = cv;
 			}
 		}
 
@@ -1984,13 +2077,15 @@ printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
 			printf("Create final clut from scattered data\n");
 
 		p->clut->fit_rspl_w(p->clut, rsplflags, p->rpoints, p->nodp, in_min, in_max, gres,
-			out_min, out_max, smooth, oavgdev, iwidth);
-		if (p->verb) printf("\n");
+			out_min, out_max, smooth, oavgdev, ipos);
+		if (p->verb)
+			printf("\n");
 
 		for (e = 0; e < p->di; e++)
-			free(iwidth[e]);
+			free(ipos[e]);
 
-		/* Now do a final white point fixup */
+		/* The current rspl is an aproximate white point relative dev->PCS lookup, */ 
+		/* now do a final white point fixup to make it perfect. */
 		if (p->flags & XFIT_OUT_WP_REL) {
 			co wcc;
 			icmXYZNumber _wp;
@@ -2002,39 +2097,52 @@ printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
 			xfit_inpscurves(p, wcc.p, dw);
 			p->clut->interp(p->clut, &wcc);
 			xfit_outcurves(p, wcc.v, wcc.v);
+			if (p->flags & XFIT_OUT_LAB)
+				icmLab2XYZ(&icmD50, wcc.v, wcc.v);
 
 //printf("~1 device white %f %f %f %f -> %f %f %f\n",
 //dw[0], dw[1], dw[2], dw[3], wcc.v[0], wcc.v[1], wcc.v[2]);
 
-			if (p->flags & XFIT_OUT_LAB)
-				icmLab2XYZ(&icmD50, wcc.v, wcc.v);
-
-//printf("~1 XYZ white %f %f %f\n", wcc.v[0], wcc.v[1], wcc.v[2]);
-
 			if (p->verb) {
 				double labwp[3];
 				icmXYZ2Lab(&icmD50, labwp, wcc.v);
-				printf("Before fine tune, WP = XYZ %f %f %f, Lab %f %f %f\n",
+				printf("Before fine tune, rel WP = XYZ %f %f %f, Lab %f %f %f\n",
 				wcc.v[0], wcc.v[1],wcc.v[2], labwp[0], labwp[1], labwp[2]);
 			}
+			icmMulBy3x3(wcc.v, p->toAbs, wcc.v); /* Convert to absolute */
+//printf("~1 aprox abs wp = XYZ %f %f %f\n", wcc.v[0], wcc.v[1], wcc.v[2]);
+
+			/* Optional input profile adjustment of white point */
+			if (wpscale >= 0.0) {
+				wcc.v[0] *= wpscale;
+				wcc.v[1] *= wpscale;
+				wcc.v[2] *= wpscale;
+			}
+			icmAry2XYZ(_wp, wcc.v);		/* Target abs white point */
+
+			icmMulBy3x3(wcc.v, p->fromAbs, wcc.v); /* Aprox relative target white point for later */
+//printf("~1 aprox rel wp = XYZ %f %f %f\n", wcc.v[0], wcc.v[1], wcc.v[2]);
 
 			/* Fixup conversion matricies so that they transform */
 			/* the absolute input values to perfect relative. */
-			icmAry2XYZ(_wp, wcc.v);
 
 			/* Absolute->Relative Adaptation matrix */
-			icmChromAdaptMatrix(ICM_CAM_BRADFORD | ICM_CAM_MULMATRIX, icmD50, _wp, p->fromAbs);
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->fromAbs);
 		
 			/* Relative to absolute conversion matrix */
-			icmChromAdaptMatrix(ICM_CAM_BRADFORD | ICM_CAM_MULMATRIX, _wp, icmD50, p->toAbs);
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, p->toAbs);
 	
 			/* return accurate white point to caller */
-			icmXYZ2Ary(p->wp, icmD50);
-			icmMulBy3x3(p->wp, p->toAbs, p->wp);
+			icmXYZ2Ary(p->wp, _wp);
 
 			/* Matrix needed to correct from approximate to exact D50 */
+			icmAry2XYZ(_wp, wcc.v);		/* Aprox relative target white point */
 			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->cmat);
 	
+			/* NOTE: this doesn't always give us a perfect D50 white for */
+			/* Lab PCS input profiles because the dev white may land */
+			/* within a cell, and the clipping of Lab PCS values in the grid */
+			/* may introduce errors in the interpolated value. */
 			p->clut->re_set_rspl(
 				p->clut,		/* this */
 				0,				/* Combination of flags */
@@ -2044,9 +2152,17 @@ printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
 
 			if (p->verb) {
 				double labwp[3];
-				icmXYZ2Lab(&icmD50, labwp, p->wp);
-				printf("After fine tune, WP = XYZ %f %f %f, Lab %f %f %f\n",
-				p->wp[0], p->wp[1],p->wp[2], labwp[0], labwp[1], labwp[2]);
+
+				xfit_inpscurves(p, wcc.p, dw);
+				p->clut->interp(p->clut, &wcc);
+				xfit_outcurves(p, wcc.v, wcc.v);
+				if (p->flags & XFIT_OUT_LAB)
+					icmLab2XYZ(&icmD50, wcc.v, wcc.v);
+				icmXYZ2Lab(&icmD50, labwp, wcc.v);
+				printf("After fine tune, rel WP = XYZ %f %f %f, Lab %f %f %f\n",
+				wcc.v[0], wcc.v[1], wcc.v[2], labwp[0], labwp[1], labwp[2]);
+//icmMulBy3x3(wcc.v, p->toAbs, wcc.v); /* Convert to absolute */
+//printf("~1 verify abs wp = XYZ %f %f %f\n", wcc.v[0], wcc.v[1], wcc.v[2]);
 			}
 		}
 
@@ -2157,7 +2273,7 @@ printf("~1 iwidth[%d][%d] = %f\n",e,i-1,wi);
 			if ((resid = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL)
 				return 1;
 
-			resid->fit_rspl_w(resid, 0, p->rpoints, p->nodp, imin, imax, resres,
+			resid->fit_rspl_w(resid, RSPLFLAGS, p->rpoints, p->nodp, imin, imax, resres,
 				omin, omax, 2.0, NULL, NULL);
 
 			{

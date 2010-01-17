@@ -13,7 +13,7 @@
  * Copyright 2005 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * This is an alternative driver to spm/gretag.
@@ -324,7 +324,7 @@ double ss_sub_double(ss *p) {
 	return op;
 }
 
-/* Remove an  ASCII string from the receive buffer. */
+/* Remove an ASCII string from the receive buffer. */
 /* The string will be terminated with a nul, so a buffer */
 /* of len+1 should be provided to return the string in. */
 void ss_sub_string(ss *p, char *t, int len) {
@@ -1389,7 +1389,7 @@ ss_hst hs		/* Handshake type (None/XonXoff/HW) */
 /* Query the type of XY table */
 inst_code ss_do_OutputType(
 ss *p,
-char dt[19]		/* Return Device Type ("SpectroScan " or "SpectroScanT") */
+char dt[19]		/* Return Device Type ("SpectroScan", "SpectroScan " or "SpectroScanT") */
 ) {
 	ss_add_ssreq(p, ss_OutputType);
 	ss_command(p, DF_TMO);
@@ -1397,7 +1397,8 @@ char dt[19]		/* Return Device Type ("SpectroScan " or "SpectroScanT") */
 	ss_sub_string(p, dt, 18);
 	chended(p);
 #ifdef EMSST
-	if (strcmp(dt,"SpectroScan ") == 0)
+	if (strcmp(dt,"SpectroScan ") == 0
+	 || strcmp(dt,"SpectroScan") == 0)
 		sprintf(dt,"SpectroScanT");
 #endif
 	return ss_inst_err(p);

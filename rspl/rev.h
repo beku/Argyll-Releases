@@ -1,3 +1,5 @@
+#ifndef RSPL_REV_H
+#define RSPL_REV_H
 
 /* 
  * Argyll Color Correction System
@@ -11,7 +13,7 @@
  * Copyright 1999 - 2008 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Latest simplex/linear equation version.
@@ -74,15 +76,16 @@
 /* depending on which cube created it. */
 typedef struct {
 	int face;			/* Flag, nz if simplex lies on cube surface */
-	int icomb[MXRI];	/* Index by Absolute[di] -> Simplex Parameter[sdi], */
+	int icomb[MXDI];	/* Index by Absolute[di] -> Simplex Parameter[sdi], */
 						/*                          -1 == value 0, -2 == value 1 */
 						/* Note that many Abs can map to one Param to form a sum. */
 						/* icomb[] specifies the equation to convert simplex space */
 						/* coordinates back into cartesian space. */
-	int offs[MXRI+1];	/* Offsets to simplex verticies within cube */
-	int foffs[MXRI+1];	/* Fwd grid floating offsets to simplex verticies from cube base */
-	int pmino[MXRI], pmaxo[MXRI]; /* Cube verticy offsets to setup simplex */
-						          /* pmin[] and pmax[] pointers. */
+	int offs[MXDI+1];	/* Offsets to simplex verticies within cube == bit per dim */
+	int goffs[MXDI+1];	/* Offsets to simplex verticies within grid */
+	int foffs[MXDI+1];	/* Fwd grid floating offsets to simplex verticies from cube base */
+	int pmino[MXDI], pmaxo[MXDI]; /* Cube verticy offsets to setup simplex pmin[] and */
+						/* pmax[] bounding box pointers. */
 } psxinfo;
 
 /* Sub simplexes of a cube information structure */
@@ -230,8 +233,8 @@ struct _cell {
 
 #define REV_ACC_GRES_MUL 2.0		/* Reverse accelleration grid resolution */
 									/* multiplier over fwd grid resolution */
-#define REV_MAX_MEM_RATIO 0.45		/* Proportion of first 1G of Ram to use */
-#define REV_MAX_MEM_RATIO2 0.75		/* Proportion of rest of Ram to use */
+#define REV_MAX_MEM_RATIO 0.3		/* Proportion of first 1G of Ram to use */
+#define REV_MAX_MEM_RATIO2 0.4		/* Proportion of rest of Ram to use */
 									/* rev as a fraction of the System RAM. */
 #define HASH_FILL_RATIO 3			/* Ratio of entries to hash size */
 
@@ -303,11 +306,7 @@ struct _schbase {
 	int naux;			/* Number of auxiliary target input values */
 	int auxi[MXRI];		/* aux list of auxiliary target input values */
 	double idist;		/* best input distance auxiliary target found (smaller is better) */
-
-	double (*limit)(void *cntx, double *in);	/* Optional input space qualifier function. */
-	void *cntx;			/* Context passed to limit() */
-	double limitv;		/* Value not to be exceeded by limit() */
-	int limiten;		/* Flag - limiting is enabled */
+	int iabove;			/* Number of auxiliaries at or above zero */
 
 	int canvecclip;		/* Non-zero if vector clip direction usable */
 	double cdir[MXRO];	/* Clip vector direction and length wrt. v[] */
@@ -379,6 +378,7 @@ struct _rev_struct {
 	struct _rev_struct *next;	/* Linked list of instances sharing memory */
 	size_t max_sz;		/* Maximum size permitted */
 	size_t sz;			/* Total memory current allocated by rev */
+
 #ifdef NEVER
 	int thissz, lastsz;	/* Debug reporting */
 #endif
@@ -393,7 +393,7 @@ struct _rev_struct {
 	datao gl,gh,gw;		/* Reverse grid low, high, grid cell width */
 
 	/* Second section, accelleration information that changes with ink limit. */
-	int rev_valid;		/* nz if thi information in rev[] and nnrev[] is valid */
+	int rev_valid;		/* nz if this information in rev[] and nnrev[] is valid */
 	int **rev;			/* Exact reverse lookup starting list. */
 						/* rev.no pointers to lists of fwd grid indexes. */
 						/* First int is allocation length */
@@ -402,9 +402,11 @@ struct _rev_struct {
 						/* Last int is -1 */
 	int **nnrev;		/* Nearest reverse lookup starting list. */
 						/* rev.no pointers to lists of fwd grid indexes. */
-						/* First int is allocation length */
-						/* Second int is reference count */
+						/* [0] is allocation length */
+						/* [1] is the next free entry index */
+						/* [2] is reference count */
 						/* Then follows cube indexes */
+						/* The last entry is marked with -1 */
 
 	/* Third section */
 	revcache *cache;	/* Where cells are allocated and cached */
@@ -420,9 +422,24 @@ struct _rev_struct {
 	stats st[5];	/* Set of stats info indexed by enum ops */
 #endif	/* STATS */
 
+	int primsecwarn;	/* Not primary or secondary warning has been issued */
+
 }; typedef struct _rev_struct rev_struct;
 
 
+/* ------------------------------------ */
+/* Utility functions used by other parts of rspl implementation */
+
+/* Initialise a static sub-simplex verticy information table */
+void rspl_init_ssimplex_info(struct _rspl *s,	/* RSPL object */
+ssxinfo *xip,				/* Pointer to sub-simplex info structure to init. */
+int sdi);					/* Sub-simplex dimensionality (range 0 - di) */
+
+/* Free the given sub-simplex verticy information */
+void rspl_free_ssimplex_info(struct _rspl *s,
+ssxinfo *xip);		/* Pointer to sub-simplex info structure */
+
+#endif /* RSPL_REV_H */
 
 
 

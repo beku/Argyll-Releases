@@ -2,11 +2,9 @@ AUTHORS
 COPYING
 LICENSE
 README
-10-Argyll.permissions
 45-Argyll.rules
 55-Argyll.rules
 Argyll
 Argyll.usermap
 Argyll.kext/Info.plist
-color-device-file.policy
-19-color.fdi
+install_kext.sh

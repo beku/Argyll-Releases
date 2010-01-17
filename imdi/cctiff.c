@@ -11,11 +11,14 @@
  * Copyright 2000 - 2006 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
 /* TTBD:
+
+	Should make -d option default to the last device
+	profile.
 
 	Should add support for getting TIFF ink names from
 	the ICC profile colorantTable if it exists,
@@ -23,13 +26,6 @@
 	then matching them to the incoming TIFF, and
 	embedding them in the outgoing TIFF.
 	Add flag to ignore inkname mismatches.
-
-
-	Should add support for using and embedding ICC profiles in the TIFF.
-	For reading and writing use:
-
-		TIFFGetField(tif, TIFFTAG_ICCPROFILE, &icclen, &iccinfo);
-		TIFFSetField(tif, TIFFTAG_ICCPROFILE, icclen, iccinfo);
 
 
 	Should add support for transfering any extra alpha
@@ -76,40 +72,44 @@
 #include "numlib.h"
 #include "tiffio.h"
 #include "icc.h"
-#include "xutils.h"
+#include "xicc.h"
 #include "imdi.h"
 
 #undef DEBUG		/* Print detailed debug info */
 
 void usage(char *diag, ...) {
-	fprintf(stderr,"Color Correct a TIFF file using any sequence of ICC device profiles, V%s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Color Correct a TIFF file using any sequence of ICC profiles or Calibrations, V%s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
-		fprintf(stderr,"Diagnostic: ");
+		fprintf(stderr,"  Diagnostic: ");
 		va_start(args, diag);
 		vfprintf(stderr, diag, args);
 		va_end(args);
 		fprintf(stderr,"\n");
 	}
-	fprintf(stderr,"usage: cctiff [-options] { [-i intent] profile.icm ...} infile.tif outfile.tif\n");
+	fprintf(stderr,"usage: cctiff [-options] { [-i intent] profile%s | calbrtn.cal ...} infile.tif outfile.tif\n",ICC_FILE_EXT);
 	fprintf(stderr," -v              Verbose.\n");
 	fprintf(stderr," -c              Combine linearisation curves into one transform.\n");
 	fprintf(stderr," -p              Use slow precise correction.\n");
 	fprintf(stderr," -k              Check fast result against precise, and report.\n");
 	fprintf(stderr," -r n            Override the default CLUT resolution\n");
-	fprintf(stderr," -o intent       Choose last profiles intent\n");
-	fprintf(stderr," -e n            Choose TIFF output encoding from 1..n\n");
+	fprintf(stderr," -t n            Choose TIFF output encoding from 1..n\n");
 	fprintf(stderr," -a              Read and Write planes > 4 as alpha planes\n");
 	fprintf(stderr," -I              Ignore any file or profile colorspace mismatches\n");
-	fprintf(stderr," -l              This flag is ignored for backwards compatibility\n");
-	fprintf(stderr," -d profile.[icm | tiff]  Optionally embed a profile in the destination TIFF file.\n");
+	fprintf(stderr," -D              Don't append or set the description\n");
+	fprintf(stderr," -e profile.[%s | tiff]  Optionally embed a profile in the destination TIFF file.\n",ICC_FILE_EXT_ND);
 	fprintf(stderr,"\n");
 	fprintf(stderr,"                 Then for each profile in sequence:\n");
-	fprintf(stderr,"   -i intent     p = perceptual, r = relative colorimetric,\n");
-	fprintf(stderr,"                 s = saturation, a = absolute colorimetric\n");
-	fprintf(stderr,"   profile.[icm | tiff]  Device, Link or Abstract profile.\n");
-	fprintf(stderr,"                 May be embeded profile in TIFF file.\n");
+	fprintf(stderr,"   -i intent       p = perceptual, r = relative colorimetric,\n");
+	fprintf(stderr,"                   s = saturation, a = absolute colorimetric\n");
+	fprintf(stderr,"   -o order        n = normal (priority: lut > matrix > monochrome)\n");
+	fprintf(stderr,"                   r = reverse (priority: monochrome > matrix > lut)\n");
+	fprintf(stderr,"   profile.[%s | tiff]  Device, Link or Abstract profile\n",ICC_FILE_EXT_ND);
+	fprintf(stderr,"                   ( May be embeded profile in TIFF file)\n");
+	fprintf(stderr,"                 or each calibration file in sequence:\n");
+	fprintf(stderr,"   -d dir          f = forward cal. (default), b = backwards cal.\n");
+	fprintf(stderr,"   calbrtn.cal     Device calibration file.\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr," infile.tif      Input TIFF file in appropriate color space\n");
 	fprintf(stderr," outfile.tif     Output TIFF file\n");
@@ -547,17 +547,23 @@ int pmtc
 /* Information needed from a single profile */
 struct _profinfo {
 	char name[MAXNAMEL+1];
-	icc *c;
-	icmHeader *h;
+	icc *c;								/* If non-NULL, ICC profile. */
+	xcal *cal;							/* if non-NULL, xcal rather than profile */
+
+	/* Valid for both icc and xcal: */
+	icColorSpaceSignature ins, outs;	/* Colorspace of conversion */
+	int id, od;							/* Dimensions of conversion */
+
+	/* Valid only for icc: */
+	icmHeader *h;						
 	icRenderingIntent intent;			/* Rendering intent chosen */
 	icmLookupFunc func;					/* Type of function to use in lookup */
-	icColorSpaceSignature ins, outs;	/* Colorspace of conversion */
-	icColorSpaceSignature id, od;		/* Dimensions of conversion */
+	icmLookupOrder order;				/* tag search order to use */
 	icmLuAlgType alg;					/* Type of lookup algorithm used */
 	int clutres;						/* If this profile uses a clut, what's it's res. ? */
 	icColorSpaceSignature natpcs;		/* Underlying natural PCS */
+	icmLuBase *luo;						/* Base Lookup type object */
 
-	icmLuBase *luo;				/* Base Lookup type object */
 }; typedef struct _profinfo profinfo;
 
 /* Context for imdi setup callbacks */
@@ -565,7 +571,8 @@ typedef struct {
 	/* Overall parameters */
 	int verb;				/* Non-zero if verbose */
 	icColorSpaceSignature ins, outs;	/* Input/Output spaces */
-	int id, od;				/* Input/Output dimensions */
+	int id, od, md;			/* Input/Output dimensions and max(id,od) */
+	int width, height;		/* Width and heigh of raster */
 	int isign_mask;			/* Input sign mask */
 	int osign_mask;			/* Output sign mask */
 	int icombine;			/* Non-zero if input curves are to be combined */
@@ -576,6 +583,8 @@ typedef struct {
 	void (*ocvt)(double *out, double *in);	/* If non-NULL, Output format conversion */
 
 	int nprofs;				/* Number of profiles in the sequence */
+	int first, last;		/* index of first and last profiles/cals, 0 and nprofs-1 */ 
+	int fclut, lclut;		/* first and last profiles/cals that are part of multi-d table */
 	profinfo *profs;		/* Profile information */
 } sucntx;
 
@@ -592,15 +601,27 @@ static void input_curves(
 //printf("~1 incurve in %f %f %f %f\n",in_vals[0],in_vals[1],in_vals[2],in_vals[3]);
 
 	for (i = 0; i < rx->id; i++)
-		out_vals[i] = in_vals[i];
+		out_vals[i] = in_vals[i];	/* Default to nothing */
 
-	if (rx->icombine == 0) {
+	if (rx->icombine == 0) {		/* Not combined into multi-d table */
+
 		/* TIFF input format conversion */
 		if (rx->icvt != NULL) {					/* (Never used because PCS < 0.0 > 1.0) */
 			rx->icvt(out_vals, out_vals);
 		}
+
+		/* Any concatinated input calibrations */
+		for (i = rx->first; i < rx->fclut; i++) {
+			if (rx->profs[i].func == icmFwd)
+				rx->profs[i].cal->interp(rx->profs[i].cal, out_vals, out_vals);
+			else
+				rx->profs[i].cal->inv_interp(rx->profs[i].cal, out_vals, out_vals);
+		}
+
+		/* The input table of the first profile */
 		/* (icombine is set if input is PCS) */
-		rx->profs[0].luo->lookup_in(rx->profs[0].luo, out_vals, out_vals);
+		if (rx->fclut <= rx->lclut) 
+			rx->profs[rx->fclut].luo->lookup_in(rx->profs[rx->fclut].luo, out_vals, out_vals);
 
 		/* If input curve converts to Y type space, apply Y->L* curve */
 		/* so as to index CLUT perceptually. */
@@ -629,65 +650,88 @@ double *in_vals
 	int i, j;
 	
 	for (i = 0; i < rx->id; i++)
-		vals[i] = in_vals[i];
+		vals[i] = in_vals[i];		/* default is do nothing */
 
 //printf("~1 md_table in %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
 
 	prs = rx->ins;
 
-	/* Any needed file format conversion */
-	if (rx->icombine != 0 && rx->icvt != NULL) {
-		rx->icvt(vals, vals);
+	/* If the input curves are being combined into clut: */
+	if (rx->icombine != 0) {
+
+		/* Any needed TIFF file format conversion */
+		if (rx->icvt != NULL) {
+			rx->icvt(vals, vals);
 //printf("~1 md_table after icvt %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+		}
+
+		/* Any concatinated input calibrations */
+		for (j = rx->first; j < rx->fclut; j++) {
+			if (rx->profs[j].func == icmFwd)
+				rx->profs[j].cal->interp(rx->profs[j].cal, vals, vals);
+			else
+				rx->profs[j].cal->inv_interp(rx->profs[j].cal, vals, vals);
+		}
+//printf("~1 md_table after in cals %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
 	}
 
-	/* Do all the profile links in-between */
-	for (j = 0; j < rx->nprofs; j++) {
+	/* Do all the profile links in-between (if any) */
+	for (j = rx->fclut; j <= rx->lclut; j++) {
 
-		/* Convert PCS for this profile */
-		if (prs == icSigXYZData && rx->profs[j].ins == icSigLabData) {
-			icmXYZ2Lab(&icmD50, vals, vals);
-//printf("~1 md_table after XYZ2Lab %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
-		} else if (prs == icSigLabData && rx->profs[j].ins == icSigXYZData) {
-			icmLab2XYZ(&icmD50, vals, vals);
-//printf("~1 md_table after Lab2XYZ %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
-		}
-	
-		/* If first or last profile */
-		if (j == 0 || j == (rx->nprofs-1)) {
-			if (j != 0 || rx->icombine) {
-				rx->profs[j].luo->lookup_in(rx->profs[j].luo, vals, vals);
-//printf("~1 md_table after input curve %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
-			} else if (j == 0 && rx->ilcurve) {
-				/* Apply L*->Y curve to compensate for curve applied after input curve */
-				for (i = 0; i < rx->id; i++) {
-					vals[i] = (vals[i] + 0.16)/1.16;
-					if (vals[i] > 24.0/116.0)
-						vals[i] = pow(vals[i],3.0);
-					else
-						vals[i] = (vals[i] - 16.0/116.0)/7.787036979;
-				}
-			}
-			rx->profs[j].luo->lookup_core(rx->profs[j].luo, vals, vals);
-//printf("~1 md_table after core %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
-			if (j != (rx->nprofs-1) || rx->ocombine) {
-				rx->profs[j].luo->lookup_out(rx->profs[j].luo, vals, vals);
-//printf("~1 md_table after output curve %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
-			} else if (j == (rx->nprofs-1) && rx->olcurve) {
-				/* Add Y->L* curve to cause interpolation in perceptual space */
-				for (i = 0; i < rx->id; i++) {
-					if (vals[i] > 0.008856451586)
-						vals[i] = pow(vals[i],1.0/3.0);
-					else
-						vals[i] = 7.787036979 * vals[i] + 16.0/116.0;
-					vals[i] = (1.16 * vals[i] - 0.16);
-				}
-			}
+		/* If it's a calibration */
+		if (rx->profs[j].cal != NULL) {
+			if (rx->profs[j].func == icmFwd)
+				rx->profs[j].cal->interp(rx->profs[j].cal, vals, vals);
+			else
+				rx->profs[j].cal->inv_interp(rx->profs[j].cal, vals, vals);
 
-		/* Middle of chain */
+		/* Else it's a profile */
 		} else {
-			rx->profs[j].luo->lookup(rx->profs[j].luo, vals, vals);
+			/* Convert PCS for this profile */
+			if (prs == icSigXYZData && rx->profs[j].ins == icSigLabData) {
+				icmXYZ2Lab(&icmD50, vals, vals);
+//printf("~1 md_table after XYZ2Lab %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+			} else if (prs == icSigLabData && rx->profs[j].ins == icSigXYZData) {
+				icmLab2XYZ(&icmD50, vals, vals);
+//printf("~1 md_table after Lab2XYZ %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+			}
+		
+			/* If first or last profile */
+			if (j == rx->fclut || j == rx->lclut) {
+				if (j != 0 || rx->icombine) {
+					rx->profs[j].luo->lookup_in(rx->profs[j].luo, vals, vals);
+//printf("~1 md_table after input curve %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+				} else if (j == rx->fclut && rx->ilcurve) {
+					/* Apply L*->Y curve to compensate for curve applied after input curve */
+					for (i = 0; i < rx->id; i++) {
+						vals[i] = (vals[i] + 0.16)/1.16;
+						if (vals[i] > 24.0/116.0)
+							vals[i] = pow(vals[i],3.0);
+						else
+							vals[i] = (vals[i] - 16.0/116.0)/7.787036979;
+					}
+				}
+				rx->profs[j].luo->lookup_core(rx->profs[j].luo, vals, vals);
+//printf("~1 md_table after core %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+				if (j != rx->lclut || rx->ocombine) {
+					rx->profs[j].luo->lookup_out(rx->profs[j].luo, vals, vals);
+//printf("~1 md_table after output curve %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+				} else if (j == rx->lclut && rx->olcurve) {
+					/* Add Y->L* curve to cause interpolation in perceptual space */
+					for (i = 0; i < rx->id; i++) {
+						if (vals[i] > 0.008856451586)
+							vals[i] = pow(vals[i],1.0/3.0);
+						else
+							vals[i] = 7.787036979 * vals[i] + 16.0/116.0;
+						vals[i] = (1.16 * vals[i] - 0.16);
+					}
+				}
+
+			/* Middle of chain */
+			} else {
+				rx->profs[j].luo->lookup(rx->profs[j].luo, vals, vals);
 //printf("~1 md_table after middle %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+			}
 		}
 		prs = rx->profs[j].outs;
 	}
@@ -703,10 +747,24 @@ double *in_vals
 //printf("~1 md_table after out Lab2XYZ %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
 	}
 
-	/* Any needed file format conversion */
-	if (rx->ocombine != 0 && rx->ocvt != NULL) {
-		rx->ocvt(vals, vals);
+	/* If the output curves are being combined into clut: */
+	if (rx->ocombine != 0) {
+
+		/* Any concatinated output calibrations */
+		for (j = rx->lclut+1; j <= rx->last; j++) {
+			if (rx->profs[j].func == icmFwd)
+				rx->profs[j].cal->interp(rx->profs[j].cal, vals, vals);
+			else
+				rx->profs[j].cal->inv_interp(rx->profs[j].cal, vals, vals);
+		}
+//printf("~1 md_table after out cals %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+
+		/* Any needed TIFF file format conversion */
+		if (rx->ocvt != NULL) {
+			rx->ocvt(vals, vals);
 //printf("~1 md_table after out ocvt %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+		}
+
 	}
 
 	for (i = 0; i < rx->od; i++)
@@ -721,13 +779,14 @@ static void output_curves(
 	double *in_vals
 ) {
 	sucntx *rx = (sucntx *)cntx;
-	int i, j = rx->nprofs-1; 
+	int i; 
 	
 //printf("~1 outurve in %f %f %f %f\n",in_vals[0],in_vals[1],in_vals[2],in_vals[3]);
 	for (i = 0; i < rx->od; i++)
 		out_vals[i] = in_vals[i];
 
-	if (rx->ocombine == 0) {
+	if (rx->ocombine == 0) {	/* Not combined into multi-d table */
+
 		/* Apply L* -> Y curve to undo curve applied at CLUT output. */
 		if (rx->olcurve != 0) {
 			for (i = 0; i < rx->od; i++) {
@@ -738,8 +797,21 @@ static void output_curves(
 					out_vals[i] = (out_vals[i] - 16.0/116.0)/7.787036979;
 			}
 		}
-		rx->profs[j].luo->lookup_out(rx->profs[j].luo, out_vals, out_vals);
+
+		/* The output table of the last profile */
+		/* (ocombine is set if output is PCS) */
+		if (rx->fclut <= rx->lclut)  {
+			rx->profs[rx->lclut].luo->lookup_out(rx->profs[rx->lclut].luo, out_vals, out_vals);
 //printf("~1 md_table after out curve %f %f %f %f\n",out_vals[0],out_vals[1],out_vals[2],out_vals[3]);
+		}
+
+		/* Any concatinated output calibrations */
+		for (i = rx->lclut+1; i <= rx->last; i++) {
+			if (rx->profs[i].func == icmFwd)
+				rx->profs[i].cal->interp(rx->profs[i].cal, out_vals, out_vals);
+			else
+				rx->profs[i].cal->inv_interp(rx->profs[i].cal, out_vals, out_vals);
+		}
 
 		/* Any needed file format conversion */
 		if (rx->ocvt != NULL) {					/* (Never used because PCS < 0.0 > 1.0) */
@@ -793,14 +865,18 @@ main(int argc, char *argv[]) {
 	char dst_pname[MAXNAMEL+1] = "";		/* Destination embeded profile file name */
 	icc *deicc = NULL;						/* Destination embedded profile (if any) */
 	icRenderingIntent next_intent;			/* Rendering intent for next profile */
-	icRenderingIntent last_intent;			/* Rendering intent for next profile */
+	icmLookupOrder next_order;				/* tag search order for next profile */
+	icmLookupFunc next_func;				/* Direction for next calibration */
 	int last_dim;							/* Next dimentionality between conversions */
 	icColorSpaceSignature last_colorspace;	/* Next colorspace between conversions */
-	int slow = 0;			/* Slow and precice (float) */
+	char *last_cs_file;		/* Name of the file the last colorspace came from */
+	int doimdi = 1;			/* Use the fast overall integer conversion */
+	int dofloat = 0;		/* Use the slow precice (float). */
 	int check = 0;			/* Check fast (int) against slow (float) */
 	int ochoice = 0;		/* Output photometric choice 1..n */
 	int alpha = 0;			/* Use alpha for extra planes */
 	int ignoremm = 0;		/* Ignore any colorspace mismatches */
+	int nodesc = 0;			/* Don't append or set the description */
 	int i, j, rv = 0;
 
 	/* TIFF file info */
@@ -812,12 +888,14 @@ main(int argc, char *argv[]) {
 	float resx, resy;
 	uint16 pconfig;								/* Planar configuration */
 
-	uint16 rsamplesperpixel, wsamplesperpixel;	/* Bits per sample */
+	uint16 rsamplesperpixel, wsamplesperpixel;	/* Channels per sample */
 	uint16 rphotometric, wphotometric;			/* Photometrics */
 	uint16 rextrasamples, wextrasamples;		/* Extra "alpha" samples */
 	uint16 *rextrainfo, wextrainfo[MAX_CHAN];	/* Info about extra samples */
+	char *rdesc = NULL;							/* Existing description */
+	char *wdesc = "[ Color corrected by ArgyllCMS ]";	/* New description */
 
-	tdata_t *inbuf, *outbuf, *precbuf = NULL;
+	tdata_t *inbuf = NULL, *outbuf = NULL, *precbuf = NULL;
 
 	/* IMDI */
 	imdi *s = NULL;
@@ -844,7 +922,8 @@ main(int argc, char *argv[]) {
 	su.nprofs = 0;
 	su.profs = NULL;
 	next_intent = icmDefaultIntent;
-	last_intent = icmDefaultIntent;
+	next_func = icmFwd;
+	next_order = icmLuOrdNorm;
 
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
@@ -866,9 +945,10 @@ main(int argc, char *argv[]) {
 			if (argv[fa][1] == '?')
 				usage("Usage requested");
 
-			/* Slow, Precise */
+			/* Slow, Precise, not integer */
 			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
-				slow = 1;
+				doimdi = 0;
+				dofloat = 1;
 			}
 
 			/* Combine per channel curves */
@@ -879,17 +959,14 @@ main(int argc, char *argv[]) {
 
 			/* Check curves */
 			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
+				doimdi = 1;
+				dofloat = 1;
 				check = 1;
 			}
 
 			/* Use alpha planes for any over 4 */
 			else if (argv[fa][1] == 'a' || argv[fa][1] == 'A') {
 				alpha = 1;
-			}
-
-			/* Ignore a -l flag, for backwards compatibility with cctiff1 */
-			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L') {
-				;
 			}
 
 			/* CLUT resolution */
@@ -901,18 +978,19 @@ main(int argc, char *argv[]) {
 					usage("-r argument must be >= 2");
 			}
 
-			/* Output photometric choice */
-			else if (argv[fa][1] == 'e' || argv[fa][1] == 'E') {
+			/* Output TIFF photometric choice */
+			else if (argv[fa][1] == 't' || argv[fa][1] == 'T') {
 				fa = nfa;
-				if (na == NULL) usage("Expect argument to -e flag");
+				if (na == NULL) usage("Expect argument to -t flag");
 				ochoice = atoi(na);
 			}
 			/* Destination TIFF embedded profile */
-			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D') {
+			else if (argv[fa][1] == 'e' || argv[fa][1] == 'E') {
 				fa = nfa;
-				if (na == NULL) usage("Expect profile name argument to -d flag");
+				if (na == NULL) usage("Expect profile name argument to -e flag");
 				strncpy(dst_pname,na, MAXNAMEL); dst_pname[MAXNAMEL] = '\000';
 			}
+
 			/* Next profile Intent */
 			else if (argv[fa][1] == 'i') {
 				fa = nfa;
@@ -939,34 +1017,47 @@ main(int argc, char *argv[]) {
 				}
 			}
 
-			/* Last profile Intent */
-			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+			/* Next profile search order */
+			else if (argv[fa][1] == 'o') {
 				fa = nfa;
 				if (na == NULL) usage("Missing argument to -o flag");
     			switch (na[0]) {
-					case 'p':
-					case 'P':
-						last_intent = icPerceptual;
+					case 'n':
+					case 'N':
+						next_order = icmLuOrdNorm;
 						break;
 					case 'r':
 					case 'R':
-						last_intent = icRelativeColorimetric;
-						break;
-					case 's':
-					case 'S':
-						last_intent = icSaturation;
-						break;
-					case 'a':
-					case 'A':
-						last_intent = icAbsoluteColorimetric;
+						next_order = icmLuOrdRev;
 						break;
 					default:
-						usage("Unknown argument '%c' to -i flag",na[0]);
+						usage("Unknown argument '%c' to -o flag",na[0]);
+				}
+			}
+
+			/* Next calibraton direction */
+			else if (argv[fa][1] == 'd') {
+				fa = nfa;
+				if (na == NULL) usage("Missing argument to -i flag");
+    			switch (na[0]) {
+					case 'f':
+					case 'F':
+						next_func = icmFwd;
+						break;
+					case 'b':
+					case 'B':
+						next_func = icmBwd;
+						break;
+					default:
+						usage("Unknown argument '%c' to -d flag",na[0]);
 				}
 			}
 
 			else if (argv[fa][1] == 'I')
 				ignoremm = 1;
+
+			else if (argv[fa][1] == 'D')
+				nodesc = 1;
 
 			/* Verbosity */
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
@@ -987,12 +1078,17 @@ main(int argc, char *argv[]) {
 			if (su.profs == NULL)
 				error("Malloc failed in allocating space for profile info.");
 
+			memset((void *)&su.profs[su.nprofs], 0, sizeof(profinfo));
 			strncpy(su.profs[su.nprofs].name,argv[fa],MAXNAMEL);
 			su.profs[su.nprofs].name[MAXNAMEL] = '\000';
 			su.profs[su.nprofs].intent = next_intent;
+			su.profs[su.nprofs].func = next_func;
+			su.profs[su.nprofs].order = next_order;
 
 			su.nprofs++;
 			next_intent = icmDefaultIntent;
+			next_func = icmFwd;
+			next_order = icmLuOrdNorm;
 		} else {
 			break;
 		}
@@ -1006,14 +1102,11 @@ main(int argc, char *argv[]) {
 	strncpy(out_name,su.profs[--su.nprofs].name, MAXNAMEL); out_name[MAXNAMEL] = '\000';
 	strncpy(in_name,su.profs[--su.nprofs].name, MAXNAMEL); in_name[MAXNAMEL] = '\000';
 
-	/* Implement the "last intent" option */
-	if (su.nprofs > 0) {
-		if (su.profs[su.nprofs-1].intent == icmDefaultIntent
-		 && last_intent != icmDefaultIntent)
-			su.profs[su.nprofs-1].intent = last_intent;
-	}
+	su.fclut = su.first = 0;
+	su.lclut = su.last = su.nprofs-1;
 
-	next_intent = icmDefaultIntent;
+	if (check && (!doimdi || !dofloat))
+		error("Can't do check unless both integera and float processing are enabled");
 
 /*
 
@@ -1034,6 +1127,10 @@ main(int argc, char *argv[]) {
 			check next_space == profile.in_devspace
 			next_space = profile.out_devspace 
 
+		case cal file:
+			check next_space == cal.devspace
+			next_space = cal.devspace 
+
 		case colorspace/input/display/output:
 			if colorspace
 				set intent = default
@@ -1049,6 +1146,10 @@ main(int argc, char *argv[]) {
 		create luo
 	
 	Make output TIFF colorspace match next_space
+
+	Figure out how many calibrations can be concatinated into the input
+	and output curves.
+
 	Set any special output space encoding transform (ie. device, Lab flavour)
 
 */
@@ -1091,88 +1192,140 @@ main(int argc, char *argv[]) {
 
 	last_dim = su.id;
 	last_colorspace = su.ins;
+	last_cs_file = in_name;
+
+	su.width = width;
+	su.height = height;
 
 	/* - - - - - - - - - - - - - - - */
 	/* Check and setup the sequence of ICC profiles */
 
 	/* For each profile in the sequence, configure it to transform the color */
 	/* appropriately */
-	for (i = 0; i < su.nprofs; i++) {
+	for (i = su.first; i <= su.last; i++) {
 
-		/* Open up the profile for reading */
-		if ((su.profs[i].c = read_embeded_icc(su.profs[i].name)) == NULL)
-			error ("Can't read profile from file '%s'",su.profs[i].name);
-	
-		su.profs[i].h = su.profs[i].c->header;
+		/* First see if it's a calibration file */
+		if ((su.profs[i].cal = new_xcal()) == NULL)
+			error("new_xcal failed");
 
-		/* Deal with different profile classes */
-		switch (su.profs[i].h->deviceClass) {
+		if ((su.profs[i].cal->read(su.profs[i].cal, su.profs[i].name)) == 0) {
+
+			su.profs[i].ins = su.profs[i].outs = icx_colorant_comb_to_icc(su.profs[i].cal->devmask);
+			if (su.profs[i].outs == 0)
+				error ("Calibration file '%s' has unhandled device mask %s",su.profs[i].name,icx_inkmask2char(su.profs[i].cal->devmask,1));
+			su.profs[i].id = su.profs[i].od = su.profs[i].cal->devchan;
+			/* We use the user provided direction */
+
+		/* else see if it's an ICC or embedded ICC */
+		} else {
+		
+			su.profs[i].cal->del(su.profs[i].cal);	/* Clean up */
+			su.profs[i].cal = NULL;
+
+			if ((su.profs[i].c = read_embeded_icc(su.profs[i].name)) == NULL)
+				error ("Can't read profile or calibration from file '%s'",su.profs[i].name);
+
+			su.profs[i].h = su.profs[i].c->header;
+
+			/* Deal with different profile classes, */
+			/* and set the profile function and intent. */
+			switch (su.profs[i].h->deviceClass) {
     		case icSigAbstractClass:
     		case icSigLinkClass:
-				su.profs[i].func = icmFwd;
-				su.profs[i].intent = icmDefaultIntent;
-				break;
+					su.profs[i].func = icmFwd;
+					su.profs[i].intent = icmDefaultIntent;
+					break;
 
     		case icSigColorSpaceClass:
-				su.profs[i].func = icmFwd;
-				su.profs[i].intent = icmDefaultIntent;
-				/* Fall through */
+					su.profs[i].func = icmFwd;
+					su.profs[i].intent = icmDefaultIntent;
+					/* Fall through */
 
     		case icSigInputClass:
     		case icSigDisplayClass:
     		case icSigOutputClass:
-				/* Note we don't handle an ambigious (both directions match) case. */
-				/* We would need direction from the user to resolve this. */
-				if (CSMatch(last_colorspace, su.profs[i].h->colorSpace)) {
-					su.profs[i].func = icmFwd;
-				} else {
-					su.profs[i].func = icmBwd;		/* PCS -> Device */
-				}
-				break;
+					/* Note we don't handle an ambigious (both directions match) case. */
+					/* We would need direction from the user to resolve this. */
+					if (CSMatch(last_colorspace, su.profs[i].h->colorSpace)) {
+						su.profs[i].func = icmFwd;
+					} else {
+						su.profs[i].func = icmBwd;		/* PCS -> Device */
+					}
+					break;
+					/* Use the user provided intent */
 
-			default:
-				error("Can't handle deviceClass %s from file '%s'",
-				     icm2str(icmProfileClassSignature,su.profs[i].h->deviceClass),
-				     su.profs[i].c->err,su.profs[i].name);
+				default:
+					error("Can't handle deviceClass %s from file '%s'",
+					     icm2str(icmProfileClassSignature,su.profs[i].h->deviceClass),
+					     su.profs[i].c->err,su.profs[i].name);
+			}
+
+			/* Get a conversion object */
+			if ((su.profs[i].luo = su.profs[i].c->get_luobj(su.profs[i].c, su.profs[i].func,
+			              su.profs[i].intent, icmSigDefaultData, su.profs[i].order)) == NULL)
+				error ("%d, %s from '%s'",su.profs[i].c->errc, su.profs[i].c->err, su.profs[i].name);
+		
+			/* Get details of conversion */
+			su.profs[i].luo->spaces(su.profs[i].luo, &su.profs[i].ins, &su.profs[i].id,
+			         &su.profs[i].outs, &su.profs[i].od, &su.profs[i].alg, NULL, NULL, NULL, NULL);
+
+			/* Get native PCS space */
+			su.profs[i].luo->lutspaces(su.profs[i].luo, NULL, NULL, NULL, NULL, &su.profs[i].natpcs);
+
+			/* If this is a lut transform, find out its resolution */
+			if (su.profs[i].alg == icmLutType) {
+				icmLut *lut;
+				icmLuLut *luluo = (icmLuLut *)su.profs[i].luo;		/* Safe to coerce */
+				luluo->get_info(luluo, &lut, NULL, NULL, NULL);	/* Get some details */
+				su.profs[i].clutres = lut->clutPoints;			/* Desired table resolution */
+			} else 
+				su.profs[i].clutres = 0;
+
 		}
-
-		/* Get a conversion object */
-		if ((su.profs[i].luo = su.profs[i].c->get_luobj(su.profs[i].c, su.profs[i].func,
-		                          su.profs[i].intent, icmSigDefaultData, icmLuOrdNorm)) == NULL)
-			error ("%d, %s from '%s'",su.profs[i].c->errc, su.profs[i].c->err, su.profs[i].name);
-	
-		/* Get details of conversion */
-		su.profs[i].luo->spaces(su.profs[i].luo, &su.profs[i].ins, &su.profs[i].id,
-		         &su.profs[i].outs, &su.profs[i].od, &su.profs[i].alg, NULL, NULL, NULL);
-
-		/* Get native PCS space */
-		su.profs[i].luo->lutspaces(su.profs[i].luo, NULL, NULL, NULL, NULL, &su.profs[i].natpcs);
-
-		/* If this is a lut transform, find out its resolution */
-		if (su.profs[i].alg == icmLutType) {
-			icmLut *lut;
-			icmLuLut *luluo = (icmLuLut *)su.profs[i].luo;		/* Safe to coerce */
-			luluo->get_info(luluo, &lut, NULL, NULL, NULL);	/* Get some details */
-			su.profs[i].clutres = lut->clutPoints;			/* Desired table resolution */
-		} else 
-			su.profs[i].clutres = 0;
 
 		/* Check that we can join to previous correctly */
 		if (!ignoremm && !CSMatch(last_colorspace, su.profs[i].ins))
-			error("Last colorspace %s doesn't match input space %s of profile %s",
+			error("Last colorspace %s from file '%s' doesn't match input space %s of profile %s",
 		      icm2str(icmColorSpaceSignature,last_colorspace),
-				      icm2str(icmColorSpaceSignature,su.profs[i].h->colorSpace),
-				      su.profs[i].name);
+			  last_cs_file,
+			  icm2str(icmColorSpaceSignature,su.profs[i].h->colorSpace),
+			  su.profs[i].name);
 
 		last_dim = icmCSSig2nchan(su.profs[i].outs);
 		last_colorspace = su.profs[i].outs;
+		last_cs_file = su.profs[i].name; 
 	}
 	
 	su.od = last_dim;
 	su.outs = last_colorspace;
 
+	/* Go though the sequence again, and count the number of leading and */
+	/* trailing calibrations that can be combined into the input and output */
+	/* lookup curves */
+	for (i = su.first; ; i++) {
+		if (i > su.last || su.profs[i].c != NULL) {
+			su.fclut = i;
+			break;
+		}
+	}
+	for (i = su.last; ; i--) {
+		if (i < su.first || su.profs[i].c != NULL) {
+			su.lclut = i;
+			break;
+		}
+	}
+
+	if (su.fclut > su.lclut) {	/* Hmm. All calibs, no profiles */
+		su.fclut = su.first;	/* None at start */
+		su.lclut = su.first-1;	/* All at the end */
+	}
+		
+//printf("~1 first = %d, fclut = %d, lclut = %d, last = %d\n", su.first, su.fclut, su.lclut, su.last);
+
+	su.md = su.id > su.od ? su.id : su.od;
+
 	/* - - - - - - - - - - - - - - - */
-	/* Open up the output file for writing */
+	/* Open up the output TIFF file for writing */
 	if ((wh = TIFFOpen(out_name, "w")) == NULL)
 		error("Can\'t create TIFF file '%s'!",out_name);
 	
@@ -1199,7 +1352,24 @@ main(int argc, char *argv[]) {
 		TIFFSetField(wh, TIFFTAG_XRESOLUTION, resx);
 		TIFFSetField(wh, TIFFTAG_YRESOLUTION, resy);
 	}
-	TIFFSetField(wh, TIFFTAG_IMAGEDESCRIPTION, "Color corrected by Argyll");
+		/* Perhaps the description could be more informative ? */
+	if (TIFFGetField(rh, TIFFTAG_IMAGEDESCRIPTION, &rdesc) != 0) {
+		char *ndesc = NULL;
+
+		if ((ndesc = malloc(sizeof(char) * (strlen(rdesc) + strlen(wdesc) + 2))) == NULL)
+			error("malloc failed on new desciption string");
+		
+		strcpy(ndesc, rdesc);
+		if (nodesc == 0) {
+			strcat(ndesc, " ");
+			strcat(ndesc, wdesc);
+		}
+		TIFFSetField(wh, TIFFTAG_IMAGEDESCRIPTION, ndesc);
+	
+		free(ndesc);
+	} else if (nodesc == 0) {
+		TIFFSetField(wh, TIFFTAG_IMAGEDESCRIPTION, wdesc);
+	}
 
 	/* Lookup and decide what TIFF photometric suites the output colorspace */
 	{
@@ -1217,7 +1387,7 @@ main(int argc, char *argv[]) {
 				for (i = 0; i < no_pmtc; i++)
 					printf("%d: %s\n",i+1, Photometric2str(pmtc[i]));
 				if (ochoice < 1 || ochoice > no_pmtc )
-					error("An output photometric must be selected with the -e parameter");
+					error("An output photometric must be selected with the -t parameter");
 				
 			}
 			wphotometric = pmtc[ochoice-1];
@@ -1252,7 +1422,7 @@ main(int argc, char *argv[]) {
 	}
 
 	/* - - - - - - - - - - - - - - - */
-	/* Setup the destination embedded profile */
+	/* Setup any destination embedded profile */
 	if (dst_pname[0] != '\000') {
 		icmFile *fp;		/* Read fp for the profile */
 		unsigned char *buf;
@@ -1303,21 +1473,22 @@ main(int argc, char *argv[]) {
 	/* Setup input/output curve use. */
 	if (su.ins == icSigLabData || su.ins == icSigXYZData) {
 		su.icombine = 1;		/* CIE can't be conveyed through 0..1 domain lookup */
-
 	}
 
 	if (su.icombine == 0
-	 && su.profs[0].natpcs == icSigXYZData && su.profs[0].alg == icmMatrixFwdType) {
+	 && su.fclut <= su.lclut
+	 && su.profs[su.fclut].natpcs == icSigXYZData && su.profs[su.fclut].alg == icmMatrixFwdType) {
 		su.ilcurve = 1;			/* Index CLUT with L* curve rather than Y */
 	}
 
-	j = su.nprofs-1;
+	j = su.last;
 	if (su.outs == icSigLabData || su.outs == icSigXYZData) {
-		su.ocombine = 1;			/* CIE can't be conveyed through 0..1 domain lookup */
+		su.ocombine = 1;		/* CIE can't be conveyed through 0..1 domain lookup */
 	}
 
 	if (su.ocombine == 0
-	 && su.profs[j].natpcs == icSigXYZData && su.profs[j].alg == icmMatrixBwdType) {
+	 && su.fclut <= su.lclut
+	 && su.profs[su.lclut].natpcs == icSigXYZData && su.profs[su.lclut].alg == icmMatrixBwdType) {
 		su.olcurve = 1;			/* Interpolate in L* space rather than Y */
 	}
 
@@ -1331,27 +1502,41 @@ main(int argc, char *argv[]) {
 		printf("TIFF file photometric is %s\n",Photometric2str(rphotometric));
 		printf("\n");
 
-		printf("There are %d profile in the sequence\n",su.nprofs);
+		printf("There are %d profiles/calibrations in the sequence:\n\n",su.nprofs);
 
-		for (i = 0; i < su.nprofs; i++) {
-			icmFile *op;
-			if ((op = new_icmFileStd_fp(stdout)) == NULL)
-				error ("Can't open stdout");
-			printf("Profile %d '%s':\n",i,su.profs[i].name);
-			su.profs[i].h->dump(su.profs[i].h, op, 1);
-			op->del(op);
+		for (i = su.first; i <= su.last; i++) {
+			if (su.profs[i].c != NULL) {
+				icmFile *op;
+				if ((op = new_icmFileStd_fp(stdout)) == NULL)
+					error ("Can't open stdout");
+				printf("Profile %d '%s':\n",i,su.profs[i].name);
+				su.profs[i].h->dump(su.profs[i].h, op, 1);
+				op->del(op);
+				printf("Direction = %s\n",icm2str(icmTransformLookupFunc, su.profs[i].func));
+				printf("Intent = %s\n",icm2str(icmRenderingIntent, su.profs[i].intent));
+				printf("Algorithm = %s\n",icm2str(icmLuAlg, su.profs[i].alg));
+			} else {
+				printf("Calibration %d '%s':\n",i,su.profs[i].name);
+				printf("Direction = %s\n",icm2str(icmTransformLookupFunc, su.profs[i].func));
+				if (su.profs[i].cal->xpi.deviceMfgDesc != NULL)
+					printf("Manufacturer: '%s'\n",su.profs[i].cal->xpi.deviceMfgDesc);
+				if (su.profs[i].cal->xpi.modelDesc != NULL)
+					printf("Model: '%s'\n",su.profs[i].cal->xpi.modelDesc);
+				if (su.profs[i].cal->xpi.profDesc != NULL)
+					printf("Description: '%s'\n",su.profs[i].cal->xpi.profDesc);
+				if (su.profs[i].cal->xpi.copyright != NULL)
+					printf("Copyright: '%s'\n",su.profs[i].cal->xpi.copyright);
+			}
 
-			printf("Direction = %s\n",icm2str(icmTransformLookupFunc, su.profs[i].func));
-			printf("Intent = %s\n",icm2str(icmRenderingIntent, su.profs[i].intent));
 			if (i == 0 && su.icombine)
 				printf("Input curves being combined\n");
 			if (i == 0 && su.ilcurve)
 				printf("Input curves being post-converted to L*\n");
 			printf("Input space = %s\n",icm2str(icmColorSpaceSignature, su.profs[i].ins));
 			printf("Output space = %s\n",icm2str(icmColorSpaceSignature, su.profs[i].outs));
-			if (i == (su.nprofs-1) && su.olcurve)
+			if (i == (su.last) && su.olcurve)
 				printf("Output curves being pre-converted from L*\n");
-			if (i == (su.nprofs-1) && su.ocombine)
+			if (i == (su.last) && su.ocombine)
 				printf("Output curves being combined\n");
 			printf("\n");
 		}
@@ -1365,14 +1550,23 @@ main(int argc, char *argv[]) {
 	/* - - - - - - - - - - - - - - - */
 	/* Setup the imdi */
 
-	{
-		int aclutres = 0;	/* Automatically set res */
+	if (check)
+		doimdi = dofloat = 1;
 
+	if (doimdi && su.nprofs > 0) {
+		int aclutres = 0;	/* Automatically set res */
+		imdi_options opts = opts_none;
+	
+		if (rextrasamples > 0) {		/* We need to skip the alpha */
+			opts |= opts_istride;
+		}
+	
 		/* Setup the imdi resolution */
 		/* Choose the resolution from the highest lut resolution in the sequence, */
 		/* or choose a default. */
-		for (i = 0; i < su.nprofs; i++) {
-			if (su.profs[i].clutres > aclutres)
+		for (i = su.first; i <= su.last; i++) {
+			if (su.profs[i].c != NULL
+			 && su.profs[i].clutres > aclutres)
 				aclutres = su.profs[i].clutres;
 		}
 		if (aclutres == 0) {
@@ -1384,18 +1578,10 @@ main(int argc, char *argv[]) {
 
 		if (clutres == 0)
 			clutres = aclutres;
-	}
 
-	if (su.verb && su.nprofs > 0)
-		printf("Using CLUT resolution %d\n",clutres);
-
-	if (!slow && su.nprofs > 0) {
-		imdi_options opts = opts_none;
-
-		if (rextrasamples > 0) {		/* We need to skip the alpha */
-			opts |= opts_istride;
-		}
-
+		if (su.verb)
+			printf("Using CLUT resolution %d\n",clutres);
+	
 		s = new_imdi(
 			su.id,			/* Number of input dimensions */
 			su.od,			/* Number of output dimensions */
@@ -1432,20 +1618,17 @@ main(int argc, char *argv[]) {
 		}
 	}
 
+	inbuf  = _TIFFmalloc(TIFFScanlineSize(rh));
+	outbuf = _TIFFmalloc(TIFFScanlineSize(wh));
+	inp[0] = (unsigned char *)inbuf;
+	outp[0] = (unsigned char *)outbuf;
+	if (dofloat || su.nprofs == 0)
+		precbuf = _TIFFmalloc(TIFFScanlineSize(wh));
+
+
 	/* - - - - - - - - - - - - - - - */
 	/* Process colors to translate */
 	/* (Should fix this to process a group of lines at a time ?) */
-
-	if (check)
-		slow = 0;
-
-	inbuf  = _TIFFmalloc(TIFFScanlineSize(rh));
-	outbuf = _TIFFmalloc(TIFFScanlineSize(wh));
-	if (slow || check || su.nprofs == 0)
-		precbuf = _TIFFmalloc(TIFFScanlineSize(wh));
-
-	inp[0] = (unsigned char *)inbuf;
-	outp[0] = (unsigned char *)outbuf;
 
 	for (y = 0; y < height; y++) {
 
@@ -1453,13 +1636,13 @@ main(int argc, char *argv[]) {
 		if (TIFFReadScanline(rh, inbuf, y, 0) < 0)
 			error ("Failed to read TIFF line %d",y);
 
-		if (!slow && su.nprofs > 0) {
+		if (doimdi && su.nprofs > 0) {
 			/* Do fast conversion */
 			s->interp(s, (void **)outp, 0, (void **)inp, rsamplesperpixel, width);
 		}
 		
-		if (slow || check || su.nprofs == 0) {
-			/* Do floating point conversion */
+		if (dofloat || su.nprofs == 0) {
+			/* Do floating point conversion into the precbuf[] */
 			for (x = 0; x < width; x++) {
 				int i;
 				double in[MAX_CHAN], out[MAX_CHAN];
@@ -1549,7 +1732,7 @@ main(int argc, char *argv[]) {
 			}
 		}
 			
-		if (slow || su.nprofs == 0) {	/* Use the results of the f.p. conversion */
+		if (dofloat || su.nprofs == 0) {	/* Use the results of the f.p. conversion */
 			if (TIFFWriteScanline(wh, precbuf, y, 0) < 0)
 				error ("Failed to write TIFF line %d",y);
 		} else {
@@ -1568,10 +1751,10 @@ main(int argc, char *argv[]) {
 			       mxerr/655.35, avgerr/(655.35 * avgcount));
 	}
 
-	_TIFFfree(inbuf);
-	_TIFFfree(outbuf);
-	if (check)
-		_TIFFfree(precbuf);
+
+	if (inbuf != NULL) _TIFFfree(inbuf);
+	if (outbuf != NULL) _TIFFfree(outbuf);
+	if (precbuf != NULL) _TIFFfree(precbuf);
 
 	/* Done with lookup object */
 	if (s != NULL)
@@ -1582,11 +1765,13 @@ main(int argc, char *argv[]) {
 
 	/* Free up all the profiles etc. in the sequence. */
 	for (i = 0; i < su.nprofs; i++) {
-		su.profs[i].luo->del(su.profs[i].luo);
-		su.profs[i].c->del(su.profs[i].c);
+		if (su.profs[i].c != NULL) {				/* Has an ICC profile */
+			su.profs[i].luo->del(su.profs[i].luo);	/* Lookup */
+			su.profs[i].c->del(su.profs[i].c);	
+		} else {
+			su.profs[i].cal->del(su.profs[i].cal);	/* Calibration */
+		}
 	}
-
-	
 
 	return 0;
 }

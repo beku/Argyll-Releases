@@ -10,7 +10,7 @@
  * Copyright 1997 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -31,6 +31,7 @@
 #include <string.h>
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -44,6 +45,7 @@
 # define DBG(xx)	fprintf(errout, xx )
 # define DBGF(xx)	fprintf xx
 #else
+# define errout stderr
 # define DBG(xx)
 # define DBGF(xx)
 #endif
@@ -58,6 +60,8 @@
 #endif
 
 #ifdef __APPLE__
+//#include <stdbool.h>
+#include <sys/sysctl.h>
 #include <sys/param.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/IOKitLib.h>
@@ -67,368 +71,19 @@
 #include <mach/task_policy.h>
 #endif /* __APPLE__ */
 
-void error(char *fmt, ...), warning(char *fmt, ...), verbose(int level, char *fmt, ...);
-
-/* wait for and return the next character from the keyboard */
-int next_con_char(void) {
-	struct pollfd pa[1];		/* Poll array to monitor stdin */
-	struct termios origs, news;
-	char rv = 0;
-
-	/* Configure stdin to be ready with just one character */
-	if (tcgetattr(STDIN_FILENO, &origs) < 0)
-		error("tcgetattr failed with '%s' on stdin", strerror(errno));
-	news = origs;
-	news.c_lflag &= ~(ICANON | ECHO);
-	news.c_cc[VTIME] = 0;
-	news.c_cc[VMIN] = 1;
-	if (tcsetattr(STDIN_FILENO,TCSANOW, &news) < 0)
-		error("next_con_char: tcsetattr failed with '%s' on stdin", strerror(errno));
-
-	/* Wait for stdin to have a character */
-	pa[0].fd = STDIN_FILENO;
-	pa[0].events = POLLIN | POLLPRI;
-	pa[0].revents = 0;
-
-	if (poll_x(pa, 1, -1) > 0
-	 && (pa[0].revents == POLLIN
-		 || pa[0].revents == POLLPRI)) {
-		char tb[3];
-		if (read(STDIN_FILENO, tb, 1) > 0) {	/* User hit a key */
-			rv = tb[0] ;
-		}
-	} else {
-		tcsetattr(STDIN_FILENO, TCSANOW, &origs);
-		error("poll on stdin returned unexpected value 0x%x",pa[0].revents);
-	}
-
-	/* Restore stdin */
-	if (tcsetattr(STDIN_FILENO, TCSANOW, &origs) < 0)
-		error("tcsetattr failed with '%s' on stdin", strerror(errno));
-
-	return rv;
-}
-
-/* If here is one, return the next character from the keyboard, else return 0 */
-int poll_con_char(void) {
-	struct pollfd pa[1];		/* Poll array to monitor stdin */
-	struct termios origs, news;
-	char rv = 0;
-
-	/* Configure stdin to be ready with just one character */
-	if (tcgetattr(STDIN_FILENO, &origs) < 0)
-		error("tcgetattr failed with '%s' on stdin", strerror(errno));
-	news = origs;
-	news.c_lflag &= ~(ICANON | ECHO);
-	news.c_cc[VTIME] = 0;
-	news.c_cc[VMIN] = 1;
-	if (tcsetattr(STDIN_FILENO,TCSANOW, &news) < 0)
-		error("next_con_char: tcsetattr failed with '%s' on stdin", strerror(errno));
-
-	/* Wait for stdin to have a character */
-	pa[0].fd = STDIN_FILENO;
-	pa[0].events = POLLIN | POLLPRI;
-	pa[0].revents = 0;
-
-	if (poll_x(pa, 1, 0) > 0
-	 && (pa[0].revents == POLLIN
-		 || pa[0].revents == POLLPRI)) {
-		char tb[3];
-		if (read(STDIN_FILENO, tb, 1) > 0) {	/* User hit a key */
-			rv = tb[0] ;
-		}
-	}
-
-	/* Restore stdin */
-	if (tcsetattr(STDIN_FILENO, TCSANOW, &origs) < 0)
-		error("tcsetattr failed with '%s' on stdin", strerror(errno));
-
-	return rv;
-}
-
-/* Suck all characters from the keyboard */
-void empty_con_chars(void) {
-	tcflush(STDIN_FILENO, TCIFLUSH);
-}
-
-/* Sleep for the given number of msec */
-void msec_sleep(unsigned int msec) {
-#ifdef NEVER
-	if (msec > 1000) {
-		unsigned int secs;
-		secs = msec / 1000;
-		msec = msec % 1000;
-		sleep(secs);
-	}
-	usleep(msec * 1000);
-#else
-	struct timespec ts;
-
-	ts.tv_sec = msec / 1000;
-	ts.tv_nsec = (msec % 1000) * 1000000;
-	nanosleep(&ts, NULL);
-#endif
-}
-
-/* Return the current time in msec. This is not related to any particular epoch */
-unsigned int msec_time() {
-	unsigned int rv;
-	static struct timeval startup = { 0, 0 };
-	struct timeval cv;
-
-	gettimeofday(&cv, NULL);
-
-	/* Set time to 0 on first invocation */
-	if (startup.tv_sec == 0 && startup.tv_usec == 0)
-		startup = cv;
-
-	/* Subtract, taking care of carry */
-	cv.tv_sec -= startup.tv_sec;
-	if (startup.tv_usec > cv.tv_usec) {
-		cv.tv_sec--;
-		cv.tv_usec += 1000000;
-	}
-	cv.tv_usec -= startup.tv_usec;
-
-	/* Convert usec to msec */
-	rv = cv.tv_sec * 1000 + cv.tv_usec / 1000;
-
-	return rv;
-}
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
-
-#ifdef NEVER    /* Not currently needed, or effective */
-
-/* Set the current threads priority */
-int set_interactive_priority() {
-#ifdef __APPLE__
-#ifdef NEVER
-    int rv = 0;
-    struct task_category_policy tcatpolicy;
-
-    tcatpolicy.role = TASK_FOREGROUND_APPLICATION;
-
-    if (task_policy_set(mach_task_self(),
-        TASK_CATEGORY_POLICY, (thread_policy_t)&tcatpolicy,
-        TASK_CATEGORY_POLICY_COUNT) != KERN_SUCCESS)
-		rv = 1;
-printf("~1 set to forground got %d\n",rv);
-	return rv;
-#else
-    int rv = 0;
-    struct thread_precedence_policy tppolicy;
-
-    tppolicy.importance = 500;
-
-    if (thread_policy_set(mach_thread_self(),
-        THREAD_PRECEDENCE_POLICY, (thread_policy_t)&tppolicy,
-        THREAD_PRECEDENCE_POLICY_COUNT) != KERN_SUCCESS)
-		rv = 1;
-printf("~1 set to important got %d\n",rv);
-	return rv;
-#endif /* NEVER */
-#else /* !APPLE */
-	int rv;
-	struct sched_param param;
-	param.sched_priority = 32;
-
-	/* This doesn't work unless we're running as su :-( */
-	rv = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
-//printf("Set got %d\n",rv);
-	return rv;
-#endif /* !APPLE */
-}
-
-int set_normal_priority() {
-#ifdef __APPLE__
-#ifdef NEVER
-    int rv = 0;
-    struct task_category_policy tcatpolicy;
-
-    tcatpolicy.role = TASK_UNSPECIFIED;
-
-    if (task_policy_set(mach_task_self(),
-        TASK_CATEGORY_POLICY, (thread_policy_t)&tcatpolicy,
-        TASK_CATEGORY_POLICY_COUNT) != KERN_SUCCESS)
-		rev = 1;
-printf("~1 set to normal got %d\n",rv);
-#else
-    int rv = 0;
-    struct thread_precedence_policy tppolicy;
-
-    tppolicy.importance = 1;
-
-    if (thread_policy_set(mach_thread_self(),
-        THREAD_STANDARD_POLICY, (thread_policy_t)&tppolicy,
-        THREAD_STANDARD_POLICY_COUNT) != KERN_SUCCESS)
-		rv = 1;
-printf("~1 set to standard got %d\n",rv);
-	return rv;
-#endif /* NEVER */
-#else /* !APPLE */
-	struct sched_param param;
-	param.sched_priority = 0;
-	int rv;
-
-	rv = pthread_setschedparam(pthread_self(), SCHED_OTHER, &param);
-//printf("Reset got %d\n",rv);
-	return rv;
-#endif /* !APPLE */
-}
-
-#endif /* NEVER */
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-static athread *beep_thread = NULL;
-static int beep_delay;
-static int beep_freq;
-static int beep_msec;
-
-/* Delayed beep handler */
-static int delayed_beep(void *pp) {
-	msec_sleep(beep_delay);
-#ifdef __APPLE__
-	SysBeep((beep_msec * 60)/1000);
-#else
-	fprintf(stdout, "\a"); fflush(stdout);
-#endif 
-	return 0;
-}
-
-/* Activate the system beeper */
-void msec_beep(int delay, int freq, int msec) {
-	if (delay > 0) {
-		if (beep_thread != NULL)
-			beep_thread->del(beep_thread);
-		beep_delay = delay;
-		beep_freq = freq;
-		beep_msec = msec;
-		if ((beep_thread = new_athread(delayed_beep, NULL)) == NULL)
-			error("Delayed beep failed to create thread");
-	} else {
-#ifdef __APPLE__
-		SysBeep((msec * 60)/1000);
-#else
-		/* Linux is pretty lame in this regard... */
-		fprintf(stdout, "\a"); fflush(stdout);
-#endif
-	}
-}
-
-
-#ifdef NEVER
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-/* If we're UNIX and running on X11, we could do this */
-/* sort of thing (from xset), IF we were linking with X11: */
-
-static void
-set_bell_vol(Display *dpy, int percent)
-{
-XKeyboardControl values;
-XKeyboardState kbstate;
-values.bell_percent = percent;
-if (percent == DEFAULT_ON)
-  values.bell_percent = SERVER_DEFAULT;
-XChangeKeyboardControl(dpy, KBBellPercent, &values);
-if (percent == DEFAULT_ON) {
-  XGetKeyboardControl(dpy, &kbstate);
-  if (!kbstate.bell_percent) {
-    values.bell_percent = -percent;
-    XChangeKeyboardControl(dpy, KBBellPercent, &values);
-  }
-}
-return;
-}
-
-static void
-set_bell_pitch(Display *dpy, int pitch)
-{
-XKeyboardControl values;
-values.bell_pitch = pitch;
-XChangeKeyboardControl(dpy, KBBellPitch, &values);
-return;
-}
-
-static void
-set_bell_dur(Display *dpy, int duration)
-{
-XKeyboardControl values;
-values.bell_duration = duration;
-XChangeKeyboardControl(dpy, KBBellDuration, &values);
-return;
-}
-
-XBell(..);
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-#endif /* NEVER */
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
-
-/* Destroy the thread */
-static void athread_del(
-athread *p
+/* Return the port type */
+static icom_type icoms_port_type(
+icoms *p
 ) {
-	DBG("athread_del called\n");
-
-	if (p == NULL)
-		return;
-
-	pthread_cancel(p->thid);
-	pthread_join(p->thid, NULL);
-
-	free(p);
+	if (p->is_hid)
+		return icomt_hid;
+	if (p->is_usb)
+		return icomt_usb;
+	return icomt_serial;
 }
-
-static void *threadproc(
-	void *param
-) {
-	athread *p = (athread *)param;
-
-	p->result = p->function(p->context);
-	return 0;
-}
- 
-
-athread *new_athread(
-	int (*function)(void *context),
-	void *context
-) {
-	int rv;
-	athread *p = NULL;
-
-	DBG("new_athread called\n");
-	if ((p = (athread *)calloc(sizeof(athread), 1)) == NULL)
-		return NULL;
-
-	p->function = function;
-	p->context = context;
-	p->del = athread_del;
-
-	/* Create a thread */
-	rv = pthread_create(&p->thid, NULL, threadproc, (void *)p);
-	if (rv != 0) {
-		DBG("Failed to create thread\n");
-		athread_del(p);
-		return NULL;
-	}
-
-	DBG("About to exit new_athread()\n");
-	return p;
-}
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
-
-/* Delete a file */
-void delete_file(char *fname) {
-	unlink(fname);
-}
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Create and return a list of available serial ports or USB instruments for this system */
-icompath **
+static icompath **
 icoms_get_paths(
 icoms *p 
 ) {
@@ -578,7 +233,8 @@ icoms *p
 		char *dirn = "/dev/";
 	
 		if ((dd = opendir(dirn)) == NULL) {
-			DBGF((errout,"failed to open directory \"%s\"\n",dirn));
+//			DBGF((errout,"failed to open directory \"%s\"\n",dirn));
+			if (p->debug) fprintf(errout,"failed to open directory \"%s\"\n",dirn);
 			return p->paths;
 		}
 
@@ -604,10 +260,12 @@ icoms *p
 			strcat(dpath, de->d_name);
 
 			if ((fd = open(dpath, O_RDWR | O_NOCTTY )) < 0) {
+				if (p->debug) fprintf(errout,"failed to open serial \"%s\"\n",dpath);
 				free(dpath);
 				continue;
 			}
 			close(fd);
+			if (p->debug) fprintf(errout,"managed to open serial \"%s\"\n",dpath);
 
 			/* Add the path to the list */
 			if (p->paths == NULL) {
@@ -1187,6 +845,7 @@ extern icoms *new_icoms() {
 	p->wl = length_nc;
 	p->debug = 0;
 	
+	p->port_type = icoms_port_type;
 	p->get_paths = icoms_get_paths;
 	p->set_ser_port = icoms_set_ser_port;
 

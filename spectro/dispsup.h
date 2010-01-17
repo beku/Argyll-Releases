@@ -11,7 +11,7 @@
  * Copyright 1998 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -39,6 +39,8 @@ instType itype,		/* Instrument type */
 int comport, 		/* COM port used */
 flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
+int proj,			/* NZ for projector mode */
+int adaptive,		/* NZ for adaptive mode */
 int nocal,			/* NZ to disable auto instrument calibration */
 disppath *screen,	/* Screen to calibrate. */
 int blackbg,		/* NZ if whole screen should be filled with black */
@@ -63,6 +65,8 @@ typedef struct {
 	double aXYZ[3];		/* Absolute colorimeter readings */
 
 	xspect sp;			/* Spectrum. sp.spec_n > 0 if valid */
+
+	double duration;	/* Total duration in seconds (flash measurement) */
 } col;
 
 
@@ -82,6 +86,7 @@ struct _disprd {
 	double cal[3][MAX_CAL_ENT];	/* Calibration being worked through (cal[0][0] < 0.0 if not used */
 	int ncal;			/* Number of entries used in cal[] */
 	icmLuBase *fake_lu;
+	char *mcallout;		/* fake instrument shell callout */
 	int debug;			/* Debug flag */
 	int comport; 		/* COM port used */
 	baud_rate br;
@@ -89,6 +94,8 @@ struct _disprd {
 	inst *it;			/* Instrument */
 	instType itype;		/* Instrument type */
 	int dtype;			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
+	int proj;			/* NZ for projector mode */
+	int adaptive;		/* NZ for adaptive mode */
 	int spectral;		/* Spectral values requested/used */
 	int nocal;			/* No automatic instrument calibration */
 	int highres;		/* Use high res mode if available */
@@ -145,6 +152,8 @@ instType itype,		/* Instrument type */
 int comport, 		/* COM port used, -99 for fake display */
 flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
+int proj,			/* NZ for projector mode */
+int adaptive,		/* NZ for adaptive mode */
 int nocal,			/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */
 int donat,			/* Use ramdac for native output, else run through current or set ramdac */
@@ -153,7 +162,8 @@ int ncal,			/* number of entries use in cal */
 disppath *screen,	/* Screen to calibrate. */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
-char *callout,		/* Shell callout on set color */
+char *ccallout,		/* Shell callout on set color */
+char *mcallout,		/* Shell callout on measure color (forced fake) */
 double patsize,		/* Size of dispwin */
 double ho,			/* Horizontal offset */
 double vo,			/* Vertical offset */

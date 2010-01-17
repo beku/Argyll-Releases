@@ -14,5 +14,6 @@ nearsmth.h
 maptest.c
 smthtest.c
 surftest.c
+fakegam.c
 GenRMGam.c
 GenVisGam.c

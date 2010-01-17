@@ -17,7 +17,7 @@ Headers = yajl_common.h  yajl_gen.h  yajl_parse.h ;		# API headers
 #InstallLib ./lib : $(Libraries) ;
 
 # config parser based on yajl 
-Library libyajl : yajl.c yajl_buf.c yajl_encode.c yajl_gen.c yajl_lex.c yajl_parser.c ;
+Library libyajl : yajl.c yajl_alloc.c yajl_buf.c yajl_encode.c yajl_gen.c yajl_lex.c yajl_parser.c ;
 
 # Link all utilities here with libicc
 LINKLIBS = libyajl ;

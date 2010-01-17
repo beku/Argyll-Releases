@@ -9,7 +9,7 @@
  * Copyright 1996 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -187,9 +187,9 @@ dtp92_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 		/*											*/
 		/* Set config, interface, write end point, read end point, read quanta */
 		if (itype == instDTP94)
-			p->icom->set_usb_port(p->icom, port, 1, 0x02, 0x81, icomuf_none); 
+			p->icom->set_usb_port(p->icom, port, 1, 0x02, 0x81, icomuf_none, 0); 
 		else
-			p->icom->set_usb_port(p->icom, port, 1, 0x01, 0x81, icomuf_none); 
+			p->icom->set_usb_port(p->icom, port, 1, 0x01, 0x81, icomuf_none, 0); 
 
 		/* Blind reset it twice - it seems to sometimes hang up */
 		/* otherwise under OSX */
@@ -233,7 +233,7 @@ dtp92_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 
 		while (msec_time() < etime) {
 
-			if (p->debug) fprintf(stderr,"dtp92: Trying different baud rates (%d ticks to go)\n",etime - msec_time());
+			if (p->debug) fprintf(stderr,"dtp92: Trying different baud rates (%ld ticks to go)\n",etime - msec_time());
 
 			/* Until we time out, find the correct baud rate */
 			for (i = ci; msec_time() < etime;) {
@@ -542,6 +542,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 			val->aXYZ_v = 1;		/* These are absolute XYZ readings */
 			val->Lab_v = 0;
 			val->sp.spec_n = 0;
+			val->duration = 0.0;
 			rv = inst_ok;
 			break;
 		} else {

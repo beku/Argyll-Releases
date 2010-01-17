@@ -1,6 +1,7 @@
+
 /* 
  * Argyll Color Correction System
- * Print Device calibration curve  generator.
+ * Print Device calibration curve generator.
  *
  * Author: Graeme W. Gill
  * Date:   2008/3/3
@@ -8,213 +9,596 @@
  * Copyright 1996-2008 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
 /*
  * This program takes in the colorent wedge test chart
  * points, and creates a set of per channel correction curves.
- * It can also be used to create
-~~
- * forward ICC device profile, as well as creating
- * backward conversions based on the forward grid.
- * 
- * Preview profiles are not currently generated.
- * 
- * The gamut clut should be implemented with xicc/rspl
  */
 
 /*
  * TTBD:
- *      Add Argyll private tag to record ink limit etc. to automate link parameters.
- *      Estimate ink limit from B2A tables if no private tag ?
- *      Add used option for black relative
- *      Add used option for separate high res reverse tables
- *      Fix 400% assumptions for > 4 color devices ?
- *
- *      Should allow creating profiles from .MPP directly for <= 4 dev channels.
- *      Should allow creating profiles from existing ICC profiles (deprecate revfix ?)
- *
- *      Should allow creating profiles >4 channels by providing .MPP for input,
- *      dev link .icm for psudo-dev to device & .ti3 for Pseudo-dev to PCS.
- *		Note gamut should come from psudo-dev to PCS.
+ *			Allow auto max threshold to be scaled on command line ?
+ */
+
+
+/*
+	Additive spaces are handled by inverting the device values internally.
+	(Such a space should probably have ICX_INVERTED set as well, indicating
+	 that the underlying device is actually subtractive.) 
  */
 
 #undef DEBUG
-#undef DO_TIME			/* Time the operation */
 
 #define verbo stdout
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <fcntl.h>
 #include <string.h>
 #include <time.h>
 #include "copyright.h"
 #include "config.h"
 #include "cgats.h"
+#include "numlib.h"
+#include "sort.h"
+#include "rspl.h"
 #include "xicc.h"
-#include "prof.h"
+#include "plot.h"
 
-#define DEFAVGDEV 0.5		/* Default average deviation percentage */
-							/* This equates to a uniform added error of +/- 1% */
+
+#define RSPLFLAGS (0 /* | RSPL_2PASSSMTH | RSPL_EXTRAFIT2 */)
+
+#define GRES 256		/* Rspl grid resolution */
+#define SLOPE_NORM 70.0	/* Normalized delta E for below thresholds */
+#define MIN_SLOPE_A 8.0	/* Criteria for Auto max, DE/dDev at max */
+#define MIN_SLOPE_O 3.0	/* Criteria for Auto max, min DE/dDev below max */
+
+#define CAL_RES 256		/* Resolution saved to .cal file */
+
+#define PRES 256		/* Plotting resolution */
 
 void usage(char *diag, ...) {
 	int i;
-	fprintf(stderr,"Create ICC profile, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Create printer calibration, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
-		fprintf(stderr,"Diagnostic: ");
+		fprintf(stderr,"  Diagnostic: ");
 		va_start(args, diag);
 		vfprintf(stderr, diag, args);
 		va_end(args);
 		fprintf(stderr,"\n");
 	}
-	fprintf(stderr,"usage: %s [-options] inoutfile\n",error_program);
-	fprintf(stderr," -v              Verbose mode\n");
-	fprintf(stderr," -A manufacturer Manufacturer description string\n");
-	fprintf(stderr," -M model        Model description string\n");
-	fprintf(stderr," -D description  Profile Description string (Default \"inoutfile\")\n");
-	fprintf(stderr," -C copyright    Copyright string\n");
-	fprintf(stderr," -q lmhu         Quality - Low, Medium (def), High, Ultra\n");
-	fprintf(stderr," -b [lmhu]       Use low quality B2A table - optional specific B2A quality\n");
-	fprintf(stderr," -y              Verify A2B profile\n");
-	fprintf(stderr," -ni             Don't create input (Device) shaper curves\n");
-	fprintf(stderr," -np             Don't create input (Device) grid position curves\n");
-	fprintf(stderr," -no             Don't create output (PCS) shaper curves\n");
-	fprintf(stderr," -k zhxr         Black value target: z = zero K,\n");
-	fprintf(stderr,"                 h = 0.5 K, x = max K, r = ramp K (def.)\n");
-	fprintf(stderr," -k p stle stpo enpo enle shape\n");
-	fprintf(stderr,"                 stle: K level at White 0.0 - 1.0\n");
-	fprintf(stderr,"                 stpo: start point of transition Wh 0.0 - Bk 1.0\n");
-	fprintf(stderr,"                 enpo: End point of transition Wh 0.0 - Bk 1.0\n");
-	fprintf(stderr,"                 enle: K level at Black 0.0 - 1.0\n");
-	fprintf(stderr,"                 shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0 convex\n");
-	fprintf(stderr," -K parameters   Same as -k, but target is K locus rather than K value itself\n");
-	fprintf(stderr," -l tlimit       override total ink limit, 0 - 400%% (default from .ti3)\n");
-	fprintf(stderr," -L klimit       override black ink limit, 0 - 100%% (default from .ti3)\n");
-	fprintf(stderr," -a lxgs         Algorithm type override\n");
-	fprintf(stderr,"                 l = Lab clut (def.), x = XYZ lut\n");
-	fprintf(stderr,"                 g = gamma+matrix, s = shaper+matrix\n");
-	fprintf(stderr,"                 G = single gamma+matrix, S = single shaper+matrix\n");
-//  Development - not supported
-//	fprintf(stderr," -I ver          Set ICC profile version > 2.2.0\n");
-//	fprintf(stderr,"                 ver = 4, Enable ICC V4 creation\n");
-	fprintf(stderr," -u              If Lut input profile, make it absolute (non-standard)\n");
-	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
-	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
-	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
-	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
-	fprintf(stderr," -r avgdev       Average deviation of device+instrument readings as a percentage (default %4.2f%%)\n",DEFAVGDEV);
-/* Research options: */
-/*	fprintf(stderr," -rs smooth      RSPL suplimental optimised smoothing factor\n"); */
-/*	fprintf(stderr," -rr smooth      RSPL raw underlying smoothing factor\n"); */
-	fprintf(stderr," -s src%s      Apply gamut mapping to perceptual B2A table for given source space\n",ICC_FILE_EXT);
-	fprintf(stderr," -S src%s      Apply gamut mapping to perceptual and saturation B2A table\n",ICC_FILE_EXT);
-	fprintf(stderr," -g src.gam      Use source image gamut as well for gamut mapping\n");
-	fprintf(stderr," -p absprof      Incorporate abstract profile into output tables\n");
-	fprintf(stderr," -t intent       Override gamut mapping intent for perceptual table:\n");
-	fprintf(stderr," -T intent       Override gamut mapping intent for saturation table:\n");
-	for (i = 0; ; i++) {
-		icxGMappingIntent gmi;
-		if (xicc_enum_gmapintent(&gmi, i, NULL) == icxIllegalGMIntent)
-			break;
-		fprintf(stderr,"              %s\n",gmi.desc);
-	}
-	fprintf(stderr," -c viewcond     set input viewing conditions for %s gamut mapping,\n",icxcam_description(cam_default));
-	fprintf(stderr,"                  either an enumerated choice, or a parameter\n");
-	fprintf(stderr," -d viewcond     set output viewing conditions for %s gamut mapping\n",icxcam_description(cam_default));
-	fprintf(stderr,"                  either an enumerated choice, or a parameter\n");
-	fprintf(stderr,"                  Also sets out of gamut clipping CAM space.\n");
-	fprintf(stderr,"                  either an enumerated choice,, or a series of parameters:value changes\n");
-	for (i = 0; ; i++) {
-		icxViewCond vc;
-		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1) == -999)
-			break;
-
-		fprintf(stderr,"             %s\n",vc.desc);
-	}
-	fprintf(stderr," inoutfile        Base name for input.ti3/output%s file\n",ICC_FILE_EXT);
+	fprintf(stderr,"usage: %s [-options] [prevcal] inoutfile\n",error_program);
+	fprintf(stderr," -v verbosity    Verbose mode\n");
+	fprintf(stderr," -p              Plot graphs.\n");
+	fprintf(stderr," -i              Initial calibration, set targets, create .cal\n");
+	fprintf(stderr," -r              Re-calibrate against previous .cal and create new .cal\n");
+	fprintf(stderr," -e              Verify against previous .cal\n");
+	fprintf(stderr," -d              Go through the motions but don't write any files\n");
+	fprintf(stderr," -A manufacturer Set the manufacturer description string\n");
+	fprintf(stderr," -M model        Set the model description string\n");
+	fprintf(stderr," -D description  Set the profile Description string\n");
+	fprintf(stderr," -C copyright    Set the copyright string\n");
+	fprintf(stderr," -x# percent     Set maximum device percentage target\n");
+	fprintf(stderr," -n# deltaE      Set white minimum deltaE target\n");
+	fprintf(stderr," -t# percent     Set 50%% transfer curve percentage target\n");
+	fprintf(stderr,"   # = c, r, 0	 First channel\n");
+	fprintf(stderr,"       m, g, 1	 Second channel\n");
+	fprintf(stderr,"       y, b, 2	 Third channel\n");
+	fprintf(stderr,"       k,    3	 Fourth channel, etc.\n");
+	fprintf(stderr," -a              Create an Adobe Photoshop .AMP file as well as a .cal\n");
+	fprintf(stderr," prevcal         Base name of previous .cal file for recal or verify.\n");
+	fprintf(stderr," inoutname       Base name of input .ti3 file, output .cal file\n");
 	exit(1);
 }
 
+/* - - - - - - - - - - - - - - - - - - - - - - - */
+typedef struct {
+	double loc;					/* Location up the curve 0.0 - 1.0 */
+	double val[MAX_CHAN];		/* Value at that location 0.0 - 1.0 */
+} trans_point;
+
+/* Class to hold a print calibration target */
+struct _pcaltarg {
+	inkmask devmask;            	/* ICX ink mask of device space */
+	
+	/* Note that with all of these, a value < 0.0 */
+	/* indicates no value set. */
+	int devmaxset;						/* Flag - nz if the devmax is set */
+	double devmax[MAX_CHAN];			/* Device value maximum 0.0 - 1.0 */
+
+	int ademaxset;						/* Flag - nz if the ademax is set */
+	double ademax[MAX_CHAN];			/* abs DE maximum for each channel */
+
+	int ademinset;						/* Flag - nz if the ademin is set */
+	double ademin[MAX_CHAN];			/* abs DE minimum for each channel */
+
+	int no_tpoints;						/* Number of transfer curve points */
+	trans_point *tpoints;				/* Array of transfer curve points */
+
+	char err[500];						/* Error message from diagnostics */
+
+	/* Methods */
+	void (*del)(struct _pcaltarg *p);
+
+	/* Save/restore to a CGATS file */
+	int (*write)(struct _pcaltarg *p, cgats *cg, int tab);	/* return nz on error */
+	int (*read)(struct _pcaltarg *p, cgats *cg, int tab);	/* return nz on error */
+
+	/* Set values in the target */
+	void (*update_devmax)(struct _pcaltarg *p, int chan, double val);
+	void (*update_ademax)(struct _pcaltarg *p, int chan, double val);
+	void (*update_ademin)(struct _pcaltarg *p, int chan, double val);
+	void (*update_tcurve)(struct _pcaltarg *p, int chan, double loc, double val);
+
+	/* Reurn nz if the target has been set */
+	int (*is_set)(struct _pcaltarg *p);
+
+	/* Update settings or from one from another */
+	void (*update)(struct _pcaltarg *p, struct _pcaltarg *s);
+
+}; typedef struct _pcaltarg pcaltarg; 
+
+static void pcaltarg_del(pcaltarg *p) {
+	if (p != NULL) {
+		free(p);
+	}
+}
+
+/* Write the cal target to a givent cgats table */
+static int pcaltarg_write(pcaltarg *p, cgats *cg, int tab) {
+	int i, j;
+	time_t clk = time(0);
+	struct tm *tsp = localtime(&clk);
+	char *atm = asctime(tsp); /* Ascii time */
+	char *ident = icx_inkmask2char(p->devmask, 1); 
+	char *bident = icx_inkmask2char(p->devmask, 0); 
+	int devchan = icx_noofinks(p->devmask);
+	int nsetel = 0;
+	cgats_set_elem *setel;	/* Array of set value elements */
+	char buf[100];
+
+	atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
+
+	/* Setup output cgats file */
+	cg->add_table(cg, tt_other, 0);   /* Add a table for Calibration TarGet values */
+	cg->add_kword(cg, tab, "DESCRIPTOR", "Argyll Calibration Target Definition File",NULL);
+	cg->add_kword(cg, tab, "ORIGINATOR", "Argyll printcal", NULL);
+	cg->add_kword(cg, tab, "CREATED",atm, NULL);
+	cg->add_kword(cg, tab, "COLOR_REP", ident, NULL);
+
+	/* Setup the table, which holds all the model parameters. */
+	/* There is always a parameter per X Y Z or spectral band */
+	cg->add_field(cg, tab, "PARAMTYPE", nqcs_t);
+	nsetel++;
+	sprintf(buf, "%s_I",bident);
+	cg->add_field(cg, tab, buf, r_t);
+	nsetel++;
+	for (i = 0; i < devchan; i++) {
+		inkmask imask = icx_index2ink(p->devmask, i);
+		sprintf(buf, "%s_%s",bident,icx_ink2char(imask));
+		cg->add_field(cg, tab, buf, r_t);
+		nsetel++;
+	}
+
+	if ((setel = (cgats_set_elem *)malloc(sizeof(cgats_set_elem) * nsetel)) == NULL) {
+		free(ident);
+		free(bident);
+		sprintf(p->err,"ctg_write: malloc of setel failed");
+		return 1;
+	}
+
+	/* Write out the values */
+	if (p->devmaxset) {
+		/* This is informational only */
+		setel[0].c = "DEVMAX_USED";
+		setel[1].d = 0.0;		/* Not used */
+			
+		if (p->devmask & ICX_ADDITIVE) {
+			for (i = 0; i < devchan; i++)
+				setel[2+i].d = 1.0 - p->devmax[i];
+		} else {
+			for (i = 0; i < devchan; i++)
+				setel[2+i].d = p->devmax[i];
+		}
+		cg->add_setarr(cg, tab, setel);
+	}
+	if (p->ademaxset) {
+		setel[0].c = "DELMAX_AIM";
+		setel[1].d = 0.0;		/* Not used */
+			
+		for (i = 0; i < devchan; i++)
+			setel[2+i].d = p->ademax[i];
+		cg->add_setarr(cg, tab, setel);
+	}
+	if (p->ademinset) {
+		setel[0].c = "DELMIN_AIM";
+		setel[1].d = 0.0;		/* Not used */
+			
+		for (i = 0; i < devchan; i++)
+			setel[2+i].d = p->ademin[i];
+		cg->add_setarr(cg, tab, setel);
+	}
+	for (j = 0; j < p->no_tpoints; j++) {
+		setel[0].c = "TRANS_PNT";
+		setel[1].d = p->tpoints[j].loc;
+
+		for (i = 0; i < devchan; i++)
+			setel[2+i].d = p->tpoints[j].val[i];
+		cg->add_setarr(cg, tab, setel);
+	}
+	free(setel);
+	free(ident);
+	free(bident);
+
+	return 0;
+}
+
+/* Read the cal target from a given cgats table */
+static int pcaltarg_read(pcaltarg *p, cgats *cg, int tab) {
+	char *bident;
+	int devchan;
+	int i, j, ix;
+	int ti;					/* Temporary CGATs index */
+	int spi[2+MAX_CHAN];	/* CGATS indexes for each field */
+	char buf[100];
+
+	if ((ti = cg->find_kword(cg, tab, "COLOR_REP")) < 0) {
+		sprintf(p->err, "ctg_read: Can't fint COLOR_REP");
+		return 1;
+	}
+
+	if ((p->devmask = icx_char2inkmask(cg->t[tab].kdata[ti]) ) == 0) {
+		sprintf(p->err, "ctg_read: unrecognized COLOR_REP '%s'",cg->t[tab].kdata[ti]);
+		return 1;
+	}
+	devchan = icx_noofinks(p->devmask);
+	bident = icx_inkmask2char(p->devmask, 0); 
+
+	/* Figure out the indexes of all the fields */
+	if ((spi[0] = cg->find_field(cg, tab, "PARAMTYPE")) < 0) {
+		sprintf(p->err, "ctg_read: Can't find field PARAMTYPE");
+		free(bident);
+		return 1;
+	}
+	sprintf(buf, "%s_I",bident);
+	if ((spi[1] = cg->find_field(cg, tab, buf)) < 0) {
+		sprintf(p->err, "ctg_read: Can't find field PARAMTYPE",buf);
+		free(bident);
+		return 1;
+	}
+	for (i = 0; i < devchan; i++) {
+		inkmask imask = icx_index2ink(p->devmask, i);
+		sprintf(buf, "%s_%s",bident,icx_ink2char(imask));
+		if ((spi[2+i] = cg->find_field(cg, tab, buf)) < 0) {
+			sprintf(p->err, "ctg_read: Can't find field %s",buf);
+			free(bident);
+			return 1;
+		}
+	}
+
+	/* Go through all the entries in the table, putting them in the right place */
+	for (ix = 0; ix < cg->t[tab].nsets; ix++) {
+
+		if (strcmp((char *)cg->t[tab].fdata[ix][spi[0]], "DELMAX_AIM") == 0) { 
+			for (i = 0; i < devchan; i++)
+				p->ademax[i] = *((double *)cg->t[tab].fdata[ix][spi[2+i]]);
+			p->ademaxset = 1;
+
+		} else if (strcmp((char *)cg->t[tab].fdata[ix][spi[0]], "DELMIN_AIM") == 0) { 
+			for (i = 0; i < devchan; i++)
+				p->ademin[i] = *((double *)cg->t[tab].fdata[ix][spi[2+i]]);
+			p->ademinset = 1;
+
+		} else if (strcmp((char *)cg->t[tab].fdata[ix][spi[0]], "TRANS_PNT") == 0) { 
+			if ((p->tpoints = (trans_point *)realloc(p->tpoints, sizeof(trans_point)
+			                                                   * (p->no_tpoints+1))) == NULL)
+				error("Realloc of tpoints");
+			p->tpoints[p->no_tpoints].loc = *((double *)cg->t[tab].fdata[ix][spi[1]]);
+			for (i = 0; i < devchan; i++)
+				p->tpoints[p->no_tpoints].val[i] = *((double *)cg->t[tab].fdata[ix][spi[2+i]]);
+			p->no_tpoints++;
+		}
+	}
+	free(bident);
+
+	return 0;
+}
+
+/* Update an individual setting. Use chan < 0 to set all to default */
+void pcaltarg_update_devmax(struct _pcaltarg *p, int chan, double val) {
+	int i;
+	if (p->devmaxset == 0) {
+		for (i = 0; i < MAX_CHAN; i++)
+			p->devmax[i] = -1.0;
+		p->devmaxset = 1;
+	}
+	if (chan >= 0)
+		p->devmax[chan] = val;
+}
+void pcaltarg_update_ademax(struct _pcaltarg *p, int chan, double val) {
+	int i;
+	if (p->ademaxset == 0) {
+		for (i = 0; i < MAX_CHAN; i++)
+			p->ademax[i] = -1.0;
+		p->ademaxset = 1;
+	}
+	if (chan >= 0)
+		p->ademax[chan] = val;
+}
+void pcaltarg_update_ademin(struct _pcaltarg *p, int chan, double val) {
+	int i;
+	if (p->ademinset == 0) {
+		for (i = 0; i < MAX_CHAN; i++)
+			p->ademin[i] = -1.0;
+		p->ademinset = 1;
+	}
+	if (chan >= 0)
+		p->ademin[chan] = val;
+}
+void pcaltarg_update_tcurve(struct _pcaltarg *p, int chan, double loc, double val) {
+	int i, j;
+
+	/* See if a transfer curve point already exists */
+	for (j = 0; j < p->no_tpoints; j++) {
+		if (p->tpoints[j].loc == loc)
+			break;
+	}
+	/* If not, allocate a new one */
+	if (j >= p->no_tpoints) {
+		p->no_tpoints++;
+		if ((p->tpoints = (trans_point *)realloc(p->tpoints, sizeof(trans_point) * p->no_tpoints)) == NULL)
+			error("Realloc of tpoints");
+		p->tpoints[j].loc = loc;
+		for (i = 0; i < MAX_CHAN; i++)
+			p->tpoints[j].val[i] = -1.0;
+	}
+	p->tpoints[j].val[chan] = val;
+
+	if (p->no_tpoints > 0) {
+		/* Sort the transfer points into loc order */
+#define HEAP_COMPARE(A,B) ((A).loc < (B).loc)
+		HEAPSORT(trans_point, p->tpoints, p->no_tpoints);
+#undef HEAP_COMPARE
+	}
+}
+
+/* Reurn nz if the target has been set */
+static int pcaltarg_is_set(pcaltarg *p) {
+	if (p->devmaxset != 0
+	 || p->ademaxset != 0
+	 || p->ademinset != 0
+	 || p->no_tpoints > 0)
+		return 1;
+	return 0;
+}
+
+/* Update one from another */
+static void pcaltarg_update(pcaltarg *p, pcaltarg *s) {
+	int i, j, k;
+
+	if (s->devmaxset) {
+		if (p->devmaxset == 0) {
+			for (i = 0; i < MAX_CHAN; i++)
+				p->devmax[i] = -1.0;
+			p->devmaxset = 1;
+		}
+		for (i = 0; i < MAX_CHAN; i++) {
+			if (s->devmax[i] >= 0.0)
+				p->devmax[i] = s->devmax[i];
+		}
+	}
+
+	if (s->ademaxset) {
+		if (p->ademaxset == 0) {
+			for (i = 0; i < MAX_CHAN; i++)
+				p->ademax[i] = -1.0;
+			p->ademaxset = 1;
+		}
+		for (i = 0; i < MAX_CHAN; i++) {
+			if (s->ademax[i] >= 0.0)
+				p->ademax[i] = s->ademax[i];
+		}
+	}
+
+	if (s->ademinset) {
+		if (p->ademinset == 0) {
+			for (i = 0; i < MAX_CHAN; i++)
+				p->ademin[i] = -1.0;
+			p->ademinset = 1;
+		}
+		for (i = 0; i < MAX_CHAN; i++) {
+			if (s->ademin[i] >= 0.0)
+				p->ademin[i] = s->ademin[i];
+		}
+	}
+
+	/* For each source transfer curve point */
+	for (k = 0; k < s->no_tpoints; k++) {
+
+		/* See if a transfer curve point already exists */
+		for (j = 0; j < p->no_tpoints; j++) {
+			if (p->tpoints[j].loc == s->tpoints[k].loc)
+				break;
+		}
+		/* If not, allocate a new one */
+		if (j >= p->no_tpoints) {
+			p->no_tpoints++;
+			if ((p->tpoints = (trans_point *)realloc(p->tpoints, sizeof(trans_point) * p->no_tpoints)) == NULL)
+				error("Realloc of tpoints");
+			p->tpoints[j].loc = s->tpoints[k].loc;
+			for (i = 0; i < MAX_CHAN; i++)
+				p->tpoints[j].val[i] = -1.0;
+		}
+		for (i = 0; i < MAX_CHAN; i++) {
+			if (s->tpoints[k].val[i] >= 0.0)
+				p->tpoints[j].val[i] = s->tpoints[k].val[i]; 
+		}
+	}
+	if (s->no_tpoints > 0) {
+		/* Sort the transfer points into loc order */
+#define HEAP_COMPARE(A,B) ((A).loc < (B).loc)
+		HEAPSORT(trans_point, p->tpoints, p->no_tpoints);
+#undef HEAP_COMPARE
+	}
+}
+
+/* Create a new, empty pcaltarget */
+/* Return NULL on error */
+pcaltarg *new_pcaltarg() {
+	pcaltarg *p;
+
+	if ((p = (pcaltarg *)calloc(1, sizeof(pcaltarg))) == NULL) {
+		return NULL;
+	}
+
+	/* Set method pointers */
+	p->del = pcaltarg_del;
+	p->write = pcaltarg_write;
+	p->read = pcaltarg_read;
+	p->update_devmax = pcaltarg_update_devmax;
+	p->update_ademax = pcaltarg_update_ademax;
+	p->update_ademin = pcaltarg_update_ademin;
+	p->update_tcurve = pcaltarg_update_tcurve;
+	p->is_set = pcaltarg_is_set;
+	p->update = pcaltarg_update;
+
+	return p;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* A wedge sample value */
+typedef struct {
+	double inv;			/* Input value (cal table) */
+	double dev;			/* Device value */
+	double XYZ[3];		/* XYZ value */
+	double Lab[3];		/* Lab value */
+	double del;			/* Absolute delta (to white) */
+} wval;
+
+#define MAX_INVSOLN	10	/* Rspl maximum reverse solutions */
+
+/* rspl setting functions */
+static void rsplset1(void *cbntx, double *out, double *in) {
+	co *dpoints = (co *)cbntx;
+	int ix;
+
+	ix = *((int*)&in[-0-1]);	/* Get grid index being looked up */
+	out[0] = dpoints[ix].v[0];
+}
+
+/* Do an inverse lookup of an rspl. Return -1.0 on error. */
+/* dir is value to favour if there are multiple solutions. */
+static double rspl_ilookup(rspl *r, double dir, double in) {
+	int nsoln;				/* Number of solutions found */
+	co pp[MAX_INVSOLN];		/* Room for all the solutions found */
+	int k;					/* Chosen solution */
+
+	pp[0].v[0] = in;
+
+	nsoln = r->rev_interp (
+		r,				 	/* this */
+		RSPL_NEARCLIP,		/* Clip to nearest (faster than vector) */
+		MAX_INVSOLN,		/* Maximum number of solutions allowed for */
+		NULL, 				/* No auxiliary input targets */
+		NULL,				/* Clip vector direction and length */
+		pp);				/* Input and output values */
+
+	nsoln &= RSPL_NOSOLNS;		/* Get number of solutions */
+
+	if (nsoln == 1) { /* Exactly one solution */
+		k = 0;
+	} else if (nsoln == 0) {	/* Zero solutions. This is unexpected. */
+		return -1.0;
+	} else {		/* Multiple solutions */
+		double bdist = 1e300;
+		int bsoln = 0;
+//		warning("Multiple solutions for curve %d for DE %f",j,pp[0].v[0]); 
+		for (k = 0; k < nsoln; k++) {
+			double tt;
+			tt = pp[k].p[0] - dir;
+			tt *= tt;
+			if (tt < bdist) {	/* Better solution */
+				bdist = tt;
+				bsoln = k;
+			}
+		}
+		k = bsoln;
+	}
+	return pp[k].p[0];
+}
 
 int main(int argc, char *argv[]) {
 	int fa,nfa,mfa;				/* current argument we're looking at */
-#ifdef DO_TIME			/* Time the operation */
-	clock_t stime, ttime;		/* Start and total times */
-#endif
 	int verb = 0;
-	int iquality = 1;			/* A2B quality */
-	int oquality = -1;			/* B2A quality same as A2B */
-	int verify = 0;
-	int noisluts = 0;			/* No input shaper luts */
-	int noipluts = 0;			/* No input position luts */
-	int nooluts = 0;			/* No output shaper luts */
-	int nsabs = 0;				/* Make non-standard absolute input lut profile */
-	int inking = 3;				/* Default K target ramp K */
-	int locus = 0;				/* Default K value target */
-	double Kstle = 0.0, Kstpo = 0.0, Kenle = 0.0, Kenpo = 0.0, Kshap = 0.0;
-	int tlimit = -1;			/* Total ink limit as a % */
-	int klimit = -1;			/* Black ink limit as a % */
-	int fwacomp = 0;			/* FWA compensation */
-	double avgdev = DEFAVGDEV/100.0;	/* Average measurement deviation */
-	double smooth = 1.0;		/* RSPL Smoothness factor (relative, for verification) */
+	int doplot = 0;
+	int initial = 0;			/* Do initial creation of cal target and calibration */
+	int recal = 0;				/* Do recalibrate/use cal target. Initial or recal must be set */
+	int verify = 0;				/* Do verification */
+	int dowrite = 1;			/* Write to files */
+	int doamp = 0;				/* Write Adobe Photoshop .AMP file */
+	profxinf xpi;				/* Extra profile/calibration information */
+	pcaltarg *upct = NULL;		/* User settings of print calibration target */
+	pcaltarg *pct = NULL;		/* Settings of print calibration target */
+	double smooth = 4.0;		/* RSPL Smoothness factor */
+	double ver_maxde = 2.0;		/* Verify maximum Delta E (1.0 for smooth == 1.0) */
 	int spec = 0;				/* Use spectral data flag */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;			/* Custom illumination spectrum */
 	icxObserverType observ = icxOT_CIE_1931_2;	/* The classic observer */
-	char ipname[MAXNAMEL+1] = "";	/* Input icc profile - enables gamut map */
-	char sgname[MAXNAMEL+1] = "";	/* Image source gamut name */
-	char absname[MAXNAMEL+1] = "";	/* Abstract profile name */
-	int sepsat = 0;				/* Create separate saturation B2A table */
-	icxViewCond ivc_p;			/* Input Viewing Parameters for CAM */
-	icxViewCond ovc_p;			/* Output Viewing Parameters for CAM (enables CAM clip) */
-	int ivc_e = -1, ovc_e = -1;	/* Enumerated viewing condition */
-	icxGMappingIntent pgmi;		/* default Perceptual gamut mapping intent */
-	icxGMappingIntent sgmi;		/* default Saturation gamut mapping intent */
-	char baname[MAXNAMEL+1] = "";	/* Input & Output base name */
-	char inname[MAXNAMEL+1] = "";	/* Input cgats file base name */
-	char outname[MAXNAMEL+1] = "";	/* Output cgats file base name */
-	cgats *icg;					/* input cgats structure */
-	int ti;						/* Temporary CGATs index */
-	prof_atype ptype = prof_default;	/* Default for each type of device */
-	icmICCVersion iccver = icmVersionDefault;	/* ICC profile version to create */
-	profxinf xpi;		/* Extra profile information */
 
-	
-#ifdef DO_TIME			/* Time the operation */
-	stime = clock();
-#endif /* DO_TIME */
+	char baname[MAXNAMEL+1] = "";	/* Input & Output base name */
+	char inname[MAXNAMEL+1] = "";	/* new .ti3 input file name */
+	char calname[MAXNAMEL+1] = "";	/* previous .cal input file name */
+	char outname[MAXNAMEL+1] = "";	/* new .cal output file name */
+	char ampname[MAXNAMEL+1] = "";	/* new .amp output file name */
+	cgats *icg = NULL;			/* .ti3 input cgats structure */
+	int ti;						/* Temporary CGATs index */
+	inkmask devmask;			/* ICX ink mask of device space */
+	int devchan;				/* Number of chanels in device space */
+	int isLab = 0;				/* Flag indicating whether PCS is XYZ or Lab */
+	int n_pvals[MAX_CHAN];		/* Number of measurement values */
+	wval *pvals[MAX_CHAN];		/* Patch measurement values */
+	wval white;					/* Average white value */
+	int n_white = 0;			/* Number of values to average */
+	icmXYZNumber wht;			/* White value */
+	rspl *raw[MAX_CHAN];		/* Raw Lab values fitted to rspl */
+	rspl *ade[MAX_CHAN];		/* Absolute delta E */
+	rspl *rde[MAX_CHAN];		/* Relative delta E */
+	rspl *pcade[MAX_CHAN];		/* Previous calibrated absolute delta E */
+	int n_cvals;				/* Number of calibration curve values */
+	wval *cvals[MAX_CHAN];		/* Calibration curve tables */
+	rspl *tcurves[MAX_CHAN];	/* Tweak target curves */
+
+	int i, j;
+
+	/* Init pointers to NULL */
+	for (j = 0; j < MAX_CHAN; j++) {
+		pvals[j] = NULL;
+		raw[j] = NULL;
+		ade[j] = NULL;
+		rde[j] = NULL;
+		pcade[j] = NULL;
+		cvals[j] = NULL;
+		tcurves[j] = NULL;
+	}
+
 	error_program = argv[0];
 	memset((void *)&xpi, 0, sizeof(profxinf));	/* Init extra profile info to defaults */
+	if ((upct = new_pcaltarg()) == NULL || (pct = new_pcaltarg()) == NULL)
+		error("new_caltarg failed");
 
-	/* Init VC overrides so that we know when the've been set */
-	ivc_p.Ev = -1;
-	ivc_p.Wxyz[0] = -1.0; ivc_p.Wxyz[1] = -1.0; ivc_p.Wxyz[2] = -1.0;
-	ivc_p.La = -1.0;
-	ivc_p.Yb = -1.0;
-	ivc_p.Lv = -1.0;
-	ivc_p.Yf = -1.0;
-	ivc_p.Fxyz[0] = -1.0; ivc_p.Fxyz[1] = -1.0; ivc_p.Fxyz[2] = -1.0;
-
-	ovc_p.Ev = -1;
-	ovc_p.Wxyz[0] = -1.0; ovc_p.Wxyz[1] = -1.0; ovc_p.Wxyz[2] = -1.0;
-	ovc_p.La = -1.0;
-	ovc_p.Yb = -1.0;
-	ovc_p.Lv = -1.0;
-	ovc_p.Yf = -1.0;
-	ovc_p.Fxyz[0] = -1.0; ovc_p.Fxyz[1] = -1.0; ovc_p.Fxyz[2] = -1.0;
-
-	xicc_enum_gmapintent(&pgmi, icxPerceptualGMIntent, NULL);
-	xicc_enum_gmapintent(&sgmi, icxSaturationGMIntent, NULL);
-
-	if (argc < 2)
-		usage("Too few arguments, got %d expect at least %d",argc-1,1);
+	if (argc < 3)
+		usage("Too few arguments, got %d expect at least %d",argc-1,2);
 
 	/* Process the arguments */
-	mfa = 1;		/* Minimum final arguments */
+	mfa = 2;		/* Minimum final arguments */
 	for(fa = 1;fa < argc;fa++) {
 
 		nfa = fa;					/* skip to nfa if next argument is used */
@@ -235,8 +619,36 @@ int main(int argc, char *argv[]) {
 			if (argv[fa][1] == '?')
 				usage("Usage requested");
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
-				verb = 1;
+			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+				if (na != NULL) {
+					fa = nfa;
+					verb = atoi(na);
+				} else
+					verb = 1;
+			}
+
+			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+				if (na != NULL) {
+					fa = nfa;
+					doplot = atoi(na);
+				} else
+					doplot = 1;				/* Plot various graphs */
+			}
+
+			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I')
+				initial = 1;			/* Initial calibration */
+
+			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R')
+				recal = 1;			/* Recalibrate */
+
+			else if (argv[fa][1] == 'e' || argv[fa][1] == 'E')
+				verify = 1;			/* Verify */
+
+			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D')
+				dowrite = 0;			/* Don't write to files */
+
+			else if (argv[fa][1] == 'a')
+				doamp = 1;			/* write AMP file */
 
 			/* Manufacturer description string */
 			else if (argv[fa][1] == 'A') {
@@ -255,7 +667,7 @@ int main(int argc, char *argv[]) {
 			/* Profile Description */
 			else if (argv[fa][1] == 'D') {
 				fa = nfa;
-				if (na == NULL) usage("Expect argument to profile description flag -E");
+				if (na == NULL) usage("Expect argument to profile description flag -D");
 				xpi.profDesc = na;
 			}
 
@@ -266,430 +678,119 @@ int main(int argc, char *argv[]) {
 				xpi.copyright = na;
 			}
 
-			/* Quality */
-			else if (argv[fa][1] == 'q' || argv[fa][1] == 'Q') {
+			/* Device maximum percentage */
+			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X'
+			      || argv[fa][1] == 't' || argv[fa][1] == 'T'
+			      || argv[fa][1] == 'n' || argv[fa][1] == 'N') {
+				char fch = argv[fa][1];
+				int chan = -1;
+				double val = -1.0;
 				fa = nfa;
-				if (na == NULL) usage("Expect argument to quality flag -q");
-   	 			switch (na[0]) {
-					case 'l':
-					case 'L':
-						iquality = 0;
-						break;
-					case 'm':
-					case 'M':
-						iquality = 1;
-						break;
-					case 'h':
-					case 'H':
-						iquality = 2;
-						break;
-					case 'u':
-					case 'U':
-						iquality = 3;
-						break;
-					default:
-						usage("Unknown argument '%c' to quality flag -q",na[0]);
-				}
-			}
-			else if (argv[fa][1] == 'b') {
-				oquality = 0;
-				if (na != NULL) {	/* Got a B2A quaiity */
-					fa = nfa;
-	    			switch (na[0]) {
-						case 'l':
-						case 'L':
-							oquality = 0;
-							break;
-						case 'm':
-						case 'M':
-							oquality = 1;
-							break;
-						case 'h':
-						case 'H':
-							oquality = 2;
-							break;
-						case 'u':
-						case 'U':
-							oquality = 3;
-							break;
-						default:
-							usage("Unknown argument '%c' to quality flag -q",na[0]);
-					}
-				}
-			}
-
-			else if (argv[fa][1] == 'B')
-				oquality = -2;
-
-			else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y')
-				verify = 1;
-
-			/* Disable input or output luts */
-			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
-				fa = nfa;
-				if (na == NULL) {	/* Backwards compatible */
-					nooluts = 1;
-				} else {
-
-					if (na[0] != 'i' && na[0] != 'I'
-					 && na[0] != 'p' && na[0] != 'P'
-					 && na[0] != 'o' && na[0] != 'O')
-						usage("Unknown argument '%c' to flag -n",na[0]);
-	
-					if (na[0] == 'i' || na[0] == 'I')
-						noisluts = 1;
-					if (na[0] == 'p' || na[0] == 'P')
-						noipluts = 1;
-					if (na[0] == 'o' || na[0] == 'O')
-						nooluts = 1;
-				}
-			}
-
-			else if (argv[fa][1] == 'u' || argv[fa][1] == 'U')
-				nsabs = 1;
-
-			/* Inking rule */
-			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
-				fa = nfa;
-				if (na == NULL) usage("Expect argument to inking flag -k");
-				if (argv[fa][1] == 'k')
-					locus = 0;		/* Use K value target */
-				else
-					locus = 1;		/* Use K locus target */
+				if (na == NULL)
+					usage("Expect channel flag after flag -%c",argv[fa][1]);
     			switch (na[0]) {
-					case 'z':
-					case 'Z':
-						inking = 0;		/* Use minimum k */
+					case 'c': case 'r': case '0':
+						chan = 0;
 						break;
-					case 'h':
-					case 'H':
-						inking = 1;		/* Use 0.5 k */
+					case 'm': case 'g': case '1':
+						chan = 1;
 						break;
-					case 'x':
-					case 'X':
-						inking = 2;		/* Use maximum K */
+					case 'y': case 'b': case '2':
+						chan = 2;
 						break;
-					case 'r':
-					case 'R':
-						inking = 3;		/* Use ramping K */
+					case 'k': case '3':
+						chan = 3;
 						break;
-					case 'p':
-					case 'P':
-						inking = 4;		/* Use parameter curve */
-						++fa;
-						if (fa >= argc) usage("Too few arguments to inking flag -kp");
-						Kstle = atof(argv[fa]);
-
-						++fa;
-						if (fa >= argc) usage("Too few arguments to inking flag -kp");
-						Kstpo = atof(argv[fa]);
-
-						++fa;
-						if (fa >= argc || argv[fa][0] == '-') usage("Too few arguments to inking flag -kp");
-						Kenpo = atof(argv[fa]);
-
-						++fa;
-						if (fa >= argc) usage("Too few arguments to inking flag -kp");
-						Kenle = atof(argv[fa]);
-
-						++fa;
-						if (fa >= argc || argv[fa][0] == '-') usage("Too few arguments to inking flag -kp");
-						Kshap = atof(argv[fa]);
-						break;
-					default:
-						usage("Unknown inking rule (-k) argument '%c'",na[0]);
-				}
-			}
-
-			/* Total Ink Limit */
-			else if (argv[fa][1] == 'l') {
-				fa = nfa;
-				if (na == NULL) usage("Expected argument to total ink limit flag -l");
-				tlimit = atoi(na);
-			}
-
-			/* Black Ink Limit */
-			else if (argv[fa][1] == 'L') {
-				fa = nfa;
-				if (na == NULL) usage("Expected argument to black ink limit flag -L");
-				klimit = atoi(na);
-			}
-
-			/* Algorithm type */
-			else if (argv[fa][1] == 'a' || argv[fa][1] == 'A') {
-				fa = nfa;
-				if (na == NULL) usage("Expect argument to algorithm flag -a");
-    			switch (na[0]) {
-					case 'l':
-					case 'L':
-						ptype = prof_clutLab;
-						break;
-					case 'x':
-					case 'X':
-						ptype = prof_clutXYZ;
-						break;
-					case 'g':
-						ptype = prof_gammat;
-						break;
-					case 'G':
-						ptype = prof_gam1mat;
-						break;
-					case 's':
-						ptype = prof_shamat;
-						break;
-					case 'S':
-						ptype = prof_sha1mat;
-						break;
-					default:
-						usage("Unknown argument '%c' to algorithm flag -a",na[0] );
-				}
-			}
-			/* Profile version */
-			else if (argv[fa][1] == 'I') {
-				fa = nfa;
-				if (na == NULL) usage("Expect argument to version flag -I");
-    			switch (na[0]) {
 					case '4':
-						iccver = icmVersion4_1;
+						chan = 4;
+						break;
+					case '5':
+						chan = 5;
+						break;
+					case '6':
+						chan = 6;
+						break;
+					case '7':
+						chan = 7;
+						break;
+					case '8':
+						chan = 8;
+						break;
+					case '9':
+						chan = 9;
+						break;
+					case 'A':
+						chan = 10;
+						break;
+					case 'B':
+						chan = 11;
+						break;
+					case 'C':
+						chan = 12;
+						break;
+					case 'D':
+						chan = 13;
+						break;
+					case 'E':
+						chan = 14;
+						break;
+					case 'F':
+						chan = 15;
 						break;
 					default:
-						usage("Unknown argument '%c' to version flag -I",na[0] );
+						usage("Unknown channel flag '%s' after flag -%c",argv[fa][2],argv[fa][1]);
+				}
+				++fa;
+				if (fa >= argc || argv[fa][0] == '-') usage("Expect argument after flag -%c%c",fch,na[0]);
+				val = atof(argv[fa]);
+			
+				if (fch == 'x' || fch == 'X') {
+					if (val < 0.0 || val > 100.0)
+						usage("Argument to -%c%c %f from '%s' is out of range",fch,na[0],val,argv[fa]);
+					val /= 100.0;
+					upct->update_devmax(upct, chan, val);
+				}
+				if (fch == 'n' || fch == 'N') {
+					upct->update_ademin(upct, chan, val);
+				}
+				if (fch == 't' || fch == 'T') {
+					if (val < 0.0 || val > 100.0)
+						usage("Argument to -%c%c %f from '%s' is out of range",fch,na[0],val,argv[fa]);
+					val /= 100.0;
+					upct->update_tcurve(upct, chan, 0.5, val);
 				}
 			}
-			/* Spectral Illuminant type */
-			else if (argv[fa][1] == 'i') {
-				fa = nfa;
-				if (na == NULL) usage("Expect argument to illuminant flag -i");
-				if (strcmp(na, "A") == 0) {
-					spec = 1;
-					illum = icxIT_A;
-				} else if (strcmp(na, "D50") == 0) {
-					spec = 1;
-					illum = icxIT_D50;
-				} else if (strcmp(na, "D65") == 0) {
-					spec = 1;
-					illum = icxIT_D65;
-				} else if (strcmp(na, "F5") == 0) {
-					spec = 1;
-					illum = icxIT_F5;
-				} else if (strcmp(na, "F8") == 0) {
-					spec = 1;
-					illum = icxIT_F8;
-				} else if (strcmp(na, "F10") == 0) {
-					spec = 1;
-					illum = icxIT_F10;
-				} else {	/* Assume it's a filename */
-					spec = 1;
-					illum = icxIT_custom;
-					if (read_xspect(&cust_illum, na) != 0)
-						usage("Failed to read custom illuminant spectrum in file '%s'",na);
-				}
-			}
-
-			/* Spectral Observer type */
-			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
-				fa = nfa;
-				if (na == NULL) usage("Expect argument to observer flag -o");
-				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
-					spec = 1;
-					observ = icxOT_CIE_1931_2;
-				} else if (strcmp(na, "1964_10") == 0) {	/* Classic 10 degree */
-					spec = 1;
-					observ = icxOT_CIE_1964_10;
-				} else if (strcmp(na, "1955_2") == 0) {		/* Stiles and Burch 1955 2 degree */
-					spec = 1;
-					observ = icxOT_Stiles_Burch_2;
-				} else if (strcmp(na, "1978_2") == 0) {		/* Judd and Voss 1978 2 degree */
-					spec = 1;
-					observ = icxOT_Judd_Voss_2;
-				} else if (strcmp(na, "shaw") == 0) {		/* Shaw and Fairchilds 1997 2 degree */
-					spec = 1;
-					observ = icxOT_Shaw_Fairchild_2;
-				} else
-					usage("Unrecognised argument '%s' to observer flag -o",na);
-			}
-
-			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F')
-				fwacomp = 1;
-
-			/* Average Deviation percentage */
-			else if (argv[fa][1] == 'r') {
-				fa = nfa;
-				if (na == NULL) usage("Expected argument to average deviation flag -r");
-				if (na[0] == 's') {			/* (relative, for verification) */
-					smooth = atof(na+1);
-					if (smooth < 0.0)
-						usage("Optimised smoothing factor argument to '-rs' must be over 0.0");
-				} else if (na[0] == 'r') {	/* (absolute, for testing) */
-					smooth = atof(na+1);
-					if (smooth < 0.0)
-						usage("Raw smoothing factor argument to '-rr' must be over 0.0");
-					smooth = -smooth;		/* Signal raw factor */
-				} else {
-					avgdev = 0.01 * atof(na);
-					if (avgdev < 0.0 || avgdev > 1.0)
-						usage("Average Deviation argument must be between 0.0 and 100.0");
-				}
-			}
-
-			/* Percetual Source Gamut and Perceptual/Saturation Gamut Maping mode enable */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
-				if (argv[fa][1] == 'S')
-					sepsat = 1;
-				if (na == NULL)
-					usage("Unrecognised argument to source gamut flag -%c",argv[fa][1]);
-
-				fa = nfa;
-				strncpy(ipname,na,MAXNAMEL); ipname[MAXNAMEL] = '\000';
-			}
-
-			/* Source image gamut */
-			else if (argv[fa][1] == 'g' || argv[fa][1] == 'G') {
-				if (na == NULL)
-					usage("Unrecognised argument to source image gamut flag -g",argv[fa][1]);
-				fa = nfa;
-				strncpy(sgname,na,MAXNAMEL); sgname[MAXNAMEL] = '\000';
-			}
-
-			/* Abstract profile */
-			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
-				if (na == NULL) usage("Expected abstract profile filename after -p");
-				fa = nfa;
-				strncpy(absname,na,MAXNAMEL); absname[MAXNAMEL] = '\000';
-			}
-
-			/* Perceptual Mapping intent override */
-			else if (argv[fa][1] == 't') {
-				fa = nfa;
-				if (na == NULL) usage("Expect argument to perceptul intent override flag -t");
-#ifdef NEVER
-				if (na[0] >= '0' && na[0] <= '9') {
-					int i = atoi(na);
-					if (xicc_enum_gmapintent(&pgmi, i, NULL) == icxIllegalGMIntent)
-						usage("Unrecognised intent '%s' to perceptual override flag -t",na);
-				} else
-#endif
-				{
-					if (xicc_enum_gmapintent(&pgmi, icxNoGMIntent, na) == icxIllegalGMIntent)
-						usage("Unrecognised intent '%s' to perceptual override flag -t",na);
-				}
-			}
-
-			/* Saturation Mapping intent override */
-			else if (argv[fa][1] == 'T') {
-				fa = nfa;
-				if (na == NULL) usage("Expect argument to saturation intent override flag -T");
-#ifdef NEVER
-				if (na[0] >= '0' && na[0] <= '9') {
-					int i = atoi(na);
-					if (xicc_enum_gmapintent(&sgmi, i, NULL) == icxIllegalGMIntent0)
-						usage("Unrecognised intent '%s' to saturation override flag -t",na);
-				} else
-#endif
-				{
-					if (xicc_enum_gmapintent(&sgmi, icxNoGMIntent, na) == icxIllegalGMIntent)
-						usage("Unrecognised intent '%s' to saturation override flag -t",na);
-				}
-			}
-
-			/* Viewing conditions */
-			else if (argv[fa][1] == 'c' || argv[fa][1] == 'd') {
-				icxViewCond *vc;
-
-				if (argv[fa][1] == 'c') {
-					vc = &ivc_p;
-				} else {
-					vc = &ovc_p;
-				}
-
-				fa = nfa;
-				if (na == NULL) usage("Viewing conditions flag (-c) needs an argument");
-#ifdef NEVER
-				if (na[0] >= '0' && na[0] <= '9') {
-					if (vc == &ivc_p)
-						ivc_e = atoi(na);
-					else
-						ovc_e = atoi(na);
-				} else
-#endif
-				if (na[1] != ':') {
-					if (vc == &ivc_p) {
-						if ((ivc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
-							usage("Urecognised Enumerated Viewing conditions '%s'",na);
-					} else {
-						if ((ovc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
-							usage("Urecognised Enumerated Viewing conditions '%s'",na);
-					}
-				} else if (na[0] == 's' || na[0] == 'S') {
-					if (na[1] != ':')
-						usage("Viewing conditions (-cs) missing ':'");
-					if (na[2] == 'a' || na[2] == 'A') {
-						vc->Ev = vc_average;
-					} else if (na[2] == 'm' || na[2] == 'M') {
-						vc->Ev = vc_dim;
-					} else if (na[2] == 'd' || na[2] == 'D') {
-						vc->Ev = vc_dark;
-					} else if (na[2] == 'c' || na[2] == 'C') {
-						vc->Ev = vc_cut_sheet;
-					} else
-						usage("Viewing condition (-c) unrecognised surround '%c'",na[2]);
-				} else if (na[0] == 'w' || na[0] == 'W') {
-					double x, y, z;
-					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
-						vc->Wxyz[0] = x; vc->Wxyz[1] = y; vc->Wxyz[2] = z;
-					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
-						vc->Wxyz[0] = x; vc->Wxyz[1] = y;
-					} else
-						usage("Viewing condition (-cw) unrecognised white point '%s'",na+1);
-				} else if (na[0] == 'a' || na[0] == 'A') {
-					if (na[1] != ':')
-						usage("Viewing conditions (-ca) missing ':'");
-					vc->La = atof(na+2);
-				} else if (na[0] == 'b' || na[0] == 'B') {
-					if (na[1] != ':')
-						usage("Viewing conditions (-cb) missing ':'");
-					vc->Yb = atof(na+2)/100.0;
-				} else if (na[0] == 'f' || na[0] == 'F') {
-					double x, y, z;
-					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
-						vc->Fxyz[0] = x; vc->Fxyz[1] = y; vc->Fxyz[2] = z;
-					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
-						vc->Fxyz[0] = x; vc->Fxyz[1] = y;
-					} else if (sscanf(na+1,":%lf",&x) == 1) {
-						vc->Yf = x/100.0;
-					} else
-						usage("Viewing condition (-cf) unrecognised flare '%s'",na+1);
-				} else
-					usage("Viewing condition (-c) unrecognised sub flag '%c'",na[0]);
-			}
-
 			else 
 				usage("Unknown flag '%c'",argv[fa][1]);
 		} else
 			break;
 	}
 
-	/* Get the file name argument */
-	if (fa >= argc || argv[fa][0] == '-') usage("Missing input .ti3 and output ICC basename");
-	strncpy(baname,argv[fa++],MAXNAMEL-4); baname[MAXNAMEL-4] = '\000';
-	if (xpi.profDesc == NULL)
-		xpi.profDesc = baname;	/* Default description */
-	strcpy(inname,baname);
-	strcpy(outname,baname);
-	strcat(inname,".ti3");
-	strcat(outname,ICC_FILE_EXT);
+	if (!(   (initial && !recal && !verify)
+	      || (!initial && recal && !verify)
+	      || (!initial && !recal && verify)))
+		error("One of -i, -r or -e must be set");
 
-	if (fwacomp && spec == 0)
-		error ("FWA compensation only works when viewer and/or illuminant selected");
-
-	if (oquality == -1) {		/* B2A tables will be used */
-		oquality = iquality;
+	/* Get the file name arguments */
+	if (verify || recal) {
+		if (fa >= argc || argv[fa][0] == '-') usage("Missing prevoius .cal basename");
+		strncpy(calname,argv[fa++],MAXNAMEL-4); calname[MAXNAMEL-4] = '\000';
+		strcat(calname,".cal");
 	}
+	if (fa >= argc || argv[fa][0] == '-') usage("Missing .ti3 and new .cal basename");
+	strncpy(baname,argv[fa++],MAXNAMEL-4); baname[MAXNAMEL-4] = '\000';
+	strcpy(inname,baname);		/* new .ti3 file */
+	strcat(inname,".ti3");
+	strcpy(outname,baname);		/* New .cal file */
+	strcat(outname,".cal");
+	strcpy(ampname,baname);		/* New .amp file */
+	strcat(ampname,".amp");
+
+	if (fa < argc) usage("Too many arguments ('%s')",argv[fa]);
 
 	/* Open and look at the .ti3 profile patches file */
-	icg = new_cgats();			/* Create a CGATS structure */
+	icg = new_cgats();				/* Create a CGATS structure */
 	icg->add_other(icg, "CTI3"); 	/* our special input type is Calibration Target Information 3 */
-	icg->add_other(icg, "CAL"); 	/* our special device Calibration state */
 
 	if (icg->read_name(icg, inname))
 		error("CGATS file read error : %s",icg->err);
@@ -721,140 +822,1174 @@ int main(int argc, char *argv[]) {
 			error ("Requested spectral interpretation when data not available");
 	}
 
-	/* read the device class, and call function to create profile. */
-	if ((ti = icg->find_kword(icg, 0, "DEVICE_CLASS")) < 0)
-		error ("Input file doesn't contain keyword DEVICE_CLASS");
+	/* Get colorspace information from input CGATS file */
+	{
+		char *buf;
+		char *inc, *outc;
 
-	if (strcmp(icg->t[0].kdata[ti],"OUTPUT") == 0) {
-		icxInk ink;							/* Ink parameters */
+		if ((ti = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
+			error("Input file doesn't contain keyword COLOR_REPS");
 
-		if ((ti = icg->find_kword(icg, 0, "TOTAL_INK_LIMIT")) >= 0) {
-			int imax;
-			imax = atoi(icg->t[0].kdata[ti]);
-			if (imax > 0 && imax <= 400.0) {
-				if (tlimit > 0 && tlimit <= 400.0) {	/* User has specified limit as option */
-					if (imax < tlimit) {
-						warning("Ink limit greater than original chart! (%d%% > %d%%)",tlimit,imax);
+		if ((buf = strdup(icg->t[0].kdata[ti])) == NULL)
+			error("Malloc failed - color rep");
+
+		/* Split COLOR_REP into device and PCS space */
+		inc = buf;
+		if ((outc = strchr(buf, '_')) == NULL)
+			error("COLOR_REP '%s' invalid", icg->t[0].kdata[ti]);
+		*outc++ = '\000';
+
+		if (strcmp(outc, "XYZ") == 0)
+			isLab = 0;
+		else if (strcmp(outc, "LAB") == 0)
+			isLab = 1;
+		else
+			error("COLOR_REP '%s' invalid (Neither XYZ nor LAB)", icg->t[0].kdata[ti]);
+
+		devmask = icx_char2inkmask(inc); 
+		devchan = icx_noofinks(devmask);
+		
+		if (devchan == 0)
+			error("COLOR_REP '%s' invalid (No matching devmask)", icg->t[0].kdata[ti]);
+		
+		if ((devmask & ICX_ADDITIVE) && !(devmask & ICX_INVERTED))
+			warning("COLOR_REP '%s' is probably not suitable for print calibration!", icg->t[0].kdata[ti]);
+
+		free(buf);
+	}
+
+	/* For recalibrate or verify, load the previous calibration file */
+	if (verify || recal) {
+		cgats *tcg;					/* Previous .cal file */
+
+		tcg = new_cgats();			/* Create a CGATS structure */
+		tcg->add_other(tcg, "CAL"); 	/* our special input type is Calibration Target */
+
+		if (tcg->read_name(tcg, calname))
+			error("No cal target '%s' found for re-acalibrate(%s)\n",calname,tcg->err);
+
+		/* Check that this is an output cal file */
+		if ((ti = tcg->find_kword(tcg, 0, "DEVICE_CLASS")) < 0)
+			error ("Calibration file '%s'doesn't contain keyword DEVICE_CLASS",calname);
+		if (strcmp(tcg->t[0].kdata[ti],"OUTPUT") != 0)
+			error ("Calibration file '%s' doesn't has DEVICE_CLASS that is not OUTPUT",calname);
+
+		if (pct->read(pct, tcg, 1) != 0)
+			error("Reading cal target '%s' failed",calname);
+
+		if (pct->devmask != devmask)
+			error("Target '%s' colorspace '%s' doesn't match '%s' colorspace '%s'",
+				   calname,icx_inkmask2char(pct->devmask, 1),inname,icx_inkmask2char(devmask, 1)); 
+		if (upct->is_set(upct)) {
+			warning("Command line calibration target paramers ignored on re-calibrate!");
+		}
+
+		/* Load the previous expected absolute DE response */
+		/* It will be in the third table with other type "CAL" */
+		if (tcg->ntables >= 3 && tcg->t[2].tt == tt_other && tcg->t[0].oi == 0) {
+			int ti;
+			char *bident;
+			int spi[1+MAX_CHAN];	/* CGATS indexes for each field */
+			char buf[100];
+
+			bident = icx_inkmask2char(pct->devmask, 0); 
+
+			if (tcg->t[2].nsets <= 0)
+				error ("No Calibration Expected DE Response in '%s'",calname);
+
+			/* Figure out the indexes of all the fields */
+			sprintf(buf, "%s_I_DE",bident);
+			if ((spi[0] = tcg->find_field(tcg, 2, buf)) < 0)
+				error("Can't find field %s in '%s'",buf,calname);
+
+			for (i = 0; i < devchan; i++) {
+				inkmask imask = icx_index2ink(pct->devmask, i);
+				sprintf(buf, "%s_%s_DE",bident,icx_ink2char(imask));
+				if ((spi[1+i] = tcg->find_field(tcg, 2, buf)) < 0)
+					error("Can't find field %s in '%s'",buf,calname);
+			}
+
+			/* Read in each channels values and put them in a rspl */
+			for (j = 0; j < devchan; j++) {
+				datai low,high;
+				int gres[MXDI];
+				co *dpoints;
+
+				low[0] = 0.0;
+				high[0] = 1.0;
+				gres[0] = tcg->t[2].nsets;
+
+				if ((pcade[j] = new_rspl(RSPL_NOFLAGS,1, 1)) == NULL)
+					error("new_rspl() failed");
+
+				if ((dpoints = malloc(sizeof(co) * gres[0])) == NULL)
+					error("malloc dpoints[%d] failed",gres[0]);
+
+				/* Copy the points to our array */
+				if (devmask & ICX_ADDITIVE) {
+					for (i = 0; i < gres[0]; i++) {
+						dpoints[i].p[0] = 1.0 - i/(double)(gres[0]-1);
+						dpoints[i].v[0] = *((double *)tcg->t[2].fdata[gres[0]-1-i][spi[1+j]]);
 					}
 				} else {
-					if (imax > 80.0)
-						tlimit = (int)imax - 10;	/* Rule of thumb - 10% below chart maximum */
-					else
-						tlimit = (int)imax;
+					for (i = 0; i < gres[0]; i++) {
+						dpoints[i].p[0] = i/(double)(gres[0]-1);
+						dpoints[i].v[0] = *((double *)tcg->t[2].fdata[i][spi[1+j]]);
+					}
 				}
+
+				pcade[j]->set_rspl(pcade[j],
+						   0, 
+						   (void *)dpoints,		/* Read points */
+						   rsplset1,			/* Setting function */
+						   low, high, gres,		/* Low, high, resolution of grid */
+						   NULL, NULL			/* Default data scale */
+						   );
+				free(dpoints);
+			}
+			free(bident);
+		}
+		tcg->del(tcg);
+
+	/* Must be an initial calibration */
+	} else {
+		pct->devmask = devmask;
+
+		/* Set the cal target from any user supplied parameters */
+		pct->update(pct, upct);
+
+		/* No previous absolute de reference */
+		for (j = 0; j < devchan; j++)
+			pcade[j] = NULL;
+	}
+
+	/* Read in the patch data */
+	{
+		int dvi[MAX_CHAN];	/* CGATS indexes for each device field */
+		int pcsix[3];		/* XYZ/Lab chanel indexes */
+		char buf[100];
+		char *pcsfname[2][3] = { { "XYZ_X", "XYZ_Y", "XYZ_Z" },
+		                         { "LAB_L", "LAB_A", "LAB_B" } };
+		char *bident = icx_inkmask2char(devmask, 0); 
+	
+		/* Figure out the indexes of all the device fields */
+		for (j = 0; j < devchan; j++) {
+			inkmask imask = icx_index2ink(devmask, j);
+			sprintf(buf, "%s_%s",bident,icx_ink2char(imask));
+			if ((dvi[j] = icg->find_field(icg, 0, buf)) < 0)
+				error("Can't find field %s in '%s'",buf,inname);
+#ifdef DEBUG
+			printf("devn chan %d field %s = %d\n",j,buf,dvi[j]);
+#endif
+		}
+		free(bident);
+
+		/* Figure out the indexes of the PCS fields */
+		for (j = 0; j < 3; j++) {
+			if ((i = icg->find_field(icg, 0, pcsfname[isLab][j])) >= 0) {
+				if (icg->t[0].ftype[i] != r_t)
+					error ("Field %s is wrong type",pcsfname[isLab][j]);
+				pcsix[j] = i;
+#ifdef DEBUG
+				printf("PCS chan %d field %s = %d\n",j,pcsfname[isLab][j],pcsix[j]);
+#endif
+			}
+		}
+	
+		n_cvals = 0;
+		for (j = 0; j < devchan; j++) {
+			pvals[j] = NULL;
+			n_pvals[j] = 0;
+			cvals[j] = NULL;
+		}
+
+		/* Read all the test patches in */
+		for (i = 0; i < icg->t[0].nsets; i++) {
+			double maxv = -1.0;
+			int maxch;
+
+#ifdef DEBUG
+			printf("Reading patch %d\n",i);
+#endif
+
+			/* Locate the maximum device value of any channel */
+			for (j = 0; j < devchan; j++) {
+				double val = *((double *)icg->t[0].fdata[i][dvi[j]]) / 100.0;
+				if (devmask & ICX_ADDITIVE)
+					val = 1.0 - val;
+				if (val > maxv) {
+					maxv = val;
+					maxch = j;
+				}
+			}
+#ifdef DEBUG
+			printf("max %f at chan %d\n",maxv,maxch);
+#endif
+			/* Treat white specially */
+			if (maxv < 0.001) {
+				double wxyz[3];
+				white.dev = maxv;
+				if (n_white == 0) {
+					for (j = 0; j < 3; j++)
+						white.XYZ[j] = 0.0;
+				}
+				for (j = 0; j < 3; j++)
+					wxyz[j] = *((double *)icg->t[0].fdata[i][pcsix[j]]);
+				if (isLab) {
+					icmLab2XYZ(&icmD50, wxyz, wxyz);
+				} else {
+					for (j = 0; j < 3; j++)
+						wxyz[j] /= 100.0;
+				}
+				for (j = 0; j < 3; j++)
+					white.XYZ[j] += wxyz[j];
+				n_white++;
+#ifdef DEBUG
+				printf("  white: dev %f,XYZ %f %f %f\n",
+				white.dev,white.XYZ[0]/n_white, white.XYZ[1]/n_white, white.XYZ[2]/n_white);
+#endif
 			} else {
-				tlimit = -1;
+				wval *vp;
+				/* Check that all the non-max value channels are zero */
+				for (j = 0; j < devchan; j++) {
+					double val = *((double *)icg->t[0].fdata[i][dvi[j]]) / 100.0;
+					if (devmask & ICX_ADDITIVE)
+						val = 1.0 - val;
+					if (j == maxch)
+						continue;
+					if (val > 0.001)
+						break;
+				}
+				if (j < devchan) {
+#ifdef DEBUG
+				printf("Skipping patch\n");
+#endif
+					continue;		/* Ignore this patch */
+				}
+
+				if ((pvals[maxch] = (wval *)realloc(pvals[maxch],
+				                       sizeof(wval) * (n_pvals[maxch]+1))) == NULL)
+					error("Realloc of pvals failed");
+				vp = &pvals[maxch][n_pvals[maxch]];
+				vp->dev = maxv;
+				for (j = 0; j < 3; j++)
+					vp->Lab[j] = vp->XYZ[j] = *((double *)icg->t[0].fdata[i][pcsix[j]]);
+				if (isLab)
+					icmLab2XYZ(&icmD50, vp->XYZ, vp->Lab);
+				else {
+					for (j = 0; j < 3; j++)
+						vp->XYZ[j] /= 100.0;
+					icmXYZ2Lab(&icmD50, vp->Lab, vp->XYZ);
+				}
+#ifdef DEBUG
+				printf("  patch %d: dev %f,XYZ %f %f %f, Lab %f %f %f\n",
+				n_pvals[maxch], vp->dev,vp->XYZ[0], vp->XYZ[1], vp->XYZ[2],
+				vp->Lab[0], vp->Lab[1], vp->Lab[2]);
+#endif
+				n_pvals[maxch]++;
 			}
 		}
 
-		if (tlimit >= 0) {
-			if (verb)
-				printf("Total ink limit being used is %d%%\n",tlimit);
-			ink.tlimit = tlimit/100.0;	/* Set a total ink limit */
-		} else {
-			if (verb)
-				printf("No total ink limit being used\n");
-			ink.tlimit = -1.0;			/* Don't use a limit */
+		/* Average the white */
+		if (n_white == 0)
+			error("Can't find even one white patch in '%s'",inname);
+		for (j = 0; j < 3; j++)
+			white.XYZ[j] /= (double)n_white;
+		icmAry2XYZ(wht, white.XYZ);
+		icmXYZ2Lab(&icmD50, white.Lab, white.XYZ);
+
+		/* Convert the Lab white reference to absolute */
+		wht.X /= wht.Y;
+		wht.Z /= wht.Y;
+		wht.Y /= wht.Y;
+
+		if (verb) {
+			icmXYZ2Lab(&icmD50, white.Lab, white.XYZ);
+			printf("Average white = XYZ %f %f %f, D50 Lab %f %f %f\n",
+			white.XYZ[0], white.XYZ[1], white.XYZ[2], white.Lab[0], white.Lab[1], white.Lab[2]);
 		}
 
-		if (klimit >= 0) {
-			if (verb)
-				printf("Black ink limit being used is %d%%\n",klimit);
-			ink.klimit = klimit/100.0;	/* Set a black ink limit */
-		} else {
-			if (verb)
-				printf("No black ink limit being used\n");
-			ink.klimit = -1.0;			/* Don't use a limit */
+		for (j = 0; j < devchan; j++) {
+			wval *wp;
+
+			/* Add white to each channel */
+			if ((pvals[j] = (wval *)realloc(pvals[j],
+			                       sizeof(wval) * (n_pvals[j]+1))) == NULL)
+				error("Realloc (%d) of pvals failed",n_pvals[j]+1);
+			wp = &pvals[j][n_pvals[j]];
+			wp->dev = white.dev;
+			wp->XYZ[0] = white.XYZ[0];
+			wp->XYZ[1] = white.XYZ[1];
+			wp->XYZ[2] = white.XYZ[2];
+			n_pvals[j]++;
+
+			/* Sort the channel acording to device value */ 
+#define HEAP_COMPARE(A,B) ((A).dev < (B).dev)
+			HEAPSORT(wval, pvals[j], n_pvals[j]);
+#undef HEAP_COMPARE
+
+			/* Check the maximum value looks OK */
+			if (n_pvals[j] < 5)
+				warning("Channel %d has only %d test patches",n_pvals[j]);
+			if (pvals[j][n_pvals[j]-1].dev < 0.99)
+				warning("Channel %d has max test patch value of %f",pvals[j][n_pvals[j]-1]); 
+
+			/* Convert all the XYZ values to Lab paper relative */
+			for (i = 0; i < n_pvals[j]; i++) {
+				wp = &pvals[j][i];
+				icmXYZ2Lab(&wht, wp->Lab, wp->XYZ);
+			}
+
+			if (verb > 1) {
+				printf("Chan %d has %d raw values:\n",j,n_pvals[j]);
+				for (i = 0; i < n_pvals[j]; i++) {
+					wp = &pvals[j][i];
+					printf("  %d: dev %f,XYZ %f %f %f, Lab %f %f %f\n",
+					       i,wp->dev,wp->XYZ[0], wp->XYZ[1], wp->XYZ[2],
+					         wp->Lab[0], wp->Lab[1], wp->Lab[2]);
+				}
+			}
 		}
-
-		ink.c.Ksmth = ICXINKDEFSMTH;	/* default black curve smoothing */
-
-		if (inking == 0) {			/* Use minimum */
-			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
-			ink.c.Kstle = 0.0;
-			ink.c.Kstpo = 0.0;
-			ink.c.Kenpo = 1.0;
-			ink.c.Kenle = 0.0;
-			ink.c.Kshap = 1.0;
-		} else if (inking == 1) {	/* Use 0.5  */
-			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
-			ink.c.Kstle = 0.5;
-			ink.c.Kstpo = 0.0;
-			ink.c.Kenpo = 1.0;
-			ink.c.Kenle = 0.5;
-			ink.c.Kshap = 1.0;
-		} else if (inking == 2) {	/* Use maximum  */
-			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
-			ink.c.Kstle = 1.0;
-			ink.c.Kstpo = 0.0;
-			ink.c.Kenpo = 1.0;
-			ink.c.Kenle = 1.0;
-			ink.c.Kshap = 1.0;
-		} else if (inking == 3) {	/* Use ramp  */
-			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
-			ink.c.Kstle = 0.0;
-			ink.c.Kstpo = 0.0;
-			ink.c.Kenpo = 1.0;
-			ink.c.Kenle = 1.0;
-			ink.c.Kshap = 1.0;
-		} else {				/* Use specified curve */
-			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
-			ink.c.Kstle = Kstle;
-			ink.c.Kstpo = Kstpo;
-			ink.c.Kenpo = Kenpo;
-			ink.c.Kenle = Kenle;
-			ink.c.Kshap = Kshap;
-		}
-
-		if (ptype == prof_default)
-			ptype = prof_clutLab;
-		else if (ptype != prof_clutLab && ptype != prof_clutXYZ) {
-			error ("Output profile can only be a clut algorithm");
-		}
-
-		make_output_icc(ptype, iccver, verb, iquality, oquality, noisluts, noipluts, nooluts,
-		                verify, &ink, iname, outname, icg, spec,
-		                illum, &cust_illum, observ, fwacomp, smooth, avgdev,
-		                ipname[0] != '\000' ? ipname : NULL,
-		                sgname[0] != '\000' ? sgname : NULL,
-		                absname[0] != '\000' ? absname : NULL,
-						sepsat, &ivc_p, &ovc_p, ivc_e, ovc_e,
-						&pgmi, &sgmi, &xpi);
-
-	} else if (strcmp(icg->t[0].kdata[ti],"INPUT") == 0) {
-
-		if (ptype == prof_default)
-			ptype = prof_clutLab;		/* For best possible quality */
-		make_input_icc(ptype, iccver, verb, iquality, noisluts, noipluts, nooluts, verify, nsabs,
-		               iname, outname, icg, smooth, avgdev, &xpi);
-
-	} else if (strcmp(icg->t[0].kdata[ti],"DISPLAY") == 0) {
-
-		if (fwacomp)
-			error ("FWA compensation isn't applicable to a display device");
-
-		if (ptype == prof_default)
-			ptype = prof_clutLab;		/* ?? or should it default to prof_shamat ?? */
-
-		/* If a source gamut is provided for a Display, then a V2.4.0 profile will be created */
-		make_output_icc(ptype, iccver, verb, iquality, oquality, noisluts, noipluts, nooluts,
-		                verify, NULL, iname, outname, icg, spec,
-		                illum, &cust_illum, observ, 0, smooth, avgdev,
-		                ipname[0] != '\000' ? ipname : NULL,
-		                sgname[0] != '\000' ? sgname : NULL,
-		                absname[0] != '\000' ? absname : NULL,
-						sepsat, &ivc_p, &ovc_p, ivc_e, ovc_e,
-						&pgmi, &sgmi, &xpi);
-
-	} else
-		error ("Input file keyword DEVICE_CLASS has unknown value");
-
+	}
 	icg->del(icg);		/* Clean up */
 
-#ifdef DO_TIME			/* Time the operation */
-	ttime = clock() - stime;
-	printf("Exectution time = %f seconds\n",(double)ttime/(double)CLOCKS_PER_SEC);
-#endif /* DO_TIME */
+	/* Interpolate Lab using rspl */
+	for (j = 0; j < devchan; j++) {
+		datai low,high;
+		datao olow,ohigh;
+		int gres[MXDI];
+		double avgdev[MXDO];
+		cow *dpoints;
+
+		low[0] = 0.0;
+		high[0] = 1.0;
+		gres[0] = GRES;
+		olow[0] = 0.0;
+		ohigh[0] = 100.0;
+		olow[1] = olow[2] = -128.0; 
+		ohigh[1] = ohigh[2] = 128.0;
+		avgdev[0] = 0.0025;
+		avgdev[1] = 0.005;
+		avgdev[2] = 0.005;
+
+		if ((raw[j] = new_rspl(RSPL_NOFLAGS,1, 3)) == NULL)
+			error("new_rspl() failed");
+
+		if ((dpoints = (cow *)malloc(sizeof(cow) * n_pvals[j])) == NULL)
+			error("malloc dpoints[%d] failed",n_pvals[j]);
+
+		for (i = 0; i < n_pvals[j]; i++) {
+			dpoints[i].p[0] = pvals[j][i].dev;
+			dpoints[i].v[0] = pvals[j][i].Lab[0];
+			dpoints[i].v[1] = pvals[j][i].Lab[1];
+			dpoints[i].v[2] = pvals[j][i].Lab[2];
+			if (i == 0)
+				dpoints[i].w = (double)n_white;
+			else
+				dpoints[i].w = 1.0;
+		}
+
+		raw[j]->fit_rspl_w(raw[j],
+		           RSPLFLAGS,
+		           dpoints,			/* Test points */
+		           n_pvals[j],			/* Number of test points */
+		           low, high, gres,		/* Low, high, resolution of grid */
+		           olow, ohigh,			/* Default data scale */
+		           smooth,				/* Smoothing */
+		           avgdev,				/* Average deviation */
+		           NULL);				/* iwidth */
+
+
+		if (verb > 1) {
+		}
+
+		free(dpoints);
+	}
+
+	/* Plot the raw curves */
+	if (doplot > 1) {
+		double xx[PRES];
+		double yy[3][PRES];
+
+		for (j = 0; j < 6 && j < devchan; j++) {
+			printf("Chan %d raw L*a*b*:\n",j);
+			for (i = 0; i < PRES; i++) {
+				co tp;	/* Test point */
+				xx[i] = i/(double)(PRES-1);
+				tp.p[0] = xx[i];
+				raw[j]->interp(raw[j], &tp);
+				yy[0][i] = tp.v[0];
+				yy[1][i] = tp.v[1];
+				yy[2][i] = tp.v[2];
+			}
+			do_plot6(xx, yy[0], yy[1], yy[2], NULL, NULL, NULL, PRES);
+		}
+	}
+
+	/* Create a RSPL of absolute deltaE and relative deltaE '94 */ 
+	for (j = 0; j < devchan; j++) {
+		datai low,high;
+		int gres[MXDI];
+		double avgdev[MXDO];
+		co *dpoints_a;
+		co *dpoints_r;
+		double wh[3], prev[3], tot;
+
+		low[0] = 0.0;
+		high[0] = 1.0;
+		gres[0] = GRES;
+		avgdev[0] = 0.0;
+
+		if ((ade[j] = new_rspl(RSPL_NOFLAGS,1, 1)) == NULL)
+			error("new_rspl() failed");
+		if ((rde[j] = new_rspl(RSPL_NOFLAGS,1, 1)) == NULL)
+			error("new_rspl() failed");
+
+		if ((dpoints_a = malloc(sizeof(co) * GRES)) == NULL)
+			error("malloc dpoints[%d] failed",GRES);
+		if ((dpoints_r = malloc(sizeof(co) * GRES)) == NULL)
+			error("malloc dpoints[%d] failed",GRES);
+
+//printf("~1 Chan %d:\n",j);
+		for (i = 0; i < GRES; i++) {
+			co tp;	/* Test point */
+
+			tp.p[0] = i/(double)(GRES-1);
+			raw[j]->interp(raw[j], &tp);
+
+			dpoints_a[i].p[0] = tp.p[0];
+			dpoints_r[i].p[0] = tp.p[0];
+			if (i == 0) {
+//printf("~1 wht = %f %f %f\n",tp.v[0],tp.v[1],tp.v[2]);
+				tot = 0.0;
+				prev[0] = wh[0] = tp.v[0];
+				prev[1] = wh[1] = tp.v[1];
+				prev[2] = wh[2] = tp.v[2];
+				dpoints_a[i].v[0] = 0.0;
+				dpoints_r[i].v[0] = 0.0;
+			} else {
+//printf("~1 samp %d = %f %f %f\n",i,tp.v[0],tp.v[1],tp.v[2]);
+				/* Use Euclidean for large DE: (CIE94 stuffs up here) */
+				dpoints_a[i].v[0] = icmLabDE(tp.v, wh);
+				/* And CIE94 for small: */
+				tot += icmCIE94(tp.v, prev);
+				prev[0] = tp.v[0];
+				prev[1] = tp.v[1];
+				prev[2] = tp.v[2];
+				dpoints_r[i].v[0] = tot;
+			}
+//printf("~1   %d: dev %f, ade %f, rde %f\n",i,tp.p[0],dpoints_a[i].v[0],dpoints_r[i].v[0]);
+		}
+
+		ade[j]->set_rspl(ade[j],
+		           0, 
+		           (void *)dpoints_a,	/* Test points */
+		           rsplset1,			/* Setting function */
+		           low, high, gres,		/* Low, high, resolution of grid */
+		           NULL, NULL			/* Default data scale */
+		           );
+		rde[j]->set_rspl(rde[j],
+		           0, 
+		           (void *)dpoints_r,		/* Test points */
+		           rsplset1,			/* Setting function */
+		           low, high, gres,		/* Low, high, resolution of grid */
+		           NULL, NULL			/* Default data scale */
+		           );
+		free(dpoints_a);
+		free(dpoints_r);
+	}
+
+	if (initial) {
+		/* Establish the ademax values */
+		pct->update_devmax(pct, -1, -1.0);		/* Make sure there is a value for each */
+		pct->update_ademax(pct, -1, -1.0);
+		pct->update_ademin(pct, -1, -1.0);
+		for (j = 0; j < devchan; j++) {
+			co tp;	/* Test point */
+
+			if (pct->devmax[j] < 0.0) {		/* Auto */
+				double maxd, maxde, maxix;
+				/* Locate the point of maximum aDE */
+				for (maxde = -1.0, i = 0; i < GRES; i++) {
+
+					tp.p[0] = i/(GRES-1.0);
+					ade[j]->interp(ade[j], &tp);
+					if (tp.v[0] > maxde) {
+						maxd = tp.p[0];
+						maxde = tp.v[0];
+						maxix = i;
+					}
+				}
+				pct->devmax[j] = maxd;
+				pct->ademax[j] = maxde;		/* Temporary */
+//printf("Chan %d, dev %f, max de = %f\n", j, maxd, maxde);
+
+				if (maxd < 0.2) {
+					warning("Chan %d, max DE point %f is below < 0.2 - ignored\n", j, maxd);
+					maxix = GRES-1;
+				}
+				/* Then locate the point below that where the slope */
+				/* becomes reasonable. */ 
+				for (i = maxix; i >= 40; i--) {
+					double aslope, minslope = 1e6;
+					double naslope, nminslope;
+					int k;
+
+					/* Compute the minimum over a span of 20/GRES */
+					for (k = 0; k < 40; k++) {
+						double dp, dv, slope;
+
+						tp.p[0] = (i-k)/(GRES-1.0);
+						dp = tp.p[0];
+						ade[j]->interp(ade[j], &tp);
+						dv = tp.v[0];
+
+						tp.p[0] = (i-k-1)/(GRES-1.0);
+						ade[j]->interp(ade[j], &tp);
+						slope = (dv - tp.v[0])/(dp - (i-k-1)/(GRES-1.0));
+						if (k == 0)
+							aslope = slope;
+//printf("  Chan %d, dev %f, dv = %f, slope = %f\n", j, (i-k)/(GRES-1.0),dv - tp.v[0],slope);
+						if (slope < minslope)
+							minslope = slope;
+					}
+//printf("Chan %d, dev %f, aslope = %f, min slope = %f\n", j, i/(GRES-1.0),aslope,minslope);
+					/* Normalize the slopes */
+					naslope = aslope * SLOPE_NORM/pct->ademax[j];
+					nminslope = minslope * SLOPE_NORM/pct->ademax[j];
+//printf("Chan %d, dev %f, norm aslope = %f, min slope = %f\n", j, i/(GRES-1.0),naslope,nminslope);
+
+					if (naslope > MIN_SLOPE_A && nminslope >= MIN_SLOPE_O)
+						break;
+				}
+				pct->devmax[j] = i/(GRES-1.0);
+			}
+
+			/* Lookup devmax to set ademax */
+			tp.p[0] = pct->devmax[j];
+			ade[j]->interp(ade[j], &tp);
+			pct->ademax[j] = tp.v[0];
+
+	
+			/* Establish a default ademin value */
+			if (pct->ademin[j] < 0.0)
+				pct->ademin[j] = 0.0;
+		}
+
+	} else if (recal) {
+
+		/* Since the plot markers use devmax, look it up */
+		for (j = 0; j < devchan; j++) {
+			if ((pct->devmax[j] = rspl_ilookup(ade[j], 0.5, pct->ademax[j])) < 0.0)
+				error("Unexpected failure to invert curve %d for ADE %f",j,pct->ademax[j]); 
+		}
+	}
+
+	if (verb > 1) {
+		printf("Abs DE values:\n");
+		for (i = 0; i < PRES; i++) {
+			co tp;	/* Test point */
+			tp.p[0]= i/(double)(PRES-1);
+
+			printf("  dev %f, aDE",tp.p[0]);
+			for (j = 0; j < 6 && j < devchan; j++) {
+				ade[j]->interp(ade[j], &tp);
+				printf(" %f",tp.v[0]);
+			}
+			printf("\n");
+		}
+		printf("Rel DE values:\n");
+		for (i = 0; i < PRES; i++) {
+			co tp;	/* Test point */
+			tp.p[0]= i/(double)(PRES-1);
+
+			printf("  dev %f, rdev",tp.p[0]);
+			for (j = 0; j < 6 && j < devchan; j++) {
+				rde[j]->interp(rde[j], &tp);
+				printf(" %f",tp.v[0]);
+			}
+			printf("\n");
+		}
+	}
+
+	if (initial || recal) {
+		if (verb)  {
+			for (j = 0; j < devchan; j++) {
+				printf("Chan %d Dev max %f, aDE Max %f, aDE Min %f\n",j,pct->devmax[j],pct->ademax[j],pct->ademin[j]);
+			}
+		}
+	}
+
+	/* Plot both the delta E curves, and markers */
+	if (doplot) {
+		co tp;	/* Test point */
+		double xx[PRES];
+		double yy[6][PRES];
+		double cx[6], cy[6];
+		int nmark;
+
+		printf("Absolute DE plot:\n");
+
+		for (i = 0; i < PRES; i++) {
+			xx[i] = i/(double)(PRES-1);
+
+			for (j = 0; j < 6 && j < devchan; j++) {
+				tp.p[0] = xx[i];
+				ade[j]->interp(ade[j], &tp);
+				yy[j][i] = tp.v[0];
+			}
+		}
+		/* Add markers for deMax */
+		nmark = 0;
+		for (j = 0; j < 6 && j < devchan; j++) {
+			cx[j] = pct->devmax[j];
+			cy[j] = pct->ademax[j];
+			nmark++;
+		}
+		do_plot6p(xx, devchan > 3 ? yy[3] : NULL,
+		             devchan > 1 ? yy[1] : NULL,
+		             devchan > 4 ? yy[4] : NULL,
+		             devchan > 0 ? yy[0] : NULL,
+		             devchan > 2 ? yy[2] : NULL,
+		             devchan > 5 ? yy[5] : NULL, PRES,
+					 cx, cy, verify ? 0 : nmark);
+
+		printf("Relative DE plot:\n");
+
+		for (i = 0; i < PRES; i++) {
+			xx[i] = i/(double)(PRES-1.0);
+
+			for (j = 0; j < 6 && j < devchan; j++) {
+				tp.p[0] = xx[i];
+				rde[j]->interp(rde[j], &tp);
+				yy[j][i] = tp.v[0];
+			}
+		}
+		/* Add markers for deMax */
+		nmark = 0;
+		for (j = 0; j < 6 && j < devchan; j++) {
+			cx[j] = pct->devmax[j];
+			tp.p[0] = cx[j];
+			rde[j]->interp(rde[j], &tp);
+			cy[j] = tp.v[0];
+			nmark++;
+		}
+		do_plot6p(xx, devchan > 3 ? yy[3] : NULL,
+		             devchan > 1 ? yy[1] : NULL,
+		             devchan > 4 ? yy[4] : NULL,
+		             devchan > 0 ? yy[0] : NULL,
+		             devchan > 2 ? yy[2] : NULL,
+		             devchan > 5 ? yy[5] : NULL, PRES,
+					 cx, cy, verify ? 0 : nmark);
+	}
+
+	/* Compare the previous expected aDE against the current one */
+	if (verify) {
+		co tp;	/* Test point */
+		double avg[MAX_CHAN];
+		double max[MAX_CHAN];
+		double rms[MAX_CHAN];
+		int verified = 1;
+
+		/* Verify each channel */
+		for (j = 0; j < devchan; j++) {
+			co tp;
+
+			avg[j] = 0.0;
+			max[j] = -1.0;
+			rms[j] = 0.0;
+
+			/* Sample it at GRES */
+			for (i = 0; i < GRES; i++) {
+				double iv, targ, val, tt;
+
+				iv = i/(GRES-1.0);
+
+				/* Lookup the ade that we expect */ 
+				tp.p[0] = iv;
+				pcade[j]->interp(pcade[j], &tp);
+				targ = tp.v[0];
+
+				/* Lookup the ade that we have */ 
+				tp.p[0] = iv;
+				ade[j]->interp(ade[j], &tp);
+				val = tp.v[0];
+
+				/* Compute the stats */
+				tt = fabs(targ - val);
+				avg[j] += tt;
+				rms[j] += tt * tt;
+				if (tt > max[j])
+					max[j] = tt;
+//printf("~1 chan %d, ix %d, iv %f, targ %f, actual %f, err %f\n",j,i,iv,targ,val,tt);
+			}
+			avg[j] /= (double)GRES;
+			rms[j] /= (double)GRES;
+			rms[j] = sqrt(rms[j]);
+			if (max[j] > ver_maxde)
+				verified = 0;
+		}
+		if (verb) {
+			for (j = 0; j < devchan; j++) {
+				printf("Verify results:\n");
+				printf("Channel %d has DE avg %.1f, rms %.1f, max %.1f\n",j,avg[j],rms[j],max[j]);
+			}
+			if (verified)
+				printf("Verified OK\n");
+			else
+				printf("Verification FAILED\n");
+		}
+
+		/* Plot the verification curves */
+		if (doplot) {
+			double xx[PRES];
+			double yy[6][PRES];
+	
+			printf("Verification match plot:\n");
+
+			for (j = 0; j < 6 && j < devchan; j++) {
+				co tp;	/* Test point */
+				double max;
+
+				/* Establish the scale */
+				tp.p[0] = 1.0;
+				pcade[j]->interp(pcade[j], &tp);
+				max = tp.v[0];
+
+				for (i = 0; i < PRES; i++) {
+					xx[i] = i/(double)(PRES-1);
+
+					/* Convert ade target to device */
+					tp.v[0] = max * xx[i];
+					if ((tp.p[0] = rspl_ilookup(pcade[j], 1.0, tp.v[0])) < 0.0)
+						error("Unexpected failure to invert curve %d for pcADE %f",j,tp.v[0]); 
+					/* Convert device to actual ade */
+					ade[j]->interp(ade[j], &tp);
+					if (fabs(max) > 0.1)
+						yy[j][i] = tp.v[0]/max;
+					else
+						yy[j][i] = 0.0;
+				}
+			}
+			do_plot6(xx, devchan > 3 ? yy[3] : NULL,
+						 devchan > 1 ? yy[1] : NULL,
+						 devchan > 4 ? yy[4] : NULL,
+						 devchan > 0 ? yy[0] : NULL,
+						 devchan > 2 ? yy[2] : NULL,
+						 devchan > 5 ? yy[5] : NULL, PRES);
+			if (!verified)
+				exit(1);
+		}
+	} else if (initial) {
+
+		/* Convert any transfer curve points into a smooth curve */ 
+		if (pct->no_tpoints > 0) {
+			int gres[MXDI] = { GRES };
+			co *pnts;
+		
+			if ((pnts = (co *)calloc(pct->no_tpoints + 2, sizeof(co))) == NULL)
+				error ("Malloc of rspl points failed");
+	
+			for (j = 0; j < devchan; j++) {
+				int npts;
+				int gotmin, gotmax;
+	
+				/* Count the number of valid points */
+				for (npts = i = 0; i < pct->no_tpoints; i++) {
+					if (pct->tpoints[i].val[j] >= 0.0)
+						npts++;
+				}
+				if (npts == 0)
+					continue;		/* No target curve for this channel */
+	
+				if ((tcurves[j] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL)
+					error("new_rspl(1,1) failed");
+				
+				gotmin = gotmax = 0;
+				for (npts = i = 0; i < pct->no_tpoints; i++) {
+					if (pct->tpoints[i].val[j] < 0.0)
+						continue;
+	
+					pnts[npts].p[0] = pct->tpoints[i].loc;
+					pnts[npts].v[0] = pct->tpoints[i].val[j];
+					if (pnts[npts].p[0] < 0.0)
+						pnts[npts].p[0] = 0.0;
+					else if (pnts[npts].p[0] > 1.0)
+						pnts[npts].p[0] = 1.0;
+					if (pnts[npts].v[0] < 0.0)
+						pnts[npts].v[0] = 0.0;
+					else if (pnts[npts].v[0] > 1.0)
+						pnts[npts].v[0] = 1.0;
+	
+					if (pnts[npts].p[0] <= 0.05)
+						gotmin = 1;
+					if (pnts[npts].p[0] >= 0.95)
+						gotmax = 1;
+					npts++;
+				}
+				/* Add default anchors if there are none supplied */
+				if (gotmin == 0) {
+					pnts[npts].p[0] = 0.0;
+					pnts[npts++].v[0] = 0.0;
+				}
+				if (gotmax == 0) {
+					pnts[npts].p[0] = 1.0;
+					pnts[npts++].v[0] = 1.0;
+				}
+	
+				/* Fit the curve to the given points */
+				tcurves[j]->fit_rspl(tcurves[j], RSPLFLAGS, pnts, npts,
+				                NULL, NULL, gres, NULL, NULL, 1.0, NULL, NULL); 
+			}
+			free(pnts);
+	
+			/* Plot the target curves */
+			if (doplot) {
+				double xx[PRES];
+				double yy[6][PRES];
+	
+				printf("Target curves plot:\n",j);
+	
+				for (i = 0; i < (PRES-1); i++) {
+					co tp;	/* Test point */
+					double pp = i/(PRES-1.0);
+	
+					xx[i] = pp;
+					for (j = 0; j < 6 && j < devchan; j++) {
+						if (tcurves[j] != NULL) {
+							tp.p[0] = pp;
+							tcurves[j]->interp(tcurves[j], &tp);
+							yy[j][i] = tp.v[0];
+						} else
+							yy[j][i] = pp;
+					}
+				}
+				do_plot6(xx, devchan > 3 ? yy[3] : NULL,
+							 devchan > 1 ? yy[1] : NULL,
+							 devchan > 4 ? yy[4] : NULL,
+							 devchan > 0 ? yy[0] : NULL,
+							 devchan > 2 ? yy[2] : NULL,
+							 devchan > 5 ? yy[5] : NULL, PRES);
+			}
+		}
+
+		/* Do inverse lookup to create relative linearization curves */
+		n_cvals = CAL_RES;
+		for (j = 0; j < devchan; j++) {
+			co tp;
+			double rdemin, rdemax;	/* Relative DE min and max targets */
+
+			/* Convert absolute de aims to relative */
+			if ((rdemax = rspl_ilookup(ade[j], 0.0, pct->ademax[j])) < 0.0)
+				error("Unexpected failure to invert curve %d for DE %f",j,pct->ademax[j]); 
+
+			tp.p[0] = rdemax;
+			rde[j]->interp(rde[j], &tp);
+			rdemax = tp.v[0];
+
+			if ((rdemin = rspl_ilookup(ade[j], 1.0, pct->ademin[j])) < 0.0)
+				error("Unexpected failure to invert curve %d for DE %f",j,pct->ademax[j]); 
+
+			tp.p[0] = rdemin;
+			rde[j]->interp(rde[j], &tp);
+			rdemin = tp.v[0];
+
+			if (verb > 0)
+				printf("Chan %d: rDE Max = %f, rDE Min = %f\n",j,rdemax,rdemin);
+
+			if ((cvals[j] = (wval *)malloc(sizeof(wval) * n_cvals)) == NULL)
+				error("Malloc of %d cvals failed",n_cvals);
+
+			/* Convert relative delta E aim to device value */
+			for (i = 0; i < n_cvals; i++) {
+				double x = i/(n_cvals-1.0);
+				double inv;
+
+				cvals[j][i].inv = x;
+
+				/* Apply any aim tweak curve */
+				if (tcurves[j] != NULL) {
+					tp.p[0] = x;
+					tcurves[j]->interp(tcurves[j], &tp);
+					x = tp.v[0];
+				}
+
+				inv = x * (rdemax - rdemin) + rdemin;
+
+				if ((cvals[j][i].dev = rspl_ilookup(rde[j], 0.5, inv)) < 0.0)
+					error("Unexpected failure to invert curve %d for DE %f",j,inv); 
+//printf("~1 chan %d, step %d, inv %f, detarg %f, got dev %f\n",j,i,x,pp[0].v[0],pp[k].p[0]);
+			}
+		}
+
+	} else if (recal) {
+
+		n_cvals = CAL_RES;
+		for (j = 0; j < devchan; j++) {
+			co tp;
+
+			if ((cvals[j] = (wval *)malloc(sizeof(wval) * n_cvals)) == NULL)
+				error("Malloc of %d cvals failed",n_cvals);
+
+			/* Lookup the expected ade for each input device value, and */
+			/* then translate it into the required output device value */
+			for (i = 0; i < n_cvals; i++) {
+				double x = i/(n_cvals-1.0);
+
+				cvals[j][i].inv = tp.p[0] = x;
+				pcade[j]->interp(pcade[j], &tp);
+
+				if ((cvals[j][i].dev = rspl_ilookup(ade[j], 0.5, tp.v[0])) < 0.0)
+					error("Unexpected failure to invert curve %d for DE %f",j,tp.v[0]); 
+//printf("~1 chan %d, ix %d, inv %f, pcade %f, iade %f\n",j,i,x,tp.v[0],cvals[j][i].dev);
+			}
+		}
+	}
+
+	if (initial || recal) {
+
+		if (verb > 1) {
+			printf("Calibration curve values:\n");
+			for (i = 0; i < n_cvals; i++) {
+				printf("  inv %f, dev",cvals[0][i].inv);
+				for (j = 0; j < devchan; j++) {
+					printf(" %f",cvals[j][i].dev);
+				}
+				printf("\n");
+			}
+		}
+
+		/* Plot the calibration curves */
+		if (doplot) {
+			double xx[PRES];
+			double yy[6][PRES];
+
+			printf("Calibration curve plot:\n");
+
+			for (i = 0; i < n_cvals; i++) {
+				xx[i] = cvals[0][i].inv;
+				for (j = 0; j < 6 && j < devchan; j++) {
+					yy[j][i] = cvals[j][i].dev;
+				}
+			}
+			do_plot6(xx, devchan > 3 ? yy[3] : NULL,
+			             devchan > 1 ? yy[1] : NULL,
+			             devchan > 4 ? yy[4] : NULL,
+			             devchan > 0 ? yy[0] : NULL,
+			             devchan > 2 ? yy[2] : NULL,
+			             devchan > 5 ? yy[5] : NULL, PRES);
+		}
+
+		/* Write out an Argyll .CAL file */
+		if (dowrite) {
+			cgats *ocg;						/* output cgats structure */
+			time_t clk = time(0);
+			struct tm *tsp = localtime(&clk);
+			char *atm = asctime(tsp);		/* Ascii time */
+			char *ident = icx_inkmask2char(devmask, 1); 
+			char *bident = icx_inkmask2char(devmask, 0); 
+			cgats_set_elem *setel;			/* Array of set value elements */
+			int nsetel = 0;
+			int ncps;						/* Number of curve parameters */
+			double *cps[3];					/* Arrays of curve parameters */
+			char *bp = NULL, buf[100];		/* Buffer to sprintf into */
+			co tp;
+
+			ocg = new_cgats();				/* Create a CGATS structure */
+			ocg->add_other(ocg, "CAL"); 	/* our special type is Calibration file */
+
+			ocg->add_table(ocg, tt_other, 0);	/* Add a table for RAMDAC values */
+			ocg->add_kword(ocg, 0, "DESCRIPTOR", "Argyll Device Calibration Curves",NULL);
+			ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll printcal", NULL);
+			atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
+			ocg->add_kword(ocg, 0, "CREATED",atm, NULL);
+
+			ocg->add_kword(ocg, 0, "DEVICE_CLASS","OUTPUT", NULL);
+			ocg->add_kword(ocg, 0, "COLOR_REP", ident, NULL);
+
+			if (xpi.deviceMfgDesc != NULL)
+				ocg->add_kword(ocg, 0, "MANUFACTURER", xpi.deviceMfgDesc, NULL);
+			if (xpi.modelDesc != NULL)
+				ocg->add_kword(ocg, 0, "MODEL", xpi.modelDesc, NULL);
+			if (xpi.profDesc != NULL)
+				ocg->add_kword(ocg, 0, "DESCRIPTION", xpi.profDesc, NULL);
+			if (xpi.copyright != NULL)
+				ocg->add_kword(ocg, 0, "COPYRIGHT", xpi.copyright, NULL);
+
+			/* Setup the table which holds the translation from calibrated */
+			/* device value "I" to the raw device channel value */ 
+			sprintf(buf, "%s_I",bident);
+			ocg->add_field(ocg, 0, buf, r_t);
+			nsetel++;
+			for (j = 0; j < devchan; j++) {
+				inkmask imask = icx_index2ink(devmask, j);
+				sprintf(buf, "%s_%s",bident,icx_ink2char(imask));
+				ocg->add_field(ocg, 0, buf, r_t);
+				nsetel++;
+			}
+			if ((setel = (cgats_set_elem *)malloc(sizeof(cgats_set_elem) * nsetel)) == NULL)
+				error("Malloc failed!");
+
+			/* Write the per channel device to device loolup curve values */
+			if (devmask & ICX_ADDITIVE) {
+				for (i = n_cvals-1; i >= 0; i--) {
+		
+					setel[0].d = 1.0 - cvals[0][i].inv;
+					for (j = 0; j < devchan; j++)
+						setel[1+j].d = 1.0 - cvals[j][i].dev;
+					ocg->add_setarr(ocg, 0, setel);
+				}
+			} else {
+				for (i = 0; i < n_cvals; i++) {
+		
+					setel[0].d = cvals[0][i].inv;
+					for (j = 0; j < devchan; j++)
+						setel[1+j].d = cvals[j][i].dev;
+					ocg->add_setarr(ocg, 0, setel);
+				}
+			}
+
+			free(setel);
+
+			/* Write the calibration target information to a second table */
+			if (pct->write(pct, ocg, 1) != 0)
+				error("Writing cal target info to cal file '%s'",outname);
+
+			/* Add a third table which is the expected absolute DE response */
+			/* of the calibrated device. */
+			ocg->add_table(ocg, tt_other, 0);	/* Add a table for RAMDAC values */
+			ocg->add_kword(ocg, 2, "DESCRIPTOR", "Argyll Output Calibration Expected DE Response",NULL);
+			ocg->add_kword(ocg, 2, "ORIGINATOR", "Argyll printcal", NULL);
+			atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
+			ocg->add_kword(ocg, 2, "CREATED",atm, NULL);
+
+			ocg->add_kword(ocg, 2, "DEVICE_CLASS","OUTPUT", NULL);
+			ocg->add_kword(ocg, 2, "COLOR_REP", ident, NULL);
+
+			/* Setup the table which holds the translation from calibrated */
+			/* device value "I" to the expected absolute deltaE value for */
+			/* each colorant. */
+			sprintf(buf, "%s_I_DE",bident);
+			ocg->add_field(ocg, 2, buf, r_t);
+			nsetel++;
+			for (j = 0; j < devchan; j++) {
+				inkmask imask = icx_index2ink(devmask, j);
+				sprintf(buf, "%s_%s_DE",bident,icx_ink2char(imask));
+				ocg->add_field(ocg, 2, buf, r_t);
+				nsetel++;
+			}
+			if ((setel = (cgats_set_elem *)malloc(sizeof(cgats_set_elem) * nsetel)) == NULL)
+				error("Malloc failed!");
+
+			for (i = 0; i < n_cvals; i++) {
+				int ix = i;
+
+				/* Calibrated device value */
+				if (devmask & ICX_ADDITIVE) {
+					ix = n_cvals -1 - i;
+					setel[0].d = 1.0 - cvals[0][ix].inv;
+				} else
+					setel[0].d = cvals[0][ix].inv;
+
+				for (j = 0; j < devchan; j++) {
+					tp.p[0] = cvals[j][ix].dev;		/* Raw device value */
+					ade[j]->interp(ade[j], &tp);	/* Corresponding ade value */
+					setel[1+j].d = tp.v[0];
+				}
+				ocg->add_setarr(ocg, 2, setel);
+			}
+
+			free(setel);
+
+			if (ocg->write_name(ocg, outname))
+				error("Write error to file '%s': %s",outname,ocg->err);
+
+			if (verb)
+				printf("Written calibration file '%s'\n",outname);
+
+			ocg->del(ocg);		/* Clean up */
+			free(ident);
+			free(bident);
+		}
+
+		/* 
+			The structure of *.AMP is very simple.
+	
+				It has 5 tables that have
+					256 entries that are 8-bit (byte), even for 16 bit mode.
+			
+						The first table 0000..00FFh is the CMYK channel.
+						The second table 0100..01FFh is the C channel.
+						The third table 0200..02FFh is the M channel.
+						The fourth table 0300..03FFh is the Y channel.
+						The fifth table 0300..03FFh is the K channel.
+			
+						Table position nn00h is the black end and table position nnFFh
+						is the white end.
+			
+		*/
+
+		/* Write an Adobe map format (.AMP) file */
+		if (dowrite && doamp && devchan <= 4) {
+			FILE *fp;
+			cgatsFile *p;
+			char nmode[50] = { '\000' };
+
+			strcpy(nmode, "w");
+#if defined(O_BINARY) || defined(_O_BINARY)
+			strcat(nmode, "b");
+#endif
+			if ((fp = fopen(ampname, nmode)) == NULL)
+				error("Couldn't open '%s' for writing",ampname);
+			
+			/* CMYK table is unity */
+			for (i = 0; i < 256; i++) {
+				if (putc(i,fp) == EOF)
+					error("Error writing to fle '%s'",ampname);
+			}
+			for (j = 0; j < devchan; j++) {
+				for (i = 0; i < 256; i++) {
+					int x;
+					if (devmask & ICX_ADDITIVE)
+						x = (int)(cvals[j][i].dev * 255.0 + 0.5);		/* ??? */
+					else
+						x = 255 - (int)(cvals[j][255 - i].dev * 255.0 + 0.5);
+					if (putc(x,fp) == EOF)
+						error("Error writing to fle '%s'",ampname);
+//printf("~1 chan %d, inv %d, dev %d\n",j,i,x);
+				}
+			}
+			/* Extra 1:1 table */
+			for (i = 0; i < 256; i++) {
+				if (putc(i,fp) == EOF)
+					error("Error writing to fle '%s'",ampname);
+			}
+
+			if (fclose(fp) != 0)
+				error("Closing '%s' failed",ampname);
+
+			if (verb)
+				printf("Written calibration curves to '%s'\n",ampname);
+		}
+	}
+
+	/* Free up various possible allocations */
+	for (j = 0; j < devchan; j++) {
+		if (pvals[j] != NULL)
+			free(pvals[j]);
+		if (raw[j] != NULL)
+			raw[j]->del(raw[j]);
+		if (ade[j] != NULL)
+			ade[j]->del(ade[j]);
+		if (rde[j] != NULL)
+			rde[j]->del(rde[j]);
+		if (pcade[j] != NULL)
+			pcade[j]->del(pcade[j]);
+		if (cvals[j] != NULL)
+			free(cvals[j]);
+		if (tcurves[j] != NULL)
+			tcurves[j]->del(tcurves[j]);
+	}
 
 	return 0;
 }

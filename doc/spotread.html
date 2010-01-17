@@ -14,8 +14,8 @@ diagnostic aid. The type of instrument is determined by the
 communication port
 selected.
 <h3>Usage Summary</h3>
-<small><span style="font-family: monospace;">spotread [-options]</span><br
- style="font-family: monospace;">
+<small><span style="font-family: monospace;">spotread [-options]
+[logfile]</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#v">-v</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -132,7 +132,7 @@ Display Yxy instead of Lab<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#T">-T</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Display correlated color temperatures<br>
+Display correlated color temperatures and CRI<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="dispcal.html#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Disable auto calibration of instrument</span></font><br>
@@ -237,8 +237,9 @@ support this mode. Values returned are absolute.<br>
 allows measuring
 in ambient illumination mode using instruments that
 support this mode (i.e. Eye-One Display 2). Values returned are
-absolute, and include the various color temperatures (see <span
- style="font-weight: bold;">-T</span>). If the instrument does not
+absolute, and include the various color temperatures and Color
+Rendering Index (see <span style="font-weight: bold;">-T</span>). If
+the instrument does not
 support ambient mode, emissive mode will be used instead.<br>
 <br>
 <a name="y"></a>&nbsp; Display type. Some colorimeters (like the DTP94
@@ -294,14 +295,19 @@ use a glass of acrylic lens in the optical path.<br>
 displayed as XYZ and Yxy values, rather than the default XYZ and L*a*b*<br>
 <br>
 <a name="T"></a>The <b>-T</b> option causes various color temperatures
-to be displayed. Three color temperatures will be shown. The first is
+to be displayed, plus the Color Rendering Index. Three color
+temperatures will be shown. The first is
 the classic Correlated Color Temperature, which is the black body
 (Plankian) color closest to the measured color in the CIE 1960 UCS
 color space. The second is the black body (Plankian) color that has a
 minimum CIEDE2000 error to the measured color. The last is the daylight
 color that has a minimum CIEDE2000 error to the measured color. The
 delta E between the closest temperature and the measured color is also
-shown for each.<br>
+shown for each. The Color Rendering Index (CRI Ra) is also computed if
+the instrument is capable of spectral measurement. If the notation <span
+ style="font-weight: bold;">(Invalid)</span> is displayed after the
+CRI, then this means that the the spectrum white point is to far from
+the black body and Daylight locus to be meaningful.<br>
 <br>
 <a name="N"></a>The <b>-N</b> option disables the automatic
 calibration
@@ -331,8 +337,10 @@ tracking
 down why an instrument can't connect.<br>
 <br>
 <a name="log"></a>The <span
- style="font-weight: bold; font-style: italic;">log</span> file is an
-optional file that can be specified to capture each reading taken.<br>
+ style="font-weight: bold; font-style: italic;">logfile</span> is an
+optional file that can be specified to capture each reading taken.
+There will be column headers printed to the first row, and then each
+reading will be on a separate line with tab separators.<br>
 <br>
 All instruments will be used
 in a spot mode. For the SpectroScan instrument, the samples can be
@@ -345,6 +353,7 @@ and cannot read
 spectral information, and that the DTP92 can only read CRT type
 displays.<br>
 <br>
+<hr style="width: 100%; height: 2px;"><br>
 Once <b>spotread</b> has established communications with the
 instrument, it awaits a command from the user, indicated by the user
 hitting a key or activating the instrument switch.<br>
@@ -355,7 +364,9 @@ switches, and then setup for each paper white background
 color, to establish an FWA reference. There is one FWA reference
 locations
 available for each alphabetic character not used for a special function
-(ie. not <span style="font-weight: bold;">H, N, Q, R)</span>, keyed to
+(ie. not <span style="font-weight: bold;">H, K, N, Q, R, S)</span>,
+keyed
+to
 the capital letters <b>A-</b><b>Z</b>, allowing FWA corrected
 comparisons between many different media.<br>
 <br>
@@ -369,16 +380,27 @@ alphabetic key, or using the instrument switch) will not be FWA
 corrected readings.<br>
 <br>
 If a non-FWA readings is to be performed, then a reading for a location
-that has not been initialized for paper white should be used, or a non
+that has not been initialised for paper white should be used, or a non
 alphabetic key (such as space or return) or instrument switch trigger
 should be used.<br>
-<br>
-The previous reading can be stored as a reference, and delta E's
-computed for each reading, using the <b>r</b> key.<br>
 <br>
 If the instrument supports a high resolution spectral mode, then it can
 be toggled on and off using the <span style="font-weight: bold;">h</span>
 key.<br>
+<br>
+If the instrument supports stored readings (ie. DTP20), then these can
+be ignored using the <span style="font-weight: bold;">n</span>
+key.<br>
+<br>
+The previous reading can be stored as a reference, and delta E's
+computed for each reading, using the <b>r</b> key.<br>
+<br>
+A previous spectral reading can be saved in a spectrum CGATS file
+(spectrum.sp) using the <span style="font-weight: bold;">s</span> key,
+making this a convenient way of creating a custom illuminant spectrum.<br>
+<br>
+A calibration can be initiated using the <span
+ style="font-weight: bold;">k</span> key.<br>
 <br>
 <br>
 <br>

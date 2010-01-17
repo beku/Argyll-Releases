@@ -28,7 +28,7 @@
 #include "sort.h"
 
 void usage(void) {
-	fprintf(stderr,"Simple plot of CGATS .ti3 data\n");
+	fprintf(stderr,"Simple 2D plot of CGATS .ti3 data\n");
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: cgatssplot [-v] infile\n");
 	fprintf(stderr," -v        verbose\n");
@@ -62,7 +62,7 @@ main(
 	int npat;					/* Number of patches */ 
 	inkmask nmask;				/* Device inkmask */
 	int nchan;					/* Number of input chanels */
-	char *ident;
+	char *bident;				/* Base ident */
 	int chix[ICX_MXINKS];	/* Device chanel indexes */
 	int pcsix[3];	/* Device chanel indexes */
 	pval *pat;					/* patch values */
@@ -147,7 +147,7 @@ main(
 	free(buf);
 
 	nchan = icx_noofinks(nmask);
-	ident = icx_inkmask2char(nmask); 
+	bident = icx_inkmask2char(nmask, 0);		/* Base ident (No possible 'i') */ 
 
 	/* Find device fields */
 	for (j = 0; j < nchan; j++) {
@@ -155,7 +155,7 @@ main(
 		char fname[100];
 
 		imask = icx_index2ink(nmask, j);
-		sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : ident,
+		sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : bident,
 		                      icx_ink2char(imask));
 
 		if ((ii = cgf->find_field(cgf, 0, fname)) < 0)

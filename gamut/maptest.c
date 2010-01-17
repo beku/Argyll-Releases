@@ -9,7 +9,7 @@
  * Copyright 2000, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -37,22 +37,27 @@ void usage(void) {
 	fprintf(stderr,"Map bteween two gamuts, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: maptest [options] ingamut outgamut diag_gamut\n");
-	fprintf(stderr," -v            Verbose\n");
+	fprintf(stderr," -v                Verbose\n");
+	fprintf(stderr," -s                Do saturation style expand/compress\n");
+	fprintf(stderr," -i imggamut.gam   Use an image gamut\n");
 	exit(1);
 }
 
 int
 main(int argc, char *argv[]) {
-	int fa,nfa;				/* argument we're looking at */
+	int fa, nfa, mfa;
 	char *xl;
 	char in_name[100];
+	char img_name[MAXNAMEL] = "";
 	char out_name[100];
 	char diag_name[100];
+	int sat = 0;
 	int verb = 0;
 	gammap *map;			/* Regular split gamut mapping */
 	icxGMappingIntent gmi;
 
 	gamut *gin, *gout;		/* Input and Output gamuts */
+	gamut *gimg = NULL;		/* Optional image gamut */
 
 	error_program = argv[0];
 
@@ -60,6 +65,7 @@ main(int argc, char *argv[]) {
 		usage();
 
 	/* Process the arguments */
+	mfa = 3;        /* Minimum final arguments */
 	for(fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */
 		if (argv[fa][0] == '-')	{	/* Look for any flags */
@@ -68,7 +74,7 @@ main(int argc, char *argv[]) {
 			if (argv[fa][2] != '\000')
 				na = &argv[fa][2];		/* next is directly after flag */
 			else {
-				if ((fa+1) < argc) {
+				if ((fa+1+mfa) < argc) {
 					if (argv[fa+1][0] != '-') {
 						nfa = fa + 1;
 						na = argv[nfa];		/* next is seperate non-flag argument */
@@ -82,6 +88,18 @@ main(int argc, char *argv[]) {
 			/* Verbosity */
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
+			}
+
+			/* Saturation */
+			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+				sat = 1;
+			}
+
+			/* Image gamut */
+			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
+				if (na == NULL) usage();
+				fa = nfa;
+				strncpy(img_name,na,MAXNAMEL); img_name[MAXNAMEL] = '\000';
 			}
 
 			else 
@@ -113,6 +131,24 @@ main(int argc, char *argv[]) {
 		error("Reading input gamut failed");
 
 	/* - - - - - - - - - - - - - - - - - - - */
+	/* read the optional image gamut */
+
+	if (img_name[0] != '\000') {
+
+		gimg = new_gamut(0.0, 0);
+
+		if ((xl = strrchr(img_name, '.')) == NULL) { /* Add .gam extention if there isn't one */
+			xl = img_name + strlen(img_name);
+			strcpy(xl,".gam");
+		}
+	
+		if (gimg->read_gam(gimg, img_name))
+			error("Reading image gamut failed");
+	} else {
+		gimg = gin;
+	}
+
+	/* - - - - - - - - - - - - - - - - - - - */
 	/* read the output device gamut */
 
 	gout = new_gamut(0.0, 0);
@@ -127,7 +163,6 @@ main(int argc, char *argv[]) {
 
 	/* - - - - - - - - - - - - - - - - - - - */
 
-	// ~~9
 	/* Create the gamut mapping */
 	gmi.usecas = 0;
 	gmi.usemap = 1;
@@ -138,25 +173,45 @@ main(int argc, char *argv[]) {
 	gmi.glumbexf = 1.0;		/* Grey axis luminance black expansion factor, 0.0 - 1.0 */
 	gmi.glumknf = 0.7;		/* Gray axis luminance knee factor, 0.0 - 1.0 */
 	gmi.gamcpf = 1.0;		/* Gamut compression factor, 0.0 - 1.0 */
-	gmi.gamexf = 0.0;		/* Gamut expansion factor, 0.0 - 1.0 */
-	gmi.gamknf = 0.7;		/* Gamut knee factor, 0.0 - 1.0 */
-	gmi.gampwf = 1.0;		/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
-	gmi.gamswf = 0.0;		/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
+	if (sat)
+		gmi.gamexf = 1.0;		/* Gamut expansion factor, 0.0 - 1.0 */
+	else
+		gmi.gamexf = 0.0;		/* Gamut expansion factor, 0.0 - 1.0 */
+	gmi.gamcknf = 0.1;		/* Gamut comp. knee factor, 0.0 - 1.0 */
+	gmi.gamxknf = 0.1;		/* Gamut exp. knee factor, 0.0 - 1.0 */
+	if (sat) {
+		gmi.gampwf = 0.0;		/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
+		gmi.gamswf = 1.0;		/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
+	} else {
+		gmi.gampwf = 1.0;		/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
+		gmi.gamswf = 0.0;		/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
+	}
 	gmi.satenh = 0.0;		/* Saturation enhancement factor */
+	gmi.desc = "mapetest";
+	gmi.icci = 0;
 
 	map = new_gammap(
 		verb,
-		gin,		/* Source gamut */
-		gin,		/* Image gamut */
-		gout,		/* Destination gamut */
+		gin,			/* Source gamut */
+		gimg,			/* Image gamut */
+		gout,			/* Destination gamut */
 		&gmi,
-		17,			/* rspl resolution of 17 */
-		NULL,		/* No input range override */
+		0, 0, 			/* Normal black points */
+		0,				/* Normal CMY cusp mapping */
+		0,				/* No relative weighting override */
+		17,				/* rspl resolution of 17 */
+		NULL,			/* No input range override */
 		NULL,
 		"gammap.wrl"	/* Diagnostic plot */
 	);
 
-printf("~9 got gamut mapping\n");
+	if (map == NULL) {
+		error("new_gammap() failed\n");
+	}
+
+	if (verb)
+		printf("Got gamut mapping\n");
+
 	/* Transform the input gamut by the gamut mapping */
 	{	/* Bad - delving inside gamut! */
 		int i;
@@ -177,6 +232,8 @@ printf("~9 got gamut mapping\n");
 	/* Clean up */
 	gout->del(gout);
 	gin->del(gin);
+	if (gimg != gin)
+		gimg->del(gimg);
 
 	return 0;
 }

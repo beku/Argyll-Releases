@@ -10,7 +10,7 @@
  * Copyright 2005, 2008 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -252,6 +252,8 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 	TIFFSetField(wh, TIFFTAG_RESOLUTIONUNIT, RESUNIT_CENTIMETER);
 	TIFFSetField(wh, TIFFTAG_XRESOLUTION, 10.0 * s->hres);
 	TIFFSetField(wh, TIFFTAG_YRESOLUTION, 10.0 * s->vres);
+	TIFFSetField(wh, TIFFTAG_XPOSITION, 0.1 * s->lm);
+	TIFFSetField(wh, TIFFTAG_YPOSITION, 0.1 * s->tm);
 	if (comprn) {
 		TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_LZW);
 	}
@@ -489,6 +491,7 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 render2d *new_render2d(
 double w,
 double h,
+double ma[4],	/* Margines, left, right, top, bottom, NULL for zero */
 double hres,
 double vres,
 colort2d csp,
@@ -501,8 +504,20 @@ depth2d dpth
 		return NULL;
 	}
 
-	s->w = w;
-	s->h = h;
+	s->fw = w;
+	s->fh = h;
+	if (ma != NULL) {
+		s->lm = ma[0];
+		s->rm = ma[1];
+		s->tm = ma[2];
+		s->bm = ma[3];
+	}
+	w = s->fw - s->lm - s->rm;
+	h = s->fh - s->tm - s->bm;
+	if (w < 0.0)
+		error("render2d: Left & Right margines %f %f exceed width %f",s->lm,s->rm,s->fw); 
+	if (h < 0.0)
+		error("render2d: Top & Bottom margines %f %f exceed height %f",s->tm,s->bm,s->fh); 
 	s->hres = hres;
 	s->vres = vres;
 	s->csp = csp;
@@ -586,6 +601,10 @@ color2d c
 	if ((s = (rect2d *)calloc(1, sizeof(rect2d))) == NULL) {
 		return NULL;
 	}
+
+	/* Account for margines */
+	x -= ss->lm;
+	y -= ss->bm;
 
 	s->ncc = ss->ncc;
 	s->del = prim2d_del; 
@@ -679,6 +698,10 @@ color2d c[4]
 		return NULL;
 	}
 
+	/* Account for margines */
+	x -= ss->lm;
+	y -= ss->bm;
+
 	s->ncc = ss->ncc;
 	s->del = prim2d_del; 
 	s->rend = rectvs2d_rend; 
@@ -759,10 +782,17 @@ color2d c[3]			/* Corresponding colors */
 ) {
 	int i, j;
 	trivs2d *s;
+	double vv[3][2];	/* Margin adjusted vertex locations */
 	double tt[3][3];
 
 	if ((s = (trivs2d *)calloc(1, sizeof(trivs2d))) == NULL) {
 		return NULL;
+	}
+
+	/* Account for margines */
+	for (i = 0; i < 3; i++) {
+		vv[i][0] = v[i][0] - ss->lm;
+		vv[i][1] = v[i][1] - ss->bm;
 	}
 
 	s->ncc = ss->ncc;
@@ -773,20 +803,20 @@ color2d c[3]			/* Corresponding colors */
 	s->x0 = s->y0 = 1e38;	
 	s->x1 = s->y1 = -1e38;	
 	for (i = 0; i < 3; i++) {
-		if (v[i][0] < s->x0)
-			s->x0 = v[i][0];
-		if (v[i][1] < s->y0)
-			s->y0 = v[i][1];
-		if (v[i][0] > s->x1)
-			s->x1 = v[i][0];
-		if (v[i][1] > s->y1)
-			s->y1 = v[i][1];
+		if (vv[i][0] < s->x0)
+			s->x0 = vv[i][0];
+		if (vv[i][1] < s->y0)
+			s->y0 = vv[i][1];
+		if (vv[i][0] > s->x1)
+			s->x1 = vv[i][0];
+		if (vv[i][1] > s->y1)
+			s->y1 = vv[i][1];
 	}
 
 	/* Compute baricentric equations */
 	for (i = 0; i < 3; i++) {
-		tt[0][i] = v[i][0];
-		tt[1][i] = v[i][1];
+		tt[0][i] = vv[i][0];
+		tt[1][i] = vv[i][1];
 		tt[2][i] = 1.0;
 	}
 	if (inverse3x3(s->be, tt))
@@ -878,6 +908,12 @@ color2d c
 	if ((s = (line2d *)calloc(1, sizeof(line2d))) == NULL) {
 		return NULL;
 	}
+
+	/* Account for margines */
+	x0 -= ss->lm;
+	y0 -= ss->bm;
+	x1 -= ss->lm;
+	y1 -= ss->bm;
 
 	s->ncc = ss->ncc;
 	s->del = prim2d_del; 

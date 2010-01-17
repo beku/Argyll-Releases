@@ -5,7 +5,7 @@
  *
  * Author:  Graeme W. Gill
  * Date:    99/11/29
- * Version: 2.05
+ * Version: 2.12
  *
  * Copyright 1998 - 2005 Graeme W. Gill
  *
@@ -258,7 +258,7 @@ main(int argc, char *argv[]) {
 		error ("%d, %s",icco->errc, icco->err);
 
 	/* Get details of conversion (Arguments may be NULL if info not needed) */
-	luo->spaces(luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL);
+	luo->spaces(luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL, NULL);
 
 	if (repYxy) {	/* report Yxy rather than XYZ */
 		if (ins == icSigXYZData)

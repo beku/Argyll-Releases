@@ -11,7 +11,7 @@
  * Copyright 2005 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Derived from DTP41.h
@@ -266,10 +266,10 @@ ss_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 #ifdef DEBUG
 			printf("Got device name '%s'\n",devn);
 #endif
-			if (strcmp(devn, "SpectroScan ") == 0) {
-				p->itype = instSpectroScan;
-			} else if (strcmp(devn, "SpectroScanT") == 0) {
+			if (strncmp(devn, "SpectroScanT",12) == 0) {
 				p->itype = instSpectroScanT;
+			} else if (strncmp(devn, "SpectroScan",11) == 0) {
+				p->itype = instSpectroScan;
 			}
 		}
 	}
@@ -391,11 +391,11 @@ ss_init_inst(inst *pp) {
 	                           &tt, &fswl, &nosw, &dsw)) != inst_ok)
 			return rv;
 
-		sprintf("Device:     %s\n"
-		        "Serial No:  %u\n"
-		        "Part No:    %s\n"
-		        "Prod Date:  %d/%d/%d\n"
-		        "SW Version: %s\n", dn, sn, pn, dp, mp, yp, sv);
+		printf("Device:     %s\n"
+		       "Serial No:  %u\n"
+		       "Part No:    %s\n"
+		       "Prod Date:  %d/%d/%d\n"
+		       "SW Version: %s\n", dn, sn, pn, dp, mp, yp, sv);
 	}
 
 	/* Set the default colorimetric parameters */
@@ -660,6 +660,7 @@ ipatch *vals) { 		/* Pointer to array of values */
 				vals[patch].aXYZ_v = 0;
 				vals[patch].Lab_v = 0;
 				vals[patch].sp.spec_n = 0;
+				vals[patch].duration = 0.0;
 			
 				/* move and measure gives us spectrum data anyway */
 				if ((rv = ss_do_MoveAndMeasure(p, ix, iy, spec, &refvalid)) != inst_ok)
@@ -668,6 +669,8 @@ ipatch *vals) { 		/* Pointer to array of values */
 				vals[patch].sp.spec_n = 36;
 				vals[patch].sp.spec_wl_short = 380;
 				vals[patch].sp.spec_wl_long = 730;
+				vals[patch].sp.norm = 100.0;
+				
 				for (i = 0; i < vals[patch].sp.spec_n; i++)
 					vals[patch].sp.spec[i] = 100.0 * (double)spec[i];
 
@@ -821,6 +824,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	val->aXYZ_v = 0;
 	val->Lab_v = 0;
 	val->sp.spec_n = 0;
+	val->duration = 0.0;
 
 	/* Do calibration if it is needed */
 	if ((p->need_w_cal || p->need_t_cal) && p->noautocalib == 0) {
@@ -951,6 +955,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 			val->sp.spec_n = 36;
 			val->sp.spec_wl_short = 380;
 			val->sp.spec_wl_long = 730;
+			val->sp.norm = 100.0;
 			for (i = 0; i < val->sp.spec_n; i++)
 				val->sp.spec[i] = 100.0 * (double)spec[i];
 		}
@@ -1019,8 +1024,15 @@ ipatch *val) {		/* Pointer to instrument patch value */
 			val->sp.spec_n = 36;
 			val->sp.spec_wl_short = 380;
 			val->sp.spec_wl_long = 730;
-			for (i = 0; i < val->sp.spec_n; i++)
-				val->sp.spec[i] = 100.0 * (double)spec[i];
+			if ((p->mode & inst_mode_illum_mask) == inst_mode_emission) {
+				val->sp.norm = 1.0;
+				for (i = 0; i < val->sp.spec_n; i++)
+					val->sp.spec[i] = (double)spec[i];
+			} else {
+				val->sp.norm = 100.0;
+				for (i = 0; i < val->sp.spec_n; i++)
+					val->sp.spec[i] = 100.0 * (double)spec[i];
+			}
 		}
 
 		/* Convert to desired illuminant XYZ */
@@ -1034,31 +1046,15 @@ ipatch *val) {		/* Pointer to instrument patch value */
 			for (j = 0; j < 3; j++)
 				XYZ[j] += obsv[tix][j][i] * spec[i];
 
-		/* I'm a bit unclear about the relationship between */
-		/* the spectral values the instrument returns in emissive mode, */
-		/* and the XYZ values it computes. */
-#ifdef NEVER
-		/* Compute normalisation factor */
-		for (norm = 0.0, i = 0; i < 36; i++)
-			norm += obsv[tix][1][i];
-
-		norm = 100.0/norm;
-
-		XYZ[0] *= norm;
-		XYZ[2] *= norm;
-		XYZ[1] *= norm;
-#endif
-
 		if ((p->mode & inst_mode_illum_mask) == inst_mode_emission) {
 			/* The CIE maximum spectral luminence efficiency is 683 lumens per watt, */
 			/* which is the constant applied to sumation over 1nm from 360 to 830nm, */
 			/* so this needs to be scaled by the sumation over 5nm from 380 to 830, */
-			/* a factor of 10.683/106.86 * 683. The sumation that Gretag uses must be */
-			/* slightly different to the above table, about 1.06895 ?? */
+			/* a factor of 10.683/106.86 * 683. */
 			val->aXYZ_v = 1;
-			val->aXYZ[0] = XYZ[0] * 6.83226;
-			val->aXYZ[1] = XYZ[1] * 6.83226;
-			val->aXYZ[2] = XYZ[2] * 6.83226;
+			val->aXYZ[0] = XYZ[0] * 683.226;
+			val->aXYZ[1] = XYZ[1] * 683.226;
+			val->aXYZ[2] = XYZ[2] * 683.226;
 		} else {
 			val->XYZ_v = 1;
 			val->XYZ[0] = XYZ[0];
@@ -1104,8 +1100,15 @@ ipatch *val) {		/* Pointer to instrument patch value */
 			val->sp.spec_n = 36;
 			val->sp.spec_wl_short = 380;
 			val->sp.spec_wl_long = 730;
-			for (i = 0; i < val->sp.spec_n; i++)
-				val->sp.spec[i] = 100.0 * (double)spec[i];
+			if ((p->mode & inst_mode_illum_mask) == inst_mode_emission) {
+				val->sp.norm = 1.0;
+				for (i = 0; i < val->sp.spec_n; i++)
+					val->sp.spec[i] = (double)spec[i];
+			} else {
+				val->sp.norm = 100.0;
+				for (i = 0; i < val->sp.spec_n; i++)
+					val->sp.spec[i] = 100.0 * (double)spec[i];
+			}
 		}
 	}
 	if (user_trig)

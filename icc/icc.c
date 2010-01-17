@@ -5,9 +5,9 @@
  *
  * Author:  Graeme W. Gill
  * Date:    2002/04/22
- * Version: 2.05
+ * Version: 2.12
  *
- * Copyright 1997 - 2005 Graeme W. Gill
+ * Copyright 1997 - 2009 Graeme W. Gill
  *
  * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
@@ -25,8 +25,6 @@
  *
  *      Should recognise & honour unicode 0xFFFE endian marker.
  *      Should generate it on writing too ?
- *
- *      Add support for saving and storing unknown tag types.
  *
  *      Add support for copying tags from one icc to another.
  *
@@ -52,6 +50,11 @@
 #define SYMETRICAL_DEFAULT_LAB_RANGE
 
 #define _ICC_C_				/* Turn on implimentation code */
+
+#undef DEBUG_SETLUT			/* Show each value being set in setting lut contents */
+#undef DEBUG_SETLUT_CLIP		/* Show clipped values when setting LUT */
+#undef DEBUG_LULUT			/* Show each value being looked up from lut contents */
+#undef DEBUG_LLULUT			/* Debug individual lookup steps (not fully implemented) */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,6 +90,167 @@
 #undef COMBINED_STD
 #endif /* SEPARATE_STD */
 
+/* Forced byte alignment for tag table and tags */
+#define ALIGN_SIZE 4
+
+/* =========================================================== */
+
+#ifdef DEBUG_SETLUT
+#undef DBGSL
+#define DBGSL(xxx) printf xxx ;
+#else
+#undef DBGSL
+#define DBGSL(xxx) 
+#endif
+
+#if defined(DEBUG_SETLUT) || defined(DEBUG_SETLUT_CLIP)
+#undef DBGSLC
+#define DBGSLC(xxx) printf xxx ;
+#else
+#undef DBGSLC
+#define DBGSLC(xxx) 
+#endif
+
+#ifdef DEBUG_LULUT
+#undef DBGLL
+#define DBGLL(xxx) printf xxx ;
+#else
+#undef DBGLL
+#define DBGLL(xxx) 
+#endif
+
+#ifdef DEBUG_LLULUT
+#undef DBLLL
+#define DBLLL(xxx) printf xxx ;
+#else
+#undef DBLLL
+#define DBLLL(xxx) 
+#endif
+
+/* =========================================================== */
+/* Overflow protected unsigned int arithmatic functions. */
+/* These functions saturate rather than wrapping around. */
+/* (Divide doesn't need protection) */
+/* They return UINT_MAX if there was an overflow */
+
+/* a + b */
+static unsigned int sat_add(unsigned int a, unsigned int b) {
+	if (b > (UINT_MAX - a))
+		return UINT_MAX;
+	return a + b;
+}
+
+/* a - b */
+static unsigned int sat_sub(unsigned int a, unsigned int b) {
+	if (a < b)
+		return UINT_MAX;
+	return a - b;
+}
+
+/* a * b */
+static unsigned int sat_mul(unsigned int a, unsigned int b) {
+	unsigned int c;
+
+	if (a == 0 || b == 0)
+		return 0;
+
+	if (a > (UINT_MAX/b))
+		return UINT_MAX;
+	else
+		return a * b;
+}
+
+/* A + B + C */
+#define sat_addadd(A, B, C) sat_add(A, sat_add(B, C))
+
+/* A + B * C */
+#define sat_addmul(A, B, C) sat_add(A, sat_mul(B, C))
+
+/* A + B + C * D */
+#define sat_addaddmul(A, B, C, D) sat_add(A, sat_add(B, sat_mul(C, D)))
+
+/* A * B * C */
+#define sat_mul3(A, B, C) sat_mul(A, sat_mul(B, C))
+
+/* a ^ b */
+static unsigned int sat_pow(unsigned int a, unsigned int b) {
+	unsigned int c = 1;
+	for (; b > 0; b--) {
+		c = sat_mul(c, a);
+		if (c == UINT_MAX)
+			break;
+	}
+	return c;
+}
+
+/* Alignment */
+static unsigned int sat_align(unsigned int align_size, unsigned int a) {
+	align_size--;
+
+	if (align_size > (UINT_MAX - a))
+		return UINT_MAX;
+
+	return (a + align_size) & ~align_size;
+}
+
+/* These test functions detect whether an overflow would occur */
+
+/* Return nz if add would overflow */
+static int ovr_add(unsigned int a, unsigned int b) {
+
+	if (b > (UINT_MAX - a))
+		return 1;
+	return 0;
+}
+
+/* Return nz if sub would overflow */
+static int ovr_sub(unsigned int a, unsigned int b) {
+	if (a < b)
+		return 1;
+	return 0;
+}
+
+/* Return nz if mult would overflow */
+static int ovr_mul(unsigned int a, unsigned int b) {
+	if (a > (UINT_MAX/b))
+		return 1;
+	return 0;
+}
+
+
+/* size_t versions of saturating arithmatic */
+
+#ifndef SIZE_MAX
+# define SIZE_MAX ((size_t)(-1))
+#endif
+
+/* a + b */
+static size_t ssat_add(size_t a, size_t b) {
+	if (b > (SIZE_MAX - a))
+		return SIZE_MAX;
+	return a + b;
+}
+
+/* a - b */
+static size_t ssat_sub(size_t a, size_t b) {
+	if (a < b)
+		return SIZE_MAX;
+	return a - b;
+}
+
+/* a * b */
+static size_t ssat_mul(size_t a, size_t b) {
+	size_t c;
+
+	if (a == 0 || b == 0)
+		return 0;
+
+	if (a > (SIZE_MAX/b))
+		return SIZE_MAX;
+	else
+		return a * b;
+}
+
 /* ------------------------------------------------- */
 /* Memory image icmFile compatible class */
 /* Buffer is assumed to be a fixed size, and externally allocated */
@@ -100,7 +264,7 @@ static size_t icmFileMem_get_size(icmFile *pp) {
 /* Set current position to offset. Return 0 on success, nz on failure. */
 static int icmFileMem_seek(
 icmFile *pp,
-long int offset
+unsigned int offset
 ) {
 	icmFileMem *p = (icmFileMem *)pp;
 	unsigned char *np;
@@ -122,8 +286,8 @@ size_t count
 	icmFileMem *p = (icmFileMem *)pp;
 	size_t len;
 
-	len = size * count;
-	if ((p->cur + len) >= p->end) {		/* Too much */
+	len = ssat_mul(size, count);
+	if (len > (p->end - p->cur)) { /* Too much */
 		if (size > 0)
 			count = (p->end - p->cur)/size;
 		else
@@ -146,8 +310,8 @@ size_t count
 	icmFileMem *p = (icmFileMem *)pp;
 	size_t len;
 
-	len = size * count;
-	if ((p->cur + len) >= p->end) {		/* Too much */
+	len = ssat_mul(size, count);
+	if (len > (p->end - p->cur)) { /* Too much */
 		if (size > 0)
 			count = (p->end - p->cur)/size;
 		else
@@ -198,7 +362,7 @@ icmFile *pp
 	icmAlloc *al = p->al;
 	int del_al   = p->del_al;
 
-	if (p->del_buf)		/* Free the memoryt buffer */
+	if (p->del_buf)		/* Free the memory buffer */
 		al->free(al, p->start);
 	al->free(al, p);	/* Free object */
 	if (del_al)			/* We are responsible for deleting allocator */
@@ -766,24 +930,25 @@ char *tag2str(
 
 /* Auiliary function - return a tag created from a string */
 /* Note there is also the icmMakeTag() macro */
-int str2tag(
+unsigned int str2tag(
 	const char *str
 ) {
-	unsigned long tag;
-	tag = (((unsigned long)str[0]) << 24)
-	    + (((unsigned long)str[1]) << 16)
-	    + (((unsigned long)str[2]) << 8)
-	    + (((unsigned long)str[3]));
-	return (int)tag;
+	unsigned int tag;
+	tag = (((unsigned int)str[0]) << 24)
+	    + (((unsigned int)str[1]) << 16)
+	    + (((unsigned int)str[2]) << 8)
+	    + (((unsigned int)str[3]));
+	return tag;
 }
 
 /* helper - return 1 if the string doesn't have a */
-/*  null terminator, return 0 if it does. */
+/* null terminator within len, return 0 if it does. */
 /* Note: will return 1 if len == 0 */
 static int check_null_string(char *cp, int len) {
 	for (; len > 0; len--) {
-		if (*cp++ == '\000')
+		if (cp[0] == '\000')
 			break;
+		cp++;
 	}
 	if (len == 0)
 		return 1;
@@ -791,7 +956,7 @@ static int check_null_string(char *cp, int len) {
 }
 
 /* helper - return 1 if the string doesn't have a */
-/*  null terminator, return 0 if it does. */
+/*  null terminator within len, return 0 if it does. */
 /* Note: will return 1 if len == 0 */
 /* Unicode version */
 static int check_null_string16(char *cp, int len) {
@@ -1006,7 +1171,7 @@ ICCLIB_API unsigned int icmCSSig2chanNames(icColorSpaceSignature sig, char *cval
 /* times before buffers get reused. */
 
 /* Screening Encodings */
-static char *string_ScreenEncodings(unsigned long flags) {
+static char *string_ScreenEncodings(unsigned int flags) {
 	static int si = 0;			/* String buffer index */
 	static char buf[5][80];		/* String buffers */
 	char *bp, *cp;
@@ -1031,7 +1196,7 @@ static char *string_ScreenEncodings(unsigned long flags) {
 }
 
 /* Device attributes */
-static char *string_DeviceAttributes(unsigned long flags) {
+static char *string_DeviceAttributes(unsigned int flags) {
 	static int si = 0;			/* String buffer index */
 	static char buf[5][80];		/* String buffers */
 	char *bp, *cp;
@@ -1056,7 +1221,7 @@ static char *string_DeviceAttributes(unsigned long flags) {
 }
 
 /* Profile header flags */
-static char *string_ProfileHeaderFlags(unsigned long flags) {
+static char *string_ProfileHeaderFlags(unsigned int flags) {
 	static int si = 0;			/* String buffer index */
 	static char buf[5][80];		/* String buffers */
 	char *bp, *cp;
@@ -1081,7 +1246,7 @@ static char *string_ProfileHeaderFlags(unsigned long flags) {
 }
 
 
-static char *string_AsciiOrBinaryData(unsigned long flags) {
+static char *string_AsciiOrBinaryData(unsigned int flags) {
 	static int si = 0;			/* String buffer index */
 	static char buf[5][80];		/* String buffers */
 	char *bp, *cp;
@@ -1607,13 +1772,13 @@ const char *icm2str(icmEnumType etype, int enumval) {
 
 	switch(etype) {
 	    case icmScreenEncodings:
-			return string_ScreenEncodings((unsigned long) enumval);
+			return string_ScreenEncodings((unsigned int) enumval);
 	    case icmDeviceAttributes:
-			return string_DeviceAttributes((unsigned long) enumval);
+			return string_DeviceAttributes((unsigned int) enumval);
 		case icmProfileHeaderFlags:
-			return string_ProfileHeaderFlags((unsigned long) enumval);
+			return string_ProfileHeaderFlags((unsigned int) enumval);
 		case icmAsciiOrBinaryData:
-			return string_AsciiOrBinaryData((unsigned long) enumval);
+			return string_AsciiOrBinaryData((unsigned int) enumval);
 		case icmTagSignature:
 			return string_TagSignature((icTagSignature) enumval);
 		case icmTechnologySignature:
@@ -1656,21 +1821,21 @@ static unsigned int icmUnknown_get_size(
 ) {
 	icmUnknown *p = (icmUnknown *)pp;
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += p->size * 1;	/* 1 byte for each unknown data */
+	len = sat_add(len, 8);				/* 8 bytes for tag and padding */
+	len = sat_addmul(len, p->size, 1);	/* 1 byte for each unknown data */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmUnknown_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,	/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmUnknown *p = (icmUnknown *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i, size;
+	unsigned int i, size;
 	char *bp, *buf;
 
 	if (len < 8) {
@@ -1714,17 +1879,20 @@ static int icmUnknown_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmUnknown_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmUnknown *p = (icmUnknown *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmUnknown_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmUnknown_write malloc() failed");
 		return icp->errc = 2;
@@ -1831,9 +1999,14 @@ static int icmUnknown_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(unsigned char))) {
+			sprintf(icp->err,"icmUnknown_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (unsigned char *) icp->al->malloc(icp->al, p->size * sizeof(unsigned char))) == NULL) {
+		if ((p->data = (unsigned char *) icp->al->calloc(icp->al, p->size, sizeof(unsigned char)))
+		                                                                                == NULL) {
 			sprintf(icp->err,"icmUnknown_alloc: malloc() of icmUnknown data failed");
 			return icp->errc = 2;
 		}
@@ -1884,21 +2057,21 @@ static unsigned int icmUInt8Array_get_size(
 ) {
 	icmUInt8Array *p = (icmUInt8Array *)pp;
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += p->size * 1;	/* 1 byte for each UInt8 */
+	len = sat_add(len, 8);				/* 8 bytes for tag and padding */
+	len = sat_addmul(len, p->size, 1);	/* 1 byte for each UInt8 */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmUInt8Array_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,	/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmUInt8Array *p = (icmUInt8Array *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i, size;
+	unsigned int i, size;
 	char *bp, *buf;
 
 	if (len < 8) {
@@ -1946,17 +2119,20 @@ static int icmUInt8Array_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmUInt8Array_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmUInt8Array *p = (icmUInt8Array *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmUInt8Array_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmUInt8Array_write malloc() failed");
 		return icp->errc = 2;
@@ -2005,7 +2181,7 @@ static void icmUInt8Array_dump(
 	op->gprintf(op,"UInt8Array:\n");
 	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
-		unsigned long i;
+		unsigned int i;
 		for (i = 0; i < p->size; i++)
 			op->gprintf(op,"    %lu:  %u\n",i,p->data[i]);
 	}
@@ -2019,9 +2195,14 @@ static int icmUInt8Array_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(unsigned int))) {
+			sprintf(icp->err,"icmUInt8Array_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (unsigned int *) icp->al->malloc(icp->al, p->size * sizeof(unsigned int))) == NULL) {
+		if ((p->data = (unsigned int *) icp->al->calloc(icp->al, p->size, sizeof(unsigned int)))
+		                                                                              == NULL) {
 			sprintf(icp->err,"icmUInt8Array_alloc: malloc() of icmUInt8Array data failed");
 			return icp->errc = 2;
 		}
@@ -2071,21 +2252,21 @@ static unsigned int icmUInt16Array_get_size(
 ) {
 	icmUInt16Array *p = (icmUInt16Array *)pp;
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += p->size * 2;	/* 2 bytes for each UInt16 */
+	len = sat_add(len, 8);				/* 8 bytes for tag and padding */
+	len = sat_addmul(len, p->size, 2);	/* 2 bytes for each UInt16 */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmUInt16Array_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,	/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmUInt16Array *p = (icmUInt16Array *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i, size;
+	unsigned int i, size;
 	char *bp, *buf;
 
 	if (len < 8) {
@@ -2133,17 +2314,20 @@ static int icmUInt16Array_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmUInt16Array_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmUInt16Array *p = (icmUInt16Array *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmUInt16Array_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmUInt16Array_write malloc() failed");
 		return icp->errc = 2;
@@ -2192,7 +2376,7 @@ static void icmUInt16Array_dump(
 	op->gprintf(op,"UInt16Array:\n");
 	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
-		unsigned long i;
+		unsigned int i;
 		for (i = 0; i < p->size; i++)
 			op->gprintf(op,"    %lu:  %u\n",i,p->data[i]);
 	}
@@ -2206,9 +2390,14 @@ static int icmUInt16Array_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(unsigned int))) {
+			sprintf(icp->err,"icmUInt16Array_alloc:: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (unsigned int *) icp->al->malloc(icp->al, p->size * sizeof(unsigned int))) == NULL) {
+		if ((p->data = (unsigned int *) icp->al->calloc(icp->al, p->size, sizeof(unsigned int)))
+		                                                                              == NULL) {
 			sprintf(icp->err,"icmUInt16Array_alloc: malloc() of icmUInt16Array data failed");
 			return icp->errc = 2;
 		}
@@ -2258,21 +2447,21 @@ static unsigned int icmUInt32Array_get_size(
 ) {
 	icmUInt32Array *p = (icmUInt32Array *)pp;
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += p->size * 4;	/* 4 bytes for each UInt32 */
+	len = sat_add(len, 8);				/* 8 bytes for tag and padding */
+	len = sat_addmul(len, p->size, 4);	/* 4 bytes for each UInt32 */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmUInt32Array_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,	/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmUInt32Array *p = (icmUInt32Array *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i, size;
+	unsigned int i, size;
 	char *bp, *buf;
 
 	if (len < 8) {
@@ -2320,17 +2509,20 @@ static int icmUInt32Array_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmUInt32Array_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmUInt32Array *p = (icmUInt32Array *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmUInt32Array_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmUInt32Array_write malloc() failed");
 		return icp->errc = 2;
@@ -2379,7 +2571,7 @@ static void icmUInt32Array_dump(
 	op->gprintf(op,"UInt32Array:\n");
 	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
-		unsigned long i;
+		unsigned int i;
 		for (i = 0; i < p->size; i++)
 			op->gprintf(op,"    %lu:  %u\n",i,p->data[i]);
 	}
@@ -2393,9 +2585,14 @@ static int icmUInt32Array_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(unsigned int))) {
+			sprintf(icp->err,"icmUInt32Array_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (unsigned int *) icp->al->malloc(icp->al, p->size * sizeof(unsigned int))) == NULL) {
+		if ((p->data = (unsigned int *) icp->al->calloc(icp->al, p->size, sizeof(unsigned int)))
+		                                                                              == NULL) {
 			sprintf(icp->err,"icmUInt32Array_alloc: malloc() of icmUInt32Array data failed");
 			return icp->errc = 2;
 		}
@@ -2445,21 +2642,21 @@ static unsigned int icmUInt64Array_get_size(
 ) {
 	icmUInt64Array *p = (icmUInt64Array *)pp;
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += p->size * 8;	/* 8 bytes for each UInt64 */
+	len = sat_add(len, 8);				/* 8 bytes for tag and padding */
+	len = sat_addmul(len, p->size, 8);	/* 8 bytes for each UInt64 */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmUInt64Array_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,	/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmUInt64Array *p = (icmUInt64Array *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i, size;
+	unsigned int i, size;
 	char *bp, *buf;
 
 	if (len < 8) {
@@ -2507,17 +2704,20 @@ static int icmUInt64Array_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmUInt64Array_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmUInt64Array *p = (icmUInt64Array *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmUInt64Array_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmUInt64Array_write malloc() failed");
 		return icp->errc = 2;
@@ -2566,7 +2766,7 @@ static void icmUInt64Array_dump(
 	op->gprintf(op,"UInt64Array:\n");
 	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
-		unsigned long i;
+		unsigned int i;
 		for (i = 0; i < p->size; i++)
 			op->gprintf(op,"    %lu:  h=%lu, l=%lu\n",i,p->data[i].h,p->data[i].l);
 	}
@@ -2580,9 +2780,14 @@ static int icmUInt64Array_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(icmUint64))) {
+			sprintf(icp->err,"icmUInt64Array_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (icmUint64 *) icp->al->malloc(icp->al, p->size * sizeof(icmUint64))) == NULL) {
+		if ((p->data = (icmUint64 *) icp->al->calloc(icp->al, p->size, sizeof(icmUint64)))
+		                                                                        == NULL) {
 			sprintf(icp->err,"icmUInt64Array_alloc: malloc() of icmUInt64Array data failed");
 			return icp->errc = 2;
 		}
@@ -2632,21 +2837,21 @@ static unsigned int icmU16Fixed16Array_get_size(
 ) {
 	icmU16Fixed16Array *p = (icmU16Fixed16Array *)pp;
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += p->size * 4;	/* 4 byte for each U16Fixed16 */
+	len = sat_add(len, 8);				/* 8 bytes for tag and padding */
+	len = sat_addmul(len, p->size, 4);	/* 4 byte for each U16Fixed16 */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmU16Fixed16Array_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,	/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmU16Fixed16Array *p = (icmU16Fixed16Array *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i, size;
+	unsigned int i, size;
 	char *bp, *buf;
 
 	if (len < 8) {
@@ -2694,17 +2899,20 @@ static int icmU16Fixed16Array_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmU16Fixed16Array_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmU16Fixed16Array *p = (icmU16Fixed16Array *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmU16Fixed16Array_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmU16Fixed16Array_write malloc() failed");
 		return icp->errc = 2;
@@ -2753,7 +2961,7 @@ static void icmU16Fixed16Array_dump(
 	op->gprintf(op,"U16Fixed16Array:\n");
 	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
-		unsigned long i;
+		unsigned int i;
 		for (i = 0; i < p->size; i++)
 			op->gprintf(op,"    %lu:  %f\n",i,p->data[i]);
 	}
@@ -2767,9 +2975,13 @@ static int icmU16Fixed16Array_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(double))) {
+			sprintf(icp->err,"icmU16Fixed16Array_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (double *) icp->al->malloc(icp->al, p->size * sizeof(double))) == NULL) {
+		if ((p->data = (double *) icp->al->calloc(icp->al, p->size, sizeof(double))) == NULL) {
 			sprintf(icp->err,"icmU16Fixed16Array_alloc: malloc() of icmU16Fixed16Array data failed");
 			return icp->errc = 2;
 		}
@@ -2819,21 +3031,21 @@ static unsigned int icmS15Fixed16Array_get_size(
 ) {
 	icmS15Fixed16Array *p = (icmS15Fixed16Array *)pp;
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += p->size * 4;	/* 4 byte for each S15Fixed16 */
+	len = sat_add(len, 8);				/* 8 bytes for tag and padding */
+	len = sat_addmul(len, p->size, 4);	/* 4 byte for each S15Fixed16 */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmS15Fixed16Array_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmS15Fixed16Array *p = (icmS15Fixed16Array *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i, size;
+	unsigned int i, size;
 	char *bp, *buf;
 
 	if (len < 8) {
@@ -2881,17 +3093,20 @@ static int icmS15Fixed16Array_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmS15Fixed16Array_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmS15Fixed16Array *p = (icmS15Fixed16Array *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmS15Fixed16Array_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmS15Fixed16Array_write malloc() failed");
 		return icp->errc = 2;
@@ -2940,7 +3155,7 @@ static void icmS15Fixed16Array_dump(
 	op->gprintf(op,"S15Fixed16Array:\n");
 	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
-		unsigned long i;
+		unsigned int i;
 		for (i = 0; i < p->size; i++)
 			op->gprintf(op,"    %lu:  %f\n",i,p->data[i]);
 	}
@@ -2954,9 +3169,13 @@ static int icmS15Fixed16Array_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(double))) {
+			sprintf(icp->err,"icmS15Fixed16Array_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (double *) icp->al->malloc(icp->al, p->size * sizeof(double))) == NULL) {
+		if ((p->data = (double *) icp->al->calloc(icp->al, p->size, sizeof(double))) == NULL) {
 			sprintf(icp->err,"icmS15Fixed16Array_alloc: malloc() of icmS15Fixed16Array data failed");
 			return icp->errc = 2;
 		}
@@ -3048,21 +3267,21 @@ static unsigned int icmXYZArray_get_size(
 ) {
 	icmXYZArray *p = (icmXYZArray *)pp;
 	unsigned int len = 0;
-	len += 8;				/* 8 bytes for tag and padding */
-	len += p->size * 12;	/* 12 bytes for each XYZ */
+	len = sat_add(len, 8);				/* 8 bytes for tag and padding */
+	len = sat_addmul(len, p->size, 12);	/* 12 bytes for each XYZ */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmXYZArray_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmXYZArray *p = (icmXYZArray *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i, size;
+	unsigned int i, size;
 	char *bp, *buf;
 
 	if (len < 8) {
@@ -3110,17 +3329,20 @@ static int icmXYZArray_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmXYZArray_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmXYZArray *p = (icmXYZArray *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmXYZArray_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmXYZArray_write malloc() failed");
 		return icp->errc = 2;
@@ -3169,14 +3391,13 @@ static void icmXYZArray_dump(
 	op->gprintf(op,"XYZArray:\n");
 	op->gprintf(op,"  No. elements = %lu\n",p->size);
 	if (verb >= 2) {
-		unsigned long i;
+		unsigned int i;
 		for (i = 0; i < p->size; i++) {
 			op->gprintf(op,"    %lu:  %s\n",i,string_XYZNumber_and_Lab(&p->data[i]));
 			
 		}
 	}
 }
-
 
 /* Allocate variable sized data elements */
 static int icmXYZArray_allocate(
@@ -3186,9 +3407,13 @@ static int icmXYZArray_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(icmXYZNumber))) {
+			sprintf(icp->err,"icmXYZArray_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (icmXYZNumber *) icp->al->malloc(icp->al, p->size * sizeof(icmXYZNumber))) == NULL) {
+		if ((p->data = (icmXYZNumber *) icp->al->malloc(icp->al, sat_mul(p->size, sizeof(icmXYZNumber)))) == NULL) {
 			sprintf(icp->err,"icmXYZArray_alloc: malloc() of icmXYZArray data failed");
 			return icp->errc = 2;
 		}
@@ -3281,7 +3506,7 @@ static int icmCurve_lookup_fwd(
 static int icmTable_setup_bwd(
 	icc          *icp,			/* Base icc object */
 	icmRevTable  *rt,			/* Reverse table data to setup */
-	unsigned long size,			/* Size of fwd table */
+	unsigned int size,			/* Size of fwd table */
 	double       *data			/* Table */
 ) {
 	unsigned int i;
@@ -3300,33 +3525,38 @@ static int icmTable_setup_bwd(
 	}
 
 	/* Decide on reverse granularity */
-	rt->rsize = (rt->size+2)/2;
+	rt->rsize = sat_add(rt->size,2)/2;
 	rt->qscale = (double)rt->rsize/(rt->rmax - rt->rmin);	/* Scale factor to quantize to */
 	
+	if (ovr_mul(rt->size, sizeof(unsigned int *))) {
+		return 2;
+	}
 	/* Initialize the reverse lookup structures, and get overall min/max */
-	if ((rt->rlists = (unsigned int **) icp->al->calloc(icp->al, 1, rt->rsize * sizeof(unsigned int *))) == NULL) {
+	if ((rt->rlists = (unsigned int **) icp->al->calloc(icp->al, rt->rsize, sizeof(unsigned int *))) == NULL) {
 		return 2;
 	}
 
 	/* Assign each output value range bucket lists it intersects */
 	for (i = 0; i < (rt->size-1); i++) {
-		int s, e, j;	/* Start and end indexes (inclusive) */
-		s = (int)((rt->data[i] - rt->rmin) * rt->qscale);
-		e = (int)((rt->data[i+1] - rt->rmin) * rt->qscale);
-		if (s > e) {	/* swap */
-			int t;
-			t = s; s = e; e = t;
-		}
+		unsigned int s, e, j;	/* Start and end indexes (inclusive) */
+		s = (unsigned int)((rt->data[i] - rt->rmin) * rt->qscale);
+		e = (unsigned int)((rt->data[i+1] - rt->rmin) * rt->qscale);
+		if (s >= rt->rsize)
+			s = rt->rsize-1;
 		if (e >= rt->rsize)
 			e = rt->rsize-1;
+		if (s > e) {	/* swap */
+			unsigned int t;
+			t = s; s = e; e = t;
+		}
 
 		/* For all buckets that may contain this output range, add index of this output */
 		for (j = s; j <= e; j++) {
-			int as;			/* Allocation size */
-			int nf;			/* Next free slot */
+			unsigned int as;			/* Allocation size */
+			unsigned int nf;			/* Next free slot */
 			if (rt->rlists[j] == NULL) {	/* No allocation */
 				as = 5;						/* Start with space for 5 */
-				if ((rt->rlists[j] = (unsigned int *) icp->al->malloc(icp->al, sizeof(unsigned int) * as)) == NULL) {
+				if ((rt->rlists[j] = (unsigned int *) icp->al->calloc(icp->al, as, sizeof(unsigned int))) == NULL) {
 					return 2;
 				}
 				rt->rlists[j][0] = as;
@@ -3335,8 +3565,11 @@ static int icmTable_setup_bwd(
 				as = rt->rlists[j][0];	/* Allocate space for this list */
 				nf = rt->rlists[j][1];	/* Next free location in list */
 				if (nf >= as) {			/* need to expand space */
-					as *= 2;
-					rt->rlists[j] = (unsigned int *) icp->al->realloc(icp->al,rt->rlists[j], sizeof(unsigned int) * as);
+					if ((as = sat_mul(as, 2)) == UINT_MAX
+					 || ovr_mul(as, sizeof(unsigned int))) {
+						return 2;
+					}
+					rt->rlists[j] = (unsigned int *) icp->al->realloc(icp->al,rt->rlists[j], as * sizeof(unsigned int));
 					if (rt->rlists[j] == NULL) {
 						return 2;
 					}
@@ -3384,7 +3617,7 @@ static int icmTable_lookup_bwd(
 		val = 0.0;
 	else if (val > rsize_1)
 		val = rsize_1;
-	ix = (int)floor(val);		/* Coordinate */
+	ix = (unsigned int)floor(val);		/* Coordinate */
 
 	if (ix > (rt->size-2))
 		ix = (rt->size-2);
@@ -3467,21 +3700,21 @@ static unsigned int icmCurve_get_size(
 ) {
 	icmCurve *p = (icmCurve *)pp;
 	unsigned int len = 0;
-	len += 12;			/* 12 bytes for tag, padding and count */
-	len += p->size * 2;	/* 2 bytes for each UInt16 */
+	len = sat_add(len, 12);				/* 12 bytes for tag, padding and count */
+	len = sat_addmul(len, p->size, 2);	/* 2 bytes for each UInt16 */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmCurve_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,	/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmCurve *p = (icmCurve *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i;
+	unsigned int i;
 	char *bp, *buf, *end;
 
 	if (len < 12) {
@@ -3522,6 +3755,11 @@ static int icmCurve_read(
 		p->flag = icmCurveGamma;
 	} else {
 		p->flag = icmCurveSpec;
+		if (p->size > (len - 12)/2) {
+			sprintf(icp->err,"icmCurve_read: size overflow");
+			icp->al->free(icp->al, buf);
+			return icp->errc = 1;
+		}
 	}
 
 	if ((rv = p->allocate((icmBase *)p)) != 0) {
@@ -3530,8 +3768,8 @@ static int icmCurve_read(
 	}
 
 	if (p->flag == icmCurveGamma) {	/* Gamma curve */
-		if ((bp + 1) > end) {
-			sprintf(icp->err,"icmCurve_read: Data too short to curve gamma");
+		if (bp > end || 1 > (end - bp)) {
+			sprintf(icp->err,"icmCurve_read: Data too short for curve gamma");
 			icp->al->free(icp->al, buf);
 			return icp->errc = 1;
 		}
@@ -3539,8 +3777,8 @@ static int icmCurve_read(
 	} else if (p->flag == icmCurveSpec) {
 		/* Read all the data from the buffer */
 		for (i = 0; i < p->size; i++, bp += 2) {
-			if ((bp + 2) > end) {
-				sprintf(icp->err,"icmCurve_read: Data too short to curve value");
+			if (bp > end || 2 > (end - bp)) {
+				sprintf(icp->err,"icmCurve_read: Data too short for curve value");
 				icp->al->free(icp->al, buf);
 				return icp->errc = 1;
 			}
@@ -3554,17 +3792,20 @@ static int icmCurve_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmCurve_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmCurve *p = (icmCurve *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmCurve_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmCurve_write malloc() failed");
 		return icp->errc = 2;
@@ -3578,6 +3819,7 @@ static int icmCurve_write(
 		return icp->errc = rv;
 	}
 	write_SInt32Number(0,bp+4);			/* Set padding to 0 */
+
 	/* Write count */
 	if ((rv = write_UInt32Number(p->size,bp+8)) != 0) {
 		sprintf(icp->err,"icmCurve_write: write_UInt32Number() failed");
@@ -3649,7 +3891,7 @@ static void icmCurve_dump(
 	} else {
 		op->gprintf(op,"  No. elements = %lu\n",p->size);
 		if (verb >= 2) {
-			unsigned long i;
+			unsigned int i;
 			for (i = 0; i < p->size; i++)
 				op->gprintf(op,"    %3lu:  %f\n",i,p->data[i]);
 		}
@@ -3672,9 +3914,13 @@ static int icmCurve_allocate(
 		p->size = 1;
 	}
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(double))) {
+			sprintf(icp->err,"icmCurve_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (double *) icp->al->malloc(icp->al, p->size * sizeof(double))) == NULL) {
+		if ((p->data = (double *) icp->al->calloc(icp->al, p->size, sizeof(double))) == NULL) {
 			sprintf(icp->err,"icmCurve_alloc: malloc() of icmCurve data failed");
 			return icp->errc = 2;
 		}
@@ -3731,16 +3977,16 @@ static unsigned int icmData_get_size(
 ) {
 	icmData *p = (icmData *)pp;
 	unsigned int len = 0;
-	len += 12;			/* 12 bytes for tag and padding */
-	len += p->size * 1;	/* 1 byte for each data element */
+	len = sat_add(len, 12);				/* 12 bytes for tag and padding */
+	len = sat_addmul(len, p->size, 1);	/* 1 byte for each data element */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmData_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmData *p = (icmData *)pp;
 	icc *icp = p->icp;
@@ -3814,7 +4060,7 @@ static int icmData_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmData_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmData *p = (icmData *)pp;
 	icc *icp = p->icp;
@@ -3823,7 +4069,10 @@ static int icmData_write(
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmData_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmData_write malloc() failed");
 		return icp->errc = 2;
@@ -3886,7 +4135,7 @@ static void icmData_dump(
 	int   verb		/* Verbosity level */
 ) {
 	icmData *p = (icmData *)pp;
-	unsigned long i, r, c, ii, size = 0;
+	unsigned int i, r, c, ii, size = 0;
 	int ph = 0;		/* Phase */
 
 	if (verb <= 0)
@@ -3969,9 +4218,13 @@ static int icmData_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(unsigned char))) {
+			sprintf(icp->err,"icmData_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (unsigned char *) icp->al->malloc(icp->al, p->size * sizeof(unsigned char))) == NULL) {
+		if ((p->data = (unsigned char *) icp->al->calloc(icp->al, p->size, sizeof(unsigned char))) == NULL) {
 			sprintf(icp->err,"icmData_alloc: malloc() of icmData data failed");
 			return icp->errc = 2;
 		}
@@ -4022,16 +4275,16 @@ static unsigned int icmText_get_size(
 ) {
 	icmText *p = (icmText *)pp;
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += p->size;		/* 1 byte for each character element (inc. null) */
+	len = sat_add(len, 8);				/* 8 bytes for tag and padding */
+	len = sat_addmul(len, p->size, 1);	/* 1 byte for each character element (inc. null) */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmText_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,	/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmText *p = (icmText *)pp;
 	icc *icp = p->icp;
@@ -4086,7 +4339,7 @@ static int icmText_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmText_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmText *p = (icmText *)pp;
 	icc *icp = p->icp;
@@ -4095,7 +4348,10 @@ static int icmText_write(
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmText_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmText_write malloc() failed");
 		return icp->errc = 2;
@@ -4138,7 +4394,7 @@ static void icmText_dump(
 	int   verb		/* Verbosity level */
 ) {
 	icmText *p = (icmText *)pp;
-	unsigned long i, r, c, size;
+	unsigned int i, r, c, size;
 
 	if (verb <= 0)
 		return;
@@ -4183,9 +4439,13 @@ static int icmText_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(char))) {
+			sprintf(icp->err,"icmText_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (char *) icp->al->malloc(icp->al, p->size * sizeof(char))) == NULL) {
+		if ((p->data = (char *) icp->al->calloc(icp->al, p->size, sizeof(char))) == NULL) {
 			sprintf(icp->err,"icmText_alloc: malloc() of icmText data failed");
 			return icp->errc = 2;
 		}
@@ -4365,16 +4625,16 @@ static unsigned int icmDateTimeNumber_get_size(
 	icmBase *pp
 ) {
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += 12;			/* 12 bytes for Date & Time */
+	len = sat_add(len, 8);		/* 8 bytes for tag and padding */
+	len = sat_add(len, 12);		/* 12 bytes for Date & Time */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmDateTimeNumber_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmDateTimeNumber *p = (icmDateTimeNumber *)pp;
 	icc *icp = p->icp;
@@ -4423,7 +4683,7 @@ static int icmDateTimeNumber_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmDateTimeNumber_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmDateTimeNumber *p = (icmDateTimeNumber *)pp;
 	icc *icp = p->icp;
@@ -4432,7 +4692,10 @@ static int icmDateTimeNumber_write(
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmDateTimeNumber_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmDateTimeNumber_write malloc() failed");
 		return icp->errc = 2;
@@ -4522,15 +4785,6 @@ static icmBase *new_icmDateTimeNumber(
 /* ---------------------------------------------------------- */
 /* icmLut object */
 
-/* Utility function - raise one integer to an integer power */
-static unsigned int uipow(unsigned int a, unsigned int b) {
-	unsigned int rv = 1;
-	for (; b > 0; b--)
-		rv *= a;
-	return rv;
-}
-
-/* - - - - - - - - - - - - - - - - */
 /* Check if the matrix is non-zero */
 static int icmLut_nu_matrix(
 	icmLut *p		/* Pointer to Lut object */
@@ -4639,7 +4893,7 @@ double *in		/* Input array[inputChan] */
 				val = inputEnt_1;
 				rv |= 1;
 			}
-			ix = (int)floor(val);		/* Grid coordinate */
+			ix = (unsigned int)floor(val);		/* Grid coordinate */
 			if (ix > (p->inputEnt-2))
 				ix = (p->inputEnt-2);
 			w = val - (double)ix;		/* weight */
@@ -4667,7 +4921,7 @@ double *in		/* Input array[outputChan] */
 	if (p->inputChan <= 8) {
 		gw = GW;				/* Use stack allocation */
 	} else {
-		if ((gw = (double *) icp->al->malloc(icp->al, (1 << p->inputChan) * sizeof(double))) == NULL) {
+		if ((gw = (double *) icp->al->malloc(icp->al, sat_mul((1 << p->inputChan), sizeof(double)))) == NULL) {
 			sprintf(icp->err,"icmLut_lookup_clut: malloc() failed");
 			return icp->errc = 2;
 		}
@@ -4689,7 +4943,7 @@ double *in		/* Input array[outputChan] */
 		gp = p->clutTable;		/* Base of grid array */
 
 		for (e = 0; e < p->inputChan; e++) {
-			int x;
+			unsigned int x;
 			double val;
 			val = in[e] * clutPoints_1;
 			if (val < 0.0) {
@@ -4699,7 +4953,7 @@ double *in		/* Input array[outputChan] */
 				val = clutPoints_1;
 				rv |= 1;
 			}
-			x = (int)floor(val);		/* Grid coordinate */
+			x = (unsigned int)floor(val);	/* Grid coordinate */
 			if (x > clutPoints_2)
 				x = clutPoints_2;
 			co[e] = val - (double)x;	/* 1.0 - weight */
@@ -4763,7 +5017,7 @@ double *in		/* Input array[outputChan] */
 		gp = p->clutTable;		/* Base of grid array */
 
 		for (e = 0; e < p->inputChan; e++) {
-			int x;
+			unsigned int x;
 			double val;
 			val = in[e] * clutPoints_1;
 			if (val < 0.0) {
@@ -4773,7 +5027,7 @@ double *in		/* Input array[outputChan] */
 				val = clutPoints_1;
 				rv |= 1;
 			}
-			x = (int)floor(val);		/* Grid coordinate */
+			x = (unsigned int)floor(val);		/* Grid coordinate */
 			if (x > clutPoints_2)
 				x = clutPoints_2;
 			co[e] = val - (double)x;	/* 1.0 - weight */
@@ -4871,7 +5125,7 @@ double *in		/* Input array[outputChan] */
 		gp = p->clutTable;		/* Base of grid array */
 
 		for (e = 0; e < p->inputChan; e++) {
-			int x;
+			unsigned int x;
 			double val;
 // ~~~999
 #ifdef NEVER
@@ -4892,7 +5146,7 @@ double *in		/* Input array[outputChan] */
 				val = clutPoints_1;
 				rv |= 1;
 			}
-			x = (int)floor(val);		/* Grid coordinate */
+			x = (unsigned int)floor(val);		/* Grid coordinate */
 			if (x > clutPoints_2)
 				x = clutPoints_2;
 			co[e] = val - (double)x;	/* 1.0 - weight */
@@ -5005,7 +5259,7 @@ double *in		/* Input array[outputChan] */
 				val = outputEnt_1;
 				rv |= 1;
 			}
-			ix = (int)floor(val);		/* Grid coordinate */
+			ix = (unsigned int)floor(val);		/* Grid coordinate */
 			if (ix > (p->outputEnt-2))
 				ix = (p->outputEnt-2);
 			w = val - (double)ix;		/* weight */
@@ -5145,13 +5399,17 @@ static int getNormFunc(
 	void               (**nfunc)(double *out, double *in)
 );
 
+#define CLIP_MARGIN 0.005		/* Margine to allow before reporting clipping = 0.5% */
+
 /* Helper function to set multiple Lut tables simultaneously. */
 /* Note that these tables all have to be compatible in */
 /* having the same configuration and resolution. */
 /* Set errc and return error number in underlying icc */
-int icmSetMultiLutTables (
-	int ntables,							/* Number of tables to be set, 1..3 */
-	icmLut *pp[3],							/* Pointer to array of Lut objects */
+/* Set warnc if there is clipping in the output values */
+/* 1 = input table, 2 = main clut, 3 = clut midpoin, 4 = midpoint interp, 5 = output table */
+int icmSetMultiLutTables(
+	int ntables,							/* Number of tables to be set, 1..n */
+	icmLut **pp,							/* Pointer to array of Lut objects */
 	int     flags,							/* Setting flags */
 	void   *cbctx,							/* Opaque callback context pointer value */
 	icColorSpaceSignature insig, 			/* Input color space */
@@ -5179,7 +5437,9 @@ int icmSetMultiLutTables (
 	double **clutTable2 = NULL;		/* Cell center values for ICM_CLUT_SET_APXLS */ 
 	int ii[MAX_CHAN];		/* Index value */
 	psh counter;			/* Pseudo-Hilbert counter */
-	double _iv[4 * MAX_CHAN], *iv = &_iv[MAX_CHAN], *ivn;	/* Real index value/table value */
+//	double _iv[4 * MAX_CHAN], *iv = &_iv[MAX_CHAN], *ivn;	/* Real index value/table value */
+	int maxchan;			/* Actual max of input and output */
+	double *_iv, *iv, *ivn;	/* Real index value/table value */
 	double imin[MAX_CHAN], imax[MAX_CHAN];
 	double omin[MAX_CHAN], omax[MAX_CHAN];
 	void (*ifromindex)(double *out, double *in);	/* Index to input color space function */
@@ -5187,6 +5447,7 @@ int icmSetMultiLutTables (
 	void (*ifromentry)(double *out, double *in);	/* Entry to input color space function */
 	void (*otoentry)(double *out, double *in);		/* Output colorspace to table value function */
 	void (*ofromentry)(double *out, double *in);	/* Table value to output color space function */
+	int clip = 0;
 
 	/* Check that everything is OK to proceed */
 	if (ntables < 1 || ntables > 3) {
@@ -5247,6 +5508,15 @@ int icmSetMultiLutTables (
 		sprintf(icp->err,"icmLut_set_tables table entry to output colorspace function lookup failed");
 		return icp->errc = 1;
 	}
+
+	/* Allocate an array to hold the input and output values */
+	maxchan = p->inputChan > p->outputChan ? p->inputChan : p->outputChan;
+	if ((_iv = (double *) icp->al->malloc(icp->al, sizeof(double) * maxchan * (ntables+1)))
+	                                                                              == NULL) {
+		sprintf(icp->err,"icmLut_read: malloc() failed");
+		return icp->errc = 2;
+	}
+	iv = _iv + maxchan;		/* Allow for "index under" */
 
 	/* Setup input table value min-max */
 	if (inmin == NULL || imax == NULL) {
@@ -5360,10 +5630,17 @@ int icmSetMultiLutTables (
 			for (e = 0; e < pn->inputChan; e++) {
 				double tt;
 				tt = (iv[e] - imin[e])/(imax[e] - imin[e]);
-				if (tt < 0.0)
+				if (tt < 0.0) {
+					DBGSLC(("iclip: tt = %f, iv = %f, omin = %f, omax = %f\n",tt,iv[e],omin[e],omax[e]));
+					if (tt < -CLIP_MARGIN)
+						clip = 1;
 					tt = 0.0;
-				else if (tt > 1.0)
+				} else if (tt > 1.0) {
+					DBGSLC(("iclip: tt = %f, iv = %f, omin = %f, omax = %f\n",tt,iv[e],omin[e],omax[e]));
+					if (tt > (1.0 + CLIP_MARGIN))
+						clip = 1;
 					tt = 1.0;
+				}
 				iv[e] = tt;
 			}
 
@@ -5376,6 +5653,7 @@ int icmSetMultiLutTables (
 	if (flags == ICM_CLUT_SET_APXLS) {
 		if ((clutTable2 = (double **) icp->al->calloc(icp->al,sizeof(double *), ntables)) == NULL) {
 			sprintf(icp->err,"icmLut_set_tables malloc of cube center array failed");
+			icp->al->free(icp->al, _iv);
 			return icp->errc = 1;
 		}
 		for (tn = 0; tn < ntables; tn++) {
@@ -5383,6 +5661,7 @@ int icmSetMultiLutTables (
 			                                               p->clutTable_size)) == NULL) {
 				for (--tn; tn >= 0; tn--)
 					icp->al->free(icp->al, clutTable2[tn]);
+				icp->al->free(icp->al, _iv);
 				icp->al->free(icp->al, clutTable2);
 				sprintf(icp->err,"icmLut_set_tables malloc of cube center array failed");
 				return icp->errc = 1;
@@ -5412,30 +5691,45 @@ int icmSetMultiLutTables (
 			*((int *)&iv[-((int)e)-1]) = ii[e];	/* Trick to supply grid index in iv[] */
 		}
 	
+		DBGSL(("\nix %s\n",icmPiv(p->inputChan, ii)));
+		DBGSL(("raw itv %s to iv'",icmPdv(p->inputChan, iv)));
 		ifromentry(iv,iv);			/* Convert from table value to input color space */
+		DBGSL((" %s\n",icmPdv(p->inputChan, iv)));
 	
 		/* Apply incolor -> outcolor function we want to represent */
+		DBGSL(("iv: %s to ov'",icmPdv(p->inputChan, iv)));
 		clutfunc(cbctx, iv, iv);
+		DBGSL((" %s\n",icmPdv(p->outputChan, iv)));
 	
 		/* Disperse the results */
 		for (tn = 0, ivn = iv; tn < ntables; ivn += p->outputChan, tn++) {
 			pn = pp[tn];
 		
+			DBGSL(("tn %d, ov' %s -> otv",tn,icmPdv(p->outputChan, ivn)));
 			otoentry(ivn,ivn);			/* Convert from output color space value to table value */
+			DBGSL((" %s\n  -> oval",icmPdv(p->outputChan, ivn)));
 	
 			/* Expand used range to 0.0 - 1.0, and clip to legal values */
 			for (f = 0; f < pn->outputChan; f++) {
 				double tt;
 				tt = (ivn[f] - omin[f])/(omax[f] - omin[f]);
-				if (tt < 0.0)
+				if (tt < 0.0) {
+					DBGSLC(("lclip: tt = %f, ivn= %f, omin = %f, omax = %f\n",tt,ivn[f],omin[f],omax[f]));
+					if (tt < -CLIP_MARGIN)
+						clip = 2;
 					tt = 0.0;
-				else if (tt > 1.0)
+				} else if (tt > 1.0) {
+					DBGSLC(("lclip: tt = %f, ivn= %f, omin = %f, omax = %f\n",tt,ivn[f],omin[f],omax[f]));
+					if (tt > (1.0 + CLIP_MARGIN))
+						clip = 2;
 					tt = 1.0;
+				}
 				ivn[f] = tt;
 			}
 		
 			for (f = 0; f < pn->outputChan; f++) 	/* Output chans */
 				pn->clutTable[ti + f] = ivn[f];
+			DBGSL((" %s\n",icmPdv(pn->outputChan, ivn)));
 		}
 	
 		/* Lookup cell center value if ICM_CLUT_SET_APXLS */
@@ -5467,10 +5761,17 @@ int icmSetMultiLutTables (
 					for (f = 0; f < pn->outputChan; f++) {
 						double tt;
 						tt = (ivn[f] - omin[f])/(omax[f] - omin[f]);
-						if (tt < 0.0)
+						if (tt < 0.0) {
+							DBGSLC(("lclip: tt = %f, ivn= %f, omin = %f, omax = %f\n",tt,ivn[f],omin[f],omax[f]));
+							if (tt < -CLIP_MARGIN)
+								clip = 3;
 							tt = 0.0;
-						else if (tt > 1.0)
+						} else if (tt > 1.0) {
+							DBGSLC(("lclip: tt = %f, ivn= %f, omin = %f, omax = %f\n",tt,ivn[f],omin[f],omax[f]));
+							if (tt > (1.0 + CLIP_MARGIN))
+								clip = 3;
 							tt = 1.0;
+						}
 						ivn[f] = tt;
 					}
 				
@@ -5538,13 +5839,16 @@ int icmSetMultiLutTables (
 			}
 
 			for (i = 0; i < (1 << p->inputChan); i++) { /* For corners of cube */
-				double sc = 1.0;		/* Scale factor for edge nodes */
+				double sc = 1.0;		/* Scale factor for non-edge nodes */
 
-				/* Compute averaging scale factor for edge nodes */
+				/* Don't distribute error to edge nodes since there may */
+				/* an expectation that they have precicely set values */
+				/* (ie. white and black points) */
 				for (e = 0; e < p->inputChan; e++) {
 					if ((ii[e] == 0 && (i & (1 << e)) == 0)
-					 || (ii[e] == ((p->clutPoints-2)) && (i & (1 << e)) != 0))
-						sc *= 2.0;
+					 || (ii[e] == ((p->clutPoints-2)) && (i & (1 << e)) != 0)) {
+						sc = 0.0;
+					}
 				}
 
 				for (tn = 0; tn < ntables; tn++) {
@@ -5553,11 +5857,13 @@ int icmSetMultiLutTables (
 					for (f = 0; f < pn->outputChan; f++) { 	/* Output chans */
 						double vv;
 						vv = pn->clutTable[ti + pn->dcube[i] + f];		/* Current value */
-						vv += sc * clutTable2[tn][ti + f];			/* Correction */
-						if (vv < 0.0)
+						vv += sc * clutTable2[tn][ti + f];				/* Correction */
+						/* Hmm. Ignore clipping to to extrapolation ?? */
+						if (vv < 0.0) {
 							vv = 0.0;
-						else if (vv > 1.0)
+						} else if (vv > 1.0) {
 							vv = 1.0;
+						}
 						pn->clutTable[ti + pn->dcube[i] + f] = vv;
 					}
 				}
@@ -5600,10 +5906,17 @@ int icmSetMultiLutTables (
 			for (f = 0; f < pn->outputChan; f++) {
 				double tt;
 				tt = iv[f];
-				if (tt < 0.0)
+				if (tt < 0.0) {
+					DBGSLC(("oclip: tt = %f\n",tt));
+					if (tt < -CLIP_MARGIN)
+						clip = 5;
 					tt = 0.0;
-				else if (tt > 1.0)
+				} else if (tt > 1.0) {
+					DBGSLC(("oclip: tt = %f\n",tt));
+					if (tt > (1.0 + CLIP_MARGIN))
+						clip = 5;
 					tt = 1.0;
+				}
 				iv[f] = tt;
 			}
 
@@ -5612,12 +5925,21 @@ int icmSetMultiLutTables (
 		}
 	}
 
+	icp->al->free(icp->al, _iv);
+
+	icp->warnc = 0;
+	if (clip) {
+		DBGSLC(("Returning clip status = %d\n",clip));
+		icp->warnc = clip;
+	}
+	
 	return 0;
 }
 
 /* Helper function to initialize a Lut tables contents */
 /* from supplied transfer functions. */
 /* Set errc and return error number */
+/* Set warnc if there is clipping in the output values */
 static int icmLut_set_tables (
 icmLut *p,									/* Pointer to Lut object */
 int     flags,							/* Setting flags */
@@ -5655,15 +5977,15 @@ static unsigned int icmLut_get_size(
 	unsigned int len = 0;
 
 	if (p->ttype == icSigLut8Type) {
-		len += 48;			/* tag and header */
-		len += 1 * (p->inputChan * p->inputEnt);
-		len += 1 * (p->outputChan * uipow(p->clutPoints,p->inputChan));
-		len += 1 * (p->outputChan * p->outputEnt);
+		len = sat_add(len, 48);			/* tag and header */
+		len = sat_add(len, sat_mul3(1, p->inputChan, p->inputEnt));
+		len = sat_add(len, sat_mul3(1, p->outputChan, sat_pow(p->clutPoints,p->inputChan)));
+		len = sat_add(len, sat_mul3(1, p->outputChan, p->outputEnt));
 	} else {
-		len += 52;			/* tag and header */
-		len += 2 * (p->inputChan * p->inputEnt);
-		len += 2 * (p->outputChan * uipow(p->clutPoints,p->inputChan));
-		len += 2 * (p->outputChan * p->outputEnt);
+		len = sat_add(len, 52);			/* tag and header */
+		len = sat_add(len, sat_mul3(2, p->inputChan, p->inputEnt));
+		len = sat_add(len, sat_mul3(2, p->outputChan, sat_pow(p->clutPoints,p->inputChan)));
+		len = sat_add(len, sat_mul3(2, p->outputChan, p->outputEnt));
 	}
 	return len;
 }
@@ -5671,13 +5993,13 @@ static unsigned int icmLut_get_size(
 /* read the object, return 0 on success, error code on fail */
 static int icmLut_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmLut *p = (icmLut *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i, j, g, size;
+	unsigned int i, j, g, size;
 	char *bp, *buf;
 
 	if (len < 4) {
@@ -5755,8 +6077,11 @@ static int icmLut_read(
 		bp = buf+52;
 	}
 
-	if (len < icmLut_get_size((icmBase *)p)) {
-		sprintf(icp->err,"icmLut_read: Tag too small for contents");
+	/* Sanity check dimensions. This protects against */
+	/* subsequent integer overflows involving the dimensions. */
+	if ((size = icmLut_get_size((icmBase *)p)) == UINT_MAX
+	 || size > len) {
+		sprintf(icp->err,"icmLut_read: Tag wrong size for contents");
 		icp->al->free(icp->al, buf);
 		return icp->errc = 1;
 	}
@@ -5776,7 +6101,7 @@ static int icmLut_read(
 	}
 
 	/* Read the clut table */
-	size = (p->outputChan * uipow(p->clutPoints,p->inputChan));
+	size = (p->outputChan * sat_pow(p->clutPoints,p->inputChan));
 	if ((rv = p->allocate((icmBase *)p)) != 0) {
 		icp->al->free(icp->al, buf);
 		return rv;
@@ -5824,17 +6149,20 @@ static int icmLut_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmLut_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmLut *p = (icmLut *)pp;
 	icc *icp = p->icp;
-	unsigned long i,j;
+	unsigned int i,j;
 	unsigned int len, size;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmLut_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmLut_write malloc() failed");
 		return icp->errc = 2;
@@ -5927,7 +6255,7 @@ static int icmLut_write(
 	}
 
 	/* Write the clut table */
-	size = (p->outputChan * uipow(p->clutPoints,p->inputChan));
+	size = (p->outputChan * sat_pow(p->clutPoints,p->inputChan));
 	if (p->ttype == icSigLut8Type) {
 		for (i = 0; i < size; i++, bp += 1) {
 			if ((rv = write_DCS8Number(p->clutTable[i], bp)) != 0) {
@@ -6017,7 +6345,7 @@ static void icmLut_dump(
 		if (p->inputChan > MAX_CHAN) {
 			op->gprintf(op,"  !!Can't dump > %d input channel CLUT table!!\n",MAX_CHAN);
 		} else {
-			size = (p->outputChan * uipow(p->clutPoints,p->inputChan));
+			size = (p->outputChan * sat_pow(p->clutPoints,p->inputChan));
 			for (j = 0; j < p->inputChan; j++)
 				ii[j] = 0;
 			for (i = 0; i < size;) {
@@ -6071,31 +6399,52 @@ static int icmLut_allocate(
 		return icp->errc = 1;
 	}
 
-	size = (p->inputChan * p->inputEnt);
+	if ((size = sat_mul(p->inputChan, p->inputEnt)) == UINT_MAX) {
+		sprintf(icp->err,"icmLut_alloc size overflow");
+		return icp->errc = 1;
+	}
 	if (size != p->inputTable_size) {
+		if (ovr_mul(size, sizeof(double))) {
+			sprintf(icp->err,"icmLut_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->inputTable != NULL)
 			icp->al->free(icp->al, p->inputTable);
-		if ((p->inputTable = (double *) icp->al->calloc(icp->al,sizeof(double), size)) == NULL) {
+		if ((p->inputTable = (double *) icp->al->calloc(icp->al,size, sizeof(double))) == NULL) {
 			sprintf(icp->err,"icmLut_alloc: calloc() of Lut inputTable data failed");
 			return icp->errc = 2;
 		}
 		p->inputTable_size = size;
 	}
-	size = (p->outputChan * uipow(p->clutPoints,p->inputChan));
+	if ((size = sat_mul(p->outputChan, sat_pow(p->clutPoints,p->inputChan))) == UINT_MAX) {
+		sprintf(icp->err,"icmLut_alloc size overflow");
+		return icp->errc = 1;
+	}
 	if (size != p->clutTable_size) {
+		if (ovr_mul(size, sizeof(double))) {
+			sprintf(icp->err,"icmLut_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->clutTable != NULL)
 			icp->al->free(icp->al, p->clutTable);
-		if ((p->clutTable = (double *) icp->al->calloc(icp->al,sizeof(double), size)) == NULL) {
+		if ((p->clutTable = (double *) icp->al->calloc(icp->al,size, sizeof(double))) == NULL) {
 			sprintf(icp->err,"icmLut_alloc: calloc() of Lut clutTable data failed");
 			return icp->errc = 2;
 		}
 		p->clutTable_size = size;
 	}
-	size = (p->outputChan * p->outputEnt);
+	if ((size = sat_mul(p->outputChan, p->outputEnt)) == UINT_MAX) {
+		sprintf(icp->err,"icmLut_alloc size overflow");
+		return icp->errc = 1;
+	}
 	if (size != p->outputTable_size) {
+		if (ovr_mul(size, sizeof(double))) {
+			sprintf(icp->err,"icmLut_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->outputTable != NULL)
 			icp->al->free(icp->al, p->outputTable);
-		if ((p->outputTable = (double *) icp->al->calloc(icp->al,sizeof(double), size)) == NULL) {
+		if ((p->outputTable = (double *) icp->al->calloc(icp->al,size, sizeof(double))) == NULL) {
 			sprintf(icp->err,"icmLut_alloc: calloc() of Lut outputTable data failed");
 			return icp->errc = 2;
 		}
@@ -6203,20 +6552,20 @@ static unsigned int icmMeasurement_get_size(
 	icmBase *pp
 ) {
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += 4;			/* 4 for standard observer */
-	len += 12;			/* 12 for XYZ of measurement backing */
-	len += 4;			/* 4 for measurement geometry */
-	len += 4;			/* 4 for measurement flare */
-	len += 4;			/* 4 for standard illuminant */
+	len = sat_add(len, 8);		/* 8 bytes for tag and padding */
+	len = sat_add(len, 4);		/* 4 for standard observer */
+	len = sat_add(len, 12);		/* 12 for XYZ of measurement backing */
+	len = sat_add(len, 4);		/* 4 for measurement geometry */
+	len = sat_add(len, 4);		/* 4 for measurement flare */
+	len = sat_add(len, 4);		/* 4 for standard illuminant */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmMeasurement_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmMeasurement *p = (icmMeasurement *)pp;
 	icc *icp = p->icp;
@@ -6276,7 +6625,7 @@ static int icmMeasurement_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmMeasurement_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmMeasurement *p = (icmMeasurement *)pp;
 	icc *icp = p->icp;
@@ -6285,7 +6634,10 @@ static int icmMeasurement_write(
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmMeasurement_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmMeasurement_write malloc() failed");
 		return icp->errc = 2;
@@ -6416,6 +6768,10 @@ static int read_NamedColorVal(
 	unsigned int i;
 	unsigned int mxl;	/* Max possible string length */
 
+	if (bp > end) {
+		sprintf(icp->err,"icmNamedColorVal_read: Data too short to read");
+		return icp->errc = 1;
+	}
 	mxl = (end - bp) < 32 ? (end - bp) : 32;
 	if (check_null_string(bp,mxl)) {
 		sprintf(icp->err,"icmNamedColorVal_read: Root name string not terminated");
@@ -6423,7 +6779,7 @@ static int read_NamedColorVal(
 	}
 	strcpy(p->root, bp);
 	bp += strlen(p->root) + 1;
-	if ((bp + ndc) > end) {
+	if (bp > end || ndc > (end - bp)) {
 		sprintf(icp->err,"icmNamedColorVal_read: Data too short to read device coords");
 		return icp->errc = 1;
 	}
@@ -6439,11 +6795,13 @@ static int read_NamedColorVal2(
 	char *bp,
 	char *end,
 	icColorSpaceSignature pcs,		/* Header Profile Connection Space */
-	unsigned int ndc				/* Number of device corrds */
+	unsigned int ndc				/* Number of device coords */
 ) {
 	icc *icp = p->icp;
 	unsigned int i;
-	if ((bp + 32 + 6 + ndc * 2) > end) {
+	if (bp > end
+	 || (32 + 6) > (end - bp)
+	 || ndc > (end - bp - 32 - 6)/2) {
 		sprintf(icp->err,"icmNamedColorVal2_read: Data too short to read");
 		return icp->errc = 1;
 	}
@@ -6497,7 +6855,7 @@ static int write_NamedColorVal2(
 	icmNamedColorVal *p,
 	char *bp,
 	icColorSpaceSignature pcs,		/* Header Profile Connection Space */
-	unsigned int ndc				/* Number of device corrds */
+	unsigned int ndc				/* Number of device coords */
 ) {
 	icc *icp = p->icp;
 	unsigned int i;
@@ -6543,23 +6901,24 @@ static unsigned int icmNamedColor_get_size(
 	unsigned int len = 0;
 	if (p->ttype == icSigNamedColorType) {
 		unsigned int i;
-		len += 8;			/* 8 bytes for tag and padding */
-		len += 4;			/* 4 for vendor specific flags */
-		len += 4;			/* 4 for count of named colors */
-		len += strlen(p->prefix) + 1; /* prefix of color names */
-		len += strlen(p->suffix) + 1; /* suffix of color names */
+		len = sat_add(len, 8);			/* 8 bytes for tag and padding */
+		len = sat_add(len, 4);			/* 4 for vendor specific flags */
+		len = sat_add(len, 4);			/* 4 for count of named colors */
+		len = sat_add(len, strlen(p->prefix) + 1); /* prefix of color names */
+		len = sat_add(len, strlen(p->suffix) + 1); /* suffix of color names */
 		for (i = 0; i < p->count; i++) {
-			len += strlen(p->data[i].root) + 1; /* color names */
-			len += p->nDeviceCoords * 1;	/* bytes for each named color */
+			len = sat_add(len, strlen(p->data[i].root) + 1); /* color names */
+			len = sat_add(len, p->nDeviceCoords * 1);	/* bytes for each named color */
 		}
 	} else {	/* Named Color 2 */
-		len += 8;			/* 8 bytes for tag and padding */
-		len += 4;			/* 4 for vendor specific flags */
-		len += 4;			/* 4 for count of named colors */
-		len += 4;			/* 4 for number of device coords */
-		len += 32;			/* 32 for prefix of color names */
-		len += 32;			/* 32 for suffix of color names */
-		len += p->count * (32 + 6 + p->nDeviceCoords * 2);	/* bytes for each named color */
+		len = sat_add(len, 8);			/* 8 bytes for tag and padding */
+		len = sat_add(len, 4);			/* 4 for vendor specific flags */
+		len = sat_add(len, 4);			/* 4 for count of named colors */
+		len = sat_add(len, 4);			/* 4 for number of device coords */
+		len = sat_add(len, 32);			/* 32 for prefix of color names */
+		len = sat_add(len, 32);			/* 32 for suffix of color names */
+		len = sat_add(len, sat_mul(p->count, (32 + 6 + p->nDeviceCoords * 2)));
+		                                /* bytes for each named color */
 	}
 	return len;
 }
@@ -6567,12 +6926,12 @@ static unsigned int icmNamedColor_get_size(
 /* read the object, return 0 on success, error code on fail */
 static int icmNamedColor_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,	/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmNamedColor *p = (icmNamedColor *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	char *bp, *buf, *end;
 	int rv = 0;
 
@@ -6638,6 +6997,10 @@ static int icmNamedColor_read(
 		bp = bp + 16;
 
 		/* Prefix for each color name */
+		if (bp > end) {
+			sprintf(icp->err,"icmNamedColor_read: Data too short to read");
+			return icp->errc = 1;
+		}
 		mxl = (end - bp) < 32 ? (end - bp) : 32;
 		if (check_null_string(bp,mxl) != 0) {
 			sprintf(icp->err,"icmNamedColor_read: Color prefix is not null terminated");
@@ -6648,6 +7011,10 @@ static int icmNamedColor_read(
 		bp += strlen(p->prefix) + 1;
 	
 		/* Suffix for each color name */
+		if (bp > end) {
+			sprintf(icp->err,"icmNamedColor_read: Data too short to read");
+			return icp->errc = 1;
+		}
 		mxl = (end - bp) < 32 ? (end - bp) : 32;
 		if (check_null_string(bp,mxl) != 0) {
 			sprintf(icp->err,"icmNamedColor_read: Color suffix is not null terminated");
@@ -6674,6 +7041,11 @@ static int icmNamedColor_read(
 	} else {  /* icmNC2 */
 		/* Number of device coords per color */
 		p->nDeviceCoords = read_UInt32Number(bp+16);
+		if (p->nDeviceCoords > MAX_CHAN) {
+			sprintf(icp->err,"icmNamedColor_read: Can't handle more than %d device channels",MAX_CHAN);
+			icp->al->free(icp->al, buf);
+			return icp->errc = 1;
+		}
 	
 		/* Prefix for each color name */
 		memcpy((void *)p->prefix, (void *)(bp + 20), 32);
@@ -6698,11 +7070,12 @@ static int icmNamedColor_read(
 	
 		/* Read all the data from the buffer */
 		bp = bp + 84;
-		for (i = 0; i < p->count; i++, bp += (32 + 6 + p->nDeviceCoords * 2)) {
+		for (i = 0; i < p->count; i++) {
 			if ((rv = read_NamedColorVal2(p->data+i, bp, end, icp->header->pcs, p->nDeviceCoords)) != 0) {
 				icp->al->free(icp->al, buf);
 				return rv;
 			}
+			bp += 32 + 6 + p->nDeviceCoords * 2;
 		}
 	}
 	icp->al->free(icp->al, buf);
@@ -6712,17 +7085,20 @@ static int icmNamedColor_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmNamedColor_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmNamedColor *p = (icmNamedColor *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmNamedColor_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmNamedColor_write malloc() failed");
 		return icp->errc = 2;
@@ -6848,7 +7224,7 @@ static void icmNamedColor_dump(
 	op->gprintf(op,"  Name prefix = '%s'\n",p->prefix);
 	op->gprintf(op,"  Name suffix = '%s'\n",p->suffix);
 	if (verb >= 2) {
-		unsigned long i, n;
+		unsigned int i, n;
 		icmNamedColorVal *vp;
 		for (i = 0; i < p->count; i++) {
 			vp = p->data + i;
@@ -6892,6 +7268,10 @@ static int icmNamedColor_allocate(
 
 	if (p->count != p->_count) {
 		unsigned int i;
+		if (ovr_mul(p->count, sizeof(icmNamedColorVal))) {
+			sprintf(icp->err,"icmNamedColor_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
 		if ((p->data = (icmNamedColorVal *) icp->al->calloc(icp->al,p->count, sizeof(icmNamedColorVal))) == NULL) {
@@ -6952,7 +7332,7 @@ static int read_ColorantTableVal(
 	icColorSpaceSignature pcs		/* Header Profile Connection Space */
 ) {
 	icc *icp = p->icp;
-	if ((bp + 32 + 6) > end) {
+	if (bp > end || (32 + 6) > (end - bp)) {
 		sprintf(icp->err,"icmColorantTableVal_read: Data too short to read");
 		return icp->errc = 1;
 	}
@@ -7011,11 +7391,11 @@ static unsigned int icmColorantTable_get_size(
 	unsigned int len = 0;
 	if (p->ttype == icSigColorantTableType) {
 		unsigned int i;
-		len += 8;			/* 8 bytes for tag and padding */
-		len += 4;			/* 4 for count of colorants */
+		len = sat_add(len, 8);			/* 8 bytes for tag and padding */
+		len = sat_add(len, 4);			/* 4 for count of colorants */
 		for (i = 0; i < p->count; i++) {
-			len += 32; /* colorant names - 32 bytes*/
-			len += 6; /* colorant pcs value - 3 x 16bit number*/
+			len = sat_add(len, 32); /* colorant names - 32 bytes*/
+			len = sat_add(len, 6); /* colorant pcs value - 3 x 16bit number*/
 		}
 	}
 	return len;
@@ -7024,13 +7404,13 @@ static unsigned int icmColorantTable_get_size(
 /* read the object, return 0 on success, error code on fail */
 static int icmColorantTable_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmColorantTable *p = (icmColorantTable *)pp;
 	icc *icp = p->icp;
 	icColorSpaceSignature pcs;
-	unsigned long i;
+	unsigned int i;
 	char *bp, *buf, *end;
 	int rv = 0;
 
@@ -7077,6 +7457,12 @@ static int icmColorantTable_read(
 	/* Read count of colorants */
 	p->count = read_UInt32Number(bp+8);
 
+	if (p->count > ((len - 12) / (32 + 6))) {
+		sprintf(icp->err,"icmColorantTable_read count overflow");
+		icp->al->free(icp->al, buf);
+		return icp->errc = 1;
+	}
+
 	bp = bp + 12;
 
 	if ((rv = p->allocate((icmBase *)p)) != 0) {
@@ -7099,12 +7485,12 @@ static int icmColorantTable_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmColorantTable_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmColorantTable *p = (icmColorantTable *)pp;
 	icc *icp = p->icp;
 	icColorSpaceSignature pcs;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
@@ -7115,7 +7501,10 @@ static int icmColorantTable_write(
 		pcs = icSigLabData;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmColorantTable_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmColorantTable_write malloc() failed");
 		return icp->errc = 2;
@@ -7180,7 +7569,7 @@ static void icmColorantTable_dump(
 		op->gprintf(op,"ColorantTable:\n");
 	op->gprintf(op,"  No. colorants  = %u\n",p->count);
 	if (verb >= 2) {
-		unsigned long i;
+		unsigned int i;
 		icmColorantTableVal *vp;
 		for (i = 0; i < p->count; i++) {
 			vp = p->data + i;
@@ -7215,6 +7604,10 @@ static int icmColorantTable_allocate(
 
 	if (p->count != p->_count) {
 		unsigned int i;
+		if (ovr_mul(p->count, sizeof(icmColorantTableVal))) {
+			sprintf(icp->err,"icmColorantTable_alloc: count overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
 		if ((p->data = (icmColorantTableVal *) icp->al->calloc(icp->al,p->count, sizeof(icmColorantTableVal))) == NULL) {
@@ -7270,18 +7663,18 @@ static unsigned int icmTextDescription_get_size(
 ) {
 	icmTextDescription *p = (icmTextDescription *)pp;
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += 4 + p->size;	/* Ascii string length + ascii string */
-	len += 8 + 2 * p->ucSize;	/* Unicode language code + length + string */
-	len += 3 + 67;		/* ScriptCode code, length string */
+	len = sat_add(len, 8);						/* 8 bytes for tag and padding */
+	len = sat_addadd(len, 4, p->size);			/* Ascii string length + ascii string */
+	len = sat_addaddmul(len, 8, 2, p->ucSize);	/* Unicode language code + length + string */
+	len = sat_addadd(len, 3, 67);				/* ScriptCode code, length string */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmTextDescription_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmTextDescription *p = (icmTextDescription *)pp;
 	icc *icp = p->icp;
@@ -7333,7 +7726,7 @@ static int icmTextDescription_core_read(
 	int rv = 0;
 	char *bp = *bpp;
 
-	if ((bp + 8) > end) {
+	if (bp > end || 8 > (end - bp)) {
 		sprintf(icp->err,"icmTextDescription_read: Data too short to type descriptor");
 		*bpp = bp;
 		return icp->errc = 1;
@@ -7350,7 +7743,7 @@ static int icmTextDescription_core_read(
 	bp = bp + 8;
 
 	/* Read the Ascii string */
-	if ((bp + 4) > end) {
+	if (bp > end || 4 > (end - bp)) {
 		*bpp = bp;
 		sprintf(icp->err,"icmTextDescription_read: Data too short to read Ascii header");
 		return icp->errc = 1;
@@ -7358,9 +7751,9 @@ static int icmTextDescription_core_read(
 	p->size = read_UInt32Number(bp);
 	bp += 4;
 	if (p->size > 0) {
-		if ((bp + p->size) > end) {
+		if (bp > end || p->size > (end - bp)) {
 			*bpp = bp;
-			sprintf(icp->err,"icmTextDescription_read: Data to short to read Ascii string");
+			sprintf(icp->err,"icmTextDescription_read: Data too short to read Ascii string");
 			return icp->errc = 1;
 		}
 		if (check_null_string(bp,p->size)) {
@@ -7372,11 +7765,11 @@ static int icmTextDescription_core_read(
 			return rv;
 		}
 		strcpy(p->desc, bp);
-		bp += p->size;
+		bp += strlen(p->desc) + 1;
 	}
 	
 	/* Read the Unicode string */
-	if ((bp + 8) > end) {
+	if (bp > end || 8 > (end - bp)) {
 		*bpp = bp;
 		sprintf(icp->err,"icmTextDescription_read: Data too short to read Unicode string");
 		return icp->errc = 1;
@@ -7387,7 +7780,7 @@ static int icmTextDescription_core_read(
 	bp += 4;
 	if (p->ucSize > 0) {
 		ORD16 *up;
-		if ((bp + 2 * p->ucSize) > end) {
+		if (bp > end || p->ucSize > (end - bp)/2) {
 			*bpp = bp;
 			sprintf(icp->err,"icmTextDescription_read: Data too short to read Unicode string");
 			return icp->errc = 1;
@@ -7407,7 +7800,7 @@ static int icmTextDescription_core_read(
 	}
 	
 	/* Read the ScriptCode string */
-	if ((bp + 3) > end) {
+	if (bp > end || 3 > (end - bp)) {
 		*bpp = bp;
 		sprintf(icp->err,"icmTextDescription_read: Data too short to read ScriptCode header");
 		return icp->errc = 1;
@@ -7422,7 +7815,7 @@ static int icmTextDescription_core_read(
 			sprintf(icp->err,"icmTextDescription_read: ScriptCode string too long");
 			return icp->errc = 1;
 		}
-		if ((bp + p->scSize) > end) {
+		if (bp > end || p->scSize > (end - bp)) {
 			*bpp = bp;
 			sprintf(icp->err,"icmTextDescription_read: Data too short to read ScriptCode string");
 			return icp->errc = 1;
@@ -7450,7 +7843,7 @@ static int icmTextDescription_core_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmTextDescription_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmTextDescription *p = (icmTextDescription *)pp;
 	icc *icp = p->icp;
@@ -7459,7 +7852,10 @@ static int icmTextDescription_write(
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmTextDescription_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmTextDescription_write malloc() failed");
 		return icp->errc = 2;
@@ -7515,7 +7911,7 @@ static int icmTextDescription_core_write(
 			return icp->errc = 1;
 		}
 		strcpy(bp, p->desc);
-		bp += p->size;
+		bp += strlen(p->desc) + 1;
 	}
 	
 	/* Write the Unicode string */
@@ -7591,7 +7987,7 @@ static void icmTextDescription_dump(
 	int   verb		/* Verbosity level */
 ) {
 	icmTextDescription *p = (icmTextDescription *)pp;
-	unsigned long i, r, c;
+	unsigned int i, r, c;
 
 	if (verb <= 0)
 		return;
@@ -7599,7 +7995,7 @@ static void icmTextDescription_dump(
 	op->gprintf(op,"TextDescription:\n");
 
 	if (p->size > 0) {
-		unsigned long size = p->size > 0 ? p->size-1 : 0;
+		unsigned int size = p->size > 0 ? p->size-1 : 0;
 		op->gprintf(op,"  ASCII data, length %lu chars:\n",p->size);
 
 		i = 0;
@@ -7634,7 +8030,7 @@ static void icmTextDescription_dump(
 
 	/* Can't dump Unicode or ScriptCode as text with portable code */
 	if (p->ucSize > 0) {
-		unsigned long size = p->ucSize;
+		unsigned int size = p->ucSize;
 		op->gprintf(op,"  Unicode Data, Language code 0x%x, length %lu chars\n",
 		        p->ucLangCode, p->ucSize);
 		i = 0;
@@ -7662,7 +8058,7 @@ static void icmTextDescription_dump(
 		op->gprintf(op,"  No Unicode data\n");
 	}
 	if (p->scSize > 0) {
-		unsigned long size = p->scSize;
+		unsigned int size = p->scSize;
 		op->gprintf(op,"  ScriptCode Data, Code 0x%x, length %lu chars\n",
 		        p->scCode, p->scSize);
 		i = 0;
@@ -7699,18 +8095,26 @@ static int icmTextDescription_allocate(
 	icc *icp = p->icp;
 
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(char))) {
+			sprintf(icp->err,"icmTextDescription_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->desc != NULL)
 			icp->al->free(icp->al, p->desc);
-		if ((p->desc = (char *) icp->al->malloc(icp->al, p->size * sizeof(char))) == NULL) {
+		if ((p->desc = (char *) icp->al->calloc(icp->al, p->size, sizeof(char))) == NULL) {
 			sprintf(icp->err,"icmTextDescription_alloc: malloc() of Ascii description failed");
 			return icp->errc = 2;
 		}
 		p->_size = p->size;
 	}
 	if (p->ucSize != p->uc_size) {
+		if (ovr_mul(p->ucSize, sizeof(ORD16))) {
+			sprintf(icp->err,"icmTextDescription_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->ucDesc != NULL)
 			icp->al->free(icp->al, p->ucDesc);
-		if ((p->ucDesc = (ORD16 *) icp->al->malloc(icp->al, p->ucSize * sizeof(ORD16))) == NULL) {
+		if ((p->ucDesc = (ORD16 *) icp->al->calloc(icp->al, p->ucSize, sizeof(ORD16))) == NULL) {
 			sprintf(icp->err,"icmTextDescription_alloc: malloc() of Unicode description failed");
 			return icp->errc = 2;
 		}
@@ -7784,9 +8188,13 @@ static unsigned int icmDescStruct_get_size(
 	icmDescStruct *p
 ) {
 	unsigned int len = 0;
-	len += 20;				/* 20 bytes for header info */
-	len += p->device.get_size((icmBase *)&p->device);
-	len += p->model.get_size((icmBase *)&p->model);
+	len = sat_add(len, 20);				/* 20 bytes for header info */
+	len = sat_add(len, p->device.get_size((icmBase *)&p->device));
+	if (p->device.size == 0)
+		len = sat_add(len, 1);			/* Extra 1 because of zero length desciption */
+	len = sat_add(len, p->model.get_size((icmBase *)&p->model));
+	if (p->model.size == 0)
+		len = sat_add(len, 1);			/* Extra 1 because of zero length desciption */
 	return len;
 }
 
@@ -7800,7 +8208,7 @@ static int icmDescStruct_read(
 	char *bp = *bpp;
 	int rv = 0;
 
-	if ((bp + 20) > end) {
+	if (bp > end || 20 > (end - bp)) {
 		sprintf(icp->err,"icmDescStruct_read: Data too short read header");
 		*bpp = bp;
 		return icp->errc = 1;
@@ -7833,6 +8241,8 @@ static int icmDescStruct_write(
 	icc *icp = p->icp;
 	char *bp = *bpp;
 	int rv = 0;
+	char *ttd = NULL;
+	unsigned int tts = 0;
 
     if ((rv = write_SInt32Number(p->deviceMfg, bp + 0)) != 0) {
 		sprintf(icp->err,"icmDescStruct_write: write_SInt32Number() failed");
@@ -7856,15 +8266,43 @@ static int icmDescStruct_write(
 	}
 	*bpp = bp += 20;
 
+	/* Make sure the ASCII device text is a minimum size of 1, as per the spec. */
+	ttd = p->device.desc;
+	tts = p->device.size;
+
+	if (p->device.size == 0) {
+		p->device.desc = "";
+		p->device.size = 1;
+	}
+
 	/* Write the device text description */
 	if ((rv = p->device.core_write(&p->device, bpp)) != 0) {
 		return rv;
+	}
+
+	p->device.desc = ttd;
+	p->device.size = tts;
+
+	/* Make sure the ASCII model text is a minimum size of 1, as per the spec. */
+	ttd = p->model.desc;
+	tts = p->model.size;
+
+	if (p->model.size == 0) {
+		p->model.desc = "";
+		p->model.size = 1;
 	}
 
 	/* Write the model text description */
 	if ((rv = p->model.core_write(&p->model, bpp)) != 0) {
 		return rv;
 	}
+
+	p->model.desc = ttd;
+	p->model.size = tts;
+
+	/* Make sure the ASCII model text is a minimum size of 1, as per the spec. */
+	ttd = p->device.desc;
+	tts = p->device.size;
 
 	return 0;
 }
@@ -7937,9 +8375,9 @@ static unsigned int icmProfileSequenceDesc_get_size(
 	icmProfileSequenceDesc *p = (icmProfileSequenceDesc *)pp;
 	unsigned int len = 0;
 	unsigned int i;
-	len += 12;				/* 8 bytes for tag, padding and count */
+	len = sat_add(len, 12);				/* 12 bytes for tag, padding and count */
 	for (i = 0; i < p->count; i++) {	/* All the description structures */
-		len += icmDescStruct_get_size(&p->data[i]);
+		len = sat_add(len, icmDescStruct_get_size(&p->data[i]));
 	}
 	return len;
 }
@@ -7947,12 +8385,12 @@ static unsigned int icmProfileSequenceDesc_get_size(
 /* read the object, return 0 on success, error code on fail */
 static int icmProfileSequenceDesc_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmProfileSequenceDesc *p = (icmProfileSequenceDesc *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	char *bp, *buf, *end;
 	int rv = 0;
 
@@ -8007,17 +8445,20 @@ static int icmProfileSequenceDesc_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmProfileSequenceDesc_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmProfileSequenceDesc *p = (icmProfileSequenceDesc *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmProfileSequenceDesc_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmProfileSequenceDesc_write malloc() failed");
 		return icp->errc = 2;
@@ -8071,7 +8512,7 @@ static void icmProfileSequenceDesc_dump(
 	op->gprintf(op,"ProfileSequenceDesc:\n");
 	op->gprintf(op,"  No. elements = %u\n",p->count);
 	if (verb >= 2) {
-		unsigned long i;
+		unsigned int i;
 		for (i = 0; i < p->count; i++)
 			icmDescStruct_dump(&p->data[i], op, verb-1, i);
 	}
@@ -8086,9 +8527,13 @@ static int icmProfileSequenceDesc_allocate(
 	unsigned int i;
 
 	if (p->count != p->_count) {
+		if (ovr_mul(p->count, sizeof(icmDescStruct))) {
+			sprintf(icp->err,"icmProfileSequenceDesc_allocate: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
-		if ((p->data = (icmDescStruct *) icp->al->malloc(icp->al, p->count * sizeof(icmDescStruct))) == NULL) {
+		if ((p->data = (icmDescStruct *) icp->al->calloc(icp->al, p->count, sizeof(icmDescStruct))) == NULL) {
 			sprintf(icp->err,"icmProfileSequenceDesc_allocate Allocation of DescStruct array failed");
 			return icp->errc = 2;
 		}
@@ -8145,16 +8590,16 @@ static unsigned int icmSignature_get_size(
 	icmBase *pp
 ) {
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += 4;			/* 4 for signature */
+	len = sat_add(len, 8);			/* 8 bytes for tag and padding */
+	len = sat_add(len, 4);			/* 4 for signature */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmSignature_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmSignature *p = (icmSignature *)pp;
 	icc *icp = p->icp;
@@ -8197,7 +8642,7 @@ static int icmSignature_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmSignature_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmSignature *p = (icmSignature *)pp;
 	icc *icp = p->icp;
@@ -8206,7 +8651,10 @@ static int icmSignature_write(
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmSignature_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmSignature_write malloc() failed");
 		return icp->errc = 2;
@@ -8321,21 +8769,21 @@ static unsigned int icmScreening_get_size(
 ) {
 	icmScreening *p = (icmScreening *)pp;
 	unsigned int len = 0;
-	len += 16;				/* 16 bytes for tag, padding, flag & channeles */
-	len += p->channels * 12;	/* 12 bytes for each channel */
+	len = sat_add(len, 16);					/* 16 bytes for tag, padding, flag & channeles */
+	len = sat_addmul(len, p->channels, 12);	/* 12 bytes for each channel */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmScreening_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmScreening *p = (icmScreening *)pp;
 	icc *icp = p->icp;
 	int rv = 0;
-	unsigned long i;
+	unsigned int i;
 	char *bp, *buf, *end;
 
 	if (len < 12) {
@@ -8376,7 +8824,7 @@ static int icmScreening_read(
 
 	/* Read all the data from the buffer */
 	for (i = 0; i < p->channels; i++, bp += 12) {
-		if ((bp + 12) > end) {
+		if (bp > end || 12 > (end - bp)) {
 			sprintf(icp->err,"icmScreening_read: Data too short to read Screening Data");
 			icp->al->free(icp->al, buf);
 			return icp->errc = 1;
@@ -8390,17 +8838,20 @@ static int icmScreening_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmScreening_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmScreening *p = (icmScreening *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmScreening_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmScreening_write malloc() failed");
 		return icp->errc = 2;
@@ -8461,7 +8912,7 @@ static void icmScreening_dump(
 	op->gprintf(op,"  Flags = %s\n", string_ScreenEncodings(p->screeningFlag));
 	op->gprintf(op,"  No. channels = %u\n",p->channels);
 	if (verb >= 2) {
-		unsigned long i;
+		unsigned int i;
 		for (i = 0; i < p->channels; i++) {
 			op->gprintf(op,"    %lu:\n",i);
 			op->gprintf(op,"      Frequency:  %f\n",p->data[i].frequency);
@@ -8479,6 +8930,10 @@ static int icmScreening_allocate(
 	icc *icp = p->icp;
 
 	if (p->channels != p->_channels) {
+		if (ovr_mul(p->channels, sizeof(icmScreeningData))) {
+			sprintf(icp->err,"icmScreening_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->data != NULL)
 			icp->al->free(icp->al, p->data);
 		if ((p->data = (icmScreeningData *) icp->al->malloc(icp->al, p->channels * sizeof(icmScreeningData))) == NULL) {
@@ -8531,22 +8986,22 @@ static unsigned int icmUcrBg_get_size(
 ) {
 	icmUcrBg *p = (icmUcrBg *)pp;
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += 4 + p->UCRcount * 2;	/* Undercolor Removal */
-	len += 4 + p->BGcount * 2;	/* Black Generation */
-	len += p->size;				/* Description string */
+	len = sat_add(len, 8);							/* 8 bytes for tag and padding */
+	len = sat_addaddmul(len, 4, p->UCRcount, 2);	/* Undercolor Removal */
+	len = sat_addaddmul(len, 4, p->BGcount, 2);		/* Black Generation */
+	len = sat_add(len, p->size);					/* Description string */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmUcrBg_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmUcrBg *p = (icmUcrBg *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	int rv = 0;
 	char *bp, *buf, *end;
 
@@ -8586,7 +9041,7 @@ static int icmUcrBg_read(
 			return rv;
 		}
 		for (i = 0; i < p->UCRcount; i++, bp += 2) {
-			if ((bp + 2) > end) {
+			if (bp > end || 2 > (end - bp)) {
 				sprintf(icp->err,"icmUcrBg_read: Data too short to read UCR Data");
 				icp->al->free(icp->al, buf);
 				return icp->errc = 1;
@@ -8600,7 +9055,7 @@ static int icmUcrBg_read(
 		p->UCRcurve = NULL;
 	}
 
-	if ((bp + 4) > end) {
+	if (bp > end || 4 > (end - bp)) {
 		sprintf(icp->err,"icmData_read: Data too short to read Black Gen count");
 		icp->al->free(icp->al, buf);
 		return icp->errc = 1;
@@ -8614,7 +9069,7 @@ static int icmUcrBg_read(
 			return rv;
 		}
 		for (i = 0; i < p->BGcount; i++, bp += 2) {
-			if ((bp + 2) > end) {
+			if (bp > end || 2 > (end - bp)) {
 				sprintf(icp->err,"icmUcrBg_read: Data too short to read BG Data");
 				icp->al->free(icp->al, buf);
 				return icp->errc = 1;
@@ -8653,17 +9108,20 @@ static int icmUcrBg_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmUcrBg_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmUcrBg *p = (icmUcrBg *)pp;
 	icc *icp = p->icp;
-	unsigned long i;
+	unsigned int i;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmUcrBg_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmUcrBg_write malloc() failed");
 		return icp->errc = 2;
@@ -8766,7 +9224,7 @@ static void icmUcrBg_dump(
 	} else {
 		op->gprintf(op,"  UCR curve no. elements = %u\n",p->UCRcount);
 		if (verb >= 2) {
-			unsigned long i;
+			unsigned int i;
 			for (i = 0; i < p->UCRcount; i++)
 				op->gprintf(op,"  %3lu:  %f\n",i,p->UCRcurve[i]);
 		}
@@ -8778,14 +9236,14 @@ static void icmUcrBg_dump(
 	} else {
 		op->gprintf(op,"  BG curve no. elements = %u\n",p->BGcount);
 		if (verb >= 2) {
-			unsigned long i;
+			unsigned int i;
 			for (i = 0; i < p->BGcount; i++)
 				op->gprintf(op,"  %3lu:  %f\n",i,p->BGcurve[i]);
 		}
 	}
 
 	{
-		unsigned long i, r, c, size;
+		unsigned int i, r, c, size;
 		op->gprintf(op,"  Description:\n");
 		op->gprintf(op,"    No. chars = %lu\n",p->size);
 	
@@ -8827,27 +9285,39 @@ static int icmUcrBg_allocate(
 	icc *icp = p->icp;
 
 	if (p->UCRcount != p->UCR_count) {
+		if (ovr_mul(p->UCRcount, sizeof(double))) {
+			sprintf(icp->err,"icmUcrBg_allocate: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->UCRcurve != NULL)
 			icp->al->free(icp->al, p->UCRcurve);
-		if ((p->UCRcurve = (double *) icp->al->malloc(icp->al, p->UCRcount * sizeof(double))) == NULL) {
+		if ((p->UCRcurve = (double *) icp->al->calloc(icp->al, p->UCRcount, sizeof(double))) == NULL) {
 			sprintf(icp->err,"icmUcrBg_allocate: malloc() of UCR curve data failed");
 			return icp->errc = 2;
 		}
 		p->UCR_count = p->UCRcount;
 	}
 	if (p->BGcount != p->BG_count) {
+		if (ovr_mul(p->BGcount, sizeof(double))) {
+			sprintf(icp->err,"icmUcrBg_allocate: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->BGcurve != NULL)
 			icp->al->free(icp->al, p->BGcurve);
-		if ((p->BGcurve = (double *) icp->al->malloc(icp->al, p->BGcount * sizeof(double))) == NULL) {
+		if ((p->BGcurve = (double *) icp->al->calloc(icp->al, p->BGcount, sizeof(double))) == NULL) {
 			sprintf(icp->err,"icmUcrBg_allocate: malloc() of BG curve data failed");
 			return icp->errc = 2;
 		}
 		p->BG_count = p->BGcount;
 	}
 	if (p->size != p->_size) {
+		if (ovr_mul(p->size, sizeof(char))) {
+			sprintf(icp->err,"icmUcrBg_allocate: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->string != NULL)
 			icp->al->free(icp->al, p->string);
-		if ((p->string = (char *) icp->al->malloc(icp->al, p->size * sizeof(char))) == NULL) {
+		if ((p->string = (char *) icp->al->calloc(icp->al, p->size, sizeof(char))) == NULL) {
 			sprintf(icp->err,"icmUcrBg_allocate: malloc() of string data failed");
 			return icp->errc = 2;
 		}
@@ -8902,30 +9372,30 @@ static unsigned int icmVideoCardGamma_get_size(
 	icmVideoCardGamma *p = (icmVideoCardGamma *)pp;
 	unsigned int len = 0;
 
-	len += 8;			/* 8 bytes for tag and padding */
-	len += 4;			/* 4 for gamma type */
+	len = sat_add(len, 8);			/* 8 bytes for tag and padding */
+	len = sat_add(len, 4);			/* 4 for gamma type */
 
 	/* compute size of remainder */
 	if (p->tagType == icmVideoCardGammaTableType) {
-		len += 2;       /* 2 bytes for channels */
-		len += 2;       /* 2 for entry count */
-		len += 2;       /* 2 for entry size */
-		len += ( p->u.table.channels *     /* compute table size */
-				 p->u.table.entryCount *
-				 p->u.table.entrySize );
+		len = sat_add(len, 2);       /* 2 bytes for channels */
+		len = sat_add(len, 2);       /* 2 for entry count */
+		len = sat_add(len, 2);       /* 2 for entry size */
+		len = sat_add(len, sat_mul3(p->u.table.channels, /* compute table size */
+		                            p->u.table.entryCount, p->u.table.entrySize));
 	}
 	else if (p->tagType == icmVideoCardGammaFormulaType) {
-		len += 12;		/* 4 bytes each for red gamma, min, & max */
-		len += 12;		/* 4 bytes each for green gamma, min & max */
-		len += 12;		/* 4 bytes each for blue gamma, min & max */
+		len = sat_add(len, 12);		/* 4 bytes each for red gamma, min, & max */
+		len = sat_add(len, 12);		/* 4 bytes each for green gamma, min & max */
+		len = sat_add(len, 12);		/* 4 bytes each for blue gamma, min & max */
 	}
 	return len;
 }
+
 /* read the object, return 0 on success, error code on fail */
 static int icmVideoCardGamma_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmVideoCardGamma *p = (icmVideoCardGamma *)pp;
 	icc *icp = p->icp;
@@ -8969,9 +9439,8 @@ static int icmVideoCardGamma_read(
 		p->u.table.channels   = read_UInt16Number(bp+12);
 		p->u.table.entryCount = read_UInt16Number(bp+14);
 		p->u.table.entrySize  = read_UInt16Number(bp+16);
-		if ((len-18) < (unsigned int)(p->u.table.channels
-		                            * p->u.table.entryCount
-		                            * p->u.table.entrySize)) {
+		if ((len-18) < sat_mul3(p->u.table.channels, p->u.table.entryCount,
+		                        p->u.table.entrySize)) {
 			sprintf(icp->err,"icmVideoCardGamma_read: Tag too small to be legal");
 			return icp->errc = 1;
 		}
@@ -9027,7 +9496,7 @@ static int icmVideoCardGamma_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmVideoCardGamma_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmVideoCardGamma *p = (icmVideoCardGamma *)pp;
 	icc *icp = p->icp;
@@ -9038,7 +9507,10 @@ static int icmVideoCardGamma_write(
 	ORD16 *pshort;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmViewingConditions_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmViewingConditions_write malloc() failed");
 		return icp->errc = 2;
@@ -9211,7 +9683,7 @@ static int icmVideoCardGamma_allocate(
 ) {
 	icmVideoCardGamma *p = (icmVideoCardGamma *)pp;
 	icc *icp = p->icp;
-	int size;
+	unsigned int size;
 
 	/* note: allocation is only relevant for table type
 	 * and in that case the channels, entryCount, and entrySize
@@ -9219,21 +9691,24 @@ static int icmVideoCardGamma_allocate(
 	 */
 
 	if (p->tagType == icmVideoCardGammaTableType) {
-		if (p->u.table.data != NULL)
-			icp->al->free(icp->al, p->u.table.data);
-		size = (p->u.table.channels *
-				p->u.table.entryCount);
+		size = sat_mul(p->u.table.channels, p->u.table.entryCount);
 		switch (p->u.table.entrySize) {
-		case 1:
-			size *= sizeof(ORD8);
-			break;
-		case 2:
-			size *= sizeof(unsigned short);
-			break;
-		default:
-			sprintf(icp->err,"icmVideoCardGamma_alloc: unsupported table entry size");
+			case 1:
+				size = sat_mul(size, sizeof(ORD8));
+				break;
+			case 2:
+				size = sat_mul(size, sizeof(unsigned short));
+				break;
+			default:
+				sprintf(icp->err,"icmVideoCardGamma_alloc: unsupported table entry size");
+				return icp->errc = 1;
+		}
+		if (size == UINT_MAX) {
+			sprintf(icp->err,"icmVideoCardGamma_alloc: size overflow");
 			return icp->errc = 1;
 		}
+		if (p->u.table.data != NULL)
+			icp->al->free(icp->al, p->u.table.data);
 		if ((p->u.table.data = (void*) icp->al->malloc(icp->al, size)) == NULL) {
 			sprintf(icp->err,"icmVideoCardGamma_alloc: malloc() of table data failed");
 			return icp->errc = 2;
@@ -9260,7 +9735,7 @@ static double icmVideoCardGamma_lookup(
 		ov = iv;
 	} else if (p->tagType == icmVideoCardGammaTableType) {
 		/* Use linear interpolation */
-		int ix;
+		unsigned int ix;
 		double val0, val1, w;
 		double inputEnt_1 = (double)(p->u.table.entryCount-1);
 
@@ -9269,7 +9744,7 @@ static double icmVideoCardGamma_lookup(
 			val0 = 0.0;
 		else if (val0 > inputEnt_1)
 			val0 = inputEnt_1;
-		ix = (int)floor(val0);		/* Coordinate */
+		ix = (unsigned int)floor(val0);		/* Coordinate */
 		if (ix > (p->u.table.entryCount-2))
 			ix = (p->u.table.entryCount-2);
 		w = val0 - (double)ix;		/* weight */
@@ -9349,18 +9824,18 @@ static unsigned int icmViewingConditions_get_size(
 	icmBase *pp
 ) {
 	unsigned int len = 0;
-	len += 8;			/* 8 bytes for tag and padding */
-	len += 12;			/* 12 for XYZ of illuminant */
-	len += 12;			/* 12 for XYZ of surround */
-	len += 4;			/* 4 for illuminant type */
+	len = sat_add(len, 8);			/* 8 bytes for tag and padding */
+	len = sat_add(len, 12);			/* 12 for XYZ of illuminant */
+	len = sat_add(len, 12);			/* 12 for XYZ of surround */
+	len = sat_add(len, 4);			/* 4 for illuminant type */
 	return len;
 }
 
 /* read the object, return 0 on success, error code on fail */
 static int icmViewingConditions_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmViewingConditions *p = (icmViewingConditions *)pp;
 	icc *icp = p->icp;
@@ -9418,7 +9893,7 @@ static int icmViewingConditions_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmViewingConditions_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmViewingConditions *p = (icmViewingConditions *)pp;
 	icc *icp = p->icp;
@@ -9427,7 +9902,10 @@ static int icmViewingConditions_write(
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmViewingConditions_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmViewingConditions_write malloc() failed");
 		return icp->errc = 2;
@@ -9537,10 +10015,10 @@ static unsigned int icmCrdInfo_get_size(
 ) {
 	icmCrdInfo *p = (icmCrdInfo *)pp;
 	unsigned int len = 0, t;
-	len += 8;				/* 8 bytes for tag and padding */
-	len += 4 + p->ppsize;	/* Postscript product name */
+	len = sat_add(len, 8);				/* 8 bytes for tag and padding */
+	len = sat_addadd(len, 4, p->ppsize);	/* Postscript product name */
 	for (t = 0; t < 4; t++) {	/* For all 4 intents */
-		len += 4 + p->crdsize[t];	/* crd names */ 
+		len = sat_addadd(len, 4, p->crdsize[t]);	/* crd names */ 
 	}
 	return len;
 }
@@ -9548,12 +10026,12 @@ static unsigned int icmCrdInfo_get_size(
 /* read the object, return 0 on success, error code on fail */
 static int icmCrdInfo_read(
 	icmBase *pp,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icmCrdInfo *p = (icmCrdInfo *)pp;
 	icc *icp = p->icp;
-	unsigned long t;
+	unsigned int t;
 	int rv = 0;
 	char *bp, *buf, *end;
 
@@ -9587,7 +10065,7 @@ static int icmCrdInfo_read(
 	bp = bp + 8;
 
 	/* Postscript product name */
-	if ((bp + 4) > end) {
+	if (bp > end || 4 > (end - bp)) {
 		sprintf(icp->err,"icmCrdInfo_read: Data too short to read Postscript product name");
 		icp->al->free(icp->al, buf);
 		return icp->errc = 1;
@@ -9595,7 +10073,7 @@ static int icmCrdInfo_read(
 	p->ppsize = read_UInt32Number(bp);
 	bp += 4;
 	if (p->ppsize > 0) {
-		if ((bp + p->ppsize) > end) {
+		if (p->ppsize > (end - bp)) {
 			sprintf(icp->err,"icmCrdInfo_read: Data to short to read Postscript product string");
 			icp->al->free(icp->al, buf);
 			return icp->errc = 1;
@@ -9615,21 +10093,21 @@ static int icmCrdInfo_read(
 	
 	/* CRD names for the four rendering intents */
 	for (t = 0; t < 4; t++) {	/* For all 4 intents */
-		if ((bp + 4) > end) {
-			sprintf(icp->err,"icmCrdInfo_read: Data too short to read CRD%ld name",t);
+		if (bp > end || 4 > (end - bp)) {
+			sprintf(icp->err,"icmCrdInfo_read: Data too short to read CRD%d name",t);
 			icp->al->free(icp->al, buf);
 			return icp->errc = 1;
 		}
 		p->crdsize[t] = read_UInt32Number(bp);
 		bp += 4;
 		if (p->crdsize[t] > 0) {
-			if ((bp + p->crdsize[t]) > end) {
-				sprintf(icp->err,"icmCrdInfo_read: Data to short to read CRD%ld string",t);
+			if (p->crdsize[t] > (end - bp)) {
+				sprintf(icp->err,"icmCrdInfo_read: Data to short to read CRD%d string",t);
 				icp->al->free(icp->al, buf);
 				return icp->errc = 1;
 			}
 			if (check_null_string(bp,p->crdsize[t])) {
-				sprintf(icp->err,"icmCrdInfo_read: CRD%ld name is not terminated",t);
+				sprintf(icp->err,"icmCrdInfo_read: CRD%d name is not terminated",t);
 				icp->al->free(icp->al, buf);
 				return icp->errc = 1;
 			}
@@ -9649,17 +10127,20 @@ static int icmCrdInfo_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmCrdInfo_write(
 	icmBase *pp,
-	unsigned long of			/* File offset to write from */
+	unsigned int of			/* File offset to write from */
 ) {
 	icmCrdInfo *p = (icmCrdInfo *)pp;
 	icc *icp = p->icp;
-	unsigned long t;
+	unsigned int t;
 	unsigned int len;
 	char *bp, *buf;		/* Buffer to write from */
 	int rv = 0;
 
 	/* Allocate a file write buffer */
-	len = p->get_size((icmBase *)p);
+	if ((len = p->get_size((icmBase *)p)) == UINT_MAX) {
+		sprintf(icp->err,"icmCrdInfo_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->malloc(icp->al, len)) == NULL) {
 		sprintf(icp->err,"icmCrdInfo_write malloc() failed");
 		return icp->errc = 2;
@@ -9702,7 +10183,7 @@ static int icmCrdInfo_write(
 		bp += 4;
 		if (p->ppsize > 0) {
 			if ((rv = check_null_string(p->crdname[t],p->crdsize[t])) != 0) {
-				sprintf(icp->err,"icmCrdInfo_write: CRD%ld name is not terminated",t);
+				sprintf(icp->err,"icmCrdInfo_write: CRD%d name is not terminated",t);
 				icp->al->free(icp->al, buf);
 				return icp->errc = 1;
 			}
@@ -9729,7 +10210,7 @@ static void icmCrdInfo_dump(
 	int   verb		/* Verbosity level */
 ) {
 	icmCrdInfo *p = (icmCrdInfo *)pp;
-	unsigned long i, r, c, size, t;
+	unsigned int i, r, c, size, t;
 
 	if (verb <= 0)
 		return;
@@ -9810,9 +10291,13 @@ static int icmCrdInfo_allocate(
 	unsigned int t;
 
 	if (p->ppsize != p->_ppsize) {
+		if (ovr_mul(p->ppsize, sizeof(char))) {
+			sprintf(icp->err,"icmCrdInfo_alloc: size overflow");
+			return icp->errc = 1;
+		}
 		if (p->ppname != NULL)
 			icp->al->free(icp->al, p->ppname);
-		if ((p->ppname = (char *) icp->al->malloc(icp->al, p->ppsize * sizeof(char))) == NULL) {
+		if ((p->ppname = (char *) icp->al->calloc(icp->al, p->ppsize, sizeof(char))) == NULL) {
 			sprintf(icp->err,"icmCrdInfo_alloc: malloc() of string data failed");
 			return icp->errc = 2;
 		}
@@ -9820,9 +10305,13 @@ static int icmCrdInfo_allocate(
 	}
 	for (t = 0; t < 4; t++) {	/* For all 4 intents */
 		if (p->crdsize[t] != p->_crdsize[t]) {
+			if (ovr_mul(p->crdsize[t], sizeof(char))) {
+				sprintf(icp->err,"icmCrdInfo_alloc: size overflow");
+				return icp->errc = 1;
+			}
 			if (p->crdname[t] != NULL)
 				icp->al->free(icp->al, p->crdname[t]);
-			if ((p->crdname[t] = (char *) icp->al->malloc(icp->al, p->crdsize[t] * sizeof(char))) == NULL) {
+			if ((p->crdname[t] = (char *) icp->al->calloc(icp->al, p->crdsize[t], sizeof(char))) == NULL) {
 				sprintf(icp->err,"icmCrdInfo_alloc: malloc() of CRD%d name string failed",t);
 				return icp->errc = 2;
 			}
@@ -9883,8 +10372,8 @@ static unsigned int icmHeader_get_size(
 /* read the object, return 0 on success, error code on fail */
 static int icmHeader_read(
 	icmHeader *p,
-	unsigned long len,		/* tag length */
-	unsigned long of		/* start offset within file */
+	unsigned int len,		/* tag length */
+	unsigned int of		/* start offset within file */
 ) {
 	icc *icp = p->icp;
 	char *buf;
@@ -9917,6 +10406,11 @@ static int icmHeader_read(
 
 	/* Fill in the in-memory structure */
 	p->size  = read_UInt32Number(buf + 0);	/* Profile size in bytes */
+	if (p->size < (128 + 4)) {
+		sprintf(icp->err,"icmHeader_read: file size %d too small to be legal",p->size);
+		icp->al->free(icp->al, buf);
+		return icp->errc = 1;
+	}
     p->cmmId = read_SInt32Number(buf + 4);	/* CMM for profile */
 	tt       = read_UInt8Number(buf + 8);	/* Raw major version number */
     p->majv  = (tt >> 4) * 10 + (tt & 0xf);	/* Integer major version number */
@@ -9967,7 +10461,7 @@ static int icmHeader_read(
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
 static int icmHeader_write(
 	icmHeader *p,
-	unsigned long of,		/* File offset to write from */
+	unsigned int of,		/* File offset to write from */
 	int doid				/* Flag, nz = writing to compute ID */
 ) {
 	icc *icp = p->icp;
@@ -9976,7 +10470,11 @@ static int icmHeader_write(
 	unsigned int tt;
 	int rv = 0;
 
-	len = p->get_size(p);
+	/* Allocate a file write buffer */
+	if ((len = p->get_size(p)) == UINT_MAX) {
+		sprintf(icp->err,"icmHeader_write get_size overflow");
+		return icp->errc = 1;
+	}
 	if ((buf = (char *) icp->al->calloc(icp->al,1,len)) == NULL) {	/* Zero it - some CMS are fussy */
 		sprintf(icp->err,"icmHeader_write calloc() failed");
 		return icp->errc = 2;
@@ -10534,11 +11032,12 @@ static int check_icc_legal(
 static int icc_read_x(
 	icc *p,
 	icmFile *fp,			/* File to read from */
-	unsigned long of,		/* File offset to read from */
+	unsigned int of,		/* File offset to read from */
 	int take_fp				/* NZ if icc is to take ownership of fp */
 ) {
 	char tcbuf[4];			/* Tag count read buffer */
 	unsigned int i, len;
+	unsigned int minoff, maxoff;		/* Minimum and maximum offsets of tag data */
 	int er = 0;				/* Error code */
 	
 	p->fp = fp;
@@ -10561,23 +11060,39 @@ static int icc_read_x(
 		sprintf(p->err,"icc_read: fseek() or fread() failed on tag count");
 		return p->errc = 1;
 	}
+	p->count = read_UInt32Number(tcbuf);
 
-	p->count = read_UInt32Number(tcbuf);		/* Tag count */
+	/* Sanity check it */
+	if (p->count > 357913940	/* (2^32-5)/12 */
+	 || (p->count > ((p->header->size - 128 - 4) / 12))) {
+		sprintf(p->err,"icc_read: tag count %d is too large to be legal",p->count);
+		return p->errc = 1;
+	}
+	minoff = 128 + 4 + p->count * 12;
+	maxoff = p->header->size;
+
 	if (p->count > 0) {
 		char *bp, *buf;
-		if ((p->data = (icmTag *) p->al->malloc(p->al, p->count * sizeof(icmTag))) == NULL) {
+
+		if (ovr_mul(p->count, sizeof(icmTag))) {
+			sprintf(p->err,"icc_read: size overflow");
+			return p->errc = 1;
+		}
+
+		/* Read the table into memory */
+		if ((p->data = (icmTag *) p->al->calloc(p->al, p->count, sizeof(icmTag))) == NULL) {
 			sprintf(p->err,"icc_read: Tag table malloc() failed");
 			return p->errc = 2;
 		}
 	
-		len = 4 + p->count * 12;
+		len = sat_mul(p->count, 12);
 		if ((buf = (char *) p->al->malloc(p->al, len)) == NULL) {
 			sprintf(p->err,"icc_read: Tag table read buffer malloc() failed");
 			p->al->free(p->al, p->data);
 			p->data = NULL;
 			return p->errc = 2;
 		}
-		if (   p->fp->seek(p->fp, of + 128) != 0
+		if (   p->fp->seek(p->fp, of + 128 + 4) != 0
 		    || p->fp->read(p->fp, buf, 1, len) != len) {
 			sprintf(p->err,"icc_read: fseek() or fread() failed on tag table");
 			p->al->free(p->al, p->data);
@@ -10586,24 +11101,42 @@ static int icc_read_x(
 			return p->errc = 1;
 		}
 
-		/* Fill in the tag table structure */
-		bp = buf+4;
-		for (i = 0; i < p->count; i++, bp += 12) {
+		/* Fill in the tag table structure for each tag */
+		for (bp = buf, i = 0; i < p->count; i++, bp += 12) {
 	    	p->data[i].sig = (icTagSignature)read_SInt32Number(bp + 0);	
 	    	p->data[i].offset = read_UInt32Number(bp + 4);
 	    	p->data[i].size = read_UInt32Number(bp + 8);	
+		}
+		p->al->free(p->al, buf);
+
+		/* Check that each tag lies within the nominated space available, */
+		/* and has a reasonable size. */
+		for (i = 0; i < p->count; i++) {
+			if (p->data[i].offset < minoff
+			 || p->data[i].offset > maxoff
+			 || p->data[i].size < 4
+			 || p->data[i].size > (maxoff - minoff)
+			 || (p->data[i].offset + p->data[i].size) < p->data[i].offset	/* Overflow */
+			 || (p->data[i].offset + p->data[i].size) > p->header->size) {
+				sprintf(p->err,"icc_read: tag %d is out of range of the nominated file size",i);
+				p->al->free(p->al, p->data);
+				p->data = NULL;
+				return p->errc = 1;
+			}
+		}
+
+		/* Read each tag type */
+		for (i = 0; i < p->count; i++) {
 			if (   p->fp->seek(p->fp, of + p->data[i].offset) != 0
 			    || p->fp->read(p->fp, tcbuf, 1, 4) != 4) {
 				sprintf(p->err,"icc_read: fseek() or fread() failed on tag headers");
 				p->al->free(p->al, p->data);
 				p->data = NULL;
-				p->al->free(p->al, buf);
 				return p->errc = 1;
 			}
 	    	p->data[i].ttype = (icTagTypeSignature) read_SInt32Number(tcbuf);	/* Tag type */
 	    	p->data[i].objp = NULL;							/* Read on demand */
 		}
-		p->al->free(p->al, buf);
 	}	/* p->count > 0 */
 
 	return er;
@@ -10615,7 +11148,7 @@ static int icc_read_x(
 static int icc_read(
 	icc *p,
 	icmFile *fp,			/* File to read from */
-	unsigned long of		/* File offset to read from */
+	unsigned int of		/* File offset to read from */
 ) {
 	return icc_read_x(p, fp, of, 0);
 }
@@ -10636,7 +11169,7 @@ static int icc_check_id(
 		sprintf(p->err,"icc_check_id: No header defined");
 		return p->errc = 3;
 	}
-	len = p->header->size;
+	len = p->header->size;		/* Claimed size of profile */
 
 	/* See if there is an ID to compare against */
 	for (len = 0; len < 16; len++) {
@@ -10701,11 +11234,6 @@ static int icc_check_id(
 	return 2;			/* Didn't match */
 }
 
-/* Forced byte alignment for tag table and tags */
-
-#define ALIGN_SIZE 4
-#define DO_ALIGN(val) (((val) + (ALIGN_SIZE-1)) & ~(ALIGN_SIZE-1))
-
 /* Return the total size needed for the profile */
 /* Return 0 on error. */
 static unsigned int icc_get_size(
@@ -10727,11 +11255,16 @@ static unsigned int icc_get_size(
 		return 0;
 	}
 
-	size += p->header->get_size(p->header);
+	size = sat_add(size, p->header->get_size(p->header));
 	/* Assume header is aligned */
-	size += 4 + p->count * 12;	/* Tag table length */
-	size = DO_ALIGN(size);
-	
+	size = sat_addaddmul(size, 4, p->count, 12);	/* Tag table length */
+	size = sat_align(ALIGN_SIZE, size);
+
+	if (size == UINT_MAX) {
+		sprintf(p->err,"icc_get_size: size overflow");
+		return p->errc = 1;
+	}
+
 	/* Reset touched flag for each tag type */
 	for (i = 0; i < p->count; i++) {
 		if (p->data[i].objp == NULL) {
@@ -10744,13 +11277,13 @@ static unsigned int icc_get_size(
 	/* Get size for each tag type, skipping links */
 	for (i = 0; i < p->count; i++) {
 		if (p->data[i].objp->touched == 0) { /* Not alllowed for previously */
-			size += p->data[i].objp->get_size(p->data[i].objp);
-			size = DO_ALIGN(size);
+			size = sat_add(size, p->data[i].objp->get_size(p->data[i].objp));
+			size = sat_align(ALIGN_SIZE, size);
 			p->data[i].objp->touched = 1;	/* Don't account for this again */
 		}
 	}
 
-	return size;	/* Total size needed */
+	return size;	/* Total size needed, or UINT_MAX if overflow */
 }
 
 /* Write the contents of the object. Return 0 on sucess, error code on failure */
@@ -10758,7 +11291,7 @@ static unsigned int icc_get_size(
 static int icc_write_x(
 	icc *p,
 	icmFile *fp,		/* File to write to */
-	unsigned long of,	/* File offset to write to */
+	unsigned int of,	/* File offset to write to */
 	int take_fp			/* NZ if icc is to take ownership of fp */
 ) {
 	char *bp, *buf;		/* tag table buffer */
@@ -10786,13 +11319,17 @@ static int icc_write_x(
 		return p->errc = 1;
 	}
 
-	size += p->header->get_size(p->header);
+	size = sat_add(size, p->header->get_size(p->header));
 	/* Assume header is aligned */
-
-	len = 4 + p->count * 12;	/* Tag table length */
-	len = DO_ALIGN(size + len) - size;	/* Aligned size */
-	size = DO_ALIGN(size + len);
+	len = sat_addmul(4, p->count, 12);	/* Tag table length */
+	len = sat_sub(sat_align(ALIGN_SIZE, sat_add(size, len)), size);	/* Aligned size */
+	size = sat_align(ALIGN_SIZE, sat_add(size, len));
 	
+	if (len == UINT_MAX) {
+		sprintf(p->err,"icc_write get_size overflow");
+		return p->errc = 1;
+	}
+
 	/* Allocate memory buffer for tag table */
 	if ((buf = (char *) p->al->calloc(p->al, 1, len)) == NULL) {
 		sprintf(p->err,"icc_write calloc() failed");
@@ -10821,10 +11358,14 @@ static int icc_write_x(
 		if (p->data[i].objp->touched == 0) {	/* Allocate space for tag type */
 			p->data[i].offset = size;			/* Profile relative target */
 			p->data[i].size = p->data[i].objp->get_size(p->data[i].objp);
-			size += p->data[i].size;
-			p->data[i].pad = DO_ALIGN(size) - size;
-			size = DO_ALIGN(size);
+			size = sat_add(size, p->data[i].size);
+			p->data[i].pad = sat_sub(sat_align(ALIGN_SIZE, size), size);
+			size = sat_align(ALIGN_SIZE, size);
 			p->data[i].objp->touched = 1;	/* Allocated space for it */
+			if (size == UINT_MAX) {
+				sprintf(p->err,"icc_write: size overflow");
+				return p->errc = 1;
+			}
 		} else { /* must be linked - copy allocation */
 			unsigned int k;
 			for (k = 0; k < p->count; k++) {	/* Find linked tag */
@@ -10990,13 +11531,10 @@ static int icc_write_x(
 static int icc_write(
 	icc *p,
 	icmFile *fp,		/* File to write to */
-	unsigned long of	/* File offset to write to */
+	unsigned int of	/* File offset to write to */
 ) {
 	return icc_write_x(p, fp, of, 0);
 }
-
-#undef ALIGN_SIZE
-#undef DO_ALIGN
 
 /* Create and add a tag with the given signature. */
 /* Returns a pointer to the element object */
@@ -11047,7 +11585,7 @@ static icmBase *icc_add_tag(
 		}
 	}
 
-	/* Check that this tag doesn't already exits */
+	/* Check that this tag doesn't already exist */
 	/* (Perhaps we should simply replace it, rather than erroring ?) */
 	for (j = 0; j < p->count; j++) {
 		if (p->data[j].sig == sig) {
@@ -11058,6 +11596,11 @@ static icmBase *icc_add_tag(
 	}
 
 	/* Make space in tag table for new tag item */
+	if (ovr_mul(sat_add(p->count,1), sizeof(icmTag))) {
+		sprintf(p->err,"icc_add_tag: size overflow");
+		p->errc = 1;
+		return NULL;
+	}
 	if (p->data == NULL)
 		tp = (icmBase *)p->al->malloc(p->al, (p->count+1) * sizeof(icmTag));
 	else
@@ -11469,16 +12012,17 @@ static void icc_delete(
 		(p->header->del)(p->header);
 
 	/* Free up the tag data objects */
-	for (i = 0; i < p->count; i++) {
-		if (p->data[i].objp != NULL) {
-			if (--(p->data[i].objp->refcount) == 0)	/* decrement reference count */
-				(p->data[i].objp->del)(p->data[i].objp);	/* Last reference */
-	  	  	p->data[i].objp = NULL;
+	if (p->data != NULL) {
+		for (i = 0; i < p->count; i++) {
+			if (p->data[i].objp != NULL) {
+				if (--(p->data[i].objp->refcount) == 0)	/* decrement reference count */
+					(p->data[i].objp->del)(p->data[i].objp);	/* Last reference */
+		  	  	p->data[i].objp = NULL;
+			}
 		}
+		/* Free tag table */
+		al->free(al, p->data);
 	}
-
-	/* Free tag table */
-	al->free(al, p->data);
 
 	/* We are responsible for deleting the file object */
 	if (p->del_fp && p->fp != NULL)
@@ -12242,6 +12786,25 @@ double in[3][3]
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Transpose a 3x3 matrix */
+void icmTranspose3x3(double out[3][3], double in[3][3]) {
+	int i, j;
+	if (out != in) {
+		for (i = 0; i < 3; i++)
+			for (j = 0; j < 3; j++)
+				out[i][j] = in[j][i];
+	} else {
+		double tt[3][3];
+		for (i = 0; i < 3; i++)
+			for (j = 0; j < 3; j++)
+				tt[i][j] = in[j][i];
+		for (i = 0; i < 3; i++)
+			for (j = 0; j < 3; j++)
+				out[i][j] = tt[i][j];
+	}
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Compute the dot product of two 3 vectors */
 double icmDot3(double in1[3], double in2[3]) {
 	return in1[0] * in2[0] + in1[1] * in2[1] + in1[2] * in2[2];
@@ -12275,6 +12838,13 @@ void icmScale3(double out[3], double in[3], double rat) {
 	out[0] = in[0] * rat;
 	out[1] = in[1] * rat;
 	out[2] = in[2] * rat;
+}
+
+/* Compute a blend between in0 and in1 */
+void icmBlend3(double out[3], double in0[3], double in1[3], double bf) {
+	out[0] = (1.0 - bf) * in0[0] + bf * in1[0];
+	out[1] = (1.0 - bf) * in0[1] + bf * in1[1];
+	out[2] = (1.0 - bf) * in0[2] + bf * in1[2];
 }
 
 /* Normalise a 3 vector to the given length. Return nz if not normalisable */
@@ -12312,7 +12882,7 @@ double icmNorm33(double in1[3], double in0[3]) {
 	return sqrt(rv);
 }
 
-/* Scale a two point vector by the given ratio */
+/* Scale a two point vector by the given ratio. in0[] is the origin */
 void icmScale33(double out[3], double in1[3], double in0[3], double rat) {
 	out[0] = in0[0] + (in1[0] - in0[0]) * rat;
 	out[1] = in0[1] + (in1[1] - in0[1]) * rat;
@@ -12344,8 +12914,7 @@ int icmNormalize33(double out[3], double in1[3], double in0[3], double len) {
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Given two 3D points, create a matrix that rotates */
 /* and scales one onto the other about the origin 0,0,0. */
-/* The maths is from page 52 of Tomas Moller and Eric Haines */
-/* "Real-Time Rendering". */
+/* The maths is from page 52 of Tomas Moller and Eric Haines "Real-Time Rendering". */
 /* s is source vector, t is target vector. */
 /* Usage of icmRotMat: */
 /*	t[0] == mat[0][0] * s[0] + mat[0][1] * s[1] + mat[0][2] * s[2]; */
@@ -12419,6 +12988,30 @@ void icmRotMat(double m[3][3], double s[3], double t[3]) {
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Multiply 2 array by 2x2 transform matrix */
+void icmMulBy2x2(double out[2], double mat[2][2], double in[2]) {
+	double tt[2];
+
+	tt[0] = mat[0][0] * in[0] + mat[0][1] * in[1];
+	tt[1] = mat[1][0] * in[0] + mat[1][1] * in[1];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Copy a 3x4 transform matrix */
+void icmCpy3x4(double dst[3][4], double src[3][4]) {
+	int i, j;
+
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 4; i++)
+			dst[j][i] = src[j][i];
+	}
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Multiply 3 array by 3x4 transform matrix */
 void icmMul3By3x4(double out[3], double mat[3][4], double in[3]) {
@@ -12471,6 +13064,154 @@ void icmVecRotMat(double m[3][4], double s1[3], double s0[3], double t1[3], doub
 				m[j][i] = 0.0;
 		}
 	}
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Compute the 3D intersection of a vector and a plane */
+/* return nz if there is no intersection */
+int icmVecPlaneIsect(double isect[3], double pl_const, double pl_norm[3], double ve_1[3], double ve_0[3]) {
+	double den;			/* denominator */
+	double rv;			/* Vector parameter value */
+	double vvec[3];		/* Vector vector */
+	double ival[3];		/* Intersection value */
+
+	/* Compute vector between the two points */
+	vvec[0] = ve_1[0] - ve_0[0];
+	vvec[1] = ve_1[1] - ve_0[1];
+	vvec[2] = ve_1[2] - ve_0[2];
+
+	/* Compute the denominator */
+	den = pl_norm[0] * vvec[0] + pl_norm[1] * vvec[1] + pl_norm[2] * vvec[2];
+
+	/* Too small to intersect ? */
+	if (fabs(den) < 1e-12) {
+		return 1;
+	}
+
+	/* Compute the parameterized intersction point */
+	rv = -(pl_norm[0] * ve_0[0] + pl_norm[1] * ve_0[1] + pl_norm[2] * ve_0[2] + pl_const)/den;
+
+	/* Compute the actual intersection point */
+	isect[0] = ve_0[0] + rv * vvec[0];
+	isect[1] = ve_0[1] + rv * vvec[1];
+	isect[2] = ve_0[2] + rv * vvec[2];
+
+	return 0;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Compute the closest points between two lines a and b. */
+/* Return closest points and parameter values if not NULL. */
+/* Return nz if they are paralel. */
+/* The maths is from page 338 of Tomas Moller and Eric Haines "Real-Time Rendering". */
+int icmLineLineClosest(double ca[3], double cb[3], double *pa, double * pb,
+                       double la0[3], double la1[3], double lb0[3], double lb1[3]) {
+	double va[3], vb[3];
+	double vvab[3], vvabns;		/* Cross product of va and vb and its norm squared */
+	double vba0[3];				/* lb0 - la0 */
+	double tt[3];
+	double a, b;				/* Parameter values */
+
+	icmSub3(va, la1, la0);
+	icmSub3(vb, lb1, lb0);
+	icmCross3(vvab, va, vb);
+	vvabns = icmNorm3sq(vvab);
+
+	if (vvabns < 1e-12)
+		return 1;
+
+	icmSub3(vba0, lb0, la0);
+	icmCross3(tt, vba0, vb);
+	a = icmDot3(tt, vvab) / vvabns;
+
+	icmCross3(tt, vba0, va);
+	b = icmDot3(tt, vvab) / vvabns;
+
+	if (pa != NULL)
+		*pa = a;
+
+	if (pb != NULL)
+		*pb = b;
+
+	if (ca != NULL) {
+		ca[0] = la0[0] + a * va[0];
+		ca[1] = la0[1] + a * va[1];
+		ca[2] = la0[2] + a * va[2];
+	}
+
+	if (cb != NULL) {
+		cb[0] = lb0[0] + b * vb[0];
+		cb[1] = lb0[1] + b * vb[1];
+		cb[2] = lb0[2] + b * vb[2];
+	}
+
+#ifdef NEVER	/* Verify  */
+	{
+		double vab[3];		/* Vector from ca to cb */
+
+		vab[0] = lb0[0] + b * vb[0] - la0[0] - a * va[0];
+		vab[1] = lb0[1] + b * vb[1] - la0[1] - a * va[1];
+		vab[2] = lb0[2] + b * vb[2] - la0[2] - a * va[2];
+		
+		if (icmDot3(va, vab) > 1e-6
+		 || icmDot3(vb, vab) > 1e-6)
+			warning("icmLineLineClosest verify failed\n");
+	}
+#endif
+
+	return 0;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Given 3 3D points, compute a plane equation. */
+/* The normal will be right handed given the order of the points */
+/* The plane equation will be the 3 normal components and the constant. */
+/* Return nz if any points are cooincident or co-linear */
+int icmPlaneEqn3(double eq[4], double p0[3], double p1[3], double p2[3]) {
+	double ll, v1[3], v2[3];
+
+	/* Compute vectors along edges */
+	v2[0] = p1[0] - p0[0];
+	v2[1] = p1[1] - p0[1];
+	v2[2] = p1[2] - p0[2];
+
+	v1[0] = p2[0] - p0[0];
+	v1[1] = p2[1] - p0[1];
+	v1[2] = p2[2] - p0[2];
+
+	/* Compute cross products v1 x v2, which will be the normal */
+	eq[0] = v1[1] * v2[2] - v1[2] * v2[1];
+	eq[1] = v1[2] * v2[0] - v1[0] * v2[2];
+	eq[2] = v1[0] * v2[1] - v1[1] * v2[0];
+
+	/* Normalise the equation */
+	ll = sqrt(eq[0] * eq[0] + eq[1] * eq[1] + eq[2] * eq[2]);
+	if (ll < 1e-10) {
+		return 1;
+	}
+	eq[0] /= ll;
+	eq[1] /= ll;
+	eq[2] /= ll;
+
+	/* Compute the plane equation constant */
+	eq[3] = - (eq[0] * p0[0])
+	        - (eq[1] * p0[1])
+	        - (eq[2] * p0[2]);
+
+	return 0;
+}
+
+/* Given a 3D point and a plane equation, return the signed */
+/* distance from the plane */
+double icmPlaneDist3(double eq[4], double p[3]) {
+	double rv;
+
+	rv = eq[0] * p[0]
+	   + eq[1] * p[1]
+	   + eq[2] * p[2]
+	   + eq[3];
+
+	return rv;
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -12676,19 +13417,126 @@ extern ICCLIB_API void icmLuv2XYZ(icmXYZNumber *w, double *out, double *in) {
 	out[2] = Z;
 }
 
+/* NOTE :- none of the following seven have been protected */
+/* against arithmmetic issues (ie. for black) */
+
+/* CIE XYZ to perceptual CIE 1976 UCS diagram Yu'v'*/
+/* (Yu'v' is a better chromaticity space than Yxy) */
+extern ICCLIB_API void icmXYZ21976UCS(double *out, double *in) {
+	double X = in[0], Y = in[1], Z = in[2];
+	double den, u, v;
+
+	den = (X + 15.0 * Y + 3.0 * Z);
+	u = (4.0 * X) / den;
+	v = (9.0 * Y) / den;
+	
+	out[0] = Y;
+	out[1] = u;
+	out[2] = v;
+}
+
+/* Perceptual CIE 1976 UCS diagram Yu'v' to CIE XYZ */
+extern ICCLIB_API void icm1976UCS2XYZ(double *out, double *in) {
+	double u, v, fl, fu, fv, sum, X, Y, Z;
+
+	Y = in[0];
+	u = in[1];
+	v = in[2];
+
+	X = ((9.0 * u * Y)/(4.0 * v));
+	Z = -(((20.0 * v + 3.0 * u - 12.0) * Y)/(4.0 * v));
+
+	out[0] = X;
+	out[1] = Y;
+	out[2] = Z;
+}
+
 /* CIE XYZ to perceptual CIE 1960 UCS */
-extern ICCLIB_API void icmXYZ2UCS(icmXYZNumber *w, double *out, double *in) {
-	icmXYZ2Luv(w, out, in);
-	out[2] *= 2.0/3.0;
+/* (This was obsoleted by the 1976UCS, but is still used */
+/*  in computing color temperatures.) */
+extern ICCLIB_API void icmXYZ21960UCS(double *out, double *in) {
+	double X = in[0], Y = in[1], Z = in[2];
+	double u, v;
+
+	u = (4.0 * X) / (X + 15.0 * Y + 3.0 * Z);
+	v = (6.0 * Y) / (X + 15.0 * Y + 3.0 * Z);
+	
+	out[0] = Y;
+	out[1] = u;
+	out[2] = v;
 }
 
 /* Perceptual CIE 1960 UCS to CIE XYZ */
-extern ICCLIB_API void icmUCS2XYZ(icmXYZNumber *w, double *out, double *in) {
-	double tin[3];
-	tin[0] = in[0];
-	tin[1] = in[1];
-	tin[2] = 3.0/2.0 * in[2];
-	icmLuv2XYZ(w, out, tin);
+extern ICCLIB_API void icm1960UCS2XYZ(double *out, double *in) {
+	double u, v, fl, fu, fv, sum, X, Y, Z;
+
+	Y = in[0];
+	u = in[1];
+	v = in[2];
+
+	X = ((3.0 * u * Y)/(2.0 * v));
+	Z = -(((10.0 * v + u - 4.0) * Y)/(2.0 * v));
+
+	out[0] = X;
+	out[1] = Y;
+	out[2] = Z;
+}
+
+/* CIE XYZ to perceptual CIE 1964 WUV (U*V*W*) */
+/* (This is obsolete but still used in computing CRI) */
+extern ICCLIB_API void icmXYZ21964WUV(icmXYZNumber *w, double *out, double *in) {
+	double W, U, V;
+	double wucs[3];
+	double iucs[3];
+
+	icmXYZ2Ary(wucs, *w);
+	icmXYZ21960UCS(wucs, wucs);
+	icmXYZ21960UCS(iucs, in);
+
+	W = 25.0 * pow(iucs[0] * 100.0/wucs[0], 1.0/3.0) - 17.0;
+	U = 13.0 * W * (iucs[1] - wucs[1]);
+	V = 13.0 * W * (iucs[2] - wucs[2]);
+
+	out[0] = W;
+	out[1] = U;
+	out[2] = V;
+}
+
+/* Perceptual CIE 1964 WUV (U*V*W*) to CIE XYZ */
+extern ICCLIB_API void icm1964WUV2XYZ(icmXYZNumber *w, double *out, double *in) {
+	double W, U, V;
+	double wucs[3];
+	double iucs[3];
+
+	icmXYZ2Ary(wucs, *w);
+	icmXYZ21960UCS(wucs, wucs);
+
+	W = in[0];
+	U = in[1];
+	V = in[2];
+
+	iucs[0] = pow((W + 17.0)/25.0, 3.0) * wucs[0]/100.0;
+	iucs[1] = U / (13.0 * W) + wucs[1];
+	iucs[2] = V / (13.0 * W) + wucs[2];
+
+	icm1960UCS2XYZ(out, iucs);
+}
+
+/* CIE CIE1960 UCS to perceptual CIE 1964 WUV (U*V*W*) */
+extern ICCLIB_API void icm1960UCS21964WUV(icmXYZNumber *w, double *out, double *in) {
+	double W, U, V;
+	double wucs[3];
+
+	icmXYZ2Ary(wucs, *w);
+	icmXYZ21960UCS(wucs, wucs);
+
+	W = 25.0 * pow(in[0] * 100.0/wucs[0], 1.0/3.0) - 17.0;
+	U = 13.0 * W * (in[1] - wucs[1]);
+	V = 13.0 * W * (in[2] - wucs[2]);
+
+	out[0] = W;
+	out[1] = U;
+	out[2] = V;
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -12754,6 +13602,21 @@ extern ICCLIB_API double icmXYZLabDE(icmXYZNumber *w, double *in0, double *in1) 
 	return rv;
 }
 
+/* (Note that CIE94 can give odd results for very large delta E's, */
+/* when one of the two points is near the neutral axis: */
+/* ie DE(A,B + del) != DE(A,B) + DE(del), ie: */
+#ifdef NEVER
+{
+	double w1[3] = { 99.996101, -0.058417, -0.010557 };
+	double c1[3] = { 60.267956, 98.845863, -61.163277 };
+	double w2[3] = { 100.014977, -0.138339, 0.089744 };
+	double c2[3] = { 60.294464, 98.117104, -60.843159 };
+	
+	printf("DE   1 = %f, 2 = %f\n", icmLabDE(c1, w1), icmLabDE(c2, w2));
+	printf("DE94 1 = %f, 2 = %f\n", icmCIE94(c1, w1), icmCIE94(c2, w2));
+}
+#endif
+
 
 /* Return the CIE94 Delta E color difference measure, squared */
 double icmCIE94sq(double Lab0[3], double Lab1[3]) {
@@ -12794,7 +13657,6 @@ double icmCIE94sq(double Lab0[3], double Lab1[3]) {
 		/* Weighting factors for delta chromanance & delta hue */
 		sc = 1.0 + 0.048 * c12;
 		sh = 1.0 + 0.014 * c12;
-	
 		return dlsq + dcsq/(sc * sc) + dhsq/(sh * sh);
 	}
 }
@@ -13433,11 +14295,11 @@ static size_t icmFileMD5_get_size(icmFile *pp) {
 /* Seek can't be supported for MD5, so and seek must be to current location. */
 static int icmFileMD5_seek(
 icmFile *pp,
-long int offset
+unsigned int offset
 ) {
 	icmFileMD5 *p = (icmFileMD5 *)pp;
 
-	if (p->of != (unsigned int) offset) {
+	if (p->of != offset) {
 		p->errc = 1;
 	}
 	return 0;
@@ -13583,7 +14445,8 @@ icmLuSpaces(
 	icmLuAlgType *alg,				/* Return type of lookup algorithm used */
     icRenderingIntent *intt,		/* Return the intent being implented */
     icmLookupFunc *fnc,				/* Return the profile function being implemented */
-	icColorSpaceSignature *pcs		/* Return the profile effective PCS */
+	icColorSpaceSignature *pcs,		/* Return the profile effective PCS */
+	icmLookupOrder *ord				/* return the search Order */
 ) {
 	if (ins != NULL)
 		*ins = p->e_inSpace;
@@ -13606,6 +14469,9 @@ icmLuSpaces(
 
 	if (pcs != NULL)
 		*pcs = p->e_pcs;
+
+	if (ord != NULL)
+		*ord = p->order;
 }
 
 /* Relative to Absolute for this WP in XYZ */
@@ -13621,7 +14487,7 @@ static void icmLuXYZ_Abs2Rel(icmLuBase *p, double *out, double *in) {
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Methods common to all non-named transforms (icmLuBase) : */
 
-/* Initialise the white and black points from the ICC tags, */
+/* Initialise the LU white and black points from the ICC tags, */
 /* and the corresponding absolute<->relative conversion matrices */
 /* return nz on error */
 static int icmLuInit_Wh_bk(
@@ -13642,7 +14508,7 @@ struct _icmLuBase *lup
 		}
 		p->err[0] = '\000';
 		p->errc = 0;
-		lup->whitePoint = icmD50;						/* safe value */
+		lup->whitePoint = icmD50;					/* safe value */
 	} else
 		lup->whitePoint = whitePointTag->data[0];	/* Copy structure */
 
@@ -13650,30 +14516,71 @@ struct _icmLuBase *lup
         || blackPointTag->ttype != icSigXYZType || blackPointTag->size < 1) {
 		p->err[0] = '\000';
 		p->errc = 0;
-		lup->blackPoint = icmBlack;						/* default */
-	} else 
+		lup->blackPoint = icmBlack;					/* default */
+		lup->blackisassumed = 1;					/* We assumed the default */
+	} else  {
 		lup->blackPoint = blackPointTag->data[0];	/* Copy structure */
+		lup->blackisassumed = 0;					/* The black is from the tag */
+	}
 
 	/* Create absolute <-> relative conversion matricies */
 	icmChromAdaptMatrix(ICM_CAM_BRADFORD, lup->whitePoint, icmD50, lup->toAbs);
 	icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, lup->whitePoint,  lup->fromAbs);
+	DBLLL(("toAbs and fromAbs created from wp %f %f %f and D50 %f %f %f\n", lup->whitePoint.X, lup->whitePoint.Y, lup->whitePoint.Z, icmD50.X, icmD50.Y, icmD50.Z));
+	DBLLL(("toAbs   = %f %f %f\n          %f %f %f\n          %f %f %f\n", lup->toAbs[0][0], lup->toAbs[0][1], lup->toAbs[0][2], lup->toAbs[1][0], lup->toAbs[1][1], lup->toAbs[1][2], lup->toAbs[2][0], lup->toAbs[2][1], lup->toAbs[2][2]));
+	DBLLL(("fromAbs = %f %f %f\n          %f %f %f\n          %f %f %f\n", lup->fromAbs[0][0], lup->fromAbs[0][1], lup->fromAbs[0][2], lup->fromAbs[1][0], lup->fromAbs[1][1], lup->fromAbs[1][2], lup->fromAbs[2][0], lup->fromAbs[2][1], lup->fromAbs[2][2]));
 
 	return 0;
 }
 
-/* Return the media white and black points in XYZ space. */
-/* Note that if not in the icc, the black point will be returned as 0, 0, 0 */
+/* Return the media white and black points in absolute XYZ space. */
+/* Note that if not in the icc, the black point will be returned as 0, 0, 0, */
+/* and the function will return nz. */ 
 /* Any pointer may be NULL if value is not to be returned */
-static void icmLuWh_bk_points(
+static int icmLuWh_bk_points(
 struct _icmLuBase *p,
-icmXYZNumber *wht,
-icmXYZNumber *blk
+double *wht,
+double *blk
 ) {
-	if (wht != NULL)
-		*wht = p->whitePoint;	/* Structure copy */
+	if (wht != NULL) {
+		icmXYZ2Ary(wht,p->whitePoint);
+	}
 
-	if (blk != NULL)
-		*blk = p->blackPoint;	/* Structure copy */
+	if (blk != NULL) {
+		icmXYZ2Ary(blk,p->blackPoint);
+	}
+	if (p->blackisassumed)
+		return 1;
+	return 0;
+}
+
+/* Get the LU white and black points in LU PCS space, converted to XYZ. */
+/* (ie. white and black will be relative if LU is relative intent etc.) */
+/* Return nz if the black point is being assumed to be 0,0,0 rather */
+/* than being from the tag. */															\
+static int icmLuLu_wh_bk_points(
+struct _icmLuBase *p,
+double *wht,
+double *blk
+) {
+	if (wht != NULL) {
+		icmXYZ2Ary(wht,p->whitePoint);
+	}
+
+	if (blk != NULL) {
+		icmXYZ2Ary(blk,p->blackPoint);
+	}
+	if (p->intent != icAbsoluteColorimetric
+	 && p->intent != icmAbsolutePerceptual
+	 && p->intent != icmAbsoluteSaturation) {
+		if (wht != NULL)
+			icmMulBy3x3(wht, p->fromAbs, wht);
+		if (blk != NULL)
+			icmMulBy3x3(blk, p->fromAbs, blk);
+	}
+	if (p->blackisassumed)
+		return 1;
+	return 0;
 }
 
 /* Get the native (internal) ranges for the Monochrome or Matrix profile */
@@ -14067,6 +14974,7 @@ new_icmLuMono(
 	p->get_ranges = icmLu_get_ranges;
 	p->init_wh_bk = icmLuInit_Wh_bk;
 	p->wh_bk_points = icmLuWh_bk_points;
+	p->lu_wh_bk_points = icmLuLu_wh_bk_points;
 	p->fwd_lookup = icmLuMonoFwd_lookup;
 	p->fwd_curve  = icmLuMonoFwd_curve;
 	p->fwd_map    = icmLuMonoFwd_map;
@@ -14453,6 +15361,7 @@ new_icmLuMatrix(
 	p->get_ranges = icmLu_get_ranges;
 	p->init_wh_bk = icmLuInit_Wh_bk;
 	p->wh_bk_points = icmLuWh_bk_points;
+	p->lu_wh_bk_points = icmLuLu_wh_bk_points;
 	p->fwd_lookup = icmLuMatrixFwd_lookup;
 	p->fwd_curve  = icmLuMatrixFwd_curve;
 	p->fwd_matrix = icmLuMatrixFwd_matrix;
@@ -14600,6 +15509,7 @@ static int icmLuLut_in_abs(icmLuLut *p, double *out, double *in) {
 	icmLut *lut = p->lut;
 	int rv = 0;
 
+	DBLLL(("icm in_abs: input %s\n",icmPdv(lut->inputChan, in)));
 	if (out != in) {
 		unsigned int i;
 		for (i = 0; i < lut->inputChan; i++)		/* Don't alter input values */
@@ -14612,23 +15522,32 @@ static int icmLuLut_in_abs(icmLuLut *p, double *out, double *in) {
 		 || p->intent == icmAbsolutePerceptual
 		 || p->intent == icmAbsoluteSaturation)) {
 	
-		if (p->e_inSpace == icSigLabData)
+		if (p->e_inSpace == icSigLabData) {
 			icmLab2XYZ(&p->pcswht, out, out);
+			DBLLL(("icm in_abs: after Lab2XYZ %s\n",icmPdv(lut->inputChan, out)));
+		}
 
 		/* Convert from Absolute to Relative colorimetric */
 		icmMulBy3x3(out, p->fromAbs, out);
+		DBLLL(("icm in_abs: after fromAbs %s\n",icmPdv(lut->inputChan, out)));
 		
-		if (p->inSpace == icSigLabData)
+		if (p->inSpace == icSigLabData) {
 			icmXYZ2Lab(&p->pcswht, out, out);
+			DBLLL(("icm in_abs: after XYZ2Lab %s\n",icmPdv(lut->inputChan, out)));
+		}
 
 	} else {
 
 		/* Convert from Effective to Native input space */
-		if (p->e_inSpace == icSigLabData && p->inSpace == icSigXYZData)
+		if (p->e_inSpace == icSigLabData && p->inSpace == icSigXYZData) {
 			icmLab2XYZ(&p->pcswht, out, out);
-		else if (p->e_inSpace == icSigXYZData && p->inSpace == icSigLabData)
+			DBLLL(("icm in_abs: after Lab2XYZ %s\n",icmPdv(lut->inputChan, out)));
+		} else if (p->e_inSpace == icSigXYZData && p->inSpace == icSigLabData) {
 			icmXYZ2Lab(&p->pcswht, out, out);
+			DBLLL(("icm in_abs: after XYZ2Lab %s\n",icmPdv(lut->inputChan, out)));
+		}
 	}
+	DBLLL(("icm in_abs: returning %s\n",icmPdv(lut->inputChan, out)));
 
 	return rv;
 }
@@ -14686,9 +15605,10 @@ static int icmLuLut_out_abs(icmLuLut *p, double *out, double *in) {
 	icmLut *lut = p->lut;
 	int rv = 0;
 
+	DBLLL(("icm out_abs: input %s\n",icmPdv(lut->outputChan, in)));
 	if (out != in) {
 		unsigned int i;
-		for (i = 0; i < lut->inputChan; i++)		/* Don't alter input values */
+		for (i = 0; i < lut->outputChan; i++)		/* Don't alter input values */
 			out[i] = in[i];
 	}
 
@@ -14699,22 +15619,31 @@ static int icmLuLut_out_abs(icmLuLut *p, double *out, double *in) {
 		 || p->intent == icmAbsolutePerceptual
 		 || p->intent == icmAbsoluteSaturation)) {
 
-		if (p->outSpace == icSigLabData)
+		if (p->outSpace == icSigLabData) {
 			icmLab2XYZ(&p->pcswht, out, out);
+			DBLLL(("icm out_abs: after Lab2XYZ %s\n",icmPdv(lut->outputChan, out)));
+		}
 		
 		/* Convert from Relative to Absolute colorimetric XYZ */
 		icmMulBy3x3(out, p->toAbs, out);
+		DBLLL(("icm out_abs: after toAbs %s\n",icmPdv(lut->outputChan, out)));
 
-		if (p->e_outSpace == icSigLabData)
+		if (p->e_outSpace == icSigLabData) {
 			icmXYZ2Lab(&p->pcswht, out, out);
+			DBLLL(("icm out_abs: after XYZ2Lab %s\n",icmPdv(lut->outputChan, out)));
+		}
 	} else {
 
 		/* Convert from Native to Effective output space */
-		if (p->outSpace == icSigLabData && p->e_outSpace == icSigXYZData)
+		if (p->outSpace == icSigLabData && p->e_outSpace == icSigXYZData) {
 			icmLab2XYZ(&p->pcswht, out, out);
-		else if (p->outSpace == icSigXYZData && p->e_outSpace == icSigLabData)
+			DBLLL(("icm out_abs: after Lab2 %s\n",icmPdv(lut->outputChan, out)));
+		} else if (p->outSpace == icSigXYZData && p->e_outSpace == icSigLabData) {
 			icmXYZ2Lab(&p->pcswht, out, out);
+			DBLLL(("icm out_abs: after XYZ2Lab %s\n",icmPdv(lut->outputChan, out)));
+		}
 	}
+	DBLLL(("icm out_abs: returning %s\n",icmPdv(lut->outputChan, out)));
 	return rv;
 }
 
@@ -14731,25 +15660,25 @@ double *in			/* Vector of input values */
 	icmLut *lut = p->lut;
 	double temp[MAX_CHAN];
 
-//printf("~1 icmLuLut_lookup: in = %f %f %f\n", in[0], in[1], in[2]);
+	DBGLL(("icmLuLut_lookup: in = %s\n", icmPdv(p->inputChan, in)));
 	rv |= p->in_abs(p,temp,in);						/* Possible absolute conversion */
-//printf("~1 icmLuLut_lookup: in_abs = %f %f %f\n", temp[0], temp[1], temp[2]);
+	DBGLL(("icmLuLut_lookup: in_abs = %s\n", icmPdv(p->inputChan, temp)));
 	if (p->usematrix) {
 		rv |= lut->lookup_matrix(lut,temp,temp);/* If XYZ, multiply by non-unity matrix */
-//printf("~1 icmLuLut_lookup: matrix = %f %f %f\n", temp[0], temp[1], temp[2]);
+		DBGLL(("icmLuLut_lookup: matrix = %s\n", icmPdv(p->inputChan, temp)));
 	}
 	p->in_normf(temp, temp);					/* Normalize for input color space */
-//printf("~1 icmLuLut_lookup: norm = %f %f %f\n", temp[0], temp[1], temp[2]);
+	DBGLL(("icmLuLut_lookup: norm = %s\n", icmPdv(p->inputChan, temp)));
 	rv |= lut->lookup_input(lut,temp,temp);		/* Lookup though input tables */
-//printf("~1 icmLuLut_lookup: input = %f %f %f\n", temp[0], temp[1], temp[2]);
+	DBGLL(("icmLuLut_lookup: input = %s\n", icmPdv(p->inputChan, temp)));
 	rv |= p->lookup_clut(lut,out,temp);			/* Lookup though clut tables */
-//printf("~1 icmLuLut_lookup: clut = %f %f %f\n", out[0], out[1], out[2]);
+	DBGLL(("icmLuLut_lookup: clut = %s\n", icmPdv(p->outputChan, out)));
 	rv |= lut->lookup_output(lut,out,out);		/* Lookup though output tables */
-//printf("~1 icmLuLut_lookup: output = %f %f %f\n", out[0], out[1], out[2]);
+	DBGLL(("icmLuLut_lookup: output = %s\n", icmPdv(p->outputChan, out)));
 	p->out_denormf(out,out);					/* Normalize for output color space */
-//printf("~1 icmLuLut_lookup: denorm = %f %f %f\n", out[0], out[1], out[2]);
+	DBGLL(("icmLuLut_lookup: denorm = %s\n", icmPdv(p->outputChan, out)));
 	rv |= p->out_abs(p,out,out);				/* Possible absolute conversion */
-//printf("~1 icmLuLut_lookup: out_abse = %f %f %f\n", out[0], out[1], out[2]);
+	DBGLL(("icmLuLut_lookup: out_abse = %s\n", icmPdv(p->outputChan, out)));
 
 	return rv;
 }
@@ -14906,9 +15835,10 @@ static int icmLuLut_inv_out_abs(icmLuLut *p, double *out, double *in) {
 	icmLut *lut = p->lut;
 	int rv = 0;
 
+	DBLLL(("icm inv_out_abs: input %s\n",icmPdv(lut->outputChan, in)));
 	if (out != in) {
 		unsigned int i;
-		for (i = 0; i < lut->inputChan; i++)		/* Don't alter input values */
+		for (i = 0; i < lut->outputChan; i++)		/* Don't alter input values */
 			out[i] = in[i];
 	}
 
@@ -14920,22 +15850,30 @@ static int icmLuLut_inv_out_abs(icmLuLut *p, double *out, double *in) {
 		 || p->intent == icmAbsolutePerceptual
 		 || p->intent == icmAbsoluteSaturation)) {
 
-		if (p->e_outSpace == icSigLabData)
+		if (p->e_outSpace == icSigLabData) {
 			icmLab2XYZ(&p->pcswht, out, out);
+			DBLLL(("icm inv_out_abs: after Lab2XYZ %s\n",icmPdv(lut->outputChan, out)));
+		}
 	
 		/* Convert from Absolute to Relative colorimetric */
 		icmMulBy3x3(out, p->fromAbs, out);
+		DBLLL(("icm inv_out_abs: after fromAbs %s\n",icmPdv(lut->outputChan, out)));
 		
-		if (p->outSpace == icSigLabData)
+		if (p->outSpace == icSigLabData) {
 			icmXYZ2Lab(&p->pcswht, out, out);
+			DBLLL(("icm inv_out_abs: after XYZ2Lab %s\n",icmPdv(lut->outputChan, out)));
+		}
 
 	} else {
 
 		/* Convert from Effective to Native output space */
-		if (p->e_outSpace == icSigLabData && p->outSpace == icSigXYZData)
+		if (p->e_outSpace == icSigLabData && p->outSpace == icSigXYZData) {
 			icmLab2XYZ(&p->pcswht, out, out);
-		else if (p->e_outSpace == icSigXYZData && p->outSpace == icSigLabData)
+			DBLLL(("icm inv_out_abs: after Lab2XYZ %s\n",icmPdv(lut->outputChan, out)));
+		} else if (p->e_outSpace == icSigXYZData && p->outSpace == icSigLabData) {
 			icmXYZ2Lab(&p->pcswht, out, out);
+			DBLLL(("icm inv_out_abs: after XYZ2Lab %s\n",icmPdv(lut->outputChan, out)));
+		}
 	}
 	return rv;
 }
@@ -15030,6 +15968,7 @@ static int icmLuLut_inv_in_abs(icmLuLut *p, double *out, double *in) {
 	icmLut *lut = p->lut;
 	int rv = 0;
 
+	DBLLL(("icm inv_in_abs: input %s\n",icmPdv(lut->inputChan, in)));
 	if (out != in) {
 		unsigned int i;
 		for (i = 0; i < lut->inputChan; i++)		/* Don't alter input values */
@@ -15043,22 +15982,31 @@ static int icmLuLut_inv_in_abs(icmLuLut *p, double *out, double *in) {
 		 || p->intent == icmAbsolutePerceptual
 		 || p->intent == icmAbsoluteSaturation)) {
 
-		if (p->inSpace == icSigLabData)
+		if (p->inSpace == icSigLabData) {
 			icmLab2XYZ(&p->pcswht, out, out);
+			DBLLL(("icm inv_in_abs: after Lab2XYZ %s\n",icmPdv(lut->inputChan, out)));
+		}
 
 		/* Convert from Relative to Absolute colorimetric XYZ */
 		icmMulBy3x3(out, p->toAbs, out);
+		DBLLL(("icm inv_in_abs: after toAbs %s\n",icmPdv(lut->inputChan, out)));
 		
-		if (p->e_inSpace == icSigLabData)
+		if (p->e_inSpace == icSigLabData) {
 			icmXYZ2Lab(&p->pcswht, out, out);
+			DBLLL(("icm inv_in_abs: after XYZ2Lab %s\n",icmPdv(lut->inputChan, out)));
+		}
 	} else {
 
 		/* Convert from Native to Effective input space */
-		if (p->inSpace == icSigLabData && p->e_inSpace == icSigXYZData)
+		if (p->inSpace == icSigLabData && p->e_inSpace == icSigXYZData) {
 			icmLab2XYZ(&p->pcswht, out, out);
-		else if (p->inSpace == icSigXYZData && p->e_inSpace == icSigLabData)
+			DBLLL(("icm inv_in_abs: after Lab2XYZ %s\n",icmPdv(lut->inputChan, out)));
+		} else if (p->inSpace == icSigXYZData && p->e_inSpace == icSigLabData) {
 			icmXYZ2Lab(&p->pcswht, out, out);
+			DBLLL(("icm inv_in_abs: after XYZ2Lab %s\n",icmPdv(lut->inputChan, out)));
+		}
 	}
+	DBLLL(("icm inv_in_abs: returning %s\n",icmPdv(lut->inputChan, out)));
 	return rv;
 }
 
@@ -15181,18 +16129,18 @@ icmLuBase *p
 	icp->al->free(icp->al, p);
 }
 
-static icmLuBase *
-new_icmLuLut(
+icmLuBase *
+icc_new_icmLuLut(
 	icc                   *icp,
 	icTagSignature        ttag,			/* Target Lut tag */
     icColorSpaceSignature inSpace,		/* Native Input color space */
     icColorSpaceSignature outSpace,		/* Native Output color space */
-    icColorSpaceSignature pcs,			/* Native PCS */
+    icColorSpaceSignature pcs,			/* Native PCS (from header) */
     icColorSpaceSignature e_inSpace,	/* Effective Input color space */
     icColorSpaceSignature e_outSpace,	/* Effective Output color space */
     icColorSpaceSignature e_pcs,		/* Effective PCS */
-	icRenderingIntent     intent,		/* Rendering intent */
-	icmLookupFunc         func			/* Functionality requested */
+	icRenderingIntent     intent,		/* Rendering intent (For absolute) */
+	icmLookupFunc         func			/* Functionality requested (for icmLuSpaces()) */
 ) {
 	icmLuLut *p;
 
@@ -15207,6 +16155,7 @@ new_icmLuLut(
 	p->XYZ_Abs2Rel = icmLuXYZ_Abs2Rel;
 	p->init_wh_bk  = icmLuInit_Wh_bk;
 	p->wh_bk_points = icmLuWh_bk_points;
+	p->lu_wh_bk_points = icmLuLu_wh_bk_points;
 
 	p->lookup        = icmLuLut_lookup;
 	p->lookup_in     = icmLuLut_lookup_in;
@@ -15586,14 +16535,14 @@ static icmLuBase* icc_get_luobj (
 
 					if (order != icmLuOrdRev) {
 						/* Try Lut type lookup with the chosen intent first */
-						if ((luobj = new_icmLuLut(p, ttag,
+						if ((luobj = icc_new_icmLuLut(p, ttag,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
 						     intent, func)) != NULL)
 							break;
 	
 						/* Try the fallback tag */
-						if ((luobj = new_icmLuLut(p, fbtag,
+						if ((luobj = icc_new_icmLuLut(p, fbtag,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
 						     fbintent, func)) != NULL)
@@ -15629,14 +16578,14 @@ static icmLuBase* icc_get_luobj (
 							break;
 	
 						/* Try Lut type lookup last */
-						if ((luobj = new_icmLuLut(p, ttag,
+						if ((luobj = icc_new_icmLuLut(p, ttag,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
 						     intent, func)) != NULL)
 							break;
 	
 						/* Try the fallback tag */
-						if ((luobj = new_icmLuLut(p, fbtag,
+						if ((luobj = icc_new_icmLuLut(p, fbtag,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
 						     fbintent, func)) != NULL)
@@ -15688,14 +16637,14 @@ static icmLuBase* icc_get_luobj (
 
 					if (order != icmLuOrdRev) {
 						/* Try Lut type lookup first */
-						if ((luobj = new_icmLuLut(p, ttag,
+						if ((luobj = icc_new_icmLuLut(p, ttag,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
 						     intent, func)) != NULL)
 							break;
 
 						/* Try the fallback Lut */
-						if ((luobj = new_icmLuLut(p, fbtag,
+						if ((luobj = icc_new_icmLuLut(p, fbtag,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
 						     fbintent, func)) != NULL)
@@ -15730,14 +16679,14 @@ static icmLuBase* icc_get_luobj (
 							break;
 	
 						/* Try Lut type lookup last */
-						if ((luobj = new_icmLuLut(p, ttag,
+						if ((luobj = icc_new_icmLuLut(p, ttag,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
 						     intent, func)) != NULL)
 							break;
 
 						/* Try the fallback Lut */
-						if ((luobj = new_icmLuLut(p, fbtag,
+						if ((luobj = icc_new_icmLuLut(p, fbtag,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
 						     fbintent, func)) != NULL)
@@ -15789,7 +16738,7 @@ static icmLuBase* icc_get_luobj (
 
 					if (order != icmLuOrdRev) {
 						/* Try Lut type lookup first */
-						if ((luobj = new_icmLuLut(p, ttag,
+						if ((luobj = icc_new_icmLuLut(p, ttag,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
 						     intent, func)) != NULL) {
@@ -15825,7 +16774,7 @@ static icmLuBase* icc_get_luobj (
 							break;
 	
 						/* Try Lut type lookup last */
-						if ((luobj = new_icmLuLut(p, ttag,
+						if ((luobj = icc_new_icmLuLut(p, ttag,
 						     p->header->colorSpace, pcs, pcs,
 						     p->header->colorSpace, e_pcs, e_pcs,
 						     intent, func)) != NULL)
@@ -15859,7 +16808,7 @@ static icmLuBase* icc_get_luobj (
 
 					if (order != icmLuOrdRev) {
 						/* Try Lut type lookup first */
-						if ((luobj = new_icmLuLut(p, ttag,
+						if ((luobj = icc_new_icmLuLut(p, ttag,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
 						     intent, func)) != NULL)
@@ -15894,7 +16843,7 @@ static icmLuBase* icc_get_luobj (
 							break;
 	
 						/* Try Lut type lookup last */
-						if ((luobj = new_icmLuLut(p, ttag,
+						if ((luobj = icc_new_icmLuLut(p, ttag,
 						     pcs, p->header->colorSpace, pcs,
 						     e_pcs, p->header->colorSpace, e_pcs,
 						     intent, func)) != NULL)
@@ -15931,7 +16880,7 @@ static icmLuBase* icc_get_luobj (
 
 #endif
 					/* If the target tag exists, and it is a Lut */
-					luobj = new_icmLuLut(p, icSigGamutTag,
+					luobj = icc_new_icmLuLut(p, icSigGamutTag,
 					     pcs, icSigGrayData, pcs,
 					     e_pcs, icSigGrayData, e_pcs,
 					     intent, func);
@@ -15962,7 +16911,7 @@ static icmLuBase* icc_get_luobj (
 					}
 
 					/* If the target tag exists, and it is a Lut */
-					luobj = new_icmLuLut(p, ttag,
+					luobj = icc_new_icmLuLut(p, ttag,
 					     pcs, pcs, pcs,
 					     e_pcs, e_pcs, e_pcs,
 					     intent, func);
@@ -15991,7 +16940,7 @@ static icmLuBase* icc_get_luobj (
 			switch (func) {
 		    	case icmFwd:	/* Device to PCS (== Device) */
 
-					luobj = new_icmLuLut(p, icSigAToB0Tag,
+					luobj = icc_new_icmLuLut(p, icSigAToB0Tag,
 					     p->header->colorSpace, pcs, pcs,
 					     p->header->colorSpace, pcs, pcs,
 					     intent, func);
@@ -15999,7 +16948,7 @@ static icmLuBase* icc_get_luobj (
 
 		    	case icmBwd:	/* PCS (== Device) to Device */
 
-					luobj = new_icmLuLut(p, icSigBToA0Tag,
+					luobj = icc_new_icmLuLut(p, icSigBToA0Tag,
 					     pcs, p->header->colorSpace, pcs,
 					     pcs, p->header->colorSpace, pcs,
 					     intent, func);
@@ -16028,7 +16977,7 @@ static icmLuBase* icc_get_luobj (
 			switch (func) {
 		    	case icmFwd:	/* PCS (== Device) to PCS */
 
-					luobj = new_icmLuLut(p, icSigAToB0Tag,
+					luobj = icc_new_icmLuLut(p, icSigAToB0Tag,
 					     p->header->colorSpace, pcs, pcs,
 					     e_pcs, e_pcs, e_pcs,
 					     intent, func);
@@ -16036,7 +16985,7 @@ static icmLuBase* icc_get_luobj (
 
 		    	case icmBwd:	/* PCS to PCS (== Device) */
 
-					luobj = new_icmLuLut(p, icSigBToA0Tag,
+					luobj = icc_new_icmLuLut(p, icSigBToA0Tag,
 					     pcs, p->header->colorSpace, pcs,
 					     e_pcs, e_pcs, e_pcs,
 					     intent, func);
@@ -16078,6 +17027,8 @@ static icmLuBase* icc_get_luobj (
 	if (luobj == NULL) {
 		sprintf(p->err,"icc_get_luobj: Unable to locate usable conversion");
 		p->errc = 1;
+	} else {
+		luobj->order = order;
 	}
 
 	return luobj;
@@ -16085,14 +17036,16 @@ static icmLuBase* icc_get_luobj (
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 
-/* Returns total ink limit and channel maximums */
+/* Returns total ink limit and channel maximums. */
 /* Returns -1.0 if not applicable for this type of profile. */
 /* Returns -1.0 for grey, additive, or any profiles < 4 channels. */
 /* This is a place holder that uses a heuristic, */
 /* until there is a private or standard tag for this information */
 static double icm_get_tac(		/* return TAC */
 icc *p,
-double *chmax					/* device return channel sums. May be NULL */
+double *chmax,					/* device return channel sums. May be NULL */
+void (*calfunc)(void *cntx, double *out, double *in),	/* Optional calibration func. */
+void *cntx
 ) {
 	icmHeader *rh = p->header;
 	icmLuBase *luo;
@@ -16146,7 +17099,7 @@ double *chmax					/* device return channel sums. May be NULL */
 	}
 
 	/* Get details of conversion (Arguments may be NULL if info not needed) */
-	luo->spaces(luo, NULL, &inn, &outs, &outn, &alg, NULL, NULL, NULL);
+	luo->spaces(luo, NULL, &inn, &outs, &outn, &alg, NULL, NULL, NULL, NULL);
 
 	/* Assume any non-Lut type doesn't have a TAC */
 	if (alg != icmLutType) {
@@ -16161,12 +17114,15 @@ double *chmax					/* device return channel sums. May be NULL */
 
 	lut = ll->lut;
 	gp = lut->clutTable;		/* Base of grid array */
-	size = uipow(lut->clutPoints,lut->inputChan);
+	size = sat_pow(lut->clutPoints,lut->inputChan);
 	for (i = 0; i < size; i++) {
 		double tot, vv[MAX_CHAN];			
 		
 		lut->lookup_output(lut,vv,gp);		/* Lookup though output tables */
 		ll->out_denormf(vv,vv);				/* Normalize for output color space */
+
+		if (calfunc != NULL)
+			calfunc(cntx, vv, vv);			/* Apply device calibration */
 
 		for (tot = 0.0, uf = 0; uf < lut->outputChan; uf++) {
 			tot += vv[uf];
@@ -16194,7 +17150,7 @@ double *chmax					/* device return channel sums. May be NULL */
 icc *new_icc_a(
 icmAlloc *al			/* Memory allocator */
 ) {
-	int i;
+	unsigned int i;
 	icc *p;
 
 	if ((p = (icc *) al->calloc(al, 1,sizeof(icc))) == NULL) {
@@ -16224,6 +17180,7 @@ icmAlloc *al			/* Memory allocator */
 	p->check_id      = icc_check_id;
 	p->get_tac       = icm_get_tac;
 	p->get_luobj     = icc_get_luobj;
+	p->new_clutluobj = icc_new_icmLuLut;
 
 #if defined(__IBMC__) && defined(_M_IX86)
 	_control87(EM_UNDERFLOW, EM_UNDERFLOW);
@@ -16269,3 +17226,75 @@ icmAlloc *al			/* Memory allocator */
 
 
 /* ---------------------------------------------------------- */
+/* Print an int vector to a string. */
+/* Returned static buffer is re-used every 5 calls. */
+char *icmPiv(int di, int *p) {
+	static char buf[5][MAX_CHAN * 16];
+	static ix = 0;
+	int e;
+	char *bp;
+
+	if (++ix >= 5)
+		ix = 0;
+	bp = buf[ix];
+
+	if (di > MAX_CHAN)
+		di = MAX_CHAN;		/* Make sure that buf isn't overrun */
+
+	for (e = 0; e < di; e++) {
+		if (e > 0)
+			*bp++ = ' ';
+		sprintf(bp, "%d", p[e]); bp += strlen(bp);
+	}
+	return buf[ix];
+}
+
+/* Print a double color vector to a string. */
+/* Returned static buffer is re-used every 5 calls. */
+char *icmPdv(int di, double *p) {
+	static char buf[5][MAX_CHAN * 16];
+	static ix = 0;
+	int e;
+	char *bp;
+
+	if (++ix >= 5)
+		ix = 0;
+	bp = buf[ix];
+
+	if (di > MAX_CHAN)
+		di = MAX_CHAN;		/* Make sure that buf isn't overrun */
+
+	for (e = 0; e < di; e++) {
+		if (e > 0)
+			*bp++ = ' ';
+		sprintf(bp, "%f", p[e]); bp += strlen(bp);
+	}
+	return buf[ix];
+}
+
+/* Print a float color vector to a string. */
+/* Returned static buffer is re-used every 5 calls. */
+char *icmPfv(int di, float *p) {
+	static char buf[5][MAX_CHAN * 16];
+	static ix = 0;
+	int e;
+	char *bp;
+
+	if (++ix >= 5)
+		ix = 0;
+	bp = buf[ix];
+
+	if (di > MAX_CHAN)
+		di = MAX_CHAN;		/* Make sure that buf isn't overrun */
+
+	for (e = 0; e < di; e++) {
+		if (e > 0)
+			*bp++ = ' ';
+		sprintf(bp, "%f", p[e]); bp += strlen(bp);
+	}
+	return buf[ix];
+}
+
+
+/* ---------------------------------------------------------- */
+

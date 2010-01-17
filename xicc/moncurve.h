@@ -11,7 +11,7 @@
  *
  * Copyright 2005 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * This is based on the monotonic curve equations used elsewhere,
@@ -58,7 +58,7 @@ struct _mcv {
 	);
 
 	/* Scale the the output so that the value for input 1.0, */
-	/* is the given target value. Scale the value for 0 too. */
+	/* is the given target value. Scale the value for 0.0 too. */
 	void (*force_scale) (struct _mcv *p,
 	            double target	/* Target output value */
 	);
@@ -107,10 +107,10 @@ struct _mcv {
 
 }; typedef struct _mcv mcv;
 
-/* Create a new, uninitialised mcv */
+/* Create a new, uninitialised mcv that will fit with offset and scale */
 mcv *new_mcv(void);
 
-/* Create a new mcv initiated with the given parameters */
+/* Create a new mcv initiated with the given curve parameters */
 mcv *new_mcv_p(double *pp, int np);
 
 /* Create a new, uninitialised mcv with offset and scale not to be fitted, */

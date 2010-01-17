@@ -6,7 +6,7 @@
  * Copyright 1998 Graeme Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -74,55 +74,37 @@ int dnsqe(
 					/* Optional function to compute jacobian, NULL if not used */
 	int n,			/* Number of functions and variables */
 	double x[],		/* Initial solution estimate, RETURNs final solution */
+	double ss,		/* Initial search area */
 	double fvec[],	/* Array that will be RETURNed with thefunction values at the solution */
-	double tol,		/* Desired tollerance of the solution */
+	double dtol,	/* Desired delta tollerance of the solution */
+	double atol,	/* Desired absolute tollerance of the solution */
+	int maxfev,		/* Maximum number of function calls. set to 0 for automatic */
 	int nprint	 	/* Turn on debugging printouts from func() every nprint itterations */
 ) {
 	int info = 0;		/* Return status */
-	double *diag;		/* Diagonal scaling matrix */
-	double **sjac;		/* Last jacobian */
 
 	int nfev, njev;
 	int i,j, index, ml, lr, mu;
-	double epsfcn = 0.0;
-	double factor = 100.0;
-	int maxfev;
+	double epsfcn = ss * ss;		/* Jacobian estimate step */
+	double factor = ss;		/* Initial step size */
+	double maxstep = 0.0;	/* Subsequent step size (not working ??) */
 
-	/*	Check the input parameters for errors. */
-	if (n <= 0 || tol < 0.0) {
-		warning("dnsqe: invalid input parameter.");
-		return 0;
+	if (maxfev <= 0) {
+		maxfev = (n + 1) * 100;
+		if (jac == NULL)
+			maxfev <<= 1;
 	}
-
-	/* Call dnsq. */
-	maxfev = (n + 1) * 100;
-	if (jac == NULL)
-		maxfev <<= 1;
 	ml = n - 1;		/* number of subdiagonals within the band of the Jacobian matrix. */
 	mu = n - 1;		/* number of superdiagonals within the band of the Jacobian matrix. */
 
-	sjac = dmatrix(0,n-1,0,n-1);
-	for (j = 0; j < n; j++) 
-		for (i = 0; i < n; i++)
-			if (j == i)
-				sjac[j][i] = 7.0;
-			else
-				sjac[j][i] = 0.0;
-
-	/* We specify the scaling */
-	diag = dvector(0,n-1);
-	for (j = 0; j < n; ++j)
-		diag[j] = 1.0;
-
 	lr = n * (n + 1) / 2;
 	index = n * 6 + lr;
-	info = dnsq(fdata, fcn, jac, sjac, 1,
-			n, &x[0], &fvec[0], tol, tol,
-			maxfev, ml, mu, epsfcn, diag, factor, nprint, 
-			&nfev, &njev);
 
-	free_dmatrix(sjac,0,n-1,0,n-1);
-	free_dvector(diag,0,n-1);
+	/* Call dnsq. */
+	info = dnsq(fdata, fcn, jac, NULL, 0,
+			n, &x[0], &fvec[0], dtol, atol,
+			maxfev, ml, mu, epsfcn, NULL, factor, maxstep, nprint, 
+			&nfev, &njev);
 
 	if (info == 5)
 		info = 4;
@@ -471,13 +453,15 @@ int dnsq(
 	double x[],		/* Initial solution estimate, RETURNs final solution */
 	double fvec[],	/* Array that will be RETURNed with thefunction values at the solution */
 	double dtol,	/* Desired delta tollerance of the solution */
-	double tol,		/* Desired tollerance of the root (stops on dtol or tol) */
+	double atol,	/* Desired tollerance of the root (stops on dtol or tol) */
 	int maxfev,		/* Set excessive Number of Function Evaluations */
 	int ml,			/* number of subdiagonals within the band of the Jacobian matrix. */
 	int mu, 		/* number of superdiagonals within the band of the Jacobian matrix. */
 	double epsfcn,	/* determines suitable step for forward-difference approximation */
 	double diag[],	/* Optional scaling factors, use NULL for internal scaling */
 	double factor,	/* Determines the initial step bound */
+	double maxstep,	/* Determines the maximum subsequent step bound (0.0 for none) */
+					/* maxstep is NOT WORKING !!! ??? */
 	int nprint, 	/* Turn on debugging printouts from func() every nprint itterations */
 	int *nfev,		/* RETURNs the number of calls to fcn() */ 
 	int *njev		/* RETURNs the number of calls to jac() */
@@ -486,20 +470,20 @@ int dnsq(
 	int smode = 0;	/* Scaling mode, 1 = internal */
 
 	/* Internal working arrays */
-	double *fjac;	/* n by n array which contains the orthogonal matrix Q */
+	double *fjac = NULL;	/* n by n array which contains the orthogonal matrix Q */
 					/* produced by the QR factorization of the final approximate Jacobian. */ 
 	int ldfjac = n; /* stride of 2d array */
-	double **jjac;	/* NR style pointers to fjac */
+	double **jjac = NULL;	/* NR style pointers to fjac */
 
-	double *r;  	/* Array of length (n*(n+1))/2 which contains the upper  */
+	double *r = NULL;  	/* Array of length (n*(n+1))/2 which contains the upper  */
 					/* triangular matrix produced by the QR factorization of the  */
 					/* final approximate Jacobian, stored rowwise. */
-	double *qtf;	/* Array of length n which contains the vector (q transpose)*fvec. */
+	double *qtf = NULL;	/* Array of length n which contains the vector (q transpose)*fvec. */
 
-	double *wa1; 	/* Four working arrays length n */
-	double *wa2;
-	double *wa3;
-	double *wa4;
+	double *wa1 = NULL; 	/* Four working arrays length n */
+	double *wa2 = NULL;
+	double *wa3 = NULL;
+	double *wa4 = NULL;
 
 	int iwa[1];		/* Pivot swap array (only one element used) */
 
@@ -539,7 +523,7 @@ int dnsq(
 
 	/* Check the input parameters for errors. */
 	if (n <= 0 || dtol < 0.0 || maxfev <= 0
-		|| ml < 0 || mu < 0 || factor <= 0.0
+		|| ml < 0 || mu < 0 || factor <= 0.0 || maxstep < 0.0
 	    || (sjac == NULL && startsjac != 0)) {
 		goto func_exit;
 	}
@@ -599,7 +583,8 @@ printf("DNSQ: Jacobian initialized\n");
 		/* On the first iteration and if internal scaling mode set, scale */
 		/* according to the norms of the columns of the initial jacobian. */
 		/* (wa2[] will contain norms) */
-		if (iter == 1) {
+		/* Do this on subsequent itterations too, if a maxstep is set. */
+		if (iter == 1 || maxstep > 0.0) {
 			if (smode) {
 				for (j = 0; j < n; ++j) {
 					diag[j] = wa2[j];
@@ -615,12 +600,21 @@ printf("DNSQ: Jacobian initialized\n");
 				wa3[j] = diag[j] * x[j];
 	
 			xnorm = denorm(n, &wa3[0]);
-			delta = factor * xnorm;
-			if (delta == 0.0)
-				delta = factor;
+			if (iter == 1) {
+				delta = factor * xnorm;
+				if (delta == 0.0)
+					delta = factor;
 #ifdef DEBUG
-printf("Initial Delta = %f\n",delta);
+				printf("Initial Delta = %f\n",delta);
 #endif /* DEBUG */
+			} else {
+				delta = maxstep * xnorm;
+				if (delta == 0.0)
+					delta = maxstep;
+#ifdef DEBUG
+				printf("Subsequent Delta = %f\n",delta);
+#endif /* DEBUG */
+			}
 		}
 
 		/* Form (q transpose)*fvec and store in qtf. */
@@ -673,29 +667,29 @@ printf("Initial Delta = %f\n",delta);
 			}
 
 #ifdef DEBUG
-/* If the user supplied an array, and there is a valid Q in */
-/* fjac[], and R is in r[], recover the most recent Jacobian */
-/* matrix by multiplying Q by R */
-if (qrflag && sjac) {
-	for (i = 0; i < n; ++i)  {
-		for (j = 0; j < n; ++j) {
-			double temp = 0.0;
-			l = j;
-			for (k = 0; k <= j; ++k) {
-				temp += fjac[k * ldfjac + i] * r[l];
-				l += (n-1-k);
+			/* If the user supplied an array, and there is a valid Q in */
+			/* fjac[], and R is in r[], recover the most recent Jacobian */
+			/* matrix by multiplying Q by R */
+			if (qrflag && sjac) {
+				for (i = 0; i < n; ++i)  {
+					for (j = 0; j < n; ++j) {
+						double temp = 0.0;
+						l = j;
+						for (k = 0; k <= j; ++k) {
+							temp += fjac[k * ldfjac + i] * r[l];
+							l += (n-1-k);
+						}
+						sjac[j][i] = temp;
+					}
+				}
+				printf("Current Jacobian = \n");
+				for (j = 0; j < n; ++j) {
+					for (i = 0; i < n; ++i)  {
+						printf("%f  ",sjac[j][i]);
+					}
+				printf("\n");
+				}
 			}
-			sjac[j][i] = temp;
-		}
-	}
-	printf("Current Jacobian = \n");
-	for (j = 0; j < n; ++j) {
-		for (i = 0; i < n; ++i)  {
-			printf("%f  ",sjac[j][i]);
-		}
-	printf("\n");
-	}
-}
 #endif /* DEBUG */
 
 			/* Determine the direction p. */
@@ -711,10 +705,14 @@ if (qrflag && sjac) {
 			pnorm = denorm(n, &wa3[0]);
 
 			/* On the first iteration, adjust the initial step bound. */
-			if (iter == 1) {
+			/* Do this on subsequent itterations too, if maxstep is set. */
+			if (iter == 1 || maxstep > 0.0) {
 				delta = min(delta,pnorm);
 #ifdef DEBUG
-printf("First itter Delta = %f\n",delta);
+				if (iter == 1)
+					printf("First itter Delta = %f\n",delta);
+				else
+					printf("Subsequent itter Delta = %f\n",delta);
 #endif /* DEBUG */
 			}
 
@@ -725,8 +723,8 @@ printf("First itter Delta = %f\n",delta);
 			fnorm1 = denorm(n, &wa4[0]);
 
 			/* Compute the scaled actual reduction. */
-			actred = -1.0;
-			if (fnorm1 < fnorm) {
+			actred = -1.0;				/* Assume norm is made worse */
+			if (fnorm1 < fnorm) {		/* There was a reduction in the norm */
 				double td;
 				td = fnorm1 / fnorm;
 				actred = 1.0 - td * td;
@@ -752,11 +750,11 @@ printf("First itter Delta = %f\n",delta);
 			}
 
 			/* Compute the ratio of the actual to the predicted reduction. */
-			ratio = 0.0;
+			ratio = 0.0;		/* Assume no improvement */ 
 			if (prered > 0.0)
 				ratio = actred / prered;
 #ifdef DEBUG
-printf("DNSQ: actual/predicted = %f\n",ratio);
+printf("DNSQ: actual/predicted ratio = %f\n",ratio);
 #endif /* DEBUG */
 
 			/* Update the step bound. */
@@ -765,7 +763,7 @@ printf("DNSQ: actual/predicted = %f\n",ratio);
 				++ncfail;		/* Forces jacobian recalc when ncfail == 2 */
 				delta = 0.5 * delta;
 #ifdef DEBUG
-printf("ratio < 0.1 Delta = %f\n",delta);
+printf("ratio < 0.1 bad, Delta = %f, ncfail = %d\n",delta,ncfail);
 #endif /* DEBUG */
 			} else {
 				ncfail = 0;		/* Pospone jacobian recalc */
@@ -773,19 +771,22 @@ printf("ratio < 0.1 Delta = %f\n",delta);
 				if (ratio >= 0.5 || ncsuc > 1) {
 					delta = max(delta, pnorm / 0.5);
 #ifdef DEBUG
-printf("ratio < 0.1 Delta = %f\n",delta);
+printf("ratio > 0.1 good, Delta = %f, ncsuc = %d\n",delta,ncsuc);
 #endif /* DEBUG */
 				}
 				if (fabs(ratio - 1.0) <= 0.1) {
-					delta = pnorm / 0.5;
+					delta = 2.0 * pnorm;
 #ifdef DEBUG
 printf("abs(ratio -1.0) <= 0.1 Delta = %f\n",delta);
 #endif /* DEBUG */
 				}
 			}
 
-			/* Test for successful iteration. */
-			if (ratio >= 1e-4) {
+			/* Test for progressing iteration. */
+			if (ratio > 0.0001) {
+#ifdef DEBUG
+printf("Successful itter\n");
+#endif /* DEBUG */
 				/* Successful iteration. update x, fvec, and their norms. */
 				for (j = 0; j < n; ++j) {
 					x[j] = wa2[j];
@@ -797,26 +798,35 @@ printf("abs(ratio -1.0) <= 0.1 Delta = %f\n",delta);
 				++iter;
 			}
 
+#ifdef DEBUG
+printf("DNSQ: actual = %f\n",actred);
+#endif /* DEBUG */
 			/* Determine the progress of the iteration. */
 			++nslow1;
-			if (actred >= 0.001)
+			if (fabs(actred) >= 0.001)
 				nslow1 = 0;
 			if (jeval)
 				++nslow2;
-			if (actred >= 0.1)
+			if (fabs(actred) >= 0.1)
 				nslow2 = 0;
 
 			/* Test for convergence. */
 			if (delta <= dtol * xnorm || fnorm == 0.0) {
+#ifdef DEBUG
+printf("DNSQ: delta %f <= dtol * xnorm %f || fnorm == %f\n",delta,dtol * xnorm,fnorm);
+#endif /* DEBUG */
 				info = 1;
 				goto func_exit;
 			}
 			/* Test for root meeting tolerance (GWG) */
 			for (j = 0; j < n; ++j) {
-				if (fabs(fvec[j]) > tol)
+				if (fabs(fvec[j]) > atol)
 					break;
 			}
 			if (j >= n) {		/* All were below tollerance */
+#ifdef DEBUG
+printf("DNSQ: fvecs are all <= atol %f\n",atol);
+#endif /* DEBUG */
 				info = 1;
 				goto func_exit;
 			}
@@ -899,18 +909,18 @@ func_exit:
 		info = iflag;
 	if (nprint > 0)
 		(*fcn)(fdata, n, &x[0], &fvec[0], 0);
-#ifdef NEVER
+#ifdef DEBUG
 	if (info < 0)
-		error("dnsq: Execution terminated because user set iflag negative");
+		printf("dnsq: Execution terminated because user set iflag negative\n");
 	if (info == 0)
-		error("dnsq: Invalid input parameter");
+		printf("dnsq: Invalid input parameter\n");
 	if (info == 2)
-		error("dnsq: Too many function evaluations");
+		printf("dnsq: Too many function evaluations\n");
 	if (info == 3)
-		error("dnsq: dtol too small. no further improvement possible");
+		printf("dnsq: dtol too small. no further improvement possible\n");
 	if (info > 4)
-		error("dnsq: Iteration not making good progress");
-#endif /* NEVER */
+		printf("dnsq: Iteration not making good progress\n");
+#endif /* DEBUG */
 	return info;
 } /* dnsq */
 
@@ -1310,72 +1320,95 @@ static double denorm(
 	int n,			/* Size of x[] */
 	double x[])		/* Input vector */
 {
-	/* Initialized data */
-	static double rdwarf = 3.834e-20;
-	static double rgiant = 1.304e19;
-
-	/* Local variables */
-	static double xabs, x1max, x3max;
-	static int i;
-	static double s1, s2, s3, agiant, floatn;
-	double ret_val, td;
-
-	s1 = 0.0;	/* Large component */
-	s2 = 0.0;	/* Intermedate component */
-	s3 = 0.0;	/* Small component */
-	x1max = 0.0;
-	x3max = 0.0;
-	floatn = (double) (n + 1);
-	agiant = rgiant / floatn;
-	for (i = 0; i < n; i++) {
-		xabs = (td = x[i], fabs(td));
-
-		/* Sum for intermediate components. */
-		if (xabs > rdwarf && xabs < agiant) {
-			td = xabs;				 	/* Computing 2nd power */
-			s2 += td * td;
-
-		/* Sum for small components. */
-		} else if (xabs <= rdwarf) {
-			if (xabs <= x3max) {
-				if (xabs != 0.0) {		/* Computing 2nd power */
-				td = xabs / x3max;
-				s3 += td * td;
+	if (n < 8) {	/* Make it simple and fast */
+		double ss = 0.0;
+		switch (n) {
+			case 8:
+				ss += x[7] * x[7];
+			case 7:
+				ss += x[6] * x[6];
+			case 6:
+				ss += x[5] * x[5];
+			case 5:
+				ss += x[4] * x[4];
+			case 4:
+				ss += x[3] * x[3];
+			case 3:
+				ss += x[2] * x[2];
+			case 2:
+				ss += x[1] * x[1];
+			case 1:
+				ss += x[0] * x[0];
+		}
+		return sqrt(ss);
+	} else {
+		/* Initialized data */
+		static double rdwarf = 3.834e-20;
+		static double rgiant = 1.304e19;
+	
+		/* Local variables */
+		static double xabs, x1max, x3max;
+		static int i;
+		static double s1, s2, s3, agiant, floatn;
+		double ret_val, td;
+	
+		s1 = 0.0;	/* Large component */
+		s2 = 0.0;	/* Intermedate component */
+		s3 = 0.0;	/* Small component */
+		x1max = 0.0;
+		x3max = 0.0;
+		floatn = (double) (n + 1);
+		agiant = rgiant / floatn;
+		for (i = 0; i < n; i++) {
+			xabs = (td = x[i], fabs(td));
+	
+			/* Sum for intermediate components. */
+			if (xabs > rdwarf && xabs < agiant) {
+				td = xabs;				 	/* Computing 2nd power */
+				s2 += td * td;
+	
+			/* Sum for small components. */
+			} else if (xabs <= rdwarf) {
+				if (xabs <= x3max) {
+					if (xabs != 0.0) {		/* Computing 2nd power */
+					td = xabs / x3max;
+					s3 += td * td;
+					}
+				} else { /* Computing 2nd power */
+					td = x3max / xabs;
+					s3 = 1.0 + s3 * (td * td);
+					x3max = xabs;
 				}
-			} else { /* Computing 2nd power */
-				td = x3max / xabs;
-				s3 = 1.0 + s3 * (td * td);
-				x3max = xabs;
-			}
-
-		/* Sum for large components. */
-		} else {
-			if (xabs <= x1max) {		/* Computing 2nd power */
-				td = xabs / x1max;
-				s1 += td * td;
-			} else {					/* Computing 2nd power */
-				td = x1max / xabs;
-				s1 = 1.0 + s1 * (td * td);
-				x1max = xabs;
+	
+			/* Sum for large components. */
+			} else {
+				if (xabs <= x1max) {		/* Computing 2nd power */
+					td = xabs / x1max;
+					s1 += td * td;
+				} else {					/* Computing 2nd power */
+					td = x1max / xabs;
+					s1 = 1.0 + s1 * (td * td);
+					x1max = xabs;
+				}
 			}
 		}
-	}
-
-	/* Calculation of norm. */
-	if (s1 != 0.0) {		/* Large is present */
-		ret_val = x1max * sqrt(s1 + s2 / x1max / x1max);
-	} else {				/* Medium and small are present */
-		if (s2 == 0.0) {
-			ret_val = x3max * sqrt(s3);		/* Small only */
-		} else {
-			if (s2 >= x3max) {		/* Medium larger than small */
-				ret_val = sqrt(s2 * (1.0 + x3max / s2 * (x3max * s3)));
-			} else {				/* Small large than medium */
-				ret_val = sqrt(x3max * (s2 / x3max + x3max * s3));
+	
+		/* Calculation of norm. */
+		if (s1 != 0.0) {		/* Large is present */
+			ret_val = x1max * sqrt(s1 + s2 / x1max / x1max);
+		} else {				/* Medium and small are present */
+			if (s2 == 0.0) {
+				ret_val = x3max * sqrt(s3);		/* Small only */
+			} else {
+				if (s2 >= x3max) {		/* Medium larger than small */
+					ret_val = sqrt(s2 * (1.0 + x3max / s2 * (x3max * s3)));
+				} else {				/* Small large than medium */
+					ret_val = sqrt(x3max * (s2 / x3max + x3max * s3));
+				}
 			}
 		}
+		return ret_val;
 	}
-	return ret_val;
 }
 
 /***************************************************************/

@@ -8,7 +8,7 @@
  *
  * Copyright 2000-2004 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -29,6 +29,7 @@
 #undef INVTEST2	/* Jab cube to XYZ to Jab */
 #define TRES 33
 #define USE_HK 0	/* Use Helmholtz-Kohlraush */
+#define NOCAMCLIP 1	/* Don't clip before XYZ2Jab */
 
 #ifndef _isnan
 #define _isnan(x) ((x) != (x))
@@ -214,7 +215,8 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK
+			USE_HK,
+			NOCAMCLIP
 		);
 #ifdef DIAG
 		printf("\n");
@@ -284,7 +286,8 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK
+			USE_HK,
+			NOCAMCLIP
 		);
 	
 		{
@@ -373,7 +376,8 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK
+			USE_HK,
+			NOCAMCLIP
 		);
 	
 		{

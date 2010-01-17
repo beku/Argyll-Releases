@@ -11,7 +11,7 @@
  * Copyright 2003 Graeme W. Gill
  * Parts derived from rspl/c1.c
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -320,7 +320,7 @@ int luord
 		tt = v[f];
 		tt *= tt;
 
-		/* Weigh to supress ripples */
+		/* Weigh to suppress ripples */
 		if (f <= 1)
 			w = SHAPE_BASE;
 		else {
@@ -405,7 +405,7 @@ int pnts			/* Number of test points */
 		params[i] = 0.0;
 	}
 
-	if (powell(NULL, np, params, sa, POWTOL, MAXITS, luoptfunc, (void *)&os) != 0)
+	if (powell(NULL, np, params, sa, POWTOL, MAXITS, luoptfunc, (void *)&os, NULL, NULL) != 0)
 		error ("Powell failed");
 }
 

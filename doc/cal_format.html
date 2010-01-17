@@ -11,8 +11,9 @@
 Device calibration information. This is ASCII text, <a
  href="File_Formats.html#CGATS">CGATS</a>, Argyll specific format, used
 to hold a description of device setup information that brings it to a
-desired calibration state. Currently only display output curves are
-defined. Created by <a href="dispcal.html">dispcal</a>.<br>
+desired calibration state. Calibration files are created by <a
+ href="synthcal.html">synthcal</a>, <a href="dispcal.html">dispcal</a>
+and <a href="printcal.html">printcal</a>.<br>
 <br>
 While fully compatible with the CGATS.5 Data Exchange Format, the
 particular required keywords and fields are unique to Argyll, hence an
@@ -51,6 +52,75 @@ keyword that has a value of <span style="font-weight: bold;">"OUTPUT</span>",
 This indicates what type of device the calibration information is
 suitable for.<br>
 <br>
+There shall be a keyword <span style="font-weight: bold;">COLOR_REP</span>
+that has a value that indicates what colorspaces of the device values.
+The colorspaces shall be encoded with one&nbsp; or two letters
+per
+component. The device spaces shall use the
+following letter encoding:<br>
+<br>
+<span style="font-weight: bold;"><span style="font-weight: bold;"></span></span>&nbsp;&nbsp;&nbsp;
+Cyan &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+C<br>
+&nbsp;&nbsp;&nbsp; Magenta &nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp; M<br>
+&nbsp;&nbsp;&nbsp; Yellow &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Y<br>
+&nbsp;&nbsp;&nbsp; Black &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+K<br>
+&nbsp;&nbsp;&nbsp; Orange &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+O<br>
+&nbsp;&nbsp;&nbsp; Red
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+R<br>
+&nbsp;&nbsp;&nbsp; Green &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+G<br>
+&nbsp;&nbsp;&nbsp; Blue &nbsp;&nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+B<br>
+&nbsp;&nbsp;&nbsp; White &nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp; W<br>
+&nbsp;&nbsp;&nbsp; Light Cyan
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+c<br>
+&nbsp;&nbsp;&nbsp; Light
+Magenta&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+m<br>
+&nbsp;&nbsp;&nbsp; Light
+Yellow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+y<br>
+&nbsp;&nbsp;&nbsp; Light
+Black&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+k<br>
+&nbsp;&nbsp;&nbsp; Medium Cyan&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2c<br>
+&nbsp;&nbsp;&nbsp; Medium Magenta &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+2m<br>
+&nbsp;&nbsp;&nbsp; Medium Yellow
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2y<br>
+&nbsp;&nbsp;&nbsp; Medium Black
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2k<br>
+&nbsp;&nbsp;&nbsp; Light Light Black &nbsp; &nbsp; &nbsp;&nbsp; 1k<br>
+<br>
+There may be an a prefix <span style="font-weight: bold;">i</span>
+preceding the device space letter encoding, indicating that although
+the space appears to be an additive space, it is in fact a subtractive
+device.<br>
+<br>
+Typical values might be: "<span style="font-weight: bold;">RGB</span><span
+ style="font-weight: bold;"></span>" for an RGB display, "<span
+ style="font-weight: bold;">iRGB</span><span style="font-weight: bold;"></span>"
+for an RGB printer, "<span style="font-weight: bold;">CMYK</span>" for
+a
+printer, "<span style="font-weight: bold;">RGB"</span> for an RGB
+scanner.<br>
+<br>
 The <span style="font-weight: bold;">NUMBER_OF_FIELDS</span> keyword
 shall have a value that indicates the number of fields in each data
 set, e.g. <span style="font-weight: bold;">4</span> (as per CGATS).<br>
@@ -59,17 +129,31 @@ The start of the declaration of the fields shall be marked by the <span
  style="font-weight: bold;">BEGIN_DATA_FORMAT</span> keyword (as per
 CGATS).<br>
 <br>
-For a <span style="font-weight: bold;">DISPLAY</span> device, the
-following fields shall be used:<br>
+The fields shall use the standard CGATS pattern of the full colorspace
+identified followed by the individual colorant identifier. There shall
+be an initial input index value identified by the letter <span
+ style="font-weight: bold;">I</span>.<br>
+<br>
+For an RGB device, the
+following fields would be used:<br>
 <br>
 &nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_I</span>&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; index of the RAMDAC entry.<br>
+&nbsp;&nbsp; The device value input value between 0.0 and 1.0.<br>
 &nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_R</span>&nbsp;&nbsp;&nbsp;
-&nbsp; RAMDAC Red value for that entry.<br>
+&nbsp; The Red device value input value between 0.0 and 1.0.<br>
 &nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_G</span>
-&nbsp;&nbsp; &nbsp; RAMDAC Green value for that entry.<br>
+&nbsp;&nbsp; &nbsp; The Green device value input value between 0.0 and
+1.0.<br>
 &nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_B</span>
-&nbsp;&nbsp; &nbsp; RAMDAC Blue value for that entry.<br>
+&nbsp;&nbsp; &nbsp; The Blue device value input value between 0.0 and
+1.0.<br>
+<br>
+The corresponding field names for a CMYK device would be <span
+ style="font-weight: bold;">CMYK_I</span>, <span
+ style="font-weight: bold;">CMYK_C</span>, <span
+ style="font-weight: bold;">CMYK_M</span>, <span
+ style="font-weight: bold;">CMYK_Y</span> and <span
+ style="font-weight: bold;">CMYK_K</span>, etc.<br>
 <br>
 The definition of the fields shall be terminated by the <span
  style="font-weight: bold;">END_DATA_FORMAT</span> keyword (as per
@@ -87,6 +171,10 @@ space. All values shall be normalized to lie between 0.0 and 1.0.<br>
 <br>
 The end of the values of the data sets shall be marked by the <span
  style="font-weight: bold;">END_DATA</span> keyword (as per CGATS).<br>
+<br>
+There may then be device type specific extra tables that hold target or
+device behavior information. These will be specific to the tool that
+creates that particular type of calibration.<br>
 <br>
 Generally any other keywords and values will be ignored.<br>
 <br>

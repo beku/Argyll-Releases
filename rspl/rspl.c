@@ -9,7 +9,7 @@
  * Copyright 1996 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -37,11 +37,18 @@
 #include "numlib.h"
 #include "counters.h"	/* Counter macros */
 
-#define DEBUG
-#define VERBOSE
+#undef DEBUG
+#undef DEBUGLU			/* Debug fwd interpolation */
+#undef VERBOSE
 
 #undef NEVER
 #define ALWAYS
+
+#ifdef DEBUGLU
+# define DEBLU(xxxx) printf xxxx
+#else
+# define DEBLU(xxxx)
+#endif
 
 /* Implemeted in this file: */
 rspl *new_rspl(int flags, int di, int fdi);
@@ -50,6 +57,7 @@ static void init_grid(rspl *s);
 static void free_grid(rspl *s);
 static void get_in_range(rspl *s, double *min, double *max);
 static void get_out_range(rspl *s, double *min, double *max);
+static void get_out_range_points(rspl *s, int *minp, int *maxp);
 static double get_out_scale(rspl *s);
 static unsigned int get_next_touch(rspl *s);
 static int within_restrictedsize(rspl *s);
@@ -84,6 +92,10 @@ int opt_rspl_imp(struct _rspl *s, int flags, int tdi, int adi, double **vdata,
 	double (*func)(void *fdata, double *inout, double *surav, int first, double *cw),
 	void *fdata, datai glow, datai ghigh, int gres[MXDI], datao vlow, datao vhigh);
 
+/* Implemented in gam.c: */
+void init_gam(rspl *s);
+void free_gam(rspl *s);
+
 /* Convention is to use:
    i to index grid points u.a
    n to index data points d.a
@@ -102,11 +114,6 @@ new_rspl(
 	int fdi
 ) {
 	rspl *s;
-
-#if defined(__IBMC__) && defined(_M_IX86)
-	_control87(EM_UNDERFLOW, EM_UNDERFLOW);
-	_control87(EM_OVERFLOW, EM_OVERFLOW);
-#endif
 
 	/* Allocate a structure */
 	if ((s = (rspl *) calloc(1, sizeof(rspl))) == NULL)
@@ -139,8 +146,9 @@ new_rspl(
 
 	/* Init sub sections */
 	init_data(s);
-	init_rev(s);
 	init_grid(s);
+	init_gam(s);
+	init_rev(s);
 	init_spline(s);
 
 	if (flags & RSPL_FASTREVSETUP)
@@ -152,6 +160,7 @@ new_rspl(
 	s->del           = free_rspl;
 	s->interp        = interp_rspl_sx;	/* Default to simplex interp */
 #ifdef NEVER
+#define USING_INTERP_NL
 printf("!!!! rspl.c using interp_rspl_nl !!!!");
 	s->interp        = interp_rspl_nl;
 #endif
@@ -163,6 +172,7 @@ printf("!!!! rspl.c using interp_rspl_nl !!!!");
 	s->filter_rspl   = filter_rspl;
 	s->get_in_range  = get_in_range;
 	s->get_out_range = get_out_range;
+	s->get_out_range_points = get_out_range_points;
 	s->get_out_scale = get_out_scale;
 	s->get_next_touch = get_next_touch;
 	s->within_restrictedsize = within_restrictedsize;
@@ -177,14 +187,15 @@ static void free_rspl(rspl *s) {
 	/* Free everying contained */
 	free_data(s);		/* Free any scattered data */
 	free_rev(s);		/* Free any reverse lookup data */
+	free_gam(s);		/* Free any grid data */
 	free_grid(s);		/* Free any grid data */
 
 	/* Free spline interpolation data ~~~~ */
 
 	/* Free structure */
 	for (e = 0; e < s->di; e++) {
-		if (s->g.iwidth[e] != NULL)
-			free(s->g.iwidth[e]);
+		if (s->g.ipos[e] != NULL)
+			free(s->g.ipos[e]);
 	}
 	if (s->g.hi != s->g.a_hi) {
 		free(s->g.hi);
@@ -200,7 +211,7 @@ alloc_grid(rspl *s) {
 	int di = s->di, fdi = s->fdi;
 	int e,g,i;
 	int gno;				/* Number of points in grid */
-	ECOUNT(gc, MXDIDO, di, s->g.res);/* coordinates */
+	ECOUNT(gc, MXDIDO, di, 0, s->g.res, 0);/* coordinates */
 	float *gp;				/* Grid point pointer */
 
 	/* Compute total number of elements in the grid */
@@ -301,15 +312,21 @@ double *min, double *max	/* Return min/max values */
 		for (f = 0; f < s->fdi; f++) {
 			s->g.fmin[f] = 1e30;
 			s->g.fmax[f] = -1e30;
+			s->g.fminx[f] = -1;
+			s->g.fmaxx[f] = -1;
 		}
 	
 		/* Scan the Grid points for min/max values */
 		for (gp = s->g.a, ep = s->g.a + s->g.no * s->g.pss; gp < ep; gp += s->g.pss) {
 			for (f = 0; f < s->fdi; f++) {
-				if (s->g.fmin[f] > gp[f])
+				if (s->g.fmin[f] > gp[f]) {
 					 s->g.fmin[f] = gp[f];
-				if (s->g.fmax[f] < gp[f])
+					 s->g.fminx[f] = (gp - s->g.a)/s->g.pss;
+				}
+				if (s->g.fmax[f] < gp[f]) {
 					 s->g.fmax[f] = gp[f];
+					 s->g.fmaxx[f] = (gp - s->g.a)/s->g.pss;
+				}
 			}
 		}
 
@@ -319,12 +336,29 @@ double *min, double *max	/* Return min/max values */
 			s->g.fscale += tt * tt;
 		}
 		s->g.fscale = sqrt(s->g.fscale);
+		s->g.fminmax_valid = 1;		/* Now is valid */
 	}
 	for (f = 0; f < s->fdi; f++) {
 		if (min != NULL)
 			min[f] = s->g.fmin[f];
 		if (max != NULL)
 			max[f] = s->g.fmax[f];
+	}
+}
+
+/* ============================================ */
+/* return the grid index of the grid values at the min & max output values */
+static void get_out_range_points(rspl *s, int *minp, int *maxp) {
+	int f;
+
+	if (s->g.fminmax_valid == 0) /* Not valid, so compute it */
+		get_out_range(s, NULL, NULL);
+
+	for (f = 0; f < s->fdi; f++) {
+		if (minp != NULL)
+			minp[f] = s->g.fminx[f];
+		if (maxp != NULL)
+			maxp[f] = s->g.fmaxx[f];
 	}
 }
 
@@ -402,7 +436,7 @@ co *p			/* Input value and returned function value */
 
 	/* We are using a simplex (ie. tetrahedral for 3D input) interpolation. */
 
-//if (rspldb && di == 3) printf("~1 in %f %f %f\n", p->p[0], p->p[1], p->p[2]);
+	DEBLU(("In %s\n", icmPdv(di, p->p)));
 
 	/* Figure out which grid cell the point falls into */
 	{
@@ -430,6 +464,7 @@ co *p			/* Input value and returned function value */
 			we[e] = t - (double)mi;		/* 1.0 - weight */
 //if (rspldb && di == 3) printf("~1 e = %d, ix = %d, we = %f\n", e, mi, we[e]);
 		}
+		DEBLU(("ix %d, we %s\n", (gp - s->g.a)/s->g.pss, icmPdv(di, p->p)));
 	}
 
 	/* Do selection sort on coordinates */
@@ -450,7 +485,7 @@ co *p			/* Input value and returned function value */
 			}
 		}
 	}
-//if (rspldb && di == 3) printf("~1 si[] = %d %d %d\n", si[0],si[1],si[2]);
+	DEBLU(("si[] = %s\n", icmPiv(di, si)));
 
 	/* Now compute the weightings, simplex vertices and output values */
 	{
@@ -460,22 +495,22 @@ co *p			/* Input value and returned function value */
 		for (f = 0; f < fdi; f++)
 			p->v[f] = w * gp[f];
 
-//if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
+		DEBLU(("ix %d: w %f * val %s\n", (gp - s->g.a)/s->g.pss, w, icmPfv(fdi,gp)));
 
 		for (e = di-1; e > 0; e--) {		/* Middle verticies */
 			w = we[si[e]] - we[si[e-1]];
 			gp += s->g.fci[si[e]];			/* Move to top of cell in next largest dimension */
 			for (f = 0; f < fdi; f++)
 				p->v[f] += w * gp[f];
-//if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
+			DEBLU(("ix %d: w %f * val %s\n", (gp - s->g.a)/s->g.pss, w, icmPfv(fdi,gp)));
 		}
 
 		w = we[si[0]];
 		gp += s->g.fci[si[0]];		/* Far corner from base of cell */
 		for (f = 0; f < fdi; f++)
 			p->v[f] += w * gp[f];
-//if (rspldb && di == 3) printf("~1 w %f * val  %f %f %f (0x%x)\n", w, gp[0], gp[1], gp[2],gp - s->g.a);
-//if (rspldb && di == 3) printf("~1 outval  %f %f %f\n", p->v[0], p->v[1], p->v[2]);
+		DEBLU(("ix %d: w %f * val %s\n", (gp - s->g.a)/s->g.pss, w, icmPfv(fdi,gp)));
+		DEBLU(("Outval  %s\n", icmPdv(fdi, p->v)));
 	}
 	return rv;
 }
@@ -672,7 +707,7 @@ co *p			/* Input value and returned function value */
 
 /* ============================================ */
 
-#ifdef NEVER
+#ifdef USING_INTERP_NL
 /* Alternate, not currently used */
 /* Do a forward interpolation using an n-linear method. */
 /* Return 0 if OK, 1 if input was clipped to grid */
@@ -755,7 +790,7 @@ co *p			/* Input value and returned function value */
 
 	return rv;
 }
-#endif /* NEVER */
+#endif /* USING_INTERP_NL */
 
 /* ============================================ */
 /* Non-mono calculations */
@@ -913,6 +948,8 @@ static int set_rspl(
 	for (f = 0; f < s->fdi; f++) {
 		s->g.fmin[f] = 1e30;
 		s->g.fmax[f] = -1e30;
+		s->g.fminx[f] = -1;
+		s->g.fmaxx[f] = -1;
 	}
 
 	/* Set the grid points value from the provided function */
@@ -936,10 +973,14 @@ static int set_rspl(
 
 		for (f = 0; f < s->fdi; f++) { 	/* Output chans */
 			gp[f] = (float)ov[f];		/* Set output value */
-			if (s->g.fmin[f] > gp[f])
+			if (s->g.fmin[f] > gp[f]) {
 				 s->g.fmin[f] = gp[f];
-			if (s->g.fmax[f] < gp[f])
+				 s->g.fminx[f] = (gp - s->g.a)/s->g.pss;
+			}
+			if (s->g.fmax[f] < gp[f]) {
 				 s->g.fmax[f] = gp[f];
+				 s->g.fmaxx[f] = (gp - s->g.a)/s->g.pss;
+			}
 		}
 
 		/* For RSPL_SET_APXLS, get the center of the cell values as well. */
@@ -1022,24 +1063,30 @@ static int set_rspl(
 			}
 
 			for (j = 0; j < (1 << s->di); j++) { /* For corners of cube */
-				double sc = 1.0;		/* Scale factor for edge nodes */
+				double sc = 1.0;		/* Scale factor for non-edge nodes */
 
-				/* Compute averaging scale factor for edge nodes */
+				/* Don't distribute error to edge nodes since there may */
+				/* an expectation that they have precicely set values */
+				/* (ie. white and black points) */
 				for (e = 0; e < s->di; e++) {
 					if ((gc[e] == 0 && (j & (1 << e)) == 0)
 					 || (gc[e] == ((gres[e]-2)) && (j & (1 << e)) != 0))
-						sc *= 2.0;
+						sc *= 0.0;
 				}
 
-				for (f = 0; f < s->fdi; f++) { 	/* Output chans */
+				for (f = 0; f < s->fdi; f++) { 		/* Output chans */
 					double vv;
-					vv = (gp + s->g.fhi[j])[f];				/* Current value */
-					vv += sc * cc[f];		/* Correction */
-					if (s->g.fmin[f] > vv)
-						 s->g.fmin[f] = vv;
-					if (s->g.fmax[f] < vv)
-						 s->g.fmax[f] = vv;
+					vv = (gp + s->g.fhi[j])[f];		/* Current value */
+					vv += sc * cc[f];				/* Correction */
 					(gp + s->g.fhi[j])[f] = vv;
+					if (s->g.fmin[f] > vv) {
+						s->g.fmin[f] = vv;
+						s->g.fminx[f] = (gp + s->g.fhi[j] - s->g.a)/s->g.pss;
+					}
+					if (s->g.fmax[f] < vv) {
+						s->g.fmax[f] = vv;
+						s->g.fmaxx[f] = (gp + s->g.fhi[j] - s->g.a)/s->g.pss;
+					}
 				}
 			}
 
@@ -1093,6 +1140,8 @@ int change		/* Flag - nz means change values, 0 means scan values */
 		for (f = 0; f < s->fdi; f++) {
 			s->g.fmin[f] = 1e30;
 			s->g.fmax[f] = -1e30;
+			s->g.fminx[f] = -1;
+			s->g.fmaxx[f] = -1;
 		}
 	}
 
@@ -1123,10 +1172,14 @@ int change		/* Flag - nz means change values, 0 means scan values */
 		if (change) {		/* Put new output values back */
 			for (f = 0; f < s->fdi; f++) { 	/* Output chans */
 				gp[f] = (float)ov[f];
-				if (s->g.fmin[f] > gp[f])
+				if (s->g.fmin[f] > gp[f]) {
 					 s->g.fmin[f] = gp[f];
-				if (s->g.fmax[f] < gp[f])
+					 s->g.fminx[f] = (gp - s->g.a)/s->g.pss;
+				}
+				if (s->g.fmax[f] < gp[f]) {
 					 s->g.fmax[f] = gp[f];
+					 s->g.fmaxx[f] = (gp - s->g.a)/s->g.pss;
+				}
 			}
 		}
 
@@ -1196,7 +1249,7 @@ void *cbctx,	/* Opaque function context */
 void (*func)(void *cbntx, float **out, double *in, int cvi) /* Function to set from */
 ) {
 	int e, f;
-	ECOUNT(gc, MXDIDO, s->di, s->g.res);	/* coordinates */
+	ECOUNT(gc, MXDIDO, s->di, 0, s->g.res, 0);	/* coordinates */
 	DCOUNT(cc, MXDIDO, s->di, -1, -1, 2);	/* Surrounding cube counter */
 	float *gp, *ep;		/* Pointer to grid data */
 	float *tarry, *tp;	/* Temporary array of values */
@@ -1278,6 +1331,8 @@ void (*func)(void *cbntx, float **out, double *in, int cvi) /* Function to set f
 	for (f = 0; f < s->fdi; f++) {
 		s->g.fmin[f] = 1e30;
 		s->g.fmax[f] = -1e30;
+		s->g.fminx[f] = -1;
+		s->g.fmaxx[f] = -1;
 	}
 
 	/* Now update all the values */
@@ -1288,10 +1343,14 @@ void (*func)(void *cbntx, float **out, double *in, int cvi) /* Function to set f
 			gp[f] = tp[f];
 
 		for (f = 0; f < s->fdi; f++) { 	/* Output chans */
-			if (s->g.fmin[f] > gp[f])
+			if (s->g.fmin[f] > gp[f]) {
 				 s->g.fmin[f] = gp[f];
-			if (s->g.fmax[f] < gp[f])
+				 s->g.fminx[f] = (gp - s->g.a)/s->g.pss;
+			}
+			if (s->g.fmax[f] < gp[f]) {
 				 s->g.fmax[f] = gp[f];
+				 s->g.fmaxx[f] = (gp - s->g.a)/s->g.pss;
+			}
 		}
 	}
 
@@ -1424,7 +1483,6 @@ int coa[]	/* Coordinates to return */
 
 	return (p->ix == 0);
 }
-
 
 /* =============================================== */
 

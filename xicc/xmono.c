@@ -7,7 +7,7 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Based on the old iccXfm class.
@@ -212,7 +212,7 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 	p->spaces            = icxLuSpaces;
 	p->get_native_ranges = icxLu_get_native_ranges;
 	p->get_ranges        = icxLu_get_ranges;
-	p->rel_wh_bk_points  = icxLuRel_wh_bk_points;
+	p->efv_wh_bk_points  = icxLuEfv_wh_bk_points;
 	p->get_gamut         = icxLuMonoGamut;
 	p->fwd_relpcs_outpcs = icxLuMono_fwd_relpcs_outpcs;
 	p->bwd_outpcs_relpcs = icxLuMono_bwd_outpcs_relpcs;
@@ -240,18 +240,21 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 	}
 
 	/* There are no mono specific flags */
+	p->flags = flags;
+	p->func = func;
 
 	/* Get details of internal, native color space */
 	plu->lutspaces(p->plu, &p->natis, NULL, &p->natos, NULL, &p->natpcs);
 
 	/* Get other details of conversion */
-	p->plu->spaces(p->plu, NULL, &p->inputChan, NULL, &p->outputChan, NULL, NULL, NULL, NULL);
+	p->plu->spaces(p->plu, NULL, &p->inputChan, NULL, &p->outputChan, NULL, NULL, NULL, NULL, NULL);
 
 	/* Init the CAM model */
 	if (pcsor == icxSigJabData) {
 		p->vc  = *vc;				/* Copy the structure */
 		p->cam = new_icxcam(cam_default);
-		p->cam->set_view(p->cam, vc->Ev, vc->Wxyz, vc->La, vc->Yb, vc->Lv, vc->Yf, vc->Fxyz, XICC_USE_HK);
+		p->cam->set_view(p->cam, vc->Ev, vc->Wxyz, vc->La, vc->Yb, vc->Lv, vc->Yf, vc->Fxyz,
+		XICC_USE_HK, XICC_NOCAMCL);
 	} else 
 		p->cam = NULL;
 
@@ -259,7 +262,7 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 	p->intent = intent;
 
 	/* Get the effective spaces */
-	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, NULL, NULL, &p->pcs);
+	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, NULL, NULL, &p->pcs, NULL);
 
 	/* Override with pcsor */
 	if (pcsor == icxSigJabData) {

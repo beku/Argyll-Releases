@@ -8,7 +8,7 @@
  * Copyright 2005 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -33,7 +33,7 @@
 #endif
 #include "copyright.h"
 #include "config.h"
-#include "numsup.h"
+#include "numlib.h"
 #include "vrml.h"
 #include "cgats.h"
 #include "xicc.h"
@@ -55,7 +55,7 @@ usage(void) {
 	fprintf(stderr," -W              create VRML marker visualisation (measured.wrl)\n");
 	fprintf(stderr," -x              Use VRML axes\n");
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr,"                 A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
@@ -172,6 +172,9 @@ int main(int argc, char *argv[])
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
+				} else if (strcmp(na, "C") == 0) {
+					spec = 1;
+					illum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
@@ -302,14 +305,15 @@ int main(int argc, char *argv[])
 			error("Malloc failed - pat[]");
 	
 		/* Read in the CGATs fields */
-		if ((sidx = cgf->find_field(cgf, 0, "SampleName")) < 0
+		if ((sidx = cgf->find_field(cgf, 0, "SAMPLE_ID")) < 0
+		 && (sidx = cgf->find_field(cgf, 0, "SampleName")) < 0
 		 && (sidx = cgf->find_field(cgf, 0, "Sample_Name")) < 0
 		 && (sidx = cgf->find_field(cgf, 0, "SAMPLE_NAME")) < 0
-		 && (sidx = cgf->find_field(cgf, 0, "SAMPLE_ID")) < 0
 		 && (sidx = cgf->find_field(cgf, 0, "SAMPLE_LOC")) < 0)
-			error("Input file '%s' doesn't contain field SampleName, Sample_Name, SAMPLE_NAME, SAMPLE_ID or SAMPLE_LOC",cg[n].name);
-		if (cgf->t[0].ftype[sidx] != nqcs_t)
-			error("Sample ID field isn't non quoted character string");
+			error("Input file '%s' doesn't contain field SAMPLE_ID, SampleName, Sample_Name, SAMPLE_NAME or SAMPLE_LOC",cg[n].name);
+		if (cgf->t[0].ftype[sidx] != nqcs_t
+		 && cgf->t[0].ftype[sidx] != cs_t)
+			error("Sample ID/Name field isn't a quoted or non quoted character string");
 
 		if (spec == 0) { 		/* Using instrument tristimulous value */
 
@@ -554,7 +558,7 @@ int main(int argc, char *argv[])
 
 		if (dovrml) {
 			wrl = new_vrml(out_name, doaxes);
-			wrl->start_line_set(wrl);
+			wrl->start_line_set(wrl, 0);
 
 			/* Fudge sphere diameter */
 			rad = 10.0/pow(cg[0].npat, 1.0/3.0);
@@ -584,8 +588,8 @@ int main(int argc, char *argv[])
 
 			if (dovrml) {
 				if (de > 1e-6) {
-					wrl->add_vertex(wrl, cg[0].pat[j].v);
-					wrl->add_vertex(wrl, cg[1].pat[j].v);
+					wrl->add_vertex(wrl, 0, cg[0].pat[j].v);
+					wrl->add_vertex(wrl, 0, cg[1].pat[j].v);
 				}
 				if (dovrml == 2) {
 					wrl->add_marker(wrl, cg[0].pat[j].v, NULL, rad);
@@ -598,7 +602,7 @@ int main(int argc, char *argv[])
 			aerr /= (double)cg[0].npat;
 
 		if (dovrml) {
-			wrl->make_lines(wrl, 2);
+			wrl->make_lines(wrl, 0, 2);
 			wrl->del(wrl);
 			wrl = NULL;
 		}

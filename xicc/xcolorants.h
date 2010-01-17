@@ -10,7 +10,7 @@
  *
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -61,7 +61,9 @@
 typedef unsigned int inkmask;
 
 /* The ink mask enumeration */
-#define ICX_ADDITIVE          0x80000000	/* Special flag indicating addive process */
+#define ICX_ADDITIVE          0x80000000	/* Special flag indicating addive colorants */
+#define ICX_INVERTED          0x40000000	/* Special flag indicating actual device is */
+											/* the inverse of the perported additive/subtractive */
 #define ICX_CYAN              0x00000001
 #define ICX_MAGENTA           0x00000002
 #define ICX_YELLOW            0x00000004
@@ -154,6 +156,9 @@ typedef unsigned int inkmask;
 #define ICX_CMY						/* Classic printing CMY */ \
 	(ICX_CYAN | ICX_MAGENTA | ICX_YELLOW)
 
+#define ICX_IRGB					/* Fake printer RGB (== Inverted CMY) */ \
+	(ICX_ADDITIVE | ICX_INVERTED | ICX_RED | ICX_GREEN | ICX_BLUE)
+
 #define ICX_CMYK					/* Classic printing CMYK */ \
 	(ICX_CYAN | ICX_MAGENTA | ICX_YELLOW | ICX_BLACK)
 
@@ -191,11 +196,12 @@ typedef unsigned int inkmask;
 /* Given an ink combination mask, return the number of recognised inks in it */
 int icx_noofinks(inkmask mask);
 
-/* Given an ink combination mask, return the 1-2 character string */
+/* Given an ink combination mask, return the 1-2 character based string */
+/* If winv is nz, include ICX_INVERTED indicator if set */
 /* Return NULL on error. free() after use */
-char *icx_inkmask2char(inkmask mask); 
+char *icx_inkmask2char(inkmask mask, int winv);
 
-/* Given the 1-2 character string, return the ink combination mask */
+/* Given the 1-2 character based string, return the ink combination mask */
 /* Note that ICX_ADDITIVE will be guessed */
 /* Return 0 if unrecognised character in string */
 inkmask icx_char2inkmask(char *chstring); 
@@ -246,12 +252,13 @@ int icx_colorant_comb_match_icc(inkmask mask, icColorSpaceSignature sig);
 
 /* Given an ICC colorspace signature, return the appropriate */
 /* colorant combination mask. Return 0 if ambiguous signature. */
-inkmask icx_icc_to_colorant_comb(icColorSpaceSignature sig);
+inkmask icx_icc_to_colorant_comb(icColorSpaceSignature sig, icProfileClassSignature deviceClass);
 
 /* Given an ICC colorspace signature, and a matching list */
 /* of the D50 L*a*b* colors of the colorants, return the best matching */
 /* colorant combination mask. Return 0 if not applicable to colorspace. */
-inkmask icx_icc_cv_to_colorant_comb(icColorSpaceSignature sig, double cvals[][3]);
+inkmask icx_icc_cv_to_colorant_comb(icColorSpaceSignature sig, icProfileClassSignature deviceClass,
+                                    double cvals[][3]);
 
 /* Given an colorant combination mask */
 /* return the primary matching ICC colorspace signature. */ 

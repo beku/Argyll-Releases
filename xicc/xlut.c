@@ -8,7 +8,7 @@
  *
  * Copyright 2000, 2001 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * This is the third major version of xlut.c (originally called xlut2.c)
@@ -28,22 +28,20 @@
 
 #include "xfit.h"
 
-#define USE_CIE94_DE	/* Use CIE94 delta E measure when creating in/out curves */
+#undef USE_CIE94_DE				/* [Undef] Use CIE94 delta E measure when creating in/out curves */
+								/* Don't use CIE94 because it makes peak error worse ? */
 
-#undef DEBUG 			/* Verbose debug information */
-#undef DEBUG_RLUT 		/* Print values being reverse lookup up */
-#undef INK_LIMIT_TEST	/* Turn off input tables for ink limit testing */
-#undef CHECK_ILIMIT		/* Do sanity checks on meeting ink limit */
+#undef DEBUG 					/* [Undef] Verbose debug information */
+#undef DEBUG_OLUT 				/* [Undef] Print steps in overall fwd & rev lookups */
+#undef DEBUG_RLUT 				/* [Undef] Print values being reverse lookup up */
+#undef INK_LIMIT_TEST			/* [Undef] Turn off input tables for ink limit testing */
+#undef CHECK_ILIMIT				/* [Undef] Do sanity checks on meeting ink limit */
+#undef WARN_CLUT_CLIPPING		/* [Undef] Print warning if setting clut clips */
+#undef DISABLE_KCURVE_FILTER	/* [Undef] don't filter the Kcurve */
 
-#undef NODDV			/* Use slow non d/dv powell */
-
-#define POWTOL 5e-4			/* Shaper Powell optimiser tollerance */
-#define MAXITS 2000			/* Shaper number of itterations before giving up */
-
-/* Weights in shaper parameters, to minimise unconstrained "wiggles" */
-#define SHAPE_WEIGHT 5000.0		/* Overal shaper weight contribution - err on side of smoothness */
-#define SHAPE_BASE  0.00001		/* 0 & 1 harmonic weight */
-#define SHAPE_HBASE 0.0001		/* 2nd and higher additional weight */
+#define SHP_SMOOTH 1.0	/* Input shaper curve smoothing */
+#define OUT_SMOOTH1 1.0	/* Output shaper curve smoothing for L*, X,Y,Z */
+#define OUT_SMOOTH2 1.0	/* Output shaper curve smoothing for a*, b* */
 
 /*
  * TTBD:
@@ -67,6 +65,24 @@
 static double icxLimitD(void *lcntx, double *in);		/* For input' */
 static double icxLimit(void *lcntx, double *in);		/* For input */
 static int icxLuLut_init_clut_camclip(icxLuLut *p);
+
+#ifdef DEBUG_OLUT
+#undef DBOL
+#define DBOL(xxx) printf xxx ;
+#else
+#undef DBOL
+#define DBOL(xxx) 
+#endif
+
+#ifdef DEBUG_RLUT
+#undef DBR
+#define DBR(xxx) printf xxx ;
+#else
+#undef DBR
+#define DBR(xxx) 
+#endif
+
+static char *ppos(int di, double *p);
 
 /* ========================================================== */
 /* xicc lookup code.                                          */
@@ -115,7 +131,8 @@ int icxLuLut_input(icxLuLut *p, double *out, double *in) {
 #endif
 }
 
-/* Do input'->output' lookup, with aux return */
+/* Do input'->output' lookup, with aux' return */
+/* (The aux' is just extracted from the in' values) */
 int icxLuLut_clut_aux(icxLuLut *p,
 double *out,	/* output' value */
 double *oink,	/* If not NULL, return amount input is over the ink limit, 0 if not */
@@ -219,13 +236,20 @@ double *in			/* Vector of input values */
 	int rv = 0;
 	double temp[MAX_CHAN];
 
+	DBOL(("xicclu: in = %s\n", ppos(p->inputChan, in)));
 	rv |= p->in_abs  (p, temp, in);
+	DBOL(("xicclu: after abs = %s\n", ppos(p->inputChan, temp)));
 	rv |= p->matrix  (p, temp, temp);
+	DBOL(("xicclu: after matrix = %s\n", ppos(p->inputChan, temp)));
 	rv |= p->input   (p, temp, temp);
+	DBOL(("xicclu: after inout = %s\n", ppos(p->inputChan, temp)));
 	rv |= p->clut    (p, out,  temp);
+	DBOL(("xicclu: after clut = %s\n", ppos(p->outputChan, out)));
 	if (p->mergeclut == 0) {
 		rv |= p->output  (p, out,  out);
+		DBOL(("xicclu: after output = %s\n", ppos(p->outputChan, out)));
 		rv |= p->out_abs (p, out,  out);
+		DBOL(("xicclu: after outabs = %s\n", ppos(p->outputChan, out)));
 	}
 	return rv;
 }
@@ -253,14 +277,6 @@ double *out, double *in) {
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Components of inverse lookup, in order */
-
-#ifdef DEBUG_RLUT
-#undef DBR
-#define DBR(xxx) printf xxx ;
-#else
-#undef DBR
-#define DBR(xxx) 
-#endif
 
 /* Utility function - compute the clip vector direction. */
 /* return NULL if vector clip isn't used. */
@@ -313,18 +329,25 @@ double *cdirv		/* Space for returned clip vector */
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Typically inv is used to invert a device->PCS table, */
+/* so it typically is doing a PCS->device conversion. */
+/* This doesn't always have to be the case though. */
+
 /* PCS override (Effective PCS) to PCS conversion + absolute to relative conversion */
 int icxLuLut_inv_out_abs(icxLuLut *p, double *out, double *in) {
 	int rv = 0;
 
-	DBR(("icxLuLut_inv_out_abs got PCS %f %f %f\n",in[0],in[1],in[2]))
+	DBR(("\nicxLuLut_inv_out_abs got PCS %s\n",ppos(p->outputChan, in)));
 
 	if (p->mergeclut == 0) {
 		if (p->outs == icxSigJabData) {
 			p->cam->cam_to_XYZ(p->cam, out, in);
+			DBR(("icxLuLut_inv_out_abs after cam2XYZ %s\n",ppos(p->outputChan, out)));
 			rv |= ((icmLuLut *)p->plu)->inv_out_abs((icmLuLut *)p->plu, out, out);
+			DBR(("icxLuLut_inv_out_abs after icmLut inv_out_abs %s\n",ppos(p->outputChan, out)));
 		} else {
 			rv |= ((icmLuLut *)p->plu)->inv_out_abs((icmLuLut *)p->plu, out, in);
+			DBR(("icxLuLut_inv_out_abs after icmLut inv_out_abs %s\n",ppos(p->outputChan, out)));
 		}
 	} else {
 		int i;
@@ -375,10 +398,10 @@ int icxLuLut_inv_output(icxLuLut *p, double *out, double *in) {
 				/* Use a simple minded resolution - choose the one closest to the center */
 				double bdist = 1e300;
 				int bsoln = 0;
-/* Don't expect this - 1D luts are meant to be monotonic */
-printf("~~~1 got %d reverse solutions\n",nsoln);
-printf("~~~1 solution 0 = %f\n",pp[0].p[0]);
-printf("~~~1 solution 1 = %f\n",pp[1].p[0]);
+				/* Don't expect this - 1D luts are meant to be monotonic */
+				warning("1D lut inversion got %d reverse solutions\n",nsoln);
+				warning("solution 0 = %f\n",pp[0].p[0]);
+				warning("solution 1 = %f\n",pp[1].p[0]);
 				for (j = 0; j < nsoln; j++) {
 					double tt;
 					tt = pp[i].p[0] - p->outputClipc[i];
@@ -408,28 +431,36 @@ printf("~~~1 solution 1 = %f\n",pp[1].p[0]);
 /* > 0.0 if outside limits. Value is proportinal to distance to limits. */
 /* We implement device gamut check to improve utility outside rspl, */
 /* in optimisation routines. */
+/* The limits are assumed to be post calibrated device values (ie. real */
+/* final device values) */ 
 static double icxLimit(
 void *lcntx,
 double *in
 ) {
 	icxLuLut *p = (icxLuLut *)lcntx;
+	double cin[MAX_CHAN];	/* Calibrated input values */
 	double tlim, klim;
 	double ovr, val;
 	int e;
 
-//printf("~~ limit got %f %f %f %f\n", in[0], in[1], in[2], in[3]);
+	if (p->pp->cal != NULL) {	/* We have device calibration information */
+		p->pp->cal->interp(p->pp->cal, cin, in);
+	} else {
+		for (e = 0; e < p->inputChan; e++)
+			cin[e] = in[e];
+	}
 
 	if ((tlim = p->ink.tlimit) < 0.0)
-		tlim = (double)p->inputChan + 1.0;
+		tlim = (double)p->inputChan;	/* Default is no limit */
 
 	if ((klim = p->ink.klimit) < 0.0)
-		klim = 2.0;
+		klim = 1.0;
 
 	/* Compute amount outside total limit */
-	{
+	{					/* No calibration */
 		double sum;
 		for (sum = 0.0, e = 0; e < p->inputChan; e++)
-			sum += in[e];
+			sum += cin[e];
 		val = sum - tlim;
 	}
 
@@ -438,17 +469,22 @@ double *in
 		double kval = 0.0;
 		switch(p->natis) {
 			case icSigCmykData:
-				kval = in[3] - klim;
+				kval = cin[3] - klim;
 				break;
 			default:
-				error("xlut: Unknown colorspace when black limit specified");
+				/* NOTE !!! p->kch isn't being initialized !!! */
+				if (p->kch >= 0) {
+					kval = cin[p->kch] - klim;
+				} else {
+					error("xlut: Unknown colorspace when black limit specified");
+				}
 		}
 		if (kval > val)
 			val = kval;
 	}
 	/* Compute amount outside device value limits 0.0 - 1.0 */
 	for (ovr = -1.0, e = 0; e < p->inputChan; e++) {
-		if (in[e] < 0.0) {
+		if (in[e] < 0.0) {				/* ! Not cin[] */
 			if (-in[e] > ovr)
 				ovr = -in[e];
 		} else if (in[e] > 1.0) {
@@ -459,11 +495,12 @@ double *in
 	if (ovr > val)
 		val = ovr;
 
-//printf("~~ limit returning %f\n", val);
 	return val;
 }
 
 /* Same as above, but works with input' values */
+/* (If an ink limit is being used we assume that the */
+/*  input space is not PCS, hence inv_in_abs() is doing nothing) */
 static double icxLimitD(
 void *lcntx,
 double *ind
@@ -473,7 +510,7 @@ double *ind
 	co tc;
 	int e;
 
-	/* Convert input' to input through revinput Luts */
+	/* Convert input' to input through revinput Luts (for speed) */
 	for (e = 0; e < p->inputChan; e++) {
 		tc.p[0] = ind[e];
 		p->revinputTable[e]->interp(p->revinputTable[e], &tc);
@@ -483,29 +520,93 @@ double *ind
 	return icxLimit(lcntx, in);
 }
 
+/* Ink limit+gamut limit clipping function for xLuLut (CMYK). */
+/* Return nz if there was clipping */
+static int icxDoLimit(
+icxLuLut *p,
+double *out,
+double *in
+) {
+	double tlim, klim;
+	double sum;
+	int clip = 0, e;
+	int kch = -1;
 
+	for (e = 0; e < p->inputChan; e++)
+		out[e] = in[e];
+
+	if ((tlim = p->ink.tlimit) < 0.0)
+		tlim = (double)p->inputChan;
+
+	if ((klim = p->ink.klimit) < 0.0)
+		klim = 1.0;
+
+	/* Clip black */
+	if (p->natis == icSigCmykData)
+		kch = 3;
+	else
+		kch = p->kch;
+
+	if (kch >= 0) {
+		if (out[p->kch] > klim) {
+			out[p->kch] = klim;	
+			clip = 1;
+		}
+	}
+
+	/* Compute amount outside total limit */
+	for (sum = 0.0, e = 0; e < p->inputChan; e++)
+		sum += out[e];
+
+	if (sum > tlim) {
+		clip = 1;
+		sum /= (double)p->inputChan;
+		for (e = 0; e < p->inputChan; e++)
+			out[e] -= sum;
+	}
+	return clip;
+}
+
+#ifdef NEVER
+#undef DBK
+#define DBK(xxx) printf xxx ;
+#else
+#undef DBK
+#define DBK(xxx) 
+#endif
 
 /* helper function that creates our standard K locus curve value, */
-/* given the curve parameters, and the normalised L value. */
-/* No filtering version */
+/* given the curve parameters, and the normalised L 0.0 - 1.0 value. */
+/* No filtering version. */
+/* !!! Should add K limit in here so that smoothing takes it into account !!! */
 static double icxKcurveNF(double L, icxInkCurve *c) {
 	double rv;
+	int refl = 0;
 
-	/* Constrain L to 0.0 .. 1.0, just in case... */
-	if (L < 0.0)
-		L = 0.0;
-	else if (L > 1.0)
+	DBK(("icxKcurve got L = %f, Params smth %f %f, %f %f %f %f %f\n",L, c->Ksmth, c->Kskew, c->Kstle, c->Kstpo, c->Kenpo, c->Kenle, c->Kshap));
+
+	/* Reflect about L min and max for filter smoothness */
+	if (L < 0.0) {
+		L = -L;
+		refl = 1;
+	} else if (L > 1.0) {
+//		L = 2.0 - L;
 		L = 1.0;
+		refl = 2;
+	}
 
 	/* Invert sense of L, so that 0.0 = white, 1.0 = black */
 	L = 1.0 - L;
+	DBK(("constrained inverted L = %f\n",L));
 
 	if (L <= c->Kstpo && L <= c->Kenpo) {
 		/* We are at white level */
 		rv = c->Kstle;
+		DBK(("At white level %f\n",rv));
 	} else if (L >= c->Kstpo && L >= c->Kenpo) {
 		/* We are at black level */
 		rv = c->Kenle;
+		DBK(("At black level %f\n",rv));
 	} else {
 		double g;
 		/* We must be on the curve from start to end levels */
@@ -516,13 +617,28 @@ static double icxKcurveNF(double L, icxInkCurve *c) {
 			rv = (L - c->Kstpo)/(c->Kenpo - c->Kstpo);
 		}
 
+		DBK(("Curve position %f\n",rv));
+
+		rv = pow(rv, c->Kskew);
+
+		DBK(("Skewed curve position %f\n",rv));
+
 		g = c->Kshap/2.0;
+		DBK(("Curve bf %f, g %g\n",rv,g));
 
 		/* A value of 0.5 will be tranlated to g */
 		rv = rv/((1.0/g - 2.0) * (1.0 - rv) + 1.0);
 
+		DBK(("Skewed shaped %f\n",rv));
+
+		rv = pow(rv, 1.0/c->Kskew);
+
+		DBK(("Shaped %f\n",rv));
+
 		/* Transition between start end end levels */
 		rv = rv * (c->Kenle - c->Kstle) + c->Kstle;
+
+		DBK(("Scaled to start and end levele %f\n",rv));
 	}
 
 	/* To be safe */
@@ -531,13 +647,29 @@ static double icxKcurveNF(double L, icxInkCurve *c) {
 	else if (rv > 1.0)
 		rv = 1.0;
 
+	if (refl == 1) {
+		rv = 2.0 * c->Kenle - rv;
+	} else if (refl == 2) {
+//		rv = 2.0 * c->Kstle - rv;
+		rv = c->Kstle;
+	}
+
+	DBK(("Returning %f\n",rv));
 	return rv;
 }
+
+#ifdef DBK
+#undef DBK
+#define DBK(xxx) 
+#endif
 
 /* Same as above, but implement a convolution filter */
 static double icxKcurve(double L, icxInkCurve *c) {
 	double rv = 0.0;
 
+#ifdef DISABLE_KCURVE_FILTER
+	return icxKcurveNF(L, c);
+#else /* !DISABLE_KCURVE_FILTER */
 	if (c->Ksmth == 0.0)
 		return icxKcurveNF(L, c);
 
@@ -553,15 +685,16 @@ static double icxKcurve(double L, icxInkCurve *c) {
 	rv +=  0.20 * icxKcurveNF(L + 1.0 * c->Ksmth, c);
 
 	return rv/3.8;
+#endif /* !DISABLE_KCURVE_FILTER */
 }
 
 /* Do output'->input' lookup with aux details. */
-/* Note than out[] will be used as the inking value if icxKrule is */
-/* icxKvalue, icxKlocus, icxKl5l or icxKl5lk, and that the icxKrule value will */
-/* be in the input' space. Note that the ink limit will be computed after converting */
-/* input' to input, auxt will override the inking rule, and auxr reflects the */
-/* available auxiliary range there was to choose from. auxv was the actual auxiliary used. */
-/* Note that the aux values will reflect linearised auxiliary values. */
+/* Note that out[] will be used as the inking value if icxKrule is */
+/* icxKvalue, icxKlocus, icxKl5l or icxKl5lk, and that the auxiliar values, PCS ranges */
+/* and icxKrule value will all be evaluated in output->input space (not ' space). */
+/* Note that the ink limit will be computed after converting input' to input, auxt */
+/* will override the inking rule, and auxr[] reflects the available auxiliary range */
+/* that the locus was to choose from, and auxv[] was the actual auxiliary used. */
 /* Retuns clip status. */
 int icxLuLut_inv_clut_aux(
 icxLuLut *p,
@@ -605,6 +738,40 @@ double *in		/* Function input values to invert (== clut output' values) */
 	if (p->clutTable->di > fdi) {	/* ie. CMYK->Lab, there will be ambiguity */
 		double min[MXDI], max[MXDI];	/* Auxiliary locus range */
 
+#ifdef NEVER	/* Examine how many segments there are */
+		{	/* ie. CMYK->Lab, there will be ambiguity */
+			double smin[10][MXRI], smax[10][MXRI];	/* Auxiliary locus segment ranges */
+			double min[MXRI], max[MXRI];	/* Auxiliary min and max locus range */
+
+			nsoln = p->clutTable->rev_locus_segs(
+				p->clutTable,	/* rspl object */
+				p->auxm,		/* Auxiliary mask */
+				pp,				/* Input target and output solutions */
+				10,				/* Maximum number of solutions to return */
+				smin, smax);		/* Returned locus of valid auxiliary values */
+
+			if (nsoln != 0) {
+				/* Convert the locuses from input' -> input space */
+				/* and get overall min/max locus range */
+				for (e = 0; e < p->clutTable->di; e++) {
+					co tc;
+					/* (Is speed more important than precision ?) */
+					if (p->auxm[e] != 0) {
+						for (i = 0; i < nsoln; i++) {
+							tc.p[0] = smin[i][e];
+							p->revinputTable[e]->interp(p->revinputTable[e], &tc);
+							smin[i][e] = tc.v[0];
+							tc.p[0] = smax[i][e];
+							p->revinputTable[e]->interp(p->revinputTable[e], &tc);
+							smax[i][e] = tc.v[0];
+							printf("  Locus seg %d:[%d] %f -> %f\n",i, e, smin[i][e], smax[i][e]);
+						}
+					}
+				}
+			}
+		}
+#endif /* NEVER */
+
 		/* Compute auxiliary locus on the fly. This is in dev' == input' space. */
 		nsoln = p->clutTable->rev_locus(
 			p->clutTable,	/* rspl object */
@@ -614,9 +781,25 @@ double *in		/* Function input values to invert (== clut output' values) */
 		
 		if (nsoln == 0) {
 			xflags |= RSPL_WILLCLIP;	/* No valid locus, so we expect to have to clip */
-		}
+#ifdef DEBUG_RLUT
+			printf("inv_clut_aux: no valid locus, expect clip\n");
+#endif
 
-		else {  /* Got a valid locus */
+		} else {  /* Got a valid locus */
+
+			/* Convert the locuses from input' -> input space */
+			for (e = 0; e < p->clutTable->di; e++) {
+				co tc;
+				/* (Is speed more important than precision ?) */
+				if (p->auxm[e] != 0) {
+					tc.p[0] = min[e];
+					p->revinputTable[e]->interp(p->revinputTable[e], &tc);
+					min[e] = tc.v[0];
+					tc.p[0] = max[e];
+					p->revinputTable[e]->interp(p->revinputTable[e], &tc);
+					max[e] = tc.v[0];
+				}
+			}
 
 			if (auxr != NULL) {		/* Report the locus range */
 				int ee = 0;
@@ -640,9 +823,10 @@ double *in		/* Function input values to invert (== clut output' values) */
 						pp[0].p[e] = iv;
 					}
 				}
+				DBR(("inv_clut_aux: aux %f from auxt[] %f\n",pp[0].p[3],auxt[0]))
 			} else if (p->ink.k_rule == icxKvalue) {
 				/* Implement the auxiliary inking rule */
-				/* Target auxiliary values are provided in out[] */
+				/* Target auxiliary values are provided in out[] K value */
 				for (e = 0; e < p->clutTable->di; e++) {
 					if (p->auxm[e] != 0) {
 						double iv = out[e];		/* out[] holds aux target value */
@@ -653,6 +837,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 						pp[0].p[e] = iv;
 					}
 				}
+				DBR(("inv_clut_aux: aux %f from out[0] K target %f min %f max %f\n",pp[0].p[3],out[3],min[3],max[3]))
 			} else if (p->ink.k_rule == icxKlocus) {
 				/* Set target auxliary input values from values in out[] and locus */
 				for (e = 0; e < p->clutTable->di; e++) {
@@ -667,6 +852,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 						pp[0].p[e] = iv;
 					}
 				}
+				DBR(("inv_clut_aux: aux %f from out[0] locus %f min %f max %f\n",pp[0].p[3],out[3],min[3],max[3]))
 			} else { /* p->ink.k_rule == icxKluma5 || icxKluma5k || icxKl5l || icxKl5lk */
 				/* Auxiliaries are driven by a rule and the output values */
 				double tin[MAX_CHAN], rv, L;
@@ -686,17 +872,19 @@ double *in		/* Function input values to invert (== clut output' values) */
 				/* Figure out Luminance number */
 				if (p->natos == icSigXYZData) {
 					icmXYZ2Lab(&icmD50, tin, tin);
-
 				} else if (p->natos != icSigLabData) {	/* Hmm. that's unexpected */
 					error("Assert: xlut K locus, unexpected native pcs of 0x%x\n",p->natos);
 				}
 				L = 0.01 * tin[0];
+				DBR(("inv_clut_aux: aux from Luminance, raw L = %f\n",L));
 
 				/* Normalise L to its possible range from min to max */
 				L = (L - p->Lmin)/(p->Lmax - p->Lmin);
+				DBR(("inv_clut_aux: Normalize L = %f\n",L));
 
 				/* Convert L to curve value */
 				rv = icxKcurve(L, &p->ink.c);
+				DBR(("inv_clut_aux: icxKurve lookup returns = %f\n",rv));
 
 				if (p->ink.k_rule == icxKluma5) {	/* Curve is locus value */
 
@@ -707,6 +895,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 							pp[0].p[e] = min[e] + rv * (max[e] - min[e]);
 						}
 					}
+					DBR(("inv_clut_aux: aux %f from locus %f min %f max %f\n",pp[0].p[3],rv,min[3],max[3]))
 
 				} else if (p->ink.k_rule == icxKluma5k) {	/* Curve is K value */
 
@@ -720,6 +909,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 							pp[0].p[e] = iv;
 						}
 					}
+					DBR(("inv_clut_aux: aux %f from out[0] K target %f min %f max %f\n",pp[0].p[3],rv,min[3],max[3]))
 
 				} else { /* icxKl5l || icxKl5lk */
 					/* Create second curve, and use input locus to */
@@ -760,25 +950,46 @@ double *in		/* Function input values to invert (== clut output' values) */
 							}
 						}
 					}
+					DBR(("inv_clut_aux: aux %f from 2 curves\n",pp[0].p[3]))
+				}
+			}
+
+			/* Convert to input/dev aux target to input'/dev' space for rspl inversion */
+			for (e = 0; e < p->clutTable->di; e++) {
+				double tv, bv = 0.0, bd = 1e6;
+				co tc;
+				if (p->auxm[e] != 0)  {
+					tv = pp[0].p[e];
+					/* Clip to overall locus range (belt and braces) */
+					if (tv < min[e])
+						tv = min[e];
+					if (tv > max[e])
+						tv = max[e];
+					tc.p[0] = tv;
+					p->inputTable[e]->interp(p->inputTable[e], &tc);
+					pp[0].p[e] = tc.v[0];
 				}
 			}
 
 			xflags |= RSPL_EXACTAUX;	/* Since we confine aux to locus */
-		}
 
 #ifdef DEBUG_RLUT
-		printf("inv_clut_aux computed aux values ");
-		for (e = 0; e < p->clutTable->di; e++) {
-			if (p->auxm[e] != 0)
-				printf("%d: %f ",e,pp[0].p[e]);
-		}
-		printf("\n");
+			printf("inv_clut_aux computed aux values ");
+			for (e = 0; e < p->clutTable->di; e++) {
+				if (p->auxm[e] != 0)
+					printf("%d: %f ",e,pp[0].p[e]);
+			}
+			printf("\n");
 #endif /* DEBUG_RLUT */
+		}
 
 		/* Find reverse solution with target auxiliaries */
+		/* We choose the closest aux at or above the target */
+		/* to try and avoid glitches near black due to */
+		/* possible forked black locuses. */
 		nsoln = p->clutTable->rev_interp(
 			p->clutTable, 	/* rspl object */
-			flags | xflags,	/* Combine all the flags */
+			RSPL_MAXAUX | flags | xflags,	/* Combine all the flags */
 			MAX_INVSOLN, 	/* Maxumum solutions to return */
 			p->auxm, 		/* Auxiliary input chanel mask */
 			cdir,			/* Clip vector direction and length */
@@ -817,12 +1028,12 @@ double *in		/* Function input values to invert (== clut output' values) */
 		DBR(("inv_clut_aux got clip, compute CAM clip\n"))
 
 		if (nsoln != 1) {	/* This would be unexpected */
-			error("~~~1 Unexpected failure to return 1 solution on clip for input to output table");
+			error("Unexpected failure to return 1 solution on clip for input to output table");
 		}
 
 		if (p->cclutTable == NULL) {	/* we haven't created this yet, so do so */
 			if (icxLuLut_init_clut_camclip(p))
-				error("~~~1 Error in creating CAM rspl for camclip");
+				error("Creating CAM rspl for camclip failed");
 		}
 
 		/* Setup for reverse lookup */
@@ -864,7 +1075,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 		nsoln &= RSPL_NOSOLNS;		/* Get number of solutions */
 
 		if (nsoln != 1) {	/* This would be unexpected */
-			error("~~~1 Unexpected failure to return 1 solution on CAM clip for input to output table");
+			error("Unexpected failure to return 1 solution on CAM clip for input to output table");
 		}
 
 		/* Compute the CAM clip distances */
@@ -880,7 +1091,6 @@ double *in		/* Function input values to invert (== clut output' values) */
 		bf = cdist/4.0;						/* 0.0 for PCS result, 1.0 for CAM result */
 		if (bf > 1.0)
 			bf = 1.0;
-//printf("~1 raw blend = %f\n",bf);
 		bf = bf * bf * (3.0 - 2.0 * bf);	/* Convert to spline blend */
 		DBR(("cdist %f, spline blend %f\n",cdist,bf))
 
@@ -895,8 +1105,8 @@ double *in		/* Function input values to invert (== clut output' values) */
 		/* convex hull "wrapper" to create a clip vector, which we're not */
 		/* current doing. */
 		DBR(("Clip blend between:\n"))
-		DBR(("Lab: %f %f %f %f and\n",pp[0].p[0], pp[0].p[1], pp[0].p[2], pp[0].p[3]))
-		DBR(("Jab: %f %f %f %f\n",cpp.p[0], cpp.p[1], cpp.p[2], cpp.p[3]))
+		DBR(("Lab: %f %f %f and\n",pp[0].p[0], pp[0].p[1], pp[0].p[2]))
+		DBR(("Jab: %f %f %f\n",cpp.p[0], cpp.p[1], cpp.p[2]))
 
 		for (e = 0; e < p->clutTable->di; e++) {
 			out[e] = (1.0 - bf) * pp[0].p[e] + bf * cpp.p[e];
@@ -911,13 +1121,13 @@ double *in		/* Function input values to invert (== clut output' values) */
 			double in_v[MXDO];
 			p->output(p, in_v, pp[0].v);		/* Get ICC inverse input values */
 			p->out_abs(p, in_v, in_v);
-			error("~~~1 Unexpected failure to find reverse solution for input to output table for value %f %f %f (ICC input %f %f %f)",pp[0].v[0],pp[0].v[1],pp[0].v[2], in_v[0], in_v[1], in_v[2]);
+			error("Unexpected failure to find reverse solution for input to output table for value %f %f %f (ICC input %f %f %f)",pp[0].v[0],pp[0].v[1],pp[0].v[2], in_v[0], in_v[1], in_v[2]);
 			return 2;
 		} else {		/* Multiple solutions */
 			/* Use a simple minded resolution - choose the one closest to the center */
 			double bdist = 1e300;
 			int bsoln = 0;
-//printf("~~~1 got multiple reverse solutions\n");
+			DBR(("got multiple reverse solutions\n"));
 			for (i = 0; i < nsoln; i++) {
 				double ss;
 				for (ss = 0.0, e = 0; e < p->clutTable->di; e++) {
@@ -971,16 +1181,16 @@ if (p->ink.tlimit >= 0.0 || p->ink.klimit >= 0.0) {
 
 /* Do output'->input' lookup, simple version */
 /* Note than out[] will carry inking value if icxKrule is icxKvalue of icxKlocus */
-/* and that the icxKrule value will be in the input' space. */
+/* and that the icxKrule value will be in the input (NOT input') space. */
 /* Note that the ink limit will be computed after converting input' to input */
 int icxLuLut_inv_clut(icxLuLut *p, double *out, double *in) {
 	return icxLuLut_inv_clut_aux(p, out, NULL, NULL, NULL, in);
 }
 
-/* Given the proposed auxiliary input' values in in[di], */
+/* Given the proposed auxiliary input values in in[di], */
 /* and the target output' (ie. PCS') values in out[fdi], */
-/* return the auxiliary input' values as a proportion of their possible locus */
-/* in locus[di]. */
+/* return the auxiliary input (NOT input' space) values as a proportion of their */
+/* possible locus in locus[di]. */
 /* This is generally used on a source CMYK profile to convey the black intent */
 /* to destination CMYK profile. */
 int icxLuLut_clut_aux_locus(icxLuLut *p, double *locus, double *out, double *in) {
@@ -993,7 +1203,7 @@ int icxLuLut_clut_aux_locus(icxLuLut *p, double *locus, double *out, double *in)
 
 		/* Setup for auxiliary locus lookup */
 		for (f = 0; f < p->clutTable->fdi; f++) {
-			pp[0].v[f] = out[f];			/* Target value */
+			pp[0].v[f] = out[f];			/* Target output' (i.e. PCS) value */
 		}
 	
 		/* Compute auxiliary locus */
@@ -1007,6 +1217,20 @@ int icxLuLut_clut_aux_locus(icxLuLut *p, double *locus, double *out, double *in)
 			for (e = 0; e < p->clutTable->di; e++)
 				locus[e] = 0.0;		/* Return some safe values */
 		} else {  /* Got a valid locus */
+
+			/* Convert the locus from input' -> input space */
+			for (e = 0; e < p->clutTable->di; e++) {
+				co tc;
+				/* (Is speed more important than precision ?) */
+				if (p->auxm[e] != 0) {
+					tc.p[0] = min[e];
+					p->revinputTable[e]->interp(p->revinputTable[e], &tc);
+					min[e] = tc.v[0];
+					tc.p[0] = max[e];
+					p->revinputTable[e]->interp(p->revinputTable[e], &tc);
+					max[e] = tc.v[0];
+				}
+			}
 
 			/* Figure out the proportion of the locus */
 			for (e = 0; e < p->clutTable->di; e++) {
@@ -1068,16 +1292,16 @@ int icxLuLut_inv_input(icxLuLut *p, double *out, double *in) {
 		if (nsoln == 1) { /* Exactly one solution */
 			j = 0;
 		} else if (nsoln == 0) {	/* Zero solutions. This is unexpected. */
-			error("~~~1 Unexpected failure to find reverse solution for input table");
+			error("Unexpected failure to find reverse solution for input table");
 			return 2;
 		} else {		/* Multiple solutions */
 			/* Use a simple minded resolution - choose the one closest to the center */
 			double bdist = 1e300;
 			int bsoln = 0;
-/* Don't expect this - 1D luts are meant to be monotonic */
-printf("~~~1 got %d reverse solutions\n",nsoln);
-printf("~~~1 solution 0 = %f\n",pp[0].p[0]);
-printf("~~~1 solution 1 = %f\n",pp[1].p[0]);
+			/* Don't expect this - 1D luts are meant to be monotonic */
+			warning("1D lut inversion got %d reverse solutions\n",nsoln);
+			warning("solution 0 = %f\n",pp[0].p[0]);
+			warning("solution 1 = %f\n",pp[1].p[0]);
 			for (j = 0; j < nsoln; j++) {
 				double tt;
 				tt = pp[i].p[0] - p->inputClipc[i];
@@ -1098,12 +1322,15 @@ printf("~~~1 solution 1 = %f\n",pp[1].p[0]);
 }
 
 /* Possible inverse matrix lookup */
+/* (Will do nothing if input is device space) */
 int icxLuLut_inv_matrix(icxLuLut *p, double *out, double *in) {
 	int rv = 0;
 	rv |= ((icmLuLut *)p->plu)->inv_matrix((icmLuLut *)p->plu, out, in);
 	return rv;
 }
 
+/* Inverse input absolute intent conversion */
+/* (Will do nothing if input is device space) */
 int icxLuLut_inv_in_abs(icxLuLut *p, double *out, double *in) {
 	int rv = 0;
 	rv |= ((icmLuLut *)p->plu)->inv_in_abs((icmLuLut *)p->plu, out, in);
@@ -1116,9 +1343,9 @@ int icxLuLut_inv_in_abs(icxLuLut *p, double *out, double *in) {
 }
 
 /* Overall inverse lookup */
-/* Note that if k_rule is icxKvalue, the inking value is in lut input space */
+/* Note that all auxiliary values are in input (NOT input') space */
 static int
-icxLuLut_inv_lookup (
+icxLuLut_inv_lookup(
 icxLuBase *pp,		/* This */
 double *out,		/* Vector of output values/input auxiliary values */
 double *in			/* Vector of input values */
@@ -1127,33 +1354,26 @@ double *in			/* Vector of input values */
 	int rv = 0;
 	int i;
 	double temp[MAX_CHAN];
-	double tout[MAX_CHAN];			/* Use as out[] to clut in case out == in */
+
+	DBOL(("xiccilu: input            = %s\n", ppos(p->outputChan, in)));
 	if (p->mergeclut == 0) {		/* Do this if it's not merger with clut */
 		rv |= p->inv_out_abs (p, temp, in);
+		DBOL(("xiccilu: after inv abs    = %s\n", ppos(p->outputChan, temp)));
 		rv |= p->inv_output  (p, temp, temp);
+		DBOL(("xiccilu: after inv out    = %s\n", ppos(p->outputChan, temp)));
 	} else {
 		for (i = 0; i < p->outputChan; i++)
 			temp[i] = in[i];
 	}
-	if (p->ink.k_rule == icxKvalue) {	/* aux K value is provided in out[] */
-		co tc;
-		/* Convert aux targets from input to input' space ready for inv_clut */
-		for (i = 0; i < p->inputChan; i++) {
-			tc.p[0] = out[i];
-			p->inputTable[i]->interp(p->inputTable[i], &tc);
-			tout[i] = tc.v[0];
-		}
-	} else if (p->ink.k_rule == icxKlocus) {	/* Carry aux K locus above input */
-		/* ~~~888 This isn't right - we need to convert between dev and dev' */
-		/* locus values. This means we need the dev locus ranges here, to */
-		/* recompute the proportions ~~~888 */
-		for (i = p->outputChan; i < p->inputChan; i++)
-			tout[i] = out[i];
-	}
-	rv |= p->inv_clut    (p, tout, temp);
-	rv |= p->inv_input   (p, out, tout);
+	DBOL(("xiccilu: aux targ   = %s\n", ppos(p->inputChan,out)));
+	rv |= p->inv_clut    (p, out, temp);
+	DBOL(("xiccilu: after inv clut   = %s\n", ppos(p->inputChan,out)));
+	rv |= p->inv_input   (p, out, out);
+	DBOL(("xiccilu: after inv input  = %s\n", ppos(p->inputChan,out)));
 	rv |= p->inv_matrix  (p, out, out);
+	DBOL(("xiccilu: after inv matrix = %s\n", ppos(p->inputChan,out)));
 	rv |= p->inv_in_abs  (p, out, out);
+	DBOL(("xiccilu: after inv abs    = %s\n", ppos(p->inputChan,out)));
 	return rv;
 }
 
@@ -1258,7 +1478,7 @@ alloc_icxLuLut(
 	p->spaces            = icxLuSpaces;
 	p->get_native_ranges = icxLu_get_native_ranges;
 	p->get_ranges        = icxLu_get_ranges;
-	p->rel_wh_bk_points  = icxLuRel_wh_bk_points;
+	p->efv_wh_bk_points  = icxLuEfv_wh_bk_points;
 	p->get_gamut         = icxLuLutGamut;
 	p->fwd_relpcs_outpcs = icxLuLut_fwd_relpcs_outpcs;
 	p->bwd_outpcs_relpcs = icxLuLut_bwd_outpcs_relpcs;
@@ -1300,7 +1520,10 @@ alloc_icxLuLut(
 	p->plu->lutspaces(p->plu, &p->natis, NULL, &p->natos, NULL, &p->natpcs);
 
 	/* Get other details of conversion */
-	p->plu->spaces(p->plu, NULL, &p->inputChan, NULL, &p->outputChan, NULL, NULL, NULL, NULL);
+	p->plu->spaces(p->plu, NULL, &p->inputChan, NULL, &p->outputChan, NULL, NULL, NULL, NULL, NULL);
+
+	/* Remember flags */
+	p->flags = flags;
 
 	/* Sanity check */
 	if (p->inputChan > MXDI) {
@@ -1333,13 +1556,17 @@ icxLuLut *p,			/* Object being initialised */
 icxInk   *ink,			/* inking details (NULL for default) */
 int       setLminmax	/* Figure the L locus for inking rule */
 ) {
+	int devchan = p->func == icmFwd ? p->inputChan : p->outputChan;
+
 	if (ink) {
 		p->ink = *ink;	/* Copy the structure */
 	} else {
 		p->ink.tlimit = 3.0;			/* default ink limit of 300% */
 		p->ink.klimit = -1.0;			/* default no black limit */
+		p->ink.KonlyLmin = 0;			/* default don't use K only black as Locus Lmin */
 		p->ink.k_rule = icxKluma5;		/* default K generation rule */
 		p->ink.c.Ksmth = ICXINKDEFSMTH;	/* Default smoothing */
+		p->ink.c.Kskew = ICXINKDEFSKEW;	/* Default shape skew */
 		p->ink.c.Kstle = 0.0;		/* Min K at white end */
 		p->ink.c.Kstpo = 0.0;		/* Start of transition is at white */
 		p->ink.c.Kenle = 1.0;		/* Max K at black end */
@@ -1348,9 +1575,9 @@ int       setLminmax	/* Figure the L locus for inking rule */
 	}
 
 	/* Normalise total and black ink limits */
-    if (p->ink.tlimit <= 1e-4 || p->ink.tlimit >= (double)p->inputChan)
+    if (p->ink.tlimit <= 1e-4 || p->ink.tlimit >= (double)devchan)
     	p->ink.tlimit = -1.0;		/* Turn ink limit off if not effective */
-    if (p->inputChan < 4 || p->ink.klimit < 0.0 || p->ink.klimit >= 1.0)
+    if (devchan < 4 || p->ink.klimit < 0.0 || p->ink.klimit >= 1.0)
     	p->ink.klimit = -1.0;		/* Turn black limit off if not effective */
 	
 	/* Set the ink limit information for any reverse interpolation. */
@@ -1360,7 +1587,7 @@ int       setLminmax	/* Figure the L locus for inking rule */
 		p->ink.tlimit >= 0.0 || p->ink.klimit >= 0.0 ? icxLimitD : NULL,
 		                    /* Optional input space limit() function. */
 		                	/* Function should evaluate in[0..di-1], and return */
-		                	/* numbert that is not to exceed 0.0. NULL if not used. */
+		                	/* number that is not to exceed 0.0. NULL if not used. */
 		(void *)p,			/* Context passed to limit() */
 		0.0					/* Value that limit() is not to exceed */
 	);
@@ -1381,26 +1608,31 @@ int       setLminmax	/* Figure the L locus for inking rule */
 	/* Figure Lmin and Lmax for icxKluma5 curve basis */
 	if (setLminmax
 	 && p->clutTable->di > p->clutTable->fdi) {	/* If K generation makes sense */
-		double wh[3], bk[3];
+		double wh[3], bk[3], kk[3];
 		int mergeclut;			/* Save/restore mergeclut value */
 
-		/* Get white/black in effective xlu pcs space */
-		p->rel_wh_bk_points((icxLuBase *)p, wh, bk);
+		/* Get white/black in effective xlu PCS space */
+		p->efv_wh_bk_points((icxLuBase *)p, wh, bk, kk);
 
-		/* Convert from effective PCS to native relative XYZ or Lab PCS */
+		/* Convert from effective PCS (ie. Jab) to native XYZ or Lab PCS */
 		mergeclut = p->mergeclut;			/* Hack to be able to use inv_out_abs() */
 		p->mergeclut = 0;					/* if mergeclut is active. */
 		icxLuLut_inv_out_abs(p, wh, wh);
 		icxLuLut_inv_out_abs(p, bk, bk);
+		icxLuLut_inv_out_abs(p, kk, kk);
 		p->mergeclut = mergeclut;			/* Restore */
 
 		/* Convert to Lab PCS */
 		if (p->natos == icSigXYZData) {	/* Always do K rule in L space */
 			icmXYZ2Lab(&icmD50, wh, wh);
 			icmXYZ2Lab(&icmD50, bk, bk);
+			icmXYZ2Lab(&icmD50, kk, kk);
 		}
 		p->Lmax = 0.01 * wh[0];
-		p->Lmin = 0.01 * bk[0];
+		if (p->ink.KonlyLmin != 0)
+			p->Lmin = 0.01 * kk[0];
+		else
+			p->Lmin = 0.01 * bk[0];
 	} else {
 
 		/* Some sane defaults */
@@ -1424,6 +1656,8 @@ icxLuLut *p			/* Object being initialised */
 
 	/* Setup for inversion of multi-dim clut */
 
+	p->kch = -1;		/* Not known yet */
+
 	/* Set auxiliaries */
 	for (i = 0; i < p->inputChan; i++)
 		p->auxm[i] = 0;
@@ -1431,19 +1665,24 @@ icxLuLut *p			/* Object being initialised */
 	if (p->inputChan > p->outputChan) {
 		switch(p->natis) {
 			case icSigCmykData:
+									/* Should fix icm/xicc to remember K channel */
 				p->auxm[3] = 1;		/* K is the auxiliary channel */
 				break;
 			default:
-				p->pp->errc = 2;
-				sprintf(p->pp->err,"Unknown colorspace %s when setting auxliaries",
-				                icm2str(icmColorSpaceSignature, p->natis));
-				return p->pp->errc;
+				if (p->kch >= 0)	/* It's been discovered */
+					p->auxm[p->kch] = 1;
+				else {
+					p->pp->errc = 2;
+					sprintf(p->pp->err,"Unknown colorspace %s when setting auxliaries",
+					                icm2str(icmColorSpaceSignature, p->natis));
+					return p->pp->errc;
+				}
 				break;
 		}
 	}
 
-	p->auxlinf = NULL;		/* Input space auxiliary linearisation function  - not implemented */
-	p->auxlinf_ctx = NULL;	/* Opaque context for auxliliary linearisation function */
+//	p->auxlinf = NULL;		/* Input space auxiliary linearisation function  - not implemented */
+//	p->auxlinf_ctx = NULL;	/* Opaque context for auxliliary linearisation function */
 
 	/* Aproximate center of clut input gamut - used for */
 	/* resolving multiple reverse solutions. */
@@ -1568,7 +1807,7 @@ icxLuLut *p			/* Object being initialised */
 	return 0;
 }
 
-/* Function to pass to rspl to set input/output transfer functions */
+/* Function to pass to rspl to set secondary input/output transfer functions */
 static void
 icxLuLut_inout_func(
 	void *pp,			/* icxLuLut */
@@ -1602,8 +1841,9 @@ icxLuLut_inout_func(
 		for (i = 0; i < p->inputChan; i++)
 			tin[i] = 0.0;
 		tin[p->iol_ch] = in[0];
-		/* This won't be valid if matrix is used !!! */
 		luluto->inv_input(luluto, tout, tin);
+		/* This won't be valid if matrix is used or there is a PCS conversion !!! */
+		/* Shouldn't be a problem because this is only used for inverting dev->PCS ? */
 		luluto->inv_in_abs(luluto, tout, tout);
 #endif
 	}
@@ -1624,8 +1864,9 @@ icxLuLut_clut_merge_func(
 	luluto->output(luluto, out, out);
 	luluto->out_abs(luluto, out, out);
 
-	if (p->outs == icxSigJabData)
+	if (p->outs == icxSigJabData) {
 		p->cam->XYZ_to_cam(p->cam, out, out);
+	}
 }
 
 /* Implimenation of Lut create from icc. */
@@ -1659,6 +1900,8 @@ icxInk                *ink			/* inking details (NULL for default) */
 	if ((p = alloc_icxLuLut(xicp, plu, flags)) == NULL)
 		return NULL;
 
+	p->func = func;
+
 	/* Set LuLut "use" specific creation flags: */
 	if (flags & ICX_CLIP_NEAREST)
 		p->nearclip = 1;
@@ -1685,9 +1928,10 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 		if (vc != NULL)		/* One has been provided */
 			p->vc  = *vc;		/* Copy the structure */
 		else
-			xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0);	/* Use a default */
+			xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0, NULL);	/* Use a default */
 		p->cam = new_icxcam(cam_default);
-		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf, p->vc.Fxyz, XICC_USE_HK);
+		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf,
+		                 p->vc.Fxyz, XICC_USE_HK, XICC_NOCAMCL);
 	} else {
 		p->cam = NULL;
 	}
@@ -1696,10 +1940,10 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 	p->intent = intent;
 
 	/* Get the effective spaces of underlying icm */
-	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, NULL, NULL, &p->pcs);
+	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, NULL, NULL, &p->pcs, NULL);
 
 	/* Override with pcsor */
-	/* We assume that any profile that has a cie color as a "device" color */
+	/* We assume that any profile that has a CIE color as a "device" color */
 	/* intends it to stay that way, and not be overridden. */
 	if (pcsor == icxSigJabData) {
 		p->pcs = pcsor;		
@@ -1766,9 +2010,11 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 		p->inputClipc[i] = (p->ninmin[i] + p->ninmax[i])/2.0;
 	}
 
-	/* Create rspl based reverse input lookups used in ink limit function. */
+	/* Create rspl based reverse input lookups used in ink limit and locus range functions. */
 	for (i = 0; i < p->inputChan; i++) {
-		int gres = 256;
+		int gres = p->inputTable[i]->g.mres;	/* Same res as curve being inverted */
+		if (gres < 256)
+			gres = 256;
 		if ((p->revinputTable[i] = new_rspl(RSPL_NOFLAGS, 1, 1)) == NULL) {
 			p->pp->errc = 2;
 			sprintf(p->pp->err,"Creation of reverse input table rspl failed");
@@ -1898,7 +2144,8 @@ icxLuLut *p) {
 	}
 
 	/* Create CAM rspl based multi-dim table */
-	if ((p->cclutTable = new_rspl(p->fastsetup ? RSPL_FASTREVSETUP : RSPL_NOFLAGS,
+	if ((p->cclutTable = new_rspl(p->fastsetup ? RSPL_FASTREVSETUP : RSPL_NOFLAGS
+		                          | p->flags & ICX_VERBOSE ? RSPL_VERBOSE : RSPL_NOFLAGS,
 	                              p->inputChan, p->outputChan)) == NULL) {
 		p->pp->errc = 2;
 		sprintf(p->pp->err,"Creation of clut table rspl failed");
@@ -2101,11 +2348,7 @@ static void set_input(void *cntx, double *out, double *in) {
 /* clut */
 static void set_clut(void *cntx, double *out, double *in) {
 	icxLuLut *p = (icxLuLut *)cntx;
-	int didc = 0;		/* Clipped */
 	int f;
-#ifdef DEBUG
-	double ucout[MXDO];
-#endif
 
 	if (p->clut(p, out, in) > 1)
 		error ("%d, %s",p->pp->errc,p->pp->err);
@@ -2117,30 +2360,6 @@ static void set_clut(void *cntx, double *out, double *in) {
 		else
 			icmXYZ2Lab(&icmD50, out, out);
 	}
-
-#ifdef DEBUG
-	ucout[0] = out[0];
-	ucout[1] = out[1];
-	ucout[2] = out[2];
-#endif
-
-	/* Do some crude clipping of the PCS */
-	/* Should yell and scream if this happens ??? */
-	for (f = 0; f < 3; f++) {
-		if (out[f] < p->noutmin[f]) {
-			out[f] = p->noutmin[f];
-			didc = 1;
-		} else if (out[f] > p->noutmax[f]) {
-			out[f] = p->noutmax[f];
-			didc = 1;
-		}
-	}
-#ifdef DEBUG
-	if (didc) {
-		printf("set_clut callback clipped %f %f %f -> %f %f %f\n",
-		ucout[0], ucout[1], ucout[2], out[0], out[1], out[2]);
-	}
-#endif
 }
 
 /* output */
@@ -2179,8 +2398,12 @@ static double bfindfunc(void *adata, double pv[]) {
 	double lr, ta, tb, terr;	/* L ratio, target a, target b, target error */
 	double ovr;
 
+//printf("~1 bfindfunc got %f %f %f %f\n", pv[0], pv[1], pv[2], pv[3]);
 	/* See if over ink limit or outside device range */
 	ovr = icxLimit((void *)b->p, pv);		/* > 0.0 if outside device gamut or ink limit */
+	if (ovr < 0.0)
+		ovr = 0.0;
+//printf("~1 bfindfunc got ovr %f\n", ovr);
 
 	/* Compute the absolute Lab value: */
 	b->p->input(b->p, bcc.p, pv);						/* Through input tables */
@@ -2244,6 +2467,7 @@ int                flags,			/* white/black point flags etc. */
 int                nodp,			/* Number of points */
 cow                *ipoints,		/* Array of input points (Lab or XYZ normalized to 1.0) */
 double             dispLuminance,	/* > 0.0 if display luminance value and is known */
+double             wpscale,			/* > 0.0 if white point is to be scaled */
 double             smooth,			/* RSPL smoothing factor, -ve if raw */
 double             avgdev,			/* reading Average Deviation as a prop. of the input range */
 icxViewCond        *vc,				/* Viewing Condition (NULL if not using CAM) */
@@ -2269,14 +2493,19 @@ int                quality			/* Quality metric, 0..3 */
 	if (flags & ICX_VERBOSE)
 		rsplflags |= RSPL_VERBOSE;
 
-	if (flags & ICX_EXTRA_FIT)
-		rsplflags |= RSPL_EXTRAFIT;		/* Try extra hard to fit data */
+//	if (flags & ICX_2PASSSMTH)
+//		rsplflags |= RSPL_2PASSSMTH;	/* Smooth data using Gaussian */
+
+//	if (flags & ICX_EXTRA_FIT)
+//		rsplflags |= RSPL_EXTRAFIT2;	/* Try extra hard to fit data */
 
 	luflags = flags;		/* Transfer straight though ? */
 
 	/* Do basic creation and initialisation */
 	if ((p = alloc_icxLuLut(xicp, plu, luflags)) == NULL)
 		return NULL;
+
+	p->func = func;
 
 	/* Set LuLut "use" specific creation flags: */
 	if (flags & ICX_CLIP_NEAREST)
@@ -2293,7 +2522,7 @@ int                quality			/* Quality metric, 0..3 */
 		p->nooluts = 1;
 
 	/* Get the effective spaces of underlying icm, and set icx the same */
-	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, &p->intent, NULL, &p->pcs);
+	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, &p->intent, NULL, &p->pcs, NULL);
 
 	/* For set_icx the effective pcs has to be the same as the native pcs */
 
@@ -2383,6 +2612,9 @@ int                quality			/* Quality metric, 0..3 */
 				icmLab2XYZ(&icmD50, wp, wp);
 				icmLab2XYZ(&icmD50, bp, bp);
 			}
+
+//printf("~1 xlut: got input white of dev %f %f %f XYZ %f %f %f\n",
+//dwhite[0], dwhite[1], dwhite[2], wp[0], wp[1], wp[2]);
 
 		} else {	/* Output or Display device */
 			/* We assume that the output target is well behaved, */
@@ -2545,6 +2777,8 @@ int                quality			/* Quality metric, 0..3 */
 		int iord[MXDI];			/* Input curve orders */
 		int sord[MXDI];			/* Input sub-grid curve orders */
 		int oord[MXDO];			/* Output curve orders */
+		double shp_smooth[MXDI];/* Smoothing factors for each curve, nom = 1.0 */
+		double out_smooth[MXDO];
 
 		optcomb tcomb = oc_ipo;	/* Create all by default */
 
@@ -2577,7 +2811,7 @@ int                quality			/* Quality metric, 0..3 */
 		/* With current B2A code, make sure a & b curves */
 		/* pass through zero. */
 		if (p->pcs == icSigLabData) {
-			xfflags |=XFIT_OUT_ZERO;
+			xfflags |= XFIT_OUT_ZERO;
 		}
 
 		/* Let xfit create the clut */
@@ -2606,6 +2840,7 @@ int                quality			/* Quality metric, 0..3 */
 			sord[e] = sluord;
 			in_min[e] = p->inmin[e];
 			in_max[e] = p->inmax[e];
+			shp_smooth[e] = SHP_SMOOTH;
 		}
 
 		for (f = 0; f < p->outputChan; f++) {
@@ -2623,6 +2858,9 @@ int                quality			/* Quality metric, 0..3 */
 					out_max[f] = 100.0;	
 				}
 			}
+			out_smooth[f] = OUT_SMOOTH1;
+			if (f != 0 && p->pcs == icSigLabData)	/* a* & b* */
+				out_smooth[f] = OUT_SMOOTH2;
 		}
 
 		/* Create input, sub and output per channel curves (if configured), */
@@ -2630,9 +2868,9 @@ int                quality			/* Quality metric, 0..3 */
 		/* and create clut rspl using xfit class. */
 		/* The true white point for the returned curves and rspl is returned. */
 		if (xf->fit(xf, xfflags, p->inputChan, p->outputChan,
-			rsplflags, wp, dwhite, 
+			rsplflags, wp, dwhite, wpscale, 
 		    ipoints, nodp, in_min, in_max, gres, out_min, out_max,
-		    smooth, oavgdev, iord, sord, oord, tcomb,
+		    smooth, oavgdev, iord, sord, oord, shp_smooth, out_smooth, tcomb,
 		   (void *)p, xfit_to_de2, xfit_to_dde2) != 0) {
 			p->pp->errc = 2;
 			sprintf(p->pp->err,"xfit fitting failed");
@@ -2716,9 +2954,6 @@ int                quality			/* Quality metric, 0..3 */
 	}
 
 
-	if (flags & ICX_VERBOSE)
-		printf("Compensate scattered data for input curves\n");
-
 	/* ------------------------------- */
 	/* Set clut lookup table from xfit */
 	p->clutTable = xf->clut;
@@ -2753,13 +2988,16 @@ int                quality			/* Quality metric, 0..3 */
 
 			/* For CMYK devices, we choose a black point that is in */
 			/* the same Lab vector direction as K, with the minimum L value. */
+			/* (Note this is duplicated in xicc.c icxLu_comp_bk_point() !!!) */
 			if (h->deviceClass != icSigInputClass
 			 && h->colorSpace == icSigCmykData) {
 				bfinds bfs;					/* Callback context */
 				double sr[MXDO];			/* search radius */
 				double tt[MXDO];			/* Temporary */
+				double rs0[MXDO], rs1[MXDO];	/* Random start candidates */
 				int trial;
 				double brv;
+				int kch = 3;
 
 				/* Setup callback function context */
 				bfs.p = p;
@@ -2777,8 +3015,11 @@ int                quality			/* Quality metric, 0..3 */
 				/* Now figure abs Lab value of K only, as the direction */
 				/* to use for the rich black. */
 				for (e = 0; e < p->inputChan; e++)
-					bcc.p[e] = 0.0;
-				bcc.p[3] = 1.0;
+					bcc.p[e] = rs0[e] = 0.0;
+				if (p->ink.klimit < 0.0)
+					bcc.p[kch] = rs0[kch] = 1.0;
+				else
+					bcc.p[kch] = rs0[kch] = p->ink.klimit;		/* K value */
 
 				p->input(p, bcc.p, bcc.p);			/* Through input tables */
 				p->clutTable->interp(p->clutTable, &bcc);	/* Through clut */
@@ -2794,42 +3035,87 @@ int                quality			/* Quality metric, 0..3 */
 				if (flags & ICX_VERBOSE)
 					printf("K only value (Lab) = %f %f %f\n",bfs.p2[0], bfs.p2[1], bfs.p2[2]);
 
-				/* Find the device black point using optimization */
-				/* Do several trials to avoid local minima */
-				for (j = 0; j < p->inputChan; j++) { 
-					tt[j] = bcc.p[j] = 0.5;		/* Starting point */
-					sr[j] = 0.1;
+				/* Start with the K only as the current best value */
+				brv = bfindfunc((void *)&bfs, bcc.p);
+//printf("~1 initial brv for K only = %f\n",brv);
+
+				/* Set the random start 1 location as CMY0 */
+				{
+					double tt;
+					if (p->ink.tlimit < 0.0)
+						tt = 1.0;
+					else
+						tt = p->ink.tlimit/(p->inputChan - 1.0);
+					for (e = 0; e < p->inputChan; e++)
+						rs1[e] = tt;
+					rs1[kch] = 0.0;		/* K value */
 				}
-				brv = 1e38;
-				for (trial = 0; trial < 20; trial++) {
+
+				/* Find the device black point using optimization */
+				/* Do several trials to avoid local minima. */
+				rand32(0x12345678);	/* Make trial values deterministic */
+				for (trial = 0; trial < 200; trial++) {
 					double rv;			/* Temporary */
 
-					if (powell(&rv, p->inputChan, tt, sr, 0.00001, 500, bfindfunc, (void *)&bfs) == 0) {
+					/* Start first trial at 000K */
+					if (trial == 0) {
+						for (j = 0; j < p->inputChan; j++) {
+							tt[j] = rs0[j];
+							sr[j] = 0.1;
+						}
+
+					} else {
+						/* Base is random between 000K and CMY0: */
+						if (trial < 100) {
+							rv = d_rand(0.0, 1.0);
+							for (j = 0; j < p->inputChan; j++) {
+								tt[j] = rv * rs0[j] + (1.0 - rv) * rs1[j];
+								sr[j] = 0.1;
+							}
+						/* Base on current best */
+						} else {
+							for (j = 0; j < p->inputChan; j++) {
+								tt[j] = bcc.p[j];
+								sr[j] = 0.1;
+							}
+						}
+	
+						/* Then add random start offset */
+						for (rv = 0.0, j = 0; j < p->inputChan; j++) {
+							tt[j] +=  d_rand(-0.5, 0.5);
+							if (tt[j] < 0.0)
+								tt[j] = 0.0;
+							else if (tt[j] > 1.0)
+								tt[j] = 1.0;
+						}
+					}
+
+					/* Clip to be within ink limit */
+					icxDoLimit(p, tt, tt);
+
+					if (powell(&rv, p->inputChan, tt, sr, 0.000001, 1000,
+					           bfindfunc, (void *)&bfs, NULL, NULL) == 0) {
 //printf("~1 trial %d, rv %f bp %f %f %f %f\n",trial,rv,tt[0],tt[1],tt[2],tt[3]);
 						if (rv < brv) {
+//printf("~1   new best\n");
 							brv = rv;
 							for (j = 0; j < p->inputChan; j++)
 								bcc.p[j] = tt[j];
 						}
 					}
-					for (j = 0; j < p->inputChan; j++) {
-						tt[j] = bcc.p[j] + d_rand(-0.3, 0.3);
-						if (tt[j] < 0.0)
-							tt[j] = 0.0;
-						else if (tt[j] > 1.0)
-							tt[j] = 1.0;
-					}
 				}
 				if (brv > 1000.0)
 					error ("set_icxLuLut: Black point powell failed");
 
-				for (j = 0; j < p->inputChan; j++) { /* Make sure device values are in range */
+				/* Make sure resulting device values are strictly in range */
+				for (j = 0; j < p->inputChan; j++) {
 					if (bcc.p[j] < 0.0)
 						bcc.p[j] = 0.0;
 					else if (bcc.p[j] > 1.0)
 						bcc.p[j] = 1.0;
 				}
 				/* Now have device black in bcc.p[] */
+//printf("~1 Black point is CMYK %f %f %f %f\n", bcc.p[0], bcc.p[1], bcc.p[2], bcc.p[3]);
 
 			/* Else not a CMYK output device, */
 			/* use the previously determined device black value. */
@@ -2840,7 +3126,6 @@ int                quality			/* Quality metric, 0..3 */
 
 			/* Lookup the PCS for the device black: */
 			p->input(p, bcc.p, bcc.p);			/* Through input tables */
-
 			p->clutTable->interp(p->clutTable, &bcc);	/* Through clut */
 			p->output(p, bcc.v, bcc.v);		/* Through the output tables */
 
@@ -2856,6 +3141,22 @@ int                quality			/* Quality metric, 0..3 */
 				icmXYZ2Lab(&icmD50, labbp, bp);
 				printf("Black point XYZ = %f %f %f, Lab = %f %f %f\n",
 				        bp[0],bp[1],bp[2],labbp[0],labbp[1],labbp[2]);
+			}
+		}
+
+		/* If this is a display, adjust the white point to be */
+		/* exactly Y = 1.0, and compensate the dispLuminance */
+		/* and black point accordingly. The Lut is already set to */
+		/* assume device white maps to perfect PCS white. */
+		if (h->deviceClass == icSigDisplayClass) {
+			double scale = 1.0/wp[1];
+			int i;
+
+			dispLuminance *= wp[1];
+
+			for (i = 0; i < 3; i++) {
+				wp[i] *= scale;
+				bp[i] *= scale;
 			}
 		}
 
@@ -2960,6 +3261,44 @@ int                quality			/* Quality metric, 0..3 */
 
 	/* ------------------------------- */
 
+//Debugging clipping of clut
+//printf("~1 xlut.c: noutmin = %f %f %f\n", p->noutmin[0], p->noutmin[1], p->noutmin[2]);
+//printf("~1 xlut.c: noutmax = %f %f %f\n", p->noutmax[0], p->noutmax[1], p->noutmax[2]);
+//printf("~1 xlut.c: outmin = %f %f %f\n", p->outmin[0], p->outmin[1], p->outmin[2]);
+//printf("~1 xlut.c: outmax = %f %f %f\n", p->outmax[0], p->outmax[1], p->outmax[2]);
+
+	/* Do a specific test for out of Lab encoding range RGB primaries */
+	/* (A more general check seems to get false positives - why ??) */
+	if (h->pcs == icSigLabData 
+	 && (   h->deviceClass == icSigDisplayClass
+	     || h->deviceClass == icSigOutputClass)
+	 && h->colorSpace == icSigRgbData) {
+		double dev[3] = { 0.0, 0.0, 0.0 };
+		double pcs[3];
+		double clip = 0;
+
+		for (i = 0; i < 3; i++) {
+			dev[i] = 1.0;
+
+			if (p->clut(p, pcs, dev) > 1)
+				error ("%d, %s",p->pp->errc,p->pp->err);
+		
+			/* Convert from efective pcs to natural pcs */
+			if (p->pcs != icSigLabData)
+				icmXYZ2Lab(&icmD50, pcs, pcs);
+
+			if (pcs[1] < -128.0 || pcs[1] > 128.0
+			 || pcs[2] < -128.0 || pcs[2] > 128.0) {
+				warning("\n    *** %s primary value can't be encoded in L*a*b* PCS (%f %f %f)",
+				        i == 0 ? "Red" : i == 1 ? "Green" : "Blue", pcs[0],pcs[1],pcs[2]);
+				clip = 1;
+			}
+			dev[i] = 0.0;
+		}
+		if (clip)
+			fprintf(warn_out,"   *** Try switching to XYZ PCS ***\n");
+	}
+
 	/* Use our rspl's to set the icc Lut AtoB table values. */
 	/* Use helper function to do the hard work. */
 	if (p->lut->set_tables(p->lut, ICM_CLUT_SET_EXACT, (void *)p,
@@ -2976,13 +3315,23 @@ int                quality			/* Quality metric, 0..3 */
 			     icm2str(icmColorSpaceSignature, h->pcs),
 		         p->pp->pp->errc,p->pp->pp->err);
 
+#ifdef WARN_CLUT_CLIPPING
+	if (p->pp->pp->warnc) {
+		warning("Values clipped in setting A2B LUT!");
+		if (p->pp->pp->warnc == 2 && h->pcs == icSigLabData) {
+			fprintf(warn_out,"*** Try switching to XYZ PCS ***\n");
+		}
+	}
+#endif /* WARN_CLUT_CLIPPING */
+
 	/* Init a CAM model in case it will be used (ie. in profile with camclip flag) */
-	if (vc != NULL)		/* One has been provided */
+	if (vc != NULL)			/* One has been provided */
 		p->vc  = *vc;		/* Copy the structure */
 	else
-		xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0);	/* Use a default */
+		xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0, NULL);	/* Use a default */
 	p->cam = new_icxcam(cam_default);
-	p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf, p->vc.Fxyz, XICC_USE_HK);
+	p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf,
+	                 p->vc.Fxyz, XICC_USE_HK, XICC_NOCAMCL);
 	
 	if (flags & ICX_VERBOSE)
 		printf("Done A to B table creation\n");
@@ -2997,9 +3346,9 @@ int                quality			/* Quality metric, 0..3 */
 
 /* Context for creating gamut boundary points fro, xicc */
 typedef struct {
-	gamut *g;			/* Gamut being created */
-	icxLuLut *x;		/* xLut we are working from */
-	icxLuBase *flu;		/* Forward xlookup */
+	gamut *g;				/* Gamut being created */
+	icxLuLut *x;			/* xLut we are working from */
+	icxLuBase *flu;			/* Forward xlookup */
 	double in[MAX_CHAN];	/* Device input values */
 } lutgamctx;
 
@@ -3069,7 +3418,8 @@ lutfwdgam_func(
 
 
 /* Function to pass to rspl to create gamut boundary from */
-/* backwards Lut transform. */
+/* backwards Lut transform. This is called for every node in the */
+/* B2A grid. */
 static void
 lutbwdgam_func(
 	void *pp,			/* lutgamctx structure */
@@ -3103,15 +3453,15 @@ double       detail		/* gamut detail level, 0.0 = def */
 ) {
 	xicc     *p = plu->pp;				/* parent xicc */
 	icxLuLut *luluto = (icxLuLut *)plu;	/* Lookup xLut type object */
-	icColorSpaceSignature ins, pcs;
+	icColorSpaceSignature ins, pcs, outs;
 	icmLookupFunc func;
 	icRenderingIntent intent;
-	double white[3], black[3];
-	int inn;
+	double white[3], black[3], kblack[3];
+	int inn, outn;
 	gamut *gam;
 
 	/* get some details */
-	plu->spaces(plu, &ins, &inn, NULL, NULL, NULL, &intent, &func, &pcs);
+	plu->spaces(plu, &ins, &inn, &outs, &outn, NULL, &intent, &func, &pcs);
 
 	if (func != icmFwd && func != icmBwd) {
 		p->errc = 1;
@@ -3131,6 +3481,9 @@ double       detail		/* gamut detail level, 0.0 = def */
 		cx.g = gam = new_gamut(detail, pcs == icxSigJabData);
 		cx.x = luluto;
 
+		/* Scan through grid. */
+		/* (Note this can give problems for a strange input space - ie. Lab */
+		/* and a low grid resolution - ie. 2) */
 		luluto->clutTable->scan_rspl(
 			luluto->clutTable,	/* this */
 			RSPL_NOFLAGS,		/* Combination of flags */
@@ -3138,11 +3491,15 @@ double       detail		/* gamut detail level, 0.0 = def */
 			lutfwdgam_func		/* Function to set from */
 		);
 
+		/* Make sure the white and point goes in too, if it isn't in the grid */
+		plu->efv_wh_bk_points(plu, white, NULL, NULL);
+		gam->expand(gam, white);
+
 		if (detail == 0.0)
 			detail = 10.0;
 
 		/* If the gamut is more than cursary, add some more detail surface points */
-		if (detail < 20.0) {
+		if (detail < 20.0 || luluto->clutTable->g.mres < 4) {
 			int res;
 			DCOUNT(co, MAX_CHAN, inn, 0, 0, 2);
 		
@@ -3157,8 +3514,11 @@ double       detail		/* gamut detail level, 0.0 = def */
 				double in[MAX_CHAN];
 				double out[3];
 		
-				for (e = 0; e < inn; e++)
-					in[e] = (double)co[e];		/* Base value */
+				for (e = 0; e < inn; e++) {	/* Base value */
+					in[e] = (double)co[e];      /* Base value */
+					in[e] = in[e] * (luluto->inmax[e] - luluto->inmin[e])
+					       + luluto->inmin[e];
+				}
 
    				/* Figure if we are over the ink limit. */
 				if ((luluto->ink.tlimit >= 0.0 || luluto->ink.klimit >= 0.0)
@@ -3177,13 +3537,14 @@ double       detail		/* gamut detail level, 0.0 = def */
 						if (co[m2] != 0)
 							continue;					/* Not at lower corner */
 		
-						for (e = 0; e < inn; e++)
-							in[e] = (double)co[e];		/* Base value */
-		
 						for (x = 0; x < res; x++) {				/* step over surface */
 							in[m1] = x/(res - 1.0);
+							in[m1] = in[m1] * (luluto->inmax[m1] - luluto->inmin[m1])
+							       + luluto->inmin[m1];
 							for (y = 0; y < res; y++) {
 								in[m2] = y/(res - 1.0);
+								in[m2] = in[m2] * (luluto->inmax[m2] - luluto->inmin[m2])
+								       + luluto->inmin[m2];
 
 				   				/* Figure if we are over the ink limit. */
 								if (   (luluto->ink.tlimit >= 0.0 || luluto->ink.klimit >= 0.0)
@@ -3229,7 +3590,13 @@ double       detail		/* gamut detail level, 0.0 = def */
 				DC_INC(co);
 			}
 			gam->setcusps(gam, 2, NULL);
-		} else {	/* Do all ink combinations and hope we can sort it out */
+
+		/* Do all ink combinations and hope we can sort it out */
+		/* (This may not be smart, since bodgy cusp values will cause gamut mapping to fail...) */
+		} else if (ins != icSigXYZData
+		        && ins != icSigLabData
+		        && ins != icSigLuvData
+		        && ins != icSigYxyData) {
 			DCOUNT(co, MAX_CHAN, inn, 0, 0, 2);
 
 			gam->setcusps(gam, 0, NULL);
@@ -3239,8 +3606,11 @@ double       detail		/* gamut detail level, 0.0 = def */
 				double in[MAX_CHAN];
 				double out[3];
 		
-				for (e = 0; e < inn; e++)
+				for (e = 0; e < inn; e++) {
 					in[e] = (double)co[e];
+					in[e] = in[e] * (luluto->inmax[e] - luluto->inmin[e])
+					       + luluto->inmin[e];
+				}
 	
 	   			/* Figure if we are over the ink limit. */
 				if ((luluto->ink.tlimit >= 0.0 || luluto->ink.klimit >= 0.0)
@@ -3260,8 +3630,8 @@ double       detail		/* gamut detail level, 0.0 = def */
 	} else { /* Must be icmBwd */
 		lutgamctx cx;
 	
-#ifdef NEVER	/* Not sure why this code is here. */
-		/* Get an appropriate device to PCS conversion */
+		/* Get an appropriate device to PCS conversion for the fwd conversion */
+		/* we use after bwd conversion in lutbwdgam_func() */
 		switch (intent) {
 			/* If it is relative */
 			case icmDefaultIntent:					/* Shouldn't happen */
@@ -3278,7 +3648,6 @@ double       detail		/* gamut detail level, 0.0 = def */
 			default:
 				break;
 		}
-#endif /* NEVER */
 		if ((cx.flu = p->get_luobj(p, ICX_CLIP_NEAREST , icmFwd, intent, pcs, icmLuOrdNorm,
 		                              &plu->vc, NULL)) == NULL) {
 			return NULL;	/* oops */
@@ -3295,23 +3664,114 @@ double       detail		/* gamut detail level, 0.0 = def */
 			lutbwdgam_func		/* Function to set from */
 		);
 
-		cx.flu->del(cx.flu);	/* Done with the fwd conversion */
+		/* Now set the cusp points by using the fwd conversion and */
+		/* itterating through colorant 0 & 100% combinations. */
+		/* If we know what sort of space it is: */
+		if (outs == icSigRgbData || outs == icSigCmyData || outs == icSigCmykData) {
+			DCOUNT(co, 3, 3, 0, 0, 2);
 
+			gam->setcusps(gam, 0, NULL);
+			DC_INIT(co);
+			while(!DC_DONE(co)) {
+				int e;
+				double in[MAX_CHAN];
+				double out[3];
+		
+				if (!(co[0] == 0 && co[1] == 0 && co[2] == 0)
+				 && !(co[0] == 1 && co[1] == 1 && co[2] == 1)) {	/* Skip white and black */
+					for (e = 0; e < 3; e++)
+						in[e] = (double)co[e];
+					in[e] = 0;					/* K */
+		
+					/* Always use the device->PCS conversion */
+					if (cx.flu->lookup((icxLuBase *)cx.flu, out, in) > 1)
+						error ("%d, %s",p->errc,p->err);
+					gam->setcusps(gam, 3, out);
+				}
+
+				DC_INC(co);
+			}
+			gam->setcusps(gam, 2, NULL);
+
+		/* Do all ink combinations and hope we can sort it out */
+		/* (This may not be smart, since bodgy cusp values will cause gamut mapping to fail...) */
+		} else if (ins != icSigXYZData
+		        && ins != icSigLabData
+		        && ins != icSigLuvData
+		        && ins != icSigYxyData) {
+			DCOUNT(co, MAX_CHAN, inn, 0, 0, 2);
+
+			gam->setcusps(gam, 0, NULL);
+			DC_INIT(co);
+			while(!DC_DONE(co)) {
+				int e;
+				double in[MAX_CHAN];
+				double out[3];
+		
+				for (e = 0; e < inn; e++) {
+					in[e] = (double)co[e];
+					in[e] = in[e] * (luluto->inmax[e] - luluto->inmin[e])
+					       + luluto->inmin[e];
+				}
+	
+	   			/* Figure if we are over the ink limit. */
+				if ((luluto->ink.tlimit >= 0.0 || luluto->ink.klimit >= 0.0)
+			        && icxLimit((void *)luluto, in) > 0.0) {
+					DC_INC(co);
+					continue;		/* Skip points over limit */
+				}
+	
+				cx.flu->lookup((icxLuBase *)cx.flu, out, in);
+				gam->setcusps(gam, 1, out);
+
+				DC_INC(co);
+			}
+			gam->setcusps(gam, 2, NULL);
+		}
+		cx.flu->del(cx.flu);	/* Done with the fwd conversion */
 	}
 
-	/* Put the white and black points in the gamut */
-	plu->rel_wh_bk_points(plu, white, black);
-	gam->setwb(gam, white, black);
+	/* Set the white and black points */
+	plu->efv_wh_bk_points(plu, white, black, kblack);
+	gam->setwb(gam, white, black, kblack);
+
+//printf("~1 icxLuLutGamut: set black %f %f %f and kblack %f %f %f\n", black[0], black[1], black[2], kblack[0], kblack[1], kblack[2]);
 
 #ifdef NEVER	/* Not sure if this is a good idea ?? */
 	/* Since we know this is a profile, force the space and gamut points to be the same */
-	gam->getwb(gam, NULL, NULL, white, black);	/* Get the actual gamut white and black points */
-	gam->setwb(gam, white, black);				/* Put it back as colorspace one */
+	gam->getwb(gam, NULL, NULL, white, black, kblack);	/* Get the actual gamut white and black points */
+	gam->setwb(gam, white, black, kblack);				/* Put it back as colorspace one */
 #endif
 
 	return gam;
 }
 
+/* ----------------------------------------------- */
+#if defined(DEBUG_RLUT) || defined(DEBUG_OLUT)
+
+/* Utility - return a string containing the di vector */
+static char *ppos(int di, double *p) {
+	static char buf[5][200];
+	static ix = 0;
+	int e;
+	char *bp;
+
+	if (++ix >= 5)
+		ix = 0;
+	bp = buf[ix];
+
+	for (e = 0; e < di; e++) {
+		if (e > 0)
+			*bp++ = ' ';
+		sprintf(bp, "%f", p[e]); bp += strlen(bp);
+	}
+	return buf[ix];
+}
+
+
+#endif
+
+/* ----------------------------------------------- */
 #ifdef DEBUG
 #undef DEBUG 	/* Limit extent to this file */
 #endif

@@ -10,7 +10,7 @@
  *
  * Copyright 2004 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -37,6 +37,7 @@ struct _icxcam {
 /* Public: */
 	void (*del)(struct _icxcam *s);	/* We're done with it */
 
+	/* Always returns 0 */
 	int (*set_view)(
 		struct _icxcam *s,
 		ViewingCondition Ev,	/* Enumerated Viewing Condition */
@@ -47,7 +48,8 @@ struct _icxcam {
 						/* Ignored if Ev is set */
 		double Yf,		/* Flare as a fraction of the reference white (range 0.0 .. 1.0) */
 		double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
-		int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
+		int hk,			/* Flag, NZ to use Helmholtz-Kohlraush effect */
+		int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
 	);
 
 	/* Conversions */
@@ -57,6 +59,7 @@ struct _icxcam {
 /* Private: */
 	icxCAM tag;			/* Type */
 	void *p;			/* Pointer to implementation */
+	double Wxyz[3];		/* Copy of Wxyz */
 
 }; typedef struct _icxcam icxcam;
 

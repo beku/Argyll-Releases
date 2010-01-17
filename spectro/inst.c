@@ -9,7 +9,7 @@
  * Copyright 2001 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -323,8 +323,12 @@ static char *inst_interp_error(inst *p, inst_code ec) {
 			return "Unsupported function";
 		case inst_unexpected_reply:
 			return "Unexpected Reply";
+		case inst_wrong_sensor_pos:
+			return "Wrong Sensor Position";
 		case inst_wrong_config:
 			return "Wrong Configuration";
+		case inst_bad_parameter:
+			return "Bad Parameter Value";
 		case inst_hardware_fail:
 			return "Hardware Failure";
 		case inst_other_error:
@@ -402,9 +406,13 @@ int verb			/* Verbosity flag */
 		p = (inst *)new_i1pro(icom, debug, verb);
 	else if (itype == instI1Pro)
 		p = (inst *)new_i1pro(icom, debug, verb);
+	else if (itype == instColorMunki)
+		p = (inst *)new_munki(icom, debug, verb);
 	else if (itype == instHCFR)
 		p = (inst *)new_hcfr(icom, debug, verb);
 	else if (itype == instSpyder2)
+		p = (inst *)new_spyd2(icom, debug, verb);
+	else if (itype == instSpyder3)
 		p = (inst *)new_spyd2(icom, debug, verb);
 	else if (itype == instHuey)
 		p = (inst *)new_huey(icom, debug, verb);
@@ -493,7 +501,7 @@ static instType ser_inst_type(
 	int so = 0;
 	
 	if (p->paths == NULL)
-		icoms_get_paths(p);
+		p->get_paths(p);
 
 	if (port <= 0 || port > p->npaths)
 		return instUnknown;
@@ -503,7 +511,6 @@ static instType ser_inst_type(
 	 || p->paths[port-1]->hev != NULL)
 		return instUnknown;
 #endif /* ENABLE_USB */
-
 
 	if (p->debug) fprintf(stderr,"instType: About to init Serial I/O\n");
 
@@ -546,7 +553,7 @@ static instType ser_inst_type(
 			so = 1;
 			break;
 		}
-		/* Is this a SpectroScan resonse ? */
+		/* Is this a SpectroScan response ? */
 		if (len >= 7 && strncmp(buf, ":D183", 5) == 0) {
 //printf("~1 spectroscan\n");
 			ss = 1;

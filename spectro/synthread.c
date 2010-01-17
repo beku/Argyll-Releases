@@ -1,3 +1,4 @@
+
 /* 
  * Argyll Color Correction System
  * Synthetic device target chart reader
@@ -8,7 +9,7 @@
  * Copyright 2002 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Based on fakeread.c
@@ -128,8 +129,8 @@ int main(int argc, char *argv[])
 	int verb = 0;		/* Verbose flag */
 	int dosep = 0;		/* Use separation before profile */
 	int gfudge = 0;		/* Do grey fudge, 1 = W->RGB, 2 = K->xxxK */
-	double rdlevel = 0.0;	/* Random device average deviation level */
-	double rplevel = 0.0;	/* Random PCS level */
+	double rdlevel = 0.0;	/* Random device average deviation level (0.0 - 1.0) */
+	double rplevel = 0.0;	/* Random PCS average deviatio level (0.0 - 1.0) */
 	int unidist = 0;		/* Use uniform distribution of errors */
 	double tbp[3] = { -1.0, 0.0, 0.0 };	/* Target black point */
 	static char sepname[500] = { 0 };	/* ICC separation profile */
@@ -276,7 +277,7 @@ int main(int argc, char *argv[])
 			else if (argv[fa][1] == 'r') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -r");
-				rdlevel = atof(na);
+				rdlevel = 0.01 * atof(na);
 				rand32(time(NULL));		/* Init seed randomly */
 			}
 
@@ -284,7 +285,7 @@ int main(int argc, char *argv[])
 			else if (argv[fa][1] == 'R') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -R");
-				rplevel = atof(na);
+				rplevel = 0.01 * atof(na);
 				rand32(time(NULL));		/* Init seed randomly */
 			}
 
@@ -405,8 +406,8 @@ printf("~1 omax = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
 			}
 	
 			/* Get details of conversion */
-			sep_luo->spaces(sep_luo, &sep_ins, &sep_inn, &sep_outs, NULL, NULL, NULL, NULL, NULL);
-			sep_nmask = icx_icc_to_colorant_comb(sep_ins);
+			sep_luo->spaces(sep_luo, &sep_ins, &sep_inn, &sep_outs, NULL, NULL, NULL, NULL, NULL, NULL);
+			sep_nmask = icx_icc_to_colorant_comb(sep_ins, sep_icco->header->deviceClass);
 		}
 	}
 
@@ -466,9 +467,13 @@ printf("~1 omax = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
 	{
 		int i, j, ii;
 		int chix[ICX_MXINKS];	/* Device chanel indexes */
-		char *ident;
+		char *ident, *bident;
 		int nsetel = 0;
 		cgats_set_elem *setel;	/* Array of set value elements */
+
+		nchan = icx_noofinks(nmask);
+		ident = icx_inkmask2char(nmask, 1); 
+		bident = icx_inkmask2char(nmask, 0); 
 
 		/* Sanity check what we're going to do */
 		if (dosep) {
@@ -481,7 +486,7 @@ printf("~1 omax = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
 			else if (icx_colorant_comb_match_icc(nmask, sep_ins) == 0) {
 				error("Separation ICC device space '%s' dosen't match TI1 '%s'",
 				       icm2str(icmColorSpaceSignature, sep_ins),
-				       icx_inkmask2char(nmask));	/* Should free(). */
+				       ident);	/* Should free(). */
 			}
 
 			/* Check if separation ICC output is compatible with ICC/MPP/TI3 conversion */ 
@@ -498,15 +503,12 @@ printf("~1 omax = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
 			else if (icx_colorant_comb_match_icc(nmask, ins) == 0) {
 				error("Synthetic device space '%s' dosen't match TI1 '%s'",
 				       icm2str(icmColorSpaceSignature, ins),
-				       icx_inkmask2char(nmask));	// Should free().
+				       ident);	// Should free().
 			}
 		}
 
 		if ((ii = icg->find_kword(icg, 0, "TOTAL_INK_LIMIT")) >= 0)
 			ocg->add_kword(ocg, 0, "TOTAL_INK_LIMIT",icg->t[0].kdata[ii], NULL);
-
-		nchan = icx_noofinks(nmask);
-		ident = icx_inkmask2char(nmask); 
 
 		nsetel += 1;		/* For id */
 		nsetel += nchan;	/* For device values */
@@ -517,7 +519,7 @@ printf("~1 omax = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
 			char fname[100];
 
 			imask = icx_index2ink(nmask, j);
-			sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : ident,
+			sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : bident,
 			                      icx_ink2char(imask));
 
 			if ((ii = icg->find_field(icg, 0, fname)) < 0)
@@ -598,16 +600,16 @@ printf("~1 omax = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
 				if (sep_luo->lookup(sep_luo, sep, dev) > 1)
 					error ("%d, %s",sep_icco->errc,sep_icco->err);
 
-			/* Add randomness and non-linearity */
+			/* Add randomness and non-linearity (rdlevel is avg. dev.) */
 			/* Note dev/sep is 0-1.0 at this stage */
 			for (j = 0; j < inn; j++) {
 				double dv = sep[j];
 				if (rdlevel > 0.0) {
 					double rr;
 					if (unidist)
-						rr = 0.01 * d_rand(-2.0 * rdlevel, 2.0 * rdlevel);
+						rr = d_rand(-2.0 * rdlevel, 2.0 * rdlevel);
 					else
-						rr = 0.01 * 1.773 * rdlevel * norm_rand();
+						rr = 1.2533 * rdlevel * norm_rand();
 					dv += rr;
 					if (dv < 0.0)
 						dv = 0.0;
@@ -640,16 +642,16 @@ printf("~1 omax = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
 				PCS[2] *= 100.0;
 			}
 
-			/* Add randomness */
+			/* Add randomness (rplevel is avg. dev.) */
 			/* Note PCS is 0..100 XYZ or Lab at this point */
 			if (rplevel > 0.0) {
 				for (j = 0; j < 3; j++) {
 					double dv = PCS[j];
 					double rr;
 					if (unidist)
-						rr = d_rand(-2.0 * rplevel, 2.0 * rplevel);
+						rr = 100.0 * d_rand(-2.0 * rplevel, 2.0 * rplevel);
 					else
-						rr = 1.773 * rplevel * norm_rand();
+						rr = 100.0 * 1.2533 * rplevel * norm_rand();
 					dv += rr;
 
 					/* Don't let L*, X, Y or Z go negative */
@@ -668,6 +670,7 @@ printf("~1 omax = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
 
 		free(setel);
 		free(ident);
+		free(bident);
 	}
 
 	if (sep_luo != NULL) {

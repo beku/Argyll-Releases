@@ -3,6 +3,14 @@
 /* and common Argyll support functions. */
 /* (Perhaps these should be moved out of numlib at some stange ?) */
 
+/*
+ * Copyright 1997 Graeme W. Gill
+ * All rights reserved.
+ *
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -36,21 +44,6 @@ int verbose_level = 6;			/* Current verbosity level */
 								/* !0 = diagnostics */
 
 #undef RETURN_NULL_ON_MALLOC	/* Else error out here */
-
-/******************************************************************/
-/* Malloc interception routines. */
-/******************************************************************/
-/* All ArgyllCMS code should use these routines instead of the */
-/* usual ones, so that memory failures can be intercepted, and */
-/* (for instance) cache memory freed before re-trying. */
-/* These names also make for an easy target for memory leak checking. */
-
-// ~~999
-// amalloc
-// acalloc
-// arealloc
-// afree
-// g_amalloc_fail_callback = NULL;
 
 /******************************************************************/
 /* Executable path routine. Sets default error_program too. */
@@ -186,6 +179,7 @@ static void
 error_imp(char *fmt, ...) {
 	va_list args;
 
+	fflush(stdout);
 	if (error_out == NULL)
 		error_out = ERROR_OUT_DEFAULT;
 	fprintf(error_out,"%s: Error - ",error_program);
@@ -194,13 +188,14 @@ error_imp(char *fmt, ...) {
 	va_end(args);
 	fprintf(error_out, "\n");
 	fflush(error_out);
-	exit (-1);
+	exit (1);
 }
 
 static void
 warning_imp(char *fmt, ...) {
 	va_list args;
 
+	fflush(stdout);
 	if (warn_out == NULL)
 		warn_out = WARN_OUT_DEFAULT;
 	fprintf(warn_out,"%s: Warning - ",error_program);
@@ -214,6 +209,8 @@ warning_imp(char *fmt, ...) {
 static void
 verbose_imp(int level, char *fmt, ...) {
 	va_list args;
+
+	fflush(stdout);
 	va_start(args, fmt);
 	if (verbose_level >= level)
 		{

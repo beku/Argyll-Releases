@@ -43,7 +43,7 @@ recogin.cht
 <a style="font-family: monospace;" href="#c"> usage</a><span
  style="font-family: monospace;">: scanin -c [options] input.tif
 recogin.cht
-scanprofile.icc pbase [diag.tif]</span><br
+scanprofile.[icm|mpp] pbase [diag.tif]</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp; :- inputs pbase.ti2
 and outputs printer pbase.ti3, or</span><br
@@ -70,20 +70,21 @@ Output patch values in .val file</span><br
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#c">-c</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use image to measure color to convert printer .ti2 to .ti3</span><span
+Use image to measure color to convert printer pbase .ti2 to .ti3</span><span
  style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#ca">-ca</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Same as -c, but accumulates more values to .ti3</span><br
+Same as -c, but accumulates more values to pbase .ti3</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 from subsequent pages</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#r">-r</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Replace device values in .ti3</span><br style="font-family: monospace;">
+Replace device values in pbase .ti3</span><br
+ style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Default is to create a scanner .ti3 file<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
@@ -104,7 +105,7 @@ Default is to recognize all possible chart angles<br>
 &nbsp;<a href="#m">-m</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Return true mean (default is robust mean)<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;<a
- href="scanin.html#G">-G gamma</a>
+ href="#G">-G gamma</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Approximate
 gamma encoding of image</span></small><br
@@ -148,7 +149,7 @@ diag - All lines detected<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 diag - lines used to improve fit<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;
-</span><a style="font-family: monospace;" href="dc">c</a><span
+</span><a style="font-family: monospace;" href="#dc">c</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 diag - lines perspective corrected</span></small><br
  style="font-family: monospace;">
@@ -178,6 +179,10 @@ diag - sample box areas</span><br style="font-family: monospace;">
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 diag - pixel areas sampled</span></small>
 <br>
+<small><span style="font-family: monospace;">&nbsp;
+<a href="#O">-O</a> outputfile&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Override the default output filename
+&amp; extension.</span></small><br>
 <h3>Usage Details and Discussion</h3>
 <span style="font-weight: bold;">scanin</span> is setup to deal with a
 raster file that has been roughly cropped to a size that contains the
@@ -191,7 +196,11 @@ will cope with some degree of noise in the scan (due to screening
 artefacts on the original, or film grain), but it isn't really designed
 to accept very high resolution input. For anything over 600DPI, you
 should consider down sampling the scan using a filtering downsample,
-before submitting the file to scanin.<br>
+before submitting the file to scanin. Similarly, any file with a large
+level of noise (due to screening or scanner artefacts) should consider
+down sampling the image or filtering it with some average preserving
+filter before submitting it to scanin. Examining the diagnostic output
+(ie. -dig and -dil) may help in determining whether noise is an issue.<br>
 <br>
 There are 5 basic modes that <b>scanin</b> operates in.<br>
 <ul>
@@ -238,12 +247,13 @@ are: <a name="op1"></a>The TIFF file that is to be processed, <a
 to be created, <a name="op3"></a>and an optional name for the image
 recognition diagnostic
 output.</li>
-  <><a name="c"></a>If the <b>-c</b> flag is used, then an input image
+  <li><a name="c"></a>If the <b>-c</b> flag is used, then an input
+image
 of a print test chart can be used
-in combination with an input profile, to estimate the CIE tristimulus
+in combination with a device profile, to estimate the CIE tristimulus
 values of the patches. This allows RGB
 input devices to be used as a crude replacement for a color measuring
-instrument. The icc profile has
+instrument. The icc or mpp profile has
 (presumably) been
 created by scanning an IT8.7/2 chart (or similar) through the RGB input
 device,
@@ -256,7 +266,7 @@ TIFF file that
 is to be processed containing the image of a print test chart, <a
  name="cp2"></a>the image recognition template file for the test chart
 generated by the <a href="printtarg.html"> printtarg</a> utility, <a
- name="cp3"></a>the input device ICC profile, <a name="cp4"></a>the
+ name="cp3"></a>the input device ICC or MPP profile, <a name="cp4"></a>the
 base
 name for the .ti2 file containing the
 test chart printer device
@@ -273,8 +283,12 @@ used
 for all pages after the first,
 as this then adds that pages test values to the .ti3 file, rather than
 creating
-a .ti3 file that contains only that pages test values.</> <li><a
- name="r"></a>If the -r flag is used, then the input TIFF value
+a .ti3 file that contains only that pages test values. If the incoming
+.ti2 file contains per-channel calibration
+curves, these will be passed through to the .ti3 so that accurate ink
+limits can be computed during profiling. </li>
+  <li><a name="r"></a>If the <span style="font-weight: bold;">-r</span>
+flag is used, then the input TIFF value
 is used as a source of device values to replace any existing device
 values in the given .ti3
 file. This is intended for use in the situation in which the device
@@ -426,6 +440,13 @@ but yielding more accurate results.<br>
 If at all in doubt that the file has been recognized correctly, use the
 <span style="font-weight: bold;">-dipn</span> diagnostic flag
 combination, and check the resulting diagnostic raster file.<br>
+<br>
+<a name="O"></a>The <span style="font-weight: bold;">-O</span>
+parameter allows the
+output file name &amp; extension to be specified independently of the
+last tiff
+filename. Note that the full filename must be specified, including the
+extension.<br>
 <br>
 <br>
 <br>

@@ -19,10 +19,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <string.h>
+#include <ctype.h>
+#include <math.h>
+#include <time.h>
+#ifdef __sun
+#include <unistd.h>
+#endif
+
+#ifdef _MSC_VER
+#define vsnprintf _vsnprintf
+#define snprintf _snprintf
+#endif
 
 #ifdef STANDALONE_TEST
-extern void error(char *fmt, ...), warning(char *fmt, ...);
+extern void error(const char *fmt, ...), warning(const char *fmt, ...);
 #endif
 
 #include "pars.h"
@@ -85,6 +99,217 @@ cgatsFile *fp		/* File to read from */
 #undef COMBINED_STD
 #endif /* SEPARATE_STD */
 
+/* --------------------------------------------- */
+
+/* size_t versions of saturating arithmatic */
+
+#ifndef SIZE_MAX
+# define SIZE_MAX ((size_t)(-1))
+#endif
+
+/* a * b */
+static size_t ssat_mul(size_t a, size_t b) {
+	size_t c;
+
+	if (a == 0 || b == 0)
+		return 0;
+
+	if (a > (SIZE_MAX/b))
+		return SIZE_MAX;
+	else
+		return a * b;
+}
+
+/* --------------------------------------------- */
+/* Memory image cgatsFile compatible class */
+/* Buffer is assumed to be a fixed size, and externally allocated */
+/* Writes therefore don't expand the buffer. */
+
+/* Get the size of the file (Only valid for memory file). */
+static size_t cgatsFileMem_get_size(cgatsFile *pp) {
+	return pp->size;
+}
+
+/* Set current position to offset. Return 0 on success, nz on failure. */
+static int cgatsFileMem_seek(
+cgatsFile *pp,
+unsigned int offset
+) {
+	cgatsFileMem *p = (cgatsFileMem *)pp;
+	unsigned char *np;
+
+	np = p->start + offset;
+	if (np < p->start || np >= p->end)
+		return 1;
+	p->cur = np;
+	return 0;
+}
+
+/* Read count items of size length. Return number of items successfully read. */
+static size_t cgatsFileMem_read(
+cgatsFile *pp,
+void *buffer,
+size_t size,
+size_t count
+) {
+	cgatsFileMem *p = (cgatsFileMem *)pp;
+	size_t len;
+
+	len = ssat_mul(size, count);
+	if (len > (p->end - p->cur)) { /* Too much */
+		if (size > 0)
+			count = (p->end - p->cur)/size;
+		else
+			count = 0;
+	}
+	len = size * count;
+	if (len > 0)
+		memcpy (buffer, p->cur, len);
+	p->cur += len;
+	return count;
+}
+
+/* Read a character */
+static int cgatsFileMem_getch(
+cgatsFile *pp
+) {
+	cgatsFileMem *p = (cgatsFileMem *)pp;
+	int c;
+
+	if (p->cur < p->start || p->cur >= p->end)
+		return EOF;
+
+	c = (int)*p->cur;
+	p->cur++;
+
+	return c;
+}
+
+/* write count items of size length. Return number of items successfully written. */
+static size_t cgatsFileMem_write(
+cgatsFile *pp,
+void *buffer,
+size_t size,
+size_t count
+) {
+	cgatsFileMem *p = (cgatsFileMem *)pp;
+	size_t len;
+
+	len = ssat_mul(size, count);
+	if (len > (p->end - p->cur)) { /* Too much */
+		if (size > 0)
+			count = (p->end - p->cur)/size;
+		else
+			count = 0;
+	}
+	len = size * count;
+	if (len > 0)
+		memcpy (p->cur, buffer, len);
+	p->cur += len;
+	return count;
+}
+
+/* do a printf */
+static int cgatsFileMem_printf(
+cgatsFile *pp,
+const char *format,
+...
+) {
+	int rv;
+	va_list args;
+	cgatsFileMem *p = (cgatsFileMem *)pp;
+
+	va_start(args, format);
+
+#if ((defined(__IBMC__) || defined(__BORLANDC__)) && defined(_M_IX86))
+	rv = vsprintf((char *)p->cur, format, args);	/* This could overwrite the buffer !!! */
+#else
+	rv = vsnprintf((char *)p->cur, (p->end - p->cur), format, args);
+#endif
+
+	va_end(args);
+	return rv;
+}
+
+
+/* flush all write data out to secondary storage. Return nz on failure. */
+static int cgatsFileMem_flush(
+cgatsFile *pp
+) {
+	return 0;
+}
+
+/* return the filename */
+static char *cgatsFileMem_fname(
+cgatsFile *pp
+) {
+	cgatsFileMem *p = (cgatsFileMem *)pp;
+
+	/* Memory doesn't have a name */
+	return "**Mem**";
+}
+
+/* we're done with the file object, return nz on failure */
+static int cgatsFileMem_delete(
+cgatsFile *pp
+) {
+	cgatsFileMem *p = (cgatsFileMem *)pp;
+	cgatsAlloc *al = p->al;
+	int del_al   = p->del_al;
+
+	if (p->del_buf)		/* Free the memory buffer */
+		al->free(al, p->start);
+	al->free(al, p);	/* Free object */
+	if (del_al)			/* We are responsible for deleting allocator */
+		al->del(al);
+	return 0;
+}
+
+/* Create a memory image file access class with allocator */
+/* Buffer is used as is. */
+cgatsFile *new_cgatsFileMem_a(
+void *base,			/* Pointer to base of memory buffer */
+size_t length,		/* Number of bytes in buffer */
+cgatsAlloc *al		/* heap allocator */
+) {
+	cgatsFileMem *p;
+
+	if ((p = (cgatsFileMem *) al->calloc(al, 1, sizeof(cgatsFileMem))) == NULL) {
+		return NULL;
+	}
+	p->al       = al;				/* Heap allocator */
+	p->get_size = cgatsFileMem_get_size;
+	p->seek     = cgatsFileMem_seek;
+	p->read     = cgatsFileMem_read;
+	p->getch    = cgatsFileMem_getch;
+	p->write    = cgatsFileMem_write;
+	p->gprintf  = cgatsFileMem_printf;
+	p->flush    = cgatsFileMem_flush;
+	p->fname    = cgatsFileMem_fname;
+	p->del      = cgatsFileMem_delete;
+
+	p->start = (unsigned char *)base;
+	p->cur = p->start;
+	p->end = p->start + length;
+
+	p->size = length;
+
+	return (cgatsFile *)p;
+}
+
+/* Create a memory image file access class with given allocator */
+/* and delete base when cgatsFile is deleted. */
+cgatsFile *new_cgatsFileMem_ad(void *base, size_t length, cgatsAlloc *al) {
+	cgatsFile *fp;
+
+	if ((fp = new_cgatsFileMem_a(base, length, al)) != NULL) {	
+		((cgatsFileMem *)fp)->del_buf = 1;
+	}
+
+	return fp;
+}
+
+/* --------------------------------------------- */
 /* Free up the structure (doesn't close the file) */
 static void
 del_parse(parse *p) {
@@ -314,7 +539,7 @@ main() {
 
 /* Basic printf type error() and warning() routines for standalone test */
 void
-error(char *fmt, ...) {
+error(const char *fmt, ...) {
 	va_list args;
 
 	fprintf(stderr,"chart: Error - ");
@@ -326,7 +551,7 @@ error(char *fmt, ...) {
 }
 
 void
-warning(char *fmt, ...) {
+warning(const char *fmt, ...) {
 	va_list args;
 
 	fprintf(stderr,"chart: Warning - ");

@@ -3,10 +3,10 @@
 
 #PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
 PREF_CCFLAGS	+= $(CCDEBUGFLAG) ;		# Debugging flags
-#PREF_CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
-#PREF_LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile flags
 #PREF_CCFLAGS     += $(CCHEAPDEBUG) ;     # Heap Debugging flags
 PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
+#PREF_CCFLAGS 	+= $(CCPROFFLAG) ;		# Profile flags
+#PREF_LINKFLAGS	+= $(LINKPROFFLAG) ;    # Profile link flags
 
 #Products
 Executables = targen printtarg ;
@@ -20,14 +20,14 @@ Objects alphix.c randix.c ;
 
 HDRS += ../plot ../rspl ../cgats ../icc ../gamut ../xicc ../spectro ../render $(TIFFINC) ;
 
-LINKLIBS = ../xicc/libxcolorants ../xicc/libxicc ../spectro/libinsttypes
+LINKLIBS = ../xicc/libxcolorants ../xicc/libxicc ../spectro/libinsttypes ../spectro/libconv
            ../gamut/libgamut ../rspl/librspl ../render/librender ../cgats/libcgats
-           ../icc/libicc ../plot/libplot ../plot/libvrml ../numlib/libnum 
+           ../plot/libplot ../plot/libvrml ../icc/libicc ../numlib/libnum 
            $(TIFFLIB) $(LibWin) ;
 
 
 #target generator
-Main targen : targen.c ppoint.c ofps.c ifarp.c simplat.c simdlat.c prand.c ;
+Main targen : targen.c ofps.c ifarp.c simplat.c simdlat.c prand.c ;
 
 # Film Calibration Target File generator
 #Main filmtarg : filmtarg.c : : : $(TIFFINC) : alphix randix : $(TIFFLIB) ;
@@ -38,7 +38,7 @@ Main printtarg : printtarg.c : : : : alphix randix : ;
 # Individual stand alone test of sample point classes
 
 # Percepttual point distribution
-MainVariant ppoint : ppoint.c : : STANDALONE_TEST ;
+#MainVariant ppoint : ppoint.c : : STANDALONE_TEST ;
 
 # Optimised farthest point sampling class
 MainVariant ofps : ofps.c : : STANDALONE_TEST ;

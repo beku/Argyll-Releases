@@ -8,7 +8,7 @@
  * Derived from cmatch.c
  * Copyright 1995 - 2000 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 

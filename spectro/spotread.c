@@ -12,7 +12,7 @@
  * Copyright 2001 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -37,6 +37,7 @@
 #include <string.h>
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
 #include "icoms.h"
@@ -72,12 +73,28 @@ fix_asciiz(char *s) {
 }
 #endif
 
+/* Replacement for gets */
+char *getns(char *buf, int len) {
+	int i;
+	if (fgets(buf, len, stdin) == NULL)
+		return NULL;
+
+	for (i = 0; i < len; i++) {
+		if (buf[i] == '\n') {
+			buf[i] = '\000';
+			return buf;
+		}
+	}
+	buf[len-1] = '\000';
+	return buf;
+}
+
 /* Deal with an instrument error. */
 /* Return 0 to retry, 1 to abort */
 static int ierror(inst *it, inst_code ic) {
 	int ch;
 	empty_con_chars();
-	printf("Got '%s' (%s) error.\nHit Esc, ^C or Q to give up, any other key to retry:",
+	printf("Got '%s' (%s) error.\nHit Esc or Q to give up, any other key to retry:",
 	       it->inst_interp_error(it, ic), it->interp_error(it, ic));
 	fflush(stdout);
 	ch = next_con_char();
@@ -149,22 +166,26 @@ usage(int debug) {
 	fprintf(stderr," -d                   Use display measurement mode (absolute results)\n");
 	fprintf(stderr," -db                  Use display white brightness relative measurement mode\n");
 	fprintf(stderr," -dw                  Use display white relative measurement mode\n");
+	fprintf(stderr," -p                   Use projector measurement mode (absolute results)\n");
+	fprintf(stderr," -pb                  Use projector white brightness relative measurement mode\n");
+	fprintf(stderr," -pw                  Use projector white relative measurement mode\n");
 	fprintf(stderr," -e                   Use emissive measurement mode (absolute results)\n");
 	fprintf(stderr," -a                   Use ambient measurement mode (absolute results)\n");
+	fprintf(stderr," -f                   Use ambient flash measurement mode (absolute results)\n");
 	fprintf(stderr," -y c|l               Display type (if emissive), c = CRT, l = LCD\n");
 	fprintf(stderr," -i illum             Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"                      A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr,"                      A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ            Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"                      1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr,"                      (Choose FWA during operation)\n");
-	fprintf(stderr," -f filter            Set filter configuration (if aplicable):\n");
+	fprintf(stderr," -F filter            Set filter configuration (if aplicable):\n");
 	fprintf(stderr,"    n                  None\n");
 	fprintf(stderr,"    p                  Polarising filter\n");
 	fprintf(stderr,"    6                  D65\n");
 	fprintf(stderr,"    u                  U.V. Cut\n");
-	fprintf(stderr," -F extrafilterfile   Apply extra filter compensation file\n");
+	fprintf(stderr," -E extrafilterfile   Apply extra filter compensation file\n");
 	fprintf(stderr," -x                   Display Yxy instead of Lab\n");
-	fprintf(stderr," -T                   Display correlated color temperatures\n");
+	fprintf(stderr," -T                   Display correlated color temperatures and CRI\n");
 //	fprintf(stderr," -K type              Run instrument calibration first\n");
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
 	fprintf(stderr," -H                   Start in high resolution spectrum mode (if available)\n");
@@ -188,7 +209,9 @@ int main(int argc, char *argv[])
 	int emiss = 0;					/* Use emissive mode */
 	int displ = 0;					/* 1 = Use display emissive mode, 2 = display bright rel. */
 	                                /* 3 = display white rel. */
-	int ambient = 0;				/* Use ambient emissive mode */
+	int proj = 0;					/* 1 = Use projector emissive mode, 2 = proj bright rel. */
+	                                /* 3 = proj white rel. */
+	int ambient = 0;				/* 1 = Use ambient emissive mode, 2 = ambient flash mode */
 	int highres = 0;				/* Use high res mode if available */
 	int doYxy= 0;					/* Display Yxy instead of Lab */
 	int doCCT= 0;					/* Display correlated color temperatures */
@@ -210,7 +233,7 @@ int main(int argc, char *argv[])
 	inst *it;						/* Instrument object */
 	inst_code rv;
 	int uswitch = 0;				/* Instrument switch is enabled */
-	int spec = 0;					/* Use spectral data flag */
+	int spec = 0;					/* Need spectral data for observer/illuminant flag */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;				/* Custom illumination spectrum */
 	icxObserverType observ = icxOT_CIE_1931_2;
@@ -289,6 +312,9 @@ int main(int argc, char *argv[])
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
+				} else if (strcmp(na, "C") == 0) {
+					spec = 1;
+					illum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
@@ -338,6 +364,7 @@ int main(int argc, char *argv[])
 				emiss = 0;
 				trans = 1;
 				displ = 0;
+				proj = 0;
 				ambient = 0;
 
 			/* Request display (emissive) measurement */
@@ -346,23 +373,43 @@ int main(int argc, char *argv[])
 				emiss = 1;
 				trans = 0;
 				displ = 1;
+				proj = 0;
 				ambient = 0;
 
-				if (na != NULL) {
-					fa = nfa;
-					if (na[0] == 'b' || na[0] == 'B')
+				if (argv[fa][2] != '\000') {
+					if (argv[fa][2] == 'b' || argv[fa][2] == 'B')
 						displ = 2;
-					else if (na[0] == 'w' || na[0] == 'W')
+					else if (argv[fa][2] == 'w' || argv[fa][2] == 'W')
 						displ = 3;
 					else
 						usage(debug);
 				}
 
-			/* Request emissive measurement */
-			} else if (argv[fa][1] == 'e' || argv[fa][1] == 'E') {
+			/* Request projector (emissive) measurement */
+			} else if (argv[fa][1] == 'p') {
+
 				emiss = 1;
 				trans = 0;
 				displ = 0;
+				proj = 1;
+				ambient = 0;
+
+				if (argv[fa][2] != '\000') {
+					fa = nfa;
+					if (argv[fa][2] == 'b' || argv[fa][2] == 'B')
+						proj = 2;
+					else if (argv[fa][2] == 'w' || argv[fa][2] == 'W')
+						proj = 3;
+					else
+						usage(debug);
+				}
+
+			/* Request emissive measurement */
+			} else if (argv[fa][1] == 'e') {
+				emiss = 1;
+				trans = 0;
+				displ = 0;
+				proj = 0;
 				ambient = 0;
 
 			/* Request ambient measurement */
@@ -370,10 +417,19 @@ int main(int argc, char *argv[])
 				emiss = 1;
 				trans = 0;
 				displ = 0;
+				proj = 0;
 				ambient = 1;
 
-			/* Filter configuration */
+			/* Request ambient flash measurement */
 			} else if (argv[fa][1] == 'f') {
+				emiss = 1;
+				trans = 0;
+				displ = 0;
+				proj = 0;
+				ambient = 2;
+
+			/* Filter configuration */
+			} else if (argv[fa][1] == 'F') {
 				fa = nfa;
 				if (na == NULL) usage(debug);
 				if (na[0] == 'n' || na[0] == 'N')
@@ -388,7 +444,7 @@ int main(int argc, char *argv[])
 					usage(debug);
 
 			/* Extra filter compensation file */
-			} else if (argv[fa][1] == 'F') {
+			} else if (argv[fa][1] == 'E') {
 				fa = nfa;
 				if (na == NULL) usage(debug);
 				strncpy(filtername,na,MAXNAMEL-1); filtername[MAXNAMEL-1] = '\000';
@@ -531,7 +587,7 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 
-		} else if (ambient) {
+		} else if (ambient == 1) {
 			if ((cap & inst_emis_ambient) == 0) {
 				printf("Requested ambient light capability,\n");
 				printf("and instrument doesn't support it.\n");
@@ -550,7 +606,21 @@ int main(int argc, char *argv[])
 				}
 			}
 
-		} else if (emiss || displ) {
+		} else if (ambient == 2) {
+			if ((cap & inst_emis_ambient_flash) == 0) {
+				printf("Requested ambient flash capability,\n");
+				printf("and instrument doesn't support it.\n");
+				it->del(it);
+				return -1;
+			} else {
+				if (verb) {
+					printf("Please make sure the instrument is fitted with\n");
+					printf("the appropriate ambient light measuring head, and that\n");
+					printf("you are ready to trigger the flash.\n");
+				}
+			}
+
+		} else if (emiss || displ || proj) {
 
 			if (emiss) {
 				if ((cap & inst_emis_spot) == 0) {
@@ -559,9 +629,16 @@ int main(int argc, char *argv[])
 					it->del(it);
 					return -1;
 				}
-			} else {
+			} else if (displ) {
 				if ((cap & inst_emis_disp) == 0) {
 					printf("Need display spot capability\n");
+					printf("and instrument doesn't support it\n");
+					it->del(it);
+					return -1;
+				}
+			} else {
+				if ((cap & inst_emis_proj) == 0) {
+					printf("Need projector spot capability\n");
 					printf("and instrument doesn't support it\n");
 					it->del(it);
 					return -1;
@@ -572,17 +649,29 @@ int main(int argc, char *argv[])
 			if (dtype == 1 || dtype == 2) {
 				inst_opt_mode om;
 	
-				if (dtype == 1)
-					om = inst_opt_disp_crt;
-				else
-					om = inst_opt_disp_lcd;
+				if (proj) {
+					if (dtype == 1)
+						om = inst_opt_proj_crt;
+					else
+						om = inst_opt_proj_lcd;
+				} else {
+					if (dtype == 1)
+						om = inst_opt_disp_crt;
+					else
+						om = inst_opt_disp_lcd;
+				}
 	
 				if ((rv = it->set_opt_mode(it,om)) != inst_ok) {
-					printf("Setting display mode %s not supported by instrument\n",
-					       dtype == 1 ? "CRT" : "LCD");
+					printf("Setting %s mode %s not supported by instrument\n",
+					       proj ? "projector" : "display", dtype == 1 ? "CRT" : "LCD");
 					it->del(it);
 					return -1;
 				}
+			} else if (proj && it->capabilities(it) & (inst_emis_proj_crt | inst_emis_proj_lcd)) {
+				printf("Either CRT or LCD must be selected\n");
+				it->del(it);
+				return -1;
+
 			} else if (it->capabilities(it) & (inst_emis_disp_crt | inst_emis_disp_lcd)) {
 				printf("Either CRT or LCD must be selected\n");
 				it->del(it);
@@ -634,10 +723,14 @@ int main(int argc, char *argv[])
 		/* Should look at instrument type & user spec ??? */
 		if (trans)
 			smode = mode = inst_mode_trans_spot;
-		else if (ambient && (cap & inst_emis_ambient))
+		else if (ambient == 1 && (cap & inst_emis_ambient))
 			smode = mode = inst_mode_emis_ambient;
+		else if (ambient == 2 && (cap & inst_emis_ambient_flash))
+			smode = mode = inst_mode_emis_ambient_flash;
 		else if (displ)
 			smode = mode = inst_mode_emis_disp;
+		else if (proj)
+			smode = mode = inst_mode_emis_proj;
 		else if (emiss || ambient)
 			smode = mode = inst_mode_emis_spot;
 		else {
@@ -646,7 +739,8 @@ int main(int argc, char *argv[])
 				smode = inst_mode_s_ref_spot;
 		}
 
-		if (spec || pspec) {
+		/* Use spec if requested, or if available and CRI should be computed */
+		if (spec || pspec || ((cap & inst_spectral) != 0 && (emiss || ambient))) {
 			mode |= inst_mode_spectral;
 			smode |= inst_mode_spectral;
 		}
@@ -721,6 +815,10 @@ int main(int argc, char *argv[])
 		it->icom->set_uih(it->icom, 'R', 'R', ICOM_CMND);
 		it->icom->set_uih(it->icom, 'h', 'h', ICOM_CMND);
 		it->icom->set_uih(it->icom, 'H', 'H', ICOM_CMND);
+		it->icom->set_uih(it->icom, 'k', 'k', ICOM_CMND);
+		it->icom->set_uih(it->icom, 'K', 'K', ICOM_CMND);
+		it->icom->set_uih(it->icom, 's', 's', ICOM_CMND);
+		it->icom->set_uih(it->icom, 'S', 'S', ICOM_CMND);
 		it->icom->set_uih(it->icom, 'q', 'q', ICOM_USER);
 		it->icom->set_uih(it->icom, 'Q', 'Q', ICOM_USER);
 		it->icom->set_uih(it->icom, 0x03, 0x03, ICOM_USER);		/* ^c */
@@ -761,7 +859,8 @@ int main(int argc, char *argv[])
 		double cct, vct, vdt;
 		double cct_de, vct_de, vdt_de;
 		int ch = '0';		/* Character */
-		int dofwa = 0;		/* Setup for FWA compensation */
+		int sufwa = 0;		/* Setup for FWA compensation */
+		int dofwa = 0;		/* Do FWA compensation */
 		int fidx = -1;		/* FWA compensated index, default = none */
 	
 		if (savdrd != -1 && (cap & inst_s_ref_spot)) {
@@ -805,8 +904,8 @@ int main(int argc, char *argv[])
 			printf("\nThere are saved spot readings in the instrument.\n");
 			printf("Hit [A-Z] to use reading for white and setup FWA compensation (keyed to letter)\n");
 			printf("[a-z] to use reading for FWA compensated value from keyed reference\n");
-			printf("'r' to take previous reading as the reference, 'h' to toggle high res.\n");
-			printf("Hit ESC, ^C or Q to exit, N to not read saved reading,\n");
+			printf("'r' to set reference, 's' to save spectrum,\n");
+			printf("Hit ESC or Q to exit, N to not read saved reading,\n");
 			printf("any other key to use reading: ");
 			fflush(stdout);
 			
@@ -849,6 +948,7 @@ int main(int argc, char *argv[])
 			/* Do any needed calibration before the user places the instrument on a desired spot */
 			if ((it->needs_calibration(it) & inst_calt_needs_cal_mask) != 0
 			 && (it->needs_calibration(it) & inst_calt_needs_cal_mask) != inst_calt_disp_int_time
+			 && (it->needs_calibration(it) & inst_calt_needs_cal_mask) != inst_calt_proj_int_time
 			 && (it->needs_calibration(it) & inst_calt_needs_cal_mask) != inst_calt_crt_freq) {
 				inst_code ev;
 
@@ -886,39 +986,47 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			/* If this is an xy instrument: */
-			if ((cap2 & inst2_xy_locate) && (cap2 & inst2_xy_position)) {
+			if (ambient == 2) {
+				printf("\nConfigure for ambient, press and hold button, trigger flash then release button,\n");
+				printf("or hit 'r' to set reference, 's' to save spectrum,\n");
+				printf("'h' to toggle high res., 'k' to do a calibration\n");
 
-				/* Allow the user to position the instrument */
-				for (;;) {		/* retry loop */
-					if ((rv = it->xy_locate_start(it)) == inst_ok)
-						break;
-					if (ierror(it, rv) == 0)	/* Ignore */
-						continue;
-					break;						/* Abort */
-				}
-				if (rv != inst_ok)
-					break;			/* Abort */
-
-				printf("\nUsing the XY table controls, locate the point to measure with the sight.\n");
-
-			/* Purely manual instrument */
 			} else {
+				/* If this is an xy instrument: */
+				if ((cap2 & inst2_xy_locate) && (cap2 & inst2_xy_position)) {
 
-				/* If this is display white brightness relative, read the white */
-				if (displ > 1 && wXYZ[0] < 0.0)
-					printf("\nPlace instrument on white reference spot,\n");
-				else
-					printf("\nPlace instrument on spot to be measured,\n");
+					/* Allow the user to position the instrument */
+					for (;;) {		/* retry loop */
+						if ((rv = it->xy_locate_start(it)) == inst_ok)
+							break;
+						if (ierror(it, rv) == 0)	/* Ignore */
+							continue;
+						break;						/* Abort */
+					}
+					if (rv != inst_ok)
+						break;			/* Abort */
+
+					printf("\nUsing the XY table controls, locate the point to measure with the sight,\n");
+
+				/* Purely manual instrument */
+				} else {
+
+					/* If this is display white brightness relative, read the white */
+					if (displ > 1 && wXYZ[0] < 0.0)
+						printf("\nPlace instrument on white reference spot,\n");
+					else {
+						printf("\nPlace instrument on spot to be measured,\n");
+					}
+				}
+				printf("and hit [A-Z] to read white and setup FWA compensation (keyed to letter)\n");
+				printf("[a-z] to read and make FWA compensated reading from keyed reference\n");
+				printf("'r' to set reference, 's' to save spectrum,\n");
+				printf("'h' to toggle high res., 'k' to do a calibration\n");
 			}
-
-			printf("and hit [A-Z] to read white and setup FWA compensation (keyed to letter)\n");
-			printf("[a-z] to read and make FWA compensated reading from keyed reference\n");
-			printf("'r' to take previous reading as the reference\n");
 			if (uswitch)
-				printf("Hit ESC, ^C or Q to exit, instrument switch or any other key to take a reading: ");
+				printf("Hit ESC or Q to exit, instrument switch or any other key to take a reading: ");
 			else
-				printf("Hit ESC, ^C or Q to exit, any other key to take a reading: ");
+				printf("Hit ESC or Q to exit, any other key to take a reading: ");
 			fflush(stdout);
 
 			if ((cap2 & inst2_xy_locate) && (cap2 & inst2_xy_position)) {
@@ -996,7 +1104,7 @@ int main(int argc, char *argv[])
 		/* Deal with a user abort */
 		} else if ((rv & inst_mask) == inst_user_abort) {
 			printf("\n\nSpot read stopped at user request!\n");
-			printf("Hit Esc, ^C or Q to give up, any other key to retry:"); fflush(stdout);
+			printf("Hit Esc or Q to give up, any other key to retry:"); fflush(stdout);
 			ch = next_con_char();
 			if (ch == 0x1b || ch == 0x03 || ch == 'q' || ch == 'Q') {
 				printf("\n");
@@ -1015,11 +1123,16 @@ int main(int argc, char *argv[])
 			}
 			continue;
 
+		/* Deal with a bad sensor position */
+		} else if ((rv & inst_mask) == inst_wrong_sensor_pos) {
+			printf("\n\nSpot read failed due to the sensor being in the wrong position\n(%s)\n",it->interp_error(it, rv));
+			continue;
+
 		/* Deal with a misread */
 		} else if ((rv & inst_mask) == inst_misread) {
 			empty_con_chars();
 			printf("\n\nSpot read failed due to misread (%s)\n",it->interp_error(it, rv));
-			printf("Hit Esc, ^C or Q to give up, any other key to retry:"); fflush(stdout);
+			printf("Hit Esc or Q to give up, any other key to retry:"); fflush(stdout);
 			ch = next_con_char();
 			printf("\n");
 			if (ch == 0x1b || ch == 0x03 || ch == 'q' || ch == 'Q') {
@@ -1029,31 +1142,33 @@ int main(int argc, char *argv[])
 
 		/* Deal with a communications error */
 		} else if ((rv & inst_mask) == inst_coms_fail) {
-			int tt = it->last_comerr(it);
-			if (tt & (ICOM_BRK | ICOM_FER | ICOM_PER | ICOM_OER)) {
-				if (br == baud_57600) br = baud_38400;
-				else if (br == baud_38400) br = baud_9600;
-				else if (br == baud_9600) br = baud_4800;
-				else if (br == baud_9600) br = baud_4800;
-				else if (br == baud_2400) br = baud_1200;
-				else br = baud_1200;
-			}
-			/* Communication problem, allow retrying at a lower baud rate */
 			empty_con_chars();
 			printf("\n\nSpot read failed due to communication problem.\n");
-			printf("Hit Esc, ^C or Q to give up, any other key to retry:"); fflush(stdout);
+			printf("Hit Esc or Q to give up, any other key to retry:"); fflush(stdout);
 			ch = next_con_char();
 			if (ch == 0x1b || ch == 0x03 || ch == 'q' || ch == 'Q') {
 				printf("\n");
 				break;
 			}
 			printf("\n");
-			if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
+			if (it->icom->port_type(it->icom) == icomt_serial) {
+				/* Allow retrying at a lower baud rate */
+				int tt = it->last_comerr(it);
+				if (tt & (ICOM_BRK | ICOM_FER | ICOM_PER | ICOM_OER)) {
+					if (br == baud_57600) br = baud_38400;
+					else if (br == baud_38400) br = baud_9600;
+					else if (br == baud_9600) br = baud_4800;
+					else if (br == baud_9600) br = baud_4800;
+					else if (br == baud_2400) br = baud_1200;
+					else br = baud_1200;
+				}
+				if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
 #ifdef DEBUG
-				printf("init_coms returned '%s' (%s)\n",
-			       it->inst_interp_error(it, rv), it->interp_error(it, rv));
+					printf("init_coms returned '%s' (%s)\n",
+				       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 #endif /* DEBUG */
-				break;
+					break;
+				}
 			}
 			continue;
 
@@ -1105,24 +1220,82 @@ int main(int argc, char *argv[])
 				}
 				printf("\n Reference is now Lab: %f %f %f\n", rLab[0], rLab[1], rLab[2]);
 			} else {
-				printf("\n No previous reading to use as referece\n");
+				printf("\n No previous reading to use as reference\n");
+			}
+			continue;
+		}
+		if (ch == 'S' || ch == 's') {	/* Save last spectral into file */
+			if (sp.spec_n > 0) {
+				char buf[500];
+				printf("\nEnter filename (ie. xxxx.sp): "); fflush(stdout);
+				if (getns(buf, 500) != NULL && strlen(buf) > 0) {
+					if(write_xspect(buf, &sp))
+						printf("\nWriting file '%s' failed\n",buf);
+					else
+						printf("\nWriting file '%s' succeeded\n",buf);
+				} else {
+					printf("\nNo filename, nothing saved\n");
+				}
+			} else {
+				printf("\nNo previous spectral reading to save to file (Use -s flag ?)\n");
+			}
+			continue;
+		}
+		if (ch == 'K' || ch == 'k') {	/* Do a calibration */
+			inst_code ev;
+
+			printf("\nDoing a calibration\n");
+
+			/* save current location */
+			if ((cap2 & inst2_xy_locate) && (cap2 & inst2_xy_position)) {
+				for (;;) {		/* retry loop */
+					if ((ev = it->xy_get_location(it, &lx, &ly)) == inst_ok)
+						break;
+					if (ierror(it, ev) == 0)	/* Ignore */
+						continue;
+					break;						/* Abort */
+				}
+				if (ev != inst_ok)
+					break;			/* Abort */
+			}
+
+			ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL);
+			if (ev != inst_ok) {	/* Abort or fatal error */
+				break;
+			}
+
+			/* restore location */
+			if ((cap2 & inst2_xy_locate) && (cap2 & inst2_xy_position)) {
+				for (;;) {		/* retry loop */
+					if ((ev = it->xy_position(it, 0, lx, ly)) == inst_ok)
+						break;
+					if (ierror(it, ev) == 0)	/* Ignore */
+						continue;
+					break;						/* Abort */
+				}
+				if (ev != inst_ok)
+					break;			/* Abort */
 			}
 			continue;
 		}
 
 		if (ch >= 'A' && ch <= 'Z') {
-			printf("Measured media to setup FWA compensation '%c'\n",ch);
-			dofwa = 1;
+			printf("\nMeasured media to setup FWA compensation '%c'\n",ch);
+			sufwa = 1;
 			fidx = ch - 'A';
 		}
 		if (ch >= 'a' && ch <= 'z') {
 			fidx = ch - 'a';
+			if (fidx < 0 ||  sp2cief[fidx] == NULL) {
+				printf("\nUnable to apply FWA compensation because it wasn't set up\n");
+				fidx = -1;
+			} else {
+				dofwa = 1;
+			}
 		}
 
-		val.sp.norm = 100.0;
-
 		/* Setup FWA compensation */
-		if (spec && dofwa) {
+		if (sufwa) {
 			double FWAc;
 			xspect insp;			/* Instrument illuminant */
 
@@ -1158,7 +1331,7 @@ int main(int argc, char *argv[])
 			tsp = val.sp;		/* Temp. save spectral reading */
 
 			/* Compute FWA corrected spectrum */
-			if (!dofwa && fidx >= 0 && sp2cief[fidx] != NULL) {
+			if (dofwa != 0) {
 				sp2cief[fidx]->sconvert(sp2cief[fidx], &tsp, NULL, &tsp);
 			}
 
@@ -1222,12 +1395,12 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		if (dofwa == 0) {		/* Not setting up fwa */
+		if (sufwa == 0) {		/* Not setting up fwa, so show reading */
 
 			sp = val.sp;		/* Save as last spectral reading */
 
 			/* Compute the XYZ & Lab */
-			if (!spec) {
+			if (dofwa == 0 && spec == 0) {
 				if (val.XYZ_v == 0 && val.aXYZ_v == 0)
 					error("Instrument didn't return XYZ value");
 				
@@ -1247,7 +1420,7 @@ int main(int argc, char *argv[])
 					error("Instrument didn't return spectral data");
 				}
 	
-				if (fidx < 0 || sp2cief[fidx] == NULL) {
+				if (dofwa == 0) {
 					/* Convert it to XYZ space using uncompensated */
 					sp2cie->convert(sp2cie, XYZ, &sp);
 				} else {
@@ -1255,6 +1428,8 @@ int main(int argc, char *argv[])
 					sp2cief[fidx]->sconvert(sp2cief[fidx], &sp, XYZ, &sp);
 				}
 			}
+
+			/* XYZ is 0 .. 1 range here */
 
 			/* Compute color temperatures */
 			if (ambient || doCCT) {
@@ -1362,10 +1537,15 @@ int main(int argc, char *argv[])
 				icmLabDE(Lab, rLab), icmCIE94(Lab, rLab));
 			}
 			if (ambient) {
+				if (ambient == 2)
+					printf(" Apparent flash duration = %f seconds\n",val.duration);
 				if (cap & inst_emis_ambient_mono) {
-					printf(" Ambient = %.1f Lux\n", 3.141592658 * XYZ[1]);
+					printf(" Ambient = %.1f Lux%s\n",
+						       3.141592658 * XYZ[1], ambient == 2 ? "-Seconds" : "");
 				} else {
-					printf(" Ambient = %.1f Lux, CCT = %.0fK (Delta E %f)\n", 3.1415926 * XYZ[1],cct, cct_de);
+					printf(" Ambient = %.1f Lux%s, CCT = %.0fK (Delta E %f)\n",
+					       3.1415926 * XYZ[1], ambient == 2 ? "-Seconds" : "",
+					       cct, cct_de);
 					printf(" Closest Planckian temperature = %.0fK (Delta E %f)\n",vct, vct_de);
 					printf(" Closest Daylight temperature  = %.0fK (Delta E %f)\n",vdt, vdt_de);
 				}
@@ -1373,6 +1553,12 @@ int main(int argc, char *argv[])
 				printf("                           CCT = %.0fK (Delta E %f)\n",cct, cct_de);
 				printf(" Closest Planckian temperature = %.0fK (Delta E %f)\n",vct, vct_de);
 				printf(" Closest Daylight temperature  = %.0fK (Delta E %f)\n",vdt, vdt_de);
+			}
+			if (val.sp.spec_n > 0 && (ambient || doCCT)) {
+				int invalid = 0;
+				double cri;
+				cri = icx_CIE1995_CRI(&invalid, &sp);
+				printf(" Color Rendering Index (Ra) = %.1f%s\n",cri,invalid ? " (Invalid)" : "");
 			}
 
 			/* Save reading to the log file */

@@ -9,7 +9,7 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUB LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Based on the old iccXfm class.
@@ -32,6 +32,7 @@
  */
 
 #include "icc.h"		/* icclib ICC definitions */ 
+#include "cgats.h"		/* CGAT format */	
 #include "rspl.h"		/* rspllib thin plate spline definitions */
 #include "gamut.h"		/* gamut definitions */
 #include "xutils.h"		/* Utility functions */
@@ -39,12 +40,13 @@
 #include "xspect.h"		/* Spectral conversion object */
 #include "xsep.h"		/* Separation and multi-ink support */
 #include "xcolorants.h"	/* Known colorants support */
-#include "cgats.h"		/* CGAT format */	
 #include "insttypes.h"	/* Instrument type support */
 #include "mpp.h"		/* model printer profile support */
 #include "moncurve.h"	/* monotonic curve support */
+						/* (more at the end) */
 
-#define XICC_USE_HK 1	/* Set to 1 to use Helmholtz-Kohlraush in all CAM conversions */
+#define XICC_USE_HK 1	/* [Set] Set to 1 to use Helmholtz-Kohlraush in all CAM conversions */
+#define XICC_NOCAMCL 0	/* [Unset] Set to 1 to disable clipping out of CAM gamut on XYZ to Jab */
 
 /* ------------------------------------------------------------------------------ */
 
@@ -97,6 +99,7 @@ const char *icx2str(icmEnumType etype, int enumval);
 /* expanded set of methods. */
 
 /* Black generation rule */
+/* The rule is all in terms of device K and L* values */
 typedef enum {
     icxKvalue    = 0,	/* K is specified as output K target by PCS auxiliary */
     icxKlocus    = 1,	/* K is specified as proportion of K locus by PCS auxiliary */
@@ -114,16 +117,19 @@ typedef struct {
 	double Kenpo;		/* K end point as prop. of L locus (0.0 - 1.0) */
 	double Kenle;		/* K end level at Black end (0.0 - 1.0) */
 	double Kshap;		/* K transition shape, 0.0-1.0 concave, 1.0-2.0 convex */
+	double Kskew;		/* K transition shape skew, 1.0 = even */
 } icxInkCurve;
 
 /* Default black generation smoothing value */
-#define ICXINKDEFSMTH 0.15
+#define ICXINKDEFSMTH 0.20
+#define ICXINKDEFSKEW 2.0	/* Curve shape skew (matches typical device behaviour) */
 
 /* Structure to convey inking details */
 typedef struct {
 	double tlimit;		/* Total ink limit, > 0.0 to < inputChan, < 0.0 == off */
 	double klimit;		/* Black limit, > 0.0 to < 1.0, < 0.0 == off */
 	icxKrule k_rule;	/* type of K generation rule */
+	int KonlyLmin;		/* Use K only black Locus Lmin */
 	icxInkCurve c;		/* K curve, or locus minimum curve */
 	icxInkCurve x;		/* locus maximum curve if icxKl5l */
 } icxInk;
@@ -167,10 +173,12 @@ typedef struct {
 	double glumknf;			/* Grey axis luminance knee factor, 0.0 - 1.0 */
 	double gamcpf;			/* Gamut compression factor, 0.0 - 1.0 */
 	double gamexf;			/* Gamut expansion factor, 0.0 - 1.0 */
-	double gamknf;			/* Gamut knee factor, 0.0 - 1.0 */
+	double gamcknf;			/* Gamut compression knee factor, 0.0 - 1.0 */
+	double gamxknf;			/* Gamut expansion knee factor, 0.0 - 1.0 */
 	double gampwf;			/* Gamut Perceptual Map weighting factor, 0.0 - 1.0 */
 	double gamswf;			/* Gamut Saturation Map weighting factor, 0.0 - 1.0 */
 	double satenh;			/* Saturation enhancement value, 0.0 - Inf */
+	char *as;				/* Alias string (option name) */
 	char *desc;				/* Possible description of this VC */
 	icRenderingIntent icci;	/* Closest ICC intent */
 } icxGMappingIntent;
@@ -179,6 +187,8 @@ struct _xicc {
 	/* Private: */
 	icc *pp;			/* ICC profile we expand */
 
+	struct _xcal *cal;	/* Optional device cal, NULL if none */
+	int nodel_cal;		/* Flag, nz if cal was provided externally and shouldn't be deleted */
 
 	/* Public: */
 	void                 (*del)(struct _xicc *p);
@@ -195,7 +205,7 @@ struct _xicc {
 									/* irrespective of the native or effective PCS. */
 									/* Ignored if MERGE_CLUT is set or vector clip is used. */
 									/* May halve the inverse lookup performance! */ 
-#define ICX_INT_SEPARATE 0x0200		/* Handle 4 dimensional devices with fixed inking rules */
+#define ICX_INT_SEPARATE 0x0400		/* Handle 4 dimensional devices with fixed inking rules */
 									/* with an optimised internal separation pass, rather */
 									/* than a point by point inverse locus lookup . */
 									/* NOT IMPLEMENTED YET */
@@ -221,10 +231,12 @@ struct _xicc {
 	/* "create" flags */
 #define ICX_SET_WHITE       0x0001		/* find, set and make relative to the white point */
 #define ICX_SET_BLACK       0x0002		/* find and set the black point */
+#define ICX_WRITE_WBL       0x0004		/* Matrix: write White, Black & Luminance tags */
 #define ICX_NO_IN_SHP_LUTS  0x0040		/* If LuLut: Don't create input (Device) shaper curves. */
 #define ICX_NO_IN_POS_LUTS  0x0080		/* If LuLut: Don't create input (Device) poistion curves. */
 #define ICX_NO_OUT_LUTS     0x0100		/* If LuLut: Don't create output (PCS) curves. */
-#define ICX_EXTRA_FIT       0x0400		/* If LuLut: Don't create output (PCS) curves. */
+//#define ICX_2PASSSMTH       0x0400		/* If LuLut: Use Gaussian smoothing */
+//#define ICX_EXTRA_FIT       0x0800		/* If LuLut: Counteract scat data point errors. */
 /* And  ICX_VERBOSE         0x8000 */	/* Turn on verboseness during creation */
 	struct _icxLuBase * (*set_luobj) (struct _xicc *p,
 	                                  icmLookupFunc func,		/* Functionality to set */
@@ -235,6 +247,8 @@ struct _xicc {
 	                                  cow *points,				/* Array of input points */
 	                                  double dispLuminance,		/* > 0.0 if display luminance */
 	                                                                    /* value and is known */
+	                                  double wpscale,			/* > 0.0 if input white pt is */
+	                                                                    /* is to be scaled */
 	                                  double smooth,			/* RSPL smoothing factor, */
 	                                                                        /* -ve if raw */
 	                                  double avgdev,			/* Avge Dev. of points */
@@ -242,6 +256,8 @@ struct _xicc {
 	                                                            /* used if pcsor == CIECAM. */
 																/* or ICX_CAM_CLIP flag. */
 	                                  icxInk *ink,				/* inking details */
+	                                  struct _xcal *cal,		/* Optional cal Will override any */
+																/* existing, not deltd with xicc. */
 	                                  int quality);				/* Quality metric, 0..3 */
 
 
@@ -267,6 +283,8 @@ xicc *new_xicc(icc *picc);
 	/* Private: */																		\
 	struct _xicc    *pp;					/* Pointer to XICC we're a part of */		\
 	icmLuBase       *plu;					/* Pointer to icm Lu we are expanding */	\
+	int              flags;					/* Flags passed to get_luobj */				\
+	icmLookupFunc    func;					/* Function passed to get_luobj */			\
 	icRenderingIntent intent;				/* Effective/External Intent */				\
 											/* "in" and "out" are in reference to */	\
 											/* the requested lookup direction. */		\
@@ -325,9 +343,10 @@ xicc *new_xicc(icc *picc);
 		double *outmin, double *outmax);	/* Maximum range of outspace values */		\
 																						\
 																						\
-								/* Return the relative media white and black points */	\
-								/* in the Effective PCS colorspace. */					\
-	void    (*rel_wh_bk_points)(struct _icxLuBase *p, double *wht, double *blk);		\
+	/* Return the media white and black points */										\
+	/* in the effective PCS colorspace. */												\
+	/* (ie. these will be relative values for relative intent etc.) */					\
+	void    (*efv_wh_bk_points)(struct _icxLuBase *p, double *wht, double *blk, double *kblk);	\
 																						\
 	/* Translate color values through profile */										\
 	/* 0 = success */																	\
@@ -424,6 +443,7 @@ struct _icxLuLut {
 	rspl	        *outputTable[MXDO];		/* The output lookups */
 
 	/* Inverted RSPLs used to speed ink limit calculation */
+	/* input' -> input */
 	rspl *revinputTable[MXDI];
 
 	/* In/Out lookup flags used for rspl init. callback */
@@ -439,6 +459,9 @@ struct _icxLuLut {
 
 	icxClip clip;					/* Clip setup information */
 
+	int kch;						/* Black ink channel if discovered */
+									/* -1 if not known or applicable */
+									/* (Only set by icxLu_comp_bk_point()) */
 	icxInk      ink;				/* inking details */
 	double Lmin, Lmax;				/* L min/max for inking rule */
 
@@ -450,10 +473,10 @@ struct _icxLuLut {
 	/* Auxiliar linearization function - NULL if none */
  	/* Only the used auxiliary chanels need be calculated. */
 	/* ~~ not implimented yet ~~~ */
-	void (*auxlinf)(void *auxlinf_ctx, double inout[MXDI]);
+//	void (*auxlinf)(void *auxlinf_ctx, double inout[MXDI]);
 
 	/* Opaque context for auxlin */
-	void *auxlinf_ctx;
+//	void *auxlinf_ctx;
 
 	/* Temporary icm fwd abs XYZ LuLut used for setting up icx clut */
 	icmLuBase *absxyzlu;
@@ -473,6 +496,11 @@ struct _icxLuLut {
 
 	/* public: */
 
+	/* Note that black inking rules are always defined and provided */
+	/* in dev[] and pcs[] space, even for component functions */
+	/* (ie. the implementation of the inking rule deals with */
+	/*  the dev<->dev' and pcs<->pcs' conversions) */
+	
 	/* Requested direction component lookup */
 	int (*in_abs)  (struct _icxLuLut *p, double *out, double *in);
 	int (*matrix)  (struct _icxLuLut *p, double *out, double *in);
@@ -483,7 +511,7 @@ struct _icxLuLut {
 	int (*output)  (struct _icxLuLut *p, double *out, double *in);
 	int (*out_abs) (struct _icxLuLut *p, double *out, double *in);
 
-	/* Inverse direction component lookup */
+	/* Inverse direction component lookup (in reverse order) */
 	int (*inv_out_abs) (struct _icxLuLut *p, double *out, double *in);
 	int (*inv_output)  (struct _icxLuLut *p, double *out, double *in);
 	int (*inv_clut)    (struct _icxLuLut *p, double *out, double *in);
@@ -554,15 +582,17 @@ void (*outfunc)(void *cbntx, double *out, double *in)
 );
 
 		
-
 /* Return an enumerated viewing condition */
-/* Return the enumeration if OK, -999 if there is no such enumeration. */
+/* Return enumeration if OK, -999 if there is no such enumeration. */
+/* xicc may be NULL if just the description is wanted, */
+/* or an explicit white point is provided. */
 int xicc_enum_viewcond(
-xicc *p,			/* Expanded profile we're working with (May be NULL if desc NZ) */
-icxViewCond *vc,	/* Viewing parameters to return */
-int no,				/* Enumeration to return, -1 for default, -2 for none  */
+xicc *p,			/* Expanded profile to get white point (May be NULL if desc NZ) */
+icxViewCond *vc,	/* Viewing parameters to return, May be NULL if desc is nz */
+int no,				/* Enumeration to return, -1 for default, -2 for none */
 char *as,			/* String alias to number, NULL if none */
-int desc			/* NZ - Just return a description of this enumeration */
+int desc,			/* NZ - Just return a description of this enumeration in vc */
+double *wp			/* Provide white point if xicc is NULL */
 );
 
 /* Debug: dump a Viewing Condition to standard out */
@@ -585,13 +615,31 @@ int xicc_enum_gmapintent(icxGMappingIntent *gmi, int no, char *as);
 void xicc_dump_gmi(icxGMappingIntent *gmi);
 
 /* - - - - - - - - - - */
+/* Utility functions: */
 
-/* Utility function - given an open icc profile, */
-/* estmate the total ink limit and black ink limit. */
-void icxGetLimits(icc *p, double *tlimit, double *klimit);
+/* Given an open icc profile, */
+/* guess which channel is the black. */
+/* Return -1 if there is no black channel or it can't be guessed */
+int icxGuessBlackChan(icc *p);
+
+/* Given an icc profile, try and create an xcal */
+/* Return NULL on error or no cal */
+struct _xcal *xiccReadCalTag(icc *p);
+
+/* A callback that uses an xcal, that can be used with icc get_tac */
+void xiccCalCallback(void *cntx, double *out, double *in);
+
+/* Given an xicc icc profile, estmate the total ink limit and black ink limit. */
+void icxGetLimits(xicc *p, double *tlimit, double *klimit);
 
 /* Using the above function, set default total and black ink values */
-void icxDefaultLimits(icc *p, double *tlout, double tlin, double *klout, double klin);
+void icxDefaultLimits(xicc *p, double *tlout, double tlin, double *klout, double klin);
+
+/* Given a calibrated total ink limit and an xcal, return the */
+/* equivalent underlying (pre-calibration) total ink limit. */
+/* This is the maximum equivalent, that makes sure that */
+/* the calibrated limit is met or exceeded. */
+double icxMaxUnderlyingLimit(struct _xcal *cal, double ilimit);
 
 /* - - - - - - - - - - */
 
@@ -615,6 +663,14 @@ double icxdLabDEsq(double dout[2][3], double *Lab0, double *Lab1);
 /* Return the CIE94 Delta E color difference measure, squared */
 /* including partial derivatives. */
 double icxdCIE94sq(double dout[2][3], double Lab0[3], double Lab1[3]);
+
+/* Return the normal Delta E given two Lab values, */
+/* including partial derivatives. */
+double icxdLabDE(double dout[2][3], double *Lab0, double *Lab1);
+
+/* Return the CIE94 Delta E color difference measure */
+/* including partial derivatives. */
+double icxdCIE94(double dout[2][3], double Lab0[3], double Lab1[3]);
 
 /* - - - - - - - - - - */
 
@@ -717,6 +773,29 @@ double max
 /* since it has offset and scaling. */
 
 /* - - - - - - - - - - */
+/* Multi-plane interpolation - uses base + di slope values.  */
+/* Parameters are assumed to be fdi groups of di + 1 parameters. */
+void icxPlaneInterp(
+double *v,			/* Pointer to first parameter [fdi * (di + 1)] */
+int    fdi,			/* Number of output channels */
+int    di,			/* Number of input channels */
+double *out,		/* Resulting fdi values */
+double *in			/* Input di values */
+);
+
+/* Matrix cube interpolation. with partial derivative */
+/* with respect to the input and parameters. */
+void icxdpdiPlaneInterp(
+double *v,			/* Pointer to first parameter value [fdi * (di + 1)] */
+double *dv,			/* Return [1 + di] deriv. wrt each parameter v */
+double *din,		/* Return [fdi * di] deriv. wrt each input value */
+int    fdi,			/* Number of output channels */
+int    di,			/* Number of input channels */
+double *out,		/* Resulting fdi values */
+double *in			/* Input di values */
+);
+
+/* - - - - - - - - - - */
 
 /* Matrix cube interpolation - interpolate between 2^di output corner values. */
 /* Parameters are assumed to be fdi groups of 2^di parameters. */
@@ -761,6 +840,8 @@ void icxdpdiMulBy3x3Parm(
 );
 
 /* - - - - - - - - - - */
+
+#include "xcal.h"
 
 #endif /* XICC_H */
 

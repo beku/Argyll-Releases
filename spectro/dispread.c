@@ -8,7 +8,7 @@
  * Copyright 1996 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -130,10 +130,11 @@ void usage(char *diag, ...) {
 			fprintf(stderr,"    ** No ports found **\n");
 		icom->del(icom);
 	}
+	fprintf(stderr," -p                   Use projector mode (if available)\n");
 	fprintf(stderr," -y c|l               Display type, c = CRT, l = LCD\n");
 	fprintf(stderr," -k file.cal          Apply display calibration file while reading\n");
 	fprintf(stderr," -s                   Save spectral information (default don't save)\n");
-	fprintf(stderr," -p ho,vo,ss          Position test window and scale it\n");
+	fprintf(stderr," -P ho,vo,ss          Position test window and scale it\n");
 	fprintf(stderr,"                      ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                      ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
 	fprintf(stderr," -F                   Fill whole screen with black background\n");
@@ -144,6 +145,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
 	fprintf(stderr," -C \"command\"         Invoke shell \"command\" each time a color is set\n");
+	fprintf(stderr," -M \"command\"         Invoke shell \"command\" each time a color is measured\n");
 	fprintf(stderr," -W n|h|x             Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," outfile              Base name for input[ti1]/output[ti3] file\n");
@@ -168,10 +170,13 @@ int main(int argc, char *argv[])
 	instType itype = instUnknown;		/* Default target instrument - none */
 	int docalib = 0;					/* Do a calibration */
 	int highres = 0;					/* Use high res mode if available */
+	int adaptive = 0;					/* Use adaptive mode if available */
 	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
+	int proj = 0;						/* NZ if projector */
 	int nocal = 0;						/* Disable auto calibration */
 	int spectral = 0;					/* Don't save spectral information */
-	char *callout = NULL;				/* Shell callout */
+	char *ccallout = NULL;				/* Change color Shell callout */
+	char *mcallout = NULL;				/* Measure color Shell callout */
 	char inname[MAXNAMEL+1] = "\000";	/* Input cgats file base name */
 	char outname[MAXNAMEL+1] = "\000";	/* Output cgats file base name */
 	char calname[MAXNAMEL+1] = "\000";	/* Calibration file name */
@@ -235,7 +240,7 @@ int main(int argc, char *argv[])
 			if (argv[fa][1] == '?' || argv[fa][1] == '-') {
 				usage("Usage requested");
 
-			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			} else if (argv[fa][1] == 'v') {
 				verb = 1;
 
 			/* Display number */
@@ -289,6 +294,10 @@ int main(int argc, char *argv[])
 				comport = atoi(na);
 				if (comport < 1 || comport > 50) usage("-c parameter %d out of range",comport);
 
+			/* Projector */
+			} else if (argv[fa][1] == 'p') {
+				proj = 1;
+
 			/* Display type */
 			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
 				fa = nfa;
@@ -312,15 +321,15 @@ int main(int argc, char *argv[])
 				spectral = 1;
 
 			/* Test patch offset and size */
-			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+			} else if (argv[fa][1] == 'P') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -p");
+				if (na == NULL) usage("Parameter expected after -P");
 				if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &patscale) != 3)
-					usage("-p parameter '%s' not recognised",na);
+					usage("-P parameter '%s' not recognised",na);
 				if (ho < 0.0 || ho > 1.0
 				 || vo < 0.0 || vo > 1.0
 				 || patscale <= 0.0 || patscale > 50.0)
-					usage("-p parameters %f %f %f out of range",ho,vo,patscale);
+					usage("-P parameters %f %f %f out of range",ho,vo,patscale);
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
@@ -335,11 +344,21 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'H') {
 				highres = 1;
 
+			/* Adaptive mode */
+			} else if (argv[fa][1] == 'V') {
+				adaptive = 1;
+
 			/* Change color callout */
 			} else if (argv[fa][1] == 'C') {
 				fa = nfa;
 				if (na == NULL) usage("Parameter expected after -C");
-				callout = na;
+				ccallout = na;
+
+			/* Measure color callout */
+			} else if (argv[fa][1] == 'M') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expected after -M");
+				mcallout = na;
 
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
@@ -393,8 +412,8 @@ int main(int argc, char *argv[])
 	}
 
 	if (docalib) {
-		if ((rv = disprd_calibration(itype, comport, fc, dtype, nocal, disp, blackbg,
-		                               override, patsize, ho, vo, verb, debug)) != 0) {
+		if ((rv = disprd_calibration(itype, comport, fc, dtype, proj, adaptive, nocal, disp,
+		                             blackbg, override, patsize, ho, vo, verb, debug)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
 		}
 	}
@@ -460,7 +479,7 @@ int main(int argc, char *argv[])
 
 	/* Figure out the color space */
 	if ((fi = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
-		error ("Input file doesn't contain keyword COLOR_REPS");
+		error ("Input file doesn't contain keyword COLOR_REP");
 	if (strcmp(icg->t[0].kdata[fi],"RGB") == 0) {
 		int ri, gi, bi;
 		dim = 3;
@@ -491,7 +510,7 @@ int main(int argc, char *argv[])
 			cols[i].XYZ[0] = cols[i].XYZ[1] = cols[i].XYZ[2] = -1.0;
 		}
 	} else
-		error ("Input file keyword COLOR_REPS has illegal value");
+		error ("Input file keyword COLOR_REP has illegal value (RGB colorspace expected)");
 
 	/* Check that there is a white patch, and if not, add one, */
 	/* so that we can normalize the values to white. */
@@ -534,9 +553,14 @@ int main(int argc, char *argv[])
 			error ("Cant handle %d data sets in file '%s', max is %d",ncal,calname,MAX_CAL_ENT);
 	
 		if ((fi = ccg->find_kword(ccg, 0, "DEVICE_CLASS")) < 0)
-			error ("Calibration file '%s' doesn't contain keyword COLOR_REPS",calname);
+			error ("Calibration file '%s' doesn't contain keyword DEVICE_CLASS",calname);
 		if (strcmp(ccg->t[0].kdata[fi],"DISPLAY") != 0)
 			error ("Calibration file '%s' doesn't have DEVICE_CLASS of DISPLAY",calname);
+
+		if ((fi = ccg->find_kword(ccg, 0, "COLOR_REP")) < 0)
+			error ("Calibration file '%s' doesn't contain keyword COLOR_REP",calname);
+		if (strcmp(ccg->t[0].kdata[fi],"RGB") != 0)
+			error ("Calibration file '%s' doesn't have COLOR_REP of RGB",calname);
 
 		if ((ii = ccg->find_field(ccg, 0, "RGB_I")) < 0)
 			error ("Calibration file '%s' doesn't contain field RGB_I",calname);
@@ -564,9 +588,9 @@ int main(int argc, char *argv[])
 		cal[0][0] = -1.0;	/* Not used */
 	}
 
-	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, nocal, highres, 0,
-	          cal, ncal, disp, blackbg, override, callout, patsize, ho, vo, spectral,
-	          verb, VERBOUT, debug,
+	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, proj, adaptive, nocal,
+	                     highres, 0, cal, ncal, disp, blackbg, override, ccallout, mcallout,
+	                     patsize, ho, vo, spectral, verb, VERBOUT, debug,
 	                     "fake" ICC_FILE_EXT)) == NULL)
 		error("new_disprd failed with '%s'\n",disprd_err(errc));
 
@@ -667,6 +691,7 @@ int main(int argc, char *argv[])
 		ocg->add_kword(ocg, 1, "CREATED",atm, NULL);
 
 		ocg->add_kword(ocg, 1, "DEVICE_CLASS","DISPLAY", NULL);
+		ocg->add_kword(ocg, 1, "COLOR_REP","RGB", NULL);
 
 		ocg->add_field(ocg, 1, "RGB_I", r_t);
 		ocg->add_field(ocg, 1, "RGB_R", r_t);

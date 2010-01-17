@@ -12,7 +12,7 @@
  * Copyright 1996 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  * 
  * Derived from serio.h
@@ -96,6 +96,13 @@ typedef enum {
 	icomuf_reset_not_close     = 0x0004,	/* Don't release and close port, reset it */
 	icomuf_resetep_before_read = 0x0008		/* Do a usb_resetep before each ep read */
 } icomuflags;
+
+/* Type of port */
+typedef enum {
+	icomt_serial,		/* Serial port */
+	icomt_usb,			/* USB port */
+	icomt_hid			/* HID (USB) port */
+} icom_type;
 
 /* Status bits/return values */
 #define ICOM_OK	    0x00000		/* No error */
@@ -208,7 +215,7 @@ struct _icoms {
 	/* General parameters */
 	int lerr;					/* Last error code */
 	int tc;						/* Current serial parser termination character (-1 if not set) */
-	int npaths;
+	int npaths;					/* Number of paths */
 	icompath **paths;			/* Paths if any */
 	int debug;					/* Flag, nz to print instrument io info to stderr */
 
@@ -226,6 +233,9 @@ struct _icoms {
 	icompath ** (*get_paths)(		/* Return pointer to list of icompath */
 		struct _icoms *p 			/* End is marked with NULL pointer, */
 	);								/* Storage will be freed with icoms object */
+
+	/* Return the port type */
+	icom_type (*port_type)(struct _icoms *p);
 
 	/* Return the instrument type if the port number is USB, instUnknown if not */
 	instType (*is_usb_portno)(
@@ -255,7 +265,9 @@ struct _icoms {
 	    int            config,		/* Configuration */
 	    int            wr_ep,		/* "serial" write end point */
 	    int            rd_ep,		/* "serial" read end point */
-		icomuflags usbflags);		/* Any special handling flags */
+		icomuflags usbflags,		/* Any special handling flags */
+		int retries					/* > 0 if we should retry set_configuration (100msec) */
+	);
 
 	/* Select the HID communications port and characteristics */
 	void (*set_hid_port)(
@@ -403,12 +415,6 @@ extern icoms *new_icoms(void);
 
 /* - - - - - - - - */
 /* Other functions */
-
-/* Create and return a list of available serial ports or USB instruments for this system. */
-/* We look at the registry key "HKEY_LOCAL_MACHINE\HARDWARE\DEVICEMAP\SERIALCOMM" */
-/* to determine serial ports, and use libusb to discover USB instruments. */
-/* Return NULL if function fails */
-icompath **icoms_get_paths(icoms *p); 
 
 /* Poll for a user abort, terminate, trigger or command. */
 /* Wait for a key rather than polling, if wait != 0 */

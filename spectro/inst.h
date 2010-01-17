@@ -12,7 +12,7 @@
  * Copyright 2001 - 2008 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -51,12 +51,17 @@ struct _ipatch {
 	double XYZ[3];		/* XYZ values, 0.0 .. 100.0 */
 
 	int aXYZ_v;			/* Absolute XYZ valid */
-	double aXYZ[3];		/* XYZ values in cd/m^2 or Lux/PI*/
+	double aXYZ[3];		/* XYZ values in cd/m^2 or Lux/PI */
+						/* or cd/m^2 seconds for flash. */
 
 	int Lab_v;			/* Lab valid */
 	double Lab[3];		/* Lab value */
 
-	xspect sp;			/* Spectrum. sp.specn > 0 if valid */
+	xspect sp;			/* Spectrum. sp.spec_n > 0 if valid */
+						/* Reflectance/Transmittance 0.0 .. 100.0, norm = 100.0 */
+						/* or mW/m^2, norm = 1.0  */
+
+	double duration;	/* Apparent total duration in seconds (flash measurement) */
 
 }; typedef struct _ipatch ipatch;
 
@@ -84,11 +89,13 @@ typedef enum {
 	inst_nochmatch         = 0x0D00,	/* Chart doesn't match */
 	inst_needs_cal         = 0x0E00,	/* Instrument needs calibration, and read retried */
 	inst_cal_setup         = 0x0F00,	/* Calibration retry with correct setup is needed */
-	inst_unsupported       = 0x1000,	/* Unsupported function */
-	inst_unexpected_reply  = 0x2000,	/* Unexpected Reply */
-	inst_wrong_config      = 0x3000,    /* Configuration is wrong */
-	inst_hardware_fail     = 0x4000,    /* Hardware failure */
-	inst_other_error       = 0x5000,	/* Some other error */
+	inst_wrong_sensor_pos  = 0x1000,	/* Reading retry with correct sensor position is needed */
+	inst_unsupported       = 0x1100,	/* Unsupported function */
+	inst_unexpected_reply  = 0x1200,	/* Unexpected Reply */
+	inst_wrong_config      = 0x1300,    /* Configuration is wrong */
+	inst_hardware_fail     = 0x1400,    /* Hardware failure */
+	inst_bad_parameter     = 0x1500,	/* Bad parameter value */
+	inst_other_error       = 0x1600,	/* Some other error */
 	inst_mask              = 0xff00,	/* inst_code mask value */
 	inst_imask             = 0x00ff		/* instrument specific mask value */
 } inst_code;
@@ -96,39 +103,43 @@ typedef enum {
 /* Instrument capabilities */
 /* (Some instrument capabilities may be mode dependent) */
 typedef enum {
-	inst_unknown           = 0x00000000, /* Capabilities can't be determined */
+	inst_unknown            = 0x00000000, /* Capabilities can't be determined */
 
-	inst_ref_spot          = 0x00000001, /* Capable of reflection spot measurement */
-	inst_ref_strip         = 0x00000002, /* Capable of reflection strip measurement */
-	inst_ref_xy            = 0x00000004, /* Capable of reflection X-Y page measurement */
-	inst_ref_chart         = 0x00000008, /* Capable of reflection chart measurement */
-	inst_reflection        = 0x0000000F, /* Capable of general reflection measurements */
+	inst_ref_spot           = 0x00000001, /* Capable of reflection spot measurement */
+	inst_ref_strip          = 0x00000002, /* Capable of reflection strip measurement */
+	inst_ref_xy             = 0x00000004, /* Capable of reflection X-Y page measurement */
+	inst_ref_chart          = 0x00000008, /* Capable of reflection chart measurement */
+	inst_reflection         = 0x0000000F, /* Capable of general reflection measurements */
 
-	inst_s_ref_spot        = 0x00000010, /* Capable of saved reflection spot measurement */
-	inst_s_ref_strip       = 0x00000020, /* Capable of saved reflection strip measurement */
-	inst_s_ref_xy          = 0x00000040, /* Capable of saved reflection X-Y page measurement */
-	inst_s_ref_chart       = 0x00000080, /* Capable of saved reflection chart measurement */
-	inst_s_reflection      = 0x000000F0, /* Capable of general saved reflection measurements */
+	inst_s_ref_spot         = 0x00000010, /* Capable of saved reflection spot measurement */
+	inst_s_ref_strip        = 0x00000020, /* Capable of saved reflection strip measurement */
+	inst_s_ref_xy           = 0x00000040, /* Capable of saved reflection X-Y page measurement */
+	inst_s_ref_chart        = 0x00000080, /* Capable of saved reflection chart measurement */
+	inst_s_reflection       = 0x000000F0, /* Capable of general saved reflection measurements */
+ 
+	inst_trans_spot         = 0x00000100, /* Capable of transmission spot measurement */
+	inst_trans_strip        = 0x00000200, /* Capable of transmission strip measurement */
+	inst_trans_xy           = 0x00000400, /* Capable of transmission X-Y measurement */
+	inst_trans_chart        = 0x00000800, /* Capable of transmission chart measurement */
+	inst_transmission       = 0x00000F00, /* Capable of general transmission measurements */
 
-	inst_trans_spot        = 0x00000100, /* Capable of transmission spot measurement */
-	inst_trans_strip       = 0x00000200, /* Capable of transmission strip measurement */
-	inst_trans_xy          = 0x00000400, /* Capable of transmission X-Y measurement */
-	inst_trans_chart       = 0x00000800, /* Capable of transmission chart measurement */
-	inst_transmission      = 0x00000F00, /* Capable of general transmission measurements */
+	inst_emis_spot          = 0x00001000, /* Capable of emission spot measurement */
+	inst_emis_strip         = 0x00002000, /* Capable of emission strip measurement */
+	inst_emis_disp          = 0x00004000, /* Capable of display emission measurement */
+	inst_emis_disp_crt      = 0x00008000, /* Has a CRT display mode */
+	inst_emis_disp_lcd      = 0x00010000, /* Has an LCD display mode */
+	inst_emis_proj          = 0x00020000, /* Capable of projector emission measurement */
+	inst_emis_proj_crt      = 0x00040000, /* Has a CRT display mode */
+	inst_emis_proj_lcd      = 0x00080000, /* Has an LCD display mode */
+	inst_emis_illum         = 0x00100000, /* Capable of illuminant emission measurement */
+	inst_emis_ambient       = 0x00200000, /* Capable of ambient measurement */
+	inst_emis_ambient_flash = 0x00400000, /* Capable of ambient flash measurement */
+	inst_emis_ambient_mono  = 0x00800000, /* The ambient measurement is monochrome */
+	inst_emission           = 0x00FFF000, /* Capable of general emission measurements */
 
-	inst_emis_spot         = 0x00001000, /* Capable of emission spot measurement */
-	inst_emis_strip        = 0x00002000, /* Capable of emission strip measurement */
-	inst_emis_disp         = 0x00004000, /* Capable of display emission measurement */
-	inst_emis_disp_crt     = 0x00008000, /* Has a CRT display mode */
-	inst_emis_disp_lcd     = 0x00010000, /* Has an LCD display mode */
-	inst_emis_illum        = 0x00020000, /* Capable of illuminant emission measurement */
-	inst_emis_ambient      = 0x00040000, /* Capable of ambient measurement */
-	inst_emis_ambient_mono = 0x00080000, /* The ambient measurement is monochrome */
-	inst_emission          = 0x000FF000, /* Capable of general emission measurements */
-
-	inst_colorimeter       = 0x00100000, /* Colorimetric capability */
-	inst_spectral          = 0x00200000, /* Spectral capability */
-	inst_highres           = 0x00400000  /* High Resolution Spectral mode */
+	inst_colorimeter        = 0x01000000, /* Colorimetric capability */
+	inst_spectral           = 0x02000000, /* Spectral capability */
+	inst_highres            = 0x04000000  /* High Resolution Spectral mode */
 
 } inst_capability;
 
@@ -146,73 +157,81 @@ typedef enum {
 	inst2_cal_trans_dark    = 0x00000080, /* Uses a transmissive dark reference calibration */
 	inst2_cal_disp_offset   = 0x00000100, /* Uses a display offset/black calibration */
 	inst2_cal_disp_ratio    = 0x00000200, /* Uses a display ratio calibration */
-	inst2_cal_crt_freq      = 0x00000400, /* Uses a display CRT scan frequency calibration */
-	inst2_cal_disp_int_time = 0x00000800, /* Uses a display integration time calibration */
+	inst2_cal_disp_int_time = 0x00000400, /* Uses a display integration time calibration */
+	inst2_cal_proj_offset   = 0x00000800, /* Uses a display offset/black calibration */
+	inst2_cal_proj_ratio    = 0x00001000, /* Uses a display ratio calibration */
+	inst2_cal_proj_int_time = 0x00002000, /* Uses a display integration time calibration */
+	inst2_cal_crt_freq      = 0x00004000, /* Uses a display CRT scan frequency calibration */
 
-	inst2_prog_trig         = 0x00001000, /* Progromatic trigger measure capability */
-	inst2_keyb_trig         = 0x00002000, /* Keyboard trigger measure capability */
-	inst2_switch_trig       = 0x00003000, /* Inst. switch trigger measure capability */
-	inst2_keyb_switch_trig  = 0x00004000, /* keyboard or switch trigger measure capability */
+	inst2_prog_trig         = 0x00010000, /* Progromatic trigger measure capability */
+	inst2_keyb_trig         = 0x00020000, /* Keyboard trigger measure capability */
+	inst2_switch_trig       = 0x00040000, /* Inst. switch trigger measure capability */
+	inst2_keyb_switch_trig  = 0x00080000, /* keyboard or switch trigger measure capability */
 
-	inst2_bidi_scan         = 0x00020000, /* Try and recognise patches scanned from either dir. */
-	inst2_cal_using_switch  = 0x00040000, /* DTP22 special - use switch triggered calibration */
-	inst2_has_scan_toll     = 0x00080000, /* Instrument will honour modified scan tollerance */
-	inst2_no_feedback       = 0x00100000, /* Instrument doesn't give any user feedback */
+	inst2_bidi_scan         = 0x00100000, /* Try and recognise patches scanned from either dir. */
+	inst2_cal_using_switch  = 0x00200000, /* DTP22 special - use switch triggered calibration */
+	inst2_has_scan_toll     = 0x00400000, /* Instrument will honour modified scan tollerance */
+	inst2_no_feedback       = 0x00800000, /* Instrument doesn't give any user feedback */
 
-	inst2_has_leds          = 0x00200000, /* Instrument has some user viewable indicator LEDs */
+	inst2_has_leds          = 0x01000000, /* Instrument has some user viewable indicator LEDs */
+	inst2_has_sensmode      = 0x02000000, /* Instrument can report it's sensors mode */
 
-	inst2_has_battery       = 0x00400000  /* Instrument is battery powered */
+	inst2_has_battery       = 0x04000000  /* Instrument is battery powered */
 
 } inst2_capability;
 
 /* Instrument modes and sub-modes */
 /* We assume that we only want to be in one measurement mode at a time */
 typedef enum {
-	inst_mode_unknown           = 0x0000,	/* Mode not specified */
+	inst_mode_unknown            = 0x0000,	/* Mode not specified */
 
 	/* Sub modes that compose operating modes: */
-	inst_mode_reflection        = 0x0001,	/* General reflection mode */
-	inst_mode_s_reflection      = 0x0002,	/* General saved reflection mode */
-	inst_mode_transmission      = 0x0003,	/* General transmission mode */
-	inst_mode_emission          = 0x0004,	/* General emission mode */
-	inst_mode_illum_mask        = 0x000f,	/* Mask of sample illumination sub mode */
+	inst_mode_reflection         = 0x0001,	/* General reflection mode */
+	inst_mode_s_reflection       = 0x0002,	/* General saved reflection mode */
+	inst_mode_transmission       = 0x0003,	/* General transmission mode */
+	inst_mode_emission           = 0x0004,	/* General emission mode */
+	inst_mode_illum_mask         = 0x000f,	/* Mask of sample illumination sub mode */
 
-	inst_mode_spot              = 0x0010,	/* General spot measurement mode */
-	inst_mode_strip             = 0x0020,	/* General strip measurement mode */
-	inst_mode_xy                = 0x0030,	/* General X-Y measurement mode */
-	inst_mode_chart             = 0x0040,	/* General chart measurement mode */
-	inst_mode_disp              = 0x0050,	/* General Display spot measurement mode */
-	inst_mode_illum             = 0x0060,	/* General illuminant spot measurement mode */
-	inst_mode_ambient           = 0x0070,	/* General ambient spot measurement mode */
-	inst_mode_sub_mask          = 0x00f0,	/* Mask of sub-mode */
+	inst_mode_spot               = 0x0010,	/* General spot measurement mode */
+	inst_mode_strip              = 0x0020,	/* General strip measurement mode */
+	inst_mode_xy                 = 0x0030,	/* General X-Y measurement mode */
+	inst_mode_chart              = 0x0040,	/* General chart measurement mode */
+	inst_mode_disp               = 0x0050,	/* General Display spot measurement mode */
+	inst_mode_proj               = 0x0060,	/* General Projector spot measurement mode */
+	inst_mode_illum              = 0x0070,	/* General illuminant spot measurement mode */
+	inst_mode_ambient            = 0x0080,	/* General ambient spot measurement mode */
+	inst_mode_ambient_flash      = 0x0090,	/* General ambient flash measurement mode */
+	inst_mode_sub_mask           = 0x00f0,	/* Mask of sub-mode */
 
 	/* Operating modes: */
-	inst_mode_ref_spot          = 0x0011,	/* Reflection spot measurement mode */
-	inst_mode_ref_strip         = 0x0021,	/* Reflection strip measurement mode */
-	inst_mode_ref_xy            = 0x0031,	/* Reflection X-Y measurement mode */
-	inst_mode_ref_chart         = 0x0041,	/* Reflection Chart measurement mode */
+	inst_mode_ref_spot           = 0x0011,	/* Reflection spot measurement mode */
+	inst_mode_ref_strip          = 0x0021,	/* Reflection strip measurement mode */
+	inst_mode_ref_xy             = 0x0031,	/* Reflection X-Y measurement mode */
+	inst_mode_ref_chart          = 0x0041,	/* Reflection Chart measurement mode */
 
-	inst_mode_s_ref_spot        = 0x0012,	/* Saved reflection spot measurement mode */
-	inst_mode_s_ref_strip       = 0x0022,	/* Saved reflection strip measurement mode */
-	inst_mode_s_ref_xy          = 0x0032,	/* Saved reflection X-Y measurement mode */
-	inst_mode_s_ref_chart       = 0x0042,	/* Saved reflection Chart measurement mode */
+	inst_mode_s_ref_spot         = 0x0012,	/* Saved reflection spot measurement mode */
+	inst_mode_s_ref_strip        = 0x0022,	/* Saved reflection strip measurement mode */
+	inst_mode_s_ref_xy           = 0x0032,	/* Saved reflection X-Y measurement mode */
+	inst_mode_s_ref_chart        = 0x0042,	/* Saved reflection Chart measurement mode */
 
-	inst_mode_trans_spot        = 0x0013,	/* Transmission spot measurement mode */
-	inst_mode_trans_strip       = 0x0023,	/* Transmission strip measurement mode */
-	inst_mode_trans_xy          = 0x0033,	/* Transmission X-Y measurement mode */
-	inst_mode_trans_chart       = 0x0043,	/* Transmission chart measurement mode */
+	inst_mode_trans_spot         = 0x0013,	/* Transmission spot measurement mode */
+	inst_mode_trans_strip        = 0x0023,	/* Transmission strip measurement mode */
+	inst_mode_trans_xy           = 0x0033,	/* Transmission X-Y measurement mode */
+	inst_mode_trans_chart        = 0x0043,	/* Transmission chart measurement mode */
 
-	inst_mode_emis_spot         = 0x0014,	/* Spot emission measurement mode */
-	inst_mode_emis_strip        = 0x0024,	/* Strip emission measurement mode */
-	inst_mode_emis_disp         = 0x0054,	/* Display emission measurement mode */
-	inst_mode_emis_illum        = 0x0064,	/* Illuminant emission measurement mode */
-	inst_mode_emis_ambient      = 0x0074,	/* Ambient emission measurement mode */
+	inst_mode_emis_spot          = 0x0014,	/* Spot emission measurement mode */
+	inst_mode_emis_strip         = 0x0024,	/* Strip emission measurement mode */
+	inst_mode_emis_disp          = 0x0054,	/* Display emission measurement mode */
+	inst_mode_emis_proj          = 0x0064,	/* Projector emission measurement mode */
+	inst_mode_emis_illum         = 0x0074,	/* Illuminant emission measurement mode */
+	inst_mode_emis_ambient       = 0x0084,	/* Ambient emission measurement mode */
+	inst_mode_emis_ambient_flash = 0x0094,	/* Ambient emission flash measurement mode */
 
-	inst_mode_measurement_mask  = 0x00ff,	/* Mask of exclusive measurement modes */
+	inst_mode_measurement_mask   = 0x00ff,	/* Mask of exclusive measurement modes */
 
 	/* Independent extra modes */
-	inst_mode_colorimeter       = 0x1000,	/* Colorimetric mode */
-	inst_mode_spectral          = 0x2000	/* Spectral mode */
+	inst_mode_colorimeter        = 0x1000,	/* Colorimetric mode */
+	inst_mode_spectral           = 0x2000	/* Spectral mode */
 
 } inst_mode;
 
@@ -225,28 +244,35 @@ typedef enum {
 
 	inst_opt_disp_crt           = 0x0003,	/* CRT display technology [No args] */
 	inst_opt_disp_lcd           = 0x0004,	/* LCD display technology [No args] */
+	inst_opt_proj_crt           = 0x0005,	/* CRT display technology [No args] */
+	inst_opt_proj_lcd           = 0x0006,	/* LCD display technology [No args] */
 
-	inst_opt_set_filter         = 0x0005,	/* Set a filter configuration */
+	inst_opt_set_filter         = 0x0007,	/* Set a filter configuration */
 											/* [1 argument type inst_opt_filter] */
 
-	inst_opt_trig_prog          = 0x0006,	/* Trigger progromatically [No args] */
-	inst_opt_trig_keyb          = 0x0007,	/* Trigger from keyboard (default) [No args] */
-	inst_opt_trig_switch        = 0x0008,	/* Trigger using instrument switch [No args] */
-	inst_opt_trig_keyb_switch   = 0x0009,	/* Trigger using keyboard or switch (def) [No args] */
+	inst_opt_trig_prog          = 0x0008,	/* Trigger progromatically [No args] */
+	inst_opt_trig_keyb          = 0x0009,	/* Trigger from keyboard (default) [No args] */
+	inst_opt_trig_switch        = 0x000A,	/* Trigger using instrument switch [No args] */
+	inst_opt_trig_keyb_switch   = 0x000B,	/* Trigger using keyboard or switch (def) [No args] */
 
-	inst_opt_trig_return        = 0x000A,	/* Hack - emit "\n" after switch/kbd trigger [No args] */
-	inst_opt_trig_no_return     = 0x000B,	/* Hack - don't emit "\n" after trigger (def) [No args] */
+	inst_opt_trig_return        = 0x000C,	/* Hack - emit "\n" after switch/kbd trigger [No args] */
+	inst_opt_trig_no_return     = 0x000D,	/* Hack - don't emit "\n" after trigger (def) [No args] */
 
-	inst_opt_highres            = 0x000C,	/* Enable high resolution spectral mode */
-	inst_opt_stdres             = 0x000D,	/* Revert to standard resolution spectral mode */
+	inst_opt_highres            = 0x000E,	/* Enable high resolution spectral mode */
+	inst_opt_stdres             = 0x000F,	/* Revert to standard resolution spectral mode */
 
-	inst_opt_scan_toll          = 0x000E,	/* Modify the patch scan recognition tollnce [double] */
+	inst_opt_scan_toll          = 0x0010,	/* Modify the patch scan recognition tollnce [double] */
 
-	inst_opt_get_gen_ledmask    = 0x000F,	/* Get the bitmask for general indication LEDs [*int] */
+	inst_opt_get_gen_ledmask    = 0x0011,	/* Get the bitmask for general indication LEDs [*int] */
 											/* (More specialized indicator masks go here) */
-	inst_opt_get_led_state      = 0x0010,	/* Get the current LED state. 0 = off, 1 == on [*int] */
-	inst_opt_set_led_state      = 0x0011	/* Set the current LED state. 0 = off, 1 == on [int] */
+	inst_opt_set_led_state      = 0x0012,	/* Set the current LED state. 0 = off, 1 == on [int] */
+	inst_opt_get_led_state      = 0x0013,	/* Get the current LED state. 0 = off, 1 == on [*int] */
 
+	inst_opt_get_pulse_ledmask  = 0x0014,	/* Get the bitmask for pulseable ind. LEDs [*int] */
+	inst_opt_set_led_pulse_state= 0x0015,	/* Set the current LED state. [double period_in_secs, */
+	                                        /* double on_time_prop, double trans_time_prop] */
+	inst_opt_get_led_pulse_state= 0x0016	/* Get the current pulse LED state. [*double period, */
+	                                        /* double *on_time_prop, double *trans_time_prop] */
 } inst_opt_mode;
 
 /* Instrument status commands for get_status() */
@@ -268,8 +294,11 @@ typedef enum {
 	                                        /*        int *pat_per_row, int *chart_id, */
 											/*        int *missing_row ]               */
 
-	inst_stat_battery           = 0x0006	/* Return charged status of battery */
+	inst_stat_battery           = 0x0006,	/* Return charged status of battery */
 											/* [1 argument type *double : range 0.0 - 1.0 ] */
+
+	inst_stat_sensmode          = 0x0007	/* Return sensor mode */
+											/* [1 argument type *inst_stat_smode ] */
 } inst_status_type;
 
 
@@ -291,6 +320,15 @@ typedef enum {
 	inst_stat_savdrd_chart   = 0x08			/* There are saved chart readings available */
 } inst_stat_savdrd;
 
+/* Sensor mode/position */
+typedef enum {
+	inst_stat_smode_unknown = 0x00,	/* Unknown mode */
+	inst_stat_smode_calib   = 0x01,	/* Calibration tile */
+	inst_stat_smode_surf    = 0x02,	/* Surface (ie. reflective or display) */
+	inst_stat_smode_proj    = 0x03,	/* Projector */
+	inst_stat_smode_amb     = 0x04	/* Ambient */
+} inst_stat_smode;
+
 /* Type of user interaction */
 typedef enum {
 	inst_verb              = 0x00,	/* verbose message */
@@ -311,11 +349,14 @@ typedef enum {
 	inst_calt_ref_dark       = 0x30, 	/* Reflective dark calibration (in dark) */
 	inst_calt_disp_offset    = 0x40, 	/* Display offset/black calibration (dark surface) */
 	inst_calt_disp_ratio     = 0x50, 	/* Display ratio calibration */
-	inst_calt_crt_freq       = 0x60, 	/* Display CRT scan frequency calibration */
-	inst_calt_disp_int_time  = 0x70, 	/* Display integration time */
-	inst_calt_em_dark        = 0x80, 	/* Emissive dark calibration (in dark) */
-	inst_calt_trans_white    = 0x90,	/* Transmissive white reference calibration */
-	inst_calt_trans_dark     = 0xA0,	/* Transmissive dark reference calibration */
+	inst_calt_proj_offset    = 0x60, 	/* Display offset/black calibration (dark surface) */
+	inst_calt_proj_ratio     = 0x70, 	/* Display ratio calibration */
+	inst_calt_crt_freq       = 0x80, 	/* Display CRT scan frequency calibration */
+	inst_calt_disp_int_time  = 0x90, 	/* Display integration time */
+	inst_calt_proj_int_time  = 0xA0, 	/* Display integration time */
+	inst_calt_em_dark        = 0xB0, 	/* Emissive dark calibration (in dark) */
+	inst_calt_trans_white    = 0xC0,	/* Transmissive white reference calibration */
+	inst_calt_trans_dark     = 0xD0,	/* Transmissive dark reference calibration */
 
 	inst_calt_needs_cal_mask = 0xF0		/* One of the calibrations in needed */
 
@@ -336,8 +377,10 @@ typedef enum {
 	inst_calc_man_ref_whitek   = 0x00000020, /* click instrument on reflective white reference */
 	inst_calc_man_ref_dark     = 0x00000030, /* place instrument in dark, not close to anything */
 	inst_calc_man_em_dark      = 0x00000040, /* place cap on instrument, put on dark surface or white ref. */
-	inst_calc_man_trans_white  = 0x00000050, /* place instrument on transmissive white reference */
-	inst_calc_man_trans_dark   = 0x00000060, /* place instrument on transmissive dark reference */
+	inst_calc_man_cal_smode    = 0x00000050, /* Put instrument sensor in calibration position */
+
+	inst_calc_man_trans_white  = 0x00000060, /* place instrument on transmissive white reference */
+	inst_calc_man_trans_dark   = 0x00000070, /* place instrument on transmissive dark reference */
 	inst_calc_man_man_mask     = 0x000000F0, /* user configured calibration mask */ 
 
 	inst_calc_disp_white       = 0x00000100, /* Provide a white display test patch */
@@ -346,8 +389,14 @@ typedef enum {
 	inst_calc_disp_grey_ligher = 0x00000400, /* Provide a darker grey display test patch */
 	inst_calc_disp_mask        = 0x00000F00, /* Display provided reference patch */
 
-	inst_calc_change_filter    = 0x00001000, /* Filter needs changing on device - see id[] */
-	inst_calc_message          = 0x00002000  /* Issue a message. - see id[] */
+	inst_calc_proj_white       = 0x00001000, /* Provide a white projector test patch */
+	inst_calc_proj_grey        = 0x00002000, /* Provide a grey projector test patch */
+	inst_calc_proj_grey_darker = 0x00003000, /* Provide a darker grey projector test patch */
+	inst_calc_proj_grey_ligher = 0x00004000, /* Provide a darker grey projector test patch */
+	inst_calc_proj_mask        = 0x0000F000, /* Projector provided reference patch */
+
+	inst_calc_change_filter    = 0x00010000, /* Filter needs changing on device - see id[] */
+	inst_calc_message          = 0x00020000  /* Issue a message. - see id[] */
 } inst_cal_cond;
 
 #define CALIDLEN 200

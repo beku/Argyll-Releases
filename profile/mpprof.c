@@ -9,7 +9,7 @@
  * Copyright 2003 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -76,19 +76,21 @@ usage(void) {
 	fprintf(stderr," -s         Generate spectral model too\n");
 	fprintf(stderr," -m         Generate ink mixing model\n");
 	fprintf(stderr," -y         Verify profile\n");
+	fprintf(stderr," -L         Output Lab values\n");
 	fprintf(stderr," outfile    Base name for input.ti3/output.mpp file\n");
 	exit(1);
 	}
 
 /* Worker function */
 static int make_output_mpp(int verb, int quality, int verify, char *inname, char *outname,
-double ilimit, int ospec, int omix, profxinf *xpi);
+int dolab, double ilimit, int ospec, int omix, profxinf *xpi);
 
 int main(int argc, char *argv[])
 {
 	int fa,nfa;							/* current argument we're looking at */
 	int verb = 0;
 	int iquality = 1;					/* Forward quality, default medium */
+	int dolab = 0;
 	int verify = 0;						/* Verify each point */
 	double limit = -1.0;				/* Ink limit */
 	int ospec = 0;						/* Output spectral model flag */
@@ -132,7 +134,7 @@ int main(int argc, char *argv[])
 				verb = 1;
 
 			/* Ink Limit */
-			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L') {
+			else if (argv[fa][1] == 'l') {
 				fa = nfa;
 				if (na == NULL) usage();
 				limit = atof(na);
@@ -180,6 +182,10 @@ int main(int argc, char *argv[])
 			else if (argv[fa][1] == 'm' || argv[fa][1] == 'M')
 				omix = 1;
 
+			/* Output Lab values rather than XYZ */
+			else if (argv[fa][1] == 'L')
+				dolab = 1;
+
 			else 
 				usage();
 		} else
@@ -194,7 +200,7 @@ int main(int argc, char *argv[])
 	strcat(outname,".mpp");
 
 	if (make_output_mpp(verb, iquality, verify, inname, outname,
-	                limit, ospec, omix, &xpi) != 0) {
+	                dolab, limit, ospec, omix, &xpi) != 0) {
 		error ("making mpp failed");
 	}
 		
@@ -211,6 +217,7 @@ make_output_mpp(
 	int verify,				/* verify result flag */
 	char *inname,			/* Input .ti3 file name */
 	char *outname,			/* Output .mpp file name */
+	int dolab,				/* NZ if Lab output */
 	double limit,			/* Ink limit, -1.0 == default */
 	int ospec,				/* Output spectral model */
 	int omix,				/* Output ink mixing model */
@@ -351,7 +358,7 @@ make_output_mpp(
 	}
 
 	if (verb)
-		printf("Device has %d colorants, key = '%s', %s\n", devchan, icx_inkmask2char(devmask),
+		printf("Device has %d colorants, key = '%s', %s\n", devchan, icx_inkmask2char(devmask, 1),
 	           devmask & ICX_ADDITIVE ? "Additive" : "Subtractive"); 
 
 	if ((cols = new_mppcols(nodp, devchan, spec_n)) == NULL)
@@ -360,13 +367,13 @@ make_output_mpp(
 	/* Read in all the patch values */
 	{
 		int chix[ICX_MXINKS];
-		char *ident;
+		char *bident;
 		int ii, Xi, Yi, Zi;
 		xspect sp;
 		char buf[100];
 		int  spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
 
-		ident = icx_inkmask2char(devmask); 
+		bident = icx_inkmask2char(devmask, 0); 
 
 		/* Find the device value fields */
 		for (j = 0; j < devchan; j++) {
@@ -374,7 +381,7 @@ make_output_mpp(
 			char fname[100];
 
 			imask = icx_index2ink(devmask, j);
-			sprintf(fname,"%s_%s",ident,icx_ink2char(imask));
+			sprintf(fname,"%s_%s",bident,icx_ink2char(imask));
 
 			if ((ii = icg->find_field(icg, 0, fname)) < 0)
 				error ("Input file doesn't contain field %s",fname);
@@ -485,7 +492,7 @@ make_output_mpp(
 			}
 		}
 
-		free(ident);
+		free(bident);
 
 	}	/* End of reading in CGATs file */
 
@@ -508,7 +515,7 @@ make_output_mpp(
 	}
 
 	/* create and write the cgats profile */
-	if (p->write_mpp(p, outname))
+	if (p->write_mpp(p, outname, dolab))
 		error("Write error : %s",p->err);
 
 	/* Check the forward profile accuracy against the data points */
@@ -803,7 +810,7 @@ make_output_mpp(
 			}
 		}
 
-		if (p2->write_mpp(p2, "xxxx.mpp"))
+		if (p2->write_mpp(p2, "xxxx.mpp", dolab))
 			error("Write error : %s",p2->err);
 
 		p2->del(p2);

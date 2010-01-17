@@ -90,10 +90,12 @@ double sl[65][4] = {
 
 int
 main(int argc, char *argv[]) {
-	int i, j;
+	int i, j, e;
 	double Yxy[3], XYZ[3], Lab[3];
 	char out_name[100];			/* VRML output file */
 	double big[3] = { 0.0, 0.0, 0.0 }, bc;
+	double low[3] = { 1e6, 1e6, 1e6 };
+	double high[3] = { -1e6, -1e6, -1e6 };
 //	double limit = 5.0;			/* Limit multiplier of light at maximum sensitivity */
 
 	double gamres = GAMRES;				/* Surface resolution */
@@ -124,6 +126,12 @@ main(int argc, char *argv[]) {
 
 			gam->expand(gam, Lab);
 
+			for (e = 0; e < 3; e++) {
+				if (Lab[e] < low[e])
+					low[e] = Lab[e];
+				if (Lab[e] > high[e])
+					high[e] = Lab[e];
+			}
 			if ((Lab[1] * Lab[1] + Lab[2] * Lab[2]) > bc) {
 				bc = Lab[1] * Lab[1] + Lab[2] * Lab[2];
 				big[0] = Lab[0], big[1] = Lab[1], big[2] = Lab[2];
@@ -144,6 +152,12 @@ main(int argc, char *argv[]) {
 
 			gam->expand(gam, Lab);
 
+			for (e = 0; e < 3; e++) {
+				if (Lab[e] < low[e])
+					low[e] = Lab[e];
+				if (Lab[e] > high[e])
+					high[e] = Lab[e];
+			}
 			if ((Lab[1] * Lab[1] + Lab[2] * Lab[2]) > bc) {
 				bc = Lab[1] * Lab[1] + Lab[2] * Lab[2];
 				big[0] = Lab[0], big[1] = Lab[1], big[2] = Lab[2];
@@ -162,6 +176,8 @@ main(int argc, char *argv[]) {
 	gam->expand(gam, Lab);
 
 	printf("Bigest = %f %f %f\n",big[0],big[1],big[2]);
+	printf("Low    = %f %f %f\n",low[0],low[1],low[2]);
+	printf("High   = %f %f %f\n",high[0],high[1],high[2]);
 
 	if (gam->write_gam(gam, out_name))
 		error ("write gamut failed on '%s'",out_name);

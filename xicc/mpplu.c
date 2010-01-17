@@ -8,7 +8,7 @@
  *
  * Copyright 2002, 2003 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -23,8 +23,8 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
-#include "xicc.h"
 #include "numlib.h"
+#include "xicc.h"
 #include "counters.h"
 
 void usage(void) {
@@ -36,12 +36,14 @@ void usage(void) {
 	fprintf(stderr," -p oride      x = XYZ_PCS, l = Lab_PCS, y = Yxy, s = spectral,\n");
 	fprintf(stderr," -l limit   override default ink limit, 1 - N00%%\n");
 	fprintf(stderr," -i illum   Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"            A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr,"            A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ  Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"            1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -u         Use Fluorescent Whitening Agent compensation\n");
 	fprintf(stderr," -g         Create gamut output\n");
 	fprintf(stderr," -w         Create gamut VRML as well\n");
+	fprintf(stderr," -n         Don't add VRML axes\n");
+	fprintf(stderr," -a n       Gamut transparency level\n");
 	fprintf(stderr," -d n       Gamut surface detail level\n");
 	fprintf(stderr," -t num     Invoke debugging test code \"num\" 1..n\n");
 	fprintf(stderr,"            1 - check partial derivative for device input\n");
@@ -54,7 +56,7 @@ void usage(void) {
 	exit(1);
 }
 
-static void diag_gamut(mpp *p, double gamres, char *outname);
+static void diag_gamut(mpp *p, double gamres, int doaxes, double trans, char *outname);
 static void mpp_rev(mpp *mppo, double limit, double *out, double *in);
 
 int
@@ -66,6 +68,8 @@ main(int argc, char *argv[]) {
 	int test = 0;			/* special test code */
 	int dogam = 0;			/* Create gamut */
 	int dowrl = 0;			/* Create VRML gamut */
+	int doaxes = 1;			/* Create VRML axes */
+	double trans = 0.0;		/* Transparency */
 	double gamres = 0.0;	/* Gamut resolution */
 	int repYxy = 0;			/* Report Yxy */
 	int repSpec = 0;		/* Report Spectral */
@@ -84,8 +88,8 @@ main(int argc, char *argv[]) {
 	double in[MAX_CHAN], out[MAX_CHAN];
 	int rv = 0;
 
-	int imask;							/* Device Ink mask */
-	char *idesc = NULL;					/* Device colorspec description */
+	inkmask imask;						/* Device Ink mask */
+	char *ident = NULL;					/* Device colorspec description */
 	icColorSpaceSignature pcss;			/* Type of PCS space */
 	int devn, pcsn;						/* Number of components */
 
@@ -185,6 +189,9 @@ main(int argc, char *argv[]) {
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
+				} else if (strcmp(na, "C") == 0) {
+					spec = 1;
+					illum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
@@ -245,6 +252,18 @@ main(int argc, char *argv[]) {
 				dowrl = 1;
 			}
 
+			/* No VRML axes */
+			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
+				doaxes = 0;
+			}
+
+			/* Transparency */
+			else if (argv[fa][1] == 'a' || argv[fa][1] == 'A') {
+				fa = nfa;
+				if (na == NULL) usage();
+				trans = atof(na);
+			}
+
 			/* Surface Detail */
 			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D') {
 				fa = nfa;
@@ -276,10 +295,10 @@ main(int argc, char *argv[]) {
 		error ("%d, %s",rv,mppo->err);
 
 	mppo->get_info(mppo, &imask, &devn, &dlimit, &spec_n, &spec_wl_short, &spec_wl_long, NULL);
-	idesc = icx_inkmask2char(imask); 
+	ident = icx_inkmask2char(imask, 1); 
 
 	if (verb) {
-		printf("MPP profile with %d colorants, type %s, TAC %f\n",devn,idesc, dlimit);
+		printf("MPP profile with %d colorants, type %s, TAC %f\n",devn,ident, dlimit);
 	}
 
 	if (limit <= 0.0 || dlimit < limit)
@@ -293,7 +312,7 @@ main(int argc, char *argv[]) {
 	}
 
 	/* Select CIE return value details */
-	if ((rv = mppo->set_ilob(mppo,illum, &cust_illum, observ, NULL, pcss, fwacomp)) != 0) {
+	if ((rv = mppo->set_ilob(mppo, illum, &cust_illum, observ, NULL, pcss, fwacomp)) != 0) {
 		if (rv == 1)
 			error("Spectral profile needed for custom illuminant, observer or FWA");
 		error("Error setting illuminant, observer, or FWA");
@@ -358,7 +377,7 @@ main(int argc, char *argv[]) {
 					else
 						fprintf(stdout,"%f",in[j]);
 				}
-				printf(" [%s] -> ", idesc);
+				printf(" [%s] -> ", ident);
 		
 				for (j = 0; j < pcsn; j++) {
 					if (j > 0)
@@ -392,7 +411,7 @@ main(int argc, char *argv[]) {
 				xl = gam_name + strlen(gam_name);
 	
 			strcpy(xl,".wrl");
-			diag_gamut(mppo, gamres, gam_name);
+			diag_gamut(mppo, gamres, doaxes, trans, gam_name);
 
 		} else {
 			printf("Unknown test!\n");
@@ -401,7 +420,6 @@ main(int argc, char *argv[]) {
 	} else if (dogam) {
 		gamut *gam;
 		char *xl, gam_name[100];
-		int doaxes = 1;
 		int docusps = 1;
 
 		if ((gam = mppo->get_gamut(mppo, gamres)) == NULL)
@@ -468,7 +486,7 @@ main(int argc, char *argv[]) {
 						else
 							fprintf(stdout,"%f",in[j]);
 					}
-					printf(" [%s] -> ", idesc);
+					printf(" [%s] -> ", ident);
 			
 					for (j = 0; j < spec_n; j++) {
 						if (j > 0)
@@ -491,7 +509,7 @@ main(int argc, char *argv[]) {
 						else
 							fprintf(stdout,"%f",in[j]);
 					}
-					printf(" [%s] -> ", idesc);
+					printf(" [%s] -> ", ident);
 			
 					if (repYxy && pcss == icSigYxyData) {
 						double X = out[0];
@@ -553,12 +571,12 @@ main(int argc, char *argv[]) {
 						fprintf(stdout,"%f",out[j]);
 				}
 
-				printf(" [%s]\n", idesc);
+				printf(" [%s]\n", ident);
 			}
 		}
 	}
 
-	free(idesc);
+	free(ident);
 	mppo->del(mppo);
 
 	return 0;
@@ -576,10 +594,11 @@ main(int argc, char *argv[]) {
 static void diag_gamut(
 mpp *p,				/* This */
 double detail,		/* Gamut resolution detail */
+int doaxes,
+double trans,		/* Transparency */
 char *outname		/* Output VRML file */
 ) {
 	int i, j;
-	int doaxes = 1;
 	FILE *wrl;
 	struct {
 		double x, y, z;
@@ -838,7 +857,7 @@ char *outname		/* Output VRML file */
 	fprintf(wrl,"		    }\n");
 	fprintf(wrl,"		    appearance Appearance { \n");
 	fprintf(wrl,"		        material Material {\n");
-	fprintf(wrl,"					transparency 0.0\n");
+	fprintf(wrl,"					transparency %f\n",trans);
 	fprintf(wrl,"					ambientIntensity 0.3\n");
 	fprintf(wrl,"					shininess 0.5\n");
 	fprintf(wrl,"				}\n");
@@ -1078,7 +1097,7 @@ double *out,		/* Device value */
 double *in			/* Lab target */
 ) {
 	int i, j;
-	int imask;							/* Device Ink mask */
+	inkmask imask;	/* Device Ink mask */
 	int inn;
 	revlus rs;		/* Reverse lookup structure */
 	double sr[MAX_CHAN];	/* Search radius */
@@ -1303,7 +1322,7 @@ printf("#############################################\n\n\n\n\n\n\n\n");
 #endif
 #ifndef NEVER
 	rs.pass = 1;
-	if (powell(&tt, inn, out, sr,  0.00001, 5000, revoptfunc, (void *)&rs) != 0) {
+	if (powell(&tt, inn, out, sr,  0.00001, 5000, revoptfunc, (void *)&rs, NULL, NULL) != 0) {
 		error("Powell failed inside mpp_rev()");
 	}
 #endif

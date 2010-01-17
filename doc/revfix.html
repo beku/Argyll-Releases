@@ -219,7 +219,10 @@ number should be the acceptable level. Although limits can be set below
 saturated
 secondary colors will not be reproduced. Values are between 220% and
 300%
-for typical printing devices.<br>
+for typical printing devices. The ink limit
+will be in final calibrated device values if the profile includes
+calibration information.<br>
+<br>
 <br>
 <a name="L"></a> The <b>-L</b> <i>klimit</i> parameter sets the black
 channel ink limit for the CMYK separation, as a total percentage from
@@ -229,7 +232,10 @@ printing press like devices, this can be used to prevent
 the
 black channel screening pattern "filling in". Typical values might be
 from
-95% to 99%. <br>
+95% to 99%. The ink limit
+will be in final calibrated device values if the profile includes
+calibration information.<br>
+<br>
 <br>
 The <b><a name="p"></a>-p</b> option allows specifying an abstract
 profile be applied to all of the output tables. An abstract

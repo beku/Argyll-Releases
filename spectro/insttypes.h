@@ -11,7 +11,7 @@
  * Copyright 2001 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -33,8 +33,10 @@ typedef enum {
 	instI1Display,				/* GretagMacbeth i1 Display */
 	instI1Monitor,				/* GretagMacbeth i1 Monitor */
 	instI1Pro,					/* GretagMacbeth i1 Pro */
+	instColorMunki,				/* X-Rite ColorMunki */
 	instHCFR,					/* Colorimtre HCFR */
-	instSpyder2,				/* ColorVision Spyder2 */
+	instSpyder2,				/* Datacolor/ColorVision Spyder2 */
+	instSpyder3,				/* Datacolor Spyder3 */
 	instHuey,					/* GretagMacbeth Huey */
 } instType;
 

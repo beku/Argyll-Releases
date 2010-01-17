@@ -5,7 +5,7 @@
  *
  * Author:  Graeme W. Gill
  * Date:    00/6/18
- * Version: 2.04
+ * Version: 2.12
  *
  * Copyright 1998 - 2005 Graeme W. Gill
  *

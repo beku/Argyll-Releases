@@ -20,6 +20,12 @@
 #define CGATSLIB_VERSION 0x020005
 #define CGATSLIB_VERSION_STR "2.05"
 
+#define CGATS_ERRM_LENGTH 200
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 #include "pars.h"		/* We use the ASCII parsing class */
 
 /* Possible table types */
@@ -80,40 +86,46 @@ struct _cgats {
 	char **others;		/* Other file type identifiers */
 
 	/* Public Methods */
-	int (*set_cgats_type)(struct _cgats *p, char *osym);
+	int (*set_cgats_type)(struct _cgats *p, const char *osym);
 											/* Define the (one) variable CGATS type */
 											/* Return -2, set errc & err on system error */
 
-	int (*add_other)(struct _cgats *p, char *osym);
+	int (*add_other)(struct _cgats *p, const char *osym);
 											/* Add a user defined file identifier string. */
 											/* Use a zero length string for wildcard. */
+											/* Return the oi */
 											/* Return -2, set errc & err on system error */
+
+	int (*get_oi)(struct _cgats *p, const char *osym);
+											/* Return the oi of the given other type */
+											/* return -ve and errc and err set on error */
 
 	int (*read)(struct _cgats *p, cgatsFile *fp);	/* Read a cgats file into structure */
 												/* return -ve and errc and err set on error */
 
 	/* NULL if SEPARATE_STD is defined: */ 
-	int (*read_name)(struct _cgats *p, char *filename);	/* Standard file I/O */
+	int (*read_name)(struct _cgats *p, const char *filename);	/* Standard file I/O */
 												/* return -ve and errc and err set on error */
 
-	int (*find_kword)(struct _cgats *p, int table, char *ksym);
+	int (*find_kword)(struct _cgats *p, int table, const char *ksym);
 												/* Return index of the keyword, -1 on fail */
 												/* -2 on illegal table index, errc & err */
-	int (*find_field)(struct _cgats *p, int table, char *fsym);
+	int (*find_field)(struct _cgats *p, int table, const char *fsym);
 												/* Return index of the field, -1 on fail */
 												/* -2 on illegal table index, errc & err */
 
 	int (*add_table)(struct _cgats *p, table_type tt, int oi);
 	                                        /* Add a new (empty) table to the structure */
+											/* Return the index of the table */
 											/* Return -2, set errc & err on system error */
 											/* if tt is tt_other, io sets the other index */
 	int (*set_table_flags)(struct _cgats *p, int table, int sup_id,int sup_kwords,int sup_fields);
 						/* Set or reset table output suppresion flags */
 						/* Return -ve, set errc & err on error */
-	int (*add_kword)(struct _cgats *p, int table, char *ksym, char *kdata, char *kcom);
+	int (*add_kword)(struct _cgats *p, int table, const char *ksym, const char *kdata, const char *kcom);
 						/* Add a new keyword/value pair + optional comment to the table */
 						/* Return index of new keyword, or -1, errc & err on error */
-	int (*add_field)(struct _cgats *p, int table, char *fsym, data_type ftype);
+	int (*add_field)(struct _cgats *p, int table, const char *fsym, data_type ftype);
 						/* Add a new field to the table */
 						/* Return index of new field, or -1, -2, errc and err on error */
 	int (*add_set)(struct _cgats *p, int table, ...);	/* Add a set of data */
@@ -127,7 +139,7 @@ struct _cgats {
 						/* Fill a suitable set_element with a line of data */
 						/* Return 0 normally, -1, -2, errc & err if error */
 	/* NULL if SEPARATE_STD is defined: */ 
-	int (*write_name)(struct _cgats *p, char *filename);	/* Standard file I/O */
+	int (*write_name)(struct _cgats *p, const char *filename);	/* Standard file I/O */
 										/* return -ve and errc and err set on error */
 
 
@@ -136,9 +148,9 @@ struct _cgats {
 													/* has occured since object creation. */
 	void (*del)(struct _cgats *p);					/* Delete the object */
 
-	char err[200];		/* Error message */
+	char err[CGATS_ERRM_LENGTH];		/* Error message */
 	int errc;			/* Error code */
-	char ferr[200];		/* First error message */
+	char ferr[CGATS_ERRM_LENGTH];		/* First error message */
 	int ferrc;			/* First error code */
 }; typedef struct _cgats cgats;
 
@@ -155,8 +167,12 @@ extern cgats *new_cgats_al(cgatsAlloc *al);	/* with allocator object */
 extern cgats *new_cgats(void);							/* Standard allocator */
 
 /* Available from cgatsstd.obj SEPARATE_STD is defined: */ 
-CGATS_STATIC int cgats_read_name(cgats *p, char *filename);
-CGATS_STATIC int cgats_write_name(cgats *p, char *filename);
+CGATS_STATIC int cgats_read_name(cgats *p, const char *filename);
+CGATS_STATIC int cgats_write_name(cgats *p, const char *filename);
+
+#ifdef __cplusplus
+	}
+#endif
 
 #define CGATS_H
 #endif /* CGATS_H */

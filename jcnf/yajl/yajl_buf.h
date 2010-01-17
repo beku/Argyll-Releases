@@ -1,5 +1,5 @@
 /*
- * Copyright 2007, Lloyd Hilaiel.
+ * Copyright 2007-2009, Lloyd Hilaiel.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -33,6 +33,16 @@
 #ifndef __YAJL_BUF_H__
 #define __YAJL_BUF_H__
 
+#include "yajl_common.h"
+#include "yajl_alloc.h"
+
+/*
+ * Implementation/performance notes.  If this were moved to a header
+ * only implementation using #define's where possible we might be 
+ * able to sqeeze a little performance out of the guy by killing function
+ * call overhead.  YMMV.
+ */
+
 /**
  * yajl_buf is a buffer with exponential growth.  the buffer ensures that
  * you are always null padded.
@@ -40,7 +50,7 @@
 typedef struct yajl_buf_t * yajl_buf;
 
 /* allocate a new buffer */
-yajl_buf yajl_buf_alloc(void);
+yajl_buf yajl_buf_alloc(yajl_alloc_funcs * alloc);
 
 /* free the buffer */
 void yajl_buf_free(yajl_buf buf);

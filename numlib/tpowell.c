@@ -3,7 +3,7 @@
  * Copyright 1999 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -28,6 +28,13 @@ double fcn(		/* Return function value */
 	double tp[]);		/* Multivriate input value */
 
 #define N 9
+
+static void progress(void *pdata, int perc) {
+	printf("\r% 3d%%",perc); 
+	if (perc == 100)
+		printf("\n");
+	fflush(stdout);
+}
 
 int main(void)
 {
@@ -60,7 +67,10 @@ int main(void)
 		0.00000001,		/* Tollerance of error change to stop on */
 		1000,			/* Maximum iterations allowed */
 		fcn, 			/* Error function to evaluate */
-		NULL);			/* Opaque data needed by function */
+		NULL,			/* Opaque data needed by function */
+		progress,		/* Progress callback */
+		NULL			/* Context for callback */
+	);
 
 
 	fprintf(stdout,"Status = %d, final approximate solution err = %f:\n",rc,err);

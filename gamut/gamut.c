@@ -11,10 +11,23 @@
  * Copyright 2000 - 2006 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
+/*
+	The gamut boundary is comuted using a variation of
+	Jan Morovic's Segment Maximum approach. The variations
+	are:
+
+		The segments are filtered with an adaptive depth structure,
+		so that approximately the same detail is kept on the gamut
+		surface. Multiple direction vectors at each point are retained.
+		The resultant points are used to create the overal convex
+		jull, but in an adaptive, non-linearly scaled radial space, 
+		that allows for convexity in the PCS result.
+*/
+		
 /* TTBD:
 
 */
@@ -27,9 +40,10 @@
 #include <math.h>
 #include <time.h>
 #include "icc.h"
+#include "numlib.h"
+#include "vrml.h"
 #include "gamut.h"
 #include "cgats.h"
-#include "numlib.h"
 #include "sort.h"			/* ../h sort macro */
 #include "counters.h"		/* ../h counter macros */
 #include "xlist.h"			/* ../h expandable list macros */
@@ -38,7 +52,6 @@
 
 #define DO_TWOPASS			/* Second pass with adjustment based on first pass */
 
-#define USE_FAKE_SEED		/* Use fake seed points */
 #define FAKE_SEED_SIZE 0.1	/* Usually 0.1 */
 #define TRIANG_TOL 1e-10	/* Triangulation tollerance, usually 1e-10 */
 
@@ -60,6 +73,9 @@
 #undef SHOW_HULL_PNTS		/* Show log() length convex hull points */
 
 #undef ASSERTS				/* Do internal checking */
+
+#undef INTERSECT_DEBUG		/* Turn on compute_vector_isect debugging, inc isect.wrl plot */
+#undef INTERSECT_VERIFY		/* Verify compute_vector_isect against brute force search */
 
 /* These routines support:
 
@@ -116,7 +132,7 @@
 
 static void triangulate(gamut *s);
 static void del_gamut(gamut *s);
-static void expand_gamut(gamut *s, double in[3]);
+static gvert *expand_gamut(gamut *s, double in[3]);
 static double getsres(gamut *s);
 static int getisjab(gamut *s);
 void getcent(gamut *s, double *cent);
@@ -128,6 +144,8 @@ static int nraw0verts(gamut *s);
 static int getraw0vert(gamut *s, double pos[3], int ix);
 static int nverts(gamut *s);
 static int getvert(gamut *s, double *rad, double pos[3], int ix);
+static int nssverts(gamut *s, double xvra);
+static int getssvert(gamut *s, double *rad, double pos[3], double norm[3], int ix);
 static void startnexttri(gamut *s);
 static int getnexttri(gamut *s, int v[3]);
 static double volume(gamut *s);
@@ -139,13 +157,15 @@ static int read_gam(gamut *s, char *filename);
 static double radial(gamut *s, double out[3], double in[3]);
 static double nradial(gamut *s, double out[3], double in[3]);
 static void nearest(gamut *s, double out[3], double in[3]);
-static void setwb(gamut *s, double *wp, double *bp);
-static int getwb(gamut *s, double *cswp, double *csbp, double *gawp, double *gabp);
+static void setwb(gamut *s, double *wp, double *bp, double *kp);
+static int getwb(gamut *s, double *cswp, double *csbp, double *cskp, double *gawp, double *gabp, double *gakp);
 static void setcusps(gamut *s, int flag, double in[3]);
 static int getcusps(gamut *s, double cusps[6][3]);
-static int compute_vector_isect(gamut *s, double *p1, double *p2, double *min, double *max, double *mint, double *maxt);
+static int compute_vector_isect(gamut *s, double *p1, double *p2, double *min, double *max,
+                                 double *mint, double *maxt, gtri **mntri, gtri **mxtri);
 static double log_scale(double ss);
 static int intersect(gamut *s, gamut *s1, gamut *s2);
+static int expandbydiff(gamut *s, gamut *s1, gamut *s2, gamut *s3, int docomp);
 static int vect_intersect(gamut *s, double *rvp, double *ip, double *p1, double *p2, gtri *t);
 
 /* in isecvol.c: */
@@ -153,7 +173,7 @@ extern double isect_volume(gamut *s1, gamut *s2);
 
 /* ------------------------------------ */
 
-/* Hue directions in degrees for Lab and Jab */
+/* Generic hue directions in degrees for Lab and Jab */
 /* Must be in increasing order */
 double gam_hues[2][7] = {
 	{
@@ -444,7 +464,7 @@ gbspn *new_gbspn(void) {
 		fprintf(stderr,"gamut: malloc failed - bspn node\n");
 		exit(-1);
 	}
-	t->tag = 1;		/* bspn node */
+	t->tag = 1;		/* bspn decision node */
 	t->n = n++;
 
 	return t;
@@ -468,7 +488,7 @@ gtri **t		/* List of triangles to copy into structure */
 		fprintf(stderr,"gamut: malloc failed - bspl triangle tree node\n");
 		exit(-1);
 	}
-	l->tag = 3;		/* bspl node */
+	l->tag = 3;		/* bspl triangle list node */
 	l->n = n++;
 	l->nt = nt;
 	for (i = 0; i < nt; i++)
@@ -533,6 +553,18 @@ int isJab				/* Flag indicating Jab space */
 #ifdef ASSERTS
 	fprintf(stderr,">>>>>>> ASSERTS ARE COMPILED INTO GAMUT.C <<<<<<<\n");
 #endif /* ASSERTS */
+#ifdef TEST_LOOKUP
+	fprintf(stderr,">>>>>>> TEST_LOOKUP IS COMPILED INTO GAMUT.C <<<<<<<\n");
+#endif
+#ifdef TEST_NEAREST
+	fprintf(stderr,">>>>>>> TEST_NEAREST IS COMPILED INTO GAMUT.C <<<<<<<\n");
+#endif
+#ifdef TEST_NOSORT			/* Turn off sorted insersion of verticies */
+	fprintf(stderr,">>>>>>> TEST_NOSORT IS COMPILED INTO GAMUT.C <<<<<<<\n");
+#endif
+#ifdef INTERSECT_VERIFY	
+	fprintf(stderr,">>>>>>> INTERSECT_VERIFY IS COMPILED INTO GAMUT.C <<<<<<<\n");
+#endif
 
 	if ((s = (gamut *)calloc(1, sizeof(gamut))) == NULL) {
 		fprintf(stderr,"gamut: calloc failed on gamut object\n");
@@ -587,6 +619,8 @@ int isJab				/* Flag indicating Jab space */
 	s->getrawvert  = getrawvert;
 	s->nraw0verts  = nraw0verts;
 	s->getraw0vert = getraw0vert;
+	s->nssverts    = nssverts;
+	s->getssvert   = getssvert;
 	s->nverts      = nverts;
 	s->getvert     = getvert;
 	s->startnexttri = startnexttri;
@@ -594,6 +628,7 @@ int isJab				/* Flag indicating Jab space */
 	s->getvert     = getvert;
 	s->volume      = volume;
 	s->intersect   = intersect;
+	s->expandbydiff = expandbydiff;
 	s->radial      = radial;
 	s->nradial     = nradial;
 	s->nearest     = nearest;
@@ -620,28 +655,33 @@ static void del_triang(gamut *s) {
 	gtri *tp;		/* Triangle pointer */
 	gedge *ep;
 
+	/* Recursively free radial lookup acceleration structures */
+	/* Do this before we delete triangles, because there may */
+	/* be triangles in the tree. */
+	if (s->lutree != NULL) {
+		del_gbsp(s->lutree);
+		s->lutree = NULL;
+	}
+
 	if (s->tris != NULL) {
 		tp = s->tris; 					/* Delete all the triangles */
 		FOR_ALL_ITEMS(gtri, tp) {
 			DEL_LINK(s->tris, tp);
+			del_gtri(tp);
 		} END_FOR_ALL_ITEMS(tp);
 
-		INIT_LIST(s->tris);			/* Init triangle list */
+		INIT_LIST(s->tris);				/* Init triangle list */
 	}
 	
 	if (s->edges != NULL) {
 		ep = s->edges; 					/* Delete all the edges */
 		FOR_ALL_ITEMS(gedge, ep) {
 			DEL_LINK(s->edges, ep);
+			del_gedge(ep);
 		} END_FOR_ALL_ITEMS(ep);
-		INIT_LIST(s->edges);		/* Init edge list */
+		INIT_LIST(s->edges);			/* Init edge list */
 	}
 	
-	/* Free radial lookup acceleration structures */
-	if (s->lutree != NULL) {
-		del_gbsp(s->lutree);
-		s->lutree = NULL;
-	}
 	s->lu_inited = 0;
 
 	if (s->nns != NULL) {
@@ -664,6 +704,9 @@ del_gamut(gamut *s) {
 
 	del_triang(s);
 	del_gverts(s);
+
+	if (s->ss != NULL)
+		s->ss->del(s->ss);
 
 	free(s);
 }
@@ -765,8 +808,11 @@ gvert *v2		/* Existing vertex */
 }
 
 
-/* Expand the gamut by adding a point */
-static void expand_gamut(
+/* Expand the gamut by adding a point. */
+/* If nofilter is set, return NULL if the point */
+/* is discarded, or the address of the point  representing */
+/* the point added. If nofiler is not set, return NULL */
+static gvert *expand_gamut(
 gamut *s,
 double pp[3]		/* rectangular coordinate of point */
 ) {
@@ -803,7 +849,7 @@ double pp[3]		/* rectangular coordinate of point */
 	gamut_rect2radial(s, rr, pp);
 
 	if (rr[0] < 1e-6) 		/* Ignore a point right at the center */
-		return;
+		return NULL;
 
 	/* Figure log scaled radius */
 	lrr0 = log_scale(rr[0]);
@@ -842,15 +888,16 @@ double pp[3]		/* rectangular coordinate of point */
 			if (xx < (1e-4 * 1e-4)) {
 				if (s->doingfake)
 					s->verts[i]->f |= GVERT_ESTP;
-				return;			/* Ignore duplicate */
+
+				return s->verts[i];		/* Existing point becomes added point */
 			}
 		}
 		
 		/* Create a vertex for the point we're possibly adding */
-		new_gvert(s, NULL, 0, GVERT_SET | (s->doingfake ? (GVERT_FAKE | GVERT_ESTP) : 0),
+		nv = new_gvert(s, NULL, 0, GVERT_SET | (s->doingfake ? (GVERT_FAKE | GVERT_ESTP) : 0),
 		             pp, rr, lrr0, sp, ch);
 
-		return;
+		return nv;
 	}
 	/* else filter using adaptive segmented maxima */
 
@@ -980,13 +1027,15 @@ double pp[3]		/* rectangular coordinate of point */
 	dec_gvert(s, nv);	 /* Make sure it's reclaimed if wasn't used */
 
 //printf("~1 Point is done\n\n");
+
+	return NULL;
 }
 
 /* ------------------------------------ */
 /* Initialise this gamut with the intersection of the */
 /* the two given gamuts. Return NZ on error. */
 /* Return 1 if gamuts are not compatible */
-/* (We assume that the gamut is currently empty) */
+/* (We assume that the this gamut is currently empty) */
 static int intersect(gamut *s, gamut *sa, gamut *sb) {
 	int i, j, k;
 	gamut *s1, *s2;
@@ -1032,20 +1081,22 @@ static int intersect(gamut *s, gamut *sa, gamut *sb) {
 			pl = s2->nradial(s2, NULL, s1->verts[i]->p);
 			if (pl <= (1.0 + 1e-9)) {
 				expand_gamut(s, s1->verts[i]->p);
-				s1->verts[i]->f &= ~GVERT_ISOS;
+				s1->verts[i]->f &= ~GVERT_ISOS;		/* s1 vert is not outside s2 */
 			} else {
-				s1->verts[i]->f |= GVERT_ISOS;
+				s1->verts[i]->f |= GVERT_ISOS;		/* s1 vert is outside s2 */
 			}
 		}
 
 		/* Now find the edges that intersect the other gamut */
 		tp1 = s1->tris;
-		FOR_ALL_ITEMS(gtri, tp1) {
+		FOR_ALL_ITEMS(gtri, tp1) {		/* For all s1 triangles */
 
-			for (j = 0; j < 3; j++) {
+			for (j = 0; j < 3; j++) {	/* For all edges in s1 triangle */
+				/* If edge passes through the other gamut */
 				if ((tp1->e[j]->v[0]->f ^ tp1->e[j]->v[1]->f) & GVERT_ISOS) {
 
-					/* Exhaustive search of other triangles */
+					/* Exhaustive search of other triangles in s2, */
+					/* to find the one that the edge intersects with. */
 					tp2 = s2->tris;
 					FOR_ALL_ITEMS(gtri, tp2) {
 						double pv;
@@ -1077,6 +1128,140 @@ static int intersect(gamut *s, gamut *sa, gamut *sb) {
 }
 
 /* ------------------------------------ */
+/* Initialise this gamut with a gamut which is s1 expanded */
+/* by the distance from s2 to s3. Don't shrink if s3 is less than s2 */
+/* but if docomp != 0 shrink to s3 if it's less than s1. (ie assume compression */
+/* if the destination wanders out of the expansion area if docomp) */
+/* Return 1 if gamuts are not compatible */
+/* (We assume that the this gamut is currently empty) */
+static int expandbydiff(gamut *s, gamut *s1, gamut *s2, gamut *s3, int docomp) {
+	int i, j, k;
+	gamut *ss[3];
+
+	if (s1->compatible(s1, s2) == 0
+	 || s1->compatible(s2, s3) == 0)
+		return 1;
+
+	if IS_LIST_EMPTY(s1->tris)
+		triangulate(s1);
+	if IS_LIST_EMPTY(s2->tris)
+		triangulate(s2);
+	if IS_LIST_EMPTY(s3->tris)
+		triangulate(s3);
+
+	s->isJab = s1->isJab;
+	for (j = 0; j < 3; j++)
+		s->cent[j] = s1->cent[j];
+
+	/* Clear some flags */
+	s->cswbset = 0;
+	s->cswbset = 0;
+	s->dcuspixs = 0;
+
+	/* Don't filter the points (gives a more accurate result ?) */
+	s->nofilter = 1;
+
+	ss[0] = s1;
+	ss[1] = s2;
+	ss[2] = s3;
+
+	/* Use all the triangle vertices from the three gamuts */
+	/* as candidate points, because any of them might */
+	/* determine a surface feature. */
+	for (k = 0; k < 3; k++) {
+		double r1, r2, r3;
+
+		for (i = 0; i < ss[k]->nv; i++) {
+			double rr, r4, pp[3];
+	
+			if (!(ss[k]->verts[i]->f & GVERT_TRI))
+				continue;
+	
+			r1 = s1->radial(s1, NULL, ss[k]->verts[i]->p);
+			r2 = s1->radial(s2, NULL, ss[k]->verts[i]->p);
+			r3 = s1->radial(s3, NULL, ss[k]->verts[i]->p);
+
+			r4 = r1;					/* Image gamut */
+			if (r3 > r2)
+				r4 += r3 - r2;			/* Expand by (dst - src) colorspace */
+			if (docomp && (r4 + 1e-9) > r3)
+				r4 = r3;				/* But make no larger than destination */ 
+
+			icmAry2Ary(pp, ss[k]->verts[i]->p);
+			rr = icmNorm33(pp, s->cent);
+			if (rr > 1e-9)
+				icmScale33(pp, pp, s->cent, r4/rr);
+			expand_gamut(s, pp);
+		}
+	}
+
+	/* Add any intersection points between s2 and s3 as well. */
+	for (k = 1; k < 3; k++) {
+		gamut *sa, *sb;
+		gtri *tpa, *tpb;		/* Triangle pointers */
+
+		if (k == 1) {
+			sa = ss[1];
+			sb = ss[2];
+		} else {
+			sa = ss[2];
+			sb = ss[1];
+		}
+
+		/* Now find the edges that intersect the other gamut */
+		tpa = sa->tris;
+		FOR_ALL_ITEMS(gtri, tpa) {
+
+			for (j = 0; j < 3; j++) {
+				if ((tpa->e[j]->v[0]->f ^ tpa->e[j]->v[1]->f) & GVERT_ISOS) {
+
+					/* Exhaustive search of other triangles */
+					tpb = sb->tris;
+					FOR_ALL_ITEMS(gtri, tpb) {
+						double pv;
+						double pp[3];
+
+						/* Do a min/max intersection elimination test */
+						for (i = 0; i < 3; i++) {
+							if (tpb->mix[1][i] < tpa->mix[0][i]
+							 || tpb->mix[0][i] > tpa->mix[1][i])
+								break;			/* min/max don't overlap */
+						}
+						if (i < 3)
+							continue;			/* Skip this triangle, it can't intersect */
+
+						if (vect_intersect(sa, &pv, pp, tpa->e[j]->v[0]->p, tpa->e[j]->v[1]->p, tpb)
+						 && pv >= (0.0 - 1e-10) && pv <= (1.0 + 1e-10)) {
+							double rr, r1, r2, r3, r4;
+	
+							r1 = s1->radial(s1, NULL, pp);
+							r2 = s1->radial(s2, NULL, pp);
+							r3 = s1->radial(s3, NULL, pp);
+
+							r4 = r1;					/* Image gamut */
+							if (r3 > r2)
+								r4 += r3 - r2;			/* Expand by (dst - src) colorspace */
+							if (docomp && (r4 + 1e-9) > r3)
+								r4 = r3;				/* But make no larger than destination */ 
+
+							rr = icmNorm33(pp, s->cent);
+							if (rr > 1e-9)
+								icmScale33(pp, pp, s->cent, r4/rr);
+							expand_gamut(s, pp);
+						}
+					} END_FOR_ALL_ITEMS(tpb);
+				}
+			}
+
+		} END_FOR_ALL_ITEMS(tpa);
+	}
+
+	s->nofilter = 0;
+
+	return 0;
+}
+
+/* ------------------------------------ */
 /* Locate the vertices most likely to correspond to the */
 /* primary and secondary colors (cusps) */
 /*
@@ -1086,6 +1271,14 @@ static int intersect(gamut *s, gamut *sa, gamut *sb) {
  *  it may be necessary to add another flag type that expands
  *  the cusps to lie on the actual gamut surface, as for
  *  some devices this lies outside the pure colorant combinations.
+ *
+ *  Flinging a grid of values at this doesn't always
+ *  return sensible results. Sometimes two "cusps" might be
+ *  unreasonable close to each other (ie. one isn't a real cusp).
+ *  This can cause gammut mapping to fail ...
+ *
+ *	How could this be made more robust ?
+ *
  */ 
 
 static void setcusps(gamut *s, int flag, double in[3]) {
@@ -1160,7 +1353,6 @@ static void setcusps(gamut *s, int flag, double in[3]) {
 			if (s->cusps[j][0] == 0.0
 			 && s->cusps[j][1] == 0.0
 			 && s->cusps[j][2] == 0.0) {
-//printf("~1 not enough cusps were found = slot %d hue %f is empty\n",j,gam_hues[s->isJab][j]);
 				s->cu_inited = 0;
 				return;			/* Not all have been set */
 			}
@@ -1239,8 +1431,9 @@ double cusps[6][3]
 ) {
 	int i, j;
 
-	if (s->cu_inited == 0)
+	if (s->cu_inited == 0) {
 		return 1;
+	}
 
 	for (i = 0; i < 6; i++)
 		for (j = 0; j < 3; j++)
@@ -1252,6 +1445,8 @@ double cusps[6][3]
 /* ===================================================== */
 /* Triangulation code */
 /* ===================================================== */
+
+static double ne_point_on_tri(gamut *s, gtri *t, double *out, double *in);
 
 /* Given three points, compute the normalised plane equation */
 /* of a surface through them. */
@@ -1329,7 +1524,9 @@ comptriattr(
 gamut *s,
 gtri *t
 ) {
+	int j;
 	static double v0[3] = {0.0, 0.0, 0.0};
+	double cp[3];		/* Closest point - not used */
 
 	/* Compute the plane equation for the absolute triangle. */
 	/* This is used for testing if a point is inside the gamut hull. */
@@ -1353,10 +1550,30 @@ gtri *t
 	plane_equation(t->ee[1], v0, t->v[2]->sp, t->v[0]->sp);
 	plane_equation(t->ee[2], v0, t->v[0]->sp, t->v[1]->sp);
 
+	/* Compute the radius range of the triangle to the center */
+	/* Compute the maximum from the vertexes */
+	t->rs1 = -1.0;
+	for (j = 0; j < 3; j++) {
+		int k;
+		double rs, tt;
+		for (rs = 0.0, k = 0;k < 3; k++) { 
+			tt = t->v[j]->p[k] - s->cent[k];
+			rs += tt * tt;
+		}
+		if (rs > t->rs1)
+			t->rs1 = rs; 
+	}
+	/* The minimum may be on the plane, an edge or a vertex, */
+	/* so use closest point in triangle function. */
+	t->rs0 = ne_point_on_tri(s, t, cp, s->cent);
+
+	/* Allow a tollerance around the radius squareds */
+	t->rs0 -= 1e-4;
+	t->rs1 += 1e-4;
+
 #ifdef NEVER // ???
 #ifdef ASSERTS
 	{
-	int j;
 	double tt[3];	/* Triangle test point */
 	double ds;
 	for (j = 0; j < 3; j++) {
@@ -1365,9 +1582,9 @@ gtri *t
 	}
 	for (j = 0; j < 3; j++) {
 		ds = t->ee[j][0] * tt[0]	/* Point we know is inside */
-		    + t->ee[j][1] * tt[1]
-	        + t->ee[j][2] * tt[2]
-		    + t->ee[j][3];
+		   + t->ee[j][1] * tt[1]
+	       + t->ee[j][2] * tt[2]
+		   + t->ee[j][3];
 		if (ds > 1e-8)
 			break;		/* Not within triangle */
 	}
@@ -1488,81 +1705,6 @@ gamut *s
 		j++;
 	}
 	s->ntv = j;
-}
-
-/* Given a list of target convex hull locations, */
-/* return pointers to the closest verticies in those directions */
-/* (Used to setup initial convex hull) */
-void closest_verticies(
-gamut *s,			/* Gamut with convex hull points to search */
-gvert **tvs,		/* Return pointers to best verticies */
-double **tgts,		/* Target vectors */		
-int nn				/* Number of points */
-) {
-	int i, j, m;
-	double *bestd;
-
-	if ((bestd = (double *) malloc(nn * sizeof(double))) == NULL) {
-		fprintf(stderr,"gamut: malloc failed - closest verticies best distance\n");
-		exit(-1);
-	}
-
-	/* We are using a brute force search */
-	for (m = 0; m < nn; m++) {
-		bestd[m] = -1e38;
-		tvs[m] = NULL;
-	}
-
-	for (m = 0; m < nn; m++) {			/* For all target vectors */
-		double ss;
-
-		/* Compute dot product of target vector and verticy vectors */
-		for (i = 0; i < s->nv; i++) {			/* For all the search points */
-
-			if (!(s->verts[i]->f & GVERT_SET))
-				continue;
-
-			if (!(s->verts[i]->f & GVERT_FAKE))
-				continue;
-
-			/* If this vector is already been used for a target, skip it */
-			for (j = 0; j < m; j++) {
-				if (tvs[j] == s->verts[i])
-					break;
-			}
-			if (j < m)
-				continue;
-
-			for (ss = 0.0, j = 0; j < 3; j++) {
-				double t1, t2;
-				t1 = tgts[m][j];
-				t2 = s->verts[i]->ch[j];
-				ss += t1 * t2;
-			}
-
-			if (ss > bestd[m]) {	/* Found better candidate */
-				bestd[m] = ss;
-				tvs[m] = s->verts[i];
-			}
-		}
-	}
-
-	/* Sanity check */
-	for (m = 0; m < nn; m++) {
-		if (tvs[m] == NULL) {
-			fprintf(stderr,"gamut: internal error - enough seed verticies not found\n");
-			exit(-1);
-		}
-	}
-
-#ifdef DEBUG_TRIANG
-	printf("Returning closest verticies %d %d %d %d\n",
-	        tvs[0]->n, tvs[1]->n, tvs[2]->n, tvs[3]->n);
-	for (m = 0; m < nn; m++) {
-		printf("Vert %d ch = %f %f %f\n", m, tvs[m]->ch[0], tvs[m]->ch[1], tvs[m]->ch[2]);
-	}
-#endif
-	free(bestd);
 }
 
 #ifdef ASSERTS
@@ -1867,7 +2009,7 @@ gvert *v		/* Vertex to insert */
 #endif
 
 #ifdef DEBUG_TRIANG
-	printf("Adding vertex to triang %d: %f %f %f\n", v->n, v->p[0], v->p[1], v->p[2]);
+	printf("Adding vertex %d: %f %f %f to triangles\n", v->n, v->p[0], v->p[1], v->p[2]);
 #endif
 
 	/* First we search the current triangles, and convert */
@@ -1893,15 +2035,16 @@ gvert *v		/* Vertex to insert */
 		  + tp->che[3];
 
 		/* If vertex is above the log hull surface, add triangle to the hit list. */
-		if (c < 0.0) {
+		if (c < -tol) {
 #ifdef DEBUG_TRIANG
 			int j;
+			double bds = -1e10;
 #endif
 			hit = 1;
 
 #ifdef DEBUG_TRIANG
-			printf("Got a hit on triangle %d: %d %d %d\n",
-			           tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n);
+			printf("Got a hit on triangle %d: %d %d %d by %f\n",
+			           tp->n, tp->v[0]->n, tp->v[1]->n, tp->v[2]->n,c);
 #endif
 
 #ifdef DEBUG_TRIANG
@@ -1915,9 +2058,13 @@ gvert *v		/* Vertex to insert */
 					printf("Vertex is not in triangle by %e\n",ds);
 					break;
 				}
+				if (ds > bds)
+					bds = ds; 
 			}
-			if (j >= 3)
+			if (j >= 3) {
+				printf("Vertex is in triangle by %e\n",bds);
 				intri = 1;		/* Landed in this triangle */
+			}
 
 			xxs.tix[0] = tp->v[0]->n, xxs.tix[1] = tp->v[1]->n, xxs.tix[2] = tp->v[2]->n;
 			xxs.type = 0;
@@ -1936,6 +2083,8 @@ gvert *v		/* Vertex to insert */
 		int changed = 1;
 
 #ifdef DEBUG_TRIANG
+	/* Point doesn't lie radially within any of the triangles it is */
+	/* above the plane of. This is a geometric conundrum. (?) */
 if (!intri) printf("~1 ###### vertex didn't land in any triangle! ########\n");
 #endif
 
@@ -2067,8 +2216,6 @@ gamut *s
 		gvert *tvs[4];	/* Initial verticies */
 		gtri  *tr[4];	/* Initial triangles */
 		gedge *ed[6];	/* Initial edges */
-
-#ifdef USE_FAKE_SEED
 		double fsz = FAKE_SEED_SIZE;		/* Initial tetra size */
 		double ff[3];
 		int onf;
@@ -2094,44 +2241,19 @@ gamut *s
 		s->nofilter = 1;			/* Turn off filtering */
 		s->doingfake = 1;			/* Adding fake points */
 
-		for (i = 0; i < 4; i++) {
+		for (j = i = 0; i < 4; i++) {
 			ff[0] = fsz * foffs[i][2] + s->cent[0];
 			ff[1] = fsz * foffs[i][0] + s->cent[1];
 			ff[2] = fsz * foffs[i][1] + s->cent[2];
-			expand_gamut(s, ff);
+			if ((tvs[j++] = expand_gamut(s, ff)) == NULL) {
+				fprintf(stderr,"gamut: internal error - failed to register a fake initial verticies!\n");
+				exit (-1);
+			}
 		}
 
 		s->nofilter = onf;
 		s->doingfake = 0;
 
-		/* Locate them for initial triangulation */
-		for (j = i = 0; i < s->nv && j < 4; i++) {
-			if (s->verts[i]->f & GVERT_ESTP) {
-				tvs[j++] = s->verts[i];
-			}
-		}
-		if (j != 4) {
-			fprintf(stderr,"gamut: internal error - failed to find the 4 fake initial verticies!\n");
-			exit (-1);
-		}
-			
-#else	/* !USE_FAKE_SEED */
-		/* Tetrahedral target points, outside log surface */
-		/* (Assuming input values are < 1000) */
-		double tgvals[4][3] = {
-			{  0.0e4,   0.0e4,        1.0e4 },
-			{  0.0e4,   0.8660254e4, -0.5e4 },
-			{  0.75e4, -0.4330127e4, -0.5e4 },
-			{ -0.75e4, -0.4330127e4, -0.5e4 }
-		};
-		double *tgts[4] = {
-			tgvals[0], tgvals[1], tgvals[2], tgvals[3]
-		};
-
-		/* Find the closest verticies to the ideal tetrahedral */
-		closest_verticies(s, tvs, tgts, 4);
-#endif	/* !USE_FAKE_SEED */
-		
 #ifdef NEVER
 		printf("Initial verticies:\n");
 		for (i = 0; i < 4; i++) {
@@ -2257,8 +2379,7 @@ gamut *s
 		/* The four used verticies are now part of the triangulation */
 		for (i = 0; i < 4; i++) {
 			tvs[i]->f |= GVERT_TRI;
-//printf("Base triangle %d: %d %d %d (Verticies 0x%x, 0x%x, 0x%x, 0x%x)\n",
-//tr[i]->n, tr[i]->v[0]->n, tr[i]->v[1]->n, tr[i]->v[2]->n, tr[i]->v[0], tr[i]->v[1], tr[i]->v[2]);
+//printf("Base triangle %d: %d %d %d (Verticies 0x%x, 0x%x, 0x%x, 0x%x)\n", tr[i]->n, tr[i]->v[0]->n, tr[i]->v[1]->n, tr[i]->v[2]->n, tr[i]->v[0], tr[i]->v[1], tr[i]->v[2]);
 		}
 #ifdef ASSERTS
 		check_triangulation(s, 0);
@@ -2584,6 +2705,206 @@ int ix				/* Input index */
 	return ix+1;
 }
 
+/* Return the number of stratified sampling surface verticies, */
+/* for the given verticies per unit area parameter. */
+static int nssverts(
+gamut *s,
+double xvra			/* Extra vertex ratio */
+) {
+
+	if IS_LIST_EMPTY(s->tris)
+		triangulate(s);
+
+//printf("~1 nssverts called with xvra = %f\n",xvra);
+	if (s->xvra != xvra) {
+		int i, j;
+		gtri *tp;		/* Triangle pointer */
+		double tarea;	/* Total area */
+		double tnverts;	/* Target number of verticies */
+		int    anverts;	/* Actual number of verticies */
+
+		/* Calculate the total surface area of the triangulation */
+		tarea = 0.0;
+		tp = s->tris; 
+		FOR_ALL_ITEMS(gtri, tp) {
+			double sp, ss[3];		/* Triangle side lengths */
+			double dp;				/* Dot product of point in triangle and normal */
+			
+			for (i = 0; i < 3; i++) {	/* For each edge */
+				for (ss[i] = 0.0, j = 0; j < 3; j++) {
+					double dd = tp->e[i]->v[1]->p[j] - tp->e[i]->v[0]->p[j];
+					ss[i] += dd * dd;
+				}
+				ss[i] = sqrt(ss[i]);
+			}
+
+			/* semi-perimeter */
+			sp = 0.5 * (ss[0] + ss[1] + ss[2]);
+
+			/* Area of triangle */
+			tp->area = sqrt(sp * (sp - ss[0]) * (sp - ss[1]) * (sp - ss[2]));
+			
+			tarea += tp->area;
+		} END_FOR_ALL_ITEMS(tp);
+
+		/* target number of vectors */
+		tnverts = xvra * s->ntv;
+//printf("~1 total area = %f, tnverts = %f\n",tarea, tnverts);
+		
+		/* Number that need to be added using stratified sampling */
+		tnverts -= (double)s->ntv;
+		anverts = 0;
+
+		/* Compute number of extra verticies for each triangle */
+		if (tnverts > 0.0) {
+			double exvpua;	/* Extra verticies per unit area to create */
+
+			exvpua = tnverts/tarea;
+//printf("~1 extra verts = %f\n",exvpua);
+			tp = s->tris; 
+			FOR_ALL_ITEMS(gtri, tp) {
+				tp->ssverts = (int)(exvpua * tp->area + 0.5);
+				anverts += tp->ssverts;
+			} END_FOR_ALL_ITEMS(tp);
+		}
+		anverts += s->ntv;
+		s->xvra = xvra;
+		s->ssnverts = anverts;
+	}
+
+//printf("~1 returning total verts %d\n",s->ssnverts);
+	return s->ssnverts;
+}
+
+/* Return the stratified sampling surface verticies */
+/* location and radius. nssverts() sets vpua */
+static int getssvert(
+gamut *s,
+double *rad,		/* Return radial radius */
+double pos[3],		/* Return absolute position */
+double norm[3],		/* Return normal of triangle it orginates from */
+int ix				/* Input index */
+) {
+	int sskip = 0;	/* Number of points to skip after each reset of pseudo rand */
+
+//printf("getssvert called\n");
+
+	if (ix < 0)
+		return -1;
+
+	if (ix < s->nv) {
+
+		/* Find then next used vertex in the triangulation */
+		for (; ix < s->nv; ix++) {
+			if (!(s->verts[ix]->f & GVERT_TRI))
+				continue;
+			break;
+		}
+	}
+
+	if (ix < s->nv) {	/* returning verticies */
+	
+		if (rad != NULL)
+			*rad   = s->verts[ix]->r[0];
+		if (pos != NULL) {
+			pos[0] = s->verts[ix]->p[0];
+			pos[1] = s->verts[ix]->p[1];
+			pos[2] = s->verts[ix]->p[2];
+		}
+		if (norm != NULL) {
+			gvert *vp = s->verts[ix];
+			gtri *tp;
+			int i, j, nt = 0;
+			for (j = 0; j < 3; j++)
+				norm[j] = 0.0;
+
+			/* Slow, but search all triangles for this vertex. */
+			/* Return the average normal of all the triangles it is part of */
+			tp = s->tris; 
+			FOR_ALL_ITEMS(gtri, tp) {
+				for (i = 0; i < 3; i++) {
+					if (tp->v[i] == vp) {
+						for (j = 0; j < 3; j++)
+							norm[j] += tp->pe[j];
+						nt++;
+						break;
+					}
+				}
+			} END_FOR_ALL_ITEMS(tp);
+			if (nt == 0)
+				error("gamut::getssvert() vertex doesn't have a triangle");
+			for (j = 0; j < 3; j++)
+				norm[j] /= (double)nt;
+		}
+//printf("~1 returning tri vertex %f %f %f\n", pos[0],pos[1],pos[2]);
+
+	} else {	/* We're generating ss points for each triangle */
+		int i, j;
+        double tt;
+		double uv[2];
+		double tr[3];		/* Baricentric weighting */
+		double vv[3];
+
+		if (s->ss == NULL) {
+			if ((s->ss = new_sobol(2)) == NULL)
+			    error("gamut::getssvert() new_sobol() failed");
+			for (i = 0; i < sskip; i++)
+				s->ss->next(s->ss, uv);
+		}
+		if (ix == s->nv) {		/* Start of generating verticies in triangles */
+
+//printf("~1 setting up for scan through triangles\n");
+			s->nexttri = s->tris;
+			if (s->nexttri == NULL)
+				return -1;
+			s->ssvertn = 0;
+			s->ss->reset(s->ss);
+		} 
+		if (s->ssvertn >= s->nexttri->ssverts) {
+			do {
+//printf("~1 skipping to next triangle\n");
+				s->nexttri = NEXT_FWD(s->nexttri);
+				if (s->nexttri == s->tris)
+					return -1;
+			} while(s->nexttri->ssverts <= 0);
+			s->ssvertn = 0;
+			s->ss->reset(s->ss);
+			for (i = 0; i < sskip; i++)
+				s->ss->next(s->ss, uv);
+		}
+//printf("~1 generating ss vert %d out of %d\n",s->ssvertn+1,s->nexttri->ssverts);
+        s->ss->next(s->ss, uv);
+
+        tt = sqrt(uv[0]);
+        tr[0] = 1 - tt;
+        tr[1] = uv[1] * tt;
+		tr[2] = 1.0 - tr[0] - tr[1];
+		
+		vv[0] = vv[1] = vv[2] = 0.0;
+		for (i = 0; i < 3; i++) {
+			for (j = 0; j < 3; j++)
+				vv[j] += s->nexttri->v[i]->p[j] * tr[i];
+		}
+
+		if (rad != NULL)
+			*rad   = icmNorm33(vv, s->cent);
+		if (pos != NULL) {
+			pos[0] = vv[0];
+			pos[1] = vv[1];
+			pos[2] = vv[2];
+		}
+		if (norm != NULL) {
+			norm[0] = s->nexttri->pe[0];
+			norm[1] = s->nexttri->pe[1];
+			norm[2] = s->nexttri->pe[2];
+		}
+		s->ssvertn++;
+//printf("~1 returning ss vertex %f %f %f\n", pos[0],pos[1],pos[2]);
+	}
+
+	return ix+1;
+}
+
 /* Return the number of verticies in the triangulated surface */
 static int nverts(
 gamut *s
@@ -2611,6 +2932,8 @@ int ix				/* Input index */
 			continue;
 		break;
 	}
+	if (ix >= s->nv)
+		return -1;
 
 	if (rad != NULL)
 		*rad   = s->verts[ix]->r[0];
@@ -2659,6 +2982,9 @@ int v[3]		/* Return indexes for same order as getvert() */
 /* ===================================================== */
 
 /* Return the total volume of the gamut */
+/* [ We use the formula from "Area of planar polygons and */
+/*   volume of polyhedra" by Ronald N. Goldman, */
+/*   Graphics Gems II, pp 170 ] */
 static double volume(
 gamut *s
 ) {
@@ -2716,9 +3042,48 @@ static void init_lu(gamut *s);
 static gtri *radial_point_triang(gamut *s, gbsp *np, double in[3]);
 static double radial_point(gamut *s, gbsp *np, double in[3]);
 
+/* Given a point, return the point in that direction */
+/* that lies on the gamut surface. Return the radial */
+/* radius to the surface point */
+/* Brute force search version. */
+static double
+radial_bf(
+gamut *s,
+double *out,	/* result point (absolute)*/
+double *in		/* input point (absolute)*/
+) {
+	gtri *tp;
+	int j;
+	double ss, rv;
+	double nin[3];	/* Normalised input vector */
+
+//printf("~1 radial called with %f %f %f\n", in[0], in[1], in[2]);
+	if IS_LIST_EMPTY(s->tris)
+		triangulate(s);
+
+	/* Compute vector length to center point */
+	for (ss = 0.0, j = 0; j < 3; j++)
+		ss += (in[j] - s->cent[j]) * (in[j] - s->cent[j]);
+	ss = 1.0/sqrt(ss);				/* Normalising factor */
+	for (ss = 0.0, j = 0; j < 3; j++)
+		nin[j] = s->cent[j] + (in[j] - s->cent[j]) * ss;
+
+	tp = s->tris; 
+	FOR_ALL_ITEMS(gtri, tp) {
+		if (vect_intersect(s, &rv, out, s->cent, nin, tp)) {
+			if (rv > 0.0)	/* Expect only one intersection */
+				break;
+		}
+	} END_FOR_ALL_ITEMS(tp);
+
+//printf("~1 result = %f %f %f\n",out[0], out[1], out[2]);
+
+	return rv;
+}
+
 /* Implementation for following two functions: */
 /* Given a point, return the point in that direction */
-/* that lies on the gamut surface. */
+/* that lies on the gamut surface. Use the BSP accellerated search. */
 /* Return the radial length of the input and radial length of result */
 static void
 _radial(
@@ -2759,8 +3124,7 @@ double *in		/* input point (absolute)*/
 	rv = radial_point(s, s->lutree, nin);
 
 	if (rv < 0.0) {
-		fprintf(stderr,"gamut: radial internal error - failed to find triangle\n");
-		exit (-1);
+		error("gamut: radial internal error - failed to find triangle\n");
 	}
 
 	if (out != NULL) {
@@ -2854,7 +3218,7 @@ gamut *s
 		ntris++;
 	} END_FOR_ALL_ITEMS(tp);
 
-	/* Recursively split them */
+	/* Recursively split them, and add objects to leaves */
 	lu_split(s, &s->lutree, 0, tlist, ntris);
 
 	free(tlist);
@@ -2863,9 +3227,23 @@ gamut *s
 	s->lu_inited = 1;
 }
 
+/*
+ * BSP accellerator:
+ *		This is setup specifically to accellerate finding
+ * the radial point on the gamut surface. To do this, all
+ * the BSP plains pass through the gamut center, creating
+ * wedge shaped sub-division regions.
+ * 
+ * For accellerating the vector intersect code, this isn't
+ * so fabulous, and a general unconstrained BSP tree would
+ * be better. To address this, an orhogonal element to the
+ * radial BSP's is provided in the radius squared range
+ * of each set of elements below a BSP node.
+ */
+
 /* Recursive routine to choose a partition plane, */
 /* and then split the triangle list between the */
-/* +ve and -ve sides. */
+/* +ve and -ve sides, or add triangles as leaves. */
 void
 lu_split(
 gamut *s,
@@ -2874,6 +3252,7 @@ int rdepth,		/* Current recursion depth */
 gtri **list,	/* Current triangle list */
 int llen		/* Number of triangles in the list */
 ) {
+	double rs0, rs1;	/* Radius squared range of elements */
 	int ii, jj;			/* Progress through edges */
 	int pcount;			/* Current best scored try */
 	int ncount;
@@ -2902,6 +3281,22 @@ int llen		/* Number of triangles in the list */
 	if ((rdepth+1) >= BSPDEPTH) {	/* Oops */
 		printf("gamut internal error: ran out of recursion depth in BSP\n");
 		exit (-1);
+	}
+
+	/* Scan our list or triangles and figure out radius squared range */
+	{
+		int i, j, e;
+		double rs;
+
+		rs0 = 1e120;
+		rs1 = -1.0;
+		for (i = 0; i < llen; i++) {
+			if (list[i]->rs0 < rs0)
+				rs0 = list[i]->rs0; 
+			if (list[i]->rs1 > rs1)
+				rs1 = list[i]->rs1; 
+		}
+//printf("~1 no triangs %d, rs range %f - %f\n",llen,rs0,rs1);
 	}
 
 	pcount = ncount = bcount = -1;
@@ -2993,19 +3388,24 @@ int llen		/* Number of triangles in the list */
 		/* that do not share any edges (disconected from each other), and */
 		/* lying so that any split plane formed from an edge of one, */
 		/* intersects one of the others. */
+		/* In theory we could solve this by picking some */
+		/* other radial split plane ? */
 
-		/* Leave our list of triangles as the leaf node, */
+		/* Instead leave our list of triangles as the leaf node, */
 		/* and let the search algorithms deal with this. */
 
 		*np = (gbsp *)new_gbspl(llen, list);
+		(*np)->rs0 = rs0;		/* Radius squared range */
+		(*np)->rs1 = rs1;
 //printf("~1 lu_split returning with a non split list of %d triangles\n",llen);
 		return;
 	}
 
 	/* Divide the triangles into two lists */
-
 	bspn = new_gbspn();				/* Next node */
 	*np = (gbsp *)bspn;				/* Put it in place */
+	bspn->rs0 = rs0;				/* Radius squared range */
+	bspn->rs1 = rs1;
 	bspn->pe[0] = peqs[0];			/* Plane equation */
 	bspn->pe[1] = peqs[1];
 	bspn->pe[2] = peqs[2];
@@ -3056,14 +3456,14 @@ int llen		/* Number of triangles in the list */
 }
 
 /* Given a point and a node in the BSP tree, recurse down */
-/* the correct side of the tree, or return the triangle or */
-/* triangles that could be on the gamut surface. Return NULL */
-/* if it wasn't in triangle. */
+/* the tree, or return the triangle it lies in. */
+/* Return NULL if it wasn't in any triangle (shouldn't happen with a closed gamut ?). */
 static gtri *radial_point_triang(
 gamut *s,
 gbsp *np,		/* BSP node pointer we're at */
 double *nin		/* Normalised center relative point */
 ) {
+	gtri *rv;
 //if (trace) printf("~1 rad_pnt_tri: BSP 0x%x tag = %d, point %f %f %f\n", np,np->tag,nin[0],nin[1],nin[2]);
 	if (np->tag == 1) {		/* It's a BSP node */
 		gbspn *n = (gbspn *)np;
@@ -3075,38 +3475,52 @@ double *nin		/* Normalised center relative point */
 		   + n->pe[3];
 
 //if (trace) printf("~1 checking against BSP plane, ds = %e\n",ds);
-		if (ds >= 0)
-			return radial_point_triang(s, n->po, nin);
-		else
-			return radial_point_triang(s, n->ne, nin);
+		/* Recurse down both sides it might be in */
+		if (ds > -1e-12) {
+			if ((rv = radial_point_triang(s, n->po, nin)) != NULL)
+				return rv;
+		}
+		if (ds <  1e-12) {
+			if ((rv = radial_point_triang(s, n->ne, nin)) != NULL)
+				return rv;
+		}
+		return NULL;		/* Hmm */
 
-	} else if (np->tag == 2) {	/* It's a triangle */
-//if (trace) printf("~1 returning triangle %d\n",((gtri *)np)->n);
-		return (gtri *)np;
-
-	} else {			/* It's a triangle list */	
-		gbspl *n = (gbspl *)np;
+	} else {			/* It's a triangle or list of triangles */
+		int nt;			/* Number of triangles in list */
+		gtri **tpp;		/* Pointer to list of triangles */
 		int i, j;
-//if (trace) printf("~1 got triangle list - radial failed to split triangles!\n");
+
+		if (np->tag == 2) {			/* It's a triangle */
+			tpp = (gtri **)&np;
+			nt = 1;
+		} else if (np->tag == 3) {	/* It's a triangle list */
+			gbspl *n = (gbspl *)np;
+			tpp = n->t;
+			nt = n->nt;
+		}
 
 		/* Go through the list and stop at the first triangle */
 		/* that the node lies in. */
-		for (i = 0; i < n->nt; i++) {
+		for (i = 0; i < nt; i++, tpp++) {
+			gtri *t = *tpp;
+
 			/* Check if the point is within this triangle */
 			for (j = 0; j < 3; j++) {
 				double ds;
-				ds = n->t[i]->ee[j][0] * nin[0]
-				   + n->t[i]->ee[j][1] * nin[1]
-			       + n->t[i]->ee[j][2] * nin[2]
-				   + n->t[i]->ee[j][3];
+				ds = t->ee[j][0] * nin[0]
+				   + t->ee[j][1] * nin[1]
+			       + t->ee[j][2] * nin[2]
+				   + t->ee[j][3];
 				if (ds > 1e-10)
 					break;			/* Not within triangle */
 			}
 			if (j >= 3) {
 //if (trace) printf("~1 located triangle from list that we're in %d\n",n->t[i]->n);
-				return n->t[i];
+				return t;
 			}
 		}
+		/* Hmm. */
 	}
 
 //if (trace) printf("~1 failed to find a triangle\n");
@@ -3114,9 +3528,9 @@ double *nin		/* Normalised center relative point */
 }
 
 /* Return the location on the surface of the triangle */
-/* that is intersected by the vector in the direction */
+/* that is intersected by the radial direction */
 /* of the given relative point.  Return the distance to */
-/* the gamut surface. Return -1 if it wasn't in triangle. */
+/* the gamut surface. */
 static double radial_point(
 gamut *s,
 gbsp *np,		/* BSP node pointer we're at */
@@ -3129,63 +3543,11 @@ double *nin		/* Normalised center relative point */
 
 	t = radial_point_triang(s, np, nin);
 
-	/* Due to numerical issues, the BSP accelerated result may (very occassionally) */
-	/* be in error. Double check that we've landed in the correct triangle. */
-	if (t != NULL) {
-		int j;
-
-		/* Check if the closest point is within this triangle */
-		for (j = 0; j < 3; j++) {
-			double ds;
-			ds = t->ee[j][0] * nin[0]
-			   + t->ee[j][1] * nin[1]
-		       + t->ee[j][2] * nin[2]
-			   + t->ee[j][3];
-//			if (ds > 1e-10) {
-			if (1) {
-//if (trace) printf("radial: lookup point wasn't within its BSP triangle (%f) !!\n",ds);
-				t = NULL;
-				break;
-			}
-		}
-
-	}
-
 	/* If we failed to find a triangle, or the result was incorrect, do a */
 	/* brute force search to be sure of the result. */
 	if (t == NULL) {
-		gtri *tp, *btp = NULL;		/* Triangle pointer */
-		double bds = 1e38;			/* Track smallest "out of side" */
-		int j;
-
-		tp = s->tris;
-		FOR_ALL_ITEMS(gtri, tp) {
-			double tds = -1e38;		/* Track bigest "out of side" */
-
-			/* Track the triangle that the point most comfortably lands in */
-			for (j = 0; j < 3; j++) {
-				double ds;
-				ds = tp->ee[j][0] * nin[0]
-				   + tp->ee[j][1] * nin[1]
-			       + tp->ee[j][2] * nin[2]
-				   + tp->ee[j][3];
-				if (ds > tds) {
-					tds = ds;
-				}
-			}
-			if (tds < bds) {
-				bds = tds;
-				btp = tp;
-//if (trace) printf("radial: found new best triangle %d bds %f\n",tp->n,bds);
-			}
-		} END_FOR_ALL_ITEMS(tp);
-
-		if (bds < 1e-10)	/* Found an acceptable result */
-			t = btp;
+		error("rspl.radial: failed to find radial triangle\n");
 	}
-
-	if (t == NULL)
-		return -1.0;
 
 	/* Compute the intersection of the input vector with the triangle plane */
 	/* (Since nin[] is already relative, we don't need to subtract cent[] from it) */
@@ -3245,7 +3607,10 @@ static void del_gbsp(gbsp *n) {
 		del_gbspl(dl);			/* Delete itself */
 	}
 
-	/* Don't delete triangles since they have their own linked list. */
+	/* Don't delete triangles (tag == 2) since they */
+	/* have their own linked list, and may have already been deleted. */
+	/* Note we need to be called _before_ triangles are deleted though, */
+	/* since we access them to get the tag. */
 }
 
 /* =================================== */
@@ -3254,7 +3619,41 @@ static void del_gbsp(gbsp *n) {
 
 #define GNN_INF 1e307
 static void init_ne(gamut *s);
-static double ne_point_on_tri(gamut *s, gtri *t, double *out, double *in);
+
+/* Given an absolute point, return the point on the gamut */
+/* surface that is closest to it. */
+/* Use a brute force search */
+static void
+nearest_bf(
+gamut *s,
+double *out,	/* result point (absolute) */
+double *q		/* Target point (absolute) */
+) {
+	gtri *tp;
+	double bdist = 1e308;	/* Best possible distance to an object outside the window */
+
+
+	if IS_LIST_EMPTY(s->tris)
+		triangulate(s);
+
+	tp = s->tris; 
+	FOR_ALL_ITEMS(gtri, tp) {
+		double r[3];		/* Possible solution point */
+		double tdist;
+
+		/* Compute distance from query point to this object */
+		tdist = ne_point_on_tri(s, tp, r, q);
+
+		if (tdist < bdist) {	/* New best point */
+			bdist = tdist;
+			out[0] = r[0];
+			out[1] = r[1];
+			out[2] = r[2];
+		}
+	} END_FOR_ALL_ITEMS(tp);
+}
+
+/* Using nearest neighbourhood accelleration structure: */
 
 /* Given an absolute point, return the point on the gamut */
 /* surface that is closest to it. */
@@ -3632,7 +4031,8 @@ static void del_gnn(gnn *p) {
 static void setwb(
 gamut *s,
 double *wp,
-double *bp
+double *bp,
+double *kp
 ) {
 	if (wp != NULL) {
 		s->cs_wp[0] = wp[0];
@@ -3654,18 +4054,28 @@ double *bp
 		s->cs_bp[2] = 0.0;
 	}
 
+	if (kp != NULL) {
+		s->cs_kp[0] = kp[0];
+		s->cs_kp[1] = kp[1];
+		s->cs_kp[2] = kp[2];
+	} else {
+		s->cs_kp[0] = s->cs_bp[0];
+		s->cs_kp[1] = s->cs_bp[1];
+		s->cs_kp[2] = s->cs_bp[2];
+	}
+
 	s->cswbset = 1;
 }
 
 
 /* Compute the gamut white/black points, assuming */
-/* that the colorspace white/black points have been set */
+/* that the colorspace white/black points have been set. */
 /* The gamut white/black are the points on the colorspace */
 /* white/black axis that have the same L values as the */
 /* extremes within the gamut. */
 static void compgawb(gamut *s) {
 	int i;
-	double ff, Lmax, Lmin;
+	double ff, Lmax, Lmin, LKmin;
 
 	if (s->cswbset == 0 || s->gawbset != 0)
 		return;		/* Nothing to do */
@@ -3684,10 +4094,14 @@ static void compgawb(gamut *s) {
 			Lmin = s->verts[i]->p[0];
 	}
 
-	if (Lmax > s->cs_wp[0])		/* Strange */
+	LKmin = Lmin;
+
+	if (Lmax > s->cs_wp[0])		/* Slightly Strange */
 		Lmax = s->cs_wp[0];
-	if (Lmin < s->cs_bp[0])		/* Also strange */
+	if (Lmin < s->cs_bp[0])		/* Also Slightly strange */
 		Lmin = s->cs_bp[0];
+	if (LKmin < s->cs_kp[0])	/* Expected */
+		LKmin = s->cs_kp[0];
 
 	/* Locate points along colorspace grey axis */
 	/* that correspond to the L extremes */
@@ -3701,6 +4115,11 @@ static void compgawb(gamut *s) {
 	s->ga_bp[1] = ff * (s->cs_wp[1] - s->cs_bp[1]) + s->cs_bp[1];
 	s->ga_bp[2] = ff * (s->cs_wp[2] - s->cs_bp[2]) + s->cs_bp[2];
 	
+	ff = (LKmin - s->cs_kp[0])/(s->cs_wp[0] - s->cs_kp[0]);
+	s->ga_kp[0] = LKmin;
+	s->ga_kp[1] = ff * (s->cs_wp[1] - s->cs_kp[1]) + s->cs_kp[1];
+	s->ga_kp[2] = ff * (s->cs_wp[2] - s->cs_kp[2]) + s->cs_kp[2];
+	
 	s->gawbset = 1;
 }
 
@@ -3709,11 +4128,14 @@ static void compgawb(gamut *s) {
 /* Return non-zero if not possible. */
 static int getwb(
 gamut *s,
-double *cswp,
+double *cswp,		/* Color space */
 double *csbp,
-double *gawp,
-double *gabp
+double *cskp,
+double *gawp,		/* Gamut */
+double *gabp,
+double *gakp
 ) {
+//printf("~1 getwb() called\n");
 	if (s->cswbset == 0) {
 		return 1;
 	}
@@ -3729,9 +4151,18 @@ double *gabp
 		csbp[1] = s->cs_bp[1];
 		csbp[2] = s->cs_bp[2];
 	}
+
+	if (cskp != NULL) {
+		cskp[0] = s->cs_kp[0];
+		cskp[1] = s->cs_kp[1];
+		cskp[2] = s->cs_kp[2];
+	}
+//printf("~1 colorspace white %f %f %f, black %f %f %f, kblack %f %f %f\n", s->cs_wp[0], s->cs_wp[1], s->cs_wp[2], s->cs_bp[0], s->cs_bp[1], s->cs_bp[2], s->cs_kp[0],s->cs_kp[1],s->cs_kp[2]);
 	
-	if (gawp != NULL || gabp != NULL)
+	if (gawp != NULL || gabp != NULL) {
+//printf("~1 computing gamut white & black\n");
 		compgawb(s);		/* make sure we have gamut white/black available */
+	}
 
 	if (gawp != NULL) {
 		gawp[0] = s->ga_wp[0];
@@ -3745,15 +4176,23 @@ double *gabp
 		gabp[2] = s->ga_bp[2];
 	}
 
+	if (gakp != NULL) {
+		gakp[0] = s->ga_kp[0];
+		gakp[1] = s->ga_kp[1];
+		gakp[2] = s->ga_kp[2];
+	}
+//printf("~1 gamut white %f %f %f, black %f %f %f, kblack %f %f %f\n", s->ga_wp[0], s->ga_wp[1], s->ga_wp[2], s->ga_bp[0], s->ga_bp[1], s->ga_bp[2], s->ga_kp[0],s->ga_kp[1],s->ga_kp[2]);
+
 	return 0;
 }
 
 
 /* ---------------------------------------------------- */
-/* Per-triangle primitives used to compute radial & vector */
-/* intersection, and nearest point. */
+/* Per-triangle primitives used to compute brute force */
+/* radial & vector intersection and nearest point, */
+/* as well as gamut surface intersections. */
 /* See if the given triangle intersect the given vector. */
-/* Return 1 if it doesm 0 if it doesn't */
+/* Return 1 if it does, 0 if it doesn't */
 static int vect_intersect(
 gamut *s,
 double *rvp,	/* parameter, 0.0 = p1, 1.0 = p2 */
@@ -3762,28 +4201,28 @@ double *p1,		/* First point of vector (ie black) */
 double *p2,		/* Second point of vector (ie white) */
 gtri *t			/* Triangle in question */
 ) {
-	double rv;			/* Axis parameter value */
-	double gv[3];		/* Grey axis vector */
+	double ti;			/* Axis parameter value */
+	double vv[3];		/* vector vector */
 	double ival[3];		/* Intersection value */
 	double den;
 	int j;
 
-	gv[0] = p2[0] - p1[0];
-	gv[1] = p2[1] - p1[1];
-	gv[2] = p2[2] - p1[2];
+	vv[0] = p2[0] - p1[0];
+	vv[1] = p2[1] - p1[1];
+	vv[2] = p2[2] - p1[2];
 
-	den = t->pe[0] * gv[0] + t->pe[1] * gv[1] + t->pe[2] * gv[2];
+	den = t->pe[0] * vv[0] + t->pe[1] * vv[1] + t->pe[2] * vv[2];
 	if (fabs(den) < 1e-10) {
 		return 0;
 	}
 
 	/* Compute the intersection of the grey axis vector with the triangle plane */
-	rv = -(t->pe[0] * p1[0] + t->pe[1] * p1[1] + t->pe[2] * p1[2] + t->pe[3])/den;
+	ti = -(t->pe[0] * p1[0] + t->pe[1] * p1[1] + t->pe[2] * p1[2] + t->pe[3])/den;
 
 	/* Compute the actual intersection point */
-	ival[0] = p1[0] + rv * gv[0];
-	ival[1] = p1[1] + rv * gv[1];
-	ival[2] = p1[2] + rv * gv[2];
+	ival[0] = p1[0] + ti * vv[0];
+	ival[1] = p1[1] + ti * vv[1];
+	ival[2] = p1[2] + ti * vv[2];
 
 	/* Check if the intersection point is within the triangle */
 	for (j = 0; j < 3; j++) {
@@ -3796,19 +4235,21 @@ gtri *t			/* Triangle in question */
 			return 0;		/* Not within triangle */
 		}
 	}
+//printf("~1 vect_intersect got intersection with tri %d at %f\n",t->n,ti);
 
 	/* Got an intersection point */
 	ip[0] = ival[0];
 	ip[1] = ival[1];
 	ip[2] = ival[2];
 
-	*rvp = rv;
+	*rvp = ti;
 
 	return 1;
 }
 
 /* Given a point and a triangle, return the closest point on */
 /* the triangle closest to point. Also return the distance squared */
+/* (Doesn't depend on triangle edge info) */
 static double ne_point_on_tri(
 gamut *s,
 gtri *t,		/* Triangle to use */
@@ -3844,25 +4285,25 @@ double *in		/* Absolute input point */
 	}
 
 	/* Not in triangle, so find closest point along any edge, */
-	/* or at the verticies. */
+	/* or at the verticies. (don't use edge info, it may not be set up) */
 	bdist = 1e38;
 	for (j = 0; j < 3; j++) {	/* For each edge */
-		gedge *e = t->e[j];
+		gvert *v0 = t->v[j], *v1 = t->v[j >= 2 ? 0 : j+1];
 		int k;
 		double nu, de, ds;
 		for (de = 0.0, k = 0; k < 3; k++) {
-			double tt = e->v[1]->p[k] - e->v[0]->p[k];
+			double tt = v1->p[k] - v0->p[k];
 			de += tt * tt;
 		}
 		for (nu = 0.0, k = 0; k < 3; k++)
-			nu += (e->v[1]->p[k] - e->v[0]->p[k]) * (in[k] - e->v[0]->p[k]);
+			nu += (v1->p[k] - v0->p[k]) * (in[k] - v0->p[k]);
 
 		ds = nu/de;
 
 		if (ds >= 0.0 && ds <= 1.0) {	/* Valid edge */
 			double tout[3], ss;
 			for (ss = 0.0, k = 0; k < 3; k++) {
-				tout[k] = e->v[0]->p[k] + ds * (e->v[1]->p[k] - e->v[0]->p[k]);
+				tout[k] = v0->p[k] + ds * (v1->p[k] - v0->p[k]);
 				ss += (in[k] - tout[k]) * (in[k] - tout[k]); 
 			}
 			if (ss < bdist) {
@@ -3894,98 +4335,24 @@ double *in		/* Absolute input point */
 	return bdist;
 }
 
-/* ----------------------------------- */
-
-#ifdef NEVER	/* Alternate brute force radial() */
-/* Given a point, return the point in that direction */
-/* that lies on the gamut surface */
-/* Return the radial radius to the surface point */
-/* We use a simple exaustive search, so this is not very fast. */
-static double
-radial(
-gamut *s,
-double *out,	/* result point (absolute)*/
-double *in		/* input point (absolute)*/
-) {
-	gtri *tp;
-	int j;
-	double ss, rv;
-	double nin[3];	/* Normalised input vector */
-
-//printf("~1 radial called with %f %f %f\n", in[0], in[1], in[2]);
-	if IS_LIST_EMPTY(s->tris)
-		triangulate(s);
-
-	/* Compute vector length to center point */
-	for (ss = 0.0, j = 0; j < 3; j++)
-		ss += (in[j] - s->cent[j]) * (in[j] - s->cent[j]);
-	ss = 1.0/sqrt(ss);				/* Normalising factor */
-	for (ss = 0.0, j = 0; j < 3; j++)
-		nin[j] = s->cent[j] + (in[j] - s->cent[j]) * ss;
-
-	tp = s->tris; 
-	FOR_ALL_ITEMS(gtri, tp) {
-		if (vect_intersect(s, &rv, out, s->cent, nin, tp)) {
-			if (rv > 0.0)	/* Expect only one intersection */
-				break;
-		}
-	} END_FOR_ALL_ITEMS(tp);
-
-//printf("~1 result = %f %f %f\n",out[0], out[1], out[2]);
-
-	return rv;
-}
-#endif /* NEVER */
-
-
-#ifdef NEVER	/* Alternate brute force nearest()  */
-/* Given an absolute point, return the point on the gamut */
-/* surface that is closest to it. */
-static void
-nearest(
-gamut *s,
-double *out,	/* result point (absolute) */
-double *q		/* Target point (absolute) */
-) {
-	gtri *tp;
-	double bdist = 1e308;	/* Best possible distance to an object outside the window */
-
-
-	if IS_LIST_EMPTY(s->tris)
-		triangulate(s);
-
-	tp = s->tris; 
-	FOR_ALL_ITEMS(gtri, tp) {
-		double r[3];		/* Possible solution point */
-		double tdist;
-
-		/* Compute distance from query point to this object */
-		tdist = ne_point_on_tri(s, tp, r, q);
-
-		if (tdist < bdist) {	/* New best point */
-			bdist = tdist;
-			out[0] = r[0];
-			out[1] = r[1];
-			out[2] = r[2];
-		}
-	} END_FOR_ALL_ITEMS(tp);
-}
-#endif /* NEVER */
+/* ----------------------------------------------------- */
+/* Arbitrary vector intersect */
 
 /* Given a vector, find the two extreme intersection with */
-/* the gamut surface. */
-/* We use a simple exuastive search, so this is not very fast. */
+/* the gamut surface using a brute force search. */
 /* Return 0 if there is no intersection */
-static int compute_vector_isect(
+static int compute_vector_isect_bf(
 gamut *s,
 double *p1,		/* First point (ie black) */
 double *p2,		/* Second point (ie white) */
 double *omin,	/* Return gamut surface points, min = closest to p1 */
 double *omax,	/* max = farthest from p1 */
 double *omnt,	/* Return parameter values for p1 and p2, 0 being at p1, */
-double *omxt	/* and 1 being at p2 */
+double *omxt,	/* and 1 being at p2 */
+gtri **omntri, 	/* Return the intersection triangles */
+gtri **omxtri
 ) {
-	gtri *tp;
+	gtri *tp, *t0, *t1;
 	double ip[3], min[3], max[3];
 	double mint, maxt;
 	int j;
@@ -4000,47 +4367,633 @@ double *omxt	/* and 1 being at p2 */
 	FOR_ALL_ITEMS(gtri, tp) {
 		double rv;
 		if (vect_intersect(s, &rv, ip, p1, p2, tp)) {
-			if (rv > maxt) {
-				max[0] = ip[0];
-				max[1] = ip[1];
-				max[2] = ip[2];
-				maxt = rv;
-			}
 			if (rv < mint) {
 				min[0] = ip[0];
 				min[1] = ip[1];
 				min[2] = ip[2];
 				mint = rv;
+				t0 = tp;
+			}
+			if (rv > maxt) {
+				max[0] = ip[0];
+				max[1] = ip[1];
+				max[2] = ip[2];
+				maxt = rv;
+				t1 = tp;
 			}
 		}
 	} END_FOR_ALL_ITEMS(tp);
 
-	if (((omax != NULL || omxt != NULL) && maxt == -1e68)
-	 || ((omin != NULL || omnt != NULL) && mint == 1e68)) {
+	if (((omin != NULL || omnt != NULL || omntri != NULL) && mint == 1e68)
+	 || ((omax != NULL || omxt != NULL || omxtri != NULL) && maxt == -1e68)) {
 		return 0;
 	}
-
-	if (omax != NULL)
-		for (j = 0; j < 3; j++)
-			omax[j] = max[j];
 
 	if (omin != NULL)
 		for (j = 0; j < 3; j++)
 			omin[j] = min[j];
 
-	if (omxt != NULL)
-		*omxt = maxt;
+	if (omax != NULL)
+		for (j = 0; j < 3; j++)
+			omax[j] = max[j];
 
 	if (omnt != NULL)
 		*omnt = mint;
+
+	if (omxt != NULL)
+		*omxt = maxt;
+
+	if (omntri != NULL)
+		*omntri = t0;
+
+	if (omxtri != NULL)
+		*omxtri = t1;
 
 	return 1;
 }
 
 
+#ifdef INTERSECT_DEBUG
+
+#define ISDBG(xxx) if (deb_insect) printf xxx
+
+int deb_insect = 0;		/* Do vrml plot */
+
+/* Debug - given a BSP node, add all the triangles vertexes indexes */
+/* below this node to the diagnosti wrl */
+static void debug_bsp_triangl_wrl(
+gamut *s,
+gbsp *np,		/* BSP node pointer we're at */
+vrml *wrl		/* Diagnostic plot */
+) {
+	if (np->tag == 1) {		/* It's a BSP node */
+		gbspn *n = (gbspn *)np;
+
+		debug_bsp_triangl_wrl(s, n->po, wrl);
+		debug_bsp_triangl_wrl(s, n->ne, wrl);
+
+	} else {
+		int nt;			/* Number of triangles in list */
+		gtri **tpp;		/* Pointer to list of triangles */
+		int i, j;
+
+		if (np->tag == 2) {			/* It's a triangle */
+			tpp = &((gtri *)np);
+			nt = 1;
+		} else if (np->tag == 3) {	/* It's a triangle list */
+			gbspl *n = (gbspl *)np;
+			tpp = n->t;
+			nt = n->nt;
+		}
+		/* Go through the list of triangles and intersect with vector */
+		for (i = 0; i < nt; i++, tpp++) {
+			gtri *t = *tpp;
+			int ix[3];
+
+			ix[0] = t->v[0]->tn;
+			ix[1] = t->v[1]->tn;
+			ix[2] = t->v[2]->tn;
+
+			wrl->add_triangle(wrl, 0, ix);
+		}
+	}
+}
+#else	/* !INTERSECT_DEBUG */
+# define ISDBG(xxx)
+#endif	/* !INTERSECT_DEBUG */
+
+/* Recursive vector intersect using BSP accelleration */
+static void vector_isect_rec(
+gamut *s,
+gbsp *np,		/* BSP node pointer we're at */
+double *vb,		/* Center relative base point of vector */
+double *vv,		/* Vector direction from base */
+double t0,		/* Start parameter value of line */
+double rs0,		/* line start point radius squared */ 
+double t1,		/* End parameter value of line */
+double rs1,		/* line end point radius squared */ 
+double tc,		/* Parameter value of closest point on line to center */
+double rsc,		/* Radius squared of closest point on line to center */
+double rse0,	/* Effective radius squared minimum */
+double rse1,	/* Effective radius squared maximum */
+double *omnt,	/* Return minimum parameter values at any intersection */
+double *omxt,	/* Return maximum parameter values at any intersection */
+gtri **tri0,	/* Return intersection triangle at minimum parameter */ 
+gtri **tri1		/* Return intersection triangle at maximum parameter */
+) {
+	double den;			/* Intersection denominator */
+	double ti;			/* Intersection parameter value */
+	double rsi;			/* Radius squared of intersection point */
+	double ip[3];		/* Intersection point */
+
+	ISDBG(("\nvector_isect_rec got seg %f - %f (%e), best %f, %f\n",t0,t1,t1-t0,*omnt,*omxt));
+	ISDBG(("     rs %f, %f, tc %f, rsc %f, rse0 %f, rse1 %f, BSP rs %f - %f\n",rs0, rs1, tc, rsc, rse0, rse1, np->rs0, np->rs1));
+#ifdef INTERSECT_DEBUG
+	if (deb_insect) {
+		vrml *wrl = NULL;
+		double cc[3] = { 1.0, 1.0, 0.0 };
+		double red[3] = { 1.0, 0.0, 0.0 };
+		double green[3] = { 0.0, 1.0, 0.0 };
+		double blue[3] = { 0.0, 0.0, 1.0 };
+		double p1[3], p2[3];
+		int i;
+
+	    unlink("isect2.wrl");
+    	rename("isect.wrl", "isect2.wrl");
+
+		if ((wrl = new_vrml("isect.wrl", 0)) == NULL)
+			error("New vrml failed");
+
+		/* The triangles below the BSP */
+		for (i = 0; i < s->nv; i++) {
+			if (!(s->verts[i]->f & GVERT_TRI))
+				continue;
+			wrl->add_vertex(wrl, 0, s->verts[i]->p);
+		}
+		debug_bsp_triangl_wrl(s, np, wrl);
+		wrl->make_triangles(wrl, 0, 0.0, cc);
+
+		/* The segment. The vrml browser can go crazy if the line */
+		/* is too long, so limit it to +/- 100 */
+		{
+			double vbl = icmNorm3(vb);
+			double tt0 = t0, tt1 = t1;
+			if (tt0 > 0.0) {
+				if ((tt0 * vbl) > 100.0)
+					tt0 = 100.0/vbl;
+			} else {
+				if ((tt0 * vbl) < -100.0)
+					tt0 = -100.0/vbl;
+			}
+			if (tt1 > 0.0) {
+				if ((tt1 * vbl) > 100.0)
+					tt1 = 100.0/vbl;
+			} else {
+				if ((tt1 * vbl) < -100.0)
+					tt1 = -100.0/vbl;
+			}
+			for (i = 0; i < 3; i++) {
+				p1[i] = s->cent[i] + vb[i] + tt0 * vv[i];
+				p2[i] = s->cent[i] + vb[i] + tt1 * vv[i];
+			}
+		}
+		wrl->add_col_vertex(wrl, 1, p1, red);
+		wrl->add_col_vertex(wrl, 1, p2, red);
+		wrl->make_lines(wrl, 1, 2);
+
+		/* Add two initial points */
+		for (i = 0; i < 3; i++) {
+			p1[i] = s->cent[i] + vb[i] + 0.0 * vv[i];
+			p2[i] = s->cent[i] + vb[i] + 1.0 * vv[i];
+		}
+		wrl->add_marker(wrl, p1, green, 0.5);
+		wrl->add_marker(wrl, p2, blue, 0.5);
+
+		wrl->del(wrl);
+		printf("Waiting for input after writing 'isect.wrl':\n");
+		getchar();
+
+	}
+#endif
+
+	if (np->tag == 1) {		/* It's a BSP node */
+		int j;
+		gbspn *n = (gbspn *)np;
+		double ds;
+		gbsp *n1, *n2;		/* next bsp to recurse to */
+		double ti1, ti2;	/* Intersection parameters for recursion */
+		double rse1_0, rse1_1, rse2_0, rse2_1;
+
+		ISDBG(("vector_isect_rec at bsp node %d\n"));
+
+		/* Try and compute intersection with BSP */
+
+		den = n->pe[0] * vv[0] + n->pe[1] * vv[1] + n->pe[2] * vv[2];
+		if (fabs(den) > 1e-12) {
+			/* Compute the intersection point */
+			ti = -(n->pe[0] * vb[0] + n->pe[1] * vb[1] + n->pe[2] * vb[2] + n->pe[3])/den;
+			ISDBG(("intersects BSP plane at ti %f\n",ti));
+		} 
+		if (fabs(den) < 1e-12 || ti < (t0 - 1e-6) || ti > (t1 + 1e-6)) {	/* Doesn't intersect */
+			double ds;									/* or intersects outside segment */
+
+			ISDBG(("doesn't intersect BSP plane within segment\n"));
+			/* Figure which side of the BSP segment is on */
+			ds = n->pe[0] * (vb[0] + 0.5 * (t0 + t1) * vv[0])
+			   + n->pe[1] * (vb[1] + 0.5 * (t0 + t1) * vv[1])
+		       + n->pe[2] * (vb[2] + 0.5 * (t0 + t1) * vv[2])
+			   + n->pe[3];
+
+			ISDBG(("recursing down side that segment is on\n"));
+			/* And recurse approproately if it can be improved */
+			if (ds >= 0.0) {
+				if (rse0 <= n->po->rs1 && rse1 >= n->po->rs0 && (t0 < *omnt || t1 > *omxt))
+					vector_isect_rec(s, n->po, vb, vv, t0, rs0, t1, rs1, tc, rsc, rse0, rse1,
+					omnt, omxt, tri0, tri1);
+			} else {
+				if (rse0 <= n->ne->rs1 && rse1 >= n->ne->rs0 && (t0 < *omnt || t1 > *omxt))
+					vector_isect_rec(s, n->ne, vb, vv, t0, rs0, t1, rs1, tc, rsc, rse0, rse1,
+					omnt, omxt, tri0, tri1);
+			}
+			ISDBG(("vector_isect_rec returning\n"));
+			return;
+		}
+
+		/* Compute radius squared to center point at split point */
+		for (rsi = 0.0, j = 0; j < 3; j++) {
+			den = vb[j] + ti * vv[j];
+			rsi += den * den;
+		}
+
+		/* Compute the effective radius squared range for each segment */
+		rse1_0 = rs0;
+		rse1_1 = rs0;
+		if (rsi < rse1_0)
+			rse1_0 = rsi;
+		if (rsi > rse1_1)
+			rse1_1 = rsi;
+		if (tc >= t0 && tc <= ti) {	/* Closest point is within segment */
+			if (rsc < rse1_0)
+				rse1_0 = rsc;
+			if (rsc > rse1_1)
+				rse1_1 = rsc;
+		}
+	
+		rse2_0 = rsi;
+		rse2_1 = rsi;
+		if (rs1 < rse2_0)
+			rse2_0 = rs1;
+		if (rs1 > rse2_1)
+			rse2_1 = rs1;
+		if (tc >= ti && tc <= t1) {	/* Closest point is within segment */
+			if (rsc < rse2_0)
+				rse2_0 = rsc;
+			if (rsc > rse2_1)
+				rse2_1 = rsc;
+		}
+
+		/* Test t0-1.0 to see what side of the BSP t0..ti is. */
+		ip[0] = vb[0] + (t0-1.0) * vv[0];
+		ip[1] = vb[1] + (t0-1.0) * vv[1];
+		ip[2] = vb[2] + (t0-1.0) * vv[2];
+
+		ds = n->pe[0] * ip[0]
+		   + n->pe[1] * ip[1]
+	       + n->pe[2] * ip[2]
+		   + n->pe[3];
+		
+		/* Because we're intersecting a line segment, we don't */
+		/* have to recurse down both sides of the BSP tree ? */
+		if (ds >= 0.0) {
+			n1 = n->po;
+			n2 = n->ne;
+		} else {
+			n1 = n->ne;
+			n2 = n->po;
+		}
+
+		/* Make sure that touching segments get properly tested */
+		ti1 = ti + 1e-8;
+		ti2 = ti - 1e-8;
+
+		/* Split the line into two segments and recurse for each. */
+		/* Don't recurse if the line can't improve either min or max. */
+		if (rse1_0 <= n1->rs1 && rse1_1 >= n1->rs0
+		 && (ti1 > *omxt || t0 < *omnt)) {
+			ISDBG(("recursing segment 1/2 %f .. %f\n",t0,ti1));
+			vector_isect_rec(s, n1, vb, vv, t0, rs0, ti1, rsi, tc, rsc, rse1_0, rse1_1,
+			                                                    omnt, omxt, tri0, tri1);
+		}
+#ifdef INTERSECT_DEBUG
+		else if (deb_insect) {
+			printf("Skipped seg 1/2 because rse1_0 %f > n1->rs1 %f ? || rse1_1 %f < n1->rs0 %f\n",rse1_0,n1->rs1,rse1_1, n1->rs0);
+			printf("|| ti1 %f <= t0 %f ? || ti1 %f <= *omxt %f && t0 %f <= *omnt %f ?\n",ti1,t0,ti1,*omxt,t0,*omnt);
+		}
+#endif
+		if (rse2_0 <= n2->rs1 && rse2_1 >= n2->rs0
+		 && (t1 > *omxt || ti2 < *omnt)) {
+			ISDBG(("recursing segment 2/2 %f .. %f\n",ti2,t1));
+			vector_isect_rec(s, n2, vb, vv, ti2, rsi, t1, rs1, tc, rsc, rse2_0, rse2_1,
+			                                                    omnt, omxt, tri0, tri1);
+		}
+#ifdef INTERSECT_DEBUG
+		else if (deb_insect) {
+			printf("Skipped seg 2/2 because rse2_0 %f > n2->rs1 %f ? || rse2_1 %f < n2->rs0 %f\n",rse2_0,n2->rs1,rse2_1, n2->rs0);
+			printf("|| t1 %f <= ti2 %f ? || t1 %f <= *omxt %f && ti2 %f <= *omnt %f ?\n",t1,ti2,t1,*omxt,ti2,*omnt);
+		}
+#endif
+
+		ISDBG(("vector_isect_rec returning\n"));
+		return;
+
+	} else {
+		int nt;			/* Number of triangles in list */
+		gtri **tpp;		/* Pointer to list of triangles */
+		int i, j;
+
+		if (np->tag == 2) {			/* It's a triangle */
+			tpp = (gtri **)&np;
+			nt = 1;
+		} else if (np->tag == 3) {	/* It's a triangle list */
+			gbspl *n = (gbspl *)np;
+			tpp = n->t;
+			nt = n->nt;
+		}
+		ISDBG(("vector_isect_rec at triangle(s) %d\n",nt));
+		/* Go through the list of triangles and intersect with vector */
+		for (i = 0; i < nt; i++, tpp++) {
+			gtri *t = *tpp;
+
+			ISDBG(("triangle no %d\n",t->n));
+
+			den = t->pe[0] * vv[0] + t->pe[1] * vv[1] + t->pe[2] * vv[2];
+			if (fabs(den) < 1e-12) {
+				ISDBG(("segment doesn't intersect\n"));
+				continue;
+			}
+
+			/* Compute the intersection of vector with the BSP plane */
+			ti = -(t->pe[0] * (vb[0] + s->cent[0]) 
+			     + t->pe[1] * (vb[1] + s->cent[1])
+			     + t->pe[2] * (vb[2] + s->cent[2])
+			     + t->pe[3])/den;
+			ISDBG(("segment intersects at %f\n",ti));
+
+//			/* If intersection is outside this segment, ignore it */
+//			if (ti < (t0 - 1e-6) || ti > (t1 + 1e-6)) {
+//				ISDBG(("triangle intersect is outside segment %f .. %f\n",t0,t1));
+//				continue;
+//			}
+
+			/* Compute the actual intersection point */
+			ip[0] = vb[0] + ti * vv[0];
+			ip[1] = vb[1] + ti * vv[1];
+			ip[2] = vb[2] + ti * vv[2];
+			ISDBG(("triangle intersection point %f %f %f\n",ip[0]+s->cent[0],ip[1]+s->cent[1],ip[2]+s->cent[2]));
+
+			/* Check if the intersection point is within the triangle */
+			for (j = 0; j < 3; j++) {
+				double ds;
+				ds = t->ee[j][0] * ip[0]
+				   + t->ee[j][1] * ip[1]
+			       + t->ee[j][2] * ip[2]
+				   + t->ee[j][3];
+				if (ds > 1e-8)
+					break;			/* Not within triangle */
+			}
+			if (j < 3) {
+				ISDBG(("intersection not within triangle\n"));
+				continue;			/* Not within triangle, so ignore */
+			}
+
+			/* See if the intersection is a new extreme */
+			if (ti < *omnt) {
+				ISDBG(("new min %f\n",ti));
+				*omnt = ti;
+				*tri0 = t;
+			}
+			if (ti > *omxt) {
+				ISDBG(("new max %f\n",ti));
+				*omxt = ti;
+				*tri1 = t;
+			}
+		}
+		ISDBG(("vector_isect_rec returning\n"));
+		return;
+	}
+}
+#ifdef INTERSECT_VERIFY
+#define compute_vector_isect _compute_vector_isect
+#endif
+
+/* Given a vector, find the two extreme intersection with */
+/* the gamut surface. */
+/* BSP accellerated version */
+/* Return 0 if there is no intersection */
+static int compute_vector_isect(
+gamut *s,
+double *p1,		/* First point (ie black) */
+double *p2,		/* Second point (ie white) */
+double *omin,	/* Return gamut surface points, min = closest to p1 */
+double *omax,	/* max = farthest from p1 */
+double *omnt,	/* Return parameter values for p1 and p2, 0 being at p1, */
+double *omxt,	/* and 1 being at p2 */
+gtri **omntri,	/* Return the intersection triangles */
+gtri **omxtri
+) {
+	gtri *tp, *tr0, *tr1;
+	double vb[3], vv[3];	/* Center relative base of vector, vector of vector */
+	double tt, t0, rs0, t1, rs1, tc, rsc;	
+	double rse0, rse1;	/* Effective radius squared min & max */
+	double mint, maxt;	
+	int j;
+	int rv = 0;
+
+	if IS_LIST_EMPTY(s->tris)
+		triangulate(s);
+
+	if (s->lu_inited == 0)
+		init_lu(s);				/* Init BSP search tree */
+
+	/* Convert twp points to relative base + vector direction */
+	for (tt = 0.0, j = 0; j < 3; j++) {
+		vv[j] = p2[j] - p1[j];
+		tt += vv[j] * vv[j];
+		vb[j] = p1[j] - s->cent[j]; /* relative to gamut center */
+	}
+	/* If vector is too small to have a valid direction */
+	if (tt < 1e-12) {
+		return 0;
+	}
+
+	mint =  1e68;
+	maxt = -1e68;	/* Setup to find min/max */
+	t0 = -1e6;
+	t1 =  1e6;
+
+	/* Compute radius range of segment */
+	for (rs0 = rs1 = 0.0, j = 0; j < 3; j++) {
+		tt = vb[j] + t0 * vv[j];
+		rs0 += tt * tt;
+		tt = vb[j] + t1 * vv[j];
+		rs1 += tt * tt;
+	}
+
+	/* Compute the point closest to the center */
+	tc = -(vv[0] * vb[0] + vv[1] * vb[1] + vv[2] * vb[2])
+	    / (vv[0] * vv[0] + vv[1] * vv[1] + vv[2] * vv[2]);
+
+#ifdef INTERSECT_VERIFY
+	/* Check that this is correct */
+	for (tt = 0.0, j = 0; j < 3; j++) {
+		double pp;
+		pp = vb[j] + tc * vv[j];
+		tt += pp * vv[j];
+	}
+	if (fabs(tt) > 1e-5)
+		error("Failed to locate closest point on vector");
+#endif	/* INTERSECT_VERIFY */
+
+	for (rsc = 0.0, j = 0; j < 3; j++) {
+		tt = vb[j] + tc * vv[j];
+		rsc += tt * tt;
+	}
+
+	/* Compute the effective min/max radius squared */
+	rse0 = rs0;
+	rse1 = rs0;
+	if (rs1 < rse0)
+		rse0 = rs1;
+	if (rs1 > rse1)
+		rse1 = rs1;
+	if (tc >= t0 && tc <= t1) {	/* Closest point is within segment */
+		if (rsc < rse0)
+			rse0 = rsc;
+		if (rsc > rse1)
+			rse1 = rsc;
+	}
+
+	vector_isect_rec(s, s->lutree, vb, vv, t0, rs0, t1, rs1, tc, rsc, rse0, rse1,
+	                                                  &mint, &maxt, &tr0, &tr1);   
+
+	/* If we failed to locate a requested intersection */
+	if (((omin != NULL || omnt != NULL || omntri != NULL) && mint == 1e68)
+	 || ((omax != NULL || omxt != NULL || omxtri != NULL) && maxt == -1e68)) {
+		rv = 0;
+
+	} else {
+
+		/* Compute and return intersection points */
+		if (omin != NULL) {
+			for (j = 0; j < 3; j++)
+				omin[j] = s->cent[j] + vb[j] + mint * vv[j];
+			ISDBG(("Fast min = %f %f %f\n", omin[0], omin[1], omin[2]));
+		}
+
+		if (omax != NULL) {
+			for (j = 0; j < 3; j++)
+				omax[j] = s->cent[j] + vb[j] + maxt * vv[j];
+			ISDBG(("Fast max = %f %f %f\n", omax[0], omax[1], omax[2]));
+		}
+
+		if (omnt != NULL)
+			*omnt = mint;
+
+		if (omxt != NULL)
+			*omxt = maxt;
+
+		if (omntri != NULL)
+			*omntri = tr0;
+
+		if (omxtri != NULL)
+			*omxtri = tr1;
+
+		rv = 1;
+	}
+
+	return rv;
+}
+
+#ifdef INTERSECT_VERIFY
+#undef compute_vector_isect
+
+/* Verifying version of above */
+static int compute_vector_isect(
+gamut *s,
+double *p1,		/* First point (ie black) */
+double *p2,		/* Second point (ie white) */
+double *omin,	/* Return gamut surface points, min = closest to p1 */
+double *omax,	/* max = farthest from p1 */
+double *omnt,	/* Return parameter values for p1 and p2, 0 being at p1, */
+double *omxt,	/* and 1 being at p2 */
+gtri **omintri, 	/* Return the intersection triangles */
+gtri **omaxtri
+) {
+	int rv, _rv;
+	double _omin[3];
+	double _omax[3];
+	double _omnt;
+	double _omxt;
+	gtri *_omintri;
+	gtri *_omaxtri;
+	int fail = 0;
+
+	ISDBG(("\n\n###########################################\n"));
+
+	/* Call the routine we're checking */
+	rv = _compute_vector_isect(s, p1, p2, omin, omax, omnt, omxt, omintri, omaxtri);
+
+	_rv = compute_vector_isect_bf(s, p1, p2, _omin, _omax, &_omnt, &_omxt, &_omintri, &_omaxtri);
+
+	if (rv != _rv) {
+		warning("compute_vector_isect verify: rv %d != _rv %d\n",rv,_rv);
+		fail = 1;
+	}
+
+	if (rv == 1) {
+		int j;
+		if (omnt != NULL)
+			if (fabs (*omnt - _omnt) > 1e-4) {
+				warning("compute_vector_isect verify:\n omnt %f != _omnt %f\n",*omnt,_omnt);
+				fail = 1;
+			}
+		if (omxt != NULL)
+			if (fabs (*omxt - _omxt) > 1e-4) {
+				warning("compute_vector_isect verify:\n omxt %f != _omxt %f\n",*omxt,_omxt);
+				fail = 1;
+			}
+		if (omin != NULL) {
+			ISDBG(("bf min = %f %f %f\n", _omin[0], _omin[1], _omin[2]));
+			for (j = 0; j < 3; j++) {
+				if (fabs (omin[j] - _omin[j]) > 1e-4)
+					break;
+			}
+			if (j < 3) {
+				warning("compute_vector_isect verify:\n omin %f %f %f != _omin %f %f %f\n", omin[0], omin[1], omin[2], _omin[0], _omin[1], _omin[2]);
+				fail = 1;
+			}
+		}
+		if (omax != NULL) {
+			ISDBG(("bf max = %f %f %f\n", _omax[0], _omax[1], _omax[2]));
+			for (j = 0; j < 3; j++) {
+				if (fabs (omax[j] - _omax[j]) > 1e-4)
+					break;
+			}
+			if (j < 3) {
+				warning("compute_vector_isect verify:\n omax %f %f %f != _omax %f %f %f\n", omax[0], omax[1], omax[2], _omax[0], _omax[1], _omax[2]);
+				fail = 1;
+			}
+		}
+#ifdef NEVER
+		if (omintri != NULL)
+			if (*omintri != _omintri) {
+				warning("compute_vector_isect verify:\n omintri %d != _omintri %d\n",(*omintri)->n, _omintri->n); 
+			}
+		if (omaxtri != NULL)
+			if (*omaxtri != _omaxtri) {
+				warning("compute_vector_isect verify:\n omaxtri %d != _omaxtri %d\n",(*omaxtri)->n, _omaxtri->n); 
+			}
+#endif /* NEVER */
+	}
+	if (fail) {
+#ifdef INTERSECT_DEBUG
+		printf("Re-running intersect with debug trace on\n");
+		deb_insect = 1;
+		_compute_vector_isect(s, p1, p2, _omin, _omax, &_omnt, &_omxt, &_omintri, &_omaxtri);
+#endif /* INTERSECT_DEBUG */
+		error("Verify failed");
+	}
+	return rv;
+}
+
+#endif /* INTERSECT_VERIFY */
+
+#ifdef INTERSECT_DEBUG
+#undef ISDBG
+#endif /* INTERSECT_DEBUG */
+
+
 /* ===================================================== */
-/* ===================================================== */
-/* ----------------------------------- */
 /* Write to a VRML .wrl file */
 /* Return non-zero on error */
 static int write_vrml(
@@ -5146,7 +6099,7 @@ gtri *hl			/* Edge hit list (may be NULL) */
 	fprintf(wrl,"    }\n");
 
 
-	/* Verticies for Polygon edges */
+	/* Verticies for Polygon edges, marked by directional cones */
 	if (hl != NULL) {
 		double base[3] = { 0.0, 0.0, 1.0 };		/* Default orientation of cone is b axis */
 		tp = hl; 

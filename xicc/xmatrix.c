@@ -7,7 +7,7 @@
  *
  * Copyright 2000, 2003 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Based on the old iccXfm class.
@@ -29,7 +29,7 @@
  *		profile quality on non-calibrated displays. See spectro/dispcal.c
  *		spectro/moncurve.c. Use conjgrad() instead of powell() to speed things up.
  *      Note that if curves have scale, the scale will have to be
- *      normalized bacl to zero by scaling the matrix before storing
+ *      normalized back to zero by scaling the matrix before storing
  *      the result in the ICC profile.
  */
 
@@ -223,7 +223,7 @@ alloc_icxLuMatrix(
 	p->spaces            = icxLuSpaces;
 	p->get_native_ranges = icxLu_get_native_ranges;
 	p->get_ranges        = icxLu_get_ranges;
-	p->rel_wh_bk_points  = icxLuRel_wh_bk_points;
+	p->efv_wh_bk_points  = icxLuEfv_wh_bk_points;
 	p->get_gamut         = icxLuMatrixGamut;
 	p->fwd_relpcs_outpcs = icxLuMatrix_fwd_relpcs_outpcs;
 	p->bwd_outpcs_relpcs = icxLuMatrix_bwd_outpcs_relpcs;
@@ -254,12 +254,13 @@ alloc_icxLuMatrix(
 	}
 
 	/* There are no matrix specific flags */
+	p->flags = flags;
 
 	/* Get details of internal, native color space */
 	p->plu->lutspaces(p->plu, &p->natis, NULL, &p->natos, NULL, &p->natpcs);
 
 	/* Get other details of conversion */
-	p->plu->spaces(p->plu, NULL, &p->inputChan, NULL, &p->outputChan, NULL, NULL, NULL, NULL);
+	p->plu->spaces(p->plu, NULL, &p->inputChan, NULL, &p->outputChan, NULL, NULL, NULL, NULL, NULL);
 
 	return p;
 }
@@ -283,14 +284,17 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 	if ((p = alloc_icxLuMatrix(xicp, plu, dir, flags)) == NULL)
 		return NULL;
 
+	p->func = func;
+
 	/* Init the CAM model */
 	if (pcsor == icxSigJabData) {
 		if (vc != NULL)		/* One has been provided */
 			p->vc  = *vc;		/* Copy the structure */
 		else
-			xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0);	/* Use a default */
+			xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0, NULL);	/* Use a default */
 		p->cam = new_icxcam(cam_default);
-		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf, p->vc.Fxyz, XICC_USE_HK);
+		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf,
+		                 p->vc.Fxyz, XICC_USE_HK, XICC_NOCAMCL);
 	} else {
 		p->cam = NULL;
 	}
@@ -299,7 +303,7 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 	p->intent = intent;
 
 	/* Get the effective spaces */
-	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, NULL, NULL, &p->pcs);
+	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, NULL, NULL, &p->pcs, NULL);
 
 	/* Override with pcsor */
 	if (pcsor == icxSigJabData) {
@@ -566,14 +570,26 @@ static double mxoptfunc(void *edata, double *v) {
 printf("~9(%f)mxoptfunc returning %f\n",smv,rv);
 #endif
 
-	if (p->verb)
-		printf("."), fflush(stdout);
 	return rv;
+}
+
+/* Matrix progress function handed to powell() */
+static void mxprogfunc(void *pdata, int perc) {
+	mxopt *p = (mxopt *)pdata;
+
+	if (p->verb) {
+		printf("\r% 3d%%",perc); 
+		if (perc == 100)
+			printf("\n");
+		fflush(stdout);
+	}
 }
 
 
 /* Create icxLuMatrix and undelying tone reproduction curves and */
-/* colorant tags from scattered data. */
+/* colorant tags, initialised from the icc, and then overwritten */
+/* by a conversion created from the supplied scattered data points. */
+
 /* The scattered data is assumed to map Device -> native PCS (ie. dir = Fwd) */
 /* NOTE:- in theory once this icxLuMatrix is setup, it can be */
 /* called to translate color values. In practice I suspect */
@@ -587,6 +603,7 @@ int                flags,			/* white/black point flags */
 int                nodp,			/* Number of points */
 cow                *ipoints,		/* Array of input points in XYZ space */
 double             dispLuminance,	/* > 0.0 if display luminance value and is known */
+double             wpscale,			/* > 0.0 if input white point is to be scaled */
 int                quality			/* Quality metric, 0..3 */
 ) {
 	icxLuMatrix *p;						/* Object being created */
@@ -601,9 +618,10 @@ int                quality			/* Quality metric, 0..3 */
 	int rsplflags = 0;					/* Flags for scattered data rspl */
 	int e, f, i, j;
 	int maxits = 200;					/* Optimisation stop params */
-	double stopon = 0.01;
+	double stopon = 0.01;				/* Absolute delta E change to stop on */
 	cow *points;		/* Copy of ipoints */
 	mxopt os;			/* Optimisation information */
+	double rerr;
 
 #ifdef DEBUG_PLOT
 	#define	XRES 100
@@ -645,8 +663,10 @@ int                quality			/* Quality metric, 0..3 */
 	if ((p = alloc_icxLuMatrix(xicp, plu, 0, luflags)) == NULL)
 		return NULL;
 
+	p->func = icmFwd;		/* Assumed by caller */
+
 	/* Get the effective spaces of underlying icm, and set icx the same */
-	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, &p->intent, NULL, &p->pcs);
+	plu->spaces(plu, &p->ins, NULL, &p->outs, NULL, NULL, &p->intent, NULL, &p->pcs, NULL);
 
 	/* For set_icx the effective pcs has to be the same as the native pcs */
 
@@ -716,15 +736,15 @@ int                quality			/* Quality metric, 0..3 */
 		stopon = 0.000001;
 	} else if (quality == 2) {	/* High */
 		os.norders = 15;
-		maxits = 1000;
+		maxits = 2000;
 		stopon = 0.00001;
 	} else if (quality == 1) {	/* Medium */
 		os.norders = 10;
-		maxits = 500;
+		maxits = 1000;
 		stopon = 0.0001;
 	} else {					/* Low */
 		os.norders = 5;
-		maxits = 200;
+		maxits = 500;
 		stopon = 0.001;
 	}
 	if (os.norders > MXNORDERS)
@@ -763,11 +783,12 @@ int                quality			/* Quality metric, 0..3 */
 		os.optdim = ((os.optdim - 9)/3) + 9;
 	}
 
-	if (powell(NULL, os.optdim, os.v, os.sa, stopon, maxits, mxoptfunc, (void *)&os) != 0)
-		error ("Powell failed");
-
 	if (os.verb)
-		printf("\n");
+		printf("Creating matrix and curves...\n"); 
+
+	if (powell(&rerr, os.optdim, os.v, os.sa, stopon, maxits,
+	           mxoptfunc, (void *)&os, mxprogfunc, (void *)&os) != 0)
+		warning("Powell failed to converge, residual error = %f",rerr);
 
 #ifdef NEVER
 printf("Matrix = %f %f %f\n",os.v[0], os.v[1], os.v[2]);
@@ -799,13 +820,14 @@ else
 		double bp[3];	/* Absolute Black point in XYZ */
 
 		if (flags & ICX_VERBOSE)
-			printf("\nFind white & black points\n");
+			printf("Find white & black points\n");
 
 		icmXYZ2Ary(wp, icmD50); 		/* Set a default value - D50 */
 		icmXYZ2Ary(bp, icmBlack); 		/* Set a default value - absolute black */
 
 		/* Figure out the device values for white */
 		if (h->deviceClass == icSigInputClass) {
+			double dwhite[MXDI], dblack[MXDI];	/* Device white and black values */
 			double Lmax = -1e60;
 			double Lmin = 1e60;
 
@@ -820,18 +842,31 @@ else
 					wp[0] = points[i].v[0];
 					wp[1] = points[i].v[1];
 					wp[2] = points[i].v[2];
+					dwhite[0] = points[i].p[0];
+					dwhite[1] = points[i].p[1];
+					dwhite[2] = points[i].p[2];
 				}
 				if (points[i].v[0] < Lmin) {
 					Lmin = 
 					bp[0] = points[i].v[0];
 					bp[1] = points[i].v[1];
 					bp[2] = points[i].v[2];
+					dblack[0] = points[i].p[0];
+					dblack[1] = points[i].p[1];
+					dblack[2] = points[i].p[2];
 				}
 			}
 
-			/* Convert w/b points from Lab to XYZ */
-			icmLab2XYZ(&icmD50, wp, wp);
-			icmLab2XYZ(&icmD50, bp, bp);
+			/* Lookup device white/black values in model */
+			mxmfunc(&os, os.v, wp, dwhite);
+			mxmfunc(&os, os.v, bp, dblack);
+
+			/* If we were given an input white point scale factor, apply it */
+			if (wpscale >= 0.0) {
+				wp[0] *= wpscale;
+				wp[1] *= wpscale;
+				wp[2] *= wpscale;
+			}
 
 		} else {	/* Assume Monitor class */
 
@@ -913,7 +948,9 @@ else
 			}
 		}
 
-		if (h->deviceClass == icSigDisplayClass
+		/* Absolute luminance tag */
+		if (flags & ICX_WRITE_WBL
+		 && h->deviceClass == icSigDisplayClass
 		 && dispLuminance > 0.0) {
 			icmXYZArray *wo;
 			if ((wo = (icmXYZArray *)icco->read_tag(
@@ -941,7 +978,8 @@ else
 		}
 
 		/* Write white and black tags */
-		if (flags & ICX_SET_WHITE) { /* White Point Tag: */
+		if ((flags & ICX_WRITE_WBL)
+		 && (flags & ICX_SET_WHITE)) { /* White Point Tag: */
 			icmXYZArray *wo;
 			if ((wo = (icmXYZArray *)icco->read_tag(
 			           icco, icSigMediaWhitePointTag)) == NULL)  {
@@ -959,14 +997,15 @@ else
 
 			wo->size = 1;
 			wo->allocate((icmBase *)wo);	/* Allocate space */
-			wo->data[0].X = wp[0]/wp[1];
-			wo->data[0].Y = wp[1]/wp[1];
-			wo->data[0].Z = wp[2]/wp[1];
+			wo->data[0].X = wp[0];
+			wo->data[0].Y = wp[1];
+			wo->data[0].Z = wp[2];
 
 			if (flags & ICX_VERBOSE)
 				printf("White point XYZ = %f %f %f\n",wp[0],wp[1],wp[2]);
 		}
-		if (flags & ICX_SET_BLACK) { /* Black Point Tag: */
+		if ((flags & ICX_WRITE_WBL)
+		 && (flags & ICX_SET_BLACK)) { /* Black Point Tag: */
 			icmXYZArray *wo;
 			if ((wo = (icmXYZArray *)icco->read_tag(
 			           icco, icSigMediaBlackPointTag)) == NULL)  {
@@ -1024,7 +1063,7 @@ else
 	}
 
 	if (flags & ICX_VERBOSE)
-		printf("Done gama/shaper and matrix creation\n");
+		printf("Done gamma/shaper and matrix creation\n");
 
 	/* Write the gamma/shaper and matrix to the icc memory structures */
 	if (!isGamma) {		/* Creating input curves */
@@ -1111,7 +1150,7 @@ double       detail		/* gamut detail level, 0.0 = def */
 	icxLuMatrix *lumat = (icxLuMatrix *)plu;	/* Lookup xMatrix type object */
 	icColorSpaceSignature pcs;
 	icmLookupFunc func;
-	double white[3], black[3];
+	double white[3], black[3], kblack[3];
 	gamut *gam;
 	int res;		/* Sample point resolution */
 	int i, e;
@@ -1248,9 +1287,8 @@ double       detail		/* gamut detail level, 0.0 = def */
 #endif
 
 	/* Put the white and black points in the gamut */
-	plu->rel_wh_bk_points(plu, white, black);
-
-	gam->setwb(gam, white, black);
+	plu->efv_wh_bk_points(plu, white, black, kblack);
+	gam->setwb(gam, white, black, kblack);
 
 	/* set the cusp points by itterating through the 0 & 100% colorant combinations */
 	{
@@ -1279,10 +1317,9 @@ double       detail		/* gamut detail level, 0.0 = def */
 		gam->setcusps(gam, 2, NULL);
 	}
 
-#ifdef NEVER	/* Not sure if this is a good idea ?? */
-	/* Since we know this is a profile, force the space and gamut points to be the same */
+#ifdef NEVER		/* Not sure if this is a good idea ?? */
 	gam->getwb(gam, NULL, NULL, white, black);	/* Get the actual gamut white and black points */
-	gam->setwb(gam, white, black);					/* Put it back as colorspace one */
+	gam->setwb(gam, white, black);				/* Put it back as colorspace one */
 #endif
 
 	return gam;

@@ -9,6 +9,7 @@
 #include "ss.h"
 #include "i1disp.h"
 #include "i1pro.h"
+#include "munki.h"
 #include "hcfr.h"
 #include "spyd2.h"
 #include "huey.h"

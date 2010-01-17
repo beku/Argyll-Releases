@@ -8,9 +8,9 @@
 <body>
 <h2><u>About ICC profiles and Gamut Mapping</u></h2>
 <h3>How ICC profiles support different intents</h3>
-CLUT (Color Lookup Table) based ICC profiles support multiple <span
+cLUT (Color Lookup Table) based ICC profiles support multiple <span
  style="font-weight: bold;">intents</span> by having a table for each
-intent. In a typical device CLUT profile, there are up to 6 CLUT's,
+intent. In a typical device cLUT profile, there are up to 6 cLUT's,
 three for input (AtoB tables, that convert from device space to PCS
 (Profile connection space)), and three for output (BtoA tables, that
 convert from PCS to device space). The tables allow the use of
@@ -33,6 +33,10 @@ combined with the device characterization. The allowance for this in
 both the AtoB direction, as well as the BtoA direction permits a
 profile to gamut map from the device gamut to some intermediate gamut,
 and then from the intermediate gamut to the device gamut.<br>
+<br>
+[Note that Shaper/Matrix profiles are always Colorimetric intent, since
+there is only a single transformation, and it does not have the
+necessary flexibility to accommodate gamut mapping.]<br>
 <h3>ICC Version 2 behaviour<br>
 </h3>
 Apart from defining the general purpose of the different tables, the
@@ -58,7 +62,7 @@ defined, a full range of gamut mapping options is available, and
 compatibility with matrix profiles (which do not have gamut mapping
 transforms) and other foreign profiles can be assured, by simply using
 such profiles as colorimetric sources. The main disadvantage is that
-the gamut mapping will only operate exactly as intended, when the
+the gamut mapping will only operate exactly as intended when the
 profile is linked with the source profile it was setup for. This is
 really a fundamental limitation of the idea of having pre-computed
 gamut mapping color transforms, that the ICC profile format was
@@ -70,13 +74,14 @@ gamut of a source through these tables may be different to the actual
 device gamut. To accommodate using these profiles with CMM's (Color
 Management Modules) that do not permit the separate choice of intent
 tables for the source and destination profiles, Argyll will by default
-use the gamut defined by the source profile perceptual table&nbsp; to
+use the gamut defined by the source profile perceptual table to
 create the gamut mapping of the destination perceptual table, and the
 source saturation table to make the destination saturation table. Note
 that this can affect the exact nature of the gamut mapping, the
 distortion of the source gamut changing the apparent relationship
 between it and the destination gamut - see "ICC Version 4 behavior" for
-an illustration of the kind of changes this causes.<br>
+an illustration of the kind of changes this causes. [This default can
+be overridden though using the colprof -nP and -nS flags.]<br>
 <h3>ICC Version 4 behaviour</h3>
 (Note that Argyll does not currently support ICC V4)<br>
 <br>

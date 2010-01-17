@@ -9,7 +9,7 @@
  *
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -106,16 +106,18 @@ static struct {
 	icColorSpaceSignature ssig;	/* Appropriate secondary ICC signature */
 	char *desc;					/* Description */
 } icx_colcomb_table[] = {
-	{ ICX_W, 		  ICX_W,           icSigGrayData,   icSigGrayData,
-	                                                    "Video grey" },
 	{ ICX_K,		  ICX_K,           icSigGrayData,   icSigGrayData,
 	                                                    "Print grey" },
-	{ ICX_CMY, 		  ICX_CMY,         icSigCmyData,    icSigCmyData,
-	                                                    "CMY" },
+	{ ICX_W, 		  ICX_W,           icSigGrayData,   icSigGrayData,
+	                                                    "Video grey" },
+	{ ICX_IRGB,		  ICX_IRGB,        icSigRgbData,    icSigRgbData,
+	                                                    "Print RGB" },
 	{ ICX_RGB, 		  ICX_RGB,         icSigRgbData,    icSigRgbData,
-	                                                    "RGB" },
+	                                                    "Video RGB" },
 	{ ICX_CMYK,       ICX_CMYK,        icSigCmykData,   icSigCmykData,
 	                                                    "CMYK" },
+	{ ICX_CMY, 		  ICX_CMY,         icSigCmyData,    icSigCmyData,
+	                                                    "CMY" },
 	{ ICX_CMYKcm,     ICX_CMYK,        icSig6colorData, icSigMch6Data,
 	                                                    "CMYK + Light CM" },
 	{ ICX_CMYKcmk,    ICX_CMYK,        icSig7colorData, icSig7colorData,
@@ -146,9 +148,10 @@ int icx_noofinks(inkmask mask) {
 	return count;
 }
 
-/* Given an ink combination mask, return the 1-2 character string */
+/* Given an ink combination mask, return the 1-2 character based string */
+/* If winv is nz, include ICX_INVERTED indicator if set */
 /* Return NULL on error. free() after use */
-char *icx_inkmask2char(inkmask mask) {
+char *icx_inkmask2char(inkmask mask, int winv) {
 	int i;
 	char *rv;
 
@@ -157,6 +160,9 @@ char *icx_inkmask2char(inkmask mask) {
 
 	*rv = '\000';
 	
+	if (winv && (mask & ICX_INVERTED))
+		strcat(rv, "i");
+
 	for (i = 0; icx_ink_table[i].m != 0; i++) {
 		if (mask & icx_ink_table[i].m) {
 			strcat(rv, icx_ink_table[i].c);
@@ -171,17 +177,24 @@ char *icx_inkmask2char(inkmask mask) {
 /* Return 0 if unrecognised character in string */
 inkmask icx_char2inkmask(char *chstring)  {
 	inkmask mask = 0;
-	int i;
+	int k, i;
 	char *cp;
 
 	cp = chstring;
 
-	for (;;) {
+	for (k = 0; ; k++) {
 
 		if (*cp == '\000') {
 			break;
 		}
 
+		/* "Inverted" prefix ? */
+		if (k == 0 && *cp == 'i') {
+			mask |= ICX_INVERTED;
+			cp++;
+			continue;
+		}
+		/* Colorant ? */
 		for (i = 0; icx_ink_table[i].m != 0; i++) {
 
 			if (strncmp(cp, icx_ink_table[i].c, strlen(icx_ink_table[i].c)) == 0) {
@@ -356,12 +369,19 @@ icColorSpaceSignature sig	/* ICC signature */
 
 /* Given an ICC colorspace signature, return the appropriate */
 /* colorant combination mask. Return 0 if ambiguous signature. */
-inkmask icx_icc_to_colorant_comb(icColorSpaceSignature sig) {
+inkmask icx_icc_to_colorant_comb(icColorSpaceSignature sig, icProfileClassSignature deviceClass) {
 	switch (sig) {
+		case icSigGrayData:
+			if (deviceClass == icSigOutputClass)
+				return ICX_K;
+			return ICX_W;
+
 		case icSigCmyData:
 			return ICX_CMY;
 
 		case icSigRgbData:
+			if (deviceClass == icSigOutputClass)
+				return ICX_IRGB;
 			return ICX_RGB;
 
 		case icSigCmykData:
@@ -378,8 +398,9 @@ inkmask icx_icc_to_colorant_comb(icColorSpaceSignature sig) {
 /* colorant combination mask. Return 0 if not an applicable colorspace. */
 /* (Note we're not dealing with colorant order here.) */
 inkmask icx_icc_cv_to_colorant_comb(
-icColorSpaceSignature sig,	/* Input ICC colorspace signature */ 
-double cvals[][3]			/* Input L*a*b* colorant values */
+icColorSpaceSignature sig,				/* Input ICC colorspace signature */ 
+icProfileClassSignature deviceClass,	/* Device class */
+double cvals[][3]						/* Input L*a*b* colorant values */
 ) {
 	int i, j;
 	int imask;
@@ -406,10 +427,17 @@ double cvals[][3]			/* Input L*a*b* colorant values */
 		case icSigNamedData:
 			return 0;
 
+		case icSigGrayData:
+			if (deviceClass == icSigOutputClass)
+				return ICX_K;
+			return ICX_W;
+
 		case icSigCmyData:
 			return ICX_CMY;
 
 		case icSigRgbData:
+			if (deviceClass == icSigOutputClass)
+				return ICX_IRGB;
 			return ICX_RGB;
 
 		case icSigCmykData:
@@ -419,6 +447,7 @@ double cvals[][3]			/* Input L*a*b* colorant values */
 			break;
 
 	}
+#ifdef NEVER	/* Rely on device class (above) */
 	if (sig == icSigGrayData) {
 		/* This only works reliably if we got the Lab data from a non-ICC */
 		/* conformant monochrome profile (one that doesn't force device 0 */
@@ -433,6 +462,7 @@ double cvals[][3]			/* Input L*a*b* colorant values */
 			return ICX_K;
 		} 
 	}
+#endif /* NEVER */
 
 	/* Compute Lab values of stock inks, and count them */
 	for (ninks = 0; ninks < ICX_MXINKS; ninks++) {

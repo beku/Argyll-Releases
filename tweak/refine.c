@@ -8,7 +8,7 @@
  * Date:    12/5/05
  * Version: 1.00
  *
- * Copyright 2005 Graeme W. Gill
+ * Copyright 2005, 2008 Graeme W. Gill
  * Please refer to License.txt file for details.
  */
 
@@ -25,7 +25,7 @@
 	in the B2A table, which is then used to refine an existing abstract
 	correction profile. (Any device values in the .ti3 tables are ignored.)
 
-	The refined abstract profile can the be used to create an adjusted
+	The refined abstract profile can then be used to create an adjusted
 	device profile, or an adjusted device link.
 
 	Complications are:
@@ -55,7 +55,7 @@
 	Interestingly, for CMYK the results are most stable (in simulation)
 	when applied to the simple linked device link, and tends to
 	be slightly unstable when applied to inverse A2B lookups
-	that are used in profile and icclink -G. This could be a symtom
+	that are used in profile and icclink -G. This could be a symptom
 	of the black generation non-uniformity problem causing instability
 	in the black inversion. Moving to optimised separation CMYK
 	profile generation might overcome this problem.
@@ -75,16 +75,20 @@
 #include <math.h>
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "rspl.h"
 #include "xicc.h"
 #include "xicc.h"
 
 #define COMPLOOKUP	/* Compound with previous in ICM lookup rather than rspl */
+#undef WARN_CLUT_CLIPPING   /* [Undef] Print warning if setting clut clips */
 #undef DEBUG1		/* Print each correction value */
 #undef DEBUG2		/* Print each value changed */
 #undef DEBUG3		/* Trace history of particular points */
 
 #define verbo stdout
+
+#define RSPLFLAGS (0 /* | RSPL_2PASSSMTH | RSPL_EXTRAFIT2 */)
 
 #define DEF_DAMP1 0.95		/* Initial */
 #define DEF_DAMP2 0.70		/* Subsequent */
@@ -165,8 +169,9 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -g              Don't impose output device gamut limit\n");
 	fprintf(stderr," -r res          Set abstract profile clut resolution (default %d)\n",DEF_CLUTRES);
 	fprintf(stderr," -d factor       Override default damping factor (default %f, then %f)\n",DEF_DAMP1,DEF_DAMP2);
+	fprintf(stderr," -R              Aim for white point relative match rather than absolute\n");
 	fprintf(stderr," -i illum        Choose illuminant for spectral data:\n");
-	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr,"                 A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"                 1931_2, 1964_10, S&B 1955_2, J&V 1978_2 (def.)\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation on spectral data\n");
@@ -262,6 +267,7 @@ main(int argc, char *argv[]) {
 	char rd_name[MAXNAMEL+1];	/* Abstract profile ICC to modify */
 	char wr_name[MAXNAMEL+1];	/* Modified/created abstract profile ICC */
 
+	int dorel = 0;				/* Do white point relative match */
 	int *match;					/* Array mapping first list indexes to corresponding second */
 	int fwacomp = 0;			/* FWA compensation on spectral ? */
 	int spec = 0;				/* Use spectral data flag */
@@ -327,7 +333,7 @@ main(int argc, char *argv[]) {
 				nogamut = 1;
 			}
 			/* Override the correction clut resolution */
-			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
+			else if (argv[fa][1] == 'r') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -r");
 				clutres = atoi(na);
@@ -338,7 +344,10 @@ main(int argc, char *argv[]) {
 				if (na == NULL) usage("Expect argument to -d");
 				damp2 = atof(na);
 			}
-
+			/* Aim for white point relative match */
+			else if (argv[fa][1] == 'R') {
+				dorel = 1;
+			}
 
 			/* Spectral Illuminant type */
 			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
@@ -347,6 +356,9 @@ main(int argc, char *argv[]) {
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
+				} else if (strcmp(na, "C") == 0) {
+					spec = 1;
+					illum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
@@ -483,14 +495,15 @@ main(int argc, char *argv[]) {
 			error("Malloc failed - pat[]");
 	
 		/* Read in the CGATs fields */
-		if ((sidx = cgf->find_field(cgf, 0, "SampleName")) < 0
+		if ((sidx = cgf->find_field(cgf, 0, "SAMPLE_ID")) < 0
+		 && (sidx = cgf->find_field(cgf, 0, "SampleName")) < 0
 		 && (sidx = cgf->find_field(cgf, 0, "Sample_Name")) < 0
 		 && (sidx = cgf->find_field(cgf, 0, "SAMPLE_NAME")) < 0
-		 && (sidx = cgf->find_field(cgf, 0, "SAMPLE_ID")) < 0
 		 && (sidx = cgf->find_field(cgf, 0, "SAMPLE_LOC")) < 0)
-			error("Input file '%s' doesn't contain field SampleName, Sample_Name, SAMPLE_NAME, SAMPLE_ID or SAMPLE_LOC",cg[n].name);
-		if (cgf->t[0].ftype[sidx] != nqcs_t)
-			error("Sample ID field isn't non quoted character string");
+			error("Input file '%s' doesn't contain field SAMPLE_ID, SampleName, Sample_Name, SAMPLE_NAME or SAMPLE_LOC",cg[n].name);
+		if (cgf->t[0].ftype[sidx] != nqcs_t
+		 && cgf->t[0].ftype[sidx] != cs_t)
+			error("Sample ID/Name field isn't a quoted or non quoted character string");
 
 		if (spec == 0) { 		/* Using instrument tristimulous value */
 
@@ -644,7 +657,7 @@ main(int argc, char *argv[]) {
 	if (cg[0].npat != cg[1].npat)
 		error("Number of patches between '%s' and '%s' doesn't match",cg[0].name,cg[1].name);
 	
-	/* Create a list to map the second list of patches to the first */
+	/* Create a list to map the second list (measured) of patches to the first (target) */
 	if ((match = (int *)malloc(sizeof(int) * cg[0].npat)) == NULL)
 		error("Malloc failed - match[]");
 	for (i = 0; i < cg[0].npat; i++) {
@@ -659,17 +672,6 @@ main(int argc, char *argv[]) {
 		}
 	}
 
-	/* Compute the delta E's just for information */
-	for (i = 0; i < cg[0].npat; i++) {
-		double de = icmLabDE(cg[0].pat[i].v, cg[1].pat[match[i]].v);
-		cg[0].pat[i].de = de;
-		if (de > merr)
-			merr = de;
-		aerr += de;
-	}
-	if (cg[0].npat > 0)
-		aerr /= (double)cg[0].npat;
-
 	/* Try and figure out which is the white patch */
 	{
 		double hL = -1.0;
@@ -680,6 +682,47 @@ main(int argc, char *argv[]) {
 			}
 		}
 	}
+
+	/* If we are aiming for a white point relative match, adjust the */
+	/* measured and target values to have a D50 white point */
+	if (dorel) {
+		for (n = 0; n < 2; n++) {
+			int wpix;			/* White patch index */
+			double wp_xyz[3];
+			icmXYZNumber wp;	/* White value */
+			double mat[3][3];	/* Chromatic transform */
+			
+			if (n == 0)
+				wpix = whitepatch;
+			else
+				wpix = match[whitepatch];
+		
+
+			/* Compute a chromatic correction matrix */
+			icmLab2XYZ(&icmD50, wp_xyz, cg[n].pat[wpix].v);
+			icmAry2XYZ(wp, wp_xyz);
+
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, wp, mat);
+
+			for (i = 0; i < cg[n].npat; i++) {
+				icmLab2XYZ(&icmD50, cg[n].pat[i].v, cg[n].pat[i].v);
+				icmMulBy3x3(cg[n].pat[i].v, mat, cg[n].pat[i].v);
+				icmXYZ2Lab(&icmD50, cg[n].pat[i].v, cg[n].pat[i].v);
+//printf("Table %d, patch %d, Lab %f %f %f\n",n,i,cg[n].pat[i].v[0],cg[n].pat[i].v[1],cg[n].pat[i].v[2]);
+			}
+		}
+	}
+
+	/* Compute the delta E's just for information */
+	for (i = 0; i < cg[0].npat; i++) {
+		double de = icmLabDE(cg[0].pat[i].v, cg[1].pat[match[i]].v);
+		cg[0].pat[i].de = de;
+		if (de > merr)
+			merr = de;
+		aerr += de;
+	}
+	if (cg[0].npat > 0)
+		aerr /= (double)cg[0].npat;
 
 	if (verb) {
 		fprintf(verbo,"No of correction patches = %d\n",cg[0].npat);
@@ -717,21 +760,21 @@ main(int argc, char *argv[]) {
 		ink.tlimit = -1.0;		/* No ink limit by default */
 		ink.klimit = -1.0;
 
-		/* Use a heuristic to guess the ink limit */
-		if (icmCSSig2nchan(dev_icc->header->colorSpace) > 3) {
-			ink.tlimit = dev_icc->get_tac(dev_icc, NULL);
-			ink.tlimit += 0.05;		/* allow a slight margine */
-
-			if (verb)
-				printf("Estimated inklimit is %f%%\n",100.0 * ink.tlimit);
-		}
-
 		/* Wrap with an expanded icc */
 		if ((dev_xicc = new_xicc(dev_icc)) == NULL)
 			error ("Creation of xicc failed");
 
+		/* Use a heuristic to guess the ink limit */
+		icxGetLimits(dev_xicc, &ink.tlimit, &ink.klimit);
+		ink.tlimit += 0.05;		/* allow a slight margine */
+
+		if (verb)
+			printf("Estimated Total inklimit is %f%%, Black %f%% \n",100.0 * ink.tlimit,ink.klimit < 0.0 ? 100.0 : 100.0 * ink.klimit);
+
 		/* Get a expanded color conversion object suitable for gamut */
-		if ((dev_luo = dev_xicc->get_luobj(dev_xicc, ICX_CLIP_NEAREST, icmFwd, icAbsoluteColorimetric, icSigLabData, icmLuOrdNorm, NULL, &ink)) == NULL)
+		if ((dev_luo = dev_xicc->get_luobj(dev_xicc, ICX_CLIP_NEAREST, icmFwd,
+		     dorel ? icRelativeColorimetric : icAbsoluteColorimetric,
+		     icSigLabData, icmLuOrdNorm, NULL, &ink)) == NULL)
 			error ("%d, %s",dev_xicc->errc, dev_xicc->err);
 	
 		/* Creat a gamut surface */
@@ -762,7 +805,9 @@ main(int argc, char *argv[]) {
 		if (rd_icc->header->deviceClass != icSigAbstractClass)
 			error("Input Profile '%s' isn't abstract type",rd_name);
 
-		if ((cb.rd_luo = rd_icc->get_luobj(rd_icc, icmFwd, icAbsoluteColorimetric, icSigLabData, icmLuOrdNorm)) == NULL)
+		if ((cb.rd_luo = rd_icc->get_luobj(rd_icc, icmFwd,
+		        dorel ? icRelativeColorimetric : icAbsoluteColorimetric,
+		        icSigLabData, icmLuOrdNorm)) == NULL)
 				error ("%d, %s",rd_icc->errc, rd_icc->err);
 	} else {
 		cb.rd_luo = NULL;
@@ -979,7 +1024,7 @@ main(int argc, char *argv[]) {
 			avgdev[e] = AVGDEV;
 
 		cb.r->fit_rspl_w_df(cb.r,
-		           RSPL_EXTRAFIT		/* Extra fit flag */
+		           RSPLFLAGS			/* Extra flags */
 		           | verb ? RSPL_VERBOSE : 0,
 		           rp,					/* Test points */
 		           npnts,				/* Number of test points */
@@ -1034,7 +1079,10 @@ main(int argc, char *argv[]) {
 		wh->deviceClass     = icSigAbstractClass;
     	wh->colorSpace      = icSigLabData;
     	wh->pcs             = icSigLabData;
-    	wh->renderingIntent = icAbsoluteColorimetric;	/* Instrument reading based */
+		if (dorel)
+	    	wh->renderingIntent = icRelativeColorimetric;	/* White point relative */
+		else
+	    	wh->renderingIntent = icAbsoluteColorimetric;	/* Instrument reading based */
 	}
 	/* Profile Description Tag: */
 	{
@@ -1094,8 +1142,13 @@ main(int argc, char *argv[]) {
 
 		/* Use helper function to do the hard work. */
 		if (cb.verb) {
+			int extra;
 			for (cb.total = 1, i = 0; i < 3; i++, cb.total *= wo->clutPoints)
 				; 
+			/* Add in cell center points */
+			for (extra = 1, i = 0; i < wo->inputChan; i++, extra *= (wo->clutPoints-1))
+				;
+			cb.total += extra;
 			cb.count = 0;
 			cb.last = -1;
 			printf(" 0%%"), fflush(stdout);
@@ -1121,7 +1174,13 @@ main(int argc, char *argv[]) {
 			error("Setting 16 bit Lab->Lab Lut failed: %d, %s",wr_icc->errc,wr_icc->err);
 
 		if (verb)
-			printf("\nDone filling abstract table\n");
+			printf("\n");
+#ifdef WARN_CLUT_CLIPPING
+		if (wr_icc->warnc)
+			warning("Values clipped in setting abstract LUT");
+#endif /* WARN_CLUT_CLIPPING */
+		if (verb)
+			printf("Done filling abstract table\n");
 	}
 	/* Write the file out */
 	if ((rv = wr_icc->write(wr_icc,wr_fp,0)) != 0)

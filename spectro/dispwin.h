@@ -11,7 +11,7 @@
  * Copyright 1998 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -24,10 +24,12 @@ int do_plot(double *x, double *y1, double *y2, double *y3, int n);
 #define _WIN32_WINNT 0x0501
 #endif
 #if !defined(WINVER) || WINVER < 0x0501
+#if defined(WINVER)
+# undef WINVER
+#endif
 #define WINVER 0x0501
 #endif
 #include <windows.h>
-#include <shlwapi.h>
 #include <icm.h>
 
 #if(WINVER < 0x0500)
@@ -44,6 +46,21 @@ int do_plot(double *x, double *y1, double *y2, double *y3, int n);
 #define CM_CMYK_COLOR       0x00000004
 
 #endif	/* !COLORMGMTCAPS */
+
+/* Avoid shlwapi.h - there are problems in using it in latter SDKs */
+#ifndef WINSHLWAPI
+#define WINSHLWAPI DECLSPEC_IMPORT
+#endif
+
+WINSHLWAPI LPSTR WINAPI PathFindFileNameA(LPCSTR);
+WINSHLWAPI LPWSTR WINAPI PathFindFileNameW(LPCWSTR);
+
+#ifdef UNICODE
+#define PathFindFileName PathFindFileNameW
+#else
+#define PathFindFileName PathFindFileNameA
+#endif
+
 #endif /* NT */
 
 #ifdef __APPLE__	/* Assume OSX Carbon */

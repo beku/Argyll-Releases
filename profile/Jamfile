@@ -7,11 +7,11 @@ PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 #Products
 Libraries = libprof ;
 Executables = cb2cgats kodak2cgats logo2cgats splitcgats mppcheck mpprof
-              profcheck invprofcheck verify colprof sepgen ;
+              profcheck invprofcheck verify colprof printcal applycal sepgen ;
 Headers = prof.h ;
 Samples = example.sp example121.sp 3dap5k.sp GTIPlus.sp Office.sp Trulux.sp TruluxPlus.sp
-		D50_0.0.sp D50_0.3.sp D50_0.5.sp D50_0.7.sp D50_1.0.sp D50_1.2.sp
-		D50_1.5.sp D50_1.7.sp D50_2.0.sp D50_2.5.sp D50_3.0.sp ;
+		D50_0.0.sp D50_0.1.sp D50_0.3.sp D50_0.5.sp D50_0.7.sp D50_1.0.sp D50_1.2.sp
+		D50_1.5.sp D50_1.7.sp D50_2.0.sp D50_2.5.sp D50_3.0.sp CIE_C.sp ;
 
 #Install
 InstallBin ../bin : $(Executables) ;
@@ -26,7 +26,8 @@ HDRS = ../h ../icc ../cgats ../rspl
 Library libprof : profin.c profout.c ;
 
 
-LINKLIBS = ../rspl/librspl ../icc/libicc ../cgats/libcgats ../numlib/libnum ../plot/libplot ;
+LINKLIBS = ../rspl/librspl ../icc/libicc ../cgats/libcgats ../numlib/libnum ../plot/libplot
+           ../plot/libvrml ;
 
 # Simple profile generator
 Main simpprof : simpprof.c ;
@@ -67,6 +68,12 @@ LINKLIBS = libprof ../gamut/libgammap $(LINKLIBS) $(TIFFLIB) ;
 
 # Full profile generator
 Main colprof : colprof.c : : : $(TIFFINC) ;
+
+# Print calibration
+Main printcal : printcal.c : : : $(TIFFINC) ;
+
+# Applying calibration
+Main applycal : applycal.c ;
 
 # Optimised Separation Generator
 Main sepgen : sepgen.c ;

@@ -11,7 +11,7 @@
  * Copyright 1996 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -25,7 +25,9 @@
 #define MXDO 8			/* Maximum output dimensionality (Is not fully tested!!!) */
 #define LOG2MXDI 3		/* log2 MXDI */
 #define DEF2MXDI 16		/* Default allocation size for 2^di */
+#define POW2MXDI 256	/* 2 ^ MXDI */
 #define DEF3MXDI 81		/* Default allocation size for 3^di */
+#define POW3MXDI 6561	/* 3 ^ MXDI */
 
 #if MXDI > MXDO		/* Maximum of either DI or DO */
 # define MXDIDO MXDI
@@ -78,12 +80,19 @@ typedef struct {
 	double w;			/* Weight to give this point, nominally 1.0 */ 
 } cow;
 
-/* Scattered data Per data point data */
+/* Interface coordinate value + per out component weighting */
+typedef struct {
+	double p[MXDI];		/* coordinate position */
+	double v[MXDO];		/* function values */
+	double w[MXDO];		/* Weight to give this point, nominally 1.0 */ 
+} coww;
+
+/* Scattered data Per data point data (internal) */
 struct _rpnts {
 	double p[MXRI];		/* Data position [di] */
 	double v[MXRO];		/* Data value    [fdi] */
-	double k;			/* Weight factor (nominally 1.0, less for lower confidence data point) */
-	double kx;			/* Extra weight factor for extra fit adjustment */
+	double k[MXRO];		/* Weight factor (nominally 1.0, less for lower confidence data point) */
+	double cv[MXRO];	/* Extra fit corrected v[fdi] */
 }; typedef struct _rpnts rpnts;
 
 /* Hermite interpolation magic data */
@@ -95,6 +104,7 @@ typedef struct {
 } magic_data;
 
 #include "rev.h"			/* Reverse interpolation defintions */
+#include "gam.h"			/* Gamut defintions */
 
 /* Structure for final resolution multi-dimensional regularized spline data */
 struct _rspl {
@@ -118,12 +128,11 @@ struct _rspl {
 					/* Function to set from */
 
 	/* Scattered Data point related information */
-	int xf;			/* Extra fitting flag - change local smoothing in second round */
-	int inc;		/* Flag - Incremental scattered data mode */
-	int sinit;		/* Flag - Grid has been initialised from scattered data */
+	int zf;			/* Extra fitting flag - Compensate for data fit errors each round */
+	int tpsm;		/* Two pass smoothing flag (if set to 1). */
+	int tpsm2;		/* Two pass smoothing 2nd pass flag */
 	struct {
 		int no;			/* Number of data points in array */
-		int ano;		/* Number of data points added last time around (incremental) */
 		rpnts *a;		/* Array of data points */
 		datao vl,vw;	/* Data value low/width - used to normalize smoothness values */
 		datao va;		/* Data value averages */
@@ -143,11 +152,13 @@ struct _rspl {
 						/* This is used to map from the input domain to the grid */
 
 		datao fmin, fmax;	/* Min & max values of grid output (function) variables */
+		int fminx[MXDO], fmaxx[MXDO];	/* Grid indexes of points that set min/max output values */
 		double fscale;		/* Overall magnitude of output values */
-		double *iwidth[MXDI]; /* Optional relative grid cell width for each input dim cell, */
-						/* gres[]-1 entries per dimension. Allows for the possibility of */
+		double *ipos[MXDI]; /* Optional relative grid cell position for each input dim cell, */
+						/* gres[] entries per dimension. Allows for the possibility of */
 						/* a non-uniform grid spacing, by adjusting the curvature evaluation */
 						/* appropriately. */
+		double **ccv;		/* Curvature compensation array for current outpu (May be NULL) */
 		int fminmax_valid;	/* Min/max/scale cached values valid flag. */
 		int limitv_cached;	/* Flag: Ink limit values have been set in the grid array */
 
@@ -157,7 +168,7 @@ struct _rspl {
 						/* Array is res[] ^ di entries float[fdi+G_XTRA], offset by G_XTRA */
 						/* (But is expanded when spline interpolaton is active) */
 						/* float[-1] contains the ink limit function value, L_UNINIT if not initd */
-						/* float[-2] contains the edge flag values. */
+						/* float[-2] contains the edge flag values, 2 bits per in dim. */
 						/* float[-3] contains the touched flag generation count. */
 						/* (k value for non-linear fit would be another entry.) */
 						/* Flag values are 3 bits for each dimension. Bits 1,0 form */
@@ -167,7 +178,7 @@ struct _rspl {
 						/* with the two MS bits spare. */
 		int pss;		/* Grid point structure size = fdi+G_XTRA */
 
-		/* Uninigialised limit value */
+		/* Uninitialised limit value */
 #define L_UNINIT ((float)-1e38)
 
 		/* Macros to access flags. Arguments are a pointer to base grid point and  */
@@ -196,6 +207,13 @@ struct _rspl {
 		unsigned int touch;	/* Cell touched flag count */
 	} g;
 
+
+	/* Ink limit related information */
+	int limiten;		/* Flag - limiting is enabled */
+	double (*limitf)(void *cntx, double *in);	/* Optional input space qualifier function. */
+	void *lcntx;		/* Context passed to limit() */
+	double limitv;		/* Value not to be exceeded by limit() */
+
 	/* Hermite spline interpolation support */
 	struct {
 		magic_data *magic;	/* Magic matrix - non-zero elements only, Non-NULL if splining */
@@ -204,6 +222,9 @@ struct _rspl {
 						/* Changes from float g.a[res ^ di][fdi+G_XTRA], offset by G_XTRA, */
 						/* to float g.a[res ^ di][(2^di * fdi)+G_XTRA], offset by G_XTRA, */
 	} spline;
+
+	/* Gamut support */
+	gam_struct gam;		/* See gam.h */
 
 	/* Reverse Interpolation support */
 	rev_struct rev;		/* See rev.h */
@@ -214,11 +235,13 @@ struct _rspl {
 	void (*del)(struct _rspl *ss);
 
 	/* Combination lags used by various functions */
+	/* NOTE that RSPL_2PASSSMTH and RSPL_EXTRAFIT2 are available, but the smoothing */
+	/* factors are not setup for them, and they are not sufficiently different from the */
+	/* default smoothing to be useful. */
 #define RSPL_NOFLAGS      0x0000
-#define RSPL_EXTRAFIT     0x0002	/* Enable extra fitting effort by relaxing smoothing */
+#define RSPL_2PASSSMTH    0x0001	/* Use gaussian filter in 2nd pass to smooth */
+#define RSPL_EXTRAFIT2    0x0002	/* Compensate for data errors each round */
 #define RSPL_SYMDOMAIN    0x0004	/* Maintain symetric smoothness with nonsym. resolution */
-#define RSPL_INCREMENTAL  0x0008	/* Enable adding more data points */ 
-#define RSPL_FINAL        0x0010	/* Signal to add_rspl() that this is the last points */
 #define RSPL_SET_APXLS    0x0020	/* For set_rspl, adjust samples for aproximate least squares */
 #define RSPL_FASTREVSETUP 0x0010	/* Do a fast reverse setup at the cost of subsequent speed */
 #define RSPL_VERBOSE      0x8000	/* Turn on print progress messages */
@@ -242,8 +265,8 @@ struct _rspl {
 		                /* Average Deviation of function values as proportion of function range, */
 						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
 						/* NULL = default 0.005 */
-		double *iwidth[MXDI] /* Optional relative grid cell width for each input dim cell, */
-						/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
+		double *ipos[MXDI] /* Optional relative grid cell position for each input dim cell, */
+						/* gres[] entries per dimension. Used to scale smoothness criteria */
 	); 
 
 	/* Initialise from scattered data, with per point weighting. RESTRICTED SIZE */
@@ -264,8 +287,30 @@ struct _rspl {
 		                /* Average Deviation of function values as proportion of function range, */
 						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
 						/* NULL = default 0.005 */
-		double *iwidth[MXDI] /* Optional relative grid cell width for each input dim cell, */
-						/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
+		double *ipos[MXDI] /* Optional relative grid cell position for each input dim cell, */
+						/* gres[] entries per dimension. Used to scale smoothness criteria */
+	);
+
+	/* Initialise from scattered data, with per point individual out weighting. */
+	/* RESTRICTED SIZE Return non-zero if result is non-monotonic */
+	int
+	(*fit_rspl_ww)(
+		struct _rspl *s,	/* this */
+		int flags,		/* Combination of flags */
+		coww *d,		/* Array holding position, function and weight values of data points */
+		int ndp,		/* Number of data points */
+		datai glow,		/* Grid low scale - will expand to enclose data, NULL = default 0.0 */
+		datai ghigh,	/* Grid high scale - will expand to enclose data, NULL = default 1.0 */
+		int gres[MXDI],	/* Spline grid resolution, ncells = gres-1 */
+		datao vlow,		/* Data value low normalize, NULL = default 0.0 */
+		datao vhigh,	/* Data value high normalize - NULL = default 1.0 */
+		double smooth,	/* Smoothing factor, 0.0 = default 1.0 */
+		double avgdev[MXDO],
+		                /* Average Deviation of function values as proportion of function range, */
+						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
+						/* NULL = default 0.005 */
+		double *ipos[MXDI] /* Optional relative grid cell position for each input dim cell, */
+						/* gres[] entries per dimension. Used to scale smoothness criteria */
 	);
 
 	/* Initialise from scattered data, with weak default function. */
@@ -287,8 +332,8 @@ struct _rspl {
 		                /* Average Deviation of function values as proportion of function range, */
 						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
 						/* NULL = default 0.005 */
-		double *iwidth[MXDI], /* Optional relative grid cell width for each input dim cell, */
-						/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
+		double *ipos[MXDI],/* Optional relative grid cell position for each input dim cell, */
+						/* gres[] entries per dimension. Used to scale smoothness criteria */
 		double weak,	/* Weak weighting, nominal = 1.0 */
 		void *cbntx,	/* Opaque function context */
 		void (*func)(void *cbntx, double *out, double *in)		/* Function to set from */
@@ -313,25 +358,15 @@ struct _rspl {
 		                /* Average Deviation of function values as proportion of function range, */
 						/* typical value 0.005 (aprox. = 0.564 times the standard deviation) */
 						/* NULL = default 0.005 */
-		double *iwidth[MXDI], /* Optional relative grid cell width for each input dim cell, */
-						/* gres[]-1 entries per dimension. Used to scale smoothness criteria */
+		double *ipos[MXDI],/* Optional relative grid cell position for each input dim cell, */
+						/* gres[] entries per dimension. Used to scale smoothness criteria */
 		double weak,	/* Weak weighting, nominal = 1.0 */
 		void *cbntx,	/* Opaque function context */
 		void (*func)(void *cbntx, double *out, double *in)		/* Function to set from */
 	);
 
-	/* If the incremental flag was set on the fit_rspl call, add more points */
-	/* to the rspl and update it. */
-	int
-	(*add_rspl)(
-		struct _rspl *s,/* this */
-		int flags,		/* Combination of flags */
-		co *d,			/* Array holding position and function values of data points */
-		int ndp			/* Number of data points to add */
-	);
-
 	/* Initialize the grid from a provided function. By default the grid */
-	/* values are set to exactly the value returned fy func(), unless the */
+	/* values are set to exactly the value returned by func(), unless the */
 	/* RSPL_SET_APXLS flag is set, in which case an attempt is made to have */
 	/* the grid points represent a least squares aproximation to the underlying */
 	/* surface. */
@@ -340,7 +375,7 @@ struct _rspl {
 	int
 	(*set_rspl)(
 		struct _rspl *s,	/* this */
-		int flags,		/* Combination of flags (not used) */
+		int flags,		/* Combination of flags */
 		void *cbntx,	/* Opaque function context */
 		void (*func)(void *cbntx, double *out, double *in),		/* Function to set from */
 		datai glow,		/* Grid low scale - will expand to enclose data, NULL = default 0.0 */
@@ -431,21 +466,35 @@ struct _rspl {
 
 	/* ------------------------------- */
 
-	/* Set the ink limit information for any reverse interpolation. RESTRICTED SIZE */
+	/* Create a surface gamut representation. */
+	/* Return NZ on error */
+	int (*comp_gamut)(struct _rspl *s,
+		double *cent,		/* Optional center of gamut [fdi], default center of out range */
+		double *scale,		/* Optional Scale of output values in vector to center [fdi] */
+							/*               default 1.0 */
+		void (*outf)(void *cntxf, double *out, double *in),	/* Optional rspl val -> output value */
+		void *cntxf,					/* Context for function */
+		void (*outb)(void *cntxb, double *out, double *in),	/* Optional output value -> rspl val */
+		void *cntxb						/* Context for function */
+	);
+
+	/* ------------------------------- */
+
+	/* Set the ink limit information for any reverse interpolation. */
 	/* Calling this will clear the reverse interpolaton cache. */
 	void (*rev_set_limit)(
 		struct _rspl *s,	/* this */
-		double (*limit)(void *lcntx, double *in),	/* Optional input space limit function. */
+		double (*limitf)(void *lcntx, double *in),	/* Optional input space limit function. */
 		                	/* Function should evaluate in[0..di-1], and return number */
 		                	/* that is not to exceed limitv. NULL if not used. */
 		void *lcntx,		/* Context passed to limit() */
 		double limitv		/* Value that limit() is not to exceed */
 	);
 
-	/* Get the ink limit information for any reverse interpolation. RESTRICTED SIZE */
+	/* Get the ink limit information for any reverse interpolation. */
 	void (*rev_get_limit)(
 		struct _rspl *s,	/* this */
-		double (**limit)(void *lcntx, double *in),
+		double (**limitf)(void *lcntx, double *in),
 							/* Return pointer to function of NULL if not set */
 		void **lcntx,		/* return context pointer */
 		double *limitv		/* Return limit value */
@@ -454,9 +503,12 @@ struct _rspl {
 	/* Possible reverse hint flags */
 #define RSPL_WILLCLIP 0x0001		/* Hint that clipping will be needed */
 #define RSPL_EXACTAUX 0x0002		/* Hint that auxiliary target will be matched exactly */
-#define RSPL_AUXLOCUS 0x0004		/* Auxiliary target is proportion of locus, not */
+#define RSPL_MAXAUX   0x0004		/* If not possible to match exactly, return the */
+									/* closest value larger than the target, rather than */
+									/* absolute closest. */
+#define RSPL_AUXLOCUS 0x0008		/* Auxiliary target is proportion of locus, not */
 									/* absolute. Implies EXACTAUX hint. */
-#define RSPL_NEARCLIP 0x0008		/* If clipping occurs, return the nearest solution, */
+#define RSPL_NEARCLIP 0x0010		/* If clipping occurs, return the nearest solution, */
 									/* rather than the one in the clip direction. */
 
 	/* Return value masks */
@@ -511,6 +563,9 @@ struct _rspl {
 	void (*get_out_range)(
 		struct _rspl *s,			/* this */
 		double *min, double *max);	/* Return min/max values */
+
+	/* return the grid index of the grid values at the min & max output values */
+	void (*get_out_range_points)(struct _rspl *s, int *minp, int *maxp);
 
 	/* return the overall scale of the output values contained in the grid */
 	double (*get_out_scale)(struct _rspl *s);

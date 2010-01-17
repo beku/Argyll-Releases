@@ -72,7 +72,7 @@ Orange + Green + Light CM</span><br style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 11: CMYK + Light
 CM + Medium CM</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="targen.html#D">-D colorant</a><span
+ style="font-family: monospace;" href="#D">-D colorant</a><span
  style="font-family: monospace;"> &nbsp;&nbsp;&nbsp; Add or
 delete colorant from combination:</span><br
  style="font-family: monospace;">
@@ -136,10 +136,13 @@ Medium Yellow</span><br style="font-family: monospace;">
 Black</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 18: Light Light
-Black</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
+Black<br>
+&nbsp;<a href="#G">-G</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Generate good optimzed points rather than Fast<br
+ style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#e">-e patches</a><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; White
+ style="font-family: monospace;"> &nbsp;&nbsp;&nbsp;&nbsp; White
 color test patches (default 4)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#s">-s steps</a><span
@@ -154,8 +157,8 @@ Gray axis RGB or CMY steps (default 0)</span><br
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#m">-m steps</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Multidimensional device space cube steps (default 2)</span><br
- style="font-family: monospace;">
+Multidimensional device space
+cube steps (default 2)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#f">-f patches</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Add
@@ -181,9 +184,15 @@ Default is Optimised Farthest Point Sampling (OFPS)<br
 <span style="font-family: monospace;">&nbsp; </span><a
  style="font-family: monospace;" href="#q">-q</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; Use device space-filling quasi-random for full spread</span><br
+&nbsp; &nbsp; Use device space-filling quasi-random for full spread<br>
+</span></small><small><span style="font-family: monospace;">&nbsp; </span><a
+ style="font-family: monospace;" href="#Q">-Q</a><span
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp; </span><a
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; Use perceptual space-filling quasi-random for full spread</span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp; </span><a
  style="font-family: monospace;" href="#i">-i</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; Use device space body centered cubic grid for full spread</span><br
@@ -201,8 +210,8 @@ Simplex grid angle 0.0 - 0.5 for B.C.C. grid, default -2047840407</span><br
 <span style="font-family: monospace;">&nbsp; </span><a
  style="font-family: monospace;" href="#A">-A adaptation</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Degree
-of adaptation for preconditioning in OFPS 0.0 - 1.0 (default 0.0)</span><br
- style="font-family: monospace;">
+of adaptation of OFPS 0.0 - 1.0 (default 0.1, 1.0 if -c profile
+provided)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#t">-t</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -212,9 +221,14 @@ iterative)</span><br style="font-family: monospace;">
  style="font-family: monospace;" href="#l">-l ilimit</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Total
-ink limit in %(default = none, or estimated from profile)</span><br
+ink limit in %(default = none, or estimated from profile)<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#p">-p power</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Optional power applied to all device values.</span></small><br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#c">-c profile</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Optional device ICC or MPP pre-conditioning profile filename</span><br
@@ -229,7 +243,7 @@ outside Lab sphere.</span><br style="font-family: monospace;">
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Dump diagnostic outfile.wrl file (Lab locations)<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="targen.html#W">-W</a><span
+ style="font-family: monospace;" href="#W">-W</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Dump diagnostic outfile.wrl file (Device locations)</span></small><br
@@ -272,12 +286,15 @@ will
 be black. If no colorspace is specified, subtractive CMYK is assumed as
 a default.<br>
 <br>
-<a name="D"></a> The <b>-D</b> parameter Adds or Deletes a single
-colorant from the colorspace colorant set. This flag can be specified
-multiple times to build up a custom colorant combination, or delete
-multiple colorants from a colorspace set. A pseudo colorant "Additive"
-allows specifying an additive colorspace rather than subtractive. To
-list the known colorants, use -?? or --- as a parameter.<br>
+<a name="D"></a> The <b>-D</b> parameter modifies the colorspace set
+by <span style="font-weight: bold;">-d</span> by allowing individual
+colorants to be added or subtracted from the colorspace.<br>
+<br>
+<a name="G"></a> The <b>-G</b> flag changes the Incremental Far Point
+Distribution
+algorithm from fast to good mode. Fast mode uses a limited number of
+iterations to optimize the patch locations, while good mode strives for
+a more even patch distribution by using more iterations.<br>
 <br>
 The composition of the test patches is controlled by the following
 flags and parameters:<br>
@@ -291,9 +308,17 @@ single point.<br>
 <br>
 <a name="s"></a> The <b>-s</b> parameter sets the number of patches
 in a set of per colorant wedges. The steps are evenly spaced in device
-space, and the total number of test patches will be the number of
+space by default, and the total number of test patches will be the
+number of
 colorants
-times the value specified with the -s flag. By default, no per colorant
+times the value specified with the -s flag. If the <span
+ style="font-weight: bold;">-p</span> parameter is provided, then,
+then the steps will be distributed according to the power value. e.g.
+the option <span style="font-weight: bold;">-s 5</span> will generate
+steps at 0.0 0.25 0.5 0.75 and 1.0, while the option <span
+ style="font-weight: bold;">-s 5 -p 2.0</span> will generate steps at
+0.0
+0.125 0.25 0.5625 and 1.0. By default, no per colorant
 test wedge values are generated. When creating a test chart for a
 device
 that will be used as a source colorspace, it is often useful to
@@ -302,8 +327,16 @@ some per colorant wedge values.<br>
 <br>
 <a name="g"></a> The <b>-g</b> parameter sets the number of patches
 in a set of combined (nominally gray) wedges. This will typically be
-equal RGB or CMY values, and will be equally spaced steps in device
-space. By
+equal RGB or CMY values, and by default will be equally spaced steps in
+device
+space. If the <span style="font-weight: bold;">-p</span> parameter is
+provided, then,
+then the steps will be distributed according to the power value. e.g.
+the option <span style="font-weight: bold;">-g 5</span>
+will generate steps at 0.0 0.25 0.5 0.75 and 1.0, while the option <span
+ style="font-weight: bold;">-g 5 -p 2.0</span> will generate steps at
+0.0
+0.125 0.25 0.5625 and 1.0. By
 default, no gray combination values are generated. When creating a test
 chart for a device that will be used as a source colorspace, it is
 often
@@ -312,7 +345,15 @@ useful to generated some per colorant wedge values.<br>
 <a name="m"></a> The <b>-m</b> parameter sets the edge size of the
 multidimensional grid of test values. The total number of patches of
 this type will be the -m parameter value to the power of the number of
-colorants. The grid steps are evenly spaced in device space. By
+colorants. The grid steps are evenly spaced in device space by default,
+but if the <span style="font-weight: bold;">-p</span> parameter is
+provided, then,
+then the steps will be distributed according to the power value. e.g.
+the option <span style="font-weight: bold;">-m 5</span>
+will generate steps at 0.0 0.25 0.5 0.75 and 1.0, while the option <span
+ style="font-weight: bold;">-m 5 -p 2.0</span> will generate steps at
+0.0
+0.125 0.25 0.5625 and 1.0. By
 default, all the device primary color combinations that fall within the
 ink limit are generated..<br>
 <br>
@@ -381,6 +422,10 @@ distribution in perceptual space.<br>
 test patch algorithm, and chooses test points with a quasi-random,
 space filling distribution in device space.<br>
 <br>
+<a name="Q"></a> The <b>-Q</b> flag overrides the default full spread
+test patch algorithm, and chooses test points with a quasi-random,
+space filling distribution in perceptual space.<br>
+<br>
 <a name="i"></a> The <b>-i</b> flag overrides the default full spread
 test patch algorithm, and chooses test points with body centered cubic
 distribution in device space.<br>
@@ -395,8 +440,12 @@ angle that the body centered grid distribution has.<br>
 <br>
 <a name="A"></a> The <b>-A <i>adaptation</i></b> parameter sets the
 degree of adaptation to the known device characteristics, used by the
-default full spread iterative &amp; adaptive algorithm.&nbsp; By
-default the adapatation is 0.0, (none).<br>
+default full spread OFPS algorithm. A profile
+should be provided using the <span style="font-weight: bold;">-c</span>
+parameter if <span style="font-weight: bold; font-style: italic;">adaptation</span>
+is set above a low level. By
+default the adaptation is 0.1 (low), and 1.0 (maximum) if <span
+ style="font-weight: bold;">-c profile</span> is provided<br>
 <br>
 <a name="l"></a> The <b>-l</b> flag and parameter sets a total ink
 limit (Total
@@ -417,18 +466,40 @@ it
 can be used during profile creation. If a profile is provided using the
 <span style="font-weight: bold;">-c</span> flag, then this will be used
 to estimate an ink limit, if none is provided with the <span
- style="font-weight: bold;">-l</span> flag. <br>
+ style="font-weight: bold;">-l</span> flag. Ink limits are, as far as
+possible, always in final calibrated device values, and the calibration
+curves from the profile provided to the <span
+ style="font-weight: bold;">-c</span> flag will be used to estimate the
+equivalent limit in the underlying pre-calibration device space values
+that targen creates.<br>
+<br>
+<a name="p"></a> The <b>-p</b> flag and parameter sets a power value
+applied to all of the device values after they are generated, <span
+ style="font-weight: bold;"></span><span style="font-weight: bold;"></span>the
+spacer colors. This can be useful in creating calibration charts for
+very non-linearly behaved devices. A value greater than 1.0 will cause
+a tighter spacing of test values near device value 0.0, while a value
+less than 1.0 will cause a tighter spacing near device value 1.0. [ <span
+ style="font-weight: bold;">Note</span> that for Print RGB space this
+is reversed, since internally a Print RGB space is treated as a CMY
+space. ]. <span style="font-weight: bold;">Note</span> that the device
+model used to create the expected patch values will not take into
+account the applied power, nor will the more complex full spread
+algorithms correctly take into account the power in generating values
+up to the ink limits.<br>
 <br>
 <a name="c"></a> The <b>-c</b> flag and parameter is used to specify
 an <a href="File_Formats.html#ICC">ICC</a> or <a
  href="File_Formats.html#MPP">MPP</a> pre-conditioning profile, for
 estimating perceptual distances and colorspace curvature, used in
-optimizing the full spread test point placement. Normally a previous
+optimizing the full spread test point placement,or in creating
+perceptualy spaced distributions. Normally a previous
 profile for this or a similar device will be used, or a simpler,
 preliminary profile will be created and used. If no such profile is
-specified, a default device space model is used.&nbsp; Note that this
+specified, a default device space model is used. Note that this
 will only have an effect if an algorithm that uses the perceptual
-placement, such as <span style="font-weight: bold;">-R -I</span>, or a
+placement, such as <span style="font-weight: bold;">-R, -Q, -I</span>,
+or the default OFPS with an
 <span style="font-weight: bold;">-A</span> value &gt; 0.0.<br>
 <br>
 <a name="F"></a> The <b>-F</b> flag and parameters is used to define

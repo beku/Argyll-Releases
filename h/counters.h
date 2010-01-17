@@ -9,7 +9,7 @@
  * Copyright 1996 - 2006, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -19,12 +19,12 @@
 /* Macros for a multi-dimensional counter. */
 /* Declare the counter name nn, maximum di mxdi, dimensions di, & count */
 
-#define DCOUNT(nn, mxdi, di, start, reset, count) 				\
+#define DCOUNT(nn, mxdi, di, start, reset, endp1) 				\
 	int nn[mxdi];	/* counter value */						\
 	int nn##_di = (di);		/* Number of dimensions */		\
 	int nn##_stt = (start);	/* start count value */			\
 	int nn##_rst = (reset);	/* reset on carry value */		\
-	int nn##_res = (count); /* last count +1 */				\
+	int nn##_res = (endp1); /* last count +1 */				\
 	int nn##_e				/* dimension index */
 
 /* Set the counter value to 0 */
@@ -52,31 +52,34 @@
 	
 /* (Do we need a version of the above that tracks the actual input coords ?) */
 /* ------------------------------------------------------- */
-/* Same as above, but allows for variable resolution on each axis */
+/* Same as above, but allows for variable resolution on each axis. */
+/* End offset is added to count[] */
 
-#define ECOUNT(nn, mxdi, di, count)				 				\
+#define ECOUNT(nn, mxdi, di, start, endp1, end_offst)		\
 	int nn[mxdi];	/* counter value */						\
 	int nn##_di = (di);		/* Number of dimensions */		\
-	int *nn##_res = (count);/* last count +1 */				\
+	int nn##_start = (start);/* Start value*/				\
+	int *nn##_res = (endp1);/* last count +1 */				\
+	int nn##_endo = (end_offst);/* Count offset */			\
 	int nn##_e				/* dimension index */
 
-/* Set the counter value to 0 */
+/* Set the counter value to start */
 #define EC_INIT(nn) 								\
 {													\
 	for (nn##_e = 0; nn##_e < nn##_di; nn##_e++)	\
-		nn[nn##_e] = 0;								\
+		nn[nn##_e] = nn##_start;					\
 	nn##_e = 0;										\
 }
 
 /* Increment the counter value */
-#define EC_INC(nn)									\
-{													\
-	for (nn##_e = 0; nn##_e < nn##_di; nn##_e++) {	\
-		nn[nn##_e]++;								\
-		if (nn[nn##_e] < nn##_res[nn##_e])			\
-			break;	/* No carry */					\
-		nn[nn##_e] = 0;								\
-	}												\
+#define EC_INC(nn)											\
+{															\
+	for (nn##_e = 0; nn##_e < nn##_di; nn##_e++) {			\
+		nn[nn##_e]++;										\
+		if (nn[nn##_e] < (nn##_res[nn##_e] + nn##_endo))	\
+			break;	/* No carry */							\
+		nn[nn##_e] = nn##_start;							\
+	}														\
 }
 
 /* After increment, expression is TRUE if counter is done */
@@ -88,7 +91,7 @@
 /* ------------------------------------------------------- */
 /* Macros combination counter */
 /* Declare the counter name nn, combinations out of total */
-/* Maximum combinations is DI+2 */
+/* mxdi should be set to maximum combinations */
 
 #define COMBO(nn, mxdi, comb, total) 				\
 	int nn[mxdi+2];			/* counter value */				\

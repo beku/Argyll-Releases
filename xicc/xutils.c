@@ -8,7 +8,7 @@
  *
  * Copyright 2000 - 2006 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -90,6 +90,7 @@ icc *read_embeded_icc(char *file_name) {
 	icmAlloc *al;
 	icmFile *fp;
 	icc *icco;
+	TIFFErrorHandler oldhandler;
 	int rv;
 
 	/* First see if the file can be opened as an ICC profile */
@@ -113,14 +114,17 @@ icc *read_embeded_icc(char *file_name) {
 	icco->del(icco);		/* icc wil fp->del() */
 
 	/* Not an ICC profile, see if it's a TIFF file */
+	oldhandler = TIFFSetWarningHandler(NULL);
 
 	if ((rh = TIFFOpen(file_name, "r")) == NULL) {
 		debug2((errout,"TIFFOpen failed for '%s'\n",file_name));
+		TIFFSetWarningHandler(oldhandler);
 		return NULL;
 	}
 
 	if (TIFFGetField(rh, TIFFTAG_ICCPROFILE, &size, &tag) == 0 || size == 0) {
 		TIFFClose(rh);
+		TIFFSetWarningHandler(oldhandler);
 		return NULL;
 	}
 
@@ -128,17 +132,20 @@ icc *read_embeded_icc(char *file_name) {
 	if ((al = new_icmAllocStd()) == NULL) {
 		debug("new_icmAllocStd failed\n");
 		TIFFClose(rh);
+		TIFFSetWarningHandler(oldhandler);
 	    return NULL;
 	}
 	if ((buf = al->malloc(al, size)) == NULL) {
 		debug("malloc of profile buffer failed\n");
 		al->del(al);
 		TIFFClose(rh);
+		TIFFSetWarningHandler(oldhandler);
 	    return NULL;
 	}
 
 	memcpy(buf, tag, size);
 	TIFFClose(rh);
+	TIFFSetWarningHandler(oldhandler);
 
 	/* Memory File fp that will free the buffer when deleted: */
 	if ((fp = new_icmFileMem_ad(buf, size, al)) == NULL) {

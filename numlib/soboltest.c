@@ -70,14 +70,14 @@ int main() {
 
 	if ((s = new_sobol(40)) == NULL) {
 		printf("new_sobol failed\n");
-		exit(-1);
+		exit(1);
 	}
 
 	for (i = 0; i < 10; i++) {
 		int j;
 		if (s->next(s, vec)) {
 			printf("Next failed\n");
-			exit(-1);
+			exit(1);
 		}
 		printf("Vector %d = ",i);
 		for (j = 0; j < 40; j++) {

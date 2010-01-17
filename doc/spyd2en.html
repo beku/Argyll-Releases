@@ -64,7 +64,13 @@ than <span style="font-style: italic;">/media</span>,<span
  style="font-style: italic;">/cdrom</span>, then you will have to mount
 the CDROM manually, and give spyd2en the path to the CDROM
 setup/setup.exe
-file as the argument <span style="font-style: italic;">inputfile</span>.<br>
+file as the argument <span style="font-style: italic;">inputfile</span>.<span
+ style="font-weight: bold;"><br>
+<br>
+NOTE </span>that under OS X 10.6 (Snow Leopard) you may need to run
+spyd2en as root to be able to mount the CDROM's ISO partition. The
+simplest way of doing this is to use the "sudo" commands. e.g. "sudo
+spyd2en", which will then ask you to enter the root password.<br>
 <br>
 If the instrument firmware pattern is successfully located, then
 spyd2en will create a <span style="font-weight: bold;">spyd2PLD.bin</span>

@@ -1,4 +1,12 @@
 
+/*
+ * Copyright 1999 Graeme W. Gill
+ * All rights reserved.
+ *
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
+ */
+
 /* Example use of dnsqe()                                                  */
 /*                                                                         */
 /*       The problem is to determine the values of X(1), X(2), ..., X(9),  */
@@ -43,6 +51,7 @@ int main(void)
 	int n = 9 /* 9 */;			/* Problem vector size */
 	double x[9];		/* Function input values */
 	double fvec[9];		/* Function output values */
+	double ss;			/* Search area */
 	int info, j;
 	double fnorm;
 	int nprint = 0;		/* Itteration debugging print = off */
@@ -54,8 +63,10 @@ int main(void)
 	/* Not supplying Jacobian, use approximation */
 
 	/*	 The following starting values provide a rough solution. */
-	for (j = 1; j <= 9; ++j)
+	for (j = 1; j <= 9; ++j) {
 		x[j - 1] = -1.f;
+	}
+	ss = 0.1;
 
 	nprint = 0;
 
@@ -65,7 +76,7 @@ int main(void)
 
 	tol = sqrt(M_DIVER);
 
-	info = dnsqe(NULL, fcn, NULL, n, x, fvec, tol, nprint);
+	info = dnsqe(NULL, fcn, NULL, n, x, ss, fvec, tol, tol, 0, nprint);
 	fnorm = denorm(n, fvec);
 	fprintf(stdout,"Final L2 norm of the residuals = %e\n",fnorm);
 	fprintf(stdout,"Exit return value = %d (1 = sucess)\n",info);

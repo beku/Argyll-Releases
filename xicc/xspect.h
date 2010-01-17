@@ -10,7 +10,7 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -51,7 +51,11 @@ typedef struct {
 #define XSPECT_XWL(PXSP, IX) \
 (((PXSP)->spec_wl_short) + (double)(IX) * (((PXSP)->spec_wl_long) - ((PXSP)->spec_wl_short))/(((PXSP)->spec_n)-1.0))
 
-/* Spectrum utility functions */
+/* Given a wavelength and the sampling ranges, compute the nearest index */
+#define XSPECT_IX(SHORT, LONG, N, WL) \
+(int)(((N)-1.0) * ((WL) - (SHORT))/((LONG) - (SHORT)) + 0.5)
+
+/* Spectrum utility functions. Return NZ if error */
 int write_xspect(char *fname, xspect *s);
 int read_xspect(xspect *sp, char *fname);
 
@@ -69,14 +73,15 @@ typedef enum {
     icxIT_none		 = 1,	/* No illuminant - self luminous spectrum */
     icxIT_custom	 = 2,	/* Custom illuminant spectrum */
     icxIT_A			 = 3,	/* Standard Illuminant A */
-    icxIT_D50		 = 4,	/* Daylight 5000K */
-    icxIT_D65		 = 5,	/* Daylight 6500K */
-    icxIT_F5		 = 6,	/* Fluorescent, Standard, 6350K, CRI 72 */
-    icxIT_F8		 = 7,	/* Fluorescent, Broad Band 5000K, CRI 95 */
-    icxIT_F10		 = 8,	/* Fluorescent Narrow Band 5000K, CRI 81 */
-	icxIT_Spectrocam = 9,	/* Spectrocam Xenon Lamp */
-    icxIT_Dtemp		 = 10,	/* Daylight at specified temperature */
-    icxIT_Ptemp		 = 11	/* Planckian at specified temperature */
+	icxIT_C          = 4,	/* Standard Illuminant C */
+    icxIT_D50		 = 5,	/* Daylight 5000K */
+    icxIT_D65		 = 6,	/* Daylight 6500K */
+    icxIT_F5		 = 7,	/* Fluorescent, Standard, 6350K, CRI 72 */
+    icxIT_F8		 = 8,	/* Fluorescent, Broad Band 5000K, CRI 95 */
+    icxIT_F10		 = 9,	/* Fluorescent Narrow Band 5000K, CRI 81 */
+	icxIT_Spectrocam = 10,	/* Spectrocam Xenon Lamp */
+    icxIT_Dtemp		 = 11,	/* Daylight at specified temperature */
+    icxIT_Ptemp		 = 12	/* Planckian at specified temperature */
 } icxIllumeType;
 
 /* Fill in an xpsect with a standard illuminant spectrum */
@@ -112,6 +117,7 @@ icxObserverType obType);	/* Type of observer */
 struct _xsp2cie {
 	/* Private: */
 	xspect illuminant;
+	int isemis;					/* nz if we are doing an emission conversion */
 	xspect observer[3];
 	int doLab;					/* Return D50 Lab result */
 
@@ -128,6 +134,7 @@ struct _xsp2cie {
 	void (*del)(struct _xsp2cie *p);
 
 	/* Convert (and possibly fwa correct) reflectance spectrum */
+	/* Note that XYZ is 0..1 range */
 	void (*convert) (struct _xsp2cie *p,	/* this */
 	                 double *out,			/* Return XYZ or D50 Lab value */
 	                 xspect *in				/* Spectrum to be converted, normalised by norm */
@@ -135,6 +142,7 @@ struct _xsp2cie {
 
 	/* Convert and also return (possibly corrected) reflectance spectrum */
 	/* Spectrum will be same wlength range and readings as input spectrum */
+	/* Note that XYZ is 0..1 range */
 	void (*sconvert) (struct _xsp2cie *p,	/* this */
 	                 xspect *sout,			/* Return corrected refl. spectrum (may be NULL) */
 	                 double *out,			/* Return XYZ or D50 Lab value (may be NULL) */
@@ -225,6 +233,15 @@ xspect *custObserver[3],/* Optional custom observer */
 double xyz[3],			/* Input XYZ value, NULL if spectrum intead */
 xspect *insp0,			/* Input spectrum value, NULL if xyz[] instead */
 int viscct);			/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
+
+/* Compute the CIE1995 CRI: Ra */
+/* Return < 0.0 on error */
+/* If invalid is not NULL, set it to nz if CRI */
+/* is invalid because the sample is not white enough. */
+double icx_CIE1995_CRI(
+int *invalid,			/* if not NULL, set to nz if invalid */
+xspect *sample			/* Illuminant sample to compute CRI of */
+);
 
 #endif /* XSPECTFM_H */
 

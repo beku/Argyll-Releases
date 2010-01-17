@@ -8,7 +8,7 @@
  *
  * Copyright 2000 - 2006 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Based on the old iccXfm class.
@@ -48,7 +48,7 @@
 /* ------------------ */
 /* Illuminant spectra */
 
-/* Dummy "no illuminant" illuminant spectra */
+/* Dummy "no illuminant" illuminant spectra used to signal an emmission */
 static xspect il_none = {
 	54, 300.0, 830.0,	/* 54 bands from 300 to 830 in 10nm steps */
 	1.0,				/* Scale factor */
@@ -69,7 +69,7 @@ static xspect il_none = {
 /* and 2856 according to the newer temerature scale. */
 static xspect il_A = {
 	107, 300.0, 830.0,	/* 107 bands from 300 to 830 nm in 5nm steps */
-	100.0,				/* Scale factor */
+	100.0,				/* Arbitrary scale factor */
 	{
 		0.930483, 1.128210, 1.357690, 1.622190, 1.925080,
 		2.269800, 2.659810, 3.098610, 3.589680, 4.136480,
@@ -96,10 +96,30 @@ static xspect il_A = {
 	}
 };
  
+/* CIE 15.2-1986 Table 1.1 */
+/* Part 1: CIE Standard Illuminant C relative spectral power distribution */
+/* This is a CIE Illuminant A combined with a filter to simulate daylight. */
+static xspect il_C = {
+	93, 320.0, 780.0,	/* 107 bands from 300 to 830 nm in 5nm steps */
+	100.0,				/* Arbitrary factor */
+	{
+		0.01,   0.20,   0.40,   1.55,   2.70,   4.85,   7.00,   9.95,   12.90,  17.20, 
+		21.40,  27.50,  33.00,  39.92,  47.40,  55.17,  63.30,  71.81,  80.60,  89.53,
+		98.10,  105.80, 112.40, 117.75, 121.50, 123.45, 124.00, 123.60, 123.10, 123.30,
+		123.80, 124.09, 123.90, 122.92, 120.70, 116.90, 112.10, 106.98, 102.30, 98.81,
+		96.90,  96.78,  98.00,  99.94,  102.10, 103.95, 105.20, 105.67, 105.30, 104.11,
+		102.30, 100.15, 97.80,  95.43,  93.20,  91.22,  89.70,  88.83,  88.40,  88.19,
+		88.10,  88.06,  88.00,  87.86,  87.80,  87.99,  88.20,  88.20,  87.90,  87.22,
+		86.30,  85.30,  84.00,  82.21,  80.20,  78.24,  76.30,  74.36,  72.40,  70.40,
+		68.30,  66.30,  64.40,  62.80,  61.50,  60.20,  59.20,  58.50,  58.10,  58.00,
+		58.20,  58.50,  59.10
+	}
+};
+ 
 /* D50 illuminant spectra */
 static xspect il_D50 = {
 	107, 300.0, 830.0,	/* 107 bands from 300 to 830 nm in 5nm steps */
-	100.0,				/* Scale factor */
+	100.0,				/* Arbitrary factor */
 	{
 		0.02, 1.03, 2.05, 4.91, 7.78, 11.26, 14.75, 16.35, 17.95, 19.48,
 		21.01, 22.48, 23.94, 25.45, 26.96, 25.72, 24.49, 27.18, 29.87, 39.59,
@@ -120,7 +140,7 @@ static xspect il_D50 = {
 /* Part 2: CIE Standard Illuminant D65 relative spectral power distribution */
 static xspect il_D65 = {
 	107, 300.0, 830.0,	/* 107 bands from 300 to 830 nm in 5nm steps */
-	100.0,				/* Scale factor */
+	100.0,				/* Arbitrary factor */
 	{
 		0.03410, 1.66430, 3.29450, 11.76520, 20.23600,
 		28.64470, 37.05350, 38.50110, 39.94880, 42.43020,
@@ -216,7 +236,7 @@ static int daylight_il(xspect *sp, double ct) {
 	sp->spec_n = 107;
 	sp->spec_wl_short = 300.0;
 	sp->spec_wl_long = 830;
-	sp->norm = 100.0;
+	sp->norm = 100.0;		/* Arbitrary */
 
 	return 0;
 }
@@ -247,7 +267,7 @@ static int planckian_il(xspect *sp, double ct) {
 		sp->spec[i] /= norm;
 
 	}
-	sp->norm = 100.0;
+	sp->norm = 100.0;		/* Arbitrary */
 
 	return 0;
 }
@@ -256,7 +276,7 @@ static int planckian_il(xspect *sp, double ct) {
 /* Fluorescent, Standard, 6350K, CRI 72 */
 static xspect il_F5 = {
 	107, 300.0, 830.0,	/* 109 bands from 300 to 830 nm in 5nm steps */
-	20.0,
+	20.0,		/* Arbitrary scale factor */
 	{
 /* 300 */	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 /* 340 */	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
@@ -279,7 +299,7 @@ static xspect il_F5 = {
 /* Fluorescent, Wide band 5000K, CRI 95 */
 static xspect il_F8 = {
 	107, 300.0, 830.0,	/* 109 bands from 300 to 830 nm in 5nm steps */
-	20.0,
+	20.0,		/* Arbitrary scale factor */
 	{
 /* 300 */	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 /* 340 */	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
@@ -303,7 +323,7 @@ static xspect il_F8 = {
 /* Fluorescent, Narrow band 5000K, CRI 81 */
 static xspect il_F10 = {
 	107, 300.0, 830.0,	/* 109 bands from 300 to 830 nm in 5nm steps */
-	20.0,
+	20.0,		/* Arbitrary scale factor */
 	{
 		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
@@ -324,7 +344,7 @@ static xspect il_F10 = {
 /* Spectrocam Xenon Lamp */
 static xspect il_Spectrocam = {
    95, 325.0, 795.0,   /* 95 bands from 325 to 795 nm in 5nm steps */
-   1.0,
+   1.0,		/* Arbitrary scale factor */
    {
 	   0.220794, 0.240550, 0.281212, 0.363042, 0.493282,
 	   0.582279, 0.657489, 0.715563, 0.797559, 0.916343,
@@ -362,6 +382,9 @@ double temp					/* Optional temperature in degrees kelvin, for Dtemp and Ptemp *
 			return 1;
 	    case icxIT_A:
 			*sp = il_A;
+			return 0;
+	    case icxIT_C:
+			*sp = il_C;
 			return 0;
 	    case icxIT_default:
 	    case icxIT_D50:
@@ -1737,6 +1760,285 @@ icxObserverType obType		/* Type of observer */
 	return 1;
 }
 
+/* ----------------------------------- */
+/* Standard refelective sample spectra */
+
+/* Ra CRI Test Color Samples */ 
+static xspect CIE1995_TCS[] = {
+
+	/* TCS01  7.5 R 6/4  Light greyish red */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.12, 0.14, 0.16, 0.19, 0.22, 0.24, 0.25, 0.26, 0.26, 0.25, 
+			0.25, 0.25, 0.24, 0.24, 0.24, 0.23, 0.23, 0.23, 0.23, 0.22, 
+			0.22, 0.22, 0.22, 0.21, 0.21, 0.21, 0.22, 0.22, 0.22, 0.23, 
+			0.23, 0.23, 0.23, 0.23, 0.23, 0.23, 0.24, 0.25, 0.25, 0.26, 
+			0.27, 0.28, 0.3, 0.32, 0.34, 0.37, 0.39, 0.41, 0.42, 0.44, 
+			0.44, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 
+			0.45, 0.45, 0.45, 0.45, 0.46, 0.46, 0.46, 0.46, 0.46, 0.46, 
+			0.46, 0.47, 0.47, 0.47, 0.47, 0.47, 0.47, 0.47, 0.47, 0.47, 
+			0.47, 0.47, 0.47, 0.47, 0.47, 0.47, 0.47, 0.47, 0.47, 0.47, 
+			0.47, 0.47, 0.47, 0.46, 0.46 
+		}
+	},
+	/* TCS02  5 Y6/4  Dark greyish yellow */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.05, 0.06, 0.06, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 
+			0.12, 0.12, 0.12, 0.12, 0.12, 0.12, 0.12, 0.12, 0.13, 0.13, 
+			0.13, 0.13, 0.14, 0.14, 0.15, 0.16, 0.17, 0.19, 0.21, 0.23, 
+			0.24, 0.25, 0.26, 0.26, 0.27, 0.27, 0.27, 0.28, 0.28, 0.29, 
+			0.3, 0.31, 0.32, 0.33, 0.34, 0.34, 0.34, 0.34, 0.34, 0.34, 
+			0.34, 0.34, 0.34, 0.34, 0.34, 0.34, 0.34, 0.34, 0.34, 0.34, 
+			0.33, 0.33, 0.33, 0.33, 0.33, 0.33, 0.33, 0.33, 0.33, 0.33, 
+			0.33, 0.33, 0.32, 0.32, 0.32, 0.32, 0.32, 0.32, 0.32, 0.32, 
+			0.32, 0.32, 0.32, 0.31, 0.31, 0.31, 0.31, 0.31, 0.31, 0.31, 
+			0.31, 0.31, 0.31, 0.31, 0.31
+		}
+	},
+	/* TCS03  5 GY 6/8  Strong yellow green */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.06, 0.06, 0.06, 0.06, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 
+			0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.08, 
+			0.08, 0.08, 0.09, 0.09, 0.11, 0.13, 0.15, 0.17, 0.2, 0.22, 
+			0.24, 0.26, 0.28, 0.3, 0.34, 0.37, 0.39, 0.4, 0.4, 0.39, 
+			0.38, 0.37, 0.35, 0.33, 0.32, 0.3, 0.29, 0.27, 0.26, 0.26, 
+			0.25, 0.25, 0.24, 0.24, 0.23, 0.22, 0.22, 0.22, 0.22, 0.22, 
+			0.22, 0.22, 0.23, 0.24, 0.25, 0.27, 0.29, 0.31, 0.34, 0.37, 
+			0.39, 0.41, 0.43, 0.45, 0.46, 0.47, 0.48, 0.49, 0.49, 0.5, 
+			0.5, 0.5, 0.51, 0.51, 0.52, 0.52, 0.52, 0.53, 0.53, 0.54, 
+			0.54, 0.54, 0.55, 0.55, 0.56
+		}
+	},
+	/* TCS04  2.5 G 6/6  Moderate yellowish green */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.06, 0.06, 0.06, 0.07, 0.07, 0.08, 0.09, 0.11, 0.12, 0.12, 
+			0.12, 0.13, 0.13, 0.13, 0.14, 0.14, 0.14, 0.15, 0.16, 0.17, 
+			0.19, 0.21, 0.23, 0.25, 0.28, 0.31, 0.33, 0.35, 0.37, 0.38, 
+			0.39, 0.39, 0.4, 0.39, 0.39, 0.38, 0.37, 0.35, 0.34, 0.33, 
+			0.31, 0.3, 0.28, 0.26, 0.25, 0.23, 0.21, 0.2, 0.19, 0.18, 
+			0.17, 0.16, 0.16, 0.16, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 
+			0.15, 0.15, 0.15, 0.15, 0.16, 0.16, 0.17, 0.17, 0.17, 0.17, 
+			0.17, 0.17, 0.17, 0.16, 0.16, 0.17, 0.17, 0.17, 0.18, 0.18, 
+			0.19, 0.19, 0.19, 0.19, 0.2, 0.2, 0.2, 0.21, 0.22, 0.23, 
+			0.23, 0.24, 0.25, 0.26, 0.27
+		}
+	},
+	/* TCS05  10 BG 6/4  Light bluish green */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.14, 0.19, 0.23, 0.27, 0.3, 0.31, 0.31, 0.31, 0.31, 0.32, 
+			0.32, 0.32, 0.33, 0.33, 0.33, 0.34, 0.35, 0.35, 0.36, 0.37, 
+			0.38, 0.39, 0.4, 0.41, 0.42, 0.42, 0.42, 0.42, 0.41, 0.41, 
+			0.4, 0.4, 0.39, 0.38, 0.37, 0.36, 0.35, 0.34, 0.33, 0.32,
+			0.31, 0.3, 0.28, 0.27, 0.26, 0.25, 0.23, 0.22, 0.21, 0.2,
+			0.19, 0.19, 0.19, 0.18, 0.18, 0.18, 0.18, 0.18, 0.18, 0.18, 
+			0.18, 0.18, 0.18, 0.18, 0.19, 0.19, 0.19, 0.2, 0.2, 0.2, 
+			0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.21, 
+			0.21, 0.21, 0.22, 0.22, 0.22, 0.22, 0.23, 0.23, 0.24, 0.24, 
+			0.25, 0.26, 0.27, 0.27, 0.28
+		}
+	},
+	/* TCS06  5 PB 6/8  Light blue */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.08, 0.08, 0.09, 0.11, 0.15, 0.2, 0.27, 0.34, 0.41, 0.46, 
+			0.49, 0.51, 0.52, 0.52, 0.53, 0.54, 0.54, 0.55, 0.56, 0.56, 
+			0.55, 0.55, 0.54, 0.53, 0.52, 0.5, 0.49, 0.47, 0.45, 0.43, 
+			0.41, 0.4, 0.38, 0.36, 0.34, 0.33, 0.31, 0.29, 0.28, 0.27, 
+			0.25, 0.24, 0.23, 0.23, 0.23, 0.22, 0.22, 0.22, 0.22, 0.22, 
+			0.22, 0.22, 0.22, 0.23, 0.23, 0.24, 0.24, 0.25, 0.26, 0.26, 
+			0.27, 0.27, 0.28, 0.28, 0.28, 0.29, 0.29, 0.3, 0.3, 0.31, 
+			0.33, 0.34, 0.35, 0.36, 0.38, 0.39, 0.4, 0.41, 0.43, 0.44, 
+			0.45, 0.46, 0.47, 0.48, 0.49, 0.49, 0.5, 0.51, 0.51, 0.52, 
+			0.52, 0.53, 0.53, 0.53, 0.54
+		}
+	},
+	/* TCS07  2.5 P 6/8 Y6/4  Light violet */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.15, 0.18, 0.22, 0.29, 0.38, 0.46, 0.52, 0.55, 0.55, 0.56, 
+			0.56, 0.56, 0.56, 0.56, 0.56, 0.55, 0.54, 0.54, 0.52, 0.51, 
+			0.49, 0.47, 0.45, 0.43, 0.41, 0.39, 0.36, 0.34, 0.32, 0.31, 
+			0.3, 0.29, 0.28, 0.27, 0.27, 0.26, 0.26, 0.26, 0.26, 0.26, 
+			0.26, 0.26, 0.26, 0.25, 0.25, 0.26, 0.27, 0.28, 0.3, 0.32, 
+			0.34, 0.36, 0.38, 0.39, 0.4, 0.41, 0.42, 0.43, 0.44, 0.45, 
+			0.45, 0.46, 0.46, 0.47, 0.47, 0.47, 0.47, 0.48, 0.48, 0.49, 
+			0.5, 0.5, 0.51, 0.52, 0.53, 0.53, 0.54, 0.55, 0.55, 0.56, 
+			0.57, 0.57, 0.58, 0.58, 0.58, 0.58, 0.59, 0.59, 0.59, 0.59, 
+			0.59, 0.59, 0.59, 0.59, 0.59
+		}
+	},
+	/* TCS08  10 P 6/8  Light reddish purple */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.08, 0.08, 0.08, 0.09, 0.1, 0.13, 0.17, 0.24, 0.32, 0.42, 
+			0.46, 0.48, 0.49, 0.49, 0.48, 0.47, 0.46, 0.45, 0.44, 0.43, 
+			0.41, 0.4, 0.38, 0.37, 0.35, 0.34, 0.33, 0.31, 0.3, 0.29, 
+			0.28, 0.28, 0.27, 0.26, 0.26, 0.25, 0.25, 0.25, 0.25, 0.26, 
+			0.26, 0.27, 0.27, 0.27, 0.28, 0.28, 0.3, 0.32, 0.35, 0.38, 
+			0.43, 0.48, 0.53, 0.57, 0.6, 0.63, 0.65, 0.66, 0.68, 0.69, 
+			0.69, 0.7, 0.71, 0.71, 0.71, 0.72, 0.72, 0.72, 0.72, 0.72, 
+			0.72, 0.72, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 
+			0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 
+			0.73, 0.73, 0.73, 0.73, 0.73
+		}
+	},
+	/* TCS09  4.5 R 4/13  Strong red */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.08, 0.08, 0.08, 0.09, 0.1, 0.13, 0.17, 0.24, 0.32, 0.42, 
+			0.46, 0.48, 0.49, 0.49, 0.48, 0.47, 0.46, 0.45, 0.44, 0.43, 
+			0.41, 0.4, 0.38, 0.37, 0.35, 0.34, 0.33, 0.31, 0.3, 0.29, 
+			0.28, 0.28, 0.27, 0.26, 0.26, 0.25, 0.25, 0.25, 0.25, 0.26, 
+			0.26, 0.27, 0.27, 0.27, 0.28, 0.28, 0.3, 0.32, 0.35, 0.38, 
+			0.43, 0.48, 0.53, 0.57, 0.6, 0.63, 0.65, 0.66, 0.68, 0.69, 
+			0.69, 0.7, 0.71, 0.71, 0.71, 0.72, 0.72, 0.72, 0.72, 0.72, 
+			0.72, 0.72, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 
+			0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 0.73, 
+			0.73, 0.73, 0.73, 0.73, 0.73
+		}
+	},
+	/* TCS10  5 Y 8/10  Strong yellow */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.04, 0.04, 0.05, 0.05, 0.05, 0.05, 0.06, 0.06, 0.07, 0.07, 
+			0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.08, 0.08, 0.08, 0.09, 
+			0.1, 0.1, 0.11, 0.13, 0.14, 0.16, 0.19, 0.22, 0.26, 0.31, 
+			0.37, 0.42, 0.47, 0.51, 0.55, 0.58, 0.61, 0.63, 0.65, 0.67, 
+			0.68, 0.69, 0.69, 0.7, 0.7, 0.7, 0.71, 0.71, 0.71, 0.71,
+			0.71, 0.71, 0.71, 0.71, 0.71, 0.71, 0.71, 0.71, 0.72, 0.72, 
+			0.72, 0.72, 0.73, 0.73, 0.73, 0.74, 0.74, 0.74, 0.75, 0.75, 
+			0.75, 0.75, 0.75, 0.75, 0.76, 0.76, 0.76, 0.76, 0.76, 0.76, 
+			0.76, 0.76, 0.76, 0.76, 0.76, 0.76, 0.76, 0.76, 0.76, 0.76, 
+			0.76, 0.76, 0.76, 0.76, 0.76
+		}
+	},
+	/* TCS11  4.5 G 5/8  Strong green */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.13, 0.13, 0.12, 
+			0.12, 0.11, 0.11, 0.11, 0.1, 0.1, 0.11, 0.11, 0.11, 0.12, 
+			0.12, 0.13, 0.15, 0.17, 0.19, 0.22, 0.25, 0.29, 0.33, 0.35, 
+			0.36, 0.35, 0.35, 0.33, 0.31, 0.29, 0.27, 0.25, 0.23, 0.21, 
+			0.19, 0.17, 0.15, 0.14, 0.13, 0.11, 0.11, 0.1, 0.1, 0.09, 
+			0.09, 0.09, 0.09, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 
+			0.08, 0.08, 0.09, 0.09, 0.1, 0.11, 0.13, 0.14, 0.16, 0.18, 
+			0.2, 0.22, 0.24, 0.26, 0.27, 0.28, 0.29, 0.3, 0.31, 0.31, 
+			0.32, 0.32, 0.33, 0.33, 0.34, 0.34, 0.35, 0.35, 0.36, 0.37, 
+			0.37, 0.38, 0.39, 0.4, 0.4
+		}
+	},
+	/* TCS12  3 PB 3/11  Strong blue */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.19, 0.18, 0.16, 0.14, 0.12, 0.1, 0.09, 0.08, 0.08, 0.07, 
+			0.06, 0.07, 0.08, 0.09, 0.12, 0.16, 0.21, 0.26, 0.3, 0.33, 
+			0.35, 0.35, 0.34, 0.33, 0.31, 0.28, 0.26, 0.23, 0.2, 0.18, 
+			0.15, 0.13, 0.11, 0.09, 0.08, 0.06, 0.05, 0.04, 0.04, 0.03, 
+			0.03, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 
+			0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 
+			0.02, 0.02, 0.03, 0.03, 0.04, 0.04, 0.06, 0.07, 0.1, 0.13, 
+			0.17, 0.21, 0.26, 0.31, 0.35, 0.4, 0.45, 0.49, 0.52, 0.55, 
+			0.58, 0.6, 0.62, 0.63, 0.65, 0.66, 0.67, 0.67, 0.68, 0.69, 
+			0.69, 0.69, 0.7, 0.7, 0.7
+		}
+	},
+	/* TCS13  5 YR 8/4  Light yellowish pink */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.07, 0.08, 0.08, 0.09, 0.1, 0.13, 0.16, 0.21, 0.26, 0.31, 
+			0.34, 0.35, 0.36, 0.36, 0.36, 0.37, 0.37, 0.37, 0.37, 0.37, 
+			0.38, 0.38, 0.38, 0.39, 0.4, 0.41, 0.42, 0.43, 0.44, 0.45, 
+			0.46, 0.47, 0.47, 0.47, 0.47, 0.48, 0.48, 0.49, 0.51, 0.53, 
+			0.55, 0.58, 0.62, 0.65, 0.68, 0.7, 0.72, 0.73, 0.74, 0.74, 
+			0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 
+			0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 
+			0.75, 0.74, 0.74, 0.74, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 
+			0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 
+			0.75, 0.75, 0.75, 0.75, 0.75
+		}
+	},
+	/* TCS14  5 GY 4/4  Moderate olive green */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 
+			0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 0.05, 0.05, 0.05, 
+			0.05, 0.05, 0.05, 0.05, 0.06, 0.06, 0.06, 0.07, 0.08, 0.08, 
+			0.09, 0.1, 0.11, 0.12, 0.13, 0.14, 0.15, 0.15, 0.16, 0.15, 
+			0.15, 0.14, 0.13, 0.13, 0.12, 0.11, 0.11, 0.1, 0.1, 0.1, 
+			0.09, 0.09, 0.09, 0.09, 0.09, 0.09, 0.08, 0.08, 0.08, 0.08, 
+			0.09, 0.09, 0.09, 0.1, 0.1, 0.11, 0.12, 0.14, 0.15, 0.17, 
+			0.19, 0.21, 0.23, 0.24, 0.26, 0.28, 0.29, 0.31, 0.33, 0.34, 
+			0.35, 0.37, 0.38, 0.39, 0.4, 0.41, 0.42, 0.42, 0.43, 0.43, 
+			0.44, 0.44, 0.45, 0.45, 0.45
+		}
+	},
+	/* TCS15  1 YR 6/4  Asian skin */
+	{
+		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
+		1.0,				/* Scale factor */
+
+		{
+			0, 0, 0, 0, 0.13, 0.14, 0.15, 0.15, 0.16, 0.16, 
+			0.16, 0.17, 0.17, 0.18, 0.18, 0.19, 0.2, 0.21, 0.22, 0.23, 
+			0.24, 0.24, 0.25, 0.25, 0.26, 0.26, 0.27, 0.28, 0.28, 0.29, 
+			0.3, 0.3, 0.3, 0.29, 0.28, 0.28, 0.27, 0.28, 0.28, 0.29, 
+			0.29, 0.29, 0.29, 0.28, 0.29, 0.31, 0.35, 0.4, 0.44, 0.47, 
+			0.49, 0.51, 0.52, 0.54, 0.54, 0.55, 0.56, 0.57, 0.57, 0.58, 
+			0.58, 0.59, 0.59, 0.59, 0.6, 0.6, 0.61, 0.61, 0.61, 0.61, 
+			0.62, 0.62, 0.62, 0.62, 0.62, 0.61, 0.61, 0.61, 0.61, 0.61, 
+			0.61, 0.61, 0.61, 0.61, 0.61, 0, 0, 0, 0, 0, 
+			0, 0, 0, 0, 0
+		}
+	}
+};
+ 
+
 /* -------------------------------- */
 /* Fluorescent Whitening Agent Data */
 
@@ -1846,7 +2148,8 @@ int read_xspect(xspect *sp, char *fname) {
 	int j, ii;
 
 	/* Open and look at the spectrum file */
-	icg = new_cgats();			/* Create a CGATS structure */
+	if ((icg = new_cgats()) == NULL)	/* Create a CGATS structure */
+		error("new_cgats() failed");
 	icg->add_other(icg, "SPECT"); 	/* our special input type is spectral power or reflectance */
 
 	if (icg->read_name(icg, fname))
@@ -1887,6 +2190,8 @@ int read_xspect(xspect *sp, char *fname) {
 
 		sp->spec[j] = *((double *)icg->t[0].fdata[0][fi]);
 	}
+
+	icg->del(icg);
 
 	return 0;
 }
@@ -2584,9 +2889,13 @@ xspect *in			/* Spectrum to be converted */
 #endif /* DEBUG */
 		}
 	}
-
+	if (p->isemis) {
+		scale = 0.683;		/* Convert from mW/m^2 to Lumens/m^2 */
+	} else {
+		scale = 1.0/scale;
+	}
 	for (j = 0; j < 3; j++) {	/* Scale for illuminant/observer normalisation of Y */
-		wout[j] /= scale;
+		wout[j] *= scale;
 		if (wout[j] < 0.0)
 			wout[j] = 0.0;		/* Just to be sure we don't get silly values */
 	}
@@ -2710,8 +3019,13 @@ xspect *in			/* Spectrum to be converted */
 			out[j] += I * O * S;
 		}
 	}
+	if (p->isemis) {
+		scale = 0.683;		/* Convert from mW/m^2 to Lumens/m^2 */
+	} else {
+		scale = 1.0/scale;
+	}
 	for (j = 0; j < 3; j++) {	/* Scale for illuminant/observer normalisation of Y */
-		out[j] /= scale;
+		out[j] *= scale;
 		if (out[j] < 0.0)
 			out[j] = 0.0;		/* Just to be sure we don't get silly values */
 	}
@@ -2751,15 +3065,20 @@ icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData 
 	if ((p = (xsp2cie *) calloc(1,sizeof(xsp2cie))) == NULL)
 		return NULL;
 
+	p->isemis = 0;
 	switch (ilType) {
 	    case icxIT_none:
 			p->illuminant = il_none;			/* Emissive */
+			p->isemis = 1;
 			break;
 	    case icxIT_custom:
 			p->illuminant = *custIllum;
 			break;
 	    case icxIT_A:
 			p->illuminant = il_A;
+			break;
+	    case icxIT_C:
+			p->illuminant = il_C;
 			break;
 	    case icxIT_default:
 	    case icxIT_D50:
@@ -3168,8 +3487,8 @@ static double cct_func(void *fdata, double tp[]) {
 			rv = icmCIE2Ksq(lab1, lab2);
 		} else {
 			/* Use original CIE 1960 UCS space color difference */
-			icmXYZ2UCS(wp, lab1, x->xyz);
-			icmXYZ2UCS(wp, lab2, xyz);
+			icmXYZ21960UCS(lab1, x->xyz);
+			icmXYZ21960UCS(lab2, xyz);
 			rv = icmLabDEsq(lab1, lab2);
 		}
 	}
@@ -3237,7 +3556,7 @@ int viscct				/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
 	s[0] = 500.0;
 
 	/* Locate the CCT */
-	if (powell(&rv, 1, cp, s, 0.01, 1000, cct_func, (void *)&x) != 0) {
+	if (powell(&rv, 1, cp, s, 0.01, 1000, cct_func, (void *)&x, NULL, NULL) != 0) {
 		x.conv->del(x.conv);
 		return -1.0;
 	}
@@ -3245,11 +3564,17 @@ int viscct				/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
 	if (txyz != NULL) {
 		xspect sp;
 		if (x.ilType == icxIT_Dtemp) {
-			if (daylight_il(&sp, cp[0]) != 0)
-				rv = 1e6;
+			if (daylight_il(&sp, cp[0]) != 0) {
+				x.conv->del(x.conv);
+				txyz[0] = txyz[2] = txyz[1] = cp[0] = 0.0;
+				return cp[0];
+			}
 		} else {
-			if (planckian_il(&sp, cp[0]) != 0)
-				rv = 1e6;
+			if (planckian_il(&sp, cp[0]) != 0) {
+				x.conv->del(x.conv);
+				txyz[0] = txyz[2] = txyz[1] = cp[0] = 0.0;
+				return cp[0];
+			}
 		}
 		x.conv->convert(x.conv, txyz, &sp);
 		/* Make sure locus XYZ is Normalised */
@@ -3263,6 +3588,159 @@ int viscct				/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
 	return cp[0];
 }
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Convert UCS Yuv to chromatic adaptation Ycd */
+static void UCSYuv2Ycd(double *out, double *in) {
+	double u, v;
+	u = in[1];
+	v = in[2];
+
+	out[0] = in[0];
+	out[1] = (4.0 - u - 10.0 * v)/v;
+	out[2] = (1.708 * v - 1.481 * u + 0.404)/v;
+}
+
+
+
+/* Compute the CIE1995 CRI: Ra */
+/* Return < 0.0 on error */
+/* If invalid is not NULL, set it to nz if CRI */
+/* is invalid because the sample is not white enough. */
+double icx_CIE1995_CRI(
+int *invalid,			/* if not NULL, set to nz if invalid */
+xspect *sample			/* Illuminant sample to compute CRI of */
+) {
+	int i;
+	double cct;
+	xspect wts;			/* Reference white spectrum */
+	xsp2cie *tocie;
+	double wt[3];		/* Reference white in CIE 1960 UCS */
+	icmXYZNumber wtn;
+	double wt_Ycd[3];	/* Ycd reference white */
+	double sa[3];		/* Sample white in CIE 1960 UCS */
+	double sa_Ycd[3];	/* Ycd sample white */
+	double dc;			/* delta of sample to reference white in 1960 UCS */
+	double ref[8][3];	/* reference XYZ/1964 color space */
+	double sam[8][3];	/* sample XYZ/1964 color space */
+	double c_ad, d_ad;	/* Chromatic adaptation scaling factors */
+	double cri = 0.0;
+	
+//printf("~1 icx_CIE1995_CRI called\n");
+
+	/* First find the standard 2 degree observer plankian CCT */
+	if ((cct = icx_XYZ2ill_ct(NULL, icxIT_Ptemp, icxOT_CIE_1931_2, NULL, NULL, sample, 0)) < 0.0)
+		return -1.0;   
+
+//printf("~1 CCT = %f\n", cct);
+
+	/* Create a reference white spectrum with the same CCT */
+	if (cct < 5000.0) {
+		if (planckian_il(&wts, cct))
+			return -1.0;
+	} else {
+		if (daylight_il(&wts, cct))
+			return -1.0;
+	}
+
+	if ((tocie = new_xsp2cie(icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigXYZData)) == NULL)
+		return -1.0;   
+
+	/* Compute the XYZ of the reference white and sample */
+	tocie->convert(tocie, wt, &wts);
+	tocie->convert(tocie, sa, sample);
+
+//printf("~1 XYZ white = %f %f %f\n",wt[0],wt[1],wt[2]);
+//printf("~1 XYZ sampl = %f %f %f\n",sa[0],sa[1],sa[2]);
+
+	/* Normalize the spectra so as to create a normalized white */
+	wts.norm *= wt[1];
+	sample->norm *= sa[1];			/* ~~~ shouldn't change sample!!!! ~~~~ */
+	tocie->convert(tocie, wt, &wts);
+	tocie->convert(tocie, sa, sample);
+	tocie->del(tocie);
+
+//printf("~1 norm XYZ white = %f %f %f\n",wt[0],wt[1],wt[2]);
+//printf("~1 norm XYZ sampl = %f %f %f\n",sa[0],sa[1],sa[2]);
+
+	/* Convert to perceptual CIE 1960 UCS */
+	icmAry2XYZ(wtn, wt);		/* Use reference white as UCS white */
+	icmXYZ21960UCS(wt, wt);		/* 1960 UCS Yuv reference white */
+	UCSYuv2Ycd(wt_Ycd, wt);		/* Ycd version for chromatic adapation */
+	icmXYZ21960UCS(sa, sa);		/* 1960 UCS Yuv sample white */
+	UCSYuv2Ycd(sa_Ycd, sa);		/* Ycd version for chromatic adapation */
+
+	c_ad = wt_Ycd[1]/sa_Ycd[1];	/* Chromatic adaptation scaling factors */
+	d_ad = wt_Ycd[2]/sa_Ycd[2];
+	
+//printf("~1 UCS white = %f %f %f\n",wt[0],wt[1],wt[2]);
+//printf("~1 UCS sampl = %f %f %f\n",sa[0],sa[1],sa[2]);
+
+	dc = sqrt((wt[1] - sa[1]) * (wt[1] - sa[1]) + (wt[2] - sa[2]) * (wt[2] - sa[2]));
+
+//printf("~1 dc = %f\n",dc);
+//if (dc > 0.0054) printf("~1 CRI is invalid\n");
+
+	/* If dc > 0.0054 we should abort computing the CRI, */
+	/* but this means we fail on lots of real world lighting. */
+	if (invalid != NULL) {
+		if (dc > 0.0054)
+			*invalid = 1;
+		else
+			*invalid = 0;
+	}
+		
+	/* Check out the delta E for each reflective sample */
+	if ((tocie = new_xsp2cie(icxIT_custom, &wts, icxOT_CIE_1931_2, NULL, icSigXYZData)) == NULL)
+		return -1.0;   
+	for (i = 0; i < 8; i++) {
+		tocie->convert(tocie, ref[i], &CIE1995_TCS[i]);
+		icmXYZ21964WUV(&wtn, ref[i], ref[i]);
+//printf("~1 ref samp %d = WUV %f %f %f\n", i,ref[i][0],ref[i][1],ref[i][2]);
+	}
+	tocie->del(tocie);
+
+	if ((tocie = new_xsp2cie(icxIT_custom, sample, icxOT_CIE_1931_2, NULL, icSigXYZData)) == NULL)
+		return -1.0;   
+	for (i = 0; i < 8; i++) {
+		double c, d;
+		tocie->convert(tocie, sam[i], &CIE1995_TCS[i]);
+
+		icmXYZ21960UCS(sam[i], sam[i]);
+
+		/* Do chromatic adaptation */
+		UCSYuv2Ycd(sam[i], sam[i]);
+		c = sam[i][1];
+		d = sam[i][2];
+		sam[i][1] = (10.872 + 0.404 * c * c_ad - 4.0 * d * d_ad)/
+		            (16.518 + 1.481 * c * c_ad - 1.0 * d * d_ad);
+
+		sam[i][2] = (5.520)/
+		            (16.518 + 1.481 * c * c_ad - 1.0 * d * d_ad);
+
+		icm1960UCS21964WUV(&wtn, sam[i], sam[i]);
+
+//printf("~1 sam samp %d = WUV %f %f %f\n", i,sam[i][0],sam[i][1],sam[i][2]);
+	}
+	tocie->del(tocie);
+
+	/* Compute the CRI */
+	for (i = 0; i < 8; i++) {
+		double de, tcri;
+
+		de = icmLabDE(ref[i], sam[i]);
+		tcri = 100.0 - 4.6 * de;
+//printf("~1 sample %d: de = %f, CRI = %f\n",i,de,tcri);
+		cri += tcri;
+	}
+	cri /= 8.0;
+
+//printf("~1 average CRI = %f\n",cri);
+	if (cri < 0.0)
+		cri = -1.0;
+
+//printf("~1 returning CRI = %f\n",cri);
+	return cri;
+}
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 

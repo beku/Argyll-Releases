@@ -68,11 +68,13 @@ spectral)<br>
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; Save CIE as D50 L*a*b* rather than XYZ<br>
-</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#a">-a</a><span
- style="font-family: monospace;">
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; Save patch locations to output as well</span></small><br>
+&nbsp;<a href="#r">-r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Resume reading partly read chart<br>
+&nbsp;<a href="#I">-I</a>
+file.cal&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Override calibration
+info from .ti2 in resulting .ti3</span></small><small><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span></small><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#N">-N</a><span
  style="font-family: monospace;">
@@ -91,7 +93,7 @@ spectral)<br>
 &nbsp;<a href="#T">-T ratio</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Modify strip patch consistency tollerance by ratio (if available)<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="dispcal.html#W">-W n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ href="#W">-W n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><br
  style="font-family: monospace;">
 <small><span style="font-family: monospace;"></span><small
@@ -186,7 +188,8 @@ values are expected to be scaled to a maximum of 100. It is possible to
 navigate about the test values being measured, so as to do them in any
 order, as well as re-do values, in case of any mistakes.<br>
 <br>
-<a name="n"></a> By default spectral information as well as D50
+<a name="n"></a> <span style="font-weight: bold;">-n</span> By default
+spectral information as well as D50
 standard observer XYZ values
 will be recorded for each test patch, when such readings are available
 from a device. The spectral readings allow for
@@ -198,19 +201,46 @@ when creating the profile. If the spectral readings are not needed,
 then
 prinread operation can be speeded up by specifying the <b>-n</b> flag.<br>
 <br>
-<a name="l"></a> By default D50
+<a name="l"></a> <span style="font-weight: bold;">-l</span> By default
+D50
 standard observer XYZ values
 will be recorded for each test patch, but if the <span
  style="font-weight: bold;"><span style="font-weight: bold;">-l</span></span>
 flag is used, D50 L*a*b* values will be recorded instead.<br>
 <br>
-<a name="a"></a> Normally the patch locations are not needed in the
-output, but if a chart is being read as an input reference (for use in
-profiling a scanner or a camera), then the patch locations will still
-be needed. The <span style="font-weight: bold;">-a</span> flag adds
-the locations to the output .ti3 file.<br>
+<a name="r"></a> <span style="font-weight: bold;">-r</span> By default
+chartread reads the chart from scratch each time. When reading a chart
+using a strip instrument or patch by patch you can choose to finish
+chartread without reading all the patches, and whatever patches have
+been read will be saved to the output .ti3 file. You can then <span
+ style="text-decoration: underline;">resume</span> reading the patches
+by using the <span style="font-weight: bold;">-r</span> flag, in which
+case chartread will read the .ti3 file and set the patches to those
+previously read values, allowing any unread patches to then be read, or
+to re-read previously read patches.<br>
 <br>
-<a name="N"></a> Many instruments automatically ask for an instrument
+<a name="I"></a> <span style="font-weight: bold;">-I</span> <span
+ style="font-style: italic;">file.cal</span>&nbsp; Normally per channel
+calibration curves are added to the .ti2 file using the <span
+ style="font-weight: bold;">printtarg -K</span> or <span
+ style="font-weight: bold;">-I</span> options, so that they will be
+passed on to the .ti3 file by&nbsp; <span style="font-weight: bold;">chartread</span>,
+so that <span style="font-weight: bold;">colprof</span> is able to
+correctly compute total ink limits. Where the calibration is being
+applied in a workflow with native calibration capability<small><span
+ style="font-family: monospace;"></span></small> though, it is
+sometimes convenient to re-use a profile chart with different
+calibration curves without going through the process of using <span
+ style="font-weight: bold;">printtarg</span> to re-create it. This
+would mean though, that the calibration information and subsequent ink
+limit calculations wouldn't be accurate. To overcome this and allow
+such a scenario, the <span style="font-weight: bold;">chartread -I</span>
+parameter allows overriding the .ti2 calibration curves placed in the
+resulting .ti3 file with the actual calibration that was used for that
+particular print.<br>
+<br>
+<a name="N"></a> <span style="font-weight: bold;">-N</span> Many
+instruments automatically ask for an instrument
 calibration before each set of readings. Sometimes this can be awkward
 if the instrument is being mounted in some sort of measuring jig, or
 annoying if several sets of readings are being taken in quick
@@ -220,10 +250,12 @@ calibration recorded in the instrument or on the host computer. It is
 advisable to only use this option on the second and subsequent
 measurements in a single session.<br>
 <br>
-<a name="B"></a> Some strip instruments (i.e.. Eye-One Pro) when used
+<a name="B"></a> <span style="font-weight: bold;">-B</span> Some strip
+instruments (i.e.. Eye-One Pro, Color Munki) when used
 with Argyll will automatically recognize a strip when read in the
-reverse direction, by matching the patch readings against their
-expected values. If the expected values are not known accurately
+reverse direction by matching the patch readings against their
+expected values. If the randomized patch layout has not been used, or
+the expected values are not known accurately
 enough, this may cause erroneous reverse recognition, so the <span
  style="font-weight: bold;">-<span style="font-weight: bold;">B</span></span>
 flag allows this to be turned off, forcing strips to only be read in
@@ -265,7 +297,9 @@ down why an instrument can't connect.<br>
 name of the .ti2 file,
 and chartread will output an .ti3 that has the same basename and the
 .ti3
-extension.<br>
+extension. If the incoming .ti2 file contains per-channel calibration
+curves, these will be passed through to the .ti3 so that accurate ink
+limits can be computed during profiling.<br>
 <br>
 <hr style="width: 50%; height: 2px;">
 <h3>Discussion</h3>

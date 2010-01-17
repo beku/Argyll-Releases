@@ -46,7 +46,7 @@ n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nb
 [Not X11] Choose the display from the following list (default 1)<br
  style="font-family: monospace;">
 </span></font><font size="-1"><span style="font-family: monospace;"></span><span
- style="font-family: monospace;">&nbsp;<a href="#p">-p ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ style="font-family: monospace;">&nbsp;<a href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Position test window and scale it</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -65,20 +65,23 @@ Fill whole screen with black background</span></font><br
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; Run forever with random values<br>
-&nbsp;<a href="#G">-G</a> <span style="font-style: italic;">filename</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;<a href="#G">-G <span style="font-style: italic;">filename</span></a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Display RGB colors from CGATS file<br>
 &nbsp;</span></font><font size="-1"><a style="font-family: monospace;"
  href="#m">-m</a><span style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; Manually step through colors</span></font><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#r">-r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Test just video LUT loading<br>
+Test just video LUT loading &amp; Beeps<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#n">-n</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Test native display values (rather than through Video LUT)</span></font><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="dispwin.html#c">-c</a>
+Test native display values (rather than through Video LUT)<br>
+&nbsp;<a href="#s">-s <span style="font-style: italic;">filename.cal</span></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Save the currently loaded Video LUT to 'filename'<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="#c">-c</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Load a linear display calibration (clear calibration)</span></font><font
  size="-1"><span style="font-family: monospace;"><br>
@@ -101,8 +104,7 @@ Specify the install/uninstall scope for OS X [nlu] or Vista [lu]<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 d is one of: n = network, l = local system, u = user (default)<br>
 </span></font><font size="-1"><span style="font-family: monospace;"></span></font><font
- size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="dispwin.html#L">-L</a>
+ size="-1"><span style="font-family: monospace;">&nbsp;<a href="#L">-L</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></font><font size="-1"><span style="font-family: monospace;">Load
 installed profiles cal. into Video LUT<br>
@@ -188,7 +190,7 @@ screens the test patches appear on. You may be able to calibrate one
 screen, and then share the calibration with another screen. Profiling
 can be done independently to calibration.<br>
 <br>
-<a name="p"></a> The <span style="font-weight: bold;">-p</span>
+<a name="P"></a> The <span style="font-weight: bold;">-P</span>
 parameter allows you to position and size the test patch window. By
 default it is places in the center of the screen, and sized
 appropriately for the type of instrument. The <span
@@ -204,7 +206,7 @@ produce a double size window. Note that the ho,vo,ss numbers must be
 specified as a single string (no space between the numbers and the
 comma).<br>
 For example, to create a double sized test window at the top right of
-the screen, use <span style="font-weight: bold;">-p 1,0,2</span> .<br>
+the screen, use <span style="font-weight: bold;">-P 1,0,2</span> .<br>
 <br>
 <a name="F"></a> The <span style="font-weight: bold;">-F</span>
 flag causes the while screen behind the test window to be masked with
@@ -243,13 +245,21 @@ flag is set, then <span style="font-weight: bold;">dispwin</span> will
 display the colors directly on the display, rather than having the
 color values translated through the currently loaded Video LUTs.<br>
 <br>
+<a name="s"></a> If a <span style="font-weight: bold;">-s <span
+ style="font-style: italic;">filename.cal</span></span> option
+is used, then rather than displaying a test window, <span
+ style="font-weight: bold;">dispwin</span>
+will save the currently loaded calibration curves to the given
+calibration file. Note that other functions such as clearing or loading
+a calibration can be performed after this action.<br>
+<br>
 <a name="c"></a> If a <span style="font-weight: bold;">-c</span> flag
 is used, then rather than displaying a test window, <span
  style="font-weight: bold;">dispwin</span> will load the selected
 display with a linear set of Video LUT curves, effectively clearing
-the calibration, and will then exit. Any <span
- style="font-style: italic;">calfile</span>
-will be ignored.<br>
+the calibration, and will then exit. Note that other functions such as
+loading a calibration can be performed after this action.<span
+ style="font-style: italic;"></span><br>
 <br>
 <a name="V"></a> If a <span style="font-weight: bold;">-V</span> flag
 is used, then rather than loading the calibration specified as the
@@ -292,8 +302,8 @@ for network scope, if people are sharing profiles over a network, <span
  style="font-weight: bold;">l</span>: local system scope, which
 installs the profile for all users of a system, and the default <span
  style="font-weight: bold;">u</span>, which covers just the user
-installing the profile. On Microsoft Vista, just the local system <span
- style="font-weight: bold;">l</span> and user <span
+installing the profile. On Linux or Microsoft Vista, just the local
+system <span style="font-weight: bold;">l</span> and user <span
  style="font-weight: bold;">u</span> scope are available. Note that you
 may need to run dispwin with elevated privileges to be able to
 successfully use network or local system scope. This option also

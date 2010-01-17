@@ -1,11 +1,17 @@
 
  Change History:
  
-		Further add V4 compatibility, with changes to PCS encoding. 
+ 2.10
+	
+	Added protection against crafted file integer overflows.
+
+	Many minor additions to support ArgyllCMS.
+
+	Further add V4 compatibility, with changes to PCS encoding. 
  
  2.06
 
-		Added MD5 checksum code for profile ID support.
+	Added MD5 checksum code for profile ID support.
 
  2.05
       Version in Argyll V0.51 release.

@@ -6,7 +6,7 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -57,6 +57,14 @@ int      n,			/* Dimensionality */
 double  *b,			/* B[] vector of equation */
 double  *x,			/* X[] solution to be polished */
 int     *pivx		/* Pivoting row permutations record */
+);
+
+/* Invert a matrix A using lu decomposition */
+/* Return 1 if the matrix is singular, 0 if OK */
+int
+lu_invert(
+double **a,	/* A[][] input matrix, returns LU decimposition of A */
+int      n	/* Dimensionality */
 );
 
 #ifdef __cplusplus

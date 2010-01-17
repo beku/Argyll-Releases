@@ -81,19 +81,41 @@ is used by the profiling program to determine the spectral
 characteristics of the instrument illuminant if Fluorescent Whitener
 Compensation is desired. The value shall be one of:<br>
 <br>
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "Xrite DTP20"</span><br
+ style="font-weight: bold;">
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "Xrite DTP22"</span><br
+ style="font-weight: bold;">
 <span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "Xrite DTP41"</span><br
  style="font-weight: bold;">
 <span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "Xrite DTP51"</span><br
  style="font-weight: bold;">
 <span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "Xrite DTP92"</span><br
  style="font-weight: bold;">
-<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "GretagMacbeth
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "Xrite DTP94"</span><br
+ style="font-weight: bold;">
+<span style="font-weight: bold;">&nbsp;&nbsp; "GretagMacbeth
 Spectrolino"</span><br style="font-weight: bold;">
 <span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "GretagMacbeth
 SpectroScan"</span><br style="font-weight: bold;">
 <span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "GretagMacbeth
 SpectroScanT"</span><br style="font-weight: bold;">
-<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "Spectrocam"</span><br>
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "Spectrocam"</span><br
+ style="font-weight: bold;">
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "GretagMacbeth i1
+Display"</span><br style="font-weight: bold;">
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "GretagMacbeth i1
+Monitor"</span><br style="font-weight: bold;">
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "GretagMacbeth i1
+Pro"</span><br style="font-weight: bold;">
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "X-Rite ColorMunki"</span><br
+ style="font-weight: bold;">
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "Colorimtre HCFR"</span><br
+ style="font-weight: bold;">
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "ColorVision
+Spyder2"</span><br style="font-weight: bold;">
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "Datacolor Spyder3"</span><br
+ style="font-weight: bold;">
+<span style="font-weight: bold;">&nbsp;&nbsp;&nbsp; "GretagMacbeth Huey"</span><br>
 <br>
 All instruments except the Spectrocam are assumed to have an "A" type
 illuminant (incandescent lamp of&nbsp; 2850 degrees Kelvin.)<br>
@@ -169,9 +191,16 @@ k<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2k<br>
 &nbsp;&nbsp;&nbsp; Light Light Black &nbsp; &nbsp; &nbsp;&nbsp; 1k<br>
 <br>
+There may be an a previx <span style="font-weight: bold;">i</span>
+preceeding the device space letter encoding, indicating that although
+the space appears to be an additive space, it is in fact a subtractive
+device.<br>
+<br>
 Typical values might be: "<span style="font-weight: bold;">RGB_XYZ</span>"
-or "<span style="font-weight: bold;">RGB_LAB</span>" for an RGB printer
-or display, "<span style="font-weight: bold;">CMYK_XYZ</span>" for a
+or "<span style="font-weight: bold;">RGB_LAB</span>" for an RGB
+display, "<span style="font-weight: bold;">iRGB_XYZ</span>"
+or "<span style="font-weight: bold;">iRGB_LAB</span>" for an RGB
+printer, "<span style="font-weight: bold;">CMYK_XYZ</span>" for a
 printer, "<span style="font-weight: bold;">XYZ_RGB"</span> for an RGB
 scanner.<br>
 <br>
@@ -221,6 +250,10 @@ etc. Spectral band values shall be named <span
  style="font-weight: bold;">XXX</span> is the nearest integer values of
 the number of nanometers of the band.<br>
 <br>
+Optional patch location information shall use the&nbsp; <span
+ style="font-weight: bold;">SAMPLE_LOC</span> field and shall be of
+quoted string type.<br>
+<br>
 The definition of the fields shall be terminated by the <span
  style="font-weight: bold;">END_DATA_FORMAT</span> keyword (as per
 CGATS).<br>
@@ -244,7 +277,8 @@ The end of the values of the data sets shall be marked by the <span
 Generally any other keywords and values will be ignored.<br>
 <br>
 If a second table is present, and it is a display RAMDAC calibration,
-it will be of the <a href="cal_format.html">CAL file format</a>..<br>
+printers or input devices per channel calibration curves, and will be
+of the <a href="cal_format.html">CAL file format</a>..<br>
 <br>
 </body>
 </html>

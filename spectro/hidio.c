@@ -12,7 +12,7 @@
  *
  * (Based on usbio.c)
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -41,8 +41,7 @@
 #include "usb.h"
 #include "hidio.h"
 
-#if defined(NT) && defined(ENABLE_NT_HID)
-#include <hidsdi.h>
+#if defined(NT)
 #include <setupapi.h>
 #endif
 
@@ -52,7 +51,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#ifdef __FreeBSD__ 
+#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
 #include <sys/types.h> 
 #include <usbhid.h> 
 #else	/* assume Linux */ 
@@ -74,6 +73,43 @@
 #define DBG(xxx) 
 #endif	/* DEBUG */
 
+#if defined(NT)
+
+/* Declartions to enable HID access without using the DDK */
+
+typedef struct _HIDD_ATTRIBUTES {
+	ULONG	Size;
+	USHORT	VendorID;
+	USHORT	ProductID;
+	USHORT	VersionNumber;
+} HIDD_ATTRIBUTES, *PHIDD_ATTRIBUTES;
+
+void (WINAPI *pHidD_GetHidGuid)(OUT LPGUID HidGuid) = NULL;
+BOOL (WINAPI *pHidD_GetAttributes)(IN HANDLE HidDeviceObject, OUT PHIDD_ATTRIBUTES Attributes) = NULL;
+
+/* See if we can get the wanted function calls */
+/* Return nz if OK */
+static int setup_dyn_calls() {
+	static int dyn_inited = 0;
+
+	if (dyn_inited == 0) {
+		dyn_inited = 1;
+
+		pHidD_GetHidGuid = (void (WINAPI*)(LPGUID))
+		                   GetProcAddress(LoadLibrary("HID"), "HidD_GetHidGuid");
+		pHidD_GetAttributes = (BOOL (WINAPI*)(HANDLE, PHIDD_ATTRIBUTES))
+		                      GetProcAddress(LoadLibrary("HID"), "HidD_GetAttributes");
+
+		if (pHidD_GetHidGuid == NULL
+		|| pHidD_GetAttributes == NULL)
+			dyn_inited = 0;
+	}
+	return dyn_inited;
+}
+
+#endif
+
+
 /* Add paths to USB connected instruments, to the existing */
 /* icompath paths in the icoms structure. */
 void hid_get_paths(
@@ -81,7 +117,7 @@ struct _icoms *p
 ) {
 #ifdef ENABLE_USB
 
-#if defined(NT) && defined(ENABLE_NT_HID)
+#if defined(NT)
 	{
 		GUID HidGuid;
 		HDEVINFO hdinfo;
@@ -94,8 +130,13 @@ struct _icoms *p
 		HANDLE fh;
 		HIDD_ATTRIBUTES attr;
 	
+		/* Make sure we've dynamically linked */
+		if (setup_dyn_calls() == 0) {
+        	error("Dynamic linking to hid.dll failed");
+		}
+
 		/* Get the device interface GUID for HIDClass devices */
-		HidD_GetHidGuid(&HidGuid);
+		(*pHidD_GetHidGuid)(&HidGuid);
 
 		/* Return device information for all devices of the HID class */
 		hdinfo = SetupDiGetClassDevs(&HidGuid, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE); 
@@ -125,7 +166,7 @@ struct _icoms *p
                               0, NULL)) != INVALID_HANDLE_VALUE) {
 				instType itype;
 
-				if (HidD_GetAttributes(fh, &attr) == 0) {
+				if ((*pHidD_GetAttributes)(fh, &attr) == 0) {
 					DBG((stderr,"HidD_GetAttributes failed for device %d",i))
 					CloseHandle(fh);
 					continue;
@@ -173,7 +214,7 @@ struct _icoms *p
         	error("SetupDiDestroyDeviceInfoList failed");
 
 	}
-#endif /* NT && ENABLE_NT_HID */
+#endif /* NT */
 
 #ifdef __APPLE__
 	/* On OS X the general USB driver will locate the HID devices, but */
@@ -210,9 +251,10 @@ struct _icoms *p
 					kCFAllocatorDefault, kNilOptions) != KERN_SUCCESS || hidprops == 0)
 				goto continue1;
 
-			if ((vref = CFDictionaryGetValue(hidprops, CFSTR(kIOHIDVendorIDKey))) != 0)
+			if ((vref = CFDictionaryGetValue(hidprops, CFSTR(kIOHIDVendorIDKey))) != 0) {
 				CFNumberGetValue(vref, kCFNumberIntType, &vid);
 				CFRelease(vref);
+			}
 			if ((pref = CFDictionaryGetValue(hidprops, CFSTR(kIOHIDProductIDKey))) != 0) {
 				CFNumberGetValue(pref, kCFNumberIntType, &pid);
 				CFRelease(pref);
@@ -311,10 +353,10 @@ void hid_del_hid_device(hid_device *hev) {
 	if (hev == NULL)
 		return;
 
-#if defined(NT) && defined(ENABLE_NT_HID)
+#if defined(NT)
 	if (hev->dpath != NULL)
 		free(hev->dpath);
-#endif /* NT && ENABLE_NT_HID */
+#endif /* NT */
 #ifdef __APPLE__
 	if (hev->ioob != 0)
 	    IOObjectRelease(hev->ioob);		/* Release found object */
@@ -331,7 +373,7 @@ instType hid_is_hid_portno(
 ) {
 	
 	if (p->paths == NULL)
-		icoms_get_paths(p);
+		p->get_paths(p);
 
 	if (port <= 0 || port > p->npaths)
 		error("icoms - set_ser_port: port number out of range!");
@@ -355,10 +397,10 @@ void hid_close_port(icoms *p) {
 
 	if (p->is_open && p->hidd != NULL) {
 
-#if defined(NT) && defined(ENABLE_NT_HID)
+#if defined(NT) 
 		CloseHandle(p->hidd->ols.hEvent);
 		CloseHandle(p->hidd->fh);
-#endif /* NT && ENABLE_NT_HID */
+#endif /* NT */
 
 #ifdef __APPLE__
 	    IOObjectRelease(p->hidd->port);
@@ -422,7 +464,7 @@ icomuflags hidflags	/* Any special handling flags */
 		}
 
 		if (p->paths == NULL)
-			icoms_get_paths(p);
+			p->get_paths(p);
 
 		if (port <= 0 || port > p->npaths)
 			error("icoms - hid_open_port: port number out of range!");
@@ -442,7 +484,7 @@ icomuflags hidflags	/* Any special handling flags */
 		p->hidd = p->ppath->hev;		/* A more convenient copy */
 		p->uflags = hidflags;
 
-#if defined(NT) && defined(ENABLE_NT_HID)
+#if defined(NT) 
 		{
 			/* Open the device */
   			if ((p->hidd->fh = CreateFile(p->hidd->dpath, GENERIC_READ|GENERIC_WRITE,
@@ -454,7 +496,7 @@ icomuflags hidflags	/* Any special handling flags */
   			if ((p->hidd->ols.hEvent = CreateEvent(NULL, 0, 0, NULL)) == NULL)
 				error("Failed to create HID Event'\n");
 		}
-#endif /* NT && ENABLE_NT_HID */
+#endif /* NT */
 
 #ifdef __APPLE__
 		{
@@ -547,7 +589,7 @@ icoms_hid_read_th(icoms *p,
 	if (!p->is_open)
 		error("icoms_hid_read: not initialised");
 
-#if defined(NT) && defined(ENABLE_NT_HID)
+#if defined(NT)
 	{
 		unsigned char *rbuf2;
 
@@ -555,7 +597,7 @@ icoms_hid_read_th(icoms *p,
 		if ((rbuf2 = malloc(bsize + 1)) == NULL)
 			error("icoms_hid_write, malloc failed");
 		rbuf2[0] = 0;
-		if (ReadFile(p->hidd->fh, rbuf2, bsize+1, &bread, &p->hidd->ols) == 0)  {
+		if (ReadFile(p->hidd->fh, rbuf2, bsize+1, (LPDWORD)&bread, &p->hidd->ols) == 0)  {
 			if (GetLastError() != ERROR_IO_PENDING) {
 				lerr = ICOM_USBR; 
 			} else {
@@ -577,7 +619,7 @@ icoms_hid_read_th(icoms *p,
 		memcpy(rbuf,rbuf2+1,bsize);
 		free(rbuf2);
 	}
-#endif /* NT && ENABLE_NT_HID */
+#endif /* NT */
 
 #ifdef ENABLE_USB
 #ifdef __APPLE__
@@ -670,7 +712,7 @@ icoms_hid_write_th(icoms *p,
 
 #ifdef ENABLE_USB
 
-#if defined(NT) && defined(ENABLE_NT_HID)
+#if defined(NT)
 	{
 		unsigned char *wbuf2;
 
@@ -679,7 +721,7 @@ icoms_hid_write_th(icoms *p,
 			error("icoms_hid_write, malloc failed");
 		memcpy(wbuf2+1,wbuf,bsize);
 		wbuf2[0] = 0;		/* Extra report ID byte */
-		if (WriteFile(p->hidd->fh, wbuf2, bsize+1, &bwritten, &p->hidd->ols) == 0) { 
+		if (WriteFile(p->hidd->fh, wbuf2, bsize+1, (LPDWORD)&bwritten, &p->hidd->ols) == 0) { 
 			if (GetLastError() != ERROR_IO_PENDING) {
 				lerr = ICOM_USBW; 
 			} else {
@@ -701,7 +743,7 @@ icoms_hid_write_th(icoms *p,
 
 		free(wbuf2);
 	}
-#endif /* NT && ENABLE_NT_HID */
+#endif /* NT */
 
 #ifdef __APPLE__
 	{

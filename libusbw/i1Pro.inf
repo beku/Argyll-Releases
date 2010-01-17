@@ -1,9 +1,9 @@
 [Version]
-Signature = "$Chicago$"
+Signature = "$Windows NT$"
 provider  = ArgyllCMS
 DriverVer = 11/21/2007,0.1.12.1
 CatalogFile = i1Pro.cat
-CatalogFile.NT = i1Pro.cat
+CatalogFile.NTX86 = i1Pro.cat
 CatalogFile.NTAMD64 = i1Pro_x64.cat
 
 Class = LibUsbDevices
@@ -20,7 +20,7 @@ HKR,,,,"LibUSB-Win32 Devices"
 HKR,,Icon,,"-20"
 
 [Manufacturer]
-%manufacturer%=Devices,NT,NTAMD64
+%manufacturer%=Devices,NTX86,NTAMD64
 
 ;--------------------------------------------------------------------------
 ; Files
@@ -65,7 +65,7 @@ libusb0.dll,libusb0_x64.dll
 CopyFiles = libusb_files_sys, libusb_files_dll
 AddReg    = libusb_add_reg
 
-[LIBUSB_DEV.NT]
+[LIBUSB_DEV.NTX86]
 CopyFiles = libusb_files_sys, libusb_files_dll
 
 [LIBUSB_DEV.NTAMD64]
@@ -75,7 +75,7 @@ CopyFiles = libusb_files_sys_x64, libusb_files_dll_wow64, libusb_files_dll_x64
 DelReg = libusb_del_reg_hw
 AddReg = libusb_add_reg_hw
 
-[LIBUSB_DEV.NT.HW]
+[LIBUSB_DEV.NTX86.HW]
 DelReg = libusb_del_reg_hw
 AddReg = libusb_add_reg_hw
 
@@ -83,7 +83,7 @@ AddReg = libusb_add_reg_hw
 DelReg = libusb_del_reg_hw
 AddReg = libusb_add_reg_hw
 
-[LIBUSB_DEV.NT.Services]
+[LIBUSB_DEV.NTX86.Services]
 AddService = libusb0, 0x00000002, libusb_add_service
 
 [LIBUSB_DEV.NTAMD64.Services]
@@ -121,7 +121,7 @@ ServiceBinary  = %12%\libusb0.sys
 [Devices]
 "Eye-One Pro (Argyll)"=LIBUSB_DEV, USB\VID_0971&PID_2000
 
-[Devices.NT]
+[Devices.NTX86]
 "Eye-One Pro (Argyll)"=LIBUSB_DEV, USB\VID_0971&PID_2000
 
 [Devices.NTAMD64]

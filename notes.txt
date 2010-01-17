@@ -2,45 +2,6 @@ Misc technical notes
 --------------------
 
 
-Display Calibration
--------------------
-
-Normally you don't use the vcgt tag to calibrate the display, you use
-some other operating system mechanism to set the RAMDAC values, and then
-store the curves you arrive at in the vcgt tag, so that they will be
-loaded automatically by the operating system when that profile is used.
-(Only Apple Mac uses the vcgt tag as far as I know, although there might
-be ways of using the vcgt on windows and X11. MSWindowsXP has a
-utility available, and there is also  Stefan Doehla's "xcalib").
-
-There are four aspects I can imagine setting using the vcgt:
-	1) white point color
-	2) maximum brightness
-	3) grey balance
-	4) response curve ("Gamma" curve).
-
-Both 1) and 2) are set by the maximum values in the three vcgt curves.
-The relative values set the white point, the absolute values set the
-brightness.
-
-3) Is determined by the relative values of the three curves for
-each input value, and might be selected to give a consistent grey
-color to that set for the white point.
-
-4) Is determined by the absolute values of the three curves, and might
-be selected to make the display behave as if it had an ideal exponential
-(or truncated exponential) response.
-
--> dispcal allows for all of the above.
-
-- Would be good to have "instrument mode" to allow other (non RAMDAC)
-manual adjustments made by the user. Include "white target", "Gamma target",
-"brightness target" assistance.
-
--> dispcal allows for all of the above.
-
-
-
 Things I'd like to standardise
 ------------------------------
 

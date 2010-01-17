@@ -20,6 +20,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  *
+ * See the License3.txt file for details.
+ *
  * This program performs an average/merge with two measurement files. 
  * All files have to be in CTI3 format (use Logo2Cgats or Spec2CIE).
  * Method: First it fills key field depending on device space and looks for this key 
@@ -27,12 +29,20 @@
  * patches number.
  */
 
+/*
+	NOTE :- this should really be re-written to use xcolorants rather than
+	having hard codes RGB, CMYK and CMY !!!
+
+	It also doesn't pass the calibration information though !!!
+
+ */
+
 #include <stdio.h>
 #if defined(__IBMC__)
 #include <float.h>
 #endif
 #include "config.h"
-#include "numsup.h"
+#include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
 #include "insttypes.h"
@@ -156,6 +166,7 @@ main(int argc, char *argv[])
 	/* The device colorspace
 	*/
 	icColorSpaceSignature devspace[2] = {icmSigDefaultData, icmSigDefaultData};	
+	int isinv[2] = { 0, 0 };		/* Printer RGB ? */
 	icColorSpaceSignature space = {icmSigDefaultData};
 
 	int fa,nfa;				/* current argument we're looking at */
@@ -169,7 +180,8 @@ main(int argc, char *argv[])
 	xspect sp1;		/* spectral file data */
 	xspect sp2;		/* spectral file data */
 
-	long spNum, spLow, spHigh;
+	long spNum;
+	double spLow, spHigh;
 
 	int spi1[XSPECT_MAX_BANDS];		/* CGATS indexes for each wavelength */
 	int spi2[XSPECT_MAX_BANDS];		/* CGATS indexes for each wavelength */
@@ -296,9 +308,16 @@ main(int argc, char *argv[])
 		devspace[0] = icSigCmyData;
 	else if (strncmp(cg[0]->t[0].kdata[ti],"RGB_",4) == 0)
 		devspace[0] = icSigRgbData;
-	else{
+	else if (strncmp(cg[0]->t[0].kdata[ti],"iRGB_",5) == 0) {
+		devspace[0] = icSigRgbData;
+		isinv[0] = 1;
+	} else if (strncmp(cg[0]->t[0].kdata[ti],"K_",2) == 0) {
+		devspace[0] = icSigGrayData;
+	} else if (strncmp(cg[0]->t[0].kdata[ti],"W_",2) == 0) {
+		devspace[0] = icSigGrayData;
+	} else {
 		error("Device has unhandled color representation '%s'",cg[0]->t[0].kdata[ti]);
-		}
+	}
 
 	if (devspace[0] == icSigRgbData) {
 		if (cg[0]->find_field(cg[0], 0, "RGB_R") < 0 ||
@@ -356,7 +375,10 @@ main(int argc, char *argv[])
 		devspace[1] = icSigCmyData;
 	else if (strncmp(cg[1]->t[0].kdata[ti],"RGB_",4) == 0)
 		devspace[1] = icSigRgbData;
-	else if (strncmp(cg[1]->t[0].kdata[ti],"K_",2) == 0) {
+	else if (strncmp(cg[1]->t[0].kdata[ti],"iRGB_",5) == 0) {
+		devspace[1] = icSigRgbData;
+		isinv[1] = 1;
+	} else if (strncmp(cg[1]->t[0].kdata[ti],"K_",2) == 0) {
 		devspace[1] = icSigGrayData;
 	} else if (strncmp(cg[1]->t[0].kdata[ti],"W_",2) == 0) {
 		devspace[1] = icSigGrayData;
@@ -489,10 +511,17 @@ main(int argc, char *argv[])
 			cgf->add_field(cgf, 0, "RGB_R", r_t);nf++;
 			cgf->add_field(cgf, 0, "RGB_G", r_t);nf++;
 			cgf->add_field(cgf, 0, "RGB_B", r_t);nf++;
-			if (isLab[0] == 1 || isLab[1] == 1)
-				cgf->add_kword(cgf, 0, "COLOR_REP","RGB_LAB", NULL);
-			else
-				cgf->add_kword(cgf, 0, "COLOR_REP","RGB_XYZ", NULL);
+			if (isLab[0] == 1 || isLab[1] == 1) {
+				if (isinv[0] || isinv[1])
+					cgf->add_kword(cgf, 0, "COLOR_REP","iRGB_LAB", NULL);
+				else
+					cgf->add_kword(cgf, 0, "COLOR_REP","RGB_LAB", NULL);
+			} else {
+				if (isinv[0] || isinv[1])
+					cgf->add_kword(cgf, 0, "COLOR_REP","iRGB_XYZ", NULL);
+				else
+					cgf->add_kword(cgf, 0, "COLOR_REP","RGB_XYZ", NULL);
+			}
 			break;
 		case icSigGrayData:
 			error("Not supported space");
@@ -533,10 +562,10 @@ main(int argc, char *argv[])
 			*/
 			spNum = Min(sp1.spec_n, sp2.spec_n);
 
-			spLow = (long)sp1.spec_wl_short;
-			spLow = (long)(spLow > sp2.spec_wl_short)?sp2.spec_wl_short:spLow;
-			spHigh = (long)sp1.spec_wl_long;
-			spHigh = (long)(spHigh < sp2.spec_wl_long)?sp2.spec_wl_long:spHigh;
+			spLow = sp1.spec_wl_short;
+			spLow = (spLow > sp2.spec_wl_short)?sp2.spec_wl_short:spLow;
+			spHigh = sp1.spec_wl_long;
+			spHigh = (spHigh < sp2.spec_wl_long)?sp2.spec_wl_long:spHigh;
 
 			/* add spectral fields
 			*/
@@ -546,12 +575,6 @@ main(int argc, char *argv[])
 			cgf->add_kword(cgf, 0, "SPECTRAL_START_NM",buf, NULL);
 			sprintf(buf,"%d", spHigh);
 			cgf->add_kword(cgf, 0, "SPECTRAL_END_NM",buf, NULL);
-
-			for (j = 0; j < spNum; j++)
-				{
-				sprintf(buf,"SPEC_%03d", spLow + 10 * j);
-				cgf->add_field(cgf, 0, buf, r_t);
-				}
 
 			/* add spectral fields number to fields counter
 			*/
@@ -567,6 +590,7 @@ main(int argc, char *argv[])
 							* (spHigh - spLow) + 0.5);
 
 				sprintf(buf, "SPEC_%03d", nm);
+				cgf->add_field(cgf, 0, buf, r_t);
 				if ((spi1[j] = cg[0]->find_field (cg[0], 0, buf)) < 0)
 					error ("Input file doesn't contain field %s", buf);
 				if ((spi2[j] = cg[1]->find_field (cg[1], 0, buf)) < 0)

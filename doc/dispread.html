@@ -25,13 +25,13 @@ option.<br>
  href="#display">-display displayname</a><span
  style="font-family: monospace;"> [X11 only] Choose X11 display name<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="dispwin.html#dnm">-d n[,m]</a>
+ href="#dnm">-d n[,m]</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; [X11
 only]Choose the display from the following list (default 1),<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 and optionally choose a different display m for VideoLUT access.</span></font><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="dispwin.html#d">-d n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#d">-d
+n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Choose the display from the following list (default 1)</span></font><small
  style="font-family: monospace;"><br>
 <span style="font-family: monospace;">&nbsp;</span><a
@@ -44,14 +44,14 @@ communication port from the following list (default 1)</span></small><small
  href="#y">-y c|l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Display type, c = CRT, l = LCD</span></font><br>
 <small style="font-family: monospace;">&nbsp;<span
- style="text-decoration: underline;">-</span><a href="dispcal.html#k">k
+ style="text-decoration: underline;">-</span><a href="#k">k
 file.cal</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Apply
 display calibration file while reading<br>
 &nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; Save spectral information (default don't save)<br>
 </small><font style="font-family: monospace;" size="-1">&nbsp;<a
- href="#p">-p ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Position
 test window and scale it<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -67,8 +67,7 @@ Fill whole screen with black background</span></font><br
  style="text-decoration: underline;"></span><a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; [X11 only] Don't set override redirect on test
 window<br>
-</small><small style="font-family: monospace;">&nbsp;<a
- href="dispread.html#K">-K</a>
+</small><small style="font-family: monospace;">&nbsp;<a href="#K">-K</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; Run calibration first</small><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -80,12 +79,22 @@ Disable auto calibration of instrument<br>
 &nbsp;&nbsp;&nbsp;&nbsp; Use high resolution spectrum mode (if
 available)<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="dispcal.html#C">-C "command"</a><span
+ style="font-family: monospace;" href="#V">-V</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; Use adaptive measurement mode (if available)</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#C">-C "command"</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Invoke shell "command" each
-time a color is set</span></font><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="dispcal.html#W">-W n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+time a color is set<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#M">-M "command"</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Invoke shell "command" each
+time a color is measured</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#W">-W
+n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><br>
 <small style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print debug
@@ -114,7 +123,8 @@ images or windows on the screen at the time you run it.<br>
 <br>
 <a name="v"></a> The <b>-v</b> flag reports progress information.<br>
 <br>
-<a name="display"></a>When running on a UNIX based system that used the
+<a name="display"></a><span style="font-weight: bold;">-display</span>:
+When running on a UNIX based system that used the
 X11
 Windowing
 System, <b>dispread</b>
@@ -125,7 +135,8 @@ option. Note that if Xinerama is active, you can't select the screen
 using $DISPLAY or -display, you have to select it using the <span
  style="font-weight: bold;">-d</span> parameter.<br>
 <br>
-<a name="d"></a> By default the main display will be the location of
+<a name="d"></a> <span style="font-weight: bold;">-d</span>: By
+default the main display will be the location of
 the test window. If the system has more than
 one display or screen, an alternate display/screen can be selected with
 the <span style="font-weight: bold;">-d</span> parameter. If you
@@ -140,6 +151,7 @@ Windowing
 System, the <span style="font-weight: bold;">-d</span> parameter will
 override the screen specified by the $DISPLAY or <span
  style="font-weight: bold;">-display</span> parameter.<br>
+<br>
 <span style="font-weight: bold;">Note</span> that if a calibration file
 is provided using the <span style="font-weight: bold;">-k</span>
 option, and the VideoLUTs for a display are not accessible, <span
@@ -169,7 +181,8 @@ patches appear on. You may be able to calibrate one screen, and then
 share the calibration with another screen. Profiling can be done
 independently to calibration.<br>
 <br>
-<a name="c"></a> The instrument is assumed to communicate through a
+<a name="c"></a> <span style="font-weight: bold;">-c</span>: The
+instrument is assumed to communicate through a
 USB or serial communication port, and the port can be selected with the
 <b>-c</b>
 option,
@@ -182,15 +195,18 @@ UNIX/Linux, a list of all possible serial ports are shown, but not all
 of them may
 actually be present on your system.<br>
 <br>
-<a name="y"></a>&nbsp; Display type. Colorimeters can
+<a name="y"></a>&nbsp; <span style="font-weight: bold;">-y</span>:
+Display type. Colorimeters can
 do a more accurate job if they know what type of display technology
 they are measuring. Use <span style="font-weight: bold;">-yc</span> if
 you are
-calibrating a CRT (Cathode Ray Tube) type monitor, and use <span
- style="font-weight: bold;">-yl</span> if you are calibrating an LCD
+calibrating a CRT (Cathode Ray Tube) type monitor or Plasma type
+display, and use <span style="font-weight: bold;">-yl</span> if you
+are calibrating an LCD
 (Liquid Crystal Display).<br>
 <br>
-<a name="s"></a>By default only the colorimetric information (XYZ
+<a name="s"></a><span style="font-weight: bold;">-s</span>: By default
+only the colorimetric information (XYZ
 value)
 will be saved, but for instruments that support spectral readings (such
 as
@@ -198,16 +214,18 @@ the Gretag Spectrolino), the <b>-s</b> option will save the spectral
 readings
 to the .ti3 file as well.<br>
 <br>
-<a name="k"></a> If a display video lookup table calibration <a
- href="File_Formats.html#.cal">.cal</a> file is provided, it will be
+<a name="k"></a> <span style="font-weight: bold;">-k: </span>If a
+display video lookup table calibration <a href="File_Formats.html#.cal">.cal</a>
+file is provided, it will be
 applied to the display while the measurements are being taken, and also
 included in the resulting .ti3 data file, so that <a
  href="colprof.html">colprof</a> can include it as a <span
  style="font-weight: bold;">vcgt</span> tag in the resulting
 profile.&nbsp; The calibration file has usually been created using <a
- href="dispcal.html">dispcal</a>. <br>
+ href="dispcal.html">dispcal</a>. If a calibration file is not created,
+then the display will be read in whatever calibration state it is in.<br>
 <br>
-<a name="p"></a> The <span style="font-weight: bold;">-p</span>
+<a name="P"></a> The <span style="font-weight: bold;">-P</span>
 parameter allows you to position and size the test patch window. By
 default it is places in the center of the screen, and sized
 appropriately for the type of instrument. The <span
@@ -223,7 +241,7 @@ for instance, would produce a half sized window. A value of 2.0 will
 produce a double size window. Note that the ho,vo,ss numbers must be
 specified as a single string (no space between the numbers and the
 comma). For example, to create a double sized test window at the top
-right of the screen, use <span style="font-weight: bold;">-p 1,0,2</span>
+right of the screen, use <span style="font-weight: bold;">-P 1,0,2</span>
 .<br>
 <br>
 <a name="F"></a> The <span style="font-weight: bold;">-F</span>
@@ -231,7 +249,8 @@ flag causes the while screen behind the test window to be masked with
 black. This can aid black accuracy when measuring CRT displays or
 projectors.<br>
 <br>
-<a name="n"></a>When running on a UNIX based system that used the X11
+<a name="n"></a><span style="font-weight: bold;">-n</span>: When
+running on a UNIX based system that used the X11
 Windowing
 System, <b>dispread</b> normally selects the override redirect so that
 the
@@ -272,6 +291,13 @@ turns on high resolution spectral mode, if the instrument supports it.
 See <a href="instruments.html">Operation of particular instruments</a>
 for more details.<br>
 <br>
+<a name="V"></a> The -<span style="font-weight: bold;">V</span> option
+uses adaptive
+emission measurement mode, if the instrument supports it,
+such as the Eye-One Pro. This may give better accuracy for low level
+measurements, but may be more inconsistent overall due to the varying
+integration times. Overall measurement time will probably be longer.<br>
+<br>
 <a name="C"></a> The -<span style="font-weight: bold;">C</span> <span
  style="font-weight: bold;">"command" </span>option
 allows a method of relaying each test value to some other display than
@@ -283,7 +309,23 @@ test color as floating point numbers in the range 0.0 to 1.0. The
 script or utility should relay the given color to the screen in some
 manner (e.g. by generating a raster file of the given color and sending
 it to the display being profiled), before returning. Note that a test
-window will also be creating on the system running dispread.<br>
+window will also be created on the system running dispread.<br>
+<br>
+<a name="M"></a> The -<span style="font-weight: bold;">M</span> <span
+ style="font-weight: bold;">"command" </span>option
+allows a method of gathering each test value from some external source,
+such as an instrument that is not directly supported by Argyll. The
+given command is involked to the shell,
+with six arguments. The first three arguments are the RGB test color as
+integers in the range 0 to 255, the second three parameters are the RGB
+test color as floating point numbers in the range 0.0 to 1.0. The
+script or utility should create a file called <span
+ style="font-weight: bold;">"command.meas</span>" that contains the XYZ
+values for the given RGB (or measured from the test window) in cd/m^2
+as three numbers separated by spaces, before returning. If the command
+returns a non-zero return value,
+dispread will abort. Note that a test
+window will also be created on the system running dispread.<br>
 <br>
 <a name="W"></a>The <b>-W</b> <span style="font-weight: bold;">n|h|x</span>
 parameter overrides the default serial communications

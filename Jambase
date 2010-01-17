@@ -374,29 +374,44 @@ if $(NT)
 	}
 	else if $(MingW) || $(MINGW)
 	{
-		ECHO "Compiler is MingW" ;
-
 		MINGW           ?= $(MingW) ; 
+		TPFX             = "" ;
+
+		if [ GLOB $(MINGW)/bin : x86_64-w64-mingw32-gcc.exe ] {
+			MINGW64 = $(MINGW) ;
+        }
+		
+		if $(MINGW64) {
+			ECHO "Compiler is MingW 64 bit" ;
+			TPFX         = x86_64-w64-mingw32- ;
+			# This doesn't work on a 32 bit system because we're cross
+			# compiling and need to create build system exe's
+			# (tiff/mkversion.exe, imdi/imdi_make.exe
+		} else {
+			ECHO "Compiler is MingW" ;
+		}
+
 
 		# Basic C/C++ tools
-		AR				?= ar rusc ;
-		AS				?= as ;
-		CC				?= gcc ;
+		AR				?= $(TPFX)ar rusc ;
+		AS				?= $(TPFX)as ;
+		CC				?= $(TPFX)gcc ;
 		CCFLAGS			?= -DNT ;
 		C++				?= $(CC) ;
 		C++FLAGS		?= $(CCFLAGS) ;
 
 		OLELIBS			?= -lole32 -loleaut32 -luuid ;
 		BASELIBS		?= -lstdc++ -lgcc -lodbc32 -lwsock32 ;
-		WINLIBS			?= -lwinspool -lwinmm -lshell32 -lcomctl32 -lctl3d32
-						   -lodbc32 -ladvapi32 -lodbc32 -lwsock32 -lopengl32
-		                   -lglu32 -lshlwapi ;
-		GUILIBS			?= -lgdi32 -lmscms -lshlwapi ;
+#		WINLIBS			?= -lwinspool -lwinmm -lshell32 -lcomctl32 -lctl3d32
+#						   -lodbc32 -ladvapi32 -lodbc32 -lwsock32 -lopengl32
+#		                   -lglu32 -lshlwapi -lsetupapi ;
+		WINLIBS			?= -lshlwapi -lsetupapi ;
+		GUILIBS			?= -lgdi32 -lmscms ;
 
 		LINK			?= $(CC) ;
 		LINKFLAGS		?= ;
 		SHLINKFLAGS		?= ;
-		STDLIBS			?= -lm $(GUILIBS) ;
+		STDLIBS			?= -lm $(WINLIBS) $(GUILIBS) ;
 
 		STDHDRS			?= $(MINGW)\\include ;	
 
@@ -449,52 +464,83 @@ if $(NT)
 		DEFFLAG		 	?= /D ;						
 		UNDEFFLAG		?= "/u _" ;
 	}
-	else if $(MSVCNT) || $(MSVCDIR) || $(MSVCDir)
+	else if $(MSVCNT) || $(MSVCDIR) || $(MSVCDir) || $(VCINSTALLDIR)
 	{
-		ECHO "Compiler is VC++ 32 bit" ;
+		# Visual C++ 8.0/9.0 uses VCINSTALLDIR
+		# We assume VC++ Express + XP32 SDK has been setup
 
 		# Visual C++ 6.0 uses MSVCDIR
 
-		if $(MSVCDir) {
+		if $(VCINSTALLDIR) {
+			MSVCNT		?= $(VCINSTALLDIR) ;		
+		} else if $(MSVCDir) {
 			MSVCNT		?= $(MSVCDir) ;		
 		} else {
 			MSVCNT		?= $(MSVCDIR) ;		
 		}
 
-		# bury IA64 in the path for the SDK
+		if $(COMPILER) = MSVCPP9 {
+			ECHO "Compiler is VC++9 32 bit" ;
+			MSVCVER     = 9 ;
+		} else if $(COMPILER) = MSVCPP8 {
+			ECHO "Compiler is VC++8 32 bit" ;
+			MSVCVER     = 8 ;
+		} else {
+			ECHO "Compiler is VC++ 32 bit" ;
+			MSVCVER     = 6 ;
+		}
 
-		local I ; if $(OSPLAT) = IA64 { I = ia64\\ ; } else { I = "" ; }
+		# Add the SDK include and lib if it is present
+		if $(MSSdk) {
+			MSNTSDK ?= $(MSSdk) ;
+		} else if $(MSSDK) {
+			MSNTSDK ?= $(MSSDK) ;
+		}
+
+		# bury IA64 in the path for the SDK ???
+		# (but MSSDK already has this ?
+#		local I ; if $(CPU) = "IA64" { I = ia64\\ ; } else { I = "" ; }
+		local I ; I = "" ;
 
 		AR				?= lib /NOLOGO ;
 		AS				?= masm386 ;
 		CC				?= cl /nologo ;
 		CCFLAGS			?= /DNT ;
+		if $(MSVCVER) >= 8 {
+			CCFLAGS		+= /D_CRT_SECURE_NO_DEPRECATE=1
+                           /D_CRT_NONSTDC_NO_DEPRECATE=1 ;
+		}
 		C++				?= $(CC) ;
 		C++FLAGS		?= $(CCFLAGS) ;
 		LINK			?= link /nologo ;
 		LINKOUTFLAG		?= /out: ;
-		LINKFLAGS		?= /INCREMENTAL:NO /LIBPATH:$(MSVCNT)\\lib\\$(I) ;
+		LINKFLAGS		?= /INCREMENTAL:NO /LIBPATH:$(MSVCNT)\\lib\\$(I) /LIBPATH:$(MSNTSDK)\\lib\\$(I) ;
 		SHLINKFLAGS		?= ;
-		STDLIBS			?= 
-							libc.lib
-							oldnames.lib
-							kernel32.lib 
-							advapi32.lib		
-							user32.lib		
-							mscms.lib		
-							gdi32.lib		 
-							shlwapi.lib		 
-							shell32.lib		 
-							;
+
+		STDLIBS		?= 
+						oldnames.lib
+						kernel32.lib 
+						advapi32.lib		
+						user32.lib		
+						mscms.lib		
+						gdi32.lib		 
+						shlwapi.lib		 
+						shell32.lib		 
+						setupapi.lib
+						;
 		LINKFLAG		?= ;						
-		STDHDRS			?= $(MSVCNT)\\Include ;
+		STDHDRS			?= $(MSVCNT)\\Include $(MSNTSDK)\\Include ;
 		DEFFLAG		 	?= /D ;				
 		UNDEFFLAG		?= "/u _" ;
-		CCOPTFLAG		?= /Ox /G6 ;		
+		CCOPTFLAG		?= /Ox ;		# MSVC9 doesn't understamd GB, G6 ?
 		CCDEBUGFLAG		?= /Od /Z7 ;		
-		CCPROFFLAG		?= /Z7 ;			
-		LINKDEBUGFLAG	?= /DEBUG /PDB:NONE ;		
-		LINKPROFFLAG	?= /PROFILE ;		
+		CCPROFFLAG		?= $(CCDEBUGFLAG) ;			
+		if $(MSVCVER) = 6 {
+			LINKDEBUGFLAG	?= /DEBUG /PDB:NONE ;		
+		} else {
+			LINKDEBUGFLAG	?= /DEBUG ;	# MSVC8/9 don't understand PDB:NONE		
+		}
+		LINKPROFFLAG	?= /PROFILE $(LINKDEBUGFLAG) ;		
 		LINKOPTFLAG		?= /OPT:REF ;	
 		LINKSTRIPFLAG	?= ;
 		LINKSHSCHORIGIN	?= ;		# Executable should search it's directory for shared libraries
@@ -799,6 +845,8 @@ else if $(UNIX)
 
 	# Make things work on 64 bit Linux
 	if $(HOSTTYPE) = x86_64 {
+		ECHO "We've on a 64 bit host" ;
+		HOST64     = true ;
 		CCFLAGS	   += -m64 ;
 		C++FLAGS   += -m64 ;
 	}

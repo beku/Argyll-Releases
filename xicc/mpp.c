@@ -8,7 +8,7 @@
  *
  * Copyright 2003 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -105,6 +105,7 @@
 #if defined(__IBMC__) && defined(_M_IX86)
 #include <float.h>
 #endif
+#include "numlib.h"
 #include "cgats.h"
 #include "icc.h"
 #include "xicc.h"		/* Spectral support */
@@ -112,7 +113,6 @@
 #include "xcolorants.h"	/* Known colorants support */
 #include "insttypes.h"
 #include "gamut.h"
-#include "numlib.h"
 #include "mpp.h"
 #ifdef DOPLOT
 #include "plot.h"
@@ -122,7 +122,7 @@
 static double bandval(mpp *p, int band, double *dev);
 static double dbandval(mpp *p, double *dv, int band, double *dev);
 static void forward(mpp *p, double *spec, double *Lab, double *XYZ, double *dev);
-static int create(mpp *p, int verb, int quality, int display, double limit, int devmask,
+static int create(mpp *p, int verb, int quality, int display, double limit, inkmask devmask,
                   int spec_n, double spec_wl_short, double spec_wl_long,
                   double norm, instType itype, int nodp, mppcol *points);
 static void compute_wb(mpp *p);
@@ -180,14 +180,15 @@ static void sharp2XYZ(double *a, double *b, double *c) {
 /* Return nz on error */
 static int write_mpp(
 mpp *p,			/* This */
-char *outname	/* Filename to write to */
+char *outname,	/* Filename to write to */
+int dolab		/* If NZ, write Lab values rather than XYZ */
 ) {
 	int i, j, n;
 	time_t clk = time(0);
 	struct tm *tsp = localtime(&clk);
 	char *atm = asctime(tsp); /* Ascii time */
 	cgats *ocg;		/* CGATS structure */
-	char *ident = icx_inkmask2char(p->imask); 
+	char *ident = icx_inkmask2char(p->imask, 1); 
 	int nsetel = 0;
 	cgats_set_elem *setel;	/* Array of set value elements */
 	char buf[100];
@@ -231,9 +232,15 @@ char *outname	/* Filename to write to */
 	/* Setup the table, which holds all the model parameters. */
 	/* There is always a parameter per X Y Z or spectral band */
 	ocg->add_field(ocg, 0, "PARAMETER", nqcs_t);
-	ocg->add_field(ocg, 0, "XYZ_X", r_t);
-	ocg->add_field(ocg, 0, "XYZ_Y", r_t);
-	ocg->add_field(ocg, 0, "XYZ_Z", r_t);
+	if (dolab) {
+		ocg->add_field(ocg, 0, "LAB_L", r_t);
+		ocg->add_field(ocg, 0, "LAB_A", r_t);
+		ocg->add_field(ocg, 0, "LAB_B", r_t);
+	} else {
+		ocg->add_field(ocg, 0, "XYZ_X", r_t);
+		ocg->add_field(ocg, 0, "XYZ_Y", r_t);
+		ocg->add_field(ocg, 0, "XYZ_Z", r_t);
+	}
 	nsetel = 1 + 3;
 
 	/* Add fields for spectral values */
@@ -277,11 +284,6 @@ char *outname	/* Filename to write to */
 				
 			for (n = 0; n < (3+p->spec_n); n++)
 				setel[1+n].d = p->tc[i][n][j];
-
-#ifdef SHARPEN
-			sharp2XYZ(&setel[1+0].d, &setel[1+1].d, &setel[1+2].d);
-#endif
-	
 			ocg->add_setarr(ocg, 0, setel);
 		}
 	}
@@ -299,14 +301,11 @@ char *outname	/* Filename to write to */
 			for (n = 0; n < (3+p->spec_n); n++)
 				setel[1+n].d = p->shape[m][k][n];
 		
-#ifdef SHARPEN
-			sharp2XYZ(&setel[1+0].d, &setel[1+1].d, &setel[1+2].d);
-#endif
 			ocg->add_setarr(ocg, 0, setel);
 		}
 	}
 
-	/* Write out the combination values */
+	/* Write out the colorant combination values */
 	for (i = 0; i < p->nn; i++) {
 
 		sprintf(buf,"c_%d",i);
@@ -318,6 +317,12 @@ char *outname	/* Filename to write to */
 #ifdef SHARPEN
 		sharp2XYZ(&setel[1+0].d, &setel[1+1].d, &setel[1+2].d);
 #endif
+		if (dolab) {
+			double ttt[3];
+			ttt[0] = setel[1+0].d, ttt[1] = setel[1+1].d, ttt[2] = setel[1+2].d;
+			icmXYZ2Lab(&icmD50, ttt, ttt);
+			setel[1+0].d = ttt[0], setel[1+1].d = ttt[1], setel[1+2].d = ttt[2];
+		}
 		ocg->add_setarr(ocg, 0, setel);
 	}
 	free(setel);
@@ -343,6 +348,7 @@ char *inname	/* Filename to read from */
 	int i, j, n, ix;
 	cgats *icg;			/* input cgats structure */
 	int ti;				/* Temporary CGATs index */
+	int islab = 0;		/* nz if Lab parameters */
 
 	/* Open and look at the .mpp model printer profile */
 	icg = new_cgats();			/* Create a CGATS structure */
@@ -444,6 +450,7 @@ char *inname	/* Filename to read from */
 		int ci;						/* Parameter dentified index */
 		int  spi[3+MPP_MXBANDS];	/* CGATS indexes for each band */
 		char *xyzfname[3] = { "XYZ_X", "XYZ_Y", "XYZ_Z" };
+		char *labfname[3] = { "LAB_L", "LAB_A", "LAB_B" };
 		char buf[100];
 
 		/* See if we have spectral information available */
@@ -470,6 +477,9 @@ char *inname	/* Filename to read from */
 		if ((new_mppcol(&p->black, p->n, p->spec_n)) != 0) {
 			error("Malloc failed!");
 		}
+		if ((new_mppcol(&p->kblack, p->n, p->spec_n)) != 0) {
+			error("Malloc failed!");
+		}
 		init_shape(p); /* Allocate and init shape related parameter space */
 
 		/* Get the field indexes */
@@ -486,14 +496,28 @@ char *inname	/* Filename to read from */
 
 		for (i = 0; i < 3; i++) {	/* XYZ fields */
 			if ((spi[i] = icg->find_field(icg, 0, xyzfname[i])) < 0) {
-				sprintf(p->err, "read_mpp: Input file '%s' doesn't contain field %s",
-				        inname, xyzfname[i]);
-				return 1;
+				break;
 			}
 			if (icg->t[0].ftype[spi[i]] != r_t) {
 				sprintf(p->err, "read_mpp: Input file '%s' field %s is wrong type",
 				        inname, buf);
 				return 1;
+			}
+		}
+
+		if (i < 3) {
+			islab = 1;
+			for (i = 0; i < 3; i++) {	/* XYZ fields */
+				if ((spi[i] = icg->find_field(icg, 0, labfname[i])) < 0) {
+					sprintf(p->err, "read_mpp: Input file '%s' doesn't contain field %s or %s",
+					        inname, xyzfname[i], labfname[i]);
+					return 1;
+				}
+				if (icg->t[0].ftype[spi[i]] != r_t) {
+					sprintf(p->err, "read_mpp: Input file '%s' field %s is wrong type",
+					        inname, buf);
+					return 1;
+				}
 			}
 		}
 
@@ -533,9 +557,6 @@ char *inname	/* Filename to read from */
 					if (strcmp((char *)icg->t[0].fdata[ix][ci], buf) == 0) { 
 						for (n = 0; n < (3+p->spec_n); n++)
 							p->tc[i][n][j] = *((double *)icg->t[0].fdata[ix][spi[n]]);
-#ifdef SHARPEN
-					XYZ2sharp(&p->tc[i][0][j], &p->tc[i][1][j], &p->tc[i][2][j]);
-#endif
 						break;
 					}
 				}
@@ -557,9 +578,7 @@ char *inname	/* Filename to read from */
 					if (strcmp((char *)icg->t[0].fdata[ix][ci], buf) == 0) { 
 						for (n = 0; n < (3+p->spec_n); n++)
 							p->shape[m][k][n] = *((double *)icg->t[0].fdata[ix][spi[n]]);
-#ifdef SHARPEN
-						XYZ2sharp(&p->shape[m][k][0], &p->shape[m][k][1], &p->shape[m][k][2]);
-#endif
+
 						break;
 					}
 				}
@@ -578,6 +597,12 @@ char *inname	/* Filename to read from */
 				if (strcmp((char *)icg->t[0].fdata[ix][ci], buf) == 0) { 
 					for (n = 0; n < (3+p->spec_n); n++)
 						p->pc[i][n] = *((double *)icg->t[0].fdata[ix][spi[n]]);
+					if (islab) {
+						double tt[3];
+						tt[0] = p->pc[i][0], tt[1] = p->pc[i][1], tt[2] = p->pc[i][2];
+						icmLab2XYZ(&icmD50, tt, tt);
+						p->pc[i][0] = tt[0], p->pc[i][1] = tt[1], p->pc[i][2] = tt[2];
+					}
 #ifdef SHARPEN
 					XYZ2sharp(&p->pc[i][0], &p->pc[i][1], &p->pc[i][2]);
 #endif
@@ -598,7 +623,7 @@ char *inname	/* Filename to read from */
 /* Get various types of information about the mpp */
 static void get_info(
 mpp *p,					/* This */
-int *imask,				/* Inkmask, describing device colorspace */
+inkmask *imask,			/* Inkmask, describing device colorspace */
 int *nodchan,			/* Number of device channels */
 double *limit,			/* Total ink limit (0.0 .. devchan) */
 int *spec_n,			/* Number of spectral bands, 0 if none */
@@ -756,7 +781,8 @@ double *dev) {
 static void get_wb(
 mpp *p,						/* This */
 double *white,
-double *black	
+double *black,	
+double *kblack				/* K only black */
 ) {
 	if (white != NULL) {
 		if (p->spc == NULL) {
@@ -804,6 +830,31 @@ double *black
 				ispect.spec[j] = p->black.band[3+j];
 			
 			p->spc->convert(p->spc, black, &ispect);
+		}
+	}
+
+	if (kblack != NULL) {
+		if (p->spc == NULL) {
+			kblack[0] = p->kblack.band[0];
+			kblack[1] = p->kblack.band[1];
+			kblack[2] = p->kblack.band[2];
+#ifdef SHARPEN
+			sharp2XYZ(&kblack[0], &kblack[1], &kblack[2]);
+#endif
+			if (p->pcs == icSigLabData)
+				icmXYZ2Lab(&icmD50, kblack, kblack);
+		} else {
+			int j;
+			xspect ispect;
+	
+			ispect.norm = p->norm; 
+			ispect.spec_n = p->spec_n; 
+			ispect.spec_wl_short = p->spec_wl_short; 
+			ispect.spec_wl_long = p->spec_wl_long; 
+			for (j = 0; j < p->spec_n; j++)
+				ispect.spec[j] = p->kblack.band[3+j];
+			
+			p->spc->convert(p->spc, kblack, &ispect);
 		}
 	}
 }
@@ -870,7 +921,7 @@ double       detail		/* gamut detail level, 0.0 = def */
 ) {
 	gamut *gam;
 	int res;		/* Sample point resolution */
-	double white[3], black[3];
+	double white[3], black[3], kblack[3];
 	DCOUNT(co, p->n, 0, 0, 2);
 
 	if (detail == 0.0)
@@ -957,8 +1008,8 @@ double       detail		/* gamut detail level, 0.0 = def */
 	}
 
 	/* set the white and black points */
-	p->get_wb(p, white, black);
-	gam->setwb(gam, white, black);
+	p->get_wb(p, white, black, kblack);
+	gam->setwb(gam, white, black, kblack);
 
 	/* Set the cusp points */
 	/* Do this by scanning just 0 & 100% colorant combinations */
@@ -1035,6 +1086,7 @@ static void del_mpp(mpp *p) {
 	if (p != NULL) {
 		del_mppcol(&p->white, p->n, p->spec_n);	
 		del_mppcol(&p->black, p->n, p->spec_n);	
+		del_mppcol(&p->kblack, p->n, p->spec_n);	
 		del_mppcols(p->cols, p->nodp, p->n, p->spec_n);	/* Delete array of target points */
 		if (p->spc != NULL)
 			p->spc->del(p->spc);
@@ -1644,6 +1696,18 @@ double *maxse		/* Return maximum Error from spectral bands */
 /* - - - - - - - - - - - - - - - */
 /* Powell optimisation callbacks */
 
+/* Progress reporter for mpp powell/conjgrad  */
+static void mppprog(void *pdata, int perc) {
+	mpp *p = (mpp *)pdata;
+
+	if (p->verb) {
+		printf("\r% 3d%%",perc); 
+		if (perc == 100)
+			printf("\n");
+		fflush(stdout);
+	}
+}
+
 #ifdef NEVER		// Skip efunc1 passes for now.
 
 /* Setup test point data ready for efunc1 on the given och and oba */
@@ -1730,10 +1794,6 @@ static double efunc1(void *adata, double pv[]) {
 
 #ifdef DEBUG
 printf("~1 efunc1 itt %d/%d chan %d band %d k0 %f returning %f\n",p->oit,p->ott,k,j,pv[0],rv);
-#else
-	if (p->verb) {
-		printf("."); fflush(stdout);
-	}
 #endif
 	return rv;
 }
@@ -1828,10 +1888,6 @@ static double efunc2(void *adata, double pv[]) {
 
 #ifdef DEBUG
 printf("~1 efunc2 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
-#else
-	if (p->verb) {
-		printf("."); fflush(stdout);
-	}
 #endif
 	return rv;
 }
@@ -2141,10 +2197,6 @@ for (m = 0; m < p->n; m++) {
 
 #ifdef DEBUG
 printf("~1 dfunc2 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
-#else
-	if (p->verb) {
-		printf("."); fflush(stdout);
-	}
 #endif
 	return rv;
 }
@@ -2288,10 +2340,6 @@ static double efunc3(void *adata, double pv[]) {
 
 #ifdef DEBUG
 printf("~1 efunc3 itt %d/%d band %d (smv %f) returning %f\n",p->oit,p->ott,j,smv,rv);
-#else
-	if (p->verb) {
-		printf("."); fflush(stdout);
-	}
 #endif
 	return rv;
 }
@@ -2406,10 +2454,6 @@ static double dfunc3(void *adata, double dv[], double pv[]) {
 
 #ifdef DEBUG
 printf("~1 dfunc3 itt %d/%d band %d (smv %f) returning %f\n",p->oit,p->ott,j,smv,rv);
-#else
-	if (p->verb) {
-		printf("."); fflush(stdout);
-	}
 #endif
 	return rv;
 }
@@ -2550,10 +2594,6 @@ static double efunc4(void *adata, double pv[]) {
 
 #ifdef DEBUG
 printf("~1 efunc4 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
-#else
-	if (p->verb) {
-		printf("."); fflush(stdout);
-	}
 #endif
 	return rv;
 }
@@ -2622,10 +2662,6 @@ static double dfunc4(void *adata, double dv[], double pv[]) {
 
 #ifdef DEBUG
 printf("~1 dfunc4 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
-#else
-	if (p->verb) {
-		printf("."); fflush(stdout);
-	}
 #endif
 	return rv;
 }
@@ -2776,10 +2812,6 @@ static double efunc0(void *adata, double pv[]) {
 
 #ifdef DEBUG
 printf("~1 efunc0 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
-#else
-	if (p->verb) {
-		printf("."); fflush(stdout);
-	}
 #endif
 	return rv;
 }
@@ -3026,10 +3058,6 @@ static double dfunc0(void *adata, double dv[], double pv[]) {
 
 #ifdef DEBUG
 printf("~1 dfunc0 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
-#else
-	if (p->verb) {
-		printf("."); fflush(stdout);
-	}
 #endif
 	return rv;
 }
@@ -3120,7 +3148,7 @@ static double efuncS(void *adata, double pv[]) {
 	}
 	rv += SHAPE_PMW * 0.1 * smv/(double)p->n;	/* Don't worry about this here - SVD will cope */
 
-//printf("~1 efuncS %f %f %f %f returning %f\n",pv[0],pv[1],pv[2],pv[3],rv);
+printf("~1 efuncS %f %f %f %f returning %f\n",pv[0],pv[1],pv[2],pv[3],rv);
 	return rv;
 }
 
@@ -3175,7 +3203,7 @@ int j			/* Band being initialised */
 			sr[k] = 0.5;
 		}
 
-		if (powell(NULL, p->n, pv, sr, 0.001, 300, efuncS, (void *)p) != 0) {
+		if (powell(NULL, p->n, pv, sr, 0.001, 300, efuncS, (void *)p, NULL, NULL) != 0) {
 //printf("~1 ishape Powell failed at point %d\n",i);
 			for (k = 0; k < p->n; k++)
 				pv[k] = 0.0;
@@ -3376,12 +3404,17 @@ mpp *p
 			p->black.nv[j] = 0.0;
 		forward(p, &p->black.band[3], NULL, p->black.band, p->black.nv);
 
+		for (j = 0; j < p->n; j++)
+			p->kblack.nv[j] = 0.0;
+		forward(p, &p->kblack.band[3], NULL, p->kblack.band, p->kblack.nv);
+
 	} else {		/* Subtractive */
 		bfinds bfs;
 		double sr[MPP_MXINKS];		/* search radius */
 		double tt[MPP_MXINKS];		/* temporary */
 		int trial;
 		double rv, brv;
+		int kbset = 0;
 
 		/* Lookup white directly */
 		for (j = 0; j < p->n; j++)
@@ -3395,11 +3428,12 @@ mpp *p
 
 			for (j = 0; j < p->n; j++) {
 				if (j == bix)
-					p->black.nv[j] = 1.0;
+					p->kblack.nv[j] = 1.0;
 				else
-					p->black.nv[j] = 0.0;
+					p->kblack.nv[j] = 0.0;
 			}
-			forward(p, NULL, bfs.p2, NULL, p->black.nv);
+			forward(p, &p->kblack.band[3], bfs.p2, p->kblack.band, p->kblack.nv);
+			kbset = 1;
 
 		} else if ((p->imask & (ICX_CYAN | ICX_MAGENTA | ICX_YELLOW))
 		                    == (ICX_CYAN | ICX_MAGENTA | ICX_YELLOW)) {
@@ -3410,15 +3444,15 @@ mpp *p
 
 			for (j = 0; j < p->n; j++) {
 				if (j == cix)
-					p->black.nv[j] = 1.0;
+					p->kblack.nv[j] = 1.0;
 				else if (j == mix)
-					p->black.nv[j] = 1.0;
+					p->kblack.nv[j] = 1.0;
 				else if (j == yix)
-					p->black.nv[j] = 1.0;
+					p->kblack.nv[j] = 1.0;
 				else
-					p->black.nv[j] = 0.0;
+					p->kblack.nv[j] = 0.0;
 			}
-			forward(p, NULL, bfs.p2, NULL, p->black.nv);
+			forward(p, NULL, bfs.p2, NULL, p->kblack.nv);
 
 		} else {	/* Make direction parallel to L axis */
 			bfs.p2[0] = 0.0;
@@ -3438,7 +3472,7 @@ mpp *p
 		brv = 1e38;
 		for (trial = 0; trial < 20; trial++) {
 
-			if (powell(&rv, p->n, tt, sr, 0.00001, 500, efunc6, (void *)&bfs) == 0) {
+			if (powell(&rv, p->n, tt, sr, 0.00001, 500, efunc6, (void *)&bfs, NULL, NULL) == 0) {
 				if (rv < brv) {
 					brv = rv;
 					for (j = 0; j < p->n; j++)
@@ -3463,7 +3497,15 @@ mpp *p
 				p->black.nv[j] = 1.0;
 		}
 
+		/* Set black value */
 		forward(p, &p->black.band[3], NULL, p->black.band, p->black.nv);
+
+		/* Set K only if device doesn't have a K channel */
+		if (kbset == 0) {
+			for (j = 0; j < p->n; j++)
+				p->kblack.nv[j] = p->black.nv[j];
+			forward(p, &p->kblack.band[3], NULL, p->kblack.band, p->kblack.nv);
+		}
 
 		if (p->verb) {
 			double Lab[3];
@@ -3476,6 +3518,11 @@ mpp *p
 			icmXYZ2Lab(&icmD50, Lab, p->black.band);
 			printf("Black point %f %f %f [Lab %f %f %f]\n",
 			p->black.band[0],p->black.band[1],p->black.band[2],
+			Lab[0], Lab[1], Lab[2]);
+
+			icmXYZ2Lab(&icmD50, Lab, p->kblack.band);
+			printf("K only Black point %f %f %f [Lab %f %f %f]\n",
+			p->kblack.band[0],p->kblack.band[1],p->kblack.band[2],
 			Lab[0], Lab[1], Lab[2]);
 		}
 	}
@@ -3491,7 +3538,7 @@ static int create(
 	int quality,			/* Profile quality, 0..3 */
 	int display,			/* non-zero if display device */
 	double limit,			/* Total ink limit (if not display) */
-	int    devmask,			/* Inkmask describing device colorspace */
+	inkmask devmask,		/* Inkmask describing device colorspace */
 	int    spec_n,			/* Number of spectral bands, 0 if not valid */
 	double spec_wl_short,	/* First reading wavelength in nm (shortest) */
 	double spec_wl_long,	/* Last reading wavelength in nm (longest) */
@@ -3582,6 +3629,9 @@ static int create(
 		error("Malloc failed!");
 	}
 	if ((new_mppcol(&p->black, p->n, p->spec_n)) != 0) {
+		error("Malloc failed!");
+	}
+	if ((new_mppcol(&p->kblack, p->n, p->spec_n)) != 0) {
 		error("Malloc failed!");
 	}
 
@@ -3838,7 +3888,7 @@ printf("~1 best %d now %f\n",bk, p->pc[i][j]);
 
 				sfunc1(p);	/* Setup test point values for this chan and band */
 
-				if (powell(&resid, p->cord, pv, sr, 0.001, 100, efunc1, (void *)p) != 0)
+				if (powell(&resid, p->cord, pv, sr, 0.001, 100, efunc1, (void *)p, mppprog, (void *)p) != 0)
 					error ("Powell failed");
 	
 				/* Put results back into place */
@@ -4018,10 +4068,12 @@ printf("~1 best %d now %f\n",bk, p->pc[i][j]);
 			test_dfunc2(p, p->n * p->cord, pv);
 #endif /* TESTDFUNC */
 #ifdef NODDV
-			if (powell(&resid, p->n * p->cord, pv, sr, thr * 0.01, 200, efunc2, (void *)p) != 0)
+			if (powell(&resid, p->n * p->cord, pv, sr, thr * 0.01, 200,
+			                          efunc2, (void *)p, mppprog, (void *)p) != 0)
 				error ("Powell failed");
 #else /* !NODDV */
-			if (conjgrad(&resid, p->n * p->cord, pv, sr, thr * 0.01, 200, efunc2, dfunc2, (void *)p)!= 0)
+			if (conjgrad(&resid, p->n * p->cord, pv, sr, thr * 0.01, 200,
+			                   efunc2, dfunc2, (void *)p, mppprog, (void *)p)!= 0)
 				error ("ConjGrad failed");
 #endif /* !NODDV */
 
@@ -4062,11 +4114,13 @@ printf("~1 best %d now %f\n",bk, p->pc[i][j]);
 				test_dfunc3(p, p->nnn2, pv);
 #endif /* TESTDFUNC */
 #ifdef NODDV
-				if (powell(&resid, p->nnn2, pv, sr, thr * 0.05, 2000, efunc3, (void *)p) != 0)
+				if (powell(&resid, p->nnn2, pv, sr, thr * 0.05, 2000,
+				           efunc3, (void *)p, mppprog, (void *)p) != 0)
 					error ("Powell failed");
 
 #else /* !NODDV */
-				if (conjgrad(&resid, p->nnn2, pv, sr, thr * 0.05, 2000, efunc3, dfunc3, (void *)p) != 0.0)
+				if (conjgrad(&resid, p->nnn2, pv, sr, thr * 0.05, 2000,
+				          efunc3, dfunc3, (void *)p, mppprog, (void *)p) != 0.0)
 					error ("ConjGrad failed");
 #endif /* !NODDV */
 
@@ -4110,10 +4164,12 @@ printf("~1 best %d now %f\n",bk, p->pc[i][j]);
 			test_dfunc4(p, p->nn, pv);
 #endif /* TESTDFUNC */
 #ifdef NODDV
-			if (powell(&resid, p->nn, pv, sr, thr * 0.01, 500, efunc4, (void *)p) != 0)
+			if (powell(&resid, p->nn, pv, sr, thr * 0.01, 500,
+			                 efunc4, (void *)p, mppprog, (void *)p) != 0)
 				error ("Powell failed");
 #else /* !NODDV */
-			if (conjgrad(&resid, p->nn, pv, sr, thr * 0.01, 500, efunc4, dfunc4, (void *)p) != 0)
+			if (conjgrad(&resid, p->nn, pv, sr, thr * 0.01, 500,
+			          efunc4, dfunc4, (void *)p, mppprog, (void *)p) != 0)
 				error ("ConjGrad failed");
 #endif /* !NODDV */
 
@@ -4175,7 +4231,8 @@ printf("~1 best %d now %f\n",bk, p->pc[i][j]);
 			test_dfunc0(p, tparms, pv);
 #endif /* TESTDFUNC */
 
-			if (conjgrad(&resid, tparms, pv, sr, 0.001, 4000, efunc0, dfunc0, (void *)p) != 0)
+			if (conjgrad(&resid, tparms, pv, sr, 0.001, 4000, efunc0, dfunc0, (void *)p,
+			                                                     mppprog, (void *)p) != 0)
 				error ("ConjGrad failed");
 
 			/* Put results back into place */

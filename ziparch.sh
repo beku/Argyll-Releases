@@ -36,8 +36,8 @@ do
 			if [ ! -e ${i}/${j} ] ; then
 				echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Can't find file ${i}/${j} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
 			else 
+				dos2unix ${i}/${j}
 				cp ${i}/${j} _zipdir/${i}/${j}
-				dos2unix _zipdir/${i}/${j}
 				echo ${i}/${j} >> _ziplist
 			fi
 		done
@@ -70,8 +70,8 @@ do
 			if [ ! -e ${i}/${j} ] ; then
 				echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Can't find file ${i}/${j} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
 			else 
+				dos2unix ${i}/${j}
 				cp ${i}/${j} _zipdir/${i}/${j}
-				dos2unix _zipdir/${i}/${j}
 				echo ${i}/${j} >> _ziplist
 			fi
 		done

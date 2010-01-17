@@ -46,6 +46,9 @@
 
 #undef DEBUG
 
+#define CONFIG_FILE "color.jcnf"
+#define PROFILE_DIR "color/icc/devices/display"
+
 #ifdef DEBUG
 # define errout stderr
 # define debug(xx)	fprintf(errout, xx )
@@ -118,8 +121,8 @@ ucmm_error ucmm_install_monitor_profile(
 	                        /* the X11 display name */
 	char *profile			/* Path to profile to be installed. */
 ) {
-	char *config_file = "color.jcnf";
-	char *profile_dir = "color/icc/devices/display";
+	char *config_file = CONFIG_FILE;
+	char *profile_dir = PROFILE_DIR;
 	int i, pnl, cnl;			/* profile and configuration name length */
 	char *conf_name = NULL;		/* Configuration directory to use */
 	char *data_name = NULL;		/* Data directory to use */
@@ -492,8 +495,8 @@ ucmm_error ucmm_uninstall_monitor_profile(
 	char *display_name,		/* Fall back device association, */
 	char *profile			/* Base name of profile to be deleted. NULL if not to be deleted. */
 ) {
-	char *config_file = "color.jcnf";
-	char *profile_dir = "color/devices/display";
+	char *config_file = CONFIG_FILE;
+	char *profile_dir = PROFILE_DIR;
 	int i, pnl = -1, cnl;			/* profile and configuration name length */
 	char *conf_name = NULL;		/* Configuration directory to use */
 	char *data_name = NULL;		/* Data directory to use */

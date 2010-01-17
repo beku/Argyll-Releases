@@ -66,7 +66,7 @@ lut)</span><br style="font-family: monospace;">
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; j = CIECAM02
 Appearance Jab, J = CIECAM02 Appearance JCh<br>
 </span><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#S">-s scale</a><span
+ style="font-family: monospace;" href="#s">-s scale</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Scale device range 0.0 - scale rather than 0.0 - 1.0</span><br
  style="font-family: monospace;">
@@ -250,9 +250,9 @@ or exploring the behavior of various black generation options using
 the
 <b>-k</b> parameters. The profile must be a device profile, and the PCS
 must
-be either Lab or Jab. The plot up the neutral axis is from L or J = 100
-(white)
-to L or J = 0 (black). To examine a profiles B2A table black
+be either Lab or Jab. The plot up the neutral axis is from the white to
+the black point (scale 0 to 100%), and shows the percentage of each
+device colorant. To examine a profiles B2A table black
 generation,
 use the flag <b>-fb</b> to select the B2A table, or to invert the A2B
 table,
@@ -346,7 +346,7 @@ starts more abruptly but finishes gradually), using values 1.0-2.0,
 with 2.0 being the most convex.<br>
 <br>
 Typical black value generation curve with parameters something
-like: -kp 0 .1 .9 1 .5<br>
+like: -kp 0 .05 1 .9 .8<br>
 <br>
 <tt> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 K &nbsp; |
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;enpo<br>
@@ -403,12 +403,16 @@ values.<br>
 <b><a name="l"></a>-l</b> <i>tlimit</i>&nbsp; &nbsp;&nbsp; Sets the
 total ink limit (TAC, Total Area Coverage) for the CMYK inverse forward
 lookup, as a total percentage from 0% to 400%. If none is provided, it
-will be estimated from the profile relcolor B2A table.<br>
+will be estimated from the profile relcolor B2A table. The ink limit
+will be in final calibrated device values if the profile includes
+calibration information.<br>
 <br>
 <b><a name="L"></a>-L</b> <i>klimit</i>&nbsp; &nbsp; Sets the black
 ink limit for the CMYK inverse forward lookup, as a total percentage
 from 0% to 100%. If none is provided, it will be estimated from the
-profile relcolor B2A table.<br>
+profile relcolor B2A table. The ink limit
+will be in final calibrated device values if the profile includes
+calibration information.<br>
 <br>
 <a name="a"></a> If the <b>-a</b> flag is used for inverse forward
 lookups, then if
@@ -423,7 +427,8 @@ Jab appearance colorspace, rather than L*a*b* colorspace.<br>
 option, in which the per device curve lookup table processing is merged
 into the main multi-dimensional interpolation lut lookup.<br>
 <br>
-Whenever PCS values are to be specified or displayed in Jab/CIECAM02
+<a name="c"></a>Whenever PCS values are to be specified or displayed in
+Jab/CIECAM02
 colorspace, a set of viewing conditions will be used to determine the
 details of the conversion. The <b>-c</b> parameter allows the
 specification of the viewing conditions. Viewing conditions can be

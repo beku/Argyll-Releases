@@ -21,11 +21,16 @@ if $(UNIX) {
 			LibWinD = /usr/X11R6/lib ;
 		} else if [ GLOB /usr/include/X11 : X.h ] {
 			LibWinH = /usr/include ;
-			LibWinD = /usr/lib ;
+			if $(HOST64) {
+				LibWinD = /usr/lib64 ;
+			} else {
+				LibWinD = /usr/lib ;
+			}
 		} else {
 			EXIT Unable to locate the X11 include files ;
 		}
 		LINKFLAGS += -L$(LibWinD) -ldl -lX11 -lXext -lXxf86vm -lXinerama -lXrandr -lXau -lXdmcp -lXss ;
+		# HDRS += $(LibWinH) ; 
 	}
 }
 

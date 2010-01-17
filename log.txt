@@ -2,6 +2,464 @@
 Argyll CMS change log
 =====================
 
+Version 1.1.0 (17th January 2010)
+-------------
+
+*	Added some warnings to colprof for strange combinations
+	of -s -S and -t -T and -g.
+
+*	Fixed problem in perceptual gamut mapping that resulting in
+	less deep blacks than desirable. Also tweaked gamut mapping
+	to try and maintain luminance gradation near black
+	for chromatic colors.
+
+*	Simplified the Linux instalation instructions, particularly
+	with regard to USB and serial permissions. Permissions use groups now,
+	or ACL if it is available.
+
+*	Added working MSWindows 64 bit libusb drivers, which will work
+	on Vista 64 and MSWindows 7 64 bit. Because of
+	Microsofts driver signing requirements though, they won't be
+	usable unless a driver code signing workaround is used.
+
+*	Fixed viewgam so that the number of gamuts that can be
+	viewed is unlimited. Also added error when computing intersecting
+	volume if the two gamuts are incompatible.
+
+*	Added -O option to scanin and colprof, to allow overriding the
+	default output filename/location.
+
+*	There was a regression in the black inking fixes, the K target
+    was corresponding to the pre-1D Lut values, this is now fixed.
+
+*	Fixed another glitch in rspl/rev.c when computing black solution -
+	the auxiliary target was not always the closest one possible.
+	This fix may also help smoothness near black.
+
+Version 1.1.0 RC4 (6th January 2010) 
+-----------------
+
+*	Fixed bug in xicclu -pz that caused maximum rather than minimum ink. Also
+    fixed tolerance glitch in rspl/rev.c that was causing non-exact black
+    values to be returned.
+
+*	Changed printtarg so that the TIFF output has the paper margin subtracted
+	from it. This is so that the resulting TIFF can be placed on that sized paper
+	without clipping or scaling. Set the margin to zero to get a TIFF that
+	exactly fits into the specified paper size.
+
+*	Fixed bug in colprof -aX which caused crash when there are calibration
+	curves.
+
+*	Fixed bug in printcal, changed first -n option to -d to distinguish it
+	from second -n parameter.
+
+Version 1.1.0 RC3 (4th January 2010) 
+-----------------
+
+*	Fixed bug in Linux profile uninstall (dispwin -U)
+	(Typo in path causes uninstall to fail).
+
+*	Changed MSWindows athread implementation to kill a thread
+	that hasn't terminated on thread object deletion. This
+	isn't nice, but avoids the problem of the i1pro switch handler
+	thread exiting after 600 seconds and then accessing
+	a free'd structure when dispread -K is used.
+
+*	Change colprof XYZ B2A table scaling to make better
+	use of the cLUT table grid resolution.
+
+*	Fixed bugs in black generation rule to do with white->black point
+	calculations, scale and input/output curve handling. Changed
+	xicclu -g to better correspond with -k p parameters.
+	Changed xlut CMYK black locus handling to pick largest K value
+	when there are multiple K locus segments and the desired K 
+	doesn't fall on any segment, to give better K continuity.
+	Added "skew" adjustment to K generation rule to make
+	the curve it better fit typical device behaviour.
+	Updated tutorial to reflect these changes.
+	Note that the -kp parameter values will have to
+	be re-established for a particular device using V1.1.0 RC3.
+	(This may improve the "bumpy black" problem ?)
+
+*	Changed profile/colprof to generate matrix tags for Display XYZ PCS cLUT profiles,
+	to improve compatibility with other CMMs.
+	By default (-ax) the matrix tags will be a dummy transform that swaps red and green
+	so that it is obvious if the matrix is being used instead of the cLUT, and so it does
+	not increase profiling time.  Using -aX will create real matrix tags.
+
+*	Removed deprecated imdi/cctiff -o option, and added per profile -o option to set the
+	tag search order so as to be able to test profiles that have both matrix and
+	cLUT tags.
+
+*	Removed general cLUT clip warnings, and added a specific RGB display/output
+	device warning if a primary can't be encoded in L*a*b* PCS.
+
+*	Fixed bug in i1pro driver - the linearization factors were being swapped
+	between low and high gain.  This improves the absolute luminance calibration,
+	and may have subtle effects on the accuracy of other readings.
+
+*	Added -V option to dispcal and dispread to allow using the
+	adaptive mode of the i1pro for display measurement.
+	This may give better low level readings ?
+
+*	Improved targen so that it doesn't slow down as badly
+	when a very large number of fixed points are used together
+	with full spread points.
+
+*	Improved profile/logo2cgats so that it errors
+	on a wrong spectral field type.
+
+*	Change spectro/dispcal to default to -f 1.0 (assume
+	black is all output offset) to make it work in more
+	sympathy to a typical display response. This may give
+	better fit and lessen the chance of color tints 
+	due to a poor fit.
+
+*	Increased profile/printcal curve smoothing to reduce
+	the effect of noise.
+
+*	Changed chartread strip reading mode to allow navigating about the
+	strips, saving a partially read chart, and resuming a partially
+	read chart (chartread -r).
+	Also added a "next unread patch" key to the patch by patch mode.
+	Chartread won't exeit automaticcaly now, once all the patches have
+	been read (in case any patches need to be re-read), so the 'd'
+	key must be hit to finish.
+	Removed chartread -a option (it always saves the patch locations now).
+	Added a -I option to allow re-using .ti2 files on a chart printed
+	with different calibration curves.
+
+*	Modified xicc/cam02 to clip the blue to avoid
+	crazy behaviour outside the spectrum locus.
+	Removed previous attempt at spectrum locus clipping.
+
+*	Fixed bug in Spyder 3 driver that can cause readings
+	to be scaled by a factor of 16. (This depends on
+	when the Spyder was manufactured.)
+
+*	Fixed bug in adding CIE illuminant C to spectral support.
+
+*	Change printtarg last row padding to be media color
+	for both random and non-random layout.
+
+Version 1.1.0 RC2 (7th December 2009)
+-----------------
+
+*	Re-worked gamut mapping to improve saturation levels
+	within the bulk of the gamut, as well as improve
+	hue preservation. 
+
+*	Changed "la" intent (luminance matched appearance) to have
+	zero luminance matching enhancement "knee", to make
+	it more appropriate for assessing transformations
+	in light of their estimated appearance.
+ 
+*	Added CIE C type illuminant spectrum support.
+
+*	Modified DTP20 driver to double check for an offline
+	read chart in case it is running old firmware.
+
+*	Added device power value for targen to allow
+	calibrating devices that have extreme non linearity.
+
+*	Fixed bug in targen when full spread patches were
+	mixed with other test patch types.
+
+*	Updated yajl library to latest version.
+
+*	Improved X11 XRandR CRTC detection 
+
+*   Added verbosity level to profcheck to match invprofcheck.
+
+*   Clarified licensing of various files (GPLv2+ files, reference
+	files and documentation).
+
+Version 1.1.0 RC1 (6 November 2009)
+-----------------
+
+*	Added flash measurement support to i1pro and Munki, + corresponding
+	option in spotread.
+
+*	Added new link/collink flags -fcmy that force pure 100% C, M and/or Y
+	colorant input values to be pure output values. Gamut mapping
+	is adjusted sympathetically with these options too.
+
+*	Fixed link/collink so that the -f, fk and -F options used
+	to force K only output also trigger gammut mapping
+	to the K only destination range. Also made these
+	options set black generation and intent in a sympathetic
+	way by default. The result is that there now should be
+	no discontinuity between the K only mapped colors and
+	others in the gamut, and the source gamut should be
+	mapped to be within the range of the K only black device.
+
+* 	Modified and improved gamut mapping to fix perceptual uniformity,
+	and also greatly improves smoothness and preservation of
+	source detail.. Re-tuned gamut mapping parameters.
+	Added support for K only black gamut mapping from source
+	and/or destination.
+
+*	Fixed most CIECAM02 usages so as to clip values against
+	the spectrum locus before converting to Jab. This
+	may help avoid poor CIECAM behaviour for imaginary color values.
+
+*	Fixed bug in rspl/inv.c that was causing innacurate
+	inverse lookups in some corner cases. This may have been
+	afecting black generation accuracy and general B2A table
+	and device link accuracy.
+
+*	Added support for Spyder3Express (ie. disable ambient capability
+	if it's an Express).
+
+*	Added workalike sRGB and Adobe1998 ICC profiles to /ref
+	Note that the sRGB profile has slightly higher accuracy
+	(better matching of matrix to white point) than the
+	original H.P./Microsoft profile.
+	Also provided lab2lab profile to use with collink.
+
+*	Add support for the ColorMunki Create colorimeter.
+
+*	Fixed xicc/xicc.x and xicc/xlut.c to be more robust in
+	computing a CMYK black point. Fixed bug in K limit handling.
+
+*	Changed xicc/xfit to use higher order delta E metric, so that
+	maximum errors do not blow out. This seems to make the
+	output curves a much better fit, and reduces the error
+	when higher rspl smoothing factors are used. Curve stiffness
+	has been increased to improve smoothness ant match higher order error
+	values.
+
+*	Added support for the Christophe Mtairie's Digital Target-3 chart with 570
+	patches. (Thanks to Nikolay Pokhilchenko & Ben Goren).
+
+*	Changed the rspl/rev "> colprof: Error - rev: bwd vertex 0 is not prime or secondary"
+	error to a warning. This seems to be triggered by odd data sets (ie. monochrome).
+
+*	Created a new tool extractttag to extract text tags from an ICC
+	profile. This can be used to extract the original target data
+	(ie. .ti3 file) and/or CAL curves from an ICC profile.
+
+*	Fixed all the ink limit calculations to work in post-calibrated
+	final device values when per-channel calibration is being used,
+	and the calibration curves are embedded in the .ti3 file or ICC profile.
+
+*	Added printer calibration capability:
+	Added printcal utility to create and verify printer calibrations.
+	Added calibration file support to printtarg.
+	Added calibration file support to cctiff.
+	New utility "applycal" to apply calibration to ICC profiles.
+	Modified targen etc. to distiguish between real RGB and fake
+	printer RGB.
+
+*	Changed targen ofps point distribution to maintain
+	any initial gamut surface points during itterative
+	refinement, and to distribute them independently in
+	the sub-dimension they lie in. Changed adaptive operation
+	to be the default, and to use a much more sophisticated error
+	estimation model in determining the points locations.
+
+*	Fixed problem with reliably detecting backward read strips
+	using the i1pro & Munki, by making target/printtarg optimize the
+	random patch layout to maximize the difference between
+	patches read from each direction. (This problem was more
+	prevalent with large charts with lots of strips.)
+
+*	Added support for the LaserSoft DCPro scanner/camera
+	target chart.
+
+*	Changed profile/logo2cats.c spectral scaling heuristic threshold
+	from 2 to 10 to allow more margin.
+
+*	Fixed bug in spectro/dispwin.c for 256 byte EDID's (thanks to Omari Stephens).
+
+*	Fixed bug in scanin/scanrd.c that caused crash due to diagnositic
+	output when a gross chart recognition mismatch occures.
+
+*	Added warnings to colprof, collink and tweak if any values
+	get clipped when setting the cLUTs.
+
+*   Fix bug in xicc/xfit.c where too little memory was being allocated.
+
+*	Fix dispwin/dispcal problem on X11 with compositing WMs displaying
+	transparent test window.
+
+*	Fix spectro/dispcal to fall back if Jacobian inversion fails.
+
+*	Reduce default reverse cache memory limits to avoid thrashing.
+
+*	Changed all code with my copyright to the
+    GNU AFFERO GENERAL PUBLIC LICENSE Version 3.
+	This may be of significance to anyone using
+	this code to provide a service over the Internet.
+
+*	Modified spyder 2 & 3 driver to change how adaptive works.
+	Now increases the integration time to try and get
+	a minimum transition count. This speeds Spyder 2
+	readings (at some cost to accuracy), while helping
+	make the Spyder 3 a bit more useful on dark displays
+	(at the cost of a long read time). Also added workaround
+	to the Spyder 3 not having a reset command - drain
+	any pending read data on startup, so that it doesn't
+	corrupt calibration or initial readings.
+
+*	Fix USB instruments so that a comms failure doesn't try
+	and re-establish communications. Fix i1pro & Munki so
+	that they don't return a comms error on a short measurement.
+
+*	For the ColorMunki on OS X, kill the manufacturers daemon process that 
+	has it open, when Argyll wants to open it. (daemon will automatically
+	restart).
+
+*	Changed spectro/dispsup.c to show test window without
+	black background to position instrument, and
+	then re-create the test window with black backgroud.
+
+*	Fixed memory allocation bug in i1pro & Munki drivers
+	when sensor gets saturated during display measurement.
+
+*	Tweaked Jambase to work with Microsoft VC++8 and 9
+	when the Platform SDK February 2003 is used.
+
+*	Removed need for DDK to access HID devices on MSWindows.
+	This simplifies compiling with Microsoft VC++ and
+	means that a MingW compile can use HID.
+
+*	Enhanced plot library to aid debugging target/ofps.
+
+*	Added a -M "command" option to dispcal and dispread, that
+	allows an external command to supply display readings.
+	This could be used to interface to an instrument not directly
+	supported by Argyll.
+
+*	Fix spectrum -> XYZ conversion scale factor for absolute readings.
+	It was in error by 100/(10.685 * 6.83) = 1.37. This affected display
+	and emission readings for the i1pro.
+
+*   Modified printtarg to allow creating of a ColorMunki chart.
+	By default the rows are as wide as the instrument, but -h will
+	double the row density. 
+
+*	Added -p for projector mode to spotread, dispcal and dispread.
+
+*	Change dispread, dispcal & dispwin to use -P to position test window,
+	so that -p can be used for projector mode.
+
+*	Added ColorMunki spectrometer driver.
+
+*	Changed most code that reports progress on optimization
+	to aproximate percentage rather than ".....".
+
+*	Added interactive option to spotread to allow saving specrums
+	to a CGATS ".sp" spectral file, suitable for use as an illuminant.
+
+*	Added Spyder3 colorimeter driver.
+
+*	Modified libusb/linux.c to make sure that a single large
+	request is broken down into overlapping 16K reads, so that
+	the i1pro rev A/B doesn't time out on SuSE Linux.
+
+*	Fix bug in spectro/ntio.c involving error() and warning()
+	declarations. This causes crashes on machines with no serial ports.
+
+*	Added another challenge/response key for DTP22.
+
+*	Fix bug in gamut creation that caused internal error if
+	.gam points matches fake initial gamut tetrahedron.
+
+*   Fix two problems in spectro/i1pro_imp.c:
+	The way that calibration files were detected as invalid
+	was insufficiently sesitive to the parameters being
+ 	changed in the driver. This meant reading and partially
+	re-using some parameters when the previous calibratin
+	should really have been ignored.
+
+	The second issue was in not being sufficiently sensitive
+	to sensor saturation for display measurement. Fix by
+	now having a zero tollerance, and allowing for 3 different
+	display measurement exposures.
+
+*	Fix bug in link/collink -ke where the K value was being
+	distorted by not taking into account the B2A per channel output curves. 
+
+*	Fix bug in spectro/hidio.c that can cause a crash (bus error) on OS X
+	for any program that accesses the instruments.
+
+*	Make cgats lib easier to use from C++ (Thanks to Alastair M. Robinson).
+
+*	Fix ICC spec. compliance issue with minimum
+	description tag length in Profile Sequence Description
+	tag type.
+
+*	Fix bug in spectro/dispwin that prevented DPMS being
+	re-enabled if the process is killed.
+
+*	Fix bug in xicc/tiffgamut.c that prevented it working for
+	Lab TIFF input. Fixed issues with doing image specific gamut mapping
+    in collink.
+
+*	Make sure CGATS file identifiers are always a minimum of 7 characters.
+
+*	Add 'targ' tag to hold chart data in profiles.
+
+*	Fix problem where rev would fail on systems with lots
+	of RAM, due to running out of Virtual Memory space.
+	This happens mostly on OS X, because its malloc
+	routine use a lot more VM for small allocations
+	than the actual memory consumed.
+
+*	Fixed problem with Spyder 2 driver, where errors or user
+	terminating/aborting measurements leaves the instrument
+	in a hung or corrupted state. Fix by making sure that
+	a measurement is always completed before returning.
+
+*	Added Color Rendering Ra Index to measurements returned
+	from spotread for ambient or with the -T flag.
+
+*	Add an option to tweak/refine to improve matching for
+	white point relative test chart data (Relative Colorimetric
+	intent matching).
+
+*	Fix a memory leak in gamut.c, plus a few other 1-off minor leaks
+	elsewhere. (Thanks to Jordi Nodal for pointing these out.)
+
+*	Add -U scale option to colprof so that input profiles can be created
+	that have a media white that is whiter than PCS white.
+
+*	Fixed bug introduced in V1.0.0 in matrix input profiles where white point
+	was being normalized rather than being left absolute.
+	Also changed Lut based display profiles so that the white
+	point is forced to have a Y value of 1.0, to bring it into
+	line with matrix profiles. (This may worsen the verification
+	match to the original data though.) 
+
+*	Change rev cache RAM allocation to make sure
+	ARGYLL_REV_CACHE_MULT scaled value can't exceed VM size.
+
+*	Added -A option to displcal, so that the neutral axis to
+	black point blend rate can be altered, and changed default to 4.0
+	to improve the off axis visual appearance with some LCD displays.
+
+*	Made verify and refine a bit more robust in the face
+	of different format .ti3 files, partucularly those created
+	by logo2cgats.
+
+*	Added a -O parameter to tiffgamut, to allow the resulting gamut
+	file to be located somewhere other that the directory the last .tiff
+	file is in.
+
+Version 1.0.4 bug fix release  (30th June 2009)
+-----------------------------
+
+*   Modify icc/icclib to protect against integer overflow exploits,
+	and fixes to minor bugs.
+    Bump icclib version to 2.11 to reflect this.
+
+*   Fix bug in spectro/hidio.c that can cause a crash (bus error) on OS X
+    for any program that accesses the instruments.
+
+*	Fix bug in xicc/xfit.c where too little memory was being allocated.
+
 
 Version 1.0.3 bug fix release  (3rd September 2008)
 -----------------------------

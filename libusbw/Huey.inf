@@ -1,10 +1,10 @@
 [Version]
-Signature = "$Chicago$"
+Signature = "$Windows NT$"
 provider  = ArgyllCMS
 DriverVer = 11/21/2007,0.1.12.1
-CatalogFile = spyd2.cat
-CatalogFile.NT = spyd2.cat
-CatalogFile.NTAMD64 = spyd2_x64.cat
+CatalogFile = Huey.cat
+CatalogFile.NTX86 = Huey.cat
+CatalogFile.NTAMD64 = Huey_x64.cat
 
 Class = LibUsbDevices
 ClassGUID = {EB781AAF-9C70-4523-A5DF-642A87ECA567}
@@ -20,7 +20,7 @@ HKR,,,,"LibUSB-Win32 Devices"
 HKR,,Icon,,"-20"
 
 [Manufacturer]
-%manufacturer%=Devices,NT,NTAMD64
+%manufacturer%=Devices,NTX86,NTAMD64
 
 ;--------------------------------------------------------------------------
 ; Files
@@ -65,7 +65,7 @@ libusb0.dll,libusb0_x64.dll
 CopyFiles = libusb_files_sys, libusb_files_dll
 AddReg    = libusb_add_reg
 
-[LIBUSB_DEV.NT]
+[LIBUSB_DEV.NTX86]
 CopyFiles = libusb_files_sys, libusb_files_dll
 
 [LIBUSB_DEV.NTAMD64]
@@ -75,7 +75,7 @@ CopyFiles = libusb_files_sys_x64, libusb_files_dll_wow64, libusb_files_dll_x64
 DelReg = libusb_del_reg_hw
 AddReg = libusb_add_reg_hw
 
-[LIBUSB_DEV.NT.HW]
+[LIBUSB_DEV.NTX86.HW]
 DelReg = libusb_del_reg_hw
 AddReg = libusb_add_reg_hw
 
@@ -83,7 +83,7 @@ AddReg = libusb_add_reg_hw
 DelReg = libusb_del_reg_hw
 AddReg = libusb_add_reg_hw
 
-[LIBUSB_DEV.NT.Services]
+[LIBUSB_DEV.NTX86.Services]
 AddService = libusb0, 0x00000002, libusb_add_service
 
 [LIBUSB_DEV.NTAMD64.Services]
@@ -119,13 +119,13 @@ ServiceBinary  = %12%\libusb0.sys
 ;--------------------------------------------------------------------------
 
 [Devices]
-"Spyder2 (Argyll)"=LIBUSB_DEV, USB\VID_085C&PID_0200
+"Huey (Argyll)"=LIBUSB_DEV, USB\VID_0971&PID_2005
 
-[Devices.NT]
-"Spyder2 (Argyll)"=LIBUSB_DEV, USB\VID_085C&PID_0200
+[Devices.NTX86]
+"Huey (Argyll)"=LIBUSB_DEV, USB\VID_0971&PID_2005
 
 [Devices.NTAMD64]
-"Spyder2 (Argyll)"=LIBUSB_DEV, USB\VID_085C&PID_0200
+"Huey (Argyll)"=LIBUSB_DEV, USB\VID_0971&PID_2005
 
 
 ;--------------------------------------------------------------------------
@@ -133,6 +133,6 @@ ServiceBinary  = %12%\libusb0.sys
 ;--------------------------------------------------------------------------
 
 [Strings]
-DESCRIPTION="Spyder2 (Argyll)"
-FriendlyName="Spyder2 (Argyll)"
-manufacturer="ColorVision"
+DESCRIPTION="Huey (Argyll)"
+FriendlyName="Huey (Argyll)"
+manufacturer="Gretag Macbeth"

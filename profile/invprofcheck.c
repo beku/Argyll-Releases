@@ -9,7 +9,7 @@
  * Copyright 1999 - 2005 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -33,7 +33,7 @@
 #include <math.h>
 #include "copyright.h"
 #include "config.h"
-#include "numsup.h"
+#include "numlib.h"
 #include "icc.h"
 #include "xicc.h"
 
@@ -83,10 +83,12 @@ void usage(void) {
 	fprintf(stderr,"Check fwd to bwd relative transfer of an ICC file, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: invprofcheck [-] profile.icm\n");
-	fprintf(stderr," -v           verbose\n");
+	fprintf(stderr," -v [level]   verbosity level (default 1), 2 to print each DE\n");
 	fprintf(stderr," -l limit     set total ink limit (estimate by default)\n");
+	fprintf(stderr," -L klimit    set black channel ink limit (estimate by default)\n");
 	fprintf(stderr," -h           high res test (%d)\n",HTRES);
 	fprintf(stderr," -u           Ultra high res test (%d)\n",UHTRES);
+	fprintf(stderr," -R res       Specific grid resolution\n");
 	fprintf(stderr," -c           Show CIE94 delta E values\n");
 	fprintf(stderr," -k           Show CIEDE2000 delta E values\n");
 	fprintf(stderr," -w           create VRML visualisation (profile.wrl)\n");
@@ -122,7 +124,7 @@ main(
 	char in_name[MAXNAMEL+1];
 	char out_name[MAXNAMEL+1], *xl;		/* VRML name */
 	icmFile *rd_fp;
-	icc *rd_icco;
+	icc *icco;
 	int rv = 0;
 	int tres = TRES;
 	double tlimit = -1.0;
@@ -157,6 +159,9 @@ main(
 			/* Verbosity */
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
+				if (na != NULL && isdigit(na[0])) {
+					verb = atoi(na);
+				}
 			}
 
 			/* Resolution */
@@ -169,7 +174,18 @@ main(
 				tres = UHTRES;
 			}
 
-			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L') {
+			/* Resolution */
+			else if (argv[fa][1] == 'R') {
+				int res;
+				fa = nfa;
+				if (na == NULL) usage();
+				res = atoi(na);
+				if (res < 2 || res > 500)
+					usage();
+				tres = res;
+			}
+
+			else if (argv[fa][1] == 'l') {
 				int limit;
 				fa = nfa;
 				if (na == NULL) usage();
@@ -177,6 +193,16 @@ main(
 				if (limit < 1)
 					limit = 1;
 				tlimit = limit/100.0;
+			}
+
+			else if (argv[fa][1] == 'L') {
+				int limit;
+				fa = nfa;
+				if (na == NULL) usage();
+				limit = atoi(na);
+				if (limit < 1)
+					limit = 1;
+				klimit = limit/100.0;
 			}
 
 			/* VRML */
@@ -211,6 +237,7 @@ main(
 	if (fa >= argc || argv[fa][0] == '-') usage();
 	strncpy(in_name,argv[fa++],MAXNAMEL); in_name[MAXNAMEL] = '\000';
 
+
 	strncpy(out_name,in_name,MAXNAMEL-4); out_name[MAXNAMEL-4] = '\000';
 	if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
 		xl = out_name + strlen(out_name);
@@ -220,17 +247,19 @@ main(
 	if ((rd_fp = new_icmFileStd_name(in_name,"r")) == NULL)
 		error ("Read: Can't open file '%s'",in_name);
 
-	if ((rd_icco = new_icc()) == NULL)
+	if ((icco = new_icc()) == NULL)
 		error ("Read: Creation of ICC object failed");
 
 	/* Read the header and tag list */
-	if ((rv = rd_icco->read(rd_icco,rd_fp,0)) != 0)
-		error ("Read: %d, %s",rv,rd_icco->err);
+	if ((rv = icco->read(icco,rd_fp,0)) != 0)
+		error ("Read: %d, %s",rv,icco->err);
 
 	/* Check the forward lookup against the bwd function */
 	{
+		xcal *cal = NULL;                   /* Device calibration curves */
 		icColorSpaceSignature ins, outs;	/* Type of input and output spaces of fwd */
 		int inn, outn;						/* Channels of fwd conversion */
+		int kch;							/* Black channel, -1 if not known/applicable */
 		icmLuBase *luo1, *luo2;
 		double merr = 0.0;		/* Max */
 		double aerr = 0.0;		/* Avg */
@@ -238,17 +267,17 @@ main(
 		double nsamps = 0.0;
 
 		/* Get a Device to PCS conversion object */
-		if ((luo1 = rd_icco->get_luobj(rd_icco, icmFwd, icRelativeColorimetric, icSigLabData, icmLuOrdNorm)) == NULL) {
-			if ((luo1 = rd_icco->get_luobj(rd_icco, icmFwd, icmDefaultIntent, icSigLabData, icmLuOrdNorm)) == NULL)
-				error ("%d, %s",rd_icco->errc, rd_icco->err);
+		if ((luo1 = icco->get_luobj(icco, icmFwd, icRelativeColorimetric, icSigLabData, icmLuOrdNorm)) == NULL) {
+			if ((luo1 = icco->get_luobj(icco, icmFwd, icmDefaultIntent, icSigLabData, icmLuOrdNorm)) == NULL)
+				error ("%d, %s",icco->errc, icco->err);
 		}
 		/* Get details of conversion */
-		luo1->spaces(luo1, &ins, &inn, &outs, &outn, NULL, NULL, NULL, NULL);
+		luo1->spaces(luo1, &ins, &inn, &outs, &outn, NULL, NULL, NULL, NULL, NULL);
 
 		/* Get a PCS to Device conversion object */
-		if ((luo2 = rd_icco->get_luobj(rd_icco, icmBwd, icRelativeColorimetric, icSigLabData, icmLuOrdNorm)) == NULL) {
-			if ((luo2 = rd_icco->get_luobj(rd_icco, icmBwd, icmDefaultIntent, icSigLabData, icmLuOrdNorm)) == NULL)
-				error ("%d, %s",rd_icco->errc, rd_icco->err);
+		if ((luo2 = icco->get_luobj(icco, icmBwd, icRelativeColorimetric, icSigLabData, icmLuOrdNorm)) == NULL) {
+			if ((luo2 = icco->get_luobj(icco, icmBwd, icmDefaultIntent, icSigLabData, icmLuOrdNorm)) == NULL)
+				error ("%d, %s",icco->errc, icco->err);
 		}
 
 		if (dovrml) {
@@ -256,18 +285,34 @@ main(
 			start_line_set(wrl);
 		}
 		
-		/* Set the default ink limits if not set on command line */
-		icxDefaultLimits(rd_icco, &tlimit, tlimit, &klimit, klimit);
+		/* Grab any device calibration curves */
+		cal = xiccReadCalTag(icco);
+
+		kch = icxGuessBlackChan(icco);
+
+		/* Set the default ink limits if not set by user */
+		if (tlimit < 0.0 || klimit < 0.0) {
+			double max[MAX_CHAN], total;
+
+			total = icco->get_tac(icco, max, cal != NULL ? xiccCalCallback : NULL, (void *)cal);
+
+			if (tlimit < 0.0)
+				tlimit = total;
+
+			if (klimit < 0.0 && kch >= 0)
+				klimit = max[kch];
+		}
 
 		if (verb) {
+			printf("Grid resolution is %d\n",tres);
 			if (tlimit >= 0.0)
-				printf("Input total ink limit assumed is %3.0f%%\n",100.0 * tlimit);
+				printf("Input total ink limit assumed is %3.1f%%\n",100.0 * tlimit);
 			if (klimit >= 0.0)
-				printf("Input black ink limit assumed is %3.0f%%\n",100.0 * klimit);
+				printf("Input black ink limit assumed is %3.1f%%\n",100.0 * klimit);
 		}
 
 		{
-			double dev[MAX_CHAN], pcsin[3], devout[MAX_CHAN], pcsout[3];
+			double dev[MAX_CHAN], cdev[MAX_CHAN], pcsin[3], devout[MAX_CHAN], pcsout[3];
 			DCOUNT(co, inn, 0, 0, tres);		/* Multi-D counter */
 	
 			/* Go through the chosen device grid */
@@ -277,12 +322,20 @@ main(
 				double sum;
 				double de;
 
+				/* Check the (possibly calibrated) device values */
+				/* end reject any over the limits. */
 				for (sum = 0, n = 0; n < inn; n++) {
-					dev[n] = co[n]/(tres-1.0);
-					sum += dev[n];
+					cdev[n] = dev[n] = co[n]/(tres-1.0);
+					sum += cdev[n];
+				}
+				if (cal != NULL) {
+					cal->interp(cal, cdev, dev);
+					for (sum = 0, n = 0; n < inn; n++)
+						sum += cdev[n];
 				}
 
-				if (tlimit > 0.0 && sum > tlimit) {
+				if (tlimit > 0.0 && sum > tlimit
+				 || klimit > 0.0 && kch >= 0 && cdev[kch] > klimit) {
 					DC_INC(co);
 					continue;
 				}
@@ -290,16 +343,16 @@ main(
 				/* Generate the in-gamut PCS test point */
 				/* by converting device to pcsin */
 				if ((rv1 = luo1->lookup(luo1, pcsin, dev)) > 1)
-					error ("%d, %s",rd_icco->errc,rd_icco->err);
+					error ("%d, %s",icco->errc,icco->err);
 
 				/* Now do the check */
 				/* PCS -> Device */
 				if ((rv2 = luo2->lookup(luo2, devout, pcsin)) > 1)
-					error ("%d, %s",rd_icco->errc,rd_icco->err);
+					error ("%d, %s",icco->errc,icco->err);
 
 				/* Device to PCS */
 				if ((rv2 = luo1->lookup(luo1, pcsout, devout)) > 1)
-					error ("%d, %s",rd_icco->errc,rd_icco->err);
+					error ("%d, %s",icco->errc,icco->err);
 
 				/* Delta E */
 				if (dovrml) {
@@ -321,7 +374,7 @@ main(
 					merr = de;
 				nsamps++;
 
-				if (verb) {
+				if (verb > 1) {
 					printf("[%f] %f %f %f -> ",de, pcsin[0], pcsin[1], pcsin[2]);
 					for (n = 0; n < inn; n++)
 						printf("%f ",devout[n]);
@@ -347,7 +400,7 @@ main(
 		luo2->del(luo2);
 	}
 
-	rd_icco->del(rd_icco);
+	icco->del(icco);
 	rd_fp->del(rd_fp);
 
 	return 0;
@@ -356,6 +409,7 @@ main(
 
 /* ------------------------------------------------ */
 /* Some simple functions to do basix VRML work */
+/* !!! Should change to plot/vrml lib !!! */
 
 #define GAMUT_LCENT 50.0
 static int npoints = 0;

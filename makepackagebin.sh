@@ -15,9 +15,12 @@ echo "Script to invoke Jam and then package the binary release."
 #
 #	OS X i386 10.5 [bash]			darwin9.0	i386-apple-darwin9.0	i386
 #
+#	OS X i386 10.6 [bash]			darwin10.0	i386-apple-darwin8.0	i386
+#
 #	Linux RH 4.0 [bash]				linux-gnu	i686-redhat-linux-gnu	i686
 #
 #	Linux Fedora 7.1 [bash]			linux-gnu	i386-redhat-linux-gnu	i386
+#	Linux Ubuntu  ??7				linux-gnu	i486-pc-linux-gnu		i686
 #
 #	Linux Fedora 7.1 64 bit [bash]	linux-gnu	x86_64-redhat-linux-gnu	x86_64
 #
@@ -36,6 +39,10 @@ if [ X$OS != "XWindows_NT" ] ; then
 	chmod +x libusb/configure
 fi
 
+# Make sure that some environment variable are visible to Jam:
+export OSTYPE MACHTYPE HOSTTYPE
+
+# .sp come from profile, .cht from scanin and .ti3 from spectro
 rm -f bin/*.exe bin/*.dll
 rm -f ref/*.sp ref/*.cht ref/*.ti2
 
@@ -76,7 +83,9 @@ else if [ X$OSTYPE = "Xdarwin9.0" ] ; then
 	unset USBDIR
 	USETAR=true
 else if [ X$OSTYPE = "Xlinux-gnu" ] ; then
-	if [ X$MACHTYPE = "Xi686-redhat-linux-gnu" -o  X$MACHTYPE = "Xi386-redhat-linux-gnu" ] ; then
+	if [ X$MACHTYPE = "Xi686-redhat-linux-gnu" \
+      -o X$MACHTYPE = "Xi386-redhat-linux-gnu" \
+      -o X$MACHTYPE = "Xi486-pc-linux-gnu" ] ; then
 		echo "We're on Linux x86!"
 		PACKAGE=Argyll_V${VERSION}_linux_x86_bin.tgz
 	else if [ X$MACHTYPE = "Xx86_64-redhat-linux-gnu" ] ; then

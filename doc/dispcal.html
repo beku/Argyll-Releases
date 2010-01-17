@@ -29,13 +29,13 @@ Verbose mode<br>
  style="font-family: monospace;" href="#display">-display displayname</a><span
  style="font-family: monospace;"> [X11 only] Choose X11 display name<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="dispwin.html#dnm">-d n[,m]</a>
+ href="#dnm">-d n[,m]</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; [X11
 only]Choose the display from the following list (default 1),<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 and optionally choose a different display m for VideoLUT access.</span></font><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="dispwin.html#d">-d n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#d">-d
+n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Choose the display from the following list (default 1)</span></font><br
  style="font-family: monospace;">
 <font size="-1"><span style="font-family: monospace;"></span><span
@@ -43,12 +43,12 @@ Choose the display from the following list (default 1)</span></font><br
  style="font-family: monospace;"></span>&nbsp; <span
  style="font-family: monospace;"></span></font><small
  style="font-family: monospace;"><span style="font-family: monospace;"></span><a
- style="font-family: monospace;" href="dispread.html#c">-c listno</a><span
+ style="font-family: monospace;" href="#c">-c listno</a><span
  style="font-family: monospace;"> &nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set
 communication port from the following list (default 1)<br>
 </span></small><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="dispcal.html#r">-r</a><span
+ style="font-family: monospace;" href="#r">-r</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; Report on the calibrated display then exit</span></font><font
@@ -131,7 +131,7 @@ Use "-g240" for SMPTE 240M curve </span></font><font size="-1"><span
 the target response curve actual technical gamma<br>
 &nbsp;<a href="#f">-f [degree]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Amount of black level accounted for with output offset (default all
-input offset)<br>
+output offset)<br>
 &nbsp;<a href="#a">-a ambient</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Use viewing condition adjustment for ambient in Lux<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
@@ -139,7 +139,11 @@ Use viewing condition adjustment for ambient in Lux<br>
 factor</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Amount to
 try and correct black point hue. Default 1.0, LCD default 0.0<br>
-</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="#A">-A rate</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Rate of blending from neutral to black point. Default 4.0</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#B">-B bkbright</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Set the target black brightness in cd/m^2</span></font><br
@@ -156,7 +160,7 @@ Run n verify passes on final curves<br>
 Run only verify pass on installed calibration curves</span></font><br
  style="font-family: monospace;">
 <font size="-1"><span style="font-family: monospace;"></span><span
- style="font-family: monospace;">&nbsp;<a href="#p">-p ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ style="font-family: monospace;">&nbsp;<a href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Position test window and scale it</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -174,19 +178,29 @@ Fill whole screen with black background<br
 &nbsp;&nbsp;&nbsp;&nbsp; [X11 only] Don't set override redirect on test
 window<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="dispcal.html#K">-K</a><span
+ style="font-family: monospace;" href="#K">-K</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; Run instrument calibration first<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="dispcal.html#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Disable auto calibration of instrument</span></font><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#H">-H</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp; Use high resolution spectrum mode (if
-available)</span></font><font size="-1"><span
+available)<br>
+</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#V">-V</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp; Use adaptive measurement mode (if available)</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#M">-M "command"</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Invoke shell "command" each
+time a color is measured</span></font><font size="-1"><span
  style="font-family: monospace;"></span><span
  style="font-family: monospace;"></span></font><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#W">-W
@@ -405,8 +419,9 @@ entries and Digital or Analogue output (RAMDAC).<br>
 do a more accurate job if they know what type of display technology
 they are measuring. Use <span style="font-weight: bold;">-yc</span> if
 you are
-calibrating a CRT (Cathode Ray Tube) type monitor, and use <span
- style="font-weight: bold;">-yl</span> if you are calibrating an LCD
+calibrating a CRT (Cathode Ray Tube) type monitor or Plasma type
+display, and use <span style="font-weight: bold;">-yl</span> if you
+are calibrating an LCD
 (Liquid Crystal Display). A spectrometer instrument will not need this
 option.<br>
 <br>
@@ -464,9 +479,11 @@ display is capable of.<br>
 Set the
 target response curve gamma. This is
 normally an exponential curve (output = input ^gamma), and defaults to
-2.4 on MSWindows&nbsp; and Linux/Unix (which is typical for a CRT type
-display), and 1.8 on a Macintosh (OS X). Four pre-defined curves can be
-used as well:&nbsp; the sRGB colorspace response curve, which is an
+2.4 on MSWindows and Macintosh OS X 10.6 or latter and Linux/Unix
+(which is typical of a CRT type
+displays real response), and 1.8 on a Macintosh (prior to OS X 10.6).
+Four pre-defined curves can be
+used as well: the sRGB colorspace response curve, which is an
 exponent curve with a
 straight segment at the dark end and an overall response of
 approximately gamma 2.2 (<span style="font-weight: bold;">-gs</span>),
@@ -476,7 +493,7 @@ video standard response curve (<span style="font-weight: bold;">-g709</span>)
 and the SMPTE 240M video standard response curve (<span
  style="font-weight: bold;">-g240</span>) <br>
 <br>
-&nbsp;Note that a
+<span style="font-weight: bold;">Note</span> that a
 real display can't reproduce any of these ideal curves, since it will
 have a non-zero black point, whereas all the ideal curves assume zero
 light at zero input. In the case of a gamma curve target, dispcal uses
@@ -484,35 +501,51 @@ an actual technical power curve shape that aims for the same relative
 output at 50% input
 as the ideal gamma power curve. To allow for the non-zero black level
 of a real display, by default <span style="font-weight: bold;">dispcal</span>
-will offset and scale the target curve so that zero input gives the
-actual black level of the display (input offset). This ensures the most
+will offset the target curve values so that zero input gives the
+actual black level of the display (output offset). This ensures that
+the target curve better corresponds to the typical natural behavior of
+displays, but it may not be the most
 visually even progression from display minimum, but this behavior can
 be changed using the <span style="font-weight: bold;">-f</span> option
 (see below).<br>
 <br>
-<span style="font-weight: bold;">Note</span> that many color spaces are
-encoded with, and labeled as having a gamma of approximately 2.2 (ie.
-sRGB, REC 709, SMPTE 240M), but are actually intended to be displayed
+<span style="font-weight: bold;">Also note</span> that many color
+spaces are
+encoded with, and labelled as having a gamma of approximately<span
+ style="font-weight: bold;"> 2.2</span> (ie.
+sRGB, REC 709, SMPTE 240M, Macintosh OS X 10.6), but are actually
+intended to be displayed
 on a display with a typical CRT gamma of <span
- style="font-weight: bold;">2.4</span>. This is because this 2.2 gamma
+ style="font-weight: bold;">2.4</span> viewed in a darkened
+environment. This is because this <span style="font-weight: bold;">2.2</span>
+gamma
 is a source gamma encoding in bright viewing conditions such as a
 television studio, while typical display viewing conditions are quite
 dark by comparison, and a contrast expansion of (approx.) gamma 1.1 is
 desirable to make the images look as intended. So if you are displaying
-video through the calibration, just setting the gamma curve to REC 709
-is probably <span style="font-weight: bold;">not what you want!</span>
+images encoded to the sRGB standard, or displaying
+video through the calibration, just setting the gamma curve to sRGB or
+REC 709
+(respectively) is probably <span style="font-weight: bold;">not what
+you want!</span>
 What you probably want to do, is to set the gamma curve to about gamma
 2.4, so that the contrast range is expanded appropriately, or
-alternatively use REC 709 but also use the <span
- style="font-weight: bold;">-a</span> parameter to specify the ambient
+<span style="text-decoration: underline; font-weight: bold;">alternatively</span>
+use sRGB or REC 709 or a gamm of 2.2 but <span
+ style="font-weight: bold;">also</span> use the <span
+ style="font-weight: bold;">-a</span> parameter to specify the actual
+ambient
 viewing conditions, so that <span style="font-weight: bold;">dispcal</span>
 can make an appropriate contrast enhancement. If your instrument is
 capable of measuring ambient light levels, then you can do so during
-the interactive display control adjustment.<br>
+the interactive display control adjustment. See
+&lt;http://www.color.org/sRGB.xalter&gt; for details of how sRGB is
+intended to be used.<br>
 <br>
-It is hard to know whether sRGB or Apple Macintosh computers should
+It is hard to know whether Apple Macintosh computers prior to OS X 10.6
+should
 also have such an adjustment, since it is not really possible to know
-whether colors labeled as being in such a colorspace are actually
+whether colors labelled as being in such a colorspace are actually
 encoded in that gamma with the expectation that they will be displayed
 on a display with that actual response, or whether they are intended to
 be displayed on a display that contrast expands by a power 1.1.&nbsp;
@@ -539,22 +572,29 @@ explained in for the <span style="font-weight: bold;">-g</span> and <span
  style="font-weight: bold;">-G</span> options, real displays do not
 have a zero black response, while all the target response curves do, so
 this has to be allowed for in some way. The default way of handling
-this (equivalent to -f 0)&nbsp; is to offset and scale the input values
+this (equivalent to -f 1.0)&nbsp; is to allow for this at the output of
+the ideal
+response curve, by offsetting and scaling the output values.<span
+ style="font-weight: bold;"></span> This defined a curve that will
+match the
+responses that many other systems provide and may be a better match to
+the natural response of the display, but will give a
+less visually even response from black<span style="font-weight: bold;"></span>.
+The other alternative is to offset and scale the input values
 into the ideal response
 curve so that zero input gives the actual non-zero display response.
-This ensures the most visually even progression from display minimum.
-The other alternative is to allow for this at the output of the ideal
-response curve, by offsetting and scaling the output values.<span
- style="font-weight: bold;"></span> This can be done by using the <span
- style="font-weight: bold;">-f</span> option. This will probably give a
-less progressive response from black, but may better match the
-responses that other systems provide. A further subtlety is to provide
+This ensures the most visually even progression from display minimum,
+but might be hard to achieve since it is different to the naturally
+response of a display.
+A subtlety is to provide
 a split between how much of the offset is accounted for as input to the
 ideal response curve, and how much is accounted for at the output, and
 this can be done by providing a parameter <span
  style="font-weight: bold;">-f degree</span>, where the degree is 0.0
 accounts for it all as input offset, and 1.0 accounts for all of it as
-output offset.<br>
+output offset. If <span style="font-weight: bold;">-f</span> is used
+without a specified degree, a degree of 0.0 is assumed, the opposite of
+the default.<br>
 <br>
 <a name="a"></a><span style="font-weight: bold;">-a ambient</span>: As
 explained for the <span style="font-weight: bold;">-g</span>
@@ -578,17 +618,19 @@ CIECAM02 color appearance model will be made for the brightness
 of&nbsp; your display and the contrast it makes with your ambient light
 levels. <br>
 <br>
-<a name="k"></a><span style="font-weight: bold;">-k</span> Normally
+<a name="k"></a><span style="font-weight: bold;">-k factor</span>:
+Normally
 dispcal will attempt to make all colors
 down the neutral axis (R=G=B) have the same hue as the chosen white
-point (equivalent to <span style="font-weight: bold;">-k 1.0</span>).
+point (ie. default is <span style="font-weight: bold;">-k 1.0</span>).
 Near the black point, red, green or blue can only be added, not
 subtracted from zero, so the process of making the near black colors
 have the desired hue, will <span style="font-weight: bold;">lighten</span>
 them to some extent. For a device
 with a good contrast ratio or a black point that has nearly the same
 hue as the white, this is not a problem. If the device contrast ratio
-is not so good, and the black hue is noticeably different to that of
+is not so good, and the native black hue is noticeably different to
+that of
 the chosen white point (which is often the case for <span
  style="font-weight: bold;">LCD</span> type displays, or <span
  style="font-weight: bold;">CRT</span> type displays with one channel
@@ -604,11 +646,34 @@ default a factor of <span style="font-weight: bold;">0.0</span> is
 used for <span style="font-weight: bold;">LCD</span>
 type displays, but the <span style="font-weight: bold;">-k</span>
 option allows overriding these with a custom value between 0.0 (no
-correction) to 1.0 (full correction). If less than full correction is
+correction of black) to 1.0 (full correction of black). If less than
+full correction is
 chosen, then the resulting calibration curves will have the target
-white point down most of the curve, but will then cross over to the
+white point down most of the curve, but will then blend over to the
 native or compromise black point that is blacker, but not of the right
-hue.<br>
+hue. The rate of this blend can be controlled with the <span
+ style="font-weight: bold;">-A</span> parameter (see below).<br>
+<br>
+<a name="A"></a><span style="font-weight: bold;">-A rate</span>:&nbsp;
+If the black point is not being set completely to the same hue as the
+white point (ie. because the <span style="font-weight: bold;">-k</span>
+factor is less than 1.0), then the resulting calibration curves will
+have the target
+white point down most of the curve, but will then blend over to the
+native or compromise black point that is blacker, but not of the right
+hue. The rate of this blend can be controlled with the <span
+ style="font-weight: bold;">-A</span> parameter. The default value 4.0,
+which results in a target that switches from the white point target to
+the black, moderately close to the black point. While this typically
+gives a
+good visual result with the target neutral hue being maintained to the
+point where the crossover to the black hue is not visible, it may be
+asking too much of some displays (typically LCD type displays), and
+there may be some visual effects due to inconsistent color with viewing
+angle. For this situation a smaller value may give a better visual
+result (e.g. try values of 3.0 or 2.0. A value of 1.0 will set a pure
+linear blend from white point to black point). If there is too much
+coloration near black, try a larger value, e.g. 6.0 or 8.0.<br>
 <br>
 <a name="B"></a><span style="font-weight: bold;">-B</span>&nbsp; Set
 the
@@ -651,7 +716,7 @@ on Apple OS X, you will need to run dispwin with the <a
 retained while dispcal <span style="font-weight: bold;">-E</span> is
 run. <br>
 <br>
-<a name="p"></a> The <span style="font-weight: bold;">-p</span>
+<a name="P"></a> The <span style="font-weight: bold;">-P</span>
 parameter allows you to position and size the test patch window. By
 default it is places in the center of the screen, and sized
 appropriately for the type of instrument. The <span
@@ -667,7 +732,7 @@ produce a double size window. Note that the ho,vo,ss numbers must be
 specified as a single string (no space between the numbers and the
 comma).<br>
 For example, to create a double sized test window at the top right of
-the screen, use <span style="font-weight: bold;">-p 1,0,2</span> .<br>
+the screen, use <span style="font-weight: bold;">-P 1,0,2</span> .<br>
 <br>
 <a name="F"></a> The <span style="font-weight: bold;">-F</span>
 flag causes the while screen behind the test window to be masked with
@@ -719,6 +784,29 @@ such as the Eye-One Pro.
 See <a href="instruments.html">Operation of particular instruments</a>
 for more details. This may give better accuracy for display
 measurements.<br>
+<br>
+<a name="V"></a> The -<span style="font-weight: bold;">V</span> option
+uses adaptive emission measurement mode, if the instrument supports it,
+such as the Eye-One Pro. This may give better accuracy for low level
+measurements, but may be more inconsistent overall due to the varying
+integration times. Overall measurement time will probably be longer.<br>
+<br>
+<a name="M"></a> The -<span style="font-weight: bold;">M</span> <span
+ style="font-weight: bold;">"command" </span>option
+allows a method of gathering each test value from some external source,
+such as an instrument that is not directly supported by Argyll. The
+given command
+is involked to the shell,
+with six arguments. The first three arguments are the RGB test color as
+integers in the range 0 to 255, the second three parameters are the RGB
+test color as floating point numbers in the range 0.0 to 1.0. The
+script or utility should create a file called <span
+ style="font-weight: bold;">"command.meas</span>"
+that contains the XYZ values for the given RGB (or measured from the
+test window) in cd/m^2 as three numbers separated by spaces, before
+returning. If the command returns a non-zero return value,
+dispcal will abort. Note that a test
+window will also be created on the system running dispcal.<br>
 <br>
 <a name="W"></a>The <b>-W</b> <span style="font-weight: bold;">n|h|x</span>
 parameter overrides the default serial communications
@@ -893,11 +981,13 @@ white point from the target, and further to the right are hints '+',
 '-'
 or '='&nbsp; as to which direction to adjust the individual Red, Green
 and Blue gain settings to move the white point in the direction of the
-target.
+target, and reduce the delta E.
 If the symbol is doubled, then this channel will have the greatest
 effect. If you do not have individual channel gain controls, then try
 choosing amongst color temperature pre-sets, to find one with the
-lowest delta E.<br>
+lowest delta E. Depending on the stability of the display, the
+coarseness of the controls, and the repeatability of the instrument,
+you may not be able to get a perfectly zero delta E.<br>
 <br>
 &nbsp;&nbsp;
 <small style="font-weight: bold;"><span style="font-family: monospace;">Adjust

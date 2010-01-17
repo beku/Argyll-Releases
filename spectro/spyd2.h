@@ -3,17 +3,17 @@
 /* 
  * Argyll Color Correction System
  *
- * ColorVision Spyder 2 related software.
+ * ColorVision Spyder 2 & 3 related software.
  *
  * Author: Graeme W. Gill
  * Date:   19/10/2006
  *
- * Copyright 2006 - 2007, Graeme W. Gill
+ * Copyright 2006 - 2009, Graeme W. Gill
  * All rights reserved.
  *
  * (Based on i1disp.c)
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -68,7 +68,7 @@
 #define SPYD2_NOT_INITED  		    0x24
 
 
-/* SPYD2 communication object */
+/* SPYD2/3 communication object */
 struct _spyd2 {
 	INST_OBJ_BASE
 
@@ -78,9 +78,16 @@ struct _spyd2 {
 	int trig_return;			/* Emit "\n" after trigger */
 
 	/* Serial EEPROM registers */
-	unsigned int hwver;			/* 5:S	Harware version number */
+	unsigned int hwver;			/* 5:S	Harware version number & feature bits */
+								/* Spyder2 = 0x0307 */
+								/* Spyder3 = 0x0407 */
+								/* Feature bits 0,1,2 correspond to display types */
+								/* CRT, LCD, TOK */
+								/* Feature bit 3 on Spyder 3 correspond to no ambient sensor */
 	char    serno[9];			/* 8:8xB  Serial number as zero terminated string */
 
+								/* Spyder2: [0][][] = CRT, [1][][] = LCD */
+								/* Spyder3: [0][][] = ???, [1][][] = CRT & LCD */
 	double  cal_A[2][3][9];		/* 16, 256  CRT/LCD A calibration matrix */
 	double  cal_B[2][3][9];		/* 128, 384 CRT/LCD B calibration matrix */
 
@@ -99,13 +106,17 @@ struct _spyd2 {
 
 	double cal_F[7];			/* 240:4, 364:3  F calibration vector */ 
 								/* This might be Y only weightings for the 7 sensor values, */
-								/* with no offset value. */
+								/* with no offset value (TOK type ?). */
 
 	/* Computed factors and state */
 	int prevraw[8];				/* Previous raw reading values */
 	int     lcd;				/* NZ if set to LCD */ 
-	int     rrset;				/* Flag, nz if the refresh rate has been measured determined */
-	double  rrate;				/* Current refresh rate. Set to DEFREFR if not determined */
+	int     rrset;				/* Flag, nz if the refresh rate has been determined */
+	double  rrate;				/* Current refresh rate. Set to DEFREFR if !determined */
+
+	/* Other state */
+	int     led_state;			/* Spyder 3: Current LED state */
+	double	led_period, led_on_time_prop, led_trans_time_prop;	/* Spyder 3: Pulse state */
 
 }; typedef struct _spyd2 spyd2;
 

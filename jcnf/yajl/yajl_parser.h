@@ -1,5 +1,5 @@
 /*
- * Copyright 2007, Lloyd Hilaiel.
+ * Copyright 2007-2009, Lloyd Hilaiel.
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -34,7 +34,9 @@
 #define __YAJL_PARSER_H__
 
 #include "yajl_parse.h"
+#include "yajl_bytestack.h"
 #include "yajl_buf.h"
+
 
 typedef enum {
     yajl_state_start = 0,
@@ -60,7 +62,9 @@ struct yajl_handle_t {
     /* temporary storage for decoded strings */
     yajl_buf decodeBuf;
     /* a stack of states.  access with yajl_state_XXX routines */
-    yajl_buf stateBuf;
+    yajl_bytestack stateStack;
+    /* memory allocation routines */
+    yajl_alloc_funcs alloc;
 };
 
 yajl_status
@@ -71,14 +75,5 @@ unsigned char *
 yajl_render_error_string(yajl_handle hand, const unsigned char * jsonText,
                          unsigned int jsonTextLen, int verbose);
 
-yajl_state yajl_state_current(yajl_handle handle);
-
-void yajl_state_push(yajl_handle handle, yajl_state state);
-
-yajl_state yajl_state_pop(yajl_handle handle);
-
-unsigned int yajl_parse_depth(yajl_handle handle);
-
-void yajl_state_set(yajl_handle handle, yajl_state state);
 
 #endif

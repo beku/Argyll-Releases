@@ -12,10 +12,11 @@ scat2.c
 mlbs.c
 mlbs.h
 opt.c
+gam.h
+gam.c
 revbench.c
 c1.c
 c1df.c
-c1i.c
 spline.c
 t2d.c
 t2ddf.c

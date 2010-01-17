@@ -11,7 +11,7 @@
  * Copyright 2006 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -51,7 +51,7 @@ typedef enum {
 	i1p_emiss_spot     = 3,
 	i1p_emiss_scan     = 4,
 	i1p_amb_spot       = 5,
-	i1p_amb_scan       = 6,
+	i1p_amb_flash      = 6,
 	i1p_trans_spot     = 7,
 	i1p_trans_scan     = 8,
 	i1p_no_modes       = 9
@@ -69,6 +69,9 @@ struct _i1pro_state {
 	/* The following can be added to any of the 3: */
 	int scan;			/* flag - Scanning mode */
 	int adaptive;		/* flag - adaptive mode */
+
+	/* The following can be added to scan: */
+	int flash;			/* flag - Flash detection from scan mode */
 
 	/* Configuration & state information */
 	double targoscale;	/* Optimal reading scale factor <= 1.0 */
@@ -116,10 +119,14 @@ struct _i1pro_state {
 	int need_dcalib;		/* Dark Calibration needed anyway */
 
 	/* Display mode calibration state (emmis && !scan && !adaptive) */
+	int    dispswap;		/* 0 = default time, 1 = dark_int_time2, 2 = dark_int_time3 */
 	double done_dintcal;	/* A display integration time cal has been done */
 	double dcaltime2;		/* Target dark calibration time - sets number of readings */
 	double dark_int_time2;	/* Integration time used for dark data 2 */
 	double *dark_data2;		/* [nraw] of dark level to subtract for dark_int_time2. */
+	double dcaltime3;		/* Target dark calibration time - sets number of readings */
+	double dark_int_time3;	/* Integration time used for dark data 3 */
+	double *dark_data3;		/* [nraw] of dark level to subtract for dark_int_time3. */
 
 }; typedef struct _i1pro_state i1pro_state;
  
@@ -253,9 +260,6 @@ struct _i1proimp {
 	int trig_se;			/* Delayed trigger icoms error */
 	i1pro_code trig_rv;		/* Delayed trigger result */
 
-	int dumy[2];			/* Dummy to alter structure size to invalidate NV save */
-							/* Must be even size */
-
 }; typedef struct _i1proimp i1proimp;
 
 /* Add an implementation structure */
@@ -314,11 +318,14 @@ void del_i1proimp(i1pro *p);
 #define I1PRO_RD_WHITEREFERROR 	        0x35		/* White reference reading error */
 #define I1PRO_RD_LIGHTTOOLOW 	        0x36		/* Light level is too low */
 #define I1PRO_RD_LIGHTTOOHIGH 	        0x37		/* Light level is too high */
-#define I1PRO_RD_READINCONS             0x38		/* Reading is inconsistent */
-#define I1PRO_RD_TRANSWHITERANGE        0x39		/* Transmission white reference is out of range */
-#define I1PRO_RD_NOTENOUGHPATCHES       0x3A		/* Not enough patches */
-#define I1PRO_RD_TOOMANYPATCHES         0x3B		/* Too many patches */
-#define I1PRO_RD_NOTENOUGHSAMPLES       0x3C		/* Not enough samples per patch */
+#define I1PRO_RD_SHORTMEAS              0x38		/* Measurment was too short */
+#define I1PRO_RD_READINCONS             0x39		/* Reading is inconsistent */
+#define I1PRO_RD_TRANSWHITERANGE        0x3A		/* Transmission white reference is out of range */
+#define I1PRO_RD_NOTENOUGHPATCHES       0x3B		/* Not enough patches */
+#define I1PRO_RD_TOOMANYPATCHES         0x3C		/* Too many patches */
+#define I1PRO_RD_NOTENOUGHSAMPLES       0x3D		/* Not enough samples per patch */
+#define I1PRO_RD_NOFLASHES              0x3E		/* No flashes recognized */
+#define I1PRO_RD_NOAMBB4FLASHES         0x3F		/* No ambient before flashes found */
 
 /* Internal errors */
 #define I1PRO_INT_NO_COMS 		        0x40
@@ -508,6 +515,7 @@ i1pro_code i1pro_read_patches_1(
 /* Converts to completely processed output readings. */
 i1pro_code i1pro_read_patches_2(
 	i1pro *p,
+	double *duration,		/* return flash duration (secs) */
 	double **specrd,		/* Return array [numpatches][nwav] of spectral reading values */
 	int numpatches,			/* Number of patches to return */
 	double inttime, 		/* Integration time to used */
@@ -521,6 +529,7 @@ i1pro_code i1pro_read_patches_2(
 /* Converts to completely processed output readings. */
 i1pro_code i1pro_read_patches(
 	i1pro *p,
+	double *duration,		/* Return flash duration */
 	double **specrd,		/* Return array [numpatches][nwav] of spectral reading values */
 	int numpatches,			/* Number of patches to return */
 	int minnummeas,			/* Minimum number of measurements to take */
@@ -622,6 +631,19 @@ i1pro_code i1pro_extract_patches_multimeas(
 	double *phighest,		/* If not NULL, return highest value from all bands and msrmts. */
 	double satthresh,		/* Sauration threshold, 0 for none */
 	double inttime			/* Integration time (used to adjust consistency threshold) */
+);
+
+/* Recognise any flashes in the readings, and */
+/* and average their values together as well as summing their duration. */
+/* Return nz on an error */
+i1pro_code i1pro_extract_patches_flash(
+	i1pro *p,
+	int *flags,				/* return flags */
+	double *duration,		/* return duration */
+	double *pavg,			/* return patch average [nraw] */
+	double **multimeas,		/* Array of [nummeas][nraw] value to extract from */
+	int nummeas,			/* number of readings made */
+	double inttime			/* Integration time (used to compute duration) */
 );
 
 /* Subtract one abssens array from another */
@@ -923,10 +945,10 @@ typedef enum {
 /* Linearisation uses Polinomial equation, ie: y = c0 + c1 * x + c2 * x^2 + c3 * x^3 etc. */
 /* and is applied to the raw (integer) sensor data. */
 
-	key_ng_lin		= 0x03e9,	/* double[4] */
+	key_ng_lin		= 0x03e8,	/* double[4] */
 								/* Normal gain polinomial linearisation coefficients */
 
-	key_hg_lin		= 0x03e8,	/* double[4] */
+	key_hg_lin		= 0x03e9,	/* double[4] */
 								/* High gain polinomial linearisation coefficients */
 
 	key_min_int_time= 0x04c5,	/* double - Minumum integration time */

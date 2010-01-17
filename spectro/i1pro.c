@@ -10,7 +10,7 @@
  * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -103,7 +103,7 @@ i1pro_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 
 	/* Set config, interface, write end point, read end point, read quanta */
 	/* ("serial" end points aren't used - the i1display uses USB control messages) */
-	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags); 
+	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags, 0); 
 
 	if (p->debug) fprintf(stderr,"i1pro: init coms has suceeded\n");
 
@@ -122,8 +122,10 @@ i1pro_init_inst(inst *pp) {
 
 	if (p->gotcoms == 0)
 		return i1pro_interp_code(p, I1PRO_INT_NO_COMS);	/* Must establish coms before calling init */
-	if ((ev = i1pro_imp_init(p)) != I1PRO_OK)
+	if ((ev = i1pro_imp_init(p)) != I1PRO_OK) {
+		if (p->debug) fprintf(stderr,"i1pro_imp_init() failed\n");
 		return i1pro_interp_code(p, ev);
+	}
 
 	/* Set the base Monitor/Pro capabilities mask */
 	p->cap =  inst_emis_spot
@@ -134,7 +136,6 @@ i1pro_init_inst(inst *pp) {
 	       |  inst_emis_strip		/* Also likely to be light table reading */
 	       |  inst_colorimeter
 	       |  inst_spectral
-	       |  inst_highres
 	       ;
 
 	p->cap2 = inst2_cal_trans_white 
@@ -161,8 +162,9 @@ i1pro_init_inst(inst *pp) {
 		p->cap |= inst_highres;
 
 	if (i1pro_imp_ambient(p)) {
-		p->cap |= inst_emis_ambient;
-		/* ambient scan ? */
+		p->cap |= inst_emis_ambient
+		       |  inst_emis_ambient_flash
+		       ;
 	}
 
 	return i1pro_interp_code(p, ev);
@@ -243,7 +245,7 @@ i1pro_interp_error(inst *pp, i1pro_code ec) {
 		case I1PRO_COMS_FAIL:
 			return "Communications failure";
 		case I1PRO_UNKNOWN_MODEL:
-			return "Not a i1 Display";
+			return "Not an i1 Pro";
 		case I1PRO_DATA_PARSE_ERROR:
 			return "Data from i1 Display didn't parse as expected";
 
@@ -314,6 +316,8 @@ i1pro_interp_error(inst *pp, i1pro_code ec) {
 			return "Light level is too low";
 		case I1PRO_RD_LIGHTTOOHIGH:
 			return "Light level is too high";
+		case I1PRO_RD_SHORTMEAS:
+			return "Reading is too short";
 		case I1PRO_RD_READINCONS:
 			return "Reading is inconsistent";
 		case I1PRO_RD_TRANSWHITERANGE:
@@ -324,6 +328,10 @@ i1pro_interp_error(inst *pp, i1pro_code ec) {
 			return "Too many patches";
 		case I1PRO_RD_NOTENOUGHSAMPLES:
 			return "Not enough samples per patch";
+		case I1PRO_RD_NOFLASHES:
+			return "No flashes recognized";
+		case I1PRO_RD_NOAMBB4FLASHES:
+			return "No ambient found before first flash";
 
 		case I1PRO_INT_NO_COMS:
 			return "Communications hasn't been established";
@@ -433,11 +441,14 @@ i1pro_interp_code(i1pro *p, i1pro_code ec) {
 		case I1PRO_RD_WHITEREFERROR:
 		case I1PRO_RD_LIGHTTOOLOW:
 		case I1PRO_RD_LIGHTTOOHIGH:
+		case I1PRO_RD_SHORTMEAS:
 		case I1PRO_RD_READINCONS:
 		case I1PRO_RD_TRANSWHITERANGE:
 		case I1PRO_RD_NOTENOUGHPATCHES:
 		case I1PRO_RD_TOOMANYPATCHES:
 		case I1PRO_RD_NOTENOUGHSAMPLES:
+		case I1PRO_RD_NOFLASHES:
+		case I1PRO_RD_NOAMBB4FLASHES:
 			return inst_misread | ec;
 
 		case I1PRO_RD_NEEDS_CAL:
@@ -525,6 +536,9 @@ inst_code i1pro_set_mode(inst *pp, inst_mode m) {
 		} else if ((mm & inst_mode_sub_mask) == inst_mode_ambient
 		        && (p->cap & inst_emis_ambient)) {
 			mmode = i1p_amb_spot;
+		} else if ((mm & inst_mode_sub_mask) == inst_mode_ambient_flash
+		        && (p->cap & inst_emis_ambient_flash)) {
+			mmode = i1p_amb_flash;
 		} else {
 			return inst_unsupported;
 		}

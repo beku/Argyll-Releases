@@ -13,5 +13,6 @@
 #include "zbrent.h"		/* 1 dimentional brent root search */
 #include "rand.h"		/* Random number generators */
 #include "sobol.h"		/* Sub-random vector generators */
+#include "aatree.h"		/* Anderson balanced binary tree */
 
 #endif /* NUMLIB_H */

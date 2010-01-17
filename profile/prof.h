@@ -10,7 +10,7 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -34,6 +34,7 @@ typedef enum {
 /* Output or Display device */
 void make_output_icc(
 	prof_atype ptype,		/* Profile output type */
+	int mtxtoo,				/* NZ if matrix tags should be created for Display XYZ cLUT */
 	icmICCVersion iccver,	/* ICC profile version to create */
 	int verb,				/* Vebosity level, 0 = none */
 	int iquality,			/* A2B table quality, 0..2 */
@@ -83,6 +84,7 @@ void make_input_icc(
 	int nocied,				/* nz to supress inclusion of .ti3 data in profile */
 	int verify,				/* nz to print verification */
 	int nsabs,				/* nz for non-standard absolute output */
+	double iwpscale,		/* >= 0.0 for media white point scale factor */
 	int dob2a,				/* nz to create a B2A table as well */
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */

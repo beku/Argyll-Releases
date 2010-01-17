@@ -6,7 +6,7 @@
  * Copyright 2005 Graeme W. Gill
  * Parts derived from rspl/c1.c, cv.c etc.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Test monocurve class.
@@ -34,7 +34,7 @@ void usage(void);
 
 #define TRIALS 30	/* Number of random trials */
 #define SKIP 0		/* Number of random trials to skip */
-#define NORMONLY	/* Defined to use 0.0 - 1.0 limited curve */
+#undef NORMONLY	/* Defined to use 0.0 - 1.0 limited curve */
 
 #undef ORDER_STEP		/* Step orders from 2 to SHAPE_ORDERS */
 #define SHAPE_ORDS 30		/* Number of order to use */

@@ -33,7 +33,7 @@ emit VRML .wrl file as well as CGATS .gam file</span><br
 Don't add VRML axes or white/black point</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-k&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Add markers for prim. &amp; sec. "cusp" points</span><br
+Add VRML markers for prim. &amp; sec. "cusp" points</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-f function&nbsp;&nbsp; f =
 forward*, b = backwards</span><br style="font-family: monospace;">
@@ -228,13 +228,17 @@ devices. If a device has a total ink limit, and hasn't been
 characterised with device values above this limit, then plotting the
 gamut in these areas will almost certainly be misleading. tables. By
 default, a total ink limit will
-be estimated from the profile tables.<br>
+be estimated from the profile tables. The ink limit
+will be in final calibrated device values if the profile includes
+calibration information.<br>
 <br>
 The <b>-L</b> parameter allows setting a black ink limit for printing
 devices. If a device is to be used with a black ink limit, then it is
 useful to evaluate
 the gamut with the limit in place. By default, a black ink limit will
-be estimated from the profile tables.<br>
+be estimated from the profile tables. The ink limit
+will be in final calibrated device values if the profile includes
+calibration information.<br>
 <br>
 The <b>-c</b> parameter allows setting the CIECAM02 viewing
 conditions,

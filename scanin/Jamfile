@@ -10,7 +10,8 @@ Executables = scanin ;
 Headers = scanrd.h ;
 Samples = it8.cht ColorChecker.cht ColorChecker.cie ColorCheckerDC.cht
           ColorCheckerSG.cht Hutchcolor.cht i1_RGB_Scan_1.4.cht
-          QPcard_201.cht QPcard_201.cie CMP_DT_003.cht ;
+          QPcard_201.cht QPcard_201.cie CMP_DT_003.cht CMP_Digital_Target-3.cht
+          LaserSoftDCPro.cht ;
 
 #Install
 InstallBin ../bin : $(Executables) ;
@@ -23,8 +24,8 @@ Library libscanrd : scanrd.c : : : ../numlib ;
 
 # IT8 chart reader - sucks in tiff file and spits out cgats file
 Main scanin : scanin.c ;
-ObjectHdrs scanin : ../h ../cgats ../numlib ../icc ../xicc $(TIFFINC) ;
-LinkLibraries scanin : libscanrd ../xicc/libxcolorants
-                       ../numlib/libnum ../cgats/libcgats
-                       ../icc/libicc $(TIFFLIB) ;
-
+# ObjectHdrs scanin : ../h ../cgats ../numlib ../icc ../rspl ../gamut ../xicc $(TIFFINC) ;
+ObjectHdrs scanin : ../h ../numlib ../icc ../cgats ../rspl ../xicc ../gamut ../spectro $(TIFFINC) ;
+LinkLibraries scanin : libscanrd ../xicc/libxicc ../spectro/libinsttypes 
+                       ../gamut/libgamut ../rspl/librspl ../cgats/libcgats
+                       ../icc/libicc ../numlib/libnum ../plot/libplot ../plot/libvrml $(TIFFLIB) ;

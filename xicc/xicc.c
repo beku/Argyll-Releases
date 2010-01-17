@@ -8,7 +8,7 @@
  *
  * Copyright 2000, 2001 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Based on the old iccXfm class.
@@ -53,14 +53,14 @@
 
 #define MAX_INVSOLN 4
 
-static void xicc_free(xicc *p);
+static void xicc_del(xicc *p);
 icxLuBase * xicc_get_luobj(xicc *p, int flags, icmLookupFunc func, icRenderingIntent intent,
                            icColorSpaceSignature pcsor, icmLookupOrder order,
                            icxViewCond *vc, icxInk *ink);
 static icxLuBase *xicc_set_luobj(xicc *p, icmLookupFunc func, icRenderingIntent intent,
                             icmLookupOrder order, int flags, int no, cow *points,
-                            double dispLuminance, double smooth, double avgdev,
-                            icxViewCond *vc, icxInk *ink, int quality);
+                            double dispLuminance, double wpscale, double smooth, double avgdev,
+                            icxViewCond *vc, icxInk *ink, xcal *cal, int quality);
 static void icxLutSpaces(icxLuBase *p, icColorSpaceSignature *ins, int *inn,
                          icColorSpaceSignature *outs, int *outn,
                          icColorSpaceSignature *pcs);
@@ -72,7 +72,7 @@ static void icxLu_get_native_ranges (icxLuBase *p,
                               double *inmin, double *inmax, double *outmin, double *outmax);
 static void icxLu_get_ranges (icxLuBase *p,
                               double *inmin, double *inmax, double *outmin, double *outmax);
-static void icxLuRel_wh_bk_points(icxLuBase *p, double *wht, double *blk);
+static void icxLuEfv_wh_bk_points(icxLuBase *p, double *wht, double *blk, double *kblk);
 int xicc_get_viewcond(xicc *p, icxViewCond *vc);
 
 /* The different profile types are in their own source filesm */
@@ -152,7 +152,7 @@ icxLuSpaces(
     icmLookupFunc function;
 	icColorSpaceSignature npcs;		/* Native PCS */
 
-	p->plu->spaces(p->plu, NULL, inn, NULL, outn, alg, NULL, &function, &npcs);
+	p->plu->spaces(p->plu, NULL, inn, NULL, outn, alg, NULL, &function, &npcs, NULL);
 
 	if (intt != NULL)
 		*intt = p->intent;
@@ -222,55 +222,554 @@ double *outmin, double *outmax		/* Return maximum range of outspace values */
 	}
 }
 
-/* Return the relative media white and black points */
-/* in the xlu effective PCS colorspace. Pointers may be NULL. */
-static void icxLuRel_wh_bk_points(
-struct _icxLuBase *p,
-double *wht,
-double *blk
-) {
-	icmXYZNumber whiteXYZ, blackXYZ;
-	double white[3], black[3];
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Routine to figure out a suitable black point for CMYK */
 
-	/* Get the absolute XYZ profile black and white points */
-	p->plu->wh_bk_points(p->plu, &whiteXYZ, &blackXYZ);
+/* Structure to hold optimisation information */
+typedef struct {
+	icmLuBase *p;
+	int kch;				/* K channel, -1 if none */
+	double tlimit, klimit;	/* Ink limit values */
+	int inn;				/* Number of input channels */
+	icColorSpaceSignature outs;		/* Output space */
+	double p1[3];			/* white pivot point in abs Lab */
+	double p2[3];			/* Point on vector towards black */
+} bpfind;
 
-	white[0] = whiteXYZ.X;
-	white[1] = whiteXYZ.Y;
-	white[2] = whiteXYZ.Z;
-	black[0] = blackXYZ.X;
-	black[1] = blackXYZ.Y;
-	black[2] = blackXYZ.Z;
+/* Optimise device values to minimise L, while remaining */
+/* within the ink limit, and staying in line between p1 (white) and p2 (K) */
+static double bpfindfunc(void *adata, double pv[]) {
+	bpfind *b = (bpfind *)adata;
+	double rv = 0.0;
+	double Lab[3];
+	double lr, ta, tb, terr;	/* L ratio, target a, target b, target error */
+	double ovr = 0.0;
+	int e;
 
-	/* Convert to relative colorimetric if appropriate */
-	switch (p->intent) {
-		/* If it is relative */
-		case icmDefaultIntent:				/* Shouldn't happen */
-		case icPerceptual:
-		case icRelativeColorimetric:
-		case icSaturation:
-			p->plu->XYZ_Abs2Rel(p->plu,white,white);
-			p->plu->XYZ_Abs2Rel(p->plu,black,black);
-			break;
-		default:
-			break;
+	/* Compute amount outside total limit */
+	if (b->tlimit >= 0.0) {
+		double sum;
+		for (sum = 0.0, e = 0; e < b->inn; e++)
+			sum += pv[e];
+		if (sum > b->tlimit) {
+			ovr = sum - b->tlimit;
+#ifdef DEBUG
+	printf("~1 total ink ovr = %f\n",ovr);
+#endif
+		}
 	}
 
-	/* Convert to the (possibly) override PCS */
+	/* Compute amount outside black limit */
+	if (b->klimit >= 0.0 && b->kch >= 0) {
+		double kval = pv[b->kch] - b->klimit;
+		if (kval > ovr) {
+			ovr = kval;
+#ifdef DEBUG
+	printf("~1 black ink ovr = %f\n",ovr);
+#endif
+		}
+	}
+	/* Compute amount outside device value limits 0.0 - 1.0 */
+	{
+		double dval;
+		for (dval = -1.0, e = 0; e < b->inn; e++) {
+			if (pv[e] < 0.0) {
+				if (-pv[e] > dval)
+					dval = -pv[e];
+			} else if (pv[e] > 1.0) {
+				if ((pv[e] - 1.0) > dval)
+					dval = pv[e] - 1.0;
+			}
+		}
+		if (dval > ovr)
+			ovr = dval;
+	}
+
+	/* Compute the Lab value: */
+	b->p->lookup(b->p, Lab, pv);
+	if (b->outs == icSigXYZData)
+		icmXYZ2Lab(&icmD50, Lab, Lab);
+
+#ifdef DEBUG
+	printf("~1 p1 =  %f %f %f, p2 = %f %f %f\n",b->p1[0],b->p1[1],b->p1[2],b->p2[0],b->p2[1],b->p2[2]);
+	printf("~1 device value %f %f %f %f, Lab = %f %f %f\n",pv[0],pv[1],pv[2],pv[3],Lab[0],Lab[1],Lab[2]);
+#endif
+
+	/* Primary aim is to minimise L value */
+	rv = Lab[0];
+
+	/* See how out of line from p1 to p2 we are */
+	lr = (Lab[0] - b->p1[0])/(b->p2[0] - b->p1[0]);		/* Distance towards p2 from p1 */
+	ta = lr * (b->p2[1] - b->p1[1]) + b->p1[1];			/* Target a value */
+	tb = lr * (b->p2[2] - b->p1[2]) + b->p1[2];			/* Target b value */
+
+	terr = (ta - Lab[1]) * (ta - Lab[1])
+	     + (tb - Lab[2]) * (tb - Lab[2]);
+	
+#ifdef DEBUG
+	printf("~1 target error %f\n",terr);
+#endif
+	rv += 100.0 * terr;
+
+#ifdef DEBUG
+	printf("~1 out of range error %f\n",ovr);
+#endif
+	rv += 200 * ovr;
+
+#ifdef DEBUG
+	printf("~1 black find tc ret %f\n",rv);
+#endif
+	return rv;
+}
+
+/* Try and compute a real black point in XYZ given an iccLu, */
+/* and also return the K only black or the normal black if the device doesn't have K */
+/* black[] will be unchanged if black cannot be computed. */
+/* Note that the black point will be in the space of the Lu */
+/* converted to XYZ, so will have the Lu's intent etc. */
+/* (Note that this is duplicated in xlut.c set_icxLuLut() !!!) */
+static void icxLu_comp_bk_point(
+icxLuBase *x,
+int gblk,				/* If nz, compute black if possible. */
+double *white,			/* Input, used for computing black */
+double *black,			/* Input & Output. Set if gblk NZ and can be computed */
+double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
+) {
+	icmLuBase *p = x->plu;
+	icmLuBase *op = p;			/* Original icmLu, in case we replace p */
+	icc *icco = p->icp;
+	icmHeader *h = icco->header;
+	icColorSpaceSignature ins, outs;
+	int inn, outn;
+	icmLuAlgType alg;
+	icRenderingIntent intt;
+	icmLookupFunc fnc;
+	icmLookupOrder ord;
+	int kch = -1;
+	double dblack[MAX_CHAN];	/* device black value */
+	int e;
+
+//printf("~1 icxLu_comp_bk_point() called\n");
+	/* Default return incoming black as K only black */
+	kblack[0] = black[0];
+	kblack[1] = black[1];
+	kblack[2] = black[2];
+
+	/* Get the effective characteristics of the Lu */
+	p->spaces(p, &ins, &inn, &outs, &outn, &alg, &intt, &fnc, NULL, &ord);
+
+	if (fnc == icmBwd) { /* Hmm. We've got PCS to device, and we want device to PCS. */
+
+		/* Strictly speaking this is a dubious approach, since for a cLut profile */
+		/* the B2A table could make the effective white and black points */
+		/* anything it likes, and they don't have to match what the corresponding */
+		/* A2B table does. In our usage it's probably OK, since we tend */
+		/* to use colorimetric B2A */ 
+//printf("~1 getting icmFwd\n");
+		if ((p = icco->get_luobj(icco, icmFwd, intt, ins, ord)) == NULL)
+			error("icxLu_comp_bk_point: assert: getting Fwd Lookup failed!");
+
+		p->spaces(p, &ins, &inn, &outs, &outn, &alg, &intt, &fnc, NULL, &ord);
+	}
+
+	if (outs != icSigXYZData && outs != icSigLabData) {
+		error("icxLu_comp_bk_point: assert: icc Lu output is not XYZ or Lab!, outs = 0x%x, ");
+	}
+
+//printf("~1 icxLu_comp_bk_point called for inn = %d, ins = %s\n", inn, icx2str(icmColorSpaceSignature,ins));
+
+	switch (ins) {
+
+    	case icSigXYZData:
+    	case icSigLabData:
+    	case icSigLuvData:
+    	case icSigYxyData:
+//printf("~1 Assuming CIE colorspace black is 0.0\n");
+			if (gblk) {
+				for (e = 0; e < inn; e++)
+					black[0] = 0.0;
+			}
+			kblack[0] = black[0];
+			kblack[1] = black[1];
+			kblack[2] = black[2];
+			return;
+
+		case icSigRgbData:
+//printf("~1 RGB:\n");
+			for (e = 0; e < inn; e++)
+				dblack[e] = 0.0;
+			break;
+
+		case icSigGrayData: {	/* Could be additive or subtractive */
+			double dval[1];
+			double minv[3], maxv[3];
+//printf("~1 Gray:\n");
+
+			/* Check out 0 and 100% colorant */
+			dval[0] = 0.0;
+			p->lookup(p, minv, dval);
+			if (outs == icSigXYZData)
+				icmXYZ2Lab(&icmD50, minv, minv);
+			dval[0] = 1.0;
+			p->lookup(p, maxv, dval);
+			if (outs == icSigXYZData)
+				icmXYZ2Lab(&icmD50, maxv, maxv);
+
+			if (minv[0] < maxv[0])
+				dblack[0] = 0.0;
+			else
+				dblack[0] = 1.0;
+			}
+			break;
+
+		case icSigCmyData:
+			for (e = 0; e < inn; e++)
+				dblack[e] = 1.0;
+			break;
+
+		case icSigCmykData:
+//printf("~1 CMYK:\n");
+			kch = 3;
+			dblack[0] = 0.0;
+			dblack[1] = 0.0;
+			dblack[2] = 0.0;
+			dblack[3] = 1.0;
+			if (alg == icmLutType) {
+				icxLuLut *pp = (icxLuLut *)x;
+		
+				if (pp->ink.tlimit >= 0.0)
+					dblack[kch] = pp->ink.tlimit;
+			};
+			break;
+
+			/* Use a heursistic. */
+			/* This duplicates code in icxGetLimits() :-( */
+			/* Colorant guessing should go in icclib ? */
+		case icSig2colorData:
+    	case icSig3colorData:
+    	case icSig4colorData:
+    	case icSig5colorData:
+    	case icSig6colorData:
+    	case icSig7colorData:
+    	case icSig8colorData:
+    	case icSig9colorData:
+    	case icSig10colorData:
+    	case icSig11colorData:
+    	case icSig12colorData:
+    	case icSig13colorData:
+    	case icSig14colorData:
+    	case icSig15colorData:
+    	case icSigMch5Data:
+    	case icSigMch6Data:
+    	case icSigMch7Data:
+    	case icSigMch8Data: {
+				double dval[MAX_CHAN];
+				double ncval[3];
+				double cvals[MAX_CHAN][3];
+				int nlighter, ndarker;
+
+				/* Decide if the colorspace is additive or subtractive */
+//printf("~1 N channel:\n");
+
+				/* First the no colorant value */
+				for (e = 0; e < inn; e++)
+					dval[e] = 0.0;
+				p->lookup(p, ncval, dval);
+				if (outs == icSigXYZData)
+					icmXYZ2Lab(&icmD50, ncval, ncval);
+
+				/* Then all the colorants */
+				nlighter = ndarker = 0;
+				for (e = 0; e < inn; e++) {
+					dval[e] = 1.0;
+					p->lookup(p, cvals[e], dval);
+					if (outs == icSigXYZData)
+						icmXYZ2Lab(&icmD50, cvals[e], cvals[e]);
+					dval[e] = 0.0;
+					if (fabs(cvals[e][0] - ncval[0]) > 5.0) {
+						if (cvals[e][0] > ncval[0])
+							nlighter++;
+						else
+							ndarker++;
+					}
+				}
+				if (ndarker == 0 && nlighter > 0) {		/* Assume additive */
+					for (e = 0; e < inn; e++)
+						dblack[e] = 0.0;
+//printf("~1 N channel is additive:\n");
+
+				} else if (ndarker > 0 && nlighter == 0) {				/* Assume subtractive. */
+					double pbk[3] = { 0.0,0.0,0.0 };	/* Perfect black */
+					double smd = 1e10;			/* Smallest distance */
+
+//printf("~1 N channel is subtractive:\n");
+					/* See if we can guess the black channel */
+					for (e = 0; e < inn; e++) {
+						double tt;
+						tt = icmNorm33sq(pbk, cvals[e]);
+						if (tt < smd) {
+							smd = tt;	
+							kch = e;
+						}
+					}
+					/* See if the black seems sane */
+					if (cvals[kch][0] > 40.0
+					 || fabs(cvals[kch][1]) > 10.0
+					 || fabs(cvals[kch][2]) > 10.0) {
+						if (p != op)
+							p->del(p);
+//printf("~1 black doesn't look sanem so assume nothing\n");
+						return;		/* Assume nothing */
+					}
+
+					/* Chosen kch as black */
+					for (e = 0; e < inn; e++)
+						dblack[e] = 0.0;
+					dblack[kch] = 1.0;
+					if (alg == icmLutType) {
+						icxLuLut *pp = (icxLuLut *)x;
+			
+						if (pp->ink.tlimit >= 0.0)
+							dblack[kch] = pp->ink.tlimit;
+					};
+//printf("~1 N channel K = chan %d\n",kch);
+				} else {
+					if (p != op)
+						p->del(p);
+//printf("~1 can't figure if additive or subtractive, so assume nothing\n");
+					return;			/* Assume nothing */
+				}
+			}
+			break;
+
+		default:
+//printf("~1 unhandled colorspace, so assume nothing\n");
+			if (p != op)
+				p->del(p);
+			return;				/* Don't do anything */
+	}
+
+	/* Lookup the K only value */
+	if (kch >= 0) {
+		p->lookup(p, kblack, dblack);
+		
+		/* We always return XYZ */
+		if (outs == icSigLabData)
+			icmLab2XYZ(&icmD50, kblack, kblack);
+	}
+
+	if (gblk == 0) {		/* That's all we have to do */
+//printf("~1 gblk == 0, so only return kblack\n");
+		if (p != op)
+			p->del(p);
+		return;
+	}
+
+	/* Lookup the device black  or K only value */
+	p->lookup(p, black, dblack);
+//printf("~1 Got initial black %f %f %f, kch = %d\n", black[0],black[1],black[2],kch);
+
+	if (kch >= 0) {
+		/* The colorspace is subtractive and has a K channel. */
+		/* Locate the device value within the ink limits that is */
+		/* in the direction of the K channel */
+		bpfind bfs;					/* Callback context */
+		double sr[MXDO];			/* search radius */
+		double tt[MXDO];			/* Temporary */
+		double rs0[MXDO], rs1[MXDO];	/* Random start candidates */
+		int trial;
+		double brv;
+
+		/* Setup callback function context */
+		bfs.p = p;
+		bfs.inn = inn;
+		bfs.outs = outs;
+
+		bfs.kch = kch;
+		bfs.tlimit = -1.0;
+		bfs.klimit = -1.0;
+
+		if (alg == icmLutType) {
+			icxLuLut *pp = (icxLuLut *)x;
+
+			pp->kch = kch;
+			bfs.tlimit = pp->ink.tlimit;
+			bfs.klimit = pp->ink.klimit;
+//printf("~1 tlimit = %f, klimit = %f\n",bfs.tlimit,bfs.klimit);
+		};
+	
+		/* Now figure abs Lab value of K only, as the direction */
+		/* to use for the rich black. */
+		for (e = 0; e < inn; e++)
+			dblack[e] = rs0[e] = 0.0;
+		if (bfs.klimit < 0.0)
+			dblack[kch] = rs0[kch] = 1.0;
+		else
+			dblack[kch] = rs0[kch] = bfs.klimit;		/* K value */
+
+		p->lookup(p, black, dblack);
+
+		if (outs == icSigXYZData) {
+			icmXYZ2Lab(&icmD50, bfs.p1, white);		/* Pivot */
+			icmXYZ2Lab(&icmD50, bfs.p2, black);		/* K direction */
+		} else {
+			icmAry2Ary(bfs.p1, white);
+			icmAry2Ary(bfs.p2, black);
+		}
+
+//printf("~1 p1 = %f %f %f, p2 = %f %f %f\n",bfs.p1[0],bfs.p1[1],bfs.p1[2],bfs.p2[0],bfs.p2[1],bfs.p2[2]);
+		/* Start with the K only as the current best value */
+		brv = bpfindfunc((void *)&bfs, dblack);
+//printf("~1 initial brv for K only = %f\n",brv);
+
+		/* Set the random start 1 location as CMY0 */
+		{
+			double tt;
+			if (bfs.tlimit < 0.0)
+				tt = 1.0;
+			else
+				tt = bfs.tlimit/(inn - 1.0);
+			for (e = 0; e < inn; e++)
+				rs1[e] = tt;
+			rs1[kch] = 0.0;		/* K value */
+		}
+
+		/* Find the device black point using optimization */
+		/* Do several trials to avoid local minima. */
+		rand32(0x12345678);	/* Make trial values deterministic */
+		for (trial = 0; trial < 200; trial++) {
+			double rv;			/* Temporary */
+
+			/* Start first trial at 000K */
+			if (trial == 0) {
+				for (e = 0; e < inn; e++) {
+					tt[e] = rs0[e];
+					sr[e] = 0.1;
+				}
+
+			} else {
+				/* Base is random between 000K and CMY0: */
+				if (trial < 100) {
+					rv = d_rand(0.0, 1.0);
+					for (e = 0; e < inn; e++) {
+						tt[e] = rv * rs0[e] + (1.0 - rv) * rs1[e];
+						sr[e] = 0.1;
+					}
+				/* Base on current best */
+				} else {
+					for (e = 0; e < inn; e++) {
+						tt[e] = dblack[e];
+						sr[e] = 0.1;
+					}
+				}
+	
+				/* Then add random start offset */
+				for (rv = 0.0, e = 0; e < inn; e++) {
+					tt[e] +=  d_rand(-0.5, 0.5);
+					if (tt[e] < 0.0)
+						tt[e] = 0.0;
+					else if (tt[e] > 1.0)
+						tt[e] = 1.0;
+				}
+			}
+
+			/* Clip black */
+			if (bfs.klimit >= 0.0 && tt[kch] > bfs.klimit)
+				tt[kch] = bfs.klimit;	
+			
+			/* Compute amount outside total limit */
+			if (bfs.tlimit >= 0.0) {
+				for (rv = 0.0, e = 0; e < inn; e++)
+					rv += tt[e];
+		
+				if (rv > bfs.tlimit) {
+					rv /= (double)inn;
+					for (e = 0; e < inn; e++)
+						tt[e] -= rv;
+				}
+			}
+	
+			if (powell(&rv, inn, tt, sr, 0.000001, 1000, bpfindfunc,
+			                      (void *)&bfs, NULL, NULL) == 0) {
+//printf("~1 trial %d, rv %f bp %f %f %f %f\n",trial,rv,tt[0],tt[1],tt[2],tt[3]);
+				if (rv < brv) {
+//printf("~1   new best\n");
+					brv = rv;
+					for (e = 0; e < inn; e++)
+						dblack[e] = tt[e];
+				}
+			}
+		}
+		if (brv > 1000.0)
+			error("icxLu_comp_bk_point: Black point powell failed");
+
+		for (e = 0; e < inn; e++) { /* Make sure device values are in range */
+			if (dblack[e] < 0.0)
+				dblack[e] = 0.0;
+			else if (dblack[e] > 1.0)
+				dblack[e] = 1.0;
+		}
+		/* Now have device black in dblack[] */
+//printf("~1 got device black %f %f %f %f\n",dblack[0], dblack[1], dblack[2], dblack[3]);
+
+		p->lookup(p, black, dblack);		/* Convert to PCS */
+	}
+
+	if (p != op)
+		p->del(p);
+
+	/* We always return XYZ */
+	if (outs == icSigLabData)
+		icmLab2XYZ(&icmD50, black, black);
+//printf("~1 returning %f %f %f\n", black[0], black[1], black[2]);
+
+	return;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Return the media white and black points */
+/* in the xlu effective PCS colorspace. Pointers may be NULL. */
+/* (ie. these will be relative values for relative intent etc.) */
+static void icxLuEfv_wh_bk_points(
+icxLuBase *p,
+double *wht,
+double *blk,
+double *kblk		/* K only black */
+) {
+	double white[3], black[3], kblack[3];
+
+	/* Get the Lu PCS converted to XYZ icc black and white points in XYZ */
+	if (p->plu->lu_wh_bk_points(p->plu, white, black)) {
+		/* Black point is assumed. We should determine one instead. */
+		/* Lookup K only black too */
+		icxLu_comp_bk_point(p, 1, white, black, kblack);
+
+	} else {
+		/* Lookup a possible K only black */
+		icxLu_comp_bk_point(p, 0, white, black, kblack);
+	}
+
+//printf("~1 white %f %f %f, black %f %f %f, kblack %f %f %f\n",white[0],white[1],white[2],black[0],black[1],black[2],kblack[0],kblack[1],kblack[2]);
+	/* Convert to possibl xicc override PCS */
 	switch (p->pcs) {
 		case icSigXYZData:
 			break;								/* Don't have to do anyting */
 		case icSigLabData:
 			icmXYZ2Lab(&icmD50, white, white);	/* Convert from XYZ to Lab */
 			icmXYZ2Lab(&icmD50, black, black);
+			icmXYZ2Lab(&icmD50, kblack, kblack);
 			break;
 		case icxSigJabData:
 			p->cam->XYZ_to_cam(p->cam, white, white);	/* Convert from XYZ to Jab */
 			p->cam->XYZ_to_cam(p->cam, black, black);
+			p->cam->XYZ_to_cam(p->cam, kblack, kblack);
 			break;
 		default:
 			break;
 	}
+
+//printf("~1 icxLuEfv_wh_bk_points: pcsor %s White %f %f %f, Black %f %f %f\n", icx2str(icmColorSpaceSignature,p->pcs), white[0], white[1], white[2], black[0], black[1], black[2]);
 	if (wht != NULL) {
 		wht[0] = white[0];
 		wht[1] = white[1];
@@ -282,6 +781,12 @@ double *blk
 		blk[1] = black[1];
 		blk[2] = black[2];
 	}
+
+	if (kblk != NULL) {
+		kblk[0] = kblack[0];
+		kblk[1] = kblack[1];
+		kblk[2] = kblack[2];
+	}
 }
 
 /* Create an instance of an xicc object */
@@ -292,17 +797,24 @@ icc *picc		/* icc we are expanding */
 	if ((p = (xicc *) calloc(1,sizeof(xicc))) == NULL)
 		return NULL;
 	p->pp = picc;
-	p->del           = xicc_free;
+	p->del           = xicc_del;
 	p->get_luobj     = xicc_get_luobj;
 	p->set_luobj     = xicc_set_luobj;
 	p->get_viewcond  = xicc_get_viewcond;
+
+	/* Create an xcal if there is the right tag in the profile */
+	p->cal = xiccReadCalTag(p->pp);
+	p->nodel_cal = 0;	/* We created it, we will delete it */
+
 	return p;
 }
 
 /* Do away with the xicc (but not the icc!) */
-static void xicc_free(
+static void xicc_del(
 xicc *p
 ) {
+	if (p->cal != NULL && p->nodel_cal == 0)
+		p->cal->del(p->cal);
 	free (p);
 }
 
@@ -335,10 +847,7 @@ icxInk *ink					/* inking details (NULL for default) */
 	icRenderingIntent n_intent = intent;			/* Native Intent to request */
 	icColorSpaceSignature n_pcs = icmSigDefaultData;	/* Native PCS to request */
 
-#if defined(__IBMC__)
-	_control87(EM_UNDERFLOW, EM_UNDERFLOW);
-	_control87(EM_OVERFLOW, EM_OVERFLOW);
-#endif
+//printf("~1 xicc_get_luobj got intent %s and pcsor %s\n",icx2str(icmRenderingIntent,intent),icx2str(icmColorSpaceSignature,pcsor));
 
 	/* Ensure that appropriate PCS is slected for an appearance intent */
 	if (intent == icxAppearance
@@ -370,7 +879,7 @@ icxInk *ink					/* inking details (NULL for default) */
 			intent = icxAppearance;
 	}
 
-	/* Translate intent asked for into intent needed icclib */
+	/* Translate intent asked for into intent needed in icclib */
 	if      (intent == icxAppearance
 	      || intent == icxAbsAppearance)
 		n_intent = icAbsoluteColorimetric;
@@ -387,6 +896,8 @@ icxInk *ink					/* inking details (NULL for default) */
 	if (pcsor == icxSigJabData)	/* xicc override */
 		n_pcs = icSigXYZData;	/* Translate to XYZ */
 
+//printf("~1 xicc_get_luobj processed intent %s and pcsor %s\n",icx2str(icmRenderingIntent,intent),icx2str(icmColorSpaceSignature,pcsor));
+//printf("~1 xicc_get_luobj icclib intent %s and pcsor %s\n",icx2str(icmRenderingIntent,n_intent),icx2str(icmColorSpaceSignature,n_pcs));
 	/* Get icclib lookup object */
 	if ((plu = p->pp->get_luobj(p->pp, func, n_intent, n_pcs, order)) == NULL) {
 		p->errc = p->pp->errc;		/* Copy error */
@@ -395,7 +906,7 @@ icxInk *ink					/* inking details (NULL for default) */
 	}
 
 	/* Figure out what the algorithm is */
-	plu->spaces(plu, NULL, NULL, NULL, NULL, &alg, NULL, NULL, &n_pcs);
+	plu->spaces(plu, NULL, NULL, NULL, NULL, &alg, NULL, NULL, &n_pcs, NULL);
 
 	/* make sure its "Abs CAM" */
 	if (vc!= NULL
@@ -403,6 +914,7 @@ icxInk *ink					/* inking details (NULL for default) */
 	  || intent == icxAbsPerceptualAppearance
 	  || intent == icxAbsSaturationAppearance)) {	/* make sure its "Abs CAM" */
 		/* Set white point and flare color to D50 */
+		/* (Hmm. This doesn't match what happens within collink with absolute intent!!) */
 		vc->Wxyz[0] = icmD50.X/icmD50.Y;
 		vc->Wxyz[1] = icmD50.Y/icmD50.Y;	// Normalise white reference to Y = 1 ?
 		vc->Wxyz[2] = icmD50.Z/icmD50.Y;
@@ -455,20 +967,24 @@ int flags,					/* white/black point, verbose flags etc. */
 int no,						/* Number of points */
 cow *points,				/* Array of input points */
 double dispLuminance,		/* > 0.0 if display luminance value and is known */
+double wpscale,				/* > 0.0 if input white point is to be scaled */
 double smooth,				/* RSPL smoothing factor, -ve if raw */
 double avgdev,				/* reading Average Deviation as a proportion of the input range */
 icxViewCond *vc,			/* Viewing Condition (NULL if not using CAM) */
 icxInk *ink,				/* inking details (NULL for default) */
+xcal *cal,                  /* Optional cal, will override any existing (not deleted with xicc)*/
 int quality					/* Quality metric, 0..3 */
 ) {
 	icmLuBase *plu;
 	icxLuBase *xplu = NULL;
 	icmLuAlgType alg;
 
-#if defined(__IBMC__)
-	_control87(EM_UNDERFLOW, EM_UNDERFLOW);
-	_control87(EM_OVERFLOW, EM_OVERFLOW);
-#endif
+	if (cal != NULL) {
+		if (p->cal != NULL && p->nodel_cal == 0)
+			p->cal->del(p->cal);
+		p->cal = cal;
+		p->nodel_cal = 1;	/* We were given it, so don't delete it */
+	}
 
 	if (func != icmFwd) {
 		p->errc = 1;
@@ -485,7 +1001,7 @@ int quality					/* Quality metric, 0..3 */
 	}
 
 	/* Figure out what the algorithm is */
-	plu->spaces(plu, NULL, NULL, NULL, NULL, &alg, NULL, NULL, NULL);
+	plu->spaces(plu, NULL, NULL, NULL, NULL, &alg, NULL, NULL, NULL, NULL);
 
 	/* Call xiccLu wrapper creation */
 	switch (alg) {
@@ -497,12 +1013,12 @@ int quality					/* Quality metric, 0..3 */
 			break;
 
     	case icmMatrixFwdType:
-			xplu = set_icxLuMatrix(p, plu, flags, no, points, dispLuminance, quality);
+			xplu = set_icxLuMatrix(p, plu, flags, no, points, dispLuminance, wpscale, quality);
 			break;
 
     	case icmLutType:
 			/* ~~~ Should add check that it is a fwd profile ~~~ */
-			xplu = set_icxLuLut(p, plu, intent, func, flags, no, points, dispLuminance, smooth, avgdev, vc, ink, quality);
+			xplu = set_icxLuLut(p, plu, func, intent, flags, no, points, dispLuminance, wpscale, smooth, avgdev, vc, ink, quality);
 			break;
 
 		default:
@@ -977,37 +1493,54 @@ icxViewCond *vc		/* Viewing parameters to return */
 
 /* Return an enumerated viewing condition */
 /* Return enumeration if OK, -999 if there is no such enumeration. */
+/* xicc may be NULL if just the description is wanted, */
+/* or an explicit white point is provided. */
 int xicc_enum_viewcond(
 xicc *p,			/* Expanded profile to get white point (May be NULL if desc NZ) */
 icxViewCond *vc,	/* Viewing parameters to return, May be NULL if desc is nz */
 int no,				/* Enumeration to return, -1 for default, -2 for none */
 char *as,			/* String alias to number, NULL if none */
-int desc			/* NZ - Just return a description of this enumeration in vc */
+int desc,			/* NZ - Just return a description of this enumeration in vc */
+double *wp			/* Provide white point if xicc is NULL */
 ) {
 
 	if (desc == 0) {	/* We're setting the viewing condition */
 		icc *pp;		/* Base ICC */
 		icmXYZArray *whitePointTag;
 
-		if (p == NULL)
+		if (vc == NULL)
 			return -999;
-	
-		pp = p->pp;
-		if ((whitePointTag = (icmXYZArray *)pp->read_tag(pp, icSigMediaWhitePointTag)) != NULL
-         && whitePointTag->ttype == icSigXYZType && whitePointTag->size >= 1) {
-			vc->Wxyz[0] = whitePointTag->data[0].X;
-			vc->Wxyz[1] = whitePointTag->data[0].Y;
-			vc->Wxyz[2] = whitePointTag->data[0].Z;
 
-			/* Set a default flare color */
-			vc->Fxyz[0] = vc->Wxyz[0];
-			vc->Fxyz[1] = vc->Wxyz[1];
-			vc->Fxyz[2] = vc->Wxyz[2];
+		if (p == NULL) {
+			if (wp == NULL)
+				return -999;
+			vc->Wxyz[0] = wp[0];
+			vc->Wxyz[1] = wp[1];
+			vc->Wxyz[2] = wp[2];
 		} else {
-			sprintf(p->err,"Enum VC: Failed to read Media White point");
-			p->errc = 2;
-			return -999;
+	
+			pp = p->pp;
+			if ((whitePointTag = (icmXYZArray *)pp->read_tag(pp, icSigMediaWhitePointTag)) != NULL
+	   	      && whitePointTag->ttype == icSigXYZType && whitePointTag->size >= 1) {
+				vc->Wxyz[0] = whitePointTag->data[0].X;
+				vc->Wxyz[1] = whitePointTag->data[0].Y;
+				vc->Wxyz[2] = whitePointTag->data[0].Z;
+			} else {
+				if (wp == NULL) { 
+					sprintf(p->err,"Enum VC: Failed to read Media White point");
+					p->errc = 2;
+					return -999;
+				}
+				vc->Wxyz[0] = wp[0];
+				vc->Wxyz[1] = wp[1];
+				vc->Wxyz[2] = wp[2];
+			}
 		}
+
+		/* Set a default flare color */
+		vc->Fxyz[0] = vc->Wxyz[0];
+		vc->Fxyz[1] = vc->Wxyz[1];
+		vc->Fxyz[2] = vc->Wxyz[2];
 	}
 
 	/*
@@ -1207,10 +1740,16 @@ void xicc_dump_inking(icxInk *ik) {
 		printf("No total limit\n");
 	else
 		printf("Total limit = %f%%\n",ik->tlimit * 100.0);
+
 	if (ik->klimit < 0.0)
 		printf("No black limit\n");
 	else
 		printf("Black limit = %f%%\n",ik->klimit * 100.0);
+
+	if (ik->KonlyLmin)
+		printf("K only black as locus Lmin\n");
+	else
+		printf("Normal black as locus Lmin\n");
 
 	if (ik->k_rule == icxKvalue) {
 		printf("Inking rule is a fixed K target\n");
@@ -1222,6 +1761,7 @@ void xicc_dump_inking(icxInk *ik) {
 		else
 			printf("Inking rule is a 5 parameter K function of L\n");
 		printf("Ksmth = %f\n",ik->c.Ksmth);
+		printf("Kskew = %f\n",ik->c.Kskew);
 		printf("Kstle = %f\n",ik->c.Kstle);
 		printf("Kstpo = %f\n",ik->c.Kstpo);
 		printf("Kenpo = %f\n",ik->c.Kenpo);
@@ -1233,12 +1773,14 @@ void xicc_dump_inking(icxInk *ik) {
 		else
 			printf("Inking rule is a 2x5 parameter K function of L and K aux\n");
 		printf("Min Ksmth = %f\n",ik->c.Ksmth);
+		printf("Min Kskew = %f\n",ik->c.Kskew);
 		printf("Min Kstle = %f\n",ik->c.Kstle);
 		printf("Min Kstpo = %f\n",ik->c.Kstpo);
 		printf("Min Kenpo = %f\n",ik->c.Kenpo);
 		printf("Min Kenle = %f\n",ik->c.Kenle);
 		printf("Min Kshap = %f\n",ik->c.Kshap);
 		printf("Max Ksmth = %f\n",ik->x.Ksmth);
+		printf("Max Kskew = %f\n",ik->x.Kskew);
 		printf("Max Kstle = %f\n",ik->x.Kstle);
 		printf("Max Kstpo = %f\n",ik->x.Kstpo);
 		printf("Max Kenpo = %f\n",ik->x.Kenpo);
@@ -1275,6 +1817,7 @@ char *as				/* Alias string selector, NULL for none */
 	 || (as != NULL && stricmp(as,"a") == 0)) {
 		/* Map Absolute Jab to Jab and clip out of gamut */
 		no = 0;
+		gmi->as = "a";
 		gmi->desc = " a - Absolute Colorimetric (in Jab) [ICC Absolute Colorimetric]";
 		gmi->icci = icAbsoluteColorimetric;
 		gmi->usecas  = colccas;		/* Use absolute appearance space */
@@ -1287,7 +1830,8 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumknf = 0.0;
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
-		gmi->gamknf  = 0.0;
+		gmi->gamcknf  = 0.0;
+		gmi->gamxknf  = 0.0;
 		gmi->gampwf  = 0.0;
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
@@ -1302,6 +1846,7 @@ char *as				/* Alias string selector, NULL for none */
 
 		/* Map Absolute Jab to Jab and scale source to avoid clipping the white point */
 		no = 1;
+		gmi->as = "aw";
 		gmi->desc = "aw - Absolute Colorimetric (in Jab) with scaling to fit white point";
 		gmi->icci = icAbsoluteColorimetric;
 		gmi->usecas = 0x100 | colccas;	/* Absolute Appearance space with scaling */
@@ -1315,7 +1860,8 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumknf = 0.0;
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
-		gmi->gamknf  = 0.0;
+		gmi->gamcknf  = 0.0;
+		gmi->gamxknf  = 0.0;
 		gmi->gampwf  = 0.0;
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
@@ -1325,6 +1871,7 @@ char *as				/* Alias string selector, NULL for none */
 
 		/* Map Jab to Jab and clip out of gamut */
 		no = 2;
+		gmi->as = "aa";
 		gmi->desc = "aa - Absolute Appearance";
 		gmi->icci = icRelativeColorimetric;
 		gmi->usecas  = perccas;		/* Appearance space */
@@ -1337,7 +1884,8 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumknf = 0.0;
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
-		gmi->gamknf  = 0.0;
+		gmi->gamcknf  = 0.0;
+		gmi->gamxknf  = 0.0;
 		gmi->gampwf  = 0.0;
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
@@ -1349,19 +1897,21 @@ char *as				/* Alias string selector, NULL for none */
 		/* Map Jab to Jab and clip out of gamut */
 		/* Linear transform of the neutral axis to align white */
 		no = 3;
+		gmi->as = "r";
 		gmi->desc = " r - White Point Matched Appearance [ICC Relative Colorimetric]";
 		gmi->icci = icRelativeColorimetric;
 		gmi->usecas  = perccas;		/* Appearance space */
 		gmi->usemap  = 1;			/* Use gamut mapping */
-		gmi->greymf  = 1.0;			/* And linearly map white point */
-		gmi->glumwcpf = 1.0;
-		gmi->glumwexf = 1.0;
+		gmi->greymf  = 1.0;			/* Fully align grey axis */
+		gmi->glumwcpf = 1.0;		/* Fully compress grey axis at white end */
+		gmi->glumwexf = 1.0;		/* Fully expand grey axis at white end */
 		gmi->glumbcpf = 0.0;
 		gmi->glumbexf = 0.0;
 		gmi->glumknf = 0.0;
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
-		gmi->gamknf  = 0.0;
+		gmi->gamcknf  = 0.0;
+		gmi->gamxknf  = 0.0;
 		gmi->gampwf  = 0.0;
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
@@ -1370,20 +1920,23 @@ char *as				/* Alias string selector, NULL for none */
 	 || (as != NULL && stricmp(as,"la") == 0)) {
 
 		/* Map Jab to Jab, sigma map white/black points, and clip out of gamut */
+		/* Don't apply any luminance mapping "knee" */
 		no = 4;
+		gmi->as = "la";
 		gmi->desc = "la - Luminance axis matched Appearance";
 		gmi->icci = icRelativeColorimetric;
 		gmi->usecas  = perccas;		/* Appearance space */
 		gmi->usemap  = 1;			/* Use gamut mapping */
 		gmi->greymf  = 1.0;			/* Fully align grey axis */
-		gmi->glumwcpf = 1.0;		/* Fully compress grey axis */
-		gmi->glumwexf = 1.0;		/* Fully expand grey axis at black end */
+		gmi->glumwcpf = 1.0;		/* Fully compress grey axis at white end */
+		gmi->glumwexf = 1.0;		/* Fully expand grey axis at white end */
 		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
-		gmi->glumbexf = 1.0;		/* Fully expand grey axis */
-		gmi->glumknf = 1.0;			/* Distort at white/black ends only */
+		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
+		gmi->glumknf = 0.0;			/* No knee on grey mapping */
 		gmi->gamcpf  = 0.0;			/* No gamut compression */
 		gmi->gamexf  = 0.0;			/* No gamut expansion */
-		gmi->gamknf  = 0.0;			/* No knee in gamut compress/expand */
+		gmi->gamcknf  = 0.0;		/* No knee in gamut compress */
+		gmi->gamxknf  = 0.0;		/* No knee in gamut expand */
 		gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
 		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
@@ -1394,10 +1947,9 @@ char *as				/* Alias string selector, NULL for none */
 	 || (as != NULL && stricmp(as,"p") == 0)) {
 
 		/* Map Jab to Jab, sigma map white/black, compress out of gamut */
-		/* NOTE would like to be using sigma knee on gamut in these two, */
-		/* but the current gamut mapping isn't linear enough to need extra knee :-) */
 		no = 5;
-		gmi->desc = " p - Perceptual (Preferred) [ICC Perceptual]";
+		gmi->as = "p";
+		gmi->desc = " p - Perceptual (Preferred) (Default) [ICC Perceptual]";
 		gmi->icci = icPerceptual;
 		gmi->usecas  = perccas;		/* Appearance space */
 		gmi->usemap  = 1;			/* Use gamut mapping */
@@ -1409,7 +1961,11 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 0.0;			/* No gamut expansion */
-		gmi->gamknf  = 0.5;			/* Sigma knee in gamut compress/expand */
+		gmi->gamcknf  = 0.7;		/* Moderate Sigma knee in gamut compress */
+// ~~888
+//		gmi->gamcknf  = 0.0;		/* Moderate Sigma knee in gamut compress */
+//		gmi->gamcknf  = 1.0;		/* Moderate Sigma knee in gamut compress */
+		gmi->gamxknf  = 0.0;		/* No knee in gamut expand */
 		gmi->gampwf  = 1.0;			/* Full Perceptual surface weighting factor */
 		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
@@ -1419,6 +1975,7 @@ char *as				/* Alias string selector, NULL for none */
 
 		/* Map Jab to Jab, sigma map whole gamut */
 		no = 6;
+		gmi->as = "ms";
 		gmi->desc = "ms - Saturation";
 		gmi->icci = icSaturation;
 		gmi->usecas  = perccas;		/* Appearance space */
@@ -1429,11 +1986,12 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
 		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
 		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
-		gmi->gamcpf  = 0.95;		/* Almost full gamut compression */
-		gmi->gamexf  = 1.2;			/* Excessive expansion to compensate for rspl effect */
-		gmi->gamknf  = 1.0;			/* Sigma knee in gamut compress/expand */
-		gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
-		gmi->gamswf  = 1.0;			/* Full Saturation surface weighting factor */
+		gmi->gamcpf  = 1.0;			/* Full gamut compression */
+		gmi->gamexf  = 1.0;			/* Full gamut expansion  */
+		gmi->gamcknf = 0.9;			/* High Sigma knee in gamut compress/expand */
+		gmi->gamxknf = 0.4;			/* Moderate Sigma knee in gamut compress/expand */
+		gmi->gampwf  = 0.6;			/* Most Perceptual surface weighting factor */
+		gmi->gamswf  = 0.4;			/* Some Saturation surface weighting factor */
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
 	else if (no == 7
@@ -1442,6 +2000,7 @@ char *as				/* Alias string selector, NULL for none */
 
 		/* Map Jab to Jab, sigma map whole gamut */
 		no = 7;
+		gmi->as = "s";
 		gmi->desc = " s - Enhanced Saturation [ICC Saturation]";
 		gmi->icci = icSaturation;
 		gmi->usecas  = perccas;		/* Appearance space */
@@ -1452,18 +2011,20 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
 		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
 		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
-		gmi->gamcpf  = 0.90;		/* Almost full gamut compression */
-		gmi->gamexf  = 1.3;			/* Excessive expansion to compensate for rspl effect */
-		gmi->gamknf  = 1.0;			/* Sigma knee in gamut compress/expand */
+		gmi->gamcpf  = 1.0;			/* Full gamut compression */
+		gmi->gamexf  = 1.0;			/* Full gamut expansion */
+		gmi->gamcknf = 0.9;			/* High sigma knee in gamut compress */
+		gmi->gamxknf = 0.5;			/* Moderate sigma knee in gamut expand */
 		gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
 		gmi->gamswf  = 1.0;			/* Full Saturation surface weighting factor */
-		gmi->satenh  = 0.8;			/* Medium saturation enhancement */
+		gmi->satenh  = 0.9;			/* Medium saturation enhancement */
 	}
 	else if (no == 8
 	 || (as != NULL && stricmp(as,"al") == 0)) {
 
 		/* Map Absolute Lab to Lab and clip out of gamut */
 		no = 8;
+		gmi->as = "al";
 		gmi->desc = "al - Absolute Colorimetric (Lab)";
 		gmi->icci = icAbsoluteColorimetric;
 		gmi->usecas  = 0x0;			/* Don't use appearance space, use L*a*b* */
@@ -1476,7 +2037,8 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumknf = 0.0;
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
-		gmi->gamknf  = 0.0;
+		gmi->gamcknf = 0.0;
+		gmi->gamxknf = 0.0;
 		gmi->gampwf  = 0.0;
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
@@ -1487,6 +2049,7 @@ char *as				/* Alias string selector, NULL for none */
 		/* Map Lab to Lab and clip out of gamut */
 		/* Linear transform of the neutral axis to align white */
 		no = 3;
+		gmi->as = "rl";
 		gmi->desc = "rl - White Point Matched Appearance (Lab)";
 		gmi->icci = icRelativeColorimetric;
 		gmi->usecas  = 0x0;			/* Don't use appearance space, use L*a*b* */
@@ -1499,7 +2062,8 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumknf = 0.0;
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
-		gmi->gamknf  = 0.0;
+		gmi->gamcknf = 0.0;
+		gmi->gamxknf = 0.0;
 		gmi->gampwf  = 0.0;
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
@@ -1543,7 +2107,8 @@ icxGMappingIntent *gmi	/* Gamut Mapping parameters to return */
 		printf("  Grey axis knee        factor %f\n", gmi->glumknf);
 		printf("  Gamut compression factor %f\n", gmi->gamcpf);
 		printf("  Gamut expansion   factor %f\n", gmi->gamexf);
-		printf("  Gamut knee        factor %f\n", gmi->gamknf);
+		printf("  Gamut compression knee factor %f\n", gmi->gamcknf);
+		printf("  Gamut expansion   knee factor %f\n", gmi->gamxknf);
 		printf("  Gamut Perceptual mapping weighting factor %f\n", gmi->gampwf);
 		printf("  Gamut Saturation mapping weighting factor %f\n", gmi->gamswf);
 		printf("  Saturation enhancement factor %f\n", gmi->satenh);
@@ -1551,6 +2116,169 @@ icxGMappingIntent *gmi	/* Gamut Mapping parameters to return */
 }
 
 /* ------------------------------------------------------ */
+/* Turn xicc xcal into limit calibration callback */
+
+/* Given an icc profile, try and create an xcal */
+/* Return NULL on error or no cal */
+xcal *xiccReadCalTag(icc *p) {
+	xcal *cal = NULL;
+	icTagSignature sig = icmMakeTag('t','a','r','g');
+	icmText *ro;
+	int oi, tab;
+
+//printf("~1 about to look for CAL in profile\n");
+	if ((ro = (icmText *)p->read_tag(p, sig)) != NULL) { 
+		cgatsFile *cgf;
+		cgats *icg;
+
+		if (ro->ttype != icSigTextType)
+			return NULL;
+	
+//printf("~1 found 'targ' tag\n");
+		if ((icg = new_cgats()) == NULL) {
+			return NULL;
+		}
+		if ((cgf = new_cgatsFileMem(ro->data, ro->size)) != NULL) {
+			icg->add_other(icg, "CTI3");
+			oi = icg->add_other(icg, "CAL");
+
+//printf("~1 created cgats object from 'targ' tag\n");
+			if (icg->read(icg, cgf) == 0) {
+
+				for (tab = 0; tab < icg->ntables; tab++) {
+					if (icg->t[tab].tt == tt_other && icg->t[tab].oi == oi) {
+						break;
+					}
+				}
+				if (tab < icg->ntables) {
+//printf("~1 found CAL table\n");
+		
+					if ((cal = new_xcal()) == NULL) {
+						icg->del(icg);
+						cgf->del(cgf);
+						return NULL;
+					}
+					if (cal->read_cgats(cal, icg, tab, "'targ' tag") != 0)  {
+#ifdef DEBUG
+						printf("read_cgats on cal tag failed\n");
+#endif
+						cal->del(cal);
+						cal = NULL;
+					}
+//else printf("~1 read CAL and creaded xcal object OK\n");
+				}
+			}
+		}
+		icg->del(icg);
+		cgf->del(cgf);
+	}
+	return cal;
+}
+
+/* A callback that uses an xcal, that can be used with icc get_tac */
+void xiccCalCallback(void *cntx, double *out, double *in) {
+	xcal *cal = (xcal *)cntx;
+
+	cal->interp(cal, out, in);
+}
+
+/* ---------------------------------------------- */
+
+/* Utility function - given an open icc profile, */
+/* guess which channel is the black. */
+/* Return -1 if there is no black channel or it can't be guessed */
+int icxGuessBlackChan(icc *p) {
+	int kch = -1;
+
+	switch (p->header->colorSpace) {
+   	 	case icSigCmykData:
+			kch = 3;
+			break;
+
+		/* Use a heuristic to detect the black channel. */
+		/* This duplicates code in icxLu_comp_bk_point() :-( */ 
+		/* Colorant guessing should go in icclib ? */
+		case icSig2colorData:
+		case icSig3colorData:
+		case icSig4colorData:
+		case icSig5colorData:
+		case icSig6colorData:
+		case icSig7colorData:
+		case icSig8colorData:
+		case icSig9colorData:
+		case icSig10colorData:
+		case icSig11colorData:
+		case icSig12colorData:
+		case icSig13colorData:
+		case icSig14colorData:
+		case icSig15colorData:
+		case icSigMch5Data:
+		case icSigMch6Data:
+		case icSigMch7Data:
+		case icSigMch8Data: {
+				icmLuBase *lu;
+				double dval[MAX_CHAN];
+				double ncval[3];
+				double cvals[MAX_CHAN][3];
+				int inn, e, nlighter, ndarker;
+
+				/* Grab a lookup object */
+				if ((lu = p->get_luobj(p, icmFwd, icRelativeColorimetric, icSigLabData, icmLuOrdNorm)) == NULL)
+					error("icxGetLimits: assert: getting Fwd Lookup failed!");
+
+				lu->spaces(lu, NULL, &inn, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
+				/* Decide if the colorspace is aditive or subtractive */
+
+				/* First the no colorant value */
+				for (e = 0; e < inn; e++)
+					dval[e] = 0.0;
+				lu->lookup(lu, ncval, dval);
+
+				/* Then all the colorants */
+				nlighter = ndarker = 0;
+				for (e = 0; e < inn; e++) {
+					dval[e] = 1.0;
+					lu->lookup(lu, cvals[e], dval);
+					dval[e] = 0.0;
+					if (fabs(cvals[e][0] - ncval[0]) > 5.0) {
+						if (cvals[e][0] > ncval[0])
+							nlighter++;
+						else
+							ndarker++;
+					}
+				}
+
+				if (ndarker > 0 && nlighter == 0) {		/* Assume subtractive. */
+					double pbk[3] = { 0.0,0.0,0.0 };	/* Perfect black */
+					double smd = 1e10;			/* Smallest distance */
+
+					/* Guess the black channel */
+					for (e = 0; e < inn; e++) {
+						double tt;
+						tt = icmNorm33sq(pbk, cvals[e]);
+						if (tt < smd) {
+							smd = tt;	
+							kch = e;
+						}
+					}
+					/* See if the black seems sane */
+					if (cvals[kch][0] > 40.0
+					 || fabs(cvals[kch][1]) > 10.0
+					 || fabs(cvals[kch][2]) > 10.0) {
+						kch = -1;
+					}
+				}
+				lu->del(lu);
+			}
+			break;
+
+		default:
+			break;
+	}
+
+	return kch;
+}
 
 /* Utility function - given an open icc profile, */
 /* estmate the total ink limit and black ink limit. */
@@ -1561,12 +2289,17 @@ icxGMappingIntent *gmi	/* Gamut Mapping parameters to return */
 /* If there are no limits, or they are not discoverable or */
 /* applicable, return values of -1.0 */
 
-void icxGetLimits(icc *p, double *tlimit, double *klimit) {
+void icxGetLimits(
+xicc *xp,
+double *tlimit,
+double *klimit 
+) {
+	icc *p = xp->pp;
 	int nch;
-	double max[MAX_CHAN];
+	double max[MAX_CHAN];		/* Max of each channel */
 	double total;
 
-	total = p->get_tac(p, max);
+	total = p->get_tac(p, max, xp->cal != NULL ? xiccCalCallback : NULL, (void *)xp->cal);
 
 	if (total < 0.0) {	/* Not valid */
 		if (tlimit != NULL)
@@ -1588,31 +2321,31 @@ void icxGetLimits(icc *p, double *tlimit, double *klimit) {
 	}
 
 	if (klimit != NULL) {
-		double black = 1.0;
-		switch (p->header->colorSpace) {
-	   	 	case icSigCmykData:
-				black = max[3];
-				break;
-			/* Hmm. It would be nice to know the black channel of other spaces */
-			/* This could be fixed by using other tags + heuristics on the profile */
-			default:
-				break;
-		}
+		int kch;
 
-		if (black >= 1.0) {
+		kch = icxGuessBlackChan(p);
+
+		if (kch < 0 || max[kch] >= 1.0) {
 			*klimit = -1.0;
 		} else {
-			*klimit = black;
+			*klimit = max[kch];
 		}
 	}
 }
 
-/* Using the above function, set default total and black ink values */
-void icxDefaultLimits(icc *p, double *tlout, double tlin, double *klout, double klin) {
+/* Replace a non-set limit (ie. < 0.0) with the heuristic from */
+/* the given profile. */
+void icxDefaultLimits(
+xicc *xp,
+double *tlout,
+double tlin,
+double *klout,
+double klin
+) {
 	if (tlin < 0.0 || klin < 0.0) { 
 		double tl, kl;
 
-		icxGetLimits(p, &tl, &kl);
+		icxGetLimits(xp, &tl, &kl);
 
 		if (tlin < 0.0)
 			tlin = tl;
@@ -1626,6 +2359,90 @@ void icxDefaultLimits(icc *p, double *tlout, double tlin, double *klout, double 
 
 	if (klout != NULL)
 		*klout = klin;
+}
+
+/* Structure to hold optimisation information */
+typedef struct {
+	xcal *cal;
+	double ilimit;
+	double uilimit;
+} ulimctx;
+
+/* Callback to find equivalent underlying total limit */
+/* and try and maximize it while remaining within gamut */
+static double ulimitfunc(void *cntx, double pv[]) {
+	ulimctx *cx = (ulimctx *)cntx;
+	xcal *cal = cx->cal;
+	int devchan = cal->devchan;
+	int i;
+	double dv, odv;
+	double og = 0.0, rv = 0.0;
+
+	double usum = 0.0, sum = 0.0;
+
+	/* Comute calibrated sum of channels except last */
+	for (i = 0; i < (devchan-1); i++) {
+		double dv = pv[i];		/* Underlying (pre-calibration) device value */
+		usum += dv;				/* Underlying sum */
+		if (dv < 0.0) {
+			og += -dv;
+			dv = 0.0;
+		} else if (dv > 1.0) {
+			og += dv - 1.0;
+			dv = 1.0;
+		} else 
+			dv = cal->interp_ch(cal, i, dv);	/* Calibrated device value */
+		sum += dv;							/* Calibrated device sum */
+	}
+	/* Compute the omitted channel value */
+	dv = cx->ilimit - sum;					/* Omitted calibrated device value */
+	if (dv < 0.0) {
+		og += -dv;
+		dv = 0.0;
+	} else if (dv > 1.0) {
+		og += dv - 1.0;
+		dv = 1.0;
+	} else 
+		dv = cal->inv_interp_ch(cal, i, dv);	/* Omitted underlying device value */
+	usum += dv;								/* Underlying sum */
+	cx->uilimit = usum; 
+	
+	rv = 10000.0 * og - usum;		/* Penalize out of gamut, maximize underlying sum */
+
+//printf("~1 returning %f from %f %f %f %f\n",rv,pv[0],pv[1],pv[2],dv);
+	return rv;
+}
+
+/* Given a calibrated total ink limit and an xcal, return the */
+/* equivalent underlying (pre-calibration) total ink limit. */
+/* This is the maximum equivalent, that makes sure that */
+/* the calibrated limit is met or exceeded. */
+double icxMaxUnderlyingLimit(xcal *cal, double ilimit) {
+	ulimctx cx;
+	int i;
+	double dv[MAX_CHAN];
+	double sr[MAX_CHAN];
+	double rv;				/* Residual value */
+
+	if (cal->devchan <= 1) {
+		return cal->inv_interp_ch(cal, 0, ilimit);
+	}
+
+	cx.cal = cal;
+	cx.ilimit = ilimit;
+
+	for (i = 0; i < (cal->devchan-1); i++) {
+		sr[i] = 0.05;
+		dv[i] = 0.1;
+	}
+	if (powell(&rv, cal->devchan-1, dv, sr, 0.000001, 1000, ulimitfunc,
+			                      (void *)&cx, NULL, NULL) != 0) {
+		warning("icxUnderlyingLimit() failed for chan %d, ilimit %f\n",cal->devchan,ilimit);
+		return ilimit;
+	}
+	ulimitfunc((void *)&cx, dv);
+
+	return cx.uilimit;
 }
 
 /* ------------------------------------------------------ */
@@ -1787,6 +2604,129 @@ double icxdCIE94sq(double dout[2][3], double Lab0[3], double Lab1[3]) {
 		dout[1][2] = _dcsq[1][1]/scsq + _c12[1][1] * scf
 		           + _dhsq[1][1]/shsq + _c12[1][1] * shf;
 		return rv;
+	}
+}
+
+// ~~99 not sure if these are correct:
+
+/* Return the normal Delta E given two Lab values, */
+/* including partial derivatives. */
+double icxdLabDE(double dout[2][3], double *Lab0, double *Lab1) {
+	double rv = 0.0, tt;
+
+	tt = Lab0[0] - Lab1[0];
+	dout[0][0] =  1.0 * tt;
+	dout[1][0] = -1.0 * tt;
+	rv += tt * tt;
+	tt = Lab0[1] - Lab1[1];
+	dout[0][1] =  1.0 * tt;
+	dout[1][1] = -1.0 * tt;
+	rv += tt * tt;
+	tt = Lab0[2] - Lab1[2];
+	dout[0][2] =  1.0 * tt;
+	dout[1][2] = -1.0 * tt;
+	rv += tt * tt;
+	return sqrt(rv);
+}
+
+/* Return the CIE94 Delta E color difference measure */
+/* including partial derivatives. */
+double icxdCIE94(double dout[2][3], double Lab0[3], double Lab1[3]) {
+	double desq, _desq[2][3];
+	double dlsq;
+	double dcsq, _dcsq[2][2];	/* == [x][1,2] */
+	double c12,   _c12[2][2];	/* == [x][1,2] */
+	double dhsq, _dhsq[2][2];	/* == [x][1,2] */
+	double rv;
+
+	{
+		double dl, da, db;
+
+		dl = Lab0[0] - Lab1[0];
+		dlsq = dl * dl;		/* dl squared */
+		da = Lab0[1] - Lab1[1];
+		db = Lab0[2] - Lab1[2];
+
+
+		/* Compute normal Lab delta E squared */
+		desq = dlsq + da * da + db * db;
+		_desq[0][0] =  1.0 * dl;
+		_desq[1][0] = -1.0 * dl;
+		_desq[0][1] =  1.0 * da;
+		_desq[1][1] = -1.0 * da;
+		_desq[0][2] =  1.0 * db;
+		_desq[1][2] = -1.0 * db;
+	}
+
+	{
+		double c1, c2, dc, tt;
+
+		/* Compute chromanance for the two colors */
+		c1 = sqrt(Lab0[1] * Lab0[1] + Lab0[2] * Lab0[2]);
+		c2 = sqrt(Lab1[1] * Lab1[1] + Lab1[2] * Lab1[2]);
+		c12 = sqrt(c1 * c2);	/* Symetric chromanance */
+
+		tt = 0.5 * (pow(c2, 0.5) + 1e-12)/(pow(c1, 1.5) + 1e-12);
+		_c12[0][0] = Lab0[1] * tt;
+		_c12[0][1] = Lab0[2] * tt;
+		tt = 0.5 * (pow(c1, 0.5) + 1e-12)/(pow(c2, 1.5) + 1e-12);
+		_c12[1][0] = Lab1[1] * tt;
+		_c12[1][1] = Lab1[2] * tt;
+
+		/* delta chromanance squared */
+		dc = c2 - c1;
+		dcsq = dc * dc;
+		if (c1 < 1e-12 || c2 < 1e-12) {
+			c1 += 1e-12;
+			c2 += 1e-12;
+		}
+		_dcsq[0][0] = -1.0 * Lab0[1] * (c2 - c1)/c1;
+		_dcsq[0][1] = -1.0 * Lab0[2] * (c2 - c1)/c1;
+		_dcsq[1][0] =  1.0 * Lab1[1] * (c2 - c1)/c2;
+		_dcsq[1][1] =  1.0 * Lab1[2] * (c2 - c1)/c2;
+	}
+
+	/* Compute delta hue squared */
+	dhsq = desq - dlsq - dcsq;
+	if (dhsq >= 0.0) {
+		_dhsq[0][0] = _desq[0][1] - _dcsq[0][0];
+		_dhsq[0][1] = _desq[0][2] - _dcsq[0][1];
+		_dhsq[1][0] = _desq[1][1] - _dcsq[1][0];
+		_dhsq[1][1] = _desq[1][2] - _dcsq[1][1];
+	} else {
+		dhsq = 0.0;
+		_dhsq[0][0] = 0.0;
+		_dhsq[0][1] = 0.0;
+		_dhsq[1][0] = 0.0;
+		_dhsq[1][1] = 0.0;
+	}
+
+	{
+		double sc, scsq, scf;
+		double sh, shsq, shf;
+
+		/* Weighting factors for delta chromanance & delta hue */
+		sc = 1.0 + 0.048 * c12;
+		scsq = sc * sc;
+		
+		sh = 1.0 + 0.014 * c12;
+		shsq = sh * sh;
+	
+		rv = dlsq + dcsq/scsq + dhsq/shsq;
+
+		scf = 0.048 * -1.0 * dcsq/(scsq * sc);
+		shf = 0.014 * -1.0 * dhsq/(shsq * sh);
+		dout[0][0] = _desq[0][0];
+		dout[0][1] = _dcsq[0][0]/scsq + _c12[0][0] * scf
+		           + _dhsq[0][0]/shsq + _c12[0][0] * shf;
+		dout[0][2] = _dcsq[0][1]/scsq + _c12[0][1] * scf
+		           + _dhsq[0][1]/shsq + _c12[0][1] * shf;
+		dout[1][0] = _desq[1][0];
+		dout[1][1] = _dcsq[1][0]/scsq + _c12[1][0] * scf
+		           + _dhsq[1][0]/shsq + _c12[1][0] * shf;
+		dout[1][2] = _dcsq[1][1]/scsq + _c12[1][1] * scf
+		           + _dhsq[1][1]/shsq + _c12[1][1] * shf;
+		return sqrt(rv);
 	}
 }
 
@@ -2169,6 +3109,67 @@ double max
 }
 
 /* ------------------------------------------------------ */
+/* Multi-plane interpolation, used for device modelling. */
+/* Including partial derivative for input and parameters. */
+/* A simple flat plane is used for each output. */
+
+/* Multi-plane interpolation - uses base + di slope values.  */
+/* Parameters are assumed to be fdi groups of di + 1 parameters. */
+void icxPlaneInterp(
+double *v,			/* Pointer to first parameter [fdi * (di + 1)] */
+int    fdi,			/* Number of output channels */
+int    di,			/* Number of input channels */
+double *out,		/* Resulting fdi values */
+double *in			/* Input di values */
+) {
+	int e, f;
+
+	for (f = 0; f < fdi; f++) {
+		for (out[f] = 0.0, e = 0; e < di; e++, v++) {
+			out[f] += in[e] * *v;
+		}
+		out[f] += *v;
+	}
+}
+
+
+/* Multii-plane interpolation with partial derivative */
+/* with respect to the input and parameters. */
+void icxdpdiPlaneInterp(
+double *v,			/* Pointer to first parameter value [fdi * (di + 1)] */
+double *dv,			/* Return [1 + di] deriv. wrt each parameter v */
+double *din,		/* Return [fdi * di] deriv. wrt each input value */
+int    fdi,			/* Number of output channels */
+int    di,			/* Number of input channels */
+double *out,		/* Resulting fdi values */
+double *in			/* Input di values */
+) {
+	int e, ee, f, g;
+	int dip2 = (di + 1);	/* Output dim increment through parameters */
+
+	/* Compute the output values */
+	for (f = 0; f < fdi; f++) {
+		for (out[f] = 0.0, e = 0; e < di; e++)
+			out[f] += in[e] * v[f * dip2 + e];
+		out[f] += v[f * dip2 + e];
+	}
+
+	/* Since interpolation is verys simple, derivative are also simple */
+
+	/* Copy del for parameter to return array */
+	for (e = 0; e < di; e++)
+		dv[e] = in[e];
+	dv[e] = 1.0;
+
+	/* Compute del of out[] from in[] */
+	for (f = 0; f < fdi; f++) {
+		for (e = 0; e < di; e++) {
+			din[f * di + e] = v[f * dip2 + e];
+		}
+	}
+}
+
+/* ------------------------------------------------------ */
 /* Matrix cube interpolation, used for device modelling. */
 /* Including partial derivative for input and parameters. */
 
@@ -2289,7 +3290,6 @@ double *in			/* Input di values */
 ) {
 	int    si[MAX_CHAN];		/* in[] Sort index, [0] = smalest */
 
-// ~~999
 //{
 //	double tout[MXDO];
 //

@@ -8,7 +8,7 @@
  *
  * Copyright 2008 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -53,8 +53,8 @@ main(int argc, char *argv[]) {
 	char out_name[MAXNAMEL+1];	/* ICC output name */
 	int verb = 0;
 	TIFF *rh;
-	int  size;
-	void *buf;
+	int  size = 0;
+	void *buf = NULL;
 	icmFile *fp;
 	int rv = 0;
 	
@@ -110,10 +110,8 @@ main(int argc, char *argv[]) {
 		error("unable to find ICC profile tag in TIFF file '%s'",in_name);
 	}
 
-	TIFFClose(rh);		/* Close Input file */
-
 	if ((fp = new_icmFileStd_name(out_name, "w")) == NULL) {
-		error("unable to open outpu ICC profile '%s'",out_name);
+		error("unable to open output ICC profile '%s'",out_name);
 	}
 
 	if (fp->write(fp, buf, 1, size) != size) {
@@ -123,6 +121,8 @@ main(int argc, char *argv[]) {
 	if (fp->del(fp) != 0) {
 		error("error closing file '%s'",out_name);
 	}
+
+	TIFFClose(rh);		/* Close Input file and free field buffer */
 
 	return 0;
 }

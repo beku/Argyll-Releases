@@ -92,7 +92,8 @@ typedef enum {
 struct _jc_key {
 	char *key;						/* Key path */
 	jc_type type;					/* Type of value */
-	char *comment;					/* Comment */
+	char *c_comment;				/* C Comment */
+	char *cpp_comment;				/* C++ Comment */
 	unsigned char *data;			/* Pointer to data */
 	size_t dataSize;				/* Size of data */
 }; typedef struct _jc_key jc_key;

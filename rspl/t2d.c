@@ -7,7 +7,7 @@
  * Derived from cmatch.c
  * Copyright 1995 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -30,9 +30,6 @@ int verbose_level = 6;			/* Current verbosity level */
 								/* 0 = none */
 								/* !0 = diagnostics */
 #endif /* NEVER */
-
-/* rspl flags */
-#define FLAGS (0 /* | RSPL_EXTRAFIT */)
 
 #define PLOTRES 256
 #define WIDTH 400			/* Raster size */
@@ -289,6 +286,76 @@ co test_points10[] = {
 	{{ 0.84729, 0.94866 }, { 0.3979 }}
 };
 
+/* Values at edges test */
+double test_f11(double x, double y) {		/* Function that computes values */
+	double val = 0.0;
+	
+	val = (x * x - 0.5) * 0.6
+	    + (y * y - 0.5) * 0.4
+	    + 0.5;
+
+	return val;
+}
+co test_points11[] = {
+	{{ 0.0,     0.0 }},
+	{{ 0.0,     0.25 }},
+	{{ 0.0,     0.5 }},
+	{{ 0.0,     0.75 }},
+	{{ 0.0,     1.0 }},
+
+	{{ 0.25,     0.0 }},
+	{{ 0.25,     0.25 }},
+	{{ 0.25,     0.5 }},
+	{{ 0.25,     0.75 }},
+	{{ 0.25,     1.0 }},
+
+	{{ 0.5,     0.0 }},
+	{{ 0.5,     0.25 }},
+	{{ 0.5,     0.5 }},
+	{{ 0.5,     0.75 }},
+	{{ 0.5,     1.0 }},
+
+	{{ 0.75,     0.0 }},
+	{{ 0.75,     0.25 }},
+	{{ 0.75,     0.5 }},
+	{{ 0.75,     0.75 }},
+	{{ 0.75,     1.0 }},
+
+	{{ 1.0,     0.0 }},
+	{{ 1.0,     0.25 }},
+	{{ 1.0,     0.5 }},
+	{{ 1.0,     0.75 }},
+	{{ 1.0,     1.0 }},
+
+
+	{{ 0.2,     0.7 }},
+	{{ 0.2,     0.8 }},
+	{{ 0.2,     0.9 }},
+	{{ 0.2,     1.0 }},
+
+	{{ 0.1,     0.7 }},
+	{{ 0.1,     0.8 }},
+	{{ 0.1,     0.9 }},
+	{{ 0.1,     1.0 }},
+
+	{{ 0.0,     0.7 }},
+	{{ 0.0,     0.8 }},
+	{{ 0.0,     0.9 }}
+};
+
+/* Points consistent with a matrix interpolation */
+co test_points12[] = {
+	{{ 0.1,     0.1 }, { 0.1 }},
+	{{ 0.5,     0.1 }, { 0.5 }},
+	{{ 0.9,     0.1 }, { 0.9 }},
+	{{ 0.1,     0.5 }, { 0.1 }},
+	{{ 0.5,     0.5 }, { 0.35 }},
+	{{ 0.9,     0.5 }, { 0.6 }},
+	{{ 0.1,     0.9 }, { 0.1 }},
+	{{ 0.5,     0.9 }, { 0.2 }},
+	{{ 0.9,     0.9 }, { 0.3 }}
+};
+
 #ifdef NEVER
 #ifdef	__STDC__
 #include <stdarg.h>
@@ -316,12 +383,17 @@ void usage(void) {
 	fprintf(stderr,"               8 = C + M printer L* values\n");
 	fprintf(stderr,"               9 = C + M printer a* values\n");
 	fprintf(stderr,"               10 = C + M printer b* values\n");
+	fprintf(stderr,"               11 = Points up to edge test\n");
+	fprintf(stderr,"               12 = Four points with high smoothing\n");
 	fprintf(stderr," -r resx,resy  Set grid resolutions (def %d %d)\n",GRES0,GRES1);
 	fprintf(stderr," -h            Test half scale resolution too\n");
 	fprintf(stderr," -q            Test quarter scale resolution too\n");
-	fprintf(stderr," -s            Test symetric smoothness\n");
+	fprintf(stderr," -2            Use two pass smoothing\n");
+	fprintf(stderr," -x            Use extra fitting\n");
+	fprintf(stderr," -s            Test symetric smoothness (set asymetric -r !)\n");
 	fprintf(stderr," -S            Test spline interpolation\n");
 	fprintf(stderr," -p            plot 3 slices, x = 0.5, y = 0.5, x = y\n");
+	fprintf(stderr," -m            No red point markers in TIFF\n");
 	exit(1);
 }
 
@@ -336,12 +408,16 @@ int main(int argc, char *argv[]) {
 	co *test_points = test_points1;
 	int npoints = sizeof(test_points1)/sizeof(co);
 	int dospline = 0;
+	int twopass = 0;
+	int extra = 0;
 	int dosym = 0;
 	int doplot = 0;
 	int doh = 0;
 	int doq = 0;
 	int rsv;
-	int flags = FLAGS;
+	int flags = RSPL_NOFLAGS;
+	int markers = 1;
+	double smooth = 1.0;
 
 	low[0] = 0.0;
 	low[1] = 0.0;
@@ -419,6 +495,23 @@ int main(int argc, char *argv[]) {
 						test_points = test_points10;
 						npoints = sizeof(test_points10)/sizeof(co);
 						break;
+					case 11: {
+						int i;
+						test_points = test_points11;
+						npoints = sizeof(test_points11)/sizeof(co);
+						for (i = 0; i < npoints; i++) {
+							test_points[i].v[0] = test_f11(test_points[i].p[0],test_points[i].p[1]);
+						}
+						break;
+					case 12:
+						test_points = test_points12;
+						npoints = sizeof(test_points12)/sizeof(co);
+//						smooth = -100000.0;
+//						smooth = 1e-4;
+						avgdev[0] = 0.1;
+						avgdev[1] = 0.1;
+						break;
+					}
 					default:
 						usage();
 				}
@@ -442,8 +535,17 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'S') {
 				dospline = 1;
 
+			} else if (argv[fa][1] == '2') {
+				twopass = 1;
+
+			} else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
+				extra = 1;
+
 			} else if (argv[fa][1] == 's') {
 				dosym = 1;
+
+			} else if (argv[fa][1] == 'm') {
+				markers = 0;
 
 			} else 
 				usage();
@@ -451,6 +553,12 @@ int main(int argc, char *argv[]) {
 			break;
 	}
 
+
+	if (twopass)
+		flags |= RSPL_2PASSSMTH;
+
+	if (extra)
+		flags |= RSPL_EXTRAFIT2;
 
 	if (dosym)
 		flags |= RSPL_SYMDOMAIN;
@@ -465,7 +573,7 @@ int main(int argc, char *argv[]) {
 	           npoints,				/* Number of test points */
 	           low, high, gres,		/* Low, high, resolution of grid */
 	           NULL, NULL,			/* Default data scale */
-	           1.0,					/* Smoothing */
+	           smooth,				/* Smoothing */
 	           avgdev,				/* Average deviation */
 	           NULL);				/* iwidth */
 	if (doh) {
@@ -544,13 +652,15 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	
-		/* Mark verticies in red */
-		for(k = 0; k < npoints; k++) {
-			j = (int)((HEIGHT * (y2 - test_points[k].p[1])/(y2 - y1)) + 0.5);
-			i = (int)((WIDTH * (test_points[k].p[0] - x1)/(x2 - x1)) + 0.5);
-			pa[j][i][0] = 255;
-			pa[j][i][1] = 0;
-			pa[j][i][2] = 0;
+		if (markers) {
+			/* Mark verticies in red */
+			for(k = 0; k < npoints; k++) {
+				j = (int)((HEIGHT * (y2 - test_points[k].p[1])/(y2 - y1)) + 0.5);
+				i = (int)((WIDTH * (test_points[k].p[0] - x1)/(x2 - x1)) + 0.5);
+				pa[j][i][0] = 255;
+				pa[j][i][1] = 0;
+				pa[j][i][2] = 0;
+			}
 		}
 		write_rgb_tiff(rsv == 0 ? "t2d.tif" : "t2dh.tif" ,WIDTH,HEIGHT,(unsigned char *)pa);
 	}

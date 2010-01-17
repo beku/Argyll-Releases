@@ -13,7 +13,7 @@
  * Copyright 1996 - 2008 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  * 
  * Derived from icoms.h
@@ -90,6 +90,8 @@ struct _athread {
 	void *context;
 
     /* Kill the thread and delete the object */
+	/* (Killing it may have side effects, so this is a last */
+	/*  resort if the thread hasn't exited) */
     void (*del)(struct _athread *p);
 
 }; typedef struct _athread athread;
@@ -99,9 +101,37 @@ struct _athread {
 /* It should return 0 on completion or exit, nz on error. */
 athread *new_athread(int (*function)(void *context), void *context);
 
+#ifdef NEVER
+
+/* Ideas for worker variant on thread: */
+
+	/* Create a new worker thread, and put it to sleep */
+	athread *new_aworker();
+	/* Give the worker a job to do */
+   	         ->start_work(int (*function)(void *context), void *context);
+	/* See if the worker is finished its job */
+	result = ->poll_work();
+	/* Wait until the worker has finished its job */
+	result = ->wait_work();
+
+#endif
+
+/* - - - - - - - - - - - - - - - - - - -- */
+
 /* Delete a file */
 void delete_file(char *fname);
 
+/* - - - - - - - - - - - - - - - - - - -- */
+
+#ifdef __APPLE__
+
+/* Kill a particular named process. */
+/* return < 0 if this fails. */
+/* return 0 if there is no such process */
+/* return 1 if a process was killed */
+int kill_nprocess(char *pname);
+
+#endif /* __APPLE__ */
 
 #define CONV_H
 #endif /* CONV_H */

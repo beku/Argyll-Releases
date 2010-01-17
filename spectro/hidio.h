@@ -12,7 +12,7 @@
  * Copyright 2006 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -44,7 +44,7 @@ void hid_set_hid_methods(icoms *p);
 /* Opaque structure to hid OS dependent HID details */
 struct _hid_device {
 	int temp;					/* Shut the compiler up */
-#if defined(NT) && defined(ENABLE_NT_HID)
+#if defined(NT)
 	char *dpath;				/* Path to open the device */
 	/* Stuff setup when device is open: */
 	HANDLE fh;					/* File handle for write/read */
@@ -64,8 +64,9 @@ struct _hid_device {
 #endif
 }; typedef struct _hid_device hid_device;
 
+/* Cleanup and then free an hev entry */
+void hid_del_hid_device(hid_device *hev);
+
 #define HIDIO_H
 #endif /* HIDIO_H */
 
-/* Cleanup and then free an hev entry */
-void hid_del_hid_device(hid_device *hev);

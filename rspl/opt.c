@@ -10,7 +10,7 @@
  * Copyright 1996 - 2001 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -430,7 +430,7 @@ double **vdata		/* di^2 array of function and target values to init array corner
 	int gres_1[MXDI];
 	int e, n;
 	double *gp;				/* Pointer to dest g.a[] grid cube base */
-	ECOUNT(gc, MXDIDO, di, m->g.res);	/* Counter for output points */
+	ECOUNT(gc, MXDIDO, di, 0, m->g.res, 0);	/* Counter for output points */
 	double *gw;				/* weight for each grid cube corner */
 	double a_gw[DEF2MXDI];	/* default allocation for gw */
 
@@ -506,7 +506,7 @@ static void init_soln(
 	int gres2_1[MXDI];
 	int e, n;
 	double *a;				/* Pointer to dest g.a[] grid cube base */
-	ECOUNT(gc, MXDIDO, di, m1->g.res);	/* Counter for output points */
+	ECOUNT(gc, MXDIDO, di, 0, m1->g.res, 0);	/* Counter for output points */
 	double *gw;				/* weight for each grid cube corner */
 	double a_gw[DEF2MXDI];	/* default allocation for gw */
 

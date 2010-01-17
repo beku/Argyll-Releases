@@ -41,7 +41,7 @@ illuminant for
 print/transparency spectral data:</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp; A, D50 (def.), D65, F5, F8, F10 or file.sp</span><br
+&nbsp; &nbsp;&nbsp; A, C, D50 (def.), D65, F5, F8, F10 or file.sp</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">-o </span><i
  style="font-family: monospace;">observ</i><span
@@ -63,9 +63,12 @@ data:</span><br style="font-family: monospace;">
 &nbsp; &nbsp; Create gamut output</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; Create gamut VRML as well</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">-d
+&nbsp; &nbsp; Create gamut VRML as well<br>
+-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Don't add VRML axes<br>
+-a n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Gamut
+transparency level<br style="font-family: monospace;">
+</span><span style="font-family: monospace;">-d
 n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; Gamut
 surface detail level</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">-t num&nbsp;&nbsp;&nbsp;&nbsp;
@@ -156,6 +159,13 @@ the given profile.<br>
 The <b>-w</b> flag causes the gamut surface to be generated in <a
  href="File_Formats.html#VRML">VRML</a> format
 as well as <a href="File_Formats.html#.gam">.gam</a> format.<br>
+<br>
+<small><span style="font-family: monospace;">The <span
+ style="font-weight: bold;">-n</span> flag suppresses the VRML axes.<br>
+<br>
+The <span style="font-weight: bold;">-a</span> <span
+ style="font-weight: bold;">n</span> parameter sets a transparency
+level in the VRML surface.</span></small><br>
 <br>
 The <b>-d</b> parameter controls the level of detail displayed in the
 gamut surface. The parameter roughly corresponds to a deltaE value, so

@@ -6,21 +6,17 @@ PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 # Setup the right hardware access libraries
 if $(NT) {
-	if $(DDK_INC_PATH) && $(DDK_LIB_PATH) {		# We can use HID access
-		DEFINES += ENABLE_NT_HID ;
-		HIDLIBS = $(DDK_LIB_PATH)\\hid $(DDK_LIB_PATH)\\setupapi ;
-		HID_HDRS = $(STDHDRS) $(DDK_INC_PATH) ;			# hack to force search of STDHDRS before DDK
-	}
 	IOFILE = ntio.c ;
 	LIBUSB = ../libusbw ;
 }
 if $(UNIX) {
-	IOFILE = unixio.c pollem.c ;
+	IOFILE = unixio.c ;
+	CONVFILE = pollem.c ;
 	LIBUSB = ../libusb ;
 }
 
 #Products
-Libraries = libinsttypes libinst ;
+Libraries = libinsttypes libinst libdisp libconv ;
 Executables = dispwin synthcal dispread dispcal fakeread synthread
               chartread spotread spec2cie average spyd2en ;
 Headers = inst.h ;
@@ -40,10 +36,10 @@ if $(UNIX) && $(OS) != MACOSX {
 }
 
 HDRS = ../h ../numlib ../icc ../cgats ../rspl ../xicc ../gamut ../spectro
-       ../plot $(HID_HDRS) $(LIBUSB) $(CMMHDRS) ;
+       ../plot $(LIBUSB) $(CMMHDRS) ;
 
 # Instrument access library library
-Library libinst : inst.c insttypes.c dtp20.c dtp22.c dtp41.c dtp51.c dtp92.c i1disp.c i1pro.c i1pro_imp.c ss.c ss_imp.c hcfr.c spyd2.c huey.c $(IOFILE) usbio.c hidio.c ;
+Library libinst : inst.c insttypes.c dtp20.c dtp22.c dtp41.c dtp51.c dtp92.c i1disp.c i1pro.c i1pro_imp.c munki.c munki_imp.c ss.c ss_imp.c hcfr.c spyd2.c huey.c $(IOFILE) usbio.c hidio.c ;
 
 # Display access library 
 Library libdisp : dispsup.c dispwin.c : : : $(LibWinH) ;
@@ -53,24 +49,24 @@ Library libdisp : dispsup.c dispwin.c : : : $(LibWinH) ;
 Object insttypes2 : insttypes.c ;
 LibraryFromObjects libinsttypes : insttypes2 ;
 
-#Object insttypes2 : insttypes.c ;
-#LibraryFromObjects libinsttypes : insttypes2 ;
+# System utility functions (keyboard, msec_*, thread)
+Library libconv : conv.c $(CONVFILE) : : : $(LibWinH) ;
 
 # Support file
 #Object alphix : ../target/alphix.c ;
 
-LINKLIBS = libinst $(LIBUSB)/libusb $(HIDLIBS)
+LINKLIBS = libinst $(LIBUSB)/libusb
            ../xicc/libxcolorants ../xicc/libxicc
            ../gamut/libgamut
            ../rspl/librspl ../cgats/libcgats
-           ../icc/libicc ../plot/libplot ../numlib/libnum
+           ../icc/libicc ../plot/libplot ../plot/libvrml ../numlib/libnum
            $(CMMLIBS) ;
 
 # General target reader program
-Main chartread : chartread.c ../target/alphix.c : : : ../target : : libdisp ;
+Main chartread : chartread.c ../target/alphix.c : : : ../target : : libdisp libconv ;
 
 # Printed target spot reader utility
-Main spotread : spotread.c : : : : : libdisp ;
+Main spotread : spotread.c : : : : : libdisp libconv ;
 
 # Gretag Spectroscan/T filmstrip reader
 #Main filmread : filmread.c : : : : : libdisp ;
@@ -79,18 +75,19 @@ Main spotread : spotread.c : : : : : libdisp ;
 Main synthcal : synthcal.c ;
 
 # Display calibration program
-Main dispcal : dispcal.c : : : ../target : : libdisp ;
+Main dispcal : dispcal.c : : : ../target : : libdisp libconv ;
 
 # Display tester program
-Main dispread : dispread.c : : : : : libdisp ;
+Main dispread : dispread.c : : : : : libdisp libconv ;
 
 #display test window test/Lut loader utility
 # [ Could avoid need for libisnt libusb etc.
 #   by separating system dependent utils to a separate library .] 
-MainVariant dispwin : dispwin.c : : STANDALONE_TEST : : : $(LibWin) ;
+MainVariant dispwin : dispwin.c : : STANDALONE_TEST : : : $(LibWin) libconv ;
 
 LINKLIBS = libinsttypes ../xicc/libxicc ../gamut/libgamut ../rspl/librspl
-           ../cgats/libcgats ../icc/libicc ../numlib/libnum ../plot/libplot ;
+           ../cgats/libcgats ../icc/libicc ../numlib/libnum ../plot/libplot
+           ../plot/libvrml ;
 
 # Fake device print/read utility using ICC profile
 Main fakeread : fakeread.c ;
@@ -109,6 +106,7 @@ Main spyd2en : spyd2en.c vinflate.c ;
 
 # Generate strange.cal example/diagnostic
 GenFileND strange.cal : synthcal -s 0.7,1.0,0.9 -p 1.7,0.8,0.7 [ NormPaths strange ] ;
+NDepends exe : strange.cal ;	# Normally create it 
 
 # Dumy ti3 file generator for testing
 #Main dumyti3 : dumyti3.c ;

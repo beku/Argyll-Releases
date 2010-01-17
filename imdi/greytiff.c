@@ -9,7 +9,7 @@
  * Copyright 2000, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -39,6 +39,7 @@
 #include "config.h"
 #include "tiffio.h"
 #include "icc.h"
+#include "numlib.h"
 #include "xicc.h"
 #include "imdi.h"
 

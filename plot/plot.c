@@ -3,7 +3,7 @@
  * Copyright 1998 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -47,9 +47,20 @@ struct _plot_info {
 	double mnx, mxx, mny, mxy;		/* Extrema of values to be plotted */
 	int graph;						/* NZ if graph, Z if vectors */
 	int revx;						/* reversed X axis */
-	double *x1, *x2, *x3;
+
+	double *x1, *x2;
 	double *y1, *y2, *y3, *y4, *y5, *y6;
-	int n, m;
+	char **ntext;
+	int n;
+
+	double *x7, *y7;
+	plot_col *mcols;
+	char **mtext;
+	int m;
+
+	double *x8, *y8, *x9, *y9;
+	plot_col *ocols;
+	int o;
 
 	/* Plot instance information */
 	int sx,sy;			/* Screen offset */
@@ -61,10 +72,20 @@ struct _plot_info {
 /* Global to transfer info to window callback */
 static plot_info pd;
 
-static int do_plot2(double xmin, double xmax, double ymin, double ymax, double ratio,
-                    double *x1, double *y1, double *x2, double *y2,
-                    double *x3, double *y3, double *y4, double *y5, double *y6,
-                    int n, int m, int dowait);
+/* Declaration of superset */
+static int do_plot_imp(
+    double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
+	double ratio,	/* Aspect ratio of window, X/Y */
+	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
+    double *x1, double *y1, double *x2, double *y2,
+    double *y3, double *y4, double *y5, double *y6, char **ntext,
+	int n,
+	double *x7, double *y7, plot_col *mcols, char **mtext,
+    int m,
+	double *x8, double *y8, double *x9, double*y9, plot_col *ocols,
+	int o
+);
+
 
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
@@ -115,7 +136,92 @@ int n) {
 	if ((ymax - ymin) == 0.0)
 		ymax += 0.5, ymin -= 0.5;
 
-	return do_plot2(xmin, xmax, ymin, ymax, 1.0, x, y1, NULL, y2, NULL, y3, NULL, NULL, NULL,  n, 0, 1); 
+	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	                   x, y1, NULL, y2, y3, NULL, NULL, NULL,  NULL, n,
+	                   NULL, NULL, NULL, NULL, 0,
+	                   NULL, NULL, NULL, NULL, NULL, 0); 
+}
+
+/* Public routines */
+/* Plot up to 3 graphs + crosses. Wait for key */
+/* return 0 on success, -1 on error */
+/* If n is -ve, reverse the X axis */
+int
+do_plot_p(
+double *x,
+double *y1,	/* Up to 3 graphs */
+double *y2,
+double *y3,
+int n,
+double *x4, double *y4,		/* And crosses */
+int m) {
+	int i;
+	double xmin, xmax, ymin, ymax;
+
+	/* Determine min and max dimensions of plot */
+	xmin = ymin = 1e6;
+	xmax = ymax = -1e6;
+
+	for (i = 0; i < n; i++) {
+		if (xmin > x[i])
+			xmin = x[i];
+		if (xmax < x[i])
+			xmax = x[i];
+		if (ymin > y1[i])
+			ymin = y1[i];
+		if (ymax < y1[i])
+			ymax = y1[i];
+		if (y2 != NULL) {
+			if (ymin > y2[i])
+				ymin = y2[i];
+			if (ymax < y2[i])
+				ymax = y2[i];
+		}
+		if (y3 != NULL) {
+			if (ymin > y3[i])
+				ymin = y3[i];
+			if (ymax < y3[i])
+				ymax = y3[i];
+		}
+		if (x4 != NULL) {
+			if (xmin > x4[i])
+				xmin = x4[i];
+			if (xmax < x4[i])
+				xmax = x4[i];
+		}
+		if (y4 != NULL) {
+			if (ymin > y4[i])
+				ymin = y4[i];
+			if (ymax < y4[i])
+				ymax = y4[i];
+		}
+	}
+
+	for (i = 0; i < m; i++) {
+		if (x4 != NULL) {
+			if (xmin > x4[i])
+				xmin = x4[i];
+			if (xmax < x4[i])
+				xmax = x4[i];
+		}
+		if (y4 != NULL) {
+			if (ymin > y4[i])
+				ymin = y4[i];
+			if (ymax < y4[i])
+				ymax = y4[i];
+		}
+	}
+
+	/* Work out scale factors */
+	if ((xmax - xmin) == 0.0)
+		xmax += 0.5, xmin -= 0.5;
+	if ((ymax - ymin) == 0.0)
+		ymax += 0.5, ymin -= 0.5;
+
+	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	                   x, y1, NULL, y2, y3, NULL, NULL, NULL, NULL, n,
+	                   x4, y4, NULL, NULL, m ,
+	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
 
 /* Plot up to 3 graphs. */
@@ -185,7 +291,10 @@ double ratio
 		ymin = pymin;
 	}
 
-	return do_plot2(xmin, xmax, ymin, ymax, ratio, x, y1, NULL, y2, NULL, y3, NULL, NULL, NULL,  n, 0, dowait); 
+	return do_plot_imp(xmin, xmax, ymin, ymax, ratio, dowait,
+	                   x, y1, NULL, y2, y3, NULL, NULL, NULL, NULL, n,
+	                   NULL, NULL, NULL, NULL, 0,
+	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
 
 /* Public routines */
@@ -259,10 +368,106 @@ int n) {	/* Number of values */
 	if ((ymax - ymin) == 0.0)
 		ymax += 0.5, ymin -= 0.5;
 
-	return do_plot2(xmin, xmax, ymin, ymax, 1.0, x, y1, NULL, y2, NULL, y3, y4, y5, y6, n, 0, 1); 
+	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	                   x, y1, NULL, y2, y3, y4, y5, y6, NULL, n,
+	                   NULL, NULL, NULL, NULL, n ,
+	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
 
-/* Plot a bunch of vectors */
+/* Public routines */
+/* Plot up to 6 graphs + optional crosses. Wait for a key */
+/* return 0 on success, -1 on error */
+/* If n is -ve, reverse the X axis */
+int
+do_plot6p(
+double *x,	/* X coord */
+double *y1,	/* Black */
+double *y2,	/* Red */
+double *y3,	/* Green */
+double *y4,	/* Blue */
+double *y5,	/* Yellow */
+double *y6,	/* Purple */
+int n,		/* Number of values */
+double *x7, double *y7,		/* And crosses */
+int m) {
+	int i;
+	double xmin, xmax, ymin, ymax;
+	int nn = abs(n);
+
+	/* Determine min and max dimensions of plot */
+	xmin = ymin = 1e6;
+	xmax = ymax = -1e6;
+
+	for (i = 0; i < nn; i++) {
+		if (xmin > x[i])
+			xmin = x[i];
+		if (xmax < x[i])
+			xmax = x[i];
+		if (y1 != NULL) {
+			if (ymin > y1[i])
+				ymin = y1[i];
+			if (ymax < y1[i])
+				ymax = y1[i];
+		}
+		if (y2 != NULL) {
+			if (ymin > y2[i])
+				ymin = y2[i];
+			if (ymax < y2[i])
+				ymax = y2[i];
+		}
+		if (y3 != NULL) {
+			if (ymin > y3[i])
+				ymin = y3[i];
+			if (ymax < y3[i])
+				ymax = y3[i];
+		}
+		if (y4 != NULL) {
+			if (ymin > y4[i])
+				ymin = y4[i];
+			if (ymax < y4[i])
+				ymax = y4[i];
+		}
+		if (y5 != NULL) {
+			if (ymin > y5[i])
+				ymin = y5[i];
+			if (ymax < y5[i])
+				ymax = y5[i];
+		}
+		if (y6 != NULL) {
+			if (ymin > y6[i])
+				ymin = y6[i];
+			if (ymax < y6[i])
+				ymax = y6[i];
+		}
+	}
+	for (i = 0; i < m; i++) {
+		if (x7 != NULL) {
+			if (xmin > x7[i])
+				xmin = x7[i];
+			if (xmax < x7[i])
+				xmax = x7[i];
+		}
+		if (y7 != NULL) {
+			if (ymin > y7[i])
+				ymin = y7[i];
+			if (ymax < y7[i])
+				ymax = y7[i];
+		}
+	}
+
+	/* Work out scale factors */
+	if ((xmax - xmin) == 0.0)
+		xmax += 0.5, xmin -= 0.5;
+	if ((ymax - ymin) == 0.0)
+		ymax += 0.5, ymin -= 0.5;
+
+	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	                   x, y1, NULL, y2, y3, y4, y5, y6, NULL, n,
+	                   x7, y7, NULL, NULL, m,
+	                   NULL, NULL, NULL, NULL, NULL, 0); 
+}
+
+/* Plot a bunch of vectors + optional crosses */
 /* return 0 on success, -1 on error */
 int do_plot_vec(
 double xmin,
@@ -277,11 +482,47 @@ int n,			/* Number of vectors */
 int dowait,
 double *x3,		/* extra point */
 double *y3,
+plot_col *mcols,	/* point colors */
+char **mtext,		/* notation */
 int m			/* Number of points */
 ) {
-	return do_plot2(xmin, xmax, ymin, ymax, 1.0, x1, y1, x2, y2, x3, y3, NULL, NULL, NULL, n, m, dowait); 
+	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, dowait,
+	                   x1, y1, x2, y2, NULL, NULL, NULL, NULL, NULL, n,
+	                   x3, y3, mcols, mtext, m,
+	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
 
+/* Plot a bunch of vectors + optional crosses + optional vectors*/
+/* return 0 on success, -1 on error */
+int do_plot_vec2(
+double xmin,
+double xmax,
+double ymin,
+double ymax,
+double *x1,		/* n vector start */
+double *y1,
+double *x2,		/* vector end and diagonal cross */
+double *y2,
+char **ntext,	/* text annotation at cross */
+int n,			/* Number of vectors */
+int dowait,
+double *x3,		/* m extra point */
+double *y3,
+plot_col *mcols,/* point colors */
+char **mtext,	/* text annotation */
+int m,			/* Number of points */
+double *x4,		/* o vector start */
+double *y4,
+double *x5,		/* o vector end */
+double *y5,
+plot_col *ocols,/* Vector colors */
+int o			/* Number of vectors */
+) {
+	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, dowait,
+	                   x1, y1, x2, y2, NULL, NULL, NULL, NULL, ntext, n,
+	                   x3, y3, mcols, mtext, m,
+	                   x4, y4, x5, y5, ocols, o); 
+}
 /* ********************************** NT version ********************** */
 #ifdef NT
 
@@ -295,29 +536,27 @@ int m			/* Number of points */
 
 static LRESULT CALLBACK MainWndProc (HWND, UINT, WPARAM, LPARAM);
 
-/* Combined implementation */
+/* Superset implementation function: */
 /* return 0 on success, -1 on error */
-static int
-do_plot2(
-double xmin,	/* Bounding box */
-double xmax,
-double ymin,
-double ymax,
-double ratio,	/* Aspect ratio of window, X/Y */
-double *x1,		/* Graph or vector data */
-double *y1,
-double *x2,
-double *y2,
-double *x3,
-double *y3,
-double *y4,
-double *y5,
-double *y6,
-				/* Graph uses x1, y1, y2, y3, y4, y5, y6 for up to 6 graph curves */
-				/* Vector uses x1, y1 to x2, y2 as a vector plus x3, y3 as a point */
-int n,			/* Number of points/vectors. -ve for reversed X axis */
-int m,			/* Number of extra points */
-int dowait		/* Wait for a user key */
+/* Hybrid Graph uses x1 : y1, y2, y3, y4, y5, y6 for up to 6 graph curves + */
+/* optional diagonal crosses at x7, y7 in yellow (x2 == NULL). */
+/* Vector uses x1, y1 to x2, y2 as a vector with a diagonal cross at x2, y2 all in black, */
+/* with annotation  ntext at the cross, */
+/* plus a diagonal cross at x7, y7 in yellow. The color for x7, y7 can be overidden by an  */
+/* array of colors mcols, and augmented by optional label text mtext. (x2 != NULL) */
+/* n = number of points/vectors. -ve for reversed X axis */
+/* m = number of extra points (x2,y3 or x7,y7) */
+static int do_plot_imp(
+    double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
+	double ratio,	/* Aspect ratio of window, X/Y */
+	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
+    double *x1, double *y1, double *x2, double *y2,
+    double *y3, double *y4, double *y5, double *y6, char **ntext,
+	int n,
+	double *x7, double *y7, plot_col *mcols, char **mtext,
+    int m,
+	double *x8, double *y8, double *x9, double*y9, plot_col *ocols,
+	int o
 ) {
 	pd.dowait = 10 * dowait;
 	{
@@ -328,7 +567,7 @@ int dowait		/* Wait for a user key */
 		pd.mxx = xmax;
 		pd.mxy = ymax;
 
-		/* Allow some extra arround plot */
+		/* Allow some extra around plot */
 		xr = pd.mxx - pd.mnx;
 		yr = pd.mxy - pd.mny;
 		if (xr < 1e-6)
@@ -342,20 +581,20 @@ int dowait		/* Wait for a user key */
 
 		/* Transfer raw point info */
 		if (x2 == NULL)
-			pd.graph = 1;
+			pd.graph = 1;		/* 6 graphs + points */
 		else
 			pd.graph = 0;
 		pd.x1 = x1;
 		pd.x2 = x2;
 		pd.y1 = y1;
 		pd.y2 = y2;
-		pd.x3 = x3;
 		pd.y3 = y3;
 		pd.y4 = y4;
 		pd.y5 = y5;
 		pd.y6 = y6;
+		pd.ntext = ntext;
 		pd.n = abs(n);
-		pd.m = m;
+
 		if (n < 0) {
 			double tt;
 			tt = pd.mxx;
@@ -365,6 +604,18 @@ int dowait		/* Wait for a user key */
 		} else {
 			pd.revx = 0;
 		}
+		pd.x7 = x7;
+		pd.y7 = y7;
+		pd.mcols = mcols;
+		pd.mtext = mtext;
+		pd.m = abs(m);
+
+		pd.x8 = x8;
+		pd.y8 = y8;
+		pd.x9 = x9;
+		pd.y9 = y9;
+		pd.ocols = ocols;
+		pd.o = abs(o);
 	}
 
 	/* ------------------------------------------- */
@@ -439,13 +690,16 @@ int dowait		/* Wait for a user key */
 		}
 #else
 		for (;;) {
-			if (PeekMessage(&msg, hwnd, 0, 0, PM_REMOVE)) {
+			while (PeekMessage(&msg, hwnd, 0, 0, PM_REMOVE)) {
 				TranslateMessage(&msg);
 				DispatchMessage(&msg);
 				if (msg.message == WM_QUIT) {
 					break;
 				}
 			}
+			if (pd.dowait == 0 || msg.message == WM_QUIT)
+				break;
+
 			/* Can check for timeout here */
 			Sleep(100);
 			if (pd.dowait < 0) {		/* Don't wait */
@@ -505,8 +759,6 @@ static LRESULT CALLBACK MainWndProc(
 
 			EndPaint(hwnd, &ps);
 
-#ifdef NEVER
-#endif
 			return 0;
 
 		case WM_CHAR:
@@ -586,8 +838,6 @@ loose_label(HDC hdc, plot_info *pdp, double min, double max, void (*pfunc)(HDC h
 	}
 }
 
-
-
 void
 DoPlot(
 HDC hdc,
@@ -614,7 +864,7 @@ plot_info *pdp
 	RestoreDC(hdc,-1);
 	DeleteObject(pen);
 
-	if (pdp->graph) {		/* Up to 6 graphs */
+	if (pdp->graph) {		/* Up to 6 graphs + crosses */
 		int gcolors[6][3] = {
 			{   0,   0,   0},	/* Black */
 			{ 210,  30,   0},	/* Red */
@@ -662,10 +912,25 @@ plot_info *pdp
 			DeleteObject(pen);
 		}
 
-	} else {	/* Vectors */
+	} else {	/* Vectors with cross */
 
 		pen = CreatePen(PS_SOLID,ILTHICK,RGB(0,0,0));
 		SelectObject(hdc,pen);
+
+		if (pdp->ntext != NULL) {
+			HFONT fon;
+
+			fon = CreateFont(12, 0, 0, 0, FW_LIGHT, FALSE, FALSE, FALSE, ANSI_CHARSET,
+			                 OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+			                 FF_DONTCARE, NULL);
+
+			if (fon == NULL)
+				fprintf(stderr,"plot: CreateFont returned NULL\n");
+			else {
+				SelectObject(hdc,fon);
+				DeleteObject(fon);
+			}
+		}
 
 		for (i = 0; i < pdp->n; i++) {
 			int cx,cy;
@@ -683,24 +948,104 @@ plot_info *pdp
 			LineTo(hdc, 10 + cx + 5, pdp->sh - 10 - cy + 5);
 			MoveToEx(hdc, 10 + cx + 5, pdp->sh - 10 - cy - 5, NULL);
 			LineTo(hdc, 10 + cx - 5, pdp->sh - 10 - cy + 5);
+
+			if (pdp->ntext != NULL) {
+				RECT rct;
+				rct.right = 
+				rct.left = 10 + cx + 10;
+				rct.top = 
+				rct.bottom = pdp->sh - 10 - cy + 10;
+				DrawText(hdc, pdp->ntext[i], -1, &rct, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOCLIP);
+			}
 		}
 		DeleteObject(pen);
+	}
 
-		if (pdp->x3 != NULL) {		/* Extra points */
-			pen = CreatePen(PS_SOLID,ILTHICK,RGB(210,150,0));
-			SelectObject(hdc,pen);
-	
-			for (i = 0; i < pdp->m; i++) {
-				lx = (int)((pdp->x3[i] - pdp->mnx) * pdp->scx + 0.5);
-				ly = (int)((pdp->y3[i] - pdp->mny) * pdp->scy + 0.5);
-	
-				MoveToEx(hdc, 10 + lx - 5, pdp->sh - 10 - ly, NULL);
-				LineTo(hdc, 10 + lx + 5, pdp->sh - 10 - ly);
-				MoveToEx(hdc, 10 + lx, pdp->sh - 10 - ly - 5, NULL);
-				LineTo(hdc, 10 + lx, pdp->sh - 10 - ly + 5);
+	/* Extra points */
+	if (pdp->x7 != NULL && pdp->y7 != NULL && pdp->m > 0 ) {
+		pen = CreatePen(PS_SOLID,ILTHICK,RGB(210,150,0));
+		SelectObject(hdc,pen);
+		
+		if (pdp->mtext != NULL) {
+			HFONT fon;
+
+
+			fon = CreateFont(12, 0, 0, 0, FW_LIGHT, FALSE, FALSE, FALSE, ANSI_CHARSET,
+			                 OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+			                 FF_DONTCARE, NULL);
+
+			if (fon == NULL)
+				fprintf(stderr,"plot: CreateFont returned NULL\n");
+			else {
+				SelectObject(hdc,fon);
+				DeleteObject(fon);
 			}
-			DeleteObject(pen);
 		}
+
+		for (i = 0; i < pdp->m; i++) {
+			lx = (int)((pdp->x7[i] - pdp->mnx) * pdp->scx + 0.5);
+			ly = (int)((pdp->y7[i] - pdp->mny) * pdp->scy + 0.5);
+
+			if (pdp->mcols != NULL) {
+				int rgb[3];
+
+				for (j = 0; j < 3; j++)
+					rgb[j] = (int)(pdp->mcols[i].rgb[j] * 255.0 + 0.5);
+
+				DeleteObject(pen);
+				pen = CreatePen(PS_SOLID,ILTHICK,RGB(rgb[0],rgb[1],rgb[2]));
+				SelectObject(hdc,pen);
+
+				if (pdp->mtext != NULL)
+					SetTextColor(hdc, RGB(rgb[0],rgb[1],rgb[2]));
+			}
+			MoveToEx(hdc, 10 + lx - 5, pdp->sh - 10 - ly, NULL);
+			LineTo(hdc, 10 + lx + 5, pdp->sh - 10 - ly);
+			MoveToEx(hdc, 10 + lx, pdp->sh - 10 - ly - 5, NULL);
+			LineTo(hdc, 10 + lx, pdp->sh - 10 - ly + 5);
+
+			if (pdp->mtext != NULL) {
+				RECT rct;
+				rct.right = 
+				rct.left = 10 + lx + 10;
+				rct.top = 
+				rct.bottom = pdp->sh - 10 - ly - 10;
+				DrawText(hdc, pdp->mtext[i], -1, &rct, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOCLIP);
+			}
+		}
+		DeleteObject(pen);
+	}
+	/* Extra vectors */
+	if (pdp->x8 != NULL && pdp->y8 != NULL && pdp->x9 != NULL && pdp->y9 && pdp->o > 0 ) {
+		pen = CreatePen(PS_SOLID,ILTHICK,RGB(150,255,255));
+		SelectObject(hdc,pen);
+		
+		for (i = 0; i < pdp->o; i++) {
+			int cx,cy;
+
+			lx = (int)((pdp->x8[i] - pdp->mnx) * pdp->scx + 0.5);
+			ly = (int)((pdp->y8[i] - pdp->mny) * pdp->scy + 0.5);
+
+			cx = (int)((pdp->x9[i] - pdp->mnx) * pdp->scx + 0.5);
+			cy = (int)((pdp->y9[i] - pdp->mny) * pdp->scy + 0.5);
+
+			if (pdp->ocols != NULL) {
+				int rgb[3];
+
+				for (j = 0; j < 3; j++)
+					rgb[j] = (int)(pdp->ocols[i].rgb[j] * 255.0 + 0.5);
+
+				DeleteObject(pen);
+				pen = CreatePen(PS_SOLID,ILTHICK,RGB(rgb[0],rgb[1],rgb[2]));
+				SelectObject(hdc,pen);
+
+				if (pdp->mtext != NULL)
+					SetTextColor(hdc, RGB(rgb[0],rgb[1],rgb[2]));
+			}
+			MoveToEx(hdc, 10 + lx, pdp->sh - 10 - ly, NULL);
+			LineTo(hdc, 10 + cx, pdp->sh - 10 - cy);
+		}
+		DeleteObject(pen);
 	}
 
 //	while(!kbhit());
@@ -723,29 +1068,27 @@ plot_info *pdp
 static void DoPlot(WindowRef win, plot_info *pdp);
 static pascal OSStatus HandleEvent(EventHandlerCallRef inRef, EventRef inEvent, void* userData);
 
-/* Combined implementation */
+/* Superset implementation function: */
 /* return 0 on success, -1 on error */
-static int
-do_plot2(
-double xmin,	/* Bounding box */
-double xmax,
-double ymin,
-double ymax,
-double ratio,	/* Aspect ratio of window, X/Y */
-double *x1,		/* Graph or vector data */
-double *y1,
-double *x2,	
-double *y2,
-double *x3,
-double *y3,
-double *y4,
-double *y5,
-double *y6,
-				/* Graph uses x1, y1, y2, y3, y4, y5, y6 for up to 6 graph curves */
-				/* Vector uses x1, y1 to x2, y2 as a vector plus x3, y3 as a point */
-int n,			/* Number of points/vectors. -ve for reversed X axis */
-int m,			/* Number of extra points */
-int dowait		/* Wait for a user key */
+/* Hybrid Graph uses x1 : y1, y2, y3, y4, y5, y6 for up to 6 graph curves + */
+/* optional diagonal crosses at x7, y7 in yellow (x2 == NULL). */
+/* Vector uses x1, y1 to x2, y2 as a vector with a diagonal cross at x2, y2 all in black, */
+/* with annotation  ntext at the cross, */
+/* plus a diagonal cross at x7, y7 in yellow. The color for x7, y7 can be overidden by an  */
+/* array of colors mcols, and augmented by optional label text mtext. (x2 != NULL) */
+/* n = number of points/vectors. -ve for reversed X axis */
+/* m = number of extra points (x2,y3 or x7,y7) */
+static int do_plot_imp(
+    double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
+	double ratio,	/* Aspect ratio of window, X/Y */
+	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
+    double *x1, double *y1, double *x2, double *y2,
+    double *y3, double *y4, double *y5, double *y6, char **ntext,
+	int n,
+	double *x7, double *y7, plot_col *mcols, char **mtext,
+    int m,
+	double *x8, double *y8, double *x9, double*y9, plot_col *ocols,
+	int o
 ) {
 	{
 		double xr,yr;
@@ -771,20 +1114,20 @@ int dowait		/* Wait for a user key */
 
 		/* Transfer raw point info */
 		if (x2 == NULL)
-			pd.graph = 1;
+			pd.graph = 1;		/* 6 graphs + points */
 		else
 			pd.graph = 0;
 		pd.x1 = x1;
 		pd.x2 = x2;
 		pd.y1 = y1;
 		pd.y2 = y2;
-		pd.x3 = x3;
 		pd.y3 = y3;
 		pd.y4 = y4;
 		pd.y5 = y5;
 		pd.y6 = y6;
+		pd.ntext = ntext;
 		pd.n = abs(n);
-		pd.m = m;
+
 		if (n < 0) {
 			double tt;
 			tt = pd.mxx;
@@ -794,6 +1137,18 @@ int dowait		/* Wait for a user key */
 		} else {
 			pd.revx = 0;
 		}
+		pd.x7 = x7;
+		pd.y7 = y7;
+		pd.mcols = mcols;
+		pd.mtext = mtext;
+		pd.m = abs(m);
+
+		pd.x8 = x8;
+		pd.y8 = y8;
+		pd.x9 = x9;
+		pd.y9 = y9;
+		pd.ocols = ocols;
+		pd.o = abs(o);
 	}
 
 	{
@@ -919,7 +1274,7 @@ void* userData
 				case kEventWindowDrawContent: {
 					DoPlot(myWindow, pdp);
 					result = noErr;
-					if (pdp->dowait <= 0) { 		/* Don't wait */
+					if (pdp->dowait <= 0) { 		/* Don't wait or delay */
 						debugf(("Exiting event loop after drawing contents\n"));
 						if (pdp->dowait < 0)
 							sleep(-pdp->dowait);
@@ -1220,14 +1575,14 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 			{ 0.78, 0.78, 0.0},	/* Yellow */
 			{ 0.86, 0.0, 1.0}	/* Purple */
 		};
-		double *yps[6] = {
-			pdp->y1,
-			pdp->y2,
-			pdp->y3,
-			pdp->y4,
-			pdp->y5,
-			pdp->y6,
-		};
+		double *yps[6];
+
+		yps[0] = pdp->y1;
+		yps[1] = pdp->y2;
+		yps[2] = pdp->y3;
+		yps[3] = pdp->y4;
+		yps[4] = pdp->y5;
+		yps[5] = pdp->y6;
 		for (j = 0; j < 6; j++) {
 			double *yp = yps[j];
 		
@@ -1255,6 +1610,8 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 
 	} else {	/* Vectors */
 		CGContextSetRGBStrokeColor(mygc, 0.0, 0.0, 0.0, 1.0);	/* Black */
+		if (pdp->ntext != NULL)
+			CGContextSetRGBFillColor(mygc, 0.0, 0.0, 0.0, 1.0);
 		for (i = 0; i < pdp->n; i++) {
 			int cx,cy;
 
@@ -1268,18 +1625,58 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 
 			CDrawLine(mygc, 20.0 + cx - 5, 20.0 + cy - 5, 20.0 + cx + 5, 20.0 + cy + 5);
 			CDrawLine(mygc, 20.0 + cx + 5, 20.0 + cy - 5, 20.0 + cx - 5, 20.0 + cy + 5);
-		}
 
-		if (pdp->x3 != NULL) {		/* Extra points */
-			CGContextSetRGBStrokeColor(mygc, 0.82, 0.59, 0.0, 1.0);	/* Orange ? */
+			if (pdp->ntext != NULL)
+				CDrawText(mygc, 9.0, 20.0 + cx + 9, 20.0 + cy - 7, 0x1, pdp->ntext[i]);
+		}
+	}
+
+	/* Extra points */
+	if (pdp->x7 != NULL && pdp->y7 != NULL && pdp->m > 0 ) {
+		CGContextSetRGBStrokeColor(mygc, 0.82, 0.59, 0.0, 1.0);	/* Orange ? */
 	
-			for (i = 0; i < pdp->m; i++) {
-				lx = (int)((pdp->x3[i] - pdp->mnx) * pdp->scx + 0.5);
-				ly = (int)((pdp->y3[i] - pdp->mny) * pdp->scy + 0.5);
-	
-				CDrawLine(mygc, 20.0 + lx - 5, 20.0 + ly, 20.0 + lx + 5, 20.0 + ly);
-				CDrawLine(mygc, 20.0 + lx, 20.0 + ly - 5, 20.0 + lx, 20.0 + ly + 5);
+		for (i = 0; i < pdp->m; i++) {
+
+			if (pdp->mcols != NULL) {
+				CGContextSetRGBStrokeColor(mygc, pdp->mcols[i].rgb[0],
+					pdp->mcols[i].rgb[1], pdp->mcols[i].rgb[2], 1.0);
+				if (pdp->mtext != NULL)
+					CGContextSetRGBFillColor(mygc, pdp->mcols[i].rgb[0],
+					pdp->mcols[i].rgb[1], pdp->mcols[i].rgb[2], 1.0);
 			}
+			lx = (int)((pdp->x7[i] - pdp->mnx) * pdp->scx + 0.5);
+			ly = (int)((pdp->y7[i] - pdp->mny) * pdp->scy + 0.5);
+
+			CDrawLine(mygc, 20.0 + lx - 5, 20.0 + ly, 20.0 + lx + 5, 20.0 + ly);
+			CDrawLine(mygc, 20.0 + lx, 20.0 + ly - 5, 20.0 + lx, 20.0 + ly + 5);
+
+			if (pdp->mtext != NULL) {
+				CDrawText(mygc, 9.0, 20.0 + lx + 9, 20.0 + ly + 7, 0x1, pdp->mtext[i]);
+			}
+		}
+	}
+
+	/* Extra vectors */
+	if (pdp->x8 != NULL && pdp->y8 != NULL && pdp->x9 != NULL && pdp->y9 && pdp->o > 0 ) {
+		CGContextSetRGBStrokeColor(mygc, 0.5, 0.9, 0.9, 1.0);	/* Light blue */
+	
+		for (i = 0; i < pdp->o; i++) {
+			int cx,cy;
+
+			if (pdp->ocols != NULL) {
+				CGContextSetRGBStrokeColor(mygc, pdp->ocols[i].rgb[0],
+					pdp->ocols[i].rgb[1], pdp->ocols[i].rgb[2], 1.0);
+				if (pdp->mtext != NULL)
+					CGContextSetRGBFillColor(mygc, pdp->ocols[i].rgb[0],
+					pdp->ocols[i].rgb[1], pdp->ocols[i].rgb[2], 1.0);
+			}
+			lx = (int)((pdp->x8[i] - pdp->mnx) * pdp->scx + 0.5);
+			ly = (int)((pdp->y8[i] - pdp->mny) * pdp->scy + 0.5);
+
+			cx = (int)((pdp->x9[i] - pdp->mnx) * pdp->scx + 0.5);
+			cy = (int)((pdp->y9[i] - pdp->mny) * pdp->scy + 0.5);
+
+			CDrawLine(mygc, 20.0 + lx, 20.0 + ly, 20.0 + cx, 20.0 + cy);
 		}
 	}
 
@@ -1309,31 +1706,29 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 
 void DoPlot(Display *mydisplay, Window mywindow, GC mygc, plot_info *pdp);
 
-/* Combined implementation */
+/* Superset implementation function: */
 /* return 0 on success, -1 on error */
-static int
-do_plot2(
-double xmin,	/* Bounding box */
-double xmax,
-double ymin,
-double ymax,
-double ratio,	/* Aspect ratio of window, X/Y */
-double *x1,		/* Graph or vector data */
-double *y1,
-double *x2,	
-double *y2,
-double *x3,
-double *y3,
-double *y4,
-double *y5,
-double *y6,
-				/* Graph uses x1, y1, y2, y3, y4, y5, y6 for up to 6 graph curves */
-				/* Vector uses x1, y1 to x2, y2 as a vector plus x3, y3 as a point */
-int n,			/* Number of points/vectors. -ve for reversed X axis */
-int m,			/* Number of extra points */
-int dowait		/* Wait for a user key */
+/* Hybrid Graph uses x1 : y1, y2, y3, y4, y5, y6 for up to 6 graph curves + */
+/* optional diagonal crosses at x7, y7 in yellow (x2 == NULL). */
+/* Vector uses x1, y1 to x2, y2 as a vector with a diagonal cross at x2, y2 all in black, */
+/* with annotation  ntext at the cross, */
+/* plus a diagonal cross at x7, y7 in yellow. The color for x7, y7 can be overidden by an  */
+/* array of colors mcols, and augmented by optional label text mtext. (x2 != NULL) */
+/* n = number of points/vectors. -ve for reversed X axis */
+/* m = number of extra points (x2,y3 or x7,y7) */
+static int do_plot_imp(
+    double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
+	double ratio,	/* Aspect ratio of window, X/Y */
+	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
+    double *x1, double *y1, double *x2, double *y2,
+    double *y3, double *y4, double *y5, double *y6, char **ntext,
+	int n,
+	double *x7, double *y7, plot_col *mcols, char **mtext,
+    int m,
+	double *x8, double *y8, double *x9, double*y9, plot_col *ocols,
+	int o
 ) {
-		{
+	{
 		double xr,yr;
 
 		pd.dowait = dowait;
@@ -1357,20 +1752,20 @@ int dowait		/* Wait for a user key */
 
 		/* Transfer raw point info */
 		if (x2 == NULL)
-			pd.graph = 1;
+			pd.graph = 1;		/* 6 graphs + points */
 		else
 			pd.graph = 0;
 		pd.x1 = x1;
 		pd.x2 = x2;
 		pd.y1 = y1;
 		pd.y2 = y2;
-		pd.x3 = x3;
 		pd.y3 = y3;
 		pd.y4 = y4;
 		pd.y5 = y5;
 		pd.y6 = y6;
+		pd.ntext = ntext;
 		pd.n = abs(n);
-		pd.m = m;
+
 		if (n < 0) {
 			double tt;
 			tt = pd.mxx;
@@ -1380,13 +1775,26 @@ int dowait		/* Wait for a user key */
 		} else {
 			pd.revx = 0;
 		}
+		pd.x7 = x7;
+		pd.y7 = y7;
+		pd.mcols = mcols;
+		pd.mtext = mtext;
+		pd.m = abs(m);
+
+		pd.x8 = x8;
+		pd.y8 = y8;
+		pd.x9 = x9;
+		pd.y9 = y9;
+		pd.ocols = ocols;
+		pd.o = abs(o);
 	}
 
 	{
 		/* stuff for X windows */
 		char plot[] = {"plot"};
-		Display *mydisplay;
-		Window mywindow;
+		static Display *mydisplay = NULL;
+		static Window mywindow = -1;
+		int dorefresh = 1;
 		GC mygc;
 		XEvent myevent;
 		XSizeHints myhint;
@@ -1396,9 +1804,12 @@ int dowait		/* Wait for a user key */
 		int done;
 	
 		/* open the display */
-		mydisplay = XOpenDisplay("");
-		if(!mydisplay)
-			error("Unable to open display");
+		if (mydisplay == NULL) {
+			mydisplay = XOpenDisplay("");
+			if(!mydisplay)
+				error("Unable to open display");
+			dorefresh = 0;
+		}
 		myscreen = DefaultScreen(mydisplay);
 		mybackground = WhitePixel(mydisplay,myscreen);
 		myforeground = BlackPixel(mydisplay,myscreen);
@@ -1411,13 +1822,15 @@ int dowait		/* Wait for a user key */
 	
 		debugf(("Opened display OK\n"));
 	
-		debugf(("Opening window\n"));
-		mywindow = XCreateSimpleWindow(mydisplay,
-				DefaultRootWindow(mydisplay),
-				myhint.x,myhint.y,myhint.width,myhint.height,
-				5, myforeground,mybackground);
-		XSetStandardProperties(mydisplay,mywindow,plot,plot,None,
-		       NULL,0, &myhint);
+		if (mywindow == -1) {
+			debugf(("Opening window\n"));
+			mywindow = XCreateSimpleWindow(mydisplay,
+					DefaultRootWindow(mydisplay),
+					myhint.x,myhint.y,myhint.width,myhint.height,
+					5, myforeground,mybackground);
+			XSetStandardProperties(mydisplay,mywindow,plot,plot,None,
+			       NULL,0, &myhint);
+		}
 	
 		mygc = XCreateGC(mydisplay,mywindow,0,0);
 		XSetBackground(mydisplay,mygc,mybackground);
@@ -1426,8 +1839,26 @@ int dowait		/* Wait for a user key */
 		XSelectInput(mydisplay,mywindow,
 		     KeyPressMask | ExposureMask);
 	
-		XMapRaised(mydisplay,mywindow);
-		debugf(("Raised window\n"));
+		if (dorefresh) {
+			XExposeEvent ev;
+
+			ev.type = Expose;
+			ev.display = mydisplay;
+			ev.send_event = True;
+			ev.window = mywindow;
+			ev.x = 0;
+			ev.y = 0;
+			ev.width = myhint.width;
+			ev.height = myhint.height;
+			ev.count = 0;
+
+			XClearWindow(mydisplay, mywindow);
+			XSendEvent(mydisplay, mywindow, False, ExposureMask, (XEvent *)&ev);
+			
+		} else {
+			XMapRaised(mydisplay,mywindow);
+			debugf(("Raised window\n"));
+		}
 	
 		/* Main event loop */
 		debugf(("About to enter main loop\n"));
@@ -1467,8 +1898,8 @@ int dowait		/* Wait for a user key */
 		}
 		debugf(("About to close display\n"));
 		XFreeGC(mydisplay,mygc);
-		XDestroyWindow(mydisplay,mywindow);
-		XCloseDisplay(mydisplay);
+//		XDestroyWindow(mydisplay,mywindow);
+//		XCloseDisplay(mydisplay);
 		debugf(("finished\n"));
 	}
 	return 0;
@@ -1556,7 +1987,7 @@ plot_info *pdp
 	XSetForeground(mydisplay,mygc, col.pixel);
 
 	/* Set dashed lines for axes */
-	XSetLineAttributes(mydisplay, mygc, 0, LineOnOffDash, CapButt, JoinBevel);
+	XSetLineAttributes(mydisplay, mygc, 1, LineOnOffDash, CapButt, JoinBevel);
 	XSetDashes(mydisplay, mygc, 0, dash_list, 2);
 	// ~~ doesn't seem to work. Why ?
 
@@ -1578,14 +2009,14 @@ plot_info *pdp
 			{ 200, 200,   0},	/* Yellow */
 			{ 220,   0, 255}	/* Purple */
 		};
-		double *yps[6] = {
-			pdp->y1,
-			pdp->y2,
-			pdp->y3,
-			pdp->y4,
-			pdp->y5,
-			pdp->y6,
-		};
+		double *yps[6];
+
+		yps[0] = pdp->y1;
+		yps[1] = pdp->y2;
+		yps[2] = pdp->y3;
+		yps[3] = pdp->y4;
+		yps[4] = pdp->y5;
+		yps[5] = pdp->y6;
 		for (j = 0; j < 6; j++) {
 			double *yp = yps[j];
 		
@@ -1638,21 +2069,71 @@ plot_info *pdp
 
 			XDrawLine(mydisplay, mywindow, mygc, 10 + cx - 5, pdp->sh - 10 - cy - 5, 10 + cx + 5, pdp->sh - 10 - cy + 5);
 			XDrawLine(mydisplay, mywindow, mygc, 10 + cx + 5, pdp->sh - 10 - cy - 5, 10 + cx - 5, pdp->sh - 10 - cy + 5);
-		}
 
-		if (pdp->x3 != NULL) {		/* Extra points */
-			col.red = 210 * 256; col.green = 150 * 256; col.blue = 0 * 256;
-			XAllocColor(mydisplay, mycmap, &col);
-			XSetForeground(mydisplay,mygc, col.pixel);
-			XSetLineAttributes(mydisplay, mygc, ILTHICK, LineSolid, CapButt, JoinBevel);
-	
-			for (i = 0; i < pdp->m; i++) {
-				lx = (int)((pdp->x3[i] - pdp->mnx) * pdp->scx + 0.5);
-				ly = (int)((pdp->y3[i] - pdp->mny) * pdp->scy + 0.5);
-	
-				XDrawLine(mydisplay, mywindow, mygc, 10 + lx - 5, pdp->sh - 10 - ly, 10 + lx + 5, pdp->sh - 10 - ly);
-				XDrawLine(mydisplay, mywindow, mygc, 10 + lx, pdp->sh - 10 - ly - 5, 10 + lx, pdp->sh - 10 - ly + 5);
+			if (pdp->ntext != NULL)
+				XDrawImageString(mydisplay, mywindow, mygc, 10 + cx + 5, pdp->sh - 10 - cy + 7,
+				                 pdp->ntext[i], strlen(pdp->ntext[i]));
+		}
+	}
+
+	/* Extra points */
+	if (pdp->x7 != NULL && pdp->y7 != NULL && pdp->m > 0 ) {
+		col.red = 210 * 256; col.green = 150 * 256; col.blue = 0 * 256;
+		XAllocColor(mydisplay, mycmap, &col);
+		XSetForeground(mydisplay,mygc, col.pixel);
+		XSetLineAttributes(mydisplay, mygc, ILTHICK, LineSolid, CapButt, JoinBevel);
+
+		for (i = 0; i < pdp->m; i++) {
+			lx = (int)((pdp->x7[i] - pdp->mnx) * pdp->scx + 0.5);
+			ly = (int)((pdp->y7[i] - pdp->mny) * pdp->scy + 0.5);
+
+			if (pdp->mcols != NULL) {
+				col.red = (int)(pdp->mcols[i].rgb[0] * 65535.0 + 0.5);
+				col.green = (int)(pdp->mcols[i].rgb[1] * 65535.0 + 0.5);
+				col.blue = (int)(pdp->mcols[i].rgb[2] * 65535.0 + 0.5);
+
+				XAllocColor(mydisplay, mycmap, &col);
+				XSetForeground(mydisplay,mygc, col.pixel);
+
 			}
+			XDrawLine(mydisplay, mywindow, mygc, 10 + lx - 5, pdp->sh - 10 - ly,
+			                                     10 + lx + 5, pdp->sh - 10 - ly);
+			XDrawLine(mydisplay, mywindow, mygc, 10 + lx, pdp->sh - 10 - ly - 5,
+			                                     10 + lx, pdp->sh - 10 - ly + 5);
+
+			if (pdp->mtext != NULL)
+				XDrawImageString(mydisplay, mywindow, mygc, 10 + lx + 5, pdp->sh - 10 - ly - 7,
+				                 pdp->mtext[i], strlen(pdp->mtext[i]));
+		}
+	}
+
+	/* Extra vectors */
+	if (pdp->x8 != NULL && pdp->y8 != NULL && pdp->x9 != NULL && pdp->y9 && pdp->o > 0 ) {
+		col.red = 150 * 256; col.green = 255 * 256; col.blue = 255 * 256;
+		XAllocColor(mydisplay, mycmap, &col);
+		XSetForeground(mydisplay,mygc, col.pixel);
+		XSetLineAttributes(mydisplay, mygc, ILTHICK, LineSolid, CapButt, JoinBevel);
+
+		for (i = 0; i < pdp->o; i++) {
+			int cx,cy;
+
+			lx = (int)((pdp->x8[i] - pdp->mnx) * pdp->scx + 0.5);
+			ly = (int)((pdp->y8[i] - pdp->mny) * pdp->scy + 0.5);
+
+			cx = (int)((pdp->x9[i] - pdp->mnx) * pdp->scx + 0.5);
+			cy = (int)((pdp->y9[i] - pdp->mny) * pdp->scy + 0.5);
+
+			if (pdp->ocols != NULL) {
+				col.red = (int)(pdp->ocols[i].rgb[0] * 65535.0 + 0.5);
+				col.green = (int)(pdp->ocols[i].rgb[1] * 65535.0 + 0.5);
+				col.blue = (int)(pdp->ocols[i].rgb[2] * 65535.0 + 0.5);
+
+				XAllocColor(mydisplay, mycmap, &col);
+				XSetForeground(mydisplay,mygc, col.pixel);
+
+			}
+
+			XDrawLine(mydisplay, mywindow, mygc, 10 + lx, pdp->sh - 10 - ly, 10 + cx, pdp->sh - 10 - cy);
 		}
 	}
 }
@@ -1666,8 +2147,7 @@ plot_info *pdp
 
 #define expt(a,n) pow(a,(double)(n))
 
-double nicenum(double x, int round)
-	{
+double nicenum(double x, int round) {
 	int ex;
 	double f;
 	double nf;
@@ -1678,24 +2158,21 @@ double nicenum(double x, int round)
 // printf("ex = %d\n",ex);
 	f = x/expt(10.0,ex);
 // printf("f = %f\n",f);
-	if (round)
-		{
+	if (round) {
 		if (f < 1.5) nf = 1.0;
 		else if (f < 3.0) nf = 2.0;
 		else if (f < 7.0) nf = 5.0;
 		else nf = 10.0;
-		}
-	else
-		{
+	} else {
 		if (f < 1.0) nf = 1.0;
 		else if (f < 2.0) nf = 2.0;
 		else if (f < 5.0) nf = 5.0;
 		else nf = 10.0;
-		}
+	}
 // printf("nf = %f\n",nf);
 // printf("about to return %f\n",(nf * expt(10.0, ex)));
 	return (nf * expt(10.0, ex));
-	}
+}
 
 /* ---------------------------------------------------------------- */
 #ifdef STANDALONE_TEST
@@ -1717,6 +2194,16 @@ main()
 	double Bx3[10] = {0.8, 0.4, 1.3, 0.5, 0.23};
 	double By3[10] = {0.5, 1.3, 0.4, 0.7, 0.77};
 
+	plot_col mcols[5] = {
+	{ 1.0, 0.0, 0.0 },
+	{ 0.0, 1.0, 0.0 },
+	{ 0.0, 0.0, 1.0 },
+	{ 0.6, 0.6, 0.6 },
+	{ 1.0, 1.0, 0.0 } };
+
+	char *ntext[5] = { "A", "B", "C", "D" };
+	char *mtext[5] = { "10", "20", "30", "40", "50" };
+
 	printf("Doing first plot\n");
 	if (do_plot(x,y1,y2,y3,4) < 0)
 		printf("Error - do_plot returned -1!\n");
@@ -1729,7 +2216,16 @@ main()
 
 	/* Try vectors */
 	printf("Doing vector plot\n");
-	if (do_plot_vec(0.0, 1.0, 0.0, 2.0, Bx1, By1, Bx2, By2, 4, 1, Bx3, By3, 5))
+	if (do_plot_vec(0.0, 1.4, 0.0, 2.0, Bx1, By1, Bx2, By2, 4, 1, Bx3, By3, NULL, NULL, 5))
+		printf("Error - do_plot_vec returned -1!\n");
+
+	printf("Doing vector plot with colors and notation\n");
+	if (do_plot_vec(0.0, 1.4, 0.0, 2.0, Bx1, By1, Bx2, By2, 4, 1, Bx3, By3, mcols, mtext, 5))
+		printf("Error - do_plot_vec returned -1!\n");
+
+	printf("Doing vector plot with colors and notation + extra vectors\n");
+	if (do_plot_vec2(0.0, 1.4, 0.0, 2.0, Bx1, By1, Bx2, By2, ntext, 4, 1, Bx3, By3, mcols, mtext, 5,
+	                x,y1,y2,y3,mcols,4))
 		printf("Error - do_plot_vec returned -1!\n");
 
 	printf("We're done\n");

@@ -165,7 +165,7 @@ main(
 	}
 
 	/* Get details of conversion */
-	luo->spaces(luo, &ins, &inn, &outs, NULL, &alg, NULL, NULL, NULL);
+	luo->spaces(luo, &ins, &inn, &outs, NULL, &alg, NULL, NULL, NULL, NULL);
 
 	if (labin) {
 		chans[3] = 0;

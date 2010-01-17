@@ -83,8 +83,11 @@ cgatsAlloc *new_cgatsAllocStd(void);
 #define CGATS_FILE_BASE																		\
 	/* Public: */																			\
 																							\
+	/* Get the size of the file (Only valid for reading file). */							\
+	size_t (*get_size) (struct _cgatsFile *p);												\
+																							\
 	/* Set current position to offset. Return 0 on success, nz on failure. */				\
-	int    (*seek) (struct _cgatsFile *p, long int offset);									\
+	int    (*seek) (struct _cgatsFile *p, unsigned int offset);									\
 																							\
 	/* Read count items of size length. Return number of items successfully read. */ 		\
 	size_t (*read) (struct _cgatsFile *p, void *buffer, size_t size, size_t count);			\
@@ -107,7 +110,9 @@ cgatsAlloc *new_cgatsAllocStd(void);
 	/* we're done with the file object, close & free it */									\
 	/* return nz on failure */																\
 	int (*del)(struct _cgatsFile *p);														\
-
+																							\
+	/* Private: */																			\
+	size_t size;	/* Size of the file */													\
 
 /* Common file interface class */
 struct _cgatsFile {
@@ -132,16 +137,42 @@ struct _cgatsFileStd {
 }; typedef struct _cgatsFileStd cgatsFileStd;
 
 /* Create given a file name */
-cgatsFile *new_cgatsFileStd_name(char *name, char *mode);
+cgatsFile *new_cgatsFileStd_name(const char *name, const char *mode);
 
 /* Create given a (binary) FILE* */
 cgatsFile *new_cgatsFileStd_fp(FILE *fp);
 
 /* Create given a file name and allocator */
-cgatsFile *new_cgatsFileStd_name_a(char *name, char *mode, cgatsAlloc *al);
+cgatsFile *new_cgatsFileStd_name_a(const char *name, const char *mode, cgatsAlloc *al);
 
 /* Create given a (binary) FILE* and allocator */
 cgatsFile *new_cgatsFileStd_fp_a(FILE *fp, cgatsAlloc *al);
+
+
+/* - - - - - - - - - - - - - - - - - - - - -  */
+/* Implementation of file access class based on a memory image */
+struct _cgatsFileMem {
+	CGATS_FILE_BASE
+
+	/* Private: */
+	cgatsAlloc *al;		/* Heap allocator */
+	int      del_al;	/* NZ if heap allocator should be deleted */
+	int      del_buf;	/* NZ if memory file buffer should be deleted */
+	unsigned char *start, *cur, *end;
+
+}; typedef struct _cgatsFileMem cgatsFileMem;
+
+/* Create a memory image file access class with given allocator */
+cgatsFile *new_cgatsFileMem_a(void *base, size_t length, cgatsAlloc *al);
+
+/* Create a memory image file access class with given allocator */
+/* and delete base when cgatsFile is deleted. */
+cgatsFile *new_cgatsFileMem_ad(void *base, size_t length, cgatsAlloc *al);
+
+/* This is avalailable if SEPARATE_STD is not defined: */
+
+/* Create a memory image file access class with the std allocator */
+cgatsFile *new_cgatsFileMem(void *base, size_t length);
 
 
 /* - - - - - - - - - - - - - - - - - - - - -  */

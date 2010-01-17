@@ -18,7 +18,7 @@
  * Copyright 1996 - 2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -332,8 +332,8 @@ int tnn			/* Number to return */
 	for (i = 0; i < opoints; i++) {
 		double mx;
 
-		if (powell(&mx, di, fp[i].p, sr,  0.001, 100, 
-		(double (*)(void *, double *))efunc1, (void *)s) != 0 || mx >= 50000.0) {
+		if (powell(&mx, di, fp[i].p, sr,  0.001, 1000, 
+		(double (*)(void *, double *))efunc1, (void *)s, NULL, NULL) != 0 || mx >= 50000.0) {
 #ifdef ALWAYS
 			printf("ppoint powell failed, tt = %f\n",mx);
 #endif
@@ -1034,7 +1034,7 @@ static dump_image(ppoint *s, int pcp) {
 
 	/* Plot the vectors */
 	do_plot_vec(minx, maxx, miny, maxy, 
-				x1a, y1a, x1a, y1a, s->np, DO_WAIT, NULL, NULL, 0);
+				x1a, y1a, x1a, y1a, s->np, DO_WAIT, NULL, NULL, NULL, NULL, 0);
 }
 
 #endif /* DUMP_PLOT */

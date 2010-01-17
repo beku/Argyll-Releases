@@ -13,7 +13,7 @@
  *
  * Copyright 2002 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -29,6 +29,7 @@
 #include <math.h>
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "icc.h"
 #include "xicc.h"
 #include "plot.h"
@@ -194,10 +195,10 @@ main(
 #ifdef USE_JAB
 	pcsor = icxSigJabData;		/* Use CIECAM as PCS */
 
-	if (xicc_enum_viewcond(in_xicco, ivc, -2, "mt", 0) == -999)	/* Set input at monitor in typical */
+	if (xicc_enum_viewcond(in_xicco, ivc, -2, "mt", 0, NULL) == -999)	/* Set input at monitor in typical */
 		error ("%d, %s",in_xicco->errc, in_xicco->err);
 
-	if (xicc_enum_viewcond(out_xicco, ovc, -2, "pp", 0) == -999)	/* Set output at practical reflection print */
+	if (xicc_enum_viewcond(out_xicco, ovc, -2, "pp", 0, NULL) == -999)	/* Set output at practical reflection print */
 		error ("%d, %s",out_xicco->errc, out_xicco->err);
 
 #else

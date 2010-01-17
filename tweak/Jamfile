@@ -19,7 +19,7 @@ LINKLIBS = ../icc/libicc ../xicc/libxicc
            ../spectro/libinsttypes ../gamut/libgamut
            ../gamut/libgammap ../rspl/librspl 
            ../cgats/libcgats ../numlib/libnum
-           ../plot/libplot $(LibWin) ;
+           ../plot/libplot ../plot/libvrml $(LibWin) ;
 
 # Profile refiner
 Main refine : refine.c ;

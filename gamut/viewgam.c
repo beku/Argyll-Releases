@@ -11,7 +11,7 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -38,11 +38,9 @@
  *
  */
 
-#undef HALF_HACK /* 27.0 */
+#undef DEBUG
 
-#ifdef NEVER
-void error(char *fmt, ...), warning(char *fmt, ...);
-#endif
+#undef HALF_HACK /* 27.0 */
 
 void usage(char *diag, ...) {
 	fprintf(stderr,"View gamuts Version %s\n",ARGYLL_VERSION_STR);
@@ -72,8 +70,6 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"\n");
 	exit(1);
 }
-
-#define MXGAMTS 5		/* Maximum number of gamuts that can be displayed */
 
 #define GCENT 50.0		/* Center of object view */
 
@@ -108,14 +104,71 @@ typedef enum {
 	gam_points    = 2
 } gam_reps;
 
+struct _gamdisp {
+	char in_name[MAXNAMEL+1];
+	gam_colors in_colors;		/* Color enum for each input */
+	double in_trans;			/* Transparency for each input */
+	gam_reps in_rep;			/* Representation enum for each input */
+}; typedef struct _gamdisp gamdisp;  
+
+
+/* Set a default for a given gamut */
+static set_default(gamdisp *gds, int n) {
+	gds[n].in_name[0] = '\000';
+	switch(n) {
+		case 0:
+			gds[n].in_colors = gam_natural;
+			gds[n].in_rep   = gam_solid;
+			gds[n].in_trans  = 0.0;
+			break;
+		case 1:
+			gds[n].in_colors = gam_white;
+			gds[n].in_rep   = gam_wire;
+			gds[n].in_trans  = 0.0;
+			break;
+		case 2:
+			gds[n].in_colors = gam_red;
+			gds[n].in_rep   = gam_wire;
+			gds[n].in_trans  = 0.0;
+			break;
+		case 3:
+			gds[n].in_colors = gam_cyan;
+			gds[n].in_rep   = gam_wire;
+			gds[n].in_trans  = 0.0;
+			break;
+		case 4:
+			gds[n].in_colors = gam_yellow;
+			gds[n].in_rep   = gam_wire;
+			gds[n].in_trans  = 0.2;
+			break;
+		case 5:
+			gds[n].in_colors = gam_green;
+			gds[n].in_rep   = gam_wire;
+			gds[n].in_trans  = 0.3;
+			break;
+		case 6:
+			gds[n].in_colors = gam_blue;
+			gds[n].in_rep   = gam_wire;
+			gds[n].in_trans  = 0.4;
+			break;
+		case 7:
+			gds[n].in_colors = gam_magenta;
+			gds[n].in_rep   = gam_wire;
+			gds[n].in_trans  = 0.5;
+			break;
+		default:
+			gds[n].in_colors = n % 6;
+			gds[n].in_rep   = gam_wire;
+			gds[n].in_trans  = 0.6;
+			break;
+	}
+}
+
 int
 main(int argc, char *argv[]) {
 	int fa, nfa, mfa;		/* argument we're looking at */
-	int n, ng = 0;			/* Current number of input gamuts */
-	char in_name[MXGAMTS+1][MAXNAMEL+1];
-	gam_colors in_colors[MXGAMTS+1];	/* Color enum for each input */
-	double in_trans[MXGAMTS+1];		/* Transparency for each input */
-	gam_reps in_rep[MXGAMTS+1];		/* Representation enum for each input */
+	int n, ng = 0;			/* Current allocation, number of input gamuts */
+	gamdisp *gds;			/* Definition of each gamut */
 	int doaxes = 1;
 	int docusps = 0;
 	int isect = 0;
@@ -125,48 +178,11 @@ main(int argc, char *argv[]) {
 	if (argc < 3)
 		usage("Too few arguments, got %d expect at least 2",argc-1);
 
-	/* Set some defaults */
-	for (n = 0; n < MXGAMTS; n++) {
-		switch(n) {
-			case 0:
-				in_colors[0] = gam_natural;
-				in_rep[0]   = gam_solid;
-				in_trans[0]  = 0.0;
-				break;
-			case 1:
-				in_colors[1] = gam_white;
-				in_rep[1]   = gam_wire;
-				in_trans[1]  = 0.0;
-				break;
-			case 2:
-				in_colors[2] = gam_red;
-				in_rep[2]   = gam_wire;
-				in_trans[3]  = 0.0;
-				break;
-			case 3:
-				in_colors[3] = gam_cyan;
-				in_rep[3]   = gam_wire;
-				in_trans[3]  = 0.0;
-				break;
-			case 4:
-				in_colors[4] = gam_yellow;
-				in_rep[4]   = gam_wire;
-				in_trans[4]  = 0.2;
-				break;
-			case 5:
-				in_colors[5] = gam_green;
-				in_rep[5]   = gam_wire;
-				in_trans[5]  = 0.4;
-				break;
-			default:
-				in_colors[n] = gam_blue;
-				in_rep[n]   = gam_wire;
-				in_trans[n]  = 0.6;
-				break;
-		}
-	}
-
 	mfa = 1;		/* Minimum final arguments */
+
+	if ((gds = (gamdisp *)malloc((ng+1) * sizeof(gamdisp))) == NULL)
+		error("Malloc failed on gamdisp");
+	set_default(gds, 0);
 
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
@@ -195,39 +211,39 @@ main(int argc, char *argv[]) {
     			switch (na[0]) {
 					case 'r':
 					case 'R':
-						in_colors[ng] = gam_red;
+						gds[ng].in_colors = gam_red;
 						break;
 					case 'g':
 					case 'G':
-						in_colors[ng] = gam_green;
+						gds[ng].in_colors = gam_green;
 						break;
 					case 'b':
 					case 'B':
-						in_colors[ng] = gam_blue;
+						gds[ng].in_colors = gam_blue;
 						break;
 					case 'c':
 					case 'C':
-						in_colors[ng] = gam_cyan;
+						gds[ng].in_colors = gam_cyan;
 						break;
 					case 'm':
 					case 'M':
-						in_colors[ng] = gam_magenta;
+						gds[ng].in_colors = gam_magenta;
 						break;
 					case 'y':
 					case 'Y':
-						in_colors[ng] = gam_yellow;
+						gds[ng].in_colors = gam_yellow;
 						break;
 					case 'e':
 					case 'E':
-						in_colors[ng] = gam_grey;
+						gds[ng].in_colors = gam_grey;
 						break;
 					case 'w':
 					case 'W':
-						in_colors[ng] = gam_white;
+						gds[ng].in_colors = gam_white;
 						break;
 					case 'n':
 					case 'N':
-						in_colors[ng] = gam_natural;
+						gds[ng].in_colors = gam_natural;
 						break;
 					default:
 						usage("Unknown argument after flag -c '%c'",na[0]);
@@ -244,17 +260,17 @@ main(int argc, char *argv[]) {
 					v = 0.0;
 				else if (v > 1.0)
 					v = 1.0;
-				in_trans[ng] = v;
+				gds[ng].in_trans = v;
 			}
 
 			/* Solid output */
 			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
-				in_rep[ng] = gam_solid;
+				gds[ng].in_rep = gam_solid;
 			}
 
 			/* Wireframe output */
 			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W') {
-				in_rep[ng] = gam_wire;
+				gds[ng].in_rep = gam_wire;
 			}
 
 			/* No axis output */
@@ -282,11 +298,12 @@ main(int argc, char *argv[]) {
 				usage("Unknown flag '%c'",argv[fa][1]);
 
 		} else if (argv[fa][0] != '\000') { /* Got a non-flag */
-			strncpy(in_name[ng],argv[fa],MAXNAMEL); in_name[ng][MAXNAMEL] = '\000';
-			ng++;
-			if (ng >= MXGAMTS)
-				break;
+			strncpy(gds[ng].in_name,argv[fa],MAXNAMEL); gds[ng].in_name[MAXNAMEL] = '\000';
 
+			ng++;
+			if ((gds = (gamdisp *)realloc(gds, (ng+1) * sizeof(gamdisp))) == NULL)
+				error("Realloc failed on gamdisp");
+			set_default(gds, ng);
 		} else {
 			break;
 		}
@@ -298,18 +315,18 @@ main(int argc, char *argv[]) {
 	if (ng < 2)
 		usage("Not enough arguments to specify output VRML files");
 
-	strncpy(out_name,in_name[--ng],MAXNAMEL); out_name[MAXNAMEL] = '\000';
+	strncpy(out_name,gds[--ng].in_name,MAXNAMEL); out_name[MAXNAMEL] = '\000';
 
-#ifdef NEVER
+#ifdef DEBUG
 	for (n = 0; n < ng; n++) {
-		printf("Input file %d is '%s'\n",n,in_name[n]);
-		printf("Input file %d has color %d\n",n,in_colors[n]);
-		printf("Input file %d has rep %d\n",n,in_rep[n]);
-		printf("Input file %d has trans %f\n",n,in_trans[n]);
+		printf("Input file %d is '%s'\n",n,gds[n].in_name);
+		printf("Input file %d has color %d\n",n,gds[n].in_colors);
+		printf("Input file %d has rep %d\n",n,gds[n].in_rep);
+		printf("Input file %d has trans %f\n",n,gds[n].in_trans);
 		
 	}
 	printf("Output file is '%s'\n",out_name);
-#endif	/* NEVER */
+#endif	/* DEBUG */
 
 	/* Open up the output file */
 	if ((wrl = fopen(out_name,"w")) == NULL)
@@ -421,8 +438,8 @@ main(int argc, char *argv[]) {
 		/* Setup to cope with a gamut file */
 		pp->add_other(pp, "GAMUT");
 	
-		if (pp->read_name(pp, in_name[n]))
-			error("Input file '%s' error : %s",in_name[n], pp->err);
+		if (pp->read_name(pp, gds[n].in_name))
+			error("Input file '%s' error : %s",gds[n].in_name, pp->err);
 	
 		if (pp->t[0].tt != tt_other || pp->t[0].oi != 0)
 			error("Input file isn't a GAMUT format file");
@@ -453,7 +470,7 @@ main(int argc, char *argv[]) {
 		fprintf(wrl,"      translation 0 0 0\n");
 		fprintf(wrl,"      children [\n");
 		fprintf(wrl,"        Shape { \n");
-		if (in_rep[n] == gam_wire) {
+		if (gds[n].in_rep == gam_wire) {
 			fprintf(wrl,"          geometry IndexedLineSet {\n");
 		} else {
 			fprintf(wrl,"          geometry IndexedFaceSet {\n");
@@ -506,7 +523,7 @@ main(int argc, char *argv[]) {
 				continue;
 #endif /* HALF_HACK */
 
-			if (in_rep[n] == gam_wire) {
+			if (gds[n].in_rep == gam_wire) {
 				if (v0 < v1)				/* Only output 1 wire of two on an edge */
 					fprintf(wrl,"              %d, %d, -1\n", v0, v1);
 				if (v1 < v2)
@@ -521,7 +538,7 @@ main(int argc, char *argv[]) {
 		fprintf(wrl,"\n");
 
 		/* Write the colors out */
-		if (in_colors[n] == gam_natural) {
+		if (gds[n].in_colors == gam_natural) {
 			fprintf(wrl,"            colorPerVertex TRUE\n");
 			fprintf(wrl,"            color Color {\n");
 			fprintf(wrl,"              color [			# RGB colors of each vertex\n");
@@ -540,14 +557,14 @@ main(int argc, char *argv[]) {
 		fprintf(wrl,"          }\n");
 		fprintf(wrl,"          appearance Appearance { \n");
 		fprintf(wrl,"            material Material {\n");
-		if (in_trans[n] > 0.0) {
-			fprintf(wrl,"              transparency %f\n", in_trans[n]);
+		if (gds[n].in_trans > 0.0) {
+			fprintf(wrl,"              transparency %f\n", gds[n].in_trans);
 		}
 		fprintf(wrl,"              ambientIntensity 0.3\n");
 		fprintf(wrl,"              shininess 0.5\n");
-		if (in_colors[n] != gam_natural) {
+		if (gds[n].in_colors != gam_natural) {
 			fprintf(wrl,"              emissiveColor %f %f %f\n",
-			   color_rgb[in_colors[n]].r, color_rgb[in_colors[n]].g, color_rgb[in_colors[n]].b);
+			   color_rgb[gds[n].in_colors].r, color_rgb[gds[n].in_colors].g, color_rgb[gds[n].in_colors].b);
 		}
 		fprintf(wrl,"            }\n");
 		fprintf(wrl,"          }\n");
@@ -582,10 +599,10 @@ main(int argc, char *argv[]) {
 				fprintf(wrl,"		Shape { \n");
 				fprintf(wrl,"		 geometry Sphere { radius 2.0 }\n");
 				fprintf(wrl,"         appearance Appearance { material Material {\n");
-				if (in_trans[n] > 0.0)
-				fprintf(wrl,"         transparency %f\n", in_trans[n]);
-				if (in_colors[n] != gam_natural)
-				fprintf(wrl,"          diffuseColor %f %f %f\n", color_rgb[in_colors[n]].r, color_rgb[in_colors[n]].g, color_rgb[in_colors[n]].b);
+				if (gds[n].in_trans > 0.0)
+				fprintf(wrl,"         transparency %f\n", gds[n].in_trans);
+				if (gds[n].in_colors != gam_natural)
+				fprintf(wrl,"          diffuseColor %f %f %f\n", color_rgb[gds[n].in_colors].r, color_rgb[gds[n].in_colors].g, color_rgb[gds[n].in_colors].b);
 				else
 				fprintf(wrl,"          diffuseColor  %f %f %f\n", rgb[0], rgb[1], rgb[2]);
 				fprintf(wrl,"		  }\n");
@@ -620,34 +637,34 @@ main(int argc, char *argv[]) {
 		if ((s2 = new_gamut(0.0, 0)) == NULL)
 			error("Creating gamut object failed");
 		
-		if (s1->read_gam(s1, in_name[0]))
-			error("Input file '%s' read failed",in_name[0]);
+		if (s1->read_gam(s1, gds[0].in_name))
+			error("Input file '%s' read failed",gds[n].in_name[0]);
 
-		if (s2->read_gam(s2, in_name[1]))
-			error("Input file '%s' read failed",in_name[1]);
+		if (s2->read_gam(s2, gds[1].in_name))
+			error("Input file '%s' read failed",gds[n].in_name[1]);
 
 		v1 = s1->volume(s1);
 		v2 = s2->volume(s2);
 
-#ifdef NEVER
-		vi = s1->ivolume(s1, s2);
-#else
-		s->intersect(s, s1, s2);
+		if (s->intersect(s, s1, s2))
+			error("Gamuts are not compatible! (Colorspace, gamut center ?)");
 		vi = s->volume(s);
 
 		if (iout_name[0] != '\000') {
 			if (s->write_gam(s, iout_name))
 				error("Writing intersection gamut to '%s' failed",iout_name);
 		}
-#endif
 
 		printf("Intersecting volume = %.1f cubic units\n",vi);
-		printf("'%s' volume = %.1f cubic units, intersect = %.2f%%\n",in_name[0],v1,100.0 * vi/v1);
-		printf("'%s' volume = %.1f cubic units, intersect = %.2f%%\n",in_name[1],v2,100.0 * vi/v2);
+		printf("'%s' volume = %.1f cubic units, intersect = %.2f%%\n",gds[0].in_name,v1,100.0 * vi/v1);
+		printf("'%s' volume = %.1f cubic units, intersect = %.2f%%\n",gds[1].in_name,v2,100.0 * vi/v2);
 
 		s1->del(s1);
 		s2->del(s2);
 	}
+
+	if (ng > 0)
+		free(gds);
 
 	return 0;
 }

@@ -13,7 +13,7 @@
  * Copyright 2005, 2008 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -183,19 +183,21 @@ int or				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = right */
 struct _render2d {
 
 /* Private: */
-	int ix;				/* Next primitive index */
-	double w, h;		/* Page size in mm */
-	double hres, vres;	/* Page pixel resolution in pixels/mm */
-	int pw, ph;			/* Page size in pixels */
-	colort2d csp;		/* Color space */
-	int      ncc;		/* Number of color components */
-	depth2d  dpth;		/* Depth of the components */
+	int ix;					/* Next primitive index */
+	double fw, fh;			/* Page size in mm including margines */
+	double lm, rm, tm, bm;	/* Page margines */
+	double w, h;			/* Page size in mm excluding margines */
+	double hres, vres;		/* Page pixel resolution in pixels/mm */
+	int pw, ph;				/* Page size in pixels */
+	colort2d csp;			/* Color space */
+	int      ncc;			/* Number of color components */
+	depth2d  dpth;			/* Depth of the components */
 
-	color2d defc;		/* Default color value */
+	color2d defc;			/* Default color value */
 
-	prim2d *head;		/* Start of list of primitives in rendering order */
-	prim2d *yl;			/* Active Y list linked list head */
-	prim2d *xl;			/* Active X list linked list head */
+	prim2d *head;			/* Start of list of primitives in rendering order */
+	prim2d *yl;				/* Active Y list linked list head */
+	prim2d *xl;				/* Active X list linked list head */
 
 /* Public: */
 	/* Methods */
@@ -211,8 +213,9 @@ struct _render2d {
 
 /* Constructor */
 /* Sizes are in mm, resolutions are in pixels/mm */
-render2d *new_render2d(double w, double h, double hres, double vres, colort2d csp,
-                       int nd, depth2d dpth);
+/* Margines are left, right, top, bottom, and may be NULL for zero */
+render2d *new_render2d(double w, double h, double ma[4], double hres, double vres,
+                       colort2d csp, int nd, depth2d dpth);
 
 #endif /* RENDER2D_H */
 

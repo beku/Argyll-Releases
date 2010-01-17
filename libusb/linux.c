@@ -162,12 +162,15 @@ int usb_control_msg(usb_dev_handle *dev, int requesttype, int request,
 static int usb_urb_transfer(usb_dev_handle *dev, int ep, int urbtype,
 	char *bytes, int size, int timeout)
 {
-  struct usb_urb urb;
-  int bytesdone = 0, requested;
+  struct usb_urb urb[2];
+  int urbos[2];		/* Flag, nz if urb is outstanding */
+  int pp;		/* Ping pong phase */
+  int bytesdone, beingdone, requested[2];
   struct timeval tv, tv_ref, tv_now;
-  struct usb_urb *context;
+  fd_set writefds;
   int ret, tdout, rc;
 
+//printf("~1 usb_urb_transfer ep 0x%x %d bytes\n",ep,size);
   /*
    * HACK: The use of urb.usercontext is a hack to get threaded applications
    * sort of working again. Threaded support is still not recommended, but
@@ -189,47 +192,92 @@ static int usb_urb_transfer(usb_dev_handle *dev, int ep, int urbtype,
     tv_ref.tv_sec++;
   }
 
-  do {
-    fd_set writefds;
+  /* For large transfers we use two URBs, and ping pong between them, */
+  /* so that there is no delay in continuing the transfer. */
+  pp = 0;
+  bytesdone = beingdone = 0;
+  urbos[0] = urbos[1] = 0;
 
-    requested = size - bytesdone;
-    if (requested > MAX_READ_WRITE)
-      requested = MAX_READ_WRITE;
+  /* Start the first request */
+  requested[0] = size - bytesdone;
+  if (requested[0] > MAX_READ_WRITE)
+    requested[0] = MAX_READ_WRITE;
+//printf("~1 starting urb %d with %d bytes\n",0,requested[0]);
 
-    urb.type = urbtype;
-    urb.endpoint = ep;
-    urb.flags = 0;
-    urb.buffer = bytes + bytesdone;
-    urb.buffer_length = requested;
-    urb.signr = 0;
-    urb.actual_length = 0;
-    urb.number_of_packets = 0;	/* don't do isochronous yet */
-    urb.usercontext = NULL;
+  urb[0].type = urbtype;
+  urb[0].endpoint = ep;
+  urb[0].flags = 0;
+  urb[0].buffer = bytes + beingdone;
+  urb[0].buffer_length = requested[0];
+  urb[0].signr = 0;
+  urb[0].actual_length = 0;
+  urb[0].number_of_packets = 0;	/* don't do isochronous yet */
+  urb[0].usercontext = NULL;
+  urbos[0] = 1;
+  beingdone += requested[0];
 
-    ret = ioctl(dev->fd, IOCTL_USB_SUBMITURB, &urb);
+  ret = ioctl(dev->fd, IOCTL_USB_SUBMITURB, &urb[0]);
+  if (ret < 0) {
+    USB_ERROR_STR(-errno, "error submitting URB: %s", strerror(errno));
+    return ret;
+  }
+
+  /* If there is more after that, start it as well */
+  if (size > beingdone) {
+
+    requested[1] = size - beingdone;
+    if (requested[1] > MAX_READ_WRITE)
+      requested[1] = MAX_READ_WRITE;
+//printf("~1 starting urb %d with %d bytes\n",1,requested[1]);
+
+    urb[1].type = urbtype;
+    urb[1].endpoint = ep;
+    urb[1].flags = 0;
+    urb[1].buffer = bytes + beingdone;
+    urb[1].buffer_length = requested[1];
+    urb[1].signr = 0;
+    urb[1].actual_length = 0;
+    urb[1].number_of_packets = 0;	/* don't do isochronous yet */
+    urb[1].usercontext = NULL;
+    urbos[1] = 1;
+    beingdone += requested[1];
+
+    ret = ioctl(dev->fd, IOCTL_USB_SUBMITURB, &urb[1]);
     if (ret < 0) {
       USB_ERROR_STR(-errno, "error submitting URB: %s", strerror(errno));
       return ret;
     }
+  }
 
-    FD_ZERO(&writefds);
-    FD_SET(dev->fd, &writefds);
+  FD_ZERO(&writefds);
+  FD_SET(dev->fd, &writefds);
 
-    /* Now wait for our urb to turn up */
+  /* Untill we've trasferred size MAX_READ_WRITE at a time */
+  for(;;) {
+    struct usb_urb *context;
+
+    /* Now wait for our urb[pp] to turn up */
     tdout = 0;
     for (;;) {
+
       ret = 0;
-      if (urb.usercontext) {
+      if (urb[pp].usercontext) {
+//printf("~1 other thread found urb %d\n",pp);
 	break;				/* Another thread found our URB for us */
       }
       context = NULL;
       ret = ioctl(dev->fd, IOCTL_USB_REAPURBNDELAY, &context);
       if (ret == 0 && context) {	/* Found something */
-        if (context == &urb) {		/* Got the URB we were waiting for */
+        if (context == &urb[pp]) {	/* Got the URB we were waiting for */
+//printf("~1 got urb %d we were waiting for\n",pp);
 	  break;
 	}
-	/* Must be some other threads. Mark it and keep waiting for ours */
-        context->usercontext = URB_USERCONTEXT_COOKIE;
+	if (context != &urb[pp ^1]) {	/* If not the other one of ours */
+	  /* Must be some other threads. Mark it and keep waiting for ours */
+	  context->usercontext = URB_USERCONTEXT_COOKIE;
+	}
+//else
+//printf("~1 got urb %d we were wern't waiting for\n",pp ^1);
       } else {
 	if (errno != EAGAIN) {
           fprintf(stderr, "error reaping URB: %s", strerror(errno));
@@ -239,14 +287,25 @@ static int usb_urb_transfer(usb_dev_handle *dev, int ep, int urbtype,
         gettimeofday(&tv_now, NULL);
         if ((tv_now.tv_sec > tv_ref.tv_sec) ||
             ((tv_now.tv_sec == tv_ref.tv_sec) && (tv_now.tv_usec >= tv_ref.tv_usec))) {
+//printf("~1 timed out waiting for urb %d\n",pp);
 	  if (tdout) {	/* Second time we've timed out. Discard must have failed */
+//printf("~1 2nd time out\n");
 	    break;
 	  }
           tdout = 1;
-	  /* Discard our URB and continue waiting a while for it to turn up */	
-	  ret = ioctl(dev->fd, IOCTL_USB_DISCARDURB, &urb);
+	  /* Discard our outstanding URB's and continue waiting a while for it to turn up */	
+//printf("~1 discard urb %d\n",pp);
+	  ret = ioctl(dev->fd, IOCTL_USB_DISCARDURB, &urb[pp]);
           if (ret < 0 && errno != EINVAL && usb_debug >= 1) {
             fprintf(stderr, "error discarding URB: %s", strerror(errno));
+          }
+          if (urbos[pp ^ 1]) {	/* The pong urb is outstanding */
+//printf("~1 discard urb %d\n",pp ^ 1);
+	    ret = ioctl(dev->fd, IOCTL_USB_DISCARDURB, &urb[pp ^ 1]);
+            if (ret < 0 && errno != EINVAL && usb_debug >= 1) {
+              fprintf(stderr, "error discarding URB: %s", strerror(errno));
+            }
+            pp ^= 1;	/* Wait for it rather than first outstanding urb */
           }
 	  /* Allow another 100msec for discard to occur. Should normally happen faster than this. */
           tv_ref.tv_sec = tv_now.tv_sec + 100 / 1000;
@@ -262,19 +321,120 @@ static int usb_urb_transfer(usb_dev_handle *dev, int ep, int urbtype,
       tv.tv_usec = 2000; 	/* 2 msec */
       select(dev->fd + 1, NULL, &writefds, NULL, &tv); 
     }
+//printf("~1 finished waiting on urb %d, ret = %d, tdout = %d\n",pp,ret,tdout);
 
     if (ret < 0 || tdout)	/* We didn't get a sucessful URB back */
       break;
 
-    bytesdone += urb.actual_length;
-  } while (bytesdone < size && urb.actual_length == requested);
+    bytesdone += urb[pp].actual_length;
+    urbos[pp] = 0;
+//printf("~1 done %d bytes, urb %d, ret = %d, tdout = %d\n", urb[pp].actual_length,pp,ret,tdout);
+
+    /* If we've got a short read, we're done */
+    if (urb[pp].actual_length != requested[pp]) {
+
+//printf("~1 Got a short read on urb %d\n",pp);
+      if (urbos[pp ^ 1]) {	/* The other urb is outstanding though. */
+
+//printf("~1 discard urb %d\n",pp ^ 1);
+	/* Discard it */
+	pp ^= 1;
+	ret = ioctl(dev->fd, IOCTL_USB_DISCARDURB, &urb[pp]);
+        if (ret < 0 && errno != EINVAL && usb_debug >= 1) {
+          fprintf(stderr, "error discarding URB: %s", strerror(errno));
+        }
+
+	/* Allow another 100msec for discard to occur. Should normally happen faster than this. */
+        gettimeofday(&tv_now, NULL);
+        tv_ref.tv_sec = tv_now.tv_sec + 100 / 1000;
+        tv_ref.tv_usec = tv_now.tv_usec + (100 % 1000) * 1000;
+        if (tv_ref.tv_usec > 1000000) {
+          tv_ref.tv_usec -= 1000000;
+          tv_ref.tv_sec++;
+        }
+
+        /* Now wait for our urb[pp] to be discarded */
+        tdout = 0;
+        for (;;) {
+    
+          ret = 0;
+          if (urb[pp].usercontext) {
+    	    break;				/* Another thread found our URB for us */
+          }
+          context = NULL;
+          ret = ioctl(dev->fd, IOCTL_USB_REAPURBNDELAY, &context);
+          if (ret == 0 && context) {	/* Found something */
+            if (context == &urb[pp]) {	/* Got the URB we were waiting for */
+//printf("~1 discarded urb %d\n",pp);
+    	      break;
+    	    }
+    	    /* Must be some other threads. Mark it and keep waiting for ours */
+            context->usercontext = URB_USERCONTEXT_COOKIE;
+          } else {
+    	    if (errno != EAGAIN) {
+              fprintf(stderr, "error reaping URB: %s", strerror(errno));
+    	      break;
+    	    }
+    	    /* We are still waiting. See if we've timed out */
+            gettimeofday(&tv_now, NULL);
+            if ((tv_now.tv_sec > tv_ref.tv_sec) ||
+                ((tv_now.tv_sec == tv_ref.tv_sec) && (tv_now.tv_usec >= tv_ref.tv_usec))) {
+    	        break;		/* Hmm. discard time out - give up */
+    	    }
+          }
+          /* Sleep for 2msec to wait for things to happen */
+          tv.tv_sec = 0;
+          tv.tv_usec = 2000; 	/* 2 msec */
+          select(dev->fd + 1, NULL, &writefds, NULL, &tv); 
+        }
+      }
+//printf("~1 done short read\n");
+      break;		/* We're done with short read */
+    }
+
+    /* Got a full read of urb[pp] */
+
+    /* See if there's more to do */
+    if (size > beingdone) {
+      requested[pp] = size - beingdone;
+      if (requested[pp] > MAX_READ_WRITE)
+        requested[pp] = MAX_READ_WRITE;
+//printf("~1 starting urb %d with %d bytes\n",pp,requested[pp]);
+  
+      urb[pp].type = urbtype;
+      urb[pp].endpoint = ep;
+      urb[pp].flags = 0;
+      urb[pp].buffer = bytes + beingdone;
+      urb[pp].buffer_length = requested[pp];
+      urb[pp].signr = 0;
+      urb[pp].actual_length = 0;
+      urb[pp].number_of_packets = 0;	/* don't do isochronous yet */
+      urb[pp].usercontext = NULL;
+      urbos[pp] = 1;
+      beingdone += requested[pp];
+  
+      ret = ioctl(dev->fd, IOCTL_USB_SUBMITURB, &urb[pp]);
+      if (ret < 0) {
+        USB_ERROR_STR(-errno, "error submitting URB: %s", strerror(errno));
+        return ret;
+      }
+
+    } else  if (bytesdone >= size) {
+//printf("~1 we're done all requested bytes\n");
+      break;		/* We're done */
+    }
+
+    pp ^= 1;	/* Swap to other urb and wait for it */
+//printf("~1 swapping to wait on urb %d\n",pp);
+  }
 
   if (tdout)
     rc = -ETIMEDOUT;
   else if (ret < 0)
-    rc = urb.status;
+    rc = urb[pp].status;
   else
     rc = bytesdone; 
+//printf("~1 returning %d\n",rc);
   return rc;
 }
 

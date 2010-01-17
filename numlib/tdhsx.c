@@ -5,7 +5,7 @@
  * Copyright 1999 - 2005 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -38,6 +38,7 @@ int main(void)
 	double err;
 	int j;
 	int nprint = 0;		/* Itteration debugging print = off */
+	int rv;
 
 	error_program = "tdhsx";	/* Set global error reporting string */
 
@@ -53,7 +54,8 @@ int main(void)
 	/*	 Unless high precision solutions are required, */
 	/*	 this is the recommended setting. */
 
-	err = dhsx(
+	rv = dhsx(
+		&err,			/* return residual */
 		N, 				/* Dimentionality */
 		cp,				/* Initial starting point */
 		s,				/* Size of initial search area */
@@ -66,7 +68,7 @@ int main(void)
 		NULL);			/* Opaque data needed by function */
 
 
-	fprintf(stdout,"Final approximate solution err = %f:\n",err);
+	fprintf(stdout,"Return code %d, residual err = %f:\n",rv, err);
 	for (j = 0; j < N; j++) {
 		fprintf(stdout,"cp[%d] = %e, expect %e\n",j,cp[j],expect[j]);
 	}

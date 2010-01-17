@@ -25,7 +25,7 @@ platform, highly customizable and flexible. It uses a concise, scalable
 and platform neutral configuration files, and is fast.<br>
 <p>If you do not already have Jam 2.5 on your system, you will need to
 install it. [It may be available as an RPM for Linux systems.] Jam/MR
-is available from <a href="ftp://ftp.perforce.com/pub/jam/jam-2.5.zip">&lt;ftp://ftp.perforce.com/pub/jam/&gt;</a>
+is available from <a href="ftp://ftp.perforce.com/jam/">&lt;ftp://ftp.perforce.com/jam&gt;</a>
 You'll
 want to bootstrap it up using its Makefile - see the <span
  style="font-weight: bold;">README</span> file that comes with Jam for
@@ -95,27 +95,46 @@ will invoke jam.<br>
 shell environment variable $MACHTYPE may be incorrect. On Intel 10.4 it
 should be i386-apple-darwin8.0, but there are bugs in Apples
 distribution.</p>
-<p>If&nbsp; you are on MSWindows and have the DDK installed, then it is
-worth setting the environment variables %DDK_INC_PATH% and
-%DDK_LIB_PATH% to the header and DDK library directories, so that the
-MSWindows HID driver interface will get enabled. This allows accessing
-USB instruments&nbsp;
-that are labeled as HID devices (such as the Gretag Huey) , without
-having to install the libusb kernel drivers, and this will also allow
-the Huey to be accessed on Vista 64.<br>
-</p>
 <p>To build a particular sub directory only, cd to the directory and
 simply run <span style="font-weight: bold;">jam</span>, although be
 aware that the local Jamfile compile time options may be different to
 those in the top level Jamfile used when compiling from the top.<br>
-&nbsp;
+</p>
+<p><span style="font-weight: bold;">NOTE</span> that "jam install"
+doesn't install the resulting binaries in the "usual places", it
+installs them in the <span style="font-weight: bold;">Argyll_VX.X.X/</span><span
+ style="font-weight: bold;">bin</span>
+directory, and it's then up to you whether you want copy them to
+somewhere like C:\Program Files\argyll, /usr/bin, /usr/local/bin etc.,
+or simply leave them there.
+</p>
+<h5><span style="text-decoration: underline;">Compile environment on
+MSWindows:</span></h5>
+<p>Setting up a compile environment on MSWindows can be challenging.
+The simplest approach is probably to install MingW, since it
+provides both the compiler and the SDK in one package.<br>
 <br>
-&nbsp;
-<br>
-&nbsp;
-<br>
-&nbsp;
-<br>
+I've successfully compiled using Microsoft VC++ 6.0, but I think I
+remember tweaking some of the header files by borrowing from a latter
+SDK to be able to incorporate the&nbsp; necessary function calls to
+access display and color profiles on Win2K and latter, so this may not
+work "out of the box".</p>
+<p>I've also successfully compiled using Microsoft VC++ 8.0 and VC++
+9.0 Express (the free Microsoft compiler) plus the Microsoft Platform
+SDK February 2008. To get this to work though, I had to create my own
+batch file to setup the SDK environment variables <span
+ style="font-weight: bold;">MSSdk</span> etc., because the batch files
+provided with the SDK got confused by the presence of VC++6, and didn't
+notice that VC++8 or 9 was configured.</p>
+<p>Note that for some hard to fathom reason VC++ 9.0 refused to install
+on my Win2K development machine, so I had to install it on a WinXP
+machine and then copy the installation back to Win2K, and manually
+complete the installation. There seems to be no reason for this
+limitation, since the VC++9&nbsp; compiler/linker etc. seems quite
+happy to run on Win2K.</p>
+<p>I haven't attempted to compile for Win64, and currently the Jambase
+isn't setup for cross compilation, nor have I tried to setup a native
+build environment yet on Vista64.<br>
 &nbsp;
 </p>
 </body>

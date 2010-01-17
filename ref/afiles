@@ -1,6 +1,13 @@
 afiles
+ReadMe.txt
+License.txt
+sRGB.icm
+ClayRGB1998.icm
+lab2lab.icm
 CMP_DT_003.cht
+CMP_Digital_Target-3.cht
 ColorChecker.cht
+ColorChecker.cie
 ColorChecker.ti2
 ColorCheckerDC.cht
 ColorCheckerSG.cht
@@ -8,12 +15,17 @@ ECI2002R.ti2
 FograStrip.ti1
 FograStrip.ti2
 Hutchcolor.cht
+LaserSoftDCPro.cht
 QPcard_201.cht
+QPcard_201.cie
 i1_RGB_Scan_1.4.cht
 i1_RGB_Scan_1.4.ti2
 it8.cht
+strange.cal
 3dap5k.sp
+CIE_C.sp
 D50_0.0.sp
+D50_0.1.sp
 D50_0.3.sp
 D50_0.5.sp
 D50_0.7.sp
@@ -31,4 +43,3 @@ Trulux.sp
 TruluxPlus.sp
 example.sp
 example121.sp
-strange.cal

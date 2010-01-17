@@ -8,7 +8,7 @@
  *
  * Copyright 2005 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * This is based on the monotonic curve equations used elsewhere,
@@ -19,7 +19,8 @@
  *  output scaling
  */
 
-#undef DEBUG
+#undef DEBUG		/* Input points */
+#undef DEBUG2		/* Detailed progress */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,8 +59,8 @@ static double mcv_shweight_p(mcv *p, double *v, double smooth);
 double mcv_dinterp_p(mcv *p, double *pms, double *dv, double vv);
 static double mcv_dshweight_p(mcv *p, double *v, double *dv, double smooth);
 
-/* Allocate a new, uninitialised mcv */
-/* Note thate black and white points aren't allocated */
+/* Create a new, uninitialised mcv that will fit with offset and scale */
+/* (Note thate black and white points aren't allocated) */
 mcv *new_mcv(void) {
 	mcv *p;
 
@@ -97,7 +98,7 @@ mcv *new_mcv_noos(void) {
 	return p;
 }
 
-/* Create a new mcv initiated with the given parameters */
+/* Create a new mcv initiated with the given curve parameters */
 /* (Assuming parameters always includes offset and scale) */
 mcv *new_mcv_p(double *pp, int np) {
 	int i;
@@ -135,7 +136,7 @@ static double mcv_opt_func(void *edata, double *v) {
 	double out;
 	int i;
 
-#ifdef NEVER
+#ifdef DEBUG2
 	printf("params =");
 	for (i = 0; i < p->luord-p->noos; i++)
 		printf(" %f",v[i]);
@@ -165,7 +166,7 @@ static double mcv_opt_func(void *edata, double *v) {
 	smv = mcv_shweight_p(p, v, p->smooth);
 	rv = ev + smv;
 
-#ifdef NEVER
+#ifdef DEBUG2
 	printf("rv = %f (er %f + sm %f)\n",rv,ev,smv);
 #endif
 	return rv;
@@ -179,7 +180,7 @@ static double mcv_dopt_func(void *edata, double *dv, double *v) {
 	double out;
 	int i, j;
 
-#ifdef NEVER
+#ifdef DEBUG2
 	printf("params =");
 	for (i = 0; i < (p->luord-p->noos); i++)
 		printf(" %f",v[i]);
@@ -196,22 +197,29 @@ static double mcv_dopt_func(void *edata, double *dv, double *v) {
 
 		/* Apply our function with dv's */
 		out = p->dinterp_p(p, v, p->dv, p->d[i].p);
+//printf("~1 point %d: p %f, v %f, func %f\n",i,p->d[i].p,p->d[i].v,out); 
 
 		del = out - p->d[i].v;
 		ev += p->d[i].w * del * del;
+//printf("~1 del %f, ev %f\n",del,ev);
 
 		/* Sum the dv's */
-		for (j = 0; j < (p->luord-p->noos); j++)
+		for (j = 0; j < (p->luord-p->noos); j++) {
 			dv[j] += p->d[i].w * 2.0 * del * p->dv[j];
+//printf("~1 dv[%d] = %f\n",j,dv[j]);
+		}
 
 		totw += p->d[i].w;
 	}
 
+//printf("~1 totw = %f, dra = %f\n",totw, p->dra);
 	/* Normalise error to be an average delta E squared */
 	totw = (100.0 * 100.0)/(p->dra * p->dra * totw);
 	ev *= totw;
-	for (j = 0; j < (p->luord-p->noos); j++)
+	for (j = 0; j < (p->luord-p->noos); j++) {
 		dv[j] *= totw; 
+//printf("~1 norm dv[%d] = %f\n",j,dv[j]);
+	}
 
 	/* Sum with shaper parameters squared, to */
 	/* minimise unsconstrained "wiggles", */
@@ -219,7 +227,7 @@ static double mcv_dopt_func(void *edata, double *dv, double *v) {
 	smv = mcv_dshweight_p(p, v, dv, p->smooth);
 	rv = ev + smv;
 
-#ifdef NEVER
+#ifdef DEBUG2
 	printf("drv = %f (er %f + sm %f)\n",rv,ev,smv);
 #endif
 	return rv;
@@ -290,6 +298,9 @@ static void mcv_fit(mcv *p,
 	if ((p->dv = (double *)calloc(p->luord, sizeof(double))) == NULL)
 		error ("Malloc failed");
 
+#ifdef DEBUG
+	printf("mcv_fit with %d points (noos = %d)\n",ndp,p->noos);
+#endif
 	/* Establish the range of data values */
 	min = 1e38;			/* Locate min, and make that offset */
 	max = -1e38;			/* Locate max */
@@ -304,14 +315,16 @@ static void mcv_fit(mcv *p,
 	}
 
 	if (p->noos) {
-		p->pms[0] = 0.0;
-		p->pms[1] = 1.0;
+		p->pms[0] = min = 0.0;
+		p->pms[1] = max = 1.0;
 	} else {
 		/* Set offset and scale to reasonable values */
 		p->pms[0] = min;
 		p->pms[1] = max - min;
 	}
 	p->dra = max - min;
+	if (p->dra <= 1e-12)
+		error("Mcv max - min %e too small",p->dra);
 
 	/* Use powell to minimise the sum of the squares of the */
 	/* input points to the curvem, plus a parameter damping factor. */
@@ -322,11 +335,20 @@ static void mcv_fit(mcv *p,
 		sa[i] = 0.2;
 
 #ifdef NEVER
-	if (powell(&p->resid, p->luord-p->noos, p->pms+p->noos, sa+p->noos, POWTOL, MAXITS, mcv_opt_func, (void *)p) != 0)
+	if (powell(&p->resid, p->luord-p->noos, p->pms+p->noos, sa+p->noos, POWTOL, MAXITS,
+	                                          mcv_opt_func, (void *)p, NULL, NULL) != 0)
 		error ("Mcv fit powell failed");
 #else
-	if (conjgrad(&p->resid, p->luord-p->noos, p->pms+p->noos, sa+p->noos, POWTOL, MAXITS, mcv_opt_func, mcv_dopt_func, (void *)p) != 0)
+	if (conjgrad(&p->resid, p->luord-p->noos, p->pms+p->noos, sa+p->noos, POWTOL, MAXITS,
+	                              mcv_opt_func, mcv_dopt_func, (void *)p, NULL, NULL) != 0) {
+#ifndef NEVER
+	fprintf(stderr,"Mcv fit conjgrad failed with %d points:\n",ndp);
+	for (i = 0; i < ndp; i++) {
+		fprintf(stderr,"  %d: %f -> %f\n",i,d->p, d->v);
+	}
+#endif
 		error ("Mcv fit conjgrad failed");
+	}
 #endif
 
 	free(p->dv);
@@ -522,7 +544,7 @@ double smooth) {
 		cx = i - 2 + p->noos; 
 		tt = pms[i];
 
-		/* Weigh to supress ripples */
+		/* Weigh to suppress ripples */
 		if (cx <= 1) {
 			w = HW01;
 		} else if (cx <= HBREAK) {
@@ -625,7 +647,7 @@ double smooth) {
 		cx = i - 2 + p->noos; 
 		tt = pms[i];
 
-		/* Weigh to supress ripples */
+		/* Weigh to suppress ripples */
 		if (cx <= 1) {			/* First or second curves */
 			w = HW01;
 		} else if (cx <= HBREAK) {	/* First or second curves */

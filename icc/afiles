@@ -20,5 +20,4 @@ icctest.c
 lutest.c
 mcheck.c
 testDE2K.c
-lab2lab.c
 makezip.ksh

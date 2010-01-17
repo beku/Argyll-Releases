@@ -9,7 +9,7 @@
  * Copyright 1996, 2002 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -341,7 +341,7 @@ int main(int argc, char *argv[])
 			/* Adjust the gamma */
 			for (i = 0; i < 4; i++)
 				sr[i] = 0.1;			/* Device space search radius */
-			if (powell(&resid[3], 4, &ed.gam[0], sr,  0.1, 1000, efunc1, (void *)&ed) != 0)
+			if (powell(&resid[3], 4, &ed.gam[0], sr,  0.1, 1000, efunc1, (void *)&ed, NULL, NULL) != 0)
 				error ("Powell failed");
 
 			/* Adjust the primaries */
@@ -356,7 +356,7 @@ int main(int argc, char *argv[])
 					p[i] = ed.k[j][i];
 printf("##############\n");
 printf("XYZ = %d\n",j);
-				if (powell(&resid[j], 8, p, sr,  0.1, 1000, efunc2, (void *)&ed) != 0)
+				if (powell(&resid[j], 8, p, sr,  0.1, 1000, efunc2, (void *)&ed, NULL, NULL) != 0)
 					error ("Powell failed");
 
 				for (i = 0; i < 8; i++)

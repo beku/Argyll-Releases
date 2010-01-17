@@ -15,8 +15,12 @@ data.<br>
 <h3>Usage Summary</h3>
 <small><span style="font-family: monospace;">profcheck&nbsp; [-options]
 data.ti3 iccprofile.icm</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; Verbose - print each patch value</span><br
+&nbsp;
+<span style="font-family: monospace;"></span></small><small><span
+ style="font-family: monospace;">-v
+[level]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Verbosity level (default 1), 2 to print each DE</span></small><small><span
+ style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp; Show CIE94 delta E values</span><br
@@ -29,8 +33,10 @@ data.ti3 iccprofile.icm</span><br style="font-family: monospace;">
 &nbsp;&nbsp; create VRML visualization (iccprofile.wrl)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-x&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; Use VRML axes</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-e&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; Use VRML axes<br>
+&nbsp;-m&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Make VRML lines a minimum of 0.5<br style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;-e&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Color vectors acording to delta E</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-d devval1,deval2,devvalN</span><br
@@ -46,7 +52,7 @@ illum&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; Choose
 illuminant for print/transparency spectral data:</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp; A, D50 (def.), D65, F5, F8, F10 or
+&nbsp; &nbsp;&nbsp; A, C, D50 (def.), D65, F5, F8, F10 or
 file.sp</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-o observ&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp; Choose CIE
@@ -89,7 +95,8 @@ and a good profiler will try and filter out this noise, resulting in
 some deliberate differences between the profile and the sample points
 used to create it.<br>
 <br>
-The <b>-v</b> flag prints out extra information during the checking.<br>
+The <b>-v</b> flag prints out extra information during the checking. A
+value greater than 1 will print the color values of each test point.<br>
 <br>
 The <b>-c</b> option causes the differences between the test values
 and
@@ -117,6 +124,10 @@ of
 the resulting colors.<br>
 <br>
 The <b>-x</b> flag adds Lab axes to the VRML output.<br>
+<br>
+The <b>-m</b> flag makes each error line a minimum of 0.5 delta E
+long, so that all the points are visible. This makes it easier to view
+the distribution of test points in the reference set.<br>
 <br>
 The <span style="font-weight: bold;">-e</span> flag causes the error
 vectors in the VRML output to be color coded according to their

@@ -24,8 +24,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
+#include <ctype.h>
+#include <math.h>
+#include <time.h>
+#ifdef __sun
+#include <unistd.h>
+#endif
 
 #include "pars.h"
 
@@ -186,10 +194,15 @@ cgatsAlloc *new_cgatsAllocStd() {
 /* ------------------------------------------------- */
 /* Standard Stream file I/O cgatsFile compatible class */
 
+/* Get the size of the file (Only valid for reading file. */
+static size_t cgatsFileStd_get_size(cgatsFile *pp) {
+	return pp->size;
+}
+
 /* Set current position to offset. Return 0 on success, nz on failure. */
 static int cgatsFileStd_seek(
 cgatsFile *pp,
-long int offset
+unsigned int offset
 ) {
 	cgatsFileStd *p = (cgatsFileStd *)pp;
 
@@ -306,6 +319,7 @@ cgatsAlloc *al		/* heap allocator, NULL for default */
 ) {
 	cgatsFileStd *p;
 	int del_al = 0;
+	struct stat sbuf;
 
 	if (al == NULL) {	/* None provided, create default */
 		if ((al = new_cgatsAllocStd()) == NULL)
@@ -318,16 +332,23 @@ cgatsAlloc *al		/* heap allocator, NULL for default */
 			al->del(al);
 		return NULL;
 	}
-	p->al      = al;				/* Heap allocator */
-	p->del_al  = del_al;			/* Flag noting whether we delete it */
-	p->seek    = cgatsFileStd_seek;
-	p->read    = cgatsFileStd_read;
-	p->getch   = cgatsFileStd_getch;
-	p->write   = cgatsFileStd_write;
-	p->gprintf = cgatsFileStd_printf;
-	p->flush   = cgatsFileStd_flush;
-	p->fname   = cgatsFileStd_fname;
-	p->del     = cgatsFileStd_delete;
+	p->al       = al;				/* Heap allocator */
+	p->del_al   = del_al;			/* Flag noting whether we delete it */
+	p->get_size = cgatsFileStd_get_size;
+	p->seek     = cgatsFileStd_seek;
+	p->read     = cgatsFileStd_read;
+	p->getch    = cgatsFileStd_getch;
+	p->write    = cgatsFileStd_write;
+	p->gprintf  = cgatsFileStd_printf;
+	p->flush    = cgatsFileStd_flush;
+	p->fname    = cgatsFileStd_fname;
+	p->del      = cgatsFileStd_delete;
+
+	if (fstat(fileno(fp), &sbuf) == 0) {
+		p->size = sbuf.st_size;
+	} else {
+		p->size = 0;
+	}
 
 	p->fp = fp;
 	p->doclose = 0;
@@ -337,16 +358,16 @@ cgatsAlloc *al		/* heap allocator, NULL for default */
 
 /* Create cgatsFile given a file name */
 cgatsFile *new_cgatsFileStd_name(
-char *name,
-char *mode
+const char *name,
+const char *mode
 ) {
 	return new_cgatsFileStd_name_a(name, mode, NULL);
 }
 
 /* Create given a file name and allocator */
 cgatsFile *new_cgatsFileStd_name_a(
-char *name,
-char *mode,
+const char *name,
+const char *mode,
 cgatsAlloc *al			/* heap allocator, NULL for default */
 ) {
 	FILE *fp;
@@ -370,6 +391,26 @@ cgatsAlloc *al			/* heap allocator, NULL for default */
 		pp->filename = pp->al->malloc(pp->al, strlen(name) + 1);
 		strcpy(pp->filename, name);
 	}
+	return p;
+}
+
+/* Create a memory image file access class with the std allocator */
+cgatsFile *new_cgatsFileMem(
+void *base,			/* Pointer to base of memory buffer */
+size_t length		/* Number of bytes in buffer */
+) {
+	cgatsFile *p;
+	cgatsAlloc *al;			/* memory allocator */
+
+	if ((al = new_cgatsAllocStd()) == NULL)
+		return NULL;
+
+	if ((p = new_cgatsFileMem_a(base, length, al)) == NULL) {
+		al->del(al);
+		return NULL;
+	}
+
+	((cgatsFileMem *)p)->del_al = 1;		/* Get cgatsFileMem->del to cleanup allocator */
 	return p;
 }
 

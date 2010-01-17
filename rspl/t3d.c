@@ -7,7 +7,7 @@
  * Derived from cmatch.c
  * Copyright 1995 Graeme W. Gill
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -35,9 +35,6 @@ int verbose_level = 6;			/* Current verbosity level */
 								/* 0 = none */
 								/* !0 = diagnostics */
 #endif /* NEVER */
-
-/* rspl flags */
-#define FLAGS (0 /* | RSPL_EXTRAFIT | RSPL_NONMON */)
 
 #define PLOTRES 256
 #define WIDTH 400			/* Raster size */
@@ -298,6 +295,8 @@ void usage(void) {
 	fprintf(stderr," -r resx,resy,resz  Set grid resolutions (def %d %d %d)\n",GRES0,GRES1,GRES2);
 	fprintf(stderr," -h            Test half scale resolution too\n");
 	fprintf(stderr," -q            Test quarter scale resolution too\n");
+	fprintf(stderr," -2            Use two pass smoothing\n");
+	fprintf(stderr," -x            Use extra fitting\n");
 	fprintf(stderr," -s            Test symetric smoothness\n");
 	fprintf(stderr," -p            plot 4 slices, xy = 0.5, yz = 0.5, xz = 0.5,  x=y=z\n");
 	exit(1);
@@ -314,11 +313,13 @@ int main(int argc, char *argv[]) {
 	co *test_points = test_points1;
 	int npoints = sizeof(test_points1)/sizeof(co);
 	int dosym = 0;
+	int twopass = 0;
+	int extra = 0;
 	int doplot = 0;
 	int doh = 0;
 	int doq = 0;
 	int rsv;
-	int flags = FLAGS;
+	int flags = RSPL_NOFLAGS;
 
 	low[0] = 0.0;
 	low[1] = 0.0;
@@ -399,6 +400,12 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
 				dosym = 1;
 
+			} else if (argv[fa][1] == '2') {
+				twopass = 1;
+
+			} else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
+				extra = 1;
+
 			} else 
 				usage();
 		} else
@@ -406,8 +413,15 @@ int main(int argc, char *argv[]) {
 	}
 
 
+	if (twopass)
+		flags |= RSPL_2PASSSMTH;
+
+	if (extra)
+		flags |= RSPL_EXTRAFIT2;
+
 	if (dosym)
 		flags |= RSPL_SYMDOMAIN;
+
 
 	/* Create the object */
 	rss =  new_rspl(RSPL_NOFLAGS, 3, 1);

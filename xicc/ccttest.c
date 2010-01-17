@@ -8,14 +8,14 @@
  *
  * Copyright 2006 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
 
 /*
  * This is some test code to test the Daylight and Plankian spectra, 
- * plust Correlated and Visual Color Temperatures.
+ * Correlated and Visual Color Temperatures, and CRI.
  */
 
 #include <stdio.h>
@@ -70,6 +70,13 @@ static int do_spec(char *name, xspect *sp) {
 #else
 	printf("CDT = %f, VDT = %f\n",cct, vct);
 #endif
+
+	{
+		int invalid = 0;
+		double cri;
+		cri = icx_CIE1995_CRI(&invalid, sp);
+		printf("CRI = %.1f%s\n",cri,invalid ? " (Invalid)" : "");
+	}
 
 	/* Use modern color difference - gives a better visual match */
 	icmAry2XYZ(wp, vct_xyz);
@@ -245,6 +252,8 @@ main(
 			switch (ilType) {
 			    case icxIT_A:
 					inm = "A"; break;
+			    case icxIT_C:
+					inm = "C"; break;
 			    case icxIT_D50:
 					inm = "D50"; break;
 			    case icxIT_D65:
@@ -256,6 +265,7 @@ main(
 			    case icxIT_F10:
 					inm = "F10"; break;
 				default:
+					inm = "Unknown"; break;
 					break;
 			}
 	

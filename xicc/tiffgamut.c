@@ -8,7 +8,7 @@
  *
  * Copyright 2000, 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -19,7 +19,9 @@
  *		with viewing conditions, so that a mismatch within
  *		icclink can be detected or allowed for.
  *
- *       Need to cope with profile not having black point.
+ *      Need to cope with profile not having black point.
+ *
+ *		How to cope with no profile, therefore no white or black point ?
  */
 
 
@@ -37,6 +39,8 @@
 #include "gamut.h"
 #include "xicc.h"
 #include "sort.h"
+
+#undef NOCAMGAM_CLIP		/* No clip to CAM gamut before CAM lookup */
 
 void set_fminmax(double min[3], double max[3]);
 void reset_filter();
@@ -65,7 +69,7 @@ void usage(void) {
 	fprintf(stderr,"               either an enumerated choice, or a parameter:value changes\n");
 	for (i = 0; ; i++) {
 		icxViewCond vc;
-		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1) == -999)
+		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1, NULL) == -999)
 			break;
 
 		fprintf(stderr,"           %s\n",vc.desc);
@@ -79,10 +83,11 @@ void usage(void) {
 	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 1)\n");
 	fprintf(stderr,"         f:X:Y:Z       Flare color as XYZ (default media white)\n");
 	fprintf(stderr,"         f:x:y         Flare color as x, y\n");
+	fprintf(stderr," -O outputfile Override the default output filename.\n");
 	exit(1);
 }
 
-#define GAMRES 15.0		/* Default surface resolution */
+#define GAMRES 10.0		/* Default surface resolution */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
@@ -271,7 +276,7 @@ main(int argc, char *argv[]) {
 	int ffa, lfa;				/* First, last input file argument */
 	char prof_name[MAXNAMEL+1] = { '\000' };	/* ICC profile name, "" if none */
 	char in_name[MAXNAMEL+1];			/* TIFF input file */
-	char *xl, out_name[MAXNAMEL+4+1];	/* VRML output file */
+	char *xl = NULL, out_name[MAXNAMEL+4+1] = { '\000' };	/* VRML output file */
 	int verb = 0;
 	int vrml = 0;
 	int doaxes = 1;
@@ -282,6 +287,7 @@ main(int argc, char *argv[]) {
 
 	icc *icco = NULL;
 	xicc *xicco = NULL;
+	icxcam *cam = NULL;			/* Separate CAM used for Lab TIFF files */
 	icxViewCond vc;				/* Viewing Condition for CIECAM */
 	int vc_e = -1;				/* Enumerated viewing condition */
 	int vc_s = -1;				/* Surround override */
@@ -316,6 +322,8 @@ main(int argc, char *argv[]) {
 
 	double gamres = GAMRES;				/* Surface resolution */
 	gamut *gam;
+
+	double apcsmin[3], apcsmax[3];		/* Actual PCS range */
 
 	error_program = argv[0];
 
@@ -381,7 +389,7 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Search order */
-			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+			else if (argv[fa][1] == 'o') {
 				fa = nfa;
 				if (na == NULL) usage();
     			switch (na[0]) {
@@ -424,7 +432,7 @@ main(int argc, char *argv[]) {
 
 				/* Set the viewing conditions */
 				if (na[1] != ':') {
-					if ((vc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
+					if ((vc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1, NULL)) == -999)
 						usage();
 				} else if (na[0] == 's' || na[0] == 'S') {
 					if (na[1] != ':')
@@ -497,6 +505,13 @@ main(int argc, char *argv[]) {
 				filter = 1;
 			}
 
+			/* Output file name */
+			else if (argv[fa][1] == 'O') {
+				fa = nfa;
+				if (na == NULL) usage();
+				strncpy(out_name,na,MAXNAMEL); out_name[MAXNAMEL] = '\000';
+			}
+
 			else 
 				usage();
 		} else
@@ -513,10 +528,15 @@ main(int argc, char *argv[]) {
 	if (verb)
 		printf("There are %d raster files to process\n",lfa - ffa + 1);
 
-	strncpy(out_name,argv[lfa],MAXNAMEL); out_name[MAXNAMEL] = '\000';
-	if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
-		xl = out_name + strlen(out_name);
-	strcpy(xl,".gam");
+	if (out_name[0] == '\000') {
+		strncpy(out_name,argv[lfa],MAXNAMEL); out_name[MAXNAMEL] = '\000';
+		if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
+			xl = out_name + strlen(out_name);
+		strcpy(xl,".gam");
+	} else {
+		if ((xl = strrchr(out_name, '.')) == NULL)	/* Figure where extention is */
+			xl = out_name + strlen(out_name);
+	}
 
 	if (verb)
 		printf("Gamut output files is '%s'\n",out_name);
@@ -556,11 +576,11 @@ main(int argc, char *argv[]) {
 			error ("Creation of xicc failed");
 	
 		/* Setup the default viewing conditions */
-		if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0) == -999)
+		if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0, NULL) == -999)
 			error ("%d, %s",xicco->errc, xicco->err);
 	
 		if (vc_e != -1)
-			if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0) == -999)
+			if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0, NULL) == -999)
 				error ("%d, %s",xicco->errc, xicco->err);
 		if (vc_s >= 0)
 			vc.Ev = vc_s;
@@ -597,11 +617,67 @@ main(int argc, char *argv[]) {
 	
 		/* Get a expanded color conversion object */
 		if ((luo = xicco->get_luobj(xicco, ICX_CLIP_NEAREST
+#ifdef NOCAMGAM_CLIP
+		             | ICX_CAM_NOGAMCLIP
+#endif
 		           , func, intent, pcsor, order, &vc, NULL)) == NULL)
 			error ("%d, %s",xicco->errc, xicco->err);
 	
 		luo->spaces(luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL);
+
+	/* Else if the image is in Lab space, and we want Jab */
+	} else if (pcsor == icxSigJabData) {
+		double wp[3];		/* D50 white point */
+
+		wp[0] = icmD50.X;
+		wp[1] = icmD50.Y;
+		wp[2] = icmD50.Z;
+
+		/* Setup the default viewing conditions */
+		if (xicc_enum_viewcond(NULL, &vc, -1, NULL, 0, wp) == -999)
+			error("Failed to locate a default viewing condition");
 	
+		if (vc_e != -1)
+			if (xicc_enum_viewcond(NULL, &vc, vc_e, NULL, 0, wp) == -999)
+				error("Failed to enumerate viewing condition %d",vc_e);
+		if (vc_s >= 0)
+			vc.Ev = vc_s;
+		if (vc_wXYZ[1] > 0.0) {
+			/* Normalise it to current media white */
+			vc.Wxyz[0] = vc_wXYZ[0]/vc_wXYZ[1] * vc.Wxyz[1];
+			vc.Wxyz[2] = vc_wXYZ[2]/vc_wXYZ[1] * vc.Wxyz[1];
+		} 
+		if (vc_wxy[0] >= 0.0) {
+			double x = vc_wxy[0];
+			double y = vc_wxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
+			double z = 1.0 - x - y;
+			vc.Wxyz[0] = x/y * vc.Wxyz[1];
+			vc.Wxyz[2] = z/y * vc.Wxyz[1];
+		}
+		if (vc_a >= 0.0)
+			vc.La = vc_a;
+		if (vc_b >= 0.0)
+			vc.Yb = vc_b/100.0;
+		if (vc_f >= 0.0)
+			vc.Yf = vc_f/100.0;
+		if (vc_fXYZ[1] > 0.0) {
+			/* Normalise it to current media white */
+			vc.Fxyz[0] = vc_fXYZ[0]/vc_fXYZ[1] * vc.Fxyz[1];
+			vc.Fxyz[2] = vc_fXYZ[2]/vc_fXYZ[1] * vc.Fxyz[1];
+		}
+		if (vc_fxy[0] >= 0.0) {
+			double x = vc_fxy[0];
+			double y = vc_fxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
+			double z = 1.0 - x - y;
+			vc.Fxyz[0] = x/y * vc.Fxyz[1];
+			vc.Fxyz[2] = z/y * vc.Fxyz[1];
+		}
+	
+		if ((cam = new_icxcam(cam_default)) == NULL)
+			error("new_icxcam failed");
+
+		cam->set_view(cam, vc.Ev, vc.Wxyz, vc.La, vc.Yb, vc.Lv, vc.Yf, vc.Fxyz,
+		              XICC_USE_HK, XICC_NOCAMCL);
 	}
 
 	/* Establish the PCS range if we are filtering */
@@ -617,12 +693,22 @@ main(int argc, char *argv[]) {
 			csgam->getrange(csgam, pcsmin, pcsmax);
 			csgam->del(csgam);
 		} else {
-			pcsmin[0] = 0.0;
-			pcsmax[0] = 100.0;
-			pcsmin[1] = -128.0;
-			pcsmax[1] = 128.0;
-			pcsmin[2] = -128.0;
-			pcsmax[2] = 128.0;
+			pcsmin[0] = -10.0;
+			pcsmax[0] = 110.0;
+			pcsmin[1] = -138.0;
+			pcsmax[1] = 138.0;
+			pcsmin[2] = -138.0;
+			pcsmax[2] = 138.0;
+
+#ifdef NEVER	/* Does this make any sense ?? */
+			if (cam) {
+				icmLab2XYZ(&icmD50, pcsmin, pcsmin);
+				cam->XYZ_to_cam(cam, pcsmin, pcsmin);
+
+				icmLab2XYZ(&icmD50, pcsmax, pcsmax);
+				cam->XYZ_to_cam(cam, pcsmax, pcsmax);
+			}
+#endif
 		}
 
 		if (verb)
@@ -635,6 +721,9 @@ main(int argc, char *argv[]) {
 	/* - - - - - - - - - - - - - - - */
 	/* Creat a gamut surface */
 	gam = new_gamut(gamres, pcsor == icxSigJabData);
+
+	apcsmin[0] = apcsmin[1] = apcsmin[2] = 1e6;
+	apcsmax[0] = apcsmax[1] = apcsmax[2] = -1e6;
 
 	/* Process all the tiff files */
 	for (fa = ffa; fa <= lfa; fa++) {
@@ -658,9 +747,11 @@ main(int argc, char *argv[]) {
 		TIFFGetFieldDefaulted(rh, TIFFTAG_EXTRASAMPLES, &extrasamples, &extrainfo);
 		TIFFGetField(rh, TIFFTAG_PHOTOMETRIC, &photometric);
 
-		if (inn != (samplesperpixel-extrasamples))
-			error ("TIFF Input file has %d input chanels mismatched to colorspace '%s'",
-			       samplesperpixel, icm2str(icmColorSpaceSignature, ins));
+		if (luo != NULL) {
+			if (inn != (samplesperpixel-extrasamples))
+				error ("TIFF Input file has %d input chanels and is mismatched to colorspace '%s'",
+				       samplesperpixel, icm2str(icmColorSpaceSignature, ins));
+		}
 
 		if ((tcs = TiffPhotometric2ColorSpaceSignature(&cvt, &sign_mask, photometric,
 		                                     bitspersample, samplesperpixel, extrasamples)) == 0)
@@ -725,17 +816,37 @@ main(int argc, char *argv[]) {
 				if (cvt != NULL) {	/* Undo TIFF encoding */
 					cvt(in, in);
 				}
+				/* ICC profile to convert RGB to Lab or Jab */
 				if (luo != NULL) {
+//printf("~1 RGB in value = %f %f %f\n",in[0],in[1],in[2]);
 					if ((rv = luo->lookup(luo, out, in)) > 1)
 						error ("%d, %s",icco->errc,icco->err);
+//printf("~1 after luo = %f %f %f\n",out[0],out[1],out[2]);
 					
-					if (outs == icSigXYZData)	/* Convert to Lab */
+					if (outs == icSigXYZData) {	/* Convert to Lab */
 						icmXYZ2Lab(&icco->header->illuminant, out, out);
+//printf("~1 after XYZ2Lab = %f %f %f\n",out[0],out[1],out[2]);
+					}
+				/* Lab TIFF - may need to convert to Jab */
+				} else if (cam != NULL) {
+//printf("~1 Lab in value = %f %f %f\n",in[0],in[1],in[2]);
+					icmLab2XYZ(&icmD50, out, in);
+//printf("~1 XYZ = %f %f %f\n",out[0],out[1],out[2]);
+					cam->XYZ_to_cam(cam, out, out);
+//printf("~1 Jab = %f %f %f\n",out[0],out[1],out[2]);
+
 				} else {
+//printf("~1 Lab value = %f %f %f\n",in[0],in[1],in[2]);
 					for (i = 0; i < samplesperpixel; i++)
 						out[i] = in[i];
 				}
 
+				for (i = 0; i < 3; i++) {
+					if (out[i] < apcsmin[i])
+						apcsmin[i] = out[i];
+					if (out[i] > apcsmax[i])
+						apcsmax[i] = out[i];
+				}
 				if (filter)
 					add_fpixel(out);
 				else
@@ -753,15 +864,22 @@ main(int argc, char *argv[]) {
 		}
 	}
 
+	if (verb)
+		printf("Actual PCS range = %f..%f, %f..%f. %f..%f\n\n", apcsmin[0], apcsmax[0], apcsmin[1], apcsmax[1], apcsmin[2], apcsmax[2]);
+
 	if (filter)
 		del_filter();
 	
-	/* Get White and Black points from the profile, and set them in the gamut */
+	/* Get White and Black points from the profile, and set them in the gamut. */
 	if (luo != NULL) {
-		double wp[3], bp[3];
+		double wp[3], bp[3], kp[3];
 
-		luo->rel_wh_bk_points(luo, wp, bp);
-		gam->setwb(gam, wp, bp);
+		luo->efv_wh_bk_points(luo, wp, bp,kp);
+		gam->setwb(gam, wp, bp, kp);
+	} else {
+		double wp[3] = { 100.0, 0.0, 0.0 };
+		double bp[3] = {   0.0, 0.0, 0.0 };
+		gam->setwb(gam, wp, bp, bp);
 	}
 
 	/* Done with lookup object */
@@ -770,13 +888,21 @@ main(int argc, char *argv[]) {
 		xicco->del(xicco);		/* Expansion wrapper */
 		icco->del(icco);		/* Icc */
 	}
+	if (cam != NULL) {
+		cam->del(cam);
+	}
+
+	if (verb)
+		printf("Output Gamut file '%s'\n",out_name);
 
 	/* Create the VRML file */
 	if (gam->write_gam(gam,out_name))
 		error ("write gamut failed on '%s'",out_name);
 
 	if (vrml) {
+
 		strcpy(xl,".wrl");
+		printf("Output vrml file '%s'\n",out_name);
 		if (gam->write_vrml(gam,out_name, doaxes, docusps))
 			error ("write vrml failed on '%s'",out_name);
 	}
@@ -848,6 +974,10 @@ void add_fpixel(double val[3]) {
 
 		vv = (val[j] - ff->min[j])/(ff->max[j] - ff->min[j]);
 		qv[j] = (int)(vv * (FILTSIZE - 1) + 0.5);
+		if (qv[j] < 0)
+			qv[j] = 0;
+		else if (qv[j] >= FILTSIZE)
+			qv[j] = FILTSIZE-1; 
 	}
 
 //printf("~1 color %f %f %f -> Cell %d %d %d\n", val[0], val[1], val[2], qv[0], qv[1], qv[2]);

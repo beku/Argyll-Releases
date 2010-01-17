@@ -25,6 +25,7 @@ Library librender : render.c ;
 
 Main timage : timage.c : : : : : librender ../numlib/libnum $(TIFFLIB) ;
 
-if $(BUILD_JUNK) {
 
+if $(BUILD_JUNK) {
+	Main tt : tt.c : : : ../plot : : ../numlib/libnum ../plot/libplot ;
 }

@@ -12,7 +12,7 @@
  *
  * (Based on i1disp.c)
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -61,8 +61,7 @@
 static inst_code huey_interp_code(inst *pp, int ec);
 static inst_code huey_check_unlock(huey *p);
 
-#define CALFACTOR 3.428         /* Emissive magic calibration factor */
-//#define AMB_SCALE_FACTOR 7.806e-3	/* Ambient mode scale factor */ 
+#define CALFACTOR 3.428         	/* Emissive magic calibration factor */
 #define AMB_SCALE_FACTOR 5.772e-3	/* Ambient mode scale factor */ 
 									/* This is only approximate, and were derived */
 									/* by matching readings from the i1pro. */
@@ -1001,7 +1000,9 @@ huey_compute_factors(
 
 	/* Check that certain value are valid */
 	if (p->ser_no == 0xffffffff)
-		return huey_interp_code((inst *)p, HUEY_BAD_SERIAL_NUMBER);
+		/* (It appears that some instruments have no serial number!) */
+//		return huey_interp_code((inst *)p, HUEY_BAD_SERIAL_NUMBER);
+		warning("huey: bad instrument serial number");
 
 	if (p->LCD_caltime == 0xffffffff)
 		return huey_interp_code((inst *)p, HUEY_BAD_LCD_CALIBRATION);
@@ -1053,7 +1054,7 @@ huey_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 		/* Set config, interface, write end point, read end point */
 		/* ("serial" end points aren't used - the huey uses USB control messages) */
 		/* We need to detatch the HID driver on Linux */
-		p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, icomuf_detach); 
+		p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, icomuf_detach, 0); 
 
 	} else {
 		if (p->debug) fprintf(stderr,"huey: init_coms called to wrong device!\n");
@@ -1167,6 +1168,7 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings ? */
 	val->Lab_v = 0;
 	val->sp.spec_n = 0;
+	val->duration = 0.0;
 
 	if (user_trig)
 		return inst_user_trig;
@@ -1385,7 +1387,7 @@ inst_code huey_set_mode(inst *pp, inst_mode m)
 	/* The measurement mode portion of the mode */
 	mm = m & inst_mode_measurement_mask;
 
-	/* only display emission mode supported */
+	/* only display emission mode and ambient supported */
 	if (mm != inst_mode_emis_spot
 	 && mm != inst_mode_emis_disp
 	 && mm != inst_mode_emis_ambient) {

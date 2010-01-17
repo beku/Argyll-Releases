@@ -36,11 +36,16 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#ifndef NT
+#include <sys/file.h>
+#endif
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <unistd.h>
+#include <time.h>
 
 #include "yajl/yajl_common.h"
 #include "yajl/yajl_gen.h"
@@ -122,11 +127,7 @@ static jc_error jcnf_print_key(jcnf *p, int ix, FILE *fp) {
 			break;
 		}
 		case jc_integer: {
-#ifdef NT
-			fprintf(fp," %I64d",*((longlong *)kp->data));
-#else
-			fprintf(fp," %lld",*((longlong *)kp->data));
-#endif
+			fprintf(fp," %ld",*((long *)kp->data));
 			break;
 		}
 		case jc_string: {
@@ -138,8 +139,11 @@ static jc_error jcnf_print_key(jcnf *p, int ix, FILE *fp) {
 			break;
 		}
 	}
-	if (kp->comment != NULL) {
-		fprintf(fp," comment = '%s'",kp->comment);
+	if (kp->c_comment != NULL) {
+		fprintf(fp," C comment = '%s'",kp->c_comment);
+	}
+	if (kp->cpp_comment != NULL) {
+		fprintf(fp," C++ comment = '%s'",kp->cpp_comment);
 	}
 	fprintf(fp,"\n");
 	return jc_ok;
@@ -152,9 +156,13 @@ static void free_key_contents(jc_key *p) {
 		free(p->key);
 		p->key = NULL;
 	}
-	if (p->comment != NULL) {
-		free(p->comment);
-		p->comment = NULL;
+	if (p->c_comment != NULL) {
+		free(p->c_comment);
+		p->c_comment = NULL;
+	}
+	if (p->cpp_comment != NULL) {
+		free(p->cpp_comment);
+		p->cpp_comment = NULL;
 	}
 	if (p->data != NULL) {
 		free(p->data);
@@ -179,7 +187,7 @@ static jc_error jcnf_set_key_internal(
 	jc_type type,
 	void *data,
 	size_t dataSize,	/* Data size (including string nul) */
-	char *comment
+	char *comment		/* C++ style comment */
 ) {
 	free_key_contents(kp);
 
@@ -197,7 +205,7 @@ static jc_error jcnf_set_key_internal(
 	}
 
 	if (comment != NULL) {
-		if ((kp->comment = strdup(comment)) == NULL)
+		if ((kp->cpp_comment = strdup(comment)) == NULL)
 			return jc_malloc;
 	}
 	return jc_ok;
@@ -315,7 +323,7 @@ static jc_error jcnf_get_key(
 	if (dataSize != NULL)
 		*dataSize = p->keys[ix]->dataSize;
 	if (comment != NULL)
-		*comment = p->keys[ix]->comment;
+		*comment = p->keys[ix]->cpp_comment;
 
 	return jc_ok;
 }
@@ -453,7 +461,7 @@ static int jcnf_yajl_boolean(void * ctx, int boolVal) {
     return 1;
 }
 
-static int jcnf_yajl_integer(void *ctx, longlong integerVal) {
+static int jcnf_yajl_integer(void *ctx, long integerVal) {
 	jcnf *p = (jcnf *)ctx;
 	char *t1;
 
@@ -465,7 +473,7 @@ static int jcnf_yajl_integer(void *ctx, longlong integerVal) {
 	if ((t1 = cur_keypath(p)) == NULL)
 		return 0;
 
-	if (jcnf_add_key_internal(p, t1, jc_integer, (void *)&integerVal, sizeof(longlong), NULL)  != jc_ok) {
+	if (jcnf_add_key_internal(p, t1, jc_integer, (void *)&integerVal, sizeof(long), NULL)  != jc_ok) {
 		free(t1);
 		return 0;
 	}
@@ -526,22 +534,43 @@ static int jcnf_yajl_string(void *ctx, const unsigned char *stringVal,
     return 1;
 }
 
-static int jcnf_yajl_comment(void *ctx, const unsigned char * stringVal,
+static int jcnf_yajl_c_comment(void *ctx, const unsigned char * stringVal,
                      unsigned int stringLen) {
 	jcnf *p = (jcnf *)ctx;
 
-//	printf("comment: '");
+//	printf("c_comment: '");
 //	fwrite(stringVal, 1, stringLen, stdout);
 //	printf("'\n");    
 
-	if (p->lk != NULL && p->lk->comment == NULL) {
+	if (p->lk != NULL && p->lk->c_comment == NULL) {
 		char *t1;
 		if ((t1 = malloc(stringLen + 1)) == NULL)
 			return 0;
 		memcpy(t1, stringVal, stringLen);
 		t1[stringLen] = 0;
 
-		p->lk->comment = t1;
+		p->lk->c_comment = t1;
+	}
+
+    return 1;
+}
+
+static int jcnf_yajl_cpp_comment(void *ctx, const unsigned char * stringVal,
+                     unsigned int stringLen) {
+	jcnf *p = (jcnf *)ctx;
+
+//	printf("cpp_comment: '");
+//	fwrite(stringVal, 1, stringLen, stdout);
+//	printf("'\n");    
+
+	if (p->lk != NULL && p->lk->cpp_comment == NULL) {
+		char *t1;
+		if ((t1 = malloc(stringLen + 1)) == NULL)
+			return 0;
+		memcpy(t1, stringVal, stringLen);
+		t1[stringLen] = 0;
+
+		p->lk->cpp_comment = t1;
 	}
 
     return 1;
@@ -681,8 +710,10 @@ static yajl_callbacks callbacks = {
     jcnf_yajl_boolean,
     jcnf_yajl_integer,
     jcnf_yajl_double,
+	NULL,				/* number */
     jcnf_yajl_string,
-    jcnf_yajl_comment,
+    jcnf_yajl_c_comment,
+    jcnf_yajl_cpp_comment,
     jcnf_yajl_start_map,
     jcnf_yajl_map_key,
     jcnf_yajl_end_map,
@@ -726,7 +757,7 @@ static jc_error jcnf_read(
 ) {
 	jc_error ev;
 	yajl_handle hand;
-	yajl_parser_config cfg = { 0, 1 };
+	yajl_parser_config cfg = { 0, 1 };		/* Validate UTF8 strings ? */
 	unsigned char buf[BUF_SIZE];	
 	struct stat sbuf;
 
@@ -746,7 +777,7 @@ static jc_error jcnf_read(
 	if ((ev = jcnf_lock_file(p)) != jc_ok)
 		return ev;
 
-	hand = yajl_alloc(&callbacks, &cfg, (void *)p);
+	hand = yajl_alloc(&callbacks, &cfg, NULL, (void *)p);
 
 	/* Parse the file */
 	for(;;) {
@@ -770,8 +801,8 @@ static jc_error jcnf_read(
 			{
 				unsigned char * str = yajl_get_error(hand, 1, buf, rd);
 				fflush(stdout);
-				fprintf(stderr, (char *) str);
-				yajl_free_error(str);
+				fprintf(stderr, "%s", (char *) str);
+				yajl_free_error(hand, str);
 				return jc_parse_fail;
 			}
 		}
@@ -857,7 +888,7 @@ static jc_error jcnf_write(
 	}
 #endif
 
-	g = yajl_gen_alloc(&conf);
+	g = yajl_gen_alloc(&conf, NULL);
 
 	/* Generate the file */
 	for (i = 0; i < p->nkeys; i++, pkey = ckey) { 
@@ -942,7 +973,7 @@ static jc_error jcnf_write(
 				break;
 			
 			case jc_integer:
-				yajl_gen_integer(g, *((longlong *)p->keys[i]->data));
+				yajl_gen_integer(g, *((long *)p->keys[i]->data));
 				break;
 			
 			case jc_string:
@@ -955,8 +986,11 @@ static jc_error jcnf_write(
 			}
 		}
 
-		if (p->keys[i]->comment != NULL) {
-			yajl_gen_cpp_comment(g, p->keys[i]->comment, strlen(p->keys[i]->comment));
+		if (p->keys[i]->cpp_comment != NULL) {
+			yajl_gen_cpp_comment(g, p->keys[i]->cpp_comment, strlen(p->keys[i]->cpp_comment));
+		}
+		if (p->keys[i]->c_comment != NULL) {
+			yajl_gen_c_comment(g, p->keys[i]->c_comment, strlen(p->keys[i]->c_comment), 1);
 		}
 
 #ifdef NEVER

@@ -6,7 +6,7 @@
  *
  * Copyright 2007 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -28,7 +28,7 @@ void usage(void) {
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: specsubsamp -options\n");
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"                 A, D50, D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr,"                 A, C, D50, D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"                 1931_2, 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -w st,en,sp     Output start, end and spacing nm\n");
@@ -76,6 +76,8 @@ main(
 				if (na == NULL) usage();
 				if (strcmp(na, "A") == 0) {
 					illum = icxIT_A;
+				} else if (strcmp(na, "C") == 0) {
+					illum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0) {
 					illum = icxIT_D50;
 				} else if (strcmp(na, "D65") == 0) {

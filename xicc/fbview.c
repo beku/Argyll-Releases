@@ -166,7 +166,7 @@ main(
 				error ("%d, %s",rd_icco->errc, rd_icco->err);
 		}
 		/* Get details of conversion */
-		luo1->spaces(luo1, &ins, NULL, &outs, NULL, NULL, NULL, NULL, NULL);
+		luo1->spaces(luo1, &ins, NULL, &outs, NULL, NULL, NULL, NULL, NULL, NULL);
 
 		if (ins != icSigCmykData) {
 			error("Expecting CMYK device");

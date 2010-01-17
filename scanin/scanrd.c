@@ -6,7 +6,7 @@
  * Author: Graeme Gill
  *
  * Copyright 1995 - 2008 Graeme W. Gill, All right reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -339,7 +339,7 @@ static scanrd_
 ) {
 	scanrd_ *s;
 
-	if ((s = (scanrd_ *)malloc(sizeof(scanrd_))) == NULL)
+	if ((s = (scanrd_ *)calloc(1, sizeof(scanrd_))) == NULL)
 		return NULL;
 
 	/* Public functions */
@@ -1528,7 +1528,7 @@ scanrd_ *s
 	ss[1] = 0.0001;
 	ss[2] = 1.0001;
 	ss[3] = 1.0001;
-	rc = powell(&rv, 4, pc,ss,1e-8,2000,pfunc,s);
+	rc = powell(&rv, 4, pc,ss,1e-8,2000,pfunc,s, NULL, NULL);
 
 	if (rc == 0) {
 		points *tp;
@@ -2338,7 +2338,7 @@ elist *el
 ) {
 	int i, rc = el->c;
 	
-	DBG((dbgo,"Elist has %d entries allocated at 0x%x\n",el->c,(unsigned int)el->a));
+	DBG((dbgo,"Elist has %d entries allocated at 0x%x\n",el->c,(unsigned long)el->a));
 	DBG((dbgo,"lennorm = %f\n",el->lennorm));
 	for (i = 0; i < rc; i++)
 		DBG((dbgo,"  [%d] = %f %f %f\n",i,el->a[i].pos,el->a[i].len,el->a[i].ccount));
@@ -2517,6 +2517,8 @@ ematch *rv		/* Return values */
 	r0 = 0;
 	r1 = r->c-1;
 	rw = r->c/2;	/* Minimum number of target line to match all of reference */
+	if (t->c/2 < rw)
+		rw = t->c/2;
 	rwidth = r->a[r1].pos - r->a[r0].pos;
 
 	for (t0 = 0; t0 < t->c-1; t0++) {
@@ -2525,8 +2527,9 @@ ematch *rv		/* Return values */
 			double scale;
 
 			scale = rwidth/(t->a[t1].pos - t->a[t0].pos);
-			if (scale < 0.001 || scale > 100.0)
+			if (scale < 0.001 || scale > 100.0) {
 				break;		/* Don't bother with silly scale factors */
+			}
 
 			/* Have to compenate the offset for the scale since it is scaled from 0 */
 			off = r->a[r0].pos/scale - t->a[t0].pos;
@@ -2557,7 +2560,7 @@ ematch *rv		/* Return values */
 				ss[1] = scale * 0.01 * rwidth/ELISTCDIST;
 
 				/* Find minimum */
-				rc = powell(&rv, 2,cp,ss,0.0001,200,efunc,&dd);
+				rc = powell(&rv, 2,cp,ss,0.0001,400,efunc,&dd, NULL, NULL);
 
 				if (rc == 0								/* Powell converged */
 				  && cp[1] > 0.001 && cp[1] < 100.0) {	/* and not ridiculous */
@@ -2579,13 +2582,13 @@ ematch *rv		/* Return values */
 				}
 			}
 			if (s->verb >= 7)
-				DBG((dbgo,"offset %f, scale %f returns %f\n", off,scale,cc));
+				DBG((dbgo,"offset %f, scale %f cc %f\n", off,scale,cc));
 	        if (cc > 0.0 && cc > bcc) {	/* Keep best */
 				boff = off;
 				bscale = scale;
 				bcc = cc;
 				if (s->verb >= 7)
-					DBG((dbgo,"(New best)\n", off,scale,cc));
+					DBG((dbgo,"(New best)\n"));
 			}
 		}
 	}
@@ -2639,10 +2642,14 @@ scanrd_ *s
 
 	if (s->verb >= 2) {
 		DBG((dbgo,"Axis matches for each possible orientation:\n"));
-		DBG((dbgo,"xx = %f, yy = %f\n",xx.cc,yy.cc));
-		DBG((dbgo,"xy = %f, yx = %f\n",xy.cc,xy.cc));
-		DBG((dbgo,"xix = %f, yiy = %f\n",xix.cc,yiy.cc));
-		DBG((dbgo,"xiy = %f, yix = %f\n",xiy.cc,yix.cc));
+		DBG((dbgo,"  0: xx  = %f, yy  = %f, xx.sc  = %f, yy.sc  = %f\n",
+		                                xx.cc,yy.cc,xx.scale,yy.scale));
+		DBG((dbgo," 90: xiy = %f, yx  = %f, xiy.sc = %f, yx.sc  = %f\n",
+		                                xiy.cc,yx.cc,xiy.scale,yx.scale));
+		DBG((dbgo,"180: xix = %f, yiy = %f, xix.sc = %f, yiy.sc = %f\n",
+		                                xix.cc,yiy.cc,xix.scale,yiy.scale));
+		DBG((dbgo,"270: xy  = %f, yix = %f, xy.sc  = %f, yix.sc = %f\n",
+		                                xy.cc,yix.cc,xy.scale,yix.scale));
 	}
 
 	/* Compute the combined values for the four orientations. */
@@ -2894,7 +2901,7 @@ double *ref		/* 4 x x,y reference points */
 	for (i = 0; i < 8; i++)
 		ss[i] = 0.0001;
 
-	rc = powell(&rv, 8, s->ptrans, ss, 1e-7, 500, ptransfunc,&dd);
+	rc = powell(&rv, 8, s->ptrans, ss, 1e-7, 500, ptransfunc, &dd, NULL, NULL);
 
 	return rc;
 }
@@ -3153,7 +3160,7 @@ scanrd_ *s
 		ss[i] = 0.0001;
 	}
 
-	rc = powell(&rv, 8, pc, ss, 0.0001, 200, ofunc, (void *)s);
+	rc = powell(&rv, 8, pc, ss, 0.0001, 200, ofunc, (void *)s, NULL, NULL);
 
 	if (rc == 0) {
 		for (i = 0; i < 8; i++)
@@ -3165,6 +3172,20 @@ scanrd_ *s
 }
 
 /********************************************************************************/
+/* Simple clip to avoid gross problems */
+static void clip_ipoint(scanrd_ *s, ipoint *p) {
+	int ow = s->width, oh = s->height;
+
+	if (p->x < 0)
+		p->x = 0;
+	if (p->x >= ow)
+		p->x = ow-1;
+	if (p->y < 0)
+		p->y = 0;
+	if (p->y >= oh)
+		p->y = oh-1;
+}
+
 /* Initialise the sample boxes read for a rescan of the input file */
 static int
 setup_sboxes(
@@ -3190,18 +3211,22 @@ scanrd_ *s
 		ptrans(&x, &y, xx1, yy1, s->ptrans);
 		p[0].x = (int)(0.5 + x);
 		p[0].y = (int)(0.5 + y);
+		clip_ipoint(s, &p[0]);
 
 		ptrans(&x, &y, xx2, yy1, s->ptrans);
 		p[1].x = (int)(0.5 + x);
 		p[1].y = (int)(0.5 + y);
+		clip_ipoint(s, &p[1]);
 
 		ptrans(&x, &y, xx2, yy2, s->ptrans);
 		p[2].x = (int)(0.5 + x);
 		p[2].y = (int)(0.5 + y);
+		clip_ipoint(s, &p[2]);
 
 		ptrans(&x, &y, xx1, yy2, s->ptrans);
 		p[3].x = (int)(0.5 + x);
 		p[3].y = (int)(0.5 + y);
+		clip_ipoint(s, &p[3]);
 
 		if (s->verb >= 4)
 			DBG((dbgo,"Box number %d:\n",sp - &s->sboxes[0]));

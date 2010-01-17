@@ -11,7 +11,7 @@
  *
  * Copyright 2000 - 2007 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  * Based on the rspl.c and xlut.c code.
@@ -128,6 +128,9 @@ struct _xfit {
 	double mat[3][3];		/* XYZ White point aprox relative to accurate relative matrix */
 	double cmat[3][3];		/* Final rspl correction matrix */
 
+	double shp_smooth[MXDI];/* Smoothing factors for each curve, nom = 1.0 */
+	double out_smooth[MXDO];
+
 	/* Optimisation state */
 	optcomb opt_msk;		/* Optimisation mask: 3 = i+m, 2 = m, 6 = m+o, 7 = i+m+o */
 	int opt_off;			/* Optimisation parameters offset from v[0] */
@@ -142,13 +145,14 @@ struct _xfit {
 	/* Do the fitting. Return nz on error */ 
 	int (*fit)(
 		struct _xfit *p, 
-		int flags,				/* Flag values */
+		int flags,				/* Xfit flag values */
 		int di,					/* Input dimensions */
 		int fdi,				/* Output dimensions */
 		int rsplflags,			/* clut rspl creation flags */
 		double *wp,				/* if flags & XFIT_OUT_WP_REL, */
 								/* Initial white point, returns final wp */
 		double *dw,				/* Device white value to adjust to be D50 */
+		double wpscale,			/* If >= 0.0 scale final wp */  
 		cow *ipoints,			/* Array of data points to fit - referece taken */
 		int nodp,				/* Number of data points */
 		double in_min[MXDI],	/* Input value scaling/domain minimum */
@@ -161,6 +165,8 @@ struct _xfit {
 		int iord[],				/* Order of input positioning/shaper curve for each dimension */
 		int sord[],				/* Order of input sub-grid shaper curve (not used) */
 		int oord[],				/* Order of output shaper curve for each dimension */
+		double shp_smooth[MXDI],/* Smoothing factors for each curve, nom = 1.0 */
+		double out_smooth[MXDO],
 		optcomb tcomb,			/* Flag - target elements to fit. */
 		void *cntx2,			/* Context of callbacks */
 								/* Callback to convert two fit values delta E squared */

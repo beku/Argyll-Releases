@@ -37,24 +37,35 @@ print/measure simulation.<br>
 <span style="font-family: monospace;">&nbsp;-p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Use separation profile</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-l&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Output Lab rather than XYZ</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-0
-pow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Apply power to input device chanel 0-9 (after sep.)</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-r
+Output Lab rather than XYZ<br>
+&nbsp;-k
+file.cal&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply calibration (after sep.) and include in .ti3<br>
+&nbsp;-i
+file.cal&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Include calibration in .ti3 (but don't apply it)<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;-r
 level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Add average random deviation of &lt;level&gt;% to input device values
-(after sep.)</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-R
+(after sep. &amp; cal.)</span></small><br
+ style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;-0
+pow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply power to input device chanel 0-9 (after sep. cal. &amp; rand.)</span><br
+ style="font-family: monospace;">
+&nbsp;
+<span style="font-family: monospace;">-R
 level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Add average random deviation of &lt;level&gt;% to output PCS values<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;-u
 &nbsp; &nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Make random deviations have uniform distributions rather than normal</span></small><br
- style="font-family: monospace;">
-<small><span style="font-family: monospace;"></span><span
+Make random deviations have uniform distributions rather than normal<br>
+&nbsp;-S
+seed&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set random seed<br style="font-family: monospace;">
+</span></small><small><span style="font-family: monospace;"></span><span
  style="font-family: monospace;">&nbsp;-b
 L,a,b&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Scale black point to target Lab value</span><br
@@ -103,21 +114,44 @@ The <span style="font-weight: bold;">-l</span> flag causes the CIE
 output values to be L*a*b* rather than the
 default XYZ values.<br>
 <br>
-The <span style="font-weight: bold;">-0, -1, -2 .. -9</span>
-parameters are a way of simulating changes in the
-behaviour of the simulated printing system. The parameter supplied to
-the flag will be used to modify the device values (after any separation
-is applied) by raising them to the power of the parameter. This applies
-a transfer curve to the simulated device response.<br>
+The <b>-k file.cal</b> parameter specifies a printer
+calibration file created by <a href="printcal.html">printcal</a>, and
+the supplied calibration curves will be applied to the chart device
+values after any separation. This allows emulating a system that uses
+per device channel calibration. The calibration curves will also be
+included in
+the resulting .ti3 file, so that they can be passed through to the ICC
+profile allowing accurate computation of ink
+limits.<br>
 <br>
+<a name="i"></a> The <b>-i file.cal</b> parameter specifies a printer
+calibration file created by <a href="printcal.html">printcal</a>,
+and the calibration curves will be
+included in the included in
+the resulting .ti3 file, so that they can be passed through to the ICC
+profile, to allow accurate computation of ink limits.
+The calibration <span style="font-weight: bold;">is not applied</span>
+to tchart values. <span style="font-weight: bold;">Note</span> that if
+the supplied ICC profile contains calibration curves, that these will
+be included in the resulting .ti3 by default.<br>
+<span style="font-weight: bold;"></span><br>
 The <span style="font-weight: bold;">-r</span> parameter is a way of
 simulating instability in the behaviour of
 the simulated
 printing system. The parameter supplied to the flag will be used to
 scale a random offset added to the device values (after any separation
-is applied). The offset will be a normally distributed error with an
+and calibration is applied). The offset will be a normally distributed
+error with an
 average deviation of level%. A typically value supplied
 might be 1.0 to simulate 1% randomness.<br>
+<br>
+The <span style="font-weight: bold;">-0, -1, -2 .. -9</span>
+parameters are a way of simulating changes in the
+behaviour of the simulated printing system. The parameter supplied to
+the flag will be used to modify the device values (after any
+separation, calibration and device randomness
+is applied) by raising them to the power of the parameter. This applies
+a transfer curve to the simulated device response.<br>
 <br>
 The <span style="font-weight: bold;">-R</span> parameter is a way of
 simulating instability in the behaviour of
@@ -134,6 +168,11 @@ distribution of the random offsets applied using the <span
  style="font-weight: bold;">-R</span> flags, from the default standard
 deviation, to a uniform deviation distribution. The level is still
 specified as an average deviation.<br>
+<br>
+The <span style="font-weight: bold;">-S</span> parameter lets a
+particular random seed be used when generating random offsets, so that
+the randomness can be made repeatable. Normally a different seed will
+be used for each run. <br>
 <br>
 The <span style="font-weight: bold;">-b</span> parameter is a way of
 simulating devices that have a different black point to the profile
@@ -163,7 +202,15 @@ file is a monochrome test file with a Black device value, then a CMYK <a
  href="File_Formats.html#ICC">ICC</a> profile, <a
  href="File_Formats.html#MPP">MPP</a> or <a
  href="File_Formats.html#.ti3">.ti3</a> may be used, and the Black
-values will be translated to equal CMY = 0, K = grey values. <br>
+values will be translated to equal CMY = 0, K = grey values. <span
+ style="font-weight: bold;">Note</span> that
+any calibration within a supplied ICC profile is <span
+ style="text-decoration: underline;">not</span> applied during the
+conversion, although it will be included in the .ti3 output (see <span
+ style="font-weight: bold;">-k</span> and <span
+ style="font-weight: bold;">-i</span> flags for how apply calibration
+curves during the conversion and/or include
+a specific calibration curves in the output).<br>
 <br>
 If a separation device profile is provided (e.g. from CMY -&gt; CMYK,
 or perhaps CMYK-&gt;CMYK, to simulate a color correction step before

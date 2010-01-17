@@ -12,11 +12,14 @@
  *
  * Copyright 1999, 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
 /* TTBD:
+
+	Can -ff and -fif be made to work with device link files ?
+
  */
 
 #include <stdio.h>
@@ -31,6 +34,7 @@
 #include "plot.h"
 #include "xicc.h"
 
+#undef SPTEST				/* Test rspl gamut surface code */
 
 #define USE_NEARCLIP		/* Our usual expectation */
 #define XRES 128			/* Plotting resolution */
@@ -75,11 +79,15 @@ void usage(char *diag) {
 	fprintf(stderr," -b             use CAM Jab for clipping\n");
 //	fprintf(stderr," -S             Use internal optimised separation for inverse 4d [NOT IMPLEMENTED]\n");
 
+#ifdef SPTEST
+	fprintf(stderr," -w             special test PCS space\n");
+	fprintf(stderr," -W             special test, PCS' space\n");
+#endif
 	fprintf(stderr," -c viewcond    set viewing conditions for CIECAM97s,\n");
 	fprintf(stderr,"                either an enumerated choice, or a parameter:value changes\n");
 	for (i = 0; ; i++) {
 		icxViewCond vc;
-		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1) == -999)
+		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1, NULL) == -999)
 			break;
 
 		fprintf(stderr,"            %s\n",vc.desc);
@@ -99,9 +107,30 @@ void usage(char *diag) {
 	fprintf(stderr,"    one input color per line, white space separated.\n");
 	fprintf(stderr,"    A line starting with a # will be ignored.\n");
 	fprintf(stderr,"    A line not starting with a number will terminate the program.\n");
+	fprintf(stderr,"    Use -v0 for just output colors.\n");
 	exit(1);
 }
 
+#ifdef SPTEST
+
+/* Output curve function */
+void spoutf(void *cbntx, double *out, double *in) {
+	icxLuLut *clu = (icxLuLut *)cbntx;
+	
+	clu->output(clu, out, in);
+	clu->out_abs(clu, out, out);
+}
+
+/* Inverse output curve function */
+void spioutf(void *cbntx, double *out, double *in) {
+	icxLuLut *clu = (icxLuLut *)cbntx;
+
+	clu->inv_out_abs(clu, out, in);
+	clu->inv_output(clu, out, out);
+}
+
+
+#endif /* SPTEST */
 
 int
 main(int argc, char *argv[]) {
@@ -156,6 +185,11 @@ main(int argc, char *argv[]) {
 	double Kstle1 = 0.0, Kstpo1 = 0.0, Kenle1 = 0.0, Kenpo1 = 0.0, Kshap1 = 0.0;
 	int               invert = 0;
 	
+#ifdef SPTEST
+	int sptest = 0;
+	warning("xicc/xicclu.c !!!! special rspl gamut sest code is compiled in !!!!\n");
+#endif
+
 	error_program = argv[0];
 
 	if (argc < 2)
@@ -465,6 +499,14 @@ main(int argc, char *argv[]) {
 				klimit = atoi(na)/100.0;
 			}
 
+#ifdef SPTEST
+			else if (argv[fa][1] == 'w') {
+				sptest = 1;
+			}
+			else if (argv[fa][1] == 'W') {
+				sptest = 2;
+			}
+#endif
 			/* Viewing conditions */
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
@@ -475,7 +517,7 @@ main(int argc, char *argv[]) {
 				} else
 #endif
 				if (na[1] != ':') {
-					if ((vc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
+					if ((vc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1, NULL)) == -999)
 						usage("Urecognised Enumerated Viewing conditions");
 				} else if (na[0] == 's' || na[0] == 'S') {
 					if (na[1] != ':')
@@ -572,7 +614,7 @@ main(int argc, char *argv[]) {
 		error ("Creation of xicc failed");
 
 	/* Set the default ink limits if not set on command line */
-	icxDefaultLimits(icco, &ink.tlimit, tlimit, &ink.klimit, klimit);
+	icxDefaultLimits(xicco, &ink.tlimit, tlimit, &ink.klimit, klimit);
 
 	if (verb > 1) {
 		if (ink.tlimit >= 0.0)
@@ -580,6 +622,13 @@ main(int argc, char *argv[]) {
 		if (ink.klimit >= 0.0)
 			printf("Black ink limit assumed is %3.0f%%\n",100.0 * ink.klimit);
 	}
+
+	ink.KonlyLmin = 0;		/* Use normal black as locus Lmin */
+
+	ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
+	ink.c.Kskew = ICXINKDEFSKEW;	/* default curve skew */
+	ink.x.Ksmth = ICXINKDEFSMTH;
+	ink.x.Kskew = ICXINKDEFSKEW;
 
 	if (inking == 0) {			/* Use minimum */
 		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
@@ -604,7 +653,6 @@ main(int argc, char *argv[]) {
 		ink.c.Kshap = 1.0;
 	} else if (inking == 3) {	/* Use ramp  */
 		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
-		ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
 		ink.c.Kstle = 0.0;
 		ink.c.Kstpo = 0.0;
 		ink.c.Kenpo = 1.0;
@@ -616,7 +664,6 @@ main(int argc, char *argv[]) {
 		ink.k_rule = icxKvalue;
 	} else if (inking == 6) {	/* Use specified curve */
 		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
-		ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
 		ink.c.Kstle = Kstle;
 		ink.c.Kstpo = Kstpo;
 		ink.c.Kenpo = Kenpo;
@@ -624,13 +671,11 @@ main(int argc, char *argv[]) {
 		ink.c.Kshap = Kshap;
 	} else {				/* Use dual curves */
 		ink.k_rule = locus ? icxKl5l : icxKl5lk;	/* Locus or value target */
-		ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
 		ink.c.Kstle = Kstle;
 		ink.c.Kstpo = Kstpo;
 		ink.c.Kenpo = Kenpo;
 		ink.c.Kenle = Kenle;
 		ink.c.Kshap = Kshap;
-		ink.x.Ksmth = ICXINKDEFSMTH;
 		ink.x.Kstle = Kstle1;
 		ink.x.Kstpo = Kstpo1;
 		ink.x.Kenpo = Kenpo1;
@@ -639,12 +684,12 @@ main(int argc, char *argv[]) {
 	}
 
 	/* Setup the viewing conditions */
-	if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0) == -999)
+	if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0, NULL) == -999)
 		error ("%d, %s",xicco->errc, xicco->err);
 
 //xicc_dump_viewcond(&vc);
 	if (vc_e != -1)
-		if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0) == -999)
+		if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0, NULL) == -999)
 			error ("%d, %s",xicco->errc, xicco->err);
 	if (vc_s >= 0)
 		vc.Ev = vc_s;
@@ -771,19 +816,36 @@ main(int argc, char *argv[]) {
 			outs = icxSigLChData; 
 	}
 
+#ifdef SPTEST
+	if (sptest) {
+		icxLuLut *clu;
+		double cent[3] = { 50.0, 0.0, 0.0 };
+
+		if (luo->plu->ttype != icmLutType)
+			error("Special test only works on CLUT profiles");
+
+		clu = (icxLuLut *)luo;
+
+		clu->clutTable->comp_gamut(clu->clutTable, cent, NULL, spoutf, clu, spioutf, clu);
+		rspl_gam_plot(clu->clutTable, "sp_test.wrl", sptest-1);
+		exit(0);
+	}
+#endif
+
 	if (doplot) {
 		int i, j;
 		double xx[XRES];
 		double yy[6][XRES];
 #ifdef HACK_PLOT
+		/* Plot some other slice */
 		double start[3] = { 91.069165, -13.555080, 85.608633 };
 		double end[3] = { 8.602831, -3.112174, 12.541111 };
 #else
-		double start[3] = { 100.0, 0.0, 0.0 };
-		double end[3] = { 0.0, 0.0, 0.0 };
-#endif
-
 		/* Plot from white to black */
+		double start[3], end[3];
+		luo->efv_wh_bk_points(luo, start, end, NULL);
+
+#endif
 		for (i = 0; i < XRES; i++) {
 			double ival = (double)i/(XRES-1.0);
 
@@ -791,48 +853,51 @@ main(int argc, char *argv[]) {
 			in[0] = ival * end[0] + (1.0 - ival) * start[0];
 			in[1] = ival * end[1] + (1.0 - ival) * start[1];
 			in[2] = ival * end[2] + (1.0 - ival) * start[2];
+//in[1] = in[2] = 0.0;
 
 			/* Do the conversion */
 			if (invert) {
 				if ((rv = luo->inv_lookup(luo, out, in)) > 1)
 					error ("%d, %s",xicco->errc,xicco->err);
+//printf("~1 %f: %f %f %f -> %f %f %f %f\n", ival, in[0], in[1], in[2], out[0], out[1], out[2], out[3]);
 			} else {
 				if ((rv = luo->lookup(luo, out, in)) > 1)
 					error ("%d, %s",xicco->errc,xicco->err);
 			}
 
-			xx[i] = in[0];
+			xx[i] = 100.0 * ival; 
 			for (j = 0; j < outn; j++)
 				yy[j][i] = 100.0 * out[j];
 		}
+fflush(stdout);
 
 		/* plot order: Black Red Green Blue Yellow Purple */
 		if (outs == icSigRgbData) {
-			do_plot6(xx, NULL, yy[0], yy[1], yy[2], NULL, NULL, -XRES);
+			do_plot6(xx, NULL, yy[0], yy[1], yy[2], NULL, NULL, XRES);
 
 		} else if (outs == icSigCmykData) {
-			do_plot6(xx, yy[3], yy[1], NULL, yy[0], yy[2], NULL, -XRES);
+			do_plot6(xx, yy[3], yy[1], NULL, yy[0], yy[2], NULL, XRES);
 
 		} else {
 		
 			switch(outn) {
 				case 1:
-					do_plot6(xx, yy[0], NULL, NULL, NULL, NULL, NULL, -XRES);
+					do_plot6(xx, yy[0], NULL, NULL, NULL, NULL, NULL, XRES);
 					break;
 				case 2:
-					do_plot6(xx, yy[0], yy[1], NULL, NULL, NULL, NULL, -XRES);
+					do_plot6(xx, yy[0], yy[1], NULL, NULL, NULL, NULL, XRES);
 					break;
 				case 3:
-					do_plot6(xx, yy[0], yy[1], yy[2], NULL, NULL, NULL, -XRES);
+					do_plot6(xx, yy[0], yy[1], yy[2], NULL, NULL, NULL, XRES);
 					break;
 				case 4:
-					do_plot6(xx, yy[0], yy[1], yy[2], yy[3], NULL, NULL, -XRES);
+					do_plot6(xx, yy[0], yy[1], yy[2], yy[3], NULL, NULL, XRES);
 					break;
 				case 5:
-					do_plot6(xx, yy[0], yy[1], yy[2], yy[3], yy[4], NULL, -XRES);
+					do_plot6(xx, yy[0], yy[1], yy[2], yy[3], yy[4], NULL, XRES);
 					break;
 				case 6:
-					do_plot6(xx, yy[0], yy[1], yy[2], yy[3], yy[4], yy[5], -XRES);
+					do_plot6(xx, yy[0], yy[1], yy[2], yy[3], yy[4], yy[5], XRES);
 					break;
 			}
 		}

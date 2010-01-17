@@ -32,7 +32,7 @@
 /* Return the error number */
 /* [Note that this is a duplicate of the one in cgats.c] */
 static int
-err(cgats *p, int errc, char *fmt, ...) {
+err(cgats *p, int errc, const char *fmt, ...) {
 	va_list args;
 
 	p->errc = errc;
@@ -77,7 +77,7 @@ cgats *new_cgats(void) {
 /* and set p->errc * p->err */
 CGATS_STATIC
 int
-cgats_read_name(cgats *p, char *filename) {
+cgats_read_name(cgats *p, const char *filename) {
 	int rv;
 	cgatsFile *fp;
 
@@ -96,7 +96,7 @@ cgats_read_name(cgats *p, char *filename) {
 /* Return -ve, errc & err if there was an error */
 CGATS_STATIC
 int
-cgats_write_name(cgats *p, char *filename) {
+cgats_write_name(cgats *p, const char *filename) {
 	int rv;
 	cgatsFile *fp;
 

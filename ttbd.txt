@@ -24,7 +24,7 @@ Categories:
 
 
 --------------------------------------------------------
-1) Active list:
+1) Active list (not really!):
 
 
 1a) Candidate list:
@@ -118,6 +118,8 @@ Categories:
 
 
 4) Charts:
+
+* Fix i1pro chart to allow for arbitrary long paper.
 
 * Create a test chart specifically for establishing an ink limit ?
 
@@ -255,6 +257,11 @@ Categories:
 * Add support in collink for linking with monochrome in and out
   profiles. Gamut mapping needs to have monochrome bypass of
   3D mapping.
+
+* Add support for setting arbitrary colorant constraints
+  (ie. min/max/target, sum combinations)
+  This is linked with the ideas of culling the gamut to
+  avoid CMYK+ aliasing problems.
 
 7a) Profile/Link speedups
 

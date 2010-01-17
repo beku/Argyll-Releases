@@ -9,7 +9,7 @@
  * Copyright 1998 - 2008, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -161,8 +161,6 @@ static BOOL CALLBACK MonitorEnumProc(
 
 /* Dynamically linked function support */
 
-int dyn_inited = 0;
-
 BOOL (WINAPI* pEnumDisplayDevices)(PVOID,DWORD,PVOID,DWORD) = NULL;
 
 #if !defined(NTDDI_LONGHORN) || NTDDI_VERSION < NTDDI_LONGHORN
@@ -178,20 +176,27 @@ BOOL (WINAPI* pWcsDisassociateColorProfileFromDevice)(WCS_PROFILE_MANAGEMENT_SCO
 #endif  /* NTDDI_VERSION < NTDDI_LONGHORN */
 
 /* See if we can get the wanted function calls */
-static void setup_dyn_calls() {
+/* return nz if OK */
+static int setup_dyn_calls() {
+	static int dyn_inited = 0;
 
 	if (dyn_inited == 0) {
+		dyn_inited = 1;
 
 		/* EnumDisplayDevicesA was left out of lib32.lib on earlier SDK's ... */
 		pEnumDisplayDevices = (BOOL (WINAPI*)(PVOID,DWORD,PVOID,DWORD)) GetProcAddress(LoadLibrary("USER32"), "EnumDisplayDevicesA");
+		if (pEnumDisplayDevices == NULL)
+			dyn_inited = 0;
 
 		/* Vista calls */
 #if !defined(NTDDI_LONGHORN) || NTDDI_VERSION < NTDDI_LONGHORN
 		pWcsAssociateColorProfileWithDevice = (BOOL (WINAPI*)(WCS_PROFILE_MANAGEMENT_SCOPE,PCWSTR,PCWSTR)) GetProcAddress(LoadLibrary("mscms"), "WcsAssociateColorProfileWithDevice");
 		pWcsDisassociateColorProfileFromDevice = (BOOL (WINAPI*)(WCS_PROFILE_MANAGEMENT_SCOPE,PCWSTR,PCWSTR)) GetProcAddress(LoadLibrary("mscms"), "WcsDisassociateColorProfileFromDevice");
+		/* These are checked individually */
 #endif  /* NTDDI_VERSION < NTDDI_LONGHORN */
 	}
-	dyn_inited = 1;
+
+	return dyn_inited;
 }
 
 /* Simple up conversion from char string to wchar string */
@@ -217,8 +222,14 @@ static unsigned short *char2wchar(char *s) {
 
 
 #if defined(UNIX) && !defined(__APPLE__)
+/* Hack to notice if the error handler has been triggered */
+/* when a function doesn't return a value. */
+
+int g_error_handler_triggered = 0;
+
 /* A noop X11 error handler */
 int null_error_handler(Display *disp, XErrorEvent *ev) {
+	 g_error_handler_triggered = 1;
 	return 0;
 }
 #endif	/* X11 */
@@ -233,7 +244,11 @@ disppath **get_displays() {
 	char buf[200];
 	int i, j;
 
-	setup_dyn_calls();
+	if (setup_dyn_calls() == 0) {
+		debugrr("Dynamic linking to EnumDisplayDevices or Vista AssociateColorProfile failed\n");
+		free_disppaths(disps);
+		return NULL;
+	}
 
 	/* Create an initial list of monitors */
 	/* (It might be better to call pEnumDisplayDevices(NULL, i ..) instead ??, */
@@ -545,7 +560,8 @@ disppath **get_displays() {
 					return NULL;
 				}
 	
-				if (outi->connection == RR_Disconnected) {
+				if (outi->connection == RR_Disconnected ||
+					outi->crtc == None) {
 					continue;
 				}
 
@@ -683,33 +699,45 @@ disppath **get_displays() {
 						int ret_format;
 						long ret_len = 0, ret_togo;
 						unsigned char *atomv = NULL;
+						int ii;
+						char *keys[] = {		/* Possible keys that may be used */
+							"EDID_DATA",
+							"EDID",
+							""
+						};
 
-						/* Get the atom for the EDID data */
-						if ((edid_atom = XInternAtom(mydisplay, "EDID_DATA", True)) == None) {
-							debugrr2((errout, "Unable to intern atom 'EDID_DATA'\n"));
-						} else {
-
-							/* Get the EDID_DATA */
-							if (XRRGetOutputProperty(mydisplay, scrnres->outputs[j], edid_atom,
-							            0, 0x7ffffff, False, False, XA_INTEGER, 
-   		                            &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) == Success
-						            && (ret_len == 128 || ret_len == 256)) {
-								if ((disps[ndisps]->edid = malloc(sizeof(unsigned char) * ret_len)) == NULL) {
-									debugrr("get_displays failed on malloc\n");
-									XRRFreeCrtcInfo(crtci);
-									XRRFreeScreenResources(scrnres);
-									XCloseDisplay(mydisplay);
-									free_disppaths(disps);
-									return NULL;
-								}
-								memcpy(disps[ndisps]->edid, atomv, ret_len);
-								disps[ndisps]->edid_len = ret_len;
-								XFree(atomv);
-								debugrr2((errout, "Got EDID for display\n"));
+						/* Try each key in turn */
+						for (ii = 0; keys[ii][0] != '\000'; ii++) {
+							/* Get the atom for the EDID data */
+							if ((edid_atom = XInternAtom(mydisplay, keys[ii], True)) == None) {
+								debugrr2((errout, "Unable to intern atom '%s'\n",keys[ii]));
+								/* Try the next key */
 							} else {
-								debugrr2((errout, "Failed to get EDID for display\n"));
+
+								/* Get the EDID_DATA */
+								if (XRRGetOutputProperty(mydisplay, scrnres->outputs[j], edid_atom,
+								            0, 0x7ffffff, False, False, XA_INTEGER, 
+   		                            &ret_type, &ret_format, &ret_len, &ret_togo, &atomv) == Success
+							            && (ret_len == 128 || ret_len == 256)) {
+									if ((disps[ndisps]->edid = malloc(sizeof(unsigned char) * ret_len)) == NULL) {
+										debugrr("get_displays failed on malloc\n");
+										XRRFreeCrtcInfo(crtci);
+										XRRFreeScreenResources(scrnres);
+										XCloseDisplay(mydisplay);
+										free_disppaths(disps);
+										return NULL;
+									}
+									memcpy(disps[ndisps]->edid, atomv, ret_len);
+									disps[ndisps]->edid_len = ret_len;
+									XFree(atomv);
+									debugrr2((errout, "Got EDID for display\n"));
+									break;
+								}
+								/* Try the next key */
 							}
 						}
+						if (keys[ii][0] == '\000')
+							debugrr2((errout, "Failed to get EDID for display\n"));
 					}
 		
 					jj++;			/* Next enabled index */
@@ -991,7 +1019,7 @@ disppath *get_a_display(int ix) {
 	}
 #if defined(UNIX) && !defined(__APPLE__)
 	if (paths[i]->edid != NULL) {
-		if ((rv->edid = malloc(sizeof(unsigned char) * 128)) == NULL) {
+		if ((rv->edid = malloc(sizeof(unsigned char) * paths[i]->edid_len)) == NULL) {
 			debugrr("get_displays failed on malloc\n");
 			free(rv);
 			free_disppaths(paths);
@@ -1029,6 +1057,10 @@ static void dispwin_del_ramdac(ramdac *r);
 /* meshes perfectly with the display raster depth, so that we can */
 /* figure out how to apportion device values. We fail if they don't */
 /* seem to mesh. */
+
+/* !!! Would be nice to add an error message return to dispwin and */
+/* !!! pass errors back to it so that the detail can be reported */
+/* !!! to the user. */
 
 /* Get RAMDAC values. ->del() when finished. */
 /* Return NULL if not possible */
@@ -1362,7 +1394,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 	/* By default the OSX RAMDAC access is transient, lasting only as long */
 	/* as the process setting it. To set a temporary but persistent beyond this process */
 	/* calibration, we fake up a profile and install it in such a way that it will disappear, */
-	/* restoring the previous display profile whenever the current ColorSync display profies */
+	/* restoring the previous display profile whenever the current ColorSync display profile */
 	/* is restored to the screen. NOTE that this trick will fail if it is not possible */
 	/* to rename the currently selected profile file, ie. because it is a system profile. */
 	if (persist) {					/* Persistent */
@@ -1643,6 +1675,8 @@ static int set_X11_atom(dispwin *p, char *fname) {
 	unsigned long psize, bread;
 	unsigned char *atomv;
 
+	debugr("Setting _ICC_PROFILE property\n");
+
 	/* Read in the ICC profile, then set the X11 atom value */
 #if defined(O_BINARY) || defined(_O_BINARY)
 	if ((fp = fopen(fname,"rb")) == NULL)
@@ -1682,10 +1716,22 @@ static int set_X11_atom(dispwin *p, char *fname) {
 	                XA_CARDINAL, 8, PropModeReplace, atomv, psize);
 
 #if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
-	/* If Xrandr 1.2, set property on output */
 	if (p->icc_out_atom != 0) {
+		/* If Xrandr 1.2, set property on output */
+		/* This seems to fail on some servers. Ignore the error ? */
+		if (XSetErrorHandler(null_error_handler) == 0) {
+			debugr("get_displays failed on XSetErrorHandler\n");
+			return 1;
+		}
+		g_error_handler_triggered = 0;
 		XRRChangeOutputProperty(p->mydisplay, p->output, p->icc_out_atom,
 	                XA_CARDINAL, 8, PropModeReplace, atomv, psize);
+		if (g_error_handler_triggered != 0) {
+			debugr("XRRChangeOutputProperty failed\n");
+			warning("Unable to set _ICC_PROFILE property on output"); 
+		}
+		XSync(p->mydisplay, False);		/* Flush the change out */
+		XSetErrorHandler(NULL);
 	}
 #endif /* randr >= V 1.2 */
 	free(atomv);
@@ -2395,6 +2441,9 @@ static void restore_ssaver(dispwin *p) {
 	if (p->dpmsenabled) {
 		DPMSEnable(p->mydisplay);
 	}
+
+	/* Flush any changes out */
+	XSync(p->mydisplay, False);
 }
 	
 /* ----------------------------------------------- */
@@ -3232,6 +3281,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		p->myrscreen = disp->rscreen;
 
 #if RANDR_MAJOR == 1 && RANDR_MINOR >= 2 && !defined(DISABLE_RANDR)
+		/* These will be NULL otherwise */
 		p->icc_atom = disp->icc_atom;
 		p->crtc = disp->crtc;
 		p->output = disp->output;
@@ -3239,7 +3289,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 #endif /* randr >= V 1.2 */
 
 		if (disp->edid != NULL) {
-			if ((p->edid = malloc(sizeof(unsigned char) * 128)) == NULL) {
+			if ((p->edid = malloc(sizeof(unsigned char) * disp->edid_len)) == NULL) {
 				debugr2((errout,"Malloc failed\n"));
 				dispwin_del(p);
 				return NULL;
@@ -3355,6 +3405,8 @@ int ddebug						/* >0 to print debug statements to stderr */
 		
 			/* Set aditional properties */
 			{
+				Atom optat;
+				unsigned int opaque = 0xffffffff;
 				unsigned int xid = (unsigned int)rootwindow;	/* Hope this is 32 bit */
 				XChangeProperty(
 					p->mydisplay, p->mywindow,
@@ -3365,6 +3417,16 @@ int ddebug						/* >0 to print debug statements to stderr */
 					(char *)(&xid),				/* Data is Root Window XID */
 					1							/* Number of elements of data */
 				);
+
+				/* Set hint for compositing WMs that the window must be opaque */
+				if ((optat = XInternAtom(p->mydisplay, "_NET_WM_WINDOW_OPACITY", False)) != None) {
+					XChangeProperty(p->mydisplay, p->mywindow, optat,
+	           				     XA_CARDINAL, 32, PropModeReplace, (char *)(&opaque), 1);
+				}
+				if ((optat = XInternAtom(p->mydisplay, "_NET_WM_WINDOW_OPACITY_LOCKED", False)) != None) {
+					XChangeProperty(p->mydisplay, p->mywindow, optat,
+	           				     XA_CARDINAL, 32, PropModeReplace, (char *)(&opaque), 1);
+				}
 			}
 
 			p->mygc = XCreateGC(p->mydisplay,p->mywindow,0,0);
@@ -3539,7 +3601,7 @@ int x11_daemon_mode(disppath *disp, int verb, int ddebug) {
 	Display *mydisplay;
 	int majv, minv;			/* Version */
 	int evb = 0, erb = 0;
-	int dopoll = 1;
+	int dopoll = 1;				/* Until XRandR is fixed */
 	XEvent myevent;
 	int update_profiles = 1;	/* Do it on entry */ 
 
@@ -3744,15 +3806,35 @@ int x11_daemon_mode(disppath *disp, int verb, int ddebug) {
 
 /* ================================================================ */
 #ifdef STANDALONE_TEST
-/* test code */
+/* test/utility code */
+
+#if defined(__APPLE__) && defined(__POWERPC__)
+
+/* Workaround for a ppc gcc 3.3 optimiser bug... */
+/* It seems to cause a segmentation fault instead of */
+/* converting an integer loop index into a float, */
+/* when there are sufficient variables in play. */
+static int gcc_bug_fix(int i) {
+	static int nn;
+	nn += i;
+	return nn;
+}
+#endif	/* APPLE */
 
 #include "numlib.h"
 
-static void
-usage(void) {
+static void usage(char *diag, ...) {
 	disppath **dp;
 	fprintf(stderr,"Test display patch window, Set Video LUTs, Install profiles, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	if (diag != NULL) {
+		va_list args;
+		fprintf(stderr,"Diagnostic: ");
+		va_start(args, diag);
+		vfprintf(stderr, diag, args);
+		va_end(args);
+		fprintf(stderr,"\n");
+	}
 	fprintf(stderr,"usage: dispwin [options] [calfile] \n");
 	fprintf(stderr," -v                   Verbose mode\n");
 #if defined(UNIX) && !defined(__APPLE__)
@@ -3774,14 +3856,15 @@ usage(void) {
 		}
 	}
 	free_disppaths(dp);
-	fprintf(stderr," -p ho,vo,ss          Position test window and scale it\n");
+	fprintf(stderr," -P ho,vo,ss          Position test window and scale it\n");
 	fprintf(stderr," -F                   Fill whole screen with black background\n");
 	fprintf(stderr," -i                   Run forever with random values\n");
 	fprintf(stderr," -G filename          Display RGB colors from CGATS file\n");
-	fprintf(stderr," -m                   Manually cycle through initial values\n");
+	fprintf(stderr," -m                   Manually cycle through values\n");
 	fprintf(stderr," -f                   Test grey ramp fade\n");
-	fprintf(stderr," -r                   Test just Video LUT loading\n");
+	fprintf(stderr," -r                   Test just Video LUT loading & Beeps\n");
 	fprintf(stderr," -n                   Test native output (rather than through Video LUT)\n");
+	fprintf(stderr," -s filename          Save the currently loaded Video LUT to 'filename'\n");
 	fprintf(stderr," -c                   Load a linear display calibration\n");
 	fprintf(stderr," -V                   Verify that calfile/profile cal. is currently loaded in LUT\n");
 	fprintf(stderr," -I                   Install profile for display and use it's calibration\n");
@@ -3817,6 +3900,7 @@ main(int argc, char *argv[]) {
 	int inf = 0;				/* Infnite/manual patches flag */
 	char pcname[MAXNAMEL+1] = "\000";	/* CGATS patch color name */
 	int clear = 0;				/* Clear any display calibration (any calname is ignored) */
+	char sname[MAXNAMEL+1] = "\000";	/* Current cal save name */
 	int verify = 0;				/* Verify that calname is currently loaded */
 	int installprofile = 0;		/* Install (1) or uninstall (2) a profile for display */
 	int loadprofile = 0;		/* Load displays profile calibration into LUT */
@@ -3852,7 +3936,7 @@ main(int argc, char *argv[]) {
 			}
 
 			if (argv[fa][1] == '?')
-				usage();
+				usage("Usage requested");
 
 			else if (argv[fa][1] == 'v')
 				verb = 1;
@@ -3874,10 +3958,10 @@ main(int argc, char *argv[]) {
 
 				/* X11 type display name. */
 				if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
-					if (++fa >= argc || argv[fa][0] == '-') usage();
+					if (++fa >= argc || argv[fa][0] == '-') usage("-DISPLAY parameter missing");
 					setenv("DISPLAY", argv[fa], 1);
 				} else {
-					if (na == NULL) usage();
+					if (na == NULL) usage("-d parameter missing");
 					fa = nfa;
 					if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
 						ix = atoi(na);
@@ -3886,32 +3970,32 @@ main(int argc, char *argv[]) {
 					if (disp != NULL)
 						free_a_disppath(disp);
 					if ((disp = get_a_display(ix-1)) == NULL)
-						usage();
+						usage("-d parameter '%s' is out of range",na);
 					if (iv > 0)
 						disp->rscreen = iv-1;
 				}
 #else
 				int ix;
-				if (na == NULL) usage();
+				if (na == NULL) usage("-d parameter is missing");
 				fa = nfa;
 				ix = atoi(na);
 				if (disp != NULL)
 					free_a_disppath(disp);
 				if ((disp = get_a_display(ix-1)) == NULL)
-					usage();
+					usage("-d parameter '%s' is out of range",na);
 #endif
 			}
 
 			/* Test patch offset and size */
-			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+			else if (argv[fa][1] == 'P') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage("-p parameters are missing");
 				if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &patscale) != 3)
-					usage();
+					usage("-p parameters '%s' is badly formatted",na);
 				if (ho < 0.0 || ho > 1.0
 				 || vo < 0.0 || vo > 1.0
 				 || patscale <= 0.0 || patscale > 50.0)
-					usage();
+					usage("-p parameters '%s' is out of range",na);
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
@@ -3928,7 +4012,7 @@ main(int argc, char *argv[]) {
 			/* CGATS patch color file */
 			else if (argv[fa][1] == 'G') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage("-G parameter is missing");
 				strncpy(pcname,na,MAXNAMEL); pcname[MAXNAMEL] = '\000';
 			}
 			else if (argv[fa][1] == 'f')
@@ -3939,6 +4023,12 @@ main(int argc, char *argv[]) {
 
 			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N')
 				donat = 1;
+
+			else if (argv[fa][1] == 's') {
+				fa = nfa;
+				if (na == NULL) usage("-s parameter is missing");
+				strncpy(sname,na,MAXNAMEL); sname[MAXNAMEL] = '\000';
+			}
 
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C')
 				clear = 1;
@@ -3960,7 +4050,7 @@ main(int argc, char *argv[]) {
 
 			else if (argv[fa][1] == 'S') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage("-S parameter is missing");
 					if (na[0] == 'n' || na[0] == 'N')
 						scope = p_scope_network;
 					else if (na[0] == 'l' || na[0] == 'L')
@@ -3969,7 +4059,7 @@ main(int argc, char *argv[]) {
 						scope = p_scope_user;
 			}
 			else
-				usage();
+				usage("Unknown flag '%s'",argv[fa]);
 		}
 		else
 			break;
@@ -3998,7 +4088,7 @@ main(int argc, char *argv[]) {
 	if (fa < argc) {
 		strncpy(calname,argv[fa++],MAXNAMEL); calname[MAXNAMEL] = '\000';
 		if (installprofile == 0 && loadprofile == 0 && verify == 0)
-			loadfile = 1;
+			loadfile = 1;		/* Load the given profile into the videoLUT */
 	}
 
 #if defined(UNIX) && !defined(__APPLE__)
@@ -4021,7 +4111,7 @@ main(int argc, char *argv[]) {
 		error("Can't verify and uninstall a displays profile at the same time");
 
 	/* Don't create a window if it won't be used */
-	if (ramd != 0 || clear != 0 || verify != 0 || loadfile != 0 || installprofile != 0 || loadprofile != 0)
+	if (ramd != 0 || sname[0] != '\000' || clear != 0 || verify != 0 || loadfile != 0 || installprofile != 0 || loadprofile != 0)
 		nowin = 1;
 
 	if (verb)
@@ -4030,6 +4120,69 @@ main(int argc, char *argv[]) {
 	if ((dw = new_dispwin(disp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, donat, blackbg, 1, ddebug)) == NULL) {
 		printf("Error - new_dispwin failed!\n");
 		return -1;
+	}
+
+	/* Save the current Video LUT to the calfile */
+	if (sname[0] != '\000') {
+		cgats *ocg;			/* output cgats structure */
+		time_t clk = time(0);
+		struct tm *tsp = localtime(&clk);
+		char *atm = asctime(tsp);	/* Ascii time */
+		cgats_set_elem *setel;		/* Array of set value elements */
+		int nsetel = 0;
+		
+		if (verb)
+			printf("About to save current loaded calibration to file '%s'\n",sname);
+
+		if ((r = dw->get_ramdac(dw)) == NULL) {
+			error("We don't have access to the VideoLUT");
+		}
+
+		ocg = new_cgats();				/* Create a CGATS structure */
+		ocg->add_other(ocg, "CAL"); 	/* our special type is Calibration file */
+
+		ocg->add_table(ocg, tt_other, 0);	/* Add a table for RAMDAC values */
+		ocg->add_kword(ocg, 0, "DESCRIPTOR", "Argyll Device Calibration Curves",NULL);
+		ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll synthcal", NULL);
+		atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
+		ocg->add_kword(ocg, 0, "CREATED",atm, NULL);
+
+		ocg->add_kword(ocg, 0, "DEVICE_CLASS","DISPLAY", NULL);
+		ocg->add_kword(ocg, 0, "COLOR_REP", "RGB", NULL);
+
+		ocg->add_field(ocg, 0, "RGB_I", r_t);
+		ocg->add_field(ocg, 0, "RGB_R", r_t);
+		ocg->add_field(ocg, 0, "RGB_G", r_t);
+		ocg->add_field(ocg, 0, "RGB_B", r_t);
+
+		if ((setel = (cgats_set_elem *)malloc(sizeof(cgats_set_elem) * 4)) == NULL)
+			error("Malloc failed!");
+
+		/* Write the video lut curve values */
+		for (i = 0; i < r->nent; i++) {
+			double iv = i/(r->nent-1.0);
+
+#if defined(__APPLE__) && defined(__POWERPC__)
+			gcc_bug_fix(i);
+#endif
+			setel[0].d = iv;
+			setel[1].d = r->v[0][i];
+			setel[2].d = r->v[1][i];
+			setel[3].d = r->v[2][i];
+
+			ocg->add_setarr(ocg, 0, setel);
+		}
+
+		free(setel);
+
+		if (ocg->write_name(ocg, sname))
+			error("Write error to '%s' : %s",sname,ocg->err);
+
+		ocg->del(ocg);		/* Clean up */
+		r->del(r);
+		r = NULL;
+
+		/* Fall through, as we may want to do other stuff too */
 	}
 
 	/* Clear the display calibration curve */
@@ -4087,13 +4240,17 @@ main(int argc, char *argv[]) {
 			error("We don't have access to the VideoLUT");
 		}
 
+		/* Should we load calfile instead of installed profile if it's present ??? */
 		if (loadprofile) {
+			if (calname[0] != '\000')
+				warning("Profile '%s' provided as argument is being ignored!\n",calname);
+				
 			/* Get the current displays profile */
 			debug2((errout,"Loading calibration from display profile '%s'\n",dw->name));
 			if ((rd_fp = dw->get_profile(dw, calname, MAXNAMEL)) == NULL)
 				error("Failed to get the displays current ICC profile\n");
-		} else {
 
+		} else {
 			/* Open up the profile for reading */
 			debug2((errout,"Loading calibration from file '%s'\n",calname));
 			if ((rd_fp = new_icmFileStd_name(calname,"r")) == NULL)
@@ -4286,7 +4443,7 @@ main(int argc, char *argv[]) {
 	}
 
 	/* If no other command selected, do a Window or VideoLUT test */
-	if (clear == 0 && installprofile == 0 && loadfile == 0 && verify == 0 && loadprofile == 0) {
+	if (sname[0] == '\000' && clear == 0 && installprofile == 0 && loadfile == 0 && verify == 0 && loadprofile == 0) {
 
 		if (ramd == 0) {
 

@@ -8,7 +8,7 @@
  *
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -125,8 +125,8 @@ in the ICC.
 */
 
 #include "icc.h"
-#include "xicc.h"
 #include "numlib.h"
+#include "xicc.h"
 
 /* NOTE:- that we only implement support for CMYK output here !!! */
 
@@ -1193,7 +1193,7 @@ p->clutipcsfunc(p->cbctx, start, NULL, auxst, dev);
 	for (i = 0; i < p->dout; i++)
 		ss[i] = 0.3;
 
-	if (powell(&rv, p->dout, dev, ss, 0.001, 1000, minfunc, p) != 0) {
+	if (powell(&rv, p->dout, dev, ss, 0.001, 1000, minfunc, p, NULL, NULL) != 0) {
 		return 1;
 	}
 

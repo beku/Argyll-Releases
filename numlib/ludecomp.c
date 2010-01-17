@@ -11,7 +11,7 @@
  * Copyright 2000 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -57,9 +57,9 @@ int      n	/* Dimensionality */
 #if defined(DO_POLISH) || defined(DO_CHECK)
 		free_dvector(sb, 0, n-1);
 		free_dmatrix(sa, 0, n-1, 0, n-1);
+#endif
 		if (pivx != PIVX)
 			free_ivector(pivx, 0, n-1);
-#endif
 		return 1;
 	}
 
@@ -271,6 +271,53 @@ int     *pivx		/* Pivoting row permutations record */
 		free_dvector(r, 0, n-1);
 }
 
+
+/* Invert a matrix A using lu decomposition */
+/* Return 1 if the matrix is singular, 0 if OK */
+int
+lu_invert(
+double **a,	/* A[][] input matrix, returns LU decimposition of A */
+int      n	/* Dimensionality */
+) {
+	int i, j;
+	double rip;		/* Row interchange parity */
+	int *pivx, PIVX[10];
+	double **y;
+
+	if (n <= 10)
+		pivx = PIVX;
+	else
+		pivx = ivector(0, n-1);
+
+	if (lu_decomp(a, n, pivx, &rip)) {
+		if (pivx != PIVX)
+			free_ivector(pivx, 0, n-1);
+		return 1;
+	}
+
+	/* Copy lu decomp. to y[][] */
+	y = dmatrix(0, n-1, 0, n-1);
+	for (i = 0; i < n; i++) {
+		for (j = 0; j < n; j++) {
+			y[i][j] = a[i][j];
+		}
+	}
+
+	/* Find inverse by columns */
+	for (i = 0; i < n; i++) {
+		for (j = 0; j < n; j++)
+			a[i][j] = 0.0;
+		a[i][i] = 1.0;
+		lu_backsub(y, n, pivx, a[i]);
+	}
+
+	/* Clean up */
+	free_dmatrix(y, 0, n-1, 0, n-1);
+	if (pivx != PIVX)
+		free_ivector(pivx, 0, n-1);
+
+	return 0;
+}
 
 
 

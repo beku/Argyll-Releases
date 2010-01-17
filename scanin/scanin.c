@@ -10,7 +10,7 @@
  *
  * Copyright 1995 - 2002 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -27,13 +27,12 @@
 
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "cgats.h"
-#include "scanrd.h"
-#include "numsup.h"
-#include "tiffio.h"
 #include "icc.h"
-#include "xcolorants.h"
-#include "xspect.h"
+#include "xicc.h"
+#include "scanrd.h"
+#include "tiffio.h"
 
 void fix_it8(char *o, char *i);
 
@@ -80,7 +79,7 @@ usage(void) {
 	fprintf(stderr,"usage: scanin -o [options] input.tif recogin.cht [diag.tif]\n");
 	fprintf(stderr,"   :- outputs file 'input.val', or\n");
 	fprintf(stderr,"\n");
-	fprintf(stderr,"usage: scanin -c [options] input.tif recogin.cht scanprofile.icc pbase [diag.tif]\n");
+	fprintf(stderr,"usage: scanin -c [options] input.tif recogin.cht scanprofile.[%s|mpp] pbase [diag.tif]\n",ICC_FILE_EXT_ND);
 	fprintf(stderr,"   :- inputs pbase.ti2 and outputs printer pbase.ti3, or\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"usage: scanin -r [options] input.tif recogin.cht pbase [diag.tif]\n");
@@ -88,10 +87,10 @@ usage(void) {
 	fprintf(stderr,"\n");
 	fprintf(stderr," -g                   Generate a chart reference (.cht) file\n");
 	fprintf(stderr," -o                   Output patch values in .val file\n");
-	fprintf(stderr," -c                   Use image to measure color to convert printer .ti2 to .ti3\n");
-	fprintf(stderr," -ca                  Same as -c, but accumulates more values to .ti3\n");
+	fprintf(stderr," -c                   Use image to measure color to convert printer pbase .ti2 to .ti3\n");
+	fprintf(stderr," -ca                  Same as -c, but accumulates more values to pbase .ti3\n");
 	fprintf(stderr,"                       from subsequent pages\n");
-	fprintf(stderr," -r                   Replace device values in .ti2/.ti3\n");
+	fprintf(stderr," -r                   Replace device values in pbase .ti2/.ti3\n");
 	fprintf(stderr,"                      Default is to create a scanner .ti3 file\n");
 	fprintf(stderr," -F x1,y1,x2,y2,x3,y3,x4,y4\n");
 	fprintf(stderr,"                      Don't auto recognize, locate using four fiducual marks\n");
@@ -116,6 +115,7 @@ usage(void) {
 	fprintf(stderr,"     n                diag - sample box names\n");
 	fprintf(stderr,"     a                diag - sample box areas\n");
 	fprintf(stderr,"     p                diag - pixel areas sampled\n");
+	fprintf(stderr," -O outputfile Override the default output filename & extension.\n");
 	exit(1);
 	}
 
@@ -123,12 +123,12 @@ usage(void) {
 int main(int argc, char *argv[])
 {
 	int fa,nfa;					/* current argument we're looking at */
-	static char tiffin_name[200] = { 0 };	/* TIFF Input file name (.tif) */
-	static char datin_name[200] = { 0 };	/* Data input name (.cie/.q60) */
-	static char datout_name[200] = { 0 };	/* Data output name (.ti3/.val) */
-	static char recog_name[200] = { 0 };	/* Reference chart name (.cht) */
-	static char prof_name[200] = { 0 };		/* scanner profile name (.cht) */
-	static char diag_name[200] = { 0 };		/* Diagnostic Output (.tif) name, if used */
+	static char tiffin_name[MAXNAMEL+1] = { 0 };	/* TIFF Input file name (.tif) */
+	static char datin_name[MAXNAMEL+4+1] = { 0 };	/* Data input name (.cie/.q60) */
+	static char datout_name[MAXNAMEL+4+1] = { 0 };	/* Data output name (.ti3/.val) */
+	static char recog_name[MAXNAMEL+1] = { 0 };	/* Reference chart name (.cht) */
+	static char prof_name[MAXNAMEL+1] = { 0 };		/* scanner profile name (.cht) */
+	static char diag_name[MAXNAMEL+1] = { 0 };		/* Diagnostic Output (.tif) name, if used */
 	int verb = 1;
 	int tmean = 0;		/* Return true mean, rather than robust mean */
 	int repl = 0;		/* Replace .ti3 device values from raster file */
@@ -183,12 +183,12 @@ int main(int argc, char *argv[])
 
 			if (argv[fa][1] == '?') {
 				usage();
-			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			} else if (argv[fa][1] == 'v') {
 				verb = 2;
 				if (na != NULL && isdigit(na[0])) {
 					verb = atoi(na);
 				}
-			} else if (argv[fa][1] == 'm' || argv[fa][1] == 'M') {
+			} else if (argv[fa][1] == 'm') {
 				tmean = 1;
 
 			} else if (argv[fa][1] == 'g') {
@@ -197,17 +197,17 @@ int main(int argc, char *argv[])
 				outo = 0;
 				colm = 0;
 
-			} else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
+			} else if (argv[fa][1] == 'r') {
 				repl = 1;
 				outo = 0;
 				colm = 0;
 
-			} else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+			} else if (argv[fa][1] == 'o') {
 				repl = 0;
 				outo = 1;
 				colm = 0;
 
-			} else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
+			} else if (argv[fa][1] == 'c') {
 				repl = 0;
 				outo = 0;
 				colm = 1;
@@ -298,6 +298,13 @@ int main(int argc, char *argv[])
 					}
 					na++;
 				}
+
+			/* Output file name */
+			} else if (argv[fa][1] == 'O') {
+				fa = nfa;
+				if (na == NULL) usage();
+				strncpy(datout_name,na,MAXNAMEL); datout_name[MAXNAMEL] = '\000';
+
 			} else 
 				usage();
 		} else
@@ -306,12 +313,13 @@ int main(int argc, char *argv[])
 
 	/* TIFF Raster input file name */
 	if (fa >= argc || argv[fa][0] == '-') usage();
-	strcpy(tiffin_name,argv[fa]);
+	strncpy(tiffin_name,argv[fa],MAXNAMEL); tiffin_name[MAXNAMEL] = '\000';
 
-	if ((flags & SI_BUILD_REF) == 0
-	     && repl == 0 && colm == 0) {	/* Not generate ref or replacing .ti3 dev */
+	if (datout_name[0] == '\000'		/* Not been overridden */
+	 && (flags & SI_BUILD_REF) == 0
+	 && repl == 0 && colm == 0) {	/* Not generate ref or replacing .ti3 dev */
 		char *xl;
-		strcpy(datout_name,argv[fa]);
+		strncpy(datout_name,argv[fa],MAXNAMEL); datout_name[MAXNAMEL] = '\000';
 		if ((xl = strrchr(datout_name, '.')) == NULL)	/* Figure where extention is */
 			xl = datout_name + strlen(datout_name);
 		if (outo == 0)	/* Creating scan calib data */
@@ -322,11 +330,11 @@ int main(int argc, char *argv[])
 
 	/* .cht Reference file in or out */
 	if (++fa >= argc || argv[fa][0] == '-') usage();
-	strcpy(recog_name,argv[fa]);
+	strncpy(recog_name,argv[fa],MAXNAMEL); recog_name[MAXNAMEL] = '\000';
 
 	if (colm > 0) {
 		if (++fa >= argc || argv[fa][0] == '-') usage();
-		strcpy(prof_name,argv[fa]);
+		strncpy(prof_name,argv[fa],MAXNAMEL); prof_name[MAXNAMEL] = '\000';
 	}
 
 	/* CGATS Data file input/output */
@@ -334,7 +342,7 @@ int main(int argc, char *argv[])
 		if (++fa >= argc || argv[fa][0] == '-') usage();
 		if (outo == 0) {	/* Creating scan calib data */
 			/* Data file */
-			strcpy(datin_name,argv[fa]);
+			strncpy(datin_name,argv[fa],MAXNAMEL); datin_name[MAXNAMEL] = '\000';
 		}
 		if (repl != 0 || colm > 0) {	/* Color from image or replacing .ti3 device data */
 			strcpy(datin_name,argv[fa]);
@@ -348,7 +356,7 @@ int main(int argc, char *argv[])
 	if (++fa < argc) {
 		if (argv[fa][0] == '-')
 			usage();
-		strcpy(diag_name,argv[fa]);
+		strncpy(diag_name,argv[fa],MAXNAMEL); diag_name[MAXNAMEL] = '\000';
 	} else {	/* Provide a default name */
 		strcpy(diag_name,"diag.tif");
 	}
@@ -529,6 +537,9 @@ int main(int argc, char *argv[])
 				}
 			}
 	
+			if (verb)
+				printf("Writing output values to file '%s'\n",datout_name);
+				
 			if (ocg->write_name(ocg, datout_name))
 				error("Write error to '%s' : %s",datout_name,ocg->err);
 	
@@ -562,8 +573,8 @@ int main(int argc, char *argv[])
 			if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
 				error("Input file '%s' isn't a CTI2 format file",datin_name);
 
-			if (icg->ntables != 1)
-				error("Input file '%s' doesn't contain exactly one table",datin_name);
+			if (icg->ntables < 1)
+				error("Input file '%s' doesn't contain at least one table",datin_name);
 	
 			if ((npat = icg->t[0].nsets) <= 0)
 				error("Input file '%s' doesn't contain any data sets",datin_name);
@@ -602,8 +613,8 @@ int main(int argc, char *argv[])
 			if (ocg->t[0].tt != tt_other || ocg->t[0].oi != 0)
 				error("Input file '%s' isn't a CTI3 format file",datout_name);
 
-			if (ocg->ntables != 1)
-				error("Input file '%s' doesn't contain exactly one table",datout_name);
+			if (ocg->ntables < 1)
+				error("Input file '%s' doesn't contain at least one table",datout_name);
 	
 			if (npat != ocg->t[0].nsets)
 				error("Input file '%s' doesn't contain same number of data sets",datout_name);
@@ -638,7 +649,7 @@ int main(int argc, char *argv[])
 				if (ocg->t[0].ftype[dfi[dim][i]] != r_t)
 					error("Input '%s' Field %s is wrong type",datout_name,dfnames[dim][i]);
 			}
-	
+
 			/* Initialise, ready to read out all the values */
 			for (i = sr->reset(sr); i > 0; i--) {	/* For all samples in .tiff file */
 				char loc[100];		/* Target patch location */
@@ -680,6 +691,9 @@ int main(int argc, char *argv[])
 			}
 	
 			/* Flush our changes */
+			if (verb)
+				printf("Writing output values to file '%s'\n",datout_name);
+				
 			if (ocg->write_name(ocg, datout_name))
 				error("Write error to file '%s' : %s",datout_name,ocg->err);
 	
@@ -691,9 +705,10 @@ int main(int argc, char *argv[])
 			/* All this needs to track the code in spectro/printread.c */
 			cgats *icg;			/* input .ti2 cgats structure */
 			cgats *ocg;			/* input/output .ti3 cgats structure */
-			icmFile *rd_fp;		/* Image to CIE lookup */
-			icc *rd_icco;
+			icmFile *rd_fp = NULL;	/* Image to CIE lookup */
+			icc *rd_icco = NULL;
 			icmLuBase *luo;
+			mpp *mlu = NULL;
 			time_t clk = time(0);
 			struct tm *tsp = localtime(&clk);
 			char *atm = asctime(tsp); /* Ascii time */
@@ -708,14 +723,15 @@ int main(int argc, char *argv[])
 	
 			icg = new_cgats();			/* Create a CGATS structure */
 			icg->add_other(icg, "CTI2"); 	/* special type Calibration Target Information 2 */
+			icg->add_other(icg, "CAL"); 	/* There may be a calibration too */
 		
 			if (icg->read_name(icg, datin_name))
 				error("CGATS file '%s' read error : %s",datin_name,icg->err);
 		
 			if (icg->t[0].tt != tt_other || icg->t[0].oi != 0)
 				error("Input file '%s' isn't a CTI2 format file",datin_name);
-			if (icg->ntables != 1)
-				error("Input file '%s' doesn't contain exactly one table",datin_name);
+			if (icg->ntables < 1)
+				error("Input file '%s' doesn't contain at least one table",datin_name);
 		
 			if ((npat = icg->t[0].nsets) <= 0)
 				error("Input file '%s' has no sets of data",datin_name);
@@ -731,8 +747,8 @@ int main(int argc, char *argv[])
 		
 				if (ocg->t[0].tt != tt_other || ocg->t[0].oi != 0)
 					error("Input file '%s' isn't a CTI3 format file",datout_name);
-				if (ocg->ntables != 1)
-					error("Input file '%s' doesn't contain exactly one table",datout_name);
+				if (ocg->ntables < 1)
+					error("Input file '%s' doesn't at least exactly one table",datout_name);
 				if ((nopat = ocg->t[0].nsets) <= 0)
 					error("Input file '%s' has no existing sets of data",datout_name);
 
@@ -759,6 +775,38 @@ int main(int argc, char *argv[])
 
 				if ((ti = icg->find_kword(icg, 0, "TOTAL_INK_LIMIT")) >= 0)
 					ocg->add_kword(ocg, 0, "TOTAL_INK_LIMIT",icg->t[0].kdata[ti], NULL);
+
+				/* See if there is a calibration in the .ti2, and copy it if there is */
+				{
+					int oi, tab;
+			
+					oi = icg->get_oi(icg, "CAL");
+			
+					for (tab = 0; tab < icg->ntables; tab++) {
+						if (icg->t[tab].tt == tt_other && icg->t[tab].oi == oi) {
+							break;
+						}
+					}
+					if (tab < icg->ntables) {
+						xcal *cal = NULL;
+			
+						if (verb)
+							printf("Copying .cal from '%s' to '%s'\n",datin_name,datout_name);
+						
+						if ((cal = new_xcal()) == NULL) {
+							error("new_xcal failed");
+						}
+						if (cal->read_cgats(cal, icg, tab, datin_name) != 0)  {
+							error("%s",cal->err);
+						}
+			
+						if (cal->write_cgats(cal, ocg)) {
+							error("%s",cal->err);
+						}
+			
+						cal->del(cal);
+					}
+				}
 			}
 
 			if ((si = icg->find_field(icg, 0, "SAMPLE_ID")) < 0)
@@ -788,11 +836,12 @@ int main(int argc, char *argv[])
 				int i, j, ii;
 				int chix[ICX_MXINKS];	/* Device chanel indexes */
 				int xyzix[3];			/* XYZ chanel indexes */
-				char *ident;
+				char *ident, *bident;
 				char *xyzfname[3] = { "XYZ_X", "XYZ_Y", "XYZ_Z" };
 		
 				nchan = icx_noofinks(nmask);
-				ident = icx_inkmask2char(nmask); 
+				ident = icx_inkmask2char(nmask, 1); 
+				bident = icx_inkmask2char(nmask, 0); 
 		
 				/* Device channels */
 				for (j = 0; j < nchan; j++) {
@@ -800,7 +849,7 @@ int main(int argc, char *argv[])
 					char fname[100];
 		
 					imask = icx_index2ink(nmask, j);
-					sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : ident,
+					sprintf(fname,"%s_%s",nmask == ICX_W || nmask == ICX_K ? "GRAY" : bident,
 					                      icx_ink2char(imask));
 		
 					if ((ii = icg->find_field(icg, 0, fname)) < 0)
@@ -901,6 +950,7 @@ int main(int argc, char *argv[])
 					free(setel);
 				}
 				free(ident);
+				free(bident);
 
 			} else
 				error("Input file '%s' keyword COLOR_REPS has unknown value",datin_name);
@@ -919,25 +969,52 @@ int main(int argc, char *argv[])
 					error("Read: Creation of ICC object failed");
 		
 				/* Read the header and tag list */
-				if ((rv = rd_icco->read(rd_icco,rd_fp,0)) != 0)
-					error("File '%s' read: %d, %s",prof_name,rv,rd_icco->err);
+				if ((rv = rd_icco->read(rd_icco,rd_fp,0)) == 0) {
 		
-				/* Check that this is an input profile */
-				if (rd_icco->header->deviceClass != icSigInputClass)
-					error("ICC profile '%s' is expected to be an input profile",prof_name);
+					/* Get the Fwd table, absolute with XYZ override */
+					if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, icAbsoluteColorimetric,
+					                              icSigXYZData, icmLuOrdNorm)) == NULL) {
+						error("%d, %s",rd_icco->errc, rd_icco->err);
+					}
 
-				/* Get the Fwd table, absolute with XYZ override */
-				if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, icAbsoluteColorimetric,
-				                              icSigXYZData, icmLuOrdNorm)) == NULL) {
-					error("%d, %s",rd_icco->errc, rd_icco->err);
+					/* Get details of conversion */
+					luo->spaces(luo, &ins, &inn, &outs, &outn, NULL, NULL, NULL, NULL, NULL);
+
+					/* Check that it matches what we expect */
+
+				} else {	/* Not a valid ICC */
+					inkmask cnv_nmask = 0;  /* Conversion input nmask */
+
+					/* Close out the ICC profile */
+					rd_icco->del(rd_icco);
+					rd_icco = NULL;
+					rd_fp->del(rd_fp);
+					rd_fp = NULL;
+
+					/* If we don't have an ICC lookup object, look for an MPP */
+
+					if ((mlu = new_mpp()) == NULL)
+						error ("Creation of MPP object failed");
+
+					if ((rv = mlu->read_mpp(mlu, prof_name)) == 0) {
+
+						/* mlu defaults to absolute XYZ lookup */
+						mlu->get_info(mlu, &cnv_nmask, &inn, NULL, NULL, NULL, NULL, NULL);
+				
+						outn = 3;
+						outs = icSigXYZData;
+				
+						if ((ins = icx_colorant_comb_to_icc(cnv_nmask)) == 0)
+							error ("Couldn't match MPP mask to valid ICC colorspace");
+
+					} else {
+						mlu->del(mlu);
+						mlu = NULL;
+						error("File '%s' failed to read as ICC or MPP profile",prof_name);
+					}
 				}
-
-				/* Get details of conversion */
-				luo->spaces(luo, &ins, &inn, &outs, &outn, NULL, NULL, NULL, NULL);
-
-				/* Check that it matches what we expect */
 				if (inn != depth || tiffs != ins)
-					error("ICC profile '%s' doesn't match TIFF file type",prof_name);
+					error("%s profile '%s' doesn't match TIFF file type",luo != NULL ? "ICC" : "MPP", prof_name);
 			}
 
 			/* Initialise, ready to read out all the values */
@@ -962,7 +1039,7 @@ int main(int argc, char *argv[])
 						char *sidp = (char *)icg->t[0].fdata[j][si];	/* Get id */
 
 						if (strcmp(sidp, "0") == 0)
-							continue;			/* Padding, so skip it */
+							break;			/* Padding, so ignore it */
 
 						/* Search for this sample id in .ti3 file */
 						for (k = 0; k < nopat; k++) {
@@ -975,7 +1052,10 @@ int main(int argc, char *argv[])
 									P[e] /= 255.0;			/* Convert to 0.0 .. 1.0 range */
 
 								/* Convert to XYZ */
-								luo->lookup(luo, xyz, P);
+								if (luo != NULL)
+									luo->lookup(luo, xyz, P);
+								else
+									mlu->lookup(mlu, xyz, P);
 
 								/* Sanity check XYZ ? */
 								// ~~~99
@@ -1020,12 +1100,20 @@ int main(int argc, char *argv[])
 					printf("All sample values have been filled\n");
 			}
 
+			if (verb)
+				printf("Writing output values to file '%s'\n",datout_name);
+				
 			if (ocg->write_name(ocg, datout_name))
 				error("File '%s' write error : %s",datout_name,ocg->err);
 		
-			luo->del(luo);
-			rd_icco->del(rd_icco);
-			rd_fp->del(rd_fp);
+			if (luo != NULL)
+				luo->del(luo);
+			if (rd_icco != NULL)
+				rd_icco->del(rd_icco);
+			if (rd_fp != NULL)
+				rd_fp->del(rd_fp);
+			if (mlu != NULL)
+				mlu->del(mlu);
 
 			ocg->del(ocg);		/* Clean up */
 			icg->del(icg);		/* Clean up */
@@ -1264,6 +1352,9 @@ int main(int argc, char *argv[])
 					printf("Warning: Couldn't match field '%s'\n",id);
 			}
 	
+			if (verb)
+				printf("Writing output values to file '%s'\n",datout_name);
+				
 			if (ocg->write_name(ocg, datout_name))
 				error("Output file '%s' write error : %s",datout_name, ocg->err);
 	

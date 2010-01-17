@@ -36,7 +36,7 @@ agents, and cheaper papers more.<br>
 <br>
 <h3>Reflection Models and Spectro-colorimetry</h3>
 The way a spectrometer measures the effect of ink
-on paper, depends on a model of how an illumination is
+on paper, depends on a model of how an illuminant is
 reflected by the ink and the paper. Typically a spectrometer instrument
 illuminates the sample with a known illumination, often a incandescent
 tungsten lamp having a color temperature of&nbsp; 2800 degrees Kelvin.
@@ -46,14 +46,20 @@ between 0 and 100% by dividing by it's measurement illuminant's
 intensity at each
 wavelength. When it comes time to use that measurement to create an ICC
 profile,
-the intensity of the illumination that is assumed is going to be used
-to view the sample at each wavelength (typically D50 for standard ICC
+the intensity of the assumed viewing illumination at each wavelength
+(typically D50 for standard ICC
 profiles) is then multiplied by the reflectance
 at each wavelength, and the overall spectral levels are in this way
 converted
 into tri-stimulus values using an observer model.<br>
 <br>
-Notice that a key assumption in all of this is that the light that
+So while the instrument measures with one type of light (type A), it
+returns a measurement as if it had been measured under a different kind
+of light (D50) by making use of a simple model of light reflection of
+the media.<br>
+<br>
+Notice that a key assumption of this simple model is that the light
+that
 impinges on the sample at a given wavelength is reflected back at
 exactly the same wavelength at a diminished intensity. Notice also
 that any sort of fluorescent material (such as FWA) breaks this model,
@@ -61,7 +67,7 @@ since fluorescent materials emit light a different wavelengths to which
 they absorb it.<br>
 <br>
 <h3>What Argyll's FWA compensation does</h3>
-The FWA compensation function in Argyll, improve this simple model of
+The FWA compensation function in Argyll improve on this simple model of
 spectral reflection by taking into account the action of FWA. To do
 this, it needs to measure the amount and nature of the FWA in the
 media, and then have enough information about the viewing environment
@@ -71,10 +77,12 @@ To be able to measure the level of FWA in the media, the instrument
 needs to be able to "see" the FWA in action, so the instrument needs to
 be illuminating the samples with some level of U.V. Typically all
 instruments do this, unless they have been fitted with a filter that
-filters out any U.V. illumination (so called "UV cut" instruments), so
-such UV filtered instruments are not suitable for use with FWA
+filters out any U.V. illumination (so called "UV cut" instruments), or
+use an illumination source such as a "white" LED that doesn't emit any
+U.V.<br>
+Such UV filtered instruments are not suitable for use with FWA
 compensation.<br>
-The effects of FWA are modelled spectrally, so a spectral reading
+The effects of FWA are modeled spectrally, so a spectral reading
 instrument is also required.<br>
 <br>
 Argyll can compute a model for the effects of FWA given the media's
@@ -157,7 +165,8 @@ take
 into account the different levels of FWA activity between the
 illumination using by the instrument to measure the media, and real
 D50. To
-allow for this and actually meet letter of the ICC specifications, FWA
+allow for this and actually meet the letter of the ICC specifications,
+FWA
 compensation should ideally be used when building a interchangeable ICC
 profile, by selecting the D50 illuminant, and the 1931_2 observer
 model. Note however that this is likely to make profiles less
@@ -180,7 +189,7 @@ In practice it is possible to compensate for the color shift that
 results in viewing the media under non-D50 illumination or using a non
 1931_2 observer, or allowing
 for FWA effects without severe incompatibility because all
-rendering intents except absolute rendering, normalize to the media
+rendering intents except absolute rendering normalize to the media
 color, rendering the media white as white, even though the absolute
 values are not measured using a D50 illuminant.<br>
 <h3>FWA myths</h3>

@@ -8,7 +8,7 @@
  * Copyright 1996-2004 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -20,11 +20,15 @@
  * 
  * Preview profiles are not currently generated.
  * 
- * The gamut clut should be implemented with xicc/rspl
+ * The gamut cLUT should be implemented with xicc/rspl
  */
 
 /*
  * TTBD:
+ *		Should allow an option to build a display profile with both
+ *		an XYZ cLUT and a matrix, for systems that won't load a non-matrix
+ *		profile, yet have some software that can use the more accurate cLUT profile.
+ *
  *      Add Argyll private tag to record ink limit etc. to automate link parameters.
  *      Estimate ink limit from B2A tables if no private tag ?
  *      Add used option for black relative
@@ -49,6 +53,7 @@
 #include <time.h>
 #include "copyright.h"
 #include "config.h"
+#include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
 #include "prof.h"
@@ -62,7 +67,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
-		fprintf(stderr,"Diagnostic: ");
+		fprintf(stderr,"  Diagnostic: ");
 		va_start(args, diag);
 		vfprintf(stderr, diag, args);
 		va_end(args);
@@ -92,52 +97,54 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -K parameters   Same as -k, but target is K locus rather than K value itself\n");
 	fprintf(stderr," -l tlimit       override total ink limit, 0 - 400%% (default from .ti3)\n");
 	fprintf(stderr," -L klimit       override black ink limit, 0 - 100%% (default from .ti3)\n");
-	fprintf(stderr," -a lxgs         Algorithm type override\n");
-	fprintf(stderr,"                 l = Lab clut (def.), x = XYZ lut\n");
-	fprintf(stderr,"                 g = gamma+matrix, s = shaper+matrix\n");
+	fprintf(stderr," -a lxXgsGS      Algorithm type override\n");
+	fprintf(stderr,"                 l = Lab cLUT (def.), x = XYZ cLUT, X = display XYZ cLUT + matrix\n");
+	fprintf(stderr,"                 g = gamma+matrix, s = shaper+matrix,\n");
 	fprintf(stderr,"                 G = single gamma+matrix, S = single shaper+matrix\n");
 //  Development - not supported
 //	fprintf(stderr," -I ver          Set ICC profile version > 2.2.0\n");
 //	fprintf(stderr,"                 ver = 4, Enable ICC V4 creation\n");
 	fprintf(stderr," -u              If Lut input profile, make it absolute (non-standard)\n");
+	fprintf(stderr," -U scale        If input profile, scale media white point by scale\n");
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr,"                 A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
 	fprintf(stderr," -r avgdev       Average deviation of device+instrument readings as a percentage (default %4.2f%%)\n",DEFAVGDEV);
 /* Research options: */
-/*	fprintf(stderr," -rs smooth      RSPL suplimental optimised smoothing factor\n"); */
-/*	fprintf(stderr," -rr smooth      RSPL raw underlying smoothing factor\n"); */
-	fprintf(stderr," -s src%s      Apply gamut mapping to perceptual B2A table for given source space\n",ICC_FILE_EXT);
-	fprintf(stderr," -S src%s      Apply gamut mapping to perceptual and saturation B2A table\n",ICC_FILE_EXT);
-	fprintf(stderr," -nP             Use colormetric source gamut to make perceptual table\n");
-	fprintf(stderr," -nS             Use colormetric source gamut to make saturation table\n");
-	fprintf(stderr," -g src.gam      Use source image gamut as well for gamut mapping\n");
+/*	fprintf(stderr," -r sSMOOTH      RSPL suplimental optimised smoothing factor\n"); */
+/*	fprintf(stderr," -r rSMOOTH      RSPL raw underlying smoothing factor\n"); */
+	fprintf(stderr," -s src%s      Apply gamut mapping to output profile perceptual B2A table for given source space\n",ICC_FILE_EXT);
+	fprintf(stderr," -S src%s      Apply gamut mapping to output profile perceptual and saturation B2A table\n",ICC_FILE_EXT);
+	fprintf(stderr," -nP             Use colormetric source gamut to make output profile perceptual table\n");
+	fprintf(stderr," -nS             Use colormetric source gamut to make output profile saturation table\n");
+	fprintf(stderr," -g src.gam      Use source image gamut as well for output profile gamut mapping\n");
 	fprintf(stderr," -p absprof      Incorporate abstract profile into output tables\n");
-	fprintf(stderr," -t intent       Override gamut mapping intent for perceptual table:\n");
-	fprintf(stderr," -T intent       Override gamut mapping intent for saturation table:\n");
+	fprintf(stderr," -t intent       Override gamut mapping intent for output profile perceptual table:\n");
+	fprintf(stderr," -T intent       Override gamut mapping intent for output profile saturation table:\n");
 	for (i = 0; ; i++) {
 		icxGMappingIntent gmi;
 		if (xicc_enum_gmapintent(&gmi, i, NULL) == icxIllegalGMIntent)
 			break;
 		fprintf(stderr,"              %s\n",gmi.desc);
 	}
-	fprintf(stderr," -c viewcond     set input viewing conditions for %s gamut mapping,\n",icxcam_description(cam_default));
+	fprintf(stderr," -c viewcond     set input viewing conditions for output profile %s gamut mapping,\n",icxcam_description(cam_default));
 	fprintf(stderr,"                  either an enumerated choice, or a parameter\n");
-	fprintf(stderr," -d viewcond     set output viewing conditions for %s gamut mapping\n",icxcam_description(cam_default));
+	fprintf(stderr," -d viewcond     set output viewing conditions for output profile %s gamut mapping\n",icxcam_description(cam_default));
 	fprintf(stderr,"                  either an enumerated choice, or a parameter\n");
 	fprintf(stderr,"                  Also sets out of gamut clipping CAM space.\n");
-	fprintf(stderr,"                  either an enumerated choice,, or a series of parameters:value changes\n");
+	fprintf(stderr,"                  either an enumerated choice, or a series of parameters:value changes\n");
 	for (i = 0; ; i++) {
 		icxViewCond vc;
-		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1) == -999)
+		if (xicc_enum_viewcond(NULL, &vc, i, NULL, 1, NULL) == -999)
 			break;
 
 		fprintf(stderr,"             %s\n",vc.desc);
 	}
 	fprintf(stderr," -P              Create gamut gammap_p.wrl and gammap_s.wrl diagostics\n");
-	fprintf(stderr," inoutfile        Base name for input.ti3/output%s file\n",ICC_FILE_EXT);
+	fprintf(stderr," -O outputfile   Override the default output filename.\n");
+	fprintf(stderr," inoutfile       Base name for input.ti3/output%s file\n",ICC_FILE_EXT);
 	exit(1);
 }
 
@@ -159,6 +166,7 @@ int main(int argc, char *argv[]) {
 	int nostos = 0;				/* Use colormetric source gamut to make saturation table */
 	int gamdiag = 0;			/* Make gamut mapping diagnostic wrl plots */
 	int nsabs = 0;				/* Make non-standard absolute input lut profile */
+	double iwpscale = -1.0;		/* Input white point scale factor */
 	int doinb2a = 1;			/* Create an input device B2A table */
 	int inking = 3;				/* Default K target ramp K */
 	int locus = 0;				/* Default K value target */
@@ -180,13 +188,16 @@ int main(int argc, char *argv[]) {
 	icxViewCond ovc_p;			/* Output Viewing Parameters for CAM (enables CAM clip) */
 	int ivc_e = -1, ovc_e = -1;	/* Enumerated viewing condition */
 	icxGMappingIntent pgmi;		/* default Perceptual gamut mapping intent */
+	int pgmi_set = 0;			/* Set by user option */
 	icxGMappingIntent sgmi;		/* default Saturation gamut mapping intent */
+	int sgmi_set = 0;			/* Set by user option */
 	char baname[MAXNAMEL+1] = "";	/* Input & Output base name */
 	char inname[MAXNAMEL+1] = "";	/* Input cgats file base name */
 	char outname[MAXNAMEL+1] = "";	/* Output cgats file base name */
 	cgats *icg;					/* input cgats structure */
 	int ti;						/* Temporary CGATs index */
 	prof_atype ptype = prof_default;	/* Default for each type of device */
+	int mtxtoo = 0;				/* NZ if matrix tags should be created for Display XYZ cLUT */
 	icmICCVersion iccver = icmVersionDefault;	/* ICC profile version to create */
 	profxinf xpi;		/* Extra profile information */
 
@@ -217,7 +228,7 @@ int main(int argc, char *argv[]) {
 	xicc_enum_gmapintent(&pgmi, icxPerceptualGMIntent, NULL);
 	xicc_enum_gmapintent(&sgmi, icxSaturationGMIntent, NULL);
 
-	if (argc < 2)
+	if (argc <= 1)
 		usage("Too few arguments, got %d expect at least %d",argc-1,1);
 
 	/* Process the arguments */
@@ -262,7 +273,7 @@ int main(int argc, char *argv[]) {
 			/* Profile Description */
 			else if (argv[fa][1] == 'D') {
 				fa = nfa;
-				if (na == NULL) usage("Expect argument to profile description flag -E");
+				if (na == NULL) usage("Expect argument to profile description flag -D");
 				xpi.profDesc = na;
 			}
 
@@ -361,8 +372,16 @@ int main(int argc, char *argv[]) {
 				}
 			}
 
-			else if (argv[fa][1] == 'u' || argv[fa][1] == 'U')
+			else if (argv[fa][1] == 'u') {
 				nsabs = 1;
+			}
+			else if (argv[fa][1] == 'U') {
+				fa = nfa;
+				if (na == NULL) usage("Expected argument to input white point scale flag -U");
+				iwpscale = atof(na);
+				if (iwpscale < 0.0 || iwpscale > 100.0)
+					usage("Argument '%s' to flag -U out of range",na);
+			}
 
 			/* Inking rule */
 			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
@@ -440,8 +459,10 @@ int main(int argc, char *argv[]) {
 					case 'L':
 						ptype = prof_clutLab;
 						break;
-					case 'x':
 					case 'X':
+						mtxtoo = 1;
+						/* Fall though */
+					case 'x':
 						ptype = prof_clutXYZ;
 						break;
 					case 'g':
@@ -479,6 +500,9 @@ int main(int argc, char *argv[]) {
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
+				} else if (strcmp(na, "C") == 0) {
+					spec = 1;
+					illum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
@@ -503,7 +527,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* Spectral Observer type */
-			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+			else if (argv[fa][1] == 'o') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to observer flag -o");
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
@@ -578,34 +602,18 @@ int main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 't') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to perceptul intent override flag -t");
-#ifdef NEVER
-				if (na[0] >= '0' && na[0] <= '9') {
-					int i = atoi(na);
-					if (xicc_enum_gmapintent(&pgmi, i, NULL) == icxIllegalGMIntent)
-						usage("Unrecognised intent '%s' to perceptual override flag -t",na);
-				} else
-#endif
-				{
-					if (xicc_enum_gmapintent(&pgmi, icxNoGMIntent, na) == icxIllegalGMIntent)
-						usage("Unrecognised intent '%s' to perceptual override flag -t",na);
-				}
+				if (xicc_enum_gmapintent(&pgmi, icxNoGMIntent, na) == icxIllegalGMIntent)
+					usage("Unrecognised intent '%s' to perceptual override flag -t",na);
+				pgmi_set = 1;
 			}
 
 			/* Saturation Mapping intent override */
 			else if (argv[fa][1] == 'T') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to saturation intent override flag -T");
-#ifdef NEVER
-				if (na[0] >= '0' && na[0] <= '9') {
-					int i = atoi(na);
-					if (xicc_enum_gmapintent(&sgmi, i, NULL) == icxIllegalGMIntent0)
-						usage("Unrecognised intent '%s' to saturation override flag -t",na);
-				} else
-#endif
-				{
-					if (xicc_enum_gmapintent(&sgmi, icxNoGMIntent, na) == icxIllegalGMIntent)
-						usage("Unrecognised intent '%s' to saturation override flag -t",na);
-				}
+				if (xicc_enum_gmapintent(&sgmi, icxNoGMIntent, na) == icxIllegalGMIntent)
+					usage("Unrecognised intent '%s' to saturation override flag -T",na);
+				sgmi_set = 1;
 			}
 
 			/* Viewing conditions */
@@ -620,20 +628,12 @@ int main(int argc, char *argv[]) {
 
 				fa = nfa;
 				if (na == NULL) usage("Viewing conditions flag (-c) needs an argument");
-#ifdef NEVER
-				if (na[0] >= '0' && na[0] <= '9') {
-					if (vc == &ivc_p)
-						ivc_e = atoi(na);
-					else
-						ovc_e = atoi(na);
-				} else
-#endif
 				if (na[1] != ':') {
 					if (vc == &ivc_p) {
-						if ((ivc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
+						if ((ivc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1, NULL)) == -999)
 							usage("Urecognised Enumerated Viewing conditions '%s'",na);
 					} else {
-						if ((ovc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1)) == -999)
+						if ((ovc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1, NULL)) == -999)
 							usage("Urecognised Enumerated Viewing conditions '%s'",na);
 					}
 				} else if (na[0] == 's' || na[0] == 'S') {
@@ -683,6 +683,13 @@ int main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'P')
 				gamdiag = 1;
 
+			/* Output file name */
+			else if (argv[fa][1] == 'O') {
+				fa = nfa;
+				if (na == NULL) usage("Output filename override (-O) needs an argument");
+				strncpy(outname,na,MAXNAMEL); outname[MAXNAMEL] = '\000';
+			}
+
 			else 
 				usage("Unknown flag '%c'",argv[fa][1]);
 		} else
@@ -695,12 +702,30 @@ int main(int argc, char *argv[]) {
 	if (xpi.profDesc == NULL)
 		xpi.profDesc = baname;	/* Default description */
 	strcpy(inname,baname);
-	strcpy(outname,baname);
 	strcat(inname,".ti3");
-	strcat(outname,ICC_FILE_EXT);
+	if (outname[0] == '\000') {		/* If not overridden */
+		strcpy(outname,baname);
+		strcat(outname,ICC_FILE_EXT);
+	}
 
+	/* Issue some errors & warnings for strange combinations */
 	if (fwacomp && spec == 0)
-		error ("FWA compensation only works when viewer and/or illuminant selected");
+		error("FWA compensation only works when viewer and/or illuminant selected");
+
+	if (pgmi_set && ipname[0] == '\000')
+		warning("-t perceptual intent override only works if -s srcprof or -S srcprof is used");
+
+	if (sgmi_set && ipname[0] == '\000')
+		warning("-T saturation intent override only works if -S srcprof is used");
+
+	if (sgmi_set && sepsat == 0) {	/* Won't do much otherwise */
+		if (verb)
+			printf("Saturation intent override was set, so adding saturation intent table\n");
+		sepsat = 1;
+	}
+
+	if (sgname[0] != '\000' && ipname[0] == '\000')
+		warning("-g srcgam will do nothing without -s srcprof or -S srcprof");
 
 	if (oquality == -1) {		/* B2A tables will be used */
 		oquality = iquality;
@@ -725,7 +750,7 @@ int main(int argc, char *argv[]) {
 	 && icg->find_field(icg, 0, "XYZ_X") < 0) {
 
 		if (icg->find_kword(icg, 0, "SPECTRAL_BANDS") < 0)
-			error ("Neither CIE nor spectral data found in file '%s'",inname);
+			error("Neither CIE nor spectral data found in file '%s'",inname);
 
 		/* Switch to using spectral information */
 		if (verb)
@@ -765,6 +790,22 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
+		/* (Note that this isn't set by any of the Argyll tools currently, */
+		/*  but can be set manually.) */
+		if ((ti = icg->find_kword(icg, 0, "BLACK_INK_LIMIT")) >= 0) {
+			int kmax;
+			kmax = atoi(icg->t[0].kdata[ti]);
+			if (kmax > 0 && kmax <= 100.0) {
+				if (klimit > 0 && klimit <= 100.0) {	/* User has specified limit as option */
+					if (kmax < klimit) {
+						warning("Black ink limit greater than original chart! (%d%% > %d%%)",klimit,kmax);
+					}
+				} else {
+					klimit = (int)kmax;
+				}
+			}
+		}
+
 		if (tlimit >= 0 && tlimit < 400.0) {
 			if (verb)
 				printf("Total ink limit being used is %d%%\n",tlimit);
@@ -785,7 +826,11 @@ int main(int argc, char *argv[]) {
 			ink.klimit = -1.0;			/* Don't use a limit */
 		}
 
+		ink.KonlyLmin = 0;				/* Use normal black Lmin for locus */
 		ink.c.Ksmth = ICXINKDEFSMTH;	/* default black curve smoothing */
+		ink.c.Kskew = ICXINKDEFSKEW;	/* default black curve skew */
+		ink.x.Ksmth = ICXINKDEFSMTH;
+		ink.x.Kskew = ICXINKDEFSKEW;
 
 		if (inking == 0) {			/* Use minimum */
 			ink.k_rule = locus ? icxKluma5 : icxKluma5k;
@@ -827,10 +872,10 @@ int main(int argc, char *argv[]) {
 		if (ptype == prof_default)
 			ptype = prof_clutLab;
 		else if (ptype != prof_clutLab && ptype != prof_clutXYZ) {
-			error ("Output profile can only be a clut algorithm");
+			error ("Output profile can only be a cLUT algorithm");
 		}
 
-		make_output_icc(ptype, iccver, verb, iquality, oquality,
+		make_output_icc(ptype, 0, iccver, verb, iquality, oquality,
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
 		                gamdiag, verify, &ink, inname, outname, icg, spec,
 		                illum, &cust_illum, observ, fwacomp, smooth, avgdev,
@@ -845,7 +890,7 @@ int main(int argc, char *argv[]) {
 		if (ptype == prof_default)
 			ptype = prof_clutLab;		/* For best possible quality */
 		make_input_icc(ptype, iccver, verb, iquality, oquality, noisluts, noipluts, nooluts, nocied,
-		               verify, nsabs, doinb2a, inname, outname, icg,
+		               verify, nsabs, iwpscale, doinb2a, inname, outname, icg,
 		               spec, illum, &cust_illum, observ, smooth, avgdev, &xpi);
 
 	} else if (strcmp(icg->t[0].kdata[ti],"DISPLAY") == 0) {
@@ -857,7 +902,7 @@ int main(int argc, char *argv[]) {
 			ptype = prof_clutLab;		/* ?? or should it default to prof_shamat ?? */
 
 		/* If a source gamut is provided for a Display, then a V2.4.0 profile will be created */
-		make_output_icc(ptype, iccver, verb, iquality, oquality,
+		make_output_icc(ptype, mtxtoo, iccver, verb, iquality, oquality,
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
 		                gamdiag, verify, NULL, inname, outname, icg, spec,
 		                illum, &cust_illum, observ, 0, smooth, avgdev,

@@ -10,7 +10,7 @@
  * Copyright 2003 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -28,11 +28,11 @@
 #endif
 #include "copyright.h"
 #include "config.h"
-#include "cgats.h"
 #include "numlib.h"
+#include "cgats.h"
 #include "xicc.h"
 #include "prof.h"
-#include "../h/sort.h"
+#include "sort.h"
 
 void
 usage(void) {
@@ -262,7 +262,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (verb)
-		printf("Device has %d colorants, key = '%s', %s\n", devchan, icx_inkmask2char(devmask),
+		printf("Device has %d colorants, key = '%s', %s\n", devchan, icx_inkmask2char(devmask, 1),
 	           devmask & ICX_ADDITIVE ? "Additive" : "Subtractive"); 
 
 	if ((cols = new_mppcols(nodp, devchan, spec_n)) == NULL)
@@ -271,13 +271,13 @@ int main(int argc, char *argv[])
 	/* Read in all the patch values */
 	{
 		int chix[ICX_MXINKS];
-		char *ident;
+		char *bident;
 		int ii, Xi, Yi, Zi;
 		xspect sp;
 		char buf[100];
 		int  spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
 
-		ident = icx_inkmask2char(devmask); 
+		bident = icx_inkmask2char(devmask, 0); 
 
 		/* Find the device value fields */
 		for (j = 0; j < devchan; j++) {
@@ -285,7 +285,7 @@ int main(int argc, char *argv[])
 			char fname[100];
 
 			imask = icx_index2ink(devmask, j);
-			sprintf(fname,"%s_%s",ident,icx_ink2char(imask));
+			sprintf(fname,"%s_%s",bident,icx_ink2char(imask));
 
 			if ((ii = icg->find_field(icg, 0, fname)) < 0)
 				error ("Input file doesn't contain field %s",fname);
@@ -395,7 +395,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		free(ident);
+		free(bident);
 
 	}	/* End of reading in CGATs file */
 

@@ -8,7 +8,7 @@
  *
  * Copyright 2000-2004 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
@@ -26,36 +26,40 @@
 #include "numlib.h"
 #include "cam02ref.h"
 
-#undef DIAG		/* Print internal value diagnostics for each spot test conversion */
+					/* ** = usual tests */
+
+#undef DIAG			/* Print internal value diagnostics for each spot test conversion */
 					/* and print diagnostics for excessive errors, nans etc. */
 #undef VERBOSE		/* Print diagnostic values for every conversion */
 #define SPOTTEST	/* ** Test known spot colors */
 #undef TROUBLE		/* Test trouble spot colors XYZ -> Jab -> XYZ */
-#undef TROUBLE2	/* Test trouble spot colors Jab -> XYZ -> Jab */
+#undef TROUBLE2		/* Test trouble spot colors Jab -> XYZ -> Jab */
 #undef SPECIAL		/* Special exploration code */
 
-#define LOCUSTEST	/* ** Test spectrum locus points */
-#define LOCUSRAND	/* ** Test random spectrum locus points */
+#define LOCUSTEST	/* [def] ** Test spectrum locus points */
+#define LOCUSRAND	/* [def] ** Test random spectrum locus points */
 
-#define INVTEST		/* ** -100 -> 100 XYZ cube to Jab to XYZ */
-#undef INVTEST1		/* Single value */
-#undef INVTEST2		/* Powell search for invers */
+#define INVTEST		/* [def] ** -100 -> 100 XYZ cube to Jab to XYZ */
+#undef INVTEST1		/* [undef] Single value */
+#undef INVTEST2		/* [undef] Powell search for invers */
 
-#define TESTINV		/* ** Jab cube to XYZ to Jab */
-#undef TESTINV1		/* Single Jab value */
-#undef TESTINV2		/* J = 0 test values */
+#define TESTINV		/* [def] ** Jab cube to XYZ to Jab */
+#undef TESTINV1		/* [undef] Single Jab value */
+#undef TESTINV2		/* [undef] J = 0 test values */
 
-#define TRES 41		/* Grid resolution */
-//#define TRES 11		/* Grid resolution */
-#define USE_HK 0	/* Use Helmholtz-Kohlraush in testing */
+//#define TRES 41		/* Grid resolution */
+#define TRES 11		/* Grid resolution */
+#define USE_HK 1	/* Use Helmholtz-Kohlraush in testing */
+#define NOCAMCLIP 1	/* Don't clip before XYZ2Jab conversion */
 #undef EXIT_ON_ERROR
 
 #define MAX_REF_ERR 0.1	/* Maximum permitted error to reference transform in delta Jab */
 
 #ifndef _isnan
 #define _isnan(x) ((x) != (x))
-#define _finite(x) ((x) == (x))
-#endif /* _isnan */
+#define _finite(x) ((x) == 0.0 || (x) * 1.0000001 != (x))
+#endif
+
 
 #ifdef INVTEST1
 static void
@@ -95,7 +99,7 @@ XYZ2Lab(double *out, double *in) {
 	double X = in[0], Y = in[1], Z = in[2];
 	double x,y,z,fx,fy,fz;
 
-	x = X/0.9642;
+	x = X/0.9642;		/* D50 ? */
 	y = Y/1.0000;
 	z = Z/0.8249;
 
@@ -128,7 +132,7 @@ double maxdiff(double in1[3], double in2[3]) {
 	/* Deal with the possibility that we have nan's */
 	for (i = 0; i < 3; i++) {
 		tt = fabs(in1[i] - in2[i]);
-		if (_isnan(tt))
+		if (!_finite(tt))
 			return tt;
 		if (tt > rv)
 			rv = tt;
@@ -160,7 +164,7 @@ double maxxyzdiff(double i1[3], double i2[3]) {
 	/* Deal with the possibility that we have nan's */
 	for (i = 0; i < 3; i++) {
 		tt = fabs(in1[i] - in2[i]);
-		if (_isnan(tt))
+		if (!_finite(tt))
 			return tt;
 		if (tt > rv)
 			rv = tt;
@@ -399,7 +403,8 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			tFlair[c],	/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			twhite[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK		/* use Helmholtz-Kohlraush flag */ 
+			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
+			NOCAMCLIP
 		);
 		cam->set_view(
 			cam,
@@ -410,7 +415,8 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			tFlair[c],	/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			twhite[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK		/* use Helmholtz-Kohlraush flag */ 
+			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
+			NOCAMCLIP
 		);
 		camr->nldlimit = cam->nldlimit;
 		camr->jlimit = cam->jlimit;
@@ -551,7 +557,8 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			sp_white[c],/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK		/* use Helmholtz-Kohlraush flag */ 
+			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
+			NOCAMCLIP
 		);
 
 		cam->set_view(
@@ -563,7 +570,8 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			sp_white[c],/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK		/* use Helmholtz-Kohlraush flag */ 
+			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
+			NOCAMCLIP
 		);
 
 		camr->nldlimit = cam->nldlimit;
@@ -664,13 +672,17 @@ main(void) {
 	/* ================= LocusTest ===================== */
 #ifdef LOCUSTEST
 #define LT_YRES 30
+	{
+	double mxlocde = -100.0;		/* maximum locus test delta E */
+
 	for (c = 0; c < NO_WHITES; c++) {
 	printf("Locus: next white reference\n");
 	for (d = 0; d < NO_LAS; d++) {
 	for (e = 0; e < NO_VCS; e++) {
 		int i, j;
 		double Yxy[3], xyz[3], Jab[3], jabr[3], checkxyz[3];
-		double mxd;
+		double mxd;		/* Maximum delta of Lab any component */
+		double ltde;	/* Locus test delta E */
 
 		camr->set_view(
 			camr,
@@ -681,7 +693,8 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK		/* use Helmholtz-Kohlraush flag */ 
+			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
+			NOCAMCLIP
 		);
 		
 		cam->set_view(
@@ -693,7 +706,8 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK		/* use Helmholtz-Kohlraush flag */ 
+			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
+			NOCAMCLIP
 		);
 		
 		/* Make reference return error where it's going to disagree with implementation */
@@ -737,6 +751,9 @@ main(void) {
 #endif /* DIAG */
 
 				/* Check the result */
+				ltde = icmXYZLabDE(&icmD50, checkxyz, xyz);
+				if (ltde > mxlocde)
+					mxlocde = ltde;
 				mxd = maxxyzdiff(checkxyz, xyz);
 				if (mxd > 0.05) {
 					printf("XYZ %f %f %f\n ->",xyz[0],xyz[1],xyz[2]);
@@ -785,6 +802,9 @@ main(void) {
 #endif /* DIAG */
 
 				/* Check the result */
+				ltde = icmXYZLabDE(&icmD50, checkxyz, xyz);
+				if (ltde > mxlocde)
+					mxlocde = ltde;
 				mxd = maxxyzdiff(checkxyz, xyz);
 				if (mxd > 0.05) {
 					printf("XYZ %f %f %f\n ->",xyz[0],xyz[1],xyz[2]);
@@ -852,6 +872,9 @@ main(void) {
 #endif /* DIAG */
 
 			/* Check the result */
+			ltde = icmXYZLabDE(&icmD50, checkxyz, xyz);
+			if (ltde > mxlocde)
+				mxlocde = ltde;
 			mxd = maxxyzdiff(checkxyz, xyz);
 			if (mxd > 0.05) {
 				printf("XYZ %f %f %f\n ->",xyz[0],xyz[1],xyz[2]);
@@ -874,7 +897,8 @@ main(void) {
 	if (ok == 0) {
 		printf("Locustest FAILED\n");
 	} else {
-		printf("Locustest OK\n");
+		printf("Locustest OK, max DE = %e\n",mxlocde);
+	}
 	}
 #endif /* LOCUSTEST */
 	/* =============================================== */
@@ -903,7 +927,8 @@ main(void) {
 				0.0,		/* Luminance of white in image - not used */
 				0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 				white[c],	/* The Flare color coordinates (typically the Ambient color) */
-				USE_HK		/* use Helmholtz-Kohlraush flag */ 
+				USE_HK,		/* use Helmholtz-Kohlraush flag */ 
+				NOCAMCLIP
 			);
 		
 #ifdef INVTEST1
@@ -915,11 +940,11 @@ main(void) {
 
 			/* Check the result */
 			mxd = maxxyzdiff(checkxyz, xyz);
-			if (_finite(merr) && (_isnan(mxd) || mxd > merr))
+			if (_finite(merr) && (!_finite(mxd) || mxd > merr))
 				merr = mxd;
 #ifdef DIAG
 #ifndef VERBOSE
-			if (_isnan(mxd) || mxd > 0.1)
+			if (!_finite(mxd) || mxd > 0.1)
 #endif /* VERBOSE */
 			{
 				printf("\n");
@@ -929,7 +954,7 @@ main(void) {
 				checkxyz[0],checkxyz[1],checkxyz[2],
 				maxxyzdiff(checkxyz, xyz));
 #ifdef EXIT_ON_ERROR
-				if (_isnan(mxd) || mxd > 0.1) {
+				if (!_finite(mxd) || mxd > 0.1) {
 					fflush(stdout);
 					exit(-1);
 				}
@@ -1003,13 +1028,13 @@ main(void) {
 
 						/* Check the result */
 						mxd = maxxyzdiff(checkxyz, xyz);
-						if (_finite(merr) && (_isnan(mxd) || mxd > merr))
+						if (_finite(merr) && (!_finite(mxd) || mxd > merr))
 							merr = mxd;
 
 #if defined(DIAG) || defined(VERBOSE) || defined(EXIT_ON_ERROR)
 
 #if defined(DIAG) || defined(EXIT_ON_ERROR)
-						if (_isnan(mxd) || mxd > 0.1)
+						if (!_finite(mxd) || mxd > 0.1)
 #endif /* DIAG || EXIT_ON_ERROR */
 						{
 							double oLab[3];
@@ -1023,7 +1048,7 @@ main(void) {
 							maxxyzdiff(checkxyz, xyz));
 							printf("c = %d\n",c);
 #ifdef EXIT_ON_ERROR
-							if (_isnan(mxd) || mxd > 0.1) {
+							if (!_finite(mxd) || mxd > 0.1) {
 								fflush(stdout);
 								exit(-1);
 							}
@@ -1035,7 +1060,7 @@ main(void) {
 			}
 #endif /* INVTEST */
 		}
-		if (_isnan(merr) || merr > 0.1) {
+		if (!_finite(merr) || merr > 0.1) {
 			printf("INVTEST: Excessive error in roundtrip check %f\n",merr);
 			ok = 0;
 		}
@@ -1079,7 +1104,8 @@ main(void) {
 				0.0,		/* Luminance of white in image - not used */
 				0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 				white[c],	/* The Flare color coordinates (typically the Ambient color) */
-				USE_HK		/* use Helmholtz-Kohlraush flag */ 
+				USE_HK,		/* use Helmholtz-Kohlraush flag */ 
+				NOCAMCLIP
 			);
 		
 #ifdef TESTINV1
@@ -1113,11 +1139,11 @@ main(void) {
 
 				/* Check the result */
 				mxd = maxdiff(checkJab, Jab);
-				if (_finite(merr) && (_isnan(mxd) || mxd > merr))
+				if (_finite(merr) && (!_finite(mxd) || mxd > merr))
 					merr = mxd;
 #ifdef DIAG
 #ifndef VERBOSE
-				if (_isnan(mxd) || mxd > 0.1)
+				if (!_finite(mxd) || mxd > 0.1)
 #endif /* VERBOSE */
 				{
 					printf("\n");
@@ -1128,7 +1154,7 @@ main(void) {
 					maxdiff(checkJab, Jab));
 					printf("c = %d\n",c);
 #ifdef EXIT_ON_ERROR
-					if (_isnan(mxd) || mxd > 0.1) {
+					if (!_finite(mxd) || mxd > 0.1) {
 						fflush(stdout);
 						exit(-1);
 					}
@@ -1215,12 +1241,12 @@ main(void) {
 
 						/* Check the result */
 						mxd = maxdiff(checkJab, Jab);
-						if (_finite(merr) && (_isnan(mxd) || mxd > merr))
+						if (_finite(merr) && (!_finite(mxd) || mxd > merr))
 							merr = mxd;
 #if defined(DIAG) || defined(VERBOSE) || defined(EXIT_ON_ERROR)
 
 #if defined(DIAG) || defined(EXIT_ON_ERROR)
-						if (_isnan(mxd) || mxd > 0.1)
+						if (!_finite(mxd) || mxd > 0.1)
 #endif /* DIAG || EXIT_ON_ERROR */
 						{
 							printf("\n");
@@ -1231,7 +1257,7 @@ main(void) {
 							maxdiff(checkJab, Jab));
 							printf("c = %d\n",c);
 #ifdef EXIT_ON_ERROR
-							if (_isnan(mxd) || mxd > 0.1) {
+							if (!_finite(mxd) || mxd > 0.1) {
 								fflush(stdout);
 								exit(-1);
 							}
@@ -1243,7 +1269,7 @@ main(void) {
 			}
 #endif /* TESTINV */
 		}
-		if (_isnan(merr) || merr > 1.0) {
+		if (!_finite(merr) || merr > 1.0) {
 			printf("TESTINV: Excessive error in roundtrip check %f\n",merr);
 			ok = 0;
 		}

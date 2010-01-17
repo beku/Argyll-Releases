@@ -5,7 +5,7 @@
  *
  * Author:  Graeme W. Gill
  * Date:    99/11/29
- * Version: 2.05
+ * Version: 2.12
  *
  * Copyright 1997 - 2005 Graeme W. Gill
  *
@@ -60,10 +60,10 @@ double rand_u16f16(void), rand_s15f16(void);
 int dcomp(double a, double b);
 
 /* random ICC specific values */
-unsigned long rand_ScreenEncodings(void);
-unsigned long rand_DeviceAttributes(void);
-unsigned long rand_ProfileHeaderFlags(void);
-unsigned long rand_AsciiOrBinaryData(void);
+unsigned int rand_ScreenEncodings(void);
+unsigned int rand_DeviceAttributes(void);
+unsigned int rand_ProfileHeaderFlags(void);
+unsigned int rand_AsciiOrBinaryData(void);
 icColorSpaceSignature rand_ColorSpaceSignature(void);
 icColorSpaceSignature rand_PCS(void);
 icTechnologySignature rand_TechnologySignature(void);
@@ -153,7 +153,7 @@ main(
 
 			if (fseek(pp->fp, 0, SEEK_END))
 				error ("Write: seek to EOF failed");
-			if ((unsigned long)ftell(pp->fp) != offset + size)
+			if ((unsigned int)ftell(pp->fp) != offset + size)
 				error ("Write: get_size function didn't return correct value - got %d, expected %d",
 				        ftell(pp->fp),offset+size);
 		}
@@ -704,7 +704,7 @@ int doit(
 
 	} else {
 		icmLut *ro;
-		unsigned long size;
+		unsigned int size;
 		unsigned int i, j;
 
 		/* Try and read the tag from the file */
@@ -756,7 +756,7 @@ int doit(
 			return 1;
 	} else {
 		icmLut *ro;
-		unsigned long size;
+		unsigned int size;
 		unsigned int i;
 
 		/* Try and read the tag from the file */
@@ -834,7 +834,7 @@ int doit(
 
 	} else {
 		icmLut *ro;
-		unsigned long size;
+		unsigned int size;
 		unsigned int i, j;
 
 		/* Try and read the tag from the file */
@@ -1955,7 +1955,7 @@ int doit(
 /* get away with exact verification. */
 
 /* 32 bit pseudo random sequencer */
-static unsigned long seed = 0x12345678;
+static unsigned int seed = 0x12345678;
 
 /* #define PSRAND(S) ((S) * 1103515245 + 12345) */
 #define PSRAND(S) (((S) & 0x80000000) ? (((S) << 1) ^ 0xa398655d) : ((S) << 1))
@@ -2059,8 +2059,8 @@ double rand_16f() {
 
 /* Random selectors for ICC flags and enumerayions */
 
-unsigned long rand_ScreenEncodings() {
-	unsigned long flags = 0;
+unsigned int rand_ScreenEncodings() {
+	unsigned int flags = 0;
 	
 	if (rand_int(0,1) == 0)
 		flags |= icPrtrDefaultScreensTrue;
@@ -2072,8 +2072,8 @@ unsigned long rand_ScreenEncodings() {
 }
 
 /* Device attributes */
-unsigned long rand_DeviceAttributes() {
-	unsigned long flags = 0;
+unsigned int rand_DeviceAttributes() {
+	unsigned int flags = 0;
 
 	if (rand_int(0,1) == 0)
 		flags |= icTransparency;
@@ -2085,8 +2085,8 @@ unsigned long rand_DeviceAttributes() {
 }
 
 /* Profile header flags */
-unsigned long rand_ProfileHeaderFlags() {
-	unsigned long flags = 0;
+unsigned int rand_ProfileHeaderFlags() {
+	unsigned int flags = 0;
 
 	if (rand_int(0,1) == 0)
 		flags |= icEmbeddedProfileTrue;
@@ -2098,8 +2098,8 @@ unsigned long rand_ProfileHeaderFlags() {
 }
 
 
-unsigned long rand_AsciiOrBinaryData() {
-	unsigned long flags = 0;
+unsigned int rand_AsciiOrBinaryData() {
+	unsigned int flags = 0;
 
 	if (rand_int(0,1) == 0)
 		flags |= icBinaryData;

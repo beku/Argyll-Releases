@@ -10,7 +10,7 @@
  * Copyright 2002 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -210,7 +210,7 @@ double *d		/* starting and returned device position */
 // ~~99
 	for (e = 0; e < di; e++)
 		sr[e] = drad;			/* Device space search radius */
-	if (powell(&tt, di, d, sr,  ptol, 500, efunc, (void *)s) != 0 || tt >= 50000.0) {
+	if (powell(&tt, di, d, sr,  ptol, 500, efunc, (void *)s, NULL, NULL) != 0 || tt >= 50000.0) {
 #ifdef DEBUG
 		warning("ifarp: powell failed, tt = %f",tt);
 #endif

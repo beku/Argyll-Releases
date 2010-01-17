@@ -9,7 +9,7 @@
  * Copyright 2001 - 2005 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 3 :-
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
@@ -39,7 +39,7 @@
 #endif
 #include "copyright.h"
 #include "config.h"
-#include "numsup.h"
+#include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
 #include "insttypes.h"
@@ -50,17 +50,18 @@ usage(void) {
 	fprintf(stderr,"Check accuracy of ICC profile, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: profcheck [-options] data.ti3 iccprofile.icm\n");
-	fprintf(stderr," -v              Verbose - print each patch value\n");
+	fprintf(stderr," -v [level]      Verbosity level (default 1), 2 to print each DE\n");
 	fprintf(stderr," -c              Show CIE94 delta E values\n");
 	fprintf(stderr," -k              Show CIEDE2000 delta E values\n");
 	fprintf(stderr," -w              create VRML visualisation (iccprofile.wrl)\n");
 	fprintf(stderr," -x              Use VRML axes\n");
+	fprintf(stderr," -m              Make VRML lines a minimum of 0.5\n");
 	fprintf(stderr," -e              Color vectors acording to delta E\n");
 	fprintf(stderr," -d devval1,deval2,devvalN\n");
 	fprintf(stderr,"                 Specify a device value to sort against\n");
 	fprintf(stderr," -p              Sort device value by PCS (Lab) target\n");
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"                 A, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr,"                 A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
@@ -92,6 +93,7 @@ int main(int argc, char *argv[])
 	int cie94 = 0;
 	int cie2k = 0;
 	int dovrml = 0;
+	int dominl = 0;
 	int doaxes = 0;
 	int dodecol = 0;
 	char ti3name[MAXNAMEL+1] = { 0 };	/* Input cgats file base name */
@@ -153,12 +155,21 @@ int main(int argc, char *argv[])
 			if (argv[fa][1] == '?')
 				usage();
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			/* Verbosity */
+			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
+				if (na != NULL && isdigit(na[0])) {
+					verb = atoi(na);
+				}
+			}
 
 			/* VRML */
 			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W')
 				dovrml = 1;
+
+			/* Minimum line length */
+			else if (argv[fa][1] == 'm' || argv[fa][1] == 'M')
+				dominl = 1;
 
 			/* Axes */
 			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X')
@@ -213,6 +224,9 @@ int main(int argc, char *argv[])
 				if (strcmp(na, "A") == 0) {
 					spec = 1;
 					illum = icxIT_A;
+				} else if (strcmp(na, "C") == 0) {
+					spec = 1;
+					illum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
@@ -356,6 +370,16 @@ int main(int argc, char *argv[])
 			isLab = 0;
 			isAdditive = 1;
 		} else if (strcmp(icg->t[0].kdata[ti],"RGB_LAB") == 0) {
+			devspace = icSigRgbData;
+			devchan = 3;
+			isLab = 1;
+			isAdditive = 1;
+		} else if (strcmp(icg->t[0].kdata[ti],"iRGB_XYZ") == 0) {
+			devspace = icSigRgbData;
+			devchan = 3;
+			isLab = 0;
+			isAdditive = 1;
+		} else if (strcmp(icg->t[0].kdata[ti],"iRGB_LAB") == 0) {
 			devspace = icSigRgbData;
 			devchan = 3;
 			isLab = 1;
@@ -732,7 +756,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* Get details of conversion (Arguments may be NULL if info not needed) */
-		luo->spaces(luo, NULL, &inn, NULL, &outn, NULL, NULL, NULL, NULL);
+		luo->spaces(luo, NULL, &inn, NULL, &outn, NULL, NULL, NULL, NULL, NULL);
 
 		for (i = 0; i < npat; i++) {
 			double out[3];
@@ -742,7 +766,7 @@ int main(int argc, char *argv[])
 			if (luo->lookup(luo, out, tpat[i].p) > 1)
 				error("%d, %s",rd_icco->errc,rd_icco->err);
 
-			if (verb) {
+			if (verb > 1) {
 				if (devspace == icSigCmykData) {
 					printf("[%f] %s: %f %f %f %f -> %f %f %f should be %f %f %f\n",
 					       cie2k ? icmCIE2K(tpat[i].v, out) : 
@@ -762,8 +786,27 @@ int main(int argc, char *argv[])
 				}
 			}
 			if (dovrml) {
-				add_vertex(wrl, tpat[i].v);
-				add_vertex(wrl, out);
+				if (dominl && icmLabDE(tpat[i].v, out) < 0.5) {
+					double cent[3], vec[3], vlen;
+					double p1[3], p2[3];
+
+					/* Compute center */
+					icmAdd3(cent, tpat[i].v, out);
+					icmScale3(cent, cent, 0.5);
+					if ((vlen = icmLabDE(tpat[i].v, out)) < 1e-6) {
+						vec[0] = 0.25; vec[1] = 0.0; vec[2] = 0.0;
+					} else {
+						icmSub3(vec, tpat[i].v, out);
+						icmScale3(vec, vec, 0.25/vlen);
+					}
+					icmSub3(p1, cent, vec);
+					icmAdd3(p2, cent, vec);
+					add_vertex(wrl, p1);
+					add_vertex(wrl, p2);
+				} else {
+					add_vertex(wrl, tpat[i].v);
+					add_vertex(wrl, out);
+				}
 			}
 
 			/* Check the result */
@@ -876,6 +919,7 @@ int main(int argc, char *argv[])
 
 /* ------------------------------------------------ */
 /* Some simple functions to do basix VRML work */
+/* !!! Should change to plot/vrml lib !!! */
 
 #define GAMUT_LCENT 50.0
 static int npoints = 0;

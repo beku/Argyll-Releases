@@ -6171,7 +6171,7 @@ i1pro_code i1pro_set_stdres(i1pro *p) {
 	return ev;
 }
 
-/* Modify the scan consistency tollerance */
+/* Modify the scan consistency tolerance */
 i1pro_code i1pro_set_scan_toll(i1pro *p, double toll_ratio) {
 	i1proimp *m = (i1proimp *)p->m;
 	i1pro_code ev = I1PRO_OK;
@@ -6461,7 +6461,7 @@ i1pro_code i1pro_check_white_reference1(
 
 	free_dvector(emiswav, 0, m->nraw-1);
 
-	/* And check them against tollerances for the illuminant. */
+	/* And check them against tolerance for the illuminant. */
 	if (m->physfilt == 0x82) {		/* UV filter */
 		if (0.0 < avg01 && avg01 < 0.05
 		 && 1.2 < avg2227 && avg2227 < 1.76)

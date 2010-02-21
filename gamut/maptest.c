@@ -120,7 +120,7 @@ main(int argc, char *argv[]) {
 	/* - - - - - - - - - - - - - - - - - - - */
 	/* read the input device gamut */
 
-	gin = new_gamut(0.0, 0);
+	gin = new_gamut(0.0, 0, 0);
 
 	if ((xl = strrchr(in_name, '.')) == NULL) {	/* Add .gam extention if there isn't one */
 		xl = in_name + strlen(in_name);
@@ -135,7 +135,7 @@ main(int argc, char *argv[]) {
 
 	if (img_name[0] != '\000') {
 
-		gimg = new_gamut(0.0, 0);
+		gimg = new_gamut(0.0, 0, 0);
 
 		if ((xl = strrchr(img_name, '.')) == NULL) { /* Add .gam extention if there isn't one */
 			xl = img_name + strlen(img_name);
@@ -151,7 +151,7 @@ main(int argc, char *argv[]) {
 	/* - - - - - - - - - - - - - - - - - - - */
 	/* read the output device gamut */
 
-	gout = new_gamut(0.0, 0);
+	gout = new_gamut(0.0, 0, 0);
 
 	if ((xl = strrchr(out_name, '.')) == NULL) { /* Add .gam extention if there isn't one */
 		xl = out_name + strlen(out_name);

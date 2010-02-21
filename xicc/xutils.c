@@ -81,9 +81,9 @@ int dim_to_clutres(int dim, int quality) {
 
 /* ------------------------------------------------------ */
 
-/* Open an ICC file or an TIFF file with an embeded ICC profile for reading. */
+/* Open an ICC file or an TIFF file with an embedded ICC profile for reading. */
 /* Return NULL on error */
-icc *read_embeded_icc(char *file_name) {
+icc *read_embedded_icc(char *file_name) {
 	TIFF *rh = NULL;
 	int  size;
 	void *tag, *buf;
@@ -162,11 +162,11 @@ icc *read_embeded_icc(char *file_name) {
 	}
 
 	if ((rv = icco->read_x(icco,fp,0,1)) == 0) {
-		debug2((errout,"Opened '%s' embeded icc profile\n",file_name));
+		debug2((errout,"Opened '%s' embedded icc profile\n",file_name));
 		return icco;
 	}
 
-	debug2((errout,"Failed to read '%s' embeded icc profile\n",file_name));
+	debug2((errout,"Failed to read '%s' embedded icc profile\n",file_name));
 	icco->del(icco);	/* icco will delete fp and al */
 	return NULL;
 }

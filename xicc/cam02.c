@@ -27,7 +27,7 @@
  *
  * This file is based on cam97s3.c by Graeme Gill.
  *
- * Copyright 2004 - 2008 Graeme W. Gill
+ * Copyright 2004 - 2009 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.

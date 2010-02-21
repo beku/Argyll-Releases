@@ -25,10 +25,6 @@
 
 /*
  * TTBD:
- *		Should allow an option to build a display profile with both
- *		an XYZ cLUT and a matrix, for systems that won't load a non-matrix
- *		profile, yet have some software that can use the more accurate cLUT profile.
- *
  *      Add Argyll private tag to record ink limit etc. to automate link parameters.
  *      Estimate ink limit from B2A tables if no private tag ?
  *      Add used option for black relative
@@ -97,9 +93,9 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -K parameters   Same as -k, but target is K locus rather than K value itself\n");
 	fprintf(stderr," -l tlimit       override total ink limit, 0 - 400%% (default from .ti3)\n");
 	fprintf(stderr," -L klimit       override black ink limit, 0 - 100%% (default from .ti3)\n");
-	fprintf(stderr," -a lxXgsGS      Algorithm type override\n");
+	fprintf(stderr," -a lxXgsmGS     Algorithm type override\n");
 	fprintf(stderr,"                 l = Lab cLUT (def.), x = XYZ cLUT, X = display XYZ cLUT + matrix\n");
-	fprintf(stderr,"                 g = gamma+matrix, s = shaper+matrix,\n");
+	fprintf(stderr,"                 g = gamma+matrix, s = shaper+matrix, m = matrix only,\n");
 	fprintf(stderr,"                 G = single gamma+matrix, S = single shaper+matrix\n");
 //  Development - not supported
 //	fprintf(stderr," -I ver          Set ICC profile version > 2.2.0\n");
@@ -476,6 +472,9 @@ int main(int argc, char *argv[]) {
 						break;
 					case 'S':
 						ptype = prof_sha1mat;
+						break;
+					case 'm':
+						ptype = prof_matonly;
 						break;
 					default:
 						usage("Unknown argument '%c' to algorithm flag -a",na[0] );

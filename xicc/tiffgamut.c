@@ -41,6 +41,7 @@
 #include "sort.h"
 
 #undef NOCAMGAM_CLIP		/* No clip to CAM gamut before CAM lookup */
+#undef DEBUG				/* Dump filter cell contents */
 
 void set_fminmax(double min[3], double max[3]);
 void reset_filter();
@@ -52,7 +53,7 @@ void usage(void) {
 	int i;
 	fprintf(stderr,"Create VRML image of the gamut surface of a TIFF, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	fprintf(stderr,"usage: tiffgamut [-v level] [profile.icm | embeded.tif] infile1.tif [infile2.tif ...] \n");
+	fprintf(stderr,"usage: tiffgamut [-v level] [profile.icm | embedded.tif] infile1.tif [infile2.tif ...] \n");
 	fprintf(stderr," -v            Verbose\n");
 	fprintf(stderr," -d sres       Surface resolution details 1.0 - 50.0\n");
 	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .gam file\n");
@@ -553,7 +554,7 @@ main(int argc, char *argv[]) {
 	if (prof_name[0] != '\000') {
 
 		/* Open up the profile or TIFF embedded profile for reading */
-		if ((icco = read_embeded_icc(prof_name)) == NULL)
+		if ((icco = read_embedded_icc(prof_name)) == NULL)
 			error ("Can't open profile in file '%s'",prof_name);
 	
 		if (verb) {
@@ -719,8 +720,8 @@ main(int argc, char *argv[]) {
 	}
 
 	/* - - - - - - - - - - - - - - - */
-	/* Creat a gamut surface */
-	gam = new_gamut(gamres, pcsor == icxSigJabData);
+	/* Creat a raster gamut surface */
+	gam = new_gamut(gamres, pcsor == icxSigJabData, 1);
 
 	apcsmin[0] = apcsmin[1] = apcsmin[2] = 1e6;
 	apcsmax[0] = apcsmax[1] = apcsmax[2] = -1e6;
@@ -916,6 +917,7 @@ main(int argc, char *argv[]) {
 }
 
 
+/* ============================================================================= */
 /* A pixel value filter module. We quantize the pixel values and keep statistics */
 /* on them, so as to filter out low frequency colors. */
 
@@ -1027,6 +1029,18 @@ void flush_filter(int verb, gamut *gam, double filtperc) {
 #define HEAP_COMPARE(A,B) A->count > B->count 
 	HEAPSORT(fent *,ff->scells, totcells)
 
+#ifdef DEBUG
+	for (i = 0; i < totcells; i++) {
+		if (ff->scells[i]->count > 0) {
+			printf("Cell %d at %f %f %f count %d\n",
+			        i,
+			        ff->scells[i]->pcs[0],
+			        ff->scells[i]->pcs[1],
+			        ff->scells[i]->pcs[2],
+			        ff->scells[i]->count);
+		}
+	}
+#endif
 	if (verb) {
 		printf("Total of %d cells out of %d were hit (%.1f%%)\n",used,totcells,used * 100.0/totcells);
 		printf("%.1f%% have a count of 1\n",hasone * 100.0/used);
@@ -1043,7 +1057,9 @@ void flush_filter(int verb, gamut *gam, double filtperc) {
 			val[0] = ff->scells[i]->pcs[0];	/* float -> double */
 			val[1] = ff->scells[i]->pcs[1];
 			val[2] = ff->scells[i]->pcs[2];
-//printf("~1 adding %f %f %f to gamut\n", val[0], val[1], val[2]);
+#ifdef DEBUG
+			printf("Adding %d: %f %f %f count %d to gamut\n", i, val[0], val[1], val[2],ff->scells[i]->count);
+#endif
 			gam->expand(gam, val);
 			j++;
 			cuml = j/(used-1.0);

@@ -155,10 +155,11 @@ main(int argc, char *argv[]) {
 
 	/* Define combinations to test */
 #ifdef TEST1
+#pragma message("!!!!!!!!!!!!!!!!! TEST1 is defined !!!!!!!!!!!!!!!1")
 	int ids[] = { 3, 0 };			/* Input dimensions */
-	int ods[] = { 4, 0 };							/* Output dimensions */
-	int iprs[] = { 8, 0 };
-	int oprs[] = { 8, 0 };
+	int ods[] = { 1, 0 };			/* Output dimensions */
+	int iprs[] = { 16, 0 };
+	int oprs[] = { 16, 0 };
 #else
 #ifndef FULL
 	int ids[] = { 1, 3, 4, 8, 0 };

@@ -1,6 +1,6 @@
 
-PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
-#PREF_CCFLAGS	    += $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS 	+= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS	    += $(CCDEBUGFLAG) ;		# Debugging flags
 #PREF_CCFLAGS	+= $(CCHEAPDEBUG) ;		# Heap Debugging flags
 PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
 

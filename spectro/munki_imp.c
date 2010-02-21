@@ -5971,7 +5971,7 @@ munki_code munki_set_stdres(munki *p) {
 	return ev;
 }
 
-/* Modify the scan consistency tollerance */
+/* Modify the scan consistency tolerance */
 munki_code munki_set_scan_toll(munki *p, double toll_ratio) {
 	munkiimp *m = (munkiimp *)p->m;
 	munki_code ev = MUNKI_OK;

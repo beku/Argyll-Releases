@@ -33,7 +33,7 @@ colorant combination from the following:</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2: Print CMY</span><br
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2: Print RGB</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp;
@@ -42,34 +42,37 @@ Video RGB</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-4: CMYK</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;
+4: CMYK<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+5: CMY<br style="font-family: monospace;">
+</span><span style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp;
 &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 5:
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 6:
 CMYK + Light CM</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 6: CMYK + Light CMK</span><br
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 7: CMYK + Light CMK</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp;
-&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; 7: CMYK + Red + Blue</span><br
+&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; 8: CMYK + Red + Blue</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
 &nbsp; &nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 8: CMYK +
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 9: CMYK +
 Orange + Green</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
 &nbsp; &nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 9: CMYK +
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 10: CMYK +
 Light CMK + Light Light K</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
 &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 10: CMYK +
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 11: CMYK +
 Orange + Green + Light CM</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 11: CMYK + Light
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 12: CMYK + Light
 CM + Medium CM</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#D">-D colorant</a><span
@@ -269,7 +272,7 @@ hundred points, if a shaper/matrix type profile is to be produced,
 while pseudo RGB printers, or other RGB devices that a CLUT type
 profile may be used
 with, should probably choose somewhere between 500 and 3000 patches.
-For n color profile creation,
+For 'N' color profile creation,
 3000 or more test points should probably be used.<br>
 <br>
 <a name="v"></a> The <b>-v</b> flag turns on extra verbosity when
@@ -372,16 +375,9 @@ This can be overridden by specifying the <b>-t. -r, -R,
 -i or -I</b> flags. If the default OFPS algorithm is used, then
 adaptive
 test
-point distribution can be enabled by specifying a non-zero value for
-the
-<b>-A</b> parameter, which sets the degree of adaptation. A value of
-1.0
-distributes the test points so as to minimize the estimated error in
-the
-resulting profile. A value less than 1.0 is generally recommended -
-e.g. try starting with a value of 0.5. Currently if a value of greater
-than 0.0 is use, the distribution is not as highly optimized as it is
-when the default 0.0 is used. The total number patches specified will
+point distribution can be fully enabled by supplying a previous or
+typical profile with the <span style="font-weight: bold;">-c</span>
+option. The total number patches specified will
 include any
 patches
 generated using the <b>-e</b>, <b>-s</b>, <b>-g</b> and <b>-m</b>
@@ -445,7 +441,11 @@ should be provided using the <span style="font-weight: bold;">-c</span>
 parameter if <span style="font-weight: bold; font-style: italic;">adaptation</span>
 is set above a low level. By
 default the adaptation is 0.1 (low), and 1.0 (maximum) if <span
- style="font-weight: bold;">-c profile</span> is provided<br>
+ style="font-weight: bold;">-c profile</span> is provided, but these
+defaults can be overridden using this option. For instance, if the <span
+ style="font-weight: bold;">-c profile</span> doesn't represent the
+device behavior very well, a lower adaption than 1.0 might be
+appropriate.<br>
 <br>
 <a name="l"></a> The <b>-l</b> flag and parameter sets a total ink
 limit (Total

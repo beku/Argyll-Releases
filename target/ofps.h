@@ -347,6 +347,7 @@ struct _ofps {
 	int sucdnsq;	/* Number of sucessful dnsqs */
 	int maxretries;	/* Maximum retries used on sucessful dnsq */
 	int posfails;	/* Number of position_vtx failures */
+	int posfailstp;	/* Number of position_vtx failures this pass */
 	int nvtxcreated;	/* Number of vertexes created */
 	int nvtxdeleted;	/* Number of vertexes deleted */
 	int add_hit;	/* Number of add_to_vsurf hits */

@@ -250,9 +250,9 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 	}
 	TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
 	TIFFSetField(wh, TIFFTAG_RESOLUTIONUNIT, RESUNIT_CENTIMETER);
-	TIFFSetField(wh, TIFFTAG_XRESOLUTION, 10.0 * s->hres);
+	TIFFSetField(wh, TIFFTAG_XRESOLUTION, 10.0 * s->hres);	/* Cvt. to pixels/cm */
 	TIFFSetField(wh, TIFFTAG_YRESOLUTION, 10.0 * s->vres);
-	TIFFSetField(wh, TIFFTAG_XPOSITION, 0.1 * s->lm);
+	TIFFSetField(wh, TIFFTAG_XPOSITION, 0.1 * s->lm);		/* Cvt. to cm */
 	TIFFSetField(wh, TIFFTAG_YPOSITION, 0.1 * s->tm);
 	if (comprn) {
 		TIFFSetField(wh, TIFFTAG_COMPRESSION, COMPRESSION_LZW);

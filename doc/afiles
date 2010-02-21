@@ -1,5 +1,4 @@
 afiles
-ReadMe.txt
 DocLicense.txt
 License.txt
 License2.txt
@@ -13,7 +12,7 @@ Installing_MSWindows.html
 Installing_OSX.html
 Installing_Linux.html
 File_Formats.html
-MinorUtilities.html
+MinorTools.html
 Organisation.html
 Overview.html
 Limitations.html
@@ -53,7 +52,7 @@ srgbplot.gif
 Source.html
 average.html
 applycal.html
-cb2cgats.html
+cb2ti3.html
 cctiff.html
 cht_format.html
 dispwin.html
@@ -72,11 +71,11 @@ iccdump.html
 iccgamut.html
 collink.html
 icclu.html
-kodak2cgats.html
-logo2cgats.html
+kodak2ti3.html
+txt2ti3.html
 mppcheck.html
 mpplu.html
-mpprof.html
+mppprof.html
 chartread.html
 printtarg.html
 profcheck.html
@@ -87,8 +86,9 @@ refine.html
 revfix.html
 scanin.html
 sepgen.html
-splitcgats.html
+splitti3.html
 spec2cie.html
+specplot.html
 spotread.html
 synthread.html
 targen.html

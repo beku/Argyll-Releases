@@ -36,16 +36,16 @@
   Background field is 10-12 degree field immediately surrounding the stimulus field.
 	This may be within, overlap or encompass the Viewing/Scene/Image field.
 
+  Visual field is the 130 degree angular field that is seen by the eyes.
+
   Surround/Adapting field is the visual field minus the background field,
   and is what is assumed to be setting the viewers light adaptation level.
 
-  Visual field is the 130 degree angular field that is seen by the eyes.
+  Ambient field is the whole surrounding environmental light field.
 
   Illuminating field is the field that illuminates the reflective
   Scene/Image. It may be the same as the Ambient field or it could
   be a specific light source that is directed to the viewing scene..
-
-  Ambient field is the whole surrounding environmental light field.
 
   NOTE: In "Digital Color Management", Giorgianni and Madden use the term
   "Surround" to mean the same thing as "Background" in the CIECAM02 terminology.
@@ -59,12 +59,12 @@
 /* i.e. Lamb = Eamb/PI */	/* (1 foot candle = 0.0929 lux) */
 
 /* Illuminating field Luminance (Li, cd/m^2) is the Illuminating field Illuminance (Ei, Lux) */
-/* divide by PI. i.e. Li - Ei/PI */
+/* divide by PI. i.e. Li = Ei/PI */
 
 /* The Adapting/Surround Luminance is La often taken to be */
 /* the 20% of the Ambient Luminance (gray world, 50% perceptual) */
 /* i.e. La = Lamb/5 = Eamb/15.7 */
-/* If the Illuminating field covers the surround, the it will be 20% of the */
+/* If the Illuminating field covers the Adapting/surround, the it will be 20% of the */
 /* Illuminating field. */
 
 /* For a reflective print, the Viewing/Scene/Image luminance (Lv, cd/m^2), */

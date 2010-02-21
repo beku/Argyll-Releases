@@ -55,6 +55,9 @@
 #define FAKE_SEED_SIZE 0.1	/* Usually 0.1 */
 #define TRIANG_TOL 1e-10	/* Triangulation tollerance, usually 1e-10 */
 
+#define NORM_LOG_POW 0.25	/* Normal, colorspace lopow value */
+#define RAST_LOG_POW 0.05	/* Raster lopow value */
+
 #undef TEST_CONVEX_HULL		/* Use pure convex hull, not log hull */
 
 #undef DEBUG_TRIANG			/* Enable detailed triangulation debugging */
@@ -135,8 +138,10 @@ static void del_gamut(gamut *s);
 static gvert *expand_gamut(gamut *s, double in[3]);
 static double getsres(gamut *s);
 static int getisjab(gamut *s);
-void getcent(gamut *s, double *cent);
-void getrange(gamut *s, double *min, double *max);
+static int getisrast(gamut *s);
+static void setnofilt(gamut *s);
+static void getcent(gamut *s, double *cent);
+static void getrange(gamut *s, double *min, double *max);
 static int compatible(gamut *s, gamut *t);
 static int nrawverts(gamut *s);
 static int getrawvert(gamut *s, double pos[3], int ix);
@@ -163,7 +168,7 @@ static void setcusps(gamut *s, int flag, double in[3]);
 static int getcusps(gamut *s, double cusps[6][3]);
 static int compute_vector_isect(gamut *s, double *p1, double *p2, double *min, double *max,
                                  double *mint, double *maxt, gtri **mntri, gtri **mxtri);
-static double log_scale(double ss);
+static double log_scale(gamut *s, double ss);
 static int intersect(gamut *s, gamut *s1, gamut *s2);
 static int expandbydiff(gamut *s, gamut *s1, gamut *s2, gamut *s3, int docomp);
 static int vect_intersect(gamut *s, double *rvp, double *ip, double *p1, double *p2, gtri *t);
@@ -546,7 +551,8 @@ void del_gedge(gedge *t) {
 gamut *new_gamut(
 double sres,			/* Resolution (in rect coord units) of surface triangles */
 						/* 0.0 = default */
-int isJab				/* Flag indicating Jab space */
+int isJab,				/* Flag indicating Jab space */
+int isRast				/* Flag indicating Raster rather than colorspace */
 ) {
 	gamut *s;
 
@@ -581,6 +587,18 @@ int isJab				/* Flag indicating Jab space */
 		s->isJab = 1;
 	}
 
+	if (isRast != 0) {
+		s->isRast = 1;
+	}
+
+	if (s->isRast) {
+		s->logpow = RAST_LOG_POW;	/* Wrap the surface more closely */
+		s->no2pass = 1;				/* Only do one pass */
+	} else {
+		s->logpow = NORM_LOG_POW;	/* Convex hull compression power */
+		s->no2pass = 0;				/* Do two passes */
+	}
+
 	/* Center point for radial values, surface creation etc. */
 	/* To compare two gamuts using radial values, their cent must */
 	/* be the same. */
@@ -612,6 +630,8 @@ int isJab				/* Flag indicating Jab space */
 	s->expand      = expand_gamut;
 	s->getsres     = getsres;
 	s->getisjab    = getisjab;
+	s->getisrast   = getisrast;
+	s->setnofilt   = setnofilt;
 	s->getcent     = getcent;
 	s->getrange    = getrange;
 	s->compatible  = compatible;
@@ -852,7 +872,7 @@ double pp[3]		/* rectangular coordinate of point */
 		return NULL;
 
 	/* Figure log scaled radius */
-	lrr0 = log_scale(rr[0]);
+	lrr0 = log_scale(s, rr[0]);
 
 	/* Compute unit shere mapped location */
 	aa = 1.0/rr[0];				/* Adjustment to put in on unit sphere */
@@ -1049,6 +1069,10 @@ static int intersect(gamut *s, gamut *sa, gamut *sb) {
 		triangulate(sb);
 
 	s->isJab = sa->isJab;
+
+	if (sa->isRast || sb->isRast)
+		s->isRast = 1;
+
 	for (j = 0; j < 3; j++)
 		s->cent[j] = sa->cent[j];
 
@@ -1056,6 +1080,12 @@ static int intersect(gamut *s, gamut *sa, gamut *sb) {
 	s->cswbset = 0;
 	s->cswbset = 0;
 	s->dcuspixs = 0;
+
+	/* If either is a raster gamut, make it a raster gamut */
+	if (s->isRast)
+		s->logpow = RAST_LOG_POW;	/* Wrap the surface more closely */
+	else
+		s->logpow = NORM_LOG_POW;	
 
 	/* Don't filter the points (gives a more accurate result ?) */
 	s->nofilter = 1;
@@ -1150,6 +1180,8 @@ static int expandbydiff(gamut *s, gamut *s1, gamut *s2, gamut *s3, int docomp) {
 		triangulate(s3);
 
 	s->isJab = s1->isJab;
+	s->isRast = s1->isRast;
+
 	for (j = 0; j < 3; j++)
 		s->cent[j] = s1->cent[j];
 
@@ -1157,6 +1189,12 @@ static int expandbydiff(gamut *s, gamut *s1, gamut *s2, gamut *s3, int docomp) {
 	s->cswbset = 0;
 	s->cswbset = 0;
 	s->dcuspixs = 0;
+
+	/* If s1 is a raster gamut, make output a raster gamut */
+	if (s->isRast) 
+		s->logpow = RAST_LOG_POW;	/* Wrap the surface more closely */
+	else
+		s->logpow = NORM_LOG_POW;	
 
 	/* Don't filter the points (gives a more accurate result ?) */
 	s->nofilter = 1;
@@ -1605,19 +1643,19 @@ gtri *t
 /* between a pure convex hull surface, and a pure Delaunay triangulation */
 /* the latter which would show dings and nicks from points */
 /* that fall withing the "real" gamut. */
-static double log_scale(double ss) {
+static double log_scale(gamut *s, double rr) {
 	double aa;
 
 #ifdef TEST_CONVEX_HULL
-	return ss;
+	return rr;
 #else
-#ifdef NEVER		/* (Not using this version) */
-	aa = (2.0 + ss)/3.0;	/* Blend with sphere */
+#ifdef NEVER		/* (Not using this version, doesn't work reliably) */
+	aa = (2.0 + rr)/3.0;	/* Blend with sphere */
 	aa = log(aa);			/* Allow for concave slope */
 	if (aa < 0.0)			/* but constrain to be +ve */
 		aa = 0.0;
 #else				/* (Using simpler version) */
-	aa = 20.0 * pow(ss, 0.25);
+	aa = 20.0 * pow(rr, s->logpow);		/* Default 0.25 */
 #endif
 #endif	/* TEST_CONVEX_HULL */
 
@@ -1645,7 +1683,7 @@ gamut *s
 			double aa;
 
 			/* Figure log scaled radius */
-			s->verts[i]->lr0 = log_scale(s->verts[i]->r[0]);
+			s->verts[i]->lr0 = log_scale(s, s->verts[i]->r[0]);
 
 			/* Compute unit shere mapped location */
 			aa = 1.0/s->verts[i]->r[0];		/* Adjustment to put in on unit sphere */
@@ -2496,7 +2534,7 @@ gamut *s
 
 				/* Sum weighted radius at sample point */
 				tt = s->radial(s, NULL, in);
-				tt = log_scale(tt);
+				tt = log_scale(s, tt);
 				rad += rv * tt;
 				rw += rv;
 
@@ -2510,7 +2548,7 @@ gamut *s
 		/* based on dividing out the sampled radius */
 
 //		s->verts[i]->lr0 = 40.0 + s->verts[i]->lr0 - rad;
-		s->verts[i]->lr0 = 40.0 + log_scale(s->verts[i]->r[0]) - rad;
+		s->verts[i]->lr0 = 40.0 + log_scale(s, s->verts[i]->r[0]) - rad;
 		/* Prevent silliness */
 		if (s->verts[i]->lr0 < (2.0 * FAKE_SEED_SIZE))
 			s->verts[i]->lr0 = (2.0 * FAKE_SEED_SIZE);
@@ -2533,19 +2571,21 @@ gamut *s
 	triangulate_ch(s);
 
 #if defined(DO_TWOPASS) && !defined(TEST_CONVEX_HULL)
+	if (s->no2pass == 0) {
 #ifdef DEBUG_TRIANG
-	printf("############ Starting second pass ###################\n");
+		printf("############ Starting second pass ###################\n");
 #endif
-	compute_smchrad(s);
-	del_triang(s);
-	s->pass++;
-	triangulate_ch(s);
+		compute_smchrad(s);
+		del_triang(s);
+		s->pass++;
+		triangulate_ch(s);
 
-	/* Three passes is slightly better, but slower... */
-//	compute_smchrad(s);
-//	del_triang(s);
-//	s->pass++;
-//	triangulate_ch(s);
+		/* Three passes is typically slightly better, but slower... */
+//		compute_smchrad(s);
+//		del_triang(s);
+//		s->pass++;
+//		triangulate_ch(s);
+	}
 #endif /* DO_TWOPASS && !TEST_CONVEX_HULL */
 }
 
@@ -2567,15 +2607,27 @@ gamut *s
 	return s->isJab;
 }
 
+/* return the isRast flag value */
+static int getisrast(
+gamut *s
+) {
+	return s->isRast;
+}
+
+/* Disable segmented maxima filtering */
+static void setnofilt(gamut *s) {
+	s->nofilter = 1;
+}
+
 /* return the gamut center value */
-void getcent(gamut *s, double *cent) {
+static void getcent(gamut *s, double *cent) {
 	cent[0] = s->cent[0];
 	cent[1] = s->cent[1];
 	cent[2] = s->cent[2];
 }
 
 /* Return the gamut min/max range */
-void getrange(gamut *s, double *min, double *max) {
+static void getrange(gamut *s, double *min, double *max) {
 
 	if (min != NULL) {
 		min[0] = s->mn[0];
@@ -5451,6 +5503,9 @@ char *filename
 	else
 		gam->add_kword(gam, 0, "COLOR_REP","LAB", NULL);
 
+	if (s->isRast)
+		gam->add_kword(gam, 0, "SURF_TYPE","RASTER", NULL);
+
 	sprintf(buf,"%f %f %f", s->cent[0], s->cent[1], s->cent[2]);
 	gam->add_kword(gam, 0, "GAMUT_CENTER",buf, NULL);
 
@@ -5567,6 +5622,20 @@ char *filename
 	if ((cw = gam->find_kword(gam, 0, "COLOR_REP")) >= 0) {
 		if (strcmp(gam->t[0].kdata[cw], "JAB") == 0)
 			s->isJab = 1;
+	}
+
+	/* Figure the surface type */
+	s->isRast = 0;
+	if ((cw = gam->find_kword(gam, 0, "SURF_TYPE")) >= 0) {
+		if (strcmp(gam->t[0].kdata[cw], "RASTER") == 0)
+			s->isRast = 1;
+	}
+	if (s->isRast) {
+		s->logpow = RAST_LOG_POW;	/* Wrap the surface more closely */
+		s->no2pass = 1;				/* Only do one pass */
+	} else {
+		s->logpow = NORM_LOG_POW;	/* Convex hull compression power */
+		s->no2pass = 0;				/* Do two passes */
 	}
 
 	/* If we can find the the colorspace white and black points, add them to the gamut */

@@ -43,10 +43,13 @@ ATTRS{idVendor}=="085c", ATTRS{idProduct}=="0300", ENV{COLOR_MEASUREMENT_DEVICE}
 # Huey
 ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2005", ENV{COLOR_MEASUREMENT_DEVICE}="1"
 
-# Let ACL manage these devices, if it is installed
-TEST=="/lib/udev/udev-acl", ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{ACL_MANAGE}="1"
+# Let udev-acl and ConsoleKit manage these devices, if applicable
+TEST=="/lib/udev/udev-acl", TEST=="/var/run/ConsoleKit/database", ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{ACL_MANAGE}="1"
 
-# Otherwise users should be members of the plugdev group
-TEST!="/lib/udev/udev-acl", ENV{COLOR_MEASUREMENT_DEVICE}=="*?", MODE="660", GROUP="plugdev"
+# Otherwise, restrict access to members of the plugdev group
+ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{ACL_MANAGE}!="*?", MODE="660", GROUP="plugdev"
+
+# Set ID_VENDOR and ID_MODEL acording to VID and PID
+IMPORT{program}="usb-db %p"
 
 LABEL="argyll_rules_end"

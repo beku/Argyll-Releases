@@ -2,16 +2,14 @@
 /* 
  * Argyll Color Correction System
  *
- * Read in the RGB/CMYK device data from Gretag/Logo
- * device files or X-Rite Color Port files, and
- * convert it into a CGATs format
- * suitable for the Argyll CMS.
+ * Read in the RGB/CMYK CGATS device data from Gretag/Logo/X-Rite etc.
+ * and convert it into a .ti3 CGATs format suitable for the Argyll CMS.
  *
  * Derived from  kodak2cgats.c 
  * Author: Graeme W. Gill
  * Date:   16/11/00
  *
- * Copyright 2000 - 2006, Graeme W. Gill
+ * Copyright 2000 - 2010, Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-

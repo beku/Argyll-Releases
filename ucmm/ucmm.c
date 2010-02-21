@@ -175,7 +175,7 @@ ucmm_error ucmm_install_monitor_profile(
 	/* and where we should copy the profile to. */
 
 	cnl = strlen(config_file);
-	pnl = strlen(profile_dir) + 1 + strlen(profile);
+	pnl = strlen(profile_dir) + 1 + strlen(profile);	/* Including "/" */
 
 	if (scope == ucmm_local_system) {
 		char *tt;
@@ -187,7 +187,7 @@ ucmm_error ucmm_install_monitor_profile(
 
 		if ((tt = getenv("XDG_DATA_DIRS")) == NULL)
 			tt = "/usr/local/share/:/usr/share/";
-		if ((data_name = malloc(strlen(tt) + cnl + 2)) == NULL) {
+		if ((data_name = malloc(strlen(tt) + pnl + 2)) == NULL) {
 			free(conf_name);
 			return ucmm_resource;
 		}
@@ -249,7 +249,7 @@ ucmm_error ucmm_install_monitor_profile(
 	strcat(data_name, "/");
 	{
 		char *tt;
-		if ((tt = strrchr(profile, '/')) != NULL)	/* Get base name */
+		if ((tt = strrchr(profile, '/')) != NULL)	/* Get base name of profile */
 			tt++;
 		else
 			tt = profile;
@@ -526,7 +526,7 @@ ucmm_error ucmm_uninstall_monitor_profile(
 
 		if ((tt = getenv("XDG_DATA_DIRS")) == NULL)
 			tt = "/usr/local/share/:/usr/share/";
-		if ((data_name = malloc(strlen(tt) + cnl + 2)) == NULL) {
+		if ((data_name = malloc(strlen(tt) + pnl + 2)) == NULL) {
 			free(conf_name);
 			return ucmm_resource;
 		}

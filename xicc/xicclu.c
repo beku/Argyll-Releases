@@ -869,7 +869,7 @@ main(int argc, char *argv[]) {
 			for (j = 0; j < outn; j++)
 				yy[j][i] = 100.0 * out[j];
 		}
-fflush(stdout);
+//fflush(stdout);
 
 		/* plot order: Black Red Green Blue Yellow Purple */
 		if (outs == icSigRgbData) {

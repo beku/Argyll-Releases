@@ -185,15 +185,18 @@ viewing conditions for CIECAM02,</span><br
 viewing conditions for CIECAM02,</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; either an enumerated choice, or a parameter:value change</span><span
- style="font-family: monospace;"></span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp; pp - Practical Reflection Print</span><br
- style="font-family: monospace;">
+&nbsp;&nbsp; either an enumerated choice, or a parameter:value change<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; pp - Practical Reflection
+Print (ISO-3664 P2)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; pe - Print evaluation environment</span><br
+&nbsp; &nbsp; &nbsp; pe - Print evaluation environment (CIE 116-1995)<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; pc - Critical print evaluation environment
+(ISO-3664 P1)</span></small><small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;
@@ -524,7 +527,7 @@ instead of that of the source profile. This is to allow optimizing the
 gamut mapping to a source gamut of &nbsp;a particular image, which can
 give slightly better results that gamut mapping from the gamut of the
 source colorspace. Such a source image gamut can be created using the <a
- href="tiffgamut.html"> tiffgamut</a> utility. More&nbsp; <a href="#gg">details</a>
+ href="tiffgamut.html"> tiffgamut</a> tool. More&nbsp; <a href="#gg">details</a>
 about gamut mapping mode.<br>
 <br>
 <a name="G"></a>&nbsp;<b>-G</b>&nbsp; Use the gamut mapped, inverse
@@ -538,7 +541,7 @@ profile. This is to allow optimizing the gamut mapping to a source
 gamut of &nbsp;a particular image, which can give slightly better
 results that gamut mapping from the gamut of the source colorspace.
 Such a source image gamut can be created using the <a
- href="tiffgamut.html"> tiffgamut</a> utility. More <a href="#GG">details</a>
+ href="tiffgamut.html"> tiffgamut</a> tool. More <a href="#GG">details</a>
 about the gamut mapping, inverse AtoB mode.<br>
 <br>
 The gamut provided to the <span style="font-weight: bold;">-g</span>
@@ -634,7 +637,8 @@ appearance, linearly
 compresses or expands the the luminance axis to match the source to the
 destination space, while not otherwise altering the gamut, clipping any
 out
-of gamut colors to the closest match.<br>
+of gamut colors to the closest match. This is often useful for
+appearance based soft proofing.<br>
 <br>
 <a name="ip"></a>The&nbsp; <span style="font-weight: bold;">p</span>
 intent, Perceptual, uses "knee"
@@ -803,7 +807,7 @@ functionality, with the black being preserved in CMYK to CMYK linking,
 with the output black constrained to be between the first and second
 set of curve parameters.<br>
 <br>
-The <a href="xicclu.html">xicclu</a> utility can be used to plot out
+The <a href="xicclu.html">xicclu</a> tool can be used to plot out
 the resulting black level for a given set of parameters, by using the <a
  href="xicclu.html#g">-g</a> flag of a profile already created from the
 same .ti3 file.<br>

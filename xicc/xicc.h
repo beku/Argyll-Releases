@@ -121,7 +121,7 @@ typedef struct {
 } icxInkCurve;
 
 /* Default black generation smoothing value */
-#define ICXINKDEFSMTH 0.20
+#define ICXINKDEFSMTH 0.09	/* Transition window of +/- ICXINKDEFSMTH */
 #define ICXINKDEFSKEW 2.0	/* Curve shape skew (matches typical device behaviour) */
 
 /* Structure to convey inking details */
@@ -232,9 +232,9 @@ struct _xicc {
 #define ICX_SET_WHITE       0x0001		/* find, set and make relative to the white point */
 #define ICX_SET_BLACK       0x0002		/* find and set the black point */
 #define ICX_WRITE_WBL       0x0004		/* Matrix: write White, Black & Luminance tags */
-#define ICX_NO_IN_SHP_LUTS  0x0040		/* If LuLut: Don't create input (Device) shaper curves. */
-#define ICX_NO_IN_POS_LUTS  0x0080		/* If LuLut: Don't create input (Device) poistion curves. */
-#define ICX_NO_OUT_LUTS     0x0100		/* If LuLut: Don't create output (PCS) curves. */
+#define ICX_NO_IN_SHP_LUTS  0x0040		/* Lut/Mtx: Don't create input (Device) shaper curves. */
+#define ICX_NO_IN_POS_LUTS  0x0080		/* LuLut: Don't create input (Device) postion curves. */
+#define ICX_NO_OUT_LUTS     0x0100		/* LuLut: Don't create output (PCS) curves. */
 //#define ICX_2PASSSMTH       0x0400		/* If LuLut: Use Gaussian smoothing */
 //#define ICX_EXTRA_FIT       0x0800		/* If LuLut: Counteract scat data point errors. */
 /* And  ICX_VERBOSE         0x8000 */	/* Turn on verboseness during creation */

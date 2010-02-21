@@ -64,7 +64,7 @@ unsigned short idProduct);
 
 /* Should deprecate the following. It should be replaced with a */
 /* method in the instrument class that returns its configured spectrum, */
-/* and the spectrum should be embeded in the .ti3 file, not the instrument */
+/* and the spectrum should be embedded in the .ti3 file, not the instrument */
 /* name. */
 
 #ifdef NOXSPECT

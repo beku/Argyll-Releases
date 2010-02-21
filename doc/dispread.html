@@ -95,7 +95,7 @@ time a color is set<br>
 time a color is measured</span></font><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#W">-W
 n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><br>
+Override serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><br>
 <small style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print debug
 diagnostics to stderr</small><br>
@@ -109,7 +109,7 @@ Base name for input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
 dispread -c1 -i92 mycrt<br>
 <h3>Comments<br>
 </h3>
-This is the utility for exercising a display, in order to measure its
+This is the tool for exercising a display, in order to measure its
 color characteristics. The device test colors are defined by the
 outfile.ti1 file, while the resulting device+colorimetric and optional
 spectral readings are stored in the outfile.ti3 file. Display
@@ -306,7 +306,7 @@ screen etc.), by causing the given command to be invoked to the shell,
 with six arguments. The first three arguments are the RGB test color as
 integers in the range 0 to 255, the second three parameters are the RGB
 test color as floating point numbers in the range 0.0 to 1.0. The
-script or utility should relay the given color to the screen in some
+script or tool should relay the given color to the screen in some
 manner (e.g. by generating a raster file of the given color and sending
 it to the display being profiled), before returning. Note that a test
 window will also be created on the system running dispread.<br>
@@ -319,7 +319,7 @@ given command is involked to the shell,
 with six arguments. The first three arguments are the RGB test color as
 integers in the range 0 to 255, the second three parameters are the RGB
 test color as floating point numbers in the range 0.0 to 1.0. The
-script or utility should create a file called <span
+script or tool should create a file called <span
  style="font-weight: bold;">"command.meas</span>" that contains the XYZ
 values for the given RGB (or measured from the test window) in cd/m^2
 as three numbers separated by spaces, before returning. If the command

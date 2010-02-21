@@ -20,6 +20,8 @@
 	Add an option that allows including a scale gauge, to detect
 	accidental re-scaling.
 
+	Make it aportion extra space evenly around the chart
+	rather than at the trailing edges.
 */
 
 /* This program generates a PostScript or TIFF print target file, */
@@ -872,7 +874,7 @@ static trend *new_tiff_trend(
 	tiff_trend *s;
 	color2d c;					/* Background color */
 	colort2d csp;
-	double ma[4];				/* Page margines */
+	double ma[4];				/* Page margins */
 	int nc = 0;
 	int j;
 
@@ -936,7 +938,10 @@ static trend *new_tiff_trend(
 		nc = icx_noofinks(nmask);
 	}
 
-	ma[0] = ma[1] = ma[2] = ma[3] = marg;
+	if (marg > 0)
+		ma[0] = ma[1] = ma[2] = ma[3] = marg;
+	else
+		ma[0] = ma[1] = ma[2] = ma[3] = 0;
 
 	if ((s->r = new_render2d(pw, ph, ma, hres, vres,  csp, nc, dpth)) == NULL) {
 		error("Failed to create a render2d object for tiff output");
@@ -1655,6 +1660,7 @@ char *label,		/* Per strip label */
 double pw,			/* Page width */
 double ph,			/* Page height */
 double bord, 		/* Border margin in mm */
+int nosubmarg,		/* NZ if bord is not to be subtracted from raster */
 int nollimit,		/* NZ to not limit the strip length */
 int nolpcbord,		/* NZ to suppress left paper clip border */
 int rand,			/* Randomise flag */
@@ -2333,6 +2339,8 @@ int *p_npat			/* Return number of patches including padding */
 							sprintf(psname,"%s.ps",bname);
 							if ((tro = new_ps_trend(psname,npages,nmask,pw,ph,oft,rand,rstart)) == NULL)
 								error ("Unable to create output rendering object file '%s'",psname);
+							if (verb)
+								printf("Creating file '%s'\n",psname);
 						}
 					} else if (oft == 1) {	/* EPS */
 						if (npages > 1)
@@ -2341,6 +2349,8 @@ int *p_npat			/* Return number of patches including padding */
 							sprintf(psname,"%s.eps",bname);
 						if ((tro = new_ps_trend(psname,npages,nmask,pw,ph,oft,rand,rstart)) == NULL)
 							error ("Unable to create output rendering object file '%s'",psname);
+						if (verb)
+							printf("Creating file '%s'\n",psname);
 					} else {	/* TIFF */
 						double res;		/* pix/mm */
 						if (npages > 1)
@@ -2349,11 +2359,12 @@ int *p_npat			/* Return number of patches including padding */
 							sprintf(psname,"%s.tif",bname);
 
 						res = tiffres/25.4; 
-						if ((tro = new_tiff_trend(psname,nmask,tiffdpth,pw,ph,bord, res,res,pgreyt,ncha,tiffcomp)) == NULL)
+						if ((tro = new_tiff_trend(psname,nmask,tiffdpth,pw,ph,
+						    nosubmarg ? 0 : bord, res,res,pgreyt,ncha,tiffcomp)) == NULL)
 							error ("Unable to create output rendering object file '%s'",psname);
+						if (verb)
+							printf("Creating file '%s'\n",psname);
 					}
-					if (verb)
-						printf("Creating file '%s'\n",psname);
 					tro->startpage(tro,pif);
 
 					/* Print all the row labels */
@@ -2777,7 +2788,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -c              Force colored spacers\n");
 	fprintf(stderr," -b              Force B&W spacers\n");
 	fprintf(stderr," -n              Force no spacers\n");
-	fprintf(stderr," -f              Create PostSCript DeviceN Color fallback\n");
+	fprintf(stderr," -f              Create PostScript DeviceN Color fallback\n");
 	fprintf(stderr," -w g|r|s|n      White colorspace encoding DeviceGray (def), DeviceRGB, Separation or DeviceN\n");            
 	fprintf(stderr," -k g|c|s|n      Black colorspace encoding DeviceGray (def), DeviceCMYK, Separation or DeviceN\n");            
 	fprintf(stderr," -e              Output EPS compatible file\n");
@@ -2792,6 +2803,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -x pattern      Use given strip indexing pattern (Default = \"%s\")\n",DEF_SIXPAT);
 	fprintf(stderr," -y pattern      Use given patch indexing pattern (Default = \"%s\")\n",DEF_PIXPAT);
 	fprintf(stderr," -m margin       Set a page margin in mm (default %3.1f mm)\n",DEF_MARGINE);       
+	fprintf(stderr," -M margin       Set a page margin in mm and include it in TIFF\n");       
 	fprintf(stderr," -P              Don't limit strip length\n");       
 	fprintf(stderr," -L              Suppress any left paper clip border\n");       
 	fprintf(stderr," -p size         Select page size from:\n");
@@ -2846,6 +2858,7 @@ char *argv[];
 	int si, fi, wi;			/* sample id index, field index, keyWord index */
 	char label[400];		/* Space for chart label */
 	double marg = DEF_MARGINE;	/* Margin from paper edge in mm */
+	int nosubmarg = 0;		/* Don't subtract it from raster */
 	int nolpcbord = 0;		/* NZ to suppress left paper clip border */
 	int nollimit = 0;		/* NZ to release any strip length limits */
 	paper *pap = NULL;		/* Paper size pointer, NULL if custom */
@@ -3076,6 +3089,8 @@ char *argv[];
 
 			/* Border margin */
 			else if (argv[fa][1] == 'm' || argv[fa][1] == 'M') {
+				if (argv[fa][1] == 'M')
+					nosubmarg = 1;
 				fa = nfa;
 				if (na == NULL) usage("Expected border margine argument to -m");
 				marg = atof(na);
@@ -3503,7 +3518,7 @@ char *argv[];
 	               psname, rand ? "Random Start" : "Chart ID", rstart, atm);
 	generate_file(itype, psname, cols, npat, applycal ? cal : NULL, label,
 	            pap != NULL ? pap->w : cwidth, pap != NULL ? pap->h : cheight,
-	            marg, nollimit, nolpcbord, rand, rstart, saix, paix,	ixord,
+	            marg, nosubmarg, nollimit, nolpcbord, rand, rstart, saix, paix,	ixord,
 	            pscale, sscale, hflag, verb, scanc, oft, tiffdpth, tiffres, ncha, tiffcomp,
 	            spacer, nmask, pgreyt, pcol, wp,
 	            &sip, &pis, &plen, &glen, &tlen, &nppat);

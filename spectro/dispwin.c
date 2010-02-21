@@ -43,9 +43,9 @@
 #include <signal.h>
 #ifndef NT
 #include <unistd.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
-#endif
 #include <time.h>
 #include "copyright.h"
 #include "config.h"
@@ -2080,16 +2080,14 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 		}
 
 		if (UninstallColorProfile(NULL, basename, TRUE) == 0) {
+			/* This can happen when some other program has the profile open */
 			int ev;
+			struct _stat sbuf;
 			debugr2((errout,"Warning, uninstallColorProfile() failed for file '%s' with error %d\n", basename,GetLastError()));
-			/* Hmm. This seems to happen on Win2K. Force the issue. */
-			if ((ev = _unlink(colpath)) != 0) {
-				debugr2((errout,"unlink() failed for file '%s' with error %d\n", colpath,errno));
-				free(wmonid);
-				free(wbname);
-				free(fullpath);
-				return 2;
-			}
+			free(wmonid);
+			free(wbname);
+			free(fullpath);
+			return 2;
 		}
 
 		free(wmonid);

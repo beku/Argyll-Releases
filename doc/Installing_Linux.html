@@ -75,7 +75,7 @@ are running. You can switch to using Xinerama to solve this problem, or
 you can try doing a calibration for the screens that do
 have accessible Video LUTs with these proprietary extensions, or ignore
 calibration and rely purely on display profiling. Use the dispwin
-utility to figure out what works on your system. The NVidia ATI binary
+tool to figure out what works on your system. The NVidia ATI binary
 drivers do not seem to properly support XRandR V1.2 either, even though
 they claim to do so. You may have to set the <span
  style="font-weight: bold;"></span><span style="font-weight: bold;">ARGYLL_IGNORE_XRANDR1_2</span>
@@ -99,7 +99,7 @@ Some users have noted that their default X11 installation doesn't
 properly enable access to the video card Video Lookup Tables (RAMDAC).
 The Video LUTs are used for display calibration purposes, and a warning
 will be issues by the <span style="font-weight: bold;">dispcal</span>
-and <span style="font-weight: bold;">dispread</span> utilities if
+and <span style="font-weight: bold;">dispread</span> tools if
 there is a problem with this. Without access to the VideoLUTs, you
 won't be able to use display calibration.<br>
 <br>
@@ -134,7 +134,7 @@ up instrument access:<br>
 <br>
 </span></big>By default most Linux based systems make devices
 inaccessible to user mode programs, so it is necessary to make some
-modification to your permissions so that Argyll utilities are able to
+modification to your permissions so that Argyll tools are able to
 access the Color Measurement Instruments. In order from newest
 to oldest, the following sub-systems may need to be configured to
 permit this:<br>

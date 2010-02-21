@@ -119,7 +119,12 @@ struct _mpp {
 	               double **dout,				/* Return the partial derivative dout[3][n] */
 	               double *dev);
 
-	/* Lookup a spectral value. (never fwa corrected) */
+	/* Lookup an XYZ value. (never FWA corrected) */
+	void (*lookup_xyz) (struct _mpp *p,
+	               double *out,					/* Returned XYZ value */
+	               double *in);					/* Input device values */
+
+	/* Lookup a spectral value. (never FWA corrected) */
 	void (*lookup_spec) (struct _mpp *p,
 	               xspect *out,					/* Returned spectral value */
 	               double *in);					/* Input device values */

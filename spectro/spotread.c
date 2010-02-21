@@ -21,8 +21,8 @@
 
 /* TTBD
  *
- *     Complete support for spectrolino and spectroscan.
- *
+ *  Should fix plot so that it is a separate object running its own thread,
+ *  so that it can be sent a graph without needing to be clicked in all the time.
  */
 
 #undef DEBUG
@@ -189,7 +189,7 @@ usage(int debug) {
 //	fprintf(stderr," -K type              Run instrument calibration first\n");
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
 	fprintf(stderr," -H                   Start in high resolution spectrum mode (if available)\n");
-	fprintf(stderr," -W n|h|x             Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
+	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," logfile              Optional file to save reading results as text\n");
 	exit(1);
@@ -739,8 +739,8 @@ int main(int argc, char *argv[])
 				smode = inst_mode_s_ref_spot;
 		}
 
-		/* Use spec if requested, or if available and CRI should be computed */
-		if (spec || pspec || ((cap & inst_spectral) != 0 && (emiss || ambient))) {
+		/* Use spec if requested or if available in case of CRI or FWA */
+		if (spec || pspec || ((cap & inst_spectral) != 0)) {
 			mode |= inst_mode_spectral;
 			smode |= inst_mode_spectral;
 		}

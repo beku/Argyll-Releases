@@ -85,12 +85,16 @@ appearance mode and viewing conditions for CIECAM02,</span><br
 either an enumerated choice, or a parameter:value change</span><span
  style="font-family: monospace;"></span><br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;
-&nbsp; &nbsp;&nbsp; &nbsp;
-&nbsp; pp - Practical Reflection Print</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; pe - Print evaluation environment</span><br
+<span style="font-family: monospace;"></span></small><small><span
+ style="font-family: monospace;">&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp; pp - Practical Reflection Print
+(ISO-3664 P2)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; pe - Print evaluation environment (CIE 116-1995)<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; pc - Critical print evaluation environment (ISO-3664 P1)</span></small><small><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; mt - Monitor in typical work environment</span><br
@@ -247,7 +251,7 @@ necessary to supply an ICC profile to translate the device space values
 to a CIE space value such as L*a*b* or CIECAM02 Jab space for creating
 a gamut surface. For the ICC profile provided it is then possible to
 select exactly what type of conversion is used. A TIFF file with an
-embeded ICC profile may be supplied as the profile argument - e.g. to
+embedded ICC profile may be supplied as the profile argument - e.g. to
 get the gamut of a tiff file that contains an embedded profile use
 something like:<br>
 <br>

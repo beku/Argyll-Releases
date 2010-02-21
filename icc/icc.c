@@ -1610,6 +1610,8 @@ static const char *string_PlatformSignature(icPlatformSignature sig) {
 			return "SGI";
 		case icSigTaligent:
 			return "Taligent";
+		case icmSig_nix:
+			return "*nix";
 		default:
 			sprintf(buf,"Unrecognized - %s",tag2str(sig));
 			return buf;
@@ -5450,12 +5452,13 @@ int icmSetMultiLutTables(
 	int clip = 0;
 
 	/* Check that everything is OK to proceed */
-	if (ntables < 1 || ntables > 3) {
-		if (ntables > 1) {
+	if (ntables < 1 || ntables > MAX_CHAN) {
+		if (ntables >= 1) {
 			icp = pp[0]->icp;
 			sprintf(icp->err,"icmSetMultiLutTables has illegal number of tables %d",ntables);
 			return icp->errc = 1;
 		} else {
+			/* Can't write error message anywhere */
 			return 1;
 		}
 	}

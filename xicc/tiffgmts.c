@@ -50,7 +50,7 @@ void usage(void) {
 	int i;
 	fprintf(stderr,"Create locus of test points that spans the range of colors a TIFF, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	fprintf(stderr,"usage: tiffgmts [-v level] [profile.icm | embeded.tif] infile.tif\n");
+	fprintf(stderr,"usage: tiffgmts [-v level] [profile.icm | embedded.tif] infile.tif\n");
 	fprintf(stderr," -v            Verbose\n");
 	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .ts file\n");
 	fprintf(stderr," -n            Don't add VRML axes or white/black point\n");
@@ -536,7 +536,7 @@ main(int argc, char *argv[]) {
 	if (prof_name[0] != '\000') {
 
 		/* Open up the profile or TIFF embedded profile for reading */
-		if ((icco = read_embeded_icc(prof_name)) == NULL)
+		if ((icco = read_embedded_icc(prof_name)) == NULL)
 			error ("Can't open profile in file '%s'",prof_name);
 	
 		if (verb) {

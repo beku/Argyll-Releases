@@ -188,7 +188,7 @@ int dtype,			/* Display type, 0 = default, 1 = CRT, 2 = LCD */
 int nocal,			/* Disable auto calibration */
 int disbidi,		/* Disable automatic bi-directional strip recognition */
 int highres,		/* Use high res spectral mode */
-double scan_tol,	/* Modify patch consistency tollerance */
+double scan_tol,	/* Modify patch consistency tolerance */
 int pbypatch,		/* Patch by patch measurement */
 int xtern,			/* Use external (user supplied) values rather than instument read */
 int spectral,		/* Generate spectral info flag */
@@ -355,14 +355,14 @@ int debug			/* Debug level */
 				if (cap2 & inst2_has_scan_toll) {
 					inst_code ev;
 					if ((ev = it->set_opt_mode(it, inst_opt_scan_toll, scan_tol)) != inst_ok) {
-						printf("\nSetting patch consistency tollerance to %f failed with error :'%s' (%s)\n",
+						printf("\nSetting patch consistency tolerance to %f failed with error :'%s' (%s)\n",
 				       	       scan_tol, it->inst_interp_error(it, ev), it->interp_error(it, ev));
 						it->del(it);
 						return -1;
 					}
 					highres = 1;
 				} else if (verb) {
-					printf("Modified patch consistency tollerance ignored - instrument doesn't support it\n");
+					printf("Modified patch consistency tolerance ignored - instrument doesn't support it\n");
 				}
 			}
 
@@ -1886,8 +1886,8 @@ usage(void) {
 	fprintf(stderr," -N              Disable auto calibration of instrument\n");
 	fprintf(stderr," -B              Disable auto bi-directional strip recognition\n");
 	fprintf(stderr," -H              Use high resolution spectrum mode (if available)\n");
-	fprintf(stderr," -T ratio        Modify strip patch consistency tollerance by ratio\n");
-	fprintf(stderr," -W n|h|x        Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
+	fprintf(stderr," -T ratio        Modify strip patch consistency tolerance by ratio\n");
+	fprintf(stderr," -W n|h|x        Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]      Print debug diagnostics to stderr\n");
 	fprintf(stderr," outfile         Base name for input[ti2]/output[ti3] file\n");
 	exit(1);
@@ -1910,7 +1910,7 @@ int main(int argc, char *argv[]) {
 	int pbypatch = 0;				/* Read patch by patch */
 	int disbidi = 0;				/* Disable bi-directional strip recognition */
 	int highres = 0;				/* Use high res mode if available */
-	double scan_tol = 1.0;			/* Patch consistency tollerance modification */
+	double scan_tol = 1.0;			/* Patch consistency tolerance modification */
 	int xtern = 0;					/* Take external values, 1 = Lab, 2 = XYZ */
 	int spectral = 1;				/* Save spectral information */
 	int accurate_expd = 0;			/* Expected value assumed to be accurate */
@@ -1989,7 +1989,7 @@ int main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'H')
 				highres = 1;
 
-			/* Scan tollerance ratio */
+			/* Scan tolerance ratio */
 			else if (argv[fa][1] == 'T') {
 				if (na == NULL)
 					usage();

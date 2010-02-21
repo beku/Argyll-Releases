@@ -109,6 +109,8 @@
 #include "xicc.h"
 #include "gamut.h"
 #include "gammap.h"
+// ~~~99
+#include "vrml.h"
 
 void usage(char *diag, ...) {
 	int i;
@@ -134,8 +136,8 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -n              Don't preserve device linearization curves in result\n");
 	fprintf(stderr," -f              Special :- Force neutral colors to be K only output\n");
 	fprintf(stderr," -fk             Special :- Force K only neutral colors to be K only output\n");
-	fprintf(stderr," -fcmy           Special :- Force 100%% C,M or Y only to stay pure \n");
 	fprintf(stderr," -F              Special :- Force all colors to be K only output\n");
+	fprintf(stderr," -fcmy           Special :- Force 100%% C,M or Y only to stay pure \n");
 	fprintf(stderr," -p absprof      Include abstract profile in link\n");
 	fprintf(stderr," -s              Simple Mode (default)\n");
 	fprintf(stderr," -g [src.gam]    Gamut Mapping Mode [optional source image gamut]\n");
@@ -213,9 +215,11 @@ struct _profinfo {
 	xicc *x;
 	icxLuBase *luo;				/* Base XLookup type object */
 	icmLuAlgType alg;			/* Type of lookup algorithm */
+	icColorSpaceSignature csp;	/* Colorspace */
 	int chan;					/* Channels */
 	int nocurve;				/* NZ to not use device curve in per channel curve */
-	int lcurve;					/* NZ to apply a Y to L* curve for XYZ Matrix profiles */
+	int lcurve;					/* 1 to apply a Y like to L* curve for XYZ Matrix profiles */
+								/* 2 to apply a Y to L* curve for XYZ space */
 	double wp[3];				/* Lab/Jab white point for profile used by wphack & xyzscale */
 	icxLuBase *b2aluo;			/* B2A lookup for inking == 7 */
 }; typedef struct _profinfo profinfo;
@@ -267,6 +271,67 @@ struct _link {
 
 
 /* ------------------------------------------- */
+//#define YSCALE 1.0
+#define YSCALE (2.0/1.3)
+
+/* Extra non-linearity applied to BtoA XYZ PCS */
+/* This distributes the LUT indexes more evenly in */
+/* perceptual space, greatly improving the B2A accuracy of XYZ LUT */
+/* Since typically XYZ doesn't use the full range of 0-2.0 allowed */
+/* for in the encoding, we scale the cLUT index values to use the 0-1.3 range */
+
+/* (For these functions the encoded XYZ 0.0 - 2.0 range is 0.0 - 1.0 ??) */
+
+/* Y to L* */
+static void y2l_curve(double *out, double *in, int isXYZ) {
+	int i;
+	double val;
+	double isc = 1.0, osc = 1.0;
+
+	/* Scale from 0.0 .. 1.999969 to 0.0 .. 1.0 and back */
+	/* + range adjustment */
+	if (isXYZ) {
+		isc = 32768.0/65535.0 * YSCALE;
+		osc = 65535.0/32768.0;
+	}
+
+	for (i = 0; i < 3; i++) {
+		val = in[i] * isc;
+		if (val > 0.008856451586)
+			val = 1.16 * pow(val,1.0/3.0) - 0.16;
+		else
+			val = 9.032962896 * val;
+		if (val > 1.0)
+			val = 1.0;
+		out[i] = val * osc;
+	}
+}
+
+/* L* to Y */
+static void l2y_curve(double *out, double *in, int isXYZ) {
+	int i;
+	double val;
+	double isc = 1.0, osc = 1.0;
+
+	/* Scale from 0.0 .. 1.999969 to 0.0 .. 1.0 and back */
+	/* + range adjustment */
+	if (isXYZ) {
+		isc = 32768.0/65535.0;
+		osc = 65535.0/32768.0 / YSCALE;
+	}
+
+	/* Use an L* like curve, scaled to the maximum XYZ value */
+	for (i = 0; i < 3; i++) {
+		val = in[i] * isc;
+		if (val > 0.08)
+			val = pow((val + 0.16)/1.16, 3.0);
+		else
+			val = val/9.032962896;
+		out[i] = val * osc;
+	}
+}
+
+/* ------------------------------------------- */
 /* Functions called back in setting up the transform table */
 
 #ifdef DEBUGC
@@ -296,7 +361,7 @@ void devi_devip(void *cntx, double *out, double *in) {
 		int i;
 		for (i = 0; i < p->in.chan; i++)
 			out[i] = in[i];
-	} else {	/* We use an explicit curve */
+	} else {				/* Use input profile per channel curves */
 		switch(p->in.alg) {
 		    case icmMonoFwdType: {
 				icxLuMono *lu = (icxLuMono *)p->in.luo;	/* Safe to coerce */
@@ -320,18 +385,13 @@ void devi_devip(void *cntx, double *out, double *in) {
 		}
 		if (rv >= 2)
 			error("icc lookup failed: %d, %s",p->in.c->errc,p->in.c->err);
-
-		if (p->in.lcurve) {		/* Apply Y to L* */
-			int i;
-			for (i = 0; i < p->in.chan; i++) {
-				if (out[i] > 0.008856451586)
-					out[i] = pow(out[i],1.0/3.0);
-				else
-					out[i] = 7.787036979 * out[i] + 16.0/116.0;
-				out[i] = (1.16 * out[i] - 0.16);
-			}
-		}
 	}
+
+	if (p->in.lcurve) { 		/* Apply Y to L* */
+//printf("~1 y2l_curve got %f %f %f, isXYZ %d\n",in[0],in[1],in[2],p->in.lcurve == 2);
+		y2l_curve(out, out, p->in.lcurve == 2);
+	}
+
 #ifdef DEBUG
 #ifdef DEBUGC
 	DEBUGC
@@ -446,14 +506,8 @@ void devip_devop(void *cntx, double *out, double *in) {
 	}
 #endif /* ENKHACK */
 
-	if (p->in.nocurve == 0 && p->in.lcurve) {	/* Apply L* to Y */
-		for (i = 0; i < p->in.chan; i++) {
-			win[i] = (in[i] + 0.16)/1.16;
-			if (win[i] > 24.0/116.0)
-				win[i] = pow(win[i],3.0);
-			else
-				win[i] = (win[i] - 16.0/116.0)/7.787036979;
-		}
+	if (p->in.lcurve) {	/* Apply L* to Y */
+		l2y_curve(win, in, p->in.lcurve == 2);
 #ifdef DEBUG
 #ifdef DEBUGC
 	DEBUGC
@@ -656,9 +710,11 @@ void devip_devop(void *cntx, double *out, double *in) {
 			double map0[3], map1[3];
 
 			/* Compute blend of normal gamut map and Konly to Konly gamut map */	
-			p->map->domap(p->map, map0, pcsv);
-			p->Kmap->domap(p->Kmap, map1, pcsv);
-			icmBlend3(pcsvm, map0, map1, konlyness);
+			{
+				p->map->domap(p->map, map0, pcsv);
+				p->Kmap->domap(p->Kmap, map1, pcsv);
+				icmBlend3(pcsvm, map0, map1, konlyness);
+			}
 
 #ifdef DEBUG
 #ifdef DEBUGC
@@ -669,7 +725,9 @@ void devip_devop(void *cntx, double *out, double *in) {
 
 		/* Normal gamut mapping */
 		} else {
-			p->map->domap(p->map, pcsvm, pcsv);
+			{
+				p->map->domap(p->map, pcsvm, pcsv);
+			}
 		}
 
 
@@ -871,16 +929,8 @@ void devip_devop(void *cntx, double *out, double *in) {
 			error("icc lookup failed: %d, %s",p->in.c->errc,p->in.c->err);
 	}
 
-	if (p->out.nocurve == 0 && p->out.lcurve) {		/* Apply Y to L* */
-		for (i = 0; i < p->out.chan; i++) {
-			if (out[i] > 0.008856451586)
-				out[i] = pow(out[i],1.0/3.0);
-			else
-				out[i] = 7.787036979 * out[i] + 16.0/116.0;
-			out[i] = (1.16 * out[i] - 0.16);
-		}
-	}
-
+	if (p->out.lcurve) 		/* Apply Y to L* */
+		y2l_curve(out, out, p->out.lcurve == 2);
 
 #ifdef DEBUG
 #ifdef DEBUGC
@@ -918,17 +968,10 @@ void devop_devo(void *cntx, double *out, double *in) {
 	for (i = 0; i < p->out.chan; i++)
 		out[i] = in[i];
 
-	if (p->out.nocurve == 0) {	/* Using per channel curves */
+	if (p->out.lcurve) 		/* Apply L* to Y */
+		l2y_curve(out, out, p->out.lcurve == 2);
 
-		if (p->out.lcurve) {		/* Apply L* to Y */
-			for (i = 0; i < p->out.chan; i++) {
-				out[i] = (in[i] + 0.16)/1.16;
-				if (out[i] > 24.0/116.0)
-					out[i] = pow(out[i],3.0);
-				else
-					out[i] = (out[i] - 16.0/116.0)/7.787036979;
-			}
-		}
+	if (p->out.nocurve == 0) {	/* Using per channel curves */
 
 		switch(p->out.alg) {
 		    case icmMonoBwdType: {
@@ -1799,7 +1842,7 @@ main(int argc, char *argv[]) {
 
 	/* - - - - - - - - - - - - - - - - - - - */
 	/* Open up the input device profile for reading, and read header etc. */
-	if ((li.in.c = read_embeded_icc(in_name)) == NULL)
+	if ((li.in.c = read_embedded_icc(in_name)) == NULL)
 		error ("Can't open file '%s'",in_name);
 	li.in.h = li.in.c->header;
 
@@ -1850,7 +1893,7 @@ main(int argc, char *argv[]) {
 	}
 	/* - - - - - - - - - - - - - - - - - - - */
 	/* Open up the output device output profile for reading, and read header etc. */
-	if ((li.out.c = read_embeded_icc(out_name)) == NULL)
+	if ((li.out.c = read_embedded_icc(out_name)) == NULL)
 		error ("Can't open file '%s'",out_name);
 	li.out.h = li.out.c->header;
 
@@ -2067,7 +2110,7 @@ main(int argc, char *argv[]) {
 		}
 	
 		/* Get details of overall conversion */
-		li.in.luo->spaces(li.in.luo, NULL, &li.in.chan, NULL, NULL, &li.in.alg,
+		li.in.luo->spaces(li.in.luo, &li.in.csp, &li.in.chan, NULL, NULL, &li.in.alg,
 		                  NULL, NULL, NULL);
 
 		/* Get the input profile A2B input curve resolution */
@@ -2088,8 +2131,13 @@ main(int argc, char *argv[]) {
 		li.in.luo->lutspaces(li.in.luo, NULL, NULL, &natpcs, NULL, NULL);
 	
 		if (li.in.nocurve == 0 && natpcs == icSigXYZData
-		  && (li.in.alg == icmMatrixFwdType || li.in.alg == icmMatrixBwdType)) {
+		  && (li.in.alg == icmMatrixFwdType || li.in.alg == icmMatrixBwdType
+		      || li.in.csp == icSigXYZData)) {
 			li.in.lcurve = 1;		/* Use Y to L* and L* to Y for input */
+		    if (li.in.csp == icSigXYZData) {
+				li.in.lcurve = 2;		/* Use real Y to L* and L* to Y for input */
+				li.in.nocurve = 1;		/* Don't trust the curve that comes with it */
+			}
 			if (li.verb)
 				printf("Using Y to L* and L* to Y curves for input\n");
 		}
@@ -2180,7 +2228,7 @@ main(int argc, char *argv[]) {
 			}
 		
 			/* Get details of overall conversion */
-			li.out.luo->spaces(li.out.luo, NULL, &li.out.chan, NULL, NULL, &li.out.alg,
+			li.out.luo->spaces(li.out.luo, &li.out.csp, &li.out.chan, NULL, NULL, &li.out.alg,
 			                   NULL, NULL, NULL);
 
 			/* Get the output profile A2B input curve resolution */
@@ -2336,10 +2384,14 @@ main(int argc, char *argv[]) {
 				error("100% CMY mapping requested with non CMY or CMYK output profile");
 		}
 
-			
 		if (li.out.nocurve == 0 && natpcs == icSigXYZData
-		  && (li.out.alg == icmMatrixFwdType || li.out.alg == icmMatrixBwdType)) {
+		  && (li.out.alg == icmMatrixFwdType || li.out.alg == icmMatrixBwdType
+		      || li.out.csp == icSigXYZData)) {
 			li.out.lcurve = 1;		/* Use Y to L* and L* to Y for output */
+		    if (li.out.csp == icSigXYZData) {
+				li.out.lcurve = 2;		/* Use real Y to L* and L* to Y for output */
+				li.out.nocurve = 1;		/* Don't trust the curve that comes with it */
+			}
 			if (li.verb)
 				printf("Using Y to L* and L* to Y curves for output\n");
 		}
@@ -2403,7 +2455,7 @@ main(int argc, char *argv[]) {
 			if (li.verb)
 				printf(" Loading Image Source Gamut '%s'\n",sgam_name);
 
-			igam = new_gamut(sgres, isJab);		/* isJab will be overriden by gamut file */
+			igam = new_gamut(sgres, isJab, 0);	/* isJab will be overriden by gamut file */
 
 			if (igam->read_gam(igam, sgam_name))
 				error("Reading source gamut '%s' failed",sgam_name);
@@ -3018,8 +3070,9 @@ main(int argc, char *argv[]) {
 				devip_devop,				/* devi' -> devo' transfer function */
 				NULL, NULL,					/* Default output colorspace range */
 				devop_devo					/* Output transfer tables, devo'->devo */
-			) != 0)
+			) != 0) {
 				error("Setting 16 bit Lut failed: %d, %s",wr_icc->errc,wr_icc->err);
+			}
 			if (li.verb) {
 				printf("\n");
 			}

@@ -185,7 +185,7 @@ struct _render2d {
 /* Private: */
 	int ix;					/* Next primitive index */
 	double fw, fh;			/* Page size in mm including margines */
-	double lm, rm, tm, bm;	/* Page margines */
+	double lm, rm, tm, bm;	/* Page margines in mm */
 	double w, h;			/* Page size in mm excluding margines */
 	double hres, vres;		/* Page pixel resolution in pixels/mm */
 	int pw, ph;				/* Page size in pixels */

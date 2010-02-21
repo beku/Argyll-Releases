@@ -28,7 +28,8 @@ typedef enum {
 	prof_gammat           = 3,		/* XYZ gamut + matrix */
 	prof_shamat           = 4,		/* XYZ shaper + matrix */
 	prof_gam1mat          = 5,		/* XYZ shared TRC gamut + matrix */
-	prof_sha1mat          = 6		/* XYZ shared TRC shaper + matrix */
+	prof_sha1mat          = 6,		/* XYZ shared TRC shaper + matrix */
+	prof_matonly          = 7		/* XYZ matrix, linear */
 } prof_atype;
 
 /* Output or Display device */

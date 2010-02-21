@@ -62,6 +62,8 @@ int read_xspect(xspect *sp, char *fname);
 /* Get interpolated value at wavelenth (not normalised) */
 double value_xspect(xspect *sp, double wl);
 
+/* Convert from one xspect type to another */
+void xspect2xspect(xspect *dst, xspect *targ, xspect *src);
 /* ------------------------------------------------------------------------------ */
 /* Class for converting between spectral and CIE */
 
@@ -122,7 +124,7 @@ struct _xsp2cie {
 	int doLab;					/* Return D50 Lab result */
 
 	/* FWA compensation */
-	double bw;		/* Intergration bandwidth */
+	double bw;		/* Integration bandwidth */
 	xspect emits;	/* Estimated FWA emmission spectrum */
 	xspect media;	/* Estimated base media (ie. minus FWA) */
 	xspect instr;	/* Normalised instrument illuminant spectrum */
@@ -149,6 +151,12 @@ struct _xsp2cie {
 	                 xspect *in				/* Spectrum to be converted, normalised by norm */
 	                );
 
+	/* Set Media White value */
+	/* return NZ if error */
+	int (*set_mw) (struct _xsp2cie *p,	/* this */
+	                xspect *white		/* Spectrum of plain media */
+	                );
+
 	/* Set Fluorescent Whitening Agent compensation */
 	/* return NZ if error */
 	int (*set_fwa) (struct _xsp2cie *p,	/* this */
@@ -160,6 +168,23 @@ struct _xsp2cie {
 	/* return NZ if error */
 	void (*get_fwa_info) (struct _xsp2cie *p,	/* this */
 					double *FWAc		/* FWA content as a ratio. */
+	                );
+
+	/* Extract the colorant reflectance value from the media. Takes FWA */
+	/* into account if set. Media white or FWA must be set. */
+	/* return NZ if error */
+	int (*extract) (struct _xsp2cie *p,	/* this */
+	                 xspect *out,			/* Extracted colorant refl. spectrum */
+	                 xspect *in				/* Spectrum to be converted, normalised by norm */
+	                );
+
+
+	/* Apply the colorant reflectance value from the media. Takes FWA */
+	/* into account if set. DOESN'T convert to FWA target illumination! */
+	/* FWA must be set. */
+	int (*apply) (struct _xsp2cie *p,	/* this */
+	                 xspect *out,			/* Applied refl. spectrum */
+	                 xspect *in				/* Colorant reflectance to be applied */
 	                );
 
 }; typedef struct _xsp2cie xsp2cie;

@@ -37,7 +37,7 @@ marking
 values that may be needed in creating a rendered test chart is also
 included.
 This file is typically created using the <a href="targen.html"> targen</a>
-utility.<br>
+tool.<br>
 <br>
 <h2><a name=".ti2"></a>.ti2</h2>
 Target Information 2 data. This is an ASCII text, <a href="#CGATS">CGATS</a>,
@@ -47,7 +47,7 @@ estimated CIE color values for each value used for reading validation
 purposes. This file is typically created using the <a
  href="printtarg.html">printtarg</a> or <a href="filmtarg.html">
 filmtarg</a>
-utilities.<br>
+tools.<br>
 <br>
 <h2><a name=".ti3"></a>.ti3</h2>
 Target Information 3 data. This is an ASCII text, <a href="#CGATS">CGATS</a>,
@@ -57,10 +57,10 @@ file is typically created using the <a href="chartread.html">chartread</a>,&nbsp
  href="dispread.html"> dispread</a>,
 <a href="filmread.html">filmread</a>, <a href="scanin.html"> scanin</a>,
 <a href="fakeread.html"> fakeread</a> or one of the conversion
-utilities
-such as <a href="cb2cgats.html">cb2cgats</a>, <a
- href="kodak2cgats.html">kodak2cgats</a>,
-<a href="logo2cgats.html">logo2cgats</a>. See&nbsp; <a
+tools
+such as <a href="cb2ti3.html">cb2ti3</a>, <a
+ href="kodak2ti3.html">kodak2ti3</a>,
+<a href="txt2ti3.html">txt2ti3</a>. See&nbsp; <a
  href="ti3_format.html">TI3 file format</a> for more detail.
 <h2><a name=".cal"></a>.cal</h2>
 Device calibration information. This is ASCII text, <a
@@ -77,11 +77,11 @@ to hold a description of a test chart, so that a raster image of the
 chart
 can be turned into device test values by the <a href="scanin.html">
 scanin</a>
-utility. <span style="font-weight: bold;">.cht</span> files are
+tool. <span style="font-weight: bold;">.cht</span> files are
 created manually (usually in combination with <a href="scanin.html">
 scanin</a> creating a boilerplate file containing
 the recognition parameters, but not the patch location information), or
-by the <a href="printtarg.html"> printtarg</a> utility, when creating
+by the <a href="printtarg.html"> printtarg</a> tool, when creating
 a test print chart that will be scanned in, rather than read by an
 instrument.
 See &nbsp;<a href="cht_format.html">CHT file format</a> for more detail.<br>
@@ -91,8 +91,8 @@ Gamut surface description. This is an ASCII text, <a
 to hold a 3 Dimensional surface description of a color gamut. Typical
 this is created using the <a href="iccgamut.html">iccgamut</a>, <a
  href="tiffgamut.html">tiffgamut</a>, or <a href="mpplu.html">mpplu</a>
-utilities. The resulting file is typically viewed using the <a
- href="viewgam.html">viewgam</a> utility to convert one or more gamuts
+tools. The resulting file is typically viewed using the <a
+ href="viewgam.html">viewgam</a> tool to convert one or more gamuts
 into a <a href="#VRML">VRML</a> file, or as input to <a
  href="collink.html">collink</a>, to describe a source colorspace gamut.<br>
 <h2><a name=".sp"></a>.sp</h2>
@@ -128,7 +128,7 @@ and other platforms. As well as device profiles, the ICC format can
 also
 store device link profiles, abstract profiles and named color profiles.
 This file is typically created using the <a href="colprof.html">colprof</a>
-or <a href="collink.html"> collink</a> utilities. A device link
+or <a href="collink.html"> collink</a> tools. A device link
 profile
 is also a way of specifying a custom ink separation from (say) CMYK to
 the
@@ -143,8 +143,8 @@ way of representing a devices response when it has a large number of
 color
 channels, or when very few measured data points are available for its
 construction.
-This file is typically created using the <a href="mpprof.html">mpprof</a>
-utility.<br>
+This file is typically created using the <a href="mppprof.html">mppprof</a>
+tool.<br>
 <h3><a name="TIFF"></a>TIFF</h3>
 Tag Image File Format (TIFF), a widely used format within the graphic
 arts industries for storing image data. It handles various forms of

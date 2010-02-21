@@ -1,8 +1,8 @@
 
-Argyll CMS README file - Version 1.1.0
+Argyll CMS README file - Version 1.1.1
 --------------------------------------
 
-Date:   16th January 2010
+Date:   21st February 2010
 Author: Graeme Gill
 
 Introduction
@@ -19,12 +19,12 @@ can be created with a wide variety of advanced options. It also includes code fo
 the fastest portable 8 bit raster color conversion engine available anywhere, as
 well as support for fast, fully accurate 16 bit conversion. Device color gamuts
 can also be viewed and compared using a VRML viewer. Comprehensive documentation
-is provided for each utility, and a general guide to using the tools for typical
+is provided for each major tool, and a general guide to using the tools for typical
 color management tasks is also available. A mailing list provides support for
 more advanced usage.
 
-This is Version 1.1.0, a feature and bug fix release following the V1.0.4
-release on 30th June 2009. The first public release of icclib was in November 1998,
+This is Version 1.1.1, a bug fix release following the V1.1.0 release on
+17th January 2010.  The first public release of icclib was in November 1998,
 and of Argyll was in July 2000. Code development commenced in 1995. See Changes
 Summary for an overview of changes since the last release. Changes between
 revisions is detailed in the log.txt file that accompanies the source code. 

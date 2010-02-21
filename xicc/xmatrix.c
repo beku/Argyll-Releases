@@ -22,6 +22,9 @@
 /*
  * TTBD:
  *
+ *		Should the input profile white point determination
+ *		be made a bit smarter about determining the chromaticity ?
+ *
  *      Some of the error handling is crude. Shouldn't use
  *      error(), should return status.
  *
@@ -353,6 +356,7 @@ typedef struct {
 typedef struct {
 	int verb;				/* Verbose */
 	int optdim;				/* Optimisation dimensions */
+	int isLinear;			/* NZ if no curves, fixed Gamma = 1.0 */
 	int isGamma;			/* NZ if gamma + matrix, else shaper */
 	int isShTRC;			/* NZ if shared TRC */
 	int norders;			/* Number of shaper orders */
@@ -386,6 +390,11 @@ static void mxmfunc1(mxopt *p, int j, double *v, double *out, double *in) {
 		ps = 1;				/* Only one channel */
 	}
 
+
+	if (p->isLinear) {		/* No per channel curve */
+		*out = vv;
+		return;
+	}
 
 	if (p->isGamma) {		/* Pure Gamma */
 		/* Apply gamma */
@@ -610,6 +619,7 @@ int                quality			/* Quality metric, 0..3 */
 	icc *icco = xicp->pp;				/* Underlying icc object */
 	icmLuMatrix *pmlu = (icmLuMatrix *)plu;	/* icc matrix lookup object */
 	int luflags = 0;					/* icxLuMatrix alloc clip, merge flags */
+	int isLinear = 0;					/* NZ if pure linear, gamma = 1.0 */
 	int isGamma = 0;					/* NZ if gamma rather than shaper */
 	int isShTRC = 0;					/* NZ if shared TRCs */
 	int inputChan = 3;					/* Must be RGB like */
@@ -656,6 +666,10 @@ int                quality			/* Quality metric, 0..3 */
 		}
 		if (wor->flag == icmCurveGamma) {
 			isGamma = 1;
+		}
+
+		if (flags & ICX_NO_IN_SHP_LUTS) {
+			isLinear = 1;
 		}
 	}
 
@@ -755,11 +769,18 @@ int                quality			/* Quality metric, 0..3 */
 	os.v[3] = 0.2;  os.v[4] = 0.8;  os.v[5] = 0.1;
 	os.v[6] = 0.02; os.v[7] = 0.15; os.v[8] = 1.3;
 
-	if (isGamma) {		/* Just gamma curve */
+	if (isLinear) {		/* Just gamma curve */
+		os.isLinear = 1;
+		os.isGamma = 1;
+		os.optdim = 9;
+		os.v[9] = os.v[10] = os.v[11] = 1.0;					/* Linear */ 
+	} else if (isGamma) {		/* Just gamma curve */
+		os.isLinear = 0;
 		os.isGamma = 1;
 		os.optdim = 12;
 		os.v[9] = os.v[10] = os.v[11] = 2.4;					/* Gamma */ 
 	} else {		/* Creating input curves */
+		os.isLinear = 0;
 		os.isGamma = 0;
 		os.optdim = 12 + 3 * os.norders;
 		os.v[9] = os.v[10] = os.v[11] = 0.0;	/* Offset */
@@ -775,16 +796,22 @@ int                quality			/* Quality metric, 0..3 */
 	if (isShTRC) {						/* Adjust things for shared */
 		os.isShTRC = 1;
 
-		/* Pack red paramenters down */
-		for (i = 9; i < os.optdim; i++) {
-			os.v[i] = os.v[(i - 9) * 3 + 9];
-			os.sa[i] = os.sa[(i - 9) * 3 + 9];
+		if (os.optdim > 9) {
+			/* Pack red paramenters down */
+			for (i = 9; i < os.optdim; i++) {
+				os.v[i] = os.v[(i - 9) * 3 + 9];
+				os.sa[i] = os.sa[(i - 9) * 3 + 9];
+			}
+			os.optdim = ((os.optdim - 9)/3) + 9;
 		}
-		os.optdim = ((os.optdim - 9)/3) + 9;
 	}
 
-	if (os.verb)
-		printf("Creating matrix and curves...\n"); 
+	if (os.verb) {
+		if (os.isLinear)
+			printf("Creating matrix...\n"); 
+		else
+			printf("Creating matrix and curves...\n"); 
+	}
 
 	if (powell(&rerr, os.optdim, os.v, os.sa, stopon, maxits,
 	           mxoptfunc, (void *)&os, mxprogfunc, (void *)&os) != 0)
@@ -794,22 +821,24 @@ int                quality			/* Quality metric, 0..3 */
 printf("Matrix = %f %f %f\n",os.v[0], os.v[1], os.v[2]);
 printf("         %f %f %f\n",os.v[3], os.v[4], os.v[5]);
 printf("         %f %f %f\n",os.v[6], os.v[7], os.v[8]);
-if (isGamma) {		/* Creating input curves */
-if (isShTRC) 
-	printf("Gamma = %f\n",os.v[9]);
-else
-	printf("Gamma = %f %f %f\n",os.v[9], os.v[10], os.v[11]);
-} else {		/* Creating input curves */
-	if (isShTRC) 
-		printf("Offset = %f\n",os.v[9]);
-	else
-		printf("Offset = %f %f %f\n",os.v[9], os.v[10], os.v[11]);
-	for (j = 0; j < os.norders; j++) {
+if (!isLinear) {		/* Creating input curves */
+	if (isGamma) {		/* Creating input curves */
 		if (isShTRC) 
-			printf("%d harmonics = %f\n",j, os.v[10 + j]);
+			printf("Gamma = %f\n",os.v[9]);
 		else
-			printf("%d harmonics = %f %f %f\n",j, os.v[12 + j * 3], os.v[13 + j * 3],
-			                                           os.v[14 + j * 3]);
+			printf("Gamma = %f %f %f\n",os.v[9], os.v[10], os.v[11]);
+	} else {		/* Creating input curves */
+		if (isShTRC) 
+			printf("Offset = %f\n",os.v[9]);
+		else
+			printf("Offset = %f %f %f\n",os.v[9], os.v[10], os.v[11]);
+		for (j = 0; j < os.norders; j++) {
+			if (isShTRC) 
+				printf("%d harmonics = %f\n",j, os.v[10 + j]);
+			else
+				printf("%d harmonics = %f %f %f\n",j, os.v[12 + j * 3], os.v[13 + j * 3],
+				                                           os.v[14 + j * 3]);
+		}
 	}
 }
 #endif /* NEVER */
@@ -834,7 +863,15 @@ else
 			/* We assume that the input target is well behaved, */
 			/* and that it includes a white and black point patch, */
 			/* and that they have the extreme L values */
-	
+
+			/*
+				NOTE that this may not be the best approach !
+				It may be better to average the chromaticity
+				of all the neutral seeming patches, since
+				the whitest patch may have (for instance)
+				a blue tint.
+			 */
+
 			/* Discover the white and black points */
 			for (i = 0; i < nodp; i++) {
 				if (points[i].v[0] > Lmax) {
@@ -1031,14 +1068,14 @@ else
 				printf("Black point XYZ = %f %f %f\n",bp[0],bp[1],bp[2]);
 		}
 
-		if (flags & ICX_VERBOSE)
-			printf("Fixup matrix for white point\n");
-
 		/* Fix matrix to be relative to D50 white point, rather than absolute */
-		{
+		if (flags & ICX_SET_WHITE) {
 			icmXYZNumber swp;
 			double mat[3][3];
 			
+			if (flags & ICX_VERBOSE)
+				printf("Fixup matrix for white point\n");
+
 			icmAry2XYZ(swp, wp);
 
 			/* Transfer from parameter to matrix */
@@ -1173,7 +1210,7 @@ double       detail		/* gamut detail level, 0.0 = def */
 		return NULL;
 	}
 
-	gam = new_gamut(detail, pcs == icxSigJabData);
+	gam = new_gamut(detail, pcs == icxSigJabData, 0);
 
 	/* Explore the gamut by itterating through */
 	/* it with sample points in device space. */

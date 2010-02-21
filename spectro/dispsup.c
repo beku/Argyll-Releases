@@ -309,7 +309,7 @@ instType itype,			/* Instrument type (usually instUnknown) */
 int comport, 			/* COM port used */
 flow_control fc,		/* Serial flow control */
 int dtype,				/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
-int proj,				/* NZ for projector mode */
+int proj,				/* NZ for projector mode, falls back to display mode */
 int adaptive,			/* NZ for adaptive mode */
 int nocal,				/* NZ to disable auto instrument calibration */
 disppath *disp,			/* display to calibrate. */
@@ -366,6 +366,12 @@ int debug				/* Debug flag */
 	cap  = p->capabilities(p);
 	cap2 = p->capabilities2(p);
 
+	if (proj && (cap & inst_emis_proj) == 0) {
+		printf("Want projection measurement capability but instrument doesn't support it\n");
+		printf("so falling back to display mode.\n");
+		proj = 0;
+	}
+	
 	/* Set to emission mode to read a display */
 	if (proj)
 		mode = inst_mode_emis_proj;
@@ -1278,6 +1284,12 @@ static int config_inst_displ(disprd *p) {
 	cap = p->it->capabilities(p->it);
 	cap2 = p->it->capabilities2(p->it);
 	
+	if (p->proj && (cap & inst_emis_proj) == 0) {
+		printf("Want projection measurement capability but instrument doesn't support it\n");
+		printf("so falling back to display mode.\n");
+		p->proj = 0;
+	}
+	
 	if (( p->proj && (cap & inst_emis_proj) == 0)
 	 || (!p->proj && p->adaptive && (cap & inst_emis_spot) == 0)
 	 || (!p->proj && !p->adaptive && (cap & inst_emis_disp) == 0)) {
@@ -1402,7 +1414,7 @@ instType itype,		/* Nominal instrument type (usually instUnknown) */
 int comport, 		/* COM port used. -99 == fake Display */
 flow_control fc,	/* Flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
-int proj,			/* NZ for projector mode */
+int proj,			/* NZ for projector mode. Falls back to display mode */
 int adaptive,		/* NZ for adaptive mode */
 int nocal,			/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */

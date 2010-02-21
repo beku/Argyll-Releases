@@ -6,7 +6,7 @@ PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 #Products
 Libraries = libprof ;
-Executables = cb2cgats kodak2cgats logo2cgats splitcgats mppcheck mpprof
+Executables = cb2ti3 kodak2ti3 txt2ti3 splitti3 mppcheck mppprof
               profcheck invprofcheck verify colprof printcal applycal sepgen ;
 Headers = prof.h ;
 Samples = example.sp example121.sp 3dap5k.sp GTIPlus.sp Office.sp Trulux.sp TruluxPlus.sp
@@ -33,19 +33,19 @@ LINKLIBS = ../rspl/librspl ../icc/libicc ../cgats/libcgats ../numlib/libnum ../p
 Main simpprof : simpprof.c ;
 
 #Kodak raw profile data to Argyll CGATS format converter
-Main kodak2cgats : kodak2cgats.c ;
+Main kodak2ti3 : kodak2ti3.c ;
 
 #Colorblind raw profile data to Argyll CGATS format converter
-Main cb2cgats : cb2cgats.c ;
+Main cb2ti3 : cb2ti3.c ;
 
 # the gcc linker is retarded, and can't link to things it's gone past, hence 2 x libxicc...
 LINKLIBS = ../xicc/libxicc ../spectro/libinsttypes ../xicc/libxicc ../gamut/libgamut $(LINKLIBS) ;
 
 #Gretag/Logo raw CMYK profile data to Argyll CGATS format converter
-Main logo2cgats : logo2cgats.c ;
+Main txt2ti3 : txt2ti3.c ;
 
 #Split a .ti3 into two pieces randomly
-Main splitcgats : splitcgats.c ;
+Main splitti3 : splitti3.c ;
 
 # Profile checker
 Main profcheck : profcheck.c ;
@@ -54,7 +54,7 @@ Main profcheck : profcheck.c ;
 Main invprofcheck : invprofcheck.c ;
 
 # Model Printer Profile generator
-Main mpprof : mpprof.c ;
+Main mppprof : mppprof.c ;
 
 # Model Printer Profile checker
 Main mppcheck : mppcheck.c ;
@@ -78,8 +78,10 @@ Main applycal : applycal.c ;
 # Optimised Separation Generator
 Main sepgen : sepgen.c ;
 
-# ~~ hack 
-#Main denmat : denmat.c ;
+# Development code
+if [ GLOB . : retargti3.c ]  {
+	Main retargti3 : retargti3.c ;
+}
 
 
 

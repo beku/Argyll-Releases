@@ -59,7 +59,7 @@ static unsigned int scanrd_error(scanrd *s, char **errm);
 /* Forward internal function declaration */
 static scanrd_ *new_scanrd(int flags, int verb, double gammav,
 	int (*write_line)(void *ddata, int y, char *src), void *ddata,
-	int w, int h, int d, int p,
+	int w, int h, int d, int td, int p,
 	int (*read_line)(void *fdata, int y, char *dst), void *fdata,
 	char *refname);
 static int read_input(scanrd_ *s);
@@ -97,7 +97,7 @@ double *sfid,		/* Specified four fiducials x1, y1 .. x4, y4, NULL if auto recogn
 					/* Typical clockwise from top left */
 
 int w, int h, 		/* Width and Height of input raster in pixels */
-int d, int p,		/* Plane Depth, Bit presision of input pixels */
+int d, int td, int p,		/* Useful plane depth, Total depth, Bit presision of input pixels */
 int (*read_line)(void *fdata, int y, char *dst),	/* Read RGB line of source file */
 void *fdata,		/* Opaque data for read_line */
 
@@ -111,7 +111,7 @@ void *ddata			/* Opaque data for write_line */
 	/* allocate the basic object */
 	if (verb >= 2)
 		DBG((dbgo,"About to allocate scanrd_ object\n"));
-	if ((s = new_scanrd(flags, verb, gammav, write_line, ddata, w, h, d, p, read_line, fdata, refname)) == NULL)
+	if ((s = new_scanrd(flags, verb, gammav, write_line, ddata, w, h, d, td, p, read_line, fdata, refname)) == NULL)
 		return NULL;
 
 	if (s->errv != 0)	/* Some other error from new_scanrd() */
@@ -331,7 +331,7 @@ static scanrd_
 	int (*write_line)(void *ddata, int y, char *src),	/* Write RGB line of diag file */
 	void *ddata,		/* Opaque data for write_line() */
 	int w, int h, 		/* Width and Height of input raster in pixels */
-	int d, int p,		/* Plane Depth, Bit presision of input pixels */
+	int d, int td, int p,	/* Useful plane Depth, Total depth, Bit presision of input pixels */
 	int (*read_line)(void *fdata, int y, char *dst),	/* Read RGB line of source file */
 	void *fdata,		/* Opaque data for read_line() */
 
@@ -369,6 +369,7 @@ static scanrd_
 	s->width = w;
 	s->height = h;
 	s->depth = d;
+	s->tdepth = td;
 	s->bpp = p;
 
 	if (d > MXDE)  {
@@ -543,7 +544,7 @@ read_input(scanrd_ *s) {
 
 	/* Allocate input line buffers */
 	for (i = 0; i < 6; i++) {
-		if ((in[i] = malloc(s->depth * w * s->bypp)) == NULL) {
+		if ((in[i] = malloc(s->tdepth * w * s->bypp)) == NULL) {
 			s->errv = SI_MALLOC_INPUT_BUF;
 			sprintf(s->errm,"scanrd: Failed to malloc input line buffers");
 			return 1;
@@ -645,7 +646,7 @@ unsigned char *inp[6],		/* current and previous 5 lines */
 int y						/* Current line y */
 ) {
 	int w = s->width;
-	int stride = s->depth * s->width;	/* In pixels */
+	int stride = s->tdepth * s->width;	/* In pixels */
 	unsigned short *gamma = s->gamma;
 	int x,i;
 	unsigned short *inp2[6];	/* current and previous 5 lines (16bpp) equivalent of inp[] */
@@ -658,9 +659,9 @@ int y						/* Current line y */
 	int atdmagc = 0;			/* Average magnitude over a line count */
 	double linedv = 0.0;		/* Lines average divider value */
 	int linedc = 0;				/* Lines average count */
-	int xo3 = s->depth * 3;		/* Xoffset by 3 pixels */
-	int xo2 = s->depth * 2;		/* Xoffset by 2 pixels */
-	int xo1 = s->depth * 1;		/* Xoffset by 1 pixels */
+	int xo3 = s->tdepth * 3;	/* Xoffset by 3 pixels */
+	int xo2 = s->tdepth * 2;	/* Xoffset by 2 pixels */
+	int xo1 = s->tdepth * 1;	/* Xoffset by 1 pixels */
 
 	for (x = 0; x < 6; x++)		/* Create 16 bpp version of line pointers */
 		inp2[x] = (unsigned short *)inp[x];
@@ -734,10 +735,10 @@ int y						/* Current line y */
 
 		if (s->bpp == 8)
 			for (i = 0; i < 6; i++)
-				in[i] = inp[i] + x * s->depth;	/* Strength reduce */
+				in[i] = inp[i] + x * s->tdepth;	/* Strength reduce */
 		else
 			for (i = 0; i < 6; i++) {
-				in2[i] = inp2[i] + x * s->depth;	/* Strength reduce */
+				in2[i] = inp2[i] + x * s->tdepth;	/* Strength reduce */
 				in[i] = (unsigned char *)in2[i];	/* track 8bpp pointers */
 			}
 
@@ -3421,7 +3422,7 @@ scanrd_ *s
 	}
 
 	/* Allocate one input line buffers */
-	if ((in = malloc(s->depth * ox * s->bypp)) == NULL) {
+	if ((in = malloc(s->tdepth * ox * s->bypp)) == NULL) {
 		s->errv = SI_MALLOC_VALUE_SCAN;
 		sprintf(s->errm,"do_value_scan: Failed to malloc test output array");
 		return 1;
@@ -3450,7 +3451,7 @@ scanrd_ *s
 					DBG((dbgo,"added box %d '%s' to the active list\n",sp - &s->sboxes[0],sp->name));
 				ADD_ITEM_TO_TOP(s->alist,sp);	/* Add it to the active list */
 				sp->active = 1;
-				sp->ps[0] = calloc(s->depth * binsize,sizeof(unsigned long));
+				sp->ps[0] = calloc(s->tdepth * binsize,sizeof(unsigned long));
 				if (sp->ps == NULL)
 					error("do_value_scan: Failed to malloc sbox histogram array");
 				for (e = 1; e < s->depth; e++)
@@ -3466,14 +3467,14 @@ scanrd_ *s
 			x1 = nextx(sp,&sp->l);		/* next in left edge */
 			x2 = nextx(sp,&sp->r);		/* next in right edge */
 			if (s->bpp == 8)
-				for (x = s->depth*x1, xx = 3*x1; x <= s->depth*x2; x += s->depth, xx+=3) {
+				for (x = s->tdepth*x1, xx = 3*x1; x <= s->tdepth*x2; x += s->tdepth, xx +=3) {
 					for (e = 0; e < s->depth; e++)
 						sp->ps[e][in[x+e]]++;		/* Increment histogram bins */
 					if (s->flags & SI_SHOW_SAMPLED_AREA)
 						toRGB(oo+xx, in+x, s->depth, s->bpp);
 				}
 			else
-				for (x = s->depth*x1, xx = 3*x1; x <= s->depth*x2; x += s->depth, xx+=3) {
+				for (x = s->tdepth*x1, xx = 3*x1; x <= s->tdepth*x2; x += s->tdepth, xx+=3) {
 					for (e = 0; e < s->depth; e++)
 						sp->ps[e][in2[x+e]]++;		/* Increment histogram bins */
 					if (s->flags & SI_SHOW_SAMPLED_AREA)

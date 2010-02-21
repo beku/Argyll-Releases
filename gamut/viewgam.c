@@ -628,13 +628,13 @@ main(int argc, char *argv[]) {
 		gamut *s, *s1, *s2;
 		double v1, v2, vi;
 
-		if ((s = new_gamut(0.0, 0)) == NULL)
+		if ((s = new_gamut(0.0, 0, 0)) == NULL)
 			error("Creating gamut object failed");
 		
-		if ((s1 = new_gamut(0.0, 0)) == NULL)
+		if ((s1 = new_gamut(0.0, 0, 0)) == NULL)
 			error("Creating gamut object failed");
 		
-		if ((s2 = new_gamut(0.0, 0)) == NULL)
+		if ((s2 = new_gamut(0.0, 0, 0)) == NULL)
 			error("Creating gamut object failed");
 		
 		if (s1->read_gam(s1, gds[0].in_name))

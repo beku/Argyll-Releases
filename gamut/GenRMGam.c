@@ -753,7 +753,7 @@ main(int argc, char *argv[]) {
 	}
 
 	/* Creat a gamut surface */
-	gam = new_gamut(gamres, 0);
+	gam = new_gamut(gamres, 0, 0);
 
 	/* For all the supplied surface points, */
 	/* add them to the gamut */

@@ -119,9 +119,6 @@
 #undef DEBUG
 #undef WARNINGS		/* Print warnings within DEBUG */
 #undef STATS		/* Show function stats */
-#undef TESTTEST   	/* Special test with forced node locations to test specific cases */
-					/* 1 = crossing points fixup */
-					/* 2 = point crossing gaamut boundary fixup */
 
 	/* Optimal fully adapted weightings : */
 #define ADAPT_PERCWGHT 0.65			/* Degree of perceptual adaptation */
@@ -173,7 +170,7 @@
 # define DO_WAIT 1 		/* Wait for user key after each plot */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-#else			// ofps settings
+#else	/* ofps standalone test settings */
 
 # define DOOPT			/* Do optimization */
 # define INDEP_SURFACE		/* Make surface point distribution and optimization independent */
@@ -265,7 +262,7 @@ struct _vopt_cx;
 static void dump_dnsqe(ofps *s, char *fname, int *nix, struct _vopt_cx *cx);
 #endif
 
-#if defined(DEBUG) || defined(DUMP_PLOT)
+#if defined(DEBUG) || defined(DUMP_PLOT_SEED) || defined(DUMP_PLOT)
 static void dump_image(ofps *s, int pcp, int dwt, int vtx, int dpla, int ferr, int noi);
 #endif
 #if defined(DEBUG) || defined (SANITY_CHECK_CONSISTENCY) 
@@ -2761,14 +2758,15 @@ static void dummy_vtx_position(
 /* The nodes may be fake gamut boundary nodes, but must have */
 /* real vertexes. Vertexes that are marked for deletion or new ones */
 /* will be added to the batch update list for later execution. */
-/* Node that have had vertexes added to them will added to the node 'to be updated' list */
+/* Nodes that have had vertexes added to them will added to the node 'to be updated' list */
 /* and then a batch update will be executed. */
 /* Return 0 if it wasn't added, */
 /* Return 1 if it was added */
 static int add_to_vsurf(
 ofps *s,
 node *nn,		/* Node to add */
-int fixup		/* 0 = seed, 1 = fixup ?? */
+int fixup,		/* 0 = seed, 1 = fixup ?? */
+int abortonfail	/* 0 = ignore position failures, 1 = abort add if there are any failures */
 ) {
 	int e, ff, f, di = s->di;
 	int i, j, k, ndi;
@@ -3086,12 +3084,27 @@ int fixup		/* 0 = seed, 1 = fixup ?? */
 				if (s->verb > 1)
 					warning("Unable to locate vertex at node comb %s\n",pcomb(di,s->combs[i].nix));
 				s->posfails++;
+				s->posfailstp++;
+				if (abortonfail)
+					break;
 
 			} else {
 				s->combs[i].pvalid = 1;
 			}
 		}
 	}	/* Next replacement vertex */
+
+	/* If we aborted because abortonfail is set and we failed to place a new node, */
+	/* erase our tracks and return failure. */
+	if (i < nncombs) {
+		for (i = 0; i < nncombs; i++) { 
+			if (s->combs[i].vv != NULL) {
+				s->combs[i].vv->add = 0;
+				s->combs[i].vv->del = 0;
+			}
+		}
+		return 0;
+	}
 
 #ifdef DEBUG
 	printf("\nNow converting positioned combinations to vertexes\n");
@@ -3960,12 +3973,14 @@ ofps_check_vtx_sanity(ofps *s, node *nn, vtx *vx, int fixit) {
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Add a node to the currnent voronoi. */
-/* Return nz if the addition fails due to there beeing no vetexhits. */
+/* Return nz if the addition fails due to there being no vetex hits or a cooincince. */
+/* Return nz if abortonfail is set and we fail to position the node. */
 /* (This theoretically shouldn't happen, but does, due to the perceptual */
 /*  geometry ?) */ 
 static int add_node2voronoi(
 ofps *s,
-int poi		/* Index of sample point to update/create Voronoi surface */
+int poi,		/* Index of sample point to update/create Voronoi surface */
+int abortonfail	/* 0 = ignore position failures, 1 = abort add if there are any failures */
 ) {
 	node *nn = s->n[poi];		/* Node in question */
 	int e, di = s->di;
@@ -4084,15 +4099,18 @@ int poi		/* Index of sample point to update/create Voronoi surface */
 	}
 
 	/* Now turn all the hit vertexes into new vertexes. */
-	if (add_to_vsurf(s, nn, 0) > 0) {
+	if (add_to_vsurf(s, nn, 0, abortonfail) > 0) {
 		s->add_hit++;
 	} else {
+		if (abortonfail)
+			return 1;
 		s->add_mis++;
 	}
 
 	ofps_add_nacc(s, nn);			/* Add to spatial accelleration grid */
 
 	s->np++;
+
 #ifdef DEBUG
 	printf("Done add_node2voronoi()\n");
 #endif
@@ -5505,7 +5523,7 @@ ofps *s
 		p->fx = 1;							/* is a fixed point */
 
 		/* Compute the Voronoi for it, and inc s->np */
-		if (add_node2voronoi(s, s->np)) {
+		if (add_node2voronoi(s, s->np, 1)) {
 			/* In theory we could try adding points in a different order, */
 			/* by resetting the voronoi, shuffling all the fixedpoints */
 			/* and re-adding them again. */
@@ -5533,8 +5551,9 @@ ofps_seed(ofps *s) {
 	int e, di = s->di;
 	int ii, i, j, k, fc;
 	double rerr;
-	int needfirst = 1;	/* Need a special first seed point */
+	int needfirst = 0;	/* Need a special first seed point (seems better without this ?) */
 	int dofixed = 0;	/* Do a fixed point next */
+	int abortonfail = 0;	/* Abort on failing to add fixed points (isn't always good ?) */
 	int nsp = 0;		/* Number of surface points */
 	aat_atrav_t *aat_tr;
 
@@ -5549,7 +5568,11 @@ ofps_seed(ofps *s) {
 		printf("There are %d far spread points to add\n",s->tinp - s->fnp);
 	}
 
-	/* Seed the non-fixed points */
+	if (!needfirst && s->fnp > 1) {	/* There are fixed points to add */
+		dofixed = s->fnp > 2 ? 2 : 1;
+	}
+
+	/* Seed all the points. */
 	/* (i is the node we're creating, j is the verbose interval count, */
 	/*  fc is the count of the fixed points added, ii is the movable count) */
 	for (fc = j = i = ii = 0; i < s->tinp; i++, j++) {
@@ -5563,28 +5586,28 @@ ofps_seed(ofps *s) {
 			spref_mult = ii/(s->tinp - s->fnp - 1.0);
 		spref_mult = (1.0 - spref_mult) * s->ssurfpref + spref_mult * s->esurfpref;
 
-#ifndef TESTTEST	/* Special test with forced node values */
-
 		if (needfirst) {			/* No initial fixed points, so seed the first */
 									/* point as a special. */
 			double min[MXPD], max[MXPD];
 
+			p->fx = 0;
+
 			/* If there are no fixed points in the bulk, make the */
 			/* first point such a point, to avoid pathology. */
 			for (e = 0; e < di; e++)
-				p->p[e] = s->imin[e] + (s->imax[e] - s->imin[e]) * 1.0/3.141592654;
+				p->p[e] = s->imin[e] + (s->imax[e] - s->imin[e]) * 1.0/4.141592654;
 
 			/* Clip the new location */
 			ofps_clip_point8(s, p->p, p->p);
 
 			s->percept(s->od, p->v, p->p);
 #ifdef DEBUG
-			printf("Creating first seed point\n");
+			printf("Creating first seed point (moveable %d out of %d)\n",i+1,s->tinp);
 #endif
 		} else if (dofixed) {	/* Setup to add a fixed point */
 
 #ifdef DEBUG
-			printf("Adding fixed point %d out of %d\n",fc,s->fnp);
+			printf("Adding fixed point %d out of %d\n",fc+1,s->fnp);
 #endif
 
 			/* (Fixed points are already clipped and have perceptual value) */
@@ -5610,8 +5633,11 @@ ofps_seed(ofps *s) {
 			double bspweight;				/* Biggest weight */
 
 #ifdef DEBUG
-			printf("Adding movable point %d out of %d\n",i,s->tinp);
+			printf("Adding movable point %d out of %d\n",i+1,s->tinp);
 #endif
+
+			p->fx = 0;
+
 			/* Compute current surface preference weighting */
 			if (s->tinp - s->fnp <= 1)	/* Prevent divide by zero */
 				spref_mult = 0.0;
@@ -5807,52 +5833,8 @@ ofps_seed(ofps *s) {
 			}	/* keep looking for a movable point */
 		}
 
-#else /* TESTTEST */
-		/* Initial position */
-		switch(j) {
-#if TESTTEST == 1
-			case 0:
-				p->p[0] = 0.5;
-				p->p[1] = 0.7;
-				break;
-			case 1:
-				p->p[0] = 0.5;
-				p->p[1] = 0.3;
-				break;
-			case 2:
-				p->p[0] = 0.2;
-				p->p[1] = 0.5;
-				break;
-			case 3:
-				p->p[0] = 0.8;
-				p->p[1] = 0.5;
-				break;
-#else
-			case 0:
-				p->p[0] = 0.9;
-				p->p[1] = 0.8;
-				break;
-			case 1:
-				p->p[0] = 0.9;
-				p->p[1] = 0.2;
-				break;
-			case 2:
-				p->p[0] = 0.6;
-				p->p[1] = 0.5;
-				break;
-			case 3:
-				p->p[0] = 0.1;
-				p->p[1] = 0.5;
-				break;
-#endif /* TESTTEST != 1 */
-			default:
-				p->p[0] = 0.0;
-				p->p[1] = 0.0;
-				break;
-		}
-		ofps_cc_percept(s, p->v, p->p);
-#endif /* TESTTEST */
-	
+		/* We now have a first/fixed/moevable point to add */
+
 /* hack test */
 //p->p[0] = d_rand(0.0, 1.0);
 //p->p[1] = d_rand(0.0, 1.0);
@@ -5863,16 +5845,22 @@ ofps_seed(ofps *s) {
 			p->op[e] = p->p[e];
 
 		/* Compute the Voronoi for it, and inc s->np */
-		if (add_node2voronoi(s, i)) {
-			if (needfirst || dofixed) {
-				/* For fixed we actually have the option here of aborting */
-				/* the seeding and re-shuffling the fixed points. It's not */
-				/* clear how likely this is. If we get any reports of this */
-				/* we will solve this problem... */
-				error("Adding first seed point or fixed point failed to hit any vertexes");	
+		/* Fail if we get a position fail */
+		if (add_node2voronoi(s, i, dofixed && abortonfail)) {
+			if (dofixed) {
+				/* Pospone adding this vertex */
+				if ((s->fnp - fc) >= (s->tinp - i - 1))	{	/* No room for moveable points */
+//					error("Adding fixed point failed to hit any vertexes or posn. failed");	
+					abortonfail = 0;
+				} else
+					dofixed = 0;
 			}
-
-			/* Simply skip this vertex as a new node point */
+			if (needfirst) {
+				/* Hmm. The first seed point has failed. What should we do ? */
+				error("Adding first seed point failed to hit any vertexes or posn. failed");	
+			}
+	
+			/* Skip this point */
 			--i;
 			--j;
 			continue;
@@ -5883,7 +5871,7 @@ ofps_seed(ofps *s) {
 			fc++;
 			dofixed--;
 			if ((s->fnp - fc) >= (s->tinp - i - 1))	{	/* No room for moveable points */
-				dofixed = s->fnp - fc;
+				dofixed = s->fnp - fc;					/* Do all the fixed */
 			}
 		} else {		/* Movable point */
 			ii++;
@@ -5964,20 +5952,32 @@ ofps *s
 		/* Initialse the empty veronoi etc. */ 
 		ofps_binit(s);
 
+		s->posfailstp = 0;
+
 		/* Add all points in again. */
 		for (i = 0 ;i < s->tinp; i++) {	/* Same order as before */
 
 			/* Compute the Voronoi for it (will add it to spatial accelleration grid) */
 			/* and increment s->np */
-			if (add_node2voronoi(s, i)) {
+			if (add_node2voronoi(s, i, 0)) {
 
-				/* Hmm. Move the problem node to the start, and retry the whole thing. */
+				/* Hmm. Shuffle and retry the whole thing. */
+				shuffle_node_order(s);
+				break;
+			}
+
+			/* If it's not going well, re-shuffle and abort too */
+			if (i > 10 && s->posfailstp/(1.0+i) > 0.2) {
+//printf("~1 after node %d, posfailes = %d, prop %f\n",i,s->posfailstp, s->posfailstp/(1.0+i));
+				/* Hmm. Shuffle and and retry the whole thing. */
+				if (s->verb > 1)
+					warning("Too many nodes are failing to be inserted - reshuffling and re-starting\n");
 				shuffle_node_order(s);
 				break;
 			}
 
 #ifdef DUMP_STRUCTURE
-			printf("Done node %d\n",j);
+			printf("Done node %d\n",i);
 			dump_node_vtxs(s, 0);
 //		ofps_re_create_node_node_vtx_lists(s);
 //	if ((s->optit+1) >= 4)
@@ -7146,7 +7146,7 @@ ofps *s
 			s->vvpchecks += s->nv;
 			
 			/* Now re-add the node to the veronoi */
-			if (add_to_vsurf(s, nn, 1) > 0) {
+			if (add_to_vsurf(s, nn, 1, 0) > 0) {
 				s->add_hit++;
 #ifdef DUMP_PLOT_EACHFIXUP
 				printf("After adding node ix %d at %s to vurf\n",nn->ix,ppos(di,nn->p));
@@ -7649,100 +7649,7 @@ ofps *s
 			if (s->n[i]->fx)
 				continue;		/* Ignore fixed points */ 
 
-#ifndef TESTTEST	/* Special test with forced node values */
 			comp_opt(s, i, oshoot, sepw);
-#else
-			node *pp = s->n[i];
-			pp->np[0] = pp->p[0];
-			pp->np[1] = pp->p[1];
-			/* Optimized poistions */
-#if TESTTEST == 1
-			if (s->optit == 0) {
-				switch(i) {
-					case 0:
-						pp->np[0] = 0.5;
-						pp->np[1] = 0.8;
-						break;
-					case 1:
-						pp->np[0] = 0.5;
-						pp->np[1] = 0.2;
-						break;
-					case 2:
-						pp->np[0] = 0.3;
-						pp->np[1] = 0.5;
-						break;
-					case 3:
-						pp->np[0] = 0.7;
-						pp->np[1] = 0.5;
-						break;
-				}
-			} else {
-				switch(i) {
-					case 0:
-						pp->np[0] = 0.5;
-						pp->np[1] = 0.7;
-						break;
-					case 1:
-						pp->np[0] = 0.5;
-						pp->np[1] = 0.3;
-						break;
-					case 2:
-						pp->np[0] = 0.2;
-						pp->np[1] = 0.5;
-						break;
-					case 3:
-						pp->np[0] = 0.8;
-						pp->np[1] = 0.5;
-						break;
-				}
-			}
-#else
-			if (s->optit == 0) {
-				switch(i) {
-					case 0:
-						pp->np[0] = 0.9;
-//						pp->np[1] = 0.85;
-						pp->np[1] = 0.92;
-						break;
-					case 1:
-						pp->np[0] = 0.9;
-//						pp->np[1] = 0.15;
-						pp->np[1] = 0.08;
-						break;
-					case 2:
-//						pp->np[0] = 0.67;
-						pp->np[0] = 0.6;
-						pp->np[1] = 0.5;
-						break;
-					case 3:
-						pp->np[0] = 0.1;
-						pp->np[1] = 0.5;
-						break;
-				}
-			} else {
-				switch(i) {
-					case 0:
-						pp->np[0] = 0.9;
-						pp->np[1] = 0.8;
-						break;
-					case 1:
-						pp->np[0] = 0.9;
-						pp->np[1] = 0.2;
-						break;
-					case 2:
-						pp->np[0] = 0.6;
-						pp->np[1] = 0.5;
-						break;
-					case 3:
-						pp->np[0] = 0.1;
-						pp->np[1] = 0.5;
-						break;
-				}
-			}
-#endif /* TESTTEST != 1 */
-			s->percept(s->od, pp->nv, pp->np);
-			s->mxmvsq = 1.0;
-#endif /* TESTTEST */
 		}
 
 		/* Then update their positions to the optimized ones */
@@ -8371,8 +8278,6 @@ static void sa_percept(void *od, double *p, double *d) {
 	p[0] = 100.0 * (dd[0] = d[0]);
 	p[1] = 100.0 * (dd[1] = d[1]);
 
-#ifndef TESTTEST	/* Special test with forced node values */
-
 	/* Normal non-linear test */
 //	p[0] = 100.0 * gcurve(dd[0], -8.0);
 //	p[1] = 100.0 * gcurve(dd[1], 4.0);
@@ -8404,8 +8309,6 @@ static void sa_percept(void *od, double *p, double *d) {
 
 //	p[0] = 100.0 * dd[0] * dd[0];
 //	p[1] = 100.0 * dd[1] * dd[1];
-
-#endif /* TESTTEST */
 }
 
 int
@@ -8444,20 +8347,11 @@ char *argv[];
 
 	nfx = 0;
 
-#ifndef TESTTEST	/* Special test with forced node values */
-
 	/* Create the required points */
 	s = new_ofps_ex(1, 2, 1.5, NULL, NULL, npoints, 1,
 //	s = new_ofps_ex(1, 2, 2.5, NULL, NULL, npoints, 1,
 	             SA_ADAPT, SA_DEVD_MULT, SA_PERC_MULT, SA_INTERP_MULT,
 	             fx, nfx, sa_percept, (void *)NULL, ntostop, nopstop);
-
-#else
-
-	s = new_ofps_ex(1, 2, 2.5, NULL, NULL, 4, 1,
-	             SA_ADAPT, SA_DEVD_MULT, SA_PERC_MULT, SA_INTERP_MULT,
-	             fx, nfx, sa_percept, (void *)NULL, ntostop, nopstop);
-#endif /* TESTTEST */
 
 #ifdef DUMP_PLOT
 	printf("Device plot (with verts):\n");
@@ -8560,7 +8454,7 @@ static char *peperr(double eperr) {
 }
 
 /* --------------------------------------------------------------- */
-#if defined(DEBUG) || defined(DUMP_PLOT)
+#if defined(DEBUG) || defined(DUMP_PLOT_SEED) || defined(DUMP_PLOT)
 
 /* Dump the current point positions to a plot window file */
 static void

@@ -293,7 +293,8 @@ make_input_icc(
 		isLut = 0;
 
 		if (ptype == prof_gam1mat	
-		 || ptype == prof_sha1mat) {
+		 || ptype == prof_sha1mat
+		 || ptype == prof_matonly) {
 			isShTRC = 1;		/* Single curve */
 		}
 	}
@@ -430,7 +431,7 @@ make_input_icc(
 
 		wo->size = 1;
 		wo->allocate((icmBase *)wo);	/* Allocate space */
-		wo->data[0].X = 0.00;		/* Set a default value */
+		wo->data[0].X = 0.00;			/* Set default perfect black */
 		wo->data[0].Y = 0.00;
 		wo->data[0].Z = 0.00;
 	}
@@ -800,7 +801,7 @@ make_input_icc(
 			flags |= ICX_VERBOSE;
 
 		if (nsabs == 0)
-	        flags |= ICX_SET_WHITE | ICX_SET_BLACK;		/* Set white and black */
+	        flags |= ICX_SET_WHITE | ICX_SET_BLACK;		/* Compute & use white and black */
 
 		/* Setup RGB -> Lab conversion object from scattered data. */
 		/* Note that we've layered it on a native XYZ icc profile. */
@@ -927,12 +928,20 @@ make_input_icc(
 		if (verb)
 			flags |= ICX_VERBOSE;
 
+		if (ptype == prof_matonly)
+			flags |= ICX_NO_IN_SHP_LUTS;	/* Make it linear */
+
+		if (nsabs == 0)
+	        flags |= ICX_SET_WHITE | ICX_SET_BLACK;		/* Compute & use white and black */
+
+        flags |= ICX_WRITE_WBL;		/* Write white/black/luminence */
+
 		/* Setup Device -> XYZ conversion (Fwd) object from scattered data. */
 		if ((xluo = wr_xicc->set_luobj(
 //		               wr_xicc, icmFwd, icRelativeColorimetric,
 		               wr_xicc, icmFwd, icmDefaultIntent,
 		               icmLuOrdNorm,
-		               flags | ICX_SET_WHITE | ICX_SET_BLACK, 		/* Flags */
+		               flags, 		/* Flags */
 		               npat, tpat, 0.0, wpscale, smooth, avgdev,
 		               NULL, NULL, NULL, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);

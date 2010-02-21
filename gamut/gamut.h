@@ -190,6 +190,8 @@ struct _gamut {
 /* Private: */
 	double sres;		/* Surface triangle resolution */
 	int isJab;			/* nz if Jab CIECAM02 type space rather than L*a*b* */
+	int isRast;			/* nz if raster file point cloud, else colorspace */
+						/* (This affects convex hull filtering) */
 	double cent[3];		/* Gamut center for radial conversion. Default 50.0,0,0 */
 						/* Must be same to compare radial values. */
 
@@ -203,9 +205,11 @@ struct _gamut {
 	int lu_inited;		/* Flag set if radial surface lookup is inited */
 	int ne_inited;		/* Flag set if nearest lookup is inited */
 	int cu_inited;		/* Flag set if cusp values inited */
-	int nofilter;		/* Debug Flag, skip segmented maxima filtering */
+	int nofilter;		/* Flag, skip segmented maxima filtering */
+	int no2pass;		/* Flag, do only one pass of convex hull */
 	int doingfake;		/* Internal transient state */
 	int pass;			/* Pass number for multi-pass */
+	double logpow;		/* Convex hull compression power (default 0.25) */
 
 	gquad *tl, *tr;		/* Top left and quadtree elements */
 
@@ -245,6 +249,10 @@ struct _gamut {
 	gvert *(*expand)(struct _gamut *s, double in[3]);		/* Expand the gamut surface */
 
 	int (*getisjab)(struct _gamut *s);	/* Return the isJab flag value */
+
+	int (*getisrast)(struct _gamut *s);	/* Return the isRast flag value */
+
+	void (*setnofilt)(struct _gamut *s);	/* Disable segmented maxima filtering */
 
 	void (*getcent)(struct _gamut *s, double *cent);	/* Return the gamut center location */
 
@@ -358,7 +366,7 @@ struct _gamut {
 }; typedef struct _gamut gamut;
 
 /* Creator */
-gamut *new_gamut(double sres, int isJab);		/* Surface resolution, 0.0 = default */
+gamut *new_gamut(double sres, int isJab, int isRast);	/* Surface resolution, 0.0 = default */
 
 /* Utility */
 void gamut_rect2radial(gamut *s, double out[3], double in[3]);

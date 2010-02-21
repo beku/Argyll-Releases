@@ -220,7 +220,7 @@ main(int argc, char *argv[]) {
 	}
 
 	/* Creat a gamut object */
-	if ((gam = new_gamut(5.0, 0)) == NULL)
+	if ((gam = new_gamut(5.0, 0, 0)) == NULL)
 		error("Failed to create aa gamut object\n");
 
 	/* Create and add our gridded test points */

@@ -34,7 +34,17 @@
 #include "scanrd.h"
 #include "tiffio.h"
 
+/* Utilities */
+
 void fix_it8(char *o, char *i);
+
+#ifdef NT		/* You'd think there might be some standards.... */
+# ifndef __BORLANDC__
+#  define stricmp _stricmp
+# endif
+#else
+# define stricmp strcasecmp
+#endif
 
 #define TXBUF (256*1024L)
 
@@ -137,8 +147,11 @@ int main(int argc, char *argv[])
 	int flags = SI_GENERAL_ROT;	/* Default allow all rotations */
 
 	TIFF *rh = NULL, *wh = NULL;
-	uint16 depth, bps;
+	uint16 depth, bps;			/* Useful depth, bits per sample */
+	uint16 tdepth;				/* Total depth including alpha */
 	uint16 pconfig, photometric;
+	uint16 rextrasamples;		/* Extra "alpha" samples */
+	uint16 *rextrainfo;			/* Info about extra samples */
 	int gotres = 0;
 	uint16 resunits;
 	float resx, resy;
@@ -361,6 +374,10 @@ int main(int argc, char *argv[])
 		strcpy(diag_name,"diag.tif");
 	}
 
+	if (stricmp(diag_name, tiffin_name) == 0) {
+		error("Diagnostic output '%s' might overwrite the input '%s'!",diag_name,tiffin_name);
+	}
+
 	/* ----------------------------------------- */
 	/* Open up input tiff file ready for reading */
 	/* Got arguments, so setup to process the file */
@@ -374,7 +391,17 @@ int main(int argc, char *argv[])
 	if (bps != 8 && bps != 16)
 		error("TIFF Input file '%s' must be 8 or 16 bits/channel",tiffin_name);
 
+	/* See if there are alpha planes */
+	TIFFGetFieldDefaulted(rh, TIFFTAG_EXTRASAMPLES, &rextrasamples, &rextrainfo);
+
 	TIFFGetField(rh, TIFFTAG_SAMPLESPERPIXEL, &depth);
+
+	if (rextrasamples > 0 && verb)
+		printf("%d extra (alpha ?) samples will be ignored\n",rextrasamples);
+
+	tdepth = depth;
+	depth = tdepth - rextrasamples;
+
 	if (depth != 1 && depth != 3 && depth != 4)
 		error("Input '%s' must be a Grey, RGB or CMYK tiff file",tiffin_name);
 
@@ -455,7 +482,7 @@ int main(int argc, char *argv[])
 
 		gamma,
 		sfid,			/* Specified fiducuals, if any */
-		width, height, depth, bps,	/* Width, Height and Depth of input in pixels */
+		width, height, depth, tdepth, bps,	/* Width, Height and Depth of input in pixels */
 		read_line,		/* Read line function */
 		(void *)rh,		/* Opaque data for read_line */
 

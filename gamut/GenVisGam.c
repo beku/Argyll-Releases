@@ -104,7 +104,7 @@ main(int argc, char *argv[]) {
 	strcpy(out_name, "VisGamut.gam");
 
 	/* Creat a gamut surface */
-	gam = new_gamut(gamres, 0);
+	gam = new_gamut(gamres, 0, 0);
 
 	bc = 0.0;
 

@@ -11,7 +11,7 @@
 <h3>Summary&nbsp;<br>
 </h3>
 Lookup individual color values forward or inverted though an ICC
-profile table. <b>xicclu</b> is the analogue of the icclib utility <a
+profile table. <b>xicclu</b> is the analogue of the icclib tool <a
  href="icclu.html">icclu</a>, but expands the capability to reverse
 lookup the Lut tables, and displaying PCS values in CIECAM02 Jab space.
 <b>xicclu</b>
@@ -146,12 +146,16 @@ for CIECAM02,</span><br style="font-family: monospace;">
 &nbsp;&nbsp; either an enumerated choice, or a parameter:value change</span><span
  style="font-family: monospace;"></span><br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;
-&nbsp;&nbsp; &nbsp; &nbsp;
-&nbsp; pp - Practical Reflection Print</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; pe - Print evaluation environment</span><br
+<span style="font-family: monospace;"></span></small><small><span
+ style="font-family: monospace;">&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp; pp - Practical Reflection Print
+(ISO-3664 P2)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; pe - Print evaluation environment (CIE 116-1995)<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; pc - Critical print evaluation environment (ISO-3664 P1)</span></small><small><span
+ style="font-family: monospace;"></span><span
+ style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; mt - Monitor in typical work environment</span><br
@@ -316,7 +320,7 @@ instance, if your device values have a range between 0 and 255, use <span
 flag), an input PCS value can have many possible CMYK solutions. To be
 able to return a unique solution, a black level (or black inking rule)
 should be chosen. The choice here reflect similar choices in black
-generation available in other utilities (eg. <a href="colprof.html">colprof</a>,
+generation available in other tools (eg. <a href="colprof.html">colprof</a>,
 <a href="collink.html"> collink</a>), with the addition of two extra
 options.<br>
 <br>

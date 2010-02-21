@@ -51,6 +51,15 @@
 	input and output curves, rather than depending on
 	reasonable behaviour from the profiles.
 
+	I don't think that the idea of an XYZ input/output space
+	has been properly implemented, since the TIFF format
+	doesn't have an encoding for it, and hence the l2y_curve
+	and u2l_curve scaling is probably incorrect.
+
+	Forcing XYZ or Lab input & output spaces to be [io]combined
+	is also not actually necessary, if the necessary profile
+	curves were applied and the colorspace ranges properly allowed for.
+
  */
 
 /*
@@ -77,6 +86,7 @@
 
 #undef DEBUG		/* Print detailed debug info */
 
+
 void usage(char *diag, ...) {
 	fprintf(stderr,"Color Correct a TIFF file using any sequence of ICC profiles or Calibrations, V%s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
@@ -97,7 +107,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -t n            Choose TIFF output encoding from 1..n\n");
 	fprintf(stderr," -a              Read and Write planes > 4 as alpha planes\n");
 	fprintf(stderr," -I              Ignore any file or profile colorspace mismatches\n");
-	fprintf(stderr," -D              Don't append or set the description\n");
+	fprintf(stderr," -D              Don't append or set the output TIFF description\n");
 	fprintf(stderr," -e profile.[%s | tiff]  Optionally embed a profile in the destination TIFF file.\n",ICC_FILE_EXT_ND);
 	fprintf(stderr,"\n");
 	fprintf(stderr,"                 Then for each profile in sequence:\n");
@@ -106,7 +116,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"   -o order        n = normal (priority: lut > matrix > monochrome)\n");
 	fprintf(stderr,"                   r = reverse (priority: monochrome > matrix > lut)\n");
 	fprintf(stderr,"   profile.[%s | tiff]  Device, Link or Abstract profile\n",ICC_FILE_EXT_ND);
-	fprintf(stderr,"                   ( May be embeded profile in TIFF file)\n");
+	fprintf(stderr,"                   ( May be embedded profile in TIFF file)\n");
 	fprintf(stderr,"                 or each calibration file in sequence:\n");
 	fprintf(stderr,"   -d dir          f = forward cal. (default), b = backwards cal.\n");
 	fprintf(stderr,"   calbrtn.cal     Device calibration file.\n");
@@ -542,7 +552,69 @@ int pmtc
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+#define YSCALE (2.0/1.3)
+
+/* Extra non-linearity applied to BtoA XYZ PCS */
+/* This distributes the LUT indexes more evenly in */
+/* perceptual space, greatly improving the B2A accuracy of XYZ LUT */
+/* Since typically XYZ doesn't use the full range of 0-2.0 allowed */
+/* for in the encoding, we scale the cLUT index values to use the 0-1.3 range */
+
+/* (For these functions the encoded XYZ 0.0 - 2.0 range is 0.0 - 1.0 ??) */
+
+/* Y to L* */
+static void y2l_curve(double *out, double *in, int isXYZ) {
+	int i;
+	double val;
+	double isc = 1.0, osc = 1.0;
+
+	/* Scale from 0.0 .. 1.999969 to 0.0 .. 1.0 and back */
+	/* + range adjustment */
+	if (isXYZ) {
+		isc = 32768.0/65535.0 * YSCALE;
+		osc = 65535.0/32768.0;
+	}
+
+	for (i = 0; i < 3; i++) {
+		val = in[i] * isc;
+		if (val > 0.008856451586)
+			val = 1.16 * pow(val,1.0/3.0) - 0.16;
+		else
+			val = 9.032962896 * val;
+		if (val > 1.0)
+			val = 1.0;
+		out[i] = val * osc;
+	}
+}
+
+/* L* to Y */
+static void l2y_curve(double *out, double *in, int isXYZ) {
+	int i;
+	double val;
+	double isc = 1.0, osc = 1.0;
+
+	/* Scale from 0.0 .. 1.999969 to 0.0 .. 1.0 and back */
+	/* + range adjustment */
+	if (isXYZ) {
+		isc = 32768.0/65535.0;
+		osc = 65535.0/32768.0 / YSCALE;
+	}
+
+	/* Use an L* like curve, scaled to the maximum XYZ value */
+	for (i = 0; i < 3; i++) {
+		val = in[i] * isc;
+		if (val > 0.08)
+			val = pow((val + 0.16)/1.16, 3.0);
+		else
+			val = val/9.032962896;
+		out[i] = val * osc;
+	}
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
 /* Callbacks used to initialise imdi */
+
 
 /* Information needed from a single profile */
 struct _profinfo {
@@ -577,8 +649,10 @@ typedef struct {
 	int osign_mask;			/* Output sign mask */
 	int icombine;			/* Non-zero if input curves are to be combined */
 	int ocombine;			/* Non-zero if output curves are to be combined */
-	int ilcurve;			/* Non-zero if input curves are to be concatenated with Y->L* curve */
-	int olcurve;			/* Non-zero if output curves are to be concatenated with L*->Y curve */
+	int ilcurve;			/* 1 if input curves are to be concatenated with Y like ->L* curve */
+							/* (2 if input curves are to be concatenated with Y->L* curve) */
+	int olcurve;			/* 1 if output curves are to be concatenated with L*->Y like curve */
+							/* (2 if output curves are to be concatenated with L*->Y curve) */
 	void (*icvt)(double *out, double *in);	/* If non-NULL, Input format conversion */
 	void (*ocvt)(double *out, double *in);	/* If non-NULL, Output format conversion */
 
@@ -622,18 +696,12 @@ static void input_curves(
 		/* (icombine is set if input is PCS) */
 		if (rx->fclut <= rx->lclut) 
 			rx->profs[rx->fclut].luo->lookup_in(rx->profs[rx->fclut].luo, out_vals, out_vals);
+	}
 
-		/* If input curve converts to Y type space, apply Y->L* curve */
-		/* so as to index CLUT perceptually. */
-		if (rx->ilcurve != 0) {
-			for (i = 0; i < rx->id; i++) {
-				if (out_vals[i] > 0.008856451586)
-					out_vals[i] = pow(out_vals[i],1.0/3.0);
-				else
-					out_vals[i] = 7.787036979 * out_vals[i] + 16.0/116.0;
-				out_vals[i] = (1.16 * out_vals[i] - 0.16);
-			}
-		}
+	/* If input curve converts to Y like space, apply Y->L* curve */
+	/* so as to index CLUT perceptually. */
+	if (rx->ilcurve != 0) {
+		y2l_curve(out_vals, out_vals, rx->ilcurve == 2);
 	}
 //printf("~1 incurve out %f %f %f %f\n",out_vals[0],out_vals[1],out_vals[2],out_vals[3]);
 }
@@ -653,6 +721,11 @@ double *in_vals
 		vals[i] = in_vals[i];		/* default is do nothing */
 
 //printf("~1 md_table in %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
+
+	if (rx->ilcurve) {
+		/* Apply L*->Y curve to compensate for curve applied after input curve */
+		l2y_curve(vals, vals, rx->ilcurve == 2);
+	}
 
 	prs = rx->ins;
 
@@ -698,35 +771,16 @@ double *in_vals
 		
 			/* If first or last profile */
 			if (j == rx->fclut || j == rx->lclut) {
-				if (j != 0 || rx->icombine) {
+				if (j != rx->fclut || rx->icombine) {
 					rx->profs[j].luo->lookup_in(rx->profs[j].luo, vals, vals);
 //printf("~1 md_table after input curve %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
-				} else if (j == rx->fclut && rx->ilcurve) {
-					/* Apply L*->Y curve to compensate for curve applied after input curve */
-					for (i = 0; i < rx->id; i++) {
-						vals[i] = (vals[i] + 0.16)/1.16;
-						if (vals[i] > 24.0/116.0)
-							vals[i] = pow(vals[i],3.0);
-						else
-							vals[i] = (vals[i] - 16.0/116.0)/7.787036979;
-					}
 				}
 				rx->profs[j].luo->lookup_core(rx->profs[j].luo, vals, vals);
 //printf("~1 md_table after core %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
 				if (j != rx->lclut || rx->ocombine) {
 					rx->profs[j].luo->lookup_out(rx->profs[j].luo, vals, vals);
-//printf("~1 md_table after output curve %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
-				} else if (j == rx->lclut && rx->olcurve) {
-					/* Add Y->L* curve to cause interpolation in perceptual space */
-					for (i = 0; i < rx->id; i++) {
-						if (vals[i] > 0.008856451586)
-							vals[i] = pow(vals[i],1.0/3.0);
-						else
-							vals[i] = 7.787036979 * vals[i] + 16.0/116.0;
-						vals[i] = (1.16 * vals[i] - 0.16);
-					}
 				}
-
+//printf("~1 md_table after output curve %f %f %f %f\n",vals[0],vals[1],vals[2],vals[3]);
 			/* Middle of chain */
 			} else {
 				rx->profs[j].luo->lookup(rx->profs[j].luo, vals, vals);
@@ -767,6 +821,11 @@ double *in_vals
 
 	}
 
+	if (rx->olcurve) {
+		/* Add Y->L* curve to cause interpolation in perceptual space */
+		y2l_curve(vals, vals, rx->olcurve == 2);
+	}
+
 	for (i = 0; i < rx->od; i++)
 		out_vals[i] = vals[i];
 //printf("~1 md_table returns %f %f %f %f\n",out_vals[0],out_vals[1],out_vals[2],out_vals[3]);
@@ -785,18 +844,12 @@ static void output_curves(
 	for (i = 0; i < rx->od; i++)
 		out_vals[i] = in_vals[i];
 
-	if (rx->ocombine == 0) {	/* Not combined into multi-d table */
+	/* Apply L* -> Y curve to undo curve applied at CLUT output. */
+	if (rx->olcurve != 0) {
+		l2y_curve(out_vals, out_vals, rx->olcurve == 2);
+	}
 
-		/* Apply L* -> Y curve to undo curve applied at CLUT output. */
-		if (rx->olcurve != 0) {
-			for (i = 0; i < rx->od; i++) {
-				out_vals[i] = (out_vals[i] + 0.16)/1.16;
-				if (out_vals[i] > 24.0/116.0)
-					out_vals[i] = pow(out_vals[i],3.0);
-				else
-					out_vals[i] = (out_vals[i] - 16.0/116.0)/7.787036979;
-			}
-		}
+	if (rx->ocombine == 0) {	/* Not combined into multi-d table */
 
 		/* The output table of the last profile */
 		/* (ocombine is set if output is PCS) */
@@ -862,7 +915,7 @@ main(int argc, char *argv[]) {
 	int fa, nfa;							/* argument we're looking at */
 	char in_name[MAXNAMEL+1] = "";			/* Input raster file name */
 	char out_name[MAXNAMEL+1] = "";			/* Output raster file name */
-	char dst_pname[MAXNAMEL+1] = "";		/* Destination embeded profile file name */
+	char dst_pname[MAXNAMEL+1] = "";		/* Destination embedded profile file name */
 	icc *deicc = NULL;						/* Destination embedded profile (if any) */
 	icRenderingIntent next_intent;			/* Rendering intent for next profile */
 	icmLookupOrder next_order;				/* tag search order for next profile */
@@ -913,14 +966,8 @@ main(int argc, char *argv[]) {
 	if (argc < 2)
 		usage("Too few arguments");
 
-	su.verb = 0;
-	su.icombine = 0;
-	su.ocombine = 0;
-	su.ilcurve = 0;
-	su.olcurve = 0;
-
-	su.nprofs = 0;
-	su.profs = NULL;
+	/* Set defaults */
+	memset((void *)&su, 0, sizeof(sucntx));
 	next_intent = icmDefaultIntent;
 	next_func = icmFwd;
 	next_order = icmLuOrdNorm;
@@ -1197,6 +1244,7 @@ main(int argc, char *argv[]) {
 	su.width = width;
 	su.height = height;
 
+
 	/* - - - - - - - - - - - - - - - */
 	/* Check and setup the sequence of ICC profiles */
 
@@ -1222,7 +1270,7 @@ main(int argc, char *argv[]) {
 			su.profs[i].cal->del(su.profs[i].cal);	/* Clean up */
 			su.profs[i].cal = NULL;
 
-			if ((su.profs[i].c = read_embeded_icc(su.profs[i].name)) == NULL)
+			if ((su.profs[i].c = read_embedded_icc(su.profs[i].name)) == NULL)
 				error ("Can't read profile or calibration from file '%s'",su.profs[i].name);
 
 			su.profs[i].h = su.profs[i].c->header;
@@ -1428,7 +1476,7 @@ main(int argc, char *argv[]) {
 		unsigned char *buf;
 		int size;
 
-		if ((deicc = read_embeded_icc(dst_pname)) == NULL)
+		if ((deicc = read_embedded_icc(dst_pname)) == NULL)
 			error("Unable to open profile for destination embedding '%s'",dst_pname);
 
 		/* Check that it is compatible with the destination TIFF */
@@ -1470,26 +1518,25 @@ main(int argc, char *argv[]) {
 	}
 
 	/* - - - - - - - - - - - - - - - */
+	if (su.fclut <= su.lclut
+	 && ((su.profs[su.fclut].natpcs == icSigXYZData && su.profs[su.fclut].alg == icmMatrixFwdType))
+	  || (su.profs[su.fclut].ins == icSigXYZData)) {
+		su.ilcurve = 1;			/* Index CLUT with L* curve rather than Y */
+	}
+
 	/* Setup input/output curve use. */
 	if (su.ins == icSigLabData || su.ins == icSigXYZData) {
 		su.icombine = 1;		/* CIE can't be conveyed through 0..1 domain lookup */
 	}
 
-	if (su.icombine == 0
-	 && su.fclut <= su.lclut
-	 && su.profs[su.fclut].natpcs == icSigXYZData && su.profs[su.fclut].alg == icmMatrixFwdType) {
-		su.ilcurve = 1;			/* Index CLUT with L* curve rather than Y */
+	if (su.fclut <= su.lclut
+	 && ((su.profs[su.lclut].natpcs == icSigXYZData && su.profs[su.lclut].alg == icmMatrixBwdType))
+	  || (su.profs[su.lclut].outs == icSigXYZData)) {
+		su.olcurve = 1;			/* Interpolate in L* space rather than Y */
 	}
 
-	j = su.last;
 	if (su.outs == icSigLabData || su.outs == icSigXYZData) {
 		su.ocombine = 1;		/* CIE can't be conveyed through 0..1 domain lookup */
-	}
-
-	if (su.ocombine == 0
-	 && su.fclut <= su.lclut
-	 && su.profs[su.lclut].natpcs == icSigXYZData && su.profs[su.lclut].alg == icmMatrixBwdType) {
-		su.olcurve = 1;			/* Interpolate in L* space rather than Y */
 	}
 
 	/* - - - - - - - - - - - - - - - */

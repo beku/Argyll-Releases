@@ -42,7 +42,7 @@
 
 #define iabs(a)  ((a) < 0 ? -(a) : (a))
 
-#define MXDE 4		/* Maximum pixel depth */
+#define MXDE 4		/* Maximum useful pixel depth */
 
 /* A run of points at a given y, in a group */
 typedef struct {
@@ -182,7 +182,8 @@ struct _scanrd_ {
 
 	double gammav;			/* Approximate gamma encoding of input image */
 	int width,height;		/* With and height of raster in pixels */
-	int depth;				/* Pixel Plane depth */
+	int depth;				/* Useful pixel plane depth */
+	int tdepth;				/* Total pixel plane depth */
 	int bpp;				/* Bit precision per pixel, 8 or 16 */
 	int bypp;				/* Bytes per pixel, either 1 or 2 */
 

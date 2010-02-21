@@ -12,6 +12,7 @@
  */
 
 /* Graph order is Black = Y1, Red = Y2, Green = Y3, Blue = Y4, Yellow = Y5, Purple = Y6 */
+/* Brown = Y7, Orange = Y8, Grey = Y9, White = Y10  */
 
 /* A plot color */
 typedef struct {
@@ -50,6 +51,22 @@ int do_plot6(double *x, double *y1, double *y2, double *y3, double *y4, double *
 /* If n is -ve, reverse the X axis */
 int do_plot6p(double *x, double *y1, double *y2, double *y3, double *y4, double *y5, double *y6,
               int n, double *x7, double *y7, int m);
+
+/* Public routines */
+/* Plot up to 10 graphs */
+/* return 0 on success, -1 on error */
+/* Graph order is Black = Y1, Red = Y2, Green = Y3, Blue = Y4, Yellow = Y5, Purple = Y6 */
+/* Brown = Y7, Orange = Y8, Grey = Y9, White = Y10 */
+int do_plot10(double *x, double *y1, double *y2, double *y3, double *y4, double *y5, double *y6,
+             double *y7, double *y8, double *y9, double *y10,
+             int n);
+
+/* Plot up to 10 graphs + optional crosses. Wait for a key */
+/* return 0 on success, -1 on error */
+/* If n is -ve, reverse the X axis */
+int do_plot10p(double *x, double *y1, double *y2, double *y3, double *y4, double *y5, double *y6,
+               double *y7, double *y8, double *y9, double *y10,
+               int n, double *xp, double *yp, int m);
 
 /* Plot a bunch of vectors + points + optional colored points & notation */
 /* return 0 on success, -1 on error */

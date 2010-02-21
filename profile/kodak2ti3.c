@@ -3,14 +3,14 @@
  * Argyll Color Correction System
  *
  * Read in the raw data from a Kodak print profile,
- * and convert it into a CGATs format suitable for
+ * and convert it into a .ti3 CGATs format suitable for
  * the Argyll CMM.
  *
  * Derived from  spectro.c 
  * Author: Graeme W. Gill
  * Date:   4/9/00
  *
- * Copyright 2000, Graeme W. Gill
+ * Copyright 2000, 2010, Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-

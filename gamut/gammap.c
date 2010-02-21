@@ -25,18 +25,18 @@
 #define XRES 100		/* Res of plot */
 
 	/* What do display when user requests disgnostic .wrl */
-#define PLOT_SRC_GMT	/* Plot the source surface to "gammap.wrl" as well */
-#define PLOT_DST_GMT	/* Plot the dest surface to "gammap.wrl" as well */
-#define PLOT_SRC_CUSPS	/* Plot the source surface cusps to "gammap.wrl" as well */
-#define PLOT_DST_CUSPS	/* Plot the dest surface cusps to "gammap.wrl" as well */
-#define PLOT_TRANSSRC_CUSPS	/* Plot the gamut mapped source surface cusps to "gammap.wrl" as well */
-#undef PLOT_AXES		/* Plot the axes to "gammap.wrl" as well */
-#undef SHOW_VECTOR_INDEXES	/* Show the mapping vector index numbers */
-#define SHOW_MAP_VECTORS	/* Show the mapping vectors */
-#define SHOW_SUB_SURF	/* Show the sub-surface mapping vector */
-#undef SHOW_CUSPMAP		/* Show the cusp mapped vectors rather than final vectors */
-#define SHOW_ACTUAL_VECTORS		/* Show how the source vectors actually map */
-#undef SHOW_ACTUAL_VEC_DIFF		/* Show how the difference between guide and actual vectors */
+#define PLOT_SRC_GMT	/* [Def] Plot the source surface to "gammap.wrl" as well */
+#define PLOT_DST_GMT	/* [Def] Plot the dest surface to "gammap.wrl" as well */
+#undef PLOT_SRC_CUSPS	/* [Und] Plot the source surface cusps to "gammap.wrl" as well */
+#undef PLOT_DST_CUSPS	/* [Und] Plot the dest surface cusps to "gammap.wrl" as well */
+#undef PLOT_TRANSSRC_CUSPS	/* [Und] Plot the gamut mapped source surface cusps to "gammap.wrl" */
+#define PLOT_AXES		/* [Und] Plot the axes to "gammap.wrl" as well */
+#undef SHOW_VECTOR_INDEXES	/* [Und] Show the mapping vector index numbers */
+#define SHOW_MAP_VECTORS	/* [Def] Show the mapping vectors */
+#undef SHOW_SUB_SURF	/* [Und] Show the sub-surface mapping vector */
+#undef SHOW_CUSPMAP		/* [Und] Show the cusp mapped vectors rather than final vectors */
+#define SHOW_ACTUAL_VECTORS		/* [Def] Show how the source vectors actually map */
+#undef SHOW_ACTUAL_VEC_DIFF		/* [Und] Show how the difference between guide and actual vectors */
 
 #undef PLOT_LMAP		/* [undef] Plot L map */
 #undef PLOT_GAMUTS		/* Save (part mapped) input and output gamuts as */
@@ -476,7 +476,7 @@ gammap *new_gammap(
 	int src_kbp,		/* Use K only black point as src gamut black point */
 	int dst_kbp,		/* Use K only black point as dst gamut black point */
 	int dst_cmymap,		/* masks C = 1, M = 2, Y = 4 to force 100% cusp map */
-	int rel_oride,		/* 0 = normal, 1 = override min relative, 2 = max relative */
+	int rel_oride,		/* 0 = normal, 1 = clip like, 2 = max relative */
 	int    mapres,		/* Gamut map resolution, typically 9 - 33 */
 	double *mn,			/* If not NULL, set minimum mapping input range */
 	double *mx,			/* for rspl grid. */
@@ -878,7 +878,6 @@ gammap *new_gammap(
 		icmMul3By3x4(sr_ga_wp, s->grot, s_ga_wp);
 		icmMul3By3x4(sr_ga_bp, s->grot, s_ga_bp);
 
-
 #ifdef VERBOSE
 		if (verb) {
 			printf("Rotated source grey axis wp/bp %f %f %f, %f %f %f\n",
@@ -1181,7 +1180,8 @@ glumknf	= 1.0;
 		}
 #endif
 
-		scl_gam = new_gamut(sc_gam->getsres(sc_gam), sc_gam->getisjab(sc_gam));
+		scl_gam = new_gamut(sc_gam->getsres(sc_gam), sc_gam->getisjab(sc_gam), sc_gam->getisrast(sc_gam));
+		scl_gam->setnofilt(scl_gam);
 
 		for (ix = 0;;) {
 			double p[3];
@@ -1233,7 +1233,8 @@ glumknf	= 1.0;
 			sil_gam = scl_gam;
 
 		else {
-			sil_gam = new_gamut(si_gam->getsres(si_gam), si_gam->getisjab(si_gam));
+			sil_gam = new_gamut(si_gam->getsres(si_gam), si_gam->getisjab(si_gam), si_gam->getisrast(si_gam));
+			sil_gam->setnofilt(sil_gam);
 
 			for (ix = 0;;) {
 				double p[3];
@@ -1294,7 +1295,7 @@ typedef struct {
 		}
 #endif
 
-		if ((gpnts = (cow *)malloc((nres + 2 * nspts + rgridpts) * sizeof(cow))) == NULL) { 
+		if ((gpnts = (cow *)malloc((nres + 3 * nspts + rgridpts) * sizeof(cow))) == NULL) { 
 			fprintf(stderr,"gamut map: Malloc of mapping setup points failed\n");
 			s->grey->del(s->grey);
 			s->igrey->del(s->igrey);
@@ -1413,7 +1414,7 @@ typedef struct {
 			smooth = (gmi->gampwf * psmooth) + (gmi->gamswf * ssmooth);
 
 		/* Tweak gamut mappings according to extra cmy cusp flags or rel override */ 
-		if (dst_cmymap != 0) {
+		if (dst_cmymap != 0 || rel_oride != 0) {
 			tweak_weights(xwh, dst_cmymap, rel_oride); 
 		}
 
@@ -1654,12 +1655,11 @@ typedef struct {
 		/* Create preliminary gamut mapping rspl, without grid boundary values. */
 		/* We use this to lookup the mapping for points on the source space gamut */
 		/* that result from clipping our grid boundary points */
+#ifdef USE_BOUND
 		for (j = 0; j < 3; j++) {		/* Set resolution for all axes */
 			gres[j] = mapres/2;
 			avgdev[j] = 0.005;
 		}
-		avgdev[j] = 0.005;
-#ifdef USE_BOUND
 		s->map = new_rspl(RSPL_NOFLAGS, 3, 3);	/* Allocate 3D -> 3D */
 		s->map->fit_rspl_w(s->map, RSPLFLAGS, gpnts, ngamp, il, ih, gres, ol, oh, smooth, avgdev, NULL);
 
@@ -1760,6 +1760,10 @@ typedef struct {
 			s->map->del(s->map);
 		if (verb)
 			printf("Creating rspl..\n");
+		for (j = 0; j < 3; j++) {		/* Set resolution for all axes */
+			gres[j] = mapres;
+			avgdev[j] = 0.005;
+		}
 		s->map = new_rspl(RSPL_NOFLAGS, 3, 3);	/* Allocate 3D -> 3D */
 		if (s->map->fit_rspl_w(s->map, MAINRSPLFLAGS, gpnts, ngamp, il, ih, gres, ol, oh, smooth, avgdev, NULL)) {
 			if (verb)
@@ -1800,7 +1804,7 @@ typedef struct {
 					maxde = de;
 			}
 			avgde /= nnsm;
-			fprintf(stderr,"Gamut hull mapping errors: = avg %f, max %f\n",avgde,maxde);
+			printf("Gamut hull fit to guides: = avg %f, max %f\n",avgde,maxde);
 		}
 #endif /* CHECK_NEARMAP */
 
@@ -2390,7 +2394,7 @@ double *in
 		for (e = 0; e < s->map->fdi; e++)
 			out[e] = cp.v[e];
 	
-		if (s->dbg) printf("domap: after 3D map %f %f %f\n\n",out[0],out[1],out[2]);
+		if (s->dbg) printf("domap: after 3D map %s\n\n",icmPdv(s->map->fdi, out));
 	} else {
 		out[0] = cp.v[0];
 		out[1] = rin[1];

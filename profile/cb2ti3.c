@@ -3,14 +3,14 @@
  * Argyll Color Correction System
  *
  * Read in the device data from Colorblind device files,
- * and convert it into a CGATs format suitable for
+ * and convert it into a .ti3 CGATs format suitable for
  * the Argyll CMM.
  *
  * Derived from  kodak2cgats.c 
  * Author: Graeme W. Gill
  * Date:   16/11/00
  *
- * Copyright 2000, Graeme W. Gill
+ * Copyright 2000, 2010, Graeme W. Gill
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.

@@ -11,6 +11,19 @@
 /* The code is in three sections, one for each GUI environment. */
 /* (Perhaps common code could be consolidated ?) */
 
+
+/*
+ * TTBD:
+ *	
+ *		Allow for a window title for each plot.
+ *
+ *		Put all state information in plot_info (window handles etc.)
+ *      Create thread to handle events, so it updates correctly.
+ *		(Will have to lock plot info updates or ping pong them);
+ *		Have call to destroy window.
+ *		(Could then move to having multiple instances of plot).
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -34,10 +47,28 @@
 #define DEFWHEIGHT 500
 
 /* Graph order is Black = Y1, Red = Y2, Green = Y3, Blue = Y4, Yellow = Y5, Purple = Y6 */
+/* Brown = Y7, Orange = Y8, Grey = Y9, White = Y10  */
 
 double nicenum(double x, int round);
 
+#define MXGPHS	10		/* Number of graphs with common X axis */
+
+/* Colors of the graphs */
+static int gcolors[MXGPHS][3] = {
+	{   0,   0,   0},	/* Black */
+	{ 210,  30,   0},	/* Red */
+	{   0, 200,  90},	/* Green */
+	{   0,  10, 255},	/* Blue */
+	{ 200, 200,   0},	/* Yellow */
+	{ 220,   0, 255},	/* Purple */
+	{ 136,  86,  68},	/* Brown */
+	{ 248,  95,   0},	/* Orange */
+	{ 160, 160, 160},	/* Grey */
+	{ 220, 220, 220}	/* White */
+};
+
 /* Information defining plot */
+/* There is one global instance of this. */
 struct _plot_info {
 	void *cx;				/* Other Context */
 
@@ -49,7 +80,7 @@ struct _plot_info {
 	int revx;						/* reversed X axis */
 
 	double *x1, *x2;
-	double *y1, *y2, *y3, *y4, *y5, *y6;
+	double *yy[MXGPHS];				/* y1 - y10 */
 	char **ntext;
 	int n;
 
@@ -77,8 +108,8 @@ static int do_plot_imp(
     double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
 	double ratio,	/* Aspect ratio of window, X/Y */
 	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
-    double *x1, double *y1, double *x2, double *y2,
-    double *y3, double *y4, double *y5, double *y6, char **ntext,
+	double *x1, double *x2,
+	double *yy[MXGPHS], char **ntext,
 	int n,
 	double *x7, double *y7, plot_col *mcols, char **mtext,
     int m,
@@ -100,8 +131,16 @@ double *y1,	/* Up to 3 graphs */
 double *y2,
 double *y3,
 int n) {
-	int i;
+	int i, j;
 	double xmin, xmax, ymin, ymax;
+	double *yy[MXGPHS];
+
+	for (j = 0; j < MXGPHS; j++)
+		yy[j] = NULL;
+
+	yy[0] = y1;
+	yy[1] = y2;
+	yy[2] = y3;
 
 	/* Determine min and max dimensions of plot */
 	xmin = ymin = 1e6;
@@ -112,21 +151,14 @@ int n) {
 			xmin = x[i];
 		if (xmax < x[i])
 			xmax = x[i];
-		if (ymin > y1[i])
-			ymin = y1[i];
-		if (ymax < y1[i])
-			ymax = y1[i];
-		if (y2 != NULL) {
-			if (ymin > y2[i])
-				ymin = y2[i];
-			if (ymax < y2[i])
-				ymax = y2[i];
-		}
-		if (y3 != NULL) {
-			if (ymin > y3[i])
-				ymin = y3[i];
-			if (ymax < y3[i])
-				ymax = y3[i];
+
+		for (j = 0; j < MXGPHS; j++) {
+			if (yy[j] != NULL) {
+				if (ymin > yy[j][i])
+					ymin = yy[j][i];
+				if (ymax < yy[j][i])
+					ymax = yy[j][i];
+			}
 		}
 	}
 
@@ -137,7 +169,7 @@ int n) {
 		ymax += 0.5, ymin -= 0.5;
 
 	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
-	                   x, y1, NULL, y2, y3, NULL, NULL, NULL,  NULL, n,
+	                   x, NULL, yy, NULL, n,
 	                   NULL, NULL, NULL, NULL, 0,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
@@ -155,8 +187,16 @@ double *y3,
 int n,
 double *x4, double *y4,		/* And crosses */
 int m) {
-	int i;
+	int i, j;
 	double xmin, xmax, ymin, ymax;
+	double *yy[MXGPHS];
+
+	for (j = 0; j < MXGPHS; j++)
+		yy[j] = NULL;
+
+	yy[0] = y1;
+	yy[1] = y2;
+	yy[2] = y3;
 
 	/* Determine min and max dimensions of plot */
 	xmin = ymin = 1e6;
@@ -167,33 +207,14 @@ int m) {
 			xmin = x[i];
 		if (xmax < x[i])
 			xmax = x[i];
-		if (ymin > y1[i])
-			ymin = y1[i];
-		if (ymax < y1[i])
-			ymax = y1[i];
-		if (y2 != NULL) {
-			if (ymin > y2[i])
-				ymin = y2[i];
-			if (ymax < y2[i])
-				ymax = y2[i];
-		}
-		if (y3 != NULL) {
-			if (ymin > y3[i])
-				ymin = y3[i];
-			if (ymax < y3[i])
-				ymax = y3[i];
-		}
-		if (x4 != NULL) {
-			if (xmin > x4[i])
-				xmin = x4[i];
-			if (xmax < x4[i])
-				xmax = x4[i];
-		}
-		if (y4 != NULL) {
-			if (ymin > y4[i])
-				ymin = y4[i];
-			if (ymax < y4[i])
-				ymax = y4[i];
+
+		for (j = 0; j < MXGPHS; j++) {
+			if (yy[j] != NULL) {
+				if (ymin > yy[j][i])
+					ymin = yy[j][i];
+				if (ymax < yy[j][i])
+					ymax = yy[j][i];
+			}
 		}
 	}
 
@@ -219,12 +240,12 @@ int m) {
 		ymax += 0.5, ymin -= 0.5;
 
 	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
-	                   x, y1, NULL, y2, y3, NULL, NULL, NULL, NULL, n,
+	                   x, NULL, yy, NULL, n,
 	                   x4, y4, NULL, NULL, m ,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
 
-/* Plot up to 3 graphs. */
+/* Plot up to 3 graphs with specified window size. */
 /* if dowait > 0, wait for user key */
 /* if dowait < 0, wait for no seconds */
 /* If xmax > xmin, use as x scale, else auto. */
@@ -246,8 +267,16 @@ double pymin,
 double pymax,
 double ratio
 ) {
-	int i;
+	int i, j;
 	double xmin, xmax, ymin, ymax;
+	double *yy[MXGPHS];
+
+	for (j = 0; j < MXGPHS; j++)
+		yy[j] = NULL;
+
+	yy[0] = y1;
+	yy[1] = y2;
+	yy[2] = y3;
 
 	/* Determine min and max dimensions of plot */
 	xmin = ymin = 1e6;
@@ -258,21 +287,14 @@ double ratio
 			xmin = x[i];
 		if (xmax < x[i])
 			xmax = x[i];
-		if (ymin > y1[i])
-			ymin = y1[i];
-		if (ymax < y1[i])
-			ymax = y1[i];
-		if (y2 != NULL) {
-			if (ymin > y2[i])
-				ymin = y2[i];
-			if (ymax < y2[i])
-				ymax = y2[i];
-		}
-		if (y3 != NULL) {
-			if (ymin > y3[i])
-				ymin = y3[i];
-			if (ymax < y3[i])
-				ymax = y3[i];
+
+		for (j = 0; j < MXGPHS; j++) {
+			if (yy[j] != NULL) {
+				if (ymin > yy[j][i])
+					ymin = yy[j][i];
+				if (ymax < yy[j][i])
+					ymax = yy[j][i];
+			}
 		}
 	}
 
@@ -292,7 +314,7 @@ double ratio
 	}
 
 	return do_plot_imp(xmin, xmax, ymin, ymax, ratio, dowait,
-	                   x, y1, NULL, y2, y3, NULL, NULL, NULL, NULL, n,
+	                   x, NULL, yy, NULL, n,
 	                   NULL, NULL, NULL, NULL, 0,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
@@ -311,54 +333,38 @@ double *y4,	/* Blue */
 double *y5,	/* Yellow */
 double *y6,	/* Purple */
 int n) {	/* Number of values */
-	int i;
+	int i, j;
 	double xmin, xmax, ymin, ymax;
 	int nn = abs(n);
+	double *yy[MXGPHS];
+
+	for (j = 0; j < MXGPHS; j++)
+		yy[j] = NULL;
+
+	yy[0] = y1;
+	yy[1] = y2;
+	yy[2] = y3;
+	yy[3] = y4;
+	yy[4] = y5;
+	yy[5] = y6;
 
 	/* Determine min and max dimensions of plot */
 	xmin = ymin = 1e6;
 	xmax = ymax = -1e6;
 
-	for (i = 0; i < nn; i++) {
+	for (i = 0; i < n; i++) {
 		if (xmin > x[i])
 			xmin = x[i];
 		if (xmax < x[i])
 			xmax = x[i];
-		if (y1 != NULL) {
-			if (ymin > y1[i])
-				ymin = y1[i];
-			if (ymax < y1[i])
-				ymax = y1[i];
-		}
-		if (y2 != NULL) {
-			if (ymin > y2[i])
-				ymin = y2[i];
-			if (ymax < y2[i])
-				ymax = y2[i];
-		}
-		if (y3 != NULL) {
-			if (ymin > y3[i])
-				ymin = y3[i];
-			if (ymax < y3[i])
-				ymax = y3[i];
-		}
-		if (y4 != NULL) {
-			if (ymin > y4[i])
-				ymin = y4[i];
-			if (ymax < y4[i])
-				ymax = y4[i];
-		}
-		if (y5 != NULL) {
-			if (ymin > y5[i])
-				ymin = y5[i];
-			if (ymax < y5[i])
-				ymax = y5[i];
-		}
-		if (y6 != NULL) {
-			if (ymin > y6[i])
-				ymin = y6[i];
-			if (ymax < y6[i])
-				ymax = y6[i];
+
+		for (j = 0; j < MXGPHS; j++) {
+			if (yy[j] != NULL) {
+				if (ymin > yy[j][i])
+					ymin = yy[j][i];
+				if (ymax < yy[j][i])
+					ymax = yy[j][i];
+			}
 		}
 	}
 
@@ -369,7 +375,7 @@ int n) {	/* Number of values */
 		ymax += 0.5, ymin -= 0.5;
 
 	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
-	                   x, y1, NULL, y2, y3, y4, y5, y6, NULL, n,
+	                   x, NULL, yy, NULL, n,
 	                   NULL, NULL, NULL, NULL, n ,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
@@ -388,70 +394,55 @@ double *y4,	/* Blue */
 double *y5,	/* Yellow */
 double *y6,	/* Purple */
 int n,		/* Number of values */
-double *x7, double *y7,		/* And crosses */
+double *xp, double *yp,		/* And crosses */
 int m) {
-	int i;
+	int i, j;
 	double xmin, xmax, ymin, ymax;
 	int nn = abs(n);
+	double *yy[MXGPHS];
+
+	for (j = 0; j < MXGPHS; j++)
+		yy[j] = NULL;
+
+	yy[0] = y1;
+	yy[1] = y2;
+	yy[2] = y3;
+	yy[3] = y4;
+	yy[4] = y5;
+	yy[5] = y6;
 
 	/* Determine min and max dimensions of plot */
 	xmin = ymin = 1e6;
 	xmax = ymax = -1e6;
 
-	for (i = 0; i < nn; i++) {
+	for (i = 0; i < n; i++) {
 		if (xmin > x[i])
 			xmin = x[i];
 		if (xmax < x[i])
 			xmax = x[i];
-		if (y1 != NULL) {
-			if (ymin > y1[i])
-				ymin = y1[i];
-			if (ymax < y1[i])
-				ymax = y1[i];
-		}
-		if (y2 != NULL) {
-			if (ymin > y2[i])
-				ymin = y2[i];
-			if (ymax < y2[i])
-				ymax = y2[i];
-		}
-		if (y3 != NULL) {
-			if (ymin > y3[i])
-				ymin = y3[i];
-			if (ymax < y3[i])
-				ymax = y3[i];
-		}
-		if (y4 != NULL) {
-			if (ymin > y4[i])
-				ymin = y4[i];
-			if (ymax < y4[i])
-				ymax = y4[i];
-		}
-		if (y5 != NULL) {
-			if (ymin > y5[i])
-				ymin = y5[i];
-			if (ymax < y5[i])
-				ymax = y5[i];
-		}
-		if (y6 != NULL) {
-			if (ymin > y6[i])
-				ymin = y6[i];
-			if (ymax < y6[i])
-				ymax = y6[i];
+
+		for (j = 0; j < MXGPHS; j++) {
+			if (yy[j] != NULL) {
+				if (ymin > yy[j][i])
+					ymin = yy[j][i];
+				if (ymax < yy[j][i])
+					ymax = yy[j][i];
+			}
 		}
 	}
+
 	for (i = 0; i < m; i++) {
-		if (x7 != NULL) {
-			if (xmin > x7[i])
-				xmin = x7[i];
-			if (xmax < x7[i])
-				xmax = x7[i];
+		if (xp != NULL) {
+			if (xmin > xp[i])
+				xmin = xp[i];
+			if (xmax < xp[i])
+				xmax = xp[i];
 		}
-		if (y7 != NULL) {
-			if (ymin > y7[i])
-				ymin = y7[i];
-			if (ymax < y7[i])
-				ymax = y7[i];
+		if (yp != NULL) {
+			if (ymin > yp[i])
+				ymin = yp[i];
+			if (ymax < yp[i])
+				ymax = yp[i];
 		}
 	}
 
@@ -462,10 +453,166 @@ int m) {
 		ymax += 0.5, ymin -= 0.5;
 
 	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
-	                   x, y1, NULL, y2, y3, y4, y5, y6, NULL, n,
-	                   x7, y7, NULL, NULL, m,
+	                   x, NULL, yy, NULL, n,
+	                   xp, yp, NULL, NULL, m,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
+
+/* Public routines */
+/* Plot up to 10 graphs. Wait for a key */
+/* return 0 on success, -1 on error */
+/* If n is -ve, reverse the X axis */
+int
+do_plot10(
+double *x,	/* X coord */
+double *y1,	/* Black */
+double *y2,	/* Red */
+double *y3,	/* Green */
+double *y4,	/* Blue */
+double *y5,	/* Yellow */
+double *y6,	/* Purple */
+double *y7,	/* Brown */
+double *y8,	/* Orange */
+double *y9,	/* Grey */
+double *y10,/* White */
+int n) {	/* Number of values */
+	int i, j;
+	double xmin, xmax, ymin, ymax;
+	int nn = abs(n);
+	double *yy[MXGPHS];
+
+	for (j = 0; j < MXGPHS; j++)
+		yy[j] = NULL;
+
+	yy[0] = y1;
+	yy[1] = y2;
+	yy[2] = y3;
+	yy[3] = y4;
+	yy[4] = y5;
+	yy[5] = y6;
+	yy[6] = y7;
+	yy[7] = y8;
+	yy[9] = y9;
+	yy[5] = y10;
+
+	/* Determine min and max dimensions of plot */
+	xmin = ymin = 1e6;
+	xmax = ymax = -1e6;
+
+	for (i = 0; i < n; i++) {
+		if (xmin > x[i])
+			xmin = x[i];
+		if (xmax < x[i])
+			xmax = x[i];
+
+		for (j = 0; j < MXGPHS; j++) {
+			if (yy[j] != NULL) {
+				if (ymin > yy[j][i])
+					ymin = yy[j][i];
+				if (ymax < yy[j][i])
+					ymax = yy[j][i];
+			}
+		}
+	}
+
+	/* Work out scale factors */
+	if ((xmax - xmin) == 0.0)
+		xmax += 0.5, xmin -= 0.5;
+	if ((ymax - ymin) == 0.0)
+		ymax += 0.5, ymin -= 0.5;
+
+	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	                   x, NULL, yy, NULL, n,
+	                   NULL, NULL, NULL, NULL, n ,
+	                   NULL, NULL, NULL, NULL, NULL, 0); 
+}
+
+/* Public routines */
+/* Plot up to 10 graphs + optional crosses. Wait for a key */
+/* return 0 on success, -1 on error */
+/* If n is -ve, reverse the X axis */
+int
+do_plot10p(
+double *x,	/* X coord */
+double *y1,	/* Black */
+double *y2,	/* Red */
+double *y3,	/* Green */
+double *y4,	/* Blue */
+double *y5,	/* Yellow */
+double *y6,	/* Purple */
+double *y7,	/* Brown */
+double *y8,	/* Orange */
+double *y9,	/* Grey */
+double *y10,/* White */
+int n,		/* Number of values */
+double *xp, double *yp,		/* And crosses */
+int m) {
+	int i, j;
+	double xmin, xmax, ymin, ymax;
+	int nn = abs(n);
+	double *yy[MXGPHS];
+
+	for (j = 0; j < MXGPHS; j++)
+		yy[j] = NULL;
+
+	yy[0] = y1;
+	yy[1] = y2;
+	yy[2] = y3;
+	yy[3] = y4;
+	yy[4] = y5;
+	yy[5] = y6;
+	yy[6] = y7;
+	yy[7] = y8;
+	yy[9] = y9;
+	yy[5] = y10;
+
+	/* Determine min and max dimensions of plot */
+	xmin = ymin = 1e6;
+	xmax = ymax = -1e6;
+
+	for (i = 0; i < n; i++) {
+		if (xmin > x[i])
+			xmin = x[i];
+		if (xmax < x[i])
+			xmax = x[i];
+
+		for (j = 0; j < MXGPHS; j++) {
+			if (yy[j] != NULL) {
+				if (ymin > yy[j][i])
+					ymin = yy[j][i];
+				if (ymax < yy[j][i])
+					ymax = yy[j][i];
+			}
+		}
+	}
+
+	for (i = 0; i < m; i++) {
+		if (xp != NULL) {
+			if (xmin > xp[i])
+				xmin = xp[i];
+			if (xmax < xp[i])
+				xmax = xp[i];
+		}
+		if (yp != NULL) {
+			if (ymin > yp[i])
+				ymin = yp[i];
+			if (ymax < yp[i])
+				ymax = yp[i];
+		}
+	}
+
+	/* Work out scale factors */
+	if ((xmax - xmin) == 0.0)
+		xmax += 0.5, xmin -= 0.5;
+	if ((ymax - ymin) == 0.0)
+		ymax += 0.5, ymin -= 0.5;
+
+	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	                   x, NULL, yy, NULL, n,
+	                   xp, yp, NULL, NULL, m,
+	                   NULL, NULL, NULL, NULL, NULL, 0); 
+}
+
 
 /* Plot a bunch of vectors + optional crosses */
 /* return 0 on success, -1 on error */
@@ -486,8 +633,17 @@ plot_col *mcols,	/* point colors */
 char **mtext,		/* notation */
 int m			/* Number of points */
 ) {
+	int j;
+	double *yy[MXGPHS];
+
+	for (j = 0; j < MXGPHS; j++)
+		yy[j] = NULL;
+
+	yy[0] = y1;
+	yy[1] = y2;
+
 	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, dowait,
-	                   x1, y1, x2, y2, NULL, NULL, NULL, NULL, NULL, n,
+	                   x1, x2, yy, NULL, n,
 	                   x3, y3, mcols, mtext, m,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
@@ -518,8 +674,17 @@ double *y5,
 plot_col *ocols,/* Vector colors */
 int o			/* Number of vectors */
 ) {
+	int j;
+	double *yy[MXGPHS];
+
+	for (j = 0; j < MXGPHS; j++)
+		yy[j] = NULL;
+
+	yy[0] = y1;
+	yy[1] = y2;
+
 	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, dowait,
-	                   x1, y1, x2, y2, NULL, NULL, NULL, NULL, ntext, n,
+	                   x1, x2, yy, ntext, n,
 	                   x3, y3, mcols, mtext, m,
 	                   x4, y4, x5, y5, ocols, o); 
 }
@@ -550,8 +715,8 @@ static int do_plot_imp(
     double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
 	double ratio,	/* Aspect ratio of window, X/Y */
 	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
-    double *x1, double *y1, double *x2, double *y2,
-    double *y3, double *y4, double *y5, double *y6, char **ntext,
+    double *x1, double *x2,
+    double *yy[MXGPHS], char **ntext,
 	int n,
 	double *x7, double *y7, plot_col *mcols, char **mtext,
     int m,
@@ -560,6 +725,7 @@ static int do_plot_imp(
 ) {
 	pd.dowait = 10 * dowait;
 	{
+		int j;
 		double xr,yr;
 
 		pd.mnx = xmin;
@@ -586,12 +752,8 @@ static int do_plot_imp(
 			pd.graph = 0;
 		pd.x1 = x1;
 		pd.x2 = x2;
-		pd.y1 = y1;
-		pd.y2 = y2;
-		pd.y3 = y3;
-		pd.y4 = y4;
-		pd.y5 = y5;
-		pd.y6 = y6;
+		for (j = 0; j < MXGPHS; j++)
+			pd.yy[j] = yy[j];
 		pd.ntext = ntext;
 		pd.n = abs(n);
 
@@ -864,25 +1026,21 @@ plot_info *pdp
 	RestoreDC(hdc,-1);
 	DeleteObject(pen);
 
-	if (pdp->graph) {		/* Up to 6 graphs + crosses */
-		int gcolors[6][3] = {
+	if (pdp->graph) {		/* Up to MXGPHS graphs + crosses */
+		int gcolors[MXGPHS][3] = {
 			{   0,   0,   0},	/* Black */
 			{ 210,  30,   0},	/* Red */
 			{   0, 200,  90},	/* Green */
 			{   0,  10, 255},	/* Blue */
 			{ 200, 200,   0},	/* Yellow */
-			{ 220,   0, 255}	/* Purple */
+			{ 220,   0, 255},	/* Purple */
+			{ 136,  86,  68},	/* Brown */
+			{ 248,  95,   0},	/* Orange */
+			{ 160, 160, 160},	/* Grey */
+			{ 220, 220, 220}	/* White */
 		};
-		double *yps[6];
-
-		yps[0] = pdp->y1;
-		yps[1] = pdp->y2;
-		yps[2] = pdp->y3;
-		yps[3] = pdp->y4;
-		yps[4] = pdp->y5;
-		yps[5] = pdp->y6;
-		for (j = 0; j < 6; j++) {
-			double *yp = yps[j];
+		for (j = 0; j < MXGPHS; j++) {
+			double *yp = pdp->yy[j];
 		
 			if (yp == NULL)
 				continue;
@@ -936,10 +1094,10 @@ plot_info *pdp
 			int cx,cy;
 
 			lx = (int)((pdp->x1[i] - pdp->mnx) * pdp->scx + 0.5);
-			ly = (int)((pdp->y1[i] - pdp->mny) * pdp->scy + 0.5);
+			ly = (int)((pdp->yy[0][i] - pdp->mny) * pdp->scy + 0.5);
 
 			cx = (int)((pdp->x2[i] - pdp->mnx) * pdp->scx + 0.5);
-			cy = (int)((pdp->y2[i] - pdp->mny) * pdp->scy + 0.5);
+			cy = (int)((pdp->yy[1][i] - pdp->mny) * pdp->scy + 0.5);
 
 			MoveToEx(hdc, 10 + lx, pdp->sh - 10 - ly, NULL);
 			LineTo(hdc, 10 + cx, pdp->sh - 10 - cy);
@@ -1082,8 +1240,8 @@ static int do_plot_imp(
     double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
 	double ratio,	/* Aspect ratio of window, X/Y */
 	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
-    double *x1, double *y1, double *x2, double *y2,
-    double *y3, double *y4, double *y5, double *y6, char **ntext,
+    double *x1, double *x2,
+    double *yy[MXGPHS], char **ntext,
 	int n,
 	double *x7, double *y7, plot_col *mcols, char **mtext,
     int m,
@@ -1091,6 +1249,7 @@ static int do_plot_imp(
 	int o
 ) {
 	{
+		int j;
 		double xr,yr;
 
 		pd.dowait = dowait;
@@ -1119,12 +1278,8 @@ static int do_plot_imp(
 			pd.graph = 0;
 		pd.x1 = x1;
 		pd.x2 = x2;
-		pd.y1 = y1;
-		pd.y2 = y2;
-		pd.y3 = y3;
-		pd.y4 = y4;
-		pd.y5 = y5;
-		pd.y6 = y6;
+		for (j = 0; j < MXGPHS; j++)
+			pd.yy[j] = yy[j];
 		pd.ntext = ntext;
 		pd.n = abs(n);
 
@@ -1567,28 +1722,24 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 	CGContextSetLineDash(mygc, 0.0, NULL, 0);
 
 	if (pdp->graph) {		/* Up to 6 graphs */
-		float gcolors[6][3] = {
-			{ 0.0, 0.0, 0.0},	/* Black */
-			{ 0.82, 0.12, 0.0},	/* Red */
-			{ 0.0, 0.78, 0.35},	/* Green */
-			{ 0.0, 0.04, 1.0},	/* Blue */
-			{ 0.78, 0.78, 0.0},	/* Yellow */
-			{ 0.86, 0.0, 1.0}	/* Purple */
+		int gcolors[MXGPHS][3] = {
+			{   0,   0,   0},	/* Black */
+			{ 210,  30,   0},	/* Red */
+			{   0, 200,  90},	/* Green */
+			{   0,  10, 255},	/* Blue */
+			{ 200, 200,   0},	/* Yellow */
+			{ 220,   0, 255},	/* Purple */
+			{ 136,  86,  68},	/* Brown */
+			{ 248,  95,   0},	/* Orange */
+			{ 160, 160, 160},	/* Grey */
+			{ 220, 220, 220}	/* White */
 		};
-		double *yps[6];
-
-		yps[0] = pdp->y1;
-		yps[1] = pdp->y2;
-		yps[2] = pdp->y3;
-		yps[3] = pdp->y4;
-		yps[4] = pdp->y5;
-		yps[5] = pdp->y6;
-		for (j = 0; j < 6; j++) {
-			double *yp = yps[j];
+		for (j = 0; j < MXGPHS; j++) {
+			double *yp = pdp->yy[j];
 		
 			if (yp == NULL)
 				continue;
-			CGContextSetRGBStrokeColor(mygc, gcolors[j][0], gcolors[j][1], gcolors[j][2], 1.0);
+			CGContextSetRGBStrokeColor(mygc, gcolors[j][0]/255.0, gcolors[j][1]/255.0, gcolors[j][2]/255.0, 1.0);
 
 			lx = (int)((pdp->x1[0] - pdp->mnx) * pdp->scx + 0.5);
 			ly = (int)((     yp[0] - pdp->mny) * pdp->scy + 0.5);
@@ -1616,10 +1767,10 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 			int cx,cy;
 
 			lx = (int)((pdp->x1[i] - pdp->mnx) * pdp->scx + 0.5);
-			ly = (int)((pdp->y1[i] - pdp->mny) * pdp->scy + 0.5);
+			ly = (int)((pdp->yy[0][i] - pdp->mny) * pdp->scy + 0.5);
 
 			cx = (int)((pdp->x2[i] - pdp->mnx) * pdp->scx + 0.5);
-			cy = (int)((pdp->y2[i] - pdp->mny) * pdp->scy + 0.5);
+			cy = (int)((pdp->yy[1][i] - pdp->mny) * pdp->scy + 0.5);
 
 			CDrawLine(mygc, 20.0 + lx, 20.0 + ly, 20.0 + cx, 20.0 + cy);
 
@@ -1720,8 +1871,8 @@ static int do_plot_imp(
     double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
 	double ratio,	/* Aspect ratio of window, X/Y */
 	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
-    double *x1, double *y1, double *x2, double *y2,
-    double *y3, double *y4, double *y5, double *y6, char **ntext,
+    double *x1, double *x2,
+    double *yy[MXGPHS], char **ntext,
 	int n,
 	double *x7, double *y7, plot_col *mcols, char **mtext,
     int m,
@@ -1729,6 +1880,7 @@ static int do_plot_imp(
 	int o
 ) {
 	{
+		int j;
 		double xr,yr;
 
 		pd.dowait = dowait;
@@ -1757,12 +1909,8 @@ static int do_plot_imp(
 			pd.graph = 0;
 		pd.x1 = x1;
 		pd.x2 = x2;
-		pd.y1 = y1;
-		pd.y2 = y2;
-		pd.y3 = y3;
-		pd.y4 = y4;
-		pd.y5 = y5;
-		pd.y6 = y6;
+		for (j = 0; j < MXGPHS; j++)
+			pd.yy[j] = yy[j];
 		pd.ntext = ntext;
 		pd.n = abs(n);
 
@@ -2001,24 +2149,8 @@ plot_info *pdp
 	loose_label(mydisplay, mywindow, mygc, pdp, pdp->mny, pdp->mxy, ytick);
 
 	if (pdp->graph) {		/* Up to 6 graphs */
-		int gcolors[6][3] = {
-			{   0,   0,   0},	/* Black */
-			{ 210,  30,   0},	/* Red */
-			{   0, 200,  90},	/* Green */
-			{   0,  10, 255},	/* Blue */
-			{ 200, 200,   0},	/* Yellow */
-			{ 220,   0, 255}	/* Purple */
-		};
-		double *yps[6];
-
-		yps[0] = pdp->y1;
-		yps[1] = pdp->y2;
-		yps[2] = pdp->y3;
-		yps[3] = pdp->y4;
-		yps[4] = pdp->y5;
-		yps[5] = pdp->y6;
-		for (j = 0; j < 6; j++) {
-			double *yp = yps[j];
+		for (j = 0; j < MXGPHS; j++) {
+			double *yp = pdp->yy[j];
 		
 			if (yp == NULL)
 				continue;
@@ -2060,10 +2192,10 @@ plot_info *pdp
 			int cx,cy;
 
 			lx = (int)((pdp->x1[i] - pdp->mnx) * pdp->scx + 0.5);
-			ly = (int)((pdp->y1[i] - pdp->mny) * pdp->scy + 0.5);
+			ly = (int)((pdp->yy[0][i] - pdp->mny) * pdp->scy + 0.5);
 
 			cx = (int)((pdp->x2[i] - pdp->mnx) * pdp->scx + 0.5);
-			cy = (int)((pdp->y2[i] - pdp->mny) * pdp->scy + 0.5);
+			cy = (int)((pdp->yy[1][i] - pdp->mny) * pdp->scy + 0.5);
 
 			XDrawLine(mydisplay, mywindow, mygc, 10 + lx, pdp->sh - 10 - ly, 10 + cx, pdp->sh - 10 - cy);
 

@@ -131,8 +131,12 @@ patch indexing pattern (Default = "0-9,@-9,@-9;1-999")</span><br
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Set a page margin in
 mm (default 6.0 mm)<br>
-</span></small><small><span style="font-family: monospace;">&nbsp;<a
- href="#P">-P</a>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#M">-M margin</a><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span></small><small><span
+ style="font-family: monospace;">Set a page margin in mm and include it
+in TIFF</span><span style="font-family: monospace;"></span></small><br>
+<small><span style="font-family: monospace;">&nbsp;<a href="#P">-P</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Don't limit strip length</span></small><br>
 <small><span style="font-family: monospace;">&nbsp;<a href="#L">-L</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -404,7 +408,8 @@ default this will be a character sequence A, B, C .. Z. AA, AB, AC ..
 ZZ, but this can be changed by specifying an alternate labelling
 sequence pattern. The pattern specifies the labelling sequence as
 follows: First comes the definition of the symbols for each digit
-location, least significant to most significant. Note that space is a
+location, least significant to most significant, each digit separated
+by the ',' character. Note that space is a
 valid character. The number of
 definitions declares the maximum number of digits. For example, for a 2
 digit numerical sequence: "0123456789, 123456789" would define
@@ -415,7 +420,7 @@ can be used for brevity: "0-9, 1-9". As a special case, the '@'
 character can be used to instead of '0' to indicate suppression of the
 leading zero: "0-9,@-9". Leading ' ' characters in the resulting
 generated sequence are
-omitted. Optionally following this, and delimited by a ';'
+omitted. Optionally following this and delimited by a ';'
 character, are the definitions of valid segments of the index sequence.
 For instance, to define the index range to be 1..19, 30..39 one could
 use the pattern "0-9, 1-9;1-19,30-39". Of course most of the time an
@@ -475,6 +480,12 @@ each page. A TIFF chart will be the size of the paper minus the margin,
 so that it
 can be placed on a page that size without cropping or inadvertent
 scaling.<br>
+<br>
+<a name="M"></a> The <b>-M</b> parameter sets the page margin for all
+sides, but for a TIFF chart will the margin will be <span
+ style="font-weight: bold;">included</span> in the raster, meaning that
+the TIFF will have to be printed&nbsp; right to the edge of the paper,
+or on paper larger than the raster size.<br>
 <br>
 <a name="P"></a> The <b>-P</b> flag disables any normal limiting of
 strip length that would normally be imposed due to guide or instrument

@@ -883,6 +883,7 @@ struct _icmTextDescription {
 	unsigned int 	  ucSize;		/* Allocated and used size of ucDesc in wchars, inc null */
 	ORD16             *ucDesc;		/* The UniCode description (null terminated) */
 
+	/* See <http://unicode.org/Public/MAPPINGS/VENDORS/APPLE/ReadMe.txt> */
 	ORD16             scCode;		/* ScriptCode code */
 	unsigned int 	  scSize;		/* Used size of scDesc in bytes, inc null */
 	ORD8              scDesc[67];	/* ScriptCode Description (null terminated, max 67) */

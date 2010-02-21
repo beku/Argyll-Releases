@@ -203,47 +203,56 @@ static void do_abstract(out_b2a_callback *p, double out[3], double in[3]) {
 
 /* --------------------------------------------------------- */
 
+/* Scale B2A XYZ input so effective range is 0.0 - 1.3 rather than 0.0 - 2.0 */
+#define YSCALE (2.0/1.3)
+
 /* Extra non-linearity applied to BtoA XYZ PCS */
 /* This distributes the LUT indexes more evenly in */
 /* perceptual space, greatly improving the B2A accuracy of XYZ LUT */
 /* Since typically XYZ doesn't use the full range of 0-2.0 allowed */
 /* for in the encoding, we scale the cLUT index values to use the 0-1.3 range */
-static void xyzcurve(double *out, double *in) {
-	int i;
-	double sc = 2.0/1.3 * 65535.0/32768.0;
 
-	/* Use an L* like curve, scaled to the maximum XYZ valu */
-	out[0] = in[0]/sc;
-	out[1] = in[1]/sc;
-	out[2] = in[2]/sc;
+/* Y to L* */
+static void y2l_curve(double *out, double *in) {
+	int i;
+	double sc = 65535.0/32768.0;	/* Scale from 0.0 .. 1.999969 to 0.0 .. 1.0 and back */
+	double val;
+
 	for (i = 0; i < 3; i++) {
-		if (out[i] > 0.08)
-			out[i] = pow((out[i] + 0.16)/1.16, 3.0);
+		val = in[i];
+		val *= YSCALE;			/* Range adjustment */
+		val = val/sc;
+		if (val > 0.008856451586)
+			val = 1.16 * pow(val,1.0/3.0) - 0.16;
 		else
-			out[i] = out[i]/9.032962896;
+			val = 9.032962896 * val;
+		if (val > 1.0)
+			val = 1.0;
+		val *= sc;
+		out[i] = val;
 	}
-	out[0] = out[0] * sc;
-	out[1] = out[1] * sc;
-	out[2] = out[2] * sc;
 }
 
-static void invxyzcurve(double *out, double *in) {
+/* L* to Y */
+static void l2y_curve(double *out, double *in) {
 	int i;
-	double sc = 2.0/1.3 * 65535.0/32768.0;
+	double sc = 65535.0/32768.0;	/* Scale from 0.0 .. 1.999969 to 0.0 .. 1.0 and back */
+	double val;
 
-	out[0] = in[0]/sc;
-	out[1] = in[1]/sc;
-	out[2] = in[2]/sc;
+	/* Use an L* like curve, scaled to the maximum XYZ value */
 	for (i = 0; i < 3; i++) {
-		if (out[i] > 0.008856451586)
-			out[i] = 1.16 * pow(out[i],1.0/3.0) - 0.16;
+		val = in[i];
+		val /= sc;
+		if (val > 0.08)
+			val = pow((val + 0.16)/1.16, 3.0);
 		else
-			out[i] = 9.032962896 * out[i];
+			val = val/9.032962896;
+		val *= sc;
+		val /= YSCALE;		/* Range adjustment */
+		out[i] = val;
 	}
-	out[0] = out[0] * sc;
-	out[1] = out[1] * sc;
-	out[2] = out[2] * sc;
 }
+
 /* --------------------------------------------------------- */
 
 /* sRGB device gamma encoded value to linear value 0.0 .. 1.0 */
@@ -287,7 +296,7 @@ void out_b2a_input(void *cntx, double out[3], double in[3]) {
 	}
 	/* PCS' to PCS'' */
 	if (p->pcsspace == icSigXYZData)	/* Apply XYZ non-linearity curve */
-		invxyzcurve(out, out);
+		y2l_curve(out, out);
 
 	DBG(("out_b2a_input returning PCS'' %f %f %f\n",out[0],out[1],out[2]))
 }
@@ -313,7 +322,7 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 	DBG(("out_b2a_clut got       PCS' %f %f %f\n",in[0],in[1],in[2]))
 
 	if (p->pcsspace == icSigXYZData)		/* Undo effects of extra XYZ non-linearity curve */
-		xyzcurve(in1, in1);
+		l2y_curve(in1, in1);
 
 	inn[0] = in1[0];	/* Copy of PCS' for 2nd and 3rd tables */
 	inn[1] = in1[1];
@@ -654,7 +663,8 @@ make_output_icc(
 		isLut = 0;
 
 		if (ptype == prof_gam1mat	
-		 || ptype == prof_sha1mat) {
+		 || ptype == prof_sha1mat
+		 || ptype == prof_matonly) {
 			isShTRC = 1;		/* Single curve */
 		}
 	}
@@ -1757,6 +1767,8 @@ make_output_icc(
 			if (verb)
 				flags |= ICX_VERBOSE;
 
+			flags |= ICX_SET_WHITE | ICX_SET_BLACK; 		/* Compute & use white & black */
+
 			/* Setup Device -> PCS conversion (Fwd) object from scattered data. */
 			if ((AtoB = wr_xicc->set_luobj(
 			               wr_xicc, icmFwd, !allintents ? icmDefaultIntent : icRelativeColorimetric,
@@ -1767,7 +1779,7 @@ make_output_icc(
 #ifdef USE_2PASSSMTH
 			               ICX_2PASSSMTH |
 #endif
-			               flags | ICX_SET_WHITE | ICX_SET_BLACK, 		/* Flags */
+			               flags,
 			               npat, tpat, dispLuminance, -1.0, smooth, avgdev,
 			               NULL, oink, cal, iquality)) == NULL)
 				error("%d, %s",wr_xicc->errc, wr_xicc->err);
@@ -1794,7 +1806,7 @@ make_output_icc(
 			if (ipname != NULL) {		/* There is a source profile to determine gamut mapping */
 
 				/* Open up the profile for reading */
-				if ((src_icco = read_embeded_icc(ipname)) == NULL)
+				if ((src_icco = read_embedded_icc(ipname)) == NULL)
 					error ("Can't open file '%s'",ipname);
 
 				/* Wrap with an expanded icc */
@@ -2091,7 +2103,7 @@ make_output_icc(
 						if (verb)
 							printf(" Loading Image Source Gamut '%s'\n",sgname);
 			
-						igam = new_gamut(gres, 0);
+						igam = new_gamut(gres, 0, 0);
 			
 						if (igam->read_gam(igam, sgname))
 							error("Reading source gamut '%s' failed",sgname);
@@ -2441,7 +2453,7 @@ make_output_icc(
 					cx.pcsspace,				/* Input color space */
 					devspace, 					/* Output color space */
 					out_b2a_input,				/* Input transform PCS->PCS' */
-					NULL, NULL,					/* Use default Lab' range */
+					NULL, NULL,					/* Use default PCS range */
 					out_b2a_clut,				/* Lab' -> Device' transfer function */
 					NULL, NULL,					/* Use default Device' range */
 					out_b2a_output) != 0)		/* Output transfer function, Device'->Device */
@@ -2608,6 +2620,11 @@ make_output_icc(
 		if (verb)
 			flags |= ICX_VERBOSE;
 
+		if (ptype == prof_matonly)
+			flags |= ICX_NO_IN_SHP_LUTS;	/* Make it linear */
+
+		flags |= ICX_SET_WHITE | ICX_SET_BLACK; 		/* Compute & use white & black */
+
 		if (!mtxtoo)	/* Write matrix white/black/Luminance if no cLUT */
 			flags |= ICX_WRITE_WBL;
 
@@ -2615,7 +2632,7 @@ make_output_icc(
 		if ((xluo = wr_xicc->set_luobj(
 		               wr_xicc, icmFwd, isdisp ? icmDefaultIntent : icRelativeColorimetric,
 		               icmLuOrdRev,
-			           flags | ICX_SET_WHITE | ICX_SET_BLACK, 		/* Compute white & black */
+			           flags,		 		/* Compute white & black */
 		               npat, tpat, dispLuminance, -1.0, smooth, avgdev,
 		               NULL, oink, cal, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);

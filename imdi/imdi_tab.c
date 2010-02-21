@@ -40,48 +40,39 @@ typedef unsigned char byte;
 /* Left shift, handles >= 32 properly */
 #define LSHIFT(aa, bb)  ((bb) <= 31 ? ((aa) << (bb)) : (((aa) << 31) << ((bb)-31)))
 
+/* The big value type used to represent table entries */
+#ifdef ALLOW64
+typedef unsigned longlong bvt;
+#else
+typedef unsigned long bvt;
+#endif
+
 /* Specific entry size write routine */
 
 void write_uchar(
 byte *p,
-#ifdef ALLOW64
-unsigned longlong v
-#else
-unsigned long v
-#endif
+bvt v
 ) {
 	*((unsigned char *)p) = (unsigned char)v;
 }
 
 void write_ushort(
 byte *p,
-#ifdef ALLOW64
-unsigned longlong v
-#else
-unsigned long v
-#endif
+bvt v
 ) {
 	*((unsigned short *)p) = (unsigned short)v;
 }
 
 void write_uint(
 byte *p,
-#ifdef ALLOW64
-unsigned longlong v
-#else
-unsigned long v
-#endif
+bvt v
 ) {
 	*((unsigned int *)p) = (unsigned int)v;
 }
 
 void write_ulong(
 byte *p,
-#ifdef ALLOW64
-unsigned longlong v
-#else
-unsigned long v
-#endif
+bvt v
 ) {
 	*((unsigned long *)p) = (unsigned long)v;
 }
@@ -89,7 +80,7 @@ unsigned long v
 #ifdef ALLOW64
 void write_ulonglong(
 byte *p,
-unsigned longlong v
+bvt v
 ) {
 	*((unsigned longlong *)p) = (unsigned longlong)v;
 }
@@ -97,22 +88,14 @@ unsigned longlong v
 
 void write_default(
 byte *p,
-#ifdef ALLOW64
-unsigned longlong v
-#else
-unsigned long v
-#endif
+bvt v
 ) {
 	fprintf(stderr,"imdi_tabl: internal failure - unexpected write size!\n");
 	exit(-1);
 }
 
 /* Array of write routines */
-#ifdef ALLOW64
-void (*write_entry[16])(byte *p, unsigned longlong v);
-#else
-void (*write_entry[16])(byte *p, unsigned long v);
-#endif
+void (*write_entry[16])(byte *p, bvt v);
 
 static void
 init_write_tab(void) {
@@ -132,14 +115,12 @@ init_write_tab(void) {
 
 
 /* Input offset adjustment table */
-double in_adj[21] = {
-	1.2449233468522996e-282, 8.0324820232182659e+281, 1.4857837676572304e+166,
-	1.3997102851752585e-152, 1.3987140593588909e-076, 2.8215833239257504e+243,
-	1.4104974786556771e+277, 2.0916973891832284e+121, 2.0820139887245793e-152,
-	1.0372833042501621e-152, 2.1511212233835046e-313, 7.7791723264456369e-260,
-	3.6109836288371308e+238, 8.5733372291341995e+170, 1.4275976773846279e-071,
-	2.3994297542685112e-038, 3.9052141785471924e-153, 3.8223903939904297e-096,
-	3.2368131456774088e+262, 6.5639459298208554e+045, 2.0087765219520138e-139
+double in_adj[] = {
+        8.0324820232182659e+281, 1.3051220361353854e+214, 1.5654418860154115e-076,
+        6.6912978722165055e+281, 1.2369092402930559e+277, 1.4097588049607207e-308,
+        7.7791723264456369e-260, 3.6184161952648606e+238, 5.8235640814908141e+180,
+        9.1271554315814989e-072, 5.4310198502711138e+241, 2.7935452404894958e+275,
+        -2.9408705449902027e+003
 };
 
 
@@ -292,9 +273,9 @@ imdi_tab(
 #endif /* VERBOSE */
 
 		/* Comput input adjustment factor */
-		for (iaf = 0.0, i = 1; i < 21; i++)
-			iaf += in_adj[i];
-		iaf *= in_adj[0];
+        for (iaf = 0.0, i = 0; i < (sizeof(in_adj)/sizeof(double)-1); i++)
+                iaf += log(in_adj[i]);
+        iaf += in_adj[i];
 
 		/* For each possible input value, compute the entry value */
 		for (ex = 0, p = t; ex < ne; ex++, p += ts->it_ts) {
@@ -372,23 +353,16 @@ imdi_tab(
 						write_entry[ts->we_es](p + ts->we_eo, iwe);
 						write_entry[ts->vo_es](p + ts->vo_eo, vo);
 					} else {
-#ifdef ALLOW64
-						unsigned longlong iwo;
-#else
-						unsigned long iwo;
-#endif
+						bvt iwo;
 	
-						iwo = (iwe << ts->vo_ab) | vo; 	/* Combined weight+vertex offset */
+						iwo = ((bvt)iwe << ts->vo_ab) | vo; 	/* Combined weight+vertex offset */
 						write_entry[ts->ix_es](p + ts->ix_eo, imi);
 						write_entry[ts->wo_es](p + ts->wo_eo, iwo);
 					}
 				} else {			/* All 3 are combined  */
-#ifdef ALLOW64
-					unsigned longlong iit;
-#else
-					unsigned long iit;
-#endif
-					iit = (((imi << ts->we_ab) | iwe) << ts->vo_ab) | vo;
+					bvt iit;
+
+					iit = ((((bvt)imi << ts->we_ab) | (bvt)iwe) << ts->vo_ab) | vo;
 					write_entry[ts->it_ts](p, iit);
 				}
 			} else {
@@ -396,12 +370,9 @@ imdi_tab(
 					write_entry[ts->ix_es](p + ts->ix_eo, imi);
 					write_entry[ts->sx_es](p + ts->sx_eo, isi);
 				} else {
-#ifdef ALLOW64
-					unsigned longlong iit;
-#else
-					unsigned long iit;
-#endif
-					iit = (imi << ts->sx_ab) | isi;	/* Combine interp and simplex indexes */
+					bvt iit;
+
+					iit = ((bvt)imi << ts->sx_ab) | isi;	/* Combine interp and simplex indexes */
 					write_entry[ts->it_ts](p, iit);
 				}
 			}
@@ -680,12 +651,9 @@ imdi_tab(
 						write_entry[ts->vo_es](pp + ts->vo_eo, vof);
 						pp += ts->wo_es;
 					} else {			/* Combined entries */
-#ifdef ALLOW64
-						unsigned longlong iwo;
-#else
-						unsigned long iwo;
-#endif
-						iwo = (vwe << ts->vo_ab) | vof; 	/* Combined weight+vertex offset */
+						bvt iwo;
+
+						iwo = ((bvt)vwe << ts->vo_ab) | vof; 	/* Combined weight+vertex offset */
 						write_entry[ts->wo_es](pp + ts->wo_eo, iwo);
 						pp += ts->wo_es;
 					}

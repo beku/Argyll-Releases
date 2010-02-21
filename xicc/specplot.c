@@ -39,6 +39,7 @@ static int do_spec(char *name, xspect *sp) {
 	int i;
 	double xyz[3];		/* Color temperature */
 	double Yxy[3];
+	double Lab[3];		/* D50 Lab value */
 	double xx[XRES];
 	double y1[XRES];
 	double cct, vct;
@@ -54,9 +55,11 @@ static int do_spec(char *name, xspect *sp) {
 		error ("icx_sp_temp2XYZ returned error");
 
 	icmXYZ2Yxy(Yxy, xyz);
+	icmXYZ2Lab(&icmD50, Lab, xyz);
 
 	printf("Type = %s\n",name);
 	printf("XYZ = %f %f %f, x,y = %f %f\n", xyz[0], xyz[1], xyz[2], Yxy[1], Yxy[2]);
+	printf("D50 L*a*b* = %f %f %f\n", Lab[0], Lab[1], Lab[2]);
 	
 	/* Compute CCT */
 	if ((cct = icx_XYZ2ill_ct(cct_xyz, BBTYPE, icxOT_CIE_1931_2, NULL, xyz, NULL, 0)) < 0)

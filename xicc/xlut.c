@@ -26,6 +26,46 @@
  *
  */
 
+/*
+	TTBD:
+
+		Should the input profile white point determination
+		be made a bit smarter about determining the chromaticity ?
+ */
+
+/*
+
+	NOTE :- an alternative to the way absolute is handled here would be
+    to always chromatically adapt the illuminant to D50, and encode
+	that in the Chromatic adapation tag. To make absolute colorimetric
+	do anything useful though, the chromatic adapation tag would
+    have to be used for that intent.
+	This may be the way of improving compatibility with other systems.
+
+	ie. For Argyll create profile:
+
+		if (use chromatic adaptation tag)
+			Create chromatic adapation matrix and store it in tag
+			Adapt all the readings using Brtadford
+			Create white point and store it in tag
+			Adapt all the readings to the white point using wrong Von-Kries	
+			Store relative colorimetric cLUT 
+		else (don't use chromatic adapation tag)
+			Create white point and store it in tag
+			Adapt all the readings to the white point using Brtadford
+			Store relative colorimetric tag
+
+	Argyll absolute colorimetric intent:
+
+		if found chromatic adapation matrix
+			Un-adapt cLUT using wrong Von-Kries from white point
+			Un-adapt cLUT using chromatic matrix
+			Un-adapt apparant white point & black point using chromatic
+		else
+			Un-adapt cLUT using Bradford from white point
+			
+ */
+
 #include "xfit.h"
 
 #undef USE_CIE94_DE				/* [Undef] Use CIE94 delta E measure when creating in/out curves */
@@ -580,78 +620,71 @@ double *in
 /* No filtering version. */
 /* !!! Should add K limit in here so that smoothing takes it into account !!! */
 static double icxKcurveNF(double L, icxInkCurve *c) {
+	double Kstpo, Kenpo, Kstle, Kenle;
 	double rv;
-	int refl = 0;
 
-	DBK(("icxKcurve got L = %f, Params smth %f %f, %f %f %f %f %f\n",L, c->Ksmth, c->Kskew, c->Kstle, c->Kstpo, c->Kenpo, c->Kenle, c->Kshap));
-
-	/* Reflect about L min and max for filter smoothness */
-	if (L < 0.0) {
-		L = -L;
-		refl = 1;
-	} else if (L > 1.0) {
-//		L = 2.0 - L;
-		L = 1.0;
-		refl = 2;
-	}
+	DBK(("icxKcurve got L = %f, smth %f skew %f, Parms %f %f %f %f %f\n",L, c->Ksmth, c->Kskew, c->Kstle, c->Kstpo, c->Kenpo, c->Kenle, c->Kshap));
 
 	/* Invert sense of L, so that 0.0 = white, 1.0 = black */
 	L = 1.0 - L;
-	DBK(("constrained inverted L = %f\n",L));
 
-	if (L <= c->Kstpo && L <= c->Kenpo) {
-		/* We are at white level */
-		rv = c->Kstle;
-		DBK(("At white level %f\n",rv));
-	} else if (L >= c->Kstpo && L >= c->Kenpo) {
-		/* We are at black level */
-		rv = c->Kenle;
-		DBK(("At black level %f\n",rv));
-	} else {
-		double g;
-		/* We must be on the curve from start to end levels */
+	/* Clip L, just in case */
+	if (L < 0.0) {
+		L = 0.0;
+	} else if (L > 1.0) {
+		L = 1.0;
+	}
+	DBK(("Clipped inverted L = %f\n",L));
 
-		if (c->Kstpo > c->Kenpo) {
-			rv = (L - c->Kenpo)/(c->Kstpo - c->Kenpo);
-		} else {
-			rv = (L - c->Kstpo)/(c->Kenpo - c->Kstpo);
-		}
-
-		DBK(("Curve position %f\n",rv));
-
-		rv = pow(rv, c->Kskew);
-
-		DBK(("Skewed curve position %f\n",rv));
-
-		g = c->Kshap/2.0;
-		DBK(("Curve bf %f, g %g\n",rv,g));
-
-		/* A value of 0.5 will be tranlated to g */
-		rv = rv/((1.0/g - 2.0) * (1.0 - rv) + 1.0);
-
-		DBK(("Skewed shaped %f\n",rv));
-
-		rv = pow(rv, 1.0/c->Kskew);
-
-		DBK(("Shaped %f\n",rv));
-
-		/* Transition between start end end levels */
-		rv = rv * (c->Kenle - c->Kstle) + c->Kstle;
-
-		DBK(("Scaled to start and end levele %f\n",rv));
+	/* Make sure breakpoints are ordered */
+	if (c->Kstpo < c->Kenpo) {
+		Kstle = c->Kstle;
+		Kstpo = c->Kstpo;
+		Kenpo = c->Kenpo;
+		Kenle = c->Kenle;
+	} else {	/* They're swapped */
+		Kstle = c->Kenle;
+		Kstpo = c->Kenpo;
+		Kenpo = c->Kstpo;
+		Kenle = c->Kstle;
 	}
 
-	/* To be safe */
-	if (rv < 0.0)
-		rv = 0.0;
-	else if (rv > 1.0)
-		rv = 1.0;
+	if (L <= Kstpo) {
+		/* We are at white level */
+		rv = Kstle;
+		DBK(("At white level %f\n",rv));
+	} else if (L >= Kenpo) {
+		/* We are at black level */
+		rv = Kenle;
+		DBK(("At black level %f\n",rv));
+	} else {
+		double Lp, g;
+		/* We must be on the curve from start to end levels */
 
-	if (refl == 1) {
-		rv = 2.0 * c->Kenle - rv;
-	} else if (refl == 2) {
-//		rv = 2.0 * c->Kstle - rv;
-		rv = c->Kstle;
+		Lp = (L - Kstpo)/(Kenpo - Kstpo);
+
+		DBK(("Curve position %f\n",Lp));
+
+		Lp = pow(Lp, c->Kskew);
+
+		DBK(("Skewed curve position %f\n",Lp));
+
+		g = c->Kshap/2.0;
+		DBK(("Curve bf %f, g %g\n",Lp,g));
+
+		/* A value of 0.5 will be tranlated to g */
+		Lp = Lp/((1.0/g - 2.0) * (1.0 - Lp) + 1.0);
+
+		DBK(("Skewed shaped %f\n",Lp));
+
+		Lp = pow(Lp, 1.0/c->Kskew);
+
+		DBK(("Shaped %f\n",Lp));
+
+		/* Transition between start end end levels */
+		rv = Lp * (Kenle - Kstle) + Kstle;
+
+		DBK(("Scaled to start and end levele %f\n",rv));
 	}
 
 	DBK(("Returning %f\n",rv));
@@ -663,30 +696,140 @@ static double icxKcurveNF(double L, icxInkCurve *c) {
 #define DBK(xxx) 
 #endif
 
-/* Same as above, but implement a convolution filter */
+
+#ifdef NEVER
+#undef DBK
+#define DBK(xxx) printf xxx ;
+#else
+#undef DBK
+#define DBK(xxx) 
+#endif
+
+/* Same as above, but implement transition filters accross inflection points. */
+/* (The convolultion filter previously used could be */
+/* re-instituted if something was done about compressing */
+/* the filter at the boundaries so that the levels are met.) */
 static double icxKcurve(double L, icxInkCurve *c) {
-	double rv = 0.0;
 
 #ifdef DISABLE_KCURVE_FILTER
 	return icxKcurveNF(L, c);
+
 #else /* !DISABLE_KCURVE_FILTER */
-	if (c->Ksmth == 0.0)
-		return icxKcurveNF(L, c);
 
-	/* Use a simple triangle filter */
-	rv  =  0.20 * icxKcurveNF(L - 1.0 * c->Ksmth, c);
-	rv +=  0.44 * icxKcurveNF(L - 0.7 * c->Ksmth, c);
-	rv +=  0.76 * icxKcurveNF(L - 0.3 * c->Ksmth, c);
+	double Kstpo, Kenpo, Kstle, Kenle, Ksmth;
+	double rv;
 
-	rv +=  1.0  * icxKcurveNF(L,                  c);
+	DBK(("icxKcurve got L = %f, smth %f skew %f, Parms %f %f %f %f %f\n",L, c->Ksmth, c->Kskew, c->Kstle, c->Kstpo, c->Kenpo, c->Kenle, c->Kshap));
 
-	rv +=  0.76 * icxKcurveNF(L + 0.3 * c->Ksmth, c);
-	rv +=  0.44 * icxKcurveNF(L + 0.7 * c->Ksmth, c);
-	rv +=  0.20 * icxKcurveNF(L + 1.0 * c->Ksmth, c);
+	/* Invert sense of L, so that 0.0 = white, 1.0 = black */
+	L = 1.0 - L;
 
-	return rv/3.8;
+	/* Clip L, just in case */
+	if (L < 0.0) {
+		L = 0.0;
+	} else if (L > 1.0) {
+		L = 1.0;
+	}
+	DBK(("Clipped inverted L = %f\n",L));
+
+	/* Make sure breakpoints are ordered */
+	if (c->Kstpo < c->Kenpo) {
+		Kstle = c->Kstle;
+		Kstpo = c->Kstpo;
+		Kenpo = c->Kenpo;
+		Kenle = c->Kenle;
+	} else {	/* They're swapped */
+		Kstle = c->Kenle;
+		Kstpo = c->Kenpo;
+		Kenpo = c->Kstpo;
+		Kenle = c->Kstle;
+	}
+	Ksmth = c->Ksmth;
+
+	/* Curve value at point */
+	rv = icxKcurveNF(1.0 - L, c);
+
+	DBK(("Raw output at iL = %f, rv\n",L));
+
+	/* Create filtered value */
+	{
+		double wbs, wbe;		/* White transitioin start, end */
+		double wbl, wfv;		/* White blend factor, value at filter band */
+
+		double mt;				/* Middle of the two transitions */
+
+		double bbs, bbe;		/* Black transitioin start, end */
+		double bbl, bfv;		/* Black blend factor, value at filter band */
+
+		wbs = Kstpo - Ksmth;
+		wbe = Kstpo + Ksmth;
+
+		bbs = Kenpo - 1.0 * Ksmth;
+		bbe = Kenpo + 1.0 * Ksmth;
+
+		mt = 0.5 * (wbe + bbs);
+
+		/* Make sure that the whit & black transition regions */
+		/* don't go out of bounts or overlap */
+		if (wbs < 0.0) {
+			wbe += wbs;   
+			wbs = 0.0;
+		}
+		if (bbe > 1.0) {
+			bbs += (bbe - 1.0);
+			bbe = 1.0;
+		}
+
+		if (wbe > mt) {
+			wbs += (wbe - mt);
+			wbe = mt;
+		}
+
+		if (bbs < mt) {
+			bbe += (mt - bbs);   
+			bbs = mt;
+		}
+
+		DBK(("Transition windows %f - %f, %f - %f\n",wbs, wbe, bbw, bbe));
+		if (wbs < wbe) {
+			wbl = (L - wbe)/(wbs - wbe);
+
+			if (wbl > 0.0 && wbl < 1.0) {
+				wfv = icxKcurveNF(1.0 - wbe, c);
+				DBK(("iL = %f, wbl = %f, wfv = %f\n",L,Kstpo,wbl,wfv));
+	
+				wbl = 1.0 - pow(1.0 - wbl, 2.0);
+				rv = wbl * Kstle + (1.0 - wbl) * wfv;
+			}
+		}
+		if (bbs < bbe) {
+			bbl = (L - bbe)/(bbs - bbe);
+
+			if (bbl > 0.0 && bbl < 1.0) {
+				bfv = icxKcurveNF(1.0 - bbs, c);
+				DBK(("iL = %f, bbl = %f, bfv = %f\n",L,Kstpo,bbl,bfv));
+	
+				bbl = pow(bbl, 2.0);
+				rv = bbl * bfv + (1.0 - bbl) * Kenle;
+			}
+		}
+	}
+
+	/* To be safe */
+	if (rv < 0.0)
+		rv = 0.0;
+	else if (rv > 1.0)
+		rv = 1.0;
+
+	DBK(("Returning %f\n",rv));
+	return rv;
 #endif /* !DISABLE_KCURVE_FILTER */
 }
+
+#ifdef DBK
+#undef DBK
+#define DBK(xxx) 
+#endif
 
 /* Do output'->input' lookup with aux details. */
 /* Note that out[] will be used as the inking value if icxKrule is */
@@ -2588,6 +2731,14 @@ int                quality			/* Quality metric, 0..3 */
 			/* and that it includes a white and black point patch, */
 			/* and that they have the extreme L/Y values */
 
+			/*
+				NOTE that this may not be the best approach !
+				It may be better to average the chromaticity
+				of all the neutral seeming patches, since
+				the whitest patch may have (for instance)
+				a blue tint.
+			 */
+
 			wp[pcsy] = -1e60;
 			bp[pcsy] =  1e60;
 
@@ -3478,7 +3629,7 @@ double       detail		/* gamut detail level, 0.0 = def */
 	if (func == icmFwd) {
 		lutgamctx cx;
 
-		cx.g = gam = new_gamut(detail, pcs == icxSigJabData);
+		cx.g = gam = new_gamut(detail, pcs == icxSigJabData, 0);
 		cx.x = luluto;
 
 		/* Scan through grid. */
@@ -3653,7 +3804,7 @@ double       detail		/* gamut detail level, 0.0 = def */
 			return NULL;	/* oops */
 		}
 
-		cx.g = gam = new_gamut(detail, pcs == icxSigJabData);
+		cx.g = gam = new_gamut(detail, pcs == icxSigJabData, 0);
 
 		cx.x = luluto;
 

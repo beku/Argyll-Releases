@@ -111,7 +111,7 @@ scanrd *do_scanrd(
 						/* Typically clockwise from top left, NULL if auto recognition */
 
 	int w, int h, 		/* Width and Height of input raster in pixels */
-	int d, int p,		/* Plane Depth, Bit presision of input pixels */
+	int d, int td, int p,	/* Useful plane depth, Total depth, Bit presision of input pixels */
 
 	int (*read_line)(void *fdata, int y, char *dst),	/* Read pixel interleaved line of source */
 	void *fdata,		/* Opaque data for read_line */

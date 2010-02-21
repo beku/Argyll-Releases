@@ -859,8 +859,18 @@ double *kblack				/* K only black */
 	}
 }
 
+/* Lookup an XYZ value. */
+/* (Note that this is never FWA compensated) */
+static void lookup_xyz(
+mpp *p,						/* This */
+double *out,				/* Returned XYZ value */
+double *in					/* Input device values */
+) {
+	forward(p, NULL, NULL, out, in);
+}
+
 /* Lookup a spectral value. */
-/* (Note that this is not FWA compensated) */
+/* (Note that this is never FWA compensated) */
 static void lookup_spec(
 mpp *p,						/* This */
 xspect *out,				/* Returned spectral value */
@@ -927,7 +937,7 @@ double       detail		/* gamut detail level, 0.0 = def */
 	if (detail == 0.0)
 		detail = 10.0;
 
-	gam = new_gamut(detail, 0);		/* Lab only at the moment */
+	gam = new_gamut(detail, 0, 0);		/* Lab only at the moment */
 
 	/* Explore the gamut by itterating through */
 	/* it with sample points in device space. */
@@ -1130,6 +1140,7 @@ mpp *new_mpp(void) {
 	p->get_wb      = get_wb;
 	p->lookup      = lookup;
 	p->dlookup     = dlookup;
+	p->lookup_xyz  = lookup_xyz;
 	p->lookup_spec = lookup_spec;
 
 	return p;
@@ -1793,7 +1804,7 @@ static double efunc1(void *adata, double pv[]) {
 	rv += 0.01 * smv;
 
 #ifdef DEBUG
-printf("~1 efunc1 itt %d/%d chan %d band %d k0 %f returning %f\n",p->oit,p->ott,k,j,pv[0],rv);
+	printf("efunc1 itt %d/%d chan %d band %d k0 %f returning %f\n",p->oit,p->ott,k,j,pv[0],rv);
 #endif
 	return rv;
 }
@@ -1887,7 +1898,7 @@ static double efunc2(void *adata, double pv[]) {
 	rv += smv;
 
 #ifdef DEBUG
-printf("~1 efunc2 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
+	printf("efunc2 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
 #endif
 	return rv;
 }
@@ -2196,7 +2207,7 @@ for (m = 0; m < p->n; m++) {
 	rv += smv;
 
 #ifdef DEBUG
-printf("~1 dfunc2 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
+	printf("dfunc2 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
 #endif
 	return rv;
 }
@@ -2339,7 +2350,7 @@ static double efunc3(void *adata, double pv[]) {
 	rv += SHAPE_PMW * smv;		
 
 #ifdef DEBUG
-printf("~1 efunc3 itt %d/%d band %d (smv %f) returning %f\n",p->oit,p->ott,j,smv,rv);
+	printf("efunc3 itt %d/%d band %d (smv %f) returning %f\n",p->oit,p->ott,j,smv,rv);
 #endif
 	return rv;
 }
@@ -2453,7 +2464,7 @@ static double dfunc3(void *adata, double dv[], double pv[]) {
 	rv += SHAPE_PMW * smv;		
 
 #ifdef DEBUG
-printf("~1 dfunc3 itt %d/%d band %d (smv %f) returning %f\n",p->oit,p->ott,j,smv,rv);
+	printf("dfunc3 itt %d/%d band %d (smv %f) returning %f\n",p->oit,p->ott,j,smv,rv);
 #endif
 	return rv;
 }
@@ -2593,7 +2604,7 @@ static double efunc4(void *adata, double pv[]) {
 	rv += COMB_PMW * smv;
 
 #ifdef DEBUG
-printf("~1 efunc4 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
+	printf("efunc4 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
 #endif
 	return rv;
 }
@@ -2661,7 +2672,7 @@ static double dfunc4(void *adata, double dv[], double pv[]) {
 		dv[k] += drv[k];
 
 #ifdef DEBUG
-printf("~1 dfunc4 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
+	printf("dfunc4 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
 #endif
 	return rv;
 }
@@ -2811,7 +2822,7 @@ static double efunc0(void *adata, double pv[]) {
 	rv += COMB_PMW * smv;
 
 #ifdef DEBUG
-printf("~1 efunc0 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
+	printf("efunc0 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
 #endif
 	return rv;
 }
@@ -3057,7 +3068,7 @@ static double dfunc0(void *adata, double dv[], double pv[]) {
 		dv4[k] += drv4[k];
 
 #ifdef DEBUG
-printf("~1 dfunc0 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
+	printf("dfunc0 itt %d/%d band %d returning %f\n",p->oit,p->ott,j,rv);
 #endif
 	return rv;
 }
@@ -3148,7 +3159,7 @@ static double efuncS(void *adata, double pv[]) {
 	}
 	rv += SHAPE_PMW * 0.1 * smv/(double)p->n;	/* Don't worry about this here - SVD will cope */
 
-printf("~1 efuncS %f %f %f %f returning %f\n",pv[0],pv[1],pv[2],pv[3],rv);
+//printf("~1 efuncS %f %f %f %f returning %f\n",pv[0],pv[1],pv[2],pv[3],rv);
 	return rv;
 }
 
@@ -3290,14 +3301,14 @@ int j			/* Band being initialised */
 			if (k & (1<<m))
 				continue;			/* Invalid comb for this channel */
 			
-printf("~1 Calculated shape[%d][%d] = %f\n",m,k,b[kk]);
+//printf("~1 Calculated shape[%d][%d] = %f\n",m,k,b[kk]);
 			p->shape[m][k][j] = b[kk++];
 		}
 	}
 
 	free_dvector(b, 0, p->nodp-1 + p->nn/2);
 	free_dmatrix(a, 0, p->nodp-1 + p->nn/2, 0, p->nn/2-1);
-printf("~1 ishape is done for band %d\n",j);
+//printf("~1 ishape is done for band %d\n",j);
 
 }
 #endif /* ISHAPE */
@@ -3353,8 +3364,8 @@ static double efunc6(void *adata, double pv[]) {
 	forward(b->p, NULL, Lab, NULL, dv);
 
 #ifdef DEBUG
-printf("~1 p1 =  %f %f %f, p2 = %f %f %f\n",b->p1[0],b->p1[1],b->p1[2],b->p2[0],b->p2[1],b->p2[2]);
-printf("~1 device value %f %f %f %f, Lab = %f %f %f\n",dv[0],dv[1],dv[2],dv[3],Lab[0],Lab[1],Lab[2]);
+	printf("p1 =  %f %f %f, p2 = %f %f %f\n",b->p1[0],b->p1[1],b->p1[2],b->p2[0],b->p2[1],b->p2[2]);
+	printf("device value %f %f %f %f, Lab = %f %f %f\n",dv[0],dv[1],dv[2],dv[3],Lab[0],Lab[1],Lab[2]);
 #endif
 
 	/* Primary is to minimise L value */
@@ -3369,18 +3380,18 @@ printf("~1 device value %f %f %f %f, Lab = %f %f %f\n",dv[0],dv[1],dv[2],dv[3],L
 	     + (tb - Lab[2]) * (tb - Lab[2]);
 	
 #ifdef DEBUG
-printf("~1 target error %f\n",terr);
+	printf("target error %f\n",terr);
 #endif
 	rv += 100.0 * terr;
 
 #ifdef DEBUG
-printf("~1 out of range error %f\n",ovr);
-printf("~1 over limit error %f\n",sum);
+	printf("out of range error %f\n",ovr);
+	printf("over limit error %f\n",sum);
 #endif
 	rv += 200 * (ovr + sum);
 
 #ifdef DEBUG
-printf("~1 black find tc ret %f\n",rv);
+	printf("black find tc ret %f\n",rv);
 #endif
 	return rv;
 }
@@ -3702,7 +3713,7 @@ static int create(
 		for (j = 0; j < (3+p->spec_n); j++)
 			p->pc[ii][j] = p->cols[bk].band[j];
 #ifdef DEBUG
-printf("~1 comb 0x%x XYZ is %f %f %f\n", ii, p->pc[ii][0], p->pc[ii][1], p->pc[ii][2]);
+	printf("comb 0x%x XYZ is %f %f %f\n", ii, p->pc[ii][0], p->pc[ii][1], p->pc[ii][2]);
 #endif
 	}
 
@@ -3731,7 +3742,7 @@ printf("~1 comb 0x%x XYZ is %f %f %f\n", ii, p->pc[ii][0], p->pc[ii][1], p->pc[i
 				sm[j] *= pow(0.775, 4.0 - ink[j]);
 			}
 #ifdef DEBUG
-printf("~1 smallest value in band %d = %f from total ink %f\n",j,sm[j],ink[j]);
+	printf("smallest value in band %d = %f from total ink %f\n",j,sm[j],ink[j]);
 #endif
 		}
 
@@ -3764,7 +3775,7 @@ printf("~1 smallest value in band %d = %f from total ink %f\n",j,sm[j],ink[j]);
 				p->pc[i][j] += sm[j];			/* Add freznell back in */
 			}
 #ifdef DEBUG
-printf("~1 comb 0x%x estimated XYZ = %f %f %f\n",i, p->pc[i][0], p->pc[i][1], p->pc[i][2]);
+	printf("comb 0x%x estimated XYZ = %f %f %f\n",i, p->pc[i][0], p->pc[i][1], p->pc[i][2]);
 #endif
 		}
 	}
@@ -3801,11 +3812,11 @@ printf("~1 comb 0x%x estimated XYZ = %f %f %f\n",i, p->pc[i][0], p->pc[i][1], p-
 			/* Override the estimated combination values with the real values */
 			for (j = 0; j < (3+p->spec_n); j++) {
 #ifdef DEBUG
-printf("~1 comb 0x%x band %d was %f ",i, j, p->pc[i][j]);
+	printf("comb 0x%x band %d was %f ",i, j, p->pc[i][j]);
 #endif
 				p->pc[i][j] = p->cols[bk].band[j];
 #ifdef DEBUG
-printf("~1 best %d now %f\n",bk, p->pc[i][j]);
+	printf("best %d now %f\n",bk, p->pc[i][j]);
 #endif
 			}
 		}
@@ -4133,7 +4144,7 @@ printf("~1 best %d now %f\n",bk, p->pc[i][j]);
 //printf("~1 shape[%d][%d] = %f\n",m,n,pv[i]);
 				}
 
-#ifdef DEBUG
+#ifndef DEBUG
 				if (p->verb)
 #endif /* !DEBUG */
 				{
@@ -4181,7 +4192,7 @@ printf("~1 best %d now %f\n",bk, p->pc[i][j]);
 				p->pc[k][j] = pp;
 			}
 
-#ifdef DEBUG
+#ifndef DEBUG
 			if (p->verb)
 #endif /* !DEBUG */
 			{

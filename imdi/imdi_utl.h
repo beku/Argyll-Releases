@@ -11,6 +11,8 @@
  * see the License.txt file for licencing details.
  */
 
+#include <limits.h>
+
 /* Common utility definitions used at both generation and runtime. */
 
 #define IXDI 8		/* maximum input channels/dimensions allowed */
@@ -29,7 +31,10 @@
 
 /* ------------------------------------------------------ */
 
-#if defined(ALLOW64) && (ULONG_MAX == 0xffffffffUL || defined(FORCE64))
+#if defined(ALLOW64) && (ULONG_MAX == 0xffffffffffffffffUL || defined(FORCE64))
+#ifndef USE64
+#pragma message("Using 64 bit integer color kernel")
+#endif /* USE64 */
 #define USE64		/* Use 64 bits if it's natural or forced */
 #endif
 

@@ -2,6 +2,106 @@
 Argyll CMS change log
 =====================
 
+Version 1.1.1 21 February 2010
+-------------
+
+*	Altered xpsect FWA code to reduce overshoot artefacts due to filetering.
+
+*	Updated ref/CMP_Digital_Target-3.cht as it seems that the reference
+	chart has columns labeled "2A - 2D" rather than the "AA - AD" that
+	is actually printed on the chart...
+
+*	Changed dispcal and dispread so that a request for projector
+	mode falls back to display mode if the instrument doesn't 
+	support a projector mode.
+
+*	Changed printcal so that it will create .AMP file with more
+	than 4 channels.
+	Also fixed up plotting to plot up to 10 channels.
+
+*   Renamed the following tools:
+
+	cb2cgats    -> cb2ti3
+	kodak2cgats -> kodak2ti3
+	logo2cgats  -> txt2ti3
+	splitcgats  -> splitti3
+	mpprof      -> mppprof
+
+*	Modified scanin so that it ignores any alpha channels
+	in the input .tiff file.
+
+*	Change spotread so that it takes spectral readings by
+	default so that FWA comensation readings can be used.
+
+*	Changed link/collink to apply Y to L* curve if the input or output
+	space is XYZ. Fixed the Y to L* scaling to make sure it only
+	apples to XYZ space, and that the L* non-linearisation still
+	applies to Y like device spaces.
+
+*	Fixed colprof so that the per channel input curves for
+	XYZ PCS B2A tables are actually scaled correctly.
+
+*	Re-organized imdi/cctiff to allow for the possibility of
+	the Y to L* linearization being applied to actual XYZ input
+	spaces, not just Y like device spaces.
+
+*	Modifed target/targen to cope better with case where adding
+	nodes fails to determine vertex positions a lot of the time, causing
+	extreme slowdown. Re-shuffle node order and retry now.
+	Also change appoach of adding fixed nodes to temporarily
+	skip fixed nodes that fail to add due to vertex positioning 
+	failures. Also removed special node as this doesn't seem to
+	be required for reasonable positioning, and caused problems
+	in at least one case (media fixed node could never be added).
+
+*	Modified libusb/55-Argyll.rules for better compatibility
+	with systems that have ACL installed but no ConsoleKit.
+	Also set ID_VENDOR and ID_MODEL using usb-db
+
+*	Added matrix only/linear algorithm option to
+	profile/colprof, for raw camera profiling.
+
+*	Fixed bug in input matrix profiles introduced by the XYZ cLUT
+	display matrix profile change, where the correct white and
+	black point wern't being written.
+
+*	Changed tiffgamut to use one pass gamut hull finding,
+	since this seems to be more reliable on the odd shaped
+	image gamuts, as well as use a convex hull surface that
+	more closely wraps the raster colors.
+
+*	Added standards references to the viewing condition pre-set
+	descriptions, and also added a preset for the ISO Critical
+	print viewing lighting level.
+
+*	Fixed bug in profile/colprof -u, this wasn't being
+	applied properly to matrix profiles.
+
+*	Fixed several build bugs in imdi code related to 64 bits.
+	The 64 bit code was sometimes being compiled on non-native 64
+	bit architectures, and not being compiled on native 64 bit
+	architectures. The table setup code was not handling 64 bit
+	setup correctly on 32 bit architectures. 
+
+*	Tried to improve dispcal -E (verify) behavior
+	by switching to native response for base measurement used	
+	to establish black aim point. Probably would be better to
+	store all aim info in .cal file, and verify against that
+	rather than altering verification target by the current response...
+
+*	Added documentation for specplot.
+
+*	Added -M option to printtarg, for the case where the TIFF
+	file is to include the margin.
+
+*	Fixed bug in ucmm/ucmm.c where wrong malloc length
+	causes crash when installing/unintstalling profiles
+	with long filenames.
+
+*	Modified black curve to make sure that smoothed
+	curve meets target level at boundaries, and to
+	reduce smoothing filter width.
+
 Version 1.1.0 (17th January 2010)
 -------------
 

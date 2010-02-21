@@ -118,6 +118,7 @@ void msec_sleep(unsigned int msec) {
 
 /* Return the current time in msec since */
 /* the process started. */
+/* (Is this based on timeGetTime() ? ) */
 unsigned int msec_time() {
 	return GetTickCount();
 }
@@ -365,6 +366,10 @@ unsigned int msec_time() {
 	static struct timeval startup = { 0, 0 };
 	struct timeval cv;
 
+	/* Is this monotonic ? */
+	/* On Linux, should clock_gettime with CLOCK_MONOTONIC be used instead ? */
+	/* On OS X, should mach_absolute_time() be used ? */
+	/* or host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &clk) */
 	gettimeofday(&cv, NULL);
 
 	/* Set time to 0 on first invocation */

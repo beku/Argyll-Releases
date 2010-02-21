@@ -1211,7 +1211,7 @@ int main(int argc, char *argv[]) {
 		double xx[PRES];
 		double yy[3][PRES];
 
-		for (j = 0; j < 6 && j < devchan; j++) {
+		for (j = 0; j < devchan; j++) {
 			printf("Chan %d raw L*a*b*:\n",j);
 			for (i = 0; i < PRES; i++) {
 				co tp;	/* Test point */
@@ -1222,7 +1222,7 @@ int main(int argc, char *argv[]) {
 				yy[1][i] = tp.v[1];
 				yy[2][i] = tp.v[2];
 			}
-			do_plot6(xx, yy[0], yy[1], yy[2], NULL, NULL, NULL, PRES);
+			do_plot(xx, yy[0], yy[1], yy[2], PRES);
 		}
 	}
 
@@ -1424,8 +1424,8 @@ int main(int argc, char *argv[]) {
 	if (doplot) {
 		co tp;	/* Test point */
 		double xx[PRES];
-		double yy[6][PRES];
-		double cx[6], cy[6];
+		double yy[10][PRES];
+		double cx[10], cy[10];
 		int nmark;
 
 		printf("Absolute DE plot:\n");
@@ -1433,7 +1433,7 @@ int main(int argc, char *argv[]) {
 		for (i = 0; i < PRES; i++) {
 			xx[i] = i/(double)(PRES-1);
 
-			for (j = 0; j < 6 && j < devchan; j++) {
+			for (j = 0; j < 10 && j < devchan; j++) {
 				tp.p[0] = xx[i];
 				ade[j]->interp(ade[j], &tp);
 				yy[j][i] = tp.v[0];
@@ -1441,25 +1441,30 @@ int main(int argc, char *argv[]) {
 		}
 		/* Add markers for deMax */
 		nmark = 0;
-		for (j = 0; j < 6 && j < devchan; j++) {
+		for (j = 0; j < 10 && j < devchan; j++) {
 			cx[j] = pct->devmax[j];
 			cy[j] = pct->ademax[j];
 			nmark++;
 		}
-		do_plot6p(xx, devchan > 3 ? yy[3] : NULL,
-		             devchan > 1 ? yy[1] : NULL,
-		             devchan > 4 ? yy[4] : NULL,
-		             devchan > 0 ? yy[0] : NULL,
-		             devchan > 2 ? yy[2] : NULL,
-		             devchan > 5 ? yy[5] : NULL, PRES,
-					 cx, cy, verify ? 0 : nmark);
+		do_plot10p(xx, devchan > 3 ? yy[3] : NULL,
+		               devchan > 1 ? yy[1] : NULL,
+		               devchan > 4 ? yy[4] : NULL,
+		               devchan > 0 ? yy[0] : NULL,
+		               devchan > 2 ? yy[2] : NULL,
+		               devchan > 5 ? yy[5] : NULL,
+		               yy[6],
+		               yy[7],
+		               yy[8],
+		               yy[9],
+		               PRES,
+					   cx, cy, verify ? 0 : nmark);
 
 		printf("Relative DE plot:\n");
 
 		for (i = 0; i < PRES; i++) {
 			xx[i] = i/(double)(PRES-1.0);
 
-			for (j = 0; j < 6 && j < devchan; j++) {
+			for (j = 0; j < 10 && j < devchan; j++) {
 				tp.p[0] = xx[i];
 				rde[j]->interp(rde[j], &tp);
 				yy[j][i] = tp.v[0];
@@ -1467,19 +1472,24 @@ int main(int argc, char *argv[]) {
 		}
 		/* Add markers for deMax */
 		nmark = 0;
-		for (j = 0; j < 6 && j < devchan; j++) {
+		for (j = 0; j < 10 && j < devchan; j++) {
 			cx[j] = pct->devmax[j];
 			tp.p[0] = cx[j];
 			rde[j]->interp(rde[j], &tp);
 			cy[j] = tp.v[0];
 			nmark++;
 		}
-		do_plot6p(xx, devchan > 3 ? yy[3] : NULL,
+		do_plot10p(xx, devchan > 3 ? yy[3] : NULL,
 		             devchan > 1 ? yy[1] : NULL,
 		             devchan > 4 ? yy[4] : NULL,
 		             devchan > 0 ? yy[0] : NULL,
 		             devchan > 2 ? yy[2] : NULL,
-		             devchan > 5 ? yy[5] : NULL, PRES,
+		             devchan > 5 ? yy[5] : NULL,
+		             yy[6],
+		             yy[7],
+		             yy[8],
+		             yy[9],
+		             PRES,
 					 cx, cy, verify ? 0 : nmark);
 	}
 
@@ -1571,12 +1581,17 @@ int main(int argc, char *argv[]) {
 						yy[j][i] = 0.0;
 				}
 			}
-			do_plot6(xx, devchan > 3 ? yy[3] : NULL,
-						 devchan > 1 ? yy[1] : NULL,
-						 devchan > 4 ? yy[4] : NULL,
-						 devchan > 0 ? yy[0] : NULL,
-						 devchan > 2 ? yy[2] : NULL,
-						 devchan > 5 ? yy[5] : NULL, PRES);
+			do_plot10(xx, devchan > 3 ? yy[3] : NULL,
+						  devchan > 1 ? yy[1] : NULL,
+						  devchan > 4 ? yy[4] : NULL,
+						  devchan > 0 ? yy[0] : NULL,
+						  devchan > 2 ? yy[2] : NULL,
+						  devchan > 5 ? yy[5] : NULL,
+			              yy[6],
+			              yy[7],
+			              yy[8],
+			              yy[9],
+			              PRES);
 			if (!verified)
 				exit(1);
 		}
@@ -1646,7 +1661,7 @@ int main(int argc, char *argv[]) {
 			/* Plot the target curves */
 			if (doplot) {
 				double xx[PRES];
-				double yy[6][PRES];
+				double yy[10][PRES];
 	
 				printf("Target curves plot:\n",j);
 	
@@ -1655,7 +1670,7 @@ int main(int argc, char *argv[]) {
 					double pp = i/(PRES-1.0);
 	
 					xx[i] = pp;
-					for (j = 0; j < 6 && j < devchan; j++) {
+					for (j = 0; j < 10 && j < devchan; j++) {
 						if (tcurves[j] != NULL) {
 							tp.p[0] = pp;
 							tcurves[j]->interp(tcurves[j], &tp);
@@ -1664,12 +1679,16 @@ int main(int argc, char *argv[]) {
 							yy[j][i] = pp;
 					}
 				}
-				do_plot6(xx, devchan > 3 ? yy[3] : NULL,
-							 devchan > 1 ? yy[1] : NULL,
-							 devchan > 4 ? yy[4] : NULL,
-							 devchan > 0 ? yy[0] : NULL,
-							 devchan > 2 ? yy[2] : NULL,
-							 devchan > 5 ? yy[5] : NULL, PRES);
+				do_plot10(xx, devchan > 3 ? yy[3] : NULL,
+							  devchan > 1 ? yy[1] : NULL,
+							  devchan > 4 ? yy[4] : NULL,
+							  devchan > 0 ? yy[0] : NULL,
+							  devchan > 2 ? yy[2] : NULL,
+							  devchan > 5 ? yy[5] : NULL,
+				              yy[6],
+				              yy[7],
+				              yy[8],
+				              yy[9], PRES);
 			}
 		}
 
@@ -1762,22 +1781,27 @@ int main(int argc, char *argv[]) {
 		/* Plot the calibration curves */
 		if (doplot) {
 			double xx[PRES];
-			double yy[6][PRES];
+			double yy[10][PRES];
 
 			printf("Calibration curve plot:\n");
 
 			for (i = 0; i < n_cvals; i++) {
 				xx[i] = cvals[0][i].inv;
-				for (j = 0; j < 6 && j < devchan; j++) {
+				for (j = 0; j < 10 && j < devchan; j++) {
 					yy[j][i] = cvals[j][i].dev;
 				}
 			}
-			do_plot6(xx, devchan > 3 ? yy[3] : NULL,
-			             devchan > 1 ? yy[1] : NULL,
-			             devchan > 4 ? yy[4] : NULL,
-			             devchan > 0 ? yy[0] : NULL,
-			             devchan > 2 ? yy[2] : NULL,
-			             devchan > 5 ? yy[5] : NULL, PRES);
+			do_plot10(xx, devchan > 3 ? yy[3] : NULL,	/* Black */
+			              devchan > 1 ? yy[1] : NULL,	/* Red */
+			              devchan > 4 ? yy[4] : NULL,	/* Green */
+			              devchan > 0 ? yy[0] : NULL,	/* Blue */
+			              devchan > 2 ? yy[2] : NULL,	/* Yellow */
+			              devchan > 5 ? yy[5] : NULL,	/* Purple */
+			              yy[6],						/* Brown */
+			              yy[7],						/* Orange */
+			              yy[8],						/* Grey */
+			              yy[9],						/* White */
+			              PRES);
 		}
 
 		/* Write out an Argyll .CAL file */
@@ -1930,7 +1954,8 @@ int main(int argc, char *argv[]) {
 		*/
 
 		/* Write an Adobe map format (.AMP) file */
-		if (dowrite && doamp && devchan <= 4) {
+		/* (It's not clear if more than 4 channels is allowed) */
+		if (dowrite && doamp) {
 			FILE *fp;
 			cgatsFile *p;
 			char nmode[50] = { '\000' };

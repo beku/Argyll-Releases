@@ -95,7 +95,7 @@
 
 #define COMBO(nn, mxdi, comb, total) 				\
 	int nn[mxdi+2];			/* counter value */				\
-	int nn##_cmb = (comb);	/* number of combinations*/		\
+	int nn##_cmb = (comb);	/* number of combinations */	\
 	int nn##_tot = (total);	/* out of total possible */		\
 	int nn##_e				/* dimension index */
 

@@ -15,6 +15,58 @@
 <body>
 <h1> Summary of Argyll CMS Changes since last release</h1>
 <h3>For detailed change list please see the log.txt file.</h3>
+<br>
+<h1>[V1.1.0 -&gt; V1.1.1]</h1>
+<ul>
+  <li>Renamed the following tools:<br>
+&nbsp;&nbsp;&nbsp; cb2cgats&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; cb2ti3<br>
+&nbsp;&nbsp;&nbsp; kodak2cgats -&gt; kodak2ti3<br>
+&nbsp;&nbsp;&nbsp; logo2cgats&nbsp;&nbsp;&nbsp; -&gt; txt2ti3<br>
+&nbsp;&nbsp;&nbsp; splitcgats&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt;
+splitti3<br>
+&nbsp;&nbsp;&nbsp;
+mpprof&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; -&gt; mppprof<br>
+  </li>
+  <li>Modified black curve to make sure that smoothed curve meets
+target level at boundaries.</li>
+  <li>Added -M option to printtarg, for the case where the TIFF file is
+to include the margin.</li>
+  <li>Fixed several build bugs in imdi code related to 64 bits.</li>
+  <li>Fixed profile/colprof -u so that it is applied to matrix profiles
+too</li>
+  <li>Changed tiffgamut to use one pass gamut hull finding and modified
+the smoothing so as to end up with a more closely wrapped volume.</li>
+  <li>Fixed bug in input matrix profiles introduced by the XYZ cLUT
+display matrix profile change, where the correct white and black point
+weren't being written.</li>
+  <li>Added matrix only/linear algorithm option to profile/colprof, for
+raw camera profiling.</li>
+  <li>Modified libusb/55-Argyll.rules for better compatibility with
+systems that have ACL installed but no ConsoleKit. Also set ID_VENDOR
+and ID_MODEL using. usb-db.</li>
+  <li>Modified target/targen to cope better with case where adding
+nodes fails to determine vertex positions a lot of the time, causing
+extreme slowdown.</li>
+  <li>Fixed colprof so that the per channel input curves for XYZ PCS
+B2A tables are actually scaled correctly.</li>
+  <li>Changed link/collink to apply Y to L* curve if the input or
+output space is XYZ. Fixed the Y to L* scaling to make sure it only
+apples to XYZ space, and that the L* non-linearisation still applies to
+Y like device spaces.</li>
+  <li>Modified scanin so that it ignores any alpha channels in the
+input .tiff file.</li>
+  <li>Changed printcal so that it will create .AMP file with more than
+4 channels. Also fixed up plotting to plot up to 10 channels.</li>
+  <li>Changed dispcal and dispread so that a request for projector mode
+falls back to display mode if the instrument doesn't support a
+projector mode.</li>
+  <li>Updated ref/CMP_Digital_Target-3.cht as it seems that the
+reference chart has columns labelled "2A - 2D" rather than the "AA -
+AD" that is actually printed on the chart...</li>
+  <li>Altered xpsect FWA code to reduce overshoot artefacts due to
+filtering.<br>
+  </li>
+</ul>
 <h1>[V1.0.4 -&gt; V1.1.0]</h1>
 <ul>
   <li>Spyder3 and ColorMunki Design, Photo and Create instrument

@@ -133,11 +133,11 @@ main(int argc, char *argv[]) {
 	}
 
 	/* Creat a gamut object */
-	if ((gam = new_gamut(0.0, 0)) == NULL)
+	if ((gam = new_gamut(0.0, 0, 0)) == NULL)
 		error("Failed to create aa gamut object\n");
 
 	if (dofilt == 0)
-		gam->nofilter = 1;
+		gam->setnofilt(gam);
 
 	if (rand) {
 		npoints = npoints * npoints * npoints;

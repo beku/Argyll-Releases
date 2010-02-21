@@ -431,7 +431,7 @@ if $(NT)
 		}
 
 		CCDEBUGFLAG		?= -g ;
-		CCPROFFLAG		?= -p  ;
+		CCPROFFLAG		?= -p ;
 		LINKDEBUGFLAG	?= ;
 		LINKPROFFLAG	?= -p ; 
 		LINKOPTFLAG		?= -s -O ;			# Affects creating .so's ??
@@ -845,7 +845,7 @@ else if $(UNIX)
 
 	# Make things work on 64 bit Linux
 	if $(HOSTTYPE) = x86_64 {
-		ECHO "We've on a 64 bit host" ;
+		ECHO "We're on a 64 bit host" ;
 		HOST64     = true ;
 		CCFLAGS	   += -m64 ;
 		C++FLAGS   += -m64 ;

@@ -8,7 +8,7 @@
 <body>
 <h2><u>Typical usage Scenarios and Examples</u></h2>
 Choose a task from the list below. For more details on alternative
-options, follow the links to the individual utilities being used.<br>
+options, follow the links to the individual tools being used.<br>
 <br>
 Note that by default it is assumed that ICC profile have the file
 extension <span style="font-weight: bold;">.icm</span>, but that on
@@ -97,9 +97,8 @@ converted into an ICC profile.<br>
 </h3>
 You might first want to check that you are accessing and can calibrate
 your display. You can do this using the <a href="dispwin.html">dispwin</a><span
- style="font-weight: bold;"></span> utility<span
- style="font-weight: bold;">.</span> If you just run <span
- style="font-weight: bold;">dispwin</span>
+ style="font-weight: bold;"></span> tool<span style="font-weight: bold;">.</span>
+If you just run <span style="font-weight: bold;">dispwin</span>
 it will create a test window and run through a series of test colors
 before checking that the VideoLUT can be accessed by the display. If
 you invoke the usage for <span style="font-weight: bold;">dispwin</span>
@@ -200,7 +199,7 @@ window using the <a href="dispcal.html#p"><span
  style="font-weight: bold;">-p</span></a> parameter.
 You can determine how best to arrange the test window, as well as
 whether each display has separate video lookup capability, by
-experimenting with the <a href="dispwin.html">dispwin</a> utility. <br>
+experimenting with the <a href="dispwin.html">dispwin</a> tool. <br>
 <br>
 For a more detailed discussion on interactively adjusting the display
 controls using <span style="font-weight: bold;">dispcal</span>, see <a
@@ -278,7 +277,7 @@ following would achieve this:<br>
 <u><br>
 </u><a href="targen.html"> targen</a> <a href="targen.html#v">-v</a>
 &nbsp;<a href="targen.html#d">-d3</a> <a href="targen.html#f">-f500</a>
-<a href="targen.html#A">-A.8</a> <a href="targen.html#c">-cOldDisplay.icm</a>
+<a href="targen.html#c">-cOldDisplay.icm</a>
 <a href="targen.html#p1">DisplayA</a><br>
 <br>
 The output of <b>targen</b> will be the file DisplayA.ti1, containing
@@ -352,7 +351,7 @@ Make sure you check the delta E report at the end of the profile
 creation, to see if the profile is behaving reasonably.<br>
 If a calibration file was used with <a href="dispread.html">dispread</a>,
 then it will be converted to a vcgt tag in the profile, so that the
-operating system or other system color utilities load the lookup curves
+operating system or other system color tools load the lookup curves
 into the display hardware, when the profile is used.<br>
 <h4><a name="PM5"></a>Installing a display profile</h4>
 <a href="dispwin.html">dispwin</a> provides a convenient way of
@@ -370,7 +369,7 @@ current display.<br>
 <br>
 Some systems will automatically set the display to the calibration
 contained in the installed profile (ie. OS X), while on other systems
-(ie. MSWindows and Linux/X11) it is necessary to use some utility to do
+(ie. MSWindows and Linux/X11) it is necessary to use some tool to do
 this. On MSWindows XP you could install the optional&nbsp; <span
  style="font-weight: bold;">Microsoft&nbsp;Color&nbsp;Control&nbsp;Panel&nbsp;Applet&nbsp;for&nbsp;Windows&nbsp;XP</span>
 available for
@@ -380,10 +379,10 @@ however that it seems to
 have a <span style="font-weight: bold;">bug</span>, in that it
 sometimes associates the profiles with the <span
  style="font-weight: bold;">wrong monitor</span> entry. Other display
-calibration utilities will often install a similar utility, so beware
+calibration tools will often install a similar tool, so beware
 of there being multiple, competing programs. [ Commonly these will be
 in your Start-&gt;Programs-&gt;Startup folder. ]<br>
-On Microsoft Vista, you need to use dispwin -L or some other utility to
+On Microsoft Vista, you need to use dispwin -L or some other tool to
 load the installed profiles calibration at startup.<br>
 <br>
 To use dispwin to load the installed profiles calibration to the
@@ -514,7 +513,7 @@ cropped so as to contain the test chart (including the charts edges).<br>
 <br>
 The second step is to extract the RGB values from the scanner.tif file,
 and match then to the reference CIE values.
-To locate the patch values in the scan, the <b>scanin</b> utility
+To locate the patch values in the scan, the <b>scanin</b> tool
 needs to
 be given a template <a href="File_Formats.html#.cht">.cht</a> file
 that describes the features of the chart, and
@@ -570,7 +569,7 @@ then you may need to convert the reference information from spectral <span
 <span style="font-weight: bold;">ColorCheckerSG.cie</span>
 reference file,
 follow the following steps:<br>
-&nbsp;&nbsp;&nbsp;&nbsp; <a href="logo2cgats.html">logo2cgats</a>
+&nbsp;&nbsp;&nbsp;&nbsp; <a href="txt2ti3.html">txt2ti3</a>
 ColorCheckerSG.txt ColorCheckerSG<br>
 &nbsp;&nbsp;&nbsp;&nbsp; <a href="spec2cie.html">spec2cie</a>
 ColorCheckerSG.ti3 ColorCheckerSG.cie<br>
@@ -615,7 +614,7 @@ chart recognition template file will need to be created (this is beyond
 the scope of the current documentation, although see&nbsp; the <a
  href="cht_format.html">.cht_format documentation</a>).<br>
 <br>
-To create the scanner .ti3 file, run the <b>scanin</b> utility as
+To create the scanner .ti3 file, run the <b>scanin</b> tool as
 follows
 (assuming an IT8 chart is being used):<br>
 <br>
@@ -689,6 +688,23 @@ generally be used:<br>
 Make sure you check the delta E report at the end of the profile
 creation, to see if the profile is behaving reasonably.<br>
 <br>
+<br>
+If profiling a <span style="font-weight: bold;">camera</span> in <span
+ style="font-weight: bold;">RAW</span> mode, then there may be some
+advantage in creating a pure matrix only profile, in which it is
+assumed that the camera response is completely linear. This may reduce
+extrapolation artefacts. If setting the white point will be done in
+some application, then it may also be an advantage to use the <span
+ style="font-weight: bold;">-u</span> flag and avoid setting the white
+point to that of the profile chart:<br>
+<br>
+<a href="colprof.html">colprof</a> <a href="colprof.html#v">-v</a> <a
+ href="colprof.html#E">-D"Camera"</a>
+<a href="colprof.html#q">-qm</a> <a href="colprof.html#a">-am</a>
+<a href="colprof.html#u">-u</a>
+<a href="colprof.html#p1">scanner</a><br>
+<br>
+<br>
 <hr size="2" width="100%">
 <h3><a name="PP1"></a>Profiling Printers<br>
 </h3>
@@ -712,7 +728,13 @@ to use ?</li>
   <li>What information do I already have about how the device behaves ?</li>
 </ul>
 Most printers running through simple drivers will appear as if they are
-RGB devices. Other drivers will drive a printer more directly, and will
+RGB devices. In fact there is no such
+thing as a real RGB printer, since printers use white media and the
+colorant must subtract from the light reflected on it to create color,
+but the printer itself turns the incoming RGB into the native print
+colorspace, so for this reason we will tell targen to use the
+"Print RGB" colorspace, so that it knows that it's really a subtractive
+media. Other drivers will drive a printer more directly, and will
 expect a CMYK profile. [Currently Argyll is not capable of creating an
 ICC profile for devices with more colorants than CMYK. When this
 capability is introduced, it will by creating an additional separation
@@ -720,15 +742,17 @@ profile which then allows the printer to be treated as a CMY or CMYK
 printer.] One way of telling what sort
 of profile is expected for your device is to examine an existing
 profile for
-that device using <a href="iccdump.html">iccdump</a>.<br>
+that device using <a href="http://www.argyllcms.com/doc/iccdump.html">iccdump</a>.<br>
 <br>
 The number of test patches will depend somewhat on what quality profile
-you want to make, as well as the effort needed to read the number of
+you want to make, how well behaved the printer is, as well as the
+effort needed to read the number of
 test values. Generally it is convenient to fill a certain paper size
 with the maximum
 number of test values that will fit.<br>
 <br>
-At a minimum, for an RGB device, a few hundred values are needed.
+At a minimum, for an "RGB" device, a few hundred values are needed
+(400-1000).
 For high quality CMYK profiles, 1000-3000 is not an unreasonable number
 of
 patches.<br>
@@ -741,10 +765,11 @@ high quality Lut based profile, then it might be worthwhile to make up
 a smaller, preliminary shaper/matrix profile using a few hundred test
 points, before embarking on testing the device with several thousand.<br>
 <br>
-The documentation for the <a href="targen.html">targen</a> utility
+The documentation for the <a
+ href="http://www.argyllcms.com/doc/targen.html">targen</a> tool
 lists
 a
-<a href="targen.html#Table">table</a> of
+<a href="http://www.argyllcms.com/doc/targen.html#Table">table</a> of
 paper
 sizes and number of &nbsp;patches for typical situations.<br>
 <br>
@@ -774,22 +799,22 @@ combinations of any two primary colorants) will not be able to reach
 full strength.<br>
 <br>
 Once an ink limit is used in printing the characterization test chart
-for a device, it becomes a critical parameter<br>
-in knowing what the characterized gamut of the device is. If after
-printing the test chart, a greater ink limit<br>
-were to be used, the the software would effectively be extrapolating
-the device behaviour at total ink levels<br>
-beyond that used in the test chart, leading to inaccuracies.<br>
+for a device, it becomes a critical parameter in knowing what the
+characterized gamut of the device is. If after
+printing the test chart, a greater ink limit were to be used, the the
+software would effectively be extrapolating
+the device behaviour at total ink levels beyond that used in the test
+chart, leading to inaccuracies.<br>
 <br>
 Generally in Argyll, the ink limit is established when creating the
-test chart values, and then carried through the<br>
-profile making process automatically. Once the profile has been made
+test chart values, and then carried through the profile making process
+automatically. Once the profile has been made
 however, the ink limit is no longer recorded, and you, the user, will
 have to keep track of it if the ICC profile is used in any program than
 needs to know the usable gamut of the device.<br>
 <br>
 <br>
-Lets consider two devices in our examples, "PrinterA" which is an RGB
+Lets consider two devices in our examples, "PrinterA" which is an "RGB"
 device, and "PrinterB" which is CMYK, and has a target ink limit of
 250%.
 <br>
@@ -799,7 +824,7 @@ independent
 of the characteristics of the particular device:<br>
 <br>
 <a href="targen.html">targen</a> <a href="targen.html#v">-v</a> &nbsp;<a
- href="targen.html#d">-d3</a> <a href="targen.html#f">-f1053</a> <a
+ href="targen.html#d">-d2</a> <a href="targen.html#f">-f1053</a> <a
  href="targen.html#p1">PrinterA</a><br>
 <br>
 <a href="targen.html">targen</a> <a href="targen.html#v">-v</a> &nbsp;<a
@@ -817,14 +842,13 @@ values that will more efficiently sample the device response, then the
 following would achieve this:<u><br>
 </u><br>
 <a href="targen.html">targen</a> <a href="targen.html#v">-v</a> &nbsp;<a
- href="targen.html#d">-d3</a> <a href="targen.html#f">-f1053</a> <a
- href="targen.html#c">-c OldPrinterA</a> <a href="targen.html#A">-A.8</a>
-<a href="targen.html#p1">PrinterA</a><br>
+ href="targen.html#d">-d2</a> <a href="targen.html#f">-f1053</a> <a
+ href="targen.html#c">-c OldPrinterA</a>&nbsp;<a href="targen.html#p1">PrinterA</a><br>
 <br>
 <a href="targen.html">targen</a> <a href="targen.html#v">-v</a> &nbsp;<a
  href="targen.html#d">-d4</a> <a href="targen.html#l">-l260</a> <a
  href="targen.html#f">-f1053</a> <a href="targen.html#c">-c OldPrinterB</a>
-<a href="targen.html#A">-A.8</a> <a href="targen.html#p1">PrinterB</a><br>
+<a href="targen.html#p1">PrinterB</a><br>
 <a href="targen.html#p1"></a><br>
 <br>
 The output of <b>targen</b> will be the file PrinterA.ti1 and
@@ -1017,7 +1041,7 @@ is assumed to be called <span style="font-weight: bold;">PrinterB.cht</span>.
 Using the scanner profile created previously (assumed to be called <span
  style="font-weight: bold;">scanner.icm</span>), the printer test chart
 scan patches are converted to CIE values using the <span
- style="font-weight: bold;">scanin</span> utility:<br>
+ style="font-weight: bold;">scanin</span> tool:<br>
 <br>
 <a href="scanin.html">scanin</a> <a href="scanin.html#v">-v</a> <a
  href="scanin.html#c">-c</a> <a href="scanin.html#cp1">PrinterB.tif</a>
@@ -1357,7 +1381,8 @@ of how a device behaves, while <span style="font-weight: bold;">calibration</spa
 on the other hand is
 intended to <span style="text-decoration: underline;">change</span>
 how a device behaves. Argyll has the ability to
-create per device channel calibration curves for print devices, that
+create per-channel device space calibration curves for print devices,
+that
 can
 then be used to improve the behavior of of the device, making a
 subsequent
@@ -1418,7 +1443,7 @@ calibration, <span style="font-weight: bold;">OR</span>
 by creating
 a version of the profile that has had the calibration curves
 incorporated into it using the <span style="font-weight: bold;">applycal</span>
-utility. The latter is useful when some CMM (color management module)
+tool. The latter is useful when some CMM (color management module)
 other than <span style="font-weight: bold;">cctiff </span>is being
 used.<br>
 <br>
@@ -1450,20 +1475,21 @@ For instance, to create a 50 steps per channel calibration test chart
 for our RGB and CMYK devices, the following would be sufficient:<br>
 <br>
 <a href="targen.html">targen</a> <a href="targen.html#v">-v</a> &nbsp;<a
- href="targen.html#d">-d2</a><a href="targen.html#e"></a> <a
- href="targen.html#s">-s50</a> <a href="targen.html#e">-e3</a> <a
- href="targen.html#f">-f0</a> <a href="targen.html#p1">PrinterA</a><br>
+ href="targen.html#d">-d2</a> <a href="targen.html#s">-s50</a> <a
+ href="targen.html#e">-e3</a> <a href="targen.html#f">-f0</a> <a
+ href="targen.html#p1">PrinterA_c</a><br>
 <br>
 <a href="targen.html">targen</a> <a href="targen.html#v">-v</a> &nbsp;<a
  href="targen.html#d">-d4</a> <a href="targen.html#s">-s50</a> <a
  href="targen.html#e">-e4</a> <a href="targen.html#f">-f0</a> <a
- href="targen.html#p1">PrinterB</a><a href="targen.html#p1"></a><br>
+ href="targen.html#p1">PrinterB_c</a><br>
 <a href="targen.html#p1"></a><br>
 For an outline of how to then print and read the resulting test chart,
 see&nbsp; <a href="Scenarios.html#PP2b">Printing a print profile test
 chart</a>, and <a href="Scenarios.html#PP3">Reading a print test chart
-using an instrument</a>.<br>
-Having done this, there will be a PrinterA.ti3 or PrinterB.ti3 file
+using an instrument</a>. Note that the printer must be in an
+un-profiled and un-calibrated mode when doing this print. Having done
+this, there will be a PrinterA.ti3 or PrinterB.ti3 file
 containing the step wedge calibration chart readings.<br>
 <br>
 <h4><a name="PC4"></a>Creating a printer calibration<br>
@@ -1513,16 +1539,18 @@ calibration, and compares the achieved response to the aim target.<br>
 The simplest possible way of creating the <span
  style="font-weight: bold;">PrinterA.cal</span> file is:<br>
 <br>
+&nbsp;
 <a href="printcal.html">printcal</a> <a href="printcal.htm#i">-i</a> <a
- href="colprof.html#p2">PrinterA</a><br>
+ href="colprof.html#p2">PrinterA_c</a><br>
 <br>
 For more detailed information, you can add the <span
  style="font-weight: bold;">-v</span> and <span
  style="font-weight: bold;">-p</span> flags:<br>
 <br>
+&nbsp;
 <a href="printcal.html">printcal</a> <a href="printcal.html#v">-v</a> <a
  href="printcal.html#p">-p</a> <a href="printcal.htm#i">-i</a> <a
- href="colprof.html#p2">PrinterB</a><br>
+ href="colprof.html#p2">PrinterB_c</a><br>
 <br>
 (You will need to select the plot window and hit a key to advance past
 each plot).<br>
@@ -1531,11 +1559,25 @@ For re-calibration, the name of the previous calibration file will need
 to be supplied, and a new calibration<br>
 file will be created:<br>
 <br>
+&nbsp;
 <a href="printcal.html">printcal</a> <a href="printcal.html#v">-v</a> <a
  href="printcal.html#p">-p</a> <a href="printcal.htm#r">-r</a> <a
- href="colprof.html#p1">PrinterB_old</a> <a href="colprof.html#p2">PrinterB_new</a><br>
+ href="colprof.html#p1">PrinterB_c_old</a> <a href="colprof.html#p2">PrinterB_c_new</a><br>
 <br>
-<a href="colprof.html#p1"></a>
+Various aim points are normally set automatically by <span
+ style="font-weight: bold;">printcal</span>, but these can be
+overridden using the <a href="colprof.html#x">-x</a>, <a
+ href="colprof.html#n">-n</a> and <a href="colprof.html#t">-t</a>
+options. e.g. say we wanted to set the maximum ink for Cyan to 80% and
+Black to 95%, we might use:<br>
+<br>
+&nbsp;
+<a href="printcal.html">printcal</a> <a href="printcal.html#v">-v</a> <a
+ href="printcal.html#p">-p</a> <a href="printcal.htm#i">-i</a> <a
+ href="colprof.html#x">-xc 80</a> <a href="colprof.html#x">-xk 95</a> <a
+ href="colprof.html#p2">PrinterB_c</a><br>
+<br>
+<a href="colprof.html#p2"></a>
 <h4><a name="PC5"></a>Using a printer calibration</h4>
 The resulting calibration curves can be used with the following other
 Argyll tools:<br>
@@ -1560,15 +1602,15 @@ while not otherwise using the calibration within the ICC workflow:<br>
 &nbsp;&nbsp;&nbsp; <a href="printtarg.html">printtarg</a> <a
  href="printtarg.html#v">-v</a>
 <a href="printtarg.html#i">-ii1</a> <a href="printtarg.html#p">-pA4</a>
-<a href="printtarg.html#I">-I PrinterA.cal</a>
-<a href="printtarg.html#p1">PrinterA_Profile_Target</a><br>
+<a href="printtarg.html#I">-I PrinterA_c.cal</a>
+<a href="printtarg.html#p1">PrinterA</a><br>
 <br>
 This will cause the .ti2 and resulting .ti3 and ICC profiles to contain
 the calibration curves, allowing all the tools to be able to compute
 final device value ink limits. The calibration curves must also of
 course be installed into the printer. The means to do this is currently
 outside the scope of Argyll (ie. either the print system needs to be
-able to understand Argyll CAL format files, or some utility will be
+able to understand Argyll CAL format files, or some tool will be
 needed to convert Argyll CAL files into the printer calibration format).<br>
 <br>
 <br>
@@ -1583,15 +1625,9 @@ final device value ink limits:<br>
 &nbsp;&nbsp;&nbsp; <a href="printtarg.html">printtarg</a> <a
  href="printtarg.html#v">-v</a>
 <a href="printtarg.html#i">-ii1</a> <a href="printtarg.html#p">-pA4</a>
-<a href="printtarg.html#K">-K PrinterA.cal</a>
-<a href="printtarg.html#p1">PrinterA_ProfileTarget</a><br>
-<br>
-To apply color management and calibration to a raster image:<br>
-<br>
-&nbsp;<a href="cctiff.html">cctiff</a> <a href="cctiff.html#p1">Source2Destination.icm</a>
-<a href="cctiff.html#p2">PrinterA.cal</a>
-<a href="cctiff.html#p3">infile.tif</a> <a href="cctiff.html#p4">outfile.tif</a><br>
-<br>
+<a href="printtarg.html#K">-K PrinterA_c.cal</a>
+<a href="printtarg.html#p1">PrinterA</a><br>
+<a href="cctiff.html#p4"></a><br>
 To apply calibration to an ICC profile, so that a calibration unaware
 CMM can be used:<br>
 <br>
@@ -1599,8 +1635,15 @@ CMM can be used:<br>
  href="applycal.html#p1">PrinterA.cal</a> <a href="applycal.html#p2">PrinterA.icm</a>
 <a href="applycal.html#p3">PrinterA_cal.icm</a><br>
 <br>
+To apply color management and calibration to a raster image:<br>
 <br>
-Another useful utility is <a href="synthcal.html">synthcal</a>, that
+&nbsp;&nbsp;&nbsp; <a href="cctiff.html">cctiff</a> <a
+ href="cctiff.html#p1">Source2Destination.icm</a>
+<a href="cctiff.html#p2">PrinterA_c.cal</a>
+<a href="cctiff.html#p3">infile.tif</a> <a href="cctiff.html#p4">outfile.tif</a><br>
+<br>
+<br>
+Another useful tool is <a href="synthcal.html">synthcal</a>, that
 allows creating linear or synthetic calibration files for disabling
 calibration or testing.<br>
 Similarly, <a href="fakeread.html">fakeread</a> also supports applying
@@ -1608,9 +1651,9 @@ calibration curves and embedding them in the resulting .ti3 file<br>
 <h4><a name="PC6"></a>How profile ink limits are handled when
 calibration is being used.</h4>
 Even though the profiling process is carried out on top of the
-linearized device, so that the profiling is generally unaware of the
+linearized device, and the profiling is generally unaware of the
 underlying non-linearized device values, an exception is made in the
-calculation of ink limits during the profiling. This is made possible
+calculation of ink limits during profiling. This is made possible
 by including the calibration curves in the profile charts .ti2 and
 subsequent .ti3 file and resulting ICC profile <span
  style="font-weight: bold;">'targ'</span> text tag, by way of the <span
@@ -1627,7 +1670,7 @@ values represent such a physical quantity.<br>
 Two device profiles can be linked together to create a device link
 profile,
 than encapsulates a particular device to device transform. Often this
-step is not necessary, as many systems and utilities will link two
+step is not necessary, as many systems and tools will link two
 device profiles "on the fly", but creating a device link profile gives
 you the option of using "smart CMM" techniques, such as true gamut
 mapping, improved inverse transform accuracy, tailored black
@@ -1638,7 +1681,7 @@ The overall process is to link the input space and
 output space profiles using <a href="collink.html">collink</a>,
 creating a device to device link profile. The device to device link
 profile can then be used by cctiff (or other ICC device profile capable
-utilities), to color
+tools), to color
 correct a raster files.<br>
 <br>
 Three examples will be given here, showing the three different modes
@@ -1717,13 +1760,38 @@ destination (<a href="collink.html#d">-d</a>)
 viewing conditions for the type of device the profile represents, and
 the conditions under which it will be viewed.<br>
 <br>
+<h3><a name="LP2"></a>Soft Proofing Link</h3>
+Often it is desirable to get an idea what a particular devices output
+will look like using a different device. Typically this might be trying
+to evaluate print output using a display. Often it is sufficient to use
+an absolute or relative colorimetric transform from the print device
+space to the display space, but while these provide a colorimetric
+preview of the result, they do not take into account the subjective
+appearance differences due to the different device conditions. It can
+therefore be useful to create a soft proof appearance transform using
+collink:<br>
+<br>
+<a href="collink.html">collink</a> <a href="collink.html#v">-v</a> <a
+ href="collink.html#q">-qm</a> <a href="collink.html#G">-G</a> <a
+ href="collink.html#si">-ila</a> <a href="collink.html#c">-cpp</a> <a
+ href="collink.html#d">-dmt</a> <a href="collink.html#l">-t250</a>&nbsp;<a
+ href="collink.html#k"></a><a href="collink.html#p1">CMYKDestinationProfile.icm</a>
+<a href="collink.html#p2">MonitorProfile.icm</a> <a
+ href="collink.html#p3">SoftProof.icm</a><br>
+<br>
+We use the Luminance matched
+appearance intent, to preserve the subjective apperance of the target
+device, which takes into account the viewing conditions and assumes
+adaptation to the differences in the luminence range, but otherwise not
+attempting to compress or change the gamut.<br>
+&nbsp;
 <hr size="2" width="100%"><br>
 <h3><a name="TR1"></a>Transforming colorspaces of raster files</h3>
 Although a device profile or device link profile may be useful with
-other programs and systems, Argyll provides the utility <a
+other programs and systems, Argyll provides the tool <a
  href="cctiff.html">cctiff</a> for directly applying a device to device
 transform to a <a href="File_Formats.html#TIFF">TIFF</a> raster file.
-The cctiff utility is capable of linking an arbitrary sequence of
+The cctiff tool is capable of linking an arbitrary sequence of
 device profiles, device links, abstract profiles and calibration
 curves. Each device
 profile can be preceded by the <span style="font-weight: bold;">-i</span>

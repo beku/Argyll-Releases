@@ -205,7 +205,7 @@ time a color is measured</span></font><font size="-1"><span
  style="font-family: monospace;"></span></font><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#W">-W
 n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Ovride serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><font
+Override serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><font
  size="-1"><span style="font-family: monospace;"><br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#D">-D [level]</a><span
@@ -225,7 +225,7 @@ updated </span></font><font size="-1"><a
 <br>
 <h3>Comments<br>
 </h3>
-This is the utility is used for adjusting and calibrating a display to
+This is the tool is used for adjusting and calibrating a display to
 reach
 specified target behaviour, and optionally profiling it.&nbsp; For best
 results on a CRT, you should
@@ -710,11 +710,9 @@ You can
 use <a href="dispwin.html">dispwin</a> to load a <span
  style="font-weight: bold;">.cal</span> file into the display before
 running dispcal <span style="font-weight: bold;">-E</span>. Note that
-on Apple OS X, you will need to run dispwin with the <a
- href="dispwin.html%20#x">-x</a> option <span
- style="font-weight: bold;"></span>to ensure that the calibration is
-retained while dispcal <span style="font-weight: bold;">-E</span> is
-run. <br>
+if you set an Ambient light level interactively during the calibration,
+you need to enter the same number that was measured and set using the <span
+ style="font-weight: bold;">-a</span> parameter for verify.<br>
 <br>
 <a name="P"></a> The <span style="font-weight: bold;">-P</span>
 parameter allows you to position and size the test patch window. By
@@ -774,7 +772,7 @@ between runs.<br>
 <a name="N"></a>The <b>-N</b> option disables the automatic
 calibration
 of an instrument if it is possible to do so. Sometimes it is awkward to
-have to re-calibrate and instrument every time a utility starts, and
+have to re-calibrate and instrument every time a tool starts, and
 unnecessary if the instrument has recently been calibration, and this
 switch prevents it happening.<br>
 <br>
@@ -800,7 +798,7 @@ is involked to the shell,
 with six arguments. The first three arguments are the RGB test color as
 integers in the range 0 to 255, the second three parameters are the RGB
 test color as floating point numbers in the range 0.0 to 1.0. The
-script or utility should create a file called <span
+script or tool should create a file called <span
  style="font-weight: bold;">"command.meas</span>"
 that contains the XYZ values for the given RGB (or measured from the
 test window) in cd/m^2 as three numbers separated by spaces, before

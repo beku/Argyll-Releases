@@ -24,6 +24,11 @@
 	Would be nice to be able to generate secondary
 	color ramps (ie. CMY for RGB space, RGB for CMYK space.)
 
+	Would be nice to be able to take a previous .ti3 and
+	then suppliment the measured patches. Would have to add another
+	set of measurement columns to .ti1 & .ti2 to carry the
+	already measured values through ? 
+
 	Using adaptive patch creation for grey colorspace is broken.
 	This should be fixed.
 
@@ -793,7 +798,7 @@ usage(int level, char *diag, ...) {
 			fprintf(stderr,"                 %d: %s\n",i+1,desc);
 		}
 	}
-	fprintf(stderr," -G               Generate good optimzed points rather than Fast\n");
+	fprintf(stderr," -G               Generate good optimized points rather than Fast\n");
 	fprintf(stderr," -e patches       White test patches (default 4)\n");
 	fprintf(stderr," -s steps         Single channel steps (default grey 50, color 0)\n");
 	fprintf(stderr," -g steps         Grey axis RGB or CMY steps (default 0)\n");

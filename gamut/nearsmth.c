@@ -298,8 +298,8 @@ void tweak_weights(gammapweights out[14], int dst_cmymap, int rel_oride)  {
 			
 		} else if (rel_oride == 2) {	/* A maximal feature preserving mapping */
 			out[i].r.o = 2.0;		/* Extra relative weight */
-			out[i].r.rdl *= 1.4;	/* Extra neighbourhood size */
-			out[i].r.rdh *= 1.4;	/* Extra neighbourhood size */
+			out[i].r.rdl *= 1.6;	/* Extra neighbourhood size */
+			out[i].r.rdh *= 1.6;	/* Extra neighbourhood size */
 		}
 	}
 }
@@ -1206,7 +1206,7 @@ double m21fsm		/* Inverse 3D RSPL smoothing level, 0.0 = none */
 	/* exceeds the source colorspace size. */
 	sci_gam = sc_gam;			/* Alias to source space gamut */
 	if (si_gam != sc_gam) {
-		if ((sci_gam = new_gamut(0.0, 0)) == NULL) {
+		if ((sci_gam = new_gamut(0.0, 0, 0)) == NULL) {
 			fprintf(stderr,"gamut map: new_gamut failed\n");
 			*npp = 0;
 			return NULL;
@@ -1220,7 +1220,7 @@ double m21fsm		/* Inverse 3D RSPL smoothing level, 0.0 = none */
 
 	di_gam = sci_gam;			/* Default no compress or expand */
 	if (usecomp || useexp) {
-		if ((di_gam = new_gamut(0.0, 0)) == NULL) {
+		if ((di_gam = new_gamut(0.0, 0, 0)) == NULL) {
 			fprintf(stderr,"gamut map: new_gamut failed\n");
 			if (si_gam != sc_gam)
 				sci_gam->del(sci_gam);
@@ -2551,6 +2551,7 @@ double m21fsm		/* Inverse 3D RSPL smoothing level, 0.0 = none */
 					/* near a "lip", ignore it. */
 					if (mint >= -1e-8 && maxt > 1e-8) {
 
+						/* Gamut compression and vector compression */
 						if (fabs(mint - 1.0) < fabs(maxt) - 1.0
 						 && smp[i].dgam->radial(smp[i].dgam, NULL, smp[i].dv)
 						  < smp[i].sgam->radial(smp[i].sgam, NULL, smp[i].dv)) {
@@ -2603,6 +2604,7 @@ double m21fsm		/* Inverse 3D RSPL smoothing level, 0.0 = none */
 //if (PFCOND) printf("~1 point is crossover point\n",mint,maxt);
 						}
 	
+					/* Gamut expansion and vector expansion */
 					} else if (mint < -1e-8 && maxt > 1e-8) {
 
 //if (PFCOND) printf("~1 point is gamut exp & vect exp. mint %f maxt %f\n",mint,maxt);
@@ -2644,6 +2646,7 @@ double m21fsm		/* Inverse 3D RSPL smoothing level, 0.0 = none */
 						icmCpy3(smp[i].temp, smp[i].dv2);	/* Save a copy to temp */
 						smp[i].w2 = 0.8;
 
+					/* Conflicted case */
 					} else {
 						/* Nonsense vector */
 						smp[i].gflag = 0;		/* Gamut compression but */

@@ -1,11 +1,11 @@
 /* 
  * Argyll Color Correction System
- * Split a .ti3 file into two parts.
+ * Split a .ti3 (or other CGATS like) file into two parts.
  *
  * Author: Graeme W. Gill
  * Date:   14/12/2005
  *
- * Copyright 2005 Graeme W. Gill
+ * Copyright 2005, 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-

@@ -1,3 +1,5 @@
+#ifndef GAMMAP_H
+#define GAMMAP_H
 
 /* 
  * Argyll Gamut Mapping Library
@@ -63,4 +65,4 @@ gammap *new_gammap(
 );
 
 
-	
+#endif /* GAMMAP_H */

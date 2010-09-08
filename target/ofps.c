@@ -4295,7 +4295,7 @@ static void discover_subsuf(ofps *s) {
 	/* We can reduce the number of setmask bits by figuring out which */
 	/* combinations are disjoint, and using the same setmask bits for disjoint */
 	/* combinations. For CMYK, this reduces the setmask from 80-100 to less than 32 bits, */
-	/* mermiting faster mask manipulation. */ 
+	/* permiting faster mask manipulation. */ 
 	{
 		surfcomb *scp, *zd = NULL;	/* Zero Dimension combinations */
 		surfcomb *sets = NULL;		/* Sets at a given nos */
@@ -4321,7 +4321,7 @@ static void discover_subsuf(ofps *s) {
 		}
 
 		if (zd == NULL)
-			error("No zero-dim surface combinations");
+			error("No zero-dim surface combinations (s->nbp = %d)",s->nbp);
 
 //printf("~1 total 0D points = %d\n",k);
 
@@ -5531,7 +5531,7 @@ ofps *s
 		}
 
 		if (s->verb)
-			printf("\rAdded fixed %d/%d",i,s->fnp); fflush(stdout);
+			printf("%cAdded fixed %d/%d",cr_char,i,s->fnp); fflush(stdout);
 
 #ifdef DUMP_STRUCTURE
 		printf("Done node %d\n",s->np);
@@ -5885,7 +5885,7 @@ ofps_seed(ofps *s) {
 		}
 
 		if (s->verb && (j == 11 || i == (s->tinp-1))) {
-			printf("\rAdded %d/%d",s->np,s->tinp); fflush(stdout);
+			printf("%cAdded %d/%d",cr_char,s->np,s->tinp); fflush(stdout);
 			j = 0;
 		}
 #ifdef DUMP_STRUCTURE
@@ -5916,7 +5916,7 @@ ofps *s
 	int i, j, k, e, di = s->di;
 
 	/* Retry if we get a failure to add a point */
-	for (k = 0; k < 10; k++) {
+	for (k = 0; k < 20; k++) {
 
 		/* Clear the voronoi nodes */
 		node_clear(s, s->n[-2 * di - 2]);
@@ -5988,12 +5988,16 @@ ofps *s
 			dump_image(s, PERC_PLOT, DO_WAIT, DUMP_VTX, DUMP_PLA, 0, -1);		/* Device, No wait, verticies */
 #endif /* DUMP_PLOT_RESEED */
 		}
-		if (i >= s->tinp)
+		if (i >= s->tinp) {
+#ifdef DEBUG
+			if (k > 1) printf("Took %d retries\n",k-1);
+#endif /* DEBUG */
 			break;
+		}
 		/* Retry the whole thing */
 	}
-	if (k >= 10)
-		error("Failed to re-seed the veronoi - too many node instertion failures ?");
+	if (k >= 40)
+		error("Failed to re-seed the veronoi - too many node insertion failures ?");
 }
 
 /* ----------------------------------------------------------- */

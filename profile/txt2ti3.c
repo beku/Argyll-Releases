@@ -17,6 +17,10 @@
  */
 
 /* TTBD
+	
+	Do we need to worry about normalising display values to Y = 100, or marking
+	them not normalised ?
+
  */
 
 #define DEBUG
@@ -29,7 +33,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "cgats.h"
 #include "xspect.h"
 #include "insttypes.h"

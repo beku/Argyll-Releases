@@ -39,7 +39,6 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <time.h>
 #include "icc.h"
 #include "jcnf.h"
 #include "ucmm.h"
@@ -173,6 +172,7 @@ ucmm_error ucmm_install_monitor_profile(
 
 	/* Locate the directories where the config file is, */
 	/* and where we should copy the profile to. */
+	/* !! Should switch to xdg_bds() function !! */
 
 	cnl = strlen(config_file);
 	pnl = strlen(profile_dir) + 1 + strlen(profile);	/* Including "/" */
@@ -215,7 +215,6 @@ ucmm_error ucmm_install_monitor_profile(
 			}
 			memcpy(data_name, tt, strlen(tt)+1);
 		} else {
-			data_name = ".local/share";
 			if ((home = getenv("HOME")) == NULL) {
 				free(conf_name);
 				return ucmm_no_home;
@@ -510,6 +509,7 @@ ucmm_error ucmm_uninstall_monitor_profile(
 
 	/* Locate the directories where the config file is, */
 	/* and where the profile should be too. */
+	/* !! Should switch to xdg_bds() function !! */
 
 	cnl = strlen(config_file);
 	pnl = strlen(profile_dir) + 1;
@@ -830,6 +830,7 @@ ucmm_error ucmm_get_monitor_profile(
 
 	/* Locate the directories where the config file is, */
 	/* and where the profile should be too. */
+	/* !! Should switch to xdg_bds() function !! */
 
 	cnl = strlen(config_file);
 

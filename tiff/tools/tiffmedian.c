@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/tools/tiffmedian.c,v 1.5 2003/08/21 10:00:06 dron Exp $ */
+/* $Id: tiffmedian.c,v 1.8.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
 
 /*
  * Apply median cut on an image.
@@ -7,7 +7,6 @@
  *     -C n		- set colortable size.  Default is 256.
  *     -f		- use Floyd-Steinberg dithering.
  *     -c lzw		- compress output with LZW 
- *                        (no longer supported by default due to unisys patent enforcement) 
  *     -c none		- use no compression on output
  *     -c packbits	- use packbits compression on output
  *     -r n		- create output with n rows/strip of data
@@ -41,9 +40,15 @@
  *	Siggraph '82 proceedings, pp. 297-307
  */
 
+#include "tif_config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
 
 #include "tiffio.h"
 
@@ -114,18 +119,18 @@ main(int argc, char* argv[])
 	float floatv;
 	uint32 longv;
 	int c;
-	extern int tiff_optind;
-	extern char* tiff_optarg;
+	extern int optind;
+	extern char* optarg;
 
 	num_colors = MAX_CMAP_SIZE;
-	while ((c = tiff_getopt(argc, argv, "c:C:r:f")) != -1)
+	while ((c = getopt(argc, argv, "c:C:r:f")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(tiff_optarg))
+			if (!processCompressOptions(optarg))
 				usage();
 			break;
 		case 'C':		/* set colormap size */
-			num_colors = atoi(tiff_optarg);
+			num_colors = atoi(optarg);
 			if (num_colors > MAX_CMAP_SIZE) {
 				fprintf(stderr,
 				   "-c: colormap too big, max %d\n",
@@ -137,15 +142,15 @@ main(int argc, char* argv[])
 			dither = 1;
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(tiff_optarg);
+			rowsperstrip = atoi(optarg);
 			break;
 		case '?':
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - tiff_optind != 2)
+	if (argc - optind != 2)
 		usage();
-	in = TIFFOpen(argv[tiff_optind], "r");
+	in = TIFFOpen(argv[optind], "r");
 	if (in == NULL)
 		return (-1);
 	TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &imagewidth);
@@ -154,18 +159,18 @@ main(int argc, char* argv[])
 	TIFFGetField(in, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
 	if (bitspersample != 8 && bitspersample != 16) {
 		fprintf(stderr, "%s: Image must have at least 8-bits/sample\n",
-		    argv[tiff_optind]);
+		    argv[optind]);
 		return (-3);
 	}
 	if (!TIFFGetField(in, TIFFTAG_PHOTOMETRIC, &photometric) ||
 	    photometric != PHOTOMETRIC_RGB || samplesperpixel < 3) {
-		fprintf(stderr, "%s: Image must have RGB data\n", argv[tiff_optind]);
+		fprintf(stderr, "%s: Image must have RGB data\n", argv[optind]);
 		return (-4);
 	}
 	TIFFGetField(in, TIFFTAG_PLANARCONFIG, &config);
 	if (config != PLANARCONFIG_CONTIG) {
 		fprintf(stderr, "%s: Can only handle contiguous data packing\n",
-		    argv[tiff_optind]);
+		    argv[optind]);
 		return (-5);
 	}
 
@@ -234,7 +239,7 @@ main(int argc, char* argv[])
 	/*
 	 * STEP 6: scan image, match input values to table entries
 	 */
-	out = TIFFOpen(argv[tiff_optind+1], "w");
+	out = TIFFOpen(argv[optind+1], "w");
 	if (out == NULL)
 		return (-2);
 
@@ -313,7 +318,6 @@ char* stuff[] = {
 " -C #		create a colormap with # entries",
 " -f		use Floyd-Steinberg dithering",
 " -c lzw[:opts]	compress output with Lempel-Ziv & Welch encoding",
-"               (no longer supported by default due to Unisys patent enforcement)", 
 " -c zip[:opts]	compress output with deflate encoding",
 " -c packbits	compress output with packbits encoding",
 " -c none	use no compression algorithm on output",
@@ -403,7 +407,7 @@ static void
 splitbox(Colorbox* ptr)
 {
 	uint32		hist2[B_LEN];
-	int		first, last;
+	int		first=0, last=0;
 	register Colorbox	*new;
 	register uint32	*iptr, *histp;
 	register int	i, j;
@@ -760,7 +764,7 @@ quant(TIFF* in, TIFF* out)
 			red = *inptr++ >> COLOR_SHIFT;
 			green = *inptr++ >> COLOR_SHIFT;
 			blue = *inptr++ >> COLOR_SHIFT;
-			*outptr++ = histogram[red][green][blue];
+			*outptr++ = (unsigned char)histogram[red][green][blue];
 		}
 		if (TIFFWriteScanline(out, outline, i, 0) < 0)
 			break;
@@ -889,3 +893,10 @@ bad:
 	_TIFFfree(nextline);
 	_TIFFfree(outline);
 }
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

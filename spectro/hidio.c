@@ -1,8 +1,8 @@
 
+ /* General USB HID I/O support */
+
 /* 
  * Argyll Color Correction System
- *
- * General USB HID I/O support
  *
  * Author: Graeme W. Gill
  * Date:   2007/10/10
@@ -30,7 +30,7 @@
 #include <dirent.h>
 #endif
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numsup.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -38,7 +38,11 @@
 #include "conv.h"
 #include "usbio.h"
 
-#include "usb.h"
+#ifdef USE_LIBUSB1
+# include "libusb.h"
+#else
+# include "usb.h"
+#endif
 #include "hidio.h"
 
 #if defined(NT)

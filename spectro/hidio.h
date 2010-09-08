@@ -1,15 +1,15 @@
 
 #ifndef HIDIO_H
 
+ /* General USB HID I/O support */
+
 /* 
  * Argyll Color Correction System
- *
- * General USB HID I/O support
  *
  * Author: Graeme W. Gill
  * Date:   2007/10/10
  *
- * Copyright 2006 - 2007 Graeme W. Gill
+ * Copyright 2006 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -27,6 +27,10 @@
 #include <IOKit/hid/IOHIDKeys.h>
 #include <CoreFoundation/CoreFoundation.h>
 #endif /* __APPLE__ */
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
 
 /* Add or modify paths to USB HID connected instruments, to the existing */
 /* icompath paths in the icoms structure, if HID access is supported. */
@@ -66,6 +70,10 @@ struct _hid_device {
 
 /* Cleanup and then free an hev entry */
 void hid_del_hid_device(hid_device *hev);
+
+#ifdef __cplusplus
+	}
+#endif
 
 #define HIDIO_H
 #endif /* HIDIO_H */

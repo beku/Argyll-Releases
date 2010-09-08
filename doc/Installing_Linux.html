@@ -43,7 +43,8 @@ system.<br>
  name="bell"></a>Note
 on the system bell:</span></big><br>
 <br>
-When reading strips using the Eye-One Pro instrument, the system bell
+When reading strips using the Eye-One Pro or ColorMunki instrument, the
+system bell
 is used to indicate when the instrument the ready to be used, and to
 provide feedback on any problems. On some Linux installations the
 system bell may be disabled. As well as checking the terminal and GUI
@@ -52,7 +53,7 @@ driver, which can be done by adding the command <span
  style="font-weight: bold;">/sbin/modprobe pcspkr </span>to the <span
  style="font-weight: bold;">/etc/rc.local</span> startup script. You
 may also have to run <span style="font-weight: bold;">xset b 100 1000
-200</span> in your local setup, if you are running in an X11
+100</span> in your local setup, if you are running in an X11
 environment. You can check that the system bell is operating by doing
 an "echo ^G", where ^G is ctrl-G.<br>
 <br>
@@ -148,7 +149,9 @@ installation</a><br>
 <br>
 <h5>&nbsp; <a href="Installing_Linux.html#udev1">USB instruments
 access using udev:</a></h5>
-&nbsp;&nbsp;&nbsp; <a href="#udev1">Fedora Core 8</a><br>
+<a href="#udev1"></a>&nbsp;&nbsp;&nbsp; <a
+ href="Installing_Linux.html#udev1">Ubuntu 10.04</a><br>
+&nbsp;&nbsp;&nbsp; <a href="Installing_Linux.html#udev1">Fedora Core 8</a><br>
 &nbsp;&nbsp;&nbsp; <a href="#udev1">Mandriva 2008.1</a><br>
 &nbsp;&nbsp;&nbsp; <a href="#udev1">OpenSuSE 10.3</a><br>
 &nbsp;&nbsp;&nbsp; <a href="#udev1">Ubuntu 7.1</a><br>
@@ -162,6 +165,9 @@ access using udev:</a></h5>
 <br>
 <h5>&nbsp; <span style="text-decoration: underline;"></span><a
  href="#serial">Serial instrument access:</a></h5>
+&nbsp;&nbsp; <a href="#serial">All</a><br>
+<br>
+<hr style="width: 100%; height: 2px;"><br>
 <h5><span style="color: rgb(204, 51, 204);"><a name="None"></a>No
 device configuration needed:</span></h5>
 Some systems have in place&nbsp; a security configuration such that
@@ -181,7 +187,7 @@ group and permission of any Color Measurement Instruments, and you may
 then need to add youself to that group.<br>
 <br>
 <span style="font-weight: bold;"></span>Copy the file <span
- style="font-weight: bold;">libusb/</span><span
+ style="font-weight: bold;">libusb1/</span><span
  style="font-weight: bold;">55-Argyll.rules</span> from the binary or
 source distribution into <span style="font-weight: bold;">/etc/udev/rules.d/55-Argyll.rules</span>
 with&nbsp;owner root, group root, permissions 644.<br>
@@ -190,7 +196,7 @@ If you are on an <span style="font-weight: bold;">older system</span>
 that uses a udev that doesn't recognize the syntax used in
 55-Argyll.rules, or that doesn't have rules to create the libusb
 /dev/bus/usb/00X/00Y
-device entries, you should install the <span style="font-weight: bold;">libusb/45-Argyll.rules</span>
+device entries, you should install the <span style="font-weight: bold;">libusb1/45-Argyll.rules</span>
 file instead.<br>
 <br>
 On recent systems the new rules file will be notices as soon as you
@@ -201,13 +207,14 @@ On older systems you may need to run <b>/sbin/udevtrigger</b>,&nbsp;
 or reboot to get the new file
 noticed.<br>
 <br>
-&nbsp; ----------------- cut here ---------------------<br>
+----------------- cut here ---------------------<br>
 # udev rule to recognize instruments and make them accessible to user
 applications.<br>
 # Copy this to /etc/udev/rules.d/55-Argyll.rules<br>
 <br>
-# Skip all this to speed things up if it'a not an add.<br>
+# Skip all this to speed things up if it'a not a usb add.<br>
 ACTION!="add", GOTO="argyll_rules_end"<br>
+SUBSYSTEM!="usb", GOTO="argyll_rules_end"<br>
 <br>
 # Recognize the color measurement devices<br>
 <br>
@@ -215,7 +222,7 @@ ACTION!="add", GOTO="argyll_rules_end"<br>
 ATTRS{idVendor}=="0765", ATTRS{idProduct}=="d020",
 ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
 <br>
-# DTP92Q (not testedt)<br>
+# DTP92Q (not tested)<br>
 ATTRS{idVendor}=="0765", ATTRS{idProduct}=="d092",
 ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
 <br>
@@ -259,16 +266,19 @@ ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
 ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2005",
 ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
 <br>
-# Let ACL manage these devices, if it is installed<br>
-TEST=="/lib/udev/udev-acl", ENV{COLOR_MEASUREMENT_DEVICE}=="*?",
-ENV{ACL_MANAGE}="1"<br>
+# Let udev-acl and ConsoleKit manage these devices, if applicable<br>
+TEST=="/lib/udev/udev-acl", TEST=="/var/run/ConsoleKit/database",
+ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{ACL_MANAGE}="1"<br>
 <br>
-# Otherwise users should be members of the plugdev group<br>
-TEST!="/lib/udev/udev-acl", ENV{COLOR_MEASUREMENT_DEVICE}=="*?",
-MODE="660", GROUP="plugdev"<br>
+# Otherwise, restrict access to members of the plugdev group<br>
+ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{ACL_MANAGE}!="*?", MODE="660",
+GROUP="plugdev"<br>
+<br>
+# Set ID_VENDOR and ID_MODEL acording to VID and PID<br>
+IMPORT{program}="usb-db %p"<br>
 <br>
 LABEL="argyll_rules_end"<br>
-&nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
+----------------- cut here ---------------------<br>
 <br>
 (You may want to refer to <a
  href="http://reactivated.net/writing_udev_rules.html">this document</a>
@@ -334,7 +344,7 @@ exists on
 your system.<br>
 <br>
 Assuming we want to configure for all Argyll supported USB instruments,
-copy the file <span style="font-weight: bold;">libusb/</span><span
+copy the file <span style="font-weight: bold;">libusb1/</span><span
  style="font-weight: bold;">Argyll.usermap</span> from the binary or
 source distribution into&nbsp; <span style="font-weight: bold;">/etc/hotplug/usb/Argyll.usermap</span>
 with owner root, group root, permissions 644.<span
@@ -399,7 +409,7 @@ Argyll 0x0003 0x0971 0x2005 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00 0x00
 <span style="font-weight: bold;">/etc/hotplug/usb.usermap</span>, and
 you may have to run <span style="font-weight: bold;">update-usb.usermap</span>)<br>
 <br>
-Then copy the file <span style="font-weight: bold;">libusb/</span><span
+Then copy the file <span style="font-weight: bold;">libusb1/</span><span
  style="font-weight: bold;">Argyll</span> from the binary or source
 distribution into <span style="font-weight: bold;">/etc/hotplug/usb/Argyll</span>
 with owner root, group root, permissions 744.<span

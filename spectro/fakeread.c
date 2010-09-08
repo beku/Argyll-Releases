@@ -14,7 +14,8 @@
 
 /*
  * TTBD: 
- *
+	
+	Do we need to deterct & mark display values normalized to Y = 100 ??
  */
 
 
@@ -27,7 +28,7 @@
 #include <time.h>
 #include <string.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
@@ -79,11 +80,11 @@ int main(int argc, char *argv[])
 	unsigned int seed = time(NULL);	/* Random seed value */
 	double tbp[3] = { -1.0, 0.0, 0.0 };	/* Target black point */
 	int applycal = 0;		/* NZ to apply calibration */
-	static char sepname[500] = { 0 };	/* ICC separation profile */
-	static char calname[500] = { 0 };	/* device calibration */
-	static char profname[500] = { 0 };	/* ICC or MPP Profile name */
-	static char inname[500] = { 0 };	/* Input cgats file base name */
-	static char outname[500] = { 0 };	/* Output cgats file base name */
+	static char sepname[MAXNAMEL+1] = { 0 };	/* ICC separation profile */
+	static char calname[MAXNAMEL+1] = { 0 };	/* device calibration */
+	static char profname[MAXNAMEL+1] = { 0 };	/* ICC or MPP Profile name */
+	static char inname[MAXNAMEL+1] = { 0 };	/* Input cgats file base name */
+	static char outname[MAXNAMEL+1] = { 0 };	/* Output cgats file base name */
 	cgats *icg;			/* input cgats structure */
 	cgats *ocg;			/* output cgats structure */
 	int nmask = 0;		/* Test chart device colorant mask */
@@ -249,16 +250,16 @@ int main(int argc, char *argv[])
 	/* Get the file name argument */
 	if (dosep) {
 		if (fa >= argc || argv[fa][0] == '-') usage("Missing separation profile filename argument");
-		strcpy(sepname,argv[fa++]);
+		strncpy(sepname,argv[fa++],MAXNAMEL); sepname[MAXNAMEL] = '\000';
 	}
 
 	if (fa >= argc || argv[fa][0] == '-') usage("Missing profile filename argument");
-	strcpy(profname,argv[fa++]);
+	strncpy(profname,argv[fa++],MAXNAMEL); profname[MAXNAMEL] = '\000';
 
 	if (fa >= argc || argv[fa][0] == '-') usage("Missing basename argument");
-	strcpy(inname,argv[fa]);
+	strncpy(inname,argv[fa],MAXNAMEL-4); inname[MAXNAMEL-4] = '\000';
 	strcat(inname,".ti1");
-	strcpy(outname,argv[fa]);
+	strncpy(outname,argv[fa],MAXNAMEL-4); outname[MAXNAMEL-4] = '\000';
 	strcat(outname,".ti3");
 
 	rand32(seed);		/* Init seed */
@@ -379,7 +380,7 @@ int main(int argc, char *argv[])
 			}
 
 			mlu->get_info(mlu, &cnv_nmask, &inn, NULL,
-			                   &spec_n, &spec_wl_short, &spec_wl_long, &itype);
+			                   &spec_n, &spec_wl_short, &spec_wl_long, &itype, NULL);
 	
 			outn = 3;
 			outs = dolab ? icSigLabData : icSigXYZData;
@@ -397,7 +398,7 @@ int main(int argc, char *argv[])
 
 	/* If we don't have an ICC or MPP lookup object, look for a TI3 */
 	if (icc_luo == NULL && mlu == NULL) {
-		char *buf, *outc;
+		char *rbuf, *outc;
 		char *ti3_bident;
 		int ti3_nchan;
 
@@ -415,11 +416,11 @@ int main(int argc, char *argv[])
 		if ((ti = ti3->find_kword(ti3, 0, "COLOR_REP")) < 0)
 			error("Input file doesn't contain keyword COLOR_REPS");
 	
-		if ((buf = strdup(ti3->t[0].kdata[ti])) == NULL)
+		if ((rbuf = strdup(ti3->t[0].kdata[ti])) == NULL)
 			error("Malloc failed");
 	
 		/* Split COLOR_REP into device and PCS space */
-		if ((outc = strchr(buf, '_')) == NULL)
+		if ((outc = strchr(rbuf, '_')) == NULL)
 			error("COLOR_REP '%s' invalid", ti3->t[0].kdata[ti]);
 		*outc++ = '\000';
 	
@@ -433,11 +434,11 @@ int main(int argc, char *argv[])
 		} else
 			error("COLOR_REP '%s' invalid (Neither XYZ nor LAB)", ti3->t[0].kdata[ti]);
 
-		if ((cnv_nmask = icx_char2inkmask(buf)) == 0) {
-			error ("File '%s' keyword COLOR_REPS has unknown device value '%s'",profname,buf);
+		if ((cnv_nmask = icx_char2inkmask(rbuf)) == 0) {
+			error ("File '%s' keyword COLOR_REPS has unknown device value '%s'",profname,rbuf);
 		}
 
-		free(buf);
+		free(rbuf);
 
 		if ((ins = icx_colorant_comb_to_icc(cnv_nmask)) == 0)
 			error ("Couldn't match MPP mask to valid ICC colorspace");
@@ -480,6 +481,8 @@ int main(int argc, char *argv[])
 
 		/* Find spectral fields */
 		if ((ti = ti3->find_kword(ti3, 0, "SPECTRAL_BANDS")) >= 0) {
+			char buf[100];
+
 			spec_n = atoi(ti3->t[0].kdata[ti]);
 			if ((ti = ti3->find_kword(ti3, 0, "SPECTRAL_START_NM")) < 0)
 				error ("Input file doesn't contain keyword SPECTRAL_START_NM");

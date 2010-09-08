@@ -1,15 +1,15 @@
 
+ /* Spectrometer/Colorimeter color spot reader utility */
+
 /* 
  * Argyll Color Correction System
- * Spectrometer/Colorimeter color spot reader utility
- *
  * Author: Graeme W. Gill
  * Date:   3/10/2001
  *
  * Derived from printread.c/chartread.c
  * Was called printspot.
  *
- * Copyright 2001 - 2007 Graeme W. Gill
+ * Copyright 2001 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -23,6 +23,8 @@
  *
  *  Should fix plot so that it is a separate object running its own thread,
  *  so that it can be sent a graph without needing to be clicked in all the time.
+ *
+ *  Should add option to show reflective/tranmsission density values.
  */
 
 #undef DEBUG
@@ -36,15 +38,16 @@
 #include <time.h>
 #include <string.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
-#include "icoms.h"
+#include "ccmx.h"
 #include "conv.h"
 #include "inst.h"
-#include "sort.h"
+#include "icoms.h"
 #include "plot.h"
+#include "spyd2setup.h"			/* Enable Spyder 2 access */
 
 #include <stdarg.h>
 
@@ -52,7 +55,8 @@
 #include <conio.h>
 #endif
 
-#include "spyd2setup.h"			/* Enable Spyder 2 access */
+# define RELEASE_VERSION ARGYLL_VERSION
+# define RELEASE_VERSION_STR ARGYLL_VERSION_STR
 
 #ifdef NEVER	/* Not currently used */
 /* Convert control chars to ^[A-Z] notation in a string */
@@ -72,6 +76,7 @@ fix_asciiz(char *s) {
 	return buf;
 }
 #endif
+
 
 /* Replacement for gets */
 char *getns(char *buf, int len) {
@@ -132,9 +137,9 @@ static int gcc_bug_fix(int i) {
 void
 usage(int debug) {
 	icoms *icom;
-	fprintf(stderr,"Read Print Spot values, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Read Print Spot values, Version %s\n",RELEASE_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	if (setup_spyd2(NULL) == 2)
+	if (setup_spyd2() == 2)
 		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	fprintf(stderr,"usage: spotread [-options] [logfile]\n");
 	fprintf(stderr," -v                   Verbose mode\n");
@@ -152,7 +157,7 @@ usage(int debug) {
 					break;
 				if (strlen(paths[i]->path) >= 8
 				  && strcmp(paths[i]->path+strlen(paths[i]->path)-8, "Spyder2)") == 0
-				  && setup_spyd2(NULL) == 0)
+				  && setup_spyd2() == 0)
 					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->path);
 				else
 					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
@@ -170,6 +175,7 @@ usage(int debug) {
 	fprintf(stderr," -pb                  Use projector white brightness relative measurement mode\n");
 	fprintf(stderr," -pw                  Use projector white relative measurement mode\n");
 	fprintf(stderr," -e                   Use emissive measurement mode (absolute results)\n");
+// 	Hmm. Need to add tele mode as well ~~~
 	fprintf(stderr," -a                   Use ambient measurement mode (absolute results)\n");
 	fprintf(stderr," -f                   Use ambient flash measurement mode (absolute results)\n");
 	fprintf(stderr," -y c|l               Display type (if emissive), c = CRT, l = LCD\n");
@@ -189,6 +195,7 @@ usage(int debug) {
 //	fprintf(stderr," -K type              Run instrument calibration first\n");
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
 	fprintf(stderr," -H                   Start in high resolution spectrum mode (if available)\n");
+	fprintf(stderr," -X file.ccmx         Apply Colorimeter Correction Matrix\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," logfile              Optional file to save reading results as text\n");
@@ -220,6 +227,7 @@ int main(int argc, char *argv[])
 	inst_opt_filter fe = inst_opt_filter_unknown;
 									/* Filter configuration */
 	char outname[MAXNAMEL+1] = "\000";  /* Output logfile name */
+	char ccmxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction Matrix name */
 	char filtername[MAXNAMEL+1] = "\000";  /* Filter compensation */
 	FILE *fp = NULL;				/* Logfile */
 	int comport = COMPORT;			/* COM port used */
@@ -247,9 +255,11 @@ int main(int argc, char *argv[])
 	double Yxy[3] = { 0.0, 0, 0};	/* Yxy value */
 	int savdrd = 0;					/* At least one saved reading is available */
 	int ix;							/* Reading index number */
+	int loghead = 0;				/* NZ if log file heading has been printed */
 
 	set_exe_path(argv[0]);			/* Set global exe_path and error_program */
-	setup_spyd2(NULL);				/* Load firware if available */
+	check_if_not_interactive();
+	setup_spyd2();				/* Load firware if available */
 
 	for (i = 0; i < 26; i++)
 		sp2cief[i] = NULL;
@@ -474,6 +484,12 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'H') {
 				highres = 1;
 
+			/* Colorimeter Correction Matrix */
+			} else if (argv[fa][1] == 'X') {
+				fa = nfa;
+				if (na == NULL) usage(debug);
+				strncpy(ccmxname,na,MAXNAMEL-1); ccmxname[MAXNAMEL-1] = '\000';
+
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
@@ -505,6 +521,15 @@ int main(int argc, char *argv[])
 		strncpy(outname,argv[fa++],MAXNAMEL-1); outname[MAXNAMEL-1] = '\000';
 		if ((fp = fopen(outname, "w")) == NULL)
 			error("Unable to open logfile '%s' for writing\n",outname);
+	}
+
+
+	/* See if there is an environment variable ccmx */
+	{
+		char *na = getenv("ARGYLL_COLMTER_COR_MATRIX");
+		if (na != NULL) {
+			strncpy(ccmxname,na,MAXNAMEL-1); ccmxname[MAXNAMEL-1] = '\000';
+		}
 	}
 
 	/* - - - - - - - - - - - - - - - - - - -  */
@@ -762,6 +787,37 @@ int main(int argc, char *argv[])
 			}
 		}
 
+		/* Colorimeter Correction Matrix */
+		if (ccmxname[0] != '\000') {
+			ccmx *cmx;
+
+			if ((cap & inst_ccmx) == 0) {
+				printf("\nInstrument doesn't have Colorimeter Correction Matix capability\n");
+				it->del(it);
+				return -1;
+			}
+			if ((cmx = new_ccmx()) == NULL) {
+				printf("\nnew_ccmx failed\n");
+				it->del(it);
+				return -1;
+			}
+			if (cmx->read_ccmx(cmx,ccmxname)) {
+				printf("\nReading Colorimeter Correction Matrix file '%s' failed with error %d:'%s'\n",
+			     	       ccmxname, cmx->errc, cmx->err);
+				cmx->del(cmx);
+				it->del(it);
+				return -1;
+			}
+			if ((rv = it->col_cor_mat(it, cmx->matrix)) != inst_ok) {
+				printf("\nSetting Colorimeter Correction Matrix failed with error :'%s' (%s)\n",
+			     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
+				cmx->del(cmx);
+				it->del(it);
+				return -1;
+			}
+			cmx->del(cmx);
+		}
+
 		/* If it batter powered, show the status of the battery */
 		if ((cap2 & inst2_has_battery)) {
 			double batstat = 0.0;
@@ -833,8 +889,14 @@ int main(int argc, char *argv[])
 		printf("Init instrument success !\n");
 
 	if (spec) {
+		/* Any non-illuminated mode has no illuminant */
+		if (emiss || displ || proj || ambient)
+			illum = icxIT_none;
+
 		/* Create a spectral conversion object */
-		if ((sp2cie = new_xsp2cie(illum, &cust_illum, observ, NULL, icSigXYZData)) == NULL)
+		if ((sp2cie = new_xsp2cie(illum, &cust_illum, observ, NULL
+		     , icSigXYZData
+		                      )) == NULL)
 			error("Creation of spectral conversion object failed");
 	}
 
@@ -855,7 +917,8 @@ int main(int argc, char *argv[])
 	/* Read spots until the user quits */
 	for (ix = 1;; ix++) {
 		ipatch val;
-		double XYZ[3], tXYZ[3];
+		double XYZ[3];			/* XYZ scaled 0..100 or absolute */
+		double tXYZ[3];
 		double cct, vct, vdt;
 		double cct_de, vct_de, vdt_de;
 		int ch = '0';		/* Character */
@@ -967,7 +1030,7 @@ int main(int argc, char *argv[])
 						break;			/* Abort */
 				}
 
-				ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL);
+				ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL);
 				if (ev != inst_ok) {	/* Abort or fatal error */
 					break;
 				}
@@ -1012,7 +1075,7 @@ int main(int argc, char *argv[])
 				} else {
 
 					/* If this is display white brightness relative, read the white */
-					if (displ > 1 && wXYZ[0] < 0.0)
+					if ((displ > 1  || proj > 1) && wXYZ[0] < 0.0)
 						printf("\nPlace instrument on white reference spot,\n");
 					else {
 						printf("\nPlace instrument on spot to be measured,\n");
@@ -1117,7 +1180,7 @@ int main(int argc, char *argv[])
 		} else if ((rv & inst_mask) == inst_needs_cal) {
 			inst_code ev;
 			printf("\n\nSpot read failed because instruments needs calibration.\n");
-			ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL);
+			ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL);
 			if (ev != inst_ok) {	/* Abort or fatal error */
 				break;
 			}
@@ -1194,6 +1257,8 @@ int main(int argc, char *argv[])
 						return -1;
 					}
 					highres = 0;
+					if (pspec) 
+						loghead = 0;
 					printf("\n Instrument set to standard resolution spectrum mode\n");
 				} else {
 					if ((ev = it->set_opt_mode(it, inst_opt_highres)) != inst_ok) {
@@ -1203,11 +1268,14 @@ int main(int argc, char *argv[])
 						return -1;
 					}
 					highres = 1;
+					if (pspec) 
+						loghead = 0;
 					printf("\n Instrument set to high resolution spectrum mode\n");
 				}
 			} else {
 				printf("\n 'H' Command ignored - instrument doesn't support high res. mode\n");
 			}
+			--ix;
 			continue;
 		}
 		if (ch == 'R' || ch == 'r') {	/* Make last reading the reference */
@@ -1222,6 +1290,7 @@ int main(int argc, char *argv[])
 			} else {
 				printf("\n No previous reading to use as reference\n");
 			}
+			--ix;
 			continue;
 		}
 		if (ch == 'S' || ch == 's') {	/* Save last spectral into file */
@@ -1239,6 +1308,7 @@ int main(int argc, char *argv[])
 			} else {
 				printf("\nNo previous spectral reading to save to file (Use -s flag ?)\n");
 			}
+			--ix;
 			continue;
 		}
 		if (ch == 'K' || ch == 'k') {	/* Do a calibration */
@@ -1251,15 +1321,17 @@ int main(int argc, char *argv[])
 				for (;;) {		/* retry loop */
 					if ((ev = it->xy_get_location(it, &lx, &ly)) == inst_ok)
 						break;
-					if (ierror(it, ev) == 0)	/* Ignore */
+					if (ierror(it, ev) == 0) {	/* Ignore */
+						--ix;
 						continue;
+					}
 					break;						/* Abort */
 				}
 				if (ev != inst_ok)
 					break;			/* Abort */
 			}
 
-			ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL);
+			ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL);
 			if (ev != inst_ok) {	/* Abort or fatal error */
 				break;
 			}
@@ -1276,6 +1348,7 @@ int main(int argc, char *argv[])
 				if (ev != inst_ok)
 					break;			/* Abort */
 			}
+			--ix;
 			continue;
 		}
 
@@ -1318,6 +1391,9 @@ int main(int argc, char *argv[])
 
 			sp2cief[fidx]->get_fwa_info(sp2cief[fidx], &FWAc);
 			printf("FWA content = %f\n",FWAc);
+		}
+		if (sufwa) {
+			error ("FWA compensation not supported in this version");
 		}
 
 		/* Print and/or plot out spectrum, */
@@ -1406,11 +1482,11 @@ int main(int argc, char *argv[])
 				
 				if (val.XYZ_v != 0) {
 					for (j = 0; j < 3; j++)
-						XYZ[j] = val.XYZ[j]/100.0;
-				} else {
+						XYZ[j] = val.XYZ[j];
+				} else {	/* aXYZ_v */
 					// Hmm. Should we really allow an absolute emmisive and relative mode ? */
 					for (j = 0; j < 3; j++)
-						XYZ[j] = val.aXYZ[j]/100.0;
+						XYZ[j] = val.aXYZ[j];
 				}
 	
 			} else {
@@ -1427,9 +1503,14 @@ int main(int argc, char *argv[])
 					/* Convert using compensated conversion */
 					sp2cief[fidx]->sconvert(sp2cief[fidx], &sp, XYZ, &sp);
 				}
+				if (!(emiss || displ || proj || ambient)) {
+					for (j = 0; j < 3; j++)
+						XYZ[j] *= 100.0;		/* 0..100 scale */
+				}
 			}
 
-			/* XYZ is 0 .. 1 range here */
+			/* XYZ is 0 .. 100 for reflective/transmissive, and absolute for emissibe here */
+			/* XYZ is 0 .. 1 for reflective/transmissive, and absolute for emissibe here */
 
 			/* Compute color temperatures */
 			if (ambient || doCCT) {
@@ -1476,46 +1557,43 @@ int main(int argc, char *argv[])
 			}
 
 			/* Compute D50 Lab from XYZ */
-			icmXYZ2Lab(&icmD50, Lab, XYZ);
+			icmXYZ2Lab(&icmD50_100, Lab, XYZ);
 
 			/* Compute Yxy from XYZ */
 			icmXYZ2Yxy(Yxy, XYZ);
 
-			if (displ > 1) {
+
+			if (displ > 1 || proj > 1) {
 				if (wXYZ[0] < 0.0) {
+					if (XYZ[1] < 10.0)
+						error ("White of XYZ %f %f %f doesn't seem reasonable",XYZ[0], XYZ[1], XYZ[2]);
 					printf("\n Making result XYZ: %f %f %f, D50 Lab: %f %f %f white reference.\n",
-					XYZ[0] * 100.0, XYZ[1] * 100.0, XYZ[2] * 100.0, Lab[0], Lab[1], Lab[2]);
+					XYZ[0], XYZ[1], XYZ[2], Lab[0], Lab[1], Lab[2]);
 					wXYZ[0] = XYZ[0];
 					wXYZ[1] = XYZ[1];
 					wXYZ[2] = XYZ[2];
 					continue;
 				}
-				if (displ == 2) {
-					/* Normalize to white Y value */
-					XYZ[0] /= wXYZ[1];
-					XYZ[1] /= wXYZ[1];
-					XYZ[2] /= wXYZ[1];
-				} else {
+				if (displ == 2 || proj == 2) {
+					/* Normalize to white Y value and scale to 0..100 */
+					XYZ[0] = 100.0 * XYZ[0] / wXYZ[1];
+					XYZ[1] = 100.0 * XYZ[1] / wXYZ[1];
+					XYZ[2] = 100.0 * XYZ[2] / wXYZ[1];
+				} 
+				  else {
 
-					/* Normalize to white */
-					XYZ[0] *= icmD50.X/wXYZ[0];
-					XYZ[1] *= icmD50.Y/wXYZ[1];
-					XYZ[2] *= icmD50.Z/wXYZ[2];
+					/* Normalize to white and scale to 0..100 */
+					XYZ[0] = XYZ[0] * icmD50_100.X / wXYZ[0];
+					XYZ[1] = XYZ[1] * icmD50_100.Y / wXYZ[1];
+					XYZ[2] = XYZ[2] * icmD50_100.Z / wXYZ[2];
 				}
 
 				/* recompute Lab */
-				icmXYZ2Lab(&icmD50, Lab, XYZ);
+				icmXYZ2Lab(&icmD50_100, Lab, XYZ);
 
 				/* recompute Yxy from XYZ */
 				icmXYZ2Yxy(Yxy, XYZ);
 			}
-
-			/* Scale XYZ to 100 */
-			XYZ[0] *= 100.0;
-			XYZ[1] *= 100.0;
-			XYZ[2] *= 100.0;
-
-			Yxy[0] *= 100.0;
 
 			if (ambient && (cap & inst_emis_ambient_mono)) {
 				printf("\n Result is Y: %f, L*: %f\n",XYZ[1], Lab[0]);
@@ -1542,10 +1620,18 @@ int main(int argc, char *argv[])
 				if (cap & inst_emis_ambient_mono) {
 					printf(" Ambient = %.1f Lux%s\n",
 						       3.141592658 * XYZ[1], ambient == 2 ? "-Seconds" : "");
+					if (ambient != 2) 
+						printf(" Suggested EV @ ISO100 for %.1f Lux incident light = %.1f\n",
+							       3.141592658 * XYZ[1],
+						           log(3.141592658 * XYZ[1]/2.5)/log(2.0));
 				} else {
 					printf(" Ambient = %.1f Lux%s, CCT = %.0fK (Delta E %f)\n",
 					       3.1415926 * XYZ[1], ambient == 2 ? "-Seconds" : "",
 					       cct, cct_de);
+					if (ambient != 2) 
+						printf(" Suggested EV @ ISO100 for %.1f Lux incident light = %.1f\n",
+							       3.141592658 * XYZ[1],
+						           log(3.141592658 * XYZ[1]/2.5)/log(2.0));
 					printf(" Closest Planckian temperature = %.0fK (Delta E %f)\n",vct, vct_de);
 					printf(" Closest Daylight temperature  = %.0fK (Delta E %f)\n",vdt, vdt_de);
 				}
@@ -1564,7 +1650,7 @@ int main(int argc, char *argv[])
 			/* Save reading to the log file */
 			if (fp != NULL) {
 				/* Print some column titles */
-				if (ix == 1) {
+				if (loghead == 0) {
 					fprintf(fp,"Reading\tX\tY\tZ\tL*\ta*\tb*");
 					if (pspec) {	/* Print or plot out spectrum */
 						for (j = 0; j < sp.spec_n; j++) {
@@ -1574,6 +1660,7 @@ int main(int argc, char *argv[])
 						}
 					}
 					fprintf(fp,"\n");
+					loghead = 1;
 				}
 			
 				/* Print results */

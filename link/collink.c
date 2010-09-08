@@ -103,7 +103,7 @@
 #include <string.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "icc.h"
 #include "xicc.h"
@@ -169,12 +169,13 @@ void usage(char *diag, ...) {
 
 		fprintf(stderr,"            %s\n",vc.desc);
 	}
-	fprintf(stderr,"         s:surround    a = average, m = dim, d = dark,\n");
+	fprintf(stderr,"         s:surround    n = auto, a = average, m = dim, d = dark,\n");
 	fprintf(stderr,"                       c = transparency (default average)\n");
 	fprintf(stderr,"         w:X:Y:Z       Adapted white point as XYZ (default media white)\n");
 	fprintf(stderr,"         w:x:y         Adapted white point as x, y\n");
 	fprintf(stderr,"         a:adaptation  Adaptation luminance in cd.m^2 (default 50.0)\n");
 	fprintf(stderr,"         b:background  Background %% of image luminance (default 20)\n");
+	fprintf(stderr,"         l:scenewhite  Scene white in cd.m^2 if surround = auto (default 250)\n");
 	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 1)\n");
 	fprintf(stderr,"         f:X:Y:Z       Flare color as XYZ (default media white)\n");
 	fprintf(stderr,"         f:x:y         Flare color as x, y\n");
@@ -945,7 +946,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 		p->count++;
 		pc = (int)(p->count * 100.0/p->total + 0.5);
 		if (pc != p->last) {
-			printf("\r%2d%%",pc); fflush(stdout);
+			printf("%c%2d%%",cr_char,pc); fflush(stdout);
 			p->last = pc;
 		}
 	}
@@ -1136,6 +1137,7 @@ main(int argc, char *argv[]) {
 	int i;
 
 	error_program = argv[0];
+	check_if_not_interactive();
 	memset((void *)&xpi, 0, sizeof(profxinf));	/* Init extra profile info to defaults */
 	memset((void *)&li, 0, sizeof(link));
 
@@ -1448,6 +1450,7 @@ main(int argc, char *argv[]) {
 				} else
 #endif
 				if (na[1] != ':') {
+					/* Enumerated condition index */
 					if (vc == &ivc) {
 						if ((ivc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1, NULL)) == -999)
 							usage("Unrecognised viewing condition enumeration '%s'",na);
@@ -1458,7 +1461,9 @@ main(int argc, char *argv[]) {
 				} else if (na[0] == 's' || na[0] == 'S') {
 					if (na[1] != ':')
 						usage("Viewing conditions (-[cd]s) missing ':'");
-					if (na[2] == 'a' || na[2] == 'A') {
+					if (na[2] == 'n' || na[2] == 'N') {
+						vc->Ev = vc_none;		/* Automatic */
+					} else if (na[2] == 'a' || na[2] == 'A') {
 						vc->Ev = vc_average;
 					} else if (na[2] == 'm' || na[2] == 'M') {
 						vc->Ev = vc_dim;
@@ -1484,6 +1489,10 @@ main(int argc, char *argv[]) {
 					if (na[1] != ':')
 						usage("Viewing conditions (-[cd]b) missing ':'");
 					vc->Yb = atof(na+2)/100.0;
+				} else if (na[0] == 'l' || na[0] == 'L') {
+					if (na[1] != ':')
+						usage("Viewing conditions (-[cd]l) missing ':'");
+					vc->Lv = atof(na+2);
 				} else if (na[0] == 'f' || na[0] == 'F') {
 					double x, y, z;
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
@@ -1990,15 +1999,17 @@ main(int argc, char *argv[]) {
 			x = li.out.x;		/* xicc */
 		}
 		
-		/* Set the default */
+		/* Set the default viewing conditions */
 		xicc_enum_viewcond(x, vc, -1, NULL, 0, NULL);
 
-		/* Override the viewing conditions */
+		/* Override the default viewing conditions. */
 		/* (?? Could move this code into xicc_enum_viewcond() as an option ??) */
+		/* First any enumerated selection */
 		if (es != -1) {
 			if (xicc_enum_viewcond(x, vc, es, NULL, 0, NULL) == -999)
 				error ("%d, %s",x->errc, x->err);
 		}
+		/* Then any individual paramaters */
 		if (v->Ev >= 0)
 			vc->Ev = v->Ev;
 		if (v->Wxyz[0] >= 0.0 && v->Wxyz[1] > 0.0 && v->Wxyz[2] >= 0.0) {
@@ -2018,6 +2029,8 @@ main(int argc, char *argv[]) {
 			vc->La = v->La;
 		if (v->Yb >= 0.0)
 			vc->Yb = v->Yb;
+		if (v->Lv >= 0.0)
+			vc->Lv = v->Lv;
 		if (v->Yf >= 0.0)
 			vc->Yf = v->Yf;
 		if (v->Fxyz[0] >= 0.0 && v->Fxyz[1] > 0.0 && v->Fxyz[2] >= 0.0) {
@@ -3217,7 +3230,7 @@ main(int argc, char *argv[]) {
 			count++;
 			pc = (int)(count * 100.0/total + 0.5);
 			if (pc != lastpc) {
-				printf("\r%2d%%",pc); fflush(stdout);
+				printf("%c%2d%%",cr_char,pc); fflush(stdout);
 				lastpc = pc;
 			}
 

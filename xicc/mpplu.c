@@ -76,6 +76,7 @@ main(int argc, char *argv[]) {
 	int bwd = 0;			/* Do reverse lookup */
 	double dlimit;			/* Device ink limit */
 	double limit = -1.0;	/* Used ink limit */
+	int display = 0;		/* NZ if display type */
 	int spec = 0;			/* Use spectral data flag */
 	int    spec_n;			/* Number of spectral bands, 0 if not valid */
 	double spec_wl_short;	/* First reading wavelength in nm (shortest) */
@@ -294,11 +295,13 @@ main(int argc, char *argv[]) {
 	if ((rv = mppo->read_mpp(mppo,prof_name)) != 0)
 		error ("%d, %s",rv,mppo->err);
 
-	mppo->get_info(mppo, &imask, &devn, &dlimit, &spec_n, &spec_wl_short, &spec_wl_long, NULL);
+	mppo->get_info(mppo, &imask, &devn, &dlimit, &spec_n, &spec_wl_short, &spec_wl_long, NULL, &display);
 	ident = icx_inkmask2char(imask, 1); 
 
 	if (verb) {
 		printf("MPP profile with %d colorants, type %s, TAC %f\n",devn,ident, dlimit);
+		if (display)
+			printf("MPP profile is for a display type device\n");
 	}
 
 	if (limit <= 0.0 || dlimit < limit)
@@ -1106,7 +1109,7 @@ double *in			/* Lab target */
 	static saent *start = NULL;	/* Start array */
 	static int nisay = 0;		/* Number in start array */
 
-	mppo->get_info(mppo, &imask, &inn, NULL, NULL, NULL, NULL, NULL);
+	mppo->get_info(mppo, &imask, &inn, NULL, NULL, NULL, NULL, NULL, NULL);
 
 	rs.di = inn;				/* Number of device channels */
 

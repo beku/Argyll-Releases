@@ -42,7 +42,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -1164,6 +1164,9 @@ ipatch *val) {		/* Pointer to instrument patch value */
 		return rv;
 	}
 
+	/* Apply the colorimeter correction matrix */
+	icmMulBy3x3(val->aXYZ, p->ccmat, val->aXYZ);
+
 	val->XYZ_v = 0;
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings ? */
 	val->Lab_v = 0;
@@ -1173,6 +1176,23 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	if (user_trig)
 		return inst_user_trig;
 	return rv;
+}
+
+/* Insert a colorimetric correction matrix in the instrument XYZ readings */
+/* This is only valid for colorimetric instruments. */
+/* To remove the matrix, pass NULL for the filter filename */
+inst_code huey_col_cor_mat(
+inst *pp,
+double mtx[3][3]
+) {
+	huey *p = (huey *)pp;
+
+	if (mtx == NULL)
+		icmSetUnity3x3(p->ccmat);
+	else
+		icmCpy3x3(p->ccmat, mtx);
+		
+	return inst_ok;
 }
 
 /* Determine if a calibration is needed. Returns inst_calt_none if not, */
@@ -1359,6 +1379,7 @@ inst_capability huey_capabilities(inst *pp) {
 	   | inst_emis_disp_crt
 	   | inst_emis_disp_lcd
 	   | inst_colorimeter
+	   | inst_ccmx
 	   | inst_emis_ambient
 	   | inst_emis_ambient_mono;
 	     ;
@@ -1484,6 +1505,8 @@ extern huey *new_huey(icoms *icom, int debug, int verb)
 	p->debug = debug;
 	p->verb = verb;
 
+	icmSetUnity3x3(p->ccmat);	/* Set the colorimeter correction matrix to do nothing */
+
 	p->init_coms         = huey_init_coms;
 	p->init_inst         = huey_init_inst;
 	p->capabilities      = huey_capabilities;
@@ -1492,6 +1515,7 @@ extern huey *new_huey(icoms *icom, int debug, int verb)
 	p->set_opt_mode      = huey_set_opt_mode;
 	p->read_sample       = huey_read_sample;
 	p->needs_calibration = huey_needs_calibration;
+	p->col_cor_mat       = huey_col_cor_mat;
 	p->calibrate         = huey_calibrate;
 	p->interp_error      = huey_interp_error;
 	p->del               = huey_del;

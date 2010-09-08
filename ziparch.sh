@@ -7,6 +7,7 @@ echo "Making Complete Argyll source archive argyll.zip... "
 rm -f argyll.zip
 rm -rf _zipdir
 mkdir _zipdir
+NOTFOUND=
 
 for i in `cat adirs`
 do
@@ -15,6 +16,7 @@ do
 	if [ ! -e ${i}/afiles ] ; then
 		if [ ! -e ${i}/bfiles ] ; then
 			echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Can't find ${i}/afiles or ${i}/bfiles !!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+			NOTFOUND="$NOTFOUND ${i}/afiles ${i}/bfiles"
 		fi
 	fi
 
@@ -35,6 +37,7 @@ do
 
 			if [ ! -e ${i}/${j} ] ; then
 				echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Can't find file ${i}/${j} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+				NOTFOUND="$NOTFOUND ${i}/${j}"
 			else 
 				dos2unix ${i}/${j}
 				cp ${i}/${j} _zipdir/${i}/${j}
@@ -69,6 +72,7 @@ do
 
 			if [ ! -e ${i}/${j} ] ; then
 				echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Can't find file ${i}/${j} !!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+				NOTFOUND="$NOTFOUND ${i}/${j}"
 			else 
 				dos2unix ${i}/${j}
 				cp ${i}/${j} _zipdir/${i}/${j}
@@ -86,4 +90,7 @@ do
 done
 rm -r _zipdir
 rm _ziplist
+if [ "X$NOTFOUND" != "X" ] ; then
+    echo "!!!!!! Didn't find $NOTFOUND !!!!!!"
+fi
 echo "Finished Complete Argyll source archive argyll.zip... "

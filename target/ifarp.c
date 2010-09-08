@@ -396,7 +396,7 @@ void *od				/* context for Perceptual function */
 		new_node(s, i);
 		if (verb) {
 			int pc = (int)(100.0 * s->np/s->inp + 0.5);
-			printf("  % 3d%%\r",pc); fflush(stdout);
+			printf("  % 3d%%%c",pc,cr_char); fflush(stdout);
 		}
 	}
 
@@ -846,6 +846,7 @@ char *argv[];
 	int di = 2;
 	
 	error_program = argv[0];
+	check_if_not_interactive();
 
 	if (argc > 1)
 		npoints = atoi(argv[1]);

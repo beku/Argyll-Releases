@@ -1,12 +1,13 @@
+
+ /* Abstract instrument class implemenation */
+
 /* 
  * Argyll Color Correction System
- *
- * Abstract instrument class implemenation
  *
  * Author: Graeme W. Gill
  * Date:   10/3/2001
  *
- * Copyright 2001 - 2007 Graeme W. Gill
+ * Copyright 2001 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -37,7 +38,7 @@
 #include <string.h>
 #include <time.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -47,7 +48,19 @@
 #include "inst.h"
 #include "insttypeinst.h"
 
+#ifdef ENABLE_SERIAL
 static instType ser_inst_type(icoms *p, int port);
+#endif /* ENABLE_SERIAL */
+
+#undef DEBUG
+
+#define dbgo stderr
+
+#ifdef DEBUG
+#define DBG(xxx) fprintf xxx ;
+#else
+#define DBG(xxx) if (p != NULL && p->debug) fprintf xxx ;
+#endif
 
 /* ------------------------------------ */
 /* Default methods for instrument class */
@@ -73,6 +86,12 @@ inst *p) {
 /* Return the instrument type */
 static instType get_itype(inst *p) {
 	return p->itype;
+}
+
+/* Return the instrument serial number. */
+/* (This will be an empty string if there is no serial no) */
+static char *get_serial_no(inst *p) {
+	return "";
 }
 
 /* Return the instrument capabilities */
@@ -253,6 +272,15 @@ char *filtername) {		/* File containing compensating filter */
 	return inst_unsupported;
 }
 
+/* Insert a colorimetric correction matrix in the instrument XYZ readings */
+/* This is only valid for colorimetric instruments. */
+/* To remove the matrix, pass NULL for the filter filename */
+inst_code col_cor_mat(
+struct _inst *p,
+double mtx[3][3]) {	/* XYZ matrix */
+	return inst_unsupported;
+}
+
 /* Poll for a user abort, terminate, trigger or command. */
 /* Wait for a key rather than polling, if wait != 0 */
 /* Return: */
@@ -372,8 +400,10 @@ int verb			/* Verbosity flag */
 	atype = usb_is_usb_portno(icom, comport);		/* Type from USB */
 	if (atype == instUnknown)						/* Not USB */
 		atype = hid_is_hid_portno(icom, comport);	/* Else type from HID */
+#ifdef ENABLE_SERIAL
 	if (atype == instUnknown)
 		atype = ser_inst_type(icom, comport);		/* Else type from serial */
+#endif /* ENABLE_SERIAL */
 	if (itype == instUnknown && atype != instUnknown) {
 		itype = atype;
 	} else if (itype != instUnknown && atype == instUnknown) {
@@ -430,6 +460,8 @@ int verb			/* Verbosity flag */
 		p->init_inst = init_inst;
 	if (p->get_itype == NULL)
 		p->get_itype = get_itype;
+	if (p->get_serial_no == NULL)
+		p->get_serial_no = get_serial_no;
 	if (p->capabilities == NULL)
 		p->capabilities = capabilities;
 	if (p->capabilities2 == NULL)
@@ -468,6 +500,8 @@ int verb			/* Verbosity flag */
 		p->calibrate = calibrate;
 	if (p->comp_filter == NULL)
 		p->comp_filter = comp_filter;
+	if (p->col_cor_mat == NULL)
+		p->col_cor_mat = col_cor_mat;
 	if (p->poll_user == NULL)
 		p->poll_user = poll_user;
 	if (p->inst_interp_error == NULL)
@@ -480,6 +514,9 @@ int verb			/* Verbosity flag */
 	return p;
 }
 
+/* --------------------------------------------------- */
+
+#ifdef ENABLE_SERIAL
 static void hex2bin(char *buf, int len);
 
 /* Heuristicly determine the instrument type for */
@@ -634,5 +671,219 @@ static void hex2bin(char *buf, int len) {
 		buf[i] = (h2b(buf[2 * i + 0]) << 4)
 		       | (h2b(buf[2 * i + 1]) << 0);
 	}
+}
+
+#endif /* ENABLE_SERIAL */
+
+/* ================================================================= */
+
+/* A default calibration user interaction handler using the console. */
+/* This handles both normal and display based calibration interaction */
+/* with the instrument, if a disp_setup function and pointer to disp_win_info */
+/* is provided. */
+inst_code inst_handle_calibrate(
+	inst *p,
+	inst_cal_type calt,		/* type of calibration to do. inst_calt_all for all */
+	inst_cal_cond calc,		/* Current condition. inst_calc_none for not setup */
+	inst_code (*disp_setup) (inst *p,inst_cal_cond calc, disp_win_info *dwi),
+							/* Callback for handling a display calibration - May be NULL */
+	disp_win_info *dwi		/* Information to be able to open a display test patch - May be NULL */
+) {
+	inst_code rv = inst_ok, ev;
+	int usermes = 0;		/* User was given a message */
+	char id[200];			/* Condition identifier */
+	int ch;
+
+	DBG((dbgo,"inst_handle_calibrate called\n"))
+
+	/* Untill we're done with the calibration */
+	for (;;) {
+
+		DBG((dbgo,"About to call calibrate at top of loop\n"))
+	    ev = p->calibrate(p, calt, &calc, id);
+
+		/* We're done */
+		if ((ev & inst_mask) == inst_ok) {
+			if (calc == inst_calc_message)
+				printf("%s\n",id);
+			if (usermes)
+				printf("Calibration complete\n");
+			fflush(stdout);
+			DBG((dbgo,"inst_handle_calibrate done 0x%x\n",ev))
+			return ev;
+		}
+
+		/* User aborted */
+		if ((ev & inst_mask) == inst_user_abort
+		 || (ev & inst_mask) == inst_user_term) {
+			DBG((dbgo,"inst_handle_calibrate user aborted 0x%x\n",ev))
+			return ev;
+		}
+
+		/* Retry on an error */
+		if ((ev & inst_mask) != inst_cal_setup) {
+			if ((ev & inst_mask) == inst_unsupported) {
+				DBG((dbgo,"inst_handle_calibrate calibration not supported\n"))
+				return inst_unsupported;
+			}
+
+			printf("Calibration failed with '%s' (%s)\n",
+				       p->inst_interp_error(p, ev), p->interp_error(p, ev));
+			printf("Hit any key to retry, or Esc or Q to abort:\n");
+
+			empty_con_chars();
+			ch = next_con_char();
+			printf("\n");
+			if (ch == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+				DBG((dbgo,"inst_handle_calibrate user aborted 0x%x\n",inst_user_abort))
+				fflush(stdout);
+				return inst_user_abort;
+			}
+
+		/* Get user to do/setup calibration */
+		} else {
+
+			switch (calc) {
+				case inst_calc_uop_ref_white:
+					printf("Do a reflective white calibration,\n");
+					printf(" and then hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+
+				case inst_calc_uop_trans_white:
+					printf("Do a transmissive white calibration,\n");
+					printf(" and then hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+			
+				case inst_calc_uop_trans_dark:
+					printf("Do a transmissive dark calibration,\n");
+					printf(" and then hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+			
+				case inst_calc_man_ref_white:
+					printf("Place the instrument on its reflective white reference %s,\n",id);
+					printf(" and then hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+
+				case inst_calc_man_ref_whitek:
+					printf("Click the instrument on its reflective white reference %s,\n",id);
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+
+				case inst_calc_man_ref_dark:
+					printf("Place the instrument in the dark, not in contact with any surface,\n");
+					printf(" and then hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+
+				case inst_calc_man_em_dark:
+					printf("Place cap on the instrument, or place in on a dark surface,\n");
+					printf("or place on the white calibration reference,\n");
+					printf(" and then hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+
+				case inst_calc_man_cal_smode:
+					printf("Set instrument sensor to calibration position,\n");
+					printf(" and then hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+
+				case inst_calc_man_trans_white:
+					printf("Place the instrument on its transmissive white source,\n");
+					printf(" and then hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+
+				case inst_calc_man_trans_dark:
+					printf("Use the appropriate tramissive blocking to block the transmission path,\n");
+					printf(" and then hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+
+				case inst_calc_change_filter:
+					printf("Change filter on instrument to %s,\n",id);
+					printf(" and then hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+
+				case inst_calc_message:
+					printf("%s\n",id);
+					printf(" Hit any key to continue,\n"); 
+					printf(" or hit Esc or Q to abort:"); 
+					break;
+
+				case inst_calc_disp_white:
+				case inst_calc_proj_white:
+					if (disp_setup == NULL || dwi == NULL) { /* No way of creating a test window */
+						DBG((dbgo,"inst_handle_calibrate no way of creating test window 0x%x\n",inst_internal_error))
+						return inst_internal_error; 
+					}
+				
+					/* We need to display a 100% white patch to proceed with this */
+					/* type of calibration */
+					if ((rv = disp_setup(p, calc, dwi)) != inst_ok)
+						return rv; 
+					break;
+
+				case inst_calc_disp_grey:
+				case inst_calc_disp_grey_darker: 
+				case inst_calc_disp_grey_ligher:
+				case inst_calc_proj_grey:
+				case inst_calc_proj_grey_darker: 
+				case inst_calc_proj_grey_ligher:
+					if (dwi == NULL) {	/* No way of creating a test window */
+						DBG((dbgo,"inst_handle_calibrate no way of creating test window 0x%x\n",inst_internal_error))
+						return inst_internal_error; 
+					}
+
+					/* We need to display a test patch to proceed with this
+					 * type of calibration. Typically this will be:
+					 *
+					 * inst_calc_xxxx_grey:
+					 *		set p->cal_gy_level = 0.6
+					 *		set p->cal_gy_count = 0;
+					 *
+					 * inst_calc_xxxx_grey_darker:
+					 *		set p->cal_gy_level *= 0.7
+					 *		set p->cal_gy_count++
+					 *
+					 * inst_calc_xxxx_grey_ligher:
+					 *		set p->cal_gy_level *= 1.4
+					 *		set p->cal_gy_count++
+					 *
+					 * and return failure if p->cal_gy_count > 4
+					 */
+
+					if ((rv = disp_setup(p, calc, dwi)) != inst_ok)
+						return rv; 
+
+					break;
+
+				default:
+					/* Something isn't being handled */
+					DBG((dbgo,"inst_handle_calibrate unhandled calc case 0x%x, err 0x%x\n",calc,inst_internal_error))
+					return inst_internal_error;
+			}
+			fflush(stdout);
+
+			usermes = 1;
+
+			if (calc != inst_calc_man_ref_whitek) {
+				empty_con_chars();
+				ch = next_con_char();
+				printf("\n");
+				if (ch == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+					DBG((dbgo,"inst_handle_calibrate user aborted 0x%x\n",inst_user_abort))
+					return inst_user_abort;
+				}
+			}
+		}
+	}
+	DBG((dbgo,"inst_handle_calibrate done 0x%x\n",ev))
+	return inst_ok;
 }
 

@@ -32,11 +32,12 @@
 #include <float.h>
 #endif
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "vrml.h"
 #include "cgats.h"
 #include "xicc.h"
+#include "ccmx.h"
 #include "insttypes.h"
 #include "sort.h"
 
@@ -48,6 +49,7 @@ usage(void) {
 	fprintf(stderr," -v              Verbose - print each patch value\n");
 	fprintf(stderr," -n              Normalise each files reading to white Y\n");
 	fprintf(stderr," -N              Normalise each files reading to white XYZ\n");
+	fprintf(stderr," -D              Use D50 100.0 as L*a*b* white reference\n");
 	fprintf(stderr," -c              Show CIE94 delta E values\n");
 	fprintf(stderr," -k              Show CIEDE2000 delta E values\n");
 	fprintf(stderr," -s              Sort patch values by error\n");
@@ -59,6 +61,7 @@ usage(void) {
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
+	fprintf(stderr," -X file.ccmx    Apply Colorimeter Correction Matrix to second file\n");
 	fprintf(stderr," target.ti3      Target (reference) PCS or spectral values.\n");
 	fprintf(stderr," measured.ti3    Measured (actual) PCS or spectral values\n");
 	exit(1);
@@ -76,14 +79,19 @@ int main(int argc, char *argv[])
 	int fa,nfa;				/* current argument we're looking at */
 	int verb = 0;
 	int norm = 0;			/* 1 = norm to Y, 2 = norm to XYZ */
+	int usestdd50 = 0;		/* Use standard D50 instead of scaled D50 as Lab reference */
 	int cie94 = 0;
 	int cie2k = 0;
 	int dovrml = 0;
 	int doaxes = 0;
 	int dosort = 0;
+	char ccmxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction Matrix name */
+	ccmx *cmx = NULL;					/* Colorimeter Correction Matrix */
 
 	struct {
 		char name[MAXNAMEL+1];	/* Patch filename  */
+		int isdisp;				/* nz if display */
+		int isdnormed;      	/* Has display data been normalised to 100 ? */
 		int npat;				/* Number of patches */
 		pval *pat;				/* patch values */
 	} cg[2];					/* Target and current patch file information */
@@ -95,6 +103,8 @@ int main(int argc, char *argv[])
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;			/* Custom illumination spectrum */
 	icxObserverType observ = icxOT_CIE_1931_2;
+
+	icmXYZNumber labw = icmD50;	/* The Lab white reference */
 
 	char out_name[MAXNAMEL+4+1]; /* VRML name */
 	vrml *wrl = NULL;
@@ -140,6 +150,9 @@ int main(int argc, char *argv[])
 					norm = 2;
 			}
 
+			else if (argv[fa][1] == 'D')
+				usestdd50 = 1;
+
 			/* VRML */
 			else if (argv[fa][1] == 'w')
 				dovrml = 1;
@@ -147,7 +160,7 @@ int main(int argc, char *argv[])
 				dovrml = 2;
 
 			/* Axes */
-			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X')
+			else if (argv[fa][1] == 'x')
 				doaxes = 1;
 
 			/* CIE94 delta E */
@@ -224,9 +237,14 @@ int main(int argc, char *argv[])
 			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F') {
 				spec = 1;
 				fwacomp = 1;
-			}
 
-			else 
+			/* Colorimeter Correction Matrix for second file */
+			} else if (argv[fa][1] == 'X') {
+				fa = nfa;
+				if (na == NULL) usage();
+				strncpy(ccmxname,na,MAXNAMEL-1); ccmxname[MAXNAMEL-1] = '\000';
+
+			} else 
 				usage();
 		} else
 			break;
@@ -250,6 +268,15 @@ int main(int argc, char *argv[])
 
 	if (fwacomp && spec == 0)
 		error ("FWA compensation only works when viewer and/or illuminant selected");
+
+	/* Colorimeter Correction Matrix */
+	if (ccmxname[0] != '\000') {
+		if ((cmx = new_ccmx()) == NULL)
+			error("new_ccmx failed\n");
+		if (cmx->read_ccmx(cmx,ccmxname))
+			error("Reading Colorimeter Correction Matrix file '%s' failed with error %d:'%s'\n",
+		     	       ccmxname, cmx->errc,  cmx->err);
+	}
 
 	/* Open up each file in turn, target then measured, */
 	/* and read in the CIE values. */
@@ -292,6 +319,30 @@ int main(int argc, char *argv[])
 		
 		cg[n].npat = cgf->t[0].nsets;		/* Number of patches */
 	
+		/* Figure out what sort of device it is */
+		{
+			int ti;
+	
+			cg[n].isdisp = 0;
+
+			if ((ti = cgf->find_kword(cgf, 0, "DEVICE_CLASS")) < 0)
+				error ("Input file '%s' doesn't contain keyword DEVICE_CLASS",cg[n].name);
+	
+			if (strcmp(cgf->t[0].kdata[ti],"DISPLAY") == 0) {
+				cg[n].isdisp = 1;
+				illum = icxIT_none;		/* Displays are assumed to be self luminous */
+				/* ?? What if two files are different ?? */
+			}
+
+			/* See if the CIE data has been normalised to Y = 100 */
+			if ((ti = cgf->find_kword(cgf, 0, "NORMALIZED_TO_Y_100")) < 0
+			 || strcmp(cgf->t[0].kdata[ti],"NO") == 0) {
+				cg[n].isdnormed = 0;
+			} else {
+				cg[n].isdnormed = 1;
+			}
+		}
+
 		/* Read all the target patches */
 		if (cg[n].npat <= 0)
 			error("No sets of data in file '%s'",cg[n].name);
@@ -351,13 +402,21 @@ int main(int argc, char *argv[])
 				cg[n].pat[i].v[0] = *((double *)cgf->t[0].fdata[i][xix]);
 				cg[n].pat[i].v[1] = *((double *)cgf->t[0].fdata[i][yix]);
 				cg[n].pat[i].v[2] = *((double *)cgf->t[0].fdata[i][zix]);
-				if (!isLab) {
-					cg[n].pat[i].v[0] /= 100.0;		/* Normalise XYZ to range 0.0 - 1.0 */
-					cg[n].pat[i].v[1] /= 100.0;
-					cg[n].pat[i].v[2] /= 100.0;
+
+				if (!isLab) {	/* If XYZ */
+
+					/* If normalised to 100, scale back to 1.0 */
+					if (!cg[n].isdisp || !cg[n].isdnormed) {
+						cg[n].pat[i].v[0] /= 100.0;		/* scale back to 1.0 */
+						cg[n].pat[i].v[1] /= 100.0;
+						cg[n].pat[i].v[2] /= 100.0;
+					}
+				} else {		/* If Lab */
+					icmLab2XYZ(&icmD50, cg[n].pat[i].v, cg[n].pat[i].v);
 				}
-				if (!isLab) { /* Convert test patch result XYZ to PCS (D50 Lab) */
-					icmXYZ2Lab(&icmD50, cg[n].pat[i].v, cg[n].pat[i].v);
+				/* Apply ccmx */
+				if (n == 1 && cmx != NULL) {
+					cmx->xform(cmx, cg[n].pat[i].v, cg[n].pat[i].v);
 				}
 			}
 
@@ -377,7 +436,10 @@ int main(int argc, char *argv[])
 			if ((ii = cgf->find_kword(cgf, 0, "SPECTRAL_END_NM")) < 0)
 				error ("Input file doesn't contain keyword SPECTRAL_END_NM");
 			sp.spec_wl_long = atof(cgf->t[0].kdata[ii]);
-			sp.norm = 100.0;
+			if (!cg[n].isdisp || cg[n].isdnormed != 0)
+				sp.norm = 100.0;
+			else
+				sp.norm = 1.0;
 
 			/* Find the fields for spectral values */
 			for (j = 0; j < sp.spec_n; j++) {
@@ -393,21 +455,9 @@ int main(int argc, char *argv[])
 					error("Input file doesn't contain field %s",buf);
 			}
 
-			/* Figure out what sort of device it is */
-			{
-				int ti;
-		
-				if ((ti = cgf->find_kword(cgf, 0, "DEVICE_CLASS")) < 0)
-					error ("Input file '%s' doesn't contain keyword DEVICE_CLASS",cg[n].name);
-		
-				if (strcmp(cgf->t[0].kdata[ti],"DISPLAY") == 0) {
-					illum = icxIT_none;		/* Displays are assumed to be self luminous */
-				}
-			}
-
 			/* Create a spectral conversion object */
 			if ((sp2cie = new_xsp2cie(illum, illum == icxIT_none ? NULL : &cust_illum,
-			                          observ, NULL, icSigLabData)) == NULL)
+			                          observ, NULL, icSigXYZData)) == NULL)
 				error("Creation of spectral conversion object failed");
 
 			if (fwacomp) {
@@ -464,8 +514,13 @@ int main(int argc, char *argv[])
 					sp.spec[j] = *((double *)cgf->t[0].fdata[i][spi[j]]);
 				}
 
-				/* Convert it to CIE space */
+				/* Convert it to XYZ space */
 				sp2cie->convert(sp2cie, cg[n].pat[i].v, &sp);
+
+				/* Applu ccmx */
+				if (n == 1 && cmx != NULL) {
+					cmx->xform(cmx, cg[n].pat[i].v, cg[n].pat[i].v);
+				}
 			}
 
 			sp2cie->del(sp2cie);		/* Done with this */
@@ -473,7 +528,7 @@ int main(int argc, char *argv[])
 		}	/* End of reading in CGATs file */
 
 
-		/* Normalise to white = 1.0 */
+		/* Normalise this file to white = 1.0 or D50 */
 		if (norm) {
 			double bxyz[3] = { 0.0, -100.0, 0.0 };
 
@@ -481,31 +536,29 @@ int main(int argc, char *argv[])
 			for (i = 0; i < cg[n].npat; i++) {
 				double xyz[3];
 				icmLab2XYZ(&icmD50, xyz, cg[n].pat[i].v);
-				if (xyz[1] > bxyz[1]) {
-					bxyz[0] = xyz[0];
-					bxyz[1] = xyz[1];
-					bxyz[2] = xyz[2];
+				if (cg[n].pat[i].v[1] > bxyz[1]) {
+					icmCpy3(bxyz, cg[n].pat[i].v);
 				}
 			}
 
 			/* Then normalize all the values */
 			for (i = 0; i < cg[n].npat; i++) {
-				double xyz[3];
-				icmLab2XYZ(&icmD50, xyz, cg[n].pat[i].v);
 				if (norm == 1) {
-					xyz[0] /= bxyz[1];
-					xyz[1] /= bxyz[1];
-					xyz[2] /= bxyz[1];
+					cg[n].pat[i].v[0] /= bxyz[1];
+					cg[n].pat[i].v[1] /= bxyz[1];
+					cg[n].pat[i].v[2] /= bxyz[1];
 				} else {
-					xyz[0] *= icmD50.X/bxyz[0];
-					xyz[1] *= icmD50.Y/bxyz[1];
-					xyz[2] *= icmD50.Z/bxyz[2];
+					cg[n].pat[i].v[0] *= icmD50.X/bxyz[0];
+					cg[n].pat[i].v[1] *= icmD50.Y/bxyz[1];
+					cg[n].pat[i].v[2] *= icmD50.Z/bxyz[2];
 				}
-				icmXYZ2Lab(&icmD50, cg[n].pat[i].v, xyz);
 			}
 		}
 		cgf->del(cgf);		/* Clean up */
 	}
+	if (cmx != NULL) 
+		cmx->del(cmx);
+	cmx = NULL;
 
 	/* Check that the number of test patches matches */
 	if (cg[0].npat != cg[1].npat)
@@ -523,6 +576,31 @@ int main(int argc, char *argv[])
 			match[i] = j;
 		} else {
 			error("Failed to find matching patch to '%s'",cg[0].pat[i].sid);
+		}
+	}
+
+	/* Adjust the reference white Y to be larger than the largest Y of the two files */
+	if (!usestdd50) {
+		double maxy = -1e6;
+ 
+		for (n = 0; n < 2; n++) {
+			for (i = 0; i < cg[n].npat; i++) {
+				if (cg[n].pat[i].v[1] > maxy)
+					maxy = cg[n].pat[i].v[1];
+			}
+		}
+		labw.X *= maxy/icmD50.Y;		/* Scale white uniformly */
+		labw.Y *= maxy/icmD50.Y;		/* Scale white uniformly */
+		labw.Z *= maxy/icmD50.Y;
+
+		if (verb)
+			printf("L*a*b* white reference = XYZ %f %f %f\n",labw.X,labw.Y,labw.Z);
+	}
+
+	/* Convert XYZ to Lab */
+	for (n = 0; n < 2; n++) {
+		for (i = 0; i < cg[n].npat; i++) {
+			icmXYZ2Lab(&labw, cg[n].pat[i].v, cg[n].pat[i].v);
 		}
 	}
 

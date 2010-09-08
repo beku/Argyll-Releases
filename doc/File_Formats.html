@@ -58,10 +58,9 @@ file is typically created using the <a href="chartread.html">chartread</a>,&nbsp
 <a href="filmread.html">filmread</a>, <a href="scanin.html"> scanin</a>,
 <a href="fakeread.html"> fakeread</a> or one of the conversion
 tools
-such as <a href="cb2ti3.html">cb2ti3</a>, <a
- href="kodak2ti3.html">kodak2ti3</a>,
-<a href="txt2ti3.html">txt2ti3</a>. See&nbsp; <a
- href="ti3_format.html">TI3 file format</a> for more detail.
+such as <a href="cb2ti3.html">cb2ti3</a>, <a href="kodak2ti3.html">kodak2ti3</a>,
+<a href="txt2ti3.html">txt2ti3</a>. See&nbsp; <a href="ti3_format.html">TI3
+file format</a> for more detail.
 <h2><a name=".cal"></a>.cal</h2>
 Device calibration information. This is ASCII text, <a
  href="File_Formats.html#CGATS">CGATS</a>, Argyll specific format, used
@@ -105,6 +104,15 @@ Whitening
 Agent compensation for reflective samples, as well as computing CIE
 tristimulus
 values from spectral samples.<br>
+<h2><a name=".ccmx"></a>.ccmx</h2>
+Colorimeter Correction Matrix. This is an ASCII text, <a
+ href="File_Formats.html#CGATS">CGATS</a>, Argyll specific format, used
+to hold a 3x3 correction matrix. The matrix is for a specific display
+and Colorimeter, and is used to transform the instruments XYZ values to
+make them better match a reference spectrometers measurements for that
+display. The file contains a description of the display, Colorimeter
+and reference Spectrometer. See <a href="ccmxmake.html">ccmxmake</a>
+for more information.<br>
 <h3><a name="CGATS"></a>CGATS</h3>
 CGATS.5 Data Exchange Format, from the Annex J, of the ANSI
 CGATS.5-1993 standard.<br>

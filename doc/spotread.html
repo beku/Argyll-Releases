@@ -7,7 +7,7 @@
   <meta name="author" content="Graeme Gill">
 </head>
 <body>
-<h2><b>target/spotread</b></h2>
+<h2><b>spectro/spotread</b></h2>
 <h3>Summary</h3>
 Use an instrument to read a single color value. This can be a useful
 diagnostic aid. The type of instrument is determined by the
@@ -61,17 +61,38 @@ Use display white brightness relative measurement mode<br>
  style="font-family: monospace;" href="#dw">-dw</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use display white relative measurement mode</span></small><br>
+Use display white relative measurement mode<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="spotread.html#p">-p</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use projector measurement mode (absolute results)<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="spotread.html#pb">-pb</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use </span></small><small><span style="font-family: monospace;">projector</span></small><small><span
+ style="font-family: monospace;"> white brightness relative measurement
+mode<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="spotread.html#pw">-pw</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use </span></small><small><span style="font-family: monospace;">projector</span></small><small><span
+ style="font-family: monospace;"> white relative measurement mode</span></small><br>
 <small><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="spotread.html#e">-e</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Use emissive measurement mode (absolute results)</span></small><br>
 <small><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="spotread.html#a">-a</a><span
+ style="font-family: monospace;" href="#a">-a</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use ambient measurement mode (absolute results)</span></small><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#y">-y
+Use ambient measurement mode (absolute results)<br>
+&nbsp;<a href="#f">-f</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use ambient flash measurement mode (absolute results)<br>
+</span></small><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="#y">-y
 c|l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Display type, c = CRT, l = LCD</span></font><br
  style="font-family: monospace;">
@@ -106,10 +127,9 @@ spectral data:</span><br style="font-family: monospace;">
 &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp;&nbsp; (Choose FWA during
-operation)</span></small><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Disable auto calibration of instrument<br>
-&nbsp;<a href="#f">-f filter</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+operation)</span></small><font size="-1"><span
+ style="font-family: monospace;"><br>
+&nbsp;<a href="#F">-F filter</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Set filter configuration:<br>
 &nbsp;&nbsp;
 n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -123,7 +143,7 @@ D65<br>
 &nbsp;&nbsp;
 u&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 U.V. Cut<br>
-&nbsp;<a href="#F">-F extrafilterfile</a>&nbsp;&nbsp;&nbsp; Apply extra
+&nbsp;<a href="#E">-E extrafilterfile</a>&nbsp;&nbsp;&nbsp; Apply extra
 filter compensation file<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#x">-x</a>
@@ -143,6 +163,9 @@ Disable auto calibration of instrument</span></font><br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use high resolution spectrum mode (if
 available)<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="dispcal.html#X">-X</a><a href="#X"> file.ccmx</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply Colorimeter Correction Matrix</span></font><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="dispcal.html#W">-W n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Override serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><br>
 <small><span style="font-family: monospace;">&nbsp;</span><a
@@ -182,9 +205,9 @@ USB or serial communication port, and the port can be selected with the
 <b>-c</b>
 option,
 if the instrument is not connected to the first port. If you invoke <span
- style="font-weight: bold;">dispread</span>
+ style="font-weight: bold;">spotread</span>
 so as to display the usage
-information (i.e. "dispread -?" or "dispread --"), then the discovered
+information (i.e. "spotread -?" or "spotread --"), then the discovered
 USB and serial ports will be listed. On
 UNIX/Linux, a list of all possible serial ports are shown, but not all
 of them may
@@ -219,11 +242,34 @@ support this mode, with the brightness normalized to the white value
 read as the first reading. While the brightness values are then
 relative to the white, the readings are otherwise absolute. This
 corresponds to the raw ICC absolute readings created by <a
- href="dispread.html">dispread</a>.<br>
+ href="dispread.html">spotread</a>.<br>
 <br>
 <a name="dw"></a>The <span style="font-weight: bold;">-dw</span> flag
 allows measuring
 in display mode using
+instruments that
+support this mode, with the white normalized to the white value
+read as the first reading.<br>
+<br>
+<a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
+allows measuring
+in projector mode, using
+instruments that
+support this mode. Values returned are absolute.<br>
+<br>
+<a name="pb"></a>The <span style="font-weight: bold;">-pb</span> flag
+allows measuring
+in projector mode using
+instruments that
+support this mode, with the brightness normalized to the white value
+read as the first reading. While the brightness values are then
+relative to the white, the readings are otherwise absolute. This
+corresponds to the raw ICC absolute readings created by <a
+ href="dispread.html">spotread</a>.<br>
+<br>
+<a name="pw"></a>The <span style="font-weight: bold;">-pw</span> flag
+allows measuring
+in projector mode using
 instruments that
 support this mode, with the white normalized to the white value
 read as the first reading.<br>
@@ -242,6 +288,12 @@ Rendering Index (see <span style="font-weight: bold;">-T</span>). If
 the instrument does not
 support ambient mode, emissive mode will be used instead.<br>
 <br>
+<a name="f"></a>The <span style="font-weight: bold;">-f</span> flag
+allows measuring a flash with those instruments that support scanning
+emissive measurements. The instrument needs to be triggered by holding
+down its button, triggering the flash, then releasing the button,
+similar to how a reflective strip is read.<br>
+<br>
 <a name="y"></a>&nbsp; Display type. Some colorimeters (like the DTP94
 and Eye-One Display)
 require that the the type of display technology used be specified. Use <span
@@ -252,7 +304,8 @@ calibrating a CRT (Cathode Ray Tube) type monitor, and use <span
 <br>
 <a name="i"></a>The <b>-i</b> flag allows specifying a standard or
 custom illumination
-spectrum, applied to reflective spectral data to compute CIE
+spectrum, applied to <span style="text-decoration: underline;">reflective</span>
+spectral data to compute CIE
 tristimulus values. <b>A</b>, <b>D50</b>, <b>D65</b>, <b>F5</b>, <b>F8</b>,
 <b>F10</b> are a selection of standard illuminant spectrums, with <b>D50</b>
 being the default. If a filename is specified instead, it will be
@@ -271,21 +324,14 @@ observer<br>
 &nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
 observer<br>
 <br>
-<a name="N"></a>The <b>-N</b> flag disables any automatic instrument
-calibration (used for the Gretag Spectrolino for instance). This would
-be used when the instrument is being used for a series of measurements,
-and it is inconvenient to place it on it's calibration tile between
-measurements. The instrument should be calibrated at least once for
-each measurement session though.<br>
-<br>
-<a name="f"></a>The <b>-f</b> options allows configuring the
+<a name="F"></a>The <b>-F</b> options allows configuring the
 instrument to have a particular filter fitted to it. Some instruments
 (i.e. the Gretag Spectrolino) allow the fitting of various filters,
 such as a polarizing filter, D65 illuminant simulation, or Ultra Violet
 Cut filter, and this option allows the instrument to be configured
 appropriately.<br>
 <br>
-<a name="F"></a>The <b>-F</b> option allows the setting of an extra
+<a name="E"></a>The <b>-E</b> option allows the setting of an extra
 filter compensation file, that allows for the filtration of the
 spectral readings through a medium of some kind, when in emission mode.
 This is useful in allowing for such things as telescopic adapters that
@@ -320,6 +366,14 @@ switch prevents it happening.<br>
 turns on high resolution spectral mode, if the instrument supports it.
 See <a href="instruments.html">Operation of particular instruments</a>
 for more details.<br>
+<br>
+<a name="X"></a> The -<span style="font-weight: bold;">X <span
+ style="font-style: italic;">file.ccmx</span></span> option reads a <a
+ href="File_Formats.html#.ccmx">Colorimeter Correction Matrix</a>
+from the given file, and applies it to the colorimeter instruments
+readings. This can improve a colorimeters accuracy for a particular
+type of display. A list of contributed <span style="font-weight: bold;">ccmx</span>
+files is <a href="ccmxs.html">here</a>.<br>
 <br>
 <a name="W"></a>The <b>-W</b> <span style="font-weight: bold;">n|h|x</span>
 parameter overrides the default serial communications
@@ -356,7 +410,13 @@ displays.<br>
 <hr style="width: 100%; height: 2px;"><br>
 Once <b>spotread</b> has established communications with the
 instrument, it awaits a command from the user, indicated by the user
-hitting a key or activating the instrument switch.<br>
+hitting a key or activating the instrument switch. XYZ values are in
+the range 0 .. 100 for reflective or transmissive readings, and
+absolute cd/m^2 for display, emissive and ambient readings.<br>
+<br>
+The L*a*b* values are computed relative to a D50 100 scale white point.
+(Note that using display white relative mode makes the L*a*b relative
+to the display white point.)<br>
 &nbsp;<br>
 If Fluorescent Whiter Additive (FWA) compensated readings are to be
 made, then this needs to be enabled with the correct command line

@@ -16,9 +16,8 @@ file is typically created using the <a href="chartread.html">chartread</a>,&nbsp
 <a href="filmread.html">filmread</a>, <a href="scanin.html"> scanin</a>,
 <a href="fakeread.html"> fakeread</a> or one of the conversion
 tools
-such as <a href="cb2cgats.html">cb2cgats</a>, <a
- href="kodak2cgats.html">kodak2cgats</a>,
-<a href="logo2cgats.html">logo2cgats</a>.<br>
+such as <a href="cb2ti3.html">cb2ti3</a>, <a href="kodak2ti3.html">kodak2ti3</a>,
+<a href="txt2ti3.html">txt2ti3</a>.<br>
 <br>
 While fully compatible with the CGATS.5 Data Exchange Format, the
 particular required keywords and fields are unique to Argyll, hence an
@@ -73,7 +72,13 @@ A <span style="font-weight: bold;">"DISPLAY"</span> type device may
 have a <span style="font-weight: bold;">LUMINANCE_XYZ_CDM2</span>
 keyword that contains the absolute XYZ value of white in candelas per
 meter squared, e.g. <span style="font-weight: bold;">"112.334770
-119.657745 121.474236".</span><br>
+119.657745 121.474236".<br>
+<br>
+</span>A display device may also have a <span
+ style="font-weight: bold;">NORMALIZED_TO_Y_100</span> keyword that
+must have a value of "<span style="font-weight: bold;">NO</span>" or "<span
+ style="font-weight: bold;">YES</span>", to indicate whether the CIE
+values have been normalised so that the largest has a Y value of 100.<br>
 <br>
 There may be a keyword <span style="font-weight: bold;">TARGET_INSTRUMENT</span>
 which will identify the instrument used to read the test values. This
@@ -119,6 +124,11 @@ Spyder2"</span><br style="font-weight: bold;">
 <br>
 All instruments except the Spectrocam are assumed to have an "A" type
 illuminant (incandescent lamp of&nbsp; 2850 degrees Kelvin.)<br>
+<br>
+There may be a <span style="font-weight: bold;">INSTRUMENT_TYPE_SPECTRAL</span>
+keyword that must have a value of "<span style="font-weight: bold;">NO</span>"
+or "<span style="font-weight: bold;">YES</span>", to indicate whether
+the instrument is based on spectral measurement or not.<br>
 <br>
 There may be keywords with associated values <span
  style="font-weight: bold;">SINGLE_DIM_STEPS</span>, <span

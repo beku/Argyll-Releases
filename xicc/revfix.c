@@ -31,7 +31,7 @@
 #include <string.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "xicc.h"
 
@@ -242,7 +242,7 @@ void Labp_CMYKp(void *cntx, double out[4], double in[3]) {
 		p->count++;
 		pc = (int)(p->count * 100.0/p->total + 0.5);
 		if (pc != p->last) {
-			printf("\r%2d%%",pc), fflush(stdout);
+			printf("%c%2d%%",cr_char,pc), fflush(stdout);
 			p->last = pc;
 		}
 	}
@@ -293,7 +293,9 @@ main(int argc, char *argv[]) {
 	double klimit = -1.0;	/* Black ink limit */
 	int intsep = 0;			/* Not implimented in xicc yet ??? */
 	int rv = 0;
+
 	error_program = argv[0];
+	check_if_not_interactive();
 
 	if (argc < 2)
 		usage();

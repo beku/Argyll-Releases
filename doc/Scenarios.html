@@ -34,6 +34,8 @@ display profile</a></h4>
 <h4> &nbsp;&nbsp;&nbsp; <span style="text-decoration: underline;"></span><a
  href="#PM5">Installing a
 display profile</a></h4>
+<h4> &nbsp;&nbsp;&nbsp; <span style="text-decoration: underline;"></span><a
+ href="#PM6">Expert tips when measuring displays</a></h4>
 <h4><br>
 <a href="#PS1">Profiling Scanners and other input devices such as
 cameras<br>
@@ -421,6 +423,76 @@ in the background, as in its "daemon" mode it will
 update the profile and calibration in response to any changes in the
 the connected display.<br>
 <br>
+<h4><a name="PM6"></a>Expert tips when measuring displays:<br>
+</h4>
+Sometimes it can be difficult to get good quality, consistent and
+visually relevant readings from displays, due to various practical
+considerations with regard to instruments and the displays themselves.
+Argyll's tools have some extra options that may assist in overcoming
+these problems.<br>
+<br>
+If you are using an Eye-One Pro or ColorMunki spectrometer, then you
+may wish to use the <a href="dispcal.html#H">high resolution spectral
+mode</a> (<span style="font-weight: bold;">-H</span>). This may be
+better at capturing the often narrow wavelength peaks that are typical
+of display primary colors.<br>
+<br>
+Another option that can be used with the Eye-One Pro or ColorMunki
+spectrometer is the <a href="dispcal.html#V">adaptive measurement mode</a>
+(<span style="font-weight: bold;">-V</span>). By default a fixed
+measurement integration time is used, as this will give the most
+consistent results, but for displays with high contrast ratio's and
+deep blacks, the integration time may be too short to give adequate
+precision. The adaptive measurement mode increases integration time
+when measuring dark colors (which will increase the overall calibration
+or profiling time), and is capable of achieving higher precision for
+these dark measurements.<br>
+<br>
+All instruments depend on silicon sensors, and such sensors generate a
+temperature dependant level of noise ("dark noise") that is factored
+out of the measurements by a dark or black instrument calibration. The
+spectrometers in particular need this calibration before commencing
+each set of measurements. Often an instrument will warm up as it sits
+on a display, and this warming up can cause the dark noise to increase,
+leading to inaccuracies in dark patch measurements. The longer the
+measurement takes, the worse this problem is likely to be. One way of
+addressing this is to "acclimatise" the instrument before commencing
+measurements by placing it on the screen in a powered up state, and
+leaving it for some time. (Some people leave it for up to an hour to
+acclimatise.). Another approach is to try and <a href="dispcal.html#I">compensate
+for dark calibration changes</a> (<span style="font-weight: bold;">-Ib</span>)
+by doing on the fly calibrations during the measurements, based on the
+assumption that the black level of the display itself won't change
+significantly. <br>
+<br>
+Some displays take a long time to settle down and stabilise. The is
+often the case with LCD (Liquid Crystal) displays that use fluorescent
+back lights, and these sorts of displays can change in brightness
+significantly with changes in temperature. One way of addressing this
+is to make sure that the display is given adequate time to warm up
+before measurements. Another approach is to try and <a
+ href="dispcal.html#I">compensate for display white level</a>&nbsp;
+(<span style="font-weight: bold;">-Iw</span>) changes by doing on the
+fly calibrations during the measurements. Instrument black level drift
+and display white level drift can be combined (<span
+ style="font-weight: bold;">-Ibw</span>).<br>
+<br>
+Colorimeter instruments make use of physical color filters that
+approximate the standard observer spectral sensitivity curves. Because
+these filters are not perfectly accurate, the manufacturer calibrates
+the instrument for typical displays, which is why you have to make a
+selection between CRT (Cathode Ray Tube) and LCD (Liquid Crystal
+Display) modes. If you are measuring a display that has primary
+colorants that differ significantly from those typical displays,&nbsp;
+(ie. you have a Wide Gamut Display), then you may get disappointing
+results with a Colorimeter. One way of addressing this problem is to
+use a <a href="File_Formats.html#.ccmx">Colorimeter Correction Matrix</a>.
+These are specific to a particular Colorimeter and Display make and
+model combination, although a matrix for a different but similar type
+of display may give better results than none at all. A list of
+contributed <span style="font-weight: bold;">ccmx</span> files is <a
+ href="ccmxs.html">here</a>.<br>
+<span style="font-weight: bold;"></span><br>
 <hr size="2" width="100%">
 <h3><a name="PS1"></a>Profiling Scanners and other input devices such
 as cameras<br>
@@ -758,7 +830,8 @@ of
 patches.<br>
 <br>
 To assist the determination of test patch values, it can help to have a
-rough idea of how the device behaves. This could be in the form of an
+rough idea of how the device behaves, so that the device test point
+locations can be pre-conditioned. This could be in the form of an
 ICC profile of a similar device, or a lower quality, or previous
 profile for that particular device. If one were going to make a very
 high quality Lut based profile, then it might be worthwhile to make up
@@ -928,7 +1001,7 @@ used, then
 either the chart needs to be a single page, or separate .eps or .tiff
 files for
 each page should be used, so that they can be converted and printed one
-at a time (see the <a href="printtarg#e">-e</a> and <a
+at a time (see the <a href="printtarg.html#e">-e</a> and <a
  href="printtarg.html#t">-t</a> flags).<br>
 <br>
 <h4><a name="PP3"></a>Reading a print test chart using an instrument</h4>
@@ -1250,16 +1323,10 @@ profile.<br>
  src="Kparams.jpg"><br>
 <br>
 <br>
-Let's say we'd like to chose a moderate black curve, one that aims for
-about equal levels of CMY and K. We should also aim for it to be fairly
-smooth, since this will minimize visual artefacts caused by the limited
-fidelity that profile LUT tables are able to represent inside the
-profile. For minimum discontinuities we should aim for the curve to
+For minimum discontinuities we should aim for the curve to
 finish at the point it has to reach to satisfy the total ink limit at
-88% curve and 90% black.<br>
-<br>
-For a first try simply try a straight line between 0 and 100%K and 100%
-input:<br>
+87% curve and 93% black. For a first try we can simply set a straight
+line to that point: <br>
 <br>
 <a href="xicclu.html">xicclu</a> <a href="xicclu.html#g">-g</a> <a
  href="xicclu.html#k">-kp 0 0 .93 .87 1.0</a> <a href="xicclu.html#l">-l290</a>
@@ -1496,8 +1563,12 @@ containing the step wedge calibration chart readings.<br>
 </h4>
 The <a href="printcal.html">printcal</a> tool turns a calibration
 chart <a href="File_Formats.html#.ti3">.ti3</a> file into a <a
- href="File_Formats.html#.cal">.cal</a> file. It has three operating
-modes:- Initial calibration, Re-Calibration, and Verification.<br>
+ href="File_Formats.html#.cal">.cal</a> file. It has three main
+operating
+modes:- Initial calibration, Re-Calibration, and Verification. (A
+fourth mode, "Imitation" is very like Initial Calibration, but is used
+for establishing a calibration target that a similar printer can
+attempt to imitate.)<br>
 <br>
 The distinction between Initial Calibration and Re-Calibration is that
 in the initial calibration we establish the "aim points" or response we
@@ -1540,7 +1611,7 @@ The simplest possible way of creating the <span
  style="font-weight: bold;">PrinterA.cal</span> file is:<br>
 <br>
 &nbsp;
-<a href="printcal.html">printcal</a> <a href="printcal.htm#i">-i</a> <a
+<a href="printcal.html">printcal</a> <a href="printcal.html#i">-i</a> <a
  href="colprof.html#p2">PrinterA_c</a><br>
 <br>
 For more detailed information, you can add the <span
@@ -1549,7 +1620,7 @@ For more detailed information, you can add the <span
 <br>
 &nbsp;
 <a href="printcal.html">printcal</a> <a href="printcal.html#v">-v</a> <a
- href="printcal.html#p">-p</a> <a href="printcal.htm#i">-i</a> <a
+ href="printcal.html#p">-p</a> <a href="printcal.html#i">-i</a> <a
  href="colprof.html#p2">PrinterB_c</a><br>
 <br>
 (You will need to select the plot window and hit a key to advance past
@@ -1561,7 +1632,7 @@ file will be created:<br>
 <br>
 &nbsp;
 <a href="printcal.html">printcal</a> <a href="printcal.html#v">-v</a> <a
- href="printcal.html#p">-p</a> <a href="printcal.htm#r">-r</a> <a
+ href="printcal.html#p">-p</a> <a href="printcal.html#r">-r</a> <a
  href="colprof.html#p1">PrinterB_c_old</a> <a href="colprof.html#p2">PrinterB_c_new</a><br>
 <br>
 Various aim points are normally set automatically by <span
@@ -1573,7 +1644,7 @@ Black to 95%, we might use:<br>
 <br>
 &nbsp;
 <a href="printcal.html">printcal</a> <a href="printcal.html#v">-v</a> <a
- href="printcal.html#p">-p</a> <a href="printcal.htm#i">-i</a> <a
+ href="printcal.html#p">-p</a> <a href="printcal.html#i">-i</a> <a
  href="colprof.html#x">-xc 80</a> <a href="colprof.html#x">-xk 95</a> <a
  href="colprof.html#p2">PrinterB_c</a><br>
 <br>

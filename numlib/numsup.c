@@ -4,7 +4,7 @@
 /* (Perhaps these should be moved out of numlib at some stange ?) */
 
 /*
- * Copyright 1997 Graeme W. Gill
+ * Copyright 1997 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -27,12 +27,14 @@
 #include "numsup.h"
 
 /* 
- * TODO: Should probably break the error handler out into
+ * TODO: Should probably break all the non-numlib stuff out into
  *       a separate library, so that it can be ommitted.
  *       Or enhance it so that numerical callers of error()
  *       can get a callback on out of memory etc. ???
  *
  */
+
+/* Globals */
 
 char *exe_path = "\000";			/* Directory executable resides in ('/' dir separator) */
 char *error_program = "Unknown";	/* Name to report as responsible for an error */
@@ -43,7 +45,9 @@ int verbose_level = 6;			/* Current verbosity level */
 								/* 0 = none */
 								/* !0 = diagnostics */
 
-#undef RETURN_NULL_ON_MALLOC	/* Else error out here */
+/* Should Vector/Matrix Support functions return NULL on error, */
+/* or call error() ? */
+int ret_null_on_malloc_fail = 0;	/* Call error() */
 
 /******************************************************************/
 /* Executable path routine. Sets default error_program too. */
@@ -166,6 +170,28 @@ void set_exe_path(char *argv0) {
 }
 
 /******************************************************************/
+/* Check "ARGYLL_NOT_INTERACTIVE" environment variable.           */
+/******************************************************************/
+
+/* Check if the "ARGYLL_NOT_INTERACTIVE" environment variable is */
+/* set, and set cr_char to '\n' if it is. */
+
+int not_interactive = 0;
+char cr_char = '\r';
+
+void check_if_not_interactive() {
+	char *ev;
+
+	if ((ev = getenv("ARGYLL_NOT_INTERACTIVE")) != NULL) {
+		not_interactive = 1;
+		cr_char = '\n';
+	} else {
+		not_interactive = 0;
+		cr_char = '\r';
+	}
+}
+
+/******************************************************************/
 /* Default error/debug output routines */
 /******************************************************************/
 
@@ -241,12 +267,12 @@ int nh		/* Highest index */
 )	{
 	double *v;
 
-	if ((v = (double *) malloc((nh-nl+1) * sizeof(double))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dvector()");
-#endif
+	if ((v = (double *) malloc((nh-nl+1) * sizeof(double))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dvector()");
+	}
 	return v-nl;
 }
 
@@ -256,12 +282,12 @@ int nh		/* Highest index */
 ) {
 	double *v;
 
-	if ((v = (double *) calloc(nh-nl+1, sizeof(double))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dvector()");
-#endif
+	if ((v = (double *) calloc(nh-nl+1, sizeof(double))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dvector()");
+	}
 	return v-nl;
 }
 
@@ -296,21 +322,21 @@ int nch		/* Col high index */
 	rows = nrh - nrl + 1;
 	cols = nch - ncl + 1;
 
-	if ((m = (double **) malloc((rows + 1) * sizeof(double *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), pointers");
-#endif
+	if ((m = (double **) malloc((rows + 1) * sizeof(double *))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dmatrix(), pointers");
+	}
 	m -= nrl;	/* Offset to nrl */
 	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
 
-	if ((m[nrl-1] = (double *) malloc(rows * cols * sizeof(double))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), array");
-#endif
+	if ((m[nrl-1] = (double *) malloc(rows * cols * sizeof(double))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dmatrix(), array");
+	}
 
 	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
 	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
@@ -337,21 +363,21 @@ int nch		/* Col high index */
 	rows = nrh - nrl + 1;
 	cols = nch - ncl + 1;
 
-	if ((m = (double **) malloc((rows + 1) * sizeof(double *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), pointers");
-#endif
+	if ((m = (double **) malloc((rows + 1) * sizeof(double *))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dmatrix(), pointers");
+	}
 	m -= nrl;	/* Offset to nrl */
 	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
 
-	if ((m[nrl-1] = (double *) calloc(rows * cols, sizeof(double))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), array");
-#endif
+	if ((m[nrl-1] = (double *) calloc(rows * cols, sizeof(double))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dmatrix(), array");
+	}
 
 	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
 	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
@@ -401,28 +427,28 @@ int nch		/* Col high index */
 	rows = nrh - nrl + 1;
 	cols = nch - ncl + 1;
 
-	if (rows != cols)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("dhmatrix() given unequal rows and columns");
-#endif
+	if (rows != cols) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("dhmatrix() given unequal rows and columns");
+	}
 
-	if ((m = (double **) malloc((rows + 1) * sizeof(double *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dhmatrix(), pointers");
-#endif
+	if ((m = (double **) malloc((rows + 1) * sizeof(double *))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dhmatrix(), pointers");
+	}
 	m -= nrl;	/* Offset to nrl */
 	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
 
-	if ((m[nrl-1] = (double *) malloc((rows * rows + rows)/2 * sizeof(double))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dhmatrix(), array");
-#endif
+	if ((m[nrl-1] = (double *) malloc((rows * rows + rows)/2 * sizeof(double))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dhmatrix(), array");
+	}
 
 	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
 	for(i = nrl+1, j = 1; i <= nrh; i++, j++) /* Set subsequent row addresses */
@@ -449,28 +475,28 @@ int nch		/* Col high index */
 	rows = nrh - nrl + 1;
 	cols = nch - ncl + 1;
 
-	if (rows != cols)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("dhmatrix() given unequal rows and columns");
-#endif
+	if (rows != cols) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("dhmatrix() given unequal rows and columns");
+	}
 
-	if ((m = (double **) malloc((rows + 1) * sizeof(double *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dhmatrix(), pointers");
-#endif
+	if ((m = (double **) malloc((rows + 1) * sizeof(double *))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dhmatrix(), pointers");
+	}
 	m -= nrl;	/* Offset to nrl */
 	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
 
-	if ((m[nrl-1] = (double *) calloc((rows * rows + rows)/2, sizeof(double))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dhmatrix(), array");
-#endif
+	if ((m[nrl-1] = (double *) calloc((rows * rows + rows)/2, sizeof(double))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dhmatrix(), array");
+	}
 
 	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
 	for(i = nrl+1, j = 1; i <= nrh; i++, j++) /* Set subsequent row addresses */
@@ -527,12 +553,12 @@ int nch		/* Col high index */
 	double **m;
 
 	/* Allocate pointers to rows */
-	if ((m = (double **) malloc(nrow * sizeof(double*))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in convert_dmatrix()");
-#endif
+	if ((m = (double **) malloc(nrow * sizeof(double*))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in convert_dmatrix()");
+	}
 
 	m -= nrl;
 
@@ -558,19 +584,19 @@ int nch
 }
 
 /* -------------------------- */
-/* Float Vector malloc/free */
+/* Float vector malloc/free */
 float *fvector(
 int nl,		/* Lowest index */
 int nh		/* Highest index */
 )	{
 	float *v;
 
-	if ((v = (float *) malloc((nh-nl+1) * sizeof(float))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dvector()");
-#endif
+	if ((v = (float *) malloc((nh-nl+1) * sizeof(float))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in fvector()");
+	}
 	return v-nl;
 }
 
@@ -580,12 +606,12 @@ int nh		/* Highest index */
 ) {
 	float *v;
 
-	if ((v = (float *) calloc(nh-nl+1, sizeof(float))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dvector()");
-#endif
+	if ((v = (float *) calloc(nh-nl+1, sizeof(float))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in fvector()");
+	}
 	return v-nl;
 }
 
@@ -601,7 +627,7 @@ int nh		/* Highest index */
 }
 
 /* --------------------- */
-/* 2D Float vector malloc/free */
+/* 2D Float matrix malloc/free */
 float **fmatrix(
 int nrl,	/* Row low index */
 int nrh,	/* Row high index */
@@ -620,21 +646,21 @@ int nch		/* Col high index */
 	rows = nrh - nrl + 1;
 	cols = nch - ncl + 1;
 
-	if ((m = (float **) malloc((rows + 1) * sizeof(float *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), pointers");
-#endif
+	if ((m = (float **) malloc((rows + 1) * sizeof(float *))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dmatrix(), pointers");
+	}
 	m -= nrl;	/* Offset to nrl */
 	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
 
-	if ((m[nrl-1] = (float *) malloc(rows * cols * sizeof(float))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), array");
-#endif
+	if ((m[nrl-1] = (float *) malloc(rows * cols * sizeof(float))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dmatrix(), array");
+	}
 
 	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
 	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
@@ -661,21 +687,21 @@ int nch		/* Col high index */
 	rows = nrh - nrl + 1;
 	cols = nch - ncl + 1;
 
-	if ((m = (float **) malloc((rows + 1) * sizeof(float *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), pointers");
-#endif
+	if ((m = (float **) malloc((rows + 1) * sizeof(float *))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dmatrix(), pointers");
+	}
 	m -= nrl;	/* Offset to nrl */
 	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
 
-	if ((m[nrl-1] = (float *) calloc(rows * cols, sizeof(float))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dmatrix(), array");
-#endif
+	if ((m[nrl-1] = (float *) calloc(rows * cols, sizeof(float))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in dmatrix(), array");
+	}
 
 	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
 	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
@@ -711,12 +737,12 @@ int nh		/* Highest index */
 ) {
 	int *v;
 
-	if ((v = (int *) malloc((nh-nl+1) * sizeof(int))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dvector()");
-#endif
+	if ((v = (int *) malloc((nh-nl+1) * sizeof(int))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in ivector()");
+	}
 	return v-nl;
 }
 
@@ -726,12 +752,12 @@ int nh		/* Highest index */
 ) {
 	int *v;
 
-	if ((v = (int *) calloc(nh-nl+1, sizeof(int))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dvector()");
-#endif
+	if ((v = (int *) calloc(nh-nl+1, sizeof(int))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in ivector()");
+	}
 	return v-nl;
 }
 
@@ -748,7 +774,7 @@ int nh		/* Highest index */
 
 
 /* ------------------------------ */
-/* 2D integer vector malloc/free */
+/* 2D integer matrix malloc/free */
 
 int **imatrix(
 int nrl,	/* Row low index */
@@ -768,21 +794,21 @@ int nch		/* Col high index */
 	rows = nrh - nrl + 1;
 	cols = nch - ncl + 1;
 
-	if ((m = (int **) malloc((rows + 1) * sizeof(int *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in imatrix(), pointers");
-#endif
+	if ((m = (int **) malloc((rows + 1) * sizeof(int *))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in imatrix(), pointers");
+	}
 	m -= nrl;	/* Offset to nrl */
 	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
 
-	if ((m[nrl-1] = (int *) malloc(rows * cols * sizeof(int))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in imatrix(), array");
-#endif
+	if ((m[nrl-1] = (int *) malloc(rows * cols * sizeof(int))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in imatrix(), array");
+	}
 
 	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
 	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
@@ -809,21 +835,21 @@ int nch		/* Col high index */
 	rows = nrh - nrl + 1;
 	cols = nch - ncl + 1;
 
-	if ((m = (int **) malloc((rows + 1) * sizeof(int *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in imatrix(), pointers");
-#endif
+	if ((m = (int **) malloc((rows + 1) * sizeof(int *))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in imatrix(), pointers");
+	}
 	m -= nrl;	/* Offset to nrl */
 	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
 
-	if ((m[nrl-1] = (int *) calloc(rows * cols, sizeof(int))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in imatrix(), array");
-#endif
+	if ((m[nrl-1] = (int *) calloc(rows * cols, sizeof(int))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in imatrix(), array");
+	}
 
 	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
 	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
@@ -859,12 +885,12 @@ int nh		/* Highest index */
 ) {
 	short *v;
 
-	if ((v = (short *) malloc((nh-nl+1) * sizeof(short))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dvector()");
-#endif
+	if ((v = (short *) malloc((nh-nl+1) * sizeof(short))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in svector()");
+	}
 	return v-nl;
 }
 
@@ -874,12 +900,12 @@ int nh		/* Highest index */
 ) {
 	short *v;
 
-	if ((v = (short *) calloc(nh-nl+1, sizeof(short))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in dvector()");
-#endif
+	if ((v = (short *) calloc(nh-nl+1, sizeof(short))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in svector()");
+	}
 	return v-nl;
 }
 
@@ -916,21 +942,21 @@ int nch		/* Col high index */
 	rows = nrh - nrl + 1;
 	cols = nch - ncl + 1;
 
-	if ((m = (short **) malloc((rows + 1) * sizeof(short *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in imatrix(), pointers");
-#endif
+	if ((m = (short **) malloc((rows + 1) * sizeof(short *))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in smatrix(), pointers");
+	}
 	m -= nrl;	/* Offset to nrl */
 	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
 
-	if ((m[nrl-1] = (short *) malloc(rows * cols * sizeof(short))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in imatrix(), array");
-#endif
+	if ((m[nrl-1] = (short *) malloc(rows * cols * sizeof(short))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in smatrix(), array");
+	}
 
 	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
 	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
@@ -957,21 +983,21 @@ int nch		/* Col high index */
 	rows = nrh - nrl + 1;
 	cols = nch - ncl + 1;
 
-	if ((m = (short **) malloc((rows + 1) * sizeof(short *))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in imatrix(), pointers");
-#endif
+	if ((m = (short **) malloc((rows + 1) * sizeof(short *))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in smatrix(), pointers");
+	}
 	m -= nrl;	/* Offset to nrl */
 	m += 1;		/* Make nrl-1 pointer to main allocation, in case rows get swaped */
 
-	if ((m[nrl-1] = (short *) calloc(rows * cols, sizeof(short))) == NULL)
-#ifdef RETURN_NULL_ON_MALLOC
-		return NULL;
-#else
-		error("Malloc failure in imatrix(), array");
-#endif
+	if ((m[nrl-1] = (short *) calloc(rows * cols, sizeof(short))) == NULL) {
+		if (ret_null_on_malloc_fail)
+			return NULL;
+		else
+			error("Malloc failure in smatrix(), array");
+	}
 
 	m[nrl] = m[nrl-1] - ncl;		/* Set first row address, offset to ncl */
 	for(i = nrl+1; i <= nrh; i++)	/* Set subsequent row addresses */
@@ -1047,8 +1073,14 @@ unsigned int doubletoIEEE754(double d) {
 /* on the rare platforms that don't use IEEE 754 floating */
 /* point for their C implementation) */
 double IEEE754todouble(unsigned int ip) {
-	unsigned int sn = 0, ep = 0, ma;
 	double op;
+#ifdef NEVER			/* For testing */
+	float fv;
+
+	*((unsigned int *)(&fv)) = ip;
+	op = fv * 1.00001;
+#else
+	unsigned int sn = 0, ep = 0, ma;
 
 	sn = (ip >> 31) & 0x1;
 	ep = (ip >> 23) & 0xff;
@@ -1063,6 +1095,7 @@ double IEEE754todouble(unsigned int ip) {
 	}
 	if (sn)
 		op = -op;
+#endif
 	return op;
 }
 

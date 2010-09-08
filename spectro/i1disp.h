@@ -84,6 +84,7 @@ struct _i1disp {
 	int       dtype;			/* Device type: 0 = i1D1, 1 = i1D2 */	
 	int       lite;				/* i1D2: 0 = normal, 1 = "Lite" */
 	int       munki;			/* i1D2: 0 = normal, 1 = "Munk" */
+	int       hpdream;			/* i1D2: 0 = normal, 1 = "ObiW" */
 	int       chroma4;			/* 0 = other, 1 = Sequel Chroma 4 (i1D1 based) */
 	inst_mode mode;				/* Currently selected mode */
 
@@ -96,10 +97,12 @@ struct _i1disp {
 
 	double  reg4_F[9];			/* LCD 3x3 calibration matrix (also known as "user") */
 	int     reg50_W;			/* Calibration time in secs from January 1, 1970, UTC */
-	int     reg126_S;			/* cal valid/state flag. For the i1disp this is 0xd, */
+	int     reg126_S;			/* LCD cal valid/state flag. For the i1disp this is 0xd, */
 								/* perhaps meaning that it is the LCD matrix. */
 								/* It's set to 7 after storing a user calibration. */
 								/* A value of 0xffff or < 7 means that it's invalid */
+								/* A value of 2 seems valid for OEM instruments */
+								/* (Heidelberg Viewmaker & Lacie Blue Eye) */
 
 	double  reg54_F[9];			/* CRT 3x3 calibration matrix (also known as "factory") */
 	int     reg90_W;			/* cal valid/time flag.  0xffffffff = invalid, */
@@ -117,6 +120,7 @@ struct _i1disp {
 	int     reg102_B;			/* Not used ? */
 
 	double  reg103_F[3];		/* Dark current calibration values */
+								/* Not valid if reg126_S < 0xd ?? */
 
 	int     reg115_B;			/* Unknown */
 	int     reg121_B;			/* Device ID character */
@@ -134,6 +138,8 @@ struct _i1disp {
 	double  rgbadj1[3];			/* RGB adjustment values, typically 1e6 */
 	double  rgbadj2[3];			/* RGB adjustment values, typically 1.0 */
 	double  amb[9];				/* Ambient measurement matrix = ref144[] * average of LCD & CRT */
+
+	double ccmat[3][3];			/* Colorimeter correction matrix */
 
 	/* For dtype == 1 (Eye-One Display2) */
 	int     itset;				/* Flag, nz if the integration time has been measured and set */

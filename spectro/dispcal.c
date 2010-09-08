@@ -42,11 +42,6 @@
 	chosen locus. ie. should it do this if "-t" or "-T"
 	with no specific teperature is chosen ?
 
-	We could improve the robustnes against LCD warm up
-	effects by reading the white every N readings,
-	and then linearly interpolating the white readings,
-	and scaling them back to a reference white.
-
 	Need to add flare measure/subtract, to improve
 	projector calibration ? - need to add to dispread too.
 
@@ -72,11 +67,12 @@
 #include <conio.h>
 #endif
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "xicc.h"
 #include "xspect.h"
 #include "xcolorants.h"
+#include "ccmx.h"
 #include "cgats.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -94,9 +90,9 @@
 #include "spyd2setup.h"			/* Enable Spyder 2 access */
 
 #undef DEBUG
-#undef DEBUG_OFFSET		/* Keep test window out of the way */
-#undef DEBUG_PLOT		/* Plot curve each time around */
-#undef CHECK_MODEL		/* Do readings to check the accuracy of our model */
+#undef DEBUG_OFFSET			/* Keep test window out of the way */
+#undef DEBUG_PLOT			/* Plot curve each time around */
+#undef CHECK_MODEL			/* Do readings to check the accuracy of our model */
 #undef SHOW_WINDOW_ONFAKE	/* Display a test window up for a fake device */
 
 /* Invoke with -dfake for testing with a fake device. */
@@ -1182,7 +1178,7 @@ void usage(char *diag, ...) {
 
 	fprintf(stderr,"Calibrate a Display, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	if (setup_spyd2(NULL) == 2)
+	if (setup_spyd2() == 2)
 		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	if (diag != NULL) {
 		va_list args;
@@ -1224,7 +1220,7 @@ void usage(char *diag, ...) {
 					break;
 				if (strlen(paths[i]->path) >= 8
 				  && strcmp(paths[i]->path+strlen(paths[i]->path)-8, "Spyder2)") == 0
-				  && setup_spyd2(NULL) == 0)
+				  && setup_spyd2() == 0)
 					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->path);
 				else
 					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
@@ -1273,9 +1269,11 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
 	fprintf(stderr," -V                   Use adaptive measurement mode (if available)\n");
-#ifdef NEVER
+	fprintf(stderr," -X file.ccmx         Apply Colorimeter Correction Matrix\n");
+	fprintf(stderr," -Q observ            Choose CIE Observer for spectrometer data:\n");
+	fprintf(stderr,"                      1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
+	fprintf(stderr," -I b|w               Drift compensation, Black: -Ib, White: -Iw, Both: -Ibw\n");
 	fprintf(stderr," -C \"command\"         Invoke shell \"command\" each time a color is set\n");
-#endif
 	fprintf(stderr," -M \"command\"         Invoke shell \"command\" each time a color is measured\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
@@ -1314,6 +1312,8 @@ int main(int argc, char *argv[])
 	int nocal = 0;						/* Disable auto calibration */
 	int highres = 0;					/* Use high res mode if available */
 	int adaptive = 0;					/* Use adaptive mode if available */
+	int bdrift = 0;						/* Flag, nz for black drift compensation */
+	int wdrift = 0;						/* Flag, nz for white drift compensation */
 	double temp = 0.0;					/* Color temperature (0 = native) */
 	int planckian = 0;					/* 0 = Daylight, 1 = Planckian color locus */
 	int dovct = 1;						/* Show VXT rather than CXT for adjusting white point */
@@ -1337,7 +1337,10 @@ int main(int argc, char *argv[])
 	char *mcallout = NULL;				/* Measure color Shell callout */
 	char outname[MAXNAMEL+1] = { 0 };	/* Output cgats file base name */
 	char iccoutname[MAXNAMEL+1] = { 0 };/* Output icc file base name */
-	int spectral = 0;					/* Want spectral data from instrument */
+	char ccmxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction Matrix name */
+	ccmx *cmx = NULL;					/* Colorimeter Correction Matrix */
+	int spec = 0;						/* Want spectral data from instrument */
+	icxObserverType observ = icxOT_CIE_1931_2;
 	disprd *dr = NULL;					/* Display patch read object */
 	csamp asgrey;						/* Main calibration loop test points */
 	double dispLum = 0.0;				/* Display luminence reading */
@@ -1349,6 +1352,7 @@ int main(int argc, char *argv[])
 	cctx x;								/* Context for calibration solution */
 
 	set_exe_path(argv[0]);				/* Set global exe_path and error_program */
+	check_if_not_interactive();
 
 #if defined(__APPLE__)
 	{
@@ -1369,7 +1373,7 @@ int main(int argc, char *argv[])
 #endif
 	gamma = g_def_gamma;
 
-	setup_spyd2(NULL);					/* Load firware if available */
+	setup_spyd2();					/* Load firware if available */
 
 	x.gammat = gt_power ;				/* Default gamma type */
 	x.egamma = 0.0;						/* Default effective gamma none */
@@ -1476,13 +1480,54 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'V') {
 				adaptive = 1;
 
-#ifdef NEVER	/* Doesn't make much sense if VideoLUTs can't be set ? */
+			/* Colorimeter Correction Matrix */
+			} else if (argv[fa][1] == 'X') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expected following -X");
+				strncpy(ccmxname,na,MAXNAMEL-1); ccmxname[MAXNAMEL-1] = '\000';
+
+			/* Drift Compensation */
+			} else if (argv[fa][1] == 'I') {
+				fa = nfa;
+				if (na == NULL || na[0] == '\000') usage("Parameter expected after -I");
+				for (i=0; ; i++) {
+					if (na[i] == '\000')
+						break;
+					if (na[i] == 'b' || na[i] == 'B')
+						bdrift = 1;
+					else if (na[i] == 'w' || na[i] == 'W')
+						wdrift = 1;
+					else
+						usage("-I parameter '%c' not recognised",na[i]);
+				}
+
+			/* Spectral Observer type */
+			} else if (argv[fa][1] == 'Q') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expecte after -Q");
+				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
+					spec = 2;
+					observ = icxOT_CIE_1931_2;
+				} else if (strcmp(na, "1964_10") == 0) {	/* Classic 10 degree */
+					spec = 2;
+					observ = icxOT_CIE_1964_10;
+				} else if (strcmp(na, "1955_2") == 0) {		/* Stiles and Burch 1955 2 degree */
+					spec = 2;
+					observ = icxOT_Stiles_Burch_2;
+				} else if (strcmp(na, "1978_2") == 0) {		/* Judd and Voss 1978 2 degree */
+					spec = 2;
+					observ = icxOT_Judd_Voss_2;
+				} else if (strcmp(na, "shaw") == 0) {		/* Shaw and Fairchilds 1997 2 degree */
+					spec = 2;
+					observ = icxOT_Shaw_Fairchild_2;
+				} else
+					usage("-Q parameter '%s' not recognised",na);
+
 			/* Change color callout */
 			} else if (argv[fa][1] == 'C') {
 				fa = nfa;
 				if (na == NULL) usage("Parameter expected after -C");
 				ccallout = na;
-#endif
 
 			/* Measure color callout */
 			} else if (argv[fa][1] == 'M') {
@@ -1584,12 +1629,12 @@ int main(int argc, char *argv[])
 				profDesc = na;
 
 			/* Update calibration and (optionally) profile */
-			} else if (argv[fa][1] == 'u' || argv[fa][1] == 'U') {
+			} else if (argv[fa][1] == 'u') {
 				doupdate = 1;
 				docontrols = 0;
 
 			/* Quality */
-			} else if (argv[fa][1] == 'q' || argv[fa][1] == 'Q') {
+			} else if (argv[fa][1] == 'q') {
 				fa = nfa;
 				if (na == NULL) usage("Parameter expected following -q");
     			switch (na[0]) {
@@ -1619,10 +1664,10 @@ int main(int argc, char *argv[])
 				}
 
 			/* Display type */
-			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
+			} else if (argv[fa][1] == 'y') {
 				fa = nfa;
 				if (na == NULL) usage("Parameter expected after -y");
-				if (na[0] == 'c')
+				if (na[0] == 'c' || na[9] == 'C')
 					dtype = 1;
 				else if (na[0] == 'l' || na[0] == 'L')
 					dtype = 2;
@@ -1760,6 +1805,22 @@ int main(int argc, char *argv[])
 			error("Unable to open the default display");
 	}
 
+	/* See if there is an environment variable ccmx */
+	{
+		char *na = getenv("ARGYLL_COLMTER_COR_MATRIX");
+		if (na != NULL) {
+			strncpy(ccmxname,na,MAXNAMEL-1); ccmxname[MAXNAMEL-1] = '\000';
+		}
+	}
+	/* Colorimeter Correction Matrix */
+	if (ccmxname[0] != '\000') {
+		if ((cmx = new_ccmx()) == NULL)
+			error("new_ccmx failed\n");
+		if (cmx->read_ccmx(cmx,ccmxname))
+			error("Reading Colorimeter Correction Matrix file '%s' failed with error %d:'%s'\n",
+		     	       ccmxname, cmx->errc, cmx->err);
+	}
+
 	if (docalib) {
 		if ((rv = disprd_calibration(itype, comport, fc, dtype, proj, adaptive, nocal, disp,
 		                             blackbg, override, patsize, ho, vo, verb, debug)) != 0) {
@@ -1797,9 +1858,13 @@ int main(int argc, char *argv[])
 		donat = 0;	/* But measure calibrated response of verify or report calibrated */ 
 	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, proj, adaptive, nocal,
 	                     highres, donat, NULL, 0, disp, blackbg, override, ccallout, mcallout,
-	                     patsize, ho, vo, spectral, verb, VERBOUT, debug,
+	                     patsize, ho, vo, cmx != NULL ? cmx->matrix : NULL, spec, observ,
+	                     bdrift, wdrift, verb, VERBOUT, debug,
 	                     "fake" ICC_FILE_EXT)) == NULL)
 		error("new_disprd() failed with '%s'\n",disprd_err(errc));
+
+	if (cmx != NULL)
+		cmx->del(cmx);
 
 	/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 	if (doreport) {
@@ -2493,7 +2558,8 @@ int main(int argc, char *argv[])
 					dir = tar1 - val1;
 					if (fabs(dir) < 0.01)
 						dir = 0.0;
-					printf("\r%c Current %.2f  %c",
+					printf("%c%c Current %.2f  %c",
+					       cr_char,
 					       ff == 0 ? '/' : '\\',
 					       val1,
 					       dir < 0.0 ? '-' : dir > 0.0 ? '+' : '=');
@@ -2583,14 +2649,14 @@ int main(int argc, char *argv[])
 
 				if (!nat) {	/* Target is a specified white */
 					printf("\nAdjust R,G & B gain to get target x,y. Press space when done.\n");
-					printf("   Target Br %.2f, x %.4f, y %.4f\n",
+					printf("   Target Br %.2f, x %.4f , y %.4f \n",
 					        tarw, tYxy[1],tYxy[2]);
 
 				} else {	/* Target is native white */
 					printf("\nAdjust R,G & B gain to desired white point. Press space when done.\n");
 					/* Compute the CT and delta E to white locus of target */
 					ct = comp_ct(&ct_de, NULL, planckian, dovct, tcols[0].aXYZ);
-					printf("  Initial Br %.2f, x %.4f, y %.4f, %c%cT %4.0fK DE 2K %4.1f\n",
+					printf("  Initial Br %.2f, x %.4f , y %.4f , %c%cT %4.0fK DE 2K %4.1f\n",
 					        tarw, tYxy[1],tYxy[2],
 				            dovct ? 'V' : 'C', planckian ? 'C' : 'D', ct,ct_de);
 				}
@@ -2678,9 +2744,14 @@ int main(int argc, char *argv[])
 
 	
 					if (!nat) {
-						printf("\r%c Current Br %.2f, x %.4f, y %.4f  DE %4.1f  R%c%c G%c%c B%c%c ",
+						printf("%c%c Current Br %.2f, x %.4f%c, y %.4f%c  DE %4.1f  R%c%c G%c%c B%c%c ",
+						   cr_char,
 					       ff == 0 ? '/' : '\\',
-					       tcols[0].aXYZ[1], Yxy[1], Yxy[2],
+					       tcols[0].aXYZ[1],
+					       Yxy[1],
+						   Yxy[1] > tYxy[1] ? '-' : Yxy[1] < tYxy[1] ? '+' : '=',
+					       Yxy[2],
+						   Yxy[2] > tYxy[2] ? '-' : Yxy[2] < tYxy[2] ? '+' : '=',
 					       icmCIE2K(tLab, Lab),
 					       rgbdir[0] < 0.0 ? '-' : rgbdir[0] > 0.0 ? '+' : '=',
 					       rgbxdir[0] < 0.0 ? '-' : rgbxdir[0] > 0.0 ? '+' : ' ',
@@ -2689,9 +2760,14 @@ int main(int argc, char *argv[])
 					       rgbdir[2] < 0.0 ? '-' : rgbdir[2] > 0.0 ? '+' : '=',
 					       rgbxdir[2] < 0.0 ? '-' : rgbxdir[2] > 0.0 ? '+' : ' ');
 					} else {
-						printf("\r%c Current Br %.2f, x %.4f, y %.4f  %c%cT %4.0fK DE %4.1f  R%c%c G%c%c B%c%c ",
+						printf("%c%c Current Br %.2f, x %.4f%c, y %.4f%c  %c%cT %4.0fK DE 2K %4.1f  R%c%c G%c%c B%c%c ",
+						   cr_char,
 					       ff == 0 ? '/' : '\\',
-					       tcols[0].aXYZ[1], Yxy[1], Yxy[2],
+					       tcols[0].aXYZ[1],
+					       Yxy[1],
+						   Yxy[1] > tYxy[1] ? '-': Yxy[1] < tYxy[1] ? '+' : '=',
+					       Yxy[2],
+						   Yxy[2] > tYxy[2] ? '-': Yxy[2] < tYxy[2] ? '+' : '=',
 				           dovct ? 'V' : 'C', planckian ? 'C' : 'D', ct,ct_de,
 					       rgbdir[0] < 0.0 ? '-' : rgbdir[0] > 0.0 ? '+' : '=',
 					       rgbxdir[0] < 0.0 ? '-' : rgbxdir[0] > 0.0 ? '+' : ' ',
@@ -2754,12 +2830,14 @@ int main(int argc, char *argv[])
 						dir = 0.0;
 
 					if (tbright > 0.0)
-						printf("\r%c Current %.2f  %c",
+						printf("%c%c Current %.2f  %c",
+						   cr_char,
 					       ff == 0 ? '/' : '\\',
 					       tcols[0].aXYZ[1],
 					       dir < 0.0 ? '-' : dir > 0.0 ? '+' : '=');
 					else
-						printf("\r%c Current %.2f   ",
+						printf("%c%c Current %.2f   ",
+						   cr_char,
 					       ff == 0 ? '/' : '\\',
 					       tcols[0].aXYZ[1]);
 					fflush(stdout);
@@ -2848,7 +2926,7 @@ int main(int argc, char *argv[])
 				}
 
 				printf("\nAdjust R,G & B offsets to get target x,y. Press space when done.\n");
-				printf("   Target Br %.2f, x %.4f, y %.4f\n", tar1, tYxy[1],tYxy[2]);
+				printf("   Target Br %.2f, x %.4f , y %.4f \n", tar1, tYxy[1],tYxy[2]);
 				for (ff = 0;; ff ^= 1) {
 					double dir;			/* Direction to adjust brightness */
 					double sv[3], val1;				/* Scaled values */
@@ -2917,9 +2995,14 @@ int main(int argc, char *argv[])
 						rgbdir[0] = rgbdir[1] = rgbdir[2] = 0.0;
 					rgbxdir[bx] = rgbdir[bx];
 
-			 		printf("\r%c Current Br %.2f, x %.4f, y %.4f  DE %4.1f  R%c%c G%c%c B%c%c ",
+			 		printf("%c%c Current Br %.2f, x %.4f%c, y %.4f%c  DE %4.1f  R%c%c G%c%c B%c%c ",
+					       cr_char,
 					       ff == 0 ? '/' : '\\',
-					       val1, Yxy[1], Yxy[2],
+					       val1,
+					       Yxy[1],
+						   Yxy[1] > tYxy[1] ? '-': Yxy[1] < tYxy[1] ? '+' : '=',
+					       Yxy[2],
+						   Yxy[2] > tYxy[2] ? '-': Yxy[2] < tYxy[2] ? '+' : '=',
 					       icmCIE2K(tLab, Lab),
 					       rgbdir[0] < 0.0 ? '-' : rgbdir[0] > 0.0 ? '+' : '=',
 					       rgbxdir[0] < 0.0 ? '-' : rgbxdir[0] > 0.0 ? '+' : ' ',
@@ -2985,6 +3068,7 @@ int main(int argc, char *argv[])
 				}
 				
 				/* Scale 1% values by ratio of Y to white XYZ */
+				/* (Note we're assuming -k1 here, which may not be true...) */
 				sv[0] = tcols[3].aXYZ[0] * tcols[2].aXYZ[1]/tcols[2].aXYZ[0];
 				sv[1] = tcols[3].aXYZ[1];
 				sv[2] = tcols[3].aXYZ[2] * tcols[2].aXYZ[1]/tcols[2].aXYZ[2];
@@ -3220,18 +3304,24 @@ int main(int argc, char *argv[])
 	/* Now do some more readings, to compute the basic per channel */
 	/* transfer characteristics, and then a device model. */
 	if (verify != 2 && !doupdate) {
-		col set[4];				/* Variable to read up to 4 values from the display */
+		col *cols;				/* Read 4 x isteps patches from display */
 		sxyz *asrgb[4];			/* samples for r, g, b & w */
 
+		if ((cols = (col *)malloc(isteps * 4 * sizeof(col))) == NULL) {
+			dr->del(dr);
+			error ("Malloc of array of readings failed");
+		}
 		for (j = 0; j < 4; j++) {
 			if ((asrgb[j] = (sxyz *)malloc(isteps * sizeof(sxyz))) == NULL) {
+				free(cols);
 				dr->del(dr);
 				error ("Malloc of array of readings failed");
 			}
 		}
 
+		/* Set the device colors to read */
 		for (i = 0; i < isteps; i++) {
-			double vv, v[4];
+			double vv;
 
 #if defined(__APPLE__) && defined(__POWERPC__)
 			gcc_bug_fix(i);
@@ -3239,29 +3329,35 @@ int main(int argc, char *argv[])
 			vv = i/(isteps - 1.0);
 			vv = pow(vv, MOD_DIST_POW);
 			for (j = 0; j < 4; j++) {
-				v[j] = vv;
-				set[j].r = set[j].g = set[j].b = 0.0;
+				cols[i * 4 + j].r = cols[i * 4 + j].g = cols[i * 4 + j].b = 0.0;
 				if (j == 0)
-					set[j].r = v[j];
+					cols[i * 4 + j].r = vv;
 				else if (j == 1)
-					set[j].g = v[j];
+					cols[i * 4 + j].g = vv;
 				else if (j == 2)
-					set[j].b = v[j];
+					cols[i * 4 + j].b = vv;
 				else
-					set[j].r = set[j].g = set[j].b = v[j];
+					cols[i * 4 + j].r = cols[i * 4 + j].g = cols[i * 4 + j].b = vv;
 			}
+		}
 
-			if ((rv = dr->read(dr, set, 4, i * 4+1, isteps * 4, 1, 0)) != 0) {
-				dr->del(dr);
-				error("display read failed with '%s'\n",disprd_err(rv));
-			} 
+		/* Read the patches */
+		if ((rv = dr->read(dr, cols, isteps * 4, 1, isteps * 4, 1, 0)) != 0) {
+			free(cols); free(asrgb[0]); free(asrgb[1]); free(asrgb[2]); free(asrgb[3]);
+			dr->del(dr);
+			error("display read failed with '%s'\n",disprd_err(rv));
+		} 
+
+		/* Transfer readings to asrgb[] */
+		for (i = 0; i < isteps; i++) {
+			double vv =  cols[i * 4 + 0].r;
 			for (j = 0; j < 4; j++) {
 //printf("~1 R = %f, G = %f, B = %f, XYZ = %f %f %f\n",
-//set[j].r, set[j].g, set[j].b, set[j].aXYZ[0], set[j].aXYZ[1], set[j].aXYZ[2]);
-				asrgb[j][i].v = v[j];
-				asrgb[j][i].xyz[0] = set[j].aXYZ[0];
-				asrgb[j][i].xyz[1] = set[j].aXYZ[1];
-				asrgb[j][i].xyz[2] = set[j].aXYZ[2];
+//cols[i * 4 + j].r, cols[i * 4 + j].g, cols[i * 4 + j].b, cols[i * 4 + j].aXYZ[0], cols[i * 4 + j].aXYZ[1], cols[i * 4 + j].aXYZ[2]);
+				asrgb[j][i].v = vv;
+				asrgb[j][i].xyz[0] = cols[i * 4 + j].aXYZ[0];
+				asrgb[j][i].xyz[1] = cols[i * 4 + j].aXYZ[1];
+				asrgb[j][i].xyz[2] = cols[i * 4 + j].aXYZ[2];
 			}
 		}
 
@@ -3279,6 +3375,7 @@ int main(int argc, char *argv[])
 //printf("~1 linearised RGB should be %f %f %f\n", blrgb[0], blrgb[1], blrgb[2]);
 
 			if ((sdv = malloc(sizeof(mcvco) * isteps)) == NULL) {
+				free(cols); free(asrgb[0]); free(asrgb[1]); free(asrgb[2]); free(asrgb[3]);
 				dr->del(dr);
 				error ("Malloc of scattered data points failed");
 			}
@@ -3291,6 +3388,7 @@ int main(int argc, char *argv[])
 //k,i,x.sdv[k][i].p,x.sdv[k][i].v, asrgb[k][i].xyz[0], asrgb[k][i].xyz[1], asrgb[k][i].xyz[2]);
 				}
 				if ((x.dcvs[k] = new_mcv()) == NULL) {
+					free(cols); free(asrgb[0]); free(asrgb[1]); free(asrgb[2]); free(asrgb[3]);
 					dr->del(dr);
 					error("new_mcv x.dcvs[%d] failed",k);
 				}
@@ -3307,6 +3405,7 @@ int main(int argc, char *argv[])
 			/* Setup list of reference points ready for optimisation */
 			x.nrp = 4 * isteps;
 			if ((x.rp = (optref *)malloc(sizeof(optref) * x.nrp)) == NULL) {
+				free(cols); free(asrgb[0]); free(asrgb[1]); free(asrgb[2]); free(asrgb[3]);
 				dr->del(dr);
 				error ("Malloc of measurement reference points failed");
 			}
@@ -3335,22 +3434,30 @@ int main(int argc, char *argv[])
 
 			/* Get parameters and setup for optimisation */
 			op = dev_get_params(&x);
-			if ((sa = malloc(x.np * sizeof(double))) == NULL)
+			if ((sa = malloc(x.np * sizeof(double))) == NULL) {
+				free(cols); free(asrgb[0]); free(asrgb[1]); free(asrgb[2]); free(asrgb[3]);
+				dr->del(dr);
 				error ("Malloc of scattered data points failed");
+			}
 			
 			for (i = 0; i < x.np; i++)
 				sa[i] = 0.1;
 
 			/* Do optimisation */
 #ifdef NEVER
-			if (powell(&re, x.np, op, sa, 1e-5, 3000, dev_opt_func, (void *)&x, NULL, NULL) != 0)
+			if (powell(&re, x.np, op, sa, 1e-5, 3000, dev_opt_func, (void *)&x, NULL, NULL) != 0) {
+				free(cols); free(asrgb[0]); free(asrgb[1]); free(asrgb[2]); free(asrgb[3]);
+				dr->del(dr);
 				error ("Model powell failed, re = %f",re);
+			}
 #else
 			if (conjgrad(&re, x.np, op, sa, 1e-5, 3000,
 			                         dev_opt_func, dev_dopt_func, (void *)&x, NULL, NULL) != 0) {
-				if (re > 1e-2)
+				if (re > 1e-2) {
+					free(cols); free(asrgb[0]); free(asrgb[1]); free(asrgb[2]); free(asrgb[3]);
+					dr->del(dr);
 					error("Model conjgrad failed, residual error = %f",re);
-				else
+				} else
 					warning("Model conjgrad failed, residual error = %f",re);
 			}
 #endif
@@ -3385,9 +3492,8 @@ int main(int argc, char *argv[])
 		}
 #endif
 
-		/* We're done with asrgb[] */
-		for (j = 0; j < 4; j++)
-			free(asrgb[j]);
+		/* We're done with cols[] and asrgb[] */
+		free(cols); free(asrgb[0]); free(asrgb[1]); free(asrgb[2]); free(asrgb[3]);
 	}
 
 #ifdef CHECK_MODEL
@@ -3401,6 +3507,7 @@ int main(int argc, char *argv[])
 		double anerr;		/* Average neutral error */
 
 		mnerr = anerr = 0.0;
+		/* !!! Should change this to single batch to work better with drift comp. !!! */
 		for (i = 0; i < nn; i++) {
 			double vv, v[3];
 			double de;
@@ -3775,6 +3882,8 @@ int main(int argc, char *argv[])
 	}
 #endif
 
+	dr->reset_targ_w(dr);			/* Reset white drift target at start of main cal. */
+
 	/* Now we go into the main verify & refine loop */
 	for (it = verify == 2 ? mxits : 0; it < mxits || verify != 0;
 	     rsteps *= 2, errthr /= (it < mxits) ? pow(2.0,THRESH_SCALE_POW) : 1.0, it++)  {
@@ -3854,12 +3963,14 @@ int main(int argc, char *argv[])
 				/* adjust all the other point targets txyz to track the white. */
 				if (x.nat && i == (rsteps-1) && it < mxits && asgrey.s[i].v == 1.0) {
 
-					icmAry2Ary(x.twh, asgrey.s[i].XYZ);	/* Set current white */
-					icmAry2XYZ(x.twN, x.twh);			/* Need this for Lab conversions */
-														/* Recompute txyz */
-					init_csamp_txyz(&asgrey, &x, 1);
+					icmAry2Ary(x.twh, asgrey.s[i].XYZ);		/* Set current white */
+					icmAry2XYZ(x.twN, x.twh);				/* Need this for Lab conversions */
+					init_csamp_txyz(&asgrey, &x, 1);		/* Recompute txyz's */
+					icmAry2Ary(peqXYZ, asgrey.s[i].tXYZ);	/* Fix peqXYZ */
 //printf("~1 Just reset target white to native white\n");
-					icmAry2Ary(peqXYZ, asgrey.s[i].tXYZ);	/* Its own aim point */
+					if (wdrift) {	/* Make sure white drift is reset on next read. */
+						dr->reset_targ_w(dr);			/* Reset this */
+					}
 				}
 
 				/* Compute the current change wanted to hit target */

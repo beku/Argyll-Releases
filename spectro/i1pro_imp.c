@@ -7,7 +7,7 @@
  * Author: Graeme W. Gill
  * Date:   24/11/2006
  *
- * Copyright 2006 - 2008 Graeme W. Gill
+ * Copyright 2006 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -42,6 +42,14 @@
 	See the Munki implementation for an approach to fix this ??
 */
 
+/*
+	Notes:
+
+	The Rev D seems to die if it is ever given a GET_STATUS. This is why
+	the WinUSB driver can't be used with it.
+
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -50,7 +58,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "rspl.h"
 #include "xspect.h"
@@ -62,13 +70,14 @@
 /* Configuration */
 #define USE_THREAD		/* Need to use thread, or there are 1.5 second internal */
 						/* instrument delays ! */
+#undef WAIT_FOR_DELAY_TRIGGER	/* Hack to diagnose threading problems */
 #undef ENABLE_WRITE		/* Enable writing of calibration and log data to the EEProm */
 #define ENABLE_NONVCAL	/* Enable saving calibration state between program runs in a file */
+#define ENABLE_NONLINCOR	/* Enable non-linear correction */
 #define CALTOUT (24 * 60 * 60)	/* Calibration timeout in seconds */
 #define MAXSCANTIME 15.0	/* MAximum scan time in seconds */
 #define SW_THREAD_TIMEOUT	(10 * 60.0) 	/* Switch read thread timeout */
 
-#undef SELF_CONT		/* Use self contained spectral->XYZ, else use xicc */
 #define SINGLE_READ		/* Use a single USB read for scan to eliminate latency issues. */
 #define HIGH_RES		/* Enable high resolution spectral mode code. Dissable */
 						/* to break dependency on rspl library. */
@@ -85,6 +94,8 @@
 #undef HIGH_RES_PLOT
 #undef FAKE_AMBIENT		/* Fake the ambient mode for a Rev A */
 
+#define MATCH_SPOT_OMD			/* [Def] Match Original Manufacturers Driver. Reduce */
+								/* integration time and lamp turn on time */
 
 #define DISP_INTT 2.0			/* Seconds per reading in display spot mode */
 								/* More improves repeatability in dark colors, but limits */
@@ -105,15 +116,16 @@
 
 /* High res mode settings */
 #define HIGHRES_SHORT 350
-#define HIGHRES_LONG  750
+#define HIGHRES_LONG  740
 #define HIGHRES_WIDTH  (10.0/3.0) /* (The 3.3333 spacing and lanczos2 seems a good combination) */
+
 
 #include "i1pro.h"
 #include "i1pro_imp.h"
 
 /* - - - - - - - - - - - - - - - - - - */
 #define LAMP_OFF_TIME 1500		/* msec to make sure lamp is dark for dark measurement */
-#define PATCH_CONS_THR 0.05		/* Dark measurement consistency threshold */
+#define PATCH_CONS_THR 0.1		/* Dark measurement consistency threshold */
 #define TRIG_DELAY 10			/* Measure trigger delay to allow pending read, msec */
 
 /* - - - - - - - - - - - - - - - - - - */
@@ -134,6 +146,7 @@ static int disdebplot = 0;
 #else
 
 #define DBG(xxx) 
+#define dbgo stderr
 #define DISDPLOT 
 #define ENDPLOT 
 	
@@ -254,6 +267,8 @@ i1pro_code add_i1proimp(i1pro *p) {
 	if ((m->data = new_i1data(m, p->verb, p->debug)) == NULL)
 		I1PRO_INT_CREATE_EEPROM_STORE;
 		
+	m->msec = msec_time();
+
 	p->m = (void *)m;
 	return I1PRO_OK;
 }
@@ -278,8 +293,15 @@ void del_i1proimp(i1pro *p) {
 		if (m->th != NULL) {		/* Terminate switch monitor thread */
 			m->th_term = 1;			/* Tell thread to exit on error */
 			i1pro_terminate_switch(p);
+			
+			for (i = 0; m->th_termed == 0 && i < 5; i++)
+				msec_sleep(50);		/* Wait for thread to terminate */
+			if (i >= 5) {
+				DBG((dbgo,"i1pro switch thread termination failed\n"))
+			}
 			m->th->del(m->th);
 		}
+		DBG((dbgo,"i1pro switch thread terminated\n"))
 
 		/* Free any per mode data */
 		for (i = 0; i < i1p_no_modes; i++) {
@@ -373,10 +395,14 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 		if ((ip = m->data->get_ints(m->data, &count, key_serno)) == NULL || count < 1)
 			return I1PRO_HW_CALIBINFO;
 		m->serno = ip[0];
+		if (p->debug >= 1) fprintf(stderr,"Serial number = %d\n",m->serno);
+		sprintf(m->sserno,"%ud",m->serno);
 
 		if ((ip = m->data->get_ints(m->data, &count, key_dom)) == NULL || count < 1)
 			return I1PRO_HW_CALIBINFO;
 		m->dom = ip[0];
+		if (p->debug >= 1) fprintf(stderr,"Date of manufactur = %d-%d-%d\n",
+		                          m->dom/1000000, (m->dom/10000) % 100, m->dom % 10000);
 
 		if ((ip = m->data->get_ints(m->data, &count, key_cpldrev)) == NULL || count < 1)
 			return I1PRO_HW_CALIBINFO;
@@ -387,10 +413,12 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 		if ((ip = m->data->get_ints(m->data, &count, key_capabilities)) == NULL || count < 1)
 			return I1PRO_HW_CALIBINFO;
 		m->capabilities = ip[0];
+		if (p->debug >= 1) fprintf(stderr,"Capabilities flag = 0x%x\n",m->capabilities);
 
 		if ((ip = m->data->get_ints(m->data, &count, key_physfilt)) == NULL || count < 1)
 			return I1PRO_HW_CALIBINFO;
 		m->physfilt = ip[0];
+		if (p->debug >= 1) fprintf(stderr,"Physical filter flag = 0x%x\n",m->physfilt);
 
 		/* Underlying calibration information */
 
@@ -412,6 +440,11 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 		m->wl_short = m->wl_short1;
 		m->wl_long = m->wl_long1; 
 
+		if ((dp = m->data->get_doubles(m->data, &count, key_hg_factor)) == NULL || count < 1)
+			return I1PRO_HW_CALIBINFO;
+		m->highgain = dp[0];
+		if (p->debug >= 1) fprintf(stderr,"High gain         = %.10f\n",m->highgain);
+
 		if ((m->lin0 = m->data->get_doubles(m->data, &m->nlin0, key_ng_lin)) == NULL
 		                                                               || m->nlin0 < 1)
 			return I1PRO_HW_CALIBINFO;
@@ -419,6 +452,17 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 		if ((m->lin1 = m->data->get_doubles(m->data, &m->nlin1, key_hg_lin)) == NULL
 		                                                               || m->nlin1 < 1)
 			return I1PRO_HW_CALIBINFO;
+
+		if (p->debug >= 1) {
+			fprintf(stderr,"Normal non-lin    =");
+			for(i = 0; i < m->nlin0; i++)
+				fprintf(stderr," %1.10f",m->lin0[i]);
+			fprintf(stderr,"\n");
+			fprintf(stderr,"High Gain non-lin =");
+			for(i = 0; i < m->nlin1; i++)
+				fprintf(stderr," %1.10f",m->lin1[i]);
+			fprintf(stderr,"\n");
+		}
 
 		if ((dp = m->data->get_doubles(m->data, &count, key_min_int_time)) == NULL || count < 1)
 			return I1PRO_HW_CALIBINFO;
@@ -475,10 +519,6 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 		m->emis_coef = m->emis_coef1;
 		m->amb_coef = m->amb_coef1;
 	
-		if ((dp = m->data->get_doubles(m->data, &count, key_hg_factor)) == NULL || count < 1)
-			return I1PRO_HW_CALIBINFO;
-		m->highgain = dp[0];
-
 		if ((ip = m->data->get_ints(m->data, &count, key_sens_target)) == NULL || count < 1)
 			return I1PRO_HW_CALIBINFO;
 		m->sens_target = ip[0];
@@ -554,8 +594,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 			s->gainmode = 0;		/* Normal gain mode */
 
 			s->inttime = 0.5;		/* Integration time */
-			s->lamptime = 0.2;		/* Lamp turn on time (up to 1.0 sec is better) */
-
+			s->lamptime = 0.50;		/* Lamp turn on time (up to 1.0 sec is better, */
 
 			s->dark_valid = 0;		/* Dark cal invalid */
 			s->dark_data = dvectorz(0, m->nraw-1);  
@@ -596,10 +635,23 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 
 					s->dadaptime = 0.10;
 					s->wadaptime = 0.10;
-					s->dcaltime = 0.5;			/* same as reading */
-					s->wcaltime = 0.5;			/* same as reading */
-					s->dreadtime = 0.5;			/* same as reading */
+#ifdef MATCH_SPOT_OMD
+					s->lamptime = 0.18;			/* Lamp turn on time, close to OMD */
+												/* (Not ideal, but partly compensated by calib.) */
+												/* (The actual value the OMD uses is 0.20) */
+					s->dcaltime = 0.05;			/* Longer than the original driver for lower */
+												/* noise, and lamptime has been reduces to */
+												/* compensate. (OMD uses 0.014552) */
+					s->wcaltime = 0.05;
+					s->dreadtime = 0.05;
+					s->wreadtime = 0.05;
+#else
+					s->lamptime = 0.5;			/* This should give better accuracy, and better */
+					s->dcaltime = 0.5;			/* match the scan readings. Difference is about */
+					s->wcaltime = 0.5;			/* 0.1 DE though, but would be lost in the */
+					s->dreadtime = 0.5;			/* repeatability noise... */
 					s->wreadtime = 0.5;
+#endif
 					s->maxscantime = 0.0;
 					s->min_wl = 375.0;			/* Too much stray light below this */
 												/* given low illumination < 375nm */
@@ -615,7 +667,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					else
 						s->targoscale = 0.5;
 
-					s->lamptime = 0.5;		/* Use slightly longer turn on time */
+					s->lamptime = 0.5;		/* Lamp turn on time - lots to match scan */
 					s->dadaptime = 0.10;
 					s->wadaptime = 0.10;
 					s->dcaltime = 0.5;
@@ -634,6 +686,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->adaptive = 0;
 
 					s->inttime = DISP_INTT;		/* Default disp integration time (ie. 2.0 sec) */
+					s->lamptime = 0.20;			/* ???? */
 					s->dark_int_time = s->inttime;
 					s->dark_int_time2 = DISP_INTT2;	/* Alternate disp integration time (ie. 0.8) */
 					s->dark_int_time3 = DISP_INTT3;	/* Alternate disp integration time (ie. 0.3) */
@@ -655,6 +708,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->emiss = 1;
 					s->adaptive = 1;
 
+					s->lamptime = 0.20;			/* ???? */
 					s->dadaptime = 0.0;
 					s->wadaptime = 0.10;
 					s->dcaltime = 1.0;
@@ -671,6 +725,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->scan = 1;
 					s->adaptive = 1;
 					s->inttime = m->min_int_time;	/* Maximize scan rate */
+					s->lamptime = 0.20;			/* ???? */
 					s->dark_int_time = s->inttime;
 					if (m->fwrev >= 301)
 						s->targoscale = 0.25;		/* (We're not using scan targoscale though) */
@@ -702,6 +757,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->ambient = 1;
 					s->adaptive = 1;
 
+					s->lamptime = 0.20;			/* ???? */
 					s->dadaptime = 0.0;
 					s->wadaptime = 0.10;
 					s->dcaltime = 1.0;
@@ -728,7 +784,9 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->scan = 1;
 					s->flash = 1;
 					s->adaptive = 0;
+
 					s->inttime = m->min_int_time;	/* Maximize scan rate */
+					s->lamptime = 0.20;			/* ???? */
 					s->dark_int_time = s->inttime;
 					if (m->fwrev >= 301)
 						s->targoscale = 0.25;		/* (We're not using scan targoscale though) */
@@ -748,6 +806,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->trans = 1;
 					s->adaptive = 1;
 
+					s->lamptime = 0.20;			/* ???? */
 					s->dadaptime = 0.10;
 					s->wadaptime = 0.10;
 					s->dcaltime = 1.0;
@@ -766,8 +825,9 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 						s->targoscale = 0.25;
 					else
 						s->targoscale = 0.5;
-					s->adaptive = 1;
+					s->adaptive = 0;
 
+					s->lamptime = 0.20;			/* ???? */
 					s->dadaptime = 0.10;
 					s->wadaptime = 0.10;
 					s->dcaltime = 1.0;
@@ -821,6 +881,13 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 	}
 
 	return ev;
+}
+
+/* Return a pointer to the serial number */
+char *i1pro_imp_get_serial_no(i1pro *p) {
+	i1proimp *m = (i1proimp *)p->m;
+
+	return m->sserno; 
 }
 
 /* Return non-zero if capable of ambient mode */
@@ -1072,13 +1139,17 @@ i1pro_code i1pro_imp_calibrate(
 		s->dark_gain_mode = s->gainmode;
 
 		/* Save the calib to all similar modes */
+		DBG((dbgo,"Saving emissive scan black calib to similar modes\n"))
 		for (i = 0; i < i1p_no_modes; i++) {
 			i1pro_state *ss = &m->ms[i];
 			if (ss == s)
 				continue;
-			if (ss->emiss && !ss->adaptive && s->scan) {
+			if (ss->emiss && !ss->adaptive && ss->scan) {
 				ss->dark_valid = s->dark_valid;
+				ss->need_dcalib = s->need_dcalib;
 				ss->ddate = s->ddate;
+				ss->dark_int_time = s->dark_int_time;
+				ss->dark_gain_mode = s->dark_gain_mode;
 				for (k = 0; k < m->nraw; k++) {
 					ss->dark_data[k] = s->dark_data[k];
 				}
@@ -1138,14 +1209,17 @@ i1pro_code i1pro_imp_calibrate(
 		s->dark_gain_mode = s->gainmode;
 
 		/* Save the calib to all similar modes */
+		DBG((dbgo,"Saving adaptive black calib to similar modes\n"))
 		for (i = 0; i < i1p_no_modes; i++) {
 			i1pro_state *ss = &m->ms[i];
 			if (ss == s)
 				continue;
-			if ((ss->emiss && ss->adaptive)
-			 || ss->trans) {
+			if ((ss->emiss || ss->trans) && ss->adaptive && !ss->scan) {
 				ss->idark_valid = s->idark_valid;
+				ss->need_dcalib = s->need_dcalib;
 				ss->iddate = s->iddate;
+				ss->dark_int_time = s->dark_int_time;
+				ss->dark_gain_mode = s->dark_gain_mode;
 				for (j = 0; j < 4; j++) {
 					ss->idark_int_time[j] = s->idark_int_time[j];
 					for (k = 0; k < m->nraw; k++)
@@ -1230,6 +1304,26 @@ i1pro_code i1pro_imp_calibrate(
 		s->dark_gain_mode = s->gainmode;
 
 		DBG((dbgo,"Done adaptive scan black calibration\n"))
+
+		/* Save the calib to all similar modes */
+		DBG((dbgo,"Saving adaptive scan black calib to similar modes\n"))
+		for (i = 0; i < i1p_no_modes; i++) {
+			i1pro_state *ss = &m->ms[i];
+			if (ss == s)
+				continue;
+			if ((ss->emiss || ss->trans) && ss->adaptive && s->scan) {
+				ss->idark_valid = s->idark_valid;
+				ss->need_dcalib = s->need_dcalib;
+				ss->iddate = s->iddate;
+				ss->dark_int_time = s->dark_int_time;
+				ss->dark_gain_mode = s->dark_gain_mode;
+				for (j = 0; j < 4; j++) {
+					ss->idark_int_time[j] = s->idark_int_time[j];
+					for (k = 0; k < m->nraw; k++)
+						ss->idark_data[j][k] = s->idark_data[j][k];
+				}
+			}
+		}
 	}
 
 	/* If we are doing a white reference calibrate */
@@ -1350,11 +1444,11 @@ i1pro_code i1pro_imp_calibrate(
 		} else if (s->adaptive) {
 			int j;
 			if (scale == 0.0) {		/* If sensor was saturated */
-				DBG((dbgo,"Scan illuminant is saturating sensor\n"))
+				if (p->debug) fprintf(dbgo,"Scan illuminant is saturating sensor\n");
 				if (s->gainmode == 0) {
 					return I1PRO_RD_SENSORSATURATED;		/* Nothing we can do */
 				}
-				DBG((dbgo,"Switching to low gain mode"))
+				if (p->debug) fprintf(dbgo,"Switching to low gain mode");
 				s->gainmode = 0;
 				/* Measure white again with low gain */
 				nummeas = i1pro_comp_nummeas(p, s->wcaltime, s->inttime);
@@ -1362,7 +1456,7 @@ i1pro_code i1pro_imp_calibrate(
 				   &scale, nummeas, &s->inttime, s->gainmode, 1.0, 0)) != I1PRO_OK)
 					return ev;
 			} else if (s->gainmode == 0 && scale > m->highgain) {
-				DBG((dbgo,"Scan signal is so low we're switching to high gain mode\n"))
+				if (p->debug) fprintf(dbgo,"Scan signal is so low we're switching to high gain mode\n");
 				s->gainmode = 1;
 				/* Measure white again with high gain */
 				nummeas = i1pro_comp_nummeas(p, s->wcaltime, s->inttime);
@@ -1375,7 +1469,7 @@ i1pro_code i1pro_imp_calibrate(
 			if (scale > 6.0) {
 				transwarn |= 2;
 				if (p->debug)
-					fprintf(stderr,"Transmission white reference is not bright enough by %f\n",scale);
+					fprintf(stderr,"scan white reference is not bright enough by %f\n",scale);
 			}
 
 			if (*calc == inst_calc_man_ref_white) {
@@ -1412,7 +1506,7 @@ i1pro_code i1pro_imp_calibrate(
 
 
 		/* We've settled on the inttime and gain mode to get a good white reference. */
-		if (s->reflective) {	/* We read the write reference - check it */
+		if (s->reflective) {	/* We read the white reference - check it */
 			/* Check a reflective white measurement, and check that */
 			/* it seems reasonable. Return I1PRO_OK if it is, error if not. */
 			if ((ev = i1pro_check_white_reference1(p, s->cal_factor1)) != I1PRO_OK) {
@@ -1431,6 +1525,20 @@ i1pro_code i1pro_imp_calibrate(
 		s->cfdate = time(NULL);
 		s->need_calib = 0;
 	}
+
+	/* Update and write the EEProm log if the is a refspot calibration */
+	if (s->reflective && !s->scan && s->dark_valid && s->cal_valid) {
+		m->calcount = m->rpcount;
+		m->caldate = time(NULL);
+		if ((ev = i1pro_update_log(p)) != I1PRO_OK) {
+			DBG((dbgo,"i1pro_update_log failed\n"))
+			if (p->verb) printf("Updating the calibration and log parameters to EEProm failed\n");
+		}
+	}
+#ifdef ENABLE_NONVCAL
+	/* Save the calibration to a file */
+	i1pro_save_calibration(p);
+#endif
 
 	/* Deal with a display integration time calibration */
 	if (s->emiss && !s->scan && !s->adaptive
@@ -1487,20 +1595,6 @@ i1pro_code i1pro_imp_calibrate(
 
 		DBG((dbgo,"Done display integration time calibration\n"))
 	}
-
-	/* Update and write the EEProm log if the is a refspot calibration */
-	if (s->reflective && !s->scan && s->dark_valid && s->cal_valid) {
-		m->calcount = m->rpcount;
-		m->caldate = time(NULL);
-		if ((ev = i1pro_update_log(p)) != I1PRO_OK) {
-			DBG((dbgo,"i1pro_update_log failed\n"))
-			if (p->verb) printf("Updating the calibration and log parameters to EEProm failed\n");
-		}
-	}
-#ifdef ENABLE_NONVCAL
-	/* Save the calibration to a file */
-	i1pro_save_calibration(p);
-#endif
 
 	/* Go around again if we're calibrating all, and transmissive, */
 	/* since transmissive needs two calibration steps. */
@@ -2236,15 +2330,14 @@ static void read_time_ts(i1pnonv *x, FILE *fp, time_t *dp, int n) {
 	}
 }
 
-
 i1pro_code i1pro_save_calibration(i1pro *p) {
 	i1proimp *m = (i1proimp *)p->m;
 	i1pro_code ev = I1PRO_OK;
 	i1pro_state *s;
 	int i, j;
-	char fname[MAXNAMEL+1];
 	char nmode[10];
-	char *path;
+	char cal_name[40+1];		/* Name */
+	char *cal_path;
 	FILE *fp;
 	i1pnonv x;
 	int ss;
@@ -2254,18 +2347,21 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 #if defined(O_BINARY) || defined(_O_BINARY)
 	strcat(nmode, "b");
 #endif
-	/* Use global exe_path setup by set_exe_path(argv[0]) */
-	/* to locate file in same directory as the executable. */
-	if ((strlen(exe_path) + 15) > MAXNAMEL) {
-		DBG((dbgo,"i1pro_save_calibration can't open cal file because path is too long\n"));
+
+	/* Create the file name */
+	sprintf(cal_name, "color/.i1p_%d.cal", m->serno);
+	if ((cal_path = xdg_bds(NULL, xdg_cache, xdg_write, xdg_user, cal_name)) == NULL)
+		return I1PRO_INT_CAL_SAVE;
+
+	DBG((dbgo,"i1pro_save_calibration saving to file '%s'\n",cal_path));
+
+	if (create_parent_directories(cal_path)) {
 		return I1PRO_INT_CAL_SAVE;
 	}
-	sprintf(fname, "%s.i1p_%d.cal", exe_path, m->serno);
 
-	DBG((dbgo,"i1pro_save_calibration saving to file '%s'\n",fname));
-
-	if ((fp = fopen(fname, nmode)) == NULL) {
+	if ((fp = fopen(cal_path, nmode)) == NULL) {
 		DBG((dbgo,"i1pro_save_calibration failed to open file for writing\n"));
+		free(cal_path);
 		return I1PRO_INT_CAL_SAVE;
 	}
 	
@@ -2333,12 +2429,14 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 
 	if (x.ef != 0) {
 		DBG((dbgo,"Writing calibration file failed\n"))
+		return I1PRO_INT_CAL_SAVE;
 		fclose(fp);
-		delete_file(fname);
+		delete_file(cal_path);
 	} else {
 		fclose(fp);
 		DBG((dbgo,"Writing calibration file done\n"))
 	}
+	free(cal_path);
 
 	return ev;
 }
@@ -2349,9 +2447,9 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 	i1pro_code ev = I1PRO_OK;
 	i1pro_state *s, ts;
 	int i, j;
-	char fname[MAXNAMEL+1];
 	char nmode[10];
-	char *path;
+	char cal_name[40+1];		/* Name */
+	char *cal_path;
 	FILE *fp;
 	i1pnonv x;
 	int argyllversion;
@@ -2361,21 +2459,19 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 #if defined(O_BINARY) || defined(_O_BINARY)
 	strcat(nmode, "b");
 #endif
-	/* Use global exe_path setup by set_exe_path(argv[0]) */
-	/* to locate file in same directory as the executable. */
-	if ((strlen(exe_path) + 15) > MAXNAMEL) {
-		DBG((dbgo,"i1pro_restore_calibration can't open cal file because path is too long\n"));
+	/* Create the file name */
+	sprintf(cal_name, "color/.i1p_%d.cal", m->serno);
+	if ((cal_path = xdg_bds(NULL, xdg_cache, xdg_read, xdg_user, cal_name)) == NULL)
 		return I1PRO_INT_CAL_RESTORE;
-	}
-	sprintf(fname, "%s.i1p_%d.cal", exe_path, m->serno);
 
-	DBG((dbgo,"i1pro_restore_calibration restoring from file '%s'\n",fname));
+	DBG((dbgo,"i1pro_restore_calibration restoring from file '%s'\n",cal_path));
 
-	if ((fp = fopen(fname, nmode)) == NULL) {
+	if ((fp = fopen(cal_path, nmode)) == NULL) {
 		DBG((dbgo,"i1pro_restore_calibration failed to open file for reading\n"));
+		free(cal_path);
 		return I1PRO_INT_CAL_RESTORE;
 	}
-	
+
 	x.ef = 0;
 	x.chsum = 0;
 
@@ -2628,6 +2724,7 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
  reserr:;
 
 	fclose(fp);
+	free(cal_path);
 
 	return ev;
 }
@@ -3496,6 +3593,7 @@ i1pro_trigger_one_measure(
 	if (dlampclocks > 256.0)		/* Clip - not sure why. Silly value anyway */
 		dlampclocks = 256.0;
 	lampclocks = (int)dlampclocks;
+//printf("~1 lampclocks = %d = 0x%x\n",lampclocks,lampclocks);
 	s->lamptime = dlampclocks * m->subclkdiv * m->intclkp;	/* Quantized lamp time */
 
 	if (nummeas > 65535)
@@ -3595,7 +3693,7 @@ static int buf2ushort(unsigned char *buf) {
 /* lower level reading processing and computation */
 
 #ifdef RAWR_DEBUG
-#define RRDBG(xxx) printf xxx ;
+#define RRDBG(xxx) fprintf xxx ;
 #else
 #define RRDBG(xxx) 
 #endif	/* RAWR_DEBUG */
@@ -3623,7 +3721,6 @@ void i1pro_meas_to_abssens(
 	/* if subtmode is set, compute the average last reading raw value. */
 	/* Could this be some sort of temperature compensation offset ??? */
 
-	// ~~~~99999
 	/* For a scan it seems kind of strange to subtract the average of all */
 	/* the last value readings. We could try subtracting per buffer */
 	/* instead ? */
@@ -3665,7 +3762,7 @@ void i1pro_meas_to_abssens(
 			double fval, lval;
 
 			rval = buf2ushort(bp);
-			RRDBG((dbgo,"rval 0x%x, ",rval))
+			RRDBG((dbgo,"% 3d:rval 0x%x, ",j, rval))
 			if (rval >= maxpve)
 				rval -= 0x00010000;	/* Convert to -ve */
 			RRDBG((dbgo,"srval 0x%x, ",rval))
@@ -3674,10 +3771,13 @@ void i1pro_meas_to_abssens(
 			fval -= avlastv;
 			RRDBG((dbgo,"fval-av %.0f, ",fval))
 
+#ifdef ENABLE_NONLINCOR	
 			/* Linearise */
-			for (lval = polys[npoly-1], k = npoly-2; k >= 0; k--) {
+			for (lval = polys[npoly-1], k = npoly-2; k >= 0; k--)
 				lval = lval * fval + polys[k];
-			}
+#else
+			lval = fval;
+#endif
 			RRDBG((dbgo,"lval %.1f, ",lval))
 
 			/* And scale to be an absolute sensor reading */
@@ -3720,10 +3820,14 @@ double i1pro_raw_to_abssens(
 	}
 	scale = 1.0/(inttime * gain);
 
+#ifdef ENABLE_NONLINCOR	
 	/* Linearise */
 	for (lval = polys[npoly-1], k = npoly-2; k >= 0; k--) {
 		lval = lval * raw + polys[k];
 	}
+#else
+	lval = raw;
+#endif
 
 	/* And scale to be an absolute sensor reading */
 	lval = lval * scale;
@@ -3791,8 +3895,12 @@ i1pro_code i1pro_abssens_to_meas(
 		/* Unscale from absolute sensor reading */
 		lval = abssens[j] / scale;
 
+#ifdef ENABLE_NONLINCOR	
 		/* Un-linearise */
 		fval = inv_poly(polys, npoly, lval);
+#else
+		fval = lval;
+#endif
 
 		if (fval < (double)((int)maxpve-65536))
 			fval = (double)((int)maxpve-65536);
@@ -3877,7 +3985,6 @@ int i1pro_average_multimeas(
 	if (poallavg != NULL)
 		*poallavg = oallavg;
 
-//	if (satthresh > 0.0 && avgoverth >= 10.0)	/* Too generous */
 	if (satthresh > 0.0 && avgoverth > 0.0)
 		rv |= 2;
 
@@ -3904,7 +4011,13 @@ int i1pro_average_multimeas(
 #define PRDBG(xxx) 
 #endif	/* PATREC_DEBUG */
 
+/* Minimum number of scan samples in a patch */
 #define MIN_SAMPLES 3
+
+/* Range of bands to detect transitions */
+#define BL 5	/* Start */
+#define BH 105	/* End */
+#define BW 5	/* Width */
 
 /* Record of possible patch */
 typedef struct {
@@ -3960,7 +4073,8 @@ i1pro_code i1pro_extract_patches_multimeas(
 
 	maxval = dvectorz(0, m->nraw-1);  
 
-	/* Loosen consistency threshold for short intergation time */
+	/* Loosen consistency threshold for short integation time, */
+	/* to allow for extra noise */
 	if (inttime < 0.012308)		/* Smaller than Rev A minimum int. time */
 		patch_cons_thr *= sqrt(0.012308/inttime);
 
@@ -3996,11 +4110,6 @@ i1pro_code i1pro_extract_patches_multimeas(
 	slope = dvectorz(0, nummeas-1);  
 	fslope = dvectorz(0, nummeas-1);  
 	sizepop = ivectorz(0, nummeas-1);
-
-	/* Range of bands to detect transitions */
-#define BL 5	/* Start */
-#define BH 105	/* End */
-#define BW 5	/* Width */
 
 #ifndef NEVER		/* Good with this on */
 	/* Average bands together */
@@ -4250,16 +4359,8 @@ i1pro_code i1pro_extract_patches_multimeas(
 	do_plot6(plot[6], slope, plot[0], plot[1], plot[2], plot[3], plot[4], nummeas);
 #endif
 
-#undef BL
-#undef BH
-#undef BW
-
 	free_dvector(fslope, 0, nummeas-1);  
 	free_dmatrix(sslope, 0, nummeas-1, 0, m->nraw-1);  
-
-#ifdef PATREC_DEBUG
-	free_dmatrix(plot, 0, 6, 0, nummeas-1);  
-#endif
 
 	/* Now threshold the measurements into possible patches */
 	apat = 2 * nummeas;
@@ -4414,86 +4515,22 @@ i1pro_code i1pro_extract_patches_multimeas(
 		if (pat[i].use == 0)
 			continue;
 		printf("Patch %d, start %d, length %d:\n",i, pat[i].ss, pat[i].no, pat[i].use);
-//		for (j = 0; j < pat[i].no; j++) {
-//			printf("Bandvals %f %f %f %f %f %f\n",
-//			multimeas[i][45]/maxval[45],
-//			multimeas[i][46]/maxval[46],
-//			multimeas[i][47]/maxval[47],
-//			multimeas[i][48]/maxval[48],
-//			multimeas[i][49]/maxval[49],
-//			multimeas[i][50]/maxval[50]);
-//		}
 	}
 #endif
 
-	/* Compute average of (aproximate) white */
-	white_avg = 0.0;
-	for (j = 1; j < m->nraw-1; j++)
-		white_avg += maxval[j];
-	white_avg /= (m->nraw-2.0);
+	/* Now trim the patches simply by shrinking their windows */
+	for (k = 1; k < (npat-1); k++) {
+		int nno, trim;
 
-	/* Trim the patches to avoid any inconsistent values */
-	/* at the ends. */
-	{
-		/* Compute the average for each current patch of all wavelengths averaged */
-		for (i = 0; i < tnpatch; i++)
-			pavg[i][0] = 0.0;
+		if (pat[k].use == 0)
+			continue;
 
-		for (pix = 0, k = 1; k < (npat-1); k++) {
-			if (pat[k].use == 0)
-				continue;
-	
-			/* Average the patches values */
-			for (i = pat[k].ss; i < (pat[k].ss + pat[k].no); i++) {
-				for (j = 1; j < m->nraw-1; j++)
-					pavg[pix][0] += multimeas[i][j];
-			}
-			pavg[pix][0] /= (double)pat[k].no * (m->nraw-2.0);
-			pix++;
-		}
+		
+		nno = (pat[k].no * 3)/4;
+		trim = (pat[k].no - nno)/2;
 
-		/* Now trim the patches */
-		for (pix = 0, k = 1; k < (npat-1); k++) {
-			double measavg;
-	
-			if (pat[k].use == 0)
-				continue;
-	
-			/* Trim them at the front */
-			for (i = pat[k].ss; i < (pat[k].ss + pat[k].no); i++) {
-				measavg = 0.0;
-				/* Average over wavelengths for this sample */
-				for (j = 1; j < m->nraw-1; j++)
-					measavg += multimeas[i][j];
-				measavg /= (m->nraw-2.0);
-	
-				if (fabs(measavg - pavg[pix][0])/white_avg >= patch_cons_thr/2.5) {
-					if (pat[k].no > MIN_SAMPLES) {
-						pat[k].ss++;
-						pat[k].no--;
-					}
-				} else {
-					break;
-				}
-			}
-			/* Trim them at the back */
-			for (i = pat[k].ss + pat[k].no -1; i >= pat[k].ss; i--) {
-				measavg = 0.0;
-				/* Average over wavelengths for this sample */
-				for (j = 1; j < m->nraw-1; j++)
-					measavg += multimeas[i][j];
-				measavg /= (m->nraw-2.0);
-	
-				if (fabs(measavg - pavg[pix][0])/white_avg >= patch_cons_thr/2.5) {
-					if (pat[k].no > MIN_SAMPLES) {
-						pat[k].no--;
-					}
-				} else {
-					break;
-				}
-			}
-			pix++;
-		}
+		pat[k].ss += trim;
+		pat[k].no = nno;
 	}
 
 #ifdef PATREC_DEBUG
@@ -4503,12 +4540,47 @@ i1pro_code i1pro_extract_patches_multimeas(
 			continue;
 		printf("Patch %d, start %d, length %d:\n",i, pat[i].ss, pat[i].no, pat[i].use);
 	}
+
+	/* Create fake "slope" value that marks patches */
+	for (i = 0; i < nummeas; i++) 
+		slope[i] = 1.0;
+	for (k = 1; k < (npat-1); k++) {
+		if (pat[k].use == 0)
+			continue;
+		for (i = pat[k].ss; i < (pat[k].ss + pat[k].no); i++)
+			slope[i] = 0.0;
+	}
+
+	printf("Trimmed output:\n");
+	for (i = 0; i < nummeas; i++) { 
+		int jj;
+		for (jj = 0, j = BL; jj < 6 && j < BH; jj++, j += ((BH-BL)/6)) {
+			double sum = 0.0;
+			for (k = -BL; k <= BW; k++)		/* Box averaging filter over bands */
+				sum += multimeas[i][j + k];
+			plot[jj][i] = sum/((2.0 * BL + 1.0) * maxval[j+k]);
+		}
+	}
+	for (i = 0; i < nummeas; i++)
+		plot[6][i] = (double)i;
+	do_plot6(plot[6], slope, plot[0], plot[1], plot[2], plot[3], plot[4], nummeas);
 #endif
 
+#ifdef PATREC_DEBUG
+	free_dmatrix(plot, 0, 6, 0, nummeas-1);  
+#endif
+
+	/* Compute average of (aproximate) white */
+	white_avg = 0.0;
+	for (j = 1; j < (m->nraw-1); j++) 
+		white_avg += maxval[j];
+	white_avg /= (m->nraw - 2.0);
+
 	/* Now process the buffer values */
-	for (i = 0; i < tnpatch; i++)
+	for (i = 0; i < tnpatch; i++) {
 		for (j = 0; j < m->nraw; j++) 
 			pavg[i][j] = 0.0;
+	}
 
 	for (pix = 0, k = 1; k < (npat-1); k++) {
 		double maxavg = -1e38;	/* Track min and max averages of readings for consistency */
@@ -4520,7 +4592,7 @@ i1pro_code i1pro_extract_patches_multimeas(
 			continue;
 
 		if (pat[k].no <= MIN_SAMPLES) {
-			PRDBG((dbgo,"Too few samples\n"))
+			PRDBG((dbgo,"Too few samples (%d, need %d)\n",pat[k].no,MIN_SAMPLES))
 			free_dvector(slope, 0, nummeas-1);  
 			free_ivector(sizepop, 0, nummeas-1);
 			free_dvector(maxval, 0, m->nraw-1);  
@@ -4594,6 +4666,10 @@ i1pro_code i1pro_extract_patches_multimeas(
 
 	return I1PRO_OK;
 }
+#undef BL
+#undef BH
+#undef BW
+
 
 /* Recognise any flashes in the readings, and */
 /* and average their values together as well as summing their duration. */
@@ -5076,12 +5152,12 @@ static double lin_fshape(i1pro_fs *fsh, int n, double x) {
 	int i;
 	double y;
 
-	if (x < fsh[0].wl)
+	if (x <= fsh[0].wl)
 		return fsh[0].we;
-	else if (x > fsh[n-1].wl)
+	else if (x >= fsh[n-1].wl)
 		return fsh[n-1].we;
 
-	for (i = 0; i < (n-1); i++)
+	for (i = 0; i < (n-2); i++)
 		if (x >= fsh[i].wl && x <= fsh[i+1].wl)
 			break;
 
@@ -5235,6 +5311,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 			}
 		}
 
+		printf("Original wavelength sampling curves:\n");
 		do_plot6(xx, yy[0], yy[1], yy[2], yy[3], yy[4], yy[5], m->nraw);
 		free_dvector(xx, 0, m->nraw-1);
 		free_dmatrix(yy, 0, 2, 0, m->nraw-1);
@@ -5385,6 +5462,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 	{
 		co sd[101];				/* Scattered data points */
 		datai glow, ghigh;
+		datao vlow, vhigh;
 		int gres[1];
 		double avgdev[1];
 
@@ -5393,16 +5471,23 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 			return I1PRO_INT_NEW_RSPL_FAILED;
 		}
 
+		vlow[0] = 1e6;
+		vhigh[0] = -1e6;
 		for (i = 0; i < (m->nwav1+1); i++) {
 			sd[i].p[0] = xp[i].raw;
 			sd[i].v[0] = xp[i].wav;
+			
+			if (sd[i].v[0] < vlow[0])
+				vlow[0] = sd[i].v[0];
+			if (sd[i].v[0] > vhigh[0])
+				vhigh[0] = sd[i].v[0];
 		}
 		glow[0] = 0.0;
 		ghigh[0] = 127.0;
 		gres[0] = 128;
 		avgdev[0] = 0.0;
 		
-		raw2wav->fit_rspl(raw2wav, 0, sd, m->nwav1+1, glow, ghigh, gres, NULL, NULL, 0.5, avgdev, NULL);
+		raw2wav->fit_rspl(raw2wav, 0, sd, m->nwav1+1, glow, ghigh, gres, vlow, vhigh, 0.5, avgdev, NULL);
 	}
 
 #ifdef COMPUTE_DISPERSION
@@ -5569,6 +5654,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 				x1[i] = fshape[i].wl;
 				y1[i] = fshape[i].we;
 			}
+			printf("Accumulated curve:\n");
 			do_plot(x1, y1, NULL, NULL, ncp);
 
 			free_dvector(x1, 0, ncp-1);
@@ -5758,6 +5844,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 				}
 			}
 
+			printf("Hi-Res wavelength sampling curves:\n");
 			do_plot6(xx, yy[0], yy[1], yy[2], yy[3], yy[4], yy[5], m->nraw);
 			free_dvector(xx, 0, m->nraw-1);
 			free_dmatrix(yy, 0, 2, 0, m->nraw-1);
@@ -5864,6 +5951,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 				}
 			}
 
+			printf("Normalized Hi-Res wavelength sampling curves:\n");
 			do_plot6(xx, yy[0], yy[1], yy[2], yy[3], yy[4], yy[5], m->nraw);
 			free_dvector(xx, 0, m->nraw-1);
 			free_dmatrix(yy, 0, 2, 0, m->nraw-1);
@@ -5895,6 +5983,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 			rspl *trspl;			/* Upsample rspl */
 			cow sd[100];			/* Scattered data points of existing references */
 			datai glow, ghigh;
+			datao vlow, vhigh;
 			int gres[1];
 			double avgdev[1];
 			int ii;
@@ -5925,11 +6014,18 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 				if (ref1 == NULL)
 					continue;		/* The instI1Monitor doesn't have a reflective cal */
 
+				vlow[0] = 1e6;
+				vhigh[0] = -1e6;
 				for (i = 0; i < m->nwav1; i++) {
 
 					sd[i].p[0] = XSPECT_WL(m->wl_short1, m->wl_long1, m->nwav1, i);
 					sd[i].v[0] = ref1[i];
 					sd[i].w = 1.0;
+
+					if (sd[i].v[0] < vlow[0])
+						vlow[0] = sd[i].v[0];
+					if (sd[i].v[0] > vhigh[0])
+					    vhigh[0] = sd[i].v[0];
 				}
 
 				if (ii == 1) {		/* fudge factors */
@@ -5956,7 +6052,7 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 				gres[0] = m->nwav2;
 				avgdev[0] = 0.0;
 				
-				trspl->fit_rspl_w(trspl, 0, sd, i, glow, ghigh, gres, NULL, NULL, 0.5, avgdev, NULL);
+				trspl->fit_rspl_w(trspl, 0, sd, i, glow, ghigh, gres, vlow, vhigh, 0.5, avgdev, NULL);
 
 				if ((*ref2 = (double *)calloc(m->nwav2, sizeof(double))) == NULL) {
 					raw2wav->del(raw2wav);
@@ -5994,6 +6090,16 @@ i1pro_code i1pro_create_hr(i1pro *p) {
 							x = (wl - wl1)/(wl2 - wl1);
 							y2[i] = ref1[j] + (ref1[j+1] - ref1[j]) * x;
 						}
+					}
+					printf("Original and up-sampled ");
+					if (ii == 0) {
+						printf("Reflective cal. curve:\n");
+					} else if (ii == 1) {
+						ref1 = m->emis_coef1;
+						ref2 = &m->emis_coef2;
+						printf("Emission cal. curve:\n");
+					} else {
+						printf("Ambient cal. curve:\n");
 					}
 					do_plot(x1, y1, y2, NULL, m->nwav2);
 		
@@ -6182,93 +6288,6 @@ i1pro_code i1pro_set_scan_toll(i1pro *p, double toll_ratio) {
 }
 
 
-#ifdef SELF_CONT
-
-/* Observer weightings for Spectrolino spectrum, 380 .. 730 nm in 10nm steps */
-/* 1931 2 degree/10 degree, X, Y, Z */
-/* Derived from the 1mm CIE data by triangular integrating over +/- 10nm */
-static double obsv[2][3][36] = {
-/* 380.000000 - 730.000000, 10.000000 spacing, 36 samples */
-	{
-		{
-			/* 380.0 */	0.0014683812, 0.0047547396, 0.0152556807, 0.0482708080, 0.1417034925,
-			/* 430.0 */	0.2758107040, 0.3416076310, 0.3341124770, 0.2867249290, 0.1959168420,
-			/* 480.0 */	0.0986129022, 0.0349593380, 0.0073943580, 0.0136111344, 0.0673674035,
-			/* 530.0 */	0.1670591672, 0.2919588853, 0.4350593383, 0.5950040333, 0.7609917160,
-			/* 580.0 */	0.9124587100, 1.0203724750, 1.0546033690, 0.9953901723, 0.8482248583,
-			/* 630.0 */	0.6449786553, 0.4502488970, 0.2876357110, 0.1683055859, 0.0907159639,
-			/* 680.0 */	0.0478490821, 0.0238187896, 0.0117887139, 0.0060082099, 0.0030203141,
-			/* 730.0 */	0.0014974226
-		},
-		{
-			/* 380.0 */	0.0000421336, 0.0001346494, 0.0004233631, 0.0013506491, 0.0044782106,
-			/* 430.0 */	0.0119168330, 0.0232343626, 0.0386049762, 0.0606630796, 0.0924952658,
-			/* 480.0 */	0.1404173183, 0.2119761580, 0.3294198320, 0.5060026890, 0.7040847150,
-			/* 530.0 */	0.8567213050, 0.9496816437, 0.9916703087, 0.9912059527, 0.9486563020,
-			/* 580.0 */	0.8672449720, 0.7560261750, 0.6308804570, 0.5036414160, 0.3811538290,
-			/* 630.0 */	0.2675903510, 0.1767649360, 0.1089320738, 0.0624093607, 0.0332541797,
-			/* 680.0 */	0.0174072931, 0.0086200350, 0.0042580874, 0.0021696745, 0.0010906907,
-			/* 730.0 */	0.0005407467
-		},
-		{
-			/* 380.0 */	0.0069231379, 0.0224840586, 0.0724013672, 0.2304142263, 0.6826156790,
-			/* 430.0 */	1.3495723090, 1.7175423305, 1.7652086960, 1.6463944005, 1.2844251907,
-			/* 480.0 */	0.8237414837, 0.4783423827, 0.2791244250, 0.1607929484, 0.0823450306,
-			/* 530.0 */	0.0431386781, 0.0211870032, 0.0093073607, 0.0041398884, 0.0022173168,
-			/* 580.0 */	0.0016209631, 0.0011569656, 0.0007956485, 0.0003876752, 0.0001793706,
-			/* 630.0 */	0.0000601588, 0.0000201264, 0.0000031677, 0.0000000000, 0.0000000000,
-			/* 680.0 */	0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000,
-			/* 730.0 */	0.0000000000
-		}
-	},
-	{
-		{
-			/* 380.0 */	0.0002958055, 0.0034647268, 0.0232784790, 0.0895620440, 0.2033633812,
-			/* 430.0 */	0.3121216122, 0.3761665565, 0.3666046450, 0.2995905771, 0.1942594176,
-			/* 480.0 */	0.0847038104, 0.0207826354, 0.0080729782, 0.0414492478, 0.1207703057,
-			/* 530.0 */	0.2379836893, 0.3775972654, 0.5323473176, 0.7050396845, 0.8747075721,
-			/* 580.0 */	1.0128714307, 1.1092248315, 1.1156986830, 1.0234212896, 0.8538434325,
-			/* 630.0 */	0.6460388345, 0.4366682923, 0.2721804371, 0.1563767584, 0.0838314810,
-			/* 680.0 */	0.0424857055, 0.0208144794, 0.0100152473, 0.0047708059, 0.0022768903,
-			/* 730.0 */	0.0010934432
-		},
-		{
-			/* 380.0 */	0.0000319723, 0.0003687710, 0.0024303150, 0.0092459376, 0.0217845725,
-			/* 430.0 */	0.0392518614, 0.0621878637, 0.0902000039, 0.1292159126, 0.1860139765,
-			/* 480.0 */	0.2566762493, 0.3437008250, 0.4626107780, 0.6078447358, 0.7571587227,
-			/* 530.0 */	0.8738687830, 0.9562016434, 0.9907490799, 0.9929957444, 0.9511558305,
-			/* 580.0 */	0.8696415669, 0.7745757073, 0.6574853919, 0.5279043388, 0.3997250543,
-			/* 630.0 */	0.2839006833, 0.1827290855, 0.1097026409, 0.0618689668, 0.0328457087,
-			/* 680.0 */	0.0165529783, 0.0080896556, 0.0038886157, 0.0018530967, 0.0008856970,
-			/* 730.0 */	0.0004262791
-		},
-		{
-			/* 380.0 */	0.0013069636, 0.0154488179, 0.1053186436, 0.4142779045, 0.9709569073,
-			/* 430.0 */	1.5436362223, 1.9315426380, 1.9735220325, 1.7328686730, 1.3021800188,
-			/* 480.0 */	0.7903688306, 0.4292606263, 0.2266333151, 0.1176535230, 0.0621120370,
-			/* 530.0 */	0.0314169470, 0.0141065636, 0.0043619750, 0.0003602502, 0.0000000000,
-			/* 580.0 */	0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000,
-			/* 630.0 */	0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000,
-			/* 680.0 */	0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000,
-			/* 730.0 */	0.0000000000
-		}
-	}
-};
-
-/* D50 illuminant spectra 380 .. 730 nm in 10nm steps */
-static double illum_D50[36] = {
-	/* 380.0 */	25.7969525000, 32.2130990000, 47.2702040000, 55.8967280000, 59.0763455000,
-	/* 430.0 */	61.0225965000, 74.0596595000, 85.7397345000, 90.1767100000, 91.8666170000,
-	/* 480.0 */	93.9630315000, 93.1128015000, 95.2429645000, 96.5495895000, 97.8703425000,
-	/* 530.0 */	101.0467720000, 101.2391180000, 101.6729815000, 100.0099990000, 98.3132760000,
-	/* 580.0 */	97.8201100000, 95.1002565000, 97.2537935000, 98.9696135000, 98.5263015000,
-	/* 630.0 */	96.7965590000, 97.8038555000, 96.6203215000, 98.5728785000, 101.5559780000,
-	/* 680.0 */	97.8192980000, 90.0426505000, 91.1129655000, 90.0032055000, 81.1329050000,
-	/* 730.0 */	85.9129765000
-};
-
-#endif /* SELF_CONT */
-
 /* Optics adjustment weights */
 static double opt_adj_weights[21] = {
 	1.4944496665144658e-282, 2.0036175483913455e-070, 1.2554893022685038e+232,
@@ -6296,14 +6315,12 @@ i1pro_code i1pro_conv2XYZ(
 	double wl_short = m->wl_short;	/* Starting wavelegth */
 	double sms;			/* Weighting */
 
-#ifndef SELF_CONT
 	if (s->emiss) {
 		conv = new_xsp2cie(icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigXYZData);
 	} else
 		conv = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigXYZData);
 	if (conv == NULL)
 		return I1PRO_INT_CIECONVFAIL;
-#endif
 
 	/* Don't report any wavelengths below the minimum for this mode */
 	if (s->min_wl > wl_short) {
@@ -6334,11 +6351,14 @@ i1pro_code i1pro_conv2XYZ(
 		vals[i].sp.spec_wl_short = wl_short;
 		vals[i].sp.spec_wl_long = m->wl_long;
 
+		/* Leave values as cd/m^2 */
 		if (s->emiss) {
 			for (j = six, k = 0; j < m->nwav; j++, k++) {
 				vals[i].sp.spec[k] = specrd[i][j] * sms;
 			}
 			vals[i].sp.norm = 1.0;
+
+		/* Scale values to percentage */
 		} else {
 			for (j = six, k = 0; j < m->nwav; j++, k++) {
 				vals[i].sp.spec[k] = 100.0 * specrd[i][j] * sms;
@@ -6347,7 +6367,6 @@ i1pro_code i1pro_conv2XYZ(
 		}
 
 		/* Set the XYZ */
-#ifndef SELF_CONT
 		if (s->emiss) {
 			conv->convert(conv, vals[i].aXYZ, &vals[i].sp);
 			vals[i].aXYZ_v = 1;
@@ -6359,55 +6378,13 @@ i1pro_code i1pro_conv2XYZ(
 			vals[i].XYZ[2] *= 100.0;
 		}
 
-#else	/* SELF_CONT */
-		if (m->nwav != 36)
-			return I1PRO_INT_NOTIMPLEMENTED;
-
-		if (s->emiss) {
-			double norm;
-
-			norm = 0.683;		/* mW/m^2 -> Lumens/m^2 */
-			
-			for (k = 0; k < 3; k++)
-				vals[i].aXYZ[k] = 0.0;
-			for (j = 0; j < 36; j++) {
-				for (k = 0; k < 3; k++)
-					vals[i].aXYZ[k] += obsv[0][k][j] * specrd[i][j];
-			}
-			for (k = 0; k < 3; k++)
-				vals[i].aXYZ[k] *= norm;
-			vals[i].aXYZ_v = 1;
-
-		} else {
-			double norm;
-
-			/* Compute D50 1931 2 degree XYZ */
-			for (norm = 0.0, j = 0; j < 36; j++) {
-				norm += obsv[0][1][j] * illum_D50[j];
-			}
-			norm = 100.0/norm;		/* Return value is 0 .. 100 */
-			
-			for (k = 0; k < 3; k++)
-				vals[i].XYZ[k] = 0.0;
-			for (j = 0; j < 36; j++) {
-				for (k = 0; k < 3; k++)
-					vals[i].XYZ[k] += obsv[0][k][j] * illum_D50[j] * specrd[i][j];
-			}
-			for (k = 0; k < 3; k++)
-				vals[i].XYZ[k] *= norm;
-			vals[i].XYZ_v = 1;
-		}
-#endif /* SELF_CONT */
-
 		/* Don't return spectral if not asked for */
 		if (!m->spec_en) {
 			vals[i].sp.spec_n = 0;
 		}
 	}
 
-#ifndef SELF_CONT
 	conv->del(conv);
-#endif
 	return I1PRO_OK;
 }
 
@@ -6731,8 +6708,10 @@ int i1pro_switch_thread(void *pp) {
 	DBG((dbgo,"Switch thread started\n"))
 	for (nfailed = 0;nfailed < 5;) {
 		rv = i1pro_waitfor_switch_th(p, SW_THREAD_TIMEOUT);
-		if (m->th_term)
+		if (m->th_term) {
+			m->th_termed = 1;
 			break;
+		}
 		if (rv == I1PRO_INT_BUTTONTIMEOUT) {
 			nfailed = 0;
 			continue;
@@ -6766,12 +6745,14 @@ i1pro_reset(
 	unsigned char pbuf[1];	/* 1 bytes to write */
 	int se, rv = I1PRO_OK;
 	int isdeb = 0;
+	int stime;
 
 	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
+	isdeb = p->debug;
 	p->icom->debug = 0;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: Instrument reset with mask 0x%02x\n",mask);
+	if (isdeb) fprintf(stderr,"\ni1pro: Instrument reset with mask 0x%02x @ %d msec\n",
+	                          mask,(stime = msec_time()) - m->msec);
 
 	pbuf[0] = mask;
 	se = p->icom->usb_control(p->icom,
@@ -6780,12 +6761,12 @@ i1pro_reset(
 
 	rv = icoms2i1pro_err(se);
 
-	if (isdeb) fprintf(stderr,"Reset complete, ICOM err 0x%x\n",se);
+	if (isdeb) fprintf(stderr,"Reset complete, ICOM err 0x%x (%d msec)\n",se,msec_time()-stime);
 
 	/* Allow time for hardware to stabalize */
 	msec_sleep(100);
 
-	p->icom->debug = isdeb;
+	p->icom->debug = p->debug;
 
 	/* Make sure that we re-initialize the measurement mode */
 	m->c_intclocks = 0;
@@ -6804,19 +6785,22 @@ i1pro_readEEProm(
 	int addr,				/* Address in EEprom to read from */
 	int size				/* Number of bytes to read (max 65535) */
 ) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read or written */
 	unsigned char pbuf[8];	/* Write EEprom parameters */
 	int se, rv = I1PRO_OK;
 	int isdeb = 0;
+	int stime;
 
 	if (size >= 0x10000)
 		return I1PRO_INT_EETOOBIG;
 
 	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
+	isdeb = p->debug;
 	p->icom->debug = 0;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: Read EEProm address 0x%x size 0x%x\n",addr,size);
+	if (isdeb) fprintf(stderr,"\ni1pro: Read EEProm address 0x%x size 0x%x @ %d msec\n",
+	                           addr, size, (stime = msec_time()) - m->msec);
 
 	int2buf(&pbuf[0], addr);
 	short2buf(&pbuf[4], size);
@@ -6827,7 +6811,7 @@ i1pro_readEEProm(
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 		if (isdeb) fprintf(stderr,"\ni1pro: EEprom read failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
@@ -6835,13 +6819,13 @@ i1pro_readEEProm(
 	se = p->icom->usb_read(p->icom, 0x82, buf, size, &rwbytes, 5.0);
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 		if (isdeb) fprintf(stderr,"\ni1pro: EEprom read failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
 	if (rwbytes != size) {
 		if (isdeb) fprintf(stderr,"Read 0x%x bytes, short read error\n",rwbytes);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return I1PRO_HW_EE_SHORTREAD;
 	}
 
@@ -6856,8 +6840,9 @@ i1pro_readEEProm(
 		}
 	}
 
-	if (isdeb) fprintf(stderr,"Read 0x%x bytes, ICOM err 0x%x\n",rwbytes, se);
-	p->icom->debug = isdeb;
+	if (isdeb) fprintf(stderr,"Read 0x%x bytes, ICOM err 0x%x (%d msec)\n",
+	                   rwbytes, se, msec_time()-stime);
+	p->icom->debug = p->debug;
 
 	return rv;
 }
@@ -6870,20 +6855,23 @@ i1pro_writeEEProm(
 	int addr,				/* Address in EEprom to write to */
 	int size				/* Number of bytes to write (max 65535) */
 ) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read or written */
 	unsigned char pbuf[8];	/* Write EEprom parameters */
 	int se = 0, rv = I1PRO_OK;
 	int i, isdeb = 0;
+	int stime;
 
 	/* Don't write over fixed values, as the instrument could become unusable.. */ 
 	if (addr < 0 || addr > 0x1000 || (addr + size) >= 0x1000)
 		return I1PRO_INT_EETOOBIG;
 
 	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
+	isdeb = p->debug;
 	p->icom->debug = 0;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: Write EEProm address 0x%x size 0x%x\n",addr,size);
+	if (isdeb) fprintf(stderr,"\ni1pro: Write EEProm address 0x%x size 0x%x @ %d msec\n",
+	                   addr,size, (stime = msec_time()) - m->msec);
 
 	if (isdeb >= 3) {
 		int i;
@@ -6906,7 +6894,7 @@ i1pro_writeEEProm(
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 		if (isdeb) fprintf(stderr,"\ni1pro: EEprom write failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
@@ -6915,13 +6903,13 @@ i1pro_writeEEProm(
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 		if (isdeb) fprintf(stderr,"\ni1pro: EEprom write failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
 	if (rwbytes != size) {
 		if (isdeb) fprintf(stderr,"Write 0x%x bytes, short write error\n",rwbytes);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return I1PRO_HW_EE_SHORTREAD;
 	}
 
@@ -6934,17 +6922,18 @@ i1pro_writeEEProm(
 
 		if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 			if (isdeb) fprintf(stderr,"\ni1pro: EEprom write failed with ICOM err 0x%x\n",se);
-			p->icom->debug = isdeb;
+			p->icom->debug = p->debug;
 			return rv;
 		}
 
 		if (rwbytes != 1) {
 			if (isdeb) fprintf(stderr,"Write 0x%x bytes, short write error\n",rwbytes);
-			p->icom->debug = isdeb;
+			p->icom->debug = p->debug;
 			return I1PRO_HW_EE_SHORTREAD;
 		}
 	}
-	if (isdeb) fprintf(stderr,"Write 0x%x bytes, ICOM err 0x%x\n",size, se);
+	if (isdeb) fprintf(stderr,"Write 0x%x bytes, ICOM err 0x%x (%d msec)\n",
+	                   size, se, msec_time()-stime);
 
 	/* The instrument needs some recovery time after a write */
 	msec_sleep(50);
@@ -6955,7 +6944,7 @@ i1pro_writeEEProm(
 
 #endif /* ENABLE_WRITE */
 
-	p->icom->debug = isdeb;
+	p->icom->debug = p->debug;
 
 	return rv;
 }
@@ -6971,6 +6960,7 @@ i1pro_getmisc(
 	int *unkn3,		/* Unknown status, usually 1 */
 	int *powmode	/* 0 = high power mode, 8 = low power mode */
 ) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read or written */
 	unsigned char pbuf[8];	/* status bytes read */
 	int _fwrev;
@@ -6980,12 +6970,13 @@ i1pro_getmisc(
 	int _powmode;
 	int se, rv = I1PRO_OK;
 	int isdeb = 0;
+	int stime;
 
 	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
+	isdeb = p->debug;
 	p->icom->debug = 0;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: GetMisc\n");
+	if (isdeb) fprintf(stderr,"\ni1pro: GetMisc @ %d msec\n",(stime = msec_time()) - m->msec);
 
 	se = p->icom->usb_control(p->icom,
 		               USB_ENDPOINT_IN | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
@@ -6993,7 +6984,7 @@ i1pro_getmisc(
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 		if (isdeb) fprintf(stderr,"\ni1pro: GetMisc failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
@@ -7003,10 +6994,10 @@ i1pro_getmisc(
 	_unkn3   = pbuf[6];		/* Flag values are tested, but don't seem to be used ? */
 	_powmode = pbuf[7];
 
-	if (isdeb) fprintf(stderr,"GetMisc returns %d, 0x%04x, 0x%04x, 0x%02x, 0x%02x ICOM err 0x%x\n",
-	                   _fwrev, _unkn1, _maxpve, _unkn3, _powmode, se);
+	if (isdeb) fprintf(stderr,"GetMisc returns %d, 0x%04x, 0x%04x, 0x%02x, 0x%02x ICOM err 0x%x (%d msec)\n",
+	                   _fwrev, _unkn1, _maxpve, _unkn3, _powmode, se, msec_time()-stime);
 
-	p->icom->debug = isdeb;
+	p->icom->debug = p->debug;
 
 	if (fwrev != NULL) *fwrev = _fwrev;
 	if (unkn1 != NULL) *unkn1 = _unkn1;
@@ -7027,6 +7018,7 @@ i1pro_getmeasparams(
 	int *nummeas,		/* Number of measurements */
 	int *measmodeflags	/* Measurement mode flags */
 ) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read or written */
 	unsigned char pbuf[8];	/* status bytes read */
 	int _intclocks;
@@ -7035,12 +7027,14 @@ i1pro_getmeasparams(
 	int _measmodeflags;
 	int se, rv = I1PRO_OK;
 	int isdeb = 0;
+	int stime;
 
 	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
+	isdeb = p->debug;
 	p->icom->debug = 0;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: GetMeasureParams\n");
+	if (isdeb) fprintf(stderr,"\ni1pro: GetMeasureParams @ %d msec\n",
+	                   (stime = msec_time()) - m->msec);
 
 	se = p->icom->usb_control(p->icom,
 		               USB_ENDPOINT_IN | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
@@ -7048,7 +7042,7 @@ i1pro_getmeasparams(
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 		if (isdeb) fprintf(stderr,"\ni1pro: MeasureParam failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
@@ -7057,10 +7051,10 @@ i1pro_getmeasparams(
 	_nummeas       = buf2ushort(&pbuf[4]);
 	_measmodeflags = pbuf[6];
 
-	if (isdeb) fprintf(stderr,"MeasureParam returns %d, %d, %d, 0x%02x ICOM err 0x%x\n",
-	                   _intclocks, _lampclocks, _nummeas, _measmodeflags, se);
+	if (isdeb) fprintf(stderr,"MeasureParam returns %d, %d, %d, 0x%02x ICOM err 0x%x (%d msec)\n",
+	                   _intclocks, _lampclocks, _nummeas, _measmodeflags, se, msec_time()-stime);
 
-	p->icom->debug = isdeb;
+	p->icom->debug = p->debug;
 
 	if (intclocks != NULL) *intclocks = _intclocks;
 	if (lampclocks != NULL) *lampclocks = _lampclocks;
@@ -7095,17 +7089,20 @@ i1pro_setmeasparams(
 	int nummeas,		/* Number of measurements */
 	int measmodeflags	/* Measurement mode flags */
 ) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read or written */
 	unsigned char pbuf[8];	/* command bytes written */
 	int se, rv = I1PRO_OK;
 	int isdeb = 0;
+	int stime;
 
 	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
+	isdeb = p->debug;
 	p->icom->debug = 0;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: SetMeasureParam %d, %d, %d, 0x%02x\n",
-	                   intclocks, lampclocks, nummeas, measmodeflags);
+	if (isdeb) fprintf(stderr,"\ni1pro: SetMeasureParam %d, %d, %d, 0x%02x @ %d msec\n",
+	                   intclocks, lampclocks, nummeas, measmodeflags,
+	                   (stime = msec_time()) - m->msec);
 
 	short2buf(&pbuf[0], intclocks);
 	short2buf(&pbuf[2], lampclocks);
@@ -7119,13 +7116,13 @@ i1pro_setmeasparams(
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 		if (isdeb) fprintf(stderr,"\ni1pro: SetMeasureParams failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
-	if (isdeb) fprintf(stderr,"SetMeasureParams got ICOM err 0x%x\n",se);
-
-	p->icom->debug = isdeb;
+	if (isdeb) fprintf(stderr,"SetMeasureParams got ICOM err 0x%x (%d msec)\n",
+	                   se,msec_time()-stime);
+	p->icom->debug = p->debug;
 
 	return rv;
 }
@@ -7137,6 +7134,7 @@ i1pro_delayed_trigger(void *pp) {
 	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read or written */
 	int se, rv = I1PRO_OK;
+	int stime;
 
 	if ((m->c_measmodeflags & I1PRO_MMF_NOLAMP) == 0) {		/* Lamp will be on for measurement */
 		m->llampoffon = msec_time();						/* Record when it turned on */
@@ -7144,10 +7142,15 @@ i1pro_delayed_trigger(void *pp) {
 
 	}
 
+	if (p->icom->debug) fprintf(stderr,"Delayed trigget start sleep @ %d msec\n",
+	                            msec_time() - m->msec);
+
 	/* Delay the trigger */
 	msec_sleep(m->trig_delay);
 
 	m->tr_t1 = msec_time();		/* Diagnostic */
+
+	if (p->icom->debug) fprintf(stderr,"Trigger  @ %d msec\n",(stime = msec_time()) - m->msec);
 
 	se = p->icom->usb_control_th(p->icom,
 		               USB_ENDPOINT_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
@@ -7158,7 +7161,8 @@ i1pro_delayed_trigger(void *pp) {
 	m->trig_se = se;
 	m->trig_rv = icoms2i1pro_err(se);
 
-	if (p->icom->debug) fprintf(stderr,"Triggering measurement ICOM err 0x%x\n",se);
+	if (p->icom->debug) fprintf(stderr,"Triggering measurement ICOM err 0x%x (%d msec)\n",
+	                            se,msec_time()-stime);
 
 	return 0;
 }
@@ -7171,9 +7175,10 @@ i1pro_code
 i1pro_triggermeasure(i1pro *p, int delay) {
 	i1proimp *m = (i1proimp *)p->m;
 	int rv = I1PRO_OK;
-	int isdeb = p->icom->debug;
+	int isdeb = p->debug;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: Triggering measurement after %dmsec delay\n",delay);
+	if (isdeb) fprintf(stderr,"\ni1pro: Triggering measurement after %dmsec delay @ %d msec\n",
+	                           delay, msec_time() - m->msec);
 
 	/* NOTE := would be better here to create thread once, and then trigger it */
 	/* using a condition variable. */
@@ -7188,6 +7193,11 @@ i1pro_triggermeasure(i1pro *p, int delay) {
 		return I1PRO_INT_THREADFAILED;
 	}
 
+#ifdef WAIT_FOR_DELAY_TRIGGER	/* hack to diagnose threading problems */
+	while (m->tr_t2 == 0) {
+		Sleep(1);
+	}
+#endif
 	if (isdeb) fprintf(stderr,"Scheduled triggering OK\n");
 
 	return rv;
@@ -7218,6 +7228,7 @@ i1pro_readmeasurement(
 	int se, rv = I1PRO_OK;
 	int treadings = 0;
 	int isdeb = 0;
+	int stime;
 //	int gotshort = 0;			/* nz when got a previous short reading */
 
 	if ((bsize & 0xff) != 0) {
@@ -7225,10 +7236,10 @@ i1pro_readmeasurement(
 	}
 
 	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
+	isdeb = p->debug;
 	p->icom->debug = 0;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: Read measurement results inummeas %d, scanflag %d, address 0x%x bsize 0x%x\n",inummeas, scanflag, buf, bsize);
+	if (isdeb) fprintf(stderr,"\ni1pro: Read measurement results inummeas %d, scanflag %d, address 0x%x bsize 0x%x @ %d msec\n",inummeas, scanflag, buf, bsize, (stime = msec_time()) - m->msec);
 
 	extra = 1.0;		/* Extra timeout margin */
 
@@ -7266,7 +7277,7 @@ i1pro_readmeasurement(
 
 		if (size > bsize) {		/* oops, no room for read */
 			if (isdeb) fprintf(stderr,"Buffer was too short for scan\n");
-			p->icom->debug = isdeb;
+			p->icom->debug = p->debug;
 			return I1PRO_INT_MEASBUFFTOOSMALL;
 		}
 
@@ -7307,14 +7318,14 @@ i1pro_readmeasurement(
 				fprintf(stderr,"\ni1pro: Read timed out with top = %f\n",top);
 		
 			if (isdeb) fprintf(stderr,"\ni1pro: Read failed, bytes read 0x%x, ICOM err 0x%x\n",rwbytes, se);
-			p->icom->debug = isdeb;
+			p->icom->debug = p->debug;
 			return rv;
 		}
  
 		/* If we didn't read a multiple of 256, we've got problems */
 		if ((rwbytes & 0xff) != 0) {
 			if (isdeb) fprintf(stderr,"Read 0x%x bytes, odd read error\n",rwbytes);
-			p->icom->debug = isdeb;
+			p->icom->debug = p->debug;
 			return I1PRO_HW_ME_ODDREAD;
 		}
 
@@ -7328,7 +7339,7 @@ i1pro_readmeasurement(
 			/* Expect to read exactly what we asked for */
 			if (rwbytes != size) {
 				if (isdeb) fprintf(stderr,"Error - unexpected short read, got %d expected %d\n",rwbytes,size);
-				p->icom->debug = isdeb;
+				p->icom->debug = p->debug;
 				return I1PRO_HW_ME_SHORTREAD;
 			}
 			break;	/* And we're done */
@@ -7357,7 +7368,7 @@ i1pro_readmeasurement(
 			while ((se = p->icom->usb_read(p->icom, 0x82, tbuf, 256, &rwbytes, top)) == ICOM_OK)
 				;
 			if (isdeb) fprintf(stderr,"Buffer was too short for scan\n");
-			p->icom->debug = isdeb;
+			p->icom->debug = p->debug;
 			return I1PRO_INT_MEASBUFFTOOSMALL;
 		}
 
@@ -7381,7 +7392,7 @@ i1pro_readmeasurement(
 	/* Must have timed out in initial readings */
 	if (treadings < inummeas) {
 		if (isdeb) fprintf(stderr,"\ni1pro: Read failed, bytes read 0x%x, ICOM err 0x%x\n",rwbytes, se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return I1PRO_RD_SHORTMEAS;
 	} 
 
@@ -7397,11 +7408,12 @@ i1pro_readmeasurement(
 	}
 
 	if (isdeb)	{
-		fprintf(stderr,"Read %d readings, ICOM err 0x%x\n",treadings, se);
+		fprintf(stderr,"Read %d readings, ICOM err 0x%x (%d msec)\n",
+		                treadings, se, msec_time()-stime);
 		fprintf(stderr,"(Trig & rd times %d %d %d %d)\n",
 		    m->tr_t2-m->tr_t1, m->tr_t3-m->tr_t2, m->tr_t4-m->tr_t3, m->tr_t6-m->tr_t5);
 	}
-	p->icom->debug = isdeb;
+	p->icom->debug = p->debug;
 
 	if (nummeas != NULL) *nummeas = treadings;
 
@@ -7415,16 +7427,19 @@ i1pro_setmcmode(
 	i1pro *p,
 	int mcmode	/* Measurement clock mode, 1..mxmcmode */
 ) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read or written */
 	unsigned char pbuf[1];	/* 1 bytes to write */
 	int se, rv = I1PRO_OK;
 	int isdeb = 0;
+	int stime;
 
 	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
+	isdeb = p->debug;
 	p->icom->debug = 0;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: Set measurement clock mode %d\n",mcmode);
+	if (isdeb) fprintf(stderr,"\ni1pro: Set measurement clock mode %d @ %d msec\n",
+	                   mcmode, (stime = msec_time()) - m->msec);
 
 	pbuf[0] = mcmode;
 	se = p->icom->usb_control(p->icom,
@@ -7433,12 +7448,13 @@ i1pro_setmcmode(
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 		if (isdeb) fprintf(stderr,"\ni1pro: Set measuremnt clock mode failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
-	if (isdeb) fprintf(stderr,"Set measuremnt clock mode done, ICOM err 0x%x\n",se);
-	p->icom->debug = isdeb;
+	if (isdeb) fprintf(stderr,"Set measuremnt clock mode done, ICOM err 0x%x (%d msec)\n",
+	                   se, msec_time()-stime);
+	p->icom->debug = p->debug;
 
 	return rv;
 }
@@ -7455,6 +7471,7 @@ i1pro_getmcmode(
 	int *intclkusec,	/* Integration clock in usec */
 	int *subtmode		/* Subtract mode on read using average of value 127 */
 ) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read or written */
 	unsigned char pbuf[8];	/* status bytes read */
 	int _maxmcmode;		/* mcmode must be < maxmcmode */
@@ -7465,12 +7482,14 @@ i1pro_getmcmode(
 	int _subtmode;		/* Subtract mode on read using average of value 127 */
 	int se, rv = I1PRO_OK;
 	int isdeb = 0;
+	int stime;
 
 	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
+	isdeb = p->debug;
 	p->icom->debug = 0;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: GetMeasureClockMode\n");
+	if (isdeb) fprintf(stderr,"\ni1pro: GetMeasureClockMode @ %d msec\n",
+	                   (stime = msec_time()) - m->msec);
 
 	se = p->icom->usb_control(p->icom,
 		               USB_ENDPOINT_IN | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
@@ -7478,7 +7497,7 @@ i1pro_getmcmode(
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 		if (isdeb) fprintf(stderr,"\ni1pro: MeasureClockMode failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
@@ -7489,10 +7508,10 @@ i1pro_getmcmode(
 	_intclkusec = pbuf[4];
 	_subtmode   = pbuf[5];
 
-	if (isdeb) fprintf(stderr,"MeasureClockMode returns %d, %d, (%d), %d, %d 0x%x ICOM err 0x%x\n",
-	                   _maxmcmode, _mcmode, _unknown, _subclkdiv, _intclkusec, _subtmode, se);
+	if (isdeb) fprintf(stderr,"MeasureClockMode returns %d, %d, (%d), %d, %d 0x%x ICOM err 0x%x (%d msec)\n",
+	      _maxmcmode, _mcmode, _unknown, _subclkdiv, _intclkusec, _subtmode, se, msec_time()-stime);
 
-	p->icom->debug = isdeb;
+	p->icom->debug = p->debug;
 
 	if (maxmcmode != NULL) *maxmcmode = _maxmcmode;
 	if (mcmode != NULL) *mcmode = _mcmode;
@@ -7506,37 +7525,44 @@ i1pro_getmcmode(
 
 /* Wait for a reply triggered by a key press */
 i1pro_code i1pro_waitfor_switch(i1pro *p, double top) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read */
 	unsigned char buf[8];	/* Result  */
 	int se, rv = I1PRO_OK;
-	int isdeb = p->icom->debug;
+	int isdeb = p->debug;
+	int stime;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: Read 1 byte from switch hit port\n");
+	if (isdeb) fprintf(stderr,"\ni1pro: Read 1 byte from switch hit port @ %d msec\n",
+	                   (stime = msec_time()) - m->msec);
 
 	/* Now read 1 byte */
 	se = p->icom->usb_read(p->icom, 0x84, buf, 1, &rwbytes, top);
 
 	if ((se & ICOM_USERM) == 0 && (se & ICOM_TO)) {
-		if (isdeb) fprintf(stderr,"Switch read 0x%x bytes, timed out\n",rwbytes);
-		p->icom->debug = isdeb;
+		if (isdeb) fprintf(stderr,"Switch read 0x%x bytes, timed out (%d msec)\n",
+		                   rwbytes,msec_time()-stime);
+		p->icom->debug = p->debug;
 		return I1PRO_INT_BUTTONTIMEOUT;
 	}
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
 		if (isdeb) fprintf(stderr,"\ni1pro: Switch read failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
 	if (rwbytes != 1) {
-		if (isdeb) fprintf(stderr,"Switch read 0x%x bytes, short read error\n",rwbytes);
-		p->icom->debug = isdeb;
+		if (isdeb) fprintf(stderr,"Switch read 0x%x bytes, short read error (%d msec)\n",
+		                   rwbytes,msec_time()-stime);
+		p->icom->debug = p->debug;
 		return I1PRO_HW_EE_SHORTREAD;
 	}
 
 	if (isdeb) {
-		fprintf(stderr,"Switch read 0x%x bytes, Byte read 0x%x ICOM err 0x%x\n",rwbytes, buf[0], se);
+		fprintf(stderr,"Switch read 0x%x bytes, Byte read 0x%x ICOM err 0x%x (%d msec)\n",
+		        rwbytes, buf[0], se, msec_time()-stime);
 	}
+	p->icom->debug = p->debug;
 
 	return rv; 
 }
@@ -7547,37 +7573,45 @@ i1pro_code i1pro_waitfor_switch(i1pro *p, double top) {
 /* no switch was pressed befor the time expired, */
 /* or some other error. */
 i1pro_code i1pro_waitfor_switch_th(i1pro *p, double top) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read */
 	unsigned char buf[8];	/* Result  */
 	int se, rv = I1PRO_OK;
-	int isdeb = p->icom->debug;
+	int isdeb = p->debug;
+	int stime;
 
-	if (isdeb) fprintf(stderr,"\ni1pro: Read 1 byte from switch hit port\n");
+	if (isdeb) fprintf(stderr,"\ni1pro: Read 1 byte from switch hit port @ %d msec\n",
+	                   (stime = msec_time()) - m->msec);
 
 	/* Now read 1 byte */
-	se = p->icom->usb_read_th(p->icom, 0x84, buf, 1, &rwbytes, top, 0, NULL, 0);
+	se = p->icom->usb_read_th(p->icom, &m->hcancel, 0x84, buf, 1, &rwbytes, top, 0, NULL, 0);
 
 	if ((se & ICOM_USERM) == 0 && (se & ICOM_TO)) {
-		if (isdeb) fprintf(stderr,"Switch read 0x%x bytes, timed out\n",rwbytes);
-		p->icom->debug = isdeb;
+		if (isdeb) fprintf(stderr,"Switch read 0x%x bytes, timed out (%d msec)\n",
+		                   rwbytes,msec_time()-stime);
+		p->icom->debug = p->debug;
 		return I1PRO_INT_BUTTONTIMEOUT;
 	}
 
 	if ((rv = icoms2i1pro_err(se)) != I1PRO_OK) {
-		if (isdeb) fprintf(stderr,"\ni1pro: Switch read failed with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
+		if (isdeb) fprintf(stderr,"\ni1pro: Switch read failed with ICOM err 0x%x (%d msec)\n",
+		                   se,msec_time()-stime);
+		p->icom->debug = p->debug;
 		return rv;
 	}
 
 	if (rwbytes != 1) {
-		if (isdeb) fprintf(stderr,"Switch read 0x%x bytes, short read error\n",rwbytes);
-		p->icom->debug = isdeb;
+		if (isdeb) fprintf(stderr,"Switch read 0x%x bytes, short read error (%d msec)\n",
+		                   rwbytes,msec_time()-stime);
+		p->icom->debug = p->debug;
 		return I1PRO_HW_EE_SHORTREAD;
 	}
 
 	if (isdeb) {
-		fprintf(stderr,"Switch read 0x%x bytes, Byte read 0x%x ICOM err 0x%x\n",rwbytes, buf[0], se);
+		fprintf(stderr,"Switch read 0x%x bytes, Byte read 0x%x ICOM err 0x%x (%d msec)\n",
+		        rwbytes, buf[0], se,msec_time()-stime);
 	}
+	p->icom->debug = p->debug;
 
 	return rv; 
 }
@@ -7588,13 +7622,14 @@ i1pro_code
 i1pro_terminate_switch(
 	i1pro *p
 ) {
+	i1proimp *m = (i1proimp *)p->m;
 	int rwbytes;			/* Data bytes read or written */
 	unsigned char pbuf[8];	/* 8 bytes to write */
 	int se, rv = I1PRO_OK;
 	int isdeb = 0;
 
 	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
+	isdeb = p->debug;
 	p->icom->debug = 0;
 
 	if (isdeb) fprintf(stderr,"\ni1pro: Terminate switch Handling\n");
@@ -7615,15 +7650,14 @@ i1pro_terminate_switch(
 		if (isdeb) fprintf(stderr,"Terminate Switch Handling done, ICOM err 0x%x\n",se);
 	}
 
-	/* In case the above didn't work, clear halt to terminate the outstanding switch read. */
-	/* This seems to be needed on OS X 10.5 */
-	/* It can cause segmentation fault on Linux though. */
-#if defined(UNIX) && defined(__APPLE__)
+	/* In case the above didn't work, cancel the I/O */
 	msec_sleep(50);
-	p->icom->usb_clearhalt(p->icom, 0x84);
-#endif
+	if (m->th_termed == 0) {
+		DBG((dbgo,"i1pro terminate switch thread failed, canceling I/O\n"))
+		p->icom->usb_cancel_io(p->icom, m->hcancel);
+	}
 	
-	p->icom->debug = isdeb;
+	p->icom->debug = p->debug;
 	return rv;
 }
 

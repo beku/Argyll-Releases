@@ -1,11 +1,12 @@
-
 #ifndef CONV_H
+
+/*
+ * Some system dependent comvenience functions.
+ * Implemented in unixio.c and ntio.c
+ */
 
 /* 
  * Argyll Color Correction System
- *
- * Some system dependent comvenience functions.
- * Implemented in unixio.c and ntio.c
  *
  * Author: Graeme W. Gill
  * Date:   2008/2/9
@@ -31,16 +32,53 @@
 #include <pthread.h>
 #endif
 
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
+/* - - - - - - - - - - - - - - - - - - -- */
+/* System compatibility #defines */
+#if defined (NT)
+
+#ifndef sys_stat
+# define sys_stat _stat
+#endif
+#ifndef sys_mkdir
+# define sys_mkdir _mkdir
+#endif
+#ifndef sys_read
+# define sys_read _read
+#endif
+
+#endif
+
+#if defined (UNIX)
+
+#ifndef sys_stat
+# define sys_stat stat
+#endif
+#ifndef sys_mkdir
+# define sys_mkdir mkdir
+#endif
+#ifndef sys_read
+# define sys_read read
+#endif
+
+#endif
+
 /* - - - - - - - - - - - - - - - - - - -- */
 /* System dependent convenience functions */
 
 /* wait for and then return the next character from the keyboard */
+/* (If not_interactive, return getchar()) */
 int next_con_char(void);
 
 /* If there is one, return the next character from the keyboard, else return 0 */
+/* (If not_interactive, always returns 0) */
 int poll_con_char(void);
 
 /* Empty the console of any pending characters */
+/* (If not_interactive, does nothing) */
 void empty_con_chars(void);
 
 /* Sleep for the given number of msec */
@@ -121,6 +159,10 @@ athread *new_athread(int (*function)(void *context), void *context);
 /* Delete a file */
 void delete_file(char *fname);
 
+/* Given the path to a file, ensure that all the parent directories */
+/* are created. return nz on error */
+int create_parent_directories(char *path);
+
 /* - - - - - - - - - - - - - - - - - - -- */
 
 #ifdef __APPLE__
@@ -132,6 +174,12 @@ void delete_file(char *fname);
 int kill_nprocess(char *pname);
 
 #endif /* __APPLE__ */
+
+#include "xdg_bds.h"
+
+#ifdef __cplusplus
+	}
+#endif
 
 #define CONV_H
 #endif /* CONV_H */

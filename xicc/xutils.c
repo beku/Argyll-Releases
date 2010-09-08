@@ -28,7 +28,7 @@
 #include <float.h>
 #endif
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "icc.h"
 #include "tiffio.h"
 #include "xutils.h"		/* definitions for this library */

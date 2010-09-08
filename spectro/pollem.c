@@ -1,18 +1,20 @@
 
+ /* Unix serial I/O class poll() emulation. */
+
 /* 
  * Argyll Color Correction System
- *
- * Unix serial I/O class poll() emulation.
  *
  * Author: Graeme W. Gill
  * Date:   12/9/2004
  *
- * Copyright 2004 Graeme W. Gill
+ * Copyright 2004, 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
+
+#ifdef UNIX
 
 /* Fake up poll() support on systems that only support select() */
 
@@ -105,3 +107,5 @@ int pollem(struct pollfd *fds, unsigned long nfds, int timeout) {
 }
 
 #endif /* FD_CLR */
+
+#endif /* UNIX */

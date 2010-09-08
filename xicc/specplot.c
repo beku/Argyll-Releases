@@ -61,6 +61,17 @@ static int do_spec(char *name, xspect *sp) {
 	printf("XYZ = %f %f %f, x,y = %f %f\n", xyz[0], xyz[1], xyz[2], Yxy[1], Yxy[2]);
 	printf("D50 L*a*b* = %f %f %f\n", Lab[0], Lab[1], Lab[2]);
 	
+#ifndef NEVER
+	/* Test density */
+	{
+		double dens[4];
+
+		xsp_Tdensity(dens, sp);
+
+		printf("CMYV density = %f %f %f %f\n", dens[0], dens[1], dens[2], dens[3]);
+	}
+#endif
+
 	/* Compute CCT */
 	if ((cct = icx_XYZ2ill_ct(cct_xyz, BBTYPE, icxOT_CIE_1931_2, NULL, xyz, NULL, 0)) < 0)
 		error ("Got bad cct\n");
@@ -262,6 +273,8 @@ main(
 					inm = "D50"; break;
 			    case icxIT_D65:
 					inm = "D65"; break;
+			    case icxIT_E:
+					inm = "E"; break;
 			    case icxIT_F5:
 					inm = "F5"; break;
 			    case icxIT_F8:

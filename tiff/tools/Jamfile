@@ -5,9 +5,7 @@ PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 HDRS = .. ../libtiff ;
 
-Library tool : ../port/getopt.c ../libtiff/tif_extension.c ;
-
-LINKLIBS = ../libtiff tool ;
+LINKLIBS = ../libtiff ../libport ;
 
 Main tiffcp : tiffcp.c ;
 

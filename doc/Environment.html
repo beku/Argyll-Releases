@@ -1,0 +1,68 @@
+<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+  <meta http-equiv="Content-Type"
+ content="text/html; charset=iso-8859-1">
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="GENERATOR"
+ content="Mozilla/4.73 [en] (WinNT; I) [Netscape]">
+  <title>Argyll Environment Variables</title>
+</head>
+<body>
+<h2>
+<u>Environment variables<br>
+</u></h2>
+The following environment variables affect behaviour:<br>
+<br>
+<span style="font-weight: bold;">ARGYLL_NOT_INTERACTIVE</span><br>
+<br>
+<div style="margin-left: 40px;">Normally Argylls tools expect that they
+are directly
+interacting with a user, and use a couple of techniques for
+communicating with them through the command line. One is to output
+progress information by re-writing the same display line by using a
+Carriage Return rather than a Line Feed at the end of each line.
+Another is to allow a single key stroke to trigger an action or
+interrupt operations.<br>
+<br>
+If the <span style="font-weight: bold;">ARGYLL_NOT_INTERACTIVE</span>
+environment variable is set, then:<br>
+<br>
+&nbsp;&nbsp;&nbsp; A Line Feed will be used on each
+progress line.<br>
+<br>
+&nbsp;&nbsp;&nbsp; Any time it would wait for a single keystroke input,
+it will instead wait for and read the next character from stdin.<br>
+<br>
+&nbsp;&nbsp;&nbsp; Note that while a reading is being made, a character
+input can abort the reading, just as with normal interactive mode.<br>
+<br>
+</div>
+<span style="font-weight: bold;">XDG_CACHE_HOME<br>
+<span style="font-weight: bold;"><br>
+</span></span>
+<div style="margin-left: 40px;">Argyll tries to follow the <a
+ href="http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html">XDG
+Base Directory Specification</a>, and uses the <span
+ style="font-weight: bold;">XDG_CACHE_HOME</span> environment variable
+to place per instrument calibration information (Eye-One Pro and
+ColorMunki instruments).<br>
+</div>
+<br>
+<span style="font-weight: bold;">XDG_CONFIG_DIRS<br>
+XDG_DATA_DIRS<span style="font-weight: bold;"><br>
+<span style="font-weight: bold;"></span></span></span><br>
+<div style="margin-left: 40px;">On Unix type operating systems,
+configuration and profiles for displays are placed relative to these
+environment variables.<br>
+</div>
+<br>
+<br>
+<br>
+See <a href="Performance.html">Performance Tuning</a> for other
+variables.<br>
+<br>
+<br>
+</body>
+</html>

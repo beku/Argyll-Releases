@@ -579,12 +579,14 @@ cgats_read(cgats *p, cgatsFile *fp) {
 #endif
 				if(strcmp(tp,"END_DATA") == 0) {
 					int i,j;
+#ifdef NEVER
 					if (ct->nsets == 0) {
 						err(p,-1,"Error at line %d of file '%s': End of data without any data being read",pp->line,fp->fname(fp));
 						pp->del(pp);
 						DBG((dbgo,"End of data without any data being read\n"));
 						return p->errc;
 					}
+#endif // NEVER
 					if (expsets != 0 && ct->nsets != expsets) {
 						err(p,-1,"Error at line %d of file '%s': Read %d sets, expected %d sets",pp->line,fp->fname(fp),ct->nsets,expsets);
 						pp->del(pp);

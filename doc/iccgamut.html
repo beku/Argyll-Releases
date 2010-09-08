@@ -114,7 +114,7 @@ outdoors</span><br style="font-family: monospace;">
  style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-s:surround&nbsp;&nbsp; a = average, m = dim, d = dark,</span><br
+s:surround&nbsp;&nbsp; n = auto, a = average, m = dim, d = dark,</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp;&nbsp; c = transparency (default average)</span><br
@@ -130,9 +130,11 @@ a:adaptation Adaptation luminance in cd.m^2 (default 50.0)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 b:background
-Background % of image luminance (default 20)</span><br
+Background % of image luminance (default 20)<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; l:scenewhite Scene white in
+cd.m^2 if surround = auto (default 250)<br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare
 light % of image luminance (default 1)</span><br
  style="font-family: monospace;">

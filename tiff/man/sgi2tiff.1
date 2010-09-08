@@ -1,4 +1,4 @@
-.\"	$Header: /cvsroot/osrs/libtiff/man/sgi2tiff.1,v 1.1.1.1 1999/07/27 21:50:28 mike Exp $
+.\" $Id: sgi2tiff.1,v 1.4 2006/04/20 12:17:19 dron Exp $
 .\"
 .\" Copyright (c) 1991-1997 Sam Leffler
 .\" Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -23,7 +23,7 @@
 .\" OF THIS SOFTWARE.
 .\"
 .if n .po 0
-.TH SGI2TIFF 1 "October 15, 1995"
+.TH SGI2TIFF 1 "November 2, 2005" "libtiff"
 .SH NAME
 sgi2tiff \- create a
 .SM TIFF
@@ -50,7 +50,7 @@ image is created with data samples packed (\c
 compressed with the Lempel-Ziv & Welch algorithm (\c
 .IR Compression =5),
 and with each strip no more than 8 kilobytes.
-These characteristics can overriden, or explicitly specified
+These characteristics can overridden, or explicitly specified
 with the options described below.
 .SH OPTIONS
 .TP
@@ -58,11 +58,11 @@ with the options described below.
 Specify a compression scheme to use when writing image data:
 .B "\-c none"
 for no compression,
-.B "-c packbits"
+.B "\-c packbits"
 for the PackBits compression algorithm),
-.B "-c jpeg"
+.B "\-c jpeg"
 for the baseline JPEG compression algorithm,
-.B "-c zip
+.B "\-c zip
 for the Deflate compression algorithm,
 and
 .B "\-c lzw"
@@ -84,7 +84,10 @@ is approximately 8 kilobytes.
 .SH BUGS
 Does not record colormap information.
 .SH "SEE ALSO"
-.IR tiffinfo (1),
-.IR tiffcp (1),
-.IR tiffmedian (1),
-.IR libtiff (3)
+.BR tiffinfo (1),
+.BR tiffcp (1),
+.BR tiffmedian (1),
+.BR libtiff (3)
+.PP
+Libtiff library home page:
+.BR http://www.remotesensing.org/libtiff/

@@ -86,6 +86,8 @@ Update previous calibration and (if -o used) ICC profile VideoLUTs</span><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Quality
 - Low, Medium (def), High<br>
+&nbsp;<a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use projector mode (if available)<br>
 &nbsp;<a href="#y">-y c|l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Display type, c = CRT, l = LCD<br style="font-family: monospace;">
 </span><span style="font-family: monospace;">&nbsp;</span><a
@@ -195,7 +197,26 @@ available)<br>
  style="font-family: monospace;" href="#V">-V</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Use adaptive measurement mode (if available)</span></font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; Use adaptive measurement mode (if available)<br>
+&nbsp;<a href="#X">-X</a><a href="#X"> file.ccmx</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply Colorimeter Correction Matrix<br>
+</span></font><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#Q">-Q <i>observ</i></a><span
+ style="font-family: monospace;">&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; Choose CIE Observer for spectral
+data:</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 1931_2 </span></small><small><span
+ style="font-family: monospace;"> (def.)</span></small><small><span
+ style="font-family: monospace;">, 1964_10, S&amp;B
+1955_2, shaw, J&amp;V 1978_2<br>
+&nbsp;<a href="#I">-I b|w</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Drift compensation, Black: -Ib, White: -Iw, Both: -Ibw<br>
+</span></small><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#C">-C "command"</a><span
+ style="font-family: monospace;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Invoke shell "command" each
+time a color is set</span></font><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#M">-M "command"</a><span
  style="font-family: monospace;">
@@ -414,6 +435,12 @@ will be the calibration of the display. The result will ultimately be
 limited by the accuracy of the instrument, the repeatability of the
 display and instrument, and the resolution of the Video Lookup table
 entries and Digital or Analogue output (RAMDAC).<br>
+<br>
+<a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
+allows measuring
+in projector mode, using
+instruments that
+support this.<br>
 <br>
 <a name="y"></a>&nbsp; Display type. Colorimeters can
 do a more accurate job if they know what type of display technology
@@ -788,6 +815,57 @@ uses adaptive emission measurement mode, if the instrument supports it,
 such as the Eye-One Pro. This may give better accuracy for low level
 measurements, but may be more inconsistent overall due to the varying
 integration times. Overall measurement time will probably be longer.<br>
+<br>
+<a name="X"></a> The -<span style="font-weight: bold;">X <span
+ style="font-style: italic;">file.ccmx</span></span> option reads a <a
+ href="File_Formats.html#.ccmx">Colorimeter Correction Matrix</a> from
+the given file, and applies it to the colorimeter instruments readings.
+This can improve a colorimeters accuracy for a particular type of
+display. A list of contributed <span style="font-weight: bold;">ccmx</span>
+files is <a href="ccmxs.html">here</a>.<br>
+<br>
+<a name="Q"></a> The <b>-Q</b> flag allows specifying a tristimulus
+observer, and is used to compute PCS (Profile Connection Space)
+tristimulus values from spectral readings.&nbsp; The following choices
+are available:<br>
+<b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer.
+The default.<br>
+&nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree observer.<br>
+&nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
+observer<br>
+&nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree observer<br>
+&nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
+observer<br>
+<br>
+<a name="I"></a> The -<span style="font-weight: bold;">I <span
+ style="font-style: italic;">b|w</span></span> options invoke
+instrument black level, and display white level compensation
+(respectively). Instrument black level drift compensation attempts to
+combat instrument black calibration drift by using a display black test
+patch as a reference. If an instrument is not acclimatised sufficiently
+to the measurement conditions, changes in temperature can affect the
+black readings. Display white level drift compensation attempts to
+combat changes in display brightness as it warms up by measuring a
+white patch every so often, and using it to normalise all the other
+readings. If just instrument black drift compensation is needed, use <span
+ style="font-weight: bold;">-Ib</span>. If just display white level
+compensation is needed, use <span style="font-weight: bold;">-Iw</span>.
+If both are needed, use <span style="font-weight: bold;">-Ibw</span>
+or <span style="font-weight: bold;">-Iwb</span>.<span
+ style="font-weight: bold;"> </span><br>
+<br>
+<a name="C"></a> The -<span style="font-weight: bold;">C</span> <span
+ style="font-weight: bold;">"command" </span>option
+allows a method of relaying each test value to some other display than
+that on the system running dispcal (for instance, a photo frame, PDA
+screen etc.), by causing the given command to be invoked to the shell,
+with six arguments. The first three arguments are the RGB test color as
+integers in the range 0 to 255, the second three parameters are the RGB
+test color as floating point numbers in the range 0.0 to 1.0. The
+script or tool should relay the given color to the screen in some
+manner (e.g. by generating a raster file of the given color and sending
+it to the display being profiled), before returning. Note that a test
+window will also be created on the system running dispread.<br>
 <br>
 <a name="M"></a> The -<span style="font-weight: bold;">M</span> <span
  style="font-weight: bold;">"command" </span>option

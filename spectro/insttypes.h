@@ -1,20 +1,26 @@
+
 #ifndef INSTTYPES_H
+
+ /* Instrument suported types utilities. */
 
 /* 
  * Argyll Color Correction System
  *
- * Instrument suported types utilities.
- *
  * Author: Graeme W. Gill
  * Date:   15/3/2001
  *
- * Copyright 2001 - 2007 Graeme W. Gill
+ * Copyright 2001 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  *
  */
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 
 /* ----------------------------- */
 /* Possible types of instruments */
@@ -42,8 +48,8 @@ typedef enum {
 
 /* Utility functions in libinsttypes */
 
-/* Return the instrument identification name (static string), */
-/* given its instrument type. */
+/* Given its instrument type, return the matching */
+/* instrument identification name (static string), */
 extern char *inst_name(instType itype);
 
 
@@ -67,14 +73,12 @@ unsigned short idProduct);
 /* and the spectrum should be embedded in the .ti3 file, not the instrument */
 /* name. */
 
-#ifdef NOXSPECT
-#    undef NOXSPECT
-#else
-
 /* Fill in an instruments illuminant spectrum. */
 /* Return 0 on sucess, 1 if not not applicable. */
 extern int inst_illuminant(xspect *sp, instType itype);
 
+#ifdef __cplusplus
+	extern "C" {
 #endif
 
 #define INSTTYPES_H

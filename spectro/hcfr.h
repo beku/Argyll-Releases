@@ -92,6 +92,8 @@ struct _hcfr {
 	double crt[3][3];		/* CRT RGB->XYZ transformation matrix */
 	double lcd[3][3];		/* CRT RGB->XYZ transformation matrix */
 
+	double ccmat[3][3];		/* Colorimeter correction matrix */
+
 	inst_opt_mode trig;		/* Reading trigger mode */
 	int trig_return;			/* Emit "\n" after trigger */
 

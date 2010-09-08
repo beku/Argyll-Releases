@@ -1,14 +1,15 @@
+
 #ifndef MUNKI_IMP_H
+
+ /* X-Rite ColorMunki related defines */
 
 /* 
  * Argyll Color Correction System
  *
- * X-Rite ColorMunki related defines
- *
  * Author: Graeme W. Gill
  * Date:   12/1/2009
  *
- * Copyright 2006 - 2009, Graeme W. Gill
+ * Copyright 2006 - 2010, Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -35,6 +36,10 @@
    and agreed to support.
  */
 
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 /* Implementation resources for munki driver */
 
 /* -------------------------------------------------- */
@@ -52,12 +57,13 @@ typedef enum {
 	mk_disp_spot      = 2,		
 	mk_proj_spot      = 3,		
 	mk_emiss_spot     = 4,
-	mk_emiss_scan     = 5,
-	mk_amb_spot       = 6,
-	mk_amb_flash      = 7,
-	mk_trans_spot     = 8,
-	mk_trans_scan     = 9,
-	mk_no_modes       = 10
+	mk_tele_spot      = 5,
+	mk_emiss_scan     = 6,
+	mk_amb_spot       = 7,
+	mk_amb_flash      = 8,
+	mk_trans_spot     = 9,
+	mk_trans_scan     = 10,
+	mk_no_modes       = 11
 } mk_mode;
 
 struct _munki_state {
@@ -67,8 +73,8 @@ struct _munki_state {
 	int reflective;		/* flag - Reflective mode */
 
 	/* The following modify emiss */
-	int ambient;		/* flag - Ambient mode */
-	int projector;		/* flag - Projector mode */
+	int ambient;		/* flag - Ambient position mode */
+	int projector;		/* flag - Projector position (tele) mode */
 
 	/* The following can be added to any of the 3: */
 	int scan;			/* flag - Scanning mode */
@@ -101,7 +107,7 @@ struct _munki_state {
 	time_t ddate;			/* Date/time of last dark calibration */
 	double dark_int_time;	/* Integration time used for dark data */
 	double *dark_data;		/* [nraw] of dark level to subtract. Note that the dark value */
-							/* depends on integration time. */
+							/* depends on integration time and gain mode. */
 	int dark_gain_mode;		/* Gain mode used for dark data */
 
 	int cal_valid;			/* calibration factor valid */
@@ -145,7 +151,9 @@ struct _munkiimp {
 	struct _mkdata *data;		/* EEProm data container */
 	athread *th;				/* Switch monitoring thread (NULL if not used) */
 	volatile int switch_count;	/* Incremented in thread */
+	void *hcancel;				/* Context for canceling outstandin I/O */
 	volatile int th_term;		/* Thread terminate on error rather than retry */
+	volatile int th_termed;		/* Thread has terminated */
 	inst_opt_mode trig;			/* Reading trigger mode */
 	int trig_return;			/* Emit "\n" after trigger */
 	int noautocalib;			/* Disable automatic calibration if not essential */
@@ -359,6 +367,9 @@ void del_munkiimp(munki *p);
 /* Initialise our software state from the hardware */
 munki_code munki_imp_init(munki *p);
 
+/* Return a pointer to the serial number */
+char *munki_imp_get_serial_no(munki *p);
+
 /* Set the measurement mode. It may need calibrating */
 munki_code munki_imp_set_mode(
 	munki *p,
@@ -419,7 +430,7 @@ munki_code munki_dark_measure_1(
 /* Take a dark reference measurement - part 2 */
 munki_code munki_dark_measure_2(
 	munki *p,
-	double *abssens,		/* Return array [nraw] of abssens values */
+	double *sens,			/* Return array [nraw] of sens values */
 	int nummeas,			/* Number of readings to take */
 	double inttime, 		/* Integration time to use/used */
 	int gainmode,			/* Gain mode to use, 0 = normal, 1 = high */
@@ -430,7 +441,7 @@ munki_code munki_dark_measure_2(
 /* Take a dark measurement */
 munki_code munki_dark_measure(
 	munki *p,
-	double *abssens,		/* Return array [nraw] of abssens values */
+	double *sens,			/* Return array [nraw] of sens values */
 	int nummeas,			/* Number of readings to take */
 	double *inttime, 		/* Integration time to use/used */
 	int gainmode			/* Gain mode to use, 0 = normal, 1 = high */
@@ -598,11 +609,11 @@ void munki_sub_sens_to_abssens(
 	double *maxv			/* If not NULL, return the maximum value */
 );
 
-/* Average a set of measurements into one. */
+/* Average a set of sens measurements into one. */
 /* Return zero if readings are consistent. */
 /* Return nz if the readings are not consistent */
 /* Return the overall average. */
-int munki_average_multimeas(
+int munki_average_sens_multimeas(
 	munki *p,
 	double *avg,			/* return average [nraw] */
 	double **multimeas,		/* Array of [nummeas][nraw] value to average */
@@ -703,7 +714,8 @@ munki_code munki_optimise_sensor(
 	int    cur_gain_mode,
 	int    permithg,		/* nz to permit switching to high gain mode */
 	int    permitclip,		/* nz to permit clipping out of range int_time, else error */
-	double targoscale,		/* Optimising target scale ( <= 1.0) */
+	double *targoscale,		/* Optimising target scale ( <= 1.0) */
+							/* (May be altered if integration time isn't possible) */
 	double scale,			/* scale needed of current int time to reach optimum */
 	double deadtime			/* Dead integration time (if any) */
 );
@@ -988,6 +1000,10 @@ struct _mkdata {
 
 /* Constructor. Construct from the EEprom calibration contents */
 extern mkdata *new_mkdata(munkiimp *m, unsigned char *buf, int len, int verb, int debug);
+
+#ifdef __cplusplus
+	}
+#endif
 
 #define MUNKI_IMP
 #endif /* MUNKI_IMP */

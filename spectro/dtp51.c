@@ -38,7 +38,7 @@
 #include <time.h>
 #include <stdarg.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -772,6 +772,9 @@ inst_code dtp51_set_mode(inst *pp, inst_mode m)
 
 	return inst_ok;
 }
+
+/* !! It's not clear if there is a way of knowing */
+/* whether the instrument has a UV filter. */
 
 /* 
  * set or reset an optional mode

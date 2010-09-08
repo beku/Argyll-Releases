@@ -234,10 +234,11 @@ typedef struct {
 	icColorSpaceSignature outs;		/* Output space */
 	double p1[3];			/* white pivot point in abs Lab */
 	double p2[3];			/* Point on vector towards black */
+	double toll;			/* Tollerance of black direction */
 } bpfind;
 
 /* Optimise device values to minimise L, while remaining */
-/* within the ink limit, and staying in line between p1 (white) and p2 (K) */
+/* within the ink limit, and staying in line between p1 (white) and p2 (black dir) */
 static double bpfindfunc(void *adata, double pv[]) {
 	bpfind *b = (bpfind *)adata;
 	double rv = 0.0;
@@ -305,6 +306,9 @@ static double bpfindfunc(void *adata, double pv[]) {
 
 	terr = (ta - Lab[1]) * (ta - Lab[1])
 	     + (tb - Lab[2]) * (tb - Lab[2]);
+	
+	if (terr < b->toll)		/* Tollerance error doesn't count until it's over tollerance */
+		terr = 0.0;
 	
 #ifdef DEBUG
 	printf("~1 target error %f\n",terr);
@@ -569,9 +573,15 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 	p->lookup(p, black, dblack);
 //printf("~1 Got initial black %f %f %f, kch = %d\n", black[0],black[1],black[2],kch);
 
-	if (kch >= 0) {
-		/* The colorspace is subtractive and has a K channel. */
-		/* Locate the device value within the ink limits that is */
+	/* !!! Hmm. For CMY and RGB we are simply using the device */
+	/* combination values as the black point. In reality we might */
+	/* want to have the option of using a neutral black point, */
+	/* just like CMYK ?? */
+
+	if (kch >= 0) {	/* The space is subtractive with a K channel. */
+		/* If XICC_NEUTRAL_CMYK_BLACK then locate the darkest */
+		/* CMYK within limits with the same chromaticity as the white point, */
+		/* otherwise locate the device value within the ink limits that is */
 		/* in the direction of the K channel */
 		bpfind bfs;					/* Callback context */
 		double sr[MXDO];			/* search radius */
@@ -588,6 +598,7 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 		bfs.kch = kch;
 		bfs.tlimit = -1.0;
 		bfs.klimit = -1.0;
+		bfs.toll = XICC_BLACK_POINT_TOLL;
 
 		if (alg == icmLutType) {
 			icxLuLut *pp = (icxLuLut *)x;
@@ -598,6 +609,17 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 //printf("~1 tlimit = %f, klimit = %f\n",bfs.tlimit,bfs.klimit);
 		};
 	
+#ifdef XICC_NEUTRAL_CMYK_BLACK
+		if (outs == icSigXYZData) {
+			icmXYZ2Lab(&icmD50, bfs.p1, white);
+			icmCpy3(bfs.p2, white);
+		} else {
+			icmAry2Ary(bfs.p1, white);
+			icmLab2XYZ(&icmD50, bfs.p2, white);
+		}
+		icmScale3(bfs.p2, bfs.p2, 0.02);	/* Scale white XYZ towards 0,0,0 */
+		icmXYZ2Lab(&icmD50, bfs.p2, bfs.p2); /* Convert black direction to Lab */
+#else
 		/* Now figure abs Lab value of K only, as the direction */
 		/* to use for the rich black. */
 		for (e = 0; e < inn; e++)
@@ -616,6 +638,7 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 			icmAry2Ary(bfs.p1, white);
 			icmAry2Ary(bfs.p2, black);
 		}
+#endif
 
 //printf("~1 p1 = %f %f %f, p2 = %f %f %f\n",bfs.p1[0],bfs.p1[1],bfs.p1[2],bfs.p2[0],bfs.p2[1],bfs.p2[2]);
 		/* Start with the K only as the current best value */
@@ -1575,6 +1598,7 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->desc = "  d - Default Viewing Condition";
 			vc->Ev = vc_average;	/* Average viewing conditions */
 			vc->La = 50.0;			/* Practical to Good lighting */
+			vc->Lv = 250.0;			/* Average viewing conditions ratio */
 			vc->Yb = 0.2;			/* Grey world */
 			vc->Yf = 0.01;			/* 1% flare */
 		}
@@ -1606,7 +1630,7 @@ double *wp			/* Provide white point if xicc is NULL */
 	else if (no == 2
 	 || (as != NULL && stricmp(as,"pc") == 0)) {
 
-		no = 1;
+		no = 2;
 		if (vc != NULL) {
 			vc->desc = " pc - Critical print evaluation environment (ISO-3664 P1)";
 			vc->Ev = vc_average;	/* Average viewing conditions */
@@ -1618,7 +1642,7 @@ double *wp			/* Provide white point if xicc is NULL */
 	else if (no == 3
 	 || (as != NULL && stricmp(as,"mt") == 0)) {
 
-		no = 2;
+		no = 3;
 		if (vc != NULL) {
 			vc->desc = " mt - Monitor in typical work environment";
 			vc->Ev = vc_average;	/* Average viewing conditions */
@@ -1630,7 +1654,7 @@ double *wp			/* Provide white point if xicc is NULL */
 	else if (no == 4
 	 || (as != NULL && stricmp(as,"mb") == 0)) {
 
-		no = 3;
+		no = 4;
 		if (vc != NULL) {
 			vc->desc = " mb - Bright monitor in bright work environment";
 			vc->Ev = vc_average;	/* Average viewing conditions */
@@ -1642,7 +1666,7 @@ double *wp			/* Provide white point if xicc is NULL */
 	else if (no == 5
 	 || (as != NULL && stricmp(as,"md") == 0)) {
 
-		no = 4;
+		no = 5;
 		if (vc != NULL) {
 			vc->desc = " md - Monitor in darkened work environment";
 			vc->Ev = vc_dim;		/* Dim viewing conditions */
@@ -1654,7 +1678,7 @@ double *wp			/* Provide white point if xicc is NULL */
 	else if (no == 6
 	 || (as != NULL && stricmp(as,"jm") == 0)) {
 
-		no = 5;
+		no = 6;
 		if (vc != NULL) {
 			vc->desc = " jm - Projector in dim environment";
 			vc->Ev = vc_dim;		/* Dim viewing conditions */
@@ -1666,7 +1690,7 @@ double *wp			/* Provide white point if xicc is NULL */
 	else if (no == 7
 	 || (as != NULL && stricmp(as,"jd") == 0)) {
 
-		no = 6;
+		no = 7;
 		if (vc != NULL) {
 			vc->desc = " jd - Projector in dark environment";
 			vc->Ev = vc_dark;		/* Dark viewing conditions */
@@ -1678,7 +1702,7 @@ double *wp			/* Provide white point if xicc is NULL */
 	else if (no == 8
 	 || (as != NULL && stricmp(as,"pcd") == 0)) {
 
-		no = 7;
+		no = 8;
 		if (vc != NULL) {
 			vc->desc = "pcd - Photo CD - original scene outdoors";
 			vc->Ev = vc_average;	/* Average viewing conditions */
@@ -1690,7 +1714,7 @@ double *wp			/* Provide white point if xicc is NULL */
 	else if (no == 9
 	 || (as != NULL && stricmp(as,"ob") == 0)) {
 
-		no = 8;
+		no = 9;
 		if (vc != NULL) {
 			vc->desc = " ob - Original scene - Bright Outdoors";
 			vc->Ev = vc_average;	/* Average viewing conditions */
@@ -1702,7 +1726,7 @@ double *wp			/* Provide white point if xicc is NULL */
 	else if (no == 10
 	 || (as != NULL && stricmp(as,"cx") == 0)) {
 
-		no = 9;
+		no = 10;
 		if (vc != NULL) {
 			vc->desc = " cx - Cut Sheet Transparencies on a viewing box";
 			vc->Ev = vc_cut_sheet;	/* Cut sheet viewing conditions */
@@ -1974,7 +1998,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 0.0;			/* No gamut expansion */
-		gmi->gamcknf  = 0.7;		/* Moderate Sigma knee in gamut compress */
+		gmi->gamcknf  = 0.8;		/* High Sigma knee in gamut compress */
 		gmi->gamxknf  = 0.0;		/* No knee in gamut expand */
 		gmi->gampwf  = 1.0;			/* Full Perceptual surface weighting factor */
 		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
@@ -1999,10 +2023,10 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 1.0;			/* Full gamut expansion  */
-		gmi->gamcknf = 0.9;			/* High Sigma knee in gamut compress/expand */
+		gmi->gamcknf = 1.0;			/* High Sigma knee in gamut compress/expand */
 		gmi->gamxknf = 0.4;			/* Moderate Sigma knee in gamut compress/expand */
-		gmi->gampwf  = 0.6;			/* Most Perceptual surface weighting factor */
-		gmi->gamswf  = 0.4;			/* Some Saturation surface weighting factor */
+		gmi->gampwf  = 0.2;			/* Slight perceptual surface weighting factor */
+		gmi->gamswf  = 0.8;			/* Most saturation surface weighting factor */
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
 	else if (no == 7
@@ -2024,7 +2048,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 1.0;			/* Full gamut expansion */
-		gmi->gamcknf = 0.9;			/* High sigma knee in gamut compress */
+		gmi->gamcknf = 1.0;			/* High sigma knee in gamut compress */
 		gmi->gamxknf = 0.5;			/* Moderate sigma knee in gamut expand */
 		gmi->gampwf  = 0.0;			/* No Perceptual surface weighting factor */
 		gmi->gamswf  = 1.0;			/* Full Saturation surface weighting factor */

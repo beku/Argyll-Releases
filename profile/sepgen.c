@@ -32,7 +32,7 @@
 
 #include <stdio.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "cgats.h"
 #include "numlib.h"
 #include "xicc.h"
@@ -373,7 +373,7 @@ int main(int argc, char *argv[]) {
 			error("Read error : %s",mppo->err);
 
 		/* Get various types of information about the mpp */
-		mppo->get_info(mppo, &oimask, &outn, &plimit, &spec_n, NULL, NULL, NULL);
+		mppo->get_info(mppo, &oimask, &outn, &plimit, &spec_n, NULL, NULL, NULL, NULL);
 
 		if (spec && spec_n == 0)
 			error ("Requested spectral interpretation when data not available");

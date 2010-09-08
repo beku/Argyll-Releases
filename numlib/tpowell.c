@@ -30,7 +30,7 @@ double fcn(		/* Return function value */
 #define N 9
 
 static void progress(void *pdata, int perc) {
-	printf("\r% 3d%%",perc); 
+	printf("%c% 3d%%",cr_char,perc); 
 	if (perc == 100)
 		printf("\n");
 	fflush(stdout);
@@ -46,6 +46,7 @@ int main(void)
 	int rc;
 
 	error_program = "tpowell";	/* Set global error reporting string */
+	check_if_not_interactive();
 
 	/*	 The following starting values provide a rough solution. */
 	for (j = 0; j < N; j++) {

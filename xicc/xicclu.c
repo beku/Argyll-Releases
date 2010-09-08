@@ -29,7 +29,7 @@
 #include <string.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "plot.h"
 #include "xicc.h"
@@ -93,12 +93,13 @@ void usage(char *diag) {
 		fprintf(stderr,"            %s\n",vc.desc);
 	}
 
-	fprintf(stderr,"         s:surround    a = average, m = dim, d = dark,\n");
+	fprintf(stderr,"         s:surround    n = auto, a = average, m = dim, d = dark,\n");
 	fprintf(stderr,"                       c = transparency (default average)\n");
 	fprintf(stderr,"         w:X:Y:Z       Adapted white point as XYZ (default media white, Abs: D50)\n");
 	fprintf(stderr,"         w:x:y         Adapted white point as x, y\n");
 	fprintf(stderr,"         a:adaptation  Adaptation luminance in cd.m^2 (default 50.0)\n");
 	fprintf(stderr,"         b:background  Background %% of image luminance (default 20)\n");
+	fprintf(stderr,"         l:scenewhite  Scene white in cd.m^2 if surround = auto (default 250)\n");
 	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 1)\n");
 	fprintf(stderr,"         f:X:Y:Z       Flare color as XYZ (default media white, Abs: D50)\n");
 	fprintf(stderr,"         f:x:y         Flare color as x, y\n");
@@ -151,6 +152,7 @@ main(int argc, char *argv[]) {
 	double vc_wxy[2] = {-1.0, -1.0};		/* Adapted white override in x,y */
 	double vc_a = -1.0;			/* Adapted luminance */
 	double vc_b = -1.0;			/* Background % overid */
+	double vc_l = -1.0;			/* Scene luminance override */
 	double vc_f = -1.0;			/* Flare % overid */
 	double vc_fXYZ[3] = {-1.0, -1.0, -1.0};	/* Flare color override in XYZ */
 	double vc_fxy[2] = {-1.0, -1.0};		/* Flare color override in x,y */
@@ -522,7 +524,9 @@ main(int argc, char *argv[]) {
 				} else if (na[0] == 's' || na[0] == 'S') {
 					if (na[1] != ':')
 						usage("Unrecognised parameters after -cs");
-					if (na[2] == 'a' || na[2] == 'A') {
+					if (na[2] == 'n' || na[2] == 'N') {
+						vc_s = vc_none;		/* Automatic using Lv */
+					} else if (na[2] == 'a' || na[2] == 'A') {
 						vc_s = vc_average;
 					} else if (na[2] == 'm' || na[2] == 'M') {
 						vc_s = vc_dim;
@@ -548,6 +552,10 @@ main(int argc, char *argv[]) {
 					if (na[1] != ':')
 						usage("Unrecognised parameters after -cb");
 					vc_b = atof(na+2);
+				} else if (na[0] == 'l' || na[0] == 'L') {
+					if (na[1] != ':')
+						usage("Viewing conditions (-[cd]l) missing ':'");
+					vc_l = atof(na+2);
 				} else if (na[0] == 'f' || na[0] == 'F') {
 					double x, y, z;
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
@@ -709,6 +717,8 @@ main(int argc, char *argv[]) {
 		vc.La = vc_a;
 	if (vc_b >= 0.0)
 		vc.Yb = vc_b/100.0;
+	if (vc_l >= 0.0)
+		vc.Lv = vc_l;
 	if (vc_f >= 0.0)
 		vc.Yf = vc_f/100.0;
 	if (vc_fXYZ[1] > 0.0) {

@@ -90,8 +90,8 @@
 #include "cam02.h"
 #include "numlib.h"
 
-#define ENABLE_DDL			/* Enable k1,k2,k3 overall ss limit values (seems to be the best scheme) */
-#undef ENABLE_SS			/* Disable overall ss limit values (not the scheme used) */
+#define ENABLE_DDL			/* [Def] Enable k1,k2,k3 overall ss limit values (seems to be the best scheme) */
+#undef ENABLE_SS			/* [Undef] Disable overall ss limit values (not the scheme used) */
 
 #undef ENTRACE				/* Enable internal value runtime tracing if s->trace != 0 */
 #undef DIAG1				/* Print internal value diagnostics for conditions setup */
@@ -133,7 +133,7 @@
 #define DDULIMIT 0.90		/* ab component k3:k1 ratio limit (must be < 1.0) */
 #define SSMINcJ 0.005		/* ab scale cJ minimum value */
 #define JLIMIT 0.005		/* J encoding cutover point straight line (0 - 1.0 range) */
-#define HKLIMIT 0.5			/* Maximum Helmholtz-Kohlraush lift */
+#define HKLIMIT 0.7			/* Maximum Helmholtz-Kohlraush lift */
 
 #ifdef TRACKMINMAX
 double minss = 1e60;

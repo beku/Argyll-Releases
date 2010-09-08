@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/tools/gif2tiff.c,v 1.4 2003/03/12 14:05:05 dron Exp $ */
+/* $Id: gif2tiff.c,v 1.8.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1990-1997 Sam Leffler
@@ -33,18 +33,18 @@
  *	if input is 640 350 pixel aspect is probably 1.37
  *
  */
+#include "tif_config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
-#include "tiffio.h"
-
-#if defined(_WINDOWS) || defined(MSDOS)
-#define BINMODE "b"
-#else
-#define	BINMODE
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
 #endif
+
+#include "tiffio.h"
 
 #define	GIFGAMMA	(1.5)		/* smaller makes output img brighter */
 #define	IMAX		0xffff		/* max intensity value */
@@ -61,7 +61,7 @@ makegamtab(float gam)
     int i;
 
     for(i=0; i<256; i++) 
-	gamtab[i] = IMAX*pow(i/255.0,gam)+0.5;
+	gamtab[i] = (unsigned short) (IMAX*pow(i/255.0,gam)+0.5);
 }
 
 char* stuff[] = {
@@ -70,7 +70,6 @@ char* stuff[] = {
 " -r #		make each strip have no more than # rows",
 "",
 " -c lzw[:opts]	compress output with Lempel-Ziv & Welch encoding",
-"               (no longer supported by default due to Unisys patent enforcement)", 
 " -c zip[:opts]	compress output with deflate encoding",
 " -c packbits	compress output with packbits encoding",
 " -c none	use no compression algorithm on output",
@@ -133,30 +132,30 @@ void	rasterize(int, char*);
 int
 main(int argc, char* argv[])
 {
-    extern int tiff_optind;
-    extern char *tiff_optarg;
+    extern int optind;
+    extern char *optarg;
     int c, status;
 
-    while ((c = tiff_getopt(argc, argv, "c:r:")) != -1)
+    while ((c = getopt(argc, argv, "c:r:")) != -1)
 	    switch (c) {
 	    case 'c':		/* compression scheme */
-		    if (!processCompressOptions(tiff_optarg))
+		    if (!processCompressOptions(optarg))
 			    usage();
 		    break;
 	    case 'r':		/* rows/strip */
-		    rowsperstrip = atoi(tiff_optarg);
+		    rowsperstrip = atoi(optarg);
 		    break;
 	    case '?':
 		    usage();
 		    /*NOTREACHED*/
 	    }
-    if (argc - tiff_optind != 2)
+    if (argc - optind != 2)
 	    usage();
 
     makegamtab(GIFGAMMA);
-    filename = argv[tiff_optind];
-    imagename = argv[tiff_optind+1];
-    if ((infile = fopen(imagename, "r" BINMODE)) != NULL) {
+    filename = argv[optind];
+    imagename = argv[optind+1];
+    if ((infile = fopen(imagename, "rb")) != NULL) {
 	int c;
 	fclose(infile);
 	printf("overwrite %s? ", imagename); fflush(stdout);
@@ -164,7 +163,7 @@ main(int argc, char* argv[])
 	if (c != 'y' && c != 'Y')
 	    return (1);
     }
-    if ((infile = fopen(filename, "r" BINMODE)) == NULL) {
+    if ((infile = fopen(filename, "rb")) == NULL) {
 	perror(filename);
 	return (1);
     }
@@ -291,7 +290,7 @@ readgifimage(char* mode)
     } else if (global) {
         initcolors(globalmap, 1<<globalbits);
     }
-    if (status = readraster())
+    if ((status = readraster()))
 	rasterize(interleaved, mode);
     _TIFFfree(raster);
     return status;
@@ -309,7 +308,7 @@ readextension(void)
     char buf[255];
 
     (void) getc(infile);
-    while (count = getc(infile))
+    while ((count = getc(infile)))
         fread(buf, 1, count, infile);
 }
 
@@ -451,7 +450,7 @@ initcolors(unsigned char colormap[COLSIZE][3], int ncolors)
 void
 rasterize(int interleaved, char* mode)
 {
-    register long row;
+    register unsigned long row;
     unsigned char *newras;
     unsigned char *ras;
     TIFF *tif;
@@ -511,4 +510,13 @@ rasterize(int interleaved, char* mode)
     TIFFClose(tif);
 
     _TIFFfree(newras);
-} 
+}
+
+/* vim: set ts=8 sts=8 sw=8 noet: */
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

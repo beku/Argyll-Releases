@@ -30,7 +30,7 @@ float	D3, D4;
 float	D5, D6;
 
 int
-main(int argc, char* argv)
+main(int argc, char** argv)
 {
     int R, G, B;
 
@@ -159,3 +159,10 @@ check(int R, int G, int B)
 	eCodes++;
     eBits += abs(eR) + abs(eG) + abs(eB);
 }
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

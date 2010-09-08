@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/tools/sgisv.c,v 1.3 1999/12/27 17:35:01 mwelles Exp $ */
+/* $Id: sgisv.c,v 1.5.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1990-1997 Sam Leffler
@@ -33,8 +33,8 @@
 
 #include "tiffio.h"
 
-typedef unsigned char u_char;
-typedef unsigned long u_long;
+typedef unsigned char unsigned char;
+typedef unsigned long uint32;
 
 #define	streq(a,b)	(strcmp(a,b) == 0)
 #define	strneq(a,b,n)	(strncmp(a,b,n) == 0)
@@ -56,28 +56,28 @@ int
 main(int argc, char* argv[])
 {
 	int c;
-	extern int tiff_optind;
-	extern char* tiff_optarg;
+	extern int optind;
+	extern char* optarg;
 
-	while ((c = tiff_getopt(argc, argv, "c:p:r:")) != -1)
+	while ((c = getopt(argc, argv, "c:p:r:")) != -1)
 		switch (c) {
 		case 'b':		/* save as b&w */
 			photometric = PHOTOMETRIC_MINISBLACK;
 			break;
 		case 'c':		/* compression scheme */
-			if (streq(tiff_optarg, "none"))
+			if (streq(optarg, "none"))
 				compression = COMPRESSION_NONE;
-			else if (streq(tiff_optarg, "packbits"))
+			else if (streq(optarg, "packbits"))
 				compression = COMPRESSION_PACKBITS;
-			else if (strneq(tiff_optarg, "jpeg", 4)) {
-				char* cp = strchr(tiff_optarg, ':');
+			else if (strneq(optarg, "jpeg", 4)) {
+				char* cp = strchr(optarg, ':');
 				if (cp && isdigit(cp[1]))
 					quality = atoi(cp+1);
 				if (cp && strchr(cp, 'r'))
 					jpegcolormode = JPEGCOLORMODE_RAW;
 				compression = COMPRESSION_JPEG;
-			} else if (strneq(tiff_optarg, "lzw", 3)) {
-				char* cp = strchr(tiff_optarg, ':');
+			} else if (strneq(optarg, "lzw", 3)) {
+				char* cp = strchr(optarg, ':');
 				if (cp)
 					predictor = atoi(cp+1);
 				compression = COMPRESSION_LZW;
@@ -85,33 +85,33 @@ main(int argc, char* argv[])
 				usage();
 			break;
 		case 'p':		/* planar configuration */
-			if (streq(tiff_optarg, "separate"))
+			if (streq(optarg, "separate"))
 				config = PLANARCONFIG_SEPARATE;
-			else if (streq(tiff_optarg, "contig"))
+			else if (streq(optarg, "contig"))
 				config = PLANARCONFIG_CONTIG;
 			else
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(tiff_optarg);
+			rowsperstrip = atoi(optarg);
 			break;
 		case '?':
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - tiff_optind != 1 && argc - tiff_optind != 5)
+	if (argc - optind != 1 && argc - optind != 5)
 		usage();
 	xmaxscreen = getgdesc(GD_XPMAX)-1;
 	ymaxscreen = getgdesc(GD_YPMAX)-1;
 	foreground();
 	noport();
 	winopen("tiffsv");
-	if (argc - tiff_optind == 5)
-		tiffsv(argv[tiff_optind],
-		    atoi(argv[tiff_optind+1]), atoi(argv[tiff_optind+2]),
-		    atoi(argv[tiff_optind+3]), atoi(argv[tiff_optind+4]));
+	if (argc - optind == 5)
+		tiffsv(argv[optind],
+		    atoi(argv[optind+1]), atoi(argv[optind+2]),
+		    atoi(argv[optind+3]), atoi(argv[optind+4]));
 	else
-		tiffsv(argv[tiff_optind], 0, xmaxscreen, 0, ymaxscreen);
+		tiffsv(argv[optind], 0, xmaxscreen, 0, ymaxscreen);
 	return (0);
 }
 
@@ -124,7 +124,6 @@ char* stuff[] = {
 " -r #		make each strip have no more than # rows",
 "",
 " -c lzw[:opts]	compress output with Lempel-Ziv & Welch encoding",
-"               (no longer supported by default due to Unisys patent enforcement)", 
 " -c jpeg[:opts]compress output with JPEG encoding",
 " -c packbits	compress output with packbits encoding",
 " -c none	use no compression algorithm on output",
@@ -152,16 +151,16 @@ usage(void)
 }
 
 static void
-svRGBSeparate(TIFF* tif, u_long* ss, int xsize, int ysize)
+svRGBSeparate(TIFF* tif, uint32* ss, int xsize, int ysize)
 {
 	tsize_t stripsize = TIFFStripSize(tif);
-	u_char *rbuf = (u_char *)_TIFFmalloc(3*stripsize);
-	u_char *gbuf = rbuf + stripsize;
-	u_char *bbuf = gbuf + stripsize;
+	unsigned char *rbuf = (unsigned char *)_TIFFmalloc(3*stripsize);
+	unsigned char *gbuf = rbuf + stripsize;
+	unsigned char *bbuf = gbuf + stripsize;
 	register int y;
 
 	for (y = 0; y <= ysize; y += rowsperstrip) {
-		u_char *rp, *gp, *bp;
+		unsigned char *rp, *gp, *bp;
 		register int x;
 		register uint32 n;
 
@@ -171,7 +170,7 @@ svRGBSeparate(TIFF* tif, u_long* ss, int xsize, int ysize)
 		rp = rbuf; gp = gbuf; bp = bbuf;
 		do {
 			for (x = 0; x <= xsize; x++) {
-				u_long v = ss[x];
+				uint32 v = ss[x];
 				rp[x] = v;
 				gp[x] = v >> 8;
 				bp[x] = v >> 16;
@@ -193,14 +192,14 @@ svRGBSeparate(TIFF* tif, u_long* ss, int xsize, int ysize)
 }
 
 static void
-svRGBContig(TIFF* tif, u_long* ss, int xsize, int ysize)
+svRGBContig(TIFF* tif, uint32* ss, int xsize, int ysize)
 {
 	register int x, y;
 	tsize_t stripsize = TIFFStripSize(tif);
-	u_char *strip = (u_char *)_TIFFmalloc(stripsize);
+	unsigned char *strip = (unsigned char *)_TIFFmalloc(stripsize);
 
 	for (y = 0; y <= ysize; y += rowsperstrip) {
-		register u_char *pp = strip;
+		register unsigned char *pp = strip;
 		register uint32 n;
 
 		n = rowsperstrip;
@@ -208,7 +207,7 @@ svRGBContig(TIFF* tif, u_long* ss, int xsize, int ysize)
 			n = ysize-y+1;
 		do {
 			for (x = 0; x <= xsize; x++) {
-				u_long v = ss[x];
+				uint32 v = ss[x];
 				pp[0] = v;
 				pp[1] = v >> 8;
 				pp[2] = v >> 16;
@@ -232,14 +231,14 @@ svRGBContig(TIFF* tif, u_long* ss, int xsize, int ysize)
 #define	BLUE	CVT(11)		/* 11% */
 
 static void
-svGrey(TIFF* tif, u_long* ss, int xsize, int ysize)
+svGrey(TIFF* tif, uint32* ss, int xsize, int ysize)
 {
 	register int x, y;
-	u_char *buf = (u_char *)_TIFFmalloc(TIFFScanlineSize(tif));
+	unsigned char *buf = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(tif));
 
 	for (y = 0; y <= ysize; y++) {
 		for (x = 0; x <= xsize; x++) {
-			u_char *cp = (u_char *)&ss[x];
+			unsigned char *cp = (unsigned char *)&ss[x];
 			buf[x] = (RED*cp[3] + GREEN*cp[2] + BLUE*cp[1]) >> 8;
 		}
 		if (TIFFWriteScanline(tif, buf, (uint32) y, 0) < 0)
@@ -258,7 +257,7 @@ tiffsv(char* name, int x1, int x2, int y1, int y2)
 	TIFF *tif;
 	int xsize, ysize;
 	int xorg, yorg;
-	u_long *scrbuf;
+	uint32 *scrbuf;
 
 	xorg = MIN(x1,x2);
 	yorg = MIN(y1,y2);
@@ -296,7 +295,7 @@ tiffsv(char* name, int x1, int x2, int y1, int y2)
 	TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_BOTLEFT);
 	rowsperstrip = TIFFDefaultStripSize(tif, rowsperstrip);
 	TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, rowsperstrip);
-	scrbuf = (u_long *)_TIFFmalloc((xsize+1)*(ysize+1)*sizeof (u_long));
+	scrbuf = (uint32 *)_TIFFmalloc((xsize+1)*(ysize+1)*sizeof (uint32));
 	readdisplay(xorg, yorg, xorg+xsize, yorg+ysize, scrbuf, RD_FREEZE);
 	if (photometric == PHOTOMETRIC_RGB) {
 		if (config == PLANARCONFIG_SEPARATE)
@@ -308,3 +307,10 @@ tiffsv(char* name, int x1, int x2, int y1, int y2)
 	(void) TIFFClose(tif);
 	_TIFFfree((char *)scrbuf);
 }
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

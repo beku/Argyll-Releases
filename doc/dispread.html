@@ -38,10 +38,12 @@ Choose the display from the following list (default 1)</span></font><small
  style="font-family: monospace;" href="#c">-c listno</a><span
  style="font-family: monospace;"> &nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set
-communication port from the following list (default 1)</span></small><small
- style="font-family: monospace;"><br>
-</small><font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="#y">-y c|l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+communication port from the following list (default 1)<br>
+</span></small><font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use projector mode (if available)</span></font><br>
+<small style="font-family: monospace;"></small><font size="-1"><span
+ style="font-family: monospace;">&nbsp;<a href="#y">-y c|l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Display type, c = CRT, l = LCD</span></font><br>
 <small style="font-family: monospace;">&nbsp;<span
  style="text-decoration: underline;">-</span><a href="#k">k
@@ -82,7 +84,16 @@ available)<br>
  style="font-family: monospace;" href="#V">-V</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Use adaptive measurement mode (if available)</span></font><br>
+&nbsp;&nbsp;&nbsp;&nbsp; Use adaptive measurement mode (if available)<br>
+&nbsp;<a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Disable normalisation of white to Y = 100</span></font><small><span
+ style="font-family: monospace;"></span></small><br>
+<font size="-1"><span style="font-family: monospace;">&nbsp;<a
+ href="dispcal.html#X">-X</a><a href="#X"> file.ccmx</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply Colorimeter Correction Matrix<br>
+</span></font><small><span style="font-family: monospace;">&nbsp;<a
+ href="dispread.html#I">-I b|w</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Drift compensation, Black: -Ib, White: -Iw, Both: -Ibw</span></small><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#C">-C "command"</a><span
  style="font-family: monospace;">
@@ -195,6 +206,12 @@ UNIX/Linux, a list of all possible serial ports are shown, but not all
 of them may
 actually be present on your system.<br>
 <br>
+<a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
+allows measuring
+in projector mode, using
+instruments that
+support this.<br>
+<br>
 <a name="y"></a>&nbsp; <span style="font-weight: bold;">-y</span>:
 Display type. Colorimeters can
 do a more accurate job if they know what type of display technology
@@ -289,7 +306,8 @@ each measurement session though.<br>
 <a name="H"></a> The -<span style="font-weight: bold;">H</span> option
 turns on high resolution spectral mode, if the instrument supports it.
 See <a href="instruments.html">Operation of particular instruments</a>
-for more details.<br>
+for more details. This may give better accuracy for display
+measurements.<br>
 <br>
 <a name="V"></a> The -<span style="font-weight: bold;">V</span> option
 uses adaptive
@@ -298,7 +316,37 @@ such as the Eye-One Pro. This may give better accuracy for low level
 measurements, but may be more inconsistent overall due to the varying
 integration times. Overall measurement time will probably be longer.<br>
 <br>
-<a name="C"></a> The -<span style="font-weight: bold;">C</span> <span
+<a name="w"></a>The <b>-w</b> flag disables the normalisation of the
+white patch value to 100.0, resulting in values that are in cd/m^2.
+This is for diagnostic purposes.<br>
+<br>
+<a name="X"></a> The -<span style="font-weight: bold;">X <span
+ style="font-style: italic;">file.ccmx</span></span> option reads a <a
+ href="File_Formats.html#.ccmx">Colorimeter Correction Matrix</a>
+from the given file, and applies it to the colorimeter instruments
+readings. This can improve a colorimeters accuracy for a particular
+type of display. A list of contributed <span style="font-weight: bold;">ccmx</span>
+files is <a href="ccmxs.html">here</a>.<br>
+<br>
+<a name="I"></a> The -<span style="font-weight: bold;">I <span
+ style="font-style: italic;">b|w</span></span>
+options invoke instrument black level, and display white level
+compensation (respectively). Instrument black level drift compensation
+attempts to combat instrument black calibration drift by using a
+display black test patch as a reference. If an instrument is not
+acclimatised sufficiently to the measurement conditions, changes in
+temperature can affect the black readings. Display white level drift
+compensation attempts to combat changes in display brightness as it
+warms up by measuring a white patch every so often, and using it to
+normalise all the other readings. If just instrument black drift
+compensation is needed, use <span style="font-weight: bold;">-Ib</span>.
+If just display white level compensation is needed, use <span
+ style="font-weight: bold;">-Iw</span>. If both are needed, use <span
+ style="font-weight: bold;">-Ibw</span> or <span
+ style="font-weight: bold;">-Iwb</span>.<span style="font-weight: bold;">
+<br>
+<br>
+</span><a name="C"></a> The -<span style="font-weight: bold;">C</span> <span
  style="font-weight: bold;">"command" </span>option
 allows a method of relaying each test value to some other display than
 that on the system running dispread (for instance, a photo frame, PDA

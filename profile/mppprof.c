@@ -45,7 +45,6 @@
 #undef DEBUG
 
 #undef DOQUAD			/* Minimise error^4 */
-#define TESTRW			/* Test reading and then writing mpp */
 
 #define verbo stdout
 
@@ -58,7 +57,7 @@
 #include <float.h>
 #endif
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "cgats.h"
 #include "numlib.h"
 #include "xicc.h"
@@ -70,12 +69,12 @@ usage(void) {
 	fprintf(stderr,"Create Model Printer Profile, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: %s [options] outfile\n",error_program);
-	fprintf(stderr," -v         Verbose mode\n");
-	fprintf(stderr," -q [lmhus]  Quality - Low, Medium (def), High, Ultra, Simple\n");
+	fprintf(stderr," -v [level] Verbose mode\n");
+	fprintf(stderr," -q [lmhus] Quality - Low, Medium (def), High, Ultra, Simple\n");
 	fprintf(stderr," -l limit   override default ink limit, 1 - n00%%\n");
 	fprintf(stderr," -s         Generate spectral model too\n");
 	fprintf(stderr," -m         Generate ink mixing model\n");
-	fprintf(stderr," -y         Verify profile\n");
+	fprintf(stderr," -y [level] Verify profile, 2 = read/write verify\n");
 	fprintf(stderr," -L         Output Lab values\n");
 	fprintf(stderr," outfile    Base name for input.ti3/output.mpp file\n");
 	exit(1);
@@ -87,7 +86,7 @@ int dolab, double ilimit, int ospec, int omix, profxinf *xpi);
 
 int main(int argc, char *argv[])
 {
-	int fa,nfa;							/* current argument we're looking at */
+	int fa,nfa,mfa;						/* current argument we're looking at */
 	int verb = 0;
 	int iquality = 1;					/* Forward quality, default medium */
 	int dolab = 0;
@@ -104,12 +103,14 @@ int main(int argc, char *argv[])
 	_control87(EM_OVERFLOW, EM_OVERFLOW);
 #endif
 	error_program = argv[0];
+	check_if_not_interactive();
 	memset((void *)&xpi, 0, sizeof(profxinf));	/* Init extra profile info to defaults */
 
 	if (argc <= 1)
 		usage();
 
 	/* Process the arguments */
+	mfa = 1;						/* Expect out filename */
 	for(fa = 1;fa < argc;fa++) {
 
 		nfa = fa;					/* skip to nfa if next argument is used */
@@ -119,7 +120,7 @@ int main(int argc, char *argv[])
 			if (argv[fa][2] != '\000')
 				na = &argv[fa][2];		/* next is directly after flag */
 			else {
-				if ((fa+1) < argc) {
+				if ((fa+1+mfa) < argc) {
 					if (argv[fa+1][0] != '-') {
 						nfa = fa + 1;
 						na = argv[nfa];		/* next is seperate non-flag argument */
@@ -130,8 +131,14 @@ int main(int argc, char *argv[])
 			if (argv[fa][1] == '?')
 				usage();
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
-				verb = 1;
+			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+				fa = nfa;
+				if (na == NULL) {
+					verb = 1;
+				} else {
+					verb = atoi(na);
+				}
+			}
 
 			/* Ink Limit */
 			else if (argv[fa][1] == 'l') {
@@ -141,8 +148,14 @@ int main(int argc, char *argv[])
 			}
 
 			/* Verify model against input points */
-			else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y')
-				verify = 1;
+			else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
+				fa = nfa;
+				if (na == NULL) {
+					verify = 1;
+				} else {
+					verify = atoi(na);
+				}
+			}
 
 			/* Quality */
 			else if (argv[fa][1] == 'q' || argv[fa][1] == 'Q') {
@@ -212,7 +225,7 @@ int main(int argc, char *argv[])
 /* return nz on error */
 static int
 make_output_mpp(
-	int verb,				/* Vebosity level, 0 = none */
+	int verb,				/* Vebosity level, 0 = none, 1 = summary, 2 = detail */
 	int quality,			/* quality, 0..3 */
 	int verify,				/* verify result flag */
 	char *inname,			/* Input .ti3 file name */
@@ -230,6 +243,7 @@ make_output_mpp(
 	int devchan;			/* Number of chanels in device space */
 	int isLab = 0;			/* Flag indicating whether PCS is XYZ or Lab */
 	int isDisplay = 0;		/* Flag indicating that this is a display device, not output */
+	int isdnormed = 0;      /* Has display data been normalised to 100 ? */
 	instType itype = instUnknown;	/* Spectral instrument type */
 	int    spec_n = 0;		/* Number of spectral bands, 0 if not valid */
 	double spec_wl_short = 0.0;	/* First reading wavelength in nm (shortest) */
@@ -278,6 +292,14 @@ make_output_mpp(
 		isDisplay = 1;
 	} else {
 		error ("Input file must be for an output device");
+	}
+
+	/* See if the display CIE data has been normalised to Y = 100 */
+	if ((ti = icg->find_kword(icg, 0, "NORMALIZED_TO_Y_100")) < 0
+	 || strcmp(icg->t[0].kdata[ti],"NO") == 0) {
+		isdnormed = 0;
+	} else {
+		isdnormed = 1;
 	}
 
 	/* Deal with color representation of input */
@@ -364,7 +386,7 @@ make_output_mpp(
 	if ((cols = new_mppcols(nodp, devchan, spec_n)) == NULL)
 		error("Malloc failed! - cols (%d colors x %d bytes",nodp,sizeof(mppcol));
 
-	/* Read in all the patch values */
+	/* Read in all the patch values from the CGATS file */
 	{
 		int chix[ICX_MXINKS];
 		char *bident;
@@ -435,7 +457,7 @@ make_output_mpp(
 			if ((ii = icg->find_kword(icg, 0, "SPECTRAL_END_NM")) < 0)
 				error ("Input file doesn't contain keyword SPECTRAL_END_NM");
 			sp.spec_wl_long = atof(icg->t[0].kdata[ii]);
-			sp.norm = 100.0;
+			sp.norm = 1.0;		/* MPP uses norm of 1.0 */
 	
 			/* Find the fields for spectral values */
 			for (j = 0; j < sp.spec_n; j++) {
@@ -471,11 +493,14 @@ make_output_mpp(
 			/* Read the spectral values for this patch */
 			if (ospec) {
 
-				/* norm takes care of 100 scale */
 				for (j = 0; j < sp.spec_n; j++) {
 					sp.spec[j] = *((double *)icg->t[0].fdata[i][spi[j]]);
-					if (ospec)
-						cols[i].band[3+j] = sp.spec[j];
+					if (ospec) {
+						if (!isDisplay || isdnormed)
+							cols[i].band[3+j] = sp.spec[j]/100.0;	/* Convert to 1.0 norm */
+						else
+							cols[i].band[3+j] = sp.spec[j];			/* Absolute */
+					}
 				}
 			}
 
@@ -486,14 +511,53 @@ make_output_mpp(
 				cols[i].band[2] = *((double *)icg->t[0].fdata[i][Zi]);
 				icmLab2XYZ(&icmD50, cols[i].band, cols[i].band);
 			} else {
-				cols[i].band[0] = *((double *)icg->t[0].fdata[i][Xi])/100.0;
-				cols[i].band[1] = *((double *)icg->t[0].fdata[i][Yi])/100.0;
-				cols[i].band[2] = *((double *)icg->t[0].fdata[i][Zi])/100.0;
+				cols[i].band[0] = *((double *)icg->t[0].fdata[i][Xi]);
+				cols[i].band[1] = *((double *)icg->t[0].fdata[i][Yi]);
+				cols[i].band[2] = *((double *)icg->t[0].fdata[i][Zi]);
+
+				/* Convert % to 1.0 scale */
+				if (!isDisplay || isdnormed) {
+					cols[i].band[0] /= 100.0;
+					cols[i].band[1] /= 100.0;
+					cols[i].band[2] /= 100.0;
+				}
 			}
 		}
 
 		free(bident);
 
+		/* Normalize display values to Y = 1.0 for display */
+		if (isDisplay && !isdnormed) {
+
+			/* XYZ not already normed */
+			if (isdnormed == 0) {
+				double scale = -1e6;
+	
+				/* Locate max Y */
+				for (i = 0; i < nodp; i++) {
+					if (cols[i].band[1] > scale)
+						scale = cols[i].band[1];
+				}
+				
+				scale = 1.0/scale;
+	
+				for (i = 0; i < nodp; i++) {
+					cols[i].band[0] *= scale;
+					cols[i].band[1] *= scale;
+					cols[i].band[2] *= scale;
+				}
+
+				/* Keep spectral consistent, but won't necessarily */
+				/* give Y = 1.0 for a non 1931_2 observer. */
+				if (ospec) {
+					for (i = 0; i < nodp; i++) {
+						for (j = 0; j < sp.spec_n; j++) {
+							cols[i].band[3+j] *= scale;
+						}
+					}
+				}
+			}
+		}
 	}	/* End of reading in CGATs file */
 
 	/* Create the mpp */
@@ -537,7 +601,7 @@ make_output_mpp(
 			/* Convert our cols data to Lab */
 			icmXYZ2Lab(&icmD50, ref, cols[i].band);
 
-			if (verify && verb) {
+			if ((verify && verb) || verb >= 2) {
 				printf("[%f] ", icmLabDE(ref, out));
 				for (j = 0; j < devchan; j++)
 					printf("%6.4f ", cols[i].nv[j]);
@@ -553,10 +617,11 @@ make_output_mpp(
 			aerr += mxd;
 			nsamps++;
 		}
-		printf("profile Lab check complete, peak err = %f, avg err = %f\n",
+		printf("Profile Lab check complete, peak err = %f, avg err = %f\n",
 			    merr, aerr/nsamps);
 
 		if (ospec) {
+			double maxsp = -1e6;
 			merr = 0.0;
 			aerr = 0.0;
 			nsamps = 0.0;
@@ -574,24 +639,35 @@ make_output_mpp(
 				avd = mxd = 0.0;
 				for (j = 0; j < spec_n; j++) {
 					double ded;
-					ded = fabs(out.spec[j]/out.norm - cols[i].band[3+j]/norm);
+					if (out.spec[j] > maxsp)
+						maxsp = out.spec[j];
+					if (cols[i].band[3+j] > maxsp)
+						maxsp = out.spec[j];
+					ded = fabs(out.spec[j] - cols[i].band[3+j]);
 					avd += ded;
 					if (ded > mxd)
 						mxd = ded;
 				}
 				avd /= (double)spec_n;
 
-				if (verify && verb) {
+				if ((verify && verb) || verb >= 2) {
 					printf("[%f %f] ", avd, mxd);
 					for (j = 0; j < devchan; j++)
 						printf("%6.4f ", cols[i].nv[j]);
 					printf("-> ");
+#ifdef NEVER
 					for (j = 0; j < spec_n; j++)
 						printf("%2.0f ", out.spec[j]); 
-
 					printf("should be ");
 					for (j = 0; j < spec_n; j++)
 						printf("%2.0f ", cols[i].band[3+j]); 
+#else
+					for (j = 0; j < spec_n; j++)
+						printf("%f ", out.spec[j]); 
+					printf("should be ");
+					for (j = 0; j < spec_n; j++)
+						printf("%f ", cols[i].band[3+j]); 
+#endif
 					printf("\n");
 				}
 	
@@ -602,18 +678,25 @@ make_output_mpp(
 				nsamps++;
 			}
 			printf("profile spectral check complete, avg err = %f%%, max err = %f%%\n",
-			       aerr * 100.0/nsamps, merr * 100.0);
+			       aerr * 100.0/nsamps * 1.0/maxsp, merr * 100.0/maxsp);
 
 			/* Check spectrally derived Lab values */
 			{
 				xsp2cie *sc;
 				xspect sp;
 
-				if ((sc = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
-					error("Failed to create xsp2cie object");
-
-				/* Set standard D50 viewer & illum. */
-				p->set_ilob(p, icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, 0);
+				if (isDisplay) {
+					if ((sc = new_xsp2cie(icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+						error("Failed to create xsp2cie object");
+	
+					p->set_ilob(p, icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, 0);
+				} else {
+					/* Set standard D50 viewer & illum. */
+					if ((sc = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+						error("Failed to create xsp2cie object");
+	
+					p->set_ilob(p, icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, 0);
+				}
 
 				merr = 0.0;
 				aerr = 0.0;
@@ -635,7 +718,7 @@ make_output_mpp(
 						sp.spec[j] = cols[i].band[3+j];
 					sc->convert(sc, ref, &sp);
 
-					if (verify && verb) {
+					if ((verify && verb) || verb >= 2) {
 						printf("[%f] ", icmLabDE(ref, out));
 						for (j = 0; j < devchan; j++)
 							printf("%6.4f ", cols[i].nv[j]);
@@ -660,8 +743,8 @@ make_output_mpp(
 	}
 
 
-#ifdef TESTRW
-	{
+	/* Test again by reading and loading the profile */
+	if (verify >= 2) {
 		mpp *p2;	/* Second test profile */
 		double merr = 0.0;
 		double aerr = 0.0;
@@ -708,6 +791,7 @@ make_output_mpp(
 				    aerr/nsamps, merr); fflush(stdout);
 
 			if (ospec) {
+				double maxsp = -1e6;
 				merr = 0.0;
 				aerr = 0.0;
 				nsamps = 0.0;
@@ -725,7 +809,11 @@ make_output_mpp(
 					avd = mxd = 0.0;
 					for (j = 0; j < spec_n; j++) {
 						double ded;
-						ded = fabs(out.spec[j]/out.norm - cols[i].band[3+j]/norm);
+						if (out.spec[j] > maxsp)
+							maxsp = out.spec[j];
+						if (cols[i].band[3+j] > maxsp)
+							maxsp = out.spec[j];
+						ded = fabs(out.spec[j] - cols[i].band[3+j]);
 						avd += ded;
 						if (ded > mxd)
 							mxd = ded;
@@ -737,12 +825,19 @@ make_output_mpp(
 						for (j = 0; j < devchan; j++)
 							printf("%6.4f ", cols[i].nv[j]);
 						printf("-> ");
+#ifdef NEVER
 						for (j = 0; j < spec_n; j++)
 							printf("%2.0f ", out.spec[j]); 
-
 						printf("should be ");
 						for (j = 0; j < spec_n; j++)
 							printf("%2.0f ", cols[i].band[3+j]); 
+#else
+						for (j = 0; j < spec_n; j++)
+							printf("%f ", out.spec[j]); 
+						printf("should be ");
+						for (j = 0; j < spec_n; j++)
+							printf("%f ", cols[i].band[3+j]); 
+#endif
 						printf("\n");
 					}
 		
@@ -753,18 +848,26 @@ make_output_mpp(
 					nsamps++;
 				}
 				printf("profile spectral check complete, avg err = %f, max err = %f\n",
-				       aerr * 100.0/nsamps, merr * 100.0); fflush(stdout);
+				       aerr * 100.0/nsamps * 1.0/maxsp, merr * 100.0/maxsp); fflush(stdout);
 
 				/* Check spectrally derived Lab values */
 				{
 					xsp2cie *sc;
 					xspect sp;
 
-					if ((sc = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
-						error("Failed to create xsp2cie object");
 
-					/* Set standard D50 viewer & illum. */
-					p2->set_ilob(p2, icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, 0);
+					if (isDisplay) {
+						/* Set emissive viewer. */
+						if ((sc = new_xsp2cie(icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+							error("Failed to create xsp2cie object");
+						/* (mpp will ignore illuminant for display anyway ??) */
+						p2->set_ilob(p2, icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, 0);
+					} else {
+						/* Set standard D50 viewer & illum. */
+						if ((sc = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+							error("Failed to create xsp2cie object");
+						p2->set_ilob(p2, icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, 0);
+					}
 
 					merr = 0.0;
 					aerr = 0.0;
@@ -815,7 +918,6 @@ make_output_mpp(
 
 		p2->del(p2);
 	}
-#endif /* TESTRW */
 
 	/* Clean up */
 	del_mppcols(cols, nodp, devchan, spec_n);

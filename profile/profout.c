@@ -164,8 +164,10 @@ typedef struct {
 	icxLuBase *ox;			/* Destination profile CAM to std PCS conversion */
 							/* (This is NOT used for the colorimetric B2A table creation!) */
 
-	icRenderingIntent abs_intent;	/* Desired abstract profile rendering intent */
-	icxLuBase *abs_luo;		/* abstract profile transform in PCS, NULL if none */
+							/* Abstract transform for each table. These may be */
+							/* duplicates. */
+	icRenderingIntent abs_intent[3];	/* Desired abstract profile rendering intent */
+	icxLuBase *abs_luo[3];		/* abstract profile transform in PCS, NULL if none */
 
 	double xyzscale[2];		/* < 1.0 if XYZ is to be scaled in destination space */
 							/* for perceptual [0], and saturation [1] */
@@ -175,25 +177,25 @@ typedef struct {
 	int wantLab;			/* 0 if want is XYZ PCS, 1 want is Lab PCS */
 } out_b2a_callback;
 
-/* Utility to handle abstract profile application to PCS */
+/* Utility to handle abstract profile application to PCS. */
 /* PCS in creating output table is always XYZ or Lab relative colorimetric, */
 /* and abstract profile is absolute or relative, and will be */
 /* XYZ if absolute, and PCS if relative. */
-static void do_abstract(out_b2a_callback *p, double out[3], double in[3]) {
+static void do_abstract(out_b2a_callback *p, int tn, double out[3], double in[3]) {
 	out[0] = in[0];
 	out[1] = in[1];
 	out[2] = in[2];
 
-	if (p->abs_intent == icAbsoluteColorimetric) {
+	if (p->abs_intent[tn] == icAbsoluteColorimetric) {
 		if (p->pcsspace == icSigLabData) {
 			icmLab2XYZ(&icmD50, out, out);
 		}
 		p->x->plu->XYZ_Rel2Abs(p->x->plu, out, out);
 	}
 
-	p->abs_luo->lookup(p->abs_luo, out, out);
+	p->abs_luo[tn]->lookup(p->abs_luo[tn], out, out);
 
-	if (p->abs_intent == icAbsoluteColorimetric) {
+	if (p->abs_intent[tn] == icAbsoluteColorimetric) {
 		p->x->plu->XYZ_Abs2Rel(p->x->plu, out, out);
 		if (p->pcsspace == icSigLabData) {
 			icmXYZ2Lab(&icmD50, out, out);
@@ -328,24 +330,24 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 	inn[1] = in1[1];
 	inn[2] = in1[2];
 
-	if (p->abs_luo != NULL) {	/* Abstract profile to apply to first table only. */
+	if (p->abs_luo[0] != NULL) {	/* Abstract profile to apply to first table only. */
 
-		if (!p->noPCScurves) {	/* Convert from PCS' to PCS */
+		if (!p->noPCScurves) {	/* Convert from PCS' to PCS so we can apply abstract */
 			if (p->x->output(p->x, in1, in1) > 1)
 				error("%d, %s",p->x->pp->errc,p->x->pp->err);
 		}
-		do_abstract(p, in1, in1);		/* Abstract profile to apply to first table */
+		do_abstract(p, 0, in1, in1);	/* Abstract profile to apply to first table */
 		DBG(("through abstract prof   PCS %f %f %f\n",in1[0],in1[1],in1[2]))
 		/* We now have PCS */
 	}
 
-	if (p->noPCScurves || p->abs_luo != NULL) {	/* We were given PCS or have converted to PCS */
+	if (p->noPCScurves || p->abs_luo[0] != NULL) {	/* We were given PCS or have converted to PCS */
 
 		/* PCS to PCS' */
 		if (p->x->inv_output(p->x, in1, in1) > 1)
 			error("%d, %s",p->x->pp->errc,p->x->pp->err);
 
-		DBG(("noPCScurves = %d, abs_luo = 0x%x\n",p->noPCScurves,p->abs_luo))
+		DBG(("noPCScurves = %d, abs_luo[0] = 0x%x\n",p->noPCScurves,p->abs_luo[0]))
 		DBG(("convert to PCS' got         %f %f %f\n",in1[0],in1[1],in1[2]))
 	}
 
@@ -426,8 +428,8 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 
 			DBG(("convert CAM to PCS got %f %f %f\n",in2[0],in2[1],in2[2]))
 
-			if (p->abs_luo != NULL)
-				do_abstract(p, in2, in2);	/* Abstract profile to other tables after gamut map */
+			if (p->abs_luo[tn] != NULL)		/* Abstract profile to other tables after gamut map */
+				do_abstract(p, tn, in2, in2);
 
 			/* Convert from PCS to PCS' */
 			if (p->x->inv_output(p->x, in2, in2) > 1)
@@ -450,7 +452,7 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 		p->count++;
 		pc = (int)(p->count * 100.0/p->total + 0.5);
 		if (pc != p->last) {
-			printf("\r%2d%%",pc); fflush(stdout);
+			printf("%c%2d%%",cr_char,pc); fflush(stdout);
 			p->last = pc;
 		}
 	}
@@ -518,7 +520,7 @@ static void PCSp_bdist(void *cntx, double out[1], double in[3]) {
 		p->count++;
 		pc = (int)(p->count * 100.0/p->total + 0.5);
 		if (pc != p->last) {
-			printf("\r%2d%%",pc); fflush(stdout);
+			printf("%c%2d%%",cr_char,pc); fflush(stdout);
 			p->last = pc;
 		}
 	}
@@ -614,7 +616,8 @@ make_output_icc(
 	double avgdev,			/* reading Average Deviation as a proportion of the input range */
 	char *ipname,			/* input icc profile - enables gamut map, NULL if none */
 	char *sgname,			/* source image gamut - NULL if none */
-	char *absname,			/* abstract profile name - NULL if none */
+	char *absname[3],		/* abstract profile name for each table */
+							/* may be duplicated, NULL if none */
 	int sepsat,				/* Create separate Saturation B2A */
 	icxViewCond *ivc_p,		/* Input Viewing Parameters for CAM */
 	icxViewCond *ovc_p,		/* Output Viewing Parameters for CAM */
@@ -626,6 +629,7 @@ make_output_icc(
 ) {
 	int isdisp;				/* nz if this is a display device, 0 if output */
 	double dispLuminance = 0.0;	/* Display luminance. 0 if not known */
+	int isdnormed = 0;		/* Has display data been normalised to 100 ? */
 	int allintents;			/* nz if all intents should possibly be created */
 	icmFile *wr_fp;
 	icc *wr_icco;
@@ -694,6 +698,14 @@ make_output_icc(
 		if ((ti = icg->find_kword(icg, 0, "LUMINANCE_XYZ_CDM2")) >= 0) {
 			if (sscanf(icg->t[0].kdata[ti], " %*lf %lf %*lf ",&dispLuminance) != 1)
 				dispLuminance = 0.0;
+		}
+
+		/* See if the CIE data has been normalised to Y = 100 */
+		if ((ti = icg->find_kword(icg, 0, "NORMALIZED_TO_Y_100")) < 0
+		 || strcmp(icg->t[0].kdata[ti],"NO") == 0) {
+			isdnormed = 0;
+		} else {
+			isdnormed = 1;
 		}
 	}
 
@@ -1565,7 +1577,7 @@ make_output_icc(
 				tpat[i].v[0] = *((double *)icg->t[0].fdata[i][Xi]);
 				tpat[i].v[1] = *((double *)icg->t[0].fdata[i][Yi]);
 				tpat[i].v[2] = *((double *)icg->t[0].fdata[i][Zi]);
-				if (!isLab) {
+				if (!isLab && (!isdisp || isdnormed != 0)) {
 					tpat[i].v[0] /= 100.0;		/* Normalise XYZ to range 0.0 - 1.0 */
 					tpat[i].v[1] /= 100.0;
 					tpat[i].v[2] /= 100.0;
@@ -1593,7 +1605,10 @@ make_output_icc(
 			if ((ii = icg->find_kword(icg, 0, "SPECTRAL_END_NM")) < 0)
 				error ("Input file doesn't contain keyword SPECTRAL_END_NM");
 			sp.spec_wl_long = atof(icg->t[0].kdata[ii]);
-			sp.norm = 100.0;
+			if (!isdisp || isdnormed != 0)
+				sp.norm = 100.0;
+			else
+				sp.norm = 1.0;
 
 			/* Find the fields for spectral values */
 			for (j = 0; j < sp.spec_n; j++) {
@@ -1739,6 +1754,49 @@ make_output_icc(
 			sp2cie->del(sp2cie);		/* Done with this */
 
 		}
+
+		/* Normalize display values to Y = 1.0 if needed */
+		/* (re-norm spec derived, since observer may be different) */
+		if (isdisp && (isdnormed == 0 || spec != 0)) {
+			double scale = -1e6;
+
+			if (wantLab) {
+				double bxyz[3];
+
+				/* Locate max Y */
+				for (i = 0; i < npat; i++) {
+					icmLab2XYZ(&icmD50, bxyz,  tpat[i].v);
+					if (bxyz[1] > scale)
+						scale = bxyz[1];
+				}
+				
+				scale = 1.0/scale;
+
+				/* Scale max Y to 1.0 */
+				for (i = 0; i < npat; i++) {
+					icmLab2XYZ(&icmD50, tpat[i].v, tpat[i].v);
+					tpat[i].v[0] *= scale;
+					tpat[i].v[1] *= scale;
+					tpat[i].v[2] *= scale;
+					icmXYZ2Lab(&icmD50, tpat[i].v, tpat[i].v);
+				}
+			} else {
+
+				/* Locate max Y */
+				for (i = 0; i < npat; i++) {
+					if (tpat[i].v[1] > scale)
+						scale = tpat[i].v[1];
+				}
+				
+				scale = 1.0/scale;
+
+				for (i = 0; i < npat; i++) {
+					tpat[i].v[0] *= scale;
+					tpat[i].v[1] *= scale;
+					tpat[i].v[2] *= scale;
+				}
+			}
+		}
 	}	/* End of reading in CGATs file */
 
 	if (isLut) {
@@ -1793,10 +1851,10 @@ make_output_icc(
 			xicc *src_xicc = NULL;	/* Source profile */
 			icxViewCond ivc;		/* Input Viewing Condition for CAM */
 			icxViewCond ovc;		/* Output Viewing Condition for CAM */
+			icmFile *abs_fp[3] = { NULL, NULL, NULL };	/* Abstract profile transform: */
+			icc *abs_icc[3] = { NULL, NULL, NULL };
+			xicc *abs_xicc[3] = { NULL, NULL, NULL };
 			icmLut *wo[3];
-			icmFile *abs_fp = NULL;	/* Abstract profile transform: */
-			icc *abs_icc = NULL;
-			xicc *abs_xicc = NULL;
 
 			out_b2a_callback cx;
 
@@ -1860,6 +1918,8 @@ make_output_icc(
 					vc->La = v->La;
 				if (v->Yb >= 0.0)
 					vc->Yb = v->Yb;
+				if (v->Lv >= 0.0)
+					vc->Lv = v->Lv;
 				if (v->Yf >= 0.0)
 					vc->Yf = vc->Yf;
 				if (v->Fxyz[0] >= 0.0 && v->Fxyz[1] > 0.0 && v->Fxyz[2] >= 0.0) {
@@ -1916,57 +1976,80 @@ make_output_icc(
 			cx.pmap = NULL;		/* perceptual gamut map */
 			cx.smap = NULL;		/* Saturation gamut map */
 
-			cx.abs_luo = NULL;
+			cx.abs_luo[0] = cx.abs_luo[1] = cx.abs_luo[2] = NULL;
 			cx.xyzscale[0] = 1.0;
 			cx.xyzscale[1] = 1.0;
 			cx.gam = NULL;
 			cx.wantLab = wantLab;			/* Copy PCS flag over */
 
-			/* Open up the abstract profile if supplied, and setup luo */
-			if (absname != NULL) {
-				if ((abs_fp = new_icmFileStd_name(absname,"r")) == NULL)
-					error ("Can't open abstract profile file '%s'",absname);
-				
-				if ((abs_icc = new_icc()) == NULL)
-					error ("Creation of Abstract profile ICC object failed");
-		
-				/* Read header etc. */
-				if ((rv = abs_icc->read(abs_icc,abs_fp,0)) != 0)
-					error ("%d, %s",rv,abs_icc->err);
-		
-				if (abs_icc->header->deviceClass != icSigAbstractClass)
-					error("Abstract profile isn't an abstract profile");
-		
-				/* Take intended abstract intent from profile itself */
-				if ((cx.abs_intent = abs_icc->header->renderingIntent) != icAbsoluteColorimetric)
-					cx.abs_intent = icRelativeColorimetric;
-		
-				/* Wrap with an expanded icc */
-				if ((abs_xicc = new_xicc(abs_icc)) == NULL)
-					error ("Creation of abstract profile xicc failed");
+			/* Determine the number of tables */
+			cx.ntables = 1;
+			if (src_xicc) {		/* Creating separate perceptual and Saturation tables */
+				cx.ntables = 2;
+				if (sepsat)
+					cx.ntables = 3;
+			}
 
-				/* The abstract profile intent is assumed to determine how it gets applied. */
-				/* Make abstract PCS XYZ if icAbsoluteColorimetric is needed. */
-				if ((cx.abs_luo = abs_xicc->get_luobj(abs_xicc, ICX_CLIP_NEAREST, icmFwd,
-				                  cx.abs_intent,
-			        (cx.pcsspace == icSigLabData && cx.abs_intent == icRelativeColorimetric)
-					             ? icSigLabData : icSigXYZData,
-					icmLuOrdNorm, NULL, NULL)) == NULL)
-					error ("%d, %s",abs_icc->errc, abs_icc->err);
+			/* Open up the abstract profile if supplied, and setup luo */
+			for (i = 0; i < cx.ntables; i++) {
+				if (absname[i] != NULL && cx.abs_luo[i] == NULL) {
+
+					if ((abs_fp[i] = new_icmFileStd_name(absname[i],"r")) == NULL)
+						error ("Can't open abstract profile file '%s'",absname[i]);
+					
+					if ((abs_icc[i] = new_icc()) == NULL)
+						error ("Creation of Abstract profile ICC object failed");
+			
+					/* Read header etc. */
+					if ((rv = abs_icc[i]->read(abs_icc[i],abs_fp[i],0)) != 0)
+						error ("%d, %s",rv,abs_icc[i]->err);
+			
+					if (abs_icc[i]->header->deviceClass != icSigAbstractClass)
+						error("Abstract profile isn't an abstract profile");
+			
+					/* Take intended abstract intent from profile itself */
+					if ((cx.abs_intent[i] = abs_icc[i]->header->renderingIntent) != icAbsoluteColorimetric)
+						cx.abs_intent[i] = icRelativeColorimetric;
+			
+					/* Wrap with an expanded icc */
+					if ((abs_xicc[i] = new_xicc(abs_icc[i])) == NULL)
+						error ("Creation of abstract profile xicc failed");
+	
+					/* The abstract profile intent is assumed to determine how it gets applied. */
+					/* Make abstract PCS XYZ if icAbsoluteColorimetric is needed. */
+					if ((cx.abs_luo[i] = abs_xicc[i]->get_luobj(abs_xicc[i], ICX_CLIP_NEAREST, icmFwd,
+					                  cx.abs_intent[i],
+				        (cx.pcsspace == icSigLabData && cx.abs_intent[i] == icRelativeColorimetric)
+						             ? icSigLabData : icSigXYZData,
+						icmLuOrdNorm, NULL, NULL)) == NULL)
+						error ("%d, %s",abs_icc[i]->errc, abs_icc[i]->err);
+
+					/* If the same abstract profile is used in the other tables, */
+					/* duplicate the transform pointer */
+					for (j = i; j < cx.ntables; j++) {
+						if (absname[i] == absname[j]) {
+							cx.abs_intent[j] = cx.abs_intent[i];
+							cx.abs_luo[j] = cx.abs_luo[i];
+							if (verb)
+								printf("Applying %s abstract profile '%s' to %s table\n",
+								i == 0 ? "first" : i == 1 ? "second" : "third",
+								absname[i], 
+								j == 0 ? "colorimetric" : j == 1 ? "perceptual" : "saturation");
+						}
+					}
+				}
 			}
 			
 			if (!allintents) {	/* Only B2A0, no intent */
 				if ((wo[0] = (icmLut *)wr_icco->read_tag(
 				           wr_icco, icSigBToA0Tag)) == NULL) 
 					error("read_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
-				cx.ntables = 1;
 
 			} else {		/* All 3 intent tables */
 				/* Intent 1 = relative colorimetric */
 				if ((wo[0] = (icmLut *)wr_icco->read_tag(
 				           wr_icco, icSigBToA1Tag)) == NULL) 
 					error("read_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
-				cx.ntables = 1;
 
 				if (src_xicc) {		/* Creating separate perceptual and Saturation tables */
 					icRenderingIntent intentp;	/* Gamut mapping space perceptual selection */
@@ -2155,7 +2238,6 @@ make_output_icc(
 					if ((wo[1] = (icmLut *)wr_icco->read_tag(
 					           wr_icco, icSigBToA0Tag)) == NULL) 
 						error("read_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
-					cx.ntables = 2;
 
 					if (sepsat) {
 						/* setup saturation gamut mapping */
@@ -2169,7 +2251,6 @@ make_output_icc(
 						if ((wo[2] = (icmLut *)wr_icco->read_tag(
 						           wr_icco, icSigBToA2Tag)) == NULL) 
 							error("read_tag failed: %d, %s",wr_icco->errc,wr_icco->err);
-						cx.ntables = 3;
 					}
 					csgamp->del(csgamp);
 					csgamp = NULL;
@@ -2471,11 +2552,19 @@ make_output_icc(
 #endif /* WARN_CLUT_CLIPPING */
 #endif /* !DEBUG_ONE */
 
-			if (cx.abs_luo != NULL) {		/* Free up abstract transform */
-				cx.abs_luo->del(cx.abs_luo);
-				abs_xicc->del(abs_xicc);
-				abs_icc->del(abs_icc);
-				abs_fp->del(abs_fp);
+			/* Free up abstract transform */
+			for (i = 0; i < cx.ntables; i++) {
+				if (cx.abs_luo[i] != NULL) {
+					for (j = cx.ntables-1; j >= i; j--) {	/* Free all duplicates */
+						if (cx.abs_luo[j] == cx.abs_luo[i]) {
+							cx.abs_luo[j]->del(cx.abs_luo[j]);
+							abs_xicc[j]->del(abs_xicc[j]);
+							abs_icc[j]->del(abs_icc[j]);
+							abs_fp[j]->del(abs_fp[j]);
+							cx.abs_luo[j] = NULL;
+						}
+					}
+				}
 			}
 
 			if (cx.pmap != NULL)
@@ -2758,7 +2847,7 @@ make_output_icc(
 		}
 		rerr = sqrt(rerr/nsamps);
 		aerr /= nsamps;
-		printf("profile check complete, peak err = %f, avg err = %f, RMS = %f\n",merr,aerr,rerr);
+		printf("Profile check complete, peak err = %f, avg err = %f, RMS = %f\n",merr,aerr,rerr);
 
 		/* Done with lookup object */
 		luo->del(luo);

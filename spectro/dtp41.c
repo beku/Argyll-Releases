@@ -41,7 +41,7 @@
 #include <stdarg.h>
 #include <time.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -1086,9 +1086,6 @@ dtp41_set_mode(inst *pp, inst_mode m) {
 	} else if (mm == inst_mode_emis_disp) {
 		if (!(cap & inst_emis_disp))
 			return inst_unsupported;
-	} else if (mm == inst_mode_emis_illum) {
-		if (!(cap & inst_emis_illum))
-			return inst_unsupported;
 	} else {
 		return inst_unsupported;
 	}
@@ -1108,6 +1105,9 @@ dtp41_set_mode(inst *pp, inst_mode m) {
 	}
 	return inst_ok;
 }
+
+/* !! It's not clear if there is a way of knowing */
+/* whether the instrument has a UV filter. */
 
 /* 
  * set or reset an optional mode

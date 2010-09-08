@@ -22,7 +22,7 @@
 #include <string.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "gamut.h"
 #include "cgats.h"
@@ -113,7 +113,7 @@ struct _gamdisp {
 
 
 /* Set a default for a given gamut */
-static set_default(gamdisp *gds, int n) {
+static void set_default(gamdisp *gds, int n) {
 	gds[n].in_name[0] = '\000';
 	switch(n) {
 		case 0:

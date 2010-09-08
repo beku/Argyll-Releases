@@ -41,7 +41,7 @@
 #include <string.h>
 #include <time.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "cgats.h"
 #include "numlib.h"
 #include "sort.h"
@@ -79,6 +79,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -i              Initial calibration, set targets, create .cal\n");
 	fprintf(stderr," -r              Re-calibrate against previous .cal and create new .cal\n");
 	fprintf(stderr," -e              Verify against previous .cal\n");
+	fprintf(stderr," -I              Create imitation target from .ti3 and null calibration\n");
 	fprintf(stderr," -d              Go through the motions but don't write any files\n");
 	fprintf(stderr," -A manufacturer Set the manufacturer description string\n");
 	fprintf(stderr," -M model        Set the model description string\n");
@@ -539,8 +540,9 @@ int main(int argc, char *argv[]) {
 	int verb = 0;
 	int doplot = 0;
 	int initial = 0;			/* Do initial creation of cal target and calibration */
-	int recal = 0;				/* Do recalibrate/use cal target. Initial or recal must be set */
+	int recal = 0;				/* Do recalibrate/use cal target. */
 	int verify = 0;				/* Do verification */
+	int imitate = 0;			/* Do target directly from input */
 	int dowrite = 1;			/* Write to files */
 	int doamp = 0;				/* Write Adobe Photoshop .AMP file */
 	profxinf xpi;				/* Extra profile/calibration information */
@@ -619,7 +621,7 @@ int main(int argc, char *argv[]) {
 			if (argv[fa][1] == '?')
 				usage("Usage requested");
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			else if (argv[fa][1] == 'v') {
 				if (na != NULL) {
 					fa = nfa;
 					verb = atoi(na);
@@ -627,7 +629,7 @@ int main(int argc, char *argv[]) {
 					verb = 1;
 			}
 
-			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+			else if (argv[fa][1] == 'p') {
 				if (na != NULL) {
 					fa = nfa;
 					doplot = atoi(na);
@@ -635,16 +637,35 @@ int main(int argc, char *argv[]) {
 					doplot = 1;				/* Plot various graphs */
 			}
 
-			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I')
+			else if (argv[fa][1] == 'i') {
 				initial = 1;			/* Initial calibration */
+				recal = 0;
+				verify = 0;
+				imitate = 0;
+			}
 
-			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R')
+			else if (argv[fa][1] == 'r') {
+				initial = 0;
 				recal = 1;			/* Recalibrate */
+				verify = 0;
+				imitate = 0;
+			}
 
-			else if (argv[fa][1] == 'e' || argv[fa][1] == 'E')
+			else if (argv[fa][1] == 'e') {
+				initial = 0;
+				recal = 0;
 				verify = 1;			/* Verify */
+				imitate = 0;
+			}
 
-			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D')
+			else if (argv[fa][1] == 'I') {
+				initial = 0;
+				recal = 0;
+				verify = 0;
+				imitate = 1;			/* Imitation target */
+			}
+
+			else if (argv[fa][1] == 'd')
 				dowrite = 0;			/* Don't write to files */
 
 			else if (argv[fa][1] == 'a')
@@ -766,10 +787,11 @@ int main(int argc, char *argv[]) {
 			break;
 	}
 
-	if (!(   (initial && !recal && !verify)
-	      || (!initial && recal && !verify)
-	      || (!initial && !recal && verify)))
-		error("One of -i, -r or -e must be set");
+	if (!(   (initial && !recal && !verify && !imitate)
+	      || (!initial && recal && !verify && !imitate)
+	      || (!initial && !recal && verify && !imitate)
+	      || (!initial && !recal && !verify && imitate)))
+		error("One of -i, -r -e or -I must be set");
 
 	/* Get the file name arguments */
 	if (verify || recal) {
@@ -858,6 +880,12 @@ int main(int argc, char *argv[]) {
 		free(buf);
 	}
 
+	if (verify || recal || imitate) {
+		if (upct->is_set(upct)) {
+			warning("Command line calibration target paramers ignored on re-calibrate, verify and imitate!");
+		}
+	}
+
 	/* For recalibrate or verify, load the previous calibration file */
 	if (verify || recal) {
 		cgats *tcg;					/* Previous .cal file */
@@ -866,7 +894,7 @@ int main(int argc, char *argv[]) {
 		tcg->add_other(tcg, "CAL"); 	/* our special input type is Calibration Target */
 
 		if (tcg->read_name(tcg, calname))
-			error("No cal target '%s' found for re-acalibrate(%s)\n",calname,tcg->err);
+			error("No cal target '%s' found for re-calibrate (%s)\n",calname,tcg->err);
 
 		/* Check that this is an output cal file */
 		if ((ti = tcg->find_kword(tcg, 0, "DEVICE_CLASS")) < 0)
@@ -880,9 +908,6 @@ int main(int argc, char *argv[]) {
 		if (pct->devmask != devmask)
 			error("Target '%s' colorspace '%s' doesn't match '%s' colorspace '%s'",
 				   calname,icx_inkmask2char(pct->devmask, 1),inname,icx_inkmask2char(devmask, 1)); 
-		if (upct->is_set(upct)) {
-			warning("Command line calibration target paramers ignored on re-calibrate!");
-		}
 
 		/* Load the previous expected absolute DE response */
 		/* It will be in the third table with other type "CAL" */
@@ -951,7 +976,7 @@ int main(int argc, char *argv[]) {
 		}
 		tcg->del(tcg);
 
-	/* Must be an initial calibration */
+	/* Must be an initial or Imitation calibration */
 	} else {
 		pct->devmask = devmask;
 
@@ -1242,6 +1267,10 @@ int main(int argc, char *argv[]) {
 
 		if ((ade[j] = new_rspl(RSPL_NOFLAGS,1, 1)) == NULL)
 			error("new_rspl() failed");
+		if (imitate) {
+			if ((pcade[j] = new_rspl(RSPL_NOFLAGS,1, 1)) == NULL)
+				error("new_rspl() failed");
+		}
 		if ((rde[j] = new_rspl(RSPL_NOFLAGS,1, 1)) == NULL)
 			error("new_rspl() failed");
 
@@ -1288,6 +1317,15 @@ int main(int argc, char *argv[]) {
 		           low, high, gres,		/* Low, high, resolution of grid */
 		           NULL, NULL			/* Default data scale */
 		           );
+		if (imitate) {
+			pcade[j]->set_rspl(pcade[j],
+			           0, 
+			           (void *)dpoints_a,	/* Test points */
+			           rsplset1,			/* Setting function */
+			           low, high, gres,		/* Low, high, resolution of grid */
+			           NULL, NULL			/* Default data scale */
+			           );
+		}
 		rde[j]->set_rspl(rde[j],
 		           0, 
 		           (void *)dpoints_r,		/* Test points */
@@ -1376,7 +1414,7 @@ int main(int argc, char *argv[]) {
 				pct->ademin[j] = 0.0;
 		}
 
-	} else if (recal) {
+	} else if (recal || imitate) {
 
 		/* Since the plot markers use devmax, look it up */
 		for (j = 0; j < devchan; j++) {
@@ -1412,8 +1450,8 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (initial || recal) {
-		if (verb)  {
+	if (initial || recal || imitate) {
+		if (verb && pct->is_set(pct))  {
 			for (j = 0; j < devchan; j++) {
 				printf("Chan %d Dev max %f, aDE Max %f, aDE Min %f\n",j,pct->devmax[j],pct->ademax[j],pct->ademin[j]);
 			}
@@ -1439,12 +1477,14 @@ int main(int argc, char *argv[]) {
 				yy[j][i] = tp.v[0];
 			}
 		}
-		/* Add markers for deMax */
 		nmark = 0;
-		for (j = 0; j < 10 && j < devchan; j++) {
-			cx[j] = pct->devmax[j];
-			cy[j] = pct->ademax[j];
-			nmark++;
+		if (pct->is_set(pct)) {
+			/* Add markers for deMax */
+			for (j = 0; j < 10 && j < devchan; j++) {
+				cx[j] = pct->devmax[j];
+				cy[j] = pct->ademax[j];
+				nmark++;
+			}
 		}
 		do_plot10p(xx, devchan > 3 ? yy[3] : NULL,
 		               devchan > 1 ? yy[1] : NULL,
@@ -1452,10 +1492,10 @@ int main(int argc, char *argv[]) {
 		               devchan > 0 ? yy[0] : NULL,
 		               devchan > 2 ? yy[2] : NULL,
 		               devchan > 5 ? yy[5] : NULL,
-		               yy[6],
-		               yy[7],
-		               yy[8],
-		               yy[9],
+		               devchan > 6 ? yy[6] : NULL,
+		               devchan > 7 ? yy[7] : NULL,
+		               devchan > 8 ? yy[8] : NULL,
+		               devchan > 9 ? yy[9] : NULL,
 		               PRES,
 					   cx, cy, verify ? 0 : nmark);
 
@@ -1470,14 +1510,16 @@ int main(int argc, char *argv[]) {
 				yy[j][i] = tp.v[0];
 			}
 		}
-		/* Add markers for deMax */
 		nmark = 0;
-		for (j = 0; j < 10 && j < devchan; j++) {
-			cx[j] = pct->devmax[j];
-			tp.p[0] = cx[j];
-			rde[j]->interp(rde[j], &tp);
-			cy[j] = tp.v[0];
-			nmark++;
+		if (pct->is_set(pct)) {
+			/* Add markers for deMax */
+			for (j = 0; j < 10 && j < devchan; j++) {
+				cx[j] = pct->devmax[j];
+				tp.p[0] = cx[j];
+				rde[j]->interp(rde[j], &tp);
+				cy[j] = tp.v[0];
+				nmark++;
+			}
 		}
 		do_plot10p(xx, devchan > 3 ? yy[3] : NULL,
 		             devchan > 1 ? yy[1] : NULL,
@@ -1485,10 +1527,10 @@ int main(int argc, char *argv[]) {
 		             devchan > 0 ? yy[0] : NULL,
 		             devchan > 2 ? yy[2] : NULL,
 		             devchan > 5 ? yy[5] : NULL,
-		             yy[6],
-		             yy[7],
-		             yy[8],
-		             yy[9],
+		             devchan > 6 ? yy[6] : NULL,
+		             devchan > 7 ? yy[7] : NULL,
+		             devchan > 8 ? yy[8] : NULL,
+		             devchan > 9 ? yy[9] : NULL,
 		             PRES,
 					 cx, cy, verify ? 0 : nmark);
 	}
@@ -1587,10 +1629,10 @@ int main(int argc, char *argv[]) {
 						  devchan > 0 ? yy[0] : NULL,
 						  devchan > 2 ? yy[2] : NULL,
 						  devchan > 5 ? yy[5] : NULL,
-			              yy[6],
-			              yy[7],
-			              yy[8],
-			              yy[9],
+		                  devchan > 6 ? yy[6] : NULL,
+		                  devchan > 7 ? yy[7] : NULL,
+		                  devchan > 8 ? yy[8] : NULL,
+		                  devchan > 9 ? yy[9] : NULL,
 			              PRES);
 			if (!verified)
 				exit(1);
@@ -1685,10 +1727,11 @@ int main(int argc, char *argv[]) {
 							  devchan > 0 ? yy[0] : NULL,
 							  devchan > 2 ? yy[2] : NULL,
 							  devchan > 5 ? yy[5] : NULL,
-				              yy[6],
-				              yy[7],
-				              yy[8],
-				              yy[9], PRES);
+		                      devchan > 6 ? yy[6] : NULL,
+		                      devchan > 7 ? yy[7] : NULL,
+		                      devchan > 8 ? yy[8] : NULL,
+		                      devchan > 9 ? yy[9] : NULL,
+				              PRES);
 			}
 		}
 
@@ -1741,7 +1784,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-	} else if (recal) {
+	} else if (recal || imitate) {
 
 		n_cvals = CAL_RES;
 		for (j = 0; j < devchan; j++) {
@@ -1765,7 +1808,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (initial || recal) {
+	if (initial || recal || imitate) {
 
 		if (verb > 1) {
 			printf("Calibration curve values:\n");
@@ -1797,10 +1840,10 @@ int main(int argc, char *argv[]) {
 			              devchan > 0 ? yy[0] : NULL,	/* Blue */
 			              devchan > 2 ? yy[2] : NULL,	/* Yellow */
 			              devchan > 5 ? yy[5] : NULL,	/* Purple */
-			              yy[6],						/* Brown */
-			              yy[7],						/* Orange */
-			              yy[8],						/* Grey */
-			              yy[9],						/* White */
+		                  devchan > 6 ? yy[6] : NULL,	/* Brown */
+		                  devchan > 7 ? yy[7] : NULL,	/* Orange */
+		                  devchan > 8 ? yy[8] : NULL,	/* Grey */
+		                  devchan > 9 ? yy[9] : NULL,	/* White */
 			              PRES);
 		}
 

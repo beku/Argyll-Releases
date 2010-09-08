@@ -36,7 +36,7 @@ Swatchbook</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 XR"</font> or "Optix
 XR2"
 or "Optix Pro"- display colorimeter.<br>
-<a href="ClorMunki"><span style="text-decoration: underline;"></span></a>&nbsp;&nbsp;&nbsp;
+<a href="#ColorMunki"><span style="text-decoration: underline;"></span></a>&nbsp;&nbsp;&nbsp;
 <a href="#ColorMunki"><span style="text-decoration: underline;">ColorMunki</span></a>
 Design or Photo&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 -
@@ -45,7 +45,7 @@ spot and "swipe" reflective/emissive spectrometer (UV cut only).<br>
  style="text-decoration: underline;">ColorMunki</span></a> Create
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-- display colorimeter.<br>
+- display colorimeter. (Treated as a Eye-One Display 2)<br>
 <br>
 Gretag-Macbeth (now X-Rite):<br>
 &nbsp; &nbsp; <a href="#sl">Spectrolino</a> &nbsp; &nbsp; &nbsp;
@@ -73,6 +73,8 @@ spot and "swipe" emissive spectrometer<br>
 1 or
 2&nbsp; or LT</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 - display colorimeter<br>
+&nbsp;&nbsp;&nbsp; <a href="instruments.html#i1d">HP DreamColor</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+- display colorimeter. (Treated as a Eye-One Display 2)<br>
 &nbsp;&nbsp;&nbsp; <a href="#Huey">Huey</a> &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
@@ -87,6 +89,10 @@ Sequel imaging (Now X-Rite):<br>
 - display colorimeter (Treated as an Eye-One Display 1)<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 [The Sequel Chroma 4 may also work.]<br>
+<br>
+Lacie Blue
+Eye:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+- see <a href="#i1d">Eye-One Display</a><br>
 <br>
 DataColor ColorVision:<br>
 &nbsp;&nbsp;&nbsp;&nbsp; <a href="#spyd2">Spyder 2</a> &nbsp; &nbsp;
@@ -416,13 +422,24 @@ use with the&nbsp; Fluorescent Whitener Additive Compensation option in
 Argyll (see <a href="FWA.html">here</a> for a discussion about what
 FWA compensation is).<br>
 <br>
+<span style="font-weight: bold;">Tips &amp; Tricks:<br>
+<br>
+</span>In handling the instrument when about to make a reading, be very
+careful not to accidentally press the switch - it is large and easily
+pressed by accident. A guide of some sort (ie. a plastic ruler) can
+help a lot in&nbsp; keeping the instrument over a line of&nbsp;
+patches. <br>
+<br>
 <span style="font-weight: bold;">Patch recognition:</span><br>
 <br>
 For the best chances of good patch recognition, the instrument should
-be drawn smoothly and not too rapidly over the strip. If there is a
+be drawn smoothly and not too rapidly over the strip. (This can be a
+little tricky due to the two small rubber feet on the bottom of the
+device that aid its spot reading guide.) If there is a
 misread, try slowing down slightly.
 Generally a higher quality set of readings will result if slower scans
-are used, since there will then be more samples averaged for each patch.<br>
+are used, since there will then be more samples averaged for each
+patch. <br>
 <br>
 In <a href="chartread.html">chartread</a>, the -<span
  style="font-weight: bold;">T ratio</span>
@@ -439,7 +456,9 @@ the tolerance, use a number greater than 1.0 (ie. 1.5, 2.0). <br>
 <br>
 Note that <a href="printtarg.html">printtarg</a> provides the <a
  href="printtarg.html#h">-h</a> option that allows the choice of two
-different patch row widths with ColorMunki test charts.<br>
+different patch row widths with ColorMunki test charts. [Some people
+have successfully used the i1Pro patch layout with the ColorMunki, by
+making a guide to keep it over the much narrower patchs.]<br>
 <span style="font-weight: bold;"><span style="font-weight: bold;"></span></span><span
  style="font-weight: bold;"></span><br>
 <span style="font-weight: bold;"><span style="font-weight: bold;"></span></span>
@@ -483,8 +502,34 @@ strip reading
 will only work if the firmware in the device is version 1.03 or
 greater. You can check the firmware version by running with the verbose
 option: <span style="font-weight: bold;">-v<br>
-</span><span style="font-weight: bold;"><br>
-</span><br>
+<br>
+</span><span style="font-weight: bold;">Operation:<br>
+<br>
+</span>When reading
+in tethered (on-line) mode, that the instrument takes <span
+ style="font-weight: bold;">several seconds</span>
+to download the measurements after each strip, and that the indicator
+will be in "rainbow" mode while this occurs. <span
+ style="text-decoration: underline;">Wait</span> until the indicator
+turns solid green again before starting to measure the next strip.<br>
+<br>
+To <span style="font-weight: bold;">reset</span> the instrument and
+clear any stored readings: press the button three times in quick
+succession. The indicator will turn solid blue. Then hold the button
+down until the instrument beeps and the indicator goes out. Release the
+button and the indicator should flash then return to solid green
+(ready).<br>
+<br>
+To <span style="font-weight: bold;">calibrate</span> the instrument,
+place it on its calibration tile, then press the button three times in
+quick succession.The indicator will turn solid blue. Click the button
+another three times in quick succession, and the indicator should turn
+yellow. Then hold the button down until the instrument beeps and the
+indicator goes out. Release the button and the instrument should flash
+and then turn solid green.<br>
+<br>
+<span style="font-weight: bold;"><span style="font-weight: bold;"></span></span><span
+ style="font-weight: bold;"></span><br>
 <span style="font-weight: bold;"><span style="font-weight: bold;"></span></span>
 <hr style="width: 100%; height: 2px;"><span style="font-weight: bold;"><br>
 <a name="DTP22"></a></span><span style="font-weight: bold;">DTP22
@@ -566,7 +611,8 @@ colorimetrers</span><br>
 <br>
 </span>The <span style="font-weight: bold;">DTP94 </span>from <a
  href="http://www.xrite.com/">X-Rite</a> is a discontinued
-instrument.&nbsp; It may still be available as old stock, or second
+instrument, although it is still being supplied to OEMs.&nbsp; It may
+still be available as old stock, or second
 hand. It was sold as an instrument without software as the DTP94, and
 packaged with software from the manufacturer as the "Optix XR" range.<br>
 <br>
@@ -655,6 +701,9 @@ The only workaround is to unplug and replug the instrument in again,
 whereupon it can be used one time again. A fix for this problem will
 probably turn up in the&nbsp; Linux 2.6.26 kernel release.<br>
 <br>
+See also <a href="i1proDriver.html">How can I have confidence in the
+i1pro Driver ?</a><br>
+<br>
 <span style="font-weight: bold;">Patch recognition:</span><br>
 <br>
 For the best chances of good patch recognition, the instrument should
@@ -711,7 +760,7 @@ and off within <span style="font-weight: bold;">spotread</span> using
 the <span style="font-weight: bold;">h</span> key. The extended range
 down to 350nm may give some information about an illuminants ultra
 violet content, although the accuracy of the readings between 350-380,
-and 730-750nm should not be relied upon.<br>
+and 730-740nm should not be relied upon.<br>
 <br>
 <img alt="High res. and standard res. spectrum." src="Fluorescent.jpg"
  style="width: 750px; height: 375px;"><br>
@@ -757,6 +806,13 @@ various ways by the manufacturer, <a href="http://www.xrite.com/">X-Rite</a>.
 The <span style="font-weight: bold;">ColorMunki Create</span>
 colorimeter can also be used, and will appear as an i1Display2
 colorimeter.<br>
+The <span style="font-weight: bold;">HP DreamColor</span>
+colorimeter can also be used, and will appear as an i1Display2
+colorimeter [note that it is calibrated for the DreamColor display].<br>
+The&nbsp;
+<span style="font-weight: bold;">Lacie Blue
+Eye</span> <span style="font-weight: bold;"></span>
+colorimeter is also reported to work.<br>
 <br>
 <span style="font-weight: bold;"></span>The <span
  style="font-weight: bold;">Eye-One Display 1</span>

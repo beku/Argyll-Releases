@@ -48,7 +48,7 @@
 #include <string.h>
 #include <time.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
@@ -116,7 +116,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -nP             Use colormetric source gamut to make output profile perceptual table\n");
 	fprintf(stderr," -nS             Use colormetric source gamut to make output profile saturation table\n");
 	fprintf(stderr," -g src.gam      Use source image gamut as well for output profile gamut mapping\n");
-	fprintf(stderr," -p absprof      Incorporate abstract profile into output tables\n");
+	fprintf(stderr," -p absprof,...  Incorporate abstract profile(s) into output tables\n");
 	fprintf(stderr," -t intent       Override gamut mapping intent for output profile perceptual table:\n");
 	fprintf(stderr," -T intent       Override gamut mapping intent for output profile saturation table:\n");
 	for (i = 0; ; i++) {
@@ -178,7 +178,8 @@ int main(int argc, char *argv[]) {
 	icxObserverType observ = icxOT_CIE_1931_2;	/* The classic observer */
 	char ipname[MAXNAMEL+1] = "";	/* Input icc profile - enables gamut map */
 	char sgname[MAXNAMEL+1] = "";	/* Image source gamut name */
-	char absname[MAXNAMEL+1] = "";	/* Abstract profile name */
+	char absstring[3 * MAXNAMEL +1];	/* Storage for absnames */
+	char *absnames[3] = { NULL, NULL, NULL };	/* Abstract profile name */
 	int sepsat = 0;				/* Create separate saturation B2A table */
 	icxViewCond ivc_p;			/* Input Viewing Parameters for CAM */
 	icxViewCond ovc_p;			/* Output Viewing Parameters for CAM (enables CAM clip) */
@@ -202,6 +203,7 @@ int main(int argc, char *argv[]) {
 	stime = clock();
 #endif /* DO_TIME */
 	error_program = argv[0];
+	check_if_not_interactive();
 	memset((void *)&xpi, 0, sizeof(profxinf));	/* Init extra profile info to defaults */
 
 	/* Init VC overrides so that we know when the've been set */
@@ -592,9 +594,23 @@ int main(int argc, char *argv[]) {
 
 			/* Abstract profile */
 			else if (argv[fa][1] == 'p') {
+				char *f1 = NULL, *f2 = NULL;
 				if (na == NULL) usage("Expected abstract profile filename after -p");
 				fa = nfa;
-				strncpy(absname,na,MAXNAMEL); absname[MAXNAMEL] = '\000';
+				strncpy(absstring,na,MAXNAMEL*3); absstring[MAXNAMEL*3] = '\000';
+				if ((f1 = strchr(absstring, ',')) == NULL) {		/* Only one profile */
+					absnames[2] = absnames[1] = absnames[0] = absstring;	/* Duplicate */
+				} else {	/* At least one comma */
+					*f1++ = '\000';
+					if ((f2 = strchr(f1, ',')) != NULL)		/* Two commas */
+						*f2++ = '\000';
+					if (*absstring != '\000')
+						absnames[0] = absstring;
+					if (*f1 != '\000')
+						absnames[1] = f1;
+					if (f2 != NULL && *f2 != '\000')
+						absnames[2] = f2;
+				}
 			}
 
 			/* Perceptual Mapping intent override */
@@ -638,7 +654,9 @@ int main(int argc, char *argv[]) {
 				} else if (na[0] == 's' || na[0] == 'S') {
 					if (na[1] != ':')
 						usage("Viewing conditions (-cs) missing ':'");
-					if (na[2] == 'a' || na[2] == 'A') {
+					if (na[2] == 'n' || na[2] == 'N') {
+						vc->Ev = vc_none;		/* Automatic */
+					} else if (na[2] == 'a' || na[2] == 'A') {
 						vc->Ev = vc_average;
 					} else if (na[2] == 'm' || na[2] == 'M') {
 						vc->Ev = vc_dim;
@@ -664,6 +682,10 @@ int main(int argc, char *argv[]) {
 					if (na[1] != ':')
 						usage("Viewing conditions (-cb) missing ':'");
 					vc->Yb = atof(na+2)/100.0;
+				} else if (na[0] == 'l' || na[0] == 'L') {
+					if (na[1] != ':')
+						usage("Viewing conditions (-[cd]l) missing ':'");
+					vc->Lv = atof(na+2);
 				} else if (na[0] == 'f' || na[0] == 'F') {
 					double x, y, z;
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
@@ -880,7 +902,7 @@ int main(int argc, char *argv[]) {
 		                illum, &cust_illum, observ, fwacomp, smooth, avgdev,
 		                ipname[0] != '\000' ? ipname : NULL,
 		                sgname[0] != '\000' ? sgname : NULL,
-		                absname[0] != '\000' ? absname : NULL,
+		                absnames,
 						sepsat, &ivc_p, &ovc_p, ivc_e, ovc_e,
 						&pgmi, &sgmi, &xpi);
 
@@ -907,7 +929,7 @@ int main(int argc, char *argv[]) {
 		                illum, &cust_illum, observ, 0, smooth, avgdev,
 		                ipname[0] != '\000' ? ipname : NULL,
 		                sgname[0] != '\000' ? sgname : NULL,
-		                absname[0] != '\000' ? absname : NULL,
+		                absnames,
 						sepsat, &ivc_p, &ovc_p, ivc_e, ovc_e,
 						&pgmi, &sgmi, &xpi);
 

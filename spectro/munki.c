@@ -1,13 +1,13 @@
 
+ /* X-Rite ColorMunki related functions */
+
 /* 
  * Argyll Color Correction System
- *
- * X-Rite ColorMunki related functions
  *
  * Author: Graeme W. Gill
  * Date:   12/1/2009
  *
- * Copyright 2006 - 2009, Graeme W. Gill
+ * Copyright 2006 - 2010, Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -42,7 +42,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -106,16 +106,6 @@ munki_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 	}
 #endif /* __APPLE__ */
 
-/* Linix + munki bug workaround */
-/* Note that the munki rev D seems to crash on any get_configuration, */
-/* and is slow to release_interface under Linux (several seconds). */
-/* It also dissapears if closed under Linux, so a reset is used instead. */
-/* Not releasing the interface for the rev. D seems to cause Linix to crash ! */
-/* This may be specific to some version of Linix USB stack only ? */
-#if defined(UNIX) && !defined(__APPLE__)
-	usbflags |= icomuf_reset_not_close;
-#endif
-
 	/* Set config, interface, write end point, read end point, read quanta */
 	/* ("serial" end points aren't used - the Munki uses USB control messages) */
 	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags, retries); 
@@ -148,7 +138,7 @@ munki_init_inst(inst *pp) {
 	       |  inst_emis_spot
 	       |  inst_emis_disp
 	       |  inst_emis_proj		/* Support of a specific projector mode */
-	       |  inst_emis_illum
+	       |  inst_emis_tele
 	       |  inst_trans_spot		/* Support this manually using a light table */
 	       |  inst_trans_strip 
 	       |  inst_emis_strip		/* Also likely to be light table reading */
@@ -176,6 +166,11 @@ munki_init_inst(inst *pp) {
 		p->cap |= inst_highres;
 
 	return munki_interp_code(p, ev);
+}
+
+static char *munki_get_serial_no(inst *pp) {
+	munki *p = (munki *)pp;
+	return munki_imp_get_serial_no(p);
 }
 
 /* Read a set of strips */
@@ -527,13 +522,18 @@ inst_code munki_set_mode(inst *pp, inst_mode m) {
 			return inst_unsupported;
 		}
 	} else if ((mm & inst_mode_illum_mask) == inst_mode_emission) {
-		if ((mm & inst_mode_sub_mask) == inst_mode_disp) {
-			mmode = mk_disp_spot;
-		} else if ((mm & inst_mode_sub_mask) == inst_mode_proj) {
-			mmode = mk_proj_spot;
-		} else if ((mm & inst_mode_sub_mask) == inst_mode_spot
-		        || (mm & inst_mode_sub_mask) == inst_mode_illum) {
-			mmode = mk_emiss_spot;
+		if ((mm & inst_mode_sub_mask) == inst_mode_spot) {
+			if ((mm & inst_mode_mod_mask) == inst_mode_disp) {
+				mmode = mk_disp_spot;
+			} else {
+				mmode = mk_emiss_spot;
+			}
+		} else if ((mm & inst_mode_sub_mask) == inst_mode_tele) {
+			if ((mm & inst_mode_mod_mask) == inst_mode_disp) {
+				mmode = mk_proj_spot;
+			} else {
+				mmode = mk_tele_spot;
+			}
 		} else if ((mm & inst_mode_sub_mask) == inst_mode_strip) {
 			mmode = mk_emiss_scan;
 		} else if ((mm & inst_mode_sub_mask) == inst_mode_ambient) {
@@ -583,6 +583,22 @@ inst_status_type m,	/* Requested status type */
 			*smode = inst_stat_smode_calib;
 		else if (spos == mk_spos_amb)
 			*smode = inst_stat_smode_amb;
+
+		return inst_ok;
+	}
+
+	/* Return the filter */
+	else if (m == inst_stat_get_filter) {
+		munki_code ev;
+		inst_opt_filter *filt;
+		va_list args;
+
+		va_start(args, m);
+		filt = va_arg(args, inst_opt_filter *);
+		va_end(args);
+
+		/* The ColorMunki is always UV cut */
+		*filt = inst_opt_filter_UVCut;
 
 		return inst_ok;
 	}
@@ -775,6 +791,7 @@ extern munki *new_munki(icoms *icom, int debug, int verb)
 	/* Inst methods */
 	p->init_coms         = munki_init_coms;
 	p->init_inst         = munki_init_inst;
+	p->get_serial_no     = munki_get_serial_no;
 	p->capabilities      = munki_capabilities;
 	p->capabilities2     = munki_capabilities2;
 	p->set_mode          = munki_set_mode;

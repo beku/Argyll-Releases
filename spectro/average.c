@@ -35,13 +35,16 @@
 
 	It also doesn't pass the calibration information though !!!
 
+	Does it pass the display information, instrument spectral yes/no
+	and display normalisation (Y=100) keywords through ??
+
  */
 
 #include <stdio.h>
 #if defined(__IBMC__)
 #include <float.h>
 #endif
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
@@ -550,12 +553,12 @@ main(int argc, char *argv[])
 			sp1.spec_wl_long = atof(cg[0]->t[0].kdata[i]);
 			sp1.norm = 100.0;
 		
-			i = cg[0]->find_kword (cg[0], 0, "SPECTRAL_BANDS");
-			sp2.spec_n = atoi (cg[0]->t[0].kdata[i]);
-			i = cg[0]->find_kword (cg[0], 0, "SPECTRAL_START_NM");
-			sp2.spec_wl_short = atof (cg[0]->t[0].kdata[i]);
-			i = cg[0]->find_kword (cg[0], 0, "SPECTRAL_END_NM");
-			sp2.spec_wl_long = atof (cg[0]->t[0].kdata[i]);
+			i = cg[1]->find_kword (cg[1], 0, "SPECTRAL_BANDS");
+			sp2.spec_n = atoi (cg[1]->t[0].kdata[i]);
+			i = cg[1]->find_kword (cg[1], 0, "SPECTRAL_START_NM");
+			sp2.spec_wl_short = atof (cg[1]->t[0].kdata[i]);
+			i = cg[1]->find_kword (cg[1], 0, "SPECTRAL_END_NM");
+			sp2.spec_wl_long = atof (cg[1]->t[0].kdata[i]);
 			sp2.norm = 100.0;
 
 			/* spectral field counter
@@ -571,9 +574,9 @@ main(int argc, char *argv[])
 			*/
 			sprintf(buf,"%d", spNum);
 			cgf->add_kword(cgf, 0, "SPECTRAL_BANDS",buf, NULL);
-			sprintf(buf,"%d", spLow);
+			sprintf(buf,"%f", spLow);
 			cgf->add_kword(cgf, 0, "SPECTRAL_START_NM",buf, NULL);
-			sprintf(buf,"%d", spHigh);
+			sprintf(buf,"%f", spHigh);
 			cgf->add_kword(cgf, 0, "SPECTRAL_END_NM",buf, NULL);
 
 			/* add spectral fields number to fields counter

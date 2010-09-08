@@ -1,14 +1,13 @@
+
 #ifndef XSPECT_H
 #define XSPECT_H
 
 /* 
- * International Color Consortium color transform expanded support
- *
  * Author:  Graeme W. Gill
  * Date:    21/6/01
  * Version: 1.00
  *
- * Copyright 2000 Graeme W. Gill
+ * Copyright 2000 - 2010 Graeme W. Gill
  * All rights reserved.
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -27,6 +26,10 @@
 
 #include "icc.h"		/* icclib ICC definitions */ 
 
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 /* ------------------------------------------------------------------------------ */
 
 /* Structure for conveying spectral information */
@@ -43,7 +46,7 @@ typedef struct {
 
 /* Some helpful macro's: */
 
-/* Given an index and the sampling ranges, compute the sample wavelegth */
+/* Given an index and the sampling ranges, compute the sample wavelength */
 #define XSPECT_WL(SHORT, LONG, N, IX) \
 ((SHORT) + (double)(IX) * ((LONG) - (SHORT))/((N)-1.0))
 
@@ -51,9 +54,21 @@ typedef struct {
 #define XSPECT_XWL(PXSP, IX) \
 (((PXSP)->spec_wl_short) + (double)(IX) * (((PXSP)->spec_wl_long) - ((PXSP)->spec_wl_short))/(((PXSP)->spec_n)-1.0))
 
+/* Given a wavelength and the sampling ranges, compute the double index */
+#define XSPECT_DIX(SHORT, LONG, N, WL) \
+(((N)-1.0) * ((WL) - (SHORT))/((LONG) - (SHORT)))
+
+/* Given the wavelength and address of an xspect, compute the double index */
+#define XSPECT_XDIX(PXSP, WL) \
+(((PXSP)->spec_n-1.0) * ((WL) - ((PXSP)->spec_wl_short))/(((PXSP)->spec_wl_long) - ((PXSP)->spec_wl_short)))
+
 /* Given a wavelength and the sampling ranges, compute the nearest index */
 #define XSPECT_IX(SHORT, LONG, N, WL) \
-(int)(((N)-1.0) * ((WL) - (SHORT))/((LONG) - (SHORT)) + 0.5)
+((int)floor(XSPECT_DIX(SHORT, LONG, N, WL) + 0.5))
+
+/* Given a wavelength and address of an xspect, compute the nearest index */
+#define XSPECT_XIX(PXSP, WL) \
+((int)floor(XSPECT_DIX(PXSP, WL) + 0.5))
 
 /* Spectrum utility functions. Return NZ if error */
 int write_xspect(char *fname, xspect *s);
@@ -62,8 +77,12 @@ int read_xspect(xspect *sp, char *fname);
 /* Get interpolated value at wavelenth (not normalised) */
 double value_xspect(xspect *sp, double wl);
 
+/* De-noramlize and set normalisation factor to 1.0 */
+void xspect_denorm(xspect *sp);
+
 /* Convert from one xspect type to another */
 void xspect2xspect(xspect *dst, xspect *targ, xspect *src);
+
 /* ------------------------------------------------------------------------------ */
 /* Class for converting between spectral and CIE */
 
@@ -78,12 +97,13 @@ typedef enum {
 	icxIT_C          = 4,	/* Standard Illuminant C */
     icxIT_D50		 = 5,	/* Daylight 5000K */
     icxIT_D65		 = 6,	/* Daylight 6500K */
-    icxIT_F5		 = 7,	/* Fluorescent, Standard, 6350K, CRI 72 */
-    icxIT_F8		 = 8,	/* Fluorescent, Broad Band 5000K, CRI 95 */
-    icxIT_F10		 = 9,	/* Fluorescent Narrow Band 5000K, CRI 81 */
-	icxIT_Spectrocam = 10,	/* Spectrocam Xenon Lamp */
-    icxIT_Dtemp		 = 11,	/* Daylight at specified temperature */
-    icxIT_Ptemp		 = 12	/* Planckian at specified temperature */
+    icxIT_E		     = 7,	/* Equal Energy */
+    icxIT_F5		 = 8,	/* Fluorescent, Standard, 6350K, CRI 72 */
+    icxIT_F8		 = 9,	/* Fluorescent, Broad Band 5000K, CRI 95 */
+    icxIT_F10		 = 10,	/* Fluorescent Narrow Band 5000K, CRI 81 */
+	icxIT_Spectrocam = 11,	/* Spectrocam Xenon Lamp */
+    icxIT_Dtemp		 = 12,	/* Daylight at specified temperature */
+    icxIT_Ptemp		 = 13	/* Planckian at specified temperature */
 } icxIllumeType;
 
 /* Fill in an xpsect with a standard illuminant spectrum */
@@ -97,13 +117,14 @@ double temp);				/* Optional temperature in degrees kelvin, for Dtemp and Ptemp 
 /* Type of observer */
 typedef enum {
     icxOT_default			= 0,	/* Default observer (usually CIE_1931_2) */
-    icxOT_custom			= 1,	/* Custom observer type weighting */
-    icxOT_CIE_1931_2		= 2,	/* Standard CIE 1931 2 degree */
-    icxOT_Stiles_Burch_2	= 3,	/* Stiles & Burch 1955 2 degree */
-    icxOT_Judd_Voss_2		= 4,	/* Judd & Voss 1978 2 degree */
-    icxOT_CIE_1964_10		= 5,	/* Standard CIE 1964 10 degree */
-    icxOT_CIE_1964_10c		= 6,	/* Standard CIE 1964 10 degree, 2 degree compatible */
-    icxOT_Shaw_Fairchild_2	= 7		/* Shaw & Fairchild 1997 2 degree */
+    icxOT_none			    = 1,	/* No observer - (don't compute XYZ) */
+    icxOT_custom			= 2,	/* Custom observer type weighting */
+    icxOT_CIE_1931_2		= 3,	/* Standard CIE 1931 2 degree */
+    icxOT_CIE_1964_10		= 4,	/* Standard CIE 1964 10 degree */
+    icxOT_Stiles_Burch_2	= 5,	/* Stiles & Burch 1955 2 degree */
+    icxOT_Judd_Voss_2		= 6,	/* Judd & Voss 1978 2 degree */
+    icxOT_CIE_1964_10c		= 7,	/* Standard CIE 1964 10 degree, 2 degree compatible */
+    icxOT_Shaw_Fairchild_2	= 8		/* Shaw & Fairchild 1997 2 degree */
 } icxObserverType;
 
 /* Fill in three xpsects with a standard observer weighting curves */
@@ -114,20 +135,29 @@ xspect *sp1,
 xspect *sp2,				/* Xspects to fill in */
 icxObserverType obType);	/* Type of observer */
 
+/* Return a string describing the standard observer */
+char *standardObserverDescription(icxObserverType obType);
+
+/* Given an emission spectrum, set the UV output to the given level. */
+/* The shape of the UV is taken from FWA1_stim, and the level is */
+/* with respect to the average of the input spectrum. */
+void xsp_setUV(xspect *out, xspect *in, double uvlevel);
+
 
 /* The conversion object */
 struct _xsp2cie {
 	/* Private: */
-	xspect illuminant;
+	xspect illuminant;			/* Lookup illuminant */
 	int isemis;					/* nz if we are doing an emission conversion */
 	xspect observer[3];
 	int doLab;					/* Return D50 Lab result */
 
 	/* FWA compensation */
 	double bw;		/* Integration bandwidth */
+	xspect instr;	/* Normalised instrument illuminant spectrum */
+	xspect imedia;	/* Instrument measured media */
 	xspect emits;	/* Estimated FWA emmission spectrum */
 	xspect media;	/* Estimated base media (ie. minus FWA) */
-	xspect instr;	/* Normalised instrument illuminant spectrum */
 	xspect illum;	/* Normalised target illuminant spectrum */
 	double Sm;		/* FWA Stimulation level for emits contribution */
 	double FWAc;	/* FWA content (informational) */
@@ -164,6 +194,11 @@ struct _xsp2cie {
 	                xspect *white		/* Spectrum of plain media */
 	                );
 
+	/* Set FWA given updated conversion illuminant. */
+	/* (We assume that xsp2cie_set_fwa has been called first) */
+	/* return NZ if error */
+	int (*update_fwa_custillum) (struct _xsp2cie *p, xspect *custIllum);
+
 	/* Get Fluorescent Whitening Agent compensation information */
 	/* return NZ if error */
 	void (*get_fwa_info) (struct _xsp2cie *p,	/* this */
@@ -194,9 +229,9 @@ xsp2cie *new_xsp2cie(
 	xspect        *custIllum,
 
 	icxObserverType obType,			/* Observer */
-	xspect        *custObserver[3],
+	xspect        *custObserver[3]
+	, icColorSpaceSignature  rcs	/* Return color space, icSigXYZData or icSigLabData */
 
-	icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData */
 );
 
 /* --------------------------- */
@@ -267,6 +302,10 @@ double icx_CIE1995_CRI(
 int *invalid,			/* if not NULL, set to nz if invalid */
 xspect *sample			/* Illuminant sample to compute CRI of */
 );
+
+#ifdef __cplusplus
+	}
+#endif
 
 #endif /* XSPECTFM_H */
 

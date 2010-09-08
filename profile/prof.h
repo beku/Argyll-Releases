@@ -61,7 +61,8 @@ void make_output_icc(
 	double avgdev,			/* reading Average Deviation as a proportion of the input range */
 	char *ipname,			/* input icc profile - enables gamut map, NULL if none */
 	char *sgname,			/* source image gamut - NULL if none */
-	char *absname,			/* abstract profile name - NULL if none */
+	char *absname[3],		/* abstract profile name for each table */
+							/* may be duplicated, NULL if none */
 	int sepsat,				/* Create separate Saturation B2A */
 	icxViewCond *ivc_p,		/* Input Viewing Parameters for CIECAM97s */
 	icxViewCond *ovc_p,		/* Output Viewing Parameters for CIECAM97s (enables CAM clip) */

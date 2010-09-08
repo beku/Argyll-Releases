@@ -27,7 +27,7 @@
 #include <fcntl.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "plot.h"
 #include "rspl.h"
@@ -111,6 +111,7 @@ int main(int argc, char *argv[]) {
 	avgdev[0] = AVGDEV;
 
 	error_program = "c1";
+	check_if_not_interactive();
 
 	/* Process the arguments */
 	for(fa = 1;fa < argc;fa++) {
@@ -370,7 +371,7 @@ double efunc2(void *edata, double p[])
 		rss->u[j].v = p[j];
 	rv = rss->efactor(rss);
 #ifdef DIAG2
-	/* printf("\r%e",rv); */
+	/* printf("%c%e",cr_char,rv); */
 	printf("%e\n",rv);
 #endif
 	return rv;

@@ -47,6 +47,8 @@
 
 #define XICC_USE_HK 1	/* [Set] Set to 1 to use Helmholtz-Kohlraush in all CAM conversions */
 #define XICC_NOCAMCL 0	/* [Unset] Set to 1 to disable clipping out of CAM gamut on XYZ to Jab */
+#define XICC_NEUTRAL_CMYK_BLACK		/* Else use K direction black */
+#define XICC_BLACK_POINT_TOLL 1.0		/* Tollerance of CMYK black point location */ 
 
 /* ------------------------------------------------------------------------------ */
 

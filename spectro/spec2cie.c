@@ -44,6 +44,9 @@
 /* 
 	NOTE this uses hard coded space signatures, and should be converted 
 	to use xcolorants instead.
+
+	This doesn't handle display .ti3's properly, as the resulting CIE values
+	need to be normalised to Y=100 or marked as not normalised.
  */
 
 #define ALLOW_PLOT
@@ -54,7 +57,7 @@
 #if defined(__IBMC__)
 #include <float.h>
 #endif
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
@@ -105,6 +108,7 @@ main(int argc, char *argv[])
 	cgats_set_elem *elems;
 
 	int isdisp = 0;					/* nz if this is a display device */
+	int isdnormed = 0;				/* Has display data been normalised to 100 ? */
 	icColorSpaceSignature devspace = icmSigDefaultData;	/* The device colorspace */
 	int isAdditive = 0;				/* 0 if subtractive, 1 if additive colorspace */
 	int isInverted = 0;				/* nz if inverted real device */
@@ -325,6 +329,14 @@ main(int argc, char *argv[])
 			isdisp = 1;
 		}
 
+		/* See if the display CIE data has been normalised to Y = 100 */
+		if ((ti = icg->find_kword(icg, 0, "NORMALIZED_TO_Y_100")) < 0
+		 || strcmp(icg->t[0].kdata[ti],"NO") == 0) {
+			isdnormed = 0;
+		} else {
+			isdnormed = 1;
+		}
+
 		if (isdisp && fwacomp) {
 			error ("FWA compensation cannot be used for DISPLAY devices");
 		}
@@ -453,7 +465,10 @@ main(int argc, char *argv[])
 		if ((ii = icg->find_kword (icg, 0, "SPECTRAL_END_NM")) < 0)
 			error ("Input file doesn't contain keyword SPECTRAL_END_NM");
 		sp.spec_wl_long = atof (icg->t[0].kdata[ii]);
-		sp.norm = 100.0;		/* !!! This wouldn't be right for emsission !!! */
+		if (!isdisp || isdnormed != 0)
+			sp.norm = 100.0;
+		else
+			sp.norm = 1.0;
 
 		/* Find the fields for spectral values */
 		for (j = 0; j < sp.spec_n; j++) {
@@ -475,11 +490,11 @@ main(int argc, char *argv[])
 		}
 
 		/* copy fields to output file (except spectral if nospec) */
-	
 		for (i = 0; i < icg->t[0].nfields; i++) {
+			/* See if this is a input spectral field */
 			for (j = 0; nospec && j < sp.spec_n; j++) {
 				if (spi[j] == i)
-					break;
+					break;			/* Yes it is */
 			}
 			if (nospec == 0 || j >= sp.spec_n)
 				ocg->add_field (ocg, 0, icg->t[0].fsym[i], icg->t[0].ftype[i]);
@@ -676,7 +691,7 @@ main(int argc, char *argv[])
 				/* Write the corrected spectral values for this patch */
 				if (nospec == 0) {
 					for (j = 0; j < sp.spec_n; j++) {
-						elems[spi[j]].d = corr_sp.spec[j] * 100;
+						elems[spi[j]].d = corr_sp.spec[j];
 					}
 				}
 #ifdef ALLOW_PLOT

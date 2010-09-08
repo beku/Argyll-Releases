@@ -1,6 +1,8 @@
+/* $Id: getopt.c,v 1.2.2.1 2010-06-08 18:50:43 bfriesen Exp $ */
+
 /*
- * Copyright (c) 1987 Regents of the University of California.
- * All rights reserved.
+ * Copyright (c) 1987, 1993, 1994
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -10,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -31,86 +29,103 @@
  * SUCH DAMAGE.
  */
 
-#if defined(LIBC_SCCS) && !defined(lint)
-static char sccsid[] = "@(#)getopt.c	4.13 (Berkeley) 2/23/91";
-#endif /* LIBC_SCCS and not lint */
+#if 0
+static char sccsid[] = "@(#)getopt.c	8.3 (Berkeley) 4/27/95";
+__RCSID("$NetBSD: getopt.c,v 1.26 2003/08/07 16:43:40 agc Exp $");
+#endif
 
 #include <stdio.h>
 #include <string.h>
 
-/*
- * get option letter from argument vector
- */
-int	tiff_opterr = 1,		/* if error message should be printed */
-	tiff_optind = 1,		/* index into parent argv vector */
-	tiff_optopt;			/* character checked for validity */
-char	*tiff_optarg;		/* argument associated with option */
+int	opterr = 1,		/* if error message should be printed */
+	optind = 1,		/* index into parent argv vector */
+	optopt,			/* character checked for validity */
+	optreset;		/* reset getopt */
+char	*optarg;		/* argument associated with option */
 
 #define	BADCH	(int)'?'
+#define	BADARG	(int)':'
 #define	EMSG	""
 
+/*
+ * getopt --
+ *	Parse argc/argv argument vector.
+ */
 int
-tiff_getopt(int nargc, char** nargv, char* ostr)
+getopt(int argc, char * const argv[], const char *optstring)
 {
 	static char *place = EMSG;		/* option letter processing */
-	register char *oli;			/* option letter list index */
-	char *p;
+	char *oli;				/* option letter list index */
 
-	if (!*place) {				/* update scanning pointer */
-		if (tiff_optind >= nargc || *(place = nargv[tiff_optind]) != '-') {
+	if (optreset || *place == 0) {		/* update scanning pointer */
+		optreset = 0;
+		place = argv[optind];
+		if (optind >= argc || *place++ != '-') {
+			/* Argument is absent or is not an option */
 			place = EMSG;
-			return(EOF);
+			return (-1);
 		}
-		if (place[1] && *++place == '-') {	/* found "--" */
-			++tiff_optind;
+		optopt = *place++;
+		if (optopt == '-' && *place == 0) {
+			/* "--" => end of options */
+			++optind;
 			place = EMSG;
-			return(EOF);
+			return (-1);
 		}
-	}					/* option letter okay? */
-	if ((tiff_optopt = (int)*place++) == (int)':' ||
-	    !(oli = strchr(ostr, tiff_optopt))) {
-		/*
-		 * if the user didn't specify '-' as an option,
-		 * assume it means EOF.
-		 */
-		if (tiff_optopt == (int)'-')
-			return(EOF);
-		if (!*place)
-			++tiff_optind;
-		if (tiff_opterr) {
-			if (!(p = strrchr(*nargv, '/')))
-				p = *nargv;
-			else
-				++p;
-			(void)fprintf(stderr, "%s: illegal option -- %c\n",
-			    p, tiff_optopt);
+		if (optopt == 0) {
+			/* Solitary '-', treat as a '-' option
+			   if the program (eg su) is looking for it. */
+			place = EMSG;
+			if (strchr(optstring, '-') == NULL)
+				return -1;
+			optopt = '-';
 		}
-		return(BADCH);
+	} else
+		optopt = *place++;
+
+	/* See if option letter is one the caller wanted... */
+	if (optopt == ':' || (oli = strchr(optstring, optopt)) == NULL) {
+		if (*place == 0)
+			++optind;
+		if (opterr && *optstring != ':')
+			(void)fprintf(stderr,
+                                      "unknown option -- %c\n", optopt);
+		return (BADCH);
 	}
-	if (*++oli != ':') {			/* don't need argument */
-		tiff_optarg = NULL;
-		if (!*place)
-			++tiff_optind;
-	}
-	else {					/* need an argument */
-		if (*place)			/* no white space */
-			tiff_optarg = place;
-		else if (nargc <= ++tiff_optind) {	/* no arg */
+
+	/* Does this option need an argument? */
+	if (oli[1] != ':') {
+		/* don't need argument */
+		optarg = NULL;
+		if (*place == 0)
+			++optind;
+	} else {
+		/* Option-argument is either the rest of this argument or the
+		   entire next argument. */
+		if (*place)
+			optarg = place;
+		else if (argc > ++optind)
+			optarg = argv[optind];
+		else {
+			/* option-argument absent */
 			place = EMSG;
-			if (!(p = strrchr(*nargv, '/')))
-				p = *nargv;
-			else
-				++p;
-			if (tiff_opterr)
+			if (*optstring == ':')
+				return (BADARG);
+			if (opterr)
 				(void)fprintf(stderr,
-				    "%s: option requires an argument -- %c\n",
-				    p, tiff_optopt);
-			return(BADCH);
+                                        "option requires an argument -- %c\n",
+                                        optopt);
+			return (BADCH);
 		}
-	 	else				/* white space */
-			tiff_optarg = nargv[tiff_optind];
 		place = EMSG;
-		++tiff_optind;
+		++optind;
 	}
-	return(tiff_optopt);				/* dump back option letter */
+	return (optopt);			/* return option letter */
 }
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

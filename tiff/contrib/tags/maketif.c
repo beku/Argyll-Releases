@@ -62,9 +62,16 @@ void WriteImage(TIFF *tif)
 	memset(buffer,0,sizeof(buffer));
 	for (i=0;i<HEIGHT;i++)
 		if (!TIFFWriteScanline(tif, buffer, i, 0))
-			TIFFError("WriteImage","failure in WriteScanline\n");
+			TIFFErrorExt(tif->tif_clientdata, "WriteImage","failure in WriteScanline\n");
 }
 
 
 
 
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

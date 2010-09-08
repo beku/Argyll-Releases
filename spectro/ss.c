@@ -53,7 +53,7 @@
 #include <string.h>
 #include <time.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -406,7 +406,6 @@ ss_init_inst(inst *pp) {
 	p->cap = inst_ref_spot
 	       |  inst_emis_spot
 	       |  inst_emis_disp
-	       |  inst_emis_illum
 	       |  inst_colorimeter
 	       |  inst_spectral
 	       ;
@@ -1637,9 +1636,6 @@ ss_set_mode(inst *pp, inst_mode m) {
 	} else if (mm == inst_mode_emis_disp) {
 		if (!(cap & inst_emis_disp))
 			return inst_unsupported;
-	} else if (mm == inst_mode_emis_illum) {
-		if (!(cap & inst_emis_illum))
-			return inst_unsupported;
 	} else {
 		return inst_unsupported;
 	}
@@ -1672,6 +1668,58 @@ ss_set_mode(inst *pp, inst_mode m) {
 		}
 	}
 	return rv;
+}
+
+/* Get a (possibly) dynamic status */
+static inst_code ss_get_status(
+inst *pp,
+inst_status_type m,	/* Requested status type */
+...) {				/* Status parameters */                             
+	ss *p = (ss *)pp;
+	inst_code rv = inst_ok;
+
+	/* Return the filter */
+	if (m == inst_stat_get_filter) {
+		inst_opt_filter *filt;
+		va_list args;
+		ss_dst ds;
+		ss_wbt wb;
+		ss_ilt it;
+		ss_ot  ot;
+		ss_aft af;
+
+		va_start(args, m);
+		filt = va_arg(args, inst_opt_filter *);
+		va_end(args);
+
+		/* Get the filter. */
+		if ((rv = so_do_ParameterRequest(p, &ds, &wb, &it, &ot, &af)) != inst_ok)
+			return rv;
+
+		switch (af) {
+			case ss_aft_NoFilter:
+				*filt = inst_opt_filter_none;
+				break;
+			case ss_aft_PolFilter:
+				*filt = inst_opt_filter_pol;
+				break;
+			case ss_aft_D65Filter:
+				*filt = inst_opt_filter_D65 ;
+				break;
+			case ss_aft_UVCutFilter:
+				*filt = inst_opt_filter_UVCut;
+				break;
+			case ss_aft_CustomFilter:
+				*filt = inst_opt_filter_Custom;
+				break;
+			default:
+				*filt = inst_opt_filter_unknown;
+				break;
+		}
+		return inst_ok;
+	}
+
+	return inst_unsupported;
 }
 
 /* 
@@ -1720,6 +1768,9 @@ ss_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 				return inst_ok;
 			case inst_opt_filter_UVCut:
 				p->filt = ss_aft_UVCutFilter;
+				return inst_ok;
+			case inst_opt_filter_Custom:
+				p->filt = ss_aft_CustomFilter;
 				return inst_ok;
 		}
 		return inst_unsupported;
@@ -1778,6 +1829,7 @@ extern ss *new_ss(icoms *icom, int debug, int verb) {
 	p->capabilities 	= ss_capabilities;
 	p->capabilities2 	= ss_capabilities2;
 	p->set_mode     	= ss_set_mode;
+	p->get_status     	= ss_get_status;
 	p->set_opt_mode     = ss_set_opt_mode;
 	p->xy_sheet_release = ss_xy_sheet_release;
 	p->xy_sheet_hold    = ss_xy_sheet_hold;

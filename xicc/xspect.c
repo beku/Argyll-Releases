@@ -29,19 +29,17 @@
 #include <string.h>
 #include <math.h>
 #include "numlib.h"
-#include "xspect.h"
 #include "cgats.h"
 #include "plot.h"			/* For debugging */
+#include "xspect.h"
+
 
 #undef DEBUG
 #undef DOPLOT				/* Plot FWA setup */
 #undef DOPLOT_ALL_FWA		/* Plot all FWA corrected conversions */
 
-#undef POLY3_INTERP	
-#undef LIN_INTERP	
-#undef NN_INTERP
-
 #undef STOCKFWA			/* Use table shape else compute from flat line estimate*/
+
 
 /* Define various standard spectra */
 
@@ -49,6 +47,7 @@
 /* Illuminant spectra */
 
 /* Dummy "no illuminant" illuminant spectra used to signal an emmission */
+/* ore equal energy 'E' illuminant */
 static xspect il_none = {
 	54, 300.0, 830.0,	/* 54 bands from 300 to 830 in 10nm steps */
 	1.0,				/* Scale factor */
@@ -393,6 +392,9 @@ double temp					/* Optional temperature in degrees kelvin, for Dtemp and Ptemp *
 	    case icxIT_D65:
 			*sp = il_D65;
 			return 0;
+	    case icxIT_E:
+			*sp = il_none;
+			return 0;
 	    case icxIT_F5:
 			*sp = il_F5;
 			return 0;
@@ -415,169 +417,6 @@ double temp					/* Optional temperature in degrees kelvin, for Dtemp and Ptemp *
 
 /* ------------- */
 /* Observer Data */
-
-#ifdef NEVER
-/* Standard CIE 1931 2 degree */
-static xspect ob_CIE_1931_2[3] = {
-	{
-		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
-		1.0,				/* Scale factor */
-		{
-			0.000146516367, 0.000235319380, 0.000419469340, 0.000757649020, 0.001367696200,
-			0.002292425400, 0.004277900400, 0.007830016400, 0.014290516000, 0.023741814000,
-			0.043975472000, 0.078539126000, 0.135661480000, 0.214086120000, 0.282865100000,
-			0.327498820000, 0.347455640000, 0.347599140000, 0.336068340000, 0.318226320000,
-			0.290407960000, 0.250227840000, 0.195623920000, 0.142363920000, 0.095964138000,
-			0.058478478000, 0.032327062000, 0.015001830000, 0.005177215800, 0.002764650600,
-			0.009828458000, 0.029701060000, 0.063746180000, 0.110015662000, 0.165623840000,
-			0.225934560000, 0.290591540000, 0.359868940000, 0.433654220000, 0.512214580000,
-			0.594545520000, 0.678405540000, 0.761963200000, 0.842253060000, 0.915822080000,
-			0.978005980000, 1.025672860000, 1.055589660000, 1.061419040000, 1.044439780000,
-			1.001802560000, 0.937635500000, 0.853580380000, 0.751142480000, 0.642888260000,
-			0.542109760000, 0.448159360000, 0.361190080000, 0.284036700000, 0.219127420000,
-			0.165299960000, 0.121588280000, 0.087825258000, 0.063890554000, 0.046843812000,
-			0.033064400000, 0.022836352000, 0.015937290000, 0.011401047200, 0.008149865200,
-			0.005815095200, 0.004128027400, 0.002914022400, 0.002058474400, 0.001446571400,
-			0.001005203860, 0.000693848520, 0.000478856040, 0.000334115460, 0.000235926100,
-			0.000166940380, 0.000117990160, 0.000083463870, 0.000058992440, 0.000041709484,
-			0.000029488342, 0.000020776990, 0.000014630878, 0.000010304268, 0.000007256896,
-			0.000005110798, 0.000003599245, 0.000002534886, 0.000001785229, 0.000001344186
-			
-		}
-	},
-	{
-		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
-		1.0,				/* Scale factor */
-		{
-			0.000004413395, 0.000007057187, 0.000012543353, 0.000022385524, 0.000039097450,
-			0.000065464490, 0.000121224052, 0.000221434140, 0.000395705080, 0.000656030940,
-			0.001222776600, 0.002210898200, 0.004069952000, 0.007334133400, 0.011637600000,
-			0.016881322000, 0.023015402000, 0.029860866000, 0.038072300000, 0.048085078000,
-			0.060063754000, 0.074027114000, 0.091168598000, 0.112811680000, 0.139122260000,
-			0.169656160000, 0.208513180000, 0.259083420000, 0.323943280000, 0.407645120000,
-			0.503483040000, 0.608101540000, 0.709073280000, 0.792722560000, 0.861314320000,
-			0.914322820000, 0.953482260000, 0.979818740000, 0.994576720000, 0.999604300000,
-			0.994513460000, 0.978204680000, 0.951588260000, 0.915060800000, 0.869647940000,
-			0.816076000000, 0.756904640000, 0.694818180000, 0.630997820000, 0.566802360000,
-			0.503096860000, 0.441279360000, 0.380961920000, 0.321156580000, 0.265374180000,
-			0.217219520000, 0.175199900000, 0.138425720000, 0.107242628000, 0.081786794000,
-			0.061166218000, 0.044729418000, 0.032160714000, 0.023307860000, 0.017028548000,
-			0.011981432000, 0.008259734600, 0.005758363200, 0.004117206200, 0.002943065400,
-			0.002099937200, 0.001490706200, 0.001052306880, 0.000743352860, 0.000522383420,
-			0.000362997500, 0.000250561400, 0.000172923680, 0.000120655200, 0.000085197228,
-			0.000060285228, 0.000042608406, 0.000030140330, 0.000021303250, 0.000015062058,
-			0.000010648780, 0.000007502951, 0.000005283477, 0.000003721060, 0.000002620598,
-			0.000001845603, 0.000001299753, 0.000000915394, 0.000000644679, 0.000000485410
-		}
-	},
-	{
-		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
-		1.0,				/* Scale factor */
-		{
-			0.000684041600, 0.001101184040, 0.001967490200, 0.003562424800, 0.006447986400,
-			0.010817471200, 0.020216490000, 0.037065638000, 0.067763160000, 0.112841824000,
-			0.209652760000, 0.375709280000, 0.652004440000, 1.036039880000, 1.381018320000,
-			1.618346340000, 1.743396900000, 1.780793020000, 1.771894640000, 1.741985540000,
-			1.666963100000, 1.522856640000, 1.288300540000, 1.042470800000, 0.814196920000,
-			0.618192660000, 0.466718620000, 0.354507600000, 0.272961400000, 0.212362780000,
-			0.158500060000, 0.112268316000, 0.078793034000, 0.057451438000, 0.042250854000,
-			0.029958666000, 0.020406964000, 0.013491472000, 0.008814805000, 0.005796319800,
-			0.003926080000, 0.002769999800, 0.002114426600, 0.001806960000, 0.001643760200,
-			0.001395760000, 0.001113973400, 0.000991072000, 0.000802816000, 0.000594165340,
-			0.000349856000, 0.000241488000, 0.000186800000, 0.000102709326, 0.000051114664,
-			0.000030314666, 0.000019957332, 0.000009893333, 0.000000906667, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000
-		}
-	}
-};
-			
-
-/* Standard CIE 1964 10 degree */
-static xspect ob_CIE_1964_10[3] = {
-	{
-		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
-		1.0,				/* Scale factor */
-		{
-			0.000000195389, 0.000001057318, 0.000006710960, 0.000036743120, 0.000173532000,
-			0.000706996000, 0.002483290000, 0.007516220000, 0.019607360000, 0.044098800000,
-			0.085336800000, 0.140939000000, 0.204362800000, 0.264267400000, 0.314523200000,
-			0.357049800000, 0.382760800000, 0.385960400000, 0.370292000000, 0.342427600000,
-			0.302051600000, 0.253594200000, 0.195512000000, 0.132877400000, 0.080936200000,
-			0.041684200000, 0.016747000000, 0.005511200000, 0.004379000000, 0.015859200000,
-			0.037933800000, 0.071887400000, 0.118056000000, 0.173294800000, 0.236618800000,
-			0.304412600000, 0.376841400000, 0.451713800000, 0.530207200000, 0.616183600000,
-			0.705187200000, 0.793689200000, 0.878094600000, 0.950764600000, 1.014192000000,
-			1.073720000000, 1.117304000000, 1.133240000000, 1.123018000000, 1.088120000000,
-			1.029596000000, 0.950150000000, 0.856071400000, 0.754672000000, 0.647181400000,
-			0.535494000000, 0.432245400000, 0.344190000000, 0.268765800000, 0.204796000000,
-			0.153025600000, 0.112583200000, 0.081561120000, 0.058181600000, 0.041043960000,
-			0.028764600000, 0.020043860000, 0.013915200000, 0.009627996000, 0.006641760000,
-			0.004578226000, 0.003162020000, 0.002186832000, 0.001513980000, 0.001050444000,
-			0.000731332000, 0.000510919600, 0.000358222000, 0.000252247800, 0.000178596000,
-			0.000126988000, 0.000090570400, 0.000064819960, 0.000046548000, 0.000033559740,
-			0.000024312600, 0.000017684500, 0.000012907000, 0.000009450926, 0.000006940080,
-			0.000005113074, 0.000003781140, 0.000002805642, 0.000002089340, 0.000001648913
-		}
-	},
-	{
-		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
-		1.0,				/* Scale factor */
-		{
-			0.000000021417, 0.000000115738, 0.000000733060, 0.000004002040, 0.000018827600,
-			0.000076328000, 0.000266168000, 0.000796700000, 0.002055340000, 0.004580400000,
-			0.008816000000, 0.014498600000, 0.021445600000, 0.029534600000, 0.038761200000,
-			0.049664000000, 0.062064000000, 0.074787400000, 0.089510400000, 0.106471200000,
-			0.128216000000, 0.153126600000, 0.185263000000, 0.219875400000, 0.254226000000,
-			0.297501600000, 0.340004000000, 0.395582800000, 0.461107400000, 0.531562000000,
-			0.606902200000, 0.685566000000, 0.761069400000, 0.822930000000, 0.875172200000,
-			0.923394000000, 0.961175600000, 0.981774000000, 0.991772200000, 0.998748000000,
-			0.996780000000, 0.981904000000, 0.954952800000, 0.914938600000, 0.869170400000,
-			0.825457400000, 0.777008800000, 0.720144800000, 0.658254600000, 0.593802800000,
-			0.527935600000, 0.461926600000, 0.398304400000, 0.339631000000, 0.283475600000,
-			0.228542000000, 0.180198400000, 0.140493400000, 0.107876400000, 0.081408200000,
-			0.060469200000, 0.044249740000, 0.031922540000, 0.022702300000, 0.015981620000,
-			0.011185840000, 0.007788640000, 0.005403700000, 0.003737658000, 0.002578758000,
-			0.001778398000, 0.001229110000, 0.000850792000, 0.000589654000, 0.000409615000,
-			0.000285546800, 0.000199763600, 0.000140266800, 0.000098925200, 0.000070155800,
-			0.000049970200, 0.000035704180, 0.000025601000, 0.000018420140, 0.000013307020,
-			0.000009660260, 0.000007041540, 0.000005150260, 0.000003779424, 0.000002781518,
-			0.000002053894, 0.000001522334, 0.000001132194, 0.000000845086, 0.000000668207
-		}
-	},
-	{
-		95, 360.0, 830.0,	/* 95 bands from 360 to 830 nm in 5nm steps */
-		1.0,				/* Scale factor */
-		{
-			0.000000855649, 0.000004634000, 0.000029451540, 0.000161548800, 0.000764875200,
-			0.003126060000, 0.011028840000, 0.033588800000, 0.088307380000, 0.200434000000,
-			0.392465200000, 0.658634000000, 0.972392400000, 1.280660000000, 1.553016000000,
-			1.795460000000, 1.962676000000, 2.023560000000, 1.992560000000, 1.898220000000,
-			1.744254000000, 1.552940000000, 1.314972000000, 1.031612000000, 0.774439000000,
-			0.572000000000, 0.417093400000, 0.303382400000, 0.219623000000, 0.159709600000,
-			0.112852200000, 0.082579400000, 0.060820600000, 0.043266600000, 0.030535000000,
-			0.020709000000, 0.013701400000, 0.007991600000, 0.004018000000, 0.001161000000,
-			0.000046200000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000,
-			0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000, 0.000000000000
-		}
-	}
-};
-
-#else /* !NEVER */
 
 /* Standard CIE 1931 2 degree */
 static xspect ob_CIE_1931_2[3] = {
@@ -886,7 +725,6 @@ static xspect ob_CIE_1931_2[3] = {
 	}
 };
 			
-
 /* Standard CIE 1964 10 degree */
 static xspect ob_CIE_1964_10[3] = {
 	{
@@ -1193,8 +1031,6 @@ static xspect ob_CIE_1964_10[3] = {
 		}
 	}
 };
-
-#endif /* !NEVER */
 
 /* Standard CIE 1964 10 degree observer, */
 /* adjusted for compatibility with 2 degree observer. */
@@ -1711,7 +1547,6 @@ static xspect ob_Shaw_Fairchild_2[3] = {
 	}
 };
 
-
 /* Fill in three xpsects with a standard observer weighting curves */
 /* return 0 on sucecss, nz if not matched */
 int standardObserver(
@@ -1723,11 +1558,18 @@ icxObserverType obType		/* Type of observer */
 	switch (obType) {
     	case icxOT_custom:
 			return 1;
+    	case icxOT_none:
+			return 1;
     	case icxOT_default:
     	case icxOT_CIE_1931_2:
 			*sp0 = ob_CIE_1931_2[0];
 			*sp1 = ob_CIE_1931_2[1];
 			*sp2 = ob_CIE_1931_2[2];
+			return 0;
+    	case icxOT_CIE_1964_10:
+			*sp0 = ob_CIE_1964_10[0];
+			*sp1 = ob_CIE_1964_10[1];
+			*sp2 = ob_CIE_1964_10[2];
 			return 0;
     	case icxOT_Stiles_Burch_2:
 			*sp0 = ob_Stiles_Burch_2[0];
@@ -1738,11 +1580,6 @@ icxObserverType obType		/* Type of observer */
 			*sp0 = ob_Judd_Voss_2[0];
 			*sp1 = ob_Judd_Voss_2[1];
 			*sp2 = ob_Judd_Voss_2[2];
-			return 0;
-    	case icxOT_CIE_1964_10:
-			*sp0 = ob_CIE_1964_10[0];
-			*sp1 = ob_CIE_1964_10[1];
-			*sp2 = ob_CIE_1964_10[2];
 			return 0;
     	case icxOT_CIE_1964_10c:
 			*sp0 = ob_CIE_1964_10c[0];
@@ -1758,6 +1595,30 @@ icxObserverType obType		/* Type of observer */
 			return 1;
 	}
 	return 1;
+}
+
+/* Return a string describing the standard observer */
+char *standardObserverDescription(icxObserverType obType) {
+	switch (obType) {
+    	case icxOT_custom:
+			return "Custom observer";
+    	case icxOT_none:
+			return "No observer";
+    	case icxOT_default:
+    	case icxOT_CIE_1931_2:
+			return "CIE 1931 2 degree observer";
+    	case icxOT_CIE_1964_10:
+			return "CIE 1964 10 degree observer";
+    	case icxOT_Stiles_Burch_2:
+			return "Stiles & Burch 1955 2 degree observer (aligned)";
+    	case icxOT_Judd_Voss_2:
+			return "Judd & Voss 1978 2 degree observer";
+    	case icxOT_CIE_1964_10c:
+			return "CIE 1964 10 degree observer (aligned)";
+    	case icxOT_Shaw_Fairchild_2:
+			return "Shaw & Fairchild 1997 2 degree observer";
+	}
+	return "Unknown observer";
 }
 
 /* ----------------------------------- */
@@ -2131,8 +1992,12 @@ int write_xspect(char *fname, xspect *sp) {
 
 	ocg->add_setarr(ocg, 0, setel);
 
-	if (ocg->write_name(ocg, fname))
-		error("CGATS file write error : %s",ocg->err);
+	if (ocg->write_name(ocg, fname)) {
+#ifdef NEVER
+		printf("CGATS file write error : %s\n",ocg->err);
+#endif
+		return 1;
+	}
 
 	free(setel);
 	ocg->del(ocg);		/* Clean up */
@@ -2148,30 +2013,62 @@ int read_xspect(xspect *sp, char *fname) {
 	int j, ii;
 
 	/* Open and look at the spectrum file */
-	if ((icg = new_cgats()) == NULL)	/* Create a CGATS structure */
-		error("new_cgats() failed");
+	if ((icg = new_cgats()) == NULL) {	/* Create a CGATS structure */
+#ifdef DEBUG
+		printf("new_cgats() failed");
+#endif
+		return 1;
+	}
 	icg->add_other(icg, "SPECT"); 	/* our special input type is spectral power or reflectance */
 
-	if (icg->read_name(icg, fname))
-		error("CGATS file read error : %s",icg->err);
+	if (icg->read_name(icg, fname)) {
+#ifdef DEBUG
+		printf("CGATS file read error : %s\n",icg->err);
+#endif
+		return 1;
+	}
 
-	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0)
-		error ("Input file isn't a SPECT format file");
-	if (icg->ntables != 1)
-		error ("Input file doesn't contain exactly one table");
+	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0) {
+#ifdef DEBUG
+		printf ("Input file isn't a SPECT format file\n");
+#endif
+		return 1;
+	}
+	if (icg->ntables != 1) {
+#ifdef DEBUG
+		printf ("Input file doesn't contain exactly one table\n");
+#endif
+		return 1;
+	}
 
-	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_BANDS")) < 0)
-		error ("Input file doesn't contain keyword SPECTRAL_BANDS");
+	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_BANDS")) < 0) {
+#ifdef DEBUG
+		printf ("Input file doesn't contain keyword SPECTRAL_BANDS\n");
+#endif
+		return 1;
+	}
 	sp->spec_n = atoi(icg->t[0].kdata[ii]);
-	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_START_NM")) < 0)
-		error ("Input file doesn't contain keyword SPECTRAL_START_NM");
+	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_START_NM")) < 0) {
+#ifdef DEBUG
+		printf ("Input file doesn't contain keyword SPECTRAL_START_NM\n");
+#endif
+		return 1;
+	}
 	sp->spec_wl_short = atof(icg->t[0].kdata[ii]);
-	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_END_NM")) < 0)
-		error ("Input file doesn't contain keyword SPECTRAL_END_NM");
+	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_END_NM")) < 0) {
+#ifdef DEBUG
+		printf ("Input file doesn't contain keyword SPECTRAL_END_NM\n");
+#endif
+		return 1;
+	}
 	sp->spec_wl_long = atof(icg->t[0].kdata[ii]);
 
-	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_NORM")) < 0)
-		error ("Input file doesn't contain keyword SPECTRAL_NORM");
+	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_NORM")) < 0) {
+#ifdef DEBUG
+		printf ("Input file doesn't contain keyword SPECTRAL_NORM\n");
+#endif
+		return 1;
+	}
 	sp->norm = atof(icg->t[0].kdata[ii]);
 
 	/* Find the fields for spectral values */
@@ -2182,11 +2079,19 @@ int read_xspect(xspect *sp, char *fname) {
 		nm = (int)(XSPECT_XWL(sp, j) + 0.5);
 		sprintf(buf,"SPEC_%03d",nm);
 
-		if ((fi = icg->find_field(icg, 0, buf)) < 0)
-			error("Input file doesn't contain field %s",buf);
+		if ((fi = icg->find_field(icg, 0, buf)) < 0) {
+#ifdef DEBUG
+			printf("Input file doesn't contain field %s\n",buf);
+#endif
+			return 1;
+		}
 
-		if (icg->t[0].ftype[fi] != r_t)
-			error ("Field %s in specrum is wrong type - should be a float",buf);
+		if (icg->t[0].ftype[fi] != r_t) {
+#ifdef DEBUG
+			printf ("Field %s in specrum is wrong type - should be a float\n",buf);
+#endif
+			return 1;
+		}
 
 		sp->spec[j] = *((double *)icg->t[0].fdata[0][fi]);
 	}
@@ -2399,8 +2304,8 @@ static int getval_lxspec(xspect *sp, double *rv, double wl) {
 	return sv;
 }
 
-/* Set normalisation factor to 1.0 */
-static void sp_denorm(xspect *sp) {
+/* De-noramlize and set normalisation factor to 1.0 */
+void xspect_denorm(xspect *sp) {
 	int i;
 
 	for (i = 0; i < sp->spec_n; i++) {
@@ -2441,7 +2346,71 @@ void xspect2xspect(xspect *dst, xspect *targ, xspect *src) {
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-/* Set Media White. This enables extracting and applting the */
+/* Given an emission spectrum, set the UV output to the given level. */
+/* The shape of the UV is taken from FWA1_stim, and the level is */
+/* with respect to the Y of the input spectrum. */
+void xsp_setUV(xspect *out, xspect *in, double uvlevel) {
+	int i, xs, xe;
+	double ww, avg;
+	xspect cin;				/* Copy of in */
+
+	cin = *in;
+
+	/* Compute the average of the input spetrum */
+	for (avg = 0.0, i = 0; i < cin.spec_n; i++)
+		avg += cin.spec[i];
+	avg /= cin.spec_n;
+
+	/* Copy and Extend the range */
+	*out = cin;
+	i = (int)floor(XSPECT_XDIX(out, FWA1_stim.spec_wl_short));
+	ww = XSPECT_XWL(out, i);
+	if (i < 0)
+		out->spec_n -= i;
+	out->spec_wl_short = ww;
+	
+	/* Copy from input and merge in the UV */
+	for (i = 0; i < out->spec_n; i++) {
+		double inv, uvv, bl;
+
+		ww = XSPECT_XWL(out, i);
+		getval_raw_xspec_lin(&cin, &inv, ww);
+		getval_raw_xspec_lin(&FWA1_stim, &uvv, ww);
+
+		uvv = avg * uvlevel * uvv;
+
+#ifdef NEVER
+		/* Blend between 400 and 410 nm */
+		bl = (ww - 380.0)/(400.0 - 380.0);
+		bl = bl < 0.0 ? 0.0 : (bl > 1.0 ? 1.0 : bl);
+		
+//		out->spec[i] = bl * inv + (1.0 - bl) * uvv;
+		out->spec[i] = sqrt(bl * inv * inv + (1.0 - bl) * uvv * uvv);
+
+		if (out->spec[i] < 0.0)
+			out->spec[i] = 0.0;
+#else
+		bl = (ww - 340.0)/(370.0 - 340.0);
+		bl = bl < 0.0 ? 0.0 : (bl > 1.0 ? 1.0 : bl);
+		inv *= bl;			/* Taper measured out to zero at 360 */
+
+		if (uvv < 0.0)		/* Subtract if added is -ve */
+			inv -= uvv;
+
+		/* Make output max of two */
+		out->spec[i] = inv > uvv ? inv : uvv;
+
+		/* Protect against negative output */
+		if (out->spec[i] < 0.0)
+			out->spec[i] = 0.0;
+#endif
+	}
+}
+
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Set Media White. This enables extracting and applying the */
 /* colorant reflectance value from/to the meadia. */
 static int xsp2cie_set_mw(xsp2cie *p,	/* this */
 xspect *media		/* Spectrum of plain media measured under that instrument */
@@ -2526,12 +2495,16 @@ static int xsp2cie_fwa_apply(xsp2cie *p, xspect *out, xspect *in);
 /* measured under by the spectrometer. */
 /* Note that the media input spectrum normalisation value is used. */
 /* return nz if error */
-/* See page 248 of the Proceedings of the IS&T/SID */
-/* 11th Color Imaging Conference, November 2003, ISBN: 0-89208-248-8 */
-static int xsp2cie_set_fwa(xsp2cie *p,	/* this */
-xspect *instr,		/* Spectrum of instrument illuminent */
-xspect *media		/* Spectrum of plain media measured under that instrument */
-) {
+
+/*
+   See page 248 of the Proceedings of the IS&T/SID 
+   11th Color Imaging Conference, November 2003:
+   "A Practical Approach to Measuring and Modelling Paper Fluorescense 
+   for Improved Colorimetric Characterisation of Printing Processes"
+   ISBN: 0-89208-248-8
+ */
+
+static int xsp2cie_set_fwa_imp(xsp2cie *p)	{
 	double ww;
 	int i, j;
 	int flag;
@@ -2555,10 +2528,8 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 #endif
 
 	p->bw = 1.0;		/* Intergrate over 1nm bands */
-	p->instr = *instr;	/* Take copy of instrument illuminant */
 	p->illum = p->illuminant;	/* Take copy of target illuminant */
-	sp_denorm(&p->instr); /* Remove normalisation factor on spectrum we've made copies of */
-	sp_denorm(&p->illum);
+	xspect_denorm(&p->illum);
 
 	/* Compute normalised instrument illuminant spectrum */
 	{
@@ -2568,7 +2539,7 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 		Iim = 0.0;
 		for (ww = p->observer[1].spec_wl_short; ww <= p->observer[1].spec_wl_long; ww += p->bw) {
 			double O, I;
-			getval_lxspec(instr, &I, ww);
+			getval_lxspec(&p->instr, &I, ww);
 			getval_lxspec(&p->observer[1], &O, ww);
 			scale += O;			/* Integrate Y observer values */
 			Iim += O * I;
@@ -2612,7 +2583,7 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 	ar = 1e6;
 	for (ww = 450.0; ww <= 510.0; ww += p->bw) {	
 		double rr;
-		getval_lxspec(media, &rr, ww);
+		getval_lxspec(&p->imedia, &rr, ww);
 #ifdef DEBUG
 		printf("~1 media %f = %f\n",ww,rr);
 #endif
@@ -2627,7 +2598,7 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 	br = -1.0;
 	for (ww = aw+70.0; ww <= 630.0; ww += p->bw) {
 		double rr;
-		getval_lxspec(media, &rr, ww);
+		getval_lxspec(&p->imedia, &rr, ww);
 #ifdef DEBUG
 		printf("~1 media %f = %f\n",ww,rr);
 #endif
@@ -2653,7 +2624,7 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 		/* Compute value of line at this wavelength */
 		Rl = (ww - aw)/(bw - aw) * (br - ar) + ar;
 		
-		getval_lxspec(media, &rr, ww);		/* Media at this point */
+		getval_lxspec(&p->imedia, &rr, ww);		/* Media at this point */
 
 		if (rr > Rl) {	/* Media is over the line */
 			double Ii;
@@ -2679,10 +2650,10 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 
 	/* Setup spectrum to hold result over exected range */
 	/* and base media reflectance */
-	p->media = *media;		/* Take copy of media white */
-	p->emits = *media;		/* Structure copy */
-	sp_denorm(&p->media);	/* Set norm to 1.0 */
-	sp_denorm(&p->emits);
+	p->media = p->imedia;	/* Take copy of media white */
+	p->emits = p->imedia;	/* Structure copy */
+	xspect_denorm(&p->media);	/* Set norm to 1.0 */
+	xspect_denorm(&p->emits);
 
 	/* Copy emission spectra that explains bump over line */
 	/* plus estimated media without FWA spectrum. */
@@ -2719,10 +2690,10 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 #else /* Not STOCK_FWA */
 	/* Setup spectrum to hold result over exected range */
 	/* and base media reflectance */
-	p->media = *media;		/* Take copy of media white */
-	p->emits = *media;		/* Structure copy */
-	sp_denorm(&p->media);	/* Set norm to 1.0 */
-	sp_denorm(&p->emits);
+	p->media = p->imedia;	/* Take copy of media white */
+	p->emits = p->imedia;	/* Structure copy */
+	xspect_denorm(&p->media);	/* Set norm to 1.0 */
+	xspect_denorm(&p->emits);
 
 	/* Compute emission spectra that explains bump over line */
 	/* plus estimated media without FWA spectrum. */
@@ -2750,7 +2721,7 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 			weight = 1.0 - fabs((double)j/(double)fres);
 
 			Rl = (fww - aw)/(bw - aw) * (br - ar) + ar;		/* Line at this point */
-			getval_lxspec(media, &Rm, fww);					/* Media at this point */
+			getval_lxspec(&p->imedia, &Rm, fww);					/* Media at this point */
 
 			if (Rm < Rl)
 				Rl = Rm;
@@ -2763,7 +2734,7 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 		/* Compute value of line and media at this wavelength */
 		Rl = (ww - aw)/(bw - aw) * (br - ar) + ar;		/* Line at this point */
 
-		getval_lxspec(media, &Rm, ww);		/* Media at this point */
+		getval_lxspec(&p->imedia, &Rm, ww);		/* Media at this point */
 //printf("~1 ww %f, Rl %f, Rm %f, Rmb %f\n",ww,Rl,Rm,Rmb);
 
 		/* Stop following the filter once the actual media has crossed over it */
@@ -2851,7 +2822,7 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 		double Ii;
 		double Eu;
 
-		getval_lxspec(media, &Rm, ww);		/* Media at this point */
+		getval_lxspec(&p->imedia, &Rm, ww);	/* Media at this point */
 		getval_lxspec(&p->media, &Rmb, ww);	/* Base Media */ 
 		getval_lxspec(&p->instr, &Ii, ww);	/* Normalised illuminant at this wavelength */
 		if (Ii < 1e-9)
@@ -2881,6 +2852,30 @@ xspect *media		/* Spectrum of plain media measured under that instrument */
 	printf("~1 We're done\n"); fflush(stdout);
 #endif
 	return 0;
+}
+
+/* Set FWA given instrument illuminant and white media measurement */
+static int xsp2cie_set_fwa(xsp2cie *p,	/* this */
+xspect *instr,		/* Spectrum of instrument illuminent */
+xspect *media		/* Spectrum of plain media measured under that instrument */
+) {
+	p->instr = *instr;	/* Take copy of instrument illuminant */
+	p->imedia = *media;	/* Take copy of measured media */
+
+	xspect_denorm(&p->instr); /* Remove normalisation factor on spectrum we've made copies of */
+
+	return xsp2cie_set_fwa_imp(p);
+}
+
+/* Set FWA given updated conversion illuminant. */
+/* We assume that xsp2cie_set_fwa has been called first. */
+static int xsp2cie_update_fwa_custillum(
+xsp2cie *p,	/* this */
+xspect *custIllum		/* Updated custom illuminant */
+) {
+	p->illuminant = *custIllum;
+
+	return xsp2cie_set_fwa_imp(p);
 }
 
 /* Get Fluorescent Whitening Agent compensation information */
@@ -3435,8 +3430,8 @@ xsp2cie *new_xsp2cie(
 icxIllumeType ilType,			/* Illuminant */
 xspect        *custIllum,		/* Optional custom illuminant */
 icxObserverType obType,			/* Observer */
-xspect        *custObserver[3],	/* Optional custom observer */
-icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData */
+xspect        *custObserver[3]	/* Optional custom observer */
+, icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData */
 ) {
 	xsp2cie *p;
 
@@ -3465,6 +3460,9 @@ icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData 
 	    case icxIT_D65:
 			p->illuminant = il_D65;
 			break;
+	    case icxIT_E:
+			p->illuminant = il_none;
+			break;
 	    case icxIT_F5:
 			p->illuminant = il_F5;
 			break;
@@ -3478,6 +3476,9 @@ icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData 
 			p->illuminant = il_Spectrocam;
 			break;
 		default:
+#ifdef DEBUG
+			printf("new_xsp2cie() unrecognised illuminant 0x%x",ilType);
+#endif
 			free(p);
 			return NULL;
 	}
@@ -3495,6 +3496,11 @@ icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData 
 			p->observer[1] = ob_CIE_1931_2[1];
 			p->observer[2] = ob_CIE_1931_2[2];
 			break;
+    	case icxOT_CIE_1964_10:
+			p->observer[0] = ob_CIE_1964_10[0];
+			p->observer[1] = ob_CIE_1964_10[1];
+			p->observer[2] = ob_CIE_1964_10[2];
+			break;
     	case icxOT_Stiles_Burch_2:
 			p->observer[0] = ob_Stiles_Burch_2[0];
 			p->observer[1] = ob_Stiles_Burch_2[1];
@@ -3504,11 +3510,6 @@ icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData 
 			p->observer[0] = ob_Judd_Voss_2[0];
 			p->observer[1] = ob_Judd_Voss_2[1];
 			p->observer[2] = ob_Judd_Voss_2[2];
-			break;
-    	case icxOT_CIE_1964_10:
-			p->observer[0] = ob_CIE_1964_10[0];
-			p->observer[1] = ob_CIE_1964_10[1];
-			p->observer[2] = ob_CIE_1964_10[2];
 			break;
     	case icxOT_CIE_1964_10c:
 			p->observer[0] = ob_CIE_1964_10c[0];
@@ -3521,6 +3522,9 @@ icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData 
 			p->observer[2] = ob_Shaw_Fairchild_2[2];
 			break;
 		default:
+#ifdef DEBUG
+			printf("new_xsp2cie() unrecognised observer type 0x%x",obType);
+#endif
 			free(p);
 			return NULL;
 	}
@@ -3530,6 +3534,9 @@ icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData 
 	else if (rcs == icSigLabData)
 		p->doLab = 1;
 	else {
+#ifdef DEBUG
+		printf("new_xsp2cie() unrecognised CIE type 0x%x",rcs);
+#endif
 		free(p);
 		return NULL;
 	}
@@ -3538,6 +3545,7 @@ icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData 
 	p->sconvert     = xsp2cie_sconvert;
 	p->set_mw       = xsp2cie_set_mw;		/* Default no media white */
 	p->set_fwa      = xsp2cie_set_fwa;		/* Default no FWA compensation */
+	p->update_fwa_custillum = xsp2cie_update_fwa_custillum;
 	p->get_fwa_info = xsp2cie_get_fwa_info;
 	p->extract      = xsp2cie_extract;
 	p->apply        = xsp2cie_apply;
@@ -3547,15 +3555,14 @@ icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData 
 }
 
 
-
 /* -------------------------------------------------------- */
 
-/* Status T log10 weightings, normalised to 5.0 */
+/* Status T log10 weightings */
 /* CMYV */
 static xspect denT[4] = {
 	{
 		44, 340.0, 770.0,	/* 44 bands from 340 to 770 nm in 10nm steps */
-		5.0,				/* Log10 Scale factor */
+		1.0,				/* Log10 Scale factor */
 		{
 			0.000,
 			0.000, 0.000, 0.000, 0.000, 0.000,
@@ -3571,7 +3578,7 @@ static xspect denT[4] = {
 	},
 	{
 		44, 340.0, 770.0,	/* 44 bands from 340 to 770 nm in 10nm steps */
-		5.0,				/* Log10 Scale factor */
+		1.0,				/* Log10 Scale factor */
 		{
 			0.000,
 			0.000, 0.000, 0.000, 0.000, 0.000,
@@ -3587,7 +3594,7 @@ static xspect denT[4] = {
 	},
 	{
 		44, 340.0, 770.0,	/* 44 bands from 340 to 770 nm in 10nm steps */
-		5.0,				/* Log10 Scale factor */
+		1.0,				/* Log10 Scale factor */
 		{
 			0.500,
 			1.000, 1.301, 2.000, 2.477, 3.176,
@@ -3603,7 +3610,7 @@ static xspect denT[4] = {
 	},
 	{
 		44, 340.0, 770.0,	/* 44 bands from 340 to 770 nm in 10nm steps */
-		5.0,				/* Log10 Scale factor */
+		1.0,				/* Log10 Scale factor */
 		{
 			0.000,
 			0.000, 0.000, 0.000, 0.000, 0.000,

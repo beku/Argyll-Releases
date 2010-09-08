@@ -132,7 +132,7 @@ prand_seed(prand *s) {
 		}
 		if (prand_from_percept(s, p->p, p->v) == 0) {
 			s->np++;
-			printf("\rAdded %d/%d",s->np,s->tinp); fflush(stdout);
+			printf("%crAdded %d/%d",cr_char,s->np,s->tinp); fflush(stdout);
 		}
 	}
 	printf("\n");
@@ -164,7 +164,7 @@ pqrand_seed(prand *s) {
 		}
 		if (prand_from_percept(s, p->p, p->v) == 0) {
 			s->np++;
-			printf("\rAdded %d/%d",s->np,s->tinp); fflush(stdout);
+			printf("%cAdded %d/%d",cr_char,s->np,s->tinp); fflush(stdout);
 		}
 	}
 	printf("\n");

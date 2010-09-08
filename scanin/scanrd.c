@@ -14,6 +14,7 @@
  * To Do: 
  *        Fix sboxes parameters/digitization to fix "droop" in box areas.
  *        Scale parameters with image size.
+ *        To handle high res, introduce automatic sub-sampler.
  *		  Change reference parser to make it more forgiving - use cgats parser ?
  */
 

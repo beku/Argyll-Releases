@@ -1,7 +1,17 @@
-/*************************************************************************/
-/* Heapsort macro - sort smallest to largest */
-/* Heapsort is guaranteed nlogn, doesn't need any */
-/* extra storage, but often isn't as fast as quicksort. */
+
+/*
+ * Copyright 1996 - 2010 Graeme W. Gill
+ * All rights reserved.
+ *
+ * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
+ * see the License.txt file for licencing details.
+ */
+
+/*
+ * Heapsort macro - sort smallest to largest.
+ * Heapsort is guaranteed nlogn, doesn't need any
+ * extra storage, but often isn't as fast as quicksort.
+ */
 
 /* Need to #define HEAP_COMPARE(A,B) so it returns true if A < B */
 /* Note that A will be ARRAY[a], and B will be ARRAY[b] where a and b are indexes. */

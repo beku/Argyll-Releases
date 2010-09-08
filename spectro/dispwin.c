@@ -48,13 +48,13 @@
 #include <sys/stat.h>
 #include <time.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "icc.h"
 #include "numsup.h"
 #include "cgats.h"
 #include "conv.h"
 #include "dispwin.h"
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX) && !defined(__APPLE__) && defined(USE_UCMM)
 #include "ucmm.h"
 #endif
 
@@ -1787,7 +1787,7 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 		if (scope == p_scope_user)
 			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER;
 		else 
-			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER;
+			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_SYSTEM_WIDE;
 
 		if ((wpath = char2wchar(fullpath)) == NULL) { 
 			debugr2((errout,"char2wchar failed\n"));
@@ -1956,7 +1956,7 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 	}
 #endif /*  __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX) && !defined(__APPLE__) && defined(USE_UCMM)
 	{
 		ucmm_error ev;
 		ucmm_scope sc;
@@ -2039,7 +2039,7 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 		if (scope == p_scope_user)
 			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER;
 		else 
-			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_CURRENT_USER;
+			wcssc = WCS_PROFILE_MANAGEMENT_SCOPE_SYSTEM_WIDE;
 
 		if ((wbname = char2wchar(basename)) == NULL) { 
 			debugr2((errout,"char2wchar failed\n"));
@@ -2157,7 +2157,7 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 	}
 #endif /*  __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX) && !defined(__APPLE__) && defined(USE_UCMM)
 	{
 		ucmm_error ev;
 		ucmm_scope sc;
@@ -2294,7 +2294,7 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 	}
 #endif /*  __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX) && !defined(__APPLE__)  && defined(USE_UCMM)
 	/* Try and get the currently installed profile from ucmm */
 	{
 		ucmm_error ev;
@@ -2400,6 +2400,8 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 		return rd_fp;
 	}
 #endif	  /* UNXI X11 */
+
+	return NULL;
 }
 
 /* ----------------------------------------------- */
@@ -2709,9 +2711,6 @@ dispwin *p
 	if (p == NULL)
 		return;
 
-	if (p->callout != NULL)
-		free(p->callout);
-
 	/* Restore original RAMDAC if we were in native mode */
 	if (!p->nowin && p->donat && p->or != NULL) {
 		p->set_ramdac(p, p->or, 0);
@@ -2770,6 +2769,13 @@ dispwin *p
 
 #endif	/* UNXI X11 */
 	/* -------------------------------------------------- */
+
+	if (p->name != NULL)
+		free(p->name);
+	if (p->description != NULL)
+		free(p->description);
+	if (p->callout != NULL)
+		free(p->callout);
 
 	free(p);
 }
@@ -2891,6 +2897,11 @@ int ddebug						/* >0 to print debug statements to stderr */
 		}
 
 		if ((p->name = strdup(disp->name)) == NULL) {
+			debugr2((errout, "Malloc failed\n"));
+			dispwin_del(p);
+			return NULL;
+		}
+		if ((p->description = strdup(disp->description)) == NULL) {
 			debugr2((errout, "Malloc failed\n"));
 			dispwin_del(p);
 			return NULL;
@@ -3913,6 +3924,7 @@ main(int argc, char *argv[]) {
 	int is_ok_icc = 0;			/* The profile is OK */
 
 	error_program = "Dispwin";
+	check_if_not_interactive();
 
 	/* Process the arguments */
 	mfa = 0;        /* Minimum final arguments */

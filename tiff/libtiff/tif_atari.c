@@ -1,4 +1,4 @@
-/* "$Header: /cvsroot/osrs/libtiff/libtiff/tif_atari.c,v 1.1.1.1 1999/07/27 21:50:27 mike Exp $" */
+/* "$Header: /cvs/maptools/cvsroot/libtiff/libtiff/Attic/tif_atari.c,v 1.2.2.1 2010-06-08 18:50:41 bfriesen Exp $" */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -177,7 +177,7 @@ TIFFOpen(const char* name, const char* mode)
 	if (fd < 0)
 		errno = (int)fd;
 	if (fd < 0) {
-		TIFFError(module, "%s: Cannot open", name);
+		TIFFErrorExt(0, module, "%s: Cannot open", name);
 		return ((TIFF*)0);
 	}
 	return (TIFFFdOpen(fd, name, mode));
@@ -241,3 +241,10 @@ atariErrorHandler(const char* module, const char* fmt, va_list ap)
 	fprintf(stderr, ".\n");
 }
 TIFFErrorHandler _TIFFerrorHandler = atariErrorHandler;
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

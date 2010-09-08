@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/libtiff/tif_next.c,v 1.3 2003/07/08 16:40:46 warmerda Exp $ */
+/* $Id: tif_next.c,v 1.8.2.1 2010-06-08 18:50:42 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -34,7 +34,7 @@
 
 #define SETPIXEL(op, v) {			\
 	switch (npixels++ & 3) {		\
-	case 0:	op[0]  = (u_char) ((v) << 6); break;	\
+	case 0:	op[0]  = (unsigned char) ((v) << 6); break;	\
 	case 1:	op[0] |= (v) << 4; break;	\
 	case 2:	op[0] |= (v) << 2; break;	\
 	case 3:	*op++ |= (v);	   break;	\
@@ -48,11 +48,10 @@
 static int
 NeXTDecode(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
 {
-	register u_char *bp, *op;
-	register tsize_t cc;
-	register int n;
+	unsigned char *bp, *op;
+	tsize_t cc;
 	tidata_t row;
-	tsize_t scanline;
+	tsize_t scanline, n;
 
 	(void) s;
 	/*
@@ -63,10 +62,10 @@ NeXTDecode(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
 	for (op = buf, cc = occ; cc-- > 0;)
 		*op++ = 0xff;
 
-	bp = (u_char *)tif->tif_rawcp;
+	bp = (unsigned char *)tif->tif_rawcp;
 	cc = tif->tif_rawcc;
 	scanline = tif->tif_scanlinesize;
-	for (row = buf; (long)occ > 0; occ -= scanline, row += scanline) {
+	for (row = buf; occ > 0; occ -= scanline, row += scanline) {
 		n = *bp++, cc--;
 		switch (n) {
 		case LITERALROW:
@@ -80,14 +79,14 @@ NeXTDecode(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
 			cc -= scanline;
 			break;
 		case LITERALSPAN: {
-			int off;
+			tsize_t off;
 			/*
-			 * The scanline has a literal span
-			 * that begins at some offset.
+			 * The scanline has a literal span that begins at some
+			 * offset.
 			 */
 			off = (bp[0] * 256) + bp[1];
 			n = (bp[2] * 256) + bp[3];
-			if (cc < 4+n)
+			if (cc < 4+n || off+n > scanline)
 				goto bad;
 			_TIFFmemcpy(row+off, bp+4, n);
 			bp += 4+n;
@@ -95,23 +94,27 @@ NeXTDecode(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
 			break;
 		}
 		default: {
-			register int npixels = 0, grey;
-			u_long imagewidth = tif->tif_dir.td_imagewidth;
+			uint32 npixels = 0, grey;
+			uint32 imagewidth = tif->tif_dir.td_imagewidth;
 
 			/*
-			 * The scanline is composed of a sequence
-			 * of constant color ``runs''.  We shift
-			 * into ``run mode'' and interpret bytes
-			 * as codes of the form <color><npixels>
-			 * until we've filled the scanline.
+			 * The scanline is composed of a sequence of constant
+			 * color ``runs''.  We shift into ``run mode'' and
+			 * interpret bytes as codes of the form
+			 * <color><npixels> until we've filled the scanline.
 			 */
 			op = row;
 			for (;;) {
 				grey = (n>>6) & 0x3;
 				n &= 0x3f;
-				while (n-- > 0)
+				/*
+				 * Ensure the run does not exceed the scanline
+				 * bounds, potentially resulting in a security
+				 * issue.
+				 */
+				while (n-- > 0 && npixels < imagewidth)
 					SETPIXEL(op, grey);
-				if (npixels >= (int) imagewidth)
+				if (npixels >= imagewidth)
 					break;
 				if (cc == 0)
 					goto bad;
@@ -125,7 +128,7 @@ NeXTDecode(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
 	tif->tif_rawcc = cc;
 	return (1);
 bad:
-	TIFFError(tif->tif_name, "NeXTDecode: Not enough data for scanline %ld",
+	TIFFErrorExt(tif->tif_clientdata, tif->tif_name, "NeXTDecode: Not enough data for scanline %ld",
 	    (long) tif->tif_row);
 	return (0);
 }
@@ -140,3 +143,12 @@ TIFFInitNeXT(TIFF* tif, int scheme)
 	return (1);
 }
 #endif /* NEXT_SUPPORT */
+
+/* vim: set ts=8 sts=8 sw=8 noet: */
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

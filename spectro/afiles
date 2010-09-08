@@ -7,6 +7,8 @@ Jamfile
 chartread.c
 dispread.c
 dispcal.c
+illumread.c
+ccmxmake.c
 dispsup.h
 dispsup.c
 insttypes.h
@@ -52,6 +54,8 @@ spec2cie.c
 average.c
 conv.h
 conv.c
+xdg_bds.h
+xdg_bds.c
 icoms.h
 usbio.h
 usbio.c

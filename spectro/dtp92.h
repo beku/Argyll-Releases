@@ -85,9 +85,8 @@
 struct _dtp92 {
 	INST_OBJ_BASE
 
-	/* *** DTP92 private methods *** */
-	/* Do a command/response echange with the instrument */
-	/* Return the inst error code */
+	double ccmat[3][3];			/* Colorimeter correction matrix */
+
 	int need_offset_cal;		/* Flags to indicate type of calibration needed */
 	int need_ratio_cal;
 	inst_opt_mode trig;			/* Reading trigger mode */

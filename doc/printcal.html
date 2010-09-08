@@ -31,7 +31,11 @@ create new .cal</small><br style="font-family: monospace;">
 <span style="font-family: monospace;"></span><small
  style="font-family: monospace;">&nbsp;<a href="#e">-e</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; Verify against previous .cal<br>
-</small><small style="font-family: monospace;">&nbsp;<a href="#d">-d</a>
+</small><small style="font-family: monospace;">&nbsp;<a href="#I">-I</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp; Create imitation target from .ti3 and
+null calibration</small><br>
+<small style="font-family: monospace;">&nbsp;<a href="#d">-d</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; Go through the motions but don't
 write any files</small><br style="font-family: monospace;">
@@ -128,6 +132,17 @@ is used to establish what the targets for the calibration are.<br>
 verify mode. In this mode the test chart input is verified agains the
 expected response in the <span style="font-weight: bold;"><span
  style="font-weight: bold;"></span>prevcal</span> file.<br>
+<br>
+<a name="I"></a><span style="font-weight: bold;">-I</span> Similar to <span
+ style="font-weight: bold;">-i</span>, except that rather than creating
+a linear target curve and corresponding calibration, it takes the given
+behaviour as an absolute target and create a corresponding null set of
+calibration curves. This .cal can then be used to recalibrate a similar
+device (or the same device at some other time) to imitate the behaviour
+of the initial device. The second last parameter <span
+ style="font-weight: bold;"><span style="font-weight: bold;"></span>prevcal</span>
+is not used in this mode. Parameters that affect the
+calibration targets are ignored.<br>
 <br>
 <a name="d"></a><span style="font-weight: bold;">-d</span> Disables the
 writing of any files, causing printcal to go through the motions
@@ -262,7 +277,8 @@ linearization curve are established, as well as creating the first set
 of calibration curves. For subsequent re-calibrations (<span
  style="font-weight: bold;">-r</span>), the calibration curves aim to
 reproduce the same response as the original calibration. If a test
-chart is printed with calibration enabled is mesured, it can be used to
+chart is printed with calibration enabled and then is mesured, it can
+be used to
 verify the calibration against the expected response (<span
  style="font-weight: bold;">-e</span>).<br>
 <br>
@@ -300,6 +316,19 @@ acheived, and the device response expected. For a numerical evaluation
 the verbose flag (<span style="font-weight: bold;">-v</span>) should be
 used, and for a visual evaluation the plot flag (<span
  style="font-weight: bold;">-p</span>) should be used.<br>
+<br>
+If there are several devices of the same or similar model, then one
+device can be used to set the initial calibration target, and then the
+other devices can be re-calibrated against the same .cal file, to
+create matching responses. An alternative to creating an initial linear
+target for calibration, is to use the <span style="font-weight: bold;">-I</span>
+option with an initial device, which sets the initial target to be that
+devices absolute response. Naturally the corresponding calibration will
+be linear (null). The calibration target can then be used to later
+return that device to its initial response, or to make another similar
+device have the same response. Note though, that bad things will happen
+if the imitated devices response is non-monotonic, or if on
+re-calibration the device is unable to reach the same density levels.<br>
 <br>
 <br>
 <br>

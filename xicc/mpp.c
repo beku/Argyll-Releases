@@ -351,24 +351,31 @@ char *inname	/* Filename to read from */
 	int islab = 0;		/* nz if Lab parameters */
 
 	/* Open and look at the .mpp model printer profile */
-	icg = new_cgats();			/* Create a CGATS structure */
+	if ((icg = new_cgats()) == NULL) {		/* Create a CGATS structure */
+		sprintf(p->err, "read_mpp: new_cgats() failed");
+		return 2;
+	}
 	icg->add_other(icg, "MPP");		/* our special type is Model Printer Profile */
 
 	if (icg->read_name(icg, inname)) {
 		strcpy(p->err, icg->err);
+		icg->del(icg);
 		return 1;
 	}
 
 	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0) {
 		sprintf(p->err, "read_mpp: Input file '%s' isn't a MPP format file",inname);
+		icg->del(icg);
 		return 1;
 	}
 	if (icg->ntables != 1) {
 		sprintf(p->err, "Input file '%s' doesn't contain exactly one table",inname);
+		icg->del(icg);
 		return 1;
 	}
 	if ((ti = icg->find_kword(icg, 0, "COLOR_REP")) < 0) {
 		sprintf(p->err, "read_mpp: Input file '%s' doesn't contain keyword COLOR_REP",inname);
+		icg->del(icg);
 		return 1;
 	}
 
@@ -380,12 +387,14 @@ char *inname	/* Filename to read from */
 	if (p->n == 0) {
 		sprintf(p->err, "read_mpp: COLOR_REP '%s' invalid from file '%s' (No matching devmask)",
 		        icg->t[0].kdata[ti], inname);
+		icg->del(icg);
 		return 1;
 	}
 
 	/* See if it is the expected device class */
 	if ((ti = icg->find_kword(icg, 0, "DEVICE_CLASS")) < 0) {
 		sprintf(p->err, "read_mpp: Input file '%s' doesn't contain keyword DEVICE_CLASS",inname);
+		icg->del(icg);
 		return 1;
 	}
 	if (strcmp(icg->t[0].kdata[ti],"OUTPUT") == 0) {
@@ -400,6 +409,7 @@ char *inname	/* Filename to read from */
 
 		if ((ti = icg->find_kword(icg, 0, "TARGET_INSTRUMENT")) < 0) {
 			sprintf(p->err, "read_mpp: Can't find keyword TARGET_INSTRUMENT in file '%s'", inname);
+			icg->del(icg);
 			return 1;
 		}
 	
@@ -407,6 +417,7 @@ char *inname	/* Filename to read from */
 		 &&  icg->find_kword(icg, 0, "SPECTRAL_BANDS") >= 0) {
 			sprintf(p->err, "read_mpp: Unrecognised target instrument '%s' in file '%s'",
 			        icg->t[0].kdata[ti], inname);
+			icg->del(icg);
 			return 1;
 		}
 
@@ -422,6 +433,7 @@ char *inname	/* Filename to read from */
 		/* Don't know anything else at the moment */
 		sprintf(p->err, "read_mpp: Input file '%s' has unknown DEVICE_CLASS '%s'",
 		        inname, icg->t[0].kdata[ti]);
+		icg->del(icg);
 		return 1;
 	}
 
@@ -429,12 +441,14 @@ char *inname	/* Filename to read from */
 	if ((ti = icg->find_kword(icg, 0, "TRANSFER_ORDERS")) < 0) {
 		sprintf(p->err, "read_mpp: Input file '%s' doesn't contain keyword TRANSFER_ORDERS",
 		        inname);
+		icg->del(icg);
 		return 1;
 	}
 	p->cord = atoi(icg->t[0].kdata[ti]);
 	if (p->cord < 1 || p->cord > MPP_MXTCORD) {
 		sprintf(p->err, "read_mpp: Input file '%s' has out of range TRANSFER_ORDERS %d",
 		        inname, p->cord);
+		icg->del(icg);
 		return 1;
 	}
 
@@ -486,11 +500,13 @@ char *inname	/* Filename to read from */
 		if ((ci = icg->find_field(icg, 0, "PARAMETER")) < 0) {
 			sprintf(p->err, "read_mpp: Input file '%s' doesn't contain field PARAMETER",
 			        inname);
+			icg->del(icg);
 			return 1;
 		}
 		if (icg->t[0].ftype[ci] != nqcs_t) {
 			sprintf(p->err, "read_mpp: Input file '%s' field PARAMETER is wrong type",
 			        inname);
+			icg->del(icg);
 			return 1;
 		}
 
@@ -501,6 +517,7 @@ char *inname	/* Filename to read from */
 			if (icg->t[0].ftype[spi[i]] != r_t) {
 				sprintf(p->err, "read_mpp: Input file '%s' field %s is wrong type",
 				        inname, buf);
+				icg->del(icg);
 				return 1;
 			}
 		}
@@ -511,11 +528,13 @@ char *inname	/* Filename to read from */
 				if ((spi[i] = icg->find_field(icg, 0, labfname[i])) < 0) {
 					sprintf(p->err, "read_mpp: Input file '%s' doesn't contain field %s or %s",
 					        inname, xyzfname[i], labfname[i]);
+					icg->del(icg);
 					return 1;
 				}
 				if (icg->t[0].ftype[spi[i]] != r_t) {
 					sprintf(p->err, "read_mpp: Input file '%s' field %s is wrong type",
 					        inname, buf);
+					icg->del(icg);
 					return 1;
 				}
 			}
@@ -535,11 +554,13 @@ char *inname	/* Filename to read from */
 				if ((spi[3+j] = icg->find_field(icg, 0, buf)) < 0) {
 					sprintf(p->err, "read_mpp: Input file '%s' doesn't contain field %s",
 					        buf,inname);
+					icg->del(icg);
 					return 1;
 				}
 				if (icg->t[0].ftype[spi[3+j]] != r_t) {
 					sprintf(p->err, "read_mpp: Input file '%s' field %s is wrong type",
 					        inname, buf);
+					icg->del(icg);
 					return 1;
 				}
 			}
@@ -629,7 +650,8 @@ double *limit,			/* Total ink limit (0.0 .. devchan) */
 int *spec_n,			/* Number of spectral bands, 0 if none */
 double *spec_wl_short,	/* First reading wavelength in nm (shortest) */
 double *spec_wl_long,	/* Last reading wavelength in nm (longest) */
-instType *itype			/* Instrument type */
+instType *itype,		/* Instrument type */
+int *display			/* Return nz if display type */
 ) {
 	if (imask != NULL)
 		*imask = p->imask;
@@ -645,11 +667,14 @@ instType *itype			/* Instrument type */
 		*spec_wl_long = p->spec_wl_long;
 	if (itype != NULL)
 		*itype = p->itype;
+	if (display != NULL)
+		*display = p->display;
 }
 
 /* Set an illuminant and observer to use spectral model */
 /* for CIE lookup with optional FWA. Set both to default for XYZ mpp model. */
 /* return 0 on OK, 1 on spectral not supported, 2 on other error */ 
+/* If the model is for a display, the illuminant will be ignored. */
 static int set_ilob(
 mpp *p,
 icxIllumeType ilType,			/* Illuminant type (icxIT_default for none) */
@@ -675,6 +700,11 @@ int           use_fwa			/* NZ to involke FWA. */
 		p->errc = 1;
 		sprintf(p->err,"No Spectral Data in MPP");
 		return 1;
+	}
+
+	if (p->display) {
+		ilType = icxIT_none;
+		custIllum = NULL;
 	}
 
 	if ((p->spc = new_xsp2cie(ilType, custIllum, obType, custObserver, rcs)) == NULL)
@@ -725,10 +755,6 @@ double *in					/* Input device values */
 	} else {
 		xspect tspec;
 
-		tspec.norm = p->norm; 
-		tspec.spec_n = p->spec_n; 
-		tspec.spec_wl_short = p->spec_wl_short; 
-		tspec.spec_wl_long = p->spec_wl_long; 
 		p->lookup_spec(p, &tspec, in);
 		p->spc->convert(p->spc, out, &tspec);
 	}
@@ -1712,7 +1738,7 @@ static void mppprog(void *pdata, int perc) {
 	mpp *p = (mpp *)pdata;
 
 	if (p->verb) {
-		printf("\r% 3d%%",perc); 
+		printf("%c% 3d%%",cr_char,perc); 
 		if (perc == 100)
 			printf("\n");
 		fflush(stdout);
@@ -3646,6 +3672,7 @@ static int create(
 		error("Malloc failed!");
 	}
 
+	p->spmax = -1e6;
 	for (i = 0; i < p->nodp; i++) {
 		copy_mppcol(&p->cols[i], &points[i], p->n, p->spec_n);	/* Copy structure */
 
@@ -3658,6 +3685,9 @@ static int create(
 		/* Normalise spectral values */
 		for (j = 0; j < p->spec_n; j++) {
 			p->cols[i].band[3+j] /= norm;		/* Normalise spectral value to range 0..1 */
+
+			if (p->cols[i].band[3+j] > p->spmax)	/* Track maximum value */
+				p->spmax = p->cols[i].band[3+j];
 		}
 
 		/* Compute L* type band target values */
@@ -3667,6 +3697,12 @@ static int create(
 	}
 	p->norm = 1.0;		/* Internal norm is 1.0 */
 
+	/* Compute L* type band target values */
+	for (i = 0; i < p->nodp; i++) {
+		for (j = 0; j < (3+p->spec_n); j++) {
+			p->cols[i].lband[j] = lDE(p->cols[i].band[j]);
+		}
+	}
 	/* Init transfer curve parameters of model */
 	for (k = 0; k < p->n; k++) {				/* For each ink */
 		for (j = 0; j < (p->spec_n+3); j++) {	/* For each band */

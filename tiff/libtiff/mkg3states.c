@@ -1,4 +1,4 @@
-/* "$Header: /cvsroot/osrs/libtiff/libtiff/mkg3states.c,v 1.2 1999/11/27 21:50:41 warmerda Exp $ */
+/* "$Id: mkg3states.c,v 1.10.2.1 2010-06-08 18:50:41 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1991-1997 Sam Leffler
@@ -29,15 +29,21 @@
  * in Frank Cringle's viewfax program;
  *      Copyright (C) 1990, 1995  Frank D. Cringle.
  */
-#if defined(unix) || defined(__unix)
-#include "port.h"
-#else
+#include "tif_config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
 #endif
 
 #include "tif_fax3.h"
+
+#ifndef HAVE_GETOPT
+extern int getopt(int, char**, char*);
+#endif
 
 #define	streq(a,b)	(strcmp(a,b) == 0)
 
@@ -349,7 +355,7 @@ WriteTable(FILE* fd, const TIFFFaxTabEnt* T, int Size, const char* name)
 	for (i = 0; i < Size; i++) {
 	    fprintf(fd, "%s%s%d,%d,%d%s",
 		sep, prebrace, T->State, T->Width, (int) T->Param, postbrace);
-	    if (((i+1) % 12) == 0)
+	    if (((i+1) % 10) == 0)
 		    sep = ",\n";
 	    else
 		    sep = ",";
@@ -377,18 +383,16 @@ main(int argc, char* argv[])
     FILE* fd;
     char* outputfile;
     int c;
-    extern int tiff_optind;
-    extern char* tiff_optarg;
+    extern int optind;
+    extern char* optarg;
 
-//printf("~1 got %d args\n",argc);
-    while ((c = tiff_getopt(argc, argv, "c:s:bp")) != -1)
+    while ((c = getopt(argc, argv, "c:s:bp")) != -1)
 	switch (c) {
 	case 'c':
-	    const_class = tiff_optarg;
-//printf("~1 got c arg = '%s'\n",tiff_optarg);
+	    const_class = optarg;
 	    break;
 	case 's':
-	    storage_class = tiff_optarg;
+	    storage_class = optarg;
 	    break;
 	case 'p':
 	    packoutput = 0;
@@ -403,9 +407,7 @@ main(int argc, char* argv[])
 		argv[0]);
 	    return (-1);
 	}
-//printf("~1 got tiff_optind = %d, argc = %d\n",tiff_optind,argc);
-    outputfile = tiff_optind < argc ? argv[tiff_optind] : "g3states.h";
-//printf("~1 got outputfile = '%s'\n",outputfile);
+    outputfile = optind < argc ? argv[optind] : "g3states.h";
     fd = fopen(outputfile, "w");
     if (fd == NULL) {
 	fprintf(stderr, "%s: %s: Cannot create output file.\n",
@@ -438,3 +440,12 @@ main(int argc, char* argv[])
     fclose(fd);
     return (0);
 }
+
+/* vim: set ts=8 sts=8 sw=8 noet: */
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

@@ -392,7 +392,7 @@ struct _rspl {
 	/* Existing output values are supplied in out[] */
 	int
 	(*re_set_rspl)(
-		struct _rspl *s,	/* this */
+		struct _rspl *s,/* this */
 		int flags,		/* Combination of flags (not used) */
 		void *cbntx,	/* Opaque function context */
 		void (*func)(void *cbntx, double *out, double *in) /* Function to set from */

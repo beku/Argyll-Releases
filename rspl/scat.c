@@ -1785,8 +1785,8 @@ static void setup_solve(
 
 			ai = bp + m->g.hi[j];			/* A matrix index */
 
-			w = m->d[n].w[j];				/* Base point weight */
-			d = 2.0 * s->d.a[n].k[f] * w;	/* (2.0 and w are derivative factors) */
+			w = m->d[n].w[j];				/* Base point grid weight */
+			d = 2.0 * s->d.a[n].k[f] * w;	/* (2.0, w are derivative factors, k data pnt wgt) */
 			tt = d * s->d.a[n].cv[f];		/* Change in (corrected) data component */
 
 			nbsum += (2.0 * b[ai] + tt) * tt;	/* += (b[ai] + tt)^2 - b[ai]^2 */

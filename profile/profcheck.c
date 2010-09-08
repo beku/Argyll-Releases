@@ -23,6 +23,8 @@
  * TTBD:
  *		Switch to generic colorant read code rather than Grey/RGB/CMYK,
  *		and allow checking ICC profiles > 4 colors
+ *
+ *		Print out the patch location if it is present in the .ti3 file.
  */
 
 #undef DEBUG
@@ -38,7 +40,7 @@
 #include <float.h>
 #endif
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
@@ -107,6 +109,7 @@ int main(int argc, char *argv[])
 
 	int fwacomp = 0;			/* FWA compensation */
 	int isdisp = 0;				/* nz if this is a display device, 0 if output */
+	int isdnormed = 0;      	/* Has display data been normalised to 100 ? */
 	int spec = 0;				/* Use spectral data flag */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;			/* Custom illumination spectrum */
@@ -335,6 +338,14 @@ int main(int argc, char *argv[])
 		if (strcmp(icg->t[0].kdata[ti],"DISPLAY") == 0) {
 			isdisp = 1;
 		}
+
+		/* See if the CIE data has been normalised to Y = 100 */
+		if ((ti = icg->find_kword(icg, 0, "NORMALIZED_TO_Y_100")) < 0
+		 || strcmp(icg->t[0].kdata[ti],"NO") == 0) {
+			isdnormed = 0;
+		} else {
+			isdnormed = 1;
+		}
 	}
 
 	/* Figure out what sort of device colorspace it is */
@@ -553,7 +564,7 @@ int main(int argc, char *argv[])
 				tpat[i].v[0] = *((double *)icg->t[0].fdata[i][Xi]);
 				tpat[i].v[1] = *((double *)icg->t[0].fdata[i][Yi]);
 				tpat[i].v[2] = *((double *)icg->t[0].fdata[i][Zi]);
-				if (!isLab) {
+				if (!isLab && (!isdisp || isdnormed != 0)) {
 					tpat[i].v[0] /= 100.0;		/* Normalise XYZ to range 0.0 - 1.0 */
 					tpat[i].v[1] /= 100.0;
 					tpat[i].v[2] /= 100.0;
@@ -579,7 +590,10 @@ int main(int argc, char *argv[])
 			if ((ii = icg->find_kword(icg, 0, "SPECTRAL_END_NM")) < 0)
 				error ("Input file '%s; doesn't contain keyword SPECTRAL_END_NM",ti3name);
 			sp.spec_wl_long = atof(icg->t[0].kdata[ii]);
-			sp.norm = 100.0;
+			if (!isdisp || isdnormed != 0)
+				sp.norm = 100.0;
+			else
+				sp.norm = 1.0;
 
 			/* Find the fields for spectral values */
 			for (j = 0; j < sp.spec_n; j++) {
@@ -718,7 +732,30 @@ int main(int argc, char *argv[])
 			}
 
 			sp2cie->del(sp2cie);		/* Done with this */
+		}
+		/* Normalize display values to Y = 1.0 if needed */
+		/* (re-norm spec derived, since observer may be different) */
+		if (isdisp && (isdnormed == 0 || spec != 0)) {
+			double scale = -1e6;
+			double bxyz[3];
 
+			/* Locate max Y */
+			for (i = 0; i < npat; i++) {
+				icmLab2XYZ(&icmD50, bxyz,  tpat[i].v);
+				if (bxyz[1] > scale)
+					scale = bxyz[1];
+			}
+			
+			scale = 1.0/scale;
+
+			/* Scale max Y to 1.0 */
+			for (i = 0; i < npat; i++) {
+				icmLab2XYZ(&icmD50, tpat[i].v, tpat[i].v);
+				tpat[i].v[0] *= scale;
+				tpat[i].v[1] *= scale;
+				tpat[i].v[2] *= scale;
+				icmXYZ2Lab(&icmD50, tpat[i].v, tpat[i].v);
+			}
 		}
 
 		icg->del(icg);		/* Clean up */

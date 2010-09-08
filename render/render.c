@@ -22,7 +22,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "sort.h"
 #include "numlib.h"
 #include "tiffio.h"

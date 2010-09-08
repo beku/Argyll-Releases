@@ -40,7 +40,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -50,10 +50,12 @@
 
 #undef DEBUG
 
+#define dbgo stderr
+
 #ifdef DEBUG
-#define DBG(xxx) printf xxx ;
+#define DBG(xxx) fprintf xxx ;
 #else
-#define DBG(xxx) 
+#define DBG(xxx) if (p->debug >= 1) fprintf xxx ; 
 #endif
 
 static inst_code i1disp_interp_code(inst *pp, int ec);
@@ -169,7 +171,7 @@ i1disp_command_1(
 	tsize = insize + 2;
 	*rsize = 0;
 
-	if (isdeb) fprintf(stderr,"i1disp: Sending cmd %02x args '%s'",cc, icoms_tohex(in, insize));
+	if (isdeb > 1) fprintf(dbgo,"i1disp: Sending cmd %02x args '%s'",cc, icoms_tohex(in, insize));
 
 	/* For each byte to be sent */
 	for (i = 0; i < tsize; i++) {
@@ -193,10 +195,10 @@ i1disp_command_1(
 			if (se & ICOM_USERM)
 				ua = (se & ICOM_USERM);
 			if (se & ~ICOM_USERM) {
-				if (isdeb) {
-					fprintf(stderr,"\ni1disp: Message send failed with ICOM err 0x%x\n",se);
+				if (isdeb > 1) {
+					fprintf(dbgo,"\ni1disp: Message send failed with ICOM err 0x%x\n",se);
 					if (se & ICOM_TO)
-						fprintf(stderr,"\ni1disp: Timeout %f sec, Took %f sec.\n",to, (msec_time() - smsec)/1000.0);
+						fprintf(dbgo,"\ni1disp: Timeout %f sec, Took %f sec.\n",to, (msec_time() - smsec)/1000.0);
 
 				}
 				p->icom->debug = isdeb;
@@ -234,7 +236,7 @@ i1disp_command_1(
 		rv = i1disp_interp_code((inst *)p, I1DISP_LOCKED);
 	}
 
-	if (isdeb) fprintf(stderr," response '%s' ICOM err 0x%x\n",icoms_tohex(out, *rsize),ua);
+	if (isdeb > 1) fprintf(dbgo," response '%s' ICOM err 0x%x\n",icoms_tohex(out, *rsize),ua);
 	p->icom->debug = isdeb;
 
 	return rv; 
@@ -394,7 +396,7 @@ i1disp_rdreg_float(
 		return ev;
 
 	if (ev == 0xffffffff) {
-		return inst_ok;
+		return I1DISP_FLOAT_NOT_SET;
 	}
 
 	*outp = IEEE754todouble((unsigned int)val);
@@ -630,7 +632,7 @@ i1disp_take_measurement_1(
 	if ((ev = i1disp_take_raw_measurement_1(p, intthr, rgb)) != inst_ok)
 		return ev;
 
-	DBG(("Initial RGB = %f %f %f\n",rgb[0],rgb[1],rgb[2]))
+	DBG((dbgo, "Initial RGB = %f %f %f\n",rgb[0],rgb[1],rgb[2]))
 
 	/* Compute adjusted integration threshold, aiming */
 	/* for count values of clk_freq (~1e6). */
@@ -663,7 +665,7 @@ i1disp_take_measurement_1(
 		}
 	}
 
-	DBG(("scaled %d %d %d gives RGB = %f %f %f\n", intthr[0],intthr[1],intthr[2], rgb[0],rgb[1],rgb[2]))
+	DBG((dbgo, "scaled %d %d %d gives RGB = %f %f %f\n", intthr[0],intthr[1],intthr[2], rgb[0],rgb[1],rgb[2]))
 
 	/* Compute adjusted readings */
 	/* We need to invert the count to give a light level, and */
@@ -671,19 +673,19 @@ i1disp_take_measurement_1(
 	/* (divide by the clock period to give integration time in seconds) */
 	for (i = 0; i < 3; i++) {
 		rgb[i] = (p->rgbadj2[i] * (double)intthr[i])/(rgb[i] * 2.0 * p->clk_prd);
-		DBG(("%d after scale = %f\n",i,rgb[i]))
+		DBG((dbgo, "%d after scale = %f\n",i,rgb[i]))
 
 		/* If we're not calibrating the black */
 		if (cal == 0) {
 			rgb[i] -= p->reg103_F[i];		/* Subtract black level */
-			DBG(("%d after sub black = %f\n",i,rgb[i]))
+			DBG((dbgo, "%d after sub black = %f\n",i,rgb[i]))
 	
 			if (rgb[i] < 0.0001)
 				rgb[i] = 0.0001;
-			DBG(("%d after limit min = %f\n",i,rgb[i]))
+			DBG((dbgo, "%d after limit min = %f\n",i,rgb[i]))
 		}
 	}
-	DBG(("Adjusted RGB = %f %f %f\n",rgb[0],rgb[1],rgb[2]))
+	DBG((dbgo, "Adjusted RGB = %f %f %f\n",rgb[0],rgb[1],rgb[2]))
 
 	return inst_ok;
 }
@@ -737,7 +739,7 @@ i1disp_take_raw_measurement_2(
 	int edgec[3],		/* Measurement edge count for each channel */
 	double rgb[3]		/* Return the RGB values */
 ) {
-	int i;
+	int i, tries = 2;
 	unsigned char ibuf[16];
 	unsigned char obuf[16];
 	int rsize;
@@ -752,6 +754,7 @@ i1disp_take_raw_measurement_2(
 			return ev;
 	}
 
+//	for (i = 0; i < 2; i++) {
 	/* Do the measurement, and return the Red value */
 	if ((ev = i1disp_command(p, i1d_m_rgb_edge_2, ibuf, 0,
 		         obuf, 8, &rsize, 120.0)) != inst_ok)
@@ -799,7 +802,7 @@ i1disp_take_measurement_2(
 	if (p->dtype == 0)
 		return i1disp_interp_code((inst *)p, I1DISP_WRONG_DEVICE);
 
-	DBG(("take_measurement_2 called with crtm = %d\n",crtm));
+	DBG((dbgo, "take_measurement_2 called with crtm = %d\n",crtm));
 
 	/* Do CRT frequency calibration/set integration time if needed */
 	if (p->itset == 0) {
@@ -813,7 +816,7 @@ i1disp_take_measurement_2(
 		if ((ev = i1disp_take_first_raw_measurement_2(p, rgb)) != inst_ok)
 			return ev;
 
-		DBG(("Raw initial CRT RGB = %f %f %f\n",rgb[0],rgb[1],rgb[2]))
+		DBG((dbgo, "Raw initial CRT RGB = %f %f %f\n",rgb[0],rgb[1],rgb[2]))
 
 		/* Decide whether any channels need re-measuring, */
 		/* and computed cooked values. Threshold is typically 75 */
@@ -821,7 +824,7 @@ i1disp_take_measurement_2(
 			rem[i] = (rgb[i] <= (0.75 * (double)p->sampno)) ? 1 : 0;
 			rgb[i] = 0.5 * rgb[i] * p->rgbadj1[i]/(double)p->int_clocks;
 		}
-		DBG(("Re-measure flags = %d %d %d\n",rem[0],rem[1],rem[2]))
+		DBG((dbgo,"Re-measure flags = %d %d %d\n",rem[0],rem[1],rem[2]))
 	}
 
 	/* If any need re-measuring */
@@ -831,7 +834,7 @@ i1disp_take_measurement_2(
 		/* Do a first or second set of measurements */
 		if ((ev = i1disp_take_raw_measurement_2(p, edgec, rgb2)) != inst_ok)
 			return ev;
-		DBG(("Raw initial/subsequent ecount %d %d %d RGB = %f %f %f\n",
+		DBG((dbgo,"Raw initial/subsequent ecount %d %d %d RGB = %f %f %f\n",
 		     edgec[0], edgec[1], edgec[2], rgb2[0], rgb2[1], rgb2[2]))
 
 		/* Compute adjusted edge count for channels we're remeasuring, */
@@ -857,7 +860,7 @@ i1disp_take_measurement_2(
 			if ((ev = i1disp_take_raw_measurement_2(p, edgec, rgb3)) != inst_ok)
 				return ev;
 	
-			DBG(("Raw subsequent2 ecount %d %d %d RGB = %f %f %f\n",
+			DBG((dbgo,"Raw subsequent2 ecount %d %d %d RGB = %f %f %f\n",
 			     edgec[0], edgec[1], edgec[2], rgb3[0], rgb3[1], rgb3[2]))
 
 			/* Average readings if we repeated a measurement with the same threshold */
@@ -874,19 +877,19 @@ i1disp_take_measurement_2(
 		for (i = 0; i < 3; i++) {
 			if (rem[i]) {
 				rgb[i] = (p->rgbadj2[i] * (double)edgec[i])/(rgb2[i] * 2.0 * p->clk_prd);
-				DBG(("%d after scale = %f\n",i,rgb[i]))
+				DBG((dbgo,"%d after scale = %f\n",i,rgb[i]))
 		
 				rgb[i] -= p->reg103_F[i];		/* Subtract black level */
-				DBG(("%d after sub black = %f\n",i,rgb[i]))
+				DBG((dbgo,"%d after sub black = %f\n",i,rgb[i]))
 		
 				if (rgb[i] < 0.0001)
 					rgb[i] = 0.0001;
-				DBG(("%d after limit min = %f\n",i,rgb[i]))
+				DBG((dbgo,"%d after limit min = %f\n",i,rgb[i]))
 			}
 		}
 	}
 
-	DBG(("Cooked RGB = %f %f %f\n",rgb[0],rgb[1],rgb[2]))
+	DBG((dbgo,"Cooked RGB = %f %f %f\n",rgb[0],rgb[1],rgb[2]))
 	
 	return inst_ok;
 }
@@ -940,17 +943,17 @@ i1disp_take_XYZ_measurement(
 			XYZ[i] *= 4.0/3.0;			/* (Not sure about this factor!) */
 #endif
 	}
-	DBG(("returning XYZ = %f %f %f\n",XYZ[0],XYZ[1],XYZ[2]))
+	DBG((dbgo,"returning XYZ = %f %f %f\n",XYZ[0],XYZ[1],XYZ[2]))
 	return inst_ok;
 }
 
-/* Do a black calibration */
+/* Do a black calibration (i1display 1) */
 static inst_code
 i1disp_do_black_cal(
 	i1disp *p				/* Object */
 ) {
 	int i, j;
-	double rgb1[3], rgb2[3];		/* RGB Readings */
+	double rgb1[3], rgb2[3];	/* RGB Readings */
 	inst_code ev;
 
 	if (p->dtype != 0)
@@ -971,7 +974,7 @@ i1disp_do_black_cal(
 		rgb1[i] -= 0.0001;
 	}
 
-	DBG(("Black rgb = %f %f %f\n",rgb1[0],rgb1[1],rgb1[2]))
+	DBG((dbgo,"Black rgb = %f %f %f\n",rgb1[0],rgb1[1],rgb1[2]))
 
 	/* Save it to the EEPROM */
 	for (i = 0; i < 3; i++) {
@@ -991,7 +994,7 @@ i1disp_do_fcal_setit(
 	inst_code ev;
 	double measp = 0.0;
 
-	DBG(("Frequency calibration called\n"))
+	DBG((dbgo,"Frequency calibration called\n"))
 
 	if (p->dtype == 0)
 		return i1disp_interp_code((inst *)p, I1DISP_CANT_MEASP_CALIB);
@@ -1014,7 +1017,7 @@ i1disp_do_fcal_setit(
 			measp /= (double)p->nmeasprds;
 			measp *= p->clk_prd;		/* Multiply by master clock period to get seconds */
 			p->sampfreq = 1.0/measp;	/* Measurement sample frequency */
-			DBG(("Sample frequency measured = %f\n",p->sampfreq))
+			DBG((dbgo,"Sample frequency measured = %f\n",p->sampfreq))
 		} else {
 			p->sampfreq = 60.0;
 		}
@@ -1024,19 +1027,19 @@ i1disp_do_fcal_setit(
 
 	/* Compute actual sampling time */
 	p->samptime = p->sampno / p->sampfreq;
-	DBG(("Computed sample time = %f seconds\n",p->samptime))
+	DBG((dbgo,"Computed sample time = %f seconds\n",p->samptime))
 
 	/* Compute the integration period in clocks rounded to sample frequency */
 	p->int_clocks = (int)floor((double)p->sampno/((double)p->reg40_S * 1e-9 * p->sampfreq) + 0.5);
 
-	DBG(("Setting integration time to = %d clocks\n",p->int_clocks))
+	DBG((dbgo,"Setting integration time to = %d clocks\n",p->int_clocks))
 	if ((ev = i1disp_wr_int_time(p, p->int_clocks)) != inst_ok)
 		return ev;
 
 	/* Read the integration time (could it be limited by instrument?) */
 	if ((ev = i1disp_rd_int_time(p, &p->int_clocks) ) != inst_ok)
 		return ev;
-	DBG(("Actual integration time = %d clocks\n",p->int_clocks))
+	DBG((dbgo,"Actual integration time = %d clocks\n",p->int_clocks))
 
 	p->itset = 1;
 	return inst_ok;
@@ -1056,7 +1059,7 @@ i1disp_check_unlock(
 	int vv;
 	double ver;
 
-	if (p->debug) fprintf(stderr,"i1disp: about to check response and unlock instrument if needed\n");
+	if (p->debug) fprintf(dbgo,"i1disp: about to check response and unlock instrument if needed\n");
 
 	/* Check whether the interface is locked */
 	if ((ev = i1disp_command_1(p, i1d_status, NULL, 0,
@@ -1066,6 +1069,7 @@ i1disp_check_unlock(
 	p->lite = 0;
 	p->munki = 0;
 	p->chroma4 = 0;
+	/* i1 Display */
 	if ((ev & inst_imask) == I1DISP_LOCKED) {
 
 		/* Unlock it. Ignore I1DISP_NOT_READY status. */
@@ -1079,6 +1083,7 @@ i1disp_check_unlock(
 		                 && (ev & inst_imask) != I1DISP_LOCKED)
 			return ev;
 	}
+	/* i1 Display LT */
 	if ((ev & inst_imask) == I1DISP_LOCKED) {
 
 		/* Still locked. See if it's an i1display2LT */
@@ -1095,9 +1100,10 @@ i1disp_check_unlock(
 			return ev;
 		p->lite = 1;
 	}
+	/* ColorMunki Create */
 	if ((ev & inst_imask) == I1DISP_LOCKED) {
 
-		/* Still locked. See if it's an ColorMunki Create */
+		/* Still locked. See if it's a ColorMunki Create */
 
 		/* Unlock it. Ignore I1DISP_NOT_READY status. */
 		if (((ev = i1disp_command_1(p, i1d_unlock, (unsigned char *)"Munk", 4,
@@ -1111,6 +1117,21 @@ i1disp_check_unlock(
 			return ev;
 		p->munki = 1;
 	}
+	/* HP DreamColor */
+	if ((ev & inst_imask) == I1DISP_LOCKED) {
+
+		/* Unlock it. Ignore I1DISP_NOT_READY status. */
+		if (((ev = i1disp_command_1(p, i1d_unlock, (unsigned char *)"ObiW", 4,
+		         buf, 8, &rsize, 0.5)) & inst_mask) != inst_ok
+		                 && (ev & inst_imask) != I1DISP_LOCKED)
+			return ev;
+
+		if ((ev = i1disp_command_1(p, i1d_status, NULL, 0,
+		           buf, 8, &rsize, 0.5)) != inst_ok
+		                 && (ev & inst_imask) != I1DISP_LOCKED)
+			return ev;
+		p->hpdream = 1;
+	}
 	if ((ev & inst_imask) == I1DISP_LOCKED) {
 		return i1disp_interp_code((inst *)p, I1DISP_BAD_STATUS);
 	}
@@ -1122,7 +1143,7 @@ i1disp_check_unlock(
 
 	buf[4] = '\000';
 	ver = atof((char *)buf);
-	DBG(("Version string = %5.3f\n",ver))
+	DBG((dbgo,"Version string = %5.3f\n",ver))
 
 	/* Read register 0x79 for the model identifier */
 	if ((ev = i1disp_rdreg_byte(p, &vv, 121) ) != inst_ok) {
@@ -1130,7 +1151,7 @@ i1disp_check_unlock(
 	}
 	vv &= 0xff;
 
-	DBG(("Version character = 0x%02x = '%c'\n",vv,vv))
+	DBG((dbgo,"Version character = 0x%02x = '%c'\n",vv,vv))
 
 	if (ver >= 4.0 && ver < 5.1 && vv == 0xff) {
 		p->dtype = 0;			/* Sequel Chroma 4 ?? */
@@ -1149,7 +1170,7 @@ i1disp_check_unlock(
 		return i1disp_interp_code((inst *)p, I1DISP_UNKNOWN_VERS_ID);
 	}
 
-	if (p->debug) fprintf(stderr,"i1disp: instrument is responding, unlocked, and right type\n");
+	if (p->debug) fprintf(dbgo,"i1disp: instrument is responding, unlocked, and right type\n");
 
 	return inst_ok;
 }
@@ -1162,75 +1183,75 @@ i1disp_read_all_regs(
 	inst_code ev;
 	int i;
 
-	if (p->debug) fprintf(stderr,"i1disp: about to read all the registers\n");
+	if (p->debug) fprintf(dbgo,"i1disp: about to read all the registers\n");
 
 	/* Serial number */
 	if ((ev = i1disp_rdreg_word(p, &p->reg0_W, 0) ) != inst_ok)
 		return ev;
-	DBG(("serial number = %d\n",p->reg0_W))
+	DBG((dbgo,"serial number = %d\n",p->reg0_W))
 
 
 	/* LCD/user calibration values */
 	for (i = 0; i < 9; i++) {
 		if ((ev = i1disp_rdreg_float(p, &p->reg4_F[i], 4 + 4 * i) ) != inst_ok)
 			return ev;
-	DBG(("LCD/user cal[%d] = %f\n",i,p->reg4_F[i]))
+	DBG((dbgo,"LCD/user cal[%d] = %f\n",i,p->reg4_F[i]))
 	}
 	/* LCD/user calibration time */
 	if ((ev = i1disp_rdreg_word(p, &p->reg50_W, 50) ) != inst_ok)
 		return ev;
-	DBG(("LCD/user calibration time = 0x%x = %s\n",p->reg50_W, ctime((time_t *)&p->reg50_W)))
+	DBG((dbgo,"LCD/user calibration time = 0x%x = %s\n",p->reg50_W, ctime((time_t *)&p->reg50_W)))
 
 	/* LCD/user calibration flag */
 	if ((ev = i1disp_rdreg_short(p, &p->reg126_S, 126) ) != inst_ok)
 		return ev;
-	DBG(("user cal flag = 0x%x\n",p->reg126_S))
+	DBG((dbgo,"user cal flag = 0x%x\n",p->reg126_S))
 
 
 	/* CRT/factory calibration values */
 	for (i = 0; i < 9; i++) {
 		if ((ev = i1disp_rdreg_float(p, &p->reg54_F[i], 54 + 4 * i) ) != inst_ok)
 			return ev;
-		DBG(("CRT/factory cal[%d] = %f\n",i,p->reg54_F[i]))
+		DBG((dbgo,"CRT/factory cal[%d] = %f\n",i,p->reg54_F[i]))
 	}
 	/* CRT/factory calibration flag */
 	if ((ev = i1disp_rdreg_word(p, &p->reg90_W, 90) ) != inst_ok)
 		return ev;
-	DBG(("CRT/factory flag = 0x%x = %s\n",p->reg90_W, ctime((time_t *)&p->reg90_W)))
+	DBG((dbgo,"CRT/factory flag = 0x%x = %s\n",p->reg90_W, ctime((time_t *)&p->reg90_W)))
 
 
 	/* Calibration factor */
 	if ((ev = i1disp_rdreg_short(p, &p->reg40_S, 40) ) != inst_ok)
 		return ev;
-	DBG(("Reg40 = %d\n",p->reg40_S))
+	DBG((dbgo,"Reg40 = %d\n",p->reg40_S))
 
 	/* Calibration factor */
 	if ((ev = i1disp_rdreg_short(p, &p->reg42_S, 42) ) != inst_ok)
 		return ev;
-	DBG(("Reg42 = %d\n",p->reg42_S))
+	DBG((dbgo,"Reg42 = %d\n",p->reg42_S))
 
 	/* Calibration factors */
 	for (i = 0; i < 3; i++) {
 		if ((ev = i1disp_rdreg_short(p, &p->reg44_S[i], 44 + 2 * i) ) != inst_ok)
 			return ev;
-		DBG(("reg44[%d] = %d\n",i,p->reg44_S[i]))
+		DBG((dbgo,"reg44[%d] = %d\n",i,p->reg44_S[i]))
 	}
 
 
 	/* Overall reading scale value ?? */
 	if ((ev = i1disp_rdreg_float(p, &p->clk_prd, 94) ) != inst_ok)
 		return ev;
-	DBG(("Clock Period = %f\n",p->clk_prd))
+	DBG((dbgo,"Clock Period = %e\n",p->clk_prd))
 
 	/* unknown */
 	if ((ev = i1disp_rdreg_word(p, &p->reg98_W, 98) ) != inst_ok)
 		return ev;
-	DBG(("reg98 = 0x%x = %s\n",p->reg98_W,ctime((time_t *)&p->reg98_W)))
+	DBG((dbgo,"reg98 = 0x%x = %s\n",p->reg98_W,ctime((time_t *)&p->reg98_W)))
 
 	/* unknown */
 	if ((ev = i1disp_rdreg_byte(p, &p->reg102_B, 102) ) != inst_ok)
 		return ev;
-	DBG(("reg102 = 0x%x\n",p->reg102_B))
+	DBG((dbgo,"reg102 = 0x%x\n",p->reg102_B))
 
 	/* Dark current calibration values */
 	/* Should we set to a default 0.0 if reg126_S < 0xd ?? */
@@ -1240,18 +1261,18 @@ i1disp_read_all_regs(
 				return ev;
 			p->reg103_F[i] = 0.0;
 		}
-		DBG(("darkcal[%d] = %f\n",i,p->reg103_F[i]))
+		DBG((dbgo,"darkcal[%d] = %f\n",i,p->reg103_F[i]))
 	}
 
 	/* Unknown byte */
 	if ((ev = i1disp_rdreg_byte(p, &p->reg115_B, 115) ) != inst_ok)
 		return ev;
-	DBG(("Unknown 115 byte = 0x%x\n",p->reg115_B))
+	DBG((dbgo,"Unknown 115 byte = 0x%x\n",p->reg115_B))
 
 	/* device ID byte */
 	if ((ev = i1disp_rdreg_byte(p, &p->reg121_B, 121) ) != inst_ok)
 		return ev;
-	DBG(("device type byte = 0x%x\n",p->reg121_B))
+	DBG((dbgo,"device type byte = 0x%x\n",p->reg121_B))
 
 	/* Unlock string */
 	for (i = 0; i < 4; i++) {
@@ -1261,7 +1282,7 @@ i1disp_read_all_regs(
 		p->reg122_B[i] = (char)vv;
 	}
 	p->reg122_B[i] = '\000';
-	DBG(("unlock string = '%s'\n",p->reg122_B))
+	DBG((dbgo,"unlock string = '%s'\n",p->reg122_B))
 
 	/* Read extra registers */
 	if (p->dtype == 1) {
@@ -1270,7 +1291,7 @@ i1disp_read_all_regs(
 		for (i = 0; i < 3; i++) {
 			if ((ev = i1disp_rdreg_float(p, &p->reg128_F[i], 128 + 4 * i) ) != inst_ok)
 				return ev;
-			DBG(("reg128_F[%d] = %f\n",i,p->reg128_F[i]))
+			DBG((dbgo,"reg128_F[%d] = %f\n",i,p->reg128_F[i]))
 		}
 #endif /* NEVER */
 
@@ -1280,16 +1301,16 @@ i1disp_read_all_regs(
 					return ev;
 				p->reg144_F[i] = 1.0;
 			}
-			DBG(("Ambient scale factor [%d] = %f\n",i,p->reg144_F[i]))
+			DBG((dbgo,"Ambient scale factor [%d] = %f\n",i,p->reg144_F[i]))
 		}
 
 		/* Read the integration time */
 		if ((ev = i1disp_rd_int_time(p, &p->int_clocks) ) != inst_ok)
 			return ev;
-		DBG(("Integration time = %d\n",p->int_clocks))
+		DBG((dbgo,"Integration time = %d\n",p->int_clocks))
 	}
 
-	if (p->debug) fprintf(stderr,"i1disp: all registers read OK\n");
+	if (p->debug) fprintf(dbgo,"i1disp: all registers read OK\n");
 
 	return inst_ok;
 }
@@ -1312,8 +1333,8 @@ i1disp_compute_factors(
 	/* For the i1display 1&2, it has a value of 0xd. */
 	/* Value 0x7 seems to be for a "user calibration" */
 	/* Values 3 & 6 seem to always "errors" as does a value */
-	/* <7 in most circumstances. But the Heidelberg Viewmaker */
-	/* (from Sequel Imaging) colorimeter seems to have a value of 2. */
+	/* < 7 in most circumstances. But the Heidelberg Viewmaker */
+	/* (from Sequel Imaging) and Lacie Blue Eye colorimeter seems to have a value of 2. */
 	if (p->reg126_S == 0xffffffff || (p->reg126_S < 7 && p->reg126_S != 2))
 		return i1disp_interp_code((inst *)p, I1DISP_BAD_LCD_CALIBRATION);
 
@@ -1321,11 +1342,11 @@ i1disp_compute_factors(
 		return i1disp_interp_code((inst *)p, I1DISP_BAD_CRT_CALIBRATION);
 
 	/* Not quite sure about this, but we're assuming this */
-	/* is set to 0xd if reg4-36 hold the LCD calibration, */
+	/* is set to 2 or 0xd if reg4-36 hold the LCD calibration, */
 	/* and some other number if they are not set, or set */
 	/* to a custom user calibration. */
-	if (p->reg126_S != 0xd)
-		return i1disp_interp_code((inst *)p, I1DISP_BAD_CRT_CALIBRATION);
+	if (p->reg126_S != 0xd && p->reg126_S != 2)
+		return i1disp_interp_code((inst *)p, I1DISP_BAD_LCD_CALIBRATION);
 		
 	/* Compute ambient matrix */
 	for (i = 0; i < 9; i++)
@@ -1333,16 +1354,16 @@ i1disp_compute_factors(
 
 	/* clk_prd inversion */
 	p->clk_freq = 1.0/p->clk_prd;
-	DBG(("clk_freq = %f\n",p->clk_freq))
+	DBG((dbgo,"clk_freq = %f\n",p->clk_freq))
 	
 	/* RGB channel scale factors */
 	for (i = 0; i < 3; i++) {
 		double tt;
 		tt = (double)p->reg44_S[i] * 1e11/((double)p->reg40_S * (double)p->reg42_S);
 		p->rgbadj1[i] = floor(tt + 0.5);
-		DBG(("reg44+%dcalc = %f\n",i,p->rgbadj1[i]))
+		DBG((dbgo,"reg44+%dcalc = %f\n",i,p->rgbadj1[i]))
 		p->rgbadj2[i] = tt * 1e-9 * (double)p->reg40_S;
-		DBG(("reg44+%dcalc2 = %f\n",i,p->rgbadj2[i]))
+		DBG((dbgo,"reg44+%dcalc2 = %f\n",i,p->rgbadj2[i]))
 	}
 
 	/* Set some defaults */
@@ -1370,15 +1391,15 @@ i1disp_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout)
 
 	if (p->debug) {
 		p->icom->debug = p->debug;	/* Turn on debugging */
-		fprintf(stderr,"i1disp: About to init coms\n");
+		fprintf(dbgo,"i1disp: About to init coms\n");
 	}
 
 	if (p->icom->is_usb_portno(p->icom, port) == instUnknown) {
-		if (p->debug) fprintf(stderr,"i1disp: init_coms called to wrong device!\n");
+		if (p->debug) fprintf(dbgo,"i1disp: init_coms called to wrong device!\n");
 			return i1disp_interp_code((inst *)p, I1DISP_UNKNOWN_MODEL);
 	}
 
-	if (p->debug) fprintf(stderr,"i1disp: About to init USB\n");
+	if (p->debug) fprintf(dbgo,"i1disp: About to init USB\n");
 
 	/* Set config, interface, write end point, read end point */
 	/* ("serial" end points aren't used - the i1display uses USB control messages) */
@@ -1387,11 +1408,11 @@ i1disp_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout)
 	/* Check instrument is responding */
 	if ((ev = i1disp_command_1(p, i1d_status, NULL, 0, buf, 8, &rsize, 0.5)) != inst_ok
 	                                            && (ev & inst_imask) != I1DISP_LOCKED) {
-		if (p->debug) fprintf(stderr,"i1disp: init coms failed with rv = 0x%x\n",ev);
+		if (p->debug) fprintf(dbgo,"i1disp: init coms failed with rv = 0x%x\n",ev);
 		return ev;
 	}
 
-	if (p->debug) fprintf(stderr,"i1disp: init coms has suceeded\n");
+	if (p->debug) fprintf(dbgo,"i1disp: init coms has suceeded\n");
 
 	p->gotcoms = 1;
 	return inst_ok;
@@ -1404,7 +1425,7 @@ i1disp_init_inst(inst *pp) {
 	i1disp *p = (i1disp *)pp;
 	inst_code ev = inst_ok;
 
-	if (p->debug) fprintf(stderr,"i1disp: About to init instrument\n");
+	if (p->debug) fprintf(dbgo,"i1disp: About to init instrument\n");
 
 	if (p->gotcoms == 0)
 		return i1disp_interp_code((inst *)p, I1DISP_NO_COMS);	/* Must establish coms first */
@@ -1424,7 +1445,7 @@ i1disp_init_inst(inst *pp) {
 
 	if (ev == inst_ok) {
 		p->inited = 1;
-		if (p->debug) fprintf(stderr,"i1disp: instrument inited OK\n");
+		if (p->debug) fprintf(dbgo,"i1disp: instrument inited OK\n");
 	}
 
 	p->itype = instI1Display;
@@ -1458,6 +1479,9 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	if ((rv = i1disp_take_XYZ_measurement(p, val->aXYZ)) != inst_ok)
 		return rv;
 
+	/* Apply the colorimeter correction matrix */
+	icmMulBy3x3(val->aXYZ, p->ccmat, val->aXYZ);
+
 	val->XYZ_v = 0;
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings ? */
 	val->Lab_v = 0;
@@ -1467,6 +1491,23 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	if (user_trig)
 		return inst_user_trig;
 	return rv;
+}
+
+/* Insert a colorimetric correction matrix in the instrument XYZ readings */
+/* This is only valid for colorimetric instruments. */
+/* To remove the matrix, pass NULL for the filter filename */
+inst_code i1disp_col_cor_mat(
+inst *pp,
+double mtx[3][3]
+) {
+	i1disp *p = (i1disp *)pp;
+
+	if (mtx == NULL)
+		icmSetUnity3x3(p->ccmat);
+	else
+		icmCpy3x3(p->ccmat, mtx);
+
+	return inst_ok;
 }
 
 /* Determine if a calibration is needed. Returns inst_calt_none if not, */
@@ -1689,6 +1730,7 @@ inst_capability i1disp_capabilities(inst *pp) {
 	   | inst_emis_disp_crt
 	   | inst_emis_disp_lcd
 	   | inst_colorimeter
+	   | inst_ccmx
 	     ;
 
 	if (p->dtype == 1) {	/* Eye-One Display 2 */
@@ -1792,17 +1834,20 @@ extern i1disp *new_i1disp(icoms *icom, int debug, int verb)
 	p->debug = debug;
 	p->verb = verb;
 
-	p->init_coms        = i1disp_init_coms;
-	p->init_inst        = i1disp_init_inst;
-	p->capabilities     = i1disp_capabilities;
-	p->capabilities2    = i1disp_capabilities2;
-	p->set_mode         = i1disp_set_mode;
-	p->set_opt_mode     = i1disp_set_opt_mode;
-	p->read_sample      = i1disp_read_sample;
+	icmSetUnity3x3(p->ccmat);	/* Set the colorimeter correction matrix to do nothing */
+
+	p->init_coms         = i1disp_init_coms;
+	p->init_inst         = i1disp_init_inst;
+	p->capabilities      = i1disp_capabilities;
+	p->capabilities2     = i1disp_capabilities2;
+	p->set_mode          = i1disp_set_mode;
+	p->set_opt_mode      = i1disp_set_opt_mode;
+	p->read_sample       = i1disp_read_sample;
 	p->needs_calibration = i1disp_needs_calibration;
-	p->calibrate        = i1disp_calibrate;
-	p->interp_error     = i1disp_interp_error;
-	p->del              = i1disp_del;
+	p->calibrate         = i1disp_calibrate;
+	p->col_cor_mat       = i1disp_col_cor_mat;
+	p->interp_error      = i1disp_interp_error;
+	p->del               = i1disp_del;
 
 	p->itype = instUnknown;		/* Until initalisation */
 

@@ -1,4 +1,4 @@
-.\"	$Header: /cvsroot/osrs/libtiff/man/tiffgt.1,v 1.1.1.1 1999/07/27 21:50:28 mike Exp $
+.\" $Id: tiffgt.1,v 1.4 2006/04/20 12:17:19 dron Exp $
 .\"
 .\" Copyright (c) 1988-1997 Sam Leffler
 .\" Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -23,7 +23,7 @@
 .\" OF THIS SOFTWARE.
 .\"
 .if n .po 0
-.TH TIFFGT 1 "October 15, 1995"
+.TH TIFFGT 1 "September 20, 2005" "libtiff"
 .SH NAME
 tiffgt \- display an image stored in a
 .SM TIFF
@@ -56,11 +56,11 @@ correctly handles files with any of the following characteristics:
 .in +0.5i
 .ta \w'\fIPhotometricInterpretation\fP  'u
 .nf
-BitsPerSample	1, 2, 4, 8, 16
-SamplesPerPixel	1, 3, 4 (the 4th sample is ignored)
-PhotometricInterpretation	0 (min-is-white), 1 (min-is-black), 2 (RGB), 3 (palette), 6 (YCbCr)
-PlanarConfiguration	1 (contiguous), 2 (separate)
-Orientation	1 (top-left), 4 (bottom-left)
+\fIBitsPerSample\fP	1, 2, 4, 8, 16
+\fISamplesPerPixel\fP	1, 3, 4 (the 4th sample is ignored)
+\fIPhotometricInterpretation\fP	0 (min-is-white), 1 (min-is-black), 2 (RGB), 3 (palette), 6 (YCbCr)
+\fIPlanarConfiguration\fP	1 (contiguous), 2 (separate)
+\fIOrientation\fP	1 (top-left), 4 (bottom-left)
 .fi
 .in -0.5i
 .sp .5
@@ -71,7 +71,7 @@ by the
 library.
 .PP
 For palette images (\c
-.IR PhotomatricInterpretation =3),
+.IR PhotometricInterpretation =3),
 .I tiffgt
 inspects the colormap values and assumes either 16-bit
 or 8-bit values according to the maximum value.
@@ -97,7 +97,7 @@ In addition the following keyboard commands are recognized:
 .TP
 .B b
 Use a
-.I PhotometricIntepretation
+.I PhotometricInterpretation
 of MinIsBlack in displaying the current image.
 .TP
 .B l
@@ -108,7 +108,7 @@ of lsb-to-msb in decoding the current image.
 .B m
 Use a
 .I FillOrder
-of msb-tolmsb in decoding the current image.
+of msb-to-lsb in decoding the current image.
 .TP
 .B c
 Use a colormap visual to display the current image.
@@ -118,7 +118,7 @@ Use a true color (24-bit RGB) visual to display the current image.
 .TP
 .B w
 Use a
-.I PhotometricIntepretation
+.I PhotometricInterpretation
 of MinIsWhite in displaying the current image.
 .TP
 .B W
@@ -199,15 +199,15 @@ i.e. a leading ``0x'' for hexadecimal and a leading ``0'' for octal.
 Override the value of the
 .I PhotometricInterpretation
 tag; the parameter may be one of:
-.IR miniswhite ,
-.IR minisblack ,
-.IR rgb ,
-.IR palette ,
-.IR mask ,
-.IR separated ,
-.IR ycbcr ,
+.BR miniswhite ,
+.BR minisblack ,
+.BR rgb ,
+.BR palette ,
+.BR mask ,
+.BR separated ,
+.BR ycbcr ,
 and
-.IR cielab .
+.BR cielab .
 .TP
 .B \-r
 Force image display in a full color window.
@@ -236,7 +236,10 @@ By default, the window type is not shown in the title bar.
 Images wider and taller than the display are silently truncated to avoid
 crashing old versions of the window manager.
 .SH "SEE ALSO"
-.IR tiffdump (1),
-.IR tiffinfo (1),
-.IR tiffcp (1),
-.IR libtiff (3)
+.BR tiffdump (1),
+.BR tiffinfo (1),
+.BR tiffcp (1),
+.BR libtiff (3TIFF)
+.PP
+Libtiff library home page:
+.BR http://www.remotesensing.org/libtiff/

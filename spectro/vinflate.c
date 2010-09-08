@@ -18,7 +18,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <sys/types.h>
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 
 #undef DEBUG

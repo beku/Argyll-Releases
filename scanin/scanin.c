@@ -26,7 +26,7 @@
 #include <sys/types.h>
 
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "cgats.h"
 #include "icc.h"
@@ -1026,7 +1026,7 @@ int main(int argc, char *argv[])
 					if ((rv = mlu->read_mpp(mlu, prof_name)) == 0) {
 
 						/* mlu defaults to absolute XYZ lookup */
-						mlu->get_info(mlu, &cnv_nmask, &inn, NULL, NULL, NULL, NULL, NULL);
+						mlu->get_info(mlu, &cnv_nmask, &inn, NULL, NULL, NULL, NULL, NULL, NULL);
 				
 						outn = 3;
 						outs = icSigXYZData;

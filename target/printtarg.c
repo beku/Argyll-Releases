@@ -105,7 +105,7 @@
 #include <time.h>
 #include <ctype.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "cgats.h"
 #include "icc.h"
@@ -1451,7 +1451,7 @@ int usede			/* NZ to use delta E rather than density */
 				double pc;
 	
 				pc = (log(temp) - log(tstart))/(log(tend) - log(tstart));
-				printf("\r%2d%%",(int)(100.0 * pc+0.5)); fflush(stdout);
+				printf("%c%2d%%",cr_char,(int)(100.0 * pc+0.5)); fflush(stdout);
 			}
 
 			/* Improve the ordering */
@@ -1609,9 +1609,9 @@ cp->nc[1]->i,cp->nc[1]->id,cp->nc[1]->loc);
 			if ((cp = aat_atfirst(aat_tr, stree)) == NULL)
 				error("There seem to be no colors in the tree");
 			if (usede)
-				printf("\r100%%\nAfter optimisation, worst delta E = %f\n", cp->wnd);
+				printf("%c100%%\nAfter optimisation, worst delta E = %f\n",cr_char,cp->wnd);
 			else
-				printf("\r100%%\nAfter optimisation, density contrast = %f\n", cp->wnd);
+				printf("%c100%%\nAfter optimisation, density contrast = %f\n",cr_char,cp->wnd);
 
 			/* Evaluate each strips direction confusion */
 			for (i = 0; ; i++) {
@@ -2880,6 +2880,7 @@ char *argv[];
 	char *bp, buf[500];		/* general sprintf buffer */
 
 	error_program = "printtarg";
+	check_if_not_interactive();
 
 #if defined(__IBMC__)
 	_control87(EM_UNDERFLOW, EM_UNDERFLOW);

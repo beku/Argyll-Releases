@@ -1,10 +1,10 @@
 /******************************************************************************
- * $Id: tif_ovrcache.c,v 1.2 2000/01/28 15:42:25 warmerda Exp $
+ * $Id: tif_ovrcache.c,v 1.7.2.1 2010-06-08 18:50:40 bfriesen Exp $
  *
  * Project:  TIFF Overview Builder
  * Purpose:  Library functions to maintain two rows of tiles or two strips
  *           of data for output overviews as an output cache. 
- * Author:   Frank Warmerdam, warmerda@home.com
+ * Author:   Frank Warmerdam, warmerdam@pobox.com
  *
  ******************************************************************************
  * Copyright (c) 2000, Frank Warmerdam
@@ -27,14 +27,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  ******************************************************************************
- *
- * $Log: tif_ovrcache.c,v $
- * Revision 1.2  2000/01/28 15:42:25  warmerda
- * Avoid warnings on Windows.
- *
- * Revision 1.1  2000/01/28 15:03:44  warmerda
- * New
- *
  */
 
 #include "tiffiop.h"
@@ -52,7 +44,6 @@ TIFFOvrCache *TIFFCreateOvrCache( TIFF *hTIFF, int nDirOffset )
 
 {
     TIFFOvrCache	*psCache;
-    int			nBytesPerRow;
     uint32		nBaseDirOffset;
 
     psCache = (TIFFOvrCache *) _TIFFmalloc(sizeof(TIFFOvrCache));
@@ -70,17 +61,20 @@ TIFFOvrCache *TIFFCreateOvrCache( TIFF *hTIFF, int nDirOffset )
 
     TIFFGetField( hTIFF, TIFFTAG_BITSPERSAMPLE, &(psCache->nBitsPerPixel) );
     TIFFGetField( hTIFF, TIFFTAG_SAMPLESPERPIXEL, &(psCache->nSamples) );
+    TIFFGetField( hTIFF, TIFFTAG_PLANARCONFIG, &(psCache->nPlanarConfig) );
 
     if( !TIFFIsTiled( hTIFF ) )
     {
         TIFFGetField( hTIFF, TIFFTAG_ROWSPERSTRIP, &(psCache->nBlockYSize) );
         psCache->nBlockXSize = psCache->nXSize;
+        psCache->nBytesPerBlock = TIFFStripSize(hTIFF);
         psCache->bTiled = FALSE;
     }
     else
     {
         TIFFGetField( hTIFF, TIFFTAG_TILEWIDTH, &(psCache->nBlockXSize) );
         TIFFGetField( hTIFF, TIFFTAG_TILELENGTH, &(psCache->nBlockYSize) );
+        psCache->nBytesPerBlock = TIFFTileSize(hTIFF);
         psCache->bTiled = TRUE;
     }
 
@@ -92,29 +86,35 @@ TIFFOvrCache *TIFFCreateOvrCache( TIFF *hTIFF, int nDirOffset )
         		/ psCache->nBlockXSize;
     psCache->nBlocksPerColumn = (psCache->nYSize + psCache->nBlockYSize - 1)
         		/ psCache->nBlockYSize;
-    
-    psCache->nBytesPerBlock =
-        (psCache->nBlockXSize*psCache->nBlockYSize*psCache->nBitsPerPixel + 7) / 8;
+
+    if (psCache->nPlanarConfig == PLANARCONFIG_SEPARATE)
+        psCache->nBytesPerRow = psCache->nBytesPerBlock
+            * psCache->nBlocksPerRow * psCache->nSamples;
+    else
+        psCache->nBytesPerRow =
+            psCache->nBytesPerBlock * psCache->nBlocksPerRow;
+
 
 /* -------------------------------------------------------------------- */
 /*      Allocate and initialize the data buffers.                       */
 /* -------------------------------------------------------------------- */
-    nBytesPerRow = psCache->nBytesPerBlock * psCache->nBlocksPerRow
-                    * psCache->nSamples;
 
-    psCache->pabyRow1Blocks = (unsigned char *) _TIFFmalloc(nBytesPerRow);
-    psCache->pabyRow2Blocks = (unsigned char *) _TIFFmalloc(nBytesPerRow);
+    psCache->pabyRow1Blocks =
+        (unsigned char *) _TIFFmalloc(psCache->nBytesPerRow);
+    psCache->pabyRow2Blocks =
+        (unsigned char *) _TIFFmalloc(psCache->nBytesPerRow);
 
     if( psCache->pabyRow1Blocks == NULL
         || psCache->pabyRow2Blocks == NULL )
     {
-        TIFFError( hTIFF->tif_name,
-                   "Can't allocate memory for overview cache." );
+		TIFFErrorExt( hTIFF->tif_clientdata, hTIFF->tif_name,
+					  "Can't allocate memory for overview cache." );
+        /* TODO: use of TIFFError is inconsistent with use of fprintf in addtiffo.c, sort out */
         return NULL;
     }
 
-    _TIFFmemset( psCache->pabyRow1Blocks, 0, nBytesPerRow );
-    _TIFFmemset( psCache->pabyRow2Blocks, 0, nBytesPerRow );
+    _TIFFmemset( psCache->pabyRow1Blocks, 0, psCache->nBytesPerRow );
+    _TIFFmemset( psCache->pabyRow2Blocks, 0, psCache->nBytesPerRow );
 
     psCache->nBlockOffset = 0;
 
@@ -134,14 +134,15 @@ TIFFOvrCache *TIFFCreateOvrCache( TIFF *hTIFF, int nDirOffset )
 static void TIFFWriteOvrRow( TIFFOvrCache * psCache )
 
 {
-    int		nRet, iSample, iTileX, iTileY = psCache->nBlockOffset;
+    int		nRet, iTileX, iTileY = psCache->nBlockOffset;
     unsigned char *pabyData;
     uint32	nBaseDirOffset;
-    
+    uint32 RowsInStrip;
+
 /* -------------------------------------------------------------------- */
-/*	If the output cache is multi-byte per sample, and the file	*/
-/*	being written to is of a different byte order than the current	*/
-/*	platform, we will need to byte swap the data. 			*/
+/*      If the output cache is multi-byte per sample, and the file      */
+/*      being written to is of a different byte order than the current  */
+/*      platform, we will need to byte swap the data.                   */
 /* -------------------------------------------------------------------- */
     if( TIFFIsByteSwapped(psCache->hTIFF) )
     {
@@ -169,38 +170,72 @@ static void TIFFWriteOvrRow( TIFFOvrCache * psCache )
 /* -------------------------------------------------------------------- */
 /*      Write blocks to TIFF file.                                      */
 /* -------------------------------------------------------------------- */
-    for( iTileX = 0; iTileX < psCache->nBlocksPerRow; iTileX++ )
-    {
-        for( iSample = 0; iSample < psCache->nSamples; iSample++ )
-        {
-            int		  nTileID;
+	for( iTileX = 0; iTileX < psCache->nBlocksPerRow; iTileX++ )
+	{
+		int nTileID;
 
-            pabyData = TIFFGetOvrBlock( psCache, iTileX, iTileY, iSample );
+		if (psCache->nPlanarConfig == PLANARCONFIG_SEPARATE)
+		{
+			int iSample;
 
-            if( psCache->bTiled )
-            {
-                nTileID =
-                    TIFFComputeTile(psCache->hTIFF,
-                                    iTileX * psCache->nBlockXSize,
-                                    iTileY * psCache->nBlockYSize,
-                                    0, (tsample_t) iSample );
-                TIFFWriteEncodedTile( psCache->hTIFF, nTileID, 
-                                      pabyData,
-                                      TIFFTileSize(psCache->hTIFF) );
-            }
-            else
-            {
-                nTileID =
-                    TIFFComputeStrip(psCache->hTIFF,
-                                     iTileY * psCache->nBlockYSize,
-                                     (tsample_t) iSample);
+			for( iSample = 0; iSample < psCache->nSamples; iSample++ )
+			{
+				pabyData = TIFFGetOvrBlock( psCache, iTileX, iTileY, iSample );
 
-                TIFFWriteEncodedStrip( psCache->hTIFF, nTileID,
-                                       pabyData,
-                                       TIFFStripSize(psCache->hTIFF) );
-            }
-        }
-    }
+				if( psCache->bTiled )
+				{
+					nTileID = TIFFComputeTile( psCache->hTIFF,
+					    iTileX * psCache->nBlockXSize,
+					    iTileY * psCache->nBlockYSize,
+					    0, (tsample_t) iSample );
+					TIFFWriteEncodedTile( psCache->hTIFF, nTileID,
+					    pabyData,
+					    TIFFTileSize(psCache->hTIFF) );
+				}
+				else
+				{
+					nTileID = TIFFComputeStrip( psCache->hTIFF,
+					    iTileY * psCache->nBlockYSize,
+					    (tsample_t) iSample );
+					RowsInStrip=psCache->nBlockYSize;
+					if ((iTileY+1)*psCache->nBlockYSize>psCache->nYSize)
+						RowsInStrip=psCache->nYSize-iTileY*psCache->nBlockYSize;
+					TIFFWriteEncodedStrip( psCache->hTIFF, nTileID,
+					    pabyData,
+					    TIFFVStripSize(psCache->hTIFF,RowsInStrip) );
+				}
+			}
+
+		}
+		else
+		{
+			pabyData = TIFFGetOvrBlock( psCache, iTileX, iTileY, 0 );
+
+			if( psCache->bTiled )
+			{
+				nTileID = TIFFComputeTile( psCache->hTIFF,
+				    iTileX * psCache->nBlockXSize,
+				    iTileY * psCache->nBlockYSize,
+				    0, 0 );
+				TIFFWriteEncodedTile( psCache->hTIFF, nTileID,
+				    pabyData,
+				    TIFFTileSize(psCache->hTIFF) );
+			}
+			else
+			{
+				nTileID = TIFFComputeStrip( psCache->hTIFF,
+				    iTileY * psCache->nBlockYSize,
+				    0 );
+				RowsInStrip=psCache->nBlockYSize;
+				if ((iTileY+1)*psCache->nBlockYSize>psCache->nYSize)
+					RowsInStrip=psCache->nYSize-iTileY*psCache->nBlockYSize;
+				TIFFWriteEncodedStrip( psCache->hTIFF, nTileID,
+				    pabyData,
+				    TIFFVStripSize(psCache->hTIFF,RowsInStrip) );
+			}
+		}
+	}
+	/* TODO: add checks on error status return of TIFFWriteEncodedTile and TIFFWriteEncodedStrip */
 
 /* -------------------------------------------------------------------- */
 /*      Rotate buffers.                                                 */
@@ -209,9 +244,7 @@ static void TIFFWriteOvrRow( TIFFOvrCache * psCache )
     psCache->pabyRow1Blocks = psCache->pabyRow2Blocks;
     psCache->pabyRow2Blocks = pabyData;
 
-    _TIFFmemset( pabyData, 0,
-                 psCache->nBytesPerBlock * psCache->nSamples
-                 * psCache->nBlocksPerRow );
+    _TIFFmemset( pabyData, 0, psCache->nBytesPerRow );
 
     psCache->nBlockOffset++;
 
@@ -219,20 +252,23 @@ static void TIFFWriteOvrRow( TIFFOvrCache * psCache )
 /*      Restore access to original directory.                           */
 /* -------------------------------------------------------------------- */
     TIFFFlush( psCache->hTIFF );
-    
+    /* TODO: add checks on error status return of TIFFFlush */
     TIFFSetSubDirectory( psCache->hTIFF, nBaseDirOffset );
+    /* TODO: add checks on error status return of TIFFSetSubDirectory */
 }
 
 /************************************************************************/
 /*                          TIFFGetOvrBlock()                           */
 /************************************************************************/
 
+/* TODO: make TIFF_Downsample handle iSample offset, so that we can
+ * do with a single TIFFGetOvrBlock and no longer need TIFFGetOvrBlock_Subsampled */
 unsigned char *TIFFGetOvrBlock( TIFFOvrCache *psCache, int iTileX, int iTileY,
                                 int iSample )
 
 {
     int		nRowOffset;
-    
+
     if( iTileY > psCache->nBlockOffset + 1 )
         TIFFWriteOvrRow( psCache );
 
@@ -242,8 +278,39 @@ unsigned char *TIFFGetOvrBlock( TIFFOvrCache *psCache, int iTileX, int iTileY,
             && iTileY < psCache->nBlockOffset+2 );
     assert( iSample >= 0 && iSample < psCache->nSamples );
 
-    nRowOffset = ((iTileX * psCache->nSamples) + iSample)
-        		* psCache->nBytesPerBlock;
+    if (psCache->nPlanarConfig == PLANARCONFIG_SEPARATE)
+        nRowOffset = ((iTileX * psCache->nSamples) + iSample)
+            * psCache->nBytesPerBlock;
+    else
+        nRowOffset = iTileX * psCache->nBytesPerBlock +
+            (psCache->nBitsPerPixel + 7) / 8 * iSample;
+
+    if( iTileY == psCache->nBlockOffset )
+        return psCache->pabyRow1Blocks + nRowOffset;
+    else
+        return psCache->pabyRow2Blocks + nRowOffset;
+}
+
+/************************************************************************/
+/*                     TIFFGetOvrBlock_Subsampled()                     */
+/************************************************************************/
+
+unsigned char *TIFFGetOvrBlock_Subsampled( TIFFOvrCache *psCache, 
+                                           int iTileX, int iTileY )
+
+{
+    int		nRowOffset;
+
+    if( iTileY > psCache->nBlockOffset + 1 )
+        TIFFWriteOvrRow( psCache );
+
+    assert( iTileX >= 0 && iTileX < psCache->nBlocksPerRow );
+    assert( iTileY >= 0 && iTileY < psCache->nBlocksPerColumn );
+    assert( iTileY >= psCache->nBlockOffset
+            && iTileY < psCache->nBlockOffset+2 );
+    assert( psCache->nPlanarConfig != PLANARCONFIG_SEPARATE );
+
+    nRowOffset = iTileX * psCache->nBytesPerBlock;
 
     if( iTileY == psCache->nBlockOffset )
         return psCache->pabyRow1Blocks + nRowOffset;
@@ -265,3 +332,10 @@ void TIFFDestroyOvrCache( TIFFOvrCache * psCache )
     _TIFFfree( psCache->pabyRow2Blocks );
     _TIFFfree( psCache );
 }
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

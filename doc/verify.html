@@ -23,7 +23,9 @@ target.ti3 measured.ti3</span><br style="font-family: monospace;">
 &nbsp;-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Normalise each files reading to white Y<br>
 &nbsp;-N&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Normalise each files reading to white XYZ<br
+Normalise each files reading to white XYZ<br>
+&nbsp;-D&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use D50 100.0 as L*a*b* white reference<br
  style="font-family: monospace;">
 </span><span style="font-family: monospace;">&nbsp;-c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; Show CIE94 delta E values</span><br
@@ -91,6 +93,13 @@ The <b>-N</b> flag causes the two sets of values to be normalized to
 the XYZ of white for each set before comparison. White is assumed to be
 the patch
 with the largest Y value.<br>
+<br>
+The <b>-D</b> flag causes the white reference point for the conversion
+to L*a*b* to be D50 with a Y value of 100%. By default the sample with
+the largest Y value is found, and the L*a*b* white reference scaled to
+have that Y value. This allows sensible delta E values when comparing
+absolute color values, such as those from emission or display
+measurements.<br>
 <br>
 The <b>-c</b> option causes the differences between the test values
 and

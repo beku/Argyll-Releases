@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/libtiff/tif_extension.c,v 1.3 2003/12/19 18:29:49 dron Exp $ */
+/* $Header: /cvs/maptools/cvsroot/libtiff/libtiff/tif_extension.c,v 1.4.2.1 2010-06-08 18:50:42 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -100,10 +100,19 @@ void TIFFSetClientInfo( TIFF *tif, void *data, const char *name )
     */
 
     link = (TIFFClientInfoLink *) _TIFFmalloc(sizeof(TIFFClientInfoLink));
+    assert (link != NULL);
     link->next = tif->tif_clientinfo;
     link->name = (char *) _TIFFmalloc(strlen(name)+1);
+    assert (link->name != NULL);
     strcpy(link->name, name);
     link->data = data;
 
     tif->tif_clientinfo = link;
 }
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

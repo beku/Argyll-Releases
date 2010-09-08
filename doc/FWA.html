@@ -14,7 +14,8 @@ paper manufactures often employ a couple of different techniques. One
 technique is to add "shading agents" to the paper, that absorb a little
 of the middle wavelengths, thereby changing the color of the paper to
 be a little less green. By far the most powerful way of making the
-paper appear more white is to add Fluorescent Whitener Additive (FWA)
+paper appear more white is to add Fluorescent Whitener Additive (FWA,
+or Optical Brightening Agents - OBA)
 to the paper. This is basically a fluorescent material that absorbs
 light at Ultra Violet (U.V.) wavelengths, and re-emits it at a slightly
 longer blue wavelengths. Subjectively something that appears more blue,
@@ -49,13 +50,14 @@ profile,
 the intensity of the assumed viewing illumination at each wavelength
 (typically D50 for standard ICC
 profiles) is then multiplied by the reflectance
-at each wavelength, and the overall spectral levels are in this way
+at each wavelength, and the overall spectral reflectance is in this way
 converted
 into tri-stimulus values using an observer model.<br>
 <br>
-So while the instrument measures with one type of light (type A), it
+So while the instrument measures with one type of light (type A, or a
+white LED), it
 returns a measurement as if it had been measured under a different kind
-of light (D50) by making use of a simple model of light reflection of
+of light (D50) by making use of a simple model of light reflection off
 the media.<br>
 <br>
 Notice that a key assumption of this simple model is that the light
@@ -118,6 +120,7 @@ of simulating the measurement of a media under one illuminant, while
 then computing the tristimulus values as if being viewed under a
 different illuminant, since this mismatch is the very problem that FWA
 compensation is designed to avoid.<br>
+<br>
 <h3>Using FWA Compensation with proofing</h3>
 The most common situation for employing FWA compensation, is in
 proofing. This is when you have one printing device, the target (say a
@@ -169,7 +172,8 @@ allow for this and actually meet the letter of the ICC specifications,
 FWA
 compensation should ideally be used when building a interchangeable ICC
 profile, by selecting the D50 illuminant, and the 1931_2 observer
-model. Note however that this is likely to make profiles less
+model. Note however that this is likely to make profiles <span
+ style="text-decoration: underline;">less</span>
 interchangeable rather than more, since few if any other profiles will
 represent the appearance under real D50, since few if any instruments
 use a real D50 illuminant that will trigger the correct level of FWA
@@ -192,6 +196,17 @@ for FWA effects without severe incompatibility because all
 rendering intents except absolute rendering normalize to the media
 color, rendering the media white as white, even though the absolute
 values are not measured using a D50 illuminant.<br>
+<br>
+<h3>Measuring the illuminant</h3>
+For FWA compensation to work well, it is necessary to know what the
+spectral shape of the illuminant used for viewing is. While many
+instruments provide an illuminant measurement capability over the
+visible spectrum, for FWA compensation it is desirable to know the
+Ultra Violet (UV) component of the illuminant. Few color instruments
+are capable of reading to such short wavelengths though. Argyll
+provides an indirect way of estimating the UV component of an
+illuminant using its <a href="illumread.html">illumread</a> utility.<br>
+<br>
 <h3>FWA myths</h3>
 Amongst the user (and to some degree) vendor community, there is a
 widely held belief that the solution to fluorescent whitener affecting
@@ -206,6 +221,14 @@ tungsten instrument illuminant makes for a better instrument/viewing
 illuminant match. There seems to be no scientific or practical basis
 for believing that a UV filter fitted instrument magically makes all
 FWA induced problems go away.<br>
+<br>
+<h3>Instrument UV filters</h3>
+Note that to be able to measure the FWA in the paper, the instrument
+has to be able to trigger Fluorescence, which it cannot do if it is
+fitted with a UV filter, or uses a light source that emits no UV (e.g.
+a white LED). So UV filter instruments are not suitable for
+use with FWA compensation.<br>
+<br>
 <br>
 <br>
 <br>

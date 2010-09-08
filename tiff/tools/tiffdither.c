@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/tools/tiffdither.c,v 1.6 2003/05/05 19:13:42 dron Exp $ */
+/* $Id: tiffdither.c,v 1.9.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -24,9 +24,15 @@
  * OF THIS SOFTWARE.
  */
 
+#include "tif_config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
 
 #include "tiffio.h"
 
@@ -135,7 +141,7 @@ static	uint32 group3options = 0;
 static void
 processG3Options(char* cp)
 {
-	if (cp = strchr(cp, ':')) {
+	if ((cp = strchr(cp, ':'))) {
 		do {
 			cp++;
 			if (strneq(cp, "1d", 2))
@@ -146,7 +152,7 @@ processG3Options(char* cp)
 				group3options |= GROUP3OPT_FILLBITS;
 			else
 				usage();
-		} while (cp = strchr(cp, ':'));
+		} while ((cp = strchr(cp, ':')));
 	}
 }
 
@@ -188,29 +194,29 @@ main(int argc, char* argv[])
 	int onestrip = 0;
 	uint16 fillorder = 0;
 	int c;
-	extern int tiff_optind;
-	extern char *tiff_optarg;
+	extern int optind;
+	extern char *optarg;
 
-	while ((c = tiff_getopt(argc, argv, "c:f:r:t:")) != -1)
+	while ((c = getopt(argc, argv, "c:f:r:t:")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(tiff_optarg))
+			if (!processCompressOptions(optarg))
 				usage();
 			break;
 		case 'f':		/* fill order */
-			if (streq(tiff_optarg, "lsb2msb"))
+			if (streq(optarg, "lsb2msb"))
 				fillorder = FILLORDER_LSB2MSB;
-			else if (streq(tiff_optarg, "msb2lsb"))
+			else if (streq(optarg, "msb2lsb"))
 				fillorder = FILLORDER_MSB2LSB;
 			else
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(tiff_optarg);
+			rowsperstrip = atoi(optarg);
 			onestrip = 0;
 			break;
 		case 't':
-			threshold = atoi(tiff_optarg);
+			threshold = atoi(optarg);
 			if (threshold < 0)
 				threshold = 0;
 			else if (threshold > 255)
@@ -220,9 +226,9 @@ main(int argc, char* argv[])
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - tiff_optind < 2)
+	if (argc - optind < 2)
 		usage();
-	in = TIFFOpen(argv[tiff_optind], "r");
+	in = TIFFOpen(argv[optind], "r");
 	if (in == NULL)
 		return (-1);
 	TIFFGetField(in, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
@@ -236,7 +242,7 @@ main(int argc, char* argv[])
 		    " %s: Sorry, only handle 8-bit samples.\n", argv[0]);
 		return (-1);
 	}
-	out = TIFFOpen(argv[tiff_optind+1], "w");
+	out = TIFFOpen(argv[optind+1], "w");
 	if (out == NULL)
 		return (-1);
 	CopyField(TIFFTAG_IMAGEWIDTH, imagewidth);
@@ -246,13 +252,13 @@ main(int argc, char* argv[])
 	TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, 1);
 	TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(out, TIFFTAG_COMPRESSION, compression);
-	TIFFSetField(out, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
 	if (fillorder)
 		TIFFSetField(out, TIFFTAG_FILLORDER, fillorder);
 	else
 		CopyField(TIFFTAG_FILLORDER, shortv);
-	sprintf(thing, "Dithered B&W version of %s", argv[tiff_optind]);
+	sprintf(thing, "Dithered B&W version of %s", argv[optind]);
 	TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, thing);
+	CopyField(TIFFTAG_PHOTOMETRIC, shortv);
 	CopyField(TIFFTAG_ORIENTATION, shortv);
 	CopyField(TIFFTAG_XRESOLUTION, floatv);
 	CopyField(TIFFTAG_YRESOLUTION, floatv);
@@ -285,7 +291,6 @@ char* stuff[] = {
 " -f lsb2msb	force lsb-to-msb FillOrder for output",
 " -f msb2lsb	force msb-to-lsb FillOrder for output",
 " -c lzw[:opts]	compress output with Lempel-Ziv & Welch encoding",
-"               (no longer supported by default due to Unisys patent enforcement)", 
 " -c zip[:opts]	compress output with deflate encoding",
 " -c packbits	compress output with packbits encoding",
 " -c g3[:opts]	compress output with CCITT Group 3 encoding",
@@ -316,3 +321,12 @@ usage(void)
 		fprintf(stderr, "%s\n", stuff[i]);
 	exit(-1);
 }
+
+/* vim: set ts=8 sts=8 sw=8 noet: */
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

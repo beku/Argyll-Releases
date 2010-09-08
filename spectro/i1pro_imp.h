@@ -139,7 +139,9 @@ struct _i1proimp {
 	struct _i1data *data;		/* EEProm data container */
 	athread *th;				/* Switch monitoring thread (NULL if not used) */
 	volatile int switch_count;	/* Incremented in thread */
-	volatile int th_term;		/* Thread terminate on error rather than retry */
+	void *hcancel;				/* Handle to cancel the outstanding I/O */
+	volatile int th_term;		/* Terminate thread on next return */
+	volatile int th_termed;		/* Thread has terminated */
 	inst_opt_mode trig;			/* Reading trigger mode */
 	int trig_return;			/* Emit "\n" after trigger */
 	int noautocalib;			/* Disable automatic calibration if not essential */
@@ -190,6 +192,7 @@ struct _i1proimp {
 
 	/* Information about the instrument from the EEprom */
 	int serno;				/* serial number */
+	char sserno[14];		/* serial number as string */
 	int dom;				/* Date of manufacture DDMMYYYY ? */
 	int capabilities;		/* Capabilities flag */
 							/* Ambient capability if val & 0x6000 != 0 */
@@ -249,7 +252,8 @@ struct _i1proimp {
 	int acount;				/* Remission scan measure count (Or all scan ??) */
 	double lampage;			/* Total lamp usage time in seconds (??) */
 
-	/* Trigger houskeeping */
+	/* Trigger houskeeping & diagnostics */
+	int msec;				/* msec_time() at creation */
 	athread *trig_thread;	/* Delayed trigger thread */
 	int trig_delay;			/* Trigger delay in msec */
 	int tr_t1, tr_t2, tr_t3, tr_t4, tr_t5, tr_t6, tr_t7;	/* Trigger/read timing diagnostics */
@@ -361,6 +365,9 @@ void del_i1proimp(i1pro *p);
 
 /* Initialise our software state from the hardware */
 i1pro_code i1pro_imp_init(i1pro *p);
+
+/* Return a pointer to the serial number */
+char *i1pro_imp_get_serial_no(i1pro *p);
 
 /* Return non-zero if capable of ambient mode */
 int i1pro_imp_ambient(i1pro *p);

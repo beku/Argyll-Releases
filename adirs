@@ -3,6 +3,7 @@ numlib
 tiff
 libusb
 libusbw
+libusb1
 plot
 icc
 cgats

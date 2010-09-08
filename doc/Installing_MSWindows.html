@@ -73,7 +73,23 @@ The .zip file also contains several useful reference files
 scanner
 chart recognition templates, sample illumination spectrum etc.) in the
 ref sub-directory, all the current documentation in a doc
-sub-directory, and instrument USB drivers in the libusbw directory.<br>
+sub-directory, and instrument USB drivers in the libusb1 directory.<br>
+<br>
+<span style="font-weight: bold;">NOTE: </span><span
+ style="font-weight: bold;">Vista
+64/Windows 7 64 bit</span>
+and <span style="font-weight: bold;">Beep</span> prompt<span
+ style="font-weight: bold;">: </span>Microsoft (in its infinite
+wisdom) has removed the built in speaker driver, and now relies on
+systems having a sound card and speakers's installed and turned on to
+hear system beeps. So if you're wondering where the beeps have gone
+when using <a href="chartread.html">chartread</a>, now you know.<br>
+<br>
+<span style="font-weight: bold;">NOTE: The Colorim&egrave;tre
+HCFR</span> can't be installed Windows 7 64 (It's USB hardware behaves
+rather strangely).<br>
+<br>
+<hr style="width: 100%; height: 2px;">
 <h3><span style="color: rgb(51, 153, 153);">Serial Instruments:</span><br>
 </h3>
 If you are using a serial connected instrument, then there is nothing
@@ -83,52 +99,11 @@ If you are using a USB connected instrument, then suitable <span
  style="font-weight: bold;">USB drivers</span>
 may need to be installed.<br>
 <br>
-<div style="margin-left: 40px;"><span style="font-weight: bold;">NOTE</span>
-that you generally can't
-install USB drivers on <span style="font-weight: bold;">Vista
-64/Windows 7 64 bit</span>
-due to Microsoft's driver code signing
-requirements.<br>
-<br>
-You <span style="text-decoration: underline;">can</span> install the
-USB drivers on Vista 64 if you use some sort of
-driver code signing workaround, such as pressing <span
- style="font-weight: bold;">F8</span> when the system boots, and
-selecting the boot option to "Disable Driver Signature Enforcement".
-Note that you
-have to do this <span style="font-weight: bold;">every time you boot</span>
-and want to use the USB instruments. [You may still get a warning about
-an unsigned driver not being loaded after plugging the instrument in,
-booting or installing the
-driver, but take these messages with a grain of salt, and check in
-device manager and also whether the instruments are
-actually accessible using Argyll's tools.]<br>
-<br>
-A safer and more convenient workaround is to self sign the drivers and
-put your system in test mode. The procedure for doing this is a little
-complicated though, and beyond the scope of this documentation. You
-might want to refer to <a
- href="http://nil-techno.blogspot.com/2008/08/installing-unsigned-drivers-on-vista-64.html">this</a>.
-If you take this path then <span style="font-weight: bold;">make sure
-you sign the libusb0.sys and libusb0_x86.sys files in the
-argyll/libusbw directory <span style="text-decoration: underline;">BEFORE</span>
-you install the device or plug it in</span>,
-otherwise you will have to remove &amp; delete the driver, and also
-manually delete the libusb0&nbsp; and libusb0_x86 .sys and .dll files
-from Windows\system32, Windows\System32\drivers and Windows\SysWOW64
-and start again.<br>
-(Another possibility might be to use this <a
- class="moz-txt-link-rfc2396E"
- href="http://www.ngohq.com/home.php?page=dseo">&lt;http://www.ngohq.com/home.php?page=dseo&gt;</a>,
-but use at your own risk, I haven't tried it myself.)<br>
-[In the long run&nbsp; it may be possible to switch Argyll to using the
-winusb drivers, which should avoid the signing issue.] <br>
-</div>
-<br>
 <span style="color: rgb(51, 153, 153);"><span
- style="color: rgb(0, 0, 0); text-decoration: underline;"><a name="FNH"></a>Fresh
+ style="color: rgb(0, 0, 0); text-decoration: underline;"><a name="FNH"></a><span
+ style="font-weight: bold;">Fresh
 Install
-of USB drivers:</span><br>
+of USB drivers:</span></span><br>
 <br>
 </span>If you currently don't have any applications that talk to your
 instrument using USB, then it is relatively simple to use the drivers
@@ -151,7 +126,7 @@ other options." button.<br>
 &nbsp; In the next screen, select the "Browse my computer for driver
 software (advanced)" button.<br>
 &nbsp; On the next screen use the brows dialog to locate the directory <span
- style="font-weight: bold;">argyll\libusbw </span>below where you
+ style="font-weight: bold;">argyll\libusb1 </span>below where you
 installed Argyll. Click "next".<br>
 &nbsp; The screen should change to "Installing driver software...", and
 a "Windows Security" window should pop up.<br>
@@ -169,7 +144,7 @@ software ?"&nbsp; Select "No, not this time" and "Next"<br>
 then "Next"<br>
 &nbsp; Select "Search for the best driver in these locations", "Include
 this location in the search" and "Brows"<br>
-&nbsp; Brows to locate the directory <span style="font-weight: bold;">argyll\libusbw</span>
+&nbsp; Brows to locate the directory <span style="font-weight: bold;">argyll\libusb1</span>
 below where you installed Argyll. Click "next".<br>
 &nbsp; The screen should change to "Installing driver software...", <br>
 &nbsp; You should get the final screen "Completing the Found New
@@ -187,7 +162,7 @@ then "Next"<br>
 the manufacturer's installation disk<br>
 &nbsp;&nbsp;&nbsp; into the driver selected, and then clock OK'.&nbsp;
 Select "Browse...".<br>
-&nbsp; Brows to locate the directory <span style="font-weight: bold;">argyll\libusbw</span>
+&nbsp; Brows to locate the directory <span style="font-weight: bold;">argyll\libusb1</span>
 below where you installed Argyll, and select the <span
  style="font-weight: bold;">.inf</span> file that<br>
 &nbsp;&nbsp;&nbsp; corresponds&nbsp; to the device (ie.
@@ -207,12 +182,13 @@ Interface
 Device Class) device, and hence will be assigned to the default
 MSWindows HID driver, rather than popping a "New Hardware" dialog. You
 don't normally need to install an Argyll <span
- style="font-weight: bold;">libusbw</span> driver for the Huey.<br>
+ style="font-weight: bold;">libusb1</span> driver for the Huey.<br>
 <br>
 <span style="color: rgb(51, 153, 153);"><span
- style="color: rgb(0, 0, 0); text-decoration: underline;"><a name="IAD"></a>Adding
+ style="color: rgb(0, 0, 0); text-decoration: underline;"><a name="IAD"></a><span
+ style="font-weight: bold;">Adding
 Argyll
-drivers to existing drivers:</span></span><br>
+drivers to existing drivers:</span></span></span><br>
 <br>
 If you currently have applications other than Argyll accessing your USB
 connected instrument, then you won't automatically be prompted to
@@ -235,7 +211,7 @@ software" button.<br>
 drivers on my computer"<br>
 &nbsp; On the next screen choose "Have Disk..."<br>
 &nbsp; On the next screen "Install From Disk" use the brows dialog to
-locate the directory <span style="font-weight: bold;">argyll\libusbw </span>below
+locate the directory <span style="font-weight: bold;">argyll\libusb1 </span>below
 where you
 installed Argyll. Click "next".<br>
 &nbsp; The screen should change to "Installing driver software...", and
@@ -285,7 +261,7 @@ driver to install" button, then click "Next".<br>
 for this hardware", the existing driver for the device should be
 listed. Click "Have Disk".<br>
 &nbsp; On the next screen use the brows dialog to locate the directory <span
- style="font-weight: bold;">argyll\libusbw </span>below where you
+ style="font-weight: bold;">argyll\libusb1 </span>below where you
 installed Argyll, and select<br>
 &nbsp;&nbsp; the appropriate .inf file for the device. Click "Open".<br>
 &nbsp; Back on the "Install From Disk" dialog, click "OK".<br>
@@ -346,7 +322,7 @@ boxes. Click "Next"<br>
 "Insert the manufacturer's installation disk<br>
 &nbsp;&nbsp;&nbsp; into the driver selected, and then clock OK'.&nbsp;
 Select "Browse...".<br>
-&nbsp; Brows to locate the directory <span style="font-weight: bold;">argyll\libusbw</span>
+&nbsp; Brows to locate the directory <span style="font-weight: bold;">argyll\libusb1</span>
 below where you installed Argyll, and select the <span
  style="font-weight: bold;">.inf</span> file that<br>
 &nbsp;&nbsp;&nbsp; corresponds&nbsp; to the device (ie.
@@ -400,18 +376,19 @@ have a longer USB control transaction timeout, and this may cause
 failures for certain instruments when measuring dark colors.]<br>
 <br>
 <span style="color: rgb(51, 153, 153);"><span
- style="color: rgb(0, 0, 0); text-decoration: underline;"><a name="UD"></a>Updating
-Argyll drivers:</span></span><br>
+ style="color: rgb(0, 0, 0); text-decoration: underline;"><a name="UD"></a><span
+ style="font-weight: bold;">Updating
+Argyll drivers:</span></span></span><br>
 <br>
-<span style="font-weight: bold;">NOTE</span> that if you are updating
+If you are updating
 to a new version of Argyll, that it may be necessary to uninstall all
 the Argyll USB devices, and re-install them, to update the relevant
-libusb-win32 system driver and dll. (This is true for updating to
-Argyll Version 1.0.0). You may get an error when trying to run updated
-programs that access instrumments that "<span style="font-weight: bold;">The
-procedure entry point usb_argyll_patched could not be located in the
-dynamic link library libusb0.dll</span>", an indication that the USB
-drivers need updating. To do this you need to<br>
+libusb system driver and dll. (This is true for updating to
+Argyll Version 1.2.0). If the device does not appear as an "<span
+ style="font-weight: bold;">Argyll LibUsb-1.0 device</span>" in the
+device manager, then you will have to remove old drivers before
+installing the new ones, to avoid MSWindows simply re-installing the
+old drivers.<br>
 <br>
 <a name="V_UD"></a>In <span style="font-weight: bold;">Vista/Win 7</span><br>
 &nbsp; Plug an instrument that has been installed into the computer.<br>
@@ -420,8 +397,9 @@ select "Manage".<br>
 &nbsp; Click on "Device Manager"<br>
 &nbsp; Locate the device under "LibUSB-Win32 Device"<br>
 &nbsp; Right click on the device and choose "Uninstall"<br>
-&nbsp; In the "Confirm Device Removal" window select the "Delete the
-driver software for this device" checkbox and then choose "OK"<br>
+&nbsp; In the "Confirm Device Removal" window select the "<span
+ style="font-weight: bold;">Delete the
+driver software for this device</span>" checkbox and then choose "OK"<br>
 &nbsp; In the "Action" menu of the window choose "Scan for hardware
 changes"<br>
 &nbsp; A "Found New Hardware Wizard" window should pop up.<br>
@@ -431,6 +409,29 @@ installing the updated drivers..<br>
 <a name="X_UD"></a><a name="2_UD"></a>In <span
  style="font-weight: bold;">XP</span> and <span
  style="font-weight: bold;">2000</span>:<br>
+&nbsp; First you will have to delete the cached copy of the old Argyll
+driver .inf files, that MSWindows keeps.<br>
+<br>
+&nbsp; cd to where Windows keeps it's cached driver information files,
+ie:<br>
+&nbsp;&nbsp;&nbsp; c:<br>
+&nbsp;&nbsp;&nbsp; cd
+\winnt\inf&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp; (Windows 2000)<br>
+&nbsp;&nbsp;&nbsp; cd
+\windows\inf&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+(Windows XP)<br>
+<br>
+&nbsp; identify all the system copies of the Argyll .inf files:<br>
+<br>
+&nbsp;&nbsp;&nbsp; find /I "Argyll" oem*.inf<br>
+<br>
+&nbsp; then delete them:<br>
+<br>
+&nbsp;&nbsp;&nbsp; del oemXXX.inf<br>
+&nbsp;&nbsp;&nbsp; del oemXXY.inf<br>
+&nbsp;&nbsp;&nbsp; etc.<br>
+<br>
 &nbsp; Plug an instrument that has been installed into the computer.<br>
 &nbsp; Right click on the "My Computer" icon on the desktop or start
 menu and select Manage.<br>

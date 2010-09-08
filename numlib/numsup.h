@@ -1,9 +1,9 @@
 #ifndef NUMSUP_H
-#define NUMSUP_H
 
 /* Numerical routine general support declarations */
+
 /*
- * Copyright 2000 Graeme W. Gill
+ * Copyright 2000-2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -44,10 +44,15 @@ extern FILE *verbose_out;
 extern int verbose_level;
 
 extern void set_exe_path(char *arg0);
-//extern void error(char *fmt, ...), warning(char *fmt, ...);
 extern void (*error)(char *fmt, ...);
 extern void (*warning)(char *fmt, ...);
 extern void (*verbose)(int level, char *fmt, ...);
+
+extern int ret_null_on_malloc_fail;
+
+extern void check_if_not_interactive();
+extern int not_interactive;
+extern char cr_char;
 
 /* Numerical recipes vector/matrix support functions */
 
@@ -113,4 +118,5 @@ double IEEE754todouble(unsigned int ip);
 	}
 #endif
 
+#define NUMSUP_H
 #endif /* NUMSUP_H */

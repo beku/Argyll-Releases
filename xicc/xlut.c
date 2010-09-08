@@ -46,7 +46,7 @@
 
 		if (use chromatic adaptation tag)
 			Create chromatic adapation matrix and store it in tag
-			Adapt all the readings using Brtadford
+			Adapt all the readings using Bradford
 			Create white point and store it in tag
 			Adapt all the readings to the white point using wrong Von-Kries	
 			Store relative colorimetric cLUT 
@@ -2529,10 +2529,11 @@ typedef struct {
 	double toAbs[3][3];		/* To abs from aprox relative */
 	double p1[3];			/* white pivot point in abs Lab */
 	double p2[3];			/* Point on vector towards black */
+	double toll;			/* Tollerance of black direction */
 } bfinds;
 
 /* Optimise device values to minimise L, while remaining */
-/* within the ink limit, and staying in line between p1 (white) and p2 (K) */
+/* within the ink limit, and staying in line between p1 (white) and p2 (black dir) */
 static double bfindfunc(void *adata, double pv[]) {
 	bfinds *b = (bfinds *)adata;
 	double rv = 0.0;
@@ -2575,6 +2576,9 @@ printf("~1 device value %f %f %f %f, Lab = %f %f %f\n",pv[0],pv[1],pv[2],pv[3],L
 
 	terr = (ta - Lab[1]) * (ta - Lab[1])
 	     + (tb - Lab[2]) * (tb - Lab[2]);
+
+	if (terr < b->toll)		/* Tollerance error doesn't count until it's over tollerance */
+		terr = 0.0;
 	
 #ifdef DEBUG
 printf("~1 target error %f\n",terr);
@@ -3137,8 +3141,15 @@ int                quality			/* Quality metric, 0..3 */
 			if (flags & ICX_VERBOSE)
 				printf("Find black point\n");
 
-			/* For CMYK devices, we choose a black point that is in */
-			/* the same Lab vector direction as K, with the minimum L value. */
+			/* !!! Hmm. For CMY and RGB we are simply using the device */
+			/* combination values as the black point. In reality we might */
+			/* want to have the option of using a neutral black point, */
+			/* just like CMYK ?? */
+
+			/* For CMYK devices, we choose a black that has minumum L within */
+			/* the ink limits, and if XICC_NEUTRAL_CMYK_BLACK it will in the direction */
+			/* that has the same chrimaticity as the white point, else choose the same */
+			/* Lab vector direction as K, with the minimum L value. */
 			/* (Note this is duplicated in xicc.c icxLu_comp_bk_point() !!!) */
 			if (h->deviceClass != icSigInputClass
 			 && h->colorSpace == icSigCmykData) {
@@ -3152,6 +3163,7 @@ int                quality			/* Quality metric, 0..3 */
 
 				/* Setup callback function context */
 				bfs.p = p;
+				bfs.toll = XICC_BLACK_POINT_TOLL;
 
 				/* !!! we should use an accessor funcion of xfit !!! */
 				for (i = 0; i < 3; i++) {
@@ -3163,6 +3175,12 @@ int                quality			/* Quality metric, 0..3 */
 				/* Lookup abs Lab value of white point */
 				icmXYZ2Lab(&icmD50, bfs.p1, wp);
 
+#ifdef XICC_NEUTRAL_CMYK_BLACK
+				icmScale3(tt, wp, 0.02);		/* Scale white XYZ towards 0,0,0 */
+				icmXYZ2Lab(&icmD50, bfs.p2, tt); /* Convert black direction to Lab */
+				if (flags & ICX_VERBOSE)
+					printf("Neutral black direction (Lab) =                     %f %f %f\n",bfs.p2[0], bfs.p2[1], bfs.p2[2]);
+#else
 				/* Now figure abs Lab value of K only, as the direction */
 				/* to use for the rich black. */
 				for (e = 0; e < p->inputChan; e++)
@@ -3182,10 +3200,10 @@ int                quality			/* Quality metric, 0..3 */
 				/* Convert from relative to Absolute colorimetric */
 				icmMulBy3x3(tt, xf->toAbs, bcc.v);
 				icmXYZ2Lab(&icmD50, bfs.p2, tt); /* Convert K only black point to Lab */
- 
-				if (flags & ICX_VERBOSE)
-					printf("K only value (Lab) = %f %f %f\n",bfs.p2[0], bfs.p2[1], bfs.p2[2]);
 
+				if (flags & ICX_VERBOSE)
+					printf("K only black direction (Lab) =                      %f %f %f\n",bfs.p2[0], bfs.p2[1], bfs.p2[2]);
+#endif
 				/* Start with the K only as the current best value */
 				brv = bfindfunc((void *)&bfs, bcc.p);
 //printf("~1 initial brv for K only = %f\n",brv);

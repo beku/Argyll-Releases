@@ -6,19 +6,50 @@ PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 # Setup the right hardware access libraries
 if $(NT) {
+	if $(USE_LIBUSB1) = true {
+		LIBUSBDIR = ../libusb1 ;
+		LIBUSBHDRS = ../libusb1 ;
+		if $(MSVCNT) {
+			LIBUSBHDRS += ../libusb1/msvc ;	# So stdint.h can be found
+		}
+		if $(LIBUSB_IS_DLL) = true {
+			LIBUSB = $(LIBUSB1NAME)$(SUFIMPLIB) ;
+			LIBUSBSH = $(LIBUSB1NAME)$(SUFSHLIB) ;
+		} else {
+			LIBUSB = $(LIBUSB1NAME)$(SUFLIB) ;
+		}
+		DEFINES += USE_LIBUSB1 ;
+	} else {
+		LIBUSBDIR = ../libusbw ;
+		LIBUSBHDRS = ../libusbw ;
+		LIBUSB = libusb ;
+	}
 	IOFILE = ntio.c ;
-	LIBUSB = ../libusbw ;
 }
 if $(UNIX) {
+	if $(USE_LIBUSB1) = true {
+		LIBUSBDIR = ../libusb1 ;
+		LIBUSBHDRS = ../libusb1 ;
+		if $(LIBUSB_IS_DLL) = true {
+			LIBUSB = $(LIBUSB1NAME)$(SUFIMPLIB) ;
+			LIBUSBSH = $(LIBUSB1NAME)$(SUFSHLIB) ;
+		} else {
+			LIBUSB = $(LIBUSB1NAME)$(SUFLIB) ;
+		}
+		DEFINES += USE_LIBUSB1 ;
+	} else {
+		LIBUSBDIR = ../libusb ;
+		LIBUSBHDRS = ../libusb ;
+		LIBUSB = libusb ;
+	}
 	IOFILE = unixio.c ;
 	CONVFILE = pollem.c ;
-	LIBUSB = ../libusb ;
 }
 
 #Products
 Libraries = libinsttypes libinst libdisp libconv ;
 Executables = dispwin synthcal dispread dispcal fakeread synthread
-              chartread spotread spec2cie average spyd2en ;
+              chartread spotread illumread ccmxmake spec2cie average spyd2en ;
 Headers = inst.h ;
 Samples = ColorChecker.ti2 ECI2002R.ti2 FograStrip.ti2 i1_RGB_Scan_1.4.ti2
           SOtele.sp strange.cal ;
@@ -36,7 +67,7 @@ if $(UNIX) && $(OS) != MACOSX {
 }
 
 HDRS = ../h ../numlib ../icc ../cgats ../rspl ../xicc ../gamut ../spectro
-       ../plot $(LIBUSB) $(CMMHDRS) ;
+       ../plot $(LIBUSBHDRS) $(CMMHDRS) ;
 
 # Instrument access library library
 Library libinst : inst.c insttypes.c dtp20.c dtp22.c dtp41.c dtp51.c dtp92.c i1disp.c i1pro.c i1pro_imp.c munki.c munki_imp.c ss.c ss_imp.c hcfr.c spyd2.c huey.c $(IOFILE) usbio.c hidio.c ;
@@ -50,40 +81,55 @@ Object insttypes2 : insttypes.c ;
 LibraryFromObjects libinsttypes : insttypes2 ;
 
 # System utility functions (keyboard, msec_*, thread)
-Library libconv : conv.c $(CONVFILE) : : : $(LibWinH) ;
+Library libconv : conv.c xdg_bds.c $(CONVFILE) : : : $(LibWinH) ;
 
 # Support file
 #Object alphix : ../target/alphix.c ;
 
-LINKLIBS = libinst $(LIBUSB)/libusb
+LINKLIBS = libinst libconv 
            ../xicc/libxcolorants ../xicc/libxicc
            ../gamut/libgamut
            ../rspl/librspl ../cgats/libcgats
            ../icc/libicc ../plot/libplot ../plot/libvrml ../numlib/libnum
            $(CMMLIBS) ;
 
+if $(LIBUSB_IS_DLL) = true {
+	LINKSHLIBS = $(LIBUSBDIR)/$(LIBUSB) ;
+	File $(LIBUSBSH) : $(LIBUSBDIR)/$(LIBUSBSH) ;
+	# executable needs .so/.dll in same directory
+	NDepends $(Executables) : $(LIBUSBSH) ;
+} else {
+	LINKLIBS += $(LIBUSBDIR)/$(LIBUSB) ;
+}
+
 # General target reader program
-Main chartread : chartread.c ../target/alphix.c : : : ../target : : libdisp libconv ;
+Main chartread : chartread.c ../target/alphix.c : : : ../target : : ;
+
+# Illuminant measurement
+Main illumread : illumread.c : : : ../target : : ;
 
 # Printed target spot reader utility
-Main spotread : spotread.c : : : : : libdisp libconv ;
+Main spotread : spotread.c : : : : : ;
+
+# Colorimeter Correction Matrix tool
+Main ccmxmake : ccmxmake.c : : : : : libdisp ;
 
 # Gretag Spectroscan/T filmstrip reader
-#Main filmread : filmread.c : : : : : libdisp ;
+#Main filmread : filmread.c : : : : : ;
 
 # Create synthetic .cal
 Main synthcal : synthcal.c ;
 
 # Display calibration program
-Main dispcal : dispcal.c : : : ../target : : libdisp libconv ;
+Main dispcal : dispcal.c : : : ../target : : libdisp ;
 
 # Display tester program
-Main dispread : dispread.c : : : : : libdisp libconv ;
+Main dispread : dispread.c : : : : : libdisp ;
 
 #display test window test/Lut loader utility
 # [ Could avoid need for libisnt libusb etc.
 #   by separating system dependent utils to a separate library .] 
-MainVariant dispwin : dispwin.c : : STANDALONE_TEST : : : $(LibWin) libconv ;
+MainVariant dispwin : dispwin.c : : STANDALONE_TEST : : : $(LibWin) ;
 
 LINKLIBS = libinsttypes ../xicc/libxicc ../gamut/libgamut ../rspl/librspl
            ../cgats/libcgats ../icc/libicc ../numlib/libnum ../plot/libplot
@@ -102,7 +148,7 @@ Main spec2cie : spec2cie.c ;
 Main average : average.c ;
 
 # Utility to enable the Spyder 2 instrument */
-Main spyd2en : spyd2en.c vinflate.c ;
+Main spyd2en : spyd2en.c vinflate.c : : : : : libconv ;
 
 # Generate strange.cal example/diagnostic
 GenFileND strange.cal : synthcal -s 0.7,1.0,0.9 -p 1.7,0.8,0.7 [ NormPaths strange ] ;
@@ -113,6 +159,9 @@ NDepends exe : strange.cal ;	# Normally create it
 
 # Test utility for XYZ matrix spectral correction
 #Main xyzfix : xyzfix.c ;
+
+# Individual stand alone test of xdg_bds library
+MainVariant xdg_bds : xdg_bds.c : : STANDALONE_TEST : ;
 
 # fp conversion code test
 #Main fp : fp.c ;

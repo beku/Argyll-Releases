@@ -25,7 +25,7 @@
 #include <string.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "icc.h"
 #include "xicc.h"

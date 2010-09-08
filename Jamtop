@@ -5,8 +5,20 @@
 Echo "Argyll Jamrules has been read" ;
 
 # Tell standalone libraries that they are part of Argyll:
-
 DEFINES += ARGYLLCMS ;
+
+# Use libusb1 rather than libusb0 & libusb0-win32
+USE_LIBUSB1 = true ;
+# Make the USB V1 library static
+LIBUSB_IS_DLL = false ;
+
+# Always use DLL for MSWin, because driver install expects it (.inf)
+if $(NT) {
+	LIBUSB_IS_DLL = true ;
+}
+
+# Set the libubs1 library name.
+LIBUSB1NAME = libusb-1.0A ;
 
 # Information for compiling and linking GUI programs
 
@@ -29,7 +41,7 @@ if $(UNIX) {
 		} else {
 			EXIT Unable to locate the X11 include files ;
 		}
-		LINKFLAGS += -L$(LibWinD) -ldl -lX11 -lXext -lXxf86vm -lXinerama -lXrandr -lXau -lXdmcp -lXss ;
+		LINKFLAGS += -L$(LibWinD) -ldl -lrt -lX11 -lXext -lXxf86vm -lXinerama -lXrandr -lXau -lXdmcp -lXss ;
 		# HDRS += $(LibWinH) ; 
 	}
 }
@@ -52,7 +64,8 @@ if ! $(BUILTIN_TIFF) && $(UNIX) {
 if ! $(HAVE_TIFF) || $(BUILTIN_TIFF) {
 	echo "Using built in TIFF library" ;
 	TIFFLIB = ../tiff/libtiff.lib ;
-	TIFFINC = ../tiff ../tiff/libtiff ;
+#	TIFFINC = ../tiff ../tiff/libtiff ;
+	TIFFINC = ../tiff ;
 }
 
 # testing

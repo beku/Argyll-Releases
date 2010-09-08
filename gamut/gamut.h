@@ -72,7 +72,7 @@ struct _gvert {
 	double sp[3];		/* Point mapped to surface of unit sphere, relative to center */
 	double ch[3];		/* Point mapped for convex hull testing, relative to center */
 
-	int as;				/* Assert checking flag */
+	int as;				/* Assert checking flag, compdstgamut flag */
 }; typedef struct _gvert gvert;
 
 /* ------------------------------------ */
@@ -139,7 +139,7 @@ struct _gtri {
 
 	double pe[4];		/* Vertex plane equation (absolute) */
 						/* (The first three elements is the unit normal vector to the plane, */
-						/*  which points inward ?) */
+						/*  which points inwards) */
 	double che[4];		/* convex hull testing triangle plane equation (relative) */
 	double spe[4];		/* sphere mapped triangle plane equation (relative) */
 	double ee[3][4];	/* sphere sp[] Edge triangle plane equations for opposite edge (relative) */
@@ -183,6 +183,15 @@ struct _gnn {
 }; typedef struct _gnn gnn; 
 
 /* ------------------------------------ */
+
+/* A vector intersction point */
+struct _gispnt {
+	double ip[3];			/* Intersecion Point */
+	double pv;				/* Parameter value at intersection */
+	int dir;				/* Direction: 1 = into gamut, 0 = out or gamut */
+	int edge;				/* Edge:      2 = no isect, 1 = on edge, 0 = not on edge */
+	gtri *tri;				/* Pointer to intersection triangle */
+}; typedef struct _gispnt gispnt; 
 
 /* Gamut object */
 struct _gamut {
@@ -302,10 +311,17 @@ struct _gamut {
 								/* Initialise this gamut with the intersection of the */
 								/* the two given gamuts. */
 
+#ifdef NEVER	/* Deprecated */
 	int (*expandbydiff)(struct _gamut *s, struct _gamut *s1, struct _gamut *s2, struct _gamut *s3, int docomp);
 								/* Initialise this gamut with a gamut which is s1 expanded */
 								/* (but never reduced) by the distance from s2 to s3. */
 								/* If docomp != 0, make gamut trace s3 if it's smaller than s1 */ 
+#endif
+
+	int (*compdstgamut)(struct _gamut *s, struct _gamut *img, struct _gamut *src,
+	                    struct _gamut *dst, int docomp, int doexpp, struct _gamut *nedst,
+	                    void (*cvect)(void *cntx, double *p2, double *p1), void *cntx);
+								/* Initialise this gamut with a destination mapping gamut. */
 
 	double (*radial)(struct _gamut *s, double out[3], double in[3]);
 								/* return point on surface in same radial direction. */
@@ -320,6 +336,9 @@ struct _gamut {
 	void (*nearest)(struct _gamut *s, double out[3], double in[3]);
 	                          /* return point on surface closest to input */
 
+	void (*nearest_tri)(struct _gamut *s, double out[3], double in[3], gtri **ctri);
+	                          /* return point on surface closest to input & triangle */
+
 	int (*vector_isect)(struct _gamut *s, double *p1, double *p2, double *min, double *max,
 	                                                               double *mint, double *maxt,
 	                                                               gtri **mntri, gtri **mxtri);
@@ -331,6 +350,14 @@ struct _gamut {
 							/* intersection triangles.  min, max, mint, maxt, */
 							/* mintri & maxtri  may be NULL */
 							/* Return 0 if there is no intersection with the gamut. */
+
+	int (*vector_isectns)(struct _gamut *s, double *p1, double *p2, gispnt *lp, int ll); 
+							/* Compute all the intersection pairs of the vector p1->p2 with */
+							/* the gamut surface.  lp points to an array of ll gispnt to be */
+							/* filled in. If the list is too small, intersections will be */
+							/* arbitrarily ignored. */
+							/* Return the number of intersections set in list. Will be even. */
+							/* These will all be in then out pairs in direction p1->p2. */
 
 	void (*setwb)(struct _gamut *s, double *wp, double *bp, double *kp);
 							/* Define the colorspaces white, black and K only black points. */

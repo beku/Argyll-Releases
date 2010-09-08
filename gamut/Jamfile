@@ -68,6 +68,8 @@ Main surftest : surftest.c ;
 # Filtering test cpde
 #Main filt : filt.c ;
 
+#Main tt : tt.c ;
+
 if $(BUILD_JUNK) {
 
 	# Gamut creation test routine

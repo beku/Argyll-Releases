@@ -280,7 +280,8 @@ static void rev_reduce_cache(size_t size) {
 		}
 //printf("~1 rev instance ram = %d MB\n",rsi->sz/1000000);
 	}
-//fprintf(stdout, "\r~~1 There %s %d rev cache instance%s with %d Mbytes limit\n",
+//fprintf(stdout, "%c~~1 There %s %d rev cache instance%s with %d Mbytes limit\n",
+//              cr_char,
 //				g_no_rev_cache_instances > 1 ? "are" : "is",
 //                   g_no_rev_cache_instances,
 //				g_no_rev_cache_instances > 1 ? "s" : "",
@@ -291,7 +292,7 @@ static void rev_reduce_cache(size_t size) {
 /* can be allocated, and if not, reduce the rev-cache limit. */
 /* This is so as to detect running out of VM before */
 /* we actually run out and (on OS X) avoid emitting a warning. */
-static rev_test_vram(size_t size) {
+static void rev_test_vram(size_t size) {
 	char *a1;
 #ifdef __APPLE__
 	int old_stderr, new_stderr;
@@ -336,7 +337,7 @@ static void *rev_malloc(rspl *s, size_t size) {
 static void *rev_calloc(rspl *s, size_t num, size_t size) {
 	void *rv;
 
-	if ((size + 1 * 1024 * 1204) > g_test_ram)
+	if (((num * size) + 1 * 1024 * 1204) > g_test_ram)
 		rev_test_vram(size);
 	if ((rv = calloc(num, size)) == NULL) {
 		rev_reduce_cache(num * size);
@@ -1410,7 +1411,7 @@ unsigned int tcount		/* grid touch count for this operation */
 			if ((c = get_rcell(b, ix, nilist == 0 ? 1 : 0)) == NULL) {
 				static int warned = 0;
 				if (!warned) {
-					warning("\rWarning - Reverse Cell Cache exausted, processing in chunks");
+					warning("%cWarning - Reverse Cell Cache exausted, processing in chunks",cr_char);
 					warned = 1;
 				}
 				DBG(("revcache is exausted, do search in chunks\n"));
@@ -4954,7 +4955,8 @@ rspl *s		/* Pointer to rspl grid */
 			for (rsi = g_rev_instances; rsi != NULL; rsi = rsi->next)
 				rsi->max_sz = ram_portion;
 			if (s->verbose)
-				fprintf(stdout, "\rThere %s %d rev cache instance%s with %d Mbytes limit\n",
+				fprintf(stdout, "%cThere %s %d rev cache instance%s with %d Mbytes limit\n",
+				                cr_char,
 								g_no_rev_cache_instances > 1 ? "are" : "is",
 			                    g_no_rev_cache_instances,
 								g_no_rev_cache_instances > 1 ? "s" : "",
@@ -6147,7 +6149,8 @@ if (prop != NULL) {
 		}
 		
 		if (s->verbose)
-			fprintf(stdout, "\rThere %s %d rev cache instance%s with %d Mbytes limit\n",
+			fprintf(stdout, "%cThere %s %d rev cache instance%s with %d Mbytes limit\n",
+			                    cr_char,
 								g_no_rev_cache_instances > 1 ? "are" : "is",
 			                    g_no_rev_cache_instances,
 								g_no_rev_cache_instances > 1 ? "s" : "",
@@ -6214,7 +6217,8 @@ rspl *s		/* Pointer to rspl grid */
 			for (rsi = g_rev_instances; rsi != NULL; rsi = rsi->next)
 				rsi->max_sz = ram_portion;
 			if (s->verbose)
-				fprintf(stdout, "\rThere %s %d rev cache instance%s with %d Mbytes limit\n",
+				fprintf(stdout, "%cThere %s %d rev cache instance%s with %d Mbytes limit\n",
+				                cr_char,
 								g_no_rev_cache_instances > 1 ? "are" : "is",
 			                    g_no_rev_cache_instances,
 								g_no_rev_cache_instances > 1 ? "s" : "",
@@ -6371,7 +6375,7 @@ rspl *s
 					mstat.ullTotalPhys = 0xffffffffL;
 				avail_ram = mstat.ullTotalPhys;
 			} else {
-				warning("\rWarning - Unable to get system memory size");
+				warning("%cWarning - Unable to get system memory size",cr_char);
 			}
 		}
 	#else
@@ -6384,7 +6388,7 @@ rspl *s
 					memsize = 0xffffffff;
 				avail_ram = memsize;
 			} else {
-				warning("\rWarning - Unable to get system memory size");
+				warning("%cWarning - Unable to get system memory size",cr_char);
 			}
 			
 		}
@@ -6402,8 +6406,8 @@ rspl *s
 	
 		/* Make it sane */
 		if (avail_ram < (256 * 1024 * 1024)) {
-			warning("\rWarning - System RAM size seems very small (%d MBytes),"
-			        " assuming 256Mb instead",avail_ram/1000000);
+			warning("%cWarning - System RAM size seems very small (%d MBytes),"
+			        " assuming 256Mb instead",cr_char,avail_ram/1000000);
 			avail_ram = 256 * 1024 * 1024;
 		}
 		// avail_ram = -1;		/* Fake 4GB of RAM. This will swap! */
@@ -6475,7 +6479,7 @@ rspl *s
 			if (g_avail_ram > safe_max_vmem) {
 				g_avail_ram = safe_max_vmem;
 				if (s->verbose && repsr == 0)
-					fprintf(stdout,"\rTrimmed maximum cache RAM to %d Mbytes to allow for VM limit\n",g_avail_ram/1000000);
+					fprintf(stdout,"%cTrimmed maximum cache RAM to %d Mbytes to allow for VM limit\n",cr_char,g_avail_ram/1000000);
 			}
 		}
 	
@@ -6494,7 +6498,7 @@ rspl *s
 		}
 		if (max_vmem != 0 && g_avail_ram > max_vmem && repsr == 0) {
 			g_avail_ram = (size_t)(0.95 * max_vmem);
-			fprintf(stdout,"\rARGYLL_REV_CACHE_MULT * RAM trimmed to %d Mbytes to allow for VM limit\n",g_avail_ram/1000000);
+			fprintf(stdout,"%cARGYLL_REV_CACHE_MULT * RAM trimmed to %d Mbytes to allow for VM limit\n",cr_char,g_avail_ram/1000000);
 		}
 	}
 
@@ -6503,7 +6507,7 @@ rspl *s
 
 	DBG(("reverse cache max memory = %d Mbytes\n",s->rev.max_sz/1000000));
 	if (s->verbose && repsr == 0) {
-		fprintf(stdout, "\rRev cache RAM = %d Mbytes\n",g_avail_ram/1000000);
+		fprintf(stdout, "%cRev cache RAM = %d Mbytes\n",cr_char,g_avail_ram/1000000);
 		repsr = 1;
 	}
 

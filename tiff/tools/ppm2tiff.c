@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/tools/ppm2tiff.c,v 1.6 2003/05/05 10:40:04 dron Exp $ */
+/* $Id: ppm2tiff.c,v 1.13.2.2 2010-06-08 18:50:44 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1991-1997 Sam Leffler
@@ -24,17 +24,29 @@
  * OF THIS SOFTWARE.
  */
 
+#include "tif_config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
+
+#ifdef HAVE_FCNTL_H
+# include <fcntl.h>
+#endif
+
+#ifdef HAVE_IO_H
+# include <io.h>
+#endif
+
 #include "tiffio.h"
 
-#if defined(_WINDOWS) || defined(MSDOS)
-#define BINMODE "b"
-#else
-#define	BINMODE
+#ifndef HAVE_GETOPT
+extern int getopt(int, char**, char*);
 #endif
 
 #define	streq(a,b)	(strcmp(a,b) == 0)
@@ -44,6 +56,7 @@ static	uint16 compression = COMPRESSION_PACKBITS;
 static	uint16 predictor = 0;
 static	int quality = 75;	/* JPEG quality */
 static	int jpegcolormode = JPEGCOLORMODE_RGB;
+static  uint32 g3opts;
 
 static	void usage(void);
 static	int processCompressOptions(char*);
@@ -58,44 +71,43 @@ BadPPM(char* file)
 int
 main(int argc, char* argv[])
 {
-	uint16 photometric;
+	uint16 photometric = 0;
 	uint32 rowsperstrip = (uint32) -1;
 	double resolution = -1;
 	unsigned char *buf = NULL;
-	uint32 row;
-	tsize_t linebytes;
-	uint16 spp;
+	tsize_t linebytes = 0;
+	uint16 spp = 1;
+	uint16 bpp = 8;
 	TIFF *out;
 	FILE *in;
-	uint32 w, h;
-	int prec;
+	unsigned int w, h, prec, row;
 	char *infile;
 	int c;
-	extern int tiff_optind;
-	extern char* tiff_optarg;
+	extern int optind;
+	extern char* optarg;
 
-	if ( argc < 2 ) {
+	if (argc < 2) {
 	    fprintf(stderr, "%s: Too few arguments\n", argv[0]);
 	    usage();
 	}
-	while ((c = tiff_getopt(argc, argv, "c:r:R:")) != -1)
+	while ((c = getopt(argc, argv, "c:r:R:")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(tiff_optarg))
+			if (!processCompressOptions(optarg))
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(tiff_optarg);
+			rowsperstrip = atoi(optarg);
 			break;
 		case 'R':		/* resolution */
-			resolution = atof(tiff_optarg);
+			resolution = atof(optarg);
 			break;
 		case '?':
 			usage();
 			/*NOTREACHED*/
 		}
 
-	if ( tiff_optind + 2 < argc ) {
+	if (optind + 2 < argc) {
 	    fprintf(stderr, "%s: Too many arguments\n", argv[0]);
 	    usage();
 	}
@@ -104,9 +116,9 @@ main(int argc, char* argv[])
 	 * If only one file is specified, read input from
 	 * stdin; otherwise usage is: ppm2tiff input output.
 	 */
-	if (argc - tiff_optind > 1) {
-		infile = argv[tiff_optind++];
-		in = fopen(infile, "r" BINMODE);
+	if (argc - optind > 1) {
+		infile = argv[optind++];
+		in = fopen(infile, "rb");
 		if (in == NULL) {
 			fprintf(stderr, "%s: Can not open.\n", infile);
 			return (-1);
@@ -114,24 +126,34 @@ main(int argc, char* argv[])
 	} else {
 		infile = "<stdin>";
 		in = stdin;
+#if defined(HAVE_SETMODE) && defined(O_BINARY)
+		setmode(fileno(stdin), O_BINARY);
+#endif
 	}
 
 	if (fgetc(in) != 'P')
 		BadPPM(infile);
 	switch (fgetc(in)) {
-	case '5':			/* it's a PGM file */
-		spp = 1;
-		photometric = PHOTOMETRIC_MINISBLACK;
-		break;
-	case '6':			/* it's a PPM file */
-		spp = 3;
-		photometric = PHOTOMETRIC_RGB;
-		if (compression == COMPRESSION_JPEG &&
-		    jpegcolormode == JPEGCOLORMODE_RGB)
-			photometric = PHOTOMETRIC_YCBCR;
-		break;
-	default:
-		BadPPM(infile);
+		case '4':			/* it's a PBM file */
+			bpp = 1;
+			spp = 1;
+			photometric = PHOTOMETRIC_MINISWHITE;
+			break;
+		case '5':			/* it's a PGM file */
+			bpp = 8;
+			spp = 1;
+			photometric = PHOTOMETRIC_MINISBLACK;
+			break;
+		case '6':			/* it's a PPM file */
+			bpp = 8;
+			spp = 3;
+			photometric = PHOTOMETRIC_RGB;
+			if (compression == COMPRESSION_JPEG &&
+			    jpegcolormode == JPEGCOLORMODE_RGB)
+				photometric = PHOTOMETRIC_YCBCR;
+			break;
+		default:
+			BadPPM(infile);
 	}
 
 	/* Parse header */
@@ -143,30 +165,39 @@ main(int argc, char* argv[])
 		if (strchr(" \t\r\n", c))
 			continue;
 
-		/* Check fo comment line */
+		/* Check for comment line */
 		if (c == '#') {
 			do {
 			    c = fgetc(in);
-			} while(!strchr("\r\n", c) || feof(in));
+			} while(!(strchr("\r\n", c) || feof(in)));
 			continue;
 		}
 
 		ungetc(c, in);
 		break;
 	}
-	if (fscanf(in, " %ld %ld %d", &w, &h, &prec) != 3)
-		BadPPM(infile);
-	if (fgetc(in) != '\n' || w <= 0 || h <= 0 || prec != 255)
-		BadPPM(infile);
-
-	out = TIFFOpen(argv[tiff_optind], "w");
+	switch (bpp) {
+	case 1:
+		if (fscanf(in, " %u %u", &w, &h) != 2)
+			BadPPM(infile);
+		if (fgetc(in) != '\n')
+			BadPPM(infile);
+		break;
+	case 8:
+		if (fscanf(in, " %u %u %u", &w, &h, &prec) != 3)
+			BadPPM(infile);
+		if (fgetc(in) != '\n' || prec != 255)
+			BadPPM(infile);
+		break;
+	}
+	out = TIFFOpen(argv[optind], "w");
 	if (out == NULL)
 		return (-4);
-	TIFFSetField(out, TIFFTAG_IMAGEWIDTH,  w);
-	TIFFSetField(out, TIFFTAG_IMAGELENGTH, h);
+	TIFFSetField(out, TIFFTAG_IMAGEWIDTH, (uint32) w);
+	TIFFSetField(out, TIFFTAG_IMAGELENGTH, (uint32) h);
 	TIFFSetField(out, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
 	TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, spp);
-	TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, 8);
+	TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, bpp);
 	TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(out, TIFFTAG_PHOTOMETRIC, photometric);
 	TIFFSetField(out, TIFFTAG_COMPRESSION, compression);
@@ -180,14 +211,30 @@ main(int argc, char* argv[])
 		if (predictor != 0)
 			TIFFSetField(out, TIFFTAG_PREDICTOR, predictor);
 		break;
+        case COMPRESSION_CCITTFAX3:
+		TIFFSetField(out, TIFFTAG_GROUP3OPTIONS, g3opts);
+		break;
 	}
-	linebytes = spp * w;
+	switch (bpp) {
+		case 1:
+			linebytes = (spp * w + (8 - 1)) / 8;
+			if (rowsperstrip == (uint32) -1) {
+				TIFFSetField(out, TIFFTAG_ROWSPERSTRIP, h);
+			} else {
+				TIFFSetField(out, TIFFTAG_ROWSPERSTRIP,
+				    TIFFDefaultStripSize(out, rowsperstrip));
+			}
+			break;
+		case 8:
+			linebytes = spp * w;
+			TIFFSetField(out, TIFFTAG_ROWSPERSTRIP,
+			    TIFFDefaultStripSize(out, rowsperstrip));
+			break;
+	}
 	if (TIFFScanlineSize(out) > linebytes)
 		buf = (unsigned char *)_TIFFmalloc(linebytes);
 	else
 		buf = (unsigned char *)_TIFFmalloc(TIFFScanlineSize(out));
-	TIFFSetField(out, TIFFTAG_ROWSPERSTRIP,
-	    TIFFDefaultStripSize(out, rowsperstrip));
 	if (resolution > 0) {
 		TIFFSetField(out, TIFFTAG_XRESOLUTION, resolution);
 		TIFFSetField(out, TIFFTAG_YRESOLUTION, resolution);
@@ -208,6 +255,25 @@ main(int argc, char* argv[])
 	return (0);
 }
 
+static void
+processG3Options(char* cp)
+{
+	g3opts = 0;
+        if( (cp = strchr(cp, ':')) ) {
+                do {
+                        cp++;
+                        if (strneq(cp, "1d", 2))
+                                g3opts &= ~GROUP3OPT_2DENCODING;
+                        else if (strneq(cp, "2d", 2))
+                                g3opts |= GROUP3OPT_2DENCODING;
+                        else if (strneq(cp, "fill", 4))
+                                g3opts |= GROUP3OPT_FILLBITS;
+                        else
+                                usage();
+                } while( (cp = strchr(cp, ':')) );
+        }
+}
+
 static int
 processCompressOptions(char* opt)
 {
@@ -217,11 +283,24 @@ processCompressOptions(char* opt)
 		compression = COMPRESSION_PACKBITS;
 	else if (strneq(opt, "jpeg", 4)) {
 		char* cp = strchr(opt, ':');
-		if (cp && isdigit(cp[1]))
+
+                compression = COMPRESSION_JPEG;
+                while (cp)
+                {
+                    if (isdigit((int)cp[1]))
 			quality = atoi(cp+1);
-		if (cp && strchr(cp, 'r'))
+                    else if (cp[1] == 'r' )
 			jpegcolormode = JPEGCOLORMODE_RAW;
-		compression = COMPRESSION_JPEG;
+                    else
+                        usage();
+
+                    cp = strchr(cp+1,':');
+                }
+	} else if (strneq(opt, "g3", 2)) {
+		processG3Options(opt);
+		compression = COMPRESSION_CCITTFAX3;
+	} else if (streq(opt, "g4")) {
+		compression = COMPRESSION_CCITTFAX4;
 	} else if (strneq(opt, "lzw", 3)) {
 		char* cp = strchr(opt, ':');
 		if (cp)
@@ -247,6 +326,8 @@ char* stuff[] = {
 " -c lzw[:opts]	compress output with Lempel-Ziv & Welch encoding",
 " -c zip[:opts]	compress output with deflate encoding",
 " -c packbits	compress output with packbits encoding (the default)",
+" -c g3[:opts]  compress output with CCITT Group 3 encoding",
+" -c g4         compress output with CCITT Group 4 encoding",
 " -c none	use no compression algorithm on output",
 "",
 "JPEG options:",
@@ -270,3 +351,12 @@ usage(void)
 		fprintf(stderr, "%s\n", stuff[i]);
 	exit(-1);
 }
+
+/* vim: set ts=8 sts=8 sw=8 noet: */
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

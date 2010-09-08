@@ -74,7 +74,7 @@
 #include <string.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "rspl.h"
 #include "xicc.h"
@@ -233,7 +233,7 @@ void PCSp_PCSp(void *cntx, double *out, double *in) {
 		p->count++;
 		pc = p->count * 100.0/p->total + 0.5;
 		if (pc != p->last) {
-			printf("\r%2d%%",pc), fflush(stdout);
+			printf("%c%2d%%",cr_char,pc), fflush(stdout);
 			p->last = pc;
 		}
 	}
@@ -296,6 +296,7 @@ main(int argc, char *argv[]) {
 	int i, j, e, n, rv = 0;
 
 	error_program = argv[0];
+	check_if_not_interactive();
 
 	if (argc < 6)
 		usage("Too few arguments");

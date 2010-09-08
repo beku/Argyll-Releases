@@ -40,7 +40,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -91,16 +91,6 @@ i1pro_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 
 	if (p->debug) fprintf(stderr,"i1pro: About to init USB\n");
 
-/* Linix + i1pro bug workaround */
-/* Note that the i1pro rev D seems to crash on any get_configuration, */
-/* and is slow to release_interface under Linux (several seconds). */
-/* It also dissapears if closed under Linux, so a reset is used instead. */
-/* Not releasing the interface for the rev. D seems to cause Linix to crash ! */
-/* This may be specific to some version of Linix USB stack only ? */
-#if defined(UNIX) && !defined(__APPLE__)
-	usbflags |= icomuf_reset_not_close;
-#endif
-
 	/* Set config, interface, write end point, read end point, read quanta */
 	/* ("serial" end points aren't used - the i1display uses USB control messages) */
 	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags, 0); 
@@ -130,7 +120,6 @@ i1pro_init_inst(inst *pp) {
 	/* Set the base Monitor/Pro capabilities mask */
 	p->cap =  inst_emis_spot
 	       |  inst_emis_disp
-	       |  inst_emis_illum
 	       |  inst_trans_spot		/* Support this manually using a light table */
 	       |  inst_trans_strip 
 	       |  inst_emis_strip		/* Also likely to be light table reading */
@@ -168,6 +157,11 @@ i1pro_init_inst(inst *pp) {
 	}
 
 	return i1pro_interp_code(p, ev);
+}
+
+static char *i1pro_get_serial_no(inst *pp) {
+	i1pro *p = (i1pro *)pp;
+	return i1pro_imp_get_serial_no(p);
 }
 
 /* Read a set of strips */
@@ -526,11 +520,12 @@ inst_code i1pro_set_mode(inst *pp, inst_mode m) {
 			return inst_unsupported;
 		}
 	} else if ((mm & inst_mode_illum_mask) == inst_mode_emission) {
-		if ((mm & inst_mode_sub_mask) == inst_mode_disp) {
-			mmode = i1p_disp_spot;
-		} else if ((mm & inst_mode_sub_mask) == inst_mode_spot
-		        || (mm & inst_mode_sub_mask) == inst_mode_illum) {
-			mmode = i1p_emiss_spot;
+		if ((mm & inst_mode_sub_mask) == inst_mode_spot) {
+			if ((mm & inst_mode_mod_mask) == inst_mode_disp) {
+				mmode = i1p_disp_spot;
+			} else {
+				mmode = i1p_emiss_spot;
+			}
 		} else if ((mm & inst_mode_sub_mask) == inst_mode_strip) {
 			mmode = i1p_emiss_scan;
 		} else if ((mm & inst_mode_sub_mask) == inst_mode_ambient
@@ -546,6 +541,36 @@ inst_code i1pro_set_mode(inst *pp, inst_mode m) {
 		return inst_unsupported;
 	}
 	return i1pro_interp_code(p, i1pro_imp_set_mode(p, mmode, m & inst_mode_spectral));
+}
+
+/* Get a (possibly) dynamic status */
+static inst_code i1pro_get_status(
+inst *pp,
+inst_status_type m,	/* Requested status type */
+...) {				/* Status parameters */                             
+	i1pro *p = (i1pro *)pp;
+	i1proimp *imp = (i1proimp *)p->m;
+	inst_code rv = inst_ok;
+
+	/* Return the filter */
+	if (m == inst_stat_get_filter) {
+		i1pro_code ev;
+		inst_opt_filter *filt;
+		va_list args;
+
+		va_start(args, m);
+		filt = va_arg(args, inst_opt_filter *);
+		va_end(args);
+
+		*filt = inst_opt_filter_none;
+
+		if (imp->physfilt == 0x82)
+			*filt = inst_opt_filter_UVCut;
+
+		return inst_ok;
+	}
+
+	return inst_unsupported;
 }
 
 /* 
@@ -641,9 +666,11 @@ extern i1pro *new_i1pro(icoms *icom, int debug, int verb)
 	/* Inst methods */
 	p->init_coms         = i1pro_init_coms;
 	p->init_inst         = i1pro_init_inst;
+	p->get_serial_no     = i1pro_get_serial_no;
 	p->capabilities      = i1pro_capabilities;
 	p->capabilities2     = i1pro_capabilities2;
 	p->set_mode          = i1pro_set_mode;
+	p->get_status        = i1pro_get_status;
 	p->set_opt_mode      = i1pro_set_opt_mode;
 	p->read_strip        = i1pro_read_strip;
 	p->read_sample       = i1pro_read_sample;

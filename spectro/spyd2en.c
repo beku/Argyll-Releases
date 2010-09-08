@@ -40,8 +40,9 @@
 #include <sys/mount.h>
 #endif /* UNIX */
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
+#include "xdg_bds.h"
 
 /* --------------------------------------------------------- */
 /* code for handling the driver or install file */
@@ -556,6 +557,7 @@ void usage(void) {
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
 	fprintf(stderr,"usage: Transfer [-v] infile\n");
 	fprintf(stderr," -v              Verbose\n");
+	fprintf(stderr," -S d            Specify the install scope u = user (def.), l = local system]\n");
 	fprintf(stderr," infile          Binary driver file to search\n");
 	fprintf(stderr,"                 Creates spyd2PLD.bin\n");
 	exit(1);
@@ -574,9 +576,10 @@ main(int argc, char *argv[]) {
 	int fa,nfa;				/* argument we're looking at */
 	char in_name[MAXNAMEL+1] = "\000" ;
 	char patch_name[MAXNAMEL+1] = "\000" ;
-	char scratch_name[MAXNAMEL+1] = "\000" ;
 	char *header_name = "spyd2PLD.h";
-	char *bin_name = "spyd2PLD.bin";
+	char *bin_name = "color/spyd2PLD.bin";
+	char *bin_path = NULL;
+	xdg_scope scope = xdg_user;
 	int verb = 0;
 	int header = 0;
 	int patch = 0;
@@ -625,6 +628,16 @@ main(int argc, char *argv[]) {
 			/* Patch an executable */
 			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
 				patch = 1;
+			}
+
+			/* Install scope */
+			else if (argv[fa][1] == 'S') {
+				fa = nfa;
+				if (na == NULL) usage();
+					else if (na[0] == 'l' || na[0] == 'L')
+						scope = xdg_local;
+					else if (na[0] == 'u' || na[0] == 'U')
+						scope = xdg_user;
 			}
 			else 
 				usage();
@@ -824,16 +837,20 @@ main(int argc, char *argv[]) {
 
 	if(amount) umiso();
  	
-	get_firmware_arch(va, &fbuf, &fsize);
+	/* Get path. This may drop uid/gid if we are su */
+	if ((bin_path = xdg_bds(NULL, xdg_data, xdg_write, scope, bin_name)) == NULL) {
+		error("Failed to find/create XDG_DATA path");
+	}
 
+	get_firmware_arch(va, &fbuf, &fsize);
+	
 	if (verb)
-		printf("Path to executables is assumed to be '%s'\n",exe_path);
+		printf("Firmware is being save to '%s'\n",bin_path);
 
 	/* Create a binary file containing the firmware */
 	/* that drivers for the Spyder 2 can use */
-	strcpy(scratch_name, exe_path);
-	strcat(scratch_name, bin_name);
-	write_bin(scratch_name, fbuf, fsize, verb);
+	write_bin(bin_path, fbuf, fsize, verb);
+	free(bin_path);
 
 	/* Create a header file that can be compiled in */
 	if (header)

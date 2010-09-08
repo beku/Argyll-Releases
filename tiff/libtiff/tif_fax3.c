@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/libtiff/tif_fax3.c,v 1.20 2003/11/03 14:45:38 dron Exp $ */
+/* $Id: tif_fax3.c,v 1.43.2.10 2010-06-09 17:16:58 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1990-1997 Sam Leffler
@@ -41,7 +41,6 @@
 #include "tif_fax3.h"
 #define	G3CODES
 #include "t4.h"
-#include <assert.h>
 #include <stdio.h>
 
 /*
@@ -61,8 +60,10 @@ typedef struct {
 	uint32	recvparams;		/* encoded Class 2 session params */
 	char*	subaddress;		/* subaddress string */
 	uint32	recvtime;		/* time spent receiving (secs) */
+	char*	faxdcs;			/* Table 2/T.30 encoded session params */
 	TIFFVGetMethod vgetparent;	/* super-class method */
 	TIFFVSetMethod vsetparent;	/* super-class method */
+	TIFFPrintMethod printdir;	/* super-class method */
 } Fax3BaseState;
 #define	Fax3State(tif)		((Fax3BaseState*) (tif)->tif_data)
 
@@ -71,7 +72,7 @@ typedef struct {
 	Fax3BaseState b;
 
 	/* Decoder state info */
-	const u_char* bitmap;		/* bit reversal table */
+	const unsigned char* bitmap;	/* bit reversal table */
 	uint32	data;			/* current i/o byte/word */
 	int	bit;			/* current i/o bit in byte */
 	int	EOLcnt;			/* count of EOL codes recognized */
@@ -81,17 +82,19 @@ typedef struct {
 	uint32*	curruns;		/* runs for current line */
 
 	/* Encoder state info */
-	Ttag    tag;	                /* encoding state */
-	u_char*	refline;		/* reference line for 2d decoding */
+	Ttag    tag;			/* encoding state */
+	unsigned char*	refline;	/* reference line for 2d decoding */
 	int	k;			/* #rows left that can be 2d encoded */
 	int	maxk;			/* max #rows that can be 2d encoded */
+
+	int line;
 } Fax3CodecState;
 #define	DecoderState(tif)	((Fax3CodecState*) Fax3State(tif))
 #define	EncoderState(tif)	((Fax3CodecState*) Fax3State(tif))
 
 #define	is2DEncoding(sp) \
 	(sp->b.groupoptions & GROUP3OPT_2DENCODING)
-#define	isAligned(p,t)	((((u_long)(p)) & (sizeof (t)-1)) == 0)
+#define	isAligned(p,t)	((((unsigned long)(p)) & (sizeof (t)-1)) == 0)
 
 /*
  * Group 3 and Group 4 Decoding.
@@ -109,12 +112,12 @@ typedef struct {
     uint32 BitAcc;			/* bit accumulator */		\
     int BitsAvail;			/* # valid bits in BitAcc */	\
     int RunLength;			/* length of current run */	\
-    u_char* cp;				/* next byte of input data */	\
-    u_char* ep;				/* end of input data */		\
+    unsigned char* cp;			/* next byte of input data */	\
+    unsigned char* ep;			/* end of input data */		\
     uint32* pa;				/* place to stuff next run */	\
     uint32* thisrun;			/* current row's run array */	\
     int EOLcnt;				/* # EOL codes recognized */	\
-    const u_char* bitmap = sp->bitmap;	/* input data bit reverser */	\
+    const unsigned char* bitmap = sp->bitmap;	/* input data bit reverser */	\
     const TIFFFaxTabEnt* TabEnt
 #define	DECLARE_STATE_2D(tif, sp, mod)					\
     DECLARE_STATE(tif, sp, mod);					\
@@ -167,6 +170,7 @@ Fax3PreDecode(TIFF* tif, tsample_t s)
 		sp->refruns[0] = (uint32) sp->b.rowpixels;
 		sp->refruns[1] = 0;
 	}
+	sp->line = 0;
 	return (1);
 }
 
@@ -177,39 +181,48 @@ Fax3PreDecode(TIFF* tif, tsample_t s)
  */
 
 static void
-Fax3Unexpected(const char* module, TIFF* tif, uint32 a0)
+Fax3Unexpected(const char* module, TIFF* tif, uint32 line, uint32 a0)
 {
-	TIFFError(module, "%s: Bad code word at scanline %d (x %lu)",
-	    tif->tif_name, tif->tif_row, (u_long) a0);
+	TIFFErrorExt(tif->tif_clientdata, module, "%s: Bad code word at line %u of %s %u (x %u)",
+		     tif->tif_name, line, isTiled(tif) ? "tile" : "strip",
+		     (isTiled(tif) ? tif->tif_curtile : tif->tif_curstrip),
+		     a0);
 }
-#define	unexpected(table, a0)	Fax3Unexpected(module, tif, a0)
+#define	unexpected(table, a0)	Fax3Unexpected(module, tif, sp->line, a0)
 
 static void
-Fax3Extension(const char* module, TIFF* tif, uint32 a0)
+Fax3Extension(const char* module, TIFF* tif, uint32 line, uint32 a0)
 {
-	TIFFError(module,
-	    "%s: Uncompressed data (not supported) at scanline %d (x %lu)",
-	    tif->tif_name, tif->tif_row, (u_long) a0);
+	TIFFErrorExt(tif->tif_clientdata, module,
+		     "%s: Uncompressed data (not supported) at line %u of %s %u (x %u)",
+		     tif->tif_name, line, isTiled(tif) ? "tile" : "strip",
+		     (isTiled(tif) ? tif->tif_curtile : tif->tif_curstrip),
+		     a0);
 }
-#define	extension(a0)	Fax3Extension(module, tif, a0)
+#define	extension(a0)	Fax3Extension(module, tif, sp->line, a0)
 
 static void
-Fax3BadLength(const char* module, TIFF* tif, uint32 a0, uint32 lastx)
+Fax3BadLength(const char* module, TIFF* tif, uint32 line, uint32 a0, uint32 lastx)
 {
-	TIFFWarning(module, "%s: %s at scanline %d (got %lu, expected %lu)",
+	TIFFWarningExt(tif->tif_clientdata, module, "%s: %s at line %u of %s %u (got %u, expected %u)",
+		       tif->tif_name,
+		       a0 < lastx ? "Premature EOL" : "Line length mismatch",
+		       line, isTiled(tif) ? "tile" : "strip",
+		       (isTiled(tif) ? tif->tif_curtile : tif->tif_curstrip),
+		       a0, lastx);
+}
+#define	badlength(a0,lastx)	Fax3BadLength(module, tif, sp->line, a0, lastx)
+
+static void
+Fax3PrematureEOF(const char* module, TIFF* tif, uint32 line, uint32 a0)
+{
+	TIFFWarningExt(tif->tif_clientdata, module, "%s: Premature EOF at line %u of %s %u (x %u)",
 	    tif->tif_name,
-	    a0 < lastx ? "Premature EOL" : "Line length mismatch",
-	    tif->tif_row, (u_long) a0, (u_long) lastx);
+		       line, isTiled(tif) ? "tile" : "strip",
+		       (isTiled(tif) ? tif->tif_curtile : tif->tif_curstrip),
+		       a0);
 }
-#define	badlength(a0,lastx)	Fax3BadLength(module, tif, a0, lastx)
-
-static void
-Fax3PrematureEOF(const char* module, TIFF* tif, uint32 a0)
-{
-	TIFFWarning(module, "%s: Premature EOF at scanline %d (x %lu)",
-	    tif->tif_name, tif->tif_row, (u_long) a0);
-}
-#define	prematureEOF(a0)	Fax3PrematureEOF(module, tif, a0)
+#define	prematureEOF(a0)	Fax3PrematureEOF(module, tif, sp->line, a0)
 
 #define	Nop
 
@@ -238,6 +251,7 @@ Fax3Decode1D(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
 		(*sp->fill)(buf, thisrun, pa, lastx);
 		buf += sp->b.rowbytes;
 		occ -= sp->b.rowbytes;
+		sp->line++;
 		continue;
 	EOF1D:				/* premature EOF */
 		CLEANUP_RUNS();
@@ -286,10 +300,11 @@ Fax3Decode2D(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
 		else
 			EXPAND2D(EOF2Da);
 		(*sp->fill)(buf, thisrun, pa, lastx);
-		SETVAL(0);		/* imaginary change for reference */
+		SETVALUE(0);		/* imaginary change for reference */
 		SWAP(uint32*, sp->curruns, sp->refruns);
 		buf += sp->b.rowbytes;
 		occ -= sp->b.rowbytes;
+		sp->line++;
 		continue;
 	EOF2D:				/* premature EOF */
 		CLEANUP_RUNS();
@@ -309,8 +324,8 @@ Fax3Decode2D(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
  * this is <8 bytes.  We optimize the code here to reflect the
  * machine characteristics.
  */
-#if defined(__alpha) || _MIPS_SZLONG == 64 || defined(__LP64__) || defined(__arch64__)
-#define FILL(n, cp)							    \
+#if SIZEOF_LONG == 8
+# define FILL(n, cp)							    \
     switch (n) {							    \
     case 15:(cp)[14] = 0xff; case 14:(cp)[13] = 0xff; case 13: (cp)[12] = 0xff;\
     case 12:(cp)[11] = 0xff; case 11:(cp)[10] = 0xff; case 10: (cp)[9] = 0xff;\
@@ -319,23 +334,23 @@ Fax3Decode2D(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
     case  3: (cp)[2] = 0xff; case  2: (cp)[1] = 0xff;			      \
     case  1: (cp)[0] = 0xff; (cp) += (n); case 0:  ;			      \
     }
-#define ZERO(n, cp)							\
+# define ZERO(n, cp)							\
     switch (n) {							\
     case 15:(cp)[14] = 0; case 14:(cp)[13] = 0; case 13: (cp)[12] = 0;	\
     case 12:(cp)[11] = 0; case 11:(cp)[10] = 0; case 10: (cp)[9] = 0;	\
     case  9: (cp)[8] = 0; case  8: (cp)[7] = 0; case  7: (cp)[6] = 0;	\
     case  6: (cp)[5] = 0; case  5: (cp)[4] = 0; case  4: (cp)[3] = 0;	\
-    case  3: (cp)[2] = 0; case  2: (cp)[1] = 0;			      	\
+    case  3: (cp)[2] = 0; case  2: (cp)[1] = 0;				\
     case  1: (cp)[0] = 0; (cp) += (n); case 0:  ;			\
     }
 #else
-#define FILL(n, cp)							    \
+# define FILL(n, cp)							    \
     switch (n) {							    \
     case 7: (cp)[6] = 0xff; case 6: (cp)[5] = 0xff; case 5: (cp)[4] = 0xff; \
     case 4: (cp)[3] = 0xff; case 3: (cp)[2] = 0xff; case 2: (cp)[1] = 0xff; \
     case 1: (cp)[0] = 0xff; (cp) += (n); case 0:  ;			    \
     }
-#define ZERO(n, cp)							\
+# define ZERO(n, cp)							\
     switch (n) {							\
     case 7: (cp)[6] = 0; case 6: (cp)[5] = 0; case 5: (cp)[4] = 0;	\
     case 4: (cp)[3] = 0; case 3: (cp)[2] = 0; case 2: (cp)[1] = 0;	\
@@ -348,11 +363,11 @@ Fax3Decode2D(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
  * runs generated during G3/G4 decoding.
  */
 void
-_TIFFFax3fillruns(u_char* buf, uint32* runs, uint32* erun, uint32 lastx)
+_TIFFFax3fillruns(unsigned char* buf, uint32* runs, uint32* erun, uint32 lastx)
 {
 	static const unsigned char _fillmasks[] =
 	    { 0x00, 0x80, 0xc0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe, 0xff };
-	u_char* cp;
+	unsigned char* cp;
 	uint32 x, bx, run;
 	int32 n, nw;
 	long* lp;
@@ -385,7 +400,7 @@ _TIFFFax3fillruns(u_char* buf, uint32* runs, uint32* erun, uint32 lastx)
 			    do {
 				    *lp++ = 0L;
 			    } while (--nw);
-			    cp = (u_char*) lp;
+			    cp = (unsigned char*) lp;
 			}
 			ZERO(n, cp);
 			run &= 7;
@@ -420,7 +435,7 @@ _TIFFFax3fillruns(u_char* buf, uint32* runs, uint32* erun, uint32 lastx)
 			    do {
 				*lp++ = -1L;
 			    } while (--nw);
-			    cp = (u_char*) lp;
+			    cp = (unsigned char*) lp;
 			}
 			FILL(n, cp);
 			run &= 7;
@@ -449,13 +464,12 @@ Fax3SetupState(TIFF* tif)
 {
 	TIFFDirectory* td = &tif->tif_dir;
 	Fax3BaseState* sp = Fax3State(tif);
-	long rowbytes, rowpixels;
 	int needsRefLine;
-	Fax3CodecState* dsp = DecoderState(tif);
-	uint32 nruns;
+	Fax3CodecState* dsp = (Fax3CodecState*) Fax3State(tif);
+	uint32 rowbytes, rowpixels, nruns;
 
 	if (td->td_bitspersample != 1) {
-		TIFFError(tif->tif_name,
+		TIFFErrorExt(tif->tif_clientdata, tif->tif_name,
 		    "Bits/sample must be 1 for Group 3/4 encoding/decoding");
 		return (0);
 	}
@@ -479,21 +493,35 @@ Fax3SetupState(TIFF* tif)
 	    td->td_compression == COMPRESSION_CCITTFAX4
 	);
 
-	nruns = needsRefLine ? 2*TIFFroundup(rowpixels,32) : rowpixels;
-
-	dsp->runs = (uint32*) _TIFFmalloc((2*nruns+3)*sizeof (uint32));
-	if (dsp->runs == NULL) {
-		TIFFError("Fax3SetupState",
-		    "%s: No space for Group 3/4 run arrays",
-		    tif->tif_name);
+	/*
+	  Assure that allocation computations do not overflow.
+  
+	  TIFFroundup and TIFFSafeMultiply return zero on integer overflow
+	*/
+	dsp->runs=(uint32*) NULL;
+	nruns = TIFFroundup(rowpixels,32);
+	if (needsRefLine) {
+		nruns = TIFFSafeMultiply(uint32,nruns,2);
+	}
+	if ((nruns == 0) || (TIFFSafeMultiply(uint32,nruns,2) == 0)) {
+		TIFFErrorExt(tif->tif_clientdata, tif->tif_name,
+			     "Row pixels integer overflow (rowpixels %u)",
+			     rowpixels);
 		return (0);
 	}
+	dsp->runs = (uint32*) _TIFFCheckMalloc(tif,
+					       TIFFSafeMultiply(uint32,nruns,2),
+					       sizeof (uint32),
+					       "for Group 3/4 run arrays");
+	if (dsp->runs == NULL)
+		return (0);
 	dsp->curruns = dsp->runs;
 	if (needsRefLine)
-		dsp->refruns = dsp->runs + (nruns>>1);
+		dsp->refruns = dsp->runs + nruns;
 	else
 		dsp->refruns = NULL;
-	if (is2DEncoding(dsp)) {	/* NB: default is 1D routine */
+	if (td->td_compression == COMPRESSION_CCITTFAX3
+	    && is2DEncoding(dsp)) {	/* NB: default is 1D routine */
 		tif->tif_decoderow = Fax3Decode2D;
 		tif->tif_decodestrip = Fax3Decode2D;
 		tif->tif_decodetile = Fax3Decode2D;
@@ -508,15 +536,16 @@ Fax3SetupState(TIFF* tif)
 		 * is referenced.  The reference line must
 		 * be initialized to be ``white'' (done elsewhere).
 		 */
-		esp->refline = (u_char*) _TIFFmalloc(rowbytes);
+		esp->refline = (unsigned char*) _TIFFmalloc(rowbytes);
 		if (esp->refline == NULL) {
-			TIFFError("Fax3SetupState",
+			TIFFErrorExt(tif->tif_clientdata, "Fax3SetupState",
 			    "%s: No space for Group 3/4 reference line",
 			    tif->tif_name);
 			return (0);
 		}
 	} else					/* 1d encoding */
 		EncoderState(tif)->refline = NULL;
+
 	return (1);
 }
 
@@ -558,10 +587,10 @@ static const int _msbmask[9] =
  * assumed to be at most 16 bits.
  */
 static void
-Fax3PutBits(TIFF* tif, u_int bits, u_int length)
+Fax3PutBits(TIFF* tif, unsigned int bits, unsigned int length)
 {
 	Fax3CodecState* sp = EncoderState(tif);
-	u_int bit = sp->bit;
+	unsigned int bit = sp->bit;
 	int data = sp->data;
 
 	_PutBits(tif, bits, length);
@@ -596,9 +625,9 @@ static void
 putspan(TIFF* tif, int32 span, const tableentry* tab)
 {
 	Fax3CodecState* sp = EncoderState(tif);
-	u_int bit = sp->bit;
+	unsigned int bit = sp->bit;
 	int data = sp->data;
-	u_int code, length;
+	unsigned int code, length;
 
 	while (span >= 2624) {
 		const tableentry* te = &tab[63 + (2560>>6)];
@@ -639,9 +668,9 @@ static void
 Fax3PutEOL(TIFF* tif)
 {
 	Fax3CodecState* sp = EncoderState(tif);
-	u_int bit = sp->bit;
+	unsigned int bit = sp->bit;
 	int data = sp->data;
-	u_int code, length, tparm;
+	unsigned int code, length, tparm;
 
 	if (sp->b.groupoptions & GROUP3OPT_FILLBITS) {
 		/*
@@ -707,10 +736,11 @@ Fax3PreEncode(TIFF* tif, tsample_t s)
 		sp->k = sp->maxk-1;
 	} else
 		sp->k = sp->maxk = 0;
+	sp->line = 0;
 	return (1);
 }
 
-static const u_char zeroruns[256] = {
+static const unsigned char zeroruns[256] = {
     8, 7, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4, 4,	/* 0x00 - 0x0f */
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,	/* 0x10 - 0x1f */
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,	/* 0x20 - 0x2f */
@@ -728,7 +758,7 @@ static const u_char zeroruns[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	/* 0xe0 - 0xef */
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	/* 0xf0 - 0xff */
 };
-static const u_char oneruns[256] = {
+static const unsigned char oneruns[256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	/* 0x00 - 0x0f */
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	/* 0x10 - 0x1f */
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,	/* 0x20 - 0x2f */
@@ -752,8 +782,8 @@ static const u_char oneruns[256] = {
  * the routines that find pixel spans.
  */
 #ifdef VAXC
-static	int32 find0span(u_char*, int32, int32);
-static	int32 find1span(u_char*, int32, int32);
+static	int32 find0span(unsigned char*, int32, int32);
+static	int32 find1span(unsigned char*, int32, int32);
 #pragma inline(find0span,find1span)
 #endif
 
@@ -762,8 +792,8 @@ static	int32 find1span(u_char*, int32, int32);
  * table.  The ``base'' of the bit string is supplied
  * along with the start+end bit indices.
  */
-INLINE static int32
-find0span(u_char* bp, int32 bs, int32 be)
+static int32
+find0span(unsigned char* bp, int32 bs, int32 be)
 {
 	int32 bits = be - bs;
 	int32 n, span;
@@ -784,7 +814,7 @@ find0span(u_char* bp, int32 bs, int32 be)
 		bp++;
 	} else
 		span = 0;
-	if (bits >= 2*8*sizeof (long)) {
+	if (bits >= (int32)(2 * 8 * sizeof(long))) {
 		long* lp;
 		/*
 		 * Align to longword boundary and check longwords.
@@ -796,11 +826,11 @@ find0span(u_char* bp, int32 bs, int32 be)
 			bp++;
 		}
 		lp = (long*) bp;
-		while (bits >= 8*sizeof (long) && *lp == 0) {
+		while ((bits >= (int32)(8 * sizeof(long))) && (0 == *lp)) {
 			span += 8*sizeof (long), bits -= 8*sizeof (long);
 			lp++;
 		}
-		bp = (u_char*) lp;
+		bp = (unsigned char*) lp;
 	}
 	/*
 	 * Scan full bytes for all 0's.
@@ -821,8 +851,8 @@ find0span(u_char* bp, int32 bs, int32 be)
 	return (span);
 }
 
-INLINE static int32
-find1span(u_char* bp, int32 bs, int32 be)
+static int32
+find1span(unsigned char* bp, int32 bs, int32 be)
 {
 	int32 bits = be - bs;
 	int32 n, span;
@@ -843,7 +873,7 @@ find1span(u_char* bp, int32 bs, int32 be)
 		bp++;
 	} else
 		span = 0;
-	if (bits >= 2*8*sizeof (long)) {
+	if (bits >= (int32)(2 * 8 * sizeof(long))) {
 		long* lp;
 		/*
 		 * Align to longword boundary and check longwords.
@@ -855,11 +885,11 @@ find1span(u_char* bp, int32 bs, int32 be)
 			bp++;
 		}
 		lp = (long*) bp;
-		while (bits >= 8*sizeof (long) && *lp == ~0) {
+		while ((bits >= (int32)(8 * sizeof(long))) && (~0 == *lp)) {
 			span += 8*sizeof (long), bits -= 8*sizeof (long);
 			lp++;
 		}
-		bp = (u_char*) lp;
+		bp = (unsigned char*) lp;
 	}
 	/*
 	 * Scan full bytes for all 1's.
@@ -901,7 +931,7 @@ find1span(u_char* bp, int32 bs, int32 be)
  * of pixels encoded with Huffman codes.
  */
 static int
-Fax3Encode1DRow(TIFF* tif, u_char* bp, uint32 bits)
+Fax3Encode1DRow(TIFF* tif, unsigned char* bp, uint32 bits)
 {
 	Fax3CodecState* sp = EncoderState(tif);
 	int32 span;
@@ -930,17 +960,17 @@ Fax3Encode1DRow(TIFF* tif, u_char* bp, uint32 bits)
 }
 
 static const tableentry horizcode =
-    { 3, 0x1 };		/* 001 */
+    { 3, 0x1, 0 };	/* 001 */
 static const tableentry passcode =
-    { 4, 0x1 };		/* 0001 */
+    { 4, 0x1, 0 };	/* 0001 */
 static const tableentry vcodes[7] = {
-    { 7, 0x03 },	/* 0000 011 */
-    { 6, 0x03 },	/* 0000 11 */
-    { 3, 0x03 },	/* 011 */
-    { 1, 0x1 },		/* 1 */
-    { 3, 0x2 },		/* 010 */
-    { 6, 0x02 },	/* 0000 10 */
-    { 7, 0x02 }		/* 0000 010 */
+    { 7, 0x03, 0 },	/* 0000 011 */
+    { 6, 0x03, 0 },	/* 0000 11 */
+    { 3, 0x03, 0 },	/* 011 */
+    { 1, 0x1, 0 },	/* 1 */
+    { 3, 0x2, 0 },	/* 010 */
+    { 6, 0x02, 0 },	/* 0000 10 */
+    { 7, 0x02, 0 }	/* 0000 010 */
 };
 
 /*
@@ -948,7 +978,7 @@ static const tableentry vcodes[7] = {
  * documentation for the algorithm.
  */
 static int
-Fax3Encode2DRow(TIFF* tif, u_char* bp, u_char* rp, uint32 bits)
+Fax3Encode2DRow(TIFF* tif, unsigned char* bp, unsigned char* rp, uint32 bits)
 {
 #define	PIXEL(buf,ix)	((((buf)[(ix)>>3]) >> (7-((ix)&7))) & 1)
         uint32 a0 = 0;
@@ -1007,7 +1037,8 @@ Fax3Encode(TIFF* tif, tidata_t bp, tsize_t cc, tsample_t s)
 					return (0);
 				sp->tag = G3_2D;
 			} else {
-				if (!Fax3Encode2DRow(tif, bp, sp->refline, sp->b.rowpixels))
+				if (!Fax3Encode2DRow(tif, bp, sp->refline,
+                                                     sp->b.rowpixels))
 					return (0);
 				sp->k--;
 			}
@@ -1041,8 +1072,8 @@ Fax3Close(TIFF* tif)
 {
 	if ((Fax3State(tif)->mode & FAXMODE_NORTC) == 0) {
 		Fax3CodecState* sp = EncoderState(tif);
-		u_int code = EOL;
-		u_int length = 12;
+		unsigned int code = EOL;
+		unsigned int length = 12;
 		int i;
 
 		if (is2DEncoding(sp))
@@ -1056,19 +1087,28 @@ Fax3Close(TIFF* tif)
 static void
 Fax3Cleanup(TIFF* tif)
 {
-	if (tif->tif_data) {
-		Fax3CodecState* sp = DecoderState(tif);
+	Fax3CodecState* sp = DecoderState(tif);
+	
+	assert(sp != 0);
 
-		if (sp->runs)
-			_TIFFfree(sp->runs);
-		if (sp->refline)
-			_TIFFfree(sp->refline);
+	tif->tif_tagmethods.vgetfield = sp->b.vgetparent;
+	tif->tif_tagmethods.vsetfield = sp->b.vsetparent;
+	tif->tif_tagmethods.printdir = sp->b.printdir;
 
-		if (Fax3State(tif)->subaddress)
-			_TIFFfree(Fax3State(tif)->subaddress);
-		_TIFFfree(tif->tif_data);
-		tif->tif_data = NULL;
-	}
+	if (sp->runs)
+		_TIFFfree(sp->runs);
+	if (sp->refline)
+		_TIFFfree(sp->refline);
+
+	if (Fax3State(tif)->subaddress)
+		_TIFFfree(Fax3State(tif)->subaddress);
+	if (Fax3State(tif)->faxdcs)
+		_TIFFfree(Fax3State(tif)->faxdcs);
+
+	_TIFFfree(tif->tif_data);
+	tif->tif_data = NULL;
+
+	_TIFFSetDefaultCompressionState(tif);
 }
 
 #define	FIELD_BADFAXLINES	(FIELD_CODEC+0)
@@ -1077,8 +1117,9 @@ Fax3Cleanup(TIFF* tif)
 #define	FIELD_RECVPARAMS	(FIELD_CODEC+3)
 #define	FIELD_SUBADDRESS	(FIELD_CODEC+4)
 #define	FIELD_RECVTIME		(FIELD_CODEC+5)
+#define	FIELD_FAXDCS		(FIELD_CODEC+6)
 
-#define	FIELD_OPTIONS		(FIELD_CODEC+6)
+#define	FIELD_OPTIONS		(FIELD_CODEC+7)
 
 static const TIFFFieldInfo faxFieldInfo[] = {
     { TIFFTAG_FAXMODE,		 0, 0,	TIFF_ANY,	FIELD_PSEUDO,
@@ -1101,6 +1142,8 @@ static const TIFFFieldInfo faxFieldInfo[] = {
       TRUE,	FALSE,	"FaxSubAddress" },
     { TIFFTAG_FAXRECVTIME,	 1, 1, TIFF_LONG,	FIELD_RECVTIME,
       TRUE,	FALSE,	"FaxRecvTime" },
+    { TIFFTAG_FAXDCS,		-1,-1, TIFF_ASCII,	FIELD_FAXDCS,
+      TRUE,	FALSE,	"FaxDcs" },
 };
 static const TIFFFieldInfo fax3FieldInfo[] = {
     { TIFFTAG_GROUP3OPTIONS,	 1, 1,	TIFF_LONG,	FIELD_OPTIONS,
@@ -1116,17 +1159,27 @@ static int
 Fax3VSetField(TIFF* tif, ttag_t tag, va_list ap)
 {
 	Fax3BaseState* sp = Fax3State(tif);
+	const TIFFFieldInfo* fip;
+
+	assert(sp != 0);
+	assert(sp->vsetparent != 0);
 
 	switch (tag) {
 	case TIFFTAG_FAXMODE:
 		sp->mode = va_arg(ap, int);
-		return (1);			/* NB: pseudo tag */
+		return 1;			/* NB: pseudo tag */
 	case TIFFTAG_FAXFILLFUNC:
 		DecoderState(tif)->fill = va_arg(ap, TIFFFaxFillFunc);
-		return (1);			/* NB: pseudo tag */
+		return 1;			/* NB: pseudo tag */
 	case TIFFTAG_GROUP3OPTIONS:
+		/* XXX: avoid reading options if compression mismatches. */
+		if (tif->tif_dir.td_compression == COMPRESSION_CCITTFAX3)
+			sp->groupoptions = va_arg(ap, uint32);
+		break;
 	case TIFFTAG_GROUP4OPTIONS:
-		sp->groupoptions = va_arg(ap, uint32);
+		/* XXX: avoid reading options if compression mismatches. */
+		if (tif->tif_dir.td_compression == COMPRESSION_CCITTFAX4)
+			sp->groupoptions = va_arg(ap, uint32);
 		break;
 	case TIFFTAG_BADFAXLINES:
 		sp->badfaxlines = va_arg(ap, uint32);
@@ -1146,18 +1199,28 @@ Fax3VSetField(TIFF* tif, ttag_t tag, va_list ap)
 	case TIFFTAG_FAXRECVTIME:
 		sp->recvtime = va_arg(ap, uint32);
 		break;
+	case TIFFTAG_FAXDCS:
+		_TIFFsetString(&sp->faxdcs, va_arg(ap, char*));
+		break;
 	default:
 		return (*sp->vsetparent)(tif, tag, ap);
 	}
-	TIFFSetFieldBit(tif, _TIFFFieldWithTag(tif, tag)->field_bit);
+	
+	if ((fip = _TIFFFieldWithTag(tif, tag)))
+		TIFFSetFieldBit(tif, fip->field_bit);
+	else
+		return 0;
+
 	tif->tif_flags |= TIFF_DIRTYDIRECT;
-	return (1);
+	return 1;
 }
 
 static int
 Fax3VGetField(TIFF* tif, ttag_t tag, va_list ap)
 {
 	Fax3BaseState* sp = Fax3State(tif);
+
+	assert(sp != 0);
 
 	switch (tag) {
 	case TIFFTAG_FAXMODE:
@@ -1188,6 +1251,9 @@ Fax3VGetField(TIFF* tif, ttag_t tag, va_list ap)
 	case TIFFTAG_FAXRECVTIME:
 		*va_arg(ap, uint32*) = sp->recvtime;
 		break;
+	case TIFFTAG_FAXDCS:
+		*va_arg(ap, char**) = sp->faxdcs;
+		break;
 	default:
 		return (*sp->vgetparent)(tif, tag, ap);
 	}
@@ -1198,6 +1264,8 @@ static void
 Fax3PrintDir(TIFF* tif, FILE* fd, long flags)
 {
 	Fax3BaseState* sp = Fax3State(tif);
+
+	assert(sp != 0);
 
 	(void) flags;
 	if (TIFFFieldSet(tif,FIELD_OPTIONS)) {
@@ -1217,7 +1285,8 @@ Fax3PrintDir(TIFF* tif, FILE* fd, long flags)
 				fprintf(fd, "%suncompressed data", sep);
 		}
 		fprintf(fd, " (%lu = 0x%lx)\n",
-		    (u_long) sp->groupoptions, (u_long) sp->groupoptions);
+                        (unsigned long) sp->groupoptions,
+                        (unsigned long) sp->groupoptions);
 	}
 	if (TIFFFieldSet(tif,FIELD_CLEANFAXDATA)) {
 		fprintf(fd, "  Fax Data:");
@@ -1236,18 +1305,21 @@ Fax3PrintDir(TIFF* tif, FILE* fd, long flags)
 		    sp->cleanfaxdata, sp->cleanfaxdata);
 	}
 	if (TIFFFieldSet(tif,FIELD_BADFAXLINES))
-		fprintf(fd, "  Bad Fax Lines: %lu\n", (u_long) sp->badfaxlines);
+		fprintf(fd, "  Bad Fax Lines: %lu\n",
+                        (unsigned long) sp->badfaxlines);
 	if (TIFFFieldSet(tif,FIELD_BADFAXRUN))
 		fprintf(fd, "  Consecutive Bad Fax Lines: %lu\n",
-		    (u_long) sp->badfaxrun);
+		    (unsigned long) sp->badfaxrun);
 	if (TIFFFieldSet(tif,FIELD_RECVPARAMS))
 		fprintf(fd, "  Fax Receive Parameters: %08lx\n",
-		   (u_long) sp->recvparams);
+		   (unsigned long) sp->recvparams);
 	if (TIFFFieldSet(tif,FIELD_SUBADDRESS))
 		fprintf(fd, "  Fax SubAddress: %s\n", sp->subaddress);
 	if (TIFFFieldSet(tif,FIELD_RECVTIME))
 		fprintf(fd, "  Fax Receive Time: %lu secs\n",
-		    (u_long) sp->recvtime);
+		    (unsigned long) sp->recvtime);
+	if (TIFFFieldSet(tif,FIELD_FAXDCS))
+		fprintf(fd, "  Fax DCS: %s\n", sp->faxdcs);
 }
 
 static int
@@ -1256,13 +1328,22 @@ InitCCITTFax3(TIFF* tif)
 	Fax3BaseState* sp;
 
 	/*
+	 * Merge codec-specific tag information.
+	 */
+	if (!_TIFFMergeFieldInfo(tif, faxFieldInfo, N(faxFieldInfo))) {
+		TIFFErrorExt(tif->tif_clientdata, "InitCCITTFax3",
+			"Merging common CCITT Fax codec-specific tags failed");
+		return 0;
+	}
+
+	/*
 	 * Allocate state block so tag methods have storage to record values.
 	 */
 	tif->tif_data = (tidata_t)
 		_TIFFmalloc(sizeof (Fax3CodecState));
 
 	if (tif->tif_data == NULL) {
-		TIFFError("TIFFInitCCITTFax3",
+		TIFFErrorExt(tif->tif_clientdata, "TIFFInitCCITTFax3",
 		    "%s: No space for state block", tif->tif_name);
 		return (0);
 	}
@@ -1271,20 +1352,21 @@ InitCCITTFax3(TIFF* tif)
         sp->rw_mode = tif->tif_mode;
 
 	/*
-	 * Merge codec-specific tag information and
-	 * override parent get/set field methods.
+	 * Override parent get/set field methods.
 	 */
-	_TIFFMergeFieldInfo(tif, faxFieldInfo, N(faxFieldInfo));
 	sp->vgetparent = tif->tif_tagmethods.vgetfield;
-	tif->tif_tagmethods.vgetfield = Fax3VGetField;	/* hook for codec tags */
+	tif->tif_tagmethods.vgetfield = Fax3VGetField; /* hook for codec tags */
 	sp->vsetparent = tif->tif_tagmethods.vsetfield;
-	tif->tif_tagmethods.vsetfield = Fax3VSetField;	/* hook for codec tags */
-	tif->tif_tagmethods.printdir = Fax3PrintDir;	/* hook for codec tags */
+	tif->tif_tagmethods.vsetfield = Fax3VSetField; /* hook for codec tags */
+	sp->printdir = tif->tif_tagmethods.printdir;
+	tif->tif_tagmethods.printdir = Fax3PrintDir;   /* hook for codec tags */
 	sp->groupoptions = 0;	
 	sp->recvparams = 0;
 	sp->subaddress = NULL;
+	sp->faxdcs = NULL;
 
-	tif->tif_flags |= TIFF_NOBITREV;	/* decoder does bit reversal */
+	if (sp->rw_mode == O_RDONLY) /* FIXME: improve for in place update */
+		tif->tif_flags |= TIFF_NOBITREV; /* decoder does bit reversal */
 	DecoderState(tif)->runs = NULL;
 	TIFFSetField(tif, TIFFTAG_FAXFILLFUNC, _TIFFFax3fillruns);
 	EncoderState(tif)->refline = NULL;
@@ -1312,15 +1394,23 @@ InitCCITTFax3(TIFF* tif)
 int
 TIFFInitCCITTFax3(TIFF* tif, int scheme)
 {
+	(void) scheme;
 	if (InitCCITTFax3(tif)) {
-		_TIFFMergeFieldInfo(tif, fax3FieldInfo, N(fax3FieldInfo));
+		/*
+		 * Merge codec-specific tag information.
+		 */
+		if (!_TIFFMergeFieldInfo(tif, fax3FieldInfo, N(fax3FieldInfo))) {
+			TIFFErrorExt(tif->tif_clientdata, "TIFFInitCCITTFax3",
+			"Merging CCITT Fax 3 codec-specific tags failed");
+			return 0;
+		}
 
 		/*
 		 * The default format is Class/F-style w/o RTC.
 		 */
 		return TIFFSetField(tif, TIFFTAG_FAXMODE, FAXMODE_CLASSF);
 	} else
-		return (0);
+		return 01;
 }
 
 /*
@@ -1354,22 +1444,23 @@ Fax4Decode(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
                 if (EOLcnt)
                     goto EOFG4;
 		(*sp->fill)(buf, thisrun, pa, lastx);
-		SETVAL(0);		/* imaginary change for reference */
+		SETVALUE(0);		/* imaginary change for reference */
 		SWAP(uint32*, sp->curruns, sp->refruns);
 		buf += sp->b.rowbytes;
 		occ -= sp->b.rowbytes;
+		sp->line++;
 		continue;
 	EOFG4:
                 NeedBits16( 13, BADG4 );
         BADG4:
 #ifdef FAX3_DEBUG
                 if( GetBits(13) != 0x1001 )
-                    fputs( "Bad RTC\n", stderr );
+                    fputs( "Bad EOFB\n", stderr );
 #endif                
                 ClrBits( 13 );
 		(*sp->fill)(buf, thisrun, pa, lastx);
 		UNCACHE_STATE(tif, sp);
-		return (-1);
+		return ( sp->line ? 1 : -1);	/* don't error on badly-terminated strips */
 	}
 	UNCACHE_STATE(tif, sp);
 	return (1);
@@ -1411,8 +1502,16 @@ Fax4PostEncode(TIFF* tif)
 int
 TIFFInitCCITTFax4(TIFF* tif, int scheme)
 {
+	(void) scheme;
 	if (InitCCITTFax3(tif)) {		/* reuse G3 support */
-		_TIFFMergeFieldInfo(tif, fax4FieldInfo, N(fax4FieldInfo));
+		/*
+		 * Merge codec-specific tag information.
+		 */
+		if (!_TIFFMergeFieldInfo(tif, fax4FieldInfo, N(fax4FieldInfo))) {
+			TIFFErrorExt(tif->tif_clientdata, "TIFFInitCCITTFax4",
+			"Merging CCITT Fax 4 codec-specific tags failed");
+			return 0;
+		}
 
 		tif->tif_decoderow = Fax4Decode;
 		tif->tif_decodestrip = Fax4Decode;
@@ -1471,6 +1570,7 @@ Fax3DecodeRLE(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
 		}
 		buf += sp->b.rowbytes;
 		occ -= sp->b.rowbytes;
+		sp->line++;
 		continue;
 	EOFRLE:				/* premature EOF */
 		(*sp->fill)(buf, thisrun, pa, lastx);
@@ -1484,6 +1584,7 @@ Fax3DecodeRLE(TIFF* tif, tidata_t buf, tsize_t occ, tsample_t s)
 int
 TIFFInitCCITTRLE(TIFF* tif, int scheme)
 {
+	(void) scheme;
 	if (InitCCITTFax3(tif)) {		/* reuse G3 support */
 		tif->tif_decoderow = Fax3DecodeRLE;
 		tif->tif_decodestrip = Fax3DecodeRLE;
@@ -1500,6 +1601,7 @@ TIFFInitCCITTRLE(TIFF* tif, int scheme)
 int
 TIFFInitCCITTRLEW(TIFF* tif, int scheme)
 {
+	(void) scheme;
 	if (InitCCITTFax3(tif)) {		/* reuse G3 support */
 		tif->tif_decoderow = Fax3DecodeRLE;
 		tif->tif_decodestrip = Fax3DecodeRLE;
@@ -1513,3 +1615,12 @@ TIFFInitCCITTRLEW(TIFF* tif, int scheme)
 		return (0);
 }
 #endif /* CCITT_SUPPORT */
+
+/* vim: set ts=8 sts=8 sw=8 noet: */
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

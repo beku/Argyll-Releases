@@ -38,7 +38,7 @@
 #include <time.h>
 #include <stdarg.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -538,6 +538,9 @@ ipatch *val) {		/* Pointer to instrument patch value */
 		if (sscanf(buf, " X%*c %lf\t Y%*c %lf\t Z%*c %lf ",
 	           &val->aXYZ[0], &val->aXYZ[1], &val->aXYZ[2]) == 3) {
 
+			/* Apply the colorimeter correction matrix */
+			icmMulBy3x3(val->aXYZ, p->ccmat, val->aXYZ);
+
 			val->XYZ_v = 0;
 			val->aXYZ_v = 1;		/* These are absolute XYZ readings */
 			val->Lab_v = 0;
@@ -562,6 +565,23 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	if (user_trig)
 		return inst_user_trig;
 	return rv;
+}
+
+/* Insert a colorimetric correction matrix in the instrument XYZ readings */
+/* This is only valid for colorimetric instruments. */
+/* To remove the matrix, pass NULL for the filter filename */
+inst_code dtp92_col_cor_mat(
+inst *pp,
+double mtx[3][3]
+) {
+	dtp92 *p = (dtp92 *)pp;
+
+	if (mtx == NULL)
+		icmSetUnity3x3(p->ccmat);
+	else
+		icmCpy3x3(p->ccmat, mtx);
+		
+	return inst_ok;
 }
 
 /* Determine if a calibration is needed. Returns inst_calt_none if not, */
@@ -813,6 +833,7 @@ inst_capability dtp92_capabilities(inst *pp) {
 	rv = inst_emis_spot
 	   | inst_emis_disp
 	   | inst_colorimeter
+	   | inst_ccmx
 	     ;
 
 	if (p->itype == instDTP94) {
@@ -918,6 +939,8 @@ extern dtp92 *new_dtp92(icoms *icom, int debug, int verb)
 	p->debug = debug;
 	p->verb = verb;
 
+	icmSetUnity3x3(p->ccmat);	/* Set the colorimeter correction matrix to do nothing */
+
 	p->init_coms         = dtp92_init_coms;
 	p->init_inst         = dtp92_init_inst;
 	p->capabilities      = dtp92_capabilities;
@@ -927,6 +950,7 @@ extern dtp92 *new_dtp92(icoms *icom, int debug, int verb)
 	p->read_sample       = dtp92_read_sample;
 	p->needs_calibration = dtp92_needs_calibration;
 	p->calibrate         = dtp92_calibrate;
+	p->col_cor_mat       = dtp92_col_cor_mat;
 	p->interp_error      = dtp92_interp_error;
 	p->del               = dtp92_del;
 

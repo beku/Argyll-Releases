@@ -15,20 +15,23 @@
  * see the License.txt file for licencing details.
  */
 
-/* A default calibration user interaction handler using the console. */
-/* this will function only for non-display specific types of calibration. */
-typedef struct {
+/* A helper function to handle presenting a display test patch */
+struct _disp_win_info {
 	disppath *disp;			/* display to calibrate. */
 	int blackbg;			/* NZ if whole screen should be filled with black */
 	int override;			/* Override_redirect on X11 */
 	double patsize;			/* Size of dispwin */
 	double ho, vo;			/* Position of dispwin */
 	dispwin *dw;			/* Display window if already open */
-} disp_win_info;
+	dispwin *_dw;			/* Privare window if not already open */
+};
 
-inst_code inst_handle_calibrate(
+/* A defauult callback that can be provided as an argument to */
+/* inst_handle_calibrate() to handle the display part of a */
+/* calibration callback. */
+/* Call this again with calc = inst_calc_none to cleanup afterwards. */
+inst_code setup_display_calibrate(
 	inst *p,
-	inst_cal_type calt,		/* type of calibration to do. inst_calt_all for all */
 	inst_cal_cond calc,		/* Current condition. inst_calc_none for not setup */
 	disp_win_info *dwi		/* Information to be able to open a display test patch */
 );
@@ -67,6 +70,9 @@ typedef struct {
 	xspect sp;			/* Spectrum. sp.spec_n > 0 if valid */
 
 	double duration;	/* Total duration in seconds (flash measurement) */
+
+	int serno;			/* Reading serial number */
+	unsigned int msec;	/* Timestamp */
 } col;
 
 
@@ -80,10 +86,11 @@ struct _disprd {
 	int verb;			/* Verbosity flag */
 	FILE *df;			/* Verbose output */
 	int fake;			/* Fake display/instrument flag */
+	int fake2;			/* Flag to apply extra matrix to fake response */
 	char *fake_name;	/* Fake profile name */
 	icmFile *fake_fp;
 	icc *fake_icc;		/* NZ if ICC profile is being used for fake */
-	double cal[3][MAX_CAL_ENT];	/* Calibration being worked through (cal[0][0] < 0.0 if not used */
+	double cal[3][MAX_CAL_ENT];	/* Calibration being worked through (cal[0][0] < 0.0 or NULL if not used) */
 	int ncal;			/* Number of entries used in cal[] */
 	icmLuBase *fake_lu;
 	char *mcallout;		/* fake instrument shell callout */
@@ -96,11 +103,25 @@ struct _disprd {
 	int dtype;			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 	int proj;			/* NZ for projector mode */
 	int adaptive;		/* NZ for adaptive mode */
-	int spectral;		/* Spectral values requested/used */
-	int nocal;			/* No automatic instrument calibration */
 	int highres;		/* Use high res mode if available */
+	double (*ccmtx)[3];	/* Colorimeter Correction Matrix, NULL if none */
+	int spectral;		/* Spectral values requested/used */
+	icxObserverType observ;		/* Compute XYZ from spectral if spectral and != icxOT_none */
+	xsp2cie *sp2cie;	/* Spectral to XYZ conversion */
+	int bdrift;			/* Flag, nz for black drift compensation */
+	int wdrift;			/* Flag, nz for white drift compensation */
+	int nocal;			/* No automatic instrument calibration */
 	dispwin *dw;		/* Window */
 	ramdac *or;			/* Original ramdac if we set one */
+
+	int serno;			/* Reading serial number */
+	col ref_bw[2];   	/* Reference black and white readings for drift comp. */
+	int ref_bw_v;		/* Reference valid flag */
+	col last_bw[2];   	/* Last black and white readings for drift comp. */
+	int last_bw_v;		/* Last valid flag */
+	col targ_w;   		/* Target white to normalise to. last_bw[1] for batch, */
+						/* first white for non-batch, but can be reset. */
+	int targ_w_v;		/* target_w valid flag */
 
 /* public: */
 
@@ -123,6 +144,10 @@ struct _disprd {
 		int tc			/* If nz, termination key */
 	);
 
+	/* Reset the white drift target white value, for non-batch */
+	/* readings when white drift comp. is enabled */
+	void (*reset_targ_w)(struct _disprd *p);
+
 	/* Take an ambient reading if the instrument has the capability. */
 	/* return nz on fail/abort */
 	/* 1 = user aborted */
@@ -130,6 +155,7 @@ struct _disprd {
 	/* 3 = no ambient capability */ 
 	/* 4 = user hit terminate key */
 	/* 5 = system error */
+	/* 8 = no ambient capability */
 	int (*ambient)(struct _disprd *p,
 		double *ambient,	/* return ambient in cd/m^2 */
 		int tc				/* If nz, termination key */
@@ -140,11 +166,15 @@ struct _disprd {
 /* Create a display reading object. */
 /* Return NULL if error */
 /* Set *errc to code: */
+/* 0 = no error */
 /* 1 = user aborted */
 /* 2 = instrument access failed */
 /* 3 = window access failed */
 /* 4 = user hit terminate key */
 /* 5 = system error */
+/* 6 = system error */
+/* 7 = CRT or LCD must be selected */
+/* 9 = spectral conversion failed */
 /* Use disprd_err() to interpret errc */
 disprd *new_disprd(
 int *errc,			/* Error code. May be NULL */ 
@@ -167,7 +197,11 @@ char *mcallout,		/* Shell callout on measure color (forced fake) */
 double patsize,		/* Size of dispwin */
 double ho,			/* Horizontal offset */
 double vo,			/* Vertical offset */
-int spectral,		/* Generate spectral info flag */
+double ccmtx[3][3],	/* Colorimeter Correction matrix, NULL if none */
+int spectral,		/* 1 = Generate spectral info flag, 2 = don't print error if not capable */
+icxObserverType observ,	/* Compute XYZ from spectral if spectral and != icxOT_none */
+int bdrift,			/* Flag, nz for black drift compensation */
+int wdrift,			/* Flag, nz for white drift compensation */
 int verb,			/* Verbosity flag */
 FILE *df,			/* Verbose output - NULL = stdout */
 int debug,			/* Debug flag */

@@ -28,7 +28,7 @@
 #include <string.h>
 #include <time.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "cgats.h"
 #include "numlib.h"
 #include "rspl.h"

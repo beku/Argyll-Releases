@@ -24,7 +24,7 @@
 #include <math.h>
 #include "numlib.h"
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "icc.h"
 
 void usage(void) {

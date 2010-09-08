@@ -202,10 +202,9 @@ Use colormetric source gamut to make output profile saturation table<br
 image gamut as well for output profile gamut mapping</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#p">-p aprof.icm</a><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Incorporate abstract profile into output tables</span><br
- style="font-family: monospace;">
+ style="font-family: monospace;" href="#p">-p aprof.icm,...</a><span
+ style="font-family: monospace;"> &nbsp; Incorporate abstract
+profile(s) into output tables</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#t">-t intent</a><span
  style="font-family: monospace;">&nbsp;
@@ -319,7 +318,7 @@ box</span></small><small><span style="font-family: monospace;"></span><span
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp; s:surround a =
+&nbsp;&nbsp;&nbsp; s:surround n = auto, a =
 average, m = dim, d = dark,</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
@@ -345,9 +344,13 @@ cd.m^2
 <span style="font-family: monospace;">&nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; b:background&nbsp;
-Background % of image luminance (default 20)</span><br
+Background % of image luminance (default 20)<br>
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; l:scenewhite&nbsp; Scene white in
+cd.m^2 if surround = auto (default 250)<br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp; &nbsp; &nbsp; &nbsp;
+</span><span style="font-family: monospace;">&nbsp; &nbsp; &nbsp;
+&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare
@@ -732,7 +735,7 @@ illuminant
 and observer.<br>
 <br>
 <a name="o"></a> The <b>-o</b> flag allows specifying a tristimulus
-observer, and is used to compute PCS (Profile Connection Space)
+observer, and is used to compute
 tristimulus values. The following choices are available:<br>
 <b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer.
 The default.<br>
@@ -776,9 +779,13 @@ spectral content, otherwise FWA compensation won't work properly (but
 see the note above about non-standard illuminants and observers). This
 means you ideally need to measure your illuminant spectrum using an
 instrument that can measure down to 300nm. Such instruments are not
-easy to come by. An alternative is to simply try different illuminant
-spectra in the directory,
-and see if one gives you the result you are after. The ref/D50_X.X.sp
+easy to come by. The best alternative is to use the <a
+ href="illumread.html">illumread</a> utility, which uses an indirect
+means of measuring an illuminant and estimating its UV content. Another
+alternative is to simply try different illuminant
+spectra in the <span style="font-weight: bold;">ref </span>directory,
+and see if one gives you the result you are after, although this will
+be fairly a tedious approach. The ref/D50_X.X.sp
 set of illuminant spectra are the D50 spectrum with different levels of
 U.V. added or subtracted, ref/D50_1.0.sp being the standard D50
 illuminant, and may be somewhere to start. Note that using the
@@ -790,7 +797,7 @@ Agent compensation</a>.<br>
 with the standard D50 illuminant spectrum will predict that the device
 will produce bluer output than the default of not FWA compensation.
 This is because most instruments use an incandescent illuminant, which
-has lower relative levels of U.V. than D50, so the FWA compensation
+has lower relative levels of UV than D50, so the FWA compensation
 simulates the effect of the greater U.V. in the D50. Also note that in
 an absolute colorimetric color transformation, the more a profile
 predicts the output device will have blue output, the yellower the
@@ -902,14 +909,24 @@ conditions generally being those of the input profile viewing
 conditions. The input profile will normally be the one used to create a
 source image gamut using <span style="font-weight: bold;">tiffgamut</span>.<br>
 <br>
-<b><a name="p"></a></b>The <b>-p</b> option alows specifying an
+<b><a name="p"></a></b>The <b>-p</b> option allows specifying one or
+more
 abstract
-profile be applied to all of the output tables, after any gamut
+profiles that will be applied to the output tables, after any gamut
 mapping. An abstract
 profile is a way of specifying a color adjustment in a device
 independent way. The abstract profile might have been created using one
 of the <span style="font-weight: bold;">tweak</span> tools, such as <a
  href="refine.html">refine</a>.<br>
+If a single abstract profile is specified, then it will be applied to
+all the output tables (colorimetric, perceptual and saturation). To
+specify different abstract profiles for each output table, use a
+contiguous comma separated list of filenames. Omit a filename between
+the commas if no abstract profile is to be applied to a table. For
+instance: -<span style="font-weight: bold;">p
+colabst.icm,percabst.icm,satabst.icm</span> for three different
+abstract transforms, or: <span style="font-weight: bold;">-p
+,percabst.icm,</span> for just a perceptual table abstract transform.<br>
 <br>
 One strategy for getting the best perceptual results with output
 profile when using ICC
@@ -931,6 +948,10 @@ linking
 that profile with an RGB source profile, use relative colorimetric
 intent,
 or if linking with a CMYK profile, use the perceptual intent.<br>
+<br>
+(Note that the perceptual and saturation table gamut mapping doesn't
+make any allowance for the application of the abstract profile. This is
+a bug.)<br>
 <br>
 <a name="t"></a><a name="T"></a>Normally, the gamut mapping used in
 creating the perceptual and

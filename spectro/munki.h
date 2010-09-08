@@ -1,14 +1,15 @@
+
 #ifndef MUNKI_H
+
+ /* X-Rite ColorMunki related defines */
 
 /* 
  * Argyll Color Correction System
  *
- * X-Rite ColorMunki related defines
- *
  * Author: Graeme W. Gill
  * Date:   12/1/2009
  *
- * Copyright 2006 - 2009, Graeme W. Gill
+ * Copyright 2006 - 2010, Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -37,6 +38,10 @@
 
 #include "inst.h"
 
+#ifdef __cplusplus
+	extern "C" {
+#endif
+
 /* MUNKI communication object */
 struct _munki {
 	INST_OBJ_BASE
@@ -57,6 +62,10 @@ struct _munki {
 
 /* Constructor */
 extern munki *new_munki(icoms *icom, int debug, int verb);
+
+#ifdef __cplusplus
+	}
+#endif
 
 #define MUNKI_H
 #endif /* MUNKI_H */

@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/tools/tiffsplit.c,v 1.3 2003/07/26 03:46:08 warmerda Exp $ */
+/* $Id: tiffsplit.c,v 1.14.2.4 2010-06-08 18:50:44 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1992-1997 Sam Leffler
@@ -24,13 +24,18 @@
  * OF THIS SOFTWARE.
  */
 
+#include "tif_config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "tiffio.h"
 
-#define	streq(a,b)	(strcmp(a,b) == 0)
+#ifndef HAVE_GETOPT
+extern int getopt(int, char**, char*);
+#endif
+
 #define	CopyField(tag, v) \
     if (TIFFGetField(in, tag, &v)) TIFFSetField(out, tag, v)
 #define	CopyField2(tag, v1, v2) \
@@ -38,7 +43,11 @@
 #define	CopyField3(tag, v1, v2, v3) \
     if (TIFFGetField(in, tag, &v1, &v2, &v3)) TIFFSetField(out, tag, v1, v2, v3)
 
-static	char fname[1024+1];
+#define PATH_LENGTH 8192
+
+static const char TIFF_SUFFIX[] = ".tif";
+
+static	char fname[PATH_LENGTH];
 
 static	int tiffcp(TIFF*, TIFF*);
 static	void newfilename(void);
@@ -51,19 +60,30 @@ main(int argc, char* argv[])
 	TIFF *in, *out;
 
 	if (argc < 2) {
+                fprintf(stderr, "%s\n\n", TIFFGetVersion());
 		fprintf(stderr, "usage: tiffsplit input.tif [prefix]\n");
 		return (-3);
 	}
-	if (argc > 2)
-		strcpy(fname, argv[2]);
+	if (argc > 2) {
+		strncpy(fname, argv[2], sizeof(fname));
+		fname[sizeof(fname) - 1] = '\0';
+	}
 	in = TIFFOpen(argv[1], "r");
 	if (in != NULL) {
 		do {
-			char path[1024+1];
+			size_t path_len;
+			char *path;
+			
 			newfilename();
-			strcpy(path, fname);
-			strcat(path, ".tif");
-			out = TIFFOpen(path, "w");
+
+			path_len = strlen(fname) + sizeof(TIFF_SUFFIX);
+			path = (char *) _TIFFmalloc(path_len);
+			strncpy(path, fname, path_len);
+			path[path_len - 1] = '\0';
+			strncat(path, TIFF_SUFFIX, path_len - strlen(path) - 1);
+			out = TIFFOpen(path, TIFFIsBigEndian(in)?"wb":"wl");
+			_TIFFfree(path);
+
 			if (out == NULL)
 				return (-2);
 			if (!tiffcp(in, out))
@@ -106,28 +126,38 @@ newfilename(void)
 	}
 	if (fnum % 676 == 0) {
 		if (fnum != 0) {
-			//advance to next letter every 676 pages
-			//condition for 'z'++ will be covered above
+			/*
+                         * advance to next letter every 676 pages
+			 * condition for 'z'++ will be covered above
+                         */
 			fpnt[0]++;
 		} else {
-			//set to 'a' if we are on the very first file
+			/*
+                         * set to 'a' if we are on the very first file
+                         */
 			fpnt[0] = 'a';
 		}
-		//set the value of the last turning point
+		/*
+                 * set the value of the last turning point
+                 */
 		lastTurn = fnum;
 	}
-	//start from 0 every 676 times (provided by lastTurn)
-	//this keeps us within a-z boundaries
-	fpnt[1] = (fnum - lastTurn) / 26 + 'a';
-	//cycle last letter every file, from a-z, then repeat
-	fpnt[2] = fnum % 26 + 'a';
+	/* 
+         * start from 0 every 676 times (provided by lastTurn)
+         * this keeps us within a-z boundaries
+         */
+	fpnt[1] = (char)((fnum - lastTurn) / 26) + 'a';
+	/* 
+         * cycle last letter every file, from a-z, then repeat
+         */
+	fpnt[2] = (char)(fnum % 26) + 'a';
 	fnum++;
 }
 
 static int
 tiffcp(TIFF* in, TIFF* out)
 {
-	short bitspersample, samplesperpixel, shortv, *shortav;
+	uint16 bitspersample, samplesperpixel, compression, shortv, *shortav;
 	uint32 w, l;
 	float floatv;
 	char *stringv;
@@ -139,13 +169,21 @@ tiffcp(TIFF* in, TIFF* out)
 	CopyField(TIFFTAG_IMAGEWIDTH, w);
 	CopyField(TIFFTAG_IMAGELENGTH, l);
 	CopyField(TIFFTAG_BITSPERSAMPLE, bitspersample);
-	CopyField(TIFFTAG_COMPRESSION, shortv);
+	CopyField(TIFFTAG_SAMPLESPERPIXEL, samplesperpixel);
+	CopyField(TIFFTAG_COMPRESSION, compression);
+	if (compression == COMPRESSION_JPEG) {
+		uint16 count = 0;
+		void *table = NULL;
+		if (TIFFGetField(in, TIFFTAG_JPEGTABLES, &count, &table)
+		    && count > 0 && table) {
+		    TIFFSetField(out, TIFFTAG_JPEGTABLES, count, table);
+		}
+	}
+        CopyField(TIFFTAG_PHOTOMETRIC, shortv);
 	CopyField(TIFFTAG_PREDICTOR, shortv);
-	CopyField(TIFFTAG_PHOTOMETRIC, shortv);
 	CopyField(TIFFTAG_THRESHHOLDING, shortv);
 	CopyField(TIFFTAG_FILLORDER, shortv);
 	CopyField(TIFFTAG_ORIENTATION, shortv);
-	CopyField(TIFFTAG_SAMPLESPERPIXEL, samplesperpixel);
 	CopyField(TIFFTAG_MINSAMPLEVALUE, shortv);
 	CopyField(TIFFTAG_MAXSAMPLEVALUE, shortv);
 	CopyField(TIFFTAG_XRESOLUTION, floatv);
@@ -159,7 +197,7 @@ tiffcp(TIFF* in, TIFF* out)
 	CopyField(TIFFTAG_YPOSITION, floatv);
 	CopyField(TIFFTAG_IMAGEDEPTH, longv);
 	CopyField(TIFFTAG_TILEDEPTH, longv);
-	CopyField(TIFFTAG_SAMPLEFORMAT, longv);
+	CopyField(TIFFTAG_SAMPLEFORMAT, shortv);
 	CopyField2(TIFFTAG_EXTRASAMPLES, shortv, shortav);
 	{ uint16 *red, *green, *blue;
 	  CopyField3(TIFFTAG_COLORMAP, red, green, blue);
@@ -176,6 +214,13 @@ tiffcp(TIFF* in, TIFF* out)
 	CopyField(TIFFTAG_HOSTCOMPUTER, stringv);
 	CopyField(TIFFTAG_PAGENAME, stringv);
 	CopyField(TIFFTAG_DOCUMENTNAME, stringv);
+	CopyField(TIFFTAG_BADFAXLINES, longv);
+	CopyField(TIFFTAG_CLEANFAXDATA, longv);
+	CopyField(TIFFTAG_CONSECUTIVEBADFAXLINES, longv);
+	CopyField(TIFFTAG_FAXRECVPARAMS, longv);
+	CopyField(TIFFTAG_FAXRECVTIME, longv);
+	CopyField(TIFFTAG_FAXSUBADDRESS, stringv);
+	CopyField(TIFFTAG_FAXDCS, stringv);
 	if (TIFFIsTiled(in))
 		return (cpTiles(in, out));
 	else
@@ -194,7 +239,7 @@ cpStrips(TIFF* in, TIFF* out)
 
 		TIFFGetField(in, TIFFTAG_STRIPBYTECOUNTS, &bytecounts);
 		for (s = 0; s < ns; s++) {
-			if (bytecounts[s] > bufsize) {
+			if (bytecounts[s] > (uint32)bufsize) {
 				buf = (unsigned char *)_TIFFrealloc(buf, bytecounts[s]);
 				if (!buf)
 					return (0);
@@ -224,7 +269,7 @@ cpTiles(TIFF* in, TIFF* out)
 
 		TIFFGetField(in, TIFFTAG_TILEBYTECOUNTS, &bytecounts);
 		for (t = 0; t < nt; t++) {
-			if (bytecounts[t] > bufsize) {
+			if (bytecounts[t] > (uint32) bufsize) {
 				buf = (unsigned char *)_TIFFrealloc(buf, bytecounts[t]);
 				if (!buf)
 					return (0);
@@ -241,3 +286,12 @@ cpTiles(TIFF* in, TIFF* out)
 	}
 	return (0);
 }
+
+/* vim: set ts=8 sts=8 sw=8 noet: */
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

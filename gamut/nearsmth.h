@@ -20,6 +20,11 @@
  */
 
 
+/* Settings for nearsmth & gammap */
+
+#define GAMMAP_RSPLFLAGS (0)		/* Default rspl flags */
+#define GAMMAP_RSPLAVGDEV 0.005		/* Default average deviation */
+
 /* Structures to hold weightings */
 
 /* Color x light & dark = 14 combinations */
@@ -83,28 +88,43 @@ typedef struct {
 
 	gmm_chex ch;			/* Color hextant this applies to */
 
+	/* Cusp alignment control */
+	struct {
+		iweight w;			/* Component alignment weights, 0 - 1 */
+		double cx;			/* Chroma expansion, 1 = none, > 1 = more */
+	} c;
+
+	/* Radial weighting */
+	/* Weight to give to minimizing delta E to source mapped radially */
+	struct {
+		double o;			/* Overall Radial weight */
+		double h;			/* Hue dominance vs l+c, 0 - 1 */
+		double l;			/* l dominance vs, c, 0 - 1 */
+	} l;
+
 	/* Absolute error weighting */
 	/* Weight given to minimizing delta E to destination closest point */
 	struct {
-		double o;			/* Overall weight */
-		iweight w;			/* Component weights */
+		double o;			/* Overall Absolute weight */
+
+		double h;			/* Hue dominance vs l+c, 0 - 1 */
+
+		double wl;			/* White l dominance vs, c, 0 - 1 */
+		double gl;			/* Grey l dominance vs, c, 0 - 1 */
+		double bl;			/* Black l dominance vs, c, 0 - 1 */
+
+		double wlth;		/* White l blend start radius, 0 - 1, at white = 0 */
+		double blpow;		/* Black l blend power, linear = 1.0, enhance < 1.0 */
+
+		double lxpow;		/* L error extra power, none = 1.0 */
+		double lxthr;		/* L error xover threshold in DE */
 	} a;
 
-	/* Relative error weighting */
-	/* Weight to give to minimizing delta E to surround average displaced source */
+	/* Relative vector smoothing. */
 	struct {
-		double o;			/* Overall weight */
-		iweight w;			/* Component weights */
 		double rdl;			/* Direction smoothing radius L* dir. (delta E radius at src point)*/
 		double rdh;			/* Direction smoothing radius H* (delta E radius at src point)*/
 	} r;
-
-	/* radial weighting */
-	/* Weight to give to minimizing delta E to source mapped radially */
-	struct {
-		double o;			/* Overall weight */
-		iweight w;			/* Component weights */
-	} l;
 
 	/* depth weighting */
 	/* Weighing to give to minimizing depth ratio by mapping to/from adequate dest/src depth */
@@ -113,11 +133,14 @@ typedef struct {
 		double xo;			/* Overall expansion weighting */
 	} d;
 
-	/* Cusp alignment control */
+	/* Fine tuning destination gamut mapping */
 	struct {
-		iweight w;			/* Component weights */
-		double cx;			/* Chroma expansion, 1 = none, > 1 = more */
-	} c;
+		double x;			/* Final expansion weight, 0 - 1 */
+	} f;
+
+	/* Internal use */
+	iweight rl;				/* Resolved radial weight */
+	iweight ra;				/* Resolved absolute weight */
 
 	int set;				/* Whether this has been set */
 } gammapweights;
@@ -131,12 +154,13 @@ void near_wblend(gammapweights *dst,
 /* A neighbour and it's weight for relative error */
 typedef struct {
 	struct _nearsmth *n;	/* Pointer to neigbor */
-	double rw;				/* Raw neighbor interpolation weight */
-	double w;				/* Neighbor interpolation weight */
+	double rw;				/* Raw neighbor interpolation weight (1.0 at point) */
+	double w;				/* Neighbor interpolation weight (sums to 1.0) */
 } neighb;
 
 /* Returned point values. */
 /* Note that source == input point, destination == output point */
+/* (All the source values are in rotated L mapped partial gamut mapped space) */
 struct _nearsmth {
 
   /* Public: */
@@ -170,12 +194,19 @@ struct _nearsmth {
 	double m3d[3][4];   /* Tangent alignment rotation for 2D -> sv[] 3D */
 	double _sv[3];		/* Original (non cusp aligned) source value (input) */
 	double _sr;			/* Original source radius */
+	double naxbf;		/* Blend factor that goes to 0.0 at white & black points. */
 	double aodv[3];		/* Absolute error optimized destination value */
-	double nsdv[3];		/* No smoothing optimized destination value */
-	double anv[3];		/* Average neighborhood target point */
-	double pdel[3];		/* Previous itter change in dv[] */
+	double nrdv[3];		/* No relative weight optimized destination value */
+	double anv[3];		/* Average neighborhood target point (relative target) */
+
+	double tdst[3];		/* Target destination on gamut */
+	double evect[3];	/* Accumulated extension vector direction */
+	double clen;		/* Current correction length needed */
+	double coff[3];		/* Correction offset */
+	double rext;
+
 	double temp[3];		/* General temporary */
-	gamut *sgam;		/* Source gamut sci_gam */
+	gamut *sgam;		/* Source gamut sci_gam = intersection of src and img gamut gamut */
 	gamut *dgam;		/* Destination gamut di_gam */
 
 	int nnd, _nnd;		/* No & size of direction neighbour list */
@@ -183,11 +214,10 @@ struct _nearsmth {
 
 	double dcratio;		/* Depth compression ratio */ 
 	double dxratio;		/* Depth expansion ratio */ 
-	double ogam;		/* Out of gamut error */
-	double udst;		/* Normalized distance under destination gamut (debug) */
 
 	int debug;
 	double dbgv[4];		/* Error components va, vr, vl, vd on last itteration */
+
 }; typedef struct _nearsmth nearsmth;
 
 
@@ -213,11 +243,15 @@ nearsmth *near_smooth(
 	gammapweights *wh,  /* Structure holding weights */
 	double gamcknf,		/* Gamut compression knee factor, 0.0 - 1.0 */
 	double gamxknf,		/* Gamut expansion knee factor, 0.0 - 1.0 */
-	int   usecomp,		/* Flag indicating whether smoothed compressed value will be used */
-	int   useexp,		/* Flag indicating whether smoothed expanded value will be used */
+	int    usecomp,		/* Flag indicating whether smoothed compressed value will be used */
+	int    useexp,		/* Flag indicating whether smoothed expanded value will be used */
 	double xvra,		/* Extra vertex ratio */
-	int   mapres,		/* Grid res for 3D RSPL */
-	double m21fsm		/* Inverse 3D RSPL smoothing, 0 = none */
+	int    mapres,		/* Target grid res for 3D RSPL */
+	double mapsmooth,	/* Target smoothing for 3D RSPL */
+	datai map_il,		/* Preliminary rspl input range */
+	datai map_ih,
+	datao map_ol,		/* Preliminary rspl output range */
+	datao map_oh 
 );
 
 /* Free the list of points that was returned */

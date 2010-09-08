@@ -830,7 +830,7 @@ int main(int argc, char *argv[]) {
 	if ((rv = rco.mppo->read_mpp(rco.mppo,prof_name)) != 0)
 		error ("%d, %s",rv,rco.mppo->err);
 
-	rco.mppo->get_info(rco.mppo, &rco.imask, &rco.pdi, NULL, NULL, NULL, NULL, NULL);
+	rco.mppo->get_info(rco.mppo, &rco.imask, &rco.pdi, NULL, NULL, NULL, NULL, NULL, NULL);
 	ident = icx_inkmask2char(rco.imask, 1); 
 
 	if (rco.pdi != 3 && rco.pdi != 4)

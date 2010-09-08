@@ -2,7 +2,164 @@
 Argyll CMS change log
 =====================
 
-Version 1.1.1 21 February 2010
+Version 1.3.0
+-------------
+
+*	Added option to dispread to save non-normalised to Y=100 values.
+	Fixed colprof to normalise display spectral values that haven't been normalised.
+	Fixed profcheck to normalise display spectral values that haven't been normalised.
+	Fixed verify to scale white point reference to be larger than largest Y value
+	being compared.
+
+*	Added option to dispcal and dispread that attempts to counteract instrument
+	black drift and display white drift (-I option). This may help with 
+	instruments that haven't properly acclimatised to the measurement location,
+	and LCD displays that also take some time to stabilise.
+
+*	Added option to dispcal to allow specifying a non 1931 2 degree observer
+	if a spectrometer is being used.
+
+*	Added new utility spectro/ccmxmake, which makes Colorimeter Correction
+	Matrices for a particular Colorimeter/Display combination, using a
+	Spectrometer as a reference. The resulting .ccmx file can then be used
+	with spotread/dispcal/dispread (-X option) to improve the accuracy of
+	the colorimeter on that particular display.
+
+*	Fixed bug in spotread's handling of emsissive measurements.
+	If the XYZ was computed from spectral, it was using a D50 white
+	instead of no white reference.
+
+*	Fixed bug in i1pro normal resolution wavelength calibration,
+	introduced in V1.2.0. 
+
+*   Fixed bug in the way illumread displays available instruments.
+
+*	Changed libusb V1.0 name to libusb-1.0A, so as not to clash
+	with any official but different libubs V1.0 installation.
+	[This may necessitate re-installing device drivers on MSWin.]
+
+*	Added support for HP DreamColor version of the i1 display.
+
+*	Fix problem with ARGYLL_NOT_INTERACTIVE - reading from instruments
+	was not actually possible, because polling for input was disabled.
+
+*	Adjust ColorMunki dark threshold to reduce misread reports.
+	Add inconsitent data to debug output.
+	Fix bug in adaptive mode - the integration time was sometimes
+	too short.
+	Set adapative emissive target at 95% to allow a little more
+	margin to saturation.
+
+*   Fix some minor compiler warnings.
+
+*   Added direction indicators to xy values in dispcal interactive
+	monitor adjustments.
+
+Version 1.2.1 (9 August 2010) 
+-------------
+
+*	Fix problem with ColorMunki reporting erroneous inconsistent
+	measurement errors. This shows up on display calibration.
+	
+*	Fix bug in CIECAM02 viewing condition settings :- the enumerated
+	conditions after "mt" are displaced by 1. (ie. "mt" is really "pc",
+	"mb" is "mt", "md" is "mb" etc.) Added option -c:sn for auto
+	surround from the Lv parameter (-c:l).
+
+*   Add option to illumread to average several readings.
+
+Version 1.2.0 (30 July 2010)
+-------------
+
+*	Added EV calculation to spotread -a
+
+*	Updates included libtiff to V3.9.4
+
+*	Modified colprof -p to allow different abstract profiles to be applied
+	for each intent.
+
+*	Added -I option (imitation) to printcal, so that an existing devices
+	response can be set as a target.
+
+*	Fixed scale by 100 bug in spec2cie -f spectral output values.
+
+*	Fixed memory allocation bug in spectro/fakeread.c.
+	(Also fix memory allocation leak in xicc/mpp.c)
+
+*	Fixed bug in target/targen where .mpp pre-conditioning profiles
+	ink limits wern't being handled properly.
+
+*	Reduced i1pro high res mode from 750 to 740 nm because of
+	unreliable sensor values.
+
+*	Added support for filter in chartread.
+
+*	Re-worked gamut mapping to improve perceptual intent saturation
+	levels, as well as improve highlight and shadow contrast.
+	Added fine tuning to improve both smoothness and the precision
+	with which the source is mapped to the destination.
+
+*	Fixed bug in installing profile on MSWin Vista/Win 7 in system scope.
+
+*	Fixed bug in xsp_Tdensity() table values.
+
+*	Enable -C option in dispcal.
+
+*   Increase target/ofps.c vertex intersection retries from 10 to 40
+	to give it a better chance of working with difficult profiles.
+
+*	Fixed printcal -D problem.
+
+*	Fixed average spectral output problems.
+
+*	Changed i1pro & Munki driver to save instrument calibration
+	file in $XDG_CACHE_HOME/color/ (or the XDG fallback) 
+	rather than in the directory that the executable
+	exists in. Also changed spyd2en to save the PLD pattern
+	in the $XDG_DATA_HOME or $XDG_DATA_DIRS.
+
+*	Fixed bug in plot that shows up on XP+, where the window
+	isn't dismissed by the first keystroke, but only after it
+	has been moved or resized.
+
+*	Added illumread, which allows measuring an illuminant and
+	estimating its UV content, for better accuracy with
+	FWA compensation.
+
+*	Use a modified/forked version of libusb V1.0, that supports Win2K
+	(libusb0.sys) back end by default. Supports 64 but MSWin
+	using a combination of WinUSB.sys and ptlibusb0.sys.
+	[ The HCFR does not work on Win 64 bit though, due to its
+	buggy USB implementation. ]
+
+	NOTE that the included version of Libusb V1 has been carefully
+	tested with all supported instruments on all supported platforms,
+	and includes many bug fixes needed for correct functioning.
+	While bug fixes have been fed upstream, not all have been
+	adopted. In particular there is a nasty race condition
+	that has not, and may never be fixed upstream, as well as
+	missing critical functionality (clearep()).
+
+*	Changed CMYK black point to be natural, rather than the darkest
+	point in the same direction and K only. This may wreck
+	K only to black point matching, but it will stop printers
+	with funny colored K ink from messing up the black point.
+
+*	Make Lacie Blue Eye colorimeter appear as an i1display.
+
+*	Improved i1pro matching to Original Manufacturers Driver
+	(see doc/i1proDriver.html).
+
+*	Improved i1pro/ColorMunki patch recognition for beter uniformity.
+
+*	Fixed bug in ColorMunki driver scan mode calibration
+	when instrument is more sensitive than usual.
+
+*	Fix usage of dispread, -V option was missing.
+
+*	Fix plot bug in printcal
+
+Version 1.1.1 (21 February 2010)
 -------------
 
 *	Altered xpsect FWA code to reduce overshoot artefacts due to filetering.
@@ -28,7 +185,7 @@ Version 1.1.1 21 February 2010
 	mpprof      -> mppprof
 
 *	Modified scanin so that it ignores any alpha channels
-	in the input .tiff file.
+	in the input .tif file.
 
 *	Change spotread so that it takes spectral readings by
 	default so that FWA comensation readings can be used.
@@ -1665,7 +1822,7 @@ Version 0.60 changes (July 17 2006)
 	somewhat better, and should eliminate the "non-monotonic" warning
 	message.
 
-Version 0.53 changes (December 2005)
+Version 0.53 changes (16 December 2005)
 --------------------
 
 *   Fixed serious bug in target/ofps.c, that made
@@ -1728,7 +1885,7 @@ Version 0.53 changes (December 2005)
 
 *   Started adding support for ICC V4 Lab encoding into icc.c
 
-Version 0.52 changes
+Version 0.52 changes (3 November 2005)
 --------------------
 
 *   Added a display calibration utility, dispcal,
@@ -1813,7 +1970,7 @@ Version 0.52 changes
     faulty, so suppression of unsconstrained bumps in curves wasn't always
     effective. This change may improve matrix/shaper profile quality slightly.
 
-Version 0.51 changes
+Version 0.51 changes (11 March 2005)
 --------------------
 
 *   Added new option to xicc/xicclu to allow plotting of the neutral
@@ -1835,7 +1992,7 @@ Version 0.51 changes
 *   Modify Jamfiles to support a more restricted "install" of
     executables and other files to bin/
 
-Version 0.5 changes
+Version 0.5 changes (7 November 2004)
 -------------------
 
 *   Got the GUI and serial coms dependent parts running
@@ -2336,7 +2493,7 @@ Version 0.5 changes
     desired number of test points.)
 
 
-Fourth snapshot changes:
+Fourth snapshot changes: (25 March 2002)
 ------------------------
 
 *   Removed gamut/iccgamut, and renamed
@@ -2521,7 +2678,7 @@ Fourth snapshot changes:
 *   Added a couple of options to cctiff to aid diagnostics.
 
 
-Third snapshot changes:
+Third snapshot changes: (17 July 2001)
 ----------------------
 
 *	Changed targen to allow full spread test points to take account
@@ -2576,8 +2733,8 @@ Third snapshot changes:
     is to use Java as a sophisticated scripting front end, to
 	make the command line commands more palatable.
 
-Second snapshot changes:
-----------------------
+Second snapshot changes: (30 November 2000)
+------------------------
 
   Neil Okamoto has contributed support for generating
   RGB TIFF targets suitable for film recorder output,
@@ -2607,3 +2764,5 @@ Second snapshot changes:
 
   Numerous bug fixes and enhancement.
 
+First snapshot	(28 October 2000)
+--------------

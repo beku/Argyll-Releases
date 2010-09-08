@@ -15,7 +15,11 @@
 /* This program displays test patches, and takes readings from a display device */
 
 /* TTBD
- *
+
+	Ideally this should be changed to always create non-normalized (absolute)
+	readings, since normalised readings are not natural, but everything
+	that deals with .ti3 data then needs fixing to deal with non-normalized
+	readings !
  */
 
 #undef DEBUG
@@ -39,9 +43,10 @@
 #include <time.h>
 #include <string.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "xspect.h"
+#include "ccmx.h"
 #include "cgats.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -79,7 +84,7 @@ void usage(char *diag, ...) {
 
 	fprintf(stderr,"Read a Display, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	if (setup_spyd2(NULL) == 2)
+	if (setup_spyd2() == 2)
 		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	if (diag != NULL) {
 		va_list args;
@@ -121,7 +126,7 @@ void usage(char *diag, ...) {
 					break;
 				if (strlen(paths[i]->path) >= 8
 				  && strcmp(paths[i]->path+strlen(paths[i]->path)-8, "Spyder2)") == 0
-				  && setup_spyd2(NULL) == 0)
+				  && setup_spyd2() == 0)
 					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->path);
 				else
 					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
@@ -144,6 +149,10 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -K                   Run instrument calibration first (used rarely)\n");
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
+	fprintf(stderr," -V                   Use adaptive measurement mode (if available)\n");
+	fprintf(stderr," -w                   Disable normalisation of white to Y = 100\n");
+	fprintf(stderr," -X file.ccmx         Apply Colorimeter Correction Matrix\n");
+	fprintf(stderr," -I b|w               Drift compensation, Black: -Ib, White: -Iw, Both: -Ibw\n");
 	fprintf(stderr," -C \"command\"         Invoke shell \"command\" each time a color is set\n");
 	fprintf(stderr," -M \"command\"         Invoke shell \"command\" each time a color is measured\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
@@ -171,10 +180,15 @@ int main(int argc, char *argv[])
 	int docalib = 0;					/* Do a calibration */
 	int highres = 0;					/* Use high res mode if available */
 	int adaptive = 0;					/* Use adaptive mode if available */
+	int bdrift = 0;						/* Flag, nz for black drift compensation */
+	int wdrift = 0;						/* Flag, nz for white drift compensation */
 	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
 	int proj = 0;						/* NZ if projector */
 	int nocal = 0;						/* Disable auto calibration */
-	int spectral = 0;					/* Don't save spectral information */
+	int nonorm = 0;						/* Disable normalisation */
+	char ccmxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction Matrix name */
+	ccmx *cmx = NULL;					/* Colorimeter Correction Matrix */
+	int spec = 0;						/* Don't save spectral information */
 	char *ccallout = NULL;				/* Change color Shell callout */
 	char *mcallout = NULL;				/* Measure color Shell callout */
 	char inname[MAXNAMEL+1] = "\000";	/* Input cgats file base name */
@@ -202,7 +216,8 @@ int main(int argc, char *argv[])
 	int rv;
 
 	set_exe_path(argv[0]);				/* Set global exe_path and error_program */
-	setup_spyd2(NULL);					/* Load firware if available */
+	check_if_not_interactive();
+	setup_spyd2();					/* Load firware if available */
 
 #ifdef DEBUG_OFFSET
 	ho = 0.8;
@@ -287,6 +302,7 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'n') {
 				override = 0;
 #endif /* UNIX */
+
 			/* COM port  */
 			} else if (argv[fa][1] == 'c') {
 				fa = nfa;
@@ -318,7 +334,7 @@ int main(int argc, char *argv[])
 
 			/* Save spectral data */
 			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
-				spectral = 1;
+				spec = 1;
 
 			/* Test patch offset and size */
 			} else if (argv[fa][1] == 'P') {
@@ -337,8 +353,13 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'F') {
 				blackbg = 1;
 
+			/* Force calibration */
 			} else if (argv[fa][1] == 'K') {
 				docalib = 1;
+
+			/* No auto-cal */
+			} else if (argv[fa][1] == 'N') {
+				nocal = 1;
 
 			/* High res mode */
 			} else if (argv[fa][1] == 'H') {
@@ -347,6 +368,30 @@ int main(int argc, char *argv[])
 			/* Adaptive mode */
 			} else if (argv[fa][1] == 'V') {
 				adaptive = 1;
+
+			/* No normalisation */
+			} else if (argv[fa][1] == 'w') {
+				nonorm = 1;
+
+			/* Colorimeter Correction Matrix */
+			} else if (argv[fa][1] == 'X') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expected after -X");
+				strncpy(ccmxname,na,MAXNAMEL-1); ccmxname[MAXNAMEL-1] = '\000';
+
+			} else if (argv[fa][1] == 'I') {
+				fa = nfa;
+				if (na == NULL || na[0] == '\000') usage("Parameter expected after -I");
+				for (i=0; ; i++) {
+					if (na[i] == '\000')
+						break;
+					if (na[i] == 'b' || na[i] == 'B')
+						bdrift = 1;
+					else if (na[i] == 'w' || na[i] == 'W')
+						wdrift = 1;
+					else
+						usage("-I parameter '%c' not recognised",na[i]);
+				}
 
 			/* Change color callout */
 			} else if (argv[fa][1] == 'C') {
@@ -380,8 +425,6 @@ int main(int argc, char *argv[])
 					fa = nfa;
 				}
 				callback_ddebug = 1;		/* dispwin global */
-			} else if (argv[fa][1] == 'N') {
-				nocal = 1;
 
 			} else 
 				usage("Flag '-%c' not recognised",argv[fa][1]);
@@ -411,6 +454,22 @@ int main(int argc, char *argv[])
 			error("Unable to open the default display");
 	}
 
+	/* See if there is an environment variable ccmx */
+	{
+		char *na = getenv("ARGYLL_COLMTER_COR_MATRIX");
+		if (na != NULL) {
+			strncpy(ccmxname,na,MAXNAMEL-1); ccmxname[MAXNAMEL-1] = '\000';
+		}
+	}
+	/* Colorimeter Correction Matrix */
+	if (ccmxname[0] != '\000') {
+		if ((cmx = new_ccmx()) == NULL)
+			error("new_ccmx failed\n");
+		if (cmx->read_ccmx(cmx,ccmxname))
+			error("Reading Colorimeter Correction Matrix file '%s' failed with error %d:'%s'\n",
+		     	       ccmxname, cmx->errc,  cmx->err);
+	}
+
 	if (docalib) {
 		if ((rv = disprd_calibration(itype, comport, fc, dtype, proj, adaptive, nocal, disp,
 		                             blackbg, override, patsize, ho, vo, verb, debug)) != 0) {
@@ -432,12 +491,12 @@ int main(int argc, char *argv[])
 		error("CGATS file read error : %s",icg->err);
 
 	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0)
-		error ("Input file isn't a CTI1 format file");
+		error ("Input file '%s' isn't a CTI1 format file",inname);
 	if (icg->ntables < 1)		/* We don't use second table at the moment */
-		error ("Input file doesn't contain at least one table");
+		error ("Input file '%s' doesn't contain at least one table",inname);
 
 	if ((npat = icg->t[0].nsets) <= 0)
-		error ("No sets of data");
+		error ("Input file '%s' has no sets of data",inname);
 
 	/* Setup output cgats file */
 	ocg = new_cgats();					/* Create a CGATS structure */
@@ -470,31 +529,31 @@ int main(int argc, char *argv[])
 	ocg->add_field(ocg, 0, "SAMPLE_ID", nqcs_t);
 
 	if ((si = icg->find_field(icg, 0, "SAMPLE_ID")) < 0)
-		error ("Input file doesn't contain field SAMPLE_ID");
+		error ("Input file '%s' doesn't contain field SAMPLE_ID",inname);
 	if (icg->t[0].ftype[si] != nqcs_t)
-		error ("Field SAMPLE_ID is wrong type");
+		error ("Input file %s' field SAMPLE_ID is wrong type",inname);
 
 	if ((cols = (col *)malloc(sizeof(col) * (npat+1))) == NULL)
 		error("Malloc failed!");
 
 	/* Figure out the color space */
 	if ((fi = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
-		error ("Input file doesn't contain keyword COLOR_REP");
+		error ("Input file '%s' doesn't contain keyword COLOR_REP",inname);
 	if (strcmp(icg->t[0].kdata[fi],"RGB") == 0) {
 		int ri, gi, bi;
 		dim = 3;
 		if ((ri = icg->find_field(icg, 0, "RGB_R")) < 0)
-			error ("Input file doesn't contain field RGB_R");
+			error ("Input file '%s' doesn't contain field RGB_R",inname);
 		if (icg->t[0].ftype[ri] != r_t)
-			error ("Field RGB_R is wrong type");
+			error ("Input file '%s' field RGB_R is wrong type",inname);
 		if ((gi = icg->find_field(icg, 0, "RGB_G")) < 0)
-			error ("Input file doesn't contain field RGB_G");
+			error ("Input file '%s' doesn't contain field RGB_G",inname);
 		if (icg->t[0].ftype[gi] != r_t)
-			error ("Field RGB_G is wrong type");
+			error ("Input file '%s' field RGB_G is wrong type",inname);
 		if ((bi = icg->find_field(icg, 0, "RGB_B")) < 0)
-			error ("Input file doesn't contain field RGB_B");
+			error ("Input file '%s' doesn't contain field RGB_B",inname);
 		if (icg->t[0].ftype[bi] != r_t)
-			error ("Field RGB_B is wrong type");
+			error ("Input file '%s' field RGB_B is wrong type",inname);
 		ocg->add_field(ocg, 0, "RGB_R", r_t);
 		ocg->add_field(ocg, 0, "RGB_G", r_t);
 		ocg->add_field(ocg, 0, "RGB_B", r_t);
@@ -510,7 +569,7 @@ int main(int argc, char *argv[])
 			cols[i].XYZ[0] = cols[i].XYZ[1] = cols[i].XYZ[2] = -1.0;
 		}
 	} else
-		error ("Input file keyword COLOR_REP has illegal value (RGB colorspace expected)");
+		error ("Input file '%s' keyword COLOR_REP has illegal value (RGB colorspace expected)",inname);
 
 	/* Check that there is a white patch, and if not, add one, */
 	/* so that we can normalize the values to white. */
@@ -590,15 +649,27 @@ int main(int argc, char *argv[])
 
 	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, proj, adaptive, nocal,
 	                     highres, 0, cal, ncal, disp, blackbg, override, ccallout, mcallout,
-	                     patsize, ho, vo, spectral, verb, VERBOUT, debug,
-	                     "fake" ICC_FILE_EXT)) == NULL)
+	                     patsize, ho, vo, cmx != NULL ? cmx->matrix : NULL, spec, icxOT_none,
+	                     bdrift, wdrift, verb, VERBOUT, debug, "fake" ICC_FILE_EXT)) == NULL)
 		error("new_disprd failed with '%s'\n",disprd_err(errc));
+
+	if (cmx != NULL)
+		cmx->del(cmx);
 
 	/* Test the CRT with all of the test points */
 	if ((rv = dr->read(dr, cols, npat + xpat, 1, npat + xpat, 1, 0)) != 0) {
 		dr->del(dr);
 		error("test_crt returned error code %d\n",rv);
 	}
+	/* Note what instrument the chart was read with */
+	ocg->add_kword(ocg, 0, "TARGET_INSTRUMENT", inst_name(dr->itype) , NULL);
+
+	/* Note if the instrument is natively spectral or not */
+	if (dr->it != NULL && dr->it->capabilities(dr->it) & inst_spectral)
+		ocg->add_kword(ocg, 0, "INSTRUMENT_TYPE_SPECTRAL", "YES" , NULL);
+	else
+		ocg->add_kword(ocg, 0, "INSTRUMENT_TYPE_SPECTRAL", "NO" , NULL);
+
 	dr->del(dr);
 
 	/* And save the result: */
@@ -610,12 +681,20 @@ int main(int argc, char *argv[])
 		if (npat > 0 && cols[0].aXYZ_v == 0)
 			error("Neither relative or absolute XYZ is valid!");
 
-		nn = 100.0 / cols[wpat].aXYZ[1];		/* Normalise Y of white to 100 */
+		if (nonorm)
+			nn = 1.0;
+		else
+			nn = 100.0 / cols[wpat].aXYZ[1];		/* Normalise Y of white to 100 */
 
-		for (i = 0; i < (npat+ xpat); i++) {
-			for (j = 0; j < 3; j++) {
+		for (i = 0; i < (npat + xpat); i++) {
+			for (j = 0; j < 3; j++)
 				cols[i].XYZ[j] = nn * cols[i].aXYZ[j];
-				cols[i].XYZ_v = 1;
+			cols[i].XYZ_v = 1;
+		
+			/* Keep spectral aligned with normalised XYZ */
+			if (cols[i].sp.spec_n > 0) {
+				for (j = 0; j < cols[i].sp.spec_n; j++)
+					cols[i].sp.spec[j] *= nn;
 			}
 		}
 	}
@@ -681,6 +760,11 @@ int main(int argc, char *argv[])
 		sprintf(buf,"%f %f %f", cols[wpat].aXYZ[0], cols[wpat].aXYZ[1], cols[wpat].aXYZ[2]);
 		ocg->add_kword(ocg, 0, "LUMINANCE_XYZ_CDM2",buf, NULL);
 	}
+
+	if (nonorm == 0) 
+		ocg->add_kword(ocg, 0, "NORMALIZED_TO_Y_100","YES", NULL);
+	else
+		ocg->add_kword(ocg, 0, "NORMALIZED_TO_Y_100","NO", NULL);
 
 	/* Write out the calibration if we have it */
 	if (cal[0][0] >= 0.0) {

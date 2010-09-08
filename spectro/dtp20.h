@@ -133,7 +133,7 @@ struct _dtp20 {
 
 	int savix;					/* Index of last saved spot reading read */
 
-	}; typedef struct _dtp20 dtp20;
+}; typedef struct _dtp20 dtp20;
 
 /* Constructor */
 extern dtp20 *new_dtp20(icoms *icom, int debug, int verb);

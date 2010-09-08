@@ -54,7 +54,7 @@
 #include <ctype.h>
 #include <string.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "cgats.h"
 #include "numlib.h"
 #include "xicc.h"
@@ -185,6 +185,7 @@ int emis,			/* Use emissive mode */
 int displ,			/* 1 = Use display emissive mode, 2 = display bright rel. */
 					/* 3 = display white rel. */
 int dtype,			/* Display type, 0 = default, 1 = CRT, 2 = LCD */
+inst_opt_filter fe,	/* Optional filter */
 int nocal,			/* Disable auto calibration */
 int disbidi,		/* Disable automatic bi-directional strip recognition */
 int highres,		/* Use high res spectral mode */
@@ -208,7 +209,7 @@ int debug			/* Debug level */
 	int	nextrap = 0;	/* Number of extra patches for max and min */
 	int ch;
 
-	if (xtern == 0) {		/* Use user supplied values */
+	if (xtern == 0) {		/* Use instrument values */
 
 		/* Instrument that the chart is set up for */
 		if (itype == instDTP51) {
@@ -226,6 +227,15 @@ int debug			/* Debug level */
 			       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 			it->del(it);
 			return -1;
+		}
+
+		/* set filter configuration before initialising/calibrating */
+		if (fe != inst_opt_filter_unknown) {
+			if ((rv = it->set_opt_mode(it, inst_opt_set_filter, fe)) != inst_ok) {
+				printf("Setting filter configuration not supported by instrument\n");
+				it->del(it);
+				return -1;
+			}
 		}
 
 		/* Set it up the way we want */
@@ -950,7 +960,8 @@ int debug			/* Debug level */
 		 && it->needs_calibration(it) != inst_calt_crt_freq
 		 && it->needs_calibration(it) != inst_calt_disp_int_time
 		 && it->needs_calibration(it) != inst_calt_proj_int_time) {
-			if ((rv = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL)) != inst_ok) {
+			if ((rv = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL))
+			                                                                    != inst_ok) {
 				printf("\nCalibration failed with error :'%s' (%s)\n",
 	       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 				it->del(it);
@@ -1084,7 +1095,7 @@ int debug			/* Debug level */
 			for (;;) {	/* Until we give up reading this row */
 
 				/* Read a strip pass */
-				printf("\nReady to read strip pass %s%s\n",nn, done ? " (All rows read)" : scols[oroi *stipa]->rr ? " (This row has been read)" : "" );
+				printf("\nReady to read strip pass %s%s\n",nn, done ? " (!! ALL ROWS READ !!)" : scols[oroi *stipa]->rr ? " (This row has been read)" : "" );
 				printf("Press 'f' to move forward, 'b' to move back, 'n' for next unread,\n");
 				printf(" 'd' when done, Esc or 'q' to quit without saving.\n");
 				
@@ -1165,7 +1176,7 @@ int debug			/* Debug level */
 						if (cap2 & inst2_no_feedback)
 							bad_beep();
 						printf("\nStrip read failed because instruments needs calibration\n");
-						ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL);
+						ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL);
 						if (ev != inst_ok) {	/* Abort or fatal error */
 							it->del(it);
 							return -1;
@@ -1460,8 +1471,8 @@ int debug			/* Debug level */
 			 && it->needs_calibration(it) != inst_calt_crt_freq
 			 && it->needs_calibration(it) != inst_calt_disp_int_time
 			 && it->needs_calibration(it) != inst_calt_proj_int_time) {
-				if ((rv = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL))
-				                                                              != inst_ok) {
+				if ((rv = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL))
+				                                                                    != inst_ok) {
 					printf("\nCalibration failed with error :'%s' (%s)\n",
 		       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 					it->del(it);
@@ -1649,7 +1660,7 @@ int debug			/* Debug level */
 					if (cap2 & inst2_no_feedback)
 						bad_beep();
 					printf("\nSpot read failed because instruments needs calibration\n");
-					ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL);
+					ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL);
 					if (ev != inst_ok) {	/* Abort or fatal error */
 						it->del(it);
 						return -1;
@@ -1883,6 +1894,11 @@ usage(void) {
 	fprintf(stderr," -l              Save CIE as D50 L*a*b* rather than XYZ\n");
 	fprintf(stderr," -r              Resume reading partly read chart\n");
 	fprintf(stderr," -I file.cal     Override calibration info from .ti2 in resulting .ti3\n");
+	fprintf(stderr," -F filter       Set filter configuration (if aplicable):\n");
+	fprintf(stderr,"    n             None\n");
+	fprintf(stderr,"    p             Polarising filter\n");
+	fprintf(stderr,"    6             D65\n");
+	fprintf(stderr,"    u             U.V. Cut\n");
 	fprintf(stderr," -N              Disable auto calibration of instrument\n");
 	fprintf(stderr," -B              Disable auto bi-directional strip recognition\n");
 	fprintf(stderr," -H              Use high resolution spectrum mode (if available)\n");
@@ -1907,6 +1923,7 @@ int main(int argc, char *argv[]) {
 	int displ = 0;					/* 1 = Use display emissive mode, 2 = display bright rel. */
 	                                /* 3 = display white rel. */
 	int dtype = 0;					/* Display type, 0 = default, 1 = CRT, 2 = LCD */
+	inst_opt_filter fe = inst_opt_filter_unknown;
 	int pbypatch = 0;				/* Read patch by patch */
 	int disbidi = 0;				/* Disable bi-directional strip recognition */
 	int highres = 0;				/* Use high res mode if available */
@@ -1917,11 +1934,11 @@ int main(int argc, char *argv[]) {
 	int dolab = 0;					/* Save CIE as Lab */
 	int doresume = 0;				/* Resume reading a chart */
 	int nocal = 0;					/* Disable auto calibration */
-	static char inname[MAXNAMEL] = { 0 };	/* Input cgats file base name */
-	static char outname[MAXNAMEL] = { 0 };	/* Output cgats file base name */
+	static char inname[MAXNAMEL+1] = { 0 };	/* Input cgats file base name */
+	static char outname[MAXNAMEL+1] = { 0 };	/* Output cgats file base name */
 	cgats *icg;					/* input cgats structure */
 	cgats *ocg;					/* output cgats structure */
-	static char calname[MAXNAMEL] = { 0 };	/* User supplied calibration filename */
+	static char calname[MAXNAMEL+1] = { 0 };	/* User supplied calibration filename */
 	xcal *cal = NULL;			/* Any calibration to be output as well */
 	int nmask = 0;				/* Device colorant mask */
 	char *pixpat = "A-Z, A-Z";			/* Pass index pattern */		
@@ -1949,6 +1966,8 @@ int main(int argc, char *argv[]) {
 	double plen = 7.366, glen = 2.032, tlen = 18.8;	/* Patch, gap and trailer length in mm */
 
 	set_exe_path(argv[0]);			/* Set global exe_path and error_program */
+	check_if_not_interactive();
+
 	if (argc <= 1)
 		usage();
 
@@ -2087,6 +2106,21 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage();
 				strncpy(calname,na,MAXNAMEL); calname[MAXNAMEL] = '\000';
+
+			/* Filter configuration */
+			} else if (argv[fa][1] == 'F') {
+				fa = nfa;
+				if (na == NULL) usage();
+				if (na[0] == 'n' || na[0] == 'N')
+					fe = inst_opt_filter_none;
+				else if (na[0] == 'p' || na[0] == 'P')
+					fe = inst_opt_filter_pol;
+				else if (na[0] == '6')
+					fe = inst_opt_filter_D65;
+				else if (na[0] == 'u' || na[0] == 'U')
+					fe = inst_opt_filter_UVCut;
+				else
+					usage();
 
 			} else 
 				usage();
@@ -2572,7 +2606,7 @@ int main(int argc, char *argv[]) {
 	/* Read all of the strips in */
 	if (read_strips(itype, scols, &atype, npat, totpa, stipa, pis, paix,
 	                saix, ixord, rstart, hex, comport, fc, plen, glen, tlen,
-	                trans, emis, displ, dtype, nocal, disbidi, highres, scan_tol,
+	                trans, emis, displ, dtype, fe, nocal, disbidi, highres, scan_tol,
 	                pbypatch, xtern, spectral, accurate_expd, verb, debug) == 0) {
 		/* And save the result */
 

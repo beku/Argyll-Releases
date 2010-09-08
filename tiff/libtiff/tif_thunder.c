@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/libtiff/tif_thunder.c,v 1.2 2003/07/08 16:40:46 warmerda Exp $ */
+/* $Id: tif_thunder.c,v 1.5.2.1 2010-06-08 18:50:43 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -66,12 +66,12 @@ static const int threebitdeltas[8] = { 0, 1, 2, 3, 0, -3, -2, -1 };
 static int
 ThunderDecode(TIFF* tif, tidata_t op, tsize_t maxpixels)
 {
-	register u_char *bp;
+	register unsigned char *bp;
 	register tsize_t cc;
-	u_int lastpixel;
+	unsigned int lastpixel;
 	tsize_t npixels;
 
-	bp = (u_char *)tif->tif_rawcp;
+	bp = (unsigned char *)tif->tif_rawcp;
 	cc = tif->tif_rawcc;
 	lastpixel = 0;
 	npixels = 0;
@@ -91,8 +91,10 @@ ThunderDecode(TIFF* tif, tidata_t op, tsize_t maxpixels)
 			} else
 				lastpixel |= lastpixel << 4;
 			npixels += n;
-			for (; n > 0; n -= 2)
-				*op++ = (tidataval_t) lastpixel;
+			if (npixels < maxpixels) {
+				for (; n > 0; n -= 2)
+					*op++ = (tidataval_t) lastpixel;
+			}
 			if (n == -1)
 				*--op &= 0xf0;
 			lastpixel &= 0xf;
@@ -119,7 +121,7 @@ ThunderDecode(TIFF* tif, tidata_t op, tsize_t maxpixels)
 	tif->tif_rawcp = (tidata_t) bp;
 	tif->tif_rawcc = cc;
 	if (npixels != maxpixels) {
-		TIFFError(tif->tif_name,
+		TIFFErrorExt(tif->tif_clientdata, tif->tif_name,
 		    "ThunderDecode: %s data at scanline %ld (%lu != %lu)",
 		    npixels < maxpixels ? "Not enough" : "Too much",
 		    (long) tif->tif_row, (long) npixels, (long) maxpixels);
@@ -152,3 +154,12 @@ TIFFInitThunderScan(TIFF* tif, int scheme)
 	return (1);
 }
 #endif /* THUNDER_SUPPORT */
+
+/* vim: set ts=8 sts=8 sw=8 noet: */
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

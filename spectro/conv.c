@@ -1,19 +1,21 @@
 
+ /* Windows NT serial I/O class */
+
 /* 
  * Argyll Color Correction System
- *
- * Windows NT serial I/O class
  *
  * Author: Graeme W. Gill
  * Date:   28/9/97
  *
- * Copyright 1997 - 2007 Graeme W. Gill
+ * Copyright 1997 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
 
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -24,8 +26,6 @@
 #endif
 
 #if defined(UNIX)
-#include <sys/types.h>		/* Include sys/select.h ? */
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <termios.h>
 #include <stdio.h>
@@ -34,16 +34,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <string.h>
-#endif
 
-#include "copyright.h"
-#include "config.h"
-#include "numlib.h"
-#include "xspect.h"
-#include "insttypes.h"
-#include "icoms.h"
-#include "conv.h"
-#include "usbio.h"
 /* select() defined, but not poll(), so emulate poll() */
 #if defined(FD_CLR) && !defined(POLLIN)
 #include "pollem.h"
@@ -52,6 +43,16 @@
 #include <sys/poll.h>	/* Else assume poll() is native */
 #define poll_x poll
 #endif
+#endif
+
+#include "copyright.h"
+#include "aconfig.h"
+#include "numsup.h"
+#include "xspect.h"
+#include "insttypes.h"
+#include "icoms.h"
+#include "conv.h"
+#include "usbio.h"
 
 #ifdef __APPLE__
 //#include <stdbool.h>
@@ -81,27 +82,93 @@
 #endif
 
 /* ============================================================= */
+/*                           MS WINDOWS                          */  
+/* ============================================================= */
 #ifdef NT
 
 /* wait for and then return the next character from the keyboard */
+/* (If not_interactive, return getchar()) */
 int next_con_char(void) {
+	if (not_interactive) {
+		HANDLE stdinh;
+  		char buf[1];
+		DWORD bread;
+
+		if ((stdinh = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE)
+			return 0;
+	
+		if (ReadFile(stdinh, buf, 1, &bread, NULL) && bread == 1) { 
+			return buf[0];
+		}
+
+		return 0;
+	}
+
 	return _getch();
 }
 
-/* If here is one, return the next character from the keyboard, else return 0 */
+/* Horrible hack to poll stdin when we're not interactive */
+static int th_read_char(void *pp) {
+	char *rp = (char *)pp;
+	HANDLE stdinh;
+  	char buf[1];
+	DWORD bread;
+
+	if ((stdinh = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE)
+		return 0;
+
+	if (ReadFile(stdinh, buf, 1, &bread, NULL) && bread == 1)  {	
+		*rp = buf[0];
+
+	}
+	return 0;
+}
+
+/* If there is one, return the next character from the keyboard, else return 0 */
+/* (If not_interactive, always returns 0) */
 int poll_con_char(void) {
+
+	if (not_interactive) {		/* Can't assume that it's the console */
+		athread *getch_thread = NULL;
+		char c = 0;
+	
+		/* This is pretty horrible. The problem is that we can't use */
+		/* any of MSWin's async file read functions, because we */
+		/* have no way of ensuring that the STD_INPUT_HANDLE has been */
+		/* opened with FILE_FLAG_OVERLAPPED. Used a thread instead... */
+		if ((getch_thread = new_athread(th_read_char, &c)) != NULL) {
+			HANDLE stdinh;
+
+			if ((stdinh = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE)
+				return 0;
+
+			Sleep(1);			/* We just hope 1 msec is enough for the thread to start */
+			CancelIo(stdinh);
+			getch_thread->del(getch_thread);
+			return c;
+		}
+		return 0;
+	}
+
+	/* Assume it's the console */
 	if (_kbhit() != 0) {
-		int c = _getch();
+		int c = next_con_char();
 		return c;
 	}
 	return 0; 
 }
 
 /* Suck all characters from the keyboard */
+/* (If not_interactive, does nothing) */
 void empty_con_chars(void) {
+
+	if (not_interactive) {
+		return;
+	}
+
 	Sleep(50);					/* _kbhit seems to have a bug */
 	while (_kbhit()) {
-		if (_getch() == 0x3)	/* ^C Safety */
+		if (next_con_char() == 0x3)	/* ^C Safety */
 			break;
 	}
 }
@@ -150,8 +217,6 @@ void msec_beep(int delay, int freq, int msec) {
 	}
 }
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
-
 #ifdef NEVER    /* Not currently needed, or effective */
 
 /* Set the current threads priority */
@@ -169,7 +234,6 @@ int set_normal_priority() {
 
 #endif /* NEVER */
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
 
 #undef USE_BEGINTHREAD
 
@@ -246,34 +310,64 @@ athread *new_athread(
 	return p;
 }
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
-
 /* Delete a file */
 void delete_file(char *fname) {
 	_unlink(fname);
 }
 
-#endif /* NT */
-/* ============================================================= */
+/* Given the path to a file, ensure that all the parent directories */
+/* are created. return nz on error */
+int create_parent_directories(char *path) {
+	struct _stat sbuf;
+	char *pp = path;
 
+	if (*pp != '\000'		/* Skip drive number */
+		&& ((*pp >= 'a' && *pp <= 'z') || (*pp >= 'A' && *pp <= 'Z'))
+	    && pp[1] == ':')
+		pp += 2;
+	if (*pp == '/')
+		pp++;			/* Skip root directory */
+	for (;pp != NULL && *pp != '\000';) {
+		if ((pp = strchr(pp, '/')) != NULL) {
+			*pp = '\000';
+			if (_stat(path,&sbuf) != 0)
+			{
+				if (_mkdir(path) != 0)
+					return 1;
+			}
+			*pp = '/';
+			pp++;
+		}
+	}
+	return 0;
+}
+
+#endif /* NT */
+
+
+/* ============================================================= */
+/*                          UNIX/OS X                            */
 /* ============================================================= */
 #if defined(UNIX)
 
-/* wait for and return the next character from the keyboard */
+/* Wait for and return the next character from the keyboard */
+/* (If not_interactive, return getchar()) */
 int next_con_char(void) {
 	struct pollfd pa[1];		/* Poll array to monitor stdin */
 	struct termios origs, news;
 	char rv = 0;
 
-	/* Configure stdin to be ready with just one character */
-	if (tcgetattr(STDIN_FILENO, &origs) < 0)
-		error("tcgetattr failed with '%s' on stdin", strerror(errno));
-	news = origs;
-	news.c_lflag &= ~(ICANON | ECHO);
-	news.c_cc[VTIME] = 0;
-	news.c_cc[VMIN] = 1;
-	if (tcsetattr(STDIN_FILENO,TCSANOW, &news) < 0)
-		error("next_con_char: tcsetattr failed with '%s' on stdin", strerror(errno));
+	if (!not_interactive) {
+		/* Configure stdin to be ready with just one character */
+		if (tcgetattr(STDIN_FILENO, &origs) < 0)
+			error("tcgetattr failed with '%s' on stdin", strerror(errno));
+		news = origs;
+		news.c_lflag &= ~(ICANON | ECHO);
+		news.c_cc[VTIME] = 0;
+		news.c_cc[VMIN] = 1;
+		if (tcsetattr(STDIN_FILENO,TCSANOW, &news) < 0)
+			error("next_con_char: tcsetattr failed with '%s' on stdin", strerror(errno));
+	}
 
 	/* Wait for stdin to have a character */
 	pa[0].fd = STDIN_FILENO;
@@ -288,32 +382,36 @@ int next_con_char(void) {
 			rv = tb[0] ;
 		}
 	} else {
-		tcsetattr(STDIN_FILENO, TCSANOW, &origs);
+		if (!not_interactive)
+			tcsetattr(STDIN_FILENO, TCSANOW, &origs);
 		error("poll on stdin returned unexpected value 0x%x",pa[0].revents);
 	}
 
 	/* Restore stdin */
-	if (tcsetattr(STDIN_FILENO, TCSANOW, &origs) < 0)
+	if (!not_interactive && tcsetattr(STDIN_FILENO, TCSANOW, &origs) < 0)
 		error("tcsetattr failed with '%s' on stdin", strerror(errno));
 
 	return rv;
 }
 
 /* If here is one, return the next character from the keyboard, else return 0 */
+/* (If not_interactive, always returns 0) */
 int poll_con_char(void) {
 	struct pollfd pa[1];		/* Poll array to monitor stdin */
 	struct termios origs, news;
 	char rv = 0;
 
-	/* Configure stdin to be ready with just one character */
-	if (tcgetattr(STDIN_FILENO, &origs) < 0)
-		error("tcgetattr failed with '%s' on stdin", strerror(errno));
-	news = origs;
-	news.c_lflag &= ~(ICANON | ECHO);
-	news.c_cc[VTIME] = 0;
-	news.c_cc[VMIN] = 1;
-	if (tcsetattr(STDIN_FILENO,TCSANOW, &news) < 0)
-		error("next_con_char: tcsetattr failed with '%s' on stdin", strerror(errno));
+	if (!not_interactive) {
+		/* Configure stdin to be ready with just one character */
+		if (tcgetattr(STDIN_FILENO, &origs) < 0)
+			error("tcgetattr failed with '%s' on stdin", strerror(errno));
+		news = origs;
+		news.c_lflag &= ~(ICANON | ECHO);
+		news.c_cc[VTIME] = 0;
+		news.c_cc[VMIN] = 1;
+		if (tcsetattr(STDIN_FILENO,TCSANOW, &news) < 0)
+			error("next_con_char: tcsetattr failed with '%s' on stdin", strerror(errno));
+	}
 
 	/* Wait for stdin to have a character */
 	pa[0].fd = STDIN_FILENO;
@@ -330,14 +428,18 @@ int poll_con_char(void) {
 	}
 
 	/* Restore stdin */
-	if (tcsetattr(STDIN_FILENO, TCSANOW, &origs) < 0)
+	if (!not_interactive && tcsetattr(STDIN_FILENO, TCSANOW, &origs) < 0)
 		error("tcsetattr failed with '%s' on stdin", strerror(errno));
 
 	return rv;
 }
 
 /* Suck all characters from the keyboard */
+/* (If not_interactive, does nothing) */
 void empty_con_chars(void) {
+	if (not_interactive)
+		return;
+
 	tcflush(STDIN_FILENO, TCIFLUSH);
 }
 
@@ -619,6 +721,31 @@ void delete_file(char *fname) {
 	unlink(fname);
 }
 
+/* Given the path to a file, ensure that all the parent directories */
+/* are created. return nz on error */
+int create_parent_directories(char *path) {
+	struct stat sbuf;
+	char *pp = path;
+	mode_t mode = 0700;		/* Default directory mode */
+
+	if (*pp == '/')
+		pp++;			/* Skip root directory */
+	for (;pp != NULL && *pp != '\000';) {
+		if ((pp = strchr(pp, '/')) != NULL) {
+			*pp = '\000';
+			if (stat(path,&sbuf) != 0)
+			{
+				if (mkdir(path, mode) != 0)
+					return 1;
+			} else
+				mode = sbuf.st_mode;
+			*pp = '/';
+			pp++;
+		}
+	}
+	return 0;
+}
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 #ifdef __APPLE__
 
@@ -692,6 +819,5 @@ int kill_nprocess(char *pname) {
 #endif /* __APPLE__ */
 
 #endif /* defined(UNIX) */
-
 /* ============================================================= */
 

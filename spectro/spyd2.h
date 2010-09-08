@@ -114,6 +114,8 @@ struct _spyd2 {
 	int     rrset;				/* Flag, nz if the refresh rate has been determined */
 	double  rrate;				/* Current refresh rate. Set to DEFREFR if !determined */
 
+	double ccmat[3][3];			/* Colorimeter correction matrix */
+
 	/* Other state */
 	int     led_state;			/* Spyder 3: Current LED state */
 	double	led_period, led_on_time_prop, led_trans_time_prop;	/* Spyder 3: Pulse state */

@@ -13607,7 +13607,7 @@ extern ICCLIB_API double icmXYZLabDE(icmXYZNumber *w, double *in0, double *in1) 
 
 /* (Note that CIE94 can give odd results for very large delta E's, */
 /* when one of the two points is near the neutral axis: */
-/* ie DE(A,B + del) != DE(A,B) + DE(del), ie: */
+/* ie DE(A,B + del) != DE(A,B) + DE(del) */
 #ifdef NEVER
 {
 	double w1[3] = { 99.996101, -0.058417, -0.010557 };

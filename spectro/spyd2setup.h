@@ -37,8 +37,9 @@ extern unsigned char *spyder2_pld_bytes;
 /* Return 0 if Spyder 2 firmware is not available */
 /* Return 1 if Spyder 2 firmware is available from an external file */
 /* Return 2 if Spyder 2 firmware is part of this executable */
-int setup_spyd2(char *ovrd_exe_path) {
+int setup_spyd2() {
 	static int loaded = 0;		/* Was loaded from a file */
+	char *bin_path = NULL;
 	unsigned int size, rsize;
 	FILE *fp;
 	int i;
@@ -54,26 +55,21 @@ int setup_spyd2(char *ovrd_exe_path) {
 	spyder2_pld_size = &pld_size; 
 	spyder2_pld_bytes = pld_bytes; 
 
-	if (ovrd_exe_path == NULL)
-		ovrd_exe_path = exe_path;		/* Use global */
-
 	/* If no firmware compiled in, see if there is a file to load from. */
 	if ((pld_size == 0 || pld_size == 0x11223344) && loaded == 0) {
-		char binpath[MAXNAMEL+1];
 		
 		for (;;) {
-			if (strlen(ovrd_exe_path) + strlen("spyd2PLD.bin") > MAXNAMEL)
-				break;				/* oops */
-			strcpy(binpath, ovrd_exe_path);
-			strcat(binpath, "spyd2PLD.bin");
-	
+			if ((bin_path = xdg_bds(NULL, xdg_data, xdg_read, xdg_user, "color/spyd2PLD.bin")) == NULL)
+				break;
+
 			/* open binary file */
 #if defined(O_BINARY) || defined(_O_BINARY)
-			if ((fp = fopen(binpath,"rb")) == NULL)
+			if ((fp = fopen(bin_path,"rb")) == NULL)
 #else
-			if ((fp = fopen(binpath,"r")) == NULL)
+			if ((fp = fopen(bin_path,"r")) == NULL)
 #endif
 				break;
+			free(bin_path);
 
 			/* Figure out how file it is */
 			if (fseek(fp, 0, SEEK_END)) {

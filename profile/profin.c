@@ -222,7 +222,7 @@ void in_b2a_clut(void *cntx, double *out, double in[3]) {
 		p->count++;
 		pc = (int)(p->count * 100.0/p->total + 0.5);
 		if (pc != p->last) {
-			printf("\r%2d%%",pc); fflush(stdout);
+			printf("%c%2d%%",cr_char,pc); fflush(stdout);
 			p->last = pc;
 		}
 	}
@@ -1019,7 +1019,7 @@ make_input_icc(
 			aerr += mxd;
 			nsamps++;
 		}
-		printf("profile check complete, peak err = %f, avg err = %f\n",merr,aerr/nsamps);
+		printf("Profile check complete, peak err = %f, avg err = %f\n",merr,aerr/nsamps);
 
 		/* Done with lookup object */
 		luo->del(luo);

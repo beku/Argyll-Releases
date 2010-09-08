@@ -118,6 +118,8 @@ struct _huey {
 	int     sampno;				/* Number of CRT samples we're aiming to take, def 100 */
 	int     int_clocks;			/* Integration time in clocks */
 
+	double ccmat[3][3];			/* Colorimeter correction matrix */
+
 	/* Other state */
 	int     led_state;			/* Current LED state */
 

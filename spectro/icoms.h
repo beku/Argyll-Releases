@@ -1,10 +1,10 @@
 
 #ifndef ICOMS_H
 
+ /* An abstracted instrument serial and USB communication class. */
+
 /* 
  * Argyll Color Correction System
- *
- * An abstracted instrument serial and USB communication class.
  *
  * Author: Graeme W. Gill
  * Date:   2006/4/20
@@ -32,11 +32,39 @@
 */
 
 #ifdef ENABLE_USB
-#include "usb.h"
+# ifdef USE_LIBUSB1
+#  include "libusb.h"
+# else
+#  include "usb.h"
+# endif
 #endif /* ENABLE_USB */
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
 
 #undef QUIET_MEMCHECKERS		/* #define to memset coms read buffers before reading */
 
+/* Provide some backwards compatibility to libusb0 */
+#ifdef USE_LIBUSB1
+# define USB_ENDPOINT_IN        LIBUSB_ENDPOINT_IN
+# define USB_ENDPOINT_OUT       LIBUSB_ENDPOINT_OUT
+# define USB_RECIP_DEVICE       LIBUSB_RECIPIENT_DEVICE
+# define USB_RECIP_INTERFACE    LIBUSB_RECIPIENT_INTERFACE
+# define USB_RECIP_ENDPOINT     LIBUSB_RECIPIENT_ENDPOINT
+# define USB_TYPE_STANDARD      LIBUSB_REQUEST_TYPE_STANDARD
+# define USB_TYPE_CLASS         LIBUSB_REQUEST_TYPE_CLASS
+# define USB_TYPE_VENDOR        LIBUSB_REQUEST_TYPE_VENDOR
+# define USB_ENDPOINT_TYPE_MASK LIBUSB_TRANSFER_TYPE_MASK
+
+#define usb_device              libusb_device
+#define usb_device_descriptor   libusb_device_descriptor
+#define usb_dev_handle          libusb_device_handle
+#define usb_config_descriptor   libusb_config_descriptor
+#define usb_strerror         libusb_strerror
+#endif
+
+/* - - - - - - - - - - - */
 /* Serial related stuff */
 
 /* Flow control */
@@ -93,7 +121,7 @@ typedef enum {
 	icomuf_none                = 0x0000,
 	icomuf_detach              = 0x0001,	/* Attempt to detach from system driver */
 	icomuf_no_open_clear       = 0x0002,	/* Don't send a clear_halt after opening the port */
-	icomuf_reset_not_close     = 0x0004,	/* Don't release and close port, reset it */
+	icomuf_reset_before_close  = 0x0004,	/* Reset port before closing it */
 	icomuf_resetep_before_read = 0x0008		/* Do a usb_resetep before each ep read */
 } icomuflags;
 
@@ -156,6 +184,10 @@ typedef struct {
 
 #endif
 
+#ifdef __cplusplus
+	}
+#endif
+
 #if defined (NT)
 #if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0501
 # if defined(_WIN32_WINNT) 
@@ -165,6 +197,10 @@ typedef struct {
 #endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#endif
+
+#ifdef __cplusplus
+	extern "C" {
 #endif
 
 struct _icoms {
@@ -344,6 +380,7 @@ struct _icoms {
 	/* For a USB device, do a bulk or interrupt read from an end point */
 	/* Return error code (don't set error state). */
 	int (*usb_read_th)(struct _icoms *p,
+		void **hcancel,			/* Optionaly return handle to allow cancel */
 		int ep,					/* End point address */
 		unsigned char *buf,		/* Read buffer */
 		int bsize,				/* Bytes to read or write */
@@ -364,6 +401,7 @@ struct _icoms {
 	/* For a USB device, do a bulk or interrupt write to an end point */
 	/* Return error code (don't set error state). */
 	int (*usb_write_th)(struct _icoms *p,
+		void **hcancel,			/* Optionaly return handle to allow cancel */
 		int ep,					/* End point address */
 		unsigned char *wbuf,	/* Write buffer */
 		int wsize,				/* Bytes to or write */
@@ -380,6 +418,10 @@ struct _icoms {
 		int wsize,				/* Bytes to or write */
 		int *bwritten,			/* Bytes written */
 		double tout);			/* Timeout in seconds */
+
+	/* Cancel a read/write in another thread */
+	int (*usb_cancel_io)(struct _icoms *p,
+		void *hcancel);			/* Cancel handle */
 
 	/* Reset and end point toggle state to 0 */
 	int (*usb_resetep)(struct _icoms *p,
@@ -434,6 +476,10 @@ char *icoms_fix(char *s);
 
 /* Convert a limited binary buffer to a list of hex */
 char *icoms_tohex(unsigned char *s, int len);
+
+#ifdef __cplusplus
+	}
+#endif
 
 #define ICOMS_H
 #endif /* ICOMS_H */

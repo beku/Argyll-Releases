@@ -2,7 +2,7 @@ Readme.txt
 License.txt
 afiles
 copyright.h
-config.h
+aconfig.h
 sort.h
 llist.h
 xlist.h

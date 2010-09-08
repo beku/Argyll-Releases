@@ -15,7 +15,103 @@
 <body>
 <h1> Summary of Argyll CMS Changes since last release</h1>
 <h3>For detailed change list please see the log.txt file.</h3>
-<br>
+<h1>[V1.2.0 -&gt; V1.3.0]</h1>
+<ul>
+  <li>Added option to <span style="font-weight: bold;">dispcal</span>
+and dispread that attempts to counteract instrument black drift and
+display white drift (-I option). This may help with instruments that
+haven't properly acclimatised to the measurement location, and LCD
+displays that also take some time to stabilise. The is a short
+discussion <a href="Scenarios.html#PM6">here</a>.<br>
+  </li>
+  <li>Added option to <span style="font-weight: bold;">dispcal</span>
+to allow specifying a non 1931 2 degree observer if a spectrometer is
+being used.<br>
+  </li>
+  <li>Added new utility spectro/<span style="font-weight: bold;">ccmxmake</span>,
+which makes Colorimeter Correction Matrices for a particular
+Colorimeter/Display combination, using a Spectrometer as a reference.
+The resulting <span style="font-weight: bold;">.ccmx</span> file can
+then be used with <span style="font-weight: bold;">spotread/dispcal/dispread</span>
+(-X option) to improve the&nbsp; accuracy of the colorimeter on that
+particular display. See a discussion <a href="WideGamutColmters.html">here</a>
+and <a href="Scenarios.html#PM6">here</a>.<br>
+  </li>
+  <li>Fixed bug in spotread's handling of emsissive measurements. If
+the XYZ was computed from spectral, it was using a D50 white instead of
+no white reference.</li>
+  <li>Fixed bug in i1pro normal resolution wavelength calibration,
+introduced in V1.2.0.<br>
+  </li>
+  <li>Changed libusb V1.0 name to libusb-1.0A, so as not to clash with
+any official but different libusb V1.0 installation. [This may
+necessitate re-installing device drivers on MSWin.]</li>
+  <li>Added support for HP DreamColor version of the i1 display.<br>
+  </li>
+  <li>Fix problem with ARGYLL_NOT_INTERACTIVE - reading from
+instruments was not actually possible, because polling for input was
+disabled.</li>
+  <li>Adjust ColorMunki dark threshold to reduce misread reports. Add
+inconsistent data to debug output. Fix bug in adaptive mode - the
+integration time was sometimes&nbsp; too short. Set adaptive emissive
+target at 95% to allow a little more margin to saturation.<br>
+  </li>
+  <li>Fix problem with ColorMunki reporting erroneous inconsistent
+measurement errors. This shows up on display calibration.</li>
+  <li>Fix some minor compiler warnings.</li>
+  <li>Added direction indicators to xy values in dispcal
+interactive&nbsp; monitor adjustments. </li>
+  <li>Fix bug in CIECAM02 viewing condition settings :- the enumerated
+conditions after "mt" are displaced by 1. (ie. "mt" is really "pc",
+"mb" is "mt", "md" is "mb" etc.) Added option -c:sn for auto surround
+from the Lv parameter (-c:l).</li>
+  <li>Add option to illumread to average several readings. Fixed bug in
+the way illumread displays available instruments.<br>
+  </li>
+</ul>
+<h1>[V1.1.1 -&gt; V1.2.0]</h1>
+<ul>
+  <li>Re-worked gamut mapping to improve perceptual intent saturation
+levels,
+as well as improve highlight and shadow contrast. Added fine tuning to
+improve both smoothness and the precision with which the source is
+mapped to the destination.</li>
+  <li>Added illumread, which allows measuring an illuminant and
+estimating its UV content, for better accuracy with FWA compensation.</li>
+  <li>Use a modified/forked version of libusb V1.0, that supports Win2K
+(libusb0.sys) back end by default. Supports 64 but MSWin using a
+combination of WinUSB.sys and ptlibusb0.sys. [ The HCFR does not work
+on Win 64 bit though, due to its buggy USB implementation. ] NOTE that
+the included version of Libusb V1 has been carefully tested with all
+supported instruments on all supported platforms,&nbsp; and includes
+many
+bug fixes needed for correct functioning. While bug fixes have been fed
+upstream, not all have been adopted. In particular there is a nasty
+race condition that has not, and may never be fixed upstream, as well
+as missing critical functionality (clearep()).<br>
+  </li>
+  <li>Modified colprof -p to allow different abstract profiles to be
+applied for each intent.</li>
+  <li>Added -I option (imitation) to printcal, so that an existing
+devices response can be set as a target.</li>
+  <li>Increase target/ofps.c vertex intersection retries from 10 to 40
+to give it a better chance of working with difficult profiles.</li>
+  <li>Fixed bug in plot that shows up on XP+, where the window isn't
+dismissed by the first keystroke, but only after it has been moved or
+resized.</li>
+  <li>Changed CMYK black point to be natural, rather than the darkest
+point in the same direction and K only. This may wreck K only to black
+point matching, but it will stop printers with funny colored K ink from
+messing up the black point.</li>
+  <li>Make Lacie Blue Eye colorimeter appear as an i1display.</li>
+  <li>Improved i1pro matching to Original Manufacturers Driver (see
+doc/i1proDriver.html).</li>
+  <li>Improved i1pro/ColorMunki patch recognition for better uniformity.</li>
+  <li>Fixed bug in ColorMunki driver scan mode calibration when
+instrument is more sensitive than usual.</li>
+  <li>Added EV calculation to spotread -a<br>
+  </li>
+</ul>
 <h1>[V1.1.0 -&gt; V1.1.1]</h1>
 <ul>
   <li>Renamed the following tools:<br>

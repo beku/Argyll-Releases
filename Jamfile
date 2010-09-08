@@ -35,14 +35,19 @@ if ! $(HAVE_TIFF) {
 	SubInclude tiff ;
 }
 
-if $(NT) {
-	SubInclude libusbw ;
+if $(USE_LIBUSB1) = true {
+	SubInclude libusb1 ;
+} else {
+	if $(NT) {
+		SubInclude libusbw ;
+	}
+	if $(UNIX) {
+		SubInclude libusb ;
+	}
 }
+
 if $(UNIX) && $(OS) != MACOSX {
 	SubInclude jcnf ;
 	SubInclude ucmm ;
-}
-if $(UNIX) {
-	SubInclude libusb ;
 }
 

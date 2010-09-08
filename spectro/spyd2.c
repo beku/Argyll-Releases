@@ -64,7 +64,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -805,6 +805,9 @@ spyd2_GetReading_ll(
 
 		msec_sleep(500);
 		if (isdeb) fprintf(stderr,"\nspyd2: Get Reading retry with ICOM err 0x%x\n",se);
+
+		if (isdeb) fprintf(stderr,"\nspyd2: Resetting end point\n");
+		p->icom->usb_resetep(p->icom, 0x81);
 	}	/* End of whole command retries */
 
 	if (sensv == NULL) {
@@ -1864,6 +1867,12 @@ spyd2_download_pld(
 			return ev;
 	}
 
+	/* Let the PLD initialize */
+	msec_sleep(500);
+		
+	/* Reset the coms */
+	p->icom->usb_resetep(p->icom, 0x81);
+
 	/* Check the status */
 	if ((ev = spyd2_getstatus(p, &stat)) != inst_ok)
 		return ev;
@@ -1873,10 +1882,10 @@ spyd2_download_pld(
 		return spyd2_interp_code((inst *)p, SPYD2_PLDLOAD_FAILED);
 	}
 
-	/* Let the PLD initialize */
-	msec_sleep(500);
-		
 	if (p->debug) fprintf(stderr,"spyd2: PLD pattern downloaded\n");
+
+	msec_sleep(500);
+	p->icom->usb_resetep(p->icom, 0x81);
 
 	return inst_ok;
 }
@@ -1913,6 +1922,9 @@ spyd2_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 	/* On MSWindows the Spyder 3 doesn't work reliably unless each */
 	/* read is preceeded by a reset endpoint. */
 	/* (and Spyder 2 hangs if a reset ep is done.) */
+	/* The spyder 2 doesn't work well with the winusb driver either, */
+	/* it needs icomuf_resetep_before_read to work at all, and */
+	/* gets retries anyway. So we use the libusb0 driver for it. */
 #if defined(NT)
 	if (p->prelim_itype == instSpyder3) {
 		usbflags |= icomuf_resetep_before_read;		/* The spyder USB is buggy ? */
@@ -1922,7 +1934,7 @@ spyd2_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 	/* On OS X the Spyder 2 can't close properly */
 #if defined(UNIX) && defined(__APPLE__)			/* OS X*/
 	if (p->prelim_itype != instSpyder3) {
-		usbflags |= icomuf_reset_not_close;		/* The spyder 2 USB is buggy ? */
+		usbflags |= icomuf_reset_before_close;		/* The spyder 2 USB is buggy ? */
 	}
 #endif
 
@@ -1992,7 +2004,7 @@ spyd2_init_inst(inst *pp) {
 		/* it may be left in a borked state if the driver is aborted. */
 		/* Make sure there's no old read data hanging around. */
 		/* Sometimes it takes a little while for the old data to */
-		/* turn up, so try ay least for 1 second. */
+		/* turn up, so try at least for 1 second. */
 		/* This won't always work if the driver is re-started */
 		/* quickly after aborting a long integration read. */
 
@@ -2015,7 +2027,6 @@ spyd2_init_inst(inst *pp) {
 		/* Download the PLD pattern and check the status */
 		if ((ev = spyd2_download_pld(p)) != inst_ok)
 			return ev;
-		msec_sleep(500);
 	}
 
 	/* Do a dumy sensor read */
@@ -2099,6 +2110,9 @@ ipatch *val) {		/* Pointer to instrument patch value */
 			return ev;
 	}
 
+	/* Apply the colorimeter correction matrix */
+	icmMulBy3x3(val->aXYZ, p->ccmat, val->aXYZ);
+
 	val->XYZ_v = 0;
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings ? */
 	val->Lab_v = 0;
@@ -2108,6 +2122,23 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	if (user_trig)
 		return inst_user_trig;
 	return ev;
+}
+
+/* Insert a colorimetric correction matrix in the instrument XYZ readings */
+/* This is only valid for colorimetric instruments. */
+/* To remove the matrix, pass NULL for the filter filename */
+inst_code spyd2_col_cor_mat(
+inst *pp,
+double mtx[3][3]
+) {
+	spyd2 *p = (spyd2 *)pp;
+
+	if (mtx == NULL)
+		icmSetUnity3x3(p->ccmat);
+	else
+		icmCpy3x3(p->ccmat, mtx);
+		
+	return inst_ok;
 }
 
 /* Determine if a calibration is needed. Returns inst_calt_none if not, */
@@ -2285,11 +2316,13 @@ inst_capability spyd2_capabilities(inst *pp) {
 	spyd2 *p = (spyd2 *)pp;
 	inst_capability rv = 0;
 
-	rv |= inst_emis_spot;
-	rv |= inst_emis_disp;
-	rv |= inst_colorimeter;
-	rv |= inst_emis_disp_crt;
-	rv |= inst_emis_disp_lcd;
+	rv = inst_emis_spot
+	   | inst_emis_disp
+	   | inst_colorimeter
+	   | inst_ccmx
+	   | inst_emis_disp_crt
+	   | inst_emis_disp_lcd
+	     ;
 
 	if (p->itype == instSpyder3
 	 && (p->hwver & 0x8) == 0) {	/* Not Spyder3Express */
@@ -2305,13 +2338,14 @@ inst2_capability spyd2_capabilities2(inst *pp) {
 	spyd2 *p = (spyd2 *)pp;
 	inst2_capability rv = 0;
 
+	rv = inst2_cal_crt_freq
+	   | inst2_prog_trig
+	   | inst2_keyb_trig
+	     ;
+
 	if (p->itype == instSpyder3) {
 		rv |= inst2_has_leds;
 	}
-	rv |= inst2_cal_crt_freq;
-	rv |= inst2_prog_trig;
-	rv |= inst2_keyb_trig;
-
 	return rv;
 }
 
@@ -2487,17 +2521,20 @@ extern spyd2 *new_spyd2(icoms *icom, int debug, int verb)
 	p->debug = debug;
 	p->verb = verb;
 
-	p->init_coms        = spyd2_init_coms;
-	p->init_inst        = spyd2_init_inst;
-	p->capabilities     = spyd2_capabilities;
-	p->capabilities2    = spyd2_capabilities2;
-	p->set_mode         = spyd2_set_mode;
-	p->set_opt_mode     = spyd2_set_opt_mode;
-	p->read_sample      = spyd2_read_sample;
+	icmSetUnity3x3(p->ccmat);	/* Set the colorimeter correction matrix to do nothing */
+
+	p->init_coms         = spyd2_init_coms;
+	p->init_inst         = spyd2_init_inst;
+	p->capabilities      = spyd2_capabilities;
+	p->capabilities2     = spyd2_capabilities2;
+	p->set_mode          = spyd2_set_mode;
+	p->set_opt_mode      = spyd2_set_opt_mode;
+	p->read_sample       = spyd2_read_sample;
 	p->needs_calibration = spyd2_needs_calibration;
-	p->calibrate        = spyd2_calibrate;
-	p->interp_error     = spyd2_interp_error;
-	p->del              = spyd2_del;
+	p->calibrate         = spyd2_calibrate;
+	p->col_cor_mat       = spyd2_col_cor_mat;
+	p->interp_error      = spyd2_interp_error;
+	p->del               = spyd2_del;
 
 	p->itype = instUnknown;		/* Until initalisation */
 

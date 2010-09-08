@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/tools/rgb2ycbcr.c,v 1.6 2003/03/12 14:05:06 dron Exp $ */
+/* $Id: rgb2ycbcr.c,v 1.9.2.2 2010-06-08 18:50:44 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1991-1997 Sam Leffler
@@ -24,10 +24,17 @@
  * OF THIS SOFTWARE.
  */
 
+#include "tif_config.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
+
+#include "tiffiop.h"
 #include "tiffio.h"
 
 #define	streq(a,b)	(strcmp(a,b) == 0)
@@ -48,9 +55,9 @@ uint32	rowsperstrip = (uint32) -1;
 
 uint16	horizSubSampling = 2;		/* YCbCr horizontal subsampling */
 uint16	vertSubSampling = 2;		/* YCbCr vertical subsampling */
-float	ycbcrCoeffs[3] = { .299, .587, .114 };
+float	ycbcrCoeffs[3] = { .299F, .587F, .114F };
 /* default coding range is CCIR Rec 601-1 with no headroom/footroom */
-float	refBlackWhite[6] = { 0., 255., 128., 255., 128., 255. };
+float	refBlackWhite[6] = { 0.F, 255.F, 128.F, 255.F, 128.F, 255.F };
 
 static	int tiffcvt(TIFF* in, TIFF* out);
 static	void usage(int code);
@@ -61,33 +68,33 @@ main(int argc, char* argv[])
 {
 	TIFF *in, *out;
 	int c;
-	extern int tiff_optind;
-	extern char *tiff_optarg;
+	extern int optind;
+	extern char *optarg;
 
-	while ((c = tiff_getopt(argc, argv, "c:h:r:v:z")) != -1)
+	while ((c = getopt(argc, argv, "c:h:r:v:z")) != -1)
 		switch (c) {
 		case 'c':
-			if (streq(tiff_optarg, "none"))
+			if (streq(optarg, "none"))
 			    compression = COMPRESSION_NONE;
-			else if (streq(tiff_optarg, "packbits"))
+			else if (streq(optarg, "packbits"))
 			    compression = COMPRESSION_PACKBITS;
-			else if (streq(tiff_optarg, "lzw"))
+			else if (streq(optarg, "lzw"))
 			    compression = COMPRESSION_LZW;
-			else if (streq(tiff_optarg, "jpeg"))
+			else if (streq(optarg, "jpeg"))
 			    compression = COMPRESSION_JPEG;
-			else if (streq(tiff_optarg, "zip"))
+			else if (streq(optarg, "zip"))
 			    compression = COMPRESSION_ADOBE_DEFLATE;
 			else
 			    usage(-1);
 			break;
 		case 'h':
-			horizSubSampling = atoi(tiff_tiff_optarg);
+			horizSubSampling = atoi(optarg);
 			break;
 		case 'v':
-			vertSubSampling = atoi(tiff_optarg);
+			vertSubSampling = atoi(optarg);
 			break;
 		case 'r':
-			rowsperstrip = atoi(tiff_optarg);
+			rowsperstrip = atoi(optarg);
 			break;
 		case 'z':	/* CCIR Rec 601-1 w/ headroom/footroom */
 			refBlackWhite[0] = 16.;
@@ -101,14 +108,14 @@ main(int argc, char* argv[])
 			usage(0);
 			/*NOTREACHED*/
 		}
-	if (argc - tiff_optind < 2)
+	if (argc - optind < 2)
 		usage(-1);
 	out = TIFFOpen(argv[argc-1], "w");
 	if (out == NULL)
 		return (-2);
 	setupLumaTables();
-	for (; tiff_optind < argc-1; tiff_optind++) {
-		in = TIFFOpen(argv[tiff_optind], "r");
+	for (; optind < argc-1; optind++) {
+		in = TIFFOpen(argv[optind], "r");
 		if (in != NULL) {
 			do {
 				if (!tiffcvt(in, out) ||
@@ -153,8 +160,8 @@ setupLumaTables(void)
 	lumaRed = setupLuma(LumaRed);
 	lumaGreen = setupLuma(LumaGreen);
 	lumaBlue = setupLuma(LumaBlue);
-	D1 = 1./(2 - 2*LumaBlue);
-	D2 = 1./(2 - 2*LumaRed);
+	D1 = 1.F/(2.F - 2.F*LumaBlue);
+	D2 = 1.F/(2.F - 2.F*LumaRed);
 	Yzero = V2Code(0, refBlackWhite[0], refBlackWhite[1], 255);
 }
 
@@ -162,7 +169,7 @@ static void
 cvtClump(unsigned char* op, uint32* raster, uint32 ch, uint32 cw, uint32 w)
 {
 	float Y, Cb = 0, Cr = 0;
-	int j, k;
+	uint32 j, k;
 	/*
 	 * Convert ch-by-cw block of RGB
 	 * to YCbCr and sample accordingly.
@@ -273,13 +280,30 @@ tiffcvt(TIFF* in, TIFF* out)
 	char *stringv;
 	uint32 longv;
 
+	size_t pixel_count;
 	TIFFGetField(in, TIFFTAG_IMAGEWIDTH, &width);
 	TIFFGetField(in, TIFFTAG_IMAGELENGTH, &height);
-	raster = (uint32*)_TIFFmalloc(width * height * sizeof (uint32));
+	pixel_count = width * height;
+
+	/* XXX: Check the integer overflow. */
+	if (!width || !height || pixel_count / width != height) {
+		TIFFError(TIFFFileName(in),
+			  "Malformed input file; "
+			  "can't allocate buffer for raster of %lux%lu size",
+			  (unsigned long)width, (unsigned long)height);
+		return 0;
+	}
+
+	raster = (uint32*)_TIFFCheckMalloc(in, pixel_count, sizeof(uint32),
+					   "raster buffer");
 	if (raster == 0) {
-		TIFFError(TIFFFileName(in), "No space for raster buffer");
+		TIFFError(TIFFFileName(in),
+			  "Requested buffer size is %lu elements %lu each",
+			  (unsigned long)pixel_count,
+			  (unsigned long)sizeof(uint32));
 		return (0);
 	}
+
 	if (!TIFFReadRGBAImage(in, width, height, raster, 0)) {
 		_TIFFfree(raster);
 		return (0);
@@ -324,7 +348,6 @@ char* stuff[] = {
     "where comp is one of the following compression algorithms:\n",
     " jpeg\t\tJPEG encoding\n",
     " lzw\t\tLempel-Ziv & Welch encoding\n",
-    " (lzw no longer supported by default due to Unisys patent enforcement)\n", 
     " zip\t\tdeflate encoding\n",
     " packbits\tPackBits encoding (default)\n",
     " none\t\tno compression\n",
@@ -348,3 +371,12 @@ usage(int code)
 		fprintf(stderr, "%s\n", stuff[i]);
 	exit(code);
 }
+
+/* vim: set ts=8 sts=8 sw=8 noet: */
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

@@ -26,7 +26,7 @@ echo "Script to invoke Jam and then package the binary release."
 #
 
 # Set the environment string VERSION from the #define, ie 1.0.0
-VERSION=`grep ARGYLL_VERSION_STR h/config.h | sed 's/#define ARGYLL_VERSION_STR //' | sed 's/"//g'`
+VERSION=`grep ARGYLL_VERSION_STR h/aconfig.h | sed 's/#define ARGYLL_VERSION_STR //' | sed 's/"//g'`
 
 echo "About to make Argyll binary distribution $PACKAGE"
 
@@ -36,7 +36,7 @@ if [ X$OS != "XWindows_NT" ] ; then
 	# Fixup issues with the .zip format
 	chmod +x *.sh
 	chmod +x tiff/configure
-	chmod +x libusb/configure
+#	chmod +x libusb/configure
 fi
 
 # Make sure that some environment variable are visible to Jam:
@@ -57,12 +57,14 @@ fi
 if [ X$OS = "XWindows_NT" ] ; then
 	echo "We're on MSWindows!"
 	PACKAGE=Argyll_V${VERSION}_win32_exe.zip
-	USBDIR=libusbw
+	USBDIRS="libusb1"
+	USBBINFILES="binfiles.msw"
 	unset USETAR
 else if [ X$OSTYPE = "Xdarwin7.0" ] ; then
 	echo "We're on OSX 10.3 PPC!"
 	PACKAGE=Argyll_V${VERSION}_osx10.3_ppc_bin.tgz
-	unset USBDIR
+	USBDIRS="libusb1"
+	USBBINFILES="binfiles.osx"
 	USETAR=true
 else if [ X$OSTYPE = "Xdarwin8.0" ] ; then
 	if [ X$MACHTYPE = "Xi386-apple-darwin8.0" ] ; then
@@ -73,14 +75,16 @@ else if [ X$OSTYPE = "Xdarwin8.0" ] ; then
 		PACKAGE=Argyll_V${VERSION}_osx10.4_ppc_bin.tgz
 	fi
 	fi
-	unset USBDIR
+	USBDIRS="libusb1"
+	USBBINFILES="binfiles.osx"
 	USETAR=true
 else if [ X$OSTYPE = "Xdarwin9.0" ] ; then
 	if [ X$MACHTYPE = "Xi386-apple-darwin9.0" ] ; then
 		echo "We're on OSX 10.5 i386!"
 		PACKAGE=Argyll_V${VERSION}_osx10.5_i86_bin.tgz
 	fi
-	unset USBDIR
+	USBDIRS="libusb1"
+	USBBINFILES="binfiles.osx"
 	USETAR=true
 else if [ X$OSTYPE = "Xlinux-gnu" ] ; then
 	if [ X$MACHTYPE = "Xi686-redhat-linux-gnu" \
@@ -93,7 +97,8 @@ else if [ X$OSTYPE = "Xlinux-gnu" ] ; then
 		PACKAGE=Argyll_V${VERSION}_linux_x86_64_bin.tgz
 	fi
 	fi
-	USBDIR=libusb
+	USBDIRS="libusb1"
+	USBBINFILES="binfiles.unix"
 	USETAR=true
 fi
 fi
@@ -110,9 +115,11 @@ mkdir $TOPDIR
 unset topfiles; for i in `cat binfiles`; do topfiles="$topfiles ${i}"; done
 unset docfiles; for i in `cat doc/afiles`; do docfiles="$docfiles doc/${i}"; done
 unset usbfiles;
-if [ $USBDIR ] ; then
-	for i in `cat $USBDIR/binfiles`; do usbfiles="$usbfiles $USBDIR/${i}"; done
-fi
+for j in ${USBDIRS}; do
+	if [ ${j} ]; then
+		for i in `cat ${j}/${USBBINFILES}`; do usbfiles="$usbfiles ${j}/${i}"; done
+	fi
+done
 
 allfiles="${topfiles} bin/* ref/* ${docfiles} ${usbfiles}"
 

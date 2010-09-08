@@ -587,7 +587,7 @@ static void mxprogfunc(void *pdata, int perc) {
 	mxopt *p = (mxopt *)pdata;
 
 	if (p->verb) {
-		printf("\r% 3d%%",perc); 
+		printf("%c% 3d%%",cr_char,perc); 
 		if (perc == 100)
 			printf("\n");
 		fflush(stdout);

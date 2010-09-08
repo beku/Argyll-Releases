@@ -945,7 +945,7 @@ void usb_os_init(void)
           /* set debug level */
           req.timeout = 0;
           req.debug.level = __usb_debug;
-          
+
           if(!_usb_io_sync(dev, LIBUSB_IOCTL_SET_DEBUG_LEVEL, 
                            &req, sizeof(libusb_request), 
                            NULL, 0, NULL))

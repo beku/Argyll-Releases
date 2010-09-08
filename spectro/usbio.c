@@ -1,13 +1,13 @@
 
+ /* General USB I/O support */
+
 /* 
  * Argyll Color Correction System
- *
- * General USB I/O support
  *
  * Author: Graeme W. Gill
  * Date:   2006/22/4
  *
- * Copyright 2006 - 2007 Graeme W. Gill
+ * Copyright 2006 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -25,9 +25,10 @@
 #if defined(UNIX)
 #include <termios.h>
 #include <errno.h>
+#include <unistd.h>
 #endif
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numsup.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -35,7 +36,11 @@
 #include "conv.h"
 #include "usbio.h"
 
-#include "usb.h"
+#ifdef USE_LIBUSB1
+# include "libusb.h"
+#else
+# include "usb.h"
+#endif
 
 #undef DEBUG
 
@@ -47,11 +52,42 @@ static int usb_check_and_add(
 struct _icoms *p,
 struct usb_device *dev
 ) {
+	struct usb_device_descriptor descriptor;
 	instType itype;
 
-	if (p->debug) fprintf(stderr,"usb_check_and_add() called with VID 0x%x, PID 0x%x\n",dev->descriptor.idVendor, dev->descriptor.idProduct);
+#ifdef USE_LIBUSB1
+	if (libusb_get_device_descriptor(dev, &descriptor) != LIBUSB_SUCCESS)
+		return 1;
+#else
+	descriptor = dev->descriptor;	/* Copy */
+#endif
+	if (p->debug) fprintf(stderr,"usb_check_and_add() called with VID 0x%x, PID 0x%x\n",descriptor.idVendor, descriptor.idProduct);
 
-	if ((itype = inst_usb_match(dev->descriptor.idVendor, dev->descriptor.idProduct))
+#ifdef USE_LIBUSB1
+#ifdef NT
+	/* Ignore libusb1 HID driver capability */
+	if (descriptor.bDeviceClass == LIBUSB_CLASS_HID)
+		return 0;
+	{
+		struct libusb_config_descriptor *config;
+
+		if (libusb_get_config_descriptor(dev, 0, &config) != LIBUSB_SUCCESS) {
+			if (p->debug) fprintf(stderr,"Get config desc. 0 failed\n");
+			return 1;
+		}
+
+		if (config->bNumInterfaces > 0
+		 && config->interface[0]. num_altsetting > 0
+		 & config->interface[0].altsetting[0].bInterfaceClass == LIBUSB_CLASS_HID) {
+			if (p->debug) fprintf(stderr,"Is a libusb HID device\n");
+			libusb_free_config_descriptor(config);
+			return 0;
+		}
+		libusb_free_config_descriptor(config);
+	}
+#endif
+#endif
+	if ((itype = inst_usb_match(descriptor.idVendor, descriptor.idProduct))
 	                                                                != instUnknown) {
 		char pname[400];
 
@@ -59,10 +95,15 @@ struct usb_device *dev
 
 		/* Create a path/identification */
 		/* (devnum doesn't seem valid ?) */
-#if defined(UNIX)
-			sprintf(pname,"usb:/bus%d/dev%d (%s)",dev->bus->location >> 24, dev->devnum, inst_name(itype));
+#ifdef USE_LIBUSB1
+		libusb_ref_device(dev);		/* Keep it */
+		sprintf(pname,"usb:/bus%d/dev%d/ (%s)",libusb_get_bus_number(dev),libusb_get_device_address(dev), inst_name(itype));
 #else
-			sprintf(pname,"usb:/bus%lu/dev%d (%s)",dev->bus->location, dev->devnum, inst_name(itype));
+# if defined(UNIX)
+		sprintf(pname,"usb:/bus%d/dev%d (%s)",dev->bus->location >> 24, dev->devnum, inst_name(itype));
+# else
+		sprintf(pname,"usb:/bus%lu/dev%d (%s)",dev->bus->location, dev->devnum, inst_name(itype));
+# endif
 #endif
 
 		/* Add the path to the list */
@@ -77,8 +118,8 @@ struct usb_device *dev
 		}
 		if ((p->paths[p->npaths] = malloc(sizeof(icompath))) == NULL)
 			error("icoms: malloc failed!");
-		p->paths[p->npaths]->vid = dev->descriptor.idVendor;
-		p->paths[p->npaths]->pid = dev->descriptor.idProduct;
+		p->paths[p->npaths]->vid = descriptor.idVendor;
+		p->paths[p->npaths]->pid = descriptor.idProduct;
 		p->paths[p->npaths]->dev = dev;
 		p->paths[p->npaths]->hev = NULL;
 		p->paths[p->npaths]->itype = itype;
@@ -94,6 +135,41 @@ struct usb_device *dev
 
 #endif /* ENABLE_USB */
 
+#ifdef USE_LIBUSB1
+
+/* Add paths to USB connected instruments, to the existing */
+/* icompath paths in the icoms structure. */
+void usb_get_paths(
+struct _icoms *p 
+) {
+#ifdef ENABLE_USB
+	ssize_t i, nlist;
+	libusb_context *ctx = NULL;
+
+	struct libusb_device **list;
+
+	/* Scan the USB busses for instruments we recognise */
+	/* We're not expecting any of our unstruments to be an interface on a device. */
+
+   	libusb_init(&ctx);
+
+	if (p->debug > 8)
+		libusb_set_debug(ctx, p->debug);
+
+	nlist = libusb_get_device_list(NULL, &list);
+    
+	if (p->debug) fprintf(stderr,"usb_get_paths about to look through devices:\n");
+
+	for (i = 0; i < nlist; i++) {
+		usb_check_and_add(p, list[i]);
+   	}
+
+	libusb_free_device_list(list,  1);
+#endif /* ENABLE_USB */
+}
+
+#else /* !USE_LIBUSB1 */
+
 /* Add paths to USB connected instruments, to the existing */
 /* icompath paths in the icoms structure. */
 void usb_get_paths(
@@ -106,9 +182,8 @@ struct _icoms *p
 	if (usb_argyll_patched() < 2)
 		error("usblib isn't up to date to work with this version of Argyll");
 
-// ~~99
-//	if (p->debug)
-//		usb_set_debug(p->debug);
+	if (p->debug > 8)
+		usb_set_debug(p->debug);
 
 	/* Scan the USB busses for instruments we recognise */
 	/* We're not expecting any of our unstruments to be an interface on a device. */
@@ -128,6 +203,7 @@ struct _icoms *p
    	}
 #endif /* ENABLE_USB */
 }
+#endif /* !USE_LIBUSB1 */
 
 
 /* Cleanup and then free a usb dev entry */
@@ -136,8 +212,9 @@ void usb_del_usb_device(struct usb_device *dev) {
 	if (dev == NULL)
 		return;
 
-	/* The dev entry is allocated by libusb, */
-	/* so we don't actually free it */
+#ifdef USE_LIBUSB1
+	libusb_unref_device(dev);
+#endif
 }
 
 
@@ -152,7 +229,7 @@ instType usb_is_usb_portno(
 		p->get_paths(p);
 
 	if (port <= 0 || port > p->npaths)
-		error("icoms - set_ser_port: port number out of range!");
+		error("icoms - usb_is_usb_portno: port number out of range!");
 
 #ifdef ENABLE_USB
 	if (p->paths[port-1]->dev != NULL)
@@ -231,13 +308,109 @@ static void icoms_sighandler(int arg) {
 	exit(0);
 }
 
+#ifdef USE_LIBUSB1
+
+/* Callback functions */
+static void bulk_transfer_cb(struct libusb_transfer *transfer)
+{
+	int *completed = transfer->user_data;
+	*completed = 1;
+	/* caller interprets results and frees transfer */
+}
+
+/* Version of libusb1 sync to async code that returns the pointer */
+/* to the transfer structure so that the transfer can be cancelled */
+/* by another thread. */
+static int do_sync_bulk_transfer(struct libusb_device_handle *dev_handle,
+	void **hcancel, unsigned char endpoint, unsigned char *buffer, int length,
+	int *transferred, unsigned int timeout, unsigned char type)
+{
+	struct libusb_transfer *transfer = libusb_alloc_transfer(0);
+	int completed = 0;
+	int r;
+
+	if (!transfer)
+		return LIBUSB_ERROR_NO_MEM;
+
+	libusb_fill_bulk_transfer(transfer, dev_handle, endpoint, buffer, length,
+		bulk_transfer_cb, &completed, timeout);
+	transfer->type = type;
+
+	r = libusb_submit_transfer(transfer);
+	if (r < 0) {
+		libusb_free_transfer(transfer);
+		return r;
+	}
+
+	if (hcancel != NULL)
+		*hcancel = (void *)transfer;
+
+	while (!completed) {
+		r = libusb_handle_events_check(NULL, &completed);
+		if (r < 0) {
+			if (r == LIBUSB_ERROR_INTERRUPTED)
+				continue;
+			libusb_cancel_transfer(transfer);
+			while (!completed) {
+				if (libusb_handle_events_check(NULL, &completed) < 0)
+					break;
+			}
+			if (hcancel != NULL)
+				*hcancel = NULL;
+			libusb_free_transfer(transfer);
+			return r;
+		}
+	}
+
+	*transferred = transfer->actual_length;
+	switch (transfer->status) {
+	case LIBUSB_TRANSFER_COMPLETED:
+		r = 0;
+		break;
+	case LIBUSB_TRANSFER_TIMED_OUT:
+		r = LIBUSB_ERROR_TIMEOUT;
+		break;
+	case LIBUSB_TRANSFER_STALL:
+		r = LIBUSB_ERROR_PIPE;
+		break;
+	case LIBUSB_TRANSFER_OVERFLOW:
+		r = LIBUSB_ERROR_OVERFLOW;
+		break;
+	case LIBUSB_TRANSFER_NO_DEVICE:
+		r = LIBUSB_ERROR_NO_DEVICE;
+		break;
+	default:
+		r = LIBUSB_ERROR_OTHER;
+	}
+
+	if (hcancel != NULL)
+		*hcancel = NULL;
+	libusb_free_transfer(transfer);
+
+	return r;
+}
+#endif	/* USE_LIBUSB1 */
+
+// !!! should fix all these to separate error from length transferred !!!
+// !!! to take advantage of libus1 !!!
+
 /* Our versions of usblib read/write, that exit if a signal was caught */
 /* This is so that MSWindows works properly */
-static int icoms_usb_interrupt_write(usb_dev_handle *dev, int ep, unsigned char *bytes, int size, int timeout) {
+static int icoms_usb_interrupt_write(usb_dev_handle *dev, void **hcancel, int ep, unsigned char *bytes, int size, int timeout) {
+#ifdef USE_LIBUSB1
+	int tsize;
+#endif
 	int rv;
 
 	in_usb_rw++;
+#ifdef USE_LIBUSB1
+	rv = do_sync_bulk_transfer(dev, hcancel, (unsigned char)ep, bytes, size, &tsize, timeout, LIBUSB_TRANSFER_TYPE_INTERRUPT);
+	if (rv == LIBUSB_SUCCESS)
+		rv = tsize;
+#else
+	if (hcancel != NULL) *hcancel = (void *)ep;
 	rv = usb_interrupt_write(dev, ep, (char *)bytes, size, timeout);
+#endif
 	if (in_usb_rw < 0)
 		exit(0);
 
@@ -245,11 +418,21 @@ static int icoms_usb_interrupt_write(usb_dev_handle *dev, int ep, unsigned char 
 	return rv;
 }
 
-static int icoms_usb_interrupt_read(usb_dev_handle *dev, int ep, unsigned char *bytes, int size, int timeout) {
+static int icoms_usb_interrupt_read(usb_dev_handle *dev, void **hcancel, int ep, unsigned char *bytes, int size, int timeout) {
+#ifdef USE_LIBUSB1
+	int tsize;
+#endif
 	int rv;
 
 	in_usb_rw++;
+#ifdef USE_LIBUSB1
+	rv = do_sync_bulk_transfer(dev, hcancel, (unsigned char)ep, bytes, size, &tsize, timeout, LIBUSB_TRANSFER_TYPE_INTERRUPT);
+	if (rv == LIBUSB_SUCCESS)
+		rv = tsize;
+#else
+	if (hcancel != NULL) *hcancel = (void *)ep;
 	rv = usb_interrupt_read(dev, ep, (char *)bytes, size, timeout);
+#endif
 	if (in_usb_rw < 0)
 		exit(0);
 
@@ -257,11 +440,21 @@ static int icoms_usb_interrupt_read(usb_dev_handle *dev, int ep, unsigned char *
 	return rv;
 }
 
-static int icoms_usb_bulk_write(usb_dev_handle *dev, int ep, unsigned char *bytes, int size, int timeout) {
+static int icoms_usb_bulk_write(usb_dev_handle *dev, void **hcancel, int ep, unsigned char *bytes, int size, int timeout) {
+#ifdef USE_LIBUSB1
+	int tsize;
+#endif
 	int rv;
 
 	in_usb_rw++;
+#ifdef USE_LIBUSB1
+	rv = do_sync_bulk_transfer(dev, hcancel, (unsigned char)ep, bytes, size, &tsize, timeout, LIBUSB_TRANSFER_TYPE_BULK);
+	if (rv == LIBUSB_SUCCESS)
+		rv = tsize;
+#else
+	if (hcancel != NULL) *hcancel = (void *)ep;
 	rv = usb_bulk_write(dev, ep, (char *)bytes, size, timeout);
+#endif
 	if (in_usb_rw < 0)
 		exit(0);
 
@@ -269,11 +462,21 @@ static int icoms_usb_bulk_write(usb_dev_handle *dev, int ep, unsigned char *byte
 	return rv;
 }
 
-static int icoms_usb_bulk_read(usb_dev_handle *dev, int ep, unsigned char *bytes, int size, int timeout) {
+static int icoms_usb_bulk_read(usb_dev_handle *dev, void **hcancel, int ep, unsigned char *bytes, int size, int timeout) {
+#ifdef USE_LIBUSB1
+	int tsize;
+#endif
 	int rv;
 
 	in_usb_rw++;
+#ifdef USE_LIBUSB1
+	rv = do_sync_bulk_transfer(dev, hcancel, (unsigned char)ep, bytes, size, &tsize, timeout, LIBUSB_TRANSFER_TYPE_BULK);
+	if (rv == LIBUSB_SUCCESS)
+		rv = tsize;
+#else
+	if (hcancel != NULL) *hcancel = (void *)ep;
 	rv = usb_bulk_read(dev, ep, (char *)bytes, size, timeout);
+#endif
 	if (in_usb_rw < 0)
 		exit(0);
 
@@ -284,12 +487,16 @@ static int icoms_usb_bulk_read(usb_dev_handle *dev, int ep, unsigned char *bytes
 
 static int icoms_usb_control_msg(
 usb_dev_handle *dev, int requesttype, int request,
-int value, int index, char *bytes, int size, 
+int value, int index, unsigned char *bytes, int size, 
 int timeout) {
 	int rv;
 
 	in_usb_rw++;
-	rv = usb_control_msg(dev, requesttype, request, value, index, bytes, size, timeout);
+#ifdef USE_LIBUSB1
+	rv = libusb_control_transfer(dev, (uint8_t)requesttype, (uint8_t)request, (uint16_t)value, (uint16_t)index, bytes, (uint16_t)size, timeout);
+#else
+	rv = usb_control_msg(dev, requesttype, request, value, index, (char *)bytes, size, timeout);
+#endif
 	if (in_usb_rw < 0)
 		exit(0);
 
@@ -357,13 +564,28 @@ void usb_close_port(icoms *p) {
 		int iface;
 
 		for (iface = 0; iface < p->nifce; iface++)
+#ifdef USE_LIBUSB1
+			libusb_release_interface(p->usbh, iface);
+#else
 			usb_release_interface(p->usbh, iface);
+#endif
 
 		/* Workaround for some bugs */
-		if (p->uflags & icomuf_reset_not_close) {
+		if (p->uflags & icomuf_reset_before_close) {
+#ifdef USE_LIBUSB1
+			libusb_reset_device(p->usbh);
+#else
 			usb_reset(p->usbh);
-		} else {
+#endif
+		}
+
+		/* Close as well, othewise we can't re-open */
+		{
+#ifdef USE_LIBUSB1
+			libusb_close(p->usbh);
+#else
 			usb_close(p->usbh);
+#endif
 		}
 		p->usbh = NULL;
 
@@ -406,7 +628,12 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 
 	/* Make sure the port is open */
 	if (!p->is_open) {
+#ifdef USE_LIBUSB1
+		const struct libusb_interface_descriptor *ifd;
+	    struct libusb_config_descriptor *confdesc;
+#else
 		struct usb_interface_descriptor *ifd;
+#endif
 		int rv, i, iface;
 
 		if (p->debug) fprintf(stderr,"icoms: USB port needs opening\n");
@@ -437,9 +664,18 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 
 		/* Do open retries */
 		do {
-			if ((p->usbh = usb_open(p->ppath->dev)) == NULL) {
+#ifdef USE_LIBUSB1
+			if ((rv = libusb_open(p->ppath->dev, &p->usbh)) != LIBUSB_SUCCESS)
+#else
+			if ((p->usbh = usb_open(p->ppath->dev)) == NULL)
+#endif
+			{
 				if (retries <= 0)
+#ifdef USE_LIBUSB1
+					error("Opening USB port '%s' config %d failed (%s) (Permissions ?)",p->ppath->path,config,libusb_strerror(rv));
+#else
 					error("Opening USB port '%s' config %d failed (%s) (Permissions ?)",p->ppath->path,config,usb_strerror());
+#endif
 				msec_sleep(100);
 				continue;
 			}
@@ -448,17 +684,42 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 			p->cnfg = config;
 			p->uflags = usbflags;
 
+#ifdef USE_LIBUSB1
+			if (p->uflags & icomuf_detach) {
+				if (libusb_kernel_driver_active(p->usbh, 0) == 1) {
+					if (p->debug) fprintf(stderr,"icoms: detaching '%s'\n",p->ppath->path);
+					if (libusb_detach_kernel_driver(p->usbh, 0) != LIBUSB_SUCCESS) {
+						error("Detach kernel driver on USB port '%s' failed with %d (%s)",p->ppath->path,rv,libusb_strerror(rv));
+					}
+				}
+			}
+#else
 #if LIBUSB_HAS_DETACH_KERNEL_DRIVER_NP == 1
 			if (p->uflags & icomuf_detach) {
 				usb_detach_kernel_driver_np(p->usbh, 0);
 			}
 #endif
+#endif
 
 			/* (Should use bConfigurationValue ?) */
-			if ((rv = usb_set_configuration(p->usbh, p->cnfg)) < 0) {
+			/* (Should we do a libusb_get_configuration() and only do this if it is wrong ? */
+#ifdef USE_LIBUSB1
+			if ((rv = libusb_set_configuration(p->usbh, p->cnfg)) < 0)
+#else
+			if ((rv = usb_set_configuration(p->usbh, p->cnfg)) < 0)
+#endif
+			{
 				if (retries <= 0)
+#ifdef USE_LIBUSB1
+					error("Configuring USB port '%s' to %d failed with %d (%s)",p->ppath->path,config,rv,libusb_strerror(rv));
+#else
 					error("Configuring USB port '%s' to %d failed with %d (%s)",p->ppath->path,config,rv,usb_strerror());
+#endif
+#ifdef USE_LIBUSB1
+				libusb_close(p->usbh);
+#else
 				usb_close(p->usbh);
+#endif
 				msec_sleep(100);
 				continue;
 			}
@@ -467,7 +728,13 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 		} while (retries-- > 0);
 
 		/* Claim all interfaces of this configuration */
+#ifdef USE_LIBUSB1
+		if ((rv = libusb_get_active_config_descriptor(p->usbd, &confdesc)) != LIBUSB_SUCCESS)
+			error("Getting config descriptor for USB port '%s' failed with %d (%s)",p->ppath->path,rv,libusb_strerror(rv));
+		p->nifce = confdesc->bNumInterfaces;
+#else
 		p->nifce = p->usbd->config->bNumInterfaces;
+#endif
 
 //printf("~1 Number of interfaces = %d\n",p->nifce);
 
@@ -475,6 +742,17 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 		for (iface = 0; iface < p->nifce; iface++) {
 			/* (Second parameter is bInterfaceNumber) */
 
+#ifdef USE_LIBUSB1
+			/* Should we do a libusb_kernel_driver_active() first ? */
+			if ((rv = libusb_claim_interface(p->usbh, iface)) < 0) {
+				/* Detatch the existing interface. */
+				if (p->uflags & icomuf_detach) {
+					libusb_detach_kernel_driver (p->usbh, iface);
+					if ((rv = libusb_claim_interface(p->usbh, iface)) < 0)
+						error("Claiming USB port '%s' interface %d failed with %d",p->ppath->path,iface,rv);
+				}
+			}
+#else
 			if ((rv = usb_claim_interface(p->usbh, iface)) < 0) {
 #if LIBUSB_HAS_DETACH_KERNEL_DRIVER_NP == 1
 				/* Detatch the existing interface. */
@@ -487,9 +765,14 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 				error("Claiming USB port '%s' interface %d failed with %d",p->ppath->path,iface,rv);
 #endif
 			}
+#endif
 	
 			/* Fill in the end point details */
+#ifdef USE_LIBUSB1
+			ifd = &confdesc->interface[iface].altsetting[0];
+#else
 			ifd = &p->usbd->config[p->cnfg-1].interface[iface].altsetting[0];
+#endif
 //printf("~1 Number of endpoints on iface %d = %d\n",iface, ifd->bNumEndpoints);
 			for (i = 0; i < ifd->bNumEndpoints; i++) {
 				int ad = ifd->endpoint[i].bEndpointAddress;
@@ -499,7 +782,11 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 				p->EPINFO(ad).type = ifd->endpoint[i].bmAttributes & USB_ENDPOINT_TYPE_MASK;
 				/* Some I/F seem to hang if we do this, some seem to hang if we don't ! */
 				if (!(p->uflags & icomuf_no_open_clear))
+#ifdef USE_LIBUSB1
+					libusb_clear_halt(p->usbh, (unsigned char)ad);
+#else
 					usb_clear_halt(p->usbh, ad);
+#endif
 //printf("~1 %d: endpoint addr %02x pktsze %d, type %d\n",i,ad,ifd->endpoint[i].wMaxPacketSize,p->EPINFO(ad).type);
 			}
 		}
@@ -571,16 +858,21 @@ double tout)
 //printf("~1 write: attempting to write %d bytes to usb top = %d, i = %d\n",len,top,i);
 
 		if (bulk)
-			wbytes = icoms_usb_bulk_write(p->usbh, ep, (unsigned char *)wbuf, len, top);
+			wbytes = icoms_usb_bulk_write(p->usbh, NULL, ep, (unsigned char *)wbuf, len, top);
 		else
-			wbytes = icoms_usb_interrupt_write(p->usbh, ep, (unsigned char *)wbuf, len, top);
+			wbytes = icoms_usb_interrupt_write(p->usbh, NULL, ep, (unsigned char *)wbuf, len, top);
 		if (wbytes < 0) {
 //printf("~1 usb_interrupt_write failed with %d = '%s'\n",wbytes,usb_strerror());
-#if defined(UNIX)
-			if (wbytes != 0 && wbytes != -ETIMEDOUT) {      /* Not a timeout } */
+#ifdef USE_LIBUSB1
+			if (wbytes != LIBUSB_ERROR_TIMEOUT)	/* Not a timeout */
 #else
-			if (wbytes != -116) {		/* Not a timeout */
+#if defined(UNIX)
+			if (wbytes != 0 && wbytes != -ETIMEDOUT)      /* Not a timeout } */
+#else
+			if (wbytes != -116)		/* Not a timeout */
 #endif /* UNIX */
+#endif
+			{
 				p->lerr |= ICOM_USBW; 
 				break;
 			}
@@ -674,17 +966,22 @@ for (i = 0; i < bsize; i++) rbuf[i] = 0;
 		/* We read one read quanta at a time (usually 8 bytes), to avoid */
 		/* problems with libusb loosing characters whenever it times out. */
 		if (bulk)
-			rbytes = icoms_usb_bulk_read(p->usbh, ep, (unsigned char *)rbuf, rsize, top);
+			rbytes = icoms_usb_bulk_read(p->usbh, NULL, ep, (unsigned char *)rbuf, rsize, top);
 		else
-			rbytes = icoms_usb_interrupt_read(p->usbh, ep, (unsigned char *)rbuf, rsize, top);
+			rbytes = icoms_usb_interrupt_read(p->usbh, NULL, ep, (unsigned char *)rbuf, rsize, top);
 		if (rbytes < 0) {
 //printf("~1 usb_interrupt_read failed with %d = '%s'\n",rbytes,usb_strerror());
 //printf("~1 rbuf = '%s'\n",icoms_fix(rrbuf));
-#if defined(UNIX)
-			if (rbytes != 0 && rbytes != -ETIMEDOUT) {     /* Not a timeout } */
+#ifdef USE_LIBUSB1
+			if (rbytes != LIBUSB_ERROR_TIMEOUT)	/* Not a timeout */
 #else
-			if (rbytes != -116) {		/* Not a timeout */
+#if defined(UNIX)
+			if (rbytes != 0 && rbytes != -ETIMEDOUT)     /* Not a timeout } */
+#else
+			if (rbytes != -116)		/* Not a timeout */
 #endif /* UNIX */
+#endif
+			{
 				p->lerr |= ICOM_USBR; 
 				break;
 			}
@@ -760,13 +1057,18 @@ int checkabort) {		/* Check for abort from keyboard */
 
 #ifdef ENABLE_USB
 	rwbytes = icoms_usb_control_msg(p->usbh, requesttype, request, value, index,
-	                                    (char *)rwbuf, rwsize, top);
+	                                    rwbuf, rwsize, top);
 	if (rwbytes < 0) {
-#if defined(UNIX)
-		if (rwbytes != 0  && rwbytes != -ETIMEDOUT) {     /* Not a timeout */
+#ifdef USE_LIBUSB1
+		if (rwbytes != LIBUSB_ERROR_TIMEOUT)	/* Not a timeout */
 #else
-		if (rwbytes != -116) {		/* Not a timeout */
+#if defined(UNIX)
+		if (rwbytes != 0 && rwbytes != -ETIMEDOUT)     /* Not a timeout */
+#else
+		if (rwbytes != -116)		/* Not a timeout */
 #endif /* UNIX */
+#endif
+		{
 			lerr |= ICOM_USBW; 
 		} else {
 			lerr |= ICOM_TO; 
@@ -821,6 +1123,7 @@ double tout) {
 /* Don't retry on a short read, return ICOM_SHORT. */
 static int
 icoms_usb_read_th(icoms *p,
+	void **hcancel,			/* Cancel handle */
 	int ep,					/* End point address */
 	unsigned char *rbuf,	/* Read buffer */
 	int bsize,				/* Bytes to read */
@@ -877,16 +1180,20 @@ icoms_usb_read_th(icoms *p,
 
 //printf("~1 read %d bytes this time\n",rsize);
 		if (bulk)
-			rbytes = icoms_usb_bulk_read(p->usbh, ep, rbuf, rsize, top);
+			rbytes = icoms_usb_bulk_read(p->usbh, hcancel, ep, rbuf, rsize, top);
 		else
-			rbytes = icoms_usb_interrupt_read(p->usbh, ep, rbuf, rsize, top);
+			rbytes = icoms_usb_interrupt_read(p->usbh, hcancel, ep, rbuf, rsize, top);
 //printf("~1 got result %d\n",rbytes);
 		if (rbytes < 0) {
+#ifdef USE_LIBUSB1
+			if (rbytes == LIBUSB_ERROR_TIMEOUT) /* A timeout */
+#else
 #if defined(UNIX)
 			if (rbytes == -ETIMEDOUT)	/* A timeout */
 #else
 			if (rbytes == -116)			/* A timeout */
 #endif /* UNIX */
+#endif
 				lerr |= ICOM_TO; 
 			else
 				lerr |= ICOM_USBR; 
@@ -935,7 +1242,7 @@ icoms_usb_read(
 	int *bread,				/* Bytes read */
 	double tout				/* Timeout in seconds */
 ) {
-	p->lerr = icoms_usb_read_th(p, ep, rbuf, rsize, bread, tout, p->debug, &p->cut, 1);
+	p->lerr = icoms_usb_read_th(p, NULL, ep, rbuf, rsize, bread, tout, p->debug, &p->cut, 1);
 
 	return p->lerr;
 }
@@ -947,6 +1254,7 @@ icoms_usb_read(
 /* Don't retry on a short read, return ICOM_SHORT. */
 static int
 icoms_usb_write_th(icoms *p,
+	void **hcancel,			/* Cancel handle */
 	int ep,					/* End point address */
 	unsigned char *wbuf,	/* Write buffer */
 	int bsize,				/* Bytes to write */
@@ -990,15 +1298,19 @@ icoms_usb_write_th(icoms *p,
 		int wsize = bsize > qa ? qa : bsize; 
 
 		if (bulk)
-			wbytes = icoms_usb_bulk_write(p->usbh, ep, wbuf, wsize, top);
+			wbytes = icoms_usb_bulk_write(p->usbh, hcancel, ep, wbuf, wsize, top);
 		else
-			wbytes = icoms_usb_interrupt_write(p->usbh, ep, wbuf, wsize, top);
+			wbytes = icoms_usb_interrupt_write(p->usbh, hcancel, ep, wbuf, wsize, top);
 		if (wbytes < 0) {
+#ifdef USE_LIBUSB1
+			if (wbytes == LIBUSB_ERROR_TIMEOUT)	/* A timeout */
+#else
 #if defined(UNIX)
 			if (wbytes == -ETIMEDOUT)	/* A timeout */
 #else
 			if (wbytes == -116)			/* A timeout */
 #endif /* UNIX */
+#endif
 				lerr |= ICOM_TO; 
 			else
 				lerr |= ICOM_USBR; 
@@ -1044,10 +1356,30 @@ icoms_usb_write(
 	int *bwritten,			/* Bytes written */
 	double tout				/* Timeout in seconds */
 ) {
-	p->lerr = icoms_usb_write_th(p, ep, wbuf, wsize, bwritten, tout, p->debug, &p->cut, 1);
+	p->lerr = icoms_usb_write_th(p, NULL, ep, wbuf, wsize, bwritten, tout, p->debug, &p->cut, 1);
 	return p->lerr;
 }
 
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Cabcel i/o in another thread */
+int icoms_usb_cancel_io(
+	icoms *p,
+	void *hcancel
+) {
+	int rv;
+#ifdef USE_LIBUSB1
+	if (hcancel != NULL)
+		rv = libusb_cancel_transfer((struct libusb_transfer *)hcancel);
+#else
+	rv = usb_resetep(p->usbh, (int)hcancel);	/* Not reliable ? */
+#endif
+
+	if (rv == 0)
+		return ICOM_OK;
+
+	return ICOM_USBW;
+}
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Reset and enp point data toggle to 0 */
@@ -1056,7 +1388,11 @@ int icoms_usb_resetep(
 	int ep					/* End point address */
 ) {
 	int rv;
+#ifdef USE_LIBUSB1
+	rv = libusb_resetep(p->usbh, (unsigned char)ep);		/* Is this the same though ? */
+#else
 	rv = usb_resetep(p->usbh, ep);			/* Not reliable ? */
+#endif
 
 	if (rv == 0)
 		return ICOM_OK;
@@ -1071,7 +1407,11 @@ int icoms_usb_clearhalt(
 	int ep					/* End point address */
 ) {
 	int rv;
+#ifdef USE_LIBUSB1
+	rv = libusb_clear_halt(p->usbh, (unsigned char)ep);
+#else
 	rv = usb_clear_halt(p->usbh, ep);
+#endif
 
 	if (rv == 0)
 		return ICOM_OK;
@@ -1275,6 +1615,7 @@ icoms *p
 	p->usb_read       = icoms_usb_read;
 	p->usb_write_th   = icoms_usb_write_th;
 	p->usb_write      = icoms_usb_write;
+	p->usb_cancel_io  = icoms_usb_cancel_io;
 	p->usb_resetep    = icoms_usb_resetep;
 	p->usb_clearhalt  = icoms_usb_clearhalt;
 

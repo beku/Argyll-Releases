@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/libtiff/tif_msdos.c,v 1.1.1.1 1999/07/27 21:50:27 mike Exp $ */
+/* $Header: /cvs/maptools/cvsroot/libtiff/libtiff/Attic/tif_msdos.c,v 1.3.2.1 2010-06-08 18:50:42 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -27,7 +27,7 @@
 /*
  * TIFF Library MSDOS-specific Routines.
  */
-#if defined(__WATCOMC__) || defined(__BORLANDC__) || defined(_MSC_VER) || ((defined(__IBMCPP__) || defined(__IBMC__)) && defined(__WINDOWS__))
+#if defined(__WATCOMC__) || defined(__BORLANDC__) || defined(_MSC_VER)
 #include <io.h>		/* for open, close, etc. function prototypes */
 #include <stdio.h>
 #endif
@@ -102,24 +102,31 @@ TIFFOpen(const char* name, const char* mode)
 {
 	static const char module[] = "TIFFOpen";
 	int m, fd;
+        TIFF *ret;
 
 	m = _TIFFgetMode(mode, module);
 	if (m == -1)
 		return ((TIFF*)0);
 	fd = open(name, m|O_BINARY, 0666);
 	if (fd < 0) {
-		TIFFError(module, "%s: Cannot open", name);
+		TIFFErrorExt(0, module, "%s: Cannot open", name);
 		return ((TIFF*)0);
 	}
 	return (TIFFFdOpen(fd, name, mode));
+
+        ret = TIFFFdOpen(fd, name, mode);
+
+        if (ret == NULL) close(fd);
+
+        return ret;
 }
 
-//#ifdef __GNUC__
-//extern	char* malloc();
-//extern	char* realloc();
-//#else
+#ifdef __GNUC__
+extern	char* malloc();
+extern	char* realloc();
+#else
 #include <malloc.h>
-//#endif
+#endif
 
 tdata_t
 _TIFFmalloc(tsize_t s)
@@ -177,3 +184,10 @@ msdosErrorHandler(const char* module, const char* fmt, va_list ap)
 	fprintf(stderr, ".\n");
 }
 TIFFErrorHandler _TIFFerrorHandler = msdosErrorHandler;
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

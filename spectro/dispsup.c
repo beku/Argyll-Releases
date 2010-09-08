@@ -25,7 +25,7 @@
 #include <time.h>
 #include <string.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -46,255 +46,104 @@
 #define DBG(xxx) if (p != NULL && p->debug) fprintf xxx ;
 #endif
 
+// ~~99
+#define DRIFT_IPERIOD	30	/* Number of samples between drift interpolation measurements */
+#define DRIFT_EPERIOD	15	/* Number of samples between drift extrapolation measurements */
+//#define DRIFT_IPERIOD	6
+//#define DRIFT_EPERIOD	3
+
 #define FAKE_NOISE 0.01		/* Add noise to fake devices XYZ */
 #define FAKE_BITS 9			/* Number of bits of significance of fake device */
 
-/* -------------------------------------------------------- */
 
-/* A default calibration user interaction handler using the console. */
-/* This handles both normal and display based calibration interaction */
-/* with the instrument. */
-inst_code inst_handle_calibrate(
+/* -------------------------------------------------------- */
+/* A defauult callback that can be provided as an argument to */
+/* inst_handle_calibrate() to handle the display part of a */
+/* calibration callback. */
+/* Call this again with calc = inst_calc_none to cleanup afterwards. */
+inst_code setup_display_calibrate(
 	inst *p,
-	inst_cal_type calt,		/* type of calibration to do. inst_calt_all for all pending. */
 	inst_cal_cond calc,		/* Current condition. inst_calc_none for not setup */
-	disp_win_info *dwi      /* Optional Information to be able to open a display test patch */
+	disp_win_info *dwi		/* Information to be able to open a display test patch */
 ) {
 	inst_code rv = inst_ok, ev;
-	int usermes = 0;		/* User was given a message */
-	char id[200];			/* Condition identifier */
-	int ch;
-	dispwin *dw, *_dw = NULL;	/* Display window to display test patches on, NULL if none. */
+	dispwin *dw;	/* Display window to display test patches on, NULL if none. */
+	DBG((dbgo,"setup_display_calibrate called\n"))
 
-	DBG((dbgo,"inst_handle_calibrate called\n"))
-
-	/* Untill we're done with the calibration */
-	for (;;) {
-
-		DBG((dbgo,"About to call calibrate at top of loop\n"))
-	    ev = p->calibrate(p, calt, &calc, id);
-
-		/* We're done */
-		if ((ev & inst_mask) == inst_ok) {
-			if (calc == inst_calc_message)
-				printf("%s\n",id);
-			if (usermes)
-				printf("Calibration complete\n");
-			if (_dw != NULL)
-				_dw->del(_dw);
-			DBG((dbgo,"inst_handle_calibrate done 0x%x\n",ev))
-			return ev;
-		}
-
-		/* User aborted */
-		if ((ev & inst_mask) == inst_user_abort
-		 || (ev & inst_mask) == inst_user_term) {
-			if (_dw != NULL)
-				_dw->del(_dw);
-			DBG((dbgo,"inst_handle_calibrate user aborted 0x%x\n",ev))
-			return ev;
-		}
-
-		/* Retry on an error */
-		if ((ev & inst_mask) != inst_cal_setup) {
-			if ((ev & inst_mask) == inst_unsupported) {
-				DBG((dbgo,"inst_handle_calibrate calibration not supported\n"))
-				return inst_unsupported;
+	switch (calc) {
+		case inst_calc_none:		/* Use this as a cleanup flag */
+			if (dwi->dw == NULL && dwi->_dw != NULL) {
+				dwi->_dw->del(dwi->_dw);
+				dwi->_dw = NULL;
 			}
+			break;
 
-			printf("Calibration failed with '%s' (%s)\n",
-				       p->inst_interp_error(p, ev), p->interp_error(p, ev));
-			printf("Hit any key to retry, or Esc or Q to abort:\n");
-
-			empty_con_chars();
-			ch = next_con_char();
-			printf("\n");
-			if (ch == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
-				if (_dw != NULL)
-					_dw->del(_dw);
-				DBG((dbgo,"inst_handle_calibrate user aborted 0x%x\n",inst_user_abort))
-				return inst_user_abort;
-			}
-
-		/* Get user to do/setup calibration */
-		} else {
-
-			switch (calc) {
-				case inst_calc_uop_ref_white:
-					printf("Do a reflective white calibration,\n");
-					printf(" and then hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-
-				case inst_calc_uop_trans_white:
-					printf("Do a transmissive white calibration,\n");
-					printf(" and then hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-			
-				case inst_calc_uop_trans_dark:
-					printf("Do a transmissive dark calibration,\n");
-					printf(" and then hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-			
-				case inst_calc_man_ref_white:
-					printf("Place the instrument on its reflective white reference %s,\n",id);
-					printf(" and then hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-
-				case inst_calc_man_ref_whitek:
-					printf("Click the instrument on its reflective white reference %s,\n",id);
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-
-				case inst_calc_man_ref_dark:
-					printf("Place the instrument in the dark, not in contact with any surface,\n");
-					printf(" and then hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-
-				case inst_calc_man_em_dark:
-					printf("Place cap on the instrument, or place in on a dark surface,\n");
-					printf("or place on the white calibration reference,\n");
-					printf(" and then hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-
-				case inst_calc_man_cal_smode:
-					printf("Set instrument sensor to calibration position,\n");
-					printf(" and then hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-
-				case inst_calc_man_trans_white:
-					printf("Place the instrument on its transmissive white source,\n");
-					printf(" and then hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-
-				case inst_calc_man_trans_dark:
-					printf("Use the appropriate tramissive blocking to block the transmission path,\n");
-					printf(" and then hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-
-				case inst_calc_change_filter:
-					printf("Change filter on instrument to %s,\n",id);
-					printf(" and then hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-
-				case inst_calc_message:
-					printf("%s\n",id);
-					printf(" Hit any key to continue,\n"); 
-					printf(" or hit Esc or Q to abort:"); 
-					break;
-
-				case inst_calc_disp_white:
-				case inst_calc_proj_white:
-					if (dwi == NULL) {	/* No way of creating a test window */
-						DBG((dbgo,"inst_handle_calibrate no way of creating test window 0x%x\n",inst_internal_error))
-						return inst_internal_error; 
-					}
-				
-					if (dwi->dw == NULL) {
-						if ((dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
-						                      dwi->ho, dwi->vo, 0, 0, dwi->blackbg,
-						                      dwi->override, p->debug)) == NULL) {
-							DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
-							return inst_other_error; 
-						}
-						_dw = dw;	/* window to delete on exit */
-						printf("Frequency calibration, Place instrument on test window.\n");
-						printf(" Hit any key to continue,\n"); 
-						printf(" or hit Esc or Q to abort:"); 
-					} else {
-						dw = dwi->dw;
-					}
-					p->cal_gy_level = 1.0;
-					dw->set_color(dw, 1.0, 1.0, 1.0);
-					break;
-
-				case inst_calc_disp_grey:
-				case inst_calc_disp_grey_darker: 
-				case inst_calc_disp_grey_ligher:
-				case inst_calc_proj_grey:
-				case inst_calc_proj_grey_darker: 
-				case inst_calc_proj_grey_ligher:
-					if (dwi == NULL) {	/* No way of creating a test window */
-						DBG((dbgo,"inst_handle_calibrate no way of creating test window 0x%x\n",inst_internal_error))
-						return inst_internal_error; 
-					}
-
-					if (dwi->dw == NULL) {
-						if ((dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
-						                      dwi->ho, dwi->vo, 0, 0, dwi->blackbg,
-						                      dwi->override, p->debug)) == NULL) {
-							DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
-							return inst_other_error; 
-						}
-						_dw = dw;	/* window to delete on exit */
-						printf("Cell ratio calibration, Place instrument on test window.\n");
-						printf(" Hit any key to continue,\n"); 
-						printf(" or hit Esc or Q to abort:"); 
-					} else {
-						dw = dwi->dw;
-					}
-					if (calc == inst_calc_disp_grey
-					 || calc == inst_calc_proj_grey) {
-						p->cal_gy_level = 0.6;
-						p->cal_gy_count = 0;
-					} else if (calc == inst_calc_disp_grey_darker
-					        || calc == inst_calc_proj_grey_darker) {
-						p->cal_gy_level *= 0.7;
-						p->cal_gy_count++;
-					} else if (calc == inst_calc_disp_grey_ligher
-					        || calc == inst_calc_proj_grey_ligher) {
-						p->cal_gy_level *= 1.4;
-						if (p->cal_gy_level > 1.0)
-							p->cal_gy_level = 1.0;
-						p->cal_gy_count++;
-					}
-					if (p->cal_gy_count > 4) {
-						printf("Cell ratio calibration failed - too many tries at setting grey level.\n");
-						if (_dw != NULL)
-							_dw->del(_dw);
-						DBG((dbgo,"inst_handle_calibrate too many tries at setting grey level 0x%x\n",inst_internal_error))
-						return inst_internal_error; 
-					}
-					dw->set_color(dw, p->cal_gy_level, p->cal_gy_level, p->cal_gy_level);
-					break;
-
-				default:
-					/* Something isn't being handled */
-					if (_dw != NULL)
-						_dw->del(_dw);
-					DBG((dbgo,"inst_handle_calibrate unhandled calc case 0x%x, err 0x%x\n",calc,inst_internal_error))
-					return inst_internal_error;
-			}
-			fflush(stdout);
-
-			usermes = 1;
-
-			if (calc != inst_calc_man_ref_whitek) {
-				empty_con_chars();
-				ch = next_con_char();
-				printf("\n");
-				if (ch == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
-					if (_dw != NULL)
-						_dw->del(_dw);
-					DBG((dbgo,"inst_handle_calibrate user aborted 0x%x\n",inst_user_abort))
-					return inst_user_abort;
+		case inst_calc_disp_white:
+		case inst_calc_proj_white:
+			if (dwi->dw == NULL) {
+				if ((dwi->_dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
+				                      dwi->ho, dwi->vo, 0, 0, dwi->blackbg,
+				                      dwi->override, p->debug)) == NULL) {
+					DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
+					return inst_other_error; 
 				}
+				printf("Frequency calibration, Place instrument on test window.\n");
+				printf(" Hit any key to continue,\n"); 
+				printf(" or hit Esc or Q to abort:"); 
+			} else {
+				dwi->_dw = dwi->dw;
 			}
-		}
-	}
+			p->cal_gy_level = 1.0;
+			dwi->_dw->set_color(dwi->_dw, 1.0, 1.0, 1.0);
+			break;
 
-	if (_dw != NULL)
-		_dw->del(_dw);
-	DBG((dbgo,"inst_handle_calibrate done 0x%x\n",ev))
+		case inst_calc_disp_grey:
+		case inst_calc_disp_grey_darker: 
+		case inst_calc_disp_grey_ligher:
+		case inst_calc_proj_grey:
+		case inst_calc_proj_grey_darker: 
+		case inst_calc_proj_grey_ligher:
+			if (dwi->dw == NULL) {
+				if ((dwi->_dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
+				                      dwi->ho, dwi->vo, 0, 0, dwi->blackbg,
+				                      dwi->override, p->debug)) == NULL) {
+					DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
+					return inst_other_error; 
+				}
+				printf("Cell ratio calibration, Place instrument on test window.\n");
+				printf(" Hit any key to continue,\n"); 
+				printf(" or hit Esc or Q to abort:"); 
+			} else {
+				dwi->_dw = dwi->dw;
+			}
+			if (calc == inst_calc_disp_grey
+			 || calc == inst_calc_proj_grey) {
+				p->cal_gy_level = 0.6;
+				p->cal_gy_count = 0;
+			} else if (calc == inst_calc_disp_grey_darker
+			        || calc == inst_calc_proj_grey_darker) {
+				p->cal_gy_level *= 0.7;
+				p->cal_gy_count++;
+			} else if (calc == inst_calc_disp_grey_ligher
+			        || calc == inst_calc_proj_grey_ligher) {
+				p->cal_gy_level *= 1.4;
+				if (p->cal_gy_level > 1.0)
+					p->cal_gy_level = 1.0;
+				p->cal_gy_count++;
+			}
+			if (p->cal_gy_count > 4) {
+				printf("Cell ratio calibration failed - too many tries at setting grey level.\n");
+				DBG((dbgo,"inst_handle_calibrate too many tries at setting grey level 0x%x\n",inst_internal_error))
+				return inst_internal_error; 
+			}
+			dwi->_dw->set_color(dwi->_dw, p->cal_gy_level, p->cal_gy_level, p->cal_gy_level);
+			break;
+
+		default:
+			/* Something isn't being handled */
+			DBG((dbgo,"inst_handle_calibrate unhandled calc case 0x%x, err 0x%x\n",calc,inst_internal_error))
+			return inst_internal_error;
+	}
 	return inst_ok;
 }
 
@@ -330,13 +179,13 @@ int debug				/* Debug flag */
 	inst2_capability cap2;
 	inst_mode mode = 0;
 
+	memset((void *)&dwi, 0, sizeof(disp_win_info));
 	dwi.disp = disp; 
 	dwi.blackbg = blackbg;
 	dwi.override = override;
 	dwi.patsize = patsize;
 	dwi.ho = ho;
 	dwi.vo = vo;
-	dwi.dw = NULL;
 
 	if (verb)
 		printf("Setting up the instrument\n");
@@ -373,9 +222,12 @@ int debug				/* Debug flag */
 	}
 	
 	/* Set to emission mode to read a display */
-	if (proj)
-		mode = inst_mode_emis_proj;
-	else {
+	if (proj) {
+		if (adaptive)
+			mode = inst_mode_emis_tele;
+		else
+			mode = inst_mode_emis_proj;
+	} else {
 		if (adaptive)
 			mode = inst_mode_emis_spot;
 		else
@@ -460,7 +312,8 @@ int debug				/* Debug flag */
 	}
 	
 	/* Do the calibration */
-	rv = inst_handle_calibrate(p, calt, inst_calc_none, &dwi);
+	rv = inst_handle_calibrate(p, calt, inst_calc_none, setup_display_calibrate, &dwi);
+	setup_display_calibrate(p,inst_calc_none, &dwi); 
 	if (rv == inst_unsupported) {
 		printf("No calibration available for instrument in this mode\n");
 	} else if (rv != inst_ok) {	/* Abort or fatal error */
@@ -477,7 +330,7 @@ int debug				/* Debug flag */
 	return 0;
 }
 
-/* Take a series of readings from the display */
+/* Take a series of readings from the display - implementation */
 /* Return nz on fail/abort */
 /* 1 = user aborted */
 /* 2 = instrument access failed */
@@ -485,13 +338,14 @@ int debug				/* Debug flag */
 /* 4 = user hit terminate key */
 /* 5 = system error */
 /* Use disprd_err() to interpret it */
-static int disprd_read(
+static int disprd_read_imp(
 	disprd *p,
 	col *cols,		/* Array of patch colors to be tested */
 	int npat, 		/* Number of patches to be tested */
 	int spat,		/* Start patch index for "verb", 0 if not used */
 	int tpat,		/* Total patch index for "verb", 0 if not used */
 	int acr,		/* If nz, do automatic final carriage return */
+	int noinc,		/* If nz, don't increment the count */
 	int tc			/* If nz, termination key */
 ) {
 	int j, rv;
@@ -573,7 +427,7 @@ static int disprd_read(
 		scb->duration = 0.0;
 
 		if (p->verb && spat != 0 && tpat != 0) {
-			fprintf(p->df,"\rpatch %d of %d",spat+patch,tpat);
+			fprintf(p->df,"%cpatch %d of %d",cr_char,spat + (noinc != 0 ? 0 : patch),tpat);
 			fflush(p->df);
 		}
 		DBG((dbgo,"About to read patch %d\n",patch))
@@ -616,7 +470,9 @@ static int disprd_read(
 					disp_win_info dwi;
 					dwi.dw = p->dw;		/* Set window to use */
 					printf("\nSample read failed because instruments needs calibration\n");
-					rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none, &dwi);
+					rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none,
+					                                        setup_display_calibrate, &dwi);
+					setup_display_calibrate(p->it, inst_calc_none, &dwi); 
 					if (rv != inst_ok) {	/* Abort or fatal error */
 						return 1;
 					}
@@ -679,6 +535,9 @@ static int disprd_read(
 			}
 		}
 		/* We only fall through with a valid reading */
+		scb->serno = p->serno++;
+		scb->msec = msec_time();
+
 		DBG((dbgo, "got reading abs. %f %f %f, transfering to col\n",
 		                val.aXYZ[0], val.aXYZ[1], val.aXYZ[2]))
 
@@ -708,6 +567,433 @@ static int disprd_read(
 	return 0;
 }
 
+/* A structure to hold info about drift samples */
+typedef struct {
+	col dcols[2];	/* Black and white readings */
+
+	int off, count;	/* Offset and count into cols */
+
+} dsamples;
+
+/* Take a series of readings from the display - drift compensation */
+/* Return nz on fail/abort */
+/* 1 = user aborted */
+/* 2 = instrument access failed */
+/* 3 = window access failed */ 
+/* 4 = user hit terminate key */
+/* 5 = system error */
+/* Use disprd_err() to interpret it */
+static int disprd_read_drift(
+	disprd *p,
+	col *cols,		/* Array of patch colors to be tested */
+	int npat, 		/* Number of patches to be tested */
+	int spat,		/* Start patch index for "verb", 0 if not used */
+	int tpat,		/* Total patch index for "verb", 0 if not used */
+	int acr,		/* If nz, do automatic final carriage return */
+	int tc			/* If nz, termination key */
+) {
+	int rv, i, j, e;
+	double fper, foff;
+	int off, poff;
+	int boff, eoff, dno;	/* b&w offsets and count */
+
+//printf("~1 DRIFT_EPERIOD %d, DRIFT_IPERIOD %d, npat %d\n",DRIFT_EPERIOD,DRIFT_IPERIOD,npat);
+
+	/* Figure number and offset for b&w */
+	if (p->bdrift == 0) {	/* Must be just wdrift */
+		boff = eoff = 1;
+		dno = 1;
+	} else if (p->bdrift == 0) {	/* Must be just bdrift */
+		boff = eoff = 0;
+		dno = 1;
+	} else {				/* Must be both */
+		boff = eoff = 0;
+		dno = 2;
+	}
+
+	/* If the last readings are invalid or too old, */
+	/* or if we will use interpolation, read b&w */
+//printf("~1 last_bw_v = %d (%d)\n",p->last_bw_v,p->last_bw_v == 0);
+//printf("~1 npat = %d > %d, serno %d, last serno %d (%d)\n",npat, DRIFT_EPERIOD, p->serno,p->last_bw[eoff].serno,(npat > DRIFT_EPERIOD && p->serno > p->last_bw[eoff].serno));
+//printf("~1 serno - lastserno %d > %d (%d)\n",p->serno - p->last_bw[eoff].serno, DRIFT_EPERIOD,(p->serno - p->last_bw[eoff].serno) > DRIFT_EPERIOD);
+//printf("~1 msec %d - last %d = %d > 10000 (%d)\n",msec_time(),p->last_bw[boff].msec,msec_time() - p->last_bw[boff].msec,(msec_time() - p->last_bw[eoff].msec) > 10000);
+	if (p->last_bw_v == 0									/* There are none */
+	 || (npat > DRIFT_EPERIOD && p->serno > p->last_bw[eoff].serno)	/* We will interpolate */
+	 || (p->serno - p->last_bw[eoff].serno - dno) > DRIFT_EPERIOD	/* extrapolate would be too far */
+	 || (msec_time() - p->last_bw[eoff].msec) > 10000) {	/* The current is too long ago */
+
+//printf("~1 refreshing last bw\n");
+		/* Read the black and/or white drift patch */
+		p->last_bw[0].r = 
+		p->last_bw[0].g = 
+		p->last_bw[0].b = 0.0; 
+		p->last_bw[1].r = 
+		p->last_bw[1].g = 
+		p->last_bw[1].b = 1.0; 
+		if ((rv = disprd_read_imp(p, &p->last_bw[boff], dno, spat, tpat, 0, 1, tc)) != 0) {
+			return rv;
+		}
+		p->last_bw_v = 1;
+
+		/* If there is no reference b&w, set them from this first b&w */
+		if (p->ref_bw_v == 0) {
+			p->ref_bw[0] = p->last_bw[0];
+			p->ref_bw[1] = p->last_bw[1];
+			p->ref_bw_v = 1;
+		}
+	}
+
+	if (npat > DRIFT_EPERIOD) {
+		int ndrift = 2;			/* Number of drift records */
+		dsamples *dss;
+
+		/* Figure out the number of drift samples we need */
+		ndrift += (npat-1)/DRIFT_IPERIOD;
+//printf("~1 spat %d, npat = %d, tpat %d, ndrift = %d\n",spat,npat,tpat,ndrift);
+
+		if ((dss = (dsamples *)calloc(sizeof(dsamples), ndrift)) == NULL) {
+			DBG((dbgo, "malloc of %d dsamples failed\n",ndrift))
+			return 5;
+		}
+	
+		/* Set up bookeeping */
+		fper = (double)npat/(ndrift-1.0);
+//printf("~1 fper = %f\n",fper);
+		foff = 0.0;
+		for (poff = off = i = 0; i < ndrift; i++) {
+			dss[i].off = off;
+			foff += fper;
+			off = (int)floor(foff + 0.5);
+			if (i < (ndrift-1))
+				dss[i].count = off - poff;
+			else
+				dss[i].count = 0;
+			poff = off;
+//printf("~1 dss[%d] off = %d, count = %d\n",i, dss[i].off,dss[i].count);
+
+			dss[i].dcols[0].r = 
+			dss[i].dcols[0].g = 
+			dss[i].dcols[0].b = 0.0; 
+			dss[i].dcols[1].r = 
+			dss[i].dcols[1].g = 
+			dss[i].dcols[1].b = 1.0; 
+		}
+
+		for (i = 0; i < (ndrift-1); i++) {
+
+			if (i == 0) {
+				/* Use last b&w */
+				dss[i].dcols[0] = p->last_bw[0];
+				dss[i].dcols[1] = p->last_bw[1];
+			} else {
+				/* Read the black and/or white drift patch */
+				if ((rv = disprd_read_imp(p, &dss[i].dcols[boff], dno, spat+dss[i].off, tpat, 0, 1, tc)) != 0) {
+					free(dss);
+					return rv;
+				}
+			}
+			/* Read this batch of patches */
+			if ((rv = disprd_read_imp(p, &cols[dss[i].off], dss[i].count,spat+dss[i].off,tpat,0,0,tc)) != 0) {
+				free(dss);
+				return rv;
+			}
+		}
+		/* Read the last black and/or white drift patch */
+		if ((rv = disprd_read_imp(p, &dss[i].dcols[boff], dno, spat+dss[i].off-1, tpat, 0, 1, tc)) != 0) {
+			free(dss);
+			return rv;
+		}
+		/* Remember the last */
+		p->last_bw[0] = dss[i].dcols[0];
+		p->last_bw[1] = dss[i].dcols[1];
+		p->last_bw_v = 1;
+
+		/* Set the white drift reference to be the last one */
+		p->targ_w = p->last_bw[1];
+		p->targ_w_v = 1;
+
+//printf("~1 ref b = %f %f %f\n", p->ref_bw[0].aXYZ[0], p->ref_bw[0].aXYZ[1], p->ref_bw[0].aXYZ[2]);
+//printf("~1 ref w = %f %f %f\n", p->ref_bw[1].aXYZ[0], p->ref_bw[1].aXYZ[1], p->ref_bw[1].aXYZ[2]);
+//printf("~1 ndrift-1 b = %f %f %f\n", dss[ndrift-1].dcols[0].aXYZ[0], dss[ndrift-1].dcols[0].aXYZ[1], dss[ndrift-1].dcols[0].aXYZ[2]);
+//printf("~1 ndrift-1 w = %f %f %f\n", dss[ndrift-1].dcols[1].aXYZ[0], dss[ndrift-1].dcols[1].aXYZ[1], dss[ndrift-1].dcols[1].aXYZ[2]);
+
+		/* Apply the drift compensation using interpolation */
+		for (i = 0; i < (ndrift-1); i++) {
+
+			for (j = 0; j < dss[i].count; j++) {
+				int k = dss[i].off + j;
+				double we;		/* Interpolation weight of eairlier value */
+				col bb, ww;		/* Interpolated black and white */
+//double uXYZ[3];
+//icmCpy3(uXYZ, cols[k].aXYZ);
+//printf("~1 patch %d = %f %f %f\n", k, cols[k].aXYZ[0], cols[k].aXYZ[1], cols[k].aXYZ[2]);
+				if (p->bdrift) {
+					we = (double)(dss[i+1].dcols[0].msec - cols[k].msec)/
+					     (double)(dss[i+1].dcols[0].msec - dss[i].dcols[0].msec);
+
+					if (cols[k].XYZ_v) {
+						for (e = 0; e < 3; e++) {
+							bb.XYZ[e] =        we  * dss[i].dcols[0].XYZ[e]
+							          + (1.0 - we) * dss[i+1].dcols[0].XYZ[e];
+						}
+					}
+					if (cols[k].aXYZ_v) {
+						for (e = 0; e < 3; e++) {
+							bb.aXYZ[e] =        we  * dss[i].dcols[0].aXYZ[e]
+							          + (1.0 - we) * dss[i+1].dcols[0].aXYZ[e];
+						}
+//printf("~1 bb = %f %f %f\n", bb.aXYZ[0], bb.aXYZ[1], bb.aXYZ[2]);
+					}
+					if (cols[k].sp.spec_n > 0) {
+						for (e = 0; e < cols[k].sp.spec_n; e++) {
+							bb.sp.spec[e] =        we  * dss[i].dcols[0].sp.spec[e]
+							          + (1.0 - we) * dss[i+1].dcols[0].sp.spec[e];
+						}
+					}
+				}
+				if (p->wdrift) {
+					we = (double)(dss[i+1].dcols[1].msec - cols[k].msec)/
+					     (double)(dss[i+1].dcols[1].msec - dss[i].dcols[1].msec);
+
+					if (cols[k].XYZ_v) {
+						for (e = 0; e < 3; e++) {
+							ww.XYZ[e] =        we  * dss[i].dcols[1].XYZ[e]
+							          + (1.0 - we) * dss[i+1].dcols[1].XYZ[e];
+						}
+					}
+					if (cols[k].aXYZ_v) {
+						for (e = 0; e < 3; e++) {
+							ww.aXYZ[e] =        we  * dss[i].dcols[1].aXYZ[e]
+							          + (1.0 - we) * dss[i+1].dcols[1].aXYZ[e];
+						}
+//printf("~1 ww = %f %f %f\n", ww.aXYZ[0], ww.aXYZ[1], ww.aXYZ[2]);
+					}
+					if (cols[k].sp.spec_n > 0) {
+						for (e = 0; e < cols[k].sp.spec_n; e++) {
+							ww.sp.spec[e] =        we  * dss[i].dcols[1].sp.spec[e]
+							          + (1.0 - we) * dss[i+1].dcols[1].sp.spec[e];
+						}
+					}
+				}
+
+				if (p->bdrift) {
+					/* Compensate interpolated black for any white change from ref. */
+					if (p->wdrift) {
+						if (cols[k].XYZ_v) {
+							for (e = 0; e < 3; e++) {
+								bb.XYZ[e] *= p->ref_bw[1].XYZ[e]/ww.XYZ[e];
+							}
+						}
+						if (cols[k].aXYZ_v) {
+							for (e = 0; e < 3; e++) {
+								bb.aXYZ[e] *= p->ref_bw[1].aXYZ[e]/ww.aXYZ[e];
+							}
+//printf("~1 wcomp bb = %f %f %f\n", bb.aXYZ[0], bb.aXYZ[1], bb.aXYZ[2]);
+						}
+						if (cols[k].sp.spec_n > 0) {
+							for (e = 0; e < cols[k].sp.spec_n; e++) {
+								bb.sp.spec[e] *= p->ref_bw[1].sp.spec[e]/ww.sp.spec[e];
+							}
+						}
+					}
+
+					/* Compensate the reading for any black drift from ref. */
+					if (cols[k].XYZ_v) {
+						for (e = 0; e < 3; e++) {
+							cols[k].XYZ[e] += p->ref_bw[0].XYZ[e] - bb.XYZ[e];
+						}
+					}
+					if (cols[k].aXYZ_v) {
+						for (e = 0; e < 3; e++) {
+							cols[k].aXYZ[e] += p->ref_bw[0].aXYZ[e] - bb.aXYZ[e];
+						}
+//printf("~1 bcomp patch = %f %f %f\n",  cols[k].aXYZ[0], cols[k].aXYZ[1], cols[k].aXYZ[2]);
+					}
+					if (cols[k].sp.spec_n > 0) {
+						for (e = 0; e < cols[k].sp.spec_n; e++) {
+							cols[k].sp.spec[e] += p->ref_bw[0].sp.spec[e] - bb.sp.spec[e];
+						}
+					}
+				}
+				/* Compensate the reading for any white drift to target white */
+				if (p->wdrift) {
+					if (cols[k].XYZ_v) {
+						for (e = 0; e < 3; e++) {
+							cols[k].XYZ[e] *= p->targ_w.XYZ[e]/ww.XYZ[e];
+						}
+					}
+					if (cols[k].aXYZ_v) {
+						for (e = 0; e < 3; e++) {
+							cols[k].aXYZ[e] *= p->targ_w.aXYZ[e]/ww.aXYZ[e];
+						}
+//printf("~1 wcomp patch = %f %f %f\n",  cols[k].aXYZ[0], cols[k].aXYZ[1], cols[k].aXYZ[2]);
+					}
+					if (cols[k].sp.spec_n > 0) {
+						for (e = 0; e < cols[k].sp.spec_n; e++) {
+							cols[k].sp.spec[e] *= p->targ_w.sp.spec[e]/ww.sp.spec[e];
+						}
+					}
+				}
+//printf("~1 %d: drift change %f DE\n",k,icmXYZLabDE(&icmD50, uXYZ, cols[k].aXYZ));
+			}
+		}
+		free(dss);
+
+	/* Else use extrapolation from the last b&w */
+	} else {
+
+		/* Read the small number of patches */
+		if ((rv = disprd_read_imp(p, cols,npat,spat,tpat,acr,0,tc)) != 0)
+			return rv;
+
+		if (p->targ_w_v == 0) {
+			/* Set the white drift reference to be the last one */
+			p->targ_w = p->last_bw[1];
+			p->targ_w_v = 1;
+//printf("~1 set white drift target\n");
+		}
+
+//printf("~1 ref b = %f %f %f\n", p->ref_bw[0].aXYZ[0], p->ref_bw[0].aXYZ[1], p->ref_bw[0].aXYZ[2]);
+//printf("~1 ref w = %f %f %f\n", p->ref_bw[1].aXYZ[0], p->ref_bw[1].aXYZ[1], p->ref_bw[1].aXYZ[2]);
+//printf("~1 last b = %f %f %f\n", p->last_bw[0].aXYZ[0], p->last_bw[0].aXYZ[1], p->last_bw[0].aXYZ[2]);
+//printf("~1 last w = %f %f %f\n", p->last_bw[1].aXYZ[0], p->last_bw[1].aXYZ[1], p->last_bw[1].aXYZ[2]);
+//printf("~1 target w = %f %f %f\n", p->targ_w.aXYZ[0], p->targ_w.aXYZ[1], p->targ_w.aXYZ[2]);
+		/* Apply the drift compensation using extrapolation */
+		/* Note that white compensation can't work in this case */
+		for (j = 0; j < npat; j++) {
+			double we;		/* Interpolation weight of eairlier value */
+			col bb, ww;		/* Interpolated black and white */
+
+//printf("~1 patch %d = %f %f %f\n", j, cols[j].aXYZ[0], cols[j].aXYZ[1], cols[j].aXYZ[2]);
+//double uXYZ[3];
+//icmCpy3(uXYZ, cols[j].aXYZ);
+
+			if (p->bdrift) {
+				bb = p->last_bw[0];
+//printf("~1 bb = %f %f %f\n", bb.aXYZ[0], bb.aXYZ[1], bb.aXYZ[2]);
+			}
+			if (p->wdrift) {
+				ww = p->last_bw[1];
+//printf("~1 ww = %f %f %f\n", ww.aXYZ[0], ww.aXYZ[1], ww.aXYZ[2]);
+			}
+
+			if (p->bdrift) {
+				/* Compensate interpolated black for any white change from ref. */
+				if (p->wdrift) {
+					if (cols[j].XYZ_v) {
+						for (e = 0; e < 3; e++) {
+							bb.XYZ[e] *= p->ref_bw[1].XYZ[e]/ww.XYZ[e];
+						}
+					}
+					if (cols[j].aXYZ_v) {
+						for (e = 0; e < 3; e++) {
+							bb.aXYZ[e] *= p->ref_bw[1].aXYZ[e]/ww.aXYZ[e];
+						}
+//printf("~1 wcomp bb = %f %f %f\n", bb.aXYZ[0], bb.aXYZ[1], bb.aXYZ[2]);
+					}
+					if (cols[j].sp.spec_n > 0) {
+						for (e = 0; e < cols[j].sp.spec_n; e++) {
+							bb.sp.spec[e] *= p->ref_bw[1].sp.spec[e]/ww.sp.spec[e];
+						}
+					}
+				}
+
+				/* Compensate the reading for any black drift from ref. */
+				if (cols[j].XYZ_v) {
+					for (e = 0; e < 3; e++) {
+						cols[j].XYZ[e] += p->ref_bw[0].XYZ[e] - bb.XYZ[e];
+					}
+				}
+				if (cols[j].aXYZ_v) {
+					for (e = 0; e < 3; e++) {
+						cols[j].aXYZ[e] += p->ref_bw[0].aXYZ[e] - bb.aXYZ[e];
+					}
+//printf("~1 bcomp patch = %f %f %f\n",  cols[j].aXYZ[0], cols[j].aXYZ[1], cols[j].aXYZ[2]);
+				}
+				if (cols[j].sp.spec_n > 0) {
+					for (e = 0; e < cols[j].sp.spec_n; e++) {
+						cols[j].sp.spec[e] += p->ref_bw[0].sp.spec[e] - bb.sp.spec[e];
+					}
+				}
+			}
+			/* Compensate the reading for any white drift to target white */
+			if (p->wdrift) {
+				if (cols[j].XYZ_v) {
+					for (e = 0; e < 3; e++) {
+						cols[j].XYZ[e] *= p->targ_w.XYZ[e]/ww.XYZ[e];
+					}
+				}
+				if (cols[j].aXYZ_v) {
+					for (e = 0; e < 3; e++) {
+						cols[j].aXYZ[e] *= p->targ_w.aXYZ[e]/ww.aXYZ[e];
+					}
+//printf("~1 wcomp patch = %f %f %f\n",  cols[j].aXYZ[0], cols[j].aXYZ[1], cols[j].aXYZ[2]);
+				}
+				if (cols[j].sp.spec_n > 0) {
+					for (e = 0; e < cols[j].sp.spec_n; e++) {
+						cols[j].sp.spec[e] *= p->targ_w.sp.spec[e]/ww.sp.spec[e];
+					}
+				}
+			}
+//printf("~1 %d: drift change %f DE\n",j,icmXYZLabDE(&icmD50, uXYZ, cols[j].aXYZ));
+		}
+	}
+
+	if (acr && p->verb && spat != 0 && tpat != 0 && (spat+npat-1) == tpat)
+		fprintf(p->df,"\n");
+
+	return rv;
+}
+
+/* Reset the white drift target white value, for non-batch */
+/* readings when white drift comp. is enabled */
+static void disprd_reset_targ_w(disprd *p) {
+	p->targ_w_v = 0;
+}
+
+/* Take a series of readings from the display */
+/* Return nz on fail/abort */
+/* 1 = user aborted */
+/* 2 = instrument access failed */
+/* 3 = window access failed */ 
+/* 4 = user hit terminate key */
+/* 5 = system error */
+/* Use disprd_err() to interpret it */
+static int disprd_read(
+	disprd *p,
+	col *cols,		/* Array of patch colors to be tested */
+	int npat, 		/* Number of patches to be tested */
+	int spat,		/* Start patch index for "verb", 0 if not used */
+	int tpat,		/* Total patch index for "verb", 0 if not used */
+	int acr,		/* If nz, do automatic final carriage return */
+	int tc			/* If nz, termination key */
+) {
+	int rv, i;
+
+	if (p->bdrift || p->wdrift) {
+		if ((rv = disprd_read_drift(p, cols,npat,spat,tpat,acr,tc)) != 0)
+			return rv;
+	} else {
+		if ((rv = disprd_read_imp(p, cols,npat,spat,tpat,acr,0,tc)) != 0)
+			return rv;
+	}
+
+	/* Convert spectral to XYZ */
+	if (p->sp2cie != NULL) {
+		for (i = 0; i < npat; i++) {
+			if (cols[i].sp.spec_n > 0) {
+				p->sp2cie->convert(p->sp2cie, cols[i].XYZ, &cols[i].sp);
+				cols[i].XYZ_v = 1;
+				icmCpy3(cols[i].aXYZ, cols[i].XYZ);
+				cols[i].aXYZ_v = 1;
+			}
+		}
+	}
+
+	return rv;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 static int config_inst_displ(disprd *p);
 
 /* Take an ambient reading if the instrument has the capability. */
@@ -830,7 +1116,9 @@ int disprd_ambient(struct _disprd *p,
 				disp_win_info dwi;
 				dwi.dw = p->dw;		/* Set window to use */
 				printf("\nSample read failed because instruments needs calibration\n");
-				rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none, &dwi);
+				rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none,
+				                                        setup_display_calibrate, &dwi);
+				setup_display_calibrate(p->it,inst_calc_none, &dwi); 
 				if (rv != inst_ok) {	/* Abort or fatal error */
 					return 1;
 				}
@@ -892,6 +1180,12 @@ int disprd_ambient(struct _disprd *p,
 			break;		/* Sucesful reading */
 		}
 	}
+	/* Convert spectral to XYZ */
+	if (p->sp2cie != NULL && val.sp.spec_n > 0) {
+		p->sp2cie->convert(p->sp2cie, val.XYZ, &val.sp);
+		icmCpy3(val.aXYZ, val.XYZ);
+		val.aXYZ_v = 1;
+	}
 
 	if (val.aXYZ_v == 0) {
 		printf("Unexpected failure to get measurement\n");
@@ -929,6 +1223,7 @@ static int disprd_fake_read(disprd *p,
 	icmXYZNumber blue;		/* Blue colorant */
 	double doff[3];			/* device offsets */
 	double mat[3][3];		/* Destination matrix */
+	double xmat[3][3];		/* Extra matrix */
 	double ooff[3];			/* XYZ offsets */
 	double rgb[3];
 //	double br = 35.4;		/* Overall brightness */
@@ -964,9 +1259,18 @@ static int disprd_fake_read(disprd *p,
 	if (icmRGBprim2matrix(white, red, green, blue, mat))
 		error("Fake read unexpectedly got singular matrix\n");
 
+	icmSetUnity3x3(xmat);
+
+	if (p->fake2 == 1) {
+		/* Target matrix */
+		xmat[0][0] = 1.0; xmat[0][1] = 0.01; xmat[0][2] = 0.02;
+		xmat[1][0] = 0.1; xmat[1][1] = 1.11; xmat[1][2] = 0.12;
+		xmat[2][0] = 0.2; xmat[2][1] = 0.2;  xmat[2][2] = 1.22;
+	}
+
 	for (patch = 0; patch < npat; patch++) {
 		if (p->verb && spat != 0 && tpat != 0) {
-			fprintf(p->df,"\rpatch %d of %d",spat+patch,tpat);
+			fprintf(p->df,"%cpatch %d of %d",cr_char,spat+patch,tpat);
 			fflush(p->df);
 		}
 		rgb[0] = cols[patch].r;
@@ -1006,10 +1310,12 @@ static int disprd_fake_read(disprd *p,
 
 		/* Apply the fake devices level of quantization */
 #ifdef FAKE_BITS
-		for (j = 0; j < 3; j++) {
-			int vv;
-			vv = (int) (rgb[j] * ((1 << FAKE_BITS) - 1.0) + 0.5);
-			rgb[j] =  vv/((1 << FAKE_BITS) - 1.0);
+		if (p->fake2 == 0) {
+			for (j = 0; j < 3; j++) {
+				int vv;
+				vv = (int) (rgb[j] * ((1 << FAKE_BITS) - 1.0) + 0.5);
+				rgb[j] =  vv/((1 << FAKE_BITS) - 1.0);
+			}
 		}
 #endif
 
@@ -1037,13 +1343,18 @@ static int disprd_fake_read(disprd *p,
 		for (j = 0; j < 3; j++)
 			cols[patch].aXYZ[j] += ooff[j];
 
+		/* Apply extra matrix */
+		icmMulBy3x3(cols[patch].aXYZ, xmat, cols[patch].aXYZ);
+
 #ifdef FAKE_NOISE
-		cols[patch].aXYZ[0] += 2.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
-		cols[patch].aXYZ[1] += FAKE_NOISE * d_rand(-1.0, 1.0);
-		cols[patch].aXYZ[2] += 4.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
-		for (j = 0; j < 3; j++) { 
-			if (cols[patch].aXYZ[j] < 0.0)
-				cols[patch].aXYZ[j] = 0.0;
+		if (p->fake2 == 0) {
+			cols[patch].aXYZ[0] += 2.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
+			cols[patch].aXYZ[1] += FAKE_NOISE * d_rand(-1.0, 1.0);
+			cols[patch].aXYZ[2] += 4.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
+			for (j = 0; j < 3; j++) { 
+				if (cols[patch].aXYZ[j] < 0.0)
+					cols[patch].aXYZ[j] = 0.0;
+			}
 		}
 #endif
 		cols[patch].aXYZ_v = 1;
@@ -1072,7 +1383,7 @@ static int disprd_fake_read_lu(disprd *p,
 	for (patch = 0; patch < npat; patch++) {
 		double rgb[3];;
 		if (p->verb && spat != 0 && tpat != 0) {
-			fprintf(p->df,"\rpatch %d of %d",spat+patch,tpat);
+			fprintf(p->df,"%cpatch %d of %d",cr_char,spat+patch,tpat);
 			fflush(p->df);
 		}
 		rgb[0] = cols[patch].r;
@@ -1152,7 +1463,7 @@ static int disprd_fake_read_co(disprd *p,
 		FILE *fp;
 
 		if (p->verb && spat != 0 && tpat != 0) {
-			fprintf(p->df,"\rpatch %d of %d",spat+patch,tpat);
+			fprintf(p->df,"%cpatch %d of %d",cr_char,spat+patch,tpat);
 			fflush(p->df);
 		}
 		rgb[0] = cols[patch].r;
@@ -1244,6 +1555,8 @@ char *disprd_err(int en) {
 			return "Either CRT or LCD must be selected";
 		case 8:
 			return "Instrument has no ambient measurement capability";
+		case 9:
+			return "Creating spectral conversion object failed";
 	}
 	return "Unknown";
 }
@@ -1268,6 +1581,8 @@ static void disprd_del(disprd *p) {
 			p->dw->set_ramdac(p->dw,p->or, 0);
 		p->dw->del(p->dw);
 	}
+	if (p->sp2cie != NULL)
+		p->sp2cie->del(p->sp2cie); 
 	free(p);
 }
 
@@ -1300,8 +1615,10 @@ static int config_inst_displ(disprd *p) {
 	}
 	
 	if (p->spectral && (cap & inst_spectral) == 0) {
-		printf("Spectral information was requested,\n");
-		printf("but instrument doesn't support it\n");
+		if (p->spectral != 2) {		/* Not soft */
+			printf("Spectral information was requested,\n");
+			printf("but instrument doesn't support it\n");
+		}
 		p->spectral = 0;
 	}
 	
@@ -1374,6 +1691,13 @@ static int config_inst_displ(disprd *p) {
 		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
 		return 2;
 	}
+	if (p->ccmtx != NULL) {
+		if ((rv = p->it->col_cor_mat(p->it, p->ccmtx)) != inst_ok) {
+			DBG((dbgo,"col_cor_mat returned '%s' (%s)\n",
+			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+			return 2;
+		}
+	}
 	
 	/* Set the trigger mode to program triggered */
 	if ((rv = p->it->set_opt_mode(p->it,inst_opt_trig_prog)) != inst_ok) {
@@ -1407,6 +1731,7 @@ static int config_inst_displ(disprd *p) {
 /* 5 = user hit terminate key */
 /* 6 = system error */
 /* 7 = CRT or LCD must be selected */
+/* 9 = spectral conversion failed */
 /* Use disprd_err() to interpret *errc */
 disprd *new_disprd(
 int *errc,          /* Error code. May be NULL */
@@ -1419,7 +1744,7 @@ int adaptive,		/* NZ for adaptive mode */
 int nocal,			/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */
 int donat,			/* Use ramdac for native output, else run through current or set ramdac */
-double cal[3][MAX_CAL_ENT],	/* Calibration set/return (cal[0][0] < 0.0 if can't/not to be used) */
+double cal[3][MAX_CAL_ENT],	/* Calibration set/return (cal[0][0] < 0.0 or NULL if not used) */
 int ncal,			/* Number of cal[] entries */
 disppath *disp,		/* Display to calibrate. NULL if fake and no dispwin */
 int blackbg,		/* NZ if whole screen should be filled with black */
@@ -1429,7 +1754,11 @@ char *mcallout,		/* Shell callout on measure color (forced fake) */
 double patsize,		/* Size of dispwin */
 double ho,			/* Horizontal offset */
 double vo,			/* Vertical offset */
+double ccmtx[3][3],	/* Colorimeter Correction matrix, NULL if none */
 int spectral,		/* Generate spectral info flag */
+icxObserverType observ,	/* Compute XYZ from spectral if spectral and != icxOT_none */
+int bdrift,			/* Flag, nz for black drift compensation */
+int wdrift,			/* Flag, nz for white drift compensation */
 int verb,			/* Verbosity flag */
 FILE *df,			/* Verbose output - NULL = stdout */
 int debug,			/* Debug flag */
@@ -1448,13 +1777,18 @@ char *fake_name		/* Name of profile to use as a fake device */
 	}
 	p->del = disprd_del;
 	p->read = disprd_read;
+	p->reset_targ_w = disprd_reset_targ_w;
 	p->ambient = disprd_ambient;
 	p->fake_name = fake_name;
 
 	p->verb = verb;
 	p->debug = debug;
 	p->itype = itype;
+	p->ccmtx = ccmtx;
 	p->spectral = spectral;
+	p->observ = observ;
+	p->bdrift = bdrift;
+	p->wdrift = wdrift;
 	p->dtype = dtype;
 	p->proj = proj;
 	p->adaptive = adaptive;
@@ -1566,6 +1900,16 @@ char *fake_name		/* Name of profile to use as a fake device */
 		}
 	}
 
+	/* Create a spectral conversion object */
+	if (p->spectral && p->observ != icxOT_none) {
+		if ((p->sp2cie = new_xsp2cie(icxIT_none, NULL, p->observ, NULL, icSigXYZData)) == NULL) {
+			DBG((dbgo,"Creation of spectral conversion object failed\n"))
+			p->del(p);
+			if (errc != NULL) *errc = 9;
+			return NULL;
+		}
+	}
+
 	/* Open display window for positioning (no blackbg) */
 	if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, donat, 0,
 	                                                        override, debug)) == NULL) {
@@ -1586,7 +1930,9 @@ char *fake_name		/* Name of profile to use as a fake device */
 			disp_win_info dwi;
 			dwi.dw = p->dw;		/* Set window to use */
 	
-			rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none, &dwi);
+			rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none,
+			                                  setup_display_calibrate, &dwi);
+			setup_display_calibrate(p->it,inst_calc_none, &dwi); 
 			printf("\n");
 			if (rv != inst_ok) {	/* Abort or fatal error */
 				printf("Calibrate failed with '%s' (%s)\n",

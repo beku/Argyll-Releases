@@ -1,15 +1,16 @@
+
 #ifndef INST_H
+
+ /* Abstract base class for common color instrument interface */
+ /* and other common instrument stuff.                        */
 
 /* 
  * Argyll Color Correction System
  *
- * Abstract base class for common color instrument interface
- * and other common instrument stuff.
- *
  * Author: Graeme W. Gill
  * Date:   15/3/2001
  *
- * Copyright 2001 - 2008 Graeme W. Gill
+ * Copyright 2001 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -38,6 +39,10 @@
 #include "insttypes.h"		/* libinst Includes this functionality */
 #include "icoms.h"			/* libinst Includes this functionality */
 #include "conv.h"
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
 
 /* ------------------------------------------------- */
 /* Structure for holding an instrument patch reading */
@@ -131,7 +136,7 @@ typedef enum {
 	inst_emis_proj          = 0x00020000, /* Capable of projector emission measurement */
 	inst_emis_proj_crt      = 0x00040000, /* Has a CRT display mode */
 	inst_emis_proj_lcd      = 0x00080000, /* Has an LCD display mode */
-	inst_emis_illum         = 0x00100000, /* Capable of illuminant emission measurement */
+	inst_emis_tele          = 0x00100000, /* Capable of telephoto emission measurement */
 	inst_emis_ambient       = 0x00200000, /* Capable of ambient measurement */
 	inst_emis_ambient_flash = 0x00400000, /* Capable of ambient flash measurement */
 	inst_emis_ambient_mono  = 0x00800000, /* The ambient measurement is monochrome */
@@ -139,7 +144,8 @@ typedef enum {
 
 	inst_colorimeter        = 0x01000000, /* Colorimetric capability */
 	inst_spectral           = 0x02000000, /* Spectral capability */
-	inst_highres            = 0x04000000  /* High Resolution Spectral mode */
+	inst_highres            = 0x04000000, /* High Resolution Spectral mode */
+	inst_ccmx               = 0x08000000  /* Colorimeter Correction Matrix capability */
 
 } inst_capability;
 
@@ -186,24 +192,29 @@ typedef enum {
 	inst_mode_unknown            = 0x0000,	/* Mode not specified */
 
 	/* Sub modes that compose operating modes: */
+
+	/* Mode of light measurement */
 	inst_mode_reflection         = 0x0001,	/* General reflection mode */
 	inst_mode_s_reflection       = 0x0002,	/* General saved reflection mode */
 	inst_mode_transmission       = 0x0003,	/* General transmission mode */
 	inst_mode_emission           = 0x0004,	/* General emission mode */
 	inst_mode_illum_mask         = 0x000f,	/* Mask of sample illumination sub mode */
 
+	/* Access mode of measurement */
 	inst_mode_spot               = 0x0010,	/* General spot measurement mode */
 	inst_mode_strip              = 0x0020,	/* General strip measurement mode */
 	inst_mode_xy                 = 0x0030,	/* General X-Y measurement mode */
 	inst_mode_chart              = 0x0040,	/* General chart measurement mode */
-	inst_mode_disp               = 0x0050,	/* General Display spot measurement mode */
-	inst_mode_proj               = 0x0060,	/* General Projector spot measurement mode */
-	inst_mode_illum              = 0x0070,	/* General illuminant spot measurement mode */
-	inst_mode_ambient            = 0x0080,	/* General ambient spot measurement mode */
-	inst_mode_ambient_flash      = 0x0090,	/* General ambient flash measurement mode */
+	inst_mode_ambient            = 0x0050,	/* General ambient measurement mode */
+	inst_mode_ambient_flash      = 0x0060,	/* General ambient flash measurement mode */
+	inst_mode_tele               = 0x0070,	/* General telephoto measurement mode */
 	inst_mode_sub_mask           = 0x00f0,	/* Mask of sub-mode */
 
-	/* Operating modes: */
+	/* Measurement modifiers */
+	inst_mode_disp               = 0x0100,	/* Display device (non-adaptive/refresh) mode */
+	inst_mode_mod_mask           = 0x0f00,	/* Mask of measurement modifiers */
+
+	/* Combined operating modes (from above): */
 	inst_mode_ref_spot           = 0x0011,	/* Reflection spot measurement mode */
 	inst_mode_ref_strip          = 0x0021,	/* Reflection strip measurement mode */
 	inst_mode_ref_xy             = 0x0031,	/* Reflection X-Y measurement mode */
@@ -221,13 +232,13 @@ typedef enum {
 
 	inst_mode_emis_spot          = 0x0014,	/* Spot emission measurement mode */
 	inst_mode_emis_strip         = 0x0024,	/* Strip emission measurement mode */
-	inst_mode_emis_disp          = 0x0054,	/* Display emission measurement mode */
-	inst_mode_emis_proj          = 0x0064,	/* Projector emission measurement mode */
-	inst_mode_emis_illum         = 0x0074,	/* Illuminant emission measurement mode */
-	inst_mode_emis_ambient       = 0x0084,	/* Ambient emission measurement mode */
-	inst_mode_emis_ambient_flash = 0x0094,	/* Ambient emission flash measurement mode */
+	inst_mode_emis_disp          = 0x0114,	/* Display emission measurement mode */
+	inst_mode_emis_proj          = 0x0174,	/* Projector emission measurement mode */
+	inst_mode_emis_tele          = 0x0074,	/* Telephoto emission measurement mode */
+	inst_mode_emis_ambient       = 0x0054,	/* Ambient emission measurement mode */
+	inst_mode_emis_ambient_flash = 0x0054,	/* Ambient emission flash measurement mode */
 
-	inst_mode_measurement_mask   = 0x00ff,	/* Mask of exclusive measurement modes */
+	inst_mode_measurement_mask   = 0x0fff,	/* Mask of exclusive measurement modes */
 
 	/* Independent extra modes */
 	inst_mode_colorimeter        = 0x1000,	/* Colorimetric mode */
@@ -297,21 +308,25 @@ typedef enum {
 	inst_stat_battery           = 0x0006,	/* Return charged status of battery */
 											/* [1 argument type *double : range 0.0 - 1.0 ] */
 
-	inst_stat_sensmode          = 0x0007	/* Return sensor mode */
+	inst_stat_sensmode          = 0x0007,	/* Return sensor mode */
 											/* [1 argument type *inst_stat_smode ] */
+
+	inst_stat_get_filter        = 0x0008	/* Set a filter configuration */
+											/* [1 argument type *inst_opt_filter ] */
 } inst_status_type;
 
 
-/* Optional filter fitted to instrument */
+/* Optional filter fitted to instrument (for inst_opt_set_filter) */
 typedef enum {
-	inst_opt_filter_unknown,	/* Unspecified filter */
-	inst_opt_filter_none,		/* Option not specified */
-	inst_opt_filter_pol,		/* Polarising filter */ 
-	inst_opt_filter_D65,		/* D65 Illuminant filter */
-	inst_opt_filter_UVCut		/* U.V. Cut filter */
+	inst_opt_filter_unknown  = 0xffff,	/* Unspecified filter */
+	inst_opt_filter_none     = 0x0000,	/* No filters fitted */
+	inst_opt_filter_pol      = 0x0001,	/* Polarising filter */ 
+	inst_opt_filter_D65      = 0x0002,	/* D65 Illuminant filter */
+	inst_opt_filter_UVCut    = 0x0004,	/* U.V. Cut filter */
+	inst_opt_filter_Custom   = 0x0008	/* Custom Filter */
 } inst_opt_filter;
 
-/* Off-line pending readings available */
+/* Off-line pending readings available (status) */
 typedef enum {
 	inst_stat_savdrd_none    = 0x00,		/* No saved readings */
 	inst_stat_savdrd_spot    = 0x01,		/* There are saved spot readings available */
@@ -320,7 +335,7 @@ typedef enum {
 	inst_stat_savdrd_chart   = 0x08			/* There are saved chart readings available */
 } inst_stat_savdrd;
 
-/* Sensor mode/position */
+/* Sensor mode/position (status) */
 typedef enum {
 	inst_stat_smode_unknown = 0x00,	/* Unknown mode */
 	inst_stat_smode_calib   = 0x01,	/* Calibration tile */
@@ -432,6 +447,11 @@ typedef enum {
 	/* Return the instrument type */											\
 	/* This may not be valid until after init_inst() */							\
 	instType (*get_itype)(  													\
+        struct _inst *p);														\
+																				\
+	/* Return the instrument serial number. */									\
+	/* (This will be an empty string if there is no serial no) */               \
+	char *(*get_serial_no)(  													\
         struct _inst *p);														\
 																				\
 	/* Return the instrument capabilities */									\
@@ -599,6 +619,13 @@ typedef enum {
 		struct _inst *p,														\
 		char *filtername);		/* File containing compensating filter */		\
 																				\
+	/* Insert a colorimetric correction matrix in the instrument XYZ readings */ \
+	/* This is only valid for colorimetric instruments. */						\
+	/* To remove the matrix, pass NULL for the filter filename */               \
+	inst_code (*col_cor_mat)(											        \
+		struct _inst *p,														\
+		double mtx[3][3]);		/* XYZ matrix */								\
+																				\
 	/* Poll for a user abort, terminate, trigger or command. */					\
 	/* Wait for a key rather than polling, if wait != 0 */						\
 	/* Return: */																\
@@ -633,6 +660,28 @@ extern inst *new_inst(
 	int debug,			/* Debug level, 0 = off */
 	int verb			/* Verbose level, 0  = off */
 );
+
+/* ======================================================================= */
+
+/* Opaque type as far as inst.h is concerned. */
+typedef struct _disp_win_info disp_win_info;
+
+/* A default calibration user interaction handler using the console. */
+/* This handles both normal and display based calibration interaction */
+/* with the instrument, if a disp_setup function and pointer to disp_win_info */
+/* is provided. */
+inst_code inst_handle_calibrate(
+	inst *p,
+	inst_cal_type calt,		/* type of calibration to do. inst_calt_all for all */
+	inst_cal_cond calc,		/* Current condition. inst_calc_none for not setup */
+	inst_code (*disp_setup) (inst *p, inst_cal_cond calc, disp_win_info *dwi),
+							/* Callback for handling a display calibration - May be NULL */
+	disp_win_info *dwi		/* Information to be able to open a display test patch - May be NULL */
+);
+
+#ifdef __cplusplus
+	}
+#endif
 
 #define INST_H
 #endif /* INST_H */

@@ -59,7 +59,7 @@
 #include <unistd.h>
 #endif
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "icc.h"
 #include "rspl.h"
@@ -670,7 +670,7 @@ static void xfitprog(void *pdata, int perc) {
 	xfit *p = (xfit *)pdata;
 
 	if (p->verb) {
-		printf("\r% 3d%%",perc); 
+		printf("%c% 3d%%",cr_char,perc); 
 		if (perc == 100)
 			printf("\n");
 		fflush(stdout);

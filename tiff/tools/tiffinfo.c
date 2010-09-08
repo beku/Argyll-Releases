@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/tools/tiffinfo.c,v 1.2 2003/03/12 14:05:06 dron Exp $ */
+/* $Id: tiffinfo.c,v 1.8.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1988-1997 Sam Leffler
@@ -24,13 +24,23 @@
  * OF THIS SOFTWARE.
  */
 
+#include "tif_config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef HAVE_STRINGS_H
+# include <strings.h>
+#endif
+
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
+
 #include "tiffio.h"
 
-#define	streq(a,b)	(strcmp(a,b) == 0)
+#define	streq(a,b)	(strcasecmp(a,b) == 0)
 
 int	showdata = 0;			/* show data */
 int	rawdata = 0;			/* show raw/decoded data */
@@ -47,18 +57,18 @@ main(int argc, char* argv[])
 	int dirnum = -1, multiplefiles, c;
 	uint16 order = 0;
 	TIFF* tif;
-	extern int tiff_optind;
-	extern char* tiff_optarg;
+	extern int optind;
+	extern char* optarg;
 	long flags = 0;
 	uint32 diroff = 0;
 	int chopstrips = 0;		/* disable strip chopping */
 
-	while ((c = tiff_getopt(argc, argv, "f:o:cdDSjlmrsvwz0123456789")) != -1)
+	while ((c = getopt(argc, argv, "f:o:cdDSjilmrsvwz0123456789")) != -1)
 		switch (c) {
 		case '0': case '1': case '2': case '3':
 		case '4': case '5': case '6': case '7':
 		case '8': case '9':
-			dirnum = atoi(&argv[tiff_optind-1][1]);
+			dirnum = atoi(&argv[optind-1][1]);
 			break;
 		case 'd':
 			showdata++;
@@ -70,9 +80,9 @@ main(int argc, char* argv[])
 			flags |= TIFFPRINT_COLORMAP | TIFFPRINT_CURVES;
 			break;
 		case 'f':		/* fill order */
-			if (streq(tiff_optarg, "lsb2msb"))
+			if (streq(optarg, "lsb2msb"))
 				order = FILLORDER_LSB2MSB;
-			else if (streq(tiff_optarg, "msb2lsb"))
+			else if (streq(optarg, "msb2lsb"))
 				order = FILLORDER_MSB2LSB;
 			else
 				usage();
@@ -81,7 +91,7 @@ main(int argc, char* argv[])
 			stoponerr = 0;
 			break;
 		case 'o':
-			diroff = strtoul(tiff_optarg, NULL, 0);
+			diroff = strtoul(optarg, NULL, 0);
 			break;
 		case 'j':
 			flags |= TIFFPRINT_JPEGQTABLES |
@@ -104,24 +114,31 @@ main(int argc, char* argv[])
 			usage();
 			/*NOTREACHED*/
 		}
-	if (tiff_optind >= argc)
+	if (optind >= argc)
 		usage();
-	multiplefiles = (argc - tiff_optind > 1);
-	for (; tiff_optind < argc; tiff_optind++) {
+	multiplefiles = (argc - optind > 1);
+	for (; optind < argc; optind++) {
 		if (multiplefiles)
-			printf("%s:\n", argv[tiff_optind]);
-		tif = TIFFOpen(argv[tiff_optind], chopstrips ? "rC" : "rc");
+			printf("%s:\n", argv[optind]);
+		tif = TIFFOpen(argv[optind], chopstrips ? "rC" : "rc");
 		if (tif != NULL) {
 			if (dirnum != -1) {
-				if (TIFFSetDirectory(tif, dirnum))
+				if (TIFFSetDirectory(tif, (tdir_t) dirnum))
 					tiffinfo(tif, order, flags);
 			} else if (diroff != 0) {
 				if (TIFFSetSubDirectory(tif, diroff))
 					tiffinfo(tif, order, flags);
 			} else {
-				do
+				do {
+					uint32 offset;
+
 					tiffinfo(tif, order, flags);
-				while (TIFFReadDirectory(tif));
+					if (TIFFGetField(tif, TIFFTAG_EXIFIFD,
+							 &offset)) {
+						if (TIFFReadEXIFDirectory(tif, offset))
+							tiffinfo(tif, order, flags);
+					}
+				} while (TIFFReadDirectory(tif));
 			}
 			TIFFClose(tif);
 		}
@@ -239,7 +256,7 @@ static void
 ShowTile(uint32 row, uint32 col, tsample_t sample,
     unsigned char* pp, uint32 nrow, uint32 rowsize)
 {
-	register tsize_t cc;
+	uint32 cc;
 
 	printf("Tile (%lu,%lu", (unsigned long) row, (unsigned long) col);
 	if (sample != (tsample_t) -1)
@@ -337,7 +354,7 @@ TIFFReadData(TIFF* tif)
 static void
 ShowRawBytes(unsigned char* pp, uint32 n)
 {
-	tsize_t i;
+	uint32 i;
 
 	for (i = 0; i < n; i++) {
 		printf(" %02x", *pp++);
@@ -350,7 +367,7 @@ ShowRawBytes(unsigned char* pp, uint32 n)
 static void
 ShowRawWords(uint16* pp, uint32 n)
 {
-	tsize_t i;
+	uint32 i;
 
 	for (i = 0; i < n; i++) {
 		printf(" %04x", *pp++);
@@ -369,7 +386,7 @@ TIFFReadRawData(TIFF* tif, int bitrev)
 
 	TIFFGetField(tif, TIFFTAG_STRIPBYTECOUNTS, &stripbc);
 	if (nstrips > 0) {
-		tsize_t bufsize = stripbc[0];
+		uint32 bufsize = stripbc[0];
 		tdata_t buf = _TIFFmalloc(bufsize);
 		tstrip_t s;
 
@@ -428,3 +445,12 @@ tiffinfo(TIFF* tif, uint16 order, long flags)
 		TIFFReadData(tif);
 	}
 }
+
+/* vim: set ts=8 sts=8 sw=8 noet: */
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

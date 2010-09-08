@@ -113,7 +113,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "vrml.h"
 #include "rspl.h"
@@ -705,7 +705,7 @@ double *uilimit			/* underlying ink sum limit (scale 1.0) input and return, -1 i
 		/* If we don't have an ICC lookup object, look for an MPP */
 		if (s->luo == NULL) {
 			inkmask imask;
-			double dlimit;
+			double dlimit = 0.0;
 
 			if ((s->mlu = new_mpp()) == NULL)
 				error ("Creation of MPP object failed");
@@ -713,14 +713,14 @@ double *uilimit			/* underlying ink sum limit (scale 1.0) input and return, -1 i
 			if ((rv = s->mlu->read_mpp(s->mlu, profName)) != 0)
 				error ("%d, %s",rv,s->mlu->err);
 
-			s->mlu->get_info(s->mlu, &imask, NULL, &dlimit, NULL, NULL, NULL, NULL);
+			s->mlu->get_info(s->mlu, &imask, NULL, &dlimit, NULL, NULL, NULL, NULL, NULL);
 
 			if (xmask != imask) {
 				s->mlu->del(s->mlu);
 				error("MPP profile doesn't match device!");
 			}
-			if (*ilimit < 0.0)	 {/* If not user specified, use MPP inklimit */
-				*ilimit = 100.0 * dlimit + 10.0;
+			if (*ilimit < 0.0 && dlimit > 0.0)	 {/* If not user specified, use MPP inklimit */
+				*uilimit = *ilimit = dlimit + 0.1;
 			}
 		}
 	}
@@ -897,12 +897,13 @@ int main(int argc, char *argv[]) {
 	int fxlist_a = 0;		/* Fixed point list allocation */
 	int fxno = 0;			/* The number of fixed points */
 
-	if (argc <= 1)
-		usage(0,"Too few arguments, got %d expect at least %d",argc-1,1);
-
 #ifdef NUMSUP_H
 	error_program = "targen";
 #endif
+	check_if_not_interactive();
+
+	if (argc <= 1)
+		usage(0,"Too few arguments, got %d expect at least %d",argc-1,1);
 
 	/* Process the arguments */
 	mfa = 1;        /* Minimum final arguments */
@@ -1810,7 +1811,7 @@ int main(int argc, char *argv[]) {
 				}
 
 				if (verb) {
-					printf("\rAdded %d/%d",i+1,fxno); fflush(stdout);
+					printf("%cAdded %d/%d",cr_char,i+1,fxno); fflush(stdout);
 				}
 				i++, j++;
 			}

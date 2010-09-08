@@ -39,7 +39,7 @@
 #include <sys/time.h>
 #include <sys/ioctl.h>
 
-#include <dev/usb/usb.h>
+#include <legacy/dev/usb/usb.h>
 
 #include "usbi.h"
 #ifdef HAVE_CONFIG_H

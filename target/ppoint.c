@@ -617,7 +617,7 @@ int fxno				/* Number in fixed list */
 			continue;
 		s->np++;
 		i++;
-		printf("\rAdded: %d",i);
+		printf("%cAdded: %d",cr_char,i);
 #else 
 
 #ifdef NEVER
@@ -669,7 +669,7 @@ int fxno				/* Number in fixed list */
 			s->np++;
 		}
 		i += nn;
-		printf("\rAdded: %d",i);
+		printf("%cAdded: %d",cr_char,i);
 #endif
 	}
 	printf("\n");		/* Finish "Added:" */

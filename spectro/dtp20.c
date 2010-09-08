@@ -43,7 +43,7 @@
 #include <stdarg.h>
 #include <time.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -638,7 +638,7 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 		if (cs == 2 || cs == 3)
 			return (inst_misread | DTP20_NOT_EMPTY);	/* Has onffline patches */	
 		if (i < 20) {
-			if (cs == 4 || cs == 5 || cs == 8 || cs == 9 || cs == 10 || cs == 11 || cs == 12) {
+			if (cs == 0 || (cs >= 4 && cs <= 12)) {	/* Ignore transient status */
 				msec_sleep(200);
 				continue;
 			}
@@ -1598,6 +1598,9 @@ inst_status_type m,	/* Requested status type */
 
 		return inst_ok;
 	}
+
+	/* !! It's not clear if there is a way of knowing */
+	/* whether the instrument has a UV filter. */
 
 	return inst_unsupported;
 }

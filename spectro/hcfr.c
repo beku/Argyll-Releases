@@ -39,7 +39,7 @@
 #include <time.h>
 #include <stdarg.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -47,7 +47,7 @@
 #include "conv.h"
 #include "hcfr.h"
 
-#undef MEASURE_RAW		/* To facilitie calibration - return raw RGB values */
+#undef MEASURE_RAW		/* To facilitate calibration - return raw RGB values */
 #undef DEBUG
 
 static inst_code hcfr_interp_code(inst *pp, int ec);
@@ -139,7 +139,7 @@ hcfr_flush(
 
 	for (c->lerr = 0;;) {
 		int debug = c->debug; c->debug = 0;
-		c->read(c, buf, MAX_MES_SIZE, '\000', 100000, 0.01);
+		c->read(c, buf, MAX_MES_SIZE, '\000', 100000, 0.05);
 		c->debug = debug;
 		if (c->lerr != 0)
 			break;				/* Expect timeout with nothing to read */
@@ -580,6 +580,10 @@ ipatch *val) {		/* Pointer to instrument patch value */
 		val->aXYZ[1] = rgb[1];
 		val->aXYZ[2] = rgb[2];
 	}
+
+	/* Apply the colorimeter correction matrix */
+	icmMulBy3x3(val->aXYZ, p->ccmat, val->aXYZ);
+
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings */
 	val->XYZ_v = 0;
 	val->Lab_v = 0;
@@ -588,6 +592,23 @@ ipatch *val) {		/* Pointer to instrument patch value */
 
 	if (user_trig)
 		return inst_user_trig;
+	return inst_ok;
+}
+
+/* Insert a colorimetric correction matrix in the instrument XYZ readings */
+/* This is only valid for colorimetric instruments. */
+/* To remove the matrix, pass NULL for the filter filename */
+inst_code hcfr_col_cor_mat(
+inst *pp,
+double mtx[3][3]
+) {
+	hcfr *p = (hcfr *)pp;
+
+	if (mtx == NULL)
+		icmSetUnity3x3(p->ccmat);
+	else
+		icmCpy3x3(p->ccmat, mtx);
+		
 	return inst_ok;
 }
 
@@ -736,6 +757,7 @@ inst_capability hcfr_capabilities(inst *pp) {
 	rv = inst_emis_spot
 	   | inst_emis_disp
 	   | inst_colorimeter
+	   | inst_ccmx
 	   | inst_emis_disp_crt
 	   | inst_emis_disp_lcd
 	   ;
@@ -829,6 +851,8 @@ extern hcfr *new_hcfr(icoms *icom, int debug, int verb)
 	p->debug = debug;
 	p->verb = verb;
 
+	icmSetUnity3x3(p->ccmat);	/* Set the colorimeter correction matrix to do nothing */
+
 	p->init_coms        = hcfr_init_coms;
 	p->init_inst        = hcfr_init_inst;
 	p->capabilities     = hcfr_capabilities;
@@ -847,6 +871,7 @@ extern hcfr *new_hcfr(icoms *icom, int debug, int verb)
 	p->needs_calibration = hcfr_needs_calibration;
 	p->calibrate        = hcfr_calibrate;
 	p->comp_filter    	= hcfr_comp_filter;
+	p->col_cor_mat      = hcfr_col_cor_mat;
 	p->interp_error     = hcfr_interp_error;
 	p->inst_interp_error = NULL;				/* virtual constructor will do this */
 	p->last_comerr      = hcfr_last_comerr;

@@ -33,7 +33,7 @@
 #include <string.h>
 #include <math.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numsup.h"
 #include "render.h"
 

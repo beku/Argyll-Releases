@@ -94,7 +94,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 
 #include "imdi_utl.h"
 #include "imdi_arch.h"

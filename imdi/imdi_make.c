@@ -26,7 +26,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 
 #include "imdi.h"
 #include "imdi_tab.h"

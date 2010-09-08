@@ -1,12 +1,13 @@
+
+ /* Instrument supported types utilities */
+
 /* 
  * Argyll Color Correction System
- *
- * Instrument supported types utilities
  *
  * Author: Graeme W. Gill
  * Date:   10/3/2001
  *
- * Copyright 2001 - 2007 Graeme W. Gill
+ * Copyright 2001 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -19,7 +20,7 @@
 #include <string.h>
 #include <time.h>
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "xspect.h"
 #include "insttypes.h"
 
@@ -241,6 +242,7 @@ int inst_illuminant(xspect *sp, instType itype) {
 
 		case instHuey:
 			return 1;										/* Not applicable */
+
 
 		default:
 			break;

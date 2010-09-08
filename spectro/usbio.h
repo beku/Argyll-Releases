@@ -1,20 +1,24 @@
 
 #ifndef USBIO_H
 
+ /* General USB I/O support */
+
 /* 
  * Argyll Color Correction System
- *
- * General USB I/O support
  *
  * Author: Graeme W. Gill
  * Date:   2006/22/4
  *
- * Copyright 2006 - 2007 Graeme W. Gill
+ * Copyright 2006 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
+
+#ifdef __cplusplus
+	extern "C" {
+#endif
 
 /* These routines supliement the class code in ntio.c and unixio.c */
 /* They do benign things if ENABLE_USB is undefined */
@@ -44,6 +48,10 @@ void usb_delete_from_cleanup_list(icoms *p);
 
 /* Cleanup and then free a usb dev entry */
 void usb_del_usb_device(struct usb_device *dev);
+
+#ifdef __cplusplus
+	}
+#endif
 
 #define USBIO_H
 #endif /* USBIO_H */

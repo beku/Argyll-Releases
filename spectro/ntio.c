@@ -1,18 +1,20 @@
 
+ /* Windows NT serial I/O class */
+
 /* 
  * Argyll Color Correction System
- *
- * Windows NT serial I/O class
  *
  * Author: Graeme W. Gill
  * Date:   28/9/97
  *
- * Copyright 1997 - 2007 Graeme W. Gill
+ * Copyright 1997 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
  */
+
+#ifdef NT
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,8 +22,8 @@
 #include <time.h>
 #include <conio.h>
 #include "copyright.h"
-#include "config.h"
-#include "numlib.h"
+#include "aconfig.h"
+#include "numsup.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -91,7 +93,8 @@ icoms *p
 
 	DBGF((errout,"icoms_get_paths: up to %d, about to lookup the registry for serial ports\n",p->npaths));
 
-	/* Look in the registry */
+#ifdef ENABLE_SERIAL
+	/* Look in the registry for serial ports */
 	if ((stat = RegOpenKeyEx(HKEY_LOCAL_MACHINE, "HARDWARE\\DEVICEMAP\\SERIALCOMM",
 	                         0, KEY_READ, &sch)) != ERROR_SUCCESS) {
 		DBGF((errout,"icoms_get_paths: there is not SERIALCOMM entry, returning %d paths\n",p->npaths));
@@ -163,6 +166,7 @@ icoms *p
 		DBG("icoms_get_paths: RegCloseKey failed\n");
 		warning("RegCloseKey failed with %d\n",stat);
 	}
+#endif /* ENABLE_SERIAL */
 
 	/* Sort the COM keys so people don't get confused... */
 	DBGF((errout,"icoms_get_paths: we now have %d entries and are about to sort them\n",p->npaths));
@@ -496,7 +500,7 @@ double tout)
 		}
 
 		/* Check for user abort/term/command */
-		if (_kbhit() && p->uih[c = _getch()] != ICOM_OK) {
+		if ((c = poll_con_char()) != 0 && p->uih[c] != ICOM_OK) {
 			p->cut = c;
 			p->lerr = p->uih[c];
 			if (p->uih[c] == ICOM_TERM
@@ -594,7 +598,7 @@ double tout)		/* Time out in seconds */
 			}
 		}
 		/* Check for user abort/term/command */
-		if (_kbhit() && p->uih[c = _getch()] != ICOM_OK) {
+		if ((c = poll_con_char()) != 0 && p->uih[c] != ICOM_OK) {
 			p->cut = c;
 			p->lerr = p->uih[c];
 			if (p->uih[c] == ICOM_USER
@@ -647,7 +651,7 @@ icoms_del(icoms *p) {
 }
 
 /* Constructor */
-extern icoms *new_icoms()
+icoms *new_icoms()
 {
 	icoms *p;
 	if ((p = (icoms *)calloc(sizeof(icoms), 1)) == NULL)
@@ -681,3 +685,4 @@ extern icoms *new_icoms()
 	return p;
 }
 
+#endif /* NT */

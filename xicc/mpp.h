@@ -85,11 +85,13 @@ struct _mpp {
 	                  int *spec_n,			/* Number of spectral bands, 0 if none */
 	                  double *spec_wl_short,/* First reading wavelength in nm (shortest) */
 	                  double *spec_wl_long, /* Last reading wavelength in nm (longest) */
-	                  instType *itype);		/* Instrument type */
+	                  instType *itype,		/* Instrument type */
+					  int *display);		/* NZ if display type */
 
 	/* Set an illuminant and observer to use spectral model */
 	/* for CIE lookup with optional FWA. Set both to default for XYZ mpp model. */
 	/* Return 0 on OK, 1 on spectral not supported */
+	/* If the model is for a display, the illuminant will be ignored. */
 	int (*set_ilob) (struct _mpp *p,
 		icxIllumeType ilType,			/* Illuminant type (icxIT_default for none) */
 		xspect        *custIllum,		/* Custom illuminant (NULL for none) */
@@ -171,6 +173,7 @@ struct _mpp {
 	double lpca[MPP_MXCCOMB][MPP_MXBANDS];	/* Primary combinations anchor L* band values */
 	int nodp;				/* Number of device data points */
 	mppcol *cols;			/* List of test points */
+	double spmax;			/* Maximum spectral value of any sample and band */
 
 	/* Lookup */
 	icColorSpaceSignature pcs;	/* PCS to return, XYZ, Lab */

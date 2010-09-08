@@ -30,8 +30,9 @@
 #endif
 
 #include "copyright.h"
-#include "config.h"
+#include "aconfig.h"
 #include "numlib.h"
+#include "rspl.h"
 #include "gamut.h"
 #include "nearsmth.h"
 
@@ -40,36 +41,42 @@ double m21po[3] = { 2.0, 1.0, 2.0 };    /* Many to 1 filter mixing power LCh (th
 /* Mapping weights */
 gammapweights weights[] = {
 	{
-		gmm_default,
-
-		{		/* Weighting of absolute error of destination from source */
+		gmm_default,	/* Non hue specific defaults */
+		{				/* Cusp alignment control */
+			{
+				0.0,	/* Cusp luminance alignment weighting 0 = none, 1 = full */
+				0.0,	/* Cusp chroma alignment weighting    0 = none, 1 = full */
+				0.2		/* Cusp hue alignment weighting       0 = none, 1 = full */
+			},
+			1.00		/* Chroma expansion 1 = none */
+		},
+		{			/* Radial weighting */
+			0.0,	/* Radial error overall weight, 0 + */
+			0.5,	/* Radial hue dominance vs l+c, 0 - 1 */
+			0.5		/* Radial l dominance vs, c, 0 - 1 */
+		},
+		{			/* Weighting of absolute error of destination from source */
 			1.0,	/* Absolute error overall weight */
-			{
-				1.0,	/* Absolute luminance error weight */
-				1.0,	/* Absolute chroma error weight */
-				1.0		/* Absolute hue error weight */
-			}
+			0.5,	/* Hue dominance vs l+c, 0 - 1 */
+
+			0.9,	/* Light l dominance vs, c, 0 - 1 */
+			0.9,	/* Medium l dominance vs, c, 0 - 1 */
+			0.9,	/* Dark l dominance vs, c, 0 - 1 */
+
+			0.5,	/* l/c dominance breakpoint, 0 - 1 */
+			0.0,	/* l dominance exageration, 0+ */
+			0.0		/* c dominance exageration, 0+ */
 		},
-		{		/* Weighting of relative error of destination points to each */
-				/* other, compared to source points to each other. */
-			1.0,	/* Relative error overall weight */
-			{
-				1.0,	/* Relative luminance error weight */
-				1.0,	/* Relative chroma error weight */
-				1.0		/* Relative hue error weight */
-			}
+		{			/* Relative vector  smoothing */
+			30.0, 20.0	/* Relative Smoothing radius L* H* */
 		},
-		{		/* Weighting of error between destination point and source */
-				/* point radially mapped to destination. */
-			0.0,	/* Radial error overall weight */
-			{
-				1.0,	/* Radial luminance error weight */
-				1.0,	/* Radial chroma error weight */
-				1.0		/* Radial hue error weight */
-			}
-		},
-	
-		0.0
+		{		/* Weighting of excessive compression error, which is */
+				/* the src->dst vector length over the available dst depth. */
+				/* The depth is half the distance to the intersection of the */
+				/* vector to the other side of the gamut. (doesn't get triggered much ?) */
+			100.0,		/* Compression depth weight */
+			100.0		/* Expansion depth weight */
+		}
 	}
 };
 
@@ -99,6 +106,8 @@ main(int argc, char *argv[]) {
 	char diag_name[100];
 	int verb = 0;
 	double nearf = 1.0;		/* Absolute delta E weightign */
+	datai il, ih;			/* rspl input range */
+	datao ol, oh;			/* rspl output range */
 
 	gamut *gin, *gout;		/* Input and Output gamuts */
 	nearsmth *nsm;			/* Returned list of near smooth points */
@@ -192,12 +201,19 @@ main(int argc, char *argv[]) {
 
 	/* - - - - - - - - - - - - - - - - - - - */
 
+	il[0] = ol[0] = 0.0;
+	il[1] = ol[1] = -128.0;
+	il[2] = ol[2] = -128.0;
+	ih[0] = oh[0] = 100.0;
+	ih[1] = oh[1] = 128.0;
+	ih[2] = oh[2] = 128.0;
 	
 	/* Convert from compact to explicit hextant weightings */
 	expand_weights(xweights, weights);
 
 	/* Create the near point mapping */
-	nsm = near_smooth(verb, &nnsm, gin, gin, gout, 0, 0, NULL, xweights, 0.1, 0.1, 1, 1, 2.0, 17, 0.0);
+	nsm = near_smooth(verb, &nnsm, gin, gin, gout, 0, 0, NULL, xweights,
+	           0.1, 0.1, 1, 1, 2.0, 17, 10.0, il, ih, ol, oh);
 	if (nsm == NULL)
 		error("Creating smoothed near points failed");
 

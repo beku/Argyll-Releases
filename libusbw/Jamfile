@@ -34,5 +34,6 @@ if ! $(UNIX) {
 	File usb.h : src/usb.h ;
 
 	# Install the DLL to the binary directory
-	InstallFile ../bin : libusb0.dll ;
+	#InstallFile ../bin : libusb0.dll ;
 }
+

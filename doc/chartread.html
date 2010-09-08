@@ -72,8 +72,22 @@ spectral)<br>
 Resume reading partly read chart<br>
 &nbsp;<a href="#I">-I</a>
 file.cal&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Override calibration
-info from .ti2 in resulting .ti3</span></small><small><span
- style="font-family: monospace;"></span><span
+info from .ti2 in resulting .ti3<br>
+&nbsp;</span></small><font size="-1"><span
+ style="font-family: monospace;"><a href="#F">-F filter</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set filter configuration:<br>
+&nbsp;
+n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+None<br>
+&nbsp;
+p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Polarising filter<br>
+&nbsp;
+6&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+D65<br>
+&nbsp;
+u&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+U.V. Cut</span></font><small><span style="font-family: monospace;"></span><span
  style="font-family: monospace;"></span></small><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#N">-N</a><span
@@ -238,6 +252,13 @@ such a scenario, the <span style="font-weight: bold;">chartread -I</span>
 parameter allows overriding the .ti2 calibration curves placed in the
 resulting .ti3 file with the actual calibration that was used for that
 particular print.<br>
+<br>
+<a name="F"></a>The <b>-F</b> options allows configuring the
+instrument to have a particular filter fitted to it. Some instruments
+(i.e. the Gretag Spectrolino) allow the fitting of various filters,
+such as a polarizing filter, D65 illuminant simulation, or Ultra Violet
+Cut filter, and this option allows the instrument to be configured
+appropriately.<br>
 <br>
 <a name="N"></a> <span style="font-weight: bold;">-N</span> Many
 instruments automatically ask for an instrument

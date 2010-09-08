@@ -18,6 +18,8 @@ colorimeter.<br>
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-v level
 &nbsp;&nbsp;&nbsp;&nbsp; Verbose<br>
+&nbsp;-S d&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Specify the install scope u = user (def.), l = local system]<br>
 &nbsp;creates spyd2PLD.bin from vendor install files.<br
  style="font-family: monospace;">
 </span><span style="font-family: monospace;"></span><span
@@ -30,8 +32,14 @@ from the installation CD,
 if spyd2en is unable to locate this file automatically.<br>
 <br>
 The <b>-v</b> parameter enables verbosity. This may be of use in
-figuring out what went wrong if it doesn't work.<span
- style="font-weight: bold;"></span><br>
+figuring out what went wrong if it doesn't work.<br>
+<br>
+The <span style="font-weight: bold;">-S</span> option allows
+installing the PLD pattern file in a local system location, rather than
+the default user accessible location. You may need to run this as
+superuser using the "sudo" command on Linux systems.<span
+ style="font-weight: bold;"><span style="font-weight: bold;"><span
+ style="font-weight: bold;"></span></span></span><br>
 <h3>Usage Details and Discussion</h3>
 <span style="font-weight: bold;"></span>The Spyder 2 instrument cannot
 function without the presence of the instrument vendors PLD firmware
@@ -74,12 +82,16 @@ spyd2en", which will then ask you to enter the root password.<br>
 <br>
 If the instrument firmware pattern is successfully located, then
 spyd2en will create a <span style="font-weight: bold;">spyd2PLD.bin</span>
-file in the same directory that
-the spyd2en executable exists in, so that any other Argyll programs
-residing with,
-such as <span style="font-weight: bold;">spotread</span>, <span
+file in a subdirectory of the users home directory, or if the <span
+ style="font-weight: bold;">-S l</span> option is used, will store it
+in a system wide location. (the <a
+ href="http://standards.freedesktop.org/basedir-spec/basedir-spec-0.6.html">XDG
+Base Directory specifications</a> are used as a basis for storing the
+file). Programs that access instruments such as&nbsp; <span
+ style="font-weight: bold;">spotread</span>, <span
  style="font-weight: bold;">dispcal</span> and <span
- style="font-weight: bold;">dispread</span>, can load the firmware into
+ style="font-weight: bold;">dispread</span>, can then locate and load
+the firmware into
 the instrument.<br>
 <br>
 <span style="font-weight: bold;">Note</span> that the <span

@@ -166,6 +166,7 @@ struct _dispwin {
 /* private: */
 	char *name;			/* Display path (ie. '\\.\DISPLAY1') */
 						/* or "10.0.0.1:0.0" */
+	char *description;	/* Description of display */
 
 	/* Plot instance information */
 	int sx,sy;			/* Screen offset in pixels */

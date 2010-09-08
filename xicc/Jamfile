@@ -21,7 +21,7 @@ HDRS = ../h ../icc ../rspl ../cgats ../numlib ../gamut ../spectro ../profile
 
 # XICC library
 Library libxicc :  xicc.c xlutfix.c xspect.c xsep.c xcolorants.c xutils.c xdevlin.c
-        xcam.c cam97s3.c cam02.c mpp.c xfit.c xdgb.c moncurve.c xcal.c ;
+        xcam.c cam97s3.c cam02.c mpp.c ccmx.c xfit.c xdgb.c moncurve.c xcal.c ;
 
 # colorant library. Use instead of libxicc
 Object xcolorants2 : xcolorants.c ;

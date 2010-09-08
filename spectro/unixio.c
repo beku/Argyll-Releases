@@ -1,13 +1,13 @@
 
+ /* Unix serial I/O class */
+
 /* 
  * Argyll Color Correction System
- *
- * Linux serial I/O class
  *
  * Author: Graeme W. Gill
  * Date:   18/11/2000
  *
- * Copyright 1997 - 2007 Graeme W. Gill
+ * Copyright 1997 - 2010 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -18,6 +18,8 @@
     TTBD:
  */
 
+#ifdef UNIX
+
 #include <sys/types.h>		/* Include sys/select.h ? */
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -26,12 +28,13 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <dirent.h>
 #include <time.h>
 #include <errno.h>
 #include <string.h>
 #include "copyright.h"
-#include "config.h"
-#include "numlib.h"
+#include "aconfig.h"
+#include "numsup.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -112,6 +115,7 @@ icoms *p
 	hid_get_paths(p);
 	usbend = p->npaths;
 
+#ifdef ENABLE_SERIAL
 #ifdef __APPLE__
 	/* Search the OSX registry for serial ports */
 	{
@@ -297,20 +301,20 @@ icoms *p
 			p->paths[p->npaths] = NULL;
 		}
 		closedir(dd);
+	}
+#endif /* ! __APPLE__ */
+#endif /* ENABLE_SERIAL */
 
-		/* Sort the /dev keys so people don't get confused... */
-		for (i = usbend; i < (p->npaths-1); i++) {
-			for (j = i+1; j < p->npaths; j++) {
-				if (strcmp(p->paths[i]->path, p->paths[j]->path) > 0) {
-					icompath *tt = p->paths[i];
-					p->paths[i] = p->paths[j];
-					p->paths[j] = tt;
-				}
+	/* Sort the /dev keys so people don't get confused... */
+	for (i = usbend; i < (p->npaths-1); i++) {
+		for (j = i+1; j < p->npaths; j++) {
+			if (strcmp(p->paths[i]->path, p->paths[j]->path) > 0) {
+				icompath *tt = p->paths[i];
+				p->paths[i] = p->paths[j];
+				p->paths[j] = tt;
 			}
 		}
 	}
-
-#endif /* ! __APPLE__ */
 
 	return p->paths;
 }
@@ -829,7 +833,7 @@ icoms_del(icoms *p) {
 }
 
 /* Constructor */
-extern icoms *new_icoms() {
+icoms *new_icoms() {
 	icoms *p;
 	if ((p = (icoms *)calloc(sizeof(icoms), 1)) == NULL)
 		error("icoms: malloc failed!");
@@ -859,3 +863,4 @@ extern icoms *new_icoms() {
 	return p;
 }
 
+#endif /* UNIX */

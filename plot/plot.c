@@ -852,10 +852,13 @@ static int do_plot_imp(
 		}
 #else
 		for (;;) {
-			while (PeekMessage(&msg, hwnd, 0, 0, PM_REMOVE)) {
+			debugf(("About to peek message\n"));
+			while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 				TranslateMessage(&msg);
+				debugf(("Dispatching message 0x%x\n",msg.message));
 				DispatchMessage(&msg);
 				if (msg.message == WM_QUIT) {
+					debugf(("Got QUIT message\n"));
 					break;
 				}
 			}
@@ -903,9 +906,11 @@ static LRESULT CALLBACK MainWndProc(
 	PAINTSTRUCT ps;
 	RECT rect;
 
+	debugf(("Handling message type 0x%x\n",message));
 	// Could use Set/GetWindowLong() to pass window class info instead of global pd (beware NULL)
 	switch(message) {
 		case WM_PAINT:
+			debugf(("It's a paint message\n"));
 			hdc = BeginPaint(hwnd, &ps);
 			GetClientRect(hwnd, &rect);
 
@@ -924,17 +929,21 @@ static LRESULT CALLBACK MainWndProc(
 			return 0;
 
 		case WM_CHAR:
+			debugf(("It's a char message, wParam = 0x%x\n",wParam));
 			switch(wParam) {
 				case ' ':	/* Space */
+					debugf(("It's a SPACE, so post quit and return\n"));
 					PostQuitMessage(0);
 					return 0;
 			}
 
 		case WM_DESTROY:
+			debugf(("It's a destroy message\n"));
 			PostQuitMessage(0);
 			return 0;
 	}
 
+	debugf(("It's a message not handled here\n"));
 	return DefWindowProc(hwnd, message, wParam, lParam);
 }
 

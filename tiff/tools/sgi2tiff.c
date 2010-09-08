@@ -1,4 +1,4 @@
-/* $Header: /cvsroot/osrs/libtiff/tools/sgi2tiff.c,v 1.3 1999/12/27 17:35:01 mwelles Exp $ */
+/* $Id: sgi2tiff.c,v 1.5.2.1 2010-06-08 18:50:44 bfriesen Exp $ */
 
 /*
  * Copyright (c) 1991-1997 Sam Leffler
@@ -60,44 +60,44 @@ main(int argc, char* argv[])
 	IMAGE *in;
 	TIFF *out;
 	int c;
-	extern int tiff_optind;
-	extern char* tiff_optarg;
+	extern int optind;
+	extern char* optarg;
 
-	while ((c = tiff_getopt(argc, argv, "c:p:r:")) != -1)
+	while ((c = getopt(argc, argv, "c:p:r:")) != -1)
 		switch (c) {
 		case 'c':		/* compression scheme */
-			if (!processCompressOptions(tiff_optarg))
+			if (!processCompressOptions(optarg))
 				usage();
 			break;
 		case 'f':		/* fill order */
-			if (streq(tiff_optarg, "lsb2msb"))
+			if (streq(optarg, "lsb2msb"))
 				fillorder = FILLORDER_LSB2MSB;
-			else if (streq(tiff_optarg, "msb2lsb"))
+			else if (streq(optarg, "msb2lsb"))
 				fillorder = FILLORDER_MSB2LSB;
 			else
 				usage();
 			break;
 		case 'p':		/* planar configuration */
-			if (streq(tiff_optarg, "separate"))
+			if (streq(optarg, "separate"))
 				config = PLANARCONFIG_SEPARATE;
-			else if (streq(tiff_optarg, "contig"))
+			else if (streq(optarg, "contig"))
 				config = PLANARCONFIG_CONTIG;
 			else
 				usage();
 			break;
 		case 'r':		/* rows/strip */
-			rowsperstrip = atoi(tiff_optarg);
+			rowsperstrip = atoi(optarg);
 			break;
 		case '?':
 			usage();
 			/*NOTREACHED*/
 		}
-	if (argc - tiff_optind != 2)
+	if (argc - optind != 2)
 		usage();
-	in = iopen(argv[tiff_optind], "r");
+	in = iopen(argv[optind], "r");
 	if (in == NULL)
 		return (-1);
-	out = TIFFOpen(argv[tiff_optind+1], "w");
+	out = TIFFOpen(argv[optind+1], "w");
 	if (out == NULL)
 		return (-2);
 	TIFFSetField(out, TIFFTAG_IMAGEWIDTH, (uint32) in->xsize);
@@ -159,11 +159,19 @@ processCompressOptions(char* opt)
 		compression = COMPRESSION_PACKBITS;
 	else if (strneq(opt, "jpeg", 4)) {
 		char* cp = strchr(opt, ':');
-		if (cp && isdigit(cp[1]))
+
+                defcompression = COMPRESSION_JPEG;
+                while( cp )
+                {
+                    if (isdigit((int)cp[1]))
 			quality = atoi(cp+1);
-		if (cp && strchr(cp, 'r'))
+                    else if (cp[1] == 'r' )
 			jpegcolormode = JPEGCOLORMODE_RAW;
-		compression = COMPRESSION_JPEG;
+                    else
+                        usage();
+
+                    cp = strchr(cp+1,':');
+                }
 	} else if (strneq(opt, "lzw", 3)) {
 		char* cp = strchr(opt, ':');
 		if (cp)
@@ -292,7 +300,6 @@ char* stuff[] = {
 " -f msb2lsb	force msb-to-lsb FillOrder for output",
 "",
 " -c lzw[:opts]	compress output with Lempel-Ziv & Welch encoding",
-"               (no longer supported by default due to Unisys patent enforcement)", 
 " -c zip[:opts]	compress output with deflate encoding",
 " -c jpeg[:opts]compress output with JPEG encoding",
 " -c packbits	compress output with packbits encoding",
@@ -319,3 +326,10 @@ usage(void)
 		fprintf(stderr, "%s\n", stuff[i]);
 	exit(-1);
 }
+/*
+ * Local Variables:
+ * mode: c
+ * c-basic-offset: 8
+ * fill-column: 78
+ * End:
+ */

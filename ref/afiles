@@ -7,11 +7,13 @@ lab2lab.icm
 CMP_DT_003.cht
 CMP_Digital_Target-3.cht
 CMP_Digital_Target-3.ti2
+CMP_Digital_Target-3.cie
 ColorChecker.cht
 ColorChecker.cie
 ColorChecker.ti2
 ColorCheckerDC.cht
 ColorCheckerSG.cht
+ECI2002.ti2
 ECI2002R.ti2
 FograStrip.ti1
 FograStrip.ti2
@@ -22,6 +24,7 @@ QPcard_201.cie
 i1_RGB_Scan_1.4.cht
 i1_RGB_Scan_1.4.ti2
 it8.cht
+linear.cal
 strange.cal
 3dap5k.sp
 CIE_C.sp
@@ -44,3 +47,4 @@ Trulux.sp
 TruluxPlus.sp
 example.sp
 example121.sp
+CRT.ccss

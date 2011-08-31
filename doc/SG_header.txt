@@ -1,0 +1,13 @@
+IT8.7/2
+ORIGINATOR "X-Rite Inc."
+DESCRIPTOR "The data in this file is reported in CIE L* a* b* data for illuminant D50 and 2 degree observer and is being supplied by X-Rite, Inc. This information can be used for personal and educational but not for commercial purposes without license from X-rite, Inc.		"
+CREATED  "August 13, 2010"
+MANUFACTURER "X-Rite Inc."
+
+NUMBER_OF_FIELDS 4
+BEGIN_DATA_FORMAT
+SAMPLE_ID LAB_L LAB_A LAB_B
+END_DATA_FORMAT
+
+NUMBER_OF_SETS 140
+BEGIN_DATA

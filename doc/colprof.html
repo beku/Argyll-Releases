@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
   <title>colprof</title>
@@ -20,8 +20,12 @@ values.<br>
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#v">-v</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; Verbose mode</span><br
- style="font-family: monospace;">
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+Verbose
+mode</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#A">-A "manufacturer"</a><span
  style="font-family: monospace;">&nbsp; Set the manufacturer
@@ -41,8 +45,17 @@ profile Description string&nbsp; (Default "</span><span
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#C">-C "copyright"</a><span
  style="font-family: monospace;"> &nbsp;&nbsp;&nbsp; Set the copyright
-string</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
+string<br>
+&nbsp;<a href="#Za">-Z
+[tmnb]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Attributes: Transparency, Matte, Negative, BlackAndWhite<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;<a
+ href="colprof.html#Zi">-Z
+[prsa]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Default intent: Perceptual, Rel. Colorimetric, Saturation, Abs.
+Colorimetric</span></small><br style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#q">-q lmhu</a><span
  style="font-family: monospace;"> &nbsp;&nbsp; &nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp; Quality - Low, Medium (def),
@@ -55,13 +68,26 @@ input device</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#y">-y</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; Verify A2B profile</span><br
- style="font-family: monospace;">
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+Verify
+A2B
+profile</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#ni">-ni</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; Don't
-create input (Device) shaper curves<br>
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+Don't
+create
+input
+(Device)
+shaper
+curves<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#np">-np</a><span
  style="font-family: monospace;"> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -71,8 +97,16 @@ curves</span></small><br style="font-family: monospace;">
  style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#no">-no</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; Don't
-create output (PCS) shaper curves<br>
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+Don't
+create
+output
+(PCS)
+shaper
+curves<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#nc">-nc</a><span
  style="font-family: monospace;"> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -85,28 +119,80 @@ create output (PCS) shaper curves<br>
 &nbsp; Black generation: z = zero K,</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;
-h = 0.5 K (def), x = max K, r = ramp K</span><br
- style="font-family: monospace;">
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp;
+h
+=
+0.5
+K
+(def),
+x
+= max K, r = ramp K</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#kp">-k p stle stpo enpo enle
 shape</a><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp; stle: K level at White 0.0 -
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp;
+stle:
+K
+level
+at
+White
+0.0 -
 1.0</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; stpo: start point of
-transition Wh 0.0 - Bk 1.0</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; enpo: End point of transition
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+stpo:
+start
+point
+of
+transition
 Wh 0.0 - Bk 1.0</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; enle: K level at Black 0.0 -
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+enpo:
+End
+point
+of
+transition
+Wh 0.0 - Bk 1.0</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+enle:
+K
+level
+at
+Black 0.0 -
 1.0</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; shape: 1.0 = straight,
-0.0-1.0 concave, 1.0-2.0 convex</span><br
- style="font-family: monospace;">
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+shape:
+1.0
+=
+straight,
+0.0-1.0
+concave, 1.0-2.0 convex</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#K">-K parameters</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Same as
@@ -129,26 +215,78 @@ black ink limit, 0 - 100% (default from .ti3)</span><br
  style="font-family: monospace;"> &nbsp;&nbsp; &nbsp; &nbsp; Algorithm
 type override</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; l = Lab cLUT (def.), x = XYZ cLUT, X
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+l
+=
+Lab
+cLUT
+(def.), x = XYZ cLUT, X
 = display XYZ cLUT + matrix</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; g = gamma+matrix, s = shaper+matrix,
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+g
+=
+gamma+matrix,
+s
+= shaper+matrix,
 m = matrix only,</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; G = single gamma+matrix,
-S = single shaper+matrix</span><br style="font-family: monospace;">
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+G
+=
+single
+gamma+matrix,
+S
+= single shaper+matrix</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#u">-u</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; If
-Lut input profile, make it absolute (non-standard)<br>
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+If
+Lut
+input
+profile,
+make
+it
+absolute (non-standard)<br>
+&nbsp;<a href="#un">-un</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Same
+as
+u,
+but
+don't
+extrapolate
+cLut
+white
+&amp; black using matrix<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#U">-U <span
  style="font-style: italic;">scale</span></a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; If input profile, scale media white point by scale</span></small><br
- style="font-family: monospace;">
+&nbsp; If input profile, scale media white point by scale</span></small><br>
+<span style="font-family: monospace;">&nbsp;<a href="#R">-R</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Restrict
+white
+&lt;=
+1.0,
+black
+and primaries to be +ve</span><br style="font-family: monospace;">
 <small><span style="font-family: monospace;"></span><span
  style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#i">-i <i>illum</i></a><span
@@ -157,7 +295,16 @@ Lut input profile, make it absolute (non-standard)<br>
 for print/transparency spectral data:</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; A, C, D50 (def.), D65, F5,
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+A,
+C,
+D50
+(def.),
+D65, F5,
 F8, F10 or file.sp</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#o">-o <i>observ</i></a><span
@@ -165,16 +312,28 @@ F8, F10 or file.sp</span><br style="font-family: monospace;">
 &nbsp; Choose CIE Observer for spectral
 data:</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 1931_2 </span></small><small><span
- style="font-family: monospace;"> (def.)</span></small><small><span
- style="font-family: monospace;">, 1964_10, S&amp;B
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+1931_2
+</span></small><small><span style="font-family: monospace;">(def.)</span></small><small><span
+ style="font-family: monospace;">,
+1964_10, S&amp;B
 1955_2, shaw, J&amp;V 1978_2</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#f">-f</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; Use
-Fluorescent Whitening Agent compensation</span><br
- style="font-family: monospace;">
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+Use
+Fluorescent
+Whitening
+Agent
+compensation</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#r">-r avgdev</a><span
  style="font-family: monospace;"> &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
@@ -183,18 +342,53 @@ percentage (default 0.5%)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#s">-s src.icc</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Apply gamut mapping to output profile perceptual B2A table for given
+Apply
+gamut
+mapping
+to
+output
+profile
+perceptual
+B2A
+table
+for given
 source</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#S">-S src.icc</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Apply gamut mapping to output profile perceptual and saturation B2A
+Apply
+gamut
+mapping
+to
+output
+profile
+perceptual
+and
+saturation
+B2A
 table<br>
 &nbsp;<a href="#nP">-nP</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use colormetric source gamut to make output profile perceptual table<br>
+Use
+colormetric
+source
+gamut
+to
+make
+output
+profile
+perceptual
+table<br>
 &nbsp;<a href="#nS">-nS</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use colormetric source gamut to make output profile saturation table<br
- style="font-family: monospace;">
+Use
+colormetric
+source
+gamut
+to
+make
+output
+profile
+saturation
+table<br style="font-family: monospace;">
 </span><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#g">-g src.gam</a><span
  style="font-family: monospace;">
@@ -214,9 +408,15 @@ intent for output profile perceptual table:</span><br
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#T">-T intent</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Override gamut mapping
-intent for output profile saturation table:</span><br
- style="font-family: monospace;">
+Override
+gamut
+mapping
+intent
+for
+output
+profile
+saturation
+table:</span><br style="font-family: monospace;">
 <span style="font-family: monospace;"></span></small><small><span
  style="font-family: monospace;"> &nbsp; &nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; a -
@@ -226,70 +426,180 @@ Absolute Colorimetric]<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; aw - Absolute Colorimetric (in
 Jab) with scaling to fit white point<br style="font-family: monospace;">
 </span><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp; &nbsp;&nbsp; aa - Absolute Appearance</span><br
- style="font-family: monospace;">
+&nbsp;
+&nbsp;&nbsp;
+&nbsp;&nbsp;
+aa
+-
+Absolute
+Appearance</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; r - White Point
-Matched Appearance [ICC
-Relative Colorimetric]</span><br style="font-family: monospace;">
+&nbsp;
+&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+r
+-
+White
+Point
+Matched
+Appearance
+[ICC
+Relative
+Colorimetric]</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; la - Luminance matched Appearance</span><br
- style="font-family: monospace;">
+&nbsp;
+&nbsp;
+&nbsp;
+la
+-
+Luminance
+matched
+Appearance</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; p - Perceptual (Preferred)
-[ICC Perceptual]</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp; &nbsp;&nbsp;&nbsp; ms - Saturation</span><br
- style="font-family: monospace;">
+&nbsp;
+&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;
+p
+-
+Perceptual
+(Preferred)
+[ICC
+Perceptual]<br>
+</span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+pa
+-
+Perceptual
+Appearance</span></small><br style="font-family: monospace;">
+<small><span style="font-family: monospace;"></span><span
+ style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;
+ms
+-
+Saturation</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp; &nbsp;&nbsp;&nbsp; s - Enhanced Saturation [ICC
+&nbsp;
+&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;
+s
+-
+Enhanced
+Saturation
+[ICC
 Saturation]</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp;&nbsp; &nbsp; al - Absolute Colorimetric (Lab)</span></small><small><span
- style="font-family: monospace;"></span><br
+&nbsp;
+&nbsp;&nbsp;
+&nbsp;
+al
+-
+Absolute
+Colorimetric
+(Lab)</span></small><small><span style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#c">-c viewcond</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-set input viewing conditions for output profile CIECAM02 gamut mapping,</span><br
- style="font-family: monospace;">
+set
+input
+viewing
+conditions
+for
+output
+profile
+CIECAM02
+gamut
+mapping,</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-either an enumerated choice, or a parameter</span><br
- style="font-family: monospace;">
+either
+an
+enumerated
+choice,
+or
+a
+parameter</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#d">-d viewcond</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-set output viewing conditions for output profile CIECAM02, gamut mapping</span><br
- style="font-family: monospace;">
+set
+output
+viewing
+conditions
+for
+output
+profile
+CIECAM02,
+gamut
+mapping</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-either an enumerated choice, or a parameter:value change</span><br
- style="font-family: monospace;">
+either
+an
+enumerated
+choice,
+or
+a
+parameter:value
+change</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Also sets out of gamut clipping CAM space.</span><br
- style="font-family: monospace;">
+Also
+sets
+out
+of
+gamut
+clipping
+CAM
+space.</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Enumerated Viewing Conditions:</span><br style="font-family: monospace;">
+Enumerated
+Viewing
+Conditions:</span><br style="font-family: monospace;">
 <span style="font-family: monospace;"></span></small><small><span
  style="font-family: monospace;">&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
 &nbsp; pp - Practical Reflection Print (ISO-3664 P2)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp; &nbsp; pe - Print evaluation environment
-(CIE 116-1995)<br>
+&nbsp;
+&nbsp;
+&nbsp;&nbsp;
+&nbsp;
+pe
+-
+Print
+evaluation
+environment
+(CIE
+116-1995)<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp; &nbsp; pc - Critical print evaluation
-environment (ISO-3664 P1)</span></small><br
- style="font-family: monospace;">
+&nbsp;
+&nbsp;
+&nbsp;&nbsp;
+&nbsp;
+pc
+-
+Critical
+print
+evaluation
+environment
+(ISO-3664 P1)</span></small><br style="font-family: monospace;">
 <small><span style="font-family: monospace;"></span><span
  style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp;&nbsp;
 &nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; mt - Monitor in typical work environment</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp; mb - Monitor in bright work environment</span><br
- style="font-family: monospace;">
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+mb
+-
+Monitor
+in
+bright
+work environment</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
 &nbsp;
 &nbsp; &nbsp; &nbsp;&nbsp; md - Monitor in darkened work
@@ -321,20 +631,37 @@ box</span></small><small><span style="font-family: monospace;"></span><span
 &nbsp;&nbsp;&nbsp; s:surround n = auto, a =
 average, m = dim, d = dark,</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; c = transparency (default average)</span><br
- style="font-family: monospace;">
+&nbsp;&nbsp;
+c
+=
+transparency
+(default
+average)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Adapted white point
 as XYZ (default media white)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp;
-w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Adapted white
-point as x, y</span><br style="font-family: monospace;">
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Adapted
+white
+point
+as x, y</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; a:adaptation&nbsp; Adaptatation
@@ -368,7 +695,12 @@ f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as x,
 y<br>
 &nbsp;<a href="#P">-P</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Create gamut gammap_p.wrl and gammap_s.wrl diagostics<br>
+Create
+gamut
+gammap_p.wrl
+and
+gammap_s.wrl
+diagostics<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;<a
  href="#O">-O outputfile</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Override the default output filename &amp; extension.</span></small><br
@@ -427,22 +759,50 @@ included in the parameter, and not mistaken for the start of another
 flag, or as a final command line parameters. By default a generic
 copyright string will be generated for the profile.<br>
 <br>
+<a name="Za"></a>The <b>-Z</b> parameter allows setting of the profile
+attribute flags. There are four flags: <span style="font-weight: bold;">t</span>
+to set Transparency, the default being Reflective; <span
+ style="font-weight: bold;">m</span> to set Matte, the default is
+Glossy; <span style="font-weight: bold;">n</span> to set Negative, the
+default is Positive; <span style="font-weight: bold;">b</span> to set
+BlackAndWhite, the default is Color.<br>
+<br>
+<a name="Zi"></a>The <b>-Z</b> parameter allows setting of the profile
+default intent. The default intent can be one of the four standard
+intents: <span style="font-weight: bold;">p</span> to set Perceptual, <span
+ style="font-weight: bold;">r</span> to set Relative Colorimetric, <span
+ style="font-weight: bold;">s</span> to set Saturation, and <span
+ style="font-weight: bold;">a</span> to set Absolute colorimetric.<br>
+<br>
 <a name="q"></a> The <b>-q</b> parameter sets the level of
 effort and/or detail in the resulting profile. For table based profiles
 ("cLUT" profiles), it sets the main lookup table size, and hence
-quality in the resulting profile. It is highly recommended that <span
- style="font-weight: bold;">-qm</span> be used as a starting point, and
-other settings only tried after this has been evaluated. <span
- style="font-weight: bold;">-qu</span> should almost never be used,
-except to prove that it should almost never be used. For matrix
+quality in the resulting profile. For matrix
 profiles it sets the per channel curve detail level and fitting
-"effort". <br>
+"effort". It is <span style="text-decoration: underline;">highly
+recommended</span> that <span style="font-weight: bold;">-qm</span> be
+used as a starting point, and
+other settings only tried after this has been evaluated. <span
+ style="font-weight: bold;">NOTE</span> that <span
+ style="font-weight: bold;">-qu</span> is a <span
+ style="text-decoration: underline;">test mode</span>, and shouldn't be
+used,
+except to prove that it is not worth using.<br>
 <br>
 <a name="b"></a> The <b>-b</b> flag overrides the <b>-q</b>
 parameter, and sets the lut resolution for the BtoA (inverse) to a low
 value. The creation of the B2A table is fairly time consuming, and if
 the profile is only going to be used by <a href="targen.html">targen</a>,
-or if it will only be used as an input space profile, or if it will
+or
+if
+it
+will
+only
+be
+used
+as
+an
+input space profile, or if it will
 only
 be linked as an output profile using Argyll's <a href="collink.html">collink</a>
 tool using the <b>-G</b> option
@@ -451,8 +811,9 @@ and some time and profile space can be saved. If the profile is to be
 used
 as an output space profile with another CMS, or is going to be linked
 using
-the simple (-s) or mapping mode (-g) options, then the -b flag should
-NOT
+the simple (-s) or mapping mode (-g) options, then a good quality B2A
+table is needed, and the -b flag should
+<span style="font-weight: bold;">NOT</span>
 be set. Optionaly, a specific B2A table quality can be set.<br>
 <br>
 For input devices,&nbsp; the presence of a B2A table is not mandatory,
@@ -528,16 +889,29 @@ like: -kp 0 .1 .9 1 .5<br>
 <tt> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 K &nbsp; |
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;enpo<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; &nbsp;_______&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;
+&nbsp;
+&nbsp;_______&nbsp;
 enle<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;/<br>
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;/<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; /<br>
+|&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;
+&nbsp;
+/<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;/<br>
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;/<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; /<br>
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+/<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; stle&nbsp;
 | ------/<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
@@ -628,8 +1002,9 @@ point for input devices by avoiding
 clipping of values above the white point that can occur in L*a*b* based
 cLUT input profiles. By default cLUT XYZ PCS Display profiles will also
 have a set of dummy matrix tags included in them, for better
-compatibility with other systems. The dummy matrix deliberately swaps
-Red and Green, so that it is obvious if the cLUT tables are not being
+compatibility with other systems. The dummy matrix deliberately
+interchanges Red, Green and Blue channels, so that it is obvious if the
+cLUT tables are not being
 used. If it is important for both the cLUT and matrix be accurate, use <span
  style="font-weight: bold;">-aX</span>, which will create shaper/matrix
 tags.<br>
@@ -651,7 +1026,16 @@ each
 channel. General shaper curve and matrix profiles (which are superior
 to
 gamma curve profiles) can be created by specifying <b>-as</b> or <b>-aS</b>,
-the former creating three independent shaper curves, one for each
+the
+former
+creating
+three
+independent
+shaper
+curves,
+one
+for
+each
 device channel, and the latter creating one common curve for all the
 device channels. The latter may be needed with certain applications
 that will not accept
@@ -674,13 +1058,23 @@ represented in the lut table. Using the <b>-u</b> flag causes the lut
 based input profile to be constructed so that the lut table contains
 absolute color values, and the white of the test chart will map to its
 absolute value, and any values whiter than that, will not be clipped by
-the profile. The profile effectively operates in an absolute intent
+the profile, with values outside the range of the test chart being
+extrapolated. The profile effectively operates in an absolute intent
 mode, &nbsp;irrespective of what intent is selected when it is used.
 This flag can be useful when an input profile is needed for using a
 scanner as a "poor mans" colorimeter, or if the white point of the test
 chart doesn't represent the white points of media
 that will be used in practice, and that white point adjustment will be
 done individually in some downstream application.<br>
+<br>
+<a name="un"></a><span style="font-weight: bold;">-un</span>: By
+default a cLUT input profile with the <span style="font-weight: bold;">-u</span>
+flag set will extrapolate values beyond the test chart white and black
+points, and to improve the plausibility of the extrapolation, a special
+matrix model will be created that is used to add a perfect device white
+and perfect device black test point to the set of test patches.&nbsp;
+Selecting <span style="font-weight: bold;">-un</span> disables the
+addition of these extra extrapolated white and black patches.<br>
 <br>
 <a name="U"></a><span style="font-weight: bold;"> -U <span
  style="font-style: italic;">scale</span>:</span> Input profiles will
@@ -698,6 +1092,16 @@ comes out as white on conversion (ie. try 0.9 for instance). If the
 media is a little lighter than the test chart white and is "blowing
 out" the highlights, try a value slightly greater than 1.0 (ie. try 1.1
 for instance).<br>
+<br>
+<a name="R"></a><span style="font-weight: bold;"> -</span><span
+ style="font-weight: bold;">R</span><span style="font-weight: bold;">:</span>
+Normally the white point, black point and primary locations (for matrix
+profiles) are computed so as to create profiles that best match the
+sample data provided. Some programs are not happy with the resulting
+locations if they have negative XYZ values, or if the white point has a
+Y value &gt; 1. The <span style="font-weight: bold;">-R</span> option
+restricts the white, black and primary values, so as to work with these
+programs, but this will reduce the accuracy of the profile.<br>
 <br>
 <a name="i"></a> The <b>-i</b> flag allows specifying a standard or
 custom illumination spectrum, applied to spectral .ti3 data to compute
@@ -953,7 +1357,8 @@ or if linking with a CMYK profile, use the perceptual intent.<br>
 make any allowance for the application of the abstract profile. This is
 a bug.)<br>
 <br>
-<a name="t"></a><a name="T"></a>Normally, the gamut mapping used in
+<a name="t"></a><a name="T"></a><span style="font-weight: bold;"></span><span
+ style="font-weight: bold;"></span>Normally, the gamut mapping used in
 creating the perceptual and
 saturation intent tables for output profiles is set to perceptual and
 saturation gamut
@@ -1041,7 +1446,9 @@ testing, or profile creation.<br>
 <br>
 Given a .ti3 file from a display device that contains display RAMDAC
 calibration information (generated by <a href="dispcal.html">dispcal</a>,
-passed through <a href="dispread.html">dispread</a>),&nbsp; <span
+passed
+through
+<a href="dispread.html">dispread</a>),&nbsp; <span
  style="font-weight: bold;">colprof</span> will convert this into a <span
  style="font-weight: bold;">vcgt</span> tag in the resulting profile,
 so that the operating system tools can configure the display
@@ -1049,8 +1456,10 @@ hardware appropriately, whenever the profile is used.<br>
 <br>
 Given a .ti3 file from a print device that contains the per-channel
 calibration information (generated by <a href="printcal.html">printcal</a>,
-passed through <a href="printtarg.html">printtarg</a> and <a
- href="chartread.html">chartread</a>), <span style="font-weight: bold;">colprof</span>
+passed
+through
+<a href="printtarg.html">printtarg</a> and <a href="chartread.html">chartread</a>),
+<span style="font-weight: bold;">colprof</span>
 will save this along with the .ti3 file in the <span
  style="font-weight: bold;">'targ'</span> text tag in the profile, <span
  style="font-weight: bold;"></span>

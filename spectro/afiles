@@ -1,4 +1,7 @@
 Readme.txt
+instlib.txt
+instlib.ksh
+IntsLib_Readme.txt
 License.txt
 License2.txt
 License3.txt
@@ -8,7 +11,7 @@ chartread.c
 dispread.c
 dispcal.c
 illumread.c
-ccmxmake.c
+ccxxmake.c
 dispsup.h
 dispsup.c
 insttypes.h
@@ -32,6 +35,9 @@ ss_imp.h
 ss_imp.c
 i1disp.c
 i1disp.h
+i1d3.c
+i1d3.h
+i1d3ccss.c
 i1pro.h
 i1pro.c
 i1pro_imp.h
@@ -47,7 +53,11 @@ spyd2.h
 spyd2setup.h
 spyd2PLD.h
 spyd2en.c
+inflate.c
 vinflate.c
+LzmaTypes.h
+LzmaDec.h
+LzmaDec.c
 huey.c
 huey.h
 spec2cie.c
@@ -71,10 +81,11 @@ synthcal.c
 spotread.c
 fakeread.c
 synthread.c
-ColorChecker.ti2
-ECI2002R.ti2
-FograStrip.ti2
-i1_RGB_Scan_1.4.ti2
 linear.sp
 SOtele.sp
+linear.cal
 strange.cal
+Makefile.SA
+Makefile.OSX
+Makefile.UNIX
+Makefile.WNT

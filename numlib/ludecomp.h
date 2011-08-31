@@ -28,6 +28,15 @@ double  *b,	/* B[]   input array, returns solution X[] */
 int      n	/* Dimensionality */
 );
 
+/* Solve the simultaneous linear equations A.X = B, with polishing */
+/* Return 1 if the matrix is singular, 0 if OK */
+int
+polished_solve_se(
+double **a,	/* A[][] input matrix, returns LU decimposition of A */
+double  *b,	/* B[]   input array, returns solution X[] */
+int      n	/* Dimensionality */
+);
+
 /* Decompose the square matrix A[][] into lower and upper triangles */
 /* Return 1 if the matrix is singular. */
 int

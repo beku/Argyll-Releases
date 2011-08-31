@@ -54,13 +54,23 @@ char *outname	/* Filename to write to */
 
 	/* Setup output cgats file */
 	ocg = new_cgats();	/* Create a CGATS structure */
-	ocg->add_other(ocg, "CCMX"); 		/* our special type is Model Printer Profile */
+	ocg->add_other(ocg, "CCMX"); 		/* our special type is Colorimeter Correction Matrix */
 	ocg->add_table(ocg, tt_other, 0);	/* Start the first table */
 
-	ocg->add_kword(ocg, 0, "DESCRIPTOR", p->desc,NULL);
+	if (p->desc != NULL)
+		ocg->add_kword(ocg, 0, "DESCRIPTOR", p->desc,NULL);
 	ocg->add_kword(ocg, 0, "INSTRUMENT",p->inst, NULL);
-	ocg->add_kword(ocg, 0, "DISPLAY",p->disp, NULL);
-	ocg->add_kword(ocg, 0, "REFERENCE",p->ref, NULL);
+	if (p->disp != NULL)
+		ocg->add_kword(ocg, 0, "DISPLAY",p->disp, NULL);
+	if (p->tech != NULL)
+		ocg->add_kword(ocg, 0, "TECHNOLOGY",p->tech, NULL);
+	if (p->disp == NULL && p->tech == NULL) {
+		sprintf(p->err, "write_ccmx: ccmx for file '%s' doesn't contain display or techology strings",outname);
+		ocg->del(ocg);
+		return 1;
+	}
+	if (p->ref != NULL)
+		ocg->add_kword(ocg, 0, "REFERENCE",p->ref, NULL);
 
 	ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll ccmx", NULL);
 	ocg->add_kword(ocg, 0, "CREATED",atm, NULL);
@@ -100,7 +110,7 @@ char *inname	/* Filename to read from */
 	int  spi[3];		/* CGATS indexes for each band */
 	char *xyzfname[3] = { "XYZ_X", "XYZ_Y", "XYZ_Z" };
 
-	/* Open and look at the .ccmx model printer profile */
+	/* Open and look at the .ccmx */
 	if ((icg = new_cgats()) == NULL) {		/* Create a CGATS structure */
 		sprintf(p->err, "read_ccmx: new_cgats() failed");
 		return 2;
@@ -135,15 +145,12 @@ char *inname	/* Filename to read from */
 		return 1;
 	}
 
-	if ((ti = icg->find_kword(icg, 0, "DESCRIPTOR")) < 0) {
-		sprintf(p->err, "read_ccmx: Input file '%s' doesn't contain keyword DESCRIPTOR",inname);
-		icg->del(icg);
-		return 1;
-	}
-	if ((p->desc = strdup(icg->t[0].kdata[ti])) == NULL) {
-		sprintf(p->err, "read_ccmx: malloc failed");
-		icg->del(icg);
-		return 2;
+	if ((ti = icg->find_kword(icg, 0, "DESCRIPTOR")) >= 0) {
+		if ((p->desc = strdup(icg->t[0].kdata[ti])) == NULL) {
+			sprintf(p->err, "read_ccss: malloc failed");
+			icg->del(icg);
+			return 2;
+		}
 	}
 
 	if ((ti = icg->find_kword(icg, 0, "INSTRUMENT")) < 0) {
@@ -157,26 +164,32 @@ char *inname	/* Filename to read from */
 		return 2;
 	}
 
-	if ((ti = icg->find_kword(icg, 0, "DISPLAY")) < 0) {
-		sprintf(p->err, "read_ccmx: Input file '%s' doesn't contain keyword DISPLAY",inname);
+	if ((ti = icg->find_kword(icg, 0, "DISPLAY")) >= 0) {
+		if ((p->disp = strdup(icg->t[0].kdata[ti])) == NULL) {
+			sprintf(p->err, "read_ccss: malloc failed");
+			icg->del(icg);
+			return 2;
+		}
+	}
+	if ((ti = icg->find_kword(icg, 0, "TECHNOLOGY")) >= 0) {
+		if ((p->tech = strdup(icg->t[0].kdata[ti])) == NULL) {
+			sprintf(p->err, "read_ccss: malloc failed");
+			icg->del(icg);
+			return 2;
+		}
+	}
+	if (p->disp == NULL && p->tech == NULL) {
+		sprintf(p->err, "read_ccmx: Input file '%s' doesn't contain keyword DISPLAY or TECHNOLOGY",inname);
 		icg->del(icg);
 		return 1;
-	}
-	if ((p->disp = strdup(icg->t[0].kdata[ti])) == NULL) {
-		sprintf(p->err, "read_ccmx: malloc failed");
-		icg->del(icg);
-		return 2;
 	}
 
-	if ((ti = icg->find_kword(icg, 0, "REFERENCE")) < 0) {
-		sprintf(p->err, "read_ccmx: Input file '%s' doesn't contain keyword REFERENCE",inname);
-		icg->del(icg);
-		return 1;
-	}
-	if ((p->ref = strdup(icg->t[0].kdata[ti])) == NULL) {
-		sprintf(p->err, "read_ccmx: malloc failed");
-		icg->del(icg);
-		return 2;
+	if ((ti = icg->find_kword(icg, 0, "REFERENCE")) >= 0) {
+		if ((p->ref = strdup(icg->t[0].kdata[ti])) == NULL) {
+			sprintf(p->err, "read_ccss: malloc failed");
+			icg->del(icg);
+			return 2;
+		}
 	}
 
 	/* Locate the fields */
@@ -310,10 +323,11 @@ double optf(void *fdata, double *tp) {
 
 /* Create a ccmx from measurements. return nz on error. */
 static int create_ccmx(ccmx *p,
-char *desc,			/* Description to copy from */
+char *desc,			/* General description (optional) */
 char *inst,			/* Instrument description to copy from */
-char *disp,			/* Display description to copy from */
-char *refd,			/* Spectrometer description to copy from */
+char *disp,			/* Display make and model (optional if tech) */
+char *tech,			/* Display technology description (optional if disp) */
+char *refd,			/* Reference spectrometer description (optional) */
 int npat,			/* Number of samples in following arrays */
 double (*refs)[3],	/* Array of XYZ values from spectrometer */
 double (*cols)[3]		/* Array of XYZ values from colorimeter */

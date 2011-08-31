@@ -12,8 +12,8 @@
  * Copyright 2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 #ifdef __cplusplus
@@ -51,9 +51,13 @@ typedef enum {
 	xdg_mallformed	/* Malfomed path */
 } xdg_error;
 
-/* Return the full path to the given subpath for the type of storage */
-/* and access required. Return NULL if there is an error. */
-/* The string should be free()'s after use. */
+/* Return the number of matching full paths to the given subpath for the */
+/* type of storage and access required. Return 0 if there is an error. */
+/* The files are always unique (ie. the first match to a given filename */
+/* in the possible XDG list of directories is returned, and files with */
+/* the same name in other XDG directories are ignored) */
+/* Wildcards should only be for the filename portion, and not be used for xdg_write. */
+/* The list should be free'd using xdg_free() after use. */
 /* XDG environment variables and the subpath are assumed to be using */
 /* the '/' path separator. */
 /* When "xdg_write", the necessary path to the file will be created. */
@@ -61,16 +65,21 @@ typedef enum {
 /* we drop to using the underlying SUDO_UID/GID. If we are creating a */
 /* local system dir/file as sudo and have dropped to the SUDO_UID/GID, */
 /* then revert back to root uid/gid. */
-char *xdg_bds(
+int xdg_bds(
 	xdg_error *er,			/* Return an error code */
+	char ***paths,			/* Return array of pointers to paths */
 	xdg_storage_type st,	/* Specify the storage type */
 	xdg_op_type op,			/* Operation type */
 	xdg_scope sc,			/* Scope if write */
-	char *spath				/* Sub-path and file name */
+	char *spath				/* Sub-path and file name or file pattern */
 );
+
+/* Free the list */
+void xdg_free(char **paths, int nopaths);
 
 /* Return a string corresponding to the error value */
 char *xdg_errstr(xdg_error er);
+
 
 #define XDG_BDS_H
 #endif /* XDG_BDS_H */

@@ -78,7 +78,7 @@ char *src
 void
 usage(void) {
 	fprintf(stderr,"Scanin, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"usage: scanin [options] input.tif recogin.cht valin.cie [diag.tif]\n");
 	fprintf(stderr,"   :- inputs 'input.tif' and outputs scanner 'input.ti3', or\n");
@@ -224,7 +224,7 @@ int main(int argc, char *argv[])
 				repl = 0;
 				outo = 0;
 				colm = 1;
-				if (na != NULL && (*na == 'a' || *na == 'A'))
+				if (argv[fa][2] != '\000' && argv[fa][2] == 'a')
 					colm = 2;
 
 			/* Approximate gamma encoding of image */

@@ -12,8 +12,8 @@
  *
  * (Based initially on i1disp.c)
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /*
@@ -63,9 +63,14 @@
 #include <time.h>
 #include <stdarg.h>
 #include <math.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
+#else /* SALONEINSTLIB */
+#include "sa_config.h"
+#include "numsup.h"
+#endif /* SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -80,6 +85,7 @@
 #define DBG(xxx) 
 #endif
 
+#define DO_RESETEP				/* Do the miscelanous resetep()'s */
 #define CLKRATE 1000000			/* Clockrate the Spyder 2 hardware runs at */
 #define MSECDIV (CLKRATE/1000)	/* Divider to turn clocks into msec */
 #define DEFRRATE 50				/* Default display refresh rate */
@@ -807,7 +813,10 @@ spyd2_GetReading_ll(
 		if (isdeb) fprintf(stderr,"\nspyd2: Get Reading retry with ICOM err 0x%x\n",se);
 
 		if (isdeb) fprintf(stderr,"\nspyd2: Resetting end point\n");
+#ifdef DO_RESETEP				/* Do the miscelanous resetep()'s */
 		p->icom->usb_resetep(p->icom, 0x81);
+		msec_sleep(1);			/* Let device recover ? */
+#endif /*  DO_RESETEP */
 	}	/* End of whole command retries */
 
 	if (sensv == NULL) {
@@ -887,7 +896,7 @@ spyd2_GetReading_ll(
 					_mintcnt = transcnt;
 			}
 			if (p->debug >= 4)
-				printf("%d: initial senv %f from transcnt %d and intclls %d\n",k,sensv[k],transcnt,intclks);
+				fprintf(stderr,"%d: initial senv %f from transcnt %d and intclls %d\n",k,sensv[k],transcnt,intclks);
 
 #ifdef NEVER	/* This seems to make repeatability worse ??? */
 			/* If CRT and bright enough */
@@ -949,7 +958,7 @@ spyd2_GetReading_ll(
 					_mintcnt = transcnt;
 			}
 			if (p->debug >= 4)
-				printf("%d: initial senv %f from transcnt %d and intclls %d\n",k,sensv[k],transcnt,intclks);
+				fprintf(stderr,"%d: initial senv %f from transcnt %d and intclls %d\n",k,sensv[k],transcnt,intclks);
 		}
 	}
 
@@ -1518,7 +1527,7 @@ spyd2_GetReading(
 											/* (First table is not noticably different */
 											/*  but can have scaled values.) */
 	if (p->debug >= 4)
-		printf("Using cal table %d\n",table);
+		fprintf(stderr,"Using cal table %d\n",table);
 
 	for (k = 0; k < 8; k++) 	/* Zero weighted average */
 		a_sensv[k] = a_w[k] = 0.0;
@@ -1739,13 +1748,13 @@ spyd2_read_all_regs(
 	if ((ev = spyd2_rd_ee_ushort(p, &p->hwver, 5)) != inst_ok)
 		return ev;
 
-	if (p->debug >= 4) printf("hwver = 0x%x\n",p->hwver);
+	if (p->debug >= 1) fprintf(stderr,"hwver = 0x%x\n",p->hwver);
 
 	/* Serial number */
 	if ((ev = spyd2_readEEProm(p, (unsigned char *)p->serno, 8, 8)) != inst_ok)
 		return ev;
 	p->serno[8] = '\000';
-	if (p->debug >= 4) printf("serno = '%s'\n",p->serno);
+	if (p->debug >= 4) fprintf(stderr,"serno = '%s'\n",p->serno);
 
 	/* Spyde2: CRT calibration values */
 	/* Spyde3: Unknown calibration values */
@@ -1771,10 +1780,10 @@ spyd2_read_all_regs(
 			}
 		}
 		avgmag /= (double)(i);
-		if (p->debug >= 4) printf("Cal_A avgmag = %f\n",avgmag);
+		if (p->debug >= 4) fprintf(stderr,"Cal_A avgmag = %f\n",avgmag);
 
 		if (avgmag < 0.05) {
-			if (p->debug >= 4) printf("Scaling Cal_A by 16\n");
+			if (p->debug >= 4) fprintf(stderr,"Scaling Cal_A by 16\n");
 			for (j = 0; j < 3; j++) {
 				for (k = 0; k < 9; k++) {
 					p->cal_A[0][j][k] *= 16.0;
@@ -1812,27 +1821,27 @@ spyd2_read_all_regs(
 		int i, j, k;
 
 		
-		printf("Cal_A:\n");
+		fprintf(stderr,"Cal_A:\n");
 		for (i = 0; i < 2;i++) {
 			for (j = 0; j < 3; j++) {
 				for (k = 0; k < 9; k++) {
-					printf("Cal_A [%d][%d][%d] = %f\n",i,j,k,p->cal_A[i][j][k]);
+					fprintf(stderr,"Cal_A [%d][%d][%d] = %f\n",i,j,k,p->cal_A[i][j][k]);
 				}
 			}
 		}
-		printf("\nCal_B:\n");
+		fprintf(stderr,"\nCal_B:\n");
 		for (i = 0; i < 2;i++) {
 			for (j = 0; j < 3; j++) {
 				for (k = 0; k < 9; k++) {
-					printf("Cal_B [%d][%d][%d] = %f\n",i,j,k,p->cal_B[i][j][k]);
+					fprintf(stderr,"Cal_B [%d][%d][%d] = %f\n",i,j,k,p->cal_B[i][j][k]);
 				}
 			}
 		}
-		printf("\nCal_F:\n");
+		fprintf(stderr,"\nCal_F:\n");
 		for (i = 0; i < 7;i++) {
-			printf("Cal_F [%d] = %f\n",i,p->cal_F[i]);
+			fprintf(stderr,"Cal_F [%d] = %f\n",i,p->cal_F[i]);
 		}
-		printf("\n");
+		fprintf(stderr,"\n");
 	}
 
 	if (p->debug) fprintf(stderr,"spyd2: all EEProm read OK\n");
@@ -1846,7 +1855,7 @@ unsigned int _spyder2_pld_size = 0;  /* Number of bytes to download */
 unsigned int *spyder2_pld_size = &_spyder2_pld_size;
 unsigned char *spyder2_pld_bytes = NULL;
 
-/* Spyder 2: Download the PLD if it is available, and check and check status */
+/* Spyder 2: Download the PLD if it is available, and check status */
 static inst_code
 spyd2_download_pld(
 	spyd2 *p				/* Object */
@@ -1870,8 +1879,11 @@ spyd2_download_pld(
 	/* Let the PLD initialize */
 	msec_sleep(500);
 		
+#ifdef DO_RESETEP				/* Do the miscelanous resetep()'s */
 	/* Reset the coms */
 	p->icom->usb_resetep(p->icom, 0x81);
+	msec_sleep(1);			/* Let device recover ? */
+#endif /*  DO_RESETEP */
 
 	/* Check the status */
 	if ((ev = spyd2_getstatus(p, &stat)) != inst_ok)
@@ -1885,7 +1897,10 @@ spyd2_download_pld(
 	if (p->debug) fprintf(stderr,"spyd2: PLD pattern downloaded\n");
 
 	msec_sleep(500);
+#ifdef DO_RESETEP				/* Do the miscelanous resetep()'s */
 	p->icom->usb_resetep(p->icom, 0x81);
+	msec_sleep(1);			/* Let device recover ? */
+#endif /*  DO_RESETEP */
 
 	return inst_ok;
 }
@@ -1921,7 +1936,9 @@ spyd2_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 
 	/* On MSWindows the Spyder 3 doesn't work reliably unless each */
 	/* read is preceeded by a reset endpoint. */
-	/* (and Spyder 2 hangs if a reset ep is done.) */
+	/* (!!! This needs checking to see if it's still true. */
+	/*  Should switch back to libusb0.sys and re-test.) */
+	/* (and Spyder 2 hangs if a reset ep is done on MSWin.) */
 	/* The spyder 2 doesn't work well with the winusb driver either, */
 	/* it needs icomuf_resetep_before_read to work at all, and */
 	/* gets retries anyway. So we use the libusb0 driver for it. */
@@ -1938,17 +1955,19 @@ spyd2_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 	}
 #endif
 
+#ifdef NEVER	/* Don't want this now that we avoid 2nd set_config on Linux */
+#if defined(UNIX) && !defined(__APPLE__)		/* Linux*/
 	/* On Linux the Spyder 2 doesn't work reliably unless each */
 	/* read is preceeded by a reset endpoint. */
-#if defined(UNIX) && !defined(__APPLE__)		/* Linux*/
 	if (p->prelim_itype != instSpyder3) {
 		usbflags |= icomuf_resetep_before_read;		/* The spyder USB is buggy ? */
 	}
 #endif
+#endif
 
 	/* Set config, interface, write end point, read end point */
 	/* ("serial" end points aren't used - the spyd2lay uses USB control messages) */
-	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags, 0); 
+	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags, 0, NULL); 
 
 	if (p->debug) fprintf(stderr,"spyd2: init coms has suceeded\n");
 
@@ -2108,10 +2127,10 @@ ipatch *val) {		/* Pointer to instrument patch value */
 		/* Read the XYZ value */
 		if ((ev = spyd2_GetReading(p, val->aXYZ)) != inst_ok)
 			return ev;
-	}
 
-	/* Apply the colorimeter correction matrix */
-	icmMulBy3x3(val->aXYZ, p->ccmat, val->aXYZ);
+		/* Apply the colorimeter correction matrix */
+		icmMulBy3x3(val->aXYZ, p->ccmat, val->aXYZ);
+	}
 
 	val->XYZ_v = 0;
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings ? */
@@ -2326,6 +2345,7 @@ inst_capability spyd2_capabilities(inst *pp) {
 
 	if (p->itype == instSpyder3
 	 && (p->hwver & 0x8) == 0) {	/* Not Spyder3Express */
+// ~~~999 this doesn't seem right ????
 		rv |= inst_emis_ambient;
 		rv |= inst_emis_ambient_mono;
 	}

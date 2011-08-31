@@ -13,12 +13,6 @@
  * This is the implementation of the run time code.
  */
 
-/*
- * TTBD: It would be nice to implement the aproximate least squares sampling option
- *       here, just as it is for icc and rspl, but it's made complicated by the
- *       imdi representation being integer.
- *
- */
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -96,7 +96,7 @@ struct _mpp {
 		icxIllumeType ilType,			/* Illuminant type (icxIT_default for none) */
 		xspect        *custIllum,		/* Custom illuminant (NULL for none) */
 		icxObserverType obType,			/* Observer type (icxOT_default for none) */	
-		xspect        *custObserver[3],	/* Custom observer (NULL for none)  */
+		xspect        custObserver[3],	/* Custom observer (NULL for none)  */
 		icColorSpaceSignature  rcs,		/* Return color space, icSigXYZData or icSigLabData */
 		int           use_fwa			/* NZ to involke FWA. */
 	);

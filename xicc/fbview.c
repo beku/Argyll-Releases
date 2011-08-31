@@ -58,7 +58,7 @@ double absdiff(double in1[3], double in2[3]) {
 
 void usage(void) {
 	fprintf(stderr,"View bwd table clipping of an ICC file, , Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: fbtest [-v] infile\n");
 	fprintf(stderr," -v        verbose\n");
 	exit(1);

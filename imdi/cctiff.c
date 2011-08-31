@@ -89,7 +89,7 @@
 
 void usage(char *diag, ...) {
 	fprintf(stderr,"Color Correct a TIFF file using any sequence of ICC profiles or Calibrations, V%s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"  Diagnostic: ");

@@ -6,13 +6,13 @@ PREF_CCFLAGS	= $(CCDEBUGFLAG) ;		# Debugging flags
 PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
 
 # PLOT library
-Library libplot : plot.c : : : ../h ../numlib ;
+Library libplot : plot.c : : : ../h ../numlib ../spectro ;
 if $(UNIX) && $(OS) != MACOSX {
   ObjectHdrs plot : $(LibWinH) ;
 }
 
 # Individual stand alone test of plot library
-MainVariant plot : plot.c : : STANDALONE_TEST : ../h ../numlib ;
+MainVariant plot : plot.c : : STANDALONE_TEST : ../h ../numlib ../spectro : : ../spectro/libconv.lib ../numlib/libnum.lib ;
 
 # VRML plot library
 Library libvrml : vrml.c : : : ../h ../icc ../cgats ../numlib ../gamut ;

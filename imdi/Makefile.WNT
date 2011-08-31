@@ -12,7 +12,7 @@ CMDSEP    = &
 
 INCFLAG       = /I
 DEFFLAG       = /D
-UNDEFFLAG     = "/u _"
+UNDEFFLAG     = /U
 CCOPTFLAG     = /Ox /GB
 CCDEBUGFLAG   = /Z7 /Od
 CCPROFFLAG    = /Z7

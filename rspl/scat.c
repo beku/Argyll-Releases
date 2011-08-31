@@ -41,6 +41,12 @@
 
 /* TTBD:
  *
+ *	Try simple approach to reduce extrapolation accumulation (edge propogation) effects.
+ *	Do this by saving bounding box of scattered points, and then increase smoothness coupling
+ *  in direction of axis that is outside this box (or the reverse, reduce smoothness
+ *  coupling in direction of any axis that is not outside this box).
+ *  [Example is "t3d -t 6 -P 0:0:0:1:1:1" where lins should not bend up at top end.]
+ *  
  *  Speedup that skips recomputing all of A to add new points seems OK. (nothing uses
  *  incremental currently anyway.)
  *
@@ -126,8 +132,8 @@
 						/* The following are available, but the smoothing table is */
 						/* not setup for them, and they are not sufficiently different */
 						/* from the default smoothing to be useful. */
-#undef ENABLE_2PASSSMTH	/* [Defined] Enable 2 pass smooth using Gaussian filter */
-#define ENABLE_EXTRAFIT	/* [Defined] Enable the extra fit option. Good to combat high smoothness. */
+#define ENABLE_2PASSSMTH	/* [Define] Enable 2 pass smooth using Gaussian filter */
+#define ENABLE_EXTRAFIT	/* [Undef] Enable the extra fit option. Good to combat high smoothness. */
 
 #define TWOPASSORDER 2.0	/* Filter order. 2 = Gaussian */
 
@@ -154,17 +160,17 @@
 
 /* Release set: */
 
-#define TOL 1e-6		/* Tollerance of result - usually 1e-5 is best. */
-#define TOL_IMP 0.998	/* Minimum error improvement to continue - reduces accuracy (1.0 == off) */
-#undef GRADUATED_TOL	/* Speedup attemp - use reduced tollerance for prior grids. */
-#define GRATIO 2.0		/* Multi-grid resolution ratio */
-#undef OVERRLX 		/* Use over relaxation factor when progress slows (worse accuracy ?) */
-#define JITTERS 0		/* Number of 1D conjugate solve itters */
-#define CONJ_TOL 1.0	/* Extra tolereance on 1D conjugate solution times TOL. */
-#define MAXNI 16		/* Maximum itteration without checking progress */
+#define TOL 1e-6		/* [1e-6] Tollerance of result - usually 1e-5 is best. */
+#define TOL_IMP 0.998	/* [0.998] Minimum error improvement to continue - reduces accuracy (1.0 == off) */
+#undef GRADUATED_TOL	/* [Undef] Speedup attemp - use reduced tollerance for prior grids. */
+#define GRATIO 2.0		/* [2.0] Multi-grid resolution ratio */
+#undef OVERRLX 			/* [Undef] Use over relaxation when progress slows (worse accuracy ?) */
+#define JITTERS 0		/* [0] Number of 1D conjugate solve itters */
+#define CONJ_TOL 1.0	/* [1.0] Extra tolereance on 1D conjugate solution times TOL. */
+#define MAXNI 16		/* [16] Maximum itteration without checking progress */
 //#define SMOOTH 0.000100	/* Set nominal smoothing (1.0) */
-#define WEAKW  0.1		/* Weak default function nominal effect (1.0) */
-#define ZFCOUNT 1		/* Extra fit repeats */
+#define WEAKW  0.1		/* [0.1] Weak default function nominal effect (1.0) */
+#define ZFCOUNT 1		/* [1] Extra fit repeats */
 
 #endif
 

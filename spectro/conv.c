@@ -1,5 +1,5 @@
 
- /* Windows NT serial I/O class */
+ /* Platform isolation convenience functions */
 
 /* 
  * Argyll Color Correction System
@@ -10,8 +10,8 @@
  * Copyright 1997 - 2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 #include <sys/types.h>
@@ -45,14 +45,18 @@
 #endif
 #endif
 
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#endif
 #include "numsup.h"
 #include "xspect.h"
+#include "ccss.h"
 #include "insttypes.h"
 #include "icoms.h"
 #include "conv.h"
 #include "usbio.h"
+#include "sort.h"
 
 #ifdef __APPLE__
 //#include <stdbool.h>
@@ -89,22 +93,31 @@
 /* wait for and then return the next character from the keyboard */
 /* (If not_interactive, return getchar()) */
 int next_con_char(void) {
+	int c;
+
 	if (not_interactive) {
 		HANDLE stdinh;
   		char buf[1];
 		DWORD bread;
 
-		if ((stdinh = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE)
+		if ((stdinh = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE) {
 			return 0;
+		}
 	
-		if (ReadFile(stdinh, buf, 1, &bread, NULL) && bread == 1) { 
-			return buf[0];
+		/* Ignore end of line characters */
+		for (;;) {
+			if (ReadFile(stdinh, buf, 1, &bread, NULL)
+			 && bread == 1
+			 && buf[0] != '\r' && buf[0] != '\n') { 
+				return buf[0];
+			}
 		}
 
 		return 0;
 	}
 
-	return _getch();
+	c = _getch();
+	return c;
 }
 
 /* Horrible hack to poll stdin when we're not interactive */
@@ -117,10 +130,12 @@ static int th_read_char(void *pp) {
 	if ((stdinh = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE)
 		return 0;
 
-	if (ReadFile(stdinh, buf, 1, &bread, NULL) && bread == 1)  {	
+	if (ReadFile(stdinh, buf, 1, &bread, NULL)
+	 && bread == 1
+	 && buf[0] != '\r' && buf[0] != '\n') { 
 		*rp = buf[0];
-
 	}
+
 	return 0;
 }
 
@@ -139,8 +154,9 @@ int poll_con_char(void) {
 		if ((getch_thread = new_athread(th_read_char, &c)) != NULL) {
 			HANDLE stdinh;
 
-			if ((stdinh = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE)
+			if ((stdinh = GetStdHandle(STD_INPUT_HANDLE)) == INVALID_HANDLE_VALUE) {
 				return 0;
+			}
 
 			Sleep(1);			/* We just hope 1 msec is enough for the thread to start */
 			CancelIo(stdinh);
@@ -749,17 +765,82 @@ int create_parent_directories(char *path) {
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 #ifdef __APPLE__
 
-/* Kill a particular named process. */
+/* Thread to monitor and kill the named processes */
+static int th_kkill_nprocess(void *pp) {
+	kkill_nproc_ctx *ctx = (kkill_nproc_ctx *)pp;
+
+	while(ctx->stop == 0) {
+		kill_nprocess(ctx->pname, ctx->debug);
+		msec_sleep(20);			/* Don't hog the CPU */
+	}
+	ctx->done = 1;
+
+	return 0;
+}
+
+static void kkill_nprocess_del(kkill_nproc_ctx *p) {
+	int i;
+
+	p->stop = 1;
+
+	DBG("kkill_nprocess del called\n");
+	for (i = 0; p->done == 0 && i < 100; i++) {
+		msec_sleep(50);
+	}
+
+	if (p->done == 0) {			/* Hmm */
+		DBG("kkill_nprocess del failed to stop - killing thread\n");
+		p->th->del(p->th);
+	}
+
+	free(p);
+
+	DBG("kkill_nprocess del done\n");
+}
+
+/* Start a thread to constantly kill a process. */
+/* Call ctx->del() when done */
+kkill_nproc_ctx *kkill_nprocess(char **pname, int debug) {
+	kkill_nproc_ctx *p;
+
+	DBG("kkill_nprocess called\n");
+	if (debug) {
+		int i;
+		fprintf(stderr,"kkill_nprocess called with");
+		for (i = 0; pname[i] != NULL; i++)
+			fprintf(stderr," '%s'",pname[i]);
+		fprintf(stderr,"\n");
+	}
+
+	if ((p = (kkill_nproc_ctx *)calloc(sizeof(kkill_nproc_ctx), 1)) == NULL) {
+		DBG("kkill_nprocess calloc failed\n");
+		return NULL;
+	}
+
+	p->pname = pname;
+	p->debug = debug;
+	p->del = kkill_nprocess_del;
+
+	if ((p->th = new_athread(th_kkill_nprocess, p)) == NULL) {
+		DBG("kkill_nprocess new_athread failed\n");
+		free(p);
+		return NULL;
+	}
+	return p;
+}
+
+/* Kill a list of named process. */
+/* Kill the first process found, then return */
 /* return < 0 if this fails. */
 /* return 0 if there is no such process */
 /* return 1 if a process was killed */
-int kill_nprocess(char *pname) {
+int kill_nprocess(char **pname, int debug) {
 	struct kinfo_proc *procList = NULL;
 	size_t procCount = 0;
 	static int name[] = { CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0 };
 	size_t length;
 	int rv = 0;
-	int i;
+	int i, j;
 
 	procList = NULL;
 	for (;;) {
@@ -782,7 +863,7 @@ int kill_nprocess(char *pname) {
 		}
 
 		/* Call again with memory */
-		if ((err = sysctl( name, (sizeof(name) / sizeof(*name)) - 1,
+		if ((err = sysctl(name, (sizeof(name) / sizeof(*name)) - 1,
                           procList, &length,
                           NULL, 0)) == -1) {
 			DBGF((errout,"sysctl #1 failed with %d\n", errno));
@@ -799,17 +880,28 @@ int kill_nprocess(char *pname) {
 
 	procCount = length / sizeof(struct kinfo_proc);
 
-	/* Locate the ninjad */
+	/* Locate the processes */
 	for (i = 0; i < procCount; i++) {
-		if (strcmp(procList[i].kp_proc.p_comm,pname) == 0) {
-			DBGF((errout,"killing process '%s' pid %d\n",pname,procList[i].kp_proc.p_pid));
-			if (kill(procList[i].kp_proc.p_pid, SIGTERM) != 0) {
-				fprintf(stderr, "kill failed with %d\n", errno);
-				DBGF((errout,"kill process '%s' failed with %d\n",pname,errno));
+		for (j = 0;; j++) {
+			if (pname[j] == NULL)	/* End of list */
+				break;
+			if (debug >= 8)
+				fprintf(stderr,"Checking process '%s' against list '%s'\n",procList[i].kp_proc.p_comm,pname[j]);
+			if (strncmp(procList[i].kp_proc.p_comm,pname[j],MAXCOMLEN) == 0) {
+				if (debug)
+					fprintf(stderr,"Killing process '%s'\n",procList[i].kp_proc.p_comm);
+				DBGF((errout,"killing process '%s' pid %d\n",pname[j],procList[i].kp_proc.p_pid));
+				if (kill(procList[i].kp_proc.p_pid, SIGTERM) != 0) {
+					if (debug)
+						fprintf(stderr,"kill process '%s' failed with %d\n",pname[j],errno);
+					DBGF((errout,"kill process '%s' failed with %d\n",pname[j],errno));
+					free(procList);
+					return -1;
+				}
+				/* Stop on first one found ? */
 				free(procList);
-				return -1;
+				return 1;
 			}
-			rv = 1;
 		}
 	}
 	free(procList);
@@ -819,5 +911,355 @@ int kill_nprocess(char *pname) {
 #endif /* __APPLE__ */
 
 #endif /* defined(UNIX) */
+
 /* ============================================================= */
+/* Provide a system independent glob type function */
+
+/* Create the aglob */
+/* Return nz on malloc error */
+int aglob_create(aglob *g, char *spath) {
+#ifdef NT
+	char *pp;
+	int rlen;
+	/* Figure out where the filename starts */
+	if ((pp = strrchr(spath, '/')) == NULL
+	 && (pp = strrchr(spath, '\\')) == NULL)
+		rlen = 0;
+	else
+		rlen = pp - spath + 1;
+
+	if ((g->base = malloc(rlen + 1)) == NULL)
+		return 1;
+
+	memmove(g->base, spath, rlen);
+	g->base[rlen] = '\000';
+
+	g->first = 1;
+    g->ff = _findfirst(spath, &g->ffs);
+#else /* UNIX */
+	g->rv = glob(spath, GLOB_NOSORT, NULL, &g->g);
+	if (g->rv == GLOB_NOSPACE)
+		return 1;
+	g->ix = 0;
+#endif
+	g->merr = 0;
+	return 0;
+}
+
+/* Return an allocated string of the next match. */
+/* Return NULL if no more matches */
+char *aglob_next(aglob *g) {
+	char *fpath;
+
+#ifdef NT
+	if (g->ff == -1L) {
+		return NULL;
+	}
+	if (g->first == 0) {
+		if (_findnext(g->ff, &g->ffs) != 0) {
+			return NULL;
+		}
+	}
+	g->first = 0;
+
+	/* Convert match filename to full path */
+	if ((fpath = malloc(strlen(g->base) + strlen(g->ffs.name) + 1)) == NULL) {
+		g->merr = 1;
+		return NULL;
+	}
+	strcpy(fpath, g->base);
+	strcat(fpath, g->ffs.name);
+	return fpath;
+#else
+	if (g->rv != 0 || g->ix >= g->g.gl_pathc)
+		return NULL;
+	if ((fpath = strdup(g->g.gl_pathv[g->ix])) == NULL) {
+		g->merr = 1;
+		return NULL;
+	}
+	g->ix++;
+	return fpath;
+#endif
+}
+
+void aglob_cleanup(aglob *g) {
+#ifdef NT
+	if (g->ff != -1L)
+		_findclose(g->ff);
+	free(g->base);
+#else /* UNIX */
+	if (g->rv == 0)
+		globfree(&g->g);
+#endif
+}
+
+/* ============================================================= */
+/* CCSS location support */
+
+/* return a list of installed ccss files. */
+/* The list is sorted by description and terminated by a NULL entry. */
+/* If no is != NULL, return the number in the list */
+/* Return NULL and -1 if there is a malloc error */
+iccss *list_iccss(int *no) {
+	int i, j;
+	iccss *rv;
+
+	char **paths = NULL;
+	int npaths = 0;
+
+	npaths = xdg_bds(NULL, &paths, xdg_data, xdg_read, xdg_user, "color/*.ccss");
+
+	if ((rv = malloc(sizeof(iccss) * (npaths + 1))) == NULL) {
+		xdg_free(paths, npaths);
+		if (no != NULL) *no = -1;
+		return NULL;
+	}
+	
+	for (i = j = 0; i < npaths; i++) {
+		ccss *cs;
+		int len;
+		char *pp;
+		char *tech, *disp;
+
+		if ((cs = new_ccss()) == NULL) {
+			for (--j; j>= 0; j--) {
+				free(rv[j].path);
+				free(rv[j].desc);
+			}
+			xdg_free(paths, npaths);
+			if (no != NULL) *no = -1;
+			return NULL;
+		}
+		if (cs->read_ccss(cs, paths[i]))
+			continue;		/* Skip any unreadable ccss's */
+
+		if ((tech = cs->tech) == NULL)
+			tech = "";
+		if ((disp = cs->disp) == NULL)
+			disp = "";
+		len = strlen(tech) + strlen(disp) + 4;
+		if ((pp = malloc(len)) == NULL) {
+			for (--j; j >= 0; j--) {
+				free(rv[j].path);
+				free(rv[j].desc);
+			}
+			free(rv);
+			xdg_free(paths, npaths);
+			if (no != NULL) *no = -1;
+			return NULL;
+		}
+		if ((rv[j].path = strdup(paths[i])) == NULL) {
+			for (--j; j >= 0; j--) {
+				free(rv[j].path);
+				free(rv[j].desc);
+			}
+			free(rv);
+			free(pp);
+			xdg_free(paths, npaths);
+			if (no != NULL) *no = -1;
+			return NULL;
+		}
+		strcpy(pp, tech);
+		strcat(pp, " (");
+		strcat(pp, disp);
+		strcat(pp, ")");
+		rv[j].desc = pp;
+		cs->del(cs);
+		j++;
+	}
+	xdg_free(paths, npaths);
+	rv[j].path = NULL;
+	rv[j].desc = NULL;
+	if (no != NULL)
+		*no = j;
+
+	/* Sort the list */
+#define HEAP_COMPARE(A,B) (strcmp(A.desc, B.desc) < 0) 
+	HEAPSORT(iccss, rv, j)
+#undef HEAP_COMPARE
+
+	return rv;
+}
+
+/* Free up a iccss list */
+void free_iccss(iccss *list) {
+	int i;
+
+	if (list != NULL) {
+		for (i = 0; list[i].path != NULL || list[i].desc != NULL; i++) {
+			if (list[i].path != NULL)
+				free(list[i].path);
+			if (list[i].desc != NULL)
+				free(list[i].desc);
+		}
+		free(list);
+	}
+}
+
+/* ============================================================= */
+
+/* A very small subset of icclib, copied to here. */
+/* This is just enough to support the standalone instruments */
+#ifdef SALONEINSTLIB
+
+sa_XYZNumber sa_D50 = {
+    0.9642, 1.0000, 0.8249
+};
+
+void sa_SetUnity3x3(double mat[3][3]) {
+	int i, j;
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 3; i++) {
+			if (i == j)
+				mat[j][i] = 1.0;
+			else
+				mat[j][i] = 0.0;
+		}
+	}
+	
+}
+
+void sa_Cpy3x3(double dst[3][3], double src[3][3]) {
+	int i, j;
+
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 3; i++)
+			dst[j][i] = src[j][i];
+	}
+}
+
+void sa_MulBy3x3(double out[3], double mat[3][3], double in[3]) {
+	double tt[3];
+
+	tt[0] = mat[0][0] * in[0] + mat[0][1] * in[1] + mat[0][2] * in[2];
+	tt[1] = mat[1][0] * in[0] + mat[1][1] * in[1] + mat[1][2] * in[2];
+	tt[2] = mat[2][0] * in[0] + mat[2][1] * in[1] + mat[2][2] * in[2];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+void sa_Mul3x3_2(double dst[3][3], double src1[3][3], double src2[3][3]) {
+	int i, j, k;
+	double td[3][3];		/* Temporary dest */
+
+	for (j = 0; j < 3; j++) {
+		for (i = 0; i < 3; i++) {
+			double tt = 0.0;
+			for (k = 0; k < 3; k++)
+				tt += src1[j][k] * src2[k][i];
+			td[j][i] = tt;
+		}
+	}
+
+	/* Copy result out */
+	for (j = 0; j < 3; j++)
+		for (i = 0; i < 3; i++)
+			dst[j][i] = td[j][i];
+}
+
+
+/* Matrix Inversion by Richard Carling from "Graphics Gems", Academic Press, 1990 */
+#define det2x2(a, b, c, d) (a * d - b * c)
+
+static void adjoint(
+double out[3][3],
+double in[3][3]
+) {
+    double a1, a2, a3, b1, b2, b3, c1, c2, c3;
+
+    /* assign to individual variable names to aid  */
+    /* selecting correct values  */
+
+	a1 = in[0][0]; b1 = in[0][1]; c1 = in[0][2];
+	a2 = in[1][0]; b2 = in[1][1]; c2 = in[1][2];
+	a3 = in[2][0]; b3 = in[2][1]; c3 = in[2][2];
+
+    /* row column labeling reversed since we transpose rows & columns */
+
+    out[0][0]  =   det2x2(b2, b3, c2, c3);
+    out[1][0]  = - det2x2(a2, a3, c2, c3);
+    out[2][0]  =   det2x2(a2, a3, b2, b3);
+        
+    out[0][1]  = - det2x2(b1, b3, c1, c3);
+    out[1][1]  =   det2x2(a1, a3, c1, c3);
+    out[2][1]  = - det2x2(a1, a3, b1, b3);
+        
+    out[0][2]  =   det2x2(b1, b2, c1, c2);
+    out[1][2]  = - det2x2(a1, a2, c1, c2);
+    out[2][2]  =   det2x2(a1, a2, b1, b2);
+}
+
+static double sa_Det3x3(double in[3][3]) {
+    double a1, a2, a3, b1, b2, b3, c1, c2, c3;
+    double ans;
+
+	a1 = in[0][0]; b1 = in[0][1]; c1 = in[0][2];
+	a2 = in[1][0]; b2 = in[1][1]; c2 = in[1][2];
+	a3 = in[2][0]; b3 = in[2][1]; c3 = in[2][2];
+
+    ans = a1 * det2x2(b2, b3, c2, c3)
+        - b1 * det2x2(a2, a3, c2, c3)
+        + c1 * det2x2(a2, a3, b2, b3);
+    return ans;
+}
+
+#define SA__SMALL_NUMBER	1.e-8
+
+int sa_Inverse3x3(double out[3][3], double in[3][3]) {
+    int i, j;
+    double det;
+
+    /*  calculate the 3x3 determinant
+     *  if the determinant is zero, 
+     *  then the inverse matrix is not unique.
+     */
+    det = sa_Det3x3(in);
+
+    if ( fabs(det) < SA__SMALL_NUMBER)
+        return 1;
+
+    /* calculate the adjoint matrix */
+    adjoint(out, in);
+
+    /* scale the adjoint matrix to get the inverse */
+    for (i = 0; i < 3; i++)
+        for(j = 0; j < 3; j++)
+		    out[i][j] /= det;
+	return 0;
+}
+
+#undef SA__SMALL_NUMBER	
+#undef det2x2
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Transpose a 3x3 matrix */
+void sa_Transpose3x3(double out[3][3], double in[3][3]) {
+	int i, j;
+	if (out != in) {
+		for (i = 0; i < 3; i++)
+			for (j = 0; j < 3; j++)
+				out[i][j] = in[j][i];
+	} else {
+		double tt[3][3];
+		for (i = 0; i < 3; i++)
+			for (j = 0; j < 3; j++)
+				tt[i][j] = in[j][i];
+		for (i = 0; i < 3; i++)
+			for (j = 0; j < 3; j++)
+				out[i][j] = tt[i][j];
+	}
+}
+
+/* Scale a 3 vector by the given ratio */
+void sa_Scale3(double out[3], double in[3], double rat) {
+	out[0] = in[0] * rat;
+	out[1] = in[1] * rat;
+	out[2] = in[2] * rat;
+}
+
+#endif /* SALONEINSTLIB */
+/* ============================================================= */
+
 

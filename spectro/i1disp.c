@@ -10,8 +10,8 @@
  * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* 
@@ -39,9 +39,11 @@
 #include <time.h>
 #include <stdarg.h>
 #include <math.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
+#endif /* !SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -217,7 +219,7 @@ i1disp_command_1(
 				*rsize = bsize;
 			if (*rsize > 5)
 				*rsize = 5;
-			memcpy(out, buf + 3, *rsize);
+			memmove(out, buf + 3, *rsize);
 
 			/* buf[2] is usually the cc, except for i1d_unlock. */
 			/* If it is not the cc, this may indicate that the command */
@@ -810,7 +812,7 @@ i1disp_take_measurement_2(
 			return ev;
 	}
 
-	/* For CRT mode, do an initial set of syncromized measurements */
+	/* For CRT mode, do an initial set of syncronized measurements */
 	if (crtm) {
 
 		if ((ev = i1disp_take_first_raw_measurement_2(p, rgb)) != inst_ok)
@@ -943,6 +945,13 @@ i1disp_take_XYZ_measurement(
 			XYZ[i] *= 4.0/3.0;			/* (Not sure about this factor!) */
 #endif
 	}
+
+	if ((p->mode & inst_mode_measurement_mask) != inst_mode_emis_ambient) {
+
+		/* Apply the colorimeter correction matrix */
+		icmMulBy3x3(XYZ, p->ccmat, XYZ);
+	}
+
 	DBG((dbgo,"returning XYZ = %f %f %f\n",XYZ[0],XYZ[1],XYZ[2]))
 	return inst_ok;
 }
@@ -1056,84 +1065,70 @@ i1disp_check_unlock(
 	unsigned char buf[16];
 	int rsize;
 	inst_code ev;
-	int vv;
+	int i, vv;
 	double ver;
+
+	struct {
+		unsigned char code[4];
+		int *flag;
+	} codes[] = {
+		{ { 'G','r','M','b' }, NULL },			/* "GrMb" i1 Display */
+		{ { 'L','i','t','e' }, &p->lite },		/* "Lite" i1 Display LT */
+		{ { 'M','u','n','k' }, &p->munki },		/* "Munk" ColorMunki Create */
+		{ { 'O','b','i','W' }, &p->hpdream },	/* "ObiW" HP DreamColor */
+		{ { 'O','b','i','w' }, &p->hpdream },	/* "Obiw" HP DreamColor */
+		{ { 'C','M','X','2' }, &p->calmanx2 },	/* "CMX2" Calman X2 */
+		{ { 'R','G','B','c' }, NULL },			/* */
+		{ { 'C','E','C','5' }, NULL },			/* */
+		{ { 'C','M','C','5' }, NULL },			/* */
+		{ { 'C','M','G','5' }, NULL },			/* */
+		{ { 0x00,0x00,0x01,0x00 }, NULL },		/* */
+		{ { 0x09,0x0b,0x0c,0x0d }, NULL },		/* */
+		{ { 0x0e,0x0e,0x0e,0x0e }, NULL },		/* */
+		{ { ' ',' ',' ',' ' }, (int *)-1 }
+	}; 
 
 	if (p->debug) fprintf(dbgo,"i1disp: about to check response and unlock instrument if needed\n");
 
-	/* Check whether the interface is locked */
+	/* Get status */
 	if ((ev = i1disp_command_1(p, i1d_status, NULL, 0,
 	                   buf, 8, &rsize, 0.5)) != inst_ok && (ev & inst_imask) != I1DISP_LOCKED)
-		return ev;
+		return ev;		/* An error other than being locked */
 
-	p->lite = 0;
-	p->munki = 0;
-	p->chroma4 = 0;
-	/* i1 Display */
+	/* Try and unlock it if it is locked */
 	if ((ev & inst_imask) == I1DISP_LOCKED) {
 
-		/* Unlock it. Ignore I1DISP_NOT_READY status. */
-		if (((ev = i1disp_command_1(p, i1d_unlock, (unsigned char *)"GrMb", 4,
-		         buf, 8, &rsize, 0.5)) & inst_mask) != inst_ok
-		                 && (ev & inst_imask) != I1DISP_LOCKED)
-			return ev;
+		/* Reset any flags */
+		for (i = 0; ;i++) {
+			if (codes[i].flag == (int *)-1)
+				break;
+			if (codes[i].flag != NULL)
+				*codes[i].flag = 0;
+		}
 
-		if ((ev = i1disp_command_1(p, i1d_status, NULL, 0,
-		           buf, 8, &rsize, 0.5)) != inst_ok
-		                 && (ev & inst_imask) != I1DISP_LOCKED)
-			return ev;
-	}
-	/* i1 Display LT */
-	if ((ev & inst_imask) == I1DISP_LOCKED) {
+		/* Try each code in turn */
+		for (i = 0; ;i++) {
+			if (codes[i].flag == (int *)-1)
+				break;
 
-		/* Still locked. See if it's an i1display2LT */
+			/* Try unlock code. Ignore I1DISP_NOT_READY status. */
+			if (((ev = i1disp_command_1(p, i1d_unlock, codes[i].code, 4,
+			         buf, 8, &rsize, 0.5)) & inst_mask) != inst_ok
+			                 && (ev & inst_imask) != I1DISP_LOCKED)
+				return ev;		/* Some other sort of failure */
+	
+			/* Get status */
+			if ((ev = i1disp_command_1(p, i1d_status, NULL, 0,
+			           buf, 8, &rsize, 0.5)) != inst_ok
+			                 && (ev & inst_imask) != I1DISP_LOCKED)
+				return ev;	/* An error other than being locked */
 
-		/* Unlock it. Ignore I1DISP_NOT_READY status. */
-		if (((ev = i1disp_command_1(p, i1d_unlock, (unsigned char *)"Lite", 4,
-		         buf, 8, &rsize, 0.5)) & inst_mask) != inst_ok
-		                 && (ev & inst_imask) != I1DISP_LOCKED)
-			return ev;
-
-		if ((ev = i1disp_command_1(p, i1d_status, NULL, 0,
-		           buf, 8, &rsize, 0.5)) != inst_ok
-		                 && (ev & inst_imask) != I1DISP_LOCKED)
-			return ev;
-		p->lite = 1;
-	}
-	/* ColorMunki Create */
-	if ((ev & inst_imask) == I1DISP_LOCKED) {
-
-		/* Still locked. See if it's a ColorMunki Create */
-
-		/* Unlock it. Ignore I1DISP_NOT_READY status. */
-		if (((ev = i1disp_command_1(p, i1d_unlock, (unsigned char *)"Munk", 4,
-		         buf, 8, &rsize, 0.5)) & inst_mask) != inst_ok
-		                 && (ev & inst_imask) != I1DISP_LOCKED)
-			return ev;
-
-		if ((ev = i1disp_command_1(p, i1d_status, NULL, 0,
-		           buf, 8, &rsize, 0.5)) != inst_ok
-		                 && (ev & inst_imask) != I1DISP_LOCKED)
-			return ev;
-		p->munki = 1;
-	}
-	/* HP DreamColor */
-	if ((ev & inst_imask) == I1DISP_LOCKED) {
-
-		/* Unlock it. Ignore I1DISP_NOT_READY status. */
-		if (((ev = i1disp_command_1(p, i1d_unlock, (unsigned char *)"ObiW", 4,
-		         buf, 8, &rsize, 0.5)) & inst_mask) != inst_ok
-		                 && (ev & inst_imask) != I1DISP_LOCKED)
-			return ev;
-
-		if ((ev = i1disp_command_1(p, i1d_status, NULL, 0,
-		           buf, 8, &rsize, 0.5)) != inst_ok
-		                 && (ev & inst_imask) != I1DISP_LOCKED)
-			return ev;
-		p->hpdream = 1;
-	}
-	if ((ev & inst_imask) == I1DISP_LOCKED) {
-		return i1disp_interp_code((inst *)p, I1DISP_BAD_STATUS);
+			if (ev == inst_ok) {	/* Correct code */
+				if (codes[i].flag != NULL)
+					*codes[i].flag = 1;
+				break;
+			}
+		}
 	}
 
 	if (rsize != 5 || !isdigit(buf[0]) || buf[1] != '.'
@@ -1403,7 +1398,7 @@ i1disp_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout)
 
 	/* Set config, interface, write end point, read end point */
 	/* ("serial" end points aren't used - the i1display uses USB control messages) */
-	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, icomuf_none, 0); 
+	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, icomuf_none, 0, NULL); 
 
 	/* Check instrument is responding */
 	if ((ev = i1disp_command_1(p, i1d_status, NULL, 0, buf, 8, &rsize, 0.5)) != inst_ok
@@ -1478,9 +1473,6 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	/* Read the XYZ value */
 	if ((rv = i1disp_take_XYZ_measurement(p, val->aXYZ)) != inst_ok)
 		return rv;
-
-	/* Apply the colorimeter correction matrix */
-	icmMulBy3x3(val->aXYZ, p->ccmat, val->aXYZ);
 
 	val->XYZ_v = 0;
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings ? */

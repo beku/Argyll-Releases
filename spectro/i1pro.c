@@ -10,8 +10,8 @@
  * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* 
@@ -32,6 +32,16 @@
    and agreed to support.
  */
 
+/*
+	TTBD
+
+
+	Should add extra filter compensation support.
+
+	Should alias projector mode to display mode ??
+
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -39,9 +49,11 @@
 #include <time.h>
 #include <stdarg.h>
 #include <math.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
+#endif /* !SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -77,6 +89,20 @@ i1pro_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 	int bi, i, rv;
 	inst_code ev = inst_ok;
 	icomuflags usbflags = icomuf_none;
+#ifdef __APPLE__
+	/* If the X-Rite software has been installed, then there may */
+	/* be a daemon process that has the device open. Kill that process off */
+	/* so that we can open it here, before it re-spawns. */
+	char *pnames[] = {
+//			"i1iSisDeviceService",
+			"i1ProDeviceService",
+			NULL
+	};
+	int retries = 20;
+#else /* !__APPLE__ */
+	char **pnames = NULL;
+	int retries = 0;
+#endif /* !__APPLE__ */
 
 	if (p->debug) {
 		p->icom->debug = p->debug;	/* Turn on debugging */
@@ -93,7 +119,7 @@ i1pro_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 
 	/* Set config, interface, write end point, read end point, read quanta */
 	/* ("serial" end points aren't used - the i1display uses USB control messages) */
-	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags, 0); 
+	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags, retries, pnames); 
 
 	if (p->debug) fprintf(stderr,"i1pro: init coms has suceeded\n");
 

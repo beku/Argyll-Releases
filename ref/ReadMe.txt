@@ -12,21 +12,33 @@ The following files are licensed acording to the
 GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
 see the License.txt file for licensing details.
 
+
 	CMP_DT_003.cht
+	CMP_Digital_Target-3.cht
+	CMP_Digital_Target-3.ti2
+	CMP_Digital_Target-3.cie
 	ColorChecker.cht
+	ColorChecker.cie
 	ColorChecker.ti2
 	ColorCheckerDC.cht
 	ColorCheckerSG.cht
+	ECI2002.ti2
 	ECI2002R.ti2
 	FograStrip.ti1
 	FograStrip.ti2
 	Hutchcolor.cht
+	LaserSoftDCPro.cht
 	QPcard_201.cht
+	QPcard_201.cie
 	i1_RGB_Scan_1.4.cht
 	i1_RGB_Scan_1.4.ti2
 	it8.cht
+	linear.cal
+	strange.cal
 	3dap5k.sp
+	CIE_C.sp
 	D50_0.0.sp
+	D50_0.1.sp
 	D50_0.3.sp
 	D50_0.5.sp
 	D50_0.7.sp
@@ -44,4 +56,3 @@ see the License.txt file for licensing details.
 	TruluxPlus.sp
 	example.sp
 	example121.sp
-	strange.cal

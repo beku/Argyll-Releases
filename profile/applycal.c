@@ -47,7 +47,7 @@
 void usage(char *diag, ...) {
 	int i;
 	fprintf(stderr,"Apply device calibration to an ICC profile, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"  Diagnostic: ");

@@ -41,7 +41,7 @@ if $(USE_LIBUSB1) = true {
 	if $(NT) {
 		SubInclude libusbw ;
 	}
-	if $(UNIX) {
+	if $(UNIX) && $(OS) != FREEBSD {
 		SubInclude libusb ;
 	}
 }

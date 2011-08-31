@@ -1361,6 +1361,8 @@ static int submit_bulk_transfer(struct usbi_transfer *itransfer,
 	struct linux_device_handle_priv *dpriv =
 		__device_handle_priv(transfer->dev_handle);
 	struct usbfs_urb *urbs;
+	int is_out = (transfer->endpoint & LIBUSB_ENDPOINT_DIR_MASK)
+	        == LIBUSB_ENDPOINT_OUT;
 	int r;
 	int i;
 	size_t alloc_size;
@@ -1399,7 +1401,7 @@ static int submit_bulk_transfer(struct usbi_transfer *itransfer,
 		urb->type = urb_type;
 		urb->endpoint = transfer->endpoint;
 		urb->buffer = transfer->buffer + (i * MAX_BULK_BUFFER_LENGTH);
-		if (supports_flag_bulk_continuation)
+		if (supports_flag_bulk_continuation && !is_out)
 			urb->flags = USBFS_URB_SHORT_NOT_OK;
 		if (i == num_urbs - 1 && last_urb_partial)
 			urb->buffer_length = transfer->length % MAX_BULK_BUFFER_LENGTH;

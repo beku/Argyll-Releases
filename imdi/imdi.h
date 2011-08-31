@@ -35,6 +35,9 @@ struct _imdi {
 	/* to 1 for plane interleaved, and id and od (adjusted for skip) for pixel interleave, */
 	/* so stride is in color components (NOT bytes) */
 	/* Output pointers and data must only reference non-skipped output channels. */
+
+	/* Note that once an imdi is created, multiple can call interp() without */
+	/* interfering with each other, allowing parallel execution. */
 	void (*interp)(struct _imdi *s, void **outp, int outst,		/* Ouput pointers and stride */
 	                                void **inp, int inst,		/* Input pointers and stride */
 	                                unsigned int npixels);		/* Number of pixels */

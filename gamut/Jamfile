@@ -16,10 +16,10 @@ Samples = RefMediumGamut.gam ;
 Headers = gammap.h gamut.h ;
 
 #Install
-InstallBin ../bin : $(Executables) ;
-InstallFile ../ref : $(Samples) ;
-#InstallFile ../h : $(Headers) ;
-#InstallLib ./lib : $(Libraries) ;
+InstallBin $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
+InstallFile $(DESTDIR)$(PREFIX)/$(REFSUBDIR) : $(Samples) ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
+#InstallLib $(DESTDIR)$(PREFIX)lib : $(Libraries) ;
 
 # Header search path
 HDRS = ../h ../icc ../rspl ../numlib ../plot ../xicc ../cgats ../spectro ../gamut ;

@@ -9,9 +9,9 @@
  *
  * Copyright 2000 - 2010 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
  *
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /*
@@ -24,7 +24,11 @@
  *
  */
 
+#ifndef SALONEINSTLIB
 #include "icc.h"		/* icclib ICC definitions */ 
+#else /* SALONEINSTLIB */
+#include "conv.h"		/* fake icclib ICC definitions */ 
+#endif /* SALONEINSTLIB */
 
 #ifdef __cplusplus
 	extern "C" {
@@ -45,6 +49,13 @@ typedef struct {
 } xspect;
 
 /* Some helpful macro's: */
+
+/* Copy everything except the spectral values */
+#define XSPECT_COPY_INFO(PDST, PSRC) 						\
+ (PDST)->spec_n = (PSRC)->spec_n,							\
+ (PDST)->spec_wl_short = (PSRC)->spec_wl_short,				\
+ (PDST)->spec_wl_long = (PSRC)->spec_wl_long,				\
+ (PDST)->norm = (PSRC)->norm
 
 /* Given an index and the sampling ranges, compute the sample wavelength */
 #define XSPECT_WL(SHORT, LONG, N, IX) \
@@ -70,9 +81,11 @@ typedef struct {
 #define XSPECT_XIX(PXSP, WL) \
 ((int)floor(XSPECT_DIX(PXSP, WL) + 0.5))
 
+#ifndef SALONEINSTLIB
 /* Spectrum utility functions. Return NZ if error */
 int write_xspect(char *fname, xspect *s);
 int read_xspect(xspect *sp, char *fname);
+#endif /* !SALONEINSTLIB*/
 
 /* Get interpolated value at wavelenth (not normalised) */
 double value_xspect(xspect *sp, double wl);
@@ -80,8 +93,10 @@ double value_xspect(xspect *sp, double wl);
 /* De-noramlize and set normalisation factor to 1.0 */
 void xspect_denorm(xspect *sp);
 
+#ifndef SALONEINSTLIB
 /* Convert from one xspect type to another */
 void xspect2xspect(xspect *dst, xspect *targ, xspect *src);
+#endif /* !SALONEINSTLIB*/
 
 /* ------------------------------------------------------------------------------ */
 /* Class for converting between spectral and CIE */
@@ -98,12 +113,14 @@ typedef enum {
     icxIT_D50		 = 5,	/* Daylight 5000K */
     icxIT_D65		 = 6,	/* Daylight 6500K */
     icxIT_E		     = 7,	/* Equal Energy */
+#ifndef SALONEINSTLIB
     icxIT_F5		 = 8,	/* Fluorescent, Standard, 6350K, CRI 72 */
     icxIT_F8		 = 9,	/* Fluorescent, Broad Band 5000K, CRI 95 */
     icxIT_F10		 = 10,	/* Fluorescent Narrow Band 5000K, CRI 81 */
 	icxIT_Spectrocam = 11,	/* Spectrocam Xenon Lamp */
     icxIT_Dtemp		 = 12,	/* Daylight at specified temperature */
     icxIT_Ptemp		 = 13	/* Planckian at specified temperature */
+#endif /* !SALONEINSTLIB*/
 } icxIllumeType;
 
 /* Fill in an xpsect with a standard illuminant spectrum */
@@ -121,10 +138,12 @@ typedef enum {
     icxOT_custom			= 2,	/* Custom observer type weighting */
     icxOT_CIE_1931_2		= 3,	/* Standard CIE 1931 2 degree */
     icxOT_CIE_1964_10		= 4,	/* Standard CIE 1964 10 degree */
+#ifndef SALONEINSTLIB
     icxOT_Stiles_Burch_2	= 5,	/* Stiles & Burch 1955 2 degree */
     icxOT_Judd_Voss_2		= 6,	/* Judd & Voss 1978 2 degree */
     icxOT_CIE_1964_10c		= 7,	/* Standard CIE 1964 10 degree, 2 degree compatible */
     icxOT_Shaw_Fairchild_2	= 8		/* Shaw & Fairchild 1997 2 degree */
+#endif /* !SALONEINSTLIB*/
 } icxObserverType;
 
 /* Fill in three xpsects with a standard observer weighting curves */
@@ -152,6 +171,7 @@ struct _xsp2cie {
 	xspect observer[3];
 	int doLab;					/* Return D50 Lab result */
 
+#ifndef SALONEINSTLIB
 	/* FWA compensation */
 	double bw;		/* Integration bandwidth */
 	xspect instr;	/* Normalised instrument illuminant spectrum */
@@ -161,6 +181,7 @@ struct _xsp2cie {
 	xspect illum;	/* Normalised target illuminant spectrum */
 	double Sm;		/* FWA Stimulation level for emits contribution */
 	double FWAc;	/* FWA content (informational) */
+#endif /* !SALONEINSTLIB*/
 
 	/* Public: */
 	void (*del)(struct _xsp2cie *p);
@@ -181,6 +202,7 @@ struct _xsp2cie {
 	                 xspect *in				/* Spectrum to be converted, normalised by norm */
 	                );
 
+#ifndef SALONEINSTLIB
 	/* Set Media White value */
 	/* return NZ if error */
 	int (*set_mw) (struct _xsp2cie *p,	/* this */
@@ -221,6 +243,7 @@ struct _xsp2cie {
 	                 xspect *out,			/* Applied refl. spectrum */
 	                 xspect *in				/* Colorant reflectance to be applied */
 	                );
+#endif /* !SALONEINSTLIB*/
 
 }; typedef struct _xsp2cie xsp2cie;
 
@@ -229,10 +252,22 @@ xsp2cie *new_xsp2cie(
 	xspect        *custIllum,
 
 	icxObserverType obType,			/* Observer */
-	xspect        *custObserver[3]
-	, icColorSpaceSignature  rcs	/* Return color space, icSigXYZData or icSigLabData */
-
+	xspect        custObserver[3],
+	icColorSpaceSignature  rcs		/* Return color space, icSigXYZData or icSigLabData */
+									/* ** Must be icSigXYZData if SALONEINSTLIB ** */
 );
+
+#ifndef SALONEINSTLIB
+/* --------------------------- */
+/* Spectrum locus              */
+
+/* wavelength, x, y, Y of 2 degree 1931 spectrum locus */
+#define ICX_SPECTRUM_LOCUS_COUNT 65
+extern double icx_spectrum_locus[ICX_SPECTRUM_LOCUS_COUNT][4];
+
+/* Return an XYZ that is on the spectrum locus */
+/* t is 0 .. 1 for 380nm back to 380nm */
+void icx_interp_spectrum_locus(double xyz[3], double t);
 
 /* --------------------------- */
 /* Density and other functions */
@@ -273,7 +308,7 @@ double *in				/* Input XYZ values */
 int icx_ill_sp2XYZ(
 double xyz[3],			/* Return XYZ value with Y == 1 */
 icxObserverType obType,	/* Observer */
-xspect *custObserver[3],/* Optional custom observer */
+xspect custObserver[3],	/* Optional custom observer */
 icxIllumeType ilType,	/* Type of illuminant */
 double ct,				/* Input temperature in degrees K */
 xspect *custIllum);		/* Optional custom illuminant */
@@ -289,7 +324,7 @@ double icx_XYZ2ill_ct(
 double txyz[3],			/* If not NULL, return the XYZ of the black body temperature */
 icxIllumeType ilType,	/* Type of illuminant, icxIT_Dtemp or icxIT_Ptemp */
 icxObserverType obType,	/* Observer */
-xspect *custObserver[3],/* Optional custom observer */
+xspect custObserver[3],	/* Optional custom observer */
 double xyz[3],			/* Input XYZ value, NULL if spectrum intead */
 xspect *insp0,			/* Input spectrum value, NULL if xyz[] instead */
 int viscct);			/* nz to use visual CIEDE2000, 0 to use CCT CIE 1960 UCS. */
@@ -302,6 +337,7 @@ double icx_CIE1995_CRI(
 int *invalid,			/* if not NULL, set to nz if invalid */
 xspect *sample			/* Illuminant sample to compute CRI of */
 );
+#endif /* !SALONEINSTLIB*/
 
 #ifdef __cplusplus
 	}

@@ -20,6 +20,8 @@
 
 /* TTBD
 
+	Add bell at end of calibration ?
+
 	The verify (-E) may not be being done correctly.
 	Like update, shouldn't it read the .cal file to set what's
 	being calibrated agaist ? (This would fix missing ambient value too!)
@@ -73,6 +75,7 @@
 #include "xspect.h"
 #include "xcolorants.h"
 #include "ccmx.h"
+#include "ccss.h"
 #include "cgats.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -86,7 +89,6 @@
 #include "ofps.h"
 #include "icc.h"
 #include "sort.h"
-
 #include "spyd2setup.h"			/* Enable Spyder 2 access */
 
 #undef DEBUG
@@ -291,7 +293,7 @@ static double view_xform(cctx *x, double in) {
 		x->svc->XYZ_to_cam(x->svc, Jab, xyz);
 		x->dvc->cam_to_XYZ(x->dvc, xyz, Jab);
 
-		out = xyz[1] * x->vn1 + x->vn0;
+		out = xyz[1] * x->vn1 + x->vn0;			/* Apply scaling factors */
 	}
 	return out;
 }
@@ -1141,15 +1143,20 @@ static double comp_ct(
 	double lxyz[3],	/* If non-NULL, return normalised XYZ on locus */
 	int plank,		/* NZ if Plankian locus, 0 if Daylight locus */
 	int dovct,		/* NZ if visual match, 0 if traditional correlation */
+	icxObserverType obType,		/* If not default, set a custom observer */
 	double xyz[3]	/* Color to match */
 ) {
 	double ct_xyz[3];		/* XYZ on locus */
 	double nxyz[3];			/* Normalised input color */
 	double ct, ctde;		/* Color temperature & delta E to Black Body locus */
 	icmXYZNumber wN;
+	
+
+	if (obType == icxOT_default)
+		obType = icxOT_CIE_1931_2;
 
 	if ((ct = icx_XYZ2ill_ct(ct_xyz, plank != 0 ? icxIT_Ptemp : icxIT_Dtemp,
-	                         icxOT_CIE_1931_2, NULL, xyz, NULL, dovct)) < 0)
+	                         obType, NULL, xyz, NULL, dovct)) < 0)
 		error ("Got bad color temperature conversion\n");
 
 	if (de != NULL) {
@@ -1172,12 +1179,13 @@ static double comp_ct(
 /* Default gamma */
 double g_def_gamma = 2.4;
 
-void usage(char *diag, ...) {
+void usage(iccss *cl, char *diag, ...) {
+	int i;
 	disppath **dp;
 	icoms *icom;
 
 	fprintf(stderr,"Calibrate a Display, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (setup_spyd2() == 2)
 		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	if (diag != NULL) {
@@ -1262,16 +1270,25 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"                      ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                      ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
 	fprintf(stderr," -F                   Fill whole screen with black background\n");
+	fprintf(stderr," -K                   Don't use VideoLUT to set high precision test values\n");
 #if defined(UNIX) && !defined(__APPLE__)
 	fprintf(stderr," -n                   Don't set override redirect on test window\n");
 #endif
-	fprintf(stderr," -K                   Run instrument calibration first (used rarely)\n");
+	fprintf(stderr," -J                   Run instrument calibration first (used rarely)\n");
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
 	fprintf(stderr," -V                   Use adaptive measurement mode (if available)\n");
 	fprintf(stderr," -X file.ccmx         Apply Colorimeter Correction Matrix\n");
-	fprintf(stderr," -Q observ            Choose CIE Observer for spectrometer data:\n");
-	fprintf(stderr,"                      1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
+	fprintf(stderr," -X file.ccss         Use Colorimeter Calibration Spectral Samples for calibration\n");
+	for (i = 0; cl != NULL && cl[i].desc != NULL; i++) {
+		if (i == 0)
+			fprintf(stderr," -X N                  0: %s\n",cl[i].desc); 
+		else
+			fprintf(stderr,"                       %d: %s\n",i,cl[i].desc); 
+	}
+	free_iccss(cl);
+	fprintf(stderr," -Q observ            Choose CIE Observer for spectrometer or CCSS colorimeter data:\n");
+	fprintf(stderr,"                      1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2, 1964_10c\n");
 	fprintf(stderr," -I b|w               Drift compensation, Black: -Ib, White: -Iw, Both: -Ibw\n");
 	fprintf(stderr," -C \"command\"         Invoke shell \"command\" each time a color is set\n");
 	fprintf(stderr," -M \"command\"         Invoke shell \"command\" each time a color is measured\n");
@@ -1279,10 +1296,9 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," inoutfile            Base name for created or updated .cal and %s output files\n",ICC_FILE_EXT);
 	exit(1);
-	}
+}
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
 	int i, j, k;
 	int fa, nfa, mfa;					/* current argument we're looking at */
 	disppath *disp = NULL;				/* Display being used */
@@ -1337,17 +1353,22 @@ int main(int argc, char *argv[])
 	char *mcallout = NULL;				/* Measure color Shell callout */
 	char outname[MAXNAMEL+1] = { 0 };	/* Output cgats file base name */
 	char iccoutname[MAXNAMEL+1] = { 0 };/* Output icc file base name */
-	char ccmxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction Matrix name */
+	char ccxxname[MAXNAMEL+1] = "\000";  /* CCMX or CCSS file name */
+	iccss *cl = NULL;					/* List of installed CCSS files */
+	int ncl = 0;						/* Number of them */
 	ccmx *cmx = NULL;					/* Colorimeter Correction Matrix */
+	ccss *ccs = NULL;					/* Colorimeter Calibration Spectral Samples */
 	int spec = 0;						/* Want spectral data from instrument */
-	icxObserverType observ = icxOT_CIE_1931_2;
+	icxObserverType obType = icxOT_default;
 	disprd *dr = NULL;					/* Display patch read object */
 	csamp asgrey;						/* Main calibration loop test points */
 	double dispLum = 0.0;				/* Display luminence reading */
 	int it;								/* verify & refine iteration */
 	int rv;
 	int fitord = 30;					/* More seems to make curves smoother */
-	int donat;							/* Set native device colors ? (else via hw lut) */
+	int native = 1;						/* 0 = use current current or given calibration curve */
+										/* 1 = set native linear op and use ramdac high prec'n */
+										/* 2 = set native linear output */
 	int errc;							/* Return value from new_disprd() */
 	cctx x;								/* Context for calibration solution */
 
@@ -1392,8 +1413,11 @@ int main(int argc, char *argv[])
 	printf("!!!!!! Debug turned on !!!!!!\n");
 #endif
 
+	/* Get a list of installed CCSS files */
+	cl = list_iccss(&ncl);
+
 	if (argc <= 1)
-		usage("Too few arguments");
+		usage(cl,"Too few arguments");
 
 	/* Process the arguments */
 	mfa = 1;        /* Minimum final arguments */
@@ -1416,7 +1440,7 @@ int main(int argc, char *argv[])
 			}
 
 			if (argv[fa][1] == '?' || argv[fa][1] == '-') {
-				usage("Usage requested");
+				usage(cl,"Usage requested");
 
 			} else if (argv[fa][1] == 'v') {
 				verb = 1;
@@ -1431,10 +1455,10 @@ int main(int argc, char *argv[])
 				int ix, iv;
 
 				if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
-					if (++fa >= argc || argv[fa][0] == '-') usage("Parameter expected following -display");
+					if (++fa >= argc || argv[fa][0] == '-') usage(cl,"Parameter expected following -display");
 					setenv("DISPLAY", argv[fa], 1);
 				} else {
-					if (na == NULL) usage("Parameter expected following -d");
+					if (na == NULL) usage(cl,"Parameter expected following -d");
 					fa = nfa;
 					if (strcmp(na,"fake") == 0) {
 						fake = 1;
@@ -1446,14 +1470,14 @@ int main(int argc, char *argv[])
 						if (disp != NULL)
 							free_a_disppath(disp);
 						if ((disp = get_a_display(ix-1)) == NULL)
-							usage("-d parameter %d out of range",ix);
+							usage(cl,"-d parameter %d out of range",ix);
 						if (iv > 0)
 							disp->rscreen = iv-1;
 					}
 				}
 #else
 				int ix;
-				if (na == NULL) usage("Parameter expected following -d");
+				if (na == NULL) usage(cl,"Parameter expected following -d");
 				fa = nfa;
 				if (strcmp(na,"fake") == 0) {
 					fake = 1;
@@ -1462,11 +1486,11 @@ int main(int argc, char *argv[])
 					if (disp != NULL)
 						free_a_disppath(disp);
 					if ((disp = get_a_display(ix-1)) == NULL)
-						usage("-d parameter %d out of range",ix);
+						usage(cl,"-d parameter %d out of range",ix);
 				}
 #endif
 
-			} else if (argv[fa][1] == 'K') {
+			} else if (argv[fa][1] == 'J') {
 				docalib = 1;
 
 			} else if (argv[fa][1] == 'N') {
@@ -1481,15 +1505,23 @@ int main(int argc, char *argv[])
 				adaptive = 1;
 
 			/* Colorimeter Correction Matrix */
+			/* or Colorimeter Calibration Spectral Samples */
 			} else if (argv[fa][1] == 'X') {
+				int ix;
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected following -X");
-				strncpy(ccmxname,na,MAXNAMEL-1); ccmxname[MAXNAMEL-1] = '\000';
+				if (na == NULL) usage(cl,"Parameter expected following -X");
+				if (ncl > 0 && sscanf(na, " %d ", &ix) == 1) {
+					if (ix < 0 || ix > ncl)
+						usage(cl, "-X ccss selection is out of range");
+					strncpy(ccxxname,cl[ix].path,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
+				} else {
+					strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
+				}
 
 			/* Drift Compensation */
 			} else if (argv[fa][1] == 'I') {
 				fa = nfa;
-				if (na == NULL || na[0] == '\000') usage("Parameter expected after -I");
+				if (na == NULL || na[0] == '\000') usage(cl,"Parameter expected after -I");
 				for (i=0; ; i++) {
 					if (na[i] == '\000')
 						break;
@@ -1498,47 +1530,44 @@ int main(int argc, char *argv[])
 					else if (na[i] == 'w' || na[i] == 'W')
 						wdrift = 1;
 					else
-						usage("-I parameter '%c' not recognised",na[i]);
+						usage(cl,"-I parameter '%c' not recognised",na[i]);
 				}
 
 			/* Spectral Observer type */
 			} else if (argv[fa][1] == 'Q') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expecte after -Q");
+				if (na == NULL) usage(cl,"Parameter expecte after -Q");
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
-					spec = 2;
-					observ = icxOT_CIE_1931_2;
+					obType = icxOT_CIE_1931_2;
 				} else if (strcmp(na, "1964_10") == 0) {	/* Classic 10 degree */
-					spec = 2;
-					observ = icxOT_CIE_1964_10;
+					obType = icxOT_CIE_1964_10;
+				} else if (strcmp(na, "1964_10c") == 0) {	/* 10 degree corrected */
+					obType = icxOT_CIE_1964_10c;
 				} else if (strcmp(na, "1955_2") == 0) {		/* Stiles and Burch 1955 2 degree */
-					spec = 2;
-					observ = icxOT_Stiles_Burch_2;
+					obType = icxOT_Stiles_Burch_2;
 				} else if (strcmp(na, "1978_2") == 0) {		/* Judd and Voss 1978 2 degree */
-					spec = 2;
-					observ = icxOT_Judd_Voss_2;
+					obType = icxOT_Judd_Voss_2;
 				} else if (strcmp(na, "shaw") == 0) {		/* Shaw and Fairchilds 1997 2 degree */
-					spec = 2;
-					observ = icxOT_Shaw_Fairchild_2;
+					obType = icxOT_Shaw_Fairchild_2;
 				} else
-					usage("-Q parameter '%s' not recognised",na);
+					usage(cl,"-Q parameter '%s' not recognised",na);
 
 			/* Change color callout */
 			} else if (argv[fa][1] == 'C') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -C");
+				if (na == NULL) usage(cl,"Parameter expected after -C");
 				ccallout = na;
 
 			/* Measure color callout */
 			} else if (argv[fa][1] == 'M') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -M");
+				if (na == NULL) usage(cl,"Parameter expected after -M");
 				mcallout = na;
 
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
-				if (na == NULL) usage("Paramater expected following -W");
+				if (na == NULL) usage(cl,"Paramater expected following -W");
 				if (na[0] == 'n' || na[0] == 'N')
 					fc = fc_none;
 				else if (na[0] == 'h' || na[0] == 'H')
@@ -1546,7 +1575,7 @@ int main(int argc, char *argv[])
 				else if (na[0] == 'x' || na[0] == 'X')
 					fc = fc_XonXOff;
 				else
-					usage("-W parameter '%c' not recognised",na[0]);
+					usage(cl,"-W parameter '%c' not recognised",na[0]);
 
 			/* Debug coms */
 			} else if (argv[fa][1] == 'D') {
@@ -1560,21 +1589,21 @@ int main(int argc, char *argv[])
 			/* Black point correction amount */
 			} else if (argv[fa][1] == 'k') {
 				fa = nfa;
-				if (na == NULL) usage("Paramater expected following -k");
+				if (na == NULL) usage(cl,"Paramater expected following -k");
 				bkcorrect = atof(na);
-				if (bkcorrect < 0.0 || bkcorrect > 1.0) usage ("-k parameter must be between 0.0 and 1.0");
+				if (bkcorrect < 0.0 || bkcorrect > 1.0) usage(cl,"-k parameter must be between 0.0 and 1.0");
 			/* Neutral blend rate (power) */
 			} else if (argv[fa][1] == 'A') {
 				fa = nfa;
-				if (na == NULL) usage("Paramater expected following -A");
+				if (na == NULL) usage(cl,"Paramater expected following -A");
 				x.nbrate = atof(na);
-				if (x.nbrate < 0.05 || x.nbrate > 20.0) usage ("-A parameter must be between 0.05 and 20.0");
+				if (x.nbrate < 0.05 || x.nbrate > 20.0) usage(cl,"-A parameter must be between 0.05 and 20.0");
 			/* Black brightness */
 			} else if (argv[fa][1] == 'B') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -B");
+				if (na == NULL) usage(cl,"Parameter expected after -B");
 				bkbright = atof(na);
-				if (bkbright <= 0.0 || bkbright > 100000.0) usage("-B parameter %f out of range",bkbright);
+				if (bkbright <= 0.0 || bkbright > 100000.0) usage(cl,"-B parameter %f out of range",bkbright);
 
 			/* Number of verify passes */
 			} else if (argv[fa][1] == 'e') {
@@ -1596,9 +1625,9 @@ int main(int argc, char *argv[])
 			/* COM port  */
 			} else if (argv[fa][1] == 'c') {
 				fa = nfa;
-				if (na == NULL) usage("Paramater expected following -c");
+				if (na == NULL) usage(cl,"Paramater expected following -c");
 				comport = atoi(na);
-				if (comport < 1 || comport > 50) usage("-c parameter %d out of range",comport);
+				if (comport < 1 || comport > 50) usage(cl,"-c parameter %d out of range",comport);
 
 			} else if (argv[fa][1] == 'p') {
 				proj = 1;
@@ -1625,7 +1654,7 @@ int main(int argc, char *argv[])
 			/* Fast Profile Description */
 			} else if (argv[fa][1] == 'O') {
 				fa = nfa;
-				if (na == NULL) usage("Expect argument to profile description flag -O");
+				if (na == NULL) usage(cl,"Expect argument to profile description flag -O");
 				profDesc = na;
 
 			/* Update calibration and (optionally) profile */
@@ -1636,7 +1665,7 @@ int main(int argc, char *argv[])
 			/* Quality */
 			} else if (argv[fa][1] == 'q') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected following -q");
+				if (na == NULL) usage(cl,"Parameter expected following -q");
     			switch (na[0]) {
 					case 'L':			/* Test value */
 						quality = -3;
@@ -1660,19 +1689,19 @@ int main(int argc, char *argv[])
 						quality = 2;
 						break;
 					default:
-						usage("-q parameter '%c' not recognised",na[0]);
+						usage(cl,"-q parameter '%c' not recognised",na[0]);
 				}
 
 			/* Display type */
 			} else if (argv[fa][1] == 'y') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -y");
+				if (na == NULL) usage(cl,"Parameter expected after -y");
 				if (na[0] == 'c' || na[9] == 'C')
 					dtype = 1;
 				else if (na[0] == 'l' || na[0] == 'L')
 					dtype = 2;
 				else
-					usage("-y parameter '%c' not recognised",na[0]);
+					usage(cl,"-y parameter '%c' not recognised",na[0]);
 
 			/* Daylight color temperature */
 			} else if (argv[fa][1] == 't' || argv[fa][1] == 'T') {
@@ -1683,15 +1712,15 @@ int main(int argc, char *argv[])
 				if (na != NULL) {
 					fa = nfa;
 					temp = atof(na);
-					if (temp < 1000.0 || temp > 15000.0) usage("-%c parameter %f out of range",argv[fa][1], temp);
+					if (temp < 1000.0 || temp > 15000.0) usage(cl,"-%c parameter %f out of range",argv[fa][1], temp);
 				}
 
 			/* White point as x, y */
 			} else if (argv[fa][1] == 'w') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -w");
+				if (na == NULL) usage(cl,"Parameter expected after -w");
 				if (sscanf(na, " %lf,%lf ", &wpx, &wpy) != 2)
-					usage("-w parameter '%s' not recognised",na);
+					usage(cl,"-w parameter '%s' not recognised",na);
 
 			/* Show CXT rather than VXT when adjusting native white point */
 			} else if (argv[fa][1] == 'L') {
@@ -1700,14 +1729,14 @@ int main(int argc, char *argv[])
 			/* White brightness */
 			} else if (argv[fa][1] == 'b') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -b");
+				if (na == NULL) usage(cl,"Parameter expected after -b");
 				tbright = atof(na);
-				if (tbright <= 0.0 || tbright > 100000.0) usage("-b parameter %f out of range",tbright);
+				if (tbright <= 0.0 || tbright > 100000.0) usage(cl,"-b parameter %f out of range",tbright);
 
 			/* Target transfer curve */
 			} else if (argv[fa][1] == 'g') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -g");
+				if (na == NULL) usage(cl,"Parameter expected after -g");
 				if ((na[0] == 'l' || na[0] == 'L') && na[1] == '\000')
 					x.gammat = gt_Lab;
 				else if ((na[0] == 's' || na[0] == 'S') && na[1] == '\000')
@@ -1718,16 +1747,16 @@ int main(int argc, char *argv[])
 					x.gammat = gt_SMPTE240M;
 				else {
 					gamma = atof(na);
-					if (gamma <= 0.0 || gamma > 10.0) usage("-g parameter %f out of range",gamma);
+					if (gamma <= 0.0 || gamma > 10.0) usage(cl,"-g parameter %f out of range",gamma);
 					x.gammat = gt_power;
 				}
 
 			/* Effective gamma power */
 			} else if (argv[fa][1] == 'G') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -G");
+				if (na == NULL) usage(cl,"Parameter expected after -G");
 				egamma = atof(na);
-				if (egamma <= 0.0 || egamma > 10.0) usage("-G parameter %f out of range",egamma);
+				if (egamma <= 0.0 || egamma > 10.0) usage(cl,"-G parameter %f out of range",egamma);
 				x.gammat = gt_power;
 
 			/* Degree of output offset */
@@ -1738,28 +1767,28 @@ int main(int argc, char *argv[])
 				} else {
 					x.oofff = atof(na);
 					if (x.oofff < 0.0 || x.oofff > 1.0)
-						usage("-f parameter %f out of range",x.oofff);
+						usage(cl,"-f parameter %f out of range",x.oofff);
 				}
 
 			/* Ambient light level */
 			} else if (argv[fa][1] == 'a') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -a");
+				if (na == NULL) usage(cl,"Parameter expected after -a");
 				ambient = atof(na);
 				if (ambient < 0.0)
-					usage("-a parameter %f out of range",ambient);
+					usage(cl,"-a parameter %f out of range",ambient);
 				ambient /= 3.141592654;	/* Convert from Lux to cd/m^2 */
 
 			/* Test patch offset and size */
 			} else if (argv[fa][1] == 'P') {
 				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -P");
+				if (na == NULL) usage(cl,"Parameter expected after -P");
 				if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &patscale) != 3)
-					usage("-P parameter '%s' not recognised",na);
+					usage(cl,"-P parameter '%s' not recognised",na);
 				if (ho < 0.0 || ho > 1.0
 				 || vo < 0.0 || vo > 1.0
 				 || patscale <= 0.0 || patscale > 50.0)
-					usage("-P parameters %f %f %f out of range",ho,vo,patscale);
+					usage(cl,"-P parameters %f %f %f out of range",ho,vo,patscale);
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
@@ -1767,8 +1796,12 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'F') {
 				blackbg = 1;
 
+			/* Don't use VideoLUT to set high precision test values */
+			} else if (argv[fa][1] == 'K') {
+				native = 2;
+
 			} else 
-				usage("Flag '-%c' not recognised",argv[fa][1]);
+				usage(cl,"Flag '-%c' not recognised",argv[fa][1]);
 		} else
 			break;
 	}
@@ -1805,20 +1838,35 @@ int main(int argc, char *argv[])
 			error("Unable to open the default display");
 	}
 
-	/* See if there is an environment variable ccmx */
-	{
-		char *na = getenv("ARGYLL_COLMTER_COR_MATRIX");
-		if (na != NULL) {
-			strncpy(ccmxname,na,MAXNAMEL-1); ccmxname[MAXNAMEL-1] = '\000';
+	/* See if there is an environment variable ccxx */
+	if (ccxxname[0] == '\000') {
+		char *na;
+		if ((na = getenv("ARGYLL_COLMTER_CAL_SPEC_SET")) != NULL) {
+			strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
+
+		} else if ((na = getenv("ARGYLL_COLMTER_COR_MATRIX")) != NULL) {
+			strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
 		}
 	}
-	/* Colorimeter Correction Matrix */
-	if (ccmxname[0] != '\000') {
-		if ((cmx = new_ccmx()) == NULL)
-			error("new_ccmx failed\n");
-		if (cmx->read_ccmx(cmx,ccmxname))
-			error("Reading Colorimeter Correction Matrix file '%s' failed with error %d:'%s'\n",
-		     	       ccmxname, cmx->errc, cmx->err);
+
+	/* Load up CCMX or CCSS */
+	if (ccxxname[0] != '\000') {
+		if ((cmx = new_ccmx()) == NULL
+		  || cmx->read_ccmx(cmx, ccxxname)) {
+			if (cmx != NULL) {
+				cmx->del(cmx);
+				cmx = NULL;
+			}
+			
+			/* CCMX failed, try CCSS */
+			if ((ccs = new_ccss()) == NULL
+			  || ccs->read_ccss(ccs, ccxxname)) {
+				if (ccs != NULL) {
+					ccs->del(ccs);
+					ccs = NULL;
+				}
+			}
+		}
 	}
 
 	if (docalib) {
@@ -1830,7 +1878,7 @@ int main(int argc, char *argv[])
 
 	if (verify != 2 && doreport == 0) {
 		/* Get the file name argument */
-		if (fa >= argc || argv[fa][0] == '-') usage("Output filname parameter not found");
+		if (fa >= argc || argv[fa][0] == '-') usage(cl,"Output filname parameter not found");
 		strncpy(outname,argv[fa],MAXNAMEL-4); outname[MAXNAMEL-4] = '\000';
 		strcat(outname,".cal");
 		if (iccoutname[0] == '\000') {
@@ -1852,19 +1900,26 @@ int main(int argc, char *argv[])
 		verify = 0;
 	}
 
-	/* Get ready to do some readings */
-	donat = 1;		/* Normally calibrate against native response */
+	/* Normally calibrate against native response */
 	if (verify == 2 || doreport == 2)
-		donat = 0;	/* But measure calibrated response of verify or report calibrated */ 
+		native = 0;	/* But measure calibrated response of verify or report calibrated */ 
+
+	/* Get ready to do some readings */
 	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, proj, adaptive, nocal,
-	                     highres, donat, NULL, 0, disp, blackbg, override, ccallout, mcallout,
-	                     patsize, ho, vo, cmx != NULL ? cmx->matrix : NULL, spec, observ,
-	                     bdrift, wdrift, verb, VERBOUT, debug,
+	                     highres, native, NULL, 0, 0, disp, blackbg, override, ccallout, mcallout,
+	                     patsize, ho, vo,
+	                     cmx != NULL ? cmx->matrix : NULL,
+	                     ccs != NULL ? ccs->samples : NULL, ccs != NULL ? ccs->no_samp : 0,
+	                     spec, obType, NULL, bdrift, wdrift, verb, VERBOUT, debug,
 	                     "fake" ICC_FILE_EXT)) == NULL)
 		error("new_disprd() failed with '%s'\n",disprd_err(errc));
 
 	if (cmx != NULL)
 		cmx->del(cmx);
+	if (ccs != NULL)
+		ccs->del(ccs);
+
+	free_iccss(cl); cl = NULL; ncl = 0;
 
 	/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 	if (doreport) {
@@ -1895,10 +1950,10 @@ int main(int argc, char *argv[])
 		wp[0] = w[0]/(w[0] + w[1] + w[2]);
 		wp[1] = w[1]/(w[0] + w[1] + w[2]);
 
-		cct = comp_ct(&cct_de, NULL, 1, 0, w);	/* Compute CCT */
-		cdt = comp_ct(&cdt_de, NULL, 0, 0, w);	/* Compute CDT */
-		vct = comp_ct(&vct_de, NULL, 1, 1, w);	/* Compute VCT */
-		vdt = comp_ct(&vdt_de, NULL, 0, 1, w);	/* Compute VDT */
+		cct = comp_ct(&cct_de, NULL, 1, 0, obType, w);	/* Compute CCT */
+		cdt = comp_ct(&cdt_de, NULL, 0, 0, obType, w);	/* Compute CDT */
+		vct = comp_ct(&vct_de, NULL, 1, 1, obType, w);	/* Compute VCT */
+		vdt = comp_ct(&vdt_de, NULL, 0, 1, obType, w);	/* Compute VDT */
 
 		/* Compute advertised current gamma - use the gross curve shape for robustness */
 		cgamma = pop_gamma(tcols[0].aXYZ[1], tcols[1].aXYZ[1], tcols[2].aXYZ[1]);
@@ -1929,7 +1984,9 @@ int main(int argc, char *argv[])
 #if defined(__APPLE__) && defined(__POWERPC__)
 					gcc_bug_fix(sigbits);
 #endif
+					/* Notional test value */
 					v = (5 << (sigbits-3))/((1 << sigbits) - 1.0);
+					/* And -1, 0 , +1 bit test values */
 					if ((n % 3) == 2)
 						v += 1.0/((1 << sigbits) - 1.0);
 					else if ((n % 3) == 1)
@@ -1942,6 +1999,7 @@ int main(int argc, char *argv[])
 					dr->del(dr);
 					error("display read failed with '%s'\n",disprd_err(rv));
 				} 
+				/* Average the readings for each test value */
 				a0 = a1 = a2 = 0.0;
 				for (n = 0; n < res_samps; n++) {
 					double v = ttt[n].aXYZ[1];
@@ -1956,6 +2014,7 @@ int main(int argc, char *argv[])
 				a0 /= (res_samps / 3.0);
 				a1 /= (res_samps / 3.0);
 				a2 /= (res_samps / 3.0);
+				/* Judge significance of any differences */
 				dd = 0.0;
 				for (n = 0; n < res_samps; n++) {
 					double tt;
@@ -1970,9 +2029,9 @@ int main(int argc, char *argv[])
 				dd /= res_samps;
 				dd = sqrt(dd);
 				if (fabs(a1 - a0) > (2.0 * dd) && fabs(a2 - a1) > (2.0 * dd))
-					issig = 1;
+					issig = 1;		/* Noticable difference */
 				else
-					issig = 0;
+					issig = 0;		/* No noticable difference */
 				DBG((dbgo,"Bits %d: Between = %f, %f within = %f, sig = %s\n",sigbits, fabs(a1 - a0), fabs(a2 - a1),dd, issig ? "yes" : "no"));
 
 				switch(sigbits) {
@@ -2476,6 +2535,9 @@ int main(int argc, char *argv[])
 		int rgbch = 0;			/* Got RBG Yxy ? */
 		double rgbXYZ[3][3];	/* The RGB XYZ */
 
+		/* Make sure drift comp. is off for interactive adjustment */
+		dr->change_drift_comp(dr, 0, 0);
+
 		/* Until the user is done */
 		printf("\nDisplay adjustment menu:");
 		for (;;) {
@@ -2655,7 +2717,7 @@ int main(int argc, char *argv[])
 				} else {	/* Target is native white */
 					printf("\nAdjust R,G & B gain to desired white point. Press space when done.\n");
 					/* Compute the CT and delta E to white locus of target */
-					ct = comp_ct(&ct_de, NULL, planckian, dovct, tcols[0].aXYZ);
+					ct = comp_ct(&ct_de, NULL, planckian, dovct, obType, tcols[0].aXYZ);
 					printf("  Initial Br %.2f, x %.4f , y %.4f , %c%cT %4.0fK DE 2K %4.1f\n",
 					        tarw, tYxy[1],tYxy[2],
 				            dovct ? 'V' : 'C', planckian ? 'C' : 'D', ct,ct_de);
@@ -2697,7 +2759,7 @@ int main(int argc, char *argv[])
 
 					} else {	/* Target is native white */
 						double lxyz[3];	/* Locus XYZ */
-						ct = comp_ct(&ct_de, lxyz, planckian, dovct, tcols[0].aXYZ);
+						ct = comp_ct(&ct_de, lxyz, planckian, dovct, obType, tcols[0].aXYZ);
 
 						icmXYZ2Yxy(tYxy, lxyz);
 						/* lxyz is already normalised */
@@ -3137,7 +3199,7 @@ int main(int argc, char *argv[])
 				icmXYZ2Lab(&tXYZ, bLab, bLab);
 
 				/* And color temperature */
-				ct = comp_ct(&ct_de, NULL, planckian, dovct, tcols[2].aXYZ);
+				ct = comp_ct(&ct_de, NULL, planckian, dovct, obType, tcols[2].aXYZ);
 
 				printf("\n");
 
@@ -3194,7 +3256,11 @@ int main(int argc, char *argv[])
 				exit(0);
 			}
 		}
+
+		/* Make sure drift comp. is set to the command line options */
+		dr->change_drift_comp(dr, bdrift, wdrift);
 	}
+
 	/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 	/* Take a small number of readings, and compute basic */
@@ -3699,6 +3765,7 @@ int main(int argc, char *argv[])
 	if (verb)
 		printf("Gamma curve input offset = %f, output offset = %f, power = %f\n",x.gioff,x.gooff,x.egamma);
 
+	/* For ambient light compensation, we make use of CIECAM02 */
 	if (ambient > 0.0) {
 		double xyz[3], Jab[3];
 		double t1, t0, a1, a0;
@@ -3720,7 +3787,7 @@ int main(int argc, char *argv[])
 					0.2,					/* Background relative to reference white */
 					80.0,					/* Display is 80 cd/m^2 */
 			        0.01, x.nwh,			/* 1% flare same white point */
-					0, 0);
+					0);
 				break;
 
 			case gt_Rec709:
@@ -3731,7 +3798,7 @@ int main(int argc, char *argv[])
 					0.2,					/* Background relative to reference white */
 					1000.0/3.1415,			/* Luminance of white in the Image field (cd/m^2) */
 			        0.01, x.nwh,			/* 1% flare same white point */
-					0, 0);
+					0);
 				break;
 
 			default:
@@ -3744,7 +3811,7 @@ int main(int argc, char *argv[])
 			0.2,				/* Background relative to reference white */
 			x.twh[1],			/* Target white level (cd/m^2) */
 	        0.01, x.nwh,		/* 1% flare same white point */
-			0, 0);
+			0);
 
 		/* Compute the normalisation values */
 		x.svc->XYZ_to_cam(x.svc, Jab, x.nwh);		/* Relative white point */
@@ -3840,7 +3907,7 @@ int main(int argc, char *argv[])
 			}
 		}
 		if (x.nat)		/* Make curve go thought white if possible */
-			sdv[0][rsteps-1].w = sdv[1][rsteps-1].w = sdv[2][rsteps-1].w = 10.0;
+			sdv[0][rsteps-1].w = sdv[1][rsteps-1].w = sdv[2][rsteps-1].w = 50.0;
 
 		/* Create an initial set of RAMDAC curves */
 		for (j = 0; j < 3; j++)

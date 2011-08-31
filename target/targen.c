@@ -20,7 +20,12 @@
 
 	Should add an option to generate grey and near grey
 	or other PCS based pattern test points based on the previous profile.
+	How about an option to read in an CGATS file containing
+	PCS values ? How is the black level chosen though ?
 
+	Might be good to change/allow tweaking of the EMPH_NEUTRAL
+	to increase the grey region patch density even more.
+ 
 	Would be nice to be able to generate secondary
 	color ramps (ie. CMY for RGB space, RGB for CMYK space.)
 
@@ -101,7 +106,7 @@
 #define VRML_DIAG		/* Enable option to dump a VRML of the resulting full spread points */
 #undef ADDRECCLIPPOINTS	/* Add ink limited clipping points to regular grid */
 #define EMPH_NEUTRAL	/* Emphasise neutral axis, like CIE94 does */
-#define NEF 1.0			/* Amount to emphasis neutral axis, 0 = none, 1 = CIE94 */
+#define NEMPH_DEFAULT 0.5	/* Default emphasis == 2 x CIE94 */
 #define DEFANGLE 0.3333	/* For simdlat and simplat */
 #define SIMDLAT_TYPE SIMDLAT_BCC	/* Simdlat geometry type */
 #define MATCH_TOLL 1e-3	/* Tollerance of device value to consider a patch a duplicate */
@@ -160,7 +165,9 @@ struct _pcpt {
 	inkmask xmask;		/* external xcolorants inkmask */
 	inkmask nmask;		/* internal xcolorants inkmask */
 	int di;				/* Number of Device dimensions */
-	
+
+	/* Tuning parameters */
+	double nemph;		/* neutral emphasis, 0.0 - 1.0. Default 0.35 for == CIE94 */
 
 	/* ICC profile based */
 	icmFile *fp;
@@ -274,13 +281,13 @@ pcpt_to_nLab(pcpt *s, double *out, double *in) {
 
 #ifdef EMPH_NEUTRAL		/* Emphasise neutral axis, like CIE94 does */
 		{
-			double bl = 0.35 * NEF;	/* Strength of neutral axis emphasis - about 2:1 for NEF = 1 */
 			double c;		/* Chromanance */
 
 			c = sqrt(lab[1] * lab[1] + lab[2] * lab[2]);	/* Compute chromanance */
 
-			c = 2.6624 / (1.0 + 0.013 * c);		/* Full strength scale factor */
-			c = 1.0 + bl * (c - 1.0);			/* Reduced strength scale factor */
+//			c = 2.6624 / (1.0 + 0.013 * c);		/* Full strength scale factor */
+			c = 3.0 / (1.0 + 0.03 * c);		/* Full strength scale factor */
+			c = 1.0 + s->nemph * (c - 1.0);			/* Reduced strength scale factor */
 
 			lab[1] *= c;			/* scale a & b */
 			lab[2] *= c;
@@ -606,7 +613,8 @@ char *profName,			/* ICC or MPP profile path, NULL for default, "none" for linea
 inkmask xmask,			/* external xcolorants mask */
 inkmask nmask,			/* internal xcolorants mask */
 double *ilimit,			/* ink sum limit (scale 1.0) input and return, -1 if default */
-double *uilimit			/* underlying ink sum limit (scale 1.0) input and return, -1 if default */
+double *uilimit,		/* underlying ink sum limit (scale 1.0) input and return, -1 if default */
+double nemph			/* Neutral emphasis, 0.0 - 1.0. < 0.0 for default == CIE94 */
 ) {
 	int e;
 	pcpt *s;
@@ -628,6 +636,10 @@ double *uilimit			/* underlying ink sum limit (scale 1.0) input and return, -1 i
 	s->xmask = xmask;
 	s->nmask = nmask;
 	s->di = icx_noofinks(nmask);
+
+	if (nemph < 0.0)
+		nemph = NEMPH_DEFAULT;
+	s->nemph = nemph;
 
 	/* See if we have a profile */
 	if (profName != NULL
@@ -768,7 +780,7 @@ void
 usage(int level, char *diag, ...) {
 	int i;
 	fprintf(stderr,"Generate Target deviceb test chart color values, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: targen [options] outfile\n");
 	if (diag != NULL) {
 		va_list args;
@@ -813,14 +825,15 @@ usage(int level, char *diag, ...) {
 	fprintf(stderr,"  -i              Use device space body centered cubic grid for full spread\n");
 	fprintf(stderr,"  -I              Use perceptual space body centered cubic grid for full spread\n");
 	fprintf(stderr,"  -a angle        Simplex grid angle 0.0 - 0.5 for B.C.C. grid, default %f\n",DEFANGLE);
-	fprintf(stderr,"  -A adaptation   Degree of adaptation of OFPS 0.0 - 1.0 (default 0.1, 1.0 if -c profile provided)\n");
+	fprintf(stderr,"  -A adaptation   Degree of adaptation of OFPS 0.0 - 1.0 (default 0.1, -c profile used 1.0)\n");
 /* Research options: */
 /*	fprintf(stderr,"  -A pPERCWGHT    Device (0.0) ... Perceptual (1.0) weighting\n"); */
 /*	fprintf(stderr,"  -A cCURVEWGHT   Curvature weighting  0.0 = none ... "); */
 	fprintf(stderr," -l ilimit        Total ink limit in %%(default = none) \n");
-	fprintf(stderr," -p power         Optional power applied to all device values.\n");
+	fprintf(stderr," -p power         Optional power-like value applied to all device values.\n");
 	fprintf(stderr," -c profile       Optional device ICC or MPP pre-conditioning profile filename\n");
 	fprintf(stderr,"                  (Use \"none\" to turn off any conditioning)\n");
+	fprintf(stderr," -N emphasis      Degree of neutral axis patch concentration 0.0-1.0 (default %.2f)\n",NEMPH_DEFAULT);
 	fprintf(stderr," -F L,a,b,rad     Filter out samples outside Lab sphere.\n");
 #ifdef VRML_DIAG
 	fprintf(stderr," -w               Dump diagnostic outfilel.wrl file (Lab locations)\n");
@@ -879,6 +892,7 @@ int main(int argc, char *argv[]) {
 	double curv_wght = 0.0;	/* Curvature weighting */
 	double ilimit = -1.0;	/* Ink limit (scale 1.0) (default none) */
 	double uilimit = -1.0;	/* Underlying (pre-calibration, scale 1.0) ink limit */
+	double nemph = NEMPH_DEFAULT;
 	int filter = 0;			/* Filter values */
 	double filt[4] = { 50,0,0,0 };	
 	static char fname[MAXNAMEL+1] = { 0 };		/* Output file base name */
@@ -1099,7 +1113,7 @@ int main(int argc, char *argv[]) {
 					uilimit = ilimit = 0.01 * tt;
 			}
 
-			/* Extra device power to use */
+			/* Extra device power-like to use */
 			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
 				double tt;
 				fa = nfa;
@@ -1113,6 +1127,15 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage(0,"Expect argument after -e");
 				strncpy(pname,na,MAXNAMEL-1); pname[MAXNAMEL-1] = '\000';
+			}
+
+			/* Degree of neutral axis emphasis */
+			else if (argv[fa][1] == 'N') {
+				fa = nfa;
+				if (na == NULL) usage(0,"Expected argument to neutral emphasis flag -N");
+				nemph = atof(na);
+				if (perc_wght < 0.0 || perc_wght > 10.0)
+					usage(0,"Neautral weighting argument %f to '-N' is out of range",nemph);
 			}
 
 			/* Filter out samples outside given sphere */
@@ -1196,12 +1219,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Deal with ICC, MPP or fallback profile */
-	if ((pdata = new_pcpt(pname, xmask, nmask, &ilimit, &uilimit)) == NULL) {
+	if ((pdata = new_pcpt(pname, xmask, nmask, &ilimit, &uilimit, nemph)) == NULL) {
 		error("Perceptual lookup object creation failed");
 	}
 
 	/* Set default adapation level */
-	if (dadapt == -2.0) {		/* Not set by used */
+	if (dadapt < -1.5) {		/* Not set by user */
 		if (pname[0] != '\000')
 			dadapt = 1.0;
 		else
@@ -1362,10 +1385,10 @@ int main(int argc, char *argv[]) {
 			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 			if (xmask == nmask) {
 				for (e = 0; e < di; e++)
-					ary[1 + e].d = 100.0 * pow(val[e],xpow);
+					ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
 			} else {
 				for (e = 0; e < di; e++)
-					ary[1 + e].d = 100.0 * (1.0 - pow(val[e],xpow));
+					ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
 			}
 			ary[1 + di + 0].d = 100.0 * XYZ[0];
 			ary[1 + di + 1].d = 100.0 * XYZ[1];
@@ -1434,10 +1457,10 @@ int main(int argc, char *argv[]) {
 					ary[0].c = buf;
 					if (xmask == nmask) {
 						for (e = 0; e < di; e++)
-							ary[1 + e].d = 100.0 * pow(val[e],xpow);
+							ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
 					} else {
 						for (e = 0; e < di; e++)
-							ary[1 + e].d = 100.0 * (1.0 - pow(val[e],xpow));
+							ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
 					}
 					ary[1 + di + 0].d = 100.0 * XYZ[0];
 					ary[1 + di + 1].d = 100.0 * XYZ[1];
@@ -1502,7 +1525,7 @@ int main(int argc, char *argv[]) {
 
 			/* Compute sum that includes affect of power */
 			for (sum = 0.0, e = 0; e < di; e++)
-				sum += pow(val[e], xpow);
+				sum += icx_powlike(val[e], xpow);
 
 			if (sum > uilimit)
 				addp = 0;
@@ -1530,10 +1553,10 @@ int main(int argc, char *argv[]) {
 				ary[0].c = buf;
 				if (xmask == nmask) {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * pow(val[e],xpow);
+						ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
 				} else {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * (1.0 - pow(val[e],xpow));
+						ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
 				}
 				ary[1 + di + 0].d = 100.0 * XYZ[0];
 				ary[1 + di + 1].d = 100.0 * XYZ[1];
@@ -1582,7 +1605,7 @@ int main(int argc, char *argv[]) {
 
 			/* Compute sum that includes affect of power */
 			for (sum = 0.0, e = 0; e < di; e++)
-				sum += pow(val[e], xpow);
+				sum += icx_powlike(val[e], xpow);
 
 			if (sum > uilimit)
 				addp = 0;		/* Don't add patches over ink limit */
@@ -1612,10 +1635,10 @@ int main(int argc, char *argv[]) {
 				ary[0].c = buf;
 				if (xmask == nmask) {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * pow(val[e],xpow);
+						ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
 				} else {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * (1.0 - pow(val[e],xpow));
+						ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
 				}
 				ary[1 + di + 0].d = 100.0 * XYZ[0];
 				ary[1 + di + 1].d = 100.0 * XYZ[1];
@@ -1702,10 +1725,10 @@ int main(int argc, char *argv[]) {
 								pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 								if (xmask == nmask) {
 									for (e = 0; e < di; e++)
-										ary[1 + e].d = 100.0 * pow(val[e],xpow);
+										ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
 								} else {
 									for (e = 0; e < di; e++)
-										ary[1 + e].d = 100.0 * (1.0 - pow(val[e],xpow));
+										ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
 								}
 								ary[1 + di + 0].d = 100.0 * XYZ[0];
 								ary[1 + di + 1].d = 100.0 * XYZ[1];
@@ -1779,7 +1802,7 @@ int main(int argc, char *argv[]) {
 
 				/* Compute sum that includes the affect of power */
 				for (sum = 0.0, e = 0; e < di; e++)
-					sum += pow(val[e], xpow);
+					sum += icx_powlike(val[e], xpow);
 
 				if (sum > uilimit)
 					continue;
@@ -1788,10 +1811,10 @@ int main(int argc, char *argv[]) {
 				ary[0].c = buf;
 				if (xmask == nmask) {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * pow(val[e],xpow);
+						ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
 				} else {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * (1.0 - pow(val[e],xpow));
+						ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
 				}
 				ary[1 + di + 0].d = 100.0 * XYZ[0];
 				ary[1 + di + 1].d = 100.0 * XYZ[1];
@@ -1896,10 +1919,10 @@ int main(int argc, char *argv[]) {
 				if (uilimit < (double)di) {
 					double tot = 0.0;
 					for (e = 0; e < di; e++)
-						tot += pow(val[e],xpow);
+						tot += icx_powlike(val[e],xpow);
 					if (tot > uilimit) {
 						for (e = 0; e < di; e++)
-							val[e] = pow(pow(val[e],xpow) * uilimit/tot, 1.0/xpow);
+							val[e] = icx_powlike(icx_powlike(val[e],xpow) * uilimit/tot, 1.0/xpow);
 					}
 				}
 
@@ -1907,10 +1930,10 @@ int main(int argc, char *argv[]) {
 				ary[0].c = buf;
 				if (xmask == nmask) {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * pow(val[e],xpow);
+						ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
 				} else {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * (1.0 - pow(val[e],xpow));
+						ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
 				}
 				ary[1 + di + 0].d = 100.0 * XYZ[0];
 				ary[1 + di + 1].d = 100.0 * XYZ[1];
@@ -1975,7 +1998,7 @@ int main(int argc, char *argv[]) {
 
 			/* Apply extra power */
 			for (e = 0; e < di; e++)
-				val[e] = pow(val[e], xpow);
+				val[e] = icx_powlike(val[e], xpow);
 
 			/* Do a simple ink limit */
 			if (uilimit < (double)di) {
@@ -2044,8 +2067,8 @@ int main(int argc, char *argv[]) {
 				}
 				if (i == 7)
 					val[3] = 1.0;
-				if (i == 8) {
-					val[0] = val[1] = val[2] = 0.4;
+				if (i == 8) {			/* Special 50/50/50 grey for DTP20 */
+					val[0] = val[1] = val[2] = 0.5;
 					val[3] = 0.0;
 				}
 
@@ -2057,7 +2080,7 @@ int main(int argc, char *argv[]) {
 						val[e] = 1.0;
 				}
 				if (i == 8)
-					val[0] = val[1] = val[2] = 0.6;
+					val[0] = val[1] = val[2] = 0.5;
 			}
 			
 			/* If target space isn't something we recognise, convert it */
@@ -2070,7 +2093,7 @@ int main(int argc, char *argv[]) {
 
 			/* Apply extra power */
 			for (e = 0; e < di; e++)
-				val[e] = pow(val[e], xpow);
+				val[e] = icx_powlike(val[e], xpow);
 
 			/* Do a simple ink limit */
 			if (uilimit < (double)di) {
@@ -2120,7 +2143,7 @@ int main(int argc, char *argv[]) {
 		double rad;
 		double dev[MXTD], Lab[3], col[3];
 
-		wrl = new_vrml(wlname, 1);		/* Do axes */
+		wrl = new_vrml(wlname, 1, 0);		/* Do axes */
 
 		/* Fudge sphere diameter */
 		rad = 15.0/pow(nsets, 1.0/(double)(di <= 3 ? di : 3));
@@ -2147,7 +2170,7 @@ int main(int argc, char *argv[]) {
 		double rad;
 		double dev[MXTD], idev[MXTD], Lab[3], col[3];
 
-		wrl = new_vrml(wdname, 0);
+		wrl = new_vrml(wdname, 0, 0);
 
 		/* Fudge sphere diameter */
 		rad = 15.0/pow(nsets, 1.0/(double)(di <= 3 ? di : 3));

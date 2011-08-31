@@ -13,8 +13,8 @@
  * Copyright 2005 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  *
  * Derived from DTP41.h
  *
@@ -68,9 +68,11 @@ struct _ss {
 	double     phref;			/* Photometric reference (cd/m^2) */
 
 	int		calcount;			/* Calibration needed counter */
+	int     pisrow;             /* patches in a reading direction serpentine rows */
 	int		need_w_cal;			/* White/dark calibration needed flag */
 	int		need_t_cal;			/* Transmission calibration needed flag */
 	int     noautocalib;		/* Don't mode change or auto calibrate */
+	int     forcecalib;			/* Force a calibration even if not near white tile */
 	inst_opt_mode trig;			/* Reading trigger mode */
 	int trig_return;			/* Emit "\n" after trigger */
 	int     offline;			/* nz if we're off line */

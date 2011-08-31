@@ -48,7 +48,7 @@ void
 usage(char *mes) {
 	fprintf(stderr,"Synthetic device model test chart reader - Version %s\n",
 	               ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (mes != NULL)
 		fprintf(stderr,"Error '%s'\n",mes);
 	fprintf(stderr,"usage: synthread [-v] [-s] [separation.icm] profile.[icc|mpp|ti3] outfile\n");
@@ -459,10 +459,10 @@ printf("~1 omax = %f %f %f\n", md.omax[0], md.omax[1], md.omax[2]);
 
 	/* Figure out the color space */
 	if ((fi = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
-		error ("Input file doesn't contain keyword COLOR_REPS");
+		error ("Input file doesn't contain keyword COLOR_REP");
 
 	if ((nmask = icx_char2inkmask(icg->t[0].kdata[fi])) == 0)
-		error ("Input file keyword COLOR_REPS has unknown value");
+		error ("Input file keyword COLOR_REP has unknown value");
 
 	{
 		int i, j, ii;

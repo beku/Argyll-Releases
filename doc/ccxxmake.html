@@ -1,34 +1,66 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
-  <title>ccmxmake</title>
+  <title>ccxxmake</title>
   <meta http-equiv="content-type"
  content="text/html; charset=ISO-8859-1">
   <meta name="author" content="Graeme Gill">
 </head>
 <body>
-<h2><b>spectro/ccmxmake</b></h2>
+<h2><b>spectro/ccxxmake</b></h2>
 <h3>Summary</h3>
-For a particular <span style="font-weight: bold;">Colorimeter</span>
-and <span style="font-weight: bold;">Display</span> combination, use a
+For a normal Colorimeters that rely on a calibration matrix, <span
+ style="font-weight: bold;">ccxxmake</span> allows creation of a
+correction matrix file (<a href="File_Formats.html#.ccmx">ccmx</a>) for
+a particular <span style="font-weight: bold;">Colorimeter</span> <span
+ style="font-weight: bold;"></span> <span style="font-weight: bold;">Display</span>
+combination, by making use a
 reference <span style="font-weight: bold;">Spectrometer</span>
-instrument to create a correction matrix (<a
- href="File_Formats.html#.ccmx">ccmx</a>). This can then be used to
+instrument. This can then be used to
 improve the accuracy
-of subsequent Colorimeter measurements on that Display by using it with
+of subsequent measurements with that Colorimeter on that Display by
+using it with
 the <a href="dispcal.html#X">dispcal</a>,
 <a href="dispread.html#X">dispread</a> and <a href="spotread.html#X">spotread</a>
 -X
 option. See <a href="WideGamutColmters.html">Wide Gamut Displays and
 Colorimeters</a> for more information on why this may be useful.<br>
 <br>
-A list of contributed <span style="font-weight: bold;">ccmx</span>
-files is <a href="ccmxs.html">here</a>.<br>
+For Colorimeters that rely on sensor spectral sensitivity calibration
+information (ie. the X-Rite <span style="font-weight: bold;">i1d3), </span><span
+ style="font-weight: bold;">ccxxmake</span> allows a creation of a
+calibration spectral sample (<a href="File_Formats.html#.ccss">ccss</a>)
+for a particular <span style="font-weight: bold;">Display</span>, by
+making use a
+reference <span style="font-weight: bold;">Spectrometer</span>
+instrument. This can then be used to
+improve the accuracy
+of subsequent measurements on that Display using such Colorimeters, by
+using it with
+the <a href="dispcal.html#X">dispcal</a>,
+<a href="dispread.html#X">dispread</a> and <a href="spotread.html#X">spotread</a>
+-X
+option.<br>
+<br>
+There is a <a href="ccmxs.html">list of contributed</a> <span
+ style="font-weight: bold;">ccmx</span>
+(Colorimeter Correction Matrix) files.<br>
 <h3>Usage Summary</h3>
-<small style="font-family: monospace;">ccmxmake [-options]
+<small style="font-family: monospace;">ccxxmake [-options]
 correction.ccmx<br>
 </small><small style="font-family: monospace;">&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; Verbose mode</small><br
+&nbsp;
+&nbsp;
+&nbsp;
+Verbose
+mode</small><br>
+&nbsp; <a href="#S">-S</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create CCSS rather than CCMX<br>
+&nbsp; <a href="#f">-f file1.ti3[,file2.ti3]</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Create
+from
+one or two .ti3 files rather than measure.<br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><font
  style="font-family: monospace;" size="-1"><a href="#display">-display
@@ -38,54 +70,102 @@ displayname</a>&nbsp; [X11 only] Choose X11 display name</font><br
  style="font-family: monospace;" size="-1">&nbsp;<a href="#dnm">-d n[,m]</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 [X11
-only] Choose the display from the following list (default 1),</font><br
+only]
+Choose
+the
+display
+from the following list (default 1),</font><br
  style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-and optionally choose a different display m for VideoLUT access.</font><br
+and
+optionally
+choose
+a
+different display m for VideoLUT access.</font><br
  style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;<a href="#d">-d
 n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Choose the display from the following list (default 1)</font><br
- style="font-family: monospace;">
+Choose
+the
+display
+from
+the following list (default 1)</font><br style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;</font><font
  style="font-family: monospace;" size="-1"><a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use projector mode (if available)</font><br
- style="font-family: monospace;">
+Use
+projector
+mode
+(if
+available)</font><br style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;<a href="#y">-y
 c|l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Display type, c = CRT, l = LCD</font><br style="font-family: monospace;">
+Display
+type,
+c
+=
+CRT, l = LCD (CCMX)</font><br style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;<a href="#P">-P
 ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Position
-test window and scale it</font><br style="font-family: monospace;">
+test
+window
+and
+scale
+it</font><br style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.</font><br
+ho,vi:
+0.0
+=
+left/top,
+0.5 = center, 1.0 = right/bottom etc.</font><br
  style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.</font><br
+ss:
+0.5
+=
+half,
+1.0 = normal, 2.0 = double etc.</font><br
  style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;</font><font
  style="font-family: monospace;" size="-1"><a href="#F">-F</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Fill whole screen with black background</font><br
- style="font-family: monospace;">
+Fill
+whole
+screen
+with
+black background</font><br style="font-family: monospace;">
 <small style="font-family: monospace;">&nbsp;<span
  style="text-decoration: underline;"></span><a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; [X11 only] Don't set override redirect
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+[X11
+only]
+Don't
+set override redirect
 on test
 window<br>
 </small><font style="font-family: monospace;" size="-1">&nbsp;<a
  href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Disable auto calibration of instrument</font><small
- style="font-family: monospace;"><br>
+Disable
+auto
+calibration
+of
+instrument</font><small style="font-family: monospace;"><br>
 </small><span style="font-family: monospace;">&nbsp;</span><font
  style="font-family: monospace;" size="-1"><a href="#H">-H</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use high resolution spectrum mode (if available)<br>
+Use
+high
+resolution
+spectrum
+mode (if available)<br>
 </font><font style="font-family: monospace;" size="-1">&nbsp;<a
  href="#V">-V</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use adaptive measurement mode (if
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use
+adaptive
+measurement
+mode (if
 available)</font><br style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;<a href="#C">-C
 "command"</a>
@@ -93,48 +173,103 @@ available)</font><br style="font-family: monospace;">
 each
 time a color is set<br>
 </font><small style="font-family: monospace;">&nbsp;<a href="#o">-o <i>observ</i></a>&nbsp;
-&nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Choose CIE Observer for spectral
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;
+Choose
+CIE Observer for CCMX spectral
 data:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp; 1931_2 </small><small
  style="font-family: monospace;"> (def.)</small><small
  style="font-family: monospace;">, 1964_10, S&amp;B
-1955_2, shaw, J&amp;V 1978_2</small><br style="font-family: monospace;">
-<font style="font-family: monospace;" size="-1"></font><font
- style="font-family: monospace;" size="-1">&nbsp;<a href="#W">-W n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Override serial port flow control: n = none, h = HW, x = Xon/Xoff</font><br
+1955_2, shaw, J&amp;V 1978_2<br>
+</small><font style="font-family: monospace;" size="-1">&nbsp;<a
+ href="#s">-s
+steps</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Override
+default patch sequence combination steps (default 3)</font><br
+ style="font-family: monospace;">
+<font style="font-family: monospace;" size="-1">&nbsp;<a href="#W">-W
+n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Override
+serial
+port
+flow
+control: n = none, h = HW, x = Xon/Xoff</font><br
  style="font-family: monospace;">
 <small style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print
 debug diagnostics to stderr<br>
-</small><small style="font-family: monospace;">&nbsp;<a href="#I">-I
+</small><small style="font-family: monospace;">&nbsp;<a
+ href="ccxxmake.html#E">-E "description"</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Override
+the default overall escription</small><br>
+<small style="font-family: monospace;">&nbsp;<a href="#I">-I
 "displayname"</a>
 &nbsp;&nbsp;&nbsp;&nbsp; </small><span style="font-family: monospace;">Set
 display
-make and model description</span><small style="font-family: monospace;"><br>
-&nbsp;<a href="#E">-E "description"</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Set the
-profile Description string&nbsp; (Default "<span
- style="font-style: italic;">inoutfile</span>")</small><br
+make
+and
+model
+description</span><small style="font-family: monospace;"><br>
+&nbsp;</small><small style="font-family: monospace;"><a href="#T">-T
+"displaytech"</a>
+&nbsp;&nbsp;&nbsp;&nbsp; </small><span style="font-family: monospace;">Set
+display
+technology
+description</span> (ie. CRT, LCD etc.)<small
+ style="font-family: monospace;"></small><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><font
- style="font-family: monospace;" size="-1"><a href="#file"><span
- style="font-style: italic;">correction.ccmx</span></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-File to save correction to.</font><br style="font-family: monospace;">
-<font size="-1"><span style="font-family: monospace;"></span></font><font
- size="-1"><span style="font-family: monospace;"></span></font><small><span
- style="font-family: monospace;"></span><span
- style="font-family: monospace;"></span></small><br>
+ style="font-family: monospace;" size="-1"><a href="#file1"><span
+ style="font-style: italic;">correction.ccmx</span></a> |&nbsp;<a
+ href="#file2"></a></font><font style="font-family: monospace;"
+ size="-1"><a href="ccxxmake.html#file2">calibration.ccss</a></font><font
+ style="font-family: monospace;" size="-1"><br>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+File
+to
+save result to.</font><br>
 <h3>Usage Details and Discussion</h3>
 <a name="v"></a>The <b>-v</b> flag causes extra information to be
 printed out during
 chartread operation.<br>
 <br>
+<a name="S"></a><span style="font-weight: bold;">-S</span> By default a
+Colorimeter Correction Matrix (<span style="font-weight: bold;">CCMX</span>)
+will be created, which allows correction for errors with a particular
+Colorimeter and Display combination. If the <span
+ style="font-weight: bold;">-S</span> flag is used, then instead a
+Colorimeter Calibration Spectral Set (<span style="font-weight: bold;">CCSS</span>)
+file is created, that allows calibrating any suitable Colorimeter to
+the Display.<br>
+<br>
+<a name="f"></a><span style="font-weight: bold;">-f <span
+ style="font-style: italic;">file1.ti3[,file2.ti3]</span></span> By
+default <span style="font-weight: bold;">ccxxmake</span> creates a
+.ccmx file by displaying test patches on the screen, and then prompting
+you to measure them interactively with the two instruments. An
+alternative is to create a small number of test values using <span
+ style="font-weight: bold;">targen</span> suitable for display
+profiling, and then measure them with the two instruments using <span
+ style="font-weight: bold;">dispread</span> to create two spectral
+reading files (ie. use the <span style="font-weight: bold;">-s</span>
+flag with dispread), and then provide the two files as arguments to <span
+ style="font-weight: bold;">ccxxmake -f</span>. The filenames should be
+concatenated with a <span style="font-weight: bold;">","</span>
+separator without spaces. You will also have to supply a display name
+using the <span style="font-weight: bold;">-I</span> option.<br>
+When creating a CCSS file, only spectral readings from the display
+measured with the reference instrument are needed, and a single <span
+ style="font-weight: bold;">.ti3</span> file can be provided.<br>
+<br>
 <a name="display"></a>When running on a UNIX based system that used the
 X11
 Windowing
-System, <b>ccmxmake</b> will by default use the $DISPLAY environment
+System, <b>ccxxmake</b> will by default use the $DISPLAY environment
 variable to determine which display and screen to read from. This can
 be overridden by supplying an X11 display name to the <span
  style="font-weight: bold;">-display</span> option. Note that if
@@ -146,7 +281,7 @@ Xinerama is active, you can't select the screen using $DISPLAY or
 the test window. If the system has more than
 one display or screen, an alternate display/screen can be selected with
 the <span style="font-weight: bold;">-d</span> parameter. If you
-invoke <b>ccmxmake</b>
+invoke <b>ccxxmake</b>
 so as to display the usage
 information (i.e. "dispcal -?" or "dispcal --"), then the discovered
 displays/screens will be listed. Multiple displays may not be listed,
@@ -174,7 +309,7 @@ in projector mode, using
 instruments that
 support this.<br>
 <br>
-<a name="y"></a>&nbsp; Display type. Colorimeters can
+<a name="y"></a>&nbsp; Display type. (CCMX creation.) Colorimeters can
 do a more accurate job if they know what type of display technology
 they are measuring. Use <span style="font-weight: bold;">-yc</span> if
 you are
@@ -252,7 +387,8 @@ manner (e.g. by generating a raster file of the given color and sending
 it to the display being profiled), before returning. Note that a test
 window will also be created on the system running dispread.<br>
 <br>
-<a name="o"></a> The <b>-o</b> flag allows specifying a tristimulus
+<a name="o"></a> (CCMX creation) The <b>-o</b> flag allows specifying
+a tristimulus
 observer, and is used to compute
 tristimulus values from spectral readings.&nbsp; The following choices
 are available:<br>
@@ -264,6 +400,19 @@ observer<br>
 &nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree observer<br>
 &nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
 observer<br>
+<br>
+<a name="s"></a>The <b>-s steps</b><span style="font-weight: bold;"></span>
+parameter overrides the default number of test patch combination steps
+used in
+measuring a colorimeter &amp; display combination.<span
+ style="font-weight: bold;"></span><span style="font-weight: bold;"></span><span
+ style="font-weight: bold;"></span>&nbsp; The steps are those out of
+every combination of R,G &amp; B values of the given number of steps
+that have at least one colorant at 100%. So 2 steps gives 7 test
+patches, 3 gives 19, 4 gives 37, 5 gives 61, 6 gives 91 etc. Note that
+typically this won't make much difference to the resulting calibration,
+since it depends primarily on the underlying spectral characteristics
+of the display.<br>
 <br>
 <a name="W"></a>The <b>-W</b> <span style="font-weight: bold;">n|h|x</span>
 parameter overrides the default serial communications
@@ -280,20 +429,9 @@ information, depending on the instrument. This can be useful in
 tracking
 down why an instrument can't connect.<br>
 <br>
-<a name="I"></a>The <b>-I</b> parameter allows setting of the display
-description string in the resulting <span style="font-weight: bold;">ccmx</span>
-file. Since the default display description is probably very generic,
-it is <span style="font-weight: bold;">highly recommended</span> that
-a description of the make and model of the display be provided here.
-The default or given display description will be printed before the
-menu. With most command line
-shells, it will be necessary to enclose the parameter with double
-quotes, so that spaces and other special characters are included in the
-parameter, and not mistaken for the start of another flag, or as a
-final command line parameters.<br>
-<br>
 <a name="E"></a>The <b>-E</b> parameter allows overriding the <span
- style="font-weight: bold;">ccmx</span> files overall description tag.
+ style="font-weight: bold;">ccmx/ccss</span> files overall description
+tag.
 Normally this is not necessary. With
 most command line shells, it will be
 necessary to enclose the parameter with double quotes, so that spaces
@@ -301,7 +439,34 @@ and other special characters are included in the parameter, and not
 mistaken for the start of another flag, or as a final command line
 parameter. <br>
 <br>
-<a name="file"></a>The <span
+<a name="I"></a>The <b>-I</b> parameter allows setting of the display
+description string in the resulting <span style="font-weight: bold;">ccmx/ccss</span>
+file. Since the default display description is probably very generic,
+it is <span style="font-weight: bold;">highly recommended</span> that
+a description of the make and model of the display be provided here, or
+set a display technology description using <span
+ style="font-weight: bold;">-T</span> (see below).
+The default or given display description will be printed before the
+menu. With most command line
+shells, it will be necessary to enclose the parameter with double
+quotes, so that spaces and other special characters are included in the
+parameter, and not mistaken for the start of another flag, or as a
+final command line parameters.<br>
+<br>
+<a name="I"></a>The <b>-T</b> parameter allows setting of the display
+technology description string in the resulting <span
+ style="font-weight: bold;">ccmx/ccss</span>
+file. The applicability of the calibration mainly depends on the
+technology type of the display, so a description of the technology (ie.
+"CRT", "LCD", "LCD + backlight type + LCD type",&nbsp; etc.) is <span
+ style="font-weight: bold;">highly recommended</span>, because it can
+make the calibration more widely usable. With most command line
+shells, it will be necessary to enclose the parameter with double
+quotes, so that spaces and other special characters are included in the
+parameter, and not mistaken for the start of another flag, or as a
+final command line parameters.<br>
+<br>
+<a name="file1"></a>The <span
  style="font-weight: bold; font-style: italic;">correction.ccmx</span>
 is
 the name of the file to save the resulting <a
@@ -311,9 +476,21 @@ Colorimeter model and the display make and model. By convention it
 should have a <span style="font-weight: bold;">.ccmx</span> file
 extension.<br>
 <br>
-<hr style="width: 100%; height: 2px;"><br>
+<a name="file2"></a>The <span
+ style="font-weight: bold; font-style: italic;">correction.ccss</span>
+is
+the name of the file to save the resulting <a
+ href="File_Formats.html#.ccss">Colorimeter Calibration Spectral Samples</a>
+to.
+It is best to give it a short but informative name that includes the
+display technology or model. By convention it
+should have a <span style="font-weight: bold;">.ccss</span> file
+extension.<br>
+<br>
+<hr style="width: 100%; height: 2px;">
+<h3>Instrument Communications:</h3>
 Unlike the other measurement utilities,<span style="font-weight: bold;">
-ccmxmake</span> doesn't connect to the
+ccxxmake</span> doesn't connect to the
 instrument until it is about to make a measurement. This allows for the
 possibility of using a different instrument for each measurement.<br>
 <br>
@@ -326,18 +503,31 @@ Press 1 .. 4:<br>
 3) [ Compute Colorimeter Correction Matrix &amp; save it ]<br>
 4) Exit<br>
 <br>
-There are two measurements to be made, after which the correction
+For creating a CCMX there are two measurements to be made, after which
+the correction
 matrix can
 be computed and saved. Before each measurement, the instrument may need
-calibrating.<br>
+calibrating. For creating a CCSS a single measurement is needed.<br>
 <br>
-One measurement needs a spectral instrument.<br>
+&nbsp;A spectral measurement using a spectral instrument is always
+needed.<br>
 <br>
-The other measurement needs the Colorimeter that the correction matrix
-is being created for.<br>
+&nbsp;A measurement using the Colorimeter that the correction matrix
+is being created for is needed in the case of creating a CCMX, but <span
+ style="font-weight: bold;">not</span> needed when creating a CCSS.<br>
 <br>
 There will be a message before the menu indicating which of the
 measurements has been completed.<br>
+<br>
+<hr style="width: 100%; height: 2px;">
+<h4>Display Setup:</h4>
+Because ccmx/ccss is measuring spectral matching, the exact levels of
+each
+channel is not important, so the display settings or calibration state
+shouldn't make any difference to the result. Similarly, the number and
+variety of test patches shouldn't make much difference, as long as
+there is at least Red, Green, Blue and White test patches.<br>
+&nbsp;<br>
 <br>
 <br>
 <br>

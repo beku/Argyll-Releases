@@ -42,7 +42,7 @@
 void
 usage(void) {
 	fprintf(stderr,"Create test images, default hex RGB surface and wedge, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: timage [-options] outfile.tif\n");
 //	fprintf(stderr," -v             Verbose\n");
 	fprintf(stderr," -t             Generate rectangular gamut boundary test chart\n");

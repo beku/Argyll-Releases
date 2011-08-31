@@ -10,8 +10,8 @@
  * Copyright 1996 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  *
  * Derived from DTP51.c
  */
@@ -40,8 +40,10 @@
 #include <string.h>
 #include <stdarg.h>
 #include <time.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#endif /* !SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"

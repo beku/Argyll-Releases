@@ -12,15 +12,14 @@
  * Copyright 2001 - 2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  *
  */
 
 #ifdef __cplusplus
 	extern "C" {
 #endif
-
 
 /* ----------------------------- */
 /* Possible types of instruments */
@@ -39,11 +38,13 @@ typedef enum {
 	instI1Display,				/* GretagMacbeth i1 Display */
 	instI1Monitor,				/* GretagMacbeth i1 Monitor */
 	instI1Pro,					/* GretagMacbeth i1 Pro */
+	instI1Disp3,				/* Xrite i1 DisplayPro, ColorMunki Display */
 	instColorMunki,				/* X-Rite ColorMunki */
 	instHCFR,					/* Colorimtre HCFR */
 	instSpyder2,				/* Datacolor/ColorVision Spyder2 */
 	instSpyder3,				/* Datacolor Spyder3 */
 	instHuey,					/* GretagMacbeth Huey */
+
 } instType;
 
 /* Utility functions in libinsttypes */
@@ -76,6 +77,7 @@ unsigned short idProduct);
 /* Fill in an instruments illuminant spectrum. */
 /* Return 0 on sucess, 1 if not not applicable. */
 extern int inst_illuminant(xspect *sp, instType itype);
+
 
 #ifdef __cplusplus
 	extern "C" {

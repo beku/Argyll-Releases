@@ -19,12 +19,17 @@
 /*
  * TTBD:
  *       Improve error handling.
+ *
+ *	It might be good to offer the black mapping method as an option (gmm_BPmap),
+ *  as well as offering different profile (xicc/xlut.c) black point options
+ *  (neutral, K hue max density, CMY max density, any max density).
+ *
  */
 
 
 
-#define VERBOSE			/* (defined) Print out extra interesting information when verbose is set */
-#define XRES 100		/* Res of plot */
+#define VERBOSE			/* [Def] Print out extra interesting information when verbose is set */
+#undef PLOT_DIAG_WRL	/* [Und] Always plot "gammap.wrl" */
 
 	/* What do display when user requests disgnostic .wrl */
 #define PLOT_SRC_GMT	/* [Def] Plot the source surface to "gammap.wrl" as well */
@@ -53,6 +58,9 @@
 #undef SHOW_NEIGBORS	/* [Und] Show nearsmth neigbors in gammap.wrl */
 
 #undef PLOT_DIGAM		/* [Und] Rather than DST_GMT - don't free it (#def in nearsmth.c too) */
+
+
+#define XRES 100		/* Res of plots */
 
 /* Optional marker points for gamut mapping diagnosotic */
 struct {
@@ -197,6 +205,51 @@ gammapweights pweights[] = {
 			0.0			/* Fine tuning expansion weight, 0 - 1 */
 		}
 	},
+#ifdef NEVER
+	{
+		gmm_l_d_blue,		/* Increase maintaining hue importance for blue */
+		{
+			{
+				-1.0,	/* Cusp luminance alignment weighting 0 = none, 1 = full */
+				-1.0,	/* Cusp chroma alignment weighting    0 = none, 1 = full */
+				 0.0	/* Cusp hue alignment weighting       0 = none, 1 = full */
+			},
+			-1.0		/* Chroma expansion 1 = none */
+		},
+		{			/* Radial weighting */
+			-1.0,	/* Radial error overall weight, 0 + */
+			-1.0,	/* Radial hue dominance vs l+c, 0 - 1 */
+			-1.0	/* Radial l dominance vs, c, 0 - 1 */
+		},
+		{			/* Weighting of absolute error of destination from source */
+			-1.0,	/* Absolute error overall weight */
+			 0.8,	/* Hue dominance vs l+c, 0 - 1 */
+
+			-1.0,	/* White l dominance vs, c, 0 - 1 */
+			-1.0,	/* Grey l dominance vs, c, 0 - 1 */
+			-1.0,	/* Black l dominance vs, c, 0 - 1 */
+
+			-1.0,	/* White l threshold ratio to grey distance, 0 - 1 */
+			-1.0,	/* Black l threshold ratio to grey distance, 0 - 1 */
+
+			-1.0,	/* L error extra power, none = 1.0 */
+			-1.0	/* L error xover threshold in DE */
+		},
+		{			/* Relative error preservation using smoothing */
+			-1.0, 25.0	/* Relative Smoothing radius L* H* */
+		},
+		{		/* Weighting of excessive compression error, which is */
+				/* the src->dst vector length over the available dst depth. */
+				/* The depth is half the distance to the intersection of the */
+				/* vector to the other side of the gamut. (doesn't get triggered much ?) */
+			-1.0,		/* Compression depth weight */
+			-1.0		/* Expansion depth weight */
+		},
+		{
+			-1.0		/* Fine tuning expansion weight, 0 - 1 */
+		}
+	},
+#endif /* NEVER */
 	{
 		gmm_light_yellow,		/* Treat yellow differently, to get purer result. */
 		{
@@ -265,7 +318,7 @@ gammapweights sweights[] = {
 		},
 		{			/* Weighting of absolute error of destination from source */
 			1.0,	/* Absolute error overall weight */
-			0.3,	/* Hue dominance vs l+c, 0 - 1 */
+			0.4,	/* Hue dominance vs l+c, 0 - 1 */
 
 			0.6,	/* White l dominance vs, c, 0 - 1 */
 			0.4,	/* Grey l dominance vs, c, 0 - 1 */
@@ -565,7 +618,6 @@ gammap *new_gammap(
 		/* - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 		/* The first task is to decide what our target destination */
 		/* white and black points are going to be. */
-
 
 		/* Figure out what our initial target destination white point is going to be: */
 
@@ -1389,9 +1441,11 @@ typedef struct {
 			doaxes = 1;
 #endif
 			if (diagname != NULL)
-				wrl = new_vrml(diagname, doaxes);
+				wrl = new_vrml(diagname, doaxes, 0);
+#ifdef PLOT_DIAG_WRL
 			else
-				wrl = new_vrml("gammap.wrl", doaxes);
+				wrl = new_vrml("gammap.wrl", doaxes, 0);
+#endif
 		}
 
 		if (wrl != NULL) {
@@ -1800,7 +1854,7 @@ typedef struct {
 			wrl->add_cusps(wrl, sil_gam, 0.6, NULL);
 #endif /* PLOT_SRC_CUSPS */
 #ifdef PLOT_DST_CUSPS
-			wrl->add_cusps(wrl, d_gam, 0.2, NULL);
+			wrl->add_cusps(wrl, d_gam, 0.3, NULL);
 #endif /* PLOT_DST_CUSPS */
 
 #ifdef PLOT_TRANSSRC_CUSPS
@@ -2128,6 +2182,9 @@ typedef struct {
 
 
 		free_nearsmth(nsm, nnsm);
+
+	} else if (diagname != NULL && verb) {
+		printf("Warning: Won't create '%s' because there is no 3D gamut mapping\n",diagname);
 	}
 
 #ifdef PLOT_GAMUTS

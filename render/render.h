@@ -18,8 +18,9 @@
  */
 
 /* This is basically a simple 2D ray tracing renderer, so it's not especially */
-/* efficient, but but it's simple and direct, easy to add new primitives or */
-/* capabilities, is high quality, and is fast enough for printed output. */
+/* efficient, but it's simple and direct, easy to add new primitives or */
+/* capabilities, is high quality, and has a an accelleration algorithm that */
+/* makes it fast enough for printed output. */
 
 /* Mathematical coordinate in mm are used for primitives, ie. the origin is */
 /* the bottom left corner. */
@@ -149,7 +150,7 @@ font2d fo,			/* Font to use */
 char ch,			/* Character code to be printed */
 double x, double y,	/* Location of bottom left of normal orientation text */
 double h,			/* Height of text in normal orientation */
-int or,				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = right */
+int or,				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = up */
 color2d c			/* Color of text */
 );
 
@@ -162,7 +163,7 @@ font2d fo,			/* Font to use */
 char *string,		/* Character code to be printed */
 double x, double y,	/* Location of bottom left of normal orientation text */
 double h,			/* Height of text in normal orientation */
-int or,				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = right */
+int or,				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = up */
 color2d c			/* Color of text */
 );
 
@@ -174,7 +175,7 @@ double *yinc,
 font2d fo,			/* Font to use */
 char *string,		/* Character code to be printed */
 double h,			/* Height of text in normal orientation */
-int or				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = right */
+int or				/* Orintation, 0 = right, 1 = down, 2 = left, 3 = up */
 );
 
 /* ------------------------------------ */

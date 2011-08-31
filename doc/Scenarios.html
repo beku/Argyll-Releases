@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
   <title>Argyll Usage Scenarios</title>
@@ -146,8 +146,9 @@ Once this is done, <a href="dispcal.html">dispcal</a> can be run to
 guide you through the display adjustments, and then calibrate it. By
 default, the brightness and white point will be kept
 the same as the devices natural brightness and white point. The default
-response curve is a gamma of 2.4 on MSWindows and X11 systems, and 1.8
-on Apple OSX systems. 2.4 is close to that of&nbsp; many
+response curve is a gamma of 2.4, except for Apple OS X systems prior
+to 10.6 where a gamma of 1.8 is the default. 2.4 is close to that
+of&nbsp; many
 monitors, and close to that of the sRGB colorspace. <br>
 <br>
 A typical calibration that leaves the brightness and white point alone,
@@ -197,8 +198,8 @@ may not be possible to independently calibrate and profile each display
 if they appear as one single screen to the operating system, or if it
 is not possible to set separate video lookup tables for each
 display. You can change the position and size of the test
-window using the <a href="dispcal.html#p"><span
- style="font-weight: bold;">-p</span></a> parameter.
+window using the <a href="dispcal.html#P"><span
+ style="font-weight: bold;">-P</span></a> parameter.
 You can determine how best to arrange the test window, as well as
 whether each display has separate video lookup capability, by
 experimenting with the <a href="dispwin.html">dispwin</a> tool. <br>
@@ -314,7 +315,7 @@ screensaver before starting the
 process. Exactly the same facilities are provided to select alternate
 displays using the <span style="font-weight: bold;">-d</span>
 parameter, and an alternate location and size for the test window using
-the <span style="font-weight: bold;">-p</span> parameter as with <span
+the <span style="font-weight: bold;">-P</span> parameter as with <span
  style="font-weight: bold;">dispcal</span>.<br>
 <h4><a name="PM4"></a>Profiling in several steps: Creating a display
 profile</h4>
@@ -338,21 +339,27 @@ To create a matrix/shaper profile, the following suffices:<br>
 For a LUT based profile, where gamut mapping is desired, then a source
 profile will need to be provided to define the source gamut. For
 instance, if the display profile was likely to be linked to a CMYK
-printing source profile, say "swop.icm", then the following would
+printing source profile, say "swop.icm" or "fogra39l.icm", then the
+following would
 suffice:<br>
 <br>
 <a href="colprof.html">colprof</a> <a href="colprof.html#v">-v</a> <a
  href="colprof.html#E">-D"Display A"</a>
 <a href="colprof.html#q">-qm</a> <a href="colprof.html#S">-S</a><a
- href="colprof.html#S">
-swop.icm</a> <a href="colprof.html#c">-cpp</a> <a
- href="colprof.html#d">-dmt</a>
+ href="colprof.html#S"> fogra39l.icm</a> <a href="colprof.html#c">-cpp</a>
+<a href="colprof.html#d">-dmt</a>
 <a href="colprof.html#p1">DisplayA</a><br>
 <br>
 Make sure you check the delta E report at the end of the profile
 creation, to see if the profile is behaving reasonably.<br>
 If a calibration file was used with <a href="dispread.html">dispread</a>,
-then it will be converted to a vcgt tag in the profile, so that the
+then
+it
+will
+be
+converted
+to
+a vcgt tag in the profile, so that the
 operating system or other system color tools load the lookup curves
 into the display hardware, when the profile is used.<br>
 <h4><a name="PM5"></a>Installing a display profile</h4>
@@ -401,7 +408,11 @@ More system specific details, including how to create such startup
 scripts are <a href="dispprofloc.html">here</a>. <br>
 <br>
 If you are using Microsoft <span style="font-weight: bold;">Vista</span>,
-there is a known <span style="font-weight: bold;">bug</span> in Vista
+there
+is
+a
+known
+<span style="font-weight: bold;">bug</span> in Vista
 that resets the calibration every time a
 fade-in effect is executed, which happens if you lock and unlock the
 computer, resume from sleep or hibernate, or User Access Control is
@@ -418,7 +429,7 @@ On X11/Linux systems, you could try adding <a href="dispwin.html">dispwin</a>
  style="font-weight: bold;">~/.config/autostart</span> file, so that
 your window manager automatically sets calibration when it starts. If
 you are running XRandR 1.2, you might
-consider running the experimental <a href="dispwin.html#D">dispwin -D</a>
+consider running the experimental <a href="dispwin.html#D">dispwin -E</a>
 in the background, as in its "daemon" mode it will
 update the profile and calibration in response to any changes in the
 the connected display.<br>
@@ -460,8 +471,12 @@ addressing this is to "acclimatise" the instrument before commencing
 measurements by placing it on the screen in a powered up state, and
 leaving it for some time. (Some people leave it for up to an hour to
 acclimatise.). Another approach is to try and <a href="dispcal.html#I">compensate
-for dark calibration changes</a> (<span style="font-weight: bold;">-Ib</span>)
-by doing on the fly calibrations during the measurements, based on the
+for
+dark
+calibration
+changes</a> (<span style="font-weight: bold;">-Ib</span>)
+by
+doing on the fly calibrations during the measurements, based on the
 assumption that the black level of the display itself won't change
 significantly. <br>
 <br>
@@ -487,7 +502,13 @@ colorants that differ significantly from those typical displays,&nbsp;
 (ie. you have a Wide Gamut Display), then you may get disappointing
 results with a Colorimeter. One way of addressing this problem is to
 use a <a href="File_Formats.html#.ccmx">Colorimeter Correction Matrix</a>.
-These are specific to a particular Colorimeter and Display make and
+These
+are
+specific
+to
+a
+particular
+Colorimeter and Display make and
 model combination, although a matrix for a different but similar type
 of display may give better results than none at all. A list of
 contributed <span style="font-weight: bold;">ccmx</span> files is <a
@@ -547,9 +568,16 @@ HCT</a> :<br>
 <br>
 and <a
  href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.html">Christophe
-M&eacute;tairie's Digital TargeT 003</a> and <a
+M&eacute;tairie's
+Digital
+TargeT
+003</a> and <a
  href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.html">Christophe
-M&eacute;tairie's Digital Target - 3</a> :<br>
+M&eacute;tairie's
+Digital
+Target
+-
+3</a> :<br>
 <br>
 <img alt="CMP_DT_003" src="CMP_DT_003.jpg"
  style="width: 186px; height: 141px;">&nbsp; <img
@@ -557,7 +585,9 @@ M&eacute;tairie's Digital Target - 3</a> :<br>
  src="CMP_Digital_Target-3.jpg"><br>
 <br>
 and the <a href="http://www.silverfast.com/show/dc-targets/en.html">LaserSoft
-Imaging DCPro Target</a>:<br>
+Imaging
+DCPro
+Target</a>:<br>
 <br>
 <img style="width: 153px; height: 122px;" alt="LaserSoft DCPro Target"
  src="LSDC.jpg"><br>
@@ -571,7 +601,7 @@ same state when used subsequently with the resulting profile. For a
 camera, the chart needs to be lit in a controlled and even manner using
 the light source that will be used for subsequent photographs, and
 should be shot so as to minimise any geometric distortion, although the
-<a href="scanin.html%20#p">scanin -p</a> flag may be used to compensate
+<a href="scanin.html#p">scanin -p</a> flag may be used to compensate
 for some degree of distortion. As with any color profiling task, it is
 important to setup a known and repeatable image processing flow, to
 ensure that the resulting profile will be usable.<br>
@@ -602,6 +632,10 @@ an
 individual or batch average file along with the chart containing
 this
 information, or downloadable from their web site.<br>
+NOTE that the reference file for the IT8.7/2 chart supplied with <span
+ style="font-weight: bold;">Monaco&nbsp;EZcolor</span> can be obtained
+by unzipping the .mrf file. (You may have to make a copy of the file
+with a .zip extension to do this.)<br>
 <br>
 For the ColorChecker 24 patch chart, the
 <span style="font-weight: bold;">ref/ColorChecker.cht</span> file
@@ -626,17 +660,33 @@ are composed of multiple different pigments,
 giving it reflective spectra that are more representative of the real
 world, unlike many other charts that are created out of combination of
 3 or 4 colorants.<br>
-<span style="text-decoration: underline;">I don't recommend</span>
-buying the ColorChecker SG chart at the present time, since the
-manufacturer doesn't
-provide any CIE reference information for it, making it relatively
-useless for creating profiles unless you are using X-Rite software to
-do so. [There was a suggestion in December 2009 That X-Rite will
-address this issue by making the reference information available on
-their Website, but at the time of writing, this hasn't happened yet]<br>
-If you do happen to have access to the ColorChecker SG reference
-information, or you have measured it yourself using a color instrument,<br>
-then you may need to convert the reference information from spectral <span
+A limited CIE reference file is available from X-Rite <a
+ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.txt">here</a>,
+but
+it
+is
+not
+in
+the
+usual CGATS format. To convert it to a CIE
+reference file useful for <span style="font-weight: bold;">scanin</span>,
+you
+will
+need
+to
+edit
+the
+X-Rite file using a <span style="text-decoration: underline;">plain
+text</span> editor, first
+deleting everything before the line starting with "A1" and everything
+after "N10", then prepending <a href="SG_header.txt">this header</a>,
+and appending <a href="SG_footer.txt">this footer</a>, making sure
+there are no blank lines inserted in the process.<br>
+If you do happen to have access to a more comprehensive instrument
+measurement of the ColorChecker SG, or you have measured it yourself
+using a color instrument,<br>
+then you <span style="text-decoration: underline;">may</span> need to
+convert the reference information from spectral <span
  style="font-weight: bold;">ColorCheckerSG.txt</span> file to CIE value
 <span style="font-weight: bold;">ColorCheckerSG.cie</span>
 reference file,
@@ -667,13 +717,19 @@ patches, the <span style="font-weight: bold;"><span
  style="font-weight: bold;">ref/</span>CMP_DT_003.cht</span>
 file
 should be used, and the cie reference <span style="font-weight: bold;"></span>files
-come with the chart.<br>
+come
+with
+the
+chart.<br>
 <br>
 For the Christophe M&eacute;tairie's Digital Target-3 chart with 570
 patches, the <span style="font-weight: bold;">ref/CMP_Digital_Target-3.cht</span>
 file
 should be used, and the cie reference <span style="font-weight: bold;"></span>files
-come with the chart.<br>
+come
+with
+the
+chart.<br>
 <br>
 For the LaserSoft DCPro chart, the <span style="font-weight: bold;">ref/LaserSoftDCPro.cht</span>
 file should be used, and reference <span style="font-weight: bold;">.txt</span>
@@ -1048,7 +1104,9 @@ For a DTP41 to the default serial port:<br>
 prompt you through the process of reading each sheet or strip. See <a
  href="chartread.html">chartread</a> for more details on the responses
 for each type of instrument. Continue with <a href="Scenarios.html#PP5">Creating
-a printer profile</a>.<br>
+a
+printer
+profile</a>.<br>
 <br>
 <h4><a name="PP4"></a>Reading a print test chart using a scanner or
 camera<br>
@@ -1070,15 +1128,17 @@ spectral response can cause color errors.<br>
 * Spectral differences caused by different black amounts in the print
 test chart can cause
 color errors. <br>
-* The IT8 chart gamut may be so much smaller than the printers that the
-scanner profile is too inaccurate. <br>
+* The scanner reference chart gamut may be much smaller than the
+printers gamut, making the scanner profile too inaccurate to be useful.
+<br>
 <br>
 As well as some of the above, a camera may not be suitable if it
 automatically adjusts exposure or white point when taking a picture,
 and this behavior cannot be disabled.<br>
 <br>
-The end result is often a profile that has a slight color cast to,
-compared to a profile created using a colorimeter or spectrometer..<br>
+The end result is often a profile that has a noticeable color cast,
+compared to a profile created using a colorimeter or spectrometer.<br>
+<br>
 <br>
 It is assumed that you have created a scanner or camera profile
 following the <a href="http://www.argyllcms.com/doc/Scenarios.html#PS1">procedure</a>
@@ -1111,8 +1171,15 @@ only be roughly cropped so as to contain the test chart.<br>
 The scanner recognition files
 created when <span style="font-weight: bold;">printtarg</span> was run
 is assumed to be called <span style="font-weight: bold;">PrinterB.cht</span>.
-Using the scanner profile created previously (assumed to be called <span
- style="font-weight: bold;">scanner.icm</span>), the printer test chart
+Using
+the
+scanner
+profile
+created
+previously
+(assumed to be called <span style="font-weight: bold;">scanner.icm</span>),
+the
+printer test chart
 scan patches are converted to CIE values using the <span
  style="font-weight: bold;">scanin</span> tool:<br>
 <br>
@@ -1166,7 +1233,8 @@ being
 created, specify a display profile (e.g. sRGB) as the source gamut. If
 a display profile is being created, then specify a printer profile as
 the source
-(e.g. SWOP).&nbsp; When linking to the profile you have created this
+(e.g. Figra, SWOP etc.).&nbsp; When linking to the profile you have
+created this
 way as the output profile, then use perceptual intent if the source is
 the opposite type, and relative colorimetric if it is the same type.<br>
 <br>
@@ -1201,14 +1269,17 @@ be a typical profile usage:<br>
  href="colprof.html#c">-cmt</a> <a href="colprof.html#d">-dpp</a>
 <a href="colprof.html#p1">PrinterA</a><br>
 <br>
-or if you intent to print from SWOP style CMYK originals:<br>
+or if you intent to print from Fogra, SWOP or other standard CMYK style
+originals:<br>
 <br>
 <a href="colprof.html">colprof</a> <a href="colprof.html#v">-v</a> <a
  href="colprof.html#E">-D"Printer A"</a> <a href="colprof.html#q">-qm</a>
-<a href="colprof.html#S">-S</a><a href="colprof.html#S">
-swop.icm</a> <a href="colprof.html#c">-cmt</a> <a
- href="colprof.html#d">-dpp</a>
+<a href="colprof.html#S">-S</a><a href="colprof.html#S"> fogra39l.icm</a>
+<a href="colprof.html#c">-cmt</a> <a href="colprof.html#d">-dpp</a>
 <a href="colprof.html#p1">PrinterA</a><br>
+<br>
+If you know what colorspace your originals are in, use that as the
+argument to <span style="font-weight: bold;">-S</span>.<br>
 <br>
 <h4><a name="PP6"></a>Choosing a black generation curve (and other CMYK
 printer options)<br>
@@ -1414,8 +1485,14 @@ Normally the total ink limit
 will be read from the <span style="font-weight: bold;">PrinterB.ti3</span>
 file, and will be set at a level 10% lower than the number used in
 creating the test chart values using <a href="targen.html#l">targen -l</a>.
-If you want to override this with a lower limit, then use the <a
- href="colprof.html#l">-l flag</a>.<br>
+If
+you
+want
+to
+override
+this
+with a lower limit, then use the <a href="colprof.html#l">-l
+flag</a>.<br>
 <br>
 <a href="colprof.html">colprof</a> <a href="colprof.html#v">-v</a> <a
  href="colprof.html#E">-D"Printer B"</a> <a href="colprof.html#q">-qm</a>
@@ -1497,7 +1574,9 @@ calibration test chart that consists
 of per channel color wedges is printed. The calibration chart is
 converted into calibration curves by reading it and then processing the
 resultant .ti3 using <span style="font-weight: bold;">printcal</span>,.
-During the subsequent
+During
+the
+subsequent
 <span style="text-decoration: underline;">profiling</span>, the
 calibration curves will need to be applied to the
 profile test chart in the process of using <span
@@ -1559,6 +1638,13 @@ un-profiled and un-calibrated mode when doing this print. Having done
 this, there will be a PrinterA.ti3 or PrinterB.ti3 file
 containing the step wedge calibration chart readings.<br>
 <br>
+<span style="font-weight: bold;">NOTE</span> that if you are
+calibrating a raw printer driver, and there is considerable dot gain,
+then you may want to use the <a href="targen.html#p">-p</a> parameter
+to adjust the test chart point distribution to spread them more evenly
+in perceptual space, giving more accurate control over the calibration.
+Typically this will be a value greater than one for a device that has
+dot gain, e.g. values of 1.5, 2.0 or 2.5 might be good places to start.<br>
 <h4><a name="PC4"></a>Creating a printer calibration<br>
 </h4>
 The <a href="printcal.html">printcal</a> tool turns a calibration
@@ -1654,14 +1740,38 @@ The resulting calibration curves can be used with the following other
 Argyll tools:<br>
 <br>
 &nbsp;&nbsp;&nbsp; <a href="printtarg.html#K">printtarg</a>&nbsp;&nbsp;&nbsp;&nbsp;
-To apply calibration to a profile test chart, and/or to have it
+To
+apply
+calibration
+to
+a
+profile
+test chart, and/or to have it
 included in .ti3 file.<br>
 &nbsp;&nbsp;&nbsp; <a href="cctiff.html#p2">cctiff</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-To apply color management and calibration to an image file.<br>
+To
+apply
+color
+management
+and
+calibration
+to an image file.<br>
 &nbsp;&nbsp;&nbsp; <a href="applycal.html#p1">applycal</a>&nbsp;&nbsp;&nbsp;&nbsp;
-To incorporate calibration into an ICC profile.<br>
+To
+incorporate
+calibration
+into
+an
+ICC
+profile.<br>
 &nbsp;&nbsp;&nbsp; <a href="chartread.html#I">chartread</a>&nbsp;&nbsp;
-To override the calibration assumed when reading a profile chart.<br>
+To
+override
+the
+calibration
+assumed
+when
+reading a profile chart.<br>
 <br>
 <br>
 In a workflow <span style="font-weight: bold;">with</span> native
@@ -1792,7 +1902,13 @@ black generation and ink limiting:<br>
 <br>
 <br>
 In <a href="collink.html#G">inverse output table gamut mapping mode</a>,
-the pre-computed intent mappings inside the profiles are not used, but
+the
+pre-computed
+intent
+mappings
+inside
+the
+profiles are not used, but
 instead the gamut mapping between source and destination is tailored to
 the specific gamuts of the two profiles, and the intent parameter
 supplied to <span style="font-weight: bold;">collink</span>. In

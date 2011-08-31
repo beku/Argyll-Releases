@@ -9,8 +9,8 @@
  * Copyright 1996 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* 
@@ -37,8 +37,11 @@
 #include <string.h>
 #include <time.h>
 #include <stdarg.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#include "numlib.h"
+#endif /* !SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -125,7 +128,7 @@ dtp92_fcommand(
 		rv = extract_ec(out);
 #ifdef NEVER
 if (strcmp(in, "0PR\r") == 0)
-rv = 0x1b;
+rv = DTP92_NEEDS_OFFSET_DRIFT_CAL;		/* Emulate 1B error */
 #endif /* NEVER */
 		if (rv > 0) {
 			rv &= inst_imask;
@@ -187,9 +190,9 @@ dtp92_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 		/*											*/
 		/* Set config, interface, write end point, read end point, read quanta */
 		if (itype == instDTP94)
-			p->icom->set_usb_port(p->icom, port, 1, 0x02, 0x81, icomuf_none, 0); 
+			p->icom->set_usb_port(p->icom, port, 1, 0x02, 0x81, icomuf_none, 0, NULL); 
 		else
-			p->icom->set_usb_port(p->icom, port, 1, 0x01, 0x81, icomuf_none, 0); 
+			p->icom->set_usb_port(p->icom, port, 1, 0x01, 0x81, icomuf_none, 0, NULL); 
 
 		/* Blind reset it twice - it seems to sometimes hang up */
 		/* otherwise under OSX */
@@ -280,7 +283,7 @@ dtp92_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 
 		if (p->debug) fprintf(stderr,"dtp92: init coms has failed\n");
 
-#ifdef NEVER	/* Debug code for one user */
+#ifdef NEVER	/* Experimental code for fixing 0x1B "Offset Drift invalid" error */
 		if ((ev & inst_mask) == inst_hardware_fail) {
 			/* Could be a checksum type error. Try resetting to factory settings */
 			warning("Got error %s (%s) on attempting to communicate with instrument.",
@@ -294,19 +297,19 @@ dtp92_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 				if (sscanf(buf, "%lf<", &odv) != 1)
 					error("Unable to parse offset drift value");
 				printf("Read current offset drift value of %f\n", odv);
-				if (odv > 0.9 || odv < 0.001)
-					error("offset drift value seems like nonsese");
+				if (odv > 0.5 || odv < 0.05)
+					error("offset drift value seems like nonsense - aborting");
 				sprintf(tbuf,"%05dSD\r",(int)(odv * 100000));
 				printf("Command about to be sent is '%s', OK ? (Y/N)\n",icoms_fix(tbuf));
 				if (getchar() == 'Y') {
 					if ((ev = dtp92_command(p, tbuf, buf, MAX_MES_SIZE, 6.0)) != inst_ok)
 						error("Writing offset drift value failed");
 					else
-						printf("Writing offset drift value suceeded\n");
+						printf("Writing offset drift value suceeded!\n");
 				} else {
 					printf("No command written\n");
 				}
-				printf("Try re-running program\n");
+				printf("Now try re-running program\n");
 			}
 		}
 #endif	/* NEVER */
@@ -397,6 +400,12 @@ dtp92_init_inst(inst *pp) {
 	/* Set to factory calibration */
 	if ((ev = dtp92_command(p, "EFC\r", buf, MAX_MES_SIZE, 0.5)) != inst_ok)
 		return ev;
+
+	if (p->itype == instDTP94) {
+		/* Compensate for offset drift */
+		if ((ev = dtp92_command(p, "0117CF\r", buf, MAX_MES_SIZE, 0.5)) != inst_ok)
+			return ev;
+	}
 
 	if (p->itype == instDTP92) {
 		/* Enable ABS mode (in case firmware doesn't default to this after EFC) */

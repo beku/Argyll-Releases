@@ -38,17 +38,18 @@
 
 #define USE_NEARCLIP		/* Our usual expectation */
 #define XRES 128			/* Plotting resolution */
-#undef HACK_PLOT			/* Plot locus other than the neutral axis */
 
 void usage(char *diag) {
 	int i;
 	fprintf(stderr,"Translate colors through an xicc, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: xicclu [-options] profile\n");
 	if (diag != NULL)
 		fprintf(stderr,"Diagnostic: %s\n",diag);
 	fprintf(stderr," -v level       Verbosity level 0 - 2 (default = 1)\n");
-	fprintf(stderr," -g             Plot neutral axis instead of looking colors up.\n");
+	fprintf(stderr," -g             Plot slice instead of looking colors up. (Default white to black)\n");
+	fprintf(stderr," -G s:L:a:b    	Override plot slice start with Lab or Jab co-ordinate \n");
+	fprintf(stderr," -G e:L:a:b    	Override plot slice end with Lab or Jab co-ordinate \n");
 	fprintf(stderr," -f function    f = forward, b = backwards, g = gamut, p = preview\n");
 	fprintf(stderr,"                if = inverted forward, ib = inverted backwards\n");
 	fprintf(stderr," -i intent      a = absolute, r = relative colorimetric\n");
@@ -80,8 +81,8 @@ void usage(char *diag) {
 //	fprintf(stderr," -S             Use internal optimised separation for inverse 4d [NOT IMPLEMENTED]\n");
 
 #ifdef SPTEST
-	fprintf(stderr," -w             special test PCS space\n");
-	fprintf(stderr," -W             special test, PCS' space\n");
+	fprintf(stderr," -w             special gamut surface test PCS space\n");
+	fprintf(stderr," -W             special gamut surface test, PCS' space\n");
 #endif
 	fprintf(stderr," -c viewcond    set viewing conditions for CIECAM97s,\n");
 	fprintf(stderr,"                either an enumerated choice, or a parameter:value changes\n");
@@ -114,6 +115,8 @@ void usage(char *diag) {
 
 #ifdef SPTEST
 
+#pragma message("!!!!!!!!!!!! Experimental gamut boundary test  !!!!!!!!!")
+
 /* Output curve function */
 void spoutf(void *cbntx, double *out, double *in) {
 	icxLuLut *clu = (icxLuLut *)cbntx;
@@ -141,6 +144,8 @@ main(int argc, char *argv[]) {
 	icc *icco;
 	xicc *xicco;
 	int doplot = 0;				/* Do grey axis plot */
+	double pstart[3] = { -1000.0 };		/* Plot Lab/Jab PCS start point = white */ 
+	double pend[3]   = { -1000.0 };		/* Plot Lab/Jab PCS end point = black */ 
 	icxInk ink;					/* Ink parameters */
 	double tlimit = -1.0;		/* Total ink limit */
 	double klimit = -1.0;		/* Black ink limit */
@@ -234,9 +239,22 @@ main(int argc, char *argv[]) {
 				}
 			}
 
-			/* Grey axis plot */
-			else if (argv[fa][1] == 'g' || argv[fa][1] == 'G') {
+			/* Locus plot */
+			else if (argv[fa][1] == 'g') {
 				doplot = 1;
+			}
+			/* Plot start or end override */
+			else if (argv[fa][1] == 'G') {
+				fa = nfa;
+				if (na == NULL) usage("No parameter after flag -G");
+				if (na[0] == 's' || na[0] == 'S') {
+					if (sscanf(na+1,":%lf:%lf:%lf",&pstart[0],&pstart[1],&pstart[2]) != 3)
+						usage("Unrecognised parameters after -Gs");
+				} else if (na[0] == 'e' || na[0] == 'E') {
+					if (sscanf(na+1,":%lf:%lf:%lf",&pend[0],&pend[1],&pend[2]) != 3)
+						usage("Unrecognised parameters after -Ge");
+				} else
+					usage("Unrecognised parameters after -G");
 			}
 			/* Actual target values */
 			else if (argv[fa][1] == 'a' || argv[fa][1] == 'A') {
@@ -846,23 +864,24 @@ main(int argc, char *argv[]) {
 		int i, j;
 		double xx[XRES];
 		double yy[6][XRES];
-#ifdef HACK_PLOT
-		/* Plot some other slice */
-		double start[3] = { 91.069165, -13.555080, 85.608633 };
-		double end[3] = { 8.602831, -3.112174, 12.541111 };
-#else
-		/* Plot from white to black */
 		double start[3], end[3];
+
+		/* Plot from white to black by default */
 		luo->efv_wh_bk_points(luo, start, end, NULL);
 
-#endif
+		if (pstart[0] == -1000.0)
+			icmCpy3(pstart, start);
+
+		if (pend[0] == -1000.0)
+			icmCpy3(pend, end);
+
 		for (i = 0; i < XRES; i++) {
 			double ival = (double)i/(XRES-1.0);
 
 			/* Input is always Jab or Lab */
-			in[0] = ival * end[0] + (1.0 - ival) * start[0];
-			in[1] = ival * end[1] + (1.0 - ival) * start[1];
-			in[2] = ival * end[2] + (1.0 - ival) * start[2];
+			in[0] = ival * pend[0] + (1.0 - ival) * pstart[0];
+			in[1] = ival * pend[1] + (1.0 - ival) * pstart[1];
+			in[2] = ival * pend[2] + (1.0 - ival) * pstart[2];
 //in[1] = in[2] = 0.0;
 
 			/* Do the conversion */

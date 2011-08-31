@@ -49,7 +49,7 @@
 void usage(void) {
 	int i;
 	fprintf(stderr,"Create locus of test points that spans the range of colors a TIFF, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: tiffgmts [-v level] [profile.icm | embedded.tif] infile.tif\n");
 	fprintf(stderr," -v            Verbose\n");
 	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .ts file\n");
@@ -1002,7 +1002,7 @@ printf("~1 itter %d, alen = %f, minl = %f, maxl = %f\n",j,alen,minl,maxl);
 			
 			strcpy(xl,".wrl");
 			printf("Output vrml file '%s'\n",out_name);
-			if ((vv = new_vrml(out_name, doaxes)) == NULL)
+			if ((vv = new_vrml(out_name, doaxes, 0)) == NULL)
 				error ("Creating VRML object failed");
 
 #ifdef NEVER

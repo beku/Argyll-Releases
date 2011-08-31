@@ -18,8 +18,15 @@
 #include <fcntl.h>
 #include <string.h>
 #include <sys/types.h>
+#ifndef SALONEINSTLIB
+#include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
+#else /* SALONEINSTLIB */
+#include <fcntl.h>
+#include "sa_config.h"
+#include "numsup.h"
+#endif /* SALONEINSTLIB */
 
 #undef DEBUG
 
@@ -53,20 +60,20 @@ struct huft {
 
 
 /* Interface to visetest.c */
-extern unsigned int get_16bits();
-extern void unget_16bits();
-extern int write_output(unsigned char *buf, unsigned int len);
+extern unsigned int vget_16bits();
+extern void vunget_16bits();
+extern int vwrite_output(unsigned char *buf, unsigned int len);
 
 /* Function prototypes */
-int huft_build(unsigned *, unsigned, unsigned, ush *, ush *,
+static int huft_build(unsigned *, unsigned, unsigned, ush *, ush *,
                    struct huft **, int *);
-int huft_free(struct huft *);
-int inflate_codes(struct huft *, struct huft *, int, int);
-int inflate_stored(void);
-int inflate_fixed(void);
-int inflate_dynamic(void);
-int inflate_block(int *);
-int inflate(void);
+static int huft_free(struct huft *);
+static int inflate_codes(struct huft *, struct huft *, int, int);
+static int inflate_stored(void);
+static int inflate_fixed(void);
+static int inflate_dynamic(void);
+static int inflate_block(int *);
+int vinflate(void);
 
 /*
    The inflate algorithm uses a sliding 32K byte window on the uncompressed
@@ -87,7 +94,7 @@ int flush_output(unsigned int w) {
 
     if (wp == 0)
 		return 0;
-	if (write_output(slide, wp))
+	if (vwrite_output(slide, wp))
 		return 1;
     wp = 0;
 	return 0;
@@ -158,7 +165,7 @@ ush mask_bits[] = {
 #define NEEDBITS(n) {									\
 	while(k < (n)) {									\
 		unsigned int nv;								\
-		nv = get_16bits();								\
+		nv = vget_16bits();								\
 		if (nv == 0x11111111) {							\
 			printf("\nnoticed end\n");					\
 			/* return 2; */									\
@@ -168,12 +175,12 @@ ush mask_bits[] = {
 	}													\
 }
 #else
-#define NEXTBYTE()  (uch)get_16bits()
+#define NEXTBYTE()  (uch)vget_16bits()
 //#define NEEDBITS(n) {while(k<(n)){b|=((ulg)NEXTBYTE())<<k;k+=16;}}
 #define NEEDBITS(n) {							\
 	while(k < (n)) {							\
 		unsigned int ttt;						\
-		ttt = (ulg) (0xffff & get_16bits());	\
+		ttt = (ulg) (0xffff & vget_16bits());	\
 		b |= ttt << k;							\
 		k += 16;								\
 	}											\
@@ -232,7 +239,7 @@ unsigned hufts;         /* track memory usage */
    case), two if the input is invalid (all zero length codes or an
    oversubscribed set of lengths), and three if not enough memory. */
 /* return nz (2 ?) on error */
-int huft_build(b, n, s, d, e, t, m)
+static int huft_build(b, n, s, d, e, t, m)
 unsigned *b;            /* code lengths in bits (all assumed <= BMAX) */
 unsigned n;             /* number of codes (assumed <= N_MAX) */
 unsigned s;             /* number of simple-valued codes (0..s-1) */
@@ -436,7 +443,7 @@ int *m;                 /* maximum lookup bits, returns actual */
 
 
 
-int huft_free(t)
+static int huft_free(t)
 struct huft *t;         /* table to free */
 /* Free the malloc'ed tables built by huft_build(), which makes a linked
    list of the tables it made, with the links in a dummy first entry of
@@ -459,7 +466,7 @@ struct huft *t;         /* table to free */
 
 /* inflate (decompress) the codes in a deflated (compressed) block.
    Return an error code or zero if it all goes ok. */
-int inflate_codes(tl, td, bl, bd)
+static int inflate_codes(tl, td, bl, bd)
 struct huft *tl, *td;   /* literal/length and distance decoder tables */
 int bl, bd;             /* number of bits decoded by tl[] and td[] */
 {
@@ -544,7 +551,7 @@ int bl, bd;             /* number of bits decoded by tl[] and td[] */
 #if !defined(NOMEMCPY) && !defined(DEBUG)
         if (w - d >= e)         /* (this test assumes unsigned comparison) */
         {
-          memcpy(slide + w, slide + d, e);
+          memmove(slide + w, slide + d, e);
           w += e;
           d += e;
         }
@@ -577,7 +584,7 @@ int bl, bd;             /* number of bits decoded by tl[] and td[] */
 
 
 
-int inflate_stored()
+static int inflate_stored()
 /* "decompress" an inflated type 0 (stored) block. */
 {
   unsigned n;           /* number of bytes in block */
@@ -638,7 +645,7 @@ int inflate_stored()
 /* decompress an inflated type 1 (fixed Huffman codes) block.  We should
    either replace this with a custom decoder, or at least precompute the
    Huffman tables. */
-int inflate_fixed()
+static int inflate_fixed()
 {
   int i;                /* temporary variable */
   struct huft *tl;      /* literal/length code table */
@@ -687,7 +694,7 @@ int inflate_fixed()
 
 
 /* decompress an inflated type 2 (dynamic Huffman codes) block. */
-int inflate_dynamic()
+static int inflate_dynamic()
 {
   int i;                /* temporary variables */
   unsigned j;
@@ -866,7 +873,7 @@ int inflate_dynamic()
 
 
 /* decompress an inflated block */
-int inflate_block(e)
+static int inflate_block(e)
 int *e;                 /* last block flag */
 {
   unsigned t;           /* block type */
@@ -917,7 +924,7 @@ int *e;                 /* last block flag */
 
 /* decompress an inflated entry */
 /* return nz on error */
-int inflate()
+int vinflate()
 {
   int e;                /* last block flag */
   int r;                /* result code */
@@ -943,7 +950,7 @@ int inflate()
    */
   while (bk >= 16) {
     bk -= 16;
-	unget_16bits();
+	vunget_16bits();
   }
 
   /* flush out slide */

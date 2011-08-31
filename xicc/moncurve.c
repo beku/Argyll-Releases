@@ -43,7 +43,7 @@
 #define HW01		0.2		/* 0 & 1 harmonic weights */
 #define HBREAK	    4		/* Harmonic that has HWBR */
 #define HWBR        0.8		/* Base weight of harmonics HBREAK up */
-#define HWINC       0.4		/* Increase in weight for each harmonic above HWBR */
+#define HWINC       0.5		/* Increase in weight for each harmonic above HWBR */
 
 static void mcv_del(mcv *p);
 static void mcv_fit(mcv *p, int verb, int order, mcvco *d, int ndp, double smooth);
@@ -536,6 +536,7 @@ double smooth) {
 	/* Sum with shaper parameters squared, to */
 	/* minimise unsconstrained "wiggles" */
 	/* Note:- we start at 2, to skip offset and scale. */
+	/* ?? Should these have a weight too ?? */
 	smv = 0.0;
 	for (i = (2-p->noos); i < (p->luord-p->noos); i++) {
 		double w, tt;

@@ -69,7 +69,7 @@ double Lv		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 static void cam_free(cam97s3 *s);
 static int set_view(struct _cam97s3 *s, ViewingCondition Ev, double Wxyz[3],
                     double La, double Yb, double Lv, double Yf, double Fxyz[3],
-					int hk, int noclip);
+					int hk);
 static int XYZ_to_cam(struct _cam97s3 *s, double *Jab, double *xyz);
 static int cam_to_XYZ(struct _cam97s3 *s, double *xyz, double *Jab);
 
@@ -116,8 +116,7 @@ double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
-int hk,			/* Flag, NZ to use Helmholtz-Kohlraush effect */
-int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
+int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 ) {
 	double tt;
 
@@ -135,7 +134,6 @@ int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
 	s->Fxyz[1] = Fxyz[1];
 	s->Fxyz[2] = Fxyz[2];
 	s->hk = hk;
-	s->noclip = noclip;
 
 	/* Compute the internal parameters by category */
 	switch(s->Ev) {

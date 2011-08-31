@@ -46,13 +46,12 @@
 #define DBG(xxx) if (p != NULL && p->debug) fprintf xxx ;
 #endif
 
-// ~~99
-#define DRIFT_IPERIOD	30	/* Number of samples between drift interpolation measurements */
-#define DRIFT_EPERIOD	15	/* Number of samples between drift extrapolation measurements */
-//#define DRIFT_IPERIOD	6
+#define DRIFT_IPERIOD	40	/* Number of samples between drift interpolation measurements */
+#define DRIFT_EPERIOD	20	/* Number of samples between drift extrapolation measurements */
+//#define DRIFT_IPERIOD	6	/* Test values */
 //#define DRIFT_EPERIOD	3
 
-#define FAKE_NOISE 0.01		/* Add noise to fake devices XYZ */
+#define FAKE_NOISE 0.01		/* Add noise to _fake_ devices XYZ */
 #define FAKE_BITS 9			/* Number of bits of significance of fake device */
 
 
@@ -160,7 +159,7 @@ flow_control fc,		/* Serial flow control */
 int dtype,				/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 int proj,				/* NZ for projector mode, falls back to display mode */
 int adaptive,			/* NZ for adaptive mode */
-int nocal,				/* NZ to disable auto instrument calibration */
+int noautocal,				/* NZ to disable auto instrument calibration */
 disppath *disp,			/* display to calibrate. */
 int blackbg,			/* NZ if whole screen should be filled with black */
 int override,			/* Override_redirect on X11 */
@@ -241,6 +240,8 @@ int debug				/* Debug flag */
 		       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
 		return -1;
 	}
+	cap  = p->capabilities(p);
+	cap2 = p->capabilities2(p);
 
 	/* Set CRT or LCD mode */
 	if ((cap & (inst_emis_disp_crt | inst_emis_disp_lcd | inst_emis_proj_crt | inst_emis_proj_lcd))
@@ -272,12 +273,11 @@ int debug				/* Debug flag */
 	}
 
 	/* Disable autocalibration of machine if selected */
-	if (nocal != 0) {
+	if (noautocal != 0) {
 		if ((rv = p->set_opt_mode(p,inst_opt_noautocalib)) != inst_ok) {
 			DBG((dbgo,"Setting no-autocalibrate failed failed with '%s' (%s)\n",
 			       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
-			p->del(p);
-			return -1;
+			printf("Disable auto-calibrate not supported\n");
 		}
 	}
 
@@ -420,6 +420,7 @@ static int disprd_read_imp(
 
 	for (patch = 0; patch < npat; patch++) {
 		col *scb = &cols[patch];
+		double rgb[3];
 
 		scb->XYZ_v = 0;		/* No readings are valid */
 		scb->aXYZ_v = 0;
@@ -432,7 +433,33 @@ static int disprd_read_imp(
 		}
 		DBG((dbgo,"About to read patch %d\n",patch))
 
-		if ((rv = p->dw->set_color(p->dw, scb->r, scb->g, scb->b)) != 0) {
+		rgb[0] = scb->r;
+		rgb[1] = scb->g;
+		rgb[2] = scb->b;
+
+		/* If we are doing a soft cal, apply it to the test color */
+		if (p->softcal && p->cal[0][0] >= 0.0) {
+			int j;
+			double inputEnt_1 = (double)(p->ncal-1);
+
+			for (j = 0; j < 3; j++) {
+				unsigned int ix;
+				double val, w;
+				val = rgb[j] * inputEnt_1;
+				if (val < 0.0) {
+					val = 0.0;
+				} else if (val > inputEnt_1) {
+					val = inputEnt_1;
+				}
+				ix = (unsigned int)floor(val);		/* Coordinate */
+				if (ix > (p->ncal-2))
+					ix = (p->ncal-2);
+				w = val - (double)ix;		/* weight */
+				val = p->cal[j][ix];
+				rgb[j] = val + w * (p->cal[j][ix+1] - val);
+			}
+		}
+		if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
 			DBG((dbgo,"set_color() returned %s\n",rv))
 			return 3;
 		}
@@ -613,11 +640,13 @@ static int disprd_read_drift(
 
 	/* If the last readings are invalid or too old, */
 	/* or if we will use interpolation, read b&w */
-//printf("~1 last_bw_v = %d (%d)\n",p->last_bw_v,p->last_bw_v == 0);
-//printf("~1 npat = %d > %d, serno %d, last serno %d (%d)\n",npat, DRIFT_EPERIOD, p->serno,p->last_bw[eoff].serno,(npat > DRIFT_EPERIOD && p->serno > p->last_bw[eoff].serno));
-//printf("~1 serno - lastserno %d > %d (%d)\n",p->serno - p->last_bw[eoff].serno, DRIFT_EPERIOD,(p->serno - p->last_bw[eoff].serno) > DRIFT_EPERIOD);
-//printf("~1 msec %d - last %d = %d > 10000 (%d)\n",msec_time(),p->last_bw[boff].msec,msec_time() - p->last_bw[boff].msec,(msec_time() - p->last_bw[eoff].msec) > 10000);
-	if (p->last_bw_v == 0									/* There are none */
+#ifdef NEVER
+	printf("last_bw_v = %d (%d)\n",p->last_bw_v,p->last_bw_v == 0);
+	printf("npat = %d > %d, serno %d, last serno %d (%d)\n",npat, DRIFT_EPERIOD, p->serno,p->last_bw[eoff].serno,(npat > DRIFT_EPERIOD && p->serno > p->last_bw[eoff].serno));
+	printf("serno - lastserno %d > %d (%d)\n",p->serno - p->last_bw[eoff].serno, DRIFT_EPERIOD,(p->serno - p->last_bw[eoff].serno) > DRIFT_EPERIOD);
+	printf("msec %d - last %d = %d > 10000 (%d)\n",msec_time(),p->last_bw[boff].msec,msec_time() - p->last_bw[boff].msec,(msec_time() - p->last_bw[eoff].msec) > 10000);
+#endif /* NEVER */
+	if (p->last_bw_v == 0											/* There are none */
 	 || (npat > DRIFT_EPERIOD && p->serno > p->last_bw[eoff].serno)	/* We will interpolate */
 	 || (p->serno - p->last_bw[eoff].serno - dno) > DRIFT_EPERIOD	/* extrapolate would be too far */
 	 || (msec_time() - p->last_bw[eoff].msec) > 10000) {	/* The current is too long ago */
@@ -842,6 +871,7 @@ static int disprd_read_drift(
 	/* Else use extrapolation from the last b&w */
 	} else {
 
+//printf("~1 doing small number of readings\n");
 		/* Read the small number of patches */
 		if ((rv = disprd_read_imp(p, cols,npat,spat,tpat,acr,0,tc)) != 0)
 			return rv;
@@ -951,6 +981,41 @@ static void disprd_reset_targ_w(disprd *p) {
 	p->targ_w_v = 0;
 }
 
+/* Change the black/white drift compensation options. */
+/* Note that this simply invalidates any reference readings, */
+/* and therefore will not make for good black compensation */
+/* if it is done a long time since the instrument calibration. */
+static void disprd_change_drift_comp(disprd *p,
+	int bdrift,			/* Flag, nz for black drift compensation */
+	int wdrift			/* Flag, nz for white drift compensation */
+) {
+	if (p->bdrift && !bdrift) {		/* Turning black drift off */
+		p->bdrift = 0;
+		p->ref_bw_v = 0;
+		p->last_bw_v = 0;
+		p->targ_w_v = 0;
+
+	} else if (!p->bdrift && bdrift) {	/* Turning black drift on */
+		p->bdrift = 1;
+		p->ref_bw_v = 0;
+		p->last_bw_v = 0;
+		p->targ_w_v = 0;
+	}
+
+	if (p->wdrift && !wdrift) {		/* Turning white drift off */
+		p->wdrift = 0;
+		p->ref_bw_v = 0;
+		p->last_bw_v = 0;
+		p->targ_w_v = 0;
+
+	} else if (!p->wdrift && wdrift) {	/* Turning white drift on */
+		p->wdrift = 1;
+		p->ref_bw_v = 0;
+		p->last_bw_v = 0;
+		p->targ_w_v = 0;
+	}
+}
+
 /* Take a series of readings from the display */
 /* Return nz on fail/abort */
 /* 1 = user aborted */
@@ -1034,6 +1099,10 @@ int disprd_ambient(struct _disprd *p,
 		DBG((dbgo,"set_mode returned '%s' (%s)\n",
 		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
 		return 2;
+	}
+	if (p->it != NULL) { /* Not fake */
+		cap  = p->it->capabilities(p->it);
+		cap2 = p->it->capabilities2(p->it);
 	}
 	
 	/* Select a reasonable trigger mode */
@@ -1225,7 +1294,8 @@ static int disprd_fake_read(disprd *p,
 	double mat[3][3];		/* Destination matrix */
 	double xmat[3][3];		/* Extra matrix */
 	double ooff[3];			/* XYZ offsets */
-	double rgb[3];
+	double rgb[3];			/* Given test values */
+	double crgb[3];			/* Calibrated test values */
 //	double br = 35.4;		/* Overall brightness */
 	double br = 120.0;		/* Overall brightness */
 	int patch, j;
@@ -1273,20 +1343,11 @@ static int disprd_fake_read(disprd *p,
 			fprintf(p->df,"%cpatch %d of %d",cr_char,spat+patch,tpat);
 			fflush(p->df);
 		}
-		rgb[0] = cols[patch].r;
-		rgb[1] = cols[patch].g;
-		rgb[2] = cols[patch].b;
+		crgb[0] = rgb[0] = cols[patch].r;
+		crgb[1] = rgb[1] = cols[patch].g;
+		crgb[2] = rgb[2] = cols[patch].b;
 
-		/* If we have a test window, display the patch color */
-		if (p->dw) {
-			inst_code rv;
-			if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
-				DBG((dbgo,"set_color() returned %s\n",rv))
-				return 3;
-			}
-		}
-
-		/* If we have a RAMDAC, apply it to the color */
+		/* If we have a calibration, apply it to the color */
 		if (p->cal[0][0] >= 0.0) {
 			double inputEnt_1 = (double)(p->ncal-1);
 
@@ -1304,7 +1365,23 @@ static int disprd_fake_read(disprd *p,
 					ix = (p->ncal-2);
 				w = val - (double)ix;		/* weight */
 				val = p->cal[j][ix];
-				rgb[j] = val + w * (p->cal[j][ix+1] - val);
+				crgb[j] = val + w * (p->cal[j][ix+1] - val);
+			}
+		}
+
+		/* If we have a test window, display the patch color */
+		if (p->dw) {
+			inst_code rv;
+			if (p->softcal) {	/* Display value with calibration */
+				if ((rv = p->dw->set_color(p->dw, crgb[0], crgb[1], crgb[2])) != 0) {
+					DBG((dbgo,"set_color() returned %s\n",rv))
+					return 3;
+				}
+			} else {			/* Hardware will apply calibration */
+				if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
+					DBG((dbgo,"set_color() returned %s\n",rv))
+					return 3;
+				}
 			}
 		}
 
@@ -1313,31 +1390,31 @@ static int disprd_fake_read(disprd *p,
 		if (p->fake2 == 0) {
 			for (j = 0; j < 3; j++) {
 				int vv;
-				vv = (int) (rgb[j] * ((1 << FAKE_BITS) - 1.0) + 0.5);
-				rgb[j] =  vv/((1 << FAKE_BITS) - 1.0);
+				vv = (int) (crgb[j] * ((1 << FAKE_BITS) - 1.0) + 0.5);
+				crgb[j] =  vv/((1 << FAKE_BITS) - 1.0);
 			}
 		}
 #endif
 
 		/* Apply device offset */
 		for (j = 0; j < 3; j++) {
-			if (rgb[j] < 0.0)
-				rgb[j] = 0.0;
-			else if (rgb[j] > 1.0)
-				rgb[j] = 1.0;
-			rgb[j] = doff[j] + (1.0 - doff[j]) * rgb[j];
+			if (crgb[j] < 0.0)
+				crgb[j] = 0.0;
+			else if (crgb[j] > 1.0)
+				crgb[j] = 1.0;
+			crgb[j] = doff[j] + (1.0 - doff[j]) * crgb[j];
 		}
 
 		/* Apply gamma */
 		for (j = 0; j < 3; j++) {
-			if (rgb[j] >= 0.0)
-				rgb[j] = pow(rgb[j], 2.5);
+			if (crgb[j] >= 0.0)
+				crgb[j] = pow(crgb[j], 2.5);
 			else
-				rgb[j] = 0.0;
+				crgb[j] = 0.0;
 		}
 
 		/* Convert to XYZ */
-		icmMulBy3x3(cols[patch].aXYZ, mat, rgb);
+		icmMulBy3x3(cols[patch].aXYZ, mat, crgb);
 
 		/* Apply XYZ offset */
 		for (j = 0; j < 3; j++)
@@ -1557,6 +1634,10 @@ char *disprd_err(int en) {
 			return "Instrument has no ambient measurement capability";
 		case 9:
 			return "Creating spectral conversion object failed";
+		case 10:
+			return "Instrument has no CCMX capability";
+		case 11:
+			return "Instrument has no CCSS capability";
 	}
 	return "Unknown";
 }
@@ -1602,6 +1683,7 @@ static int config_inst_displ(disprd *p) {
 	if (p->proj && (cap & inst_emis_proj) == 0) {
 		printf("Want projection measurement capability but instrument doesn't support it\n");
 		printf("so falling back to display mode.\n");
+		DBG((dbgo,"No projection mode so falling back to display mode.\n"));
 		p->proj = 0;
 	}
 	
@@ -1611,13 +1693,30 @@ static int config_inst_displ(disprd *p) {
 		printf("Need %s measurement capability,\n",
 		       p->proj ? "projection" : p->adaptive ? "emission" : "display");
 		printf("but instrument doesn't support it\n");
+		DBG((dbgo,"Need %s measurement capability but device doesn't support it,\n",
+		       p->proj ? "projection" : p->adaptive ? "emission" : "display"));
 		return 2;
 	}
 	
+	if (p->obType != icxOT_default) {
+		if ((cap & inst_spectral) == 0 && (cap & inst_ccss) == 0) {
+			printf("A non-standard observer was requested,\n");
+			printf("but instrument doesn't support spectral or CCSS\n");
+			DBG((dbgo,"A non-standard observer was requested,\n"
+			          "but instrument doesn't support spectral or CCSS\n"))
+			return 2;
+		}
+		/* Make sure spectral is turned on if an observer is requested */
+		if (!p->spectral && (cap & inst_ccss) == 0)
+			p->spectral = 1;
+	}
+
 	if (p->spectral && (cap & inst_spectral) == 0) {
 		if (p->spectral != 2) {		/* Not soft */
 			printf("Spectral information was requested,\n");
 			printf("but instrument doesn't support it\n");
+			DBG((dbgo,"Spectral information was requested,\nbut instrument doesn't support it\n"))
+			return 2;
 		}
 		p->spectral = 0;
 	}
@@ -1666,11 +1765,11 @@ static int config_inst_displ(disprd *p) {
 	}
 	
 	/* Disable autocalibration of machine if selected */
-	if (p->nocal != 0) {
+	if (p->noautocal != 0) {
 		if ((rv = p->it->set_opt_mode(p->it,inst_opt_noautocalib)) != inst_ok) {
 			DBG((dbgo,"Setting no-autocalibrate failed failed with '%s' (%s)\n",
 		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-			return 2;
+			printf("Disable auto-calibrate not supported\n");
 		}
 	}
 	
@@ -1691,9 +1790,31 @@ static int config_inst_displ(disprd *p) {
 		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
 		return 2;
 	}
+	cap  = p->it->capabilities(p->it);
+	cap2 = p->it->capabilities2(p->it);
+
 	if (p->ccmtx != NULL) {
+		if ((cap & inst_ccmx) == 0) {
+			DBG((dbgo,"Instrument doesn't support ccmx correction\n"))
+			return 10;
+		}
 		if ((rv = p->it->col_cor_mat(p->it, p->ccmtx)) != inst_ok) {
 			DBG((dbgo,"col_cor_mat returned '%s' (%s)\n",
+			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+			return 2;
+		}
+	}
+	
+	if (p->sets != NULL
+	 || ((cap & inst_ccss) != 0 && p->obType != icxOT_default)) {
+
+		if ((cap & inst_ccss) == 0) {
+			DBG((dbgo,"Instrument doesn't support ccss calibration\n"))
+			return 11;
+		}
+		if ((rv = p->it->col_cal_spec_set(p->it, p->obType, p->custObserver,
+		                                         p->sets, p->no_sets)) != inst_ok) {
+			DBG((dbgo,"col_cal_spec_set returned '%s' (%s)\n",
 			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
 			return 2;
 		}
@@ -1716,6 +1837,7 @@ static int config_inst_displ(disprd *p) {
 	/* Reset key meanings */
 	p->it->icom->reset_uih(p->it->icom);
 
+	DBG((dbgo,"config_inst_displ suceeded\n"));
 	return 0;
 }
 
@@ -1732,6 +1854,8 @@ static int config_inst_displ(disprd *p) {
 /* 6 = system error */
 /* 7 = CRT or LCD must be selected */
 /* 9 = spectral conversion failed */
+/* 10 = no ccmx support */
+/* 11 = no ccss support */
 /* Use disprd_err() to interpret *errc */
 disprd *new_disprd(
 int *errc,          /* Error code. May be NULL */
@@ -1741,11 +1865,14 @@ flow_control fc,	/* Flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 int proj,			/* NZ for projector mode. Falls back to display mode */
 int adaptive,		/* NZ for adaptive mode */
-int nocal,			/* No automatic instrument calibration */
+int noautocal,			/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */
-int donat,			/* Use ramdac for native output, else run through current or set ramdac */
+int native,			/* 0 = use current current or given calibration curve */
+					/* 1 = set native linear output and use ramdac high prec'n */
+					/* 2 = set native linear output */
 double cal[3][MAX_CAL_ENT],	/* Calibration set/return (cal[0][0] < 0.0 or NULL if not used) */
 int ncal,			/* Number of cal[] entries */
+int softcal,		/* NZ if apply cal to readings rather than hardware */
 disppath *disp,		/* Display to calibrate. NULL if fake and no dispwin */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
@@ -1755,8 +1882,11 @@ double patsize,		/* Size of dispwin */
 double ho,			/* Horizontal offset */
 double vo,			/* Vertical offset */
 double ccmtx[3][3],	/* Colorimeter Correction matrix, NULL if none */
+xspect *sets,		/* CCSS Set of sample spectra, NULL if none  */
+int no_sets,	 	/* CCSS Number on set, 0 if none */
 int spectral,		/* Generate spectral info flag */
-icxObserverType observ,	/* Compute XYZ from spectral if spectral and != icxOT_none */
+icxObserverType obType,	/* Use alternate observer if spectral or CCSS and != icxOT_none */
+xspect custObserver[3],	/* Optional custom observer */
 int bdrift,			/* Flag, nz for black drift compensation */
 int wdrift,			/* Flag, nz for white drift compensation */
 int verb,			/* Verbosity flag */
@@ -1767,17 +1897,19 @@ char *fake_name		/* Name of profile to use as a fake device */
 	disprd *p = NULL;
 	int ch;
 	inst_code rv;
-	
+
 	if (errc != NULL) *errc = 0;		/* default return code = no error */
 
 	/* Allocate a disprd */
 	if ((p = (disprd *)calloc(sizeof(disprd), 1)) == NULL) {
+		if (debug) fprintf(stderr,"new_disprd failed due to malloc failure\n");
 		if (errc != NULL) *errc = 6;
 		return NULL;
 	}
 	p->del = disprd_del;
 	p->read = disprd_read;
 	p->reset_targ_w = disprd_reset_targ_w;
+	p->change_drift_comp = disprd_change_drift_comp;
 	p->ambient = disprd_ambient;
 	p->fake_name = fake_name;
 
@@ -1785,14 +1917,17 @@ char *fake_name		/* Name of profile to use as a fake device */
 	p->debug = debug;
 	p->itype = itype;
 	p->ccmtx = ccmtx;
+	p->sets = sets;
+	p->no_sets = no_sets;		/* CCSS */
 	p->spectral = spectral;
-	p->observ = observ;
+	p->obType = obType;			/* CCSS or spectral */
+	p->custObserver = custObserver;
 	p->bdrift = bdrift;
 	p->wdrift = wdrift;
 	p->dtype = dtype;
 	p->proj = proj;
 	p->adaptive = adaptive;
-	p->nocal = nocal;
+	p->noautocal = noautocal;
 	p->highres = highres;
 	if (df)
 		p->df = df;
@@ -1814,9 +1949,11 @@ char *fake_name		/* Name of profile to use as a fake device */
 			}
 		}
 		p->ncal = ncal;
+		p->softcal = softcal;
 	} else {
 		p->cal[0][0] =  -1.0;
 		p->ncal = 0;
+		p->softcal = 0;
 	}
 
 	if (comport == -99) {
@@ -1854,8 +1991,10 @@ char *fake_name		/* Name of profile to use as a fake device */
 		} else
 			p->read = disprd_fake_read;
 
-		if (disp == NULL)
+		if (disp == NULL) {
+			DBG((dbgo,"new_disprd returning fake device\n"));
 			return p;
+		}
 
 	/* Setup the instrument */
 	} else {
@@ -1864,6 +2003,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 			fprintf(p->df,"Setting up the instrument\n");
 	
 		if ((p->it = new_inst(comport, p->itype, debug, verb)) == NULL) {
+			DBG((stderr,"new_disprd failed because new_inst failed\n"));
 			p->del(p);
 			if (errc != NULL) *errc = 2;
 			return NULL;
@@ -1873,6 +2013,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 		if ((rv = p->it->init_coms(p->it, p->comport, p->br, p->fc, 15.0)) != inst_ok) {
 			DBG((dbgo,"init_coms returned '%s' (%s)\n",
 			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+			DBG((dbgo,"new_disprd failed because init_coms failed\n"));
 			p->del(p);
 			if (errc != NULL) *errc = 2;
 			return NULL;
@@ -1882,6 +2023,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 		if ((rv = p->it->init_inst(p->it)) != inst_ok) {
 			DBG((dbgo,"init_inst returned '%s' (%s)\n",
 			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+			DBG((dbgo,"new_disprd failed because init_inst failed\n"));
 			p->del(p);
 			if (errc != NULL) {
 				*errc = 2;
@@ -1894,16 +2036,18 @@ char *fake_name		/* Name of profile to use as a fake device */
 	
 		/* Configure the instrument mode for reading the display */
 		if ((rv = config_inst_displ(p)) != 0) {
+			DBG((dbgo,"new_disprd failed because config_inst_displ failed\n"));
 			p->del(p);
 			if (errc != NULL) *errc = rv;
 			return NULL;
 		}
 	}
 
-	/* Create a spectral conversion object */
-	if (p->spectral && p->observ != icxOT_none) {
-		if ((p->sp2cie = new_xsp2cie(icxIT_none, NULL, p->observ, NULL, icSigXYZData)) == NULL) {
-			DBG((dbgo,"Creation of spectral conversion object failed\n"))
+	/* Create a spectral conversion object if needed */
+	if (p->spectral && p->obType != icxOT_none) {
+		if ((p->sp2cie = new_xsp2cie(icxIT_none, NULL, p->obType, custObserver, icSigXYZData))
+		                                                                                 == NULL) {
+			DBG((dbgo,"new_disprd failed because creation of spectral conversion object failed\n"))
 			p->del(p);
 			if (errc != NULL) *errc = 9;
 			return NULL;
@@ -1911,9 +2055,9 @@ char *fake_name		/* Name of profile to use as a fake device */
 	}
 
 	/* Open display window for positioning (no blackbg) */
-	if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, donat, 0,
+	if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, native, 0,
 	                                                        override, debug)) == NULL) {
-		DBG((dbgo,"Failed to creat a display window \n"))
+		DBG((dbgo,"new_disprd failed because new_dispwin failed\n"))
 		p->del(p);
 		if (errc != NULL) *errc = 3;
 		return NULL;
@@ -1935,6 +2079,8 @@ char *fake_name		/* Name of profile to use as a fake device */
 			setup_display_calibrate(p->it,inst_calc_none, &dwi); 
 			printf("\n");
 			if (rv != inst_ok) {	/* Abort or fatal error */
+				DBG((dbgo,"new_disprd failed because calibrate failed with '%s' (%s)\n",
+				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)));
 				printf("Calibrate failed with '%s' (%s)\n",
 				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 				p->del(p);
@@ -1950,6 +2096,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 	printf("Hit Esc or Q to give up, any other key to continue:"); fflush(stdout);
 	if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
 		printf("\n");
+		DBG((dbgo,"new_disprd failed because user aborted when placing device\n"));
 		p->del(p);
 		if (errc != NULL) *errc = 1;
 		return NULL;
@@ -1964,9 +2111,9 @@ char *fake_name		/* Name of profile to use as a fake device */
 	}
 
 	/* Open display window again for measurement */
-	if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, donat, blackbg,
+	if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, native, blackbg,
 	                                                        override, debug)) == NULL) {
-		DBG((dbgo,"Failed to creat a display window \n"))
+		DBG((dbgo,"new_disprd failed new_dispwin failed\n"))
 		p->del(p);
 		if (errc != NULL) *errc = 3;
 		return NULL;
@@ -1978,12 +2125,12 @@ char *fake_name		/* Name of profile to use as a fake device */
 	}
 
 	/* Save current RAMDAC so that we can restore it */
-	if ((p->or = p->dw->get_ramdac(p->dw)) == NULL) {
+	if (!softcal && (p->or = p->dw->get_ramdac(p->dw)) == NULL) {
 		warning("Unable to read or set display RAMDAC");
 	}
 
 	/* Set the given RAMDAC so we can characterise through it */
-	if (cal != NULL && cal[0][0] >= 0.0 && p->or != NULL) {
+	if (!softcal && cal != NULL && cal[0][0] >= 0.0 && p->or != NULL) {
 		ramdac *r;
 		int j, i;
 		
@@ -2006,6 +2153,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 			}
 		}
 		if (p->dw->set_ramdac(p->dw, r, 0)) {
+			DBG((dbgo,"new_disprd failed becayse set_ramdac failed\n"))
 			if (p->verb) {
 				fprintf(p->df,"Failed to set RAMDAC to desired calibration.\n");
 				fprintf(p->df,"Perhaps the operating system is being fussy ?\n");
@@ -2019,11 +2167,12 @@ char *fake_name		/* Name of profile to use as a fake device */
 	}
 
 	/* Return the ramdac being used */
-	if (p->or != NULL && cal != NULL) {
+	if (!softcal && p->or != NULL && cal != NULL) {
 		ramdac *r;
 		int j, i;
 		
 		if ((r = p->dw->get_ramdac(p->dw)) == NULL) {
+			DBG((dbgo,"new_disprd failed becayse get_ramdac failed\n"))
 			if (p->verb)
 				fprintf(p->df,"Failed to read current RAMDAC");
 			p->del(p);
@@ -2049,6 +2198,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 		r->del(r);
 	}
 	
+	DBG((dbgo,"new_disprd succeeded\n"))
 	return p;
 }
 

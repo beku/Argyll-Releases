@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
   <title>Wide Gamut Displays &amp; Colorimeters</title>
@@ -35,8 +35,9 @@ Colorimeter is its simplicity, which results in a lower cost
 instrument. In theory it is also possible to make a Colorimeter that
 cheaply captures more light by using larger sensors, but this
 possibility is rarely exploited by low cost instruments. Also due to
-cost constraints, the physical filters used in these instruments are
-not a perfect match to the CIE Standard Observer weightings, and if
+cost constraints, the physical filters used in these instruments may
+not be a very good match to the CIE Standard Observer weightings, and
+if
 nothing were done about it, this would result&nbsp; in large
 measurement errors. Because such Display Colorimeters are typically
 used with additive, 3 colorant displays, it is possible to calibrate
@@ -83,12 +84,25 @@ Argyll V1.3.0 has a facility to create and apply such a <a
  href="File_Formats.html#.ccmx">correct matrix</a>
 to Colorimeter measurements. To create the correction matrix, the
 display, the Colorimeter and a reference Spectrometer are needed. (see
-<a href="ccmxmake.html">ccmxmake</a>). The correction matrix can then
+<a href="ccxxmake.html">ccxxmake</a>). The correction matrix can then
 be used with the usual
 display measurement utilities (see <a href="dispcal.html#X">dispcal</a>,
 <a href="dispread.html#X">dispread</a> and <a href="spotread.html#X">spotread</a>
 -X
 option).<br>
+<br>
+Some recent colorimeters take a slightly different approach to
+calibration, and rather than using pre-defined 3x3 calibration
+matricies, they instead contain the spectral sensitivity curves for
+each particular colorimeter. It's then possible to create 3x3
+calibration matricies automatically for any display for which the
+spectral
+characteristics are known. This makes it easy to tailor the
+colorimeters measurements to a particular type of display without
+having to cater for each colorimeter &amp; display combination. <a
+ href="ccxxmake.html">ccxxmake</a> also allows creation of these <a
+ href="File_Formats.html#.ccss">Colorimeter Calibration Spectral Sample</a>
+files.<br>
 <br>
 </body>
 </html>

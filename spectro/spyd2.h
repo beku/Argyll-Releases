@@ -13,8 +13,8 @@
  *
  * (Based on i1disp.c)
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* 
@@ -79,11 +79,13 @@ struct _spyd2 {
 
 	/* Serial EEPROM registers */
 	unsigned int hwver;			/* 5:S	Harware version number & feature bits */
-								/* Spyder2 = 0x0307 */
-								/* Spyder3 = 0x0407 */
+								/* Spyder2         = 0x0307 */
+								/* Spyder3 Express = 0x040f */
+								/* Spyder3 Pro     = 0x0407 */
+								/* Spyder3 Elite   = 0x0407 */
 								/* Feature bits 0,1,2 correspond to display types */
 								/* CRT, LCD, TOK */
-								/* Feature bit 3 on Spyder 3 correspond to no ambient sensor */
+								/* Feature bit 3 on Spyder 3 correspond to no ambient sensor ??? */
 	char    serno[9];			/* 8:8xB  Serial number as zero terminated string */
 
 								/* Spyder2: [0][][] = CRT, [1][][] = LCD */

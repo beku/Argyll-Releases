@@ -47,6 +47,8 @@
 
 	This doesn't handle display .ti3's properly, as the resulting CIE values
 	need to be normalised to Y=100 or marked as not normalised.
+
+	Calibration tables aren't being passed through either ??
  */
 
 #define ALLOW_PLOT
@@ -74,7 +76,7 @@ void
 usage (void)
 {
 	fprintf (stderr, "Convert spectral .ti3 file, Version %s\n", ARGYLL_VERSION_STR);
-	fprintf (stderr, "Author: Gerhard Fuernkranz, licensed under the GPL Version 3\n");
+	fprintf (stderr, "Author: Gerhard Fuernkranz, licensed under the AGPL Version 3\n");
 	fprintf (stderr, "\n");
 	fprintf (stderr, "Usage: spec2cie [options] input.ti3 output.ti3\n");
 	fprintf (stderr, " -v          Verbose mode\n");
@@ -342,7 +344,7 @@ main(int argc, char *argv[])
 		}
 
 		if ((ti = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
-			error("Input file doesn't contain keyword COLOR_REPS");
+			error("Input file doesn't contain keyword COLOR_REP");
 
 		if (strncmp(icg->t[0].kdata[ti],"CMYK_",5) == 0)
 			devspace = icSigCmykData;

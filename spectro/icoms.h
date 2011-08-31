@@ -12,8 +12,8 @@
  * Copyright 1996 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  * 
  * Derived from serio.h
  */
@@ -120,7 +120,7 @@ typedef enum {
 typedef enum {
 	icomuf_none                = 0x0000,
 	icomuf_detach              = 0x0001,	/* Attempt to detach from system driver */
-	icomuf_no_open_clear       = 0x0002,	/* Don't send a clear_halt after opening the port */
+	icomuf_no_open_clear       = 0x0001,	/* Don't send a clear_halt after opening the port */
 	icomuf_reset_before_close  = 0x0004,	/* Reset port before closing it */
 	icomuf_resetep_before_read = 0x0008		/* Do a usb_resetep before each ep read */
 } icomuflags;
@@ -230,6 +230,7 @@ struct _icoms {
 
 #ifdef ENABLE_USB
 	/* USB port parameters */
+	unsigned int vid, pid; 		/* USB vendor and product id's */
 	struct usb_device *usbd;
 	struct usb_dev_handle *usbh;
 	int cnfg;				/* Configuration */
@@ -302,7 +303,8 @@ struct _icoms {
 	    int            wr_ep,		/* "serial" write end point */
 	    int            rd_ep,		/* "serial" read end point */
 		icomuflags usbflags,		/* Any special handling flags */
-		int retries					/* > 0 if we should retry set_configuration (100msec) */
+		int retries,				/* > 0 if we should retry set_configuration (100msec) */
+		char **pnames				/* List of process names to try and kill before opening */
 	);
 
 	/* Select the HID communications port and characteristics */

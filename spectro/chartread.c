@@ -16,6 +16,19 @@
 /* This program reads a reflective or transmissive print target chart */
 /* using a spectrometer or colorimeter. */
 
+/* TTBD
+ *
+ *	Someone reported that XY mode (spectroscan) didn't work for one paper
+ *  orientation ?
+ *
+ *  Should fix XY chart read to also allow interruption/save/resume,
+ *  just like the strip reading code.
+ *
+ *	Should add verbose option to print average & max DE to expected value
+ *  for each patch/strip read.
+ *
+ */
+ 
 /*
  * Nomencalture:
  *
@@ -34,10 +47,6 @@
  *           
  */
 
-/* TTBD
- *
- */
- 
 #undef DEBUG
 
 #define COMPORT 1		/* Default com port 1..4 */
@@ -74,7 +83,15 @@
 #include <conio.h>
 #endif
 
+#ifdef NT		/* You'd think there might be some standards.... */
+# ifndef __BORLANDC__
+#  define stricmp _stricmp
+# endif
+#else
+# define stricmp strcasecmp
+#endif
 #ifdef NEVER	/* Not currently used */
+
 /* Convert control chars to ^[A-Z] notation in a string */
 static char *
 fix_asciiz(char *s) {
@@ -194,6 +211,7 @@ int pbypatch,		/* Patch by patch measurement */
 int xtern,			/* Use external (user supplied) values rather than instument read */
 int spectral,		/* Generate spectral info flag */
 int accurate_expd,	/* Expected values can be assumed to be accurate */
+int emit_warnings,	/* Emit warnings for wrong strip, unexpected value */
 int verb,			/* Verbosity flag */
 int debug			/* Debug level */
 ) {
@@ -326,10 +344,9 @@ int debug			/* Debug level */
 			/* Disable autocalibration of machine if selected */
 			if (nocal != 0){
 				if ((rv = it->set_opt_mode(it,inst_opt_noautocalib)) != inst_ok) {
-					printf("Setting no-autocalibrate failed failed with '%s' (%s)\n",
+					printf("Setting no-autocalibrate failed with '%s' (%s)\n",
 				       it->inst_interp_error(it, rv), it->interp_error(it, rv));
-					it->del(it);
-					return -1;
+					printf("Disable auto-calibrate not supported\n");
 				}
 			}
 
@@ -570,6 +587,8 @@ int debug			/* Debug level */
 				it->del(it);
 				return -1;
 			}
+			cap  = it->capabilities(it);
+			cap2 = it->capabilities2(it);
 		}
 	}
 
@@ -1005,6 +1024,8 @@ int debug			/* Debug level */
 		it->icom->set_uih(it->icom, 'B', 'B', ICOM_CMND);
 		it->icom->set_uih(it->icom, 'n', 'n', ICOM_CMND);
 		it->icom->set_uih(it->icom, 'N', 'N', ICOM_CMND);
+		it->icom->set_uih(it->icom, 'g', 'g', ICOM_CMND);
+		it->icom->set_uih(it->icom, 'G', 'G', ICOM_CMND);
 		it->icom->set_uih(it->icom, 'd', 'd', ICOM_CMND);
 		it->icom->set_uih(it->icom, 'D', 'D', ICOM_CMND);
 		it->icom->set_uih(it->icom, 'q', 'q',  ICOM_USER);
@@ -1349,7 +1370,7 @@ int debug			/* Debug level */
 							}
 						}
 					}
-					if (boroi != oroi) {	/* Looks like the wrong strip */
+					if (emit_warnings != 0 && boroi != oroi) {	/* Looks like the wrong strip */
 						char *mm = NULL;
 						mm = paix->aix(paix, boroi);
 #ifdef DEBUG
@@ -1380,7 +1401,7 @@ int debug			/* Debug level */
 						werror = xwerror;
 					}
 					/* Arbitrary threshold. Good seems about 15-35, bad 95-130 */
-					if (accurate_expd != 0 && werror >= 30.0) {
+					if (emit_warnings != 0 && accurate_expd != 0 && werror >= 30.0) {
 #ifdef DEBUG
 						printf("(Warning) Patch error %f (>35 not good, >95 bad)\n",werror);
 #endif
@@ -1461,6 +1482,7 @@ int debug			/* Debug level */
 		int uswitch = 0;		/* nz if switch can be used */
 		int incflag = 0;		/* 0 = no change, 1 = increment, 2 = inc by 10, */
 								/* 3 = inc next unread, -1 = decrement, -2 = dec by 10 */
+								/* 4 = goto specific patch */
 		inst_opt_mode omode;	/* The option mode used */
 		ipatch val;
 
@@ -1520,6 +1542,8 @@ int debug			/* Debug level */
 			it->icom->set_uih(it->icom, 'B', 'B', ICOM_CMND);
 			it->icom->set_uih(it->icom, 'n', 'n', ICOM_CMND);
 			it->icom->set_uih(it->icom, 'N', 'N', ICOM_CMND);
+			it->icom->set_uih(it->icom, 'g', 'g', ICOM_CMND);
+			it->icom->set_uih(it->icom, 'G', 'G', ICOM_CMND);
 			it->icom->set_uih(it->icom, 'd', 'd', ICOM_CMND);
 			it->icom->set_uih(it->icom, 'D', 'D', ICOM_CMND);
 			it->icom->set_uih(it->icom, 'q', 'q', ICOM_USER);
@@ -1536,7 +1560,7 @@ int debug			/* Debug level */
 
 		/* Until we're  done */
 		for(;pix < npat;) {
-			char buf[200], *bp = NULL;
+			char buf[200], *bp = NULL, *ep = NULL;
 			char ch = 0;
 
 			/* Adjust the location */
@@ -1561,14 +1585,48 @@ int debug			/* Debug level */
 			} else if (incflag == 3) {		/* Increment to next unread */
 				int opix = pix;
 
+				if (pix >= npat)
+					pix = 0;
 				for (;;) {
-					if (pix >= npat)
-						pix = 0;
 					if (scols[pix]->rr == 0 && strcmp(scols[pix]->id, "0") != 0)
 						break;
 					pix++;
+					if (pix >= npat)
+						pix = 0;
 					if (pix == opix)
 						break;
+				}
+			} else if (incflag == 4) {		/* Goto specific patch */
+				printf("\nEnter patch to go to: "); fflush(stdout);
+
+				/* Read in the next line from stdin. */
+				if (fgets(buf, 200, stdin) == NULL) {
+					printf("Error - unrecognised input\n");
+				} else {
+					int opix = pix;
+
+					/* Skip whitespace */
+					for (bp = buf; *bp != '\000' && isspace(*bp); bp++)
+						;
+
+					/* Skip non-whitespace */
+					for (ep = bp; *ep != '\000' && !isspace(*ep); ep++)
+						;
+					*ep = '\000';
+				
+					if (pix >= npat)
+						pix = 0;
+					for (;;) {
+						if (stricmp(scols[pix]->loc, bp) == 0)
+							break;
+						pix++;
+						if (pix >= npat)
+							pix = 0;
+						if (pix == opix) {
+							printf("Patch '%s' not found\n",bp);
+							break;
+						}
+					}
 				}
 			}
 			incflag = 0;
@@ -1584,9 +1642,12 @@ int debug			/* Debug level */
 				       i >= npat ? "(All patches read!)" :
 				       strcmp(scols[pix]->id, "0") == 0 ? " (Padding Patch)" :
 				       scols[pix]->rr ? " (Already read)" : "");
-				printf("Enter %s value (separated by spaces), or  'f' to move forward, 'b' to move back,\n"
-				       " 'n' for next unread, 'd' when done, 'q' to abort, then press <return>: ",
+				printf("Enter %s value (separated by spaces), or\n",
 				       xtern == 1 ? "L*a*b*" : "XYZ");
+				printf("  'f' to move forward, 'F' move forward 10,\n");
+				printf("  'b' to move back, 'B; to move back 10,\n");
+				printf("  'n' for next unread, 'g' to goto patch,\n");
+				printf("  'd' when done, 'q' to abort, then press <return>: ");
 				fflush(stdout);
 	
 				/* Read in the next line from stdin. */
@@ -1612,14 +1673,17 @@ int debug			/* Debug level */
 				       i >= npat ? "(All patches read!)" :
 				       strcmp(scols[pix]->id, "0") == 0 ? " (Padding Patch)" :
 				       scols[pix]->rr ? " (Already read)" : "");
-				printf("hit 'f' to move forward, 'b' to move back,  'n' for next unread,");
-				printf("'d' when done,");
+
+				printf("hit 'f' to move forward, 'F' move forward 10,\n");
+				printf("    'b' to move back,    'B; to move back 10,\n");
+				printf("    'n' for next unread, 'g' to goto patch,\n");
+				printf("    'd' when done,       <esc> to abort,\n");
 
 				if (uswitch)
-					printf(" Instrument switch, <return> or <space> to read,");
+					printf("    Instrument switch,   <return> or <space> to read:");
 				else
-					printf(" <return> or <space> to read,");
-				printf(" <esc> to abort:"); fflush(stdout);
+					printf("    <return> or <space> to read:");
+				fflush(stdout);
 
 				rv = it->read_sample(it, "SPOT", &val);
 
@@ -1758,6 +1822,9 @@ int debug			/* Debug level */
 			} else if (ch == 'n' || ch == 'N') {
 				incflag = 3;
 				continue;
+			} else if (ch == 'g' || ch == 'G') {
+				incflag = 4;
+				continue;
 			} else if (ch == 'd' || ch == 'D') {
 				int i;
 				for (i = 0; i < npat; i++) {
@@ -1867,7 +1934,7 @@ void
 usage(void) {
 	icoms *icom;
 	fprintf(stderr,"Read Target Test Chart, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: chartread [-options] outfile\n");
 	fprintf(stderr," -v             Verbose mode\n");
 	fprintf(stderr," -c listno      Set communication port from the following list (default %d)\n",COMPORT);
@@ -1892,6 +1959,7 @@ usage(void) {
 	fprintf(stderr," -x [lx]         Take external values, either L*a*b* (-xl) or XYZ (-xx).\n");
 	fprintf(stderr," -n              Don't save spectral information (default saves spectral)\n");
 	fprintf(stderr," -l              Save CIE as D50 L*a*b* rather than XYZ\n");
+	fprintf(stderr," -L              Save CIE as D50 L*a*b* as well as XYZ\n");
 	fprintf(stderr," -r              Resume reading partly read chart\n");
 	fprintf(stderr," -I file.cal     Override calibration info from .ti2 in resulting .ti3\n");
 	fprintf(stderr," -F filter       Set filter configuration (if aplicable):\n");
@@ -1903,6 +1971,7 @@ usage(void) {
 	fprintf(stderr," -B              Disable auto bi-directional strip recognition\n");
 	fprintf(stderr," -H              Use high resolution spectrum mode (if available)\n");
 	fprintf(stderr," -T ratio        Modify strip patch consistency tolerance by ratio\n");
+	fprintf(stderr," -S              Suppress wrong strip & unexpected value warnings\n");
 	fprintf(stderr," -W n|h|x        Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]      Print debug diagnostics to stderr\n");
 	fprintf(stderr," outfile         Base name for input[ti2]/output[ti3] file\n");
@@ -1931,7 +2000,8 @@ int main(int argc, char *argv[]) {
 	int xtern = 0;					/* Take external values, 1 = Lab, 2 = XYZ */
 	int spectral = 1;				/* Save spectral information */
 	int accurate_expd = 0;			/* Expected value assumed to be accurate */
-	int dolab = 0;					/* Save CIE as Lab */
+	int emit_warnings = 1;			/* Emit warnings for wrong strip, unexpected value */
+	int dolab = 0;					/* 1 = Save CIE as Lab, 2 = Save CIE as XYZ and Lab */
 	int doresume = 0;				/* Resume reading a chart */
 	int nocal = 0;					/* Disable auto calibration */
 	static char inname[MAXNAMEL+1] = { 0 };	/* Input cgats file base name */
@@ -2014,6 +2084,10 @@ int main(int argc, char *argv[]) {
 					usage();
 				scan_tol = atof(na);
 
+			/* Suppress warnings */
+			} else if (argv[fa][1] == 'S') {
+				emit_warnings = 0;
+
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
@@ -2094,8 +2168,12 @@ int main(int argc, char *argv[]) {
 				spectral = 0;
 
 			/* Save as Lab */
-			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L')
+			else if (argv[fa][1] == 'l')
 				dolab = 1;
+
+			/* Save as Lab */
+			else if (argv[fa][1] == 'L')
+				dolab = 2;
 
 			/* Resume reading a chart */
 			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R')
@@ -2315,7 +2393,7 @@ int main(int argc, char *argv[]) {
 
 	/* Figure out the color space */
 	if ((fi = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
-		error ("Input file doesn't contain keyword COLOR_REPS");
+		error ("Input file doesn't contain keyword COLOR_REP");
 
 	if ((nmask = icx_char2inkmask(icg->t[0].kdata[fi])) != 0) {
 		int i, j, ii;
@@ -2350,7 +2428,7 @@ int main(int argc, char *argv[]) {
 			chix[j] = ii;
 		}
 
-		/* Approximate XYZ and real XYZ */
+		/* Approximate XYZ */
 		for (j = 0; j < 3; j++) {
 			if ((ii = icg->find_field(icg, 0, xyzfname[j])) >= 0) {
 				if (icg->t[0].ftype[ii] != r_t)
@@ -2359,11 +2437,16 @@ int main(int argc, char *argv[]) {
 			} else {
 				gotexyz = 0;
 			}
-	
-			if (dolab)
-				ocg->add_field(ocg, 0, labfname[j], r_t);
-			else
+		}
+
+		/* Measured XYZ and/or Lab */
+		if (dolab == 0 || dolab == 2) {
+			for (j = 0; j < 3; j++)
 				ocg->add_field(ocg, 0, xyzfname[j], r_t);
+		} 
+		if (dolab == 1 || dolab == 2) {
+			for (j = 0; j < 3; j++)
+				ocg->add_field(ocg, 0, labfname[j], r_t);
 		}
 
 		if ((clu = new_icxColorantLu(nmask)) == NULL)
@@ -2410,7 +2493,7 @@ int main(int argc, char *argv[]) {
 		free(ident);
 		free(bident);
 	} else
-		error ("Input file keyword COLOR_REPS has unknown value");
+		error ("Input file keyword COLOR_REP has unknown value");
 
 	/* Read any user supplied calibration information */
 	if (calname[0] != '\000') {
@@ -2488,7 +2571,7 @@ int main(int argc, char *argv[]) {
 		char *fname[2][3] = { { "XYZ_X", "XYZ_Y", "XYZ_Z" },
 		                      { "LAB_L", "LAB_A", "LAB_B" } };
 		int k, ii;
-		char buf[100];
+		char buf[200];
 
 		/* Open and look at the .ti3 profile patches file */
 		rcg = new_cgats();			/* Create a CGATS structure */
@@ -2607,7 +2690,7 @@ int main(int argc, char *argv[]) {
 	if (read_strips(itype, scols, &atype, npat, totpa, stipa, pis, paix,
 	                saix, ixord, rstart, hex, comport, fc, plen, glen, tlen,
 	                trans, emis, displ, dtype, fe, nocal, disbidi, highres, scan_tol,
-	                pbypatch, xtern, spectral, accurate_expd, verb, debug) == 0) {
+	                pbypatch, xtern, spectral, accurate_expd, emit_warnings, verb, debug) == 0) {
 		/* And save the result */
 
 		int nrpat;				/* Number of read patches */
@@ -2662,6 +2745,8 @@ int main(int argc, char *argv[]) {
 		nsetel += 1;		/* For loc */
 		nsetel += nchan;	/* For device values */
 		nsetel += 3;		/* For XYZ or Lab */
+		if (dolab == 2)
+			nsetel += 3;	/* For XYZ and Lab */
 
 		/* If we have spectral information, output it too */
 		if (nrpat > 0 && cols[vpix].sp.spec_n > 0) {
@@ -2705,7 +2790,12 @@ int main(int argc, char *argv[]) {
 			for (j = 0; j < nchan; j++)
 				setel[k++].d = 100.0 * cols[i].dev[j];
 
-			if (dolab) {
+			if (dolab == 0 || dolab == 2) {
+				setel[k++].d = cols[i].XYZ[0];
+				setel[k++].d = cols[i].XYZ[1];
+				setel[k++].d = cols[i].XYZ[2];
+			}
+			if (dolab == 1 || dolab == 2) {
 				double lab[3];
 				double xyz[3];
 
@@ -2716,16 +2806,12 @@ int main(int argc, char *argv[]) {
 				setel[k++].d = lab[0];
 				setel[k++].d = lab[1];
 				setel[k++].d = lab[2];
-			} else {
-				setel[k++].d = cols[i].XYZ[0];
-				setel[k++].d = cols[i].XYZ[1];
-				setel[k++].d = cols[i].XYZ[2];
 			}
 
 			/* Check that the spectral matches, in case we're resuming */
 			if (   cols[i].sp.spec_n != cols[vpix].sp.spec_n
-				|| cols[i].sp.spec_wl_short != cols[vpix].sp.spec_wl_short
-				|| cols[i].sp.spec_wl_long != cols[vpix].sp.spec_wl_long) {
+				|| fabs(cols[i].sp.spec_wl_short - cols[vpix].sp.spec_wl_short) > 0.01
+				|| fabs(cols[i].sp.spec_wl_long - cols[vpix].sp.spec_wl_long) > 0.01 ) {
 				error("The resumed spectral type seems to have changed!");
 			}
 

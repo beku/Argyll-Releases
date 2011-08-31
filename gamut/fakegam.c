@@ -34,7 +34,7 @@ int get_value(double val[3]);
 
 void usage(char *diag) {
 	fprintf(stderr,"Generate a test gamut Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: gamtest [options] outputname\n");
 	if (diag != NULL)
 		fprintf(stderr,"Diagnostic: %s\n",diag);

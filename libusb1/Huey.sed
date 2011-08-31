@@ -1,4 +1,4 @@
-# Sed script for Huey
+# Sed script for Huey (Not needed because it's HID)
           s/#FILE_NAME#/Huey/
         s/#DEVICE_NAME#/Huey (Argyll)/
 s/#DEVICE_MANUFACTURER#/Gretag Macbeth/

@@ -31,39 +31,81 @@
 
 		Should the input profile white point determination
 		be made a bit smarter about determining the chromaticity ?
+		ie. not take on the tint of the whitest patch, but an
+		average of neutral patches ?
+
+		Should xlutfix.c be revived (also adding ICM_CLUT_SET_APXLS support), 
+		to improve "bumpy black" problem ?
  */
 
 /*
 
-	NOTE :- an alternative to the way absolute is handled here would be
-    to always chromatically adapt the illuminant to D50, and encode
+	NOTE :- an alternative to the way absolute is handled here
+	would be to always chromatically adapt the illuminant to D50, and encode
 	that in the Chromatic adapation tag. To make absolute colorimetric
 	do anything useful though, the chromatic adapation tag would
-    have to be used for that intent.
-	This may be the way of improving compatibility with other systems.
+    have to be used for absolute intent.
+	This may be the way of improving compatibility with other systems,
+	but would break compatibility with existing Argyll profiles,
+	unless special measures are taken:
 
-	ie. For Argyll create profile:
+	
+	ie. 
 
-		if (use chromatic adaptation tag)
-			Create chromatic adapation matrix and store it in tag
+		1) if (display profile & using chromatic adaptation tag)
+			Create Bradford chromatic adapation matrix and store it in tag
 			Adapt all the readings using Bradford
-			Create white point and store it in tag
-			Adapt all the readings to the white point using wrong Von-Kries	
+			Create white point and store it in tag (white point will be D50)
+			Adapt all the readings to the white point using wrong Von-Kries (no change)	
 			Store relative colorimetric cLUT 
-		else (don't use chromatic adapation tag)
-			Create white point and store it in tag
-			Adapt all the readings to the white point using Brtadford
-			Store relative colorimetric tag
+			Set version >= 2.4
 
-	Argyll absolute colorimetric intent:
-
-		if found chromatic adapation matrix
-			Un-adapt cLUT using wrong Von-Kries from white point
-			Un-adapt cLUT using chromatic matrix
-			Un-adapt apparant white point & black point using chromatic
 		else
-			Un-adapt cLUT using Bradford from white point
+			2) if (display scheme A or using Argyll historical printer scheme) 
+				Create white point and store it in tag
+				Adapt all the readings to the white point using Bradford
+				Store relative colorimetric tag
+				Set version < 2.4 for V2 profile
+				Add private Absolute Transform Matrix (labels V4 profile)
+
+			3) else (display scheme B or strict ICC printer compatibility)
+				Create white point and store it in tag
+				Adapt all the readings to the white point using Wrong Von-Kries
+				Store relative colorimetric tag
+				Set version >= 2.4
+
+
+	Argyll Processing for each type
+
+		1) if display and chromatic adapation matrix
+			Un-adapt matrix or cLUT using wrong Von-Kries from white point
+			Un-adapt matrix or cLUT using chromatic matrix
+			Un-adapt apparant white point & black point using chromatic transform
+
+			if (not absolute intent)
+				Create Bradford transfor from white to PCS D50
+				Adapt all matrix or cLUT
+		else
+			2) if (display scheme A or using Argyll < V2.4. profile
+			       or find Absolute Transform Matrix) 
+				if (absolute intent)
+					Un-adapt matrix or cLUT using Bradford from white point
 			
+			3) else (display scheme B or !Argyll profile or ( >= V2.4 profile
+			       and !Absolute Transform Matrix)) 
+				Un-adapt matrix or cLUT using wrong Von-Kries from white point
+	
+				if (not absolute intent)
+					Create Bradford transfor from white to PCS D50
+					Adapt all matrix or cLUT to white
+
+
+	The problem with this is that it wouldn't do the right thing on old Argyll
+	type profiles that weren't labeled.
+
+	Is there a way of recognizing Bradford Absolute transform Matricies if
+	the color chromaticities are given ?
+
  */
 
 #include "xfit.h"
@@ -72,12 +114,15 @@
 								/* Don't use CIE94 because it makes peak error worse ? */
 
 #undef DEBUG 					/* [Undef] Verbose debug information */
+#undef CNDTRACE					/* [Undef] Enable xicc->trace conditional verbosity */
 #undef DEBUG_OLUT 				/* [Undef] Print steps in overall fwd & rev lookups */
 #undef DEBUG_RLUT 				/* [Undef] Print values being reverse lookup up */
+#undef DEBUG_SPEC 				/* [Undef] Debug some specific cases */
 #undef INK_LIMIT_TEST			/* [Undef] Turn off input tables for ink limit testing */
 #undef CHECK_ILIMIT				/* [Undef] Do sanity checks on meeting ink limit */
 #undef WARN_CLUT_CLIPPING		/* [Undef] Print warning if setting clut clips */
 #undef DISABLE_KCURVE_FILTER	/* [Undef] don't filter the Kcurve */
+#undef REPORT_LOCUS_SEGMENTS    /* [Undef[ Examine how many segments there are in aux inversion */
 
 #define SHP_SMOOTH 1.0	/* Input shaper curve smoothing */
 #define OUT_SMOOTH1 1.0	/* Output shaper curve smoothing for L*, X,Y,Z */
@@ -106,23 +151,44 @@ static double icxLimitD(void *lcntx, double *in);		/* For input' */
 static double icxLimit(void *lcntx, double *in);		/* For input */
 static int icxLuLut_init_clut_camclip(icxLuLut *p);
 
+/* Debug overall lookup */
 #ifdef DEBUG_OLUT
 #undef DBOL
+#ifdef CNDTRACE
+#define DBOL(xxx) if (p->trace) printf xxx ;
+#else
 #define DBOL(xxx) printf xxx ;
+#endif
 #else
 #undef DBOL
 #define DBOL(xxx) 
 #endif
 
+/* Debug reverse lookup */
 #ifdef DEBUG_RLUT
 #undef DBR
+#ifdef CNDTRACE
+#define DBR(xxx) if (p->trace) printf xxx ;
+#else
 #define DBR(xxx) printf xxx ;
+#endif
 #else
 #undef DBR
 #define DBR(xxx) 
 #endif
 
-static char *ppos(int di, double *p);
+/* Debug some specific cases (fwd_relpcs_outpcs, bwd_outpcs_relpcs) */
+#ifdef DEBUG_SPEC
+# undef DBS
+# ifdef CNDTRACE
+#  define DBS(xxx) if (p->trace) printf xxx ;
+# else
+#  define DBS(xxx) printf xxx ;
+# endif
+#else
+# undef DBS
+# define DBS(xxx) 
+#endif
 
 /* ========================================================== */
 /* xicc lookup code.                                          */
@@ -137,10 +203,15 @@ int icxLuLut_in_abs(icxLuLut *p, double *out, double *in) {
 	int rv = 0;
 
 	if (p->ins == icxSigJabData) {
+		DBOL(("xlut in_abs: CAM in = %s\n", icmPdv(p->inputChan, in)));
 		p->cam->cam_to_XYZ(p->cam, out, in);
+		DBOL(("xlut in_abs: XYZ = %s\n", icmPdv(p->inputChan, out)));
 		rv |= ((icmLuLut *)p->plu)->in_abs((icmLuLut *)p->plu, out, out);
+		DBOL(("xlut in_abs: XYZ out = %s\n", icmPdv(p->inputChan, out)));
 	} else {
+		DBOL(("xlut in_abs: PCS in = %s\n", icmPdv(p->inputChan, in)));
 		rv |= ((icmLuLut *)p->plu)->in_abs((icmLuLut *)p->plu, out, in);
+		DBOL(("xlut in_abs: PCS out = %s\n", icmPdv(p->inputChan, out)));
 	}
 
 	return rv;
@@ -251,10 +322,16 @@ int icxLuLut_output(icxLuLut *p, double *out, double *in) {
 int icxLuLut_out_abs(icxLuLut *p, double *out, double *in) {
 	int rv = 0;
 	if (p->mergeclut == 0) {
+		DBOL(("xlut out_abs: PCS in = %s\n", icmPdv(p->outputChan, in)));
+
 		rv |= ((icmLuLut *)p->plu)->out_abs((icmLuLut *)p->plu, out, in);
+
+		DBOL(("xlut out_abs: ABS PCS out = %s\n", icmPdv(p->outputChan, out)));
 
 		if (p->outs == icxSigJabData) {
 			p->cam->XYZ_to_cam(p->cam, out, out);
+
+			DBOL(("xlut out_abs: CAM out = %s\n", icmPdv(p->outputChan, out)));
 		}
 	} else {
 		int i;
@@ -276,20 +353,20 @@ double *in			/* Vector of input values */
 	int rv = 0;
 	double temp[MAX_CHAN];
 
-	DBOL(("xicclu: in = %s\n", ppos(p->inputChan, in)));
+	DBOL(("xicclu: in = %s\n", icmPdv(p->inputChan, in)));
 	rv |= p->in_abs  (p, temp, in);
-	DBOL(("xicclu: after abs = %s\n", ppos(p->inputChan, temp)));
+	DBOL(("xicclu: after abs = %s\n", icmPdv(p->inputChan, temp)));
 	rv |= p->matrix  (p, temp, temp);
-	DBOL(("xicclu: after matrix = %s\n", ppos(p->inputChan, temp)));
+	DBOL(("xicclu: after matrix = %s\n", icmPdv(p->inputChan, temp)));
 	rv |= p->input   (p, temp, temp);
-	DBOL(("xicclu: after inout = %s\n", ppos(p->inputChan, temp)));
+	DBOL(("xicclu: after inout = %s\n", icmPdv(p->inputChan, temp)));
 	rv |= p->clut    (p, out,  temp);
-	DBOL(("xicclu: after clut = %s\n", ppos(p->outputChan, out)));
+	DBOL(("xicclu: after clut = %s\n", icmPdv(p->outputChan, out)));
 	if (p->mergeclut == 0) {
 		rv |= p->output  (p, out,  out);
-		DBOL(("xicclu: after output = %s\n", ppos(p->outputChan, out)));
+		DBOL(("xicclu: after output = %s\n", icmPdv(p->outputChan, out)));
 		rv |= p->out_abs (p, out,  out);
-		DBOL(("xicclu: after outabs = %s\n", ppos(p->outputChan, out)));
+		DBOL(("xicclu: after outabs = %s\n", icmPdv(p->outputChan, out)));
 	}
 	return rv;
 }
@@ -304,14 +381,32 @@ icColorSpaceSignature is,		/* Input space, XYZ or Lab */
 double *out, double *in) {
 	icxLuLut *p = (icxLuLut *)pp;
 
+
+	/* Convert to the ICC PCS */
 	if (is == icSigLabData && p->natpcs == icSigXYZData) {
+		DBS(("fwd_relpcs_outpcs: Lab in = %s\n", icmPdv(p->inputChan, in)));
 		icmLab2XYZ(&icmD50, out, in);
-		icxLuLut_out_abs(p, out, out);
+		DBS(("fwd_relpcs_outpcs: XYZ = %s\n", icmPdv(p->inputChan, out)));
 	} else if (is == icSigXYZData && p->natpcs == icSigLabData) {
+		DBS(("fwd_relpcs_outpcs: XYZ in = %s\n", icmPdv(p->inputChan, in)));
 		icmXYZ2Lab(&icmD50, out, in);
-		icxLuLut_out_abs(p, out, out);
+		DBS(("fwd_relpcs_outpcs: Lab = %s\n", icmPdv(p->inputChan, out)));
 	} else {
-		icxLuLut_out_abs(p, out, in);
+		DBS(("fwd_relpcs_outpcs: PCS in = %s\n", icmPdv(p->inputChan, in)));
+		icmCpy3(out, in);
+	}
+
+	/* Convert to absolute */
+	((icmLuLut *)p->plu)->out_abs((icmLuLut *)p->plu, out, out);
+
+	DBS(("fwd_relpcs_outpcs: abs PCS = %s\n", icmPdv(p->inputChan, out)));
+
+	if (p->outs == icxSigJabData) {
+
+		/* Convert to CAM */
+		p->cam->XYZ_to_cam(p->cam, out, out);
+
+		DBS(("fwd_relpcs_outpcs: Jab = %s\n", icmPdv(p->inputChan, out)));
 	}
 }
 
@@ -377,17 +472,17 @@ double *cdirv		/* Space for returned clip vector */
 int icxLuLut_inv_out_abs(icxLuLut *p, double *out, double *in) {
 	int rv = 0;
 
-	DBR(("\nicxLuLut_inv_out_abs got PCS %s\n",ppos(p->outputChan, in)));
+	DBR(("\nicxLuLut_inv_out_abs got PCS %s\n",icmPdv(p->outputChan, in)));
 
 	if (p->mergeclut == 0) {
 		if (p->outs == icxSigJabData) {
 			p->cam->cam_to_XYZ(p->cam, out, in);
-			DBR(("icxLuLut_inv_out_abs after cam2XYZ %s\n",ppos(p->outputChan, out)));
+			DBR(("icxLuLut_inv_out_abs after cam2XYZ %s\n",icmPdv(p->outputChan, out)));
 			rv |= ((icmLuLut *)p->plu)->inv_out_abs((icmLuLut *)p->plu, out, out);
-			DBR(("icxLuLut_inv_out_abs after icmLut inv_out_abs %s\n",ppos(p->outputChan, out)));
+			DBR(("icxLuLut_inv_out_abs after icmLut inv_out_abs %s\n",icmPdv(p->outputChan, out)));
 		} else {
 			rv |= ((icmLuLut *)p->plu)->inv_out_abs((icmLuLut *)p->plu, out, in);
-			DBR(("icxLuLut_inv_out_abs after icmLut inv_out_abs %s\n",ppos(p->outputChan, out)));
+			DBR(("icxLuLut_inv_out_abs after icmLut inv_out_abs %s\n",icmPdv(p->outputChan, out)));
 		}
 	} else {
 		int i;
@@ -838,7 +933,7 @@ static double icxKcurve(double L, icxInkCurve *c) {
 /* Note that the ink limit will be computed after converting input' to input, auxt */
 /* will override the inking rule, and auxr[] reflects the available auxiliary range */
 /* that the locus was to choose from, and auxv[] was the actual auxiliary used. */
-/* Retuns clip status. */
+/* Returns clip status. */
 int icxLuLut_inv_clut_aux(
 icxLuLut *p,
 double *out,	/* Function return values, plus aux value or locus target input if auxt == NULL */
@@ -881,7 +976,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 	if (p->clutTable->di > fdi) {	/* ie. CMYK->Lab, there will be ambiguity */
 		double min[MXDI], max[MXDI];	/* Auxiliary locus range */
 
-#ifdef NEVER	/* Examine how many segments there are */
+#ifdef REPORT_LOCUS_SEGMENTS	/* Examine how many segments there are */
 		{	/* ie. CMYK->Lab, there will be ambiguity */
 			double smin[10][MXRI], smax[10][MXRI];	/* Auxiliary locus segment ranges */
 			double min[MXRI], max[MXRI];	/* Auxiliary min and max locus range */
@@ -913,7 +1008,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 				}
 			}
 		}
-#endif /* NEVER */
+#endif /* REPORT_LOCUS_SEGMENTS */
 
 		/* Compute auxiliary locus on the fly. This is in dev' == input' space. */
 		nsoln = p->clutTable->rev_locus(
@@ -927,6 +1022,13 @@ double *in		/* Function input values to invert (== clut output' values) */
 #ifdef DEBUG_RLUT
 			printf("inv_clut_aux: no valid locus, expect clip\n");
 #endif
+			/* Make sure that the auxiliar value is initialized, */
+			/* even though it won't have any effect. */
+			for (e = 0; e < p->clutTable->di; e++) {
+				if (p->auxm[e] != 0) {
+					pp[0].p[e] = 0.5;
+				}
+			}
 
 		} else {  /* Got a valid locus */
 
@@ -1498,25 +1600,25 @@ double *in			/* Vector of input values */
 	int i;
 	double temp[MAX_CHAN];
 
-	DBOL(("xiccilu: input            = %s\n", ppos(p->outputChan, in)));
+	DBOL(("xiccilu: input            = %s\n", icmPdv(p->outputChan, in)));
 	if (p->mergeclut == 0) {		/* Do this if it's not merger with clut */
 		rv |= p->inv_out_abs (p, temp, in);
-		DBOL(("xiccilu: after inv abs    = %s\n", ppos(p->outputChan, temp)));
+		DBOL(("xiccilu: after inv abs    = %s\n", icmPdv(p->outputChan, temp)));
 		rv |= p->inv_output  (p, temp, temp);
-		DBOL(("xiccilu: after inv out    = %s\n", ppos(p->outputChan, temp)));
+		DBOL(("xiccilu: after inv out    = %s\n", icmPdv(p->outputChan, temp)));
 	} else {
 		for (i = 0; i < p->outputChan; i++)
 			temp[i] = in[i];
 	}
-	DBOL(("xiccilu: aux targ   = %s\n", ppos(p->inputChan,out)));
+	DBOL(("xiccilu: aux targ   = %s\n", icmPdv(p->inputChan,out)));
 	rv |= p->inv_clut    (p, out, temp);
-	DBOL(("xiccilu: after inv clut   = %s\n", ppos(p->inputChan,out)));
+	DBOL(("xiccilu: after inv clut   = %s\n", icmPdv(p->inputChan,out)));
 	rv |= p->inv_input   (p, out, out);
-	DBOL(("xiccilu: after inv input  = %s\n", ppos(p->inputChan,out)));
+	DBOL(("xiccilu: after inv input  = %s\n", icmPdv(p->inputChan,out)));
 	rv |= p->inv_matrix  (p, out, out);
-	DBOL(("xiccilu: after inv matrix = %s\n", ppos(p->inputChan,out)));
+	DBOL(("xiccilu: after inv matrix = %s\n", icmPdv(p->inputChan,out)));
 	rv |= p->inv_in_abs  (p, out, out);
-	DBOL(("xiccilu: after inv abs    = %s\n", ppos(p->inputChan,out)));
+	DBOL(("xiccilu: after inv abs    = %s\n", icmPdv(p->inputChan,out)));
 	return rv;
 }
 
@@ -1530,11 +1632,24 @@ icColorSpaceSignature os,		/* Output space, XYZ or Lab */
 double *out, double *in) {
 	icxLuLut *p = (icxLuLut *)pp;
 
-	icxLuLut_inv_out_abs(p, out, in);
+	if (p->outs == icxSigJabData) {
+		DBS(("bwd_outpcs_relpcs: Jab in = %s\n", icmPdv(3, in)));
+		p->cam->cam_to_XYZ(p->cam, out, in);
+		DBS(("bwd_outpcs_relpcs: abs XYZ = %s\n", icmPdv(3, out)));
+	} else {
+		DBS(("bwd_outpcs_relpcs: abs PCS in = %s\n", icmPdv(3, out)));
+		icmCpy3(out, in);
+	}
+
+	((icmLuLut *)p->plu)->inv_out_abs((icmLuLut *)p->plu, out, out);
+	DBS(("bwd_outpcs_relpcs: rel PCS = %s\n", icmPdv(3, out)));
+
 	if (os == icSigXYZData && p->natpcs == icSigLabData) {
 		icmLab2XYZ(&icmD50, out, out);
+		DBS(("bwd_outpcs_relpcs: rel XYZ = %s\n", icmPdv(3, out)));
 	} else if (os == icSigXYZData && p->natpcs == icSigLabData) {
 		icmXYZ2Lab(&icmD50, out, out);
+		DBS(("bwd_outpcs_relpcs: rel Lab = %s\n", icmPdv(3, out)));
 	}
 }
 
@@ -2074,7 +2189,7 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 			xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0, NULL);	/* Use a default */
 		p->cam = new_icxcam(cam_default);
 		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf,
-		                 p->vc.Fxyz, XICC_USE_HK, XICC_NOCAMCL);
+		                 p->vc.Fxyz, XICC_USE_HK);
 	} else {
 		p->cam = NULL;
 	}
@@ -2583,7 +2698,7 @@ printf("~1 device value %f %f %f %f, Lab = %f %f %f\n",pv[0],pv[1],pv[2],pv[3],L
 #ifdef DEBUG
 printf("~1 target error %f\n",terr);
 #endif
-	rv += 100.0 * terr;
+	rv += 20.0 * terr;		/* Make ab match 20 times more important than min. L */
 
 #ifdef DEBUG
 printf("~1 out of range error %f\n",ovr);
@@ -2686,16 +2801,18 @@ int                quality			/* Quality metric, 0..3 */
 	/* Translate overall average deviation into output channel deviation */
 	/* (This is for rspl scattered data fitting smoothness adjustment) */
 	/* (This could do with more tuning) */
+
+	/* For some unknown reason XYZ seems masively under-smoothed, so bump it up */
+// ~~99
 	if (p->pcs == icSigXYZData) {
-		oavgdev[0] = 0.60 * avgdev;
-		oavgdev[1] = 1.00 * avgdev;
-		oavgdev[2] = 0.60 * avgdev;
+		oavgdev[0] = 1.0 * 0.60 * avgdev;
+		oavgdev[1] = 1.0 * 1.00 * avgdev;
+		oavgdev[2] = 1.0 * 0.60 * avgdev;
 	} else if (p->pcs == icSigLabData) {
 		oavgdev[0] = 1.00 * avgdev;
 		oavgdev[1] = 0.60 * avgdev;
 		oavgdev[2] = 0.60 * avgdev;
-	} else
-	{
+	} else {	/* Hmmm */
 		for (f = 0; f < p->outputChan; f++)
 			oavgdev[f] = avgdev;
 	}
@@ -2731,6 +2848,8 @@ int                quality			/* Quality metric, 0..3 */
 		/* Figure out as best we can the device white and black points */
 
 		if (h->deviceClass == icSigInputClass) {
+			double wpy = -1e60, bpy = 1e60;
+			int wix = -1, bix = -1;
 			/* We assume that the input target is well behaved, */
 			/* and that it includes a white and black point patch, */
 			/* and that they have the extreme L/Y values */
@@ -2743,33 +2862,67 @@ int                quality			/* Quality metric, 0..3 */
 				a blue tint.
 			 */
 
-			wp[pcsy] = -1e60;
-			bp[pcsy] =  1e60;
-
 			/* Discover the white and black patches */
 			for (i = 0; i < nodp; i++) {
-				if (ipoints[i].v[pcsy] > wp[pcsy]) {
+				double labv[3], yv;
+
+				/* Create D50 Lab to allow some chromatic sensitivity */
+				/* in picking the white point */
+				if (p->pcs == icSigXYZData)
+					icmXYZ2Lab(&icmD50, labv, ipoints[i].v);
+				else
+					icmCpy3(labv,ipoints[i].v);
+
+#ifdef NEVER
+				/* Choose largest Y or L* */
+				if (ipoints[i].v[pcsy] > wpy) {
 					wp[0] = ipoints[i].v[0];
 					wp[1] = ipoints[i].v[1];
 					wp[2] = ipoints[i].v[2];
 					for (e = 0; e < p->inputChan; e++)
 						dwhite[e] = ipoints[i].p[e];
+					wpy = ipoints[i].v[pcsy];
+					wix = i;
 				}
-				if (ipoints[i].v[pcsy] < bp[pcsy]) {
+#else
+				
+				/* Tilt things towards D50 neutral white patches */
+				yv = labv[0] - 0.3 * sqrt(labv[1] * labv[1] + labv[2] * labv[2]);
+//printf("~1 patch %d Lab = %s, yv = %f\n",i+1,icmPdv(3,labv),yv);
+				if (yv > wpy) {
+//printf("~1 best so far\n");
+					wp[0] = ipoints[i].v[0];
+					wp[1] = ipoints[i].v[1];
+					wp[2] = ipoints[i].v[2];
+					for (e = 0; e < p->inputChan; e++)
+						dwhite[e] = ipoints[i].p[e];
+					wpy = yv;
+					wix = i;
+				}
+#endif
+				if (ipoints[i].v[pcsy] < bpy) {
 					bp[0] = ipoints[i].v[0];
 					bp[1] = ipoints[i].v[1];
 					bp[2] = ipoints[i].v[2];
 					for (e = 0; e < p->inputChan; e++)
 						dblack[e] = ipoints[i].p[e];
+					bpy = ipoints[i].v[pcsy];
+					bix = i;
 				}
 			}
+			/* Make sure values are XYZ */
 			if (p->pcs != icSigXYZData) {
 				icmLab2XYZ(&icmD50, wp, wp);
 				icmLab2XYZ(&icmD50, bp, bp);
 			}
 
-//printf("~1 xlut: got input white of dev %f %f %f XYZ %f %f %f\n",
-//dwhite[0], dwhite[1], dwhite[2], wp[0], wp[1], wp[2]);
+			
+			if (flags & ICX_VERBOSE) {
+				printf("Picked white patch %d with XYZ = %s, Lab = %s\n",
+				        wix+1, icmPdv(3, wp), icmPLab(wp));
+				printf("Picked black patch %d with XYZ = %s, Lab = %s\n",
+				        bix+1, icmPdv(3, bp), icmPLab(bp));
+			}
 
 		} else {	/* Output or Display device */
 			/* We assume that the output target is well behaved, */
@@ -2903,10 +3056,7 @@ int                quality			/* Quality metric, 0..3 */
 		}
 
 		if (flags & ICX_VERBOSE) {
-			double lwp[3];
-			icmXYZ2Lab(&icmD50, lwp, wp);
-			printf("Approximate White point XYZ = %f %f %f, Lab = %f %f %f\n",
-			        wp[0],wp[1],wp[2],lwp[0],lwp[1],lwp[2]);
+			printf("Approximate White point XYZ = %s, Lab = %s\n", icmPdv(3,wp),icmPLab(wp));
 		}
 	}
 
@@ -2963,6 +3113,10 @@ int                quality			/* Quality metric, 0..3 */
 				xfflags |= XFIT_OUT_LAB;
 		}
 
+		/* Always clip the absolute white point to have Y <= 1.0 ? */
+		if (flags & ICX_CLIP_WB)
+			xfflags |= XFIT_CLIP_WP;
+
 		/* With current B2A code, make sure a & b curves */
 		/* pass through zero. */
 		if (p->pcs == icSigLabData) {
@@ -3018,6 +3172,7 @@ int                quality			/* Quality metric, 0..3 */
 				out_smooth[f] = OUT_SMOOTH2;
 		}
 
+//printf("~1 wp before xfit %f %f %f\n", wp[0], wp[1], wp[2]);
 		/* Create input, sub and output per channel curves (if configured), */
 		/* adjust for white point to make relative (if configured), */
 		/* and create clut rspl using xfit class. */
@@ -3032,7 +3187,8 @@ int                quality			/* Quality metric, 0..3 */
 			xf->del(xf);
 			p->del((icxLuBase *)p);
 			return NULL;
-		}  
+		}
+//printf("~1 wp after xfit %f %f %f\n", wp[0], wp[1], wp[2]);
 
 		/* - - - - - - - - - - - - - - - */
 		/* Set the xicc input curve rspl */
@@ -3128,10 +3284,7 @@ int                quality			/* Quality metric, 0..3 */
 	{
 
 		if ((flags & ICX_SET_WHITE) && (flags & ICX_VERBOSE)) {
-			double lwp[3];
-			icmXYZ2Lab(&icmD50, lwp, wp);
-			printf("White point XYZ = %f %f %f, Lab = %f %f %f\n",
-			        wp[0],wp[1],wp[2],lwp[0],lwp[1],lwp[2]);
+			printf("White point XYZ = %s, Lab = %s\n", icmPdv(3,wp),icmPLab(wp));
 		}
 
 		/* Lookup the black point */
@@ -3148,7 +3301,7 @@ int                quality			/* Quality metric, 0..3 */
 
 			/* For CMYK devices, we choose a black that has minumum L within */
 			/* the ink limits, and if XICC_NEUTRAL_CMYK_BLACK it will in the direction */
-			/* that has the same chrimaticity as the white point, else choose the same */
+			/* that has the same chromaticity as the white point, else choose the same */
 			/* Lab vector direction as K, with the minimum L value. */
 			/* (Note this is duplicated in xicc.c icxLu_comp_bk_point() !!!) */
 			if (h->deviceClass != icSigInputClass
@@ -3180,7 +3333,8 @@ int                quality			/* Quality metric, 0..3 */
 				icmXYZ2Lab(&icmD50, bfs.p2, tt); /* Convert black direction to Lab */
 				if (flags & ICX_VERBOSE)
 					printf("Neutral black direction (Lab) =                     %f %f %f\n",bfs.p2[0], bfs.p2[1], bfs.p2[2]);
-#else
+
+#else /* K direction black */
 				/* Now figure abs Lab value of K only, as the direction */
 				/* to use for the rich black. */
 				for (e = 0; e < p->inputChan; e++)
@@ -3306,10 +3460,23 @@ int                quality			/* Quality metric, 0..3 */
 
 			/* Got XYZ black point in bp[] */
 			if (flags & ICX_VERBOSE) {
-				double labbp[3];
-				icmXYZ2Lab(&icmD50, labbp, bp);
-				printf("Black point XYZ = %f %f %f, Lab = %f %f %f\n",
-				        bp[0],bp[1],bp[2],labbp[0],labbp[1],labbp[2]);
+				printf("Black point XYZ = %s, Lab = %s\n", icmPdv(3,bp),icmPLab(bp));
+			}
+
+			/* Some ICC sw gets upset if the bp is at all -ve. */
+			/* Clip it if this is the case */
+			/* (Or we could get xfit to rescale the rspl instead ??) */
+			if ((flags & ICX_CLIP_WB)
+			 && (bp[0] < 0.0 || bp[1] < 0.0 || bp[2] < 0.0)) {
+				if (bp[0] < 0.0)
+					bp[0] = 0.0;
+				if (bp[1] < 0.0)
+					bp[1] = 0.0;
+				if (bp[2] < 0.0)
+					bp[2] = 0.0;
+				if (flags & ICX_VERBOSE) {
+					printf("Black point clipped to XYZ = %s, Lab = %s\n",icmPdv(3,bp),icmPLab(bp));
+				}
 			}
 		}
 
@@ -3500,7 +3667,7 @@ int                quality			/* Quality metric, 0..3 */
 		xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0, NULL);	/* Use a default */
 	p->cam = new_icxcam(cam_default);
 	p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf,
-	                 p->vc.Fxyz, XICC_USE_HK, XICC_NOCAMCL);
+	                 p->vc.Fxyz, XICC_USE_HK);
 	
 	if (flags & ICX_VERBOSE)
 		printf("Done A to B table creation\n");
@@ -3914,31 +4081,6 @@ double       detail		/* gamut detail level, 0.0 = def */
 
 	return gam;
 }
-
-/* ----------------------------------------------- */
-#if defined(DEBUG_RLUT) || defined(DEBUG_OLUT)
-
-/* Utility - return a string containing the di vector */
-static char *ppos(int di, double *p) {
-	static char buf[5][200];
-	static ix = 0;
-	int e;
-	char *bp;
-
-	if (++ix >= 5)
-		ix = 0;
-	bp = buf[ix];
-
-	for (e = 0; e < di; e++) {
-		if (e > 0)
-			*bp++ = ' ';
-		sprintf(bp, "%f", p[e]); bp += strlen(bp);
-	}
-	return buf[ix];
-}
-
-
-#endif
 
 /* ----------------------------------------------- */
 #ifdef DEBUG

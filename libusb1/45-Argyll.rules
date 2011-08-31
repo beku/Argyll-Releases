@@ -17,6 +17,9 @@ SYSFS{idVendor}=="0670", SYSFS{idProduct}=="0001", PROGRAM="/bin/sh -c 'K=%k; K=
 # i1Display
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2003", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c", MODE="660", GROUP="plugdev"
 
+# i1Display 3
+SYSFS{idVendor}=="0765", SYSFS{idProduct}=="5020", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c", MODE="660", GROUP="plugdev"
+
 # i1Monitor
 SYSFS{idVendor}=="0971", SYSFS{idProduct}=="2001", PROGRAM="/bin/sh -c 'K=%k; K=$${K#usbdev}; printf bus/usb/%%03i/%%03i $${K%%%%.*} $${K#*.}'", NAME="%c", MODE="660", GROUP="plugdev"
 

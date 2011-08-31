@@ -2,7 +2,295 @@
 Argyll CMS change log
 =====================
 
-Version 1.3.0
+Version 1.3.4 (31 August 2011)
+-------------
+
+*	Fix gamut code to ignore setting primary/secondary cusps that
+	are unlikely to be true. This avoids buggy gamut mapping
+	behaviour for gamuts that are very small and odd shaped.
+	Tweak saturation intent very slightly to improved hue consistency.
+
+*	Changed Linux USB code to avoid doing a set_configuration
+	if possible, since the USB driver does this by default.
+	This then avoids triggering a bug in the Spyder2, which
+	allows it to work on Linux version without the reset_ep fix,
+	and may also allow the Spyder to work better with USB hubs.
+
+*	Added support for the X-Rite i1 Display Pro and ColorMunki Display
+	colorimeters. As part of this, added support for CCSS calibration
+	files for the instruments and added CCSS support to ccxxmake (renamed from ccmxmake).
+	Provide new tool i1d3ccss to translating and installing CCSS files as well as
+    the manufacturers calibration files for these instruments.
+    Added non-default observer support for these instruments too.
+
+*	Fix all colorimeters so that the ccmx matrix is used only
+	for non-Ambient measurements.
+
+*	Change printtarg for DTP20 to allow for variable patch size.
+	Note that patch length must me 6.5, 7, 10, 12.5 or 13 mm.
+
+*	Changed dummy display matrix table to have channels rotated
+	rather than R & G swapped, to make it more obvious.
+
+*	Added option to colprof to allow setting the default profile
+	rendering intent.
+
+*	Fix bug in spectro/average.c - field match check index was wrong variable.
+
+*	Fix bug in xicc/xlut.c that caused bad reverse lookup
+	values at some clipped grid points.
+
+*	Increase number of re-seeding retries in target/ofps.c,
+	and fix bug that caused failure to finish rather than
+	error.
+
+*	Enhanced spectro/fakeread so that it will process a .ti3
+	file that has been renamed to .ti1.
+
+*	Fix bug in matrix input profile white point selection,
+	+ add in slight neutral bias code used in clut profiles.
+
+*	New profcheck -I wasn't working - fix option parsing.
+
+Version 1.3.3 (12th May 2011)
+-------------
+
+*	Added -I relative colorimetric intent flags to spectro/fakeread
+    and profile/profcheck, for special use.
+
+*	Fixed compiler dependant bug in Eye-One pro and (posibly) Munki
+	high res. spectral wavelength calculation.
+
+*	Add support for install variables DESTDIR and PREFIX
+	in Jamtop. These can be set on the command line using "jam -s"
+
+*	Add ref/linear.cal to distribution.
+
+*	Added targen -N parameter to allow adjustment of neutral axis
+	patch density emphasis. The default effect has also been
+	increased. Note this is only effective when perceptual distributions
+	are created, or the defaul OFPS with a high level of Adaptation is
+	used. This will be most effective when a pre-conditioning profile
+	is used. This may reduce the number of patches needed for a given
+	quality profile, or increase the quality for a given number of
+	patches. This should improve the result without needing to add
+    explicit grey test patches.
+
+*	Added spectro/instlib.ksh script to assemble all the files needed
+	for a standalone instrument library. Changed licence to GPLv2 for
+	the files included in the instlib.zip file that is thus created.
+	Can be built using the included Makefile, once libusb-1.0A has
+	been built.
+
+*	Fix Jambase so that recent MingW compilers don't need extra .dll's
+
+*	Change Linux serial code to test ports using O_NONBLOCK 
+
+*	Modify xspect & illumread to improve realism of UV spectrum estimation.
+
+*	Fixed profile/txt2ti3 so that a sample name that looks like an integer
+	is treated as text. (Fixes problem with latest ProfileMaker file).
+
+*	Added LCh option to spotread.
+
+*	Fixed numerical issue in scanin/scanrd.c, where large input rasters
+	would cause fitting to fail.
+
+*	Modified colprof input chart white patch detection to slightly
+	favour patches that are close to D50 neutral.
+
+*	Scaled XYZ PCS A2B profile deviation to improve default
+	smoothness.
+
+*	Change Make cLUT input -u black & white  point extrapolation
+	to use gamma curve + one order shaper, and increase these
+	extra points weights.
+
+*	Change black point search weighting to give a*b* error less
+	weight, so that devices narow gamuts due to strange inks
+	get a better chance at a reasonable black point.
+
+*	Added -Z option to colprof, to allow setting ICC attribute flags.
+
+*	Attempted to (yet again) fix the shortcoming of cam02 blue behaviour.
+	This may well improve the purity and color of blue gamut mapping.
+	Also fixed problem with inversion not matching the forward conversion,
+	resulting in gamut mapped cLUT tables white points not
+	being exact, and resulted in non perfect device values for white.
+
+*	Add code to temporarily disable X-Rite's new Daemon drivers on
+	OS X, for ColorMunki and EyeOne. The Argyll utilities either need
+	to be run as root, or the X-Rite Daeomon .plist's need to
+	be changed to run as the user.
+ 
+*	Added -R flag to colprof, which restricts the values of the white, black
+	and primaryies to have Y <= 1 and +ve, respectively. This can aid
+	compatibility with other programs.
+
+*	Fixed typo in spectro/inst.h that prevented flash measurement mode from
+	working.
+
+*	Replaced spectro/average with a new version that is more
+	general. Merging and Averaging are are now separate operations.
+
+*	Fixed bug in printcal - it wasn't dealing with spectral only files.
+
+*	Added extra verbose output to printcal in which it
+	computes an ideal power-like value to apply to the test chart values
+	in targen. Modified targen to use power-like function, to avoid
+	issues with small values with real power curve.
+
+* 	Reduced printcal data point smoothing slightly, to improve
+	accuracy.
+
+*	Fix bug in profile/printcal where the white point device
+	value wasn't beeing computed as the average of all the
+    white patches. Tightened up definition of white patch
+	to avoid targen -p type test charts slipping non-white
+	patches into white average. Made sort of device value consistent.
+
+*	Modify the way that XYZ cLUT B2A tables are indexed, so that
+	the white point is at the top corner of the grid. This should
+	make better use of the cLUT, as well as improving the accuracy
+	of the inverse white mapping. [Should solve Photoshop CS4/CS5
+	complaining that XYZ LUT profiles are 'defective'.]
+
+*	Added option in xicc/xicclu to plot an arbitrary slice.
+
+*	Expand the number of i1 Display OEM devices that can be used.
+
+*	Added some patches to help compile on FreeBSD.
+	(Thanks to Simon Walton)
+
+*	Added offset parameter to spectro/synthcal, to allow generation of
+	inverted ramps.
+
+*	Added another intent, "pa", Perceptual Appearance, which is the
+	same as perceptual except that the grey axes are not forced into
+	alignment, allowing the appearance parameters to have full affect,
+	including altering the chromatic mapping.
+
+*	txt2ti3 wasn't creating an iRGB colorspace file for output device
+	RGB files. This can cause warnings and failurs when mixed with
+	other iRGB tool sequences. Also fixed fakeread grey fudge to recognise
+	both RGB and iRGB.
+
+*	Added pathological case fix for target/ofps where the ink
+	limit == di-2. For CMYK this needs slightly more than
+	32 bits of mask. Fix forces limit to be slightly less than
+	di-2.
+
+*	targen was failing to proceed when fixed points happened
+	to be numerically just over the total ink limit, and ofps
+	then got stumped in adding them. Now clip them before
+	ofps tries to add them.
+
+*	Added more navigation options for chartread patch by patch mode.
+
+*	Fixed bug in "chartread -r -H" that caused resume of i1Pro high res
+	to fail with "The resumed spectral type seems to have changed"
+	due to a floating point mismatch.
+
+*	Modified profcheck so that it prints patch location if it is
+	present in the .ti3 file.
+
+*	Made doubly sure that DTP94 has offset drift compensation on.
+
+*	Changed dispcal and dispread -K option to -J. Added -K option to dispcal as
+	an alternate way of profiling a calibrated display, and also added a -K
+	option to dispcal. These options may be useful for displays that
+	don't have VideoLUTs or that (very strangely) have VideoLUTs with lower
+	precision entries than the frame buffer.
+
+*	Increased ColorMunki emissive auto scaling target "over" margine
+	from 5% to 10% to allow more room for instrument drift.
+
+*	Add more runtime debugging output in dispsup code (dispcal, dispread etc.)
+
+*	Fix bug in winusb + i1Display, where dark CRT measurements timeout.
+
+Version 1.3.2 (4th November 2010)
+-------------
+
+*	Turn off debugging that was accidentally left on in FWA code.
+	Add gcc 3.3 PPC optimizer bug workaround to FWA code in xicc/xspect.c
+
+*	Change shaper/matrix profile back to using power curve as 0th
+	order shape. Improve it with input & output offsets and
+	straight segment at zero. Make cLUT input -u black & white
+	point extrapolation use pure shaper curves with special tweaks.
+
+*	Increase dispcal native white target weighting from 10 to 50
+	to encourage white to be device 1.0,1.0,1.0 more strongly.
+
+Version 1.3.1 (26th October 2010)
+-------------
+
+*	Tightened up scanin -ca option parsing to reduce chances of false
+	trigger.
+
+*	Added synthetic device white/black point for input cLUT profiles
+	where the -u flag is being used. Particularly for Lab PCS, this can
+	improve the reasonableness of the extrapolation along the neutral
+	axis. Added -un flag option to disable this.
+
+*	Changed shaper/matrix profiles so that they use pure shaper curves
+	rather than base gamma + shapers, as this seems to be a better fit
+	for real device behaviour.
+
+* 	Fixed MSWIN Vista/Win7 problem where having Task Manager running
+	would stop display test window updating. Also fixed plot library to
+	avid the same problem.
+
+*	Added -i (input) option to profile/txt2ti3, as well as making
+	device value scaling be guessed from the data range.
+	
+*	Fixed problem in MSWin .inf files not copying libusb .dll to system
+	directories.
+
+*	Swapped dispwin -E and -D flags, to make -D debug consistent
+	throughout tools.
+
+*	Changed the ARGYLL_NOT_INTERACTIVE mode so that all return and line
+	feed characters are ignored, so that they can be used freely to
+	flush stdin without triggering anything.
+
+*	Added ref/ECI2002.ti1, so ECI2002 test values can be printed using
+	printtarg.
+
+*	Added -L option to chartread, to save both XYZ and Lab values.
+
+*	Fixed endless loop problem with chartread -r -p on fully read chart.
+
+*	Increase display patch color change to instrument measurement
+	settling time from 60 to 200 msec, to allow for very slow
+	MVA and PVA LCD displays.
+
+*	Fixed problem in Jambase that stops MSWin MingW compiling.
+
+*	Added -S option to chartread, that suppresses wrong strip and unexpected value warnings.
+
+*	Fix dispcal and spotread so that color temperature takes into account any non-standard
+	observer (ie. the color temperature is the closest point on the spectrum locus
+	as determined by the chosen observers interpretation of the Plancian or
+    daylight spectrum.)
+
+*	Fix bug in libusb1 triggered on systems that support bulk continuation (Linux)
+
+*	Added 1964_10c observer to spectro/dispcal, to better allow comparison to
+	the default numbers.
+ 
+*	Added recognition for Huey built into Lenovo W series Laptops. 
+
+*	Fixed chartread/dispsup/spotread etc. so that -N isn't fatal if the instrument
+	doesn't support it.
+
+*   Fixed dispcal to disable black & white drift tracking during interactive adjustment.
+
+*	Added -s option to ccmxmake to allow the number of test patches to be set.
+
+
+Version 1.3.0 (8th September 2010)
 -------------
 
 *	Added option to dispread to save non-normalised to Y=100 values.
@@ -140,7 +428,7 @@ Version 1.2.0 (30 July 2010)
 	that has not, and may never be fixed upstream, as well as
 	missing critical functionality (clearep()).
 
-*	Changed CMYK black point to be natural, rather than the darkest
+*	Changed CMYK black point to be neutral, rather than the darkest
 	point in the same direction and K only. This may wreck
 	K only to black point matching, but it will stop printers
 	with funny colored K ink from messing up the black point.
@@ -762,7 +1050,7 @@ Version 1.0.3 bug fix release  (3rd September 2008)
 * 	Added support for i1 Monitor instrument,
 	which is an i1pro without reflective capability.
 
-Version 1.0.2 bug fix release
+Version 1.0.2 bug fix release 19th August 2008
 -----------------------------
 
 *	Fixed two typo bugs in colprof (xicc/xfit.c) to do with output

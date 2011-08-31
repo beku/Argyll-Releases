@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
   <title>dispwin</title>
@@ -28,7 +28,8 @@ some instruments (ie. Eye-One Pro).<br>
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#v">-v</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Verbose mode<br>
+&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose mode<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#display">-display displayname</a><span
  style="font-family: monospace;"> [<span style="font-weight: bold;">X11
@@ -39,84 +40,102 @@ only</span>] Choose X11 display name<br>
  style="font-weight: bold;">X11
 only</span>] Choose the display from the following list (default 1),<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-and optionally choose a different display m for Video LUT access.<br>
+and
+optionally choose a different display m for Video LUT access.<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#d">-d
 n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-[Not X11] Choose the display from the following list (default 1)<br
+[Not
+X11] Choose the display from the following list (default 1)<br
  style="font-family: monospace;">
 </span></font><font size="-1"><span style="font-family: monospace;"></span><span
  style="font-family: monospace;">&nbsp;<a href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Position test window and scale it</span><br
+Position
+test window and scale it</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+ho,vi:
+0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.<br>
+ss:
+0.5 = half, 1.0 = normal, 2.0 = double etc.<br>
 &nbsp;</span></font><font size="-1"><span
  style="font-family: monospace;"><a href="#F">-F</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Fill whole screen with black background</span></font><br
+Fill
+whole screen with black background</span></font><br
  style="font-family: monospace;">
 <font size="-1"><span style="font-family: monospace;"></span><span
  style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#i">-i</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Run forever with random values<br>
+&nbsp;&nbsp;&nbsp;&nbsp;
+Run forever with random values<br>
 &nbsp;<a href="#G">-G <span style="font-style: italic;">filename</span></a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Display RGB colors from CGATS file<br>
 &nbsp;</span></font><font size="-1"><a style="font-family: monospace;"
  href="#m">-m</a><span style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Manually step through colors</span></font><br>
+&nbsp;&nbsp;&nbsp;&nbsp;
+Manually step through colors</span></font><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#r">-r</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Test just video LUT loading &amp; Beeps<br>
+Test
+just video LUT loading &amp; Beeps<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#n">-n</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Test native display values (rather than through Video LUT)<br>
+Test
+native display values (rather than through Video LUT)<br>
 &nbsp;<a href="#s">-s <span style="font-style: italic;">filename.cal</span></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Save the currently loaded Video LUT to 'filename'<br>
+Save
+the currently loaded Video LUT to 'filename'<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#c">-c</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Load a linear display calibration (clear calibration)</span></font><font
+Load
+a linear display calibration (clear calibration)</span></font><font
  size="-1"><span style="font-family: monospace;"><br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#V">-V</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Verify that calfile/profile cal. is currently loaded in LUT<br>
+Verify
+that calfile/profile cal. is currently loaded in LUT<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#I">-I</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></font><font size="-1"><span style="font-family: monospace;">Install
-profile for display and use it's calibration<br>
+profile
+for display and use it's calibration<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#U">-U</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></font><font size="-1"><span style="font-family: monospace;">Un-install
-profile for display<br>
+profile
+for display<br>
 &nbsp;<a href="#S">-S d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Specify the install/uninstall scope for OS X [nlu] or Vista [lu]<br>
+Specify
+the install/uninstall scope for OS X [nlu] or Vista [lu]<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-d is one of: n = network, l = local system, u = user (default)<br>
+d
+is one of: n = network, l = local system, u = user (default)<br>
 </span></font><font size="-1"><span style="font-family: monospace;"></span></font><font
  size="-1"><span style="font-family: monospace;">&nbsp;<a href="#L">-L</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></font><font size="-1"><span style="font-family: monospace;">Load
-installed profiles cal. into Video LUT<br>
+installed
+profiles cal. into Video LUT<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="#D">-D</a>
+ href="#E">-E</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 [<span style="font-weight: bold;">X11
 only</span>] Run in daemon loader mode for given X11 server <br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#E">-E [level]</a><span
+ style="font-family: monospace;" href="#D">-D [level]</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Print debug diagnostics to stderr</span></font><font size="-1"><span
+Print
+debug diagnostics to stderr</span></font><font size="-1"><span
  style="font-family: monospace;"></span></font><font size="-1"><span
  style="font-family: monospace;"></span><span
  style="font-family: monospace;"><br>
@@ -124,7 +143,8 @@ Print debug diagnostics to stderr</span></font><font size="-1"><span
  size="-1"><span style="font-family: monospace;"></span></font></a><font
  size="-1"><a style="font-family: monospace;" href="#p1"><i>calfile</i></a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Load display calibration (<a href="cal_format.html">.cal</a> or .icm)
+Load
+display calibration (<a href="cal_format.html">.cal</a> or .icm)
 into LUT, and exit.</span><span style="font-family: monospace;"></span><span
  style="font-family: monospace;"></span></font><br>
 <br>
@@ -179,7 +199,8 @@ component, so the Visual generally needs to be 24 bits, 8 bits per
 color component.<br>
 <br>
 <a name="dnm"></a><span style="font-weight: bold;">-d n[,m]</span>Because
-of the difficulty cause by TwinView and
+of
+the difficulty cause by TwinView and
 MergedFB in X11 based systems, you can optionally specify a separate
 display number after the display that is going to be used to present
 test patches, for accessing the VideoLUT hardware. This must be
@@ -298,7 +319,8 @@ unchanged.<br>
 systems have more than one profile scope that an installed profile will
 apply to, and this parameter allows overriding the default scope. On OS
 X, there is a choice of three scopes: <span style="font-weight: bold;">n</span>:
-for network scope, if people are sharing profiles over a network, <span
+for
+network scope, if people are sharing profiles over a network, <span
  style="font-weight: bold;">l</span>: local system scope, which
 installs the profile for all users of a system, and the default <span
  style="font-weight: bold;">u</span>, which covers just the user
@@ -317,8 +339,8 @@ of initializing the display on system startup from the installed
 display profile, if the system doesn't not
 do this automatically .<br>
 <br>
-<a name="D"></a> <span style="font-weight: bold;">-D</span>:
-Experimental. When
+<a name="E"></a> <span style="font-weight: bold;">-E</span>:
+Daemon mode (experimental). When
 running on a UNIX based system that used the
 X11
 Windowing
@@ -333,7 +355,7 @@ given, it will emit messages to stdout to show what it is doing. When
 it is first invoked, it will load the installed profiles of all the
 screens of the given X11 server.<br>
 <br>
-<a name="E"></a>The <b>-E</b> flag causes diagnostics to be printed to
+<a name="D"></a>The <b>-D</b> flag causes diagnostics to be printed to
 stdout. A level can
 be set between 1 .. 9, that may give progressively more verbose
 information. This can be useful in

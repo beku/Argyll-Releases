@@ -61,12 +61,13 @@
 		                /* Absolute = red, Relative = yellow, Radial = blue, Depth = green */
 #undef PLOT_AXES		/* [Und] */
 #undef PLOT_EVECTS		/* [Und] Create VRML of error correction vectors */
-#define VERB 0 			/* [0] If <= 1, print progress headings */
+#undef VERB  			/* [Und] [0] If <= 1, print progress headings */
 						/* if  > 1, print information about everything */
 #undef SHOW_NEIGB_WEIGHTS	/* [Und] Show the weighting for each point of neighbours */
 
 #undef PLOT_DIGAM		/* [Und] Rather than DST_GMT - don't free it (#def in gammap.c too) */
 
+#define SUM_POW 2.0		/* Delta's are sum of component deltas ^ SUM_POW */
 #define LIGHT_L 70.0	/* "light" L/J value */
 #define DARK_L  5.0		/* "dark" L/J value */
 #define NEUTRAL_C  20.0	/* "neutral" C value */
@@ -78,6 +79,16 @@
 #define SHRINK 5.0		/* Shrunk destination evect surface factor */
 #define CYLIN_SUBVEC	/* [Def] Make sub-vectors always cylindrical direction */
 #define SUBVEC_SMOOTHING	/* Smooth the sub-vectors */
+
+						/* Experimental - not used: */
+
+						/* This has similar effects to lowering SUM_POW without the side effects */
+						/* and improves hue detail for small destination gamuts. */
+						/* (This and lxpow are pretty hacky. Is there a better way ?) */
+#undef EMPH_NEUTRAL	//0.5			/* Emphasis strength near neutral */
+#define EMPH_THR	    10.0		/* delta C threshold above which it kicks in */
+
+#undef LINEAR_HUE_SUM	/* Make delta^2 = (sqrt(l^2 + c^2) + h)^2 */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 #if defined(VERB)
@@ -102,8 +113,8 @@ static void create_influence_plot(nearsmth *smp, int nmpts);
 /* Compute the weighted delta E squared of in1 - in2 */
 /* (This is like the CIE DE94) */
 static double wdesq(
-double in1[3],
-double in2[3],
+double in1[3],			/* Destination location */
+double in2[3],			/* Source location */
 double lweight,
 double cweight,
 double hweight,
@@ -112,6 +123,7 @@ double sumpow			/* Sum power. 0.0 == 2.0 */
 	double desq, dhsq;
 	double dlsq, dcsq;
 	double vv;
+	double dc, c1, c2;
 
 //printf("~1 wdesq got %f %f %f and %f %f %f\n", in1[0], in1[1], in1[2], in2[0], in2[1], in2[2]);
 	/* Compute delta L squared and delta E squared */
@@ -127,7 +139,6 @@ double sumpow			/* Sum power. 0.0 == 2.0 */
 
 	/* compute delta chromanance squared */
 	{
-		double dc, c1, c2;
 
 		/* Compute chromanance for the two colors */
 		c1 = sqrt(in1[1] * in1[1] + in1[2] * in1[2]);
@@ -144,11 +155,25 @@ double sumpow			/* Sum power. 0.0 == 2.0 */
 	if ((dhsq = desq - dlsq - dcsq) < 0.0)
 		dhsq = 0.0;
 
+#ifdef EMPH_NEUTRAL		/* Emphasise hue differences whenc dc is large and we are */ 
+						/* close to the neutral axis */
+	vv = 3.0 / (1.0 + 0.03 * c1);				/* Full strength scale factor from dest location */
+	vv = 1.0 + EMPH_NEUTRAL * (vv - 1.0);		/* Reduced strength scale factor */
+	vv *= (dc + EMPH_THR)/EMPH_THR;
+	dhsq *= vv * vv;							/* Scale squared hue delta */
+#endif
+
 	if (sumpow == 0.0 || sumpow == 2.0) {	/* Normal sum of squares */ 
+#ifdef HACK
+		vv = sqrt(lweight * dlsq + cweight * dcsq) + sqrt(hweight * dhsq);
+		vv *= vv;
+		vv = fabs(vv);	/* Avoid -0.0 */
+#else
 		vv = lweight * dlsq + cweight * dcsq + hweight * dhsq;
 		vv = fabs(vv);	/* Avoid -0.0 */
+#endif
 	} else {
-		sumpow /= 2.0;
+		sumpow *= 0.5;
 		vv = lweight * pow(dlsq, sumpow) + cweight * pow(dcsq,sumpow) + hweight * pow(dhsq,sumpow);
 		vv = fabs(vv);	/* Avoid -0.0 */
 		vv = pow(vv, 1.0/sumpow);
@@ -163,12 +188,13 @@ double sumpow			/* Sum power. 0.0 == 2.0 */
 /* (This is like the CIE DE94) */
 static void diffLCh(
 double out[3],
-double in1[3],
-double in2[3]
+double in1[3],			/* Destination location */
+double in2[3]			/* Source location */
 ) {
 	double desq, dhsq;
 	double dlsq, dcsq;
 	double vv;
+	double dc, c1, c2;
 
 	/* Compute delta L squared and delta E squared */
 	{
@@ -183,7 +209,6 @@ double in2[3]
 
 	/* compute delta chromanance squared */
 	{
-		double dc, c1, c2;
 
 		/* Compute chromanance for the two colors */
 		c1 = sqrt(in1[1] * in1[1] + in1[2] * in1[2]);
@@ -199,6 +224,14 @@ double in2[3]
 	/* Compute delta hue squared */
 	if ((dhsq = desq - dlsq - dcsq) < 0.0)
 		dhsq = 0.0;
+
+#ifdef EMPH_NEUTRAL		/* Emphasise hue differences whenc dc is large and we are */ 
+						/* close to the neutral axis */
+	vv = 3.0 / (1.0 + 0.03 * c1);				/* Full strength scale factor from dest location */
+	vv = 1.0 + EMPH_NEUTRAL * (vv - 1.0);		/* Reduced strength scale factor */
+	vv *= (dc + EMPH_THR)/EMPH_THR;
+	dhsq *= vv * vv;							/* Scale squared hue delta */
+#endif
 
 	out[0] = dlsq;
 	out[1] = dcsq;
@@ -219,14 +252,14 @@ double dxratio		/* Depth expansion ratio of mapping */
 	double a_o;
 	double va, vr = 0.0, vl, vd, vv = 0.0;
 
-	/* Absolute, Delta E^2 between destination closest and test point */
+	/* Absolute, Delta E^2 between test point and destination closest */
 	/* aodv is already positioned acording to the LCh weights, */
 	/* so weight as per average of these */
 	a_o = w->a.o;
-	va = wdesq(aodv, dtp, a_o, a_o, a_o, 2.0);
+	va = wdesq(dtp, aodv, a_o, a_o, a_o, SUM_POW);
 
-	/* Radial. Delta E^2 between source mapped radially to dest and test point */
-	vl = wdesq(drv, dtp, w->rl.l, w->rl.c, w->rl.h, 2.0);
+	/* Radial. Delta E^2 between test point and source mapped radially to dest gamut */
+	vl = wdesq(dtp, drv, w->rl.l, w->rl.c, w->rl.h, SUM_POW);
 
 	/* Depth ratio error^2. */
 	vd = w->d.co * dcratio * dcratio
@@ -350,16 +383,35 @@ double *_dv
 
 #ifdef NEVER
 	/* Absolute weighted delta E between source and dest test point */
-	rv = wdesq(ddv, p->sv, p->wt.ra.l, p->wt.ra.c, p->wt.ra.h, 2.0);
+	rv = wdesq(ddv, p->sv, p->wt.ra.l, p->wt.ra.c, p->wt.ra.h, SUM_POW);
 #else
 	{
 		double ppp = p->wt.a.lxpow;
 		double thr = p->wt.a.lxthr;	/* Xover between normal and power */
+		double sumpow = SUM_POW; 
 
 		diffLCh(delch, ddv, p->sv);
-		rv = p->wt.ra.l * pow(delch[0], ppp) * thr/pow(thr, ppp)
-		   + p->wt.ra.c * delch[1]
-		   + p->wt.ra.h * delch[2];
+
+		if (sumpow == 0.0 || sumpow == 2.0) {	/* Normal sum of squares */ 
+#ifdef LINEAR_HUE_SUM
+			double ll, cc, hh;
+			ll = p->wt.ra.l * pow(delch[0], ppp) * thr/pow(thr, ppp);
+			cc = p->wt.ra.c * delch[1];
+			hh = p->wt.ra.h * delch[2];
+			rv = sqrt(ll + cc) + sqrt(hh);
+			rv *= rv;
+#else
+			rv = p->wt.ra.l * pow(delch[0], ppp) * thr/pow(thr, ppp)
+			   + p->wt.ra.c * delch[1]
+			   + p->wt.ra.h * delch[2];
+#endif
+		} else {
+			sumpow *= 0.5;
+			
+			rv = p->wt.ra.l * pow(delch[0], ppp * sumpow) * thr/pow(thr, ppp * sumpow)
+			   + p->wt.ra.c * pow(delch[1], sumpow)
+			   + p->wt.ra.h * pow(delch[2], sumpow);
+		}
 	}
 #endif
 
@@ -399,16 +451,35 @@ double *_dv
 
 #ifdef NEVER
 	/* Absolute weighted delta E between source and dest test point */
-	rv = wdesq(ddv, p->sv, p->wt.ra.l, p->wt.ra.c, p->wt.ra.h, 2.0);
+	rv = wdesq(ddv, p->sv, p->wt.ra.l, p->wt.ra.c, p->wt.ra.h, SUM_POW);
 #else
 	{
 		double ppp = p->wt.a.lxpow;
 		double thr = p->wt.a.lxthr;	/* Xover between normal and power */
+		double sumpow = SUM_POW;
 
 		diffLCh(delch, ddv, p->dv);
-		rv = p->wt.ra.l * pow(delch[0], ppp) * thr/pow(thr, ppp)
-		   + p->wt.ra.c * delch[1]
-		   + p->wt.ra.h * delch[2];
+
+		if (sumpow == 0.0 || sumpow == 2.0) {	/* Normal sum of squares */ 
+#ifdef LINEAR_HUE_SUM
+			double ll, cc, hh;
+			ll = p->wt.ra.l * pow(delch[0], ppp) * thr/pow(thr, ppp);
+			cc = p->wt.ra.c * delch[1];
+			hh = p->wt.ra.h * delch[2];
+			rv = sqrt(ll + cc) + sqrt(hh);
+			rv *= rv;
+#else
+			rv = p->wt.ra.l * pow(delch[0], ppp) * thr/pow(thr, ppp)
+			   + p->wt.ra.c * delch[1]
+			   + p->wt.ra.h * delch[2];
+#endif
+		} else {
+			sumpow *= 0.5;
+			
+			rv = p->wt.ra.l * pow(delch[0], ppp * sumpow) * thr/pow(thr, ppp * sumpow)
+			   + p->wt.ra.c * pow(delch[1], sumpow)
+			   + p->wt.ra.h * pow(delch[2], sumpow);
+		}
 	}
 #endif
 

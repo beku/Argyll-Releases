@@ -2,7 +2,7 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9.00"
-	Name="libusb-1.0 (static)"
+	Name="libusb-1.0A (static)"
 	ProjectGUID="{349EE8F9-7D25-4909-AAF5-FF3FADE72187}"
 	RootNamespace="libusb"
 	TargetFrameworkVersion="196613"
@@ -21,7 +21,7 @@
 		<Configuration
 			Name="Debug|Win32"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib"
-			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib\libusb-1.0"
+			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib\libusb-1.0A"
 			ConfigurationType="4"
 			CharacterSet="2"
 			>
@@ -62,7 +62,7 @@
 			/>
 			<Tool
 				Name="VCLibrarianTool"
-				OutputFile="$(OutDir)\libusb-1.0.lib"
+				OutputFile="$(OutDir)\libusb-1.0A.lib"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -83,7 +83,7 @@
 		<Configuration
 			Name="Debug|x64"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib"
-			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib\libusb-1.0"
+			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib\libusb-1.0A"
 			ConfigurationType="4"
 			CharacterSet="2"
 			>
@@ -125,7 +125,7 @@
 			/>
 			<Tool
 				Name="VCLibrarianTool"
-				OutputFile="$(OutDir)\libusb-1.0.lib"
+				OutputFile="$(OutDir)\libusb-1.0A.lib"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -146,7 +146,7 @@
 		<Configuration
 			Name="Release|Win32"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib"
-			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib\libusb-1.0"
+			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib\libusb-1.0A"
 			ConfigurationType="4"
 			CharacterSet="2"
 			WholeProgramOptimization="1"
@@ -188,7 +188,7 @@
 			/>
 			<Tool
 				Name="VCLibrarianTool"
-				OutputFile="$(OutDir)\libusb-1.0.lib"
+				OutputFile="$(OutDir)\libusb-1.0A.lib"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -209,7 +209,7 @@
 		<Configuration
 			Name="Release|x64"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib"
-			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib\libusb-1.0"
+			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\lib\libusb-1.0A"
 			ConfigurationType="4"
 			CharacterSet="2"
 			WholeProgramOptimization="1"
@@ -252,7 +252,7 @@
 			/>
 			<Tool
 				Name="VCLibrarianTool"
-				OutputFile="$(OutDir)\libusb-1.0.lib"
+				OutputFile="$(OutDir)\libusb-1.0A.lib"
 			/>
 			<Tool
 				Name="VCALinkTool"

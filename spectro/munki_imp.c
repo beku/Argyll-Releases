@@ -10,8 +10,8 @@
  * Copyright 2006 - 2010, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  *
  * (Base on i1pro_imp.c)
  */
@@ -45,22 +45,26 @@
 #include <time.h>
 #include <stdarg.h>
 #include <math.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
 #include "rspl.h"
+#else /* SALONEINSTLIB */
+#include <fcntl.h>
+#include "sa_config.h"
+#include "numsup.h"
+#include "rspl1.h"
+#endif /* SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
 #include "conv.h"
 #include "sort.h"
 
-# define RELEASE_VERSION ARGYLL_VERSION
-
 /* Configuration */
 #define USE_THREAD		/* Need to use thread, or there are 1.5 second internal */
 						/* instrument delays ! */
-#undef ENABLE_WRITE     /* Enable capability of writing to EEprom */
 #define ENABLE_NONVCAL	/* Enable saving calibration state between program runs in a file */
 #define ENABLE_NONLINCOR	/* Enable non-linear correction */
 						/* NOTE :- high gain scaling will be stuffed if disabled! */
@@ -118,9 +122,11 @@
 						/* The actual sensor values used are indexes 6 to 134 inclusive */
 
 /* High res mode settings */
-#define HIGHRES_SHORT 350
+#define HIGHRES_SHORT 360		/* Wavelength to calculate */
 #define HIGHRES_LONG  740
 #define HIGHRES_WIDTH  (10.0/3.0) /* (The 3.3333 spacing and lanczos2 seems a good combination) */
+#define HIGHRES_REF_MIN 410.0	  /* Too much stray light below this in reflective mode */
+#define HIGHRES_TRANS_MIN 380.0	  /* Too much stray light below this in reflective mode */
 
 #include "munki.h"
 #include "munki_imp.h"
@@ -462,13 +468,23 @@ munki_code munki_imp_init(munki *p) {
 	m->trig = inst_opt_trig_keyb;
 	m->scan_toll_ratio = 1.0;
 
+	/* Get the firmware parameters so that we can check eeprom range. */
+	if ((ev = munki_getfirm(p, &m->fwrev, &m->tickdur, &m->minintcount, &m->noeeblocks, &m->eeblocksize)) != MUNKI_OK)
+		return ev; 
+	if (p->debug >= 2) fprintf(stderr,"Firmware rev = %d.%d\n",m->fwrev/256, m->fwrev % 256);
+
 #ifdef NEVER	// Dump the eeprom contents to stdout
 	{
 		unsigned int i, ii, r, ph;
 		int base, size;
 	
+		if (m->noeeblocks != 2 || m->eeblocksize != 8192)
+			error("EEProm is unexpected size");
+
 		size = 8192;
 		for (base = 0; base < (2 * 8192); base += 8192) {
+			unsigned char eeprom[8192];
+
 			if ((ev = munki_readEEProm(p, eeprom, base, size)) != MUNKI_OK)
 				return ev;
 		
@@ -516,11 +532,6 @@ munki_code munki_imp_init(munki *p) {
 
 #endif	// NEVER
 	
-	/* Get the firmware parameters so that we can check eeprom range. */
-	if ((ev = munki_getfirm(p, &m->fwrev, &m->tickdur, &m->minintcount, &m->noeeblocks, &m->eeblocksize)) != MUNKI_OK)
-		return ev; 
-	if (p->debug >= 2) fprintf(stderr,"Firmware rev = %d.%d\n",m->fwrev/256, m->fwrev % 256);
-
 	/* Tick in seconds */
 	m->intclkp = (double)m->tickdur * 1e-6;
 
@@ -549,7 +560,7 @@ munki_code munki_imp_init(munki *p) {
 	if (calsize > (m->noeeblocks * m->eeblocksize))
 		return MUNKI_INT_CALTOOBIG;
 
-	/* Read the calibration raw data */
+	/* Read the calibration raw data from the EEProm */
 	 if ((calbuf = (unsigned char *)calloc(rucalsize, sizeof(unsigned char))) == NULL) {
 		DBG((dbgo,"munki_imp_init malloc %d bytes failed\n",rucalsize))
 		if (p->verb) printf("Malloc %d bytes failed\n",rucalsize);
@@ -580,7 +591,7 @@ munki_code munki_imp_init(munki *p) {
 			s = &m->ms[i];
 
 			/* Default to an emissive configuration */
-			s->targoscale = 0.95;	/* Allow extra 5% margine by default */
+			s->targoscale = 0.90;	/* Allow extra 10% margine by default */
 			s->gainmode = 0;		/* Normal gain mode */
 			s->inttime = 0.5;		/* Initial integration time */
 
@@ -600,7 +611,7 @@ munki_code munki_imp_init(munki *p) {
 			s->idark_valid = 0;		/* Interpolatable Dark cal invalid */
 			s->idark_data = dmatrixz(0, 3, 0, m->nraw-1);  
 
-			s->min_wl = 360.0;		/* Default minimum to report */
+			s->min_wl = 0.0;		/* Default minimum to report */
 
 			s->dark_int_time  = DISP_INTT;	/* 0.7 */
 			s->dark_int_time2 = DISP_INTT2;	/* 0.3 */
@@ -628,7 +639,7 @@ munki_code munki_imp_init(munki *p) {
 					s->dreadtime = 0.5;			/* same as reading */
 					s->wreadtime = 0.5;
 					s->maxscantime = 0.0;
-					s->min_wl = 410.0;			/* Not enogh illumination to go below this */
+					s->min_wl = HIGHRES_REF_MIN; /* Not enogh illumination to go below this */
 					break;
 
 				case mk_refl_scan:
@@ -648,12 +659,12 @@ munki_code munki_imp_init(munki *p) {
 					s->dreadtime = 0.10;
 					s->wreadtime = 0.10;
 					s->maxscantime = MAXSCANTIME;
-					s->min_wl = 410.0;			/* Not enogh illumination to go below this */
+					s->min_wl = HIGHRES_REF_MIN; /* Not enogh illumination to go below this */
 					break;
 
 				case mk_disp_spot:				/* Same as emissive spot, but not adaptive */
 				case mk_proj_spot:				/* Same as tele spot, but not adaptive */
-					s->targoscale = 0.95;		/* Allow extra 5% margine */
+					s->targoscale = 0.90;		/* Allow extra 10% margine */
 					if (i == mk_disp_spot) {
 						for (j = 0; j < m->nwav1; j++)
 							s->cal_factor1[j] = EMIS_SCALE_FACTOR * m->emis_coef1[j];
@@ -685,7 +696,7 @@ munki_code munki_imp_init(munki *p) {
 				case mk_emiss_spot:
 				case mk_amb_spot:
 				case mk_tele_spot:			/* Adaptive projector */
-					s->targoscale = 0.95;		/* Allow extra 5% margine */
+					s->targoscale = 0.90;		/* Allow extra 5% margine */
 					if (i == mk_emiss_spot) {
 						for (j = 0; j < m->nwav1; j++)
 							s->cal_factor1[j] = EMIS_SCALE_FACTOR * m->emis_coef1[j];
@@ -720,7 +731,7 @@ munki_code munki_imp_init(munki *p) {
 
 				case mk_emiss_scan:
 				case mk_amb_flash:
-					s->targoscale = 0.95;		/* Allow extra 5% margine */
+					s->targoscale = 0.90;		/* Allow extra 10% margine */
 					if (i == mk_emiss_scan) {
 						for (j = 0; j < m->nwav1; j++)
 							s->cal_factor1[j] = EMIS_SCALE_FACTOR * m->emis_coef1[j];
@@ -754,7 +765,7 @@ munki_code munki_imp_init(munki *p) {
 
 				/* Transparency has a white reference, and interpolated dark ref. */
 				case mk_trans_spot:
-					s->targoscale = 0.95;		/* Allow extra 5% margine */
+					s->targoscale = 0.90;		/* Allow extra 10% margine */
 					s->trans = 1;
 					s->adaptive = 1;
 
@@ -765,11 +776,11 @@ munki_code munki_imp_init(munki *p) {
 					s->dreadtime = 0.0;
 					s->wreadtime = 1.0;
 					s->maxscantime = 0.0;
-					s->min_wl = 380.0;			/* Too much stray light below this ? */
+					s->min_wl = HIGHRES_TRANS_MIN;	/* Too much stray light below this ? */
 					break;
 
 				case mk_trans_scan:
-					s->targoscale = 0.95;		/* Allow extra 5% margine */
+					s->targoscale = 0.90;		/* Allow extra 10% margine */
 					s->trans = 1;
 					s->scan = 1;
 					s->targoscale = SCAN_OP_LEV;
@@ -792,7 +803,7 @@ munki_code munki_imp_init(munki *p) {
 					s->dreadtime = 0.00;
 					s->wreadtime = 0.10;
 					s->maxscantime = MAXSCANTIME;
-					s->min_wl = 380.0;			/* Too much stray light below this ? */
+					s->min_wl = HIGHRES_TRANS_MIN;	/* Too much stray light below this ? */
 					break;
 			}
 		}
@@ -2023,29 +2034,33 @@ munki_code munki_save_calibration(munki *p) {
 	int i, j;
 	char nmode[10];
 	char cal_name[40+1];		/* Name */
-	char *cal_path = NULL;		/* Allocated overal path */
+	char **cal_paths = NULL;
+	int no_paths = 0;
 	FILE *fp;
 	i1pnonv x;
 	int ss;
-	int argyllversion = RELEASE_VERSION;
+	int argyllversion = ARGYLL_VERSION;
 
 	strcpy(nmode, "w");
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
 #if defined(O_BINARY) || defined(_O_BINARY)
 	strcat(nmode, "b");
 #endif
 
 	sprintf(cal_name, "color/.mk_%s.cal", m->serno);
-	if ((cal_path = xdg_bds(NULL, xdg_cache, xdg_write, xdg_user, cal_name)) == NULL)
+	if ((no_paths = xdg_bds(NULL, &cal_paths, xdg_cache, xdg_write, xdg_user, cal_name)) < 1)
 		return MUNKI_INT_CAL_SAVE;
 
-	DBG((dbgo,"munki_save_calibration saving to file '%s'\n",cal_path));
+	DBG((dbgo,"munki_save_calibration saving to file '%s'\n",cal_paths[0]));
 
-	if (create_parent_directories(cal_path))
+	if (create_parent_directories(cal_paths[0]))
 		return MUNKI_INT_CAL_SAVE;
 
-	if ((fp = fopen(cal_path, nmode)) == NULL) {
+	if ((fp = fopen(cal_paths[0], nmode)) == NULL) {
 		DBG((dbgo,"munki_save_calibration failed to open file for writing\n"));
-		free(cal_path);
+		xdg_free(cal_paths, no_paths);
 		return MUNKI_INT_CAL_SAVE;
 	}
 	
@@ -2118,12 +2133,12 @@ munki_code munki_save_calibration(munki *p) {
 	if (x.ef != 0) {
 		DBG((dbgo,"Writing calibration file failed\n"))
 		fclose(fp);
-		delete_file(cal_path);
+		delete_file(cal_paths[0]);
 	} else {
 		fclose(fp);
 		DBG((dbgo,"Writing calibration file done\n"))
 	}
-	free(cal_path);
+	xdg_free(cal_paths, no_paths);
 
 	return ev;
 }
@@ -2136,7 +2151,8 @@ munki_code munki_restore_calibration(munki *p) {
 	int i, j;
 	char nmode[10];
 	char cal_name[40+1];		/* Name */
-	char *cal_path;
+	char **cal_paths = NULL;
+	int no_paths = 0;
 	FILE *fp;
 	i1pnonv x;
 	int argyllversion;
@@ -2149,17 +2165,17 @@ munki_code munki_restore_calibration(munki *p) {
 #endif
 
 	sprintf(cal_name, "color/.mk_%s.cal", m->serno);
-	if ((cal_path = xdg_bds(NULL, xdg_cache, xdg_read, xdg_user, cal_name)) == NULL)
+	if ((no_paths = xdg_bds(NULL, &cal_paths, xdg_cache, xdg_read, xdg_user, cal_name)) < 1)
 		return MUNKI_INT_CAL_RESTORE;
 
-	DBG((dbgo,"munki_restore_calibration restoring from file '%s'\n",cal_path));
+	DBG((dbgo,"munki_restore_calibration restoring from file '%s'\n",cal_paths[1]));
 
-	if ((fp = fopen(cal_path, nmode)) == NULL) {
+	if ((fp = fopen(cal_paths[1], nmode)) == NULL) {
 		DBG((dbgo,"munki_restore_calibration failed to open file for reading\n"));
-		free(cal_path);
+		xdg_free(cal_paths, no_paths);
 		return MUNKI_INT_CAL_RESTORE;
 	}
-	free(cal_path);
+	xdg_free(cal_paths, no_paths);
 	
 	x.ef = 0;
 	x.chsum = 0;
@@ -2172,7 +2188,7 @@ munki_code munki_restore_calibration(munki *p) {
 	read_ints(&x, fp, &nwav1, 1);
 	read_ints(&x, fp, &nwav2, 1);
 	if (x.ef != 0
-	 || argyllversion != RELEASE_VERSION
+	 || argyllversion != ARGYLL_VERSION
 	 || ss != (sizeof(munki_state) + sizeof(munkiimp))
 	 || strcmp(serno, m->serno) != 0
 	 || nraw != m->nraw
@@ -2448,6 +2464,7 @@ munki_code munki_restore_calibration(munki *p) {
 }
 
 #endif /* ENABLE_NONVCAL */
+
 
 /* ============================================================ */
 /* Intermediate routines  - composite commands/processing */
@@ -3165,6 +3182,7 @@ munki_code munki_read_patches_2(
 #endif
 	}
 #endif /* ENABLE_LEDTEMPC */
+
 
 	if (!s->scan) {
 		if (numpatches != 1) {
@@ -5585,6 +5603,9 @@ munki_code munki_create_hr(munki *p, int ref) {
 		/* If both reflective and emissive samplings have been created, */
 		/* deal with upsampling the references and calibrations */
 		if (m->hr_inited == 2) {
+#ifdef SALONEINSTLIB
+			double **slp;			/* 2D Array of stray light values */
+#endif /* !SALONEINSTLIB */
 			rspl *trspl;			/* Upsample rspl */
 			cow sd[40 * 40];		/* Scattered data points of existing references */
 			datai glow, ghigh;
@@ -5753,7 +5774,52 @@ munki_code munki_create_hr(munki *p, int ref) {
 			}
 			trspl->del(trspl);
 
-			/* Then the 2D stray light */
+#ifdef SALONEINSTLIB
+			/* Then the 2D stray light using linear interpolation */
+			slp = dmatrix(0, m->nwav1-1, 0, m->nwav1-1);
+
+			/* Set scattered points */
+			for (i = 0; i < m->nwav1; i++) {		/* Output wavelength */
+				for (j = 0; j < m->nwav1; j++) {	/* Input wavelength */
+
+					slp[i][j] = m->straylight1[i][j];
+
+					/* Use interpolate/extrapolate for middle points */
+					if (j == (i-1) || j == i || j == (i+1)) {
+						int j0, j1;
+						double w0, w1;
+						if (j == (i-1)) {
+							if (j <= 0)
+								j0 = j+3, j1 = j+4;
+							else if (j >= (m->nwav1-3))
+								j0 = j-2, j1 = j-1;
+							else
+								j0 = j-1, j1 = j+3;
+						} else if (j == i) {
+							if (j <= 1)
+								j0 = j+2, j1 = j+3;
+							else if (j >= (m->nwav1-2))
+								j0 = j-3, j1 = j-2;
+							else
+								j0 = j-2, j1 = j+2;
+						} else if (j == (i+1)) {
+							if (j <= 2)
+								j0 = j+1, j1 = j+2;
+							else if (j >= (m->nwav1-1))
+								j0 = j-4, j1 = j-3;
+							else
+								j0 = j-3, j1 = j+1;
+						}
+						w1 = (j - j0)/(j1 - j0);
+						w0 = 1.0 - w1;
+						slp[i][j] = w0 * m->straylight1[i][j0]
+						          + w1 * m->straylight1[i][j1];
+
+					}
+				}
+			}
+#else	/* !SALONEINSTLIB */
+			/* Then setup 2D stray light using rspl */
 			if ((trspl = new_rspl(RSPL_NOFLAGS, 2, 1)) == NULL) {
 				DBG((dbgo,"munki: creating rspl for high res conversion failed"))
 				raw2wav->del(raw2wav);
@@ -5784,6 +5850,7 @@ munki_code munki_create_hr(munki *p, int ref) {
 			avgdev[1] = 0.0;
 			
 			trspl->fit_rspl_w(trspl, 0, sd, m->nwav1 * m->nwav1, glow, ghigh, gres, NULL, NULL, 0.5, avgdev, NULL);
+#endif	/* !SALONEINSTLIB */
 
 			m->straylight2 = dmatrixz(0, m->nwav2-1, 0, m->nwav2-1);  
 
@@ -5792,7 +5859,40 @@ munki_code munki_create_hr(munki *p, int ref) {
 				for (j = 0; j < m->nwav2; j++) {	/* Input wavelength */
 					pp.p[0] = XSPECT_WL(m->wl_short2, m->wl_long2, m->nwav2, i);
 					pp.p[1] = XSPECT_WL(m->wl_short2, m->wl_long2, m->nwav2, j);
+#ifdef SALONEINSTLIB
+					/* Do linear interp with clipping at ends */
+					{
+						int x0, x1, y0, y1;
+						double xx, yy, w0, w1, v0, v1;
+
+						xx = (m->nwav1-1.0) * (pp.p[0] - m->wl_short1)/(m->wl_long1 - m->wl_short1);
+						x0 = (int)floor(xx);
+						if (x0 <= 0)
+							x0 = 0;
+						else if (x0 >= (m->nwav1-2))
+							x0 = m->nwav1-2;
+						x1 = x0 + 1;
+						w1 = xx - (double)x0;
+						w0 = 1.0 - w1;
+
+						yy = (m->nwav1-1.0) * (pp.p[1] - m->wl_short1)/(m->wl_long1 - m->wl_short1);
+						y0 = (int)floor(yy);
+						if (y0 <= 0)
+							y0 = 0;
+						else if (y0 >= (m->nwav1-2))
+							y0 = m->nwav1-2;
+						y1 = y0 + 1;
+						v1 = yy - (double)y0;
+						v0 = 1.0 - v1;
+
+						pp.v[0] = w0 * v0 * slp[x0][y0] 
+						        + w0 * v1 * slp[x0][y1] 
+						        + w1 * v0 * slp[x1][y0] 
+						        + w1 * v1 * slp[x1][y1]; 
+					}
+#else /* !SALONEINSTLIB */
 					trspl->interp(trspl, &pp);
+#endif /* !SALONEINSTLIB */
 					m->straylight2[i][j] = pp.v[0] * HIGHRES_WIDTH/10.0;
 					if (m->straylight2[i][j] > 0.0)
 						m->straylight2[i][j] = 0.0;
@@ -5863,7 +5963,11 @@ munki_code munki_create_hr(munki *p, int ref) {
 			}
 #endif /* HIGH_RES_PLOT */
 
+#ifdef SALONEINSTLIB
+			free_dmatrix(slp, 0, m->nwav1-1, 0, m->nwav1-1);
+#else /* !SALONEINSTLIB */
 			trspl->del(trspl);
+#endif /* !SALONEINSTLIB */
 
 			/* - - - - - - - - - - - - - - - - - - - - - - - - - */
 			/* Allocate space for per mode calibration reference */
@@ -6083,16 +6187,22 @@ munki_code munki_conv2XYZ(
 		return MUNKI_INT_CIECONVFAIL;
 
 	/* Don't report any wavelengths below the minimum for this mode */
-	if (s->min_wl > wl_short) {
+	if ((s->min_wl-1e-3) > wl_short) {
 		double wl;
 		for (j = 0; j < m->nwav; j++) {
 			wl = XSPECT_WL(m->wl_short, m->wl_long, m->nwav, j);
-			if (wl >= s->min_wl)
+			if (wl >= (s->min_wl-1e-3))
 				break;
 		}
 		six = j;
 		wl_short = wl;
 		nwl -= six;
+	}
+
+	if (p->debug >= 1) {
+		fprintf(stderr,"munki_conv2XYZ got wl_short %f, wl_long %f, nwav %d, min_wl %f\n",
+		                m->wl_short, m->wl_long, m->nwav, s->min_wl);
+		fprintf(stderr,"      after skip got wl_short %f, nwl = %d\n", wl_short, nwl);
 	}
 
 	for (sms = 0.0, i = 1; i < 21; i++)
@@ -6466,14 +6576,14 @@ munki_readEEProm(
 	int se, rv = MUNKI_OK;
 	int isdeb = 0;
 
-	if (size < 0 || addr < 0 || (addr + size) > (m->noeeblocks * m->eeblocksize))
-		return MUNKI_INT_EEOUTOFRANGE;
-
 	/* Turn off low level debug messages, and sumarise them here */
 	isdeb = p->icom->debug;
 	p->icom->debug = 0;
 
 	if (isdeb) fprintf(stderr,"\nmunki: Read EEProm address 0x%x size 0x%x\n",addr,size);
+
+	if (size < 0 || addr < 0 || (addr + size) > (m->noeeblocks * m->eeblocksize))
+		return MUNKI_INT_EEOUTOFRANGE;
 
 	int2buf(&pbuf[0], addr);
 	int2buf(&pbuf[4], size);
@@ -6518,106 +6628,7 @@ munki_readEEProm(
 	return rv;
 }
 
-/* Write to the EEProm */
-/* NOTE! Not tested */
-/* You could wipe out your calibration if you use this! */
-munki_code
-munki_writeEEProm(
-	munki *p,
-	unsigned char *buf,		/* Where to write from */
-	int addr,				/* Address in EEprom to write to */
-	int size				/* Number of bytes to write (max 65535) */
-) {
-	munkiimp *m = (munkiimp *)p->m;
-	int rwbytes;			/* Data bytes read or written */
-	unsigned char pbuf[8];	/* Write EEprom parameters */
-	int se = 0, rv = MUNKI_OK;
-	int i, isdeb = 0;
-	int eesize = m->noeeblocks * m->eeblocksize;		/* Assumes this has been set up */
 
-	if (addr < 0 || addr > eesize || (addr + size) >= eesize)
-		return MUNKI_INT_EEOUTOFRANGE;
-
-	/* Turn off low level debug messages, and sumarise them here */
-	isdeb = p->icom->debug;
-	p->icom->debug = 0;
-
-	if (isdeb) fprintf(stderr,"\nmunki: Write EEProm address 0x%x size 0x%x\n",addr,size);
-
-	if (isdeb >= 5) {
-		int i;
-		for (i = 0; i < size; i++) {
-			if ((i % 16) == 0)
-				fprintf(stderr,"    %04x:",i);
-			fprintf(stderr," %02x",buf[i]);
-			if ((i+1) >= size || ((i+1) % 16) == 0)
-				fprintf(stderr,"\n");
-		}
-	}
-
-#ifdef ENABLE_WRITE
-	int2buf(&pbuf[0], addr);
-	int2buf(&pbuf[4], size);
-  	se = p->icom->usb_control(p->icom,
-		               USB_ENDPOINT_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
-	                   0x82, 0, 0, pbuf, 8, 2.0);
-
-	if ((rv = icoms2munki_err(se)) != MUNKI_OK) {
-		if (isdeb) fprintf(stderr,"\nmunki: EEprom write failed (1) with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
-		return rv;
-	}
-
-	/* Now write the bytes */
-	se = p->icom->usb_write(p->icom, 0x02, buf, size, &rwbytes, 5.0);
-
-	if ((rv = icoms2munki_err(se)) != MUNKI_OK) {
-		if (isdeb) fprintf(stderr,"\nmunki: EEprom write failed (2) with ICOM err 0x%x\n",se);
-		p->icom->debug = isdeb;
-		return rv;
-	}
-
-	if (rwbytes != size) {
-		if (isdeb) fprintf(stderr,"Write 0x%x bytes, short write error\n",rwbytes);
-		p->icom->debug = isdeb;
-		return MUNKI_HW_EE_SHORTREAD;
-	}
-
-	// No idea, since no writes are done by manufacturers driver.
-	/* Do we write two separate bytes of 0 - confirm write ?? */
-	for (i = 0; i < 2; i++) {
-		pbuf[0] = 0;
-
-		/* Now write the bytes */
-		se = p->icom->usb_write(p->icom, 0x02, pbuf, 1, &rwbytes, 5.0);
-
-		if ((rv = icoms2munki_err(se)) != MUNKI_OK) {
-			if (isdeb) fprintf(stderr,"\nmunki: EEprom write failed (3) with ICOM err 0x%x\n",se);
-			p->icom->debug = isdeb;
-			return rv;
-		}
-
-		if (rwbytes != 1) {
-			if (isdeb) fprintf(stderr,"Write 0x%x bytes, short write (4) error\n",rwbytes);
-			p->icom->debug = isdeb;
-			return MUNKI_HW_EE_SHORTREAD;
-		}
-	}
-	if (isdeb) fprintf(stderr,"Write 0x%x bytes, ICOM err 0x%x\n",size, se);
-
-	/* The instrument needs some recovery time after a write */
-	msec_sleep(50);
-
-#else /* ENABLE_WRITE */
-
-	if (isdeb) fprintf(stderr,"(NOT) Write 0x%x bytes, ICOM err 0x%x\n",size, se);
-
-#endif /* ENABLE_WRITE */
-
-	p->icom->debug = isdeb;
-
-	return rv;
-}
 
 /* Get the firmware parameters */
 /* return pointers may be NULL if not needed. */
@@ -7422,13 +7433,16 @@ munki_code munki_parse_eeprom(munki *p, unsigned char *buf, unsigned int len) {
 	for (sum = 0, i = 0; i < (len-3); i += 4) {
 		sum += buf2uint(buf + i);
 	}
-	if (p->debug >= 4) fprintf(stderr,"cal chsum = %u, should be %u - %s\n",sum,chsum, sum == chsum ? "OK": "BAD");
 
+
+
+	if (p->debug >= 1) fprintf(stderr,"cal chsum = 0x%x, should be 0x%x - %s\n",sum,chsum, sum == chsum ? "OK": "BAD");
 	if (sum != chsum)
 		return MUNKI_INT_CALBADCHSUM;
 
+
 	/* Create class to handle EEProm parsing */
-	if ((d = m->data = new_mkdata(m, buf, len, p->verb, p->debug)) == NULL)
+	if ((d = m->data = new_mkdata(p, buf, len, p->verb, p->debug)) == NULL)
 		MUNKI_INT_CREATE_EEPROM_STORE;
 
 	/* Check out the version */
@@ -7485,7 +7499,7 @@ munki_code munki_parse_eeprom(munki *p, unsigned char *buf, unsigned int len) {
 	/* Fill this in here too */
 	m->wl_short2 = HIGHRES_SHORT;
 	m->wl_long2 = HIGHRES_LONG;
-	m->nwav2 = (int)((m->wl_long2-m->wl_short2)/HIGHRES_WIDTH) + 1;	
+	m->nwav2 = (int)((m->wl_long2-m->wl_short2)/HIGHRES_WIDTH + 0.5) + 1;	
 
 	/* Reflection wavelength calibration information */
 	/* This is setup assuming 128 raw bands, starting */
@@ -8001,13 +8015,12 @@ static void mkdata_del(mkdata *d) {
 }
 
 /* Constructor for mkdata */
-mkdata *new_mkdata(munkiimp *m, unsigned char *buf, int len, int verb, int debug) {
+mkdata *new_mkdata(munki *p, unsigned char *buf, int len, int verb, int debug) {
 	mkdata *d;
 	if ((d = (mkdata *)calloc(1, sizeof(mkdata))) == NULL)
 		error("mkdata: malloc failed!");
 
-	d->p = m->p;
-	d->m = m;
+	d->p = p;
 
 	d->verb = verb;
 	d->debug = debug;

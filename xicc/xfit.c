@@ -21,8 +21,18 @@
  *		Need to use this for B2A tables rather than inverting
  *		A2B curves. Need to add grid sizing to cover just gamut range
  *      (including level axis gamut, but watch out for devices that
- *      have values belowe the black point), 3x3 matrix optimization,
- *      and white point to grid node mapping for XYZ.
+ *      have values below the black point), 3x3 matrix optimization,
+ *      and white point to grid node mapping for B2A.
+ *
+ *      Currently the Lab A2B output tables are adjusted for ab symetry
+ *		to make the B2A white point land on a grid point, given that
+ *		the icc code forces a symetric ab range. This only works
+ *      because the B2A is using the same per channel curves.
+ *		Done properly, it should be possible to know where grid
+ *		points land within the range, and to modify the B2A input curves
+ *		to make the white point land on a grid point.
+ *		(For B2A the pseudo least squares adjustment needs to be turned
+ *		off for that grid point too.)
  *
  *		Note that one quandry is that the curve fitting doesn't
  *		fit well when the input data has an offset and/or plateaus.
@@ -77,6 +87,9 @@
 #undef SPECIAL_TEST_LAB	
 
 #define RSPLFLAGS (0 /* | RSPL_2PASSSMTH */ /* | RSPL_EXTRAFIT2 */)
+
+#undef EXTEND_GRID			/* [Undef] Use extended RSPL grid around interpolation */
+#define EXTEND_GRID_BYN 2	/* Rows to extend grid. */
 
 #undef NODDV				/* Use slow non d/dv powell else use conjgrad */
 #define CURVEPOW 1.0    	/* Power to raise deltaE squared to in setting in/out curves */
@@ -1767,7 +1780,7 @@ dump_xfit(p);
 			for (f = 1; f < 3 && f < p->fdi; f++) {
 				p->opt_ch = f;
 				p->wv[0] = p->v[p->out_offs[f]];	/* Current parameter value */
-				p->sa[0] = 0.1;					/* Search radius */
+				p->sa[0] = 0.1;						/* Search radius */
 				if (powell(&rerr, 1, p->wv, p->sa, 0.0000001, 1000,
 				                                   symoptfunc, (void *)p, NULL, NULL) != 0)
 					error("xfit_fit: Powell failed to converge, residual error = %f",rerr);
@@ -2076,13 +2089,114 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 		if (p->verb)
 			printf("Create final clut from scattered data\n");
 
+#ifdef EXTEND_GRID
+#define XN EXTEND_GRID_BYN
+		/* Try increasing the grid by one row all around */
+		{
+#pragma message("!!!!!!!!!!!! Experimental rspl fitting resolution !!!!!!!!!")
+			double xin_min[MXDI];
+			double xin_max[MXDI];
+			int xgres[MXDI];
+			double del;
+			double *xipos[MXDI];
+
+			for (e = 0; e < p->di; e++) {
+				del = (in_max[e] - in_min[e])/(gres[e]-1.0);		/* Extension */
+				xin_min[e] = in_min[e] - XN * del;
+				xin_max[e] = in_max[e] + XN * del;
+				xgres[e] = gres[e] + 2 * XN;
+//printf("~1 xgres %d, gres %d\n",xgres[e], gres[e]);
+
+				if ((xipos[e] = (double *)malloc((xgres[e]) * sizeof(double))) == NULL)
+					return 1;
+				for (i = 0; i < xgres[e]; i++) {
+					if (i < XN) {					/* Extrapolate bottom */
+						xipos[e][i] = ipos[e][0] - (XN - i) * (ipos[e][1] - ipos[e][0]);
+//printf("~1 xipos[%d] %f from ipos[%d] %f and ipos[%d] %f\n",i,xipos[e][i],0,ipos[e][0],1,ipos[e][1]);
+					} else if (i >= (xgres[e]-XN)) {	/* Extrapolate top */
+						xipos[e][i] = ipos[e][gres[e]-1] + (i - xgres[e] + XN + 1) * (ipos[e][gres[e]-1] - ipos[e][gres[e]-2]);
+//printf("~1 xipos[%d] %f from ipos[%d] %f and ipos[%d] %f\n",i,xipos[e][i],gres[e]-1,ipos[e][gres[e]-1],gres[e]-2,ipos[e][gres[e]-2]);
+					} else {
+						xipos[e][i] = ipos[e][i-XN];
+//printf("~1 xipos[%d] %f from ipos[%d] %f\n",i,xipos[e][i],i-XN,ipos[e][i-XN]);
+					}
+				}
+			}
+
+			p->clut->fit_rspl_w(p->clut, rsplflags, p->rpoints, p->nodp, xin_min, xin_max, xgres,
+				out_min, out_max, smooth, oavgdev, xipos);
+
+			for (e = 0; e < p->di; e++) {
+				free(xipos[e]);
+			}
+		}
+#undef XN
+#else
 		p->clut->fit_rspl_w(p->clut, rsplflags, p->rpoints, p->nodp, in_min, in_max, gres,
 			out_min, out_max, smooth, oavgdev, ipos);
+#endif
 		if (p->verb)
 			printf("\n");
 
 		for (e = 0; e < p->di; e++)
 			free(ipos[e]);
+
+		/* The current rspl is an aproximate white point relative dev->PCS lookup, */ 
+		/* check if this now implies a white point with Y > 1.0 */
+		if (p->flags & XFIT_CLIP_WP) {
+			co wcc;
+
+			if (p->verb)
+				printf("Checking if White point needs clipping:\n");
+				
+			/* See what current device white maps to */
+			xfit_inpscurves(p, wcc.p, dw);
+			p->clut->interp(p->clut, &wcc);
+			xfit_outcurves(p, wcc.v, wcc.v);
+			if (p->flags & XFIT_OUT_LAB)
+				icmLab2XYZ(&icmD50, wcc.v, wcc.v);
+			icmMulBy3x3(wcc.v, p->toAbs, wcc.v); /* Convert to absolute */
+
+			if (wcc.v[1] > 1.0) {
+				icmXYZNumber _wp;
+				double cwp[3];
+				icmXYZNumber _cwp;
+
+				if (p->verb) {
+					double labwp[3];
+					icmXYZ2Lab(&icmD50, labwp, wcc.v);
+					printf("Need to clip current wp = XYZ %f %f %f, Lab %f %f %f\n",
+					wcc.v[0], wcc.v[1],wcc.v[2], labwp[0], labwp[1], labwp[2]);
+				}
+				/* Matrix needed to correct from approximate to exact D50 */
+				icmAry2XYZ(_wp, wcc.v);		/* Current wp */
+				icmScale3(cwp, wcc.v, 1.0/wcc.v[1]);
+				icmAry2XYZ(_cwp, cwp);		/* Target clipped white point */
+				icmChromAdaptMatrix(ICM_CAM_BRADFORD, _cwp, _wp, p->cmat);
+		
+				/* Adjust the rspl to give the clipped wp for dw in */
+				p->clut->re_set_rspl(
+					p->clut,		/* this */
+					0,				/* Combination of flags */
+					(void *)p,		/* Opaque function context */
+					conv_rspl_out	/* Function to set from */
+				);
+
+				if (p->verb) {
+					double labwp[3];
+
+					xfit_inpscurves(p, wcc.p, dw);
+					p->clut->interp(p->clut, &wcc);
+					xfit_outcurves(p, wcc.v, wcc.v);
+					if (p->flags & XFIT_OUT_LAB)
+						icmLab2XYZ(&icmD50, wcc.v, wcc.v);
+					icmMulBy3x3(wcc.v, p->toAbs, wcc.v); /* Convert to absolute */
+					icmXYZ2Lab(&icmD50, labwp, wcc.v);
+					printf("After clip wp = XYZ %f %f %f, Lab %f %f %f\n",
+					wcc.v[0], wcc.v[1], wcc.v[2], labwp[0], labwp[1], labwp[2]);
+				}
+			}
+		}
 
 		/* The current rspl is an aproximate white point relative dev->PCS lookup, */ 
 		/* now do a final white point fixup to make it perfect. */
@@ -2119,6 +2233,7 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 				wcc.v[2] *= wpscale;
 			}
 			icmAry2XYZ(_wp, wcc.v);		/* Target abs white point */
+//printf("~1 target abs wp = XYZ %f %f %f\n", _wp.X, _wp.Y, _wp.Z);
 
 			icmMulBy3x3(wcc.v, p->fromAbs, wcc.v); /* Aprox relative target white point for later */
 //printf("~1 aprox rel wp = XYZ %f %f %f\n", wcc.v[0], wcc.v[1], wcc.v[2]);

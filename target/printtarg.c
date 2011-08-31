@@ -17,6 +17,10 @@
 
 	TTBD:
 
+	Add -h2 flag for Munki for super high-res chart ?
+	Note:   i1Pro:  Illum spot: 3.5mm Aperture: 4.5mm, Physical aperture: 4.55mm
+            Munki:  Illum spot: 8.0mm Aperture: 6.0mm, Physical aperture: 7.63mm
+
 	Add an option that allows including a scale gauge, to detect
 	accidental re-scaling.
 
@@ -206,7 +210,7 @@ void et_clear(void);
 		double w, double h,		/* Width and height */									\
 		char *str				/* String */											\
 	);																					\
-	/* A vertically centered string */													\
+	/* A vertically centered string, rendered from bottom to top */						\
 	void (*vstring)(struct _trend *s,													\
 		double x, double y,		/* Bot Right Corner of rectangle in mm from origin */	\
 		double w, double h,		/* Width and height */									\
@@ -1298,8 +1302,8 @@ int usede			/* NZ to use delta E rather than density */
 	/* Setup initial contrast check */
 	{
 		col *pp, *cp, *np, *op;	/* Previous, current, next and opposite patch */
-		col *maxd;			/* Alias for minimum density  */
-		col *mind;			/* Alias for maximum density */
+		col *maxd;			/* Alias for maximum density  */
+		col *mind;			/* Alias for minimum density */
 		aat_atree_t *stree;	/* Tree holding colors sorted by worst case contrast */
 		aat_atrav_t *aat_tr;	/* Tree accessor */
 		double temp, trate;	/* Annealing temperature & rate */
@@ -1780,6 +1784,19 @@ int *p_npat			/* Return number of patches including padding */
 	col *mind;	/* Alias for maximum density */
 	col *sc;	/* Alias for current spacer color */
 
+	/* Note pcol[] is setup by targen to be:
+		0 = white
+		1 = Cyan
+		2 = Magenta
+		3 = Blue
+		4 = Yellow
+		5 = Green
+		6 = Red
+		7 = Black
+		8 = 50/50/50 CMY Grey
+		(Should switch to symbols for these ??)
+	 */
+
 	/* We assume that since this is intended for a printer, */
 	/* the media is always white. This may not be the case */
 	/* on other output media. */
@@ -1828,11 +1845,23 @@ int *p_npat			/* Return number of patches including padding */
 		needpc = 1;				/* Helps to have patch to patch contrast in a row ? */
 		lspa  = bord + 5.0 + 5.0;	/* Leader space before first patch = bord + pcar + yxhi */
 		lcar  = 5.0;			/* Leading clear area before first patch */
-		plen  = 6.5;			/* Patch length. Can't vary. */
+		plen  = pscale * (6.5);	/* Patch min length */
+		if(plen <= 6.75)		/* Patch length must be one of 5 lengths */
+			plen = 6.5;
+		else if(plen <= 8.0)
+			plen = 7.0;
+		else if(plen <= 11.25)
+			plen = 10.0;
+		else if(plen <= 12.75)
+			plen = 12.5;
+		else 
+			plen = 13.0;
 		tidplen = 6.0;			/* TID Patch length. Can't vary. */
 		tspa  = 5.0;			/* Clear space after last patch */
 		pwid  = 10.0;			/* Patch min width. (The guide slot is 12mm ?) */
-		rrsp  = 10.0;			/* Row center to row center spacing */
+		if (plen > pwid)
+			pwid = plen;		/* Make patch at least as wide as long */
+		rrsp  = pwid;			/* Row center to row center spacing */
 		pwex  = 0.0;			/* Patch width expansion between rows of a strip */
 		if (nollimit == 0) {
 			mxpprow = MAXPPROW;		/* Maximum patches per row permitted (set by length) */
@@ -2451,7 +2480,7 @@ int *p_npat			/* Return number of patches including padding */
 				} else if (opir == 7) {	/* Patch size */
 					int j;
 					for (j = 0; j < 8; j++) {
-						if (pcol[j].dtp20_psize == plen)
+						if (fabs(pcol[j].dtp20_psize - plen) < 0.001)
 							break;
 					}
 					if (j >= 8)
@@ -2495,9 +2524,9 @@ int *p_npat			/* Return number of patches including padding */
 				if (domaxmin == 1) {
 					cp = maxd;							/* Maximum density patch at start */
 				} else if (domaxmin == 2) {
-					if (pir == 1) {
+					if (pir == 1) {						/* At very start */
 						cpf = 1;						/* Create start bit */
-						cp = &pcol[8];					/* Starts with 50% */
+						cp = &pcol[8];					/* Starts with 50/50/50 DTP20 Grey */
 					} else {
 						col *ppcol[3];
 						/* Compute the patch colors the DTP20 will use before row */
@@ -2511,7 +2540,7 @@ int *p_npat			/* Return number of patches including padding */
 				sp = NULL;								/* Not a test patch (no label) */
 				if (domaxmin == 1) {
 					cp = mind;
-				} else if (domaxmin == 2) {
+				} else if (domaxmin == 2) {				/* DTP20 end patch */
 					cpf = 2;							/* Create stop bit */
 					cp = mind;							/* Starts with mind */
 				}
@@ -2556,18 +2585,20 @@ int *p_npat			/* Return number of patches including padding */
 				wplen = tidplen;	/* TID can have a different length patch */
 			}
 
-			tro->setcolor(tro, cal, cp);
+			tro->setcolor(tro, cal, cp);	/* Patch color set above */
 			if (hex) {
 				int apir = pir - nmaxp;		/* Adjusted pir for max/min patches */
 				tro->hexagon(tro, x, y, w, wplen, apir-1, sp);
 			} else {
+				/* We hack in the twin patches for the DTP20 start and stop */
+				/* Initial color is set above (as for regular patches) */
 				if (cpf == 1) {				/* DTP20 start bit */
-					tro->rectangle(tro, x, y, w, 1.0, sp,1);
-					tro->setcolor(tro, cal, mind);
+					tro->rectangle(tro, x, y, w, 1.0, sp,1);	/* 50/50/50 set above */
+					tro->setcolor(tro, cal, mind);		/* White */
 					tro->rectangle(tro, x, y - 1.0, w, wplen - 1.0, sp,1);
 				} else if (cpf == 2) {		/* DTP20 stop bit */
-					tro->rectangle(tro, x, y, w, wplen - 3.0, sp,1);
-					tro->setcolor(tro, cal, &pcol[8]);		/* 50 % */
+					tro->rectangle(tro, x, y, w, wplen - 3.0, sp,1);	/* mind set above */
+					tro->setcolor(tro, cal, &pcol[8]);		/* 50/50/50 Grey for DTP20 */
 					tro->rectangle(tro, x, y - wplen + 3.0, w, 3.0, sp,1);
 				} else {					/* Normal patch */
 					tro->rectangle(tro, x, y, w, wplen, sp,1);
@@ -2765,7 +2796,7 @@ cistrcmp(char *s1, char *s2) {
 void usage(char *diag, ...) {
 	paper *pp;
 	fprintf(stderr,"Generate Target PostScrip file, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"  Diagnostic: ");

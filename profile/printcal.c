@@ -1,4 +1,6 @@
 
+			
+
 /* 
  * Argyll Color Correction System
  * Print Device calibration curve generator.
@@ -52,6 +54,11 @@
 
 #define RSPLFLAGS (0 /* | RSPL_2PASSSMTH | RSPL_EXTRAFIT2 */)
 
+//#define RSPLSMOOTH 4.0	/* RSPL Smoothness factor use on measured device points */
+#define RSPLSMOOTH 2.0	/* RSPL Smoothness factor use on measured device points */
+
+#define TCURVESMOOTH 1.0 /* RSPL smoothness factor for target aim points */
+
 #define GRES 256		/* Rspl grid resolution */
 #define SLOPE_NORM 70.0	/* Normalized delta E for below thresholds */
 #define MIN_SLOPE_A 8.0	/* Criteria for Auto max, DE/dDev at max */
@@ -64,7 +71,7 @@
 void usage(char *diag, ...) {
 	int i;
 	fprintf(stderr,"Create printer calibration, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"  Diagnostic: ");
@@ -548,7 +555,7 @@ int main(int argc, char *argv[]) {
 	profxinf xpi;				/* Extra profile/calibration information */
 	pcaltarg *upct = NULL;		/* User settings of print calibration target */
 	pcaltarg *pct = NULL;		/* Settings of print calibration target */
-	double smooth = 4.0;		/* RSPL Smoothness factor */
+	double smooth = RSPLSMOOTH;	/* RSPL Smoothness factor */
 	double ver_maxde = 2.0;		/* Verify maximum Delta E (1.0 for smooth == 1.0) */
 	int spec = 0;				/* Use spectral data flag */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
@@ -574,6 +581,8 @@ int main(int argc, char *argv[]) {
 	rspl *ade[MAX_CHAN];		/* Absolute delta E */
 	rspl *rde[MAX_CHAN];		/* Relative delta E */
 	rspl *pcade[MAX_CHAN];		/* Previous calibrated absolute delta E */
+	double mxade[MAX_CHAN];		/* Maximum ade value */
+	double idpow[MAX_CHAN] = { -1.0 };		/* Ideal power-like of targen values */
 	int n_cvals;				/* Number of calibration curve values */
 	wval *cvals[MAX_CHAN];		/* Calibration curve tables */
 	rspl *tcurves[MAX_CHAN];	/* Tweak target curves */
@@ -598,6 +607,32 @@ int main(int argc, char *argv[]) {
 
 	if (argc < 3)
 		usage("Too few arguments, got %d expect at least %d",argc-1,2);
+
+#ifdef NEVER
+	{
+		double src, dst, pp;
+
+		src = 0.5;
+		dst = 0.25;
+		pp = icx_powlike_needed(src, dst); 
+		printf("%f -> %f needs %f, check %f\n",src,dst,pp,icx_powlike(src,pp));
+		
+		src = 0.25;
+		dst = 0.5;
+		pp = icx_powlike_needed(src, dst); 
+		printf("%f -> %f needs %f, check %f\n",src,dst,pp,icx_powlike(src,pp));
+
+		src = 0.5;
+		dst = 0.707106;
+		pp = icx_powlike_needed(src, dst); 
+		printf("%f -> %f needs %f, check %f\n",src,dst,pp,icx_powlike(src,pp));
+
+		src = 0.5;
+		dst = 0.5;
+		pp = icx_powlike_needed(src, dst); 
+		printf("%f -> %f needs %f, check %f\n",src,dst,pp,icx_powlike(src,pp));
+	}
+#endif // NEVER
 
 	/* Process the arguments */
 	mfa = 2;		/* Minimum final arguments */
@@ -888,9 +923,9 @@ int main(int argc, char *argv[]) {
 
 	/* For recalibrate or verify, load the previous calibration file */
 	if (verify || recal) {
-		cgats *tcg;					/* Previous .cal file */
+		cgats *tcg;						/* Previous .cal file */
 
-		tcg = new_cgats();			/* Create a CGATS structure */
+		tcg = new_cgats();				/* Create a CGATS structure */
 		tcg->add_other(tcg, "CAL"); 	/* our special input type is Calibration Target */
 
 		if (tcg->read_name(tcg, calname))
@@ -976,8 +1011,8 @@ int main(int argc, char *argv[]) {
 		}
 		tcg->del(tcg);
 
-	/* Must be an initial or Imitation calibration */
-	} else {
+	} else {	/* Must be an initial or Imitation calibration */
+
 		pct->devmask = devmask;
 
 		/* Set the cal target from any user supplied parameters */
@@ -988,13 +1023,18 @@ int main(int argc, char *argv[]) {
 			pcade[j] = NULL;
 	}
 
+	/* Common processing: */
+
 	/* Read in the patch data */
 	{
-		int dvi[MAX_CHAN];	/* CGATS indexes for each device field */
-		int pcsix[3];		/* XYZ/Lab chanel indexes */
 		char buf[100];
 		char *pcsfname[2][3] = { { "XYZ_X", "XYZ_Y", "XYZ_Z" },
 		                         { "LAB_L", "LAB_A", "LAB_B" } };
+		int dvi[MAX_CHAN];	/* CGATS indexes for each device field */
+		int pcsix[3];		/* XYZ/Lab chanel indexes */
+		xsp2cie *sp2cie = NULL;		/* Spectral conversion object */
+		xspect sp;
+		int  spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
 		char *bident = icx_inkmask2char(devmask, 0); 
 	
 		/* Figure out the indexes of all the device fields */
@@ -1009,15 +1049,56 @@ int main(int argc, char *argv[]) {
 		}
 		free(bident);
 
-		/* Figure out the indexes of the PCS fields */
-		for (j = 0; j < 3; j++) {
-			if ((i = icg->find_field(icg, 0, pcsfname[isLab][j])) >= 0) {
-				if (icg->t[0].ftype[i] != r_t)
-					error ("Field %s is wrong type",pcsfname[isLab][j]);
-				pcsix[j] = i;
+		if (spec) {
+			int ii;
+			char buf[100];
+
+			if ((ii = icg->find_kword(icg, 0, "SPECTRAL_BANDS")) < 0)
+				error ("Input file doesn't contain keyword SPECTRAL_BANDS");
+			sp.spec_n = atoi(icg->t[0].kdata[ii]);
+			if ((ii = icg->find_kword(icg, 0, "SPECTRAL_START_NM")) < 0)
+				error ("Input file doesn't contain keyword SPECTRAL_START_NM");
+			sp.spec_wl_short = atof(icg->t[0].kdata[ii]);
+			if ((ii = icg->find_kword(icg, 0, "SPECTRAL_END_NM")) < 0)
+				error ("Input file doesn't contain keyword SPECTRAL_END_NM");
+			sp.spec_wl_long = atof(icg->t[0].kdata[ii]);
+			sp.norm = 100.0;
+
+			/* Find the fields for spectral values */
+			for (j = 0; j < sp.spec_n; j++) {
+				int nm;
+		
+				/* Compute nearest integer wavelength */
+				nm = (int)(sp.spec_wl_short + ((double)j/(sp.spec_n-1.0))
+				            * (sp.spec_wl_long - sp.spec_wl_short) + 0.5);
+				
+				sprintf(buf,"SPEC_%03d",nm);
+
+				if ((spi[j] = icg->find_field(icg, 0, buf)) < 0)
+					error("Input file doesn't contain field %s",buf);
+			}
+
+			/* Create a spectral conversion object to XYZ */
+			if ((sp2cie = new_xsp2cie(illum, &cust_illum, observ, NULL, icSigXYZData)) == NULL)
+				error("Creation of spectral conversion object failed");
+
+			/* To add FWA comp. would have to locate/create spectral white here, */
+			/* then set the FWA comp. on. */
+			/* See profout.c */
+
+		} else {
+			/* Figure out the indexes of the PCS fields */
+			for (j = 0; j < 3; j++) {
+				if ((i = icg->find_field(icg, 0, pcsfname[isLab][j])) >= 0) {
+					if (icg->t[0].ftype[i] != r_t)
+						error ("Field %s is wrong type",pcsfname[isLab][j]);
+					pcsix[j] = i;
 #ifdef DEBUG
-				printf("PCS chan %d field %s = %d\n",j,pcsfname[isLab][j],pcsix[j]);
+					printf("PCS chan %d field %s = %d\n",j,pcsfname[isLab][j],pcsix[j]);
 #endif
+				} else {
+					error ("Failed to find field %s",pcsfname[isLab][j]);
+				}
 			}
 		}
 	
@@ -1050,22 +1131,36 @@ int main(int argc, char *argv[]) {
 #ifdef DEBUG
 			printf("max %f at chan %d\n",maxv,maxch);
 #endif
-			/* Treat white specially */
-			if (maxv < 0.001) {
+			/* Treat white specially, and take it out of the list */
+			if (maxv < 1e-6) {
 				double wxyz[3];
-				white.dev = maxv;
 				if (n_white == 0) {
+					white.dev = 0.0;
 					for (j = 0; j < 3; j++)
 						white.XYZ[j] = 0.0;
 				}
-				for (j = 0; j < 3; j++)
-					wxyz[j] = *((double *)icg->t[0].fdata[i][pcsix[j]]);
-				if (isLab) {
-					icmLab2XYZ(&icmD50, wxyz, wxyz);
+				if (spec) {
+					/* Read and convert the spectral value */
+					for (j = 0; j < sp.spec_n; j++)
+						sp.spec[j] = *((double *)icg->t[0].fdata[i][spi[j]]);
+
+					sp2cie->convert(sp2cie, wxyz, &sp);
+
 				} else {
+					/* Read the CIE value */
 					for (j = 0; j < 3; j++)
-						wxyz[j] /= 100.0;
+						wxyz[j] = *((double *)icg->t[0].fdata[i][pcsix[j]]);
+
+					/* And convert to XYZ 0..1 */
+					if (isLab) {
+						icmLab2XYZ(&icmD50, wxyz, wxyz);
+					} else {
+						for (j = 0; j < 3; j++)
+							wxyz[j] /= 100.0;
+					}
 				}
+			
+				white.dev += maxv;
 				for (j = 0; j < 3; j++)
 					white.XYZ[j] += wxyz[j];
 				n_white++;
@@ -1097,17 +1192,31 @@ int main(int argc, char *argv[]) {
 					error("Realloc of pvals failed");
 				vp = &pvals[maxch][n_pvals[maxch]];
 				vp->dev = maxv;
-				for (j = 0; j < 3; j++)
-					vp->Lab[j] = vp->XYZ[j] = *((double *)icg->t[0].fdata[i][pcsix[j]]);
-				if (isLab)
-					icmLab2XYZ(&icmD50, vp->XYZ, vp->Lab);
-				else {
+
+				if (spec) {
+					/* Read and convert the spectral value */
+					for (j = 0; j < sp.spec_n; j++)
+						sp.spec[j] = *((double *)icg->t[0].fdata[i][spi[j]]);
+
+					sp2cie->convert(sp2cie, vp->XYZ, &sp);
+
+				} else {
+					/* Read the CIE value */
 					for (j = 0; j < 3; j++)
-						vp->XYZ[j] /= 100.0;
-					icmXYZ2Lab(&icmD50, vp->Lab, vp->XYZ);
+						vp->XYZ[j] = *((double *)icg->t[0].fdata[i][pcsix[j]]);
+
+					/* And convert to XYZ 0..1 */
+					if (isLab) {
+						icmLab2XYZ(&icmD50, vp->XYZ, vp->XYZ);
+					} else {
+						for (j = 0; j < 3; j++)
+							vp->XYZ[j] /= 100.0;
+					}
 				}
+				/* Temporary D50 Lab */
+				icmXYZ2Lab(&icmD50, vp->Lab, vp->XYZ);
 #ifdef DEBUG
-				printf("  patch %d: dev %f,XYZ %f %f %f, Lab %f %f %f\n",
+				printf("  patch %d: dev %f,XYZ %f %f %f, D50 Lab %f %f %f\n",
 				n_pvals[maxch], vp->dev,vp->XYZ[0], vp->XYZ[1], vp->XYZ[2],
 				vp->Lab[0], vp->Lab[1], vp->Lab[2]);
 #endif
@@ -1118,8 +1227,13 @@ int main(int argc, char *argv[]) {
 		/* Average the white */
 		if (n_white == 0)
 			error("Can't find even one white patch in '%s'",inname);
-		for (j = 0; j < 3; j++)
+#ifdef DEBUG
+			printf("% white patches\n",n_white);
+#endif
+		for (j = 0; j < 3; j++) {
+			white.dev    /= (double)n_white;
 			white.XYZ[j] /= (double)n_white;
+		}
 		icmAry2XYZ(wht, white.XYZ);
 		icmXYZ2Lab(&icmD50, white.Lab, white.XYZ);
 
@@ -1137,7 +1251,7 @@ int main(int argc, char *argv[]) {
 		for (j = 0; j < devchan; j++) {
 			wval *wp;
 
-			/* Add white to each channel */
+			/* Add averaged white back into each channel */
 			if ((pvals[j] = (wval *)realloc(pvals[j],
 			                       sizeof(wval) * (n_pvals[j]+1))) == NULL)
 				error("Realloc (%d) of pvals failed",n_pvals[j]+1);
@@ -1148,8 +1262,17 @@ int main(int argc, char *argv[]) {
 			wp->XYZ[2] = white.XYZ[2];
 			n_pvals[j]++;
 
+			/* Convert all the XYZ values to Lab paper relative */
+			for (i = 0; i < n_pvals[j]; i++) {
+				wp = &pvals[j][i];
+				icmXYZ2Lab(&wht, wp->Lab, wp->XYZ);
+			}
+
 			/* Sort the channel acording to device value */ 
-#define HEAP_COMPARE(A,B) ((A).dev < (B).dev)
+			/* For a consistent result for identical device values, */
+			/* secondary sort by inverse CIE value */
+//#define HEAP_COMPARE(A,B) ((A).dev < (B).dev)
+#define HEAP_COMPARE(A,B) ((A).dev != (B).dev ? ((A).dev < (B).dev) : ((A).Lab[0] > (B).Lab[0])) 
 			HEAPSORT(wval, pvals[j], n_pvals[j]);
 #undef HEAP_COMPARE
 
@@ -1158,12 +1281,6 @@ int main(int argc, char *argv[]) {
 				warning("Channel %d has only %d test patches",n_pvals[j]);
 			if (pvals[j][n_pvals[j]-1].dev < 0.99)
 				warning("Channel %d has max test patch value of %f",pvals[j][n_pvals[j]-1]); 
-
-			/* Convert all the XYZ values to Lab paper relative */
-			for (i = 0; i < n_pvals[j]; i++) {
-				wp = &pvals[j][i];
-				icmXYZ2Lab(&wht, wp->Lab, wp->XYZ);
-			}
 
 			if (verb > 1) {
 				printf("Chan %d has %d raw values:\n",j,n_pvals[j]);
@@ -1175,6 +1292,9 @@ int main(int argc, char *argv[]) {
 				}
 			}
 		}
+
+		if (sp2cie != NULL)
+			sp2cie->del(sp2cie);
 	}
 	icg->del(icg);		/* Clean up */
 
@@ -1414,12 +1534,62 @@ int main(int argc, char *argv[]) {
 				pct->ademin[j] = 0.0;
 		}
 
-	} else if (recal || imitate) {
+	} else if (recal) {
 
 		/* Since the plot markers use devmax, look it up */
 		for (j = 0; j < devchan; j++) {
 			if ((pct->devmax[j] = rspl_ilookup(ade[j], 0.5, pct->ademax[j])) < 0.0)
 				error("Unexpected failure to invert curve %d for ADE %f",j,pct->ademax[j]); 
+		}
+	}
+
+	/* Find the maximum aDE value for each curve */
+	for (j = 0; j < devchan; j++) {
+		co tp;	/* Test point */
+		mxade[j] = -1e6;
+		for (i = 0; i < PRES; i++) {
+			tp.p[0] = i/(double)(PRES-1);
+			ade[j]->interp(ade[j], &tp);
+			if (tp.v[0] > mxade[j])
+				mxade[j] = tp.v[0];
+		}
+	}
+
+	if (initial || recal) {
+		/* Compute an ideal power-like value for test target */
+		for (j = 0; j < devchan; j++) {
+			double hdv;			/* Half device value */
+			double hdvrde;		/* Half device rDE value */
+			double thdvrde;		/* Target half device rDE value */
+			double thdv;		/* Target half device value */
+			double fdvrde;		/* Full device rDE value */
+			co tp;	/* Test point */
+	
+			/* full rDE */
+			tp.p[0] = pct->devmax[j];
+			rde[j]->interp(rde[j], &tp);
+			fdvrde = tp.v[0];
+
+			/* Half device value of maximum */
+			hdv = pct->devmax[j] * 0.5;
+	
+			/* rDE value half the device value */
+			tp.p[0] = hdv;
+			rde[j]->interp(rde[j], &tp);
+			hdvrde = tp.v[0];
+	
+			/* rDE value we'd like at half the device value */
+			thdvrde = 0.5 * fdvrde;
+			
+			/* Device value to get the rDE value we'd like at half */
+			if ((thdv = rspl_ilookup(rde[j], 0.5, thdvrde)) < 0.0)
+				error("Unexpected failure to invert curve %d for ADE %f",j,thdvrde); 
+
+//printf("hdv %f, hdvrde %f, thdvrde %f, fdvrde %f, thdv %f\n",hdv,hdvrde,thdvrde, fdvrde,thdv);
+	
+			/* Power like value needed to get rDE value we'd like at hald device */
+			idpow[j] = icx_powlike_needed(hdv, thdv); 
+			
 		}
 	}
 
@@ -1450,11 +1620,21 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (initial || recal || imitate) {
+	if (initial || recal) {
 		if (verb && pct->is_set(pct))  {
 			for (j = 0; j < devchan; j++) {
 				printf("Chan %d Dev max %f, aDE Max %f, aDE Min %f\n",j,pct->devmax[j],pct->ademax[j],pct->ademin[j]);
 			}
+		}
+
+		if (verb)  {
+			double avgpow = 0.0;
+			for (j = 0; j < devchan; j++) {
+				printf("Chan %d ideal targen power = %f\n",j,idpow[j]);
+				avgpow += idpow[j];
+			}
+			avgpow /= (double)devchan;
+			printf("Average ideal targen power = %f\n",avgpow);
 		}
 	}
 
@@ -1533,6 +1713,43 @@ int main(int argc, char *argv[]) {
 		             devchan > 9 ? yy[9] : NULL,
 		             PRES,
 					 cx, cy, verify ? 0 : nmark);
+
+		if (idpow[0] > 0.0) {
+			printf("Relative DE plot with ideal targen power applied:\n");
+
+			for (i = 0; i < PRES; i++) {
+				xx[i] = i/(double)(PRES-1.0);
+	
+				for (j = 0; j < 10 && j < devchan; j++) {
+					tp.p[0] = icx_powlike(xx[i],idpow[j]);
+					rde[j]->interp(rde[j], &tp);
+					yy[j][i] = tp.v[0];
+				}
+			}
+			nmark = 0;
+			if (pct->is_set(pct)) {
+				/* Add markers for deMax */
+				for (j = 0; j < 10 && j < devchan; j++) {
+					cx[j] = pct->devmax[j];
+					tp.p[0] = icx_powlike(cx[j],idpow[j]);
+					rde[j]->interp(rde[j], &tp);
+					cy[j] = tp.v[0];
+					nmark++;
+				}
+			}
+			do_plot10p(xx, devchan > 3 ? yy[3] : NULL,
+			             devchan > 1 ? yy[1] : NULL,
+			             devchan > 4 ? yy[4] : NULL,
+			             devchan > 0 ? yy[0] : NULL,
+			             devchan > 2 ? yy[2] : NULL,
+			             devchan > 5 ? yy[5] : NULL,
+			             devchan > 6 ? yy[6] : NULL,
+			             devchan > 7 ? yy[7] : NULL,
+			             devchan > 8 ? yy[8] : NULL,
+			             devchan > 9 ? yy[9] : NULL,
+			             PRES,
+						 cx, cy, verify ? 0 : nmark);
+		}
 	}
 
 	/* Compare the previous expected aDE against the current one */
@@ -1639,7 +1856,7 @@ int main(int argc, char *argv[]) {
 		}
 	} else if (initial) {
 
-		/* Convert any transfer curve points into a smooth curve */ 
+		/* Convert any transfer curve target points into a smooth curve */ 
 		if (pct->no_tpoints > 0) {
 			int gres[MXDI] = { GRES };
 			co *pnts;
@@ -1696,7 +1913,7 @@ int main(int argc, char *argv[]) {
 	
 				/* Fit the curve to the given points */
 				tcurves[j]->fit_rspl(tcurves[j], RSPLFLAGS, pnts, npts,
-				                NULL, NULL, gres, NULL, NULL, 1.0, NULL, NULL); 
+				                NULL, NULL, gres, NULL, NULL, TCURVESMOOTH, NULL, NULL); 
 			}
 			free(pnts);
 	

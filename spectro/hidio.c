@@ -12,8 +12,8 @@
  *
  * (Based on usbio.c)
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* These routines supliement the class code in ntio.c and unixio.c */
@@ -29,8 +29,10 @@
 #include <errno.h>
 #include <dirent.h>
 #endif
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#endif
 #include "numsup.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -485,6 +487,8 @@ icomuflags hidflags	/* Any special handling flags */
 
 		if (p->debug) fprintf(stderr,"icoms: About to open HID port '%s'\n",p->ppath->path);
 
+		p->vid = p->ppath->vid;
+		p->pid = p->ppath->pid;
 		p->hidd = p->ppath->hev;		/* A more convenient copy */
 		p->uflags = hidflags;
 
@@ -506,10 +510,10 @@ icomuflags hidflags	/* Any special handling flags */
 		{
 			IOCFPlugInInterface **piif = NULL;
 			IOReturn result;
-			SInt32 dumy;
+			SInt32 score;
 
 			if ((result = IOCreatePlugInInterfaceForService(p->hidd->ioob, kIOHIDDeviceUserClientTypeID,
-			    kIOCFPlugInInterfaceID, &piif, &dumy) != kIOReturnSuccess || piif == NULL))
+			    kIOCFPlugInInterfaceID, &piif, &score) != kIOReturnSuccess || piif == NULL))
 				error("Failed to open HID device '%s', result 0x%x, piif 0x%x\n",p->ppath->path,result,piif);
 	
 			p->hidd->device = NULL;
@@ -519,7 +523,8 @@ icomuflags hidflags	/* Any special handling flags */
 				error("Getting HID device '%s' failed",p->ppath->path);
 			(*piif)->Release(piif);		/* delete intermediate object */
 
-			if ((*p->hidd->device)->open(p->hidd->device, 0) != kIOReturnSuccess)
+			if ((*p->hidd->device)->open(p->hidd->device, kIOHIDOptionsTypeSeizeDevice)
+			                                                       != kIOReturnSuccess)
 				error("Opening HID device '%s' failed",p->ppath->path);
 
 			/* Setup to handle interrupt read callbacks */
@@ -599,7 +604,7 @@ icoms_hid_read_th(icoms *p,
 
 		/* Create a copy of the data recieved with one more byte */
 		if ((rbuf2 = malloc(bsize + 1)) == NULL)
-			error("icoms_hid_write, malloc failed");
+			error("icoms_hid_read, malloc failed");
 		rbuf2[0] = 0;
 		if (ReadFile(p->hidd->fh, rbuf2, bsize+1, (LPDWORD)&bread, &p->hidd->ols) == 0)  {
 			if (GetLastError() != ERROR_IO_PENDING) {
@@ -620,7 +625,7 @@ icoms_hid_read_th(icoms *p,
 		}
 		if (bread > 0)
 			bread--;
-		memcpy(rbuf,rbuf2+1,bsize);
+		memmove(rbuf,rbuf2+1,bsize);
 		free(rbuf2);
 	}
 #endif /* NT */
@@ -723,7 +728,7 @@ icoms_hid_write_th(icoms *p,
 		/* Create a copy of the data to send with one more byte */
 		if ((wbuf2 = malloc(bsize + 1)) == NULL)
 			error("icoms_hid_write, malloc failed");
-		memcpy(wbuf2+1,wbuf,bsize);
+		memmove(wbuf2+1,wbuf,bsize);
 		wbuf2[0] = 0;		/* Extra report ID byte */
 		if (WriteFile(p->hidd->fh, wbuf2, bsize+1, (LPDWORD)&bwritten, &p->hidd->ols) == 0) { 
 			if (GetLastError() != ERROR_IO_PENDING) {
@@ -732,7 +737,7 @@ icoms_hid_write_th(icoms *p,
 				int res;
 				res = WaitForSingleObject(p->hidd->ols.hEvent, (int)(tout * 1000.0 + 0.5));
 				if (res == WAIT_FAILED)
-					error("HID wait on read failed");
+					error("HID wait on write failed");
 				else if (res == WAIT_TIMEOUT) {
 					CancelIo(p->hidd->fh);
 					lerr = ICOM_TO; 

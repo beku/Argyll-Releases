@@ -86,10 +86,10 @@ static char *cur_keypath(jcnf *p) {
 			char num[13];
 			sprintf(num, "%d",p->recds[i].aix);
 			sl = strlen(num);
-			memcpy(ckey + len, num, sl);
+			memmove(ckey + len, num, sl);
 		} else {
 			sl = strlen(p->recds[i].key);
-			memcpy(ckey + len, p->recds[i].key, sl);
+			memmove(ckey + len, p->recds[i].key, sl);
 		}
 		len += sl;
 
@@ -201,7 +201,7 @@ static jc_error jcnf_set_key_internal(
 		if ((kp->data = malloc(dataSize)) == NULL)
 			return jc_malloc;
 		kp->dataSize = dataSize;
-		memcpy(kp->data, data, dataSize);
+		memmove(kp->data, data, dataSize);
 	}
 
 	if (comment != NULL) {
@@ -408,7 +408,7 @@ static jc_error jcnf_delete_key(
 	free_key_contents(p->keys[ix]);
 	
 	if ((ix+1) < p->nkeys) {
-		memcpy(p->keys+ix, p->keys+ix+1,sizeof(jc_key *) * p->nkeys-ix-1);
+		memmove(p->keys+ix, p->keys+ix+1,sizeof(jc_key *) * p->nkeys-ix-1);
 	}
 	p->nkeys--;
 	p->modified = 1;
@@ -520,7 +520,7 @@ static int jcnf_yajl_string(void *ctx, const unsigned char *stringVal,
 
     if ((t2 = malloc(stringLen + 1)) == NULL)		/* Room to add implicit nul */
 		return 0;
-    memcpy(t2, stringVal, stringLen);
+    memmove(t2, stringVal, stringLen);
     t2[stringLen] = 0;
 
 	if (jcnf_add_key_internal(p, t1, jc_string, (void *)t2, stringLen+1, NULL)  != jc_ok) {
@@ -546,7 +546,7 @@ static int jcnf_yajl_c_comment(void *ctx, const unsigned char * stringVal,
 		char *t1;
 		if ((t1 = malloc(stringLen + 1)) == NULL)
 			return 0;
-		memcpy(t1, stringVal, stringLen);
+		memmove(t1, stringVal, stringLen);
 		t1[stringLen] = 0;
 
 		p->lk->c_comment = t1;
@@ -567,7 +567,7 @@ static int jcnf_yajl_cpp_comment(void *ctx, const unsigned char * stringVal,
 		char *t1;
 		if ((t1 = malloc(stringLen + 1)) == NULL)
 			return 0;
-		memcpy(t1, stringVal, stringLen);
+		memmove(t1, stringVal, stringLen);
 		t1[stringLen] = 0;
 
 		p->lk->cpp_comment = t1;
@@ -623,7 +623,7 @@ static int jcnf_yajl_map_key(void *ctx, const unsigned char * stringVal,
 		return 0;
 
     p->recds[p->nrecd-1].key[stringLen] = 0;
-    memcpy(p->recds[p->nrecd-1].key, stringVal, stringLen);
+    memmove(p->recds[p->nrecd-1].key, stringVal, stringLen);
 
 #ifdef NEVER
 	{

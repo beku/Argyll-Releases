@@ -35,7 +35,7 @@
 
 void usage(void) {
 	fprintf(stderr,"Map bteween two gamuts, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: maptest [options] ingamut outgamut diag_gamut\n");
 	fprintf(stderr," -v                Verbose\n");
 	fprintf(stderr," -s                Do saturation style expand/compress\n");

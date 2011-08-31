@@ -15,22 +15,18 @@
 
 /* This program displays test patches on a WinNT, MAC OSX or X11 windowing system. */
 
-/*
-   We are rather rough with how we handle window messages. We should
-   really start another thread/process to handle the messages, rather
-   that only servicing messages when we feel like it. It seems to
-   work OK for test patches. 
-*/
-
 /* TTBD
- *
- *	We could improve the robustnes against LCD warm up
- *	effects by reading the white every N readings,
- *	and then linearly interpolating the white readings,
- *	and scaling them back to a reference white.
  *
  * Should probably check the display attributes (like visual depth)
  * and complain if we aren't using 24 bit color or better. 
+ *
+ * Ideally should distinguish clearly between not having access to RAMDAC/VideoLuts
+ * (fail) vs. the display not having them at all.
+ *
+ * Is there a >8 bit way of setting frame buffer value on MSWin (see "Quantize")
+ * when using higher bit depth frame buffers ?
+ *
+ * Is there a >8 bit way of getting/setting RAMDAC indexes ?
  *
  */
 
@@ -72,6 +68,7 @@
 # define debugr2(xx)	fprintf xx
 # define debugrr(xx)	fprintf(errout, xx )
 # define debugrr2(xx)	fprintf xx
+# define debugrr2l(lev, xx)	fprintf xx
 #else
 #define errout stderr
 # define debug(xx) 
@@ -80,12 +77,14 @@
 # define debugr2(xx) if (p->ddebug) fprintf xx
 # define debugrr(xx) if (callback_ddebug) fprintf(errout, xx ) 
 # define debugrr2(xx) if (callback_ddebug) fprintf xx
+# define debugrr2l(lev, xx) if (callback_ddebug >= lev) fprintf xx
 #endif
 
 /* ----------------------------------------------- */
 /* Dealing with locating displays */
 
-int callback_ddebug = 0;			/* Diagnostic global for get_displays() and get_a_display() */  
+int callback_ddebug = 0;	/* Diagnostic global for get_displays() and get_a_display() */  
+							/* and events */
 
 #ifdef NT
 
@@ -727,7 +726,7 @@ disppath **get_displays() {
 										free_disppaths(disps);
 										return NULL;
 									}
-									memcpy(disps[ndisps]->edid, atomv, ret_len);
+									memmove(disps[ndisps]->edid, atomv, ret_len);
 									disps[ndisps]->edid_len = ret_len;
 									XFree(atomv);
 									debugrr2((errout, "Got EDID for display\n"));
@@ -874,7 +873,7 @@ disppath **get_displays() {
 						XCloseDisplay(mydisplay);
 						return NULL;
 					}
-					memcpy(disps[i]->edid, atomv, ret_len);
+					memmove(disps[i]->edid, atomv, ret_len);
 					disps[i]->edid_len = ret_len;
 					XFree(atomv);
 					debugrr2((errout, "Got EDID for display\n"));
@@ -1026,7 +1025,7 @@ disppath *get_a_display(int ix) {
 			return NULL;
 		}
 		rv->edid_len = paths[i]->edid_len;
-		memcpy(rv->edid, paths[i]->edid, rv->edid_len );
+		memmove(rv->edid, paths[i]->edid, rv->edid_len );
 	}
 #endif
 	free_disppaths(paths);
@@ -1069,7 +1068,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 	int i, j;
 
 #ifdef NT
-	WORD vals[3][256];		/* 16 bit elements */
+	WORD vals[3][256];		/* 256 x 16 bit elements (Quantize) */
 
 	debugr("dispwin_get_ramdac called\n");
 
@@ -1102,7 +1101,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 		}
 	}
 
-	/* GetDeviceGammaRamp() is hard coded for 3 x 256 entries */
+	/* GetDeviceGammaRamp() is hard coded for 3 x 256 entries (Quantize) */
 	if (r->nent != 256) {
 		debugr2((errout,"GetDeviceGammaRamp() is hard coded for nent == 256, and we've got nent = %d!\n",r->nent));
 		return NULL;
@@ -1290,6 +1289,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 		}
 	}
 #endif	/* UNXI X11 */
+	debugr("dispwin_get_ramdac returning OK\n");
 	return r;
 }
 
@@ -1600,6 +1600,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 	}
 #endif	/* UNXI X11 */
 
+	debugr("XF86VidModeSetGammaRamp returning OK\n");
 	return 0;
 }
 
@@ -1678,6 +1679,9 @@ static int set_X11_atom(dispwin *p, char *fname) {
 	debugr("Setting _ICC_PROFILE property\n");
 
 	/* Read in the ICC profile, then set the X11 atom value */
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
 #if defined(O_BINARY) || defined(_O_BINARY)
 	if ((fp = fopen(fname,"rb")) == NULL)
 #else
@@ -2382,7 +2386,7 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 			debugr("malloc of profile buffer failed\n");
 		    return NULL;
 		}
-		memcpy(buf, atomv, ret_len);
+		memmove(buf, atomv, ret_len);
 		XFree(atomv);
 
 		/* Memory File fp that will free the buffer when deleted: */
@@ -2473,6 +2477,7 @@ static void dispwin_sighandler(int arg) {
 #endif /* UNIX && !APPLE */
 
 /* ----------------------------------------------- */
+
 /* Change the window color. */
 /* Return 1 on error, 2 on window being closed */
 static int dispwin_set_color(
@@ -2498,7 +2503,10 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		p->r_rgb[j] = p->rgb[j];
 	}
 
-	if (p->donat) {		/* Output high precision native using RAMDAC */
+	/* Use ramdac for high precision native output. */
+	/* The ramdac is used to hold the lsb that the frame buffer */
+	/* doesn't hold. */
+	if (p->native == 1) {
 		double prange = p->r->nent - 1.0;
 
 		for (j = 0; j < 3; j++) {
@@ -2507,7 +2515,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 //printf("~1 %d: in %f, ",j,p->rgb[j]);
 			tt = (int)(p->rgb[j] * prange);
 			p->r->v[j][tt] = p->rgb[j];
-			p->r_rgb[j] = (double)tt/prange;	/* Quantized value */
+			p->r_rgb[j] = (double)tt/prange;	/* RAMDAC output Quantized value */
 //printf(" cell[%d], val %f, rast val %f\n",tt, p->rgb[j], p->r_rgb[j]);
 		}
 		if (p->set_ramdac(p,p->r, 0)) {
@@ -2519,13 +2527,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	/* - - - - - - - - - - - - - - */
 #ifdef NT
 	{
-		HDC hdc;
-		PAINTSTRUCT ps;
-		RECT rect;
-		HRGN regn;
-		HBRUSH hbr;
 		MSG msg;
-		int vali[3];
 		INPUT fip;
 
 		/* Stop the system going to sleep */
@@ -2543,53 +2545,18 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		fip.mi.dwExtraInfo = 0;
 		SendInput(1, &fip, sizeof(INPUT));
 		
-		if ((regn = CreateRectRgn(p->tx, p->ty, p->tx + p->tw, p->ty + p->th)) == NULL) {
-			debugr2((errout,"CreateRectRgn failed, lasterr = %d\n",GetLastError()));
+		p->colupd++;
+
+		/* Trigger a WM_PAINT */
+		if (!InvalidateRect(p->hwnd, NULL, FALSE)) {
+			debugr2((errout,"InvalidateRect failed, lasterr = %d\n",GetLastError()));
 			return 1;
 		}
 
-		/* Force a repaint with the new data */
-		if (!InvalidateRgn(p->hwnd,regn,TRUE)) {
-			debugr2((errout,"InvalidateRgn failed, lasterr = %d\n",GetLastError()));
-			return 1;
+		/* Wait for WM_PAINT to be executed */
+		while (p->colupd != p->colupde) {
+			msec_sleep(50);
 		}
-
-		/* Convert to 8 bit color */
-		for (j = 0; j < 3; j++) {
-			vali[j] = (int)(255.0 * p->r_rgb[j] + 0.5);
-		}
-
-		hdc = BeginPaint(p->hwnd, &ps);
-		SaveDC(hdc);
-
-		/* Try and turn ICM off */
-#ifdef ICM_DONE_OUTSIDEDC
-		if (!SetICMMode(hdc, ICM_DONE_OUTSIDEDC)) {
-			/* This seems to fail with "invalid handle" under NT4 */
-			/* Does it work under Win98 or Win2K ? */
-			printf("SetICMMode failed, lasterr = %d\n",GetLastError());
-		}
-#endif
-
-		hbr = CreateSolidBrush(RGB(vali[0],vali[1],vali[2]));
-		SelectObject(hdc,hbr);
-
-		SetRect(&rect, p->tx, p->ty, p->tx + p->tw, p->ty + p->th);
-		FillRect(hdc, &rect, hbr);
-
-		RestoreDC(hdc,-1);
-		EndPaint(p->hwnd, &ps);
-		
-		UpdateWindow(p->hwnd);		/* Flush the paint */
- 
-		/* Process any pending messages */
-		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-//printf("~1 got message %d\n",msg.message);
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-		DeleteDC(hdc);
-		DeleteObject(regn);
 	}
 #endif /* NT */
 
@@ -2649,7 +2616,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		/* Indicate that we've got activity to the X11 Screensaver */
 		XResetScreenSaver(p->mydisplay);
 
-		/* Convert to 16 bit color */
+		/* Quantize to 16 bit color */
 		for (j = 0; j < 3; j++)
 			vali[j] = (int)(65535.0 * p->r_rgb[j] + 0.5);
 
@@ -2683,8 +2650,9 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 
 	/* Allow some time for the display to update before */
 	/* a measurement can take place. This allows for CRT */
-	/* refresh, or LCD processing/update time. */
-	msec_sleep(60);
+	/* refresh, or LCD processing/update time, + */
+	/* display settling time (quite long for smaller LCD changes). */
+	msec_sleep(200);
 
 	return 0;
 }
@@ -2712,7 +2680,7 @@ dispwin *p
 		return;
 
 	/* Restore original RAMDAC if we were in native mode */
-	if (!p->nowin && p->donat && p->or != NULL) {
+	if (!p->nowin && p->native && p->or != NULL) {
 		p->set_ramdac(p, p->or, 0);
 		p->or->del(p->or);
 		p->r->del(p->r);
@@ -2721,14 +2689,22 @@ dispwin *p
 
 	/* -------------------------------------------------- */
 #ifdef NT
-	if (p->hwnd != NULL) {
-		if (!DestroyWindow(p->hwnd)) {
-			debugr2((errout, "DestroyWindow failed, lasterr = %d\n",GetLastError()));
-		}	
-//		DestroyCursor(p->curs); 
-	}
 
-	UnregisterClass(p->AppName, NULL);
+	if (p->hwnd != NULL) {
+
+		p->quit = 1;
+		if (PostMessage(p->hwnd, WM_CLOSE, (WPARAM)NULL, (LPARAM)NULL) != 0) {
+			while(p->hwnd != NULL)
+				msec_sleep(50);
+		} else {
+			debugr2((errout, "PostMessage(WM_GETICON failed, lasterr = %d\n",GetLastError()));
+		}
+//		DestroyCursor(p->curs); 
+
+		if (p->mth != NULL) {			/* Message thread */
+			p->mth->del(p->mth);
+		}
+	}
 
 	if (p->hdc != NULL)
 		DeleteDC(p->hdc);
@@ -2784,7 +2760,117 @@ dispwin *p
 /* Event handler callbacks */
 
 #ifdef NT
-	/* None */
+
+/* Undocumented flag. Set when minimized/maximized etc. */
+#ifndef SWP_STATECHANGED
+#define SWP_STATECHANGED 0x8000
+#endif
+
+static LRESULT CALLBACK MainWndProc(
+	HWND hwnd,
+	UINT message,
+	WPARAM wParam,
+	LPARAM lParam
+) {
+	debugrr2l(4, (stderr, "Handling message type 0x%x\n",message));
+
+	if (message >= WM_APP) {
+		debugrr2l(4, (stderr, "Message ignored\n"));
+		return 0;
+	}
+
+	switch(message) {
+		case WM_PAINT: {
+			dispwin *p = NULL;
+			int vali[3];
+			HDC hdc;
+			PAINTSTRUCT ps;
+			RECT rect;
+			HBRUSH hbr;
+			int j;
+
+#ifdef _WIN64
+			if ((p = (dispwin *)GetWindowLongPtr(hwnd, GWLP_USERDATA)) == NULL)
+#else
+			if ((p = (dispwin *)GetWindowLong(hwnd, GWL_USERDATA)) == NULL)
+#endif
+			{
+				debugrr2l(4,(stderr, "GetWindowLongPtr failed, lasterr = %d\n",GetLastError()));
+				hdc = BeginPaint(hwnd, &ps);
+				/* Don't know where to paint */
+				EndPaint(hwnd, &ps);
+				return 0;
+			}
+
+			/* Check that there is something to paint */
+			if (GetUpdateRect(hwnd, NULL, FALSE) == 0) {
+				debugrr2l(4, (stderr,"The update region was empty\n"));
+			}
+
+			/* Frame buffer Quantize 8 bit color */
+			for (j = 0; j < 3; j++) {
+				vali[j] = (int)(255.0 * p->r_rgb[j] + 0.5);
+			}
+
+			hdc = BeginPaint(hwnd, &ps);
+
+			SaveDC(hdc);
+
+			/* Try and turn ICM off */
+#ifdef ICM_DONE_OUTSIDEDC
+			if (!SetICMMode(hdc, ICM_DONE_OUTSIDEDC)) {
+				/* This seems to fail with "invalid handle" under NT4 */
+				/* Does it work under Win98 or Win2K ? */
+				printf("SetICMMode failed, lasterr = %d\n",GetLastError());
+			}
+#endif
+
+			hbr = CreateSolidBrush(RGB(vali[0],vali[1],vali[2]));
+			SelectObject(hdc,hbr);
+
+			SetRect(&rect, p->tx, p->ty, p->tx + p->tw, p->ty + p->th);
+			FillRect(hdc, &rect, hbr);
+
+			RestoreDC(hdc,-1);
+			DeleteDC(hdc);
+
+			EndPaint(hwnd, &ps);
+
+			p->colupde = p->colupd;		/* We're updated to this color */
+
+			return 0;
+		}
+
+		/* Prevent any changes in position of the window */
+		case WM_WINDOWPOSCHANGING: {
+			WINDOWPOS *wpos = (WINDOWPOS *)lParam;
+			debugrr2l(4,(stderr, "It's a windowposchange, flags = 0x%x, x,y %d %d, w,h %d %d\n",wpos->flags, wpos->x, wpos->y, wpos->cx, wpos->cy));
+			wpos->flags &= ~SWP_FRAMECHANGED & ~SWP_NOREDRAW;
+			wpos->flags |= SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOOWNERZORDER
+			            |  SWP_NOSENDCHANGING | SWP_NOSIZE | SWP_SHOWWINDOW;
+			debugrr2l(4,(stderr, "flags now = 0x%x\n",wpos->flags));
+			return DefWindowProc(hwnd, message, wParam, lParam);
+		}
+		case WM_WINDOWPOSCHANGED: {
+			WINDOWPOS *wpos = (WINDOWPOS *)lParam;
+			debugrr2l(4,(stderr, "It's a windowposchanged, flags = 0x%x, x,y %d %d, w,h %d %d\n",wpos->flags, wpos->x, wpos->y, wpos->cx, wpos->cy));
+			debugrr2l(4,(stderr, "It's a windowposchanged, flags = 0x%x\n",wpos->flags));
+			return 0;
+		}
+		case WM_CLOSE: 
+			DestroyWindow(hwnd);
+			return 0; 
+ 
+		case WM_DESTROY: 
+		    PostQuitMessage(0); 
+			return 0;
+	}
+
+	debugrr2l(4,(stderr, "Handle message using DefWindowProc()\n"));
+
+	return DefWindowProc(hwnd, message, wParam, lParam);
+}
+
 #endif /* NT */
 
 #ifdef __APPLE__
@@ -2838,13 +2924,117 @@ void* userData
 #endif	/* UNXI X11 */
 
 /* ----------------------------------------------- */
+#ifdef NT
+
+/* Thread to handle message processing, so that there is no delay */
+/* when the main thread is doing other things. */
+int win_message_thread(void *pp) {
+	dispwin *p = (dispwin *)pp;
+	MSG msg;
+	WNDCLASS wc;
+
+	debugrr2l(4, (stderr, "win_message_thread started\n"));
+
+	/* Fill in window class structure with parameters that describe the */
+	/* main window. */
+	wc.style         = 0 ;			/* Class style(s). */
+	wc.lpfnWndProc   = MainWndProc;	/* Function to retrieve messages for windows of this class. */
+	wc.cbClsExtra    = 0;			/* No per-class extra data. */
+	wc.cbWndExtra    = 0;			/* No per-window extra data. */
+	wc.hInstance     = NULL;		/* Application that owns the class. */
+	wc.hIcon         = LoadIcon(NULL, IDI_APPLICATION);
+	wc.hCursor       = LoadCursor(NULL, IDC_CROSS);
+	wc.hbrBackground = GetStockObject(BLACK_BRUSH);
+	wc.lpszMenuName  = NULL;
+	wc.lpszClassName = p->AppName;
+
+	/* Make the cursor disapear over our window */
+	/* (How does it know our window ??) */
+	ShowCursor(FALSE);
+
+	if ((p->arv = RegisterClass(&wc)) == 0) {
+		debugr2((errout, "RegisterClass failed, lasterr = %d\n",GetLastError()));
+		p->inited = 2;
+		return 0;
+	}
+
+#ifndef WS_EX_NOACTIVATE
+# define WS_EX_NOACTIVATE 0x08000000L
+#endif
+	p->hwnd = CreateWindowEx(
+		WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+//				0,
+		p->AppName,
+		"Argyll Display Calibration Window",
+		WS_VISIBLE | WS_DISABLED | WS_POPUP, 
+//		WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+//		WS_POPUPWINDOW | WS_VISIBLE,
+		p->xo, p->yo,			/* Location */
+		p->wi, p->he,			/* Size */
+		NULL,					/* Handle to parent or owner */
+		NULL,					/* Handle to menu or child window */
+		NULL, 					/* hInstance Handle to appication instance */
+		NULL);					/* pointer to window creation data */
+
+	if (!p->hwnd) {
+		debugr2((errout, "CreateWindow failed, lasterr = %d\n",GetLastError()));
+		p->inited = 2;
+		return 0;
+	}
+
+	/* Associate the dispwin object with the window, */
+	/* so that the event callback can access it */
+#ifdef _WIN64
+	SetWindowLongPtr(p->hwnd, GWLP_USERDATA, (LONG_PTR)p);
+#else
+	SetWindowLong(p->hwnd, GWL_USERDATA, (LONG)p);
+#endif
+
+	/*
+		Should we call BOOL SystemParametersInfo()
+		to disable high contrast, powertimout and screensaver timeout ?
+
+	 */
+
+	debugrr2l(4, (stderr, "win_message_thread initialized - about to process messages\n"));
+	p->inited = 1;
+
+	for (;;) {
+		if (GetMessage(&msg, NULL, 0, 0)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+
+			if (p->quit != 0) {
+				/* Process any pending messages */
+				while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+					TranslateMessage(&msg);
+					DispatchMessage(&msg);
+				}
+				break;
+			}
+		}
+	}
+
+	if (UnregisterClass(p->AppName, NULL) == 0) {
+		warning("UnregisterClass failed, lasterr = %d\n",GetLastError());
+	}
+
+	p->hwnd = NULL;		/* Signal it's been deleted */
+
+	return 0;
+}
+
+#endif /* NT */
+
 /* Create a RAMDAC access and display test window, default white */
 dispwin *new_dispwin(
 disppath *disp,					/* Display to calibrate. */
 double width, double height,	/* Width and height in mm */
 double hoff, double voff,		/* Offset from center in fraction of screen, range -1.0 .. 1.0 */
 int nowin,						/* NZ if no window should be created - RAMDAC access only */
-int native,						/* NZ if ramdac should be bypassed rather than used. */
+int native,						/* 0 = use current current or given calibration curve */
+								/* 1 = set native linear output and use ramdac high prec'n */
+								/* 2 = set native linear output */
 int blackbg,					/* NZ if whole screen should be filled with black */
 int override,					/* NZ if override_redirect is to be used on X11 */
 int ddebug						/* >0 to print debug statements to stderr */
@@ -2853,11 +3043,13 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 	debug("new_dispwin called\n");
 
-	if ((p = (dispwin *)calloc(sizeof(dispwin), 1)) == NULL)
+	if ((p = (dispwin *)calloc(sizeof(dispwin), 1)) == NULL) {
+		if (ddebug) fprintf(stderr,"new_dispwin failed because malloc failed\n");
 		return NULL;
+	}
 
 	p->nowin = nowin;
-	p->donat = native;
+	p->native = native;
 	p->blackbg = blackbg;
 	p->ddebug = ddebug;
 	p->get_ramdac      = dispwin_get_ramdac;
@@ -2876,7 +3068,6 @@ int ddebug						/* >0 to print debug statements to stderr */
 	/* -------------------------------------------------- */
 #ifdef NT
 	{
-		MSG msg;
 		WNDCLASS wc;
 		int disp_hsz, disp_vsz;		/* Display horizontal/vertical size in mm */
 		int disp_hrz, disp_vrz;		/* Display horizontal/vertical resolution in pixels */
@@ -2886,23 +3077,23 @@ int ddebug						/* >0 to print debug statements to stderr */
 		
 		p->AppName = "Argyll Test Window";
 		
-		debugr2((errout, "About to open display '%s'\n",disp->name));
+		debugr2((errout, "new_dispwin: About to open display '%s'\n",disp->name));
 
 		/* Get device context to main display */
 		/* (This is the recommended way of doing this, and works on Vista) */
 		if ((p->hdc = CreateDC(disp->name, NULL, NULL, NULL)) == NULL) {
-			debugr2((errout, "CreateDC failed, lasterr = %d\n",GetLastError()));
+			debugr2((errout, "new_dispwin: CreateDC failed, lasterr = %d\n",GetLastError()));
 			dispwin_del(p);
 			return NULL;
 		}
 
 		if ((p->name = strdup(disp->name)) == NULL) {
-			debugr2((errout, "Malloc failed\n"));
+			debugr2((errout, "new_dispwin: Malloc failed\n"));
 			dispwin_del(p);
 			return NULL;
 		}
 		if ((p->description = strdup(disp->description)) == NULL) {
-			debugr2((errout, "Malloc failed\n"));
+			debugr2((errout, "new_dispwin: Malloc failed\n"));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -2943,8 +3134,21 @@ int ddebug						/* >0 to print debug statements to stderr */
 		/* It's a bit difficult to know how windows defines the display */
 		/* depth. Microsofts doco is fuzzy, and typical values */
 		/* for BITSPIXEL and PLANES are confusing (What does "32" and "1" */
-		/* mean ?) The doco for COLORRES is also fuzzy, but it returns */
-		/* a meaningful number on my box (24) */
+		/* mean ?) NUMCOLORS seems to be -1 on my box, and perhaps */
+		/* is only applicable to up to 256 paletized colors. The doco */
+		/* for COLORRES is also fuzzy, but it returns a meaningful number */
+		/* on my box (24) */
+		if (p->ddebug) {
+			fprintf(errout,"Windows display RASTERCAPS 0x%x, BITSPIXEL %d, PLANES %d, NUMCOLORS %d, COLORRES %d\n",
+			        GetDeviceCaps(p->hdc, RASTERCAPS),
+			        GetDeviceCaps(p->hdc, BITSPIXEL),GetDeviceCaps(p->hdc, PLANES),
+			        GetDeviceCaps(p->hdc, NUMCOLORS),GetDeviceCaps(p->hdc, COLORRES));
+		}
+		if (GetDeviceCaps(p->hdc, RASTERCAPS) & RC_PALETTE) {
+			debugr2((errout, "new_dispwin: can't calibrate palette based device!\n"));
+			dispwin_del(p);
+			return NULL;
+		}
 		bpp = GetDeviceCaps(p->hdc, COLORRES);
 		if (bpp <= 0)
 			p->pdepth = 8;		/* Assume this is so */
@@ -2953,65 +3157,36 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 		if (nowin == 0) {
 
-			/* Fill in window class structure with parameters that describe the */
-			/* main window. */
-			wc.style         = CS_SAVEBITS ;	/* Class style(s). */
-			wc.lpfnWndProc   = DefWindowProc; /* Function to retrieve messages for class windows */
-			wc.cbClsExtra    = 0;			/* No per-class extra data. */
-			wc.cbWndExtra    = 0;			/* No per-window extra data. */
-			wc.hInstance     = NULL;		/* Application that owns the class. */
-			wc.hIcon         = LoadIcon(NULL, IDI_APPLICATION);
-			wc.hCursor       = LoadCursor(NULL, IDC_CROSS);
-			wc.hbrBackground = GetStockObject(BLACK_BRUSH);
-			wc.lpszMenuName  = NULL;
-			wc.lpszClassName = p->AppName;
+			/* We use a thread to process the window messages, so that */
+			/* Task Manager doesn't think it's not responding. */
 
-			/* Make the cursor disapear over our window */
-			/* (How does it know our window ??) */
-			ShowCursor(FALSE);
+			/* Becayse messages only get delivered to same thread that created window, */
+			/* the thread needs to create window. :-( */
 
-			if ((p->arv = RegisterClass(&wc)) == 0) {
-				debugr2((errout, "RegisterClass failed, lasterr = %d\n",GetLastError()));
+			p->xo = xo;		/* Pass info to thread */
+			p->yo = yo;
+			p->wi = wi;
+			p->he = he;
+
+			if ((p->mth = new_athread(win_message_thread, (void *)p)) == NULL) {
+				debugr2((errout, "new_dispwin: new_athread failed\n"));
 				dispwin_del(p);
 				return NULL;
 			}
 
-			p->hwnd = CreateWindowEx(
-				WS_EX_TOPMOST,
-				p->AppName,
-				"Argyll Display Calibration Window",
-				WS_DISABLED | WS_POPUP, 
-				xo, yo,					/* Location */
-				wi, he,					/* Size */
-				NULL,					/* Handle to parent or owner */
-				NULL,					/* Handle to menu or child window */
-				NULL, 					/* hInstance Handle to appication instance */
-				NULL);					/* pointer to window creation data */
-
-			if (!p->hwnd) {
-				debugr2((errout, "CreateWindow failed, lasterr = %d\n",GetLastError()));
+			/* Wait for thread to run */
+			while (p->inited == 0) {
+				msec_sleep(50);
+			}
+			/* If thread errored */
+			if (p->inited != 1) {		/* Error */
+				debugr2((errout, "new_dispwin: new_athread returned error\n"));
 				dispwin_del(p);
 				return NULL;
-			}
-			
-			/* Make cursor dissapear in our window. */
-			/* (Probably have to use something more complicated for */
-			/*  a true GUI application - event loop & window class cursor ?) */
-			ShowWindow(p->hwnd, SW_SHOWNA);
-
-			/*
-				Should we call BOOL SystemParametersInfo()
-				to disable high contrast, powertimout and screensaver timeout ?
-
-			 */
-
-			/* Process any pending messages */
-			while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-				TranslateMessage(&msg);
-				DispatchMessage(&msg);
 			}
 		}
 	}
+
 #endif /* NT */
 	/* -------------------------------------------------- */
 
@@ -3019,7 +3194,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 #ifdef __APPLE__
 
 	if ((p->name = strdup(disp->name)) == NULL) {
-		debugr2((errout,"Malloc failed\n"));
+		debugr2((errout,"new_dispwin: Malloc failed\n"));
 		dispwin_del(p);
 		return NULL;
 	}
@@ -3100,7 +3275,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		/* Create invisible new window of given class, attributes and size */
 	    stat = CreateNewWindow(wclass, attr, &wRect, &p->mywindow);
 		if (stat != noErr || p->mywindow == nil) {
-			debugr2((errout,"CreateNewWindow failed with code %d\n",stat));
+			debugr2((errout,"new_dispwin: CreateNewWindow failed with code %d\n",stat));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3124,7 +3299,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 			&fHandler						/* Event handler reference return value */
 		);
 		if (stat != noErr) {
-			debugr2((errout,"InstallEventHandler failed with code %d\n",stat));
+			debugr2((errout,"new_dispwin: InstallEventHandler failed with code %d\n",stat));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3133,7 +3308,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		p->port = GetWindowPort(p->mywindow);
 
 		if ((stat = QDBeginCGContext(p->port, &p->mygc)) != noErr) {
-			debugr2((errout,"QDBeginCGContext returned error %d\n",stat));
+			debugr2((errout,"new_dispwin: QDBeginCGContext returned error %d\n",stat));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3219,6 +3394,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 //printf("~1 done create window\n");
 		if (p->winclose) {
+			debugr2((errout,"new_dispwin: done create window (winclose flag)\n"));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3235,7 +3411,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		 */
 
 		if(ssdispwin != NULL) {
-			debugr2((errout,"Attempting to open more than one dispwin!\n"));
+			debugr2((errout,"new_dispwin: Attempting to open more than one dispwin!\n"));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3259,7 +3435,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 	
 		/* Create the base display name (in case of Xinerama, XRandR) */
 		if ((bname = strdup(disp->name)) == NULL) {
-			debugr2((errout,"Malloc failed\n"));
+			debugr2((errout,"new_dispwin: Malloc failed\n"));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3272,16 +3448,16 @@ int ddebug						/* >0 to print debug statements to stderr */
 		/* open the display */
 		p->mydisplay = XOpenDisplay(bname);
 		if(!p->mydisplay) {
-			debugr2((errout,"Unable to open display '%s'\n",bname));
+			debugr2((errout,"new_dispwin: Unable to open display '%s'\n",bname));
 			dispwin_del(p);
 			free(bname);
 			return NULL;
 		}
 		free(bname);
-		debugr("Opened display OK\n");
+		debugr("new_dispwin: Opened display OK\n");
 
 		if ((p->name = strdup(disp->name)) == NULL) {
-			debugr2((errout,"Malloc failed\n"));
+			debugr2((errout,"new_dispwin: Malloc failed\n"));
 			dispwin_del(p);
 			return NULL;
 		}
@@ -3299,12 +3475,12 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 		if (disp->edid != NULL) {
 			if ((p->edid = malloc(sizeof(unsigned char) * disp->edid_len)) == NULL) {
-				debugr2((errout,"Malloc failed\n"));
+				debugr2((errout,"new_dispwin: Malloc failed\n"));
 				dispwin_del(p);
 				return NULL;
 			}
 			p->edid_len = disp->edid_len;
-			memcpy(p->edid, disp->edid, p->edid_len);
+			memmove(p->edid, disp->edid, p->edid_len);
 		}
 
 		//p->pdepth = DefaultDepth(p->mydisplay, p->myscreen)/3;
@@ -3393,7 +3569,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 			if (XGetWindowAttributes(
 				p->mydisplay, p->mywindow,
 				&mywattributes) == 0) {
-				debugr("XGetWindowAttributes failed\n");
+				debugr("new_dispwin: XGetWindowAttributes failed\n");
 				dispwin_del(p);
 				return NULL;
 			}
@@ -3576,23 +3752,30 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 	if (!p->nowin) {
 		/* Setup for native mode */
-		if (p->donat) {
+		if (p->native) {
 			debug("About to setup native mode\n");
 			if ((p->or = p->get_ramdac(p)) == NULL
 			 || (p->r = p->or->clone(p->or)) == NULL) {
-				warning("Native mode can't work, no VideoLUT support");
-				dispwin_del(p);
-				return NULL;
+				if (p->native == 1) {
+					debugr("new_dispwin: Native mode can't work, no VideoLUT support\n");
+					warning("new_dispwin: Native mode can't work, no VideoLUT support");
+					dispwin_del(p);
+					return NULL;
+				} else {
+					debugr("new_dispwin: Accessing VideoLUT failed, so no way to guarantee that calibration is turned off!!\n");
+					warning("new_dispwin: Accessing VideoLUT failed, so no way to guarantee that calibration is turned off!!");
+				}
+			} else {
+				p->r->setlin(p->r);
+				debug("Saved original VideoLUT\n");
 			}
-			p->r->setlin(p->r);
-			debug("Saved original VideoLUT\n");
 		}
 	
 		/* Make sure initial test color is displayed */
 		dispwin_set_color(p, p->rgb[0], p->rgb[1], p->rgb[2]);
 	}
 
-	debug("About to exit new_dispwin()\n");
+	debugr("new_dispwin: return sucessfully\n");
 	return p;
 }
 
@@ -3835,7 +4018,7 @@ static int gcc_bug_fix(int i) {
 static void usage(char *diag, ...) {
 	disppath **dp;
 	fprintf(stderr,"Test display patch window, Set Video LUTs, Install profiles, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"Diagnostic: ");
@@ -3882,9 +4065,9 @@ static void usage(char *diag, ...) {
 	fprintf(stderr,"                      d is one of: n = network, l = local system, u = user (default)\n");
 	fprintf(stderr," -L                   Load installed profiles cal. into Video LUT\n");
 #if defined(UNIX) && !defined(__APPLE__)
-	fprintf(stderr," -D                   Run in daemon loader mode for given X11 server\n");
+	fprintf(stderr," -E                   Run in daemon loader mode for given X11 server\n");
 #endif /* X11 */
-	fprintf(stderr," -E [level]           Print debug diagnostics to stderr\n");
+	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," calfile              Load calibration (.cal or %s) into Video LUT\n",ICC_FILE_EXT);
 	exit(1);
 }
@@ -3905,7 +4088,9 @@ main(int argc, char *argv[]) {
 	int nowin = 0;				/* Don't create test window */
 	int ramd = 0;				/* Just test ramdac */
 	int fade = 0;				/* Test greyramp fade */
-	int donat = 0;				/* Test native output */
+	int native = 0;				/* 0 = use current current or given calibration curve */
+								/* 1 = set native linear output and use ramdac high prec'n */
+								/* 2 = set native linear output */
 	int inf = 0;				/* Infnite/manual patches flag */
 	char pcname[MAXNAMEL+1] = "\000";	/* CGATS patch color name */
 	int clear = 0;				/* Clear any display calibration (any calname is ignored) */
@@ -3952,13 +4137,13 @@ main(int argc, char *argv[]) {
 				verb = 1;
 
 			/* Debug */
-			else if (argv[fa][1] == 'E') {
+			else if (argv[fa][1] == 'D') {
 				ddebug = 1;
 				if (na != NULL && na[0] >= '0' && na[0] <= '9') {
 					ddebug = atoi(na);
 					fa = nfa;
 				}
-				callback_ddebug = 1;		/* dispwin global */
+				callback_ddebug = ddebug;	/* dispwin global */
 			}
 
 			/* Display number */
@@ -4031,8 +4216,11 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R')
 				ramd = 1;
 
-			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N')
-				donat = 1;
+			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
+				native = 1;
+				if (argv[fa][1] == 'N')
+					native = 2;
+			}
 
 			else if (argv[fa][1] == 's') {
 				fa = nfa;
@@ -4055,7 +4243,7 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'L')
 				loadprofile = 1;
 
-			else if (argv[fa][1] == 'D')
+			else if (argv[fa][1] == 'E')
 				daemonmode = 1;
 
 			else if (argv[fa][1] == 'S') {
@@ -4127,7 +4315,7 @@ main(int argc, char *argv[]) {
 	if (verb)
 		printf("About to open dispwin object on the display\n");
 
-	if ((dw = new_dispwin(disp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, donat, blackbg, 1, ddebug)) == NULL) {
+	if ((dw = new_dispwin(disp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, native, blackbg, 1, ddebug)) == NULL) {
 		printf("Error - new_dispwin failed!\n");
 		return -1;
 	}
@@ -4213,7 +4401,7 @@ main(int argc, char *argv[]) {
 			printf("About to clear the calibration\n");
 		if ((rv = dw->set_ramdac(dw,r,1)) != 0) {
 			if (rv == 2)
-				error("Failed to set VideoLUTs persistently due to current System Profile");
+				error("Failed to set VideoLUTs persistently because current System Profile can't be renamed");
 			else
 				error("Failed to set VideoLUTs");
 		}
@@ -4339,7 +4527,7 @@ main(int argc, char *argv[]) {
 				error("Expect 256 data sets in file '%s'",calname);
 		
 			if ((fi = ccg->find_kword(ccg, 0, "DEVICE_CLASS")) < 0)
-				error("Calibration file '%s' doesn't contain keyword COLOR_REPS",calname);
+				error("Calibration file '%s' doesn't contain keyword COLOR_REP",calname);
 			if (strcmp(ccg->t[0].kdata[fi],"DISPLAY") != 0)
 				error("Calibration file '%s' doesn't have DEVICE_CLASS of DISPLAY",calname);
 
@@ -4415,7 +4603,7 @@ main(int argc, char *argv[]) {
 			printf("About to set display to given calibration\n");
 		if ((rv = dw->set_ramdac(dw,r,1)) != 0) {
 			if (rv == 2)
-				error("Failed to set VideoLUTs persistently due to current System Profile");
+				error("Failed to set VideoLUTs persistently because current System Profile can't be renamed");
 			else
 				error("Failed to set VideoLUTs");
 		}
@@ -4733,7 +4921,7 @@ main(int argc, char *argv[]) {
 
 #endif /* STANDALONE_TEST */
 
-/* ---------------------------------------------------------------- */
+/* ================================================================ */
 /* Unused Apple code */
 
 #ifdef NEVER
@@ -4891,7 +5079,7 @@ static char *fss2path(FSSpec *fss) {
 		int tl;
 		char *tpath;
 		
-		memcpy(&tfss, fss, sizeof(FSSpec));		/* Copy so we can modify */
+		memmove(&tfss, fss, sizeof(FSSpec));		/* Copy so we can modify */
 		memset(&pb, 0, sizeof(FSRefParam));
 		pb.ioNamePtr = tfss.name;
 		pb.ioVRefNum = tfss.vRefNum;

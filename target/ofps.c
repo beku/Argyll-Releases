@@ -19,8 +19,17 @@
 
 /* TTBD:
 
+	There is a bug when the ink limit == dimensions-1 (200% for CMYY), and
+	the number of bit mask then exceeds > 32. This is not so +/- 0.2% either side
+	of 200%.
+
 	One way of addressing the performance issues would be to use multiple
 	threads to call dnsq. A pool could be setup, one for each CPU.
+
+	Some profiles are too rough, and slow/stall vertex placement.
+	Reducing the cache grid and/or smoothing the rspl values
+	ay mitigate this to some degree, and make this more robust ??
+
  */
 
 /*
@@ -218,17 +227,22 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Overall algorithm */
 
+#define NINSERTTRIES 100	/* Number of seedin insert tries befor failing with error() */
+
 #define NUMTOL 1e-16	/* Numerical tollerance */
 #define FTOL 1e-8		/* dnsqe function tollerance */
 #define FGPMUL 5.0		/* Weighting of gamut plane error into dnsqe function */
 #define COINTOL 1e-8	/* Tollerance for point cooincidence */
+#define ILIMITEPS 1e-6	/* imin, imax and ilimit clip test margine */
 
 #define FASTREJMULT1 20.5 	 /* Fast reject layer distance fudge factor */
 #define FASTREJECTMULT 0.08  /* Fast reject cell skip threshold fudge factor */
 
 #define CELLMAXEPERRFF 2.2  /* Cell worst case eperr from center fudge factor */
 
-#define TNPAGRID 0.8	/* Target nodes per acceleration grid cell */
+#define TNPAGRID 0.8		/* Target nodes per accelleration & peceptual cache grid cell */
+#define TNPAGRIDMINRES 7	/* Perceptual cache grid min resolution */
+#define TNPAGRIDMAXRES 33	/* Perceptual cache grid max resolution */
 #undef FORCE_INCREMENTAL	/* Force incremental update after itteration */
 #undef FORCE_RESEED		/* Force reseed after itteration */
 #define MAXTRIES 41		/* Maximum dnsq tries before giving up */
@@ -314,6 +328,7 @@ static void check_for_missing_vertexes(ofps *s);
 	/* We assume the number of words is <= 1, */
 	/* and we can use macros */
 
+/* Signal this is a single word mask by using -ve no. of bits */
 #define sm_init(s, nbits)  _sm_init(s, -(nbits))
 
 #define sm_cp(s, sm_B, sm_A) \
@@ -373,6 +388,7 @@ static void check_for_missing_vertexes(ofps *s);
 /* Compute set mask parameters */
 static void _sm_init(ofps *s, int nbits) {
 
+//printf("~1 _sm_init with %d bits\n",nbits);
 	s->bpsmw = sizeof(unsigned int) * 8;
 
 	if (nbits < 0) {	/* Macro initialisation */
@@ -381,7 +397,7 @@ static void _sm_init(ofps *s, int nbits) {
 #endif
 		nbits = -nbits;
 		if (nbits > s->bpsmw)
-			error("Attempt to use macro setmasks when nbits %d > 1 words bits %d",nbits,s->bpsmw);
+			error("Attempt to use macro setmasks when nbits %d > a words bits %d",nbits,s->bpsmw);
 	}
 
 	s->smbits = nbits;
@@ -774,11 +790,11 @@ ofps_clip_point(ofps *s, double *cd, double *d) {
 		cd[IX] = d[IX]; 						\
 		if (cd[IX] < s->imin[IX]) {				\
 			cd[IX] = s->imin[IX];				\
-			if (cd[IX] < (s->imin[IX] - 1e-6)) 	\
+			if (cd[IX] < (s->imin[IX] - ILIMITEPS)) 	\
 				rv |= 1;						\
 		} else if (cd[IX] > s->imax[IX]) {		\
 			cd[IX] = s->imax[IX];				\
-			if (cd[IX] > (s->imax[IX] + 1e-6)) 	\
+			if (cd[IX] > (s->imax[IX] + ILIMITEPS)) 	\
 				rv |= 1;						\
 		}										\
 		ss += cd[IX];						
@@ -795,7 +811,7 @@ ofps_clip_point(ofps *s, double *cd, double *d) {
 	}
 #undef STEP
 	if (ss > s->ilimit) {
-		if (ss > (s->ilimit + 1e-6))
+		if (ss > (s->ilimit + ILIMITEPS))
 			rv |= 1;
 		ss = (ss - s->ilimit)/s->di;
 		switch (di) {
@@ -818,21 +834,16 @@ static int
 ofps_would_clip_point(ofps *s, double *d) {
 	int e;
 	double ss;
-	int rv = 0;
 	for (ss = 0.0, e = 0; e < s->di; e++) {
-		if (d[e] < s->imin[e]) {
-			rv |= 1;
-			break;
-		} else if (d[e] > s->imax[e]) {
-			rv |= 1;
-			break;
-		}
+		if (d[e] < (s->imin[e] - ILIMITEPS))
+			return 1;
+		else if (d[e] > (s->imax[e] + ILIMITEPS))
+			return 1;
 		ss += d[e];
 	}
-	if (ss > s->ilimit) {
-		rv |= 1;
-	}
-	return rv;
+	if (ss > (s->ilimit + ILIMITEPS))
+		return 1;
+	return 0;
 }
 
 /* Return a out of gamut value. */
@@ -4138,7 +4149,7 @@ static int comp_vtx(ofps *s, double *p, pleq **peqs) {
 	}
 	/* Solve the simultaneous linear equations A.x = B */
 	/* Return 1 if the matrix is singular, 0 if OK */
-	if (solve_se(ta, p, di))
+	if (polished_solve_se(ta, p, di))
 		return 1;
 
 	return 0;
@@ -4276,6 +4287,7 @@ static void discover_subsuf(ofps *s) {
 				s->sc[co].valid = -1;
 			}
 		}
+//printf("~1 val %s sc[%d].valid = %d\n",icmPdv(di, p), co,s->sc[co].valid);
 	}
 	/* Go through the unknown combinations, and see if there */
 	/* is a valid lower dimensional combination that is valid. */
@@ -4903,10 +4915,10 @@ ofps_init_pcache(ofps *s) {
 	gr = (int)(pow(tinp/TNPAGRID, 1.0/di) + 0.5);
 	gr |= 1;			/* make it odd */
 
-	if (gr < 7)
-		gr = 7;
-	if (gr > 33)
-		gr = 33;
+	if (gr < TNPAGRIDMINRES)
+		gr = TNPAGRIDMINRES;
+	if (gr > TNPAGRIDMAXRES)
+		gr = TNPAGRIDMAXRES;
 
 	if (s->verb)
 		printf("Perceptual cache resolution = %d\n",gr);
@@ -5512,6 +5524,9 @@ ofps *s
 	for (i = 0; i < s->fnp; i++) {
 		node *p = s->n[i];	/* Destination for point */
 
+		/* Make sure that fixed point is within our gamut */
+		ofps_clip_point(s, s->ufx[i]->p, s->ufx[i]->p);
+
 		for (e = 0; e < di; e++) {	/* copy device and perceptual coords */
 			p->op[e] = p->p[e] = s->ufx[i]->p[e];
 			p->v[e] = s->ufx[i]->v[e];
@@ -5564,7 +5579,7 @@ ofps_seed(ofps *s) {
 		error("aat_atnew returned NULL");
 
 	if (s->verb) {
-		printf("There are %d unique fixed points to add (%d non-unique)\n",s->fnp, s->fxno);
+		printf("There are %d unique fixed points to add (%d total fixed points)\n",s->fnp, s->fxno);
 		printf("There are %d far spread points to add\n",s->tinp - s->fnp);
 	}
 
@@ -5645,7 +5660,7 @@ ofps_seed(ofps *s) {
 				spref_mult = ii/(s->tinp - s->fnp - 1.0);
 			spref_mult = (1.0 - spref_mult) * s->ssurfpref + spref_mult * s->esurfpref;
 	
-			/* Until we use the next vertex */
+			/* Until we use the next vertex, keep looking for a movable point */
 			for (;;) {
 
 #ifdef NEVER	/* DEBUG: Show the contents of each list */
@@ -5709,7 +5724,24 @@ ofps_seed(ofps *s) {
 				}
 #endif /* SANITY_CHECK_SEED */
 
-				if (bvx == NULL) {
+				if (bvx == NULL) {		/* We've failed to find a movable point */
+										/* This could be because there are fixed points */
+										/* at all candidate locations. */
+
+					if (fc < s->fnp) {	/* Use a fixed point */
+						/* (Fixed points are already clipped and have perceptual value) */
+						for (e = 0; e < di; e++) {	/* copy device and perceptual coords */
+							p->p[e] = s->ufx[fc]->p[e];
+							p->v[e] = s->ufx[fc]->v[e];
+						}
+			
+						p->fx = 1;							/* is a fixed point */
+		
+						/* Count gamut surface planes it lies on */
+						if (det_node_gsurf(s, p, p->p) != 0)
+							nsp++;
+						break;		/* Go and use this point */
+					}
 					error("ofps: assert, there are no vertexes to choose in initial seed\n");
 				}
 
@@ -5749,9 +5781,11 @@ ofps_seed(ofps *s) {
 						rerr = rads;
 				}
 				rerr = s->lperterb * sqrt(rerr);
+				if (rerr < 0.001)
+					rerr = 0.001;
 
 				/* Add a random offset to the position, and retry */
-				/* if it collides with an existing node */
+				/* if it collides with an existing node or future fixed point */
 				for (k = 0; k < 20; k++) {
 					int pci;		/* Point list index */
 					acell *cp;				/* Acceleration cell */
@@ -5760,7 +5794,8 @@ ofps_seed(ofps *s) {
 					for (e = 0; e < di; e++)
 						p->p[e] = bvx->p[e] + d_rand(-rerr, rerr);
 
-					/* Confine node to planes vertex was on */
+					/* Confine node to planes vertex was on, */
+					/* bit not if we're having trouble avoiding collissions */
 					if (bvx->nsp > 0)
 						confineto_gsurf(s, p->p, p->sp, p->nsp);
 
@@ -5780,11 +5815,35 @@ ofps_seed(ofps *s) {
 #ifdef DEBUG
 							printf("Random offset node ix %d at %s collides with ix %d at %s - retry random %d\n",p->ix,ppos(di,p->p),p1->ix,ppos(di,p1->p),k);
 #endif
-							break;
+							break;		/* Retry */
 						}
 					}
-					if (p1 == NULL)		/* Cell is empty */
-						break;
+					if (p1 != NULL)		/* Coincident */
+						continue;
+
+					/* Check movable point against fixed points that are yet to be added */
+					/* (~~~ Ideally we should use an accelleration structure to check */
+					/*      for cooincidence rather than doing an exaustive search. ~~~) */
+					if (fc < s->fnp) {	/* There are more fixed points to add */
+						int f;
+
+						for (f = fc; f < s->fnp; f++) {
+							for (e = 0; e < di; e++) {
+								if (fabs(p->p[e] - s->ufx[f]->p[e]) > COINTOL)
+									break;		/* Not cooincident */
+							}
+							if (e >= di) { 	/* Cooincident */
+#ifdef DEBUG
+								printf("Movable node ix %d at %s collides with fixed point %d at %s - retry movable %d\n",p->ix,ppos(di,p->p),f,ppos(di,s->ufx[f]->p),k);
+#endif
+								break;
+							}
+						}
+						if (f >= s->fnp)
+							break;		/* movable point is not cooincident */
+					} else {
+						break;			/* Not cooincident, so OK */
+					}
 				}
 				if (k >= 20) {
 					/* This can happen if we didn't pick the absolute largest weserr, */
@@ -5796,7 +5855,6 @@ ofps_seed(ofps *s) {
 
 //					error("ofps_seed: Assert, was unable to joggle cooincindent point");
 				}
-
 #else /* !RANDOM_PERTERB */
 				/* Confine node to planes vertex was on */
 				if (bvx->nsp > 0)
@@ -5807,28 +5865,7 @@ ofps_seed(ofps *s) {
 				s->percept(s->od, p->v, p->p);
 #endif /* !RANDOM_PERTERB */
 
-				/* (~~~ Ideally we should use an accelleration structure to check */
-				/*      for cooincidence rather than doing an exaustive search. ~~~) */
-				if (fc < s->fnp) {	/* There are more fixed points to add */
-					int f;
-
-					for (f = fc; f < s->fnp; f++) {
-						for (e = 0; e < di; e++) {
-							if (fabs(p->p[e] - s->ufx[f]->v[e]) > COINTOL)
-								break;		/* Not cooincident */
-						}
-						if (e >= di) { 	/* Cooincident */
-#ifdef DEBUG
-							printf("Movable node ix %d at %s collides with fixed point %d at %s - retry movable %d\n",p->ix,ppos(di,p->p),f,ppos(di,s->ufx[f]->p),k);
-#endif
-							break;
-						}
-					}
-					if (f < s->fnp)
-						continue;		/* Retry movable point */
-				}
-
-				/* Chosen the next point */
+				/* Added this movable point, so chosen the next point */
 				break;
 			}	/* keep looking for a movable point */
 		}
@@ -5916,8 +5953,11 @@ ofps *s
 	int i, j, k, e, di = s->di;
 
 	/* Retry if we get a failure to add a point */
-	for (k = 0; k < 20; k++) {
+	for (k = 0; k < NINSERTTRIES; k++) {
 
+		/* (~9 should think about smoothing the pre-conditioning lookup */
+		/*   if the number of tries is high. Add this to rspl.) */
+ 
 		/* Clear the voronoi nodes */
 		node_clear(s, s->n[-2 * di - 2]);
 		for (j = -s->gnp; j < s->np; j++)
@@ -5996,8 +6036,8 @@ ofps *s
 		}
 		/* Retry the whole thing */
 	}
-	if (k >= 40)
-		error("Failed to re-seed the veronoi - too many node insertion failures ?");
+	if (k >= NINSERTTRIES)
+		error("Failed to re-seed the veronoi after %d tries - too many node insertion failures ?",NINSERTTRIES);
 }
 
 /* ----------------------------------------------------------- */
@@ -7413,7 +7453,7 @@ ofps_reset(ofps *s) {
 /* Read the next non-fixed point value */
 /* Return nz if no more */
 static int
-ofps_read(ofps *s, double *p, double *f) {
+ofps_read(ofps *s, double *p, double *v) {
 	int e;
 
 	/* Advance to next non-fixed point */
@@ -7427,8 +7467,8 @@ ofps_read(ofps *s, double *p, double *f) {
 	for (e = 0; e < s->di; e++) {
 		if (p != NULL)
 			p[e] = s->n[s->rix]->p[e];
-		if (f != NULL)
-			f[e] = s->n[s->rix]->v[e];
+		if (v != NULL)
+			v[e] = s->n[s->rix]->v[e];
 	}
 	s->rix++;
 
@@ -7975,6 +8015,9 @@ int nopstop				/* Debug - number of optimizations until diagnostic stop, -1 = no
 	if ((s->sob = new_sobol(di)) == NULL)
 		error ("ofps: new_sobol %d failed", di);
 	
+	if (s->verb)
+		printf("Degree of adaptation: %.3f\n", dadaptation);
+
 	/* Set internal values explicitly */
 	if (dadaptation < 0.0) {
 		s->devd_wght = devd_wght;
@@ -7983,9 +8026,7 @@ int nopstop				/* Debug - number of optimizations until diagnostic stop, -1 = no
 
 	/* Set values implicitly with adapation level */
 	} else {
-		if (dadaptation < 0.0)
-			dadaptation = 0.0;
-		else if (dadaptation > 1.0)
+		if (dadaptation > 1.0)
 			dadaptation = 1.0;
 
 		/* Convert to internal numbers */
@@ -7994,7 +8035,7 @@ int nopstop				/* Debug - number of optimizations until diagnostic stop, -1 = no
 		s->devd_wght = 1.0 - s->perc_wght;
 	}
 	if (s->verb)
-		printf("Adaptation weights: Device = %.3f, Perceptual = %.3f%, Curvature = %.3f\n",
+		printf("Adaptation weights: Device = %.3f, Perceptual = %.3f, Curvature = %.3f\n",
 		                                             s->devd_wght,s->perc_wght,s->curv_wght);
 
 	s->di = di;
@@ -8004,6 +8045,14 @@ int nopstop				/* Debug - number of optimizations until diagnostic stop, -1 = no
 
 	s->fxno = fxno;		/* Number of fixed points provided */
 	s->tinp = tinp;		/* Target total number of points */
+
+	/* Hack to workaround pathalogical case. At ilimit == di-2.0, we get > 32 bits */
+	/* of mask for CMYK */
+	if (di >= 3
+	 && ilimit >= (di-2.0 - 2 * ILIMITEPS)
+	 && ilimit <= (di-2.0 + 2 * ILIMITEPS))
+		ilimit = di-2.0 - 2 * ILIMITEPS;
+
 	s->ilimit = ilimit;
 
 	for (e = 0; e < di; e++) {
@@ -8777,7 +8826,7 @@ dump_image(
 							break;
 						ss += pos[e];
 					}
-					if (e < s->di || ss > s->ilimit) {
+					if (e < s->di || ss > (s->ilimit + ILIMITEPS)) {
 //printf("~1 out of gamut\n");
 						continue;
 					}
@@ -9980,7 +10029,7 @@ dump_dnsqe(
 					break;
 				ss += pos[e];
 			}
-			if (e < s->di || ss > s->ilimit) {
+			if (e < s->di || ss > (s->ilimit + ILIMITEPS)) {
 				oog = 0.7;			/* Show gamut boundary */
 			}
 

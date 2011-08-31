@@ -353,6 +353,9 @@ icmAlloc *al			/* heap allocator, NULL for default */
 	char nmode[50];
 
 	strcpy(nmode, mode);
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
 #if defined(O_BINARY) || defined(_O_BINARY)
 	strcat(nmode, "b");
 #endif

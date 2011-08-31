@@ -23,8 +23,6 @@
  * TTBD:
  *		Switch to generic colorant read code rather than Grey/RGB/CMYK,
  *		and allow checking ICC profiles > 4 colors
- *
- *		Print out the patch location if it is present in the .ti3 file.
  */
 
 #undef DEBUG
@@ -36,9 +34,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#if defined(__IBMC__)
-#include <float.h>
-#endif
+#include <ctype.h>
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
@@ -50,7 +46,7 @@
 void
 usage(void) {
 	fprintf(stderr,"Check accuracy of ICC profile, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: profcheck [-options] data.ti3 iccprofile.icm\n");
 	fprintf(stderr," -v [level]      Verbosity level (default 1), 2 to print each DE\n");
 	fprintf(stderr," -c              Show CIE94 delta E values\n");
@@ -67,6 +63,7 @@ usage(void) {
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
+	fprintf(stderr," -I intent       r = relative colorimetric, a = absolute (default)\n");
 	fprintf(stderr," data.ti3        Test data file\n");
 	fprintf(stderr," iccprofile.icm  Profile to check against\n");
 	exit(1);
@@ -82,6 +79,7 @@ void end_vrml(FILE *wrl);
 /* Patch value type */
 typedef struct {
 	char sid[50];		/* sample id */
+	char slo[50];		/* sample location, "" if not known */
 	double p[MAX_CHAN];	/* Device value */
 	double v[3];		/* CIE value */
 	double dp;			/* Delta from target value */
@@ -102,6 +100,7 @@ int main(int argc, char *argv[])
 	cgats *icg;				/* input cgats structure */
 	char iccname[MAXNAMEL+1] = { 0 };	/* Input icc file base name */
 	icmFile *rd_fp;
+	icRenderingIntent intent = icAbsoluteColorimetric;
 	icc *rd_icco;
 	icmLuBase *luo;
 	char out_name[MAXNAMEL+1], *xl;		/* VRML name */
@@ -159,7 +158,7 @@ int main(int argc, char *argv[])
 				usage();
 
 			/* Verbosity */
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			else if (argv[fa][1] == 'v') {
 				verb = 1;
 				if (na != NULL && isdigit(na[0])) {
 					verb = atoi(na);
@@ -167,33 +166,33 @@ int main(int argc, char *argv[])
 			}
 
 			/* VRML */
-			else if (argv[fa][1] == 'w' || argv[fa][1] == 'W')
+			else if (argv[fa][1] == 'w')
 				dovrml = 1;
 
 			/* Minimum line length */
-			else if (argv[fa][1] == 'm' || argv[fa][1] == 'M')
+			else if (argv[fa][1] == 'm')
 				dominl = 1;
 
 			/* Axes */
-			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X')
+			else if (argv[fa][1] == 'x')
 				doaxes = 1;
 
 			/* Delta E coloring */
-			else if (argv[fa][1] == 'e' || argv[fa][1] == 'E')
+			else if (argv[fa][1] == 'e')
 				dodecol = 1;
 
-			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
+			else if (argv[fa][1] == 'c') {
 				cie94 = 1;
 				cie2k = 0;
 			}
 
-			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
+			else if (argv[fa][1] == 'k') {
 				cie94 = 0;
 				cie2k = 1;
 			}
 
 			/* Device sort value */
-			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D') {
+			else if (argv[fa][1] == 'd') {
 				char *tp, buf[200];
 				int ndv;
 				fa = nfa;
@@ -217,11 +216,11 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P')
+			else if (argv[fa][1] == 'p')
 				sortbypcs = 1;
 
 			/* Spectral Illuminant type */
-			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
+			else if (argv[fa][1] == 'i') {
 				fa = nfa;
 				if (na == NULL) usage();
 				if (strcmp(na, "A") == 0) {
@@ -254,7 +253,7 @@ int main(int argc, char *argv[])
 			}
 
 			/* Spectral Observer type */
-			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+			else if (argv[fa][1] == 'o') {
 				fa = nfa;
 				if (na == NULL) usage();
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
@@ -276,8 +275,24 @@ int main(int argc, char *argv[])
 					usage();
 			}
 
-			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F')
+			else if (argv[fa][1] == 'f')
 				fwacomp = 1;
+
+			/* Intent (only applies to ICC profile) */
+			else if (argv[fa][1] == 'I') {
+				fa = nfa;
+				if (na == NULL) usage();
+    			switch (na[0]) {
+					case 'r':
+						intent = icRelativeColorimetric;
+						break;
+					case 'a':
+						intent = icAbsoluteColorimetric;
+						break;
+					default:
+						usage();
+				}
+			}
 
 			else 
 				usage();
@@ -448,6 +463,7 @@ int main(int argc, char *argv[])
 	/* Read in the CGATs fields */
 	{
 		int sidx;					/* Sample ID index */
+		int sloc;					/* Sample location indexi (if any) */
 		int ti, ci, mi, yi, ki;
 		int Xi, Yi, Zi;
 
@@ -455,6 +471,11 @@ int main(int argc, char *argv[])
 			error("Input file '%s' doesn't contain field SAMPLE_ID",ti3name);
 		if (icg->t[0].ftype[sidx] != nqcs_t)
 			error("Input file '%s' field SAMPLE_ID is wrong type",ti3name);
+
+		if ((sloc = icg->find_field(icg, 0, "SAMPLE_LOC")) >= 0) {
+			if (icg->t[0].ftype[sloc] != cs_t)
+				error("Input file '%s' field SAMPLE_LOC is wrong type",ti3name);
+		}
 
 		if (devspace == icSigGrayData) {
 			if (isAdditive) {
@@ -551,6 +572,10 @@ int main(int argc, char *argv[])
 
 			for (i = 0; i < npat; i++) {
 				strcpy(tpat[i].sid, (char *)icg->t[0].fdata[i][sidx]);
+				if (sloc >= 0) 
+					strcpy(tpat[i].slo, (char *)icg->t[0].fdata[i][sloc]);
+				else
+					strcpy(tpat[i].slo, "");
 				tpat[i].p[0] = *((double *)icg->t[0].fdata[i][ci]) / 100.0;
 				tpat[i].p[1] = *((double *)icg->t[0].fdata[i][mi]) / 100.0;
 				tpat[i].p[2] = *((double *)icg->t[0].fdata[i][yi]) / 100.0;
@@ -709,8 +734,11 @@ int main(int argc, char *argv[])
 			}
 
 			for (i = 0; i < npat; i++) {
-
 				strcpy(tpat[i].sid, (char *)icg->t[0].fdata[i][sidx]);
+				if (sloc >= 0) 
+					strcpy(tpat[i].slo, (char *)icg->t[0].fdata[i][sloc]);
+				else
+					strcpy(tpat[i].slo, "");
 				tpat[i].p[0] = *((double *)icg->t[0].fdata[i][ci]) / 100.0;
 				tpat[i].p[1] = *((double *)icg->t[0].fdata[i][mi]) / 100.0;
 				tpat[i].p[2] = *((double *)icg->t[0].fdata[i][yi]) / 100.0;
@@ -787,7 +815,7 @@ int main(int argc, char *argv[])
 			error("Read: %d, %s",rv,rd_icco->err);
 
 		/* Get the Fwd table, absolute with Lab override */
-		if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, icAbsoluteColorimetric,
+		if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, intent,
 		                              icSigLabData, icmLuOrdNorm)) == NULL) {
 			error("%d, %s",rd_icco->errc, rd_icco->err);
 		}
@@ -804,23 +832,15 @@ int main(int argc, char *argv[])
 				error("%d, %s",rd_icco->errc,rd_icco->err);
 
 			if (verb > 1) {
-				if (devspace == icSigCmykData) {
-					printf("[%f] %s: %f %f %f %f -> %f %f %f should be %f %f %f\n",
-					       cie2k ? icmCIE2K(tpat[i].v, out) : 
-					               cie94 ? icmCIE94(tpat[i].v, out) : icmLabDE(tpat[i].v, out),
-					       tpat[i].sid,
-					       tpat[i].p[0],tpat[i].p[1],tpat[i].p[2],tpat[i].p[3],
-					       out[0],out[1],out[2],
-					       tpat[i].v[0],tpat[i].v[1],tpat[i].v[2]);
-				} else {	/* Assume RGB/CMY */
-					printf("[%f] %s: %f %f %f -> %f %f %f should be %f %f %f\n",
-					       cie2k ? icmCIE2K(tpat[i].v, out) : 
-					               cie94 ? icmCIE94(tpat[i].v, out) : icmLabDE(tpat[i].v, out),
-					       tpat[i].sid,
-					       tpat[i].p[0],tpat[i].p[1],tpat[i].p[2],
-					       out[0],out[1],out[2],
-					       tpat[i].v[0],tpat[i].v[1],tpat[i].v[2]);
-				}
+				printf("[%f] %s%s%s: %s -> %f %f %f should be %f %f %f\n",
+				       cie2k ? icmCIE2K(tpat[i].v, out) : 
+				               cie94 ? icmCIE94(tpat[i].v, out) : icmLabDE(tpat[i].v, out),
+				       tpat[i].sid,
+				       tpat[i].slo[0] != '\000' ? " @ " : "",
+				       tpat[i].slo,
+				       icmPdv(devchan, tpat[i].p),
+				       out[0],out[1],out[2],
+				       tpat[i].v[0],tpat[i].v[1],tpat[i].v[2]);
 			}
 			if (dovrml) {
 				if (dominl && icmLabDE(tpat[i].v, out) < 0.5) {

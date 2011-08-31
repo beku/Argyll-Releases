@@ -46,7 +46,7 @@ void error(char *fmt, ...), warning(char *fmt, ...);
 
 void usage(void) {
 	fprintf(stderr,"Color Correct a TIFF file using an ICC device link profile, V%s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: cctiff [-options] devlinkprofile.icm infile.tif outfile.tif\n");
 	fprintf(stderr,"usage: cctiff [-options] -l inprofile.icm outprofile.icm infile.tif outfile.tif\n");
 	fprintf(stderr," -v            Verbose\n");

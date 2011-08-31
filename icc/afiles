@@ -21,3 +21,6 @@ lutest.c
 mcheck.c
 testDE2K.c
 makezip.ksh
+sRGB.icm
+ClayRGB1998.icm
+lab2lab.icm

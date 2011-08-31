@@ -164,7 +164,7 @@ size_t count
 	}
 	len = size * count;
 	if (len > 0)
-		memcpy (buffer, p->cur, len);
+		memmove(buffer, p->cur, len);
 	p->cur += len;
 	return count;
 }
@@ -204,7 +204,7 @@ size_t count
 	}
 	len = size * count;
 	if (len > 0)
-		memcpy (p->cur, buffer, len);
+		memmove(p->cur, buffer, len);
 	p->cur += len;
 	return count;
 }

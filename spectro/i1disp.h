@@ -11,8 +11,8 @@
  * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* 
@@ -85,6 +85,7 @@ struct _i1disp {
 	int       lite;				/* i1D2: 0 = normal, 1 = "Lite" */
 	int       munki;			/* i1D2: 0 = normal, 1 = "Munk" */
 	int       hpdream;			/* i1D2: 0 = normal, 1 = "ObiW" */
+	int       calmanx2;			/* i1D2: 0 = normal, 1 = "CMX2" */
 	int       chroma4;			/* 0 = other, 1 = Sequel Chroma 4 (i1D1 based) */
 	inst_mode mode;				/* Currently selected mode */
 

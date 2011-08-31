@@ -53,7 +53,8 @@ typedef enum {
 #define XFIT_OPTGRID_RANGE 0x0008		/* Optimize inner grid around used range (~~not impd. yet) */
 
 #define XFIT_OUT_WP_REL    0x0010		/*  Extract the white point and make output relative */
-#define XFIT_OUT_LAB       0x0020		/*  Output space is LAB else XYZ for reading WP */
+#define XFIT_CLIP_WP       0x0020		/*  Clip white point to have Y <= 1.0 */
+#define XFIT_OUT_LAB       0x0040		/*  Output space is LAB else XYZ for reading WP */
 
 #define XFIT_OUT_ZERO      0x0200		/* Adjust output curves 1 & 2 for zero */
 

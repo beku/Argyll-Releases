@@ -37,7 +37,7 @@
 void
 usage(void) {
 	fprintf(stderr,"Check Model Printer Profile, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: %s [-v] [-c] [-s] [-y] values.ti3 profile.mpp\n",error_program);
 	fprintf(stderr," -v          Verbose mode\n");
 	fprintf(stderr," -c          Show CIE94 delta E values\n");

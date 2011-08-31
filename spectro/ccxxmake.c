@@ -1,12 +1,13 @@
 
-/* Colorimeter Correction Matrix creation utility */
+/* Colorimeter Correction Matrix and */
+/* Colorimeter Calibration Spectral Sample creation utility */
 
 /* 
  * Argyll Color Correction System
  * Author: Graeme W. Gill
  * Date:   19/8/2010
  *
- * Copyright 2010 Graeme W. Gill
+ * Copyright 2010, 2011 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -15,16 +16,22 @@
 
 /* This program uses display measurements from a colorimeter and */
 /* a spectrometer to create a correction matrix for a particular */
-/* colorimeter/display combination. */
+/* colorimeter/display combination,. */
+/* or */
+/* It uses display measurements from a spectrometer to create */
+/* calibration samples that can be used with a Colorimeter that */
+/* knowns its own spectral sensitivity curves (ie. X-Rite i1d3). */
 
 /* Based on spotread.c, illumread.c, dispcal.c */
 
 /* 
 	TTBD:
 
-		Would be nice to have an option of providing two .ti3 files
-		instead of doing the measurements here.
+		Would be nice to have the option of procssing a Spyder 3 correction.txt file.
+		(See post from umberto.guidali@tiscali.it)
 
+		Would be nice to have an option of providing two ICC profiles,
+		instead of using .ti3 files (?? How well would it work though ?)
  */
 
 #undef DEBUG
@@ -47,14 +54,15 @@
 #include "conv.h"
 #include "dispwin.h"
 #include "dispsup.h"
+#include "ccss.h"
 #include "ccmx.h"
-
-#include "spyd2setup.h"			/* Enable Spyder 2 access */
+#include "spyd2setup.h"
 
 #if defined (NT)
 #include <conio.h>
 #endif
 
+#define DEFAULT_MSTEPS 2
 #undef SHOW_WINDOW_ONFAKE	/* Display a test window up for a fake device */
 #define COMPORT 1			/* Default com port 1..4 */
 #define VERBOUT stdout
@@ -78,8 +86,8 @@ void
 usage(char *diag, ...) {
 	disppath **dp;
 
-	fprintf(stderr,"Create Colorimeter Correction Matrix, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Create CCMX or CCSS, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (setup_spyd2() == 2)
 		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	if (diag != NULL) {
@@ -90,9 +98,10 @@ usage(char *diag, ...) {
 		va_end(args);
 		fprintf(stderr,"\n");
 	}
-	fprintf(stderr,"usage: ccmxmake [-options] output.sp\n");
+	fprintf(stderr,"usage: ccmxmake [-options] output.ccmx\n");
 	fprintf(stderr," -v                     Verbose mode\n");
-	fprintf(stderr," -f file1.ti3,file2.ti3 Create from two .ti3 files rather than measure.\n");
+	fprintf(stderr," -S                     Create CCSS rather than CCMX\n");
+	fprintf(stderr," -f file1.ti3[,file2.ti3] Create from one or two .ti3 files rather than measure.\n");
 #if defined(UNIX) && !defined(__APPLE__)
 	fprintf(stderr," -display displayname   Choose X11 display name\n");
 	fprintf(stderr," -d n[,m]               Choose the display n from the following list (default 1)\n");
@@ -115,7 +124,7 @@ usage(char *diag, ...) {
 	}
 	free_disppaths(dp);
 	fprintf(stderr," -p                     Use projector mode (if available)\n");
-	fprintf(stderr," -y c|l                 Display type, c = CRT, l = LCD\n");
+	fprintf(stderr," -y c|l                 Display type, c = CRT, l = LCD (CCMX)\n");
 	fprintf(stderr," -P ho,vo,ss            Position test window and scale it\n");
 	fprintf(stderr,"                        ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                        ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
@@ -127,13 +136,16 @@ usage(char *diag, ...) {
 	fprintf(stderr," -H                     Use high resolution spectrum mode (if available)\n");
 	fprintf(stderr," -V                     Use adaptive measurement mode (if available)\n");
 	fprintf(stderr," -C \"command\"           Invoke shell \"command\" each time a color is set\n");
-	fprintf(stderr," -o observ              Choose CIE Observer for spectrometer data:\n");
+	fprintf(stderr," -o observ              Choose CIE Observer for CCMX spectrometer data:\n");
 	fprintf(stderr,"                        1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
+	fprintf(stderr," -s steps               Override default patch sequence combination steps  (default %d)\n",DEFAULT_MSTEPS);
 	fprintf(stderr," -W n|h|x               Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]             Print debug diagnostics to stderr\n");
-	fprintf(stderr," -I displayname         Set display make and model description\n");
 	fprintf(stderr," -E desciption          Override the default overall description\n");
-	fprintf(stderr," correction.ccmx        File to save measurement to\n");
+	fprintf(stderr," -I displayname         Set display make and model description\n");
+	fprintf(stderr," -T displaytech         Set display technology description (ie. CRT, LCD etc.)\n");
+	fprintf(stderr," correction.ccmx | calibration.ccss\n");
+	fprintf(stderr,"                        File to save result to\n");
 	exit(1);
 	}
 
@@ -150,9 +162,10 @@ int main(int argc, char *argv[])
 	int blackbg = 0;            		/* NZ if whole screen should be filled with black */
 	int verb = 0;
 	int debug = 0;
+	int doccss = 0;						/* Create CCSS rather than CCMX */
 	int fake = 0;						/* Use the fake device for testing, 2 for auto */
 	int faketoggle = 0;					/* Toggle fake between "colorimeter" and "spectro" */
-	int fakeseq = 0;					/* Fake auto sequence */
+	int fakeseq = 0;					/* Fake auto CCMX sequence */
 	int spec = 0;						/* Need spectral data from spectrometer */
 	icxObserverType observ = icxOT_CIE_1931_2;
 	int override = 1;					/* Override redirect on X11 */
@@ -163,9 +176,9 @@ int main(int argc, char *argv[])
 	int adaptive = 0;					/* Use adaptive mode if available */
 	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
 	int proj = 0;						/* NZ if projector */
-	int nocal = 0;						/* Disable auto calibration */
+	int noautocal = 0;					/* Disable auto calibration */
 	char *ccallout = NULL;				/* Change color Shell callout */
-	int msteps = 3;						/* Patch surface size */
+	int msteps = DEFAULT_MSTEPS;						/* Patch surface size */
 	int npat = 0;						/* Number of patches/colors */
 	ary3 *refs = NULL;					/* Reference XYZ values */
 	int gotref = 0;
@@ -177,8 +190,9 @@ int main(int argc, char *argv[])
 	int saved = 0;						/* Saved result */
 	char innames[2][MAXNAMEL+1] = { "\000", "\000" };  /* .ti3 input names */
 	char outname[MAXNAMEL+1] = "\000";  /* ccmx output file name */
-	char *displayname = NULL;			/* Given display name */
 	char *description = NULL;			/* Given overall description */
+	char *displayname = NULL;			/* Given display name */
+	char *displaytech = NULL;			/* Given display technology */
 	int rv;
 
 	set_exe_path(argv[0]);				/* Set global exe_path and error_program */
@@ -206,8 +220,11 @@ int main(int argc, char *argv[])
 			if (argv[fa][1] == '?') {
 				usage("Usage requested");
 
-			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			} else if (argv[fa][1] == 'v') {
 				verb = 1;
+
+			} else if (argv[fa][1] == 'S') {
+				doccss = 1;
 
 			} else if (argv[fa][1] == 'f') {
 				char *cna, *f1 = NULL;
@@ -216,14 +233,19 @@ int main(int argc, char *argv[])
 
 				if ((cna = strdup(na)) == NULL)
 					error("Malloc failed");
+
+				/* If got just one file - enough for CCSS */
 				if ((f1 = strchr(cna, ',')) == NULL) {
+					strncpy(innames[0],cna,MAXNAMEL-1); innames[0][MAXNAMEL-1] = '\000';
 					free(cna);
-					usage("Expect two comma separated argument to input file flag -f");
+
+				/* Got two files - needed for CCMX */
+				} else {
+					*f1++ = '\000';
+					strncpy(innames[0],cna,MAXNAMEL-1); innames[0][MAXNAMEL-1] = '\000';
+					strncpy(innames[1],f1,MAXNAMEL-1); innames[1][MAXNAMEL-1] = '\000';
+					free(cna);
 				}
-				*f1++ = '\000';
-				strncpy(innames[0],cna,MAXNAMEL-1); innames[0][MAXNAMEL-1] = '\000';
-				strncpy(innames[1],f1,MAXNAMEL-1); innames[1][MAXNAMEL-1] = '\000';
-				free(cna);
 
 			/* Display number */
 			} else if (argv[fa][1] == 'd') {
@@ -315,7 +337,7 @@ int main(int argc, char *argv[])
 
 			/* No auto calibration */
 			} else if (argv[fa][1] == 'N') {
-				nocal = 1;
+				noautocal = 1;
 
 			/* High res spectral mode */
 			} else if (argv[fa][1] == 'H') {
@@ -325,7 +347,7 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'V') {
 				adaptive = 1;
 
-			/* Spectral Observer type */
+			/* Spectral Observer type (only relevant for CCMX) */
 			} else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
 				fa = nfa;
 				if (na == NULL) usage("Parameter expecte after -o");
@@ -346,6 +368,13 @@ int main(int argc, char *argv[])
 					observ = icxOT_Shaw_Fairchild_2;
 				} else
 					usage("-o parameter '%s' not recognised",na);
+
+			} else if (argv[fa][1] == 's') {
+				fa = nfa;
+				if (na == NULL) usage("Parameter expecte after -s");
+				msteps = atoi(na);
+				if (msteps < 2 || msteps > 16)
+					usage("-s parameter value %d is outside the range 2 to 16",msteps);
 
 			/* Change color callout */
 			} else if (argv[fa][1] == 'C') {
@@ -378,6 +407,11 @@ int main(int argc, char *argv[])
 				if (na == NULL) usage("Expect argument to display description flag -I");
 				displayname = strdup(na);
 
+			} else if (argv[fa][1] == 'T') {
+				fa = nfa;
+				if (na == NULL) usage("Expect argument to display technology flag -T");
+				displaytech = strdup(na);
+
 			/* Copyright string */
 			} else if (argv[fa][1] == 'E') {
 				fa = nfa;
@@ -396,16 +430,136 @@ int main(int argc, char *argv[])
 
 	strncpy(outname,argv[fa++],MAXNAMEL-1); outname[MAXNAMEL-1] = '\000';
 
+	if (fakeseq && doccss)
+		error("Fake CCSS test not implemeted");
+
 	printf("\n");
 
-	/* See if we're working from two files */
-	if (innames[0][0] != '\000' && innames[1][0] != '\000') {
+	if (displayname == NULL && displaytech == NULL)
+		error("Either the display description (-I) or technology (-T) needs to be set");
+
+	/* CCSS: See if we're working from a .ti3 file */
+	if (doccss && innames[0][0] != '\000') {
+		cgats *cgf = NULL;			/* cgats file data */
+		int sidx;					/* Sample ID index */
+		int ii, ti;
+		char buf[100];
+		int  spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
+		xspect sp, *samples = NULL;
+		ccss *cc;
+		double bigv = -1e60;
+
+		/* Open spectral values file */
+		cgf = new_cgats();			/* Create a CGATS structure */
+		cgf->add_other(cgf, ""); 	/* Allow any signature file */
+	
+		if (cgf->read_name(cgf, innames[0]))
+			error("CGATS file '%s' read error : %s",innames[0],cgf->err);
+	
+		if (cgf->ntables < 1)
+			error ("Input file '%s' doesn't contain at least one table",innames[0]);
+	
+		if ((npat = cgf->t[0].nsets) <= 0)
+			error("No sets of data in file '%s'",innames[0]);
+
+		if ((samples = (xspect *)malloc(npat * sizeof(xspect))) == NULL)
+				error("malloc failed");
+
+		if ((ii = cgf->find_kword(cgf, 0, "TARGET_INSTRUMENT")) < 0)
+			error ("Can't find keyword TARGET_INSTRUMENT in '%s'",innames[0]);
+
+		if ((ii = cgf->find_kword(cgf, 0, "SPECTRAL_BANDS")) < 0)
+			error ("Input file '%s' doesn't contain keyword SPECTRAL_BANDS",innames[0]);
+		sp.spec_n = atoi(cgf->t[0].kdata[ii]);
+		if ((ii = cgf->find_kword(cgf, 0, "SPECTRAL_START_NM")) < 0)
+			error ("Input file '%s' doesn't contain keyword SPECTRAL_START_NM",innames[0]);
+		sp.spec_wl_short = atof(cgf->t[0].kdata[ii]);
+		if ((ii = cgf->find_kword(cgf, 0, "SPECTRAL_END_NM")) < 0)
+			error ("Input file '%s' doesn't contain keyword SPECTRAL_END_NM",innames[0]);
+		sp.spec_wl_long = atof(cgf->t[0].kdata[ii]);
+		sp.norm = 1.0;		/* We assume emssive */
+
+		/* Find the fields for spectral values */
+		for (j = 0; j < sp.spec_n; j++) {
+			int nm;
+	
+			/* Compute nearest integer wavelength */
+			nm = (int)(sp.spec_wl_short + ((double)j/(sp.spec_n-1.0))
+			            * (sp.spec_wl_long - sp.spec_wl_short) + 0.5);
+			
+			sprintf(buf,"SPEC_%03d",nm);
+
+			if ((spi[j] = cgf->find_field(cgf, 0, buf)) < 0)
+				error("Input file '%s' doesn't contain field %s",innames[0],buf);
+		}
+
+		/* Transfer all the spectral values */
+		for (i = 0; i < npat; i++) {
+
+			XSPECT_COPY_INFO(&samples[i], &sp);
+	
+			for (j = 0; j < sp.spec_n; j++) {
+				samples[i].spec[j] = *((double *)cgf->t[0].fdata[i][spi[j]]);
+			}
+		}
+		cgf->del(cgf);		/* Clean up */
+		cgf = NULL;
+
+		if (description == NULL) {
+			char *disp = displaytech != NULL ? displaytech : displayname;
+			char *tt = "CCSS for ";
+			if ((description = malloc(strlen(disp) + strlen(tt) + 1)) == NULL)
+				error("Malloc failed");
+			strcpy(description, tt);
+			strcat(description, disp);
+		}
+
+		/* See what the highest value is */
+		for (i = 0; i < npat; i++) {	/* For all grid points */
+
+			for (j = 0; j < samples[i].spec_n; j++) {
+				if (samples[i].spec[j] > bigv)
+					bigv = samples[i].spec[j];
+			}
+		}
+			
+		/* Normalize the values */
+		for (i = 0; i < npat; i++) {	/* For all grid points */
+			double scale = 100.0;
+
+			for (j = 0; j < samples[i].spec_n; j++)
+				samples[i].spec[j] *= scale / bigv;
+		}
+			
+		if ((cc = new_ccss()) == NULL)
+			error("new_ccss() failed");
+
+		if (cc->set_ccss(cc, "Argyll ccxxmake", NULL, description, displayname,
+		                 displaytech, refname, samples, npat)) {
+			error("set_ccss failed with '%s'\n",cc->err);
+		}
+		if(cc->write_ccss(cc, outname))
+			printf("\nWriting file '%s' failed\n",outname);
+		else
+			printf("\nWriting file '%s' succeeded\n",outname);
+		cc->del(cc);
+		free(samples);
+
+#ifdef DEBUG
+		printf("About to exit\n");
+#endif
+		return 0;
+	}
+
+	/* CCMX: See if we're working from two files */
+	if (!doccss && innames[0][0] != '\000') {
 		int n;
-		char *oname = NULL;
+		char *oname = NULL;			/* Observer name */
 		ccmx *cc;
 
-		if (displayname == NULL)
-			error("Display name (-I) needs to be provided");
+		if (innames[1][0] == '\000') {
+			error("Need two .ti3 files to create CCMX");
+		}
 
 		/* Open up each CIE file in turn, target then measured, */
 		/* and read in the CIE values. */
@@ -421,7 +575,6 @@ int main(int argc, char *argv[])
 			instType itype;
 			int instspec = 0;			/* Instrument is spectral/reference */
 
-			/* Open CIE target values */
 			/* Open CIE target values */
 			cgf = new_cgats();			/* Create a CGATS structure */
 			cgf->add_other(cgf, ""); 	/* Allow any signature file */
@@ -604,16 +757,17 @@ int main(int argc, char *argv[])
 			strcat(colname, ")");
 		}
 		if (description == NULL) {
-			if ((description = malloc(strlen(colname) + strlen(displayname) + 4)) == NULL)
+			char *disp = displaytech != NULL ? displaytech : displayname;
+			if ((description = malloc(strlen(colname) + strlen(disp) + 4)) == NULL)
 				error("Malloc failed");
 			strcpy(description, colname);
 			strcat(description, " & ");
-			strcat(description, displayname);
+			strcat(description, disp);
 		}
 		if ((cc = new_ccmx()) == NULL)
 			error("new_ccmx() failed");
 
-		if (cc->create_ccmx(cc, description, colname, displayname, refname,
+		if (cc->create_ccmx(cc, description, colname, displayname, displaytech, refname,
                npat, refs, cols)) {
 			error("create_ccmx failed with '%s'\n",cc->err);
 		}
@@ -634,7 +788,7 @@ int main(int argc, char *argv[])
 	/* Do interactive measurements */
 	} else {
 
-		if (dtype == 0) {
+		if (!doccss && dtype == 0) {
 			printf("**** Warning: display type (-y option) hasn't been set! ****\n");
 			printf("****     The colorimeter may not work without this!     ****\n\n");
 		}
@@ -719,6 +873,8 @@ int main(int argc, char *argv[])
 				if (j >= 3)
 					break;		/* Done grid */
 			}
+			if (verb)
+				printf("Total test patches = %d\n",npat);
 		}
 
 		/* Until the measurements are done, or we give up */
@@ -753,10 +909,18 @@ int main(int argc, char *argv[])
 				printf(")\n");
 			}
 			printf("2) Measure test patches with current instrument\n");
-			if (gotref && gotcol)
-				printf("3) Compute Colorimeter Correction Matrix & save it\n");
-			else
-				printf("3) [ Compute Colorimeter Correction Matrix & save it ]\n");
+			if (doccss) {
+				if (gotref)
+					printf("3) Save Colorimeter Calibration Spectral Set\n");
+				else
+					printf("3) [ Save Colorimeter Calibration Spectral Set ]\n");
+
+			} else {
+				if (gotref && gotcol)
+					printf("3) Compute Colorimeter Correction Matrix & save it\n");
+				else
+					printf("3) [ Compute Colorimeter Correction Matrix & save it ]\n");
+			}
 			printf("4) Exit\n");
 
 			if (fakeseq == 0) {
@@ -830,22 +994,12 @@ int main(int argc, char *argv[])
 				inst2_capability cap2 = inst2_unknown;	/* Instrument capabilities 2 */
 
 				if ((dr = new_disprd(&errc, itype, fake ? -99 : comno, fc, dtype, proj, adaptive,
-				                     nocal, highres, 1, NULL, 0, disp, blackbg, override,
-				                     ccallout, NULL, patsize, ho, vo, NULL, spec, icxOT_none,
+				                     noautocal, highres, 1, NULL, 0, 0, disp, blackbg, override,
+				                     ccallout, NULL, patsize, ho, vo, NULL, NULL, 0, 2,
+				                     icxOT_none, NULL, 
 				                     0, 0, verb, VERBOUT, debug, "fake" ICC_FILE_EXT)) == NULL)
 					error("new_disprd failed with '%s'\n",disprd_err(errc));
 			
-				if (faketoggle)
-					dr->fake2 = 1;
-				else
-					dr->fake2 = -1;
-
-				/* Test the CRT with all of the test points */
-				if ((rv = dr->read(dr, rdcols, npat, 1, npat, 1, 0)) != 0) {
-					dr->del(dr);
-					error("disprd returned error code %d\n",rv);
-				}
-
 				it = dr->it;
 
 				if (fake) {
@@ -859,47 +1013,67 @@ int main(int argc, char *argv[])
 					cap2 = it->capabilities2(it);
 				}
 
-				if (cap & inst_spectral) {
-					xsp2cie *sp2cie = NULL;
+				if (doccss && (cap & inst_spectral) == 0) {
+					printf("You have to use a spectrometer to create a CCSS!\n");
+					continue;
+				}
 
-					if (spec) {
-						/* Create a spectral conversion object */
-						if ((sp2cie = new_xsp2cie(icxIT_none, NULL, observ, NULL, icSigXYZData)) == NULL)
-							error("Creation of spectral conversion object failed");
-					}
-					for (i = 0; i < npat; i++) {	/* For all grid points */
+				if (faketoggle)
+					dr->fake2 = 1;
+				else
+					dr->fake2 = -1;
+
+				/* Test the CRT with all of the test points */
+				if ((rv = dr->read(dr, rdcols, npat, 1, npat, 1, 0)) != 0) {
+					dr->del(dr);
+					error("disprd returned error code %d\n",rv);
+				}
+
+				if (doccss) {		/* We'll use the rdcols values */
+					gotref = 1;
+				} else {
+					if (cap & inst_spectral) {
+						xsp2cie *sp2cie = NULL;
+
 						if (spec) {
-							if (rdcols[i].sp.spec_n <= 0)
-								error("Didn't get spectral value");
-							sp2cie->convert(sp2cie, refs[i], &rdcols[i].sp);
-						} else {
+							/* Create a spectral conversion object */
+							if ((sp2cie = new_xsp2cie(icxIT_none, NULL, observ, NULL, icSigXYZData)) == NULL)
+								error("Creation of spectral conversion object failed");
+						}
+						for (i = 0; i < npat; i++) {	/* For all grid points */
+							if (spec) {
+								if (rdcols[i].sp.spec_n <= 0)
+									error("Didn't get spectral value");
+								sp2cie->convert(sp2cie, refs[i], &rdcols[i].sp);
+							} else {
+								if (rdcols[i].aXYZ_v == 0)
+									error("Didn't get absolute XYZ value");
+								refs[i][0] = rdcols[i].aXYZ[0];
+								refs[i][1] = rdcols[i].aXYZ[1];
+								refs[i][2] = rdcols[i].aXYZ[2];
+							}
+						}
+						if (fake)
+							refname = "fake spectrometer";
+						else
+							refname = inst_name(it->itype);
+						gotref = 1;
+						if (sp2cie != NULL)
+							sp2cie->del(sp2cie);
+					} else if (cap & inst_colorimeter) {
+						for (i = 0; i < npat; i++) {	/* For all grid points */
 							if (rdcols[i].aXYZ_v == 0)
 								error("Didn't get absolute XYZ value");
-							refs[i][0] = rdcols[i].aXYZ[0];
-							refs[i][1] = rdcols[i].aXYZ[1];
-							refs[i][2] = rdcols[i].aXYZ[2];
+							cols[i][0] = rdcols[i].aXYZ[0];
+							cols[i][1] = rdcols[i].aXYZ[1];
+							cols[i][2] = rdcols[i].aXYZ[2];
 						}
+						if (fake)
+							colname = "fake colorimeter";
+						else
+							colname = inst_name(it->itype);
+						gotcol = 1;
 					}
-					if (fake)
-						refname = "fake spectrometer";
-					else
-						refname = inst_name(it->itype);
-					gotref = 1;
-					if (sp2cie != NULL)
-						sp2cie->del(sp2cie);
-				} else if (cap & inst_colorimeter) {
-					for (i = 0; i < npat; i++) {	/* For all grid points */
-						if (rdcols[i].aXYZ_v == 0)
-							error("Didn't get absolute XYZ value");
-						cols[i][0] = rdcols[i].aXYZ[0];
-						cols[i][1] = rdcols[i].aXYZ[1];
-						cols[i][2] = rdcols[i].aXYZ[2];
-					}
-					if (fake)
-						colname = "fake colorimeter";
-					else
-						colname = inst_name(it->itype);
-					gotcol = 1;
 				}
 				dr->del(dr);
 
@@ -907,61 +1081,127 @@ int main(int argc, char *argv[])
 
 			}	/* End of take a measurement */
 
-			if (c == '3') {		/* Compute result */
-				char *oname = NULL;
-				ccmx *cc;
+			if (c == '3') {		/* Compute result and save */
+				/* Save the CCSS */
+				if (doccss) {
+					ccss *cc;
+					xspect *samples = NULL;
+					double bigv = -1e60;
 
-				if (!gotref) {
-					printf("You have to read the spectrometer values first!\n");
-					continue;
-				}
-				if (!gotcol) {
-					printf("You have to read the colorimeter values first!\n");
-					continue;
-				}
+					if (!gotref) {
+						printf("You have to read the spectrometer values first!\n");
+						continue;
+					}
 
-				if (spec != 0 && observ != icxOT_CIE_1931_2)
-					oname = standardObserverDescription(observ);
+					if (description == NULL) {
+						char *disp = displaytech != NULL ? displaytech : displayname;
+						char *tt = "CCSS for ";
+						if ((description = malloc(strlen(disp) + strlen(tt) + 1)) == NULL)
+							error("Malloc failed");
+						strcpy(description, tt);
+						strcat(description, disp);
+					}
 
-				if (oname != NULL) {
-					char *tt = colname;
-
-					if ((colname = malloc(strlen(tt) + strlen(oname) + 3)) == NULL)
+					if ((samples = (xspect *)malloc(sizeof(xspect) * npat)) == NULL)
 						error("Malloc failed");
-					strcpy(colname, tt);
-					strcat(colname, " (");
-					strcat(colname, oname);
-					strcat(colname, ")");
-				}
-				if (description == NULL) {
-					if ((description = malloc(strlen(colname) + strlen(displayname) + 4)) == NULL)
-						error("Malloc failed");
-					strcpy(description, colname);
-					strcat(description, " & ");
-					strcat(description, displayname);
-				}
-				if ((cc = new_ccmx()) == NULL)
-					error("new_ccmx() failed");
+					
+					/* See what the highest value is */
+					for (i = 0; i < npat; i++) {	/* For all grid points */
+						if (rdcols[i].sp.spec_n <= 0)
+							error("Didn't get spectral values");
+						for (j = 0; j < rdcols[i].sp.spec_n; j++) {
+							if (rdcols[i].sp.spec[j] > bigv)
+								bigv = rdcols[i].sp.spec[j];
+						}
+					}
+						
+					/* Copy all the values and normalize them */
+					for (i = 0; i < npat; i++) {	/* For all grid points */
+						double scale = 100.0;
 
-				if (cc->create_ccmx(cc, description, colname, displayname, refname,
-		               npat, refs, cols)) {
-					error("create_ccmx failed with '%s'\n",cc->err);
-				}
-				if (verb) {
-					printf("Fit error is avg %f, max %f DE94\n",cc->av_err,cc->mx_err);
-					printf("Correction matrix is:\n");
-					printf("  %f %f %f\n", cc->matrix[0][0], cc->matrix[0][1], cc->matrix[0][2]);
-					printf("  %f %f %f\n", cc->matrix[1][0], cc->matrix[1][1], cc->matrix[1][2]);
-					printf("  %f %f %f\n", cc->matrix[2][0], cc->matrix[2][1], cc->matrix[2][2]);
-				}
+						/* Scale by half if not white, */
+						/* to give color samples and white 1/4 weight each */
+						if (rdcols[i].r < 0.9999999999
+						 || rdcols[i].g < 0.9999999999
+						 || rdcols[i].b < 0.9999999999)
+							scale = 50.0;
 
-				if(cc->write_ccmx(cc, outname))
-					printf("\nWriting file '%s' failed\n",outname);
-				else
-					printf("\nWriting file '%s' succeeded\n",outname);
-				cc->del(cc);
-				saved = 1;
+						samples[i] = rdcols[i].sp;	/* Structure copy */
+						for (j = 0; j < rdcols[i].sp.spec_n; j++)
+							samples[i].spec[j] *= scale / bigv;
+					}
+						
+					if ((cc = new_ccss()) == NULL)
+						error("new_ccss() failed");
+	
+					if (cc->set_ccss(cc, "Argyll ccxxmake", NULL, description, displayname,
+					                 displaytech, refname, samples, npat)) {
+						error("set_ccss failed with '%s'\n",cc->err);
+					}
+					if(cc->write_ccss(cc, outname))
+						printf("\nWriting file '%s' failed\n",outname);
+					else
+						printf("\nWriting file '%s' succeeded\n",outname);
+					cc->del(cc);
+					free(samples);
+					saved = 1;
 
+				/* Compute and save CCMX */
+				} else {
+					char *oname = NULL;		/* Observer desciption */
+					ccmx *cc;
+	
+					if (!gotref) {
+						printf("You have to read the spectrometer values first!\n");
+						continue;
+					}
+					if (!gotcol) {
+						printf("You have to read the colorimeter values first!\n");
+						continue;
+					}
+	
+					if (spec != 0 && observ != icxOT_CIE_1931_2)
+						oname = standardObserverDescription(observ);
+	
+					if (oname != NULL) {		/* Incorporate observer name in colname */
+						char *tt = colname;
+	
+						if ((colname = malloc(strlen(tt) + strlen(oname) + 3)) == NULL)
+							error("Malloc failed");
+						strcpy(colname, tt);
+						strcat(colname, " (");
+						strcat(colname, oname);
+						strcat(colname, ")");
+					}
+					if (description == NULL) {
+						if ((description = malloc(strlen(colname) + strlen(displayname) + 4)) == NULL)
+							error("Malloc failed");
+						strcpy(description, colname);
+						strcat(description, " & ");
+						strcat(description, displayname);
+					}
+					if ((cc = new_ccmx()) == NULL)
+						error("new_ccmx() failed");
+	
+					if (cc->create_ccmx(cc, description, colname, displayname, displaytech,
+					                    refname, npat, refs, cols)) {
+						error("create_ccmx failed with '%s'\n",cc->err);
+					}
+					if (verb) {
+						printf("Fit error is avg %f, max %f DE94\n",cc->av_err,cc->mx_err);
+						printf("Correction matrix is:\n");
+						printf("  %f %f %f\n", cc->matrix[0][0], cc->matrix[0][1], cc->matrix[0][2]);
+						printf("  %f %f %f\n", cc->matrix[1][0], cc->matrix[1][1], cc->matrix[1][2]);
+						printf("  %f %f %f\n", cc->matrix[2][0], cc->matrix[2][1], cc->matrix[2][2]);
+					}
+	
+					if(cc->write_ccmx(cc, outname))
+						printf("\nWriting file '%s' failed\n",outname);
+					else
+						printf("\nWriting file '%s' succeeded\n",outname);
+					cc->del(cc);
+					saved = 1;
+				}
 			}
 
 			if (c == '4' || c == 0x3) {		/* Exit */
@@ -982,8 +1222,8 @@ int main(int argc, char *argv[])
 	}
 
 #ifdef DEBUG
-	/* Do a verification */
-	{
+	/* Do a CCMX verification */
+	if (!doccss) {
 		ccmx *cc;
 		double av_err, mx_err;
 		int wix;

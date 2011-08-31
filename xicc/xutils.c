@@ -143,7 +143,7 @@ icc *read_embedded_icc(char *file_name) {
 	    return NULL;
 	}
 
-	memcpy(buf, tag, size);
+	memmove(buf, tag, size);
 	TIFFClose(rh);
 	TIFFSetWarningHandler(oldhandler);
 

@@ -13,8 +13,8 @@
  * Copyright 2005 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  *
  * This is an alternative driver to spm/gretag.
  */
@@ -219,7 +219,8 @@ typedef enum {
 	ss_et_BackupError     = 0x38,
 	ss_et_ProgramROMError = 0x3C,
 
-	/* Incorporate remote error set (bitmask) codes thus: */
+	/* Incororate Remote Error Set values into snerr value */
+	/* Since ss_res is a bit mask, we just prioritize the errors: */
 	ss_et_NoValidDStd           = 0x41,
 	ss_et_NoValidWhite          = 0x42,
 	ss_et_NoValidIllum          = 0x43,

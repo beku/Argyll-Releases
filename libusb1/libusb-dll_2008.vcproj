@@ -2,7 +2,7 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9.00"
-	Name="libusb-1.0 (dll)"
+	Name="libusb-1.0A (dll)"
 	ProjectGUID="{349EE8FA-7D25-4909-AAF5-FF3FADE72187}"
 	RootNamespace="libusbdll"
 	TargetFrameworkVersion="196613"
@@ -21,7 +21,7 @@
 		<Configuration
 			Name="Debug|Win32"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll"
-			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0"
+			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0A"
 			ConfigurationType="2"
 			CharacterSet="2"
 			>
@@ -64,9 +64,9 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setupapi.lib"
-				OutputFile="$(OutDir)\libusb-1.0_debug.dll"
-				ModuleDefinitionFile="libusb\libusb-1.0.def"
-				EmbedManagedResourceFile="libusb-1.0.rc"
+				OutputFile="$(OutDir)\libusb-1.0A_debug.dll"
+				ModuleDefinitionFile="libusb\libusb-1.0A.def"
+				EmbedManagedResourceFile="libusb-1.0A.rc"
 				GenerateDebugInformation="true"
 			/>
 			<Tool
@@ -94,7 +94,7 @@
 		<Configuration
 			Name="Debug|x64"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll"
-			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0"
+			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0A"
 			ConfigurationType="2"
 			CharacterSet="2"
 			>
@@ -138,9 +138,9 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setupapi.lib"
-				OutputFile="$(OutDir)\libusb-1.0_debug.dll"
-				ModuleDefinitionFile="libusb\libusb-1.0.def"
-				EmbedManagedResourceFile="libusb-1.0.rc"
+				OutputFile="$(OutDir)\libusb-1.0A_debug.dll"
+				ModuleDefinitionFile="libusb\libusb-1.0A.def"
+				EmbedManagedResourceFile="libusb-1.0A.rc"
 				GenerateDebugInformation="true"
 			/>
 			<Tool
@@ -168,7 +168,7 @@
 		<Configuration
 			Name="Release|Win32"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll"
-			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0"
+			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0A"
 			ConfigurationType="2"
 			CharacterSet="2"
 			WholeProgramOptimization="1"
@@ -212,9 +212,9 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setupapi.lib"
-				OutputFile="$(OutDir)\libusb-1.0.dll"
-				ModuleDefinitionFile="libusb\libusb-1.0.def"
-				EmbedManagedResourceFile="libusb-1.0.rc"
+				OutputFile="$(OutDir)\libusb-1.0A.dll"
+				ModuleDefinitionFile="libusb\libusb-1.0A.def"
+				EmbedManagedResourceFile="libusb-1.0A.rc"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -241,7 +241,7 @@
 		<Configuration
 			Name="Release|x64"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll"
-			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0"
+			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0A"
 			ConfigurationType="2"
 			CharacterSet="2"
 			WholeProgramOptimization="1"
@@ -286,9 +286,9 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setupapi.lib"
-				OutputFile="$(OutDir)\libusb-1.0.dll"
-				ModuleDefinitionFile="libusb\libusb-1.0.def"
-				EmbedManagedResourceFile="libusb-1.0.rc"
+				OutputFile="$(OutDir)\libusb-1.0A.dll"
+				ModuleDefinitionFile="libusb\libusb-1.0A.def"
+				EmbedManagedResourceFile="libusb-1.0A.rc"
 			/>
 			<Tool
 				Name="VCALinkTool"
@@ -384,11 +384,11 @@
 			Name="Resource Files"
 			>
 			<File
-				RelativePath=".\libusb\libusb-1.0.def"
+				RelativePath=".\libusb\libusb-1.0A.def"
 				>
 			</File>
 			<File
-				RelativePath=".\libusb\libusb-1.0.rc"
+				RelativePath=".\libusb\libusb-1.0A.rc"
 				>
 			</File>
 		</Filter>

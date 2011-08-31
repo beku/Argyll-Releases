@@ -19,7 +19,7 @@
  *
  * This file is based on cam97s3.h by Graeme Gill.
  *
- * Copyright 2004 - 2007 Graeme W. Gill
+ * Copyright 2004 - 2011 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -136,8 +136,7 @@ struct _cam02 {
 						/* Ignored if Ev is set */
 		double Yf,		/* Flare as a fraction of the reference white (range 0.0 .. 1.0) */
 		double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
-		int hk,			/* Flag, NZ to use Helmholtz-Kohlraush effect */
-		int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
+		int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	);
 
 	/* Conversions. Return nz on error */
@@ -159,6 +158,10 @@ struct _cam02 {
 	double  F;		/* Adaptation Degree */
 
 	/* Pre-computed values */
+	double cc[3][3];	/* Forward cone and chromatic transform */
+	double icc[3][3];	/* Reverse cone and chromatic transform */
+	double ncc[3][3];	/* Normalized Forward cone and chromatic transform */
+	double crange[3];	/* ENABLE_COMPR compression range */
 	double Va[3], Vb[3], VttA[3], Vttd[3];	/* rgba vectors */
 	double dcomp[3];	/* Vttd in terms of VttA, Va, Vb */
 	double Fsc;			/* Flare scale */
@@ -177,21 +180,20 @@ struct _cam02 {
 	double z;			/* Base exponential nonlinearity */
 	double rgbaW[3];	/* Post-adapted cone response of white */
 	double Aw;			/* Achromatic response of white */
-	double nldxval;		/* Non-linearity value at lower crossover to linear */
+	double nldxval;		/* Non-linearity output value at lower crossover to linear */
+	double nldxslope;	/* Non-linearity slope at lower crossover to linear */
 	double nluxval;		/* Non-linearity value at upper crossover to linear */
 	double nluxslope;	/* Non-linearity slope at upper crossover to linear */
 	double lA;			/* JLIMIT Limited A */
 
 	/* Option flags, code not always enabled */
 	int hk;				/* Use Helmholtz-Kohlraush effect */
-	int noclip;			/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
 	int trace;			/* Trace values through computation */
 	int retss;			/* Return ss rather than Jab */
 	int range;			/* (for cam02ref.h) return on range error */ 
 
 	double nldlimit;	/* value of NLDLIMIT, sets non-linearity lower limit */
-	double nldxslope;	/* Non-linearity slope below lower crossover */
-	double nldpow;		/* Non-linearity power below lower crossover */
+	double nldicept;	/* value of NLDLICEPT, sets straight line intercept with 0.1 output */
 	double nlulimit;	/* value of NLULIMIT, sets non-linearity upper limit (tangent) */
 	double ddllimit;	/* value of DDLLIMIT, sets fwd k3 to k2 limit  */
 	double ddulimit;	/* value of DDULIMIT, sets bwd k3 to k1 limit */

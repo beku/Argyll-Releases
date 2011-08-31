@@ -42,14 +42,15 @@
 void
 usage(char *mes) {
 	fprintf(stderr,"Convert Gretag/Logo or X-Rite ColorPport raw RGB or CMYK device profile data to Argyll CGATS data, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (mes != NULL)
 		fprintf(stderr,"error: %s\n",mes);
-	fprintf(stderr,"usage: logo2gcats [-v] [-l limit] [devfile] infile [specfile] outfile\n");
+	fprintf(stderr,"usage: txt2ti3 [-v] [-l limit] [devfile] infile [specfile] outfile\n");
 /*	fprintf(stderr," -v            Verbose mode\n"); */
 	fprintf(stderr," -2            Create dummy .ti2 file as well\n");
 	fprintf(stderr," -l limit      set ink limit, 0 - 400%% (default max in file)\n");
 	fprintf(stderr," -d            Set type of device as Display, not Output\n");
+	fprintf(stderr," -i            Set type of device as Input, not Output\n");
 	fprintf(stderr," [devfile]     Input Device CMYK target file (typically file.txt)\n");
 	fprintf(stderr," infile        Input CIE, Spectral or Device & Spectral file (typically file.txt)\n");
 	fprintf(stderr," [specfile]    Input Spectral file (typically file.txt)\n");
@@ -64,6 +65,7 @@ int main(int argc, char *argv[])
 	int verb = 0;
 	int out2 = 0;			/* Create dumy .ti2 file output */
 	int disp = 0;			/* nz if this is a display device */
+	int inp = 0;			/* nz if this is an input device */
 	static char devname[200] = { 0 };		/* Input CMYK/Device .txt file (may be null) */
 	static char ciename[200] = { 0 };		/* Input CIE .txt file (may be null) */
 	static char specname[200] = { 0 };		/* Input Device / Spectral .txt file */
@@ -71,6 +73,7 @@ int main(int argc, char *argv[])
 	static char outname2[200] = { 0 };		/* Output cgats .ti2 file base name */
 	cgats *cmy = NULL;		/* Input RGB/CMYK reference file */
 	int f_id1 = -1, f_c, f_m, f_y, f_k = 0;	/* Field indexes */
+	double dev_scale = 1.0;	/* Device value scaling */
 	cgats *ncie = NULL;		/* Input CIE readings file (may be Dev & spectral too) */
 	int f_id2, f_cie[3];	/* Field indexes */
 	cgats *spec = NULL;		/* Input spectral readings (NULL if none) */
@@ -90,7 +93,7 @@ int main(int argc, char *argv[])
 	double mxsum = -1.0;	/* Maximim sum of inks found in file */
 	int mxsumix = 0;
 
-	error_program = "logo2cgats";
+	error_program = "txt2ti3";
 
 	if (argc <= 1)
 		usage("Too few arguments");
@@ -126,10 +129,15 @@ int main(int argc, char *argv[])
 					tlimit = -1;
 			}
 
-			else if (argv[fa][1] == 'd')
+			else if (argv[fa][1] == 'd') {
 				disp = 1;
+				inp = 0;
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			} else if (argv[fa][1] == 'i') {
+				disp = 0;
+				inp = 1;
+
+			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
 				verb = 1;
 			else 
 				usage("Unknown flag");
@@ -200,11 +208,17 @@ int main(int argc, char *argv[])
 	 && (f_id1 = cmy->find_field(cmy, 0, "SAMPLE_ID")) < 0)
 		error("Input file '%s' doesn't contain field SampleName, Sample_Name, SAMPLE_NAME or SAMPLE_ID",devname);
 	if (cmy->t[0].ftype[f_id1] != nqcs_t
-	 && cmy->t[0].ftype[f_id1] != cs_t)
+	 && cmy->t[0].ftype[f_id1] != cs_t
+	 && cmy->t[0].ftype[f_id1] != i_t)
 		error("Field SampleName (%s) from CMYK/RGB file '%s' is wrong type",cmy->t[0].fsym[f_id1],devname);
 
 	if (cmy->find_field(cmy, 0, "RGB_R") >= 0) {
-		if (verb) printf("Seems to be an RGB device\n");
+		if (verb)  {
+			if (inp || disp)
+				printf("Seems to be an RGB device\n");
+			else
+				printf("Seems to be a psuedo-RGB device\n");
+		}
 		isrgb = 1;
 	} else
 		if (verb) printf("Assumed to be a CMYK device\n");
@@ -280,7 +294,8 @@ int main(int argc, char *argv[])
 	 && (f_id2 = ncie->find_field(ncie, 0, "SAMPLE_ID")) < 0)
 		error("Input file '%s' doesn't contain field SampleName, Sample_Name, SAMPLE_NAME or SAMPLE_ID",ciename);
 	if (ncie->t[0].ftype[f_id2] != nqcs_t
-	 && ncie->t[0].ftype[f_id2] != cs_t)
+	 && ncie->t[0].ftype[f_id2] != cs_t
+	 && cmy->t[0].ftype[f_id2] != i_t)
 		error("Field SampleName (%s) from cie file '%s' is wrong type",ncie->t[0].fsym[f_id2],ciename);
 
 	if (ncie->find_field(ncie, 0, "XYZ_X") < 0
@@ -353,7 +368,8 @@ int main(int argc, char *argv[])
 		 && (f_id3 = spec->find_field(spec, 0, "SAMPLE_ID")) < 0)
 			error("Input file '%s' doesn't contain field SampleName, Sample_Name, SAMPLE_NAME or SAMPLE_ID",specname);
 		if (spec->t[0].ftype[f_id3] != nqcs_t
-		 && spec->t[0].ftype[f_id3] != cs_t)
+		 && spec->t[0].ftype[f_id3] != cs_t
+		 && cmy->t[0].ftype[f_id3] != i_t)
 			error("Field SampleName (%s) from spec file '%s' is wrong type",spec->t[0].fsym[f_id3],specname);
 
 		/* Find the spectral readings nm range */
@@ -441,6 +457,8 @@ int main(int argc, char *argv[])
 	ocg->add_kword(ocg, 0, "CREATED",atm, NULL);
 	if (disp)
 		ocg->add_kword(ocg, 0, "DEVICE_CLASS","DISPLAY", NULL);	/* What sort of device this is */
+	else if (inp)
+		ocg->add_kword(ocg, 0, "DEVICE_CLASS","INPUT", NULL);	/* What sort of device this is */
 	else
 		ocg->add_kword(ocg, 0, "DEVICE_CLASS","OUTPUT", NULL);	/* What sort of device this is */
 
@@ -457,19 +475,38 @@ int main(int argc, char *argv[])
 		ocg->add_field(ocg, 0, "RGB_R", r_t);
 		ocg->add_field(ocg, 0, "RGB_G", r_t);
 		ocg->add_field(ocg, 0, "RGB_B", r_t);
-		if (islab)
-			ocg->add_kword(ocg, 0, "COLOR_REP","RGB_LAB", NULL);
-		else
-			ocg->add_kword(ocg, 0, "COLOR_REP","RGB_XYZ", NULL);
+		if (inp) {
+			if (islab)
+				ocg->add_kword(ocg, 0, "COLOR_REP","LAB_RGB", NULL);
+			else
+				ocg->add_kword(ocg, 0, "COLOR_REP","XYZ_RGB", NULL);
+		} else if (disp) {
+			if (islab)
+				ocg->add_kword(ocg, 0, "COLOR_REP","RGB_LAB", NULL);
+			else
+				ocg->add_kword(ocg, 0, "COLOR_REP","RGB_XYZ", NULL);
+		} else {
+			if (islab)
+				ocg->add_kword(ocg, 0, "COLOR_REP","iRGB_LAB", NULL);
+			else
+				ocg->add_kword(ocg, 0, "COLOR_REP","iRGB_XYZ", NULL);
+		}
 	} else {
 		ocg->add_field(ocg, 0, "CMYK_C", r_t);
 		ocg->add_field(ocg, 0, "CMYK_M", r_t);
 		ocg->add_field(ocg, 0, "CMYK_Y", r_t);
 		ocg->add_field(ocg, 0, "CMYK_K", r_t);
-		if (islab)
-			ocg->add_kword(ocg, 0, "COLOR_REP","CMYK_LAB", NULL);
-		else
-			ocg->add_kword(ocg, 0, "COLOR_REP","CMYK_XYZ", NULL);
+		if (inp) {	/* Does this make any sense ? */
+			if (islab)
+				ocg->add_kword(ocg, 0, "COLOR_REP","LAB_CMYK", NULL);
+			else
+				ocg->add_kword(ocg, 0, "COLOR_REP","XYZ_CMYK", NULL);
+		} else {
+			if (islab)
+				ocg->add_kword(ocg, 0, "COLOR_REP","CMYK_LAB", NULL);
+			else
+				ocg->add_kword(ocg, 0, "COLOR_REP","CMYK_XYZ", NULL);
+		}
 	}
 
 	if (ncie != NULL) {
@@ -481,6 +518,38 @@ int main(int argc, char *argv[])
 			ocg->add_field(ocg, 0, "XYZ_X", r_t);
 			ocg->add_field(ocg, 0, "XYZ_Y", r_t);
 			ocg->add_field(ocg, 0, "XYZ_Z", r_t);
+		}
+	}
+
+	/* Guess the device data scaling */
+	{
+		double maxv = 0.0;
+		int f_dev[4] = { f_c, f_m, f_y, f_k };
+		int ndevf;
+
+		if (isrgb)
+			ndevf = 3;
+		else
+			ndevf = 4;
+
+		/* Guess what scale the spectral data is set to */
+		for (i = 0; i < npat; i++) {
+			for (j = 0; j < ndevf; j++) {
+				double vv;
+				vv = *((double *)cmy->t[0].fdata[i][f_dev[j]]);
+				if (vv > maxv)
+					maxv = vv;
+			}
+		}
+		if (maxv < 10.0) {
+			dev_scale = 100.0/1.0;
+			if (verb) printf("Device max found = %f, scale by 100.0\n",maxv);
+		} else if (maxv > 160.0) {
+			dev_scale = 100.0/255.0;
+			if (verb) printf("Device max found = %f, scale by 100/255\n",maxv);
+		} else {
+			dev_scale = 100.0/100.0;
+			if (verb) printf("Device max found = %f, scale by 1.0\n",maxv);
 		}
 	}
 
@@ -510,9 +579,13 @@ int main(int argc, char *argv[])
 			}
 		}
 		if (maxv < 10.0) {
-			spec_scale = 100.0;
+			spec_scale = 100.0/1.0;
 			if (verb) printf("Spectral max found = %f, scale by 100.0\n",maxv);
+		} else if (maxv > 160.0) {
+			spec_scale = 100.0/255.0;
+			if (verb) printf("Spectral max found = %f, scale by 100/255\n",maxv);
 		} else {
+			spec_scale = 100.0/100.0;
 			if (verb) printf("Spectral max found = %f, scale by 1.0\n",maxv);
 		}
 	}
@@ -531,20 +604,20 @@ int main(int argc, char *argv[])
 			int k = 0;
 
 			if (ncie != NULL) {
-				if (strcmp(((char *)cmy->t[0].fdata[i][f_id1]), 
-				           ((char *)ncie->t[0].fdata[i][f_id2])) != 0) {
+				if (strcmp(((char *)cmy->t[0].rfdata[i][f_id1]), 
+				           ((char *)ncie->t[0].rfdata[i][f_id2])) != 0) {
 					error("Patch label mismatch to CIE values, patch %d, '%s' != '%s'\n",
-					       i, ((char *)cmy->t[0].fdata[i][f_id1]), 
-				              ((char *)ncie->t[0].fdata[i][f_id2]));
+					       i, ((char *)cmy->t[0].rfdata[i][f_id1]), 
+				              ((char *)ncie->t[0].rfdata[i][f_id2]));
 				}
 			}
 
 			if (spec != NULL) {
-				if (strcmp(((char *)cmy->t[0].fdata[i][f_id1]), 
-				           ((char *)spec->t[0].fdata[i][f_id3])) != 0) {
+				if (strcmp(((char *)cmy->t[0].rfdata[i][f_id1]), 
+				           ((char *)spec->t[0].rfdata[i][f_id3])) != 0) {
 					error("Patch label mismatch to spectral values, patch %d, '%s' != '%s'\n",
-					       i, ((char *)cmy->t[0].fdata[i][f_id1]), 
-				              ((char *)spec->t[0].fdata[i][f_id3]));
+					       i, ((char *)cmy->t[0].rfdata[i][f_id1]), 
+				              ((char *)spec->t[0].rfdata[i][f_id3]));
 				}
 			}
 
@@ -554,18 +627,18 @@ int main(int argc, char *argv[])
 
 			/* SAMPLE NAME */
 			if (f_id1 >= 0) 
-				setel[k++].c = (char *)cmy->t[0].fdata[i][f_id1];
+				setel[k++].c = (char *)cmy->t[0].rfdata[i][f_id1];
 			
 			if (isrgb) {
-				setel[k++].d = 100.0/255.0 * *((double *)cmy->t[0].fdata[i][f_c]);
-				setel[k++].d = 100.0/255.0 * *((double *)cmy->t[0].fdata[i][f_m]);
-				setel[k++].d = 100.0/255.0 * *((double *)cmy->t[0].fdata[i][f_y]);
+				setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_c]);
+				setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_m]);
+				setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_y]);
 			} else {
 				double sum = 0.0;
-				sum += setel[k++].d = *((double *)cmy->t[0].fdata[i][f_c]);
-				sum += setel[k++].d = *((double *)cmy->t[0].fdata[i][f_m]);
-				sum += setel[k++].d = *((double *)cmy->t[0].fdata[i][f_y]);
-				sum += setel[k++].d = *((double *)cmy->t[0].fdata[i][f_k]);
+				sum += setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_c]);
+				sum += setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_m]);
+				sum += setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_y]);
+				sum += setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_k]);
 				if (sum > mxsum) {
 					mxsum = sum;
 					mxsumix = i;
@@ -615,7 +688,7 @@ int main(int argc, char *argv[])
 		ocg2->add_table(ocg2, tt_other, 0);	/* Start the first table */
 
 		ocg2->add_kword(ocg2, 0, "DESCRIPTOR", "Argyll Calibration Target chart information 2",NULL);
-		ocg2->add_kword(ocg2, 0, "ORIGINATOR", "Argyll logo2cgats", NULL);
+		ocg2->add_kword(ocg2, 0, "ORIGINATOR", "Argyll txt2ti3", NULL);
 		atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
 		ocg2->add_kword(ocg2, 0, "CREATED",atm, NULL);
 		if (disp)
@@ -651,7 +724,11 @@ int main(int argc, char *argv[])
 			ocg2->add_field(ocg2, 0, "RGB_R", r_t);
 			ocg2->add_field(ocg2, 0, "RGB_G", r_t);
 			ocg2->add_field(ocg2, 0, "RGB_B", r_t);
-			ocg2->add_kword(ocg2, 0, "COLOR_REP","RGB", NULL);
+			if (inp || disp) {
+				ocg2->add_kword(ocg2, 0, "COLOR_REP","RGB", NULL);
+			} else {
+				ocg2->add_kword(ocg2, 0, "COLOR_REP","iRGB", NULL);
+			}
 		} else {
 			ocg2->add_field(ocg2, 0, "CMYK_C", r_t);
 			ocg2->add_field(ocg2, 0, "CMYK_M", r_t);
@@ -686,26 +763,26 @@ int main(int argc, char *argv[])
 				int k = 0;
 
 				if (ncie != NULL) {
-					if (strcmp(((char *)cmy->t[0].fdata[i][f_id1]), 
-					           ((char *)ncie->t[0].fdata[i][f_id2])) != 0) {
+					if (strcmp(((char *)cmy->t[0].rfdata[i][f_id1]), 
+					           ((char *)ncie->t[0].rfdata[i][f_id2])) != 0) {
 						error("Patch label mismatch to CIE values, patch %d, '%s' != '%s'\n",
-						       i, ((char *)cmy->t[0].fdata[i][f_id1]), 
-					              ((char *)ncie->t[0].fdata[i][f_id2]));
+						       i, ((char *)cmy->t[0].rfdata[i][f_id1]), 
+					              ((char *)ncie->t[0].rfdata[i][f_id2]));
 					}
 				}
 
 				if (spec != NULL) {
-					if (strcmp(((char *)cmy->t[0].fdata[i][f_id1]), 
-					           ((char *)spec->t[0].fdata[i][f_id3])) != 0) {
+					if (strcmp(((char *)cmy->t[0].rfdata[i][f_id1]), 
+					           ((char *)spec->t[0].rfdata[i][f_id3])) != 0) {
 						error("Patch label mismatch to spectral values, patch %d, '%s' != '%s'\n",
-						       i, ((char *)cmy->t[0].fdata[i][f_id1]), 
-					              ((char *)spec->t[0].fdata[i][f_id3]));
+						       i, ((char *)cmy->t[0].rfdata[i][f_id1]), 
+					              ((char *)spec->t[0].rfdata[i][f_id3]));
 					}
 				}
 
 				sprintf(id, "%d", i+1);
 				setel[k++].c = id;						/* ID */
-				setel[k++].c = ((char *)cmy->t[0].fdata[i][f_id1]); 	/* Location */
+				setel[k++].c = ((char *)cmy->t[0].rfdata[i][f_id1]); 	/* Location */
 
 				if (isrgb) {
 					setel[k++].d = 100.0/255.0 * *((double *)cmy->t[0].fdata[i][f_c]);

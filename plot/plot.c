@@ -41,6 +41,7 @@
 #define NTICK 10
 #define LTHICK 1.2			/* Plot line thickness */
 #define ILTHICK ((int)(LTHICK+0.5))		/* Integer line thickness */
+//#define ILTHICK 2
 #undef CROSSES		/* Mark input points with crosses */
 
 #define DEFWWIDTH  500
@@ -699,7 +700,83 @@ int o			/* Number of vectors */
 # define debugf(xx)
 #endif
 
+double plot_ratio = 1.0;
+HANDLE plot_th;              /* Thread */
+char plot_AppName[] = "PlotWin";
+HWND plot_hwnd  = NULL;	/* Open only one window per session */
+int plot_signal = 0;	/* Signal a key or quit */
+
 static LRESULT CALLBACK MainWndProc (HWND, UINT, WPARAM, LPARAM);
+
+/* Thread to handle message processing, so that there is no delay */
+/* when the main thread is doing other things. */
+DWORD WINAPI plot_message_thread(LPVOID lpParameter) {
+	MSG msg;
+	WNDCLASS wc;
+	ATOM arv;
+	HWND _hwnd;
+
+	// Fill in window class structure with parameters that describe the
+	// main window.
+
+	wc.style         = CS_HREDRAW | CS_VREDRAW;	// Class style(s).
+	wc.lpfnWndProc   = MainWndProc;	// Function to retrieve messages for windows of this class.
+	wc.cbClsExtra    = 0;			// No per-class extra data.
+	wc.cbWndExtra    = 0;			// No per-window extra data.
+	wc.hInstance     = NULL;		// Application that owns the class.
+	wc.hIcon         = LoadIcon(NULL, IDI_APPLICATION);
+	wc.hCursor       = LoadCursor(NULL, IDC_CROSS);
+	wc.hbrBackground = GetStockObject(WHITE_BRUSH);
+	wc.lpszMenuName  = NULL;
+	wc.lpszClassName = plot_AppName;
+
+	arv = RegisterClass(&wc);
+
+	if (!arv) {
+		debugf(("RegisterClass failed, lasterr = %d\n",GetLastError()));
+		return -1;
+	}
+
+	_hwnd = CreateWindow(
+		plot_AppName,
+		"2D Diagnostic Graph Plot",
+		WS_OVERLAPPEDWINDOW,
+		CW_USEDEFAULT,
+		CW_USEDEFAULT,
+		(int)(DEFWWIDTH * plot_ratio + 0.5),
+		DEFWHEIGHT,
+		NULL,
+		NULL,
+		NULL, // hInstance,
+		NULL);
+
+	if (!_hwnd) {
+		debugf(("CreateWindow failed, lasterr = %d\n",GetLastError()));
+		return -1;
+	}
+	
+	ShowWindow(_hwnd, SW_SHOW);
+
+	plot_hwnd = _hwnd;
+
+	/* Now process messages until we're done */
+	for (;;) {
+		if (GetMessage(&msg, NULL, 0, 0)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+			if (plot_signal == 99)
+				break;
+		}
+	}
+
+	if (UnregisterClass(plot_AppName, NULL) == 0) {
+		debugf(("UnregisterClass failed, lasterr = %d\n",GetLastError()));
+	}
+
+	plot_hwnd = NULL;		/* Signal it's been deleted */
+
+	return 0;
+}
 
 /* Superset implementation function: */
 /* return 0 on success, -1 on error */
@@ -783,113 +860,42 @@ static int do_plot_imp(
 	/* ------------------------------------------- */
 	/* Setup windows stuff */
 	{
-		static char AppName[] = "PlotWin";
-		static HWND hwnd  = NULL;	/* Open only one window per session */
-		WNDCLASS wc;
-		MSG msg;
-		ATOM arv;
-		
-		if (hwnd == NULL) {		/* First time through */
-			// Fill in window class structure with parameters that describe the
-			// main window.
 
-			wc.style         = CS_HREDRAW | CS_VREDRAW;	// Class style(s).
-			wc.lpfnWndProc   = MainWndProc;	// Function to retrieve messages for windows of this class.
-			wc.cbClsExtra    = 0;			// No per-class extra data.
-			wc.cbWndExtra    = 0;			// No per-window extra data.
-			wc.hInstance     = NULL;		// Application that owns the class.
-			wc.hIcon         = LoadIcon(NULL, IDI_APPLICATION);
-			wc.hCursor       = LoadCursor(NULL, IDC_CROSS);
-			wc.hbrBackground = GetStockObject(WHITE_BRUSH);
-			wc.lpszMenuName  = NULL;
-			wc.lpszClassName = AppName;
+		/* It would be nice to reduce number of globals. */
 
-			arv = RegisterClass(&wc);
+		/* We don't clean up properly either - ie. don't delete thread etc. */
 
-			if (!arv) {
-				debugf(("RegisterClass failed, lasterr = %d\n",GetLastError()));
+		/* Create thread that creats window and processes window messages */
+		if (plot_hwnd == NULL) {
+
+			plot_ratio = ratio;
+
+		    plot_th = CreateThread(NULL, 0, plot_message_thread, NULL, 0, NULL);
+		    if (plot_th == NULL) {
+				debugf(("new_athread failed\n"));
 				return -1;
 			}
-
-			hwnd = CreateWindow(
-				AppName,
-				"2D Diagnostic Graph Plot",
-				WS_OVERLAPPEDWINDOW,
-				CW_USEDEFAULT,
-				CW_USEDEFAULT,
-				(int)(DEFWWIDTH * ratio + 0.5),
-				DEFWHEIGHT,
-				NULL,
-				NULL,
-				NULL, // hInstance,
-				NULL);
-
-			if (!hwnd) {
-				debugf(("CreateWindow failed, lasterr = %d\n",GetLastError()));
-				return -1;
-			}
-			
-			ShowWindow(hwnd, SW_SHOW);
-			SetForegroundWindow(hwnd);
-
-			if (!UpdateWindow(hwnd)) {
-				debugf(("UpdateWindow failed, lasterr = %d\n",GetLastError()));
-				return -1;
-			}
-		} else {	/* Re-use the existing window */
-
-			/* Force a repaint with the new data */
-			if (!InvalidateRgn(hwnd,NULL,TRUE)) {
-				debugf(("InvalidateRgn failed, lasterr = %d\n",GetLastError()));
-				return -1;
-			}
+			while (plot_hwnd == NULL)
+				Sleep(50);
 		}
+ 
+		plot_signal = 0;
 
-#ifdef NEVER
-		while (GetMessage(&msg, NULL, 0, 0)) {
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-#else
-		for (;;) {
-			debugf(("About to peek message\n"));
-			while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-				TranslateMessage(&msg);
-				debugf(("Dispatching message 0x%x\n",msg.message));
-				DispatchMessage(&msg);
-				if (msg.message == WM_QUIT) {
-					debugf(("Got QUIT message\n"));
-					break;
-				}
-			}
-			if (pd.dowait == 0 || msg.message == WM_QUIT)
-				break;
+		SetForegroundWindow(plot_hwnd);
 
-			/* Can check for timeout here */
-			Sleep(100);
-			if (pd.dowait < 0) {		/* Don't wait */
-				pd.dowait++;
-				if (++pd.dowait >= 0)
-					PostQuitMessage(0);
-//printf("~1 dowait = %d\n",pd.dowait++);
-			}
-		}
-#endif
-
-
-#ifdef NEVER
-		if (!DestroyWindow(hwnd)) {
-			debugf(("DestroyWindow failed, lasterr = %d\n",GetLastError()));
+		/* Force a repaint with the new data */
+		if (!InvalidateRgn(plot_hwnd,NULL,TRUE)) {
+			debugf(("InvalidateRgn failed, lasterr = %d\n",GetLastError()));
 			return -1;
 		}
-		hwnd = NULL;
 
-		if (!UnregisterClass(AppName,NULL)) {
-			debugf(("UnregisterClass failed, lasterr = %d\n",GetLastError()));
-			return -1;
+		if (dowait > 0) {		/* Wait for a space key */
+			while(plot_signal == 0)
+				Sleep(50);
+			plot_signal = 0;
+		} else if (dowait < 0) {
+			Sleep(-dowait * 1000);
 		}
-#endif /* NEVER */
-
 	}
 	return 0;
 }
@@ -932,14 +938,20 @@ static LRESULT CALLBACK MainWndProc(
 			debugf(("It's a char message, wParam = 0x%x\n",wParam));
 			switch(wParam) {
 				case ' ':	/* Space */
-					debugf(("It's a SPACE, so post quit and return\n"));
-					PostQuitMessage(0);
+					debugf(("It's a SPACE, so signal it\n"));
+					plot_signal = 1;
 					return 0;
 			}
 
-		case WM_DESTROY:
+		case WM_CLOSE: 
+			debugf(("It's a close message\n"));
+			DestroyWindow(hwnd);
+			return 0; 
+ 
+		case WM_DESTROY: 
 			debugf(("It's a destroy message\n"));
-			PostQuitMessage(0);
+			plot_signal = 99;
+		    PostQuitMessage(0); 
 			return 0;
 	}
 
@@ -1048,7 +1060,7 @@ plot_info *pdp
 			{ 160, 160, 160},	/* Grey */
 			{ 220, 220, 220}	/* White */
 		};
-		for (j = 0; j < MXGPHS; j++) {
+		for (j = MXGPHS-1; j >= 0; j--) {
 			double *yp = pdp->yy[j];
 		
 			if (yp == NULL)
@@ -1743,7 +1755,7 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 			{ 160, 160, 160},	/* Grey */
 			{ 220, 220, 220}	/* White */
 		};
-		for (j = 0; j < MXGPHS; j++) {
+		for (j = MXGPHS-1; j >= 0; j--) {
 			double *yp = pdp->yy[j];
 		
 			if (yp == NULL)
@@ -1852,8 +1864,8 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 #else /* Assume UNIX + X11 */
 /* ********************************** X11 version ********************** */
 
-/* !!!! Should fix this so that it keeps one window open for multiple graphs, */
-/*      just like the other implementations !!!! */
+/* !!!! There is a problem if the user closes the window - an X11 error results */
+/*      This seems to happen before a DestroyNotify !. How to fix ??? !!!! */
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -1994,7 +2006,7 @@ static int do_plot_imp(
 		XSetForeground(mydisplay,mygc,myforeground);
 		
 		XSelectInput(mydisplay,mywindow,
-		     KeyPressMask | ExposureMask);
+		     KeyPressMask | ExposureMask | StructureNotifyMask);
 	
 		if (dorefresh) {
 			XExposeEvent ev;
@@ -2157,8 +2169,8 @@ plot_info *pdp
 	/* Plot vertical axis */
 	loose_label(mydisplay, mywindow, mygc, pdp, pdp->mny, pdp->mxy, ytick);
 
-	if (pdp->graph) {		/* Up to 6 graphs */
-		for (j = 0; j < MXGPHS; j++) {
+	if (pdp->graph) {		/* Up to 10 graphs */
+		for (j = MXGPHS-1; j >= 0; j--) {
 			double *yp = pdp->yy[j];
 		
 			if (yp == NULL)
@@ -2319,8 +2331,42 @@ double nicenum(double x, int round) {
 #ifdef STANDALONE_TEST
 /* test code */
 
+// ~~99
+#undef TEST_NON_CONSOLE	/* Version that works from command line and GUI */
+// May have to add link flag -Wl,-subsystem,windows
+// since MingW is stupid about noticing WinMain
+
+//#include <windows.h>
+//#include <stdio.h>
+#include <fcntl.h>
+//#include <io.h>
+
+
+#ifdef NEVER
+/* Append debugging string to log.txt */
+static void dprintf(char *fmt, ...) {
+	FILE *fp = NULL;
+	if ((fp = fopen("log.txt", "a+")) != NULL) {
+		va_list args;
+		va_start(args, fmt);
+		vfprintf(fp, fmt, args);
+		fflush(fp);
+	   	fclose(fp);
+		va_end(args);
+	}
+}
+#endif // NEVER
+
 int
+#ifndef TEST_NON_CONSOLE
 main()
+#else
+APIENTRY WinMain(
+    HINSTANCE hInstance,
+    HINSTANCE hPrevInstance,
+    LPSTR lpCmdLine,
+    int nCmdShow)
+#endif
 	{
 	double x[10]  = {0.0, 0.5, 0.7, 1.0};
 	double y1[10] = {0.0, 0.5, 0.7, 1.0};
@@ -2345,6 +2391,109 @@ main()
 	char *ntext[5] = { "A", "B", "C", "D" };
 	char *mtext[5] = { "10", "20", "30", "40", "50" };
 
+#ifdef TEST_NON_CONSOLE
+	{			/* Only works on >= XP though */
+		BOOL (WINAPI *AttachConsole)(DWORD dwProcessId);
+
+		*(FARPROC *)&AttachConsole = 
+          GetProcAddress(LoadLibraryA("kernel32.dll"), "AttachConsole");
+
+		if (AttachConsole != NULL && AttachConsole(((DWORD)-1)))
+		{
+			if (_fileno(stdout) < 0)
+				freopen("CONOUT$","wb",stdout);
+			if (_fileno(stderr) < 0)
+				freopen("CONOUT$","wb",stderr);
+			if (_fileno(stdin) < 0)
+				freopen("CONIN$","rb",stdin);
+#ifdef __cplusplus 
+			// make cout, wcout, cin, wcin, wcerr, cerr, wclog and clog point to console as well
+			std::ios::sync_with_stdio();
+#endif
+		}
+	}
+#endif /* TEST_NON_CONSOLE */
+
+#ifdef NEVER	// Attempt to find something that works on Win2K */
+{
+	/* This clever code have been found at:
+	   Adding Console I/O to a Win32 GUI App
+	   Windows Developer Journal, December 1997
+	   http://dslweb.nwnexus.com/~ast/dload/guicon.htm
+	   Andrew Tucker's Home Page */
+
+	/* This is not so clever, since it doesn't work... */
+
+	// redirect unbuffered STDOUT to the console
+	long lStdHandle = (long)GetStdHandle(STD_OUTPUT_HANDLE);
+	int hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
+	FILE *fp = _fdopen(hConHandle, "w");
+	*stdout = *fp;
+	setvbuf(stdout, NULL, _IONBF, 0);
+
+	// redirect unbuffered STDIN to the console
+	lStdHandle = (long)GetStdHandle(STD_INPUT_HANDLE);
+	hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
+	fp = _fdopen( hConHandle, "r" );
+	*stdin = *fp;
+	setvbuf(stdin, NULL, _IONBF, 0);
+
+	// redirect unbuffered STDERR to the console
+	lStdHandle = (long)GetStdHandle(STD_ERROR_HANDLE);
+	hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
+	fp = _fdopen( hConHandle, "w" );
+	*stderr = *fp;
+	setvbuf(stderr, NULL, _IONBF, 0);
+
+
+}
+#endif // NEVER
+
+#ifdef NEVER
+// ~~~~~~~~~~~~~
+//	AllocConsole();
+	{
+		ULONG pbi[6];
+		ULONG ulSize = 0;
+		LONG (WINAPI *NtQueryInformationProcess)(HANDLE ProcessHandle,
+		                                         ULONG ProcessInformationClass,
+		                                         PVOID ProcessInformation,
+		                                         ULONG ProcessInformationLength,
+		                                         PULONG ReturnLength); 
+
+		BOOL (WINAPI *AttachConsole)(DWORD dwProcessId);
+
+		*(FARPROC *)&NtQueryInformationProcess = 
+		          GetProcAddress(LoadLibraryA("NTDLL.DLL"), "NtQueryInformationProcess");
+		if(NtQueryInformationProcess) {
+printf("~1 found NtQueryInformationProcess\n"); fflush(stdout);
+			if(NtQueryInformationProcess(GetCurrentProcess(), 0,
+			    &pbi, sizeof(pbi), &ulSize) >= 0 && ulSize == sizeof(pbi)) {
+printf("~1 NtQueryInformationProcess suceeded\n"); fflush(stdout);
+
+				*(FARPROC *)&AttachConsole = 
+		          GetProcAddress(LoadLibraryA("kernel32.dll"), "AttachConsole");
+
+				if (AttachConsole) {
+printf("~1 found AttachConsole\n"); fflush(stdout);
+					AttachConsole(pbi[5]);
+printf("~1 about to freopen CONNOUT\n"); fflush(stdout);
+					freopen("CONOUT$","wb",stdout);
+				} else {
+printf("~1 failed to find AttachConsole\n"); fflush(stdout);
+				}
+			}
+		}
+		// AttachConsole(ID ATTACH_PARENT_CONSOLE); 	// Should work on XP ??
+
+		/* i mean OpenConsoleW - you are as picky as i am - its
+		   ordinal=519 and it is exported by name; the header(s)
+		   do not include it, which tells me there's got to be a
+		   reason for that.
+		 */
+	}
+// ~~~~~~~~~~~~~
+#endif // NEVER
 	printf("Doing first plot\n");
 	if (do_plot(x,y1,y2,y3,4) < 0)
 		printf("Error - do_plot returned -1!\n");

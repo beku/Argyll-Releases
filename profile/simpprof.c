@@ -423,7 +423,7 @@ printf("~1 presid = %f, sresid = %f, dresid = %f\n",presid, sresid, dresid);
 void
 usage(void) {
 	fprintf(stderr,"Create Simple CMYK Device Profile, Version %s\n",VERSION);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: %s [-v] outfile\n",error_program);
 	fprintf(stderr," -v              Verbose mode\n");
 	fprintf(stderr," outfile         Base name for input.tr3/output.pr1 file\n");

@@ -55,8 +55,10 @@ struct _cgats_table {
 	
 	char **fsym;		/* Pointer to [nfields] array of pointers to field symbols */
 	data_type *ftype;	/* Pointer to [nfields] array of field types */
+	char ***rfdata;		/* Pointer to [nsets] array of pointers */
+						/*         to [nfields] array of pointers to read file field text values */
 	void ***fdata;		/* Pointer to [nsets] array of pointers */
-						/*         to [nfields] array of pointers to field set values */
+						/*         to [nfields] array of pointers to field set values of ftype */
 	/* Private */
 	int nkwordsa;		/* Number of keywords allocated */
 	int nfieldsa;		/* Number of fields allocated */

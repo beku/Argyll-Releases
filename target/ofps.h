@@ -246,7 +246,7 @@ struct _ofps {
 	double perc_wght;	/* Perceptual space weighting */
 	double curv_wght;	/* Curvature weighting */
 
-	int fxno;		/* Number of non-unique fixed points provided */
+	int fxno;		/* Total number of fixed points provided, possibly non-unique */
 	fxpos **ufx;	/* fnp randomized unique fixed points to add */
 
 	int gnp;		/* Number of fake gamut nodes (-ve index) */
@@ -388,8 +388,8 @@ struct _ofps {
 
 	/* Read the next set of non-fixed points values */
 	/* return non-zero when no more points */
-	/* f may be NULL */
-	int (*read)(struct _ofps *s, double *p, double *f);
+	/* p = position, v = value, either may be NULL */
+	int (*read)(struct _ofps *s, double *p, double *v);
 
 	/* Calculate and print stats */
 	void (*stats)(struct _ofps *s);
@@ -409,7 +409,7 @@ extern ofps *new_ofps(
 	double devd_wght,
 	double perc_wght,
 	double curv_wght,
-	fxpos *fxlist, int fxno, 
+	fxpos *fxlist, int fxno, 		/* Existing, fixed point list */
 	void (*percept)(void *od, double *out, double *in), void *od);
 
 /* Extended constructor */

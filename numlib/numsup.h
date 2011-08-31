@@ -6,8 +6,8 @@
  * Copyright 2000-2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 #include <stdio.h>
@@ -36,7 +36,10 @@
 #endif
 
 /* Globals used to hold certain information */
-extern char *exe_path;			/* Malloce'd - won't be freed on exit (intended leak) */
+extern char *exe_path;		/* Path leading to executable, not including exe name itself. */
+							/* Always uses '/' separator */
+							/* Malloce'd - won't be freed on exit (intended leak) */
+						
 extern char *error_program;
 extern FILE *error_out;
 extern FILE *warn_out;
@@ -55,6 +58,7 @@ extern int not_interactive;
 extern char cr_char;
 
 /* Numerical recipes vector/matrix support functions */
+/* Note that the index arguments are the inclusive low and high values */
 
 /* Double */
 double *dvector(int nl,int nh);
@@ -70,6 +74,7 @@ double **dhmatrixz(int nrl, int nrh, int ncl, int nch);
 void free_dhmatrix(double **m, int nrl, int nrh, int ncl, int nch);
 
 void copy_dmatrix(double **dst, double **src, int nrl, int nrh, int ncl, int nch);
+void copy_dmatrix_to3x3(double dst[3][3], double **src, int nrl, int nrh, int ncl, int nch);
 
 double **convert_dmatrix(double *a,int nrl,int nrh,int ncl,int nch);
 void free_convert_dmatrix(double **m,int nrl,int nrh,int ncl,int nch);
@@ -104,15 +109,108 @@ short **smatrix(int nrl,int nrh,int ncl,int nch);
 short **smatrixz(int nrl,int nrh,int ncl,int nch);
 void free_smatrix(short **m,int nrl,int nrh,int ncl,int nch);
 
+/* =========================================================== */
+/* Should this go in spectro/conv.h ??                         */
+/* =========================================================== */
+/* Platform specific primitive defines. */
+/* This really needs checking for each different platform. */
+/* Using C99 and MSC covers a lot of cases, */
+/* and the fallback default is pretty reliable with modern compilers and machines. */
+/* (duplicated in icc.h) */ 
 
-/* Cast a double to an IEEE754 single precision value, */
+#if (__STDC_VERSION__ >= 199901L)	/* C99 */
+
+#include <stdint.h> 
+
+#define INR8   int8_t		/* 8 bit signed */
+#define INR16  int16_t		/* 16 bit signed */
+#define INR32  int32_t		/* 32 bit signed */
+#define INR64  int64_t		/* 64 bit signed - not used in icclib */
+#define ORD8   uint8_t		/* 8 bit unsigned */
+#define ORD16  uint16_t		/* 16 bit unsigned */
+#define ORD32  uint32_t		/* 32 bit unsigned */
+#define ORD64  uint64_t		/* 64 bit unsigned - not used in icclib */
+
+#define PNTR intptr_t
+
+/* printf format precision specifier */
+#define PF64PREC "ll"
+
+/* Constant precision specifier */
+#define CF64PREC "LL"
+
+#else  /* !__STDC_VERSION__ */
+#ifdef _MSC_VER
+
+#define INR8   __int8				/* 8 bit signed */
+#define INR16  __int16				/* 16 bit signed */
+#define INR32  __int32				/* 32 bit signed */
+#define INR64  __int64				/* 64 bit signed - not used in icclib */
+#define ORD8   unsigned __int8		/* 8 bit unsigned */
+#define ORD16  unsigned __int16		/* 16 bit unsigned */
+#define ORD32  unsigned __int32		/* 32 bit unsigned */
+#define ORD64  unsigned __int64		/* 64 bit unsigned - not used in icclib */
+
+#define PNTR UINT_PTR
+
+#define vsnprintf _vsnprintf
+
+/* printf format precision specifier */
+#define PF64PREC "I64"
+
+/* Constant precision specifier */
+#define CF64PREC "LL"
+
+#else  /* !_MSC_VER */
+
+/* The following works on a lot of modern systems, including */
+/* LP64 model 64 bit modes */
+
+#define INR8   signed char		/* 8 bit signed */
+#define INR16  signed short		/* 16 bit signed */
+#define INR32  signed int		/* 32 bit signed */
+#define ORD8   unsigned char	/* 8 bit unsigned */
+#define ORD16  unsigned short	/* 16 bit unsigned */
+#define ORD32  unsigned int		/* 32 bit unsigned */
+
+#ifdef __GNUC__
+#define INR64  long long			/* 64 bit signed - not used in icclib */
+#define ORD64  unsigned long long	/* 64 bit unsigned - not used in icclib */
+
+/* printf format precision specifier */
+#define PF64PREC "ll"
+
+/* Constant precision specifier */
+#define CF64PREC "LL"
+
+#endif	/* __GNUC__ */
+
+#define PNTR unsigned long 
+
+#endif /* !_MSC_VER */
+#endif /* !__STDC_VERSION__ */
+/* =========================================================== */
+
+/* Cast a native double to an IEEE754 encoded single precision value, */
 /* in a platform independent fashion. */
-unsigned int doubletoIEEE754(double d);
+ORD32 doubletoIEEE754(double d);
 
-/* Cast a an IEEE754 single precision value to a double, */
+/* Cast an IEEE754 encoded single precision value to a native double, */
 /* in a platform independent fashion. */
-double IEEE754todouble(unsigned int ip);
+double IEEE754todouble(ORD32 ip);
 
+
+/* Cast a native double to an IEEE754 encoded double precision value, */
+/* in a platform independent fashion. */
+ORD64 doubletoIEEE754_64(double d);
+
+/* Cast an IEEE754 encoded double precision value to a native double, */
+/* in a platform independent fashion. */
+double IEEE754_64todouble(ORD64 ip);
+
+/* Return a string representation of a 64 bit ctime. */
+/* A static buffer is used. There is no \n at the end */
+char *ctime_64(const ORD64 *timer);
 
 #ifdef __cplusplus
 	}

@@ -10,8 +10,8 @@
  * Copyright 2006 - 2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* These routines supliement the class code in ntio.c and unixio.c */
@@ -27,8 +27,10 @@
 #include <errno.h>
 #include <unistd.h>
 #endif
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#endif
 #include "numsup.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -42,9 +44,14 @@
 # include "usb.h"
 #endif
 
-#undef DEBUG
-
 #ifdef ENABLE_USB
+
+/* To simplify error messages: */
+#ifdef USE_LIBUSB1
+# define USB_STRERROR(RV) libusb_strerror(RV)
+#else
+# define USB_STRERROR(RV) usb_strerror()
+#endif
 
 /* Check a USB Vendor and product ID, and add the device */
 /* to the icoms path if it is supported. Return nz if it was added. */
@@ -52,8 +59,8 @@ static int usb_check_and_add(
 struct _icoms *p,
 struct usb_device *dev
 ) {
-	struct usb_device_descriptor descriptor;
 	instType itype;
+	struct usb_device_descriptor descriptor;
 
 #ifdef USE_LIBUSB1
 	if (libusb_get_device_descriptor(dev, &descriptor) != LIBUSB_SUCCESS)
@@ -321,6 +328,9 @@ static void bulk_transfer_cb(struct libusb_transfer *transfer)
 /* Version of libusb1 sync to async code that returns the pointer */
 /* to the transfer structure so that the transfer can be cancelled */
 /* by another thread. */
+/* Note that this isn't perfectly thread safe - there are race windows. */
+/* Accessing the libusb_transfer * should at least be protected by a lock. */
+/* (For Argyll use this problem is unlikely) */
 static int do_sync_bulk_transfer(struct libusb_device_handle *dev_handle,
 	void **hcancel, unsigned char endpoint, unsigned char *buffer, int length,
 	int *transferred, unsigned int timeout, unsigned char type)
@@ -612,13 +622,15 @@ void icoms_close_port(icoms *p);
 static void usb_open_port(
 icoms *p,
 int    port,		/* USB com port, 1 - N, 0 for no change. */
-int    config,		/* Configuration */
+int    config,		/* Configuration number */
 int    wr_ep,		/* Write end point */
 int    rd_ep,		/* Read end point */
 icomuflags usbflags,/* Any special handling flags */
-int retries			/* > 0 if we should retry set_configuration (100msec) */ 
+int retries,		/* > 0 if we should retry set_configuration (100msec) */ 
+char **pnames		/* List of process names to try and kill before opening */
 ) {
-	if (p->debug) fprintf(stderr,"icoms: About to open the USB port\n");
+	int tries = 0;
+	if (p->debug) fprintf(stderr,"icoms: About to open the USB port, tries %d\n",retries);
 
 	if (port >= 1) {
 		if (p->is_open && port != p->port) {	/* If port number changes */
@@ -628,6 +640,7 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 
 	/* Make sure the port is open */
 	if (!p->is_open) {
+		struct usb_device_descriptor descriptor;
 #ifdef USE_LIBUSB1
 		const struct libusb_interface_descriptor *ifd;
 	    struct libusb_config_descriptor *confdesc;
@@ -635,50 +648,75 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 		struct usb_interface_descriptor *ifd;
 #endif
 		int rv, i, iface;
+		kkill_nproc_ctx *kpc = NULL;
 
 		if (p->debug) fprintf(stderr,"icoms: USB port needs opening\n");
 
-		if (p->ppath != NULL) {
-			if (p->ppath->path != NULL)
-				free(p->ppath->path);
-			free(p->ppath);
-		}
-
-		if (p->paths == NULL)
-			p->get_paths(p);
-
-		if (port <= 0 || port > p->npaths)
-			error("icoms - usb_open_port: port number out of range!");
-
-		if (p->paths[port-1]->dev == NULL)
-			error("icoms - usb_open_port: Not a USB port!");
-
-		if ((p->ppath = malloc(sizeof(icompath))) == NULL)
-			error("malloc() failed on com port path");
-		*p->ppath = *p->paths[port-1];				/* Structure copy */
-		if ((p->ppath->path = strdup(p->paths[port-1]->path)) == NULL)
-			error("strdup() failed on com port path");
-		p->port = port;
-
-		if (p->debug) fprintf(stderr,"icoms: About to open USB port '%s'\n",p->ppath->path);
-
 		/* Do open retries */
-		do {
+		for (tries = 0; retries >= 0; retries--, tries++) {
+
+			if (p->ppath != NULL) {
+				if (p->ppath->path != NULL)
+					free(p->ppath->path);
+				free(p->ppath);
+			}
+	
+			if (p->paths == NULL || tries > 0)
+				p->get_paths(p);
+	
+			if (port <= 0 || port > p->npaths)
+				error("icoms - usb_open_port: port number out of range!");
+	
+			if (p->paths[port-1]->dev == NULL)
+				error("icoms - usb_open_port: Not a USB port!");
+	
+			if ((p->ppath = malloc(sizeof(icompath))) == NULL)
+				error("malloc() failed on com port path");
+			*p->ppath = *p->paths[port-1];				/* Structure copy */
+			if ((p->ppath->path = strdup(p->paths[port-1]->path)) == NULL)
+				error("strdup() failed on com port path");
+			p->port = port;
+	
+			if (p->debug) fprintf(stderr,"icoms: About to open USB port '%s'\n",p->ppath->path);
+
+			if (tries > 0) {
+				//msec_sleep(i_rand(50,100));
+				msec_sleep(77);
+			}
+			if (tries > 0 && pnames != NULL && kpc == NULL) {
+#ifdef __APPLE__
+				if ((kpc = kkill_nprocess(pnames, p->debug)) == NULL) {
+					if (p->debug) fprintf(stderr,"kkill_nprocess returned error!\n");
+				}
+#endif /* !__APPLE__ */
+			}
+
 #ifdef USE_LIBUSB1
 			if ((rv = libusb_open(p->ppath->dev, &p->usbh)) != LIBUSB_SUCCESS)
 #else
 			if ((p->usbh = usb_open(p->ppath->dev)) == NULL)
 #endif
 			{
-				if (retries <= 0)
-#ifdef USE_LIBUSB1
-					error("Opening USB port '%s' config %d failed (%s) (Permissions ?)",p->ppath->path,config,libusb_strerror(rv));
-#else
-					error("Opening USB port '%s' config %d failed (%s) (Permissions ?)",p->ppath->path,config,usb_strerror());
-#endif
-				msec_sleep(100);
+				if (p->debug)
+					fprintf(stderr, "Opening USB port '%s' config %d failed (%s) (Permissions ?)",p->ppath->path,config,USB_STRERROR(rv));
+				if (retries <= 0) {
+					if (kpc != NULL)
+						kpc->del(kpc); 
+					error("Opening USB port '%s' config %d failed (%s) (Permissions ?)",p->ppath->path,config,USB_STRERROR(rv));
+				}
 				continue;
 			}
+
+			/* Get a copy of the device descriptor so we can see device params */
+#ifdef USE_LIBUSB1
+			if (libusb_get_device_descriptor(p->ppath->dev, &descriptor) != LIBUSB_SUCCESS)
+				error("Get device descriptor on USB port '%s' failed with %d (%s)",p->ppath->path,rv,libusb_strerror(rv));
+#else
+			descriptor = dev->descriptor;	/* Copy */
+#endif
+
+			p->vid = p->ppath->vid;
+			p->pid = p->ppath->pid;
 			p->usbd = p->ppath->dev;
 
 			p->cnfg = config;
@@ -689,6 +727,8 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 				if (libusb_kernel_driver_active(p->usbh, 0) == 1) {
 					if (p->debug) fprintf(stderr,"icoms: detaching '%s'\n",p->ppath->path);
 					if (libusb_detach_kernel_driver(p->usbh, 0) != LIBUSB_SUCCESS) {
+						if (kpc != NULL)
+							kpc->del(kpc); 
 						error("Detach kernel driver on USB port '%s' failed with %d (%s)",p->ppath->path,rv,libusb_strerror(rv));
 					}
 				}
@@ -701,36 +741,54 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 #endif
 #endif
 
-			/* (Should use bConfigurationValue ?) */
-			/* (Should we do a libusb_get_configuration() and only do this if it is wrong ? */
+#if defined(UNIX) && !defined(__APPLE__)
+			/* only call set_configuration on Linux if the device has more than one */
+			/* possible configuration, because Linux does a set_configuration by default, */
+			/* and two of them */
+			/* mess up instruments like the Spyder2 */
+
+			if (descriptor.bNumConfigurations > 1) {
+#endif
+
+			/* Can't skip this, as it is needed to setup the interface and end points on OS X */
 #ifdef USE_LIBUSB1
 			if ((rv = libusb_set_configuration(p->usbh, p->cnfg)) < 0)
 #else
 			if ((rv = usb_set_configuration(p->usbh, p->cnfg)) < 0)
 #endif
 			{
-				if (retries <= 0)
+				if (p->debug)
+					fprintf(stderr,"Configuring USB port '%s' to %d failed with %d (%s)",p->ppath->path,config,rv,USB_STRERROR(rv));
+				if (retries <= 0) {
+					if (kpc != NULL)
+						kpc->del(kpc); 
+					error("Configuring USB port '%s' to %d failed with %d (%s)",p->ppath->path,config,rv,USB_STRERROR(rv));
+				}
 #ifdef USE_LIBUSB1
-					error("Configuring USB port '%s' to %d failed with %d (%s)",p->ppath->path,config,rv,libusb_strerror(rv));
-#else
-					error("Configuring USB port '%s' to %d failed with %d (%s)",p->ppath->path,config,rv,usb_strerror());
-#endif
-#ifdef USE_LIBUSB1
+				libusb_reset_device(p->usbh); // ~~999 ?????
 				libusb_close(p->usbh);
 #else
+				usb_reset(p->usbh);
 				usb_close(p->usbh);
 #endif
-				msec_sleep(100);
 				continue;
 			}
+#if defined(UNIX) && !defined(__APPLE__)
+			}		/* End of if bNumConfigurations > 1 */
+#endif
+
 			/* We're done */
 			break;
-		} while (retries-- > 0);
+		}
+
+		if (kpc != NULL)
+			kpc->del(kpc); 
 
 		/* Claim all interfaces of this configuration */
 #ifdef USE_LIBUSB1
-		if ((rv = libusb_get_active_config_descriptor(p->usbd, &confdesc)) != LIBUSB_SUCCESS)
+		if ((rv = libusb_get_active_config_descriptor(p->usbd, &confdesc)) != LIBUSB_SUCCESS) {
 			error("Getting config descriptor for USB port '%s' failed with %d (%s)",p->ppath->path,rv,libusb_strerror(rv));
+		}
 		p->nifce = confdesc->bNumInterfaces;
 #else
 		p->nifce = p->usbd->config->bNumInterfaces;
@@ -748,8 +806,9 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 				/* Detatch the existing interface. */
 				if (p->uflags & icomuf_detach) {
 					libusb_detach_kernel_driver (p->usbh, iface);
-					if ((rv = libusb_claim_interface(p->usbh, iface)) < 0)
+					if ((rv = libusb_claim_interface(p->usbh, iface)) < 0) {
 						error("Claiming USB port '%s' interface %d failed with %d",p->ppath->path,iface,rv);
+					}
 				}
 			}
 #else
@@ -758,8 +817,9 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 				/* Detatch the existing interface. */
 				if (p->uflags & icomuf_detach) {
 					usb_detach_kernel_driver_np(p->usbh, iface);
-					if ((rv = usb_claim_interface(p->usbh, iface)) < 0)
+					if ((rv = usb_claim_interface(p->usbh, iface)) < 0) {
 						error("Claiming USB port '%s' interface %d failed with %d",p->ppath->path,iface,rv);
+					}
 				}
 #else
 				error("Claiming USB port '%s' interface %d failed with %d",p->ppath->path,iface,rv);
@@ -789,6 +849,27 @@ int retries			/* > 0 if we should retry set_configuration (100msec) */
 #endif
 //printf("~1 %d: endpoint addr %02x pktsze %d, type %d\n",i,ad,ifd->endpoint[i].wMaxPacketSize,p->EPINFO(ad).type);
 			}
+
+#ifdef NEVER
+			/* Get the serial number */
+			{
+				int rv;
+				struct usb_device_descriptor descriptor;
+
+				if (p->debug) fprintf(stderr,"About to get device serial number\n");
+#ifdef USE_LIBUSB1
+				if ((rv = libusb_get_device_descriptor(p->usbd, &descriptor)) != LIBUSB_SUCCESS)
+					error("get_device_descriptor failed with %d USB port '%s'",rv,p->ppath->path);
+#else
+				descriptor = dev->descriptor;	/* Copy */
+#endif
+				if ((rv = libusb_get_string_descriptor_ascii(p->usbh, descriptor.iSerialNumber, p->serialno, 32)) <= 0) {
+					if (p->debug) fprintf(stderr,"Failed to get device serial number %d\n",rv);
+					p->serialno[0] = '\000';
+				}
+				if (p->debug) fprintf(stderr,"Device serial number = '%s'\n",p->serialno);
+			}
+#endif /* NEVER */
 		}
 
 		/* Set "serial" coms values */
@@ -1168,6 +1249,7 @@ icoms_usb_read_th(icoms *p,
 
 	/* Bug workaround - on some OS's for some devices */
 	if (p->uflags & icomuf_resetep_before_read) {
+		msec_sleep(1);		/* Let device recover ? */
 		p->usb_resetep(p, ep);
 		msec_sleep(1);		/* Let device recover (ie. Spyder 3) */
 	}
@@ -1362,7 +1444,8 @@ icoms_usb_write(
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - */
-/* Cabcel i/o in another thread */
+/* Cancel i/o in another thread */
+/* NOTE this should reall be protected by a lock. */
 int icoms_usb_cancel_io(
 	icoms *p,
 	void *hcancel
@@ -1372,7 +1455,9 @@ int icoms_usb_cancel_io(
 	if (hcancel != NULL)
 		rv = libusb_cancel_transfer((struct libusb_transfer *)hcancel);
 #else
+	msec_sleep(1);		/* Let device recover ? */
 	rv = usb_resetep(p->usbh, (int)hcancel);	/* Not reliable ? */
+	msec_sleep(1);		/* Let device recover ? */
 #endif
 
 	if (rv == 0)
@@ -1382,7 +1467,7 @@ int icoms_usb_cancel_io(
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - */
-/* Reset and enp point data toggle to 0 */
+/* Reset and end point data toggle to 0 */
 int icoms_usb_resetep(
 	icoms *p,
 	int ep					/* End point address */
@@ -1488,7 +1573,8 @@ int    config,			/* Configuration */
 int    wr_ep,			/* "Serial" Write end point */
 int    rd_ep,			/* "Serial" Read end point */
 icomuflags usbflags,	/* Any special handling flags */
-int retries				/* > 0 if we should retry set_configuration (100msec) */ 
+int retries,			/* > 0 if we should retry set_configuration (100msec) */ 
+char **pnames			/* List of process names to try and kill before opening */
 ) {
 	if (p->debug) fprintf(stderr,"icoms: About to set usb port characteristics\n");
 
@@ -1497,7 +1583,7 @@ int retries				/* > 0 if we should retry set_configuration (100msec) */
 
 	if (p->is_usb_portno(p, port) != instUnknown) {
 
-		usb_open_port(p, port, config, wr_ep, rd_ep, usbflags, retries);
+		usb_open_port(p, port, config, wr_ep, rd_ep, usbflags, retries, pnames);
 
 		p->write = icoms_usb_ser_write;
 		p->read = icoms_usb_ser_read;

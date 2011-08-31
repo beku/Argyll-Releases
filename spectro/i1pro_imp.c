@@ -10,8 +10,8 @@
  * Copyright 2006 - 2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* 
@@ -57,10 +57,17 @@
 #include <time.h>
 #include <stdarg.h>
 #include <math.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
 #include "rspl.h"
+#else /* SALONEINSTLIB */
+#include <fcntl.h>
+#include "sa_config.h"
+#include "numsup.h"
+#include "rspl1.h"
+#endif /* SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -75,7 +82,7 @@
 #define ENABLE_NONVCAL	/* Enable saving calibration state between program runs in a file */
 #define ENABLE_NONLINCOR	/* Enable non-linear correction */
 #define CALTOUT (24 * 60 * 60)	/* Calibration timeout in seconds */
-#define MAXSCANTIME 15.0	/* MAximum scan time in seconds */
+#define MAXSCANTIME 15.0	/* Maximum scan time in seconds */
 #define SW_THREAD_TIMEOUT	(10 * 60.0) 	/* Switch read thread timeout */
 
 #define SINGLE_READ		/* Use a single USB read for scan to eliminate latency issues. */
@@ -118,6 +125,7 @@
 #define HIGHRES_SHORT 350
 #define HIGHRES_LONG  740
 #define HIGHRES_WIDTH  (10.0/3.0) /* (The 3.3333 spacing and lanczos2 seems a good combination) */
+#define HIGHRES_REF_MIN 375.0	  /* Too much stray light below this in reflective mode */
 
 
 #include "i1pro.h"
@@ -427,13 +435,13 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 			return I1PRO_HW_CALIBINFO;
 		if (m->nwav1 != 36)
 			return I1PRO_HW_CALIBINFO;
-		m->wl_short1 = 380.0;
+		m->wl_short1 = 380.0;		/* Normal res. range */
 		m->wl_long1 = 730.0;
 
 		/* Fill this in here too */
 		m->wl_short2 = HIGHRES_SHORT;
 		m->wl_long2 = HIGHRES_LONG;
-		m->nwav2 = (int)((m->wl_long2-m->wl_short2)/HIGHRES_WIDTH) + 1;	
+		m->nwav2 = (int)((m->wl_long2-m->wl_short2)/HIGHRES_WIDTH + 0.5) + 1;	
 
 		/* Default to standard resolution */
 		m->nwav = m->nwav1;
@@ -590,7 +598,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 			s = &m->ms[i];
 
 			/* Default to an emissive configuration */
-			s->targoscale = 1.0;	/* No optimised sensor scaling */
+			s->targoscale = 1.0;	/* Default full scale */
 			s->gainmode = 0;		/* Normal gain mode */
 
 			s->inttime = 0.5;		/* Integration time */
@@ -628,6 +636,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 			s = &m->ms[i];
 			switch(i) {
 				case i1p_refl_spot:
+					s->targoscale = 1.0;		/* Optimised sensor scaling to full */
 					s->reflective = 1;
 					s->adaptive = 1;
 					s->inttime = 0.02366;		/* Should get this from the log ?? */ 
@@ -653,7 +662,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->wreadtime = 0.5;
 #endif
 					s->maxscantime = 0.0;
-					s->min_wl = 375.0;			/* Too much stray light below this */
+					s->min_wl = HIGHRES_REF_MIN;/* Too much stray light below this */
 												/* given low illumination < 375nm */
 					break;
 				case i1p_refl_scan:
@@ -675,7 +684,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->dreadtime = 0.10;
 					s->wreadtime = 0.10;
 					s->maxscantime = MAXSCANTIME;
-					s->min_wl = 375.0;			/* Too much stray light below this */
+					s->min_wl = HIGHRES_REF_MIN;	/* Too much stray light below this */
 					break;
 
 				case i1p_disp_spot:				/* Same as emissive spot, but not adaptive */
@@ -702,6 +711,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->maxscantime = 0.0;
 					break;
 				case i1p_emiss_spot:
+					s->targoscale = 0.90;		/* Allow extra 10% margine for drift */
 					for (j = 0; j < m->nwav1; j++)
 						s->cal_factor1[j] = EMIS_SCALE_FACTOR * m->emis_coef1[j];
 					s->cal_valid = 1;
@@ -814,7 +824,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->dreadtime = 0.0;
 					s->wreadtime = 1.0;
 					s->maxscantime = 0.0;
-					s->min_wl = 375.0;			/* Too much stray light below this */
+					s->min_wl = HIGHRES_REF_MIN;	/* Too much stray light below this */
 					break;
 				case i1p_trans_scan:
 					s->trans = 1;
@@ -835,7 +845,7 @@ i1pro_code i1pro_imp_init(i1pro *p) {
 					s->dreadtime = 0.00;
 					s->wreadtime = 0.10;
 					s->maxscantime = MAXSCANTIME;
-					s->min_wl = 375.0;			/* Too much stray light below this */
+					s->min_wl = HIGHRES_REF_MIN;	/* Too much stray light below this */
 					break;
 			}
 		}
@@ -2337,31 +2347,37 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 	int i, j;
 	char nmode[10];
 	char cal_name[40+1];		/* Name */
-	char *cal_path;
+	char **cal_paths = NULL;
+	int no_paths = 0;
 	FILE *fp;
 	i1pnonv x;
 	int ss;
 	int argyllversion = ARGYLL_VERSION;
 
 	strcpy(nmode, "w");
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
 #if defined(O_BINARY) || defined(_O_BINARY)
 	strcat(nmode, "b");
 #endif
 
 	/* Create the file name */
 	sprintf(cal_name, "color/.i1p_%d.cal", m->serno);
-	if ((cal_path = xdg_bds(NULL, xdg_cache, xdg_write, xdg_user, cal_name)) == NULL)
+	if ((no_paths = xdg_bds(NULL, &cal_paths, xdg_cache, xdg_write, xdg_user, cal_name)) < 1)
 		return I1PRO_INT_CAL_SAVE;
 
-	DBG((dbgo,"i1pro_save_calibration saving to file '%s'\n",cal_path));
+	if (p->debug > 1)
+		fprintf(stderr,"i1pro_save_calibration saving to file '%s'\n",cal_paths[0]);
 
-	if (create_parent_directories(cal_path)) {
+	if (create_parent_directories(cal_paths[0])) {
+		xdg_free(cal_paths, no_paths);
 		return I1PRO_INT_CAL_SAVE;
 	}
 
-	if ((fp = fopen(cal_path, nmode)) == NULL) {
+	if ((fp = fopen(cal_paths[0], nmode)) == NULL) {
 		DBG((dbgo,"i1pro_save_calibration failed to open file for writing\n"));
-		free(cal_path);
+		xdg_free(cal_paths, no_paths);
 		return I1PRO_INT_CAL_SAVE;
 	}
 	
@@ -2431,12 +2447,12 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 		DBG((dbgo,"Writing calibration file failed\n"))
 		return I1PRO_INT_CAL_SAVE;
 		fclose(fp);
-		delete_file(cal_path);
+		delete_file(cal_paths[0]);
 	} else {
 		fclose(fp);
 		DBG((dbgo,"Writing calibration file done\n"))
 	}
-	free(cal_path);
+	xdg_free(cal_paths, no_paths);
 
 	return ev;
 }
@@ -2449,26 +2465,31 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 	int i, j;
 	char nmode[10];
 	char cal_name[40+1];		/* Name */
-	char *cal_path;
+	char **cal_paths = NULL;
+	int no_paths = 0;
 	FILE *fp;
 	i1pnonv x;
 	int argyllversion;
 	int ss, serno, nraw, nwav1, nwav2, chsum1, chsum2;
 
 	strcpy(nmode, "r");
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
 #if defined(O_BINARY) || defined(_O_BINARY)
 	strcat(nmode, "b");
 #endif
 	/* Create the file name */
 	sprintf(cal_name, "color/.i1p_%d.cal", m->serno);
-	if ((cal_path = xdg_bds(NULL, xdg_cache, xdg_read, xdg_user, cal_name)) == NULL)
+	if ((no_paths = xdg_bds(NULL, &cal_paths, xdg_cache, xdg_read, xdg_user, cal_name)) < 1)
 		return I1PRO_INT_CAL_RESTORE;
 
-	DBG((dbgo,"i1pro_restore_calibration restoring from file '%s'\n",cal_path));
+	if (p->debug > 1)
+		fprintf(stderr,"i1pro_restore_calibration restoring from file '%s'\n",cal_paths[0]);
 
-	if ((fp = fopen(cal_path, nmode)) == NULL) {
+	if ((fp = fopen(cal_paths[0], nmode)) == NULL) {
 		DBG((dbgo,"i1pro_restore_calibration failed to open file for reading\n"));
-		free(cal_path);
+		xdg_free(cal_paths, no_paths);
 		return I1PRO_INT_CAL_RESTORE;
 	}
 
@@ -2724,7 +2745,7 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
  reserr:;
 
 	fclose(fp);
-	free(cal_path);
+	xdg_free(cal_paths, no_paths);
 
 	return ev;
 }
@@ -6315,24 +6336,30 @@ i1pro_code i1pro_conv2XYZ(
 	double wl_short = m->wl_short;	/* Starting wavelegth */
 	double sms;			/* Weighting */
 
-	if (s->emiss) {
+	if (s->emiss)
 		conv = new_xsp2cie(icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigXYZData);
-	} else
+	else
 		conv = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigXYZData);
 	if (conv == NULL)
 		return I1PRO_INT_CIECONVFAIL;
 
 	/* Don't report any wavelengths below the minimum for this mode */
-	if (s->min_wl > wl_short) {
+	if ((s->min_wl-1e-3) > wl_short) {
 		double wl;
 		for (j = 0; j < m->nwav; j++) {
 			wl = XSPECT_WL(m->wl_short, m->wl_long, m->nwav, j);
-			if (wl >= s->min_wl)
+			if (wl >= (s->min_wl-1e-3))
 				break;
 		}
 		six = j;
 		wl_short = wl;
 		nwl -= six;
+	}
+
+	if (p->debug >= 1) {
+		fprintf(stderr,"i1pro_conv2XYZ got wl_short %f, wl_long %f, nwav %d, min_wl %f\n",
+		                m->wl_short, m->wl_long, m->nwav, s->min_wl);
+		fprintf(stderr,"      after skip got wl_short %f, nwl = %d\n", wl_short, nwl);
 	}
 
 	for (sms = 0.0, i = 1; i < 21; i++)

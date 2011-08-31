@@ -47,7 +47,7 @@
 
 void usage(void) {
 	fprintf(stderr,"Convert a TIFF file to monochrome using an ICC device profile, V%s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: greytiff [-v level] profile.icm infile.tif outfile.tif\n");
 	fprintf(stderr," -v            Verbose\n");
 	fprintf(stderr," -p            Use slow precise correction\n");

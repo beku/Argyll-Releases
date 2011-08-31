@@ -30,19 +30,22 @@ static void add_marker(vrml *s, double pos[3], double col[3], double rad) {
 	if (rad <= 0.0)
 		rad = 1.0;
 
-	if (col == NULL)
-		s->Lab2RGB(s, rgb, pos);
-	else {
+	if (col == NULL) {
+		if (s->isxyz)
+			s->XYZ2RGB(s, rgb, pos);
+		else
+			s->Lab2RGB(s, rgb, pos);
+	} else {
 		rgb[0] = col[0];
 		rgb[1] = col[1];
 		rgb[2] = col[2];
 	}
 
 	fprintf(s->fp,"    # Shere\n");
-	fprintf(s->fp,"    Transform { translation %f %f %f\n", pos[1], pos[2], pos[0]-s->lcent);
+	fprintf(s->fp,"    Transform { translation %f %f %f\n", s->scale * pos[1], s->scale * pos[2], s->scale * pos[0] - s->off);
 	fprintf(s->fp,"      children [\n");
 	fprintf(s->fp,"        Shape{\n");
-	fprintf(s->fp,"          geometry Sphere { radius %f}\n", rad);
+	fprintf(s->fp,"          geometry Sphere { radius %f}\n", s->scale * rad);
 	fprintf(s->fp,"          appearance Appearance { material Material ");
 	fprintf(s->fp,"{ diffuseColor %f %f %f} }\n", rgb[0], rgb[1], rgb[2]);
 	fprintf(s->fp,"        }\n");
@@ -56,8 +59,8 @@ static void add_cone(vrml *s, double pp0[3], double pp1[3], double col[3], doubl
 	double rgb[3];
 	double p0[3], p1[3];
 
-	icmAry2Ary(p0, pp0);
-	icmAry2Ary(p1, pp1);
+	icmScale3(p0, pp0, s->scale);
+	icmScale3(p1, pp1, s->scale);
 
 //printf("~1 cone %f %f %f -> %f %f %f rad %f\n", p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], rad);
 
@@ -67,15 +70,18 @@ static void add_cone(vrml *s, double pp0[3], double pp1[3], double col[3], doubl
 	if (col == NULL) {
 		icmAdd3(rgb, p1, p0);
 		icmScale3(rgb, rgb, 0.5);		/* Compute half way value */
-		s->Lab2RGB(s, rgb, rgb);
+		if (s->isxyz)
+			s->XYZ2RGB(s, rgb, rgb);
+		else
+			s->Lab2RGB(s, rgb, rgb);
 	} else {
 		rgb[0] = col[0];
 		rgb[1] = col[1];
 		rgb[2] = col[2];
 	}
 
-	p0[0] -= s->lcent;
-	p1[0] -= s->lcent;
+	p0[0] -= s->off;
+	p1[0] -= s->off;
 
 	{
 		double base[3] = { 0.0, 0.0, 1.0 };		/* Default orientation of cone is b axis */
@@ -142,7 +148,7 @@ static void add_cone(vrml *s, double pp0[3], double pp1[3], double col[3], doubl
 		fprintf(s->fp,"      translation %f %f %f\n",loc[1], loc[2], loc[0]);
 		fprintf(s->fp,"      children [\n");
 		fprintf(s->fp,"		Shape { \n");
-		fprintf(s->fp,"		 geometry Cone { bottomRadius %f height %f }\n",rad,len);
+		fprintf(s->fp,"		 geometry Cone { bottomRadius %f height %f }\n",s->scale * rad,len);
 		fprintf(s->fp,"        appearance Appearance { material Material { diffuseColor %f %f %f } }\n",rgb[0],rgb[1],rgb[2]);
 		fprintf(s->fp,"		} \n");
 		fprintf(s->fp,"      ]\n");
@@ -159,19 +165,22 @@ static void add_text(vrml *s, char *text, double p[3], double col[3], double siz
 		size = 1.0;
 
 	if (col == NULL) {
-		s->Lab2RGB(s, rgb, p);
+		if (s->isxyz)
+			s->XYZ2RGB(s, rgb, p);
+		else
+			s->Lab2RGB(s, rgb, p);
 	} else {
 		rgb[0] = col[0];
 		rgb[1] = col[1];
 		rgb[2] = col[2];
 	}
 	fprintf(s->fp,"    # Text\n");
-	fprintf(s->fp,"    Transform { translation %f %f %f\n", p[1], p[2], p[0]-s->lcent);
+	fprintf(s->fp,"    Transform { translation %f %f %f\n", s->scale * p[1], s->scale * p[2], s->scale * p[0] - s->off);
 	fprintf(s->fp,"      children [\n");
 	fprintf(s->fp,"        Shape{\n");
 	fprintf(s->fp,"          geometry Text { string [\"%s\"]\n",text);
 	fprintf(s->fp,"            fontStyle FontStyle { family \"SANS\" style \"BOLD\" size %f }\n",
-	                                                                                      size);
+	                                                                                      s->scale * size);
 	fprintf(s->fp,"                        }\n");
 	fprintf(s->fp,"          appearance Appearance { material Material ");
 	fprintf(s->fp,"{ diffuseColor %f %f %f} }\n", rgb[0], rgb[1], rgb[2]);
@@ -254,8 +263,10 @@ static void make_lines(vrml *s, int set, int ppset) {
 	fprintf(s->fp,"          point [\n");
 
 	for (i = 0; i < s->set[set].npoints; i++) {
-		fprintf(s->fp,"            %f %f %f,\n",s->set[set].pary[i].pp[1], s->set[set].pary[i].pp[2],
-		                            s->set[set].pary[i].pp[0] - s->lcent);
+		fprintf(s->fp,"            %f %f %f,\n",
+		              s->scale * s->set[set].pary[i].pp[1],
+		              s->scale * s->set[set].pary[i].pp[2],
+		              s->scale * s->set[set].pary[i].pp[0] - s->off);
 	}
 	
 	fprintf(s->fp,"          ]\n");
@@ -285,7 +296,10 @@ static void make_lines(vrml *s, int set, int ppset) {
 			Lab[0] = s->set[set].pary[i].pp[0];
 			Lab[1] = s->set[set].pary[i].pp[1];
 			Lab[2] = s->set[set].pary[i].pp[2];
-			s->Lab2RGB(s, rgb, Lab);
+			if (s->isxyz)
+				s->XYZ2RGB(s, rgb, Lab);
+			else
+				s->Lab2RGB(s, rgb, Lab);
 			fprintf(s->fp,"            %f %f %f,\n", rgb[0], rgb[1], rgb[2]);
 		} else {
 			fprintf(s->fp,"            %f %f %f,\n", s->set[set].pary[i].cc[0], s->set[set].pary[i].cc[1], s->set[set].pary[i].cc[2]);
@@ -331,8 +345,10 @@ double cc[3]	/* Surface color, cc == NULL or cc[0] < 0.0 for natural color */
 	/* Spit out the point values, in order. */
 	/* Note that a->x, b->y, L->z */
 	for (i = 0; i < s->set[set].npoints; i++) {
-		fprintf(s->fp,"                %f %f %f,\n",s->set[set].pary[i].pp[1], s->set[set].pary[i].pp[2],
-		                            s->set[set].pary[i].pp[0] - s->lcent);
+		fprintf(s->fp,"                %f %f %f,\n",
+		              s->scale * s->set[set].pary[i].pp[1], 
+		              s->scale * s->set[set].pary[i].pp[2],
+		              s->scale * s->set[set].pary[i].pp[0] - s->off);
 	}
 	fprintf(s->fp,"              ]\n");
 	fprintf(s->fp,"            }\n");
@@ -359,7 +375,10 @@ double cc[3]	/* Surface color, cc == NULL or cc[0] < 0.0 for natural color */
 			fprintf(s->fp,"              %f %f %f,\n",s->set[set].pary[i].cc[0], s->set[set].pary[i].cc[1], s->set[set].pary[i].cc[2]);
 		} else {
 			if (cc == NULL || cc[0] < 0.0) {
-				s->Lab2RGB(s, rgb, s->set[set].pary[i].pp);
+				if (s->isxyz)
+					s->XYZ2RGB(s, rgb, s->set[set].pary[i].pp);
+				else
+					s->Lab2RGB(s, rgb, s->set[set].pary[i].pp);
 				fprintf(s->fp,"              %f %f %f,\n", rgb[0], rgb[1], rgb[2]);
 			} else {
 				fprintf(s->fp,"              %f %f %f,\n", cc[0], cc[1], cc[2]);
@@ -467,7 +486,7 @@ double cc[3]	/* Surface color, cc[0] < 0.0 for natural color */
 		double out[3];
 
 		ix = g->getvert(g, NULL, out, ix);
-		fprintf(s->fp,"              %f %f %f,\n",out[1], out[2], out[0]-s->lcent);
+		fprintf(s->fp,"              %f %f %f,\n",s->scale * out[1], s->scale * out[2], s->scale * out[0] - s->off);
 	}
 	fprintf(s->fp,"              ]\n");
 	fprintf(s->fp,"            }\n");
@@ -501,7 +520,10 @@ double cc[3]	/* Surface color, cc[0] < 0.0 for natural color */
 		ix = g->getvert(g, NULL, out, ix);
 
 		if (cc == NULL || cc[0] < 0.0) {
-			s->Lab2RGB(s, rgb, out);
+			if (s->isxyz)
+				s->XYZ2RGB(s, rgb, out);
+			else
+				s->Lab2RGB(s, rgb, out);
 			fprintf(s->fp,"                %f %f %f,\n", rgb[0], rgb[1], rgb[2]);
 		} else {
 			fprintf(s->fp,"                %f %f %f,\n", cc[0], cc[1], cc[2]);
@@ -567,14 +589,17 @@ double cc[3]	/* Surface color, cc[0] < 0.0 for natural color, NULL for default *
 		if (cc == NULL) {
 			cv = ccolors[i];
 		} else if (cc[0] < 0.0) {
-			s->Lab2RGB(s, rgb, cusps[i]);
+			if (s->isxyz)
+				s->XYZ2RGB(s, rgb, cusps[i]);
+			else
+				s->Lab2RGB(s, rgb, cusps[i]);
 			cv = rgb;
 		} else {
 			cv = cc;
 		}
 		fprintf(s->fp,"\n");
 		fprintf(s->fp,"    Transform {\n");
-		fprintf(s->fp,"      translation %f %f %f\n",cusps[i][1], cusps[i][2], cusps[i][0]-s->lcent);
+		fprintf(s->fp,"      translation %f %f %f\n",s->scale * cusps[i][1], s->scale * cusps[i][2], s->scale * cusps[i][0] - s->off);
 		fprintf(s->fp,"      children [\n");
 		fprintf(s->fp,"		   Shape { \n");
 		fprintf(s->fp,"		    geometry Sphere { radius 2.0 }\n");
@@ -681,26 +706,61 @@ static void Lab2RGB(vrml *s, double *out, double *in) {
 	out[2] = B;
 }
 
+/* Helper :- convert an XYZ value to RGB for display purposes */
+static void XYZ2RGB(vrml *s, double *out, double *in) {
+	double x = in[0], y = in[1], z = in[2];
+	double R, G, B;
+
+	/* Now convert to sRGB values */
+	R = x * 3.2410  + y * -1.5374 + z * -0.4986;
+	G = x * -0.9692 + y * 1.8760  + z * 0.0416;
+	B = x * 0.0556  + y * -0.2040 + z * 1.0570;
+
+	if (R < 0.0)
+		R = 0.0;
+	else if (R > 1.0)
+		R = 1.0;
+
+	if (G < 0.0)
+		G = 0.0;
+	else if (G > 1.0)
+		G = 1.0;
+
+	if (B < 0.0)
+		B = 0.0;
+	else if (B > 1.0)
+		B = 1.0;
+
+	R = pow(R, 1.0/2.2);
+	G = pow(G, 1.0/2.2);
+	B = pow(B, 1.0/2.2);
+
+	/* For a black background: */
+//	R = R * 0.85 + 0.15;
+//	G = G * 0.85 + 0.15;
+//	B = B * 0.85 + 0.15;
+
+	/* For a white background: */
+	R = R * 0.70 + 0.05;
+	G = G * 0.70 + 0.05;
+	B = B * 0.70 + 0.05;
+
+	out[0] = R;
+	out[1] = G;
+	out[2] = B;
+}
+
 static void del_vrml(vrml *s);
 
 /* Constructor */
-vrml *new_vrml(char *name, int doaxes) {
+vrml *new_vrml(
+char *name,
+int doaxes,
+int isxyz
+) {
 	vrml *s;
-	double gamut_lcent = 50;
 
-	/* Axes definition */
-	struct {
-		double x, y, z;
-		double wx, wy, wz;
-		double r, g, b;
-	} axes[5] = {
-		{ 0, 0,  50-gamut_lcent,  2, 2, 100,  .7, .7, .7 },	/* L axis */
-		{ 50, 0,  0-gamut_lcent,  100, 2, 2,   1,  0,  0 },	/* +a (red) axis */
-		{ 0, -50, 0-gamut_lcent,  2, 100, 2,   0,  0,  1 },	/* -b (blue) axis */
-		{ -50, 0, 0-gamut_lcent,  100, 2, 2,   0,  1,  0 },	/* -a (green) axis */
-		{ 0,  50, 0-gamut_lcent,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
-	};
-	int i;
+	int i, j;
 
 	if ((s = (vrml *)calloc(1, sizeof(vrml))) == NULL) {
 		return NULL;
@@ -723,8 +783,17 @@ vrml *new_vrml(char *name, int doaxes) {
 	s->add_cusps           = add_cusps;
 	s->clear               = clear;
 	s->Lab2RGB             = Lab2RGB;
+	s->XYZ2RGB             = XYZ2RGB;
 
-	s->lcent = gamut_lcent;
+	s->isxyz = isxyz;
+
+	if (s->isxyz) {
+		s->scale = 100.0;
+		s->off = 50.0;
+	} else {
+		s->scale = 1.0;
+		s->off = 50.0;
+	}
 
 	if ((s->fp = fopen(name,"w")) == NULL) {
 		free(s);
@@ -752,19 +821,82 @@ vrml *new_vrml(char *name, int doaxes) {
 	fprintf(s->fp,"    }\n");
 	fprintf(s->fp,"\n");
 	if (doaxes != 0) {
-		fprintf(s->fp,"    # Lab axes as boxes:\n");
-		for (i = 0; i < 5; i++) {
-			fprintf(s->fp,"    Transform { translation %f %f %f\n", axes[i].x, axes[i].y, axes[i].z);
+		/* Axes definition */
+		struct {
+			char *label;
+			double x, y, z;			/* == a,b,L or Y,Z,X */
+			double wx, wy, wz;
+			double r, g, b;
+		} axes[2][6] = {
+			{	/* Box coords are center and size: */
+				{ "L",  0, 0,   50,  2, 2, 100,  .7, .7, .7 },	/* L axis */
+				{ "+a", 50, 0,  0,  100, 2, 2,   1,  0,  0 },	/* +a (red) axis */
+				{ "-b", 0, -50, 0,  2, 100, 2,   0,  0,  1 },	/* -b (blue) axis */
+				{ "-a", -50, 0, 0,  100, 2, 2,   0,  1,  0 },	/* -a (green) axis */
+				{ "+b", 0,  50, 0,  2, 100, 2,   1,  1,  0 },	/* +b (yellow) axis */
+				{ NULL },
+			}, {
+				{ "X",  0,  0, 50,  2, 2, 100,  .7, .7, .7 },	/* X axis */
+				{ "Y", 50,  0,  0,  100, 2, 2,   1,  0,  0 },	/* Y (red) axis */
+				{ "Z",  0, 50,  0,  2, 100, 2,   0,  0,  1 },	/* Z (blue) axis */
+				{ NULL },
+			}
+		};
+
+		if (s->isxyz) {
+			j = 1;
+			fprintf(s->fp,"    # XYZ axes as boxes:\n");
+		} else {
+			j = 0;
+			fprintf(s->fp,"    # Lab axes as boxes:\n");
+		}
+		for (i = 0; ; i++) {
+			double toff[3] = { -3.0, -2.0, 0 };
+
+			if (axes[j][i].label == NULL)
+				break;
+
+			fprintf(s->fp,"    Transform { translation %f %f %f\n", axes[j][i].x, axes[j][i].y, axes[j][i].z - s->off);
 			fprintf(s->fp,"      children [\n");
 			fprintf(s->fp,"        Shape {\n");
 			fprintf(s->fp,"          geometry Box { size %f %f %f }\n",
-			                             axes[i].wx, axes[i].wy, axes[i].wz);
+			                             axes[j][i].wx, axes[j][i].wy, axes[j][i].wz);
 			fprintf(s->fp,"          appearance Appearance {");
-			fprintf(s->fp,"            material Material { diffuseColor %f %f %f }\n", axes[i].r, axes[i].g, axes[i].b);
+			fprintf(s->fp,"            material Material { diffuseColor %f %f %f }\n", axes[j][i].r, axes[0][i].g, axes[0][i].b);
 			fprintf(s->fp,"          }\n");
 			fprintf(s->fp,"        }\n");
 			fprintf(s->fp,"      ]\n");
 			fprintf(s->fp,"    }\n");
+
+			if (fabs(axes[j][i].x) > fabs(axes[j][i].y) && fabs(axes[j][i].x) > fabs(axes[j][i].z)) {
+				if (axes[j][i].x > 0.0)
+					toff[0] += axes[j][i].x + 0.5 * axes[j][i].wx + 5.0;
+				else
+					toff[0] += axes[j][i].x - 0.5 * axes[j][i].wx - 5.0;
+			} else if (fabs(axes[j][i].y) > fabs(axes[j][i].x) && fabs(axes[j][i].y) > fabs(axes[j][i].z)) {
+				if (axes[j][i].y > 0.0)
+					toff[1] += axes[j][i].y + 0.5 * axes[j][i].wy + 5.0;
+				else
+					toff[1] += axes[j][i].y - 0.5 * axes[j][i].wy - 5.0;
+			} else { 
+				if (axes[j][i].z > 0.0)
+					toff[2] += axes[j][i].z + 0.5 * axes[j][i].wz + 5.0;
+				else
+					toff[2] += axes[j][i].z - 0.5 * axes[j][i].wz - 5.0;
+			}
+
+			fprintf(s->fp,"Transform { translation %f %f %f\n", toff[0], toff[1], toff[2] - s->off);
+			fprintf(s->fp,"\tchildren [\n");
+			fprintf(s->fp,"\t\tShape {\n");
+			fprintf(s->fp,"\t\t\tgeometry Text { string [\"%s\"]\n",axes[j][i].label);
+			fprintf(s->fp,"\t\t\t\tfontStyle FontStyle { family \"SANS\" style \"BOLD\" size %f }\n",
+			                                            10.0);
+			fprintf(s->fp,"\t\t\t\t}\n");
+			fprintf(s->fp,"\t\t\tappearance Appearance { material Material ");
+			fprintf(s->fp,"{ diffuseColor %f %f %f} }\n", axes[j][i].r, axes[j][i].g, axes[j][i].b);
+			fprintf(s->fp,"\t\t}\n");
+			fprintf(s->fp,"\t]\n");
+			fprintf(s->fp,"}\n");
 		}
 		fprintf(s->fp,"\n");
 	}

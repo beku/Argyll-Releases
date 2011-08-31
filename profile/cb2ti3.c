@@ -32,15 +32,14 @@
 #include <stdarg.h>
 #include "copyright.h"
 #include "aconfig.h"
+#include "numlib.h"
 #include "cgats.h"
-
-void error(char *fmt, ...);
 
 void
 usage(void) {
 	fprintf(stderr,"Convert Colorblind raw device profile data to Argyll data, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	fprintf(stderr,"usage: cb2gcats [-v] [-l limit] infile outfile\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
+	fprintf(stderr,"usage: cb2ti3 [-v] [-l limit] infile outfile\n");
 	fprintf(stderr," -v              Verbose mode\n");
 	fprintf(stderr," -l limit        Set inklimit in .ti3 file\n");
 	fprintf(stderr," infile	         Base name for input.CMY and input.nCIE file\n");
@@ -65,6 +64,8 @@ int main(int argc, char *argv[])
 	struct tm *tsp = localtime(&clk);
 	char *atm = asctime(tsp); /* Ascii time */
 	int npat = 0;		/* Number of patches */
+
+	error_program = "cb2ti3";
 
 	if (argc <= 1)
 		usage();
@@ -237,26 +238,6 @@ int main(int argc, char *argv[])
 	ocg->del(ocg);
 
 	return 0;
-}
-
-/******************************************************************/
-/* Error/debug output routines */
-/******************************************************************/
-
-/* Basic printf type error() and warning() routines */
-
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"cb2cgats: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	fflush(stdout);
-	exit (-1);
 }
 
 

@@ -14,13 +14,14 @@ Samples = example.sp example121.sp 3dap5k.sp GTIPlus.sp Office.sp Trulux.sp Trul
 		D50_1.5.sp D50_1.7.sp D50_2.0.sp D50_2.5.sp D50_3.0.sp CIE_C.sp ;
 
 #Install
-InstallBin ../bin : $(Executables) ;
-InstallFile ../ref : $(Samples) ;
-#InstallFile ../h : $(Headers) ;
-#InstallLib ../lib : $(Libraries) ;
+InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
+InstallFile $(DESTDIR)$(PREFIX)/$(REFSUBDIR) : $(Samples) ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
+#InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
 
 HDRS = ../h ../icc ../cgats ../rspl
-       ../numlib ../gamut ../xicc ../spectro ../plot ;
+       ../numlib ../gamut ../xicc ../spectro
+       ../target ../plot ;
 
 # PROF library
 Library libprof : profin.c profout.c ;
@@ -67,7 +68,7 @@ Main verify : verify.c ;
 LINKLIBS = libprof ../gamut/libgammap $(LINKLIBS) $(TIFFLIB) ;
 
 # Full profile generator
-Main colprof : colprof.c : : : $(TIFFINC) ;
+Main colprof : colprof.c : : : $(TIFFINC) : : ;
 
 # Print calibration
 Main printcal : printcal.c : : : $(TIFFINC) ;

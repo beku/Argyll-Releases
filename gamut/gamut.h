@@ -213,7 +213,7 @@ struct _gamut {
 	int read_inited;	/* Flag set if gamut was initialised from a read */
 	int lu_inited;		/* Flag set if radial surface lookup is inited */
 	int ne_inited;		/* Flag set if nearest lookup is inited */
-	int cu_inited;		/* Flag set if cusp values inited */
+	int cu_inited;		/* Flag set if cusp values inited and trustworthy */
 	int nofilter;		/* Flag, skip segmented maxima filtering */
 	int no2pass;		/* Flag, do only one pass of convex hull */
 	int doingfake;		/* Internal transient state */

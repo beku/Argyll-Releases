@@ -10,8 +10,8 @@
  * Copyright 2001 - 2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* 
@@ -34,11 +34,15 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#endif /* !SALONEINSTLIB */
+#include "numsup.h"
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -274,11 +278,35 @@ char *filtername) {		/* File containing compensating filter */
 
 /* Insert a colorimetric correction matrix in the instrument XYZ readings */
 /* This is only valid for colorimetric instruments. */
-/* To remove the matrix, pass NULL for the filter filename */
-inst_code col_cor_mat(
+/* To remove the matrix, pass NULL for the matrix */
+static inst_code col_cor_mat(
 struct _inst *p,
 double mtx[3][3]) {	/* XYZ matrix */
 	return inst_unsupported;
+}
+
+/* Use a Colorimeter Calibration Spectral Set to set the */
+/* instrumen calibration. */
+/* This is only valid for colorimetric instruments. */
+/* To set calibration back to default, pass NULL for ccss. */
+static inst_code col_cal_spec_set(
+inst *pp,
+icxObserverType obType,
+xspect custObserver[3],
+xspect *sets,
+int no_sets) {
+	return inst_unsupported;
+}
+
+/* Send a message to the user. */
+static inst_code message_user(struct _inst *p, char *fmt, ...) {
+	va_list args;
+
+	va_start(args, fmt);
+	vfprintf(stdout, fmt, args);
+	va_end(args);
+
+	return inst_ok;
 }
 
 /* Poll for a user abort, terminate, trigger or command. */
@@ -432,6 +460,8 @@ int verb			/* Verbosity flag */
 */
 	else if (itype == instI1Display)
 		p = (inst *)new_i1disp(icom, debug, verb);
+	else if (itype == instI1Disp3)
+		p = (inst *)new_i1d3(icom, debug, verb);
 	else if (itype == instI1Monitor)
 		p = (inst *)new_i1pro(icom, debug, verb);
 	else if (itype == instI1Pro)
@@ -502,6 +532,10 @@ int verb			/* Verbosity flag */
 		p->comp_filter = comp_filter;
 	if (p->col_cor_mat == NULL)
 		p->col_cor_mat = col_cor_mat;
+	if (p->col_cal_spec_set == NULL)
+		p->col_cal_spec_set = col_cal_spec_set;
+	if (p->message_user == NULL)
+		p->message_user = message_user;
 	if (p->poll_user == NULL)
 		p->poll_user = poll_user;
 	if (p->inst_interp_error == NULL)

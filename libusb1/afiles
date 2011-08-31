@@ -70,6 +70,9 @@ Spyd3_x64.cat
 i1Disp.cat
 i1Disp.inf
 i1Disp.sed
+i1D3.cat
+i1D3.inf
+i1D3.sed
 i1Disp_x64.cat
 i1Monitor.cat
 i1Monitor.inf
@@ -89,6 +92,7 @@ WinCoInstallers/x86/winusbcoinstaller2.dll
 autogen.sh
 configure.ac
 ddk_build.cmd
+libusb.h
 doc/doxygen.cfg.in
 doc/Makefile.am
 examples/lsusb_sources
@@ -111,7 +115,6 @@ libusb/descriptor.c
 libusb/descriptor.d
 libusb/io.c
 libusb/libusb-X.X.def
-libusb/libusb-X.X.dll.manifest
 libusb/libusb-X.X.rc
 libusb/libusb.h
 libusb/libusbi.h

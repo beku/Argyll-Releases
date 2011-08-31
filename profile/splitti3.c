@@ -21,6 +21,9 @@
 /*
  * TTBD:
 	
+	This doesn't pass calibration table information through.
+	(ie. should copy all tables after the first.)
+
  */
 
 #define DEBUG
@@ -45,7 +48,7 @@
 void
 usage(void) {
 	fprintf(stderr,"Split a .ti3 into two, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: splitcgats [-options] input.ti3 output1.ti3 output2.ti3\n");
 	fprintf(stderr," -v              Verbose - print each patch value\n");
 	fprintf(stderr," -n no           Put no sets in first file, and balance in second file.\n");
@@ -80,7 +83,7 @@ int main(int argc, char *argv[]) {
 
 	int i, j, n;
 
-	error_program = "spitcgats";
+	error_program = "splitti3";
 
 	if (argc <= 1)
 		usage();
@@ -226,7 +229,7 @@ int main(int argc, char *argv[]) {
 		int nchan;
 		char *bident;
 		int chix[ICX_MXINKS];	/* Device chanel indexes */
-		int pcsix[3];			/* Device chanel indexes */
+		int pcsix[3];			/* PCS chanel indexes */
 		int isin = 0;
 		int isadd = 0;
 		int isLab = 0;

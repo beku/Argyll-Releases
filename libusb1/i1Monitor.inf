@@ -165,6 +165,7 @@ libusb0.sys
 [libusb0_files_sys_x64]
 libusb0.sys,libusb0_x64.sys
 
+; For each one of these, there must be one for Services !!!
 [LIBUSB0_DEV]
 CopyFiles = Libusb0_files_sys, Libusb_files_dll
 
@@ -205,14 +206,9 @@ libusb0.sys,ptlibusb0.sys
 [ptlibusb0_files_sys_x64]
 libusb0.sys,ptlibusb0_x64.sys
 
+; For each one of these, there must be one for Services !!!
 [PTLIBUSB0_DEV]
 CopyFiles = ptlibusb0_files_sys, Libusb_files_dll
-
-;[PTLIBUSB0_DEV.NT]
-;CopyFiles = ptlibusb0_files_sys, Libusb_files_dll
-
-;[PTLIBUSB0_DEV.NTX86]
-;CopyFiles = ptlibusb0_files_sys, Libusb_files_dll
 
 [PTLIBUSB0_DEV.NTAMD64]
 CopyFiles = ptlibusb0_files_sys_x64, Libusb_files_dll_wow64, Libusb_files_dll_x64
@@ -246,15 +242,26 @@ ServiceBinary  = %12%\libusb0.sys
 
 ; ==== WinUSB Device driver with Coinstallers ====
 
+; For each one of these, there must be one for Services !!!
 [WINUSBCO_DEV]
 CopyFiles = Libusb_files_dll
 Include=winusb.inf
 Needs=WINUSB.NT
 
+[WINUSBCO_DEV.NTAMD64]
+CopyFiles = Libusb_files_dll_wow64, Libusb_files_dll_x64
+Include=winusb.inf
+Needs=WINUSB.NT
+
+
 [WINUSBCO_DEV.HW]
 AddReg = WinUSB_add_reg_hw
 
 [WINUSBCO_DEV.Services]
+Include=winusb.inf
+AddService=WinUSB,0x00000002,WinUSB_add_service
+
+[WINUSBCO_DEV.NTAMD64.Services]
 Include=winusb.inf
 AddService=WinUSB,0x00000002,WinUSB_add_service
 
@@ -272,16 +279,24 @@ HKR,,CoInstallers32,0x00010000,"WdfCoInstaller01009.dll,WdfCoInstaller","WinUSBC
 WinUSBCoInstaller2.dll
 WdfCoInstaller01009.dll
 
-
 ; ==== WinUSB Device driver (No Coinstallers) ====
 
+; For each one of these, there must be one for Services !!!
 [WINUSB_DEV]
 CopyFiles = Libusb_files_dll
+
+[WINUSB_DEV.NTAMD64]
+CopyFiles = Libusb_files_dll_wow64, Libusb_files_dll_x64
+
 
 [WINUSB_DEV.HW]
 AddReg = WinUSB_add_reg_hw
 
 [WINUSB_DEV.Services]
+Include=winusb.inf
+AddService=WinUSB,0x00000002,WinUSB_add_service
+
+[WINUSB_DEV.NTAMD64.Services]
 Include=winusb.inf
 AddService=WinUSB,0x00000002,WinUSB_add_service
 

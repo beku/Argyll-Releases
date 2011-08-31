@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
   <title>fakeread</title>
@@ -27,53 +27,69 @@ print/measure simulation.<br>
  style="font-family: monospace;">inoutfile</i><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; Verbose mode</span><br
+&nbsp;
+&nbsp; &nbsp; &nbsp; Verbose mode</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp; Lookup </span><a
- style="font-family: monospace;" href="File_Formats.html#MPP">MPP</a><span
+&nbsp;
+&nbsp; &nbsp; &nbsp; Lookup </span><a style="font-family: monospace;"
+ href="File_Formats.html#MPP">MPP</a><span
  style="font-family: monospace;"> spectral values</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use separation profile</span><br style="font-family: monospace;">
+Use
+separation profile</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;-l&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Output Lab rather than XYZ<br>
+Output
+Lab rather than XYZ<br>
 &nbsp;-k
 file.cal&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Apply calibration (after sep.) and include in .ti3<br>
+Apply
+calibration (after sep.) and include in .ti3<br>
 &nbsp;-i
 file.cal&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Include calibration in .ti3 (but don't apply it)<br>
+Include
+calibration in .ti3 (but don't apply it)<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;-r
 level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Add average random deviation of &lt;level&gt;% to input device values
+Add
+average random deviation of &lt;level&gt;% to input device values
 (after sep. &amp; cal.)</span></small><br
  style="font-family: monospace;">
 <small><span style="font-family: monospace;"></span><span
  style="font-family: monospace;">&nbsp;-0
 pow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Apply power to input device chanel 0-9 (after sep. cal. &amp; rand.)</span><br
+Apply
+power to input device chanel 0-9 (after sep. cal. &amp; rand.)</span><br
  style="font-family: monospace;">
 &nbsp;
 <span style="font-family: monospace;">-R
 level&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Add average random deviation of &lt;level&gt;% to output PCS values<br>
+Add
+average random deviation of &lt;level&gt;% to output PCS values<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;-u
 &nbsp; &nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Make random deviations have uniform distributions rather than normal<br>
+Make
+random deviations have uniform distributions rather than normal<br>
 &nbsp;-S
 seed&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Set random seed<br style="font-family: monospace;">
+Set
+random seed<br style="font-family: monospace;">
 </span></small><small><span style="font-family: monospace;"></span><span
  style="font-family: monospace;">&nbsp;-b
 L,a,b&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Scale black point to target Lab value</span><br
+Scale
+black point to target Lab value<br>
+&nbsp;-I
+intent&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+r = relative colorimetric, a = absolute (default)<br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;[<span
+</span><span style="font-family: monospace;">&nbsp;[<span
  style="font-style: italic;">separation.ic<span
  style="font-family: monospace;">m</span></span>]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Device link separation profile</span><br style="font-family: monospace;">
+Device
+link separation profile</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><i
  style="font-family: monospace;">profile.</i><span
  style="font-family: monospace;">[icm|mpp|ti3] &nbsp; &nbsp; </span><a
@@ -89,7 +105,8 @@ profile/file to use</span><br style="font-family: monospace;">
 <span style="font-family: monospace;"></span><i
  style="font-family: monospace;">inoutfile</i><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; Base name for
+&nbsp;
+&nbsp; &nbsp; Base name for
 input[</span><a style="font-family: monospace;"
  href="File_Formats.html#.ti1">.ti1</a><span
  style="font-family: monospace;">]/output[</span><a
@@ -180,6 +197,14 @@ used. This only works if an ICC profile is used, and scales the black
 point to the parameter value. This will be done in XYZ space by
 default, and in L*a*b* space if the <span style="font-weight: bold;">-l</span>
 flag is used.<br>
+<br>
+The <span style="font-weight: bold;">-I</span> parameter allows
+changing the intent used in looking up the ICC profile colors to
+relative colorimetric. This would <span
+ style="text-decoration: underline;">not</span> be used if you intend
+to make a profile from the resulting .ti3 file, since profiles are
+always made from absolute colorimetric measurement values. Note that
+this flag does nothing if the profile is an MPP or .ti3 file.<br>
 <br>
 Fakeread is useful in creating artificial test value for testing <a
  href="colprof.html">colprof</a>, as well as providing one path for

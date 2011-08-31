@@ -14,9 +14,9 @@ Executables = cctiff greytiff ;
 Headers = imdi.h ;
 
 #Install
-InstallBin ../bin : $(Executables) ;
-#InstallFile ../h : $(Headers) ;
-#InstallLib ../lib : $(Libraries) ;
+InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
+#InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
 
 HDRS = ../h ../numlib ;
 LINKLIBS = ../numlib/libnum ;

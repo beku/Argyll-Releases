@@ -22,6 +22,9 @@ ATTRS{idVendor}=="0670", ATTRS{idProduct}=="0001", ENV{COLOR_MEASUREMENT_DEVICE}
 # i1Display
 ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2003", ENV{COLOR_MEASUREMENT_DEVICE}="1"
 
+# i1Display 3
+ATTRS{idVendor}=="0765", ATTRS{idProduct}=="5020", ENV{COLOR_MEASUREMENT_DEVICE}="1"
+
 # i1Monitor
 ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2001", ENV{COLOR_MEASUREMENT_DEVICE}="1"
 

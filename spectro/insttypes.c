@@ -10,8 +10,8 @@
  * Copyright 2001 - 2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 #include <stdio.h>
@@ -19,8 +19,10 @@
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#endif /* !SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 
@@ -55,6 +57,8 @@ char *inst_name(instType itype) {
 			return "Spectrocam";
 		case instI1Display:
 			return "GretagMacbeth i1 Display";
+		case instI1Disp3:
+			return "Xrite i1 DisplayPro, ColorMunki Display";
 		case instI1Monitor:
 			return "GretagMacbeth i1 Monitor";
 		case instI1Pro:
@@ -99,11 +103,16 @@ instType inst_enum(char *name) {
 		return instSpectroScanT;
 	else if (strcmp(name, "Spectrocam") == 0)
 		return instSpectrocam;
-	else if (strcmp(name, "GretagMacbeth i1 Display") == 0)
+	else if (strcmp(name, "GretagMacbeth i1 Display") == 0
+	      || strcmp(name, "Xrite i1 Display") == 0)
 		return instI1Display;
+	else if (strcmp(name, "Xrite i1 DisplayPro") == 0
+	      || strcmp(name, "ColorMunki Display") == 0)
+		return instI1Disp3;
 	else if (strcmp(name, "GretagMacbeth i1 Monitor") == 0)
 		return instI1Monitor;
-	else if (strcmp(name, "GretagMacbeth i1 Pro") == 0)
+	else if (strcmp(name, "GretagMacbeth i1 Pro") == 0
+	      || strcmp(name, "Xrite i1 Pro") == 0)
 		return instI1Pro;
 	else if (strcmp(name, "X-Rite ColorMunki") == 0)
 		return instColorMunki;
@@ -135,8 +144,10 @@ unsigned short idProduct) {
 			return instDTP92;
 	  	if (idProduct == 0xD094)	/* DTP94 */
 			return instDTP94;
-//	  	if (idProduct == 0x5001)	/* HueyPro */
-//			return instHuey;
+	  	if (idProduct == 0x5001)	/* HueyL (Lenovo W70DS Laptop ?) */
+			return instHuey;
+	  	if (idProduct == 0x5020)	/* i1DisplayPro, ColorMunki Display (HID) */
+			return instI1Disp3;
 	}
 
 	if (idVendor  == 0x0971) {		/* Gretag Macbeth */
@@ -146,7 +157,7 @@ unsigned short idProduct) {
 			return instI1Monitor;
 		if (idProduct == 0x2003)	/* i1 Display */
 			return instI1Display;
-		if (idProduct == 0x2005)	/* Huey */
+		if (idProduct == 0x2005)	/* Huey (HID) */
 			return instHuey;
 		if (idProduct == 0x2007)	/* ColorMunki */
 			return instColorMunki;
@@ -164,6 +175,8 @@ unsigned short idProduct) {
 	}
 
 	if (idVendor  == 0x085C) {
+		if (idProduct == 0x0100)	/* ColorVison Spyder1 */
+			return instSpyder2;		/* Alias to Spyder 2 */
 		if (idProduct == 0x0200)	/* ColorVison Spyder2 */
 			return instSpyder2;
 		if (idProduct == 0x0300)	/* ColorVison Spyder3 */
@@ -216,10 +229,14 @@ int inst_illuminant(xspect *sp, instType itype) {
 		case instSpectroScanT:
 			return standardIlluminant(sp, icxIT_A, 0);		/* Standard A type assumed */
 
+#ifndef SALONEINSTLIB
 		case instSpectrocam:
 			return standardIlluminant(sp, icxIT_Spectrocam, 0);   /* Spectrocam Xenon Lamp */
-
+#endif
 		case instI1Display:
+			return 1;										/* Not applicable */
+
+		case instI1Disp3:
 			return 1;										/* Not applicable */
 
 		case instI1Monitor:

@@ -12,9 +12,9 @@ Executables = ;
 Headers = yajl_common.h  yajl_gen.h  yajl_parse.h ;		# API headers
 
 #Install
-#InstallBin ../bin : $(Executables) ;
-#InstallFile ./h : $(Headers) ;
-#InstallLib ./lib : $(Libraries) ;
+#InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
+#InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
 
 # config parser based on yajl 
 Library libyajl : yajl.c yajl_alloc.c yajl_buf.c yajl_encode.c yajl_gen.c yajl_lex.c yajl_parser.c ;

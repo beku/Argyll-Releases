@@ -7,7 +7,7 @@
  * Date:    28/6/00
  * Version: 1.00
  *
- * Copyright 2000 Graeme W. Gill
+ * Copyright 2000, 2011 Graeme W. Gill
  * All rights reserved.
  * This material is licenced under the GNU AFFERO GENERAL PUB LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -46,8 +46,7 @@
 						/* (more at the end) */
 
 #define XICC_USE_HK 1	/* [Set] Set to 1 to use Helmholtz-Kohlraush in all CAM conversions */
-#define XICC_NOCAMCL 0	/* [Unset] Set to 1 to disable clipping out of CAM gamut on XYZ to Jab */
-#define XICC_NEUTRAL_CMYK_BLACK		/* Else use K direction black */
+#define XICC_NEUTRAL_CMYK_BLACK		/* Use neutral axis black, else use K direction black. */
 #define XICC_BLACK_POINT_TOLL 1.0		/* Tollerance of CMYK black point location */ 
 
 /* ------------------------------------------------------------------------------ */
@@ -234,6 +233,8 @@ struct _xicc {
 #define ICX_SET_WHITE       0x0001		/* find, set and make relative to the white point */
 #define ICX_SET_BLACK       0x0002		/* find and set the black point */
 #define ICX_WRITE_WBL       0x0004		/* Matrix: write White, Black & Luminance tags */
+#define ICX_CLIP_WB         0x0008		/* Clip white and black to be < 1 and > 0 respectively */
+#define ICX_CLIP_PRIMS      0x0010		/* Clip matrix primaries to be > 0 */
 #define ICX_NO_IN_SHP_LUTS  0x0040		/* Lut/Mtx: Don't create input (Device) shaper curves. */
 #define ICX_NO_IN_POS_LUTS  0x0080		/* LuLut: Don't create input (Device) postion curves. */
 #define ICX_NO_OUT_LUTS     0x0100		/* LuLut: Don't create output (PCS) curves. */
@@ -283,6 +284,7 @@ xicc *new_xicc(icc *picc);
 /* Expanded lookup object support */
 #define XLU_BASE_MEMBERS																\
 	/* Private: */																		\
+	int              trace;					/* Optional run time tracing flag */		\
 	struct _xicc    *pp;					/* Pointer to XICC we're a part of */		\
 	icmLuBase       *plu;					/* Pointer to icm Lu we are expanding */	\
 	int              flags;					/* Flags passed to get_luobj */				\
@@ -553,9 +555,48 @@ struct _profxinf {
 
 	char *copyright;		/* Copyrigh text, NULL for default */
 
-	/* Should add header attributue flags ?? */
+	/* Attribute flags */
+	int transparency;		/* NZ for Trasparency, else Reflective */
+	int matte;				/* NZ for Matte, else Glossy */
+	int negative;			/* NZ for Negative, else Positive */
+	int blackandwhite;		/* NZ for BlackAndWhite, else Color */
+
+	/* Default intent */
+	icRenderingIntent  default_ri;	/* Default rendering intent */
+
+	/* Other stuff ICC ?? */
 
 }; typedef struct _profxinf profxinf;
+
+
+/* A 3x3 matrix model */
+struct _icxMatrixModel {
+	void *imp;		/* Opaque implementation */
+
+	int isLab;		/* Convert lookup to Lab */
+
+	void (*lookup) (struct _icxMatrixModel *p, double *out, double *in);			\
+	void (*del) (struct _icxMatrixModel *p);
+
+}; typedef struct _icxMatrixModel icxMatrixModel;
+
+/* Create a matrix model of a set of points, and return an object to lookup */
+/* points from the model. Return NULL on error. */
+icxMatrixModel *new_MatrixModel(
+int verb,			/* NZ if verbose */
+int nodp,			/* Number of points */
+cow *ipoints,		/* Array of input points in XYZ space */
+int isLab,			/* nz if data points are Lab */
+int quality,		/* Quality metric, 0..3 (-1 == 2 orders only) */
+int isLinear,		/* NZ if pure linear, gamma = 1.0 */
+int isGamma,		/* NZ if gamma rather than shaper */
+int isShTRC,		/* NZ if shared TRCs */
+int shape0gam,		/* NZ if zero'th order shaper should be gamma function */
+int clipbw,			/* Prevent white > 1 and -ve black */
+int clipprims,		/* Prevent primaries going -ve */
+double smooth,		/* Smoothing factor (nominal 1.0) */
+double scale		/* Scale device values */
+);
 
 /* Set an icc's Lut tables, and take care of auxiliary continuity problems. */
 /* Only useful if there are auxiliary device output chanels to be set. */
@@ -673,6 +714,17 @@ double icxdLabDE(double dout[2][3], double *Lab0, double *Lab1);
 /* Return the CIE94 Delta E color difference measure */
 /* including partial derivatives. */
 double icxdCIE94(double dout[2][3], double Lab0[3], double Lab1[3]);
+
+/* - - - - - - - - - - */
+/* Power like function, based on Graphics Gems adjustment curve. */
+/* Avoids "toe" problem of pure power. */
+/* Adjusted so that "power" 2 and 0.5 agree with real power at 0.5 */
+double icx_powlike(double vv, double pp);
+
+/* Compute the necessary aproximate power, to transform */
+/* the given value from src to dst. They are assumed to be */
+/* in the range 0.0 .. 1.0 */
+double icx_powlike_needed(double src, double dst);
 
 /* - - - - - - - - - - */
 

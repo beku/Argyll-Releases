@@ -78,7 +78,14 @@ meter squared, e.g. <span style="font-weight: bold;">"112.334770
  style="font-weight: bold;">NORMALIZED_TO_Y_100</span> keyword that
 must have a value of "<span style="font-weight: bold;">NO</span>" or "<span
  style="font-weight: bold;">YES</span>", to indicate whether the CIE
-values have been normalised so that the largest has a Y value of 100.<br>
+values have been normalised so that the largest has a Y value of 100.
+If this is a display type device and there is no <span
+ style="font-weight: bold;">NORMALIZED_TO_Y_100</span> keyword, then it
+can be assumed that the value <span style="font-weight: bold;">are</span>
+normalized to Y = 100. If the values are normalized to Y = 100, then
+the absolute values can be restored by multiplying the XYZ values by
+the <span style="font-weight: bold;">LUMINANCE_XYZ_CDM2</span> Y value
+and dividing by 100.<br>
 <br>
 There may be a keyword <span style="font-weight: bold;">TARGET_INSTRUMENT</span>
 which will identify the instrument used to read the test values. This

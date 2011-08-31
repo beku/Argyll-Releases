@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
   <title>xicclu</title>
@@ -31,15 +31,20 @@ Verbosity level 0 - 2 (default = 1)</span><br
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#g">-g</a><span
  style="font-family: monospace;"> &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp; Plot neutral axis device values.</span><br
+&nbsp; Plot slice instead of looking colors up. (Default white to black)<br>
+&nbsp;<a href="#Gs">-G s:L:a:b</a>&nbsp;&nbsp;&nbsp;&nbsp; Override
+plot slice start with Lab or Jab co-ordinate<br>
+&nbsp;<a href="#Ge">-G e:L:a:b</a>&nbsp;&nbsp;&nbsp;&nbsp; Override
+plot slice end with Lab or Jab co-ordinate<br
  style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;</span><a
+</span><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#f">-f function</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp; f = forward, b =
 backwards, g = gamut, p = preview</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-if = inverted forward, ib = inverted backwards</span><br
+if
+= inverted forward, ib = inverted backwards</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#i">-i intent</a><span
@@ -49,7 +54,8 @@ absolute, r = relative colorimetric,</span><br
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 </span></small><small><span style="font-family: monospace;"> p =
 perceptual, </span></small><small><span style="font-family: monospace;">s
-= saturation</span><span style="font-family: monospace;"></span><br
+=
+saturation</span><span style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#o">-o order</a><span
@@ -57,7 +63,8 @@ perceptual, </span></small><small><span style="font-family: monospace;">s
 = normal (priority: lut &gt; matrix &gt; monochrome)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-r = reverse (priority: monochrome &gt; matrix &gt;
+r
+= reverse (priority: monochrome &gt; matrix &gt;
 lut)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#p">-p oride</a><span
@@ -75,38 +82,47 @@ Scale device range 0.0 - scale rather than 0.0 - 1.0</span><br
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp; Black generation: z
 = zero K,</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; h = 0.5 K, x = max K, r = ramp K (def.)</span><br
+&nbsp;&nbsp;
+h = 0.5 K, x = max K, r = ramp K (def.)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; l = extra PCS input is portion of K locus</span><br
+&nbsp;&nbsp;
+l = extra PCS input is portion of K locus</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; v = extra PCS input is K target value</span><br
+&nbsp;&nbsp;
+v = extra PCS input is K target value</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#kp">-k p stle stpo enpo enle
 shape</a><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; stle: K level at White 0.0 - 1.0</span><br
+&nbsp;&nbsp;
+stle: K level at White 0.0 - 1.0</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; stpo: start point of transition Wh 0.0 - Bk 1.0</span><br
+&nbsp;&nbsp;
+stpo: start point of transition Wh 0.0 - Bk 1.0</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; enpo: End point of transition Wh 0.0 - Bk 1.0</span><br
+&nbsp;&nbsp;
+enpo: End point of transition Wh 0.0 - Bk 1.0</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; enle: K level at Black 0.0 - 1.0</span><br
+&nbsp;&nbsp;
+enle: K level at Black 0.0 - 1.0</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0
+&nbsp;&nbsp;
+shape: 1.0 = straight, 0.0-1.0 concave, 1.0-2.0
 convex</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#kq">-k q stle0 stpo0 enpo0
 enle0 shape0 stle2 stpo2
 enpo2 enle2 shape2</a><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Transfer extra PCS input to dual curve limits</span><br
+Transfer
+extra PCS input to dual curve limits</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#K">-K parameters</a><span
@@ -126,9 +142,11 @@ black ink limit, 0 - 100% (estimate by default)</span><br
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#a">-a</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-show actual target values if clipped<br>
+show
+actual target values if clipped<br>
 &nbsp;<a href="#b">-b</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-use CAM Jab for clipping<br style="font-family: monospace;">
+use
+CAM Jab for clipping<br style="font-family: monospace;">
 </span><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#m">-m</a><span
  style="font-family: monospace;">
@@ -143,7 +161,8 @@ merge output processing into clut</span><span
 conditions
 for CIECAM02,</span><br style="font-family: monospace;">
 &nbsp;&nbsp;</small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; either an enumerated choice, or a parameter:value change</span><span
+&nbsp;&nbsp;
+either an enumerated choice, or a parameter:value change</span><span
  style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;"></span></small><small><span
@@ -151,9 +170,11 @@ for CIECAM02,</span><br style="font-family: monospace;">
 &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; pp - Practical Reflection Print
 (ISO-3664 P2)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; pe - Print evaluation environment (CIE 116-1995)<br>
+&nbsp;&nbsp;
+pe - Print evaluation environment (CIE 116-1995)<br>
 </span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; pc - Critical print evaluation environment (ISO-3664 P1)</span></small><small><span
+&nbsp;&nbsp;
+pc - Critical print evaluation environment (ISO-3664 P1)</span></small><small><span
  style="font-family: monospace;"></span><span
  style="font-family: monospace;"></span><br
  style="font-family: monospace;">
@@ -161,7 +182,8 @@ for CIECAM02,</span><br style="font-family: monospace;">
 &nbsp; &nbsp; &nbsp; mt - Monitor in typical work environment</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; mb - Monitor in bright work environment</span><br
+&nbsp;
+&nbsp; mb - Monitor in bright work environment</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;
 &nbsp;&nbsp;&nbsp; md - Monitor in darkened work
@@ -184,20 +206,25 @@ outdoors</span><br style="font-family: monospace;">
  style="font-family: monospace;"></span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-s:surround&nbsp;&nbsp; n = auto, a = average, m = dim, d = dark,</span><br
+s:surround&nbsp;&nbsp;
+n = auto, a = average, m = dim, d = dark,</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp;&nbsp;&nbsp; c = transparency (default average)</span><br
+&nbsp;
+&nbsp; &nbsp;&nbsp;&nbsp; c = transparency (default average)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Adapted white point
+w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Adapted white point
 as XYZ (default media white, Abs: D50)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Adapted white point as
+w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Adapted white point as
 x, y</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-a:adaptation Adaptation luminance in
+a:adaptation
+Adaptation luminance in
 cd.m^2
 (default 50.0)</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp; &nbsp;
@@ -205,7 +232,8 @@ cd.m^2
 of image luminance (default 20)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare
+f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Flare
 light % of image luminance (default 1)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;
@@ -214,8 +242,8 @@ f:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color
 as XYZ (default media white, Abs: D50)</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Flare color as x, y</span><br
- style="font-family: monospace;">
+f:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Flare color as x, y</span><br style="font-family: monospace;">
 <br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;
 </span><a style="font-family: monospace;" href="#p1"><i>inoutfile</i></a><span
@@ -245,16 +273,20 @@ just outputting the results of each conversion. Use the latter to
 capture batch output ready for further processing.<br>
 <br>
 <a name="g"></a>The <b>-g</b> flag causes a plot of the device values
-along the neutral axis
-to be plotted, rather than allowing the interactive looking up of color
-values.
+along a slice through the Lab or Jab colorspace, rather than allowing
+the interactive looking up of color
+values. By default this will be the neutral axis
+from the white point to the black point, but the start and end can be
+overridden using the <span style="font-weight: bold;">-G</span>
+parameters.
 This is useful in determining the existing black generation in a CMYK
 profile,
 or exploring the behavior of various black generation options using
 the
 <b>-k</b> parameters. The profile must be a device profile, and the PCS
 must
-be either Lab or Jab. The plot up the neutral axis is from the white to
+be either Lab or Jab. The default plot is up the neutral axis is from
+the white to
 the black point (scale 0 to 100%), and shows the percentage of each
 device colorant. To examine a profiles B2A table black
 generation,
@@ -266,6 +298,24 @@ The appropriate intent can be selected with the <b>-i</b> flag,
 &nbsp;as
 can other flags appropriate to the function selected.&nbsp; See <a
  href="#xg">example</a>.<br>
+<br>
+<a name="Gs"></a>The <span style="font-weight: bold;">-G </span><small><span
+ style="font-family: monospace;"><span style="font-weight: bold;">s:L:a:b</span></span></small>
+parameter overrides the plot slice start point of white, with some
+other point specified in Lab or Jab Profile Connection Space. The
+parameter must be a single string that combines<span
+ style="font-weight: bold;"> s:</span> with the three numbers separated
+by the '<span style="font-weight: bold;">:'</span> character (no
+spaces).<br>
+<br>
+<a name="Ge"></a>The <span style="font-weight: bold;">-G </span><small><span
+ style="font-family: monospace;"><span style="font-weight: bold;">e:L:a:b</span></span></small>
+parameter overrides the plot slice end point of black, with some
+other point specified in Lab or Jab Profile Connection Space. The
+parameter must be a single string that combines<span
+ style="font-weight: bold;"> s:</span> with the three numbers separated
+by the '<span style="font-weight: bold;">:'</span> character (no
+spaces).<br>
 <br>
 <a name="f"></a> The <b>-f</b> flag selects which type of table or
 conversion is to be used. In addition to the usual four tables that can
@@ -355,16 +405,21 @@ like: -kp 0 .05 1 .9 .8<br>
 <tt> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0 K &nbsp; |
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;enpo<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; &nbsp;_______&nbsp;
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; &nbsp; &nbsp;_______&nbsp;
 enle<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp;/<br>
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp; &nbsp;/<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; /<br>
+|&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp; &nbsp; /<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp;/<br>
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; &nbsp;/<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; /<br>
+|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp; /<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; stle&nbsp;
 | ------/<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;

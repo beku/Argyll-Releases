@@ -13,11 +13,13 @@ PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;	# Link debugging flags
 Libraries = libicc ;
 Executables = iccdump icclu ;
 Headers = icc.h ;
+Samples = sRGB.icm ClayRGB1998.icm lab2lab.icm ;
 
 #Install
-InstallBin ../bin : $(Executables) ;
-#InstallFile ./h : $(Headers) ;
-#InstallLib ./lib : $(Libraries) ;
+InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
+#InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
+InstallFile $(DESTDIR)$(PREFIX)/$(REFSUBDIR) : $(Samples) ;
 
 # ICC library
 Library libicc : icc.c ;
@@ -36,11 +38,12 @@ MainsFromSources icctest.c lutest.c iccdump.c icclu.c iccrw.c ;
 
 if $(BUILD_JUNK) {
 
-	MainsFromSources tt.c ;
+#	MainsFromSources tt.c ;
+
 	MainsFromSources mksRGB.c ;
 	MainsFromSources mkAdobeRGB.c ;
 	MainsFromSources mklab2lab.c ;
-	MainsFromSources icm2ary.c ;
+#	MainsFromSources icm2ary.c ;
 
 	# Check library is compatible with C++
 	Main cppcheck : cppcheck.cpp ;

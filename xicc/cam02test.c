@@ -6,7 +6,7 @@
  * Date:    18/1/2004
  * Version: 1.00
  *
- * Copyright 2000-2004 Graeme W. Gill
+ * Copyright 2000-2011 Graeme W. Gill
  * All rights reserved.
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -31,13 +31,13 @@
 #undef DIAG			/* Print internal value diagnostics for each spot test conversion */
 					/* and print diagnostics for excessive errors, nans etc. */
 #undef VERBOSE		/* Print diagnostic values for every conversion */
-#define SPOTTEST	/* ** Test known spot colors */
+#undef SPOTTEST		/* ** Test known spot colors */
 #undef TROUBLE		/* Test trouble spot colors XYZ -> Jab -> XYZ */
 #undef TROUBLE2		/* Test trouble spot colors Jab -> XYZ -> Jab */
 #undef SPECIAL		/* Special exploration code */
 
-#define LOCUSTEST	/* [def] ** Test spectrum locus points */
-#define LOCUSRAND	/* [def] ** Test random spectrum locus points */
+#undef LOCUSTEST	/* [def] ** Test spectrum locus points */
+#undef LOCUSRAND	/* [def] ** Test random spectrum locus points */
 
 #define INVTEST		/* [def] ** -100 -> 100 XYZ cube to Jab to XYZ */
 #undef INVTEST1		/* [undef] Single value */
@@ -48,10 +48,9 @@
 #undef TESTINV2		/* [undef] J = 0 test values */
 
 //#define TRES 41		/* Grid resolution */
-#define TRES 11		/* Grid resolution */
+#define TRES 17		/* Grid resolution */
 #define USE_HK 1	/* Use Helmholtz-Kohlraush in testing */
-#define NOCAMCLIP 1	/* Don't clip before XYZ2Jab conversion */
-#undef EXIT_ON_ERROR
+#define EXIT_ON_ERROR	/* and also trace */
 
 #define MAX_REF_ERR 0.1	/* Maximum permitted error to reference transform in delta Jab */
 
@@ -316,7 +315,7 @@ main(void) {
 		{ 0.9505, 1.000, 1.0888 }		/* Check white */
 	};
 
-	/* Reference values */
+	/* Reference values (NOT correct anymore, as HK params have changed!!!) */
 #if USE_HK == 1
 	double correct[5][4] = {			/* Hue range is last two */
 		{ 41.75,  0.10,    217.0, 219.0 },
@@ -403,8 +402,7 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			tFlair[c],	/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			twhite[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
-			NOCAMCLIP
+			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 		cam->set_view(
 			cam,
@@ -415,8 +413,7 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			tFlair[c],	/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			twhite[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
-			NOCAMCLIP
+			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 		camr->nldlimit = cam->nldlimit;
 		camr->jlimit = cam->jlimit;
@@ -557,8 +554,7 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			sp_white[c],/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
-			NOCAMCLIP
+			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 
 		cam->set_view(
@@ -570,8 +566,7 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			sp_white[c],/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
-			NOCAMCLIP
+			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 
 		camr->nldlimit = cam->nldlimit;
@@ -594,6 +589,13 @@ main(void) {
 				                               Jab[0], Jab[1], Jab[2], jabr[0], jabr[1], jabr[2]);
 				ok = 0;
 #ifdef EXIT_ON_ERROR
+				camr->trace = 1;
+				camr->XYZ_to_cam(camr, jabr, sample[c]);
+				camr->trace = 0;
+				cam->trace = 1;
+				cam->XYZ_to_cam(cam, Jab, sample[c]);
+				cam->trace = 0;
+				fflush(stdout);
 				fflush(stdout);
 				exit(-1);
 #endif /* EXIT_ON_ERROR */
@@ -643,6 +645,10 @@ main(void) {
 				printf("Spottest: Excessive error in inversion %f\n",maxdiff(sample[c], res));
 				ok = 0;
 #ifdef EXIT_ON_ERROR
+				cam->trace = 1;
+				cam->XYZ_to_cam(cam, Jab, sample[c]);
+				cam->cam_to_XYZ(cam, res, Jab);
+				cam->trace = 0;
 				fflush(stdout);
 				exit(-1);
 #endif /* EXIT_ON_ERROR */
@@ -693,8 +699,7 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
-			NOCAMCLIP
+			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 		
 		cam->set_view(
@@ -706,8 +711,7 @@ main(void) {
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 			white[c],	/* The Flare color coordinates (typically the Ambient color) */
-			USE_HK,		/* use Helmholtz-Kohlraush flag */ 
-			NOCAMCLIP
+			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 		
 		/* Make reference return error where it's going to disagree with implementation */
@@ -927,8 +931,7 @@ main(void) {
 				0.0,		/* Luminance of white in image - not used */
 				0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 				white[c],	/* The Flare color coordinates (typically the Ambient color) */
-				USE_HK,		/* use Helmholtz-Kohlraush flag */ 
-				NOCAMCLIP
+				USE_HK		/* use Helmholtz-Kohlraush flag */ 
 			);
 		
 #ifdef INVTEST1
@@ -998,17 +1001,17 @@ main(void) {
 #endif /* INVTEST2 */
 
 #ifdef INVTEST
-			/* itterate through -100 to +120 XYZ cube space */
+			/* itterate through -20 to +120 XYZ cube space */
 			for (co0 = 0; co0 < TRES; co0++) {
 				xyz[0] = co0/(TRES-1.0);
-				xyz[0] = xyz[0] * 2.2 - 1.0;
+				xyz[0] = xyz[0] * 1.4 - 0.2;
 				for (co1 = 0; co1 < TRES; co1++) {
 					xyz[1] = co1/(TRES-1.0);
-					xyz[1] = xyz[1] * 2.2 - 1.0;
+					xyz[1] = xyz[1] * 1.4 - 0.2;
 					for (co2 = 0; co2 < TRES; co2++) {
 						int i;
 						xyz[2] = co2/(TRES-1.0);
-						xyz[2] = xyz[2] * 2.2 - 1.0;
+						xyz[2] = xyz[2] * 1.4 - 0.2;
 		
 						for (i = 0; i < 3; i++) {
 							if (xyz[i] < xmin[i])
@@ -1034,7 +1037,7 @@ main(void) {
 #if defined(DIAG) || defined(VERBOSE) || defined(EXIT_ON_ERROR)
 
 #if defined(DIAG) || defined(EXIT_ON_ERROR)
-						if (!_finite(mxd) || mxd > 0.1)
+						if (!_finite(mxd) || mxd > 0.5)
 #endif /* DIAG || EXIT_ON_ERROR */
 						{
 							double oLab[3];
@@ -1049,6 +1052,10 @@ main(void) {
 							printf("c = %d\n",c);
 #ifdef EXIT_ON_ERROR
 							if (!_finite(mxd) || mxd > 0.1) {
+								cam->trace = 1;
+								cam->XYZ_to_cam(cam, Jab, xyz);
+								cam->cam_to_XYZ(cam, checkxyz, Jab);
+								cam->trace = 0;
 								fflush(stdout);
 								exit(-1);
 							}
@@ -1080,6 +1087,7 @@ main(void) {
 	/* =============================================== */
 
 	/* ===================Jab->XYX->Jab ============================ */
+	/* Note that this is expected to fail if BLUECOMPR is enabled */
 #if defined(TESTINV) || defined(TESTINV1) || defined(TESTINV2)
 	{
 		/* Get the range of XYZ values */
@@ -1104,8 +1112,7 @@ main(void) {
 				0.0,		/* Luminance of white in image - not used */
 				0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 				white[c],	/* The Flare color coordinates (typically the Ambient color) */
-				USE_HK,		/* use Helmholtz-Kohlraush flag */ 
-				NOCAMCLIP
+				USE_HK		/* use Helmholtz-Kohlraush flag */ 
 			);
 		
 #ifdef TESTINV1
@@ -1258,6 +1265,10 @@ main(void) {
 							printf("c = %d\n",c);
 #ifdef EXIT_ON_ERROR
 							if (!_finite(mxd) || mxd > 0.1) {
+								cam->trace = 1;
+								cam->cam_to_XYZ(cam, xyz, Jab);
+								cam->XYZ_to_cam(cam, checkJab, xyz);
+								cam->trace = 0;
 								fflush(stdout);
 								exit(-1);
 							}

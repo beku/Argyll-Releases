@@ -1204,7 +1204,7 @@ int doit(
 			wo->data[i].device.ucLangCode = 8765;		/* UniCode language code */
 			wo->data[i].device.ucSize = 29;				/* Size in chars inc null */
 			wo->data[i].allocate(&wo->data[i]);			/* Allocate space */
-			memcpy(wo->data[i].device.ucDesc, ts2a, 2 * 29);	/* Copy string in */
+			memmove(wo->data[i].device.ucDesc, ts2a, 2 * 29);	/* Copy string in */
 	
 			wo->data[i].device.scCode = 67;				/* Fudge scriptCode code */
 			wo->data[i].device.scSize = strlen(ts3a)+1;	/* Used size of scDesc in bytes, inc null */
@@ -1222,7 +1222,7 @@ int doit(
 			wo->data[i].model.ucLangCode = 7856;		/* UniCode language code */
 			wo->data[i].model.ucSize = 28;				/* Size in chars inc null */
 			wo->data[i].allocate(&wo->data[i]);			/* Allocate space */
-			memcpy(wo->data[i].model.ucDesc, ts2b, 2 * 28);	/* Copy string in */
+			memmove(wo->data[i].model.ucDesc, ts2b, 2 * 28);	/* Copy string in */
 	
 			wo->data[i].model.scCode = 67;				/* Fudge scriptCode code */
 			wo->data[i].model.scSize = strlen(ts3b)+1;	/* Used size of scDesc in bytes, inc null */
@@ -1422,7 +1422,7 @@ int doit(
 		wo->ucLangCode = 1234;		/* UniCode language code */
 		wo->ucSize = 27;			/* Allocated and used size of ucDesc in characters, inc null */
 		wo->allocate((icmBase *)wo);/* Allocate space */
-		memcpy(wo->ucDesc, ts2, 2 * 27);	/* Copy string in */
+		memmove(wo->ucDesc, ts2, 2 * 27);	/* Copy string in */
 
 		/* Don't really know anything about scriptCode, but fudge some values */
 		wo->scCode = 23;			/* ScriptCode code */

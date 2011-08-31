@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
   <title>dispread</title>
@@ -20,7 +20,9 @@ option.<br>
 <h3>Usage</h3>
 <small style="font-family: monospace;">dispread [-options]<i> inoutfile</i><br>
 &nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Verbose mode<br>
+&nbsp;&nbsp;&nbsp;&nbsp;
+Verbose
+mode<br>
 &nbsp;</small><font size="-1"><a style="font-family: monospace;"
  href="#display">-display displayname</a><span
  style="font-family: monospace;"> [X11 only] Choose X11 display name<br>
@@ -29,11 +31,22 @@ option.<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; [X11
 only]Choose the display from the following list (default 1),<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-and optionally choose a different display m for VideoLUT access.</span></font><br>
+and
+optionally
+choose
+a
+different
+display
+m for VideoLUT access.</span></font><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#d">-d
 n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Choose the display from the following list (default 1)</span></font><small
- style="font-family: monospace;"><br>
+Choose
+the
+display
+from
+the
+following
+list (default 1)</span></font><small style="font-family: monospace;"><br>
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#c">-c listno</a><span
  style="font-family: monospace;"> &nbsp; &nbsp;
@@ -41,59 +54,166 @@ Choose the display from the following list (default 1)</span></font><small
 communication port from the following list (default 1)<br>
 </span></small><font size="-1"><span style="font-family: monospace;">&nbsp;<a
  href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use projector mode (if available)</span></font><br>
+Use
+projector
+mode
+(if
+available)</span></font><br>
 <small style="font-family: monospace;"></small><font size="-1"><span
  style="font-family: monospace;">&nbsp;<a href="#y">-y c|l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Display type, c = CRT, l = LCD</span></font><br>
+Display
+type,
+c
+=
+CRT,
+l
+= LCD</span></font><br>
 <small style="font-family: monospace;">&nbsp;<span
  style="text-decoration: underline;">-</span><a href="#k">k
+file.cal</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Load
+calibration file into display while reading<br>
+</small><small style="font-family: monospace;">&nbsp;<span
+ style="text-decoration: underline;">-</span><a href="#K">K
 file.cal</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Apply
-display calibration file while reading<br>
-&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Save spectral information (default don't save)<br>
+Apply calibration file to test values while reading</small><br>
+<small style="font-family: monospace;">&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;
+Save
+spectral
+information
+(default
+don't
+save)<br>
 </small><font style="font-family: monospace;" size="-1">&nbsp;<a
  href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Position
-test window and scale it<br>
+test
+window
+and
+scale
+it<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.<br>
+ho,vi:
+0.0
+=
+left/top,
+0.5
+=
+center, 1.0 = right/bottom etc.<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.<br>
+ss:
+0.5
+=
+half,
+1.0
+=
+normal, 2.0 = double etc.<br>
 &nbsp;</font><font size="-1"><span style="font-family: monospace;"><a
  href="#F">-F</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Fill whole screen with black background</span></font><br
- style="font-family: monospace;">
+Fill
+whole
+screen
+with
+black
+background</span></font><br style="font-family: monospace;">
 <small style="font-family: monospace;">&nbsp;<span
  style="text-decoration: underline;"></span><a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; [X11 only] Don't set override redirect on test
+&nbsp;&nbsp;&nbsp;&nbsp;
+[X11
+only]
+Don't
+set
+override
+redirect on test
 window<br>
-</small><small style="font-family: monospace;">&nbsp;<a href="#K">-K</a>
+</small><small style="font-family: monospace;">&nbsp;<a href="#J">-J</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Run calibration first</small><br>
+&nbsp;&nbsp;&nbsp;&nbsp;
+Run
+calibration
+first</small><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Disable auto calibration of instrument<br>
+Disable
+auto
+calibration
+of
+instrument<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#H">-H</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Use high resolution spectrum mode (if
+&nbsp;&nbsp;&nbsp;&nbsp;
+Use
+high
+resolution
+spectrum
+mode
+(if
 available)<br>
 </span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#V">-V</a><span
  style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp; Use adaptive measurement mode (if available)<br>
-&nbsp;<a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Disable normalisation of white to Y = 100</span></font><small><span
- style="font-family: monospace;"></span></small><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="dispcal.html#X">-X</a><a href="#X"> file.ccmx</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Apply Colorimeter Correction Matrix<br>
-</span></font><small><span style="font-family: monospace;">&nbsp;<a
+&nbsp;&nbsp;&nbsp;&nbsp;
+Use
+adaptive
+measurement
+mode
+(if
+available)<br>
+&nbsp;<a href="#w">-w</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Disable
+normalisation
+of
+white
+to
+Y
+= 100</span></font><small><span style="font-family: monospace;"></span></small><br>
+&nbsp; <font size="-1"><span style="font-family: monospace;"><a
+ href="#X1">-X file.ccmx</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply
+Colorimeter
+Correction
+Matrix</span></font><br>
+<span style="font-family: monospace;">&nbsp;<a href="#X2">-X file.ccss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use
+Colorimeter
+Calibration Spectral Samples for calibration</span><br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;<a href="#X3">-X N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+0:
+Technology
+(Display description)</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+1:
+etc.</span><font size="-1"><span style="font-family: monospace;"><br>
+</span></font><small><span style="font-family: monospace;">&nbsp;</span><a
+ style="font-family: monospace;" href="#Q">-Q <i>observ</i></a><span
+ style="font-family: monospace;">&nbsp; &nbsp; &nbsp; &nbsp;
+&nbsp;&nbsp;&nbsp; Choose CIE Observer for spectrometer or CCSS
+colorimeter data:</span><br style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+1931_2
+</span></small><small><span style="font-family: monospace;">(def.)</span></small><small><span
+ style="font-family: monospace;">,
+1964_10, S&amp;B
+1955_2, shaw, J&amp;V 1978_2, 1964_10c</span></small><br>
+<small><span style="font-family: monospace;">&nbsp;<a
  href="dispread.html#I">-I b|w</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Drift compensation, Black: -Ib, White: -Iw, Both: -Ibw</span></small><br>
+Drift
+compensation,
+Black:
+-Ib,
+White:
+-Iw,
+Both: -Ibw</span></small><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#C">-C "command"</a><span
  style="font-family: monospace;">
@@ -106,12 +226,21 @@ time a color is set<br>
 time a color is measured</span></font><br>
 <font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#W">-W
 n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Override serial port flow control: n = none, h = HW, x = Xon/Xoff</span></font><br>
+Override
+serial
+port
+flow
+control:
+n
+= none, h = HW, x = Xon/Xoff</span></font><br>
 <small style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print debug
 diagnostics to stderr</small><br>
 <small style="font-family: monospace;">&nbsp;<a href="#p1"><i>inoutfile</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Base name for input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
+Base
+name
+for
+input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
  href="File_Formats.html#.ti3">.ti3</a>] file.<br>
 </small>
 <br>
@@ -234,13 +363,31 @@ to the .ti3 file as well.<br>
 <a name="k"></a> <span style="font-weight: bold;">-k: </span>If a
 display video lookup table calibration <a href="File_Formats.html#.cal">.cal</a>
 file is provided, it will be
-applied to the display while the measurements are being taken, and also
+loaded into the display <span style="font-weight: bold;">ViedoLUTs</span>
+while the measurements are being taken, thereby being applied to the
+measurement values, and the calibration will also
 included in the resulting .ti3 data file, so that <a
  href="colprof.html">colprof</a> can include it as a <span
  style="font-weight: bold;">vcgt</span> tag in the resulting
-profile.&nbsp; The calibration file has usually been created using <a
- href="dispcal.html">dispcal</a>. If a calibration file is not created,
-then the display will be read in whatever calibration state it is in.<br>
+profile. This is the <span style="font-weight: bold;">normal</span>
+way to profile a calibrated display. The calibration file has usually
+been created using <a href="dispcal.html">dispcal</a>. If a
+calibration file is not created,
+then the display will be read in whatever calibration state it is in. <span
+ style="font-weight: bold;">NOTE</span> that the calibration is loaded
+into the display hardware just before the instrument starts
+measurement, after the test window first appears.<br>
+<br>
+<a name="K"></a> <span style="font-weight: bold;">-K: </span>If a
+display video lookup table calibration <a href="File_Formats.html#.cal">.cal</a>
+file is provided, it will be
+applied to the test values for each measurement, and also
+included in the resulting .ti3 data file, so that <a
+ href="colprof.html">colprof</a> can include it as a <span
+ style="font-weight: bold;">vcgt</span> tag in the resulting
+profile. This is <span style="font-weight: bold;">NOT</span> normally
+the best way to profile a calibrated display, since the frame buffer
+may have lower precision than the VideoLUTs output values.<br>
 <br>
 <a name="P"></a> The <span style="font-weight: bold;">-P</span>
 parameter allows you to position and size the test patch window. By
@@ -277,7 +424,7 @@ this can interfere with window manager operation, and the <b>-n</b>
 option
 turns this behaviour off.<br>
 <br>
-<a name="K"></a> The -<span style="font-weight: bold;">K</span> option
+<a name="J"></a> The -<span style="font-weight: bold;">J</span> option
 runs through the black and sensor
 relative
 calibration routines for the Xrite DTP92 and DTP94 instrument, the
@@ -318,15 +465,63 @@ integration times. Overall measurement time will probably be longer.<br>
 <br>
 <a name="w"></a>The <b>-w</b> flag disables the normalisation of the
 white patch value to 100.0, resulting in values that are in cd/m^2.
-This is for diagnostic purposes.<br>
+This is mainly for diagnostic purposes.<br>
 <br>
-<a name="X"></a> The -<span style="font-weight: bold;">X <span
+<a name="X1"></a> The -<span style="font-weight: bold;">X <span
  style="font-style: italic;">file.ccmx</span></span> option reads a <a
  href="File_Formats.html#.ccmx">Colorimeter Correction Matrix</a>
 from the given file, and applies it to the colorimeter instruments
 readings. This can improve a colorimeters accuracy for a particular
 type of display. A list of contributed <span style="font-weight: bold;">ccmx</span>
 files is <a href="ccmxs.html">here</a>.<br>
+<br>
+<a name="X2"></a> The -<span style="font-weight: bold;">X <span
+ style="font-style: italic;">file.ccss</span></span> option reads a <a
+ href="File_Formats.html#.ccss">Colorimeter Calibration Spectral Sample</a>
+from the given file, and uses it to set the colorimeter instruments
+calibration. This will only work with colorimeters that rely on sensor
+spectral sensitivity calibration
+information (ie. the X-Rite <span style="font-weight: bold;">i1d3</span>).This
+can
+improve
+a colorimeters accuracy for a particular
+type of display.<br>
+<br>
+<a name="X3"></a> The -<span style="font-weight: bold;">X <span
+ style="font-style: italic;">N</span></span> option selects a <a
+ href="File_Formats.html#.ccss">Colorimeter Calibration Spectral Sample</a>from
+the
+list
+of
+installed ccss files, rather than specifying a specific
+ccss files as in the above usage. The CCSS information that came with
+your colorimeters can be installed using <a href="i1d3ccss.html">i1d3ccss</a>,
+or
+one
+can be created using <a href="ccxxmake.html">ccxxmake</a>.<br>
+<br>
+<a name="Q"></a> The <b>-Q</b> flag allows specifying a tristimulus
+observer, and is used to compute PCS (Profile Connection Space)
+tristimulus values from spectral readings or using a colorimeter that
+has CCSS capability. The
+following choices
+are available:<br>
+<b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer.
+The default.<br>
+&nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree observer.<br>
+&nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
+observer<br>
+&nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree observer<br>
+&nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
+observer<br>
+&nbsp; <b>1964_10c</b> selects a version of the CIE 1964 10 degree
+observer that has been adjusted using a 3x3 matrix to better agree with
+the 1931 2 degree observer.<br>
+<br>
+<span style="font-weight: bold;">NOTE</span> that if you select
+anything other than the default 1931 2 degree observer, that the Y
+values will not be cd/m^2, due to the Y curve not being the CIE 1924
+photopic V(&#955;) luminosity function.<br>
 <br>
 <a name="I"></a> The -<span style="font-weight: bold;">I <span
  style="font-style: italic;">b|w</span></span>
@@ -340,10 +535,17 @@ compensation attempts to combat changes in display brightness as it
 warms up by measuring a white patch every so often, and using it to
 normalise all the other readings. If just instrument black drift
 compensation is needed, use <span style="font-weight: bold;">-Ib</span>.
-If just display white level compensation is needed, use <span
- style="font-weight: bold;">-Iw</span>. If both are needed, use <span
- style="font-weight: bold;">-Ibw</span> or <span
- style="font-weight: bold;">-Iwb</span>.<span style="font-weight: bold;">
+If
+just
+display
+white
+level
+compensation
+is needed, use <span style="font-weight: bold;">-Iw</span>.
+If
+both are needed, use <span style="font-weight: bold;">-Ibw</span>
+or <span style="font-weight: bold;">-Iwb</span>.<span
+ style="font-weight: bold;">
 <br>
 <br>
 </span><a name="C"></a> The -<span style="font-weight: bold;">C</span> <span

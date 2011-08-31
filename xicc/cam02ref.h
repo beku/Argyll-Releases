@@ -82,7 +82,6 @@ struct _cam02ref {
 
 	/* Option flags */
 	int hk;				/* Use Helmholtz-Kohlraush effect */
-	int noclip;			/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
 	int trace;			/* Trace internal values */
 	double range;		/* Return error if there is a range error */
 	double nldlimit;	/* range error if nlinear is less than this */
@@ -121,7 +120,7 @@ double Lv		/* Luminence of white in the Viewing/Scene/Image field (cd/m^2) */
 
 static void cam02ref_free(cam02ref *s);
 static int cam02ref_set_view(cam02ref *s, ViewingCondition Ev, double Wxyz[3],
-                double Yb, double La, double Lv, double Yf, double Fxyz[3], int hk, int noclip);
+                double Yb, double La, double Lv, double Yf, double Fxyz[3], int hk);
 static int cam02ref_XYZ_to_cam(cam02ref *s, double *Jab, double *xyz);
 static int cam02ref_cam_to_XYZ(cam02ref *s, double XYZ[3], double Jab[3]);
 
@@ -158,8 +157,7 @@ double Lv,		/* Luminence of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
-int hk,			/* Flag, NZ to use Helmholtz-Kohlraush effect */
-int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
+int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 ) {
 	double tt;
 
@@ -177,7 +175,6 @@ int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
 	s->Fxyz[1] = Fxyz[1];
 	s->Fxyz[2] = Fxyz[2];
 	s->hk = hk;
-	s->noclip = noclip;
 
 	/* Compute the internal parameters by category */
 	switch(s->Ev) {

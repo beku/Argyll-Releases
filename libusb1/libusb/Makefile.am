@@ -1,4 +1,4 @@
-lib_LTLIBRARIES = libusb-1.0.la
+lib_LIBRARIES = libusb-1.0A.a
 
 if POSIX_THREADS
 THREADS_SRC = os/threads_posix.h
@@ -8,7 +8,7 @@ endif
 
 LINUX_USBFS_SRC = $(THREADS_SRC) os/poll_posix.h os/linux_usbfs.h os/linux_usbfs.c
 DARWIN_USB_SRC = $(THREADS_SRC) os/poll_posix.h os/darwin_usb.h os/darwin_usb.c
-WINDOWS_USB_SRC = $(THREADS_SRC) os/poll_windows.h os/poll_windows.c os/windows_usb.h os/windows_usb.c libusb-1.0.rc
+WINDOWS_USB_SRC = $(THREADS_SRC) os/poll_windows.h os/poll_windows.c os/windows_usb.h os/windows_usb.c libusb-1.0A.rc
 
 EXTRA_DIST = $(LINUX_USBFS_SRC) $(DARWIN_USB_SRC) $(WINDOWS_USB_SRC)
 
@@ -27,8 +27,8 @@ OS_SRC = $(WINDOWS_USB_SRC)
 	$(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(RC) $(RCFLAGS) -i $< -o $@
 endif
 
-libusb_1_0_la_CFLAGS = $(VISIBILITY_CFLAGS) $(AM_CFLAGS)
-libusb_1_0_la_SOURCES = libusbi.h core.c descriptor.c io.c sync.c $(OS_SRC)
+libusb_1_0A_a_CFLAGS = $(VISIBILITY_CFLAGS) $(AM_CFLAGS)
+libusb_1_0A_a_SOURCES = libusbi.h core.c descriptor.c io.c sync.c $(OS_SRC)
 
-hdrdir = $(includedir)/libusb-1.0
+hdrdir = $(includedir)/libusb-1.0A
 hdr_HEADERS = libusb.h

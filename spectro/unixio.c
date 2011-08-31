@@ -10,8 +10,8 @@
  * Copyright 1997 - 2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /*
@@ -32,8 +32,10 @@
 #include <time.h>
 #include <errno.h>
 #include <string.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#endif
 #include "numsup.h"
 #include "xspect.h"
 #include "insttypes.h"
@@ -230,6 +232,16 @@ icoms *p
 		                 Linux           /dev/ttyUSB0, /dev/ttyUSB1
 	*/
 
+	/*
+		"Most program set a lock in /var/lock/LCK..tty<XX> on Linux ?
+		<http://sunsite.ualberta.ca/LDP/LDP/nag2/x-087-2-serial.devices.html>
+		<http://docs.freebsd.org/info/uucp/uucp.info.UUCP_Lock_Files.html>
+
+		We should really use the lock files to avoid treading on
+		other programs toes. We assume at the moment that the user
+		only picks a serial port with an instrument on it.
+	*/
+
 	/* Search for devices that match the pattern /dev/ttyS[0-9]* and /dev/ttyUSB* */
 	{
 		DIR *dd;
@@ -250,9 +262,16 @@ icoms *p
 				break;
 
 			if (!(
+#ifdef __FreeBSD__
+			   /* This should match uart & USB devs. */
+				( strncmp (de->d_name, "cua", 3) == 0
+				&& strlen (de->d_name) < 7)
+#else
+				/* Presumably Linux.. */
 			    (   strncmp(de->d_name, "ttyS", 4) == 0
 			     && de->d_name[4] >= '0' && de->d_name[4] <= '9')
 			 || (   strncmp(de->d_name, "ttyUSB", 5) == 0)
+#endif
 			))
 				continue;
 
@@ -263,11 +282,23 @@ icoms *p
 			strcpy(dpath, dirn);
 			strcat(dpath, de->d_name);
 
-			if ((fd = open(dpath, O_RDWR | O_NOCTTY )) < 0) {
+			if ((fd = open(dpath, O_RDWR | O_NOCTTY | O_NONBLOCK )) < 0) {
 				if (p->debug) fprintf(errout,"failed to open serial \"%s\"\n",dpath);
 				free(dpath);
 				continue;
 			}
+			/* On linux we could do a 
+				struct serial_struct serinfo;
+
+				serinfo.reserved_char[0] = 0;
+
+				if (ioctl(fd, TIOCGSERIAL, &serinfo) < 0
+					|| serinfo.type == PORT_UNKNOWN) {
+					free(dpath);
+					continue;
+				}
+
+			 */
 			close(fd);
 			if (p->debug) fprintf(errout,"managed to open serial \"%s\"\n",dpath);
 

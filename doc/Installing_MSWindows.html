@@ -1,15 +1,15 @@
-<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<!DOCTYPE HTML PUBLIC "-//w3c//dtd html 4.0 transitional//en">
 <html>
 <head>
   <meta http-equiv="Content-Type"
- content="text/html; charset=iso-8859-1">
+ content="text/html; charset=ISO-8859-1">
   <meta http-equiv="content-type"
  content="text/html; charset=ISO-8859-1">
   <meta name="GENERATOR"
  content="Mozilla/4.73 [en] (WinNT; I) [Netscape]">
   <title>Argyll Installation on Microsoft Windows</title>
 </head>
-<body style="color: rgb(0, 0, 0);" alink="#ee0000" link="#0000ee"
+<body style="color: rgb(0, 0, 0);" link="#0000ee" alink="#ee0000"
  vlink="#551a8b">
 <h1>
 <u>Installing the software on Microsoft Windows<br>
@@ -38,7 +38,12 @@ environment
 variable to give access to the executables from your command line
 environment.<br>
 <br>
-For <span style="font-weight: bold;">Vista/Windows 7</span>, look in<br>
+For <span style="font-weight: bold;">Windows 7</span>, look in<br>
+&nbsp;&nbsp;&nbsp; Start Menu -&gt; Control Panel -&gt; System And
+Security -&gt; System -&gt; Change Settings -&gt; Advanced -&gt;
+Environment Variables<br>
+<br>
+For <span style="font-weight: bold;">Vista</span>, look in<br>
 &nbsp;&nbsp;&nbsp; Start Menu -&gt; Control Panel -&gt; System And
 Maintenance -&gt; System -&gt; Change Settings -&gt; Advanced -&gt;
 Environment Variables<br>
@@ -177,12 +182,16 @@ Hardware Wizard". Click "Finish".<span style="font-weight: bold;"><span
  style="font-weight: bold;"></span></span><span
  style="font-weight: bold;"><br>
 <br>
-</span>Note that the "Huey" colorimeter appears as an HID (USB Human
+</span>Note that the <span style="font-weight: bold;">Huey</span> and <span
+ style="font-weight: bold;">i1 Display Pro</span> and <span
+ style="font-weight: bold;">ColorMunki Display</span> colorimeter
+appears as an HID (USB Human
 Interface
 Device Class) device, and hence will be assigned to the default
 MSWindows HID driver, rather than popping a "New Hardware" dialog. You
-don't normally need to install an Argyll <span
- style="font-weight: bold;">libusb1</span> driver for the Huey.<br>
+normally <span style="font-weight: bold; text-decoration: underline;">don't
+need</span> to install an Argyll <span style="font-weight: bold;">libusb1</span>
+driver for these devices.<br>
 <br>
 <span style="color: rgb(51, 153, 153);"><span
  style="color: rgb(0, 0, 0); text-decoration: underline;"><a name="IAD"></a><span
@@ -212,8 +221,11 @@ drivers on my computer"<br>
 &nbsp; On the next screen choose "Have Disk..."<br>
 &nbsp; On the next screen "Install From Disk" use the brows dialog to
 locate the directory <span style="font-weight: bold;">argyll\libusb1 </span>below
-where you
-installed Argyll. Click "next".<br>
+where
+you
+installed
+Argyll.
+Click "next".<br>
 &nbsp; The screen should change to "Installing driver software...", and
 a "Windows Security" window should pop up.<br>
 &nbsp; In the "Windows Security"&nbsp; window choose the "Install
@@ -239,6 +251,7 @@ checkbox is ticked, and choose which<br>
 have (Argyll) at the end of them.<br>
 &nbsp; You should get the final screen "The software for this
 device has been successfully installed". Click "Close".<br>
+<br>
 <br>
 <span style="font-weight: bold;"><span style="font-weight: bold;"><span
  style="font-weight: bold;"></span></span></span><a name="X_IAD"></a>In
@@ -292,13 +305,15 @@ driver to install" button, then click "Next".<br>
 &nbsp; On the next screen "Select the device driver you want to install
 for
 this hardware", the Argyll driver and any alternative<br>
-&nbsp;&nbsp; driver for the device should be listed.
-Choose the driver you want to switch to, and then Click "Next".<br>
+&nbsp;&nbsp; driver for the device should be listed.&nbsp; All Argyll
+drivers
+have (Argyll) at the end of them.<br>
+&nbsp; Choose the driver you want to switch to, and then Click "Next".<br>
 &nbsp; A "Please wait while the wizard installs the software" dialog
 will be shown.<br>
 &nbsp; You should get the final screen "Completing the Hardware Update
 Wizard". Click "Finish".<br>
-&nbsp; The Argyll driver will now be used to access the device.<br>
+<br>
 <br>
 <a name="2_IAD"></a>In <span style="font-weight: bold;">2000</span>:<br>
 &nbsp; Plug the instrument that you want to install the the computer.<br>
@@ -354,12 +369,14 @@ one of the top level "USB" items. <br>
 specific driver", then click "Next".<br>
 &nbsp; The next dialog called "Select a Device Driver" should list the
 Argyll driver and any alternative<br>
-&nbsp;&nbsp; driver for the device.
-Choose the driver you want to switch to, and then Click "Next".<br>
+&nbsp;&nbsp; driver for the device.&nbsp; All Argyll drivers
+have (Argyll) at the end of them.<br>
+&nbsp; Choose the driver you want to switch to, and then Click "Next".<br>
 &nbsp;&nbsp; On the next dialog called "Start Device Driver
 Installation" click "Next".<br>
 &nbsp; You should get the final screen "Completing the Upgrade Device
 Driver Wizard". Click "Finish".<span style="font-weight: bold;"></span><br>
+<br>
 <br>
 [ The alternative to switching to the Argyll drivers is to go to the
 libusb-win32 web site, and download and
@@ -417,10 +434,14 @@ ie:<br>
 &nbsp;&nbsp;&nbsp; c:<br>
 &nbsp;&nbsp;&nbsp; cd
 \winnt\inf&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; (Windows 2000)<br>
+&nbsp;
+&nbsp;
+&nbsp;
+(Windows 2000)<br>
 &nbsp;&nbsp;&nbsp; cd
 \windows\inf&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-(Windows XP)<br>
+(Windows
+XP)<br>
 <br>
 &nbsp; identify all the system copies of the Argyll .inf files:<br>
 <br>

@@ -11,8 +11,8 @@
  * Copyright 2005 - 2007 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  *
  * Derived from DTP41.h
  *
@@ -43,7 +43,16 @@
 	There is a bug or limitation with using -N to skip the calibration
 	when using any of the emissive modes - the readings end up being nearly zero.
 
-	You can't trigger a calibration readsing using the instrument switch.
+	You can't trigger a calibration reading using the instrument switch.
+
+	You should be able to do use the table enter key anywhere the user
+	is asked to hit a key.
+
+	The corner positioning could be smarter.
+
+	The SpectroscanT transmission cal. directly talks to the user
+	rather than returning a code to the driving program to allow
+	changing an apature and OK'ing from the user.
 
  */
 
@@ -52,8 +61,11 @@
 #include <ctype.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#endif /* !SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -80,17 +92,40 @@ char* filter_desc[] = {
 	"Custon Filter"
 };
 
-/* Track the number of measurements taken, so that a recalibration will */
-/* be done at the right time. */
+#define SS_REF_CAL_COUNT 50
+#define SS_TRANS_CAL_COUNT 10
+
+/* Track the number of measurements taken */
 static void inc_calcount(ss *p) {
 	p->calcount++;
-	if ((p->mode & inst_mode_illum_mask) == inst_mode_reflection && p->calcount >= 50) {
-		p->need_w_cal = 1;
+}
 
+/* Check if a calibration should be done, and set flags appropriately. */
+/* (atstart should be nz at start of serpentine) */
+static void check_calcount(ss *p, int atstart) {
+#ifdef DEBUG
+	printf("check_calcount: atstart %d, calcount %d, pisrow %d\n",atstart,p->calcount,p->pisrow);
+#endif
+	if ((p->mode & inst_mode_illum_mask) == inst_mode_reflection) {
+		/* If forced or out and back will cross count, do cal now. */
+		if (p->forcecalib							/* Forced */
+		 || p->calcount >= SS_REF_CAL_COUNT			/* Needs cal now */
+		 || (   atstart								/* At start of up & back */
+		     && p->pisrow < SS_REF_CAL_COUNT		/* possible not to cross */
+		     && (p->calcount + p->pisrow) > SS_REF_CAL_COUNT)) {	/* and will cross */
+			p->need_w_cal = 1;
+			p->forcecalib = 0;
+#ifdef DEBUG
+			printf("inc_calcount: need_w_cal set\n");
+#endif
+		}
 	} else if (((p->mode & inst_mode_illum_mask) == inst_mode_transmission
-		 && (p->mode & inst_mode_sub_mask) != inst_mode_spot		/* ??? */
-	     && p->calcount >= 10)) {
-		p->need_t_cal = 1;
+	     && (p->calcount >= SS_TRANS_CAL_COUNT || p->forcecalib))) {
+		p->forcecalib = 0;
+		p->need_t_cal = 2;
+#ifdef DEBUG
+		printf("inc_calcount: need_t_cal set\n");
+#endif
 	}
 }
 
@@ -308,6 +343,56 @@ ss_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	return inst_ok;
 }
 
+/* Set the capabilities values for the current mode */
+static void ss_determine_capabilities(ss *p) {
+
+	/* Set the capabilities mask */
+	p->cap = inst_ref_spot
+	       |  inst_emis_spot
+	       |  inst_emis_disp
+	       |  inst_colorimeter
+	       |  inst_spectral
+	       ;
+
+	if (p->itype == instSpectrolino) {
+		p->cap |= inst_trans_spot;		/* Support this manually using a light table */
+	}
+
+	if (p->itype == instSpectroScan
+	 || p->itype == instSpectroScanT)	/* Only in reflective mode */
+		p->cap |= inst_ref_xy;
+
+	if (p->itype == instSpectroScanT) {
+		p->cap |= inst_trans_spot;
+	}
+
+	/* Set the capabilities mask 2 */
+	p->cap2 = inst2_cal_ref_white
+	        | inst2_prog_trig
+	        | inst2_keyb_trig
+	        | inst2_keyb_switch_trig
+	        ;
+
+	if (p->itype == instSpectrolino) {
+		p->cap2 |= inst2_cal_trans_white;	/* Support this manually using a light table */
+	}
+
+	if (p->itype == instSpectroScan
+	 || p->itype == instSpectroScanT) {
+		/* These are not available in transmission mode */
+		if ((p->mode & inst_mode_illum_mask) != inst_mode_transmission) {
+			p->cap2 |= inst2_xy_holdrel
+		            |  inst2_xy_locate
+		            |  inst2_xy_position
+	            	;
+		}
+	}
+
+	if (p->itype == instSpectroScanT) {
+		p->cap2 |= inst2_cal_trans_white;
+	}
+}
+
 /* Initialise the Spectrolino/SpectroScan. */
 /* return non-zero on an error, with dtp error code */
 static inst_code
@@ -402,47 +487,8 @@ ss_init_inst(inst *pp) {
 	if ((rv = so_do_ParameterDownload(p, p->dstd, p->wbase, p->illum, p->obsv)) != inst_ok)
 		return rv;
 
-	/* Set the capabilities mask */
-	p->cap = inst_ref_spot
-	       |  inst_emis_spot
-	       |  inst_emis_disp
-	       |  inst_colorimeter
-	       |  inst_spectral
-	       ;
-
-	if (p->itype == instSpectrolino) {
-		p->cap |= inst_trans_spot;		/* Support this manually using a light table */
-	}
-
-	if (p->itype == instSpectroScan
-	 || p->itype == instSpectroScanT)	/* Only in reflective mode */
-		p->cap |= inst_ref_xy;
-
-	if (p->itype == instSpectroScanT) {
-		p->cap |= inst_trans_spot;
-	}
-
-	/* Set the capabilities mask 2 */
-	p->cap2 = inst2_cal_ref_white
-	        | inst2_prog_trig
-	        | inst2_keyb_trig
-	        | inst2_keyb_switch_trig
-	        ;
-
-	if (p->itype == instSpectrolino) {
-		p->cap2 |= inst2_cal_trans_white;	/* Support this manually using a light table */
-	}
-
-	if (p->itype == instSpectroScan
-	 || p->itype == instSpectroScanT)	/* Only in reflective mode */
-		p->cap2 |= inst2_xy_holdrel
-	            |  inst2_xy_locate
-	            |  inst2_xy_position
-	            ;
-
-	if (p->itype == instSpectroScanT) {
-		p->cap2 |= inst2_cal_trans_white;
-	}
+	/* Set the capabilities masks */
+	ss_determine_capabilities(p);
 
 	/* Deactivate measurement switch */
 	if ((rv = so_do_TargetOnOffStDownload(p,ss_toost_Deactivated)) != inst_ok)
@@ -586,28 +632,23 @@ ipatch *vals) { 		/* Pointer to array of values */
 	int pass, step, patch;
 	int tries, tc;			/* Total read tries */
 	int fstep = 0;			/* NZ if step is fast & quiet direction */
-	int cstep;				/* step value closest to calibration tile */
+	int pisrow;				/* patches in a step direction serpentine row */
 
 	if (p->itype != instSpectroScan
 	 && p->itype != instSpectroScanT)
 		return inst_unsupported;
 
 	/* Move quickest in X direction to minimise noise, */
-	/* and maximise speed */
+	/* and maximise speed. This means we either increment the step or */
+	/* the pass fastest, depending on fstep. */
 	if (fabs(px) > fabs(ax)) {
 		fstep = 1;
-		if (px > 0.0)
-			cstep = 0;
-		else
-			cstep = sip - 1;
+		p->pisrow = 2 * sip;
 	} else {
-		if (ax > 0.0)
-			cstep = 0;
-		else
-			cstep = pis - 1;
+		p->pisrow = 2 * pis;
 	}
 
-	tries = sip * pis;
+	tries = sip * pis;		/* Total grid patch count. Not all may have real patches. */
 
 	/* Read all the patches */
 	for (step = pass = tc = 0; tc < tries; tc++) {
@@ -626,6 +667,7 @@ ipatch *vals) { 		/* Pointer to array of values */
 		patch = apass * sip + astep;
 
 		if (patch < npatch) {	/* Over a valid patch */
+			int try, notries = 5;
 
 			ix = ox + apass * ax + astep * px;
 			iy = oy + apass * ay + astep * py;
@@ -635,65 +677,96 @@ ipatch *vals) { 		/* Pointer to array of values */
 				iy += aay;
 			}
 
-			/* Do calibration if it is needed, when closest to white tile. */
-			if ((fstep ? astep == cstep : apass == cstep)
-			    && (p->need_w_cal || p->need_t_cal)
-			    && p->noautocalib == 0) {
-				inst_cal_cond calc = inst_calc_none;
-				char id[CALIDLEN];
+			/* Retry a reading if it fails. */
+			/* (Note that we actually check if retries have failed within the loop) */
+			for (try = 0; try < notries; try++) {
 
-				/* We expect this to be automatic, but handle as if it mightn't be */
-				if ((rv = ss_calibrate_imp(p, inst_calt_all, &calc, id)) != inst_ok) {
-					if (rv == inst_cal_setup)
-						return inst_needs_cal;	/* Not automatic, needs a manual setup */
-					return rv;		/* Error */
+#ifdef DEBUG
+				printf("ss_read_xy: fstep %d, astep/pass %d\n",fstep, fstep ? astep : apass);
+#endif
+				/* Do calibration if it is absolutely needed, or when it would */
+				/* avoid a long move. */
+				check_calcount(p, fstep ? (pass & 1) == 0 && step == 0 : (step & 1) == 0 && pass == 0);
+				if ( (p->need_w_cal || p->need_t_cal) && p->noautocalib == 0) {
+					inst_cal_cond calc = inst_calc_none;
+					char id[CALIDLEN];
+
+					/* We expect this to be automatic, but handle as if it mightn't be */
+					if ((rv = ss_calibrate_imp(p, inst_calt_all, &calc, id)) != inst_ok) {
+						if (rv == inst_cal_setup)
+							return inst_needs_cal;	/* Not automatic, needs a manual setup */
+						if (try < notries) {
+							p->forcecalib = 1;		/* Force a calibration */
+							inc_calcount(p);		/* Set correct type of calib */
+							if (p->verb) printf("Calibration failed, retrying...\n");
+							continue;	/* Retry */
+						}
+						return rv;		/* Error */
+					}
 				}
-			}
 
-			{
-				ss_rvt refvalid;
-				double col[3], spec[36];
-				int i;
-
-				vals[patch].XYZ_v = 0;
-				vals[patch].aXYZ_v = 0;
-				vals[patch].Lab_v = 0;
-				vals[patch].sp.spec_n = 0;
-				vals[patch].duration = 0.0;
-			
-				/* move and measure gives us spectrum data anyway */
-				if ((rv = ss_do_MoveAndMeasure(p, ix, iy, spec, &refvalid)) != inst_ok)
-					return rv;
-
-				vals[patch].sp.spec_n = 36;
-				vals[patch].sp.spec_wl_short = 380;
-				vals[patch].sp.spec_wl_long = 730;
-				vals[patch].sp.norm = 100.0;
-				
-				for (i = 0; i < vals[patch].sp.spec_n; i++)
-					vals[patch].sp.spec[i] = 100.0 * (double)spec[i];
-
-				/* Get the XYZ */
 				{
-					ss_cst rct;
-					ss_rvt rvf;
-					ss_aft af;
-					ss_wbt wb;
-					ss_ilt it;
-					ss_ot  ot;
+					ss_rvt refvalid;
+					double col[3], spec[36];
+					int i;
 
-					if ((rv = so_do_CParameterRequest(p, ss_cst_XYZ, &rct, col, &rvf,
-					     &af, &wb, &it, &ot)) != inst_ok)
-						return rv;
+					vals[patch].XYZ_v = 0;
+					vals[patch].aXYZ_v = 0;
+					vals[patch].Lab_v = 0;
+					vals[patch].sp.spec_n = 0;
+					vals[patch].duration = 0.0;
+				
+					/* move and measure gives us spectrum data anyway */
+					if ((rv = ss_do_MoveAndMeasure(p, ix, iy, spec, &refvalid)) != inst_ok) {
+						if (try < notries) {
+							p->forcecalib = 1;		/* Force a calibration */
+							inc_calcount(p);		/* Set correct type of calib */
+							if (p->verb) printf("Measurement failed, retrying...\n");
+							continue;	/* Retry */
+						}
+						return rv;		/* Error */
+					}
+
+					vals[patch].sp.spec_n = 36;
+					vals[patch].sp.spec_wl_short = 380;
+					vals[patch].sp.spec_wl_long = 730;
+					vals[patch].sp.norm = 100.0;
+					
+					for (i = 0; i < vals[patch].sp.spec_n; i++)
+						vals[patch].sp.spec[i] = 100.0 * (double)spec[i];
+
+					/* Get the XYZ */
+					{
+						ss_cst rct;
+						ss_rvt rvf;
+						ss_aft af;
+						ss_wbt wb;
+						ss_ilt it;
+						ss_ot  ot;
+
+						if ((rv = so_do_CParameterRequest(p, ss_cst_XYZ, &rct, col, &rvf,
+						     &af, &wb, &it, &ot)) != inst_ok
+						  || rvf != ss_rvt_True) {
+							if (try < notries) {
+								p->forcecalib = 1;		/* Force a calibration */
+								inc_calcount(p);		/* Set correct type of calib */
+								if (p->verb) printf("XYZ reading failed, retrying...\n");
+								continue;	/* Retry */
+							}
+							return rv;		/* Error */
+						}
+					}
+					vals[patch].XYZ_v = 1;
+					vals[patch].XYZ[0] = col[0];
+					vals[patch].XYZ[1] = col[1];
+					vals[patch].XYZ[2] = col[2];
+
+					/* Track the need for a calibration */
+					inc_calcount(p);
+
+					break;			/* Don't need to retry */
 				}
-				vals[patch].XYZ_v = 1;
-				vals[patch].XYZ[0] = col[0];
-				vals[patch].XYZ[1] = col[1];
-				vals[patch].XYZ[2] = col[2];
-
-				/* Track the need for a calibration */
-				inc_calcount(p);
-			}
+			}	/* Retry */
 		}
 
 		/* Move on to the next patch */
@@ -1279,18 +1352,9 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 		if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission
 		     && p->itype == instSpectroScanT) {
 
-#ifdef NEVER	/* Nice , but not essential to warn the user. */
-			/* Advise user to change aperture before switching to transmission mode. */
-			if (p->user((inst *)p, inst_question, 3, 2,
-			     "Ensure that desired transmission aperture is fitted and press:\n",
-			     "Continue\n", "Abort\n") != 1)
-				return inst_user_abort;
-#endif /* NEVER */
-
 			if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission) {
 				if ((rv = ss_do_SetTableMode(p, ss_tmt_Transmission)) != inst_ok)
 					return rv;
-
 			}
 		}
 	}
@@ -1313,7 +1377,7 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	 && calt == inst_calt_trans_white) {
 
 //printf("~1 ss cal need trans with calt = trans_white\n");
-		/* Emulated spot transmission */
+		/* Emulated spot transmission useing spectrolino */
 		if (p->itype == instSpectrolino) {
 			ss_st rst;		/* Return Spectrum Type (Reflectance/Density) */
 			ss_rvt rvf;		/* Return Reference Valid Flag */
@@ -1359,6 +1423,14 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 
 		/* SpectroScanT */
 		} else {
+			/* Hmm. Should we really return a message and resume somehow, */
+			/* rather than communicating directly with the user... */
+
+			/* Advise user to change aperture before switching to transmission mode. */
+			p->message_user((inst *)p, "\nEnsure that desired transmission aperture is fitted,\n"
+			                           "and press space to continue:\n");
+			p->poll_user((inst *)p, 1);
+
 			/* Presuming this is the right return code */
 			if ((rv = so_do_ExecRefMeasurement(p, ss_mmt_WhiteCalWithWarn))
 			                          != (inst_notify | ss_et_WhiteMeasOK))
@@ -1402,6 +1474,7 @@ char *filtername
 ) {
 	ss *p = (ss *)pp;
 	
+#ifndef SALONEINSTLIB
 	if (filtername == NULL) {
 		p->compen = 0;
 	} else {
@@ -1418,6 +1491,9 @@ char *filtername
 		p->compen = 1;
 	}
 	return inst_ok;
+#else /* SALONEINSTLIB */
+	return inst_unsupported; 
+#endif /* SALONEINSTLIB */
 }
 
 /* Instrument specific error codes interpretation */
@@ -1661,6 +1737,9 @@ ss_set_mode(inst *pp, inst_mode m) {
 		/* Mode has changed */
 		p->mode = p->nextmode;
 
+		/* Capabilities may have changed */
+		ss_determine_capabilities(p);
+
 		/* So we need calibration */
 		p->need_w_cal = 1;
 		if ((p->mode & inst_mode_illum_mask) == inst_mode_transmission) {
@@ -1800,7 +1879,8 @@ static void
 ss_del(inst *pp) {
 	ss *p = (ss *)pp;
 
-	if (p->inited) {
+	if (p->inited
+	 && (p->mode & inst_mode_illum_mask) != inst_mode_transmission) {
 		ss_xy_clear(pp);
 	}
 

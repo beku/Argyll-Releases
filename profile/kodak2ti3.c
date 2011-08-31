@@ -30,17 +30,16 @@
 #include <string.h>
 #include "copyright.h"
 #include "aconfig.h"
+#include "numlib.h"
 #include "cgats.h"
 #include "icc.h"
 #include <stdarg.h>
 
-void error(char *fmt, ...);
-
 void
 usage(void) {
 	fprintf(stderr,"Convert Kodak raw printer profile data to Argyll print data, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	fprintf(stderr,"usage: kodak2gcats [-v] [-l limit] infile outfile\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
+	fprintf(stderr,"usage: kodak2ti3 [-v] [-l limit] infile outfile\n");
 	fprintf(stderr," -v              Verbose mode\n");
 	fprintf(stderr," -l limit        set ink limit, 0 - 400%%\n");
 	fprintf(stderr," -r filename     Use an alternate 928 patch reference file\n");
@@ -74,6 +73,8 @@ int main(int argc, char *argv[])
 	time_t clk = time(0);
 	struct tm *tsp = localtime(&clk);
 	char *atm = asctime(tsp); /* Ascii time */
+
+	error_program = "kodak2ti3";
 
 	if (argc <= 1)
 		usage();
@@ -1266,26 +1267,6 @@ int next_928(FILE *fp, int i, double *cmyk) {
 
 void close_928(FILE *fp) {
 	fclose(fp);
-}
-
-/******************************************************************/
-/* Error/debug output routines */
-/******************************************************************/
-
-/* Basic printf type error() and warning() routines */
-
-void
-error(char *fmt, ...)
-{
-	va_list args;
-
-	fprintf(stderr,"kodak2cgats: Error - ");
-	va_start(args, fmt);
-	vfprintf(stderr, fmt, args);
-	va_end(args);
-	fprintf(stderr, "\n");
-	fflush(stdout);
-	exit (-1);
 }
 
 

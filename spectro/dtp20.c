@@ -10,8 +10,8 @@
  * Copyright 1996 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  *
  * Derived from DTP41.c
  *
@@ -42,8 +42,10 @@
 #include <string.h>
 #include <stdarg.h>
 #include <time.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#endif  /* !SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -266,7 +268,7 @@ dtp20_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 		if (p->debug) fprintf(stderr,"dtp20: About to init USB\n");
 
 		/* Set config, interface, write end point, read end point, read quanta */
-		p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x81, icomuf_none, 0); 
+		p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x81, icomuf_none, 0, NULL); 
 
 		/* Blind reset it twice - it seems to sometimes hang up */
 		/* otherwise under OSX */

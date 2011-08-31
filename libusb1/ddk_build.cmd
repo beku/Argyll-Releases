@@ -39,7 +39,7 @@ md %dstPath%\examples
 :md7
 
 @rem ==================== libusb ======================
-set version=1.0
+set version=X.X
 
 cd libusb\os
 copy /y ..\..\msvc\libusb-%version%.rc .

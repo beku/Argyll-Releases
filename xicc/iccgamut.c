@@ -48,7 +48,7 @@ static void diag_gamut(icxLuBase *p, double detail, int doaxes,
 void usage(char *diag) {
 	int i;
 	fprintf(stderr,"Create Lab/Jab gamut plot Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: iccgamut [options] profile\n");
 	if (diag != NULL)
 		fprintf(stderr,"Diagnostic: %s\n",diag);

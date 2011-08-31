@@ -29,7 +29,7 @@
 
 void usage(void) {
 	fprintf(stderr,"Check PCS->Device Interpolation faults of ICC file, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: icheck [-v] [-w] infile\n");
 	fprintf(stderr," -v        verbose\n");
 	fprintf(stderr," -w        create VRML visualisation\n");

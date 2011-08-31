@@ -178,7 +178,9 @@ struct _dispwin {
 	double rgb[3];		/* Current color (full resolution) */
 	double r_rgb[3];	/* Current color (raster value) */
 	int nowin;			/* Don't create a test window */
-	int donat;			/* Do native output */
+	int native;			/*  0 = use current current or given calibration curve */
+						/*  1 = set native linear output and use ramdac high precision */
+						/*  2 = set native linear output */
 	ramdac *or;			/* Original ramdac contents */
 	ramdac *r;			/* Ramdac in use for native mode */
 	int blackbg;		/* NZ if black full screen background */
@@ -194,6 +196,15 @@ struct _dispwin {
 	
 	MSG msg;
 	ATOM arv;
+
+	int xo, yo, wi, he;	/* Window location & size */
+	athread *mth;		/* Window message thread */
+	int inited;
+	int quit;			/* Request to quit */
+
+	int colupd;			/* Color update count */
+	int colupde;		/* Color update count echo */
+
 #endif /* NT */
 
 #ifdef __APPLE__
@@ -288,7 +299,9 @@ dispwin *new_dispwin(
 	double width, double height,	/* Width and height in mm */
 	double hoff, double voff,		/* Offset from c. in fraction of screen, range -1.0 .. 1.0 */
 	int nowin,						/* NZ if no window should be created - RAMDAC access only */
-	int native,						/* NZ if ramdac should be bypassed instead of being used */
+	int native,						/* 0 = use current current or given calibration curve */
+									/* 1 = set native linear output and use ramdac high prec'n */
+									/* 2 = set native linear output */
 	int blackbg,					/* NZ if whole screen should be filled with black */
 	int override,					/* NZ if override_redirect is to be used on X11 */
 	int ddebug						/* >0 to print debug statements to stderr */

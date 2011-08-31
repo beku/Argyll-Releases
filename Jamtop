@@ -4,11 +4,34 @@
 
 Echo "Argyll Jamrules has been read" ;
 
+
+# Default install base directory is same directory as Jamtop,
+# but can be overriden in the command line.
+DESTDIR ?= [ NormPaths  . ] ;
+
+# Default prefix is empty, but can be overriden in the command line.
+PREFIX ?= "" ;
+
+# Default ref file sub-directory is "ref", but can be overriden in the command line.
+REFSUBDIR ?= "ref" ;
+
+Echo "DESTDIR = '$(DESTDIR)', PREFIX = '$(PREFIX)', REFSUBDIR = '$(REFSUBDIR)'" ;
+
+# Keep this DESTDIR anchored to Jamtop. PREFIX is used literally
+ANCHORED_PATH_VARS = DESTDIR ;
+
+
 # Tell standalone libraries that they are part of Argyll:
 DEFINES += ARGYLLCMS ;
 
 # Use libusb1 rather than libusb0 & libusb0-win32
 USE_LIBUSB1 = true ;
+
+# Except that FreeBSD doesn't have libusb1 port yet..
+if $(OS) = FREEBSD || $(OS) = OPENBSD {
+	USE_LIBUSB1 = false ; # Use libusb 0.1
+}
+
 # Make the USB V1 library static
 LIBUSB_IS_DLL = false ;
 
@@ -41,7 +64,11 @@ if $(UNIX) {
 		} else {
 			EXIT Unable to locate the X11 include files ;
 		}
-		LINKFLAGS += -L$(LibWinD) -ldl -lrt -lX11 -lXext -lXxf86vm -lXinerama -lXrandr -lXau -lXdmcp -lXss ;
+		if $(OS) = FREEBSD {
+			LINKFLAGS += -L$(LibWinD) -g -lrt -lX11 -lXext -lXxf86vm -lXinerama -lXrandr -lXau -lXdmcp -lXss  -lusb ;
+		} else {
+			LINKFLAGS += -L$(LibWinD) -ldl -lrt -lX11 -lXext -lXxf86vm -lXinerama -lXrandr -lXau -lXdmcp -lXss ;
+		}
 		# HDRS += $(LibWinH) ; 
 	}
 }

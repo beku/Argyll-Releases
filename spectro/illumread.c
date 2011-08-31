@@ -22,7 +22,16 @@
 
 /* Based on spotread.c */
 
+/*
+	TTBD:
+	
+	Should add support for converting Spyder correction readings to ccmx.
+	(see SpyderDeviceCorrections.txt)
+
+ */
+
 #undef DEBUG			/* Save measurements and restore them to debug_X.sp */
+#undef SHOWDXX			/* Plot the best matched daylight as well */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,7 +79,11 @@ static int gcc_bug_fix(int i) {
 	nn += i;
 	return nn;
 }
-#endif	/* APPLE */
+
+#define GCC_BUGFIX(XX) gcc_bug_fix(XX);
+#else	/* !APPLE */
+#define GCC_BUGFIX(XX)
+#endif	/* !APPLE */
 
 
 /* ============================================================== */
@@ -133,16 +146,65 @@ static double bfindfunc(void *adata, double pv[]) {
 	        + 0.1 * (b->lab0[1] - b->lab1[1]) * (b->lab0[1] - b->lab1[1]) 
 	        +       (b->lab0[2] - b->lab1[2]) * (b->lab0[2] - b->lab1[2])); 
 
+	/* Add a slight weight of the UV level, to minimize it */
+	/* if the case is unconstrained. */  
+	rv += 0.1 * fabs(pv[0]);
+
 //printf("~1 rev = %f (%f %f %f - %f %f %f) from %f %f\n",rv, b->lab0[0], b->lab0[1], b->lab0[2], b->lab1[0], b->lab1[1], b->lab1[2], pv[0], pv[1]);
 	return rv;
 }
+
+/* ============================================================== */
+#ifdef SHOWDXX			/* Plot the best matched daylight as well */
+
+/* optimizer callback for computing daylight match */
+
+/* Structure to hold optimisation information */
+typedef struct {
+	xspect ill;			/* Illuminant with UV added - target */
+	xspect dxx;			/* Daylight spectrum */
+
+	xsp2cie *ref;		/* reference Lab conversion */
+
+	double lab0[3], lab1[3];	/* Conversion of target vs. Daylight */
+} cfinds;
+
+/* Optimize the daylight color temperature and level to minimizes the Delta E */
+static double cfindfunc(void *adata, double pv[]) {
+	cfinds *b = (cfinds *)adata;
+	int i;
+	double rv = 0.0;
+
+	/* Compute daylight with the given color temperature */
+	standardIlluminant( &b->dxx, icxIT_Dtemp, pv[0]);
+	b->dxx.norm = 1.0;
+
+	/* Adjust the level of daylight spectra */
+	for (i = 0; i < b->dxx.spec_n; i++) {
+		b->dxx.spec[i] *= pv[1];
+	}
+
+	/* Compute Lab of target */
+	b->ref->convert(b->ref, b->lab0, &b->ill);
+
+	/* Compute Lab of Dxx */
+	b->ref->convert(b->ref, b->lab1, &b->dxx);
+
+	/* Weighted Delta E (low weight on a* error) */
+	rv = icmLabDEsq(b->lab0, b->lab1);
+
+printf("~1 rev = %f (%f %f %f - %f %f %f) from %f %f\n",rv, b->lab0[0], b->lab0[1], b->lab0[2], b->lab1[0], b->lab1[1], b->lab1[2], pv[0], pv[1]);
+	return rv;
+}
+
+#endif /* SHOWDXX */
 
 /* ============================================================== */
 void
 usage(int debug) {
 	icoms *icom;
 	fprintf(stderr,"Measure an illuminant, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (setup_spyd2() == 2)
 		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
 	fprintf(stderr,"usage: illumread [-options] output.sp\n");
@@ -401,12 +463,9 @@ int main(int argc, char *argv[])
 				/* Disable autocalibration of machine if selected */
 				if (nocal != 0){
 					if ((rv = it->set_opt_mode(it,inst_opt_noautocalib)) != inst_ok) {
-						printf("!!! Setting no-autocalibrate failed failed with '%s' (%s) !!!\n",
+						printf("Setting no-autocalibrate failed failed with '%s' (%s) !!!\n",
 					       it->inst_interp_error(it, rv), it->interp_error(it, rv));
-						it->del(it);
-						it = NULL;
-						itype = instUnknown;
-						continue;
+						printf("Disable auto-calibrate not supported\n");
 					}
 				}
 				if (highres) {
@@ -470,6 +529,8 @@ int main(int argc, char *argv[])
 			     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 				continue;
 			}
+			cap = it->capabilities(it);
+			cap2 = it->capabilities2(it);
 
 			/* If it batter powered, show the status of the battery */
 			if ((cap2 & inst2_has_battery)) {
@@ -780,9 +841,7 @@ int main(int argc, char *argv[])
 					error("Got > %d spectral values (%d)",XSPECT_MAX_BANDS,val.sp.spec_n);
 
 				for (j = 0; j < val.sp.spec_n; j++) {
-#if defined(__APPLE__) && defined(__POWERPC__)
-					gcc_bug_fix(j);
-#endif
+					GCC_BUGFIX(j)
 					xx[j] = val.sp.spec_wl_short
 					      + j * (val.sp.spec_wl_long - val.sp.spec_wl_short)/(val.sp.spec_n-1);
 
@@ -838,6 +897,7 @@ int main(int argc, char *argv[])
 			continue;
 		}
 		if (c == '5' || c == '6') {		/* Compute result */
+			xspect cpisp;		/* FWA corrected calculated initial paper reflectance */
 			double gain;
 			bfinds bf;	/* Optimization context */
 			double xyz0[3], xyz1[3];
@@ -901,10 +961,14 @@ int main(int argc, char *argv[])
 			for (i = 0; i < r_sp.spec_n; i++)
 				r_sp.spec[i] *= gain;
 
+			/* Check initial gain match is OK */
 			bfindfunc((void *)&bf, tt);
+			cpisp = bf.cpsp;			/* Copy initial match */
 			icmLab2XYZ(&icmD50, xyz0, bf.lab0);
 			icmLab2XYZ(&icmD50, xyz1, bf.lab1);
-//printf("~1 Target XYZ %f %f %f, now %f %f %f\n",xyz0[0],xyz0[1],xyz0[2],xyz1[0],xyz1[1],xyz1[2]);
+#ifdef NEVER
+			printf("~1 Target XYZ %f %f %f, now %f %f %f\n",xyz0[0],xyz0[1],xyz0[2],xyz1[0],xyz1[1],xyz1[2]);
+#endif
 
 			tt[0] = 0.1, tt[1] = 1.0;	/* Search parameter starting values */
 			sr[0] = sr[1] = 0.1;		/* Search parameter search radiuses */
@@ -947,18 +1011,95 @@ int main(int argc, char *argv[])
 				double xx[XSPECT_MAX_BANDS];
 				double y1[XSPECT_MAX_BANDS];
 				double y2[XSPECT_MAX_BANDS];
+				double y3[XSPECT_MAX_BANDS];
 				double xmin, xmax, ymin, ymax;
 				int nn;
 
+#ifdef SHOWDXX
+				cfinds cf;	/* Optimization context */
+				double tt[2], sr[2];
+				double rv;
+				xspect cpdsp;		/* FWA corrected calculated daylight paper reflectance */
+				
+				/* Setup the referencec comversion */
+				if ((cf.ref = new_xsp2cie(icxIT_E, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+					error("new_xsp2cie ref failed");
+
+				cf.ill = bf.ill; 
+
+				/* Set starting values */
+				tt[0] = 5000.0;		/* degrees */
+				tt[1] = 1.0;
+				cfindfunc((void *)&cf, tt);
+				icmLab2XYZ(&icmD50, xyz0, cf.lab0);
+				icmLab2XYZ(&icmD50, xyz1, cf.lab1);
+
+				tt[1] = xyz0[1] / xyz1[1];
+
+				sr[0] = 10.0;
+				sr[1] = 0.1;		/* Search parameter search radiuses */
+
+				if (powell(&rv, 2, tt, sr, 0.0001, 1000,
+				           cfindfunc, (void *)&cf, NULL, NULL) != 0) {
+					error("Optimization search failed\n");
+				}
+				printf("(Best match DE %f, temp = %f (gain match %f))\n", rv, tt[0], tt[1]);
+
+				/* Compute the result */
+				cfindfunc((void *)&cf, tt);
+
+				printf("Illuminant: Black - Measured, Red - with estimated UV, Green - daylight\n");
+
+				if (bf.ill.spec_n > XSPECT_MAX_BANDS)
+					error("Got > %d spectral values (%d)",XSPECT_MAX_BANDS,bf.ill.spec_n);
+
+				for (j = 0; j < bf.ill.spec_n; j++) {
+					GCC_BUGFIX(j)
+					xx[j] = XSPECT_XWL(&bf.ill, j);
+					y1[j] = value_xspect(bf.i_sp, xx[j]);		/* Measured (black) */
+					y2[j] = value_xspect(&bf.ill, xx[j]);		/* Computed (red)*/
+					y3[j] = value_xspect(&cf.dxx, xx[j]);		/* Daylight match (green)*/
+				}
+				
+				xmax = bf.ill.spec_wl_long;
+				xmin = bf.ill.spec_wl_short;
+				ymin = ymax = 0.0;	/* let it scale */
+				do_plot_x(xx, y1, y2, y3, bf.ill.spec_n, 1,
+				          xmin, xmax, ymin, ymax, 2.0);
+
+				/* Update the conversion to the matched Dayligh */
+				if (bf.pap->update_fwa_custillum(bf.pap, &cf.dxx) != 0) 
+					error ("Updating FWA compensation to daylight failed");
+
+				/* Apply FWA compensation to the paper reflectance */
+				bf.pap->sconvert(bf.pap, &cpdsp, NULL, bf.p_sp);
+
+				printf("Paper Reflectance: Black - Measured, Red - Initial FWA model, Green - FWA Final FWA model\n");
+//				printf("Paper Reflectance: Black - Measured, Red - FWA Modelled, Green - Daylight modelled\n");
+
+				for (j = 0; j < bf.cpsp.spec_n; j++) {
+					GCC_BUGFIX(j)
+					xx[j] = XSPECT_XWL(&bf.cpsp, j);
+					y1[j] = value_xspect(&bf.srop, xx[j]);		/* Measured reflectance (black) */
+					y2[j] = value_xspect(&cpisp, xx[j]);		/* Computed initial reflectance (red) */
+					y3[j] = value_xspect(&bf.cpsp, xx[j]);		/* Computed final reflectance (green) */
+//					y3[j] = value_xspect(&cpdsp, xx[j]);		/* Computed daylight reflectance (green) */
+				}
+				
+				xmax = bf.cpsp.spec_wl_long;
+				xmin = bf.cpsp.spec_wl_short;
+				ymin = ymax = 0.0;	/* let it scale */
+				do_plot_x(xx, y1, y2, y3, bf.cpsp.spec_n, 1,
+				          xmin, xmax, ymin, ymax, 2.0);
+
+#else
 				printf("Illuminant: Black - Measured, Red - with estimated UV\n");
 
 				if (bf.ill.spec_n > XSPECT_MAX_BANDS)
 					error("Got > %d spectral values (%d)",XSPECT_MAX_BANDS,bf.ill.spec_n);
 
 				for (j = 0; j < bf.ill.spec_n; j++) {
-#if defined(__APPLE__) && defined(__POWERPC__)
-					gcc_bug_fix(j);
-#endif
+					GCC_BUGFIX(j)
 					xx[j] = XSPECT_XWL(&bf.ill, j);
 					y1[j] = value_xspect(bf.i_sp, xx[j]);		/* Measured (black) */
 					y2[j] = value_xspect(&bf.ill, xx[j]);		/* Computed (red)*/
@@ -970,29 +1111,27 @@ int main(int argc, char *argv[])
 				do_plot_x(xx, y1, y2, NULL, bf.ill.spec_n, 1,
 				          xmin, xmax, ymin, ymax, 2.0);
 
-				printf("Paper Reflectance: Black - Measured, Red - FWA Modelled\n");
+				printf("Paper Reflectance: Black - Measured, Red - Initial FWA model, Green - FWA Final FWA model\n");
 
 				for (j = 0; j < bf.cpsp.spec_n; j++) {
-#if defined(__APPLE__) && defined(__POWERPC__)
-					gcc_bug_fix(j);
-#endif
+					GCC_BUGFIX(j)
 					xx[j] = XSPECT_XWL(&bf.cpsp, j);
 					y1[j] = value_xspect(&bf.srop, xx[j]);		/* Measured reflectance (black) */
-					y2[j] = value_xspect(&bf.cpsp, xx[j]);		/* Computed reflectance (red) */
+					y2[j] = value_xspect(&cpisp, xx[j]);		/* Computed initial reflectance (red) */
+					y3[j] = value_xspect(&bf.cpsp, xx[j]);		/* Computed final reflectance (green) */
 				}
 				
 				xmax = bf.cpsp.spec_wl_long;
 				xmin = bf.cpsp.spec_wl_short;
 				ymin = ymax = 0.0;	/* let it scale */
-				do_plot_x(xx, y1, y2, NULL, bf.cpsp.spec_n, 1,
+				do_plot_x(xx, y1, y2, y3, bf.cpsp.spec_n, 1,
 				          xmin, xmax, ymin, ymax, 2.0);
 
+#endif
 				printf("%s illuminant with UV:\n",c == '5' ? "Averaged" : "Computed");
 
 				for (j = 0; j < ill.spec_n; j++) {
-#if defined(__APPLE__) && defined(__POWERPC__)
-					gcc_bug_fix(j);
-#endif
+					GCC_BUGFIX(j)
 					xx[j] = XSPECT_XWL(&ill, j);
 					y1[j] = value_xspect(&ill, xx[j]);
 				}

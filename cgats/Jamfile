@@ -13,8 +13,8 @@ Libraries = libcgats ;
 Headers = cgats.h ;
 
 #Install
-#InstallLib ../lib : $(Libraries ;
-#InstallFile ../h : $(Headers) ;
+#InstallLib $(DESTDIR)$(PREFIX)/lib : $(Libraries ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
 
 # Stop objects that are in more than one library from being
 # prematurely deleted:

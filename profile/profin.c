@@ -6,7 +6,7 @@
  * Author: Graeme W. Gill
  * Date:   11/10/00
  *
- * Copyright 2000 Graeme W. Gill
+ * Copyright 2000 - 2011 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -47,9 +47,11 @@
 #define DOB2A			/* Create B2A table as well (not implemented) */
 #define NO_B2A_PCS_CURVES       /* PCS curves seem to make B2A less accurate. Why ? */
 #define USE_CAM_CLIP_OPT        /* Clip out of gamut in CAM space rather than XYZ or L*a*b* */
-#undef USE_EXTRA_FITTING       /* Turn on data point error compensation */
+#undef USE_EXTRA_FITTING       	/* Turn on data point error compensation */
 #define USE_2ASS_SMOOTHING      /* Turn on Gaussian smoothing */
-#undef WARN_CLUT_CLIPPING	/* Print warning if setting clut clips */
+#undef WARN_CLUT_CLIPPING		/* Print warning if setting clut clips */
+#define EXTRAP_MAXPNTS 10		/* Maximum number of extra extrapolated points per direction */
+#define EXTRAP_WEIGHT 1.0		/* Extra extrapolated point weighting */
 
 /*
    Basic algorithm outline:
@@ -261,6 +263,8 @@ make_input_icc(
 	int nsabs,				/* nz for non-standard absolute output */
 	double wpscale,			/* >= 0.0 for media white point scale factor */
 	int dob2a,				/* nz to create a B2A table as well */
+	int extrap,				/* nz to create extra cLUT interpolation points */
+	int clipprims,			/* Clip white, black and primaries */
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
 	cgats *icg,				/* input cgats structure */
@@ -275,10 +279,13 @@ make_input_icc(
 	icmFile *wr_fp;
 	icc *wr_icco;
 	int npat;				/* Number of patches */
+	int npxpat = 0;			/* Number of possible extrap extrapolation patches */
+	int nxpat = 0;			/* Number of extrap extrapolation patches */
 	cow *tpat;				/* Patch input values */
 	int i, rv = 0;
 	int isLab = 0;			/* 0 if input is XYZ, 1 if input is Lab */
-	int wantLab = 0;		/* 0 if want is XYZ, 1 want is Lab */
+	int wantLab = 0;		/* 0 if want is XYZ, 1 want is Lab. */
+							/* Values will be wantLab after reading */
 	int isLut = 0;			/* 0 if shaper+ matrix, 1 if lut type */
 	int isShTRC = 0;		/* 0 if separate gamma/shaper TRC, 1 if shared */
 
@@ -291,6 +298,7 @@ make_input_icc(
 	} else {
 		wantLab = 0;			/* gamma/shaper + matrix profile must be XYZ */
 		isLut = 0;
+		extrap = 0;
 
 		if (ptype == prof_gam1mat	
 		 || ptype == prof_sha1mat
@@ -298,6 +306,9 @@ make_input_icc(
 			isShTRC = 1;		/* Single curve */
 		}
 	}
+
+	if (nsabs == 0)				/* Don't introduce extra points if not absolute range */
+		extrap = 0;
 
 	/* Open up the file for writing */
 	if ((wr_fp = new_icmFileStd_name(file_name,"w")) == NULL)
@@ -319,7 +330,11 @@ make_input_icc(
 	    	wh->pcs         = icSigLabData;
 		else
 	    	wh->pcs         = icSigXYZData;
-    	wh->renderingIntent = icRelativeColorimetric;	/* For want of something */
+
+		if (xpi->default_ri != icMaxEnumIntent)
+	    	wh->renderingIntent = xpi->default_ri;
+		else
+	    	wh->renderingIntent = icRelativeColorimetric;
 
 		/* Values that should be set before writing */
 		if (xpi != NULL && xpi->manufacturer != 0L)
@@ -344,6 +359,15 @@ make_input_icc(
 #if defined(UNIX) && !defined(__APPLE__)
 		wh->platform = icmSig_nix;
 #endif
+
+		if (xpi != NULL && xpi->transparency)
+			wh->attributes.l |= icTransparency;
+		if (xpi != NULL && xpi->matte)
+			wh->attributes.l |= icMatte;
+		if (xpi != NULL && xpi->negative)
+			wh->attributes.l |= icNegative;
+		if (xpi != NULL && xpi->blackandwhite)
+			wh->attributes.l |= icBlackAndWhite;
 	}
 	/* Profile Description Tag: */
 	{
@@ -436,7 +460,72 @@ make_input_icc(
 		wo->data[0].Z = 0.00;
 	}
 
-	if (isLut) {		/* Lut type profile */
+	if (isLut == 0) {	/* shaper + matrix type */
+
+		/* Red, Green and Blue Colorant Tags: */
+		{
+			icmXYZArray *wor, *wog, *wob;
+			if ((wor = (icmXYZArray *)wr_icco->add_tag(
+			           wr_icco, icSigRedColorantTag, icSigXYZArrayType)) == NULL) 
+				error("add_tag failed: %d, %s",rv,wr_icco->err);
+			if ((wog = (icmXYZArray *)wr_icco->add_tag(
+			           wr_icco, icSigGreenColorantTag, icSigXYZArrayType)) == NULL) 
+				error("add_tag failed: %d, %s",rv,wr_icco->err);
+			if ((wob = (icmXYZArray *)wr_icco->add_tag(
+			           wr_icco, icSigBlueColorantTag, icSigXYZArrayType)) == NULL) 
+				error("add_tag failed: %d, %s",rv,wr_icco->err);
+
+			wor->size = wog->size = wob->size = 1;
+			wor->allocate((icmBase *)wor);	/* Allocate space */
+			wog->allocate((icmBase *)wog);
+			wob->allocate((icmBase *)wob);
+
+			/* Setup some sane dummy values */
+			/* icxMatrix will override these later */
+			wor->data[0].X = 1.0; wor->data[0].Y = 0.0; wor->data[0].Z = 0.0;
+			wog->data[0].X = 0.0; wog->data[0].Y = 1.0; wog->data[0].Z = 0.0;
+			wob->data[0].X = 0.0; wob->data[0].Y = 0.0; wob->data[0].Z = 1.0;
+		}
+
+		/* Red, Green and Blue Tone Reproduction Curve Tags: */
+		{
+			icmCurve *wor, *wog, *wob;
+			if ((wor = (icmCurve *)wr_icco->add_tag(
+			           wr_icco, icSigRedTRCTag, icSigCurveType)) == NULL) 
+				error("add_tag failed: %d, %s",rv,wr_icco->err);
+
+			if (isShTRC) {	/* Make all TRCs shared */
+				if ((wog = (icmCurve *)wr_icco->link_tag(
+				           wr_icco, icSigGreenTRCTag, icSigRedTRCTag)) == NULL) 
+					error("link_tag failed: %d, %s",rv,wr_icco->err);
+				if ((wob = (icmCurve *)wr_icco->link_tag(
+				           wr_icco, icSigBlueTRCTag, icSigRedTRCTag)) == NULL) 
+					error("link_tag failed: %d, %s",rv,wr_icco->err);
+
+			} else {		/* Else individual */
+				if ((wog = (icmCurve *)wr_icco->add_tag(
+				           wr_icco, icSigGreenTRCTag, icSigCurveType)) == NULL) 
+					error("add_tag failed: %d, %s",rv,wr_icco->err);
+				if ((wob = (icmCurve *)wr_icco->add_tag(
+				           wr_icco, icSigBlueTRCTag, icSigCurveType)) == NULL) 
+					error("add_tag failed: %d, %s",rv,wr_icco->err);
+			}
+	
+			if (ptype == prof_shamat || ptype == prof_sha1mat) {	/* Shaper */
+				wor->flag = wog->flag = wob->flag = icmCurveSpec; 
+				wor->size = wog->size = wob->size = 256;			/* Number of entries */
+			} else {						/* Gamma */
+				wor->flag = wog->flag = wob->flag = icmCurveGamma;
+				wor->size = wog->size = wob->size = 1;				/* Must be 1 for gamma */
+			}
+			wor->allocate((icmBase *)wor);	/* Allocate space */
+			wog->allocate((icmBase *)wog);
+			wob->allocate((icmBase *)wob);
+
+			/* icxMatrix will set curve values */
+		}
+
+	} else {		/* Lut type profile */
 
 		/* 16 bit dev -> pcs lut: */
 		{
@@ -512,71 +601,8 @@ make_input_icc(
 		}
 #endif /* DOB2A */
 
-	} else {	/* shaper + matrix type */
-
-		/* Red, Green and Blue Colorant Tags: */
-		{
-			icmXYZArray *wor, *wog, *wob;
-			if ((wor = (icmXYZArray *)wr_icco->add_tag(
-			           wr_icco, icSigRedColorantTag, icSigXYZArrayType)) == NULL) 
-				error("add_tag failed: %d, %s",rv,wr_icco->err);
-			if ((wog = (icmXYZArray *)wr_icco->add_tag(
-			           wr_icco, icSigGreenColorantTag, icSigXYZArrayType)) == NULL) 
-				error("add_tag failed: %d, %s",rv,wr_icco->err);
-			if ((wob = (icmXYZArray *)wr_icco->add_tag(
-			           wr_icco, icSigBlueColorantTag, icSigXYZArrayType)) == NULL) 
-				error("add_tag failed: %d, %s",rv,wr_icco->err);
-
-			wor->size = wog->size = wob->size = 1;
-			wor->allocate((icmBase *)wor);	/* Allocate space */
-			wog->allocate((icmBase *)wog);
-			wob->allocate((icmBase *)wob);
-
-			/* Setup some sane dummy values */
-			/* icxMatrix will override these later */
-			wor->data[0].X = 1.0; wor->data[0].Y = 0.0; wor->data[0].Z = 0.0;
-			wog->data[0].X = 0.0; wog->data[0].Y = 1.0; wog->data[0].Z = 0.0;
-			wob->data[0].X = 0.0; wob->data[0].Y = 0.0; wob->data[0].Z = 1.0;
-		}
-
-		/* Red, Green and Blue Tone Reproduction Curve Tags: */
-		{
-			icmCurve *wor, *wog, *wob;
-			if ((wor = (icmCurve *)wr_icco->add_tag(
-			           wr_icco, icSigRedTRCTag, icSigCurveType)) == NULL) 
-				error("add_tag failed: %d, %s",rv,wr_icco->err);
-
-			if (isShTRC) {	/* Make all TRCs shared */
-				if ((wog = (icmCurve *)wr_icco->link_tag(
-				           wr_icco, icSigGreenTRCTag, icSigRedTRCTag)) == NULL) 
-					error("link_tag failed: %d, %s",rv,wr_icco->err);
-				if ((wob = (icmCurve *)wr_icco->link_tag(
-				           wr_icco, icSigBlueTRCTag, icSigRedTRCTag)) == NULL) 
-					error("link_tag failed: %d, %s",rv,wr_icco->err);
-
-			} else {		/* Else individual */
-				if ((wog = (icmCurve *)wr_icco->add_tag(
-				           wr_icco, icSigGreenTRCTag, icSigCurveType)) == NULL) 
-					error("add_tag failed: %d, %s",rv,wr_icco->err);
-				if ((wob = (icmCurve *)wr_icco->add_tag(
-				           wr_icco, icSigBlueTRCTag, icSigCurveType)) == NULL) 
-					error("add_tag failed: %d, %s",rv,wr_icco->err);
-			}
-	
-			if (ptype == prof_shamat || ptype == prof_sha1mat) {	/* Shaper */
-				wor->flag = wog->flag = wob->flag = icmCurveSpec; 
-				wor->size = wog->size = wob->size = 256;			/* Number of entries */
-			} else {						/* Gamma */
-				wor->flag = wog->flag = wob->flag = icmCurveGamma;
-				wor->size = wog->size = wob->size = 1;				/* Must be 1 for gamma */
-			}
-			wor->allocate((icmBase *)wor);	/* Allocate space */
-			wog->allocate((icmBase *)wog);
-			wob->allocate((icmBase *)wob);
-
-			/* icxMatrix will set curve values */
-		}
 	}
+
 	/* Sample data use to create profile: */
 	if (nocied == 0) {
 		icmText *wo;
@@ -623,8 +649,12 @@ make_input_icc(
 		fprintf(verbo,"No of test patches = %d\n",npat);
 	}
 
+	if (extrap) {
+		npxpat = 2 * EXTRAP_MAXPNTS;		/* Allow for up to 20 extra patches */
+	}
+
 	/* Allocate arrays to hold test patch input and output values */
-	if ((tpat = (cow *)malloc(sizeof(cow) * npat)) == NULL)
+	if ((tpat = (cow *)malloc(sizeof(cow) * (npat + npxpat))) == NULL)
 		error("Malloc failed - tpat[]");
 
 	/* Read in the CGATs fields */
@@ -776,11 +806,239 @@ make_input_icc(
 		}
 	}	/* End of reading in CGATs file */
 
-	if (isLut) {
+	if (isLut == 0) { /* Gamma/Shaper + matrix profile */
+		xicc *wr_xicc;			/* extention object */
+		icxLuBase *xluo;		/* Forward ixcLu */
+		int flags = 0;
+
+		/* Wrap with an expanded icc */
+		if ((wr_xicc = new_xicc(wr_icco)) == NULL)
+			error("Creation of xicc failed");
+		
+		if (verb)
+			flags |= ICX_VERBOSE;
+
+		if (ptype == prof_matonly)
+			flags |= ICX_NO_IN_SHP_LUTS;	/* Make it linear */
+
+		if (clipprims)
+			flags |= ICX_CLIP_WB | ICX_CLIP_PRIMS;
+				
+		if (nsabs == 0)
+	        flags |= ICX_SET_WHITE | ICX_SET_BLACK;		/* Compute & use white and black */
+
+        flags |= ICX_WRITE_WBL;		/* Write white/black/luminence */
+
+		/* Setup Device -> XYZ conversion (Fwd) object from scattered data. */
+		if ((xluo = wr_xicc->set_luobj(
+//		               wr_xicc, icmFwd, icRelativeColorimetric,
+		               wr_xicc, icmFwd, icmDefaultIntent,
+		               icmLuOrdNorm,
+		               flags, 		/* Flags */
+		               npat, tpat, 0.0, wpscale, smooth, avgdev,
+		               NULL, NULL, NULL, iquality)) == NULL)
+			error("%d, %s",wr_xicc->errc, wr_xicc->err);
+
+		/* Free up xicc stuff */
+		xluo->del(xluo);
+		wr_xicc->del(wr_xicc);
+
+	} else {		/* cLUT based profile */
 		int flags = 0;
 
 		xicc *wr_xicc;			/* extention object */
 		icxLuBase *AtoB;		/* AtoB ixcLu */
+
+		if (extrap) {
+			icxMatrixModel *mm;
+			double avgdist;		/* Average distance between points */
+			cow *mpat;
+			int nmpat;
+			double range;
+			int j;
+
+			if (verb) printf("Creating extrapolation black and white points:\n");
+
+			avgdist = pow(1.0/(double)npat, 1.0/3.0);
+			if (avgdist < 0.001)
+				avgdist = 0.001;
+			else if (avgdist > 0.3)
+				avgdist = 0.3;
+//printf("~1 avgdist = %f\n",avgdist);
+
+			if ((mpat = (cow *)malloc(sizeof(cow) * npat)) == NULL)
+				error("Malloc failed - mpat[]");
+
+			/* Select points from full set */
+			for (range = 0.05;; range *= 1.5) {
+				if (range > 1.0)
+					range = 1.0;
+
+				for (nmpat = j = 0; j < npat; j++) {
+					double mnp, mxp;
+					int k;
+	
+					icmCpy3(mpat[nmpat].p, tpat[j].p);
+					icmCpy3(mpat[nmpat].v, tpat[j].v);
+	
+					/* Locate largest/smallest RGB value */
+					mxp = -1e6, mnp = 1e6;
+					for (k = 0; k < 3; k++) {
+						if (tpat[j].p[k] > mxp)
+							mxp = tpat[j].p[k];
+						if (tpat[j].p[k] < mnp)
+							mnp = tpat[j].p[k];
+					}
+					mxp -= mnp;			/* Spread; 0 for R=G=B */
+
+					if (mxp <= range) {
+						mpat[nmpat].w = 1.0 - mxp/range;
+//printf("~1 added value %d: %f %f %f -> %f %f %f wt %f\n",j, mpat[nmpat].p[0], mpat[nmpat].p[1], mpat[nmpat].p[2], mpat[nmpat].v[0], mpat[nmpat].v[1], mpat[nmpat].v[2],mpat[nmpat].w);
+						nmpat++;
+					}
+				}
+
+				if (nmpat >= 16 || range >= 0.99) {
+//printf("~1 stopping with %d points at range %f\n",nmpat,range);
+					break;
+				}
+
+				/* Hmm. Not enough points with that range */
+			}
+
+			if (verb) printf("%d/%d patches for extrapolation gamma/matrix model\n",nmpat,npat);
+	
+			/* Create gamma/matrix model to extrapolate with. */
+			/* (Use ofset & gain, gamma curve as 0th order with 1 harmonic, */
+			/* and heavily smooth it.) */
+			if ((mm = new_MatrixModel(verb, nmpat, mpat, wantLab,
+				      /* quality */ -1, /* isLinear */ ptype == prof_matonly,
+				      /* isGamma */ 0, /* isShTRC */ 0,
+				      /* shape0gam */ 1, /* clipbw */ 0, /* clipprims */ 0,
+				      /* smooth */ 1.0, /* scale */ 0.7)) == NULL) {
+				error("Creating extrapolation matrix model failed - memory ?");
+			}
+
+#ifdef NEVER
+{
+	#define	XRES 100
+	double xx[XRES];
+	double y0[XRES];
+	double y1[XRES];
+	double y2[XRES];
+
+	/* Display the result fit */
+	for (i = 0; i < XRES; i++) {
+		double rgb[3], lab[3];
+		xx[i] = rgb[0] = rgb[1] = rgb[2] = i/(double)(XRES-1);
+		mm->lookup(mm, lab, rgb);
+		icmLab2XYZ(&icmD50,lab,lab);
+		y0[i] = lab[0];
+		y1[i] = lab[1];
+		y2[i] = lab[2];
+	}
+	do_plot(xx,y0,y1,y2,XRES);
+}
+#endif /* DEBUG_PLOT */
+
+
+			/* Create a black and white patch */
+			for (i = 0; i < 2; i++) {
+				int cix;					/* Closest point index */
+				int eix;					/* End point index */
+				double cde = 1e60;			/* Closest point distance */
+				double tt;
+				double corr[3], cwt;		/* Correction */
+
+				tpat[npat + nxpat].p[0] = 
+				tpat[npat + nxpat].p[1] = 
+				tpat[npat + nxpat].p[2] = (double)i; 
+
+				/* Locate closest point */
+				for (nmpat = j = 0; j < npat; j++) {
+					double mnp, mxp;
+					int k;
+	
+					/* Locate largest/smallest RGB value */
+					mxp = -1e6, mnp = 1e6;
+					for (k = 0; k < 3; k++) {
+						if (tpat[j].p[k] > mxp)
+							mxp = tpat[j].p[k];
+						if (tpat[j].p[k] < mnp)
+							mnp = tpat[j].p[k];
+					}
+					mxp -= mnp;			/* Spread; 0 for R=G=B */
+
+					tt = icmNorm33(tpat[npat + nxpat].p, tpat[j].p);
+					tt += mxp;
+
+					if (tt < cde) {
+						cde = tt;
+						cix = j;
+					}
+				}
+
+//printf("~1 closest %d: de %f, %f %f %f -> %f %f %f\n",cix, cde, tpat[cix].p[0], tpat[cix].p[1], tpat[cix].p[2], tpat[cix].v[0], tpat[cix].v[1], tpat[cix].v[2]);
+
+//{
+//double val[3];
+//mm->lookup(mm, val, tpat[cix].p);
+//printf("~1 closest gam/matrix -> %f %f %f\n",val[0],val[1],val[2]);
+//}
+
+				/* Lookup matrix value for our new point */
+				eix = npat + nxpat;
+				mm->lookup(mm, tpat[eix].v, tpat[eix].p);
+//printf("~1 got value %d: %f %f %f -> %f %f %f\n",i, tpat[eix].p[0], tpat[eix].p[1], tpat[eix].p[2], tpat[eix].v[0], tpat[eix].v[1], tpat[eix].v[2]);
+				/* Weight the extra point so that it doesn't overpower the */
+				/* nearest real point to it too much. */
+				tt = cde;
+				if (tt > avgdist)		/* Distance at which sythetic point has 100% weight */
+					tt = avgdist;
+				tpat[eix].w = EXTRAP_WEIGHT * tt/avgdist;	
+//printf("~1 weight %f\n",tpat[eix].w);
+				if (verb)
+					printf("Added synthetic point @ %f %f %f, val %f %f %f, weight %f\n",tpat[eix].p[0], tpat[eix].p[1], tpat[eix].p[2], tpat[eix].v[0], tpat[eix].v[1], tpat[eix].v[2],tpat[eix].w);
+				nxpat++;
+				
+				/* If there is a lot of space, add a second intemediate point */
+//printf("~1 cde = %f, avgdist = %f\n",cde,avgdist);
+				if (cde >= (0.5 * avgdist)) {
+					int nxps;				/* Number of extra points including end point */
+					nxps = 1 + (int)(cde/(0.5 * avgdist));
+					if (nxps > EXTRAP_MAXPNTS)
+						nxps = EXTRAP_MAXPNTS;
+
+//printf("~1 nxps = %d\n",nxps);
+					for (j = 1; j < nxps; j++) {
+						double bl, ipos;
+	
+						bl = j/(nxps + 1.0);
+
+						ipos = (1.0 - bl) * tpat[eix].p[0]
+						     +        bl * (tpat[cix].p[0] + tpat[cix].p[1] + tpat[cix].p[1])/3.0;
+						tpat[npat + nxpat].p[0] = 
+						tpat[npat + nxpat].p[1] = 
+						tpat[npat + nxpat].p[2] = ipos;
+		
+						/* Lookup matrix value for our new point */
+						mm->lookup(mm, tpat[npat + nxpat].v, tpat[npat + nxpat].p);
+		
+						/* Weight the extra point so that it doesn't overpower the */
+						/* nearest real point to it too much. */
+						cde = icmNorm33(tpat[cix].p, tpat[npat + nxpat].p);
+		
+						if (cde > avgdist)		/* Distance at which sythetic point has 100% weight */
+							cde = avgdist;
+						tpat[npat + nxpat].w = EXTRAP_WEIGHT * cde/avgdist;	
+						if (verb)
+							printf("Added synthetic point @ %f %f %f, val %f %f %f, weight %f\n",tpat[npat + nxpat].p[0], tpat[npat + nxpat].p[1], tpat[npat + nxpat].p[2], tpat[npat + nxpat].v[0], tpat[npat + nxpat].v[1], tpat[npat + nxpat].v[2],tpat[npat + nxpat].w);
+						nxpat++;
+					}
+				}
+			}
+			mm->del(mm);
+		}
 
 		/* Wrap with an expanded icc */
 		if ((wr_xicc = new_xicc(wr_icco)) == NULL)
@@ -800,6 +1058,9 @@ make_input_icc(
 		if (verb)
 			flags |= ICX_VERBOSE;
 
+		if (clipprims)
+			flags |= ICX_CLIP_WB;
+				
 		if (nsabs == 0)
 	        flags |= ICX_SET_WHITE | ICX_SET_BLACK;		/* Compute & use white and black */
 
@@ -815,7 +1076,7 @@ make_input_icc(
 			               ICX_2PASSSMTH |
 #endif
 		               flags, 		/* Flags */
-		               npat, tpat, 0.0, wpscale, smooth, avgdev,
+		               npat + nxpat, tpat, 0.0, wpscale, smooth, avgdev,
 			           NULL, NULL, NULL, iquality)) == NULL)
 			error ("%d, %s",wr_xicc->errc, wr_xicc->err);
 
@@ -915,40 +1176,6 @@ make_input_icc(
 #endif /* DOB2A */
 		wr_xicc->del(wr_xicc);
 
-	} else {		/* Gamma/Shaper + matrix profile */
-
-		xicc *wr_xicc;			/* extention object */
-		icxLuBase *xluo;		/* Forward ixcLu */
-		int flags = 0;
-
-		/* Wrap with an expanded icc */
-		if ((wr_xicc = new_xicc(wr_icco)) == NULL)
-			error("Creation of xicc failed");
-		
-		if (verb)
-			flags |= ICX_VERBOSE;
-
-		if (ptype == prof_matonly)
-			flags |= ICX_NO_IN_SHP_LUTS;	/* Make it linear */
-
-		if (nsabs == 0)
-	        flags |= ICX_SET_WHITE | ICX_SET_BLACK;		/* Compute & use white and black */
-
-        flags |= ICX_WRITE_WBL;		/* Write white/black/luminence */
-
-		/* Setup Device -> XYZ conversion (Fwd) object from scattered data. */
-		if ((xluo = wr_xicc->set_luobj(
-//		               wr_xicc, icmFwd, icRelativeColorimetric,
-		               wr_xicc, icmFwd, icmDefaultIntent,
-		               icmLuOrdNorm,
-		               flags, 		/* Flags */
-		               npat, tpat, 0.0, wpscale, smooth, avgdev,
-		               NULL, NULL, NULL, iquality)) == NULL)
-			error("%d, %s",wr_xicc->errc, wr_xicc->err);
-
-		/* Free up xicc stuff */
-		xluo->del(xluo);
-		wr_xicc->del(wr_xicc);
 	}
 
 	/* Write the file (including all tags) out */

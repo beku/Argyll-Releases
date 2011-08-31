@@ -1,0 +1,111 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <title>spyd2en</title>
+  <meta http-equiv="content-type"
+ content="text/html; charset=ISO-8859-1">
+  <meta name="author" content="Graeme Gill">
+</head>
+<body>
+<h2><b>spectro/i1d3ccss</b></h2>
+<h3>Summary</h3>
+A special purpose tool that can either install CCSS files, or locat and
+translate X-Rite .EDR files to CCSS files and install them.<br>
+<h3>Usage summary<br>
+</h3>
+<small><span style="font-family: monospace;">i1d3ccss [-v] [<span
+ style="font-style: italic;">inputfile</span></span>]<br
+ style="font-family: monospace;">
+<span style="font-family: monospace;">&nbsp;-v level
+&nbsp;&nbsp;&nbsp;&nbsp; Verbose<br>
+&nbsp;-S d&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Specify the install scope u = user (def.), l = local system]<br>
+<span style="font-style: italic;">inputfile&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span>Can be the Setup.exe file from the instrument CD, a .edr file or
+a .ccss file.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+If no file is provided, i1d2ccss will look for the install CD.</span></small><br>
+<h3></h3>
+<h3>Flags and Parameters</h3>
+The <span style="font-style: italic;">inputfile</span> argument is
+optional, and and can be used to specify the MSWindows setup.exe file
+from the installation CD,
+if i1d3ccss is unable to locate this file automatically. It can also be
+used to specify an X-Rite .edr file (their equivalent to an Argyll
+.ccss file), or a .ccss file. <br>
+<br>
+The <b>-v</b> parameter enables verbosity. This may be of use in
+figuring out what went wrong if it doesn't work.<br>
+<br>
+The <span style="font-weight: bold;">-S</span> option allows
+installing the .ccss file(s) in a local system location, rather than
+the default user accessible location. With this option you may need to
+run this as
+superuser using the "sudo" command on OS X and Linux systems.<span
+ style="font-weight: bold;"><span style="font-weight: bold;"><span
+ style="font-weight: bold;"></span></span></span><br>
+<h3>Usage Details and Discussion</h3>
+<span style="font-weight: bold;"></span>The <span
+ style="font-weight: bold;">i1d3</span> family of instruments can make
+use of display specific spectral calibration information, which
+improves their accuracy when used on displays of a similar type. The
+manufacturer provides 5 of these .edr calibration files that cover
+various projectors and LCD displays with the instrument on the install
+CD. The <span style="font-weight: bold;">i1d3ccss</span> utility
+allows you to translate these files into Argyll <span
+ style="font-weight: bold;">CCSS</span> format, and install them where
+the measurement tools can automatically find them, so that they can be
+selected using the <span style="font-weight: bold;">-X</span> option.<br>
+Also provided with Argyll in the ref directory is <span
+ style="font-weight: bold;">CRT.ccss</span> to cover CRT type displays.
+<span style="font-weight: bold;">i1d3ccss</span> allows this file to be
+installed too.<br>
+<br>
+On Microsoft Windows or Apple OS X platforms, <span
+ style="font-weight: bold;">i1d3ccss</span> will look to
+see if
+the manufacturers drivers have been installed on the users machine, and
+locate the firmware pattern from there. If the manufacturers drivers
+have
+not been installed, or the user does not wish to install them, or no
+manufacturers drivers are available for the users platform (i.e.
+Linux), then <span style="font-weight: bold;">i1d3ccss</span> will
+also attempt to
+locate the i1d3 installation CDROM, and make use of the firmware
+pattern from there. In this case, the CDROM should be placed in a CD
+drive prior to
+running i1d3ccss. If your Linux system is not running
+automount, or your automount is setup to mount CDROM's somewhere other
+than <span style="font-style: italic;">/media</span>,<span
+ style="font-style: italic;"> /mnt/cdrom</span>, <span
+ style="font-style: italic;">/media/cdrom</span> or <span
+ style="font-style: italic;">/cdrom</span>, then you will have to mount
+the CDROM manually, and give i1d3ccss the path to the CDROM
+setup/setup.exe
+file as the argument <span style="font-style: italic;">inputfile</span>.<span
+ style="font-weight: bold;"><br>
+<br>
+NOTE </span>that under <span style="font-weight: bold;">OS X 10.6</span>
+(Snow Leopard) and latter, you may need to run i1d3ccss as root to be
+able to mount the CDROM's ISO partition. The
+simplest way of doing this is to use the "sudo" commands. e.g. "sudo
+i1d3ccss", which will then ask you to enter the root password.<br>
+<br>
+If the .edr files are successfully located, then i1d3ccss will
+translate them to .ccss files and copy them into a <span
+ style="font-weight: bold;"></span> subdirectory of the users home
+directory, or if the <span style="font-weight: bold;">-S l</span>
+option is used, will store it
+in a system wide location. (the <a
+ href="http://standards.freedesktop.org/basedir-spec/basedir-spec-0.6.html">XDG
+Base
+Directory specifications</a> are used as a basis for storing the
+file). Programs that access instruments such as&nbsp; <span
+ style="font-weight: bold;">spotread</span>, <span
+ style="font-weight: bold;">dispcal</span> and <span
+ style="font-weight: bold;">dispread</span>, can then locate and list
+the installed .ccss as possible choices for the <span
+ style="font-weight: bold;">-X</span> option.<br>
+<br>
+</body>
+</html>

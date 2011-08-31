@@ -49,7 +49,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LIB32=link.exe -lib
 # ADD BASE LIB32 /nologo
-# ADD LIB32 /nologo /out:"Win32/Release/lib/libusb-1.0.lib"
+# ADD LIB32 /nologo /out:"Win32/Release/lib/libusb-1.0A.lib"
 
 !ELSEIF  "$(CFG)" == "libusb_static - Win32 Debug"
 
@@ -72,7 +72,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo /n
 LIB32=link.exe -lib
 # ADD BASE LIB32 /nologo
-# ADD LIB32 /nologo /out:"Win32/Debug/lib/libusb-1.0.lib"
+# ADD LIB32 /nologo /out:"Win32/Debug/lib/libusb-1.0A.lib"
 
 !ENDIF 
 

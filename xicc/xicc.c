@@ -313,7 +313,7 @@ static double bpfindfunc(void *adata, double pv[]) {
 #ifdef DEBUG
 	printf("~1 target error %f\n",terr);
 #endif
-	rv += 100.0 * terr;
+	rv += 20.0 * terr;	/* Make ab match 20 times more important than min. L */
 
 #ifdef DEBUG
 	printf("~1 out of range error %f\n",ovr);
@@ -619,7 +619,8 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 		}
 		icmScale3(bfs.p2, bfs.p2, 0.02);	/* Scale white XYZ towards 0,0,0 */
 		icmXYZ2Lab(&icmD50, bfs.p2, bfs.p2); /* Convert black direction to Lab */
-#else
+
+#else /* Use K directin black */
 		/* Now figure abs Lab value of K only, as the direction */
 		/* to use for the rich black. */
 		for (e = 0; e < inn; e++)
@@ -988,7 +989,7 @@ icRenderingIntent intent,	/* Intent */
 icmLookupOrder order,		/* Search Order */
 int flags,					/* white/black point, verbose flags etc. */
 int no,						/* Number of points */
-cow *points,				/* Array of input points */
+cow *points,				/* Array of input points in target PCS space */
 double dispLuminance,		/* > 0.0 if display luminance value and is known */
 double wpscale,				/* > 0.0 if input white point is to be scaled */
 double smooth,				/* RSPL smoothing factor, -ve if raw */
@@ -1851,7 +1852,7 @@ char *as				/* Alias string selector, NULL for none */
 	if (no == 0
 	 || no == icxAbsoluteGMIntent
 	 || (as != NULL && stricmp(as,"a") == 0)) {
-		/* Map Absolute Jab to Jab and clip out of gamut */
+		/* Map Absolute appearance space Jab to Jab and clip out of gamut */
 		no = 0;
 		gmi->as = "a";
 		gmi->desc = " a - Absolute Colorimetric (in Jab) [ICC Absolute Colorimetric]";
@@ -1879,6 +1880,7 @@ char *as				/* Alias string selector, NULL for none */
 		/* I though that a printer white point won't fit within the gamut */
 		/* of a display profile, since the display white always has Y = 1.0, */
 		/* and no paper has better than about 95% reflectance. */
+		/* Perhaps it may be more useful for targeting printer profiles ? */
 
 		/* Map Absolute Jab to Jab and scale source to avoid clipping the white point */
 		no = 1;
@@ -1905,7 +1907,7 @@ char *as				/* Alias string selector, NULL for none */
 	else if (no == 2
 	 || (as != NULL && stricmp(as,"aa") == 0)) {
 
-		/* Map Jab to Jab and clip out of gamut */
+		/* Map appearance space Jab to Jab and clip out of gamut */
 		no = 2;
 		gmi->as = "aa";
 		gmi->desc = "aa - Absolute Appearance";
@@ -1931,7 +1933,7 @@ char *as				/* Alias string selector, NULL for none */
 	 || (as != NULL && stricmp(as,"r") == 0)) {
 
 		/* Align neutral axes and linearly map white point, then */
-		/* map Jab to Jab and clip out of gamut */
+		/* map appearance space Jab to Jab and clip out of gamut */
 		no = 3;
 		gmi->as = "r";
 		gmi->desc = " r - White Point Matched Appearance [ICC Relative Colorimetric]";
@@ -1956,7 +1958,7 @@ char *as				/* Alias string selector, NULL for none */
 	 || (as != NULL && stricmp(as,"la") == 0)) {
 
 		/* Align neutral axes and linearly map white and black points, then */
-		/* map Jab to Jab and clip out of gamut */
+		/* map appearance space Jab to Jab and clip out of gamut */
 		no = 4;
 		gmi->as = "la";
 		gmi->desc = "la - Luminance axis matched Appearance";
@@ -1983,7 +1985,7 @@ char *as				/* Alias string selector, NULL for none */
 	 || (as != NULL && stricmp(as,"p") == 0)) {
 
 		/* Align neutral axes and perceptually map white and black points, */ 
-		/* perceptually compress out of gamut and map Jab to Jab. */  
+		/* perceptually compress out of gamut and map appearance space Jab to Jab. */  
 		no = 5;
 		gmi->as = "p";
 		gmi->desc = " p - Perceptual (Preferred) (Default) [ICC Perceptual]";
@@ -2005,6 +2007,31 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
 	else if (no == 6
+	 || (as != NULL && stricmp(as,"pa") == 0)) {
+
+		/* Don't align neutral axes, but perceptually compress out of gamut */
+		/* and map appearance space Jab to Jab. */  
+		no = 5;
+		gmi->as = "pa";
+		gmi->desc = "pa - Perceptual Apperance ";
+		gmi->icci = icPerceptual;
+		gmi->usecas  = perccas;		/* Appearance space */
+		gmi->usemap  = 1;			/* Use gamut mapping */
+		gmi->greymf  = 0.0;			/* Don't align grey axis */
+		gmi->glumwcpf = 1.0;		/* Fully compress grey axis at white end */
+		gmi->glumwexf = 1.0;		/* Fully expand grey axis at white end */
+		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
+		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
+		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
+		gmi->gamcpf  = 1.0;			/* Full gamut compression */
+		gmi->gamexf  = 0.0;			/* No gamut expansion */
+		gmi->gamcknf  = 0.8;		/* High Sigma knee in gamut compress */
+		gmi->gamxknf  = 0.0;		/* No knee in gamut expand */
+		gmi->gampwf  = 1.0;			/* Full Perceptual surface weighting factor */
+		gmi->gamswf  = 0.0;			/* No Saturation surface weighting factor */
+		gmi->satenh  = 0.0;			/* No saturation enhancement */
+	}
+	else if (no == 7
 	 || (as != NULL && stricmp(as,"ms") == 0)) {
 
 		/* Align neutral axes and perceptually map white and black points, */ 
@@ -2029,7 +2056,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->gamswf  = 0.8;			/* Most saturation surface weighting factor */
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
-	else if (no == 7
+	else if (no == 8
 	 || no == icxSaturationGMIntent
 	 || (as != NULL && stricmp(as,"s") == 0)) {
 
@@ -2054,7 +2081,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->gamswf  = 1.0;			/* Full Saturation surface weighting factor */
 		gmi->satenh  = 0.9;			/* Medium saturation enhancement */
 	}
-	else if (no == 8
+	else if (no == 9
 	 || (as != NULL && stricmp(as,"al") == 0)) {
 
 		/* Map absolute L*a*b* to L*a*b* and clip out of gamut */
@@ -2078,7 +2105,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->gamswf  = 0.0;
 		gmi->satenh  = 0.0;			/* No saturation enhancement */
 	}
-	else if (no == 9
+	else if (no == 10
 	 || (as != NULL && stricmp(as,"rl") == 0)) {
 
 		/* Align neutral axes and linearly map white point, then */
@@ -2763,6 +2790,42 @@ double icxdCIE94(double dout[2][3], double Lab0[3], double Lab1[3]) {
 		           + _dhsq[1][1]/shsq + _c12[1][1] * shf;
 		return sqrt(rv);
 	}
+}
+
+/* ------------------------------------------------------ */
+/* A power-like function, based on Graphics Gems adjustment curve. */
+/* Avoids "toe" problem of pure power. */
+/* Adjusted so that "power" 2 and 0.5 agree with real power at 0.5 */
+
+double icx_powlike(double vv, double pp) {
+	double tt, g;
+
+	if (pp >= 1.0) {
+		g = 2.0 * (pp - 1.0);
+		vv = vv/(g - g * vv + 1.0);
+	} else {
+		g = 2.0 - 2.0/pp;
+		vv = (vv - g * vv)/(1.0 - g * vv);
+	}
+
+	return vv;
+}
+
+/* Compute the necessary aproximate power, to transform */
+/* the given value from src to dst. They are assumed to be */
+/* in the range 0.0 .. 1.0 */
+double icx_powlike_needed(double src, double dst) {
+	double pp, g;
+
+	if (dst <= src) {
+		g = -((src - dst)/(dst * src - dst));
+		pp = (0.5 * g) + 1.0;
+	} else {
+		g = -((src - dst)/((dst - 1.0) * src));
+		pp = 1.0/(1.0 - 0.5 * g);
+	}
+
+	return pp;
 }
 
 /* ------------------------------------------------------ */

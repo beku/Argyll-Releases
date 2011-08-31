@@ -1300,7 +1300,6 @@ scanrd_ *s
 		if (tp->flag & F_VALID)		/* Valid for angle calcs */
 			s->novlines++;
 
-// ~~999
 		/* Save orininal raster (non partial perspective corrected) values */
 		if (tp->flag & F_VALID) {
 			tp->pmx = tp->mx;
@@ -2918,6 +2917,7 @@ scanrd_ *s
 ) {
 	double cirot,sirot;		/* cos and sin of -irot */
 	double t[6];
+	double minx, miny, maxx, maxy;
 	double tar[8];
 	double ref[8];
 	int rv;
@@ -2937,15 +2937,28 @@ scanrd_ *s
 	t[4] = s->rots[s->crot].ixscale * -sirot;
 	t[5] = s->rots[s->crot].iyscale * cirot;
 
-	/* Setup four reference points, and the target raster equivalent */
-	ref[0] = 0.0;
-	ref[1] = 0.0;
-	ref[2] = 10.0;
-	ref[3] = 0.0;
-	ref[4] = 10.0;
-	ref[5] = 10.0;
-	ref[6] = 0.0;
-	ref[7] = 10.0;
+	/* Setup four reference points, and the target raster equivalent. */
+	/* Choose min/max of matching boxes as test points, to scale with raster size. */
+	minx = miny = 1e60;
+	maxx = maxy = -1e60;
+	for (i = 0; i < s->nsbox; i++) {
+		if (s->sboxes[i].x1 < minx)
+			minx = s->sboxes[i].x1;
+		if (s->sboxes[i].x2 > maxx)
+			maxx = s->sboxes[i].x2;
+		if (s->sboxes[i].y1 < miny)
+			miny = s->sboxes[i].y1;
+		if (s->sboxes[i].y2 > maxy)
+			maxy = s->sboxes[i].y2;
+	}
+	ref[0] = minx;
+	ref[1] = miny;
+	ref[2] = maxx;
+	ref[3] = miny;
+	ref[4] = maxx;
+	ref[5] = maxy;
+	ref[6] = minx;
+	ref[7] = maxy;
 
 	for (i = 0; i < 8; i += 2) {
 		double x, y;

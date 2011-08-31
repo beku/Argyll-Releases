@@ -1,8 +1,8 @@
-<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<!DOCTYPE HTML PUBLIC "-//w3c//dtd html 4.0 transitional//en">
 <html>
 <head>
   <meta http-equiv="Content-Type"
- content="text/html; charset=iso-8859-1">
+ content="text/html; charset=ISO-8859-1">
   <meta http-equiv="content-type"
  content="text/html; charset=ISO-8859-1">
   <meta name="GENERATOR"
@@ -108,7 +108,8 @@ The problem may be because certain X11 extensions aren't being loaded
 by default. You may want to check that you have<br>
 <br>
 <big style="color: rgb(51, 102, 255);"><span style="font-weight: bold;"></span></big>&nbsp;
-Load&nbsp; "extmod"
+Load&nbsp;
+"extmod"
 <br>
 <br>
 in&nbsp;the&nbsp;appropriate&nbsp;(or&nbsp;any)&nbsp;section&nbsp;of
@@ -123,7 +124,7 @@ channels), but more importantly the number of entries in the the
 VideoLUTs needs to match the depth of the screen. So if the VideoLUTs
 have 256 entries per channel, then the screen must be using 8 bits per
 channel to match. Or 64 entries and 6 bits. Or 4096 entries and 12
-bits, etc. Running "dispwin -E" may give some clues as to what the
+bits, etc. Running "dispwin -D" may give some clues as to what the
 nature of the problem is. You might have to look into your xorg.conf or
 XRANDR setup, or on some distributions there will be some configuration
 program that will let you choose the display configuration (ie. YaST or
@@ -238,6 +239,10 @@ ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
 ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2003",
 ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
 <br>
+# i1Display 3<br>
+ATTRS{idVendor}=="0765", ATTRS{idProduct}=="5020",
+ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+<br>
 # i1Monitor<br>
 ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2001",
 ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
@@ -337,7 +342,9 @@ and then running "spotread -?" and looking for it listed after the <span
 instruments access using hotplug:<br>
 </span></h5>
 Under <span style="font-weight: bold;">much older versions of Linux</span>,
-you should look into the hotplug system
+you
+should
+look into the hotplug system
 configuration for USB devices. You know you are running this because
 the <span style="font-weight: bold;">/etc/hotplug</span> directory
 exists on
@@ -374,6 +381,10 @@ Argyll 0x0003 0x0670 0x0001 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00 0x00
 #<br>
 # i1 Display<br>
 Argyll 0x0003 0x0971 0x2003 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00 0x00
+0x00000000<br>
+#<br>
+# i1 Display 3<br>
+Argyll 0x0003 0x0765 0x5020 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00 0x00
 0x00000000<br>
 #<br>
 # i1 Monitor<br>
@@ -429,11 +440,8 @@ fi<br>
 <br>
 <span style="font-weight: bold;">YOU THEN NEED TO:</span><br>
 <br>
-If your system is <span style="font-weight: bold;">not</span> using
-the new ACL to manage device access
-for console users (the file <span style="font-weight: bold;">/lib/udev/udev-acl</span>
-doesn't exist on your system), then you will <span
- style="text-decoration: underline;">need to add</span> yourself to
+You will then <span style="text-decoration: underline;">need to add</span>
+yourself to
 the <span style="font-weight: bold;">plugdev</span> group, if you are
 not already a member of it. You can do this either by using a "Users
 and Groups" system administration tool, or on the command line running

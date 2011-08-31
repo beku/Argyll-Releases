@@ -10,9 +10,15 @@ PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
 
 #Products
 Executables = targen printtarg ;
+Samples = ECI2002.ti2
+          ECI2002R.ti2
+	      ColorChecker.ti2
+          FograStrip.ti1 FograStrip.ti2
+          i1_RGB_Scan_1.4.ti2 ;
 
 #Install
-InstallBin ../bin : $(Executables) ;
+InstallBin $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
+InstallFile $(DESTDIR)$(PREFIX)/$(REFSUBDIR) : $(Samples) ;
 
 HDRS = ../h ../numlib ;
 
@@ -20,7 +26,7 @@ Objects alphix.c randix.c ;
 
 HDRS += ../plot ../rspl ../cgats ../icc ../gamut ../xicc ../spectro ../render $(TIFFINC) ;
 
-LINKLIBS = ../xicc/libxcolorants ../xicc/libxicc ../spectro/libinsttypes ../spectro/libconv
+LINKLIBS = ../xicc/libxcolorants ../spectro/libconv ../xicc/libxicc ../spectro/libinsttypes
            ../gamut/libgamut ../rspl/librspl ../render/librender ../cgats/libcgats
            ../plot/libplot ../plot/libvrml ../icc/libicc ../numlib/libnum 
            $(TIFFLIB) $(LibWin) ;

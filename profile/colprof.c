@@ -5,7 +5,7 @@
  * Author: Graeme W. Gill
  * Date:   15/2/97
  *
- * Copyright 1996-2004 Graeme W. Gill
+ * Copyright 1996-2011 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -25,6 +25,8 @@
 
 /*
  * TTBD:
+ *		Should allow ICC Device attributes to be set.
+ *
  *      Add Argyll private tag to record ink limit etc. to automate link parameters.
  *      Estimate ink limit from B2A tables if no private tag ?
  *      Add used option for black relative
@@ -57,10 +59,20 @@
 #define DEFAVGDEV 0.5		/* Default average deviation percentage */
 							/* This equates to a uniform added error of +/- 1% */
 
+/*
+
+  Flags used:
+
+         ABCDEFGHIJKLMNOPQRSTUVWXYZ
+  upper  . ..    . ... .. ....    .
+  lower  .... .. . .. .........  . 
+
+*/
+
 void usage(char *diag, ...) {
 	int i;
 	fprintf(stderr,"Create ICC profile, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"  Diagnostic: ");
@@ -75,6 +87,9 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -M model        Model description string\n");
 	fprintf(stderr," -D description  Profile Description string (Default \"inoutfile\")\n");
 	fprintf(stderr," -C copyright    Copyright string\n");
+	fprintf(stderr," -Z [tmnb]       Attributes: Transparency, Matte, Negative, BlackAndWhite\n");
+	fprintf(stderr," -Z [prsa]       Default intent: Perceptual, Rel. Colorimetric, Saturation, Abs. Colorimetric\n");
+
 	fprintf(stderr," -q lmhu         Quality - Low, Medium (def), High, Ultra\n");
 	fprintf(stderr," -b [lmhun]      Low quality B2A table - or specific B2A quality or none for input device\n");
 	fprintf(stderr," -y              Verify A2B profile\n");
@@ -101,7 +116,9 @@ void usage(char *diag, ...) {
 //	fprintf(stderr," -I ver          Set ICC profile version > 2.2.0\n");
 //	fprintf(stderr,"                 ver = 4, Enable ICC V4 creation\n");
 	fprintf(stderr," -u              If Lut input profile, make it absolute (non-standard)\n");
+	fprintf(stderr," -un             Same as u, but don't extrapolate cLut white & black using matrix\n");
 	fprintf(stderr," -U scale        If input profile, scale media white point by scale\n");
+	fprintf(stderr," -R              Restrict white <= 1.0, black and primaries to be +ve\n");
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
 	fprintf(stderr,"                 A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
@@ -144,7 +161,6 @@ void usage(char *diag, ...) {
 	exit(1);
 }
 
-
 int main(int argc, char *argv[]) {
 	int fa,nfa,mfa;				/* current argument we're looking at */
 #ifdef DO_TIME			/* Time the operation */
@@ -162,7 +178,9 @@ int main(int argc, char *argv[]) {
 	int nostos = 0;				/* Use colormetric source gamut to make saturation table */
 	int gamdiag = 0;			/* Make gamut mapping diagnostic wrl plots */
 	int nsabs = 0;				/* Make non-standard absolute input lut profile */
+	int clipprims = 0;			/* Clip white, black and primaries */
 	double iwpscale = -1.0;		/* Input white point scale factor */
+	int doinextrap = 1;			/* Sythesize extra input sample points for cLUT */
 	int doinb2a = 1;			/* Create an input device B2A table */
 	int inking = 3;				/* Default K target ramp K */
 	int locus = 0;				/* Default K value target */
@@ -205,6 +223,7 @@ int main(int argc, char *argv[]) {
 	error_program = argv[0];
 	check_if_not_interactive();
 	memset((void *)&xpi, 0, sizeof(profxinf));	/* Init extra profile info to defaults */
+	xpi.default_ri = icMaxEnumIntent;			/* Default default */
 
 	/* Init VC overrides so that we know when the've been set */
 	ivc_p.Ev = -1;
@@ -280,6 +299,59 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to copyright flag -C");
 				xpi.copyright = na;
+			}
+
+			/* Attribute bits */
+			else if (argv[fa][1] == 'Z') {
+				int i, j;
+
+				fa = nfa;
+				if (na == NULL) usage("Expect argument to attribute flag -Z");
+				for (j = i = 0; j == 0; i++) {
+
+					switch(na[i]) {
+
+						/* Attribute */
+						case 't':
+						case 'T':
+							xpi.transparency = 1;
+							break;
+						case 'm':
+						case 'M':
+							xpi.matte = 1;
+							break;
+						case 'n':
+						case 'N':
+							xpi.negative = 1;
+							break;
+						case 'b':
+						case 'B':
+							xpi.blackandwhite = 1;
+							break;
+
+						/* Default intent */
+						case 'p':
+						case 'P':
+							xpi.default_ri = icPerceptual;
+							break;
+						case 'r':
+						case 'R':
+							xpi.default_ri = icRelativeColorimetric;
+							break;
+						case 's':
+						case 'S':
+							xpi.default_ri = icSaturation;
+							break;
+						case 'a':
+						case 'A':
+							xpi.default_ri = icAbsoluteColorimetric;
+							break;
+						default:
+							j = 1;
+							break;
+					}
+				}
+				if (na[i-1] != '\000') usage("Unknown argument '%c' to attribute flag -Z",na[i-1]);
 			}
 
 			/* Quality */
@@ -372,6 +444,8 @@ int main(int argc, char *argv[]) {
 
 			else if (argv[fa][1] == 'u') {
 				nsabs = 1;
+				if (argv[fa][2] == 'n')
+					doinextrap = 0;
 			}
 			else if (argv[fa][1] == 'U') {
 				fa = nfa;
@@ -379,6 +453,10 @@ int main(int argc, char *argv[]) {
 				iwpscale = atof(na);
 				if (iwpscale < 0.0 || iwpscale > 100.0)
 					usage("Argument '%s' to flag -U out of range",na);
+			}
+			/* Clip primaries */
+			else if (argv[fa][1] == 'R') {
+				clipprims = 1;
 			}
 
 			/* Inking rule */
@@ -896,9 +974,12 @@ int main(int argc, char *argv[]) {
 			error ("Output profile can only be a cLUT algorithm");
 		}
 
+		if (nsabs)
+			error ("Input absolute mode isn't applicable to an output device");
+
 		make_output_icc(ptype, 0, iccver, verb, iquality, oquality,
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
-		                gamdiag, verify, &ink, inname, outname, icg, spec,
+		                gamdiag, verify, clipprims, &ink, inname, outname, icg, spec,
 		                illum, &cust_illum, observ, fwacomp, smooth, avgdev,
 		                ipname[0] != '\000' ? ipname : NULL,
 		                sgname[0] != '\000' ? sgname : NULL,
@@ -910,11 +991,15 @@ int main(int argc, char *argv[]) {
 
 		if (ptype == prof_default)
 			ptype = prof_clutLab;		/* For best possible quality */
+
 		make_input_icc(ptype, iccver, verb, iquality, oquality, noisluts, noipluts, nooluts, nocied,
-		               verify, nsabs, iwpscale, doinb2a, inname, outname, icg,
-		               spec, illum, &cust_illum, observ, smooth, avgdev, &xpi);
+		               verify, nsabs, iwpscale, doinb2a, doinextrap, clipprims, inname, outname,
+		               icg, spec, illum, &cust_illum, observ, smooth, avgdev, &xpi);
 
 	} else if (strcmp(icg->t[0].kdata[ti],"DISPLAY") == 0) {
+
+		if (nsabs)
+			error ("Input absolute mode isn't applicable to a display device");
 
 		if (fwacomp)
 			error ("FWA compensation isn't applicable to a display device");
@@ -925,7 +1010,7 @@ int main(int argc, char *argv[]) {
 		/* If a source gamut is provided for a Display, then a V2.4.0 profile will be created */
 		make_output_icc(ptype, mtxtoo, iccver, verb, iquality, oquality,
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
-		                gamdiag, verify, NULL, inname, outname, icg, spec,
+		                gamdiag, verify, clipprims, NULL, inname, outname, icg, spec,
 		                illum, &cust_illum, observ, 0, smooth, avgdev,
 		                ipname[0] != '\000' ? ipname : NULL,
 		                sgname[0] != '\000' ? sgname : NULL,

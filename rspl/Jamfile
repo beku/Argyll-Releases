@@ -17,8 +17,8 @@ Libraries = librspl ;
 Headers = rspl.h ;
 
 #Install
-#InstallLib ../lib : $(Libraries) ;
-#InstallFile ../h : $(Headers) ;
+#InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
 
 # Multi-dimensional regular spline library
 Library librspl : rspl.c $(SCAT).c rev.c gam.c spline.c opt.c : : : ../h ../numlib ../plot ;

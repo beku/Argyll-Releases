@@ -67,7 +67,7 @@
 void
 usage(void) {
 	fprintf(stderr,"Create Model Printer Profile, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: %s [options] outfile\n",error_program);
 	fprintf(stderr," -v [level] Verbose mode\n");
 	fprintf(stderr," -q [lmhus] Quality - Low, Medium (def), High, Ultra, Simple\n");

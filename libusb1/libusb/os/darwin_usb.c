@@ -520,6 +520,12 @@ static int process_new_device (struct libusb_context *ctx, usb_device_t **device
       break;
     }
 
+#ifdef NEVER		/* This may not be valid, as internal state may not reflect config */
+	/* If there is only one possible configuration, it must already be in that config ? */
+    if (priv->dev_descriptor.bNumConfigurations == 1)
+		priv->active_config = 1;
+#endif
+
     dev->bus_number     = locationID >> 24;
     dev->device_address = address;
 

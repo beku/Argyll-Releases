@@ -11,14 +11,14 @@ Headers = scanrd.h ;
 Samples = it8.cht ColorChecker.cht ColorChecker.cie ColorCheckerDC.cht
           ColorCheckerSG.cht Hutchcolor.cht i1_RGB_Scan_1.4.cht
           QPcard_201.cht QPcard_201.cie CMP_DT_003.cht
-          CMP_Digital_Target-3.cht CMP_Digital_Target-3.ti2
+          CMP_Digital_Target-3.cht CMP_Digital_Target-3.ti2 CMP_Digital_Target-3.cie
           LaserSoftDCPro.cht ;
 
 #Install
-InstallBin ../bin : $(Executables) ;
-InstallFile ../ref : $(Samples) ;
-#InstallFile ../h : $(Headers) ;
-#InstallLib ../lib : $(Libraries) ;
+InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
+InstallFile $(DESTDIR)$(PREFIX)/$(REFSUBDIR) : $(Samples) ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
+#InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
 
 # Chart recognition library
 Library libscanrd : scanrd.c : : : ../numlib ;

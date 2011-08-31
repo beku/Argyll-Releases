@@ -410,7 +410,7 @@ void XYZ2sRGB(double *out, double *in, int trace) {
 
 void usage(char *diag) {
 	fprintf(stderr,"Create a 3D slice plot of XYZ/Lab <-> Jab, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (diag != NULL)
 		fprintf(stderr,"Diagnostic '%s'\n",diag);
 	fprintf(stderr,"usage: cam02plot [-options] x y\n");

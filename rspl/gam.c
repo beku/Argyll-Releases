@@ -1183,7 +1183,7 @@ void rspl_gam_plot(rspl *s, char *name) {
 
 	vrml *wrl;
 
-	if ((wrl = new_vrml(name, 1)) == NULL)
+	if ((wrl = new_vrml(name, 1, 0)) == NULL)
 		error("new_vrml failed\n");
 
 	/* Set the verticies */

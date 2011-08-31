@@ -10,8 +10,8 @@
  * Copyright 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* 
@@ -38,9 +38,14 @@
 #include <string.h>
 #include <time.h>
 #include <stdarg.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
+#else /* SALONEINSTLIB */
+#include "sa_config.h"
+#include "numsup.h"
+#endif /* SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -404,7 +409,7 @@ hcfr_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 
 	/* Set config, interface, "Serial" write & read end points */
 	/* Note if we clear halt the interface hangs */
-	p->icom->set_usb_port(p->icom, port, 1, 0x03, 0x83, usbflags, 0); 
+	p->icom->set_usb_port(p->icom, port, 1, 0x03, 0x83, usbflags, 0, NULL); 
 
 	if ((ev = hcfr_break(p)) != inst_ok) {
 		if (p->debug) fprintf(stderr,"hcfr: Error doing break\n");

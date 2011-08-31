@@ -48,6 +48,7 @@ void make_output_icc(
 	int nostos,				/* nz to use colorimetic source gamut to make perceptual table */
 	int gamdiag,			/* Make gamut mapping diagnostic wrl plots */
 	int verify,				/* nz to print verification */
+	int clipprims,			/* Clip white, black and primaries */
 	icxInk *ink,			/* Ink limit/black generation setup */
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
@@ -75,19 +76,21 @@ void make_output_icc(
 
 /* Input device */
 void make_input_icc(
-	prof_atype ptype,		/* Profile output type */
+	prof_atype ptype,		/* Profile algorithm type */
 	icmICCVersion iccver,	/* ICC profile version to create */
-	int verb,				/* Vebosity level, 0 = none */
-	int iquality,			/* A2B table quality, 0..2 */
-	int oquality,			/* B2A table quality, 0..2 */
-	int noiluts,			/* nz to supress creation of input (Device) shaper luts */
-	int noisluts,			/* nz to supress creation of input sub-grid (Device) shaper luts */
+	int verb,
+	int iquality,			/* A2B table quality, 0..3 */
+	int oquality,			/* B2A table quality, 0..3 */
+	int noisluts,			/* nz to supress creation of input (Device) shaper luts */
+	int noipluts,			/* nz to supress creation of input (Device) position luts */
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
 	int nocied,				/* nz to supress inclusion of .ti3 data in profile */
-	int verify,				/* nz to print verification */
+	int verify,
 	int nsabs,				/* nz for non-standard absolute output */
-	double iwpscale,		/* >= 0.0 for media white point scale factor */
+	double wpscale,			/* >= 0.0 for media white point scale factor */
 	int dob2a,				/* nz to create a B2A table as well */
+	int extrap,				/* nz to create extra cLUT interpolation points */
+	int clipprims,			/* Clip white, black and primaries */
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
 	cgats *icg,				/* input cgats structure */
@@ -97,7 +100,7 @@ void make_input_icc(
 	icxObserverType observ,	/* Spectral observer */
 	double smooth,			/* RSPL smoothing factor, -ve if raw */
 	double avgdev,			/* reading Average Deviation as a proportion of the input range */
-	profxinf *pi			/* Optional Profile creation extra data */
+	profxinf *xpi			/* Optional Profile creation extra data */
 );
 
 #endif /* PROF_H */

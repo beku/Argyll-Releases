@@ -48,13 +48,15 @@ struct _icxcam {
 						/* Ignored if Ev is set */
 		double Yf,		/* Flare as a fraction of the reference white (range 0.0 .. 1.0) */
 		double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
-		int hk,			/* Flag, NZ to use Helmholtz-Kohlraush effect */
-		int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
+		int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	);
 
 	/* Conversions */
 	int (*XYZ_to_cam)(struct _icxcam *s, double *out, double *in);
 	int (*cam_to_XYZ)(struct _icxcam *s, double *out, double *in);
+
+	/* Debug */
+	void (*settrace)(struct _icxcam *s, int tracev);
 
 /* Private: */
 	icxCAM tag;			/* Type */

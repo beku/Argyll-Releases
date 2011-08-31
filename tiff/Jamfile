@@ -22,7 +22,8 @@ if $(NT) {
 ObjectKeep port/getopt.c ;
 
 # support library for generation utilities
-Library libport.lib : [ CatPaths port : getopt.c strcasecmp.c strtoul.c ] ;
+#Library libport.lib : [ CatPaths port : getopt.c strcasecmp.c strtoul.c ] ;
+Library libport.lib : [ CatPaths port : getopt.c strcasecmp.c ] ;
 
 # generation utilities
 Main mkg3states : libtiff/mkg3states.c ;

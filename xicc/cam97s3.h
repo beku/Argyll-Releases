@@ -120,8 +120,7 @@ struct _cam97s3 {
 						/* Ignored if Ev is set */
 		double Yf,		/* Flare as a fraction of the reference white (range 0.0 .. 1.0) */
 		double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
-		int hk,			/* Flag, NZ to use Helmholtz-Kohlraush effect */
-		int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
+		int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	);
 
 	/* Conversions */
@@ -161,7 +160,7 @@ struct _cam97s3 {
 
 	/* Flags */
 	int hk;				/* If NZ, use Helmholtz-Kohlraush effect */
-	int noclip;			/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
+	int trace;			/* Trace values through computation */
 }; typedef struct _cam97s3 cam97s3;
 
 

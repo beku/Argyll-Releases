@@ -10,8 +10,8 @@
  * Copyright 2006 - 2010, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  * 
  * (Based on i1pro.c)
  */
@@ -41,9 +41,11 @@
 #include <time.h>
 #include <stdarg.h>
 #include <math.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
+#endif	/* !SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -77,9 +79,22 @@ munki_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 	int rsize;
 	long etime;
 	int bi, i, rv;
-	int retries = 0;
 	inst_code ev = inst_ok;
 	icomuflags usbflags = icomuf_none;
+#ifdef __APPLE__
+	/* If the ColorMunki software has been installed, then there will */
+	/* be a daemon process that has the device open. Kill that process off */
+	/* so that we can open it here, before it re-spawns. */
+	char *pnames[] = {
+			"ninjad",
+			"ColorMunkiDeviceService",
+			NULL
+	};
+	int retries = 20;
+#else /* !__APPLE__ */
+	char **pnames = NULL;
+	int retries = 0;
+#endif /* !__APPLE__ */
 
 	if (p->debug) {
 		p->icom->debug = p->debug;	/* Turn on debugging */
@@ -94,21 +109,9 @@ munki_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 
 	if (p->debug) fprintf(stderr,"munki: About to init USB\n");
 
-#ifdef __APPLE__
-	/* If the ColorMunki software has been installed, then there will */
-	/* be a daemon process that has the device open. Kill that process off */
-	/* so that we can open it here, before it re-spawns. */
-
-	if ((rv = kill_nprocess("ninjad")) < 0) {
-		if (p->debug) fprintf(stderr,"munki: killing ninjad process failed!\n");
-	} else if (rv > 0) {
-		retries = 10;			/* Wait for process to die */
-	}
-#endif /* __APPLE__ */
-
 	/* Set config, interface, write end point, read end point, read quanta */
 	/* ("serial" end points aren't used - the Munki uses USB control messages) */
-	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags, retries); 
+	p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags, retries, pnames); 
 
 	if (p->debug) fprintf(stderr,"munki: init coms has suceeded\n");
 
@@ -373,7 +376,6 @@ munki_interp_error(inst *pp, munki_code ec) {
 			return "Unable to save calibration to file";
 		case MUNKI_INT_CAL_RESTORE:
 			return "Unable to restore calibration from file";
-
 		default:
 			return "Unknown error code";
 	}
@@ -578,7 +580,7 @@ inst_status_type m,	/* Requested status type */
 		if (spos == mk_spos_proj)
 			*smode = inst_stat_smode_proj;
 		else if (spos == mk_spos_surf)
-			*smode = inst_stat_smode_surf;
+			*smode = inst_stat_smode_ref | inst_stat_smode_disp;
 		else if (spos == mk_spos_calib)
 			*smode = inst_stat_smode_calib;
 		else if (spos == mk_spos_amb)
@@ -754,6 +756,7 @@ munki_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 		if (trans_time_prop != NULL) *trans_time_prop = p->led_trans_time_prop;
 		return inst_ok;
 	}
+
 	return inst_unsupported;
 }
 

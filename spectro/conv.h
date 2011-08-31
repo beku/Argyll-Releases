@@ -14,22 +14,25 @@
  * Copyright 1996 - 2008 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  * 
  * Derived from icoms.h
  */
 
 #if defined (NT)
-#if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0501
-# define _WIN32_WINNT 0x0501
-#endif
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
+# if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0501
+#  define _WIN32_WINNT 0x0501
+# endif
+# define WIN32_LEAN_AND_MEAN
+# include <windows.h>
+# include <io.h>
 #endif
 
 #if defined (UNIX) || defined(__APPLE__)
-#include <pthread.h>
+# include <unistd.h>
+# include <glob.h>
+# include <pthread.h>
 #endif
 
 #ifdef __cplusplus
@@ -114,7 +117,6 @@ int set_normal_priority();
 struct _athread {
 #if defined (NT)
 	HANDLE th;				/* Thread */
-	DWORD thid;				/* Thread ID */
 #endif
 #if defined (UNIX) || defined(__APPLE__)
 	pthread_t thid;			/* Thread ID */
@@ -139,20 +141,6 @@ struct _athread {
 /* It should return 0 on completion or exit, nz on error. */
 athread *new_athread(int (*function)(void *context), void *context);
 
-#ifdef NEVER
-
-/* Ideas for worker variant on thread: */
-
-	/* Create a new worker thread, and put it to sleep */
-	athread *new_aworker();
-	/* Give the worker a job to do */
-   	         ->start_work(int (*function)(void *context), void *context);
-	/* See if the worker is finished its job */
-	result = ->poll_work();
-	/* Wait until the worker has finished its job */
-	result = ->wait_work();
-
-#endif
 
 /* - - - - - - - - - - - - - - - - - - -- */
 
@@ -163,19 +151,119 @@ void delete_file(char *fname);
 /* are created. return nz on error */
 int create_parent_directories(char *path);
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Provide a system independent glob type function */
+typedef struct {
+#ifdef NT
+	char *base;				/* Base path */
+    struct _finddata_t ffs;
+	long ff;
+	int first;
+#else	/* UNIX */
+	glob_t g;
+	int rv;			/* glob return value */
+	size_t ix;
+#endif
+	int merr;		/* NZ on malloc error */
+} aglob;
+
+
+/* Create the aglob for files matching the given path and pattern. */
+/* Return nz on malloc error */
+int aglob_create(aglob *g, char *spath);
+
+/* Return an allocated string of the next match. */
+/* Return NULL if no more matches */
+char *aglob_next(aglob *g);
+
+/* Free the aglob once we're done with it */
+void aglob_cleanup(aglob *g);
+
 /* - - - - - - - - - - - - - - - - - - -- */
+
+struct _kkill_nproc_ctx {
+	athread *th;
+	char **pname;
+	int debug;
+	int stop;
+	int done;
+    void (*del)(struct _kkill_nproc_ctx *p);
+}; typedef struct _kkill_nproc_ctx kkill_nproc_ctx;
 
 #ifdef __APPLE__
 
-/* Kill a particular named process. */
+/* Kill a list of named processes. NULL for last */
 /* return < 0 if this fails. */
 /* return 0 if there is no such process */
 /* return 1 if a process was killed */
-int kill_nprocess(char *pname);
+int kill_nprocess(char **pname, int debug);
+
+/* Start a thread to constantly kill a process. */
+/* Call ctx->del() when done */
+kkill_nproc_ctx *kkill_nprocess(char **pname, int debug);
 
 #endif /* __APPLE__ */
 
 #include "xdg_bds.h"
+
+/* - - - - - - - - - - - - - - - - - - -- */
+/* CCSS support */
+
+typedef struct {
+	char *path;		/* Path to the file */
+	char *desc;		/* Technolofy + display description */
+} iccss;
+
+/* return a list of installed ccss files. */
+/* The list is sorted by description and terminated by a NULL entry. */
+/* If no is != NULL, return the number in the list */
+/* Return NULL and -1 if there is a malloc error */
+iccss *list_iccss(int *no);
+
+/* Free up a iccss list */
+void free_iccss(iccss *list);
+
+/* - - - - - - - - - - - - - - - - - - -- */
+/* A very small subset of icclib */
+#ifdef SALONEINSTLIB
+
+typedef struct {
+    double  X;
+    double  Y;
+    double  Z;
+} sa_XYZNumber;
+
+typedef enum {
+    sa_SigXYZData                        = 0x58595A20L,  /* 'XYZ ' */
+    sa_SigLabData                        = 0x4C616220L   /* 'Lab ' */
+} sa_ColorSpaceSignature;
+
+extern sa_XYZNumber sa_D50;
+void sa_SetUnity3x3(double mat[3][3]);
+void sa_Cpy3x3(double out[3][3], double mat[3][3]);
+void sa_MulBy3x3(double out[3], double mat[3][3], double in[3]);
+void sa_Mul3x3_2(double dst[3][3], double src1[3][3], double src2[3][3]);
+int sa_Inverse3x3(double out[3][3], double in[3][3]);
+void sa_Transpose3x3(double out[3][3], double in[3][3]);
+void sa_Scale3(double out[3], double in[3], double rat);
+
+
+#define icmXYZNumber sa_XYZNumber
+#define icColorSpaceSignature sa_ColorSpaceSignature
+#define icSigXYZData sa_SigXYZData
+#define icSigLabData sa_SigLabData
+#define icmD50 sa_D50
+#define icmSetUnity3x3 sa_SetUnity3x3
+#define icmCpy3x3 sa_Cpy3x3
+#define icmMulBy3x3 sa_MulBy3x3
+#define icmMul3x3_2 sa_Mul3x3_2
+#define icmInverse3x3 sa_Inverse3x3
+#define icmTranspose3x3 sa_Transpose3x3
+#define icmScale3 sa_Scale3
+
+#endif /* SALONEINSTLIB */
+/* - - - - - - - - - - - - - - - - - - -- */
+
 
 #ifdef __cplusplus
 	}

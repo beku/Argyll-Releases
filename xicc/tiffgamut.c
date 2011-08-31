@@ -52,7 +52,7 @@ void del_filter();
 void usage(void) {
 	int i;
 	fprintf(stderr,"Create VRML image of the gamut surface of a TIFF, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: tiffgamut [-v level] [profile.icm | embedded.tif] infile1.tif [infile2.tif ...] \n");
 	fprintf(stderr," -v            Verbose\n");
 	fprintf(stderr," -d sres       Surface resolution details 1.0 - 50.0\n");
@@ -688,7 +688,7 @@ main(int argc, char *argv[]) {
 			error("new_icxcam failed");
 
 		cam->set_view(cam, vc.Ev, vc.Wxyz, vc.La, vc.Yb, vc.Lv, vc.Yf, vc.Fxyz,
-		              XICC_USE_HK, XICC_NOCAMCL);
+		              XICC_USE_HK);
 	}
 
 	/* Establish the PCS range if we are filtering */

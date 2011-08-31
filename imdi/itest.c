@@ -167,8 +167,8 @@ main(int argc, char *argv[]) {
 	int iprs[] = { 8, 8,  16, 0};
 	int oprs[] = { 8, 16, 16, 0};
 #else
-	int ids[] = { 1, 3, 4, 5, 6, 7, 8, 0 };
-	int ods[] = { 1, 3, 4, 5, 6, 7, 8, 0 };
+	int ids[] = { 1, 3, 4, 5, 6, 7, /* 8, */ 0 };
+	int ods[] = { 1, 3, 4, 5, 6, 7, /* 8, */ 0 };
 	int iprs[] = { 8, 8,  16, 0};
 	int oprs[] = { 8, 16, 16, 0};
 #endif
@@ -432,7 +432,7 @@ main(int argc, char *argv[]) {
 				
 						mxserr = 0;
 
-						if (ip == 8) {
+						if (op == 8) {
 							for (e = 0; e < od; e++) {
 								double err = robuf[e] * 255.0 - obuf[j + e];
 								if (err < 0)
@@ -529,7 +529,7 @@ main(int argc, char *argv[]) {
 						
 #endif /* VERBOSE || REPORT+ERRORS */
 					}
-					avgerr /= (npixels * od);
+					avgerr /= ((double)tbufsize * od);
 
 					{
 						double fmxerr;	/* Relative maximum error */

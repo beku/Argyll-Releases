@@ -1,4 +1,4 @@
-#ifndef CMM_H
+#ifndef CCMX_H
 #define CCMX_H
 
 /* 
@@ -33,8 +33,8 @@ struct _ccmx {
 	                double mtx[3][3]);	
 
 	/* Create a ccmx from measurements. return nz on error. */
-	int (*create_ccmx)(struct _ccmx *p, char *desc, char *inst, char *disp, char *refd,
-	               int nsamples, double refs[][3], double cols[][3]);	
+	int (*create_ccmx)(struct _ccmx *p, char *desc, char *inst, char *disp, char *tech,
+	               char *refd, int nsamples, double refs[][3], double cols[][3]);	
 
 	/* write to a CGATS .ccmx file */
 	int (*write_ccmx)(struct _ccmx *p, char *filename);
@@ -49,10 +49,11 @@ struct _ccmx {
 
   /* Private: */
 	/* (All char * are owned by ccmx) */
-	char *desc;		/* Desciption */
+	char *desc;		/* Desciption (optional) */
 	char *inst;		/* Name of colorimeter instrument */
-	char *disp;		/* Name of display */
-	char *ref;		/* Name of spectrometer instrument */
+	char *disp;		/* Name of display (optional if tech) */
+	char *tech;		/* Technology (CRT, LCD + backlight type etc.) (optional if disp) */
+	char *ref;		/* Name of spectrometer instrument (optional) */
 	double matrix[3][3];	/* Transform matrix */
 	double av_err;			/* Average error of fit */
 	double mx_err;			/* Maximum error of fit */

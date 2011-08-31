@@ -44,7 +44,7 @@ flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 int proj,			/* NZ for projector mode */
 int adaptive,		/* NZ for adaptive mode */
-int nocal,			/* NZ to disable auto instrument calibration */
+int noautocal,		/* NZ to disable auto instrument calibration */
 disppath *screen,	/* Screen to calibrate. */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
@@ -92,6 +92,7 @@ struct _disprd {
 	icc *fake_icc;		/* NZ if ICC profile is being used for fake */
 	double cal[3][MAX_CAL_ENT];	/* Calibration being worked through (cal[0][0] < 0.0 or NULL if not used) */
 	int ncal;			/* Number of entries used in cal[] */
+	int softcal;		/* NZ if apply cal to readings rather than hardware */
 	icmLuBase *fake_lu;
 	char *mcallout;		/* fake instrument shell callout */
 	int debug;			/* Debug flag */
@@ -105,12 +106,16 @@ struct _disprd {
 	int adaptive;		/* NZ for adaptive mode */
 	int highres;		/* Use high res mode if available */
 	double (*ccmtx)[3];	/* Colorimeter Correction Matrix, NULL if none */
-	int spectral;		/* Spectral values requested/used */
+	icxObserverType obType;	/* CCSS Observer */
+	xspect *custObserver;	/* CCSS Optional custom observer */
+	xspect *sets;		/* CCSS Set of sample spectra, NULL if none  */
+	int no_sets;	 	/* CCSS Number on set, 0 if none */
+	int spectral;		/* 1 = Generate spectral info flag, 2 = don't print error if not capable */
 	icxObserverType observ;		/* Compute XYZ from spectral if spectral and != icxOT_none */
 	xsp2cie *sp2cie;	/* Spectral to XYZ conversion */
 	int bdrift;			/* Flag, nz for black drift compensation */
 	int wdrift;			/* Flag, nz for white drift compensation */
-	int nocal;			/* No automatic instrument calibration */
+	int noautocal;		/* No automatic instrument calibration */
 	dispwin *dw;		/* Window */
 	ramdac *or;			/* Original ramdac if we set one */
 
@@ -148,6 +153,15 @@ struct _disprd {
 	/* readings when white drift comp. is enabled */
 	void (*reset_targ_w)(struct _disprd *p);
 
+	/* Change the black/white drift compensation options */
+	/* Note that this simply invalidates any reference readings, */
+	/* and therefore will not make for good black compensation */
+	/* if it is done a long time since the instrument calibration. */
+	void (*change_drift_comp)(struct _disprd *p,
+		int bdrift,			/* Flag, nz for black drift compensation */
+		int wdrift			/* Flag, nz for white drift compensation */
+	);
+
 	/* Take an ambient reading if the instrument has the capability. */
 	/* return nz on fail/abort */
 	/* 1 = user aborted */
@@ -184,11 +198,14 @@ flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 int proj,			/* NZ for projector mode */
 int adaptive,		/* NZ for adaptive mode */
-int nocal,			/* No automatic instrument calibration */
+int noautocal,		/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */
-int donat,			/* Use ramdac for native output, else run through current or set ramdac */
+int native,			/* 0 = use current current or given calibration curve */
+					/* 1 = set native linear output and use ramdac high prec'n */
+					/* 2 = set native linear output */
 double cal[3][MAX_CAL_ENT],	/* Calibration set/return (cal[0][0] < 0.0 if can't/not to be used) */
 int ncal,			/* number of entries use in cal */
+int softcal,		/* NZ if apply cal to readings rather than hardware */
 disppath *screen,	/* Screen to calibrate. */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
@@ -198,8 +215,11 @@ double patsize,		/* Size of dispwin */
 double ho,			/* Horizontal offset */
 double vo,			/* Vertical offset */
 double ccmtx[3][3],	/* Colorimeter Correction matrix, NULL if none */
+xspect *sets,		/* CCSS Set of sample spectra, NULL if none  */
+int no_sets,	 	/* CCSS Number on set, 0 if none */
 int spectral,		/* 1 = Generate spectral info flag, 2 = don't print error if not capable */
-icxObserverType observ,	/* Compute XYZ from spectral if spectral and != icxOT_none */
+icxObserverType obType,	/* Use alternate observer if spectral or CCSS and != icxOT_none */
+xspect custObserver[3],	/* Optional custom observer */
 int bdrift,			/* Flag, nz for black drift compensation */
 int wdrift,			/* Flag, nz for white drift compensation */
 int verb,			/* Verbosity flag */

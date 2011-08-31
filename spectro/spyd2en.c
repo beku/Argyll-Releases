@@ -11,8 +11,8 @@
  * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* This program enables the Spyder 2 instrument for Argyll, */
@@ -36,12 +36,19 @@
 #include <windows.h>
 #endif
 #ifdef UNIX
+#include <unistd.h>
 #include <sys/param.h>
 #include <sys/mount.h>
 #endif /* UNIX */
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
+#else /* SALONEINSTLIB */
+#include <fcntl.h>
+#include "sa_config.h"
+#include "numsup.h"
+#endif /* SALONEINSTLIB */
 #include "xdg_bds.h"
 
 /* --------------------------------------------------------- */
@@ -173,29 +180,29 @@ void unget16_arch(archive *p) {
 }
 
 /* --------------------------------------------------------- */
-/* Interface with inflate.c */
+/* Interface with vinflate.c */
 
 archive *g_va = NULL;
 
 /* fetch the next 16 bits, big endian */
 /* if we get 0xffffffff, we are at EOF */
-unsigned int get_16bits() {
+unsigned int vget_16bits() {
 	return get16_arch(g_va);
 }
 
 /* unget 16 bits */
-void unget_16bits() {
+void vunget_16bits() {
 	unget16_arch(g_va);
 }
 
 /* Save the decompressed file to the buffer */
-int write_output(unsigned char *buf, unsigned int len) {
+int vwrite_output(unsigned char *buf, unsigned int len) {
 	if ((g_va->dsize + len) >= g_va->maxdsize) {
 		warning("Uncompressed buffer is unexpectedly large (%d > %d)!",
 		(g_va->dsize + len), g_va->maxdsize);
 		return 1;
 	}
-	memcpy(g_va->dbuf + g_va->dsize, buf, len);
+	memmove(g_va->dbuf + g_va->dsize, buf, len);
 	g_va->dsize += len;
 	return 0;
 }
@@ -221,6 +228,9 @@ archive *new_arch(char *name, int verb) {
 	p->del = del_arch;
 
 	/* Open up the file for reading */
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
 #if defined(O_BINARY) || defined(_O_BINARY)
 	if ((ifp = fopen(name,"rb")) == NULL)
 #else
@@ -268,7 +278,7 @@ archive *new_arch(char *name, int verb) {
 			error("Failed to locate file '%s'\n",dname);
 
 		g_va = p;
-		if (inflate()) {
+		if (vinflate()) {
 			error("Inflating file '%s' failed",dname);
 		}
 		if (verb)
@@ -394,6 +404,9 @@ int patch_exe(char *name, unsigned char *fbuf, unsigned int fsize, int verb) {
 		printf("About to patch executable '%s'\n",name);
 
 	/* open executable file */
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
 #if defined(O_BINARY) || defined(_O_BINARY)
 	if ((fp = fopen(name,"r+b")) == NULL)
 #else
@@ -522,6 +535,9 @@ int write_bin(char *name, unsigned char *fbuf, unsigned int fsize, int verb) {
 		printf("About to write binary '%s'\n",name);
 
 	/* open executable file */
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
 #if defined(O_BINARY) || defined(_O_BINARY)
 	if ((fp = fopen(name,"wb")) == NULL)
 #else
@@ -554,8 +570,8 @@ int write_bin(char *name, unsigned char *fbuf, unsigned int fsize, int verb) {
 
 void usage(void) {
 	fprintf(stderr,"Transfer Spyder 2 PLD pattern from file, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
-	fprintf(stderr,"usage: Transfer [-v] infile\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 2 or later\n");
+	fprintf(stderr,"usage: spyd2en [-v] infile\n");
 	fprintf(stderr," -v              Verbose\n");
 	fprintf(stderr," -S d            Specify the install scope u = user (def.), l = local system]\n");
 	fprintf(stderr," infile          Binary driver file to search\n");
@@ -578,7 +594,8 @@ main(int argc, char *argv[]) {
 	char patch_name[MAXNAMEL+1] = "\000" ;
 	char *header_name = "spyd2PLD.h";
 	char *bin_name = "color/spyd2PLD.bin";
-	char *bin_path = NULL;
+	char **bin_paths = NULL;
+	int no_paths = 0;
 	xdg_scope scope = xdg_user;
 	int verb = 0;
 	int header = 0;
@@ -797,8 +814,11 @@ main(int argc, char *argv[]) {
 			char *vols[] = {		/* Typical volumes the CDROM could be mounted under */
 				"/media/ColorVision",
 				"/mnt/cdrom",
+				"/mnt/cdrecorder",
 				"/media/cdrom",
+				"/media/cdrecorder",
 				"/cdrom",
+				"/cdrecorder",
 				""
 			};
 
@@ -835,22 +855,22 @@ main(int argc, char *argv[]) {
 		error("Failed to create archive object from '%s'",in_name);
 	}
 
-	if(amount) umiso();
+	if (amount) umiso();
  	
 	/* Get path. This may drop uid/gid if we are su */
-	if ((bin_path = xdg_bds(NULL, xdg_data, xdg_write, scope, bin_name)) == NULL) {
+	if ((no_paths = xdg_bds(NULL, &bin_paths, xdg_data, xdg_write, scope, bin_name)) < 1) {
 		error("Failed to find/create XDG_DATA path");
 	}
 
 	get_firmware_arch(va, &fbuf, &fsize);
 	
 	if (verb)
-		printf("Firmware is being save to '%s'\n",bin_path);
+		printf("Firmware is being save to '%s'\n",bin_paths[0]);
 
 	/* Create a binary file containing the firmware */
 	/* that drivers for the Spyder 2 can use */
-	write_bin(bin_path, fbuf, fsize, verb);
-	free(bin_path);
+	write_bin(bin_paths[0], fbuf, fsize, verb);
+	xdg_free(bin_paths, no_paths);
 
 	/* Create a header file that can be compiled in */
 	if (header)

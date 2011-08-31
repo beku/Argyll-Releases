@@ -18,6 +18,25 @@
  */
 
 /* TTBD:
+
+    Should fix the clipping case so that a direction weighting
+	funtion can be applied. This should be used just like
+	the perceptual case to increase L* constance for dark
+    colors. Will this stuff up the geometric consistency though ?
+	[ See fill_nncell(), fill_nncell() and users of calc_fwd_nn_cell_list(),
+	  ie. nnearest_clip_solve(), clipn_setsort() etc. ]
+	The SVD least squares computation case makes this hard to change ?
+	Would have to feed in a weighting function, or can it be general ?
+
+	Allow function callback to set auxiliary values for 
+	flag RSPL_AUXLOCUS. 
+	How to pass enough info back to aux_compute() ?
+
+	Should auxil return multiple solutions if it finds them ???
+
+ */
+
+/* TTBD:
 	Get rid of error() calls - return status instead
 
 	Need to add a hefty overview and explanation of
@@ -40,16 +59,6 @@
 		Linear algebra choices.
 		
 	  How final solutions are chosen
-
- */
-
-/* TTBD:
-
-	Allow function callback to set auxiliary values for 
-	flag RSPL_AUXLOCUS. 
-	How to pass enough info back to aux_compute() ?
-
-	Should auxil return multiple solutions if it finds them ???
 
  */
 

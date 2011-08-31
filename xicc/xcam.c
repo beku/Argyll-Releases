@@ -24,9 +24,10 @@
 static void icx_cam_free(icxcam *s);
 static int icx_set_view(icxcam *s, ViewingCondition Ev, double Wxyz[3],
                         double La, double Yb, double Lv, double Yf, double Fxyz[3],
-						int hk, int noclip);
+						int hk);
 static int icx_XYZ_to_cam(struct _icxcam *s, double Jab[3], double XYZ[3]);
 static int icx_cam_to_XYZ(struct _icxcam *s, double XYZ[3], double Jab[3]);
+static void settrace(struct _icxcam *s, int tracev);
 
 /* Return the default CAM */
 icxCAM icxcam_default(void)	{
@@ -64,6 +65,7 @@ icxcam *new_icxcam(icxCAM which) {
 	s->set_view = icx_set_view;
 	s->XYZ_to_cam = icx_XYZ_to_cam;
 	s->cam_to_XYZ = icx_cam_to_XYZ;
+	s->settrace   = settrace;
 
 	/* We set the default CAM here */
 	if (which == cam_default)
@@ -125,8 +127,7 @@ double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
-int hk,			/* Flag, NZ to use Helmholtz-Kohlraush effect */
-int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
+int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 ) {
 	s->Wxyz[0] = Wxyz[0];
 	s->Wxyz[1] = Wxyz[1];
@@ -135,11 +136,11 @@ int noclip		/* Flag, NZ to not clip to useful gamut before XYZ_to_cam() */
 	switch(s->tag) {
 		case cam_CIECAM97s3: {
 			cam97s3 *pp = (cam97s3 *)s->p;
-			return pp->set_view(pp, Ev, Wxyz, La, Yb, Lv, Yf, Fxyz, hk, noclip);
+			return pp->set_view(pp, Ev, Wxyz, La, Yb, Lv, Yf, Fxyz, hk);
 		}
 		case cam_CIECAM02: {
 			cam02 *pp = (cam02 *)s->p;
-			return pp->set_view(pp, Ev, Wxyz, La, Yb, Lv, Yf, Fxyz, hk, noclip);
+			return pp->set_view(pp, Ev, Wxyz, La, Yb, Lv, Yf, Fxyz, hk);
 		}
 		default:
 			break;
@@ -187,6 +188,26 @@ double Jab[3]
 	}
 	return 0;
 }
+
+/* Debug */
+static void settrace(
+struct _icxcam *s,
+int tracev
+) {
+	switch(s->tag) {
+		case cam_CIECAM97s3: {
+			cam97s3 *pp = (cam97s3 *)s->p;
+			pp->trace = tracev;
+		}
+		case cam_CIECAM02: {
+			cam02 *pp = (cam02 *)s->p;
+			pp->trace = tracev;
+		}
+		default:
+			break;
+	}
+}
+
 
 
 

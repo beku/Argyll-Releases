@@ -1,15 +1,16 @@
-AUTOMAKE_OPTIONS = dist-bzip2 no-dist-gzip
+AUTOMAKE_OPTIONS = dist-bzip2 
 ACLOCAL_AMFLAGS = -I m4
-DISTCLEANFILES = ChangeLog libusb-1.0.pc
+DISTCLEANFILES = ChangeLog libusb-1.0A.pc
 EXTRA_DIST = TODO PORTING
-SUBDIRS = libusb doc
 
 if BUILD_EXAMPLES
-SUBDIRS += examples
+SUBDIRS = libusb doc examples
+else
+SUBDIRS = libusb doc
 endif
 
 pkgconfigdir=$(libdir)/pkgconfig
-pkgconfig_DATA=libusb-1.0.pc
+pkgconfig_DATA=libusb-1.0A.pc
 
 .PHONY: ChangeLog dist-up
 ChangeLog:
@@ -22,6 +23,6 @@ dist-up: dist
 	rm -rf $(reldir)
 	mkdir -p $(reldir)
 	cp $(distdir).tar.bz2 $(reldir)
-	rsync -rv $(reldir) dsd_,libusb@frs.sourceforge.net:/home/frs/project/l/li/libusb/libusb-1.0/
+	rsync -rv $(reldir) dsd_,libusb@frs.sourceforge.net:/home/frs/project/l/li/libusb/libusb-1.0A/
 	rm -rf $(reldir)
 

@@ -140,6 +140,7 @@ struct windows_usb_api_backend {
 	int (*open)(struct libusb_device_handle *dev_handle);
 	void (*close)(struct libusb_device_handle *dev_handle);
 	int (*claim_interface)(struct libusb_device_handle *dev_handle, int iface);
+	int (*configure_endpoints)(struct libusb_device_handle *dev_handle, int iface);
 	int (*set_interface_altsetting)(struct libusb_device_handle *dev_handle, int iface, int altsetting);
 	int (*release_interface)(struct libusb_device_handle *dev_handle, int iface);
 	int (*resetep)(struct libusb_device_handle *dev_handle, unsigned char endpoint);

@@ -11,10 +11,10 @@
  * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * (Based on i1disp.c)
+ * (Based on i1disp.h)
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* 
@@ -86,6 +86,8 @@
 /* HUEY communication object */
 struct _huey {
 	INST_OBJ_BASE
+
+	int      lenovo;			/* 0 = normal, 1 = 'huyL' */
 
 	inst_mode mode;				/* Currently selected mode */
 

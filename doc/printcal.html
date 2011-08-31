@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
   <title>printcal</title>
@@ -30,7 +30,8 @@ and
 create new .cal</small><br style="font-family: monospace;">
 <span style="font-family: monospace;"></span><small
  style="font-family: monospace;">&nbsp;<a href="#e">-e</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp; &nbsp; &nbsp; &nbsp;&nbsp; Verify against previous .cal<br>
+&nbsp;
+&nbsp; &nbsp; &nbsp;&nbsp; Verify against previous .cal<br>
 </small><small style="font-family: monospace;">&nbsp;<a href="#I">-I</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; Create imitation target from .ti3 and
@@ -60,7 +61,8 @@ string</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#x">-x# percent</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Set maximum device percentage target</span><br
+Set
+maximum device percentage target</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#n">-n# deltaE</a><span
@@ -70,34 +72,41 @@ target</span><br style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#t">-t# percent</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Set 50% transfer curve percentage target</span><br
+Set
+50% transfer curve percentage target</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp; # = c, r,
 0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; First channel</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-m, g,
+m,
+g,
 1&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Second channel</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-y, b,
+y,
+b,
 2&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Third channel</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 k,&nbsp;&nbsp;&nbsp;
-3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fourth channel, etc.<br>
+3&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Fourth channel, etc.<br>
 &nbsp;<a href="#a">-a</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Create an Adobe Photoshop .AMP file as well as a .cal<br
+Create
+an Adobe Photoshop .AMP file as well as a .cal<br
  style="font-family: monospace;">
 </span><span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#p1">prevcal</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Base name of previous .cal file for recal or verify.</span><br
+Base
+name of previous .cal file for recal or verify.</span><br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><a
  style="font-family: monospace;" href="#p2">inoutname</a><span
  style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Base name of input .ti3 file, output .cal file</span><br>
+Base
+name of input .ti3 file, output .cal file</span><br>
 </span><span style="font-family: monospace;"></span></small><small><span
  style="font-family: monospace;"></span><span
  style="font-family: monospace;"></span><span
@@ -106,7 +115,8 @@ Base name of input .ti3 file, output .cal file</span><br>
 </h3>
 <b><a name="v"></a>-v</b>&nbsp; Turn on verbose mode. Gives progress
 information as the calibration is created. An argument greater than 1
-increases the verbosity.<br>
+increases the verbosity. Will also report the ideal power value to
+apply to the test chart in targen.<br>
 <br>
 <a name="p"></a><span style="font-weight: bold;">-p</span> Turns on
 plot mode. This causes various graphs to be plotted as the calibration
@@ -272,7 +282,8 @@ each of the device primary colors, from the media white to full
 individual colorant intensity.<br>
 <br>
 For the initial calibration (<span style="font-weight: bold;">-i</span>),
-the range of device values to be used and the shape of the target
+the
+range of device values to be used and the shape of the target
 linearization curve are established, as well as creating the first set
 of calibration curves. For subsequent re-calibrations (<span
  style="font-weight: bold;">-r</span>), the calibration curves aim to
@@ -308,7 +319,8 @@ calibration aimed at reproducing the same response as the initial
 calibration, rather that setting new targets.<br>
 <br>
 The calibration can be verified (<span style="font-weight: bold;">-e</span>)
-by printing a calibration test chart on <span
+by
+printing a calibration test chart on <span
  style="text-decoration: underline;">non-color managed</span>, <span
  style="text-decoration: underline;"></span>but calibrated device, the
 verification evaluating any discrepancy between the device response

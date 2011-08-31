@@ -183,7 +183,7 @@ ucmm_error ucmm_install_monitor_profile(
 			tt = "/etc/xdg";
 		if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
 			return ucmm_resource;
-		memcpy(conf_name, tt, strlen(tt)+1);
+		memmove(conf_name, tt, strlen(tt)+1);
 
 		if ((tt = getenv("XDG_DATA_DIRS")) == NULL)
 			tt = "/usr/local/share/:/usr/share/";
@@ -191,19 +191,19 @@ ucmm_error ucmm_install_monitor_profile(
 			free(conf_name);
 			return ucmm_resource;
 		}
-		memcpy(data_name, tt, strlen(tt)+1);
+		memmove(data_name, tt, strlen(tt)+1);
 	} else {
 		char *tt, *home;
 		if ((tt = getenv("XDG_CONFIG_HOME")) != NULL) {
 			if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
 				return ucmm_resource;
-			memcpy(conf_name, tt, strlen(tt)+1);
+			memmove(conf_name, tt, strlen(tt)+1);
 		} else {
 			if ((home = getenv("HOME")) == NULL)
 				return ucmm_no_home;
 			if ((conf_name = malloc(strlen(home) + strlen(".config") + cnl +3)) == NULL)
 				return ucmm_resource;
-			memcpy(conf_name, home, strlen(home)+1);
+			memmove(conf_name, home, strlen(home)+1);
 			if (strlen(conf_name) > 0 && conf_name[strlen(conf_name)-1] != '/')
 				strcat(conf_name, "/");
 			strcat(conf_name, ".config");
@@ -213,7 +213,7 @@ ucmm_error ucmm_install_monitor_profile(
 				free(conf_name);
 				return ucmm_resource;
 			}
-			memcpy(data_name, tt, strlen(tt)+1);
+			memmove(data_name, tt, strlen(tt)+1);
 		} else {
 			if ((home = getenv("HOME")) == NULL) {
 				free(conf_name);
@@ -223,7 +223,7 @@ ucmm_error ucmm_install_monitor_profile(
 				free(conf_name);
 				return ucmm_resource;
 			}
-			memcpy(data_name, home, strlen(home)+1);
+			memmove(data_name, home, strlen(home)+1);
 			if (strlen(data_name) > 0 && data_name[strlen(data_name)-1] != '/')
 				strcat(data_name, "/");
 			strcat(data_name, ".local/share");
@@ -522,7 +522,7 @@ ucmm_error ucmm_uninstall_monitor_profile(
 			tt = "/etc/xdg";
 		if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
 			return ucmm_resource;
-		memcpy(conf_name, tt, strlen(tt)+1);
+		memmove(conf_name, tt, strlen(tt)+1);
 
 		if ((tt = getenv("XDG_DATA_DIRS")) == NULL)
 			tt = "/usr/local/share/:/usr/share/";
@@ -530,19 +530,19 @@ ucmm_error ucmm_uninstall_monitor_profile(
 			free(conf_name);
 			return ucmm_resource;
 		}
-		memcpy(data_name, tt, strlen(tt)+1);
+		memmove(data_name, tt, strlen(tt)+1);
 	} else {
 		char *tt, *home;
 		if ((tt = getenv("XDG_CONFIG_HOME")) != NULL) {
 			if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
 				return ucmm_resource;
-			memcpy(conf_name, tt, strlen(tt)+1);
+			memmove(conf_name, tt, strlen(tt)+1);
 		} else {
 			if ((home = getenv("HOME")) == NULL)
 				return ucmm_no_home;
 			if ((conf_name = malloc(strlen(home) + strlen(".config") + cnl +3)) == NULL)
 				return ucmm_resource;
-			memcpy(conf_name, home, strlen(home)+1);
+			memmove(conf_name, home, strlen(home)+1);
 			if (strlen(conf_name) > 0 && conf_name[strlen(conf_name)-1] != '/')
 				strcat(conf_name, "/");
 			strcat(conf_name, ".config");
@@ -552,7 +552,7 @@ ucmm_error ucmm_uninstall_monitor_profile(
 				free(conf_name);
 				return ucmm_resource;
 			}
-			memcpy(data_name, tt, strlen(tt)+1);
+			memmove(data_name, tt, strlen(tt)+1);
 		} else {
 			data_name = ".local/share";
 			if ((home = getenv("HOME")) == NULL) {
@@ -563,7 +563,7 @@ ucmm_error ucmm_uninstall_monitor_profile(
 				free(conf_name);
 				return ucmm_resource;
 			}
-			memcpy(data_name, home, strlen(home)+1);
+			memmove(data_name, home, strlen(home)+1);
 			if (strlen(data_name) > 0 && data_name[strlen(data_name)-1] != '/')
 				strcat(data_name, "/");
 			strcat(data_name, ".local/share");
@@ -844,7 +844,7 @@ ucmm_error ucmm_get_monitor_profile(
 				tt = "/etc/xdg";
 			if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
 				return ucmm_resource;
-			memcpy(conf_name, tt, strlen(tt)+1);
+			memmove(conf_name, tt, strlen(tt)+1);
 
 		} else {					/* User */
 			char *tt, *home;
@@ -852,13 +852,13 @@ ucmm_error ucmm_get_monitor_profile(
 			if ((tt = getenv("XDG_CONFIG_HOME")) != NULL) {
 				if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
 					return ucmm_resource;
-				memcpy(conf_name, tt, strlen(tt)+1);
+				memmove(conf_name, tt, strlen(tt)+1);
 			} else {
 				if ((home = getenv("HOME")) == NULL)
 					return ucmm_no_home;
 				if ((conf_name = malloc(strlen(home) + strlen(".config") + cnl +3)) == NULL)
 					return ucmm_resource;
-				memcpy(conf_name, home, strlen(home)+1);
+				memmove(conf_name, home, strlen(home)+1);
 				if (strlen(conf_name) > 0 && conf_name[strlen(conf_name)-1] != '/')
 					strcat(conf_name, "/");
 				strcat(conf_name, ".config");

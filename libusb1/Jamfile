@@ -2,7 +2,9 @@
 # JAM style makefile for libubs 1.0
 
 # This doesn't make the Win64 bit .sys and .dll
-# (you need the DDK and ddk_build.cmd to do that)
+# (you need the Server 2003 DDK 64 & 32 bit build enironmantes,
+#  and then run  ddk_build.cmd. This will then run
+#  build in libusb/os. )
 
 #PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
 PREF_CCFLAGS    = $(CCDEBUGFLAG) ;		# Debugging flags
@@ -11,7 +13,7 @@ PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;	# Link debugging flags
 
 BUILD_EXAMPLES = false ;
 ENABLE_DEBUG_LOGGING = false ;	# Normaly false
-ENABLE_LOGGING = true ;
+ENABLE_LOGGING = true ;			# Normaly true
 
 #Products
 #Libraries = ;
@@ -19,9 +21,9 @@ ENABLE_LOGGING = true ;
 #Headers = ;
 
 #Install
-#InstallBin ../bin : $(Executables) ;
-#InstallFile ./h : $(Headers) ;
-#InstallLib ./lib : $(Libraries) ;
+#InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
+#InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
 
 if [ GLOB $(PATH) : sed sed.exe ] {
 	Echo "sed seems to be available" ;
@@ -33,7 +35,7 @@ if [ GLOB $(PATH) : sed sed.exe ] {
 # List of .inf files needed
 # WinUSB driver preference
 INFS1 = ColorMunki DTP20 DTP92 DTP94 Huey MonacoOptix
-       Spyd3 i1Disp i1Monitor ;
+       Spyd3 i1Monitor i1Disp i1D3 ;
 DRIVERS1  = winusbDrivers ;
 
 # Libusb driver preference
@@ -95,10 +97,10 @@ if $(NT) {
 	                   libusb0.sys libusb0_x64.sys ;
 
 	# To build the library and/or driver using the DDK, a build window needs to
-	# be started, navigate to libusb1/libusb/os or libusb1/libusb/os/driver,
-	# and run "build".
+	# be started, navigate to libusb1 and run "ddk_build.cmd".
+	# This needs to be done for 32 & 64 bit.
 
-	# copy the 32 bit library compiled using the DDK
+	# copy the 32 bit .dll library compiled using the DDK
 #	NoCare [ NormIDstTargets libusb/os/objfre_wnet_x86/i386/$(LIBUSB1NAME).lib ] ;
 #	FileNoClean libusb-X.X.lib : libusb/os/objfre_wnet_x86/i386/libusb-X.X.lib ;
 #	FileNoClean $(LIBUSB1NAME).lib : libusb-X.X.lib ;
@@ -108,7 +110,7 @@ if $(NT) {
 #		FileNoClean $(LIBUSB1NAME).dll : libusb-X.X.dll ;
 #	}
 
-	# copy the 64 bit library compiled using the DDK
+	# copy the 64 bit .dll library compiled using the DDK
 	NoCare [ NormIDstTargets libusb/os/objfre_wnet_amd64/amd64/libusb-X.X.lib ] ;
 	FileNoClean libusb-X.X_x64.lib : libusb/os/objfre_wnet_amd64/amd64/libusb-X.X.lib ;
 	File $(LIBUSB1NAME)_x64.lib : libusb-X.X_x64.lib ;

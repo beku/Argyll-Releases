@@ -40,7 +40,7 @@
 
 void usage(void) {
 	fprintf(stderr,"Invert AtoB1 to make BtoA1 for CMYK profiles, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: revfix [-options] iccin iccout\n");
 	fprintf(stderr," -v             Verbose\n");
 	fprintf(stderr," -0             Process perceptual\n");

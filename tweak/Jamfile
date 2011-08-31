@@ -11,7 +11,7 @@ PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;	# Link debugging flags
 Executables = refine ;
 
 #Install
-InstallBin ../bin : $(Executables) ;
+InstallBin $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
 
 HDRS = ../h ../icc ../cgats ../xicc ../spectro ../gamut
        ../rspl ../numlib ../plot ;

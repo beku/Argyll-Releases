@@ -16,7 +16,9 @@ struct _vrml {
 /* Private: */
 	FILE *fp;
 
-	double lcent;		/* Gamut L center, usually 50 */
+	int isxyz;			/* nz if XYZ plot, (range 0..1) */
+	double scale;		/* Scale factor to use (applied before off) */
+	double off;			/* Gamut L center, usually 50, to put 50 at center of view */
 
 	/* Expandable point arrays */
 	struct {
@@ -86,6 +88,9 @@ struct _vrml {
 	/* Helper :- convert a Lab value to RGB */
 	void (*Lab2RGB)(struct _vrml *s, double *out, double *in);
 
+	/* Helper :- convert a XYZ value to RGB */
+	void (*XYZ2RGB)(struct _vrml *s, double *out, double *in);
+
 #ifdef GAMUT_H		/* If gamut.h is #included ahead of us */
 	/* Create a solid gamut surface from the given gamut */
 	/* trans is trasparency, cc is surface color, cc[0] < 0.0 for natural */
@@ -101,8 +106,8 @@ struct _vrml {
 
 }; typedef struct _vrml vrml;
 
-/* Constructor */
-vrml *new_vrml(char *name, int doaxes);
+/* Constructor. */
+vrml *new_vrml(char *name, int doaxes, int isxyz);
 
 #define VRML_H
 #endif /* VRML_H */

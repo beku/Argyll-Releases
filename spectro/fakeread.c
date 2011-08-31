@@ -37,7 +37,7 @@
 void usage(char *diag, ...) {
 	fprintf(stderr,"Fake test chart reader - lookup values in ICC/MPP profile, Version %s\n",
 	               ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"  Diagnostic: ");
@@ -46,7 +46,7 @@ void usage(char *diag, ...) {
 		va_end(args);
 		fprintf(stderr,"\n");
 	}
-	fprintf(stderr,"usage: fakeread [-v] [-s] [separation.icm] profile.[icc|mpp|ti3] outfile\n");
+	fprintf(stderr,"usage: fakeread [-v] [-s] [separation.icm] profile.[%s|mpp|ti3] outfile\n",ICC_FILE_EXT_ND);
 	fprintf(stderr," -v                Verbose mode\n");
 	fprintf(stderr," -s                Lookup MPP spectral values\n");
 	fprintf(stderr," -p                Use separation profile\n");
@@ -59,8 +59,9 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -u                Make random deviations have uniform distributions rather than normal\n");
 	fprintf(stderr," -S seed           Set random seed\n");
 	fprintf(stderr," -b L,a,b          Scale black point to target Lab value\n");
-	fprintf(stderr," [separation.icm]  Device link separation profile\n");
-	fprintf(stderr," profile.[icc|mpp|ti3] ICC, MPP profile or TI3 to use\n");
+	fprintf(stderr," -I intent         r = relative colorimetric, a = absolute (default)\n");
+	fprintf(stderr," [separation.%s]  Device link separation profile\n",ICC_FILE_EXT_ND);
+	fprintf(stderr," profile.[%s|mpp|ti3] ICC, MPP profile or TI3 to use\n",ICC_FILE_EXT_ND);
 	fprintf(stderr," outfile           Base name for input[ti1]/output[ti3] file\n");
 	exit(1);
 	}
@@ -93,6 +94,7 @@ int main(int argc, char *argv[])
 	int si;				/* Sample id index */
 	int ti;				/* Temp index */
 	int fi;				/* Colorspace index */
+	int inti3 = 0;		/* Input is a renamed .ti3 file rather than .ti1 */
 
 	/* ICC separation device link profile  */
 	icmFile *sep_fp = NULL;		/* Color profile file */
@@ -108,6 +110,7 @@ int main(int argc, char *argv[])
 	xcal *cal = NULL;			/* calibration */ 
 
 	/* ICC profile based */
+	icRenderingIntent intent = icAbsoluteColorimetric;
 	icmFile *icc_fp = NULL;	/* Color profile file */
 	icc *icc_icco = NULL;	/* Profile object */
 	icmLuBase *icc_luo = NULL;	/* Conversion object */
@@ -240,6 +243,22 @@ int main(int argc, char *argv[])
 				if (tbp[2] < -128.0 || tbp[2] > 128.0) usage("-b b* value out of range");
 			}
 
+			/* Intent (only applies to ICC profile) */
+			else if (argv[fa][1] == 'I') {
+				fa = nfa;
+				if (na == NULL) usage("Expect argument to -I");
+    			switch (na[0]) {
+					case 'r':
+						intent = icRelativeColorimetric;
+						break;
+					case 'a':
+						intent = icAbsoluteColorimetric;
+						break;
+					default:
+						usage("Unexpected argument value '%c' to -I optyion",na[0]);
+				}
+			}
+
 			else
 				usage("Unrecognised flag");
 		}
@@ -318,7 +337,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* Get a Device to PCS conversion object */
-		if ((icc_luo = icc_icco->get_luobj(icc_icco, icmFwd, icAbsoluteColorimetric,
+		if ((icc_luo = icc_icco->get_luobj(icc_icco, icmFwd, intent,
 		                           dolab ? icSigLabData : icSigXYZData, icmLuOrdNorm)) == NULL) {
 			if ((icc_luo = icc_icco->get_luobj(icc_icco, icmFwd, icmDefaultIntent,
 			                       dolab ? icSigLabData : icSigXYZData, icmLuOrdNorm)) == NULL)
@@ -414,7 +433,7 @@ int main(int argc, char *argv[])
 			error ("Input file '%s' doesn't contain one table",profname);
 
 		if ((ti = ti3->find_kword(ti3, 0, "COLOR_REP")) < 0)
-			error("Input file doesn't contain keyword COLOR_REPS");
+			error("Input file doesn't contain keyword COLOR_REP");
 	
 		if ((rbuf = strdup(ti3->t[0].kdata[ti])) == NULL)
 			error("Malloc failed");
@@ -435,7 +454,7 @@ int main(int argc, char *argv[])
 			error("COLOR_REP '%s' invalid (Neither XYZ nor LAB)", ti3->t[0].kdata[ti]);
 
 		if ((cnv_nmask = icx_char2inkmask(rbuf)) == 0) {
-			error ("File '%s' keyword COLOR_REPS has unknown device value '%s'",profname,rbuf);
+			error ("File '%s' keyword COLOR_REP has unknown device value '%s'",profname,rbuf);
 		}
 
 		free(rbuf);
@@ -523,7 +542,7 @@ int main(int argc, char *argv[])
 			printf("Adding %.3f%% average deviation %s noise to device values\n",rdlevel * 100.0,unidist ? "uniform" : "normal");
 		for (j = 0; j < inn && j < 10; j++) {
 			if (chpow[j] != 1.0)
-				printf("Appluing chan %d power %f\n",j,chpow[j]);
+				printf("Applying chan %d power %f\n",j,chpow[j]);
 		}
 		if (rplevel > 0.0)
 			printf("Adding %.3f%% average deviation %s noise to %s PCS values\n",rplevel * 100.0,unidist ? "uniform" : "normal", dolab ? "L*a*b*": "XYZ");
@@ -533,17 +552,45 @@ int main(int argc, char *argv[])
 	/* Deal with input CGATS files */
 	icg = new_cgats();			/* Create a CGATS structure */
 	icg->add_other(icg, "CTI1"); 	/* our special input type is Calibration Target Information 1 */
+	icg->add_other(icg, "CTI3"); 	/* also accept renamed .ti3 file */
 
 	if (icg->read_name(icg, inname))
 		error("CGATS file read error : %s",icg->err);
 
-	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0)
+	if (icg->ntables == 0 || icg->t[0].tt != tt_other || (icg->t[0].oi != 0 && icg->t[0].oi != 1))
 		error ("Input file isn't a CTI1 format file");
+	if (icg->t[0].oi == 1)
+		inti3 = 1;			/* It's a renamed .ti3 file */
 	if (icg->ntables != 1 && icg->ntables != 2 && icg->ntables != 3)
 		error ("Input file doesn't contain one, two or three tables");
 
 	if ((npat = icg->t[0].nsets) <= 0)
 		error ("No sets of data");
+
+	/* Figure out the color space of the .ti1 */
+	if ((fi = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
+		error ("Input file doesn't contain keyword COLOR_REP");
+
+	if (inti3) {
+		char *rbuf, *outc;
+
+		if ((rbuf = strdup(icg->t[0].kdata[fi])) == NULL)
+			error("Malloc failed");
+	
+		/* Split COLOR_REP into device and PCS space */
+		if ((outc = strchr(rbuf, '_')) == NULL)
+			error("Input file '%s' COLOR_REP '%s' invalid", inname, icg->t[0].kdata[fi]);
+		*outc++ = '\000';
+	
+		if ((nmask = icx_char2inkmask(rbuf)) == 0) {
+			error ("Input file '%s' keyword COLOR_REP has unknown device value '%s'",inname,rbuf);
+		}
+
+		free(rbuf);
+	} else {
+		if ((nmask = icx_char2inkmask(icg->t[0].kdata[fi])) == 0)
+			error ("Input file '%s' keyword COLOR_REP has unknown value '%s'",inname, icg->t[0].kdata[fi]);
+	}
 
 	/* Setup output cgats file */
 	ocg = new_cgats();				/* Create a CGATS structure */
@@ -562,15 +609,25 @@ int main(int argc, char *argv[])
 		ocg->add_kword(ocg, 0, "DEVICE_CLASS",ti3->t[0].kdata[ti], NULL);	/* Copy */
 	} else if (mlu != NULL) {
 		/* This is a guess. It may not be correct. */
-		if (cnv_nmask & ICX_ADDITIVE)	
+		if ((cnv_nmask & ICX_ADDITIVE) ^ (cnv_nmask & ICX_INVERTED)) {	
 			ocg->add_kword(ocg, 0, "DEVICE_CLASS","DISPLAY", NULL);
-		else
+			if (nmask == ICX_IRGB)
+				warning("It's unusual to have an iRGB display device !");
+		} else {
 			ocg->add_kword(ocg, 0, "DEVICE_CLASS","OUTPUT", NULL);
+			if (nmask == ICX_RGB)
+				warning("It's unusual to have an RGB printing device !");
+		}
 	} else {	/* Assume ICC */
-		if (icc_icco->header->deviceClass == icSigDisplayClass)
+		if (icc_icco->header->deviceClass == icSigDisplayClass) {
 			ocg->add_kword(ocg, 0, "DEVICE_CLASS","DISPLAY", NULL);
-		else
+			if (nmask == ICX_IRGB)
+				warning("It's unusual to have an iRGB display device !");
+		} else {
 			ocg->add_kword(ocg, 0, "DEVICE_CLASS","OUTPUT", NULL);
+			if (nmask == ICX_RGB)
+				warning("It's unusual to have an RGB printing device !");
+		}
 	}
 
 	if ((ti = icg->find_kword(icg, 0, "SINGLE_DIM_STEPS")) >= 0)
@@ -594,13 +651,6 @@ int main(int argc, char *argv[])
 
 	if ((si = icg->find_field(icg, 0, "SAMPLE_ID")) < 0)
 		error ("Input file doesn't contain field SAMPLE_ID");
-
-	/* Figure out the color space */
-	if ((fi = icg->find_kword(icg, 0, "COLOR_REP")) < 0)
-		error ("Input file doesn't contain keyword COLOR_REPS");
-
-	if ((nmask = icx_char2inkmask(icg->t[0].kdata[fi])) == 0)
-		error ("Input file keyword COLOR_REPS has unknown value");
 
 	{
 		int i, j, ii;
@@ -660,7 +710,7 @@ int main(int argc, char *argv[])
 			}
 		} else if (mlu != NULL) {
 			/* Check if mpp is compatible with .ti1 */
-			if (nmask == ICX_W && cnv_nmask == ICX_RGB)
+			if (nmask == ICX_W && (cnv_nmask == ICX_RGB || cnv_nmask == ICX_IRGB))
 				gfudge = 1;
 			else if (nmask == ICX_K && (cnv_nmask & ICX_BLACK))
 				gfudge = 2;
@@ -669,7 +719,7 @@ int main(int argc, char *argv[])
 				       icx_inkmask2char(cnv_nmask, 1), ident);	// Should free().
 		} else if (ti3 != NULL) {
 			/* Check if .ti3 is compatible with .ti1 */
-			if (nmask == ICX_W && cnv_nmask == ICX_RGB)
+			if (nmask == ICX_W && (cnv_nmask == ICX_RGB || cnv_nmask == ICX_IRGB))
 				gfudge = 1;
 			else if (nmask == ICX_K && (cnv_nmask & ICX_BLACK))
 				gfudge = 2;

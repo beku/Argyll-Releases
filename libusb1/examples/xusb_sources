@@ -20,7 +20,7 @@ UMTYPE=console
 INCLUDES=..\..\msvc;..\..;$(DDK_INC_PATH)
 C_DEFINES = $(C_DEFINES) /D_MSC_VER=1200
 
-UMLIBS=..\..\libusb\os\obj$(BUILD_ALT_DIR)\*\libusb-1.0.lib
+UMLIBS=..\..\libusb\os\obj$(BUILD_ALT_DIR)\*\libusb-X.X.lib
 
 SOURCES=..\xusb.c
 

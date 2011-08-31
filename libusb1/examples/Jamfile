@@ -9,7 +9,7 @@ if $(NT) {
 }
 
 # Link all utilities here with libicc
-LINKLIBS = ../libusb-1.lib ;		# Stub or full library
+LINKLIBS = ../$(LIBUSB1NAME).lib ;		# Stub or full library
 
 HDRS = .. $(OS_HDRS) ;
 
@@ -20,6 +20,6 @@ MainsFromSources lsusb.c  xusb.c ;
 
 # So executables can find the .dll
 if $(LIBUSB_IS_DLL) = true {
-	File libusb-1$(SUFSHLIB) : ../libusb/libusb-1$(SUFSHLIB) ;
+	File $(LIBUSB1NAME)$(SUFSHLIB) : ../libusb/$(LIBUSB1NAME)$(SUFSHLIB) ;
 }
 

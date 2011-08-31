@@ -1,4 +1,4 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
   <title>txt2ti3</title>
@@ -15,7 +15,7 @@ into</big></small> Argyll&nbsp;<a href="File_Formats.html#.ti3">.ti3</a>
 CGATS
 format.&nbsp;
 <h3>Usage Summary</h3>
-<small><span style="font-family: monospace;">txt2gcats [-v] [-l limit]
+<small><span style="font-family: monospace;">txt2ti3 [-v] [-l limit]
 [-d] [devfile] infile [specfile] outfile</span><br
  style="font-family: monospace;">
 <br style="font-family: monospace;">
@@ -29,7 +29,9 @@ limit, 0
 -
 400% (default max in file)<br>
 -d&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Set type of device as Display, not Output<br
+Set type of device as Display, not Output<br>
+-i&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Set type of device as Input, not Output<br
  style="font-family: monospace;">
 </span></small><small><span style="font-family: monospace;"></span><i
  style="font-family: monospace;">[devfile]</i><span
@@ -86,6 +88,10 @@ cases.<br>
 The <span style="font-style: italic;">outbasefile</span> is the base
 of the output file(s), to which txt2ti3 will automatically append a
 .ti3 and .ti2 extension.<br>
+<br>
+The input files may have data that is scaled to one of three levels:
+1.0, 100.0 or 255.0, and txt2ti3 attempts to guess what the appropriate
+range is, in order to scale to Argyll's standard range 0 .. 100.0.<br>
 <br>
 <br>
 </body>

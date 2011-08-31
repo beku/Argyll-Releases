@@ -96,6 +96,9 @@
 /* printf format precision specifier */
 #define PF64PREC "ll"
 
+/* Constant precision specifier */
+#define CF64PREC "LL"
+
 #else  /* !__STDC_VERSION__ */
 #ifdef _MSC_VER
 
@@ -114,6 +117,9 @@
 
 /* printf format precision specifier */
 #define PF64PREC "I64"
+
+/* Constant precision specifier */
+#define CF64PREC "LL"
 
 #else  /* !_MSC_VER */
 
@@ -1696,10 +1702,12 @@ extern ICCLIB_API void icm1960UCS21964WUV(icmXYZNumber *w, double *out, double *
 /* The standard D50 illuminant value */
 extern icmXYZNumber icmD50;
 extern icmXYZNumber icmD50_100;		/* Scaled to 100 */
+double icmD50_ary3[3];				/* As an array */
 
 /* The standard D65 illuminant value */
 extern icmXYZNumber icmD65;
 extern icmXYZNumber icmD65_100;		/* Scaled to 100 */
+double icmD65_ary3[3];				/* As an array */
 
 /* The default black value */
 extern icmXYZNumber icmBlack;
@@ -1741,6 +1749,9 @@ void icmChromAdaptMatrix(
 );
 
 /* - - - - - - - - - - - - - - */
+/* Set a 3 vector */
+#define icmSet3(d_ary, s_val) ((d_ary)[0] = (s_val), (d_ary)[1] = (s_val), \
+                              (d_ary)[2] = (s_val))
 
 /* Copy a 3 vector */
 #define icmCpy3(d_ary, s_ary) ((d_ary)[0] = (s_ary)[0], (d_ary)[1] = (s_ary)[1], \
@@ -1932,6 +1943,10 @@ char *icmPdv(int di, double *p);
 /* Print a float color vector to a string. */
 /* Returned static buffer is re-used every 5 calls. */
 char *icmPfv(int di, float *p);
+
+/* Print an 0..1 range XYZ as a D50 Lab string */
+/* Returned static buffer is re-used every 5 calls. */
+char *icmPLab(double *p);
 
 /* ---------------------------------------------------------- */
 

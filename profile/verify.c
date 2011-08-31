@@ -44,7 +44,7 @@
 void
 usage(void) {
 	fprintf(stderr,"Verify CIE values, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: verify [-options] target.ti3 measured.ti3\n");
 	fprintf(stderr," -v              Verbose - print each patch value\n");
 	fprintf(stderr," -n              Normalise each files reading to white Y\n");
@@ -635,7 +635,7 @@ int main(int argc, char *argv[])
 		double rad;
 
 		if (dovrml) {
-			wrl = new_vrml(out_name, doaxes);
+			wrl = new_vrml(out_name, doaxes, 0);
 			wrl->start_line_set(wrl, 0);
 
 			/* Fudge sphere diameter */

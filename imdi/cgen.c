@@ -19,19 +19,6 @@
    a per channel output lookup table, before being written.
 */
 
-/* TTBD:
-
-	* Do a floating point version
-	* Do an SSE version for int & float
-
-	  - Best strategy might be to tage cgen, strip out
-	    simplex code, and create a general vector implementation.
-	    Float version then uses vectors of length 1, while SSE
-	    uses real int or float vectors.
-
-	* Investigate in more detail, the sources of inaccuracy
-	  in the integer code.
-*/
 
 #include <stdio.h>
 #include <stdlib.h>

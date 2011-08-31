@@ -34,6 +34,7 @@ int      n	/* Dimensionality */
 #if defined(DO_POLISH) || defined(DO_CHECK)
 	double **sa;	/* save input matrix values */
 	double *sb;		/* save input vector values */
+	int i, j;
 #endif
 
 	if (n <= 10)
@@ -66,7 +67,7 @@ int      n	/* Dimensionality */
 	lu_backsub(a, n, pivx, b);
 
 #ifdef DO_POLISH
-	lu_polish(n, sa, a, pivx, sb, b);	/* Improve the solution */
+	lu_polish(sa, a, n, sb, b, pivx);	/* Improve the solution */
 #endif
 
 #ifdef DO_CHECK
@@ -90,6 +91,71 @@ int      n	/* Dimensionality */
 	free_dvector(sb, 0, n-1);
 	free_dmatrix(sa, 0, n-1, 0, n-1);
 #endif
+	if (pivx != PIVX)
+		free_ivector(pivx, 0, n-1);
+	return 0;
+}
+
+/* Solve the simultaneous linear equations A.X = B, with polishing */
+/* Return 1 if the matrix is singular, 0 if OK */
+int
+polished_solve_se(
+double **a,	/* A[][] input matrix, returns LU decomposition of A */
+double  *b,	/* B[]   input array, returns solution X[] */
+int      n	/* Dimensionality */
+) {
+	double rip;		/* Row interchange parity */
+	int *pivx, PIVX[10];
+	double **sa;	/* save input matrix values */
+	double *sb;		/* save input vector values */
+	int i, j;
+
+	if (n <= 10)
+		pivx = PIVX;
+	else
+		pivx = ivector(0, n-1);
+
+	sa = dmatrix(0, n-1, 0, n-1);
+	sb = dvector(0, n-1);
+
+	/* Copy source input matrix and vector values */
+	for (i = 0; i < n; i++) {
+		sb[i] = b[i];
+		for (j = 0; j < n; j++)
+			sa[i][j] = a[i][j];
+	}
+
+	if (lu_decomp(a, n, pivx, &rip)) {
+		free_dvector(sb, 0, n-1);
+		free_dmatrix(sa, 0, n-1, 0, n-1);
+		if (pivx != PIVX)
+			free_ivector(pivx, 0, n-1);
+		return 1;
+	}
+
+	lu_backsub(a, n, pivx, b);
+
+	lu_polish(sa, a, n, sb, b, pivx);	/* Improve the solution */
+
+#ifdef DO_CHECK
+	/* Check that the solution is correct */
+	for (i = 0; i < n; i++) {
+		double sum, temp;
+		sum = 0.0;
+		for (j = 0; j < n; j++)
+			sum += sa[i][j] * b[j];
+		temp = fabs(sum - sb[i]);
+		if (temp > 1e-6) {
+			free_dvector(sb, 0, n-1);
+			free_dmatrix(sa, 0, n-1, 0, n-1);
+			if (pivx != PIVX)
+				free_ivector(pivx, 0, n-1);
+			return 2;
+		}
+	}
+#endif
+	free_dvector(sb, 0, n-1);
+	free_dmatrix(sa, 0, n-1, 0, n-1);
 	if (pivx != PIVX)
 		free_ivector(pivx, 0, n-1);
 	return 0;

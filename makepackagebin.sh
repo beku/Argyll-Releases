@@ -140,8 +140,8 @@ done
 rm -f $PACKAGE
 if [ X$USETAR = "Xtrue" ] ; then
 	tar -czvf $PACKAGE $TOPDIR
-	# tar -zxf to extract
-	# tar -ztf to list
+	# tar -xzf to extract
+	# tar -tzf to list
 else
 	zip -9 -r $PACKAGE $TOPDIR
 	# unzip to extract

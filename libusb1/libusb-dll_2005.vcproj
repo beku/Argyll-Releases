@@ -2,7 +2,7 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="8.00"
-	Name="libusb-1.0 (dll)"
+	Name="libusb-1.0A (dll)"
 	ProjectGUID="{8224C054-5968-4238-832C-167155E7ECC3}"
 	RootNamespace="libusbdll"
 	Keyword="Win32Proj"
@@ -21,7 +21,7 @@
 		<Configuration
 			Name="Debug|Win32"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll"
-			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0"
+			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0A"
 			ConfigurationType="2"
 			CharacterSet="2"
 			>
@@ -66,9 +66,9 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setupapi.lib ole32.lib advapi32.lib"
-				OutputFile="$(OutDir)\libusb-1.0_debug.dll"
+				OutputFile="$(OutDir)\libusb-1.0A_debug.dll"
 				LinkIncremental="2"
-				ModuleDefinitionFile="libusb\libusb-1.0.def"
+				ModuleDefinitionFile="libusb\libusb-1.0A.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="1"
@@ -101,7 +101,7 @@
 		<Configuration
 			Name="Release|Win32"
 			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll"
-			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0"
+			IntermediateDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)\dll\libusb-1.0A"
 			ConfigurationType="2"
 			CharacterSet="2"
 			WholeProgramOptimization="1"
@@ -144,9 +144,9 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setupapi.lib ole32.lib advapi32.lib"
-				OutputFile="$(OutDir)\libusb-1.0.dll"
+				OutputFile="$(OutDir)\libusb-1.0A.dll"
 				LinkIncremental="1"
-				ModuleDefinitionFile="libusb\libusb-1.0.def"
+				ModuleDefinitionFile="libusb\libusb-1.0A.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				OptimizeReferences="2"
@@ -227,9 +227,9 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setupapi.lib"
-				OutputFile="$(OutDir)\libusb-1.0_debug.dll"
+				OutputFile="$(OutDir)\libusb-1.0A_debug.dll"
 				LinkIncremental="2"
-				ModuleDefinitionFile="libusb\libusb-1.0.def"
+				ModuleDefinitionFile="libusb\libusb-1.0A.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="17"
@@ -306,9 +306,9 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="setupapi.lib"
-				OutputFile="$(OutDir)\libusb-1.0.dll"
+				OutputFile="$(OutDir)\libusb-1.0A.dll"
 				LinkIncremental="1"
-				ModuleDefinitionFile="libusb\libusb-1.0.def"
+				ModuleDefinitionFile="libusb\libusb-1.0A.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				OptimizeReferences="2"
@@ -362,7 +362,7 @@
 				>
 			</File>
 			<File
-				RelativePath=".\libusb\libusb-1.0.def"
+				RelativePath=".\libusb\libusb-1.0A.def"
 				>
 				<FileConfiguration
 					Name="Debug|Win32"
@@ -451,7 +451,7 @@
 			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}"
 			>
 			<File
-				RelativePath=".\libusb\libusb-1.0.rc"
+				RelativePath=".\libusb\libusb-1.0A.rc"
 				>
 			</File>
 		</Filter>

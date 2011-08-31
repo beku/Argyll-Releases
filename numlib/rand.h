@@ -16,7 +16,7 @@
 /* Return a random number between 0 and 4294967294 */
 unsigned int
 rand32(						/* Return 32 bit random number */
-unsigned int seed);		/* Optional seed. Non-zero re-initialized with that seed */
+unsigned int seed);			/* Optional seed. Non-zero re-initialized with that seed */
 
 /* Return a random integer in the range min to max inclusive */
 int i_rand(int min, int max);

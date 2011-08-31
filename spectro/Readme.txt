@@ -33,3 +33,5 @@ fakeread.exe	Fake reading of a device, using a profile instead.
 spec2cie.exe	Convert a spectral reading file into a CIE tristimulus file.
 
 spotread.exe	Read spot values.
+
+instlib.txt	Explanation of how to extract and build a standalone instrument library.

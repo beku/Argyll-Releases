@@ -34,7 +34,7 @@
 
 void usage(char *diag) {
 	fprintf(stderr,"Do gamut surface torture test, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: surftest [options] npoints\n");
 	if (diag != NULL)
 		fprintf(stderr,"Diagnostic: %s\n",diag);

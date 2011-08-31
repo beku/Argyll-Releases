@@ -39,10 +39,10 @@ void
 usage(int level) {
 	int i;
 	fprintf(stderr,"Create a synthetic calibration file, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: synthcal [-options] outfile\n");
 	fprintf(stderr," -t N            i = input, o = output, d = display (default)\n");
-	fprintf(stderr," -d col_comb     choose colorant combination from the following:\n");
+	fprintf(stderr," -d col_comb     choose colorant combination from the following (default 3):\n");
 	for (i = 0; ; i++) {
 		char *desc; 
 		if (icx_enum_colorant_comb(i, &desc) == 0)
@@ -61,6 +61,7 @@ usage(int level) {
 			fprintf(stderr,"                 %d: %s\n",i+1,desc);
 		}
 	}
+	fprintf(stderr," -o o1,o2,o3,    Set non-linear curve offset (default 0.0)\n");
 	fprintf(stderr," -s s1,s2,s3,    Set non-linear curve scale (default 1.0)\n");
 	fprintf(stderr," -p p1,p2,p3,    Set non-linear curve powers (default 1.0)\n");
 	fprintf(stderr," -E description  Set the profile dEscription string\n");
@@ -80,11 +81,12 @@ int main(int argc, char *argv[])
 	int devchan;				/* Number of chanels in device space */
 	char *ident;				/* Ink combination identifier (includes possible leading 'i') */
 	char *bident;				/* Base ink combination identifier */
-	double max[MAX_CHAN];		/* Output scale */
+	double off[MAX_CHAN];		/* Output offset */
+	double sca[MAX_CHAN];		/* Output scale */
 	double gam[MAX_CHAN];		/* Gamma applied */
 
 	for (j = 0; j < MAX_CHAN; j++)
-		max[j] = gam[j] = 1.0;
+		off[j] = 0.0, sca[j] = gam[j] = 1.0;
 
 	error_program = "synthcal";
 	if (argc <= 1)
@@ -160,6 +162,29 @@ int main(int argc, char *argv[])
 				devmask ^= tmask;
 			}
 
+			/* curve offset */
+			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+				fa = nfa;
+				if (na == NULL) usage(0);
+				for (j = 0; j < MAX_CHAN; j++) {
+					int i;
+					for (i = 0; ; i++) {
+						if (na[i] == ','){
+							na[i] = '\000';
+							break;
+						}
+						if (na[i] == '\000') {
+							i = 0;
+							break;
+						}
+					}
+					off[j] = atof(na);
+					if (i == 0)
+						break;
+					na += i+1;
+				}
+			}
+
 			/* curve scale */
 			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
 				fa = nfa;
@@ -176,7 +201,7 @@ int main(int argc, char *argv[])
 							break;
 						}
 					}
-					max[j] = atof(na);
+					sca[j] = atof(na);
 					if (i == 0)
 						break;
 					na += i+1;
@@ -234,12 +259,24 @@ int main(int argc, char *argv[])
 			devmask = ICX_CMYK;
 	}
 
-//	for (j = 0; j < MAX_CHAN; j++)
-//		printf("~1 max[%d] = %f, gam[%d] = %f\n",j,max[j],j, gam[j]);
-
 	ident = icx_inkmask2char(devmask, 1); 
 	bident = icx_inkmask2char(devmask, 0); 
 	devchan = icx_noofinks(devmask);
+
+	if (verb) {
+		if (devtype == 0)
+			printf("Device type: input\n");
+		else if (devtype == 1)
+			printf("Device type: output\n");
+		else
+			printf("Device type: display\n");
+
+		printf("Colorspace: %s\n", ident);
+
+		printf("Curve parameters:\n");
+		for (j = 0; j < devchan; j++)
+			printf("off[%d] = %f, sca[%d] = %f, gam[%d] = %f\n",j,off[j],j,sca[j],j, gam[j]);
+	}
 
 	/* Write out the resulting calibration file */
 	{
@@ -290,7 +327,7 @@ int main(int argc, char *argv[])
 
 			setel[0].d = vv;
 			for (j = 0; j < devchan; j++) {
-				setel[j+1].d = max[j] * pow(vv, gam[j]);
+				setel[j+1].d = off[j] + sca[j] * pow(vv, gam[j]);
 				if (setel[j+1].d < 0.0)
 					setel[j+1].d = 0.0;
 				else if (setel[j+1].d > 1.0)

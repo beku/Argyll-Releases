@@ -70,6 +70,7 @@ static int winusb_exit(void);
 static int winusb_open(struct libusb_device_handle *dev_handle);
 static void winusb_close(struct libusb_device_handle *dev_handle);
 static int winusb_claim_interface(struct libusb_device_handle *dev_handle, int iface);
+static int winusb_configure_endpoints(struct libusb_device_handle *dev_handle, int iface);
 static int winusb_release_interface(struct libusb_device_handle *dev_handle, int iface);
 static int winusb_submit_control_transfer(struct usbi_transfer *itransfer);
 static int winusb_set_interface_altsetting(struct libusb_device_handle *dev_handle, int iface, int altsetting);
@@ -89,6 +90,7 @@ static int libusb0_exit(void);
 static int libusb0_open(struct libusb_device_handle *dev_handle);
 static void libusb0_close(struct libusb_device_handle *dev_handle);
 static int libusb0_claim_interface(struct libusb_device_handle *dev_handle, int iface);
+static int libusb0_configure_endpoints(struct libusb_device_handle *dev_handle, int iface);
 static int libusb0_release_interface(struct libusb_device_handle *dev_handle, int iface);
 static int libusb0_submit_control_transfer(struct usbi_transfer *itransfer);
 static int libusb0_set_interface_altsetting(struct libusb_device_handle *dev_handle, int iface, int altsetting);
@@ -106,6 +108,7 @@ static int hid_exit(void);
 static int hid_open(struct libusb_device_handle *dev_handle);
 static void hid_close(struct libusb_device_handle *dev_handle);
 static int hid_claim_interface(struct libusb_device_handle *dev_handle, int iface);
+static int hid_configure_endpoints(struct libusb_device_handle *dev_handle, int iface);
 static int hid_release_interface(struct libusb_device_handle *dev_handle, int iface);
 static int hid_set_interface_altsetting(struct libusb_device_handle *dev_handle, int iface, int altsetting);
 static int hid_submit_control_transfer(struct usbi_transfer *itransfer);
@@ -121,6 +124,7 @@ static int composite_exit(void);
 static int composite_open(struct libusb_device_handle *dev_handle);
 static void composite_close(struct libusb_device_handle *dev_handle);
 static int composite_claim_interface(struct libusb_device_handle *dev_handle, int iface);
+static int composite_configure_endpoints(struct libusb_device_handle *dev_handle, int iface);
 static int composite_set_interface_altsetting(struct libusb_device_handle *dev_handle, int iface, int altsetting);
 static int composite_release_interface(struct libusb_device_handle *dev_handle, int iface);
 static int composite_submit_control_transfer(struct usbi_transfer *itransfer);
@@ -377,9 +381,10 @@ err_exit:
 /*
  * Populate the endpoints addresses of the device_priv interface helper structs
  */
-static void windows_assign_endpoints(struct libusb_device *dev, int iface, int altsetting)
+static void windows_assign_endpoints(struct libusb_device_handle *dev_handle, int iface, int altsetting)
 {
 	int i;
+	struct libusb_device *dev = dev_handle->dev;
 	struct windows_device_priv *priv = __device_priv(dev);
 	struct libusb_config_descriptor *conf_desc;
 	const struct libusb_interface_descriptor *if_desc;
@@ -1549,6 +1554,8 @@ static int set_device_paths(struct libusb_context *ctx, struct discovered_devs *
 			}
 			CloseHandle(handle);
 
+			// (Should this be looping through all the interfaces too ??) 
+			// (What sort of libusb0.sys name will a composite device have ?)
 			_snprintf(filename, LIBUSB0_DEVICE_NAME_MAX - 1, "%s--0x%04x-0x%04x", 
 								dev_name, dev_descriptor.idVendor, dev_descriptor.idProduct);
 
@@ -1814,7 +1821,8 @@ static int windows_claim_interface(struct libusb_device_handle *dev_handle, int 
 	r = priv->apib->claim_interface(dev_handle, iface);
 
 	if (r == LIBUSB_SUCCESS) {
-		windows_assign_endpoints(dev_handle->dev, iface, 0);
+		windows_assign_endpoints(dev_handle, iface, 0);
+		priv->apib->configure_endpoints(dev_handle, iface);
 	}
 
 	return r;
@@ -1831,7 +1839,8 @@ static int windows_set_interface_altsetting(struct libusb_device_handle *dev_han
 	r = priv->apib->set_interface_altsetting(dev_handle, iface, altsetting);
 
 	if (r == LIBUSB_SUCCESS) {
-		windows_assign_endpoints(dev_handle->dev, iface, altsetting);
+		windows_assign_endpoints(dev_handle, iface, altsetting);
+		priv->apib->configure_endpoints(dev_handle, iface);
 	}
 
 	return r;
@@ -2303,6 +2312,9 @@ static void unsupported_close(struct libusb_device_handle *dev_handle) {
 static int unsupported_claim_interface(struct libusb_device_handle *dev_handle, int iface) {
 	PRINT_UNSUPPORTED_API(claim_interface);
 }
+static int unsupported_configure_endpoints(struct libusb_device_handle *dev_handle, int iface) {
+	PRINT_UNSUPPORTED_API(configure_endpoints);
+}
 static int unsupported_set_interface_altsetting(struct libusb_device_handle *dev_handle, int iface, int altsetting) {
 	PRINT_UNSUPPORTED_API(set_interface_altsetting);
 }
@@ -2353,6 +2365,7 @@ const struct windows_usb_api_backend usb_api_backend[USB_API_MAX] = {
 		unsupported_open,
 		unsupported_close,
 		unsupported_claim_interface,
+		unsupported_configure_endpoints,
 		unsupported_set_interface_altsetting,
 		unsupported_release_interface,
 		unsupported_resetep,
@@ -2375,6 +2388,7 @@ const struct windows_usb_api_backend usb_api_backend[USB_API_MAX] = {
 		composite_open,
 		composite_close,
 		composite_claim_interface,
+		composite_configure_endpoints,
 		composite_set_interface_altsetting,
 		composite_release_interface,
 		composite_resetep,
@@ -2397,6 +2411,7 @@ const struct windows_usb_api_backend usb_api_backend[USB_API_MAX] = {
 		winusb_open,
 		winusb_close,
 		winusb_claim_interface,
+		winusb_configure_endpoints,
 		winusb_set_interface_altsetting,
 		winusb_release_interface,
 		winusb_resetep,
@@ -2419,6 +2434,7 @@ const struct windows_usb_api_backend usb_api_backend[USB_API_MAX] = {
 		libusb0_open,
 		libusb0_close,
 		libusb0_claim_interface,
+		libusb0_configure_endpoints,
 		libusb0_set_interface_altsetting,
 		libusb0_release_interface,
 		libusb0_resetep,
@@ -2441,6 +2457,7 @@ const struct windows_usb_api_backend usb_api_backend[USB_API_MAX] = {
 		hid_open,
 		hid_close,
 		hid_claim_interface,
+		hid_configure_endpoints,
 		hid_set_interface_altsetting,
 		hid_release_interface,
 		hid_resetep,
@@ -2496,7 +2513,6 @@ static int winusb_open(struct libusb_device_handle *dev_handle)
 	struct libusb_context *ctx = DEVICE_CTX(dev_handle->dev);
 	struct windows_device_priv *priv = __device_priv(dev_handle->dev);
 	struct windows_device_handle_priv *handle_priv = (struct windows_device_handle_priv *)dev_handle->os_priv;
-
 	HANDLE file_handle;
 	int i;
 
@@ -2554,8 +2570,6 @@ static int winusb_claim_interface(struct libusb_device_handle *dev_handle, int i
 	bool is_composite = (priv->apib->id == USB_API_COMPOSITE);
 	HANDLE file_handle, winusb_handle;
 	USB_INTERFACE_DESCRIPTOR if_desc;
-	UCHAR policy;
-	uint8_t endpoint_address;
 	int i;
 
 	CHECK_WINUSB_AVAILABLE;
@@ -2627,31 +2641,53 @@ static int winusb_claim_interface(struct libusb_device_handle *dev_handle, int i
 	usbi_dbg("claimed interface %d", iface);
 	handle_priv->active_interface = iface;
 
-	// With handle and enpoints set (in parent), we can setup the default 
-	// pipe properties (copied from libusb-win32-v1)
-	// see http://download.microsoft.com/download/D/1/D/D1DD7745-426B-4CC3-A269-ABBBE427C0EF/DVC-T705_DDC08.pptx
-	for (i=0; i<priv->usb_interface[iface].nb_endpoints; i++) {
-		endpoint_address = priv->usb_interface[iface].endpoint[i];
-		policy = false;
-		if (!WinUsb_SetPipePolicy(winusb_handle, endpoint_address,
-			SHORT_PACKET_TERMINATE, sizeof(UCHAR), &policy)) {
-			usbi_dbg("failed to disable SHORT_PACKET_TERMINATE for endpoint %02X", endpoint_address);
+	return LIBUSB_SUCCESS;
+}
+
+static int winusb_configure_endpoints(struct libusb_device_handle *dev_handle, int iface)
+{
+	struct windows_device_handle_priv *handle_priv = (struct windows_device_handle_priv *)dev_handle->os_priv;
+	HANDLE winusb_handle = handle_priv->interface_handle[iface].api_handle;
+	struct windows_device_priv *priv = __device_priv(dev_handle->dev);
+	bool is_composite = (priv->apib->id == USB_API_COMPOSITE);
+	ULONG timeout = 0;
+	int i;
+
+	CHECK_WINUSB_AVAILABLE;
+
+	if (!is_composite) {		/* ???? */
+		// With handle and enpoints set (in parent), we can setup the default 
+		// pipe properties (copied from libusb-win32-v1)
+		// see http://download.microsoft.com/download/D/1/D/D1DD7745-426B-4CC3-A269-ABBBE427C0EF/DVC-T705_DDC08.pptx
+		/* Make sure that default control port timeout of 5 seconds is overridden */
+		if (!WinUsb_SetPipePolicy(winusb_handle, 0x0,
+			PIPE_TRANSFER_TIMEOUT, sizeof(ULONG), &timeout)) {
+			usbi_dbg("failed to set PIPE_TRANSFER_TIMEOUT for endpoint %02X", 0x0);
 		}
-		if (!WinUsb_SetPipePolicy(winusb_handle, endpoint_address,
-			IGNORE_SHORT_PACKETS, sizeof(UCHAR), &policy)) {
-			usbi_dbg("failed to disable IGNORE_SHORT_PACKETS for endpoint %02X", endpoint_address);
-		}
-		if (!WinUsb_SetPipePolicy(winusb_handle, endpoint_address,
-			ALLOW_PARTIAL_READS, sizeof(UCHAR), &policy)) {
-			usbi_dbg("failed to disable ALLOW_PARTIAL_READS for endpoint %02X", endpoint_address);
-		}
-		policy = true;
-		if (!WinUsb_SetPipePolicy(winusb_handle, endpoint_address,
-			AUTO_CLEAR_STALL, sizeof(UCHAR), &policy)) {
-			usbi_dbg("failed to enable AUTO_CLEAR_STALL for endpoint %02X", endpoint_address);
+
+		for (i=0; i<priv->usb_interface[iface].nb_endpoints; i++) {
+			UCHAR policy = false;
+			uint8_t endpoint_address = priv->usb_interface[iface].endpoint[i];
+
+			if (!WinUsb_SetPipePolicy(winusb_handle, endpoint_address,
+				SHORT_PACKET_TERMINATE, sizeof(UCHAR), &policy)) {
+				usbi_dbg("failed to disable SHORT_PACKET_TERMINATE for endpoint %02X", endpoint_address);
+			}
+			if (!WinUsb_SetPipePolicy(winusb_handle, endpoint_address,
+				IGNORE_SHORT_PACKETS, sizeof(UCHAR), &policy)) {
+				usbi_dbg("failed to disable IGNORE_SHORT_PACKETS for endpoint %02X", endpoint_address);
+			}
+			if (!WinUsb_SetPipePolicy(winusb_handle, endpoint_address,
+				ALLOW_PARTIAL_READS, sizeof(UCHAR), &policy)) {
+				usbi_dbg("failed to disable ALLOW_PARTIAL_READS for endpoint %02X", endpoint_address);
+			}
+			policy = true;
+			if (!WinUsb_SetPipePolicy(winusb_handle, endpoint_address,
+				AUTO_CLEAR_STALL, sizeof(UCHAR), &policy)) {
+				usbi_dbg("failed to enable AUTO_CLEAR_STALL for endpoint %02X", endpoint_address);
+			}
 		}
 	}
-
 	return LIBUSB_SUCCESS;
 }
 
@@ -3267,6 +3303,12 @@ static int libusb0_claim_interface(struct libusb_device_handle *dev_handle, int 
 	usbi_dbg("claimed interface %d", iface);
 	handle_priv->active_interface = iface;
 
+	return LIBUSB_SUCCESS;
+}
+
+static int libusb0_configure_endpoints(struct libusb_device_handle *dev_handle, int iface)
+{
+	/* Nothing to do */
 	return LIBUSB_SUCCESS;
 }
 
@@ -4581,6 +4623,12 @@ static int hid_claim_interface(struct libusb_device_handle *dev_handle, int ifac
 	return LIBUSB_SUCCESS;
 }
 
+static int hid_configure_endpoints(struct libusb_device_handle *dev_handle, int iface)
+{
+	/* Nothing to do */
+	return LIBUSB_SUCCESS;
+}
+
 static int hid_release_interface(struct libusb_device_handle *dev_handle, int iface)
 {
 	struct windows_device_handle_priv *handle_priv = (struct windows_device_handle_priv *)dev_handle->os_priv;
@@ -4995,6 +5043,12 @@ static int composite_claim_interface(struct libusb_device_handle *dev_handle, in
 {
 	struct windows_device_priv *priv = __device_priv(dev_handle->dev);
 	return priv->usb_interface[iface].apib->claim_interface(dev_handle, iface);
+}
+
+static int composite_configure_endpoints(struct libusb_device_handle *dev_handle, int iface)
+{
+	struct windows_device_priv *priv = __device_priv(dev_handle->dev);
+	return priv->usb_interface[iface].apib->configure_endpoints(dev_handle, iface);
 }
 
 static int composite_set_interface_altsetting(struct libusb_device_handle *dev_handle, int iface, int altsetting)

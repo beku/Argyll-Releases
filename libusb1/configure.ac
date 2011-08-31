@@ -28,7 +28,6 @@ case $host in
 *-darwin*)
 	AC_DEFINE(OS_DARWIN, [], [Darwin backend])
 	AC_SUBST(OS_DARWIN)
-	AC_DEFINE(USBI_OS_HANDLES_TIMEOUT, [], [Backend handles timeout])
 	AC_MSG_RESULT([Darwin/MacOS X])
 	backend="darwin"
 	threads="posix"
@@ -148,6 +147,11 @@ AC_SUBST(VISIBILITY_CFLAGS)
 AC_SUBST(AM_CFLAGS)
 AC_SUBST(AM_LDFLAGS)
 
-AC_CONFIG_FILES([libusb-1.0.pc] [Makefile] [libusb/Makefile] [examples/Makefile] [doc/Makefile] [doc/doxygen.cfg])
+AC_CONFIG_FILES([libusb-1.0A.pc])
+AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([libusb/Makefile])
+AC_CONFIG_FILES([examples/Makefile])
+AC_CONFIG_FILES([doc/Makefile])
+AC_CONFIG_FILES([doc/doxygen.cfg])
 AC_OUTPUT
 

@@ -12,8 +12,8 @@
  * Copyright 2006 - 2010, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  *
  * (Base on i1pro_imp.h)
  */
@@ -93,7 +93,7 @@ struct _munki_state {
 	double wpretime;	/* Target pre-read white/sample read time - sets no. of readings */
 
 	double dcaltime;	/* Target dark calibration time - sets number of readings */
-	double wcaltime;	/* Target white calibration time - sets number of readings */
+	double wcaltime;	/* Target white calibration time - sets number of readings (not used?) */
 
 	double dreadtime;	/* Target dark on-the-fly cal time - sets number of readings */
 	double wreadtime;	/* Target white/sample reading time - sets number of readings */
@@ -413,6 +413,7 @@ munki_code munki_save_calibration(munki *p);
 
 /* Restore the all modes calibration from the local system */
 munki_code munki_restore_calibration(munki *p);
+
 
 /* ============================================================ */
 /* Intermediate routines  - composite commands/processing */
@@ -782,14 +783,6 @@ munki_readEEProm(
 	int size				/* Number of bytes to read (max 65535) */
 );
 
-/* Write to the EEProm */
-munki_code
-munki_writeEEProm(
-	munki *p,
-	unsigned char *buf,		/* Where to write from */
-	int addr,				/* Address in EEprom to write to */
-	int size				/* Number of bytes to write (max 65535) */
-);
 
 /* Get the firmware parameters */
 /* return pointers may be NULL if not needed. */
@@ -928,7 +921,6 @@ munki_code munki_parse_eeprom(munki *p, unsigned char *buf, unsigned int len);
 struct _mkdata {
   /* private: */
 	munki *p;
-	munkiimp *m;
 
 	int verb;
 	int debug;
@@ -999,7 +991,7 @@ struct _mkdata {
 }; typedef struct _mkdata mkdata;
 
 /* Constructor. Construct from the EEprom calibration contents */
-extern mkdata *new_mkdata(munkiimp *m, unsigned char *buf, int len, int verb, int debug);
+extern mkdata *new_mkdata(munki *p, unsigned char *buf, int len, int verb, int debug);
 
 #ifdef __cplusplus
 	}

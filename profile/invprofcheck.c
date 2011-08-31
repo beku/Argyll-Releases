@@ -31,6 +31,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <math.h>
+#include <ctype.h>
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"

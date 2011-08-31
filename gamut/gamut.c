@@ -200,7 +200,8 @@ double gam_hues[2][7] = {
 		101.0,			/* Yellow */
 		148.0,			/* Green */
 		211.0,			/* Cyan */
-		269.0,			/* Blue */
+//		269.0,			/* Blue */
+		250.0,			/* Blue */
 		346.0,			/* Magenta */
 		28.0 + 360.0	/* Red */
 	}
@@ -1585,6 +1586,7 @@ void *cntx		/* Returns p2 which is in desired direction from given p1 */
 static void setcusps(gamut *s, int flag, double in[3]) {
 	int i, j;
 
+	/* - - - - - - - - - - - - - - - - - - - - - - */
 	if (flag == 0) {	/* Reset */
 		for (j = 0; j < 6; j++) {
 			s->cusps[j][0] = 0.0;		/* Marker values */
@@ -1595,6 +1597,7 @@ static void setcusps(gamut *s, int flag, double in[3]) {
 		s->cu_inited = 0;
 		return;
 
+	/* - - - - - - - - - - - - - - - - - - - - - - */
 	} else if (flag == 2) {	/* Finalize */
 
 		if (s->dcuspixs > 0) {
@@ -1658,9 +1661,44 @@ static void setcusps(gamut *s, int flag, double in[3]) {
 				return;			/* Not all have been set */
 			}
 		}
+
+		{
+			double JCh[3];
+			double hues[6];
+
+			/* Check how far appart the cusps are in hue angle */
+			// ~~999
+			for (j = 0; j < 6; j++) {
+				icmLab2LCh(JCh, s->cusps[j]);
+				hues[j] = JCh[2];
+//printf("~1 cusp %d = hue %f\n",j,hues[j]);
+			}
+			for (j = 0; j < 6; j++) {
+				int k = j < 5 ? j + 1 : 0;
+				double rh, h;
+				rh  = gam_hues[s->isJab][k] - gam_hues[s->isJab][j];
+				if (rh < 0.0)
+					rh = 360 + rh;
+				h = hues[k] - hues[j];
+				if (h < 0.0)
+					h = 360 + h;
+//printf("~1 cusp %d - %d = ref dh %f, dh %f\n",j,k,rh,h);
+
+				/* if our delta is less than half reference, */
+				/* assume the cusps are bad. */
+				if ((2.0 * h) < rh) {
+					
+					s->cu_inited = 0;		/* Not trustworthy */
+//printf("~1 cusps are not trustworthy\n");
+					return;
+				}
+			}
+		}
+
 		s->cu_inited = 1;
 		return;
 
+	/* - - - - - - - - - - - - - - - - - - - - - - */
 	} else if (flag == 3) {	/* Definite 1/6 cusp */
 
 		if (s->dcuspixs >= 6) {
@@ -1679,6 +1717,7 @@ static void setcusps(gamut *s, int flag, double in[3]) {
 
 		icmLab2LCh(JCh, in);
 
+//printf("~1 cusp at %f %f %f\n",JCh[0],JCh[1],JCh[2]);
 		/* See which hue it is closest and 2nd closet to cusp hue. */
 		for (j = 0; j < 6; j++) {
 			double tt;
@@ -1703,7 +1742,7 @@ static void setcusps(gamut *s, int flag, double in[3]) {
 		/* Compute distance of existing and new */
 		es = s->cusps[bj][1] * s->cusps[bj][1] + s->cusps[bj][2] * s->cusps[bj][2];
 		ns = in[1] * in[1] + in[2] * in[2];
-//printf("~1 chroma dist of chexisting %f, new %f\n",es,ns);
+//printf("~1 chroma dist of existing %f, new %f\n",es,ns);
 		if (ns > es) {
 //printf("~1 New closest\n");
 			s->cusps[bj][0] = in[0];
@@ -5562,7 +5601,7 @@ int     ll 		/* Size of list. */
 			continue;		/* Skip this one */
 
 		/* Accept this intersection */
-		memcpy(&lp[j], &lp[i], sizeof(gispnt));
+		memmove(&lp[j], &lp[i], sizeof(gispnt));
 		j++;
 	}
 	lu = j;
@@ -5656,11 +5695,11 @@ int     ll 		/* Size of list. */
 //printf("~1 creating zero length segment\n");
 			/* Hmm. For reasonable triangles we should really */
 			/* grab in/out from original evaluation... */
-			memcpy(&lp[j], &lp[i], sizeof(gispnt));
+			memmove(&lp[j], &lp[i], sizeof(gispnt));
 			lp[j].dir = 1;
 			lp[j].edge = 1;
 			j++;
-			memcpy(&lp[j], &lp[i+1], sizeof(gispnt));
+			memmove(&lp[j], &lp[i+1], sizeof(gispnt));
 			lp[j].dir = 0;
 			lp[j].edge = 1;
 			j++;
@@ -5687,7 +5726,7 @@ int     ll 		/* Size of list. */
 		}
 //printf("~1 save %d\n",i);
 		/* Accept this intersection */
-		memcpy(&lp[j], &lp[i], sizeof(gispnt));
+		memmove(&lp[j], &lp[i], sizeof(gispnt));
 		pdir = lp[j].dir;
 		j++;
 		i = k;

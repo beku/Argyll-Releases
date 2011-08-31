@@ -115,7 +115,7 @@
 void usage(char *diag, ...) {
 	int i;
 	fprintf(stderr,"Link ICC profiles, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (diag != NULL) {
 		va_list args;
 		fprintf(stderr,"  Diagnostic: ");
@@ -192,7 +192,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -K parameters   Same as -k, but target is K locus rather than K value itself\n");
 	fprintf(stderr," -l tlimit       set destination total ink limit, 0 - 400%% (estimate by default)\n");
 	fprintf(stderr," -L klimit       set destination black ink limit, 0 - 100%% (estimate by default)\n");
-	fprintf(stderr," -P              Create gamut gammap_p.wrl and gammap_s.wrl diagostics\n");
+	fprintf(stderr," -P              Create gamut gammap.wrl diagostic\n");
 	exit(1);
 }
 
@@ -1329,7 +1329,7 @@ main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage("Resolution flag (-r) needs an argument");
 				rr = atoi(na);
-				if (rr < 1 || rr > 100) usage("Resolution flag (-r) argument out of range (%d)",rr);
+				if (rr < 1 || rr > 255) usage("Resolution flag (-r) argument out of range (%d)",rr);
 				li.clutres = rr;
 			}
 
@@ -2745,7 +2745,7 @@ main(int argc, char *argv[]) {
 					wo->data[i].device.ucSize = ddesc->ucSize;
 					if (wo->data[i].allocate(&wo->data[i]) != 0)	/* Allocate space */
 						error("allocate failed: %d, %s",wr_icc->errc,wr_icc->err);
-					memcpy(wo->data[i].device.ucDesc, ddesc->ucDesc, 2 * ddesc->ucSize);
+					memmove(wo->data[i].device.ucDesc, ddesc->ucDesc, 2 * ddesc->ucSize);
 
 					wo->data[i].device.scCode = ddesc->scCode;	
 					wo->data[i].device.scSize = ddesc->scSize;		
@@ -2763,7 +2763,7 @@ main(int argc, char *argv[]) {
 					wo->data[i].model.ucSize = mdesc->ucSize;
 					if (wo->data[i].allocate(&wo->data[i]) != 0) 	/* Allocate space */
 						error("allocate failed: %d, %s",wr_icc->errc,wr_icc->err);
-					memcpy(wo->data[i].model.ucDesc, mdesc->ucDesc, 2 * mdesc->ucSize);
+					memmove(wo->data[i].model.ucDesc, mdesc->ucDesc, 2 * mdesc->ucSize);
 
 					wo->data[i].model.scCode = mdesc->scCode;	
 					wo->data[i].model.scSize = mdesc->scSize;		

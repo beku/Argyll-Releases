@@ -58,7 +58,7 @@ double absdiff(double in1[3], double in2[3]) {
 
 void usage(void) {
 	fprintf(stderr,"View inv fwd table device interp of an ICC file, Version %s\n",ARGYLL_VERSION_STR);
-	fprintf(stderr,"Author: Graeme W. Gill, licensed under the GPL Version 3\n");
+	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: fbtest [options] infile\n");
 	fprintf(stderr," -v          verbose\n");
 	fprintf(stderr," -f          Show PCS target -> reference clipped PCS vectors\n");

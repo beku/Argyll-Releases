@@ -13,8 +13,8 @@
  * Copyright 2001 - 2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  *
  */
 
@@ -145,7 +145,8 @@ typedef enum {
 	inst_colorimeter        = 0x01000000, /* Colorimetric capability */
 	inst_spectral           = 0x02000000, /* Spectral capability */
 	inst_highres            = 0x04000000, /* High Resolution Spectral mode */
-	inst_ccmx               = 0x08000000  /* Colorimeter Correction Matrix capability */
+	inst_ccmx               = 0x08000000, /* Colorimeter Correction Matrix capability */
+	inst_ccss               = 0x10000000  /* Colorimeter Calibration Spectral Set capability */
 
 } inst_capability;
 
@@ -154,7 +155,7 @@ typedef enum {
 	inst2_unknown           = 0x00000000, /* Capabilities can't be determined */
 
 	inst2_xy_holdrel        = 0x00000001, /* Needs paper hold/release between each sheet */
-	inst2_xy_locate         = 0x00080002, /* Needs user to locate patch locations */
+	inst2_xy_locate         = 0x00000002, /* Needs user to locate patch locations */
 	inst2_xy_position       = 0x00000004, /* Can be positioned at a given location */
 
 	inst2_cal_ref_white     = 0x00000010, /* Uses a reflective white/dark calibration */
@@ -215,30 +216,53 @@ typedef enum {
 	inst_mode_mod_mask           = 0x0f00,	/* Mask of measurement modifiers */
 
 	/* Combined operating modes (from above): */
-	inst_mode_ref_spot           = 0x0011,	/* Reflection spot measurement mode */
-	inst_mode_ref_strip          = 0x0021,	/* Reflection strip measurement mode */
-	inst_mode_ref_xy             = 0x0031,	/* Reflection X-Y measurement mode */
-	inst_mode_ref_chart          = 0x0041,	/* Reflection Chart measurement mode */
+	inst_mode_ref_spot           = inst_mode_spot	/* Reflection spot measurement mode */
+	                             | inst_mode_reflection,
+	inst_mode_ref_strip          = inst_mode_strip	/* Reflection strip measurement mode */
+	                             | inst_mode_reflection,
+	inst_mode_ref_xy             = inst_mode_xy		/* Reflection X-Y measurement mode */
+	                             | inst_mode_reflection,
+	inst_mode_ref_chart          = inst_mode_chart	/* Reflection Chart measurement mode */
+	                             | inst_mode_reflection,
 
-	inst_mode_s_ref_spot         = 0x0012,	/* Saved reflection spot measurement mode */
-	inst_mode_s_ref_strip        = 0x0022,	/* Saved reflection strip measurement mode */
-	inst_mode_s_ref_xy           = 0x0032,	/* Saved reflection X-Y measurement mode */
-	inst_mode_s_ref_chart        = 0x0042,	/* Saved reflection Chart measurement mode */
+	inst_mode_s_ref_spot         = inst_mode_spot	/* Saved reflection spot measurement mode */
+	                             | inst_mode_s_reflection,
+	inst_mode_s_ref_strip        = inst_mode_strip	/* Saved reflection strip measurement mode */
+	                             | inst_mode_s_reflection,
+	inst_mode_s_ref_xy           = inst_mode_xy		/* Saved reflection X-Y measurement mode */
+	                             | inst_mode_s_reflection,
+	inst_mode_s_ref_chart        = inst_mode_chart	/* Saved reflection Chart measurement mode */
+	                             | inst_mode_s_reflection,
 
-	inst_mode_trans_spot         = 0x0013,	/* Transmission spot measurement mode */
-	inst_mode_trans_strip        = 0x0023,	/* Transmission strip measurement mode */
-	inst_mode_trans_xy           = 0x0033,	/* Transmission X-Y measurement mode */
-	inst_mode_trans_chart        = 0x0043,	/* Transmission chart measurement mode */
+	inst_mode_trans_spot         = inst_mode_spot	/* Transmission spot measurement mode */
+	                             | inst_mode_transmission, 
+	inst_mode_trans_strip        = inst_mode_strip	/* Transmission strip measurement mode */
+	                             | inst_mode_transmission, 
+	inst_mode_trans_xy           = inst_mode_xy		/* Transmission X-Y measurement mode */
+	                             | inst_mode_transmission, 
+	inst_mode_trans_chart        = inst_mode_chart	/* Transmission chart measurement mode */
+	                             | inst_mode_transmission, 
 
-	inst_mode_emis_spot          = 0x0014,	/* Spot emission measurement mode */
-	inst_mode_emis_strip         = 0x0024,	/* Strip emission measurement mode */
-	inst_mode_emis_disp          = 0x0114,	/* Display emission measurement mode */
-	inst_mode_emis_proj          = 0x0174,	/* Projector emission measurement mode */
-	inst_mode_emis_tele          = 0x0074,	/* Telephoto emission measurement mode */
-	inst_mode_emis_ambient       = 0x0054,	/* Ambient emission measurement mode */
-	inst_mode_emis_ambient_flash = 0x0054,	/* Ambient emission flash measurement mode */
+	inst_mode_emis_spot          = inst_mode_spot	/* Spot emission measurement mode */
+	                             | inst_mode_emission,
+	inst_mode_emis_strip         = inst_mode_strip	/* Strip emission measurement mode */
+	                             | inst_mode_emission,
+	inst_mode_emis_disp          = inst_mode_disp	/* Display emission measurement mode */
+	                             | inst_mode_spot
+	                             | inst_mode_emission,
+	inst_mode_emis_proj          = inst_mode_disp	/* Projector emission measurement mode */
+	                             | inst_mode_tele
+	                             | inst_mode_emission,
+	inst_mode_emis_tele          = inst_mode_tele	/* Telephoto emission measurement mode */
+	                             | inst_mode_emission,
+	inst_mode_emis_ambient       = inst_mode_ambient	/* Ambient emission measurement mode */
+	                             | inst_mode_emission,
+	inst_mode_emis_ambient_flash = inst_mode_ambient_flash	/* Ambient emission flash measurement */
+	                             | inst_mode_emission,
 
-	inst_mode_measurement_mask   = 0x0fff,	/* Mask of exclusive measurement modes */
+	inst_mode_measurement_mask   = inst_mode_mod_mask	/* Mask of exclusive measurement modes */
+	                             | inst_mode_sub_mask
+	                             | inst_mode_illum_mask,
 
 	/* Independent extra modes */
 	inst_mode_colorimeter        = 0x1000,	/* Colorimetric mode */
@@ -283,7 +307,7 @@ typedef enum {
 	inst_opt_set_led_pulse_state= 0x0015,	/* Set the current LED state. [double period_in_secs, */
 	                                        /* double on_time_prop, double trans_time_prop] */
 	inst_opt_get_led_pulse_state= 0x0016	/* Get the current pulse LED state. [*double period, */
-	                                        /* double *on_time_prop, double *trans_time_prop] */
+
 } inst_opt_mode;
 
 /* Instrument status commands for get_status() */
@@ -336,12 +360,15 @@ typedef enum {
 } inst_stat_savdrd;
 
 /* Sensor mode/position (status) */
+/* Note that this is a mask, as the same position may be suitable */
+/* for several different types of measurement. */
 typedef enum {
 	inst_stat_smode_unknown = 0x00,	/* Unknown mode */
 	inst_stat_smode_calib   = 0x01,	/* Calibration tile */
-	inst_stat_smode_surf    = 0x02,	/* Surface (ie. reflective or display) */
-	inst_stat_smode_proj    = 0x03,	/* Projector */
-	inst_stat_smode_amb     = 0x04	/* Ambient */
+	inst_stat_smode_ref     = 0x02,	/* Reflective */
+	inst_stat_smode_disp    = 0x04,	/* Display */
+	inst_stat_smode_proj    = 0x08,	/* Projector */
+	inst_stat_smode_amb     = 0x10	/* Ambient */
 } inst_stat_smode;
 
 /* Type of user interaction */
@@ -454,11 +481,13 @@ typedef enum {
 	char *(*get_serial_no)(  													\
         struct _inst *p);														\
 																				\
-	/* Return the instrument capabilities */									\
+	/* Return the instrument capabilities. */									\
+	/* Note that these may change with the mode. */								\
 	inst_capability (*capabilities)(struct _inst *p);							\
 	inst2_capability (*capabilities2)(struct _inst *p);							\
 																				\
     /* Set the device measurement mode */                                       \
+	/* Note that this may change the capabilities. */							\
     inst_code (*set_mode)(														\
         struct _inst *p,														\
         inst_mode m);		/* Requested mode */								\
@@ -621,10 +650,27 @@ typedef enum {
 																				\
 	/* Insert a colorimetric correction matrix in the instrument XYZ readings */ \
 	/* This is only valid for colorimetric instruments. */						\
-	/* To remove the matrix, pass NULL for the filter filename */               \
+	/* To remove the matrix, pass NULL for the matrix */						\
 	inst_code (*col_cor_mat)(											        \
 		struct _inst *p,														\
 		double mtx[3][3]);		/* XYZ matrix */								\
+																				\
+	/* Use a Colorimeter Calibration Spectral Set (ccss) to set the */			\
+	/* instrumen calibration. This will affect emissive readings. */			\
+	/* An alternate observer may also be set, and this will affect both */		\
+	/* emmissive and ambient readings. */										\
+	/* This is only valid for colorimetric instruments. */						\
+	/* To set calibration back to default, pass NULL for sets, and */			\
+	/* icxOT_default for the observer. */										\
+	inst_code (*col_cal_spec_set)(												\
+		struct _inst *p,														\
+		icxObserverType obType,	/* Observer */									\
+		xspect custObserver[3],	/* Optional custom observer */					\
+		xspect *sets,			/* Set of sample spectra */						\
+		int no_sets);	 		/* Number on set */								\
+																				\
+	/* Send a message to the user. */											\
+	inst_code (*message_user)(struct _inst *p, char *fmt, ...);					\
 																				\
 	/* Poll for a user abort, terminate, trigger or command. */					\
 	/* Wait for a key rather than polling, if wait != 0 */						\
@@ -635,6 +681,7 @@ typedef enum {
 	/* inst_user_trig if User trigger has been hit */							\
 	/* inst_user_cmnd if User command has been hit */							\
 	inst_code (*poll_user)(struct _inst *p, int wait);							\
+																				\
 																				\
 	/* Generic inst error codes interpretation */								\
 	char * (*inst_interp_error)(struct _inst *p, inst_code ec);					\

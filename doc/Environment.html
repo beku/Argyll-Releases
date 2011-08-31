@@ -1,8 +1,8 @@
-<!DOCTYPE html PUBLIC "-//w3c//dtd html 4.0 transitional//en">
+<!DOCTYPE HTML PUBLIC "-//w3c//dtd html 4.0 transitional//en">
 <html>
 <head>
   <meta http-equiv="Content-Type"
- content="text/html; charset=iso-8859-1">
+ content="text/html; charset=ISO-8859-1">
   <meta http-equiv="content-type"
  content="text/html; charset=ISO-8859-1">
   <meta name="GENERATOR"
@@ -29,11 +29,14 @@ interrupt operations.<br>
 If the <span style="font-weight: bold;">ARGYLL_NOT_INTERACTIVE</span>
 environment variable is set, then:<br>
 <br>
-&nbsp;&nbsp;&nbsp; A Line Feed will be used on each
+&nbsp;&nbsp;&nbsp; A Line Feed will be added to the end of each
 progress line.<br>
 <br>
 &nbsp;&nbsp;&nbsp; Any time it would wait for a single keystroke input,
 it will instead wait for and read the next character from stdin.<br>
+&nbsp;&nbsp;&nbsp; To facilitate flushing stdin, any return or line
+feed characters will be ignored, so a character other than return or
+line feed must be used to trigger activity.<br>
 <br>
 &nbsp;&nbsp;&nbsp; Note that while a reading is being made, a character
 input can abort the reading, just as with normal interactive mode.<br>
@@ -44,8 +47,10 @@ input can abort the reading, just as with normal interactive mode.<br>
 </span></span>
 <div style="margin-left: 40px;">Argyll tries to follow the <a
  href="http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html">XDG
-Base Directory Specification</a>, and uses the <span
- style="font-weight: bold;">XDG_CACHE_HOME</span> environment variable
+Base
+Directory
+Specification</a>, and uses the <span style="font-weight: bold;">XDG_CACHE_HOME</span>
+environment variable
 to place per instrument calibration information (Eye-One Pro and
 ColorMunki instruments).<br>
 </div>
@@ -56,8 +61,31 @@ XDG_DATA_DIRS<span style="font-weight: bold;"><br>
 <div style="margin-left: 40px;">On Unix type operating systems,
 configuration and profiles for displays are placed relative to these
 environment variables.<br>
+<br>
+</div>
+<span style="font-weight: bold;">ARGYLL_COLMTER_CAL_SPEC_SET</span><br>
+<span style="font-weight: bold;">ARGYLL_COLMTER_COR_MATRIX</span><br>
+<br>
+<div style="margin-left: 40px;">Both of these can be used to set a
+default <span style="font-weight: bold;">CCMX</span> or <span
+ style="font-weight: bold;">CCSS</span> colorimeter calibration file,
+equivalent to supplying a <span style="font-weight: bold;">-X</span>
+argument to spotread, dispcal, dispread and any other utility that
+allows using a colorimteter. The ARGYLL_COLMTER_CAL_SPEC_SET will take
+priority if both are set.<br>
+<br>
 </div>
 <br>
+<span style="font-weight: bold;">ARGYLL_IGNORE_XRANDR1_2<br>
+<br>
+</span>
+<div style="margin-left: 40px;">On an X11 system, if
+this is <span style="font-weight: bold;"></span>set (ie. set it to
+"yes"), then the presence of the XRandR 1.2
+extension will be ignored, and other extensions such as Xinerama and
+XF86VidMode extension will be used. This may be a way to work around
+buggy XRandR 1.2 implementations.<br>
+</div>
 <br>
 <br>
 See <a href="Performance.html">Performance Tuning</a> for other

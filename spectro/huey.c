@@ -12,8 +12,8 @@
  *
  * (Based on i1disp.c)
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* 
@@ -41,9 +41,14 @@
 #include <time.h>
 #include <stdarg.h>
 #include <math.h>
+#ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
+#else /* SALONEINSTLIB */
+#include "sa_config.h"
+#include "numsup.h"
+#endif /* SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -127,7 +132,7 @@ typedef enum {
 } i1DispCC;
 
 /* Diagnostic - return a description given the instruction code */
-char *inst_desc(int cc) {
+static char *inst_desc(int cc) {
 	static char buf[40];			/* Fallback string */
 	switch(cc) {
 		case 0x00:
@@ -194,7 +199,7 @@ huey_command(
 
 	/* Send the command using the control interface */
 	buf[0] = cc;				/* Construct the command */
-	memcpy(buf + 1, in, 7);
+	memmove(buf + 1, in, 7);
 
 	if (p->icom->is_hid) {
 		se = p->icom->hid_write(p->icom, buf, 8, &wbytes, to); 
@@ -288,7 +293,7 @@ huey_command(
 	}
 
 	if (rv == inst_ok) {
-		memcpy(out, buf + 2, 6);
+		memmove(out, buf + 2, 6);
 	} else {
 		memset(out, 0, 6);
 	}
@@ -866,6 +871,9 @@ huey_take_XYZ_measurement(
 			}
 			XYZ[i] *= CALFACTOR;	/* Times magic scale factor */
 		}
+
+		/* Apply the colorimeter correction matrix */
+		icmMulBy3x3(XYZ, p->ccmat, XYZ);
 	}
 	DBG(("returning XYZ = %f %f %f\n",XYZ[0],XYZ[1],XYZ[2]))
 	return inst_ok;
@@ -891,7 +899,10 @@ huey_check_unlock(
 		return ev;
 
 	if (strncmp((char *)buf, "Locked", 6) == 0) {
-		strcpy((char *)buf,"GrMb");
+		if (p->lenovo)
+			strcpy((char *)buf,"huyL");
+		else
+			strcpy((char *)buf,"GrMb");
 
 		if ((ev = huey_command(p, i1d_unlock, buf, buf, 1.0,1.0)) != inst_ok)
 			return ev;
@@ -900,7 +911,9 @@ huey_check_unlock(
 			return ev;
 	}
 
-	if (strncmp((char *)buf, "Cir001", 6) != 0) {
+	if (strncmp((char *)buf, "huL002", 6) != 0		/* Lenovo Huey ? */
+	 && strncmp((char *)buf, "Cir001", 6) != 0) {	/* Huey */
+		if (p->debug) fprintf(stderr,"huey: unknown model '%s'\n",buf);
 		return huey_interp_code((inst *)p, HUEY_UNKNOWN_MODEL);
 	}
 
@@ -1047,6 +1060,11 @@ huey_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 		/* Set config, interface */
 		p->icom->set_hid_port(p->icom, port, icomuf_none); 
 
+		if (p->icom->vid == 0x0765 && p->icom->pid == 0x5001) {
+			if (p->debug) fprintf(stderr,"huey: Lenovo version\n");
+			p->lenovo = 1;
+		}
+
 	} else if (p->icom->is_usb_portno(p->icom, port) != instUnknown) {
 
 		if (p->debug) fprintf(stderr,"huey: About to init USB\n");
@@ -1054,7 +1072,12 @@ huey_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 		/* Set config, interface, write end point, read end point */
 		/* ("serial" end points aren't used - the huey uses USB control messages) */
 		/* We need to detatch the HID driver on Linux */
-		p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, icomuf_detach, 0); 
+		p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, icomuf_detach, 0, NULL); 
+
+		if (p->icom->vid == 0x0765 && p->icom->pid == 0x5001) {
+			if (p->debug) fprintf(stderr,"huey: Lenovo version\n");
+			p->lenovo = 1;
+		}
 
 	} else {
 		if (p->debug) fprintf(stderr,"huey: init_coms called to wrong device!\n");
@@ -1163,9 +1186,6 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	if ((rv = huey_take_XYZ_measurement(p, val->aXYZ)) != inst_ok) {
 		return rv;
 	}
-
-	/* Apply the colorimeter correction matrix */
-	icmMulBy3x3(val->aXYZ, p->ccmat, val->aXYZ);
 
 	val->XYZ_v = 0;
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings ? */

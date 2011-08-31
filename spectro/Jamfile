@@ -49,16 +49,15 @@ if $(UNIX) {
 #Products
 Libraries = libinsttypes libinst libdisp libconv ;
 Executables = dispwin synthcal dispread dispcal fakeread synthread
-              chartread spotread illumread ccmxmake spec2cie average spyd2en ;
+              chartread spotread illumread ccxxmake spec2cie average spyd2en i1d3ccss ;
 Headers = inst.h ;
-Samples = ColorChecker.ti2 ECI2002R.ti2 FograStrip.ti2 i1_RGB_Scan_1.4.ti2
-          SOtele.sp strange.cal ;
+Samples = SOtele.sp linear.cal strange.cal ;
 
 #Install
-InstallBin ../bin : $(Executables) ;
-InstallFile ../ref : $(Samples) ;
-#InstallFile ../h : $(Headers) ;
-#InstallLib ../lib : $(Libraries) ;
+InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
+InstallFile $(DESTDIR)$(PREFIX)/$(REFSUBDIR) : $(Samples) ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
+#InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
 
 if $(UNIX) && $(OS) != MACOSX {
 	# Micro Unix CMM for handling monitor profile association
@@ -70,7 +69,7 @@ HDRS = ../h ../numlib ../icc ../cgats ../rspl ../xicc ../gamut ../spectro
        ../plot $(LIBUSBHDRS) $(CMMHDRS) ;
 
 # Instrument access library library
-Library libinst : inst.c insttypes.c dtp20.c dtp22.c dtp41.c dtp51.c dtp92.c i1disp.c i1pro.c i1pro_imp.c munki.c munki_imp.c ss.c ss_imp.c hcfr.c spyd2.c huey.c $(IOFILE) usbio.c hidio.c ;
+Library libinst : inst.c insttypes.c dtp20.c dtp22.c dtp41.c dtp51.c dtp92.c i1disp.c i1d3.c i1pro.c i1pro_imp.c munki.c munki_imp.c ss.c ss_imp.c hcfr.c spyd2.c huey.c $(IOFILE) usbio.c hidio.c ;
 
 # Display access library 
 Library libdisp : dispsup.c dispwin.c : : : $(LibWinH) ;
@@ -81,7 +80,7 @@ Object insttypes2 : insttypes.c ;
 LibraryFromObjects libinsttypes : insttypes2 ;
 
 # System utility functions (keyboard, msec_*, thread)
-Library libconv : conv.c xdg_bds.c $(CONVFILE) : : : $(LibWinH) ;
+Library libconv : xdg_bds.c conv.c $(CONVFILE) : : : $(LibWinH) ;
 
 # Support file
 #Object alphix : ../target/alphix.c ;
@@ -111,8 +110,13 @@ Main illumread : illumread.c : : : ../target : : ;
 # Printed target spot reader utility
 Main spotread : spotread.c : : : : : ;
 
-# Colorimeter Correction Matrix tool
-Main ccmxmake : ccmxmake.c : : : : : libdisp ;
+# Test code
+if $(HOME) = "d:\\usr\\graeme" && $(PWD) = "/src/argyll/spectro" {
+	Main setoem : setoem.c : : : : : ;
+}
+
+# CCMX and CCSStool
+Main ccxxmake : ccxxmake.c : : : : : libdisp ;
 
 # Gretag Spectroscan/T filmstrip reader
 #Main filmread : filmread.c : : : : : ;
@@ -150,6 +154,13 @@ Main average : average.c ;
 # Utility to enable the Spyder 2 instrument */
 Main spyd2en : spyd2en.c vinflate.c : : : : : libconv ;
 
+# Utility to install ccss's or install from OEM EDR files
+Main i1d3ccss : i1d3ccss.c inflate.c LzmaDec.c : : : : : libconv ;
+
+# Generate linear.cal example/diagnostic
+GenFileND linear.cal : synthcal [ NormPaths linear ] ;
+NDepends exe : linear.cal ;	# Normally create it 
+
 # Generate strange.cal example/diagnostic
 GenFileND strange.cal : synthcal -s 0.7,1.0,0.9 -p 1.7,0.8,0.7 [ NormPaths strange ] ;
 NDepends exe : strange.cal ;	# Normally create it 
@@ -161,7 +172,7 @@ NDepends exe : strange.cal ;	# Normally create it
 #Main xyzfix : xyzfix.c ;
 
 # Individual stand alone test of xdg_bds library
-MainVariant xdg_bds : xdg_bds.c : : STANDALONE_TEST : ;
+MainVariant xdg_bds : xdg_bds.c : : STANDALONE_TEST : : : libconv ;
 
 # fp conversion code test
 #Main fp : fp.c ;

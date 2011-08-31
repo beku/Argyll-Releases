@@ -7,14 +7,16 @@
  * Copyright 1997 - 2010 Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <limits.h>
+#include <time.h>
 #if defined (NT)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -540,8 +542,27 @@ int nch		/* Col high index */
 			dst[j][i] = src[j][i];
 }
 
+/* Copy a matrix to a 3x3 standard C array */
+void copy_dmatrix_to3x3(
+double dst[3][3],
+double **src,
+int nrl,	/* Row low index */
+int nrh,	/* Row high index */
+int ncl,	/* Col low index */
+int nch		/* Col high index */
+) {
+	int i, j;
+	if ((nrh - nrl) > 2)
+		nrh = nrl + 2;
+	if ((nch - ncl) > 2)
+		nch = ncl + 2;
+	for (j = nrl; j <= nrh; j++)
+		for (i = ncl; i <= nch; i++)
+			dst[j][i] = src[j][i];
+}
+
 /* -------------------------------------------------------------- */
-/* From an indirect array reference to a standard C type 2D array */
+/* Convert standard C type 2D array into an indirect referenced array */
 double **convert_dmatrix(
 double *a,	/* base address of normal C array, ie &a[0][0] */
 int nrl,	/* Row low index */
@@ -1029,13 +1050,13 @@ int nch
 /* Platform independent IEE754 conversions */
 /*******************************************/
 
-/* Cast a double to an IEEE754 single precision value, */
+/* Cast a native double to an IEEE754 encoded single precision value, */
 /* in a platform independent fashion. (ie. This works even */
 /* on the rare platforms that don't use IEEE 754 floating */
 /* point for their C implementation) */
-unsigned int doubletoIEEE754(double d) {
-	unsigned int sn = 0, ep = 0, ma;
-	unsigned int id;
+ORD32 doubletoIEEE754(double d) {
+	ORD32 sn = 0, ep = 0, ma;
+	ORD32 id;
 
 	/* Convert double to IEEE754 single precision. */
 	/* This would be easy if we're running on an IEEE754 architecture, */
@@ -1050,7 +1071,7 @@ unsigned int doubletoIEEE754(double d) {
 		ee = (int)floor(log(d)/log(2.0));
 		if (ee < -126)			/* Allow for denormalized */
 			ee = -126;
-		d *= pow(0.5, (double)ee);
+		d *= pow(0.5, (double)(ee - 23));
 		ee += 127;
 		if (ee < 1)				/* Too small */
 			ee = 0;				/* Zero or denormalised */
@@ -1062,25 +1083,19 @@ unsigned int doubletoIEEE754(double d) {
 	} else {
 		ep = 0;					/* Zero */
 	}
-	ma = ((unsigned int)(d * (1 << 23) + 0.5)) & 0x7fffff;
+	ma = ((ORD32)d) & ((1 << 23)-1);
 	id = (sn << 31) | (ep << 23) | ma;
 
 	return id;
 }
 
-/* Cast a an IEEE754 single precision value to a double, */
+/* Cast a an IEEE754 encoded single precision value to a native double, */
 /* in a platform independent fashion. (ie. This works even */
 /* on the rare platforms that don't use IEEE 754 floating */
 /* point for their C implementation) */
-double IEEE754todouble(unsigned int ip) {
+double IEEE754todouble(ORD32 ip) {
 	double op;
-#ifdef NEVER			/* For testing */
-	float fv;
-
-	*((unsigned int *)(&fv)) = ip;
-	op = fv * 1.00001;
-#else
-	unsigned int sn = 0, ep = 0, ma;
+	ORD32 sn = 0, ep = 0, ma;
 
 	sn = (ip >> 31) & 0x1;
 	ep = (ip >> 23) & 0xff;
@@ -1088,14 +1103,96 @@ double IEEE754todouble(unsigned int ip) {
 
 	if (ep == 0) { 		/* Zero or denormalised */
 		op = (double)ma/(double)(1 << 23);
-		op *= pow(2, (-126.0));
+		op *= pow(2.0, (-126.0));
 	} else {
 		op = (double)(ma | (1 << 23))/(double)(1 << 23);
-		op *= pow(2, (((int)ep)-127.0));
+		op *= pow(2.0, (((int)ep)-127.0));
 	}
 	if (sn)
 		op = -op;
-#endif
 	return op;
 }
 
+/* Cast a native double to an IEEE754 encoded double precision value, */
+/* in a platform independent fashion. (ie. This works even */
+/* on the rare platforms that don't use IEEE 754 floating */
+/* point for their C implementation) */
+ORD64 doubletoIEEE754_64(double d) {
+	ORD32 sn = 0, ep = 0;
+	ORD64 ma, id;
+
+	/* Convert double to IEEE754 double precision. */
+	/* This would be easy if we know we're running on an IEEE754 architecture, */
+	/* but isn't generally portable, so we use ugly code: */
+
+	if (d < 0.0) {
+		sn = 1;
+		d = -d;
+	}
+	if (d != 0.0) {
+		int ee;
+		ee = (int)floor(log(d)/log(2.0));
+		if (ee < -1022)			/* Allow for denormalized */
+			ee = -1022;
+		d *= pow(0.5, (double)(ee - 52));
+		ee += 1023;				/* Exponent bias */
+		if (ee < 1)				/* Too small */
+			ee = 0;				/* Zero or denormalised */
+		else if (ee > 2046) {	/* Too large */
+			ee = 2047;			/* Infinity */
+			d = 0.0;
+		}
+		ep = ee;
+	} else {
+		ep = 0;					/* Zero */
+	}
+	ma = ((ORD64)d) & (((ORD64)1 << 52)-1);
+	id = ((ORD64)sn << 63) | ((ORD64)ep << 52) | ma;
+
+	return id;
+}
+
+/* Cast a an IEEE754 encode double precision value to a native double, */
+/* in a platform independent fashion. (ie. This works even */
+/* on the rare platforms that don't use IEEE 754 floating */
+/* point for their C implementation) */
+double IEEE754_64todouble(ORD64 ip) {
+	double op;
+	ORD32 sn = 0, ep = 0;
+	INR64 ma;
+
+	sn = (ip >> 63) & 0x1;
+	ep = (ip >> 52) & 0x7ff;
+	ma = ip & (((INR64)1 << 52)-1);
+
+	if (ep == 0) { 		/* Zero or denormalised */
+		op = (double)ma/(double)((INR64)1 << 52);
+		op *= pow(2.0, -1022.0);
+	} else {
+		op = (double)(ma | ((INR64)1 << 52))/(double)((INR64)1 << 52);
+		op *= pow(2.0, (((int)ep)-1023.0));
+	}
+	if (sn)
+		op = -op;
+	return op;
+}
+
+/* Return a string representation of a 64 bit ctime. */
+/* A static buffer is used. There is no \n at the end */
+char *ctime_64(const ORD64 *timer) {
+	char *rv;
+#ifdef _MSC_VER
+# if __MSVCRT_VERSION__ >= 0x0601
+	rv = _ctime64((const __time32_t *)timer);
+# else
+	rv = ctime((const time_t *)timer);
+# endif
+#else
+	rv = ctime((const time_t *)timer);
+#endif
+
+	if (rv != NULL)
+		rv[strlen(rv)-1] = '\000';
+
+	return rv;
+}

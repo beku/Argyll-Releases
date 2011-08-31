@@ -11,8 +11,8 @@
  * Copyright 2006 - 2007, Graeme W. Gill
  * All rights reserved.
  *
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
  */
 
 /* This file is only included in top utilities that need to */
@@ -39,7 +39,8 @@ extern unsigned char *spyder2_pld_bytes;
 /* Return 2 if Spyder 2 firmware is part of this executable */
 int setup_spyd2() {
 	static int loaded = 0;		/* Was loaded from a file */
-	char *bin_path = NULL;
+	char **bin_paths = NULL;
+	int no_paths = 0;
 	unsigned int size, rsize;
 	FILE *fp;
 	int i;
@@ -59,17 +60,20 @@ int setup_spyd2() {
 	if ((pld_size == 0 || pld_size == 0x11223344) && loaded == 0) {
 		
 		for (;;) {
-			if ((bin_path = xdg_bds(NULL, xdg_data, xdg_read, xdg_user, "color/spyd2PLD.bin")) == NULL)
+			if ((no_paths = xdg_bds(NULL, &bin_paths, xdg_data, xdg_read, xdg_user, "color/spyd2PLD.bin")) < 1)
 				break;
 
 			/* open binary file */
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
 #if defined(O_BINARY) || defined(_O_BINARY)
-			if ((fp = fopen(bin_path,"rb")) == NULL)
+			if ((fp = fopen(bin_paths[0],"rb")) == NULL)
 #else
-			if ((fp = fopen(bin_path,"r")) == NULL)
+			if ((fp = fopen(bin_paths[0],"r")) == NULL)
 #endif
 				break;
-			free(bin_path);
+			xdg_free(bin_paths, no_paths);
 
 			/* Figure out how file it is */
 			if (fseek(fp, 0, SEEK_END)) {

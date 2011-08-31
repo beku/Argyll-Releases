@@ -6,7 +6,7 @@
  * Author: Graeme W. Gill
  * Date:   11/10/00
  *
- * Copyright 2000-2004 Graeme W. Gill
+ * Copyright 2000-2011 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -205,14 +205,12 @@ static void do_abstract(out_b2a_callback *p, int tn, double out[3], double in[3]
 
 /* --------------------------------------------------------- */
 
-/* Scale B2A XYZ input so effective range is 0.0 - 1.3 rather than 0.0 - 2.0 */
-#define YSCALE (2.0/1.3)
-
-/* Extra non-linearity applied to BtoA XYZ PCS */
+/* Extra non-linearity applied to BtoA XYZ PCS. */
 /* This distributes the LUT indexes more evenly in */
 /* perceptual space, greatly improving the B2A accuracy of XYZ LUT */
-/* Since typically XYZ doesn't use the full range of 0-2.0 allowed */
-/* for in the encoding, we scale the cLUT index values to use the 0-1.3 range */
+/* To better use the full range of the grid, and also to make sure */
+/* that the white point gets mapped accurately, scale the XYZ to put */
+/* the D50 white at the top corner of the grid. */
 
 /* Y to L* */
 static void y2l_curve(double *out, double *in) {
@@ -222,15 +220,14 @@ static void y2l_curve(double *out, double *in) {
 
 	for (i = 0; i < 3; i++) {
 		val = in[i];
-		val *= YSCALE;			/* Range adjustment */
-		val = val/sc;
+		val /= icmD50_ary3[i];		/* Put white at top of grid and scale */
 		if (val > 0.008856451586)
 			val = 1.16 * pow(val,1.0/3.0) - 0.16;
 		else
 			val = 9.032962896 * val;
 		if (val > 1.0)
 			val = 1.0;
-		val *= sc;
+		val *= sc;					/* Unscale */
 		out[i] = val;
 	}
 }
@@ -244,13 +241,12 @@ static void l2y_curve(double *out, double *in) {
 	/* Use an L* like curve, scaled to the maximum XYZ value */
 	for (i = 0; i < 3; i++) {
 		val = in[i];
-		val /= sc;
+		val /= sc;					/* Scale */
 		if (val > 0.08)
 			val = pow((val + 0.16)/1.16, 3.0);
 		else
 			val = val/9.032962896;
-		val *= sc;
-		val /= YSCALE;		/* Range adjustment */
+		val *= icmD50_ary3[i];		/* Unscale and put white at top of grid */
 		out[i] = val;
 	}
 }
@@ -425,7 +421,6 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 
 			/* Convert from Gamut maping/CAM space to PCS */
 			p->ox->bwd_outpcs_relpcs(p->ox, p->pcsspace, in2, in2);
-
 			DBG(("convert CAM to PCS got %f %f %f\n",in2[0],in2[1],in2[2]))
 
 			if (p->abs_luo[tn] != NULL)		/* Abstract profile to other tables after gamut map */
@@ -603,6 +598,7 @@ make_output_icc(
 	int nostos,				/* nz to use colorimetic source gamut to make saturation table */
 	int gamdiag,			/* Make gamut mapping diagnostic wrl plots */
 	int verify,				/* nz to print verification */
+	int clipprims,			/* Clip white, black and primaries */
 	icxInk *oink,			/* Ink limit/black generation setup (NULL if n/a) */
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
@@ -954,7 +950,11 @@ make_output_icc(
 	    	wh->pcs         = icSigLabData;
 		else
     		wh->pcs         = icSigXYZData;				/* Must be XYZ for matrix based profile */
-    	wh->renderingIntent = icRelativeColorimetric;	/* Should let user set this!!! */
+
+		if (xpi->default_ri != icMaxEnumIntent)
+	    	wh->renderingIntent = xpi->default_ri;
+		else
+	    	wh->renderingIntent = icRelativeColorimetric;
 
 		/* Values that should be set before writing */
 		if (xpi != NULL && xpi->manufacturer != 0L)
@@ -980,6 +980,15 @@ make_output_icc(
 #if defined(UNIX) && !defined(__APPLE__)
 		wh->platform = icmSig_nix;
 #endif
+
+		if (xpi != NULL && xpi->transparency)
+			wh->attributes.l |= icTransparency;
+		if (xpi != NULL && xpi->matte)
+			wh->attributes.l |= icMatte;
+		if (xpi != NULL && xpi->negative)
+			wh->attributes.l |= icNegative;
+		if (xpi != NULL && xpi->blackandwhite)
+			wh->attributes.l |= icBlackAndWhite;
 	}
 
 	/* mtxtoo only applies to Display cLUT profiles */
@@ -1335,11 +1344,11 @@ make_output_icc(
 			wog->data[0].X = 0.0; wog->data[0].Y = 1.0; wog->data[0].Z = 0.0;
 			wob->data[0].X = 0.0; wob->data[0].Y = 0.0; wob->data[0].Z = 1.0;
 
-			/* Setup deliberately wrong dummy values (red and green swapped). */
+			/* Setup deliberately wrong dummy values (channels rotated). */
 			/* icxMatrix may override override these later */
-			wor->data[0].X = 0.385147; wor->data[0].Y = 0.716873; wor->data[0].Z = 0.097076;
+			wor->data[0].X = 0.143066; wor->data[0].Y = 0.060608; wor->data[0].Z = 0.714096;
 			wog->data[0].X = 0.436066; wog->data[0].Y = 0.222488; wog->data[0].Z = 0.013916;
-			wob->data[0].X = 0.143066; wob->data[0].Y = 0.060608; wob->data[0].Z = 0.714096;
+			wob->data[0].X = 0.385147; wob->data[0].Y = 0.716873; wob->data[0].Z = 0.097076;
 		}
 
 		/* Red, Green and Blue Tone Reproduction Curve Tags: */
@@ -1822,6 +1831,9 @@ make_output_icc(
 			if (nooluts)
 				flags |= ICX_NO_OUT_LUTS;
 
+			if (clipprims)
+				flags |= ICX_CLIP_WB;
+			
 			if (verb)
 				flags |= ICX_VERBOSE;
 
@@ -2505,16 +2517,18 @@ make_output_icc(
 			{
 				double in[10][MAX_CHAN];
 				double out[MAX_CHAN];
-				in[0][0] = 29.565320;			/* sRGB blue */
-				in[0][1] = 68.301300;
-				in[0][2] = -112.049899;
+				in[0][0] = 100.0;			/* White point blue */
+				in[0][1] = 0.0;
+				in[0][2] = 0.0;
 
 				for (i = 0; i < DBGNO; i++) {
-					printf("Input %f %f %f %f\n",in[i][0], in[i][1], in[i][2], in[i][3]);
+					printf("Input %s\n",icmPdv(3,in[i]));
 					out_b2a_input((void *)&cx, out, in[i]);
+					printf("Input' %s\n",icmPdv(3,out));
 					out_b2a_clut((void *)&cx, out, out);
+					printf("Output' %s\n\n",icmPdv(4,out));
 					out_b2a_output((void *)&cx, out, out);
-					printf("Output %f %f %f %f\n\n",out[0], out[1], out[2], out[3]);
+					printf("Output %s\n\n",icmPdv(4,out));
 				}
 			}
 #else /* !DEBUG_ONE */
@@ -2712,6 +2726,9 @@ make_output_icc(
 		if (ptype == prof_matonly)
 			flags |= ICX_NO_IN_SHP_LUTS;	/* Make it linear */
 
+		if (clipprims)
+			flags |= ICX_CLIP_WB | ICX_CLIP_PRIMS;
+				
 		flags |= ICX_SET_WHITE | ICX_SET_BLACK; 		/* Compute & use white & black */
 
 		if (!mtxtoo)	/* Write matrix white/black/Luminance if no cLUT */

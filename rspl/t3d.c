@@ -268,6 +268,67 @@ co test_points5[] = {
 	{{ 0.301,0.301,0.401 },{ 0.39 }}	/* 10d */
 	};
 
+co test_points6[] = {
+	{{ 0.0069, 0.0071, 0.0061 },{ 0.0726 }},
+	{{ 0.0068, 0.0071, 0.0060 },{ 0.0704 }},
+	{{ 0.0069, 0.0072, 0.0062 },{ 0.0720 }},
+	{{ 0.0069, 0.0072, 0.0061 },{ 0.0734 }},
+	{{ 0.0069, 0.0072, 0.0063 },{ 0.0750 }},
+	{{ 0.0070, 0.0072, 0.0062 },{ 0.0779 }},
+	{{ 0.0070, 0.0072, 0.0063 },{ 0.0741 }},
+	{{ 0.0069, 0.0072, 0.0061 },{ 0.0745 }},
+	{{ 0.0069, 0.0072, 0.0061 },{ 0.0747 }},
+	{{ 0.0071, 0.0073, 0.0063 },{ 0.0760 }},
+	{{ 0.0070, 0.0073, 0.0063 },{ 0.0751 }},
+	{{ 0.0070, 0.0073, 0.0062 },{ 0.0759 }},
+	{{ 0.0071, 0.0074, 0.0062 },{ 0.0693 }},
+	{{ 0.0071, 0.0074, 0.0064 },{ 0.0740 }},
+	{{ 0.0072, 0.0075, 0.0064 },{ 0.0741 }},
+	{{ 0.0199, 0.0209, 0.0184 },{ 0.1019 }},
+	{{ 0.0296, 0.0306, 0.0257 },{ 0.1213 }},
+	{{ 0.0627, 0.0651, 0.0548 },{ 0.1779 }},
+	{{ 0.0831, 0.0863, 0.0718 },{ 0.2095 }},
+	{{ 0.1091, 0.1134, 0.0946 },{ 0.2487 }},
+	{{ 0.1442, 0.1497, 0.1227 },{ 0.2949 }},
+	{{ 0.1745, 0.1814, 0.1495 },{ 0.3360 }},
+	{{ 0.1747, 0.1816, 0.1498 },{ 0.3367 }},
+	{{ 0.1747, 0.1816, 0.1496 },{ 0.3364 }},
+	{{ 0.1748, 0.1816, 0.1497 },{ 0.3355 }},
+	{{ 0.1749, 0.1817, 0.1497 },{ 0.3344 }},
+	{{ 0.1748, 0.1817, 0.1498 },{ 0.3356 }},
+	{{ 0.1748, 0.1817, 0.1498 },{ 0.3354 }},
+	{{ 0.1749, 0.1817, 0.1496 },{ 0.3361 }},
+	{{ 0.1749, 0.1818, 0.1498 },{ 0.3368 }},
+	{{ 0.1749, 0.1818, 0.1498 },{ 0.3335 }},
+	{{ 0.1750, 0.1818, 0.1499 },{ 0.3367 }},
+	{{ 0.1750, 0.1819, 0.1500 },{ 0.3362 }},
+	{{ 0.1750, 0.1819, 0.1498 },{ 0.3359 }},
+	{{ 0.1751, 0.1820, 0.1500 },{ 0.3354 }},
+	{{ 0.1752, 0.1821, 0.1501 },{ 0.3355 }},
+	{{ 0.1754, 0.1823, 0.1502 },{ 0.3369 }},
+	{{ 0.1756, 0.1824, 0.1504 },{ 0.3360 }},
+	{{ 0.2743, 0.2842, 0.2367 },{ 0.4381 }},
+	{{ 0.3289, 0.3411, 0.2834 },{ 0.4922 }},
+	{{ 0.4036, 0.4184, 0.3475 },{ 0.5617 }},
+	{{ 0.4689, 0.4854, 0.4020 },{ 0.6147 }},
+	{{ 0.5379, 0.5567, 0.4606 },{ 0.6709 }},
+	{{ 0.7137, 0.7420, 0.6169 },{ 0.8045 }},
+	{{ 0.8730, 0.9105, 0.7433 },{ 0.9150 }},
+	{{ 0.8738, 0.9113, 0.7435 },{ 0.9141 }},
+	{{ 0.8741, 0.9116, 0.7445 },{ 0.9120 }},
+	{{ 0.8744, 0.9118, 0.7443 },{ 0.9173 }},
+	{{ 0.8748, 0.9123, 0.7457 },{ 0.9219 }},
+	{{ 0.8748, 0.9123, 0.7450 },{ 0.9133 }},
+	{{ 0.8748, 0.9124, 0.7445 },{ 0.9210 }},
+	{{ 0.8751, 0.9127, 0.7462 },{ 0.9207 }},
+	{{ 0.8751, 0.9127, 0.7457 },{ 0.9225 }},
+	{{ 0.8754, 0.9130, 0.7454 },{ 0.9137 }},
+	{{ 0.8757, 0.9133, 0.7456 },{ 0.9219 }},
+	{{ 0.8759, 0.9135, 0.7470 },{ 0.9166 }},
+	{{ 0.8761, 0.9137, 0.7469 },{ 0.9162 }},
+	{{ 0.8759, 0.9137, 0.7469 },{ 0.9151 }},
+	{{ 0.8765, 0.9141, 0.7470 },{ 0.9167 }},
+};
 
 
 #ifdef NEVER
@@ -286,19 +347,22 @@ void usage(void) {
 	fprintf(stderr,"Test 3D rspl interpolation\n");
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: t2d [options]\n");
-	fprintf(stderr," -t n          Test set:\n");
-	fprintf(stderr,"             * 1 = 1D test set along x = y = 0.5\n");
-	fprintf(stderr,"               2 = Test set 1\n");
-	fprintf(stderr,"               3 = Test set 2\n");
-	fprintf(stderr,"               4 = x + y^2 + z^1/3 with nonmon point\n");
-	fprintf(stderr,"               5 = doubled up x + y^2 + z^1/3 with nonmon point\n");
+	fprintf(stderr," -t n                  Test set:\n");
+	fprintf(stderr,"                     * 1 = 1D test set along x = y = 0.5\n");
+	fprintf(stderr,"                       2 = Test set 1\n");
+	fprintf(stderr,"                       3 = Test set 2\n");
+	fprintf(stderr,"                       4 = x + y^2 + z^1/3 with nonmon point\n");
+	fprintf(stderr,"                       5 = doubled up x + y^2 + z^1/3 with nonmon point\n");
+	fprintf(stderr,"                       6 = neutral axis extrapolation\n");
 	fprintf(stderr," -r resx,resy,resz  Set grid resolutions (def %d %d %d)\n",GRES0,GRES1,GRES2);
-	fprintf(stderr," -h            Test half scale resolution too\n");
-	fprintf(stderr," -q            Test quarter scale resolution too\n");
-	fprintf(stderr," -2            Use two pass smoothing\n");
-	fprintf(stderr," -x            Use extra fitting\n");
-	fprintf(stderr," -s            Test symetric smoothness\n");
-	fprintf(stderr," -p            plot 4 slices, xy = 0.5, yz = 0.5, xz = 0.5,  x=y=z\n");
+	fprintf(stderr," -h                    Test half scale resolution too\n");
+	fprintf(stderr," -q                    Test quarter scale resolution too\n");
+	fprintf(stderr," -2                    Use two pass smoothing\n");
+	fprintf(stderr," -x                    Use extra fitting\n");
+	fprintf(stderr," -s                    Test symetric smoothness\n");
+	fprintf(stderr," -p                    plot 4 slices, xy = 0.5, yz = 0.5, xz = 0.5,  x=y=z\n");
+	fprintf(stderr," -P x1:y1:z1:x2:y2:z2  plot slice from x1,y1,z1,x2,y2,z2\n");
+	fprintf(stderr," -S factor             smoothing factor (default 1.0)\n");
 	exit(1);
 }
 
@@ -316,9 +380,11 @@ int main(int argc, char *argv[]) {
 	int twopass = 0;
 	int extra = 0;
 	int doplot = 0;
-	int doh = 0;
+	double plotpts[2][3];       /* doplot == 2 start/end points */
+	int doh = 0;				/* half scale */
 	int doq = 0;
 	int rsv;
+	double smoothf = 1.0;
 	int flags = RSPL_NOFLAGS;
 
 	low[0] = 0.0;
@@ -377,6 +443,14 @@ int main(int argc, char *argv[]) {
 						test_points = test_points4;
 						npoints = sizeof(test_points4)/sizeof(co);
 						break;
+					case 5:
+						test_points = test_points5;
+						npoints = sizeof(test_points5)/sizeof(co);
+						break;
+					case 6:
+						test_points = test_points6;
+						npoints = sizeof(test_points6)/sizeof(co);
+						break;
 					default:
 						usage();
 				}
@@ -384,7 +458,7 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
 				fa = nfa;
 				if (na == NULL) usage();
-				if (sscanf(na, " %d,%d,%d ", &gres[0], &gres[1], &gres[2]) != 2)
+				if (sscanf(na, " %d,%d,%d ", &gres[0], &gres[1], &gres[2]) != 3)
 					usage();
 
 			} else if (argv[fa][1] == 'h' || argv[fa][1] == 'H') {
@@ -394,10 +468,18 @@ int main(int argc, char *argv[]) {
 				doh = 1;
 				doq = 1;
 
-			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+			} else if (argv[fa][1] == 'p') {
 				doplot = 1;
 
-			} else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+			} else if (argv[fa][1] == 'P') {
+				doplot = 2;
+				fa = nfa;
+				if (na == NULL) usage();
+				if (sscanf(na,"%lf:%lf:%lf:%lf:%lf:%lf",&plotpts[0][0],&plotpts[0][1],&plotpts[0][2],&plotpts[1][0],&plotpts[1][1],&plotpts[1][2]) != 6) {
+					usage();
+				}
+
+			} else if (argv[fa][1] == 's') {
 				dosym = 1;
 
 			} else if (argv[fa][1] == '2') {
@@ -405,6 +487,13 @@ int main(int argc, char *argv[]) {
 
 			} else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
 				extra = 1;
+
+			/* smoothing factor */
+			} else if (argv[fa][1] == 'S') {
+				int ix;
+				fa = nfa;
+				if (na == NULL) usage();
+				smoothf = atof(na);
 
 			} else 
 				usage();
@@ -433,7 +522,7 @@ int main(int argc, char *argv[]) {
 	           npoints,				/* Number of test points */
 	           low, high, gres,		/* Low, high, resolution of grid */
 	           NULL, NULL,			/* Default data scale */
-	           1.0,					/* Smoothing */
+	           smoothf,				/* Smoothing */
 	           avgdev,				/* Average deviation */
 	           NULL);				/* iwidth */
 	if (doh) {
@@ -457,7 +546,7 @@ int main(int argc, char *argv[]) {
 		           npoints,				/* Number of test points */
 		           low, high, gres2,	/* Low, high, resolution of grid */
 		           NULL, NULL,			/* Default data scale */
-		           1.0,					/* Smoothing */
+		           smoothf,				/* Smoothing */
 		           avgdev,				/* Average deviation */
 		           NULL);				/* iwidth */
 	}
@@ -534,7 +623,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Plot out 4 slices */
-	if (doplot) {
+	if (doplot == 1) {
 		int slice;
 		
 		for (slice = 0; slice < 4; slice++) {
@@ -605,6 +694,61 @@ int main(int argc, char *argv[]) {
 			else
 				do_plot(x,ya,NULL,NULL,n);
 		}
+	} else if (doplot == 2) {
+		co tp;	/* Test point */
+		double x[PLOTRES];
+		double ya[PLOTRES];
+		double yb[PLOTRES];
+		double xx,yy,zz;
+		double x1,x2,y1,y2,z1,z2;
+		double sx,sy,sz;
+		int i,n;
+		
+
+		x1 = plotpts[0][0];
+		y1 = plotpts[0][1];
+		z1 = plotpts[0][2];
+		x2 = plotpts[1][0];
+		y2 = plotpts[1][1];
+		z2 = plotpts[1][2];
+
+		printf("Plot along z at x = y = 0.5\n");
+		n = PLOTRES;
+
+		sx = (x2 - x1)/n;
+		sy = (y2 - y1)/n;
+		sz = (z2 - z1)/n;
+		
+		xx = x1;
+		yy = y1;
+		zz = z1;
+		for (i = 0; i < n; i++) {
+			double vv = i/(n-1.0);
+			x[i] = vv;
+			tp.p[0] = xx;
+			tp.p[1] = yy;
+			tp.p[2] = zz;
+
+			if (rss->INTERP(rss, &tp))
+				tp.v[0] = -0.1;
+			ya[i] = tp.v[0];
+
+			if (doh) {
+				if (rss2->INTERP(rss2, &tp))
+					tp.v[0] = -0.1;
+				yb[i] = tp.v[0];
+			}
+
+			xx += sx;
+			yy += sy;
+			zz += sz;
+		}
+
+		/* Plot the result */
+		if (doh)
+			do_plot(x,ya,yb,NULL,n);
+		else
+			do_plot(x,ya,NULL,NULL,n);
 	}
 
 	/* Report the fit */

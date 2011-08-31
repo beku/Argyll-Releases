@@ -7,7 +7,7 @@
  * Date:    2002/04/22
  * Version: 2.12
  *
- * Copyright 1997 - 2009 Graeme W. Gill
+ * Copyright 1997 - 2011 Graeme W. Gill
  *
  * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
@@ -295,7 +295,7 @@ size_t count
 	}
 	len = size * count;
 	if (len > 0)
-		memcpy (buffer, p->cur, len);
+		memmove(buffer, p->cur, len);
 	p->cur += len;
 	return count;
 }
@@ -319,7 +319,7 @@ size_t count
 	}
 	len = size * count;
 	if (len > 0)
-		memcpy (p->cur, buffer, len);
+		memmove(p->cur, buffer, len);
 	p->cur += len;
 	return count;
 }
@@ -1214,6 +1214,18 @@ static char *string_DeviceAttributes(unsigned int flags) {
 		sprintf(cp,", Matte");
 	} else {
 		sprintf(cp,", Glossy");
+	}
+	cp = cp + strlen(cp);
+	if (flags & icNegative) {
+		sprintf(cp,", Negative");
+	} else {
+		sprintf(cp,", Positive");
+	}
+	cp = cp + strlen(cp);
+	if (flags & icBlackAndWhite) {
+		sprintf(cp,", BlackAndWhite");
+	} else {
+		sprintf(cp,", Color");
 	}
 	cp = cp + strlen(cp);
 
@@ -4053,7 +4065,7 @@ static int icmData_read(
 			return rv;
 		}
 
-		memcpy((void *)p->data, (void *)bp, p->size);
+		memmove((void *)p->data, (void *)bp, p->size);
 	}
 	icp->al->free(icp->al, buf);
 	return 0;
@@ -4116,7 +4128,7 @@ static int icmData_write(
 				return icp->errc = 1;
 			}
 		}
-		memcpy((void *)bp, (void *)p->data, p->size);
+		memmove((void *)bp, (void *)p->data, p->size);
 	}
 
 	/* Write to the file */
@@ -4332,7 +4344,7 @@ static int icmText_read(
 			icp->al->free(icp->al, buf);
 			return rv;
 		}
-		memcpy((void *)p->data, (void *)bp, p->size);
+		memmove((void *)p->data, (void *)bp, p->size);
 	}
 	icp->al->free(icp->al, buf);
 	return 0;
@@ -4375,7 +4387,7 @@ static int icmText_write(
 			icp->al->free(icp->al, buf);
 			return icp->errc = 1;
 		}
-		memcpy((void *)bp, (void *)p->data, p->size);
+		memmove((void *)bp, (void *)p->data, p->size);
 	}
 
 	/* Write to the file */
@@ -5532,7 +5544,7 @@ int icmSetMultiLutTables(
 			/* This should work well if there is an odd grid resolution, */
 			/* and icclib is being used, as input lookup will */
 			/* be computed using floating point, so that the CLUT input value */
-			/* 0.5 can be reprsented exactly. */
+			/* 0.5 can be represented exactly. */
 			/* Because the symetric range will cause slight clipping, */
 			/* only do it if the input table has sufficient resolution */
 			/* to represent the clipping faithfuly. */
@@ -6812,7 +6824,7 @@ static int read_NamedColorVal2(
 		sprintf(icp->err,"icmNamedColorVal2_read: Root name string not terminated");
 		return icp->errc = 1;
 	}
-	memcpy((void *)p->root,(void *)(bp + 0),32);
+	memmove((void *)p->root,(void *)(bp + 0),32);
 	switch(pcs) {
 		case icSigXYZData:
 			read_PCSNumber(icp, icSigXYZData, p->pcsCoords, bp+32);
@@ -6867,7 +6879,7 @@ static int write_NamedColorVal2(
 		sprintf(icp->err,"icmNamedColorVal2_write: Root string names is unterminated");
 		return icp->errc = 1;
 	}
-	memcpy((void *)(bp + 0),(void *)p->root,32);
+	memmove((void *)(bp + 0),(void *)p->root,32);
 	switch(pcs) {
 		case icSigXYZData:
 			rv |= write_PCSNumber(icp, icSigXYZData, p->pcsCoords, bp+32);
@@ -7051,7 +7063,7 @@ static int icmNamedColor_read(
 		}
 	
 		/* Prefix for each color name */
-		memcpy((void *)p->prefix, (void *)(bp + 20), 32);
+		memmove((void *)p->prefix, (void *)(bp + 20), 32);
 		if (check_null_string(p->prefix,32) != 0) {
 			sprintf(icp->err,"icmNamedColor_read: Color prefix is not null terminated");
 			icp->al->free(icp->al, buf);
@@ -7059,7 +7071,7 @@ static int icmNamedColor_read(
 		}
 	
 		/* Suffix for each color name */
-		memcpy((void *)p->suffix, (void *)(bp + 52), 32);
+		memmove((void *)p->suffix, (void *)(bp + 52), 32);
 		if (check_null_string(p->suffix,32) != 0) {
 			sprintf(icp->err,"icmNamedColor_read: Color suffix is not null terminated");
 			icp->al->free(icp->al, buf);
@@ -7175,7 +7187,7 @@ static int icmNamedColor_write(
 			icp->al->free(icp->al, buf);
 			return icp->errc = 1;
 		}
-		memcpy((void *)(bp + 20), (void *)p->prefix, 32);
+		memmove((void *)(bp + 20), (void *)p->prefix, 32);
 	
 		/* Suffix for each color name */
 		if (check_null_string(p->suffix,32)) {
@@ -7183,7 +7195,7 @@ static int icmNamedColor_write(
 			icp->al->free(icp->al, buf);
 			return icp->errc = 1;
 		}
-		memcpy((void *)(bp + 52), (void *)p->suffix, 32);
+		memmove((void *)(bp + 52), (void *)p->suffix, 32);
 	
 		/* Write all the data to the buffer */
 		bp = bp + 84;
@@ -7343,7 +7355,7 @@ static int read_ColorantTableVal(
 		sprintf(icp->err,"icmColorantTableVal_read: Name string not terminated");
 		return icp->errc = 1;
 	}
-	memcpy((void *)p->name,(void *)(bp + 0),32);
+	memmove((void *)p->name,(void *)(bp + 0),32);
 	switch(pcs) {
 		case icSigXYZData:
     	case icSigLabData:
@@ -7366,7 +7378,7 @@ static int write_ColorantTableVal(
 		sprintf(icp->err,"icmColorantTableVal_write: Name string is unterminated");
 		return icp->errc = 1;
 	}
-	memcpy((void *)(bp + 0),(void *)p->name,32);
+	memmove((void *)(bp + 0),(void *)p->name,32);
 	switch(pcs) {
 		case icSigXYZData:
     	case icSigLabData:
@@ -7833,7 +7845,7 @@ static int icmTextDescription_core_read(
 			bp[p->scSize-1] = '\000';
 #endif
 		}
-		memcpy((void *)p->scDesc, (void *)bp, p->scSize);
+		memmove((void *)p->scDesc, (void *)bp, p->scSize);
 	} else {
 		memset((void *)p->scDesc, 0, 67);
 	}
@@ -7973,7 +7985,7 @@ static int icmTextDescription_core_write(
 			sprintf(icp->err,"icmTextDescription_write: ScriptCode string is not terminated");
 			return icp->errc = 1;
 		}
-		memcpy((void *)bp, (void *)p->scDesc, 67);
+		memmove((void *)bp, (void *)p->scDesc, 67);
 	} else {
 		memset((void *)bp, 0, 67);
 	}
@@ -9098,7 +9110,7 @@ static int icmUcrBg_read(
 			icp->al->free(icp->al, buf);
 			return rv;
 		}
-		memcpy((void *)p->string, (void *)bp, p->size);
+		memmove((void *)p->string, (void *)bp, p->size);
 		bp += p->size;
 	} else {
 		p->string = NULL;
@@ -9194,7 +9206,7 @@ static int icmUcrBg_write(
 			icp->al->free(icp->al, buf);
 			return icp->errc = 1;
 		}
-		memcpy((void *)bp, (void *)p->string, p->size);
+		memmove((void *)bp, (void *)p->string, p->size);
 	}
 
 	/* Write to the file */
@@ -10090,7 +10102,7 @@ static int icmCrdInfo_read(
 			icp->al->free(icp->al, buf);
 			return rv;
 		}
-		memcpy((void *)p->ppname, (void *)bp, p->ppsize);
+		memmove((void *)p->ppname, (void *)bp, p->ppsize);
 		bp += p->ppsize;
 	}
 	
@@ -10118,7 +10130,7 @@ static int icmCrdInfo_read(
 				icp->al->free(icp->al, buf);
 				return rv;
 			}
-			memcpy((void *)p->crdname[t], (void *)bp, p->crdsize[t]);
+			memmove((void *)p->crdname[t], (void *)bp, p->crdsize[t]);
 			bp += p->crdsize[t];
 		}
 	}
@@ -10172,7 +10184,7 @@ static int icmCrdInfo_write(
 			icp->al->free(icp->al, buf);
 			return icp->errc = 1;
 		}
-		memcpy((void *)bp, (void *)p->ppname, p->ppsize);
+		memmove((void *)bp, (void *)p->ppname, p->ppsize);
 		bp += p->ppsize;
 	}
 
@@ -10190,7 +10202,7 @@ static int icmCrdInfo_write(
 				icp->al->free(icp->al, buf);
 				return icp->errc = 1;
 			}
-			memcpy((void *)bp, (void *)p->crdname[t], p->crdsize[t]);
+			memmove((void *)bp, (void *)p->crdname[t], p->crdsize[t]);
 			bp += p->crdsize[t];
 		}
 	}
@@ -13072,7 +13084,13 @@ void icmVecRotMat(double m[3][4], double s1[3], double s0[3], double t1[3], doub
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 /* Compute the 3D intersection of a vector and a plane */
 /* return nz if there is no intersection */
-int icmVecPlaneIsect(double isect[3], double pl_const, double pl_norm[3], double ve_1[3], double ve_0[3]) {
+int icmVecPlaneIsect(
+double isect[3],		/* return intersection point */
+double pl_const,		/* Plane equation constant */
+double pl_norm[3],		/* Plane normal vector */
+double ve_1[3],			/* Point on line */
+double ve_0[3]			/* Second point on line */
+) {
 	double den;			/* denominator */
 	double rv;			/* Vector parameter value */
 	double vvec[3];		/* Vector vector */
@@ -13553,6 +13571,10 @@ icmXYZNumber icmD50_100 = {		/* Profile illuminant - D50, scaled to 100 */
     96.42, 100.00, 82.49
 };
 
+double icmD50_ary3[3] = { 		/* Profile illuminant - D50 */
+    0.9642, 1.0000, 0.8249
+};
+
 /* available D65 Illuminant */
 icmXYZNumber icmD65 = { 		/* Profile illuminant - D65 */
 	0.9505, 1.0000, 1.0890
@@ -13560,6 +13582,10 @@ icmXYZNumber icmD65 = { 		/* Profile illuminant - D65 */
 
 icmXYZNumber icmD65_100 = { 	/* Profile illuminant - D65, scaled to 100 */
 	95.05, 100.00, 108.90
+};
+
+double icmD65_ary3[3] = { 		/* Profile illuminant - D65 */
+	0.9505, 1.0000, 1.0890
 };
 
 /* Default black point */
@@ -14177,11 +14203,11 @@ static void icmMD5_add(icmMD5 *p, ORD8 *ibuf, unsigned int len) {
 		bs = 64 - bs;		/* Free space in partial buffer */
 
 		if (len < bs) {		/* Not enought new to make a full buffer */
-			memcpy(np, ibuf, len);
+			memmove(np, ibuf, len);
 			return;
 		}
 
-		memcpy(np, ibuf, bs);	/* Now got one full buffer */
+		memmove(np, ibuf, bs);	/* Now got one full buffer */
 		icmMD5_accume(p, np);
 		ibuf += bs;
 		len -= bs;
@@ -14195,7 +14221,7 @@ static void icmMD5_add(icmMD5 *p, ORD8 *ibuf, unsigned int len) {
 	}
 
 	/* Deal with any remaining bytes */
-	memcpy(p->buf, ibuf, len);
+	memmove(p->buf, ibuf, len);
 }
 
 /* Finalise the checksum and return the result. */
@@ -17294,6 +17320,29 @@ char *icmPfv(int di, float *p) {
 		if (e > 0)
 			*bp++ = ' ';
 		sprintf(bp, "%f", p[e]); bp += strlen(bp);
+	}
+	return buf[ix];
+}
+
+/* Print an 0..1 range XYZ as a D50 Lab string */
+/* Returned static buffer is re-used every 5 calls. */
+char *icmPLab(double *p) {
+	static char buf[5][MAX_CHAN * 16];
+	static ix = 0;
+	int e;
+	char *bp;
+	double lab[3];
+
+	if (++ix >= 5)
+		ix = 0;
+	bp = buf[ix];
+
+	icmXYZ2Lab(&icmD50, lab, p);
+
+	for (e = 0; e < 3; e++) {
+		if (e > 0)
+			*bp++ = ' ';
+		sprintf(bp, "%f", lab[e]); bp += strlen(bp);
 	}
 	return buf[ix];
 }

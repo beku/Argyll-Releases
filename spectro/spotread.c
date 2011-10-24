@@ -630,7 +630,7 @@ int main(int argc, char *argv[])
 				fa = nfa;
 				if (na == NULL) usage(debug, cl);
 				if (ncl > 0 && sscanf(na, " %d ", &ix) == 1) {
-					if (ix < 0 || ix > ncl)
+					if (ix < 0 || ix >= ncl)
 						usage(debug, cl);
 					strncpy(ccxxname,cl[ix].path,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
 				} else {

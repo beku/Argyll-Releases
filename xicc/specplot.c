@@ -16,7 +16,7 @@
 /*
  * This is some test code to test the Daylight and Plankian spectra, 
  * Correlated and Visual Color Temperatures, and CRI.
- * and plot a spectrum.
+ * and plot a spectrum or cmf.
  */
 
 #include <stdio.h>
@@ -28,6 +28,7 @@
 #define PLANKIAN
 #define XRES 500
 
+#define MAXGRAPHS 10
 
 #ifdef PLANKIAN
 #define BBTYPE icxIT_Ptemp
@@ -36,8 +37,18 @@
 #endif
 
 /* Display a spectrum etc. */
-static int do_spec(char *name, xspect *sp, int douv, double uvmin, double uvmax) {
-	int n, i, j;
+/* We are guaranteed that the x range/increments are identical, */
+/* and that there is only one spectrum if douv */
+static int do_spec(
+	char name[MAXGRAPHS][200],
+	xspect **sp,
+	int nsp,			/* Number of sp */
+	int iscmf,			/* nz if a CMF rather than spectrum */
+	int douv,			/* Do variation of added UV test */
+	double uvmin,
+	double uvmax
+) {
+	int n, i, j, k, m;
 	double xyz[3];		/* Color temperature */
 	double Yxy[3];
 	double Lab[3];		/* D50 Lab value */
@@ -57,8 +68,15 @@ static int do_spec(char *name, xspect *sp, int douv, double uvmin, double uvmax)
 
 	for (j = 0; j < 10; j++)
 		yp[j] = NULL;
-	tsp = *sp;
 
+	if (nsp > 10)
+		nsp = 10;
+
+	m = 0;				/* offset in output array */
+	if (iscmf) {
+		douv = 0;
+		m = 1;
+	}
 	n = 1;
 
 	if (douv) {
@@ -69,77 +87,80 @@ static int do_spec(char *name, xspect *sp, int douv, double uvmin, double uvmax)
 			step = (uvmax-uvmin)/(n-1.0); 
 	}
 
-	for (uv = uvmax, j = 0; j < n; j++, uv -= step) {
+	for (k = 0; k < nsp; k++) {
+		tsp = *sp[k];
+		for (uv = uvmax, j = 0; j < n; j++, uv -= step) {
 
-		if (douv) {
-			printf("UV level = %f\n",uv);
-			xsp_setUV(&tsp, sp, uv);
-		}
+			if (douv) {
+				printf("UV level = %f\n",uv);
+				xsp_setUV(&tsp, sp[k], uv);
+			}
+				
+			/* Compute XYZ of illuminant */
+			if (icx_ill_sp2XYZ(xyz, icxOT_CIE_1931_2, NULL, icxIT_custom, 0, &tsp) != 0) 
+				error ("icx_sp_temp2XYZ returned error");
+
+			icmXYZ2Yxy(Yxy, xyz);
+			icmXYZ2Lab(&icmD50, Lab, xyz);
+
+			printf("Type = %s\n",name[k]);
+			printf("XYZ = %f %f %f, x,y = %f %f\n", xyz[0], xyz[1], xyz[2], Yxy[1], Yxy[2]);
+			printf("D50 L*a*b* = %f %f %f\n", Lab[0], Lab[1], Lab[2]);
 			
-		/* Compute XYZ of illuminant */
-		if (icx_ill_sp2XYZ(xyz, icxOT_CIE_1931_2, NULL, icxIT_custom, 0, &tsp) != 0) 
-			error ("icx_sp_temp2XYZ returned error");
-
-		icmXYZ2Yxy(Yxy, xyz);
-		icmXYZ2Lab(&icmD50, Lab, xyz);
-
-		printf("Type = %s\n",name);
-		printf("XYZ = %f %f %f, x,y = %f %f\n", xyz[0], xyz[1], xyz[2], Yxy[1], Yxy[2]);
-		printf("D50 L*a*b* = %f %f %f\n", Lab[0], Lab[1], Lab[2]);
-		
 #ifndef NEVER
-		/* Test density */
-		{
-			double dens[4];
+			/* Test density */
+			{
+				double dens[4];
 
-			xsp_Tdensity(dens, &tsp);
+				xsp_Tdensity(dens, &tsp);
 
-			printf("CMYV density = %f %f %f %f\n", dens[0], dens[1], dens[2], dens[3]);
-		}
+				printf("CMYV density = %f %f %f %f\n", dens[0], dens[1], dens[2], dens[3]);
+			}
 #endif
 
-		/* Compute CCT */
-		if ((cct = icx_XYZ2ill_ct(cct_xyz, BBTYPE, icxOT_CIE_1931_2, NULL, xyz, NULL, 0)) < 0)
-			error ("Got bad cct\n");
+			/* Compute CCT */
+			if ((cct = icx_XYZ2ill_ct(cct_xyz, BBTYPE, icxOT_CIE_1931_2, NULL, xyz, NULL, 0)) < 0)
+				error ("Got bad cct\n");
 
-		/* Compute VCT */
-		if ((vct = icx_XYZ2ill_ct(vct_xyz, BBTYPE, icxOT_CIE_1931_2, NULL, xyz, NULL, 1)) < 0)
-			error ("Got bad vct\n");
+			/* Compute VCT */
+			if ((vct = icx_XYZ2ill_ct(vct_xyz, BBTYPE, icxOT_CIE_1931_2, NULL, xyz, NULL, 1)) < 0)
+				error ("Got bad vct\n");
 
 #ifdef PLANKIAN
-		printf("CCT = %f, VCT = %f\n",cct, vct);
+			printf("CCT = %f, VCT = %f\n",cct, vct);
 #else
-		printf("CDT = %f, VDT = %f\n",cct, vct);
+			printf("CDT = %f, VDT = %f\n",cct, vct);
 #endif
 
-		{
-			int invalid = 0;
-			double cri;
-			cri = icx_CIE1995_CRI(&invalid, &tsp);
-			printf("CRI = %.1f%s\n",cri,invalid ? " (Invalid)" : "");
+			{
+				int invalid = 0;
+				double cri;
+				cri = icx_CIE1995_CRI(&invalid, &tsp);
+				printf("CRI = %.1f%s\n",cri,invalid ? " (Invalid)" : "");
+			}
+
+			/* Use modern color difference - gives a better visual match */
+			icmAry2XYZ(wp, vct_xyz);
+			icmXYZ2Lab(&wp, cct_lab, cct_xyz);
+			icmXYZ2Lab(&wp, vct_lab, vct_xyz);
+			de = icmCIE2K(cct_lab, vct_lab);
+			printf("CIEDE2000 Delta E = %f\n",de);
+
+			/* Plot spectrum out */
+			for (i = 0; i < XRES; i++) {
+				double ww;
+
+				ww = (tsp.spec_wl_long - tsp.spec_wl_short)
+				   * ((double)i/(XRES-1.0)) + tsp.spec_wl_short;
+			
+				xx[i] = ww;
+				yy[(m + k + j) % 10][i] = value_xspect(&tsp, ww);
+			}
+			yp[(m + k + j) % 10] = &yy[(m + k + j) % 10][0];
 		}
-
-		/* Use modern color difference - gives a better visual match */
-		icmAry2XYZ(wp, vct_xyz);
-		icmXYZ2Lab(&wp, cct_lab, cct_xyz);
-		icmXYZ2Lab(&wp, vct_lab, vct_xyz);
-		de = icmCIE2K(cct_lab, vct_lab);
-		printf("CIEDE2000 Delta E = %f\n",de);
-
-		/* Plot spectrum out */
-		for (i = 0; i < XRES; i++) {
-			double ww;
-
-			ww = (tsp.spec_wl_long - tsp.spec_wl_short)
-			   * ((double)i/(XRES-1.0)) + tsp.spec_wl_short;
-		
-			xx[i] = ww;
-			yy[j][i] = value_xspect(&tsp, ww);
-		}
-		yp[j] = &yy[j][0];
 	}
-
 	do_plot10(xx, yp[0], yp[1], yp[2], yp[3], yp[4], yp[5], yp[6], yp[7], yp[8], yp[9], XRES);
+
 
 	return 0;
 }
@@ -150,6 +171,7 @@ void usage(void) {
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: specplot [infile.sp]\n");
 	fprintf(stderr," -v               verbose\n");
+	fprintf(stderr," -c               combine multiple files into one plot\n");
 	fprintf(stderr," -u level         plot effect of adding estimated UV level\n");
 	fprintf(stderr," -U               plot effect of adding range of estimated UV level\n");
 	fprintf(stderr," [infile.sp ...]  spectrum files to plot\n");
@@ -165,13 +187,14 @@ main(
 	int fa, nfa;			/* argument we're looking at */
 	int k;
 	int verb = 0;
-	char in_name[100] = { '\000' };		/* Spectrum name */
+	int comb = 0;
 	double temp;
-	xspect sp;				/* Spectra */
+	xspect *sp[MAXGRAPHS];
+	xspect tsp;
 	icxIllumeType ilType;
 	int douv = 0;
 	double uvmin = -1.0, uvmax = 1.0;
-	char buf[200];
+	char buf[MAXGRAPHS][200];
 
 	error_program = argv[0];
 
@@ -212,6 +235,10 @@ main(
 			/* Verbosity */
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
+
+			} else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
+				comb = 1;
+
 			} else {
 				usage();
 			}
@@ -221,18 +248,56 @@ main(
 	}
 
 	if (fa < argc && argv[fa][0] != '-') {	/* Got file arguments */
-		strcpy(in_name,argv[fa]);
-
+		int iscmf = -1;			/* Type of spectrum */
+		int nsp = 0;
+		
 		while (fa < argc) {
+			xspect tsp[MAXGRAPHS+3];
 
-			if (read_xspect(&sp, argv[fa]) != 0)
-				error ("Unable to read custom spectrum '%s'",argv[fa]);
+			sprintf(buf[nsp],"fa = %d, File '%s'",fa, argv[fa]);
 
-			sprintf(buf, "File '%s'",argv[fa]);
-	
-			do_spec(buf, &sp, douv, uvmin, uvmax);
-
+			if (read_xspect(&tsp[nsp], argv[fa]) == 0) {
+				if ((nsp > 0 && ( tsp->spec_n != sp[0]->spec_n
+				               || tsp->spec_wl_short != sp[0]->spec_wl_short
+				               || tsp->spec_wl_long != sp[0]->spec_wl_long))
+					|| iscmf == 1 || douv || nsp >= MAXGRAPHS) {
+					do_spec(buf, sp, nsp, iscmf, douv, uvmin, uvmax);
+					/* Note we're not freeing the xpsects */
+					tsp[0] = tsp[nsp];
+					nsp = 0;
+					iscmf = -1;
+		
+				}
+				iscmf = 0;
+				sp[nsp] = &tsp[nsp];
+				nsp++;
+			} else {
+				if (read_cmf(&tsp[nsp], argv[fa]) != 0) {
+					error ("Unable to read custom spectrum or CMF '%s'",argv[fa]);
+				}
+				if ((nsp > 0 && ( tsp->spec_n != sp[0]->spec_n
+				               || tsp->spec_wl_short != sp[0]->spec_wl_short
+				               || tsp->spec_wl_long != sp[0]->spec_wl_long))
+				|| iscmf == 0 || douv || nsp >= (MAXGRAPHS - 2)) {
+					do_spec(buf, sp, nsp, iscmf, douv, uvmin, uvmax);
+					/* Note we're not freeing the xpsects */
+					tsp[0] = tsp[nsp];
+					tsp[1] = tsp[nsp+1];
+					tsp[2] = tsp[nsp+2];
+					nsp = 0;
+					iscmf = -1;
+				}
+				iscmf = 1;
+				sp[nsp+0] = &tsp[nsp+0];
+				sp[nsp+1] = &tsp[nsp+1];
+				sp[nsp+2] = &tsp[nsp+2];
+				nsp += 3;
+			}
 			fa++;
+		}
+		if (nsp > 0) {
+			do_spec(buf, sp, nsp, iscmf, douv, uvmin, uvmax);
+			/* Note we're not freeing the xpsects */
 		}
 
 	} else {
@@ -263,10 +328,12 @@ main(
 					break;
 			}
 	
-			if (standardIlluminant(&sp, ilType, 0) != 0)
+			if (standardIlluminant(&tsp, ilType, 0) != 0)
 				error ("standardIlluminant returned error");
 		
-			do_spec(inm, &sp, douv, uvmin, uvmax);
+			sp[0] = &tsp;
+			strcpy(buf[0],inm);
+			do_spec(buf, sp, 1, 0, douv, uvmin, uvmax);
 		}
 
 		/* For each material and illuminant */
@@ -276,12 +343,13 @@ main(
 	
 				ilType = k == 0 ? icxIT_Dtemp : icxIT_Ptemp;
 	
-				if (standardIlluminant(&sp, ilType, temp) != 0)
+				if (standardIlluminant(&tsp, ilType, temp) != 0)
 					error ("standardIlluminant returned error");
 		
-				sprintf(buf, "%s at %f", k == 0 ? "Daylight" : "Black body", temp);
+				sprintf(buf[0], "%s at %f", k == 0 ? "Daylight" : "Black body", temp);
 	
-				do_spec(buf, &sp, douv, uvmin, uvmax);
+				sp[0] = &tsp;
+				do_spec(buf, sp, 1, 0, douv, uvmin, uvmax);
 			}
 		}
 

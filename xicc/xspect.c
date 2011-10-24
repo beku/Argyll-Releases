@@ -2136,7 +2136,180 @@ int read_xspect(xspect *sp, char *fname) {
 
 	return 0;
 }
+
+/* save a set of 2  spectrum to a CGATS file */
+/* Return NZ on error */
+int write_cmf(char *fname, xspect sp[3]) {
+	char buf[100];
+	time_t clk = time(0);
+	struct tm *tsp = localtime(&clk);
+	char *atm = asctime(tsp); /* Ascii time */
+	cgats *ocg;				/* output cgats structure */
+	cgats_set_elem *setel;	/* Array of set value elements */
+	char *chid[3] = { "X", "Y", "Z" };
+	int i, j;
+
+	/* Setup output cgats file */
+	ocg = new_cgats();					/* Create a CGATS structure */
+	ocg->add_other(ocg, "CMF"); 		/* our special type is color matching functio */
+	ocg->add_table(ocg, tt_other, 0);	/* Start the first table */
+
+	ocg->add_kword(ocg, 0, "DESCRIPTOR", "Argyll CMF information",NULL);
+	ocg->add_kword(ocg, 0, "ORIGINATOR", "Argyll CMS", NULL);
+	atm[strlen(atm)-1] = '\000';	/* Remove \n from end */
+	ocg->add_kword(ocg, 0, "CREATED",atm, NULL);
+
+	sprintf(buf,"%d", sp->spec_n);
+	ocg->add_kword(ocg, 0, "SPECTRAL_BANDS",buf, NULL);
+	sprintf(buf,"%f", sp->spec_wl_short);
+	ocg->add_kword(ocg, 0, "SPECTRAL_START_NM",buf, NULL);
+	sprintf(buf,"%f", sp->spec_wl_long);
+	ocg->add_kword(ocg, 0, "SPECTRAL_END_NM",buf, NULL);
+	sprintf(buf,"%f", sp->norm);
+	ocg->add_kword(ocg, 0, "SPECTRAL_NORM",buf, NULL);
+
+	/* Identify color channel using index */
+	ocg->add_field(ocg, 0, "STRING", cs_t);
+
+	/* Generate fields for spectral values */
+	for (i = 0; i < sp->spec_n; i++) {
+		int nm;
+
+		/* Compute nearest integer wavelength */
+		nm = (int)(XSPECT_XWL(sp, i) + 0.5);
+		sprintf(buf,"SPEC_%03d",nm);
+		ocg->add_field(ocg, 0, buf, r_t);
+	}
+
+	if ((setel = (cgats_set_elem *)malloc(sizeof(cgats_set_elem) * sp->spec_n)) == NULL)
+		return 1;
+
+	for (j = 0; j < 3; j++) {
+		setel[0].c = chid[j];
+		
+		for (i = 0; i < sp[j].spec_n; i++)
+			setel[i+1].d = sp[j].spec[i];
+		ocg->add_setarr(ocg, 0, setel);
+	}
+
+	if (ocg->write_name(ocg, fname)) {
+#ifdef NEVER
+		printf("CGATS file write error : %s\n",ocg->err);
+#endif
+		return 1;
+	}
+
+	free(setel);
+	ocg->del(ocg);		/* Clean up */
+
+	return 0;
+}
+
+/* restore a spectrum from a CGATS file */
+/* Return NZ on error */
+/* (Would be nice to return an error message!) */
+int read_cmf(xspect sp[3], char *fname) {
+	cgats *icg;				/* input cgats structure */
+	char buf[100];
+	int i, j, ii;
+
+	/* Open and look at the spectrum file */
+	if ((icg = new_cgats()) == NULL) {	/* Create a CGATS structure */
+#ifdef DEBUG
+		printf("new_cgats() failed");
+#endif
+		return 1;
+	}
+	icg->add_other(icg, "CMF"); 	/* our special input type is Color Matching Fumctions */
+
+	if (icg->read_name(icg, fname)) {
+#ifdef DEBUG
+		printf("CGATS file read error : %s\n",icg->err);
+#endif
+		return 1;
+	}
+
+	if (icg->ntables == 0 || icg->t[0].tt != tt_other || icg->t[0].oi != 0) {
+#ifdef DEBUG
+		printf ("Input file isn't a CMF format file\n");
+#endif
+		return 1;
+	}
+	if (icg->ntables != 1) {
+#ifdef DEBUG
+		printf ("Input file doesn't contain exactly one table\n");
+#endif
+		return 1;
+	}
+
+	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_BANDS")) < 0) {
+#ifdef DEBUG
+		printf ("Input file doesn't contain keyword SPECTRAL_BANDS\n");
+#endif
+		return 1;
+	}
+	sp->spec_n = atoi(icg->t[0].kdata[ii]);
+	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_START_NM")) < 0) {
+#ifdef DEBUG
+		printf ("Input file doesn't contain keyword SPECTRAL_START_NM\n");
+#endif
+		return 1;
+	}
+	sp->spec_wl_short = atof(icg->t[0].kdata[ii]);
+	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_END_NM")) < 0) {
+#ifdef DEBUG
+		printf ("Input file doesn't contain keyword SPECTRAL_END_NM\n");
+#endif
+		return 1;
+	}
+	sp->spec_wl_long = atof(icg->t[0].kdata[ii]);
+
+	if ((ii = icg->find_kword(icg, 0, "SPECTRAL_NORM")) < 0) {
+#ifdef DEBUG
+		printf ("Input file doesn't contain keyword SPECTRAL_NORM\n");
+#endif
+		return 1;
+	}
+	sp->norm = atof(icg->t[0].kdata[ii]);
+
+	for (j = 1; j < 3; j++)			/* Copy xspect values */
+		XSPECT_COPY_INFO(sp+j, sp);
+
+	/* Find the fields for spectral values and copt them */
+	for (i = 0; i < sp->spec_n; i++) {
+		int nm, fi;
+
+		/* Compute nearest integer wavelength */
+		nm = (int)(XSPECT_XWL(sp, i) + 0.5);
+		sprintf(buf,"SPEC_%03d",nm);
+
+		if ((fi = icg->find_field(icg, 0, buf)) < 0) {
+#ifdef DEBUG
+			printf("Input file doesn't contain field %s\n",buf);
+#endif
+			return 1;
+		}
+
+		if (icg->t[0].ftype[fi] != r_t) {
+#ifdef DEBUG
+			printf ("Field %s in specrum is wrong type - should be a float\n",buf);
+#endif
+			return 1;
+		}
+
+		for (j = 0; j < 3; j++) {
+			sp[j].spec[i] = *((double *)icg->t[0].fdata[j][fi]);
+		}
+	}
+
+	icg->del(icg);
+
+	return 0;
+}
+
+/* ------------- */
 #endif /* !SALONEINSTLIB */
+
 
 /* Get a raw 3rd order polinomial interpolated spectrum value. */
 /* Return NZ if value is valid, Z and last valid value */

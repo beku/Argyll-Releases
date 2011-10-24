@@ -136,7 +136,7 @@ typedef struct {
 	/* Fine tuning destination gamut mapping */
 	struct {
 		double x;			/* Final expansion weight, 0 - 1 */
-	} f;
+	} f;					/* Weights fine tuning to expand rather than just compress */
 
 	/* Internal use */
 	iweight rl;				/* Resolved radial weight */

@@ -133,8 +133,7 @@ struct _icoms *p
 		PSP_DEVICE_INTERFACE_DETAIL_DATA pdidd = (PSP_DEVICE_INTERFACE_DETAIL_DATA)buf;
 		SP_DEVINFO_DATA dinfod;
 		int i;
-		HANDLE fh;
-		HIDD_ATTRIBUTES attr;
+		unsigned short VendorID, ProductID;
 	
 		/* Make sure we've dynamically linked */
 		if (setup_dyn_calls() == 0) {
@@ -153,9 +152,10 @@ struct _icoms *p
 		did.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
 		pdidd = (PSP_DEVICE_INTERFACE_DETAIL_DATA)buf;  
 		pdidd->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
-		attr.Size = sizeof(HIDD_ATTRIBUTES);
 		dinfod.cbSize = sizeof(SP_DEVINFO_DATA);
 		for (i = 0; ; i++) {
+			instType itype;
+
 			if (SetupDiEnumDeviceInterfaces(hdinfo, NULL, &HidGuid, i, &did) == 0) {
 				if (GetLastError() == ERROR_NO_MORE_ITEMS) {
 					break;
@@ -165,53 +165,78 @@ struct _icoms *p
 			if (SetupDiGetDeviceInterfaceDetail(hdinfo, &did, pdidd, DIDD_BUFSIZE, NULL, &dinfod)
 			                                                                                == 0)
 				error("SetupDiGetDeviceInterfaceDetail failed");
-//printf("~1 found HID device '%s', inst %d\n",pdidd->DevicePath, dinfod.DevInst);
 
-			/* Retriev its vid and pid by querying the device */
-  			if ((fh = CreateFile(pdidd->DevicePath, 0, 0, NULL, OPEN_EXISTING, 
-                              0, NULL)) != INVALID_HANDLE_VALUE) {
-				instType itype;
+			/* Extract the vid and pid from the device path */
+			{
+				int gotid;
+				char *cp, buf[20];
 
-				if ((*pHidD_GetAttributes)(fh, &attr) == 0) {
-					DBG((stderr,"HidD_GetAttributes failed for device %d",i))
-					CloseHandle(fh);
+				for(gotid = 0;;) {
+					if ((cp = strchr(pdidd->DevicePath, 'v')) == NULL)
+						break;
+					if (strlen(cp) < 8)
+						break;
+					if (cp[1] != 'i' || cp[2] != 'd' || cp[3] != '_')
+						break;
+					memcpy(buf, cp + 4, 4);
+					buf[4] = '\000';
+					if (sscanf(buf, "%x", &VendorID) != 1)
+						break;
+					if ((cp = strchr(pdidd->DevicePath, 'p')) == NULL)
+						break;
+					if (strlen(cp) < 8)
+						break;
+					if (cp[1] != 'i' || cp[2] != 'd' || cp[3] != '_')
+						break;
+					memcpy(buf, cp + 4, 4);
+					buf[4] = '\000';
+					if (sscanf(buf, "%x", &ProductID) != 1)
+						break;
+					gotid = 1;
+					break;
+				}
+				if (!gotid) {
+					if (p->debug) fprintf(stderr,"found HID device '%s', inst %d but unable get PID and VID\n",pdidd->DevicePath, dinfod.DevInst);
 					continue;
 				}
+			}
 
-				/* If it's a device we're looking for */
-				if ((itype = inst_usb_match(attr.VendorID, attr.ProductID)) != instUnknown) {
-					char pname[400];
-			
-					/* Create human readable path/identification */
-					sprintf(pname,"hid:/%d (%s)", dinfod.DevInst, inst_name(itype));
-			
-					/* Add the path to the list */
-					if (p->paths == NULL) {
-						if ((p->paths = (icompath **)calloc(sizeof(icompath *), 1 + 1)) == NULL)
-							error("icoms: calloc failed!");
-					} else {
-						if ((p->paths = (icompath **)realloc(p->paths,
-						                     sizeof(icompath *) * (p->npaths + 2))) == NULL)
-							error("icoms: realloc failed!");
-						p->paths[p->npaths+1] = NULL;
-					}
-					if ((p->paths[p->npaths] = calloc(sizeof(icompath), 1)) == NULL)
+			/* If it's a device we're looking for */
+			if ((itype = inst_usb_match(VendorID, ProductID)) != instUnknown) {
+				char pname[400];
+		
+				if (p->debug) fprintf(stderr,"found HID device '%s', inst %d that we're looking for\n",pdidd->DevicePath, dinfod.DevInst);
+
+				/* Create human readable path/identification */
+				sprintf(pname,"hid:/%d (%s)", dinfod.DevInst, inst_name(itype));
+		
+				/* Add the path to the list */
+				if (p->paths == NULL) {
+					if ((p->paths = (icompath **)calloc(sizeof(icompath *), 1 + 1)) == NULL)
 						error("icoms: calloc failed!");
-					p->paths[p->npaths]->vid = attr.VendorID;
-					p->paths[p->npaths]->pid = attr.ProductID;
-					p->paths[p->npaths]->dev = NULL;		/* Make sure it's NULL */
-					if ((p->paths[p->npaths]->hev = (hid_device *)calloc(sizeof(hid_device), 1))
-					                                                                     == NULL)
-						error("icoms: calloc failed!");
-					if ((p->paths[p->npaths]->hev->dpath = strdup(pdidd->DevicePath)) == NULL)
-						error("icoms: calloc failed!");
-					p->paths[p->npaths]->itype = itype;
-					if ((p->paths[p->npaths]->path = strdup(pname)) == NULL)
-						error("icoms: strdup failed!");
-					p->npaths++;
-					p->paths[p->npaths] = NULL;
+				} else {
+					if ((p->paths = (icompath **)realloc(p->paths,
+					                     sizeof(icompath *) * (p->npaths + 2))) == NULL)
+						error("icoms: realloc failed!");
+					p->paths[p->npaths+1] = NULL;
 				}
-				CloseHandle(fh);
+				if ((p->paths[p->npaths] = calloc(sizeof(icompath), 1)) == NULL)
+					error("icoms: calloc failed!");
+				p->paths[p->npaths]->vid = VendorID;
+				p->paths[p->npaths]->pid = ProductID;
+				p->paths[p->npaths]->dev = NULL;		/* Make sure it's NULL */
+				if ((p->paths[p->npaths]->hev = (hid_device *)calloc(sizeof(hid_device), 1))
+				                                                                     == NULL)
+					error("icoms: calloc failed!");
+				if ((p->paths[p->npaths]->hev->dpath = strdup(pdidd->DevicePath)) == NULL)
+					error("icoms: calloc failed!");
+				p->paths[p->npaths]->itype = itype;
+				if ((p->paths[p->npaths]->path = strdup(pname)) == NULL)
+					error("icoms: strdup failed!");
+				p->npaths++;
+				p->paths[p->npaths] = NULL;
+			} else {
+				if (p->debug) fprintf(stderr,"found HID device '%s', inst %d but not one we're looking for\n",pdidd->DevicePath, dinfod.DevInst);
 			}
 		}
 
@@ -448,8 +473,10 @@ void hid_close_port(icoms *p) {
 /* Open an HID port for all our uses. */
 static void hid_open_port(
 icoms *p,
-int    port,		/* USB com port, 1 - N, 0 for no change. */
-icomuflags hidflags	/* Any special handling flags */
+int    port,			/* USB com port, 1 - N, 0 for no change. */
+icomuflags hidflags,	/* Any special handling flags */
+int retries,			/* > 0 if we should retry set_configuration (100msec) */
+char **pnames			/* List of process names to try and kill before opening */
 ) {
 	if (p->debug) fprintf(stderr,"icoms: About to open the USB port\n");
 
@@ -494,15 +521,26 @@ icomuflags hidflags	/* Any special handling flags */
 
 #if defined(NT) 
 		{
-			/* Open the device */
-  			if ((p->hidd->fh = CreateFile(p->hidd->dpath, GENERIC_READ|GENERIC_WRITE,
-			      0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL))
-			                                                           == INVALID_HANDLE_VALUE)
+			int tries = 0;
+
+			for (tries = 0; retries >= 0; retries--, tries++) {
+				/* Open the device */
+  				if ((p->hidd->fh = CreateFile(p->hidd->dpath, GENERIC_READ|GENERIC_WRITE,
+				      0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL))
+				                                              != INVALID_HANDLE_VALUE) {
+					memset(&p->hidd->ols,0,sizeof(OVERLAPPED));
+  					if ((p->hidd->ols.hEvent = CreateEvent(NULL, 0, 0, NULL)) == NULL)
+						error("Failed to create HID Event'\n");
+					break;
+				}
+				if (tries > 0 && pnames != NULL) {
+					/* Open failed. This could be the i1ProfileTray.exe */
+					kill_nprocess(pnames, p->debug);
+					msec_sleep(100);
+				}
+			}
+			if (p->hidd->fh == INVALID_HANDLE_VALUE)
 				error("Failed to open HID device '%s'\n",p->ppath->path);
-			
-			memset(&p->hidd->ols,0,sizeof(OVERLAPPED));
-  			if ((p->hidd->ols.hEvent = CreateEvent(NULL, 0, 0, NULL)) == NULL)
-				error("Failed to create HID Event'\n");
 		}
 #endif /* NT */
 
@@ -818,8 +856,10 @@ icoms_hid_write(
 static void
 icoms_set_hid_port(
 icoms *p, 
-int    port,		/* HID com port, 1 - N, 0 for no change. */
-icomuflags hidflags	/* Any special handling flags */
+int    port,			/* HID com port, 1 - N, 0 for no change. */
+icomuflags hidflags,	/* Any special handling flags */
+int retries,			/* > 0 if we should retry set_configuration (100msec) */
+char **pnames			/* List of process names to try and kill before opening */
 ) {
 	if (p->debug) fprintf(stderr,"icoms: About to set hid port characteristics\n");
 
@@ -828,7 +868,7 @@ icomuflags hidflags	/* Any special handling flags */
 
 	if (p->is_hid_portno(p, port) != instUnknown) {
 
-		hid_open_port(p, port, hidflags);
+		hid_open_port(p, port, hidflags, retries, pnames);
 
 		p->write = NULL;
 		p->read = NULL;

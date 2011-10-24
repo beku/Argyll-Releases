@@ -82,9 +82,15 @@ typedef struct {
 ((int)floor(XSPECT_DIX(PXSP, WL) + 0.5))
 
 #ifndef SALONEINSTLIB
+
 /* Spectrum utility functions. Return NZ if error */
 int write_xspect(char *fname, xspect *s);
 int read_xspect(xspect *sp, char *fname);
+
+/* CMF utility functions. Return NZ if error */
+int write_cmf(char *fname, xspect cmf[3]);
+int read_cmf(xspect cmf[3], char *fname);
+
 #endif /* !SALONEINSTLIB*/
 
 /* Get interpolated value at wavelenth (not normalised) */

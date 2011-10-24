@@ -57,7 +57,8 @@
 
 #undef DEBUG
 #undef DUMP_MATRIX
-#undef PLOT_SPECTRA
+#undef PLOT_SPECTRA			/* Plot the sensor senitivity spectra */
+#undef SAVE_SPECTRA			/* Save the sensor senitivity spectra to "sensors.cmf" */
 
 #ifdef DEBUG
 #define DBG(xxx) printf xxx ;
@@ -539,43 +540,66 @@ i1d3_unlock(
 	struct {
 		char *pname;							/* Product name */
 		unsigned char key[8];					/* Unlock code */
-		i1d3_dtype dtype;						/* Type enumerator */
+		i1d3_dtype dtype;						/* Base type enumerator */
+		i1d3_dtype stype;						/* Sub type enumerator */
 	} codes[] = {
 		{ "i1Display3 ",
-			{ 0x61, 0xcd, 0xd1, 0x1e, 0x9d, 0x9c, 0x16, 0x72 }, i1d3_disppro },
+			{ 0xd4, 0x9f, 0xd4, 0xa4, 0x59, 0x7e, 0x35, 0xcf }, i1d3_disppro, i1d3_calman },
 		{ "Colormunki Display ",
-			{ 0xf6, 0x22, 0x91, 0x9d, 0xe1, 0x8b, 0x1f, 0xda }, i1d3_munkdisp },
+			{ 0xf6, 0x22, 0x91, 0x9d, 0xe1, 0x8b, 0x1f, 0xda }, i1d3_munkdisp, i1d3_munkdisp },
+		{ "i1Display3 ",
+			{ 0x61, 0xcd, 0xd1, 0x1e, 0x9d, 0x9c, 0x16, 0x72 }, i1d3_disppro, i1d3_disppro },
 		{ NULL } 
 	}; 
 	inst_code ev;
 	int isdeb = p->icom->debug;
 	int ix;
 
-	for (ix = 0; codes[ix].pname != NULL; ix++) {
-		if (strcmp(p->prod_name, codes[ix].pname) == 0)
+	if (isdeb) fprintf(stderr,"i1d3: Unlock:\n");
+
+	/* Until we give up */
+	for (ix = 0;;ix++) {
+
+		/* If we've run out of unlock keys */
+		if (codes[ix].pname == NULL)
+			return i1d3_interp_code((inst *)p, I1D3_UNKNOWN_UNLOCK);
+
+//		return i1d3_interp_code((inst *)p, I1D3_UNLOCK_FAIL);
+
+		/* Skip any keys that don't match the product name */
+		if (strcmp(p->prod_name, codes[ix].pname) != 0) {
+			continue;
+		}
+
+//		if (isdeb) fprintf(stderr,"i1d3: Trying unlock key 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n",
+//			codes[ix].key[0], codes[ix].key[1], codes[ix].key[2], codes[ix].key[3],
+//			codes[ix].key[4], codes[ix].key[5], codes[ix].key[6], codes[ix].key[7]);
+
+		p->dtype = codes[ix].dtype;
+		p->stype = codes[ix].stype;
+
+		/* Attempt unlock */
+		memset(todev, 0, 64);
+		memset(fromdev, 0, 64);
+
+		/* Get a challenge */
+		if ((ev = i1d3_command(p, i1d3_lockchal, todev, fromdev, 1.0)) != inst_ok)
+			return ev;
+
+		/* Convert challenge to response */
+		create_unlock_response(codes[ix].key, fromdev, todev);
+
+		/* Send the response */
+		if ((ev = i1d3_command(p, i1d3_lockresp, todev, fromdev, 1.0)) != inst_ok)
+			return ev;
+
+		if (fromdev[2] == 0x77) {		/* Sucess */
 			break;
+		}
+
+		if (isdeb) fprintf(stderr,"i1d3: Trying next unlock key\n");
+		/* Try the next key */
 	}
-	if (codes[ix].pname == NULL)
-		return i1d3_interp_code((inst *)p, I1D3_UNKNOWN_UNLOCK);
-
-	p->dtype = codes[ix].dtype;
-
-	memset(todev, 0, 64);
-	memset(fromdev, 0, 64);
-
-	/* Get a challenge */
-	if ((ev = i1d3_command(p, i1d3_lockchal, todev, fromdev, 1.0)) != inst_ok)
-		return ev;
-
-	/* Convert challenge to response */
-	create_unlock_response(codes[ix].key, fromdev, todev);
-
-	/* Send the response */
-	if ((ev = i1d3_command(p, i1d3_lockresp, todev, fromdev, 1.0)) != inst_ok)
-		return ev;
-
-	if (fromdev[2] != 0x77)
-		return i1d3_interp_code((inst *)p, I1D3_UNLOCK_FAIL);
 
 	return inst_ok;
 }
@@ -1366,6 +1390,10 @@ static inst_code i1d3_decode_extEE(
 		p->ambi[j] = p->sens[j];	/* Structure copy */
 	}
 
+#ifdef SAVE_SPECTRA
+	write_cmf("sensors.cmf", p->sens);
+#endif
+
 	/* Read ambient filter spectrum */
 	tmp.spec_n = 351;
 	tmp.spec_wl_short = 380.0;
@@ -1528,6 +1556,19 @@ i1d3_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	int bi, i, rv;
 	int stat;
 	inst_code ev = inst_ok;
+#ifdef NT
+	/* If the X-Rite software has been installed, then there may */
+	/* be a utility that has the device open. Kill that process off */
+	/* so that we can open it here. */
+	char *pnames[] = {
+			"i1ProfilerTray.exe",
+			NULL
+	};
+	int retries = 2;
+#else /* !NT */
+	char **pnames = NULL;
+	int retries = 0;
+#endif /* !NT */
 
 	if (p->debug) {
 		p->icom->debug = p->debug;	/* Turn on debugging */
@@ -1540,7 +1581,7 @@ i1d3_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 		if (p->debug) fprintf(stderr,"i1d3: About to init HID\n");
 
 		/* Set config, interface */
-		p->icom->set_hid_port(p->icom, port, icomuf_none); 
+		p->icom->set_hid_port(p->icom, port, icomuf_none, retries, pnames); 
 
 	} else if (p->icom->is_usb_portno(p->icom, port) != instUnknown) {
 

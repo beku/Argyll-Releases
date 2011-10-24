@@ -5,6 +5,7 @@ License2.txt
 License3.txt
 ArgyllDoc.html
 ChangesSummary.html
+ColorManagement.html
 cal_format.html
 Compiling.html
 Installing.html
@@ -150,16 +151,18 @@ ccmxs/DTP-94_1964_10_Dell_2408W.ccmx
 ccmxs/DTP-94_1997_Shaw_Dell_2408W.ccmx
 ccmxs/DTP-94_Dell_2408W.ccmx
 ccmxs/EyeOne_Display_1_NEC1990SXi.ccmx
-ccmxs/EyeOne_Display_2_NEC1990SXi.ccmx
 ccmxs/EyeOne_Display_2_EIZO_S2233W.ccmx
+ccmxs/EyeOne_Display_2_NEC1990SXi.ccmx
 ccmxs/EyeOne_Display_LT_U2410_Standard_1931.ccmx
 ccmxs/EyeOne_Display_LT_U2410_Standard_1964.ccmx
 ccmxs/EyeOne_Display_LT_U2410_sRGB_1931.ccmx
 ccmxs/EyeOne_Display_LT_U2410_sRGB_1964.ccmx
 ccmxs/Huey_Acer_al2016w.ccmx
+ccmxs/Huey_Eizo_CG243.ccmx
 ccmxs/Huey_HP_compaq_6730s.ccmx
 ccmxs/Huey_HP_lp2475w.ccmx
 ccmxs/Huey_NEC1990SXi.ccmx
+ccmxs/Huey_NEC_Spectraview_241.ccmx
 ccmxs/NEC_EyeOne_Display_2_NEC2690WUXi2.ccmx
 ccmxs/Spyder2_EIZO_S2433W_standard_1931.ccmx
 ccmxs/Spyder2_EIZO_S2433W_standard_1964.ccmx
@@ -167,3 +170,4 @@ ccmxs/Spyder3_EIZO_S2233_standard_1964.ccmx
 ccmxs/Spyder3_EIZO_S2243W_standard_1931.ccmx
 ccmxs/Spyder3_HP_LP2475w.ccmx
 ccmxs/Spyder3_NEC2690WUXi2.ccmx
+

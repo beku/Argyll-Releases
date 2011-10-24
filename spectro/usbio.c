@@ -684,7 +684,7 @@ char **pnames		/* List of process names to try and kill before opening */
 				msec_sleep(77);
 			}
 			if (tries > 0 && pnames != NULL && kpc == NULL) {
-#ifdef __APPLE__
+#if defined(__APPLE__) 
 				if ((kpc = kkill_nprocess(pnames, p->debug)) == NULL) {
 					if (p->debug) fprintf(stderr,"kkill_nprocess returned error!\n");
 				}
@@ -705,7 +705,8 @@ char **pnames		/* List of process names to try and kill before opening */
 					error("Opening USB port '%s' config %d failed (%s) (Permissions ?)",p->ppath->path,config,USB_STRERROR(rv));
 				}
 				continue;
-			}
+			} else if (p->debug)
+				fprintf(stderr,"open() of USB port '%s' suceeded\n",p->ppath->path);
 
 			/* Get a copy of the device descriptor so we can see device params */
 #ifdef USE_LIBUSB1
@@ -741,11 +742,12 @@ char **pnames		/* List of process names to try and kill before opening */
 #endif
 #endif
 
+			if (p->debug > 1) fprintf(stderr, "Number of configurations = %d\n",
+			                          descriptor.bNumConfigurations);
 #if defined(UNIX) && !defined(__APPLE__)
 			/* only call set_configuration on Linux if the device has more than one */
 			/* possible configuration, because Linux does a set_configuration by default, */
-			/* and two of them */
-			/* mess up instruments like the Spyder2 */
+			/* and two of them mess up instruments like the Spyder2 */
 
 			if (descriptor.bNumConfigurations > 1) {
 #endif

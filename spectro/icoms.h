@@ -311,7 +311,10 @@ struct _icoms {
 	void (*set_hid_port)(
 		struct _icoms *p, 
 		int            port,		/* Enumerated port number, 1..n */
-		icomuflags usbflags);		/* Any special handling flags */
+		icomuflags usbflags,		/* Any special handling flags */
+		int retries,				/* > 0 if we should retry set_configuration (100msec) */
+		char **pnames				/* List of process names to try and kill before opening */
+	);
 
 	/* Reset user interrupt handling to default (Esc, ^C, q or 'Q' = Abort) */
 	void (*reset_uih)(struct _icoms *p);

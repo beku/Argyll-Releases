@@ -180,6 +180,7 @@ MainVariant xdg_bds : xdg_bds.c : : STANDALONE_TEST : : : libconv ;
 # test code
 #Main t : t.c ;
 #Main tt : tt.c ;
+#Main i1d3eval : i1d3eval.c ;
 
 if $(OLD_GRETAG) && $(UNIX) && $(OS) != MACOSX {
 

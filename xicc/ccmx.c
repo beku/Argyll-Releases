@@ -266,6 +266,51 @@ double mtx[3][3]	/* Transform matrix to copy from */
 }
 
 /* ------------------------------------------- */
+/* Modified version that de-weights Luminance errors by 5: */
+/* Return the CIE94 Delta E color difference measure, squared */
+static double wCIE94sq(double Lab0[3], double Lab1[3]) {
+	double desq, dhsq;
+	double dlsq, dcsq;
+	double c12;
+
+	{
+		double dl, da, db;
+		dl = Lab0[0] - Lab1[0];
+		dlsq = dl * dl;		/* dl squared */
+		da = Lab0[1] - Lab1[1];
+		db = Lab0[2] - Lab1[2];
+
+		/* Compute normal Lab delta E squared */
+		desq = dlsq + da * da + db * db;
+	}
+
+	{
+		double c1, c2, dc;
+
+		/* Compute chromanance for the two colors */
+		c1 = sqrt(Lab0[1] * Lab0[1] + Lab0[2] * Lab0[2]);
+		c2 = sqrt(Lab1[1] * Lab1[1] + Lab1[2] * Lab1[2]);
+		c12 = sqrt(c1 * c2);	/* Symetric chromanance */
+
+		/* delta chromanance squared */
+		dc = c2 - c1;
+		dcsq = dc * dc;
+	}
+
+	/* Compute delta hue squared */
+	if ((dhsq = desq - dlsq - dcsq) < 0.0)
+		dhsq = 0.0;
+	{
+		double sc, sh;
+
+		/* Weighting factors for delta chromanance & delta hue */
+		sc = 1.0 + 0.048 * c12;
+		sh = 1.0 + 0.014 * c12;
+		return 0.2 * 0.2 * dlsq + dcsq/(sc * sc) + dhsq/(sh * sh);
+	}
+}
+
+/* ------------------------------------------- */
 
 /* Context for optimisation callback */
 typedef struct {
@@ -304,13 +349,13 @@ double optf(void *fdata, double *tp) {
 		icmXYZ2Lab(&cx->wh, lab, xyz);
 
 		if (i == cx->wix)
-			de += cx->npat * icmCIE94sq(tlab, lab);		/* Make white weight = all others */
+			de += cx->npat * wCIE94sq(tlab, lab);		/* Make white weight = all others */
 		else
-			de += icmCIE94sq(tlab, lab);
+			de += wCIE94sq(tlab, lab);
 //printf("~1 %d: txyz %f %f %f, tlab %f %f %f\n", i,cx->refs[i][0], cx->refs[i][1], cx->refs[i][2], tlab[0], tlab[1], tlab[2]);
 //printf("~1 %d: xyz %f %f %f\n", i,cx->cols[i][0], cx->cols[i][1], cx->cols[i][2]);
 //printf("~1 %d: mxyz %f %f %f, lab %f %f %f\n", i,xyz[0], xyz[1], xyz[2], lab[0], lab[1], lab[2]);
-//printf("~1 %d: de %f\n", i,icmCIE94(tlab, lab));
+//printf("~1 %d: de %f\n", i,wCIE94(tlab, lab));
 	}
 
 	de /= cx->npat;

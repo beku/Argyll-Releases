@@ -157,7 +157,7 @@ main(int argc, char *argv[]) {
 #ifdef TEST1
 #pragma message("!!!!!!!!!!!!!!!!! TEST1 is defined !!!!!!!!!!!!!!!1")
 	int ids[] = { 3, 0 };			/* Input dimensions */
-	int ods[] = { 1, 0 };			/* Output dimensions */
+	int ods[] = { 3, 0 };			/* Output dimensions */
 	int iprs[] = { 16, 0 };
 	int oprs[] = { 16, 0 };
 #else

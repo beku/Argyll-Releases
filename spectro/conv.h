@@ -22,6 +22,9 @@
 
 #if defined (NT)
 # if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0501
+#  if defined _WIN32_WINNT
+#   undef _WIN32_WINNT
+#  endif
 #  define _WIN32_WINNT 0x0501
 # endif
 # define WIN32_LEAN_AND_MEAN
@@ -190,7 +193,7 @@ struct _kkill_nproc_ctx {
     void (*del)(struct _kkill_nproc_ctx *p);
 }; typedef struct _kkill_nproc_ctx kkill_nproc_ctx;
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(NT)
 
 /* Kill a list of named processes. NULL for last */
 /* return < 0 if this fails. */
@@ -202,7 +205,7 @@ int kill_nprocess(char **pname, int debug);
 /* Call ctx->del() when done */
 kkill_nproc_ctx *kkill_nprocess(char **pname, int debug);
 
-#endif /* __APPLE__ */
+#endif /* __APPLE__ || NT */
 
 #include "xdg_bds.h"
 

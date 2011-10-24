@@ -30,7 +30,8 @@ For Colorimeters that rely on sensor spectral sensitivity calibration
 information (ie. the X-Rite <span style="font-weight: bold;">i1d3), </span><span
  style="font-weight: bold;">ccxxmake</span> allows a creation of a
 calibration spectral sample (<a href="File_Formats.html#.ccss">ccss</a>)
-for a particular <span style="font-weight: bold;">Display</span>, by
+for
+a particular <span style="font-weight: bold;">Display</span>, by
 making use a
 reference <span style="font-weight: bold;">Spectrometer</span>
 instrument. This can then be used to
@@ -55,12 +56,14 @@ correction.ccmx<br>
 Verbose
 mode</small><br>
 &nbsp; <a href="#S">-S</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Create CCSS rather than CCMX<br>
+Create
+CCSS rather than CCMX<br>
 &nbsp; <a href="#f">-f file1.ti3[,file2.ti3]</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Create
 from
-one or two .ti3 files rather than measure.<br
+one
+or two .ti3 files rather than measure.<br
  style="font-family: monospace;">
 <span style="font-family: monospace;">&nbsp;</span><font
  style="font-family: monospace;" size="-1"><a href="#display">-display
@@ -74,22 +77,24 @@ only]
 Choose
 the
 display
-from the following list (default 1),</font><br
+from
+the following list (default 1),</font><br
  style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 and
 optionally
 choose
 a
-different display m for VideoLUT access.</font><br
- style="font-family: monospace;">
+different
+display m for VideoLUT access.</font><br style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;<a href="#d">-d
 n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Choose
 the
 display
 from
-the following list (default 1)</font><br style="font-family: monospace;">
+the
+following list (default 1)</font><br style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;</font><font
  style="font-family: monospace;" size="-1"><a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Use
@@ -103,7 +108,8 @@ Display
 type,
 c
 =
-CRT, l = LCD (CCMX)</font><br style="font-family: monospace;">
+CRT,
+l = LCD (CCMX)</font><br style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;<a href="#P">-P
 ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Position
@@ -117,15 +123,16 @@ ho,vi:
 0.0
 =
 left/top,
-0.5 = center, 1.0 = right/bottom etc.</font><br
+0.5
+= center, 1.0 = right/bottom etc.</font><br
  style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ss:
 0.5
 =
 half,
-1.0 = normal, 2.0 = double etc.</font><br
- style="font-family: monospace;">
+1.0
+= normal, 2.0 = double etc.</font><br style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;</font><font
  style="font-family: monospace;" size="-1"><a href="#F">-F</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -133,14 +140,16 @@ Fill
 whole
 screen
 with
-black background</font><br style="font-family: monospace;">
+black
+background</font><br style="font-family: monospace;">
 <small style="font-family: monospace;">&nbsp;<span
  style="text-decoration: underline;"></span><a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 [X11
 only]
 Don't
-set override redirect
+set
+override redirect
 on test
 window<br>
 </small><font style="font-family: monospace;" size="-1">&nbsp;<a
@@ -157,7 +166,8 @@ Use
 high
 resolution
 spectrum
-mode (if available)<br>
+mode
+(if available)<br>
 </font><font style="font-family: monospace;" size="-1">&nbsp;<a
  href="#V">-V</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -165,7 +175,8 @@ mode (if available)<br>
 Use
 adaptive
 measurement
-mode (if
+mode
+(if
 available)</font><br style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;<a href="#C">-C
 "command"</a>
@@ -178,7 +189,8 @@ time a color is set<br>
 &nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;
 Choose
-CIE Observer for CCMX spectral
+CIE
+Observer for CCMX spectral
 data:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp; 1931_2 </small><small
@@ -189,7 +201,8 @@ data:<br>
  href="#s">-s
 steps</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Override
-default patch sequence combination steps (default 3)</font><br
+default
+patch sequence combination steps (default 3)</font><br
  style="font-family: monospace;">
 <font style="font-family: monospace;" size="-1">&nbsp;<a href="#W">-W
 n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -197,15 +210,16 @@ Override
 serial
 port
 flow
-control: n = none, h = HW, x = Xon/Xoff</font><br
- style="font-family: monospace;">
+control:
+n = none, h = HW, x = Xon/Xoff</font><br style="font-family: monospace;">
 <small style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print
 debug diagnostics to stderr<br>
 </small><small style="font-family: monospace;">&nbsp;<a
  href="ccxxmake.html#E">-E "description"</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Override
-the default overall escription</small><br>
+the
+default overall escription</small><br>
 <small style="font-family: monospace;">&nbsp;<a href="#I">-I
 "displayname"</a>
 &nbsp;&nbsp;&nbsp;&nbsp; </small><span style="font-family: monospace;">Set
@@ -240,11 +254,16 @@ chartread operation.<br>
 <br>
 <a name="S"></a><span style="font-weight: bold;">-S</span> By default a
 Colorimeter Correction Matrix (<span style="font-weight: bold;">CCMX</span>)
-will be created, which allows correction for errors with a particular
+will
+be created from both <span style="font-weight: bold;">Colorimeter</span>
+and <span style="font-weight: bold;">Spectrometer</span> readings,
+which allows correction for errors with a particular
 Colorimeter and Display combination. If the <span
  style="font-weight: bold;">-S</span> flag is used, then instead a
 Colorimeter Calibration Spectral Set (<span style="font-weight: bold;">CCSS</span>)
-file is created, that allows calibrating any suitable Colorimeter to
+file
+is created from just the <span style="font-weight: bold;">Spectrometer</span>
+readings, that allows calibrating any suitable Colorimeter to
 the Display.<br>
 <br>
 <a name="f"></a><span style="font-weight: bold;">-f <span

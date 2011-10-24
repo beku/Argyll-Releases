@@ -1046,6 +1046,8 @@ huey_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	long etime;
 	int bi, i, rv;
 	inst_code ev = inst_ok;
+	char **pnames = NULL;
+	int retries = 0;
 
 	if (p->debug) {
 		p->icom->debug = p->debug;	/* Turn on debugging */
@@ -1058,7 +1060,7 @@ huey_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 		if (p->debug) fprintf(stderr,"huey: About to init HID\n");
 
 		/* Set config, interface */
-		p->icom->set_hid_port(p->icom, port, icomuf_none); 
+		p->icom->set_hid_port(p->icom, port, icomuf_none, retries, pnames); 
 
 		if (p->icom->vid == 0x0765 && p->icom->pid == 0x5001) {
 			if (p->debug) fprintf(stderr,"huey: Lenovo version\n");

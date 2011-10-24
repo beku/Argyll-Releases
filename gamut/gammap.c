@@ -24,6 +24,12 @@
  *  as well as offering different profile (xicc/xlut.c) black point options
  *  (neutral, K hue max density, CMY max density, any max density).
  *
+ *  The gamut mapping code here and the near smooth code don't actually mesh
+ *  very well. For instance, the black point bend approach in < V1.3.4
+ *  means that the dest gamut isn't actually contained within the source,
+ *  messing up the guide vector mappings. Even if this is fixed, the
+ *  actual neutral aim point within nearsmooth is Jab 0,0, while
+ *  the mapping in gammap is from the source neutral to the chosen
  */
 
 
@@ -52,6 +58,7 @@
 #undef CHECK_NEARMAP	/* [Und] Check how accurately near map vectors are represented by rspl */
 
 #define USE_GLUMKNF		/* [Define] Enable luminence knee function points */
+#define USE_GREYMAP		/* [Define] Enable 3D->3D mapping points down the grey axis */
 #define USE_GAMKNF		/* [Define] Enable 3D knee function points */
 #define USE_BOUND		/* [Define] Enable grid boundary anchor points */
 
@@ -70,6 +77,7 @@ struct {
 	double col[3];	/* RGB color */
 } markers[] = {
 	{ 0, },								/* End marker */
+	{ 1, { 12.062, -0.87946, 0.97008 }, { 1.0, 0.3, 0.3 } },	/* Black point */
 	{ 1, { 67.575411, -37.555250, -36.612862 }, { 1.0, 0.3, 0.3 } },	/* bad source in red (Red) */
 	{ 1, { 61.003078, -44.466554, 1.922585 }, { 0.0, 1.0, 0.3 } },	/* good source in green */
 	{ 2, { 49.294793, 50.749543, -51.383167 }, { 1.0, 0.0, 0.0 } },	
@@ -297,7 +305,7 @@ gammapweights pweights[] = {
 		gmm_end,
 	}
 };
-double psmooth = 5.0;		/* Level of RSPL smoothing for perceptual, 1 = nominal */
+double psmooth = 5.0;		/* [5.0] Level of RSPL smoothing for perceptual, 1 = nominal */
 
 /* Saturation mapping weights, where saturation has priority over smoothness */
 gammapweights sweights[] = {
@@ -455,8 +463,8 @@ gammap *new_gammap(
 	double sr_ga_bp[3];	/* Source rotated (image) gamut black point */
 	double dr_cs_wp[3];	/* Target (gmi->greymf aligned) white point */
 	double dr_cs_bp[3];	/* Target (gmi->greymf aligned) black point */
-	double dr_be_bp[3];	/* Bend at end Target black point (Same as dr_cs_bp[] otherwise) */
-						/* == end target destination black point */
+	double dr_be_bp[3];	/* Bend at start in source neutral axis direction */
+						/* Target black point (Same as dr_cs_bp[] otherwise) */
 
 	double sl_cs_wp[3];	/* Source rotated and L mapped colorspace white point */
 	double sl_cs_bp[3];	/* Source rotated and L mapped colorspace black point */
@@ -715,7 +723,8 @@ gammap *new_gammap(
 		}
 
 		/* Now decide the detail of the white and black alignment */
-		if (bph == gmm_BPadpt) {	/* Adapt to destination white and black */
+		if (bph == gmm_BPadpt || bph == gmm_bendBP) {	/* Adapt to destination white and black */
+
 
 			/* Use the fully adapted white and black points */
 			for (j = 0; j < 3; j++) {
@@ -723,14 +732,25 @@ gammap *new_gammap(
 				dr_cs_bp[j] = fabp[j];
 			}
 
-			/* Set bent black point target to be the same as our actual */
-			/* black point target, so that the "bend" code does nothing. */ 
-			for (j = 0; j < 3; j++)
-				dr_be_bp[j] = dr_cs_bp[j];
+			if (bph == gmm_bendBP) {
+
+				/* Extend the half adapted (white = dst, black = src) black point */
+				/* to the same L as the target (dst), to use as the initial (bent) black point */
+				t = (dr_cs_bp[0] - dr_cs_wp[0])/(habp[0] - dr_cs_wp[0]);
+				for (j = 0; j < 3; j++)
+					dr_be_bp[j] = dr_cs_wp[j] + t * (habp[j] - dr_cs_wp[j]);
+
+			} else {
+
+				/* Set bent black point target to be the same as our actual */
+				/* black point target, so that the "bend" code does nothing. */ 
+				for (j = 0; j < 3; j++)
+					dr_be_bp[j] = dr_cs_bp[j];
+			}
 
 		} else {					/* Adapt to destination white but not black */
 
-			/* Use the half adapted (full white, not black) white and black points */
+			/* Use the half adapted (white = dst, black = src) white and black points */
 			for (j = 0; j < 3; j++) {
 				dr_cs_wp[j] = hawp[j];
 				dr_cs_bp[j] = habp[j];
@@ -742,7 +762,7 @@ gammap *new_gammap(
 					dr_cs_wp[0], dr_cs_wp[1], dr_cs_wp[2], dr_cs_bp[0], dr_cs_bp[1], dr_cs_bp[2]);
 			}
 #endif
-			if (bph == gmm_clipBP || bph == gmm_bendBP) {
+			if (bph == gmm_clipBP) {
 
 				/* Extend the target black point to accomodate the */
 				/* bent or clipped destination space L* range */
@@ -753,36 +773,23 @@ gammap *new_gammap(
 				}
 			}
 		
-			if (bph == gmm_bendBP) {
-
-				/* Set the destination "bent" black target value to */
-				/* be the fully adapted target black point, for use */
-				/* by the 3D neutral axis bend code. */
-				for (j = 0; j < 3; j++)
-					dr_be_bp[j] = fabp[j];
-
-			} else {
-
-				/* Set the bent black point target to be the same as our actual */
-				/* black point target, so that the "bend" code does nothing. */ 
-				for (j = 0; j < 3; j++)
-					dr_be_bp[j] = dr_cs_bp[j];
-			}
+			/* Set the bent black point target to be the same as our actual */
+			/* black point target, so that the "bend" code does nothing. */ 
+			for (j = 0; j < 3; j++)
+				dr_be_bp[j] = dr_cs_bp[j];
 		}
 
 #ifdef VERBOSE
 		if (verb) {
 			printf("Adapted & extended tgt wp/bp = %f %f %f, %f %f %f\n",
 				dr_cs_wp[0], dr_cs_wp[1], dr_cs_wp[2], dr_cs_bp[0], dr_cs_bp[1], dr_cs_bp[2]);
-			printf("Bend target                                              bp = %f %f %f\n",
-		        dr_be_bp[0], dr_be_bp[1], dr_be_bp[2]);
 		}
 #endif /* VERBOSE */
 
 		/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 		/* Now we need to figure out what origin alignment is needed, as well as */
 		/* making sure the vectors are the same length to avoid rescaling. */
-		/* (Scaling is meant to be done with the L curve.) */
+		/* (Scaling is meant to be done with the L curve though.) */
 
 		/* Create temporary source white point that has the same L as the */
 		/* target destination white point. */
@@ -830,6 +837,8 @@ gammap *new_gammap(
 
 #ifdef VERBOSE
 		if (verb) {
+			printf("Bend target                                              bp = %f %f %f\n",
+		        dr_be_bp[0], dr_be_bp[1], dr_be_bp[2]);
 			printf("Rotated source grey axis wp/bp %f %f %f, %f %f %f\n",
 				sr_cs_wp[0], sr_cs_wp[1], sr_cs_wp[2], sr_cs_bp[0], sr_cs_bp[1], sr_cs_bp[2]);
 			printf("Rotated gamut grey axis wp/bp  %f %f %f, %f %f %f\n",
@@ -980,7 +989,7 @@ glumknf	= 1.0;
 		
 			lpnts[ngreyp].p[0] = kbl;
 			lpnts[ngreyp].v[0] = kbv;
-			lpnts[ngreyp++].w  = gmi->glumknf * gmi->glumknf;	
+			lpnts[ngreyp++].w  = 1.5 * gmi->glumknf * 1.5 * gmi->glumknf;	
 		}
 #endif /* USE_GLUMKNF */
 
@@ -1009,10 +1018,8 @@ glumknf	= 1.0;
 		for (j = 0; j < 3; j++)
 			d_mt_wp[j] = dr_cs_bp[j] + t * (dr_cs_wp[j] - dr_cs_bp[j]);
 
-		/* Overal black point takes into account possible bend to fully adapted bp */
-		t = (dbL - dr_cs_wp[0])/(dr_be_bp[0] - dr_cs_wp[0]);
 		for (j = 0; j < 3; j++)
-			d_mt_bp[j] = dr_cs_wp[j] + t * (dr_be_bp[j] - dr_cs_wp[j]);
+			d_mt_bp[j] = dr_cs_wp[j] + t * (dr_cs_bp[j] - dr_cs_wp[j]);
 	}
 
 	/* We now create the 1D rspl L map, that compresses or expands the luminence */
@@ -1215,23 +1222,29 @@ typedef struct {
 		/* destination gamut) */
 
 		/* See how much to bend the black - compute the color difference */
+		/* We start out in the direction of dr_be_bp at white, and at */
+		/* the end we bend towards the overall bp dr_cs_bp */
 		/* (brad will be 0 for non gmm_bendBP because dr_be_bp dr_cs_bp */
 		for (brad = 0.0, i = 1; i < 3; i++) {
-			double tt = dr_cs_bp[i] - dr_be_bp[i];
+			double tt = dr_be_bp[i] - dr_cs_bp[i];
 			brad += tt * tt;
 		}
 		brad = sqrt(brad);
 
-		for (i = 0; i < nres; i++) {
+//printf("~1 brad = %f, Bend target = %f %f %f, straight = %f %f %f\n",
+//brad, dr_be_bp[0], dr_be_bp[1], dr_be_bp[2], dr_cs_bp[0], dr_cs_bp[1], dr_cs_bp[2]);
+
+#ifdef USE_GREYMAP
+		for (i = 0; i < nres; i++) {	/* From black to white */
 			double t;
-			double dv[3];		/* Straight destination value */
-			double bv[3];		/* Bent destination value */
+			double bv[3];		/* Bent (initial) destination value */
+			double dv[3];		/* Straight (final) destination value */
 			double wt = 1.0;	/* Default grey axis point weighting */
 
 			/* Create source grey axis point */
 			t = i/(nres - 1.0);
 
-			/* Cover 0.0 to 100.0 */
+			/* Cover L = 0.0 to 100.0 */
 			t = ((100.0 * t) - sl_cs_bp[0])/(sl_cs_wp[0] - sl_cs_bp[0]);
 			for (j = 0; j < 3; j++)
 				gpnts[ngamp].p[j] = sl_cs_bp[j] + t * (sl_cs_wp[j] - sl_cs_bp[j]);
@@ -1239,19 +1252,21 @@ typedef struct {
 			/* L values are the same, as they have been mapped prior to 3D */
 			gpnts[ngamp].v[0] = gpnts[ngamp].p[0];
 
-			/* Figure destination point on destination grey axis */
-			t = (gpnts[ngamp].v[0] - dr_cs_wp[0])/(dr_cs_bp[0] - dr_cs_wp[0]);
-			for (j = 0; j < 3; j++)
-				dv[j] = dr_cs_wp[j] + t * (dr_cs_bp[j] - dr_cs_wp[j]);
-			
-			/* Figure destination point on bent grey axis */
+			/* Figure destination point on initial bent grey axis */
 			t = (gpnts[ngamp].v[0] - dr_cs_wp[0])/(dr_be_bp[0] - dr_cs_wp[0]);
 			for (j = 0; j < 3; j++)
 				bv[j] = dr_cs_wp[j] + t * (dr_be_bp[j] - dr_cs_wp[j]);
+//printf("~1 t = %f, bent dest     %f %f %f\n",t, bv[0], bv[1],bv[2]);
 			
-			/* Figure out a blend value between the straight value */
-			/* and the bent value, so that it curves smoothly from */
-			/* one to the other. (This seems to look worse, so not used.) */
+			/* Figure destination point on final straight grey axis */
+			t = (gpnts[ngamp].v[0] - dr_cs_wp[0])/(dr_cs_bp[0] - dr_cs_wp[0]);
+			for (j = 0; j < 3; j++)
+				dv[j] = dr_cs_wp[j] + t * (dr_cs_bp[j] - dr_cs_wp[j]);
+//printf("~1 t = %f, straight dest %f %f %f\n",t, dv[0], dv[1],dv[2]);
+			
+			/* Figure out a blend value between the bent value */
+			/* and the straight value, so that it curves smoothly from */
+			/* one to the other. */
 			if (brad > 0.001) {
 				double ty;
 				t = ((dr_cs_bp[0] + brad)  - gpnts[ngamp].v[0])/brad;
@@ -1270,9 +1285,10 @@ typedef struct {
 				t = 0.0;	/* stick to straight, it will be close anyway. */
 			}
 
-			for (j = 0; j < 3; j++)		/* full bend when t == 1 */
-				gpnts[ngamp].v[j] = t * bv[j] + (1.0 - t) * dv[j];
+			for (j = 0; j < 3; j++)		/* full straight when t == 1 */
+				gpnts[ngamp].v[j] = t * dv[j] + (1.0 - t) * bv[j];
 			gpnts[ngamp].w = wt;
+//printf("~1 t = %f,      blended  %f %f %f\n",t, gpnts[ngamp].v[0], gpnts[ngamp].v[1],gpnts[ngamp].v[2]);
 
 #ifdef NEVER
 			printf("Grey axis %d maps %f %f %f -> %f %f %f wit %f\n",ngamp,
@@ -1282,6 +1298,7 @@ typedef struct {
 #endif
 			ngamp++;
 		}
+#endif /* USE_GREYMAP */
 
 		/* ---------------------------------------------------- */
 		/* Do preliminary computation of the rspl input and output bounding values */
@@ -1367,7 +1384,7 @@ typedef struct {
 		/* Create the near point mapping, which is our fundamental gamut */
 		/* hull to gamut hull mapping. */
 		nsm = near_smooth(verb, &nnsm, scl_gam, sil_gam, d_gam, src_kbp, dst_kbp,
-		                  dr_be_bp, xwh, gmi->gamcknf, gmi->gamxknf,
+		                  dr_cs_bp, xwh, gmi->gamcknf, gmi->gamxknf,
 		                  gmi->gamcpf > 1e-6, gmi->gamexf > 1e-6,
 		                  xvra, mapres, smooth, il, ih, ol, oh);
 		if (nsm == NULL) {

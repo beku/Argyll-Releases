@@ -908,7 +908,11 @@ int main(int argc, char *argv[])
 				}
 				printf(")\n");
 			}
-			printf("2) Measure test patches with current instrument\n");
+			if (doccss)
+				printf("2) Measure test patches with current (spectrometer) instrument\n");
+			else
+				printf("2) Measure test patches with current instrument\n");
+
 			if (doccss) {
 				if (gotref)
 					printf("3) Save Colorimeter Calibration Spectral Set\n");
@@ -996,7 +1000,7 @@ int main(int argc, char *argv[])
 				if ((dr = new_disprd(&errc, itype, fake ? -99 : comno, fc, dtype, proj, adaptive,
 				                     noautocal, highres, 1, NULL, 0, 0, disp, blackbg, override,
 				                     ccallout, NULL, patsize, ho, vo, NULL, NULL, 0, 2,
-				                     icxOT_none, NULL, 
+				                     icxOT_default, NULL, 
 				                     0, 0, verb, VERBOUT, debug, "fake" ICC_FILE_EXT)) == NULL)
 					error("new_disprd failed with '%s'\n",disprd_err(errc));
 			

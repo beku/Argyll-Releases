@@ -1347,8 +1347,8 @@ static void darwin_async_io_callback (void *refcon, IOReturn result, void *arg0)
   message = MESSAGE_ASYNC_IO_COMPLETE;
   write (priv->fds[1], &message, sizeof (message));
   write (priv->fds[1], &itransfer, sizeof (itransfer));
-  write (priv->fds[1], &result, sizeof (IOReturn));
-  write (priv->fds[1], &arg0, sizeof (UInt32));
+  write (priv->fds[1], &result, sizeof (result)); 
+  write (priv->fds[1], &arg0, sizeof (arg0)); 
 }
 
 static int darwin_transfer_status (struct usbi_transfer *itransfer, kern_return_t result) {
@@ -1460,8 +1460,8 @@ static int op_handle_events(struct libusb_context *ctx, struct pollfd *fds, nfds
       continue;
     case MESSAGE_ASYNC_IO_COMPLETE:
       read (hpriv->fds[0], &itransfer, sizeof (itransfer));
-      read (hpriv->fds[0], &kresult, sizeof (IOReturn));
-      read (hpriv->fds[0], &io_size, sizeof (UInt32));
+	  read (hpriv->fds[0], &kresult, sizeof (kresult)); 
+	  read (hpriv->fds[0], &io_size, sizeof (io_size)); 
 
       darwin_handle_callback (itransfer, kresult, io_size);
       break;

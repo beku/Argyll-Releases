@@ -76,8 +76,8 @@ if $(UNIX) {
 # See if we have a system TIFF library.
 if ! $(BUILTIN_TIFF) && $(UNIX) {
 	if [ GLOB /usr/include : tiffio.h ]  {
-		if  [ GLOB /usr/lib : libtiff.so ] 
-		 || [ GLOB /usr/lib : libtiff.a ]  {
+		if  ! $(HOST64) && ( [ GLOB /usr/lib : libtiff.so ] || [ GLOB /usr/lib : libtiff.a ] )
+		 ||   $(HOST64) && ( [ GLOB /usr/lib64 : libtiff.so ] || [ GLOB /usr/lib64 : libtiff.a ] ) {
 			echo "Using system TIFF library" ;
 			TIFFLIB = ;
 			TIFFINC = ;

@@ -16,6 +16,19 @@
 <h1> Summary of Argyll CMS Changes since last release</h1>
 <h3>For a <span style="text-decoration: underline;">complete</span>
 and more detailed list of changes, please see the log.txt file.</h3>
+<h1>[V1.3.4 -&gt; V1.3.5] 24th October 2011</h1>
+<ul>
+  <li>Fix bug (crash) that affects colormunki design/photo display
+measurement. This also stops it restoring a calibration (-N flag).</li>
+  <li>Add support for the Spectracal OEM version of the i1d3.</li>
+  <li>Fix bug that stopped ccxxmake being able to make ccmx's.</li>
+  <li>Tweak gamut mapping to improve dark area mapping, non-monotonic
+profile inversion, and contrast preservation to small gamut.</li>
+  <li>Kill i1ProfileTray.exe process if unable to open i1d3 on MSWin.</li>
+  <li>Fix DTP20 chart printing - TID was sometimes incomplete. This
+shows up on a 4x6 chart.<br>
+  </li>
+</ul>
 <h1>[V1.3.3 -&gt; V1.3.4] 31st August 2011</h1>
 <ul>
   <li>Added support for the X-Rite i1 Display Pro and ColorMunki
@@ -189,7 +202,8 @@ a
 particular
 Colorimeter
 +
-Display combination, using a Spectrometer as a reference.
+Display
+combination, using a Spectrometer as a reference.
 The resulting <span style="font-weight: bold;">.ccmx</span> file can
 then be used with <span style="font-weight: bold;">spotread/dispcal/dispread</span>
 (-X option) to improve the&nbsp; accuracy of the colorimeter on that
@@ -413,6 +427,7 @@ and have higher perceptual intent saturation.<br>
   </li>
   <li>Fix segmentation fault in <span style="font-weight: bold;">dispread</span>.</li>
   <li>Fix out of memory error in <span style="font-weight: bold;">colprof
+
 
 
 

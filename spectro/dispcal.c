@@ -20,6 +20,14 @@
 
 /* TTBD
 
+	Add a white point option that makes the target the
+	closest temperature to the native one of the display :-
+	ie. it moves the display to the closest point on the
+	chosen locus to RGB 1,1,1.
+     ie. should it do this if "-t" or "-T"
+	with no specific teperature is chosen ?
+
+
 	Add bell at end of calibration ?
 
 	The verify (-E) may not be being done correctly.
@@ -37,12 +45,6 @@
 
 	Add a "delta E" number to the interactive adjustments,
 	so the significance of the error can be judged ?
-
-	Add a white point option that makes the target the
-	closest temperature to the native one of the display :-
-	ie. it moves the display to the closest point on the
-	chosen locus. ie. should it do this if "-t" or "-T"
-	with no specific teperature is chosen ?
 
 	Need to add flare measure/subtract, to improve
 	projector calibration ? - need to add to dispread too.

@@ -22,9 +22,14 @@ Categories:
 
 	add filtered mode for tiffgamut
 
+	add dispcal option to set white point to closest point
+	on the white locus to RBB 1 1 1
+
+	add option to dark cal spectro's evern N readings in dispsup.
+
 
 --------------------------------------------------------
-1) Active list (not really!):
+1) List 1
 
 
 1a) Candidate list:

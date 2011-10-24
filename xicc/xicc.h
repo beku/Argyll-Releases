@@ -47,7 +47,8 @@
 
 #define XICC_USE_HK 1	/* [Set] Set to 1 to use Helmholtz-Kohlraush in all CAM conversions */
 #define XICC_NEUTRAL_CMYK_BLACK		/* Use neutral axis black, else use K direction black. */
-#define XICC_BLACK_POINT_TOLL 1.0		/* Tollerance of CMYK black point location */ 
+#define XICC_BLACK_POINT_TOLL 0.5			/* Tollerance of CMYK black point location */ 
+#define XICC_BLACK_FIND_ABERR_WEIGHT 10.0	/* Weight of ab error against min L in BP */
 
 /* ------------------------------------------------------------------------------ */
 
@@ -460,6 +461,7 @@ struct _icxLuLut {
 
 	/* clut inversion support */
 	double      icent[MXDI];		/* center of input gamut */
+	double      licent[MXDI];		/* last icent value used */
 
 	icxClip clip;					/* Clip setup information */
 

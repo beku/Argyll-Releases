@@ -193,6 +193,12 @@ Discussion of the gamut mapping algorithm used in Argyll:
 	structure), it is possible to control to some degree the
 	nature of the gamut mapping. 
 
+	Some compensation is applied to the vectors to try and counteract
+	the effects of the vector and (subsequent) RSPL smoothing.
+	This smoothing may cause the mapping to end up outside the
+	destination gamut, so we try and make sure that such smoothing
+	effects over rather than under-compress.
+	
 	In addition to the suface mapping points, the 1D neutral axis 
 	mapping is maintained by introducing a string of points
 	down the 3D neutral axis, to ensure that the 3D surface mappings
@@ -203,7 +209,6 @@ Discussion of the gamut mapping algorithm used in Argyll:
 	3D mapping to be more linear, with the compression (or
 	expansion) being concentrated near the surface of the
 	gamuts ("Sigma" compression).
-	
 	
 Limitations and future challenges:
 
@@ -230,14 +235,13 @@ Limitations and future challenges:
 
 
 	2) There is not much flexibility in what the gammapweights
-	weightings can achive. Some conrols simply don't work
+	weightings can achive. Some controls simply don't work
 	very well. Often increases in saturation in one area (at
 	the transitions between major colors) are bought at the
 	expense of the middle of the major colors becomming
 	very "flat" and desaturated. This is generally when we
 	are in a region in which the source gamut is within the
-	destination gamut. The "extra elevation" control doesn't
-	seen to help enough (or has too many side effects).
+	destination gamut. 
 
 	3) Geting smoothness and saturation is very difficult
 	for some reason. The "relative error" weights do spread

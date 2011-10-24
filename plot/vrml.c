@@ -763,6 +763,7 @@ int isxyz
 	int i, j;
 
 	if ((s = (vrml *)calloc(1, sizeof(vrml))) == NULL) {
+		warning("Malloc of vrml plot object failed");
 		return NULL;
 	}
 
@@ -796,8 +797,8 @@ int isxyz
 	}
 
 	if ((s->fp = fopen(name,"w")) == NULL) {
+		warning("Opening of vrml plot file '%s' for write failed",name);
 		free(s);
-		error("Malloc of vrml plot object failed");
 		return NULL;
 	}
 

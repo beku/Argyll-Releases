@@ -313,7 +313,7 @@ static double bpfindfunc(void *adata, double pv[]) {
 #ifdef DEBUG
 	printf("~1 target error %f\n",terr);
 #endif
-	rv += 20.0 * terr;	/* Make ab match 20 times more important than min. L */
+	rv += XICC_BLACK_FIND_ABERR_WEIGHT * terr;	/* Make ab match more important than min. L */
 
 #ifdef DEBUG
 	printf("~1 out of range error %f\n",ovr);

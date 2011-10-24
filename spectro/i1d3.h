@@ -80,7 +80,8 @@
 /* Sub-type of instrument */
 typedef enum {
 	i1d3_disppro      = 0,	/* i1 DisplayPro */
-	i1d3_munkdisp     = 1	/* ColorMunki Display */
+	i1d3_munkdisp     = 1,	/* ColorMunki Display */
+	i1d3_calman       = 2	/* CalMan */
 } i1d3_dtype;
 
 /* Measurement mode */
@@ -100,7 +101,8 @@ struct _i1d3 {
 	int trig_return;			/* Emit "\n" after trigger */
 
 	/* Information and EEPROM values */
-	i1d3_dtype dtype;			/* Sub type of instrument */
+	i1d3_dtype dtype;			/* Base type of instrument */
+	i1d3_dtype stype;			/* Sub type of instrument */
 	int status;					/* 0 if status is ok (not sure what this is) */
 	char prod_name[32];			/* "i1Display3 " or "ColorMunki Display" */
 	int prod_type;				/* 16 bit product type number. i1d3_disppro = 0x0001, */

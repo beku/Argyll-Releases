@@ -31,7 +31,7 @@
  */
 
 #undef DEBUG			/* Save measurements and restore them to debug_X.sp */
-#undef SHOWDXX			/* Plot the best matched daylight as well */
+#define SHOWDXX			/* Plot the best matched daylight as well */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -193,7 +193,7 @@ static double cfindfunc(void *adata, double pv[]) {
 	/* Weighted Delta E (low weight on a* error) */
 	rv = icmLabDEsq(b->lab0, b->lab1);
 
-printf("~1 rev = %f (%f %f %f - %f %f %f) from %f %f\n",rv, b->lab0[0], b->lab0[1], b->lab0[2], b->lab1[0], b->lab1[1], b->lab1[2], pv[0], pv[1]);
+//printf("~1 rev = %f (%f %f %f - %f %f %f) from %f %f\n",rv, b->lab0[0], b->lab0[1], b->lab0[2], b->lab1[0], b->lab1[1], b->lab1[2], pv[0], pv[1]);
 	return rv;
 }
 
@@ -249,6 +249,10 @@ int main(int argc, char *argv[])
 	int pspec = 0;                  /* 2 = Plot out the spectrum for each reading */
 	int highres = 0;				/* Use high res mode if available */
 	char outname[MAXNAMEL+1] = "\000";  /* Spectral output file name */
+#ifdef DEBUG
+	char tname[MAXNAMEL+11] = "\000", *tnp;
+	int rd_i = 0, rd_r = 0, rd_p = 0;
+#endif
 
 	int comno = 1;					/* Specific port suggested by user */
 	inst *it = NULL;				/* Instrument object, NULL if none */
@@ -356,17 +360,31 @@ int main(int argc, char *argv[])
 
 	strncpy(outname,argv[fa++],MAXNAMEL-1); outname[MAXNAMEL-1] = '\000';
 
+#ifdef DEBUG
+	strcpy(tname, outname);
+	if ((tnp = strrchr(tname, '.')) == NULL)
+		tnp = tname + strlen(tname);
+
 	/* Special debug */
-	if (read_xspect(&i_sp, "debug_i.sp") == 0)
-		printf("(Found debug_i.sp file and loaded it)\n");
-	if (read_xspect(&r_sp, "debug_r.sp") == 0)
-		printf("(Found debug_r.sp file and loaded it)\n");
-	if (read_xspect(&p_sp, "debug_p.sp") == 0) {
+	strcpy(tnp, "_i.sp");
+	if (read_xspect(&i_sp, tname) == 0) {
+		rd_i = 1;
+		printf("(Found '%s' file and loaded it)\n",tname);
+	}
+	strcpy(tnp, "_r.sp");
+	if (read_xspect(&r_sp, tname) == 0) {
+		rd_r = 1;
+		printf("(Found '%s' file and loaded it)\n",tname);
+	}
+	strcpy(tnp, "_p.sp");
+	if (read_xspect(&p_sp, tname) == 0) {
+		rd_p = 1;
 		/* Should read instrument type from debug_p.sp !! */
 		if (inst_illuminant(&insp, instI1Pro) != 0)		/* Hack !! */
 			error ("Instrument doesn't have an FWA illuminent");
-		printf("(Found debug_p.sp file and loaded it)\n");
+		printf("(Found '%s' file and loaded it)\n",tname);
 	}
+#endif /* DEBUG */
 
 	/* Until the measurements are done, or we give up */
 	for (;;) {
@@ -805,12 +823,18 @@ int main(int argc, char *argv[])
 			if (c == '1') {
 				i_sp = val.sp;
 #ifdef DEBUG
-				write_xspect("debug_i.sp",&i_sp);
+				if (rd_i == 0) {
+					strcpy(tnp, "_i.sp");
+					write_xspect(tname,&i_sp);
+				}
 #endif
 			} else if (c == '2') {
 				r_sp = val.sp;
 #ifdef DEBUG
-				write_xspect("debug_r.sp",&r_sp);
+				if (rd_r == 0) {
+					strcpy(tnp, "_r.sp");
+					write_xspect(tname,&r_sp);
+				}
 #endif
 			} else if (c == '3') {
 				p_sp = val.sp;
@@ -820,8 +844,11 @@ int main(int argc, char *argv[])
 					error ("Instrument doesn't have an FWA illuminent");
 
 #ifdef DEBUG
-				/* Should save instrument type/instrument illuminant spectrum !!! */
-				write_xspect("debug_p.sp",&p_sp);
+				if (rd_p == 0) {
+					/* Should save instrument type/instrument illuminant spectrum !!! */
+					strcpy(tnp, "_p.sp");
+					write_xspect(tname,&p_sp);
+				}
 #endif
 			}
 
@@ -1043,7 +1070,7 @@ int main(int argc, char *argv[])
 				           cfindfunc, (void *)&cf, NULL, NULL) != 0) {
 					error("Optimization search failed\n");
 				}
-				printf("(Best match DE %f, temp = %f (gain match %f))\n", rv, tt[0], tt[1]);
+				printf("(Best daylight match DE %f, temp = %f (gain match %f))\n", rv, tt[0], tt[1]);
 
 				/* Compute the result */
 				cfindfunc((void *)&cf, tt);

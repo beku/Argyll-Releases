@@ -41,6 +41,9 @@
  *		cusps. Not sure what the mechanism is, since it's not obvious
  *		from the 3D vector plots what the cause is. (fixed ?)
  *		Due to poor internal control ?
+ *
+ *		Mapping to very small, odd shaped gamuts (ie. Bonet) is poor -
+ *		there are various bugs and artefacts to be figured out.
  */
 
 #include <stdio.h>
@@ -65,28 +68,31 @@
 						/* if  > 1, print information about everything */
 #undef SHOW_NEIGB_WEIGHTS	/* [Und] Show the weighting for each point of neighbours */
 
+#undef DIAG_POINTS		/* [Und] Short circuite mapping and show vectors of various */
+						/* intermediate points (see #ifdef DIAG_POINTS) */
+
 #undef PLOT_DIGAM		/* [Und] Rather than DST_GMT - don't free it (#def in gammap.c too) */
 
 #define SUM_POW 2.0		/* Delta's are sum of component deltas ^ SUM_POW */
 #define LIGHT_L 70.0	/* "light" L/J value */
 #define DARK_L  5.0		/* "dark" L/J value */
 #define NEUTRAL_C  20.0	/* "neutral" C value */
-#define NO_TRIALS 6		/* Number of random trials */
-#define VECSMOOTHING	/* Enable vector smoothing */
-#define VECADJPASSES 3 /* [3] Adjust vectors after smoothing to be on dest gamut */
-#define RSPLPASSES 4	/* [2] Number of rspl adjustment passes */
-#define RSPLSCALE 1.8	/* Offset within gamut for rspl smoothingto aim for */
+#define NO_TRIALS 6		/* [6] Number of random trials */
+#define VECSMOOTHING	/* [Def] Enable vector smoothing */
+#define VECADJPASSES 3	/* [3] Adjust vectors after smoothing to be on dest gamut */
+#define RSPLPASSES 4	/* [4] Number of rspl adjustment passes */
+#define RSPLSCALE 1.8	/* [1.8] Offset within gamut for rspl smoothingto aim for */
 #define SHRINK 5.0		/* Shrunk destination evect surface factor */
 #define CYLIN_SUBVEC	/* [Def] Make sub-vectors always cylindrical direction */
-#define SUBVEC_SMOOTHING	/* Smooth the sub-vectors */
+#define SUBVEC_SMOOTHING	/* [Def] Smooth the sub-vectors */
 
 						/* Experimental - not used: */
 
 						/* This has similar effects to lowering SUM_POW without the side effects */
 						/* and improves hue detail for small destination gamuts. */
 						/* (This and lxpow are pretty hacky. Is there a better way ?) */
-#undef EMPH_NEUTRAL	//0.5			/* Emphasis strength near neutral */
-#define EMPH_THR	    10.0		/* delta C threshold above which it kicks in */
+#undef EMPH_NEUTRAL	//0.5		/* Emphasis strength near neutral */
+#undef EMPH_THR	    //10.0		/* delta C threshold above which it kicks in */
 
 #undef LINEAR_HUE_SUM	/* Make delta^2 = (sqrt(l^2 + c^2) + h)^2 */
 
@@ -289,7 +295,7 @@ double dxratio		/* Depth expansion ratio of mapping */
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Structure to hold context for powell optimisation */
-/* and cusp and elevation mapping function. */
+/* and cusp mapping function. */
 struct _smthopt {
 	/* optimisation */
 	int pass;				/* Itteration round */
@@ -306,7 +312,7 @@ struct _smthopt {
 	gammapweights *xwh;		/* Structure holding expanded hextant weightings */
 	gamut *sgam;			/* Source colorspace gamut */
 
-	/* Cusp alignment and elevation mapping */
+	/* Cusp alignment mapping */
 	/* 0 = src, 1 = dst, then cusp then value(s) */
 	double cusps[2][9][3];	/* raw cusp values - red .. magenta,  white [6], black [7] & grey [8] */
 	double rot[2][3][4];	/* Rotation to align to black/white center */
@@ -602,7 +608,7 @@ double *_dv
 
 /* Setup the neutral axis and cusp mapping structure information */
 static void init_ce(
-smthopt *s,			/* Context for cusp and elevation mapping being set. */
+smthopt *s,			/* Context for cusp mapping being set. */
 gamut *sc_gam,		/* Source colorspace gamut */
 gamut *d_gam,		/* Destination colorspace gamut */
 int src_kbp,		/* Use K only black point as src gamut black point */
@@ -827,9 +833,9 @@ double d_bp[3]		/* Override destination target black point (may be NULL) */
 #endif /* NEVER */
 }
 
-/* Compute cusp mapping and/or elevation mapping value */
+/* Compute cusp mapping value */
 static void comp_ce(
-smthopt *s,			/* Context for cusp and elevation mapping */
+smthopt *s,			/* Context for cusp mapping */
 double out[3], 
 double in[3],
 gammapweights *wt	/* If NULL, assume 100% */
@@ -852,12 +858,12 @@ gammapweights *wt	/* If NULL, assume 100% */
 
 	/* Compute source changes due to any cusp mapping */
 	if (s->docusp && (cw_l > 0.0 || cw_c > 0.0 || cw_h > 0.0)) {
-		double lab[3], lch[3];	/* Normalized source values */
-		double bb[3];			/* Baricentric coords */
-		double olch[3];		/* Destination transformed LCh source value */
+		double lab[3], lch[3];		/* Normalized source values */
+		double bb[3];				/* Baricentric coords */
+		double olch[3];				/* Destination transformed LCh source value */
 		double mlab[3], mlch[3];	/* Fully mapped value */
-		int c0, c1;			/* Cusp indexes */
-		int ld;				/* light/dark index */
+		int c0, c1;					/* Cusp indexes */
+		int ld;						/* light/dark index */
 
 //printf("\n~1 in = %f %f %f, ccx = %f\n",in[0],in[1],in[2],ccx);
 
@@ -932,7 +938,7 @@ gammapweights *wt	/* If NULL, assume 100% */
 /* black point the location is. Return 1.0 if as far from the */
 /* point as is grey, 0.0 when at the white or black points. */
 static double comp_naxbf(
-smthopt *s,			/* Context for cusp and elevation mapping */
+smthopt *s,			/* Context for cusp mapping */
 double in[3]		/* Non-cusp mapped source value */
 ) {
 	double rin[3];	/* Rotated/scaled to neutral axis 0 to 100 */
@@ -968,7 +974,7 @@ double in[3]		/* Non-cusp mapped source value */
 /* The value is a linear blend value, 0.0 at cusp local grey, 1.0 at white L value */
 /* and -1.0 at black L value. */
 static double comp_lvc(
-smthopt *s,			/* Context for cusp and elevation mapping */
+smthopt *s,			/* Context for cusp mapping */
 double in[3]		/* Non-cusp mapped source value */
 ) {
 	double Lg;
@@ -1063,7 +1069,7 @@ double *tp
 
 /* Inverse of com_ce. We do this by inverting com_ce numerically (slow) */
 static void inv_comp_ce(
-smthopt *s,			/* Context for cusp and elevation mapping */
+smthopt *s,			/* Context for cusp mapping */
 double out[3], 
 double in[3],
 gammapweights *wt	/* If NULL, assume 100% */
@@ -1703,7 +1709,7 @@ datai map_ih,
 datao map_ol,		/* Preliminary rspl output range */
 datao map_oh 
 ) {
-	smthopt opts;	/* optimisation and cusp/elevation context */
+	smthopt opts;	/* optimisation and cusp mapping context */
 	int ix, i, j, k;
 	gamut *p_gam;	/* Gamut used for points - either source colorspace or image */
 	gamut *sci_gam;	/* Intersection of src and img gamut gamut */
@@ -2434,8 +2440,8 @@ datao map_oh
 		}
 	}
 
-#ifdef NEVER
-	/* Show just the closest vectors */
+#ifdef DIAG_POINTS
+	/* Show just the closest vectors etc. */
 	for (i = 0; i < nmpts; i++) {		/* Move all the points */
 //		icmCpy3(smp[i].dv, smp[i].drv);			/* Radial */
 		icmCpy3(smp[i].dv, smp[i].aodv);		/* Nearest */
@@ -2689,6 +2695,7 @@ datao map_oh
 	}
 
 #if VECADJPASSES > 0
+	/* Fine tune vectors to compensate for side effects of vector smoothing */
 
 	VA(("Fine tuning out of gamut guide vectors:\n"));
 
@@ -2825,7 +2832,7 @@ datao map_oh
 #endif /* VECADJPASSES > 0 */
 
 #if RSPLPASSES > 0
-	/* We need to adjust the vectors with extra depth to allow */
+	/* We need to adjust the vectors with extra depth to compensate for */
 	/* for the effect of rspl smoothing. */
 	{
 		cow *gpnts = NULL;	/* Mapping points to create 3D -> 3D mapping */

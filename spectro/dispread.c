@@ -748,7 +748,7 @@ int main(int argc, char *argv[]) {
 
 	/* And save the result: */
 
-	/* Convert from absolute XYZ to relative XYZ if that's all we have */
+	/* Convert from absolute XYZ to relative XYZ */
 	if (npat > 0 && cols[0].XYZ_v == 0) {
 		double nn;
 

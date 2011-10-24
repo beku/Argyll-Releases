@@ -14,6 +14,12 @@
  * see the License.txt file for licencing details.
  */
 
+/* 
+	TTBD:
+
+		Should add option to ask for a black cal every N readings, for spectro's
+ */
+
 #ifdef __MINGW32__
 # define WINVER 0x0500
 #endif
@@ -1043,13 +1049,12 @@ static int disprd_read(
 			return rv;
 	}
 
-	/* Convert spectral to XYZ */
+	/* Convert spectral to XYZ. */
+	/* Since this is a display, assume that this is absolute spectral */
 	if (p->sp2cie != NULL) {
 		for (i = 0; i < npat; i++) {
 			if (cols[i].sp.spec_n > 0) {
-				p->sp2cie->convert(p->sp2cie, cols[i].XYZ, &cols[i].sp);
-				cols[i].XYZ_v = 1;
-				icmCpy3(cols[i].aXYZ, cols[i].XYZ);
+				p->sp2cie->convert(p->sp2cie, cols[i].aXYZ, &cols[i].sp);
 				cols[i].aXYZ_v = 1;
 			}
 		}
@@ -1698,7 +1703,8 @@ static int config_inst_displ(disprd *p) {
 		return 2;
 	}
 	
-	if (p->obType != icxOT_default) {
+	if (p->obType != icxOT_none
+	 && p->obType != icxOT_default) {
 		if ((cap & inst_spectral) == 0 && (cap & inst_ccss) == 0) {
 			printf("A non-standard observer was requested,\n");
 			printf("but instrument doesn't support spectral or CCSS\n");

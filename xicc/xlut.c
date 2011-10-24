@@ -49,7 +49,6 @@
 	but would break compatibility with existing Argyll profiles,
 	unless special measures are taken:
 
-	
 	ie. 
 
 		1) if (display profile & using chromatic adaptation tag)
@@ -107,6 +106,19 @@
 	the color chromaticities are given ?
 
  */
+
+/* 
+	A similar condrum is that it seems that an unwritten convetion for
+ 	V2 profiles is to scale the black point of the perceptual and
+	saturation tables to 0 (Part of the V4 spec is to scale to Y = 3.1373).
+
+	To get better gamut mapping we should therefore unscale the perceptual
+	and saturation A2B table to have the same black point as the colorimetric
+	table before computing the gamut mapping, and then apply the opposite
+	transform to our perceptual B2A and A2B tables.
+
+ */
+
 
 #include "xfit.h"
 
@@ -1375,9 +1387,10 @@ double *in		/* Function input values to invert (== clut output' values) */
 			DBR(("got multiple reverse solutions\n"));
 			for (i = 0; i < nsoln; i++) {
 				double ss;
+
 				for (ss = 0.0, e = 0; e < p->clutTable->di; e++) {
 					double tt;
-					tt = pp[i].p[e] - p->icent[e];
+					tt = pp[i].p[e] - p->licent[e];
 					tt *= tt;
 					if (tt < bdist) {	/* Better solution */
 						bdist = tt;
@@ -1385,10 +1398,13 @@ double *in		/* Function input values to invert (== clut output' values) */
 					}
 				}
 			}
+//printf("~1 chose %d\n",bsoln);
 			i = bsoln;
 		}
 		for (e = 0; e < p->clutTable->di; e++) {
-			out[e] = pp[i].p[e];			/* Solution */
+			/* Save solution as atractor for next one, on the basis */
+			/* that it might have better continuity given pesudo-hilbert inversion path. */
+			p->licent[e] = out[e] = pp[i].p[e];			/* Solution */
 		}
 	}
 
@@ -1946,7 +1962,7 @@ icxLuLut *p			/* Object being initialised */
 	/* resolving multiple reverse solutions. */
 	p->clutTable->get_in_range(p->clutTable, tmin, tmax);
 	for (i = 0; i < p->clutTable->di; i++) {
-		p->icent[i] = (tmin[i] + tmax[i])/2.0;
+		p->licent[i] = p->icent[i] = (tmin[i] + tmax[i])/2.0;
 	}
 
 	/* Compute clip setup information relating to clut output gamut. */
@@ -2698,7 +2714,7 @@ printf("~1 device value %f %f %f %f, Lab = %f %f %f\n",pv[0],pv[1],pv[2],pv[3],L
 #ifdef DEBUG
 printf("~1 target error %f\n",terr);
 #endif
-	rv += 20.0 * terr;		/* Make ab match 20 times more important than min. L */
+	rv += XICC_BLACK_FIND_ABERR_WEIGHT * terr;		/* Make ab match  more important than min. L */
 
 #ifdef DEBUG
 printf("~1 out of range error %f\n",ovr);
@@ -2803,7 +2819,6 @@ int                quality			/* Quality metric, 0..3 */
 	/* (This could do with more tuning) */
 
 	/* For some unknown reason XYZ seems masively under-smoothed, so bump it up */
-// ~~99
 	if (p->pcs == icSigXYZData) {
 		oavgdev[0] = 1.0 * 0.60 * avgdev;
 		oavgdev[1] = 1.0 * 1.00 * avgdev;

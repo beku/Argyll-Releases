@@ -1722,7 +1722,8 @@ int *p_npat			/* Return number of patches including padding */
 	double tidplen = 0.0;	/* TID Patch min length */
 	double pspa = 0.0;	/* Patch to patch spacer */
 	double tspa = 0.0;	/* Clear space after last patch */
-	double txhi = 0.0;	/* Step/cut label text height */
+	double txhi = 0.0;	/* Step/cut, row label text height */
+	double txhisl = 0.0;/* Strip/column label text height */
 	int docutmarks = 0;	/* Generate strip cut marks */
 	double clwi = 0.0;	/* Cut line width */
 
@@ -1800,7 +1801,10 @@ int *p_npat			/* Return number of patches including padding */
 	/* We assume that since this is intended for a printer, */
 	/* the media is always white. This may not be the case */
 	/* on other output media. */
-	mark  = &pcol[7];		/* Black */
+	if (itype == instDTP20)
+		mark  = &pcol[8];		/* Grey */
+	else
+		mark  = &pcol[7];		/* Black */
 	media = &pcol[0];		/* White */
 	mind = &pcol[0];		/* White */
 	maxd = &pcol[7];		/* Black */
@@ -1872,9 +1876,10 @@ int *p_npat			/* Return number of patches including padding */
 		}
 		tidrows = 1;			/* Rows on first page for target ID */
 		tidtype = 0;			/* Target ID type. 0 = DTP20 */
-		tidminp = 21;			/* Target ID minumum number of patches */
+		tidminp = 21;			/* Target ID minumum number of patches (+ white) */
 		rpstrip = 999;			/* Rows per strip */
-		txhi  = 5.0;			/* Label Text Height */
+		txhi   = 5.0;			/* Label Text Height */
+		txhisl = 2.0;			/* Strip Label Text Height */
 		docutmarks = 0;			/* Don't generate strip cut marks */
 		clwi  = 0.0;			/* Cut line width */
 		dorowlabel = 0;			/* Don't generate row labels */
@@ -1915,7 +1920,7 @@ int *p_npat			/* Return number of patches including padding */
 		mxrowl = MAXROWLEN;		/* Maximum row length */
 		tidrows = 0;			/* No rows on first page for target ID */
 		rpstrip = 999;			/* Rows per strip */
-		txhi  = 5.0;			/* Text Height */
+		txhi = txhisl = 5.0;	/* Text Height */
 		docutmarks = 0;			/* Don't generate strip cut marks */
 		clwi  = 0.0;			/* Cut line width */
 		dorowlabel = 1;			/* Generate row labels */
@@ -1954,7 +1959,7 @@ int *p_npat			/* Return number of patches including padding */
 		}
 		tidrows = 0;			/* No rows on first page for target ID */
 		rpstrip = 8;			/* Rows per strip */
-		txhi  = 5.0;			/* Text Height */
+		txhi = txhisl = 5.0;	/* Text Height */
 		docutmarks = 1;			/* Generate strip cut marks */
 		clwi  = 0.3;			/* Cut line width */
 		dorowlabel = 0;			/* Don't generate row labels */
@@ -1993,7 +1998,7 @@ int *p_npat			/* Return number of patches including padding */
 		}
 		tidrows = 0;			/* No rows on first page for target ID */
 		rpstrip = 6;			/* Rows per strip */
-		txhi  = 5.0;			/* Text Height */
+		txhi = txhisl = 5.0;	/* Text Height */
 		docutmarks = 1;			/* Generate strip cut marks */
 		clwi  = 0.3;			/* Cut line width */
 		dorowlabel = 0;			/* Don't generate row labels */
@@ -2030,7 +2035,7 @@ int *p_npat			/* Return number of patches including padding */
 		mxrowl = MAXROWLEN;		/* Maximum row length */
 		tidrows = 0;			/* No rows on first page for target ID */
 		rpstrip = 999;			/* Rows per strip */
-		txhi  = 5.0;			/* Row/Column Text Height */
+		txhi = txhisl = 5.0;	/* Row/Column Text Height */
 		docutmarks = 0;			/* Don't generate strip cut marks */
 		clwi  = 0.0;			/* Cut line width */
 		dorowlabel = 1;			/* Generate row labels */
@@ -2054,7 +2059,7 @@ int *p_npat			/* Return number of patches including padding */
 			spacer = 2;			/* Colored Spacer */
 		needpc = 1;				/* Need patch to patch contrast in a row */
 		usede = 1;				/* Use delta E to maximize patch/spacer conrast */
-		lspa  = bord + 7.0 + 10.0;	/* Leader space before first patch = bord + txhi + lcar */
+		lspa  = bord + 7.0 + 10.0;	/* Leader space before first patch = bord + txhisl + lcar */
 		lcar  = 10.0;			/* Leading clear area before first patch */
 		plen  = pscale * 10.00;	/* Patch min length - total 11 mm */
 		if (spacer > 0)
@@ -2074,7 +2079,7 @@ int *p_npat			/* Return number of patches including padding */
 		}
 		tidrows = 0;			/* No rows on first page for target ID */
 		rpstrip = 999;			/* Rows per strip */
-		txhi  = 7.0;			/* Text Height */
+		txhi = txhisl = 7.0;	/* Text Height */
 		docutmarks = 0;			/* Don't generate strip cut marks */
 		clwi  = 0.0;			/* Cut line width */
 		dorowlabel = 0;			/* Don't generate row labels */
@@ -2096,7 +2101,7 @@ int *p_npat			/* Return number of patches including padding */
 			spacer = 2;			/* Colored Spacer */
 		needpc = 1;				/* Need patch to patch contrast in a row */
 		usede = 1;				/* Use delta E to maximize patch/spacer conrast */
-		lspa  = bord + 7.0 + 20.0;	/* Leader space before first patch = bord + txhi + lcar */
+		lspa  = bord + 7.0 + 20.0;	/* Leader space before first patch = bord + txhisl + lcar */
 		lcar  = 20.0;			/* Leading clear area before first patch */
 		plen  = pscale * 14.00;	/* Patch min length - total 15 mm */
 		if (spacer > 0)
@@ -2118,7 +2123,7 @@ int *p_npat			/* Return number of patches including padding */
 		mxrowl = MAXROWLEN;		/* Maximum row length */
 		tidrows = 0;			/* No rows on first page for target ID */
 		rpstrip = 999;			/* Rows per strip */
-		txhi  = 7.0;			/* Text Height */
+		txhi = txhisl = 7.0;	/* Text Height */
 		docutmarks = 0;			/* Don't generate strip cut marks */
 		clwi  = 0.0;			/* Cut line width */
 		dorowlabel = 0;			/* Don't generate row labels */
@@ -2147,7 +2152,7 @@ int *p_npat			/* Return number of patches including padding */
 
 	/* Compute limits for this page size */
 	/* Figure the available space for patches */
-	mints = bord + txhi + lcar;		/* Minimum top space due to border, text and clear area */
+	mints = bord + txhisl + lcar;		/* Minimum top space due to border, text and clear area */
 	if (mints < lspa)
 		mints = lspa;				/* Minimum top space due to leader */
 	minbs = bord;					/* Minimum botom space due to border */
@@ -2306,10 +2311,20 @@ int *p_npat			/* Return number of patches including padding */
 			flags |= IS_FPIR;
 		if (pir <= nmaxp)
 			flags |= IS_XPAT;
-		if (pir > (pprow - nminp))
-			flags |= IS_NPAT;
-		if (pir == pprow)
-			flags |= IS_LPIR;
+
+		if (slix < 0) {		/* If TID row */
+
+			if (pir == tidpprow)
+				flags |= IS_LPIR;
+
+		} else {
+
+			if (pir > (pprow - nminp))
+				flags |= IS_NPAT;
+	
+			if (pir == pprow)
+				flags |= IS_LPIR;
+		}
 
 		if (ris == 1)
 			flags |= IS_FRIS;
@@ -2429,10 +2444,10 @@ int *p_npat			/* Return number of patches including padding */
 			slix++;
 
 			/* Print strip label */
-			if ((lspa - lcar - bord) >= txhi) {	/* There is room for label */
+			if ((lspa - lcar - bord) >= txhisl) {	/* There is room for label */
 				if (slix < 0) {	/* TID */
 					tro->setcolor(tro, cal, mark);
-					tro->string(tro,x,y2-txhi,w,txhi,"TID");
+					tro->string(tro,x,y2-txhisl,w,txhisl,"TID");
 				} else {		/* Not TID */
 					if (slab != NULL)
 						free(slab);
@@ -2440,7 +2455,7 @@ int *p_npat			/* Return number of patches including padding */
 						error("strip index %d out of range",slix);
 		
 					tro->setcolor(tro, cal, mark);
-					tro->string(tro,x,y2-txhi,w,txhi,slab);
+					tro->string(tro,x,y2-txhisl,w,txhisl,slab);
 				}
 			}
 

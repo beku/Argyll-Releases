@@ -22,7 +22,13 @@
 #include <time.h>
 
 #ifdef NT
+# if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0501
+#  define _WIN32_WINNT 0x0501
+# endif
+# define WIN32_LEAN_AND_MEAN
+# include <windows.h>
 #include <conio.h>
+#include <tlhelp32.h>
 #endif
 
 #if defined(UNIX)
@@ -762,8 +768,10 @@ int create_parent_directories(char *path) {
 	return 0;
 }
 
+#endif /* defined(UNIX) */
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(NT)
 
 /* Thread to monitor and kill the named processes */
 static int th_kkill_nprocess(void *pp) {
@@ -828,6 +836,69 @@ kkill_nproc_ctx *kkill_nprocess(char **pname, int debug) {
 	}
 	return p;
 }
+
+#ifdef NT
+
+/* Kill a list of named process. */
+/* Kill the first process found, then return */
+/* return < 0 if this fails. */
+/* return 0 if there is no such process */
+/* return 1 if a process was killed */
+int kill_nprocess(char **pname, int debug) {
+	PROCESSENTRY32 entry;
+	HANDLE snapshot;
+	int j;
+
+	/* Get a snapshot of the current processes */
+	if ((snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0)) == NULL) {
+		return -1;
+	}
+
+	while(Process32Next(snapshot,&entry) != FALSE) {
+		HANDLE proc;
+
+		if (strcmp(entry.szExeFile, "spotread.exe") == 0
+		 && (proc = OpenProcess(PROCESS_TERMINATE, FALSE, entry.th32ProcessID)) != NULL) {
+			if (TerminateProcess(proc,0) == 0) {
+				printf("Failed to kill '%s'\n",entry.szExeFile);
+			} else {
+				printf("Killed '%s'\n",entry.szExeFile);
+			}
+			CloseHandle(proc);
+		}
+		for (j = 0;; j++) {
+			if (pname[j] == NULL)	/* End of list */
+				break;
+			if (debug >= 8)
+				fprintf(stderr,"Checking process '%s' against list '%s'\n",entry.szExeFile,pname[j]);
+			if (strcmp(entry.szExeFile,pname[j]) == 0) {
+				if (debug)
+					fprintf(stderr,"Killing process '%s'\n",entry.szExeFile);
+				DBGF((errout,"killing process '%s' pid %d\n",entry.szExeFile,entry.th32ProcessID));
+
+				if ((proc = OpenProcess(PROCESS_TERMINATE, FALSE, entry.th32ProcessID)) == NULL
+				 || TerminateProcess(proc,0) == 0) {
+					if (debug)
+						fprintf(stderr,"kill process '%s' failed with %d\n",pname[j],GetLastError());
+					DBGF((errout,"kill process '%s' failed with %d\n",pname[j],GetLastError()));
+					CloseHandle(proc);
+					CloseHandle(snapshot);
+					return -1;
+				}
+				CloseHandle(proc);
+				/* Stop on first one found ? */
+				CloseHandle(snapshot);
+				return 1;
+			}
+		}
+	}
+	CloseHandle(snapshot);
+	return 0;
+}
+
+#endif /* NT */
+
+#if defined(__APPLE__)
 
 /* Kill a list of named process. */
 /* Kill the first process found, then return */
@@ -910,7 +981,7 @@ int kill_nprocess(char **pname, int debug) {
 
 #endif /* __APPLE__ */
 
-#endif /* defined(UNIX) */
+#endif /* __APPLE__ || NT */
 
 /* ============================================================= */
 /* Provide a system independent glob type function */

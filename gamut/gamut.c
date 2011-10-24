@@ -6556,8 +6556,8 @@ char *filename
 			if (tp->e[en] != NULL
 			 || tp2->e[em] != NULL) {
 				fprintf(stderr,".gam file triangle data is not consistent\n");
-				fprintf(stderr,"tp1->e[%d] = 0x%lx, tp2->e[%d]= 0x%lx\n",en,
-				        (unsigned long)tp->e[en],em,(unsigned long)tp2->e[em]);
+				fprintf(stderr,"tp1->e[%d] = 0x%p, tp2->e[%d]= 0x%p\n",en,
+				        (void *)tp->e[en],em,(void *)tp2->e[em]);
 				return 1;
 			}
 

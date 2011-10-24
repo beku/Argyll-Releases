@@ -2369,13 +2369,10 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 
 	if (p->debug > 1)
 		fprintf(stderr,"i1pro_save_calibration saving to file '%s'\n",cal_paths[0]);
+	DBG((dbgo,"i1pro_save_calibration saving to file '%s'\n",cal_paths[0]));
 
-	if (create_parent_directories(cal_paths[0])) {
-		xdg_free(cal_paths, no_paths);
-		return I1PRO_INT_CAL_SAVE;
-	}
-
-	if ((fp = fopen(cal_paths[0], nmode)) == NULL) {
+	if (create_parent_directories(cal_paths[0])
+	 || (fp = fopen(cal_paths[0], nmode)) == NULL) {
 		DBG((dbgo,"i1pro_save_calibration failed to open file for writing\n"));
 		xdg_free(cal_paths, no_paths);
 		return I1PRO_INT_CAL_SAVE;
@@ -2444,6 +2441,8 @@ i1pro_code i1pro_save_calibration(i1pro *p) {
 	write_ints(&x, fp, (int *)&x.chsum, 1);
 
 	if (x.ef != 0) {
+		if (p->debug > 1)
+			fprintf(stderr,"Writing calibration file failed\n");
 		DBG((dbgo,"Writing calibration file failed\n"))
 		return I1PRO_INT_CAL_SAVE;
 		fclose(fp);
@@ -2486,6 +2485,7 @@ i1pro_code i1pro_restore_calibration(i1pro *p) {
 
 	if (p->debug > 1)
 		fprintf(stderr,"i1pro_restore_calibration restoring from file '%s'\n",cal_paths[0]);
+	DBG((dbgo,"i1pro_restore_calibration restoring from file '%s'\n",cal_paths[0]));
 
 	if ((fp = fopen(cal_paths[0], nmode)) == NULL) {
 		DBG((dbgo,"i1pro_restore_calibration failed to open file for reading\n"));

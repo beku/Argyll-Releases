@@ -2,6 +2,32 @@
 Argyll CMS change log
 =====================
 
+Version 1.3.5  (24th October 2011)
+-------------
+
+*	Add support for the Spectracal version of the i1d3.
+
+*	Fix bug in dispread where spectral instrument readings weren't being
+	normalized to the display white Y when they were supposed to be.
+
+*	Kill i1ProfileTray.exe process if unable to open i1d3 on MSWin.
+
+*	Tweak gamut mapping to improve dark area mapping, non-monotonic
+	profile inversion, and contrast preservation to small gamut.
+
+*	Fix bug that stopped ccxxmake being able to make ccmx's.
+	(Unable to use colorimeter due to "instrument doesn't support spectral or CCSS"
+	error).
+
+*	Fix bug (crash) that affects colormunki design/photo display measurement.
+	This also stops it restoring a calibration (-N flag).
+
+*	Fix DTP20 chart printing - TID was sometimes incomplete.
+	This shows up on a 4x6 chart.
+
+*	Changed DTP20 chart to use a much smaller and ligher row label
+	to try and avoid mis-reads.
+
 Version 1.3.4 (31 August 2011)
 -------------
 

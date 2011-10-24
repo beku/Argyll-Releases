@@ -174,12 +174,12 @@ unsigned short idProduct) {
 			return instHCFR;
 	}
 
-	if (idVendor  == 0x085C) {
-		if (idProduct == 0x0100)	/* ColorVison Spyder1 */
+	if (idVendor  == 0x085C) {		/* ColorVision */
+		if (idProduct == 0x0100)	/* ColorVision Spyder1 */
 			return instSpyder2;		/* Alias to Spyder 2 */
-		if (idProduct == 0x0200)	/* ColorVison Spyder2 */
+		if (idProduct == 0x0200)	/* ColorVision Spyder2 */
 			return instSpyder2;
-		if (idProduct == 0x0300)	/* ColorVison Spyder3 */
+		if (idProduct == 0x0300)	/* ColorVision Spyder3 */
 			return instSpyder3;
 	}
 

@@ -1086,7 +1086,7 @@ int main(int argc, char *argv[]) {
 			/* Degree of iterative adaptation */
 			else if (argv[fa][1] == 'A') {
 				fa = nfa;
-				if (na == NULL) usage(0,"Expected argument to average deviation flag -r");
+				if (na == NULL) usage(0,"Expected argument to average deviation flag -A");
 				if (na[0] == 'p') {			/* (relative, for verification) */
 					perc_wght = atof(na+1);
 					if (perc_wght < 0.0 || perc_wght > 1.0)
@@ -1108,7 +1108,7 @@ int main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L') {
 				double tt;
 				fa = nfa;
-				if (na == NULL) usage(0,"Expect argument after -e");
+				if (na == NULL) usage(0,"Expect argument after -l");
 				if ((tt = atof(na)) > 0.0)
 					uilimit = ilimit = 0.01 * tt;
 			}
@@ -1125,7 +1125,7 @@ int main(int argc, char *argv[]) {
 			/* ICC profile for perceptual linearisation */
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
-				if (na == NULL) usage(0,"Expect argument after -e");
+				if (na == NULL) usage(0,"Expect argument after -c");
 				strncpy(pname,na,MAXNAMEL-1); pname[MAXNAMEL-1] = '\000';
 			}
 
@@ -1134,16 +1134,16 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage(0,"Expected argument to neutral emphasis flag -N");
 				nemph = atof(na);
-				if (perc_wght < 0.0 || perc_wght > 10.0)
+				if (nemph < 0.0 || nemph > 10.0)
 					usage(0,"Neautral weighting argument %f to '-N' is out of range",nemph);
 			}
 
 			/* Filter out samples outside given sphere */
 			else if (argv[fa][1] == 'F') {
 				fa = nfa;
-				if (na == NULL) usage(0,"Expect argument after -e");
+				if (na == NULL) usage(0,"Expect argument after -F");
 				if (sscanf(na, " %lf,%lf,%lf,%lf ",&filt[0], &filt[1], &filt[2], &filt[3]) != 4)
-					usage(0,"Argument to -e '%s' isn't correct",na);
+					usage(0,"Argument to -F '%s' isn't correct",na);
 				filter = 1;
 			}
 

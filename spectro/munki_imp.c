@@ -2053,12 +2053,12 @@ munki_code munki_save_calibration(munki *p) {
 	if ((no_paths = xdg_bds(NULL, &cal_paths, xdg_cache, xdg_write, xdg_user, cal_name)) < 1)
 		return MUNKI_INT_CAL_SAVE;
 
+	if (p->debug >= 1)
+		fprintf(stderr,"munki_save_calibration saving to file '%s'\n",cal_paths[0]);
 	DBG((dbgo,"munki_save_calibration saving to file '%s'\n",cal_paths[0]));
 
-	if (create_parent_directories(cal_paths[0]))
-		return MUNKI_INT_CAL_SAVE;
-
-	if ((fp = fopen(cal_paths[0], nmode)) == NULL) {
+	if (create_parent_directories(cal_paths[0])
+	 || (fp = fopen(cal_paths[0], nmode)) == NULL) {
 		DBG((dbgo,"munki_save_calibration failed to open file for writing\n"));
 		xdg_free(cal_paths, no_paths);
 		return MUNKI_INT_CAL_SAVE;
@@ -2131,6 +2131,8 @@ munki_code munki_save_calibration(munki *p) {
 	write_ints(&x, fp, (int *)&x.chsum, 1);
 
 	if (x.ef != 0) {
+		if (p->debug >= 1)
+			fprintf(stderr,"Writing calibration file failed\n");
 		DBG((dbgo,"Writing calibration file failed\n"))
 		fclose(fp);
 		delete_file(cal_paths[0]);
@@ -2168,9 +2170,11 @@ munki_code munki_restore_calibration(munki *p) {
 	if ((no_paths = xdg_bds(NULL, &cal_paths, xdg_cache, xdg_read, xdg_user, cal_name)) < 1)
 		return MUNKI_INT_CAL_RESTORE;
 
-	DBG((dbgo,"munki_restore_calibration restoring from file '%s'\n",cal_paths[1]));
+	if (p->debug >= 1)
+		fprintf(stderr,"munki_restore_calibration restoring from file '%s'\n",cal_paths[0]);
+	DBG((dbgo,"munki_restore_calibration restoring from file '%s'\n",cal_paths[0]));
 
-	if ((fp = fopen(cal_paths[1], nmode)) == NULL) {
+	if ((fp = fopen(cal_paths[0], nmode)) == NULL) {
 		DBG((dbgo,"munki_restore_calibration failed to open file for reading\n"));
 		xdg_free(cal_paths, no_paths);
 		return MUNKI_INT_CAL_RESTORE;
@@ -2270,7 +2274,7 @@ munki_code munki_restore_calibration(munki *p) {
 	
 	if (x.ef != 0
 	 || chsum1 != chsum2) {
-		if (p->debug >= 2)
+		if (p->debug >= 1)
 			fprintf(stderr,"Unable to restore previous calibration due to checksum error\n");
 		DBG((dbgo,"Checksum didn't verify, got 0x%x, expected 0x%x\n",chsum1, chsum2));
 		goto reserr;

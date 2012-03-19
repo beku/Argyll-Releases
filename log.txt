@@ -2,10 +2,103 @@
 Argyll CMS change log
 =====================
 
+Version 1.3.6  (19th March 2012)
+-------------
+
+*	Eperimental ColorHug support is compiled in, but is disabled
+	unless the environment variable "ENABLE_COLORHUG" is set.
+	(The ColorHug currently doesn't seem to work reliably
+	 accross all platforms Argyll supports). 
+
+*	Modified spectro/hidio.c for OS X so that it only
+	attaches run loop when an hid call is made,
+	to make the SW more GUI friendly.
+
+*	Fixed bug in Spyder 2 driver, where aborting a reading
+	(ie. in interactive dispcal), leaves hardware out of sync
+	with driver, leading to a bad next reading.
+
+*	Reworked i1disp driver slightly to improve repeatability
+	when in CRT mode.
+
+*	Added a -V option to spotread to allow tracking
+	reading consistency.
+
+*	Tweaked i1d3 integration times, and added refresh
+	period calibration to the refresh display mode.
+	Refresh display measurement times are double
+	non-refresh displays.
+	
+*	Added Spyder4 support. Note the need for sptd4en.
+	Speeded up Spyder on brighter colors. Hopefully
+	this doesn't affect accuracy.
+
+*	Changed ccxxmake to create default .ccss with just
+	RGBW, and not to weight W. This may give better
+	matching. Made corresponding change to CCMX, giving
+	the white patch 1/4 weighting of sum of all other patches.
+
+*	Changed display selection (-y flag) to be instrument
+	specific. This is to support the Spyder4 and ColorHug.
+
+*	Improved i1d3 period measurement logic to improve
+	measurement speed and accuracy for dark colors.
+
+*	Removed Linux serial port filtering code for USB serial
+	ports, since it may interfere with other devices.
+
+*	Fixed OS X and Linux profile installation so that if you run
+	dispwin -I as root (ie. sudo), the profile is still installed
+	as the underlying user, not to the root user location.
+
+*	Fixed bug in black point finding code in xicc/xicc.c that 
+	affected xicclu.
+
+*	Fixed txt2ti3 to cope with inputs that don't have any device values.
+	This is useful for dealing with input chart reference values.
+
+*	Fixed applycal so that it applies calibration to both A2B and B2A tables,
+	to preserve softproofing.
+
+*	Changed ICC unknown manufracturer and model Tags to value 0, rather than "????".
+
+*	Fixed timeout in SpectroScanT reference transmission measurement.
+
+*	Switched ucmm over to using spectro/xdg_bds code,
+	to solve problem with multiple paths in
+	XDG_*_DIRS. Changed xdg_bds and aglob code to
+	an "MIT" license, consistent with all the ucmm code.
+
+*	Made DTRP94 driver ignore with a warning any
+	NEEDS_OFFSET_DRIFT_CAL_ERR after a full reset.
+	It seems that occasionally a few instruments do this,
+	and X-Rite don't appear to be prepared to treat this
+	as an instrument fault.
+
+*	Added support for Datacolor SpyderCheckr (Thanks to Jos Pereira).
+
+*	Improved the ability of spyd2en to cope with slightly
+	different setup.exe formats.
+
+*	Made sure that dispcal and dispread now error if
+    reading of ccmx or ccss files fail.
+
+*	Add support for NEC SpectraSensor Pro version of the i1d3.
+
+*	Add smoothing control flag to printcal.
+
+*	Fix bug in ccxxmake with regard to -I and -T options.
+
+*	Fix bug in ccxxmake that stops the test patch from being scaled
+	properly using -P
+
+*	Supress TIFF open message errors better when attempting to
+	open an ICC profile embeded within a TIFF file.
+
 Version 1.3.5  (24th October 2011)
 -------------
 
-*	Add support for the Spectracal version of the i1d3.
+*	Add support for the OEM version of the i1d3.
 
 *	Fix bug in dispread where spectral instrument readings weren't being
 	normalized to the display white Y when they were supposed to be.
@@ -19,7 +112,7 @@ Version 1.3.5  (24th October 2011)
 	(Unable to use colorimeter due to "instrument doesn't support spectral or CCSS"
 	error).
 
-*	Fix bug (crash) that affects colormunki design/photo display measurement.
+*	Fix bug (crash) that affects ColorMunki design/photo display measurement.
 	This also stops it restoring a calibration (-N flag).
 
 *	Fix DTP20 chart printing - TID was sometimes incomplete.
@@ -1445,7 +1538,7 @@ Version 1.0.0 changes	(1st July 2008)
 	some systems usb_detach_kernel_driver_np() needs
 	to be called before usb_set_configuration().
 
-*	Added option to dispread to allow a shell callout
+*	Added option to dispread (-C) to allow a shell callout
 	with each color being tested, to allow relaying the
 	test patch value to a remote display via a script.
 

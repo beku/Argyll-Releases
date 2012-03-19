@@ -18,6 +18,9 @@
 
 /* TTBD
  *
+ *	Should an a -X [xl] mode that reads a simple list of readings
+ *  from a file.
+ *
  *	Someone reported that XY mode (spectroscan) didn't work for one paper
  *  orientation ?
  *
@@ -67,6 +70,8 @@
 #include "cgats.h"
 #include "numlib.h"
 #include "xicc.h"
+#include "ccmx.h"
+#include "ccss.h"
 #include "insttypes.h"
 #include "icoms.h"
 #include "inst.h"
@@ -76,6 +81,7 @@
 #include "alphix.h"
 #include "sort.h"
 #include "icc.h"
+#include "spyd2setup.h"
 
 #include <stdarg.h>
 
@@ -201,11 +207,13 @@ int trans,			/* Use transmission mode */
 int emis,			/* Use emissive mode */
 int displ,			/* 1 = Use display emissive mode, 2 = display bright rel. */
 					/* 3 = display white rel. */
-int dtype,			/* Display type, 0 = default, 1 = CRT, 2 = LCD */
+int dtype,			/* Display type selection charater */
 inst_opt_filter fe,	/* Optional filter */
 int nocal,			/* Disable auto calibration */
 int disbidi,		/* Disable automatic bi-directional strip recognition */
 int highres,		/* Use high res spectral mode */
+char *ccxxname,		/* Colorimeter Correction/Colorimeter Calibration name */
+icxObserverType obType,	/* ccss observer */
 double scan_tol,	/* Modify patch consistency tolerance */
 int pbypatch,		/* Patch by patch measurement */
 int xtern,			/* Use external (user supplied) values rather than instument read */
@@ -235,7 +243,7 @@ int debug			/* Debug level */
 			nextrap = 2;
 		}
 
-		if ((it = new_inst(comport, instUnknown, debug, verb)) == NULL) {
+		if ((it = new_inst(comport, 0, debug, verb)) == NULL) {
 			printf("Unknown, inappropriate or no instrument detected\n");
 			return -1;
 		}
@@ -269,6 +277,7 @@ int debug			/* Debug level */
 			printf("Warning: chart is for %s, using instrument %s\n",inst_name(itype),inst_name(*atype));
 
 		{
+			int ccssset = 0;
 			inst_mode mode = 0;
 
 			cap  = it->capabilities(it);
@@ -303,28 +312,6 @@ int debug			/* Debug level */
 					}
 				}
 
-				/* Set CRT or LCD mode */
-				if (dtype == 1 || dtype == 2) {
-					inst_opt_mode om;
-		
-					if (dtype == 1)
-						om = inst_opt_disp_crt;
-					else
-						om = inst_opt_disp_lcd;
-		
-					if ((rv = it->set_opt_mode(it,om)) != inst_ok) {
-						printf("Setting display mode %s not supported by instrument\n",
-						       dtype == 1 ? "CRT" : "LCD");
-						it->del(it);
-						return -1;
-					}
-
-				} else if (it->capabilities(it) & (inst_emis_disp_crt | inst_emis_disp_lcd)) {
-					printf("Either CRT or LCD must be selected\n");
-					it->del(it);
-					return -1;
-				}
-
 			} else {
 				if ((cap & (inst_ref_spot | inst_ref_strip | inst_ref_xy | inst_ref_chart
 				          | inst_s_ref_spot | inst_s_ref_strip
@@ -336,9 +323,103 @@ int debug			/* Debug level */
 				}
 			}
 
+			/* Set display type */
+			if (dtype != 0) {
+
+				if (cap & inst_emis_disptype) {
+					int ix;
+					if ((ix = inst_get_disptype_index(it, dtype)) == 0) {
+						printf("Setting display type ix %d failed\n",ix);
+						it->del(it);
+						return -1;
+					}
+		
+					if ((rv = it->set_opt_mode(it, inst_opt_disp_type, ix)) != inst_ok) {
+						printf("Setting display type ix %d not supported by instrument\n",ix);
+						it->del(it);
+						return -1;
+					}
+				} else
+					printf("Display type ignored - instrument doesn't support display type\n");
+
+			} else if (cap & (inst_emis_disptypem)) {
+				printf("A display type must be selected\n");
+				it->del(it);
+				return -1;
+			}
+
 			if (spectral && (cap & inst_spectral) == 0) {
 				printf("Warning: Instrument isn't capable of spectral measurement\n");
 				spectral = 0;
+			}
+
+			/* Colorimeter Correction Matrix */
+			if (ccxxname[0] != '\000') {
+				ccss *cs = NULL;
+				ccmx *cx = NULL;
+
+				if ((cx = new_ccmx()) == NULL) {
+					printf("\nnew_ccmx failed\n");
+					it->del(it);
+					return -1;
+				}
+				if (cx->read_ccmx(cx,ccxxname) == 0) {
+					if ((cap & inst_ccmx) == 0) {
+						printf("\nInstrument doesn't have Colorimeter Correction Matix capability\n");
+						it->del(it);
+						return -1;
+					}
+					if ((rv = it->col_cor_mat(it, cx->matrix)) != inst_ok) {
+						printf("\nSetting Colorimeter Correction Matrix failed with error :'%s' (%s)\n",
+					     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
+						cx->del(cx);
+						it->del(it);
+						return -1;
+					}
+					cx->del(cx);
+				} else {
+					cx->del(cx);
+					cx = NULL;
+					
+					/* CCMX failed, try CCSS */
+					if ((cs = new_ccss()) == NULL) {
+						printf("\nnew_ccss failed\n");
+						it->del(it);
+						return -1;
+					}
+					if (cs->read_ccss(cs,ccxxname)) {
+						printf("\nReading CCMX/CCSS File '%s' failed with error %d:'%s'\n",
+					     	       ccxxname, cs->errc, cs->err);
+						cs->del(cs);
+						it->del(it);
+						return -1;
+					}
+					if ((cap & inst_ccss) == 0) {
+						printf("\nInstrument doesn't have Colorimeter Calibration Spectral Sample capability\n");
+						cs->del(cs);
+						it->del(it);
+						return -1;
+					}
+					if ((rv = it->col_cal_spec_set(it, obType, NULL, cs->samples, cs->no_samp)) != inst_ok) {
+						printf("\nSetting Colorimeter Calibration Spectral Samples failed with error :'%s' (%s)\n",
+					     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
+						cs->del(cs);
+						it->del(it);
+						return -1;
+					}
+					ccssset = 1;
+					cs->del(cs);
+				}
+			}
+
+			/* If non-standard observer wasn't set by a CCSS file above */
+			if (obType != icxOT_default && (cap & inst_ccss) && ccssset == 0) {
+				if ((rv = it->col_cal_spec_set(it, obType, NULL, NULL, 0)) != inst_ok) {
+					printf("\nSetting Colorimeter Calibration Spectral Samples failed with error :'%s' (%s)\n",
+				     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
+					it->del(it);
+					return -1;
+				}
 			}
 
 			/* Disable autocalibration of machine if selected */
@@ -1931,8 +2012,9 @@ int debug			/* Debug level */
 }
 
 void
-usage(void) {
+usage(iccss *cl) {
 	icoms *icom;
+	inst_capability cap = 0;
 	fprintf(stderr,"Read Target Test Chart, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: chartread [-options] outfile\n");
@@ -1953,7 +2035,7 @@ usage(void) {
 	}
 	fprintf(stderr," -t              Use transmission measurement mode\n");
 	fprintf(stderr," -d              Use display measurement mode (white Y relative results)\n");
-	fprintf(stderr," -y c|l          Display type (if emissive), c = CRT, l = LCD\n");
+	cap = inst_show_disptype_options(stderr, " -y              ", icom);
 	fprintf(stderr," -e              Emissive for transparency on a light box\n");
 	fprintf(stderr," -p              Measure patch by patch rather than strip\n");
 	fprintf(stderr," -x [lx]         Take external values, either L*a*b* (-xl) or XYZ (-xx).\n");
@@ -1970,6 +2052,21 @@ usage(void) {
 	fprintf(stderr," -N              Disable auto calibration of instrument\n");
 	fprintf(stderr," -B              Disable auto bi-directional strip recognition\n");
 	fprintf(stderr," -H              Use high resolution spectrum mode (if available)\n");
+	if (cap & inst_ccmx)
+		fprintf(stderr," -X file.ccmx    Apply Colorimeter Correction Matrix\n");
+	if (cap & inst_ccss) {
+		int i;
+		fprintf(stderr," -X file.ccss    Use Colorimeter Calibration Spectral Samples for calibration\n");
+		for (i = 0; cl != NULL && cl[i].desc != NULL; i++) {
+			if (i == 0)
+				fprintf(stderr," -X N             0: %s\n",cl[i].desc); 
+			else
+				fprintf(stderr,"                  %d: %s\n",i,cl[i].desc); 
+		}
+		free_iccss(cl);
+		fprintf(stderr," -Q observ       Choose CIE Observer for CCSS instrument:\n");
+		fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
+	}
 	fprintf(stderr," -T ratio        Modify strip patch consistency tolerance by ratio\n");
 	fprintf(stderr," -S              Suppress wrong strip & unexpected value warnings\n");
 	fprintf(stderr," -W n|h|x        Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
@@ -1991,7 +2088,7 @@ int main(int argc, char *argv[]) {
 	int emis = 0;					/* Use emissive mode */
 	int displ = 0;					/* 1 = Use display emissive mode, 2 = display bright rel. */
 	                                /* 3 = display white rel. */
-	int dtype = 0;					/* Display type, 0 = default, 1 = CRT, 2 = LCD */
+	int dtype = 0;					/* Display type selection charater */
 	inst_opt_filter fe = inst_opt_filter_unknown;
 	int pbypatch = 0;				/* Read patch by patch */
 	int disbidi = 0;				/* Disable bi-directional strip recognition */
@@ -2004,6 +2101,10 @@ int main(int argc, char *argv[]) {
 	int dolab = 0;					/* 1 = Save CIE as Lab, 2 = Save CIE as XYZ and Lab */
 	int doresume = 0;				/* Resume reading a chart */
 	int nocal = 0;					/* Disable auto calibration */
+	char ccxxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction/Colorimeter Calibration name */
+	iccss *cl = NULL;				/* List of installed CCSS files */
+	int ncl = 0;					/* Number of them */
+	icxObserverType obType = icxOT_default;		/* ccss observer */
 	static char inname[MAXNAMEL+1] = { 0 };	/* Input cgats file base name */
 	static char outname[MAXNAMEL+1] = { 0 };	/* Output cgats file base name */
 	cgats *icg;					/* input cgats structure */
@@ -2038,8 +2139,13 @@ int main(int argc, char *argv[]) {
 	set_exe_path(argv[0]);			/* Set global exe_path and error_program */
 	check_if_not_interactive();
 
+	setup_spyd2();				/* Load firware if available */
+
+	/* Get a list of installed CCSS files */
+	cl = list_iccss(&ncl);
+
 	if (argc <= 1)
-		usage();
+		usage(cl);
 
 	/* Process the arguments */
 	mfa = 1;        /* Minimum final arguments */
@@ -2060,7 +2166,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (argv[fa][1] == '?')
-				usage();
+				usage(cl);
 
 			/* Verbose */
 			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
@@ -2078,10 +2184,42 @@ int main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'H')
 				highres = 1;
 
+			/* Colorimeter Correction Matrix or */
+			/* or Colorimeter Calibration Spectral Samples */
+			else if (argv[fa][1] == 'X') {
+				int ix;
+				fa = nfa;
+				if (na == NULL) usage(cl);
+				if (ncl > 0 && sscanf(na, " %d ", &ix) == 1) {
+					if (ix < 0 || ix >= ncl)
+						usage(cl);
+					strncpy(ccxxname,cl[ix].path,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
+				} else {
+					strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
+				}
+
+			/* CCSS Spectral Observer type */
+			} else if (argv[fa][1] == 'Q') {
+				fa = nfa;
+				if (na == NULL) usage(cl);
+				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
+					obType = icxOT_CIE_1931_2;
+				} else if (strcmp(na, "1964_10") == 0) {	/* Classic 10 degree */
+					obType = icxOT_CIE_1964_10;
+				} else if (strcmp(na, "1955_2") == 0) {		/* Stiles and Burch 1955 2 degree */
+					obType = icxOT_Stiles_Burch_2;
+				} else if (strcmp(na, "1978_2") == 0) {		/* Judd and Voss 1978 2 degree */
+					obType = icxOT_Judd_Voss_2;
+				} else if (strcmp(na, "shaw") == 0) {		/* Shaw and Fairchilds 1997 2 degree */
+					obType = icxOT_Shaw_Fairchild_2;
+				} else
+					usage(cl);
+			}
+
 			/* Scan tolerance ratio */
 			else if (argv[fa][1] == 'T') {
 				if (na == NULL)
-					usage();
+					usage(cl);
 				scan_tol = atof(na);
 
 			/* Suppress warnings */
@@ -2091,7 +2229,7 @@ int main(int argc, char *argv[]) {
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(cl);
 				if (na[0] == 'n' || na[0] == 'N')
 					fc = fc_none;
 				else if (na[0] == 'h' || na[0] == 'H')
@@ -2099,7 +2237,7 @@ int main(int argc, char *argv[]) {
 				else if (na[0] == 'x' || na[0] == 'X')
 					fc = fc_XonXOff;
 				else
-					usage();
+					usage(cl);
 
 
 			/* Debug coms */
@@ -2113,9 +2251,9 @@ int main(int argc, char *argv[]) {
 			/* COM port  */
 			} else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(cl);
 				comport = atoi(na);
-				if (comport < 1 || comport > 40) usage();
+				if (comport < 1 || comport > 40) usage(cl);
 
 			/* Request transmission measurement */
 			} else if (argv[fa][1] == 't') {
@@ -2139,13 +2277,8 @@ int main(int argc, char *argv[]) {
 			/* Display type */
 			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
 				fa = nfa;
-				if (na == NULL) usage();
-				if (na[0] == 'c' || na[0] == 'C')
-					dtype = 1;
-				else if (na[0] == 'l' || na[0] == 'L')
-					dtype = 2;
-				else
-					usage();
+				if (na == NULL) usage(cl);
+				dtype = na[0];
 
 			/* Request patch by patch measurement */
 			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
@@ -2154,14 +2287,14 @@ int main(int argc, char *argv[]) {
 			/* Request external values */
 			} else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(cl);
 
 				if (na[0] == 'l' || na[0] == 'L')
 					xtern = 1;
 				else if (na[0] == 'x' || na[0] == 'X')
 					xtern = 2;
 				else
-					usage();
+					usage(cl);
 
 			/* Turn off spectral measurement */
 			} else if (argv[fa][1] == 'n')
@@ -2182,13 +2315,13 @@ int main(int argc, char *argv[]) {
 			/* Printer calibration info */
 			else if (argv[fa][1] == 'I') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(cl);
 				strncpy(calname,na,MAXNAMEL); calname[MAXNAMEL] = '\000';
 
 			/* Filter configuration */
 			} else if (argv[fa][1] == 'F') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(cl);
 				if (na[0] == 'n' || na[0] == 'N')
 					fe = inst_opt_filter_none;
 				else if (na[0] == 'p' || na[0] == 'P')
@@ -2198,20 +2331,31 @@ int main(int argc, char *argv[]) {
 				else if (na[0] == 'u' || na[0] == 'U')
 					fe = inst_opt_filter_UVCut;
 				else
-					usage();
+					usage(cl);
 
 			} else 
-				usage();
+				usage(cl);
 		} else
 			break;
 	}
 
 	/* Get the file name argument */
-	if (fa >= argc || argv[fa][0] == '-') usage();
+	if (fa >= argc || argv[fa][0] == '-') usage(cl);
 	strcpy(inname,argv[fa]);
 	strcat(inname,".ti2");
 	strcpy(outname,argv[fa]);
 	strcat(outname,".ti3");
+
+	/* See if there is an environment variable ccxx */
+	if (ccxxname[0] == '\000') {
+		char *na;
+		if ((na = getenv("ARGYLL_COLMTER_CAL_SPEC_SET")) != NULL) {
+			strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
+
+		} else if ((na = getenv("ARGYLL_COLMTER_COR_MATRIX")) != NULL) {
+			strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
+		}
+	}
 
 	icg = new_cgats();			/* Create a CGATS structure */
 	icg->add_other(icg, "CTI2"); 	/* our special input type is Calibration Target Information 2 */
@@ -2689,8 +2833,9 @@ int main(int argc, char *argv[]) {
 	/* Read all of the strips in */
 	if (read_strips(itype, scols, &atype, npat, totpa, stipa, pis, paix,
 	                saix, ixord, rstart, hex, comport, fc, plen, glen, tlen,
-	                trans, emis, displ, dtype, fe, nocal, disbidi, highres, scan_tol,
-	                pbypatch, xtern, spectral, accurate_expd, emit_warnings, verb, debug) == 0) {
+	                trans, emis, displ, dtype, fe, nocal, disbidi, highres, ccxxname, obType,
+	                scan_tol, pbypatch, xtern, spectral, accurate_expd,
+	                emit_warnings, verb, debug) == 0) {
 		/* And save the result */
 
 		int nrpat;				/* Number of read patches */

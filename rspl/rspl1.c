@@ -216,6 +216,9 @@ static int fit_rspl_imp(
 				xv = dd[n].p[0];
 				yv = dd[n].v[0];
 				wv = dd[n].w;
+			} else {
+				DBG((dbgo, "rspl1:Internal error, unknown dtp value %d\n",dtp));
+				return 1;
 			}
 			yv = (yv - t->vl)/t->vw;	/* Normalize the value */
 
@@ -367,7 +370,6 @@ fit_rspl_w(
 /* Return NULL if something goes wrong. */
 rspl *new_rspl(int flags, int di, int fdi) {
 	rspl *t;	/* this */
-	double cw;		/* Curvature weighting factor */
 
 	if (flags != RSPL_NOFLAGS || di != 1 || fdi != 1) {
 		DBG((dbgo, "rspl1:Can't handle general rspl: flags %d, di %d, do %d\n",flags,di,fdi));

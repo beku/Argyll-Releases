@@ -2230,6 +2230,9 @@ scanrd_ *s
 				} else if (strcmp(csps, "LAB") == 0) {
 					isxyz = 0;
 					break;
+				} else {
+					em = "Unknown EXPECTED colorespace";
+					goto read_error;
 				}
 			}
 			if (rv == EOF) {

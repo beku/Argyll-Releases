@@ -36,10 +36,13 @@
 #include <math.h>
 #include <time.h>
 #include <signal.h>
-#include <unistd.h>
+#ifndef NT
+# include <unistd.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "icc.h"
+#include "xdg_bds.h"
 #include "jcnf.h"
 #include "ucmm.h"
 
@@ -58,6 +61,37 @@
 #endif
 
 static unsigned int fnv_32_buf(void *buf, size_t len);
+
+#ifdef NT
+
+/* Given the path to a file, ensure that all the parent directories */
+/* are created. return nz on error */
+static int mkdirs(char *path) {
+	struct _stat sbuf;
+	char *pp = path;
+
+	if (*pp != '\000'		/* Skip drive number */
+		&& ((*pp >= 'a' && *pp <= 'z') || (*pp >= 'A' && *pp <= 'Z'))
+	    && pp[1] == ':')
+		pp += 2;
+	if (*pp == '/')
+		pp++;			/* Skip root directory */
+	for (;pp != NULL && *pp != '\000';) {
+		if ((pp = strchr(pp, '/')) != NULL) {
+			*pp = '\000';
+			if (_stat(path,&sbuf) != 0)
+			{
+				if (_mkdir(path) != 0)
+					return 1;
+			}
+			*pp = '/';
+			pp++;
+		}
+	}
+	return 0;
+}
+
+#else
 
 /* Given the path to a file, ensure that all the parent directories */
 /* are created. return nz on error */
@@ -82,6 +116,7 @@ static int mkpdirs(char *path) {
 	}
 	return 0;
 } 
+#endif /* !NT */
 
 /* Given a block of binary, convert it to upper case hexadecimal, */
 /* with a 0x prefix. Free the buffer returned. */
@@ -122,9 +157,8 @@ ucmm_error ucmm_install_monitor_profile(
 ) {
 	char *config_file = CONFIG_FILE;
 	char *profile_dir = PROFILE_DIR;
-	int i, pnl, cnl;			/* profile and configuration name length */
-	char *conf_name = NULL;		/* Configuration directory to use */
-	char *data_name = NULL;		/* Data directory to use */
+	char *conf_name = NULL;		/* Configuration path to use */
+	char *data_name = NULL;		/* Data path to use */
 	char *dprof = NULL;			/* Destination for profile */
 	unsigned int edid_hash = 0;
 
@@ -172,87 +206,52 @@ ucmm_error ucmm_install_monitor_profile(
 
 	/* Locate the directories where the config file is, */
 	/* and where we should copy the profile to. */
-	/* !! Should switch to xdg_bds() function !! */
-
-	cnl = strlen(config_file);
-	pnl = strlen(profile_dir) + 1 + strlen(profile);	/* Including "/" */
-
-	if (scope == ucmm_local_system) {
-		char *tt;
-		if ((tt = getenv("XDG_CONFIG_DIRS")) == NULL)
-			tt = "/etc/xdg";
-		if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
-			return ucmm_resource;
-		memmove(conf_name, tt, strlen(tt)+1);
-
-		if ((tt = getenv("XDG_DATA_DIRS")) == NULL)
-			tt = "/usr/local/share/:/usr/share/";
-		if ((data_name = malloc(strlen(tt) + pnl + 2)) == NULL) {
-			free(conf_name);
-			return ucmm_resource;
-		}
-		memmove(data_name, tt, strlen(tt)+1);
-	} else {
-		char *tt, *home;
-		if ((tt = getenv("XDG_CONFIG_HOME")) != NULL) {
-			if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
-				return ucmm_resource;
-			memmove(conf_name, tt, strlen(tt)+1);
-		} else {
-			if ((home = getenv("HOME")) == NULL)
-				return ucmm_no_home;
-			if ((conf_name = malloc(strlen(home) + strlen(".config") + cnl +3)) == NULL)
-				return ucmm_resource;
-			memmove(conf_name, home, strlen(home)+1);
-			if (strlen(conf_name) > 0 && conf_name[strlen(conf_name)-1] != '/')
-				strcat(conf_name, "/");
-			strcat(conf_name, ".config");
-		}
-		if ((tt = getenv("XDG_DATA_HOME")) != NULL) {
-			if ((data_name = malloc(strlen(tt) + pnl + 2)) == NULL) {
-				free(conf_name);
-				return ucmm_resource;
-			}
-			memmove(data_name, tt, strlen(tt)+1);
-		} else {
-			if ((home = getenv("HOME")) == NULL) {
-				free(conf_name);
-				return ucmm_no_home;
-			}
-			if ((data_name = malloc(strlen(home) + strlen(".local/share")+ pnl + 3)) == NULL) {
-				free(conf_name);
-				return ucmm_resource;
-			}
-			memmove(data_name, home, strlen(home)+1);
-			if (strlen(data_name) > 0 && data_name[strlen(data_name)-1] != '/')
-				strcat(data_name, "/");
-			strcat(data_name, ".local/share");
-		}
-	}
-	/* There may be multiple data directories. Use the first one to copy */
-	/* profiles to. */
-	for (i = 0; ; i++) {
-		if (data_name[i] == ':')
-			data_name[i] = '\000';
-		if (data_name[i] == '\000')
-			break;
-	}
-	/* Convert directories to file names */
-	if (strlen(conf_name) > 0 && conf_name[strlen(conf_name)-1] != '/')
-		strcat(conf_name, "/");
-	strcat(conf_name, config_file);
-
-	if (strlen(data_name) > 0 && data_name[strlen(data_name)-1] != '/')
-		strcat(data_name, "/");
-	strcat(data_name, profile_dir);
-	strcat(data_name, "/");
 	{
+		int npaths;
+		xdg_error er;
+		char *data_pathfile;		/* Path & name of destination */
+		char **paths;
 		char *tt;
+
+		if (npaths = xdg_bds(&er, &paths, xdg_conf, xdg_write, 
+		                     scope == ucmm_local_system ? xdg_local : xdg_user,
+		                     config_file) == 0) {
+			return ucmm_open_config;
+		}
+		if ((conf_name = strdup(paths[0])) == NULL) {
+			xdg_free(paths, npaths);
+			return ucmm_resource;
+		}
+		xdg_free(paths, npaths);
+		
+		/* Combined sub-path and profile name */
+		if ((data_pathfile = malloc(strlen(profile_dir) + 1 + strlen(profile))) == NULL)
+			return ucmm_resource;
+		strcpy(data_pathfile, profile_dir);
+
+		if (strlen(data_pathfile) > 1 && data_pathfile[strlen(data_pathfile)-1] != '/')
+			strcat(data_pathfile, "/");
+
 		if ((tt = strrchr(profile, '/')) != NULL)	/* Get base name of profile */
 			tt++;
 		else
 			tt = profile;
-		strcat(data_name, tt);
+		strcat(data_pathfile, tt);
+
+		if (npaths = xdg_bds(&er, &paths, xdg_conf, xdg_write, 
+		                     scope == ucmm_local_system ? xdg_local : xdg_user,
+		                     data_pathfile) == 0) {
+			free(data_pathfile);
+			free(conf_name);
+			return ucmm_open_config;
+		}
+		free(data_pathfile);
+		if ((data_name = strdup(paths[0])) == NULL) {
+			free(conf_name);
+			xdg_free(paths, npaths);
+			return ucmm_resource;
+		}
+		xdg_free(paths, npaths);
 	}
 
 	debug2((errout,"config file = '%s'\n",conf_name));
@@ -496,9 +495,8 @@ ucmm_error ucmm_uninstall_monitor_profile(
 ) {
 	char *config_file = CONFIG_FILE;
 	char *profile_dir = PROFILE_DIR;
-	int i, pnl = -1, cnl;			/* profile and configuration name length */
-	char *conf_name = NULL;		/* Configuration directory to use */
-	char *data_name = NULL;		/* Data directory to use */
+	char *conf_name = NULL;		/* Configuration path to use */
+	char *data_name = NULL;		/* Data path to use */
 	char *dprof = NULL;			/* Destination for profile */
 	unsigned int edid_hash = 0;
 
@@ -509,93 +507,54 @@ ucmm_error ucmm_uninstall_monitor_profile(
 
 	/* Locate the directories where the config file is, */
 	/* and where the profile should be too. */
-	/* !! Should switch to xdg_bds() function !! */
-
-	cnl = strlen(config_file);
-	pnl = strlen(profile_dir) + 1;
-	if (profile != NULL)
-		pnl += strlen(profile);
-
-	if (scope == ucmm_local_system) {
+	{
+		int npaths;
+		xdg_error er;
+		char *data_pathfile;		/* Path & name of destination */
+		char **paths;
 		char *tt;
-		if ((tt = getenv("XDG_CONFIG_DIRS")) == NULL)
-			tt = "/etc/xdg";
-		if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
-			return ucmm_resource;
-		memmove(conf_name, tt, strlen(tt)+1);
 
-		if ((tt = getenv("XDG_DATA_DIRS")) == NULL)
-			tt = "/usr/local/share/:/usr/share/";
-		if ((data_name = malloc(strlen(tt) + pnl + 2)) == NULL) {
-			free(conf_name);
+		if (npaths = xdg_bds(&er, &paths, xdg_conf, xdg_read, 
+		                     scope == ucmm_local_system ? xdg_local : xdg_user,
+		                     config_file) == 0) {
+			return ucmm_open_config;
+		}
+		if ((conf_name = strdup(paths[0])) == NULL) {
+			xdg_free(paths, npaths);
 			return ucmm_resource;
 		}
-		memmove(data_name, tt, strlen(tt)+1);
-	} else {
-		char *tt, *home;
-		if ((tt = getenv("XDG_CONFIG_HOME")) != NULL) {
-			if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
+		xdg_free(paths, npaths);
+		
+		if (profile != NULL) {
+			/* Combined sub-path and profile name */
+			if ((data_pathfile = malloc(strlen(profile_dir) + 1 + strlen(profile))) == NULL)
 				return ucmm_resource;
-			memmove(conf_name, tt, strlen(tt)+1);
-		} else {
-			if ((home = getenv("HOME")) == NULL)
-				return ucmm_no_home;
-			if ((conf_name = malloc(strlen(home) + strlen(".config") + cnl +3)) == NULL)
-				return ucmm_resource;
-			memmove(conf_name, home, strlen(home)+1);
-			if (strlen(conf_name) > 0 && conf_name[strlen(conf_name)-1] != '/')
-				strcat(conf_name, "/");
-			strcat(conf_name, ".config");
-		}
-		if ((tt = getenv("XDG_DATA_HOME")) != NULL) {
-			if ((data_name = malloc(strlen(tt) + pnl + 2)) == NULL) {
-				free(conf_name);
-				return ucmm_resource;
-			}
-			memmove(data_name, tt, strlen(tt)+1);
-		} else {
-			data_name = ".local/share";
-			if ((home = getenv("HOME")) == NULL) {
-				free(conf_name);
-				return ucmm_no_home;
-			}
-			if ((data_name = malloc(strlen(home) + strlen(".local/share")+ pnl + 3)) == NULL) {
-				free(conf_name);
-				return ucmm_resource;
-			}
-			memmove(data_name, home, strlen(home)+1);
-			if (strlen(data_name) > 0 && data_name[strlen(data_name)-1] != '/')
-				strcat(data_name, "/");
-			strcat(data_name, ".local/share");
-		}
-	}
-	/* There may be multiple data directories. Use the first one to copy */
-	/* profiles to. */
-	for (i = 0; ; i++) {
-		if (data_name[i] == ':')
-			data_name[i] = '\000';
-		if (data_name[i] == '\000')
-			break;
-	}
-	/* Convert directories to file names */
-	if (strlen(conf_name) > 0 && conf_name[strlen(conf_name)-1] != '/')
-		strcat(conf_name, "/");
-	strcat(conf_name, config_file);
-	if (strlen(data_name) > 0 && data_name[strlen(data_name)-1] != '/')
-		strcat(data_name, "/");
-	strcat(data_name, profile_dir);
-	strcat(data_name, "/");
+			strcpy(data_pathfile, profile_dir);
 
-	if (profile != NULL) {
-		char *tt;
-		if ((tt = strrchr(profile, '/')) != NULL)	/* Get base name */
-			tt++;
-		else
-			tt = profile;
-		strcat(data_name, tt);
-	} else {
-		free(data_name);
-		data_name = NULL;
+			if (strlen(data_pathfile) > 1 && data_pathfile[strlen(data_pathfile)-1] != '/')
+				strcat(data_pathfile, "/");
+
+			if ((tt = strrchr(profile, '/')) != NULL)	/* Get base name of profile */
+				tt++;
+			else
+				tt = profile;
+			strcat(data_pathfile, tt);
+	
+			if (npaths = xdg_bds(&er, &paths, xdg_conf, xdg_read, 
+			                     scope == ucmm_local_system ? xdg_local : xdg_user,
+			                     data_pathfile) == 0) {
+				free(data_pathfile);
+				free(conf_name);
+				return ucmm_open_config;
+			}
+			free(data_pathfile);
+			if ((data_name = strdup(paths[0])) == NULL) {
+				free(conf_name);
+				xdg_free(paths, npaths);
+				return ucmm_resource;
+			}
+			xdg_free(paths, npaths);
+		}
 	}
 
 	debug2((errout,"config file = '%s'\n",conf_name));
@@ -763,7 +722,7 @@ ucmm_error ucmm_uninstall_monitor_profile(
 				}
 				if ((pp = jc_get_nth_elem(key, 3)) == NULL)
 					continue;
-				if (strcmp(pp,"ICC_PROFILE") != 0i
+				if (strcmp(pp,"ICC_PROFILE") != 0
 				 || type != jc_string
 				 || strcmp(data, data_name) != 0) {
 					free(pp);
@@ -819,8 +778,7 @@ ucmm_error ucmm_get_monitor_profile(
 ) {
 	int scope;
 	char *config_file = "color.jcnf";
-	int i, cnl;					/* configuration name length */
-	char *conf_name = NULL;		/* Configuration directory to use */
+	char *conf_name = NULL;		/* Configuration path to use */
 	unsigned int edid_hash = 0;
 
 	if (edid != NULL)
@@ -828,49 +786,28 @@ ucmm_error ucmm_get_monitor_profile(
 
 	debug2((errout,"ucmm_get_monitor_profile called edid 0x%x, disp '%s'\n",edid_hash,display_name));
 
-	/* Locate the directories where the config file is, */
-	/* and where the profile should be too. */
-	/* !! Should switch to xdg_bds() function !! */
-
-	cnl = strlen(config_file);
-
 	/* Look at user then local system scope */
 	for (scope = 0; scope < 2; scope++) {
  
-		if (scope == 1) {			/* Local system */
+		/* Locate the directories where the config file is, */
+		{
+			int npaths;
+			xdg_error er;
+			char **paths;
 			char *tt;
-			debug2((errout, "Looking in local system scope\n"));
-			if ((tt = getenv("XDG_CONFIG_DIRS")) == NULL)
-				tt = "/etc/xdg";
-			if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
-				return ucmm_resource;
-			memmove(conf_name, tt, strlen(tt)+1);
 
-		} else {					/* User */
-			char *tt, *home;
-			debug2((errout, "Looking in user scope\n"));
-			if ((tt = getenv("XDG_CONFIG_HOME")) != NULL) {
-				if ((conf_name = malloc(strlen(tt) + cnl + 2)) == NULL)
-					return ucmm_resource;
-				memmove(conf_name, tt, strlen(tt)+1);
-			} else {
-				if ((home = getenv("HOME")) == NULL)
-					return ucmm_no_home;
-				if ((conf_name = malloc(strlen(home) + strlen(".config") + cnl +3)) == NULL)
-					return ucmm_resource;
-				memmove(conf_name, home, strlen(home)+1);
-				if (strlen(conf_name) > 0 && conf_name[strlen(conf_name)-1] != '/')
-					strcat(conf_name, "/");
-				strcat(conf_name, ".config");
+			if (npaths = xdg_bds(&er, &paths, xdg_conf, xdg_read, 
+			                     scope == ucmm_local_system ? xdg_local : xdg_user,
+			                     config_file) == 0) {
+				continue;
 			}
+			if ((conf_name = strdup(paths[0])) == NULL) {
+				xdg_free(paths, npaths);
+				return ucmm_resource;
+			}
+			xdg_free(paths, npaths);
 		}
-		/* Convert directory to file name */
-		if (strlen(conf_name) > 0 && conf_name[strlen(conf_name)-1] != '/')
-			strcat(conf_name, "/");
-		strcat(conf_name, config_file);
 
-		debug2((errout,"config file = '%s'\n",conf_name));
-		
 		/* Get the config file */
 		{
 			jc_error ev;

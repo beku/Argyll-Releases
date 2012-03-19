@@ -28,6 +28,10 @@
  *
  * Is there a >8 bit way of getting/setting RAMDAC indexes ?
  *
+ * It would be good to be able to calibrate this with a faste
+ * meter like the i1d3. Run the i1d3 at (say) 10 msec sample time
+ * and see how many msec white<->black until it is stable.
+ * Double + add 50msec.
  */
 
 #include <stdio.h>
@@ -1397,6 +1401,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 	/* restoring the previous display profile whenever the current ColorSync display profile */
 	/* is restored to the screen. NOTE that this trick will fail if it is not possible */
 	/* to rename the currently selected profile file, ie. because it is a system profile. */
+	/* [ Would a workaround be to use a link, or copy of the system file ? ] */
 	if (persist) {					/* Persistent */
 		CMError ev;
 		CMProfileRef prof;			/* Current AVID profile */
@@ -1874,6 +1879,35 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 	}
 #endif /* NT */
 
+/* For Linux and OS X, make sure we don't create a file with the wrong owner */
+#if defined(UNIX)
+	/* If we're creating a user profile and running as root sudo */
+	if (scope == p_scope_user && geteuid() == 0) {
+		char *uids, *gids;
+		int uid, gid;
+
+		debugr("We're setting a user profile running as root - run as user\n");
+		if ((uids = getenv("SUDO_UID")) != NULL
+		 && (gids = getenv("SUDO_GID")) != NULL) {
+			uid = atoi(uids);
+			gid = atoi(gids);
+			if (setegid(gid) || seteuid(uid)) {
+				debugr("seteuid or setegid failed\n");
+			}
+			debug2((errout,"Set euid %d and egid %d\n",uid,gid));
+		}
+	/* If setting local system proile and not effective root, but sudo */
+	} else if (scope != p_scope_user && getuid() == 0 && geteuid() != 0) {
+		if (getenv("SUDO_UID") != NULL
+		 && getenv("SUDO_GID") != NULL) {
+
+			debugr("We're setting a system profile running as user - revert to root\n");
+			setegid(getgid());
+			seteuid(getuid());
+		}
+	}
+#endif /* OS X || Linux */
+
 #ifdef __APPLE__
 	{
 		CMError ev;
@@ -2101,6 +2135,35 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 		return 0;
 	}
 #endif /* NT */
+
+/* For Linux and OS X, make sure we don't create a file with the wrong owner */
+#if defined(UNIX)
+	/* If we're creating a user profile and running as root sudo */
+	if (scope == p_scope_user && geteuid() == 0) {
+		char *uids, *gids;
+		int uid, gid;
+
+		debugr("We're setting a user profile running as root - run as user\n");
+		if ((uids = getenv("SUDO_UID")) != NULL
+		 && (gids = getenv("SUDO_GID")) != NULL) {
+			uid = atoi(uids);
+			gid = atoi(gids);
+			if (setegid(gid) || seteuid(uid)) {
+				debugr("seteuid or setegid failed\n");
+			}
+			debug2((errout,"Set euid %d and egid %d\n",uid,gid));
+		}
+	/* If setting local system proile and not effective root, but sudo */
+	} else if (scope != p_scope_user && getuid() == 0 && geteuid() != 0) {
+		if (getenv("SUDO_UID") != NULL
+		 && getenv("SUDO_GID") != NULL) {
+
+			debugr("We're setting a system profile running as user - revert to root\n");
+			setegid(getgid());
+			seteuid(getuid());
+		}
+	}
+#endif /* OS X || Linux */
 
 #ifdef __APPLE__
 	{
@@ -4401,7 +4464,7 @@ main(int argc, char *argv[]) {
 			printf("About to clear the calibration\n");
 		if ((rv = dw->set_ramdac(dw,r,1)) != 0) {
 			if (rv == 2)
-				error("Failed to set VideoLUTs persistently because current System Profile can't be renamed");
+				warning("Failed to set VideoLUTs persistently because current System Profile can't be renamed");
 			else
 				error("Failed to set VideoLUTs");
 		}

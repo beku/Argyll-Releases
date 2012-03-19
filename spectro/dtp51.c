@@ -40,6 +40,10 @@
 #ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
+#include "numlib.h"
+#else	/* !SALONEINSTLIB */
+#include "sa_config.h"
+#include "numsup.h"
 #endif /* !SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
@@ -158,7 +162,7 @@ dtp51_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 	baud_rate brt[5] = { baud_9600, baud_19200, baud_4800, baud_2400, baud_1200 };
 	char *brc[5]     = { "30BR\r",  "60BR\r",   "18BR\r",  "0CBR\r",  "06BR\r" };
 	char *fcc;
-	long etime;
+	unsigned int etime;
 	int ci, bi, i, rv;
 	inst_code ev = inst_ok;
 
@@ -297,10 +301,10 @@ int sguide) {		/* Guide number */
 	/* *tp++ = '4'; */			/* Lab data */
 	*tp++ = '5';				/* XYZ data */
 	*tp++ = '8';				/* Auto color */
-	*tp++ = '0' + npatch/10;	/* Number of patches MS */
-	*tp++ = '0' + npatch%10;	/* Number of patches LS */
-	*tp++ = '0' + sguide/10;	/* Guide location MS */
-	*tp++ = '0' + sguide%10;	/* Guide location LS */
+	*tp++ = '0' + (char)(npatch/10);	/* Number of patches MS */
+	*tp++ = '0' + (char)(npatch%10);	/* Number of patches LS */
+	*tp++ = '0' + (char)(sguide/10);	/* Guide location MS */
+	*tp++ = '0' + (char)(sguide%10);	/* Guide location LS */
 	*tp++ = '0';				/* (Data output type) */
 	*tp++ = '0';				/* Extra steps */
 	*tp++ = '0';				/* Reserved */
@@ -436,6 +440,11 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 	int i, rv;
 	inst_code ev = inst_ok;
 
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
+
 	build_strip(tbuf, name, npatch, pname, sguide);
 	
 	if ((rv = dtp51_fcommand(p, "0105DS\r", buf, MAX_RD_SIZE, '*', 1, 0.5)) != DTP51_OK)
@@ -534,6 +543,11 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 inst_cal_type dtp51_needs_calibration(inst *pp) {
 	dtp51 *p = (dtp51 *)pp;
 
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
+
 	if (p->need_cal)
 		return inst_calt_ref_white;
 	return inst_calt_unknown;
@@ -555,6 +569,12 @@ inst_cal_cond *calc,	/* Current condition/desired condition */
 char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 ) {
 	dtp51 *p = (dtp51 *)pp;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
+
 	id[0] = '\000';
 
 	if (calt == inst_calt_all)
@@ -745,7 +765,6 @@ inst_capability dtp51_capabilities(inst *pp) {
 
 /* Return the instrument capabilities 2 */
 inst2_capability dtp51_capabilities2(inst *pp) {
-	dtp51 *p = (dtp51 *)pp;
 	inst2_capability rv;
 
 	rv = inst2_cal_ref_white		/* Currently user operated though */
@@ -759,6 +778,11 @@ inst2_capability dtp51_capabilities2(inst *pp) {
 inst_code dtp51_set_mode(inst *pp, inst_mode m)
 {
 	inst_mode mm;		/* Measurement mode */
+
+	if (!pp->gotcoms)
+		return inst_no_coms;
+	if (!pp->inited)
+		return inst_no_init;
 
 	/* The measurement mode portion of the mode */
 	mm = m & inst_mode_measurement_mask;
@@ -786,8 +810,12 @@ static inst_code
 dtp51_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 {
 	dtp51 *p = (dtp51 *)pp;
-	inst_code rv = inst_ok;
 	static char buf[MAX_MES_SIZE];
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	/* Record the trigger mode */
 	if (m == inst_opt_trig_switch) {	/* Can only be triggered this way */
@@ -808,7 +836,7 @@ dtp51_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 
 
 /* Constructor */
-extern dtp51 *new_dtp51(icoms *icom, int debug, int verb)
+extern dtp51 *new_dtp51(icoms *icom, instType itype, int debug, int verb)
 {
 	dtp51 *p;
 	if ((p = (dtp51 *)calloc(sizeof(dtp51),1)) == NULL)
@@ -834,7 +862,7 @@ extern dtp51 *new_dtp51(icoms *icom, int debug, int verb)
 	p->interp_error 	= dtp51_interp_error;
 	p->del          	= dtp51_del;
 
-	p->itype = instDTP51;
+	p->itype = itype;
 
 	return p;
 }

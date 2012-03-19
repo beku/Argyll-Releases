@@ -1275,7 +1275,7 @@ col *pcol,			/* 8 spacer colors */
 int tpprow,			/* Test sample patches per row */
 int spacer,			/* Spacer code, 0 = None, 1 = b&w, 2 = colored */
 int needpc,			/* Need patch to patch contrast in a row */
-int domaxmin,		/* Top and tail strip with max/min or SID.  0 = DTP51, 1 = DTP20 */
+int domaxmin,		/* Top and tail strip with max/min or SID.  0 = DTP51, 2 = DTP20 SID */
 col *media,			/* Alias for media color */
 int usede			/* NZ to use delta E rather than density */
 ) {
@@ -1740,7 +1740,7 @@ int *p_npat			/* Return number of patches including padding */
 	int mxpprow = 0;	/* Maximum patches per row permitted (including min/max patches) */
 	double mxrowl = 0;	/* Maximum row length for patchs (including min/max patches) */
 						/* Number of patches is strip by whichever is shorter */
-	int tidrows = 0;	/* Rows on first page for target ID */
+	int tidrows = 0;	/* Rows on first page for target ID (ie. DTP20) */
 	int tidtype = 0;	/* Target ID type. 0 = DTP20 */
 	int tidminp = 0;	/* Target ID minumum number of patches */
 	int tidpad = 0;		/* Initial padding to place TID near middle */
@@ -1776,7 +1776,7 @@ int *p_npat			/* Return number of patches including padding */
 	double x = 0.0, y = 0.0;	/* Current position */
 	col *pp = NULL, *cp = NULL;	/* Previous and current printed patch colors */
 	int cpf = 0;				/* Current patch special flag. 1 = start bit, 2 = stop bit */
-	int slix;	/* Strip label index */
+	int slix;	/* Strip label index, -1 for TID  */
 	char *slab = NULL;	/* Strip label string */
 	unsigned char *rpsp;	/* Rows per strip, pointer */
 	col *mark;	/* Alias for mark color */
@@ -2286,7 +2286,8 @@ int *p_npat			/* Return number of patches including padding */
 	sip = 1;		/* Starting strip in page */
 	pif = 1;		/* Starting page in file */
 
-	slix = -1 -tidrows;	/* Start at one before first strip index. slix < -1 if TID  */
+						/* slix is 0..n but is pre-incremented, so start at -1 */
+	slix = -1 -tidrows;	/* Start at -2 if there is a TID  */
 
 	/* Until there are no more patches to do */
 	for (;;) {
@@ -2312,7 +2313,7 @@ int *p_npat			/* Return number of patches including padding */
 		if (pir <= nmaxp)
 			flags |= IS_XPAT;
 
-		if (slix < 0) {		/* If TID row */
+		if (slix < -1) {		/* If TID row */
 
 			if (pir == tidpprow)
 				flags |= IS_LPIR;
@@ -2471,9 +2472,8 @@ int *p_npat			/* Return number of patches including padding */
 
 		/* Figure the current patch color */
 		cpf = 0;
-		cp = NULL;
 		if (slix < 0) {		/* TID */
-			cp = mind;		/* Default padding color */
+			cp = mind;		/* Default padding color is white */
 			if (pir > tidpad && pir <= (tidpad + tidminp) ) {
 				int opir = pir - tidpad -1;	/* TID index 0 .. tidminp-1 */
 				

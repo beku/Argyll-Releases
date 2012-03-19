@@ -91,7 +91,9 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -Z [prsa]       Default intent: Perceptual, Rel. Colorimetric, Saturation, Abs. Colorimetric\n");
 
 	fprintf(stderr," -q lmhu         Quality - Low, Medium (def), High, Ultra\n");
+//	fprintf(stderr," -q fmsu         Speed - Fast, Medium (def), Slow, Ultra Slow\n");
 	fprintf(stderr," -b [lmhun]      Low quality B2A table - or specific B2A quality or none for input device\n");
+//	fprintf(stderr," -b [fmsun]      B2A Speed - Fast, Medium, Slow, Ultra Slow, None, same as -q (def)\n");
 	fprintf(stderr," -y              Verify A2B profile\n");
 	fprintf(stderr," -ni             Don't create input (Device) shaper curves\n");
 	fprintf(stderr," -np             Don't create input (Device) grid position curves\n");
@@ -359,43 +361,48 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to quality flag -q");
    	 			switch (na[0]) {
+					case 'f':				/* Fast */
 					case 'l':
 					case 'L':
 						iquality = 0;
 						break;
-					case 'm':
+					case 'm':				/* Medium */
 					case 'M':
 						iquality = 1;
 						break;
+					case 's':				/* Slow */
 					case 'h':
 					case 'H':
 						iquality = 2;
 						break;
-					case 'u':
+					case 'u':				/* Ultra Slow */
 					case 'U':
 						iquality = 3;
 						break;
 					default:
 						usage("Unknown argument '%c' to quality flag -q",na[0]);
+//						usage("Unknown argument '%c' to speed flag -q",na[0]);
 				}
 			}
 			else if (argv[fa][1] == 'b') {
 				if (na != NULL) {	/* Got a B2A quaiity */
 					fa = nfa;
 	    			switch (na[0]) {
+						case 'f':				/* Fast */
 						case 'l':
 						case 'L':
 							oquality = 0;
 							break;
-						case 'm':
+						case 'm':				/* Medium */
 						case 'M':
 							oquality = 1;
 							break;
+						case 's':				/* Slow */
 						case 'h':
 						case 'H':
 							oquality = 2;
 							break;
-						case 'u':
+						case 'u':				/* Ultra Slow */
 						case 'U':
 							oquality = 3;
 							break;

@@ -109,7 +109,6 @@ cgatsFile *fp		/* File to read from */
 
 /* a * b */
 static size_t ssat_mul(size_t a, size_t b) {
-	size_t c;
 
 	if (a == 0 || b == 0)
 		return 0;
@@ -156,7 +155,7 @@ size_t count
 	size_t len;
 
 	len = ssat_mul(size, count);
-	if (len > (p->end - p->cur)) { /* Too much */
+	if (len > (size_t)(p->end - p->cur)) { /* Too much */
 		if (size > 0)
 			count = (p->end - p->cur)/size;
 		else
@@ -196,7 +195,7 @@ size_t count
 	size_t len;
 
 	len = ssat_mul(size, count);
-	if (len > (p->end - p->cur)) { /* Too much */
+	if (len > (size_t)(p->end - p->cur)) { /* Too much */
 		if (size > 0)
 			count = (p->end - p->cur)/size;
 		else
@@ -243,7 +242,7 @@ cgatsFile *pp
 static char *cgatsFileMem_fname(
 cgatsFile *pp
 ) {
-	cgatsFileMem *p = (cgatsFileMem *)pp;
+//	cgatsFileMem *p = (cgatsFileMem *)pp;
 
 	/* Memory doesn't have a name */
 	return "**Mem**";
@@ -334,7 +333,7 @@ del_parse(parse *p) {
 /* and the error message in parse will be valid. */
 static int
 read_line(parse *p) {
-	int c;
+	char c;
 	p->bo = 0;			/* Reset pointer to the start of the line buffer */
 	p->q = 0;			/* Reset quoted flag */
 	p->errc = 0;		/* Reset error status */
@@ -444,7 +443,7 @@ static char *
 get_token(parse *p) {
 	int tbo = 0;	/* Token buffer offset */
 	int term = 0;	/* flag to trigger token termination */
-	int c;
+	char c;
 
 	p->errc = 0;		/* Reset error status */
 	p->err[0] = '\000';

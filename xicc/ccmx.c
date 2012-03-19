@@ -34,7 +34,6 @@
 
 /* Utilities */
 
-
 /* Method implimentations */
 
 /* Write out the ccmx to a CGATS format .ccmx file */
@@ -65,6 +64,9 @@ char *outname	/* Filename to write to */
 	if (p->tech != NULL)
 		ocg->add_kword(ocg, 0, "TECHNOLOGY",p->tech, NULL);
 	if (p->disp == NULL && p->tech == NULL) {
+#ifdef DEBUG
+		fprintf(stdout, "write_ccmx: ccmx for file '%s' doesn't contain display or techology strings",outname);
+#endif
 		sprintf(p->err, "write_ccmx: ccmx for file '%s' doesn't contain display or techology strings",outname);
 		ocg->del(ocg);
 		return 1;
@@ -90,11 +92,17 @@ char *outname	/* Filename to write to */
 	/* Write it */
 	if (ocg->write_name(ocg, outname)) {
 		strcpy(p->err, ocg->err);
+#ifdef DEBUG
+		fprintf(stdout, "write_ccmx: CGATS write of '%s' failed",outname);
+#endif
 		return 1;
 	}
 
 	ocg->del(ocg);		/* Clean up */
 
+#ifdef DEBUG
+	fprintf(stdout, "write_ccmx: return OK");
+#endif
 	return 0;
 }
 
@@ -238,28 +246,35 @@ double *in					/* Input XYZ */
 
 /* Set the contents of the ccmx. return nz on error. */
 static int set_ccmx(ccmx *p,
-char *desc,			/* Description to copy from */
-char *inst,			/* Colorimeter description to copy from */
-char *disp,			/* Display description to copy from */
-char *ref,			/* Spectrometer description to copy from */
+char *desc,			/* General description (optional) */
+char *inst,			/* Instrument description to copy from */
+char *disp,			/* Display make and model (optional if tech) */
+char *tech,			/* Display technology description (optional if disp) */
+char *refd,			/* Reference spectrometer description (optional) */
 double mtx[3][3]	/* Transform matrix to copy from */
 ) {
-	if ((p->desc = strdup(desc)) == NULL) {
+	if ((p->desc = desc) != NULL && (p->desc = strdup(desc)) == NULL) {
 		sprintf(p->err, "set_ccmx: malloc failed");
 		return 2;
 	}
-	if ((p->inst = strdup(inst)) == NULL) {
+	if ((p->inst = inst) != NULL && (p->inst = strdup(inst)) == NULL) {
 		sprintf(p->err, "set_ccmx: malloc failed");
 		return 2;
 	}
-	if ((p->disp = strdup(disp)) == NULL) {
+	if ((p->disp = disp) != NULL && (p->disp = strdup(disp)) == NULL) {
 		sprintf(p->err, "set_ccmx: malloc failed");
 		return 2;
 	}
-	if ((p->ref = strdup(ref)) == NULL) {
+	if ((p->tech = tech) != NULL && (p->tech = strdup(tech)) == NULL) {
 		sprintf(p->err, "set_ccmx: malloc failed");
 		return 2;
 	}
+
+	if ((p->ref = refd) != NULL && (p->ref = strdup(refd)) == NULL) {
+		sprintf(p->err, "set_ccmx: malloc failed");
+		return 2;
+	}
+
 	icmCpy3x3(p->matrix, mtx);
 
 	return 0;
@@ -325,6 +340,7 @@ typedef struct {
 /* Optimisation function */
 /* Compute the sum of delta E's squared for the */
 /* tp will be the 9 matrix values */
+/* It's not clear if the white weighting is advantagous or not. */
 double optf(void *fdata, double *tp) {
 	cntx *cx = (cntx *)fdata;
 	int i;
@@ -349,7 +365,7 @@ double optf(void *fdata, double *tp) {
 		icmXYZ2Lab(&cx->wh, lab, xyz);
 
 		if (i == cx->wix)
-			de += cx->npat * wCIE94sq(tlab, lab);		/* Make white weight = all others */
+			de += cx->npat/4.0 * wCIE94sq(tlab, lab);	/* Make white weight = 1/4 all others */
 		else
 			de += wCIE94sq(tlab, lab);
 //printf("~1 %d: txyz %f %f %f, tlab %f %f %f\n", i,cx->refs[i][0], cx->refs[i][1], cx->refs[i][2], tlab[0], tlab[1], tlab[2]);
@@ -382,19 +398,24 @@ double (*cols)[3]		/* Array of XYZ values from colorimeter */
 	cntx cx;
 	double cp[9], sa[9];
 
-	if ((p->desc = strdup(desc)) == NULL) {
+	if ((p->desc = desc) != NULL && (p->desc = strdup(desc)) == NULL) {
 		sprintf(p->err, "set_ccmx: malloc failed");
 		return 2;
 	}
-	if ((p->inst = strdup(inst)) == NULL) {
+	if ((p->inst = inst) != NULL && (p->inst = strdup(inst)) == NULL) {
 		sprintf(p->err, "set_ccmx: malloc failed");
 		return 2;
 	}
-	if ((p->disp = strdup(disp)) == NULL) {
+	if ((p->disp = disp) != NULL && (p->disp = strdup(disp)) == NULL) {
 		sprintf(p->err, "set_ccmx: malloc failed");
 		return 2;
 	}
-	if ((p->ref = strdup(refd)) == NULL) {
+	if ((p->tech = tech) != NULL && (p->tech = strdup(tech)) == NULL) {
+		sprintf(p->err, "set_ccmx: malloc failed");
+		return 2;
+	}
+
+	if ((p->ref = refd) != NULL && (p->ref = strdup(refd)) == NULL) {
 		sprintf(p->err, "set_ccmx: malloc failed");
 		return 2;
 	}
@@ -412,7 +433,7 @@ double (*cols)[3]		/* Array of XYZ values from colorimeter */
 		}
 	}
 #ifdef DEBUG
-	printf("white = %f %f %f\n",refs[bi][0],refs[bi][1],refs[bi][1]);
+	printf("white = %f %f %f\n",refs[cx.wix][0],refs[cx.wix][1],refs[cx.wix][1]);
 #endif
 	cx.wh.X = refs[cx.wix][0];
 	cx.wh.Y = refs[cx.wix][1];

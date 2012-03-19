@@ -30,7 +30,9 @@
  *
  *	For flexibility, it might be nice to allow the user to override the
  *  default intent for all 3 output tables, allowing fully custom usage.
- *  Need to break dependence between intents CAM to do this.
+ *  ie. Would be nice to offer various relative colorimetric intents,
+ *  so that more image friendly versions could be chosen. 
+ *  (Need to break dependence between intents CAM to do this with full flexibility).
  *
  *  Need to make this more of a library:
  *  Fix error handling
@@ -960,12 +962,12 @@ make_output_icc(
 		if (xpi != NULL && xpi->manufacturer != 0L)
 			wh->manufacturer = xpi->manufacturer;
 		else
-			wh->manufacturer = str2tag("????");
+			wh->manufacturer = icmSigUnknownType;
 
 		if (xpi != NULL && xpi->model != 0L)
 			wh->model        = xpi->model;
 		else
-	    	wh->model        = str2tag("????");
+	    	wh->model        = icmSigUnknownType;
 
 		/* Values that may be set before writing */
 		if (xpi != NULL && xpi->creator != 0L)

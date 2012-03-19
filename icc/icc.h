@@ -346,9 +346,12 @@ typedef int icmSig;	/* Otherwise un-enumerated 4 byte signature */
 #define icmSig_nix ((icPlatformSignature) icmMakeTag('*','n','i','x'))
 
 
-/* Internal Tag Type signature, used to handle any tag that */
+/* Tag Type signature, used to handle any tag that */
 /* isn't handled with a specific type object. */
-#define icmSigUnknownType ((icTagTypeSignature)icmMakeTag('?','?','?','?'))
+/* Also used in manufacturer & model header fields */
+/* Old: #define icmSigUnknownType ((icTagTypeSignature)icmMakeTag('?','?','?','?')) */
+#define icmSigUnknownType ((icTagTypeSignature) 0)
+
 
 typedef struct {
 	ORD32 l;			/* High and low components of signed 64 bit */

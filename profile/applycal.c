@@ -186,35 +186,23 @@ main(int argc, char *argv[]) {
 
 	/* ======================================= */
 	{
-		tagsigpair insigs[] = {			/* Signatures to modify and their backups */
+		tagsigpair sigs[] = {			/* Signatures to modify and their backups */
 			{ icSigProfileDescriptionTag, 	icmMakeTag('A','R','0','T'), 0, 0 },
 			{ icSigAToB0Tag,				icmMakeTag('A','R','1','0'), 0, 1 },
 			{ icSigAToB1Tag,				icmMakeTag('A','R','2','0'), 0, 1 },
 			{ icSigAToB2Tag,				icmMakeTag('A','R','3','0'), 0, 1 },
-			{ icSigRedTRCTag,				icmMakeTag('A','R','7','0'), 0, 0 },
-			{ icSigGreenTRCTag,				icmMakeTag('A','R','7','1'), 1, 0 },
-			{ icSigBlueTRCTag,				icmMakeTag('A','R','7','2'), 2, 0 },
-			{ icSigGrayTRCTag, 				icmMakeTag('A','R','8','0'), 0, 0 },
-			{ 0, 0, 0 }
-		};
-		tagsigpair outsigs[] = {		/* Signatures to modify */
-			{ icSigProfileDescriptionTag,	icmMakeTag('A','R','0','T'), 0, 0 },
 			{ icSigBToA0Tag,				icmMakeTag('A','R','4','0'), 0, 0 },
 			{ icSigBToA1Tag,				icmMakeTag('A','R','5','0'), 0, 0 },
 			{ icSigBToA2Tag,				icmMakeTag('A','R','6','0'), 0, 0 },
 			{ icSigRedTRCTag,				icmMakeTag('A','R','7','0'), 0, 0 },
 			{ icSigGreenTRCTag,				icmMakeTag('A','R','7','1'), 1, 0 },
 			{ icSigBlueTRCTag,				icmMakeTag('A','R','7','2'), 2, 0 },
-			{ icSigGrayTRCTag,				icmMakeTag('A','R','8','0'), 0, 0 },
+			{ icSigGrayTRCTag, 				icmMakeTag('A','R','8','0'), 0, 0 },
 			{ 0, 0, 0 }
 		};
-		tagsigpair inlinksigs[] = {		/* Signatures to modify */
+		tagsigpair linksigs[] = {		/* Signatures to modify */
 			{ icSigProfileDescriptionTag, 	icmMakeTag('A','R','0','T'), 0 },
 			{ icSigAToB0Tag,				icmMakeTag('A','R','9','1'), 1 },
-			{ 0, 0, 0 }
-		};
-		tagsigpair outlinksigs[] = {		/* Signatures to modify */
-			{ icSigProfileDescriptionTag, 	icmMakeTag('A','R','0','T'), 0 },
 			{ icSigAToB0Tag,				icmMakeTag('A','R','9','0'), 0 },
 			{ 0, 0, 0 }
 		};
@@ -231,7 +219,7 @@ main(int argc, char *argv[]) {
 		if (check) {
 			DBG(("Checking...\n"));
 
-			for (sigp = inlinksigs; sigp->prim != 0; sigp++) {
+			for (sigp = linksigs; sigp->prim != 0; sigp++) {
 				icmBase *primt;
 
 				if (sigp->prim != icSigProfileDescriptionTag)
@@ -252,9 +240,9 @@ main(int argc, char *argv[]) {
 
 			if (verb) {
 				if (found)
-					printf("Profile has had calibration applied");
+					printf("Profile has had calibration applied\n");
 				else
-					printf("Profile has had calibration applied");
+					printf("Profile has NOT had calibration applied\n");
 			}
 		} else if (apply) {
 			DBG(("Applying...\n"));
@@ -270,14 +258,14 @@ main(int argc, char *argv[]) {
 					error("Calibration space %s doesn't match profile %s",
 					             icm2str(icmColorSpaceSignature, cal->colspace),
 					             icm2str(icmColorSpaceSignature, icco->header->colorSpace));
-				/* Choose the right table and cal direction */
-				if (cal->devclass == icSigInputClass) {
-					ssigp = insigs;
+
+				ssigp = sigs;
+				/* Note the cal direction */
+				if (cal->devclass == icSigInputClass)
 					inp = 1;
-				} else {
-					ssigp = outsigs;
+				else
 					inp = 0;
-				}
+
 			} else if (icco->header->deviceClass == icSigLinkClass) {
 				DBG(("Device link profile\n"));
 
@@ -286,14 +274,12 @@ main(int argc, char *argv[]) {
 					error("Calibration space %s doesn't match profile %s",
 					             icm2str(icmColorSpaceSignature, cal->colspace),
 					             icm2str(icmColorSpaceSignature, icco->header->pcs));
-				/* Choose the right table and cal direction */
-				if (cal->devclass == icSigInputClass) {
-					ssigp = inlinksigs;
+				ssigp = linksigs;
+				/* Noe the cal direction */
+				if (cal->devclass == icSigInputClass)
 					inp = 1;
-				} else {
-					ssigp = outlinksigs;
+				else
 					inp = 0;
-				}
 			} else {
 				error("Can't apply calibration to profile of class %s",
 				      icm2str(icmProfileClassSignature, icco->header->deviceClass));
@@ -418,12 +404,12 @@ main(int argc, char *argv[]) {
 						continue;				/* Skip tag */
 					}
 					if (ntags >= 50)			/* Impossible */
-						error("Internal, run out of previuos tags space");
+						error("Internal, run out of previous tags space");
 					dtags[ntags++] = primt;		/* Remember this one */
 
 					DBG(("Lut8 or Lut16\n"));
 
-					if (inp) {
+					if (sigp->dir) {
 						/* Apply calibration to the input table */
 						for (j = 0; j < ro->inputChan; j++) {
 							icTagSignature bsig = sigp->back;
@@ -448,11 +434,14 @@ main(int argc, char *argv[]) {
 									wo->data[i] = ro->inputTable[j * ro->inputEnt + i];
 							}
 
-							/* Create new input curve from cal + orginal curve */
+							/* Create new input curve from inv cal + orginal curve */
 							for (i = 0; i < ro->inputEnt; i++) {
 								double val;
 								val = i/(ro->inputEnt-1.0);
-								val = cal->interp_ch(cal, j, val);		/* Input calibration */
+								if (inp)
+									val = cal->interp_ch(cal, j, val);		/* Do calibration */
+								else
+									val = cal->inv_interp_ch(cal, j, val);	/* Undo calibration */
 								wo->lookup_fwd(wo, &val, &val);		/* Original curve */
 								ro->inputTable[j * ro->inputEnt + i] = val;
 							}
@@ -488,7 +477,10 @@ main(int argc, char *argv[]) {
 								double val;
 								val = i/(ro->outputEnt-1.0);
 								wo->lookup_fwd(wo, &val, &val);			/* Original curve */
-								val = cal->interp_ch(cal, j, val);		/* Output calibration */
+								if (inp)
+									val = cal->interp_ch(cal, j, val);		/* Undo calibration */
+								else
+									val = cal->interp_ch(cal, j, val);		/* Do calibration */
 								ro->outputTable[j * ro->outputEnt + i] = val;
 							}
 							DBG(("Created calibrated output curve\n"));
@@ -552,15 +544,11 @@ main(int argc, char *argv[]) {
 		} else if (remove) {
 			int k;
 			DBG(("Removing...\n"));
-			for (k = 0; k < 4; k++) {
+			for (k = 0; k < 2; k++) {
 				if (k == 0)
-					ssigp = insigs;
+					ssigp = sigs;
 				else if (k == 1)
-					ssigp = outsigs;
-				else if (k == 2)
-					ssigp = inlinksigs;
-				else if (k == 3)
-					ssigp = outlinksigs;
+					ssigp = linksigs;
 
 				for (sigp = ssigp; sigp->prim != 0; sigp++) { /* Process each tag */
 					icmBase *backt, *primt;
@@ -569,7 +557,6 @@ main(int argc, char *argv[]) {
 					if ((backt = icco->read_tag(icco, sigp->back)) == NULL)
 						continue;		/* Don't have this backup tag */
 					
-					inp = sigp->dir;
 					DBG(("Looking for primary tag '%s'\n",icm2str(icmTagSignature, sigp->prim)));
 					if ((primt = icco->read_tag(icco, sigp->prim)) == NULL) {
 						error("Can't find primary tag %s for backup %s",
@@ -600,7 +587,7 @@ main(int argc, char *argv[]) {
 					        || primt->ttype == icSigLut16Type) {
 						icmLut *ro = (icmLut *)primt;	/* Modified Lut */
 
-						if (inp) {
+						if (sigp->dir) {
 							/* Restore the input table */
 							for (j = 0; j < ro->inputChan; j++) {
 								icTagSignature bsig = sigp->back;

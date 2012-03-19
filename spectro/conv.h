@@ -91,8 +91,12 @@ void empty_con_chars(void);
 void msec_sleep(unsigned int msec);
 
 /* Return the current time in msec since */
-/* the process started. */
+/* the first invokation of msec_time() */
 unsigned int msec_time();
+
+/* Return the current time in usec */
+/* the first invokation of usec_time() */
+double usec_time();
 
 /* Activate the system beeper after a delay */
 /* (Note frequancy and duration may not be honoured on all systems) */
@@ -124,6 +128,7 @@ struct _athread {
 #if defined (UNIX) || defined(__APPLE__)
 	pthread_t thid;			/* Thread ID */
 #endif
+	int finished;			/* Set when the thread returned */
 	int result;				/* Return code from thread function */
 
 	/* Thread function to call */
@@ -131,6 +136,9 @@ struct _athread {
 
 	/* And the context to call it with */
 	void *context;
+
+	/* Wait for the thread to exit. Return the result */
+	int (*wait)(struct _athread *p);
 
     /* Kill the thread and delete the object */
 	/* (Killing it may have side effects, so this is a last */
@@ -153,34 +161,6 @@ void delete_file(char *fname);
 /* Given the path to a file, ensure that all the parent directories */
 /* are created. return nz on error */
 int create_parent_directories(char *path);
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - */
-/* Provide a system independent glob type function */
-typedef struct {
-#ifdef NT
-	char *base;				/* Base path */
-    struct _finddata_t ffs;
-	long ff;
-	int first;
-#else	/* UNIX */
-	glob_t g;
-	int rv;			/* glob return value */
-	size_t ix;
-#endif
-	int merr;		/* NZ on malloc error */
-} aglob;
-
-
-/* Create the aglob for files matching the given path and pattern. */
-/* Return nz on malloc error */
-int aglob_create(aglob *g, char *spath);
-
-/* Return an allocated string of the next match. */
-/* Return NULL if no more matches */
-char *aglob_next(aglob *g);
-
-/* Free the aglob once we're done with it */
-void aglob_cleanup(aglob *g);
 
 /* - - - - - - - - - - - - - - - - - - -- */
 
@@ -249,6 +229,7 @@ void sa_Mul3x3_2(double dst[3][3], double src1[3][3], double src2[3][3]);
 int sa_Inverse3x3(double out[3][3], double in[3][3]);
 void sa_Transpose3x3(double out[3][3], double in[3][3]);
 void sa_Scale3(double out[3], double in[3], double rat);
+double sa_LabDE(double *in0, double *in1);
 
 
 #define icmXYZNumber sa_XYZNumber
@@ -263,6 +244,13 @@ void sa_Scale3(double out[3], double in[3], double rat);
 #define icmInverse3x3 sa_Inverse3x3
 #define icmTranspose3x3 sa_Transpose3x3
 #define icmScale3 sa_Scale3
+#define icmLabDE sa_LabDE
+
+/* A subset of numlib */
+
+int sa_lu_psinvert(double **out, double **in, int m, int n);
+
+#define lu_psinvert sa_lu_psinvert
 
 #endif /* SALONEINSTLIB */
 /* - - - - - - - - - - - - - - - - - - -- */

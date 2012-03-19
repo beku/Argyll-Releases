@@ -49,6 +49,7 @@ if $(UNIX) {
 	if $(OS) = MACOSX {
 		LINKFLAGS += -framework IOKit ;
 		LINKFLAGS += -framework CoreFoundation ;
+		LINKFLAGS += -framework AudioToolbox ;
 
 	} else {
 		if [ GLOB /usr/X11R6/include/X11 : X.h ] {

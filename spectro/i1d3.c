@@ -57,8 +57,12 @@
 
 #undef DEBUG
 #undef DUMP_MATRIX
-#undef PLOT_SPECTRA			/* Plot the sensor senitivity spectra */
-#undef SAVE_SPECTRA			/* Save the sensor senitivity spectra to "sensors.cmf" */
+#undef PLOT_SPECTRA		/* Plot the sensor senitivity spectra */
+#undef SAVE_SPECTRA		/* Save the sensor senitivity spectra to "sensors.cmf" */
+#undef PLOT_REFRESH		/* Plot data used to determine refresh rate */
+
+#undef DO_SYNCHRONIZE	/* Try and synchronize a refresh display read */
+						/* (Appears to be of no benifit) */
 
 #ifdef DEBUG
 #define DBG(xxx) printf xxx ;
@@ -69,21 +73,38 @@
 static inst_code i1d3_interp_code(inst *pp, int ec);
 static inst_code i1d3_check_unlock(i1d3 *p);
 
+/* ------------------------------------------------------------------- */
+#if defined(__APPLE__) && defined(__POWERPC__)
+
+/* Workaround for a PPC gcc 3.3 optimiser bug... */
+/* It seems to cause a segmentation fault instead of */
+/* converting an integer loop index into a float, */
+/* when there are sufficient variables in play. */
+static int gcc_bug_fix(int i) {
+	static int nn;
+	nn += i;
+	return nn;
+}
+#endif	/* APPLE */
+
 /* ------------------------------------------------------------------------ */
 /* Implementation */
 
 /* Interpret an icoms error into a I1D3 error */
-static int icoms2i1d3_err(int se) {
+/* If torc is nz, then a trigger or command is OK, */
+/* othewise  they are treated as an abort. */
+static int icoms2i1d3_err(int se, int torc) {
 	if (se & ICOM_USERM) {
 		se &= ICOM_USERM;
-		if (se == ICOM_USER)
-			return I1D3_USER_ABORT;
+		if (torc) {
+			if (se == ICOM_TRIG)
+				return I1D3_USER_TRIG;
+			if (se == ICOM_CMND)
+				return I1D3_USER_CMND;
+		}
 		if (se == ICOM_TERM)
 			return I1D3_USER_TERM;
-		if (se == ICOM_TRIG)
-			return I1D3_USER_TRIG;
-		if (se == ICOM_CMND)
-			return I1D3_USER_CMND;
+		return I1D3_USER_ABORT;
 	}
 	if (se != ICOM_OK)
 		return I1D3_COMS_FAIL;
@@ -173,7 +194,6 @@ i1d3_command(
 	unsigned char *recv,			/* 64 Response bytes returned */
 	double to					/* Timeout in seconds */
 ) {
-	int i;
 	unsigned char cmd;		/* Major command code */
 	int wbytes;				/* bytes written */
 	int rbytes;				/* bytes read from ep */
@@ -186,16 +206,18 @@ i1d3_command(
 		p->icom->debug = 0;
 	
 	/* Send the command using interrupt transfer to EP 0x01 */
-	send[0] = cmd = (cc >> 8) & 0xff;	/* Major command */
+	send[0] = cmd = (cc >> 8) & 0xff;	/* Major command == HID report number */
 	if (cmd == 0x00)
 		send[1] = (cc & 0xff);	/* Minor command */
 
 	if (isdeb) fprintf(stderr,"i1d3: Sending cmd '%s' args '%s'",inst_desc(cc), icoms_tohex(send, 8));
 
 	if (p->icom->is_hid) {
-		se = p->icom->hid_write(p->icom, send, 64, &wbytes, to); 
+		/* Don't poll the keyboard */
+		se = p->icom->hid_write_th(p->icom, send, 64, &wbytes, to, p->debug, NULL, 0); 
 	} else {
-		se = p->icom->usb_write(p->icom, 0x01, send, 64, &wbytes, to);  
+		/* Don't poll the keyboard */
+		se = p->icom->usb_write_th(p->icom, NULL, 0x01, send, 64, &wbytes, to, p->debug, NULL, 0);  
 	}
 	if (se != 0) {
 		if (se & ICOM_USERM) {
@@ -207,11 +229,21 @@ i1d3_command(
 			return i1d3_interp_code((inst *)p, I1D3_COMS_FAIL);
 		}
 	}
-	rv = i1d3_interp_code((inst *)p, icoms2i1d3_err(ua));
+	rv = i1d3_interp_code((inst *)p, icoms2i1d3_err(ua, 0));
 	if (isdeb) fprintf(stderr," ICOM err 0x%x\n",ua);
-	if (wbytes != 64) {
+
+	if (rv == inst_ok && wbytes != 64) {
 		if (isdeb) fprintf(stderr," wbytes = %d != 64\n",wbytes);
 		rv = i1d3_interp_code((inst *)p, I1D3_BAD_WR_LENGTH);
+	}
+
+	if (rv != inst_ok) {
+		/* Flush any response */
+		if (p->icom->is_hid) {
+			p->icom->hid_read(p->icom, recv, 64, &rbytes, to);
+		} else {
+			p->icom->usb_read(p->icom, 0x81, recv, 64, &rbytes, to);
+		} 
 		p->icom->debug = isdeb;
 		return rv;
 	}
@@ -220,9 +252,11 @@ i1d3_command(
 	if (isdeb) fprintf(stderr,"i1d3: Reading response ");
 
 	if (p->icom->is_hid) {
-		se = p->icom->hid_read(p->icom, recv, 64, &rbytes, to);
+		/* Don't poll the keyboard */
+		se = p->icom->hid_read_th(p->icom, recv, 64, &rbytes, to, p->debug, NULL, 0);
 	} else {
-		se = p->icom->usb_read(p->icom, 0x81, recv, 64, &rbytes, to);
+		/* Don't poll the keyboard */
+		se = p->icom->usb_read_th(p->icom, NULL, 0x81, recv, 64, &rbytes, to, p->debug, NULL, 0);
 	} 
 	if (se != 0) {
 		if (se & ICOM_USERM) {
@@ -234,8 +268,7 @@ i1d3_command(
 			return i1d3_interp_code((inst *)p, I1D3_COMS_FAIL);
 		}
 	}
-	rv = i1d3_interp_code((inst *)p, icoms2i1d3_err(ua));
-	if (rbytes != 64) {
+	if (rv == inst_ok && rbytes != 64) {
 		if (isdeb) fprintf(stderr," rbytes = %d != 64\n",rbytes);
 		rv = i1d3_interp_code((inst *)p, I1D3_BAD_RD_LENGTH);
 	}
@@ -256,7 +289,7 @@ i1d3_command(
 		}
 	}
 
-	if (isdeb) fprintf(stderr," '%s' ICOM err 0x%x\n",icoms_tohex(recv, 8),ua);
+	if (isdeb) fprintf(stderr," '%s' ICOM err 0x%x\n",icoms_tohex(recv, 14),ua);
 	p->icom->debug = isdeb;
 
 	return rv; 
@@ -358,7 +391,6 @@ i1d3_get_info(
 	unsigned char fromdev[64];
 	inst_code ev;
 	int isdeb = p->icom->debug;
-	int slen;
 
 	memset(todev, 0, 64);
 	memset(fromdev, 0, 64);
@@ -412,7 +444,6 @@ i1d3_get_prodname(
 	unsigned char fromdev[64];
 	inst_code ev;
 	int isdeb = p->icom->debug;
-	int slen;
 
 	memset(todev, 0, 64);
 	memset(fromdev, 0, 64);
@@ -437,7 +468,6 @@ i1d3_get_prodtype(
 	unsigned char fromdev[64];
 	inst_code ev;
 	int isdeb = p->icom->debug;
-	int slen;
 
 	memset(todev, 0, 64);
 	memset(fromdev, 0, 64);
@@ -462,7 +492,6 @@ i1d3_get_firmver(
 	unsigned char fromdev[64];
 	inst_code ev;
 	int isdeb = p->icom->debug;
-	int slen;
 
 	memset(todev, 0, 64);
 	memset(fromdev, 0, 64);
@@ -487,7 +516,6 @@ i1d3_get_firmdate(
 	unsigned char fromdev[64];
 	inst_code ev;
 	int isdeb = p->icom->debug;
-	int slen;
 
 	memset(todev, 0, 64);
 	memset(fromdev, 0, 64);
@@ -528,7 +556,8 @@ i1d3_lock_status(
 	return inst_ok;
 }
 
-static void create_unlock_response(unsigned char *k, unsigned char *c, unsigned char *r);
+static void create_unlock_response(unsigned int *k, unsigned char *c, unsigned char *r);
+
 
 /* Unlock the device */
 static inst_code
@@ -539,16 +568,14 @@ i1d3_unlock(
 	unsigned char fromdev[64];
 	struct {
 		char *pname;							/* Product name */
-		unsigned char key[8];					/* Unlock code */
+		unsigned int key[2];					/* Unlock code */
 		i1d3_dtype dtype;						/* Base type enumerator */
 		i1d3_dtype stype;						/* Sub type enumerator */
 	} codes[] = {
-		{ "i1Display3 ",
-			{ 0xd4, 0x9f, 0xd4, 0xa4, 0x59, 0x7e, 0x35, 0xcf }, i1d3_disppro, i1d3_calman },
-		{ "Colormunki Display ",
-			{ 0xf6, 0x22, 0x91, 0x9d, 0xe1, 0x8b, 0x1f, 0xda }, i1d3_munkdisp, i1d3_munkdisp },
-		{ "i1Display3 ",
-			{ 0x61, 0xcd, 0xd1, 0x1e, 0x9d, 0x9c, 0x16, 0x72 }, i1d3_disppro, i1d3_disppro },
+		{ "i1Display3 ",         { 0xe9622e9f, 0x8d63e133 }, i1d3_disppro, i1d3_disppro },
+		{ "Colormunki Display ", { 0xe01e6e0a, 0x257462de }, i1d3_munkdisp, i1d3_munkdisp },
+		{ "i1Display3 ",         { 0xcaa62b2c, 0x30815b61 }, i1d3_disppro, i1d3_oem },
+		{ "i1Display3 ",         { 0xa9119479, 0x5b168761 }, i1d3_disppro, i1d3_nec_ssp },
 		{ NULL } 
 	}; 
 	inst_code ev;
@@ -571,9 +598,8 @@ i1d3_unlock(
 			continue;
 		}
 
-//		if (isdeb) fprintf(stderr,"i1d3: Trying unlock key 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x\n",
-//			codes[ix].key[0], codes[ix].key[1], codes[ix].key[2], codes[ix].key[3],
-//			codes[ix].key[4], codes[ix].key[5], codes[ix].key[6], codes[ix].key[7]);
+//		if (isdeb) fprintf(stderr,"i1d3: Trying unlock key 0x%08x 0x%08x\n",
+//			codes[ix].key[0], codes[ix].key[1]);
 
 		p->dtype = codes[ix].dtype;
 		p->stype = codes[ix].stype;
@@ -614,7 +640,6 @@ i1d3_get_diffpos(
 	unsigned char fromdev[64];
 	inst_code ev;
 	int isdeb = p->icom->debug;
-	int slen;
 
 	memset(todev, 0, 64);
 	memset(fromdev, 0, 64);
@@ -660,8 +685,8 @@ i1d3_read_internal_eeprom(
 
 		/* OEM driver retries several times after a 10msec sleep on failure. */
 		/* Can a failure actually happen though ? */
-		todev[1] = addr;
-		todev[2] = ll;
+		todev[1] = (unsigned char)addr;
+		todev[2] = (unsigned char)ll;
 	
 		p->icom->debug = 0;
 		if ((ev = i1d3_command(p, i1d3_readintee, todev, fromdev, 1.0)) != inst_ok) {
@@ -708,7 +733,7 @@ i1d3_read_external_eeprom(
 		/* OEM driver retries several times after a 10msec sleep on failure. */
 		/* Can a failure actually happen though ? */
 		short2bufBE(todev + 1, addr);
-		todev[3] = ll;
+		todev[3] = (unsigned char)ll;
 	
 		p->icom->debug = 0;
 		if ((ev = i1d3_command(p, i1d3_readextee, todev, fromdev, 1.0)) != inst_ok) {
@@ -728,16 +753,15 @@ i1d3_read_external_eeprom(
 /* The measureent is the count of (both) edges from the L2V */
 /* over the integration time */
 static inst_code
-i1d3_raw_measurement_1(
+i1d3_freq_measure(
 	i1d3 *p,				/* Object */
-	double *inttime,		/* Integration time in seconds. (Return rounded) */
+	double *inttime,		/* Integration time in seconds. (Return clock rounded) */
 	double rgb[3]			/* Return the RGB values */
 ) {
 	int intclks;
 	unsigned char todev[64];
 	unsigned char fromdev[64];
 	inst_code ev;
-	int isdeb = p->icom->debug;
 
 	memset(todev, 0, 64);
 	memset(fromdev, 0, 64);
@@ -745,8 +769,9 @@ i1d3_raw_measurement_1(
 	if (*inttime > 20.0)		/* Hmm */
 		*inttime = 20.0;
 
-	intclks = (int)(*inttime * p->clkrate + 0.5);
-	*inttime = (double)intclks / p->clkrate;
+	/* Max = 357.9 seconds ? */
+	intclks = (int)(*inttime * p->clk_freq + 0.5);
+	*inttime = (double)intclks / p->clk_freq;
 
 	int2buf(todev + 1, intclks);
 
@@ -763,22 +788,21 @@ i1d3_raw_measurement_1(
 }
 
 /* Take a raw measurement that returns the number of clocks */
-/* between the given number of (both) edges of the L2V. */
-/* The number of edges must be even (because it counts from same edge ?) */
-/* and between 2 and 65534 inclusive. */ 
+/* between and initial edge and edgec[] subsequent edges of the L2F. */
+/* The edge count must be between 1 and 65535 inclusive. */ 
+/* Both edges are counted. It's advisable to use and even edgec[], */
+/* because the L2F output may not be symetric. */
 /* If there are no edges within 10 seconds, return a count of 0 */
 static inst_code
-i1d3_raw_measurement_2(
+i1d3_period_measure(
 	i1d3 *p,				/* Object */
 	int edgec[3],			/* Measurement edge count for each channel */
 	int mask,				/* Bit mask to enable channels */
 	double rgb[3]			/* Return the RGB values */
 ) {
-	int intclks;
 	unsigned char todev[64];
 	unsigned char fromdev[64];
 	inst_code ev;
-	int isdeb = p->icom->debug;
 
 	memset(todev, 0, 64);
 	memset(fromdev, 0, 64);
@@ -787,7 +811,7 @@ i1d3_raw_measurement_2(
 	short2buf(todev + 3, edgec[1]);
 	short2buf(todev + 5, edgec[2]);
 
-	todev[7] = mask;	
+	todev[7] = (unsigned char)mask;	
 	todev[8] = 0;			/* Unknown parameter, always 0 */	
 	
 	if ((ev = i1d3_command(p, i1d3_measure2, todev, fromdev, 20.0)) != inst_ok)
@@ -813,19 +837,17 @@ i1d3_set_LEDs(
 	double ontime,			/* On time. Fade is included in this */
 	int count				/* Pulse count. 0x80 = infinity ? */
 ) {
-	int intclks;
 	unsigned char todev[64];
 	unsigned char fromdev[64];
 	inst_code ev;
-	int isdeb = p->icom->debug;
 	double mul1, mul2;
 	int ftime, ntime; 
 
 	memset(todev, 0, 64);
 	memset(fromdev, 0, 64);
 
-	mul1 = p->clkrate/(1 << 23);
-	mul2 = p->clkrate/(1 << 19);
+	mul1 = p->clk_freq/(1 << 23);
+	mul2 = p->clk_freq/(1 << 19);
 
 	ftime = (int)(0.5 + offtime * mul2);
 	if (ftime < 0)
@@ -850,10 +872,10 @@ i1d3_set_LEDs(
 	else if (count > 0x80)
 		count = 0x80;
 
-	todev[1] = mode;
-	todev[2] = ftime;
-	todev[3] = ntime;
-	todev[4] = count;
+	todev[1] = (unsigned char)mode;
+	todev[2] = (unsigned char)ftime;
+	todev[3] = (unsigned char)ntime;
+	todev[4] = (unsigned char)count;
 
 	if ((ev = i1d3_command(p, i1d3_setled, todev, fromdev, 1.0)) != inst_ok)
 		return ev;
@@ -864,61 +886,35 @@ i1d3_set_LEDs(
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - */
-#ifdef NEVER
 /*
 
-	determining the refresh rate for a CRT.
+	determining the refresh rate for a refresh type display;
 
-	With white being shown:
+	Read 1500 .5 msec samples as fast as possible, and
+	timestamp them.
+	Interpolate values up to .05 msec regular samples.
+	Do an auto-correlation on the samples.
+	Pick the longest peak as the best sample period.
 
-	read over 2 secs.
-	read with int time of 1 to 25 msec in 1msec increments
-	Choose time with starting value closest to 2 secs.
-	(Problem with this is that a reading could by chance
-     be close, if it's timing is central about the average value.)
+	If there is an error, return it.
 
-	Use search to locate t where readings for t and 2 x t are
-	closest in value within range +/- 1 msec.
+	If there is no aparent refresh, or the refresh rate is not determinable,
+	return a period of 0.0 and inst_ok;
 
+	To break up the USB synchronization, the integration time
+	is randomized slightly.
 */
 
-static double freq_funk(void *fdata, double tp[]) {
-	i1d3 *p = (i1d3 *) fdata;
-	inst_code ev;
-	int i;
-	double per;
-	double rgb[3];
-	double ming, maxg;
-	double de;
-
-	per = tp[0]; 
-	if (per < 0.004)
-		per = 0.004; 
-	else if (per > 0.025)
-		per = 0.025; 
-
-	ming = 1e60, maxg = -1e60;
-	for (i = 0; i < 5; i++) {
-
-		if ((ev = i1d3_raw_measurement_1(p, &per, rgb)) != inst_ok)
- 			-1.0;
-
-		rgb[1] *= 0.5/per;
-
-		if (rgb[1] > maxg)
-			maxg = rgb[1];
-		if (rgb[1] < ming)
-			ming = rgb[1];
-
-		msec_sleep((int)(per * 600));
-	}
-	
-	de = 80.0 * (maxg - ming)/per;		/* Noise reduces with sqrt of per ? */
-
-//	printf("Period %.2f msec DE %f\n",1000.0 * tp[0], de);
-
-	return de;
-}
+#ifndef PSRAND32L 
+# define PSRAND32L(S) ((S) * 1664525L + 1013904223L)
+#endif
+#define NFSAMPS 1000		/* Number of samples to read */
+#define NFMXTIME 4.0		/* Maximum time to take */
+#define PBPMS 20		/* bins per msec */
+#define PERMIN ((1000 * PBPMS)/80)	/* 80 Hz */
+#define PERMAX ((1000 * PBPMS)/20)	/* 20 Hz*/
+#define NPER (PERMAX - PERMIN + 1)
+#define PWIDTH (4 * PBPMS)			/* 4 msec bin spread to look for peak in */
 
 static inst_code
 i1d3_measure_refresh(
@@ -926,104 +922,290 @@ i1d3_measure_refresh(
 	double *period
 ) {
 	inst_code ev;
-	double tt;
-	double f1, f2;
-	double de, minde, mindefr;
-	double per;
-	double avde;
-	int i;
+	int i, j, k;
+	double ucalf = 1.0;				/* usec_time calibration factor */
+	double inttimel = 0.0003;
+	double inttimeh = 0.0040;
+	double sutime, putime, cutime, eutime;
+	unsigned int randn = 0x12345678;
+	struct {
+		double itime;	/* Integration time */
+		double sec;
+		double rgb[3];
+	} samp[NFSAMPS];
+	int nfsamps;		/* Actual samples read */
+	double maxt;		/* Time range */
+	int nbins;
+	double *bins[3];	/* PBPMS sample bins */
+	double corr[NPER];	/* Correlation for each period value */
+	double mincv, maxcv;	/* Max and min correlation values */
+	double crange;			/* Correlation range */
+	int pki;			/* Peak index */
+	double pkv;			/* Peak value */
+	double pval;		/* Period value */
+	int isdeb, iscdeb;
 
-	// !!! This doesn't work. Reading is too unreliable.
-	// scan of frequencies is needed to get into the ballpark,
-	// and then a finer scan with a statistical calculation
-	// to estimate the final value.
+	if (usec_time() < 0.0) {
+		if (p->debug) fprintf(stderr,"i1d3: No high resolution timers\n");
+		return inst_internal_error; 
+	}
+
+	isdeb = p->debug;
+	iscdeb = p->icom->debug;
+	p->icom->debug = 0;
+	p->debug = 0;
+
+	/* Do some measurement and throw them away, to make sure the code is in cache. */
+	for (i = 0; i < 5; i++) {
+		if ((ev = i1d3_freq_measure(p, &inttimeh, samp[i].rgb)) != inst_ok)
+	 		return ev;
+	}
+
+#ifdef NEVER		/* This appears to be unnecessary */
+	/* Calibrate the usec timer against the instrument */
+	{
+		double inttime1, inttime2;
+		inttime1 = 0.001; 
+		inttime2 = 0.501; 
+
+		sutime = usec_time();
+
+		if ((ev = i1d3_freq_measure(p, &inttime1, samp[0].rgb)) != inst_ok)
+	 		return ev;
+
+		putime = usec_time();
+
+		if ((ev = i1d3_freq_measure(p, &inttime2, samp[0].rgb)) != inst_ok)
+	 		return ev;
+
+		cutime = usec_time();
+
+		ucalf = 1000000.0 * (inttime2 - inttime1)/(cutime - 2.0 * putime + sutime);
+
+		if (p->verb) printf("Clock calibration factor = %f\n",ucalf);
+	}
+#endif
+
+	/* Read the samples */
+	sutime = usec_time();
+	putime = (usec_time() - sutime) / 1000000.0;
+	for (i = 0; i < NFSAMPS; i++) {
+		double rval;
+		
+		randn = PSRAND32L(randn); 
+		rval = (double)randn/4294967295.0;
+		rval *= rval;
+		rval *= rval;		/* Sharpen it up */
+		samp[i].itime = (inttimeh - inttimel) * rval + inttimel;
+
+		if ((ev = i1d3_freq_measure(p, &samp[i].itime, samp[i].rgb)) != inst_ok)
+ 			return ev;
+		cutime = (usec_time() - sutime) / 1000000.0;
+		samp[i].sec = 0.5 * (putime + cutime);	/* Mean of before and after stamp */
+		putime = cutime;
+		if (cutime > NFMXTIME)
+			break; 
+	}
+	nfsamps = i;
+	if (nfsamps < 100) {
+		*period = 0.0;
+		if (p->verb) printf("No distict refresh period\n");
+		if (p->debug) fprintf(stderr,"i1d3: Couldn't find a distinct refresh frequency\n");
+		return inst_ok; 
+	}
+ 
+	p->icom->debug = iscdeb;
+	p->debug = isdeb;
+	if (p->verb) printf("Read %d samples for refresh calibration\n",nfsamps);
+
 #ifdef NEVER
-	double re;
-	double cp[1] = { 0.007 } ;
-	double s[1] =  { 0.005 } ;
+	/* Plot the raw sensor values */
+	{
+		double xx[NFSAMPS];
+		double y1[NFSAMPS];
+		double y2[NFSAMPS];
+		double y3[NFSAMPS];
 
-	if (powell(&re, 1, cp, s, 0.5, 20,
-freq_funk,
-(void *)p, NULL, NULL) != 0) {
-		printf("powell failed\n");
-	} else {
-		printf("refresh = %f Hz\n",1.0/cp[0]);
+		for (i = 0; i < nfsamps; i++) {
+			xx[i] = samp[i].sec;
+			y1[i] = samp[i].rgb[0];
+			y2[i] = samp[i].rgb[1];
+			y3[i] = samp[i].rgb[2];
+		//printf("%d: %f -> %f\n",i,samp[i].sec, samp[i].rgb[0]);
+		}
+		printf("Fast scan sensor values and time (sec)\n");
+		do_plot6(xx, y1, y2, y3, NULL, NULL, NULL, nfsamps);
 	}
-#endif	/* NEVER */
+#endif
 
-	/* If we do a 2:1 range we cover those frequencies and all multiples */
-	f1 = 80.0;
-	f2 = 40.0;
-	minde = 1e60, mindefr = 50.0;
-	for (tt = f1; tt >= f2; tt -= 5.0) {
-		double per = 1.0/tt;
-		double de;
-		
-		de = freq_funk((void *)p, &per);
-		printf("Freq %.2f Hz, diff %f\n",tt, de);
-
-		if (de < minde) {
-			minde = de;
-			mindefr = tt;
+	/* Re-zero the sample times, normalise int time, and calibrate it. */
+	maxt = -1e6;
+	for (i = nfsamps-1; i >= 0; i--) {
+		samp[i].sec -= samp[0].sec; 
+		samp[i].sec *= ucalf;
+		if (samp[i].sec > maxt)
+			maxt = samp[i].sec;
+		for (j = 0; j < 3; j++) {
+			samp[i].rgb[j] /= samp[i].itime;
 		}
 	}
-	printf("Min DE Freq %.2f Hz, diff %f\n",mindefr, minde);
 
-	/* Should use binary division search here */
-	f1 = mindefr + 5.0;
-	f2 = mindefr - 5.0;
-	minde = 1e60, mindefr = 50.0;
-	for (tt = f1; tt >= f2; tt -= 2.0) {
-		double per = 1.0/tt;
-		double de;
-		
-		de = freq_funk((void *)p, &per);
-		printf("Freq %.2f Hz, diff %f\n",tt, de);
+	/* Create PBPMS bins and interpolate readings into them */
+	nbins = 1 + (int)(maxt * 1000.0 * PBPMS + 0.5);
+	for (j = 0; j < 3; j++) {
+		if ((bins[j] = (double *)calloc(sizeof(double), nbins)) == NULL)
+			error("i1d3: malloc failed in i1d3_measure_refresh()!");
+	}
 
-		if (de < minde) {
-			minde = de;
-			mindefr = tt;
+	/* Do the interpolation */
+	for (k = 0; k < (nfsamps-1); k++) {
+		int sbin, ebin;
+		sbin = (int)(samp[k].sec * 1000.0 * PBPMS + 0.5);
+		ebin = (int)(samp[k+1].sec * 1000.0 * PBPMS + 0.5);
+		for (i = sbin; i <= ebin; i++) {
+// ~~99
+			double bl;
+#if defined(__APPLE__) && defined(__POWERPC__)
+			gcc_bug_fix(i);
+#endif
+			bl = (i - sbin)/(double)(ebin - sbin);	/* 0.0 to 1.0 */
+			for (j = 0; j < 3; j++) {
+				bins[j][i] = (1.0 - bl) * samp[k].rgb[j] + bl * samp[k+1].rgb[j];
+			}
+		} 
+	}
+
+#ifdef PLOT_REFRESH
+	/* Plot interpolated values */
+	{
+		double *xx;
+		double *y1;
+		double *y2;
+		double *y3;
+
+		xx = malloc(sizeof(double) * nbins);
+		y1 = malloc(sizeof(double) * nbins);
+		y2 = malloc(sizeof(double) * nbins);
+		y3 = malloc(sizeof(double) * nbins);
+
+		if (xx == NULL || y1 == NULL || y2 == NULL || y3 == NULL)
+			error("i1d3: malloc failed in i1d3_measure_refresh()!");
+		for (i = 0; i < nbins; i++) {
+			xx[i] = i / (double)PBPMS;			/* msec */
+			y1[i] = bins[0][i];
+			y2[i] = bins[1][i];
+			y3[i] = bins[2][i];
+		}
+		printf("Interpolated fast scan sensor values and time (msec)\n");
+		do_plot6(xx, y1, y2, y3, NULL, NULL, NULL, nbins);
+
+		free(xx);
+		free(y1);
+		free(y2);
+		free(y3);
+	}
+#endif /* PLOT_REFRESH */
+
+	/* Compute auto-correlation at 1/PBPMS msec intervals */
+	/* from 12.5 msec (80Hz) to 50msec (20 Hz) */
+	mincv = 1e6, maxcv = -1.0;
+	for (i = 0; i < NPER; i++) {
+		int poff = PERMIN + i;		/* Offset to corresponding sample */
+		corr[i] = 0.0;
+
+		for (k = 0; (k + poff) < nbins; k++) {
+			for (j = 0; j < 3; j++) {
+				corr[i] += bins[j][k] * bins[j][k + poff];
+			}
+		}
+		corr[i] /= (double)k;		/* Normalize */
+		if (corr[i] > maxcv)
+			maxcv = corr[i];
+		if (corr[i] < mincv)
+			mincv = corr[i];
+	}
+	crange = maxcv - mincv;
+	DBG(("Corr value range %f - %f = %f\n",mincv, maxcv,crange))
+
+#ifdef PLOT_REFRESH
+	/* Plot auto correlation */
+	{
+		double xx[NPER];
+		double y1[NPER];
+
+		for (i = 0; i < NPER; i++) {
+			xx[i] = (i + PERMIN) / (double)PBPMS;			/* msec */
+			y1[i] = corr[i];
+		}
+		printf("Auto correlation (msec)\n");
+		do_plot6(xx, y1, NULL, NULL, NULL, NULL, NULL, NPER);
+	}
+#endif /* PLOT_REFRESH */
+
+	/* Locate the first peak starting at the longest correllation */
+	for (i = (NPER-1-PWIDTH); i >= 0; i--) {
+		double v1, v2, v3;
+		v1 = corr[i];
+		v2 = corr[i + PWIDTH/2];
+		v3 = corr[i + PWIDTH];
+
+		if (fabs(v3 - v1) < (0.1 * crange)
+		 && (v2 - v1) > (0.05 * crange)
+		 && (v2 - v3) > (0.05 * crange)) {
+			DBG(("First max between %f and %f msec\n",(i + PERMIN)/(double)PBPMS,(i + PWIDTH + PERMIN)/(double)PBPMS))
+			break;
 		}
 	}
-	printf("Min DE Freq %.2f Hz, diff %f\n",mindefr, minde);
+	if (i < 0) {
+		*period = 0.0;
+		if (p->verb) printf("No distict refresh period\n");
+		if (p->debug) fprintf(stderr,"i1d3: Couldn't find a distinct refresh frequency\n");
+		return inst_ok; 
+	}
 
-	/* Should use binary division search here */
-	f1 = mindefr + 2.0;
-	f2 = mindefr - 2.0;
-	minde = 1e60, mindefr = 50.0;
-	for (tt = f1; tt >= f2; tt -= 0.5) {
-		double per = 1.0/tt;
-		double de;
-		
-		de = freq_funk((void *)p, &per);
-		printf("Freq %.2f Hz, diff %f\n",tt, de);
-
-		if (de < minde) {
-			minde = de;
-			mindefr = tt;
+	/* Locate the actual peak */
+	pkv = -1.0;
+	pki = 0;
+	for (j = i; i < (j + PWIDTH); i++) {
+		if (corr[i] > pkv) {
+			pkv = corr[i];
+			pki = i;
 		}
 	}
-	printf("Min DE Freq %.2f Hz, diff %f\n",mindefr, minde);
+	DBG(("Peak is at %f msec, %f corr\n", (pki + PERMIN)/(double)PBPMS, pkv))
 
-	per = 0.2;
-	for (avde = 0.0, i = 0; i < 10; i++) {
-		avde += de = freq_funk((void *)p, &per);
-		printf("Perdiod %f DE %f\n",per,de);
+	/* Interpolate the peak value for higher precision */
+	/* (Is this worth it ??) */
+	{
+		double ii, bl;
+		/* j = bigest */
+		if (corr[pki-1] > corr[pki+1])  {
+			j = pki-1;
+			k = pki+1;
+		} else {
+			j = pki+1;
+			k = pki-1;
+		}
+		bl = (corr[pki] - corr[j])/(corr[pki] - corr[k]);
+		bl = (bl + 1.0)/2.0;
+		ii = bl * pki + (1.0 - bl) * j;
+		pval = (ii + PERMIN)/(double)PBPMS;
+		if (p->verb) printf("Refresh period = %f msec\n",pval);
+		/* Error against my 85Hz CRT - GWG */
+//		printf("Refresh error = %f msec\n",fabs(pval - 4000.0/85.0));	
+		if (p->debug) fprintf(stderr,"i1d3: Refresh period = %f msec\n",pval);
 	}
-	printf("Average for per %f = %e\n",per,avde/10.0);
-
-	per = 1.0/mindefr;
-	per = (int)(0.2/per + 0.999) * per;
-	for (avde = 0.0, i = 0; i < 10; i++) {
-		avde += de = freq_funk((void *)p, &per);
-		printf("Perdiod %f DE %f\n",per,de);
-	}
-	printf("Average for per %f = %e\n",per,avde/10.0);
+	*period = pval/1000.0;
 
 	return inst_ok;
 }
+#undef NFSAMPS 
+#undef PBPMS
+#undef PERMIN
+#undef PERMAX
+#undef NPER
+#undef PWIDTH
 
-#endif /* NEVER */
 /* - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Take an ambient measurement and return the cooked reading */
@@ -1049,7 +1231,7 @@ i1d3_take_amb_measurement(
 	if (pos != 1)
 		return i1d3_interp_code((inst *)p, I1D3_SPOS_AMB);
 
-	if ((ev = i1d3_raw_measurement_1(p, &p->inttime, rgb)) != inst_ok)
+	if ((ev = i1d3_freq_measure(p, &p->inttime, rgb)) != inst_ok)
  		return ev;
 
 	/* Scale to account for counting both edges (?) over integration time */
@@ -1066,6 +1248,14 @@ i1d3_take_amb_measurement(
 	return inst_ok;
 }
 
+
+
+/* - - - - - - - - - - - - - - - - - - - - - - */
+
+//#define DEBUG
+//#undef DBG
+//#define DBG(xxx) printf xxx ;
+
 /* Take an display measurement and return the cooked reading */
 /* The cooked reading is the frequency of the L2V */
 static inst_code
@@ -1074,14 +1264,21 @@ i1d3_take_emis_measurement(
 	i1d3_mmode mode,	/* Measurement mode */
 	double *rgb			/* Return the cooked emsissive RGB values */
 ) {
-	int i;				/* Returned byte - not used */
+	int i, k;
 	int pos;
 	inst_code ev;
 	double rmeas[3] = { -1.0, -1.0, -1.0 };	/* raw measurement */
-	int edgec[3] = {2,2,2};	/* Measurement edge count for each channel */
+	int edgec[3] = {2,2,2};	/* Measurement edge count for each channel (not counting start edge) */
 	int mask = 0x7;			/* Period measure mask */
 #ifdef DEBUG
 	int msecstart = msec_time();
+#endif
+#ifdef DO_SYNCHRONIZE
+	int synccount = 30;
+	double syncinttime = 0.001;
+	int maxch;
+	double maxmax, shighth, slowth;
+	double syncfail = 0;
 #endif
 
 	if (p->inited == 0)
@@ -1100,15 +1297,70 @@ i1d3_take_emis_measurement(
 	/* If we should take a frequency measurement first */
 	if (mode == i1d3_adaptive || mode == i1d3_frequency) {
 
+		/* Typically this is 200msec */
 		DBG(("Doing fixed period frequency measurement over %f secs\n",p->inttime));
 
+#ifdef DO_SYNCHRONIZE
+		if (p->refmode && p->refperiod  > 0.0) {
+			double stime;
+			double trgb[3];
+			double maxv[3] = {-1e9, -1e9, -1e9};
+			double minv[3] = {1e9, 1e9, 1e9};
+			int i, j, m;
+		
+			/* Discover the min and max values */
+			stime = usec_time();
+			for (i = 0; i < synccount ;i++) {
+				if ((ev = i1d3_freq_measure(p, &syncinttime, trgb)) != inst_ok)
+		 			return ev;
+				for (j = 0; j < 3; j++) {
+					if (trgb[j] < minv[j])
+						minv[j] = trgb[j];
+					if (trgb[j] > maxv[j])
+						maxv[j] = trgb[j];
+				}
+			}
+printf("Neasured for %f msec\n", (usec_time() - stime) / 1000.0);
+
+			/* Locate the maximum value of any of the channels */
+			maxmax = -1e9;
+			for (j = 0; j < 3; j++) {
+				if (maxv[j] > maxmax) {
+					maxmax = maxv[j];
+					maxch = j;
+				}
+			}
+			/* Set high and low thresholds */
+			shighth = 0.9 * (maxmax - minv[maxch]) + minv[maxch];
+			slowth = 0.1 * (maxmax - minv[maxch]) + minv[maxch];
+printf("samples %d, maxmax = %f chan %d, min %f\n",i, maxmax,maxch,minv[maxch]);
+		
+			/* Wait till we get the high then low value */
+			for (m = i = 0; i < synccount; i++) {
+				if ((ev = i1d3_freq_measure(p, &syncinttime, trgb)) != inst_ok)
+		 			return ev;
+				if (m) {
+					if (trgb[maxch] <= slowth)
+						break;
+//					m = 0;
+					continue;
+				}
+				if (trgb[maxch] >= shighth)
+					m = 1;
+			}
+			if (i == synccount)
+				syncfail = 1;
+		}
+#endif /* DO_SYNCHRONIZE */
+
 		/* Take a frequency measurement over a fixed period */
-		if ((ev = i1d3_raw_measurement_1(p, &p->inttime, rmeas)) != inst_ok)
+		if ((ev = i1d3_freq_measure(p, &p->inttime, rmeas)) != inst_ok)
  			return ev;
 
 		/* Convert to frequency (assume raw meas is both edges count over integration time) */
-		for (i = 0; i < 3; i++)
-			rgb[i] = (rmeas[i] * 0.5 + 0.5)/p->inttime;
+		for (i = 0; i < 3; i++) {
+			rgb[i] = (0.5 * rmeas[i])/p->inttime;
+		}
 
 		DBG(("Got %s raw, %s Hz\n",icmPdv(3,rmeas),icmPdv(3,rgb)));
 	}
@@ -1122,84 +1374,122 @@ i1d3_take_emis_measurement(
 			mask = 0x0;
 
 			for (i = 0; i < 3; i++) {
-				/* Not measured or count is too small for desired precision */
+				/* Not measured or count is too small for desired precision. */
 				/* (We're being twice as critical as the OEM driver here) */
-				if (rmeas[i] < 200.0)		/* Could be 0.25% quantization error */
+				if (rmeas[i] < 200.0) {		/* Could be 0.25% quantization error */
+					DBG(("chan %d needs period reading\n",i));
 					mask |= 1 << i;			
-				else
-					edgec[i] = 0;
+				} else {
+					DBG(("chan %d has sufficient frequeny count\n",i));
+//					edgec[i] = 0;
+				}
 			}
 		}
 
-		if (mask != 0x0) {
-			int mask2 = 0x0;
+		if (mask != 0x0) {	/* Some measurement wasn't accurate enough, so use period */
+			int mask2 = mask;
 
-			DBG(("Doing initial period measurement mask 0x%x, edgec %s\n",mask,icmPiv(3,edgec)));
-			/* Take an initial period  measurement over 2 edges */
-			if ((ev = i1d3_raw_measurement_2(p, edgec, mask, rmeas)) != inst_ok)
-	 			return ev;
-
-			DBG(("Got %s raw %f %f %f Hz\n",icmPdv(3,rmeas),
-			     p->clkrate/rmeas[0], p->clkrate/rmeas[1], p->clkrate/rmeas[2]));
-
-			/* Do 2nd initial measurement if the count is small, in case */
-			/* we are measuring a CRT with a refresh rate which adds innacuracy, */
-			/* and could result in a unecessarily long re-reading. */
-			/* Don't do this for Munki Display, because of its slow measurements. */
-			if (p->dtype != i1d3_munkdisp) {
-				for (i = 0; i < 3; i++) {
-					if ((mask & (1 << i)) == 0)
-						continue;
-
-					if (rmeas[i] > 0.5) {
-						double nedgec;
-						int inedgec;
-
-						/* Compute number of edges needed for a clock count */
-						/* of 0.01 seconds */
-						nedgec = edgec[i] * 0.025 * p->clkrate/rmeas[i];
-
-						DBG(("chan %d target edges %f\n",i,nedgec));
-
-						/* Limit to a legal range */
-						if (nedgec > 65534.0)
-							nedgec = 65534.0;
-						else if (nedgec < 2.0)
-							nedgec = 2.0;
-
-						inedgec = (int)floor(nedgec) + 0.5;
-
-						/* Make sure it is an even edge count */
-						if (inedgec & 1)
-							inedgec++;
-
-						DBG(("chan %d set edgec to %d\n",i,inedgec));
-
-						/* Don't do 2nd initial measure if we have fewer number of edges */
-						if (inedgec > edgec[i]) {
-							mask2 |= (1 << i);
-							edgec[i] = inedgec;
-						}
-					}
+			/* See if we need to do some pre-measurement to compute how many */
+			/* edges to count. */
+			for (i = 0; i < 3; i++) {
+				if ((mask & (1 << i)) == 0)
+					continue;
+				
+				if (rmeas[i] < 10.0) {
+					DBG(("chan %d needs pre-measurement\n",i));
+					mask2 |= 1 << i;			
+				} else {
+					double freq;
+					mask2 &= ~(1 << i);			
+					/* Convert rmeas[i] from frequency to period equivalent */
+					/* for subsequent calculations */
+					freq = (rmeas[i] * 0.5)/p->inttime;
+					rmeas[i] = (0.5 * edgec[i] * p->clk_freq)/freq; 
+					DBG(("chan %d has sufficient frequeny count to avoid pre-measure (rmeas_p %f)\n",i,rmeas[i]));
 				}
-				if (mask2 != 0x0) {
-					double rmeas2[3];
+			}
+			if (mask2 != 0x0) {
+				int mask3 = 0x0;
 
-					DBG(("Doing 2nd initial period measurement mask 0x%x, edgec %s\n",mask,icmPiv(3,edgec)));
-					/* Take a 2nd initial period  measurement */
-					if ((ev = i1d3_raw_measurement_2(p, edgec, mask2, rmeas2)) != inst_ok)
-			 			return ev;
+				DBG(("Doing 1st period pre-measurement mask 0x%x, edgec %s\n",mask2,icmPiv(3,edgec)));
+				/* Take an initial period  measurement over 2 edges */
+				if ((ev = i1d3_period_measure(p, edgec, mask, rmeas)) != inst_ok)
+		 			return ev;
 
-					DBG(("Got %s raw %f %f %f Hz\n",icmPdv(3,rmeas),
-					     0.5 * edgec[0] * p->clkrate/rmeas[0],
-					     0.5 * edgec[1] * p->clkrate/rmeas[1],
-					     0.5 * edgec[2] * p->clkrate/rmeas[2]));
+				DBG(("Got %s raw %f %f %f Hz\n",icmPdv(3,rmeas),
+				     0.5 * edgec[0] * p->clk_freq/rmeas2[0],
+				     0.5 * edgec[1] * p->clk_freq/rmeas2[1],
+				     0.5 * edgec[2] * p->clk_freq/rmeas2[2]));
 
-					/* Transfer updated counts from 2nd initial measurement */
+				/* Do 2nd initial measurement if the count is small, in case */
+				/* we are measuring a CRT with a refresh rate which adds innacuracy, */
+				/* and could result in a unecessarily long re-reading. */
+				/* Don't do this for Munki Display, because of its slow measurements. */
+				if (p->dtype != i1d3_munkdisp) {
 					for (i = 0; i < 3; i++) {
-						if ((mask2 & (1 << i)) == 0)
+						if ((mask & (1 << i)) == 0)
 							continue;
-						rmeas[i]  = rmeas2[i];
+
+						if (rmeas[i] > 0.5) {
+							double nedgec;
+							int inedgec;
+
+							/* Compute number of edges needed for a clock count */
+							/* of 0.050 seconds */
+							nedgec = edgec[i] * 0.050 * p->clk_freq/rmeas[i];
+
+							DBG(("chan %d target edges %f\n",i,nedgec));
+
+							/* Limit to a legal range */
+							if (nedgec > 65534.0)
+								nedgec = 65534.0;
+							else if (nedgec < 2.0)
+								nedgec = 2.0;
+
+							/* Round to nearest even edge count */
+							inedgec = 2 * (int)floor(nedgec/2.0 + 0.5);
+
+							DBG(("chan %d set edgec to %d\n",i,inedgec));
+
+							/* Don't do 2nd initial measure if we have fewer number of edges */
+							if (inedgec > edgec[i]) {
+								mask3 |= (1 << i);
+								edgec[i] = inedgec;
+							}
+						}
+#ifdef DEBUG
+						else printf("chan %d had no reading, so skipping period measurement\n",i);
+#endif
+					}
+					if (mask3 != 0x0) {
+						double rmeas2[3];
+
+						DBG(("Doing 2nd initial period measurement mask 0x%x, edgec %s\n",mask,icmPiv(3,edgec)));
+						/* Take a 2nd initial period  measurement */
+						if ((ev = i1d3_period_measure(p, edgec, mask3, rmeas2)) != inst_ok)
+				 			return ev;
+
+						DBG(("Got %s raw %f %f %f Hz\n",icmPdv(3,rmeas2),
+						     0.5 * edgec[0] * p->clk_freq/rmeas2[0],
+						     0.5 * edgec[1] * p->clk_freq/rmeas2[1],
+						     0.5 * edgec[2] * p->clk_freq/rmeas2[2]));
+
+						/* Transfer updated counts from 2nd initial measurement */
+						for (i = 0; i < 3; i++) {
+							if ((mask3 & (1 << i)) == 0)
+								continue;
+#ifdef DEBUG
+							{
+								double ratio;
+								if (rmeas2[i] > rmeas[i])
+									ratio = rmeas2[i] / rmeas[i];
+								else
+									ratio = rmeas[i] / rmeas2[i];
+								printf("Chan %d 1st to 2nd initial value ratio %f\n",i,ratio);
+							}
+#endif
+							rmeas[i]  = rmeas2[i];
+						}
 					}
 				}
 			}
@@ -1213,8 +1503,8 @@ i1d3_take_emis_measurement(
 					double nedgec;
 
 					/* Compute number of edges needed for a clock count */
-					/* of p->LCDtime seconds (ie. typical 2.4e6 clocks). */
-					nedgec = edgec[i] * p->LCDtime * p->clkrate/rmeas[i];
+					/* of 2 * p->inttime (typically 0.4) seconds (ie. typical 2.4e6 clocks). */
+					nedgec = edgec[i] * 2.0 * p->inttime * p->clk_freq/rmeas[i];
 
 					DBG(("chan %d target edges %f\n",i,nedgec));
 
@@ -1224,11 +1514,8 @@ i1d3_take_emis_measurement(
 					else if (nedgec < 2.0)
 						nedgec = 2.0;
 
-					edgec[i] = (int)floor(nedgec) + 0.5;
-
-					/* Make sure it is an even edge count */
-					if (edgec[i] & 1)
-						edgec[i]++;
+					/* Round to nearest even edge count */
+					edgec[i] = 2 * (int)floor(nedgec/2.0 + 0.5);
 
 					DBG(("chan %d set edgec to %d\n",i,edgec[i]));
 
@@ -1236,7 +1523,7 @@ i1d3_take_emis_measurement(
 					if (edgec[i] == 2) {
 
 						/* Use measurement from 2 edges */
-						rgb[i] = (p->clkrate * 0.5 * edgec[i])/rmeas[i];
+						rgb[i] = (p->clk_freq * 0.5 * edgec[i])/rmeas[i];
 						mask &= ~(1 << i);
 						edgec[i] = 0;
 
@@ -1251,21 +1538,45 @@ i1d3_take_emis_measurement(
 			}
 
 			if (mask != 0x0) {
-
 				DBG(("Doing period re-measure mask 0x%x, edgec %s\n",mask,icmPiv(3,edgec)));
 
+#ifdef DO_SYNCHRONIZE
+				if (p->refmode && p->refperiod  > 0.0) {
+					double trgb[3];
+					int m;
+				
+					/* Wait till we get the high then low value */
+					for (m = i = 0; i < synccount; i++) {
+						if ((ev = i1d3_freq_measure(p, &syncinttime, trgb)) != inst_ok)
+				 			return ev;
+						if (m) {
+							if (trgb[maxch] <= slowth)
+								break;
+//								m = 0;
+							continue;
+						}
+						if (trgb[maxch] >= shighth)
+							m = 1;
+					}
+					if (i == synccount)
+						syncfail = 1;
+				}
+#endif /* DO_SYNCHRONIZE */
+
 				/* Measure again with desired precision, taking up to 0.2 secs */
-				if ((ev = i1d3_raw_measurement_2(p, edgec, mask, rmeas)) != inst_ok)
+				if ((ev = i1d3_period_measure(p, edgec, mask, rmeas)) != inst_ok)
 		 			return ev;
 	
 				for (i = 0; i < 3; i++) {
+					double tt;
 					if ((mask & (1 << i)) == 0)
 						continue;
 	
 					/* Compute the frequency from period measurement */
-					rgb[i] = (p->clkrate * 0.5 * edgec[i])/rmeas[i];
-					DBG(("chan %d raw %f frequency %f (%d msec)\n",i,rmeas[i],rgb[i],
-					                            (int)(1000.0 * rmeas[i]/p->clkrate + 0.5)));
+					rgb[i] = (p->clk_freq * 0.5 * edgec[i])/rmeas[i];
+					DBG(("chan %d raw %f frequency %f (%f Sec)\n",i,rmeas[i],trgb[i],
+					                            rmeas[i]/p->clk_freq));
+
 				}
 			}
 			DBG(("Got %s Hz after period measure\n",icmPdv(3,rgb)));
@@ -1273,6 +1584,15 @@ i1d3_take_emis_measurement(
 	}
 
 	DBG(("Took %d msec to measure\n", msec_time() - msecstart));
+
+#ifdef DO_SYNCHRONIZE
+	if (p->verb && p->refmode && p->refperiod > 0.0) {
+		if (syncfail)
+			printf("Synchronization failed\n");
+		else
+			printf("Synchronization succeeded\n");
+	}
+#endif
 
 	/* Subtract black level */
 	for (i = 0; i < 3; i++) {
@@ -1286,6 +1606,10 @@ i1d3_take_emis_measurement(
 	return inst_ok;
 }
 
+//#undef DEBUG
+//#undef DBG
+//#define DBG(xxx) 
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Take a XYZ measurement from the device */
@@ -1294,9 +1618,7 @@ i1d3_take_XYZ_measurement(
 	i1d3 *p,				/* Object */
 	double XYZ[3]			/* Return the XYZ values */
 ) {
-	int i, j;
 	inst_code ev;
-	double *mat;		/* Pointer to matrix */
 
 	if ((p->mode & inst_mode_measurement_mask) == inst_mode_emis_ambient) {
 		if ((ev = i1d3_take_amb_measurement(p, XYZ)) != inst_ok)
@@ -1374,7 +1696,9 @@ static inst_code i1d3_decode_extEE(
 	if (rchsum != chsum)
 		return i1d3_interp_code((inst *)p, I1D3_BAD_EX_CHSUM);
 		
-	// Read 3 x sensor spectral sensitivits
+	/* Read 3 x sensor spectral sensitivits */
+	/* These seem to be in Hz per W/nm @ 1nm spacing, */
+	/* so convert to Hz per mW/nm which is our default assumption. */
 	p->cal_date = buf2ord64(buf + 0x001E);
 
 	for (j = 0; j < 3; j++) {
@@ -1386,6 +1710,7 @@ static inst_code i1d3_decode_extEE(
 			unsigned int val;
 			val = buf2uint(buf + off);
 			p->sens[j].spec[i] = IEEE754todouble(val);
+			p->sens[j].spec[i] /= 1000;
 		}
 		p->ambi[j] = p->sens[j];	/* Structure copy */
 	}
@@ -1451,7 +1776,10 @@ static inst_code i1d3_decode_extEE(
 /* a means of calibrating the Ambient readings. */
 /* (This matches the OEM default calibrations.) */
 /* We could weight this towards minimizing white error */
-/* by synthesizing a white patch to add to the "sample" set. */
+/* by synthesizing a white patch to add to the "sample" set */
+/* (but this might make the result worse!), or we could */
+/* add or use spectral shape target (ie. analogous to */
+/* one sample per spectral wavelength, weighted by CMF's) */
 
 /* The more general calibration uses a set of spectral samples, */
 /* and a least squares matrix is computed to map the sensor RGB */
@@ -1460,6 +1788,8 @@ static inst_code i1d3_decode_extEE(
 /* allows weigting towards a distribution of actual spectral samples. */
 /* (The OEM driver supplies .edr files with this information. We use */
 /* .ccsp files) */
+/* To allow less than 3 samples, extra secondary constraints could be added, */
+/* such as CMF's as pseudo-samples or a spectral shape target. */
 
 static inst_code
 i1d3_comp_calmat(
@@ -1491,16 +1821,21 @@ i1d3_comp_calmat(
 		return i1d3_interp_code((inst *)p, I1D3_INT_CIECONVFAIL);
 	for (i = 0; i < nsamp; i++) {
 		conv->convert(conv, sampXYZ[i], &samples[i]); 
-		for (j = 0; j < 3; j++)			/* Scale to 683 lumens/watt */
-			sampXYZ[i][j] *= 683.0;
 	}
 	conv->del(conv);
 
 	/* Compute sensor RGB of the sample array */
-	if ((conv = new_xsp2cie(icxIT_none, NULL, icxOT_custom, RGBcmfs, icSigXYZData)) == NULL)
+	if ((conv = new_xsp2cie(icxIT_none, NULL, icxOT_custom, RGBcmfs, icSigXYZData)) == NULL) {
+		free_dmatrix(sampXYZ, 0, nsamp-1, 0, 3-1);
+		free_dmatrix(sampRGB, 0, nsamp-1, 0, 3-1);
 		return i1d3_interp_code((inst *)p, I1D3_INT_CIECONVFAIL);
-	for (i = 0; i < nsamp; i++)
+	}
+	for (i = 0; i < nsamp; i++) {
 		conv->convert(conv, sampRGB[i], &samples[i]); 
+		/* But we need to undo lumens scaling, because it doesn't apply to RGB sensor values */
+		for (j = 0; j < 3; j++)
+			sampRGB[i][j] /= 0.683002;
+	}
 	conv->del(conv);
 
 	/* If there are exactly 3 samples, we can directly compute the */
@@ -1508,8 +1843,11 @@ i1d3_comp_calmat(
 	if (nsamp == 3) {
 		copy_dmatrix_to3x3(XYZ, sampXYZ, 0, 2, 0, 2);
 		copy_dmatrix_to3x3(RGB, sampRGB, 0, 2, 0, 2);
-		if (icmInverse3x3(iRGB, RGB))
+		if (icmInverse3x3(iRGB, RGB)) {
+			free_dmatrix(sampXYZ, 0, nsamp-1, 0, 3-1);
+			free_dmatrix(sampRGB, 0, nsamp-1, 0, 3-1);
 			return i1d3_interp_code((inst *)p, I1D3_TOO_FEW_CALIBSAMP);
+		}
 
 		icmMul3x3_2(mat, iRGB, XYZ);
 		icmTranspose3x3(mat, mat);
@@ -1532,12 +1870,17 @@ i1d3_comp_calmat(
 					RGB[j][i] += sampRGB[k][i] * sampRGB[k][j];
 			}
 		}
-		if (icmInverse3x3(iRGB, RGB))
+		if (icmInverse3x3(iRGB, RGB)) {
+			free_dmatrix(sampXYZ, 0, nsamp-1, 0, 3-1);
+			free_dmatrix(sampRGB, 0, nsamp-1, 0, 3-1);
 			return i1d3_interp_code((inst *)p, I1D3_TOO_FEW_CALIBSAMP);
+		}
 
 		icmMul3x3_2(mat, iRGB, XYZ);
 		icmTranspose3x3(mat, mat);
 	}
+	free_dmatrix(sampXYZ, 0, nsamp-1, 0, 3-1);
+	free_dmatrix(sampRGB, 0, nsamp-1, 0, 3-1);
 
 	return inst_ok;
 }
@@ -1550,12 +1893,9 @@ i1d3_comp_calmat(
 static inst_code
 i1d3_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 	i1d3 *p = (i1d3 *) pp;
-	unsigned char buf[8];
-	int rsize;
-	long etime;
-	int bi, i, rv;
 	int stat;
 	inst_code ev = inst_ok;
+	icomuflags usbflags = icomuf_none;
 #ifdef NT
 	/* If the X-Rite software has been installed, then there may */
 	/* be a utility that has the device open. Kill that process off */
@@ -1575,6 +1915,11 @@ i1d3_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 		fprintf(stderr,"i1d3: About to init coms\n");
 	}
 
+	/* On Linux, the i1d3 doesn't seem to close properly - */
+	/* something to do with detaching the default HID driver ?? */
+#if defined(UNIX) && !defined(__APPLE__)
+	usbflags |= icomuf_reset_before_close;
+#endif
 	/* Open as an HID if available */
 	if (p->icom->is_hid_portno(p->icom, port) != instUnknown) {
 
@@ -1590,15 +1935,17 @@ i1d3_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) {
 		/* Set config, interface, write end point, read end point */
 		/* ("serial" end points aren't used - the i1d3 uses USB control messages) */
 		/* We need to detatch the HID driver on Linux */
-		p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, icomuf_detach, 0, NULL); 
+		p->icom->set_usb_port(p->icom, port, 1, 0x00, 0x00, usbflags | icomuf_detach, 0, NULL); 
 
 	} else {
 		if (p->debug) fprintf(stderr,"i1d3: init_coms called to wrong device!\n");
 			return i1d3_interp_code((inst *)p, I1D3_UNKNOWN_MODEL);
 	}
 
+#if defined(UNIX) && defined(__APPLE__)
 	/* We seem to have to clear any pending messages for OS X HID */
 	i1d3_dummy_read(p);
+#endif
 
 	/* Check instrument is responding */
 	if ((ev = i1d3_check_status(p,&stat)) != inst_ok) {
@@ -1626,7 +1973,7 @@ static void dump_bytes(FILE *fp, char *pfx, unsigned char *buf, int len) {
 				if (isprint(buf[j]))
 					fprintf(fp,"%c",buf[j]);
 				else
-					fprintf(fp,".",buf[j]);
+					fprintf(fp,".");
 			}
 			fprintf(fp,"\n");
 		}
@@ -1643,6 +1990,8 @@ i1d3_init_inst(inst *pp) {
 	unsigned char buf[8192];
 
 	if (p->debug) fprintf(stderr,"i1d3: About to init instrument\n");
+
+	p->rrset = 0;
 
 	if (p->gotcoms == 0)
 		return i1d3_interp_code((inst *)p, I1D3_NO_COMS);	/* Must establish coms first */
@@ -1661,6 +2010,10 @@ i1d3_init_inst(inst *pp) {
 	}
 	if ((ev = i1d3_get_prodtype(p, &p->prod_type)) != inst_ok) {
 		if (p->debug) fprintf(stderr,"i1d3: init_inst failed with rv = 0x%x\n",ev);
+	}
+	if (p->prod_type == 0x0002) {	/* If ColorMunki Display */
+		/* Set this in case it doesn't need unlocking */
+		p->dtype = p->stype = i1d3_munkdisp;
 	}
 	if ((ev = i1d3_get_firmver(p, p->firm_ver)) != inst_ok) {
 		if (p->debug) fprintf(stderr,"i1d3: init_inst failed with rv = 0x%x\n",ev);
@@ -1720,9 +2073,9 @@ i1d3_init_inst(inst *pp) {
 	}
 
 	/* Set known constants */
-	p->clkrate = 12e6;		/* 12 Mhz */
-	p->inttime = 0.2;		/* 0.2 second integration time default */
-	p->LCDtime = 0.2;		/* 0.2 second LCD target time default */
+	p->clk_freq = 12e6;		/* 12 Mhz */
+	p->dinttime = 0.2;		/* 0.2 second integration time default */
+	p->inttime = p->dinttime;	/* Start in non-refresh mode */
 
 	/* Create the default calibrations */
 	if ((ev = i1d3_comp_calmat(p, p->emis_cal, icxOT_CIE_1931_2, NULL, p->sens, p->sens, 3)) != inst_ok) {
@@ -1751,8 +2104,6 @@ i1d3_init_inst(inst *pp) {
 		if (p->debug) fprintf(stderr,"i1d3: instrument inited OK\n");
 	}
 
-	p->itype = instI1Disp3;
-
 	/* Flash the LED, just cos we can! */
 	if ((ev = i1d3_set_LEDs(p, i1d3_flash, 0.2, 0.05, 2)) != inst_ok)
 		return ev;
@@ -1769,24 +2120,48 @@ char *name,			/* Strip name (7 chars) */
 ipatch *val) {		/* Pointer to instrument patch value */
 	i1d3 *p = (i1d3 *)pp;
 	int user_trig = 0;
-
 	int rv = inst_protocol_error;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	if (p->trig == inst_opt_trig_keyb) {
 		int se;
 		if ((se = icoms_poll_user(p->icom, 1)) != ICOM_TRIG) {
 			/* Abort, term or command */
-			return i1d3_interp_code((inst *)p, icoms2i1d3_err(se));
+			return i1d3_interp_code((inst *)p, icoms2i1d3_err(se, 1));
 		}
 		user_trig = 1;
 		if (p->trig_return)
 			printf("\n");
 	}
 
-	/* Read the XYZ value */
-	if ((rv = i1d3_take_XYZ_measurement(p, val->aXYZ)) != inst_ok) {
-		return rv;
+	/* Attempt a refresh display frame rate calibration if needed */
+	if (p->dtype != i1d3_munkdisp && p->refmode != 0 && p->rrset == 0) {
+		inst_code ev = inst_ok;
+
+		if ((ev = i1d3_measure_refresh(p, &p->refperiod)) != inst_ok)
+			return ev; 
+		p->rrset = 1;
+
+		/* Quantize the sample time */
+		if (p->refperiod > 0.0) {
+			int n;
+			n = (int)ceil(p->dinttime/p->refperiod);
+			p->inttime = n * p->refperiod;
+//p->inttime = 2.0 * p->dinttime;	/* Double integration time */
+			if (p->debug) fprintf(stderr,"i1d3: integration time quantize to %f secs\n",p->inttime);
+		} else {
+			p->inttime = 2.0 * p->dinttime;	/* Double integration time */
+			if (p->debug) fprintf(stderr,"i1d3: integration time doubled to %f secs\n",p->inttime);
+		}
 	}
+
+	/* Read the XYZ value */
+	if ((rv = i1d3_take_XYZ_measurement(p, val->aXYZ)) != inst_ok)
+		return rv;
 
 	val->XYZ_v = 0;
 	val->aXYZ_v = 1;		/* These are absolute XYZ readings ? */
@@ -1809,6 +2184,11 @@ double mtx[3][3]
 ) {
 	i1d3 *p = (i1d3 *)pp;
 
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
+
 	if (mtx == NULL)
 		icmSetUnity3x3(p->ccmat);
 	else
@@ -1830,6 +2210,11 @@ int no_sets
 ) {
 	i1d3 *p = (i1d3 *)pp;
 	inst_code ev = inst_ok;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	if (obType == icxOT_default)
 		obType = icxOT_CIE_1931_2;
@@ -1867,10 +2252,17 @@ int no_sets
 
 /* Determine if a calibration is needed. Returns inst_calt_none if not, */
 /* inst_calt_unknown if it is unknown, or inst_calt_crt_freq for an */
-/* Eye-One Display 2 if a frequency calibration is needed, */
-/* and we are in CRT mode */
+/* if a frequency calibration is needed, and we are in refresh mode */
 inst_cal_type i1d3_needs_calibration(inst *pp) {
 	i1d3 *p = (i1d3 *)pp;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
+
+	if (p->dtype != i1d3_munkdisp && p->refmode != 0 && p->rrset == 0)
+		return inst_calt_crt_freq;
 
 	return inst_ok;
 }
@@ -1883,10 +2275,45 @@ inst_cal_cond *calc,	/* Current condition/desired condition */
 char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 ) {
 	i1d3 *p = (i1d3 *)pp;
-	int rv = 0;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	id[0] = '\000';
 
+	/* Translate default into what's needed or expected default */
+	if (calt == inst_calt_all) {
+		if (p->dtype != i1d3_munkdisp && p->refmode != 0)
+			calt = inst_calt_crt_freq;
+	}
+
+	if (calt == inst_calt_crt_freq && p->dtype != i1d3_munkdisp && p->refmode != 0) {
+		inst_code ev = inst_ok;
+
+		if (*calc != inst_calc_disp_white) {
+			*calc = inst_calc_disp_white;
+			return inst_cal_setup;
+		}
+
+		/* Do refresh display rate calibration */
+		if ((ev = i1d3_measure_refresh(p, &p->refperiod)) != inst_ok)
+			return ev; 
+		p->rrset = 1;
+
+		/* Quantize the sample time */
+		if (p->refperiod > 0.0) {
+			int n;
+			n = (int)ceil(p->dinttime/p->refperiod);
+			p->inttime = n * p->refperiod;
+			if (p->debug) fprintf(stderr,"i1d3: integration time quantize to %f secs\n",p->inttime);
+		} else {
+			p->inttime = 2.0 * p->dinttime;	/* Double integration time */
+			if (p->debug) fprintf(stderr,"i1d3: integration time doubled to %f secs\n",p->inttime);
+		}
+		return inst_ok;
+	}
 	return inst_unsupported;
 }
 
@@ -2041,7 +2468,6 @@ i1d3_del(inst *pp) {
 
 /* Return the instrument capabilities */
 inst_capability i1d3_capabilities(inst *pp) {
-	i1d3 *p = (i1d3 *)pp;
 	inst_capability rv;
 
 	rv = inst_emis_spot
@@ -2049,6 +2475,7 @@ inst_capability i1d3_capabilities(inst *pp) {
 	   | inst_emis_proj
 	   | inst_emis_ambient
 	   | inst_colorimeter
+	   | inst_emis_disptype
 	   | inst_ccmx
 	   | inst_ccss
 	     ;
@@ -2066,7 +2493,59 @@ inst2_capability i1d3_capabilities2(inst *pp) {
 	rv |= inst2_keyb_trig;
 	rv |= inst2_has_leds;
 
+	if (p->dtype != i1d3_munkdisp) {
+		rv |= inst2_cal_crt_freq;
+	}
+
 	return rv;
+}
+
+/* This isn't used at the moment, */
+/* but most of the implementation is in place. */
+inst_disptypesel i1d3_disptypesel[3] = {
+	{
+		1,
+		"rc",
+		"i1d3: Refresh display",
+		1
+	},
+	{
+		2,
+		"nl",
+		"i1d3: Non-Refresh display [Default]",
+		0
+	},
+	{
+		0,
+		"",
+		"",
+		-1
+	}
+};
+
+/* Get mode and option details */
+static inst_code i1d3_get_opt_details(
+inst *pp,
+inst_optdet_type m,	/* Requested option detail type */
+...) {				/* Status parameters */                             
+
+	if (m == inst_optdet_disptypesel) {
+		va_list args;
+		int *pnsels;
+		inst_disptypesel **psels;
+
+		va_start(args, m);
+		pnsels = va_arg(args, int *);
+		psels = va_arg(args, inst_disptypesel **);
+		va_end(args);
+
+		*pnsels = 2;
+		*psels = i1d3_disptypesel;
+		
+		return inst_ok;
+	}
+
+	return inst_unsupported;
 }
 
 /* Set device measurement mode */
@@ -2075,6 +2554,10 @@ inst_code i1d3_set_mode(inst *pp, inst_mode m)
 	i1d3 *p = (i1d3 *)pp;
 	inst_mode mm;		/* Measurement mode */
 
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	/* The measurement mode portion of the mode */
 	mm = m & inst_mode_measurement_mask;
@@ -2101,7 +2584,6 @@ inst *pp,
 inst_status_type m,	/* Requested status type */
 ...) {				/* Status parameters */                             
 	i1d3 *p = (i1d3 *)pp;
-	inst_code rv = inst_ok;
 
 	/* Return the sensor mode */
 	if (m == inst_stat_sensmode) {
@@ -2138,7 +2620,39 @@ static inst_code
 i1d3_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 {
 	i1d3 *p = (i1d3 *)pp;
-	inst_code ev = inst_ok;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
+
+	/* Set the display type */
+	if (m == inst_opt_disp_type) {
+		va_list args;
+		int ix;
+
+		va_start(args, m);
+		ix = va_arg(args, int);
+		va_end(args);
+
+		if (ix == 1) {
+			p->refmode = 1;					/* Refresh mode */
+			if (p->dtype == i1d3_munkdisp) {
+				p->inttime = 2.0 * p->dinttime;	/* Double integration time */
+			} else {
+				p->inttime = p->dinttime;		/* Normal integration time */
+			}
+			p->rrset = 0;					/* This is a hint we may have swapped displays */
+			return inst_ok;
+		} else if (ix == 0 || ix == 2) {	/* Default or 2 */
+			p->refmode = 0;					/* Non-Refresh mode */
+			p->inttime = p->dinttime;		/* Normal integration time */
+			p->rrset = 0;					/* This is a hint we may have swapped displays */
+			return inst_ok;
+		} else {
+			return inst_unsupported;
+		}
+	}
 
 	/* Record the trigger mode */
 	if (m == inst_opt_trig_prog
@@ -2257,7 +2771,7 @@ i1d3_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 }
 
 /* Constructor */
-extern i1d3 *new_i1d3(icoms *icom, int debug, int verb)
+extern i1d3 *new_i1d3(icoms *icom, instType itype, int debug, int verb)
 {
 	i1d3 *p;
 	if ((p = (i1d3 *)calloc(sizeof(i1d3),1)) == NULL)
@@ -2277,6 +2791,7 @@ extern i1d3 *new_i1d3(icoms *icom, int debug, int verb)
 	p->init_inst         = i1d3_init_inst;
 	p->capabilities      = i1d3_capabilities;
 	p->capabilities2     = i1d3_capabilities2;
+	p->get_opt_details   = i1d3_get_opt_details;
 	p->set_mode          = i1d3_set_mode;
 	p->set_opt_mode      = i1d3_set_opt_mode;
 	p->read_sample       = i1d3_read_sample;
@@ -2287,14 +2802,15 @@ extern i1d3 *new_i1d3(icoms *icom, int debug, int verb)
 	p->interp_error      = i1d3_interp_error;
 	p->del               = i1d3_del;
 
-	p->itype = instUnknown;		/* Until initalisation */
+	p->itype = itype;
 
 	return p;
 }
 
 
-/* Combine the 8 byte key and 64 byte challenge into a 64 bit response.  */
-static void create_unlock_response(unsigned char *k, unsigned char *c, unsigned char *r) {
+
+/* Combine the 2 word key and 64 byte challenge into a 64 bit response.  */
+static void create_unlock_response(unsigned int *k, unsigned char *c, unsigned char *r) {
 	int i;
 	unsigned char sc[8], sr[16];	/* Sub-challeng and response */
 
@@ -2305,76 +2821,59 @@ static void create_unlock_response(unsigned char *k, unsigned char *c, unsigned 
 	
 	/* Combine key with 16 byte challenge to create core 16 byte response */
 	{
-		unsigned int ci[4];		/* key amd challenge as 4 ints */
+		unsigned int ci[2];		/* challenge as 4 ints */
 		unsigned int co[4];		/* product, difference of 4 ints */
 		unsigned int sum;		/* Sum of all input bytes */
 		unsigned char s0, s1;	/* Byte components of sum. */
 
-		/* If key == -1, return -1. This allows limited functionality ? */
-		for (i = 0; i < 8; i++) {
-			if (k[i] != 0xff)
-				break;
-		}
-		if (i >= 8) {
-			for (i = 0; i < 16; i++)
-				sr[i] = 0xff;
+		/* Shuffle bytes into 32 bit ints to be able to use 32 bit computation. */
+		ci[0] = (sc[3] << 24)
+              + (sc[0] << 16)
+              + (sc[4] << 8)
+              + (sc[6]);
 
-		/* Got a real key */
-		} else {
+		ci[1] = (sc[1] << 24)
+              + (sc[7] << 16)
+              + (sc[2] << 8)
+              + (sc[5]);
+	
+		/* Computation on the ints */
+		co[0] = -k[0] - ci[1];
+		co[1] = -k[1] - ci[0];
+		co[2] = ci[1] * -k[0];
+		co[3] = ci[0] * -k[1];
+	
+		/* Sum of challenge bytes */
+		for (sum = 0, i = 0; i < 8; i++)
+			sum += sc[i];
 
-			/* Shuffle bytes into 32 bit ints to be able to use 32 bit computation. */
-			ci[0] = (k[6] << 24)
-	              + (k[4] << 16)
-	              + (k[2] << 8)
-	              + (k[0]);
+		/* Minus the two key values as bytes */
+		sum += (0xff & -k[0]) + (0xff & (-k[0] >> 8))
+	        + (0xff & (-k[0] >> 16)) + (0xff & (-k[0] >> 24));
+		sum += (0xff & -k[1]) + (0xff & (-k[1] >> 8))
+	         + (0xff & (-k[1] >> 16)) + (0xff & (-k[1] >> 24));
 	
-			ci[1] = (k[7] << 24)
-	              + (k[5] << 16)
-	              + (k[3] << 8)
-	              + (k[1]);
+		/* Convert sum to bytes. Only need 2, because sum of 16 bytes can't exceed 16 bits. */
+		s0 =  sum       & 0xff;
+		s1 = (sum >> 8) & 0xff;
 	
-			ci[2] = (sc[3] << 24)
-	              + (sc[0] << 16)
-	              + (sc[4] << 8)
-	              + (sc[6]);
-	
-			ci[3] = (sc[1] << 24)
-	              + (sc[7] << 16)
-	              + (sc[2] << 8)
-	              + (sc[5]);
-	
-			/* Computation on the ints */
-			co[0] = ci[0] - ci[3];
-			co[1] = ci[1] - ci[2];
-			co[2] = ci[3] * ci[0];
-			co[3] = ci[2] * ci[1];
-	
-			/* Sum of key and challenge bytes */
-			for (sum = 0, i = 0; i < 8; i++)
-				sum += k[i] + sc[i];
-	
-			/* Convert sum to bytes. Only need 2, because sum of 16 bytes can't exceed 16 bits. */
-			s0 =  sum       & 0xff;
-			s1 = (sum >> 8) & 0xff;
-	
-			/* Final computation of bytes from 4 ints + sum bytes */
-			sr[0] =  ((co[0] >> 16) & 0xff) + s0;
-			sr[1] =  ((co[2] >>  8) & 0xff) - s1;
-			sr[2] =  ( co[3]        & 0xff) + s1;
-			sr[3] =  ((co[1] >> 16) & 0xff) + s0;
-			sr[4] =  ((co[2] >> 16) & 0xff) - s1;
-			sr[5] =  ((co[3] >> 16) & 0xff) - s0;
-			sr[6] =  ((co[1] >> 24) & 0xff) - s0;
-			sr[7] =  ( co[0]        & 0xff) - s1;
-			sr[8] =  ((co[3] >>  8) & 0xff) + s0;
-			sr[9] =  ((co[2] >> 24) & 0xff) - s1;
-			sr[10] = ((co[0] >>  8) & 0xff) + s0;
-			sr[11] = ((co[1] >>  8) & 0xff) - s1;
-			sr[12] = ( co[1]        & 0xff) + s1;
-			sr[13] = ((co[3] >> 24) & 0xff) + s1;
-			sr[14] = ( co[2]        & 0xff) + s0;
-			sr[15] = ((co[0] >> 24) & 0xff) - s0;
-		}
+		/* Final computation of bytes from 4 ints + sum bytes */
+		sr[0] =  ((co[0] >> 16) & 0xff) + s0;
+		sr[1] =  ((co[2] >>  8) & 0xff) - s1;
+		sr[2] =  ( co[3]        & 0xff) + s1;
+		sr[3] =  ((co[1] >> 16) & 0xff) + s0;
+		sr[4] =  ((co[2] >> 16) & 0xff) - s1;
+		sr[5] =  ((co[3] >> 16) & 0xff) - s0;
+		sr[6] =  ((co[1] >> 24) & 0xff) - s0;
+		sr[7] =  ( co[0]        & 0xff) - s1;
+		sr[8] =  ((co[3] >>  8) & 0xff) + s0;
+		sr[9] =  ((co[2] >> 24) & 0xff) - s1;
+		sr[10] = ((co[0] >>  8) & 0xff) + s0;
+		sr[11] = ((co[1] >>  8) & 0xff) - s1;
+		sr[12] = ( co[1]        & 0xff) + s1;
+		sr[13] = ((co[3] >> 24) & 0xff) + s1;
+		sr[14] = ( co[2]        & 0xff) + s0;
+		sr[15] = ((co[0] >> 24) & 0xff) - s0;
 	}
 
 	/* The OEM driver sets the resonse to random bytes, */

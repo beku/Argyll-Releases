@@ -30,7 +30,17 @@
 
  */
 
-#undef DEBUG			/* Save measurements and restore them to debug_X.sp */
+#undef DEBUG			/* Save measurements and restore them to outname_X.sp */
+						/* 
+
+							outname_i.sp	Illuminant spectrum
+							outname_r.sp	Illuminant off paper spectrum
+							outname_p.sp	Instrument measured paper reflectance spectrum
+							outname_mpir.sp	Measured paper under illuminant spectrum
+							outname_cpir.sp	Computed paper under illuminant spectrum
+
+						 */
+
 #define SHOWDXX			/* Plot the best matched daylight as well */
 
 #include <stdio.h>
@@ -430,7 +440,7 @@ int main(int argc, char *argv[])
 
 			if (it == NULL) {
 				/* Open the instrument */
-				if ((it = new_inst(comno, instUnknown, debug, verb)) == NULL) {
+				if ((it = new_inst(comno, 0, debug, verb)) == NULL) {
 					printf("!!! Unknown, inappropriate or no instrument detected !!!\n");
 					continue;
 				}
@@ -1031,6 +1041,12 @@ int main(int argc, char *argv[])
 					printf("\nWriting file '%s' failed\n",outname);
 				else
 					printf("\nWriting file '%s' succeeded\n",outname);
+#ifdef DEBUG
+				strcpy(tnp, "_mpir.sp");		// Measured paper under illuminant spectrum
+				write_xspect(tname,&bf.srop);
+				strcpy(tnp, "_cpir.sp");		// Computed paper under illuminant spectrum
+				write_xspect(tname,&bf.cpsp);
+#endif
 			}
 
 			/* Plot the result */
@@ -1119,7 +1135,7 @@ int main(int argc, char *argv[])
 				do_plot_x(xx, y1, y2, y3, bf.cpsp.spec_n, 1,
 				          xmin, xmax, ymin, ymax, 2.0);
 
-#else
+#else	// !SHOWDXX
 				printf("Illuminant: Black - Measured, Red - with estimated UV\n");
 
 				if (bf.ill.spec_n > XSPECT_MAX_BANDS)
@@ -1154,7 +1170,7 @@ int main(int argc, char *argv[])
 				do_plot_x(xx, y1, y2, y3, bf.cpsp.spec_n, 1,
 				          xmin, xmax, ymin, ymax, 2.0);
 
-#endif
+#endif	// !SHOWDXX
 				printf("%s illuminant with UV:\n",c == '5' ? "Averaged" : "Computed");
 
 				for (j = 0; j < ill.spec_n; j++) {

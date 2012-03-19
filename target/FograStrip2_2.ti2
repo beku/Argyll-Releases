@@ -1,7 +1,7 @@
 CTI2
 
 DESCRIPTOR "Argyll Calibration Target chart information 2"
-ORIGINATOR "Manualy created for FOGRA strip #2 "
+ORIGINATOR "Manualy created for FOGRA strip #2 in 2 strip layout"
 CREATED "Wed Jun 1 15:06:24 2004"
 KEYWORD "TARGET_INSTRUMENT"
 TARGET_INSTRUMENT "GretagMacbeth SpectroScan"

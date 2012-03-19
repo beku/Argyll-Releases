@@ -33,6 +33,7 @@
 #include <string.h>
 #if defined (NT)
 #define WIN32_LEAN_AND_MEAN
+#include <io.h>
 #include <windows.h>
 #endif
 #ifdef UNIX
@@ -58,6 +59,7 @@
 struct _archive {
 	int verb;
 	int isvise;				/* Is this an archive ? */
+	unsigned int vbase;		/* Base address of archive */
 	unsigned char *abuf;	/* Buffer holding archive file */
 	unsigned int asize;		/* Nuber of bytes in file */
 	unsigned int off;		/* Current offset */
@@ -128,6 +130,8 @@ int locate_file_arch(archive *p, char *name) {
 			if (strncmp((char *)&p->abuf[i], name, sl) == 0) {
 				int sto;
 				/* Found it */
+				if (p->verb)
+					printf("Located driver entry '%s' at offset 0x%x\n",name,i);
 				i += sl;
 				if (i >= (p->asize - 1))
 					return 1;
@@ -139,7 +143,7 @@ int locate_file_arch(archive *p, char *name) {
 				p->off += (p->abuf[i + 1] << 8);
 				p->off += (p->abuf[i + 2] << 16);
 				p->off += (p->abuf[i + 3] << 24);
-				p->off += 0x10000;
+				p->off += p->vbase;
 				if (p->off >= p->asize - 10)
 					return 1;
 				if (p->verb)
@@ -182,6 +186,8 @@ void unget16_arch(archive *p) {
 /* --------------------------------------------------------- */
 /* Interface with vinflate.c */
 
+int vinflate(void);
+
 archive *g_va = NULL;
 
 /* fetch the next 16 bits, big endian */
@@ -212,7 +218,7 @@ int vwrite_output(unsigned char *buf, unsigned int len) {
 /* create an archive by reading the file into memory */
 archive *new_arch(char *name, int verb) {
 	FILE *ifp;
-	unsigned int bread;
+	unsigned int bread, i;
 	int rv = 0;
 	archive *p;
 
@@ -257,18 +263,22 @@ archive *new_arch(char *name, int verb) {
 	
 	fclose(ifp);
 
-	if (p->asize >= 0x10100
-	 && p->abuf[0x10003] == 'V'
-	 && p->abuf[0x10002] == 'I'
-	 && p->abuf[0x10001] == 'S'
-	 && p->abuf[0x10000] == 'E')
-		p->isvise = 1;
+	/* See if it looks like a VIZE archive */
+	for (i = 0x10000; i < 0x11000 && i < (p->asize-4); i++) {
+		if (p->abuf[i + 3] == 'V'
+		 && p->abuf[i + 2] == 'I'
+		 && p->abuf[i + 1] == 'S'
+		 && p->abuf[i + 0] == 'E') {
+			p->isvise = 1;
+			p->vbase = i;
+		}
+	}
 
 	if (p->isvise) {		/* Need to locate driver file and decompress it */
 		char *dname = "CVSpyder.dll";
 
 		if (verb)
-			printf("Input file '%s' is a VISE archive file\n",name);
+			printf("Input file '%s' is a VISE archive file base 0x%x\n",name,p->vbase);
 		p->dsize = 0;
 		p->maxdsize = 650000;
 		if ((p->dbuf = (unsigned char *)malloc(p->asize)) == NULL)
@@ -289,6 +299,9 @@ archive *new_arch(char *name, int verb) {
 			free(p->abuf);
 		p->abuf = NULL;
 		
+	} else {
+		if (verb)
+			printf("Input file '%s' is NOT a VISE archive file - assume it's a .dll\n",name);
 	}
 
 	/* Locate the Spyder firmware image */

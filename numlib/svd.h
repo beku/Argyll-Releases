@@ -53,6 +53,7 @@ int      n		/* Number of unknowns */
 /* Solve the equation A.x = b using SVD */
 /* (The w[] values are thresholded for best accuracy) */
 /* Return non-zero if no solution found */
+/* !!! Note that A[][] will be changed !!! */
 int svdsolve(
 double **a,		/* A[0..m-1][0..n-1] input A[][], will return U[][] */
 double b[],		/* B[0..m-1]  Right hand side of equation, return solution */
@@ -60,8 +61,21 @@ int      m,		/* Number of equations */
 int      n		/* Number of unknowns */
 );
 
+/* Solve the equation A.x = b using SVD */
+/* The top s out of n singular values will be used */
+/* Return non-zero if no solution found */
+/* !!! Note that A[][] will be changed !!! */
+int svdsolve_s(
+double **a,		/* A[0..m-1][0..n-1] input A[][], will return U[][] */
+double b[],		/* B[0..m-1]  Right hand side of equation, return solution */
+int      m,		/* Number of equations */
+int      n,		/* Number of unknowns */
+int      s		/* Number of unknowns */
+);
+
 /* Solve the equation A.x = b using Direct calculation, LU or SVD as appropriate */
 /* Return non-zero if no solution found */
+/* !!! Note that A[][] will be changed !!! */
 int gen_solve_se(
 double **a,		/* A[0..m-1][0..n-1] input A[][], will return U[][] */
 double b[],		/* B[0..m-1]  Right hand side of equation, return solution */

@@ -24,8 +24,10 @@ see the License.txt file for licensing details.
 	ColorCheckerSG.cht
 	ECI2002.ti2
 	ECI2002R.ti2
-	FograStrip.ti1
-	FograStrip.ti2
+	FograStrip2.ti1
+	FograStrip2.ti2
+	FograStrip3.ti1
+	FograStrip3.ti2
 	Hutchcolor.cht
 	LaserSoftDCPro.cht
 	QPcard_201.cht

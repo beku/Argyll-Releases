@@ -49,7 +49,7 @@ static int write_ccss(
 ccss *p,			/* This */
 char *outname	/* Filename to write to */
 ) {
-	int i, j, n;
+	int i, j;
 	time_t clk = time(0);
 	struct tm *tsp = localtime(&clk);
 	char *atm = asctime(tsp); /* Ascii time */
@@ -156,7 +156,7 @@ static int read_ccss(
 ccss *p,			/* This */
 char *inname	/* Filename to read from */
 ) {
-	int i, j, n, ix;
+	int i, j;
 	cgats *icg;			/* input cgats structure */
 	int ti, ii;			/* Temporary CGATs index */
 	int  spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
@@ -276,7 +276,7 @@ char *inname	/* Filename to read from */
 		}
 	}
 
-	if ((p->no_samp = icg->t[0].nsets) <= 3) {
+	if ((p->no_samp = icg->t[0].nsets) < 3) {
 		sprintf(p->err, "Input file '%s' doesn't contain at least three spectral samples",inname);
 		p->no_samp = 0;
 		icg->del(icg);		/* Clean up */
@@ -364,7 +364,7 @@ int no_samp			/* Number of spectral samples */
 		p->samples = NULL;
 	}
 
-	if ((p->no_samp = no_samp) <= 3) {
+	if ((p->no_samp = no_samp) < 3) {
 		strcpy(p->err, "Must be at least three spectral samples");
 		p->no_samp = 0;
 		return 1;

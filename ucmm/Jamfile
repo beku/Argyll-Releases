@@ -16,7 +16,7 @@ Headers = ucmm.h ;
 #InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
 #InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
 
-HDRS = ../jcnf ../icc ;
+HDRS = ../jcnf ../spectro ../icc ;
 
 # config parser based on yajl 
 Library libucmm : ucmm.c ;

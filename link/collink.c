@@ -132,6 +132,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -C copyright    Copyright string\n");
 	fprintf(stderr," -V              Verify existing profile, rather than link\n");
 	fprintf(stderr," -q lmhu         Quality - Low, Medium (def), High, Ultra\n");
+//	fprintf(stderr," -q fmsu         Speed - Fast, Medium (def), Slow, Ultra Slow\n");
 	fprintf(stderr," -r res          Override clut res. set by -q\n");
 	fprintf(stderr," -n              Don't preserve device linearization curves in result\n");
 	fprintf(stderr," -f              Special :- Force neutral colors to be K only output\n");
@@ -1302,24 +1303,27 @@ main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage("Quality flag (-q) needs an argument");
     			switch (na[0]) {
+					case 'f':				/* fast */
 					case 'l':
 					case 'L':
 						li.quality = 0;
 						break;
-					case 'm':
+					case 'm':				/* medium */
 					case 'M':
 						li.quality = 1;
 						break;
+					case 's':				/* slow */
 					case 'h':
 					case 'H':
 						li.quality = 2;
 						break;
-					case 'u':
+					case 'u':				/* ultra slow */
 					case 'U':
 						li.quality = 3;
 						break;
 					default:
 						usage("Unrecognised quality flag (-q) argument '%c'",na[0]);
+//						usage("Unrecognised speed flag (-q) argument '%c'",na[0]);
 				}
 			}
 
@@ -2587,12 +2591,12 @@ main(int argc, char *argv[]) {
 			if (xpi.manufacturer != 0L)
 				wh->manufacturer = xpi.manufacturer;
 			else
-				wh->manufacturer = str2tag("????");
+				wh->manufacturer = icmSigUnknownType;
 	
 			if (xpi.model != 0L)
 				wh->model = xpi.model;
 			else
-		    	wh->model        = str2tag("????");
+		    	wh->model        = icmSigUnknownType;
 	
 			/* Values that may be set before writing */
 			if (xpi.creator != 0L)

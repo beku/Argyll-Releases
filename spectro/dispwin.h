@@ -85,10 +85,10 @@ WINSHLWAPI LPWSTR WINAPI PathFindFileNameW(LPCWSTR);
 
 /* Profile instalation/association scope */
 typedef enum {
-	p_scope_user     = 0,		/* (user profiles) OS X & Vista */
-	p_scope_local    = 1,		/* (local system profiles) OS X  & vista */
-	p_scope_system   = 2,		/* (system profiles) OS X */
-	p_scope_network  = 3		/* (shared network profiles) OS X */
+	p_scope_user     = 0,		/* (user profiles) Linux, OS X & Vista */
+	p_scope_local    = 1,		/* (local system profiles) Linux, OS X & vista */
+	p_scope_system   = 2,		/* (system profiles) OS X. [ Linux, Vista same as local ] */
+	p_scope_network  = 3		/* (shared network profiles) [ OS X. Linux, Vista same as local ] */
 } p_scope;
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */

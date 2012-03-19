@@ -41,14 +41,15 @@
 /* and that there is only one spectrum if douv */
 static int do_spec(
 	char name[MAXGRAPHS][200],
-	xspect **sp,
+	xspect *sp,
 	int nsp,			/* Number of sp */
-	int iscmf,			/* nz if a CMF rather than spectrum */
+	int dozero,			/* Include zero in the range */
 	int douv,			/* Do variation of added UV test */
 	double uvmin,
 	double uvmax
 ) {
 	int n, i, j, k, m;
+	double wl_short, wl_long;		/* Common range */
 	double xyz[3];		/* Color temperature */
 	double Yxy[3];
 	double Lab[3];		/* D50 Lab value */
@@ -63,6 +64,9 @@ static int do_spec(
 	double uv = uvmin;
 	double step = 0.1;
 	xspect tsp;			/* Spectrum with possible UV added */
+	char *color[] = {
+		"Black", "Red", "Green", "Blue", "Yellow", "Purple", "Brown", "Orange", "Grey", "Magenta"
+	};
 
 	printf("\n");
 
@@ -73,11 +77,16 @@ static int do_spec(
 		nsp = 10;
 
 	m = 0;				/* offset in output array */
-	if (iscmf) {
-		douv = 0;
-		m = 1;
-	}
 	n = 1;
+
+	wl_short = 1e6;
+	wl_long = -1e6;
+	for (k = 0; k < nsp; k++) {
+		if (sp[k].spec_wl_long > wl_long)
+			wl_long = sp[k].spec_wl_long;
+		if (sp[k].spec_wl_short < wl_short)
+			wl_short = sp[k].spec_wl_short;
+	}
 
 	if (douv) {
 		n = 1 + (int)(0.5 + (uvmax-uvmin)/0.1);
@@ -88,12 +97,12 @@ static int do_spec(
 	}
 
 	for (k = 0; k < nsp; k++) {
-		tsp = *sp[k];
+		tsp = sp[k];
 		for (uv = uvmax, j = 0; j < n; j++, uv -= step) {
 
 			if (douv) {
 				printf("UV level = %f\n",uv);
-				xsp_setUV(&tsp, sp[k], uv);
+				xsp_setUV(&tsp, &sp[k], uv);
 			}
 				
 			/* Compute XYZ of illuminant */
@@ -103,7 +112,7 @@ static int do_spec(
 			icmXYZ2Yxy(Yxy, xyz);
 			icmXYZ2Lab(&icmD50, Lab, xyz);
 
-			printf("Type = %s\n",name[k]);
+			printf("Type = %s [%s]\n",name[k], color[k]);
 			printf("XYZ = %f %f %f, x,y = %f %f\n", xyz[0], xyz[1], xyz[2], Yxy[1], Yxy[2]);
 			printf("D50 L*a*b* = %f %f %f\n", Lab[0], Lab[1], Lab[2]);
 			
@@ -150,8 +159,8 @@ static int do_spec(
 			for (i = 0; i < XRES; i++) {
 				double ww;
 
-				ww = (tsp.spec_wl_long - tsp.spec_wl_short)
-				   * ((double)i/(XRES-1.0)) + tsp.spec_wl_short;
+				ww = (wl_long - wl_short)
+				   * ((double)i/(XRES-1.0)) + wl_short;
 			
 				xx[i] = ww;
 				yy[(m + k + j) % 10][i] = value_xspect(&tsp, ww);
@@ -159,7 +168,7 @@ static int do_spec(
 			yp[(m + k + j) % 10] = &yy[(m + k + j) % 10][0];
 		}
 	}
-	do_plot10(xx, yp[0], yp[1], yp[2], yp[3], yp[4], yp[5], yp[6], yp[7], yp[8], yp[9], XRES);
+	do_plot10(xx, yp[0], yp[1], yp[2], yp[3], yp[4], yp[5], yp[6], yp[7], yp[8], yp[9], XRES, dozero);
 
 
 	return 0;
@@ -172,6 +181,7 @@ void usage(void) {
 	fprintf(stderr,"usage: specplot [infile.sp]\n");
 	fprintf(stderr," -v               verbose\n");
 	fprintf(stderr," -c               combine multiple files into one plot\n");
+	fprintf(stderr," -z               make range cover zero\n");
 	fprintf(stderr," -u level         plot effect of adding estimated UV level\n");
 	fprintf(stderr," -U               plot effect of adding range of estimated UV level\n");
 	fprintf(stderr," [infile.sp ...]  spectrum files to plot\n");
@@ -188,9 +198,9 @@ main(
 	int k;
 	int verb = 0;
 	int comb = 0;
+	int zero = 0;
 	double temp;
-	xspect *sp[MAXGRAPHS];
-	xspect tsp;
+	xspect sp[MAXGRAPHS];
 	icxIllumeType ilType;
 	int douv = 0;
 	double uvmin = -1.0, uvmax = 1.0;
@@ -239,6 +249,9 @@ main(
 			} else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				comb = 1;
 
+			} else if (argv[fa][1] == 'z' || argv[fa][1] == 'Z') {
+				zero = 1;
+
 			} else {
 				usage();
 			}
@@ -248,56 +261,45 @@ main(
 	}
 
 	if (fa < argc && argv[fa][0] != '-') {	/* Got file arguments */
-		int iscmf = -1;			/* Type of spectrum */
-		int nsp = 0;
-		
-		while (fa < argc) {
-			xspect tsp[MAXGRAPHS+3];
+		int nsp = 0;		/* Current number in sp[] */
+		int soff = 0;		/* Offset within file */
+		int maxgraphs = MAXGRAPHS;
+		int eof;
 
-			sprintf(buf[nsp],"fa = %d, File '%s'",fa, argv[fa]);
-
-			if (read_xspect(&tsp[nsp], argv[fa]) == 0) {
-				if ((nsp > 0 && ( tsp->spec_n != sp[0]->spec_n
-				               || tsp->spec_wl_short != sp[0]->spec_wl_short
-				               || tsp->spec_wl_long != sp[0]->spec_wl_long))
-					|| iscmf == 1 || douv || nsp >= MAXGRAPHS) {
-					do_spec(buf, sp, nsp, iscmf, douv, uvmin, uvmax);
-					/* Note we're not freeing the xpsects */
-					tsp[0] = tsp[nsp];
-					nsp = 0;
-					iscmf = -1;
+		if (douv)
+			maxgraphs = 1;
 		
-				}
-				iscmf = 0;
-				sp[nsp] = &tsp[nsp];
-				nsp++;
-			} else {
-				if (read_cmf(&tsp[nsp], argv[fa]) != 0) {
-					error ("Unable to read custom spectrum or CMF '%s'",argv[fa]);
-				}
-				if ((nsp > 0 && ( tsp->spec_n != sp[0]->spec_n
-				               || tsp->spec_wl_short != sp[0]->spec_wl_short
-				               || tsp->spec_wl_long != sp[0]->spec_wl_long))
-				|| iscmf == 0 || douv || nsp >= (MAXGRAPHS - 2)) {
-					do_spec(buf, sp, nsp, iscmf, douv, uvmin, uvmax);
-					/* Note we're not freeing the xpsects */
-					tsp[0] = tsp[nsp];
-					tsp[1] = tsp[nsp+1];
-					tsp[2] = tsp[nsp+2];
-					nsp = 0;
-					iscmf = -1;
-				}
-				iscmf = 1;
-				sp[nsp+0] = &tsp[nsp+0];
-				sp[nsp+1] = &tsp[nsp+1];
-				sp[nsp+2] = &tsp[nsp+2];
-				nsp += 3;
+		nsp = 0;
+	
+		/* Until we run out */
+		for (;;) {
+			int i, nret, nreq;
+
+			/* If we've got to the limit of each plot, */
+			/* or at least one and there are no more files, */
+			/* or at least one and we're not combining files and at start of a new file */
+			if (nsp >= MAXGRAPHS || (nsp > 0 && ((!comb && soff == 0) || fa >= argc))) {
+				/* Plot what we've got */
+				do_spec(buf, sp, nsp, zero, douv, uvmin, uvmax);
+				nsp = 0;
 			}
-			fa++;
-		}
-		if (nsp > 0) {
-			do_spec(buf, sp, nsp, iscmf, douv, uvmin, uvmax);
-			/* Note we're not freeing the xpsects */
+
+			if (fa >= argc)		/* No more files */
+				break;
+
+			/* Read as many spectra from the file as possible */
+			nreq = MAXGRAPHS - nsp;
+			if (read_nxspect(&sp[nsp], argv[fa], &nret, soff, nreq, 3) != 0) {
+				error ("Unable to read custom spectrum or CMF '%s'",argv[fa]);
+			}
+			for (i = 0; i < nret; i++)
+				sprintf(buf[nsp + i],"File '%s' spect %d",argv[fa], soff + i);
+			nsp += nret;
+			soff += nret;
+			if (nret < nreq) {		/* We're done with this file */
+				fa++;
+				soff = 0;
+			}
 		}
 
 	} else {
@@ -328,12 +330,11 @@ main(
 					break;
 			}
 	
-			if (standardIlluminant(&tsp, ilType, 0) != 0)
+			if (standardIlluminant(&sp[0], ilType, 0) != 0)
 				error ("standardIlluminant returned error");
 		
-			sp[0] = &tsp;
 			strcpy(buf[0],inm);
-			do_spec(buf, sp, 1, 0, douv, uvmin, uvmax);
+			do_spec(buf, sp, 1, zero, douv, uvmin, uvmax);
 		}
 
 		/* For each material and illuminant */
@@ -343,13 +344,12 @@ main(
 	
 				ilType = k == 0 ? icxIT_Dtemp : icxIT_Ptemp;
 	
-				if (standardIlluminant(&tsp, ilType, temp) != 0)
+				if (standardIlluminant(&sp[0], ilType, temp) != 0)
 					error ("standardIlluminant returned error");
 		
 				sprintf(buf[0], "%s at %f", k == 0 ? "Daylight" : "Black body", temp);
 	
-				sp[0] = &tsp;
-				do_spec(buf, sp, 1, 0, douv, uvmin, uvmax);
+				do_spec(buf, sp, 1, zero, douv, uvmin, uvmax);
 			}
 		}
 

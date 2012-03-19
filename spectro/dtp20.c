@@ -45,7 +45,10 @@
 #ifndef SALONEINSTLIB
 #include "copyright.h"
 #include "aconfig.h"
-#endif  /* !SALONEINSTLIB */
+#else /* SALONEINSTLIB */
+#include "sa_config.h"
+#include "numsup.h"
+#endif /* SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
 #include "icoms.h"
@@ -99,14 +102,13 @@ extract_ec(char *s) {
 static int icoms2dtp20_err(int se) {
 	if (se & ICOM_USERM) {
 		se &= ICOM_USERM;
-		if (se == ICOM_USER)
-			return DTP20_USER_ABORT;
-		if (se == ICOM_TERM)
-			return DTP20_USER_TERM;
 		if (se == ICOM_TRIG)
 			return DTP20_USER_TRIG;
 		if (se == ICOM_CMND)
 			return DTP20_USER_CMND;
+		if (se == ICOM_TERM)
+			return DTP20_USER_TERM;
+		return DTP20_USER_ABORT;
 	}
 	if (se != ICOM_OK) {
 		if (se & ICOM_TO)
@@ -141,7 +143,7 @@ double to) {			/* Timout in seconts */
 	if (insize > 0) {
 		if ((se = p->icom->usb_control(p->icom, 0x41, 0x00, 0x00, 0x00, (unsigned char *)in, insize, to)) != ICOM_OK) {
 			if (isdeb) fprintf(stderr,"send failed ICOM err 0x%x\n",se);
-			/* If something other than a user terminat, trigger or command */
+			/* If something other than a user terminate, trigger or command */
 			if ((se & ~ICOM_USERM) != ICOM_OK || (se & ICOM_USERM) == ICOM_USER) {
 				p->icom->debug = isdeb;
 				return dtp20_interp_code((inst *)p, icoms2dtp20_err(se));
@@ -206,7 +208,7 @@ double top) {		/* Timout in seconds */
 	if (insize > 0) {
 		if ((se = p->icom->usb_control(p->icom, 0x41, 0x00, 0x00, 0x00, (unsigned char *)in, insize, top)) != ICOM_OK) {
 			if (isdeb) fprintf(stderr,"send failed ICOM err 0x%x\n",se);
-			/* If something other than a user terminat, trigger or command */
+			/* If something other than a user terminate, trigger or command */
 			if ((se & ~ICOM_USERM) != ICOM_OK || (se & ICOM_USERM) == ICOM_USER) {
 				p->icom->debug = isdeb;
 				return dtp20_interp_code((inst *)p, icoms2dtp20_err(se));
@@ -375,11 +377,11 @@ double twid			/* Trailer length in mm (For DTP41T) */
 static inst_code
 dtp20_init_inst(inst *pp) {
 	dtp20 *p = (dtp20 *)pp;
-	char tbuf[100], buf[MAX_MES_SIZE];
+	char buf[MAX_MES_SIZE];
 	inst_code rv = inst_ok;
 
 	if (p->gotcoms == 0)
-		return inst_internal_error;		/* Must establish coms before calling init */
+		return inst_no_coms;		/* Must establish coms before calling init */
 
 	/* Reset it (without disconnecting USB or clearing stored data) */
 	if ((rv = dtp20_command(p, "0PR\r", buf, MAX_MES_SIZE, 2.0)) != inst_ok)
@@ -466,6 +468,11 @@ ipatch *vals) {		/* Pointer to array of values */
 	int id = -1;
 	ipatch *tvals;
 	int six;		/* strip index */
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	if ((p->mode & inst_mode_measurement_mask) != inst_mode_s_ref_chart)
 		return inst_unsupported;
@@ -623,6 +630,11 @@ ipatch *vals) {		/* Pointer to array of instrument patch values */
 	inst_code ev = inst_ok;
 	int user_trig = 0;
 	int switch_trig = 0;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	/* This funtion isn't valid in saved data mode */
 	if ((p->mode & inst_mode_measurement_mask) != inst_mode_ref_strip)
@@ -811,10 +823,15 @@ char *name,			/* Strip name (7 chars) */
 ipatch *val) {		/* Pointer to instrument patch value */
 	dtp20 *p = (dtp20 *)pp;
 	char buf[MAX_MES_SIZE], *tp;
-	int i, se;
+	int se;
 	inst_code ev = inst_ok;
 	int switch_trig = 0;
 	int user_trig = 0;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	/* This combination doesn't make any sense... */
 	if ((p->mode & inst_mode_measurement_mask) == inst_mode_s_ref_spot
@@ -999,6 +1016,11 @@ ipatch *val) {		/* Pointer to instrument patch value */
 inst_cal_type dtp20_needs_calibration(inst *pp) {
 	dtp20 *p = (dtp20 *)pp;
 	
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
+
 	if (p->need_cal) {
 		return inst_calt_ref_white;
 	}
@@ -1022,6 +1044,11 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	inst_code ev = inst_ok;
 	char buf[MAX_MES_SIZE];
 	id[0] = '\000';
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	if (calt == inst_calt_all)
 		calt = inst_calt_ref_white;
@@ -1314,9 +1341,8 @@ dtp20_del(inst *pp) {
 	free (p);
 }
 
-/* Interogate the device to discover its capabilities */
-static void	discover_capabilities(dtp20 *p) {
-	inst_code rv = inst_ok;
+/* Set the instrument capabilities */
+static void	set_capabilities(dtp20 *p) {
 
 	p->cap = inst_ref_spot
 	       | inst_ref_strip
@@ -1334,12 +1360,13 @@ static void	discover_capabilities(dtp20 *p) {
 	        ;
 }
 
+
 /* Return the instrument capabilities */
 inst_capability dtp20_capabilities(inst *pp) {
 	dtp20 *p = (dtp20 *)pp;
 
 	if (p->cap == inst_unknown)
-		discover_capabilities(p);
+		set_capabilities(p);
 	return p->cap;
 }
 
@@ -1348,13 +1375,12 @@ inst2_capability dtp20_capabilities2(inst *pp) {
 	dtp20 *p = (dtp20 *)pp;
 
 	if (p->cap2 == inst2_unknown)
-		discover_capabilities(p);
+		set_capabilities(p);
 	return p->cap2;
 }
 
 /* 
  * set measurement mode
- * We assume that the instrument has been initialised.
  */
 static inst_code
 dtp20_set_mode(inst *pp, inst_mode m)
@@ -1362,6 +1388,11 @@ dtp20_set_mode(inst *pp, inst_mode m)
 	dtp20 *p = (dtp20 *)pp;
 	inst_capability  cap  = pp->capabilities(pp);
 	inst_mode mm;		/* Measurement mode */
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	/* The measurement mode portion of the mode */
 	mm = m & inst_mode_measurement_mask;
@@ -1389,13 +1420,16 @@ dtp20_set_mode(inst *pp, inst_mode m)
 
 /* 
  * set or reset an optional mode
- * We assume that the instrument has been initialised.
  */
 static inst_code
 dtp20_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 {
 	dtp20 *p = (dtp20 *)pp;
-	inst_code rv = inst_ok;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	/* Record the trigger mode */
 	if (m == inst_opt_trig_prog
@@ -1423,7 +1457,11 @@ inst *pp,
 inst_status_type m,	/* Requested status type */
 ...) {				/* Status parameters */                             
 	dtp20 *p = (dtp20 *)pp;
-	inst_code rv = inst_ok;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	if (m == inst_stat_saved_readings) {
 		char buf[MAX_MES_SIZE];
@@ -1451,7 +1489,7 @@ inst_status_type m,	/* Requested status type */
 			return ev;
 		if (sscanf(buf," %d ", &cs) != 1)
 			return inst_protocol_error;
-		if (0 && (cs == 2 || cs == 3)) {
+		if (0 && (cs == 2 || cs == 3)) {		// ??? Is this unreliable ???
 			*fe |= inst_stat_savdrd_chart;
 		} else {
 			/* Seems to be no chart saved, but double check, in case of old firmware */
@@ -1469,11 +1507,9 @@ inst_status_type m,	/* Requested status type */
 	/* Return the number of saved spot readings */
 	if (m == inst_stat_s_spot) {
 		int ev;
-		char cmd[10];
 		char buf[MAX_MES_SIZE];
 		int *pnsr;
 		va_list args;
-		int nsr, cs;
 
 		va_start(args, m);
 		pnsr = va_arg(args, int *);
@@ -1569,7 +1605,6 @@ inst_status_type m,	/* Requested status type */
 	/* Return the charged status of the battery */
 	if (m == inst_stat_battery) {
 		int ev;
-		char cmd[10];
 		char buf[MAX_MES_SIZE];
 		double *pbchl;
 		va_list args;
@@ -1608,7 +1643,7 @@ inst_status_type m,	/* Requested status type */
 }
 
 /* Constructor */
-extern dtp20 *new_dtp20(icoms *icom, int debug, int verb)
+extern dtp20 *new_dtp20(icoms *icom, instType itype, int debug, int verb)
 {
 	dtp20 *p;
 	if ((p = (dtp20 *)calloc(sizeof(dtp20),1)) == NULL)
@@ -1637,9 +1672,9 @@ extern dtp20 *new_dtp20(icoms *icom, int debug, int verb)
 	p->interp_error  = dtp20_interp_error;
 	p->del           = dtp20_del;
 
-	p->itype = instDTP20;
-	p->cap = inst_unknown;						/* Unknown until initialised */
-	p->mode = inst_mode_unknown;				/* Not in a known mode yet */
+	p->itype = itype;
+	p->cap = inst_unknown;				/* Unknown until set */
+	p->mode = inst_mode_unknown;		/* Not in a known mode yet */
 
 	return p;
 }

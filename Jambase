@@ -298,6 +298,21 @@
 
 # - - - - - - - - - - - - - - -
 
+# NOTE:	Cross compiling support :-
+#	To fix this to support cross compilation, the setup needs to be
+#	modularised into 3, making them all rules that can be re-involked:
+#	1) OS/Platform setup. System tools like copy, delete etc.
+#	2) Compiler setup. Basic compiler syntax etc.
+#	3) Target setup. Make this a rule, and allow switching
+#	   target by involking the rule. This will be simpler to
+#	   get working that per target 'on' variable (some
+#	   things are currently broken for 'on' variables, such
+#	   as library members, and it will be easier to do
+#	   things such as switch compilers.
+
+# - - - - - - - - - - - - - - -
+
+
 # Brief review of the jam language:
 #
 # Statements:
@@ -423,13 +438,13 @@ if $(NT)
 #		WINLIBS			?= -lwinspool -lwinmm -lshell32 -lcomctl32 -lctl3d32
 #						   -lodbc32 -ladvapi32 -lodbc32 -lwsock32 -lopengl32
 #		                   -lglu32 -lshlwapi -lsetupapi ;
-		WINLIBS			?= -lshlwapi -lsetupapi -lole32 -lws2_32 ;
+		WINLIBS			?= -lshlwapi -lsetupapi -lole32 -lws2_32 -lpsapi ;
 		GUILIBS			?= -lgdi32 -lmscms ;
 
 		LINK			?= $(TPFX)g++ ;		# In case we link to C++ files
 		LINKFLAGS		?= -static ;
 		SHLINKFLAGS		?= ;
-		STDLIBS			?= -lm $(WINLIBS) $(GUILIBS) ;
+		STDLIBS			?= -lm $(OLELIBS) $(WINLIBS) $(GUILIBS) ;
 		SHSTDLIBS		?= $(STDLIBS) ;
 
 		STDHDRS			?= $(MINGW)\\include ;	
@@ -522,6 +537,8 @@ if $(NT)
 			MSNTSDK ?= $(MSSdk) ;
 		} else if $(MSSDK) {
 			MSNTSDK ?= $(MSSDK) ;
+		} else if $(MSVCNT) {
+			MSNTSDK ?= $(MSVCNT) ;
 		}
 
 		# bury IA64 in the path for the SDK ???
@@ -541,7 +558,7 @@ if $(NT)
 		C++FLAGS		?= $(CCFLAGS) /GX ;		# GX enables syncronous exception handling
 		LINK			?= link /nologo ;
 		LINKOUTFLAG		?= /out: ;
-		LINKFLAGS		?= /INCREMENTAL:NO /LIBPATH:$(MSVCNT)\\lib\\$(I) /LIBPATH:$(MSNTSDK)\\lib\\$(I) ;
+		LINKFLAGS		?= /INCREMENTAL:NO /LIBPATH:$(MSNTSDK)\\lib\\$(I) ;
 		SHLINKFLAGS		?= ;
 
 		STDLIBS			?= 
@@ -555,22 +572,24 @@ if $(NT)
 						shell32.lib		 
 						setupapi.lib
 						ole32.lib
+						oleaut32.lib
 						ws2_32.lib
+						Wbemuuid.lib
 						;
 		SHSTDLIBS		?= $(STDLIBS) ;
 		LINKFLAG		?= ;						
-		STDHDRS			?= $(MSVCNT)\\Include $(MSNTSDK)\\Include ;
+		STDHDRS			?= $(MSNTSDK)\\Include ;
 		DEFFLAG		 	?= /D ;				
 		UNDEFFLAG		?= /U ;
 		CCOPTFLAG		?= /Ox ;		# MSVC9 doesn't understamd GB, G6 ?
 		if $(MSVCVER) = 6 {
 			CCDEBUGFLAG		?= /Od /Z7 ;		# Include debugging into in each object		
 			CCPROFFLAG		?= /Od /Z7 ;
-			LINKDEBUGFLAG	?= /DEBUGTYPE:CV /DEBUG /PDB:NONE ;		
+			LINKDEBUGFLAG	?= /DEBUGTYPE:BOTH /DEBUG /PDB:NONE ;		
 		} else {
 			CCDEBUGFLAG		?= /Od /Zi ;		# /Zi creates debugging database
 			CCPROFFLAG		?= /Od /Zi ;
-			LINKDEBUGFLAG	?= /DEBUGTYPE:CV /DEBUG ;
+			LINKDEBUGFLAG	?= /DEBUG ;
 		}
 		LINKPROFFLAG	?= /PROFILE $(LINKDEBUGFLAG) ;		
 		LINKOPTFLAG		?= /OPT:REF ;	
@@ -582,7 +601,7 @@ if $(NT)
 	}
 	else
 	{
-		EXIT On NT, set BCCROOT, MINGW, MSVCDIR, MSVCNT, or MSVC to the root
+		EXIT On NT, set BCCROOT, MINGW, MSVCDIR, MSVCNT, MSVC or VCINSTALLDIR to the root
 				of the Borland, GCC or Microsoft directories. ;
 	}
 }

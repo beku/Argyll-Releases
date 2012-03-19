@@ -7,7 +7,7 @@ PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 #Products
 Libraries = libprof ;
 Executables = cb2ti3 kodak2ti3 txt2ti3 splitti3 mppcheck mppprof
-              profcheck invprofcheck verify colprof printcal applycal sepgen ;
+              profcheck invprofcheck verify colprof printcal applycal ;
 Headers = prof.h ;
 Samples = example.sp example121.sp 3dap5k.sp GTIPlus.sp Office.sp Trulux.sp TruluxPlus.sp
 		D50_0.0.sp D50_0.1.sp D50_0.3.sp D50_0.5.sp D50_0.7.sp D50_1.0.sp D50_1.2.sp
@@ -77,7 +77,12 @@ Main printcal : printcal.c : : : $(TIFFINC) ;
 Main applycal : applycal.c ;
 
 # Optimised Separation Generator
-Main sepgen : sepgen.c ;
+#Main sepgen : sepgen.c ;
+
+# Test code
+if $(HOME) = "d:\\usr\\graeme" {
+    Main specinpprof : specinpprof.c ;
+}
 
 # Development code
 if [ GLOB . : retargti3.c ]  {

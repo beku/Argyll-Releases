@@ -13,10 +13,14 @@ ColorChecker.cie
 ColorChecker.ti2
 ColorCheckerDC.cht
 ColorCheckerSG.cht
+SpyderChecker.cht
+SpyderChecker.cie
 ECI2002.ti2
 ECI2002R.ti2
-FograStrip.ti1
-FograStrip.ti2
+FograStrip2.ti1
+FograStrip2_2.ti2
+FograStrip3.ti1
+FograStrip3_3.ti2
 Hutchcolor.cht
 LaserSoftDCPro.cht
 QPcard_201.cht

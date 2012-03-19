@@ -20,7 +20,7 @@
 /* or */
 /* It uses display measurements from a spectrometer to create */
 /* calibration samples that can be used with a Colorimeter that */
-/* knowns its own spectral sensitivity curves (ie. X-Rite i1d3). */
+/* knowns its own spectral sensitivity curves (ie. X-Rite i1d3, Spyder 4). */
 
 /* Based on spotread.c, illumread.c, dispcal.c */
 
@@ -29,6 +29,9 @@
 
 		Would be nice to have the option of procssing a Spyder 3 correction.txt file.
 		(See post from umberto.guidali@tiscali.it)
+
+		Would be nice to be able to use an i1D3 to correct other instruments,
+		or an i1D3 created .ti3 as the reference.
 
 		Would be nice to have an option of providing two ICC profiles,
 		instead of using .ti3 files (?? How well would it work though ?)
@@ -62,7 +65,7 @@
 #include <conio.h>
 #endif
 
-#define DEFAULT_MSTEPS 2
+#define DEFAULT_MSTEPS 1
 #undef SHOW_WINDOW_ONFAKE	/* Display a test window up for a fake device */
 #define COMPORT 1			/* Default com port 1..4 */
 #define VERBOUT stdout
@@ -85,6 +88,8 @@ static int gcc_bug_fix(int i) {
 void
 usage(char *diag, ...) {
 	disppath **dp;
+	icoms *icom = new_icoms();
+	inst_capability cap = 0;
 
 	fprintf(stderr,"Create CCMX or CCSS, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
@@ -124,7 +129,7 @@ usage(char *diag, ...) {
 	}
 	free_disppaths(dp);
 	fprintf(stderr," -p                     Use projector mode (if available)\n");
-	fprintf(stderr," -y c|l                 Display type, c = CRT, l = LCD (CCMX)\n");
+	cap = inst_show_disptype_options(stderr, " -y c|l                 ", icom);
 	fprintf(stderr," -P ho,vo,ss            Position test window and scale it\n");
 	fprintf(stderr,"                        ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                        ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
@@ -171,14 +176,13 @@ int main(int argc, char *argv[])
 	int override = 1;					/* Override redirect on X11 */
 	int comno = COMPORT;				/* COM port used */
 	flow_control fc = fc_nc;			/* Default flow control */
-	instType itype = instUnknown;		/* Default target instrument - none */
 	int highres = 0;					/* High res mode if available */
 	int adaptive = 0;					/* Use adaptive mode if available */
 	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
 	int proj = 0;						/* NZ if projector */
 	int noautocal = 0;					/* Disable auto calibration */
 	char *ccallout = NULL;				/* Change color Shell callout */
-	int msteps = DEFAULT_MSTEPS;						/* Patch surface size */
+	int msteps = DEFAULT_MSTEPS;		/* Patch surface size */
 	int npat = 0;						/* Number of patches/colors */
 	ary3 *refs = NULL;					/* Reference XYZ values */
 	int gotref = 0;
@@ -197,7 +201,7 @@ int main(int argc, char *argv[])
 
 	set_exe_path(argv[0]);				/* Set global exe_path and error_program */
 	check_if_not_interactive();
-	setup_spyd2();					/* Load firware if available */
+	setup_spyd2();						/* Load firware if available */
 
 	/* Process the arguments */
 	mfa = 0;        /* Minimum final arguments */
@@ -311,12 +315,7 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
 				fa = nfa;
 				if (na == NULL) usage("Parameter expected after -y");
-				if (na[0] == 'c' || na[0] == 'C')
-					dtype = 1;
-				else if (na[0] == 'l' || na[0] == 'L')
-					dtype = 2;
-				else
-					usage("-y parameter '%c' not recognised",na[0]);
+				dtype = na[0];
 
 			/* Test patch offset and size */
 			} else if (argv[fa][1] == 'P') {
@@ -373,8 +372,8 @@ int main(int argc, char *argv[])
 				fa = nfa;
 				if (na == NULL) usage("Parameter expecte after -s");
 				msteps = atoi(na);
-				if (msteps < 2 || msteps > 16)
-					usage("-s parameter value %d is outside the range 2 to 16",msteps);
+				if (msteps < 1 || msteps > 16)
+					usage("-s parameter value %d is outside the range 1 to 16",msteps);
 
 			/* Change color callout */
 			} else if (argv[fa][1] == 'C') {
@@ -423,6 +422,8 @@ int main(int argc, char *argv[])
 		else
 			break;
 	}
+
+	patsize *= patscale;
 
 	/* Get the output ccmx file name argument */
 	if (fa >= argc)
@@ -539,9 +540,9 @@ int main(int argc, char *argv[])
 			error("set_ccss failed with '%s'\n",cc->err);
 		}
 		if(cc->write_ccss(cc, outname))
-			printf("\nWriting file '%s' failed\n",outname);
+			printf("\nWriting CCXX file '%s' failed\n",outname);
 		else
-			printf("\nWriting file '%s' succeeded\n",outname);
+			printf("\nWriting CCXX file '%s' succeeded\n",outname);
 		cc->del(cc);
 		free(samples);
 
@@ -572,7 +573,6 @@ int main(int argc, char *argv[])
 			int cur_ref_col;			/* 1 = reference, 0 = colorimeter */
 			ary3 *current = NULL;		/* Current value array */
 			int ii, ti;
-			instType itype;
 			int instspec = 0;			/* Instrument is spectral/reference */
 
 			/* Open CIE target values */
@@ -780,9 +780,9 @@ int main(int argc, char *argv[])
 		}
 
 		if(cc->write_ccmx(cc, outname))
-			printf("\nWriting file '%s' failed\n",outname);
+			printf("\nWriting CCMX file '%s' failed\n",outname);
 		else
-			printf("\nWriting file '%s' succeeded\n",outname);
+			printf("\nWriting CCMX file '%s' succeeded\n",outname);
 		cc->del(cc);
 
 	/* Do interactive measurements */
@@ -829,7 +829,11 @@ int main(int argc, char *argv[])
 			int j;
 			int gc[3];			/* Grid coordinate */
 
-			npat = msteps * msteps * msteps;
+			if (msteps == 1)
+				npat = 4;
+			else
+				npat = msteps * msteps * msteps;
+
 			if ((rdcols = (col *)malloc(npat * sizeof(col))) == NULL) {
 				error("malloc failed");
 			}
@@ -843,35 +847,60 @@ int main(int argc, char *argv[])
 				error("malloc failed");
 			}
 
-			for (j = 0; j < 3; j++)
-				gc[j] = 0;			/* init coords */
-				
-			for (npat = 0; ;) {	/* For all grid points */
-
-				/* Just colors with at least one channel at 100% */
-				if (gc[0] == (msteps-1)
-				 || gc[1] == (msteps-1)
-				 || gc[2] == (msteps-1)) 
-				{
-					
-					rdcols[npat].r = (double)gc[0]/(msteps-1);
-					rdcols[npat].g = (double)gc[1]/(msteps-1);
-					rdcols[npat].b = (double)gc[2]/(msteps-1);
+			/* RGBW */
+			if (msteps == 1) {
+				npat = 0;
+				rdcols[npat].r = 1.0;
+				rdcols[npat].g = 0.0;
+				rdcols[npat].b = 0.0;
+				npat++;
+				rdcols[npat].r = 0.0;
+				rdcols[npat].g = 1.0;
+				rdcols[npat].b = 0.0;
+				npat++;
+				rdcols[npat].r = 0.0;
+				rdcols[npat].g = 0.0;
+				rdcols[npat].b = 1.0;
+				npat++;
+				rdcols[npat].r = 1.0;
+				rdcols[npat].g = 1.0;
+				rdcols[npat].b = 1.0;
+				npat++;
 #ifdef DEBUG
-					printf("Dev val %f %f %f\n",rdcols[npat].r,rdcols[npat].g,rdcols[npat].b);
+				for (j = 0; j < 4; j++) 
+					printf("Dev val %f %f %f\n",rdcols[j].r,rdcols[j].g,rdcols[j].b);
 #endif
-					npat++;
+			} else {
+				for (j = 0; j < 3; j++)
+					gc[j] = 0;			/* init coords */
+					
+				for (npat = 0; ;) {	/* For all grid points */
+
+					/* Just colors with at least one channel at 100% */
+					if (gc[0] == (msteps-1)
+					 || gc[1] == (msteps-1)
+					 || gc[2] == (msteps-1)) 
+					{
+						
+						rdcols[npat].r = (double)gc[0]/(msteps-1);
+						rdcols[npat].g = (double)gc[1]/(msteps-1);
+						rdcols[npat].b = (double)gc[2]/(msteps-1);
+#ifdef DEBUG
+						printf("Dev val %f %f %f\n",rdcols[npat].r,rdcols[npat].g,rdcols[npat].b);
+#endif
+						npat++;
+					}
+					
+					/* Increment grid index and position */
+					for (j = 0; j < 3; j++) {
+						gc[j]++;
+						if (gc[j] < msteps)
+							break;	/* No carry */
+						gc[j] = 0;
+					}
+					if (j >= 3)
+						break;		/* Done grid */
 				}
-				
-				/* Increment grid index and position */
-				for (j = 0; j < 3; j++) {
-					gc[j]++;
-					if (gc[j] < msteps)
-						break;	/* No carry */
-					gc[j] = 0;
-				}
-				if (j >= 3)
-					break;		/* Done grid */
 			}
 			if (verb)
 				printf("Total test patches = %d\n",npat);
@@ -955,7 +984,6 @@ int main(int argc, char *argv[])
 			/* Deal with selecting the instrument */
 			if (c == '1') {
 				icoms *icom;
-				itype = instUnknown;
 
 				if ((icom = new_icoms()) != NULL) {
 					icompath **paths;
@@ -997,7 +1025,8 @@ int main(int argc, char *argv[])
 				inst_capability  cap = inst_unknown;	/* Instrument capabilities */
 				inst2_capability cap2 = inst2_unknown;	/* Instrument capabilities 2 */
 
-				if ((dr = new_disprd(&errc, itype, fake ? -99 : comno, fc, dtype, proj, adaptive,
+				/* Should we use current cal rather than native ??? */
+				if ((dr = new_disprd(&errc, fake ? -99 : comno, fc, dtype, proj, adaptive,
 				                     noautocal, highres, 1, NULL, 0, 0, disp, blackbg, override,
 				                     ccallout, NULL, patsize, ho, vo, NULL, NULL, 0, 2,
 				                     icxOT_default, NULL, 
@@ -1123,13 +1152,6 @@ int main(int argc, char *argv[])
 					for (i = 0; i < npat; i++) {	/* For all grid points */
 						double scale = 100.0;
 
-						/* Scale by half if not white, */
-						/* to give color samples and white 1/4 weight each */
-						if (rdcols[i].r < 0.9999999999
-						 || rdcols[i].g < 0.9999999999
-						 || rdcols[i].b < 0.9999999999)
-							scale = 50.0;
-
 						samples[i] = rdcols[i].sp;	/* Structure copy */
 						for (j = 0; j < rdcols[i].sp.spec_n; j++)
 							samples[i].spec[j] *= scale / bigv;
@@ -1143,9 +1165,9 @@ int main(int argc, char *argv[])
 						error("set_ccss failed with '%s'\n",cc->err);
 					}
 					if(cc->write_ccss(cc, outname))
-						printf("\nWriting file '%s' failed\n",outname);
+						printf("\nWriting CCSS file '%s' failed\n",outname);
 					else
-						printf("\nWriting file '%s' succeeded\n",outname);
+						printf("\nWriting CCSS file '%s' succeeded\n",outname);
 					cc->del(cc);
 					free(samples);
 					saved = 1;
@@ -1200,9 +1222,9 @@ int main(int argc, char *argv[])
 					}
 	
 					if(cc->write_ccmx(cc, outname))
-						printf("\nWriting file '%s' failed\n",outname);
+						printf("\nWriting CCMX file '%s' failed\n",outname);
 					else
-						printf("\nWriting file '%s' succeeded\n",outname);
+						printf("\nWriting CCMX file '%s' succeeded\n",outname);
 					cc->del(cc);
 					saved = 1;
 				}

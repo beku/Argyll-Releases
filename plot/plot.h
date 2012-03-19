@@ -57,9 +57,10 @@ int do_plot6p(double *x, double *y1, double *y2, double *y3, double *y4, double 
 /* return 0 on success, -1 on error */
 /* Graph order is Black = Y1, Red = Y2, Green = Y3, Blue = Y4, Yellow = Y5, Purple = Y6 */
 /* Brown = Y7, Orange = Y8, Grey = Y9, White = Y10 */
+/* if dozero flag, make sure y range covers zero */
 int do_plot10(double *x, double *y1, double *y2, double *y3, double *y4, double *y5, double *y6,
              double *y7, double *y8, double *y9, double *y10,
-             int n);
+             int n, int dozero);
 
 /* Plot up to 10 graphs + optional crosses. Wait for a key */
 /* return 0 on success, -1 on error */

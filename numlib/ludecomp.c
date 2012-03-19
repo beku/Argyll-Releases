@@ -342,7 +342,7 @@ int     *pivx		/* Pivoting row permutations record */
 /* Return 1 if the matrix is singular, 0 if OK */
 int
 lu_invert(
-double **a,	/* A[][] input matrix, returns LU decimposition of A */
+double **a,	/* A[][] input matrix, returns inversion of A */
 int      n	/* Dimensionality */
 ) {
 	int i, j;
@@ -385,6 +385,108 @@ int      n	/* Dimensionality */
 	return 0;
 }
 
+#ifdef NEVER		/* It's not clear that this is correct */
+int
+lu_polished_invert(
+double **a,	/* A[][] input matrix, returns inversion of A */
+int      n	/* Dimensionality */
+) {
+	int i, j, k;
+	double **aa;		/* saved a */
+	double **t1, **t2;
+
+	aa = dmatrix(0, n-1, 0, n-1);
+	t1 = dmatrix(0, n-1, 0, n-1);
+	t2 = dmatrix(0, n-1, 0, n-1);
+
+	/* Copy a to aa */
+	for (i = 0; i < n; i++) {
+		for (j = 0; j < n; j++)
+			aa[i][j] = a[i][j];
+	}
+
+	/* Invert a */
+	if ((i = lu_invert(a, n)) != 0) {
+		free_dmatrix(aa, 0, n-1, 0, n-1);
+		free_dmatrix(t1, 0, n-1, 0, n-1);
+		free_dmatrix(t2, 0, n-1, 0, n-1);
+		return i;
+	}
+
+	for (k = 0; k < 10; k++) {
+		matrix_mult(t1, n, n, aa, n, n, a, n, n);
+		for (i = 0; i < n; i++) {
+			for (j = 0; j < n; j++) {
+				t2[i][j] = a[i][j];
+				if (i == j)
+					t1[i][j] = 2.0 - t1[i][j];
+				else
+					t1[i][j] = 0.0 - t1[i][j];
+			}
+		}
+		matrix_mult(a, n, n, t2, n, n, t1, n, n);
+	}
+
+	free_dmatrix(aa, 0, n-1, 0, n-1);
+	free_dmatrix(t1, 0, n-1, 0, n-1);
+	free_dmatrix(t2, 0, n-1, 0, n-1);
+	return 0;
+}
+#endif
+
+/* Pseudo-Invert matrix A using lu decomposition */
+/* Return 1 if the matrix is singular, 0 if OK */
+int
+lu_psinvert(
+double **out,	/* Output[0..N-1][0..M-1] */
+double **in,	/*  Input[0..M-1][0..N-1] input matrix */
+int      m,		/* Rows */
+int      n		/* Columns */
+) {
+	int rv = 0;
+	double **tr;		/* Transpose */
+	double **sq;		/* Square matrix */
+
+	tr = dmatrix(0, n-1, 0, m-1);
+	matrix_trans(tr, in, m,  n);
+
+	/* Use left inverse */
+	if (m > n) {
+		sq = dmatrix(0, n-1, 0, n-1);
+		
+		/* Multiply transpose by input */
+		if ((rv = matrix_mult(sq, n, n, tr, n, m, in, m, n)) == 0) {
+		
+			/* Invert the square matrix */
+			if ((rv = lu_invert(sq, n)) == 0) {
+	
+				/* Multiply inverted square by transpose */
+				rv = matrix_mult(out, n, m, sq, n, n, tr, n, m);
+			}
+		}
+		free_dmatrix(sq, 0, n-1, 0, n-1);
+
+	/* Use right inverse */
+	} else {
+		sq = dmatrix(0, m-1, 0, m-1);
+		
+		/* Multiply input by transpose */
+		if ((rv = matrix_mult(sq, m, m, in, m, n, tr, n, m)) == 0) {
+		
+			/* Invert the square matrix */
+			if ((rv = lu_invert(sq, m)) == 0) {
+
+				/* Multiply transpose by inverted square */
+				rv = matrix_mult(out, n, m, tr, n, m, sq, m, m);
+			}
+		}
+		free_dmatrix(sq, 0, m-1, 0, m-1);
+	}
+
+	free_dmatrix(tr, 0, n-1, 0, m-1);
+
+	return rv;
+}
 
 
 

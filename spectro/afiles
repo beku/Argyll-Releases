@@ -53,6 +53,7 @@ spyd2.h
 spyd2setup.h
 spyd2PLD.h
 spyd2en.c
+spyd4en.c
 inflate.c
 vinflate.c
 LzmaTypes.h
@@ -60,10 +61,14 @@ LzmaDec.h
 LzmaDec.c
 huey.c
 huey.h
+colorhug.c
+colorhug.h
 spec2cie.c
 average.c
 conv.h
 conv.c
+aglob.h
+aglob.c
 xdg_bds.h
 xdg_bds.c
 icoms.h

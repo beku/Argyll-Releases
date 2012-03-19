@@ -9,6 +9,7 @@ alphix.h
 targen.c
 targen.h
 printtarg.c
+filmtarg.c
 ppoint.c
 ppoint.h
 ofps.h
@@ -22,8 +23,10 @@ ifarp.c
 prand.h
 prand.c
 ColorChecker.ti2
-FograStrip.ti1
-FograStrip.ti2
+FograStrip2.ti1
+FograStrip2_2.ti2
+FograStrip3.ti1
+FograStrip3_3.ti2
 i1_RGB_Scan_1.4.ti2
 ECI2002.ti2
 ECI2002R.ti2

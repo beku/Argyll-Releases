@@ -29,8 +29,8 @@ struct _ccmx {
 	void (*del)(struct _ccmx *p);
 
 	/* Set the contents of the ccmx. return nz on error. */
-	int (*set_ccmx)(struct _ccmx *p, char *desc, char *inst, char *disp, char *refd,
-	                double mtx[3][3]);	
+	int (*set_ccmx)(struct _ccmx *p, char *desc, char *inst, char *disp, char *tech,
+	                char *refd, double mtx[3][3]);	
 
 	/* Create a ccmx from measurements. return nz on error. */
 	int (*create_ccmx)(struct _ccmx *p, char *desc, char *inst, char *disp, char *tech,

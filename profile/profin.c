@@ -340,12 +340,12 @@ make_input_icc(
 		if (xpi != NULL && xpi->manufacturer != 0L)
 			wh->manufacturer = xpi->manufacturer;
 		else
-			wh->manufacturer = str2tag("????");
+			wh->manufacturer = icmSigUnknownType;
 
 		if (xpi != NULL && xpi->model != 0L)
 			wh->model = xpi->model;
 		else
-	    	wh->model = str2tag("????");
+	    	wh->model = icmSigUnknownType;
 
 		/* Values that may be set before writing */
 		if (xpi != NULL && xpi->creator != 0L)

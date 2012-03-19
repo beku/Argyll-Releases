@@ -18,7 +18,7 @@
 
 #define VERSION "1.1"
 
-#define DEBUG
+#undef DEBUG
 
 #include <stdio.h>
 #include <stdlib.h>

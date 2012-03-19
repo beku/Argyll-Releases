@@ -24,6 +24,7 @@
 #include <string.h>
 #if defined (NT)
 #define WIN32_LEAN_AND_MEAN
+#include <io.h>
 #include <windows.h>
 #endif
 #ifdef UNIX
@@ -43,6 +44,7 @@
 #include "xdg_bds.h"
 #include "xspect.h"
 #include "conv.h"
+#include "aglob.h"
 #include "ccss.h"
 #include "LzmaDec.h"
 
@@ -895,7 +897,7 @@ static ccss *parse_EDR(
 	unsigned long nlen;
 	unsigned int off;
 	unsigned char *dbuf = NULL;	/* Buffer for spectral samples */
-	ORD64 edrdate;
+	INR64 edrdate;
 	char creatdate[30];
 	char dispdesc[256];
 	int ttmin, ttmax;	/* Min & max technology strings (inclusive) */
@@ -1077,9 +1079,11 @@ static ccss *parse_EDR(
 
 		XSPECT_COPY_INFO(&samples[set], &sp);
 
-		/* Read the spectral values for this sample */
+		/* Read the spectral values for this sample, */
+		/* and convert it from W/nm/m^2 to mW/nm/m^2 */
 		for (j = 0; j < sp.spec_n; j++) {
 			samples[set].spec[j] = IEEE754_64todouble(buf2ord64(buf + j * 8));
+			samples[set].spec[j] *= 1000.0;
 		}
 #ifdef PLOT_SAMPLES
 		/* Plot the spectra */

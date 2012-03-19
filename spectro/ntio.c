@@ -31,6 +31,7 @@
 #include "icoms.h"
 #include "conv.h"
 #include "usbio.h"
+#include "hidio.h"
 
 #undef DEBUG
 
@@ -87,10 +88,10 @@ icoms *p
 		p->paths = NULL;
 	}
 	
-	DBG("icoms_get_paths: about to call usb_get_paths()\n");
-	usb_get_paths(p);
-	DBGF((errout,"icoms_get_paths: up to %d, about to call hid_get_paths()\n",p->npaths));
+	DBG("icoms_get_paths: about to call hid_get_paths()\n");
 	hid_get_paths(p);
+	DBGF((errout,"icoms_get_paths: up to %d, about to call usb_get_paths()\n",p->npaths));
+	usb_get_paths(p);
 	usbend = p->npaths;
 
 	DBGF((errout,"icoms_get_paths: up to %d, about to lookup the registry for serial ports\n",p->npaths));
@@ -188,7 +189,7 @@ icoms *p
 
 
 /* Close the port */
-void icoms_close_port(icoms *p) {
+static void icoms_close_port(icoms *p) {
 	if (p->is_open) {
 		if (p->is_usb) {
 			usb_close_port(p);
@@ -237,7 +238,7 @@ word_length	 word)
 
 	if (port >= 1) {
 		if (p->is_open && port != p->port) {	/* If port number changes */
-			icoms_close_port(p);
+			p->close_port(p);
 		}
 	}
 
@@ -627,7 +628,7 @@ icoms_del(icoms *p) {
 	if (p->debug) fprintf(stderr,"icoms: delete called\n");
 	if (p->is_open) {
 		if (p->debug) fprintf(stderr,"icoms: closing port\n");
-		icoms_close_port(p);
+		p->close_port(p);
 	}
 	if (p->paths != NULL) {
 		int i;
@@ -672,6 +673,8 @@ icoms *new_icoms()
 	p->tc = -1;
 	p->debug = 0;
 	
+	p->close_port = icoms_close_port;
+
 	p->port_type = icoms_port_type;
 	p->get_paths = icoms_get_paths;
 	p->set_ser_port = icoms_set_ser_port;

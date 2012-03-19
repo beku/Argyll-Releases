@@ -72,8 +72,18 @@ int     *pivx		/* Pivoting row permutations record */
 /* Return 1 if the matrix is singular, 0 if OK */
 int
 lu_invert(
-double **a,	/* A[][] input matrix, returns LU decimposition of A */
+double **a,	/* A[][] input matrix, returns inversion of A */
 int      n	/* Dimensionality */
+);
+
+/* Pseudo-Invert matrix A using lu decomposition */
+/* Return 1 if the matrix is singular, 0 if OK */
+int
+lu_psinvert(
+double **out,	/* Output[0..N-1][0..M-1] */
+double **in,	/*  Input[0..M-1][0..N-1] input matrix */
+int      m,		/* Rows */
+int      n		/* Columns */
 );
 
 #ifdef __cplusplus

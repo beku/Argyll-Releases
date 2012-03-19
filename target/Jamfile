@@ -13,7 +13,8 @@ Executables = targen printtarg ;
 Samples = ECI2002.ti2
           ECI2002R.ti2
 	      ColorChecker.ti2
-          FograStrip.ti1 FograStrip.ti2
+          FograStrip2.ti1 FograStrip2_2.ti2
+          FograStrip3.ti1 FograStrip3_3.ti2
           i1_RGB_Scan_1.4.ti2 ;
 
 #Install
@@ -36,7 +37,7 @@ LINKLIBS = ../xicc/libxcolorants ../spectro/libconv ../xicc/libxicc ../spectro/l
 Main targen : targen.c ofps.c ifarp.c simplat.c simdlat.c prand.c ;
 
 # Film Calibration Target File generator
-#Main filmtarg : filmtarg.c : : : $(TIFFINC) : alphix randix : $(TIFFLIB) ;
+Main filmtarg : filmtarg.c : : : $(TIFFINC) : alphix randix : $(TIFFLIB) ;
 
 # Print Calibration Target Postscript File generator
 Main printtarg : printtarg.c : : : : alphix randix : ;

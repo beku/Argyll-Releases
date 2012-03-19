@@ -54,7 +54,6 @@
 
 #define RSPLFLAGS (0 /* | RSPL_2PASSSMTH | RSPL_EXTRAFIT2 */)
 
-//#define RSPLSMOOTH 4.0	/* RSPL Smoothness factor use on measured device points */
 #define RSPLSMOOTH 2.0	/* RSPL Smoothness factor use on measured device points */
 
 #define TCURVESMOOTH 1.0 /* RSPL smoothness factor for target aim points */
@@ -88,6 +87,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -e              Verify against previous .cal\n");
 	fprintf(stderr," -I              Create imitation target from .ti3 and null calibration\n");
 	fprintf(stderr," -d              Go through the motions but don't write any files\n");
+	fprintf(stderr," -s smoothing    Extra curve smoothing (default 1.0)\n");
 	fprintf(stderr," -A manufacturer Set the manufacturer description string\n");
 	fprintf(stderr," -M model        Set the model description string\n");
 	fprintf(stderr," -D description  Set the profile Description string\n");
@@ -556,6 +556,7 @@ int main(int argc, char *argv[]) {
 	pcaltarg *upct = NULL;		/* User settings of print calibration target */
 	pcaltarg *pct = NULL;		/* Settings of print calibration target */
 	double smooth = RSPLSMOOTH;	/* RSPL Smoothness factor */
+	double xsmooth = 1.0;		/* Smoothing multiplier */
 	double ver_maxde = 2.0;		/* Verify maximum Delta E (1.0 for smooth == 1.0) */
 	int spec = 0;				/* Use spectral data flag */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
@@ -706,6 +707,13 @@ int main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'a')
 				doamp = 1;			/* write AMP file */
 
+			/* Smoothing modfider */
+			else if (argv[fa][1] == 's') {
+				fa = nfa;
+				if (na == NULL) usage("Expect argument to smoothing flag -s");
+				xsmooth = atof(na);
+			}
+
 			/* Manufacturer description string */
 			else if (argv[fa][1] == 'A') {
 				fa = nfa;
@@ -821,6 +829,8 @@ int main(int argc, char *argv[]) {
 		} else
 			break;
 	}
+
+	smooth *= xsmooth;
 
 	if (!(   (initial && !recal && !verify && !imitate)
 	      || (!initial && recal && !verify && !imitate)
@@ -1850,7 +1860,7 @@ int main(int argc, char *argv[]) {
 		                  devchan > 7 ? yy[7] : NULL,
 		                  devchan > 8 ? yy[8] : NULL,
 		                  devchan > 9 ? yy[9] : NULL,
-			              PRES);
+			              PRES, 0);
 			if (!verified)
 				exit(1);
 		}
@@ -1948,7 +1958,7 @@ int main(int argc, char *argv[]) {
 		                      devchan > 7 ? yy[7] : NULL,
 		                      devchan > 8 ? yy[8] : NULL,
 		                      devchan > 9 ? yy[9] : NULL,
-				              PRES);
+				              PRES, 0);
 			}
 		}
 
@@ -2061,7 +2071,7 @@ int main(int argc, char *argv[]) {
 		                  devchan > 7 ? yy[7] : NULL,	/* Orange */
 		                  devchan > 8 ? yy[8] : NULL,	/* Grey */
 		                  devchan > 9 ? yy[9] : NULL,	/* White */
-			              PRES);
+			              PRES, 0);
 		}
 
 		/* Write out an Argyll .CAL file */

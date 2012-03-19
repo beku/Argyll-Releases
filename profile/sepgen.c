@@ -18,6 +18,8 @@
  * and creates an optimsed separation from either
  * RGB'/CMY' or CMYK' pseudo-device space to the real
  * device space.
+ *
+ * UNFINISHED
  */
 
 /*
@@ -26,7 +28,7 @@
  *      B2A table.
  */
 
-#define DEBUG
+#undef DEBUG
 
 #define verbo stdout
 
@@ -56,6 +58,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr,"                 Default is psuedo-CMYK input device space,\n");
 	fprintf(stderr," -e description  Description string\n");
 	fprintf(stderr," -q [lmhu]       Quality - Low, Medium (def), High, Ultra\n");
+//	fprintf(stderr," -q [fmsu]       Speed - Fast, Medium (def), Slow, Ultra Slow\n");
 	fprintf(stderr," -l tlimit       override total ink limit, 0 - 400+%%\n");
 	fprintf(stderr," -L klimit       override black ink limit, 0 - 100%%\n");
 	fprintf(stderr,"                 Black generation for pseudo-CMY or RGB:\n");
@@ -167,24 +170,27 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to quality flag -q");
     			switch (na[0]) {
+					case 'f':				/* fast */
 					case 'l':
 					case 'L':
 						quality = 0;
 						break;
-					case 'm':
+					case 'm':				/* medium */
 					case 'M':
 						quality = 1;
 						break;
+					case 's':				/* slow */
 					case 'h':
 					case 'H':
 						quality = 2;
 						break;
-					case 'u':
+					case 'u':				/* ultra slow */
 					case 'U':
 						quality = 3;
 						break;
 					default:
 						usage("Unknown argument '%c' to quality flag -q",na[0]);
+//						usage("Unknown argument '%c' to speed flag -q",na[0]);
 				}
 			}
 

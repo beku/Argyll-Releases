@@ -85,6 +85,7 @@ void usage(iccss *cl, char *diag, ...) {
 	int i;
 	disppath **dp;
 	icoms *icom;
+	inst_capability cap = 0;
 
 	fprintf(stderr,"Read a Display, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
@@ -137,10 +138,9 @@ void usage(iccss *cl, char *diag, ...) {
 			}
 		} else
 			fprintf(stderr,"    ** No ports found **\n");
-		icom->del(icom);
 	}
 	fprintf(stderr," -p                   Use projector mode (if available)\n");
-	fprintf(stderr," -y c|l               Display type, c = CRT, l = LCD\n");
+	cap = inst_show_disptype_options(stderr, " -y                   ", icom);
 	fprintf(stderr," -k file.cal          Load calibration file into display while reading\n");
 	fprintf(stderr," -K file.cal          Apply calibration file to test values while reading\n");
 	fprintf(stderr," -s                   Save spectral information (default don't save)\n");
@@ -158,11 +158,13 @@ void usage(iccss *cl, char *diag, ...) {
 	fprintf(stderr," -w                   Disable normalisation of white to Y = 100\n");
 	fprintf(stderr," -X file.ccmx         Apply Colorimeter Correction Matrix\n");
 	fprintf(stderr," -X file.ccss         Use Colorimeter Calibration Spectral Samples for calibration\n");
-	for (i = 0; cl != NULL && cl[i].desc != NULL; i++) {
-		if (i == 0)
-			fprintf(stderr," -X N                  0: %s\n",cl[i].desc); 
-		else
-			fprintf(stderr,"                       %d: %s\n",i,cl[i].desc); 
+	if (cap & inst_ccss) {
+		for (i = 0; cl != NULL && cl[i].desc != NULL; i++) {
+			if (i == 0)
+				fprintf(stderr," -X N                  0: %s\n",cl[i].desc); 
+			else
+				fprintf(stderr,"                       %d: %s\n",i,cl[i].desc); 
+		}
 	}
 	free_iccss(cl);
 	fprintf(stderr," -Q observ            Choose CIE Observer for spectrometer or CCSS colorimeter data:\n");
@@ -173,6 +175,8 @@ void usage(iccss *cl, char *diag, ...) {
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," outfile              Base name for input[ti1]/output[ti3] file\n");
+	if (icom != NULL)
+		icom->del(icom);
 	exit(1);
 }
 
@@ -190,13 +194,12 @@ int main(int argc, char *argv[]) {
 	int override = 1;					/* Override redirect on X11 */
 	int comport = COMPORT;				/* COM port used */
 	flow_control fc = fc_nc;			/* Default flow control */
-	instType itype = instUnknown;		/* Default target instrument - none */
 	int docalib = 0;					/* Do a calibration */
 	int highres = 0;					/* Use high res mode if available */
 	int adaptive = 0;					/* Use adaptive mode if available */
 	int bdrift = 0;						/* Flag, nz for black drift compensation */
 	int wdrift = 0;						/* Flag, nz for white drift compensation */
-	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
+	int dtype = 0;						/* Display type selection charater */
 	int proj = 0;						/* NZ if projector */
 	int noautocal = 0;					/* Disable auto calibration */
 	int nonorm = 0;						/* Disable normalisation */
@@ -340,12 +343,7 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
 				fa = nfa;
 				if (na == NULL) usage(cl, "Parameter expected after -y");
-				if (na[0] == 'c' || na[0] == 'C')
-					dtype = 1;
-				else if (na[0] == 'l' || na[0] == 'L')
-					dtype = 2;
-				else
-					usage(cl, "-y parameter '%c' not recognised",na[0]);
+				dtype = na[0];
 
 			/* Calibration file */
 			} else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
@@ -533,13 +531,14 @@ int main(int argc, char *argv[]) {
 				if (ccs != NULL) {
 					ccs->del(ccs);
 					ccs = NULL;
+					error("Reading CCMX/CCSS File '%s' failed\n", ccxxname);
 				}
 			}
 		}
 	}
 
 	if (docalib) {
-		if ((rv = disprd_calibration(itype, comport, fc, dtype, proj, adaptive, noautocal, disp,
+		if ((rv = disprd_calibration(comport, fc, dtype, proj, adaptive, noautocal, disp,
 		                             blackbg, override, patsize, ho, vo, verb, debug)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
 		}
@@ -715,7 +714,7 @@ int main(int argc, char *argv[]) {
 		cal[0][0] = -1.0;	/* Not used */
 	}
 
-	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, proj, adaptive, noautocal,
+	if ((dr = new_disprd(&errc, fake ? -99 : comport, fc, dtype, proj, adaptive, noautocal,
 	                     highres, 0, cal, ncal, softcal, disp, blackbg, override, ccallout,
 	                     mcallout, patsize, ho, vo,
 	                     cmx != NULL ? cmx->matrix : NULL,
@@ -736,7 +735,10 @@ int main(int argc, char *argv[]) {
 		error("test_crt returned error code %d\n",rv);
 	}
 	/* Note what instrument the chart was read with */
-	ocg->add_kword(ocg, 0, "TARGET_INSTRUMENT", inst_name(dr->itype) , NULL);
+	if (dr->it != NULL)
+		ocg->add_kword(ocg, 0, "TARGET_INSTRUMENT", inst_name(dr->it->get_itype(dr->it)) , NULL);
+	else
+		ocg->add_kword(ocg, 0, "TARGET_INSTRUMENT", "Fake" , NULL);
 
 	/* Note if the instrument is natively spectral or not */
 	if (dr->it != NULL && dr->it->capabilities(dr->it) & inst_spectral)

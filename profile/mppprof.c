@@ -71,6 +71,7 @@ usage(void) {
 	fprintf(stderr,"usage: %s [options] outfile\n",error_program);
 	fprintf(stderr," -v [level] Verbose mode\n");
 	fprintf(stderr," -q [lmhus] Quality - Low, Medium (def), High, Ultra, Simple\n");
+//	fprintf(stderr," -q [vfmsu] Speed - Very Fast, Medium (def), Slow, Ultra Slow\n");
 	fprintf(stderr," -l limit   override default ink limit, 1 - n00%%\n");
 	fprintf(stderr," -s         Generate spectral model too\n");
 	fprintf(stderr," -m         Generate ink mixing model\n");
@@ -162,25 +163,27 @@ int main(int argc, char *argv[])
 				fa = nfa;
 				if (na == NULL) usage();
     			switch (na[0]) {
+					case 'v':				/* Very fast */
+					case 'V':
+						iquality = 99;
+						break;
+					case 'f':				/* fast */
 					case 'l':
 					case 'L':
 						iquality = 0;
 						break;
-					case 'm':
+					case 'm':				/* medium */
 					case 'M':
 						iquality = 1;
 						break;
+					case 's':				/* slow */
 					case 'h':
 					case 'H':
 						iquality = 2;
 						break;
-					case 'u':
+					case 'u':				/* ultra slow */
 					case 'U':
 						iquality = 3;
-						break;
-					case 's':
-					case 'S':
-						iquality = 99;
 						break;
 					default:
 						usage();

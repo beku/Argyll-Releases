@@ -4,6 +4,9 @@
 PREF_CCFLAGS    += $(CCDEBUGFLAG) ;		# Debugging flags
 PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
+# To enable ColorHug
+#DEFINES += ENABLE_COLORHUG ;
+
 # Setup the right hardware access libraries
 if $(NT) {
 	if $(USE_LIBUSB1) = true {
@@ -49,7 +52,8 @@ if $(UNIX) {
 #Products
 Libraries = libinsttypes libinst libdisp libconv ;
 Executables = dispwin synthcal dispread dispcal fakeread synthread
-              chartread spotread illumread ccxxmake spec2cie average spyd2en i1d3ccss ;
+              chartread spotread illumread ccxxmake spec2cie average spyd2en
+              i1d3ccss spyd4en ;
 Headers = inst.h ;
 Samples = SOtele.sp linear.cal strange.cal ;
 
@@ -69,7 +73,9 @@ HDRS = ../h ../numlib ../icc ../cgats ../rspl ../xicc ../gamut ../spectro
        ../plot $(LIBUSBHDRS) $(CMMHDRS) ;
 
 # Instrument access library library
-Library libinst : inst.c insttypes.c dtp20.c dtp22.c dtp41.c dtp51.c dtp92.c i1disp.c i1d3.c i1pro.c i1pro_imp.c munki.c munki_imp.c ss.c ss_imp.c hcfr.c spyd2.c huey.c $(IOFILE) usbio.c hidio.c ;
+Library libinst : inst.c insttypes.c dtp20.c dtp22.c dtp41.c dtp51.c dtp92.c i1disp.c i1d3.c
+                  i1pro.c i1pro_imp.c munki.c munki_imp.c ss.c ss_imp.c hcfr.c spyd2.c huey.c
+                  colorhug.c $(IOFILE) usbio.c hidio.c ;
 
 # Display access library 
 Library libdisp : dispsup.c dispwin.c : : : $(LibWinH) ;
@@ -80,7 +86,7 @@ Object insttypes2 : insttypes.c ;
 LibraryFromObjects libinsttypes : insttypes2 ;
 
 # System utility functions (keyboard, msec_*, thread)
-Library libconv : xdg_bds.c conv.c $(CONVFILE) : : : $(LibWinH) ;
+Library libconv : xdg_bds.c aglob.c conv.c $(CONVFILE) : : : $(LibWinH) ;
 
 # Support file
 #Object alphix : ../target/alphix.c ;
@@ -154,6 +160,9 @@ Main average : average.c ;
 # Utility to enable the Spyder 2 instrument */
 Main spyd2en : spyd2en.c vinflate.c : : : : : libconv ;
 
+# Utility to enable Spyder 4 instrument full range of calibrations */
+Main spyd4en : spyd4en.c vinflate.c : : : : : libconv ;
+
 # Utility to install ccss's or install from OEM EDR files
 Main i1d3ccss : i1d3ccss.c inflate.c LzmaDec.c : : : : : libconv ;
 
@@ -179,8 +188,14 @@ MainVariant xdg_bds : xdg_bds.c : : STANDALONE_TEST : : : libconv ;
 
 # test code
 #Main t : t.c ;
+#Main t : t.c ;
 #Main tt : tt.c ;
 #Main i1d3eval : i1d3eval.c ;
+
+# Test code
+if $(HOME) = "d:\\usr\\graeme" {
+	Main fakeindev : fakeindev.c ;
+}
 
 if $(OLD_GRETAG) && $(UNIX) && $(OS) != MACOSX {
 

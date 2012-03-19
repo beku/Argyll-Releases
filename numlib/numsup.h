@@ -109,6 +109,22 @@ short **smatrix(int nrl,int nrh,int ncl,int nch);
 short **smatrixz(int nrl,int nrh,int ncl,int nch);
 void free_smatrix(short **m,int nrl,int nrh,int ncl,int nch);
 
+/* ----------------------------------------------------------- */
+/* Basic matrix operations */
+
+/* Transpose a 0 base matrix */
+void matrix_trans(double **d, double **s, int nr,  int nc);
+
+/* Matrix multiply 0 based matricies */
+int matrix_mult(
+	double **d,  int nr,  int nc,
+	double **s1, int nr1, int nc1,
+	double **s2, int nr2, int nc2
+);
+
+/* Diagnostic */
+void matrix_print(char *c, double **a, int nr,  int nc);
+
 /* =========================================================== */
 /* Should this go in spectro/conv.h ??                         */
 /* =========================================================== */
@@ -208,9 +224,13 @@ ORD64 doubletoIEEE754_64(double d);
 /* in a platform independent fashion. */
 double IEEE754_64todouble(ORD64 ip);
 
+/* Return a string representation of a 32 bit ctime. */
+/* A static buffer is used. There is no \n at the end */
+char *ctime_32(const INR32 *timer);
+
 /* Return a string representation of a 64 bit ctime. */
 /* A static buffer is used. There is no \n at the end */
-char *ctime_64(const ORD64 *timer);
+char *ctime_64(const INR64 *timer);
 
 #ifdef __cplusplus
 	}

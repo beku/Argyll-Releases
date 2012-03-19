@@ -14,7 +14,7 @@
  * see the License.txt file for licencing details.
  */
 
-#define DEBUG
+#undef DEBUG
 
 #define verbo stdout
 

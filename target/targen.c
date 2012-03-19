@@ -1765,7 +1765,7 @@ int main(int argc, char *argv[]) {
 #endif /* ADDRECCLIPPOINTS */
 	}
 
-	if (fsteps > fxno) { /* Top up with full spread (perceptually even) patches */
+	if (fsteps > fxno) { /* Top up with full spread (perceptually even) and other patch types */
 
 		/* Generate random numbers. Don't check for duplicates */
 		if (userand == 1 || useqrand == 1) {
@@ -1858,23 +1858,30 @@ int main(int argc, char *argv[]) {
 			simplat *px = NULL;
 			prand *rx = NULL;
 
-			/* (Note that the ink limit for these algorithms won't take into account the xpow) */
+			/* (Note that the ink limit for these algorithms won't take into account the xpow), */
+			/* and that we're not applying the filter until after generation, so the */
+			/* number of patches won't reach the target. This could be fixed fairly easily */
+			/* for some of these (new_prand).  */
 			if (uselat)	 {
+				/* A "greedy"/incremental farp point approach */
 				t = new_ifarp(di, uilimit, fsteps, fxlist, fxno,
 				                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 				sprintf(buf,"%d",fsteps - fxno);
 				pp->add_kword(pp, 0, "INC_FAR_PATCHES", buf, NULL);
 			} else if (usedsim) {
+				/* Device space simplex latice test points */
 				dx = new_simdlat(di, uilimit, fsteps, fxlist, fxno, SIMDLAT_TYPE, simangle,
 			                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 				sprintf(buf,"%d",fsteps - fxno);
 				pp->add_kword(pp, 0, "SIMPLEX_DEVICE_PATCHES", buf, NULL);
 			} else if (usepsim) {
+				/* Perceptual space simplex latice test points */
 				px = new_simplat(di, uilimit, fsteps, fxlist, fxno, simangle,
 			                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 				sprintf(buf,"%d",fsteps - fxno);
 				pp->add_kword(pp, 0, "SIMPLEX_PERCEPTUAL_PATCHES", buf, NULL);
 			} else if (userand == 2 || useqrand == 2) {
+				/* Perceptual random test points */
 				rx = new_prand(di, uilimit, fsteps, fxlist, fxno, useqrand == 2 ? 1 : 0,
 			                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 				sprintf(buf,"%d",fsteps - fxno);

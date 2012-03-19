@@ -79,9 +79,10 @@
 
 /* Sub-type of instrument */
 typedef enum {
-	i1d3_disppro      = 0,	/* i1 DisplayPro */
-	i1d3_munkdisp     = 1,	/* ColorMunki Display */
-	i1d3_calman       = 2	/* CalMan */
+	i1d3_disppro    = 0,	/* i1 DisplayPro */
+	i1d3_munkdisp   = 1,	/* ColorMunki Display */
+	i1d3_oem        = 2,	/* OEM */
+	i1d3_nec_ssp    = 3 	/* NEC SpectraSensor Pro */
 } i1d3_dtype;
 
 /* Measurement mode */
@@ -101,8 +102,9 @@ struct _i1d3 {
 	int trig_return;			/* Emit "\n" after trigger */
 
 	/* Information and EEPROM values */
-	i1d3_dtype dtype;			/* Base type of instrument */
-	i1d3_dtype stype;			/* Sub type of instrument */
+	i1d3_dtype dtype;			/* Base type of instrument, ie i1d3_disppro or i1d3_munkdisp */
+	i1d3_dtype stype;			/* Sub type of instrument, ie. any of i1d3_dtype. */
+								/* (Only accurate if it needed unlocking). */
 	int status;					/* 0 if status is ok (not sure what this is) */
 	char prod_name[32];			/* "i1Display3 " or "ColorMunki Display" */
 	int prod_type;				/* 16 bit product type number. i1d3_disppro = 0x0001, */
@@ -112,7 +114,7 @@ struct _i1d3 {
 
 	/* Calibration information */
 	ORD64 cal_date;				/* Calibration date */
-	xspect sens[3];				/* RGB Sensor spectral sensitivities */
+	xspect sens[3];				/* RGB Sensor spectral sensitivities in Hz per mW/nm */
 	xspect ambi[3];				/* RGB Sensor with ambient filter spectral sensitivities */
 
 	double black[3];			/* Black level to subtract */
@@ -120,9 +122,12 @@ struct _i1d3 {
 	double ambi_cal[3][3];		/* Current ambient calibration matrix */
 
 	/* Computed factors and state */
-	double clkrate;				/* Clockrate (12Mhz) */
-	double inttime;				/* default integration time = 0.2 seconds */
-	double LCDtime;				/* Target time ~~99 default LCD time = 0.2 seconds */
+	int refmode;				/* nz if in refresh display mode double int. time */
+	int rrset;					/* Flag, nz if the refresh rate has been determined */
+	double refperiod;			/* if > 0.0 in refmode, target int time quantization */
+	double clk_freq;			/* Clock frequency (12Mhz) */
+	double dinttime;			/* default integration time = 0.2 seconds */
+	double inttime;				/* current integration time = 0.2 seconds */
 
 	double ccmat[3][3];			/* Optional colorimeter correction matrix */
 
@@ -133,7 +138,7 @@ struct _i1d3 {
 }; typedef struct _i1d3 i1d3;
 
 /* Constructor */
-extern i1d3 *new_i1d3(icoms *icom, int debug, int verb);
+extern i1d3 *new_i1d3(icoms *icom, instType itype, int debug, int verb);
 
 
 #define I1D3_H

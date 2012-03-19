@@ -18,12 +18,15 @@
 
 /* TTBD
 	
+	Need to add support for SPECTRAL_NM SPECTRAL_PCT type spectral values.
+	See /src/argyll/test/JosvanRiswick/R080505.cgt
+
 	Do we need to worry about normalising display values to Y = 100, or marking
 	them not normalised ?
 
  */
 
-#define DEBUG
+#undef DEBUG
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,7 +91,7 @@ int main(int argc, char *argv[])
 	int islab = 0;			/* CIE is Lab rather than XYZ */
 	int specmin = 0, specmax = 0, specnum = 0;	/* Min and max spectral in nm, inclusive */
 	int npat = 0;			/* Number of patches */
-	int isrgb = 0;			/* Is an RGB target, not CMYK */
+	int ndchan = 0;			/* Number of device channels, 0 = no device, RGB = 3, CMYK = 4 */
 	int tlimit = -1;		/* Not set */
 	double mxsum = -1.0;	/* Maximim sum of inks found in file */
 	int mxsumix = 0;
@@ -213,17 +216,22 @@ int main(int argc, char *argv[])
 		error("Field SampleName (%s) from CMYK/RGB file '%s' is wrong type",cmy->t[0].fsym[f_id1],devname);
 
 	if (cmy->find_field(cmy, 0, "RGB_R") >= 0) {
+		ndchan = 3;
 		if (verb)  {
 			if (inp || disp)
 				printf("Seems to be an RGB device\n");
 			else
 				printf("Seems to be a psuedo-RGB device\n");
 		}
-		isrgb = 1;
-	} else
-		if (verb) printf("Assumed to be a CMYK device\n");
+	} else if (cmy->find_field(cmy, 0, "CMYK_C") >= 0) {
+		ndchan = 4;
+		if (verb)
+			printf("Seems to be a CMYK device\n");
+	} else {
+		printf("No device values found - hope that's OK!\n");
+	}
 
-	if (isrgb) {
+	if (ndchan == 3) {
 		if ((f_c = cmy->find_field(cmy, 0, "RGB_R")) < 0) {
 			error("Input file '%s' doesn't contain field RGB_R",devname);
 		}
@@ -240,7 +248,7 @@ int main(int argc, char *argv[])
 		if (cmy->t[0].ftype[f_y] != r_t)
 			error("Field RGB_B from file '%s' is wrong type",devname);
 
-	} else {
+	} else if (ndchan == 4) {
 		if ((f_c = cmy->find_field(cmy, 0, "CMYK_C")) < 0) {
 			error("Input file '%s' doesn't contain field CMYK_C",devname);
 		}
@@ -262,7 +270,7 @@ int main(int argc, char *argv[])
 		if (cmy->t[0].ftype[f_k] != r_t)
 			error("Field CMYK_K from file '%s' is wrong type",devname);
 	}
-	if (verb) printf("Read device values\n");
+	if (verb && ndchan > 0) printf("Read device values\n");
 
 	if (cmy->find_field(cmy, 0, "XYZ_X") >= 0
 	 || cmy->find_field(cmy, 0, "LAB_L") >= 0) {
@@ -471,7 +479,7 @@ int main(int argc, char *argv[])
 	if (f_id1 >= 0) 
 		ocg->add_field(ocg, 0, "SAMPLE_NAME", cs_t);
 
-	if (isrgb) {
+	if (ndchan == 3) {
 		ocg->add_field(ocg, 0, "RGB_R", r_t);
 		ocg->add_field(ocg, 0, "RGB_G", r_t);
 		ocg->add_field(ocg, 0, "RGB_B", r_t);
@@ -491,7 +499,7 @@ int main(int argc, char *argv[])
 			else
 				ocg->add_kword(ocg, 0, "COLOR_REP","iRGB_XYZ", NULL);
 		}
-	} else {
+	} else if (ndchan == 4) {
 		ocg->add_field(ocg, 0, "CMYK_C", r_t);
 		ocg->add_field(ocg, 0, "CMYK_M", r_t);
 		ocg->add_field(ocg, 0, "CMYK_Y", r_t);
@@ -522,19 +530,13 @@ int main(int argc, char *argv[])
 	}
 
 	/* Guess the device data scaling */
-	{
+	if (ndchan > 0) {
 		double maxv = 0.0;
 		int f_dev[4] = { f_c, f_m, f_y, f_k };
-		int ndevf;
-
-		if (isrgb)
-			ndevf = 3;
-		else
-			ndevf = 4;
 
 		/* Guess what scale the spectral data is set to */
 		for (i = 0; i < npat; i++) {
-			for (j = 0; j < ndevf; j++) {
+			for (j = 0; j < ndchan; j++) {
 				double vv;
 				vv = *((double *)cmy->t[0].fdata[i][f_dev[j]]);
 				if (vv > maxv)
@@ -629,11 +631,11 @@ int main(int argc, char *argv[])
 			if (f_id1 >= 0) 
 				setel[k++].c = (char *)cmy->t[0].rfdata[i][f_id1];
 			
-			if (isrgb) {
+			if (ndchan == 3) {
 				setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_c]);
 				setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_m]);
 				setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_y]);
-			} else {
+			} else if (ndchan == 4){
 				double sum = 0.0;
 				sum += setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_c]);
 				sum += setel[k++].d = dev_scale * *((double *)cmy->t[0].fdata[i][f_m]);
@@ -720,7 +722,7 @@ int main(int argc, char *argv[])
 			ocg2->add_kword(ocg2, 0, "TOTAL_INK_LIMIT", buf, NULL);
 		}
 
-		if (isrgb) {
+		if (ndchan == 3) {
 			ocg2->add_field(ocg2, 0, "RGB_R", r_t);
 			ocg2->add_field(ocg2, 0, "RGB_G", r_t);
 			ocg2->add_field(ocg2, 0, "RGB_B", r_t);
@@ -729,7 +731,7 @@ int main(int argc, char *argv[])
 			} else {
 				ocg2->add_kword(ocg2, 0, "COLOR_REP","iRGB", NULL);
 			}
-		} else {
+		} else if (ndchan == 4) {
 			ocg2->add_field(ocg2, 0, "CMYK_C", r_t);
 			ocg2->add_field(ocg2, 0, "CMYK_M", r_t);
 			ocg2->add_field(ocg2, 0, "CMYK_Y", r_t);
@@ -754,7 +756,7 @@ int main(int argc, char *argv[])
 			cgats_set_elem *setel;	/* Array of set value elements */
 
 			if ((setel = (cgats_set_elem *)malloc(
-			     sizeof(cgats_set_elem) * (2 + (isrgb ? 3 : 4) + (ncie != NULL ? 3 : 0)))) == NULL)
+			     sizeof(cgats_set_elem) * (2 + (ndchan) + (ncie != NULL ? 3 : 0)))) == NULL)
 				error("Malloc failed!");
 
 			/* Write out the patch info to the output CGATS file */
@@ -784,11 +786,11 @@ int main(int argc, char *argv[])
 				setel[k++].c = id;						/* ID */
 				setel[k++].c = ((char *)cmy->t[0].rfdata[i][f_id1]); 	/* Location */
 
-				if (isrgb) {
+				if (ndchan == 3) {
 					setel[k++].d = 100.0/255.0 * *((double *)cmy->t[0].fdata[i][f_c]);
 					setel[k++].d = 100.0/255.0 * *((double *)cmy->t[0].fdata[i][f_m]);
 					setel[k++].d = 100.0/255.0 * *((double *)cmy->t[0].fdata[i][f_y]);
-				} else {
+				} else if (ndchan == 4) {
 					setel[k++].d = *((double *)cmy->t[0].fdata[i][f_c]);
 					setel[k++].d = *((double *)cmy->t[0].fdata[i][f_m]);
 					setel[k++].d = *((double *)cmy->t[0].fdata[i][f_y]);

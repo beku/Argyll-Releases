@@ -42,6 +42,9 @@
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
+#else	/* !SALONEINSTLIB */
+#include "sa_config.h"
+#include "numsup.h"
 #endif  /* !SALONEINSTLIB */
 #include "xspect.h"
 #include "insttypes.h"
@@ -66,7 +69,7 @@ static inst_code dtp22_set_opt_mode(inst *pp, inst_opt_mode m, ...);
 /* (This is a 24 bit key - only the xor of the middle 2 bytes is significant) */
 /* The keys seem to be base 6/36, using nibbles with 2+2 bits: 3 5 6 9 A C */
 /* The last digit corresponds to the OEM serial number (ie. 6C + 9base6 = A6) */
-/* Possibly each digit is offset byt the oemsn if counted in the right sequence ? - */
+/* Possibly each digit is offset by the oemsn if counted in the right sequence ? - */
 /* ie. base 40 sequence or so ? Need more examples of keys to tell. */
 struct {
 	int oemsn;	
@@ -183,7 +186,7 @@ dtp22_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 	baud_rate brt[5] = { baud_9600, baud_19200, baud_4800, baud_2400, baud_1200 };
 	char *brc[5]     = { "30BR\r",  "60BR\r",   "18BR\r",  "0CBR\r",  "06BR\r" };
 	char *fcc;
-	long etime;
+	unsigned int etime;
 	int ci, bi, i, rv;
 	inst_code ev = inst_ok;
 
@@ -227,7 +230,7 @@ dtp22_init_coms(inst *pp, int port, baud_rate br, flow_control fc, double tout) 
 
 	while (msec_time() < etime) {
 
-		if (p->debug) fprintf(stderr,"dtp22: Trying different baud rates (%lu msec to go)\n",etime - msec_time());
+		if (p->debug) fprintf(stderr,"dtp22: Trying different baud rates (%u msec to go)\n",etime - msec_time());
 
 		/* Until we time out, find the correct baud rate */
 		for (i = ci; msec_time() < etime;) {
@@ -454,6 +457,11 @@ ipatch *val) {		/* Pointer to instrument patch value */
 	int switch_trig = 0;
 	int user_trig = 0;
 
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
+
 	if ((ev = activate_mode(p)) != inst_ok) 
 		return ev;
 
@@ -593,6 +601,11 @@ ipatch *val) {		/* Pointer to instrument patch value */
 inst_cal_type dtp22_needs_calibration(inst *pp) {
 	dtp22 *p = (dtp22 *)pp;
 
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
+
 	if (p->need_cal && p->noutocalib == 0)
 		return inst_calt_ref_white;
 
@@ -616,6 +629,11 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 	char buf[MAX_RD_SIZE];
 	int se;
 	inst_code tv, rv = inst_ok;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	id[0] = '\000';
 
@@ -649,7 +667,6 @@ char id[CALIDLEN]		/* Condition identifier (ie. white reference ID) */
 		return rv;
 
 	if (calt == inst_calt_ref_white) {		/* White calibration */
-		int c;
 		if ((rv = activate_mode(p)) != inst_ok) 
 			goto do_exit;
 
@@ -870,7 +887,6 @@ dtp22_del(inst *pp) {
 
 /* Return the instrument capabilities */
 inst_capability dtp22_capabilities(inst *pp) {
-	dtp22 *p = (dtp22 *)pp;
 	inst_capability rv;
 
 	rv =  
@@ -884,7 +900,6 @@ inst_capability dtp22_capabilities(inst *pp) {
 
 /* Return the instrument capabilities 2 */
 inst2_capability dtp22_capabilities2(inst *pp) {
-	dtp22 *p = (dtp22 *)pp;
 	inst2_capability rv;
 
 	rv = inst2_cal_ref_white
@@ -928,13 +943,17 @@ activate_mode(dtp22 *p)
 
 /* 
  * set measurement mode
- * We assume that the instrument has been initialised.
  */
 static inst_code
 dtp22_set_mode(inst *pp, inst_mode m)
 {
 	dtp22 *p = (dtp22 *)pp;
 	inst_mode mm;		/* Measurement mode */
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	/* The measurement mode portion of the mode */
 	mm = m & inst_mode_measurement_mask;
@@ -954,14 +973,16 @@ dtp22_set_mode(inst *pp, inst_mode m)
 
 /* 
  * set or reset an optional mode
- * We assume that the instrument has been initialised.
  */
 static inst_code
 dtp22_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 {
 	dtp22 *p = (dtp22 *)pp;
-	char buf[MAX_MES_SIZE];
-	inst_code ev = inst_ok;
+
+	if (!p->gotcoms)
+		return inst_no_coms;
+	if (!p->inited)
+		return inst_no_init;
 
 	/* Record the trigger mode */
 	if (m == inst_opt_trig_prog
@@ -983,7 +1004,7 @@ dtp22_set_opt_mode(inst *pp, inst_opt_mode m, ...)
 }
 
 /* Constructor */
-extern dtp22 *new_dtp22(icoms *icom, int debug, int verb)
+extern dtp22 *new_dtp22(icoms *icom, instType itype, int debug, int verb)
 {
 	dtp22 *p;
 	if ((p = (dtp22 *)calloc(sizeof(dtp22),1)) == NULL)
@@ -1009,7 +1030,7 @@ extern dtp22 *new_dtp22(icoms *icom, int debug, int verb)
 	p->interp_error              = dtp22_interp_error;
 	p->del                       = dtp22_del;
 
-	p->itype = instDTP22;
+	p->itype = itype;
 	p->mode = inst_mode_unknown;
 	p->need_cal = 1;			/* Do a white calibration each time we open the device */
 
@@ -1019,14 +1040,13 @@ extern dtp22 *new_dtp22(icoms *icom, int debug, int verb)
 /* Compute the DTP22/Digital Swatchbook password response. */
 /* Return NZ if there was an error */
 static int comp_password(char *out, char *in, unsigned char key[4]) {
-	unsigned int inv[5];
+	unsigned short inv[5];
 	unsigned short outv;
-	unsigned short check;
 
 	in[10] = '\000';
 
 	/* Convert the 10 hex chars of input to 5 unsigned chars */
-	if (sscanf(in, "%2x%2x%2x%2x%2x", &inv[0], &inv[1], &inv[2], &inv[3], &inv[4]) != 5)
+	if (sscanf(in, "%2hx%2hx%2hx%2hx%2hx", &inv[0], &inv[1], &inv[2], &inv[3], &inv[4]) != 5)
 		return 1;
 
 	/* X-Rite magic... */

@@ -233,7 +233,7 @@ typedef struct {
 	int inn;				/* Number of input channels */
 	icColorSpaceSignature outs;		/* Output space */
 	double p1[3];			/* white pivot point in abs Lab */
-	double p2[3];			/* Point on vector towards black */
+	double p2[3];			/* Point on vector towards black in abs Lab */
 	double toll;			/* Tollerance of black direction */
 } bpfind;
 
@@ -335,9 +335,9 @@ static double bpfindfunc(void *adata, double pv[]) {
 static void icxLu_comp_bk_point(
 icxLuBase *x,
 int gblk,				/* If nz, compute black if possible. */
-double *white,			/* Input, used for computing black */
-double *black,			/* Input & Output. Set if gblk NZ and can be computed */
-double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
+double *white,			/* XYZ Input, used for computing black */
+double *black,			/* XYZ Input & Output. Set if gblk NZ and can be computed */
+double *kblack			/* XYZ Output. Looked up if possible or set to black[] otherwise */
 ) {
 	icmLuBase *p = x->plu;
 	icmLuBase *op = p;			/* Original icmLu, in case we replace p */
@@ -353,7 +353,9 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 	double dblack[MAX_CHAN];	/* device black value */
 	int e;
 
-//printf("~1 icxLu_comp_bk_point() called\n");
+#ifdef DEBUG
+	printf("~1 icxLu_comp_bk_point() called, gblk %d, white = %s, black = %s\n",gblk,icmPdv(3, white),icmPdv(3,black));
+#endif
 	/* Default return incoming black as K only black */
 	kblack[0] = black[0];
 	kblack[1] = black[1];
@@ -369,7 +371,9 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 		/* anything it likes, and they don't have to match what the corresponding */
 		/* A2B table does. In our usage it's probably OK, since we tend */
 		/* to use colorimetric B2A */ 
-//printf("~1 getting icmFwd\n");
+#ifdef DEBUG
+		printf("~1 getting icmFwd\n");
+#endif
 		if ((p = icco->get_luobj(icco, icmFwd, intt, ins, ord)) == NULL)
 			error("icxLu_comp_bk_point: assert: getting Fwd Lookup failed!");
 
@@ -380,7 +384,9 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 		error("icxLu_comp_bk_point: assert: icc Lu output is not XYZ or Lab!, outs = 0x%x, ");
 	}
 
-//printf("~1 icxLu_comp_bk_point called for inn = %d, ins = %s\n", inn, icx2str(icmColorSpaceSignature,ins));
+#ifdef DEBUG
+	printf("~1 icxLu_comp_bk_point called for inn = %d, ins = %s\n", inn, icx2str(icmColorSpaceSignature,ins));
+#endif
 
 	switch (ins) {
 
@@ -388,7 +394,9 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
     	case icSigLabData:
     	case icSigLuvData:
     	case icSigYxyData:
-//printf("~1 Assuming CIE colorspace black is 0.0\n");
+#ifdef DEBUG
+			printf("~1 Assuming CIE colorspace black is 0.0\n");
+#endif
 			if (gblk) {
 				for (e = 0; e < inn; e++)
 					black[0] = 0.0;
@@ -399,7 +407,9 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 			return;
 
 		case icSigRgbData:
-//printf("~1 RGB:\n");
+#ifdef DEBUG
+			printf("~1 RGB:\n");
+#endif
 			for (e = 0; e < inn; e++)
 				dblack[e] = 0.0;
 			break;
@@ -407,8 +417,9 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 		case icSigGrayData: {	/* Could be additive or subtractive */
 			double dval[1];
 			double minv[3], maxv[3];
-//printf("~1 Gray:\n");
-
+#ifdef DEBUG
+			printf("~1 Gray:\n");
+#endif
 			/* Check out 0 and 100% colorant */
 			dval[0] = 0.0;
 			p->lookup(p, minv, dval);
@@ -432,7 +443,9 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 			break;
 
 		case icSigCmykData:
-//printf("~1 CMYK:\n");
+#ifdef DEBUG
+			printf("~1 CMYK:\n");
+#endif
 			kch = 3;
 			dblack[0] = 0.0;
 			dblack[1] = 0.0;
@@ -473,7 +486,9 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 				int nlighter, ndarker;
 
 				/* Decide if the colorspace is additive or subtractive */
-//printf("~1 N channel:\n");
+#ifdef DEBUG
+				printf("~1 N channel:\n");
+#endif
 
 				/* First the no colorant value */
 				for (e = 0; e < inn; e++)
@@ -500,13 +515,17 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 				if (ndarker == 0 && nlighter > 0) {		/* Assume additive */
 					for (e = 0; e < inn; e++)
 						dblack[e] = 0.0;
-//printf("~1 N channel is additive:\n");
+#ifdef DEBUG
+					printf("~1 N channel is additive:\n");
+#endif
 
 				} else if (ndarker > 0 && nlighter == 0) {				/* Assume subtractive. */
 					double pbk[3] = { 0.0,0.0,0.0 };	/* Perfect black */
 					double smd = 1e10;			/* Smallest distance */
 
-//printf("~1 N channel is subtractive:\n");
+#ifdef DEBUG
+					printf("~1 N channel is subtractive:\n");
+#endif
 					/* See if we can guess the black channel */
 					for (e = 0; e < inn; e++) {
 						double tt;
@@ -522,7 +541,9 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 					 || fabs(cvals[kch][2]) > 10.0) {
 						if (p != op)
 							p->del(p);
-//printf("~1 black doesn't look sanem so assume nothing\n");
+#ifdef DEBUG
+						printf("~1 black doesn't look sanem so assume nothing\n");
+#endif
 						return;		/* Assume nothing */
 					}
 
@@ -536,18 +557,24 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 						if (pp->ink.tlimit >= 0.0)
 							dblack[kch] = pp->ink.tlimit;
 					};
-//printf("~1 N channel K = chan %d\n",kch);
+#ifdef DEBUG
+					printf("~1 N channel K = chan %d\n",kch);
+#endif
 				} else {
 					if (p != op)
 						p->del(p);
-//printf("~1 can't figure if additive or subtractive, so assume nothing\n");
+#ifdef DEBUG
+					printf("~1 can't figure if additive or subtractive, so assume nothing\n");
+#endif
 					return;			/* Assume nothing */
 				}
 			}
 			break;
 
 		default:
-//printf("~1 unhandled colorspace, so assume nothing\n");
+#ifdef DEBUG
+			printf("~1 unhandled colorspace, so assume nothing\n");
+#endif
 			if (p != op)
 				p->del(p);
 			return;				/* Don't do anything */
@@ -563,15 +590,19 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 	}
 
 	if (gblk == 0) {		/* That's all we have to do */
-//printf("~1 gblk == 0, so only return kblack\n");
+#ifdef DEBUG
+		printf("~1 gblk == 0, so only return kblack\n");
+#endif
 		if (p != op)
 			p->del(p);
 		return;
 	}
 
-	/* Lookup the device black  or K only value */
-	p->lookup(p, black, dblack);
-//printf("~1 Got initial black %f %f %f, kch = %d\n", black[0],black[1],black[2],kch);
+	/* Lookup the device black or K only value as a default */
+	p->lookup(p, black, dblack);		/* May be XYZ or Lab */
+#ifdef DEBUG
+	printf("~1 Got default lu black %f %f %f, kch = %d\n", black[0],black[1],black[2],kch);
+#endif
 
 	/* !!! Hmm. For CMY and RGB we are simply using the device */
 	/* combination values as the black point. In reality we might */
@@ -606,21 +637,27 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 			pp->kch = kch;
 			bfs.tlimit = pp->ink.tlimit;
 			bfs.klimit = pp->ink.klimit;
-//printf("~1 tlimit = %f, klimit = %f\n",bfs.tlimit,bfs.klimit);
+#ifdef DEBUG
+			printf("~1 tlimit = %f, klimit = %f\n",bfs.tlimit,bfs.klimit);
+#endif
 		};
 	
 #ifdef XICC_NEUTRAL_CMYK_BLACK
-		if (outs == icSigXYZData) {
-			icmXYZ2Lab(&icmD50, bfs.p1, white);
-			icmCpy3(bfs.p2, white);
-		} else {
-			icmAry2Ary(bfs.p1, white);
-			icmLab2XYZ(&icmD50, bfs.p2, white);
-		}
-		icmScale3(bfs.p2, bfs.p2, 0.02);	/* Scale white XYZ towards 0,0,0 */
+#ifdef DEBUG
+		printf("~1 Searching for neutral black\n");
+#endif
+		/* white has been given to us in XYZ */
+		icmXYZ2Lab(&icmD50, bfs.p1, white);		/* pivot Lab */
+		icmCpy3(bfs.p2, white);					/* temp white XYZ */
+		icmScale3(bfs.p2, bfs.p2, 0.02);	 /* Scale white XYZ towards 0,0,0 */
 		icmXYZ2Lab(&icmD50, bfs.p2, bfs.p2); /* Convert black direction to Lab */
 
 #else /* Use K directin black */
+#ifdef DEBUG
+		printf("~1 Searching for K direction black\n");
+#endif
+		icmXYZ2Lab(&icmD50, bfs.p1, white);			/* Pivot */
+
 		/* Now figure abs Lab value of K only, as the direction */
 		/* to use for the rich black. */
 		for (e = 0; e < inn; e++)
@@ -633,18 +670,20 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 		p->lookup(p, black, dblack);
 
 		if (outs == icSigXYZData) {
-			icmXYZ2Lab(&icmD50, bfs.p1, white);		/* Pivot */
 			icmXYZ2Lab(&icmD50, bfs.p2, black);		/* K direction */
 		} else {
-			icmAry2Ary(bfs.p1, white);
 			icmAry2Ary(bfs.p2, black);
 		}
 #endif
 
-//printf("~1 p1 = %f %f %f, p2 = %f %f %f\n",bfs.p1[0],bfs.p1[1],bfs.p1[2],bfs.p2[0],bfs.p2[1],bfs.p2[2]);
+#ifdef DEBUG
+		printf("~1 Lab pivot %f %f %f, Lab K direction %f %f %f\n",bfs.p1[0],bfs.p1[1],bfs.p1[2],bfs.p2[0],bfs.p2[1],bfs.p2[2]);
+#endif
 		/* Start with the K only as the current best value */
 		brv = bpfindfunc((void *)&bfs, dblack);
-//printf("~1 initial brv for K only = %f\n",brv);
+#ifdef DEBUG
+		printf("~1 initial brv for K only = %f\n",brv);
+#endif
 
 		/* Set the random start 1 location as CMY0 */
 		{
@@ -715,9 +754,13 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 	
 			if (powell(&rv, inn, tt, sr, 0.000001, 1000, bpfindfunc,
 			                      (void *)&bfs, NULL, NULL) == 0) {
-//printf("~1 trial %d, rv %f bp %f %f %f %f\n",trial,rv,tt[0],tt[1],tt[2],tt[3]);
+#ifdef DEBUG
+				printf("~1 trial %d, rv %f bp %f %f %f %f\n",trial,rv,tt[0],tt[1],tt[2],tt[3]);
+#endif
 				if (rv < brv) {
-//printf("~1   new best\n");
+#ifdef DEBUG
+					printf("~1   new best\n");
+#endif
 					brv = rv;
 					for (e = 0; e < inn; e++)
 						dblack[e] = tt[e];
@@ -734,7 +777,9 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 				dblack[e] = 1.0;
 		}
 		/* Now have device black in dblack[] */
-//printf("~1 got device black %f %f %f %f\n",dblack[0], dblack[1], dblack[2], dblack[3]);
+#ifdef DEBUG
+		printf("~1 got device black %f %f %f %f\n",dblack[0], dblack[1], dblack[2], dblack[3]);
+#endif
 
 		p->lookup(p, black, dblack);		/* Convert to PCS */
 	}
@@ -745,7 +790,10 @@ double *kblack			/* Output. Looked up if possible or set to black[] otherwise */
 	/* We always return XYZ */
 	if (outs == icSigLabData)
 		icmLab2XYZ(&icmD50, black, black);
-//printf("~1 returning %f %f %f\n", black[0], black[1], black[2]);
+
+#ifdef DEBUG
+	printf("~1 returning %f %f %f\n", black[0], black[1], black[2]);
+#endif
 
 	return;
 }

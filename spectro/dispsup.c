@@ -159,10 +159,9 @@ inst_code setup_display_calibrate(
 /* Should add an argument to be able to select type of calibration, */
 /* rather than guessing what the user wants ? */
 int disprd_calibration(
-instType itype,			/* Instrument type (usually instUnknown) */
 int comport, 			/* COM port used */
 flow_control fc,		/* Serial flow control */
-int dtype,				/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
+int dtype,				/* Display type selection character */
 int proj,				/* NZ for projector mode, falls back to display mode */
 int adaptive,			/* NZ for adaptive mode */
 int noautocal,				/* NZ to disable auto instrument calibration */
@@ -174,6 +173,7 @@ double ho, double vo,	/* Position of dispwin */
 int verb,				/* Verbosity flag */
 int debug				/* Debug flag */
 ) {
+	instType itype = instUnknown;
 	inst *p = NULL;
 	int c;
 	inst_code rv;
@@ -195,7 +195,7 @@ int debug				/* Debug flag */
 	if (verb)
 		printf("Setting up the instrument\n");
 
-	if ((p = new_inst(comport, itype, debug, verb)) == NULL) {
+	if ((p = new_inst(comport, 0, debug, verb)) == NULL) {
 		DBG((dbgo,"new_inst failed\n"))
 		return -1;
 	}
@@ -249,31 +249,27 @@ int debug				/* Debug flag */
 	cap  = p->capabilities(p);
 	cap2 = p->capabilities2(p);
 
-	/* Set CRT or LCD mode */
-	if ((cap & (inst_emis_disp_crt | inst_emis_disp_lcd | inst_emis_proj_crt | inst_emis_proj_lcd))
-	 && (dtype == 1 || dtype == 2)) {
-		inst_opt_mode om;
+	/* Set the display type */
+	if (dtype != 0) {
 
-		if (proj) {
-			if (dtype == 1)
-				om = inst_opt_proj_crt;
-			else
-				om = inst_opt_proj_lcd;
-		} else {
-			if (dtype == 1)
-				om = inst_opt_disp_crt;
-			else
-				om = inst_opt_disp_lcd;
-		}
-
-		if ((rv = p->set_opt_mode(p,om)) != inst_ok) {
-			DBG((dbgo,"Setting display type failed failed with '%s' (%s)\n",
-			       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
-			p->del(p);
-			return -1;
-		}
-	} else if (cap & (inst_emis_disp_crt | inst_emis_disp_lcd | inst_emis_proj_crt | inst_emis_proj_lcd)) {
-		printf("Either CRT or LCD must be selected\n");
+		if (cap & inst_emis_disptype) {
+			int ix;
+			if ((ix = inst_get_disptype_index(p, dtype)) == 0) {
+				DBG((dbgo,"Display type selection '%c' is not valid for instrument\n",dtype))
+				p->del(p);
+				return -1;
+			}
+		
+			if ((rv = p->set_opt_mode(p, inst_opt_disp_type, ix)) != inst_ok) {
+				DBG((dbgo,"Setting display type failed failed with '%s' (%s)\n",
+				       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
+				p->del(p);
+				return -1;
+			}
+		} else
+			printf("Display type ignored - instrument doesn't support display type\n");
+	} else if (cap & (inst_emis_disptypem)) {
+		printf("A display type must be selected\n");
 		p->del(p);
 		return -1;
 	}
@@ -1440,6 +1436,8 @@ static int disprd_fake_read(disprd *p,
 		}
 #endif
 		cols[patch].aXYZ_v = 1;
+		cols[patch].XYZ_v = 0;
+		cols[patch].sp.spec_n = 0;
 	}
 	if (acr && p->verb && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
 		fprintf(p->df,"\n");
@@ -1517,6 +1515,8 @@ static int disprd_fake_read_lu(disprd *p,
 		}
 #endif
 		cols[patch].aXYZ_v = 1;
+		cols[patch].XYZ_v = 0;
+		cols[patch].sp.spec_n = 0;
 	}
 	if (acr && p->verb && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
 		fprintf(p->df,"\n");
@@ -1743,30 +1743,25 @@ static int config_inst_displ(disprd *p) {
 		p->spectral = 0;
 	}
 	
-	/* Set CRT or LCD mode */
-	if ((cap & (inst_emis_disp_crt | inst_emis_disp_lcd | inst_emis_proj_crt | inst_emis_proj_lcd))
-	 && (p->dtype == 1 || p->dtype == 2)) {
-		inst_opt_mode om;
-	
-		if (p->proj) {
-			if (p->dtype == 1)
-				om = inst_opt_proj_crt;
-			else
-				om = inst_opt_proj_lcd;
-		} else {
-			if (p->dtype == 1)
-				om = inst_opt_disp_crt;
-			else
-				om = inst_opt_disp_lcd;
-		}
+	if (p->dtype != 0) {
+
+		if (cap & inst_emis_disptype) {
+			int ix;
+			if ((ix = inst_get_disptype_index(p->it, p->dtype)) == 0) {
+				DBG((dbgo,"Display type selection '%c' is not valid for instrument\n",p->dtype))
+				return 2;
+			}
 		
-		if ((rv = p->it->set_opt_mode(p->it, om)) != inst_ok) {
-			DBG((dbgo,"Setting display type failed failed with '%s' (%s)\n",
-		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-			return 2;
-		}
-	} else if (cap & (inst_emis_disp_crt | inst_emis_disp_lcd | inst_emis_proj_crt | inst_emis_proj_lcd)) {
-		printf("Either CRT or LCD must be selected\n");
+			if ((rv = p->it->set_opt_mode(p->it, inst_opt_disp_type, ix)) != inst_ok) {
+				DBG((dbgo,"Setting display type failed failed with '%s' (%s)\n",
+				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+				return 2;
+			}
+		} else
+			printf("Display type ignored - instrument doesn't support display type\n");
+
+	} else if (cap & (inst_emis_disptypem)) {
+		printf("A display type must be selected\n");
 		return 7;
 	}
 	
@@ -1865,10 +1860,9 @@ static int config_inst_displ(disprd *p) {
 /* Use disprd_err() to interpret *errc */
 disprd *new_disprd(
 int *errc,          /* Error code. May be NULL */
-instType itype,		/* Nominal instrument type (usually instUnknown) */
 int comport, 		/* COM port used. -99 == fake Display */
 flow_control fc,	/* Flow control */
-int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
+int dtype,			/* Display type selection character */
 int proj,			/* NZ for projector mode. Falls back to display mode */
 int adaptive,		/* NZ for adaptive mode */
 int noautocal,			/* No automatic instrument calibration */
@@ -1921,7 +1915,6 @@ char *fake_name		/* Name of profile to use as a fake device */
 
 	p->verb = verb;
 	p->debug = debug;
-	p->itype = itype;
 	p->ccmtx = ccmtx;
 	p->sets = sets;
 	p->no_sets = no_sets;		/* CCSS */
@@ -2008,7 +2001,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 		if (verb)
 			fprintf(p->df,"Setting up the instrument\n");
 	
-		if ((p->it = new_inst(comport, p->itype, debug, verb)) == NULL) {
+		if ((p->it = new_inst(comport, 0, debug, verb)) == NULL) {
 			DBG((stderr,"new_disprd failed because new_inst failed\n"));
 			p->del(p);
 			if (errc != NULL) *errc = 2;
@@ -2038,7 +2031,6 @@ char *fake_name		/* Name of profile to use as a fake device */
 			}
 			return NULL;
 		}
-		p->itype = p->it->get_itype(p->it);			/* Actual type */
 	
 		/* Configure the instrument mode for reading the display */
 		if ((rv = config_inst_displ(p)) != 0) {

@@ -1,630 +1,734 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
-<head>
-  <title>dispread</title>
-  <meta http-equiv="content-type"
- content="text/html; charset=ISO-8859-1">
-  <meta name="author" content="Graeme Gill">
-</head>
-<body>
-<h2><b>spectro/dispread</b>&nbsp;</h2>
-<h3>Summary</h3>
-Display test patches on a monitor, read the colorimetric value result
-with the colorimeter, and create the chart readings file. The type of
-instrument is determined by the communication port
-selected. Emission and display measurement instruments are supported.<br>
-<br>
-If you want to read a display manually rather than automatically, see <a
- href="chartread.html">chartread</a> and the <a href="chartread.html#d">-d</a>
-option.<br>
-<h3>Usage</h3>
-<small style="font-family: monospace;">dispread [-options]<i> inoutfile</i><br>
-&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;
-Verbose
-mode<br>
-&nbsp;</small><font size="-1"><a style="font-family: monospace;"
- href="#display">-display displayname</a><span
- style="font-family: monospace;"> [X11 only] Choose X11 display name<br>
-</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="#dnm">-d n[,m]</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; [X11
-only]Choose the display from the following list (default 1),<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <head>
+    <title>dispread</title>
+    <meta http-equiv="content-type" content="text/html;
+      charset=ISO-8859-1">
+    <meta name="author" content="Graeme Gill">
+  </head>
+  <body>
+    <h2><b>spectro/dispread</b>&nbsp;</h2>
+    <h3>Summary</h3>
+    Display test patches on a monitor, read the colorimetric value
+    result
+    with the colorimeter, and create the chart readings file. The type
+    of
+    instrument is determined by the communication port
+    selected. Emission and display measurement instruments are
+    supported.<br>
+    <br>
+    If you want to read a display manually rather than automatically,
+    see <a href="chartread.html">chartread</a> and the <a
+      href="chartread.html#d">-d</a>
+    option.<br>
+    <h3>Usage</h3>
+    <small style="font-family: monospace;">dispread [-options]<i>
+        inoutfile</i><br>
+      &nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      Verbose
+      mode<br>
+      &nbsp;</small><font size="-1"><a style="font-family: monospace;"
+        href="#display">-display displayname</a><span
+        style="font-family: monospace;"> [X11 only] Choose X11 display
+        name<br>
+      </span></font><font size="-1"><span style="font-family:
+        monospace;">&nbsp;<a href="#dnm">-d n[,m]</a>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        [X11
+        only]Choose the display from the following list (default 1),<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 and
 optionally
 choose
 a
 different
 display
-m for VideoLUT access.</span></font><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#d">-d
-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+m
+        for VideoLUT access.</span></font><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;<a
+          href="#d">-d
+          n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Choose
 the
 display
 from
 the
 following
-list (default 1)</span></font><small style="font-family: monospace;"><br>
-<span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#c">-c listno</a><span
- style="font-family: monospace;"> &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set
-communication port from the following list (default 1)<br>
-</span></small><font size="-1"><span style="font-family: monospace;">&nbsp;<a
- href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Use
-projector
-mode
-(if
-available)</span></font><br>
-<small style="font-family: monospace;"></small><font size="-1"><span
- style="font-family: monospace;">&nbsp;<a href="#y">-y c|l</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+list
+        (default 1)</span></font><small style="font-family: monospace;"><br>
+      <span style="font-family: monospace;">&nbsp;</span><a
+        style="font-family: monospace;" href="#c">-c listno</a><span
+        style="font-family: monospace;"> &nbsp; &nbsp;
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set
+        communication port from the following list (default 1)<br>
+      </span></small><font size="-1"><span style="font-family:
+        monospace;">&nbsp;<a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        Use
+        projector
+        mode
+        (if
+        available)</span></font><br>
+    &nbsp;
+    <font size="-1"><span style="font-family: monospace;"><a href="#y">-y
+          X</a>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Display
-type,
-c
-=
-CRT,
-l
-= LCD</span></font><br>
-<small style="font-family: monospace;">&nbsp;<span
- style="text-decoration: underline;">-</span><a href="#k">k
-file.cal</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Load
-calibration file into display while reading<br>
-</small><small style="font-family: monospace;">&nbsp;<span
- style="text-decoration: underline;">-</span><a href="#K">K
-file.cal</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Apply calibration file to test values while reading</small><br>
-<small style="font-family: monospace;">&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;
-Save
-spectral
-information
-(default
-don't
-save)<br>
-</small><font style="font-family: monospace;" size="-1">&nbsp;<a
- href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Position
-test
-window
-and
-scale
-it<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+        type - instrument specific list to choose from.</span></font><br>
+    <small style="font-family: monospace;">&nbsp;<span
+        style="text-decoration: underline;">-</span><a href="#k">k
+        file.cal</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      Load
+      calibration file into display while reading<br>
+    </small><small style="font-family: monospace;">&nbsp;<span
+        style="text-decoration: underline;">-</span><a href="#K">K
+        file.cal</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Apply
+      calibration file to test values while reading</small><br>
+    <small style="font-family: monospace;">&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      Save
+      spectral
+      information
+      (default
+      don't
+      save)<br>
+    </small><font style="font-family: monospace;" size="-1">&nbsp;<a
+        href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      Position
+      test
+      window
+      and
+      scale
+      it<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ho,vi:
 0.0
 =
 left/top,
 0.5
 =
-center, 1.0 = right/bottom etc.<br>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+center,
+      1.0 = right/bottom etc.<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ss:
 0.5
 =
 half,
 1.0
 =
-normal, 2.0 = double etc.<br>
-&nbsp;</font><font size="-1"><span style="font-family: monospace;"><a
- href="#F">-F</a>
+normal,
+      2.0 = double etc.<br>
+      &nbsp;</font><font size="-1"><span style="font-family: monospace;"><a
+          href="#F">-F</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Fill
-whole
-screen
-with
-black
-background</span></font><br style="font-family: monospace;">
-<small style="font-family: monospace;">&nbsp;<span
- style="text-decoration: underline;"></span><a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        Fill
+        whole
+        screen
+        with
+        black
+        background</span></font><br style="font-family: monospace;">
+    <small style="font-family: monospace;">&nbsp;<span
+        style="text-decoration: underline;"></span><a href="#n">-n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;
 [X11
 only]
 Don't
 set
 override
-redirect on test
-window<br>
-</small><small style="font-family: monospace;">&nbsp;<a href="#J">-J</a>
+redirect
+      on test
+      window<br>
+    </small><small style="font-family: monospace;">&nbsp;<a href="#J">-J</a>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;
-Run
-calibration
-first</small><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Disable
-auto
-calibration
-of
-instrument<br>
-</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#H">-H</a><span
- style="font-family: monospace;">
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      Run
+      calibration
+      first</small><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;<a
+          href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        Disable
+        auto
+        calibration
+        of
+        instrument<br>
+      </span></font><font size="-1"><span style="font-family:
+        monospace;">&nbsp;</span><a style="font-family: monospace;"
+        href="#H">-H</a><span style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;
-Use
-high
-resolution
-spectrum
-mode
-(if
-available)<br>
-</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#V">-V</a><span
- style="font-family: monospace;">
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        Use
+        high
+        resolution
+        spectrum
+        mode
+        (if
+        available)<br>
+      </span></font><font size="-1"><span style="font-family:
+        monospace;">&nbsp;</span><a style="font-family: monospace;"
+        href="#V">-V</a><span style="font-family: monospace;">
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;&nbsp;&nbsp;
-Use
-adaptive
-measurement
-mode
-(if
-available)<br>
-&nbsp;<a href="#w">-w</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        Use
+        adaptive
+        measurement
+        mode
+        (if
+        available)<br>
+        &nbsp;<a href="#w">-w</a>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Disable
 normalisation
 of
 white
 to
 Y
-= 100</span></font><small><span style="font-family: monospace;"></span></small><br>
-&nbsp; <font size="-1"><span style="font-family: monospace;"><a
- href="#X1">-X file.ccmx</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Apply
-Colorimeter
-Correction
-Matrix</span></font><br>
-<span style="font-family: monospace;">&nbsp;<a href="#X2">-X file.ccss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+=
+        100</span></font><small><span style="font-family: monospace;"></span></small><br>
+    &nbsp; <font size="-1"><span style="font-family: monospace;"><a
+          href="#X1">-X file.ccmx</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        Apply
+        Colorimeter
+        Correction
+        Matrix</span></font><br>
+    <span style="font-family: monospace;">&nbsp;<a href="#X2">-X
+        file.ccss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Use
 Colorimeter
-Calibration Spectral Samples for calibration</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;<a href="#X3">-X N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Calibration
+      Spectral Samples for calibration</span><br style="font-family:
+      monospace;">
+    <span style="font-family: monospace;">&nbsp;<a href="#X3">-X N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 0:
 Technology
-(Display description)</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-1:
-etc.</span><font size="-1"><span style="font-family: monospace;"><br>
-</span></font><small><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#Q">-Q <i>observ</i></a><span
- style="font-family: monospace;">&nbsp; &nbsp; &nbsp; &nbsp;
-&nbsp;&nbsp;&nbsp; Choose CIE Observer for spectrometer or CCSS
-colorimeter data:</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;
-&nbsp;
-&nbsp;
-&nbsp;
-&nbsp;
-1931_2
-</span></small><small><span style="font-family: monospace;">(def.)</span></small><small><span
- style="font-family: monospace;">,
-1964_10, S&amp;B
-1955_2, shaw, J&amp;V 1978_2, 1964_10c</span></small><br>
-<small><span style="font-family: monospace;">&nbsp;<a
- href="dispread.html#I">-I b|w</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+(Display
+      description)</span><br style="font-family: monospace;">
+    <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      1:
+      etc.</span><font size="-1"><span style="font-family: monospace;"><br>
+      </span></font><small><span style="font-family: monospace;">&nbsp;</span><a
+        style="font-family: monospace;" href="#Q">-Q <i>observ</i></a><span
+        style="font-family: monospace;">&nbsp; &nbsp; &nbsp; &nbsp;
+        &nbsp;&nbsp;&nbsp; Choose CIE Observer for spectrometer or CCSS
+        colorimeter data:</span><br style="font-family: monospace;">
+      <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        &nbsp;
+        &nbsp;
+        &nbsp;
+        &nbsp;
+        &nbsp;
+        1931_2
+      </span></small><small><span style="font-family: monospace;">(def.)</span></small><small><span
+        style="font-family: monospace;">,
+        1964_10, S&amp;B
+        1955_2, shaw, J&amp;V 1978_2, 1964_10c</span></small><br>
+    <small><span style="font-family: monospace;">&nbsp;<a
+          href="dispread.html#I">-I b|w</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Drift
 compensation,
 Black:
 -Ib,
 White:
 -Iw,
-Both: -Ibw</span></small><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#C">-C "command"</a><span
- style="font-family: monospace;">
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Invoke shell "command" each
-time a color is set<br>
-</span></font><font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
- style="font-family: monospace;" href="#M">-M "command"</a><span
- style="font-family: monospace;">
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Invoke shell "command" each
-time a color is measured</span></font><br>
-<font size="-1"><span style="font-family: monospace;">&nbsp;<a href="#W">-W
-n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Both:
+        -Ibw</span></small><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+        style="font-family: monospace;" href="#C">-C "command"</a><span
+        style="font-family: monospace;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Invoke shell
+        "command" each
+        time a color is set<br>
+      </span></font><font size="-1"><span style="font-family:
+        monospace;">&nbsp;</span><a style="font-family: monospace;"
+        href="#M">-M "command"</a><span style="font-family: monospace;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Invoke shell
+        "command" each
+        time a color is measured</span></font><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;<a
+          href="#W">-W
+          n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Override
 serial
 port
 flow
 control:
 n
-= none, h = HW, x = Xon/Xoff</span></font><br>
-<small style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print debug
-diagnostics to stderr</small><br>
-<small style="font-family: monospace;">&nbsp;<a href="#p1"><i>inoutfile</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Base
-name
-for
-input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
- href="File_Formats.html#.ti3">.ti3</a>] file.<br>
-</small>
-<br>
-<b>Examples</b><br>
-<br>
-dispread -c1 -i92 mycrt<br>
-<h3>Comments<br>
-</h3>
-This is the tool for exercising a display, in order to measure its
-color characteristics. The device test colors are defined by the
-outfile.ti1 file, while the resulting device+colorimetric and optional
-spectral readings are stored in the outfile.ti3 file. Display
-calibration curves can be applied during the measurements, and the
-curves included in the resulting .ti3 data file using the <span
- style="font-weight: bold;">-k</span>flag. See <a href="dispcal.html">dispcal</a>
-for information on how&nbsp; to calibrate the display before profiling
-it. For best results, you should run this
-against a neutral grey desktop background, and avoid having any bright
-images or windows on the screen at the time you run it.<br>
-<br>
-<a name="v"></a> The <b>-v</b> flag reports progress information.<br>
-<br>
-<a name="display"></a><span style="font-weight: bold;">-display</span>:
-When running on a UNIX based system that used the
-X11
-Windowing
-System, <b>dispread</b>
-will by default use the $DISPLAY environment variable to determine
-which display and screen to read from. This can be overridden by
-supplying an X11 display name to the <span style="font-weight: bold;">-display</span>
-option. Note that if Xinerama is active, you can't select the screen
-using $DISPLAY or -display, you have to select it using the <span
- style="font-weight: bold;">-d</span> parameter.<br>
-<br>
-<a name="d"></a> <span style="font-weight: bold;">-d</span>: By
-default the main display will be the location of
-the test window. If the system has more than
-one display or screen, an alternate display/screen can be selected with
-the <span style="font-weight: bold;">-d</span> parameter. If you
-invoke <span style="font-weight: bold;">dispread</span>
-so as to display the usage
-information (i.e. "dispcal -?" or "dispcal --"), then the discovered
-displays/screens will be listed. Multiple displays may not be listed,
-if they appear as a single display to the operating system (ie. the
-multi-display support is hidden in the video card driver). On UNIX
-based system that used the X11
-Windowing
-System, the <span style="font-weight: bold;">-d</span> parameter will
-override the screen specified by the $DISPLAY or <span
- style="font-weight: bold;">-display</span> parameter.<br>
-<br>
-<span style="font-weight: bold;">Note</span> that if a calibration file
-is provided using the <span style="font-weight: bold;">-k</span>
-option, and the VideoLUTs for a display are not accessible, <span
- style="font-weight: bold;">dispread</span>
-will issue a warning , but will continue to run without initialising
-the VideoLUTs . This could be because you are trying to access
-a remote display, and the remote display doesn't support the
-XF86VidMode extension, or perhaps you are running multiple monitors
-using NVidia TwinView, or MergedFB, and trying to access anything other
-than the primary monitor. TwinView and MergedFB don't properly support
-the XF86VidMode extension for multiple displays. Xinerama does properly
-support calibration of multiple displays. You can use <a
- href="dispwin.html#r">dispwin -r</a> to test whether the VideoLUTs are
-accessible for a particular display. See also below, on how to select a
-different display for VideoLUT access.<br>
-<br>
-<a name="dnm"></a>Because of the difficulty cause by TwinView and
-MergedFB in X11 based systems, you can optionally specify a separate
-display number after the display that is going to be used to present
-test patches, for accessing the VideoLUT hardware. This must be
-specified as a single string, e.g. <span style="font-weight: bold;">-d
-1,2</span>
-. Some experimentation may be needed using <a href="dispwin.html">dispwin</a>
-on such systems, to discover what
-screen has access to the VideoLUT hardware, and which screens the test
-patches appear on. You may be able to calibrate one screen, and then
-share the calibration with another screen. Profiling can be done
-independently to calibration.<br>
-<br>
-<a name="c"></a> <span style="font-weight: bold;">-c</span>: The
-instrument is assumed to communicate through a
-USB or serial communication port, and the port can be selected with the
-<b>-c</b>
-option,
-if the instrument is not connected to the first port. If you invoke <span
- style="font-weight: bold;">dispread</span>
-so as to display the usage
-information (i.e. "dispread -?" or "dispread --"), then the discovered
-USB and serial ports will be listed. On
-UNIX/Linux, a list of all possible serial ports are shown, but not all
-of them may
-actually be present on your system.<br>
-<br>
-<a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
-allows measuring
-in projector mode, using
-instruments that
-support this.<br>
-<br>
-<a name="y"></a>&nbsp; <span style="font-weight: bold;">-y</span>:
-Display type. Colorimeters can
-do a more accurate job if they know what type of display technology
-they are measuring. Use <span style="font-weight: bold;">-yc</span> if
-you are
-calibrating a CRT (Cathode Ray Tube) type monitor or Plasma type
-display, and use <span style="font-weight: bold;">-yl</span> if you
-are calibrating an LCD
-(Liquid Crystal Display).<br>
-<br>
-<a name="s"></a><span style="font-weight: bold;">-s</span>: By default
-only the colorimetric information (XYZ
-value)
-will be saved, but for instruments that support spectral readings (such
-as
-the Gretag Spectrolino), the <b>-s</b> option will save the spectral
-readings
-to the .ti3 file as well.<br>
-<br>
-<a name="k"></a> <span style="font-weight: bold;">-k: </span>If a
-display video lookup table calibration <a href="File_Formats.html#.cal">.cal</a>
-file is provided, it will be
-loaded into the display <span style="font-weight: bold;">ViedoLUTs</span>
-while the measurements are being taken, thereby being applied to the
-measurement values, and the calibration will also
-included in the resulting .ti3 data file, so that <a
- href="colprof.html">colprof</a> can include it as a <span
- style="font-weight: bold;">vcgt</span> tag in the resulting
-profile. This is the <span style="font-weight: bold;">normal</span>
-way to profile a calibrated display. The calibration file has usually
-been created using <a href="dispcal.html">dispcal</a>. If a
-calibration file is not created,
-then the display will be read in whatever calibration state it is in. <span
- style="font-weight: bold;">NOTE</span> that the calibration is loaded
-into the display hardware just before the instrument starts
-measurement, after the test window first appears.<br>
-<br>
-<a name="K"></a> <span style="font-weight: bold;">-K: </span>If a
-display video lookup table calibration <a href="File_Formats.html#.cal">.cal</a>
-file is provided, it will be
-applied to the test values for each measurement, and also
-included in the resulting .ti3 data file, so that <a
- href="colprof.html">colprof</a> can include it as a <span
- style="font-weight: bold;">vcgt</span> tag in the resulting
-profile. This is <span style="font-weight: bold;">NOT</span> normally
-the best way to profile a calibrated display, since the frame buffer
-may have lower precision than the VideoLUTs output values.<br>
-<br>
-<a name="P"></a> The <span style="font-weight: bold;">-P</span>
-parameter allows you to position and size the test patch window. By
-default it is places in the center of the screen, and sized
-appropriately for the type of instrument. The <span
- style="font-weight: bold;">ho</span> and <span
- style="font-weight: bold;">vo</span>
-values govern the horizontal and vertical offset respectively. A value
-of 0.0 positions the window to the far left or top of the screen, a
-value of 0.5 positions it in the center of the screen (the default),
-and 1.0 positions it to the far right or bottom of the screen. The <span
- style="font-weight: bold;">ss</span>
-parameter is a scale factor for the test window size. A value of 0.5
-for instance, would produce a half sized window. A value of 2.0 will
-produce a double size window. Note that the ho,vo,ss numbers must be
-specified as a single string (no space between the numbers and the
-comma). For example, to create a double sized test window at the top
-right of the screen, use <span style="font-weight: bold;">-P 1,0,2</span>
-.<br>
-<br>
-<a name="F"></a> The <span style="font-weight: bold;">-F</span>
-flag causes the while screen behind the test window to be masked with
-black. This can aid black accuracy when measuring CRT displays or
-projectors.<br>
-<br>
-<a name="n"></a><span style="font-weight: bold;">-n</span>: When
-running on a UNIX based system that used the X11
-Windowing
-System, <b>dispread</b> normally selects the override redirect so that
-the
-test window will appear above any other windows on the display. On some
-systems
-this can interfere with window manager operation, and the <b>-n</b>
-option
-turns this behaviour off.<br>
-<br>
-<a name="J"></a> The -<span style="font-weight: bold;">J</span> option
-runs through the black and sensor
-relative
-calibration routines for the Xrite DTP92 and DTP94 instrument, the
-black level calibration for the Eye-One Display 1, and a CRT frequency
-calibration for the Eye-One Display 2. For the
-black calibration the instrument should be placed on an opaque, black
-surface, and any stray light should be avoided by placing something
-opaque over the instrument. If a
-Spectrolino
-is being used, then a white and black calibration will always be
-performed before
-the instrument can be placed on the display, unless the <a href="#N">-N</a>
-flag is used. Generally it is not necessary to do a calibration every
-time an instrument is used, just now and again. There is no point in
-doing&nbsp; a CRT frequency calibration, as this will be done
-automatically
-at the commencement of patch reading.<br>
-<br>
-<a name="N"></a>The <b>-N</b> flag disables any automatic instrument
-calibration (used for the Gretag Spectrolino for instance). This would
-be used when the instrument is being used for a series of measurements,
-and it is inconvenient to place it on it's calibration tile between
-measurements. The instrument should be calibrated at least once for
-each measurement session though.<br>
-<br>
-<a name="H"></a> The -<span style="font-weight: bold;">H</span> option
-turns on high resolution spectral mode, if the instrument supports it.
-See <a href="instruments.html">Operation of particular instruments</a>
-for more details. This may give better accuracy for display
-measurements.<br>
-<br>
-<a name="V"></a> The -<span style="font-weight: bold;">V</span> option
-uses adaptive
-emission measurement mode, if the instrument supports it,
-such as the Eye-One Pro. This may give better accuracy for low level
-measurements, but may be more inconsistent overall due to the varying
-integration times. Overall measurement time will probably be longer.<br>
-<br>
-<a name="w"></a>The <b>-w</b> flag disables the normalisation of the
-white patch value to 100.0, resulting in values that are in cd/m^2.
-This is mainly for diagnostic purposes.<br>
-<br>
-<a name="X1"></a> The -<span style="font-weight: bold;">X <span
- style="font-style: italic;">file.ccmx</span></span> option reads a <a
- href="File_Formats.html#.ccmx">Colorimeter Correction Matrix</a>
-from the given file, and applies it to the colorimeter instruments
-readings. This can improve a colorimeters accuracy for a particular
-type of display. A list of contributed <span style="font-weight: bold;">ccmx</span>
-files is <a href="ccmxs.html">here</a>.<br>
-<br>
-<a name="X2"></a> The -<span style="font-weight: bold;">X <span
- style="font-style: italic;">file.ccss</span></span> option reads a <a
- href="File_Formats.html#.ccss">Colorimeter Calibration Spectral Sample</a>
-from the given file, and uses it to set the colorimeter instruments
-calibration. This will only work with colorimeters that rely on sensor
-spectral sensitivity calibration
-information (ie. the X-Rite <span style="font-weight: bold;">i1d3</span>).This
+=
+        none, h = HW, x = Xon/Xoff</span></font><br>
+    <small style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print debug
+      diagnostics to stderr</small><br>
+    <small style="font-family: monospace;">&nbsp;<a href="#p1"><i>inoutfile</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      Base
+      name
+      for
+      input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
+        href="File_Formats.html#.ti3">.ti3</a>] file.<br>
+    </small>
+    <br>
+    <b>Examples</b><br>
+    <br>
+    dispread -c1 -i92 mycrt<br>
+    <h3>Comments<br>
+    </h3>
+    This is the tool for exercising a display, in order to measure its
+    color characteristics. The device test colors are defined by the
+    outfile.ti1 file, while the resulting device+colorimetric and
+    optional
+    spectral readings are stored in the outfile.ti3 file. Display
+    calibration curves can be applied during the measurements, and the
+    curves included in the resulting .ti3 data file using the <span
+      style="font-weight: bold;">-k</span>flag. See <a
+      href="dispcal.html">dispcal</a>
+    for information on how&nbsp; to calibrate the display before
+    profiling
+    it. For best results, you should run this
+    against a neutral grey desktop background, and avoid having any
+    bright
+    images or windows on the screen at the time you run it.<br>
+    <br>
+    <a name="v"></a> The <b>-v</b> flag reports progress information.<br>
+    <br>
+    <a name="display"></a><span style="font-weight: bold;">-display</span>:
+    When running on a UNIX based system that used the
+    X11
+    Windowing
+    System, <b>dispread</b>
+    will by default use the $DISPLAY environment variable to determine
+    which display and screen to read from. This can be overridden by
+    supplying an X11 display name to the <span style="font-weight:
+      bold;">-display</span>
+    option. Note that if Xinerama is active, you can't select the screen
+    using $DISPLAY or -display, you have to select it using the <span
+      style="font-weight: bold;">-d</span> parameter.<br>
+    <br>
+    <a name="d"></a> <span style="font-weight: bold;">-d</span>: By
+    default the main display will be the location of
+    the test window. If the system has more than
+    one display or screen, an alternate display/screen can be selected
+    with
+    the <span style="font-weight: bold;">-d</span> parameter. If you
+    invoke <span style="font-weight: bold;">dispread</span>
+    so as to display the usage
+    information (i.e. "dispcal -?" or "dispcal --"), then the discovered
+    displays/screens will be listed. Multiple displays may not be
+    listed,
+    if they appear as a single display to the operating system (ie. the
+    multi-display support is hidden in the video card driver). On UNIX
+    based system that used the X11
+    Windowing
+    System, the <span style="font-weight: bold;">-d</span> parameter
+    will
+    override the screen specified by the $DISPLAY or <span
+      style="font-weight: bold;">-display</span> parameter.<br>
+    <br>
+    <span style="font-weight: bold;">Note</span> that if a calibration
+    file
+    is provided using the <span style="font-weight: bold;">-k</span>
+    option, and the VideoLUTs for a display are not accessible, <span
+      style="font-weight: bold;">dispread</span>
+    will issue a warning , but will continue to run without initialising
+    the VideoLUTs . This could be because you are trying to access
+    a remote display, and the remote display doesn't support the
+    XF86VidMode extension, or perhaps you are running multiple monitors
+    using NVidia TwinView, or MergedFB, and trying to access anything
+    other
+    than the primary monitor. TwinView and MergedFB don't properly
+    support
+    the XF86VidMode extension for multiple displays. Xinerama does
+    properly
+    support calibration of multiple displays. You can use <a
+      href="dispwin.html#r">dispwin -r</a> to test whether the VideoLUTs
+    are
+    accessible for a particular display. See also below, on how to
+    select a
+    different display for VideoLUT access.<br>
+    <br>
+    <a name="dnm"></a>Because of the difficulty cause by TwinView and
+    MergedFB in X11 based systems, you can optionally specify a separate
+    display number after the display that is going to be used to present
+    test patches, for accessing the VideoLUT hardware. This must be
+    specified as a single string, e.g. <span style="font-weight: bold;">-d
+      1,2</span>
+    . Some experimentation may be needed using <a href="dispwin.html">dispwin</a>
+    on such systems, to discover what
+    screen has access to the VideoLUT hardware, and which screens the
+    test
+    patches appear on. You may be able to calibrate one screen, and then
+    share the calibration with another screen. Profiling can be done
+    independently to calibration.<br>
+    <br>
+    <a name="c"></a> <span style="font-weight: bold;">-c</span>: The
+    instrument is assumed to communicate through a
+    USB or serial communication port, and the port can be selected with
+    the
+    <b>-c</b>
+    option,
+    if the instrument is not connected to the first port. If you invoke
+    <span style="font-weight: bold;">dispread</span>
+    so as to display the usage
+    information (i.e. "dispread -?" or "dispread --"), then the
+    discovered
+    USB and serial ports will be listed. On
+    UNIX/Linux, a list of all possible serial ports are shown, but not
+    all
+    of them may
+    actually be present on your system.<br>
+    <br>
+    <a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
+    allows measuring
+    in projector mode, using
+    instruments that
+    support this.<br>
+    <br>
+    <a name="y"></a>The <span style="font-weight: bold;">-y</span> flag
+    allows setting the Display Type. Most colorimeters need this
+    parameter set to operate correctly. The selection typically
+    determines two aspects of of the instrument operation: <span
+      style="font-weight: bold;">1)</span> It may set the measuring mode
+    to suite <a
+      href="http://en.wikipedia.org/wiki/Comparison_of_display_technology"><span
+        style="font-weight: bold;">refresh</span> or <span
+        style="font-weight: bold;">non-refresh</span> displays</a>.
+    Typically only LCD (Liquid Crystal) displays have a non-refresh
+    nature. <span style="font-weight: bold;">2)</span> It may select an
+    instrument calibration matrix suitable for a particular display
+    type. The selections available depends on the type and model of
+    instrument, and a list of the options for the discovered instruments
+    will be shown in the <a href="ArgyllDoc.html#CmdLine">usage</a>
+    information. For more details on what particular instruments support
+    and how this works, see <a href="instruments.html">Operation of
+      particular instruments</a>.<br>
+    <br>
+    <a name="s"></a><span style="font-weight: bold;">-s</span>: By
+    default
+    only the colorimetric information (XYZ
+    value)
+    will be saved, but for instruments that support spectral readings
+    (such
+    as
+    the Gretag Spectrolino), the <b>-s</b> option will save the
+    spectral
+    readings
+    to the .ti3 file as well.<br>
+    <br>
+    <a name="k"></a> <span style="font-weight: bold;">-k: </span>If a
+    display video lookup table calibration <a
+      href="File_Formats.html#.cal">.cal</a>
+    file is provided, it will be
+    loaded into the display <span style="font-weight: bold;">ViedoLUTs</span>
+    while the measurements are being taken, thereby being applied to the
+    measurement values, and the calibration will also
+    included in the resulting .ti3 data file, so that <a
+      href="colprof.html">colprof</a> can include it as a <span
+      style="font-weight: bold;">vcgt</span> tag in the resulting
+    profile. This is the <span style="font-weight: bold;">normal</span>
+    way to profile a calibrated display. The calibration file has
+    usually
+    been created using <a href="dispcal.html">dispcal</a>. If a
+    calibration file is not created,
+    then the display will be read in whatever calibration state it is
+    in. <span style="font-weight: bold;">NOTE</span> that the
+    calibration is loaded
+    into the display hardware just before the instrument starts
+    measurement, after the test window first appears.<br>
+    <br>
+    <a name="K"></a> <span style="font-weight: bold;">-K: </span>If a
+    display video lookup table calibration <a
+      href="File_Formats.html#.cal">.cal</a>
+    file is provided, it will be
+    applied to the test values for each measurement, and also
+    included in the resulting .ti3 data file, so that <a
+      href="colprof.html">colprof</a> can include it as a <span
+      style="font-weight: bold;">vcgt</span> tag in the resulting
+    profile. This is <span style="font-weight: bold;">NOT</span>
+    normally
+    the best way to profile a calibrated display, since the frame buffer
+    may have lower precision than the VideoLUTs output values.<br>
+    <br>
+    <a name="P"></a> The <span style="font-weight: bold;">-P</span>
+    parameter allows you to position and size the test patch window. By
+    default it is places in the center of the screen, and sized
+    appropriately for the type of instrument. The <span
+      style="font-weight: bold;">ho</span> and <span
+      style="font-weight: bold;">vo</span>
+    values govern the horizontal and vertical offset respectively. A
+    value
+    of 0.0 positions the window to the far left or top of the screen, a
+    value of 0.5 positions it in the center of the screen (the default),
+    and 1.0 positions it to the far right or bottom of the screen. The <span
+      style="font-weight: bold;">ss</span>
+    parameter is a scale factor for the test window size. A value of 0.5
+    for instance, would produce a half sized window. A value of 2.0 will
+    produce a double size window. Note that the ho,vo,ss numbers must be
+    specified as a single string (no space between the numbers and the
+    comma). For example, to create a double sized test window at the top
+    right of the screen, use <span style="font-weight: bold;">-P 1,0,2</span>
+    .<br>
+    <br>
+    <a name="F"></a> The <span style="font-weight: bold;">-F</span>
+    flag causes the while screen behind the test window to be masked
+    with
+    black. This can aid black accuracy when measuring CRT displays or
+    projectors.<br>
+    <br>
+    <a name="n"></a><span style="font-weight: bold;">-n</span>: When
+    running on a UNIX based system that used the X11
+    Windowing
+    System, <b>dispread</b> normally selects the override redirect so
+    that
+    the
+    test window will appear above any other windows on the display. On
+    some
+    systems
+    this can interfere with window manager operation, and the <b>-n</b>
+    option
+    turns this behaviour off.<br>
+    <br>
+    <a name="J"></a> The -<span style="font-weight: bold;">J</span>
+    option
+    runs through the black and sensor
+    relative
+    calibration routines for the Xrite DTP92 and DTP94 instrument, the
+    black level calibration for the Eye-One Display 1, and a CRT
+    frequency
+    calibration for the Eye-One Display 2. For the
+    black calibration the instrument should be placed on an opaque,
+    black
+    surface, and any stray light should be avoided by placing something
+    opaque over the instrument. If a
+    Spectrolino
+    is being used, then a white and black calibration will always be
+    performed before
+    the instrument can be placed on the display, unless the <a
+      href="#N">-N</a>
+    flag is used. Generally it is not necessary to do a calibration
+    every
+    time an instrument is used, just now and again. There is no point in
+    doing&nbsp; a CRT frequency calibration, as this will be done
+    automatically
+    at the commencement of patch reading.<br>
+    <br>
+    <a name="N"></a>The <b>-N</b> flag disables any automatic
+    instrument
+    calibration (used for the Gretag Spectrolino for instance). This
+    would
+    be used when the instrument is being used for a series of
+    measurements,
+    and it is inconvenient to place it on it's calibration tile between
+    measurements. The instrument should be calibrated at least once for
+    each measurement session though.<br>
+    <br>
+    <a name="H"></a> The -<span style="font-weight: bold;">H</span>
+    option
+    turns on high resolution spectral mode, if the instrument supports
+    it.
+    See <a href="instruments.html">Operation of particular instruments</a>
+    for more details. This may give better accuracy for display
+    measurements.<br>
+    <br>
+    <a name="V"></a> The -<span style="font-weight: bold;">V</span>
+    option
+    uses adaptive
+    emission measurement mode, if the instrument supports it,
+    such as the Eye-One Pro. This may give better accuracy for low level
+    measurements, but may be more inconsistent overall due to the
+    varying
+    integration times. Overall measurement time will probably be longer.<br>
+    <br>
+    <a name="w"></a>The <b>-w</b> flag disables the normalisation of
+    the
+    white patch value to 100.0, resulting in values that are in cd/m^2.
+    This is mainly for diagnostic purposes.<br>
+    <br>
+    <a name="X1"></a> The -<span style="font-weight: bold;">X <span
+        style="font-style: italic;">file.ccmx</span></span> option reads
+    a <a href="File_Formats.html#.ccmx">Colorimeter Correction Matrix</a>
+    from the given file, and applies it to the colorimeter instruments
+    readings. This can improve a colorimeters accuracy for a particular
+    type of display. A list of contributed <span style="font-weight:
+      bold;">ccmx</span>
+    files is <a href="ccmxs.html">here</a>.<br>
+    <br>
+    <a name="X2"></a> The -<span style="font-weight: bold;">X <span
+        style="font-style: italic;">file.ccss</span></span> option reads
+    a <a href="File_Formats.html#.ccss">Colorimeter Calibration
+      Spectral Sample</a>
+    from the given file, and uses it to set the colorimeter instruments
+    calibration. This will only work with colorimeters that rely on
+    sensor
+    spectral sensitivity calibration
+    information (ie. the X-Rite <span style="font-weight: bold;">i1d3</span>,
+    or the DataColor <span style="font-weight: bold;">Spyder4</span>).This
 can
 improve
-a colorimeters accuracy for a particular
-type of display.<br>
-<br>
-<a name="X3"></a> The -<span style="font-weight: bold;">X <span
- style="font-style: italic;">N</span></span> option selects a <a
- href="File_Formats.html#.ccss">Colorimeter Calibration Spectral Sample</a>from
-the
-list
-of
-installed ccss files, rather than specifying a specific
-ccss files as in the above usage. The CCSS information that came with
-your colorimeters can be installed using <a href="i1d3ccss.html">i1d3ccss</a>,
-or
-one
-can be created using <a href="ccxxmake.html">ccxxmake</a>.<br>
-<br>
-<a name="Q"></a> The <b>-Q</b> flag allows specifying a tristimulus
-observer, and is used to compute PCS (Profile Connection Space)
-tristimulus values from spectral readings or using a colorimeter that
-has CCSS capability. The
-following choices
-are available:<br>
-<b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer.
-The default.<br>
-&nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree observer.<br>
-&nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
-observer<br>
-&nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree observer<br>
-&nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
-observer<br>
-&nbsp; <b>1964_10c</b> selects a version of the CIE 1964 10 degree
-observer that has been adjusted using a 3x3 matrix to better agree with
-the 1931 2 degree observer.<br>
-<br>
-<span style="font-weight: bold;">NOTE</span> that if you select
-anything other than the default 1931 2 degree observer, that the Y
-values will not be cd/m^2, due to the Y curve not being the CIE 1924
-photopic V(&#955;) luminosity function.<br>
-<br>
-<a name="I"></a> The -<span style="font-weight: bold;">I <span
- style="font-style: italic;">b|w</span></span>
-options invoke instrument black level, and display white level
-compensation (respectively). Instrument black level drift compensation
-attempts to combat instrument black calibration drift by using a
-display black test patch as a reference. If an instrument is not
-acclimatised sufficiently to the measurement conditions, changes in
-temperature can affect the black readings. Display white level drift
-compensation attempts to combat changes in display brightness as it
-warms up by measuring a white patch every so often, and using it to
-normalise all the other readings. If just instrument black drift
-compensation is needed, use <span style="font-weight: bold;">-Ib</span>.
-If
-just
-display
-white
-level
-compensation
-is needed, use <span style="font-weight: bold;">-Iw</span>.
-If
-both are needed, use <span style="font-weight: bold;">-Ibw</span>
-or <span style="font-weight: bold;">-Iwb</span>.<span
- style="font-weight: bold;">
-<br>
-<br>
-</span><a name="C"></a> The -<span style="font-weight: bold;">C</span> <span
- style="font-weight: bold;">"command" </span>option
-allows a method of relaying each test value to some other display than
-that on the system running dispread (for instance, a photo frame, PDA
-screen etc.), by causing the given command to be invoked to the shell,
-with six arguments. The first three arguments are the RGB test color as
-integers in the range 0 to 255, the second three parameters are the RGB
-test color as floating point numbers in the range 0.0 to 1.0. The
-script or tool should relay the given color to the screen in some
-manner (e.g. by generating a raster file of the given color and sending
-it to the display being profiled), before returning. Note that a test
-window will also be created on the system running dispread.<br>
-<br>
-<a name="M"></a> The -<span style="font-weight: bold;">M</span> <span
- style="font-weight: bold;">"command" </span>option
-allows a method of gathering each test value from some external source,
-such as an instrument that is not directly supported by Argyll. The
-given command is involked to the shell,
-with six arguments. The first three arguments are the RGB test color as
-integers in the range 0 to 255, the second three parameters are the RGB
-test color as floating point numbers in the range 0.0 to 1.0. The
-script or tool should create a file called <span
- style="font-weight: bold;">"command.meas</span>" that contains the XYZ
-values for the given RGB (or measured from the test window) in cd/m^2
-as three numbers separated by spaces, before returning. If the command
-returns a non-zero return value,
-dispread will abort. Note that a test
-window will also be created on the system running dispread.<br>
-<br>
-<a name="W"></a>The <b>-W</b> <span style="font-weight: bold;">n|h|x</span>
-parameter overrides the default serial communications
-flow control setting. The value <span style="font-weight: bold;">n</span>
-turns all flow control off, <span style="font-weight: bold;">h</span>
-sets hardware handshaking, and <span style="font-weight: bold;">x</span>
-sets Xon/Xoff handshaking. This commend may be useful in workaround
-serial communications issues with some systems and cables. <br>
-<br>
-<a name="D"></a>The <b>-D</b> flag causes communications
-and other instrument diagnostics to be printed to stdout. A level can
-be set between 1 .. 9, that may give progressively more verbose
-information, depending on the instrument. This can be useful in
-tracking
-down why an instrument can't connect.<br>
-<br>
-<a name="p1"></a> The final parameter on the command line is the base
-filename for the <a href="File_Formats.html#.ti1">.ti1</a>
-input file, and the <a href="File_Formats.html#.ti3">.ti3</a> output
-file. <b>dispread</b> will add the .ti1 and .ti3 extensions
-automatically.<br>
-<br>
-<span style="font-weight: bold;">NOTE</span> that on an X11 system, if
-the environment variable <span style="font-weight: bold;">ARGYLL_IGNORE_XRANDR1_2</span>
-is set (ie. set it to "yes"), then the presence of the XRandR 1.2
-extension will be ignored, and other extensions such as Xinerama and
-XF86VidMode extension will be used. This may be a way to work around
-buggy XRandR 1.2 implementations.<br>
-<br>
-<hr style="width: 100%; height: 2px;"><br>
-If a large number of patches is being read, the screensaver on many
-systems can interfere with the operation of dispread. It is therefore
-advisable
-in these cases to manually turn off the screensaver before commencing
-the
-measurements.<br>
-<br>
-If communications break down with a USB connected instrument, you may
-have to unplug it, and plug it in again to recover.<br>
-<br>
-Some systems (Apple OSX in particular) have a special set of user
-interface controls ("Universal Access") that allows altering the
-display in ways designed to assist visually impaired users, by
-increasing contrast etc. This will interfere badly with any attempts to
-calibrate or profile such a system, and must be turned off in order to
-do so. Note that certain magic
-keyboard sequences can turn this on by accident.<br>
-<br>
-<br>
-<br>
-</body>
+a
+    colorimeters accuracy for a particular
+    type of display.<br>
+    <br>
+    <a name="X3"></a> The -<span style="font-weight: bold;">X <span
+        style="font-style: italic;">N</span></span> option selects a <a
+      href="File_Formats.html#.ccss">Colorimeter Calibration Spectral
+      Sample</a> from the list of installed ccss files, rather than
+    specifying a specific ccss files as in the above usage. The CCSS
+    file that came with the i1d3 colorimeters can be installed using <a
+      href="i1d3ccss.html">i1d3ccss</a>, or one can be created and
+    installed using <a href="ccxxmake.html">ccxxmake</a>.<br>
+    <br>
+    <a name="Q"></a> The <b>-Q</b> flag allows specifying a tristimulus
+    observer, and is used to compute PCS (Profile Connection Space)
+    tristimulus values from spectral readings or using a colorimeter
+    that
+    has CCSS capability. The
+    following choices
+    are available:<br>
+    <b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree
+    observer.
+    The default.<br>
+    &nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree
+    observer.<br>
+    &nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
+    observer<br>
+    &nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree
+    observer<br>
+    &nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
+    observer<br>
+    &nbsp; <b>1964_10c</b> selects a version of the CIE 1964 10 degree
+    observer that has been adjusted using a 3x3 matrix to better agree
+    with
+    the 1931 2 degree observer.<br>
+    <br>
+    <span style="font-weight: bold;">NOTE</span> that if you select
+    anything other than the default 1931 2 degree observer, that the Y
+    values will not be cd/m^2, due to the Y curve not being the CIE 1924
+    photopic V(&#955;) luminosity function.<br>
+    <br>
+    <a name="I"></a> The -<span style="font-weight: bold;">I <span
+        style="font-style: italic;">b|w</span></span>
+    options invoke instrument black level, and display white level
+    compensation (respectively). Instrument black level drift
+    compensation
+    attempts to combat instrument black calibration drift by using a
+    display black test patch as a reference. If an instrument is not
+    acclimatised sufficiently to the measurement conditions, changes in
+    temperature can affect the black readings. Display white level drift
+    compensation attempts to combat changes in display brightness as it
+    warms up by measuring a white patch every so often, and using it to
+    normalise all the other readings. If just instrument black drift
+    compensation is needed, use <span style="font-weight: bold;">-Ib</span>.
+    If
+    just
+    display
+    white
+    level
+    compensation
+    is needed, use <span style="font-weight: bold;">-Iw</span>.
+    If
+    both are needed, use <span style="font-weight: bold;">-Ibw</span>
+    or <span style="font-weight: bold;">-Iwb</span>.<span
+      style="font-weight: bold;">
+      <br>
+      <br>
+    </span><a name="C"></a> The -<span style="font-weight: bold;">C</span>
+    <span style="font-weight: bold;">"command" </span>option
+    allows a method of relaying each test value to some other display
+    than
+    that on the system running dispread (for instance, a photo frame,
+    PDA
+    screen etc.), by causing the given command to be invoked to the
+    shell,
+    with six arguments. The first three arguments are the RGB test color
+    as
+    integers in the range 0 to 255, the second three parameters are the
+    RGB
+    test color as floating point numbers in the range 0.0 to 1.0. The
+    script or tool should relay the given color to the screen in some
+    manner (e.g. by generating a raster file of the given color and
+    sending
+    it to the display being profiled), before returning. Note that a
+    test
+    window will also be created on the system running dispread.<br>
+    <br>
+    <a name="M"></a> The -<span style="font-weight: bold;">M</span> <span
+      style="font-weight: bold;">"command" </span>option
+    allows a method of gathering each test value from some external
+    source,
+    such as an instrument that is not directly supported by Argyll. The
+    given command is involked to the shell,
+    with six arguments. The first three arguments are the RGB test color
+    as
+    integers in the range 0 to 255, the second three parameters are the
+    RGB
+    test color as floating point numbers in the range 0.0 to 1.0. The
+    script or tool should create a file called <span
+      style="font-weight: bold;">"command.meas</span>" that contains the
+    XYZ
+    values for the given RGB (or measured from the test window) in
+    cd/m^2
+    as three numbers separated by spaces, before returning. If the
+    command
+    returns a non-zero return value,
+    dispread will abort. Note that a test
+    window will also be created on the system running dispread.<br>
+    <br>
+    <a name="W"></a>The <b>-W</b> <span style="font-weight: bold;">n|h|x</span>
+    parameter overrides the default serial communications
+    flow control setting. The value <span style="font-weight: bold;">n</span>
+    turns all flow control off, <span style="font-weight: bold;">h</span>
+    sets hardware handshaking, and <span style="font-weight: bold;">x</span>
+    sets Xon/Xoff handshaking. This commend may be useful in workaround
+    serial communications issues with some systems and cables. <br>
+    <br>
+    <a name="D"></a>The <b>-D</b> flag causes communications
+    and other instrument diagnostics to be printed to stdout. A level
+    can
+    be set between 1 .. 9, that may give progressively more verbose
+    information, depending on the instrument. This can be useful in
+    tracking
+    down why an instrument can't connect.<br>
+    <br>
+    <a name="p1"></a> The final parameter on the command line is the
+    base
+    filename for the <a href="File_Formats.html#.ti1">.ti1</a>
+    input file, and the <a href="File_Formats.html#.ti3">.ti3</a>
+    output
+    file. <b>dispread</b> will add the .ti1 and .ti3 extensions
+    automatically.<br>
+    <br>
+    <span style="font-weight: bold;">NOTE</span> that on an X11 system,
+    if
+    the environment variable <span style="font-weight: bold;">ARGYLL_IGNORE_XRANDR1_2</span>
+    is set (ie. set it to "yes"), then the presence of the XRandR 1.2
+    extension will be ignored, and other extensions such as Xinerama and
+    XF86VidMode extension will be used. This may be a way to work around
+    buggy XRandR 1.2 implementations.<br>
+    <br>
+    <hr style="width: 100%; height: 2px;"><br>
+    If a large number of patches is being read, the screensaver on many
+    systems can interfere with the operation of dispread. It is
+    therefore
+    advisable
+    in these cases to manually turn off the screensaver before
+    commencing
+    the
+    measurements.<br>
+    <br>
+    If communications break down with a USB connected instrument, you
+    may
+    have to unplug it, and plug it in again to recover.<br>
+    <br>
+    Some systems (Apple OSX in particular) have a special set of user
+    interface controls ("Universal Access") that allows altering the
+    display in ways designed to assist visually impaired users, by
+    increasing contrast etc. This will interfere badly with any attempts
+    to
+    calibrate or profile such a system, and must be turned off in order
+    to
+    do so. Note that certain magic
+    keyboard sequences can turn this on by accident.<br>
+    <br>
+    <br>
+    <br>
+  </body>
 </html>

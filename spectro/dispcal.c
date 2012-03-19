@@ -25,14 +25,13 @@
 	ie. it moves the display to the closest point on the
 	chosen locus to RGB 1,1,1.
      ie. should it do this if "-t" or "-T"
-	with no specific teperature is chosen ?
-
+	with no specific temperature is chosen ?
 
 	Add bell at end of calibration ?
 
 	The verify (-E) may not be being done correctly.
 	Like update, shouldn't it read the .cal file to set what's
-	being calibrated agaist ? (This would fix missing ambient value too!)
+	being calibrated aganist ? (This would fix missing ambient value too!)
 
 	What about the "Read the base test set" - aren't
 	there numbers then used to tweak the black aim point
@@ -49,10 +48,11 @@
 	Need to add flare measure/subtract, to improve
 	projector calibration ? - need to add to dispread too.
 
-	It may be an improvement to automatically set the black
-	ajustment level (-k) using a heuristic based on the black level
-	and the change in brightness that would result from 100%
-	black point grey adjustment.
+	Instead of measuring/matching output at 50% device input as
+	measure of gamma, what about inverting it - measure/match device
+    values at 50% perceptual (18%) output value ?
+	[ Hmm. Current method is OK because a good perceptual
+	  display gives about 18% output at 50% device input.]
 
  */
 
@@ -197,13 +197,13 @@ typedef struct {
 	int nrp;			/* Total number of reference points */
 	optref *rp;			/* reference points */
 	double *dtin_iv;	/* Temporary array :- dp for input curves */
-} cctx;
+} calx;
 
 /* - - - - - - - - - - - - - - - - - - - */
 /* Ideal target curve definitions */
 
 /* Convert ideal device (0..1) to target Y value (0..1) */
-static double dev2Y(cctx *x, double egamma, double vv) {
+static double dev2Y(calx *x, double egamma, double vv) {
 
 	switch(x->gammat) {
 		case gt_power: {
@@ -242,7 +242,7 @@ static double dev2Y(cctx *x, double egamma, double vv) {
 }
 
 /* Convert target Y value (0..1) to ideal device (0..1) */
-static double Y2dev(cctx *x, double egamma, double vv) {
+static double Y2dev(calx *x, double egamma, double vv) {
 
 	switch(x->gammat) {
 		case gt_power: {
@@ -283,7 +283,7 @@ static double Y2dev(cctx *x, double egamma, double vv) {
 /* - - - - - - - - - - - - - - - - - - - */
 /* Compute a viewing environment Y transform */
 
-static double view_xform(cctx *x, double in) {
+static double view_xform(calx *x, double in) {
 	double out = in;
 
 	if (x->vc != 0) {
@@ -342,7 +342,7 @@ static double gam_fit(void *dd, double *v) {
 /* Return the expected output value for 50% input. */
 /* (It's assumed that gooff is normalised the target brightness) */
 static double tech_gamma(
-	cctx *x,
+	calx *x,
 	double *pegamma,		/* return effective gamma needed */
 	double *pooff,			/* return output offset needed */
 	double *pioff,			/* return input offset needed */
@@ -424,7 +424,7 @@ static double pop_gamma(double bY, double gY, double wY) {
 
 /* Return the xyz that is predicted by our aproximate device model */
 /* by the given device RGB. */
-static void fwddev(cctx *x, double xyz[3], double rgb[3]) {
+static void fwddev(calx *x, double xyz[3], double rgb[3]) {
 	double lrgb[3];
 	int j;
 
@@ -445,7 +445,7 @@ static void fwddev(cctx *x, double xyz[3], double rgb[3]) {
 /* Return the closest device RGB predicted by our aprox. device model */
 /* to generate the given xyz. */
 /* Return > 0 if clipped */
-static double invdev(cctx *x, double rgb[3], double xyz[3]) {
+static double invdev(calx *x, double rgb[3], double xyz[3]) {
 	double lrgb[3];
 	double clip = 0.0;
 	int j;
@@ -484,10 +484,10 @@ static double invdev(cctx *x, double rgb[3], double xyz[3]) {
 
 /* Overall optimisation support */
 
-/* Set the optimsation parameter number and offset values in cctx, */
+/* Set the optimsation parameter number and offset values in calx, */
 /* and return an array filled in with the current parameters. */
 /* Allocate temporary arrays */
-static double *dev_get_params(cctx *x) {
+static double *dev_get_params(calx *x) {
 	double *p, *tp;
 	int i, j;
 
@@ -519,7 +519,7 @@ static double *dev_get_params(cctx *x) {
 
 /* Given a set of parameters, put them back into the model */
 /* Normalize them so that the curve maximum is 1.0 too. */
-static void dev_put_params(cctx *x, double *p) {
+static void dev_put_params(calx *x, double *p) {
 	int i, j;
 	double scale[3];
 
@@ -544,7 +544,7 @@ static void dev_put_params(cctx *x, double *p) {
 
 /* Device model optimisation function handed to powell() */
 static double dev_opt_func(void *edata, double *v) {
-	cctx *x = (cctx *)edata;
+	calx *x = (calx *)edata;
 	int i, j;
 	double tw = 0.0;
 	double rv, smv;
@@ -602,7 +602,7 @@ i, sqrt(de), lab[0], lab[1], lab[2], x->rp[i].lab[0], x->rp[i].lab[1], x->rp[i].
 
 /* Device model optimisation function handed to conjgrad() */
 static double dev_dopt_func(void *edata, double *dv, double *v) {
-	cctx *x = (cctx *)edata;
+	calx *x = (calx *)edata;
 	int i, j, k;
 	int f, ee, ff, jj;
 	double tw = 0.0;
@@ -704,7 +704,7 @@ static double dev_dopt_func(void *edata, double *dv, double *v) {
 /* Check partial derivative function within dev_opt_func() using powell() */
 
 static double dev_opt_func(void *edata, double *v) {
-	cctx *x = (cctx *)edata;
+	calx *x = (calx *)edata;
 	int i;
 	double dv[2000];
 	double rv, drv;
@@ -743,7 +743,7 @@ static double dev_opt_func(void *edata, double *v) {
 /* White point brightness optimization function handed to powell. */
 /* Maximize brigness while staying within gamut */
 static double wp_opt_func(void *edata, double *v) {
-	cctx *x = (cctx *)edata;
+	calx *x = (calx *)edata;
 	double wxyz[3], rgb[3];
 	int j;
 	double rv = 0.0;
@@ -832,7 +832,7 @@ static void free_alloc_csamp(csamp *p) {
 }
 
 /* Initialise v values */
-static void init_csamp_v(csamp *p, cctx *x, int psrand) {
+static void init_csamp_v(csamp *p, calx *x, int psrand) {
 	int i, j;
 	sobol *so = NULL;
 
@@ -871,7 +871,7 @@ static void init_csamp_v(csamp *p, cctx *x, int psrand) {
 }
 
 /* Initialise txyz values from v values */
-static void init_csamp_txyz(csamp *p, cctx *x, int fixdev) {
+static void init_csamp_txyz(csamp *p, calx *x, int fixdev) {
 	int i, j;
 	double tbL[3];		/* tbk as Lab */
 
@@ -916,7 +916,7 @@ static void init_csamp_txyz(csamp *p, cctx *x, int fixdev) {
 
 /* Allocate the sample points and initialise them with the */
 /* target device and XYZ values, and first cut device values. */
-static void init_csamp(csamp *p, cctx *x, int doupdate, int verify, int psrand, int no) {
+static void init_csamp(csamp *p, calx *x, int doupdate, int verify, int psrand, int no) {
 	int i, j;
 	
 	p->_no = p->no = no;
@@ -1019,7 +1019,7 @@ static void csamp_interp(csamp *p, double xyz[3], double v) {
 /* Re-initialise a CSP with a new number of points. */
 /* Interpolate the device values and jacobian. */
 /* Set the current rgb from the current RAMDAC curves if not verifying */
-static void reinit_csamp(csamp *p, cctx *x, int verify, int psrand, int no) {
+static void reinit_csamp(csamp *p, calx *x, int verify, int psrand, int no) {
 	csp *os;			/* Old list of samples */
 	int ono;			/* Old number of samples */
 	int i, j, k, m;
@@ -1185,6 +1185,7 @@ void usage(iccss *cl, char *diag, ...) {
 	int i;
 	disppath **dp;
 	icoms *icom;
+	inst_capability cap = 0;
 
 	fprintf(stderr,"Calibrate a Display, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
@@ -1237,7 +1238,6 @@ void usage(iccss *cl, char *diag, ...) {
 			}
 		} else
 			fprintf(stderr,"    ** No ports found **\n");
-		icom->del(icom);
 	}
 	fprintf(stderr," -r                   Report on the calibrated display then exit\n");
 	fprintf(stderr," -R                   Report on the uncalibrated display then exit\n");
@@ -1245,9 +1245,10 @@ void usage(iccss *cl, char *diag, ...) {
 	fprintf(stderr," -o [profile%s]     Create fast matrix/shaper profile [different filename to outfile%s]\n",ICC_FILE_EXT,ICC_FILE_EXT);
 	fprintf(stderr," -O \"description\"     Fast ICC Profile Description string (Default \"outfile\")\n");
 	fprintf(stderr," -u                   Update previous calibration and (if -o used) ICC profile VideoLUTs\n");
-	fprintf(stderr," -q [lmh]             Quality - Low, Medium (def), High\n");
+	fprintf(stderr," -q [lmh]             Quality - Very Low, Low, Medium (def), High\n");
+//	fprintf(stderr," -q [vfmsu]           Speed - Very Fast, Fast, Medium (def), Slow, Ultra Slow\n");
 	fprintf(stderr," -p                   Use projector mode (if available)\n");
-	fprintf(stderr," -y c|l               Display type, c = CRT, l = LCD\n");
+	cap = inst_show_disptype_options(stderr, " -y                   ", icom);
 	fprintf(stderr," -t [temp]            White Daylight locus target, optional target temperaturee in deg. K (deflt.)\n");
 	fprintf(stderr," -T [temp]            White Black Body locus target, optional target temperaturee in deg. K\n");
 	fprintf(stderr," -w x,y        	      Set the target white point as chromaticity coordinates\n");
@@ -1263,7 +1264,7 @@ void usage(iccss *cl, char *diag, ...) {
 	fprintf(stderr," -G gamma             Set the target response curve actual technical gamma\n");
 	fprintf(stderr," -f [degree]          Amount of black level accounted for with output offset (default all output offset)\n");
 	fprintf(stderr," -a ambient           Use viewing condition adjustment for ambient in Lux\n");
-	fprintf(stderr," -k factor            Amount to try and correct black point hue. Default 1.0, LCD default 0.0\n");
+	fprintf(stderr," -k factor            Amount to correct black hue, 0 = none, 1 = full, Default = Automatic\n");
 	fprintf(stderr," -A rate              Rate of blending from neutral to black point. Default %.1f\n",NEUTRAL_BLEND_RATE);
 	fprintf(stderr," -B blkbright         Set the target black brightness in cd/m^2\n");
 	fprintf(stderr," -e [n]               Run n verify passes on final curves\n");
@@ -1282,11 +1283,13 @@ void usage(iccss *cl, char *diag, ...) {
 	fprintf(stderr," -V                   Use adaptive measurement mode (if available)\n");
 	fprintf(stderr," -X file.ccmx         Apply Colorimeter Correction Matrix\n");
 	fprintf(stderr," -X file.ccss         Use Colorimeter Calibration Spectral Samples for calibration\n");
-	for (i = 0; cl != NULL && cl[i].desc != NULL; i++) {
-		if (i == 0)
-			fprintf(stderr," -X N                  0: %s\n",cl[i].desc); 
-		else
-			fprintf(stderr,"                       %d: %s\n",i,cl[i].desc); 
+	if (cap & inst_ccss) {
+		for (i = 0; cl != NULL && cl[i].desc != NULL; i++) {
+			if (i == 0)
+				fprintf(stderr," -X N                  0: %s\n",cl[i].desc); 
+			else
+				fprintf(stderr,"                       %d: %s\n",i,cl[i].desc); 
+		}
 	}
 	free_iccss(cl);
 	fprintf(stderr," -Q observ            Choose CIE Observer for spectrometer or CCSS colorimeter data:\n");
@@ -1297,6 +1300,8 @@ void usage(iccss *cl, char *diag, ...) {
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," inoutfile            Base name for created or updated .cal and %s output files\n",ICC_FILE_EXT);
+	if (icom != NULL)
+		icom->del(icom);
 	exit(1);
 }
 
@@ -1324,8 +1329,7 @@ int main(int argc, char *argv[]) {
 	int doupdate = 0;				    /* Do an update rather than a fresh calbration */
 	int comport = COMPORT;				/* COM port used */
 	flow_control fc = fc_nc;			/* Default flow control */
-	instType itype = instUnknown;		/* Default target instrument - none */
-	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
+	int dtype = 0;						/* Display type selection charater */
 	int proj  = 0;						/* nz if projector mode */
 	int nocal = 0;						/* Disable auto calibration */
 	int highres = 0;					/* Use high res mode if available */
@@ -1340,7 +1344,7 @@ int main(int argc, char *argv[]) {
 	double gamma = 0.0;					/* Advertised Gamma target */
 	double egamma = 0.0;				/* Effective Gamma target, NZ if set */
 	double ambient = 0.0;				/* NZ if viewing cond. adjustment to be used (cd/m^2) */
-	double bkcorrect = -1.0;			/* Level of black point correction */ 
+	double bkcorrect = -1.0;			/* Level of black point correction, < 0 = auto */ 
 	double bkbright = 0.0;				/* Target black brightness ( 0.0 == min)  */
 	int quality = -99;					/* Quality level, -2 = v, -1 = l, 0 = m, 1 = h, 2 = u */
 	int isteps = 22;					/* Initial measurement steps/3 (medium) */
@@ -1372,7 +1376,7 @@ int main(int argc, char *argv[]) {
 										/* 1 = set native linear op and use ramdac high prec'n */
 										/* 2 = set native linear output */
 	int errc;							/* Return value from new_disprd() */
-	cctx x;								/* Context for calibration solution */
+	calx x;								/* Context for calibration solution */
 
 	set_exe_path(argv[0]);				/* Set global exe_path and error_program */
 	check_if_not_interactive();
@@ -1664,7 +1668,7 @@ int main(int argc, char *argv[]) {
 				doupdate = 1;
 				docontrols = 0;
 
-			/* Quality */
+			/* Speed/Quality */
 			} else if (argv[fa][1] == 'q') {
 				fa = nfa;
 				if (na == NULL) usage(cl,"Parameter expected following -q");
@@ -1672,21 +1676,23 @@ int main(int argc, char *argv[]) {
 					case 'L':			/* Test value */
 						quality = -3;
 						break;
-					case 'v':
+					case 'v':			/* very fast */
 						quality = -2;
 						break;
+					case 'f':			/* fast */
 					case 'l':
 						quality = -1;
 						break;
-					case 'm':
+					case 'm':			/* medium */
 					case 'M':
 						quality = 0;
 						break;
+					case 's':			/* slow */
 					case 'h':
 					case 'H':
 						quality = 1;
 						break;
-					case 'u':
+					case 'u':			/* ultra slow */
 					case 'U':
 						quality = 2;
 						break;
@@ -1698,12 +1704,7 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'y') {
 				fa = nfa;
 				if (na == NULL) usage(cl,"Parameter expected after -y");
-				if (na[0] == 'c' || na[9] == 'C')
-					dtype = 1;
-				else if (na[0] == 'l' || na[0] == 'L')
-					dtype = 2;
-				else
-					usage(cl,"-y parameter '%c' not recognised",na[0]);
+				dtype = na[0];
 
 			/* Daylight color temperature */
 			} else if (argv[fa][1] == 't' || argv[fa][1] == 'T') {
@@ -1808,13 +1809,6 @@ int main(int argc, char *argv[]) {
 			break;
 	}
 
-	if (bkcorrect < 0.0) {
-		if (dtype == 2)			/* LCD */
-			bkcorrect = 0.0;	/* Default to no black point correction for LCD */
-		else
-			bkcorrect = 1.0;	/* Default to full black point correction for other displays */
-	}
-
 	patsize *= patscale;
 
 	/* No explicit display has been set */
@@ -1866,13 +1860,14 @@ int main(int argc, char *argv[]) {
 				if (ccs != NULL) {
 					ccs->del(ccs);
 					ccs = NULL;
+					error("Reading CCMX/CCSS File '%s' failed\n", ccxxname);
 				}
 			}
 		}
 	}
 
 	if (docalib) {
-		if ((rv = disprd_calibration(itype, comport, fc, dtype, proj, adaptive, nocal, disp,
+		if ((rv = disprd_calibration(comport, fc, dtype, proj, adaptive, nocal, disp,
 		                             blackbg, override, patsize, ho, vo, verb, debug)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
 		}
@@ -1907,7 +1902,7 @@ int main(int argc, char *argv[]) {
 		native = 0;	/* But measure calibrated response of verify or report calibrated */ 
 
 	/* Get ready to do some readings */
-	if ((dr = new_disprd(&errc, itype, fake ? -99 : comport, fc, dtype, proj, adaptive, nocal,
+	if ((dr = new_disprd(&errc, fake ? -99 : comport, fc, dtype, proj, adaptive, nocal,
 	                     highres, native, NULL, 0, 0, disp, blackbg, override, ccallout, mcallout,
 	                     patsize, ho, vo,
 	                     cmx != NULL ? cmx->matrix : NULL,
@@ -2157,16 +2152,14 @@ int main(int argc, char *argv[]) {
 
 		/* Read in the setup, user and model values */
 
-		dtype = 0;		/* Override any user setting */
-		if ((fi = icg->find_kword(icg, 0, "DEVICE_TYPE")) >= 0) {
-			if (strcmp(icg->t[0].kdata[fi], "CRT") == 0)
-				dtype = 1;
-			else if (strcmp(icg->t[0].kdata[fi], "LCD") == 0)
-				dtype = 2;
-			else {
-				dr->del(dr);
-				error ("Can't update '%s' - field 'DISPLAY_TYPE' has unrecognised value '%s'",
-				        outname,icg->t[0].kdata[fi]);
+		if (dtype == 0) {	/* If the use hasn't set anything */
+			if ((fi = icg->find_kword(icg, 0, "DEVICE_TYPE")) >= 0) {
+				if (strcmp(icg->t[0].kdata[fi], "CRT") == 0)
+					dtype = 'c';
+				else if (strcmp(icg->t[0].kdata[fi], "LCD") == 0)
+					dtype = 'l';
+				else
+					dtype = icg->t[0].kdata[fi][0];
 			}
 		}
 //printf("~1 dealt with device type\n");
@@ -2468,17 +2461,16 @@ int main(int argc, char *argv[]) {
 			break;
 	}
 
-	/* Set native white target flag in cctx so that other things can play the game.. */
+	/* Set native white target flag in calx so that other things can play the game.. */
 	if (wpx == 0.0 && wpy == 0.0 && temp == 0.0 && tbright == 0.0)
 		x.nat = 1;
 	else
 		x.nat = 0;
 
+	/* Say something about what we're doing */
 	if (verb) {
-		if (dtype == 1)
-			printf("Display type is CRT\n");
-		else if (dtype == 2)
-			printf("Display type is LCD\n");
+		if (dtype > 0)
+			printf("Display type is '%c'\n",dtype);
 
 		if (doupdate) {
 			if (x.nat)
@@ -3268,6 +3260,7 @@ int main(int argc, char *argv[]) {
 	/* Take a small number of readings, and compute basic */
 	/* informations such as black & white, white target, */
 	/* aproximate matrix based display forward and reverse model. */
+	/* If bkcorrect is auto, determine a level. */
 
 	/* Read the base test set */
 	{
@@ -3366,6 +3359,26 @@ int main(int argc, char *argv[]) {
 		if (icmInverse3x3(x.bm, x.fm)) {
 			dr->del(dr);
 			error("Inverting aprox. fwd matrix failed");
+		}
+
+		/* Decide on the level of black correction. */
+		if (bkcorrect < 0.0) {
+			double rat;
+
+			/* rat is 0 for displays with a good black, */
+			/* and 1 for displays with a bad black level. */
+			/* (Not sure if this should be scaled by the white, */
+			/*  making it contrast ratio sensitive?) */
+			rat = (x.bk[1] - 0.02)/(0.3 - 0.02);
+			if (rat < 0.0)
+				rat = 0.0;
+			else if (rat > 1.0)
+				rat = 1.0;
+			/* Make transition more perceptual */
+			rat = sqrt(rat);
+			bkcorrect = 1.0 - rat;
+			if (verb)
+				printf("Automatic black point hue correction level = %1.2f\n", bkcorrect);
 		}
 	}
 
@@ -4510,8 +4523,10 @@ int main(int argc, char *argv[]) {
 		ocg->add_kword(ocg, 0, "COLOR_REP","RGB", NULL);
 
 		/* Put the target parameters in the CGATS file too */
-		if (dtype != 0)
-			ocg->add_kword(ocg, 0, "DEVICE_TYPE", dtype == 1 ? "CRT" : "LCD", NULL);
+		if (dtype != 0) {
+			sprintf(buf,"%c",dtype);
+			ocg->add_kword(ocg, 0, "DEVICE_TYPE", buf, NULL);
+		}
 		
 		if (wpx == 0.0 && wpy == 0.0 && temp == 0.0 && tbright == 0.0)
 			ocg->add_kword(ocg, 0, "NATIVE_TARGET_WHITE","", NULL);
@@ -4743,6 +4758,10 @@ int main(int argc, char *argv[]) {
 		double bp[3];		/* Absolute Black point in XYZ */
 		double mat[3][3];	/* Device to XYZ matrix */
 
+// ~~999 this looks wrong. Should 1) Re-measure primaries through calibration
+//       and create white & black and matrix values from this.
+//       Should at least run matrix values though calibration curves !!!
+
 		/* Lookup white and black points */
 		{
 			int j;
@@ -4750,7 +4769,7 @@ int main(int argc, char *argv[]) {
 
 			rgb[0] = rgb[1] = rgb[2] = 1.0;
 
-			fwddev(&x, uwp, rgb);
+			fwddev(&x, uwp, rgb);		/* absolute uncalibrated WP */
 
 			/* Through calibration */
 			for (j = 0; j < 3; j++) {
@@ -4760,7 +4779,7 @@ int main(int argc, char *argv[]) {
 				else if (rgb[j] > 1.0)
 					rgb[j] = 1.0;
 			}
-			fwddev(&x, wp, rgb);
+			fwddev(&x, wp, rgb);		/* absolute calibrated WP */
 
 			rgb[0] = rgb[1] = rgb[2] = 0.0;
 
@@ -4772,7 +4791,7 @@ int main(int argc, char *argv[]) {
 				else if (rgb[j] > 1.0)
 					rgb[j] = 1.0;
 			}
-			fwddev(&x, bp, rgb);
+			fwddev(&x, bp, rgb);		/* Absolute calibrated BP */
 		}
 
 		/* Fix matrix to be relative to D50 white point, rather than absolute */
@@ -4806,8 +4825,8 @@ int main(int argc, char *argv[]) {
 			wh->pcs         = icSigXYZData;					/* XYZ for matrix based profile */
 			wh->renderingIntent = icRelativeColorimetric;	/* For want of something */
 
-			wh->manufacturer = str2tag("????");
-	    	wh->model        = str2tag("????");
+			wh->manufacturer = icmSigUnknownType;
+	    	wh->model        = icmSigUnknownType;
 #ifdef NT
 			wh->platform = icSigMicrosoft;
 #endif
@@ -5004,6 +5023,10 @@ int main(int argc, char *argv[]) {
 			wog->allocate((icmBase *)wog);
 			wob->allocate((icmBase *)wob);
 	
+// ~~999
+// Hmm. If we fix the matrix to represent the calibrated primaries,
+// then we need to fix this to account for that, and the resulting
+// curve values should map 1.0 in to 1.0 out.
 			for (ui = 0; ui < wor->size; ui++) {
 				double in, rgb[3];
 	

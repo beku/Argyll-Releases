@@ -38,7 +38,6 @@ inst_code setup_display_calibrate(
 
 /* User requested calibration of the display instrument */
 int disprd_calibration(
-instType itype,		/* Instrument type */
 int comport, 		/* COM port used */
 flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
@@ -100,7 +99,6 @@ struct _disprd {
 	baud_rate br;
 	flow_control fc;
 	inst *it;			/* Instrument */
-	instType itype;		/* Instrument type */
 	int dtype;			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
 	int proj;			/* NZ for projector mode */
 	int adaptive;		/* NZ for adaptive mode */
@@ -192,7 +190,6 @@ struct _disprd {
 /* Use disprd_err() to interpret errc */
 disprd *new_disprd(
 int *errc,			/* Error code. May be NULL */ 
-instType itype,		/* Instrument type */
 int comport, 		/* COM port used, -99 for fake display */
 flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */

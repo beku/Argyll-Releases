@@ -475,6 +475,90 @@ int      n		/* Number of unknowns */
 
 
 /* --------------------------- */
+/* Solve the equation A.x = b using SVD */
+/* The top s out of n singular values will be used */
+/* Return non-zero if no solution found */
+int svdsolve_s(
+double **a,		/* A[0..m-1][0..n-1] input A[][], will return U[][] */
+double b[],		/* B[0..m-1]  Right hand side of equation, return solution */
+int      m,		/* Number of equations */
+int      n,		/* Number of unknowns */
+int      s		/* Number of singular values */
+) {
+	int i, j;
+	double *w, W[8];
+	int *sw, SW[8];
+	double **v, *VP[8], V[8][8];
+	double maxw;
+
+	if (n <= 8) {
+		w = W;
+		sw = SW;
+		VP[0] = V[0]; VP[1] = V[1]; VP[2] = V[2]; VP[3] = V[3];
+		VP[4] = V[4]; VP[5] = V[5]; VP[6] = V[6]; VP[7] = V[7];
+		v = VP;
+	} else {
+		w = dvector(0, n-1);
+		sw = ivector(0, n-1);
+		v = dmatrix(0, n-1, 0, n-1);
+	}
+
+	/* Singular value decompose */
+	if (svdecomp(a, w, v, m, n)) {
+		if (w != W) {
+			free_dvector(w, 0, n-1);
+			free_dmatrix(v, 0, n-1, 0, n-1);
+		}
+		return 1;
+	}
+
+	/* Create sorted index of w[] */
+	for (maxw = 0.0, i = 0; i < n; i++) {
+		sw[i] = i;
+		if (w[i] > maxw)
+			maxw = w[i];
+	}
+	maxw *= 1.0e-12;
+
+	/* Really dumb exchange sort.. */
+	for (i = 0; i < (n-1); i++) {
+		for (j = i+1; j < n; j++) {
+			if (w[sw[i]] > w[sw[j]]) {
+				int tt = sw[i];
+				sw[i] = sw[j];
+				sw[j] = tt;
+			}
+		}
+	}
+
+	/* Set the (n - s) smallest values to zero */
+	s = n - s;
+	if (s < 0)
+		s = 0;
+	if (s > n)
+		s = n;
+	for (i = 0; i < s; i++)
+		w[sw[i]] = 0.0;
+
+	/* And threshold them too */
+	for (maxw = 0.0, i = 0; i < n; i++) {
+		if (w[i] < maxw)
+			w[i] = 0.0;
+	}
+
+	/* Back substitute to solve the equation */
+	svdbacksub(a, w, v, b, b, m, n);
+
+	if (w != W) {
+		free_dvector(w, 0, n-1);
+		free_ivector(sw, 0, n-1);
+		free_dmatrix(v, 0, n-1, 0, n-1);
+	}
+	return 0;
+}
+
+
+/* --------------------------- */
 /* Solve the equation A.x = b using Direct calculation, LU or SVD as appropriate */
 /* Return non-zero if no solution found */
 

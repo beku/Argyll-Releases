@@ -48,7 +48,7 @@
 #define DEFWHEIGHT 500
 
 /* Graph order is Black = Y1, Red = Y2, Green = Y3, Blue = Y4, Yellow = Y5, Purple = Y6 */
-/* Brown = Y7, Orange = Y8, Grey = Y9, White = Y10  */
+/* Brown = Y7, Orange = Y8, Grey = Y9, Magenta = Y10  */
 
 double nicenum(double x, int round);
 
@@ -65,7 +65,7 @@ static int gcolors[MXGPHS][3] = {
 	{ 136,  86,  68},	/* Brown */
 	{ 248,  95,   0},	/* Orange */
 	{ 160, 160, 160},	/* Grey */
-	{ 220, 220, 220}	/* White */
+	{ 220, 30,  220}	/* Magenta */
 };
 
 /* Information defining plot */
@@ -476,7 +476,9 @@ double *y7,	/* Brown */
 double *y8,	/* Orange */
 double *y9,	/* Grey */
 double *y10,/* White */
-int n) {	/* Number of values */
+int n,		/* Number of values */
+int zero	/* Flag - make sure zero is in y range */
+) {
 	int i, j;
 	double xmin, xmax, ymin, ymax;
 	int nn = abs(n);
@@ -493,8 +495,8 @@ int n) {	/* Number of values */
 	yy[5] = y6;
 	yy[6] = y7;
 	yy[7] = y8;
-	yy[9] = y9;
-	yy[5] = y10;
+	yy[8] = y9;
+	yy[9] = y10;
 
 	/* Determine min and max dimensions of plot */
 	xmin = ymin = 1e6;
@@ -516,6 +518,9 @@ int n) {	/* Number of values */
 		}
 	}
 
+	if (zero && ymin > 0.0)
+		ymin = 0.0;
+		
 	/* Work out scale factors */
 	if ((xmax - xmin) == 0.0)
 		xmax += 0.5, xmin -= 0.5;

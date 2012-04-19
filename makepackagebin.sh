@@ -47,7 +47,7 @@ rm -f bin/*.exe bin/*.dll
 rm -f ref/*.sp ref/*.cht ref/*.ti2
 
 # Make sure it's built and installed
-if ! jam -q -fJambase -j${NUMBER_OF_PROCESSORS:-2} -sBUILTIN_TIFF=true install ; then
+if ! jam -q -fJambase -j${NUMBER_OF_PROCESSORS:-2} -sBUILTIN_TIFF=true -sBUILTIN_JPEG=true install ; then
 	echo "Build failed!"
 	exit 1
 fi 

@@ -80,6 +80,16 @@ static int gcc_bug_fix(int i) {
 
 /* ------------------------------------------------------------------- */
 
+#ifdef NT       /* You'd think there might be some standards.... */
+# ifndef __BORLANDC__
+#  define stricmp _stricmp
+# endif
+#else
+# define stricmp strcasecmp
+#endif
+
+/* ------------------------------------------------------------------- */
+
 
 void usage(iccss *cl, char *diag, ...) {
 	int i;
@@ -108,7 +118,6 @@ void usage(iccss *cl, char *diag, ...) {
 #else
 	fprintf(stderr," -d n                 Choose the display from the following list (default 1)\n");
 #endif
-//	fprintf(stderr," -d fake              Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	dp = get_displays();
 	if (dp == NULL || dp[0] == NULL)
 		fprintf(stderr,"    ** No displays found **\n");
@@ -121,6 +130,8 @@ void usage(iccss *cl, char *diag, ...) {
 		}
 	}
 	free_disppaths(dp);
+	fprintf(stderr," -dweb[:port]         Display via a web server at port (default 8080)\n");
+//	fprintf(stderr," -d fake              Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	fprintf(stderr," -c listno            Set communication port from the following list (default %d)\n",COMPORT);
 	if ((icom = new_icoms()) != NULL) {
 		icompath **paths;
@@ -210,11 +221,12 @@ int main(int argc, char *argv[]) {
 	ccss *ccs = NULL;					/* Colorimeter Calibration Spectral Samples */
 	int spec = 0;						/* Don't save spectral information */
 	icxObserverType obType = icxOT_default;
+	int webdisp = 0;					/* NZ for web display, == port number */
 	char *ccallout = NULL;				/* Change color Shell callout */
 	char *mcallout = NULL;				/* Measure color Shell callout */
 	char inname[MAXNAMEL+1] = "\000";	/* Input cgats file base name */
 	char outname[MAXNAMEL+1] = "\000";	/* Output cgats file base name */
-	char calname[MAXNAMEL+1] = "\000";	/* Calibration file name */
+	char calname[MAXNAMEL+1] = "\000";	/* Calibration file name (if any) */
 	int softcal = 0;					/* nz if cal applied to values rather than hardware */
 	double cal[3][MAX_CAL_ENT];			/* Display calibration */
 	int ncal = 256;						/* number of cal entries used */
@@ -234,6 +246,7 @@ int main(int argc, char *argv[]) {
 	int nsetel = 0;
 	cgats_set_elem *setel;				/* Array of set value elements */
 	disprd *dr;							/* Display patch read object */
+	int noramdac = 0;					/* Will be set to nz if can't set ramdac */
 	int errc;							/* Return value from new_disprd() */
 	int rv;
 
@@ -285,44 +298,55 @@ int main(int argc, char *argv[]) {
 
 			/* Display number */
 			} else if (argv[fa][1] == 'd') {
-#if defined(UNIX) && !defined(__APPLE__)
-				int ix, iv;
-
-				if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
-					if (++fa >= argc || argv[fa][0] == '-') usage(cl, "Parameter expected following -display");
-					setenv("DISPLAY", argv[fa], 1);
+				if (strncmp(na,"web",3) == 0
+				 || strncmp(na,"WEB",3) == 0) {
+					webdisp = 8080;
+					if (na[3] == ':') {
+						webdisp = atoi(na+4);
+						if (webdisp == 0 || webdisp > 65535)
+							usage(cl,"Web port number must be in range 1..65535");
+					}
+					fa = nfa;
 				} else {
+#if defined(UNIX) && !defined(__APPLE__)
+					int ix, iv;
+
+					if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
+						if (++fa >= argc || argv[fa][0] == '-') usage(cl, "Parameter expected following -display");
+						setenv("DISPLAY", argv[fa], 1);
+					} else {
+						if (na == NULL) usage(cl, "Parameter expected following -d");
+						fa = nfa;
+						if (strcmp(na,"fake") == 0) {
+							fake = 1;
+						} else {
+							if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
+								ix = atoi(na);
+								iv = 0;
+							}
+							if (disp != NULL)
+								free_a_disppath(disp);
+							if ((disp = get_a_display(ix-1)) == NULL)
+								usage(cl, "-d parameter %d out of range",ix);
+							if (iv > 0)
+								disp->rscreen = iv-1;
+						}
+					}
+#else
+					int ix;
 					if (na == NULL) usage(cl, "Parameter expected following -d");
 					fa = nfa;
 					if (strcmp(na,"fake") == 0) {
 						fake = 1;
 					} else {
-						if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
-							ix = atoi(na);
-							iv = 0;
-						}
+						ix = atoi(na);
 						if (disp != NULL)
 							free_a_disppath(disp);
 						if ((disp = get_a_display(ix-1)) == NULL)
 							usage(cl, "-d parameter %d out of range",ix);
-						if (iv > 0)
-							disp->rscreen = iv-1;
 					}
-				}
-#else
-				int ix;
-				if (na == NULL) usage(cl, "Parameter expected following -d");
-				fa = nfa;
-				if (strcmp(na,"fake") == 0) {
-					fake = 1;
-				} else {
-					ix = atoi(na);
-					if (disp != NULL)
-						free_a_disppath(disp);
-					if ((disp = get_a_display(ix-1)) == NULL)
-						usage(cl, "-d parameter %d out of range",ix);
-				}
 #endif
+				}
 #if defined(UNIX) && !defined(__APPLE__)
 			} else if (argv[fa][1] == 'n') {
 				override = 0;
@@ -348,7 +372,7 @@ int main(int argc, char *argv[]) {
 			/* Calibration file */
 			} else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
 				fa = nfa;
-				if (na == NULL) usage(cl, "Parameter expected after -k");
+				if (na == NULL) usage(cl, "Parameter expected after -k/-K");
 				strncpy(calname,na,MAXNAMEL); calname[MAXNAMEL] = '\000';
 				softcal = 0;
 				if (argv[fa][1] == 'K')
@@ -539,7 +563,8 @@ int main(int argc, char *argv[]) {
 
 	if (docalib) {
 		if ((rv = disprd_calibration(comport, fc, dtype, proj, adaptive, noautocal, disp,
-		                             blackbg, override, patsize, ho, vo, verb, debug)) != 0) {
+		                             webdisp, blackbg, override, patsize, ho, vo,
+		                             verb, debug)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
 		}
 	}
@@ -655,6 +680,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Setup a display calibration set if we are given one */
+	/* (Should switch to xcal ?) */
 	if (calname[0] != '\000') {
 		cgats *ccg;			/* calibration cgats structure */
 		int ii, ri, gi, bi;
@@ -682,6 +708,13 @@ int main(int argc, char *argv[]) {
 			error ("Calibration file '%s' doesn't contain keyword DEVICE_CLASS",calname);
 		if (strcmp(ccg->t[0].kdata[fi],"DISPLAY") != 0)
 			error ("Calibration file '%s' doesn't have DEVICE_CLASS of DISPLAY",calname);
+
+		if ((fi = ccg->find_kword(ccg, 0, "VIDEO_LUT_CALIBRATION_POSSIBLE")) >= 0) {
+			if (stricmp(ccg->t[0].kdata[fi],"NO") == 0) {
+				softcal = 1;
+				if (verb) printf("Switching to soft cal because there is no access to VideoLUTs\n");
+			}
+		}
 
 		if ((fi = ccg->find_kword(ccg, 0, "COLOR_REP")) < 0)
 			error ("Calibration file '%s' doesn't contain keyword COLOR_REP",calname);
@@ -715,8 +748,8 @@ int main(int argc, char *argv[]) {
 	}
 
 	if ((dr = new_disprd(&errc, fake ? -99 : comport, fc, dtype, proj, adaptive, noautocal,
-	                     highres, 0, cal, ncal, softcal, disp, blackbg, override, ccallout,
-	                     mcallout, patsize, ho, vo,
+	                     highres, 0, &noramdac, cal, ncal, softcal, disp, blackbg, override,
+	                     webdisp, ccallout, mcallout, patsize, ho, vo,
 	                     cmx != NULL ? cmx->matrix : NULL,
 	                     ccs != NULL ? ccs->samples : NULL, ccs != NULL ? ccs->no_samp : 0,
 		                 spec, obType, NULL, bdrift, wdrift, verb, VERBOUT, debug,
@@ -843,7 +876,7 @@ int main(int argc, char *argv[]) {
 		ocg->add_kword(ocg, 0, "NORMALIZED_TO_Y_100","NO", NULL);
 
 	/* Write out the calibration if we have it */
-	if (cal[0][0] >= 0.0) {
+	if (cal != NULL && cal[0][0] >= 0.0) {
 		ocg->add_other(ocg, "CAL"); 		/* our special type is Calibration file */
 		ocg->add_table(ocg, tt_other, 1);	/* Add another table for RAMDAC values */
 		ocg->add_kword(ocg, 1, "DESCRIPTOR", "Argyll Device Calibration State",NULL);
@@ -852,6 +885,7 @@ int main(int argc, char *argv[]) {
 
 		ocg->add_kword(ocg, 1, "DEVICE_CLASS","DISPLAY", NULL);
 		ocg->add_kword(ocg, 1, "COLOR_REP","RGB", NULL);
+		ocg->add_kword(ocg, 0, "VIDEO_LUT_CALIBRATION_POSSIBLE",noramdac ? "NO" : "YES", NULL);
 
 		ocg->add_field(ocg, 1, "RGB_I", r_t);
 		ocg->add_field(ocg, 1, "RGB_R", r_t);

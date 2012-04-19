@@ -39,7 +39,7 @@ typedef enum {
 	rgb_2d,			/* RGB */
 	cmyk_2d,		/* CMYK */
 	ncol_2d,		/* N color */
-	ncol_a_2d		/* N color with extr as alpha */
+	ncol_a_2d		/* N color with extra as alpha */
 } colort2d;
 
 /* Pixel depth */
@@ -193,6 +193,7 @@ struct _render2d {
 	colort2d csp;			/* Color space */
 	int      ncc;			/* Number of color components */
 	depth2d  dpth;			/* Depth of the components */
+	int    dither;     		/* Dither flag */
 
 	color2d defc;			/* Default color value */
 
@@ -213,10 +214,17 @@ struct _render2d {
 }; typedef struct _render2d render2d;
 
 /* Constructor */
-/* Sizes are in mm, resolutions are in pixels/mm */
-/* Margines are left, right, top, bottom, and may be NULL for zero */
-render2d *new_render2d(double w, double h, double ma[4], double hres, double vres,
-                       colort2d csp, int nd, depth2d dpth);
+render2d *new_render2d(
+	double w,		/* width in mm */
+	double h,		/* height in mm */
+	double ma[4],	/* Margines, left, right, top, bottom, NULL for zero in mm */
+	double hres,	/* horizontal resolution in pixels/mm */
+	double vres,	/* horizontal resolution in pixels/mm */
+	colort2d csp,	/* Color type */
+	int nd,			/* Number of channels if c = ncol */
+	depth2d dpth,	/* Pixel depth */
+	int dither		/* Dither flag */
+);
 
 #endif /* RENDER2D_H */
 

@@ -61,9 +61,6 @@
 #undef SAVE_SPECTRA		/* Save the sensor senitivity spectra to "sensors.cmf" */
 #undef PLOT_REFRESH		/* Plot data used to determine refresh rate */
 
-#undef DO_SYNCHRONIZE	/* Try and synchronize a refresh display read */
-						/* (Appears to be of no benifit) */
-
 #ifdef DEBUG
 #define DBG(xxx) printf xxx ;
 #else
@@ -890,13 +887,15 @@ i1d3_set_LEDs(
 
 	determining the refresh rate for a refresh type display;
 
-	Read 1500 .5 msec samples as fast as possible, and
+	Read 1300 .5 msec samples as fast as possible, and
 	timestamp them.
 	Interpolate values up to .05 msec regular samples.
 	Do an auto-correlation on the samples.
-	Pick the longest peak as the best sample period.
+	Pick the longest peak between 10 andf 40Hz as the best sample period,
+	and halve this to use as the quantization value (ie. make
+	it lie between 20 and 80 Hz).
 
-	If there is an error, return it.
+	If there was no error, return refresh quanization period it.
 
 	If there is no aparent refresh, or the refresh rate is not determinable,
 	return a period of 0.0 and inst_ok;
@@ -905,16 +904,21 @@ i1d3_set_LEDs(
 	is randomized slightly.
 */
 
+//#define DBG(xxx) printf xxx ;
+
 #ifndef PSRAND32L 
 # define PSRAND32L(S) ((S) * 1664525L + 1013904223L)
 #endif
-#define NFSAMPS 1000		/* Number of samples to read */
-#define NFMXTIME 4.0		/* Maximum time to take */
+#define NFSAMPS 1300		/* Number of samples to read */
+#define NFMXTIME 6.0		/* Maximum time to take (2000 == 6) */
 #define PBPMS 20		/* bins per msec */
-#define PERMIN ((1000 * PBPMS)/80)	/* 80 Hz */
-#define PERMAX ((1000 * PBPMS)/20)	/* 20 Hz*/
+//#define PERMIN ((1000 * PBPMS)/80)	/* 80 Hz */
+//#define PERMAX ((1000 * PBPMS)/20)	/* 20 Hz*/
+#define PERMIN ((1000 * PBPMS)/40)	/* 40 Hz */
+#define PERMAX ((1000 * PBPMS)/10)	/* 10 Hz*/
 #define NPER (PERMAX - PERMIN + 1)
-#define PWIDTH (4 * PBPMS)			/* 4 msec bin spread to look for peak in */
+#define PWIDTH (3 * PBPMS)			/* 3 msec bin spread to look for peak in */
+#define MAXPKS 20					/* Number of peaks to find */
 
 static inst_code
 i1d3_measure_refresh(
@@ -935,14 +939,16 @@ i1d3_measure_refresh(
 	} samp[NFSAMPS];
 	int nfsamps;		/* Actual samples read */
 	double maxt;		/* Time range */
+	double rms[3];		/* RMS value of each channel */
+	double trms;		/* Total RMS */
 	int nbins;
 	double *bins[3];	/* PBPMS sample bins */
 	double corr[NPER];	/* Correlation for each period value */
 	double mincv, maxcv;	/* Max and min correlation values */
 	double crange;			/* Correlation range */
-	int pki;			/* Peak index */
-	double pkv;			/* Peak value */
-	double pval;		/* Period value */
+	double peaks[MAXPKS];		/* Each peak from longest to shortest */
+	int npeaks = 0;				/* Number of peaks */
+	double pval;			/* Period value */
 	int isdeb, iscdeb;
 
 	if (usec_time() < 0.0) {
@@ -995,7 +1001,7 @@ i1d3_measure_refresh(
 		randn = PSRAND32L(randn); 
 		rval = (double)randn/4294967295.0;
 		rval *= rval;
-		rval *= rval;		/* Sharpen it up */
+		rval *= rval;		/* Sharpen random time up */
 		samp[i].itime = (inttimeh - inttimel) * rval + inttimel;
 
 		if ((ev = i1d3_freq_measure(p, &samp[i].itime, samp[i].rgb)) != inst_ok)
@@ -1040,6 +1046,7 @@ i1d3_measure_refresh(
 
 	/* Re-zero the sample times, normalise int time, and calibrate it. */
 	maxt = -1e6;
+	rms[0] = rms[1] = rms[2] = 0.0;
 	for (i = nfsamps-1; i >= 0; i--) {
 		samp[i].sec -= samp[0].sec; 
 		samp[i].sec *= ucalf;
@@ -1047,8 +1054,25 @@ i1d3_measure_refresh(
 			maxt = samp[i].sec;
 		for (j = 0; j < 3; j++) {
 			samp[i].rgb[j] /= samp[i].itime;
+			rms[j] += samp[i].rgb[j] * samp[i].rgb[j];
 		}
 	}
+	trms = 0.0;
+	for (j = 0; j < 3; j++) {
+		rms[j] /= (double)nfsamps;
+		trms += rms[j];
+		rms[j] = sqrt(rms[j]);
+	}
+	trms = sqrt(trms);
+	DBG(("RMS = %f %f %f, total %f\n", rms[0], rms[1], rms[2], trms))
+
+#ifdef NEVER
+	// ~~9999
+	for (i = nfsamps-1; i >= 0; i--) {
+		for (j = 0; j < 3; j++)
+			samp[i].rgb[j] -= rms[j];
+	}
+#endif
 
 	/* Create PBPMS bins and interpolate readings into them */
 	nbins = 1 + (int)(maxt * 1000.0 * PBPMS + 0.5);
@@ -1063,7 +1087,6 @@ i1d3_measure_refresh(
 		sbin = (int)(samp[k].sec * 1000.0 * PBPMS + 0.5);
 		ebin = (int)(samp[k+1].sec * 1000.0 * PBPMS + 0.5);
 		for (i = sbin; i <= ebin; i++) {
-// ~~99
 			double bl;
 #if defined(__APPLE__) && defined(__POWERPC__)
 			gcc_bug_fix(i);
@@ -1107,17 +1130,19 @@ i1d3_measure_refresh(
 #endif /* PLOT_REFRESH */
 
 	/* Compute auto-correlation at 1/PBPMS msec intervals */
-	/* from 12.5 msec (80Hz) to 50msec (20 Hz) */
-	mincv = 1e6, maxcv = -1.0;
+	/* from 25 msec (40Hz) to 100msec (10 Hz) */
+	mincv = 1e48, maxcv = -1e48;
 	for (i = 0; i < NPER; i++) {
 		int poff = PERMIN + i;		/* Offset to corresponding sample */
 		corr[i] = 0.0;
 
-		for (k = 0; (k + poff) < nbins; k++) {
-			for (j = 0; j < 3; j++) {
-				corr[i] += bins[j][k] * bins[j][k + poff];
-			}
-		}
+		for (k = 0; (k + poff) < nbins; k++)
+			corr[i] += bins[0][k] * bins[0][k + poff];
+		for (k = 0; (k + poff) < nbins; k++)
+			corr[i] += bins[1][k] * bins[1][k + poff];
+		for (k = 0; (k + poff) < nbins; k++)
+			corr[i] += bins[2][k] * bins[2][k + poff];
+
 		corr[i] /= (double)k;		/* Normalize */
 		if (corr[i] > maxcv)
 			maxcv = corr[i];
@@ -1125,7 +1150,7 @@ i1d3_measure_refresh(
 			mincv = corr[i];
 	}
 	crange = maxcv - mincv;
-	DBG(("Corr value range %f - %f = %f\n",mincv, maxcv,crange))
+	DBG(("Corr value range %f - %f = %f = %f%%\n",mincv, maxcv,crange, 100.0 * (maxcv-mincv)/maxcv))
 
 #ifdef PLOT_REFRESH
 	/* Plot auto correlation */
@@ -1142,60 +1167,119 @@ i1d3_measure_refresh(
 	}
 #endif /* PLOT_REFRESH */
 
-	/* Locate the first peak starting at the longest correllation */
-	for (i = (NPER-1-PWIDTH); i >= 0; i--) {
-		double v1, v2, v3;
-		v1 = corr[i];
-		v2 = corr[i + PWIDTH/2];
-		v3 = corr[i + PWIDTH];
+	/* If there is sufficient level and distict correlations */
+	if (trms >= 1000 && (maxcv-mincv)/maxcv >= 0.10) {
 
-		if (fabs(v3 - v1) < (0.1 * crange)
-		 && (v2 - v1) > (0.05 * crange)
-		 && (v2 - v3) > (0.05 * crange)) {
-			DBG(("First max between %f and %f msec\n",(i + PERMIN)/(double)PBPMS,(i + PWIDTH + PERMIN)/(double)PBPMS))
-			break;
+		/* Locate all the peaks starting at the longest correllation */
+		for (i = (NPER-1-PWIDTH); i >= 0 && npeaks < MAXPKS; i--) {
+			double v1, v2, v3;
+			v1 = corr[i];
+			v2 = corr[i + PWIDTH/2];
+			v3 = corr[i + PWIDTH];
+
+			if (fabs(v3 - v1) < (0.1 * crange)
+			 && (v2 - v1) > (0.05 * crange)
+			 && (v2 - v3) > (0.05 * crange)) {
+				double pkv;			/* Peak value */
+				int pki;			/* Peak index */
+				double ii, bl;
+
+				DBG(("Max between %f and %f msec\n",(i + PERMIN)/(double)PBPMS,(i + PWIDTH + PERMIN)/(double)PBPMS))
+
+				/* Locate the actual peak */
+				pkv = -1.0;
+				pki = 0;
+				for (j = i; j < (i + PWIDTH); j++) {
+					if (corr[j] > pkv) {
+						pkv = corr[j];
+						pki = j;
+					}
+				}
+				DBG(("Peak is at %f msec, %f corr\n", (pki + PERMIN)/(double)PBPMS, pkv))
+
+				/* Interpolate the peak value for higher precision */
+				/* j = bigest */
+				if (corr[pki-1] > corr[pki+1])  {
+					j = pki-1;
+					k = pki+1;
+				} else {
+					j = pki+1;
+					k = pki-1;
+				}
+				bl = (corr[pki] - corr[j])/(corr[pki] - corr[k]);
+				bl = (bl + 1.0)/2.0;
+				ii = bl * pki + (1.0 - bl) * j;
+				pval = (ii + PERMIN)/(double)PBPMS;
+
+				DBG(("Interpolated peak is at %f msec\n", pval))
+
+				peaks[npeaks++] = pval;
+
+				i -= PWIDTH;
+			}
 		}
 	}
-	if (i < 0) {
+
+	DBG(("Number of peaks located = %d\n",npeaks))
+	if (npeaks == 0) {
 		*period = 0.0;
 		if (p->verb) printf("No distict refresh period\n");
 		if (p->debug) fprintf(stderr,"i1d3: Couldn't find a distinct refresh frequency\n");
 		return inst_ok; 
 	}
 
-	/* Locate the actual peak */
-	pkv = -1.0;
-	pki = 0;
-	for (j = i; i < (j + PWIDTH); i++) {
-		if (corr[i] > pkv) {
-			pkv = corr[i];
-			pki = i;
-		}
-	}
-	DBG(("Peak is at %f msec, %f corr\n", (pki + PERMIN)/(double)PBPMS, pkv))
+	if (npeaks == 1) {
+		pval = peaks[0] / 2000.0;	/* Scale by half and convert to seconds */
 
-	/* Interpolate the peak value for higher precision */
-	/* (Is this worth it ??) */
-	{
-		double ii, bl;
-		/* j = bigest */
-		if (corr[pki-1] > corr[pki+1])  {
-			j = pki-1;
-			k = pki+1;
-		} else {
-			j = pki+1;
-			k = pki-1;
+	} else {
+		double div;
+		double avg, ano;
+		/* Try and locate a common divisor amongst all the peaks. */
+		/* This is likely to be the underlying refresh rate. */
+		for (j = 1; j < 6; j++) {
+			div = peaks[npeaks-1]/(double)j;
+			avg = ano = 0.0;
+			for (i = 0; i < npeaks; i++) {
+				double rem, cnt;
+
+				rem = peaks[i]/div;
+				cnt = floor(rem + 0.5);
+				rem = fabs(rem - cnt);
+
+//printf("~1 remainder for peak %d = %f\n",i,rem);
+				if (rem > 0.04)
+					break;
+				avg += peaks[i];		/* Already weighted by cnt */
+				ano += cnt;
+			}
+
+			if (i >= npeaks)
+				break;		/* Sucess */
+			
 		}
-		bl = (corr[pki] - corr[j])/(corr[pki] - corr[k]);
-		bl = (bl + 1.0)/2.0;
-		ii = bl * pki + (1.0 - bl) * j;
-		pval = (ii + PERMIN)/(double)PBPMS;
-		if (p->verb) printf("Refresh period = %f msec\n",pval);
-		/* Error against my 85Hz CRT - GWG */
-//		printf("Refresh error = %f msec\n",fabs(pval - 4000.0/85.0));	
-		if (p->debug) fprintf(stderr,"i1d3: Refresh period = %f msec\n",pval);
+		if (j >= 6) {
+			DBG(("Failed to locate common divisor\n"))
+			pval = peaks[0] / 2000.0;	/* Scale by half and convert to seconds */
+		} else {
+			int mul;
+			pval = avg/ano;
+			pval /= 1000.0;		/* Convert to seconds */
+
+			if (p->verb) printf("Refresh rate = %f Hz\n",1.0/pval);
+
+			/* Error against my 85Hz CRT - GWG */
+//			printf("Refresh rate error = %.4f%%\n",100.0 * fabs(1.0/pval - 85.0)/(85.0));	
+
+			/* Scale to just above 20 Hz */
+			mul = floor((1.0/20) / pval);
+			pval *= mul;
+		}
 	}
-	*period = pval/1000.0;
+
+	if (p->verb) printf("Refresh wampling period = %f msec\n",pval * 1000);
+	if (p->debug) fprintf(stderr,"i1d3: Refresh sampling period = %f msec\n",pval);
+
+	*period = pval;
 
 	return inst_ok;
 }
@@ -1205,6 +1289,8 @@ i1d3_measure_refresh(
 #undef PERMAX
 #undef NPER
 #undef PWIDTH
+
+//#define DBG(xxx) 
 
 /* - - - - - - - - - - - - - - - - - - - - - - */
 
@@ -1273,13 +1359,6 @@ i1d3_take_emis_measurement(
 #ifdef DEBUG
 	int msecstart = msec_time();
 #endif
-#ifdef DO_SYNCHRONIZE
-	int synccount = 30;
-	double syncinttime = 0.001;
-	int maxch;
-	double maxmax, shighth, slowth;
-	double syncfail = 0;
-#endif
 
 	if (p->inited == 0)
 		return i1d3_interp_code((inst *)p, I1D3_NOT_INITED);
@@ -1299,59 +1378,6 @@ i1d3_take_emis_measurement(
 
 		/* Typically this is 200msec */
 		DBG(("Doing fixed period frequency measurement over %f secs\n",p->inttime));
-
-#ifdef DO_SYNCHRONIZE
-		if (p->refmode && p->refperiod  > 0.0) {
-			double stime;
-			double trgb[3];
-			double maxv[3] = {-1e9, -1e9, -1e9};
-			double minv[3] = {1e9, 1e9, 1e9};
-			int i, j, m;
-		
-			/* Discover the min and max values */
-			stime = usec_time();
-			for (i = 0; i < synccount ;i++) {
-				if ((ev = i1d3_freq_measure(p, &syncinttime, trgb)) != inst_ok)
-		 			return ev;
-				for (j = 0; j < 3; j++) {
-					if (trgb[j] < minv[j])
-						minv[j] = trgb[j];
-					if (trgb[j] > maxv[j])
-						maxv[j] = trgb[j];
-				}
-			}
-printf("Neasured for %f msec\n", (usec_time() - stime) / 1000.0);
-
-			/* Locate the maximum value of any of the channels */
-			maxmax = -1e9;
-			for (j = 0; j < 3; j++) {
-				if (maxv[j] > maxmax) {
-					maxmax = maxv[j];
-					maxch = j;
-				}
-			}
-			/* Set high and low thresholds */
-			shighth = 0.9 * (maxmax - minv[maxch]) + minv[maxch];
-			slowth = 0.1 * (maxmax - minv[maxch]) + minv[maxch];
-printf("samples %d, maxmax = %f chan %d, min %f\n",i, maxmax,maxch,minv[maxch]);
-		
-			/* Wait till we get the high then low value */
-			for (m = i = 0; i < synccount; i++) {
-				if ((ev = i1d3_freq_measure(p, &syncinttime, trgb)) != inst_ok)
-		 			return ev;
-				if (m) {
-					if (trgb[maxch] <= slowth)
-						break;
-//					m = 0;
-					continue;
-				}
-				if (trgb[maxch] >= shighth)
-					m = 1;
-			}
-			if (i == synccount)
-				syncfail = 1;
-		}
-#endif /* DO_SYNCHRONIZE */
 
 		/* Take a frequency measurement over a fixed period */
 		if ((ev = i1d3_freq_measure(p, &p->inttime, rmeas)) != inst_ok)
@@ -1410,16 +1436,23 @@ printf("samples %d, maxmax = %f chan %d, min %f\n",i, maxmax,maxch,minv[maxch]);
 			}
 			if (mask2 != 0x0) {
 				int mask3 = 0x0;
+				double rmeas2[3];
 
 				DBG(("Doing 1st period pre-measurement mask 0x%x, edgec %s\n",mask2,icmPiv(3,edgec)));
-				/* Take an initial period  measurement over 2 edges */
-				if ((ev = i1d3_period_measure(p, edgec, mask, rmeas)) != inst_ok)
+				/* Take an initial period pre-measurement over 2 edges */
+				if ((ev = i1d3_period_measure(p, edgec, mask2, rmeas2)) != inst_ok)
 		 			return ev;
 
-				DBG(("Got %s raw %f %f %f Hz\n",icmPdv(3,rmeas),
+				DBG(("Got %s raw %f %f %f Hz\n",icmPdv(3,rmeas2),
 				     0.5 * edgec[0] * p->clk_freq/rmeas2[0],
 				     0.5 * edgec[1] * p->clk_freq/rmeas2[1],
 				     0.5 * edgec[2] * p->clk_freq/rmeas2[2]));
+
+				/* Transfer updated counts from 1st initial measurement */
+				for (i = 0; i < 3; i++) {
+					if ((mask2 & (1 << i)) != 0)
+						rmeas[i]  = rmeas2[i];
+				}
 
 				/* Do 2nd initial measurement if the count is small, in case */
 				/* we are measuring a CRT with a refresh rate which adds innacuracy, */
@@ -1427,16 +1460,16 @@ printf("samples %d, maxmax = %f chan %d, min %f\n",i, maxmax,maxch,minv[maxch]);
 				/* Don't do this for Munki Display, because of its slow measurements. */
 				if (p->dtype != i1d3_munkdisp) {
 					for (i = 0; i < 3; i++) {
-						if ((mask & (1 << i)) == 0)
+						if ((mask2 & (1 << i)) == 0)
 							continue;
 
-						if (rmeas[i] > 0.5) {
+						if (rmeas2[i] > 0.5) {
 							double nedgec;
 							int inedgec;
 
 							/* Compute number of edges needed for a clock count */
-							/* of 0.050 seconds */
-							nedgec = edgec[i] * 0.050 * p->clk_freq/rmeas[i];
+							/* of 0.100 seconds */
+							nedgec = edgec[i] * 0.100 * p->clk_freq/rmeas2[i];
 
 							DBG(("chan %d target edges %f\n",i,nedgec));
 
@@ -1462,9 +1495,8 @@ printf("samples %d, maxmax = %f chan %d, min %f\n",i, maxmax,maxch,minv[maxch]);
 #endif
 					}
 					if (mask3 != 0x0) {
-						double rmeas2[3];
 
-						DBG(("Doing 2nd initial period measurement mask 0x%x, edgec %s\n",mask,icmPiv(3,edgec)));
+						DBG(("Doing 2nd initial period measurement mask 0x%x, edgec %s\n",mask3,icmPiv(3,edgec)));
 						/* Take a 2nd initial period  measurement */
 						if ((ev = i1d3_period_measure(p, edgec, mask3, rmeas2)) != inst_ok)
 				 			return ev;
@@ -1476,19 +1508,8 @@ printf("samples %d, maxmax = %f chan %d, min %f\n",i, maxmax,maxch,minv[maxch]);
 
 						/* Transfer updated counts from 2nd initial measurement */
 						for (i = 0; i < 3; i++) {
-							if ((mask3 & (1 << i)) == 0)
-								continue;
-#ifdef DEBUG
-							{
-								double ratio;
-								if (rmeas2[i] > rmeas[i])
-									ratio = rmeas2[i] / rmeas[i];
-								else
-									ratio = rmeas[i] / rmeas2[i];
-								printf("Chan %d 1st to 2nd initial value ratio %f\n",i,ratio);
-							}
-#endif
-							rmeas[i]  = rmeas2[i];
+							if ((mask3 & (1 << i)) != 0)
+								rmeas[i]  = rmeas2[i];
 						}
 					}
 				}
@@ -1540,30 +1561,7 @@ printf("samples %d, maxmax = %f chan %d, min %f\n",i, maxmax,maxch,minv[maxch]);
 			if (mask != 0x0) {
 				DBG(("Doing period re-measure mask 0x%x, edgec %s\n",mask,icmPiv(3,edgec)));
 
-#ifdef DO_SYNCHRONIZE
-				if (p->refmode && p->refperiod  > 0.0) {
-					double trgb[3];
-					int m;
-				
-					/* Wait till we get the high then low value */
-					for (m = i = 0; i < synccount; i++) {
-						if ((ev = i1d3_freq_measure(p, &syncinttime, trgb)) != inst_ok)
-				 			return ev;
-						if (m) {
-							if (trgb[maxch] <= slowth)
-								break;
-//								m = 0;
-							continue;
-						}
-						if (trgb[maxch] >= shighth)
-							m = 1;
-					}
-					if (i == synccount)
-						syncfail = 1;
-				}
-#endif /* DO_SYNCHRONIZE */
-
-				/* Measure again with desired precision, taking up to 0.2 secs */
+				/* Measure again with desired precision, taking up to 0.4/0.8 secs */
 				if ((ev = i1d3_period_measure(p, edgec, mask, rmeas)) != inst_ok)
 		 			return ev;
 	
@@ -1573,8 +1571,11 @@ printf("samples %d, maxmax = %f chan %d, min %f\n",i, maxmax,maxch,minv[maxch]);
 						continue;
 	
 					/* Compute the frequency from period measurement */
-					rgb[i] = (p->clk_freq * 0.5 * edgec[i])/rmeas[i];
-					DBG(("chan %d raw %f frequency %f (%f Sec)\n",i,rmeas[i],trgb[i],
+					if (rmeas[i] < 0.5)		/* Number of edges wasn't counted */
+						rgb[i] = 0.0;
+					else
+						rgb[i] = (p->clk_freq * 0.5 * edgec[i])/rmeas[i];
+					DBG(("chan %d raw %f frequency %f (%f Sec)\n",i,rmeas[i],rgb[i],
 					                            rmeas[i]/p->clk_freq));
 
 				}
@@ -1584,15 +1585,6 @@ printf("samples %d, maxmax = %f chan %d, min %f\n",i, maxmax,maxch,minv[maxch]);
 	}
 
 	DBG(("Took %d msec to measure\n", msec_time() - msecstart));
-
-#ifdef DO_SYNCHRONIZE
-	if (p->verb && p->refmode && p->refperiod > 0.0) {
-		if (syncfail)
-			printf("Synchronization failed\n");
-		else
-			printf("Synchronization succeeded\n");
-	}
-#endif
 
 	/* Subtract black level */
 	for (i = 0; i < 3; i++) {
@@ -2147,14 +2139,14 @@ ipatch *val) {		/* Pointer to instrument patch value */
 		p->rrset = 1;
 
 		/* Quantize the sample time */
-		if (p->refperiod > 0.0) {
+		if (p->refperiod > 0.0) {		/* If we have a refresh period */
 			int n;
 			n = (int)ceil(p->dinttime/p->refperiod);
 			p->inttime = n * p->refperiod;
-//p->inttime = 2.0 * p->dinttime;	/* Double integration time */
 			if (p->debug) fprintf(stderr,"i1d3: integration time quantize to %f secs\n",p->inttime);
-		} else {
-			p->inttime = 2.0 * p->dinttime;	/* Double integration time */
+
+		} else {	/* We don't have a period, so simply double the default */
+			p->inttime = 2.0 * p->dinttime;
 			if (p->debug) fprintf(stderr,"i1d3: integration time doubled to %f secs\n",p->inttime);
 		}
 	}

@@ -4,12 +4,16 @@
  * Colorimeter Correction Matrix
  *
  * Author: Graeme W. Gill
- * Date:   1r9/8/2010
+ * Date:   19/8/2010
  *
  * Copyright 2010 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ *
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
+ *
+ * NOTE though that if SALONEINSTLIB is not defined, that this file depends
+ * on other libraries that are licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3.
  */
 
 /*
@@ -25,9 +29,15 @@
 #include <math.h>
 #include <sys/types.h>
 #include <time.h>
+#ifndef SALONEINSTLIB
 #include "numlib.h"
-#include "cgats.h"
 #include "icc.h"
+#else
+#include "numsup.h"
+#include "conv.h"
+#endif
+#include "icc.h"
+#include "cgats.h"
 #include "ccmx.h"
 
 /* Forward declarations */
@@ -280,6 +290,8 @@ double mtx[3][3]	/* Transform matrix to copy from */
 	return 0;
 }
 
+#ifndef SALONEINSTLIB
+
 /* ------------------------------------------- */
 /* Modified version that de-weights Luminance errors by 5: */
 /* Return the CIE94 Delta E color difference measure, squared */
@@ -448,7 +460,8 @@ double (*cols)[3]		/* Array of XYZ values from colorimeter */
 		sa[i] = 0.1;
 
 	if (powell(NULL, 9, cp, sa, 1e-6, 2000, optf, &cx, NULL, NULL) < 0.0) {
-		error ("Powell failed");
+		sprintf(p->err, "set_ccmx: powell() failed");
+		return 1;
 	}
 
 	p->matrix[0][0] = cp[0];
@@ -490,6 +503,25 @@ double (*cols)[3]		/* Array of XYZ values from colorimeter */
 
 	return 0;
 }
+
+#else /* SALONEINSTLIB */
+
+/* Create a ccmx from measurements. return nz on error. */
+static int create_ccmx(ccmx *p,
+char *desc,			/* General description (optional) */
+char *inst,			/* Instrument description to copy from */
+char *disp,			/* Display make and model (optional if tech) */
+char *tech,			/* Display technology description (optional if disp) */
+char *refd,			/* Reference spectrometer description (optional) */
+int npat,			/* Number of samples in following arrays */
+double (*refs)[3],	/* Array of XYZ values from spectrometer */
+double (*cols)[3]		/* Array of XYZ values from colorimeter */
+) {
+	sprintf(p->err, "set_ccmx: not implemented in ccxx.x");
+	return 1;
+}
+
+#endif /* SALONEINSTLIB */
 
 /* Delete it */
 static void del_ccmx(ccmx *p) {

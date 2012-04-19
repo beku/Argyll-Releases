@@ -1,12 +1,12 @@
 
 /* 
- * Create a visualisation of the gamut of a TIFF file.
+ * Create a visualisation of the gamut of a TIFF or JPEG file.
  *
  * Author:  Graeme W. Gill
  * Date:    00/9/20
  * Version: 1.00
  *
- * Copyright 2000, 2002 Graeme W. Gill
+ * Copyright 2000, 2002, 2012 Graeme W. Gill
  * All rights reserved.
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -29,12 +29,15 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <fcntl.h>
+#include <setjmp.h>
 #include <string.h>
 #include <math.h>
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
 #include "tiffio.h"
+#include "jpeglib.h"
+#include "iccjpeg.h"
 #include "icc.h"
 #include "gamut.h"
 #include "xicc.h"
@@ -42,6 +45,10 @@
 
 #undef NOCAMGAM_CLIP		/* No clip to CAM gamut before CAM lookup */
 #undef DEBUG				/* Dump filter cell contents */
+
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
+#endif
 
 void set_fminmax(double min[3], double max[3]);
 void reset_filter();
@@ -51,9 +58,9 @@ void del_filter();
 
 void usage(void) {
 	int i;
-	fprintf(stderr,"Create VRML image of the gamut surface of a TIFF, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Create VRML image of the gamut surface of a TIFF or JPEG, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
-	fprintf(stderr,"usage: tiffgamut [-v level] [profile.icm | embedded.tif] infile1.tif [infile2.tif ...] \n");
+	fprintf(stderr,"usage: tiffgamut [-v level] [profile.icm | embedded.tif/jpg] infile1.tif/jpg [infile2.tif/jpg ...] \n");
 	fprintf(stderr," -v            Verbose\n");
 	fprintf(stderr," -d sres       Surface resolution details 1.0 - 50.0\n");
 	fprintf(stderr," -w            emit VRML .wrl file as well as CGATS .gam file\n");
@@ -272,6 +279,45 @@ int pmtc
 	return buf;
 }
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* JPEG error information */
+typedef struct {
+	jmp_buf env;		/* setjmp/longjmp environment */
+	char message[JMSG_LENGTH_MAX];
+} jpegerrorinfo;
+
+/* JPEG error handler */
+static void jpeg_error(j_common_ptr cinfo) {  
+	jpegerrorinfo *p = (jpegerrorinfo *)cinfo->client_data;
+	(*cinfo->err->format_message) (cinfo, p->message);
+	longjmp(p->env, 1);
+}
+
+static char *
+JPEG_cspace2str(
+J_COLOR_SPACE cspace
+) {
+	static char buf[80];
+	switch (cspace) {
+		case JCS_UNKNOWN:
+			return "Unknown";
+		case JCS_GRAYSCALE:
+			return "Monochrome";
+		case JCS_RGB:
+			return "RGB";
+		case JCS_YCbCr:
+			return "YCbCr";
+		case JCS_CMYK:
+			return "CMYK";
+		case JCS_YCCK:
+			return "YCCK";
+	}
+	sprintf(buf,"Unknown JPEG colorspace %d",cspace);
+	return buf;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 int
 main(int argc, char *argv[]) {
 	int fa,nfa;					/* argument we're looking at */
@@ -310,18 +356,27 @@ main(int argc, char *argv[]) {
 	icColorSpaceSignature pcsor = icSigLabData;		/* Default */
 	icmLookupOrder    order  = icmLuOrdNorm;		/* Default */
 
+	/* TIFF */
+	TIFFErrorHandler olderrh, oldwarnh;
+	TIFFErrorHandlerExt olderrhx, oldwarnhx;
 	TIFF *rh = NULL;
 	int x, y, width, height;					/* Size of image */
 	uint16 samplesperpixel, bitspersample;
 	uint16 pconfig, photometric, pmtc;
-	uint16 resunits;
-	float resx, resy;
 	tdata_t *inbuf;
-	void (*cvt)(double *out, double *in);		/* TIFF conversion function, NULL if none */
+	int inbpix;                					/* Number of pixels in jpeg in buf */
+	void (*cvt)(double *out, double *in) = NULL;	/* TIFF conversion function, NULL if none */
 	icColorSpaceSignature tcs;					/* TIFF colorspace */
 	uint16 extrasamples;						/* Extra "alpha" samples */
 	uint16 *extrainfo;							/* Info about extra samples */
 	int sign_mask;								/* Handling of encoding sign */
+
+	/* JPEG */
+	jpegerrorinfo jpeg_rerr;
+	FILE *rf = NULL;
+	struct jpeg_decompress_struct rj;
+	struct jpeg_error_mgr jerr;
+	int iinv;							/* Invert the input */
 
 	double gamres = GAMRES;				/* Surface resolution */
 	gamut *gam;
@@ -740,69 +795,204 @@ main(int argc, char *argv[]) {
 	for (fa = ffa; fa <= lfa; fa++) {
 
 		/* - - - - - - - - - - - - - - - */
-		/* Open up input tiff file ready for reading */
+		/* Open up input tiff/jpeg file ready for reading */
 		/* Got arguments, so setup to process the file */
-
 		strncpy(in_name,argv[fa],MAXNAMEL); in_name[MAXNAMEL] = '\000';
-		if ((rh = TIFFOpen(in_name, "r")) == NULL)
-			error("error opening read file '%s'",in_name);
 
-		TIFFGetField(rh, TIFFTAG_IMAGEWIDTH,  &width);
-		TIFFGetField(rh, TIFFTAG_IMAGELENGTH, &height);
+		olderrh = TIFFSetErrorHandler(NULL);
+		oldwarnh = TIFFSetWarningHandler(NULL);
+		olderrhx = TIFFSetErrorHandlerExt(NULL);
+		oldwarnhx = TIFFSetWarningHandlerExt(NULL);
+		
+		if ((rh = TIFFOpen(in_name, "r")) != NULL) {
+			TIFFSetErrorHandler(olderrh);
+			TIFFSetWarningHandler(oldwarnh);
+			TIFFSetErrorHandlerExt(olderrhx);
+			TIFFSetWarningHandlerExt(oldwarnhx);
 
-		TIFFGetField(rh, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
-		TIFFGetField(rh, TIFFTAG_BITSPERSAMPLE, &bitspersample);
-		if (bitspersample != 8 && bitspersample != 16)
-			error("TIFF Input file must be 8 bit/channel");
+			TIFFGetField(rh, TIFFTAG_IMAGEWIDTH,  &width);
+			TIFFGetField(rh, TIFFTAG_IMAGELENGTH, &height);
 
-		TIFFGetFieldDefaulted(rh, TIFFTAG_EXTRASAMPLES, &extrasamples, &extrainfo);
-		TIFFGetField(rh, TIFFTAG_PHOTOMETRIC, &photometric);
+			TIFFGetField(rh, TIFFTAG_SAMPLESPERPIXEL, &samplesperpixel);
+			TIFFGetField(rh, TIFFTAG_BITSPERSAMPLE, &bitspersample);
+			if (bitspersample != 8 && bitspersample != 16)
+				error("TIFF Input file must be 8 or 16 bits/channel");
 
-		if (luo != NULL) {
-			if (inn != (samplesperpixel-extrasamples))
-				error ("TIFF Input file has %d input chanels and is mismatched to colorspace '%s'",
-				       samplesperpixel, icm2str(icmColorSpaceSignature, ins));
-		}
+			TIFFGetFieldDefaulted(rh, TIFFTAG_EXTRASAMPLES, &extrasamples, &extrainfo);
+			TIFFGetField(rh, TIFFTAG_PHOTOMETRIC, &photometric);
 
-		if ((tcs = TiffPhotometric2ColorSpaceSignature(&cvt, &sign_mask, photometric,
-		                                     bitspersample, samplesperpixel, extrasamples)) == 0)
-			error("Can't handle TIFF file photometric %s", Photometric2str(photometric));
+			if (luo != NULL) {
+				if (inn != (samplesperpixel-extrasamples))
+					error("TIFF Input file has %d input chanels and is mismatched to colorspace '%s'",
+					       samplesperpixel, icm2str(icmColorSpaceSignature, ins));
+			}
 
-		if (tcs != ins) {
-			if (luo != NULL)
-				error("TIFF photometric '%s' doesn't match ICC input colorspace '%s' !",
-				      Photometric2str(photometric), icm2str(icmColorSpaceSignature,ins));
-			else
-				error("No profile provided and TIFF photometric '%s' isn't Lab !",
-				      Photometric2str(photometric));
-		}
+			if ((tcs = TiffPhotometric2ColorSpaceSignature(&cvt, &sign_mask, photometric,
+			                                     bitspersample, samplesperpixel, extrasamples)) == 0)
+				error("Can't handle TIFF file photometric %s", Photometric2str(photometric));
 
-		TIFFGetField(rh, TIFFTAG_PLANARCONFIG, &pconfig);
-		if (pconfig != PLANARCONFIG_CONTIG)
-			error ("TIFF Input file must be planar");
+			if (tcs != ins) {
+				if (luo != NULL)
+					error("TIFF photometric '%s' doesn't match ICC input colorspace '%s' !",
+					      Photometric2str(photometric), icm2str(icmColorSpaceSignature,ins));
+				else
+					error("No profile provided and TIFF photometric '%s' isn't Lab !",
+					      Photometric2str(photometric));
+			}
 
-		TIFFGetField(rh, TIFFTAG_RESOLUTIONUNIT, &resunits);
-		TIFFGetField(rh, TIFFTAG_XRESOLUTION, &resx);
-		TIFFGetField(rh, TIFFTAG_YRESOLUTION, &resy);
+			TIFFGetField(rh, TIFFTAG_PLANARCONFIG, &pconfig);
+			if (pconfig != PLANARCONFIG_CONTIG)
+				error("TIFF Input file must be planar");
 
-		if (verb) {
-			printf("Input TIFF file '%s'\n",in_name);
-			printf("TIFF file colorspace is %s\n",icm2str(icmColorSpaceSignature,tcs));
-			printf("TIFF file photometric is %s\n",Photometric2str(photometric));
-			printf("\n");
+			if (verb) {
+				printf("Input TIFF file '%s'\n",in_name);
+				printf("TIFF file photometric is %s\n",Photometric2str(photometric));
+				printf("TIFF file colorspace is %s\n",icm2str(icmColorSpaceSignature,tcs));
+				printf("File size %d x %d pixels\n",width,height);
+				printf("\n");
+			}
+
+		} else {
+			TIFFSetErrorHandler(olderrh);
+			TIFFSetWarningHandler(oldwarnh);
+			TIFFSetErrorHandlerExt(olderrhx);
+			TIFFSetWarningHandlerExt(oldwarnhx);
+
+			/* We cope with the horrible ijg jpeg library error handling */
+			/* by using a setjmp/longjmp. */
+			jpeg_std_error(&jerr);
+			jerr.error_exit = jpeg_error;
+			if (setjmp(jpeg_rerr.env)) {
+				jpeg_destroy_decompress(&rj);
+				fclose(rf);
+				error("Unable to read JPEG file '%s'\n",in_name);
+			}
+
+			rj.err = &jerr;
+			rj.client_data = &jpeg_rerr;
+			jpeg_create_decompress(&rj);
+
+#if defined(O_BINARY) || defined(_O_BINARY)
+		    if ((rf = fopen(in_name,"rb")) == NULL)
+#else
+		    if ((rf = fopen(in_name,"r")) == NULL)
+#endif
+			{
+				jpeg_destroy_decompress(&rj);
+				error("Unable to open input file '%s'\n",in_name);
+			}
+			
+			jpeg_stdio_src(&rj, rf);
+			jpeg_read_header(&rj, TRUE); /* we'll longjmp on error */
+
+			bitspersample = rj.data_precision;
+			if (bitspersample != 8 && bitspersample != 16) {
+				error("JPEG Input file must be 8 or 16 bit/channel");
+			}
+
+			/* No extra samples */
+			extrasamples = 0;
+			iinv = 0;
+				
+			switch (rj.jpeg_color_space) {
+				case JCS_GRAYSCALE:
+					rj.out_color_space = JCS_GRAYSCALE;
+					tcs = icSigGrayData;
+					samplesperpixel = 1;
+					break;
+
+				case JCS_YCbCr:		/* get libjpg to convert to RGB */
+					rj.out_color_space = JCS_RGB;
+					tcs = icSigRgbData;
+					samplesperpixel = 3;
+					break;
+
+				case JCS_RGB:
+					rj.out_color_space = JCS_RGB;
+					tcs = icSigRgbData;
+					samplesperpixel = 3;
+					break;
+
+				case JCS_YCCK:		/* libjpg to convert to CMYK */
+					rj.out_color_space = JCS_CMYK;
+					tcs = icSigCmykData;
+					samplesperpixel = 4;
+					if (rj.saw_Adobe_marker)
+						iinv = 1;
+					break;
+
+				case JCS_CMYK:
+					rj.out_color_space = JCS_CMYK;
+					tcs = icSigCmykData;
+					samplesperpixel = 4;
+					if (rj.saw_Adobe_marker)	/* Adobe inverts CMYK */
+						iinv = 1;
+					break;
+
+				default:
+					error("Can't handle JPEG file '%s' colorspace 0x%x", in_name, rj.jpeg_color_space);
+			}
+
+			if (luo != NULL) {
+				if (inn != samplesperpixel)
+					error ("JPEG Input file has %d input chanels and is mismatched to colorspace '%s'",
+					       samplesperpixel, icm2str(icmColorSpaceSignature, ins));
+			}
+
+			if (tcs != ins) {
+				if (luo != NULL)
+					error("JPEG colorspace '%s' doesn't match ICC input colorspace '%s' !",
+					      icm2str(icmColorSpaceSignature, tcs), icm2str(icmColorSpaceSignature,ins));
+				else
+					error("No profile provided and JPEG colorspace '%s' isn't Lab !",
+					      icm2str(icmColorSpaceSignature, tcs));
+			}
+			jpeg_calc_output_dimensions(&rj);
+			width = rj.output_width;
+			height = rj.output_height;
+
+			if (verb) {
+				printf("Input JPEG file '%s'\n",in_name);
+				printf("JPEG file original colorspace is %s\n",JPEG_cspace2str(rj.jpeg_color_space));
+				printf("JPEG file colorspace is %s\n",icm2str(icmColorSpaceSignature,tcs));
+				printf("File size %d x %d pixels\n",width,height);
+				printf("\n");
+			}
+			jpeg_start_decompress(&rj);
 		}
 
 		/* - - - - - - - - - - - - - - - */
 		/* Process colors to translate */
 		/* (Should fix this to process a group of lines at a time ?) */
 
-		inbuf  = _TIFFmalloc(TIFFScanlineSize(rh));
+		if (rh != NULL)
+			inbuf  = _TIFFmalloc(TIFFScanlineSize(rh));
+		else {
+			inbpix = rj.output_width * rj.num_components;
+			if ((inbuf = (tdata_t *)malloc(inbpix)) == NULL)
+				error("Malloc failed on input line buffer");
+
+			if (setjmp(jpeg_rerr.env)) {
+				/* Something went wrong with reading the file */
+				jpeg_destroy_decompress(&rj);
+				error("failed to read JPEG line of file '%s' [%s]",in_name, jpeg_rerr.message);
+			}
+		}
 
 		for (y = 0; y < height; y++) {
 
 			/* Read in the next line */
-			if (TIFFReadScanline(rh, inbuf, y, 0) < 0)
-				error ("Failed to read TIFF line %d",y);
+			if (rh) {
+				if (TIFFReadScanline(rh, inbuf, y, 0) < 0)
+					error ("Failed to read TIFF line %d",y);
+			} else {
+				jpeg_read_scanlines(&rj, (JSAMPARRAY)&inbuf, 1);
+				if (iinv) {
+					unsigned char *cp, *ep = (unsigned char *)inbuf + inbpix;
+					for (cp = (unsigned char *)inbuf; cp < ep; cp++)
+						*cp = ~*cp;
+				}
+			}
 
 			/* Do floating point conversion */
 			for (x = 0; x < width; x++) {
@@ -865,9 +1055,19 @@ main(int argc, char *argv[]) {
 			}
 		}
 
-		_TIFFfree(inbuf);
-
-		TIFFClose(rh);		/* Close Input file */
+		/* Release buffers and close files */
+		if (rh != NULL) {
+			if (inbuf != NULL)
+				_TIFFfree(inbuf);
+			TIFFClose(rh); /* Close Input file */
+		} else {
+			jpeg_finish_decompress(&rj);
+			jpeg_destroy_decompress(&rj);
+			if (inbuf != NULL)
+				free(inbuf);
+			if (fclose(rf))
+				error("Error closing JPEG input file '%s'\n",in_name);
+		}
 
 		/* If filtering, flush filtered points to the gamut */
 		if (filter) {

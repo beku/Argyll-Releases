@@ -5,9 +5,9 @@
  *
  * Author:  Graeme W. Gill
  * Date:    2002/04/22
- * Version: 2.12
+ * Version: 2.13
  *
- * Copyright 1997 - 2011 Graeme W. Gill
+ * Copyright 1997 - 2012 Graeme W. Gill
  *
  * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
@@ -11761,29 +11761,24 @@ static int icc_find_tag(
 	return 0;
 }
 
-/* Read the tag element data, and return a pointer to the object */
-/*
- * Returns NULL if error - icc->errc will contain:
- * 2 if not found
- * Returns an icmSigUnknownType object if the tag type isn't handled by a specific object.
- * NOTE: we don't handle tag duplication - you'll always get the first in the file
+/* Read the specific tag element data, and return a pointer to the object */
+/* (This is an internal function)                  */
+/* Returns NULL if error - icc->errc will contain: */
+/* 2 if not found                                  */
+/* Returns an icmSigUnknownType object if the tag type isn't handled by a specific object.
  */
-static icmBase *icc_read_tag(
+/* NOTE: we don't handle tag duplication - you'll always get the first in the file */
+static icmBase *icc_read_tag_ix(
 	icc *p,
-    icTagSignature sig			/* Tag signature - may be unknown */
+	unsigned int i				/* Index from 0.. p->count-1 */
 ) {
 	icTagTypeSignature ttype;	/* Tag type we will create */
 	icmBase *nob;
-	unsigned int i, k;
+	unsigned int k;
 	int j;
 
-	/* Search for signature */
-	for (i = 0; i < p->count; i++) {
-		if (p->data[i].sig == sig)		/* Found it */
-			break;
-	}
 	if (i >= p->count) {
-		sprintf(p->err,"icc_read_tag: Tag '%s' not found",string_TagSignature(sig));
+		sprintf(p->err,"icc_read_tag_ix: index %d is out of range",i);
 		p->errc = 2;
 		return NULL;
 	}
@@ -11838,6 +11833,32 @@ static icmBase *icc_read_tag(
 	return nob;
 }
 
+/* Read the tag element data of the first matching, and return a pointer to the object */
+/* Returns NULL if error - icc->errc will contain:         */
+/* 2 if not found                                          */
+/* Returns an icmSigUnknownType object if the tag type isn't handled by a specific object. */
+/* NOTE: we don't handle tag duplication - you'll always get the first in the file. */
+static icmBase *icc_read_tag(
+	icc *p,
+    icTagSignature sig			/* Tag signature - may be unknown */
+) {
+	unsigned int i;
+
+	/* Search for signature */
+	for (i = 0; i < p->count; i++) {
+		if (p->data[i].sig == sig)		/* Found it */
+			break;
+	}
+	if (i >= p->count) {
+		sprintf(p->err,"icc_read_tag: Tag '%s' not found",string_TagSignature(sig));
+		p->errc = 2;
+		return NULL;
+	}
+
+	/* Let read_tag_ix do all the work */
+	return icc_read_tag_ix(p, i);
+}
+
 /* Rename a tag signature */
 static int icc_rename_tag(
 	icc *p,
@@ -11881,11 +11902,40 @@ static int icc_rename_tag(
 	return 0;
 }
 
+/* Unread a specific tag, and free the underlying tag type data */
+/* if this was the last reference to it. */
+/* (This is an internal function) */
+/* Returns non-zero on error: */
+/* tag not found - icc->errc will contain 2 */
+/* tag not read - icc->errc will contain 2 */
+static int icc_unread_tag_ix(
+	icc *p,
+	unsigned int i				/* Index from 0.. p->count-1 */
+) {
+	if (i >= p->count) {
+		sprintf(p->err,"icc_unread_tag_ix: index %d is out of range",i);
+		return p->errc = 2;
+	}
+
+	/* See if it's been read */
+    if (p->data[i].objp == NULL) {
+		sprintf(p->err,"icc_unread_tag: Tag '%s' not currently loaded",string_TagSignature(p->data[i].sig));
+		return p->errc = 2;
+	}
+	
+	if (--(p->data[i].objp->refcount) == 0)			/* decrement reference count */
+			(p->data[i].objp->del)(p->data[i].objp);	/* Last reference */
+  	p->data[i].objp = NULL;
+
+	return 0;
+}
+
 /* Unread the tag, and free the underlying tag type */
 /* if this was the last reference to it. */
 /* Returns non-zero on error: */
 /* tag not found - icc->errc will contain 2 */
 /* tag not read - icc->errc will contain 2 */
+/* NOTE: we don't handle tag duplication - you'll always get the first in the file */
 static int icc_unread_tag(
 	icc *p,
     icTagSignature sig		/* Tag signature - may be unknown */
@@ -11902,36 +11952,20 @@ static int icc_unread_tag(
 		return p->errc = 2;
 	}
 
-	/* See if it's been read */
-    if (p->data[i].objp == NULL) {
-		sprintf(p->err,"icc_unread_tag: Tag '%s' not currently loaded",string_TagSignature(sig));
-		return p->errc = 2;
-	}
-	
-	if (--(p->data[i].objp->refcount) == 0)			/* decrement reference count */
-			(p->data[i].objp->del)(p->data[i].objp);	/* Last reference */
-  	p->data[i].objp = NULL;
-
-	return 0;
+	return icc_unread_tag(p, i);
 }
 
 /* Delete the tag, and free the underlying tag type, */
 /* if this was the last reference to it. */
+/* Note this finds the first tag with a matching signature */
 /* Returns non-zero on error: */
 /* tag not found - icc->errc will contain 2 */
-static int icc_delete_tag(
+static int icc_delete_tag_ix(
 	icc *p,
-    icTagSignature sig		/* Tag signature - may be unknown */
+	unsigned int i				/* Index from 0.. p->count-1 */
 ) {
-	unsigned int i;
-
-	/* Search for signature */
-	for (i = 0; i < p->count; i++) {
-		if (p->data[i].sig == sig)		/* Found it */
-			break;
-	}
 	if (i >= p->count) {
-		sprintf(p->err,"icc_delete_tag: Tag '%s' not found",string_TagSignature(sig));
+		sprintf(p->err,"icc_delete_tag_ix: index %d of range",i);
 		return p->errc = 2;
 	}
 
@@ -11951,6 +11985,29 @@ static int icc_delete_tag(
 	return 0;
 }
 
+/* Delete the tag, and free the underlying tag type, */
+/* if this was the last reference to it. */
+/* Note this finds the first tag with a matching signature. */
+/* Returns non-zero on error: */
+/* tag not found - icc->errc will contain 2 */
+static int icc_delete_tag(
+	icc *p,
+    icTagSignature sig		/* Tag signature - may be unknown */
+) {
+	unsigned int i;
+
+	/* Search for signature */
+	for (i = 0; i < p->count; i++) {
+		if (p->data[i].sig == sig)		/* Found it */
+			break;
+	}
+	if (i >= p->count) {
+		sprintf(p->err,"icc_delete_tag: Tag '%s' not found",string_TagSignature(sig));
+		return p->errc = 2;
+	}
+
+	return icc_delete_tag_ix(p, i);
+}
 
 /* Read all the tags into memory. */
 /* Returns non-zero on error. */
@@ -11960,10 +12017,8 @@ static int icc_read_all_tags(
 	unsigned int i;
 
 	for (i = 0; i < p->count; i++) {	/* For all the tag element data */
-		icmBase *ob;
-		if ((ob = p->read_tag(p, p->data[i].sig)) == NULL) {
+		if (icc_read_tag_ix(p, i) == NULL)
 			return p->errc;
-		}
 	}
 	return 0;
 }
@@ -11994,21 +12049,18 @@ static void icc_dump(
 		op->gprintf(op,"  offset   %d\n", p->data[i].offset);
 		op->gprintf(op,"  size     %d\n", p->data[i].size);
 		tr = 0;
-		if ((ob = p->data[i].objp) == NULL) {
+		if (p->data[i].objp == NULL) {
 			/* The object is not loaded, so load it then free it */
-			if ((ob = p->read_tag(p, p->data[i].sig)) == NULL) {
+			if (icc_read_tag_ix(p, i) == NULL)
 				op->gprintf(op,"Unable to read: %d, %s\n",p->errc,p->err);
-			}
 			tr = 1;
 		}
-		if (ob != NULL) {
+		if ((ob = p->data[i].objp) != NULL) {
 			/* op->gprintf(op,"  refcount %d\n", ob->refcount); */
 			ob->dump(ob,op,verb-1);
 
-			if (tr != 0) {		/* Cleanup if temporary */
-				ob->refcount--;
-				(ob->del)(ob);
-				p->data[i].objp = NULL;
+			if (tr != 0) {	/* Cleanup if temporary */
+				icc_unread_tag_ix(p, i);
 			}
 		}
 		op->gprintf(op,"\n");
@@ -13912,7 +13964,11 @@ void icmChromAdaptMatrix(
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
 
-/* RGB primaries device to RGB->XYZ transform matrix */
+/* RGB primaries device to RGB->XYZ transform matrix. */
+/* We assume that the device is perfectly additive, but that */
+/* there may be a scale factor applied to the channels to */
+/* match the white point at RGB = 1. */
+
 /* Return non-zero if matrix would be singular */
 int icmRGBprim2matrix(
 	icmXYZNumber white,		/* White point */

@@ -873,7 +873,8 @@ static trend *new_tiff_trend(
 	double hres, double vres,	/* Resolution */
 	int pgreyt,					/* printer grey representation type 0..6 */
 	int ncha,					/* flag, use nchannel alpha */
-	int comp					/* flag, use compression */
+	int comp,					/* flag, use compression */
+	int dith					/* flag, use 8 bit dithering */
 ) {
 	tiff_trend *s;
 	color2d c;					/* Background color */
@@ -947,7 +948,7 @@ static trend *new_tiff_trend(
 	else
 		ma[0] = ma[1] = ma[2] = ma[3] = 0;
 
-	if ((s->r = new_render2d(pw, ph, ma, hres, vres,  csp, nc, dpth)) == NULL) {
+	if ((s->r = new_render2d(pw, ph, ma, hres, vres,  csp, nc, dpth, dith)) == NULL) {
 		error("Failed to create a render2d object for tiff output");
 	} 
 
@@ -1681,6 +1682,7 @@ int oft,			/* PS/EPS/TIFF select (0,1,2) */
 depth2d tiffdpth,	/* TIFF pixel depth */
 double tiffres,		/* TIFF resolution in DPI */
 int ncha,			/* flag, use nchannel alpha */
+int tiffdith,		/* flag, nz to use TIFF 8 bit dithering */
 int tiffcomp,		/* flag, nz to use TIFF compression */
 int spacer,			/* Spacer code, -1 = default, 0 = None, 1 = b&w, 2 = colored */
 int nmask,			/* DeviceN mask */
@@ -2405,7 +2407,7 @@ int *p_npat			/* Return number of patches including padding */
 
 						res = tiffres/25.4; 
 						if ((tro = new_tiff_trend(psname,nmask,tiffdpth,pw,ph,
-						    nosubmarg ? 0 : bord, res,res,pgreyt,ncha,tiffcomp)) == NULL)
+						    nosubmarg ? 0 : bord, res,res,pgreyt,ncha,tiffcomp, tiffdith)) == NULL)
 							error ("Unable to create output rendering object file '%s'",psname);
 						if (verb)
 							printf("Creating file '%s'\n",psname);
@@ -2842,6 +2844,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -T [res]        Output 16 bit TIFF raster file, optional res DPI (default 100)\n");
 	fprintf(stderr," -C              Don't use TIFF compression\n");
 	fprintf(stderr," -N              Use TIFF alpha N channels more than 4\n");
+	fprintf(stderr," -D              Dither 8 bit TIFF values down from 16 bit\n");
 	fprintf(stderr," -Q nbits        Quantize test values to fit in nbits\n");
 	fprintf(stderr," -R rsnum        Use given random start number\n");
 	fprintf(stderr," -K file.cal     Apply printer calibration to patch values and include in .ti2\n");
@@ -2877,6 +2880,7 @@ char *argv[];
 	depth2d tiffdpth = bpc8_2d;	/* TIFF pixel depth */
 	double tiffres = 100.0;	/* TIFF resolution in DPI */
 	int ncha = 0;			/* flag, use nchannel alpha */
+	int tiffdith = 0;		/* flag, use TIFF 8 bit dithering */
 	int tiffcomp = 1;		/* flag, use TIFF compression */
 	int spacer = -1;		/* -1 = default for instrument */
 							/* 0 = forse no spacer, 1 = Force B&W spacers */
@@ -3106,6 +3110,10 @@ char *argv[];
 			else if (argv[fa][1] == 'N') {
 				ncha = 1;
 			}
+			/* use 16->8 bit dithering for 8 bit TIFF  */
+			else if (argv[fa][1] == 'D') {
+				tiffdith = 1;
+			}
 			/* Don't use TIFF compression */
 			else if (argv[fa][1] == 'C') {
 				tiffcomp = 0;
@@ -3230,7 +3238,7 @@ char *argv[];
 
 	/* Set default qantization for known output */
 	if (qbits == 0 && oft == 2) { 
-		if (tiffdpth == bpc16_2d)
+		if (tiffdpth == bpc16_2d || tiffdith != 0)
 			qbits = 16;
 		else if (tiffdpth == bpc8_2d)
 			qbits = 8;
@@ -3566,8 +3574,8 @@ char *argv[];
 	generate_file(itype, psname, cols, npat, applycal ? cal : NULL, label,
 	            pap != NULL ? pap->w : cwidth, pap != NULL ? pap->h : cheight,
 	            marg, nosubmarg, nollimit, nolpcbord, rand, rstart, saix, paix,	ixord,
-	            pscale, sscale, hflag, verb, scanc, oft, tiffdpth, tiffres, ncha, tiffcomp,
-	            spacer, nmask, pgreyt, pcol, wp,
+	            pscale, sscale, hflag, verb, scanc, oft, tiffdpth, tiffres, ncha, tiffdith,
+	            tiffcomp, spacer, nmask, pgreyt, pcol, wp,
 	            &sip, &pis, &plen, &glen, &tlen, &nppat);
 
 	if (itype == instDTP20

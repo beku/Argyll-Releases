@@ -55,6 +55,8 @@ struct _xcal {
 	/* Return -1.0 if the inversion fails */
 	double (*inv_interp_ch) (struct _xcal *p, int ch, double in);
 
+	int noramdac;			/* Set to nz if there was no VideoLUT access */
+
   /* Private: */
 	icProfileClassSignature devclass;	/* Type of device */
 	inkmask devmask;					/* ICX ink mask of device space */

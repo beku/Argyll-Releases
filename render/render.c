@@ -27,6 +27,7 @@
 #include "numlib.h"
 #include "tiffio.h"
 #include "render.h"
+#include "thscreen.h"
 
 /* ------------------------------------------------------------- */
 /* Utilities */
@@ -156,6 +157,8 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 	uint16 inkset = 0xffff;
 	char *inknames = NULL;
 	tdata_t *outbuf;
+	unsigned char *tempbuf = NULL;		/* 16 bit buffer for dithering */
+	thscreens *screen = NULL;			/* dithering object */
 	prim2d *th, **pthp;
 	prim2d **xlist, **ylist;	/* X, Y sorted start lists */
 	int xli, yli;				/* Indexes into X, Y list */
@@ -269,6 +272,23 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 
 	/* Allocate one TIFF line buffer */
 	outbuf = _TIFFmalloc(TIFFScanlineSize(wh));
+
+	if (s->dpth == bpc8_2d && s->dither) {
+#ifdef NEVER		// For testing by making screen visible
+# define LEVELS 16
+		int i, olevs[LEVELS];
+		for (i = 0; i < LEVELS; i++)
+			olevs[i] = (int)(i/(LEVELS-1.0) * 255.0 + 0.5);
+		if ((screen = new_thscreens(0, s->ncc, 1.0, 79, scie_16, 8, LEVELS, olevs,
+		                           scoo_l, 0.1, NULL, NULL)) == NULL)
+#else
+		if ((screen = new_thscreens(0, s->ncc, 1.0, 79, scie_16, 8, 256, NULL,
+		                           scoo_l, 0.1, NULL, NULL)) == NULL)
+#endif
+			return 1;
+		if ((tempbuf = malloc(s->pw * s->ncc * 2)) == NULL)
+			return 1;
+	}
 
 	/* To accelerate rendering, we keep sorted Y and X lists, */
 	/* and Y and X active linked lists derived from them. */
@@ -437,14 +457,26 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 
 				/* Translate from render value to output pixel value */
 				if (s->dpth == bpc8_2d) {
-					unsigned char *p = ((unsigned char *)outbuf) + x * s->ncc;
-					if (s->csp == lab_2d) {
-						cvt_Lab_to_CIELAB8(cc, cc);
-						for (j = 0; j < s->ncc; j++)
-							p[j] = (int)(cc[j] + 0.5);
+					if (s->dither) {
+						unsigned short *p = ((unsigned short *)tempbuf) + x * s->ncc;
+						if (s->csp == lab_2d) {
+							cvt_Lab_to_CIELAB16(cc, cc);
+							for (j = 0; j < s->ncc; j++)
+								p[j] = (int)(cc[j] + 0.5);
+						} else {
+							for (j = 0; j < s->ncc; j++)
+								p[j] = (int)(65535.0 * cc[j] + 0.5);
+						}
 					} else {
-						for (j = 0; j < s->ncc; j++)
-							p[j] = (int)(255.0 * cc[j] + 0.5);
+						unsigned char *p = ((unsigned char *)outbuf) + x * s->ncc;
+						if (s->csp == lab_2d) {
+							cvt_Lab_to_CIELAB8(cc, cc);
+							for (j = 0; j < s->ncc; j++)
+								p[j] = (int)(cc[j] + 0.5);
+						} else {
+							for (j = 0; j < s->ncc; j++)
+								p[j] = (int)(255.0 * cc[j] + 0.5);
+						}
 					}
 				} else {
 					unsigned short *p = ((unsigned short *)outbuf) + x * s->ncc;
@@ -461,6 +493,10 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 		}
 
 		if (y >= 0) {
+			if (s->dpth == bpc8_2d && s->dither)
+				screen->screen(screen, s->pw, 1, 0, y, tempbuf, s->pw * s->ncc * 2,
+				                       (unsigned char *)outbuf, s->pw * s->ncc);
+
 			if (TIFFWriteScanline(wh, outbuf, y, 0) < 0)
 				error ("Failed to write TIFF file '%s' line %d",filename,y);
 		}
@@ -479,6 +515,10 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 	free(_pixv0);
 	free(_pixv1);
 
+	if (tempbuf != NULL)
+		free(tempbuf);
+	if (screen != NULL)
+		screen->del(screen);
 	_TIFFfree(outbuf);
 	TIFFClose(wh);		/* Close Output file */
 
@@ -489,14 +529,15 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 
 /* Constructor */
 render2d *new_render2d(
-double w,
-double h,
-double ma[4],	/* Margines, left, right, top, bottom, NULL for zero */
-double hres,
-double vres,
-colort2d csp,
+double w,		/* width in mm */
+double h,		/* height in mm */
+double ma[4],	/* Margines, left, right, top, bottom, NULL for zero in mm */
+double hres,	/* horizontal resolution in pixels/mm */
+double vres,	/* horizontal resolution in pixels/mm */
+colort2d csp,	/* Color type */
 int nd,			/* Number of channels if c = ncol */
-depth2d dpth
+depth2d dpth,	/* Pixel depth */
+int dither		/* Dither flag */
 ) {
 	render2d *s;
 
@@ -522,6 +563,7 @@ depth2d dpth
 	s->vres = vres;
 	s->csp = csp;
 	s->dpth = dpth;
+	s->dither = dither;
 
 	s->del = render2d_del;
 	s->set_defc = render2d_set_defc;

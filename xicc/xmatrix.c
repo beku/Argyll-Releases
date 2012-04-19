@@ -880,7 +880,7 @@ double scale		/* Scale device values */
 							printf("%d harmonics = %f\n",j, os->v[11 + j]);
 					} else {
 						if (shape0gam && j == 0)
-							printf("gamma = %f %f %f\n",j, os->v[15 + j * 3],
+							printf("%d gamma = %f %f %f\n",j, os->v[15 + j * 3],
 							                    os->v[16 + j * 3], os->v[17 + j * 3]);
 						else
 							printf("%d harmonics = %f %f %f\n",j, os->v[15 + j * 3],

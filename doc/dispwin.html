@@ -38,6 +38,7 @@
 Verbose
 
 
+
         mode<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;</span><a style="font-family: monospace;"
@@ -54,6 +55,7 @@ and
 optionally
 
 
+
         choose a different display m for Video LUT access.<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#d">-d n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -61,19 +63,25 @@ optionally
 X11]
 
 
-        Choose the display from the following list (default 1)<br
-          style="font-family: monospace;">
-      </span></font><font size="-1"><span style="font-family:
-        monospace;"></span><span style="font-family: monospace;">&nbsp;<a
-          href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+        Choose the display from the following list (default 1)<br>
+      </span></font><span style="font-family: monospace;">&nbsp;<a
+        href="#dweb">-dweb[:port]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+      Display via a web server at port (default 8080)</span><br
+      style="font-family: monospace;">
+    <font size="-1"><span style="font-family: monospace;"></span><span
+        style="font-family: monospace;">&nbsp;<a href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Position
 test
+
 
 
         window and scale it</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ho,vi:
 0.0
+
 
 
         = left/top, 0.5 = center, 1.0 = right/bottom etc.</span><br
@@ -83,12 +91,14 @@ ss:
 0.5
 
 
+
         = half, 1.0 = normal, 2.0 = double etc.<br>
         &nbsp;</span></font><font size="-1"><span style="font-family:
         monospace;"><a href="#F">-F</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Fill
 whole
+
 
 
         screen with black background</span></font><br
@@ -113,6 +123,7 @@ Test
 just
 
 
+
         video LUT loading &amp; Beeps<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#n">-n</a>
@@ -121,10 +132,12 @@ Test
 native
 
 
+
         display values (rather than through Video LUT)<br>
         &nbsp;<a href="#s">-s <span style="font-style: italic;">filename.cal</span></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Save
 the
+
 
 
         currently loaded Video LUT to 'filename'<br>
@@ -133,6 +146,7 @@ the
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Load
 a
+
 
 
         linear display calibration (clear calibration)</span></font><font
@@ -144,10 +158,12 @@ Verify
 that
 
 
+
         calfile/profile cal. is currently loaded in LUT<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#I">-I</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
       </span></font><font size="-1"><span style="font-family:
@@ -157,6 +173,7 @@ that
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
       </span></font><font size="-1"><span style="font-family:
         monospace;">Un-install profile for display<br>
         &nbsp;<a href="#S">-S d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -164,10 +181,12 @@ Specify
 the
 
 
+
         install/uninstall scope for OS X [nlu] or Vista [lu]<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 d
 is
+
 
 
         one of: n = network, l = local system, u = user (default)<br>
@@ -177,11 +196,13 @@ is
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
       </span></font><font size="-1"><span style="font-family:
         monospace;">Load installed profiles cal. into Video LUT<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#E">-E</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
         [<span style="font-weight: bold;">X11 only</span>] Run in daemon
@@ -191,6 +212,7 @@ is
         href="#D">-D [level]</a><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Print
 debug
+
 
 
         diagnostics to stderr</span></font><font size="-1"><span
@@ -203,6 +225,7 @@ debug
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Load
 display
+
 
 
         calibration (<a href="cal_format.html">.cal</a> or .icm) into
@@ -238,26 +261,30 @@ display
     the <span style="font-weight: bold;">-d</span> parameter will
     override the screen specified by the $DISPLAY or <span
       style="font-weight: bold;">-display</span> parameter.<br>
+    <span style="font-weight: bold;"></span><br>
+    <span style="font-weight: bold;">Note</span> that if VideoLUTs for a
+    display are not accessible (i.e. no hardware calibration
+    capability), <span style="font-weight: bold;">dispwin</span> will
+    will issue a warning or fail when it attempts to access them.<br>
     <br>
-    <span style="font-weight: bold;">Note</span> that if <span
-      style="font-weight: bold;"></span> the VideoLUTs for a display are
-    not accessible, <span style="font-weight: bold;">dispwin</span>
-    will fail when it attempts to access them. This could be because you
-    are trying to access a remote display, and the remote display
-    doesn't support the XF86VidMode extension, or perhaps you are
-    running multiple monitors using NVidia TwinView, or MergedFB, and
-    trying to access anything other than the primary monitor. TwinView
-    and MergedFB don't properly support the XF86VidMode extension for
-    multiple displays. Xinerama does properly support calibration of
-    multiple displays. See also below, on how to select a different
-    display for VideoLUT access. Also note that dispwin will fail if the
-    Visual depth doesn't match the VideoLUT depth. Typically the
-    VideoLUTs have 256 entries per color component, so the Visual
-    generally needs to be 24 bits, 8 bits per color component.<br>
+    On X11 the inability to access VideoLUTs could be because you are
+    trying to access a remote display, and the remote display doesn't
+    support the XF86VidMode extension, or perhaps you are running
+    multiple monitors using NVidia TwinView, or MergedFB, and trying to
+    access anything other than the primary monitor. TwinView and
+    MergedFB don't properly support the XF86VidMode extension for
+    multiple displays. You can use <a href="dispwin.html#r">dispwin -r</a>
+    to test whether the VideoLUTs are accessible for a particular
+    display. See also below, on how to select a different display for
+    VideoLUT access. Also note that dispcal will fail if the Visual
+    depth doesn't match the VideoLUT depth. Typically the VideoLUTs have
+    256 entries per color component, so the Visual generally needs to be
+    24 bits, 8 bits per color component.<br>
     <br>
     <a name="dnm"></a><span style="font-weight: bold;">-d n[,m]</span>Because
 of
 the
+
 
 
     difficulty cause by TwinView and MergedFB in X11 based systems, you
@@ -270,6 +297,28 @@ the
     You may be able to calibrate one screen, and then share the
     calibration with another screen. Profiling can be done independently
     to calibration.<br>
+    <br>
+    <a name="dweb"></a><span style="font-weight: bold;">-dweb</span> or
+    <span style="font-weight: bold;">-dweb:port</span> starts a
+    standalone web server on your machine, which then allows a local or
+    remote web browser to display the the color test patches. By default
+    port <span style="font-weight: bold;">8080</span> is used, but this
+    can be overridden by appending a <span style="font-weight: bold;">:</span>
+    and the port number i.e. <span style="font-weight: bold;">-dweb:8001</span>.
+    The URL will be <span style="font-weight: bold;">http://</span>
+    then name of the machine or its I.P. address followed by a colon and
+    the port number - e.g something like <span style="font-weight:
+      bold;">http://192.168.0.1:8080</span>. If you use the verbose
+    option (<span style="font-weight: bold;">-v</span>) then a likely
+    URL will be printed once the server is started, or you could run <span
+      style="font-weight: bold;">ipconfig</span> (MSWin) or <span
+      style="font-weight: bold;">/sbin/ifconfig</span> (Linux or OS X)
+    and identify an internet address for your machine that way.<br>
+    <br>
+    Note that if you use this method of accessing a display, that there
+    is no access to the display Video Lookup tables, and that any
+    operation that depends on accessing the VideoLUTs will either
+    generate a warning or fail.<br>
     <br>
     <a name="P"></a> The <span style="font-weight: bold;">-P</span>
     parameter allows you to position and size the test patch window. By

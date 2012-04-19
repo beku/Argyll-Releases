@@ -1,11 +1,11 @@
 ICC profile I/O library (icclib), README file
 ---------------------------------------------
 
-This version is part of Argyll V 1.10 
+This version is part of Argyll V 1.40 
 
 -------------------------------------------
 
-Date 24 April 2009, Version 2.11
+Date 20 April 2012, Version 2.13
 
 This distribution contains source code which implements the reading and
 writing of color profile files that conform to the International Color
@@ -70,11 +70,11 @@ In summary this library provides:
      system file and memory sub-systems.
    * Loads Tag Types on demand to conserve memory space.
 
-Changes from V2.03
+Changes from V2.11
 
-Many minor additions have been made to support ArgyllCMS, and
-protection has been added against malicious file integer
-overflow attacks.
+Many changes have been made to support ArgyllCMS.
+A double memory free bug when iccdump'ing a profile
+that has duplicate tags has been fixed.
 
 
 Package contents:

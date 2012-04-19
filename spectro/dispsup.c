@@ -41,8 +41,10 @@
 #include "conv.h"
 #include "dispwin.h"
 #include "dispsup.h"
+#include "webwin.h"
 
 #undef DEBUG
+#undef SIMPLE_MODEL		/* Make fake device well behaved */
 
 #define dbgo stderr
 
@@ -57,12 +59,17 @@
 //#define DRIFT_IPERIOD	6	/* Test values */
 //#define DRIFT_EPERIOD	3
 
-#define FAKE_NOISE 0.01		/* Add noise to _fake_ devices XYZ */
-#define FAKE_BITS 9			/* Number of bits of significance of fake device */
+#ifdef SIMPLE_MODEL
+# undef FAKE_NOISE		/* Add noise to _fake_ devices XYZ */
+# undef FAKE_BITS 			/* Number of bits of significance of fake device */
+#else
+# define FAKE_NOISE 0.01		/* Add noise to _fake_ devices XYZ */
+# define FAKE_BITS 9			/* Number of bits of significance of fake device */
+#endif
 
 
 /* -------------------------------------------------------- */
-/* A defauult callback that can be provided as an argument to */
+/* A default callback that can be provided as an argument to */
 /* inst_handle_calibrate() to handle the display part of a */
 /* calibration callback. */
 /* Call this again with calc = inst_calc_none to cleanup afterwards. */
@@ -86,11 +93,20 @@ inst_code setup_display_calibrate(
 		case inst_calc_disp_white:
 		case inst_calc_proj_white:
 			if (dwi->dw == NULL) {
-				if ((dwi->_dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
-				                      dwi->ho, dwi->vo, 0, 0, dwi->blackbg,
-				                      dwi->override, p->debug)) == NULL) {
-					DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
-					return inst_other_error; 
+				if (dwi->webdisp != 0) {
+					if ((dwi->_dw = new_webwin(dwi->webdisp, dwi->patsize, dwi->patsize,
+					                      dwi->ho, dwi->vo, 0, dwi->blackbg,
+					                      p->verb, p->debug)) == NULL) {
+						DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
+						return inst_other_error; 
+					}
+				} else {
+					if ((dwi->_dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
+					                      dwi->ho, dwi->vo, 0, 0, NULL, dwi->blackbg,
+					                      dwi->override, p->debug)) == NULL) {
+						DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
+						return inst_other_error; 
+					}
 				}
 				printf("Frequency calibration, Place instrument on test window.\n");
 				printf(" Hit any key to continue,\n"); 
@@ -109,11 +125,20 @@ inst_code setup_display_calibrate(
 		case inst_calc_proj_grey_darker: 
 		case inst_calc_proj_grey_ligher:
 			if (dwi->dw == NULL) {
-				if ((dwi->_dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
-				                      dwi->ho, dwi->vo, 0, 0, dwi->blackbg,
-				                      dwi->override, p->debug)) == NULL) {
-					DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
-					return inst_other_error; 
+				if (dwi->webdisp != 0) {
+					if ((dwi->_dw = new_webwin(dwi->webdisp, dwi->patsize, dwi->patsize,
+					                      dwi->ho, dwi->vo, 0, dwi->blackbg,
+					                      p->verb, p->debug)) == NULL) {
+						DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
+						return inst_other_error; 
+					}
+				} else {
+					if ((dwi->_dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
+					                      dwi->ho, dwi->vo, 0, 0, NULL, dwi->blackbg,
+					                      dwi->override, p->debug)) == NULL) {
+						DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
+						return inst_other_error; 
+					}
 				}
 				printf("Cell ratio calibration, Place instrument on test window.\n");
 				printf(" Hit any key to continue,\n"); 
@@ -166,6 +191,7 @@ int proj,				/* NZ for projector mode, falls back to display mode */
 int adaptive,			/* NZ for adaptive mode */
 int noautocal,				/* NZ to disable auto instrument calibration */
 disppath *disp,			/* display to calibrate. */
+int webdisp,			/* If nz, port number for web display */
 int blackbg,			/* NZ if whole screen should be filled with black */
 int override,			/* Override_redirect on X11 */
 double patsize,			/* Size of dispwin */
@@ -185,6 +211,7 @@ int debug				/* Debug flag */
 	inst_mode mode = 0;
 
 	memset((void *)&dwi, 0, sizeof(disp_win_info));
+	dwi.webdisp = webdisp; 
 	dwi.disp = disp; 
 	dwi.blackbg = blackbg;
 	dwi.override = override;
@@ -1318,6 +1345,10 @@ static int disprd_fake_read(disprd *p,
 	blue.X = br * 0.15;
 	blue.Y = br * 0.10;
 	blue.Z = br * 0.97;
+#ifdef SIMPLE_MODEL
+	doff[0] = doff[1] = doff[2] = 0.0; /* Input offset */
+	ooff[0] = ooff[1] = ooff[2] = 0.0; /* Output offset */
+#else
 	/* Input offset, equivalent to RGB offsets having various values */
 	doff[0] = 0.10;
 	doff[1] = 0.06;
@@ -1326,6 +1357,7 @@ static int disprd_fake_read(disprd *p,
 	ooff[0] = 0.03;
 	ooff[1] = 0.04;
 	ooff[2] = 0.09;
+#endif
 
 	if (icmRGBprim2matrix(white, red, green, blue, mat))
 		error("Fake read unexpectedly got singular matrix\n");
@@ -1348,6 +1380,7 @@ static int disprd_fake_read(disprd *p,
 		crgb[1] = rgb[1] = cols[patch].g;
 		crgb[2] = rgb[2] = cols[patch].b;
 
+//printf("~1 patch %d RGB %f %f %f\n",patch,rgb[0], rgb[1], rgb[2]);
 		/* If we have a calibration, apply it to the color */
 		if (p->cal[0][0] >= 0.0) {
 			double inputEnt_1 = (double)(p->ncal-1);
@@ -1368,6 +1401,7 @@ static int disprd_fake_read(disprd *p,
 				val = p->cal[j][ix];
 				crgb[j] = val + w * (p->cal[j][ix+1] - val);
 			}
+//printf("~1 patch %d cal RGB %f %f %f\n",patch, crgb[0], crgb[1], crgb[2]);
 		}
 
 		/* If we have a test window, display the patch color */
@@ -1435,6 +1469,7 @@ static int disprd_fake_read(disprd *p,
 			}
 		}
 #endif
+//printf("~1 patch %d XYZ %f %f %f\n",patch,cols[patch].aXYZ[0], cols[patch].aXYZ[1], cols[patch].aXYZ[2]);
 		cols[patch].aXYZ_v = 1;
 		cols[patch].XYZ_v = 0;
 		cols[patch].sp.spec_n = 0;
@@ -1643,6 +1678,8 @@ char *disprd_err(int en) {
 			return "Instrument has no CCMX capability";
 		case 11:
 			return "Instrument has no CCSS capability";
+		case 12:
+			return "Internal: trying to set calibration when not using calibration";
 	}
 	return "Unknown";
 }
@@ -1857,6 +1894,7 @@ static int config_inst_displ(disprd *p) {
 /* 9 = spectral conversion failed */
 /* 10 = no ccmx support */
 /* 11 = no ccss support */
+/* 12 = cal to set but native != 0 */
 /* Use disprd_err() to interpret *errc */
 disprd *new_disprd(
 int *errc,          /* Error code. May be NULL */
@@ -1868,14 +1906,16 @@ int adaptive,		/* NZ for adaptive mode */
 int noautocal,			/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */
 int native,			/* 0 = use current current or given calibration curve */
-					/* 1 = set native linear output and use ramdac high prec'n */
-					/* 2 = set native linear output */
+					/* 1 = use native linear out & high precision */
+int *noramdac,		/* Return nz if no ramdac access. native is set to 0 */
 double cal[3][MAX_CAL_ENT],	/* Calibration set/return (cal[0][0] < 0.0 or NULL if not used) */
+					/* native must be 0 if cal is set */
 int ncal,			/* Number of cal[] entries */
 int softcal,		/* NZ if apply cal to readings rather than hardware */
 disppath *disp,		/* Display to calibrate. NULL if fake and no dispwin */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
+int webdisp,        /* If nz, port number for web color display */
 char *ccallout,		/* Shell callout on set color */
 char *mcallout,		/* Shell callout on measure color (forced fake) */
 double patsize,		/* Size of dispwin */
@@ -1899,6 +1939,11 @@ char *fake_name		/* Name of profile to use as a fake device */
 	inst_code rv;
 
 	if (errc != NULL) *errc = 0;		/* default return code = no error */
+
+	if (cal != NULL && cal[0][0] >= 0.0 && native != 0) {
+		if (errc != NULL) *errc = 12;
+			return NULL;
+	}
 
 	/* Allocate a disprd */
 	if ((p = (disprd *)calloc(sizeof(disprd), 1)) == NULL) {
@@ -1955,6 +2000,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 		p->softcal = 0;
 	}
 
+	/* If non-real instrument */
 	if (comport == -99) {
 		p->fake = 1;
 
@@ -2052,13 +2098,26 @@ char *fake_name		/* Name of profile to use as a fake device */
 		}
 	}
 
-	/* Open display window for positioning (no blackbg) */
-	if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, native, 0,
-	                                                        override, debug)) == NULL) {
-		DBG((dbgo,"new_disprd failed because new_dispwin failed\n"))
-		p->del(p);
-		if (errc != NULL) *errc = 3;
-		return NULL;
+	if (webdisp != 0) {
+		/* Open web display */
+		if ((p->dw = new_webwin(webdisp, patsize, patsize, ho, vo, 0, 0,
+		                                                        verb, debug)) == NULL) {
+			DBG((dbgo,"new_disprd failed because new_webwin failed\n"))
+			p->del(p);
+			if (errc != NULL) *errc = 3;
+			return NULL;
+		}
+		if (noramdac != NULL)
+			*noramdac = 1;
+	} else {
+		/* Open display window for positioning (no blackbg) */
+		if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, native, noramdac, 0,
+		                                                        override, debug)) == NULL) {
+			DBG((dbgo,"new_disprd failed because new_dispwin failed\n"))
+			p->del(p);
+			if (errc != NULL) *errc = 3;
+			return NULL;
+		}
 	}
 
 	if (p->it != NULL) {
@@ -2101,20 +2160,22 @@ char *fake_name		/* Name of profile to use as a fake device */
 	}
 	printf("\n");
 
-	/* Close the positioning window */
-	if (p->dw != NULL) {
-		if (p->or != NULL)
-			p->dw->set_ramdac(p->dw,p->or, 0);
-		p->dw->del(p->dw);
-	}
-
-	/* Open display window again for measurement */
-	if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, native, blackbg,
-	                                                        override, debug)) == NULL) {
-		DBG((dbgo,"new_disprd failed new_dispwin failed\n"))
-		p->del(p);
-		if (errc != NULL) *errc = 3;
-		return NULL;
+	if (webdisp == 0) {
+		/* Close the positioning window */
+		if (p->dw != NULL) {
+			if (p->or != NULL)
+				p->dw->set_ramdac(p->dw,p->or, 0);
+			p->dw->del(p->dw);
+		}
+	
+		/* Open display window again for measurement */
+		if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, native, noramdac, blackbg,
+		                                                        override, debug)) == NULL) {
+			DBG((dbgo,"new_disprd failed new_dispwin failed\n"))
+			p->del(p);
+			if (errc != NULL) *errc = 3;
+			return NULL;
+		}
 	}
 
 	/* Set color change callout */
@@ -2122,50 +2183,57 @@ char *fake_name		/* Name of profile to use as a fake device */
 		p->dw->set_callout(p->dw, ccallout);
 	}
 
-	/* Save current RAMDAC so that we can restore it */
-	if (!softcal && (p->or = p->dw->get_ramdac(p->dw)) == NULL) {
-		warning("Unable to read or set display RAMDAC");
-	}
+	/* If we have a calibration to set */
+	/* (This is only typically the case for disread) */
+	if (!p->softcal && cal != NULL && cal[0][0] >= 0.0) {
 
-	/* Set the given RAMDAC so we can characterise through it */
-	if (!softcal && cal != NULL && cal[0][0] >= 0.0 && p->or != NULL) {
-		ramdac *r;
-		int j, i;
-		
-		r = p->or->clone(p->or);
-
-		/* Set the ramdac contents. */
-		/* We linearly interpolate from cal[ncal] to RAMDAC[nent] resolution */
-		for (i = 0; i < r->nent; i++) {
-			double val, w;
-			unsigned int ix;
-
-			val = (ncal-1.0) * i/(r->nent-1.0);
-			ix = (unsigned int)floor(val);		/* Coordinate */
-			if (ix > (ncal-2))
-				ix = (ncal-2);
-			w = val - (double)ix;		/* weight */
-			for (j = 0; j < 3; j++) {
-				val = cal[j][ix];
-				r->v[j][i] = val + w * (cal[j][ix+1] - val);
-			}
+		/* Save current RAMDAC so that we can restore it */
+		p->or = NULL;
+		if ((p->or = p->dw->get_ramdac(p->dw)) == NULL) {
+			warning("Unable to read or set display RAMDAC - switching to softcal");
+			p->softcal = softcal = 1;
 		}
-		if (p->dw->set_ramdac(p->dw, r, 0)) {
-			DBG((dbgo,"new_disprd failed becayse set_ramdac failed\n"))
-			if (p->verb) {
-				fprintf(p->df,"Failed to set RAMDAC to desired calibration.\n");
-				fprintf(p->df,"Perhaps the operating system is being fussy ?\n");
+
+		/* Set the given RAMDAC so we can characterise through it */
+		if (p->or != NULL) {
+			ramdac *r;
+			int j, i;
+			
+			r = p->or->clone(p->or);
+
+			/* Set the ramdac contents. */
+			/* We linearly interpolate from cal[ncal] to RAMDAC[nent] resolution */
+			for (i = 0; i < r->nent; i++) {
+				double val, w;
+				unsigned int ix;
+
+				val = (ncal-1.0) * i/(r->nent-1.0);
+				ix = (unsigned int)floor(val);		/* Coordinate */
+				if (ix > (ncal-2))
+					ix = (ncal-2);
+				w = val - (double)ix;		/* weight */
+				for (j = 0; j < 3; j++) {
+					val = cal[j][ix];
+					r->v[j][i] = val + w * (cal[j][ix+1] - val);
+				}
+			}
+			if (p->dw->set_ramdac(p->dw, r, 0)) {
+				DBG((dbgo,"new_disprd failed becayse set_ramdac failed\n"))
+				if (p->verb) {
+					fprintf(p->df,"Failed to set RAMDAC to desired calibration.\n");
+					fprintf(p->df,"Perhaps the operating system is being fussy ?\n");
+				}
+				r->del(r);
+				p->del(p);
+				if (errc != NULL) *errc = 4;
+				return NULL;
 			}
 			r->del(r);
-			p->del(p);
-			if (errc != NULL) *errc = 4;
-			return NULL;
 		}
-		r->del(r);
 	}
 
 	/* Return the ramdac being used */
-	if (!softcal && p->or != NULL && cal != NULL) {
+	if (p->or != NULL && cal != NULL) {
 		ramdac *r;
 		int j, i;
 		

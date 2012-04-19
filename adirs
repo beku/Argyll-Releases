@@ -1,6 +1,5 @@
 .
 numlib
-tiff
 libusb
 libusbw
 libusb1
@@ -25,5 +24,7 @@ lib
 h
 ref
 doc
+tiff
+jpg
 icc4
 icc4/doc

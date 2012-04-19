@@ -8,7 +8,8 @@ if $(UNIX) {
 	DEFINES += "unix" ;			# libtiff assumes this
 	# Genfile actually creates libtiff/tif_config.h and libtiff/tiffconf.h:
 	GenFileNND libtiff/tif_config.h :
-	          "(cd $(SUBDIR); chmod +x configure ; ./configure --disable-jpeg --disable-old-jpeg --disable-pixarlog --disable-zlib --disable-jbig)" : configure ;
+	          "(cd $(SUBDIR); chmod +x configure ; ./configure --disable-old-jpeg --disable-pixarlog --disable-zlib --disable-jbig)" : configure ;
+#	          "(cd $(SUBDIR); chmod +x configure ; ./configure --disable-jpeg --disable-old-jpeg --disable-pixarlog --disable-zlib --disable-jbig)" : configure ;
 	# Workaround Jam problem of two products from one action:
 	FakeFile libtiff/tiffconf.h : libtiff/tif_config.h ;
 }
@@ -36,7 +37,8 @@ LIBSRCS = tif_fax3.c tif_aux.c tif_close.c tif_codec.c tif_fax3sm.c tif_predict.
         tif_dumpmode.c tif_error.c tif_getimage.c tif_flush.c tif_luv.c
         tif_lzw.c tif_next.c tif_open.c tif_packbits.c tif_print.c 
         tif_read.c tif_swab.c tif_strip.c tif_thunder.c tif_tile.c 
-        tif_version.c tif_warning.c tif_write.c tif_extension.c ;
+        tif_version.c tif_warning.c tif_write.c tif_extension.c
+        tif_jpeg.c tif_ojpeg.c ;
 
 if $(UNIX) {
 	LIBSRCS += tif_unix.c ;
@@ -45,11 +47,9 @@ if $(UNIX) {
 }
 
 # Optional codecs not included
-# tif_jpeg.c
-# tif_ojpeg.c
 # tif_zip.c
 # tif_pixarlog.c
-Library libtiff.lib : [ CatPaths libtiff : $(LIBSRCS) ] : : : libtiff ;
+Library libtiff.lib : [ CatPaths libtiff : $(LIBSRCS) ] : : : $(JPEGINC) libtiff ;
 
 # copy header file to lib directory
 File tiffconf.h    : libtiff/tiffconf.h ;

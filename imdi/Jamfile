@@ -41,7 +41,7 @@ LINKLIBS = $(LINKLIBS) libimdi ../icc/libicc ../numlib/libnum ;
 Main itest : itest.c refi.c : : : ../rspl : : ../rspl/librspl ../plot/libvrml ;
 
 # TIFF file color correction utlity
-Main cctiff : cctiff.c : : : ../xicc $(TIFFINC) : : ../xicc/libxicc ../rspl/librspl ../cgats/libcgats ../plot/libvrml $(TIFFLIB) ;
+Main cctiff : cctiff.c : : : ../xicc $(TIFFINC) $(JPEGINC) : : ../xicc/libxicc ../rspl/librspl ../cgats/libcgats ../plot/libvrml $(TIFFLIB) $(JPEGLIB) ;
 
 # Old TIFF file color correction utlity
 #Main cctiffo : cctiffo.c : : : $(TIFFINC) : : $(TIFFLIB) ;
@@ -50,7 +50,7 @@ Main cctiff : cctiff.c : : : ../xicc $(TIFFINC) : : ../xicc/libxicc ../rspl/libr
 #Main greytiff : greytiff.c ;
 Main greytiff : greytiff.c : : : ../spectro ../xicc ../gamut ../rspl ../cgats $(TIFFINC)
               : : ../xicc/libxicc ../gamut/libgamut ../rspl/librspl ../cgats/libcgats
-                  ../plot/libplot ../plot/libvrml $(TIFFLIB) ;
+                  ../plot/libplot ../plot/libvrml $(TIFFLIB) $(JPEGLIB) ;
 
 # ssort generation code
 #Main ssort : ssort.c ;
@@ -64,7 +64,7 @@ if $(BUILD_JUNK) {
 
 	Main f2test : f2test.c : : : ../spectro ../xicc ../gamut ../rspl ../cgats $(TIFFINC)
               : : ../xicc/libxicc ../gamut/libgamut ../rspl/librspl ../cgats/libcgats
-                  ../plot/libplot ../plot/libvrml $(TIFFLIB) ;
+                  ../plot/libplot ../plot/libvrml $(TIFFLIB) $(JPEGLIB) ;
 
 
 	CCFLAGS 	+= -msse3 ;

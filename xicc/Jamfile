@@ -17,10 +17,10 @@ InstallFile $(DESTDIR)$(PREFIX)/bin : $(Samples) ;
 #InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
 
 HDRS = ../h ../icc ../rspl ../cgats ../numlib ../gamut ../spectro ../profile
-       ../plot $(TIFFINC) $(LibWinH) ;
+       ../plot $(TIFFINC) $(JPEGINC) $(LibWinH) ;
 
 # XICC library
-Library libxicc :  xicc.c xlutfix.c xspect.c xsep.c xcolorants.c xutils.c xdevlin.c
+Library libxicc :  xicc.c xlutfix.c xspect.c xsep.c xcolorants.c xutils.c iccjpeg.c xdevlin.c
         xcam.c cam97s3.c cam02.c mpp.c ccmx.c ccss.c xfit.c xdgb.c moncurve.c xcal.c ;
 
 # colorant library. Use instead of libxicc
@@ -29,7 +29,8 @@ LibraryFromObjects libxcolorants : xcolorants2 ;
 
 # standalone utilities library. Use instead of libxicc
 Object xutils2 : xutils.c ;
-LibraryFromObjects libxutils : xutils2 ;
+Object iccjpeg2 : iccjpeg.c ;
+LibraryFromObjects libxutils : xutils2 iccjpeg2 ;
 
 # Utilities / test programs
 
@@ -49,11 +50,11 @@ Main xicclu : xicclu.c ;
 Main iccgamut : iccgamut.c ;
 
 # tiff file gamut utility
-Main tiffgamut : tiffgamut.c : : : $(TIFFINC) : : $(TIFFLIB) ;
+Main tiffgamut : tiffgamut.c : : : $(TIFFINC) $(JPEGINC) : : $(TIFFLIB) $(JPEGLIB) ;
 
 # diagnostic utility
 if [ GLOB . : tiffgmts.c ]  {
-	Main tiffgmts : tiffgmts.c : : : $(TIFFINC) : : $(TIFFLIB) ../plot/libvrml ;
+	Main tiffgmts : tiffgmts.c : : : $(TIFFINC) $(JPEGINC) : : $(TIFFLIB) $(JPEGLIB) ../plot/libvrml ;
 }
 
 # Reverse profile fixer
@@ -63,10 +64,10 @@ Main revfix : revfix.c ;
 Main mpplu : mpplu.c ;
 
 # Embedded ICC profile extractor
-Main extracticc : extracticc.c : : : $(TIFFINC) : : $(TIFFLIB) ;
+Main extracticc : extracticc.c : : : $(TIFFINC) $(JPEGINC) : : $(TIFFLIB) $(JPEGLIB) ;
 
 # Text tag from ICC profile extracto
-Main extractttag : extractttag.c : : : $(TIFFINC) : : $(TIFFLIB) ;
+Main extractttag : extractttag.c : : : $(TIFFINC) $(JPEGINC) : : $(TIFFLIB) $(JPEGLIB) ;
 
 # xcolorant lookup test
 Main xcolorantslu : xcolorantslu.c ;
@@ -123,9 +124,9 @@ Main monctest : monctest.c ;
 #Home = ' d:\usr\graeme ' and PWD = ' /src/argyll/xicc '
 if $(HOME) = "d:\\usr\\graeme" && $(PWD) = "/src/argyll/xicc" {
 	#Create test TIFF file for cam02 conversion
-	Main cam02plot : cam02plot.c : : : $(TIFFINC) : : $(TIFFLIB) ;
-	Main cam02logplot : cam02logplot.c : : : $(TIFFINC) : : $(TIFFLIB) ;
-	Main cam02delplot : cam02delplot.c : : : $(TIFFINC) : : $(TIFFLIB) ;
+	Main cam02plot : cam02plot.c : : : $(TIFFINC) $(JPEGINC) : : $(TIFFLIB) $(JPEGLIB) ;
+	Main cam02logplot : cam02logplot.c : : : $(TIFFINC) $(JPEGINC) : : $(TIFFLIB) $(JPEGLIB) ;
+	Main cam02delplot : cam02delplot.c : : : $(TIFFINC) $(JPEGINC) : : $(TIFFLIB) $(JPEGLIB) ;
 	Main cam02vecplot : cam02vecplot.c : : : : : ../plot/libvrml ;
 }
 

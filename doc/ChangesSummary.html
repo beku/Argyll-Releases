@@ -16,6 +16,56 @@
     <h1> Summary of Argyll CMS Changes since last release</h1>
     <h3>For a <span style="text-decoration: underline;">complete</span>
       and more detailed list of changes, please see the log.txt file.</h3>
+    <h1>[V1.3.7 -&gt; V1.4.0] 20th April 2012</h1>
+    <ul>
+      <li>Modified spectro/ccxxmake so that a colorimeter can be used as
+        a reference to make ccmx files if two .ti3 files are used. Added
+        ref/ccxx.ti1 as convenient way of creating ccmx .ti3 files.<br>
+      </li>
+      <li>Added dither/screening support for 8 bit output of render, and
+        then made it available in target/printtarg.<br>
+      </li>
+      <li>Added JPEG file support to imdi/cctiff, xicc/tiffgamut and
+        xicc/extracticc. ICC profiles embedded in JPEG files can now be
+        used anywhere a TIFF file with embeded ICC profile can be used
+        as a source of an ICC profile.<br>
+      </li>
+      <li>Fixed memory leaks in usbio.c, xdg_bds.c &amp; conv.c</li>
+      <li>Fixed double memory free bug in icc/icc.c when iccdump'ing a
+        profile that has a duplicate tag.</li>
+      <li>Changed license of xicc/ccmx.[ch] to GPL2.<br>
+      </li>
+      <li>Made display calibration and profile making deal with displays
+        without hardware calibration support (VideoLUT support) more
+        graceful. Added tutorial section covering this.<br>
+      </li>
+      <li>Added option to dispwin/dispcal/dispread/ccxxmake to redirect
+        the test patches to a web browser via a local web server. This
+        augments Argyll's existing local and remote display capability.<br>
+      </li>
+      <li>Fixed bug in spectro/i1d3.c which results in NAN if a low
+        level readings drops to zero at a particular time. Improved
+        refresh rate calibration accuracy. Fixed bugs in adaptive
+        measurement logic that caused a channel to be pre-measured when
+        it shouldn't. This seems to noticeably improve repeatability on
+        refresh displays.<br>
+      </li>
+      <li>Fixed bug in ucmm/jcnf where it was failing to locate the
+        correct profile for a display.<br>
+      </li>
+      <li>Fix bugs in ColorMunki Transmissive measurement mode
+        calibration.<br>
+      </li>
+    </ul>
+    <h1>[V1.3.6 -&gt; V1.3.7] 26th March 2012</h1>
+    <ul>
+      <li>Fix regression in Spyder support - ccmx files were not being
+        handled (bug introduced in 1.3.6).</li>
+      <li>Fix packaging problem - Spyder4 MSWin .inf file was missing.</li>
+      <li>Change dispwin so that it will install a profile when there is
+        no access to the display VideoLUT if the profile has no vcgt.<br>
+      </li>
+    </ul>
     <h1>[V1.3.5 -&gt; V1.3.6] 19th March 2012<br>
     </h1>
     <ul>
@@ -503,6 +553,9 @@
 
 
 
+
+
+
         </span>for systems with &gt; 3Gig Ram.</li>
       <li>Add support for the Eye-One Monitor spectrometer.</li>
       <li>Added -L option to <span style="font-weight: bold;">printtarg</span>
@@ -517,6 +570,9 @@
     Various bug fixes, the main ones being:<br>
     <ul>
       <li>Fixed some <span style="font-weight: bold;">colprof </span>performance
+
+
+
 
         and memory usage issues.</li>
       <li>Fixed issues with Eye-One Pro Rev B timeouts.</li>

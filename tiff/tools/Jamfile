@@ -5,7 +5,7 @@ PREF_LINKFLAGS	+= $(LINKDEBUGFLAG) ;
 
 HDRS = .. ../libtiff ;
 
-LINKLIBS = ../libtiff ../libport ;
+LINKLIBS = ../libtiff ../libport ../$(JPEGLIB) ;
 
 Main tiffcp : tiffcp.c ;
 

@@ -3292,7 +3292,7 @@ inst_capability spyd2_capabilities(inst *pp) {
 	rv = inst_emis_spot
 	   | inst_emis_disp
 	   | inst_colorimeter
-	   | inst_ccss
+	   | inst_ccmx
 	     ;
 
 	if (p->itype == instSpyder3

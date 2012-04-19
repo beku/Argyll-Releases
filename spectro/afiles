@@ -14,6 +14,10 @@ illumread.c
 ccxxmake.c
 dispsup.h
 dispsup.c
+webwin.h
+webwin.c
+mongoose.h
+mongoose.c
 insttypes.h
 insttypes.c
 insttypeinst.h
@@ -90,6 +94,7 @@ linear.sp
 SOtele.sp
 linear.cal
 strange.cal
+ccxx.ti1
 Makefile.SA
 Makefile.OSX
 Makefile.UNIX

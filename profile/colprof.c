@@ -117,7 +117,7 @@ void usage(char *diag, ...) {
 //  Development - not supported
 //	fprintf(stderr," -I ver          Set ICC profile version > 2.2.0\n");
 //	fprintf(stderr,"                 ver = 4, Enable ICC V4 creation\n");
-	fprintf(stderr," -u              If Lut input profile, make it absolute (non-standard)\n");
+	fprintf(stderr," -u              If input profile, make it absolute (non-standard)\n");
 	fprintf(stderr," -un             Same as u, but don't extrapolate cLut white & black using matrix\n");
 	fprintf(stderr," -U scale        If input profile, scale media white point by scale\n");
 	fprintf(stderr," -R              Restrict white <= 1.0, black and primaries to be +ve\n");

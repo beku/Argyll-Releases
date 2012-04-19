@@ -29,4 +29,4 @@ Main scanin : scanin.c ;
 ObjectHdrs scanin : ../h ../numlib ../icc ../cgats ../rspl ../xicc ../gamut ../spectro $(TIFFINC) ;
 LinkLibraries scanin : libscanrd ../xicc/libxicc ../spectro/libinsttypes 
                        ../gamut/libgamut ../rspl/librspl ../cgats/libcgats
-                       ../icc/libicc ../numlib/libnum ../plot/libplot ../plot/libvrml $(TIFFLIB) ;
+                       ../icc/libicc ../numlib/libnum ../plot/libplot ../plot/libvrml $(TIFFLIB) $(JPEGLIB) ;

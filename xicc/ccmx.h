@@ -10,8 +10,12 @@
  *
  * Copyright 2010 Graeme W. Gill
  * All rights reserved.
- * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
- * see the License.txt file for licencing details.
+ *
+ * This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
+ * see the License2.txt file for licencing details.
+ *
+ * NOTE though that if SALONEINSTLIB is not defined, that this file depends
+ * on other libraries that are licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3.
  *
  */
 

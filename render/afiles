@@ -6,3 +6,6 @@ makecharts.ksh
 render.h
 render.c
 timage.c
+thscreen.h
+thscreen.c
+screens.h

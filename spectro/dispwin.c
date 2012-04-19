@@ -54,6 +54,7 @@
 #include "cgats.h"
 #include "conv.h"
 #include "dispwin.h"
+#include "webwin.h"
 #if defined(UNIX) && !defined(__APPLE__) && defined(USE_UCMM)
 #include "ucmm.h"
 #endif
@@ -2715,7 +2716,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	/* a measurement can take place. This allows for CRT */
 	/* refresh, or LCD processing/update time, + */
 	/* display settling time (quite long for smaller LCD changes). */
-	msec_sleep(200);
+	msec_sleep(110);
 
 	return 0;
 }
@@ -3089,15 +3090,15 @@ int win_message_thread(void *pp) {
 
 #endif /* NT */
 
-/* Create a RAMDAC access and display test window, default white */
+/* Create a RAMDAC access and display test window, default grey */
 dispwin *new_dispwin(
 disppath *disp,					/* Display to calibrate. */
 double width, double height,	/* Width and height in mm */
 double hoff, double voff,		/* Offset from center in fraction of screen, range -1.0 .. 1.0 */
 int nowin,						/* NZ if no window should be created - RAMDAC access only */
 int native,						/* 0 = use current current or given calibration curve */
-								/* 1 = set native linear output and use ramdac high prec'n */
-								/* 2 = set native linear output */
+								/* 1 = use native linear out & high precision */
+int *noramdac,					/* Return nz if no ramdac access. native is set to 0 */
 int blackbg,					/* NZ if whole screen should be filled with black */
 int override,					/* NZ if override_redirect is to be used on X11 */
 int ddebug						/* >0 to print debug statements to stderr */
@@ -3819,18 +3820,21 @@ int ddebug						/* >0 to print debug statements to stderr */
 			debug("About to setup native mode\n");
 			if ((p->or = p->get_ramdac(p)) == NULL
 			 || (p->r = p->or->clone(p->or)) == NULL) {
-				if (p->native == 1) {
-					debugr("new_dispwin: Native mode can't work, no VideoLUT support\n");
-					warning("new_dispwin: Native mode can't work, no VideoLUT support");
-					dispwin_del(p);
-					return NULL;
-				} else {
-					debugr("new_dispwin: Accessing VideoLUT failed, so no way to guarantee that calibration is turned off!!\n");
-					warning("new_dispwin: Accessing VideoLUT failed, so no way to guarantee that calibration is turned off!!");
-				}
+				if (noramdac != NULL)
+					*noramdac = 1;
+				debugr("new_dispwin: Accessing VideoLUT failed, so no way to guarantee that calibration is turned off!!\n");
+				warning("new_dispwin: Accessing VideoLUT failed, so no way to guarantee that calibration is turned off!!");
+				p->native = 0;
 			} else {
 				p->r->setlin(p->r);
+				if (noramdac != NULL)
+					*noramdac = 0;
 				debug("Saved original VideoLUT\n");
+			}
+		} else {
+			if (p->get_ramdac(p) == NULL) {
+				if (noramdac != NULL)
+					*noramdac = 1;
 			}
 		}
 	
@@ -3962,7 +3966,7 @@ int x11_daemon_mode(disppath *disp, int verb, int ddebug) {
 							break;
 						if (verb) printf("Updating display %d = '%s'\n",i+1,dp[i]->description);
 		
-						if ((dw = new_dispwin(dp[i], 0.0, 0.0, 0.0, 0.0, 1, 0, 0, 0, ddebug)) == NULL) {
+						if ((dw = new_dispwin(dp[i], 0.0, 0.0, 0.0, 0.0, 1, 0, NULL, 0, 0, ddebug)) == NULL) {
 							if (verb) printf("Failed to access screen %d of display '%s'\n",i+1,dnbuf);
 							continue;
 						}
@@ -4111,6 +4115,7 @@ static void usage(char *diag, ...) {
 		}
 	}
 	free_disppaths(dp);
+	fprintf(stderr," -dweb[:port]         Display via a web server at port (default 8080)\n");
 	fprintf(stderr," -P ho,vo,ss          Position test window and scale it\n");
 	fprintf(stderr," -F                   Fill whole screen with black background\n");
 	fprintf(stderr," -i                   Run forever with random values\n");
@@ -4144,6 +4149,7 @@ main(int argc, char *argv[]) {
 	int fa, nfa, mfa;			/* current argument we're looking at */
 	int verb = 0;				/* Verbose flag */
 	int ddebug = 0;				/* debug level */
+	int webdisp = 0;			/* NZ for web display, == port number */
 	disppath *disp = NULL;		/* Display being used */
 	double patscale = 1.0;		/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;	/* Test window offsets, -1.0 to 1.0 */
@@ -4154,6 +4160,7 @@ main(int argc, char *argv[]) {
 	int native = 0;				/* 0 = use current current or given calibration curve */
 								/* 1 = set native linear output and use ramdac high prec'n */
 								/* 2 = set native linear output */
+	int noramdac = 0;			/* Set to nz if there is no VideoLUT access */
 	int inf = 0;				/* Infnite/manual patches flag */
 	char pcname[MAXNAMEL+1] = "\000";	/* CGATS patch color name */
 	int clear = 0;				/* Clear any display calibration (any calname is ignored) */
@@ -4211,37 +4218,48 @@ main(int argc, char *argv[]) {
 
 			/* Display number */
 			else if (argv[fa][1] == 'd') {
-#if defined(UNIX) && !defined(__APPLE__)
-				int ix, iv;
-
-				/* X11 type display name. */
-				if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
-					if (++fa >= argc || argv[fa][0] == '-') usage("-DISPLAY parameter missing");
-					setenv("DISPLAY", argv[fa], 1);
-				} else {
-					if (na == NULL) usage("-d parameter missing");
-					fa = nfa;
-					if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
-						ix = atoi(na);
-						iv = 0;
+				if (strncmp(na,"web",3) == 0
+				 || strncmp(na,"WEB",3) == 0) {
+					webdisp = 8080;
+					if (na[3] == ':') {
+						webdisp = atoi(na+4);
+						if (webdisp == 0 || webdisp > 65535)
+							usage("Web port number must be in range 1..65535");
 					}
+					fa = nfa;
+				} else {
+#if defined(UNIX) && !defined(__APPLE__)
+					int ix, iv;
+
+					/* X11 type display name. */
+					if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
+						if (++fa >= argc || argv[fa][0] == '-') usage("-DISPLAY parameter missing");
+						setenv("DISPLAY", argv[fa], 1);
+					} else {
+						if (na == NULL) usage("-d parameter missing");
+						fa = nfa;
+						if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
+							ix = atoi(na);
+							iv = 0;
+						}
+						if (disp != NULL)
+							free_a_disppath(disp);
+						if ((disp = get_a_display(ix-1)) == NULL)
+							usage("-d parameter '%s' is out of range",na);
+						if (iv > 0)
+							disp->rscreen = iv-1;
+					}
+#else
+					int ix;
+					if (na == NULL) usage("-d parameter is missing");
+					fa = nfa;
+					ix = atoi(na);
 					if (disp != NULL)
 						free_a_disppath(disp);
 					if ((disp = get_a_display(ix-1)) == NULL)
 						usage("-d parameter '%s' is out of range",na);
-					if (iv > 0)
-						disp->rscreen = iv-1;
-				}
-#else
-				int ix;
-				if (na == NULL) usage("-d parameter is missing");
-				fa = nfa;
-				ix = atoi(na);
-				if (disp != NULL)
-					free_a_disppath(disp);
-				if ((disp = get_a_display(ix-1)) == NULL)
-					usage("-d parameter '%s' is out of range",na);
 #endif
+				}
 			}
 
 			/* Test patch offset and size */
@@ -4327,7 +4345,7 @@ main(int argc, char *argv[]) {
 	}
 
 	/* No explicit display has been set */
-	if (disp == NULL) {
+	if (webdisp == 0 && disp == NULL) {
 		int ix = 0;
 #if defined(UNIX) && !defined(__APPLE__)
 		char *dn, *pp;
@@ -4353,7 +4371,7 @@ main(int argc, char *argv[]) {
 	}
 
 #if defined(UNIX) && !defined(__APPLE__)
-	if (daemonmode) {
+	if (webdisp == 0 && daemonmode) {
 		return x11_daemon_mode(disp, verb, ddebug);
 	}
 #endif
@@ -4375,13 +4393,25 @@ main(int argc, char *argv[]) {
 	if (ramd != 0 || sname[0] != '\000' || clear != 0 || verify != 0 || loadfile != 0 || installprofile != 0 || loadprofile != 0)
 		nowin = 1;
 
-	if (verb)
-		printf("About to open dispwin object on the display\n");
 
-	if ((dw = new_dispwin(disp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, native, blackbg, 1, ddebug)) == NULL) {
-		printf("Error - new_dispwin failed!\n");
-		return -1;
+	if (webdisp != 0) {
+		if ((dw = new_webwin(webdisp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, blackbg, verb, ddebug)) == NULL) {
+			printf("Error - new_webpwin failed!\n");
+			return -1;
+		}
+		noramdac = 1;
+
+	} else {
+		if (verb) printf("About to open dispwin object on the display\n");
+		if ((dw = new_dispwin(disp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, native, &noramdac, blackbg, 1, ddebug)) == NULL) {
+			printf("Error - new_dispwin failed!\n");
+			return -1;
+		}
 	}
+
+	if (native != 0 && noramdac) {
+		error("We don't have access to the VideoLUT so can't display native colors\n");
+	} 
 
 	/* Save the current Video LUT to the calfile */
 	if (sname[0] != '\000') {
@@ -4497,9 +4527,9 @@ main(int argc, char *argv[]) {
 		icc *icco = NULL;
 		cgats *ccg = NULL;			/* calibration cgats structure */
 		
-		if ((r = dw->get_ramdac(dw)) == NULL) {
-			error("We don't have access to the VideoLUT");
-		}
+		/* Get a calibration that's compatible with the display. */
+		/* This can fail and return NULL - error if we later need it */
+		r = dw->get_ramdac(dw);
 
 		/* Should we load calfile instead of installed profile if it's present ??? */
 		if (loadprofile) {
@@ -4529,15 +4559,21 @@ main(int argc, char *argv[]) {
 			is_ok_icc = 1;			/* The profile is OK */
 
 			if ((wo = (icmVideoCardGamma *)icco->read_tag(icco, icSigVideoCardGammaTag)) == NULL) {
-				warning("No vcgt tag found in profile - using linear\n");
-				for (i = 0; i < r->nent; i++) {
-					iv = i/(r->nent-1.0);
-					r->v[0][i] = iv;
-					r->v[1][i] = iv;
-					r->v[2][i] = iv;
+				warning("No vcgt tag found in profile - assuming linear\n");
+				if (r != NULL) {
+					for (i = 0; i < r->nent; i++) {
+						iv = i/(r->nent-1.0);
+						r->v[0][i] = iv;
+						r->v[1][i] = iv;
+						r->v[2][i] = iv;
+					}
 				}
 			} else {
 				
+				/* Hmm. Perhaps we should ignore this if the vcgt is linear ?? */
+				if (r == NULL)
+					error("We don't have access to the VideoLUT");
+
 				if (wo->u.table.channels == 3) {
 					for (i = 0; i < r->nent; i++) {
 						iv = i/(r->nent-1.0);
@@ -4616,6 +4652,9 @@ main(int argc, char *argv[]) {
 				cal[2][i] = *((double *)ccg->t[0].fdata[i][bi]);
 			}
 
+			if (r == NULL)
+				error("We don't have access to the VideoLUT");
+
 			/* Interpolate from cal value to RAMDAC entries */
 			for (i = 0; i < r->nent; i++) {
 				double val, w;
@@ -4660,18 +4699,21 @@ main(int argc, char *argv[]) {
 	} else if (loadfile != 0 || (loadprofile != 0 && verify == 0)) {
 		int rv;
 
-		if (r == NULL)
-			error("ICC profile '%s' has no vcgt calibration table",calname);
-		if (verb)
-			printf("About to set display to given calibration\n");
-		if ((rv = dw->set_ramdac(dw,r,1)) != 0) {
-			if (rv == 2)
-				error("Failed to set VideoLUTs persistently because current System Profile can't be renamed");
-			else
-				error("Failed to set VideoLUTs");
+		/* r == NULL if no VideoLUT access and ICC profile without vcgt */
+		if (r == NULL) {
+			warning("No linear calibration loaded because there is no access to the VideoLUT");
+		} else {
+			if (verb)
+				printf("About to set display to given calibration\n");
+			if ((rv = dw->set_ramdac(dw,r,1)) != 0) {
+				if (rv == 2)
+					error("Failed to set VideoLUTs persistently because current System Profile can't be renamed");
+				else
+					error("Failed to set VideoLUTs");
+			}
+			if (verb)
+				printf("Calibration set\n");
 		}
-		if (verb)
-			printf("Calibration set\n");
 	}
 
 	if (verify != 0) {
@@ -4680,6 +4722,9 @@ main(int argc, char *argv[]) {
 		if ((or = dw->get_ramdac(dw)) == NULL)
 			error("Unable to get current VideoLUT for verify");
 	
+		if (r == NULL)
+			error("No calibration to verify against");
+
 		for (j = 0; j < 3; j++) {
 			for (i = 0; i < r->nent; i++) {
 				double err;
@@ -4886,7 +4931,6 @@ main(int argc, char *argv[]) {
 				else
 					sleep(2);
 
-
 				if (inf == 1) {
 					for (;inf != 0;) {
 						double col[3];
@@ -4972,7 +5016,8 @@ main(int argc, char *argv[]) {
 		}
 	}
 	
-	free_a_disppath(disp);
+	if (disp != NULL)
+		free_a_disppath(disp);
 
 	if (verb)
 		printf("About to destroy dispwin object\n");

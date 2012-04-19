@@ -38,6 +38,7 @@
 #include "render.h"
 
 #define DEF_DPI 200
+#define DITHER 0			/* Test 8 bit didthering */
 
 void
 usage(void) {
@@ -174,7 +175,7 @@ int main(int argc, char *argv[])
 		if (cmyk)
 			error("CMYK not supported for test chart");
 
-		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth, DITHER)) == NULL) {
 			error("new_render2d() failed");
 		}
 	
@@ -299,7 +300,7 @@ int main(int argc, char *argv[])
 		h = (1.0 + 2.0 * bb) * hh;
 		w = (4.0 * bb + 0.25 + 2.0 * r3o2) * hh;
 	
-		if ((r = new_render2d(w, h, NULL, res, res, cmyk ? cmyk_2d : rgb_2d, 0, depth)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, cmyk ? cmyk_2d : rgb_2d, 0, depth, DITHER)) == NULL) {
 			error("new_render2d() failed");
 		}
 	
@@ -567,7 +568,7 @@ int main(int argc, char *argv[])
 		h = (1.0 + 2.0 * bb) * hh;
 		w = (2.0 * bb + 0.20 * 7.0) * hh;
 	
-		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, rgb_2d, 0, depth, DITHER)) == NULL) {
 			error("new_render2d() failed");
 		}
 	
@@ -637,7 +638,7 @@ int main(int argc, char *argv[])
 		bs = (bb * hh)/(schart + 1.0);
 		ss = hh * (1.0 - bb)/schart;
 	
-		if ((r = new_render2d(w, h, NULL, res, res, lab_2d, 0, depth)) == NULL) {
+		if ((r = new_render2d(w, h, NULL, res, res, lab_2d, 0, depth, DITHER)) == NULL) {
 			error("new_render2d() failed");
 		}
 	

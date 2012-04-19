@@ -1332,9 +1332,7 @@ i1disp_do_fcal_setit(
 
 		/* Compute the measurement frequency */
 		if (measp != 0.0) {
-printf("~1 measp = %f, p->clk_freq = %f, p->nmeasprds = %d\n", measp, p->clk_freq, p->nmeasprds);
 			p->refperiod = measp/(p->clk_freq * (double)p->nmeasprds);	
-printf("~1 refperiod = %f\n", p->refperiod);
 			DBG((dbgo,"Sample frequency measured = %f\n",1.0/p->refperiod))
 		} else {
 			DBG((dbgo,"No discernable refresh frequency measured\n"))

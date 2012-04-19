@@ -35,6 +35,10 @@ if ! $(HAVE_TIFF) {
 	SubInclude tiff ;
 }
 
+if ! $(HAVE_JPEG) {
+	SubInclude jpg ;
+}
+
 if $(USE_LIBUSB1) = true {
 	SubInclude libusb1 ;
 } else {

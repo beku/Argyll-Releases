@@ -24,6 +24,8 @@ xcolorants.c
 xcolorantslu.c
 xutils.h
 xutils.c
+iccjpeg.h
+iccjpeg.c
 xfit.h
 xfit.c
 xdgb.h

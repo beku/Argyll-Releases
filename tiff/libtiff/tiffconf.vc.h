@@ -51,7 +51,7 @@
 #define CCITT_SUPPORT 1
 
 /* Support JPEG compression (requires IJG JPEG library) */
-/* #undef JPEG_SUPPORT */
+#define JPEG_SUPPORT
 
 /* Support LogLuv high dynamic range encoding */
 #define LOGLUV_SUPPORT 1

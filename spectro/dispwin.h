@@ -180,7 +180,6 @@ struct _dispwin {
 	int nowin;			/* Don't create a test window */
 	int native;			/*  0 = use current current or given calibration curve */
 						/*  1 = set native linear output and use ramdac high precision */
-						/*  2 = set native linear output */
 	ramdac *or;			/* Original ramdac contents */
 	ramdac *r;			/* Ramdac in use for native mode */
 	int blackbg;		/* NZ if black full screen background */
@@ -255,6 +254,10 @@ struct _dispwin {
 	
 #endif /* UNIX */
 
+	void *pcntx;				/* Private context (ie., webwin) */
+	unsigned int ncix, ccix;	/* Counters to trigger webwin colorchange */
+	int mg_stop;				/* Stop flag */
+
 	int ddebug;					/* >0 to print debug to stderr */
 
 /* public: */
@@ -300,8 +303,8 @@ dispwin *new_dispwin(
 	double hoff, double voff,		/* Offset from c. in fraction of screen, range -1.0 .. 1.0 */
 	int nowin,						/* NZ if no window should be created - RAMDAC access only */
 	int native,						/* 0 = use current current or given calibration curve */
-									/* 1 = set native linear output and use ramdac high prec'n */
-									/* 2 = set native linear output */
+									/* 1 = use native linear out & high precision */
+	int *noramdac,					/* Return nz if no ramdac access. native is set to 0 */
 	int blackbg,					/* NZ if whole screen should be filled with black */
 	int override,					/* NZ if override_redirect is to be used on X11 */
 	int ddebug						/* >0 to print debug statements to stderr */

@@ -5,9 +5,9 @@
  *
  * Author:  Graeme W. Gill
  * Date:    99/11/29
- * Version: 2.12
+ * Version: 2.13
  *
- * Copyright 1997 - 2005 Graeme W. Gill
+ * Copyright 1997 - 2012 Graeme W. Gill
  *
  * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.

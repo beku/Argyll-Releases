@@ -6,9 +6,9 @@
  *
  * Author:  Graeme W. Gill
  * Date:    99/11/29
- * Version: 2.12
+ * Version: 2.13
  *
- * Copyright 1997 - 2009 Graeme W. Gill
+ * Copyright 1997 - 2012 Graeme W. Gill
  *
  * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
@@ -30,8 +30,8 @@
 
 /* Version of icclib release */
 
-#define ICCLIB_VERSION 0x020012
-#define ICCLIB_VERSION_STR "2.12"
+#define ICCLIB_VERSION 0x020013
+#define ICCLIB_VERSION_STR "2.13"
 
 #undef ENABLE_V4		/* V4 is not fully implemented */
 

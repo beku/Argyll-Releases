@@ -24,7 +24,7 @@ Headers = rspl.h ;
 Library librspl : rspl.c $(SCAT).c rev.c gam.c spline.c opt.c : : : ../h ../numlib ../plot ;
 
 HDRS = ../h ../numlib ../plot $(TIFFINC) ;
-LINKLIBS = librspl ../numlib/libnum ../plot/libplot ../plot/libvrml ../icc/libicc $(TIFFLIB) ;
+LINKLIBS = librspl ../numlib/libnum ../plot/libplot ../plot/libvrml ../icc/libicc $(TIFFLIB) $(JPEGLIB) ;
 
 # Test programs
 MainsFromSources revbench.c c1.c c1df.c t2d.c t2ddf.c t3d.c t3ddf.c tnd.c trnd.c ;
@@ -36,7 +36,7 @@ if $(BUILD_TESTS) {
 	HDRS = ../h ../numlib ../plot ../icc ../rspl ../xicc ../gamut ../cgats ../spectro $(TIFFINC) ;
 	LINKLIBS = ../xicc/libxicc ../gamut/libgamut ../spectro/libinsttypes librspl
 	           ../cgats/libcgats ../icc/libicc ../plot/libplot ../plot/libvrml
-	           ../numlib/libnum $(TIFFLIB) ;
+	           ../numlib/libnum $(TIFFLIB) $(JPEGLIB) ;
 
 	# Smoothness factor tuning test in Nd.
 	Main smtnd : smtnd.c ;

@@ -55,7 +55,7 @@ Executables = dispwin synthcal dispread dispcal fakeread synthread
               chartread spotread illumread ccxxmake spec2cie average spyd2en
               i1d3ccss spyd4en ;
 Headers = inst.h ;
-Samples = SOtele.sp linear.cal strange.cal ;
+Samples = SOtele.sp linear.cal strange.cal ccxx.ti1 ;
 
 #Install
 InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
@@ -78,7 +78,7 @@ Library libinst : inst.c insttypes.c dtp20.c dtp22.c dtp41.c dtp51.c dtp92.c i1d
                   colorhug.c $(IOFILE) usbio.c hidio.c ;
 
 # Display access library 
-Library libdisp : dispsup.c dispwin.c : : : $(LibWinH) ;
+Library libdisp : dispsup.c dispwin.c webwin.c mongoose.c : : : $(LibWinH) ;
 
 # Instrument types utility functions library. Use this instead of libinst */
 # (Note we're working around a bug in Jam caused by objects shared between libraries)
@@ -139,7 +139,7 @@ Main dispread : dispread.c : : : : : libdisp ;
 #display test window test/Lut loader utility
 # [ Could avoid need for libisnt libusb etc.
 #   by separating system dependent utils to a separate library .] 
-MainVariant dispwin : dispwin.c : : STANDALONE_TEST : : : $(LibWin) ;
+MainVariant dispwin : dispwin.c webwin.c mongoose.c : : STANDALONE_TEST : : : $(LibWin) ;
 
 LINKLIBS = libinsttypes ../xicc/libxicc ../gamut/libgamut ../rspl/librspl
            ../cgats/libcgats ../icc/libicc ../numlib/libnum ../plot/libplot
@@ -191,6 +191,8 @@ MainVariant xdg_bds : xdg_bds.c : : STANDALONE_TEST : : : libconv ;
 #Main t : t.c ;
 #Main tt : tt.c ;
 #Main i1d3eval : i1d3eval.c ;
+
+#Main webdisp : webdisp.c : : : : : libconv ;
 
 # Test code
 if $(HOME) = "d:\\usr\\graeme" {

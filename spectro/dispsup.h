@@ -17,6 +17,7 @@
 
 /* A helper function to handle presenting a display test patch */
 struct _disp_win_info {
+	int webdisp;			/* nz if web display is to be used */
 	disppath *disp;			/* display to calibrate. */
 	int blackbg;			/* NZ if whole screen should be filled with black */
 	int override;			/* Override_redirect on X11 */
@@ -45,6 +46,7 @@ int proj,			/* NZ for projector mode */
 int adaptive,		/* NZ for adaptive mode */
 int noautocal,		/* NZ to disable auto instrument calibration */
 disppath *screen,	/* Screen to calibrate. */
+int webdisp,		/* If nz, port number for web display */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
 double patsize,		/* Size of dispwin */
@@ -187,6 +189,9 @@ struct _disprd {
 /* 6 = system error */
 /* 7 = CRT or LCD must be selected */
 /* 9 = spectral conversion failed */
+/* 10 = no ccmx support */
+/* 11 = no ccss support */
+/* 12 = cal to set but native != 0 */
 /* Use disprd_err() to interpret errc */
 disprd *new_disprd(
 int *errc,			/* Error code. May be NULL */ 
@@ -198,14 +203,16 @@ int adaptive,		/* NZ for adaptive mode */
 int noautocal,		/* No automatic instrument calibration */
 int highres,		/* Use high res mode if available */
 int native,			/* 0 = use current current or given calibration curve */
-					/* 1 = set native linear output and use ramdac high prec'n */
-					/* 2 = set native linear output */
+					/* 1 = use native linear out & high precision */
+int *noramdac,		/* Return nz if no ramdac access. native is set to 0 */
 double cal[3][MAX_CAL_ENT],	/* Calibration set/return (cal[0][0] < 0.0 if can't/not to be used) */
+					/* native must be 0 if cal is set */
 int ncal,			/* number of entries use in cal */
 int softcal,		/* NZ if apply cal to readings rather than hardware */
 disppath *screen,	/* Screen to calibrate. */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
+int webdisp,		/* If nz, port number for web display */
 char *ccallout,		/* Shell callout on set color */
 char *mcallout,		/* Shell callout on measure color (forced fake) */
 double patsize,		/* Size of dispwin */

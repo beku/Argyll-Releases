@@ -104,6 +104,7 @@
 /* device behaviour if not. */
 
 #define COMPORT 1			/* Default com port 1..4 */
+#define OPTIMIZE_MODEL		/* Adjust model for best fit */
 #define REFINE_GAIN 0.80	/* Refinement correction damping/gain */
 #define MAX_RPTS 12			/* Maximum tries at making a sample meet the current threshold */
 #define VER_RES 100			/* Verification resolution */
@@ -182,10 +183,13 @@ typedef struct {
 	double tbk[3];		/* Target black point color */
 	icmXYZNumber tbN;	/* Same as above as XYZNumber */
 
+	/* Device model */
 	double fm[3][3];	/* Forward, aprox. linear RGB -> XYZ */
 	double bm[3][3];	/* Backwards, aprox. XYZ -> linear RGB */
 	mcv *dcvs[3];		/* Device RGB channel to linearised RGB curves */
+						/* These are always normalized to map 1.0 to 1.0 */
 
+	/* Current state */
 	mcv *rdac[3];		/* Current RGB to RGB ramdac curves */
 
 	double xyz[3];		/* Target xyz value */
@@ -1208,7 +1212,6 @@ void usage(iccss *cl, char *diag, ...) {
 #else
 	fprintf(stderr," -d n                 Choose the display from the following list (default 1)\n");
 #endif
-//	fprintf(stderr," -d fake              Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	dp = get_displays();
 	if (dp == NULL || dp[0] == NULL)
 		fprintf(stderr,"    ** No displays found **\n");
@@ -1221,6 +1224,8 @@ void usage(iccss *cl, char *diag, ...) {
 		}
 	}
 	free_disppaths(dp);
+	fprintf(stderr," -dweb[:port]         Display via a web server at port (default 8080)\n");
+//	fprintf(stderr," -d fake              Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	fprintf(stderr," -c listno            Set communication port from the following list (default %d)\n",COMPORT);
 	if ((icom = new_icoms()) != NULL) {
 		icompath **paths;
@@ -1273,7 +1278,6 @@ void usage(iccss *cl, char *diag, ...) {
 	fprintf(stderr,"                      ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                      ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
 	fprintf(stderr," -F                   Fill whole screen with black background\n");
-	fprintf(stderr," -K                   Don't use VideoLUT to set high precision test values\n");
 #if defined(UNIX) && !defined(__APPLE__)
 	fprintf(stderr," -n                   Don't set override redirect on test window\n");
 #endif
@@ -1355,6 +1359,7 @@ int main(int argc, char *argv[]) {
 	int mxits = 3;						/* maximum iterations (medium) */
 	int verify = 0;						/* Do a verify after last refinement, 2 = do only verify. */
 	int nver = 0;						/* Number of verify passes after refinement */
+	int webdisp = 0;					/* NZ for web display, == port number */
 	char *ccallout = NULL;				/* Change color Shell callout */
 	char *mcallout = NULL;				/* Measure color Shell callout */
 	char outname[MAXNAMEL+1] = { 0 };	/* Output cgats file base name */
@@ -1372,9 +1377,9 @@ int main(int argc, char *argv[]) {
 	int it;								/* verify & refine iteration */
 	int rv;
 	int fitord = 30;					/* More seems to make curves smoother */
-	int native = 1;						/* 0 = use current current or given calibration curve */
+	int native = 1;						/* 0 = use current or given calibration curve */
 										/* 1 = set native linear op and use ramdac high prec'n */
-										/* 2 = set native linear output */
+	int noramdac = 0;					/* Will be set to nz if can't set ramdac */
 	int errc;							/* Return value from new_disprd() */
 	calx x;								/* Context for calibration solution */
 
@@ -1457,44 +1462,55 @@ int main(int argc, char *argv[]) {
 
 			/* Display number */
 			} else if (argv[fa][1] == 'd') {
-#if defined(UNIX) && !defined(__APPLE__)
-				int ix, iv;
-
-				if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
-					if (++fa >= argc || argv[fa][0] == '-') usage(cl,"Parameter expected following -display");
-					setenv("DISPLAY", argv[fa], 1);
+				if (strncmp(na,"web",3) == 0
+				 || strncmp(na,"WEB",3) == 0) {
+					webdisp = 8080;
+					if (na[3] == ':') {
+						webdisp = atoi(na+4);
+						if (webdisp == 0 || webdisp > 65535)
+							usage(cl,"Web port number must be in range 1..65535");
+					}
+					fa = nfa;
 				} else {
+#if defined(UNIX) && !defined(__APPLE__)
+					int ix, iv;
+
+					if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
+						if (++fa >= argc || argv[fa][0] == '-') usage(cl,"Parameter expected following -display");
+						setenv("DISPLAY", argv[fa], 1);
+					} else {
+						if (na == NULL) usage(cl,"Parameter expected following -d");
+						fa = nfa;
+						if (strcmp(na,"fake") == 0) {
+							fake = 1;
+						} else {
+							if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
+								ix = atoi(na);
+								iv = 0;
+							}
+							if (disp != NULL)
+								free_a_disppath(disp);
+							if ((disp = get_a_display(ix-1)) == NULL)
+								usage(cl,"-d parameter %d out of range",ix);
+							if (iv > 0)
+								disp->rscreen = iv-1;
+						}
+					}
+#else
+					int ix;
 					if (na == NULL) usage(cl,"Parameter expected following -d");
 					fa = nfa;
 					if (strcmp(na,"fake") == 0) {
 						fake = 1;
 					} else {
-						if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
-							ix = atoi(na);
-							iv = 0;
-						}
+						ix = atoi(na);
 						if (disp != NULL)
 							free_a_disppath(disp);
 						if ((disp = get_a_display(ix-1)) == NULL)
 							usage(cl,"-d parameter %d out of range",ix);
-						if (iv > 0)
-							disp->rscreen = iv-1;
 					}
-				}
-#else
-				int ix;
-				if (na == NULL) usage(cl,"Parameter expected following -d");
-				fa = nfa;
-				if (strcmp(na,"fake") == 0) {
-					fake = 1;
-				} else {
-					ix = atoi(na);
-					if (disp != NULL)
-						free_a_disppath(disp);
-					if ((disp = get_a_display(ix-1)) == NULL)
-						usage(cl,"-d parameter %d out of range",ix);
-				}
 #endif
+				}
 
 			} else if (argv[fa][1] == 'J') {
 				docalib = 1;
@@ -1799,10 +1815,6 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'F') {
 				blackbg = 1;
 
-			/* Don't use VideoLUT to set high precision test values */
-			} else if (argv[fa][1] == 'K') {
-				native = 2;
-
 			} else 
 				usage(cl,"Flag '-%c' not recognised",argv[fa][1]);
 		} else
@@ -1868,7 +1880,8 @@ int main(int argc, char *argv[]) {
 
 	if (docalib) {
 		if ((rv = disprd_calibration(comport, fc, dtype, proj, adaptive, nocal, disp,
-		                             blackbg, override, patsize, ho, vo, verb, debug)) != 0) {
+		                             webdisp, blackbg, override, patsize, ho, vo,
+		                             verb, debug)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
 		}
 	}
@@ -1903,13 +1916,24 @@ int main(int argc, char *argv[]) {
 
 	/* Get ready to do some readings */
 	if ((dr = new_disprd(&errc, fake ? -99 : comport, fc, dtype, proj, adaptive, nocal,
-	                     highres, native, NULL, 0, 0, disp, blackbg, override, ccallout, mcallout,
+	                     highres, native, &noramdac, NULL, 0, 0, disp, blackbg, override,
+	                     webdisp, ccallout, mcallout,
 	                     patsize, ho, vo,
 	                     cmx != NULL ? cmx->matrix : NULL,
 	                     ccs != NULL ? ccs->samples : NULL, ccs != NULL ? ccs->no_samp : 0,
 	                     spec, obType, NULL, bdrift, wdrift, verb, VERBOUT, debug,
 	                     "fake" ICC_FILE_EXT)) == NULL)
 		error("new_disprd() failed with '%s'\n",disprd_err(errc));
+
+	if (native != 0 && noramdac) {
+		warning("No access to VideoLUTs, so calibrating display as-is rather than native");
+		if (doprofile)
+			warning("Profile will reflect the as-is display response and not contain a 'vcgt' tag");
+		native = 0;
+
+		if (doupdate && doprofile)
+			error("Can't update a profile that doesn't use the 'vcgt' tag for calibration");
+	}
 
 	if (cmx != NULL)
 		cmx->del(cmx);
@@ -3483,6 +3507,7 @@ int main(int argc, char *argv[]) {
 			}
 			free(sdv);
 
+#ifdef OPTIMIZE_MODEL	
 			/* Setup list of reference points ready for optimisation */
 			x.nrp = 4 * isteps;
 			if ((x.rp = (optref *)malloc(sizeof(optref) * x.nrp)) == NULL) {
@@ -3553,6 +3578,7 @@ int main(int argc, char *argv[]) {
 			x.dtin_iv = NULL;
 			free(sa);
 			free(op);
+#endif /* OPTIMIZE_MODEL */	
 		}
 
 #ifdef DEBUG_PLOT
@@ -3589,16 +3615,25 @@ int main(int argc, char *argv[]) {
 
 		mnerr = anerr = 0.0;
 		/* !!! Should change this to single batch to work better with drift comp. !!! */
-		for (i = 0; i < nn; i++) {
+		for (i = 0; i < (nn + 3); i++) {
 			double vv, v[3];
 			double de;
 
-			vv = i/(nn - 1.0);
-			vv = pow(vv, CHECK_DIST_POW);
-			v[0] = v[1] = v[2] = vv;
-			set[0].r = set[0].g = set[0].b = vv;
+			if (i < nn) {
+				vv = i/(nn - 1.0);
+				vv = pow(vv, CHECK_DIST_POW);
+				v[0] = v[1] = v[2] = vv;
+				set[0].r = set[0].g = set[0].b = vv;
 
-			if ((rv = dr->read(dr, set, 1, i+1, nn, 1, 0)) != 0) {
+			} else {	/* Do R, G, B */
+				v[0] = v[1] = v[2] = 0.0;
+				v[i - nn] = 1.0;
+				set[0].r = v[0];
+				set[0].g = v[1];
+				set[0].b = v[2];
+			}
+
+			if ((rv = dr->read(dr, set, 1, i+1, nn+3, 1, 0)) != 0) {
 				dr->del(dr);
 				error("display read failed with '%s'\n",disprd_err(rv));
 			} 
@@ -3614,13 +3649,15 @@ int main(int argc, char *argv[]) {
 			}
 			anerr += de;
 			
-			printf("RGB %.3f -> XYZ %.2f %.2f %.2f, model %.2f %.2f %.2f\n",
-			vv, set[0].aXYZ[0], set[0].aXYZ[1], set[0].aXYZ[2], mxyz[0], mxyz[1], mxyz[2]);
+			printf("RGB %.3f %.3f %.3f -> XYZ %.2f %.2f %.2f, model %.2f %.2f %.2f\n",
+			set[0].r, set[0].g, set[0].b,
+			set[0].aXYZ[0], set[0].aXYZ[1],
+			set[0].aXYZ[2], mxyz[0], mxyz[1], mxyz[2]);
 
-			printf("RGB %.3f -> Lab %.2f %.2f %.2f, model %.2f %.2f %.2f, DE %f\n",
-			vv, alab[0], alab[1], alab[2], mlab[0], mlab[1], mlab[2],de);
+			printf("RGB %.3f %.3f %.3f -> Lab %.2f %.2f %.2f, model %.2f %.2f %.2f, DE %f\n",
+			set[0].r, set[0].g, set[0].b, alab[0], alab[1], alab[2], mlab[0], mlab[1], mlab[2],de);
 		}
-		anerr /= (double)nn;
+		anerr /= (double)(nn+3);
 		printf("Model maximum error (@ %f) = %f deltaE\n",mnv, mnerr);
 		printf("Model average error = %f deltaE\n",anerr);
 	}
@@ -4521,6 +4558,9 @@ int main(int argc, char *argv[]) {
 
 		ocg->add_kword(ocg, 0, "DEVICE_CLASS","DISPLAY", NULL);
 		ocg->add_kword(ocg, 0, "COLOR_REP","RGB", NULL);
+		/* Tell downstream whether they can expect that this calibration */
+		/* will be applied in hardware or not. */
+		ocg->add_kword(ocg, 0, "VIDEO_LUT_CALIBRATION_POSSIBLE",noramdac ? "NO" : "YES", NULL);
 
 		/* Put the target parameters in the CGATS file too */
 		if (dtype != 0) {
@@ -4682,7 +4722,7 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	/* Update the ICC file with the new LUT curves */
+	/* Update the ICC file with the new 'vcgt' curves */
 	if (verify != 2 && doupdate && doprofile) {
 		icmFile *ic_fp;
 		icc *icco;
@@ -4719,8 +4759,14 @@ int main(int argc, char *argv[]) {
 		wo->allocate((icmBase*)wo);
 		for (j = 0; j < 3; j++) {
 			for (i = 0; i < CAL_RES; i++) {
-				double cc, vv = i/(CAL_RES-1.0);
+				double cc, vv;
+#if defined(__APPLE__) && defined(__POWERPC__)
+				gcc_bug_fix(i);
+#endif
+				vv = i/(CAL_RES-1.0);
+
 				cc = x.rdac[j]->interp(x.rdac[j], vv);
+
 				if (cc < 0.0)
 					cc = 0.0;
 				else if (cc > 1.0)
@@ -4748,6 +4794,10 @@ int main(int argc, char *argv[]) {
 	     measured points through the calibration curves, and
 	     then re-fit the curve/matrix to the calibrated points.
 	     This might be more accurate ?]
+
+		 Ideally we should also re-measure primaries through calibration
+		 rather than computing the calibrated values ? 
+
 	 */
 
 	} else if (verify != 2 && doprofile) {
@@ -4757,33 +4807,39 @@ int main(int argc, char *argv[]) {
 		double wp[3];		/* Absolute White point in XYZ */
 		double bp[3];		/* Absolute Black point in XYZ */
 		double mat[3][3];	/* Device to XYZ matrix */
-
-// ~~999 this looks wrong. Should 1) Re-measure primaries through calibration
-//       and create white & black and matrix values from this.
-//       Should at least run matrix values though calibration curves !!!
+		double calrgb[3];	/* 1.0 through calibration curves */
+		double clrgb[3];	/* 1.0 through calibration and linearization */
 
 		/* Lookup white and black points */
 		{
 			int j;
 			double rgb[3];
 
-			rgb[0] = rgb[1] = rgb[2] = 1.0;
+			calrgb[0] = calrgb[1] = calrgb[2] = 1.0;
 
-			fwddev(&x, uwp, rgb);		/* absolute uncalibrated WP */
+			fwddev(&x, uwp, calrgb);		/* absolute uncalibrated WP (native white point) */
 
-			/* Through calibration */
+//printf("~1 native abs white point XYZ %f %f %f\n", uwp[0], uwp[1], uwp[2]);
+
+			/* RGB 1.0 Through calibration */
 			for (j = 0; j < 3; j++) {
-				rgb[j] = x.rdac[j]->interp(x.rdac[j], rgb[j]);
-				if (rgb[j] < 0.0)
-					rgb[j] = 0.0;
-				else if (rgb[j] > 1.0)
-					rgb[j] = 1.0;
+				calrgb[j] = x.rdac[j]->interp(x.rdac[j], calrgb[j]);
+				if (calrgb[j] < 0.0)
+					calrgb[j] = 0.0;
+				else if (calrgb[j] > 1.0)
+					calrgb[j] = 1.0;
 			}
-			fwddev(&x, wp, rgb);		/* absolute calibrated WP */
+			fwddev(&x, wp, calrgb);		/* absolute calibrated WP */
+//printf("~1 calibrated rgb = %f %f %f\n", calrgb[0], calrgb[1], calrgb[2]);
+//printf("~1 calibrated abs white point XYZ %f %f %f\n", wp[0], wp[1], wp[2]);
+
+			for (j = 0; j < 3; j++)
+				clrgb[j] = x.dcvs[j]->interp(x.dcvs[j], calrgb[j]);
+//printf("~1 cal & lin rgb = %f %f %f\n", clrgb[0], clrgb[1], clrgb[2]);
 
 			rgb[0] = rgb[1] = rgb[2] = 0.0;
 
-			/* Through calibration */
+			/* RGB 0.0 through calibration */
 			for (j = 0; j < 3; j++) {
 				rgb[j] = x.rdac[j]->interp(x.rdac[j], rgb[j]);
 				if (rgb[j] < 0.0)
@@ -4794,16 +4850,98 @@ int main(int argc, char *argv[]) {
 			fwddev(&x, bp, rgb);		/* Absolute calibrated BP */
 		}
 
-		/* Fix matrix to be relative to D50 white point, rather than absolute */
+		/* Apply calibration to matrix, and then adjust it to be */
+		/* relative to D50 white point, rather than absolute. */
 		{
+			double rgb[3];
 			icmXYZNumber swp;
-			icmAry2XYZ(swp, wp);
 
 			/* Transfer from parameter to matrix */
 			icmCpy3x3(mat, x.fm);
 
-			/* Adapt matrix */
-			icmChromAdaptMatrix(ICM_CAM_MULMATRIX | ICM_CAM_BRADFORD, icmD50, swp, mat);
+			/* Compute the calibrated matrix values so that the curves */
+			/* device curves end at 1.0. */
+
+			/* In the HW calibrated case this represents the lower XYZ due to */
+			/* the HW calibrated lower RGB values of white compared to the raw */
+			/* model response, so that the calibration curve concatentation with the */
+			/* device curves can be scaled up to end at 1.0. */
+			if (noramdac == 0) {
+				for (j = 0; j < 3; j++) {
+					for (i = 0; i < 3; i++)
+						rgb[i] = 0.0;
+					rgb[j] = clrgb[j];
+					icmMulBy3x3(rgb, x.fm, rgb);	/* clrgb -> matrix -> RGB */
+					for (i = 0; i < 3; i++)
+						mat[i][j] = rgb[i];
+				}
+#ifdef NEVER
+				{
+					double rgb[3], xyz[3], lab[3];
+				
+					rgb[0] = rgb[1] = rgb[2] = 1.0;
+					icmMulBy3x3(xyz, mat, rgb);	
+					icmXYZ2Lab(&icmD50, lab, xyz);
+				
+					printf("RGB 1 through matrix = XYZ %f %f %f, Lab %f %f %f\n", xyz[0], xyz[1], xyz[2], lab[0], lab[1], lab[2]);
+				}
+#endif
+				/* Adapt matrix */
+				icmAry2XYZ(swp, wp);
+				icmChromAdaptMatrix(ICM_CAM_MULMATRIX | ICM_CAM_BRADFORD, icmD50, swp, mat);
+#ifdef NEVER
+				{
+					double rgb[3], xyz[3], lab[3];
+				
+					rgb[0] = rgb[1] = rgb[2] = 1.0;
+					icmMulBy3x3(xyz, mat, rgb);	
+					icmXYZ2Lab(&icmD50, lab, xyz);
+				
+					printf("RGB 1 through chrom matrix = XYZ %f %f %f, Lab %f %f %f\n", xyz[0], xyz[1], xyz[2], lab[0], lab[1], lab[2]);
+				}
+#endif
+
+			/* For the calibration incororated in profile case, we should boost the */
+			/* XYZ by 1/calrgb[] so that the lower calibrated RGB values results in the native */
+			/* white point, but we want to reduce it by callinrgb[] to move from the native */
+			/* white point to the calibrated white point. */
+			} else {
+				icmCpy3x3(mat, x.fm);
+
+				for (j = 0; j < 3; j++) {
+					for (i = 0; i < 3; i++)
+						rgb[i] = 0.0;
+					rgb[j] = clrgb[j]/calrgb[j];
+					icmMulBy3x3(rgb, x.fm, rgb);	/* 1/calrgb -> matrix -> RGB */
+					for (i = 0; i < 3; i++)
+						mat[i][j] = rgb[i];
+				}
+#ifdef NEVER
+				{
+					double rgb[3], xyz[3], lab[3];
+				
+					for (j = 0; j < 3; j++)
+						rgb[j] = calrgb[j];
+					icmMulBy3x3(xyz, mat, rgb);	
+					icmXYZ2Lab(&icmD50, lab, xyz);
+				
+					printf("RGB cal through matrix = XYZ %f %f %f, Lab %f %f %f\n", xyz[0], xyz[1], xyz[2], lab[0], lab[1], lab[2]);
+				}
+#endif
+				/* Adapt matrix */
+				icmAry2XYZ(swp, wp);
+				icmChromAdaptMatrix(ICM_CAM_MULMATRIX | ICM_CAM_BRADFORD, icmD50, swp, mat);
+#ifdef NEVER
+				{
+					double rgb[3], xyz[3], lab[3];
+				
+					icmMulBy3x3(xyz, mat, calrgb);	
+					icmXYZ2Lab(&icmD50, lab, xyz);
+				
+					printf("RGB cal through chrom matrix = XYZ %f %f %f, Lab %f %f %f\n", xyz[0], xyz[1], xyz[2], lab[0], lab[1], lab[2]);
+				}
+#endif
+			}
 		}
 		
 		/* Open up the file for writing */
@@ -4912,7 +5050,7 @@ int main(int argc, char *argv[]) {
 			wo->size = 1;
 			wo->allocate((icmBase *)wo);	/* Allocate space */
 			wo->data[0].X = 0.0;
-			wo->data[0].Y = wp[1] * dispLum/uwp[1];	/* Compensate for model error */
+			wo->data[0].Y = dispLum * wp[1]/uwp[1];	/* Adjust for effect of calibration */
 			wo->data[0].Z = 0.0;
 
 			if (verb)
@@ -4952,8 +5090,8 @@ int main(int argc, char *argv[]) {
 				printf("Black point XYZ = %f %f %f\n", wo->data[0].X, wo->data[0].Y, wo->data[0].Z);
 		}
 
-		/* vcgt tag */
-		{
+		/* vcgt tag, if the display has an accessible VideoLUT */
+		if (noramdac == 0) {
 			int j, i;
 			icmVideoCardGamma *wo;
 			wo = (icmVideoCardGamma *)wr_icco->add_tag(wr_icco,
@@ -5023,38 +5161,98 @@ int main(int argc, char *argv[]) {
 			wog->allocate((icmBase *)wog);
 			wob->allocate((icmBase *)wob);
 	
-// ~~999
-// Hmm. If we fix the matrix to represent the calibrated primaries,
-// then we need to fix this to account for that, and the resulting
-// curve values should map 1.0 in to 1.0 out.
-			for (ui = 0; ui < wor->size; ui++) {
-				double in, rgb[3];
-	
-				for (j = 0; j < 3; j++) {
-#if defined(__APPLE__) && defined(__POWERPC__)
-					gcc_bug_fix(ui);
-#endif
-					in = (double)ui / (wor->size - 1.0);
+			/* For the HW calibrated case, we have lowered the matrix */
+			/* values to reflect the calibrated RGB through the native */
+			/* device model, so now we can scale up the comcatenation */
+			/* of the calibration and linearisation curves so that */
+			/* 1.0 in maps to 1.0 out. */
+			if (noramdac == 0) {
+
+				for (ui = 0; ui < wor->size; ui++) {
+					double in, rgb[3];
 		
-					/* Lookup RAMDAC value */
-					in = x.rdac[j]->interp(x.rdac[j], in);
+					for (j = 0; j < 3; j++) {
+#if defined(__APPLE__) && defined(__POWERPC__)
+						gcc_bug_fix(ui);
+#endif
+						in = (double)ui / (wor->size - 1.0);
+			
+						/* Transform through calibration curve */
+						in = x.rdac[j]->interp(x.rdac[j], in);
 
-					if (in < 0.0)
-						in = 0.0;
-					else if (in > 1.0)
-						in = 1.0;
+						if (in < 0.0)
+							in = 0.0;
+						else if (in > 1.0)
+							in = 1.0;
 
-					/* Lookup device model */
-					in = x.dcvs[j]->interp(x.dcvs[j], in);
-					if (in < 0.0)
-						in = 0.0;
-					else if (in > 1.0)
-						in = 1.0;
-					rgb[j] = in;
+						/* Trandform though device model linearisation */
+						in = x.dcvs[j]->interp(x.dcvs[j], in);
+
+						/* Scale back so that 1.0 in gets 1.0 out */
+						in /= clrgb[j];
+
+
+						if (in < 0.0)
+							in = 0.0;
+						else if (in > 1.0)
+							in = 1.0;
+						rgb[j] = in;
+//printf("Step %d, Chan %d, %f -> %f\n",ui,j,(double)ui / (wor->size - 1.0),in);
+					}
+					wor->data[ui] = rgb[0];	/* Curve values 0.0 - 1.0 */
+					wog->data[ui] = rgb[1];
+					wob->data[ui] = rgb[2];
 				}
-				wor->data[ui] = rgb[0];	/* Curve values 0.0 - 1.0 */
-				wog->data[ui] = rgb[1];
-				wob->data[ui] = rgb[2];
+
+			/* For the calibration incororated in profile case, */
+			/* we bypass the inverse calibration curve if it would */
+			/* result in saturation, and then scale the overall output */
+			/* back by the calrgb[] value so that the overall curve */
+			/* maps 1.0 to 1.0. The scaled up values in the matrix */
+			/* then result in a calibrated RGB input mapping to the */
+			/* PCS white point. */
+			} else {
+
+				for (ui = 0; ui < wor->size; ui++) {
+					double in, rgb[3];
+		
+					for (j = 0; j < 3; j++) {
+#if defined(__APPLE__) && defined(__POWERPC__)
+						gcc_bug_fix(ui);
+#endif
+						in = (double)ui / (wor->size - 1.0);
+			
+						/* If within the inversion range, */
+						/* transform through the inverse calibration curve. */
+						if (in < calrgb[j]) {
+							in = x.rdac[j]->inv_interp(x.rdac[j], in);
+							if (in < 0.0)
+								in = 0.0;
+							else if (in > 1.0)
+								in = 1.0;
+							/* Pass through device model linearisation. */
+							in = x.dcvs[j]->interp(x.dcvs[j], in);
+
+						/* Linearly extrapolate when outside inv range */
+						} else {
+							in /= calrgb[j];
+						}
+
+						/* Scale it back again to 0.0 to 1.0, */
+						/* which is compensated for by matrix scale. */
+						in *= calrgb[j];
+
+						if (in < 0.0)
+							in = 0.0;
+						else if (in > 1.0)
+							in = 1.0;
+						rgb[j] = in;
+//printf("Step %d, Chan %d, %f -> %f\n",ui,j,(double)ui / (wor->size - 1.0),in);
+					}
+					wor->data[ui] = rgb[0];	/* Curve values 0.0 - 1.0 */
+					wog->data[ui] = rgb[1];
+					wob->data[ui] = rgb[2];
+				}
 			}
 		}
 

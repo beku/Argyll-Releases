@@ -13,6 +13,7 @@ GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
 see the License.txt file for licensing details.
 
 
+	ccxx.ti1
 	CMP_DT_003.cht
 	CMP_Digital_Target-3.cht
 	CMP_Digital_Target-3.ti2

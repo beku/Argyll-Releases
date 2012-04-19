@@ -31,6 +31,14 @@
 #include "numlib.h"
 #include "xicc.h"
 
+#ifdef NT       /* You'd think there might be some standards.... */
+# ifndef __BORLANDC__
+#  define stricmp _stricmp
+# endif
+#else
+# define stricmp strcasecmp
+#endif
+
 /* rspl setting functions */
 static void xcal_rsplset(void *cbntx, double *out, double *in) {
 	co *dpoints = (co *)cbntx;
@@ -95,6 +103,11 @@ static int xcal_read_cgats(xcal *p, cgats *tcg, int table, char *filename) {
 			                                          filename,tcg->t[table].kdata[ti]);
 			return p->errc = 1;
 		}
+	}
+
+	if ((ti = tcg->find_kword(tcg, table, "VIDEO_LUT_CALIBRATION_POSSIBLE")) >= 0) {
+		if (stricmp(tcg->t[table].kdata[ti], "NO") == 0)
+		p->noramdac = 1;
 	}
 
 	p->colspace = icx_colorant_comb_to_icc(p->devmask);	/* 0 if none */

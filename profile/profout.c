@@ -1146,7 +1146,10 @@ make_output_icc(
 	}
 
 	/* vcgt tag */
-	if (isdisp && cal != NULL) {		/* We've been given vcgt information */
+	if (verb & isdisp && cal != NULL && cal->noramdac) {	/* We've been given vcgt information */
+		fprintf(verbo,"Not writing calibration to 'vcgt' because there is no VideoLUT access\n");
+	}
+	if (isdisp && cal != NULL && !cal->noramdac) {	/* We've been given vcgt information */
 		int j, i;
 		int ncal = 256;					/* This is safe with other s/w */
 		icmVideoCardGamma *wo;

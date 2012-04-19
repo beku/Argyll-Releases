@@ -65,13 +65,13 @@ LINKLIBS = ../plot/libvrml $(LINKLIBS) ;
 # Verifyer 
 Main verify : verify.c ;
 
-LINKLIBS = libprof ../gamut/libgammap $(LINKLIBS) $(TIFFLIB) ;
+LINKLIBS = libprof ../gamut/libgammap $(LINKLIBS) $(TIFFLIB) $(JPEGLIB) ;
 
 # Full profile generator
-Main colprof : colprof.c : : : $(TIFFINC) : : ;
+Main colprof : colprof.c : : : $(TIFFINC) $(JPEGLIB) : : ;
 
 # Print calibration
-Main printcal : printcal.c : : : $(TIFFINC) ;
+Main printcal : printcal.c : : : $(TIFFINC) $(JPEGLIB) ;
 
 # Applying calibration
 Main applycal : applycal.c ;

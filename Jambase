@@ -905,7 +905,9 @@ else if $(UNIX)
 	}
 
 	# Make things work on 64 bit Linux
-	if $(HOSTTYPE) = x86_64 {
+	# Note that HOSTTYPE needs to be exported by the shell!
+	if $(HOSTTYPE) = x86_64 
+	 || $(HOSTTYPE) = x86_64-linux {
 		ECHO "We're on a 64 bit host" ;
 		HOST64     = true ;
 		CCFLAGS	   += -m64 ;
@@ -4017,7 +4019,7 @@ actions LexMv_
 
 actions Link_ bind LINKOBJS LINKLIBS LINKSHLIBS
 {
-	$(LINK) $(LINKFLAGS) $(LINKOUTFLAG)$(<) $(UNDEFS) $(>) $(LINKOBJS) $(LINKLIBS) $(LINKSHLIBS) $(STDLIBS) 
+	$(LINK) $(LINKOUTFLAG)$(<) $(UNDEFS) $(>) $(LINKOBJS) $(LINKFLAGS) $(LINKLIBS) $(LINKSHLIBS) $(STDLIBS) 
 }
 
 if $(OS) = MACOSX {		# OS X version of ld

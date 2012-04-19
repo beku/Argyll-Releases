@@ -249,7 +249,7 @@ static jc_error jcnf_add_key_internal(
 /* at the given index. Update the index to the matching key. */ 
 /* Look for an exact match if exact != 0, or leading match if exact = 0 */
 /* Search backwards if bwd != 0 or forwards if bwd = 0 */
-/* Set *ix = -1 to begin search from the end. */
+/* Set *ix = -1 to begin search from the start/end for fwd/bwd. */
 /* Return jc_ix_oorange if no more match. */
 static jc_error jcnf_locate_key(
 	jcnf *p,
@@ -261,8 +261,12 @@ static jc_error jcnf_locate_key(
 	int ix = *pix;
 	int sl;
 
-	if (ix == -1)
-		ix = p->nkeys-1;
+	if (ix == -1) {
+		if (bwd)
+			ix = p->nkeys-1;
+		else
+			ix = 0;
+	}
 
 	if (ix < 0 || ix >= p->nkeys)
 		return jc_ix_oorange;
@@ -347,7 +351,6 @@ static jc_error jcnf_set_key(
 	if (ix == -1) {
 		if (key == NULL)
 			return jc_no_keyname;
-		ix = 0;
 		if ((ev = jcnf_locate_key(p, &ix, key, 1, 0)) != jc_ok) {
 			if (ev != jc_ix_oorange)
 				return ev;

@@ -21,9 +21,9 @@ InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
 HDRS = ../h ../numlib $(TIFFINC) ;
 
 # 2D Rendering library
-Library librender : render.c ;
+Library librender : render.c thscreen.c ;
 
-Main timage : timage.c : : : : : librender ../numlib/libnum $(TIFFLIB) ;
+Main timage : timage.c : : : : : librender ../numlib/libnum $(TIFFLIB) $(JPEGLIB) ;
 
 
 if $(BUILD_JUNK) {

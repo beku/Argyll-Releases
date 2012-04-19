@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <string.h>
 #include <ctype.h>
+#include <setjmp.h>
 #ifdef __sun
 #include <unistd.h>
 #endif
@@ -31,6 +32,8 @@
 #include "aconfig.h"
 #include "icc.h"
 #include "tiffio.h"
+#include "jpeglib.h"
+#include "iccjpeg.h"
 #include "xutils.h"		/* definitions for this library */
 
 
@@ -43,6 +46,10 @@
 #else
 # define debug(xx)
 # define debug2(xx)
+#endif
+
+#if !defined(O_CREAT) && !defined(_O_CREAT)
+# error "Need to #include fcntl.h!"
 #endif
 
 /* ------------------------------------------------------ */
@@ -81,7 +88,22 @@ int dim_to_clutres(int dim, int quality) {
 
 /* ------------------------------------------------------ */
 
-/* Open an ICC file or an TIFF file with an embedded ICC profile for reading. */
+/* JPEG error information */
+typedef struct {
+	jmp_buf env;		/* setjmp/longjmp environment */
+	char message[JMSG_LENGTH_MAX];
+} jpegerrorinfo;
+
+/* JPEG error handler */
+static void jpeg_error(j_common_ptr cinfo) {  
+	jpegerrorinfo *p = (jpegerrorinfo *)cinfo->client_data;
+	(*cinfo->err->format_message) (cinfo, p->message);
+	longjmp(p->env, 1);
+}
+
+/* ------------------------------------------------------ */
+
+/* Open an ICC file or a TIFF or JPEG  file with an embedded ICC profile for reading. */
 /* Return NULL on error */
 icc *read_embedded_icc(char *file_name) {
 	TIFF *rh = NULL;
@@ -120,51 +142,106 @@ icc *read_embedded_icc(char *file_name) {
 	olderrhx = TIFFSetErrorHandlerExt(NULL);
 	oldwarnhx = TIFFSetWarningHandlerExt(NULL);
 
-	if ((rh = TIFFOpen(file_name, "r")) == NULL) {
+	if ((rh = TIFFOpen(file_name, "r")) != NULL) {
+		TIFFSetErrorHandler(olderrh);
+		TIFFSetWarningHandler(oldwarnh);
+		TIFFSetErrorHandlerExt(olderrhx);
+		TIFFSetWarningHandlerExt(oldwarnhx);
+		debug("TIFFOpen suceeded\n");
+
+		if (TIFFGetField(rh, TIFFTAG_ICCPROFILE, &size, &tag) == 0 || size == 0) {
+			debug2((errout,"no ICC profile found in '%s'\n",file_name));
+			TIFFClose(rh);
+			return NULL;
+		}
+
+		/* Make a copy of the profile to a memory buffer */
+		if ((al = new_icmAllocStd()) == NULL) {
+			debug("new_icmAllocStd failed\n");
+			TIFFClose(rh);
+		    return NULL;
+		}
+		if ((buf = al->malloc(al, size)) == NULL) {
+			debug("malloc of profile buffer failed\n");
+			al->del(al);
+			TIFFClose(rh);
+		    return NULL;
+		}
+
+		memmove(buf, tag, size);
+		TIFFClose(rh);
+
+	} else {
+		jpegerrorinfo jpeg_rerr;
+		FILE *rf = NULL;
+		struct jpeg_decompress_struct rj;
+		struct jpeg_error_mgr jerr;
+		unsigned char *pdata;
+		unsigned int plen;
+
 		debug2((errout,"TIFFOpen failed for '%s'\n",file_name));
 		TIFFSetErrorHandler(olderrh);
 		TIFFSetWarningHandler(oldwarnh);
 		TIFFSetErrorHandlerExt(olderrhx);
 		TIFFSetWarningHandlerExt(oldwarnhx);
-		return NULL;
-	}
 
-	if (TIFFGetField(rh, TIFFTAG_ICCPROFILE, &size, &tag) == 0 || size == 0) {
-		TIFFClose(rh);
-		TIFFSetErrorHandler(olderrh);
-		TIFFSetWarningHandler(oldwarnh);
-		TIFFSetErrorHandlerExt(olderrhx);
-		TIFFSetWarningHandlerExt(oldwarnhx);
-		return NULL;
-	}
+		/* We cope with the horrible ijg jpeg library error handling */
+		/* by using a setjmp/longjmp. */
+		jpeg_std_error(&jerr);
+		jerr.error_exit = jpeg_error;
+		if (setjmp(jpeg_rerr.env)) {
+			debug2((errout,"jpeg_read_header failed for '%s'\n",file_name));
+			jpeg_destroy_decompress(&rj);
+			fclose(rf);
+			return NULL;
+		}
 
-	/* Make a copy of the profile to a memory buffer */
-	if ((al = new_icmAllocStd()) == NULL) {
-		debug("new_icmAllocStd failed\n");
-		TIFFClose(rh);
-		TIFFSetErrorHandler(olderrh);
-		TIFFSetWarningHandler(oldwarnh);
-		TIFFSetErrorHandlerExt(olderrhx);
-		TIFFSetWarningHandlerExt(oldwarnhx);
-	    return NULL;
-	}
-	if ((buf = al->malloc(al, size)) == NULL) {
-		debug("malloc of profile buffer failed\n");
-		al->del(al);
-		TIFFClose(rh);
-		TIFFSetErrorHandler(olderrh);
-		TIFFSetWarningHandler(oldwarnh);
-		TIFFSetErrorHandlerExt(olderrhx);
-		TIFFSetWarningHandlerExt(oldwarnhx);
-	    return NULL;
-	}
+		rj.err = &jerr;
+		rj.client_data = &jpeg_rerr;
+		jpeg_create_decompress(&rj);
 
-	memmove(buf, tag, size);
-	TIFFClose(rh);
-	TIFFSetErrorHandler(olderrh);
-	TIFFSetWarningHandler(oldwarnh);
-	TIFFSetErrorHandlerExt(olderrhx);
-	TIFFSetWarningHandlerExt(oldwarnhx);
+#if defined(O_BINARY) || defined(_O_BINARY)
+	    if ((rf = fopen(file_name,"rb")) == NULL)
+#else
+	    if ((rf = fopen(file_name,"r")) == NULL)
+#endif
+		{
+			debug2((errout,"fopen failed for '%s'\n",file_name));
+			jpeg_destroy_decompress(&rj);
+			return NULL;
+		}
+		
+		jpeg_stdio_src(&rj, rf);
+		setup_read_icc_profile(&rj);
+
+		/* we'll longjmp on error */
+		jpeg_read_header(&rj, TRUE);
+
+		if (!read_icc_profile(&rj, &pdata, &plen)) {
+			debug2((errout,"no ICC profile found in '%s'\n",file_name));
+			jpeg_destroy_decompress(&rj);
+			fclose(rf);
+			return NULL;
+		}
+		jpeg_destroy_decompress(&rj);
+		fclose(rf);
+
+		/* Make a copy of the profile to a memory buffer */
+		/* (icmAllocStd may not be the same as malloc ?) */
+		if ((al = new_icmAllocStd()) == NULL) {
+			debug("new_icmAllocStd failed\n");
+		    return NULL;
+		}
+		if ((buf = al->malloc(al, plen)) == NULL) {
+			debug("malloc of profile buffer failed\n");
+			al->del(al);
+			TIFFClose(rh);
+		    return NULL;
+		}
+		memmove(buf, pdata, plen);
+		size = (int)plen;
+		free(pdata);
+	}
 
 	/* Memory File fp that will free the buffer when deleted: */
 	if ((fp = new_icmFileMem_ad(buf, size, al)) == NULL) {

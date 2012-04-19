@@ -56,6 +56,7 @@
 #include "inst.h"
 #include "conv.h"
 #include "dispwin.h"
+#include "webwin.h"
 #include "dispsup.h"
 #include "ccss.h"
 #include "ccmx.h"
@@ -114,7 +115,6 @@ usage(char *diag, ...) {
 #else
 	fprintf(stderr," -d n                   Choose the display from the following list (default 1)\n");
 #endif
-//	fprintf(stderr," -d fake                Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	dp = get_displays();
 	if (dp == NULL || dp[0] == NULL)
 		fprintf(stderr,"    ** No displays found **\n");
@@ -128,6 +128,8 @@ usage(char *diag, ...) {
 		}
 	}
 	free_disppaths(dp);
+	fprintf(stderr," -dweb[:port]           Display via a web server at port (default 8080)\n");
+//	fprintf(stderr," -d fake                Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	fprintf(stderr," -p                     Use projector mode (if available)\n");
 	cap = inst_show_disptype_options(stderr, " -y c|l                 ", icom);
 	fprintf(stderr," -P ho,vo,ss            Position test window and scale it\n");
@@ -171,7 +173,7 @@ int main(int argc, char *argv[])
 	int fake = 0;						/* Use the fake device for testing, 2 for auto */
 	int faketoggle = 0;					/* Toggle fake between "colorimeter" and "spectro" */
 	int fakeseq = 0;					/* Fake auto CCMX sequence */
-	int spec = 0;						/* Need spectral data from spectrometer */
+	int spec = 0;						/* Need spectral data to implement option */
 	icxObserverType observ = icxOT_CIE_1931_2;
 	int override = 1;					/* Override redirect on X11 */
 	int comno = COMPORT;				/* COM port used */
@@ -181,6 +183,7 @@ int main(int argc, char *argv[])
 	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
 	int proj = 0;						/* NZ if projector */
 	int noautocal = 0;					/* Disable auto calibration */
+	int webdisp = 0;					/* NZ for web display, == port number */
 	char *ccallout = NULL;				/* Change color Shell callout */
 	int msteps = DEFAULT_MSTEPS;		/* Patch surface size */
 	int npat = 0;						/* Number of patches/colors */
@@ -253,13 +256,44 @@ int main(int argc, char *argv[])
 
 			/* Display number */
 			} else if (argv[fa][1] == 'd') {
-#if defined(UNIX) && !defined(__APPLE__)
-				int ix, iv;
-
-				if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
-					if (++fa >= argc || argv[fa][0] == '-') usage("Parameter expected following -display");
-					setenv("DISPLAY", argv[fa], 1);
+				if (strncmp(na,"web",3) == 0
+				 || strncmp(na,"WEB",3) == 0) {
+					webdisp = 8080;
+					if (na[3] == ':') {
+						webdisp = atoi(na+4);
+						if (webdisp == 0 || webdisp > 65535)
+							usage("Web port number must be in range 1..65535");
+					}
+					fa = nfa;
 				} else {
+#if defined(UNIX) && !defined(__APPLE__)
+					int ix, iv;
+
+					if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
+						if (++fa >= argc || argv[fa][0] == '-') usage("Parameter expected following -display");
+						setenv("DISPLAY", argv[fa], 1);
+					} else {
+						if (na == NULL) usage("Parameter expected following -d");
+						fa = nfa;
+						if (strcmp(na,"fake") == 0 || strcmp(na,"FAKE") == 0) {
+							fake = 1;
+							if (strcmp(na,"FAKE") == 0)
+								fakeseq = 1;
+						} else {
+							if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
+								ix = atoi(na);
+								iv = 0;
+							}
+							if (disp != NULL)
+								free_a_disppath(disp);
+							if ((disp = get_a_display(ix-1)) == NULL)
+								usage("-d parameter %d out of range",ix);
+							if (iv > 0)
+								disp->rscreen = iv-1;
+						}
+					}
+#else
+					int ix;
 					if (na == NULL) usage("Parameter expected following -d");
 					fa = nfa;
 					if (strcmp(na,"fake") == 0 || strcmp(na,"FAKE") == 0) {
@@ -267,34 +301,14 @@ int main(int argc, char *argv[])
 						if (strcmp(na,"FAKE") == 0)
 							fakeseq = 1;
 					} else {
-						if (sscanf(na, "%d,%d",&ix,&iv) != 2) {
-							ix = atoi(na);
-							iv = 0;
-						}
+						ix = atoi(na);
 						if (disp != NULL)
 							free_a_disppath(disp);
 						if ((disp = get_a_display(ix-1)) == NULL)
 							usage("-d parameter %d out of range",ix);
-						if (iv > 0)
-							disp->rscreen = iv-1;
 					}
-				}
-#else
-				int ix;
-				if (na == NULL) usage("Parameter expected following -d");
-				fa = nfa;
-				if (strcmp(na,"fake") == 0 || strcmp(na,"FAKE") == 0) {
-					fake = 1;
-					if (strcmp(na,"FAKE") == 0)
-						fakeseq = 1;
-				} else {
-					ix = atoi(na);
-					if (disp != NULL)
-						free_a_disppath(disp);
-					if ((disp = get_a_display(ix-1)) == NULL)
-						usage("-d parameter %d out of range",ix);
-				}
 #endif
+				}
 #if defined(UNIX) && !defined(__APPLE__)
 			} else if (argv[fa][1] == 'n') {
 				override = 0;
@@ -570,10 +584,9 @@ int main(int argc, char *argv[])
 			double wxyz[3], scale = 1.0;/* Scale factor back to absolute */
 			int sidx;					/* Sample ID index */
 			int xix, yix, zix;
-			int cur_ref_col;			/* 1 = reference, 0 = colorimeter */
 			ary3 *current = NULL;		/* Current value array */
 			int ii, ti;
-			int instspec = 0;			/* Instrument is spectral/reference */
+			int instspec = 0;			/* File is spectrale */
 
 			/* Open CIE target values */
 			cgf = new_cgats();			/* Create a CGATS structure */
@@ -616,21 +629,32 @@ int main(int argc, char *argv[])
 				error ("Can't find keyword INSTRUMENT_TYPE_SPECTRAL in '%s'",innames[n]);
 	
 			if (strcmp(cgf->t[0].kdata[ti],"YES") == 0) {
-				instspec = 1;
-				cur_ref_col = 1;
+				instspec = 1;		/* Currently is a spectral file */
+				if (gotref)
+					error("Found two spectral files - expect one colorimtric file");
 				current = refs;
 				refname = strdup(cgf->t[0].kdata[ii]);
-				if (gotref)
-					error("Need spectral reference and colorimtric file");
 				gotref = 1;
 				
 			} else if (strcmp(cgf->t[0].kdata[ti],"NO") == 0) {
-				instspec = 0;
-				cur_ref_col = 0;
+				instspec = 0;			/* Currently is not spectral file */
+				if (gotcol) {
+					/* Copy what we though was cols to refs */
+					refname = colname;
+					for (i = 0; i < npat; i++) {
+						refs[i][0] = cols[i][0];
+						refs[i][1] = cols[i][1];
+						refs[i][2] = cols[i][2];
+					}
+					gotref = 1;
+					warning("Got two colorimetric files - assuming '%s' is the refrence",innames[0]);
+
+					if (spec) {
+						error("Spectral reference is required to use non-standard observer");
+					}
+				}
 				current = cols;
 				colname = strdup(cgf->t[0].kdata[ii]);
-				if (gotcol)
-					error("Need spectral reference and colorimtric file");
 				gotcol = 1;
 			} else {
 				error ("Unknown INSTRUMENT_TYPE_SPECTRAL value '%s'",cgf->t[0].kdata[ti]);
@@ -652,7 +676,7 @@ int main(int argc, char *argv[])
 				xspect sp;
 				char buf[100];
 				int  spi[XSPECT_MAX_BANDS];	/* CGATS indexes for each wavelength */
-				xsp2cie *sp2cie;	/* Spectral conversion object */
+				xsp2cie *sp2cie;			/* Spectral conversion object */
 
 				if ((ii = cgf->find_kword(cgf, 0, "SPECTRAL_BANDS")) < 0)
 					error ("Input file '%s' doesn't contain keyword SPECTRAL_BANDS",innames[n]);
@@ -695,6 +719,7 @@ int main(int argc, char *argv[])
 				}
 				sp2cie->del(sp2cie);        /* Done with this */
 
+			/* Colorimetric file - assume it's the target */
 			} else {
 
 				if (isLab) {		/* Expect Lab */
@@ -798,7 +823,7 @@ int main(int argc, char *argv[])
 #ifndef SHOW_WINDOW_ONFAKE
 		!fake && 
 #endif
-		 disp == NULL) {
+		 webdisp == 0 && disp == NULL) {
 			int ix = 0;
 #if defined(UNIX) && !defined(__APPLE__)
 			char *dn, *pp;
@@ -1027,9 +1052,9 @@ int main(int argc, char *argv[])
 
 				/* Should we use current cal rather than native ??? */
 				if ((dr = new_disprd(&errc, fake ? -99 : comno, fc, dtype, proj, adaptive,
-				                     noautocal, highres, 1, NULL, 0, 0, disp, blackbg, override,
-				                     ccallout, NULL, patsize, ho, vo, NULL, NULL, 0, 2,
-				                     icxOT_default, NULL, 
+				                     noautocal, highres, 2, NULL, NULL, 0, 0, disp, blackbg,
+				                     override, webdisp, ccallout, NULL, patsize, ho, vo,
+					                 NULL, NULL, 0, 2, icxOT_default, NULL, 
 				                     0, 0, verb, VERBOUT, debug, "fake" ICC_FILE_EXT)) == NULL)
 					error("new_disprd failed with '%s'\n",disprd_err(errc));
 			

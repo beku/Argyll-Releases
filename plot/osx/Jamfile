@@ -1,0 +1,21 @@
+
+# Jamfile for OS X window code development
+
+#PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS	= $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS	+= -x objective-c ;
+PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
+
+# Hello world
+#Main hello : hello.m ;
+
+# Hello world window in C
+Main helloc : helloc.c ;
+
+# Hello world window in Objective-C
+ObjectCcFlags hellom : -ObjC ;
+Main hellom : hellom.m ;
+
+#GuiBin tt ;
+#Main tt : tt.m ;
+

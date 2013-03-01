@@ -13,7 +13,6 @@ verify.c
 applycal.c
 mppprof.c
 mppcheck.c
-sepgen.c
 simpprof.c
 kodak2ti3.c
 cb2ti3.c

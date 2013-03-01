@@ -6,7 +6,7 @@
  * Author: Graeme W. Gill
  * Date:   4/10/96
  *
- * Copyright 1996 - 2007, Graeme W. Gill
+ * Copyright 1996 - 2013, Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -69,18 +69,19 @@
 #include "aconfig.h"
 #include "cgats.h"
 #include "numlib.h"
+#include "icc.h"
 #include "xicc.h"
 #include "ccmx.h"
 #include "ccss.h"
 #include "insttypes.h"
+#include "conv.h"
 #include "icoms.h"
 #include "inst.h"
-#include "conv.h"
 #include "dispwin.h"
 #include "dispsup.h"
 #include "alphix.h"
 #include "sort.h"
-#include "icc.h"
+#include "instappsup.h"
 #include "spyd2setup.h"
 
 #include <stdarg.h>
@@ -89,14 +90,7 @@
 #include <conio.h>
 #endif
 
-#ifdef NT		/* You'd think there might be some standards.... */
-# ifndef __BORLANDC__
-#  define stricmp _stricmp
-# endif
-#else
-# define stricmp strcasecmp
-#endif
-#ifdef NEVER	/* Not currently used */
+#ifdef NEVER    /* Not currently used */
 
 /* Convert control chars to ^[A-Z] notation in a string */
 static char *
@@ -145,6 +139,8 @@ typedef struct {
 	double eXYZ[3];				/* Expected XYZ values (100.0 scale for ref.) */
 
 	int rr;						/* nz if reading read (used for tracking unread patches) */
+
+	inst_meas_type mtype;		/* Measurement type */
 	double XYZ[3];				/* Colorimeter readings (100.0 scale for ref.) */
 
 	xspect sp;					/* Spectrum. sp.spec_n > 0 if valid, 100 scaled for ref. */
@@ -198,7 +194,7 @@ alphix *saix,		/* Step (patch) index generators */
 int ixord,			/* Index order, 0 = pass then step */
 int rstart,			/* Random start/chart id */
 int hex,			/* Hexagon test patches */
-int comport, 		/* COM port used */
+icompath *ipath,	/* Instrument path to open */
 flow_control fc,	/* flow control */
 double plen,		/* Patch length in mm (used by DTP20/41) */
 double glen,		/* Gap length in mm  (used by DTP20/41) */
@@ -209,7 +205,7 @@ int displ,			/* 1 = Use display emissive mode, 2 = display bright rel. */
 					/* 3 = display white rel. */
 int dtype,			/* Display type selection charater */
 inst_opt_filter fe,	/* Optional filter */
-int nocal,			/* Disable auto calibration */
+int nocal,			/* Disable initial calibration */
 int disbidi,		/* Disable automatic bi-directional strip recognition */
 int highres,		/* Use high res spectral mode */
 char *ccxxname,		/* Colorimeter Correction/Colorimeter Calibration name */
@@ -220,12 +216,12 @@ int xtern,			/* Use external (user supplied) values rather than instument read *
 int spectral,		/* Generate spectral info flag */
 int accurate_expd,	/* Expected values can be assumed to be accurate */
 int emit_warnings,	/* Emit warnings for wrong strip, unexpected value */
-int verb,			/* Verbosity flag */
-int debug			/* Debug level */
+a1log *log			/* verb, debug & error log */
 ) {
 	inst *it = NULL;
-	inst_capability  cap;
+	inst_mode  cap;		/* Mode capability */
 	inst2_capability cap2;
+	inst3_capability cap3;
 	int n, i, j;
 	int rmode = 0;		/* Read mode, 0 = spot, 1 = strip, 2 = xy, 3 = chart */
 	int svdmode = 0;	/* Saved mode, 0 = no, 1 = use saved mode */
@@ -243,12 +239,12 @@ int debug			/* Debug level */
 			nextrap = 2;
 		}
 
-		if ((it = new_inst(comport, 0, debug, verb)) == NULL) {
+		if ((it = new_inst(ipath, 0, log, DUIH_FUNC_AND_CONTEXT)) == NULL) {
 			printf("Unknown, inappropriate or no instrument detected\n");
 			return -1;
 		}
 		/* Establish communications */
-		if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
+		if ((rv = it->init_coms(it, br, fc, 15.0)) != inst_ok) {
 			printf("Establishing communications with instrument failed with message '%s' (%s)\n",
 			       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 			it->del(it);
@@ -257,7 +253,7 @@ int debug			/* Debug level */
 
 		/* set filter configuration before initialising/calibrating */
 		if (fe != inst_opt_filter_unknown) {
-			if ((rv = it->set_opt_mode(it, inst_opt_set_filter, fe)) != inst_ok) {
+			if ((rv = it->get_set_opt(it, inst_opt_set_filter, fe)) != inst_ok) {
 				printf("Setting filter configuration not supported by instrument\n");
 				it->del(it);
 				return -1;
@@ -273,20 +269,18 @@ int debug			/* Debug level */
 		}
 
 		*atype = it->get_itype(it);		/* Actual instrument type */
-		if (verb && *atype != itype)
-			printf("Warning: chart is for %s, using instrument %s\n",inst_name(itype),inst_name(*atype));
+		if (*atype != itype)
+			a1logv(log, 1, "Warning: chart is for %s, using instrument %s\n",inst_name(itype),inst_name(*atype));
 
 		{
 			int ccssset = 0;
 			inst_mode mode = 0;
 
-			cap  = it->capabilities(it);
-			cap2 = it->capabilities2(it);
+			it->capabilities(it, &cap, &cap2, &cap3);
 
 			if (trans) {
-				if ((cap & (inst_trans_spot | inst_trans_strip
-				          | inst_trans_xy | inst_trans_chart)) == 0) {
-					printf("Need transmission spot, strip, xy or chart reading capability,\n");
+				if (!IMODETST(cap, inst_mode_transmission)) {
+					printf("Need transmission reading capability,\n");
 					printf("and instrument doesn't support it\n");
 					it->del(it);
 					return -1;
@@ -295,17 +289,17 @@ int debug			/* Debug level */
 			} else if (emis || displ) {
 
 				if (emis) {
-					if ((cap & (inst_emis_spot | inst_emis_strip)) == 0) {
+					if (!IMODETST(cap, inst_mode_emis_spot)
+					 && !IMODETST(cap, inst_mode_emis_strip)) {
 						printf("Need emissive spot or strip reading capability\n");
 						printf("and instrument doesn't support it\n");
 						it->del(it);
 						return -1;
 					}
 				} else {
-					/* We're assuming that the instrument capability */
-					/* will result in a spot by spot operation */
-					if ((cap & inst_emis_disp) == 0) {
-						printf("Need display spot capability\n");
+					/* Should we allow for non-adaptive mode ? */
+					if (!IMODETST(cap, inst_mode_emis_spot)) {
+						printf("Need emissive reading capability\n");
 						printf("and instrument doesn't support it\n");
 						it->del(it);
 						return -1;
@@ -313,9 +307,7 @@ int debug			/* Debug level */
 				}
 
 			} else {
-				if ((cap & (inst_ref_spot | inst_ref_strip | inst_ref_xy | inst_ref_chart
-				          | inst_s_ref_spot | inst_s_ref_strip
-				          | inst_s_ref_xy | inst_s_ref_chart)) == 0) {
+				if (!IMODETST(cap, inst_mode_reflection)) {
 					printf("Need reflection spot, strip, xy or chart reading capability,\n");
 					printf("and instrument doesn't support it\n");
 					it->del(it);
@@ -326,29 +318,24 @@ int debug			/* Debug level */
 			/* Set display type */
 			if (dtype != 0) {
 
-				if (cap & inst_emis_disptype) {
+				if (cap2 & inst2_disptype) {
 					int ix;
-					if ((ix = inst_get_disptype_index(it, dtype)) == 0) {
+					if ((ix = inst_get_disptype_index(it, dtype, 0)) < 0) {
 						printf("Setting display type ix %d failed\n",ix);
 						it->del(it);
 						return -1;
 					}
 		
-					if ((rv = it->set_opt_mode(it, inst_opt_disp_type, ix)) != inst_ok) {
+					if ((rv = it->set_disptype(it, ix)) != inst_ok) {
 						printf("Setting display type ix %d not supported by instrument\n",ix);
 						it->del(it);
 						return -1;
 					}
 				} else
 					printf("Display type ignored - instrument doesn't support display type\n");
-
-			} else if (cap & (inst_emis_disptypem)) {
-				printf("A display type must be selected\n");
-				it->del(it);
-				return -1;
 			}
 
-			if (spectral && (cap & inst_spectral) == 0) {
+			if (spectral && !IMODETST(cap, inst_mode_spectral)) {
 				printf("Warning: Instrument isn't capable of spectral measurement\n");
 				spectral = 0;
 			}
@@ -364,7 +351,7 @@ int debug			/* Debug level */
 					return -1;
 				}
 				if (cx->read_ccmx(cx,ccxxname) == 0) {
-					if ((cap & inst_ccmx) == 0) {
+					if ((cap2 & inst2_ccmx) == 0) {
 						printf("\nInstrument doesn't have Colorimeter Correction Matrix capability\n");
 						it->del(it);
 						return -1;
@@ -394,13 +381,20 @@ int debug			/* Debug level */
 						it->del(it);
 						return -1;
 					}
-					if ((cap & inst_ccss) == 0) {
+					if ((cap2 & inst2_ccss) == 0) {
 						printf("\nInstrument doesn't have Colorimeter Calibration Spectral Sample capability\n");
 						cs->del(cs);
 						it->del(it);
 						return -1;
 					}
-					if ((rv = it->col_cal_spec_set(it, obType, NULL, cs->samples, cs->no_samp)) != inst_ok) {
+					if ((rv = it->get_set_opt(it, inst_opt_set_ccss_obs, obType, NULL)) != inst_ok) {
+						printf("\nSetting CCSS observer failed with error :'%s' (%s)\n",
+					     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
+						cs->del(cs);
+						it->del(it);
+						return -1;
+					}
+					if ((rv = it->col_cal_spec_set(it, cs->samples, cs->no_samp)) != inst_ok) {
 						printf("\nSetting Colorimeter Calibration Spectral Samples failed with error :'%s' (%s)\n",
 					     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 						cs->del(cs);
@@ -413,28 +407,28 @@ int debug			/* Debug level */
 			}
 
 			/* If non-standard observer wasn't set by a CCSS file above */
-			if (obType != icxOT_default && (cap & inst_ccss) && ccssset == 0) {
-				if ((rv = it->col_cal_spec_set(it, obType, NULL, NULL, 0)) != inst_ok) {
-					printf("\nSetting Colorimeter Calibration Spectral Samples failed with error :'%s' (%s)\n",
+			if (obType != icxOT_default && (cap2 & inst2_ccss) && ccssset == 0) {
+				if ((rv = it->get_set_opt(it, inst_opt_set_ccss_obs, obType, NULL)) != inst_ok) {
+					printf("\nSetting CCSS observer failed with error :'%s' (%s)\n",
 				     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 					it->del(it);
 					return -1;
 				}
 			}
 
-			/* Disable autocalibration of machine if selected */
+			/* Disable initial calibration of machine if selected */
 			if (nocal != 0){
-				if ((rv = it->set_opt_mode(it,inst_opt_noautocalib)) != inst_ok) {
-					printf("Setting no-autocalibrate failed with '%s' (%s)\n",
+				if ((rv = it->get_set_opt(it,inst_opt_noinitcalib, 0)) != inst_ok) {
+					printf("Setting no-initial calibrate failed with '%s' (%s)\n",
 				       it->inst_interp_error(it, rv), it->interp_error(it, rv));
-					printf("Disable auto-calibrate not supported\n");
+					printf("Disable inital-calibrate not supported\n");
 				}
 			}
 
 			/* If it battery powered, show the status of the battery */
 			if ((cap2 & inst2_has_battery)) {
 				double batstat = 0.0;
-				if ((rv = it->get_status(it, inst_stat_battery, &batstat)) != inst_ok) {
+				if ((rv = it->get_set_opt(it, inst_stat_battery, &batstat)) != inst_ok) {
 					printf("\nGetting instrument battery status failed with error :'%s' (%s)\n",
 			       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 					it->del(it);
@@ -445,47 +439,51 @@ int debug			/* Debug level */
 
 			/* Set it to the appropriate mode */
 			if (highres) {
-				if (cap & inst_highres) {
+				if (IMODETST(cap, inst_mode_highres)) {
 					inst_code ev;
-					if ((ev = it->set_opt_mode(it, inst_opt_highres)) != inst_ok) {
+					if ((ev = it->get_set_opt(it, inst_opt_highres)) != inst_ok) {
 						printf("\nSetting high res mode failed with error :'%s' (%s)\n",
 				       	       it->inst_interp_error(it, ev), it->interp_error(it, ev));
 						it->del(it);
 						return -1;
 					}
 					highres = 1;
-				} else if (verb) {
-					printf("high resolution ignored - instrument doesn't support high res. mode\n");
+				} else {
+					a1logv(log, 1, "high resolution ignored - instrument doesn't support high res. mode\n");
 				}
 			}
 
 			if (scan_tol != 1.0) {
 				if (cap2 & inst2_has_scan_toll) {
 					inst_code ev;
-					if ((ev = it->set_opt_mode(it, inst_opt_scan_toll, scan_tol)) != inst_ok) {
+					if ((ev = it->get_set_opt(it, inst_opt_scan_toll, scan_tol)) != inst_ok) {
 						printf("\nSetting patch consistency tolerance to %f failed with error :'%s' (%s)\n",
 				       	       scan_tol, it->inst_interp_error(it, ev), it->interp_error(it, ev));
 						it->del(it);
 						return -1;
 					}
 					highres = 1;
-				} else if (verb) {
-					printf("Modified patch consistency tolerance ignored - instrument doesn't support it\n");
+				} else {
+					a1logv(log, 1, "Modified patch consistency tolerance ignored - instrument doesn't support it\n");
 				}
 			}
 
 			/* Should look at instrument type & user spec ??? */
 			if (trans) {
-				if (pbypatch && (cap & inst_trans_spot)) {
+				if (pbypatch && IMODETST(cap, inst_mode_trans_spot)
+				 && it->check_mode(it, inst_mode_trans_spot) == inst_ok) {
 					mode = inst_mode_trans_spot;
 					rmode = 0;
-				} else if (cap & inst_trans_chart) {
+				} else if (IMODETST(cap, inst_mode_trans_chart)
+				 && it->check_mode(it, inst_mode_trans_chart) == inst_ok) {
 					mode = inst_mode_trans_chart;
 					rmode = 3;
-				} else if (cap & inst_trans_xy) {
+				} else if (IMODETST(cap, inst_mode_trans_xy)
+				 && it->check_mode(it, inst_mode_trans_xy) == inst_ok) {
 					mode = inst_mode_trans_xy;
 					rmode = 2;
-				} else if (cap & inst_trans_strip) {
+				} else if (IMODETST(cap, inst_mode_trans_strip)
+				 && it->check_mode(it, inst_mode_trans_strip) == inst_ok) {
 					mode = inst_mode_trans_strip;
 					rmode = 1;
 				} else {
@@ -494,13 +492,15 @@ int debug			/* Debug level */
 				}
 			} else if (displ) {
 				/* We assume a display mode will always be spot by spot */
-				mode = inst_mode_emis_disp;
+				mode = inst_mode_emis_spot;
 				rmode = 0;
 			} else if (emis) {
-				if (pbypatch && (cap & inst_emis_spot)) {
+				if (pbypatch && IMODETST(cap, inst_mode_emis_spot)
+				 && it->check_mode(it, inst_mode_emis_spot) == inst_ok) {
 					mode = inst_mode_emis_spot;
 					rmode = 0;
-				} else if (cap & inst_emis_strip) {
+				} else if (IMODETST(cap, inst_mode_emis_strip)
+				 && it->check_mode(it, inst_mode_emis_strip) == inst_ok) {
 					mode = inst_mode_emis_strip;
 					rmode = 1;
 				} else {
@@ -512,9 +512,11 @@ int debug			/* Debug level */
 
 				/* See if instrument has a saved mode, and if it has data that */
 				/* could match this chart */
-				if (cap & inst_s_reflection) {
+				if (IMODETST(cap, inst_mode_s_reflection)) {
 
-					if ((rv = it->get_status(it, inst_stat_saved_readings, &sv)) != inst_ok) {
+					a1logv(log, 2, "Instrument has a svaed chart mode\n");
+
+					if ((rv = it->get_set_opt(it, inst_stat_saved_readings, &sv)) != inst_ok) {
 						printf("Getting saved reading status failed with error :'%s' (%s)\n",
 				       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 						it->del(it);
@@ -524,7 +526,9 @@ int debug			/* Debug level */
 					if (sv & inst_stat_savdrd_chart) {
 						int no_patches, no_rows, pat_per_row, chart_id, missing_row;
 
-						if ((rv = it->get_status(it, inst_stat_s_chart,
+						a1logv(log, 2, "There is a saved chart\n");
+
+						if ((rv = it->get_set_opt(it, inst_stat_s_chart,
 						    &no_patches, &no_rows, &pat_per_row, &chart_id, &missing_row))
 							                                                      != inst_ok) {
 							printf("Getting saved chart details failed with error :'%s' (%s)\n",
@@ -553,7 +557,7 @@ int debug			/* Debug level */
 						for (nstr = 0; pis[nstr] != 0; nstr++)
 							;
 
-						if ((rv = it->get_status(it, inst_stat_s_xy,
+						if ((rv = it->get_set_opt(it, inst_stat_s_xy,
 						    &no_sheets, &no_patches, &no_rows, &pat_per_row)) != inst_ok) {
 							printf("Getting saved sheet details failed with error :'%s' (%s)\n",
 					       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -563,13 +567,11 @@ int debug			/* Debug level */
 
 						if (nstr != no_sheets || npat != no_patches
 						 || totpa != no_rows || stipa != pat_per_row) {
-							if (verb) {
-								printf("Can't use saved sheets because they don't match chart\n");
-								printf("Got %d sheets, expect %d. Got %d patches, expect %d.\n",
-								       no_sheets,nstr,no_patches,npat);
-								printf("Got %d rows, expect %d. Got %d patches per row, expect %d.\n",
-								       no_rows,totpa,pat_per_row,stipa);
-							}
+							a1logv(log, 1, "Can't use saved sheets because they don't match chart\n");
+							a1logv(log, 1, "Got %d sheets, expect %d. Got %d patches, expect %d.\n",
+							       no_sheets,nstr,no_patches,npat);
+							a1logv(log, 1, "Got %d rows, expect %d. Got %d patches per row, expect %d.\n",
+							       no_rows,totpa,pat_per_row,stipa);
 							sv &= ~inst_stat_savdrd_xy;
 						}
 					}
@@ -577,7 +579,7 @@ int debug			/* Debug level */
 					if (sv & inst_stat_savdrd_strip) {
 						int no_patches, no_rows, pat_per_row;
 
-						if ((rv = it->get_status(it, inst_stat_s_strip,
+						if ((rv = it->get_set_opt(it, inst_stat_s_strip,
 						    &no_patches, &no_rows, &pat_per_row)) != inst_ok) {
 							printf("Getting saved strip details failed with error :'%s' (%s)\n",
 					       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -586,7 +588,7 @@ int debug			/* Debug level */
 						}
 
 						if (npat != no_patches || totpa != no_rows || stipa != pat_per_row) {
-							if (verb) printf("Can't use saved strips because they don't match chart\n");
+							a1logv(log, 1, "Can't use saved strips because they don't match chart\n");
 							sv &= ~inst_stat_savdrd_strip;
 						}
 					}
@@ -594,7 +596,7 @@ int debug			/* Debug level */
 					if (sv & inst_stat_savdrd_spot) {
 						int no_patches;
 
-						if ((rv = it->get_status(it, inst_stat_s_spot, &no_patches)) != inst_ok) {
+						if ((rv = it->get_set_opt(it, inst_stat_s_spot, &no_patches)) != inst_ok) {
 							printf("Getting saved spot details failed with error :'%s' (%s)\n",
 					       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 							it->del(it);
@@ -602,55 +604,65 @@ int debug			/* Debug level */
 						}
 
 						if (npat != no_patches) {
-							if (verb) printf("Can't use saved spots because they don't match chart - got %d patches, expect %d\n",no_patches,npat);
+							a1logv(log, 1, "Can't use saved spots because they don't match chart - got %d patches, expect %d\n",no_patches,npat);
 							sv &= ~inst_stat_savdrd_spot;
 						}
 					}
 				}
 
 				if (pbypatch
-				        && (cap & inst_s_ref_spot)
+				        && IMODETST(cap, inst_mode_s_ref_spot)
+				        && it->check_mode(it, inst_mode_s_ref_spot) == inst_ok
 				        && (sv & inst_stat_savdrd_spot)) {
 					mode = inst_mode_s_ref_spot;
 					svdmode = 1;
 					rmode = 0;
 
-				} else if ((cap & inst_s_ref_chart)
+				} else if (IMODETST(cap, inst_mode_s_ref_chart)
+				        && it->check_mode(it, inst_mode_s_ref_chart) == inst_ok
 				        && (sv & inst_stat_savdrd_chart)) {
 					mode = inst_mode_s_ref_chart;
 					svdmode = 1;
 					rmode = 3;
 
-				} else if ((cap & inst_s_ref_xy)
+				} else if (IMODETST(cap, inst_mode_s_ref_xy)
+				        && it->check_mode(it, inst_mode_s_ref_xy) == inst_ok
 				        && (sv & inst_stat_savdrd_xy)) {
 					mode = inst_mode_s_ref_xy;
 					svdmode = 1;
 					rmode = 2;
 
-				} else if ((cap & inst_s_ref_strip)
+				} else if (IMODETST(cap, inst_mode_s_ref_strip)
+				        && it->check_mode(it, inst_mode_s_ref_strip) == inst_ok
 				        && (sv & inst_stat_savdrd_strip)) {
 					mode = inst_mode_s_ref_strip;
 					svdmode = 1;
 					rmode = 1;
 
-				} else if ((cap & inst_s_ref_spot)
+				} else if (IMODETST(cap, inst_mode_s_ref_spot)
+				        && it->check_mode(it, inst_mode_s_ref_spot) == inst_ok
 				        && (sv & inst_stat_savdrd_spot)) {
 					mode = inst_mode_s_ref_spot;
 					svdmode = 1;
 					rmode = 0;
 
-				} else if (pbypatch && (cap & inst_ref_spot)) {
+				} else if (pbypatch && IMODETST(cap, inst_mode_ref_spot)
+				        && it->check_mode(it, inst_mode_ref_spot) == inst_ok) {
 					mode = inst_mode_ref_spot;
 					rmode = 0;
-				} else if (cap & inst_ref_chart) {
+
+				} else if (IMODETST(cap, inst_mode_ref_chart)
+				        && it->check_mode(it, inst_mode_ref_chart) == inst_ok) {
 					mode = inst_mode_ref_chart;
 					rmode = 3;
 
-				} else if (cap & inst_ref_xy) {
+				} else if (IMODETST(cap, inst_mode_ref_xy)
+				        && it->check_mode(it, inst_mode_ref_xy) == inst_ok) {
 					mode = inst_mode_ref_xy;
 					rmode = 2;
 
-				} else if (cap & inst_ref_strip) {
+				} else if (IMODETST(cap, inst_mode_ref_strip)
+				        && it->check_mode(it, inst_mode_ref_strip) == inst_ok) {
 					mode = inst_mode_ref_strip;
 					rmode = 1;
 
@@ -668,8 +680,7 @@ int debug			/* Debug level */
 				it->del(it);
 				return -1;
 			}
-			cap  = it->capabilities(it);
-			cap2 = it->capabilities2(it);
+			it->capabilities(it, &cap, &cap2, &cap3);
 		}
 	}
 
@@ -693,7 +704,7 @@ int debug			/* Debug level */
 		for (i = 0; i < npat; i++) {
 			strncpy(vals[i].loc, scols[i]->loc, ICOM_MAX_LOC_LEN-1);
 			vals[i].loc[ICOM_MAX_LOC_LEN-1] = '\000';
-			vals[i].XYZ_v = 1;
+			vals[i].XYZ_v = 0;
 		}
 
 		for (;;) {		/* retry loop */
@@ -724,6 +735,7 @@ int debug			/* Debug level */
 			if (vals[i].sp.spec_n > 0) {
 				scols[i]->sp = vals[i].sp;
 			}
+			scols[i]->mtype = vals[i].mtype;
 			scols[i]->rr = 1;		/* Has been read */
 		}
 		free(vals);
@@ -1056,11 +1068,8 @@ int debug			/* Debug level */
 		int oroi;				/* Overall row index */
 
 		/* Do any needed calibration before the user places the instrument on a desired spot */
-		if ((it->needs_calibration(it) & inst_calt_needs_cal_mask) != 0
-		 && it->needs_calibration(it) != inst_calt_crt_freq
-		 && it->needs_calibration(it) != inst_calt_disp_int_time
-		 && it->needs_calibration(it) != inst_calt_proj_int_time) {
-			if ((rv = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL))
+		if (it->needs_calibration(it) & inst_calt_n_dfrble_mask) {
+			if ((rv = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL))
 			                                                                    != inst_ok) {
 				printf("\nCalibration failed with error :'%s' (%s)\n",
 	       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -1069,19 +1078,19 @@ int debug			/* Debug level */
 			}
 		}
 
-		/* Enable switch or keyboard trigger if possible */
-		if (cap2 & inst2_keyb_switch_trig) {
-			rv = it->set_opt_mode(it, inst_opt_trig_keyb_switch);
+		/* Enable switch or user via uicallback trigger if possible */
+		if (cap2 & inst2_user_switch_trig) {
+			rv = it->get_set_opt(it, inst_opt_trig_user_switch);
 			uswitch = 2;
 
 		/* Or use just switch trigger */
 		} else if (cap2 & inst2_switch_trig) {
-			rv = it->set_opt_mode(it, inst_opt_trig_switch);
+			rv = it->get_set_opt(it, inst_opt_trig_switch);
 			uswitch = 1;
 
-		/* Or go for keyboard trigger */
-		} else if (cap2 & inst2_keyb_trig) {
-			rv = it->set_opt_mode(it, inst_opt_trig_keyb);
+		/* Or go for user vi uicallback trigger */
+		} else if (cap2 & inst2_user_trig) {
+			rv = it->get_set_opt(it, inst_opt_trig_user);
 
 		/* Or something is wrong with instrument capabilities */
 		} else {
@@ -1098,29 +1107,21 @@ int debug			/* Debug level */
 
 		/* Set so that return or any other key triggers, */
 		/* but retain our abort keys */
-		it->icom->set_uih(it->icom, 0x00, 0xff, ICOM_TRIG);
-		it->icom->set_uih(it->icom, 'f', 'f', ICOM_CMND);
-		it->icom->set_uih(it->icom, 'F', 'F', ICOM_CMND);
-		it->icom->set_uih(it->icom, 'b', 'b', ICOM_CMND);
-		it->icom->set_uih(it->icom, 'B', 'B', ICOM_CMND);
-		it->icom->set_uih(it->icom, 'n', 'n', ICOM_CMND);
-		it->icom->set_uih(it->icom, 'N', 'N', ICOM_CMND);
-		it->icom->set_uih(it->icom, 'g', 'g', ICOM_CMND);
-		it->icom->set_uih(it->icom, 'G', 'G', ICOM_CMND);
-		it->icom->set_uih(it->icom, 'd', 'd', ICOM_CMND);
-		it->icom->set_uih(it->icom, 'D', 'D', ICOM_CMND);
-		it->icom->set_uih(it->icom, 'q', 'q',  ICOM_USER);
-		it->icom->set_uih(it->icom, 'Q', 'Q',  ICOM_USER);
-		it->icom->set_uih(it->icom, 0x03, 0x03, ICOM_USER);		/* ^c */
-		it->icom->set_uih(it->icom, 0x1b, 0x1b, ICOM_USER);		/* Esc */
-
-		/* Prompt on trigger */
-		if ((rv = it->set_opt_mode(it, inst_opt_trig_return)) != inst_ok) {
-			printf("\nSetting trigger mode failed with error :'%s' (%s)\n",
-	       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
-			it->del(it);
-			return -1;
-		}
+		inst_set_uih(0x00, 0xff, DUIH_TRIG);
+		inst_set_uih('f', 'f',   DUIH_CMND);
+		inst_set_uih('F', 'F',   DUIH_CMND);
+		inst_set_uih('b', 'b',   DUIH_CMND);
+		inst_set_uih('B', 'B',   DUIH_CMND);
+		inst_set_uih('n', 'n',   DUIH_CMND);
+		inst_set_uih('N', 'N',   DUIH_CMND);
+		inst_set_uih('g', 'g',   DUIH_CMND);
+		inst_set_uih('G', 'G',   DUIH_CMND);
+		inst_set_uih('d', 'd',   DUIH_CMND);
+		inst_set_uih('D', 'D',   DUIH_CMND);
+		inst_set_uih('q', 'q',   DUIH_ABORT);
+		inst_set_uih('Q', 'Q',   DUIH_ABORT);
+		inst_set_uih(0x03, 0x03, DUIH_ABORT);		/* ^c */
+		inst_set_uih(0x1b, 0x1b, DUIH_ABORT);		/* Esc */
 
 		/* Allocate space for values from a pass/strip */
 		if ((vals = (ipatch *)calloc(sizeof(ipatch), (stipa+nextrap))) == NULL)
@@ -1216,61 +1217,67 @@ int debug			/* Debug level */
 					printf("read_strip returned '%s' (%s)\n",
 				       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 #endif /* DEBUG */
-					/* Deal with a command */
-					if ((rv & inst_mask) == inst_user_cmnd) {
-						ch = it->icom->get_uih_char(it->icom);
+					/* Deal with user abort or command */
+					if ((rv & inst_mask) == inst_user_abort) {
+						int keyc = inst_get_uih_char();
 
-						printf("\n");
-						if (ch == 'f' || ch == 'F') {
-							incflag = 1;
-							break;
-						} else if (ch == 'b' || ch == 'B') {
-							incflag = -1;
-							break;
-						} else if (ch == 'n' || ch == 'N') {
-							incflag = 2;
-							break;
-						} else {	/* Assume 'd' or 'D' */
+						/* Deal with a command */
+						if (keyc & DUIH_CMND) {
+							ch = keyc & 0xff;
 
-							/* See if there are any unread patches */
-							for (done = i = 0; i < npat; i += stipa) {
-								if (scols[i]->rr == 0)
-									break;					/* At least one patch read */
-							}
-							if (i >= npat)
-								done = 1;
-			
-							if (done) {
-								incflag = -2;
-								break;
-							}
-
-							/* Not all rows have been read */
-							empty_con_chars();
-							printf("\nDone ? - At least one unread patch (%s), Are you sure [y/n]: ",
-							       scols[i]->loc);
-							fflush(stdout);
-							ch = next_con_char();
 							printf("\n");
-							if (ch == 'y' || ch == 'Y') {
-								incflag = -2;
+							if (ch == 'f' || ch == 'F') {
+								incflag = 1;
 								break;
+							} else if (ch == 'b' || ch == 'B') {
+								incflag = -1;
+								break;
+							} else if (ch == 'n' || ch == 'N') {
+								incflag = 2;
+								break;
+							} else {	/* Assume 'd' or 'D' */
+
+								/* See if there are any unread patches */
+								for (done = i = 0; i < npat; i += stipa) {
+									if (scols[i]->rr == 0)
+										break;					/* At least one patch read */
+								}
+								if (i >= npat)
+									done = 1;
+				
+								if (done) {
+									incflag = -2;
+									break;
+								}
+
+								/* Not all rows have been read */
+								empty_con_chars();
+								printf("\nDone ? - At least one unread patch (%s), Are you sure [y/n]: ",
+								       scols[i]->loc);
+								fflush(stdout);
+								ch = next_con_char();
+								printf("\n");
+								if (ch == 'y' || ch == 'Y') {
+									incflag = -2;
+									break;
+								}
+								continue;
 							}
+
+						/* Deal with a user abort */
+						} else if (keyc & DUIH_ABORT) {
+							empty_con_chars();
+							printf("\n\nStrip read stopped at user request!\n");
+							printf("Hit Esc or 'q' to give up, any other key to retry:"); fflush(stdout);
+							if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+								printf("\n");
+								it->del(it);
+								return -1;
+							}
+							printf("\n");
 							continue;
 						}
 
-					/* Deal with a user abort */
-					} else if ((rv & inst_mask) == inst_user_abort) {
-						empty_con_chars();
-						printf("\n\nStrip read stopped at user request!\n");
-						printf("Hit Esc or 'q' to give up, any other key to retry:"); fflush(stdout);
-						if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
-							printf("\n");
-							it->del(it);
-							return -1;
-						}
-						printf("\n");
-						continue;
 					/* Deal with needs calibration */
 					} else if ((rv & inst_mask) == inst_needs_cal) {
 						inst_code ev;
@@ -1278,7 +1285,7 @@ int debug			/* Debug level */
 						if (cap2 & inst2_no_feedback)
 							bad_beep();
 						printf("\nStrip read failed because instruments needs calibration\n");
-						ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL);
+						ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL);
 						if (ev != inst_ok) {	/* Abort or fatal error */
 							it->del(it);
 							return -1;
@@ -1286,7 +1293,7 @@ int debug			/* Debug level */
 						continue;
 
 					/* Deal with a bad sensor position */
-					} else if ((rv & inst_mask) == inst_wrong_sensor_pos) {
+					} else if ((rv & inst_mask) == inst_wrong_config) {
 						printf("\n\nSpot read failed due to the sensor being in the wrong position\n(%s)\n",it->interp_error(it, rv));
 						continue;
 
@@ -1319,7 +1326,7 @@ int debug			/* Debug level */
 						printf("\n");
 						if (it->icom->port_type(it->icom) == icomt_serial) {
 							/* Allow retrying at a lower baud rate */
-							int tt = it->last_comerr(it);
+							int tt = it->last_scomerr(it);
 							if (tt & (ICOM_BRK | ICOM_FER | ICOM_PER | ICOM_OER)) {
 								if (br == baud_57600) br = baud_38400;
 								else if (br == baud_38400) br = baud_9600;
@@ -1328,7 +1335,7 @@ int debug			/* Debug level */
 								else if (br == baud_2400) br = baud_1200;
 								else br = baud_1200;
 							}
-							if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
+							if ((rv = it->init_coms(it, br, fc, 15.0)) != inst_ok) {
 #ifdef DEBUG
 								printf("init_coms returned '%s' (%s)\n",
 							       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -1396,7 +1403,7 @@ int debug			/* Debug level */
 
 								/* Compute a Y scaling value to give correlation */
 								/* a chance for absolute readings */
-								if (vals[skipp+toff].aXYZ_v != 0) {
+								if (vals[skipp+toff].XYZ_v != 0) {
 									double refnorm = 0.0;
 									ynorm = 0.0;
 									for (i = 0; i < stipa; i++) {
@@ -1404,7 +1411,7 @@ int debug			/* Debug level */
 										if (dir != 0)
 											ix = stipa - 1 - ix;
 										refnorm += scb[i]->eXYZ[1];
-										ynorm += vals[ix].aXYZ[1];
+										ynorm += vals[ix].XYZ[1];
 									}
 									ynorm = refnorm/ynorm;
 								}
@@ -1415,13 +1422,10 @@ int debug			/* Debug level */
 									int ix = i+skipp+toff;
 									if (dir != 0)
 										ix = stipa - 1 - ix;
-									if (vals[ix].XYZ_v == 0 && vals[ix].aXYZ_v == 0)
+									if (vals[ix].XYZ_v == 0)
 										error("Instrument didn't return XYZ value");
-									if (vals[ix].XYZ_v != 0) {
-										vcorr = xyzLabDE(ynorm, vals[ix].XYZ, scb[i]->eXYZ);
+									vcorr = xyzLabDE(ynorm, vals[ix].XYZ, scb[i]->eXYZ);
 //printf("DE %f from vals[%d] %f %f %f and scols[%d] %f %f %f\n", vcorr, ix, vals[ix].XYZ[0], vals[ix].XYZ[1], vals[ix].XYZ[2], i + choroi * stipa, scb[i]->eXYZ[0], scb[i]->eXYZ[1], scb[i]->eXYZ[2]);
-									} else
-										vcorr = xyzLabDE(ynorm, vals[ix].aXYZ, scb[i]->eXYZ);
 									corr += vcorr;
 									if (vcorr > pwerr)
 										pwerr = vcorr;
@@ -1537,14 +1541,10 @@ int debug			/* Debug level */
 					ix = stipa - 1 - ix;
 
 				/* Copy XYZ */
-				if (vals[ix].XYZ_v == 0 && vals[ix].aXYZ_v == 0)
+				if (vals[ix].XYZ_v == 0)
 					error("Instrument didn't return XYZ value");
-				if (vals[ix].XYZ_v != 0)
-					for (j = 0; j < 3; j++)
-						scb[i]->XYZ[j] = vals[ix].XYZ[j];
-				else
-					for (j = 0; j < 3; j++)
-						scb[i]->XYZ[j] = vals[ix].XYZ[j];
+				for (j = 0; j < 3; j++)
+					scb[i]->XYZ[j] = vals[ix].XYZ[j];
 
 				/* Copy spectral */
 				if (vals[ix].sp.spec_n > 0) {
@@ -1564,17 +1564,14 @@ int debug			/* Debug level */
 		int incflag = 0;		/* 0 = no change, 1 = increment, 2 = inc by 10, */
 								/* 3 = inc next unread, -1 = decrement, -2 = dec by 10 */
 								/* 4 = goto specific patch */
-		inst_opt_mode omode;	/* The option mode used */
+		inst_opt_type omode;	/* The option mode used */
 		ipatch val;
 
 		if (xtern == 0) {	/* Instrument patch by patch */
 
 			/* Do any needed calibration before the user places the instrument on a desired spot */
-			if ((it->needs_calibration(it) & inst_calt_needs_cal_mask) != 0
-			 && it->needs_calibration(it) != inst_calt_crt_freq
-			 && it->needs_calibration(it) != inst_calt_disp_int_time
-			 && it->needs_calibration(it) != inst_calt_proj_int_time) {
-				if ((rv = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL))
+			if (it->needs_calibration(it) & inst_calt_n_dfrble_mask) {
+				if ((rv = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL))
 				                                                                    != inst_ok) {
 					printf("\nCalibration failed with error :'%s' (%s)\n",
 		       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -1583,16 +1580,16 @@ int debug			/* Debug level */
 				}
 			}
 	
-			/* Enable switch or keyboard trigger if possible */
-			if (cap2 & inst2_keyb_switch_trig) {
-				omode = inst_opt_trig_keyb_switch;
-				rv = it->set_opt_mode(it, omode);
+			/* Enable switch or user via uicallback trigger if possible */
+			if (cap2 & inst2_user_switch_trig) {
+				omode = inst_opt_trig_user_switch;
+				rv = it->get_set_opt(it, omode);
 				uswitch = 1;
 	
-			/* Or go for keyboard trigger */
-			} else if (cap2 & inst2_keyb_trig) {
-				omode = inst_opt_trig_keyb;
-				rv = it->set_opt_mode(it, omode);
+			/* Or go for user via uicallback trigger */
+			} else if (cap2 & inst2_user_trig) {
+				omode = inst_opt_trig_user;
+				rv = it->get_set_opt(it, omode);
 	
 			/* Or something is wrong with instrument capabilities */
 			} else {
@@ -1607,30 +1604,21 @@ int debug			/* Debug level */
 				return -1;
 			}
 
-			/* Prompt on trigger */
-			if ((rv = it->set_opt_mode(it, inst_opt_trig_return)) != inst_ok) {
-				printf("\nSetting trigger mode failed with error :'%s' (%s)\n",
-		       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
-				it->del(it);
-				return -1;
-			}
-	
 			/* Setup the keyboard trigger to return our commands */
-			it->icom->reset_uih(it->icom);
-			it->icom->set_uih(it->icom, 'f', 'f', ICOM_CMND);
-			it->icom->set_uih(it->icom, 'F', 'F', ICOM_CMND);
-			it->icom->set_uih(it->icom, 'b', 'b', ICOM_CMND);
-			it->icom->set_uih(it->icom, 'B', 'B', ICOM_CMND);
-			it->icom->set_uih(it->icom, 'n', 'n', ICOM_CMND);
-			it->icom->set_uih(it->icom, 'N', 'N', ICOM_CMND);
-			it->icom->set_uih(it->icom, 'g', 'g', ICOM_CMND);
-			it->icom->set_uih(it->icom, 'G', 'G', ICOM_CMND);
-			it->icom->set_uih(it->icom, 'd', 'd', ICOM_CMND);
-			it->icom->set_uih(it->icom, 'D', 'D', ICOM_CMND);
-			it->icom->set_uih(it->icom, 'q', 'q', ICOM_USER);
-			it->icom->set_uih(it->icom, 'Q', 'Q', ICOM_USER);
-			it->icom->set_uih(it->icom, 0xd, 0xd, ICOM_TRIG);	/* Return */
-			it->icom->set_uih(it->icom, ' ', ' ', ICOM_TRIG);
+			inst_set_uih('f', 'f', DUIH_CMND);
+			inst_set_uih('F', 'F', DUIH_CMND);
+			inst_set_uih('b', 'b', DUIH_CMND);
+			inst_set_uih('B', 'B', DUIH_CMND);
+			inst_set_uih('n', 'n', DUIH_CMND);
+			inst_set_uih('N', 'N', DUIH_CMND);
+			inst_set_uih('g', 'g', DUIH_CMND);
+			inst_set_uih('G', 'G', DUIH_CMND);
+			inst_set_uih('d', 'd', DUIH_CMND);
+			inst_set_uih('D', 'D', DUIH_CMND);
+			inst_set_uih('q', 'q', DUIH_ABORT);
+			inst_set_uih('Q', 'Q', DUIH_ABORT);
+			inst_set_uih(0xd, 0xd, DUIH_TRIG);	/* Return */
+			inst_set_uih(' ', ' ', DUIH_TRIG);
 		}
 
 		/* Skip to next unread if first has been read */
@@ -1766,7 +1754,7 @@ int debug			/* Debug level */
 					printf("    <return> or <space> to read:");
 				fflush(stdout);
 
-				rv = it->read_sample(it, "SPOT", &val);
+				rv = it->read_sample(it, "SPOT", &val, 1);
 
 				/* Deal with reading */
 				if (rv == inst_ok) {
@@ -1775,28 +1763,34 @@ int debug			/* Debug level */
 						good_beep();
 					ch = '0';
 
+				/* Deal with user trigger */
 				} else if ((rv & inst_mask) == inst_user_trig) {
-					/* User triggered read */
 					if (cap2 & inst2_no_feedback)
 						good_beep();
-					ch = it->icom->get_uih_char(it->icom);
+					ch = inst_get_uih_char();
 
-				/* Deal with a command */
-				} else if ((rv & inst_mask) == inst_user_cmnd) {
-					ch = it->icom->get_uih_char(it->icom);
-					printf("\n");
-
+				/* Deal with a abort or command */
 				} else if ((rv & inst_mask) == inst_user_abort) {
-					empty_con_chars();
-					printf("\n\nSpot read stopped at user request!\n");
-					printf("Hit Esc or 'q' to give up, any other key to retry:"); fflush(stdout);
-					if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+					int keyc = inst_get_uih_char();
+
+					/* User issued a command */
+					if (keyc & DUIH_CMND) {
+						ch = keyc & 0xff;
 						printf("\n");
-						it->del(it);
-						return -1;
+
+					/* User aborted */
+					} else if (keyc & DUIH_ABORT) {
+						empty_con_chars();
+						printf("\n\nSpot read stopped at user request!\n");
+						printf("Hit Esc or 'q' to give up, any other key to retry:"); fflush(stdout);
+						if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+							printf("\n");
+							it->del(it);
+							return -1;
+						}
+						printf("\n");
+						continue;
 					}
-					printf("\n");
-					continue;
 
 				/* Deal with needs calibration */
 				} else if ((rv & inst_mask) == inst_needs_cal) {
@@ -1805,7 +1799,7 @@ int debug			/* Debug level */
 					if (cap2 & inst2_no_feedback)
 						bad_beep();
 					printf("\nSpot read failed because instruments needs calibration\n");
-					ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL);
+					ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL);
 					if (ev != inst_ok) {	/* Abort or fatal error */
 						it->del(it);
 						return -1;
@@ -1840,7 +1834,7 @@ int debug			/* Debug level */
 					printf("\n");
 					if (it->icom->port_type(it->icom) == icomt_serial) {
 						/* Allow retrying at a lower baud rate */
-						int tt = it->last_comerr(it);
+						int tt = it->last_scomerr(it);
 						if (tt & (ICOM_BRK | ICOM_FER | ICOM_PER | ICOM_OER)) {
 							if (br == baud_57600) br = baud_38400;
 							else if (br == baud_38400) br = baud_9600;
@@ -1849,7 +1843,7 @@ int debug			/* Debug level */
 							else if (br == baud_2400) br = baud_1200;
 							else br = baud_1200;
 						}
-						if ((rv = it->init_coms(it, comport, br, fc, 15.0)) != inst_ok) {
+						if ((rv = it->init_coms(it, br, fc, 15.0)) != inst_ok) {
 #ifdef DEBUG
 							printf("init_coms returned '%s' (%s)\n",
 						       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -1981,16 +1975,11 @@ int debug			/* Debug level */
 			} else if (xtern == 0 && (ch == '0' || ch == ' ' || ch == '\r')) {	
 
 				/* Save the reading */
-				if (val.XYZ_v == 0 && val.aXYZ_v == 0)
+				if (val.XYZ_v == 0)
 					error("Instrument didn't return XYZ value");
 
-				if (val.XYZ_v != 0) {
-					for (j = 0; j < 3; j++)
-						scols[pix]->XYZ[j] = val.XYZ[j];
-				} else {
-					for (j = 0; j < 3; j++)
-						scols[pix]->XYZ[j] = val.aXYZ[j];
-				}
+				for (j = 0; j < 3; j++)
+					scols[pix]->XYZ[j] = val.XYZ[j];
 
 				/* Copy spectral */
 				if (val.sp.spec_n > 0) {
@@ -2012,30 +2001,29 @@ int debug			/* Debug level */
 }
 
 void
-usage(iccss *cl) {
-	icoms *icom;
-	inst_capability cap = 0;
+usage() {
+	icompaths *icmps;
+	inst2_capability cap2 = 0;
 	fprintf(stderr,"Read Target Test Chart, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: chartread [-options] outfile\n");
 	fprintf(stderr," -v             Verbose mode\n");
 	fprintf(stderr," -c listno      Set communication port from the following list (default %d)\n",COMPORT);
-	if ((icom = new_icoms()) != NULL) {
+	if ((icmps = new_icompaths(NULL)) != NULL) {
 		icompath **paths;
-		if ((paths = icom->get_paths(icom)) != NULL) {
+		if ((paths = icmps->paths) != NULL) {
 			int i;
 			for (i = 0; ; i++) {
 				if (paths[i] == NULL)
 					break;
-				fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
+				fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->name);
 			}
 		} else
 			fprintf(stderr,"    ** No ports found **\n");
-		icom->del(icom);
 	}
 	fprintf(stderr," -t              Use transmission measurement mode\n");
 	fprintf(stderr," -d              Use display measurement mode (white Y relative results)\n");
-	cap = inst_show_disptype_options(stderr, " -y              ", icom);
+	cap2 = inst_show_disptype_options(stderr, " -y              ", icmps, 0);
 	fprintf(stderr," -e              Emissive for transparency on a light box\n");
 	fprintf(stderr," -p              Measure patch by patch rather than strip\n");
 	fprintf(stderr," -x [lx]         Take external values, either L*a*b* (-xl) or XYZ (-xx).\n");
@@ -2049,21 +2037,14 @@ usage(iccss *cl) {
 	fprintf(stderr,"    p             Polarising filter\n");
 	fprintf(stderr,"    6             D65\n");
 	fprintf(stderr,"    u             U.V. Cut\n");
-	fprintf(stderr," -N              Disable auto calibration of instrument\n");
+	fprintf(stderr," -N              Disable initial calibration of instrument if possible\n");
 	fprintf(stderr," -B              Disable auto bi-directional strip recognition\n");
 	fprintf(stderr," -H              Use high resolution spectrum mode (if available)\n");
-	if (cap & inst_ccmx)
+	if (cap2 & inst2_ccmx)
 		fprintf(stderr," -X file.ccmx    Apply Colorimeter Correction Matrix\n");
-	if (cap & inst_ccss) {
+	if (cap2 & inst2_ccss) {
 		int i;
 		fprintf(stderr," -X file.ccss    Use Colorimeter Calibration Spectral Samples for calibration\n");
-		for (i = 0; cl != NULL && cl[i].desc != NULL; i++) {
-			if (i == 0)
-				fprintf(stderr," -X N             0: %s\n",cl[i].desc); 
-			else
-				fprintf(stderr,"                  %d: %s\n",i,cl[i].desc); 
-		}
-		free_iccss(cl);
 		fprintf(stderr," -Q observ       Choose CIE Observer for CCSS instrument:\n");
 		fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	}
@@ -2072,6 +2053,8 @@ usage(iccss *cl) {
 	fprintf(stderr," -W n|h|x        Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]      Print debug diagnostics to stderr\n");
 	fprintf(stderr," outfile         Base name for input[ti2]/output[ti3] file\n");
+	if (icmps != NULL)
+		icmps->del(icmps);
 	exit(1);
 	}
 
@@ -2081,6 +2064,8 @@ int main(int argc, char *argv[]) {
 	int verb = 0;
 	int debug = 0;
 	int comport = COMPORT;			/* COM port used */
+	icompaths *icmps = NULL;
+	icompath *ipath = NULL;
 	flow_control fc = fc_nc;		/* Default flow control */
 	instType itype = instUnknown;	/* Instrument chart is targeted to */
 	instType atype = instUnknown;	/* Instrument used to read the chart */
@@ -2100,10 +2085,8 @@ int main(int argc, char *argv[]) {
 	int emit_warnings = 1;			/* Emit warnings for wrong strip, unexpected value */
 	int dolab = 0;					/* 1 = Save CIE as Lab, 2 = Save CIE as XYZ and Lab */
 	int doresume = 0;				/* Resume reading a chart */
-	int nocal = 0;					/* Disable auto calibration */
+	int nocal = 0;					/* Disable initial calibration */
 	char ccxxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction/Colorimeter Calibration name */
-	iccss *cl = NULL;				/* List of installed CCSS files */
-	int ncl = 0;					/* Number of them */
 	icxObserverType obType = icxOT_default;		/* ccss observer */
 	static char inname[MAXNAMEL+1] = { 0 };	/* Input cgats file base name */
 	static char outname[MAXNAMEL+1] = { 0 };	/* Output cgats file base name */
@@ -2136,16 +2119,13 @@ int main(int argc, char *argv[]) {
 	int fi;						/* Colorspace index */
 	double plen = 7.366, glen = 2.032, tlen = 18.8;	/* Patch, gap and trailer length in mm */
 
-	set_exe_path(argv[0]);			/* Set global exe_path and error_program */
+	set_exe_path(argv[0]);		/* Set global exe_path and error_program */
 	check_if_not_interactive();
 
 	setup_spyd2();				/* Load firware if available */
 
-	/* Get a list of installed CCSS files */
-	cl = list_iccss(&ncl);
-
 	if (argc <= 1)
-		usage(cl);
+		usage();
 
 	/* Process the arguments */
 	mfa = 1;        /* Minimum final arguments */
@@ -2166,14 +2146,15 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (argv[fa][1] == '?')
-				usage(cl);
+				usage();
 
 			/* Verbose */
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
+				g_log->verb = verb;
 
 			/* No auto calibration */
-			else if (argv[fa][1] == 'N')
+			} else if (argv[fa][1] == 'N')
 				nocal = 1;
 
 			/* Disable bi-directional strip recognition */
@@ -2189,19 +2170,13 @@ int main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'X') {
 				int ix;
 				fa = nfa;
-				if (na == NULL) usage(cl);
-				if (ncl > 0 && sscanf(na, " %d ", &ix) == 1) {
-					if (ix < 0 || ix >= ncl)
-						usage(cl);
-					strncpy(ccxxname,cl[ix].path,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
-				} else {
-					strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
-				}
+				if (na == NULL) usage();
+				strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
 
 			/* CCSS Spectral Observer type */
 			} else if (argv[fa][1] == 'Q') {
 				fa = nfa;
-				if (na == NULL) usage(cl);
+				if (na == NULL) usage();
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
 					obType = icxOT_CIE_1931_2;
 				} else if (strcmp(na, "1964_10") == 0) {	/* Classic 10 degree */
@@ -2213,13 +2188,13 @@ int main(int argc, char *argv[]) {
 				} else if (strcmp(na, "shaw") == 0) {		/* Shaw and Fairchilds 1997 2 degree */
 					obType = icxOT_Shaw_Fairchild_2;
 				} else
-					usage(cl);
+					usage();
 			}
 
 			/* Scan tolerance ratio */
 			else if (argv[fa][1] == 'T') {
 				if (na == NULL)
-					usage(cl);
+					usage();
 				scan_tol = atof(na);
 
 			/* Suppress warnings */
@@ -2229,7 +2204,7 @@ int main(int argc, char *argv[]) {
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
-				if (na == NULL) usage(cl);
+				if (na == NULL) usage();
 				if (na[0] == 'n' || na[0] == 'N')
 					fc = fc_none;
 				else if (na[0] == 'h' || na[0] == 'H')
@@ -2237,7 +2212,7 @@ int main(int argc, char *argv[]) {
 				else if (na[0] == 'x' || na[0] == 'X')
 					fc = fc_XonXOff;
 				else
-					usage(cl);
+					usage();
 
 
 			/* Debug coms */
@@ -2247,13 +2222,14 @@ int main(int argc, char *argv[]) {
 					debug = atoi(na);
 					fa = nfa;
 				}
+				g_log->debug = debug;
 
 			/* COM port  */
 			} else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
 				fa = nfa;
-				if (na == NULL) usage(cl);
+				if (na == NULL) usage();
 				comport = atoi(na);
-				if (comport < 1 || comport > 40) usage(cl);
+				if (comport < 1 || comport > 99) usage();
 
 			/* Request transmission measurement */
 			} else if (argv[fa][1] == 't') {
@@ -2277,7 +2253,7 @@ int main(int argc, char *argv[]) {
 			/* Display type */
 			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
 				fa = nfa;
-				if (na == NULL) usage(cl);
+				if (na == NULL) usage();
 				dtype = na[0];
 
 			/* Request patch by patch measurement */
@@ -2287,14 +2263,14 @@ int main(int argc, char *argv[]) {
 			/* Request external values */
 			} else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
 				fa = nfa;
-				if (na == NULL) usage(cl);
+				if (na == NULL) usage();
 
 				if (na[0] == 'l' || na[0] == 'L')
 					xtern = 1;
 				else if (na[0] == 'x' || na[0] == 'X')
 					xtern = 2;
 				else
-					usage(cl);
+					usage();
 
 			/* Turn off spectral measurement */
 			} else if (argv[fa][1] == 'n')
@@ -2315,13 +2291,13 @@ int main(int argc, char *argv[]) {
 			/* Printer calibration info */
 			else if (argv[fa][1] == 'I') {
 				fa = nfa;
-				if (na == NULL) usage(cl);
+				if (na == NULL) usage();
 				strncpy(calname,na,MAXNAMEL); calname[MAXNAMEL] = '\000';
 
 			/* Filter configuration */
 			} else if (argv[fa][1] == 'F') {
 				fa = nfa;
-				if (na == NULL) usage(cl);
+				if (na == NULL) usage();
 				if (na[0] == 'n' || na[0] == 'N')
 					fe = inst_opt_filter_none;
 				else if (na[0] == 'p' || na[0] == 'P')
@@ -2331,16 +2307,16 @@ int main(int argc, char *argv[]) {
 				else if (na[0] == 'u' || na[0] == 'U')
 					fe = inst_opt_filter_UVCut;
 				else
-					usage(cl);
+					usage();
 
 			} else 
-				usage(cl);
+				usage();
 		} else
 			break;
 	}
 
 	/* Get the file name argument */
-	if (fa >= argc || argv[fa][0] == '-') usage(cl);
+	if (fa >= argc || argv[fa][0] == '-') usage();
 	strcpy(inname,argv[fa]);
 	strcat(inname,".ti2");
 	strcpy(outname,argv[fa]);
@@ -2830,12 +2806,17 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	if ((icmps = new_icompaths(g_log)) == NULL)
+		error("Finding instrument paths failed");
+	if ((ipath = icmps->get_path(icmps, comport)) == NULL)
+		error("No instrument at port %d",comport);
+
 	/* Read all of the strips in */
 	if (read_strips(itype, scols, &atype, npat, totpa, stipa, pis, paix,
-	                saix, ixord, rstart, hex, comport, fc, plen, glen, tlen,
+	                saix, ixord, rstart, hex, ipath, fc, plen, glen, tlen,
 	                trans, emis, displ, dtype, fe, nocal, disbidi, highres, ccxxname, obType,
 	                scan_tol, pbypatch, xtern, spectral, accurate_expd,
-	                emit_warnings, verb, debug) == 0) {
+	                emit_warnings, g_log) == 0) {
 		/* And save the result */
 
 		int nrpat;				/* Number of read patches */
@@ -2973,6 +2954,7 @@ int main(int argc, char *argv[]) {
 			error("Write error : %s",ocg->err);
 	}
 
+	icmps->del(icmps);
 	free(pis);
 	saix->del(saix);
 	paix->del(paix);

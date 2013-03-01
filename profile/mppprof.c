@@ -689,13 +689,13 @@ make_output_mpp(
 				xspect sp;
 
 				if (isDisplay) {
-					if ((sc = new_xsp2cie(icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+					if ((sc = new_xsp2cie(icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, icxClamp)) == NULL)
 						error("Failed to create xsp2cie object");
 	
 					p->set_ilob(p, icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, 0);
 				} else {
 					/* Set standard D50 viewer & illum. */
-					if ((sc = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+					if ((sc = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, icxClamp)) == NULL)
 						error("Failed to create xsp2cie object");
 	
 					p->set_ilob(p, icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, 0);
@@ -861,13 +861,13 @@ make_output_mpp(
 
 					if (isDisplay) {
 						/* Set emissive viewer. */
-						if ((sc = new_xsp2cie(icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+						if ((sc = new_xsp2cie(icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, icxClamp)) == NULL)
 							error("Failed to create xsp2cie object");
 						/* (mpp will ignore illuminant for display anyway ??) */
 						p2->set_ilob(p2, icxIT_none, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, 0);
 					} else {
 						/* Set standard D50 viewer & illum. */
-						if ((sc = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+						if ((sc = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, icxClamp)) == NULL)
 							error("Failed to create xsp2cie object");
 						p2->set_ilob(p2, icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, 0);
 					}

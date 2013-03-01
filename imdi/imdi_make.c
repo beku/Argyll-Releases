@@ -84,13 +84,14 @@ gendesc descs[] = {
 								/* * means multiplies combination */
 								/* + means lockstep with previous line */
 	{
-		{ 1,    3,  4,  5,  6,  7,  8, 0 },		/* * Input dimension combinations */
-		{ 256, 33, 18, 16, 12,  8,  7, 0 }, 	/* + Min Interpolation table resolutions */
-		{ 1,    8, 17,  1,  1,  1,  1, 0 }, 	/* + Min Simplex table resolutions */
+		{ 1,    3,  4,  5,  6,  7,  8, 9, 10, 0 },	/* * Input dimension combinations */
+		{ 256, 33, 18, 16, 12,  8,  7, 6, 5,  0 }, 	/* + Min Interpolation table resolutions */
+		{ 1,    8, 17,  1,  1,  1,  1, 1, 1,  0 }, 	/* + Min Simplex table resolutions */
 
-		{ 1, 3, 4, 5, 6, 7, 8, 0 },				/* * Output dimension combinations */
-		{oopts_none, oopts_none, oopts_none, oopts_none,
-		 oopts_none, oopts_none, oopts_none, oopts_none}, /* + Output channel options */
+		{ 1, 3, 4, 5, 6, 7, 8, 9, 10, 0 },				/* * Output dimension combinations */
+		{oopts_none, oopts_none, oopts_none, oopts_none, oopts_none, oopts_none,
+		 oopts_none, oopts_none, oopts_none, oopts_none, oopts_none, oopts_none},
+														/* + Output channel options */
 
 		{pixint8, pixint16, pixint8,  pixint16, pixint16, 0 },	/* * Input pixel representation */
 		{prec_p8, prec_p8,  prec_p8,  prec_p16, prec_p16, 0 },	/* + Internal precision */
@@ -104,7 +105,7 @@ gendesc descs[] = {
 #endif	/* !TEST1 */
 };
 
-void set_architecture(mach_arch *ar);
+void set_architecture(mach_arch *ar, int use64);
 
 struct _knamestr {
 	char name[100];
@@ -131,6 +132,7 @@ void usage(void) {
 	fprintf(stderr,"usage: imdi_make [-i]\n");
 	fprintf(stderr," -d dir        Directory to create them in (default .)\n");
 	fprintf(stderr," -i            Individial Files\n");
+	fprintf(stderr," -f            Force 64 bit\n");
 	exit(1);
 }
 
@@ -145,6 +147,11 @@ main(int argc, char *argv[]) {
 	mach_arch ar;
 	int ix = 1;				/* kernel index */
 	knamestr *list = NULL, *lp = NULL;
+#if defined(ALLOW64) && defined(USE64)
+	int use64 = 1;
+#else
+	int use64 = 0;
+#endif
 	char dirname[MAXNAMEL+1+1] = "";   /* Output directory name */
 	char temp[MAXNAMEL+100+1];		/* Buffer to compose filenames in */
 	FILE *kcode = NULL;	/* Kernel routine code file */
@@ -173,9 +180,10 @@ main(int argc, char *argv[]) {
 				}
 			}
 
-			if (argv[fa][1] == '?')
+			if (argv[fa][1] == '?') {
 				usage();
 
+			}
 			/* Destination directory */
 			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D') {
 				int len;
@@ -192,13 +200,23 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
 				indiv = 1;
 			}
-			else 
+			/* Force 64 bit */
+			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F') {
+#ifdef ALLOW64
+				use64 = 1;
+#else
+				fprintf(stderr,"ALLOW64 bits is undefined\n");
 				usage();
+#endif
+			}
+			else { 
+				usage();
+			}
 		} else
 			break;
 	}
 
-	set_architecture(&ar);
+	set_architecture(&ar, use64);
 
 	/* Open the file for kernel routine declaration header */
 	sprintf(temp, "%simdi_k.h",dirname);
@@ -357,7 +375,8 @@ main(int argc, char *argv[]) {
 /* environment. */
 void
 set_architecture(
-mach_arch *ar
+mach_arch *ar,
+int use64
 ) {
 	unsigned long etest = 0xff;
 	char *machtype;		/* Environment value */
@@ -386,13 +405,13 @@ mach_arch *ar
 		ar->shfm   = 0;		/* Use shifts to mask values */
 		ar->oscale = 8;		/* Has scaled indexing up to * 8 */
 		ar->smmul  = 0;		/* Doesn't have fast small multiply for index scaling */
-#ifdef USE64
-		ar->nords  = 4;		/* Number of ord types */
-		ar->nints  = 4;		/* Number of int types */
-#else
-		ar->nords  = 3;		/* Number of ord types */
-		ar->nints  = 3;		/* Number of int types */
-#endif
+		if (use64) {
+			ar->nords  = 4;		/* Number of ord types */
+			ar->nints  = 4;		/* Number of int types */
+		} else {
+			ar->nords  = 3;		/* Number of ord types */
+			ar->nints  = 3;		/* Number of int types */
+		}
 		ar->natord = 2;		/* Most natural type (assume unsigned int) */
 		ar->natint = 2;		/* Most natural type (assume int) */
 
@@ -442,13 +461,13 @@ mach_arch *ar
 		ar->shfm   = 0;		/* Use shifts to mask values */
 		ar->oscale = 8;		/* Has scaled indexing up to * 8 */
 		ar->smmul  = 0;		/* Doesn't have fast small multiply for index scaling */
-#ifdef USE64
-		ar->nords  = 4;		/* Number of ord types */
-		ar->nints  = 4;		/* Number of int types */
-#else
-		ar->nords  = 3;		/* Number of ord types */
-		ar->nints  = 3;		/* Number of int types */
-#endif
+		if (use64) {
+			ar->nords  = 4;		/* Number of ord types */
+			ar->nints  = 4;		/* Number of int types */
+		} else {
+			ar->nords  = 3;		/* Number of ord types */
+			ar->nints  = 3;		/* Number of int types */
+		}
 		ar->natord = 2;		/* Most natural type (assume unsigned int) */
 		ar->natint = 2;		/* Most natural type (assume int) */
 

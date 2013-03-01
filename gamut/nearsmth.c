@@ -3144,7 +3144,7 @@ datao map_oh
 //		inv_comp_ce(&opts, smp[i].sv, smp[i].sv, &smp[i].wt);
 //		smp[i].sr = icmNorm33(smp[i].sv, smp[i].sgam->cent);
 		icmCpy3(smp[i].sv, smp[i]._sv);
-		smp[i].sr, smp[i]._sr;
+		smp[i].sr = smp[i]._sr;
 	}
 
 	VB(("Creating sub-surface guide points:\n"));

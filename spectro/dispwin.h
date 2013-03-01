@@ -8,7 +8,7 @@
  * Author: Graeme W. Gill
  * Date:   4/10/96
  *
- * Copyright 1998 - 2007 Graeme W. Gill
+ * Copyright 1998 - 2013 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -63,13 +63,13 @@ WINSHLWAPI LPWSTR WINAPI PathFindFileNameW(LPCWSTR);
 
 #endif /* NT */
 
-#ifdef __APPLE__	/* Assume OSX Carbon */
-#include <Carbon/Carbon.h>
-#include <CoreServices/CoreServices.h>
-#include <IOKit/Graphics/IOGraphicsLib.h>
+#ifdef __APPLE__	/* Assume OS X Cocoa */
+
+#include <Carbon/Carbon.h>		/* To declare CGDirectDisplayID  */
+
 #endif /* __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -79,7 +79,7 @@ WINSHLWAPI LPWSTR WINAPI PathFindFileNameW(LPCWSTR);
 #include <X11/extensions/Xrandr.h>
 #include <X11/extensions/scrnsaver.h>
 #include <X11/extensions/dpms.h>
-#endif /* UNIX */
+#endif /* UNIX_X11 */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 
@@ -87,7 +87,7 @@ WINSHLWAPI LPWSTR WINAPI PathFindFileNameW(LPCWSTR);
 typedef enum {
 	p_scope_user     = 0,		/* (user profiles) Linux, OS X & Vista */
 	p_scope_local    = 1,		/* (local system profiles) Linux, OS X & vista */
-	p_scope_system   = 2,		/* (system profiles) OS X. [ Linux, Vista same as local ] */
+	p_scope_system   = 2,		/* (system supplied profiles) OS X. [ Linux, Vista same as local ] */
 	p_scope_network  = 3		/* (shared network profiles) [ OS X. Linux, Vista same as local ] */
 } p_scope;
 
@@ -107,7 +107,7 @@ typedef struct {
 #ifdef __APPLE__
 	CGDirectDisplayID ddid;
 #endif /* __APPLE__ */
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	int screen;				/* Screen to select */
 	int uscreen;			/* Underlying screen */
 	int rscreen;			/* Underlying RAMDAC screen */
@@ -121,7 +121,7 @@ typedef struct {
 	RROutput output;			/* Associated output */
 	Atom icc_out_atom;			/* ICC profile atom for this output */
 #endif /* randr >= V 1.2 */
-#endif /* UNIX */
+#endif /* UNIX_X11 */
 } disppath;
 
 /* Return pointer to list of disppath. Last will be NULL. */
@@ -177,14 +177,19 @@ struct _dispwin {
 
 	double rgb[3];		/* Current color (full resolution) */
 	double r_rgb[3];	/* Current color (raster value) */
+	int update_delay;	/* Update delay in msec, default 200 */
+	int min_update_delay;	/* Minimum update delay, default 20, overriden by EV */
 	int nowin;			/* Don't create a test window */
 	int native;			/*  0 = use current current or given calibration curve */
 						/*  1 = set native linear output and use ramdac high precision */
-	ramdac *or;			/* Original ramdac contents */
+	ramdac *or;			/* Original ramdac contents, NULL if none */
 	ramdac *r;			/* Ramdac in use for native mode */
 	int blackbg;		/* NZ if black full screen background */
 
 	char *callout;		/* if not NULL - set color Shell callout routine */
+
+	/* Linked list to automate SIGKILL cleanup */
+	struct _dispwin *next;
 
 #ifdef NT
 	char monid[128];	/* Monitor ID (ie. 'Monitor\MEA1773\{4D36E96E-E325-11CE-BFC1-08002BE10318}\0015'*/
@@ -208,14 +213,12 @@ struct _dispwin {
 
 #ifdef __APPLE__
 	CGDirectDisplayID ddid;
-	WindowRef mywindow;
-	CGrafPtr port;
-	CGContextRef mygc;
+	void *osx_cntx;			/* OSX specific info */	
 	int btf;				/* Flag, nz if window has been brought to the front once */
 	int winclose;			/* Flag, set to nz if window was closed */
 #endif /* __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	Display *mydisplay;
 	int myscreen;			/* Usual or virtual screen with Xinerama */
 	int myuscreen;			/* Underlying screen */
@@ -252,11 +255,11 @@ struct _dispwin {
 
 	int dpmsenabled;			/* DPMS is enabled */
 	
-#endif /* UNIX */
+#endif /* UNIX_X11 */
 
 	void *pcntx;				/* Private context (ie., webwin) */
-	unsigned int ncix, ccix;	/* Counters to trigger webwin colorchange */
-	int mg_stop;				/* Stop flag */
+	volatile unsigned int ncix, ccix;	/* Counters to trigger webwin colorchange */
+	volatile int mg_stop;				/* Stop flag */
 
 	int ddebug;					/* >0 to print debug to stderr */
 
@@ -280,13 +283,17 @@ struct _dispwin {
 	/* Return nz if failed */
 	int (*uninstall_profile)(struct _dispwin *p, char *fname, p_scope scope);
 
-	/* Get the currently installed default display profile */
+	/* Get the currently installed display profile and return it as an icmFile. */
+	/* Return the name as well, up to mxlen chars, excluding nul. */
 	/* Return NULL if failed */
 	icmFile *(*get_profile)(struct _dispwin *p, char *name, int mxlen);
 
 	/* Set a color (values 0.0 - 1.0) */
 	/* Return nz on error */
 	int (*set_color)(struct _dispwin *p, double r, double g, double b);
+
+	/* Set an update delay, and return the previous value */
+	int (*set_update_delay)(struct _dispwin *p, int update_delay);
 
 	/* Set a shell set color callout command line */
 	void (*set_callout)(struct _dispwin *p, char *callout);

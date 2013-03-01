@@ -24,7 +24,11 @@ ObjectKeep port/getopt.c ;
 
 # support library for generation utilities
 #Library libport.lib : [ CatPaths port : getopt.c strcasecmp.c strtoul.c ] ;
-Library libport.lib : [ CatPaths port : getopt.c strcasecmp.c ] ;
+if $(UNIX) {
+	Library libport.lib : [ CatPaths port : strcasecmp.c ] ;
+} else {
+	Library libport.lib : [ CatPaths port : getopt.c strcasecmp.c ] ;
+}
 
 # generation utilities
 Main mkg3states : libtiff/mkg3states.c ;
@@ -49,7 +53,9 @@ if $(UNIX) {
 # Optional codecs not included
 # tif_zip.c
 # tif_pixarlog.c
-Library libtiff.lib : [ CatPaths libtiff : $(LIBSRCS) ] : : : $(JPEGINC) libtiff ;
+Library libtiff.lib : [ CatPaths libtiff : $(LIBSRCS) ] : : : $(JPEGINC) libtiff : ;
+
+#Library library : sources : flags : defines : hdrpaths : objects
 
 # copy header file to lib directory
 File tiffconf.h    : libtiff/tiffconf.h ;

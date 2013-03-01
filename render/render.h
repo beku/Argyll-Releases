@@ -10,7 +10,7 @@
  * Author:  Graeme W. Gill
  * Date:    28/12/2005
  *
- * Copyright 2005, 2008 Graeme W. Gill
+ * Copyright 2005, 2008, 2012 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -19,7 +19,7 @@
 
 /* This is basically a simple 2D ray tracing renderer, so it's not especially */
 /* efficient, but it's simple and direct, easy to add new primitives or */
-/* capabilities, is high quality, and has a an accelleration algorithm that */
+/* capabilities, is high quality, and has an accelleration algorithm that */
 /* makes it fast enough for printed output. */
 
 /* Mathematical coordinate in mm are used for primitives, ie. the origin is */
@@ -50,6 +50,7 @@ typedef enum {
 
 typedef double color2d[TOTC2D]; 
 
+/* Font type */
 typedef enum {
 	rowman_s = 0,	/* Rownman, single stroke */
 	rowman_d = 1,	/* Rownman, double stroke */
@@ -197,6 +198,9 @@ struct _render2d {
 
 	color2d defc;			/* Default color value */
 
+	void (*bgfunc)(void *cntx, color2d c, double x, double y);	/* BG color function */
+	void *cntx;
+
 	prim2d *head;			/* Start of list of primitives in rendering order */
 	prim2d *yl;				/* Active Y list linked list head */
 	prim2d *xl;				/* Active X list linked list head */
@@ -206,6 +210,11 @@ struct _render2d {
 	void (*del)(struct _render2d *s);					/* Free ourselves and all primitives */
 
 	void (*set_defc)(struct _render2d *s, color2d c);	/* Set the default/background color */
+
+	void (*set_bg_func)(struct _render2d *s,			/* Set background color function */
+		void (*func)(void *cntx, color2d c, double x, double y),	/* Func can choose not to set */
+		void *cntx
+	);
 
 	void (*add)(struct _render2d *s, prim2d *p);		/* Add a primitive */
 

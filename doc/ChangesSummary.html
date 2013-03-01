@@ -16,6 +16,115 @@
     <h1> Summary of Argyll CMS Changes since last release</h1>
     <h3>For a <span style="text-decoration: underline;">complete</span>
       and more detailed list of changes, please see the log.txt file.</h3>
+    <h1>[V1.4.0 -&gt; V1.5.0] 26th February 2013</h1>
+    <ul>
+      <li>Increased ease of selecting ISO 13655:2009 M0, M1 and M2
+        measurements using FWA comensation using any spectrometer that
+        can take non-UV filtered measurements. M0, M1 or M2 can now be
+        selected directly using the -f flag. [ArgyllCMS has been
+        supporting ISO 13655 M0, M1 &amp; M2 well before the standard
+        was created, thanks to its FWA compensation feature.]<br>
+      </li>
+      <li>Increased stability of i1d3 refresh display measurements by
+        increasing integration time, and tweaking crossover from
+        frequency to period measurement.</li>
+      <li>Added i1pro Rev E (i1pro2) feature support. Uses RevE
+        measurement mode, and does wavelength calibration. Uses RevE
+        (internal) stray light reduction, and black level temperature
+        compensation. The only Rev E feature not currently supported is
+        U.V. measurement, which would improve the accuracy of FWA
+        compensation. Rev E driver can be disabled and the legacy driver
+        mode used by setting the ARGYLL_DISABLE_I1PRO2_DRIVER
+        environment variable.</li>
+      <li>Changed i1pro adaptive mode to avoid high gain mode, so as to
+        give more consistent and longer integration times for low light
+        levels.</li>
+      <li>Changed ColorMunki adaptive mode to avoid high gain mode, so
+        as to give more consistent and longer integration times for low
+        levels. Added black level temperature compensation.</li>
+      <li>Added spotread interactive function 'f' to read out the
+        calibrate display refresh rate for instruments that have a
+        refresh display mode, as well as an 'F' function that measures
+        the refresh rate for instruments that support a refresh rate
+        measurement function (colorimeters &amp; spectrometers).</li>
+      <li>The Display Type selection option -y in dispcal, dispread,
+        chartread, spotread &amp; ccxxmake now lists installed CCSS and
+        CCMX files as a selection, rather than using the -X parameter.
+        CCMX and CCSS files now have extra fields to indicate the
+        refresh mode, an optional list of default UI selection
+        characters, and (for CCMX files) the base display type they
+        apply over (CB-n).<br>
+      </li>
+      <li>Tweaked CIECAM02 to improve behavior for extreme blue colors,
+        so that the hue doesn't swing too far towards the cyan. This
+        helps in the clipping behavior from colorspaces such as
+        ProPhotoRGB.</li>
+      <li>Made the input profile cLUT extra neutral axis extrapolation
+        points the default for colprof -u and non -u profiles. Changed
+        -u algorithm to work similarly to -U scale :- it sets the scale
+        automatically. Relative colorimetric is therefore hue matched to
+        the white reference patch, Removed colprof -un, as it seems
+        unnecessary. Added colprof -uc, which clips cLUT colors over Y =
+        1 to white.</li>
+      <li>The spyd2en, spyd4en and i1d3ccss tools have been combined
+        into, and replaced by a single oeminst tool.</li>
+      <li>Fix problem with dispwin/dispcal/dispread -dweb and the latest
+        Safari browser.</li>
+      <li>Changed to a single ArgyllCMS.inf file for MSWin USB driver
+        installation. This eases installation of more than a single type
+        of instrument. Tested on MS Windows 8 and updated installation
+        instructions.</li>
+      <li>Dropped libusb for USB access, using native USB access
+        instead. MSWin uses the libusb-win32 kernel driver. Moved the
+        usb setup files from libusb1 to a new directory, usb.</li>
+      <li>Added scanin support for ColorCheckerPassort.</li>
+      <li>Updated OS X code to compile on 10.6 and 10.7 and (presumably)
+        10.8 (64 bit compatible API used when compiling on those
+        platforms, including Cocoa for the test patch window).<br>
+      </li>
+      <li>Changed udev file usb/55-Argyll.rules to eliminate the test
+        for /lib/udev/udev-acl as a condition of using ACL_MANAGE, since
+        I'm informed that it is deprecated in recent distribution
+        releases (but who can tell, given the churn in the udev API).</li>
+      <li>Deprecated -V flag (adaptive mode) in dispcal, dispread and
+        ccxxmake, since this is now the default. Flag will be ignored
+        with a warning. Added -ZA flag instead, to select non-adaptive
+        integration time mode.</li>
+      <li>spotread -d flag is deprecated, and is now a synonym for the
+        -e flag, since it defaults to adaptive mode. Added -ZA flag
+        instead, to select non-adaptive integration time mode. Also
+        added -Zr and -ZR flags to allow testing of the refresh mode
+        overrides.</li>
+      <li>Migrated ArgyllCMS specific application runtime files (such as
+        instrument blobs, calibration state &amp; calibration files) to
+        an "ArgyllCMS" sub-directory rather than the generic "color"
+        directory. On OS X also moved data files to below the
+        "Application Support" sub directory. The old locations will be
+        used as a fallback.<br>
+      </li>
+      <li>Added support for Quato Silver Haze 3 OEM i1d3<br>
+      </li>
+      <li>Added support for X-Rite ColorMunki Smile colorimeter.</li>
+      <li>Enable the ColorHug by default, although it isn't advertised
+        as supported, since it doesn't yet work reliably on OS X.
+        Updated ColorHug PCI VID &amp; PID</li>
+      <li>For Spyder, emit a warning rather than error if the feature
+        bits are missing for calibration tables.</li>
+      <li>Added automatic adjustment of patch reading delay for i1d3, so
+        that a more conservative (longer) default value (200 msec) can
+        be used without impacting i1d3 speed. Also added environment
+        variable ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS that can set a
+        different minimum update delay.</li>
+      <li>Fixed a bug introduced in V1.3.6 that stops the dtp41 from
+        being initialized properly.</li>
+      <li>Improved black level readings derived from spectral values by
+        allowing them to be -ve. <br>
+      </li>
+      <li>The instlib API has been modified quite extensively to make it
+        more self contained and flexible, although the basic
+        architecture remains the same.<br>
+      </li>
+    </ul>
     <h1>[V1.3.7 -&gt; V1.4.0] 20th April 2012</h1>
     <ul>
       <li>Modified spectro/ccxxmake so that a colorimeter can be used as
@@ -27,13 +136,13 @@
       </li>
       <li>Added JPEG file support to imdi/cctiff, xicc/tiffgamut and
         xicc/extracticc. ICC profiles embedded in JPEG files can now be
-        used anywhere a TIFF file with embeded ICC profile can be used
+        used anywhere a TIFF file with embedded ICC profile can be used
         as a source of an ICC profile.<br>
       </li>
       <li>Fixed memory leaks in usbio.c, xdg_bds.c &amp; conv.c</li>
       <li>Fixed double memory free bug in icc/icc.c when iccdump'ing a
         profile that has a duplicate tag.</li>
-      <li>Changed license of xicc/ccmx.[ch] to GPL2.<br>
+      <li>Changed license of xicc/ccmx.[ch] to GPL2+.<br>
       </li>
       <li>Made display calibration and profile making deal with displays
         without hardware calibration support (VideoLUT support) more
@@ -556,6 +665,13 @@
 
 
 
+
+
+
+
+
+
+
         </span>for systems with &gt; 3Gig Ram.</li>
       <li>Add support for the Eye-One Monitor spectrometer.</li>
       <li>Added -L option to <span style="font-weight: bold;">printtarg</span>
@@ -570,6 +686,13 @@
     Various bug fixes, the main ones being:<br>
     <ul>
       <li>Fixed some <span style="font-weight: bold;">colprof </span>performance
+
+
+
+
+
+
+
 
 
 

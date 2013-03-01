@@ -87,8 +87,8 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -M model        Model description string\n");
 	fprintf(stderr," -D description  Profile Description string (Default \"inoutfile\")\n");
 	fprintf(stderr," -C copyright    Copyright string\n");
-	fprintf(stderr," -Z [tmnb]       Attributes: Transparency, Matte, Negative, BlackAndWhite\n");
-	fprintf(stderr," -Z [prsa]       Default intent: Perceptual, Rel. Colorimetric, Saturation, Abs. Colorimetric\n");
+	fprintf(stderr," -Z tmnb         Attributes: Transparency, Matte, Negative, BlackAndWhite\n");
+	fprintf(stderr," -Z prsa         Default intent: Perceptual, Rel. Colorimetric, Saturation, Abs. Colorimetric\n");
 
 	fprintf(stderr," -q lmhu         Quality - Low, Medium (def), High, Ultra\n");
 //	fprintf(stderr," -q fmsu         Speed - Fast, Medium (def), Slow, Ultra Slow\n");
@@ -117,19 +117,20 @@ void usage(char *diag, ...) {
 //  Development - not supported
 //	fprintf(stderr," -I ver          Set ICC profile version > 2.2.0\n");
 //	fprintf(stderr,"                 ver = 4, Enable ICC V4 creation\n");
-	fprintf(stderr," -u              If input profile, make it absolute (non-standard)\n");
-	fprintf(stderr," -un             Same as u, but don't extrapolate cLut white & black using matrix\n");
+	fprintf(stderr," -u              If input profile, auto scale WP to allow extrapolation\n");
+	fprintf(stderr," -uc             If input profile, clip cLUT values above WP\n");
 	fprintf(stderr," -U scale        If input profile, scale media white point by scale\n");
 	fprintf(stderr," -R              Restrict white <= 1.0, black and primaries to be +ve\n");
-	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"                 A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr," -f [illum]      Use Fluorescent Whitening Agent compensation [opt. simulated inst. illum.:\n");
+	fprintf(stderr,"                  M0, M1, M2, A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp]\n");
+	fprintf(stderr," -i illum        Choose illuminant for computation of CIE XYZ from spectral data & FWA:\n");
+	fprintf(stderr,"                  A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
-	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
-	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
+	fprintf(stderr,"                  1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -r avgdev       Average deviation of device+instrument readings as a percentage (default %4.2f%%)\n",DEFAVGDEV);
 /* Research options: */
-/*	fprintf(stderr," -r sSMOOTH      RSPL suplimental optimised smoothing factor\n"); */
-/*	fprintf(stderr," -r rSMOOTH      RSPL raw underlying smoothing factor\n"); */
+/*	fprintf(stderr," -r sSMOOTH      RSPL or shaper suplimental optimised smoothing factor\n"); */
+/*	fprintf(stderr," -r rSMOOTH      RSPL or shaper raw underlying smoothing factor\n"); */
 	fprintf(stderr," -s src%s      Apply gamut mapping to output profile perceptual B2A table for given source space\n",ICC_FILE_EXT);
 	fprintf(stderr," -S src%s      Apply gamut mapping to output profile perceptual and saturation B2A table\n",ICC_FILE_EXT);
 	fprintf(stderr," -nP             Use colormetric source gamut to make output profile perceptual table\n");
@@ -179,10 +180,11 @@ int main(int argc, char *argv[]) {
 	int noptop = 0;				/* Use colormetric source gamut to make perceptual table */
 	int nostos = 0;				/* Use colormetric source gamut to make saturation table */
 	int gamdiag = 0;			/* Make gamut mapping diagnostic wrl plots */
-	int nsabs = 0;				/* Make non-standard absolute input lut profile */
+	int autowpsc = 0;			/* Auto scale the WP to prevent clipping above WP patch */
+	int clipovwp = 0;			/* Clip cLUT values above WP */
 	int clipprims = 0;			/* Clip white, black and primaries */
 	double iwpscale = -1.0;		/* Input white point scale factor */
-	int doinextrap = 1;			/* Sythesize extra input sample points for cLUT */
+	int doinextrap = 1;			/* Sythesize extra sample points for input device cLUT */
 	int doinb2a = 1;			/* Create an input device B2A table */
 	int inking = 3;				/* Default K target ramp K */
 	int locus = 0;				/* Default K value target */
@@ -193,6 +195,8 @@ int main(int argc, char *argv[]) {
 	double avgdev = DEFAVGDEV/100.0;	/* Average measurement deviation */
 	double smooth = 1.0;		/* RSPL Smoothness factor (relative, for verification) */
 	int spec = 0;				/* Use spectral data flag */
+	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
+	xspect cust_tillum;			/* Custom target/simulated illumination spectrum */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;			/* Custom illumination spectrum */
 	icxObserverType observ = icxOT_CIE_1931_2;	/* The classic observer */
@@ -359,7 +363,8 @@ int main(int argc, char *argv[]) {
 			/* Quality */
 			else if (argv[fa][1] == 'q' || argv[fa][1] == 'Q') {
 				fa = nfa;
-				if (na == NULL) usage("Expect argument to quality flag -q");
+//				if (na == NULL) usage("Expect argument to quality flag -q");
+				if (na == NULL) usage("Expect argument to speed flag -q");
    	 			switch (na[0]) {
 					case 'f':				/* Fast */
 					case 'l':
@@ -450,9 +455,14 @@ int main(int argc, char *argv[]) {
 			}
 
 			else if (argv[fa][1] == 'u') {
-				nsabs = 1;
-				if (argv[fa][2] == 'n')
-					doinextrap = 0;
+				autowpsc = 1;
+				clipovwp = 0;
+				if (argv[fa][2] == 'c') {
+					autowpsc = 0;
+					clipovwp = 1;
+				} else if (argv[fa][2] != '\000') {
+					usage("Unknown flag '%c' after -u",argv[fa][2]);
+				}
 			}
 			else if (argv[fa][1] == 'U') {
 				fa = nfa;
@@ -579,6 +589,49 @@ int main(int argc, char *argv[]) {
 						usage("Unknown argument '%c' to version flag -I",na[0] );
 				}
 			}
+
+			/* FWA compensation */
+			else if (argv[fa][1] == 'f') {
+				fwacomp = 1;
+
+				if (na != NULL) {	/* Argument is present - target/simulated instr. illum. */
+					fa = nfa;
+					if (strcmp(na, "A") == 0
+					 || strcmp(na, "M0") == 0) {
+						spec = 1;
+						tillum = icxIT_A;
+					} else if (strcmp(na, "C") == 0) {
+						spec = 1;
+						tillum = icxIT_C;
+					} else if (strcmp(na, "D50") == 0
+					        || strcmp(na, "M1") == 0) {
+						spec = 1;
+						tillum = icxIT_D50;
+					} else if (strcmp(na, "D50M2") == 0
+					        || strcmp(na, "M2") == 0) {
+						spec = 1;
+						tillum = icxIT_D50M2;
+					} else if (strcmp(na, "D65") == 0) {
+						spec = 1;
+						tillum = icxIT_D65;
+					} else if (strcmp(na, "F5") == 0) {
+						spec = 1;
+						tillum = icxIT_F5;
+					} else if (strcmp(na, "F8") == 0) {
+						spec = 1;
+						tillum = icxIT_F8;
+					} else if (strcmp(na, "F10") == 0) {
+						spec = 1;
+						tillum = icxIT_F10;
+					} else {	/* Assume it's a filename */
+						spec = 1;
+						tillum = icxIT_custom;
+						if (read_xspect(&cust_tillum, na) != 0)
+							usage("Failed to read custom target illuminant spectrum in file '%s'",na);
+					}
+				}
+			}
+
 			/* Spectral Illuminant type */
 			else if (argv[fa][1] == 'i') {
 				fa = nfa;
@@ -592,6 +645,9 @@ int main(int argc, char *argv[]) {
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
+				} else if (strcmp(na, "D50M2") == 0) {
+					spec = 1;
+					illum = icxIT_D50M2;
 				} else if (strcmp(na, "D65") == 0) {
 					spec = 1;
 					illum = icxIT_D65;
@@ -635,8 +691,6 @@ int main(int argc, char *argv[]) {
 					usage("Unrecognised argument '%s' to observer flag -o",na);
 			}
 
-			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F')
-				fwacomp = 1;
 
 			/* Average Deviation percentage */
 			else if (argv[fa][1] == 'r') {
@@ -830,6 +884,9 @@ int main(int argc, char *argv[]) {
 		sepsat = 1;
 	}
 
+	if (gamdiag && ipname[0] == '\000')
+		warning("no gamut mapping called for, so -P will produce nothing");
+		
 	if (sgname[0] != '\000' && ipname[0] == '\000')
 		warning("-g srcgam will do nothing without -s srcprof or -S srcprof");
 
@@ -981,13 +1038,16 @@ int main(int argc, char *argv[]) {
 			error ("Output profile can only be a cLUT algorithm");
 		}
 
-		if (nsabs)
-			error ("Input absolute mode isn't applicable to an output device");
+		if (autowpsc)
+			error ("Input auto WP scale mode isn't applicable to an output device");
+		if (clipovwp)
+			error ("Input cLUT clipping above WP mode isn't applicable to an output device");
 
 		make_output_icc(ptype, 0, iccver, verb, iquality, oquality,
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
-		                gamdiag, verify, clipprims, &ink, inname, outname, icg, spec,
-		                illum, &cust_illum, observ, fwacomp, smooth, avgdev,
+		                gamdiag, verify, clipprims, &ink, inname, outname, icg, 
+		                spec, tillum, &cust_tillum, illum, &cust_illum, observ, fwacomp,
+		                smooth, avgdev,
 		                ipname[0] != '\000' ? ipname : NULL,
 		                sgname[0] != '\000' ? sgname : NULL,
 		                absnames,
@@ -999,14 +1059,20 @@ int main(int argc, char *argv[]) {
 		if (ptype == prof_default)
 			ptype = prof_clutLab;		/* For best possible quality */
 
+		if (clipovwp && ptype != prof_clutLab && ptype != prof_clutXYZ)
+			error ("Input cLUT clipping above WP mode isn't applicable to a matrix profile");
+
 		make_input_icc(ptype, iccver, verb, iquality, oquality, noisluts, noipluts, nooluts, nocied,
-		               verify, nsabs, iwpscale, doinb2a, doinextrap, clipprims, inname, outname,
-		               icg, spec, illum, &cust_illum, observ, smooth, avgdev, &xpi);
+		               verify, autowpsc, clipovwp, iwpscale, doinb2a, doinextrap, clipprims,
+		               inname, outname, icg, spec, illum, &cust_illum, observ,
+		               smooth, avgdev, &xpi);
 
 	} else if (strcmp(icg->t[0].kdata[ti],"DISPLAY") == 0) {
 
-		if (nsabs)
-			error ("Input absolute mode isn't applicable to a display device");
+		if (autowpsc)
+			error ("Input auto WP scale mode isn't applicable to an output device");
+		if (clipovwp)
+			error ("Input cLUT clipping above WP mode isn't applicable to an output device");
 
 		if (fwacomp)
 			error ("FWA compensation isn't applicable to a display device");
@@ -1017,8 +1083,9 @@ int main(int argc, char *argv[]) {
 		/* If a source gamut is provided for a Display, then a V2.4.0 profile will be created */
 		make_output_icc(ptype, mtxtoo, iccver, verb, iquality, oquality,
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
-		                gamdiag, verify, clipprims, NULL, inname, outname, icg, spec,
-		                illum, &cust_illum, observ, 0, smooth, avgdev,
+		                gamdiag, verify, clipprims, NULL, inname, outname, icg,
+		                spec, icxIT_none, NULL, illum, &cust_illum, observ, 0,
+		                smooth, avgdev,
 		                ipname[0] != '\000' ? ipname : NULL,
 		                sgname[0] != '\000' ? sgname : NULL,
 		                absnames,

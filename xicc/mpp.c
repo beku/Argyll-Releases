@@ -707,7 +707,7 @@ int           use_fwa			/* NZ to involke FWA. */
 		custIllum = NULL;
 	}
 
-	if ((p->spc = new_xsp2cie(ilType, custIllum, obType, custObserver, rcs)) == NULL)
+	if ((p->spc = new_xsp2cie(ilType, custIllum, obType, custObserver, rcs, 1)) == NULL)
 		error("mpp->set_ilob, new_xsp2cie failed");
 
 	if (use_fwa) {
@@ -724,7 +724,7 @@ int           use_fwa			/* NZ to involke FWA. */
 		if (inst_illuminant(&inst, p->itype) != 0)
 			error ("mpp->set_ilob, instrument doesn't have an FWA illuminent");
 
-		if (p->spc->set_fwa(p->spc, &inst, &white))
+		if (p->spc->set_fwa(p->spc, &inst, NULL, &white))
 			error ("mpp->set_ilob, set_fwa faild");
 	}
 

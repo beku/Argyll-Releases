@@ -1,207 +1,251 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
-<head>
-  <title>profcheck</title>
-  <meta http-equiv="content-type"
- content="text/html; charset=ISO-8859-1">
-  <meta name="author" content="Graeme Gill">
-</head>
-<body>
-<h2><b>profile/profcheck</b></h2>
-<h3>Summary</h3>
-Check an&nbsp;<a href="File_Formats.html#ICC">ICC</a> profile
-against&nbsp;<a href="File_Formats.html#.ti3">.ti3</a> test chart
-data.<br>
-<h3>Usage Summary</h3>
-<small><span style="font-family: monospace;">profcheck&nbsp; [-options]
-data.ti3 iccprofile.icm</span><br style="font-family: monospace;">
-&nbsp;
-<span style="font-family: monospace;"></span></small><small><span
- style="font-family: monospace;">-v
-[level]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Verbosity level (default 1), 2 to print each DE</span></small><small><span
- style="font-family: monospace;"></span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <head>
+    <title>profcheck</title>
+    <meta http-equiv="content-type" content="text/html;
+      charset=ISO-8859-1">
+    <meta name="author" content="Graeme Gill">
+  </head>
+  <body>
+    <h2><b>profile/profcheck</b></h2>
+    <h3>Summary</h3>
+    Check an&nbsp;<a href="File_Formats.html#ICC">ICC</a> profile
+    against&nbsp;<a href="File_Formats.html#.ti3">.ti3</a> test chart
+    data.<br>
+    <h3>Usage Summary</h3>
+    <small><span style="font-family: monospace;">profcheck&nbsp;
+        [-options]
+        data.ti3 iccprofile.icm</span><br style="font-family:
+        monospace;">
+      &nbsp;
+      <span style="font-family: monospace;"></span></small><small><span
+        style="font-family: monospace;">-v
+        [level]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        Verbosity level (default 1), 2 to print each DE</span></small><small><span
+        style="font-family: monospace;"></span><br style="font-family:
+        monospace;">
+      <span style="font-family: monospace;">&nbsp;-c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;
-Show CIE94 delta E values</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-k
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; Show CIEDE2000 delta E values</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Show
+        CIE94 delta E values</span><br style="font-family: monospace;">
+      <span style="font-family: monospace;">&nbsp;-k
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        &nbsp;&nbsp; Show CIEDE2000 delta E values</span><br
+        style="font-family: monospace;">
+      <span style="font-family: monospace;">&nbsp;-w&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;
-create VRML visualization (iccprofile.wrl)</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-x&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+create
+        VRML visualization (iccprofile.wrl)</span><br
+        style="font-family: monospace;">
+      <span style="font-family: monospace;">&nbsp;-x&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;
-Use VRML axes<br>
-&nbsp;-m&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Use
+        VRML axes<br>
+        &nbsp;-m&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Make
-VRML lines a minimum of 0.5<br style="font-family: monospace;">
-</span><span style="font-family: monospace;">&nbsp;-e&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+VRML
+        lines a minimum of 0.5<br style="font-family: monospace;">
+      </span><span style="font-family: monospace;">&nbsp;-e&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Color
-vectors acording to delta E</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-d devval1,deval2,devvalN</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+vectors
+        acording to delta E</span><br style="font-family: monospace;">
+      <span style="font-family: monospace;">&nbsp;-d
+        devval1,deval2,devvalN</span><br style="font-family: monospace;">
+      <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;
-Specify a device value to sort
-against</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+Specify
+        a device value to sort
+        against</span><br style="font-family: monospace;">
+      <span style="font-family: monospace;">&nbsp;-p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;
-Sort device value by PCS/Lab target</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-i
-illum&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; Choose
-illuminant for print/transparency spectral data:</span><br
- style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;
-&nbsp;&nbsp; A, C, D50 (def.), D65, F5, F8, F10 or
-file.sp</span><br style="font-family: monospace;">
-<span style="font-family: monospace;">&nbsp;-o observ&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp; Choose CIE
-Observer
-for spectral data:</span><br style="font-family: monospace;">
-<span style="font-family: monospace;"></span></small><small><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-1931_2
-</span></small><small><span style="font-family: monospace;">(def.)</span></small><small><span
- style="font-family: monospace;">,
-1964_10, S&amp;B
-1955_2, shaw, J&amp;V 1978_2</span></small><br
- style="font-family: monospace;">
-<small><span style="font-family: monospace;">&nbsp;-f&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-&nbsp;&nbsp;
-Use Fluorescent Whitening Agent
-compensation<br>
-&nbsp;-I intent&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; r = relative
-colorimetric, a = absolute (default)<br style="font-family: monospace;">
-</span><i style="font-family: monospace;"> &nbsp;data.ti3</i><span
- style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;
-Test
-point data file</span><br style="font-family: monospace;">
-<i style="font-family: monospace;">&nbsp;iccprofile.icm</i><span
- style="font-family: monospace;">&nbsp; Profile to check</span></small>
-<br>
-<h3>Usage Details and Discussion</h3>
-<b> profcheck</b> provides a way of checking how well an&nbsp;<a
- href="File_Formats.html#ICC">ICC</a> profile conforms to the test
-sample data that was used to create it (or other test samples
-that are from the same device). This is the same sort of check done
-within
-the profile making tool (<a href="colprof.html">colprof</a>), but
-having a
-separate tool provides some flexibility.&nbsp; The absolute forward
-table in the profile is used to create PCS values from the sample
-points, and the profiles PCS value then compared to the PCS values of
-the measured sample points. Note the lower delta E values are not
-always a better measure of how good a profile is. The aim of a profile
-is to model the underlying characteristics of a device, not to
-slavishly reproduce the sampled data point values. Sampled data point
-values contain device variation and instrument reading inaccuracies,
-and a good profiler will try and filter out this noise, resulting in
-some deliberate differences between the profile and the sample points
-used to create it.<br>
-<br>
-The <b>-v</b> flag prints out extra information during the checking. A
-value greater than 1 will print the color values of each test point.<br>
-<br>
-The <b>-c</b> option causes the differences between the test values
-and
-the profile prediction of the color for each device value to be
-displayed
-in CIE94 delta E, rather than plain L*a*b* delta E. CIE94 delta E has a
-closer
-correspondence with perceived color differences than the default CIE76
-delta E values.<br>
-<br>
-The <b>-k</b> option causes the differences between the test values
-and
-the profile prediction of the color for each device value to be
-displayed
-in CIEDE2000 delta E, rather than plain L*a*b* delta E. CIEDE2000 delta
-E has a
-closer
-correspondence with perceived color differences than either CIE76 or
-CIE94 delta E values.<br>
-<br>
-The <b>-w</b> creates a <a href="File_Formats.html#VRML">VRML</a> 3D
-visualization
-of the differences between the test points and the profiles prediction
-of
-the resulting colors.<br>
-<br>
-The <b>-x</b> flag adds Lab axes to the VRML output.<br>
-<br>
-The <b>-m</b> flag makes each error line a minimum of 0.5 delta E
-long, so that all the points are visible. This makes it easier to view
-the distribution of test points in the reference set.<br>
-<br>
-The <span style="font-weight: bold;">-e</span> flag causes the error
-vectors in the VRML output to be color coded according to their
-lengths, from longest to shortest: yellow, red, magenta, blue, cyan and
-green.<br>
-<br>
-The <b>-d</b> parameters allow the specification of a particular
-device value,
-and the test point by test point output will be sorted by distance from
-the
-given device value. This can be useful in determining how well
-"supported"
-the profile is in a particular area of the colorspace.<br>
-<br>
-If the <b>-p </b>flag is used in combination with the <b>-d</b>
-parameters,
-then the test point by test point output will be sorted by distance in
-PCS
-(Lab) space rather than distance in device space.<br>
-<br>
-The <b>-i</b> flag allows specifying a standard or custom illumination
-spectrum, applied to the spectral test point values, to compute CIE
-tristimulus
-values. <b>A</b>, <b>D50</b>, <b>D65</b>, <b>F5</b>, <b>F8</b>, <b>F10</b>
-are a selection of standard illuminant spectrums, with <b>D50</b>
-being the
-default. If a filename is specified instead, it will be assumed to be
-an
-Argyll specific <a href="File_Formats.html#.sp">.sp</a> spectrum file.
-The same value should be used as was used during the creation of the
-profile.<br>
-<br>
-<a name="o"></a> The <b>-o</b> flag allows specifying a tristimulus
-observer, and is used to compute PCS (Profile Connection Space)
-tristimulus values. The following choices are available:<br>
-<b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree observer.
-The default.<br>
-&nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree observer.<br>
-&nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
-observer<br>
-&nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree observer<br>
-&nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
-observer<br>
-<br>
-The same parameter value should be used as was used during the creation
-of the profile.<br>
-<br>
-The <b>-f</b> flag enables Fluorescent Whitening Agent compensation,
-which compensates for the effect a different illuminant will have, on
-any Fluorescent Whitening Agent present in the reflective media. The
-same setting should
-be used as was used during the creation of the profile.<br>
-<br>
-The <span style="font-weight: bold;">-I</span> parameter allows
-changing the intent used in looking up the ICC profile colors to
-relative colorimetric. This would <span
- style="text-decoration: underline;">not</span> be used if you are
-checking a profile against the .ti3 file that was used to create it,
-since, since profiles are always made
-from absolute colorimetric measurement values.<br>
-<br>
-<br>
-<br>
-<br>
-<br>
-</body>
+Sort
+        device value by PCS/Lab target</span><br style="font-family:
+        monospace;">
+      &nbsp;
+      <span style="font-family: monospace;">-f
+        [illum]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use Fluorescent Whitening
+        Agent compensation [opt. simulated inst. illum.:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        M0, M1, M2, A, C, D50 (def.), D50M2, D65, F5, F8, F10 or
+        file.sp]<br>
+        &nbsp;-i illum&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Choose
+        illuminant for computation of CIE XYZ from spectral data &amp;
+        FWA:<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp</span><span
+        style="font-family: monospace;"></span><br style="font-family:
+        monospace;">
+      <span style="font-family: monospace;">&nbsp;-o
+        observ&nbsp;&nbsp;&nbsp;
+        &nbsp;&nbsp; Choose CIE
+        Observer
+        for spectral data:</span><br style="font-family: monospace;">
+      <span style="font-family: monospace;"></span></small><small><span
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        1931_2
+      </span></small><small><span style="font-family: monospace;">(def.)</span></small><small><span
+        style="font-family: monospace;">,
+        1964_10, S&amp;B
+        1955_2, shaw, J&amp;V 1978_2</span></small><small><span
+        style="font-family: monospace;"><br>
+        &nbsp;-I intent&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; r = relative
+        colorimetric, a = absolute (default)<br style="font-family:
+          monospace;">
+      </span><i style="font-family: monospace;"> &nbsp;data.ti3</i><span
+        style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;
+        &nbsp;&nbsp;
+        Test
+        point data file</span><br style="font-family: monospace;">
+      <i style="font-family: monospace;">&nbsp;iccprofile.icm</i><span
+        style="font-family: monospace;">&nbsp; Profile to check</span></small>
+    <br>
+    <h3>Usage Details and Discussion</h3>
+    <b> profcheck</b> provides a way of checking how well an&nbsp;<a
+      href="File_Formats.html#ICC">ICC</a> profile conforms to the test
+    sample data that was used to create it (or other test samples
+    that are from the same device). This is the same sort of check done
+    within
+    the profile making tool (<a href="colprof.html">colprof</a>), but
+    having a
+    separate tool provides some flexibility.&nbsp; The absolute forward
+    table in the profile is used to create PCS values from the sample
+    points, and the profiles PCS value then compared to the PCS values
+    of
+    the measured sample points. Note the lower delta E values are not
+    always a better measure of how good a profile is. The aim of a
+    profile
+    is to model the underlying characteristics of a device, not to
+    slavishly reproduce the sampled data point values. Sampled data
+    point
+    values contain device variation and instrument reading inaccuracies,
+    and a good profiler will try and filter out this noise, resulting in
+    some deliberate differences between the profile and the sample
+    points
+    used to create it.<br>
+    <br>
+    The <b>-v</b> flag prints out extra information during the
+    checking. A
+    value greater than 1 will print the color values of each test point.<br>
+    <br>
+    The <b>-c</b> option causes the differences between the test values
+    and
+    the profile prediction of the color for each device value to be
+    displayed
+    in CIE94 delta E, rather than plain L*a*b* delta E. CIE94 delta E
+    has a
+    closer
+    correspondence with perceived color differences than the default
+    CIE76
+    delta E values.<br>
+    <br>
+    The <b>-k</b> option causes the differences between the test values
+    and
+    the profile prediction of the color for each device value to be
+    displayed
+    in CIEDE2000 delta E, rather than plain L*a*b* delta E. CIEDE2000
+    delta
+    E has a
+    closer
+    correspondence with perceived color differences than either CIE76 or
+    CIE94 delta E values.<br>
+    <br>
+    The <b>-w</b> creates a <a href="File_Formats.html#VRML">VRML</a>
+    3D
+    visualization
+    of the differences between the test points and the profiles
+    prediction
+    of
+    the resulting colors.<br>
+    <br>
+    The <b>-x</b> flag adds Lab axes to the VRML output.<br>
+    <br>
+    The <b>-m</b> flag makes each error line a minimum of 0.5 delta E
+    long, so that all the points are visible. This makes it easier to
+    view
+    the distribution of test points in the reference set.<br>
+    <br>
+    The <span style="font-weight: bold;">-e</span> flag causes the
+    error
+    vectors in the VRML output to be color coded according to their
+    lengths, from longest to shortest: yellow, red, magenta, blue, cyan
+    and
+    green.<br>
+    <br>
+    The <b>-d</b> parameters allow the specification of a particular
+    device value,
+    and the test point by test point output will be sorted by distance
+    from
+    the
+    given device value. This can be useful in determining how well
+    "supported"
+    the profile is in a particular area of the colorspace.<br>
+    <br>
+    If the <b>-p </b>flag is used in combination with the <b>-d</b>
+    parameters,
+    then the test point by test point output will be sorted by distance
+    in
+    PCS
+    (Lab) space rather than distance in device space.<br>
+    <br>
+    The <b>-f</b> flag enables Fluorescent Whitening Agent (FWA)
+    compensation. This only works if spectral data is available and, the
+    instrument is not UV filtered.&nbsp; FWA compensation adjusts the
+    spectral samples so that they appear to have been measured using an
+    illuminant that has a different level of Ultra Violet to the one the
+    instrument actually used in the measurement. The optional
+    illumination parameter allows specifying a standard or custom
+    illumination spectrum to be used as the similated instrument
+    illuminant, overriding the default <b>D50</b> or CIE computation
+    illuminant used for FWA (see <b>-i</b> below<b>). </b>See <a
+      href="file:///D:/src/argyll/doc/colprof.html#f">colprof -f</a> for
+    a fuller explanation. The same value should be used as was used
+    during the creation of the
+    profile.<br>
+    <br>
+    The <b>-i</b> flag allows specifying a standard or custom
+    illumination
+    spectrum, applied to the spectral test point values to compute CIE
+    tristimulus values. <b>A</b>, <b>D50</b>, <b>D50M2, D65</b>, <b>F5</b>,
+    <b>F8</b>, <b>F10</b> are a selection of standard illuminant
+    spectrums, with <b>D50</b> being the default. If a filename is
+    specified instead, it will be assumed to be an Argyll specific <a
+      href="file:///D:/src/argyll/doc/File_Formats.html#.sp">.sp</a>
+    spectrum file. If FWA compensation is used during measurement, this
+    illuminant will be used by default as the simulated instrument
+    illuminant. The same value should be used as was used during the
+    creation of the
+    profile.<br>
+    <br>
+    <a name="o"></a> The <b>-o</b> flag allows specifying a tristimulus
+    observer, and is used to compute PCS (Profile Connection Space)
+    tristimulus values. The following choices are available:<br>
+    <b>&nbsp; 1931_2</b> selects the standard CIE 1931 2 degree
+    observer.
+    The default.<br>
+    &nbsp; <b>1964_10</b> selects the standard CIE 1964 10 degree
+    observer.<br>
+    &nbsp; <b>1955_2</b> selects the Stiles and Birch 1955 2 degree
+    observer<br>
+    &nbsp; <b>1978_2 </b>selects the Judd and Voss 1978 2 degree
+    observer<br>
+    &nbsp; <b>shaw</b> selects the Shaw and Fairchild 1997 2 degree
+    observer<br>
+    <br>
+    The same parameter value should be used as was used during the
+    creation
+    of the profile.<br>
+    <br>
+    The <span style="font-weight: bold;">-I</span> parameter allows
+    changing the intent used in looking up the ICC profile colors to
+    relative colorimetric. This would <span style="text-decoration:
+      underline;">not</span> be used if you are
+    checking a profile against the .ti3 file that was used to create it,
+    since, since profiles are always made
+    from absolute colorimetric measurement values.<br>
+    <br>
+    <br>
+    <br>
+    <br>
+    <br>
+  </body>
 </html>

@@ -58,7 +58,8 @@ icxLuBase * xicc_get_luobj(xicc *p, int flags, icmLookupFunc func, icRenderingIn
                            icColorSpaceSignature pcsor, icmLookupOrder order,
                            icxViewCond *vc, icxInk *ink);
 static icxLuBase *xicc_set_luobj(xicc *p, icmLookupFunc func, icRenderingIntent intent,
-                            icmLookupOrder order, int flags, int no, cow *points,
+                            icmLookupOrder order, int flags, int no, int nobw, cow *points,
+							icxMatrixModel *skm,
                             double dispLuminance, double wpscale, double smooth, double avgdev,
                             icxViewCond *vc, icxInk *ink, xcal *cal, int quality);
 static void icxLutSpaces(icxLuBase *p, icColorSpaceSignature *ins, int *inn,
@@ -661,11 +662,11 @@ double *kblack			/* XYZ Output. Looked up if possible or set to black[] otherwis
 		/* Now figure abs Lab value of K only, as the direction */
 		/* to use for the rich black. */
 		for (e = 0; e < inn; e++)
-			dblack[e] = rs0[e] = 0.0;
+			dblack[e] = 0.0;
 		if (bfs.klimit < 0.0)
-			dblack[kch] = rs0[kch] = 1.0;
+			dblack[kch] = 1.0;
 		else
-			dblack[kch] = rs0[kch] = bfs.klimit;		/* K value */
+			dblack[kch] = bfs.klimit;		/* K value */
 
 		p->lookup(p, black, dblack);
 
@@ -685,9 +686,18 @@ double *kblack			/* XYZ Output. Looked up if possible or set to black[] otherwis
 		printf("~1 initial brv for K only = %f\n",brv);
 #endif
 
-		/* Set the random start 1 location as CMY0 */
+		/* Set the random start 0 location as 000K */
+		/* and the random start 1 location as CMY0 */
 		{
 			double tt;
+
+			for (e = 0; e < inn; e++)
+				dblack[e] = rs0[e] = 0.0;
+			if (bfs.klimit < 0.0)
+				dblack[kch] = rs0[kch] = 1.0;
+			else
+				dblack[kch] = rs0[kch] = bfs.klimit;		/* K value */
+
 			if (bfs.tlimit < 0.0)
 				tt = 1.0;
 			else
@@ -1037,7 +1047,9 @@ icRenderingIntent intent,	/* Intent */
 icmLookupOrder order,		/* Search Order */
 int flags,					/* white/black point, verbose flags etc. */
 int no,						/* Number of points */
+int nobw,					/* Number of points to look for white & black patches in */
 cow *points,				/* Array of input points in target PCS space */
+icxMatrixModel *skm,   		/* Optional skeleton model (used for input profiles) */
 double dispLuminance,		/* > 0.0 if display luminance value and is known */
 double wpscale,				/* > 0.0 if input white point is to be scaled */
 double smooth,				/* RSPL smoothing factor, -ve if raw */
@@ -1085,12 +1097,14 @@ int quality					/* Quality metric, 0..3 */
 			break;
 
     	case icmMatrixFwdType:
-			xplu = set_icxLuMatrix(p, plu, flags, no, points, dispLuminance, wpscale, quality);
+			if (smooth < 0.0)
+				smooth = -smooth;
+			xplu = set_icxLuMatrix(p, plu, flags, no, nobw, points, skm, dispLuminance, wpscale, quality, smooth);
 			break;
 
     	case icmLutType:
 			/* ~~~ Should add check that it is a fwd profile ~~~ */
-			xplu = set_icxLuLut(p, plu, func, intent, flags, no, points, dispLuminance, wpscale, smooth, avgdev, vc, ink, quality);
+			xplu = set_icxLuLut(p, plu, func, intent, flags, no, nobw, points, skm, dispLuminance, wpscale, smooth, avgdev, vc, ink, quality);
 			break;
 
 		default:
@@ -2278,9 +2292,9 @@ xcal *xiccReadCalTag(icc *p) {
 //else printf("~1 read CAL and creaded xcal object OK\n");
 				}
 			}
+			cgf->del(cgf);
 		}
 		icg->del(icg);
-		cgf->del(cgf);
 	}
 	return cal;
 }

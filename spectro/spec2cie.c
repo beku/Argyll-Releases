@@ -64,8 +64,8 @@
 #include "cgats.h"
 #include "xicc.h"
 #include "insttypes.h"
-#include "icoms.h"
 #include "conv.h"
+#include "icoms.h"
 #include "inst.h"
 #ifdef ALLOW_PLOT
 #include "plot.h"
@@ -80,14 +80,15 @@ usage (void)
 	fprintf (stderr, "\n");
 	fprintf (stderr, "Usage: spec2cie [options] input.ti3 output.ti3\n");
 	fprintf (stderr, " -v          Verbose mode\n");
-	fprintf (stderr, " -i illum    Choose viewing illuminant:\n");
-	fprintf (stderr, "             A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf (stderr, " -I illum    Override actual instrument illuminant in .ti3 file:\n");
+	fprintf (stderr, "              A, C, D50, D50M2, D65, F5, F8, F10 or file.sp\n");
+	fprintf (stderr, "              (only used in conjunction with -f)\n");
+	fprintf (stderr, " -f [illum]  Use Fluorescent Whitening Agent compensation [simulated inst. illum.:\n");
+	fprintf (stderr, "              M0, M1, M2, A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp]\n");
+	fprintf (stderr, " -i illum    Choose illuminant for computation of CIE XYZ from spectral data & FWA:\n");
+	fprintf (stderr, "             A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp\n");
 	fprintf (stderr, " -o observ   Choose CIE Observer for spectral data:\n");
-	fprintf (stderr, "             1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
-	fprintf (stderr, " -f          Use Fluorescent Whitening Agent compensation\n");
-	fprintf (stderr, " -I illum    Override instrument illuminant in .ti3 file:\n");
-	fprintf (stderr, "             A, C, D50, D65, F5, F8, F10 or file.sp\n");
-	fprintf (stderr, "             (only used in conjunction with -f)\n");
+	fprintf (stderr, "              1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf (stderr, " -n          Don't output spectral values\n"); 
 #ifdef ALLOW_PLOT
 	fprintf (stderr, " -p          Plot each values spectrum\n"); 
@@ -117,11 +118,13 @@ main(int argc, char *argv[])
 	int ci, mi, yi, ki;				/* Indexes of device values */
 	int fwacomp = 0;				/* FWA compensation */
 	int doplot = 0;					/* Plot each patches spectrum */
-	xspect cust_illum;				/* Custom illumination spectrum */
-	xspect inst_cust_illum;			/* Custom illumination spectrum */
 	char* illum_str = "D50";
+	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
+	xspect cust_tillum, *tillump = NULL; /* Custom target/simulated illumination spectrum */
 	icxIllumeType illum = icxIT_D50;			/* Spectral defaults */
+	xspect cust_illum;				/* Custom illumination spectrum */
 	icxIllumeType inst_illum = icxIT_none;		/* Spectral defaults */
+	xspect inst_cust_illum;			/* Custom illumination spectrum */
 	icxObserverType observ = icxOT_CIE_1931_2;
 
 	int npat;						/* Number of patches */
@@ -183,6 +186,9 @@ main(int argc, char *argv[])
 				else if (strcmp (na, "D50") == 0) {
 					inst_illum = icxIT_D50;
 				}
+				else if (strcmp (na, "D50M2") == 0) {
+					inst_illum = icxIT_D50M2;
+				}
 				else if (strcmp (na, "D65") == 0) {
 					inst_illum = icxIT_D65;
 				}
@@ -202,7 +208,40 @@ main(int argc, char *argv[])
 				}
 			}
 
-			/* Spectral Illuminant type */
+			/* FWA comp & simulated instrument illuminant */
+			else if (argv[fa][1] == 'f') {
+				fwacomp = 1;
+
+				if (na != NULL) {	/* Argument is present - target/simulated instr. illum. */
+					fa = nfa;
+					if (strcmp(na, "A") == 0
+					 || strcmp(na, "M0") == 0) {
+						tillum = icxIT_A;
+					} else if (strcmp(na, "C") == 0) {
+						tillum = icxIT_C;
+					} else if (strcmp(na, "D50") == 0
+					        || strcmp(na, "M1") == 0) {
+						tillum = icxIT_D50;
+					} else if (strcmp(na, "D50M2") == 0
+					        || strcmp(na, "M2") == 0) {
+						tillum = icxIT_D50M2;
+					} else if (strcmp(na, "D65") == 0) {
+						tillum = icxIT_D65;
+					} else if (strcmp(na, "F5") == 0) {
+						tillum = icxIT_F5;
+					} else if (strcmp(na, "F8") == 0) {
+						tillum = icxIT_F8;
+					} else if (strcmp(na, "F10") == 0) {
+						tillum = icxIT_F10;
+					} else {	/* Assume it's a filename */
+						tillum = icxIT_custom;
+						if (read_xspect(&cust_tillum, na) != 0)
+							usage();
+					}
+				}
+			}
+
+			/* CIE tristimulous spectral Illuminant type */
 			else if (argv[fa][1] == 'i') {
 				fa = nfa;
 				if (na == NULL)
@@ -216,6 +255,9 @@ main(int argc, char *argv[])
 				}
 				else if (strcmp (na, "D50") == 0) {
 					illum = icxIT_D50;
+				}
+				else if (strcmp (na, "D50M2") == 0) {
+					illum = icxIT_D50M2;
 				}
 				else if (strcmp (na, "D65") == 0) {
 					illum = icxIT_D65;
@@ -259,9 +301,6 @@ main(int argc, char *argv[])
 				else
 					usage ();
 			}
-
-			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F')
-				fwacomp = 1;
 
 			else
 				usage ();
@@ -539,7 +578,7 @@ main(int argc, char *argv[])
 		/* Create a spectral conversion object */
 		if ((sp2cie = new_xsp2cie (illum,
 								   illum == icxIT_none ?  NULL : &cust_illum,
-								   observ, NULL, icSigXYZData)) == NULL)
+								   observ, NULL, icSigXYZData, icxClamp)) == NULL)
 		{
 			error ("Creation of spectral conversion object failed");
 		}
@@ -639,8 +678,18 @@ main(int argc, char *argv[])
 							error ("Failed to find standard illuminant");
 			}
 
+			/* If we are setting a specific simulated instrument illuminant */
+			if (tillum != icxIT_none) {
+				tillump = &cust_tillum;
+				if (tillum != icxIT_custom) {
+					if (standardIlluminant(tillump, tillum, 0.0)) {
+						error("simulated inst. illum. not recognised");
+					}
+				}
+			}
+
 			/* (Note that sp and mwsp.norm is set to 100.0) */
-			if (sp2cie->set_fwa(sp2cie, &insp, &mwsp)) 
+			if (sp2cie->set_fwa(sp2cie, &insp, tillump, &mwsp)) 
 				error ("Set FWA on sp2cie failed");
 
 			if (verb) {

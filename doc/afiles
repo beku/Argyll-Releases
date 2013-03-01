@@ -33,6 +33,7 @@ DTP92.jpg
 DTP94.jpg
 HCFR.jpg
 Huey.jpg
+Smile.jpg
 Spyd2.jpg
 Spyd3.jpg
 Spyd3x.jpg
@@ -49,6 +50,7 @@ moxxr.jpg
 Chroma4.jpg
 ColorMunki.jpg
 ColorMunkiCreate.jpg
+i1pro2.jpg
 iccgamutmapping.html
 gamutmapping1.jpg
 monitorcontrols.html
@@ -104,7 +106,6 @@ printcal.html
 refine.html
 revfix.html
 scanin.html
-sepgen.html
 splitti3.html
 spec2cie.html
 specplot.html
@@ -120,9 +121,7 @@ LabSteps.jpg
 verify.html
 viewgam.html
 xicclu.html
-spyd2en.html
-spyd4en.html
-i1d3ccss.html
+oeminst.html
 ucmm.html
 Q60.jpg
 DC.jpg
@@ -136,6 +135,8 @@ CMP_Digital_Target-3.jpg
 colorchecker.jpg
 SpyderChecker.jpg
 LSDC.jpg
+QPcard201.jpg
+QPcard202.jpg
 Kgraph1.jpg
 Kgraph2.jpg
 Kgraph3.jpg
@@ -153,6 +154,7 @@ ccmxs.html
 ccmxs/DTP-94_1964_10_Dell_2408W.ccmx
 ccmxs/DTP-94_1997_Shaw_Dell_2408W.ccmx
 ccmxs/DTP-94_Dell_2408W.ccmx
+ccmxs/DTP-94_Dell_U2410.ccmx
 ccmxs/EyeOne_Display_1_NEC1990SXi.ccmx
 ccmxs/EyeOne_Display_2_EIZO_S2233W.ccmx
 ccmxs/EyeOne_Display_2_NEC1990SXi.ccmx
@@ -173,4 +175,5 @@ ccmxs/Spyder3_EIZO_S2233_standard_1964.ccmx
 ccmxs/Spyder3_EIZO_S2243W_standard_1931.ccmx
 ccmxs/Spyder3_HP_LP2475w.ccmx
 ccmxs/Spyder3_NEC2690WUXi2.ccmx
+ccmxs/Spyder3_NEC_PA301W.ccmx
 

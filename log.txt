@@ -2,7 +2,333 @@
 Argyll CMS change log
 =====================
 
-Version 1.4.0 
+Version 1.5.0 (27 February 2013)
+-------------
+
+*	Made SpectroScanT respond to enter key when reading
+	transparent samples.
+
+*	Added signal handlers to dispwin to restore VideoLUT
+	in case of interrupt.
+
+*	Added support for an FWA simulated instrument illuminant
+	separate to the illuminant used to compute XYZ values.
+	This (and the provision of appropriate illuminants and illuminant
+	aliases) allows simulation of ISO 13655:2009 M0, M1 and M2
+	measurements using any spectrometer that can take non-UV filtered
+	measurements. An optional argumen to the -f flag is used to select
+	this.
+
+*	Increased stability of i1d3 refresh display measurements
+	by increasing integration time, and tweaking crossover
+	from frequency to period measurement.
+	Fixed bug that sometimes resulted in zero dark readings
+	due to round up of integration time that then exceeded
+	the valid maximum.
+
+*	Added spotread interactive function 'f' to read out the 
+	calibrate display refresh rate for instruments that have a refresh display
+	mode, as well as an 'F' function that measures the refresh rate for instruments
+	that support a refresh rate measurement function (colorimeters & spectrometers).
+
+*	Added refresh rate measurement function to the i1pro
+	and ColorMunki Spectro's. Also added a set refresh rate
+	function, so that a refresh rate calibration can
+	be carried over between sessions, or set manually.
+
+*	Bumped icclib to 2.15.
+	Change icc->read_tag() to only succeed if the tag type is
+	known, since the standard expectation of a non NULL
+	return type is that it is of a known type. Added new
+	method icc->read_tag_any() which will return a
+	icmSigUnknownType if the tag type is unknown.
+
+*	The Display Type selection option -y in dispcal, dispread,
+	chartread, spotread & ccxxmake now lists installed
+	CCSS and CCMX files as a selction. The -X options
+	is no longer used to select installed CCSS files.
+	To make this work, the CCMX and CCSS files now have extra
+	fields to indicate the refresh mode, an optional list of
+	default UI selection characters, and (for CCMX files)
+	the base display type they apply over (CB-n). ccxxmake now
+	only allows Base Calibration display types to be selected.
+	The installer (oeminst) checks for the refresh mode
+	and base ID before installing CCMX and CCSS's.
+
+*	Tweaked B2A least squares aproximation code to reduce
+	artefacts when used on badly behaved CMYK profiles.
+
+*	Fixed targen so that use of -v1 (verify) doesn't cause it to fail
+	if ofps stats pass fails.
+
+*	Tweaked CIECAM02 to imrove behaviour for extreme blue
+	colors, so that the hue doesn't swing too far towards the
+	cyan. This helps in the clipping behaviour from colorspaces
+	such as ProPhotoRGB.
+
+*	Added some post table setting filtering to the B2A table
+	creation for out of gamut colors.
+
+*	Made the input profile cLUT extra neutral axis extrapolation
+	points the default for colprof -u and non -u profiles. Fixed serious
+	bug in colprof -u :- the white point was being set incorrectly.
+	Changed -u algorithm to work similarly to -U scale :- it
+	sets the scale automatically. Relative colorimetric is therefore
+	hue matched to the white reference patch,
+	Removed colprof -un, as it seems unnecessary.
+	Added coloprof -uc, which clips cLUT colors over Y = 1
+	to white.
+	Modified matrix profile creation to match cLUT in terms
+	of how these options work.
+	
+*	Add verbose report if dispcal/dispread -Ibw is used.
+
+*	Fixed bug in CRI computation - the TCS09 sample was incorrect.
+	(Thanks to Gabriele Guarnieri for noticing this).
+
+*	The spyd2en, spyd4en and i1d3ccss tools have been combined into
+	and replaced by a single oeminst tool.
+
+*	Fix problem with dispwin/dispcal/dispread -dweb and the latest
+	Safari browser.
+
+*	Added optional fourth parameter to dispwin, dispcal, dispread, ccxxmake
+	-P option, that allows setting different horizontal and vertical
+	scalings of the test window.
+
+*	Changed to a single ArgyllCMS.inf file for MSWin USB driver
+	installation. This eases instalation of more than a single
+	type of isntrument.
+	Tested on MS Windows 8 and updated installation instructions.
+
+*	Added scanin support for ColorCheckerPassort
+	(Thanks to Ben Goren)
+
+*	Enable the ColorHug by default, although it
+	isn't advertised as supported, since it doesn't
+	yet work reliably on OS X.
+
+*	Updated OS X code to compile on 10.6 and 10.7
+	(64 bit compatible API used when compiling
+	on those platforms, including Cocoa for the test
+	patch window).
+
+*	Added support for Quato Silver Haze 3 OEM i1d3
+
+*	No longer using libusb for USB access, using native USB access instead.
+	MSWin uses the libusb-win32 kernel driver.
+	(This resolves the long standing issue of ArgyllCMS using
+	 a custom version of libusb.)
+
+*	Moved the usb setup files from libusb1 to
+	a new directory, usb.
+
+*	Added support for X-Rite ColorMunki Smile colorimeter.
+
+*	Changed udev file usb/55-Argyll.rules to eliminate
+	the test for /lib/udev/udev-acl as a condition of using
+	ACL_MANAGE, since I'm informed that it is deprecated
+	in recent distribution releases.
+
+*	Deprecated -V flag (adaptive mode) in dispcal, dispread and ccxxmake,
+	since this is now the default. Flag will be ignored with a warning.
+	Added -ZA flag instead, to select non-adaptive integration time mode.
+
+*	spotread -d flag is deprecated, and is now a synonym for the -e
+	flag, since it defaults to adaptive mode. Added -ZA flag instead, to
+	select non-adaptive integration time mode. Also addes -Zr and -ZR flags
+	to allow testing of the refresh mode overrides.
+
+*	Migrated ArgyllCMS specific application runtime files (such as instrument
+	blobs, calibration state & calibration files) to an "ArgyllCMS"
+	subdirectory rather than the generic "color" directory.
+	On OS X also moved data files to below the "Application Support" sub
+	directory. The old locations will be used as a fallback.
+
+*	Fix potential array bounds violation in icc/icc.c for malformed
+	cLUT profiles with zero input channels. Bump to icclib to V2.14
+
+* 	Fixed bug in cgats/pars.c that caused a parsing failure
+	with the ARM compiler.
+
+*	Modified colprof so that a -rr smoothing parameter is now
+	passed to the shaper fitting of shaper/matrix.
+
+*	Reduced regularisation weight of order 0 & 1 curve shape parameters
+	for matrix and cLUT based profiles, as well as converting it to
+	be a two pass matrix then matrix+curves approach, making for a more
+	reliable and better fit for some devices. This may improve matrix input profiles.
+
+*	Added partial i1pro Rev E (i1pro2) support.
+	Uses RevE measurement mode, and does wavelength calibration.
+	Uses RevE (internal) stray light reduction, and black level temperature
+	compensation. The only Rev E feature not currently supported is U.V.
+	measurement, which would improve the accuracy of FWA compensation.
+	Rev E driver can be disabled and the legacy driver
+	mode used by setting the ARGYLL_DISABLE_I1PRO2_DRIVER environment variable.
+
+*	Changed ColorMunki adaptive mode to avoid high gain mode,
+	so as to give more consistent and longer integration
+	times for low levels. Added black level temperature compensation.
+
+*	Changed i1pro adaptive mode to avoid high gain mode,
+	so as to give more consistent and longer integration
+	times for low light levels.
+
+*	Added automatic adjustment of patch reading delay
+	for i1d3, so that a more conservative (longer) default value (200 msec)
+	can be used without impacting i1d3 speed.
+	Also added environment variable ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS
+	that can set a different minimum update delay.
+
+*	Fixed a bug introduced in V1.3.6 that stops the dtp41 from being initialised properly.
+
+*	Added warning message to colprof if an additive device (ie. RGB)
+	has an ink limit set that will affect the white point.	
+
+*	Modified printtarg so as to output CMY colorspace charts in CMYK PS, EPS & TIFF
+	files by default rather than Device N, and to add an option (-o) to select
+	CMY as inverted RGB, or CMY Device N as an option
+
+*	Add explicity icoms error message when there are no instruments to be found.
+
+*	Updated ColorHug PCI VID & PID 
+
+*	Change ColorHug driver to not do Raw mode post scale if
+	firmware is >= 1.1.5
+
+*	Fixed regression with Spectrolino not taking filter options.
+
+*	Added doco for QPcard_201, and ref. files for QPcar_202
+
+*	Modify numlib/numsup so that error() is marked noreturn,
+	to shut up bogus compiler warnings.
+
+*	Fix problem in libusb1 for MSWIN libusb0 devices not
+	being able to be opened with more than one instance of
+	usb open (This bug is not relevant to ArgyllCMS, but is to libinst use).
+
+*	For Spyder, emit a warning rather than error if the feature bits
+	are missing for calibration tables.
+
+*	Added an introduction to color management document.
+
+*	Change libjpg to libjpeg in Jamtop & jpg/Jamfile
+	so it picks up system libraries, and fix system library link flag.
+
+*	Fix bug in profile B2A table construction that
+	sometimes created reversals in black clipping behaviour.
+
+*	For i1d3, make transition to longer re-measure integration
+	time smooth and progressive. Changed debugging so that reading
+	details are printed if debug >= 6
+
+*	Fix bug in gamut/gammap.c - freeing not allocated memory
+	if no nearpoint mapping was being done.
+
+*	Update icclib to address robustness against malformed profiles.
+
+*	Various API changes to the instlib to make it more
+	self contained and flexible:
+
+	 The ipatch structure has been changed to remove the unused/unsupported
+	 Lab[] value, and merge the XYZ[] and aXYZ[] values.
+	 There is a new type indicator "mtype" to track what sort of
+	 measurement it is, and (implicitly) what units the measurement is in. 
+
+	 Spectral readings have always been clamped to be +ve in past
+	 release of Argyll, but this has now been removed, because
+	 it has a detrimetal effect on dark XYZ readings, limiting the
+	 minimum reading possible. By default now, read_sample allows
+	 possibly -ve XYZ values (which will aid the accuracy
+	 of averaged dark readings) and has an option flag to
+	 clamp XYZ values to be +ve for compatibility with previous behaviour.
+
+	 To avoid enumerating USB devices multiple times, the list of
+	 available instruments now uses an icompaths object, and a
+	 particular icompath is handed to new_inst().
+
+	 An error, debug and verbose logging object 'a1log' (declared
+	 in numlib/numsup.h) is now used to control and capture
+	 informational output. This is handed to new_icompaths()
+	 as well as new_inst(); Existing error(), warning() and
+	 verbose() function calls now funnel into the default
+	 global a1log object 'g_log'.
+
+	 instlib user interaction is now funnelled through a callback
+	 function (uicallback) rather than interacting with stdout and
+	 command line input itself. The implementation of the callback
+	 function and the default calibration setup handler for Argyll
+	 command line applications is now in a separate library instappsup.c. 
+
+	 There is now an asynchronous callback for indicating events
+	 such as the instrument switch being pressed, or the
+	 instrument measurement configuration being changed (ie.
+	 sensor position, ambient filter). Only some instruments
+	 will use this. This is called from a thread.
+	 
+	 inst_capability and inst_mode are now one and the same: inst_mode.
+	 The IMODETST macro should be used for testing a capability or mode,
+	 but because a specific mode is represented by a combinations of
+	 bits, this test is not definitive, and should also be verified with 
+	 the check_mode() function to be sure it is valid, and won't be
+	 rejected by set_mode();
+
+	 inst_emis_disptype, inst_emis_disptypem, inst_ccmx and inst_ccss
+	 have moved to cap2 as inst2_disptype, inst2_disptypem, inst2_ccmx
+	 and inst2_ccss respectively.
+
+	 The capabilities2() method has been removed, and capabilities() now
+	 returns inst_mode capability, inst2_capability and new placeholder
+	 inst3_capability flags.
+
+	 All the inst2_cal_* enumerations have been replaced by the new
+	 get_n_a_cals() call, which gives fuller information about what
+	 calibrations are needed and available for the current measurement mode.
+
+	 needs_calibration() now retuns a mask of calibrations needed.
+	 calibrate() now can be given one of three pseudo-calibrations,
+	 and returns a mask of remaining calibrations.
+
+	 The inst_mode_emis_disp and inst_mode_emis_proj modes have been removed
+	 and replaced with a general emissive mode, with a "tele" modifier
+     to indicate projector mode (there are also corresponding changes in
+	 the calibration types and conditions, replacing "disp" and "proj" with
+	 "emis"). Adaptive measurement mode used as default
+	 for emmissive measurement. inst_mode_emis_spot and inst_mode_emis_tele can
+	 be used as replacements, with the inst_mode_emis_nonadaptive
+	 option used to get the non-adaptive display measurement mode
+	 previously triggered by inst_mode_emis_disp/proj in those instances
+	 where it is wanted and the device supports it. (i1pro, colormunki spectro.)
+
+	 By default display refresh synchronized calibration and measurement
+	 is selected in tandem with the display type selector
+	 (indicated in inst_disptypesel). Where supported, this refresh
+	 mode can now be overridden using the inst_mode_emis_refresh_ovd and
+	 inst_mode_emis_norefresh_ovd modes.
+
+	 Changed get_status(inst_stat_sensmode) to a new
+	 function meas_config(), and changed the values returned to be the
+	 valid measurement modes or calibration conditions for the current
+	 instrument physical configuration.
+	 This allows the application to be sensitive to what measurement
+	 modes are available with things like the Colormunki sensor position,
+	 and the i1d3 ambient adapter position.
+
+	 A new function get_ref_rate() has been added to make the measured
+	 display refresh rate available.
+
+	 get_opt_details(inst_optdet_disptypesel) has been replaced by get_disptypesel();
+
+	 Commbined set_opt_mode() and get_status() into get_set_opt(),
+	 and combined inst_opt_mode and inst_status_type into inst_opt_type;
+
+	 col_cal_spec_set() now only sets the CCSS, not the observer.
+	 The observer can be set by a call to get_set_opt(inst_opt_set_ccss_obs);
+
+     
+
+Version 1.4.0 (20th April 2012) 
 -------------
 
 *	Modified spectro/ccxxmake so that a colorimeter can be used
@@ -10,18 +336,19 @@ Version 1.4.0
 	Added ref/ccxx.ti1 as convenient way of creating ccmx .ti3 files.
 	
 *	Added dither/screening support for 8 bit output of 
-	render, and then made it available in target/printtarg.
+	render, and then made it available in target/printtarg -D switch.
 
 *	Added JPEG file support to imdi/cctiff, xicc/tiffgamut and xicc/extracticc.
 	ICC profiles embedded in JPEG files can now be used anywhere a TIFF
 	file with embedded ICC profile can be used as a source of an ICC profile.
+	This makes it more convenient to color correct photographs.
 
 *	Fixed memory leaks in usbio.c, xdg_bds.c & conv.c
 
 *	Fixed double memory free bug in icc/icc.c when
 	iccdump'ing a profile that has a duplicate tag.
 
-*	Changed license of xicc/ccmx.[ch] to GPL2.
+*	Changed license of xicc/ccmx.[ch] to GPL2+.
 
 *	Removed dispcal -K option, since it is not
 	needed with more graceful handling of no
@@ -34,7 +361,7 @@ Version 1.4.0
 
 *	Added option to dispwin/dispcal/dispread/ccxxmake to
 	redirect the test patches to a web browser via
-	a local web server. This augments Argyll's existing
+	a local web server. This augments Argyll's long standing
 	local and remote display capability.
 
 *   Fixed bug in spectro/i1d3.c which results in NAN if a
@@ -1403,7 +1730,7 @@ Version 1.0.0 changes	(1st July 2008)
 	embedded ICC profiles from TIF files.
 
 *	Modify tiffgamut, cctiff colprof and collink so that a TIFF file
-	with an embeded profile may be used to supply ICC profiles.
+	with an embedded profile may be used to supply ICC profiles.
 	Also added an option to cctiff of embedding a profile in the
 	destination raster file.
 

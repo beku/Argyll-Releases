@@ -1,0 +1,75 @@
+
+# JAM style makefile for libusb-win32, to create .inf files.
+
+# This doesn't make the drivers themselves.
+# (you need the Server 2003 DDK 64 & 32 bit build enironmantes,
+#  and then run  ddk_build.cmd. This will then run
+#  build in libusb/os. )
+
+#PREF_CCFLAGS 	= $(CCOPTFLAG) ;		# Turn optimisation on
+PREF_CCFLAGS    = $(CCDEBUGFLAG) ;		# Debugging flags
+#PREF_CCFLAGS	= $(CCHEAPDEBUG) ;		# Heap Debugging flags
+PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;	# Link debugging flags
+
+#Products
+#Libraries = ;
+#Executables = ;
+#Headers = ;
+
+#Install
+#InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
+#InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
+#InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
+
+if [ GLOB $(PATH) : sed sed.exe ] {
+	Echo "sed seems to be available" ;
+	CREATE_INFS = true ;
+} else {
+	CREATE_INFS = false ;
+}
+
+## List of .inf files needed
+#INFS = i1Pro Spyd2 HCFR3.1 HCFR4.0 Smile
+#        ColorMunki DTP20 DTP92 DTP94 Huey MonacoOptix
+#        Spyd3 Spyd4 i1Monitor i1Disp i1D3 ColorHugOld ColorHug ;
+#
+## Optionally generate all the .inf's from the template_inf
+#if $(CREATE_INFS) = true {
+#	local _i _ns _nt _nds _ni ;
+#	NDepends files : $(INFS1).inf $(INFS2).inf ;
+#
+#	for  _i in $(INFS) {
+#		_ni  = [ NormPaths $(_i).inf ] ;
+#		_ns  = [ NormPaths $(_i).sed ] ;
+#		_nt  = [ NormPaths template_inf ] ;
+#		GenFileNND $(_i).inf : "sed -f $(_ns) < $(_nt) > $(_ni)"
+#		                      : $(_i).sed template_inf ;
+#		File $(_i).cat     : template_cat ;
+#		File $(_i)_x64.cat : template_cat ;
+#		NDepends install : $(_i).inf $(_i).cat $(_i)_x64.cat ;
+#	}
+#}
+#
+
+# Create ArgyllCMS.inf from the template and device list
+if $(CREATE_INFS) = true {
+	local _i _t _d ;
+	NDepends files : ArgyllCMS.inf ;
+	NDepends install : ArgyllCMS.inf ArgyllCMS.cat ArgyllCMS_x64.cat ;
+
+	_i  = [ NormPaths ArgyllCMS.inf ] ;
+	_t  = [ NormPaths ArgyllCMS.inf.t ] ;
+	_d  = [ NormPaths ArgyllCMS.inf.d ] ;
+
+	File ArgyllCMS.inf : ArgyllCMS.inf.t ;
+	GenFileNND ArgyllCMS.inf : "sed s/#PLAT#// $(_d) >> $(_i)" : ArgyllCMS.inf.t ArgyllCMS.inf.d ;
+	GenFileNND ArgyllCMS.inf : "sed s/#PLAT#/.NTx86/ $(_d) >> $(_i)" : ArgyllCMS.inf.t ArgyllCMS.inf.d ; 
+	GenFileNND ArgyllCMS.inf : "sed s/#PLAT#/.NTamd64/ $(_d) >> $(_i)" : ArgyllCMS.inf.t ArgyllCMS.inf.d ;
+}
+
+
+
+
+
+
+

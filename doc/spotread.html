@@ -10,14 +10,25 @@
     <h2><b>spectro/spotread</b></h2>
     <h3>Summary</h3>
     Use an instrument to read a single color value. This can be a useful
-    diagnostic aid. The type of instrument is determined by the
-    communication port selected.
+    diagnostic aid.
     <h3>Usage Summary</h3>
     <small><span style="font-family: monospace;">spotread [-options]
         [logfile]</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;</span><a
         style="font-family: monospace;" href="#v">-v</a><span
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         &nbsp; &nbsp; &nbsp; Verbose mode</span><br style="font-family:
@@ -27,6 +38,18 @@
         style="font-family: monospace;"></span><a style=" font-family:
         monospace;" href="#s">-s</a><span style="font-family:
         monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         &nbsp; &nbsp; &nbsp; Print spectrum for each reading.</span></small><br
@@ -43,6 +66,18 @@
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         Set COM port, 1..4 (default 1)</span><span style="font-family:
         monospace;"></span><span style="font-family: monospace;"><br
           style="font-family: monospace;">
@@ -51,26 +86,74 @@
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         &nbsp; &nbsp; &nbsp; Use transmission measurement mode</span><br
         style="font-family: monospace;">
-      <span style="font-family: monospace;">&nbsp;</span><a
-        style="font-family: monospace;" href="#d">-d</a><span
+      <span style="font-family: monospace;">&nbsp;</span><a style="
+        font-family: monospace;" href="#e">-e</a><span
         style="font-family: monospace;">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-        Use display measurement mode (absolute results)<br>
+
+
+
+
+
+
+
+
+
+
+
+
+        Use emissive measurement mode (absolute results)<br>
       </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
-        style="font-family: monospace;" href="#db">-db</a><span
+        style=" font-family: monospace;" href="#eb">-eb</a><span
         style="font-family: monospace;">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         Use display white brightness relative measurement mode<br>
       </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
-        style="font-family: monospace;" href="#dw">-dw</a><span
+        style=" font-family: monospace;" href="#ew">-ew</a><span
         style="font-family: monospace;">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         Use display white relative measurement mode<br>
@@ -80,11 +163,35 @@
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-        Use projector measurement mode (absolute results)<br>
+
+
+
+
+
+
+
+
+
+
+
+
+        Use telephoto measurement mode (absolute results)<br>
       </span></small><small><span style="font-family: monospace;">&nbsp;</span><a
         style=" font-family: monospace;" href="#pb">-pb</a><span
         style="font-family: monospace;">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         Use </span></small><small><span style="font-family: monospace;">projector</span></small><small><span
@@ -96,22 +203,53 @@
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         Use </span></small><small><span style="font-family: monospace;">projector</span></small><small><span
-        style="font-family: monospace;"> white relative measurement mode</span></small><br>
-    <small><span style="font-family: monospace;">&nbsp;</span><a style="
-        font-family: monospace;" href="#e">-e</a><span
-        style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-
-
-        Use emissive measurement mode (absolute results)</span></small><br>
+        style="font-family: monospace;"> white relative measurement mode</span></small><small><span
+        style="font-family: monospace;"></span></small><br>
     <small><span style="font-family: monospace;">&nbsp;</span><a
         style="font-family: monospace;" href="#a">-a</a><span
         style="font-family: monospace;">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         Use ambient measurement mode (absolute results)<br>
         &nbsp;<a href="#f">-f</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         Use ambient flash measurement mode (absolute results)<br>
@@ -120,15 +258,43 @@
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
 
-        Display type - instrument specific list to choose from.</span></font><br
+
+
+
+
+
+
+
+
+
+
+
+
+        Display type - instrument specific list to choose from.</span></font><br>
+    <small><span style="font-family: monospace;">&nbsp;</span><a
+        style="font-family: monospace;" href="spotread.html#I">-I illum</a><span
+        style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp;
+        &nbsp; &nbsp; &nbsp;&nbsp; Set simulated instrument illumination
+        using FWA (def -i illum):</span><br style="font-family:
+        monospace;">
+      <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;
+&nbsp;&nbsp;
+M0,
+
+        M1, M2, A, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp</span></small><br
       style="font-family: monospace;">
     <small><span style="font-family: monospace;"></span><span
         style="font-family: monospace;">&nbsp;</span><a
         style="font-family: monospace;" href="#i">-i illum</a><span
         style="font-family: monospace;">&nbsp;&nbsp; &nbsp; &nbsp;
-        &nbsp; &nbsp; &nbsp;&nbsp; Choose illuminant for
-        print/transparency spectral data:</span><br style="font-family:
-        monospace;">
+        &nbsp; &nbsp; &nbsp;&nbsp; Choose illuminant for computation of
+        CIE XYZ from spectral data &amp; FWA:</span><br
+        style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
 &nbsp;
@@ -141,7 +307,19 @@ D50
 (def.),
 
 
-        D65, F5, F8, F10 or file.sp</span><br style="font-family:
+
+
+
+
+
+
+
+
+
+
+
+
+        D50M2, D65, F5, F8, F10 or file.sp</span><br style="font-family:
         monospace;">
       <span style="font-family: monospace;">&nbsp;</span><a style="
         font-family: monospace;" href="#Q">-Q observ</a><span
@@ -150,6 +328,18 @@ D50
         spectral data or CCSS instrument:</span><br style="font-family:
         monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp; </span></small><small><span
@@ -162,9 +352,33 @@ D50
         &nbsp;<a href="#F">-F filter</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         Set filter configuration:<br>
         &nbsp;&nbsp;
         n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         None<br>
@@ -172,14 +386,50 @@ D50
         p&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         Polarising filter<br>
         &nbsp;&nbsp;
         6&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         D65<br>
         &nbsp;&nbsp;
         u&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         U.V. Cut<br>
@@ -190,10 +440,34 @@ D50
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         Display Yxy instead of Lab<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#h">-h</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         Display LCh instead of Lab</span></font><br>
@@ -202,10 +476,34 @@ D50
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         Show running average and std. devation from ref.</span></font><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;<a
           href="#T">-T</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         Display correlated color temperatures and CRI<br>
@@ -213,7 +511,19 @@ D50
         monospace;">&nbsp;<a href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-        Disable auto calibration of instrument</span></font><br>
+
+
+
+
+
+
+
+
+
+
+
+
+        Disable initial calibration of instrument if possible</span></font><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
         style="font-family: monospace;" href="#H">-H</a><span
         style="font-family: monospace;">
@@ -222,6 +532,18 @@ D50
         (if available)<br>
         &nbsp;</span></font><font size="-1"><span style="font-family:
         monospace;"><a href="#X1">-X file.ccmx</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         Apply Colorimeter Correction Matrix</span></font><br>
@@ -234,16 +556,37 @@ Spectral
 Samples
 
 
-      for calibration</span><br style="font-family: monospace;">
-    <span style="font-family: monospace;">&nbsp;<a href="#X3">-X N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-      0: Technology (Display description)</span><br style="font-family:
-      monospace;">
-    <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-      1: etc.</span><br>
+
+
+
+
+
+
+
+
+      for calibration</span><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+        style=" font-family: monospace;" href="#Yrn">-<font size="-1">Y</font>
+        r|n</a><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+        &nbsp;&nbsp;&nbsp;&nbsp; Override refresh, non-refresh display
+        mode</span></font><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+        style=" font-family: monospace;" href="#YA">-<font size="-1">Y</font>A</a><span
+        style="font-family: monospace;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        &nbsp;&nbsp;&nbsp;&nbsp; Use non-adaptive integration time mode
+        (if available).</span></font><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;<a
           href="#W">-W n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Override
@@ -256,6 +599,18 @@ n
 none,
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         h = HW, x = Xon/Xoff</span></font><br>
     <small><span style="font-family: monospace;">&nbsp;</span><a style="
         font-family: monospace;" href="#D">-D [level]</a><span
@@ -264,6 +619,18 @@ none,
         Print debug diagnostics to stderr</span></small><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;<a
           href="#log"><span style="font-style: italic;">logfile</span></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         Optional file to save reading results<br style="font-family:
@@ -311,44 +678,43 @@ none,
     spectrum), and ideally should be of uniform brightness over the
     measurement area.<br>
     <br>
-    <a name="d"></a>The <span style="font-weight: bold;">-d</span> flag
-    allows measuring in display mode, using instruments that support
-    this mode. Values returned are absolute.<br>
-    <br>
-    <a name="db"></a>The <span style="font-weight: bold;">-db</span>
-    flag allows measuring in display mode using instruments that support
-    this mode, with the brightness normalized to the white value read as
-    the first reading. While the brightness values are then relative to
-    the white, the readings are otherwise absolute. This corresponds to
-    the raw ICC absolute readings created by <a href="dispread.html">spotread</a>.<br>
-    <br>
-    <a name="dw"></a>The <span style="font-weight: bold;">-dw</span>
-    flag allows measuring in display mode using instruments that support
-    this mode, with the white normalized to the white value read as the
-    first reading.<br>
-    <br>
-    <a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
-    allows measuring in projector mode, using instruments that support
-    this mode. Values returned are absolute.<br>
-    <br>
-    <a name="pb"></a>The <span style="font-weight: bold;">-pb</span>
-    flag allows measuring in projector mode using instruments that
-    support this mode, with the brightness normalized to the white value
-    read as the first reading. While the brightness values are then
-    relative to the white, the readings are otherwise absolute. This
-    corresponds to the raw ICC absolute readings created by <a
-      href="dispread.html">spotread</a>.<br>
-    <br>
-    <a name="pw"></a>The <span style="font-weight: bold;">-pw</span>
-    flag allows measuring in projector mode using instruments that
-    support this mode, with the white normalized to the white value read
-    as the first reading.<br>
-    <br>
     <a name="e"></a>The <span style="font-weight: bold;">-e</span> flag
     allows measuring in emission mode (e.g. displays or illuminants)
     using instruments that support this mode. An adaptive integration
-    time will be used in devices that support it. Values returned are
-    absolute.<br>
+    time will be used in devices that support it by default (see the <a
+      href="#ZA">-ZA</a> flag). Values returned are absolute.<br>
+    <br>
+    <a name="eb"></a>The <span style="font-weight: bold;">-eb</span>
+    flag allows measuring in emission mode using instruments that
+    support this mode, with the brightness reading being relative to the
+    white value read as the first reading. While the brightness values
+    are then relative to the white, the readings are otherwise absolute.
+    This corresponds to the raw ICC absolute readings created by <a
+      href="dispread.html">spotread</a>.<br>
+    <br>
+    <a name="ew"></a>The <span style="font-weight: bold;">-ew</span>
+    flag allows measuring in emissive mode using instruments that
+    support this mode, with the reading being relative to the white
+    value read as the first reading.<br>
+    <br>
+    <a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
+    allows measuring in telephoto mode, using instruments that support
+    this mode, e.g. the ColorMunki. Values returned are absolute.<br>
+    &nbsp;Note that you would use normal emissive mode to measure
+    projectors using instruments without a specific telephoto mode.<br>
+    <br>
+    <a name="pb"></a>The <span style="font-weight: bold;">-pb</span>
+    flag allows measuring in telephoto mode using instruments that
+    support this mode, with the brightness reading being relative to the
+    white value read as the first reading. While the brightness values
+    are then relative to the white, the readings are otherwise absolute.
+    This corresponds to the raw ICC absolute readings created by <a
+      href="dispread.html">spotread</a>.<br>
+    <br>
+    <a name="pw"></a>The <span style="font-weight: bold;">-pw</span>
+    flag allows measuring in telephoto mode using instruments that
+    support this mode, with the reading being relative to the white
+    value read as the first reading.<br>
     <br>
     <a name="a"></a>The <span style="font-weight: bold;">-a</span> flag
     allows measuring in ambient illumination mode using instruments that
@@ -366,8 +732,7 @@ none,
     button, similar to how a reflective strip is read.<br>
     <br>
     <a name="y"></a>&nbsp; The <span style="font-weight: bold;">-y</span>
-    flag allows setting the Display Type. Most colorimeters need this
-    parameter set to operate correctly. The selection typically
+    flag allows setting the Display Type. The selection typically
     determines two aspects of of the instrument operation: <span
       style="font-weight: bold;">1)</span> It may set the measuring mode
     to suite <a
@@ -382,16 +747,31 @@ none,
     will be shown in the <a href="ArgyllDoc.html#CmdLine">usage</a>
     information. For more details on what particular instruments support
     and how this works, see <a href="instruments.html">Operation of
-      particular instruments</a>.<br>
+      particular instruments</a>. <b>3)</b> Any installed CCSS files
+    (if applicable), or CCMX files. These files are typically created
+    using <a href="file:///D:/src/argyll/doc/ccxxmake.html">ccxxmake</a>,
+    and installed using <a
+      href="file:///D:/src/argyll/doc/oeminst.html">oeminst</a>. The
+    default and Base Calibration types will be indicated in the usage.<br>
     <br>
-    <a name="i"></a>The <b>-i</b> flag allows specifying a standard or
-    custom illumination spectrum, applied to <span
-      style="text-decoration: underline;">reflective</span> spectral
-    data to compute CIE tristimulus values. <b>A</b>, <b>D50</b>, <b>D65</b>,
-    <b>F5</b>, <b>F8</b>, <b>F10</b> are a selection of standard
-    illuminant spectrums, with <b>D50</b> being the default. If a
-    filename is specified instead, it will be assumed to be an Argyll
-    specific <a href="File_Formats.html#.sp">.sp</a> spectrum file.<br>
+    <a name="I"></a>The <b>-I</b> parameter allows specifying a
+    standard or custom illumination spectrum to be used as the similated
+    instrument illuminant when FWA compensation is used during
+    measurement, overriding the default <b>D50</b> or CIE computation
+    illuminant used for FWA (see <b>-i</b> below<b>). </b>See <a
+      href="colprof.html#f">colprof -f</a> for a fuller explanation. <br>
+    <br>
+    <a name="i"></a>The <b>-i</b> parameter allows specifying a
+    standard or custom illumination spectrum applied to <span
+      style="text-decoration: underline;">reflective</span> or <u>transmissive</u>
+    spectral data to compute CIE tristimulus values. <b>A</b>, <b>D50</b>,
+    <b>D50M2, D65</b>, <b>F5</b>, <b>F8</b>, <b>F10</b> are a
+    selection of standard illuminant spectrums, with <b>D50</b> being
+    the default. If a filename is specified instead, it will be assumed
+    to be an Argyll specific <a href="File_Formats.html#.sp">.sp</a>
+    spectrum file. If FWA compensation is used during measurement, this
+    illuminant will be used by default as the simulated instrument
+    illuminant.<br>
     <br>
     <a name="Q"></a> The <b>-Q</b> flag allows specifying a tristimulus
     observer, and is used to compute PCS (Profile Connection Space)
@@ -433,9 +813,11 @@ none,
     L*a*b*<br>
     <br>
     <a name="V"></a>The <b>-V</b> enables average and standard
-    deviation statistics on the L*a*b* values. This start and is reset
-    whenever a reference is taken ('r' key). This is useful in
-    quantifying repeatability.<br>
+    deviation statistics on the XYZ and L*a*b* values. This start and is
+    reset whenever a reference is taken ('r' key). A side effect of this
+    option is to disable the clamping of XYZ and L*a*b* value to
+    positive, so that a valid average of black can be obtained.This is
+    useful in quantifying repeatability.<br>
     <br>
     <a name="T"></a>The <b>-T</b> option causes various color
     temperatures to be displayed, plus the Color Rendering Index. Three
@@ -453,11 +835,16 @@ none,
     point is to far from the black body and Daylight locus to be
     meaningful.<br>
     <br>
-    <a name="N"></a>The <b>-N</b> option disables the automatic
-    calibration of an instrument if it is possible to do so. Sometimes
-    it is awkward to have to re-calibrate and instrument every time a
-    tool starts, and unnecessary if the instrument has recently been
-    calibration, and this switch prevents it happening.<br>
+    <a name="N"></a> <span style="font-weight: bold;">-N</span> Any
+    instrument that requires regular calibration will ask for
+    calibration on initial start-up. Sometimes this can be awkward if
+    the instrument is being mounted in some sort of measuring jig, or
+    annoying if several sets of readings are being taken in quick
+    succession. The -<span style="font-weight: bold;">N</span>
+    suppresses this initial calibration if a valid and not timed out
+    previous calibration is recorded in the instrument or on the host
+    computer. It is advisable to only use this option on the second and
+    subsequent measurements in a single session.<br>
     <br>
     <a name="H"></a> The -<span style="font-weight: bold;">H</span>
     option turns on high resolution spectral mode, if the instrument
@@ -484,16 +871,42 @@ can
 improve
 a
 
+
+
+
+
+
+
+
+
+
+
+
+
     colorimeters accuracy for a particular type of display.<br>
     <br>
-    <a name="X3"></a> The -<span style="font-weight: bold;">X <span
-        style="font-style: italic;">N</span></span> option selects a <a
-      href="File_Formats.html#.ccss">Colorimeter Calibration Spectral
-      Sample</a> from the list of installed ccss files, rather than
-    specifying a specific ccss files as in the above usage. The CCSS
-    file that came with the i1d3 colorimeters can be installed using <a
-      href="i1d3ccss.html">i1d3ccss</a>, or one can be created and
-    installed using <a href="ccxxmake.html">ccxxmake</a>.<br>
+    <a name="Yrn"></a> The -<span style="font-weight: bold;">Y r </span>and
+
+
+
+
+
+
+    <b>-Y n</b> options overrides the refresh display mode set by the <a
+      href="#y">-y display type selection</a>, with <b>-Y</b><span
+      style="font-weight: bold;"> r</span> forcing refresh display mode,
+    and <b>-Y n</b> forcing a non-refresh display mode. Not all
+    instruments support a display measurement refresh mode, or the
+    ability to override the mode set by the display type selection.<br>
+    <br>
+    <a name="YA"></a> The -<span style="font-weight: bold;">Y A</span>
+    option uses a non-adaptive integration time emission measurement
+    mode, if the instrument supports it, such as the Eye-One Pro or
+    ColorMunki. By default an adaptive integration time measurement mode
+    will be used for emission measurements, but some instruments support
+    a fixed integration time mode that can be used with display devices.
+    This may give increased consistency and faster measurement times,
+    but may also give less accurate low level readings.<br>
     <br>
     <a name="W"></a>The <b>-W</b> <span style="font-weight: bold;">n|h|x</span>
     parameter overrides the default serial communications flow control
@@ -542,7 +955,7 @@ a
     establish an FWA reference. There is one FWA reference locations
     available for each alphabetic character not used for a special
     function (ie. not <span style="font-weight: bold;">H, K, N, Q, R,
-      S)</span>, keyed to the capital letters <b>A-</b><b>Z</b>,
+      S, F)</span>, keyed to the capital letters <b>A-</b><b>Z</b>,
     allowing FWA corrected comparisons between many different media.<br>
     <br>
     Once a particular reference location is initialized with the FWA
@@ -576,6 +989,14 @@ a
     <br>
     A calibration can be initiated using the <span style="font-weight:
       bold;">k</span> key.<br>
+    <br>
+    For instruments that support it and are in a refresh display mode,
+    the calibrated refresh rate can be read back using the <b>f</b>
+    key.<br>
+    <br>
+    For instruments that support it and are in an emissive measurement
+    mode, a display refresh rate measurement can be made by using the <b>F</b>
+    key.<br>
     <br>
     <br>
     <br>

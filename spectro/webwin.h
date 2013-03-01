@@ -8,7 +8,7 @@
  * Author: Graeme W. Gill
  * Date:   3/4/12
  *
- * Copyright 2012 Graeme W. Gill
+ * Copyright 2013 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-

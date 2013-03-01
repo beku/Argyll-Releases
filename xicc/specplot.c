@@ -16,7 +16,7 @@
 /*
  * This is some test code to test the Daylight and Plankian spectra, 
  * Correlated and Visual Color Temperatures, and CRI.
- * and plot a spectrum or cmf.
+ * and plot a spectrum, CMF or CCSS.
  */
 
 #include <stdio.h>
@@ -181,7 +181,7 @@ void usage(void) {
 	fprintf(stderr,"usage: specplot [infile.sp]\n");
 	fprintf(stderr," -v               verbose\n");
 	fprintf(stderr," -c               combine multiple files into one plot\n");
-	fprintf(stderr," -z               make range cover zero\n");
+	fprintf(stderr," -z               don't make range cover zero\n");
 	fprintf(stderr," -u level         plot effect of adding estimated UV level\n");
 	fprintf(stderr," -U               plot effect of adding range of estimated UV level\n");
 	fprintf(stderr," [infile.sp ...]  spectrum files to plot\n");
@@ -198,7 +198,7 @@ main(
 	int k;
 	int verb = 0;
 	int comb = 0;
-	int zero = 0;
+	int zero = 1;
 	double temp;
 	xspect sp[MAXGRAPHS];
 	icxIllumeType ilType;
@@ -250,7 +250,7 @@ main(
 				comb = 1;
 
 			} else if (argv[fa][1] == 'z' || argv[fa][1] == 'Z') {
-				zero = 1;
+				zero = 0;
 
 			} else {
 				usage();
@@ -289,8 +289,8 @@ main(
 
 			/* Read as many spectra from the file as possible */
 			nreq = MAXGRAPHS - nsp;
-			if (read_nxspect(&sp[nsp], argv[fa], &nret, soff, nreq, 3) != 0) {
-				error ("Unable to read custom spectrum or CMF '%s'",argv[fa]);
+			if (read_nxspect(&sp[nsp], argv[fa], &nret, soff, nreq, 0) != 0) {
+				error ("Unable to read custom spectrum, CMF or CCSS '%s'",argv[fa]);
 			}
 			for (i = 0; i < nret; i++)
 				sprintf(buf[nsp + i],"File '%s' spect %d",argv[fa], soff + i);
@@ -315,6 +315,8 @@ main(
 					inm = "C"; break;
 			    case icxIT_D50:
 					inm = "D50"; break;
+			    case icxIT_D50M2:
+					inm = "D50M2"; break;
 			    case icxIT_D65:
 					inm = "D65"; break;
 			    case icxIT_E:

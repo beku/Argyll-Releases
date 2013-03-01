@@ -276,7 +276,7 @@ static int pcaltarg_read(pcaltarg *p, cgats *cg, int tab) {
 	}
 	sprintf(buf, "%s_I",bident);
 	if ((spi[1] = cg->find_field(cg, tab, buf)) < 0) {
-		sprintf(p->err, "ctg_read: Can't find field PARAMTYPE",buf);
+		sprintf(p->err, "ctg_read: Can't find field %s",buf);
 		free(bident);
 		return 1;
 	}
@@ -1089,7 +1089,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* Create a spectral conversion object to XYZ */
-			if ((sp2cie = new_xsp2cie(illum, &cust_illum, observ, NULL, icSigXYZData)) == NULL)
+			if ((sp2cie = new_xsp2cie(illum, &cust_illum, observ, NULL, icSigXYZData, icxClamp)) == NULL)
 				error("Creation of spectral conversion object failed");
 
 			/* To add FWA comp. would have to locate/create spectral white here, */
@@ -1822,7 +1822,7 @@ int main(int argc, char *argv[]) {
 		/* Plot the verification curves */
 		if (doplot) {
 			double xx[PRES];
-			double yy[6][PRES];
+			double yy[10][PRES];
 	
 			printf("Verification match plot:\n");
 
@@ -1932,7 +1932,7 @@ int main(int argc, char *argv[]) {
 				double xx[PRES];
 				double yy[10][PRES];
 	
-				printf("Target curves plot:\n",j);
+				printf("Target curves plot:\n");
 	
 				for (i = 0; i < (PRES-1); i++) {
 					co tp;	/* Test point */

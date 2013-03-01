@@ -170,11 +170,12 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -r res          Set abstract profile clut resolution (default %d)\n",DEF_CLUTRES);
 	fprintf(stderr," -d factor       Override default damping factor (default %f, then %f)\n",DEF_DAMP1,DEF_DAMP2);
 	fprintf(stderr," -R              Aim for white point relative match rather than absolute\n");
-	fprintf(stderr," -i illum        Choose illuminant for spectral data:\n");
-	fprintf(stderr,"                 A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr," -f [illum]      Use Fluorescent Whitening Agent compensation [opt. simulated inst. illum.:\n");
+	fprintf(stderr,"                  M0, M1, M2, A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp]\n");
+	fprintf(stderr," -i illum        Choose illuminant for computation of CIE XYZ from spectral data & FWA:\n");
+	fprintf(stderr,"                  A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
-	fprintf(stderr,"                 1931_2, 1964_10, S&B 1955_2, J&V 1978_2 (def.)\n");
-	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation on spectral data\n");
+	fprintf(stderr,"                  1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," cietarget       Target CIE or spectral values, CGATS file (e.g. .ti3)\n");
 	fprintf(stderr," ciecurrent      Actual CIE or spectral values, CGATS file (e.g. .ti3)\n");
 	fprintf(stderr," [outdevicc]     Output device ICC profile to set gamut limit (not used if -g)\n");
@@ -271,6 +272,8 @@ main(int argc, char *argv[]) {
 	int *match;					/* Array mapping first list indexes to corresponding second */
 	int fwacomp = 0;			/* FWA compensation on spectral ? */
 	int spec = 0;				/* Use spectral data flag */
+	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
+	xspect cust_tillum, *tillump = NULL; /* Custom target/simulated illumination spectrum */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;					/* Custom illumination spectrum */
 	icxObserverType observ = icxOT_Judd_Voss_2;
@@ -322,15 +325,15 @@ main(int argc, char *argv[]) {
 				usage("Usage requested");
 
 			/* Verbosity */
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			else if (argv[fa][1] == 'v') {
 				verb = 1;
 			}
 			/* Create initial abstract correction profile */
-			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
+			else if (argv[fa][1] == 'c') {
 				docreate = 1;
 			}
 			/* Don't impose a gamut limit */
-			else if (argv[fa][1] == 'g' || argv[fa][1] == 'G') {
+			else if (argv[fa][1] == 'g') {
 				nogamut = 1;
 			}
 			/* Override the correction clut resolution */
@@ -340,7 +343,7 @@ main(int argc, char *argv[]) {
 				clutres = atoi(na);
 			}
 			/* Override the damping factor */
-			else if (argv[fa][1] == 'd' || argv[fa][1] == 'D') {
+			else if (argv[fa][1] == 'd') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -d");
 				damp2 = atof(na);
@@ -350,8 +353,50 @@ main(int argc, char *argv[]) {
 				dorel = 1;
 			}
 
-			/* Spectral Illuminant type */
-			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
+			/* FWA compensation */
+			else if (argv[fa][1] == 'f') {
+				fwacomp = 1;
+
+				if (na != NULL) {	/* Argument is present - target/simulated instr. illum. */
+					fa = nfa;
+					if (strcmp(na, "A") == 0
+					 || strcmp(na, "M0") == 0) {
+						spec = 1;
+						tillum = icxIT_A;
+					} else if (strcmp(na, "C") == 0) {
+						spec = 1;
+						tillum = icxIT_C;
+					} else if (strcmp(na, "D50") == 0
+					        || strcmp(na, "M1") == 0) {
+						spec = 1;
+						tillum = icxIT_D50;
+					} else if (strcmp(na, "D50M2") == 0
+					        || strcmp(na, "M2") == 0) {
+						spec = 1;
+						tillum = icxIT_D50M2;
+					} else if (strcmp(na, "D65") == 0) {
+						spec = 1;
+						tillum = icxIT_D65;
+					} else if (strcmp(na, "F5") == 0) {
+						spec = 1;
+						tillum = icxIT_F5;
+					} else if (strcmp(na, "F8") == 0) {
+						spec = 1;
+						tillum = icxIT_F8;
+					} else if (strcmp(na, "F10") == 0) {
+						spec = 1;
+						tillum = icxIT_F10;
+					} else {	/* Assume it's a filename */
+						spec = 1;
+						tillum = icxIT_custom;
+						if (read_xspect(&cust_tillum, na) != 0)
+							usage("Unable to read custom spectrum '%s'",na);
+					}
+				}
+			}
+
+			/* Spectral to CIE Illuminant type */
+			else if (argv[fa][1] == 'i') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -i");
 				if (strcmp(na, "A") == 0) {
@@ -363,6 +408,9 @@ main(int argc, char *argv[]) {
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
+				} else if (strcmp(na, "D50M2") == 0) {
+					spec = 1;
+					illum = icxIT_D50M2;
 				} else if (strcmp(na, "D65") == 0) {
 					spec = 1;
 					illum = icxIT_D65;
@@ -384,7 +432,7 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Spectral Observer type */
-			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+			else if (argv[fa][1] == 'o') {
 				fa = nfa;
 				if (na == NULL) usage("Expected argument to -o");
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
@@ -405,10 +453,6 @@ main(int argc, char *argv[]) {
 				} else
 					usage("Unrecogised argument '%s' to -o",na);
 			}
-
-			/* FWA compensation */
-			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F')
-				fwacomp = 1;
 
 			else 
 				usage("Unrecognised flag -%c",argv[fa][1]);
@@ -598,7 +642,7 @@ main(int argc, char *argv[]) {
 
 			/* Create a spectral conversion object */
 			if ((sp2cie = new_xsp2cie(illum, illum == icxIT_none ? NULL : &cust_illum,
-			                          observ, NULL, icSigLabData)) == NULL)
+			                          observ, NULL, icSigLabData, icxClamp)) == NULL)
 				error("Creation of spectral conversion object failed");
 
 			if (fwacomp) {
@@ -631,7 +675,18 @@ main(int argc, char *argv[]) {
 							mwsp.spec[j] = rv;
 					}
 				}
-				if (sp2cie->set_fwa(sp2cie, &insp, &mwsp)) 
+
+				/* If we are setting a specific simulated instrument illuminant */
+				if (tillum != icxIT_none) {
+					tillump = &cust_tillum;
+					if (tillum != icxIT_custom) {
+						if (standardIlluminant(tillump, tillum, 0.0)) {
+							error("simulated inst. illum. not recognised");
+						}
+					}
+				}
+
+				if (sp2cie->set_fwa(sp2cie, &insp, tillump, &mwsp)) 
 					error ("Set FWA on sp2cie failed");
 			}
 

@@ -31,7 +31,7 @@
 #undef DIAG			/* Print internal value diagnostics for each spot test conversion */
 					/* and print diagnostics for excessive errors, nans etc. */
 #undef VERBOSE		/* Print diagnostic values for every conversion */
-#undef SPOTTEST		/* ** Test known spot colors */
+#define SPOTTEST		/* ** Test known spot colors */
 #undef TROUBLE		/* Test trouble spot colors XYZ -> Jab -> XYZ */
 #undef TROUBLE2		/* Test trouble spot colors Jab -> XYZ -> Jab */
 #undef SPECIAL		/* Special exploration code */
@@ -49,10 +49,14 @@
 
 //#define TRES 41		/* Grid resolution */
 #define TRES 17		/* Grid resolution */
-#define USE_HK 1	/* Use Helmholtz-Kohlraush in testing */
+#define USE_HK 0	/* Use Helmholtz-Kohlraush in testing */
 #define EXIT_ON_ERROR	/* and also trace */
 
-#define MAX_REF_ERR 0.1	/* Maximum permitted error to reference transform in delta Jab */
+//#define MAX_SPOT_ERR 0.05
+//#define MAX_REF_ERR 0.1	/* Maximum permitted error to reference transform in delta Jab */
+/* The blue fix throws this out */
+#define MAX_SPOT_ERR 2.0
+#define MAX_REF_ERR 2.0	/* Maximum permitted error to reference transform in delta Jab */
 
 #ifndef _isnan
 #define _isnan(x) ((x) != (x))
@@ -465,8 +469,7 @@ main(void) {
 #endif /* DIAG */
 			} else if (maxdiff(Jab, jabr) > MAX_REF_ERR) {
 				printf("Spottest: Excessive error to reference for %f %f %f\n",tsample[c][0],tsample[c][1],tsample[c][2]);
-				printf("Spottest: Error %f, Got %f %f %f, expected %f %f %f\n",maxdiff(Jab, jabr),
-				                               Jab[0], Jab[1], Jab[2], jabr[0], jabr[1], jabr[2]);
+				printf("Spottest: Error %f, Got %f %f %f\n                      expected %f %f %f\n", maxdiff(Jab, jabr), Jab[0], Jab[1], Jab[2], jabr[0], jabr[1], jabr[2]);
 				ok = 0;
 #ifdef EXIT_ON_ERROR
 				fflush(stdout);
@@ -533,13 +536,15 @@ main(void) {
 #endif /* EXIT_ON_ERROR */
 			}
 		}
-#endif TROUBLE2
+#endif /* TROUBLE2 */
 	}
 #endif /* TROUBLE || TROUBLE 2 */
 	/* =============================================== */
 
 	/* ================= SpotTest ===================== */
 #ifdef SPOTTEST
+	{
+	double mrerr = 0.0, mxerr = 0.0;
 	for (c = 0; c < NO_SPOTS; c++) {
 
 #ifdef DIAG
@@ -578,14 +583,15 @@ main(void) {
 	
 		{
 			double Jab[3], JCh[3], jabr[3], res[3], target[3];
+			double mde;
 
 			cam->XYZ_to_cam(cam, Jab, sample[c]);
 
 			if (camr->XYZ_to_cam(camr, jabr, sample[c]))
 				printf("Reference XYZ2Jab returned error\n");
-			else if (maxdiff(Jab, jabr) > MAX_REF_ERR) {
+			else if ((mde = maxdiff(Jab, jabr)) > MAX_REF_ERR) {
 				printf("Spottest: Excessive error to reference for %f %f %f\n",sample[c][0],sample[c][1],sample[c][2]);
-				printf("Spottest: Error %f, Got %f %f %f, expected %f %f %f\n",maxdiff(Jab, jabr),
+				printf("Spottest: Error %f, Got %f %f %f\n                     expected %f %f %f\n",maxdiff(Jab, jabr),
 				                               Jab[0], Jab[1], Jab[2], jabr[0], jabr[1], jabr[2]);
 				ok = 0;
 #ifdef EXIT_ON_ERROR
@@ -600,6 +606,8 @@ main(void) {
 				exit(-1);
 #endif /* EXIT_ON_ERROR */
 			}
+			if (mde > mrerr)
+				mrerr = mde;
 
 			/* Convert to JCh for checking */
 			JCh[0] = Jab[0];
@@ -622,7 +630,7 @@ main(void) {
 					target[2] = correct[c][3];
 			}
 
-			if (maxdiff(JCh, target) > 0.05) {
+			if ((mde = maxdiff(JCh, target)) > MAX_SPOT_ERR) {
 				printf("Spottest: Excessive error for %f %f %f\n",sample[c][0],sample[c][1],sample[c][2]);
 				printf("Spottest: Excessive error in conversion to CAM %f\n",maxdiff(JCh, target));
 				printf("Jab is %f %f %f\nJch is        %f %f %f\n",
@@ -638,6 +646,8 @@ main(void) {
 				exit(-1);
 #endif /* EXIT_ON_ERROR */
 			}
+			if (mde > mxerr)
+				mxerr = mde;
 
 			cam->cam_to_XYZ(cam, res, Jab);
 
@@ -671,6 +681,8 @@ main(void) {
 		printf("Spottest testing FAILED\n");
 	} else {
 		printf("Spottest testing OK\n");
+		printf("Spottest maximum DE to ref = %f, to expected = %f\n",mrerr,mxerr);
+	}
 	}
 #endif /* SPOTTEST */
 	/* =============================================== */
@@ -739,7 +751,7 @@ main(void) {
 #endif /* DIAG */
 				} else if (maxdiff(Jab, jabr) > MAX_REF_ERR) {
 					printf("Locustest1: Excessive error to reference for %f %f %f\n",xyz[0],xyz[1],xyz[2]);
-					printf("Locustest1: Error %f, Got %f %f %f, expected %f %f %f\n",maxdiff(Jab, jabr),
+					printf("Locustest1: Error %f, Got %f %f %f\n              expected %f %f %f\n",maxdiff(Jab, jabr),
 					                               Jab[0], Jab[1], Jab[2], jabr[0], jabr[1], jabr[2]);
 					ok = 0;
 #ifdef EXIT_ON_ERROR
@@ -790,7 +802,7 @@ main(void) {
 #endif /* DIAG */
 				} else if (maxdiff(Jab, jabr) > MAX_REF_ERR) {
 					printf("Locustest2: Excessive error to reference for %f %f %f\n",xyz[0],xyz[1],xyz[2]);
-					printf("Locustest2: Error %f, Got %f %f %f, expected %f %f %f\n",maxdiff(Jab, jabr),
+					printf("Locustest2: Error %f, Got %f %f %f,\n                 expected %f %f %f\n",maxdiff(Jab, jabr),
 					                               Jab[0], Jab[1], Jab[2], jabr[0], jabr[1], jabr[2]);
 					ok = 0;
 #ifdef EXIT_ON_ERROR
@@ -1037,7 +1049,7 @@ main(void) {
 #if defined(DIAG) || defined(VERBOSE) || defined(EXIT_ON_ERROR)
 
 #if defined(DIAG) || defined(EXIT_ON_ERROR)
-						if (!_finite(mxd) || mxd > 0.5)
+						if (!_finite(mxd) || mxd > 0.5)		/* Delta E */
 #endif /* DIAG || EXIT_ON_ERROR */
 						{
 							double oLab[3];
@@ -1067,13 +1079,13 @@ main(void) {
 			}
 #endif /* INVTEST */
 		}
-		if (!_finite(merr) || merr > 0.1) {
-			printf("INVTEST: Excessive error in roundtrip check %f\n",merr);
+		if (!_finite(merr) || merr > 0.15) {
+			printf("INVTEST: Excessive error in roundtrip check %f DE\n",merr);
 			ok = 0;
 		}
 		printf("\n");
 		printf("XYZ -> Jab -> XYZ\n");
-		printf("Inversion check complete, peak error = %e\n",merr);
+		printf("Inversion check complete, peak error = %e DE\n",merr);
 		printf("Range of XYZ values was:\n");
 		printf("X:  %f -> %f\n", xmin[0], xmax[0]);
 		printf("Y:  %f -> %f\n", xmin[1], xmax[1]);
@@ -1286,7 +1298,7 @@ main(void) {
 		}
 		printf("\n");
 		printf("Jab -> XYX -> Jab\n");
-		printf("Inversion check 2 complete, peak error = %e\n",merr);
+		printf("Inversion check 2 complete, peak error = %e DE Jab\n",merr);
 		printf("Range of Jab values was:\n");
 		printf("J:  %f -> %f\n", jmin[0], jmax[0]);
 		printf("a:  %f -> %f\n", jmin[1], jmax[1]);

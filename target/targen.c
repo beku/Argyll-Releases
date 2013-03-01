@@ -21,18 +21,15 @@
 	Should add an option to generate grey and near grey
 	or other PCS based pattern test points based on the previous profile.
 	How about an option to read in an CGATS file containing
-	PCS values ? How is the black level chosen though ?
-
-	Might be good to change/allow tweaking of the EMPH_NEUTRAL
-	to increase the grey region patch density even more.
- 
-	Would be nice to be able to generate secondary
-	color ramps (ie. CMY for RGB space, RGB for CMYK space.)
+	PCS or device values ? How is the black level chosen for PCS though ?
 
 	Would be nice to be able to take a previous .ti3 and
 	then suppliment the measured patches. Would have to add another
 	set of measurement columns to .ti1 & .ti2 to carry the
-	already measured values through ? 
+	already measured values through, or do clumbsy post merge ? 
+
+	Would be nice to be able to generate secondary
+	color ramps (ie. CMY for RGB space, RGB for CMYK space.)
 
 	Using adaptive patch creation for grey colorspace is broken.
 	This should be fixed.
@@ -829,7 +826,7 @@ usage(int level, char *diag, ...) {
 /* Research options: */
 /*	fprintf(stderr,"  -A pPERCWGHT    Device (0.0) ... Perceptual (1.0) weighting\n"); */
 /*	fprintf(stderr,"  -A cCURVEWGHT   Curvature weighting  0.0 = none ... "); */
-	fprintf(stderr," -l ilimit        Total ink limit in %%(default = none) \n");
+	fprintf(stderr," -l ilimit        Total ink limit in %% (default = none)\n");
 	fprintf(stderr," -p power         Optional power-like value applied to all device values.\n");
 	fprintf(stderr," -c profile       Optional device ICC or MPP pre-conditioning profile filename\n");
 	fprintf(stderr,"                  (Use \"none\" to turn off any conditioning)\n");
@@ -1767,7 +1764,7 @@ int main(int argc, char *argv[]) {
 
 	if (fsteps > fxno) { /* Top up with full spread (perceptually even) and other patch types */
 
-		/* Generate random numbers. Don't check for duplicates */
+		/* Generate device random numbers. Don't check for duplicates */
 		if (userand == 1 || useqrand == 1) {
 			int i, j;
 			sobol *sl = NULL;
@@ -1843,9 +1840,9 @@ int main(int argc, char *argv[]) {
 
 			sprintf(buf,"%d",j);
 			if (sl != NULL)
-				pp->add_kword(pp, 0, "SPACEFILING_RANDOM_PATCHES", buf, NULL);
+				pp->add_kword(pp, 0, "SPACEFILLING_RANDOM_PATCHES", buf, NULL);
 			else
-				pp->add_kword(pp, 0, "RANDOM_PATCHES", buf, NULL);
+				pp->add_kword(pp, 0, "RANDOM_DEVICE_PATCHES", buf, NULL);
 
 			if (sl != NULL)
 				sl->del(sl);
@@ -1863,11 +1860,11 @@ int main(int argc, char *argv[]) {
 			/* number of patches won't reach the target. This could be fixed fairly easily */
 			/* for some of these (new_prand).  */
 			if (uselat)	 {
-				/* A "greedy"/incremental farp point approach */
+				/* A "greedy"/incremental far point approach */
 				t = new_ifarp(di, uilimit, fsteps, fxlist, fxno,
 				                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 				sprintf(buf,"%d",fsteps - fxno);
-				pp->add_kword(pp, 0, "INC_FAR_PATCHES", buf, NULL);
+				pp->add_kword(pp, 0, "IFP_PATCHES", buf, NULL);
 			} else if (usedsim) {
 				/* Device space simplex latice test points */
 				dx = new_simdlat(di, uilimit, fsteps, fxlist, fxno, SIMDLAT_TYPE, simangle,
@@ -1885,7 +1882,7 @@ int main(int argc, char *argv[]) {
 				rx = new_prand(di, uilimit, fsteps, fxlist, fxno, useqrand == 2 ? 1 : 0,
 			                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 				sprintf(buf,"%d",fsteps - fxno);
-				pp->add_kword(pp, 0, "ERROR_OPTIMISED_PATCHES", buf, NULL);
+				pp->add_kword(pp, 0, "RANDOM_PERCEPTUAL_PATCHES", buf, NULL);
 
 			} else {		/* Default full spread algorithm */
 				/* Optimised Farthest Point Sampling */
@@ -1893,7 +1890,7 @@ int main(int argc, char *argv[]) {
 				            dadapt, 1.0 - perc_wght, perc_wght, curv_wght, fxlist, fxno,
 			                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
 				sprintf(buf,"%d",fsteps - fxno);
-				pp->add_kword(pp, 0, "ERROR_OPTIMISED_PATCHES", buf, NULL);
+				pp->add_kword(pp, 0, "OFPS_PATCHES", buf, NULL);
 			}
 
 	
@@ -1964,17 +1961,20 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Use ofps to measure the stats of the points */
+	/* Note that if new_ofps() fails it will exit() */
 	if (verb > 1
      && di <= 4
 	 && (userand || useqrand || usedsim || usepsim || uselat)) {
 		ofps *s;
 		printf("Computing device space point stats:\n");
-		s = new_ofps(verb, di, uilimit, fxno, 0, 0.0, 0.0, 0.0, 0.0, fxlist, fxno,
-	                (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata);
-		s->stats(s);
-		printf("Max distance stats: Min = %f, Average = %f, Max = %f\n",s->mn,s->av,s->mx);
-
-		s->del(s);
+		if ((s = new_ofps(verb, di, uilimit, fxno, 0, 0.0, 0.0, 0.0, 0.0, fxlist, fxno,
+	           (void(*)(void *, double *, double *))pdata->dev_to_perc, (void *)pdata)) == NULL) {
+			printf("Failed to compute stats\n");
+		} else {
+			s->stats(s);
+			printf("Max distance stats: Min = %f, Average = %f, Max = %f\n",s->mn,s->av,s->mx);
+			s->del(s);
+		}
 	}
 
 	/* Add the eight entries in the second table. */

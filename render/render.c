@@ -7,7 +7,7 @@
  * Author:  Graeme W. Gill
  * Date:    28/12/2005
  *
- * Copyright 2005, 2008 Graeme W. Gill
+ * Copyright 2005, 2008, 2012 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -121,6 +121,16 @@ static void render2d_set_defc(render2d *s, color2d c) {
 	s->defc[PRIX2D] = c[PRIX2D];
 }
 
+
+/* Set background color function */
+static void render2d_set_bg_func(render2d *s,
+	void (*func)(void *cntx, color2d c, double x, double y),
+	void *cntx
+) {
+	s->bgfunc = func;
+	s->cntx = cntx;
+}
+
 /* Compute the length of a double nul terminated string, including */
 /* the nuls. */
 static int zzstrlen(char *s) {
@@ -169,7 +179,7 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 	int i, j;
 
 	double rx0, rx1, ry0, ry1;	/* Box being processed, newest sample is rx1, ry1 */
-	int x, y;				/* Pixel x & y index */
+	int x, y;					/* Pixel x & y index */
 
 	if ((so = new_sobol(2)) == NULL)
 		return 1;
@@ -367,6 +377,10 @@ static int render2d_write(render2d *s, char *filename, int comprn) {
 			for (j = 0; j < s->ncc; j++)
 				pixv1[x][j] = s->defc[j];
 			pixv1[x][PRIX2D] = -1;			/* Make sure all primitive ovewrite the default */
+
+			/* Allow callback to set per pixel background color (or not) */
+			if (s->bgfunc != NULL)
+				s->bgfunc(s->cntx, pixv1[x], x, y);
 
 			/* Overwrite it with any primitives, */
 			/* and remove any that are out of range now */
@@ -567,6 +581,7 @@ int dither		/* Dither flag */
 
 	s->del = render2d_del;
 	s->set_defc = render2d_set_defc;
+	s->set_bg_func = render2d_set_bg_func;
 	s->add = render2d_add;
 	s->write = render2d_write;
 
@@ -841,7 +856,7 @@ color2d c[3]			/* Corresponding colors */
 	s->del = prim2d_del; 
 	s->rend = trivs2d_rend; 
 
-	/* Set the bouding box values */
+	/* Set the bounding box values */
 	s->x0 = s->y0 = 1e38;	
 	s->x1 = s->y1 = -1e38;	
 	for (i = 0; i < 3; i++) {

@@ -227,7 +227,7 @@ struct _profinfo {
 }; typedef struct _profinfo profinfo;
 
 /* Structure that holds all the color lookup information */
-struct _link {
+struct _clink {
 	/* Overall options */
 	int verb;
 	int gamdiag;	/* nz, create gammap.wrl diagnostic */
@@ -269,7 +269,7 @@ struct _link {
 	profinfo in;
 	profinfo out;
 
-}; typedef struct _link link;
+}; typedef struct _clink clink;
 
 
 /* ------------------------------------------- */
@@ -345,7 +345,7 @@ static int tt = 0;
 /* Input table, DevIn -> DevIn' */
 void devi_devip(void *cntx, double *out, double *in) {
 	int rv = 0;
-	link *p = (link *)cntx;
+	clink *p = (clink *)cntx;
 
 #ifdef DEBUGC
 	if (in[0] == 1.0 && in[1] == 1.0 && in[2] == 1.0 && in[3])
@@ -415,7 +415,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 	int ntrig = 0;				/* K only output hack triggered */
 	int cmytrig = 0;			/* CMY output hack triggered */
 	int i, rv = 0;
-	link *p = (link *)cntx;
+	clink *p = (clink *)cntx;
 
 #ifdef DEBUG
 #ifdef DEBUGC
@@ -957,7 +957,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 /* Output table, DevOut' -> DevOut */
 void devop_devo(void *cntx, double *out, double *in) {
 	int rv = 0;
-	link *p = (link *)cntx;
+	clink *p = (clink *)cntx;
 	int i;
 
 #ifdef DEBUG
@@ -1047,7 +1047,7 @@ fix_pcs2k_white(
 /* powell() callback to set XYZ scaling factor */
 
 static double xyzoptfunc(void *cntx, double *v) {
-	link *p = (link *)cntx;
+	clink *p = (clink *)cntx;
 	double swxyz[3], jab[3], dev[MAX_CHAN];
 	double rv;
 	int rc = 0;
@@ -1130,7 +1130,7 @@ main(int argc, char *argv[]) {
 	int rv = 0;
 	icxViewCond ivc, ovc;		/* Viewing Condition Overrides for in and out profiles */
 	int ivc_e = -1, ovc_e = -1;	/* Enumerated viewing condition */
-	link li;					/* Linking information structure */
+	clink li;					/* Linking information structure */
 	int isJab = 0;				/* (Derived from li.mode & li.gmi) NZ if Jab link space */
 	int in_curve_res = 0;		/* Input profile A2B input curve resolution (if known) */
 	int out_curve_res = 0;		/* Output profile B2A output curve resolution (if known) */
@@ -1140,7 +1140,7 @@ main(int argc, char *argv[]) {
 	error_program = argv[0];
 	check_if_not_interactive();
 	memset((void *)&xpi, 0, sizeof(profxinf));	/* Init extra profile info to defaults */
-	memset((void *)&li, 0, sizeof(link));
+	memset((void *)&li, 0, sizeof(clink));
 
 	/* Set defaults */
 	li.verb = 0;

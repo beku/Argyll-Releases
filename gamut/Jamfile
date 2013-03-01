@@ -45,6 +45,8 @@ Main smthtest :  smthtest.c ;
 Main GenRMGam : GenRMGam.c ;
 
 # Generate referenec medium gamut the kernel files
+# (NoUpdate so that Cross Compile Win64 hack works)
+NNoUpdate RefMediumGamut.gam ;
 GenFile RefMediumGamut.gam : GenRMGam ;
 
 # Visual gamut

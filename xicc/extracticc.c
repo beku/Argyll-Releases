@@ -24,12 +24,12 @@
 #include <setjmp.h>
 #include <string.h>
 #include <math.h>
+#include "numlib.h"
 #include "tiffio.h"
 #include "jpeglib.h"
 #include "iccjpeg.h"
 #include "copyright.h"
 #include "aconfig.h"
-#include "numlib.h"
 #include "icc.h"
 
 

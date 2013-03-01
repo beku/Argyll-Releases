@@ -630,15 +630,15 @@ main(void) {
 
 			/* Create two conversions for the target/check illuminant */
 			if ((pcon = new_xsp2cie(icxIT_custom, &pill, icxOT_Shaw_Fairchild_2,
-			                       NULL, icSigLabData)) == NULL)
+			                       NULL, icSigLabData, 1)) == NULL)
 				error ("Creating conversion failed");
 
 			if ((scon = new_xsp2cie(icxIT_custom, &pill, icxOT_Shaw_Fairchild_2,
-			                       NULL, icSigLabData)) == NULL)
+			                       NULL, icSigLabData, 1)) == NULL)
 				error ("Creating conversion failed");
 
 			/* Tell the secondary conversion to allow for instrument illuminant */
-			if (scon->set_fwa(scon, &sill, &matilum[m][ss].white))
+			if (scon->set_fwa(scon, &sill, NULL, &matilum[m][ss].white))
 				error ("Setting FWA compensation failed");
 
 			printf("Primary (Target/Check) '%s', Secondary (Instrument)'%s'\n",

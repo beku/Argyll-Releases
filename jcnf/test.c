@@ -144,6 +144,7 @@ main(int argc, char *argv[]) {
 	jco->del(jco);
 
 	printf("We're done\n");
+	return 0;
 }
 
 void

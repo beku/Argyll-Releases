@@ -20,6 +20,12 @@
  * TTBD:
  *       Improve error handling.
  *
+ *	There is a general expectation (especially in comparing products)
+ *  that the profile colorimetric intent be not strictly minimum delta E,
+ *  but that it correct neutral axis, luminence range and keep hue
+ *  proportionality. Ideally there should be an intent that matches
+ *  this, that can be selected for the colorimetric table (or perhaps be default).
+ *
  *	It might be good to offer the black mapping method as an option (gmm_BPmap),
  *  as well as offering different profile (xicc/xlut.c) black point options
  *  (neutral, K hue max density, CMY max density, any max density).
@@ -30,6 +36,7 @@
  *  messing up the guide vector mappings. Even if this is fixed, the
  *  actual neutral aim point within nearsmooth is Jab 0,0, while
  *  the mapping in gammap is from the source neutral to the chosen
+ *  ??????
  */
 
 
@@ -479,7 +486,6 @@ gammap *new_gammap(
 	cow lpnts[10];		/* Mapping points to create grey axis map */
 	int revrspl = 0;	/* Reverse grey axis rspl construction */
 	int ngreyp = 0;		/* Number of grey axis mapping points */
-	cow *gpnts;			/* Mapping points to create gamut mapping */
 	int ngamp = 0;		/* Number of gamut mapping points */
 	double xvra = XVRA;	/* Extra ss vertex ratio to src gamut vertex count */
 	int j;
@@ -1162,6 +1168,7 @@ glumknf	= 1.0;
 	/* Create all the 3D->3D gamut mapping points and 3D rspl, */
 	/* if there is any compression or expansion to do. */
 	if (gmi->gamcpf > 1e-6 || gmi->gamexf > 1e-6) {
+		cow *gpnts = NULL;	/* Mapping points to create gamut mapping */
 		int nspts;		/* Number of source gamut surface points */
 		int rgridpts;	/* Number of range surface grid points */
 		int i, j;
@@ -2198,6 +2205,7 @@ typedef struct {
 #endif /* PLOT_3DKNEES */
 
 
+		free(gpnts);
 		free_nearsmth(nsm, nnsm);
 
 	} else if (diagname != NULL && verb) {
@@ -2211,7 +2219,6 @@ typedef struct {
 	sc_gam->write_trans_vrml(sc_gam, "gmsrc.wrl", 1, 0, map_trans, s);
 #endif
 
-	free(gpnts);
 	if (sil_gam != scl_gam)
 		sil_gam->del(sil_gam);
 	scl_gam->del(scl_gam);

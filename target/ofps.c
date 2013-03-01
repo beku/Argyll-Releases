@@ -1,6 +1,6 @@
 
 /* 
- e Argylghbour ix/l Color Correction System
+ * ArgyllCMS Color Correction System
  *
  * Optimised Farthest Point Sampling - NN
  *
@@ -18,6 +18,10 @@
 /* in an attempt to improve performance scaling with larger numbers of points. */
 
 /* TTBD:
+
+	This code shouldn't exit on an error - this causes an unnecessary failure
+	when ofps is used to evaluate the point distribution of other
+	distribution algorithms.
 
 	There is a bug when the ink limit == dimensions-1 (200% for CMYY), and
 	the number of bit mask then exceeds > 32. This is not so +/- 0.2% either side
@@ -118,9 +122,11 @@
 #include "counters.h"
 #include "plot.h"
 #include "icc.h"
+#include "xicc.h"
 #include "xcolorants.h"
 #include "targen.h"
 #include "rspl.h"
+#include "conv.h"
 #include "ofps.h"
 
 //#include <iperf.h>
@@ -591,7 +597,7 @@ static unsigned int _sm_vtx_node(ofps *s, vtx *vx, node *nn) {
 /* Utility - return a string containing the mask in hex */
 static char *psm(ofps *s, setmask *sm) {
 	static char buf[5][200];
-	static ix = 0;
+	static int ix = 0;
 	int e, f;
 	char *bp;
 
@@ -2475,12 +2481,12 @@ static int position_vtx(
 				/* We accept a point that has an acceptable error balance */
 				/* and improves the eperr, and is in gamut if this is not a repos. */
 				/* (There's some mystery stuff in here for fixups) */
-				if ((cx.nn <= 1) || (max - min) <= (ftol * 2.0)
+				if ((cx.nn <= 1) || ((max - min) <= (ftol * 2.0)
 				 &&  ((!repos && vv->oog <= 0.01 && vv->eperr < (vv->ceperr + 0.1))
 				   || ( repos && vv->oog <= 0.01 && vv->eperr < (5.0 * vv->ceperr + 20.0))
 				   || ( repos && vv->oog > 0.0 && vv->eperr < 1000.0) 
 				   || ( fixup && vv->oog < 20.0 && vv->eperr < (vv->ceperr + 0.01))
-				)) {
+				))) {
 
 					if (tries > s->maxretries)
 						s->maxretries = tries;
@@ -5306,7 +5312,7 @@ ofps_add_vacc(ofps *s, vtx *vx) {
 		cp->vhead->pn = &vx->n;
 	cp->vhead = vx;
 	vx->pn = &cp->vhead;
-	vx->pci;
+	vx->pci = pci;
 
 #ifdef DEBUG
 	printf("Adding vertex no %d to spatial accelleration grid in cell %d\n",vx->no,pci);
@@ -5507,7 +5513,8 @@ int fxno				/* Number in fixed list */
 /* Seed the object with any fixed points */
 /* (I think this is only used if ofps is used to check the stats */
 /*  on all the points. ) */
-static void
+/* Return NZ on failure */
+static int
 ofps_add_fixed(
 ofps *s
 ) {
@@ -5516,7 +5523,7 @@ ofps *s
 
 	/* Add fixed points if there are any */
 	if (s->fnp == 0)
-		return;
+		return 0;
 
 	if (s->verb)
 		printf("Adding %d unique fixed points\n",s->fnp);
@@ -5542,7 +5549,8 @@ ofps *s
 			/* In theory we could try adding points in a different order, */
 			/* by resetting the voronoi, shuffling all the fixedpoints */
 			/* and re-adding them again. */
-			error("Adding a fixed point failed to hit any vertexes, and no points to swap with!");	
+			warning("Adding a fixed point failed to hit any vertexes, and no points to swap with!");	
+			return 1;
 		}
 
 		if (s->verb)
@@ -5557,6 +5565,8 @@ ofps *s
 		dump_image(s, PERC_PLOT, DO_WAIT, DUMP_VTX, DUMP_PLA, 0, -1);		/* Device, No wait, verticies */
 #endif /* DUMP_PLOT_SEED */
 	}
+
+	return 0;
 }
 
 /* Seed the object with any fixed and movable incremental farthest points. */
@@ -8179,7 +8189,10 @@ int nopstop				/* Debug - number of optimizations until diagnostic stop, -1 = no
 	if (fxno > 0 && tinp <= fxno) {		/* There are no moveable points to create */
 
 		/* Add the fixed points */
-		ofps_add_fixed(s);
+		if (ofps_add_fixed(s)) {
+			s->del(s);
+			return NULL;
+		}
 
 		if (s->verb && fxno > 0) {
 			ofps_stats(s);
@@ -8430,7 +8443,7 @@ char *argv[];
 /* Utility - return a string containing the di coord */
 static char *pco(int di, int *co) {
 	static char buf[5][200];
-	static ix = 0;
+	static int ix = 0;
 	int e;
 	char *bp;
 
@@ -8449,7 +8462,7 @@ static char *pco(int di, int *co) {
 /* Utility - return a string containing the di vector */
 static char *ppos(int di, double *p) {
 	static char buf[5][200];
-	static ix = 0;
+	static int ix = 0;
 	int e;
 	char *bp;
 
@@ -8472,7 +8485,7 @@ static char *ppos(int di, double *p) {
 /* Utility - return a string containing the di+1 combination */
 static char *pcomb(int di, int *n) {
 	static char buf[5][200];
-	static ix = 0;
+	static int ix = 0;
 	int e;
 	char *bp;
 
@@ -8491,7 +8504,7 @@ static char *pcomb(int di, int *n) {
 /* Utility - return a string containing the eperr/eserr value */
 static char *peperr(double eperr) {
 	static char buf[5][200];
-	static ix = 0;
+	static int ix = 0;
 	int e;
 	char *bp;
 

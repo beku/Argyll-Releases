@@ -14,6 +14,8 @@ ColorChecker.cie
 ColorChecker.ti2
 ColorCheckerDC.cht
 ColorCheckerSG.cht
+ColorCheckerPassport.cht
+ColorCheckerPassport.cie
 SpyderChecker.cht
 SpyderChecker.cie
 ECI2002.ti2
@@ -26,6 +28,8 @@ Hutchcolor.cht
 LaserSoftDCPro.cht
 QPcard_201.cht
 QPcard_201.cie
+QPcard_202.cht
+QPcard_202.cie
 i1_RGB_Scan_1.4.cht
 i1_RGB_Scan_1.4.ti2
 it8.cht

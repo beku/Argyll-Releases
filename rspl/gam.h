@@ -24,7 +24,7 @@
 /* dimensions. The gamut surface is composed of simplexes ("triangles") */
 /* of dimensions fdi-1, with fdi verticies */
 
-#include "../h/llist.h"
+#include "llist.h"
 
 #define MXNE 16			/* Maximum number of edges per triangle allowed */
 

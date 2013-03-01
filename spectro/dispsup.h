@@ -8,7 +8,7 @@
  * Author: Graeme W. Gill
  * Date:   2/11/2005
  *
- * Copyright 1998 - 2007 Graeme W. Gill
+ * Copyright 1998 - 2013 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -21,11 +21,12 @@ struct _disp_win_info {
 	disppath *disp;			/* display to calibrate. */
 	int blackbg;			/* NZ if whole screen should be filled with black */
 	int override;			/* Override_redirect on X11 */
-	double patsize;			/* Size of dispwin */
+	double hpatsize;		/* Size of dispwin */
+	double vpatsize;		/* Size of dispwin */
 	double ho, vo;			/* Position of dispwin */
 	dispwin *dw;			/* Display window if already open */
 	dispwin *_dw;			/* Privare window if not already open */
-};
+}; typedef struct _disp_win_info disp_win_info;
 
 /* A defauult callback that can be provided as an argument to */
 /* inst_handle_calibrate() to handle the display part of a */
@@ -39,20 +40,21 @@ inst_code setup_display_calibrate(
 
 /* User requested calibration of the display instrument */
 int disprd_calibration(
-int comport, 		/* COM port used */
+icompath *ipath,	/* Instrument path to open, &icomFakeDevice == fake */
 flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
-int proj,			/* NZ for projector mode */
-int adaptive,		/* NZ for adaptive mode */
-int noautocal,		/* NZ to disable auto instrument calibration */
+int docbid,			/* NZ to only allow cbid dtypes */
+int tele,			/* NZ for tele mode */
+int nadaptive,		/* NZ for non-adaptive mode */
+int noinitcal,		/* NZ to disable initial instrument calibration */
 disppath *screen,	/* Screen to calibrate. */
 int webdisp,		/* If nz, port number for web display */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
-double patsize,		/* Size of dispwin */
+double hpatsize,	/* Size of dispwin */
+double vpatsize,
 double ho, double vo,	/* Position of dispwin */
-int verb,			/* Verbosity flag */
-int debug			/* Debug flag */
+a1log *log			/* Verb, debug & error log */
 );
 
 
@@ -62,11 +64,10 @@ typedef struct {
 	double r,g,b;
 	char *id;			/* Id string */
 
+	inst_meas_type mtype;	/* Measurement type */
+
 	int    XYZ_v;
 	double XYZ[3];		/* Colorimeter readings */
-
-	int    aXYZ_v;
-	double aXYZ[3];		/* Absolute colorimeter readings */
 
 	xspect sp;			/* Spectrum. sp.spec_n > 0 if valid */
 
@@ -84,8 +85,7 @@ typedef struct {
 struct _disprd {
 
 /* private: */
-	int verb;			/* Verbosity flag */
-	FILE *df;			/* Verbose output */
+	a1log *log;			/* Verb, debug & error log */
 	int fake;			/* Fake display/instrument flag */
 	int fake2;			/* Flag to apply extra matrix to fake response */
 	char *fake_name;	/* Fake profile name */
@@ -96,15 +96,18 @@ struct _disprd {
 	int softcal;		/* NZ if apply cal to readings rather than hardware */
 	icmLuBase *fake_lu;
 	char *mcallout;		/* fake instrument shell callout */
-	int debug;			/* Debug flag */
-	int comport; 		/* COM port used */
+	icompath *ipath;	/* Instrument path to open, &icomFakeDevice == fake */
 	baud_rate br;
 	flow_control fc;
 	inst *it;			/* Instrument */
 	int dtype;			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
-	int proj;			/* NZ for projector mode */
-	int adaptive;		/* NZ for adaptive mode */
+	int docbid;			/* NZ to only allow cbid dtypes */
+	int refrmode;		/* Refresh display mode, -1 if unknow, 0 = if no, 1 if yes */
+	int cbid;			/* The Calibration Base display mode ID, 0 if unknown */
+	int tele;			/* NZ for tele mode */
+	int nadaptive;		/* NZ for non-adaptive mode */
 	int highres;		/* Use high res mode if available */
+	int update_delay_set;	/* NZ if we've calibrated the disp. update delay, or tried and failed */
 	double (*ccmtx)[3];	/* Colorimeter Correction Matrix, NULL if none */
 	icxObserverType obType;	/* CCSS Observer */
 	xspect *custObserver;	/* CCSS Optional custom observer */
@@ -115,7 +118,7 @@ struct _disprd {
 	xsp2cie *sp2cie;	/* Spectral to XYZ conversion */
 	int bdrift;			/* Flag, nz for black drift compensation */
 	int wdrift;			/* Flag, nz for white drift compensation */
-	int noautocal;		/* No automatic instrument calibration */
+	int noinitcal;		/* No initial instrument calibration */
 	dispwin *dw;		/* Window */
 	ramdac *or;			/* Original ramdac if we set one */
 
@@ -124,8 +127,8 @@ struct _disprd {
 	int ref_bw_v;		/* Reference valid flag */
 	col last_bw[2];   	/* Last black and white readings for drift comp. */
 	int last_bw_v;		/* Last valid flag */
-	col targ_w;   		/* Target white to normalise to. last_bw[1] for batch, */
-						/* first white for non-batch, but can be reset. */
+	col targ_w;   		/* Target white to normalise to. last_bw[1] for batch, first white for */
+						/* non-batch, but latter can be reset. */
 	int targ_w_v;		/* target_w valid flag */
 
 /* public: */
@@ -146,8 +149,12 @@ struct _disprd {
 		int spat,		/* Start patch index for "verb", 0 if not used */
 		int tpat,		/* Total patch index for "verb", 0 if not used */
 		int acr,		/* If nz, do automatic final carriage return */
-		int tc			/* If nz, termination key */
+		int tc,			/* If nz, termination key */
+		instClamping clamp	/* NZ if clamp XYZ/Lab to be +ve */
 	);
+
+	/* Return the display type information */
+	void (*get_disptype)(struct _disprd *p, int *refrmode, int *cbid);
 
 	/* Reset the white drift target white value, for non-batch */
 	/* readings when white drift comp. is enabled */
@@ -177,6 +184,7 @@ struct _disprd {
 
 }; typedef struct _disprd disprd;
 
+
 /* Create a display reading object. */
 /* Return NULL if error */
 /* Set *errc to code: */
@@ -195,12 +203,13 @@ struct _disprd {
 /* Use disprd_err() to interpret errc */
 disprd *new_disprd(
 int *errc,			/* Error code. May be NULL */ 
-int comport, 		/* COM port used, -99 for fake display */
+icompath *ipath,	/* Instrument path to open, &icomFakeDevice == fake */
 flow_control fc,	/* Serial flow control */
 int dtype,			/* Display type, 0 = unknown, 1 = CRT, 2 = LCD */
-int proj,			/* NZ for projector mode */
-int adaptive,		/* NZ for adaptive mode */
-int noautocal,		/* No automatic instrument calibration */
+int docbid,			/* NZ to only allow cbid dtypes */
+int tele,			/* NZ for tele mode */
+int nadaptive,		/* NZ for non-adaptive mode */
+int noinitcal,		/* No initial instrument calibration */
 int highres,		/* Use high res mode if available */
 int native,			/* 0 = use current current or given calibration curve */
 					/* 1 = use native linear out & high precision */
@@ -215,7 +224,8 @@ int override,		/* Override_redirect on X11 */
 int webdisp,		/* If nz, port number for web display */
 char *ccallout,		/* Shell callout on set color */
 char *mcallout,		/* Shell callout on measure color (forced fake) */
-double patsize,		/* Size of dispwin */
+double hpatsize,	/* Size of dispwin */
+double vpatsize,
 double ho,			/* Horizontal offset */
 double vo,			/* Vertical offset */
 double ccmtx[3][3],	/* Colorimeter Correction matrix, NULL if none */
@@ -226,12 +236,9 @@ icxObserverType obType,	/* Use alternate observer if spectral or CCSS and != icx
 xspect custObserver[3],	/* Optional custom observer */
 int bdrift,			/* Flag, nz for black drift compensation */
 int wdrift,			/* Flag, nz for white drift compensation */
-int verb,			/* Verbosity flag */
-FILE *df,			/* Verbose output - NULL = stdout */
-int debug,			/* Debug flag */
-char *fake_name		/* Name of profile to use as a fake device */
+char *fake_name,	/* Name of profile to use as a fake device */
+a1log *log			/* Verb, debug & error log */
 );
-
 /* Return a string describing the error code */
 char * disprd_err(int en);
 

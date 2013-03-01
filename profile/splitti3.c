@@ -24,6 +24,7 @@
 	This doesn't pass calibration table information through.
 	(ie. should copy all tables after the first.)
 
+	Write a companion "combineti3" to merge .ti3's together.
  */
 
 #undef DEBUG

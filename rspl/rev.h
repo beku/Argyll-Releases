@@ -231,12 +231,13 @@ struct _cell {
 /* several "chunks" and will be slower. */
 /* This sets the basic memory usage of the rev code. */
 
-#define REV_ACC_GRES_MUL 2.0		/* Reverse accelleration grid resolution */
+#define REV_ACC_GRES_MUL 2.0		/* 2.0 Reverse accelleration grid resolution */
 									/* multiplier over fwd grid resolution */
-#define REV_MAX_MEM_RATIO 0.3		/* Proportion of first 1G of Ram to use */
-#define REV_MAX_MEM_RATIO2 0.4		/* Proportion of rest of Ram to use */
+#define REV_ACC_GRES_LIMIT 43		/* Reverse accelln. grid resolution limit before env. mult. */
+#define REV_MAX_MEM_RATIO 0.3		/* 0.3 Proportion of first 1G of Ram to use */
+#define REV_MAX_MEM_RATIO2 0.4		/* 0.4 Proportion of rest of Ram to use */
 									/* rev as a fraction of the System RAM. */
-#define HASH_FILL_RATIO 3			/* Ratio of entries to hash size */
+#define HASH_FILL_RATIO 3			/* 3 Ratio of entries to hash size */
 
 /* The structure where cells are allocated and cached. */
 

@@ -6,7 +6,7 @@
  * Author: Graeme W. Gill
  * Date:   4/10/96
  *
- * Copyright 1998 - 2008, Graeme W. Gill
+ * Copyright 1998 - 2013, Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -16,6 +16,8 @@
 /* This program displays test patches on a WinNT, MAC OSX or X11 windowing system. */
 
 /* TTBD
+ *
+ * Nice to have option to create non-square test window ?
  *
  * Should probably check the display attributes (like visual depth)
  * and complain if we aren't using 24 bit color or better. 
@@ -28,10 +30,6 @@
  *
  * Is there a >8 bit way of getting/setting RAMDAC indexes ?
  *
- * It would be good to be able to calibrate this with a faste
- * meter like the i1d3. Run the i1d3 at (say) 10 msec sample time
- * and see how many msec white<->black until it is stable.
- * Double + add 50msec.
  */
 
 #include <stdio.h>
@@ -55,10 +53,38 @@
 #include "conv.h"
 #include "dispwin.h"
 #include "webwin.h"
-#if defined(UNIX) && !defined(__APPLE__) && defined(USE_UCMM)
+#if defined(UNIX_X11) && defined(USE_UCMM)
 #include "ucmm.h"
 #endif
 
+#ifdef __APPLE__
+
+#include <Foundation/Foundation.h>
+
+#include <AppKit/AppKit.h>
+
+# if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
+#  include <copyfile.h>
+# endif
+
+#ifndef CGFLOAT_DEFINED
+#ifdef __LP64__
+typedef double CGFloat;
+#else
+typedef float CGFloat;
+#endif  /* defined(__LP64__) */
+#endif	/* !CGFLOAT_DEFINED */
+
+#include <IOKit/Graphics/IOGraphicsLib.h>
+
+#if __MAC_OS_X_VERSION_MAX_ALLOWED <= 1060
+/* This wasn't declared in 10.6, although it is needed */
+CFUUIDRef CGDisplayCreateUUIDFromDisplayID (uint32_t displayID);
+#endif	/* < 10.6 */
+
+#endif /* __APPLE__ */
+
+#define DISPLAY_UPDATE_DELAY 200	/* default display update delay allowance */
 #define VERIFY_TOL (1.0/255.0)
 #undef DISABLE_RANDR				/* Disable XRandR code */
 
@@ -225,7 +251,7 @@ static unsigned short *char2wchar(char *s) {
 #endif /* NT */
 
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 /* Hack to notice if the error handler has been triggered */
 /* when a function doesn't return a value. */
 
@@ -330,6 +356,13 @@ disppath **get_displays() {
 	/* automatically adjusts the screen brigtness with ambient level. */
 	/* We may have to find a way of disabling this during calibration and profiling. */
 	/* See the "pset -g" command. */
+
+	/*
+		We could possibly use NSScreen instead of CG here,
+		but we'd need to have a an NSApp first, so perhaps not.
+
+	 */
+
 	int i;
 	CGDisplayErr dstat;
 	CGDisplayCount dcount;		/* Number of display IDs */
@@ -448,7 +481,6 @@ disppath **get_displays() {
 					if (CFStringGetCString(values[j], vbuf, 50, kCFStringEncodingMacRoman))
 						v = vbuf;
 				}
-//printf("~1 got key %s and value %s\n",k,v);
 				/* We're only grabing the english description... */
 				if (k != NULL && v != NULL && strcmp(k, "en_US") == 0) {
 					strncpy(desc, v, 49);
@@ -481,7 +513,7 @@ disppath **get_displays() {
 	free(dids);
 #endif /* __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	int i, j, k;
 	int defsix = 0;		/* default screen index */
 	int dcount;			/* Number of screens */
@@ -942,7 +974,7 @@ void free_disppaths(disppath **disps) {
 				free(disps[i]->name);
 			if (disps[i]->description != NULL)
 				free(disps[i]->description);
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 			if (disps[i]->edid != NULL)
 				free(disps[i]->edid);
 #endif
@@ -965,7 +997,7 @@ void del_disppath(disppath **disps, int ix) {
 					free(disps[i]->name);
 				if (disps[i]->description != NULL)
 					free(disps[i]->description);
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 				if (disps[i]->edid != NULL)
 					free(disps[i]->edid);
 #endif
@@ -1021,7 +1053,7 @@ disppath *get_a_display(int ix) {
 		free_disppaths(paths);
 		return NULL;
 	}
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	if (paths[i]->edid != NULL) {
 		if ((rv->edid = malloc(sizeof(unsigned char) * paths[i]->edid_len)) == NULL) {
 			debugrr("get_displays failed on malloc\n");
@@ -1043,7 +1075,7 @@ void free_a_disppath(disppath *path) {
 			free(path->name);
 		if (path->description != NULL)
 			free(path->description);
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 		if (path->edid != NULL)
 			free(path->edid);
 #endif
@@ -1173,7 +1205,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 	}
 #endif /* __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	unsigned short vals[3][16384];
 	int nent = 0;
 	int evb = 0, erb = 0;
@@ -1299,6 +1331,9 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 }
 
 #ifdef __APPLE__
+	/* Various support functions */
+
+#if __MAC_OS_X_VERSION_MAX_ALLOWED < 1060
 
 /* Given a location, return a string for it's path */
 static char *plocpath(CMProfileLocation *ploc) {
@@ -1335,6 +1370,178 @@ static void cs_w16(unsigned short *p, unsigned short val) {
 	((char *)p)[1] = (char)(val);
 }
 
+#endif /* < 10.6 */
+
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
+
+/* There doesn't seem to be any means of determining the locations */
+/* of profiles using current OS X API's, so we simply hard code them. */
+/* This makes the older code easier too. */
+
+#define COLORSYNC_DIR_NETWORK	"/Network/Library/ColorSync/Profiles/"
+#define COLORSYNC_DIR_SYSTEM	"/System/Library/ColorSync/Profiles/"
+#define COLORSYNC_DIR_LOCAL	    "/Library/ColorSync/Profiles/"
+#define COLORSYNC_DIR_USER	    "/Library/ColorSync/Profiles/"
+
+/* Given a profile name and a scope, return the path to the */
+/* installed profile. free the returned string when done. */
+/* Returns NULL on error */
+static char *iprof_path(p_scope scope, char *fname) {
+	char *home = "", *dirname, *basename, *rv = NULL;
+	int tlen = 0;
+
+	/* Locate the base filename in the fname */
+	for (basename = fname + strlen(fname);  ; basename--) {
+		if (basename <= fname || basename[-1] == '/')
+			break;
+	}
+
+	/* NSFileManager's URLForDirectory: etc. doesn't have ColorSync, */
+	/* so we have no choice but to hard code the paths */
+	if (scope == p_scope_network)
+		dirname = COLORSYNC_DIR_NETWORK; 
+	else if (scope == p_scope_system)
+		dirname = COLORSYNC_DIR_SYSTEM;
+	else if (scope == p_scope_local)
+		dirname = COLORSYNC_DIR_LOCAL;
+	else {
+		dirname = COLORSYNC_DIR_USER;
+		if ((home = getenv("HOME")) == NULL){ 
+			return NULL;
+		}
+	}
+
+	tlen = strlen(home) + strlen(dirname) + strlen(basename) + 1;
+	if ((rv = malloc(tlen)) == NULL) {
+		return NULL;
+	}
+
+	strcpy(rv, home);
+	strcat(rv, dirname);
+	strcat(rv, basename);
+
+	return rv;
+}
+
+/* Callback */
+typedef struct {
+	CFUUIDRef dispuuid;		/* UUID to match */
+	CFStringRef id;			/* ProfileId */
+	CFURLRef url;			/* URL to return */
+} diter_cntx_t;
+
+bool diter_callback(CFDictionaryRef dict, void *cntx) {
+	diter_cntx_t *cx = (diter_cntx_t *)cntx;
+	CFStringRef str;
+	CFUUIDRef uuid;
+	CFBooleanRef iscur;
+
+	if ((str = CFDictionaryGetValue(dict, kColorSyncDeviceClass)) == NULL) {
+		debugrr("Failed to get kColorSyncDeviceClass\n");
+		return true;
+	}
+	if (!CFEqual(str, kColorSyncDisplayDeviceClass)) {
+		return true;
+	}
+	if ((uuid = CFDictionaryGetValue(dict, kColorSyncDeviceID)) == NULL) {
+		debugrr("Failed to get kColorSyncDeviceID\n");
+		return true;
+	}
+	if (!CFEqual(uuid, cx->dispuuid)) {
+		return true;
+	}
+	if ((iscur = CFDictionaryGetValue(dict, kColorSyncDeviceProfileIsCurrent)) == NULL) {
+		debugrr("Failed to get kColorSyncDeviceProfileIsCurrent\n");
+		return true;
+	}
+	if (!CFBooleanGetValue(iscur)) {
+		return true;
+	}
+
+	/* get the URL */
+	if ((cx->id = CFDictionaryGetValue(dict, kColorSyncDeviceProfileID)) == NULL) {
+		debugrr("Failed to get current profile ID\n");
+		return true;
+	}
+	if ((cx->url = CFDictionaryGetValue(dict, kColorSyncDeviceProfileURL)) == NULL) {
+		debugrr("Failed to get current profile URL\n");
+		return true;
+	}
+	CFRetain(cx->id);
+	CFRetain(cx->url);
+
+	return false;
+}
+
+/* Return the url to the given displays current profile. */
+/* Return NULL on error. CFRelease when done. */
+/* Optionally return the ProfileID string */
+CFURLRef cur_profile_url(CFStringRef *idp, dispwin *p) {
+	diter_cntx_t cx;
+
+	if ((cx.dispuuid = CGDisplayCreateUUIDFromDisplayID(p->ddid)) == NULL) {
+		debugr2((errout,"CGDisplayCreateUUIDFromDisplayID() failed\n"));
+		return NULL;
+	}
+	cx.id = NULL;
+	cx.url = NULL;
+
+	ColorSyncIterateDeviceProfiles(diter_callback, (void *)&cx);
+
+	CFRelease(cx.dispuuid);
+
+	if (idp != NULL)
+		*idp = cx.id;
+	else
+		CFRelease(cx.id);
+	return cx.url;
+}
+
+/* Convert a URL into a local POSIX path string */
+/* Return NULL on error. Free returned string when done. */
+char *url_to_path(CFURLRef url) {
+	CFStringRef urlstr;
+	CFIndex bufSize;
+	char *dpath = NULL;			/* return value */
+
+	urlstr = CFURLCopyFileSystemPath(url, kCFURLPOSIXPathStyle);
+	bufSize = CFStringGetMaximumSizeForEncoding(CFStringGetLength(urlstr),
+	                                              kCFStringEncodingUTF8) + 1;
+	if ((dpath = malloc(bufSize)) == NULL) {
+		debugrr("url_to_path: malloc failed\n");
+		CFRelease(urlstr);
+		return NULL;
+	}
+	if (!CFStringGetCString(urlstr, dpath, bufSize, kCFStringEncodingUTF8)) {
+		debugrr("url_to_path: CFStringGetCString failed\n");
+		CFRelease(urlstr);
+		return NULL;
+	}
+	CFRelease(urlstr);
+
+	return dpath;
+}
+
+/* Return information about the given displays current profile */
+/* Return NULL on error. Free returned string when done. */
+char *cur_profile(dispwin *p) {
+	CFURLRef url;
+	char *dpath = NULL;			/* return value */
+
+	if ((url = cur_profile_url(NULL, p)) == NULL) {
+		debugr2((errout,"cur_profile failed to find current profile\n"));
+		return NULL;
+	}
+
+	dpath = url_to_path(url);
+
+	CFRelease(url);
+
+	return dpath;
+}
+
+#endif /* >= 10.6 */
+
 #endif /* __APPLE__ */
 
 /* Set the RAMDAC values. */
@@ -1367,7 +1574,7 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 	}
 
 	if (SetDeviceGammaRamp(p->hdc, vals) == 0) {
-		debugr("dispwin_set_ramdac failed on SetDeviceGammaRamp()\n");
+		debugr2((errout,"dispwin_set_ramdac failed on SetDeviceGammaRamp() with error %d\n",GetLastError()));
 		return 1;
 	}
 #endif	/* NT */
@@ -1396,6 +1603,9 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 
 	}
 
+	/* In theory IOFBSetGamma() might work - but maybe it needs root, and won't */
+	/* sync with OS X's view of what's loaded. */
+
 	/* By default the OSX RAMDAC access is transient, lasting only as long */
 	/* as the process setting it. To set a temporary but persistent beyond this process */
 	/* calibration, we fake up a profile and install it in such a way that it will disappear, */
@@ -1403,6 +1613,261 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 	/* is restored to the screen. NOTE that this trick will fail if it is not possible */
 	/* to rename the currently selected profile file, ie. because it is a system profile. */
 	/* [ Would a workaround be to use a link, or copy of the system file ? ] */
+	if (persist)
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
+	if (persist) {					/* Persistent */
+		int rv = 0;
+		CFStringRef id;
+		CFURLRef url;
+		char *tpath;				/* Temporary profiles/original profiles path */
+		char *ppath;				/* Current/renamed profiles path */
+		icmFile *rd_fp, *wr_fp;
+		icc *icco;
+		CFUUIDRef dispuuid;
+		CFStringRef keys[1];
+		CFURLRef values[1];
+		CFDictionaryRef dict;
+
+		debugr("Set_ramdac persist\n");
+
+		/* Get the current installed profile */
+		if ((url = cur_profile_url(&id, p)) == NULL) {
+			debugr2((errout,"cur_profile_url failed for current profile\n"));
+			return 1;
+		}
+		if ((tpath = url_to_path(url)) == NULL) {
+			debugr2((errout,"url_to_path failed for current profile\n"));
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+
+		debugr2((errout, "Current profile path = '%s'\n",tpath));
+
+		/* Create a patched version with our calibration: */
+		/* (Hmm. I think icclib will cope with V4 OK) */
+
+		/* Open up the profile for reading */
+		if ((rd_fp = new_icmFileStd_name(tpath,"r")) == NULL) {
+			debugr2((errout,"Failed to open profile '%s'\n",tpath));
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+	
+		if ((icco = new_icc()) == NULL) {
+			debugr2((errout,"Creation of ICC object failed\n"));
+			rd_fp->del(rd_fp);
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+	
+		/* Read header etc. */
+		if ((rv = icco->read(icco,rd_fp,0)) != 0) {
+			debugr2((errout,"%d, %s",rv,icco->err));
+			icco->del(icco);
+			rd_fp->del(rd_fp);
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+		/* Read every tag */
+		if (icco->read_all_tags(icco) != 0) {
+			debugr2((errout,"Unable to read all tags: %d, %s",icco->errc,icco->err));
+			icco->del(icco);
+			rd_fp->del(rd_fp);
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+	
+		rd_fp->del(rd_fp); rd_fp = NULL;
+	
+		/* Replace the description */
+		{
+			icmTextDescription *wo;
+			char *dst = "Dispwin Temp";
+
+			if (icco->find_tag(icco, icSigProfileDescriptionTag) == 0) {
+				if (icco->delete_tag(icco, icSigProfileDescriptionTag) != 0) {
+					debugr2((errout,"Unable to delete Description tag: %d, %s",icco->errc,icco->err));
+					icco->del(icco);
+					free(tpath);
+					CFRelease(id);
+					CFRelease(url);
+					return 1;
+				}
+			}
+	
+			if ((wo = (icmTextDescription *)icco->add_tag(
+			           icco, icSigProfileDescriptionTag,	icSigTextDescriptionType)) == NULL) { 
+				debugr2((errout,"Unable to add Description tag: %d, %s",icco->errc,icco->err));
+				icco->del(icco);
+				free(tpath);
+				CFRelease(id);
+				CFRelease(url);
+				return 1;
+			}
+	
+			wo->size = strlen(dst)+1; 	/* Allocated and used size of desc, inc null */
+			wo->allocate((icmBase *)wo);/* Allocate space */
+			strcpy(wo->desc, dst);		/* Copy the string in */
+		}
+		/* Replace the vcgt */
+		{
+			int c,i;
+			icmVideoCardGamma *wo;
+
+			if (icco->find_tag(icco, icSigVideoCardGammaTag) == 0) {
+				if (icco->delete_tag(icco, icSigVideoCardGammaTag) != 0) {
+					debugr2((errout,"Unable to delete VideoCardGamma tag: %d, %s",icco->errc,icco->err));
+					icco->del(icco);
+					free(tpath);
+					CFRelease(id);
+					CFRelease(url);
+					return 1;
+				}
+			}
+	
+			if ((wo = (icmVideoCardGamma *)icco->add_tag(icco, icSigVideoCardGammaTag,
+			                                        icSigVideoCardGammaType)) == NULL) {
+				debugr2((errout,"Unable to add VideoCardGamma tag: %d, %s",icco->errc,icco->err));
+				icco->del(icco);
+				free(tpath);
+				CFRelease(id);
+				CFRelease(url);
+				return 1;
+			}
+	
+			wo->tagType = icmVideoCardGammaTableType;
+			wo->u.table.channels = 3;			/* rgb */
+			wo->u.table.entryCount = r->nent;	/* number of calibration entries */
+			wo->u.table.entrySize = 2;			/* 16 bits */
+			wo->allocate((icmBase*)wo);
+
+			for (i = 0; i < r->nent; i++) {
+				for (j = 0; j < 3; j++) {
+					double vv = r->v[j][i];
+					int ivv;
+					if (vv < 0.0)
+						vv = 0.0;
+					else if (vv > 1.0)
+						vv = 1.0;
+					((unsigned short*)wo->u.table.data)[r->nent * j + i] = (int)(vv * 65535.0 + 0.5);
+				}
+			}
+		}
+	
+		if ((ppath = malloc(strlen(tpath) + 6)) == NULL) {
+			debugr2((errout,"malloc failed for display '%s'\n",p->name));
+			icco->del(icco);
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+		strcpy(ppath, tpath);
+		strcat(ppath,".orig");
+
+		/* Rename the currently installed profile temporarily. */
+		/* This will fail if current profile is a system profile and not writable by the user. */
+		/* This could be worked around by cloning the system profile to the user */
+		/* area and installing it before modifiying it. */
+		if (rename(tpath, ppath) != 0) {
+			debugr2((errout,"Unable to rename '%s' to '%s'\n",tpath,ppath));
+			icco->del(icco);
+			free(ppath);
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 2;
+		}
+
+		/* Rename worked */
+
+		debugr2((errout,"Renamed current profile '%s' to '%s'\n",tpath,ppath));
+
+		/* Save the modified profile to the original profile name */
+		if ((wr_fp = new_icmFileStd_name(tpath,"w")) == NULL) {
+			debugr2((errout,"Failed to open '%s' for writing\n",tpath));
+			free(ppath);
+			icco->del(icco);
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+	
+		if ((rv = icco->write(icco,wr_fp,0)) != 0) {
+			debugr2((errout,"Write file: %d, %s",rv,icco->err));
+			free(ppath);
+			wr_fp->del(wr_fp);
+			icco->del(icco);
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+	
+		icco->del(icco);
+		wr_fp->del(wr_fp);
+
+		/* Update to the "current" profile, which is actually the modified profile */
+		if ((dispuuid = CGDisplayCreateUUIDFromDisplayID(p->ddid)) == NULL) {
+			debugr2((errout,"CGDisplayCreateUUIDFromDisplayID() failed\n"));
+			free(ppath);
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+
+		keys[0] = id;
+		values[0] = url;
+
+		if ((dict = CFDictionaryCreate(kCFAllocatorDefault, (const void **)&keys,
+			                     (const void **)&values, 1, NULL, NULL)) == NULL) {
+			debugr2((errout,"CFDictionaryCreate() failed\n"));
+			CFRelease(dispuuid);
+			free(ppath);
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+		if (!ColorSyncDeviceSetCustomProfiles(kColorSyncDisplayDeviceClass, dispuuid, dict)) {
+			debugr2((errout,"ColorSyncDeviceSetCustomProfiles() failed\n"));
+			CFRelease(dict);
+			CFRelease(dispuuid);
+			free(ppath);
+			free(tpath);
+			CFRelease(id);
+			CFRelease(url);
+			return 1;
+		}
+		CFRelease(dict);
+		CFRelease(dispuuid);
+		CFRelease(id);
+		CFRelease(url);
+
+		/* Delete the temporary profile */
+		unlink(tpath);
+
+		/* Rename the current profile back to it's correct name */
+		if (rename(ppath, tpath) != 0) {
+			debugr2((errout,"Renaming existing profile '%s' failed\n",ppath));
+			return 1;
+		}
+		debugr2((errout,"Restored '%s' back to '%s'\n",ppath,tpath));
+		free(ppath);
+		free(tpath);
+	}
+#else	/* < 10.6 */
 	if (persist) {					/* Persistent */
 		CMError ev;
 		CMProfileRef prof;			/* Current AVID profile */
@@ -1546,10 +2011,11 @@ static int dispwin_set_ramdac(dispwin *p, ramdac *r, int persist) {
 		}
 		debugr2((errout,"Restored '%s' back to '%s'\n",ppath,tpath));
 	}
+#endif	/* < 10.6 */
+
 #endif /* __APPLE__ */
 
-
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	unsigned short vals[3][16384];
 
 	debugr("dispwin_set_ramdac called\n");
@@ -1675,7 +2141,7 @@ static void dispwin_del_ramdac(ramdac *r) {
 /* ----------------------------------------------- */
 /* Useful function for X11 profie atom settings */
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 /* Return NZ on error */
 static int set_X11_atom(dispwin *p, char *fname) {
 	FILE *fp;
@@ -1897,7 +2363,7 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 			}
 			debug2((errout,"Set euid %d and egid %d\n",uid,gid));
 		}
-	/* If setting local system proile and not effective root, but sudo */
+	/* If setting local system profile and not effective root, but sudo */
 	} else if (scope != p_scope_user && getuid() == 0 && geteuid() != 0) {
 		if (getenv("SUDO_UID") != NULL
 		 && getenv("SUDO_GID") != NULL) {
@@ -1910,6 +2376,83 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 #endif /* OS X || Linux */
 
 #ifdef __APPLE__
+
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
+	{
+		char *dpath;		/* Install file path */
+		CFUUIDRef dispuuid;
+		CFStringRef cfprofpath;
+		CFStringRef keys[1];
+		CFURLRef values[1];
+		CFDictionaryRef dict;
+	
+		if ((dispuuid = CGDisplayCreateUUIDFromDisplayID(p->ddid)) == NULL) {
+			debugr2((errout,"CGDisplayCreateUUIDFromDisplayID() failed\n"));
+			return 1;
+		}
+
+		/* Determine the location the profile will be installed into */
+		if ((dpath = iprof_path(scope, fname)) == NULL) {
+			debugr2((errout,"iprof_path() failed\n"));
+			CFRelease(dispuuid);
+			return 1;
+		}
+
+		debugr2((errout,"Source profile '%s'\n",fname));
+		debugr2((errout,"Destination profile '%s'\n",dpath));
+
+		/* Copy the new profile to the destination */
+		if (copyfile(fname, dpath, NULL, COPYFILE_ALL) != 0) {
+			debugr2((errout,"copyfile failed\n"));
+			free(dpath);
+			CFRelease(dispuuid);
+			return 1;
+		}
+		
+		/* Register it with the OS and make it the default */
+		if ((cfprofpath = CFStringCreateWithCString(kCFAllocatorDefault, dpath,
+		                                        kCFStringEncodingUTF8)) == NULL) {
+			debugr2((errout,"CFStringCreateWithCString() failed\n"));
+			free(dpath);
+			CFRelease(dispuuid);
+			return 1;
+		}
+		free(dpath); dpath = NULL;
+
+		keys[0] = kColorSyncDeviceDefaultProfileID;
+		if ((values[0] = CFURLCreateWithFileSystemPath(kCFAllocatorDefault, cfprofpath,
+		                                         kCFURLPOSIXPathStyle, false)) == NULL) {
+			debugr2((errout,"CFURLCreateWithFileSystemPath() failed\n"));
+			CFRelease(cfprofpath);
+			CFRelease(dispuuid);
+			return 1;
+		}
+
+		if ((dict = CFDictionaryCreate(kCFAllocatorDefault, (const void **)&keys,
+			                     (const void **)&values, 1, NULL, NULL)) == NULL) {
+			debugr2((errout,"CFDictionaryCreate() failed\n"));
+			CFRelease(values[0]);
+			CFRelease(cfprofpath);
+			CFRelease(dispuuid);
+			return 1;
+		}
+		if (!ColorSyncDeviceSetCustomProfiles(kColorSyncDisplayDeviceClass, dispuuid, dict)) {
+			debugr2((errout,"ColorSyncDeviceSetCustomProfiles() failed\n"));
+			CFRelease(dict);
+			CFRelease(values[0]);
+			CFRelease(cfprofpath);
+			CFRelease(dispuuid);
+			return 1;
+		}
+		CFRelease(dict);
+		CFRelease(values[0]);
+		CFRelease(cfprofpath);
+		CFRelease(dispuuid);
+
+		return 0;
+	}
+#else	/* 10.6 and prior */
+		// Switch to using iprof_path() to simplify ?
 	{
 		CMError ev;
 		short vref;
@@ -1957,6 +2500,8 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 		}
 		strcat(dpath, "/");
 		strcat(dpath, basename);
+
+		debugr2((errout,"Source profile '%s'\n",fname));
 		debugr2((errout,"Destination profile '%s'\n",dpath));
 
 		/* Open the profile we want to install */
@@ -1964,7 +2509,6 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 		strncpy(ploc.u.pathLoc.path, fname, 255);
 		ploc.u.pathLoc.path[255] = '\000';
 
-		debugr2((errout,"Source profile '%s'\n",fname));
 		if ((ev = CMOpenProfile(&prof, &ploc)) != noErr) {
 			debugr2((errout,"CMOpenProfile() failed for file '%s' with error %d\n",fname,ev));
 			return 1;
@@ -1993,9 +2537,10 @@ int dispwin_install_profile(dispwin *p, char *fname, ramdac *r, p_scope scope) {
 
 		return 0;
 	}
+#endif	/* 10.6 and prior */
 #endif /*  __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__) && defined(USE_UCMM)
+#if defined(UNIX_X11) && defined(USE_UCMM)
 	{
 		ucmm_error ev;
 		ucmm_scope sc;
@@ -2165,10 +2710,69 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 		}
 	}
 #endif /* OS X || Linux */
-
 #ifdef __APPLE__
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
 	{
-		CMError ev;
+		char *dpath;		/* Un-install file path */
+		struct stat sbuf;
+		int ev;
+		CFStringRef keys[1];
+		CFURLRef values[1];
+		CFDictionaryRef dict;
+		CFUUIDRef dispuuid;
+	
+		/* Determine the location the profile will be installed into */
+		if ((dpath = iprof_path(scope, fname)) == NULL) {
+			debugr2((errout,"iprof_path() failed\n"));
+			return 1;
+		}
+
+		debugr2((errout,"Profile to delete '%s'\n",dpath));
+
+		if (stat(dpath, &sbuf) != 0) {
+			debugr2((errout,"delete '%s' profile doesn't exist\n",dpath));
+			return 2;
+		}
+		if ((ev = unlink(dpath)) != 0) {
+			debugr2((errout,"delete '%s' failed with %d\n",dpath,ev));
+			return 1;
+		}
+
+		free(dpath); dpath = NULL;
+
+		/* Make ColorSync notice that it's gone */
+		/* (Works on 10.7, but not 10.6 ? */
+		if ((dispuuid = CGDisplayCreateUUIDFromDisplayID(p->ddid)) == NULL) {
+			debugr2((errout,"CGDisplayCreateUUIDFromDisplayID() failed\n"));
+			return 1;
+		}
+
+		keys[0] = kColorSyncDeviceDefaultProfileID;
+		values[0] = (CFURLRef)kCFNull;
+
+		if ((dict = CFDictionaryCreate(kCFAllocatorDefault, (const void **)&keys,
+			                     (const void **)&values, 1, NULL, NULL)) == NULL) {
+			debugr2((errout,"CFDictionaryCreate() failed\n"));
+			CFRelease(dispuuid);
+			return 1;
+		}
+
+		if (!ColorSyncDeviceSetCustomProfiles(kColorSyncDisplayDeviceClass, dispuuid, dict)) {
+			debugr2((errout,"ColorSyncDeviceSetCustomProfiles() failed\n"));
+			CFRelease(dict);
+			CFRelease(dispuuid);
+			return 1;
+		}
+		CFRelease(dict);
+		CFRelease(dispuuid);
+
+		return 0;
+	}
+#else	/* 10.6 and prior */
+		// ~~~ can use above code
+	{
+		CMError cmev;
+		int ev;
 		short vref;
 		char dpath[FILENAME_MAX];
 		char *basename;
@@ -2185,14 +2789,14 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 			vref = kUserDomain;
 
 		/* Locate the appropriate ColorSync path */
-		if ((ev = FSFindFolder(vref, kColorSyncProfilesFolderType, kCreateFolder, &dirref)) != noErr) {
-			debugr2((errout,"FSFindFolder() failed with error %d\n",ev));
+		if ((cmev = FSFindFolder(vref, kColorSyncProfilesFolderType, kCreateFolder, &dirref)) != noErr) {
+			debugr2((errout,"FSFindFolder() failed with error %d\n",cmev));
 			return 1;
 		}
 
 		/* Convert to POSIX path */
-		if ((ev = FSRefMakePath(&dirref, (unsigned char *)dpath, FILENAME_MAX)) != noErr) {
-			debugr2((errout,"FSRefMakePath failed with error %d\n",ev));
+		if ((cmev = FSRefMakePath(&dirref, (unsigned char *)dpath, FILENAME_MAX)) != noErr) {
+			debugr2((errout,"FSRefMakePath failed with error %d\n",cmev));
 			return 1;
 		}
 
@@ -2212,7 +2816,7 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 		strcat(dpath, basename);
 		debugr2((errout,"Profile to delete '%s'\n",dpath));
 
-		if (stat(dpath,&sbuf) != 0) {
+		if (stat(dpath, &sbuf) != 0) {
 			debugr2((errout,"delete '%s' profile doesn't exist\n",dpath));
 			return 2;
 		}
@@ -2223,9 +2827,10 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 
 		return 0;
 	}
+#endif	/* 10.6 and prior */
 #endif /*  __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__) && defined(USE_UCMM)
+#if defined(UNIX_X11) && defined(USE_UCMM)
 	{
 		ucmm_error ev;
 		ucmm_scope sc;
@@ -2257,8 +2862,8 @@ int dispwin_uninstall_profile(dispwin *p, char *fname, p_scope scope) {
 	return 1;
 }
 
-/* Get the currently installed display profile. */
-/* Copy a name to name up to mxlen chars, excluding nul */
+/* Get the currently installed display profile and return it as an icmFile. */
+/* Return the name as well, up to mxlen chars, excluding nul. */
 /* Return NULL if failed. */
 icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 		icmFile *rd_fp = NULL;
@@ -2282,6 +2887,70 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 #endif /* NT */
 
 #ifdef __APPLE__
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
+	{
+		char *dpath; 			/* Read file path */
+		struct stat sbuf;
+		icmAlloc *al;
+		void *buf;
+		FILE *fp;
+
+		if ((dpath = cur_profile(p)) == NULL) {
+			debugr2((errout,"cur_profile() failed\n"));
+			return NULL;
+		}
+
+		/* Get the profile size */
+		if (stat(dpath, &sbuf) != 0) {
+			debugr2((errout,"Failed to open profile '%s'\n",dpath));
+			free(dpath);
+			return NULL;
+		}
+
+		if ((al = new_icmAllocStd()) == NULL) {
+			debugr("new_icmAllocStd failed\n");
+			free(dpath);
+		    return NULL;
+		}
+		if ((buf = al->malloc(al, sbuf.st_size)) == NULL) {
+			debugr("malloc of profile buffer failed\n");
+			free(dpath);
+		    return NULL;
+		}
+
+		if ((fp = fopen(dpath, "r")) == NULL) {
+			debugr2((errout,"opening '%s' failed\n",dpath));
+			al->free(al, buf);
+			free(dpath);
+			return NULL;
+		}
+		if (fread(buf, 1, sbuf.st_size, fp) != sbuf.st_size) {
+			debugr2((errout,"reading '%s' failed\n",dpath));
+			al->free(al, buf);
+			fclose(fp);
+			free(dpath);
+			return NULL;
+		}
+		fclose(fp);
+		free(dpath); dpath = NULL;
+
+		/* Memory File fp that will free the buffer when deleted: */
+		if ((rd_fp = new_icmFileMem_ad(buf, sbuf.st_size, al)) == NULL) {
+			debugr("Creating memory file profile failed");
+			al->free(al, buf);
+			al->del(al);
+			return NULL;
+		}
+
+		if (name != NULL) {
+			strncpy(name, "Display", mxlen);
+			name[mxlen] = '\000';
+		}
+
+		return rd_fp;
+	}
+
+#else	/* 10.5 and prior */
 	{
 		CMError ev;
 		CMProfileRef prof, dprof;		/* Source profile */
@@ -2360,9 +3029,10 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 
 		return rd_fp;
 	}
+#endif	/* 10.5 and prior */
 #endif /*  __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__)  && defined(USE_UCMM)
+#if defined(UNIX_X11) && defined(USE_UCMM)
 	/* Try and get the currently installed profile from ucmm */
 	{
 		ucmm_error ev;
@@ -2474,10 +3144,22 @@ icmFile *dispwin_get_profile(dispwin *p, char *name, int mxlen) {
 
 /* ----------------------------------------------- */
 
-#if defined(UNIX) && !defined(__APPLE__)
+/* Restore the display state */
+static void restore_display(dispwin *p) {
 
-/* Restore the screensaver state */
-static void restore_ssaver(dispwin *p) {
+	/* Restore the ramdac */
+	if (p->or != NULL) {
+		p->set_ramdac(p, p->or, 0);
+		p->or->del(p->or);
+		p->or = NULL;
+		debugr("Restored original ramdac\n");
+	}
+	if (p->r != NULL) {
+		p->r->del(p->r);
+		p->r = NULL;
+	}
+
+#if defined(UNIX_X11)
 
 #if ScreenSaverMajorVersion >= 1 && ScreenSaverMinorVersion >= 1	/* X11R7.1 */
 	if (p->xsssuspend) {
@@ -2512,25 +3194,39 @@ static void restore_ssaver(dispwin *p) {
 
 	/* Flush any changes out */
 	XSync(p->mydisplay, False);
+#endif /* UNIX_X11 */
 }
 	
 /* ----------------------------------------------- */
-/* On something killing our process, deal with ScreenSaver cleanup */
+/* On something killing our process, deal with Ramac & ScreenSaver cleanup */
 
-static void (*dispwin_hup)(int sig) = SIG_DFL;
-static void (*dispwin_int)(int sig) = SIG_DFL;
-static void (*dispwin_term)(int sig) = SIG_DFL;
+#ifdef NT
+void (__cdecl *dispwin_int)(int sig) = SIG_DFL;
+void (__cdecl *dispwin_term)(int sig) = SIG_DFL;
+#endif
+#ifdef UNIX
+void (*dispwin_hup)(int sig) = SIG_DFL;
+void (*dispwin_int)(int sig) = SIG_DFL;
+void (*dispwin_term)(int sig) = SIG_DFL;
+#endif
 
-/* Display screensaver was saved on */
-static dispwin *ssdispwin = NULL;
+/* List of dispwin's to clean up */
+static dispwin *signal_dispwin = NULL;
 
 static void dispwin_sighandler(int arg) {
-	dispwin *p;
-	if ((p = ssdispwin) != NULL) {
-		restore_ssaver(p);
+	dispwin *pp, *np;
+
+	/* Restore all dispwin's Ramdacs & screen savers */
+	for (pp = signal_dispwin; pp != NULL; pp = np) {
+	    np = pp->next;
+		restore_display(pp);
 	}
+
+	/* Call through to previous handler */
+#ifdef UNIX
 	if (arg == SIGHUP && dispwin_hup != SIG_DFL && dispwin_hup != SIG_IGN) 
 		dispwin_hup(arg);
+#endif
 	if (arg == SIGINT && dispwin_int != SIG_DFL && dispwin_int != SIG_IGN) 
 		dispwin_int(arg);
 	if (arg == SIGTERM && dispwin_term != SIG_DFL && dispwin_term != SIG_IGN) 
@@ -2538,7 +3234,203 @@ static void dispwin_sighandler(int arg) {
 	exit(0);
 }
 
-#endif /* UNIX && !APPLE */
+static void dispwin_install_signal_handlers(dispwin *p) {
+
+	if (signal_dispwin == NULL) {
+		/* Install the signal handler to ensure cleanup */
+#ifdef UNIX
+		dispwin_hup = signal(SIGHUP, dispwin_sighandler);
+#endif /* UNIX */
+		dispwin_int = signal(SIGINT, dispwin_sighandler);
+		dispwin_term = signal(SIGTERM, dispwin_sighandler);
+	}
+
+	/* Add this one to the list */
+	p->next = signal_dispwin;
+	signal_dispwin = p;
+}
+
+static void dispwin_uninstall_signal_handlers(dispwin *p) {
+
+	/* Find it and delete it from our static cleanup list */
+	if (signal_dispwin != NULL) {
+		if (signal_dispwin == p) {
+			signal_dispwin = p->next;
+			if (signal_dispwin == NULL) {
+#if defined(UNIX)
+				signal(SIGHUP, dispwin_hup);
+#endif /* UNIX */
+				signal(SIGINT, dispwin_int);
+				signal(SIGTERM, dispwin_term);
+			}
+		} else {
+			dispwin *pp;
+			for (pp = signal_dispwin; pp != NULL; pp = pp->next) { 
+				if (pp->next == p) {
+					pp->next = p->next;
+					break;
+				}
+			}
+		}
+	}
+	p->next = NULL;
+}
+
+/* ----------------------------------------------- */
+/* Test patch window specific declarations */
+
+#ifdef __APPLE__
+
+@class DWWin;
+@class DWView;
+
+/* Our OS X window specific information */
+typedef struct {
+	dispwin *p;
+    DWWin *window;      		/* Our NSWindow */
+    DWView *view;       		/* Our NSView */
+} osx_cntx_t;
+
+static void OSX_ProcessEvents(dispwin *p);
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+
+@interface DWView : NSView {
+	osx_cntx_t *cntx;
+}
+- (void)setCntx:(osx_cntx_t *)cntx;
+@end
+
+@implementation DWView
+
+- (void)setCntx:(osx_cntx_t *)val {
+	cntx = val;
+}
+
+// A transparent 1x1 GIF: (43 bytes)
+unsigned char emptyCursor[43] = {
+	0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0xff, 0xff, 0xff,
+	0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b };
+
+/* Make cursor invisible over our window */
+/*
+ * This doesn't work very well. The only way to work it properly
+ * is to create a CGEventTap and do a hide/unkid cursor when
+ * the mouse enters the window. This needs the main thread 
+ * to be dedicated to running the event loop.
+ */
+- (void)resetCursorRects {
+	[super resetCursorRects];
+//	[self addCursorRect:[self bounds] cursor:[NSCursor crosshairCursor]];
+	NSData *idata = [NSData dataWithBytes:(void *)emptyCursor length:43];
+	NSImage *img = [NSImage alloc];
+	img = [img initWithData:idata];
+	NSCursor *curs = [NSCursor alloc];
+	curs = [curs initWithImage:img hotSpot:NSMakePoint(0,0)];
+	[self addCursorRect:[self bounds] cursor:curs];
+}
+
+- (void)drawRect:(NSRect)rect {
+	osx_cntx_t *cx = cntx;
+	dispwin *p = cx->p;
+	NSRect frect;
+	NSBezierPath* aPath = [NSBezierPath bezierPath];
+	
+	frect = NSMakeRect(p->tx, p->ty, (1.0 + p->tw), (1.0 + p->th));
+
+	[[NSColor colorWithDeviceRed: p->r_rgb[0]
+                           green: p->r_rgb[1]
+                            blue: p->r_rgb[2]
+                           alpha: 1.0] setFill];
+	[aPath appendBezierPathWithRect:frect];
+	[aPath fill];
+}
+
+@end
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+@interface DWWin : NSWindow {
+	osx_cntx_t *cntx;
+}
+- (void)setCntx:(osx_cntx_t *)cntx;
+@end
+
+@implementation DWWin
+
+- (void)setCntx:(osx_cntx_t *)val {
+	cntx = val;
+}
+
+- (BOOL)canBecomeMainWindow {
+	return NO;
+}
+
+/* So that we can change the cursor on a borderless window: */
+- (BOOL)canBecomeKeyWindow {
+    return YES;
+}
+
+- (BOOL)isMoveable {
+	return NO;
+}
+
+- (BOOL)windowShouldClose:(id)sender {
+//	printf("Got Window windowShouldClose\n");
+
+//	[NSApp terminate: nil];
+    return YES;
+}
+
+@end
+
+/* Create our window */
+static void create_my_win(NSRect rect, osx_cntx_t *cx) {
+	dispwin *p = cx->p;
+	int i;
+
+	/* We need to locate the NSScreen that corresponds to the */
+	/* CGDirectDisplayID - look through them for a match. */
+	NSScreen *screen = nil;
+	NSArray *screenArray = [NSScreen screens];
+	for (i = 0; i < [screenArray count]; i++) {
+		NSDictionary *screenDescription = [[screenArray objectAtIndex:i] deviceDescription];
+
+		// CFShow(screenDescription);	// Dump it out
+		/* Hmm. Also has "NSDeviceBitsPerSample" entry with value 8 in dict. */
+
+	    NSNumber* screenID = [screenDescription objectForKey:@"NSScreenNumber"];
+	    CGDirectDisplayID ddid = (CGDirectDisplayID)[screenID unsignedIntValue];			
+		if (ddid == p->ddid) {
+			screen = [screenArray objectAtIndex:i];
+			break;
+		}
+	}
+
+	/* Create Window */
+	cx->window = [[DWWin alloc] initWithContentRect: rect
+                                        styleMask: NSBorderlessWindowMask
+                                          backing: NSBackingStoreBuffered
+                                            defer: YES
+	                                       screen: screen];
+
+	[cx->window setLevel: NSScreenSaverWindowLevel];
+
+	[cx->window setBackgroundColor: [NSColor blackColor]];
+
+	[cx->window setTitle: @"Argyll Window"];
+
+	/* Use our view for the whole window to draw plot */
+	cx->view = [DWView new];
+	[cx->view setCntx:(void *)cx];
+	[cx->window setContentView: cx->view];
+
+	[cx->window makeKeyAndOrderFront: nil];
+}
+
+#endif /* __APPLE__ */
 
 /* ----------------------------------------------- */
 
@@ -2619,7 +3511,7 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 
 		/* Wait for WM_PAINT to be executed */
 		while (p->colupd != p->colupde) {
-			msec_sleep(50);
+			msec_sleep(20);
 		}
 	}
 #endif /* NT */
@@ -2627,6 +3519,10 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	/* - - - - - - - - - - - - - - */
 
 #ifdef __APPLE__
+
+	if (p->winclose) {
+		return 2;
+	}
 
 	/* Stop the system going to sleep */
     UpdateSystemActivity(OverallAct);
@@ -2648,30 +3544,20 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 				debugr2((errout,"SetFrontProcess returned error %d\n",stat));
 			}
 		}
-		/* Hide the cursor once too */
-		CGDisplayHideCursor(p->ddid);
 		p->btf = 1;
 	}
 
-	/* Draw the color to our test rectangle */
-	{
-		CGRect frect;
+	/* Trigger an update that fills window with r_rgb[] */
+	[((osx_cntx_t *)(p->osx_cntx))->view setNeedsDisplay: YES ];
 
-		frect = CGRectMake((float)p->tx, (float)(p->wh - p->ty - p->th - 1),
-		  (float)(1.0 + p->tw), (float)(1.0 + p->th ));
-		CGContextSetRGBFillColor(p->mygc, p->rgb[0], p->rgb[1], p->rgb[2], 1.0);
-		CGContextFillRect(p->mygc, frect);
-		CGContextFlush(p->mygc);		/* Force draw to display */
-	}
-	if (p->winclose) {
-		return 2;
-	}
+	/* Process events */
+	OSX_ProcessEvents(p);
 
 #endif /* __APPLE__ */
 
 	/* - - - - - - - - - - - - - - */
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	{
 		Colormap mycmap;
 		XColor col;
@@ -2716,9 +3602,23 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 	/* a measurement can take place. This allows for CRT */
 	/* refresh, or LCD processing/update time, + */
 	/* display settling time (quite long for smaller LCD changes). */
-	msec_sleep(110);
+	msec_sleep(p->update_delay);
 
 	return 0;
+}
+
+/* ----------------------------------------------- */
+/* Set an update delay, and return the previous value */
+/* Value can be set to zero, but othewise will be forced */
+/* to be >= min_update_delay */
+static int dispwin_set_update_delay(
+dispwin *p,
+int update_delay) {
+	int cval = p->update_delay;
+	p->update_delay = update_delay;
+	if (update_delay != 0 && p->update_delay < p->min_update_delay)
+		p->update_delay = p->min_update_delay;
+	return cval;
 }
 
 /* ----------------------------------------------- */
@@ -2743,13 +3643,10 @@ dispwin *p
 	if (p == NULL)
 		return;
 
-	/* Restore original RAMDAC if we were in native mode */
-	if (!p->nowin && p->native && p->or != NULL) {
-		p->set_ramdac(p, p->or, 0);
-		p->or->del(p->or);
-		p->r->del(p->r);
-		debugr("Restored original ramdac\n");
-	}
+	/* Restore original RAMDAC if we were in native mode, */
+	/* and restore screensaver */
+	restore_display(p);
+	dispwin_uninstall_signal_handlers(p);
 
 	/* -------------------------------------------------- */
 #ifdef NT
@@ -2759,7 +3656,7 @@ dispwin *p
 		p->quit = 1;
 		if (PostMessage(p->hwnd, WM_CLOSE, (WPARAM)NULL, (LPARAM)NULL) != 0) {
 			while(p->hwnd != NULL)
-				msec_sleep(50);
+				msec_sleep(20);
 		} else {
 			debugr2((errout, "PostMessage(WM_GETICON failed, lasterr = %d\n",GetLastError()));
 		}
@@ -2778,33 +3675,37 @@ dispwin *p
 
 	/* -------------------------------------------------- */
 #ifdef __APPLE__
-
 	if (p->nowin == 0) {	/* We have a window up */
-		QDEndCGContext(p->port, &p->mygc);		/* Ignore any errors */
-		DisposeWindow(p->mywindow);	
+		restore_display(p);
+		if (p->osx_cntx != NULL) {	/* And we've allocated a context */
+			osx_cntx_t *cx = (osx_cntx_t *)p->osx_cntx;
+
+			p->winclose = 1;
+
+			[cx->window release];
+			free(p->osx_cntx);
+			p->osx_cntx = NULL;
+		}
 	}
 
-	CGDisplayShowCursor(p->ddid);
-//	CGDisplayRelease(p->ddid);
+// ~~
+//	CGDisplayShowCursor(p->ddid);
 
 #endif /* __APPLE__ */
 	/* -------------------------------------------------- */
 
 	/* -------------------------------------------------- */
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	debugr("About to close display\n");
 
 	if (p->mydisplay != NULL) {
 		if (p->nowin == 0) {	/* We have a window up */
-	
-			restore_ssaver(p);
 	
 			XFreeGC(p->mydisplay, p->mygc);
 			XDestroyWindow(p->mydisplay, p->mywindow);
 		}
 		XCloseDisplay(p->mydisplay);
 	}
-	ssdispwin = NULL;
 	debugr("finished\n");
 
 #endif	/* UNXI X11 */
@@ -2939,51 +3840,33 @@ static LRESULT CALLBACK MainWndProc(
 
 #ifdef __APPLE__
 
-/* The OSX event handler */
-/* We arn't actually letting this run ? */
-pascal OSStatus HandleEvent(
-EventHandlerCallRef nextHandler,
-EventRef theEvent,
-void* userData
-) {
-	dispwin *p = (dispwin *)userData;
-	OSStatus result = eventNotHandledErr;
-	
-	switch (GetEventClass(theEvent)) {
-		case kEventClassWindow: {
-			switch (GetEventKind(theEvent)) {
-				case kEventWindowClose:
-					debug("Event: Close Window, exiting event loop\n");
-					p->winclose = 1;			/* Mark the window closed */
-					QuitApplicationEventLoop();
-					result = noErr;
-					break;
-				
-				case kEventWindowBoundsChanged: {
-					OSStatus stat;
-					Rect wRect;
-					debug("Event: Bounds Changed\n");
-					GetWindowPortBounds(p->mywindow, &wRect);
-					if ((stat = InvalWindowRect(p->mywindow, &wRect)) != noErr) {
-						debug2((errout,"InvalWindowRect failed with %d\n",stat));
-					}
-					break;
-				}
-			}
+/* Not the event handler (because events are handled by the Cocoa objects) */
+/* but a function to call to process events after an update */
+static void OSX_ProcessEvents(dispwin *p) {
+	NSEvent *event;
+	NSDate *to;
+
+	/* We're creating and draining a pool here to ensure that all the */
+	/* auto release objects get drained when we're finished (?) */
+	NSAutoreleasePool *tpool = [NSAutoreleasePool new];
+
+	/* Wait until the events are done */
+	to = [NSDate dateWithTimeIntervalSinceNow:0.01];	/* autorelease ? */
+	for (;;) {
+		/* Hmm. Assume event is autorelease */
+		if ((event = [NSApp nextEventMatchingMask:NSAnyEventMask
+		             untilDate:to inMode:NSDefaultRunLoopMode dequeue:YES]) != nil) {
+			[NSApp sendEvent:event];
+		} else {
+			break;
 		}
-	}
-
-	/* Call next hander if not handled here */
-	if (result == eventNotHandledErr) {
-		result =  CallNextEventHandler(nextHandler, theEvent);	/* Close window etc */
-	}
-
-	return result;
+    }
+	[tpool release];
 }
 
 #endif /* __APPLE__ */
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	/* None */
 #endif	/* UNXI X11 */
 
@@ -3104,6 +3987,7 @@ int override,					/* NZ if override_redirect is to be used on X11 */
 int ddebug						/* >0 to print debug statements to stderr */
 ) {
 	dispwin *p = NULL;
+	char *cp;
 
 	debug("new_dispwin called\n");
 
@@ -3116,16 +4000,32 @@ int ddebug						/* >0 to print debug statements to stderr */
 	p->native = native;
 	p->blackbg = blackbg;
 	p->ddebug = ddebug;
-	p->get_ramdac      = dispwin_get_ramdac;
-	p->set_ramdac      = dispwin_set_ramdac;
-	p->install_profile = dispwin_install_profile;
+	p->get_ramdac        = dispwin_get_ramdac;
+	p->set_ramdac        = dispwin_set_ramdac;
+	p->install_profile   = dispwin_install_profile;
 	p->uninstall_profile = dispwin_uninstall_profile;
-	p->get_profile     = dispwin_get_profile;
-	p->set_color       = dispwin_set_color;
-	p->set_callout     = dispwin_set_callout;
-	p->del             = dispwin_del;
+	p->get_profile       = dispwin_get_profile;
+	p->set_color         = dispwin_set_color;
+	p->set_update_delay  = dispwin_set_update_delay;
+	p->set_callout       = dispwin_set_callout;
+	p->del               = dispwin_del;
 
 	p->rgb[0] = p->rgb[1] = p->rgb[2] = 0.5;	/* Set Grey as the initial test color */
+
+	p->min_update_delay = 20;
+
+	if ((cp = getenv("ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS")) != NULL) {
+		p->min_update_delay = atoi(cp);
+		if (p->min_update_delay < 20)
+			p->min_update_delay = 20;
+		if (p->min_update_delay > 60000)
+			p->min_update_delay = 60000;
+		debugr2((errout, "new_dispwin: Minimum display update delay set to %d msec\n",p->min_update_delay));
+	}
+
+	p->update_delay = DISPLAY_UPDATE_DELAY;		/* Default update delay */
+	if (p->update_delay < p->min_update_delay)
+		p->update_delay = p->min_update_delay;
 
 	/* Basic object is initialised, so create a window */
 
@@ -3224,7 +4124,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 			/* We use a thread to process the window messages, so that */
 			/* Task Manager doesn't think it's not responding. */
 
-			/* Becayse messages only get delivered to same thread that created window, */
+			/* Because messages only get delivered to same thread that created window, */
 			/* the thread needs to create window. :-( */
 
 			p->xo = xo;		/* Pass info to thread */
@@ -3240,7 +4140,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 			/* Wait for thread to run */
 			while (p->inited == 0) {
-				msec_sleep(50);
+				msec_sleep(20);
 			}
 			/* If thread errored */
 			if (p->inited != 1) {		/* Error */
@@ -3249,6 +4149,9 @@ int ddebug						/* >0 to print debug statements to stderr */
 				return NULL;
 			}
 		}
+
+		/* Install the signal handler to ensure cleanup */
+		dispwin_install_signal_handlers(p);
 	}
 
 #endif /* NT */
@@ -3263,42 +4166,66 @@ int ddebug						/* >0 to print debug statements to stderr */
 		return NULL;
 	}
 	p->ddid = disp->ddid;		/* Display we're working on */
+
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
+	{
+		CGDisplayModeRef dispmode;
+		CFStringRef pixenc;
+
+		p->pdepth = 0;
+
+		dispmode = CGDisplayCopyDisplayMode(p->ddid);
+		pixenc = CGDisplayModeCopyPixelEncoding(dispmode);
+
+		/* Hmm. Don't know what to do with kIO16BitFloatPixels or kIO32BitFloatPixels */
+		if (CFStringCompare(pixenc, CFSTR(kIO64BitDirectPixels), kCFCompareCaseInsensitive)
+		                                                             == kCFCompareEqualTo)
+			p->pdepth = 16;
+		else if (CFStringCompare(pixenc, CFSTR(kIO30BitDirectPixels), kCFCompareCaseInsensitive)
+		                                                             == kCFCompareEqualTo)
+			p->pdepth = 10;
+		else if (CFStringCompare(pixenc, CFSTR(IO32BitDirectPixels), kCFCompareCaseInsensitive)
+		                                                             == kCFCompareEqualTo)
+			p->pdepth = 8;
+		else if (CFStringCompare(pixenc, CFSTR(IO16BitDirectPixels), kCFCompareCaseInsensitive)
+			                                                             == kCFCompareEqualTo)
+			p->pdepth = 5;
+		CFRelease(pixenc);
+		CGDisplayModeRelease(dispmode);
+	}
+#else
 	p->pdepth = CGDisplayBitsPerSample(p->ddid);
+#endif
 
 	if (nowin == 0) {			/* Create a window */
-		OSStatus stat;
-		EventHandlerRef fHandler;		/* Event handler reference */
-		const EventTypeSpec	kEvents[] =
-		{ 
-			{ kEventClassWindow, kEventWindowClose },
-			{ kEventClassWindow, kEventWindowBoundsChanged },
-			{ kEventClassWindow, kEventWindowDrawContent }
-		};
-
+		osx_cntx_t *cx;
 		CGSize sz;				/* Display size in mm */
 		int wi, he;				/* Width and height in pixels */
 		int xo, yo;				/* Window location */
-	    Rect	wRect;
-		WindowClass wclass = 0;
-		WindowAttributes attr = kWindowNoAttributes;
+		NSRect wrect;
 
-		/* Choose the windows class and attributes */
-//		wclass = kAlertWindowClass;				/* Above everything else */
-//		wclass = kModalWindowClass;
-//		wclass = kFloatingWindowClass;
-//		wclass = kUtilityWindowClass; /* The useful one */
-//		wclass = kHelpWindowClass;
-		wclass = kOverlayWindowClass;	/* Borderless and full screenable */
-//		wclass = kSimpleWindowClass;
+		debugr2((errout, "new_dispwin: About to open display '%s'\n",disp->name));
 
-		attr |= kWindowDoesNotCycleAttribute;
-		attr |= kWindowNoActivatesAttribute;
-//		attr |= kWindowStandardFloatingAttributes;
+		/* If we don't have an application object, create one. */
+		/* (This should go in a common library) */
+		/* Note that we don't actually clean this up on exit - */
+		/* possibly we can't. */
+		if (NSApp == nil) {
+			static NSAutoreleasePool *pool;	/* Pool used for NSApp */
+			pool = [NSAutoreleasePool new];
+			NSApp = [NSApplication sharedApplication];	/* Creates NSApp */
+			[NSApp finishLaunching];
+			/* We seem to need this, because otherwise we don't get focus automatically */
+			[NSApp activateIgnoringOtherApps: YES];
+		}
 
-		attr |= kWindowStandardHandlerAttribute; /* This window has the standard Carbon Handler */
-		attr |= kWindowNoShadowAttribute;		/* usual */
-//		attr |= kWindowNoTitleBarAttribute;		/* usual - but not with Overlay Class */
-		attr |= kWindowIgnoreClicksAttribute;		/* usual */
+		if ((cx = (osx_cntx_t *)calloc(sizeof(osx_cntx_t), 1)) == NULL) {
+			debugr2((errout,"new_dispwin: Malloc failed (osx_cntx_t)\n"));
+			dispwin_del(p);
+			return NULL;
+		}
+		cx->p = p;
+		p->osx_cntx = cx;
 
 		sz = CGDisplayScreenSize(p->ddid);
 		debugr2((errout," Display size = %f x %f mm\n",sz.width,sz.height));
@@ -3310,175 +4237,60 @@ int ddebug						/* >0 to print debug statements to stderr */
 		if (he > disp->sh)
 			he = disp->sh;
 
+		/* (Because Cocoa origin is botton left, we flip voff) */
+		/* (Cocoa doesn't use disp->sx/sy either - each screen origin is at 0,0) */
 		if (p->blackbg) {	/* Window fills the screen, test area is within it */
 			p->tx = (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
-			p->ty = (int)((voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
+			p->ty = (int)((-voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
 			p->tw = wi;
 			p->th = he;
 			wi = disp->sw;
 			he = disp->sh;
-			xo = disp->sx;
-			yo = disp->sy;
+			xo = 0;
+			yo = 0;
 		} else {			/* Test area completely fills the window */
 			p->tx = 0;
 			p->ty = 0;
 			p->tw = wi;
 			p->th = he;
-			xo = disp->sx + (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
-			yo = disp->sy + (int)((voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
+			xo = (int)((hoff * 0.5 + 0.5) * (disp->sw - wi) + 0.5);
+			yo = (int)((-voff * 0.5 + 0.5) * (disp->sh - he) + 0.5);
 		}
 		p->ww = wi;
 		p->wh = he;
 
-//printf("~1 Got size %d x %d at %d %d from %fmm x %fmm\n",wi,he,xo,yo,width,height);
-		wRect.left = xo;
-		wRect.top = yo;
-		wRect.right = xo+wi;
-		wRect.bottom = yo+he;
+		wrect.origin.x = xo;
+		wrect.origin.y = yo;
+		wrect.size.width = wi;
+		wrect.size.height = he;
 
-		/* Create invisible new window of given class, attributes and size */
-	    stat = CreateNewWindow(wclass, attr, &wRect, &p->mywindow);
-		if (stat != noErr || p->mywindow == nil) {
-			debugr2((errout,"new_dispwin: CreateNewWindow failed with code %d\n",stat));
-			dispwin_del(p);
-			return NULL;
-		}
+		create_my_win(wrect, cx);
 
-		/* Set a title */
-		SetWindowTitleWithCFString(p->mywindow, CFSTR("Argyll Window"));
+		OSX_ProcessEvents(p);
 
-		/* Set the window blackground color to black */
-		{
-			RGBColor col = { 0,0,0 };
-			SetWindowContentColor(p->mywindow, &col);
-		}
-
-		/* Install the event handler */
-	    stat = InstallEventHandler(
-			GetWindowEventTarget(p->mywindow),	/* Objects events to handle */
-			NewEventHandlerUPP(HandleEvent),	/* Handler to call */
-			sizeof(kEvents)/sizeof(EventTypeSpec),	/* Number in type list */
-			kEvents,						/* Table of events to handle */
-			(void *)p,						/* User Data is our object */
-			&fHandler						/* Event handler reference return value */
-		);
-		if (stat != noErr) {
-			debugr2((errout,"new_dispwin: InstallEventHandler failed with code %d\n",stat));
-			dispwin_del(p);
-			return NULL;
-		}
-
-		/* Create a GC */
-		p->port = GetWindowPort(p->mywindow);
-
-		if ((stat = QDBeginCGContext(p->port, &p->mygc)) != noErr) {
-			debugr2((errout,"new_dispwin: QDBeginCGContext returned error %d\n",stat));
-			dispwin_del(p);
-			return NULL;
-		}
 		p->winclose = 0;
-
-		/* Activate the window */
-//		BringToFront(p->mywindow);
-		ShowWindow(p->mywindow);	/* Makes visible and triggers update event */
-//		ActivateWindow(p->mywindow, false);
-		SendBehind(p->mywindow, NULL);
-//		SelectWindow(p->mywindow);
-
-		/* Make sure overlay window alpha is set initialy */
-		{
-			CGRect frect;
-
-			/* If we're using an overlay window, paint it all black */
-			if (p->blackbg) {
-				frect = CGRectMake(0.0, 0.0, (float)p->ww, (float)p->wh);
-				CGContextSetRGBFillColor(p->mygc, 0.0, 0.0, 0.0, 1.0);
-				CGContextFillRect(p->mygc, frect);
-			}
-			frect = CGRectMake((float)p->tx, (float)(p->wh - p->ty - p->th - 1),
-			  (float)(1.0 + p->tw), (float)(1.0 + p->th ));
-			CGContextSetRGBFillColor(p->mygc, p->rgb[0], p->rgb[1], p->rgb[2], 1.0);
-			CGContextFillRect(p->mygc, frect);
-			CGContextFlush(p->mygc);		/* Force draw to display */
-		}
-
-//printf("~1 created window, about to enter event loop\n");
-//		CGDisplayCapture(p->ddid);
-
-#ifdef NEVER
-		/* Carbon doesn't support setting a custom cursor yet :-( */
-		/* The QuickDraw way of making the cursor vanish. */
-		/* unfortuneately, it vanished for the whole screen, */
-		/* and comes back when you click the mouse, just like. */
-		/* CGDisplayHideCursor() */
-		{
-			InitCursor();
-			Cursor myc = {
-				{ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},		/* data */
-				{ 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},		/* Mask */
-				{ 0, 0 }								/* hotSpot */
-			};
-			
-			SetCursor(&myc);
-		}
-#endif
-/*
-		To disable screensaver,
-		could try exec("defaults ....."); ??
-		see "man defaults"
-		Maybe the universal access, "Enhance Contrast" can
-		be zero'd this way too ?? 
-
-		To disable Universal Access contrast, could try
-		exec("com.apple.universalaccess contrast 0");
-		but this doesn't activate the change.
-
-		Applescript may be able to do this in an ugly way,
-		something like:
-
-			tell application "System Preferences"
-				activate
-			end tell
-
-			tell application "System Events"
-				get properties
-				tell process "System Preferences"
-					click menu item "Universal Access" of menu "View" of menu bar 1
-					tell window "Energy Saver"
-						tell group 1
-							tell tab group 1
-								set the value of slider 2 to 600
-							end tell
-						end tell
-					end tell
-				end tell
-			end tell
-
- */
-
-//printf("~1 done create window\n");
-		if (p->winclose) {
-			debugr2((errout,"new_dispwin: done create window (winclose flag)\n"));
-			dispwin_del(p);
-			return NULL;
-		}
 	}
+
+	/* Install the signal handler to ensure cleanup */
+	dispwin_install_signal_handlers(p);
 #endif /* __APPLE__ */
 	/* -------------------------------------------------- */
 
 	/* -------------------------------------------------- */
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	{
 		/* NOTE: That we're not doing much to detect if the display/window
 		   we open is unsuitable for high quality color (ie. at least
 		   24 bit etc.
 		 */
 
-		if(ssdispwin != NULL) {
+#ifdef NEVER		// ?? is this for a specific reason ??
+		if (signal_dispwin != NULL) {
 			debugr2((errout,"new_dispwin: Attempting to open more than one dispwin!\n"));
 			dispwin_del(p);
 			return NULL;
 		}
+#endif
 
 		/* stuff for X windows */
 		char *pp, *bname;               /* base display name */
@@ -3707,12 +4519,8 @@ int ddebug						/* >0 to print debug statements to stderr */
 			/* ------------------------------------------------------- */
 			/* Suspend any screensavers if we can */
 
-			ssdispwin = p;
-
 			/* Install the signal handler to ensure cleanup */
-			dispwin_hup = signal(SIGHUP, dispwin_sighandler);
-			dispwin_int = signal(SIGINT, dispwin_sighandler);
-			dispwin_term = signal(SIGTERM, dispwin_sighandler);
+			dispwin_install_signal_handlers(p);
 
 #if ScreenSaverMajorVersion >= 1 && ScreenSaverMinorVersion >= 1	/* X11R7.1 ??? */
 
@@ -3809,6 +4617,9 @@ int ddebug						/* >0 to print debug statements to stderr */
 						break;
 				}
 			}
+		} else {
+			/* Install the signal handler to ensure cleanup */
+			dispwin_install_signal_handlers(p);
 		}
 	}
 #endif	/* UNIX X11 */
@@ -3847,7 +4658,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 }
 
 /* ================================================================ */
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 /* Process to continuously monitor XRandR events, */
 /* and load the appropriate calibration and profiles */
 /* for each monitor. */
@@ -4096,7 +4907,7 @@ static void usage(char *diag, ...) {
 	}
 	fprintf(stderr,"usage: dispwin [options] [calfile] \n");
 	fprintf(stderr," -v                   Verbose mode\n");
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	fprintf(stderr," -display displayname Choose X11 display name\n");
 	fprintf(stderr," -d n[,m]             Choose the display n from the following list (default 1)\n");
 	fprintf(stderr,"                      Optionally choose different display m for Video LUT access\n"); 
@@ -4116,7 +4927,7 @@ static void usage(char *diag, ...) {
 	}
 	free_disppaths(dp);
 	fprintf(stderr," -dweb[:port]         Display via a web server at port (default 8080)\n");
-	fprintf(stderr," -P ho,vo,ss          Position test window and scale it\n");
+	fprintf(stderr," -P ho,vo,ss[,vs]     Position test window and scale it\n");
 	fprintf(stderr," -F                   Fill whole screen with black background\n");
 	fprintf(stderr," -i                   Run forever with random values\n");
 	fprintf(stderr," -G filename          Display RGB colors from CGATS file\n");
@@ -4132,7 +4943,7 @@ static void usage(char *diag, ...) {
 	fprintf(stderr," -S d                 Specify the install/uninstall scope for OS X [nlu] or X11/Vista [lu]\n");
 	fprintf(stderr,"                      d is one of: n = network, l = local system, u = user (default)\n");
 	fprintf(stderr," -L                   Load installed profiles cal. into Video LUT\n");
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	fprintf(stderr," -E                   Run in daemon loader mode for given X11 server\n");
 #endif /* X11 */
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
@@ -4151,7 +4962,7 @@ main(int argc, char *argv[]) {
 	int ddebug = 0;				/* debug level */
 	int webdisp = 0;			/* NZ for web display, == port number */
 	disppath *disp = NULL;		/* Display being used */
-	double patscale = 1.0;		/* scale factor for test patch size */
+	double hpatscale = 1.0, vpatscale = 1.0;	/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;	/* Test window offsets, -1.0 to 1.0 */
 	int blackbg = 0;       		/* NZ if whole screen should be filled with black */
 	int nowin = 0;				/* Don't create test window */
@@ -4228,7 +5039,7 @@ main(int argc, char *argv[]) {
 					}
 					fa = nfa;
 				} else {
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 					int ix, iv;
 
 					/* X11 type display name. */
@@ -4266,11 +5077,17 @@ main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'P') {
 				fa = nfa;
 				if (na == NULL) usage("-p parameters are missing");
-				if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &patscale) != 3)
+				if (sscanf(na, " %lf,%lf,%lf,%lf ", &ho, &vo, &hpatscale, &vpatscale) == 4) {
+					;
+				} else if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &hpatscale) == 3) {
+					vpatscale = hpatscale;
+				} else {
 					usage("-p parameters '%s' is badly formatted",na);
+				}
 				if (ho < 0.0 || ho > 1.0
 				 || vo < 0.0 || vo > 1.0
-				 || patscale <= 0.0 || patscale > 50.0)
+				 || hpatscale <= 0.0 || hpatscale > 50.0
+				 || vpatscale <= 0.0 || vpatscale > 50.0)
 					usage("-p parameters '%s' is out of range",na);
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
@@ -4347,7 +5164,7 @@ main(int argc, char *argv[]) {
 	/* No explicit display has been set */
 	if (webdisp == 0 && disp == NULL) {
 		int ix = 0;
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 		char *dn, *pp;
 
 		if ((dn = getenv("DISPLAY")) != NULL) {
@@ -4370,7 +5187,7 @@ main(int argc, char *argv[]) {
 			loadfile = 1;		/* Load the given profile into the videoLUT */
 	}
 
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	if (webdisp == 0 && daemonmode) {
 		return x11_daemon_mode(disp, verb, ddebug);
 	}
@@ -4395,7 +5212,7 @@ main(int argc, char *argv[]) {
 
 
 	if (webdisp != 0) {
-		if ((dw = new_webwin(webdisp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, blackbg, verb, ddebug)) == NULL) {
+		if ((dw = new_webwin(webdisp, 100.0 * hpatscale, 100.0 * vpatscale, ho, vo, nowin, blackbg, verb, ddebug)) == NULL) {
 			printf("Error - new_webpwin failed!\n");
 			return -1;
 		}
@@ -4403,7 +5220,7 @@ main(int argc, char *argv[]) {
 
 	} else {
 		if (verb) printf("About to open dispwin object on the display\n");
-		if ((dw = new_dispwin(disp, 100.0 * patscale, 100.0 * patscale, ho, vo, nowin, native, &noramdac, blackbg, 1, ddebug)) == NULL) {
+		if ((dw = new_dispwin(disp, 100.0 * hpatscale, 100.0 * vpatscale, ho, vo, nowin, native, &noramdac, blackbg, 1, ddebug)) == NULL) {
 			printf("Error - new_dispwin failed!\n");
 			return -1;
 		}
@@ -4931,6 +5748,30 @@ main(int argc, char *argv[]) {
 				else
 					sleep(2);
 
+				printf("Setting 50%% Red\n");
+				dw->set_color(dw, 0.5, 0.0, 0.0);	/* Red */
+
+				if (inf == 2)
+					getchar();				
+				else
+					sleep(2);
+
+				printf("Setting 50%% Green\n");
+				dw->set_color(dw, 0.0, 0.5,  0.0);	/* Green */
+
+				if (inf == 2)
+					getchar();				
+				else
+					sleep(2);
+
+				printf("Setting 50%% Blue\n");
+				dw->set_color(dw, 0.0, 0.0, 0.5);	/* Blue */
+
+				if (inf == 2)
+					getchar();				
+				else
+					sleep(2);
+
 				if (inf == 1) {
 					for (;inf != 0;) {
 						double col[3];
@@ -4955,14 +5796,14 @@ main(int argc, char *argv[]) {
 
 		if (inf != 2) {
 			/* Test out the VideoLUT access */
-			if ((or = dw->get_ramdac(dw)) != NULL) {
+			if ((dw->or = dw->get_ramdac(dw)) != NULL) {	/* Use dw->or so signal will restore */
 				
-				r = or->clone(or);
+				r = dw->or->clone(dw->or);
 	
 				/* Try darkening it */
 				for (j = 0; j < 3; j++) {
 					for (i = 0; i < r->nent; i++) {
-						r->v[j][i] = pow(or->v[j][i], 2.0);
+						r->v[j][i] = pow(dw->or->v[j][i], 2.0);
 					}
 				}
 				printf("Darkening screen\n");
@@ -4975,7 +5816,7 @@ main(int argc, char *argv[]) {
 				/* Try lightening it */
 				for (j = 0; j < 3; j++) {
 					for (i = 0; i < r->nent; i++) {
-						r->v[j][i] = pow(or->v[j][i], 0.5);
+						r->v[j][i] = pow(dw->or->v[j][i], 0.5);
 					}
 				}
 				printf("Lightening screen\n");
@@ -4987,12 +5828,13 @@ main(int argc, char *argv[]) {
 	
 				/* restor it */
 				printf("Restoring screen\n");
-				if (dw->set_ramdac(dw,or,0)) {
+				if (dw->set_ramdac(dw,dw->or,0)) {
 					error("Failed to set VideoLUTs");
 				}
 	
 				r->del(r);
-				or->del(or);
+				dw->or->del(dw->or);
+				dw->or = NULL;
 	
 			} else {
 				printf("We don't have access to the VideoLUT\n");
@@ -5028,6 +5870,30 @@ main(int argc, char *argv[]) {
 }
 
 #endif /* STANDALONE_TEST */
+
+/* ================================================================ */
+/* Possible ThinkPad MSWin code to keep the main screen on */
+
+#ifdef NEVER
+
+Public Class Form1
+    Declare Sub XRCalibrationLidTurnOnNotification Lib "C:\Program Files (x86)\X-Rite\PANTONE Color Calibrator\XRLaptopIFSDK.dll" ()
+    Declare Sub XRCalibrationLidTurnOffNotification Lib "C:\Program Files (x86)\X-Rite\PANTONE Color Calibrator\XRLaptopIFSDK.dll" ()
+
+    Private Sub Form1_Load(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles MyBase.Load
+
+    End Sub
+
+    Private Sub Button1_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles Button1.Click
+        Call XRCalibrationLidTurnOnNotification()
+    End Sub
+
+    Private Sub Button2_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles Button2.Click
+        Call XRCalibrationLidTurnOffNotification()
+    End Sub
+End Class
+
+#endif
 
 /* ================================================================ */
 /* Unused Apple code */
@@ -5164,6 +6030,7 @@ static char *plocpath(CMProfileLocation *ploc) {
 
 /* fss2path takes the FSSpec of a file, folder or volume and returns it's POSIX (?) path. */
 /* Return NULL on error. Free returned string */
+/* NOTE FSSpec is deprecated in 10.5. Replace with FSRef ?? */
 static char *fss2path(FSSpec *fss) {
 	int i, l;						 /* fss->name contains name of last item in path */
 	char *path;
@@ -5358,4 +6225,97 @@ static void pcurpath(dispwin *p) {
 		}
 
 #endif /* NEVER */
+
+#ifdef NEVER
+	/* Unused 10.6+ code */
+	CFUUIDRef dispuuid;
+	CFDictionaryRef dict, sdict, pdict;
+	CFStringRef id, urlstr;
+	CFURLRef url;
+	CFIndex bufSize;
+	char *dpath = NULL;			/* return value */
+
+	if ((dispuuid = CGDisplayCreateUUIDFromDisplayID(p->ddid)) == NULL) {
+		debugr2((errout,"CGDisplayCreateUUIDFromDisplayID() failed\n"));
+		return NULL;
+	}
+
+	if ((dict = ColorSyncDeviceCopyDeviceInfo(kColorSyncDisplayDeviceClass, dispuuid)) == NULL) {
+		debugr2((errout,"ColorSyncDeviceCopyDeviceInfo() failed\n"));
+		CFRelease(dispuuid);
+		return NULL;
+	}
+
+	/* Get the factory profile dictionary */
+	if ((sdict = CFDictionaryGetValue(dict, kColorSyncFactoryProfiles)) == NULL) {
+		debugrr("Failed to get kColorSyncFactoryProfiles\n");
+		CFRelease(dict);
+		CFRelease(dispuuid);
+		return NULL;
+	}
+	/* Lookup the default profile ID */
+	if ((id = CFDictionaryGetValue(sdict, kColorSyncDeviceDefaultProfileID)) == NULL) {
+		debugrr("Failed to get kColorSyncDeviceDefaultProfileID\n");
+		CFRelease(dict);
+		CFRelease(dispuuid);
+		return NULL;
+	}
+
+//	printf("~1 got ProfileID '%s'\n",CFStringGetCStringPtr(id, kCFStringEncodingMacRoman));
+
+	/* See if this ProfileID is in the factory profile dictionary */
+	if ((pdict = CFDictionaryGetValue(sdict, id)) != NULL) {
+	} else {
+		debugrr("Failed to get factory profile with id \n");
+
+		/* Get the custom profile dictionary */
+		if ((sdict = CFDictionaryGetValue(dict, kColorSyncCustomProfiles)) == NULL) {
+			debugrr("Failed to get kColorSyncCustomProfiles\n");
+			CFRelease(dict);
+			CFRelease(dispuuid);
+			return NULL;
+		}
+		/* See if the default id is in the custom profile dictionary */
+		if ((pdict = CFDictionaryGetValue(sdict, id)) == NULL) {
+			debugrr("Failed to locate default profile in factory or custom profile list\n");
+			CFRelease(dict);
+			CFRelease(dispuuid);
+			return NULL;
+		}
+	}
+
+	/* get the URL */
+	if ((url = CFDictionaryGetValue(pdict, kColorSyncDeviceProfileURL)) == NULL) {
+		debugrr("Failed to get default profile URL\n");
+		CFRelease(dict);
+		CFRelease(dispuuid);
+		return NULL;
+	}
+
+//	urlstr = CFURLGetString(url);
+//	printf("~1 got URL '%s'\n",CFStringGetCStringPtr(urlstr, kCFStringEncodingMacRoman));
+
+	urlstr = CFURLCopyFileSystemPath(url, kCFURLPOSIXPathStyle);
+	bufSize = CFStringGetMaximumSizeForEncoding(CFStringGetLength(urlstr),
+	                                              kCFStringEncodingUTF8) + 1;
+	if ((dpath = malloc(bufSize)) == NULL) {
+		debugrr("cur_profile malloc failed\n");
+		CFRelease(dict);
+		CFRelease(dispuuid);
+		return NULL;
+	}
+	if (!CFStringGetCString(urlstr, dpath, bufSize, kCFStringEncodingUTF8)) {
+		debugrr("cur_profile CFStringGetCString failed\n");
+		CFRelease(dict);
+		CFRelease(dispuuid);
+		return NULL;
+	}
+	printf("~1 got path '%s'\n",dpath);
+
+	CFRelease(dict);
+	CFRelease(dispuuid);
+
+//	return dpath;
+	return NULL;
+#endif
 

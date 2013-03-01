@@ -6,6 +6,7 @@ License.txt
 License2.txt
 License3.txt
 afiles
+ifiles
 Jamfile
 chartread.c
 dispread.c
@@ -23,6 +24,8 @@ insttypes.c
 insttypeinst.h
 inst.c
 inst.h
+instappsup.c
+instappsup.h
 dtp20.c
 dtp20.h
 dtp22.c
@@ -41,7 +44,6 @@ i1disp.c
 i1disp.h
 i1d3.c
 i1d3.h
-i1d3ccss.c
 i1pro.h
 i1pro.c
 i1pro_imp.h
@@ -56,8 +58,9 @@ spyd2.c
 spyd2.h
 spyd2setup.h
 spyd2PLD.h
-spyd2en.c
-spyd4en.c
+oemarch.h
+oemarch.c
+oeminst.c
 inflate.c
 vinflate.c
 LzmaTypes.h
@@ -76,12 +79,18 @@ aglob.c
 xdg_bds.h
 xdg_bds.c
 icoms.h
+icoms.c
+icoms_nt.c
+icoms_ux.c
+iusb.h
 usbio.h
 usbio.c
+usbio_lusb.c
+usbio_nt.c
+usbio_ox.c
+usbio_lx.c
 hidio.h
 hidio.c
-ntio.c
-unixio.c
 pollem.h
 pollem.c
 dispwin.c

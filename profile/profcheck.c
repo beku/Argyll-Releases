@@ -58,11 +58,12 @@ usage(void) {
 	fprintf(stderr," -d devval1,deval2,devvalN\n");
 	fprintf(stderr,"                 Specify a device value to sort against\n");
 	fprintf(stderr," -p              Sort device value by PCS (Lab) target\n");
-	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"                 A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr," -f [illum]      Use Fluorescent Whitening Agent compensation [opt. simulated inst. illum.:\n");
+	fprintf(stderr,"                  M0, M1, M2, A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp]\n");
+	fprintf(stderr," -i illum        Choose illuminant for computation of CIE XYZ from spectral data & FWA:\n");
+	fprintf(stderr,"                  A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
-	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
-	fprintf(stderr," -f              Use Fluorescent Whitening Agent compensation\n");
+	fprintf(stderr,"                  1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -I intent       r = relative colorimetric, a = absolute (default)\n");
 	fprintf(stderr," data.ti3        Test data file\n");
 	fprintf(stderr," iccprofile.icm  Profile to check against\n");
@@ -110,6 +111,8 @@ int main(int argc, char *argv[])
 	int isdisp = 0;				/* nz if this is a display device, 0 if output */
 	int isdnormed = 0;      	/* Has display data been normalised to 100 ? */
 	int spec = 0;				/* Use spectral data flag */
+	icxIllumeType tillum = icxIT_none;	/* Target/simulated instrument illuminant */ 
+	xspect cust_tillum, *tillump = NULL; /* Custom target/simulated illumination spectrum */
 	icxIllumeType illum = icxIT_D50;	/* Spectral defaults */
 	xspect cust_illum;			/* Custom illumination spectrum */
 	icxObserverType observ = icxOT_CIE_1931_2;
@@ -219,6 +222,47 @@ int main(int argc, char *argv[])
 			else if (argv[fa][1] == 'p')
 				sortbypcs = 1;
 
+			/* FWA compensation */
+			else if (argv[fa][1] == 'f') {
+				fwacomp = 1;
+
+				if (na != NULL) {	/* Argument is present - target/simulated instr. illum. */
+					fa = nfa;
+					if (strcmp(na, "A") == 0
+					 || strcmp(na, "M0") == 0) {
+						spec = 1;
+						tillum = icxIT_A;
+					} else if (strcmp(na, "C") == 0) {
+						spec = 1;
+						tillum = icxIT_C;
+					} else if (strcmp(na, "D50") == 0
+					        || strcmp(na, "M1") == 0) {
+						spec = 1;
+						tillum = icxIT_D50;
+					} else if (strcmp(na, "D50M2") == 0
+					        || strcmp(na, "M2") == 0) {
+						spec = 1;
+						tillum = icxIT_D50M2;
+					} else if (strcmp(na, "D65") == 0) {
+						spec = 1;
+						tillum = icxIT_D65;
+					} else if (strcmp(na, "F5") == 0) {
+						spec = 1;
+						tillum = icxIT_F5;
+					} else if (strcmp(na, "F8") == 0) {
+						spec = 1;
+						tillum = icxIT_F8;
+					} else if (strcmp(na, "F10") == 0) {
+						spec = 1;
+						tillum = icxIT_F10;
+					} else {	/* Assume it's a filename */
+						spec = 1;
+						tillum = icxIT_custom;
+						if (read_xspect(&cust_tillum, na) != 0)
+							usage();
+					}
+				}
+			}
 			/* Spectral Illuminant type */
 			else if (argv[fa][1] == 'i') {
 				fa = nfa;
@@ -232,6 +276,9 @@ int main(int argc, char *argv[])
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
+				} else if (strcmp(na, "D50M2") == 0) {
+					spec = 1;
+					illum = icxIT_D50M2;
 				} else if (strcmp(na, "D65") == 0) {
 					spec = 1;
 					illum = icxIT_D65;
@@ -274,9 +321,6 @@ int main(int argc, char *argv[])
 				} else
 					usage();
 			}
-
-			else if (argv[fa][1] == 'f')
-				fwacomp = 1;
 
 			/* Intent (only applies to ICC profile) */
 			else if (argv[fa][1] == 'I') {
@@ -640,7 +684,7 @@ int main(int argc, char *argv[])
 
 			/* Create a spectral conversion object */
 			if ((sp2cie = new_xsp2cie(illum, illum == icxIT_none ? NULL : &cust_illum,
-			                          observ, NULL, icSigLabData)) == NULL)
+			                          observ, NULL, icSigLabData, icxClamp)) == NULL)
 				error("Creation of spectral conversion object failed");
 
 			if (fwacomp) {
@@ -722,7 +766,17 @@ int main(int argc, char *argv[])
 				for (j = 0; j < mwsp.spec_n; j++)
 					mwsp.spec[j] /= nw;	/* Compute average */
 
-				if (sp2cie->set_fwa(sp2cie, &insp, &mwsp)) 
+				/* If we are setting a specific simulated instrument illuminant */
+				if (tillum != icxIT_none) {
+					tillump = &cust_tillum;
+					if (tillum != icxIT_custom) {
+						if (standardIlluminant(tillump, tillum, 0.0)) {
+							error("simulated inst. illum. not recognised");
+						}
+					}
+				}
+
+				if (sp2cie->set_fwa(sp2cie, &insp, tillump, &mwsp)) 
 					error ("Set FWA on sp2cie failed");
 
 				if (verb) {

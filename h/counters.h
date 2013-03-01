@@ -27,6 +27,11 @@
 	int nn##_res = (endp1); /* last count +1 */				\
 	int nn##_e				/* dimension index */
 
+#define DRECONF(nn, start, reset, endp1) 				\
+	nn##_stt = (start);	/* start count value */			\
+	nn##_rst = (reset);	/* reset on carry value */		\
+	nn##_res = (endp1); /* last count +1 */			
+
 /* Set the counter value to 0 */
 #define DC_INIT(nn) 								\
 {													\
@@ -51,6 +56,45 @@
 	(nn##_e >= nn##_di)
 	
 /* (Do we need a version of the above that tracks the actual input coords ?) */
+/* ------------------------------------------------------- */
+/* Similar to abovem but each dimension range can be clipped. */
+
+#define FCOUNT(nn, mxdi, di) 				\
+	int nn[mxdi];			/* counter value */				\
+	int nn##_di = (di);		/* Number of dimensions */		\
+	int nn##_stt[mxdi];		/* start count value */			\
+	int nn##_res[mxdi]; 	/* last count +1 */				\
+	int nn##_e				/* dimension index */
+
+#define FRECONF(nn, start, endp1) 							\
+	for (nn##_e = 0; nn##_e < nn##_di; nn##_e++) {			\
+		nn##_stt[nn##_e] = (start);	/* start count value */	\
+		nn##_res[nn##_e] = (endp1); /* last count +1 */		\
+	}
+
+/* Set the counter value to 0 */
+#define FC_INIT(nn) 								\
+{													\
+	for (nn##_e = 0; nn##_e < nn##_di; nn##_e++)	\
+		nn[nn##_e] = nn##_stt[nn##_e];				\
+	nn##_e = 0;										\
+}
+
+/* Increment the counter value */
+#define FC_INC(nn)									\
+{													\
+	for (nn##_e = 0; nn##_e < nn##_di; nn##_e++) {	\
+		nn[nn##_e]++;								\
+		if (nn[nn##_e] < nn##_res[nn##_e])			\
+			break;	/* No carry */					\
+		nn[nn##_e] = nn##_stt[nn##_e];				\
+	}												\
+}
+
+/* After increment, expression is TRUE if counter is done */
+#define FC_DONE(nn)								\
+	(nn##_e >= nn##_di)
+
 /* ------------------------------------------------------- */
 /* Same as above, but allows for variable resolution on each axis. */
 /* End offset is added to count[] */

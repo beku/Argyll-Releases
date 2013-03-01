@@ -32,96 +32,104 @@
  */
 
 /* Description:
+	
+		In all the clut based color systems, there are various
+	stages where the multi-dimenional profile functions are
+	resampled from one respresentation to another. As in all
+	sampling, aliasing may be an issue. The standard
+	methods for dealing with aliasing involve band limiting and
+	over-sampling. In dealing with color, anything other than
+	point sampling is often too slow to consider, meaning that
+	over sampling, or on-the-fly filtering is impractical.
+	
+	Band limiting the function to be sampled is therefore the
+	most practical approach, but there are still sever tradoffs.
+	For accurately representing the sampled characteristics
+	of a device, a high resolution grid, with band limited
+	sample points is desirable. 3 or 4 dimension grids however,
+	quickly consume memory, and generaly show an exponential
+	decline in access and manipulation speed with grid resolution.
+	To maintain accuracy therefore, the minimum grid resolution,
+	and the minimum level of filtering is often employed.
+	
+	The routines in this file are to deal with an aditional
+	subtlety when dealing with devices that have extra
+	degrees of freedom (ie. CMYK devices). In theory, the
+	aditional degrees of freedom can be set abitrarily, and
+	are often chosen to follow a "rule", designed to acheive
+	a goal such as minimising the amount of black used
+	in the highlights of bitonal devices (to minimise
+	"black dot" visibility), or to maximise black usage
+	for minimum ink costs, to resduce grey axis sensitivity
+	to the CMY values, to reduce the total ink loading,
+	or to pass through the inking values of a similar
+	input colorspace. In Argyll, these extra degrees of 
+	freedom are refered to as auxiliary chanels.
+	
+	Because the final representation of the color correction
+	transform is often a multi-dimensional interpolation lookup
+	table (clut), there is an aditional hidden requirement for
+	any auxiliary input chanels, and that is that there be
+	a reasonable degree of interpolation continuity between
+	the sampled grid points. If this continuity requirement
+	is not met, then the accuracy of the interpolation within
+	each grid cell can be wildly inacurate, even though the
+	accuracy of the grid points themselves is good.
+	
+	For instance, if we have two grid points of a Lab->CMYK
+	interpolation grid:
+	
+	1) 	50 0 0   -> .0 .0 .0 .3 -> 50 0 0
+	2)  50 0 10  -> .2 .2 .4 .0 -> 50 0 10
+	
+	Now if an input PCS value of 50 0 5 is used to
+	lookup the device values that should be used, a typical
+	interpolation might return:
+	
+	   50 0 5 ->    .1 .1 .2 .15 ->  40 -5 6
+	
+	This is a small change in PCS space, but bevcause the
+	two device points are at opposite extremes of the possible
+	auxliary locus for each point, the device values are
+	far appart in device space. The accuracy of the
+	device space interpolation is therefore not guaranteed
+	to be accurate, and might in this case, mean that
+	the device actually reproduces an unexpectedly inaccurate PCS value.
+	Even worse, at the gamut boundaries the locus shrinks to zero,
+	and particularly in the dark end of the gamut, there
+	may be a multitude of different Device values that overlap
+	at the gamut boundary, causing abrupt or even chaotic
+	device values at spacings well above the sampling spacing
+	of the interpolation grid being created.
 
-	In all the clut based color systems, there are various
-stages where the multi-dimenional profile functions are
-resampled from one respresentation to another. As in all
-sampling, sample aliasing may be an issue. The standard
-methods for dealing with aliasing involve band limiting and
-over-sampling. In dealing with color, anything other than
-point sampling is often too slow to consider, meaning that
-over sampling, or on-the-fly filtering is impractical.
-
-Band limiting the function to be sampled is therefore the
-most practical approach, but there are still sever tradoffs.
-For accurately representing the sampled characteristics
-of a device, a high resolution grid, with band limited
-sample points is desirable. 3 or 4 dimension grids however,
-quickly consume memory, and generalyy show an exponential
-decline in access and manipulation speed with grid resolution.
-To maintain accuracy therefore, the minimum grid resolution,
-and the minimum level of filtering is often employed.
-
-The routines in this file are to deal with an aditional
-subtlety when dealing with devices that have extra
-degrees of freedom (ie. CMYK devices). In theory, the
-aditional degrees of freedom can be set abitrarily, and
-are often chosen to follow a "rule", designed to acheive
-a goal such as minimising the amount of black used
-in the highlights of bitonal devices (to minimise
-"black dot" visibility), or to maximise black usage
-for minimum ink costs, to resduce grey axis sensitivity
-to the CMY values, to reduce the total ink loading,
-or to pass through the inking values of a similar
-input colorspace. In Argyll, these extra degrees of 
-freedom are refered to as auxiliary chanels.
-
-Because the final representation of the color correction
-transform is often a multi-dimensional interpolation lookup
-table (clut), there is an aditional hidden requirement for
-any auxiliary input chanels, and that is that there be
-a reasonable degree of interpolation continuity between
-the sampled grid points. If this continuity requirement
-is not met, then the accuracy of the interpolation within
-each grid cell can be wildly inacurate, even though the
-accuracy of the grid points themselves is good.
-
-For instance, if we have two grid points of a Lab->CMYK
-interpolation grid:
-
-1) 	50 0 0   -> .0 .0 .0 .3 -> 50 0 0
-2)  50 0 10  -> .2 .2 .4 .0 -> 50 0 10
-
-Now if an input PCS value of 50 0 5 is used to
-lookup the device values that should be used, a typical
-interpolation might return:
-
-   50 0 5 ->    .1 .1 .2 .15 ->  40 -5 6
-
-This is a small change in PCS space, but bevcause the
-two device points are at opposite extremes of the possible
-auxliary locus for each point, the device values are
-far appart in device space. The accuracy of the
-device space interpolation is therefore not guaranteed
-to be accurate, and might in this case, mean that
-the device actually reproduces an unexpectedly inaccurate PCS value.
-Even worse, at the gamut boundaries the locus shrinks to zero,
-and particularly in the dark end of the gamut, there
-may be a multitude of different Device values that overlap
-at the gamut boundary, causing abrupt or even chaotic
-device values at spacings well above the sampling spacing
-of the interpolation grid being created.
-
-In Argyll, we want to maintain the freedom to set arbitrary
-auxiliary rules, yet we need to avoid the gross loss of
-accuracy abrupt transitions in auxiliary values can cause.
-
-The approach I've taken here involves a number of steps. The
-first step sets up the clut in the usual maner, but records
-various internal values for each point. In the second step, these
-grid values are examined to locate cells which are "at risk" of
-auxiliary interpolation errors. In the third step, the grid points
-around the "at risk" cells have their auxiliary target values
-adjusted to new target values, by using a simple smoothing filter
-to reduce abrupt transitions. In the fourth step, new device values
-are searched for, that have the same target PCS for the grid point,
-but the smoothed auxiliary value. In cases where there is no scope
-for meeting the new auxiliary target, because it is already at one
-extreme of its possible locus for the target PCS, a tradoff is then
-made between reduced target PCS accuracy, and an improved auxiliary
-accuracy. In the final step, the new grid values replace the old
-in the ICC.
-
+	An additional challenge is that the locus of valid auxiliary
+	values may be discontinuous, (typically bifurcated), particularly
+	when an ink limit is imposed - the limit often removing a segment
+	of the auxiliary locus from the gamut. So ideally, a contiguous
+	auxiliary region needs to be mapped out, and any holes
+    patched over or removed from the gamut in a way that
+	doesn't introduce discontinuities. 
+	
+	In Argyll, we want to maintain the freedom to set arbitrary
+	auxiliary rules, yet we need to avoid the gross loss of
+	accuracy abrupt transitions in auxiliary values can cause.
+	
+	The approach I've taken here involves a number of steps. The
+	first step sets up the clut in the usual maner, but records
+	various internal values for each point. In the second step, these
+	grid values are examined to locate cells which are "at risk" of
+	auxiliary interpolation errors. In the third step, the grid points
+	around the "at risk" cells have their auxiliary target values
+	adjusted to new target values, by using a simple smoothing filter
+	to reduce abrupt transitions. In the fourth step, new device values
+	are searched for, that have the same target PCS for the grid point,
+	but the smoothed auxiliary value. In cases where there is no scope
+	for meeting the new auxiliary target, because it is already at one
+	extreme of its possible locus for the target PCS, a tradoff is then
+	made between reduced target PCS accuracy, and an improved auxiliary
+	accuracy. In the final step, the new grid values replace the old
+	in the ICC.
+	
 */
 
 #include "icc.h"

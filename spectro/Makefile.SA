@@ -17,18 +17,10 @@ include Makefile.WNT
 # Apple OS X
 #include Makefile.OSX
 
-# On UNIX & OS X you will have to make libusb1 first!
-# by:
-#  cd libusb1
-#  sh autogen.sh
-#  make
-#  cp libusb/libusb-1.0A.a .
-#  cd ..
-
 ###############################
 
 
-CCDEFINES = $(DEFFLAG)SALONEINSTLIB $(DEFFLAG)ENABLE_SERIAL $(DEFFLAG)ENABLE_USB $(DEFFLAG)USE_LIBUSB1
+CCDEFINES = $(DEFFLAG)SALONEINSTLIB $(DEFFLAG)ENABLE_SERIAL $(DEFFLAG)ENABLE_USB $(DEFFLAG)NATIVE_USB
 
 #Set optimisation on
 CCFLAGS = $(CCFLAGSDEF) $(CCOPTFLAG) $(CCDEFINES) $(BCONFIG)
@@ -41,18 +33,18 @@ CCFLAGS = $(CCFLAGSDEF) $(CCOPTFLAG) $(CCDEFINES) $(BCONFIG)
 LINKFLAGS = $(LINKFLAGSDEF) $(LINKDEBUGFLAG)
 
 # Where headers come from
-STDHDRS = $(INCFLAG)$(STDHDRSDEF) $(INCFLAG)libusb1
-WIN_STDHDRS = $(INCFLAG)libusb1$(SLASH)msvc 
+STDHDRS = $(INCFLAG)$(STDHDRSDEF)
+WIN_STDHDRS = $(INCFLAG)usb$(SLASH)driver
 
-all:: libinst$(SUFLIB) spotread$(SUFEXE) spyd2en$(SUFEXE) spyd4en$(SUFEXE) i1d3ccss$(SUFEXE)
+all:: libinst$(SUFLIB) libinstappsup$(SUFLIB) spotread$(SUFEXE) spyd2en$(SUFEXE) spyd4en$(SUFEXE) i1d3ccss$(SUFEXE)
 
 INSTHEADERS = dtp20.h dtp22.h dtp41.h dtp51.h dtp92.h ss.h ss_imp.h i1disp.h i1d3.h i1pro.h i1pro_imp.h munki.h munki_imp.h hcfr.h huey.h colorhug.h spyd2.h spyd2setup.h spyd2PLD.h
 INSOBJS = dtp20$(SUFOBJ) dtp22$(SUFOBJ) dtp41$(SUFOBJ) dtp51$(SUFOBJ) dtp92$(SUFOBJ) ss$(SUFOBJ) ss_imp$(SUFOBJ) i1disp$(SUFOBJ) i1d3$(SUFOBJ) i1pro$(SUFOBJ) i1pro_imp$(SUFOBJ) munki$(SUFOBJ) munki_imp$(SUFOBJ) hcfr$(SUFOBJ) huey$(SUFOBJ) colorhug$(SUFOBJ) spyd2$(SUFOBJ)
 
-HEADERS = pollem.h conv.h aglob.h hidio.h icoms.h inst.c inst.h insttypeinst.h insttypes.h $(INSTHEADERS) usbio.h xspect.h rspl1.h sort.h xdg_bds.h ccss.h pars.h cgats.h libusb1$(SLASH)libusb.h
+HEADERS = pollem.h conv.h aglob.h hidio.h icoms.h inst.c inst.h insttypeinst.h insttypes.h $(INSTHEADERS) usbio.h xspect.h rspl1.h sort.h xdg_bds.h ccss.h pars.h cgats.h instappsup.h usb$(SLASH)driver$(SLASH)driver_api.h
 
 # libinst objects
-OBJS = conv$(SUFOBJ) aglob$(SUFOBJ) inst$(SUFOBJ) numsup$(SUFOBJ) rspl1$(SUFOBJ) ntio$(SUFOBJ) unixio$(SUFOBJ) usbio$(SUFOBJ) hidio$(SUFOBJ) insttypes$(SUFOBJ) pollem$(SUFOBJ) xspect$(SUFOBJ) xdg_bds$(SUFOBJ) ccss$(SUFOBJ) pars$(SUFOBJ) cgats$(SUFOBJ) $(INSOBJS)
+OBJS = conv$(SUFOBJ) aglob$(SUFOBJ) inst$(SUFOBJ) numsup$(SUFOBJ) rspl1$(SUFOBJ) icoms$(SUFOBJ) usbio$(SUFOBJ) hidio$(SUFOBJ) insttypes$(SUFOBJ) pollem$(SUFOBJ) xspect$(SUFOBJ) xdg_bds$(SUFOBJ) ccss$(SUFOBJ) pars$(SUFOBJ) cgats$(SUFOBJ) $(INSOBJS)
 
 
 # instrument library
@@ -72,11 +64,8 @@ numsup$(SUFOBJ): numsup.c $(HEADERS)
 rspl1$(SUFOBJ): rspl1.c $(HEADERS)
 	$(CC) rspl1.c
 
-ntio$(SUFOBJ): ntio.c $(HEADERS)
-	$(CC) ntio.c
-
-unixio$(SUFOBJ): unixio.c $(HEADERS)
-	$(CC) unixio.c
+icoms$(SUFOBJ): icoms.c $(HEADERS)
+	$(CC) icoms.c
 
 usbio$(SUFOBJ): usbio.c $(HEADERS)
 	$(CC) usbio.c
@@ -172,19 +161,31 @@ libinst$(SUFLIB): $(OBJS)
 	$(LIBU) $(LIBOF)$@ $(OBJS)
 	$(RANLIB) libinst$(SUFLIB)
 
+# instappsup objects
+SUPOBJS = instappsup$(SUFOBJ)
+
+# instappsup library
+
+instappsup$(SUFOBJ): instappsup.c $(HEADERS)
+	$(CC) instappsup.c
+
+libinstappsup$(SUFLIB): $(SUPOBJS)
+	$(LIBU) $(LIBOF)$@ $(SUPOBJS)
+	$(RANLIB) instappsup$(SUFLIB)
+
 # test/example code
 
-spotread$(SUFEXE): spotread$(SUFOBJ) libinst$(SUFLIB) libusb1$(SLASH)libusb-1.0A$(SUFLIB) inst.h
-	$(LINK) $(LINKOF)spotread$(SUFEXE) spotread$(SUFOBJ) libinst$(SUFLIB) libusb1$(SLASH)libusb-1.0A$(SUFLIB) $(LINKLIBS) 
+spotread$(SUFEXE): spotread$(SUFOBJ) libinst$(SUFLIB) inst.h
+	$(LINK) $(LINKOF)spotread$(SUFEXE) spotread$(SUFOBJ) libinst$(SUFLIB) libinstappsup$(SUFLIB) $(LINKLIBS) 
 
 spyd2en$(SUFEXE): spyd2en$(SUFOBJ) vinflate$(SUFOBJ) libinst$(SUFLIB)
-	$(LINK) $(LINKOF)spyd2en$(SUFEXE) spyd2en$(SUFOBJ) vinflate$(SUFOBJ) libinst$(SUFLIB) $(LINKLIBS) 
+	$(LINK) $(LINKOF)spyd2en$(SUFEXE) spyd2en$(SUFOBJ) vinflate$(SUFOBJ) libinstappsup$(SUFLIB) libinst$(SUFLIB) $(LINKLIBS) 
 
 i1d3ccss$(SUFEXE): i1d3ccss$(SUFOBJ) inflate$(SUFOBJ) LzmaDec$(SUFOBJ) libinst$(SUFLIB)
-	$(LINK) $(LINKOF)i1d3ccss$(SUFEXE) i1d3ccss$(SUFOBJ) inflate$(SUFOBJ) LzmaDec$(SUFOBJ) libinst$(SUFLIB) $(LINKLIBS) 
+	$(LINK) $(LINKOF)i1d3ccss$(SUFEXE) i1d3ccss$(SUFOBJ) inflate$(SUFOBJ) LzmaDec$(SUFOBJ) libinst$(SUFLIB) libinstappsup$(SUFLIB) $(LINKLIBS) 
 
 spyd4en$(SUFEXE): spyd4en$(SUFOBJ) vinflate$(SUFOBJ) libinst$(SUFLIB)
-	$(LINK) $(LINKOF)spyd4en$(SUFEXE) spyd4en$(SUFOBJ) vinflate$(SUFOBJ) libinst$(SUFLIB) $(LINKLIBS) 
+	$(LINK) $(LINKOF)spyd4en$(SUFEXE) spyd4en$(SUFOBJ) vinflate$(SUFOBJ) libinst$(SUFLIB) libinstappsup$(SUFLIB) $(LINKLIBS) 
 
 
 clean:

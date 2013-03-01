@@ -9,7 +9,7 @@ rm -rf _zipdir
 mkdir _zipdir
 NOTFOUND=
 
-for i in `cat adirs`
+for i in `cat adirs bdirs`
 do
 	echo
 	echo "#### Doing Directory $i ####"

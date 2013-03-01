@@ -5,6 +5,12 @@
 PREF_CCFLAGS	= $(CCDEBUGFLAG) ;		# Debugging flags
 PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
 
+# Compile .c as .m
+if $(OS) = MACOSX {
+	ObjectCcFlags plot : -ObjC ;
+	ObjectCcFlags plot_plot : -ObjC ;
+}
+
 # PLOT library
 Library libplot : plot.c : : : ../h ../numlib ../spectro ;
 if $(UNIX) && $(OS) != MACOSX {

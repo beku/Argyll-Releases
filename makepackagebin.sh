@@ -15,7 +15,9 @@ echo "Script to invoke Jam and then package the binary release."
 #
 #	OS X i386 10.5 [bash]			darwin9.0	i386-apple-darwin9.0	i386
 #
-#	OS X i386 10.6 [bash]			darwin10.0	i386-apple-darwin8.0	i386
+#	OS X i386 10.6 [bash]			darwin10.0	x86_64-apple-darwin10.0	x86_64
+#
+#	OS X i386 10.7 [bash]			darwin11	x86_64-apple-darwin11	x86_64
 #
 #	Linux RH 4.0 [bash]				linux-gnu	i686-redhat-linux-gnu	i686
 #
@@ -28,7 +30,7 @@ echo "Script to invoke Jam and then package the binary release."
 # Set the environment string VERSION from the #define, ie 1.0.0
 VERSION=`grep ARGYLL_VERSION_STR h/aconfig.h | sed 's/#define ARGYLL_VERSION_STR //' | sed 's/"//g'`
 
-echo "About to make Argyll binary distribution $PACKAGE"
+echo "About to make Argyll binary distribution"
 
 TOPDIR=Argyll_V$VERSION
 
@@ -56,14 +58,25 @@ fi
 
 if [ X$OS = "XWindows_NT" ] ; then
 	echo "We're on MSWindows!"
-	PACKAGE=Argyll_V${VERSION}_win32_exe.zip
-	USBDIRS="libusb1"
-	USBBINFILES="binfiles.msw"
-	unset USETAR
+	# Hack cross comile
+	if [ X$COMPILER = "XMINGW64" ] ; then
+		echo "We're cross compiling to MSWin 64 bit !"
+		PACKAGE=Argyll_V${VERSION}_win64_exe.zip
+		USBDIRS="usb"
+		USBBINFILES="binfiles.msw"
+		unset USETAR
+	else
+		# ~~ should detect native 64 bit here ~~
+		echo "We're on MSWin 32 bit !"
+		PACKAGE=Argyll_V${VERSION}_win32_exe.zip
+		USBDIRS="usb"
+		USBBINFILES="binfiles.msw"
+		unset USETAR
+	fi
 else if [ X$OSTYPE = "Xdarwin7.0" ] ; then
 	echo "We're on OSX 10.3 PPC!"
 	PACKAGE=Argyll_V${VERSION}_osx10.3_ppc_bin.tgz
-	USBDIRS="libusb1"
+	USBDIRS="usb"
 	USBBINFILES="binfiles.osx"
 	USETAR=true
 else if [ X$OSTYPE = "Xdarwin8.0" ] ; then
@@ -75,15 +88,16 @@ else if [ X$OSTYPE = "Xdarwin8.0" ] ; then
 		PACKAGE=Argyll_V${VERSION}_osx10.4_ppc_bin.tgz
 	fi
 	fi
-	USBDIRS="libusb1"
+	USBDIRS="usb"
 	USBBINFILES="binfiles.osx"
 	USETAR=true
-else if [ X$OSTYPE = "Xdarwin9.0" ] ; then
-	if [ X$MACHTYPE = "Xi386-apple-darwin9.0" ] ; then
-		echo "We're on OSX 10.5 i386!"
-		PACKAGE=Argyll_V${VERSION}_osx10.5_i86_bin.tgz
+else if [ X$OSTYPE = "Xdarwin10.0" \
+       -o X$OSTYPE = "Xdarwin11" ] ; then
+	if [ X$HOSTTYPE = "Xx86_64" ] ; then
+		echo "We're on OSX 10.6 x86_64!"
+		PACKAGE=Argyll_V${VERSION}_osx10.6_x86_64_bin.tgz
 	fi
-	USBDIRS="libusb1"
+	USBDIRS="usb"
 	USBBINFILES="binfiles.osx"
 	USETAR=true
 else if [ X$OSTYPE = "Xlinux-gnu" ] ; then
@@ -97,14 +111,19 @@ else if [ X$OSTYPE = "Xlinux-gnu" ] ; then
 		PACKAGE=Argyll_V${VERSION}_linux_x86_64_bin.tgz
 	fi
 	fi
-	USBDIRS="libusb1"
-	USBBINFILES="binfiles.unix"
+	USBDIRS="usb"
+	USBBINFILES="binfiles.lx"
 	USETAR=true
 fi
 fi
 fi
 fi
 fi
+
+if [ X$PACKAGE = "X" ] ; then
+	echo "Unknown host - build failed!"
+	exit 1
+fi 
 
 echo "Making GNU Argyll binary distribution $PACKAGE for Version $VERSION"
 

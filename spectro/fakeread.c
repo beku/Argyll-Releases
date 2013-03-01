@@ -5,7 +5,7 @@
  * Author: Graeme W. Gill
  * Date:   17/2/2002
  *
- * Copyright 2002 - 2007 Graeme W. Gill
+ * Copyright 2002 - 2013 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -192,7 +192,7 @@ int main(int argc, char *argv[])
 			else if (argv[fa][1] == 'S') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to -S");
-				if (sscanf(na, " %lu ",&seed) != 1)
+				if (sscanf(na, " %u ",&seed) != 1)
 					usage("Couldn't parse argument to -S");
 			}
 

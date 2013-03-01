@@ -1,8 +1,6 @@
 .
 numlib
-libusb
-libusbw
-libusb1
+usb
 plot
 icc
 cgats
@@ -26,5 +24,3 @@ ref
 doc
 tiff
 jpg
-icc4
-icc4/doc

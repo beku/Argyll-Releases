@@ -68,10 +68,10 @@ Main verify : verify.c ;
 LINKLIBS = libprof ../gamut/libgammap $(LINKLIBS) $(TIFFLIB) $(JPEGLIB) ;
 
 # Full profile generator
-Main colprof : colprof.c : : : $(TIFFINC) $(JPEGLIB) : : ;
+Main colprof : colprof.c : : : $(TIFFINC) $(JPEGINC) ;
 
 # Print calibration
-Main printcal : printcal.c : : : $(TIFFINC) $(JPEGLIB) ;
+Main printcal : printcal.c : : : $(TIFFINC) $(JPEGINC) ;
 
 # Applying calibration
 Main applycal : applycal.c ;
@@ -80,7 +80,7 @@ Main applycal : applycal.c ;
 #Main sepgen : sepgen.c ;
 
 # Test code
-if $(HOME) = "d:\\usr\\graeme" {
+if $(HOME) = "d:\\usr\\graeme" && $(PWD) = "/src/argyll/profile" {
     Main specinpprof : specinpprof.c ;
 }
 

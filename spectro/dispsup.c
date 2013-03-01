@@ -7,7 +7,7 @@
  * Author: Graeme W. Gill
  * Date:   2/11/2005
  *
- * Copyright 1998 - 2007 Graeme W. Gill
+ * Copyright 1998 - 2013 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -16,6 +16,8 @@
 
 /* 
 	TTBD:
+
+		If verb, report white/black drift
 
 		Should add option to ask for a black cal every N readings, for spectro's
  */
@@ -35,24 +37,17 @@
 #include "numlib.h"
 #include "xspect.h"
 #include "insttypes.h"
+#include "conv.h"
 #include "icoms.h"
 #include "inst.h"
 #include "spyd2.h"
-#include "conv.h"
 #include "dispwin.h"
 #include "dispsup.h"
 #include "webwin.h"
+#include "instappsup.h"
 
-#undef DEBUG
 #undef SIMPLE_MODEL		/* Make fake device well behaved */
-
-#define dbgo stderr
-
-#ifdef DEBUG
-#define DBG(xxx) fprintf xxx ;
-#else
-#define DBG(xxx) if (p != NULL && p->debug) fprintf xxx ;
-#endif
+						/* else has offsets, quantization, noise etc. */
 
 #define DRIFT_IPERIOD	40	/* Number of samples between drift interpolation measurements */
 #define DRIFT_EPERIOD	20	/* Number of samples between drift extrapolation measurements */
@@ -60,7 +55,7 @@
 //#define DRIFT_EPERIOD	3
 
 #ifdef SIMPLE_MODEL
-# undef FAKE_NOISE		/* Add noise to _fake_ devices XYZ */
+# undef FAKE_NOISE			/* Add noise to _fake_ devices XYZ */
 # undef FAKE_BITS 			/* Number of bits of significance of fake device */
 #else
 # define FAKE_NOISE 0.01		/* Add noise to _fake_ devices XYZ */
@@ -80,7 +75,7 @@ inst_code setup_display_calibrate(
 ) {
 	inst_code rv = inst_ok, ev;
 	dispwin *dw;	/* Display window to display test patches on, NULL if none. */
-	DBG((dbgo,"setup_display_calibrate called\n"))
+	a1logd(p->log,1,"setup_display_calibrate called\n");
 
 	switch (calc) {
 		case inst_calc_none:		/* Use this as a cleanup flag */
@@ -90,21 +85,20 @@ inst_code setup_display_calibrate(
 			}
 			break;
 
-		case inst_calc_disp_white:
-		case inst_calc_proj_white:
+		case inst_calc_emis_white:
 			if (dwi->dw == NULL) {
 				if (dwi->webdisp != 0) {
-					if ((dwi->_dw = new_webwin(dwi->webdisp, dwi->patsize, dwi->patsize,
+					if ((dwi->_dw = new_webwin(dwi->webdisp, dwi->hpatsize, dwi->vpatsize,
 					                      dwi->ho, dwi->vo, 0, dwi->blackbg,
-					                      p->verb, p->debug)) == NULL) {
-						DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
+					                      p->log->verb, p->log->debug)) == NULL) {
+						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
 						return inst_other_error; 
 					}
 				} else {
-					if ((dwi->_dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
+					if ((dwi->_dw = new_dispwin(dwi->disp, dwi->hpatsize, dwi->vpatsize,
 					                      dwi->ho, dwi->vo, 0, 0, NULL, dwi->blackbg,
-					                      dwi->override, p->debug)) == NULL) {
-						DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
+					                      dwi->override, p->log->debug)) == NULL) {
+						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
 						return inst_other_error; 
 					}
 				}
@@ -118,25 +112,22 @@ inst_code setup_display_calibrate(
 			dwi->_dw->set_color(dwi->_dw, 1.0, 1.0, 1.0);
 			break;
 
-		case inst_calc_disp_grey:
-		case inst_calc_disp_grey_darker: 
-		case inst_calc_disp_grey_ligher:
-		case inst_calc_proj_grey:
-		case inst_calc_proj_grey_darker: 
-		case inst_calc_proj_grey_ligher:
+		case inst_calc_emis_grey:
+		case inst_calc_emis_grey_darker: 
+		case inst_calc_emis_grey_ligher:
 			if (dwi->dw == NULL) {
 				if (dwi->webdisp != 0) {
-					if ((dwi->_dw = new_webwin(dwi->webdisp, dwi->patsize, dwi->patsize,
+					if ((dwi->_dw = new_webwin(dwi->webdisp, dwi->hpatsize, dwi->vpatsize,
 					                      dwi->ho, dwi->vo, 0, dwi->blackbg,
-					                      p->verb, p->debug)) == NULL) {
-						DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
+					                      p->log->verb, p->log->debug)) == NULL) {
+						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
 						return inst_other_error; 
 					}
 				} else {
-					if ((dwi->_dw = new_dispwin(dwi->disp, dwi->patsize, dwi->patsize,
+					if ((dwi->_dw = new_dispwin(dwi->disp, dwi->hpatsize, dwi->vpatsize,
 					                      dwi->ho, dwi->vo, 0, 0, NULL, dwi->blackbg,
-					                      dwi->override, p->debug)) == NULL) {
-						DBG((dbgo,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error))
+					                      dwi->override, p->log->debug)) == NULL) {
+						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
 						return inst_other_error; 
 					}
 				}
@@ -146,16 +137,13 @@ inst_code setup_display_calibrate(
 			} else {
 				dwi->_dw = dwi->dw;
 			}
-			if (calc == inst_calc_disp_grey
-			 || calc == inst_calc_proj_grey) {
+			if (calc == inst_calc_emis_grey) {
 				p->cal_gy_level = 0.6;
 				p->cal_gy_count = 0;
-			} else if (calc == inst_calc_disp_grey_darker
-			        || calc == inst_calc_proj_grey_darker) {
+			} else if (calc == inst_calc_emis_grey_darker) {
 				p->cal_gy_level *= 0.7;
 				p->cal_gy_count++;
-			} else if (calc == inst_calc_disp_grey_ligher
-			        || calc == inst_calc_proj_grey_ligher) {
+			} else if (calc == inst_calc_emis_grey_ligher) {
 				p->cal_gy_level *= 1.4;
 				if (p->cal_gy_level > 1.0)
 					p->cal_gy_level = 1.0;
@@ -163,7 +151,7 @@ inst_code setup_display_calibrate(
 			}
 			if (p->cal_gy_count > 4) {
 				printf("Cell ratio calibration failed - too many tries at setting grey level.\n");
-				DBG((dbgo,"inst_handle_calibrate too many tries at setting grey level 0x%x\n",inst_internal_error))
+				a1logd(p->log,1,"inst_handle_calibrate too many tries at setting grey level 0x%x\n",inst_internal_error);
 				return inst_internal_error; 
 			}
 			dwi->_dw->set_color(dwi->_dw, p->cal_gy_level, p->cal_gy_level, p->cal_gy_level);
@@ -171,7 +159,7 @@ inst_code setup_display_calibrate(
 
 		default:
 			/* Something isn't being handled */
-			DBG((dbgo,"inst_handle_calibrate unhandled calc case 0x%x, err 0x%x\n",calc,inst_internal_error))
+			a1logd(p->log,1,"inst_handle_calibrate unhandled calc case 0x%x, err 0x%x\n",calc,inst_internal_error);
 			return inst_internal_error;
 	}
 	return inst_ok;
@@ -179,25 +167,25 @@ inst_code setup_display_calibrate(
 
 /* -------------------------------------------------------- */
 /* User requested calibration of the display instrument */
-/* (Not supporting inst_crt_freq_cal, inst_calt_disp_int_time or inst_calt_proj_int_time */
-/*  since these are done automatically in dispsup.) */
+/* Do all available non-deferrable calibrations */
 /* Should add an argument to be able to select type of calibration, */
 /* rather than guessing what the user wants ? */
 int disprd_calibration(
-int comport, 			/* COM port used */
+icompath *ipath,		/* Instrument path to open, &icomFakeDevice == fake */
 flow_control fc,		/* Serial flow control */
 int dtype,				/* Display type selection character */
-int proj,				/* NZ for projector mode, falls back to display mode */
-int adaptive,			/* NZ for adaptive mode */
-int noautocal,				/* NZ to disable auto instrument calibration */
+int docbid,				/* NZ to only allow cbid dtypes */
+int tele,				/* NZ for tele mode, falls back to spot mode */
+int nadaptive,			/* NZ for non-adaptive mode */ 
+int noinitcal,			/* NZ to disable initial instrument calibration */
 disppath *disp,			/* display to calibrate. */
 int webdisp,			/* If nz, port number for web display */
 int blackbg,			/* NZ if whole screen should be filled with black */
 int override,			/* Override_redirect on X11 */
-double patsize,			/* Size of dispwin */
+double hpatsize,		/* Size of dispwin */
+double vpatsize,
 double ho, double vo,	/* Position of dispwin */
-int verb,				/* Verbosity flag */
-int debug				/* Debug flag */
+a1log *log				/* Verb, debug & error log */
 ) {
 	instType itype = instUnknown;
 	inst *p = NULL;
@@ -205,9 +193,10 @@ int debug				/* Debug flag */
 	inst_code rv;
 	baud_rate br = baud_19200;
 	disp_win_info dwi;
-	inst_cal_type calt = inst_calt_all;
-	inst_capability  cap;
+	inst_cal_type calt = inst_calt_needed;
+	inst_mode  cap;
 	inst2_capability cap2;
+	inst3_capability cap3;
 	inst_mode mode = 0;
 
 	memset((void *)&dwi, 0, sizeof(disp_win_info));
@@ -215,133 +204,93 @@ int debug				/* Debug flag */
 	dwi.disp = disp; 
 	dwi.blackbg = blackbg;
 	dwi.override = override;
-	dwi.patsize = patsize;
+	dwi.hpatsize = hpatsize;
+	dwi.vpatsize = vpatsize;
 	dwi.ho = ho;
 	dwi.vo = vo;
 
-	if (verb)
-		printf("Setting up the instrument\n");
+	p->log = new_a1log_d(log);
 
-	if ((p = new_inst(comport, 0, debug, verb)) == NULL) {
-		DBG((dbgo,"new_inst failed\n"))
+	a1logv(log, 1, "Setting up the instrument\n");
+
+	if ((p = new_inst(ipath, 0, log, DUIH_FUNC_AND_CONTEXT)) == NULL) {
+		a1logd(log, 1, "new_inst failed\n");
 		return -1;
 	}
 
 	/* Establish communications */
-	if ((rv = p->init_coms(p, comport, br, fc, 15.0)) != inst_ok) {
-		DBG((dbgo,"init_coms returned '%s' (%s)\n",
-		       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
+	if ((rv = p->init_coms(p, br, fc, 15.0)) != inst_ok) {
+		a1logd(p->log, 1, "init_coms returned '%s' (%s)\n",
+		       p->inst_interp_error(p, rv), p->interp_error(p, rv));
 		p->del(p);
 		return -1;
 	}
 
 	/* Initialise the instrument */
 	if ((rv = p->init_inst(p)) != inst_ok) {
-		DBG((dbgo,"init_inst returned '%s' (%s)\n",
-		       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
+		a1logd(log,1,"init_inst returned '%s' (%s)\n",
+		       p->inst_interp_error(p, rv), p->interp_error(p, rv));
 		p->del(p);
 		return -1;
 	}
 
 	itype = p->get_itype(p);			/* Actual type */
-	cap  = p->capabilities(p);
-	cap2 = p->capabilities2(p);
+	p->capabilities(p, &cap, &cap2, &cap3);
 
-	if (proj && (cap & inst_emis_proj) == 0) {
-		printf("Want projection measurement capability but instrument doesn't support it\n");
-		printf("so falling back to display mode.\n");
-		proj = 0;
+	if (tele && !IMODETST(cap, inst_mode_emis_tele)) {
+		printf("Want telephoto measurement capability but instrument doesn't support it\n");
+		printf("so falling back to emissive spot mode.\n");
+		tele = 0;
 	}
 	
 	/* Set to emission mode to read a display */
-	if (proj) {
-		if (adaptive)
-			mode = inst_mode_emis_tele;
-		else
-			mode = inst_mode_emis_proj;
-	} else {
-		if (adaptive)
-			mode = inst_mode_emis_spot;
-		else
-			mode = inst_mode_emis_disp;
-	}
+	if (tele)
+		mode = inst_mode_emis_tele;
+	else
+		mode = inst_mode_emis_spot;
+	if (nadaptive)
+		mode |= inst_mode_emis_nonadaptive;
 	
 	/* (We're assuming spectral doesn't affect calibration ?) */
 
 	if ((rv = p->set_mode(p, mode)) != inst_ok) {
-		DBG((dbgo,"Set_mode failed with '%s' (%s)\n",
-		       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
+		a1logd(log,1,"Set_mode failed with '%s' (%s)\n",
+		       p->inst_interp_error(p, rv), p->interp_error(p, rv));
 		return -1;
 	}
-	cap  = p->capabilities(p);
-	cap2 = p->capabilities2(p);
+	p->capabilities(p, &cap, &cap2, &cap3);
 
 	/* Set the display type */
-	if (dtype != 0) {
-
-		if (cap & inst_emis_disptype) {
+	if (dtype != 0) {		/* Given selection character */
+		if (cap2 & inst2_disptype) {
 			int ix;
-			if ((ix = inst_get_disptype_index(p, dtype)) == 0) {
-				DBG((dbgo,"Display type selection '%c' is not valid for instrument\n",dtype))
+			if ((ix = inst_get_disptype_index(p, dtype, docbid)) < 0) {
+				a1logd(log,1,"Display type selection '%c' is not valid for instrument\n",dtype);
 				p->del(p);
 				return -1;
 			}
 		
-			if ((rv = p->set_opt_mode(p, inst_opt_disp_type, ix)) != inst_ok) {
-				DBG((dbgo,"Setting display type failed failed with '%s' (%s)\n",
-				       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
+			if ((rv = p->set_disptype(p, ix)) != inst_ok) {
+				a1logd(log,1,"Setting display type failed failed with '%s' (%s)\n",
+				       p->inst_interp_error(p, rv), p->interp_error(p, rv));
 				p->del(p);
 				return -1;
 			}
 		} else
 			printf("Display type ignored - instrument doesn't support display type\n");
-	} else if (cap & (inst_emis_disptypem)) {
-		printf("A display type must be selected\n");
-		p->del(p);
-		return -1;
 	}
 
-	/* Disable autocalibration of machine if selected */
-	if (noautocal != 0) {
-		if ((rv = p->set_opt_mode(p,inst_opt_noautocalib)) != inst_ok) {
-			DBG((dbgo,"Setting no-autocalibrate failed failed with '%s' (%s)\n",
-			       p->inst_interp_error(p, rv), p->interp_error(p, rv)))
-			printf("Disable auto-calibrate not supported\n");
+	/* Disable initial calibration of machine if selected */
+	if (noinitcal != 0) {
+		if ((rv = p->get_set_opt(p,inst_opt_noinitcalib, 0)) != inst_ok) {
+			a1logd(log,1,"Setting no-initail calibrate failed with '%s' (%s)\n",
+			       p->inst_interp_error(p, rv), p->interp_error(p, rv));
+			printf("Disable initial-calibrate not supported\n");
 		}
 	}
 
-	/* Guess a calibration type */
-	if (cap2 & inst2_cal_ref_white) {
-		/* White or emmission mode calibration (ie. Spectrolino) */
-		calt = inst_calt_ref_white;
-
-	} else if (cap2 & inst2_cal_disp_offset) {
-		/* Offset calibration */
-		calt = inst_calt_disp_offset;
-	} else if (cap2 & inst2_cal_disp_ratio) {
-		/* Cell ratio calibration */
-		calt = inst_calt_disp_ratio;
-	} else if (cap2 & inst2_cal_disp_int_time) {
-		/* Integration time calibration for display mode */
-		calt = inst_calt_disp_int_time;
-
-	} else if (cap2 & inst2_cal_proj_offset) {
-		/* Offset calibration */
-		calt = inst_calt_proj_offset;
-	} else if (cap2 & inst2_cal_proj_ratio) {
-		/* Cell ratio calibration */
-		calt = inst_calt_proj_ratio;
-	} else if (cap2 & inst2_cal_proj_int_time) {
-		/* Integration time calibration for projector mode */
-		calt = inst_calt_proj_int_time;
-
-	} else if (cap2 & inst2_cal_crt_freq) {
-		/* Frequency calibration for CRT */
-		calt = inst_calt_crt_freq;
-	}
-	
 	/* Do the calibration */
-	rv = inst_handle_calibrate(p, calt, inst_calc_none, setup_display_calibrate, &dwi);
+	rv = inst_handle_calibrate(p, inst_calt_available, inst_calc_none, setup_display_calibrate, &dwi);
 	setup_display_calibrate(p,inst_calc_none, &dwi); 
 	if (rv == inst_unsupported) {
 		printf("No calibration available for instrument in this mode\n");
@@ -354,7 +303,7 @@ int debug				/* Debug flag */
 
 	/* clean up */
 	p->del(p);
-	if (verb) printf("Closing the instrument\n");
+	a1logv(log, 1, "Finished setting up the instrument\n");
 
 	return 0;
 }
@@ -375,7 +324,8 @@ static int disprd_read_imp(
 	int tpat,		/* Total patch index for "verb", 0 if not used */
 	int acr,		/* If nz, do automatic final carriage return */
 	int noinc,		/* If nz, don't increment the count */
-	int tc			/* If nz, termination key */
+	int tc,			/* If nz, termination key */
+	instClamping clamp	/* NZ if clamp XYZ/Lab to be +ve */
 ) {
 	int j, rv;
 	int patch;
@@ -383,67 +333,86 @@ static int disprd_read_imp(
 	int ch;			/* Character */
 	int cal_type;
 	char id[CALIDLEN];
+	inst2_capability cap2;
+
+	/* Setup the keyboard trigger to return our commands */
+	inst_set_uih(0x0, 0xff,  DUIH_TRIG);
+	inst_set_uih('q', 'q',   DUIH_ABORT);
+	inst_set_uih('Q', 'Q',   DUIH_ABORT);
+	inst_set_uih(0x03, 0x03, DUIH_ABORT);		/* ^c */
+	inst_set_uih(0x1b, 0x1b, DUIH_ABORT);		/* Esc */
 
 	/* Setup user termination character */
-	p->it->icom->set_uih(p->it->icom, tc, tc, ICOM_TERM);
+	inst_set_uih(tc, tc, DUIH_TERM);
 
-	/* See if we should do a frequency calibration or display intergaation time cal. first */
-	if ((p->it->capabilities2(p->it) & inst2_cal_crt_freq) != 0
-	 && p->it->needs_calibration(p->it) == inst_calt_crt_freq
+	p->it->capabilities(p->it, NULL, &cap2, NULL);
+
+	/* See if we should calibrate the display update */
+	if (!p->update_delay_set && (cap2 & inst2_meas_disp_update) != 0) {
+		int cdelay, mdelay;
+
+		/* Set white with a normal delay */
+		if ((rv = p->dw->set_color(p->dw, 1.0, 1.0, 1.0)) != 0) {
+			a1logd(p->log,1,"set_color() returned %s\n",rv);
+			return 3;
+		}
+		
+		/* Set a zero delay */
+		cdelay = p->dw->set_update_delay(p->dw, 0);
+
+		/* Set black with zero delay */
+		if ((rv = p->dw->set_color(p->dw, 0.0, 0.0, 0.0)) != 0) {
+			a1logd(p->log,1,"set_color() returned %s\n",rv);
+			return 3;
+		}
+		
+		/* Measure the delay */
+		if ((rv = p->it->meas_delay(p->it, &mdelay)) != inst_ok) {
+			a1logd(p->log,1,"warning, measure display update delay failed with '%s' (%s)\n",
+				      p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
+			p->dw->set_update_delay(p->dw, cdelay);		/* Restore the default */
+		} else {
+			a1logv(p->log, 1, "Measured display update delay of %d msec",mdelay);
+			mdelay += mdelay/2 + 50;
+			p->dw->set_update_delay(p->dw, mdelay);
+			a1logv(p->log, 1, ", using delay of %d msec\n",mdelay);
+		}
+		p->update_delay_set = 1;
+	}
+
+	/* See if we should do a frequency calibration or display integration time cal. first */
+	if (p->it->needs_calibration(p->it) & inst_calt_ref_freq
 	 && npat > 0
 	 && (cols[0].r != 1.0 || cols[0].g != 1.0 || cols[0].b != 1.0)) {
 		col tc;
-		inst_cal_cond calc;
-
-		if (p->proj)
-			calc = inst_calc_proj_white;
-		else
-			calc = inst_calc_disp_white;
+		inst_cal_type calt = inst_calt_ref_freq;
+		inst_cal_cond calc = inst_calc_emis_white;
 
 		if ((rv = p->dw->set_color(p->dw, 1.0, 1.0, 1.0)) != 0) {
-			DBG((dbgo,"set_color() returned %s\n",rv))
+			a1logd(p->log,1,"set_color() returned %s\n",rv);
 			return 3;
 		}
 		/* Do calibrate, but ignore return code. Press on regardless. */
-		if ((rv = p->it->calibrate(p->it, inst_calt_crt_freq, &calc, id)) != inst_ok) {
-			DBG((dbgo,"warning, frequency calibrate failed with '%s' (%s)\n",
-				      p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+		if ((rv = p->it->calibrate(p->it, &calt, &calc, id)) != inst_ok) {
+			a1logd(p->log,1,"warning, frequency calibrate failed with '%s' (%s)\n",
+				      p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 		}
 	}
 
-	if (p->proj) {
-		/* See if we should do a projector integration calibration first */
-		if ((p->it->capabilities2(p->it) & inst2_cal_proj_int_time) != 0
-		 && p->it->needs_calibration(p->it) == inst_calt_proj_int_time) {
-			col tc;
-			inst_cal_cond calc = inst_calc_proj_white;
-	
-			if ((rv = p->dw->set_color(p->dw, 1.0, 1.0, 1.0)) != 0) {
-				DBG((dbgo,"set_color() returned %s\n",rv))
-				return 3;
-			}
-			/* Do calibrate, but ignore return code. Press on regardless. */
-			if ((rv = p->it->calibrate(p->it, inst_calt_proj_int_time, &calc, id)) != inst_ok) {
-				DBG((dbgo,"warning, projector integration calibrate failed with '%s' (%s)\n",
-					      p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-			}
+	/* See if we should do a display integration calibration first */
+	if (p->it->needs_calibration(p->it) & inst_calt_emis_int_time) {
+		col tc;
+		inst_cal_type calt = inst_calt_emis_int_time;
+		inst_cal_cond calc = inst_calc_emis_white;
+
+		if ((rv = p->dw->set_color(p->dw, 1.0, 1.0, 1.0)) != 0) {
+			a1logd(p->log,1,"set_color() returned %s\n",rv);
+			return 3;
 		}
-	} else {
-		/* See if we should do a display integration calibration first */
-		if ((p->it->capabilities2(p->it) & inst2_cal_disp_int_time) != 0
-		 && p->it->needs_calibration(p->it) == inst_calt_disp_int_time) {
-			col tc;
-			inst_cal_cond calc = inst_calc_disp_white;
-	
-			if ((rv = p->dw->set_color(p->dw, 1.0, 1.0, 1.0)) != 0) {
-				DBG((dbgo,"set_color() returned %s\n",rv))
-				return 3;
-			}
-			/* Do calibrate, but ignore return code. Press on regardless. */
-			if ((rv = p->it->calibrate(p->it, inst_calt_disp_int_time, &calc, id)) != inst_ok) {
-				DBG((dbgo,"warning, display integration calibrate failed with '%s' (%s)\n",
-					      p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-			}
+		/* Do calibrate, but ignore return code. Press on regardless. */
+		if ((rv = p->it->calibrate(p->it, &calt, &calc, id)) != inst_ok) {
+			a1logd(p->log,1,"warning, display integration calibrate failed with '%s' (%s)\n",
+				      p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 		}
 	}
 
@@ -451,16 +420,14 @@ static int disprd_read_imp(
 		col *scb = &cols[patch];
 		double rgb[3];
 
+		scb->mtype = inst_mrt_none;
 		scb->XYZ_v = 0;		/* No readings are valid */
-		scb->aXYZ_v = 0;
 		scb->sp.spec_n = 0;
 		scb->duration = 0.0;
 
-		if (p->verb && spat != 0 && tpat != 0) {
-			fprintf(p->df,"%cpatch %d of %d",cr_char,spat + (noinc != 0 ? 0 : patch),tpat);
-			fflush(p->df);
-		}
-		DBG((dbgo,"About to read patch %d\n",patch))
+		if (spat != 0 && tpat != 0)
+			a1logv(p->log, 1, "%cpatch %d of %d",cr_char,spat + (noinc != 0 ? 0 : patch),tpat);
+		a1logd(p->log,1,"About to read patch %d\n",patch);
 
 		rgb[0] = scb->r;
 		rgb[1] = scb->g;
@@ -489,44 +456,49 @@ static int disprd_read_imp(
 			}
 		}
 		if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
-			DBG((dbgo,"set_color() returned %s\n",rv))
+			a1logd(p->log,1,"set_color() returned %s\n",rv);
 			return 3;
 		}
 
 		/* Until we give up retrying */
 		for (;;) {
+			val.mtype = inst_mrt_none;
 			val.XYZ_v = 0;		/* No readings are valid */
-			val.aXYZ_v = 0;
 			val.sp.spec_n = 0;
 			val.duration = 0.0;
 	
-			if ((rv = p->it->read_sample(p->it, scb->id, &val)) != inst_ok
+			if ((rv = p->it->read_sample(p->it, scb->id, &val, 1)) != inst_ok
 			     && (rv & inst_mask) != inst_user_trig) {
-				DBG((dbgo,"read_sample returned '%s' (%s)\n",
-			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+				a1logd(p->log,1,"read_sample returned '%s' (%s)\n",
+			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 
-				/* Deal with a user terminate */
-				if ((rv & inst_mask) == inst_user_term) {
-					return 4;
+				/* deal with a user terminate or abort */
+				if ((rv & inst_mask) == inst_user_abort) {
+					int keyc = inst_get_uih_char();
 
-				/* Deal with a user abort */
-				} else if ((rv & inst_mask) == inst_user_abort) {
-					empty_con_chars();
-					printf("\nSample read stopped at user request!\n");
-					printf("Hit Esc or Q to give up, any other key to retry:"); fflush(stdout);
-					if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+					/* Deal with a user terminate */
+					if (keyc & DUIH_TERM) {
+						return 4;
+
+					/* Deal with a user abort */
+					} else if (keyc & DUIH_ABORT) {
+						empty_con_chars();
+						printf("\nSample read stopped at user request!\n");
+						printf("Hit Esc or Q to give up, any other key to retry:"); fflush(stdout);
+						if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+							printf("\n");
+							return 1;
+						}
 						printf("\n");
-						return 1;
+						continue;
 					}
-					printf("\n");
-					continue;
 
 				/* Deal with needing calibration */
 				} else if ((rv & inst_mask) == inst_needs_cal) {
 					disp_win_info dwi;
 					dwi.dw = p->dw;		/* Set window to use */
 					printf("\nSample read failed because instruments needs calibration\n");
-					rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none,
+					rv = inst_handle_calibrate(p->it, inst_calt_needed, inst_calc_none,
 					                                        setup_display_calibrate, &dwi);
 					setup_display_calibrate(p->it, inst_calc_none, &dwi); 
 					if (rv != inst_ok) {	/* Abort or fatal error */
@@ -535,7 +507,7 @@ static int disprd_read_imp(
 					continue;
 
 				/* Deal with a bad sensor position */
-				} else if ((rv & inst_mask) == inst_wrong_sensor_pos) {
+				} else if ((rv & inst_mask) == inst_wrong_config) {
 					empty_con_chars();
 					printf("\n\nSpot read failed due to the sensor being in the wrong position\n");
 					printf("(%s)\n",p->it->interp_error(p->it, rv));
@@ -571,16 +543,16 @@ static int disprd_read_imp(
 					printf("\n");
 					if (p->it->icom->port_type(p->it->icom) == icomt_serial) {
 						/* Allow retrying at a lower baud rate */
-						int tt = p->it->last_comerr(p->it);
+						int tt = p->it->last_scomerr(p->it);
 						if (tt & (ICOM_BRK | ICOM_FER | ICOM_PER | ICOM_OER)) {
 							if (p->br == baud_19200) p->br = baud_9600;
 							else if (p->br == baud_9600) p->br = baud_4800;
 							else if (p->br == baud_2400) p->br = baud_1200;
 							else p->br = baud_1200;
 						}
-						if ((rv = p->it->init_coms(p->it, p->comport, p->br, p->fc, 15.0)) != inst_ok) {
-							DBG((dbgo,"init_coms returned '%s' (%s)\n",
-						       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+						if ((rv = p->it->init_coms(p->it, p->br, p->fc, 15.0)) != inst_ok) {
+							a1logd(p->log,1,"init_coms returned '%s' (%s)\n",
+						       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 							return 2;
 						}
 					}
@@ -594,32 +566,27 @@ static int disprd_read_imp(
 		scb->serno = p->serno++;
 		scb->msec = msec_time();
 
-		DBG((dbgo, "got reading abs. %f %f %f, transfering to col\n",
-		                val.aXYZ[0], val.aXYZ[1], val.aXYZ[2]))
+		a1logd(p->log,1, "got reading %f %f %f, transfering to col\n",
+		                val.XYZ[0], val.XYZ[1], val.XYZ[2]);
 
-		/* Copy relative XYZ */
+		scb->mtype = val.mtype;
+
+		/* Copy XYZ */
 		if (val.XYZ_v != 0) {
 			for (j = 0; j < 3; j++)
 				scb->XYZ[j] = val.XYZ[j];
 			scb->XYZ_v = 1;
 		}
 
-		/* Copy absolute XYZ */
-		if (val.aXYZ_v != 0) {
-			for (j = 0; j < 3; j++)
-				scb->aXYZ[j] = val.aXYZ[j];
-			scb->aXYZ_v = 1;
-		}
-
 		/* Copy spectral */
 		if (p->spectral && val.sp.spec_n > 0) {
 			scb->sp = val.sp;
 		}
-		DBG((dbgo,"on to next reading\n"))
+		a1logd(p->log,1,"on to next reading\n");
 	}
 	/* Final return. */
-	if (acr && p->verb && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
-		fprintf(p->df,"\n");
+	if (acr && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
+		a1logv(p->log, 1, "\n");
 	return 0;
 }
 
@@ -646,7 +613,8 @@ static int disprd_read_drift(
 	int spat,		/* Start patch index for "verb", 0 if not used */
 	int tpat,		/* Total patch index for "verb", 0 if not used */
 	int acr,		/* If nz, do automatic final carriage return */
-	int tc			/* If nz, termination key */
+	int tc,			/* If nz, termination key */
+	instClamping clamp	/* NZ if clamp XYZ/Lab to be +ve */
 ) {
 	int rv, i, j, e;
 	double fper, foff;
@@ -667,7 +635,7 @@ static int disprd_read_drift(
 		dno = 2;
 	}
 
-	/* If the last readings are invalid or too old, */
+	/* If the last drift readings are invalid or too old, */
 	/* or if we will use interpolation, read b&w */
 #ifdef NEVER
 	printf("last_bw_v = %d (%d)\n",p->last_bw_v,p->last_bw_v == 0);
@@ -688,7 +656,7 @@ static int disprd_read_drift(
 		p->last_bw[1].r = 
 		p->last_bw[1].g = 
 		p->last_bw[1].b = 1.0; 
-		if ((rv = disprd_read_imp(p, &p->last_bw[boff], dno, spat, tpat, 0, 1, tc)) != 0) {
+		if ((rv = disprd_read_imp(p, &p->last_bw[boff], dno, spat, tpat, 0, 1, tc, 0)) != 0) {
 			return rv;
 		}
 		p->last_bw_v = 1;
@@ -701,6 +669,7 @@ static int disprd_read_drift(
 		}
 	}
 
+	/* If there are enough patches to bracket with drift readings */ 
 	if (npat > DRIFT_EPERIOD) {
 		int ndrift = 2;			/* Number of drift records */
 		dsamples *dss;
@@ -710,7 +679,7 @@ static int disprd_read_drift(
 //printf("~1 spat %d, npat = %d, tpat %d, ndrift = %d\n",spat,npat,tpat,ndrift);
 
 		if ((dss = (dsamples *)calloc(sizeof(dsamples), ndrift)) == NULL) {
-			DBG((dbgo, "malloc of %d dsamples failed\n",ndrift))
+			a1logd(p->log,1, "malloc of %d dsamples failed\n",ndrift);
 			return 5;
 		}
 	
@@ -737,43 +706,44 @@ static int disprd_read_drift(
 			dss[i].dcols[1].b = 1.0; 
 		}
 
+		/* For each batch of patches bracketed by drift patch readings */
 		for (i = 0; i < (ndrift-1); i++) {
 
-			if (i == 0) {
+			if (i == 0) {	/* Already done very first drift patches, so use them */
 				/* Use last b&w */
 				dss[i].dcols[0] = p->last_bw[0];
 				dss[i].dcols[1] = p->last_bw[1];
 			} else {
-				/* Read the black and/or white drift patch */
-				if ((rv = disprd_read_imp(p, &dss[i].dcols[boff], dno, spat+dss[i].off, tpat, 0, 1, tc)) != 0) {
+				/* Read the black and/or white drift patchs before next batch */
+				if ((rv = disprd_read_imp(p, &dss[i].dcols[boff], dno, spat+dss[i].off, tpat, 0, 1, tc, 0)) != 0) {
 					free(dss);
 					return rv;
 				}
 			}
 			/* Read this batch of patches */
-			if ((rv = disprd_read_imp(p, &cols[dss[i].off], dss[i].count,spat+dss[i].off,tpat,0,0,tc)) != 0) {
+			if ((rv = disprd_read_imp(p, &cols[dss[i].off], dss[i].count,spat+dss[i].off,tpat,0,0,tc, 0)) != 0) {
 				free(dss);
 				return rv;
 			}
 		}
-		/* Read the last black and/or white drift patch */
-		if ((rv = disprd_read_imp(p, &dss[i].dcols[boff], dno, spat+dss[i].off-1, tpat, 0, 1, tc)) != 0) {
+		/* Read the black and/or white drift patchs after last batch */
+		if ((rv = disprd_read_imp(p, &dss[i].dcols[boff], dno, spat+dss[i].off-1, tpat, 0, 1, tc, 0)) != 0) {
 			free(dss);
 			return rv;
 		}
-		/* Remember the last */
+		/* Remember the last for next time */
 		p->last_bw[0] = dss[i].dcols[0];
 		p->last_bw[1] = dss[i].dcols[1];
 		p->last_bw_v = 1;
 
-		/* Set the white drift reference to be the last one */
+		/* Set the white drift target to be the last one for batch */
 		p->targ_w = p->last_bw[1];
 		p->targ_w_v = 1;
 
-//printf("~1 ref b = %f %f %f\n", p->ref_bw[0].aXYZ[0], p->ref_bw[0].aXYZ[1], p->ref_bw[0].aXYZ[2]);
-//printf("~1 ref w = %f %f %f\n", p->ref_bw[1].aXYZ[0], p->ref_bw[1].aXYZ[1], p->ref_bw[1].aXYZ[2]);
-//printf("~1 ndrift-1 b = %f %f %f\n", dss[ndrift-1].dcols[0].aXYZ[0], dss[ndrift-1].dcols[0].aXYZ[1], dss[ndrift-1].dcols[0].aXYZ[2]);
-//printf("~1 ndrift-1 w = %f %f %f\n", dss[ndrift-1].dcols[1].aXYZ[0], dss[ndrift-1].dcols[1].aXYZ[1], dss[ndrift-1].dcols[1].aXYZ[2]);
+//printf("~1 ref b = %f %f %f\n", p->ref_bw[0].XYZ[0], p->ref_bw[0].XYZ[1], p->ref_bw[0].XYZ[2]);
+//printf("~1 ref w = %f %f %f\n", p->ref_bw[1].XYZ[0], p->ref_bw[1].XYZ[1], p->ref_bw[1].XYZ[2]);
+//printf("~1 ndrift-1 b = %f %f %f\n", dss[ndrift-1].dcols[0].XYZ[0], dss[ndrift-1].dcols[0].XYZ[1], dss[ndrift-1].dcols[0].XYZ[2]);
+//printf("~1 ndrift-1 w = %f %f %f\n", dss[ndrift-1].dcols[1].XYZ[0], dss[ndrift-1].dcols[1].XYZ[1], dss[ndrift-1].dcols[1].XYZ[2]);
 
 		/* Apply the drift compensation using interpolation */
 		for (i = 0; i < (ndrift-1); i++) {
@@ -783,8 +753,8 @@ static int disprd_read_drift(
 				double we;		/* Interpolation weight of eairlier value */
 				col bb, ww;		/* Interpolated black and white */
 //double uXYZ[3];
-//icmCpy3(uXYZ, cols[k].aXYZ);
-//printf("~1 patch %d = %f %f %f\n", k, cols[k].aXYZ[0], cols[k].aXYZ[1], cols[k].aXYZ[2]);
+//icmCpy3(uXYZ, cols[k].XYZ);
+//printf("~1 patch %d = %f %f %f\n", k, cols[k].XYZ[0], cols[k].XYZ[1], cols[k].XYZ[2]);
 				if (p->bdrift) {
 					we = (double)(dss[i+1].dcols[0].msec - cols[k].msec)/
 					     (double)(dss[i+1].dcols[0].msec - dss[i].dcols[0].msec);
@@ -794,13 +764,7 @@ static int disprd_read_drift(
 							bb.XYZ[e] =        we  * dss[i].dcols[0].XYZ[e]
 							          + (1.0 - we) * dss[i+1].dcols[0].XYZ[e];
 						}
-					}
-					if (cols[k].aXYZ_v) {
-						for (e = 0; e < 3; e++) {
-							bb.aXYZ[e] =        we  * dss[i].dcols[0].aXYZ[e]
-							          + (1.0 - we) * dss[i+1].dcols[0].aXYZ[e];
-						}
-//printf("~1 bb = %f %f %f\n", bb.aXYZ[0], bb.aXYZ[1], bb.aXYZ[2]);
+//printf("~1 bb = %f %f %f\n", bb.XYZ[0], bb.XYZ[1], bb.XYZ[2]);
 					}
 					if (cols[k].sp.spec_n > 0) {
 						for (e = 0; e < cols[k].sp.spec_n; e++) {
@@ -818,13 +782,7 @@ static int disprd_read_drift(
 							ww.XYZ[e] =        we  * dss[i].dcols[1].XYZ[e]
 							          + (1.0 - we) * dss[i+1].dcols[1].XYZ[e];
 						}
-					}
-					if (cols[k].aXYZ_v) {
-						for (e = 0; e < 3; e++) {
-							ww.aXYZ[e] =        we  * dss[i].dcols[1].aXYZ[e]
-							          + (1.0 - we) * dss[i+1].dcols[1].aXYZ[e];
-						}
-//printf("~1 ww = %f %f %f\n", ww.aXYZ[0], ww.aXYZ[1], ww.aXYZ[2]);
+//printf("~1 ww = %f %f %f\n", ww.XYZ[0], ww.XYZ[1], ww.XYZ[2]);
 					}
 					if (cols[k].sp.spec_n > 0) {
 						for (e = 0; e < cols[k].sp.spec_n; e++) {
@@ -841,12 +799,7 @@ static int disprd_read_drift(
 							for (e = 0; e < 3; e++) {
 								bb.XYZ[e] *= p->ref_bw[1].XYZ[e]/ww.XYZ[e];
 							}
-						}
-						if (cols[k].aXYZ_v) {
-							for (e = 0; e < 3; e++) {
-								bb.aXYZ[e] *= p->ref_bw[1].aXYZ[e]/ww.aXYZ[e];
-							}
-//printf("~1 wcomp bb = %f %f %f\n", bb.aXYZ[0], bb.aXYZ[1], bb.aXYZ[2]);
+//printf("~1 wcomp bb = %f %f %f\n", bb.XYZ[0], bb.XYZ[1], bb.XYZ[2]);
 						}
 						if (cols[k].sp.spec_n > 0) {
 							for (e = 0; e < cols[k].sp.spec_n; e++) {
@@ -860,12 +813,7 @@ static int disprd_read_drift(
 						for (e = 0; e < 3; e++) {
 							cols[k].XYZ[e] += p->ref_bw[0].XYZ[e] - bb.XYZ[e];
 						}
-					}
-					if (cols[k].aXYZ_v) {
-						for (e = 0; e < 3; e++) {
-							cols[k].aXYZ[e] += p->ref_bw[0].aXYZ[e] - bb.aXYZ[e];
-						}
-//printf("~1 bcomp patch = %f %f %f\n",  cols[k].aXYZ[0], cols[k].aXYZ[1], cols[k].aXYZ[2]);
+//printf("~1 bcomp patch = %f %f %f\n",  cols[k].XYZ[0], cols[k].XYZ[1], cols[k].XYZ[2]);
 					}
 					if (cols[k].sp.spec_n > 0) {
 						for (e = 0; e < cols[k].sp.spec_n; e++) {
@@ -879,12 +827,7 @@ static int disprd_read_drift(
 						for (e = 0; e < 3; e++) {
 							cols[k].XYZ[e] *= p->targ_w.XYZ[e]/ww.XYZ[e];
 						}
-					}
-					if (cols[k].aXYZ_v) {
-						for (e = 0; e < 3; e++) {
-							cols[k].aXYZ[e] *= p->targ_w.aXYZ[e]/ww.aXYZ[e];
-						}
-//printf("~1 wcomp patch = %f %f %f\n",  cols[k].aXYZ[0], cols[k].aXYZ[1], cols[k].aXYZ[2]);
+//printf("~1 wcomp patch = %f %f %f\n",  cols[k].XYZ[0], cols[k].XYZ[1], cols[k].XYZ[2]);
 					}
 					if (cols[k].sp.spec_n > 0) {
 						for (e = 0; e < cols[k].sp.spec_n; e++) {
@@ -892,17 +835,17 @@ static int disprd_read_drift(
 						}
 					}
 				}
-//printf("~1 %d: drift change %f DE\n",k,icmXYZLabDE(&icmD50, uXYZ, cols[k].aXYZ));
+//printf("~1 %d: drift change %f DE\n",k,icmXYZLabDE(&icmD50, uXYZ, cols[k].XYZ));
 			}
 		}
 		free(dss);
 
-	/* Else use extrapolation from the last b&w */
+	/* Else too small a batch, use extrapolation from the last b&w */
 	} else {
 
 //printf("~1 doing small number of readings\n");
 		/* Read the small number of patches */
-		if ((rv = disprd_read_imp(p, cols,npat,spat,tpat,acr,0,tc)) != 0)
+		if ((rv = disprd_read_imp(p, cols,npat,spat,tpat,acr,0,tc,0)) != 0)
 			return rv;
 
 		if (p->targ_w_v == 0) {
@@ -912,28 +855,27 @@ static int disprd_read_drift(
 //printf("~1 set white drift target\n");
 		}
 
-//printf("~1 ref b = %f %f %f\n", p->ref_bw[0].aXYZ[0], p->ref_bw[0].aXYZ[1], p->ref_bw[0].aXYZ[2]);
-//printf("~1 ref w = %f %f %f\n", p->ref_bw[1].aXYZ[0], p->ref_bw[1].aXYZ[1], p->ref_bw[1].aXYZ[2]);
-//printf("~1 last b = %f %f %f\n", p->last_bw[0].aXYZ[0], p->last_bw[0].aXYZ[1], p->last_bw[0].aXYZ[2]);
-//printf("~1 last w = %f %f %f\n", p->last_bw[1].aXYZ[0], p->last_bw[1].aXYZ[1], p->last_bw[1].aXYZ[2]);
-//printf("~1 target w = %f %f %f\n", p->targ_w.aXYZ[0], p->targ_w.aXYZ[1], p->targ_w.aXYZ[2]);
+//printf("~1 ref b = %f %f %f\n", p->ref_bw[0].XYZ[0], p->ref_bw[0].XYZ[1], p->ref_bw[0].XYZ[2]);
+//printf("~1 ref w = %f %f %f\n", p->ref_bw[1].XYZ[0], p->ref_bw[1].XYZ[1], p->ref_bw[1].XYZ[2]);
+//printf("~1 last b = %f %f %f\n", p->last_bw[0].XYZ[0], p->last_bw[0].XYZ[1], p->last_bw[0].XYZ[2]);
+//printf("~1 last w = %f %f %f\n", p->last_bw[1].XYZ[0], p->last_bw[1].XYZ[1], p->last_bw[1].XYZ[2]);
+//printf("~1 target w = %f %f %f\n", p->targ_w.XYZ[0], p->targ_w.XYZ[1], p->targ_w.XYZ[2]);
 		/* Apply the drift compensation using extrapolation */
-		/* Note that white compensation can't work in this case */
 		for (j = 0; j < npat; j++) {
 			double we;		/* Interpolation weight of eairlier value */
 			col bb, ww;		/* Interpolated black and white */
 
-//printf("~1 patch %d = %f %f %f\n", j, cols[j].aXYZ[0], cols[j].aXYZ[1], cols[j].aXYZ[2]);
+//printf("~1 patch %d = %f %f %f\n", j, cols[j].XYZ[0], cols[j].XYZ[1], cols[j].XYZ[2]);
 //double uXYZ[3];
-//icmCpy3(uXYZ, cols[j].aXYZ);
+//icmCpy3(uXYZ, cols[j].XYZ);
 
 			if (p->bdrift) {
 				bb = p->last_bw[0];
-//printf("~1 bb = %f %f %f\n", bb.aXYZ[0], bb.aXYZ[1], bb.aXYZ[2]);
+//printf("~1 bb = %f %f %f\n", bb.XYZ[0], bb.XYZ[1], bb.XYZ[2]);
 			}
 			if (p->wdrift) {
 				ww = p->last_bw[1];
-//printf("~1 ww = %f %f %f\n", ww.aXYZ[0], ww.aXYZ[1], ww.aXYZ[2]);
+//printf("~1 ww = %f %f %f\n", ww.XYZ[0], ww.XYZ[1], ww.XYZ[2]);
 			}
 
 			if (p->bdrift) {
@@ -943,12 +885,7 @@ static int disprd_read_drift(
 						for (e = 0; e < 3; e++) {
 							bb.XYZ[e] *= p->ref_bw[1].XYZ[e]/ww.XYZ[e];
 						}
-					}
-					if (cols[j].aXYZ_v) {
-						for (e = 0; e < 3; e++) {
-							bb.aXYZ[e] *= p->ref_bw[1].aXYZ[e]/ww.aXYZ[e];
-						}
-//printf("~1 wcomp bb = %f %f %f\n", bb.aXYZ[0], bb.aXYZ[1], bb.aXYZ[2]);
+//printf("~1 wcomp bb = %f %f %f\n", bb.XYZ[0], bb.XYZ[1], bb.XYZ[2]);
 					}
 					if (cols[j].sp.spec_n > 0) {
 						for (e = 0; e < cols[j].sp.spec_n; e++) {
@@ -962,12 +899,7 @@ static int disprd_read_drift(
 					for (e = 0; e < 3; e++) {
 						cols[j].XYZ[e] += p->ref_bw[0].XYZ[e] - bb.XYZ[e];
 					}
-				}
-				if (cols[j].aXYZ_v) {
-					for (e = 0; e < 3; e++) {
-						cols[j].aXYZ[e] += p->ref_bw[0].aXYZ[e] - bb.aXYZ[e];
-					}
-//printf("~1 bcomp patch = %f %f %f\n",  cols[j].aXYZ[0], cols[j].aXYZ[1], cols[j].aXYZ[2]);
+//printf("~1 bcomp patch = %f %f %f\n",  cols[j].XYZ[0], cols[j].XYZ[1], cols[j].XYZ[2]);
 				}
 				if (cols[j].sp.spec_n > 0) {
 					for (e = 0; e < cols[j].sp.spec_n; e++) {
@@ -981,12 +913,7 @@ static int disprd_read_drift(
 					for (e = 0; e < 3; e++) {
 						cols[j].XYZ[e] *= p->targ_w.XYZ[e]/ww.XYZ[e];
 					}
-				}
-				if (cols[j].aXYZ_v) {
-					for (e = 0; e < 3; e++) {
-						cols[j].aXYZ[e] *= p->targ_w.aXYZ[e]/ww.aXYZ[e];
-					}
-//printf("~1 wcomp patch = %f %f %f\n",  cols[j].aXYZ[0], cols[j].aXYZ[1], cols[j].aXYZ[2]);
+//printf("~1 wcomp patch = %f %f %f\n",  cols[j].XYZ[0], cols[j].XYZ[1], cols[j].XYZ[2]);
 				}
 				if (cols[j].sp.spec_n > 0) {
 					for (e = 0; e < cols[j].sp.spec_n; e++) {
@@ -994,13 +921,19 @@ static int disprd_read_drift(
 					}
 				}
 			}
-//printf("~1 %d: drift change %f DE\n",j,icmXYZLabDE(&icmD50, uXYZ, cols[j].aXYZ));
+//printf("~1 %d: drift change %f DE\n",j,icmXYZLabDE(&icmD50, uXYZ, cols[j].XYZ));
 		}
 	}
 
-	if (acr && p->verb && spat != 0 && tpat != 0 && (spat+npat-1) == tpat)
-		fprintf(p->df,"\n");
+	if (acr && spat != 0 && tpat != 0 && (spat+npat-1) == tpat)
+		a1logv(p->log, 1, "\n");
 
+	if (clamp) {
+		for (j = 0; j < npat; j++) {
+			if (cols[j].XYZ_v)
+				icmClamp3(cols[j].XYZ, cols[j].XYZ);
+		}
+	}
 	return rv;
 }
 
@@ -1060,30 +993,42 @@ static int disprd_read(
 	int spat,		/* Start patch index for "verb", 0 if not used */
 	int tpat,		/* Total patch index for "verb", 0 if not used */
 	int acr,		/* If nz, do automatic final carriage return */
-	int tc			/* If nz, termination key */
+	int tc,			/* If nz, termination key */
+	instClamping clamp	/* NZ if clamp XYZ/Lab to be +ve */
 ) {
 	int rv, i;
 
 	if (p->bdrift || p->wdrift) {
-		if ((rv = disprd_read_drift(p, cols,npat,spat,tpat,acr,tc)) != 0)
+		if ((rv = disprd_read_drift(p, cols,npat,spat,tpat,acr,tc,clamp)) != 0)
 			return rv;
 	} else {
-		if ((rv = disprd_read_imp(p, cols,npat,spat,tpat,acr,0,tc)) != 0)
+		if ((rv = disprd_read_imp(p, cols,npat,spat,tpat,acr,0,tc,clamp)) != 0)
 			return rv;
 	}
 
-	/* Convert spectral to XYZ. */
+	/* Use spectral if available. */
 	/* Since this is a display, assume that this is absolute spectral */
 	if (p->sp2cie != NULL) {
 		for (i = 0; i < npat; i++) {
 			if (cols[i].sp.spec_n > 0) {
-				p->sp2cie->convert(p->sp2cie, cols[i].aXYZ, &cols[i].sp);
-				cols[i].aXYZ_v = 1;
+				p->sp2cie->convert(p->sp2cie, cols[i].XYZ, &cols[i].sp);
+				if (clamp)
+					icmClamp3(cols[i].XYZ, cols[i].XYZ);
+				cols[i].XYZ_v = 1;
 			}
 		}
 	}
 
 	return rv;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Return the refresh mode and cbid */
+static void disprd_get_disptype(disprd *p, int *refrmode, int *cbid) {
+	if (refrmode != NULL)
+		*refrmode = p->refrmode;
+	if (cbid != NULL)
+		*cbid = p->cbid;
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -1097,24 +1042,24 @@ static int config_inst_displ(disprd *p);
 /* 5 = system error */
 /* 8 = no ambient capability */ 
 /* Use disprd_err() to interpret it */
-int disprd_ambient(struct _disprd *p,
+int disprd_ambient(
+	struct _disprd *p,
 	double *ambient,		/* return ambient in cd/m^2 */
 	int tc					/* If nz, termination key */
 ) {
-	inst_capability cap = 0;
+	inst_mode cap = 0;
 	inst2_capability cap2 = 0;
-	inst_opt_mode trigmode = inst_opt_unknown;  /* Chosen trigger mode */
+	inst3_capability cap3 = 0;
+	inst_opt_type trigmode = inst_opt_unknown;  /* Chosen trigger mode */
 	int uswitch = 0;                /* Instrument switch is enabled */
 	ipatch val;
-	int verb = p->verb;
 	int rv;
 
 	if (p->it != NULL) { /* Not fake */
-		cap = p->it->capabilities(p->it);
-		cap2 = p->it->capabilities2(p->it);
+		p->it->capabilities(p->it, &cap, &cap2, &cap3);
 	}
 	
-	if ((cap & inst_emis_ambient) == 0) {
+	if (!IMODETST(cap, inst_mode_emis_ambient)) {
 		printf("Need ambient measurement capability,\n");
 		printf("but instrument doesn't support it\n");
 		return 8;
@@ -1124,23 +1069,22 @@ int disprd_ambient(struct _disprd *p,
 	printf("the appropriate ambient light measuring head.\n");
 	
 	if ((rv = p->it->set_mode(p->it, inst_mode_emis_ambient)) != inst_ok) {
-		DBG((dbgo,"set_mode returned '%s' (%s)\n",
-		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+		a1logd(p->log,1,"set_mode returned '%s' (%s)\n",
+		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 		return 2;
 	}
 	if (p->it != NULL) { /* Not fake */
-		cap  = p->it->capabilities(p->it);
-		cap2 = p->it->capabilities2(p->it);
+		p->it->capabilities(p->it, &cap, &cap2, &cap3);
 	}
 	
 	/* Select a reasonable trigger mode */
-	if (cap2 & inst2_keyb_switch_trig) {
-		trigmode = inst_opt_trig_keyb_switch;
+	if (cap2 & inst2_user_switch_trig) {
+		trigmode = inst_opt_trig_user_switch;
 		uswitch = 1;
 
-	/* Or go for keyboard trigger */
-	} else if (cap2 & inst2_keyb_trig) {
-		trigmode = inst_opt_trig_keyb;
+	/* Or go for user via uicallback trigger */
+	} else if (cap2 & inst2_user_trig) {
+		trigmode = inst_opt_trig_user;
 
 	/* Or something is wrong with instrument capabilities */
 	} else {
@@ -1148,35 +1092,27 @@ int disprd_ambient(struct _disprd *p,
 		return 2;
 	}
 
-	if ((rv = p->it->set_opt_mode(p->it, trigmode)) != inst_ok) {
+	if ((rv = p->it->get_set_opt(p->it, trigmode)) != inst_ok) {
 		printf("\nSetting trigger mode failed with error :'%s' (%s)\n",
        	       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 		return 2;
 	}
 
-	/* Prompt on trigger */
-	if ((rv = p->it->set_opt_mode(p->it, inst_opt_trig_return)) != inst_ok) {
-		printf("Setting trigger mode failed with error :'%s' (%s)\n",
-       	       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
-		return 2;
-	}
-
 	/* Setup the keyboard trigger to return our commands */
-	p->it->icom->reset_uih(p->it->icom);
-	p->it->icom->set_uih(p->it->icom, 0x0, 0xff, ICOM_TRIG);
-	p->it->icom->set_uih(p->it->icom, 'q', 'q', ICOM_USER);
-	p->it->icom->set_uih(p->it->icom, 'Q', 'Q', ICOM_USER);
-	p->it->icom->set_uih(p->it->icom, 0x03, 0x03, ICOM_USER);		/* ^c */
-	p->it->icom->set_uih(p->it->icom, 0x1b, 0x1b, ICOM_USER);		/* Esc */
+	inst_set_uih(0x0, 0xff,  DUIH_TRIG);
+	inst_set_uih('q', 'q',   DUIH_ABORT);
+	inst_set_uih('Q', 'Q',   DUIH_ABORT);
+	inst_set_uih(0x03, 0x03, DUIH_ABORT);		/* ^c */
+	inst_set_uih(0x1b, 0x1b, DUIH_ABORT);		/* Esc */
 
 	/* Setup user termination character */
-	p->it->icom->set_uih(p->it->icom, tc, tc, ICOM_TERM);
+	inst_set_uih(tc, tc, DUIH_TERM);
 
 	/* Until we give up retrying */
 	for (;;) {
 		char ch;
+		val.mtype = inst_mrt_none;
 		val.XYZ_v = 0;		/* No readings are valid */
-		val.aXYZ_v = 0;
 		val.sp.spec_n = 0;
 		val.duration = 0.0;
 
@@ -1187,33 +1123,38 @@ int disprd_ambient(struct _disprd *p,
 			printf("Hit ESC or Q to exit, any other key to take a reading: ");
 		fflush(stdout);
 
-		if ((rv = p->it->read_sample(p->it, "AMBIENT", &val)) != inst_ok
+		if ((rv = p->it->read_sample(p->it, "AMBIENT", &val, 1)) != inst_ok
 		     && (rv & inst_mask) != inst_user_trig) {
-			DBG((dbgo,"read_sample returned '%s' (%s)\n",
-		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+			a1logd(p->log,1,"read_sample returned '%s' (%s)\n",
+		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 
-			/* Deal with a user terminate */
-			if ((rv & inst_mask) == inst_user_term) {
-				return 4;
+			/* deal with a user terminate or abort */
+			if ((rv & inst_mask) == inst_user_abort) {
+				int keyc = inst_get_uih_char();
 
-			/* Deal with a user abort */
-			} else if ((rv & inst_mask) == inst_user_abort) {
-				empty_con_chars();
-				printf("\nMeasure stopped at user request!\n");
-				printf("Hit Esc or Q to give up, any other key to retry:"); fflush(stdout);
-				if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+				/* Deal with a user terminate */
+				if (keyc & DUIH_TERM) {
+					return 4;
+
+				/* Deal with a user abort */
+				} else if (keyc & DUIH_ABORT) {
+					empty_con_chars();
+					printf("\nMeasure stopped at user request!\n");
+					printf("Hit Esc or Q to give up, any other key to retry:"); fflush(stdout);
+					if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+						printf("\n");
+						return 1;
+					}
 					printf("\n");
-					return 1;
+					continue;
 				}
-				printf("\n");
-				continue;
 
 			/* Deal with needs calibration */
 			} else if ((rv & inst_mask) == inst_needs_cal) {
 				disp_win_info dwi;
 				dwi.dw = p->dw;		/* Set window to use */
 				printf("\nSample read failed because instruments needs calibration\n");
-				rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none,
+				rv = inst_handle_calibrate(p->it, inst_calt_needed, inst_calc_none,
 				                                        setup_display_calibrate, &dwi);
 				setup_display_calibrate(p->it,inst_calc_none, &dwi); 
 				if (rv != inst_ok) {	/* Abort or fatal error */
@@ -1222,7 +1163,7 @@ int disprd_ambient(struct _disprd *p,
 				continue;
 
 			/* Deal with a bad sensor position */
-			} else if ((rv & inst_mask) == inst_wrong_sensor_pos) {
+			} else if ((rv & inst_mask) == inst_wrong_config) {
 				empty_con_chars();
 				printf("\n\nSpot read failed due to the sensor being in the wrong position\n");
 				printf("(%s)\n",p->it->interp_error(p->it, rv));
@@ -1258,16 +1199,16 @@ int disprd_ambient(struct _disprd *p,
 				printf("\n");
 				if (p->it->icom->port_type(p->it->icom) == icomt_serial) {
 					/* Allow retrying at a lower baud rate */
-					int tt = p->it->last_comerr(p->it);
+					int tt = p->it->last_scomerr(p->it);
 					if (tt & (ICOM_BRK | ICOM_FER | ICOM_PER | ICOM_OER)) {
 						if (p->br == baud_19200) p->br = baud_9600;
 						else if (p->br == baud_9600) p->br = baud_4800;
 						else if (p->br == baud_2400) p->br = baud_1200;
 						else p->br = baud_1200;
 					}
-					if ((rv = p->it->init_coms(p->it, p->comport, p->br, p->fc, 15.0)) != inst_ok) {
-						DBG((dbgo,"init_coms returned '%s' (%s)\n",
-					       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+					if ((rv = p->it->init_coms(p->it, p->br, p->fc, 15.0)) != inst_ok) {
+						a1logd(p->log,1,"init_coms returned '%s' (%s)\n",
+					       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 						return 2;
 					}
 				}
@@ -1280,18 +1221,18 @@ int disprd_ambient(struct _disprd *p,
 	/* Convert spectral to XYZ */
 	if (p->sp2cie != NULL && val.sp.spec_n > 0) {
 		p->sp2cie->convert(p->sp2cie, val.XYZ, &val.sp);
-		icmCpy3(val.aXYZ, val.XYZ);
-		val.aXYZ_v = 1;
+		icmClamp3(val.XYZ, val.XYZ);
+		val.XYZ_v = 1;
 	}
 
-	if (val.aXYZ_v == 0) {
+	if (val.XYZ_v == 0) {
 		printf("Unexpected failure to get measurement\n");
 		return 2;
 	}
 
-	DBG((dbgo,"Measured ambient of %f\n",val.aXYZ[1]));
+	a1logd(p->log,1,"Measured ambient of %f\n",val.XYZ[1]);
 	if (ambient != NULL)
-		*ambient = val.aXYZ[1];
+		*ambient = val.XYZ[1];
 	
 	/* Configure the instrument mode back to reading the display */
 	if ((rv = config_inst_displ(p)) != 0)
@@ -1305,14 +1246,22 @@ int disprd_ambient(struct _disprd *p,
 
 
 /* Test without a spectrometer using a fake device */
-/* Return nz on error */
-static int disprd_fake_read(disprd *p,
+/* Return nz on fail/abort */
+/* 1 = user aborted */
+/* 2 = instrument access failed */
+/* 3 = window access failed */ 
+/* 4 = user hit terminate key */
+/* 5 = system error */
+/* Use disprd_err() to interpret it */
+static int disprd_fake_read(
+	disprd *p,
 	col *cols,		/* Array of patch colors to be tested */
 	int npat, 		/* Number of patches to be tested */
 	int spat,		/* Start patch index for "verb", 0 if not used */
 	int tpat,		/* Total patch index for "verb", 0 if not used */
 	int acr,		/* If nz, do automatic final carriage return */
-	int tc			/* If nz, termination key */
+	int tc,			/* If nz, termination key */
+	instClamping clamp	/* NZ if clamp XYZ/Lab to be +ve */
 ) {
 	icmXYZNumber white;		/* White point */
 	icmXYZNumber red;		/* Red colorant */
@@ -1328,6 +1277,8 @@ static int disprd_fake_read(disprd *p,
 	double br = 120.0;		/* Overall brightness */
 	int patch, j;
 	int ttpat = tpat;
+	inst_code (*uicallback)(void *, inst_ui_purp) = NULL;
+	void *uicontext = NULL;
 
 	if (ttpat < npat)
 		ttpat = npat;
@@ -1371,14 +1322,46 @@ static int disprd_fake_read(disprd *p,
 		xmat[2][0] = 0.2; xmat[2][1] = 0.2;  xmat[2][2] = 1.22;
 	}
 
+	uicallback = inst_get_uicallback();
+	uicontext = inst_get_uicontext();
+
+	/* Setup the keyboard trigger to return our commands */
+	inst_set_uih(0x0, 0xff,  DUIH_TRIG);
+	inst_set_uih('q', 'q',   DUIH_ABORT);
+	inst_set_uih('Q', 'Q',   DUIH_ABORT);
+	inst_set_uih(0x03, 0x03, DUIH_ABORT);		/* ^c */
+	inst_set_uih(0x1b, 0x1b, DUIH_ABORT);		/* Esc */
+
+	/* Setup user termination character */
+	inst_set_uih(tc, tc, DUIH_TERM);
+
 	for (patch = 0; patch < npat; patch++) {
-		if (p->verb && spat != 0 && tpat != 0) {
-			fprintf(p->df,"%cpatch %d of %d",cr_char,spat+patch,tpat);
-			fflush(p->df);
-		}
+		if (spat != 0 && tpat != 0)
+			a1logv(p->log, 1, "%cpatch %d of %d",cr_char,spat+patch,tpat);
 		crgb[0] = rgb[0] = cols[patch].r;
 		crgb[1] = rgb[1] = cols[patch].g;
 		crgb[2] = rgb[2] = cols[patch].b;
+
+		/* deal with a user terminate or abort */
+		if (uicallback(uicontext, inst_measuring) == inst_user_abort) {
+			int ch, keyc = inst_get_uih_char();
+
+			/* Deal with a user terminate */
+			if (keyc & DUIH_TERM) {
+				return 4;
+
+			/* Deal with a user abort */
+			} else if (keyc & DUIH_ABORT) {
+				empty_con_chars();
+				printf("\nSample read stopped at user request!\n");
+				printf("Hit Esc or Q to give up, any other key to retry:"); fflush(stdout);
+				if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+					printf("\n");
+					return 1;
+				}
+				printf("\n");
+			}
+		}
 
 //printf("~1 patch %d RGB %f %f %f\n",patch,rgb[0], rgb[1], rgb[2]);
 		/* If we have a calibration, apply it to the color */
@@ -1409,12 +1392,12 @@ static int disprd_fake_read(disprd *p,
 			inst_code rv;
 			if (p->softcal) {	/* Display value with calibration */
 				if ((rv = p->dw->set_color(p->dw, crgb[0], crgb[1], crgb[2])) != 0) {
-					DBG((dbgo,"set_color() returned %s\n",rv))
+					a1logd(p->log,1,"set_color() returned %s\n",rv);
 					return 3;
 				}
 			} else {			/* Hardware will apply calibration */
 				if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
-					DBG((dbgo,"set_color() returned %s\n",rv))
+					a1logd(p->log,1,"set_color() returned %s\n",rv);
 					return 3;
 				}
 			}
@@ -1449,67 +1432,108 @@ static int disprd_fake_read(disprd *p,
 		}
 
 		/* Convert to XYZ */
-		icmMulBy3x3(cols[patch].aXYZ, mat, crgb);
+		icmMulBy3x3(cols[patch].XYZ, mat, crgb);
 
 		/* Apply XYZ offset */
 		for (j = 0; j < 3; j++)
-			cols[patch].aXYZ[j] += ooff[j];
+			cols[patch].XYZ[j] += ooff[j];
 
 		/* Apply extra matrix */
-		icmMulBy3x3(cols[patch].aXYZ, xmat, cols[patch].aXYZ);
+		icmMulBy3x3(cols[patch].XYZ, xmat, cols[patch].XYZ);
 
 #ifdef FAKE_NOISE
 		if (p->fake2 == 0) {
-			cols[patch].aXYZ[0] += 2.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
-			cols[patch].aXYZ[1] += FAKE_NOISE * d_rand(-1.0, 1.0);
-			cols[patch].aXYZ[2] += 4.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
-			for (j = 0; j < 3; j++) { 
-				if (cols[patch].aXYZ[j] < 0.0)
-					cols[patch].aXYZ[j] = 0.0;
-			}
+			cols[patch].XYZ[0] += 2.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
+			cols[patch].XYZ[1] += FAKE_NOISE * d_rand(-1.0, 1.0);
+			cols[patch].XYZ[2] += 4.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
 		}
 #endif
-//printf("~1 patch %d XYZ %f %f %f\n",patch,cols[patch].aXYZ[0], cols[patch].aXYZ[1], cols[patch].aXYZ[2]);
-		cols[patch].aXYZ_v = 1;
-		cols[patch].XYZ_v = 0;
+		if (clamp)
+			icmClamp3(cols[patch].XYZ, cols[patch].XYZ);
+//printf("~1 patch %d XYZ %f %f %f\n",patch,cols[patch].XYZ[0], cols[patch].XYZ[1], cols[patch].XYZ[2]);
+		cols[patch].XYZ_v = 1;
 		cols[patch].sp.spec_n = 0;
+		cols[patch].mtype = inst_mrt_emission;
 	}
-	if (acr && p->verb && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
-		fprintf(p->df,"\n");
+	if (acr && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
+		a1logv(p->log, 1, "\n");
 	return 0;
 }
 
 /* Test without a spectrometer using a fake ICC profile device */
-static int disprd_fake_read_lu(disprd *p,
+/* Return nz on fail/abort */
+/* 1 = user aborted */
+/* 2 = instrument access failed */
+/* 3 = window access failed */ 
+/* 4 = user hit terminate key */
+/* 5 = system error */
+/* Use disprd_err() to interpret it */
+static int disprd_fake_read_lu(
+	disprd *p,
 	col *cols,		/* Array of patch colors to be tested */
 	int npat, 		/* Number of patches to be tested */
 	int spat,		/* Start patch index for "verb", 0 if not used */
 	int tpat,		/* Total patch index for "verb", 0 if not used */
 	int acr,		/* If nz, do automatic final carriage return */
-	int tc			/* If nz, termination key */
+	int tc,			/* If nz, termination key */
+	instClamping clamp	/* NZ if clamp XYZ/Lab to be +ve */
 ) {
 	int patch, j;
 	int ttpat = tpat;
 	double br = 120.4;		/* Overall brightness */
+	inst_code (*uicallback)(void *, inst_ui_purp) = NULL;
+	void *uicontext = NULL;
 
 	if (ttpat < npat)
 		ttpat = npat;
 
+	uicallback = inst_get_uicallback();
+	uicontext = inst_get_uicontext();
+
+	/* Setup the keyboard trigger to return our commands */
+	inst_set_uih(0x0, 0xff,  DUIH_TRIG);
+	inst_set_uih('q', 'q',   DUIH_ABORT);
+	inst_set_uih('Q', 'Q',   DUIH_ABORT);
+	inst_set_uih(0x03, 0x03, DUIH_ABORT);		/* ^c */
+	inst_set_uih(0x1b, 0x1b, DUIH_ABORT);		/* Esc */
+
+	/* Setup user termination character */
+	inst_set_uih(tc, tc, DUIH_TERM);
+
 	for (patch = 0; patch < npat; patch++) {
 		double rgb[3];;
-		if (p->verb && spat != 0 && tpat != 0) {
-			fprintf(p->df,"%cpatch %d of %d",cr_char,spat+patch,tpat);
-			fflush(p->df);
-		}
+		if (spat != 0 && tpat != 0)
+			a1logv(p->log, 1, "%cpatch %d of %d",cr_char,spat+patch,tpat);
 		rgb[0] = cols[patch].r;
 		rgb[1] = cols[patch].g;
 		rgb[2] = cols[patch].b;
+
+		/* deal with a user terminate or abort */
+		if (uicallback(uicontext, inst_measuring) == inst_user_abort) {
+			int ch, keyc = inst_get_uih_char();
+
+			/* Deal with a user terminate */
+			if (keyc & DUIH_TERM) {
+				return 4;
+
+			/* Deal with a user abort */
+			} else if (keyc & DUIH_ABORT) {
+				empty_con_chars();
+				printf("\nSample read stopped at user request!\n");
+				printf("Hit Esc or Q to give up, any other key to retry:"); fflush(stdout);
+				if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+					printf("\n");
+					return 1;
+				}
+				printf("\n");
+			}
+		}
 
 		/* If we have a test window, display the patch color */
 		if (p->dw) {
 			inst_code rv;
 			if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
-				DBG((dbgo,"set_color() returned %s\n",rv))
+				a1logd(p->log,1,"set_color() returned %s\n",rv);
 				return 3;
 			}
 		}
@@ -1537,41 +1561,62 @@ static int disprd_fake_read_lu(disprd *p,
 			}
 		}
 
-		p->fake_lu->lookup(p->fake_lu, cols[patch].aXYZ, rgb); 
+		p->fake_lu->lookup(p->fake_lu, cols[patch].XYZ, rgb); 
 		for (j = 0; j < 3; j++) 
-			cols[patch].aXYZ[j] *= br;
+			cols[patch].XYZ[j] *= br;
 #ifdef FAKE_NOISE
-		cols[patch].aXYZ[0] += 2.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
-		cols[patch].aXYZ[1] += FAKE_NOISE * d_rand(-1.0, 1.0);
-		cols[patch].aXYZ[2] += 4.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
-		for (j = 0; j < 3; j++) { 
-			if (cols[patch].aXYZ[j] < 0.0)
-				cols[patch].aXYZ[j] = 0.0;
-		}
+		cols[patch].XYZ[0] += 2.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
+		cols[patch].XYZ[1] += FAKE_NOISE * d_rand(-1.0, 1.0);
+		cols[patch].XYZ[2] += 4.0 * FAKE_NOISE * d_rand(-1.0, 1.0);
 #endif
-		cols[patch].aXYZ_v = 1;
-		cols[patch].XYZ_v = 0;
+		if (clamp)
+			icmClamp3(cols[patch].XYZ, cols[patch].XYZ);
+		cols[patch].XYZ_v = 1;
 		cols[patch].sp.spec_n = 0;
+		cols[patch].mtype = inst_mrt_emission;
 	}
-	if (acr && p->verb && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
-		fprintf(p->df,"\n");
+	if (acr && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
+		a1logv(p->log, 1, "\n");
 	return 0;
 }
 
 /* Use without a direct connect spectrometer using shell callout */
+/* Return nz on fail/abort */
+/* 1 = user aborted */
+/* 2 = instrument access failed */
+/* 3 = window access failed */ 
+/* 4 = user hit terminate key */
+/* 5 = system error */
+/* Use disprd_err() to interpret it */
 static int disprd_fake_read_co(disprd *p,
 	col *cols,		/* Array of patch colors to be tested */
 	int npat, 		/* Number of patches to be tested */
 	int spat,		/* Start patch index for "verb", 0 if not used */
 	int tpat,		/* Total patch index for "verb", 0 if not used */
 	int acr,		/* If nz, do automatic final carriage return */
-	int tc			/* If nz, termination key */
+	int tc,			/* If nz, termination key */
+	instClamping clamp	/* NZ if clamp XYZ/Lab to be +ve */
 ) {
 	int patch, j;
 	int ttpat = tpat;
+	inst_code (*uicallback)(void *, inst_ui_purp) = NULL;
+	void *uicontext = NULL;
 
 	if (ttpat < npat)
 		ttpat = npat;
+
+	uicallback = inst_get_uicallback();
+	uicontext = inst_get_uicontext();
+
+	/* Setup the keyboard trigger to return our commands */
+	inst_set_uih(0x0, 0xff,  DUIH_TRIG);
+	inst_set_uih('q', 'q',   DUIH_ABORT);
+	inst_set_uih('Q', 'Q',   DUIH_ABORT);
+	inst_set_uih(0x03, 0x03, DUIH_ABORT);		/* ^c */
+	inst_set_uih(0x1b, 0x1b, DUIH_ABORT);		/* Esc */
+
+	/* Setup user termination character */
+	inst_set_uih(tc, tc, DUIH_TERM);
 
 	for (patch = 0; patch < npat; patch++) {
 		double rgb[3];
@@ -1579,10 +1624,29 @@ static int disprd_fake_read_co(disprd *p,
 		char *cmd;
 		FILE *fp;
 
-		if (p->verb && spat != 0 && tpat != 0) {
-			fprintf(p->df,"%cpatch %d of %d",cr_char,spat+patch,tpat);
-			fflush(p->df);
+		/* deal with a user terminate or abort */
+		if (uicallback(uicontext, inst_measuring) == inst_user_abort) {
+			int ch, keyc = inst_get_uih_char();
+
+			/* Deal with a user terminate */
+			if (keyc & DUIH_TERM) {
+				return 4;
+
+			/* Deal with a user abort */
+			} else if (keyc & DUIH_ABORT) {
+				empty_con_chars();
+				printf("\nSample read stopped at user request!\n");
+				printf("Hit Esc or Q to give up, any other key to retry:"); fflush(stdout);
+				if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+					printf("\n");
+					return 1;
+				}
+				printf("\n");
+			}
 		}
+
+		if (spat != 0 && tpat != 0)
+			a1logv(p->log, 1, "%cpatch %d of %d",cr_char,spat+patch,tpat);
 		rgb[0] = cols[patch].r;
 		rgb[1] = cols[patch].g;
 		rgb[2] = cols[patch].b;
@@ -1591,7 +1655,7 @@ static int disprd_fake_read_co(disprd *p,
 		if (p->dw) {
 			inst_code rv;
 			if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
-				DBG((dbgo,"set_color() returned %s\n",rv))
+				a1logd(p->log,1,"set_color() returned %s\n",rv);
 				return 3;
 			}
 		}
@@ -1634,20 +1698,23 @@ static int disprd_fake_read_co(disprd *p,
 		if ((fp = fopen(cmd,"r")) == NULL)
 			error("Unable to open measurement value file '%s'",cmd);
 
-		if (fscanf(fp, " %lf %lf %lf", &cols[patch].aXYZ[0], &cols[patch].aXYZ[1],
-		                               &cols[patch].aXYZ[2]) != 3)
+		if (fscanf(fp, " %lf %lf %lf", &cols[patch].XYZ[0], &cols[patch].XYZ[1],
+		                               &cols[patch].XYZ[2]) != 3)
 			error("Unable to parse measurement value file '%s'",cmd);
 		fclose(fp);
 		free(cmd);
 
-		if (p->verb > 1)
-			printf("Read XYZ %f %f %f from '%s'\n", cols[patch].aXYZ[0],
-			            cols[patch].aXYZ[1],cols[patch].aXYZ[2], cmd);
+		if (clamp)
+			icmClamp3(cols[patch].XYZ, cols[patch].XYZ);
+		cols[patch].XYZ_v = 1;
+		cols[patch].mtype = inst_mrt_emission;
 
-		cols[patch].aXYZ_v = 1;
+		a1logv(p->log, 2, "Read XYZ %f %f %f from '%s'\n", cols[patch].XYZ[0],
+			                     cols[patch].XYZ[1],cols[patch].XYZ[2], cmd);
+
 	}
-	if (acr && p->verb && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
-		fprintf(p->df,"\n");
+	if (acr && spat != 0 && tpat != 0 && (spat+patch-1) == tpat)
+		a1logv(p->log, 1, "\n");
 	return 0;
 }
 
@@ -1686,6 +1753,21 @@ char *disprd_err(int en) {
 
 static void disprd_del(disprd *p) {
 
+	if (p->log->verb >= 1 && p->bdrift && p->ref_bw_v && p->last_bw_v) {
+		icmXYZNumber w;
+		double de;
+		icmAry2XYZ(w, p->ref_bw[1].XYZ);
+		de = icmXYZLabDE(&w, p->ref_bw[0].XYZ, p->last_bw[0].XYZ);
+		a1logv(p->log, 1, "Black drift was %f DE\n",de);
+	}
+	if (p->log->verb >= 1 && p->wdrift && p->ref_bw_v && p->last_bw_v) {
+		icmXYZNumber w;
+		double de;
+		icmAry2XYZ(w, p->ref_bw[1].XYZ);
+		de = icmXYZLabDE(&w, p->ref_bw[1].XYZ, p->last_bw[1].XYZ);
+		a1logv(p->log, 1, "White drift was %f DE\n",de);
+	}
+
 	/* The user may remove the instrument */
 	if (p->dw != NULL)
 		printf("The instrument can be removed from the screen.\n");
@@ -1706,6 +1788,7 @@ static void disprd_del(disprd *p) {
 	}
 	if (p->sp2cie != NULL)
 		p->sp2cie->del(p->sp2cie); 
+	p->log = del_a1log(p->log);
 	free(p);
 }
 
@@ -1713,65 +1796,67 @@ static void disprd_del(disprd *p) {
 /* for reading the display */
 /* return new_disprd() error code */
 static int config_inst_displ(disprd *p) {
-	inst_capability cap;
+	inst_mode cap;
 	inst2_capability cap2;
+	inst3_capability cap3;
 	inst_mode mode = 0;
-	int verb = p->verb;
 	int rv;
 	
-	cap = p->it->capabilities(p->it);
-	cap2 = p->it->capabilities2(p->it);
+	p->it->capabilities(p->it, &cap, &cap2, &cap3);
 	
-	if (p->proj && (cap & inst_emis_proj) == 0) {
-		printf("Want projection measurement capability but instrument doesn't support it\n");
-		printf("so falling back to display mode.\n");
-		DBG((dbgo,"No projection mode so falling back to display mode.\n"));
-		p->proj = 0;
+	if (p->tele && !IMODETST(cap, inst_mode_emis_tele)) {
+		printf("Want telephoto measurement capability but instrument doesn't support it\n");
+		printf("so falling back to spot mode.\n");
+		a1logd(p->log,1,"No telephoto mode so falling back to spot mode.\n");
+		p->tele = 0;
 	}
 	
-	if (( p->proj && (cap & inst_emis_proj) == 0)
-	 || (!p->proj && p->adaptive && (cap & inst_emis_spot) == 0)
-	 || (!p->proj && !p->adaptive && (cap & inst_emis_disp) == 0)) {
-		printf("Need %s measurement capability,\n",
-		       p->proj ? "projection" : p->adaptive ? "emission" : "display");
+	if (( p->tele && !IMODETST(cap, inst_mode_emis_tele))
+	 || (!p->tele && !IMODETST(cap, inst_mode_emis_spot))) {
+		printf("Need %s emissive measurement capability,\n", p->tele ? "telephoto" : "spot");
 		printf("but instrument doesn't support it\n");
-		DBG((dbgo,"Need %s measurement capability but device doesn't support it,\n",
-		       p->proj ? "projection" : p->adaptive ? "emission" : "display"));
+		a1logd(p->log,1,"Need %s emissive measurement capability but device doesn't support it,\n",
+		       p->tele ? "telephoto" : "spot");
+		return 2;
+	}
+	
+	if (p->nadaptive && !IMODETST(cap, inst_mode_emis_nonadaptive)) {
+		printf("Need non-adaptives measurement mode, but instrument doesn't support it\n");
+		a1logd(p->log,1, "Need non-adaptives measurement mode, but instrument doesn't support it\n");
 		return 2;
 	}
 	
 	if (p->obType != icxOT_none
 	 && p->obType != icxOT_default) {
-		if ((cap & inst_spectral) == 0 && (cap & inst_ccss) == 0) {
+		if (!IMODETST(cap, inst_mode_spectral) && (cap2 & inst2_ccss) == 0) {
 			printf("A non-standard observer was requested,\n");
 			printf("but instrument doesn't support spectral or CCSS\n");
-			DBG((dbgo,"A non-standard observer was requested,\n"
-			          "but instrument doesn't support spectral or CCSS\n"))
+			a1logd(p->log,1,"A non-standard observer was requested,\n"
+			          "but instrument doesn't support spectral or CCSS\n");
 			return 2;
 		}
 		/* Make sure spectral is turned on if an observer is requested */
-		if (!p->spectral && (cap & inst_ccss) == 0)
+		if (!p->spectral && (cap2 & inst2_ccss) == 0)
 			p->spectral = 1;
 	}
 
-	if (p->spectral && (cap & inst_spectral) == 0) {
+	if (p->spectral && !IMODETST(cap,inst_mode_spectral)) {
 		if (p->spectral != 2) {		/* Not soft */
 			printf("Spectral information was requested,\n");
 			printf("but instrument doesn't support it\n");
-			DBG((dbgo,"Spectral information was requested,\nbut instrument doesn't support it\n"))
+			a1logd(p->log,1,"Spectral information was requested,\nbut instrument doesn't support it\n");
 			return 2;
 		}
 		p->spectral = 0;
 	}
 	
-	if (p->proj) {
-		mode = inst_mode_emis_proj;
+	if (p->tele) {
+		mode = inst_mode_emis_tele;
 	} else {
-		if (p->adaptive)
-			mode = inst_mode_emis_spot;
-		else
-			mode = inst_mode_emis_disp;
+		mode = inst_mode_emis_spot;
 	}
+	if (p->nadaptive)
+		mode |= inst_mode_emis_nonadaptive;
 	
 	if (p->spectral) {
 		mode |= inst_mode_spectral;
@@ -1780,102 +1865,100 @@ static int config_inst_displ(disprd *p) {
 		p->spectral = 0;
 	}
 	
-	if (p->dtype != 0) {
+	/* Set the display type */
 
-		if (cap & inst_emis_disptype) {
+	if (p->dtype != 0) {
+		if (cap2 & inst2_disptype) {
 			int ix;
-			if ((ix = inst_get_disptype_index(p->it, p->dtype)) == 0) {
-				DBG((dbgo,"Display type selection '%c' is not valid for instrument\n",p->dtype))
+			if ((ix = inst_get_disptype_index(p->it, p->dtype, p->docbid)) < 0) {
+				a1logd(p->log,1,"Display type selection '%c' is not valid for instrument\n",p->dtype);
 				return 2;
 			}
-		
-			if ((rv = p->it->set_opt_mode(p->it, inst_opt_disp_type, ix)) != inst_ok) {
-				DBG((dbgo,"Setting display type failed failed with '%s' (%s)\n",
-				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+			if ((rv = p->it->set_disptype(p->it, ix)) != inst_ok) {
+				a1logd(p->log,1,"Setting display type failed failed with '%s' (%s)\n",
+				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 				return 2;
 			}
 		} else
 			printf("Display type ignored - instrument doesn't support display type\n");
+	}
 
-	} else if (cap & (inst_emis_disptypem)) {
-		printf("A display type must be selected\n");
-		return 7;
+	/* Get the refresh mode and cbid */
+	if (cap2 & inst2_disptype) {
+		p->it->get_set_opt(p->it, inst_opt_get_dtinfo, &p->refrmode, &p->cbid);
 	}
 	
-	/* Disable autocalibration of machine if selected */
-	if (p->noautocal != 0) {
-		if ((rv = p->it->set_opt_mode(p->it,inst_opt_noautocalib)) != inst_ok) {
-			DBG((dbgo,"Setting no-autocalibrate failed failed with '%s' (%s)\n",
-		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-			printf("Disable auto-calibrate not supported\n");
+	/* Disable initcalibration of machine if selected */
+	if (p->noinitcal != 0) {
+		if ((rv = p->it->get_set_opt(p->it,inst_opt_noinitcalib, 0)) != inst_ok) {
+			a1logd(p->log,1,"Setting no-initial calibrate failed failed with '%s' (%s)\n",
+		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
+			printf("Disable initial-calibrate not supported\n");
 		}
 	}
 	
 	if (p->highres) {
-		if (cap & inst_highres) {
+		if (IMODETST(cap, inst_mode_highres)) {
 			inst_code ev;
-			if ((ev = p->it->set_opt_mode(p->it, inst_opt_highres)) != inst_ok) {
-				DBG((dbgo,"\nSetting high res mode failed with error :'%s' (%s)\n",
-		       	       p->it->inst_interp_error(p->it, ev), p->it->interp_error(p->it, ev)))
+			if ((ev = p->it->get_set_opt(p->it, inst_opt_highres)) != inst_ok) {
+				a1logd(p->log,1,"\nSetting high res mode failed with error :'%s' (%s)\n",
+		       	       p->it->inst_interp_error(p->it, ev), p->it->interp_error(p->it, ev));
 				return 2;
 			}
-		} else if (p->verb) {
-			printf("high resolution ignored - instrument doesn't support high res. mode\n");
+		} else {
+			a1logv(p->log, 1, "high resolution ignored - instrument doesn't support high res. mode\n");
 		}
 	}
 	if ((rv = p->it->set_mode(p->it, mode)) != inst_ok) {
-		DBG((dbgo,"set_mode returned '%s' (%s)\n",
-		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+		a1logd(p->log,1,"set_mode returned '%s' (%s)\n",
+		       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 		return 2;
 	}
-	cap  = p->it->capabilities(p->it);
-	cap2 = p->it->capabilities2(p->it);
+	p->it->capabilities(p->it, &cap, &cap2, &cap3);
 
 	if (p->ccmtx != NULL) {
-		if ((cap & inst_ccmx) == 0) {
-			DBG((dbgo,"Instrument doesn't support ccmx correction\n"))
+		if ((cap2 & inst2_ccmx) == 0) {
+			a1logd(p->log,1,"Instrument doesn't support ccmx correction\n");
 			return 10;
 		}
 		if ((rv = p->it->col_cor_mat(p->it, p->ccmtx)) != inst_ok) {
-			DBG((dbgo,"col_cor_mat returned '%s' (%s)\n",
-			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+			a1logd(p->log,1,"col_cor_mat returned '%s' (%s)\n",
+			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 			return 2;
 		}
 	}
 	
 	if (p->sets != NULL
-	 || ((cap & inst_ccss) != 0 && p->obType != icxOT_default)) {
+	 || ((cap2 & inst2_ccss) != 0 && p->obType != icxOT_default)) {
 
-		if ((cap & inst_ccss) == 0) {
-			DBG((dbgo,"Instrument doesn't support ccss calibration\n"))
+		if ((cap2 & inst2_ccss) == 0) {
+			a1logd(p->log,1,"Instrument doesn't support ccss calibration\n");
 			return 11;
 		}
-		if ((rv = p->it->col_cal_spec_set(p->it, p->obType, p->custObserver,
-		                                         p->sets, p->no_sets)) != inst_ok) {
-			DBG((dbgo,"col_cal_spec_set returned '%s' (%s)\n",
-			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+		if ((rv = p->it->get_set_opt(p->it, inst_opt_set_ccss_obs, p->obType, p->custObserver))
+			                                                                        != inst_ok) {
+			a1logd(p->log,1,"inst_opt_set_ccss_obs returned '%s' (%s)\n",
+			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
+			return 2;
+		}
+		if ((rv = p->it->col_cal_spec_set(p->it, p->sets, p->no_sets)) != inst_ok) {
+			a1logd(p->log,1,"col_cal_spec_set returned '%s' (%s)\n",
+			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 			return 2;
 		}
 	}
 	
 	/* Set the trigger mode to program triggered */
-	if ((rv = p->it->set_opt_mode(p->it,inst_opt_trig_prog)) != inst_ok) {
-		DBG((dbgo,"Setting program trigger mode failed failed with '%s' (%s)\n",
-	       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-		return 2;
-	}
-
-	/* No prompt on trigger */
-	if ((rv = p->it->set_opt_mode(p->it, inst_opt_trig_no_return)) != inst_ok) {
-		DBG((dbgo,"\nSetting trigger mode failed with error :'%s' (%s)\n",
-	       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
+	if ((rv = p->it->get_set_opt(p->it,inst_opt_trig_prog)) != inst_ok) {
+		a1logd(p->log,1,"Setting program trigger mode failed failed with '%s' (%s)\n",
+	       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 		return 2;
 	}
 
 	/* Reset key meanings */
-	p->it->icom->reset_uih(p->it->icom);
+	inst_reset_uih();
 
-	DBG((dbgo,"config_inst_displ suceeded\n"));
+	a1logd(p->log,1,"config_inst_displ suceeded\n");
 	return 0;
 }
 
@@ -1897,13 +1980,14 @@ static int config_inst_displ(disprd *p) {
 /* 12 = cal to set but native != 0 */
 /* Use disprd_err() to interpret *errc */
 disprd *new_disprd(
-int *errc,          /* Error code. May be NULL */
-int comport, 		/* COM port used. -99 == fake Display */
+int *errc,          /* Error code. May be NULL (could use log for this instead?) */
+icompath *ipath,	/* Instrument path to open, &icomFakeDevice == fake */
 flow_control fc,	/* Flow control */
 int dtype,			/* Display type selection character */
-int proj,			/* NZ for projector mode. Falls back to display mode */
-int adaptive,		/* NZ for adaptive mode */
-int noautocal,			/* No automatic instrument calibration */
+int docbid,			/* NZ to only allow cbid dtypes */
+int tele,			/* NZ for tele mode. Falls back to display mode */
+int nadaptive,		/* NZ for non-adaptive mode */
+int noinitcal,		/* No initial instrument calibration */
 int highres,		/* Use high res mode if available */
 int native,			/* 0 = use current current or given calibration curve */
 					/* 1 = use native linear out & high precision */
@@ -1918,7 +2002,8 @@ int override,		/* Override_redirect on X11 */
 int webdisp,        /* If nz, port number for web color display */
 char *ccallout,		/* Shell callout on set color */
 char *mcallout,		/* Shell callout on measure color (forced fake) */
-double patsize,		/* Size of dispwin */
+double hpatsize,	/* Size of dispwin */
+double vpatsize,
 double ho,			/* Horizontal offset */
 double vo,			/* Vertical offset */
 double ccmtx[3][3],	/* Colorimeter Correction matrix, NULL if none */
@@ -1929,10 +2014,8 @@ icxObserverType obType,	/* Use alternate observer if spectral or CCSS and != icx
 xspect custObserver[3],	/* Optional custom observer */
 int bdrift,			/* Flag, nz for black drift compensation */
 int wdrift,			/* Flag, nz for white drift compensation */
-int verb,			/* Verbosity flag */
-FILE *df,			/* Verbose output - NULL = stdout */
-int debug,			/* Debug flag */
-char *fake_name		/* Name of profile to use as a fake device */
+char *fake_name,	/* Name of profile to use as a fake device */
+a1log *log      	/* Verb, debug & error log */
 ) {
 	disprd *p = NULL;
 	int ch;
@@ -1947,19 +2030,19 @@ char *fake_name		/* Name of profile to use as a fake device */
 
 	/* Allocate a disprd */
 	if ((p = (disprd *)calloc(sizeof(disprd), 1)) == NULL) {
-		if (debug) fprintf(stderr,"new_disprd failed due to malloc failure\n");
+		a1logd(log, 1, "new_disprd failed due to malloc failure\n");
 		if (errc != NULL) *errc = 6;
 		return NULL;
 	}
+	p->log = new_a1log_d(log);
 	p->del = disprd_del;
 	p->read = disprd_read;
+	p->get_disptype = disprd_get_disptype;
 	p->reset_targ_w = disprd_reset_targ_w;
 	p->change_drift_comp = disprd_change_drift_comp;
 	p->ambient = disprd_ambient;
 	p->fake_name = fake_name;
 
-	p->verb = verb;
-	p->debug = debug;
 	p->ccmtx = ccmtx;
 	p->sets = sets;
 	p->no_sets = no_sets;		/* CCSS */
@@ -1969,18 +2052,17 @@ char *fake_name		/* Name of profile to use as a fake device */
 	p->bdrift = bdrift;
 	p->wdrift = wdrift;
 	p->dtype = dtype;
-	p->proj = proj;
-	p->adaptive = adaptive;
-	p->noautocal = noautocal;
+	p->docbid = docbid;
+	p->refrmode = -1;			/* Unknown */
+	p->cbid = 0;				/* Unknown */
+	p->tele = tele;
+	p->nadaptive = nadaptive;
+	p->noinitcal = noinitcal;
 	p->highres = highres;
-	if (df)
-		p->df = df;
-	else
-		p->df = stdout;
 	if (mcallout != NULL)
-		comport = -99;			/* Force fake device */
+		ipath = &icomFakeDevice;	/* Force fake device */
 	p->mcallout = mcallout;
-	p->comport = comport;
+	p->ipath = ipath;
 	p->br = baud_19200;
 	p->fc = fc;
 
@@ -2001,7 +2083,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 	}
 
 	/* If non-real instrument */
-	if (comport == -99) {
+	if (ipath == &icomFakeDevice) {
 		p->fake = 1;
 
 		p->fake_fp = NULL;
@@ -2026,39 +2108,36 @@ char *fake_name		/* Name of profile to use as a fake device */
 		}
 
 		if (p->fake_lu != NULL) {
-			if (verb)
-				printf("Using profile '%s' rather than real device\n",p->fake_name);
+			a1logv(p->log, 1, "Using profile '%s' rather than real device\n",p->fake_name);
 			p->read = disprd_fake_read_lu;
 		} else if (p->mcallout != NULL) {
-			if (verb)
-				printf("Using shell callout '%s' rather than real device\n",p->mcallout);
+			a1logv(p->log, 1, "Using shell callout '%s' rather than real device\n",p->mcallout);
 			p->read = disprd_fake_read_co;
 		} else
 			p->read = disprd_fake_read;
 
 		if (disp == NULL) {
-			DBG((dbgo,"new_disprd returning fake device\n"));
+			a1logd(log,1,"new_disprd returning fake device\n");
 			return p;
 		}
 
 	/* Setup the instrument */
 	} else {
 	
-		if (verb)
-			fprintf(p->df,"Setting up the instrument\n");
+		a1logv(p->log, 1, "Setting up the instrument\n");
 	
-		if ((p->it = new_inst(comport, 0, debug, verb)) == NULL) {
-			DBG((stderr,"new_disprd failed because new_inst failed\n"));
+		if ((p->it = new_inst(ipath, 0, log, DUIH_FUNC_AND_CONTEXT)) == NULL) {
+			a1logd(p->log,1,"new_disprd failed because new_inst failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 2;
 			return NULL;
 		}
 	
 		/* Establish communications */
-		if ((rv = p->it->init_coms(p->it, p->comport, p->br, p->fc, 15.0)) != inst_ok) {
-			DBG((dbgo,"init_coms returned '%s' (%s)\n",
-			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-			DBG((dbgo,"new_disprd failed because init_coms failed\n"));
+		if ((rv = p->it->init_coms(p->it, p->br, p->fc, 15.0)) != inst_ok) {
+			a1logd(log,1,"init_coms returned '%s' (%s)\n",
+			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
+			a1logd(log,1,"new_disprd failed because init_coms failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 2;
 			return NULL;
@@ -2066,9 +2145,9 @@ char *fake_name		/* Name of profile to use as a fake device */
 	
 		/* Initialise the instrument */
 		if ((rv = p->it->init_inst(p->it)) != inst_ok) {
-			DBG((dbgo,"init_inst returned '%s' (%s)\n",
-			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)))
-			DBG((dbgo,"new_disprd failed because init_inst failed\n"));
+			a1logd(log,1,"init_inst returned '%s' (%s)\n",
+			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
+			a1logd(log,1,"new_disprd failed because init_inst failed\n");
 			p->del(p);
 			if (errc != NULL) {
 				*errc = 2;
@@ -2080,7 +2159,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 	
 		/* Configure the instrument mode for reading the display */
 		if ((rv = config_inst_displ(p)) != 0) {
-			DBG((dbgo,"new_disprd failed because config_inst_displ failed\n"));
+			a1logd(log,1,"new_disprd failed because config_inst_displ failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = rv;
 			return NULL;
@@ -2089,9 +2168,9 @@ char *fake_name		/* Name of profile to use as a fake device */
 
 	/* Create a spectral conversion object if needed */
 	if (p->spectral && p->obType != icxOT_none) {
-		if ((p->sp2cie = new_xsp2cie(icxIT_none, NULL, p->obType, custObserver, icSigXYZData))
+		if ((p->sp2cie = new_xsp2cie(icxIT_none, NULL, p->obType, custObserver, icSigXYZData, icxNoClamp))
 		                                                                                 == NULL) {
-			DBG((dbgo,"new_disprd failed because creation of spectral conversion object failed\n"))
+			a1logd(log,1,"new_disprd failed because creation of spectral conversion object failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 9;
 			return NULL;
@@ -2100,9 +2179,9 @@ char *fake_name		/* Name of profile to use as a fake device */
 
 	if (webdisp != 0) {
 		/* Open web display */
-		if ((p->dw = new_webwin(webdisp, patsize, patsize, ho, vo, 0, 0,
-		                                                        verb, debug)) == NULL) {
-			DBG((dbgo,"new_disprd failed because new_webwin failed\n"))
+		if ((p->dw = new_webwin(webdisp, hpatsize, vpatsize, ho, vo, 0, 0,
+		                                        p->log->verb, p->log->debug)) == NULL) {
+			a1logd(log,1,"new_disprd failed because new_webwin failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 3;
 			return NULL;
@@ -2111,9 +2190,9 @@ char *fake_name		/* Name of profile to use as a fake device */
 			*noramdac = 1;
 	} else {
 		/* Open display window for positioning (no blackbg) */
-		if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, native, noramdac, 0,
-		                                                        override, debug)) == NULL) {
-			DBG((dbgo,"new_disprd failed because new_dispwin failed\n"))
+		if ((p->dw = new_dispwin(disp, hpatsize, vpatsize, ho, vo, 0, native, noramdac, 0,
+		                                              override, p->log->debug)) == NULL) {
+			a1logd(log,1,"new_disprd failed because new_dispwin failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 3;
 			return NULL;
@@ -2124,20 +2203,17 @@ char *fake_name		/* Name of profile to use as a fake device */
 		/* Do a calibration up front, so as not to get in the users way, */
 		/* but ignore a CRT frequency or display integration calibration, */
 		/* since these will be done automatically. */
-		if ((p->it->needs_calibration(p->it) & inst_calt_needs_cal_mask) != 0
-		 && p->it->needs_calibration(p->it) != inst_calt_crt_freq
-		 && p->it->needs_calibration(p->it) != inst_calt_disp_int_time
-		 && p->it->needs_calibration(p->it) != inst_calt_proj_int_time) {
+		if (p->it->needs_calibration(p->it) & inst_calt_n_dfrble_mask) {
 			disp_win_info dwi;
 			dwi.dw = p->dw;		/* Set window to use */
 	
-			rv = inst_handle_calibrate(p->it, inst_calt_all, inst_calc_none,
+			rv = inst_handle_calibrate(p->it, inst_calt_needed, inst_calc_none,
 			                                  setup_display_calibrate, &dwi);
 			setup_display_calibrate(p->it,inst_calc_none, &dwi); 
 			printf("\n");
 			if (rv != inst_ok) {	/* Abort or fatal error */
-				DBG((dbgo,"new_disprd failed because calibrate failed with '%s' (%s)\n",
-				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv)));
+				a1logd(log,1,"new_disprd failed because calibrate failed with '%s' (%s)\n",
+				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 				printf("Calibrate failed with '%s' (%s)\n",
 				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 				p->del(p);
@@ -2153,7 +2229,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 	printf("Hit Esc or Q to give up, any other key to continue:"); fflush(stdout);
 	if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
 		printf("\n");
-		DBG((dbgo,"new_disprd failed because user aborted when placing device\n"));
+		a1logd(log,1,"new_disprd failed because user aborted when placing device\n");
 		p->del(p);
 		if (errc != NULL) *errc = 1;
 		return NULL;
@@ -2169,9 +2245,9 @@ char *fake_name		/* Name of profile to use as a fake device */
 		}
 	
 		/* Open display window again for measurement */
-		if ((p->dw = new_dispwin(disp, patsize, patsize, ho, vo, 0, native, noramdac, blackbg,
-		                                                        override, debug)) == NULL) {
-			DBG((dbgo,"new_disprd failed new_dispwin failed\n"))
+		if ((p->dw = new_dispwin(disp, hpatsize, vpatsize, ho, vo, 0, native, noramdac, blackbg,
+		                                                    override, p->log->debug)) == NULL) {
+			a1logd(log,1,"new_disprd failed new_dispwin failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 3;
 			return NULL;
@@ -2218,11 +2294,9 @@ char *fake_name		/* Name of profile to use as a fake device */
 				}
 			}
 			if (p->dw->set_ramdac(p->dw, r, 0)) {
-				DBG((dbgo,"new_disprd failed becayse set_ramdac failed\n"))
-				if (p->verb) {
-					fprintf(p->df,"Failed to set RAMDAC to desired calibration.\n");
-					fprintf(p->df,"Perhaps the operating system is being fussy ?\n");
-				}
+				a1logd(log,1,"new_disprd failed becayse set_ramdac failed\n");
+				a1logv(p->log, 1, "Failed to set RAMDAC to desired calibration.\n");
+				a1logv(p->log, 1, "Perhaps the operating system is being fussy ?\n");
 				r->del(r);
 				p->del(p);
 				if (errc != NULL) *errc = 4;
@@ -2238,9 +2312,8 @@ char *fake_name		/* Name of profile to use as a fake device */
 		int j, i;
 		
 		if ((r = p->dw->get_ramdac(p->dw)) == NULL) {
-			DBG((dbgo,"new_disprd failed becayse get_ramdac failed\n"))
-			if (p->verb)
-				fprintf(p->df,"Failed to read current RAMDAC");
+			a1logd(log,1,"new_disprd failed becayse get_ramdac failed\n");
+			a1logv(p->log, 1, "Failed to read current RAMDAC\n");
 			p->del(p);
 			if (errc != NULL) *errc = 4;
 			return NULL;
@@ -2264,7 +2337,7 @@ char *fake_name		/* Name of profile to use as a fake device */
 		r->del(r);
 	}
 	
-	DBG((dbgo,"new_disprd succeeded\n"))
+	a1logd(log,1,"new_disprd succeeded\n");
 	return p;
 }
 

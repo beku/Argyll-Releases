@@ -58,6 +58,18 @@
 	[0.0030, 0.0136, 0.9834] to [0.0000, 0.0000, 1.0000]
 	[Susstrunk & Brill, IS&T/SID 14th Color Imaging Conference Late Breaking News sublement]
 
+	To prevent wild Jab values as the rgb' values approach zero, a region close to each
+	primary ground plane is compressed. This expands the region of reasonable
+	behaviour to encompass XYZ values that are found in practice (ie. ProPhotoRGB).
+
+	To prevent excessive curvature of hue in high saturation blue regions
+	due to the non-linearity exagerating the difference between
+	r & b values, a heuristic is introduced that blends the r & b
+	values, reducing this effect. This degrades the agreement
+	with the reference CIECAM implementation by about 1DE in this region,
+	but greatly improves the behaviour in mapping and clipping from
+	highly saturated blues (ie. ProPhotoRGB).
+
 	The post-adaptation non-linearity response has had a straight
 	line negative linear extension added.
 	The positive region has a tangential linear extension added, so
@@ -94,27 +106,35 @@
 #include "numlib.h"
 
 #define ENABLE_COMPR		/* [Def] Enable XYZ compression  */
+#define ENABLE_BLUE_ANGLE_FIX	/* [Def] Limit maximum blue angle */
 #define ENABLE_DDL			/* [Def] Enable k1,k2,k3 overall ss limit values (seems to be the best scheme) */
 #undef ENABLE_SS			/* [Undef] Disable overall ss limit values (not the scheme used) */
 
 #undef ENTRACE				/* [Undef] Enable internal value runtime tracing if s->trace != 0 */
+#undef DOTRACE				/* [Undef] Trace anyway (ie. set s->trace = 1) */
 #undef DIAG1				/* [Undef] Print internal value diagnostics for conditions setup */
 #undef DIAG2				/* [Undef] Print internal value diagnostics for each conversion */
 #undef TRACKMINMAX			/* [Undef] Track min/max DD & SS limits (run with locus cam02test) */
 #undef DISABLE_MATRIX		/* Debug - disable matrix & non-lin, wire XYZ to rgba */
+#undef DISABLE_SCR			/* Debug - disable Sharpened Cone Response matrix */
+#undef DISABLE_HPE			/* Debug - disable just Hunt-Pointer_Estevez matrix */
 #undef DISABLE_NONLIN		/* Debug - wire rgbp to rgba */
 #undef DISABLE_TTD			/* Debug - disable ttd vector 'tilt' */
 #undef DISABLE_HHKR			/* Debug - disable Helmholtz-Kohlraush */
 
 #ifdef ENABLE_COMPR
-# define BC_RANGE_R 0.05	/* [0.05] Set compression range as proportion of distance to neutral - red */
-# define BC_RANGE_G 0.05	/* [0.05] Set compression range as proportion of distance to neutral - green*/
-# define BC_RANGE_B 0.01	/* [0.01] Set compression range as proportion of distance to neutral - blue */
-# define BC_MAXRANGE 0.13	/* Maximum compression range */
-# define BC_LIMIT 0.5		/* [0.5] Correction limit (abs. XYZ distance shift) */
-# define BC_WHMINY 0.5		/* [0.5] Compression direction minimum Y value */
-# define BC_WHITEDIR 1.0	/* [1.0] Amount to clip in white direction vs. normal direction */
+# define BC_WHMINY 0.3		/* [0.3] Compression direction minimum Y value */
+# define BC_RANGE_R 0.01	/* [0.01] Set compression range as prop. of distance to neutral - red */
+# define BC_RANGE_G 0.05	/* [0.05] Set compression range as prop. of distance to neutral - green*/
+# define BC_RANGE_B 0.10	/* [0.10] Set compression range as prop. of distance to neutral - blue */
+# define BC_MAXRANGE 0.13	/* [0.13] Maximum compression range */
+# define BC_LIMIT 0.7		/* [0.7] Correction limit (abs. rgbp distance shift) */
 #endif /* ENABLE_COMPR */
+
+#ifdef ENABLE_BLUE_ANGLE_FIX
+# define BLUE_BL_MAX 0.9	/* [0.9] Sets ultimate blue angle, higher = less angle */
+# define BLUE_BL_POW 3.5	/* [3.5] Sets rate at which blue angle is limited */
+#endif
 
 #define NLDLIMIT 0.00001	/* [0.00001] Non-linearity minimum lower crossover to straight line */
 #define NLDICEPT -0.18		/* [-0.18] Input intercept of straight line with 0.1 output */
@@ -131,8 +151,8 @@
 #define DDLLIMIT 0.55		/* [0.55] ab component -k3:k2 ratio limit (must be < 1.0) */
 //#define DDULIMIT 0.9993		/* [0.9993] ab component k3:k1 ratio limit (must be < 1.0) */
 #define DDULIMIT 0.34		/* [0.34] ab component k3:k1 ratio limit (must be < 1.0) */
-#define SSMINcJ 0.005		/* [0.001] ab scale cJ minimum value */
-#define JLIMIT 0.005		/* [0.001] J encoding cutover point straight line (0 - 1.0 range) */
+#define SSMINcJ 0.005		/* [0.005] ab scale cJ minimum value */
+#define JLIMIT 0.005		/* [0.005] J encoding cutover point straight line (0 - 1.0 range) */
 #define HKLIMIT 0.7			/* [0.7] Maximum Helmholtz-Kohlraush lift */
 
 #ifdef TRACKMINMAX
@@ -146,7 +166,7 @@ double slotsu[noslots];
 double minj = 1e38, maxj = -1e38;
 #endif /* TRACKMINMAX */
 
-#ifdef ENTRACE
+#if defined(ENTRACE) || defined(DOTRACE)
 #define TRACE(xxxx) if (s->trace) printf xxxx ;
 #else
 #define TRACE(xxxx) 
@@ -194,6 +214,10 @@ cam02 *new_cam02(void) {
 
 	/* Set a default viewing condition ?? */
 	/* set_view(s, vc_average, D50, 33, 0.2, 0.0, 0.0, D50, 0); */
+
+#ifdef DOTRACE
+	s->trace = 1;
+#endif
 
 #ifdef TRACKMINMAX
 	{
@@ -353,10 +377,16 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->Fsxyz[2] *= s->Fsc;
 	s->Fisc = 1.0/s->Fsc;
 
+#ifndef DISABLE_SCR
 	/* Sharpened cone response white values */
 	s->rgbW[0] =  0.7328 * s->Wxyz[0] + 0.4296 * s->Wxyz[1] - 0.1624 * s->Wxyz[2];
 	s->rgbW[1] = -0.7036 * s->Wxyz[0] + 1.6975 * s->Wxyz[1] + 0.0061 * s->Wxyz[2];
 	s->rgbW[2] =  0.0000 * s->Wxyz[0] + 0.0000 * s->Wxyz[1] + 1.0000 * s->Wxyz[2];
+#else
+	s->rgbW[0] = s->Wxyz[0];
+	s->rgbW[1] = s->Wxyz[1];
+	s->rgbW[2] = s->Wxyz[2];
+#endif
 
 	/* Degree of chromatic adaptation */
 	s->D = s->F * (1.0 - exp((-s->La - 42.0)/92.0)/3.6);
@@ -371,6 +401,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->rgbcW[1] = s->Drgb[1] * s->rgbW[1];
 	s->rgbcW[2] = s->Drgb[2] * s->rgbW[2];
 	
+#ifndef DISABLE_HPE
 	/* Transform from spectrally sharpened, to Hunt-Pointer_Estevez cone space */
 	s->rgbpW[0] =  0.7409744840453773 * s->rgbcW[0]
 	            +  0.2180245944753982 * s->rgbcW[1]
@@ -381,12 +412,23 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->rgbpW[2] = -0.0096276087384294 * s->rgbcW[0]
 	            -  0.0056980312161134 * s->rgbcW[1]
 	            +  1.0153256399545427 * s->rgbcW[2];
+#else
+	s->rgbpW[0] = s->rgbcW[0];
+	s->rgbpW[1] = s->rgbcW[1];
+	s->rgbpW[2] = s->rgbcW[2];
+#endif /* DISABLE_HPE */
 
+#ifndef DISABLE_SCR
 	/* Create combined cone and chromatic transform matrix: */
 	/* Spectrally sharpened cone responses matrix */
 	s->cc[0][0] =  0.7328; s->cc[0][1] = 0.4296; s->cc[0][2] = -0.1624;
 	s->cc[1][0] = -0.7036; s->cc[1][1] = 1.6975; s->cc[1][2] =  0.0061;
 	s->cc[2][0] =  0.0000; s->cc[2][1] = 0.0000; s->cc[2][2] =  1.0000;
+#else
+	s->cc[0][0] = 1.0; s->cc[0][1] = 0.0; s->cc[0][2] = 0.0;
+	s->cc[1][0] = 0.0; s->cc[1][1] = 1.0; s->cc[1][2] = 0.0;
+	s->cc[2][0] = 0.0; s->cc[2][1] = 0.0; s->cc[2][2] = 1.0;
+#endif
 	
 	/* Chromaticaly transformed sample value */
 	icmSetUnity3x3(tm);
@@ -395,6 +437,7 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	tm[2][2] = s->Drgb[2];
 	icmMul3x3(s->cc, tm);
 	
+#ifndef DISABLE_HPE
 	/* Transform from spectrally sharpened, to Hunt-Pointer_Estevez cone space */
 	tm[0][0] =  0.7409744840453773;
 	tm[0][1] =  0.2180245944753982;
@@ -406,15 +449,12 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	tm[2][1] = -0.0056980312161134;
 	tm[2][2] =  1.0153256399545427;
 	icmMul3x3(s->cc, tm);
+#endif /* DISABLE_HPE */
 
 	/* Create inverse combined cone and chromatic transform matrix: */
 	icmInverse3x3(s->icc, s->cc);		/* Hmm. we assume it cannot fail */
 
 #ifdef ENABLE_COMPR
-	/* Create normalized cc for compression */
-	for (i = 0; i < 3; i++)
-		icmNormalize3(s->ncc[i], s->cc[i],1.0);
-
 	/* Compression ranges */
 	s->crange[0] = BC_RANGE_R; 
 	s->crange[1] = BC_RANGE_G; 
@@ -547,69 +587,75 @@ double XYZ[3]
 
 	TRACE(("XYZ inc flare = %f %f %f\n",xyz[0], xyz[1], xyz[2]))
 
+	/* Spectrally sharpened cone responses, */
+	/* Chromaticaly transformed sample value, */
+	/* Transform from spectrally sharpened, to Hunt-Pointer_Estevez cone space. */
+	icmMulBy3x3(rgbp, s->cc, xyz);
+
+	TRACE(("rgbp = %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]))
+
 #ifdef ENABLE_COMPR
 	/* Try and prevent crazy out of cam02 gamut behaviour, by compressing */
-	/* the XYZ so as to prevent rgb[] becoming less than zero. */
+	/* the rgbp so as to prevent it becoming less than zero. */
 	{
 		double tt;			/* Temporary */
-		double wxyz[3];		/* White target */
-		double wvec[3];		/* Normalized vector to white */
+		double wrgb[3];		/* White target */
 
-		/* Locate the white target point */
-		tt = xyz[1] > BC_WHMINY ? xyz[1] : BC_WHMINY;
-		icmScale3(wxyz, s->Wxyz, tt/s->Wxyz[1]);	/* White target at same Y */
+		/* Make white target white point with same Y value */
+		tt = xyz[1] > BC_WHMINY ? xyz[1] : BC_WHMINY;	/* Limit to minimum Y */
+		icmScale3(wrgb, s->rgbpW, tt/s->Wxyz[1]);	/* White target at same Y */
+		TRACE(("wrgb %f %f %f\n", wrgb[0], wrgb[1], wrgb[2]))
 
+		/* Compress r,g,b in turn */
 		for (i = 0; i < 3; i++) {
 			double cv;		/* Compression value */
 			double ctv;		/* Compression target value */
 			double cd;		/* Compression displacement needed */
 			double cvec[3];	/* Normalized correction vector */
-			double af;		/* Normal to correction vector length addjustment factor */
-			double pol[3];	/* Point on line */
 			double isec[3];	/* Intersection with plane */
 			double offs;	/* Offset of point from orgin*/
 			double range;	/* Threshold to start compression */
 			double asym;	/* Compression asymtope */
 
-			/* Compute white direction vector */
-			icmSub3(wvec, wxyz, xyz);					/* Direction of white target */
-			icmNormalize3(wvec, wvec, 1.0);				/* Normalized vector to white */
+			/* Compute compression direction as vector towards white */
+			/* (We did try correcting in a blend of limit plane normal and white, */
+			/*  but compressing towards white seems to be the best.) */
+			icmSub3(cvec, wrgb, rgbp);					/* Direction of white target */
 
-			TRACE(("xyz %f %f %f\n", xyz[0], xyz[1], xyz[2]))
-			TRACE(("wvec %f %f %f\n", wvec[0], wvec[1], wvec[2]))
-
-			/* Compute correction direction vector as blend of */
-			/* limit surface normal and direction to white. */
-			icmBlend3(cvec, s->ncc[i], wvec, BC_WHITEDIR);
-			icmNormalize3(cvec, cvec, 1.0);	
-
+			TRACE(("rgbp %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]))
 			TRACE(("cvec %f %f %f\n", cvec[0], cvec[1], cvec[2]))
 
-			af = 1.0/icmDot3(cvec, s->ncc[i]);			/* Length adjustment from normal to cvec */
-			af = fabs(af);
-
-			/* Compute intersection of correction direction with this plane */
-			icmAdd3(pol, xyz, cvec);			/* Second point on line */
-			if (icmVecPlaneIsect(isec, 0.0, s->ncc[i], pol, xyz)) {
-				TRACE(("Intersection with clip plane failed\n"))
+			if (cvec[i] < 1e-9) {		/* compression direction can't correct this coord */
+				TRACE(("Intersection with limit plane failed\n"))
 				continue;
 			}
+
+			/* Scale compression vector to make it move a unit in normal direction */
+			icmScale3(cvec, cvec, 1.0/cvec[i]);		/* Normalized vector to white */
+			TRACE(("cvec %f %f %f\n", cvec[0], cvec[1], cvec[2]))
+
+			/* Compute intersection of correction direction with this limit plane */
+			/* (This corresponds with finding displacement of rgbp by cvec */
+			/*  such that the current coord value = 0) */
+			icmScale3(isec, cvec, -rgbp[i]);		/* (since cvec[i] == 1.0) */
+			icmAdd3(isec, isec, rgbp);
+			TRACE(("isec %f %f %f\n", isec[0], isec[1], isec[2]))
+
 			/* Compute distance from intersection to origin */
 			offs = pow(icmNorm3(isec), 0.85);
 
-			range = s->crange[i] * offs;		/* Scale range by distance to origin */
-
-			if (range > BC_MAXRANGE)
-				range = BC_MAXRANGE;
+			range = s->crange[i] * offs;	/* Scale range by distance to origin */
+			if (range > BC_MAXRANGE)		/* so that it tapers down as we approach it */
+				range = BC_MAXRANGE;		/* and limit maximum */
 
 			/* Aiming above plane when far from origin, */
 			/* but below plane at the origin, so that black isn't affected. */
 			asym = range - 0.2 * (range + (0.01 * s->crange[i]));
 
-			ctv = cv = icmDot3(xyz, s->ncc[i]);
+			ctv = cv = rgbp[i];		/* Distance above/below limit plane */
 
-			TRACE(("ch %d af %f, offs %f, range %f asym %f, cv %f\n",i,af, offs,range,asym,cv))
-			if (cv < (range - 1e-12)) {
+			TRACE(("ch %d, offs %f, range %f asym %f, cv %f\n",i, offs,range,asym,cv))
+			if (cv < (range - 1e-12)) {		/* Need to compress */
 				double aa, bb;
 				aa = 1.0/(range - cv);
 				bb = 1.0/(range - asym);
@@ -618,24 +664,36 @@ double XYZ[3]
 				cd = ctv - cv;				/* Displacement needed */
 				if (cd > BC_LIMIT)
 					cd = BC_LIMIT;
-				TRACE(("ch %d cd = %f, scaled cd %f\n",i,cd,af * cd))
-				cd *= af;
+				TRACE(("ch %d cd = %f, scaled cd %f\n",i,cd,cd))
 
 				/* Apply correction */
 				icmScale3(cvec, cvec, cd);			/* Compression vector */
-				icmAdd3(xyz, xyz, cvec);			/* Compress by displacement */
-				TRACE(("XYZ after comp. = %f %f %f\n",xyz[0], xyz[1], xyz[2]))
+				icmAdd3(rgbp, rgbp, cvec);			/* Compress by displacement */
+				TRACE(("rgbp after comp. = %f %f %f\n",rgbp[0], rgbp[1], rgbp[2]))
 			}
 		}
 	}
 #endif /* ENABLE_COMPR */
 
-	/* Spectrally sharpened cone responses, */
-	/* Chromaticaly transformed sample value, */
-	/* Transform from spectrally sharpened, to Hunt-Pointer_Estevez cone space. */
-	icmMulBy3x3(rgbp, s->cc, xyz);
+#ifdef ENABLE_BLUE_ANGLE_FIX
+	ss = rgbp[0] + rgbp[1] + rgbp[2];
+	if (ss < 1e-9) {
+		ss = 0.0;
+	} else {
+		ss = (rgbp[2]/ss - 1.0/3.0) * 3.0/2.0;
+		if (ss > 0.0)
+			ss = BLUE_BL_MAX * pow(ss, BLUE_BL_POW);
+	}
+	if (ss < 0.0)
+		ss = 0.0;
+	else if (ss > 1.0)
+		ss = 1.0;
+	tt = 0.5 * (rgbp[0] + rgbp[1]);
+	rgbp[0] = ss * tt + (1.0 - ss) * rgbp[0];
+	rgbp[1] = ss * tt + (1.0 - ss) * rgbp[1];
+	TRACE(("rgbp after blue fix ss = %f, rgbp = %f %f %f\n",ss,rgbp[0], rgbp[1], rgbp[2]))
+#endif
 
-	TRACE(("rgbp = %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]))
 #ifdef DISABLE_NONLIN
 	for (i = 0; i < 3; i++) {
 		rgba[i] = 400.0/27.13 * rgbp[i];
@@ -660,6 +718,10 @@ double XYZ[3]
 		}
 	}
 #endif	/* !DISABLE_NONLIN */
+
+//tt = 0.5 * (rgba[0] + rgba[1]);
+//rgba[0] = (rgba[0] - ss * tt)/(1.0 - ss);
+//rgba[1] = (rgba[1] - ss * tt)/(1.0 - ss);
 
 #endif /* !DISABLE_MATRIX */
 
@@ -871,10 +933,10 @@ double XYZ[3]
 	TRACE(("\n"))
 
 #ifdef DIAG2
-	printf("Processing:\n");
+	printf("Processing XYZ->Jab:\n");
 	printf("XYZ = %f %f %f\n", XYZi[0], XYZi[1], XYZi[2]);
 	printf("Including flare XYZ = %f %f %f\n", xyz[0], xyz[1], xyz[2]);
-	printf("Hunt-P-E cone space rgbp = %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]);
+	printf("Huntpace rgbpP-E cone space rgbp = %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]);
 	printf("Post adapted cone response rgba = %f %f %f\n", rgba[0], rgba[1], rgba[2]);
 	printf("Prelim red green a = %f, b = %f\n", a, b);
 	printf("Hue angle h = %f\n", h);
@@ -1061,6 +1123,7 @@ double Jab[3]
 		} else if (rgba[i] <= s->nluxval) {
 			tt = rgba[i] - 0.1;
 			rgbp[i] = pow((27.13 * tt)/(400.0 - tt), 1.0/0.42)/s->Fl;
+//			rgbp[i] = pow((27.13 * tt)/(400.0 - tt), 1.0/1.0)/s->Fl;
 		} else {
 			rgbp[i] = s->nlulimit + (rgba[i] - s->nluxval)/s->nluxslope;
 		}
@@ -1069,76 +1132,90 @@ double Jab[3]
 
 	TRACE(("rgbp %f %f %f\n",rgbp[0], rgbp[1], rgbp[2]))
 
-	/* Chromaticaly transformed sample value */
-	/* Spectrally sharpened cone responses */
-	/* XYZ values */
-	icmMulBy3x3(xyz, s->icc, rgbp);
+#ifdef ENABLE_BLUE_ANGLE_FIX
+	ss = rgbp[0] + rgbp[1] + rgbp[2];
+	if (ss < 1e-9)
+		ss = 0.0;
+	else {
+		ss = (rgbp[2]/ss - 1.0/3.0) * 3.0/2.0;
+		if (ss > 0.0)
+			ss = BLUE_BL_MAX * pow(ss, BLUE_BL_POW);
+	}
+	if (ss < 0.0)
+		ss = 0.0;
+	else if (ss > 1.0)
+		ss = 1.0;
+	tt = 0.5 * (rgbp[0] + rgbp[1]);
+	rgbp[0] = (rgbp[0] - ss * tt)/(1.0 - ss);
+	rgbp[1] = (rgbp[1] - ss * tt)/(1.0 - ss);
 
-	TRACE(("XYZ = %f %f %f\n",xyz[0], xyz[1], xyz[2]))
+	TRACE(("rgbp after blue fix %f = %f %f %f\n",ss,rgbp[0], rgbp[1], rgbp[2]))
+#endif
+
 
 #ifdef ENABLE_COMPR
 	/* Undo soft limiting */
 	{
 		double tt;			/* Temporary */
-		double wxyz[3];		/* White target */
-		double wvec[3];		/* Normalized vector to white */
+		double wrgb[3];		/* White target */
 
-		/* Locate the white target point */
-		tt = xyz[1] > BC_WHMINY ? xyz[1] : BC_WHMINY;
-		icmScale3(wxyz, s->Wxyz, tt/s->Wxyz[1]);	/* White target at same Y */
+		/* Make white target white point with same Y value */
+		tt = rgbp[0] * s->icc[1][0] + rgbp[1] * s->icc[1][1] + rgbp[2] * s->icc[1][2];
+		tt = tt > BC_WHMINY ? tt : BC_WHMINY;	/* Limit to minimum Y */
+		icmScale3(wrgb, s->rgbpW, tt/s->Wxyz[1]);	/* White target at same Y */
+		TRACE(("wrgb %f %f %f\n", wrgb[0], wrgb[1], wrgb[2]))
 
+		/* Un-limit b,g,r in turn */
 		for (i = 2; i >= 0; i--) {
 			double cv;		/* Compression value */
 			double ctv;		/* Compression target value */
 			double cd;		/* Compression displacement needed */
 			double cvec[3];	/* Normalized correction vector */
-			double af;		/* Normal to correction vector length addjustment factor */
-			double pol[3];	/* Point on line */
 			double isec[3];	/* Intersection with plane */
 			double offs;	/* Offset of point from orgin*/
 			double range;	/* Threshold to start compression */
 			double asym;	/* Compression asymtope */
 
-			/* Compute white direction vector */
-			icmSub3(wvec, wxyz, xyz);					/* Direction of white target */
-			icmNormalize3(wvec, wvec, 1.0);				/* Normalized vector to white */
+			/* Compute compression direction as vector towards white */
+			/* (We did try correcting in a blend of limit plane normal and white, */
+			/*  but compressing towards white seems to be the best.) */
+			icmSub3(cvec, wrgb, rgbp);					/* Direction of white target */
 
-			TRACE(("xyz %f %f %f\n", xyz[0], xyz[1], xyz[2]))
-			TRACE(("wvec %f %f %f\n", wvec[0], wvec[1], wvec[2]))
-
-			/* Compute correction direction vector as blend of */
-			/* limit surface normal and direction to white. */
-			icmBlend3(cvec, s->ncc[i], wvec, BC_WHITEDIR);
-			icmNormalize3(cvec, cvec, 1.0);	
-
+			TRACE(("rgbp %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]))
 			TRACE(("cvec %f %f %f\n", cvec[0], cvec[1], cvec[2]))
 
-			af = 1.0/icmDot3(cvec, s->ncc[i]);			/* Length adjustment from normal to cvec */
-			af = fabs(af);
-
-			/* Compute intersection of correction direction with this plane */
-			icmAdd3(pol, xyz, cvec);			/* Second point on line */
-			if (icmVecPlaneIsect(isec, 0.0, s->ncc[i], pol, xyz)) {
-				TRACE(("Intersection with clip plane failed\n"))
+			if (cvec[i] < 1e-9) {		/* compression direction can't correct this coord */
+				TRACE(("Intersection with limit plane failed\n"))
 				continue;
 			}
+
+			/* Scale compression vector to make it move a unit in normal direction */
+			icmScale3(cvec, cvec, 1.0/cvec[i]);		/* Normalized vector to white */
+			TRACE(("cvec %f %f %f\n", cvec[0], cvec[1], cvec[2]))
+
+			/* Compute intersection of correction direction with this limit plane */
+			/* (This corresponds with finding displacement of rgbp by cvec */
+			/*  such that the current coord value = 0) */
+			icmScale3(isec, cvec, -rgbp[i]);		/* (since cvec[i] == 1.0) */
+			icmAdd3(isec, isec, rgbp);
+			TRACE(("isec %f %f %f\n", isec[0], isec[1], isec[2]))
+
 			/* Compute distance from intersection to origin */
 			offs = pow(icmNorm3(isec), 0.85);
 
-			range = s->crange[i] * offs;		/* Scale range by distance to origin */
-
-			if (range > BC_MAXRANGE)
-				range = BC_MAXRANGE;
+			range = s->crange[i] * offs;	/* Scale range by distance to origin */
+			if (range > BC_MAXRANGE)		/* so that it tapers down as we approach it */
+				range = BC_MAXRANGE;		/* and limit maximum */
 
 			/* Aiming above plane when far from origin, */
 			/* but below plane at the origin, so that black isn't affected. */
 			asym = range - 0.2 * (range + (0.01 * s->crange[i]));
 
-			ctv = cv = icmDot3(xyz, s->ncc[i]);
+			ctv = cv = rgbp[i];		/* Distance above/below limit plane */
 
-			TRACE(("ch %d af %f offs %f, range %f asym %f, cv %f\n",i,af,offs,range,asym,cv))
+			TRACE(("ch %d, offs %f, range %f asym %f, cv %f\n",i, offs,range,asym,cv))
 
-			if (ctv < (range - 1e-12)) {
+			if (ctv < (range - 1e-12)) {		/* Need to expand */
 
 				if (ctv <= asym) {
 					cd = BC_LIMIT;
@@ -1153,19 +1230,24 @@ double Jab[3]
 				}
 				if (cd > BC_LIMIT)
 					cd = BC_LIMIT;
-				TRACE(("ch %d cd = %f, scaled cd %f\n",i,cd,af * cd))
-
-				cd *= af;		/* Displacement in white direction needed */
+				TRACE(("ch %d cd = %f, scaled cd %f\n",i,cd,cd))
 
 				if (cd > 1e-9) {
 					icmScale3(cvec, cvec, -cd);			/* Compression vector */
-					icmAdd3(xyz, xyz, cvec);			/* Compress by displacement */
-					TRACE(("XYZ after decomp. = %f %f %f\n",xyz[0], xyz[1], xyz[2]))
+					icmAdd3(rgbp, rgbp, cvec);			/* Compress by displacement */
+					TRACE(("rgbp after decomp. = %f %f %f\n",rgbp[0], rgbp[1], rgbp[2]))
 				}
 			}
 		}
 	}
 #endif /* ENABLE_COMPR */
+
+	/* Chromaticaly transformed sample value */
+	/* Spectrally sharpened cone responses */
+	/* XYZ values */
+	icmMulBy3x3(xyz, s->icc, rgbp);
+
+	TRACE(("XYZ = %f %f %f\n",xyz[0], xyz[1], xyz[2]))
 
 	/* Subtract flare */
 	XYZ[0] = s->Fisc * (xyz[0] - s->Fsxyz[0]);
@@ -1187,7 +1269,7 @@ double Jab[3]
 	printf("Eccentricity factor e = %f\n", e);
 	printf("Hue angle h = %f\n", h);
 	printf("Post adapted cone response rgba = %f %f %f\n", rgba[0], rgba[1], rgba[2]);
-	printf("Hunt-P-E cone space rgbp = %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]);
+	printf("Hunundeft-P-E cone space rgbp = %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]);
 	printf("Including flare XYZ = %f %f %f\n", xyz[0], xyz[1], xyz[2]);
 	printf("XYZ = %f %f %f\n", XYZ[0], XYZ[1], XYZ[2]);
 	printf("\n");

@@ -83,6 +83,10 @@ extern void free_data(rspl *s);
 void init_rev(rspl *s);
 void free_rev(rspl *s);
 
+/* Implemented in gam.c: */
+void init_gam(rspl *s);
+void free_gam(rspl *s);
+
 /* Implemented in spline.c: */
 void init_spline(rspl *s);
 void free_spline(rspl *s);
@@ -92,9 +96,6 @@ int opt_rspl_imp(struct _rspl *s, int flags, int tdi, int adi, double **vdata,
 	double (*func)(void *fdata, double *inout, double *surav, int first, double *cw),
 	void *fdata, datai glow, datai ghigh, int gres[MXDI], datao vlow, datao vhigh);
 
-/* Implemented in gam.c: */
-void init_gam(rspl *s);
-void free_gam(rspl *s);
 
 /* Convention is to use:
    i to index grid points u.a
@@ -115,6 +116,9 @@ new_rspl(
 ) {
 	rspl *s;
 
+#ifdef DEBUG
+	fprintf(stderr,"new_rspl with flags 0x%x, di %d, fdi %d\n",flags,di,fdi);
+#endif
 	/* Allocate a structure */
 	if ((s = (rspl *) calloc(1, sizeof(rspl))) == NULL)
 		error("rspl: malloc failed - main structure");
@@ -147,8 +151,8 @@ new_rspl(
 	/* Init sub sections */
 	init_data(s);
 	init_grid(s);
-	init_gam(s);
 	init_rev(s);
+	init_gam(s);
 	init_spline(s);
 
 	if (flags & RSPL_FASTREVSETUP)
@@ -213,6 +217,10 @@ alloc_grid(rspl *s) {
 	int gno;				/* Number of points in grid */
 	ECOUNT(gc, MXDIDO, di, 0, s->g.res, 0);/* coordinates */
 	float *gp;				/* Grid point pointer */
+
+#ifdef DEBUG
+	fprintf(stderr,"rspl allocating grid res %s\n",icmPiv(di, s->g.res));
+#endif
 
 	/* Compute total number of elements in the grid */
 	for (gno = 1, e = 0; e < di; gno *= s->g.res[e], e++)

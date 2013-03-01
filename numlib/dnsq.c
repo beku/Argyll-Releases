@@ -16,8 +16,10 @@
 #undef DEBUG
 
 typedef long int bool;
-#define FALSE (0)
-#define TRUE (!FALSE)
+#ifndef TRUE
+# define FALSE (0)
+# define TRUE (!FALSE)
+#endif
 
 #ifndef min
 #define min(a,b) ((a) <= (b) ? (a) : (b))

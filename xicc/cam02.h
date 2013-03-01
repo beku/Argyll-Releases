@@ -160,7 +160,6 @@ struct _cam02 {
 	/* Pre-computed values */
 	double cc[3][3];	/* Forward cone and chromatic transform */
 	double icc[3][3];	/* Reverse cone and chromatic transform */
-	double ncc[3][3];	/* Normalized Forward cone and chromatic transform */
 	double crange[3];	/* ENABLE_COMPR compression range */
 	double Va[3], Vb[3], VttA[3], Vttd[3];	/* rgba vectors */
 	double dcomp[3];	/* Vttd in terms of VttA, Va, Vb */

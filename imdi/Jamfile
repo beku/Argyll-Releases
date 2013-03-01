@@ -18,8 +18,17 @@ InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
 #InstallFile $(DESTDIR)$(PREFIX)/h : $(Headers) ;
 #InstallLib  $(DESTDIR)$(PREFIX)/lib : $(Libraries) ;
 
-HDRS = ../h ../numlib ;
-LINKLIBS = ../numlib/libnum ;
+HDRS = ../h ;
+
+# Hack! Make cross compile of MingW64 on 32 bit host work.
+# (This doesn't work - 32 bit libraries are not provided :-()
+#if $(NT) && $(MINGW64) {
+#	ObjectCcFlags ctest imdi_make imdi_gen cgen : -m32 ;
+#	MainLinkFlags ctest imdi_make : -m32 -L $(MINGW64_LIB32) ;
+#}
+if $(NT) && $(MINGW64) {
+	IMDI_MAKE_OPT = -f ;	# Force 64 bits
+}
 
 # imdi low level cgen test code
 Main ctest : ctest.c cgen.c ;
@@ -27,9 +36,12 @@ Main ctest : ctest.c cgen.c ;
 # make imdi code program
 Main imdi_make : imdi_make.c imdi_gen.c cgen.c ;
 
+HDRS = ../h ../numlib ;
+LINKLIBS = ../numlib/libnum ;
+
 # GenFile source.c : program args ;	make custom file
 # Generate all the kernel files
-GenFileND imdi_k.h : imdi_make -d [ NormPaths $(DOT) ] ;
+GenFileND imdi_k.h : imdi_make $(IMDI_MAKE_OPT) -d [ NormPaths $(DOT) ] ;
 
 # imdi library
 Library libimdi : imdi.c imdi_tab.c ;

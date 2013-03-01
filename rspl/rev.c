@@ -81,16 +81,18 @@
 #include <time.h>
 
 #ifdef NT 
-#define WINVER 0x0500		/* We need 2k features */
-#include <windows.h>
+# ifdef WINVER
+#  undef WINVER
+# endif
+# define WINVER 0x0500		/* We need 2k features */
+# include <windows.h>
 #else
-#ifdef __APPLE__
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/sysctl.h>
-#else
-#include <unistd.h>
-#endif
+# include <unistd.h>
+# ifdef __APPLE__
+#  include <fcntl.h>
+#  include <sys/types.h>
+#  include <sys/sysctl.h>
+# endif
 #endif
 
 #define INKSCALE 5000.0	/* For ink limit weighting to fudge SVD least squares solution */
@@ -205,7 +207,7 @@ static char *pcellorange(cell *c);
    k misc
  */
 
-#define	EPS (2e-6)			/* Allowance for numeric error */
+#define	EPS (2e-6)			/* 2e-6 Allowance for numeric error */
 
 static void make_rev(rspl *s);
 static void init_revaccell(rspl *s);
@@ -549,7 +551,7 @@ rev_interp_rspl(
 			rip = calc_fwd_cell_list(s, cpp[0].v);
 	
 #ifdef STATS
-		s->rev.st[b->op].searchcalls++;
+			s->rev.st[b->op].searchcalls++;
 #endif	/* STATS */
 		if (rip != NULL) {
 			/* Setup, sort and search the list */
@@ -1434,7 +1436,7 @@ unsigned int tcount		/* grid touch count for this operation */
 						if (cp->refcount == 0)
 							nunlk++;
 					}
-					fprintf(stdout,"Diagnostic: rev.sz = %d, rev.max_sz = %d, numlocked = %d, nunlk = %d\n",
+					fprintf(stdout,"Diagnostic: rev.sz = %lu, rev.max_sz = %lu, numlocked = %d, nunlk = %d\n",
 					               rc->s->rev.sz, rc->s->rev.max_sz, rc->nunlocked,nunlk);
 					error("Not enough memory to process in chunks");
 				}
@@ -4964,7 +4966,7 @@ rspl *s		/* Pointer to rspl grid */
 			for (rsi = g_rev_instances; rsi != NULL; rsi = rsi->next)
 				rsi->max_sz = ram_portion;
 			if (s->verbose)
-				fprintf(stdout, "%cThere %s %d rev cache instance%s with %d Mbytes limit\n",
+				fprintf(stdout, "%cThere %s %d rev cache instance%s with %lu Mbytes limit\n",
 				                cr_char,
 								g_no_rev_cache_instances > 1 ? "are" : "is",
 			                    g_no_rev_cache_instances,
@@ -6158,7 +6160,7 @@ if (prop != NULL) {
 		}
 		
 		if (s->verbose)
-			fprintf(stdout, "%cThere %s %d rev cache instance%s with %d Mbytes limit\n",
+			fprintf(stdout, "%cThere %s %d rev cache instance%s with %lu Mbytes limit\n",
 			                    cr_char,
 								g_no_rev_cache_instances > 1 ? "are" : "is",
 			                    g_no_rev_cache_instances,
@@ -6226,7 +6228,7 @@ rspl *s		/* Pointer to rspl grid */
 			for (rsi = g_rev_instances; rsi != NULL; rsi = rsi->next)
 				rsi->max_sz = ram_portion;
 			if (s->verbose)
-				fprintf(stdout, "%cThere %s %d rev cache instance%s with %d Mbytes limit\n",
+				fprintf(stdout, "%cThere %s %d rev cache instance%s with %lu Mbytes limit\n",
 				                cr_char,
 								g_no_rev_cache_instances > 1 ? "are" : "is",
 			                    g_no_rev_cache_instances,
@@ -6284,14 +6286,21 @@ rspl *s
 	/* indexing though. */
 	{
 		char *ev;
-		double gresmul = REV_ACC_GRES_MUL;
+		double gresmul = REV_ACC_GRES_MUL;		/* Typically 2.0 */
+
+		if ((gresmul * s->g.mres) > (double)REV_ACC_GRES_LIMIT) {
+			gresmul = (double)REV_ACC_GRES_LIMIT/s->g.mres;		/* Limit target res to typ. 43. */
+		}
+
 		/* Allow the user to override if it causes memory consumption problems */
+		/* or to speed things up if more memory is available */
 		if ((ev = getenv("ARGYLL_REV_ACC_GRID_RES_MULT")) != NULL) {
 			double mm;
 			mm = atof(ev);
 			if (mm > 0.1 && mm < 20.0)
 				gresmul *= mm;
 		}
+		/* Less than 4 is not functional */
 		if ((rgres = (int) gresmul * s->g.mres) < 4)
 			rgres = 4;
 	}
@@ -6488,7 +6497,7 @@ rspl *s
 			if (g_avail_ram > safe_max_vmem) {
 				g_avail_ram = safe_max_vmem;
 				if (s->verbose && repsr == 0)
-					fprintf(stdout,"%cTrimmed maximum cache RAM to %d Mbytes to allow for VM limit\n",cr_char,g_avail_ram/1000000);
+					fprintf(stdout,"%cTrimmed maximum cache RAM to %lu Mbytes to allow for VM limit\n",cr_char,g_avail_ram/1000000);
 			}
 		}
 	
@@ -6507,7 +6516,7 @@ rspl *s
 		}
 		if (max_vmem != 0 && g_avail_ram > max_vmem && repsr == 0) {
 			g_avail_ram = (size_t)(0.95 * max_vmem);
-			fprintf(stdout,"%cARGYLL_REV_CACHE_MULT * RAM trimmed to %d Mbytes to allow for VM limit\n",cr_char,g_avail_ram/1000000);
+			fprintf(stdout,"%cARGYLL_REV_CACHE_MULT * RAM trimmed to %lu Mbytes to allow for VM limit\n",cr_char,g_avail_ram/1000000);
 		}
 	}
 
@@ -6516,7 +6525,7 @@ rspl *s
 
 	DBG(("reverse cache max memory = %d Mbytes\n",s->rev.max_sz/1000000));
 	if (s->verbose && repsr == 0) {
-		fprintf(stdout, "%cRev cache RAM = %d Mbytes\n",cr_char,g_avail_ram/1000000);
+		fprintf(stdout, "%cRev cache RAM = %lu Mbytes\n",cr_char,g_avail_ram/1000000);
 		repsr = 1;
 	}
 

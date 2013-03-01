@@ -48,7 +48,7 @@ main(int argc, char *argv[]) {
 	int fa, nfa, mfa;
 	char *xl;
 	char in_name[100];
-	char img_name[MAXNAMEL] = "";
+	char img_name[MAXNAMEL+1] = "";
 	char out_name[100];
 	char diag_name[100];
 	int sat = 0;

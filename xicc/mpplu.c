@@ -36,7 +36,7 @@ void usage(void) {
 	fprintf(stderr," -p oride      x = XYZ_PCS, l = Lab_PCS, y = Yxy, s = spectral,\n");
 	fprintf(stderr," -l limit   override default ink limit, 1 - N00%%\n");
 	fprintf(stderr," -i illum   Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"            A, C, D50 (def.), D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr,"            A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ  Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"            1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -u         Use Fluorescent Whitening Agent compensation\n");
@@ -196,6 +196,9 @@ main(int argc, char *argv[]) {
 				} else if (strcmp(na, "D50") == 0) {
 					spec = 1;
 					illum = icxIT_D50;
+				} else if (strcmp(na, "D50M2") == 0) {
+					spec = 1;
+					illum = icxIT_D50M2;
 				} else if (strcmp(na, "D65") == 0) {
 					spec = 1;
 					illum = icxIT_D65;

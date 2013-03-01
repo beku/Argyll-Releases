@@ -42,8 +42,12 @@
     used of the PC speaker driver, which can be done by adding the
     command <span style="font-weight: bold;">/sbin/modprobe pcspkr </span>to
 
+
+
     the <span style="font-weight: bold;">/etc/rc.local</span> startup
     script. You may also have to run <span style="font-weight: bold;">xset
+
+
 
       b 100 1000 100</span> in your local setup, if you are running in
     an X11 environment. You can check that the system bell is operating
@@ -180,9 +184,9 @@
     may then need to add yourself to that group.<br>
     <br>
     <span style="font-weight: bold;"></span>Copy the file <span
-      style="font-weight: bold;">libusb1/</span><span
-      style="font-weight: bold;">55-Argyll.rules</span> from the binary
-    or source distribution into <span style="font-weight: bold;">/etc/udev/rules.d/55-Argyll.rules</span>
+      style="font-weight: bold;">usb/</span><span style="font-weight:
+      bold;">55-Argyll.rules</span> from the binary or source
+    distribution into <span style="font-weight: bold;">/etc/udev/rules.d/55-Argyll.rules</span>
     with&nbsp;owner root, group root, permissions 644.<br>
     (There may already be a file that handles some of the color
     instruments as part of your installation. You need to check though
@@ -192,12 +196,14 @@
     that uses a udev that doesn't recognize the syntax used in
     55-Argyll.rules, or that doesn't have rules to create the libusb
     /dev/bus/usb/00X/00Y device entries, you should install the <span
-      style="font-weight: bold;">libusb1/45-Argyll.rules</span> file
+      style="font-weight: bold;">usb/45-Argyll.rules</span> file
     instead.<br>
     <br>
     On recent systems the new rules file will be notices as soon as you
     plug the instrument in again.<br>
     On older systems you may need to run <b>/sbin/udevtrigger</b>,&nbsp;
+
+
 
 
     <b>/sbin/udevcontrol reload_rules</b> or&nbsp; <span
@@ -215,6 +221,32 @@
     <br>
     # Recognize the color measurement devices<br>
     <br>
+    # Colorimtre HCFR<br>
+    ATTRS{idVendor}=="04db", ATTRS{idProduct}=="005b",
+    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+    <br>
+    <br>
+    # MonacoOPTIX (Same as i1 Display 1)<br>
+    ATTRS{idVendor}=="0670", ATTRS{idProduct}=="0001",
+    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+    <br>
+    <br>
+    # HueyL (not tested)<br>
+    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="5001",
+    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+    <br>
+    # HueyL (not tested)<br>
+    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="5010",
+    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+    <br>
+    # i1Display 3<br>
+    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="5020",
+    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+    <br>
+    # ColorMunki Smile<br>
+    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="6003",
+    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+    <br>
     # DTP20<br>
     ATTRS{idVendor}=="0765", ATTRS{idProduct}=="d020",
     ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
@@ -227,32 +259,38 @@
     ATTRS{idVendor}=="0765", ATTRS{idProduct}=="d094",
     ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
     <br>
-    # MonacoOPTIX (Same as i1 Display 1)<br>
-    ATTRS{idVendor}=="0670", ATTRS{idProduct}=="0001",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
     <br>
-    # i1Display<br>
-    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2003",
-    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
-    <br>
-    # i1Display 3<br>
-    ATTRS{idVendor}=="0765", ATTRS{idProduct}=="5020",
+    # i1Pro<br>
+    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2000",
     ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
     <br>
     # i1Monitor<br>
     ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2001",
     ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
     <br>
-    # i1Pro<br>
-    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2000",
+    # i1Display<br>
+    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2003",
+    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+    <br>
+    # i1 io table (not tested)<br>
+    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2004",
+    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+    <br>
+    # Huey<br>
+    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2005",
+    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+    <br>
+    # i1 iSis (not tested)<br>
+    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2006",
     ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
     <br>
     # ColorMunki<br>
     ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2007",
     ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
     <br>
-    # Colorimtre HCFR<br>
-    ATTRS{idVendor}=="04db", ATTRS{idProduct}=="005b",
+    <br>
+    # Spyder 1<br>
+    ATTRS{idVendor}=="085c", ATTRS{idProduct}=="0100",
     ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
     <br>
     # Spyder 2<br>
@@ -267,15 +305,20 @@
     ATTRS{idVendor}=="085c", ATTRS{idProduct}=="0400",
     ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
     <br>
-    # Huey<br>
-    ATTRS{idVendor}=="0971", ATTRS{idProduct}=="2005",
+    <br>
+    # ColorHug, old and new<br>
+    ATTRS{idVendor}=="04d8", ATTRS{idProduct}=="f8da",
+    ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
+    ATTRS{idVendor}=="273f", ATTRS{idProduct}=="1001",
     ENV{COLOR_MEASUREMENT_DEVICE}="1"<br>
     <br>
-    # Let udev-acl and ConsoleKit manage these devices, if applicable<br>
-    TEST=="/lib/udev/udev-acl", TEST=="/var/run/ConsoleKit/database",
+    <br>
+    # Let udev-acl manage these devices, if it's available<br>
+    TEST=="/var/run/ConsoleKit/database",
     ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{ACL_MANAGE}="1"<br>
     <br>
-    # Otherwise, restrict access to members of the plugdev group<br>
+    # Otherwise, restrict access to members of the plugdev group,<br>
+    # which the user may have to add to the system.<br>
     ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{ACL_MANAGE}!="*?",
     MODE="660", GROUP="plugdev"<br>
     <br>
@@ -342,6 +385,8 @@ href="http://www.google.com/search?hl=en&amp;q=man+udev&amp;btnG=Search&amp;meta
 instruments
 
 
+
+
         access using hotplug:<br>
       </span></h5>
     Under <span style="font-weight: bold;">much older versions of Linux</span>,
@@ -351,7 +396,7 @@ instruments
     your system.<br>
     <br>
     Assuming we want to configure for all Argyll supported USB
-    instruments, copy the file <span style="font-weight: bold;">libusb1/</span><span
+    instruments, copy the file <span style="font-weight: bold;">usb/</span><span
       style="font-weight: bold;">Argyll.usermap</span> from the binary
     or source distribution into&nbsp; <span style="font-weight: bold;">/etc/hotplug/usb/Argyll.usermap</span>
     with owner root, group root, permissions 644.<span
@@ -399,6 +444,10 @@ instruments
     Argyll 0x0003 0x0971 0x2007 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
     0x00 0x00000000<br>
     #<br>
+    # ColorMunki Smile<br>
+    Argyll 0x0003 0x0765 0x6003 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
+    0x00 0x00000000<br>
+    #<br>
     # Colorimtre HCFR<br>
     Argyll 0x0003 0x04DB 0x005B 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
     0x00 0x00000000<br>
@@ -418,13 +467,19 @@ instruments
     # Huey<br>
     Argyll 0x0003 0x0971 0x2005 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
     0x00 0x00000000<br>
+    #<br>
+    # ColorHug<br>
+    Argyll 0x0003 0x04D8 0xF8DA 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
+    0x00 0x00000000<br>
+    Argyll 0x0003 0x273F 0x1001 0x0000 0x0000 0x00 0x00 0x00 0x00 0x00
+    0x00 0x00000000<br>
     &nbsp;&nbsp;&nbsp; ----------------- cut here ---------------------<br>
     <br>
     &nbsp;(For even older versions, append the lines above to <span
       style="font-weight: bold;">/etc/hotplug/usb.usermap</span>, and
     you may have to run <span style="font-weight: bold;">update-usb.usermap</span>)<br>
     <br>
-    Then copy the file <span style="font-weight: bold;">libusb1/</span><span
+    Then copy the file <span style="font-weight: bold;">usb/</span><span
       style="font-weight: bold;">Argyll</span> from the binary or source
     distribution into <span style="font-weight: bold;">/etc/hotplug/usb/Argyll</span>
     with owner root, group root, permissions 744.<span
@@ -463,7 +518,7 @@ instruments
     plugdev yourusernamehere".<br>
     &nbsp;If this doesn't work you will have to run "id yourusername" to
     list the current suplemental<br>
-    &nbsp;groups, and add them plus plugdev using just "usermod -G
+    &nbsp;groups, and add plugdev using just "usermod -G
     group1,group2,... yourusername")<br>
     <br>
     You may find that the <span style="font-weight: bold;">plugdev</span>
@@ -483,6 +538,8 @@ instruments
     <span style="font-weight: bold;"></span>&nbsp; <br>
     <h5><span style="color: rgb(204, 51, 204);"><a name="serial"></a>Serial
 instruments
+
+
 
 
         access:</span><br>
@@ -509,10 +566,10 @@ instruments
     plugdev yourusernamehere".<br>
     &nbsp;If this doesn't work you will have to run "id yourusername" to
     list the current suplemental<br>
-    &nbsp;groups, and add them plus plugdev using just "usermod -G
+    &nbsp;groups, and add a tty or uucp group using just "usermod -G
     group1,group2,... yourusername")<br>
     <br>
-    You may have to log out and then in again for the groups to become
+    You may have to log out and then in again for the group to become
     effecive.<span style="font-weight: bold;"><br>
     </span>
     <p>&nbsp; <br>

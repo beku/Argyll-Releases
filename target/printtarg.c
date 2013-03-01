@@ -26,6 +26,8 @@
 
 	Make it aportion extra space evenly around the chart
 	rather than at the trailing edges.
+
+	Add direct PDF support, including NChannel output.
 */
 
 /* This program generates a PostScript or TIFF print target file, */
@@ -132,7 +134,7 @@
 /* A color structure */
 struct _col {
 	int nmask;		/* colorant mask */
-	int pgreyt;		/* printer grey representation type 0..6 */
+	int altrep;		/* alternate grey or CMY representation type 0..8 */
 	int i;			/* cols list index */
 	int ix;			/* random list index */
 	char *id;		/* Id string */
@@ -312,15 +314,15 @@ static	void ps_setcolor(trend *ss, xcal *cal, col *c) {
 		if ((c->t & T_PRESET) == 0)
 			fprintf(s->of,"%% Ref %s %s %f\n",c->id, c->loc, 100.0 * cdev[0]);
 
-		if (c->pgreyt == 0) {	/* DeviceGray */
+		if (c->altrep == 0) {	/* DeviceGray */
 			fprintf(s->of,"%f setgray\n",cdev[0]);
-		} else if (c->pgreyt == 4) {	/* DeviceRGB */
+		} else if (c->altrep == 4) {	/* DeviceRGB */
 			fprintf(s->of,"%f %f %f setrgbcolor\n",cdev[0],cdev[0],cdev[0]);
-		} else if (c->pgreyt == 5) {	/* Separation */
+		} else if (c->altrep == 5) {	/* Separation */
 			fprintf(s->of,"[ /Separation (White) /DeviceGray { pop %f } ] setcolorspace\n",
 			           cdev[0]);
 			fprintf(s->of,"%f setcolor\n",cdev[0]);
-		} else if (c->pgreyt == 6) {	/* DeviceN */
+		} else if (c->altrep == 6) {	/* DeviceN */
 			gen_ncolor(s, c);
 		} else {
 			error("Device white encoding not approproate!");
@@ -329,18 +331,33 @@ static	void ps_setcolor(trend *ss, xcal *cal, col *c) {
 	} else if (c->nmask == ICX_K) {
 		if ((c->t & T_PRESET) == 0)
 			fprintf(s->of,"%% Ref %s %s %f\n",c->id, c->loc, 100.0 * cdev[0]);
-		if (c->pgreyt == 0) {	/* DeviceGray */
+		if (c->altrep == 0) {	/* DeviceGray */
 			fprintf(s->of,"%f setgray\n",1.0 - cdev[0]);
-		} else if (c->pgreyt == 1) {	/* DeviceCMYK */
+		} else if (c->altrep == 1) {	/* DeviceCMYK */
 			fprintf(s->of,"0.0 0.0 0.0 %f setcmykcolor\n",cdev[0]);
-		} else if (c->pgreyt == 2) {	/* Separation */
+		} else if (c->altrep == 2) {	/* Separation */
 			fprintf(s->of,"[ /Separation (Black) /DeviceGray { pop %f } ] setcolorspace\n",
 			           1.0 - cdev[0]);
 			fprintf(s->of,"%f setcolor\n",cdev[0]);
-		} else if (c->pgreyt == 3) {	/* DeviceN */
+		} else if (c->altrep == 3) {	/* DeviceN */
 			gen_ncolor(s, c);
 		} else {
 			error("Device black encoding not approproate!");
+		}
+
+	} else if (c->nmask == ICX_CMY) {
+		if ((c->t & T_PRESET) == 0)
+			fprintf(s->of,"%% Ref %s %s %f %f %f\n", c->id, c->loc,
+			        100.0 * cdev[0], 100.0 * cdev[1], 100.0 * cdev[2]);
+
+		if (c->altrep == 0) {			/* DeviceCMYK */
+			fprintf(s->of,"%f %f %f 0.0 setcmykcolor\n",cdev[0],cdev[1],cdev[2]);
+		} else if (c->altrep == 7) {	/* Inverted DeviceRGB */
+			fprintf(s->of,"%f %f %f setrgbcolor\n",1.0-cdev[0],1.0-cdev[1],1.0-cdev[2]);
+		} else if (c->altrep == 8) {	/* DeviceN */
+			gen_ncolor(s, c);
+		} else {
+			error("Device CMY encoding not approproate!");
 		}
 
 	} else if (c->nmask == ICX_RGB || c->nmask == ICX_IRGB) {
@@ -698,34 +715,52 @@ static	void tiff_setcolor(trend *ss, xcal *cal, col *c) {
 		error("tiff_setcolor with no device values set");
 
 	if (c->nmask == ICX_W) {
-		if (c->pgreyt == 0) {	/* DeviceGray */
+		if (c->altrep == 0) {	/* DeviceGray */
 			s->c[0] = cdev[0];
-		} else if (c->pgreyt == 4) {	/* DeviceRGB */
+		} else if (c->altrep == 4) {	/* DeviceRGB */
 			s->c[0] = cdev[0];
 			s->c[1] = cdev[0];
 			s->c[2] = cdev[0];
-		} else if (c->pgreyt == 5) {	/* Separation */
+		} else if (c->altrep == 5) {	/* Separation */
 			s->c[0] = cdev[0];
-		} else if (c->pgreyt == 6) {	/* DeviceN single channel */
+		} else if (c->altrep == 6) {	/* DeviceN single channel */
 			s->c[0] = cdev[0];
 		} else {
 			error("Device white encoding not approproate!");
 		}
 
 	} else if (c->nmask == ICX_K) {
-		if (c->pgreyt == 0) {	/* DeviceGray */
+		if (c->altrep == 0) {	/* DeviceGray */
 			s->c[0] = cdev[0];
-		} else if (c->pgreyt == 1) {	/* DeviceCMYK */
+		} else if (c->altrep == 1) {	/* DeviceCMYK */
 			s->c[0] = 0.0;
-			s->c[0] = 0.0;
-			s->c[0] = 0.0;
+			s->c[1] = 0.0;
+			s->c[2] = 0.0;
 			s->c[3] = cdev[0];
-		} else if (c->pgreyt == 2) {	/* Separation */
+		} else if (c->altrep == 2) {	/* Separation */
 			s->c[0] = cdev[0];
-		} else if (c->pgreyt == 3) {	/* DeviceN single channel */
+		} else if (c->altrep == 3) {	/* DeviceN single channel */
 			s->c[0] = cdev[0];
 		} else {
 			error("Device black encoding not approproate!");
+		}
+
+	} else if (c->nmask == ICX_CMY) {
+		if (c->altrep == 0) {			/* DeviceCMYK */
+			s->c[0] = cdev[0];
+			s->c[1] = cdev[1];
+			s->c[2] = cdev[2];
+			s->c[3] = 0.0;
+		} else if (c->altrep == 7) {	/* Inverted DeviceRGB */
+			s->c[0] = 1.0-cdev[0];
+			s->c[1] = 1.0-cdev[1];
+			s->c[2] = 1.0-cdev[2];
+		} else if (c->altrep == 8) {	/* DeviceN three channel */
+			s->c[0] = cdev[0];
+			s->c[1] = cdev[1];
+			s->c[2] = cdev[2];
+		} else {
+			error("Device CMY encoding not approproate!");
 		}
 
 	} else {
@@ -871,7 +906,7 @@ static trend *new_tiff_trend(
 	double pw, double ph,		/* Page width and height in mm */
 	double marg,				/* Page margine in mm */
 	double hres, double vres,	/* Resolution */
-	int pgreyt,					/* printer grey representation type 0..6 */
+	int altrep,					/* printer grey/CMY representation type 0..8 */
 	int ncha,					/* flag, use nchannel alpha */
 	int comp,					/* flag, use compression */
 	int dith					/* flag, use 8 bit dithering */
@@ -898,14 +933,14 @@ static trend *new_tiff_trend(
 	s->del = tiff_del;
 
 	if (nmask == ICX_W) {
-		if (pgreyt == 0		/* DeviceGray */
-		 || pgreyt == 5) {	/* Separation single channel */
+		if (altrep == 0				/* DeviceGray */
+		 || altrep == 5) {			/* Separation single channel */
 			csp = w_2d;
 			nc = 1;
-		} else if (pgreyt == 4) {	/* DeviceRGB */
+		} else if (altrep == 4) {	/* DeviceRGB */
 			csp = rgb_2d;
 			nc = 3;
-		} else if (pgreyt == 6) {	/* DeviceN single channel */
+		} else if (altrep == 6) {	/* DeviceN single channel */
 			csp = ncol_2d;
 			nc = icx_noofinks(nmask);
 			nc = 1;
@@ -914,14 +949,14 @@ static trend *new_tiff_trend(
 		}
 
 	} else if (nmask == ICX_K) {
-		if (pgreyt == 0		/* DeviceGray */
-		 || pgreyt == 2) {	/* Separation single channel */
+		if (altrep == 0				/* DeviceGray */
+		 || altrep == 2) {			/* Separation single channel */
 			csp = k_2d;
 			nc = 1;
-		} else if (pgreyt == 1) {	/* DeviceCMYK */
+		} else if (altrep == 1) {	/* DeviceCMYK */
 			csp = cmyk_2d;
 			nc = 4;
-		} else if (pgreyt == 3) {	/* DeviceN single channel */
+		} else if (altrep == 3) {	/* DeviceN single channel */
 			csp = ncol_2d;
 			nc = icx_noofinks(nmask);
 			nc = 1;
@@ -932,6 +967,21 @@ static trend *new_tiff_trend(
 	} else if (nmask == ICX_RGB || nmask == ICX_IRGB) {
 		csp = rgb_2d;
 		nc = 3;
+
+	} else if (nmask == ICX_CMY) {
+		if (altrep == 0) {			/* DeviceCMYK */
+			csp = cmyk_2d;
+			nc = 4;
+		} else if (altrep == 7) {	/* Inverted DeviceRGB */
+			csp = rgb_2d;
+			nc = 3;
+		} else if (altrep == 8) {	/* DeviceN three channel */
+			csp = ncol_2d;
+			nc = icx_noofinks(nmask);
+		} else {
+			error("Device CMY encoding not approproate");
+		}
+
 	} else if (nmask == ICX_CMYK) {
 		csp = cmyk_2d;
 		nc = 4;
@@ -954,7 +1004,8 @@ static trend *new_tiff_trend(
 
 	/* We're goin to assume this is all printed output, so */
 	/* the background should be white. */
-	if (nmask & ICX_ADDITIVE) {
+	if ((nmask & ICX_ADDITIVE)
+	  || (nmask == ICX_CMY && altrep == 7)) {	/* CMY as inverted RGB */
 		for (j = 0; j < nc; j++)
 			c[j] = 1.0;
 	} else {
@@ -1686,7 +1737,7 @@ int tiffdith,		/* flag, nz to use TIFF 8 bit dithering */
 int tiffcomp,		/* flag, nz to use TIFF compression */
 int spacer,			/* Spacer code, -1 = default, 0 = None, 1 = b&w, 2 = colored */
 int nmask,			/* DeviceN mask */
-int pgreyt,			/* printer grey representation type 0..6 */
+int altrep,			/* printer grey/CMY representation type 0..8 */
 col *pcol,			/* 8 spacer colors or 8 barcode colors for DTP20 */
 double *wp,			/* Approximate white XYZ point */
 int *ptpprow,		/* Return Test sample patches per row */
@@ -2407,7 +2458,7 @@ int *p_npat			/* Return number of patches including padding */
 
 						res = tiffres/25.4; 
 						if ((tro = new_tiff_trend(psname,nmask,tiffdpth,pw,ph,
-						    nosubmarg ? 0 : bord, res,res,pgreyt,ncha,tiffcomp, tiffdith)) == NULL)
+						    nosubmarg ? 0 : bord, res,res,altrep,ncha,tiffcomp, tiffdith)) == NULL)
 							error ("Unable to create output rendering object file '%s'",psname);
 						if (verb)
 							printf("Creating file '%s'\n",psname);
@@ -2839,6 +2890,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -f              Create PostScript DeviceN Color fallback\n");
 	fprintf(stderr," -w g|r|s|n      White colorspace encoding DeviceGray (def), DeviceRGB, Separation or DeviceN\n");            
 	fprintf(stderr," -k g|c|s|n      Black colorspace encoding DeviceGray (def), DeviceCMYK, Separation or DeviceN\n");            
+	fprintf(stderr," -o k|r|n        CMY colorspace encoding DefiveCMYK (def), inverted DeviceRGB or DeviceN\n");            
 	fprintf(stderr," -e              Output EPS compatible file\n");
 	fprintf(stderr," -t [res]        Output 8 bit TIFF raster file, optional res DPI (default 100)\n");
 	fprintf(stderr," -T [res]        Output 16 bit TIFF raster file, optional res DPI (default 100)\n");
@@ -2892,7 +2944,7 @@ char *argv[];
 	int ixord = 0;			/* Index order, 0 = strip then patch */
 	int scanc = 0;			/* Scan compatible bits, 1 = .cht, 2 = wide first row */
 	int devnfb = 0;			/* Add device N fallback colors */
-	int pgreyt = 0;			/* Device K/W color type 0..6 */
+	int altrep = 0;			/* Device K/W/CMY color type 0..8 */
 	int applycal = 0;		/* NZ to apply calibration */
 	static char inname[MAXNAMEL+20] = { 0 };	/* Input cgats file name */
 	static char calname[MAXNAMEL+1] = { 0 };	/* Input printer calibration */
@@ -3042,19 +3094,19 @@ char *argv[];
 				switch(na[0]) {
 					case 'g':
 					case 'G':
-						pgreyt = 0;
+						altrep = 0;
 						break;
 					case 'r':
 					case 'R':
-						pgreyt = 4;
+						altrep = 4;
 						break;
 					case 's':
 					case 'S':
-						pgreyt = 5;
+						altrep = 5;
 						break;
 					case 'n':
 					case 'N':
-						pgreyt = 6;
+						altrep = 6;
 						break;
 					default:
 						usage("Unexpected argument to -w");
@@ -3068,22 +3120,44 @@ char *argv[];
 				switch(na[0]) {
 					case 'g':
 					case 'G':
-						pgreyt = 0;
+						altrep = 0;
 						break;
 					case 'c':
 					case 'C':
-						pgreyt = 1;
+						altrep = 1;
 						break;
 					case 's':
 					case 'S':
-						pgreyt = 2;
+						altrep = 2;
 						break;
 					case 'n':
 					case 'N':
-						pgreyt = 3;
+						altrep = 3;
 						break;
 					default:
 						usage("Unexpected argument to -k");
+				}
+			}
+
+			/* Select the printer CMY color representation */
+			else if (argv[fa][1] == 'o') {
+				fa = nfa;
+				if (na == NULL) usage("Expected argument to -o");
+				switch(na[0]) {
+					case 'k':
+					case 'K':
+						altrep = 0;
+						break;
+					case 'r':
+					case 'R':
+						altrep = 7;
+						break;
+					case 'n':
+					case 'N':
+						altrep = 8;
+						break;
+					default:
+						usage("Unexpected argument to -o");
 				}
 			}
 
@@ -3389,7 +3463,7 @@ char *argv[];
 			if (devnfb)
 				cols[i].t |= T_NFB;
 			cols[i].nmask = nmask;
-			cols[i].pgreyt = pgreyt;
+			cols[i].altrep = altrep;
 			cols[i].n  = nchan;
 			cols[i].id = ((char *)icg->t[0].fdata[i][si]);
 			sprintf(cols[i].loc, "???");
@@ -3462,7 +3536,7 @@ char *argv[];
 			if (devnfb)
 				pcold[i].t |= T_NFB;
 			pcold[i].nmask = nmask;
-			pcold[i].pgreyt = pgreyt;
+			pcold[i].altrep = altrep;
 			pcold[i].n  = nchan;
 			pcold[i].id = "";
 			sprintf(cols[i].loc, "???");
@@ -3523,7 +3597,7 @@ char *argv[];
 				if (devnfb)
 					pcolv[i].t |= T_NFB;
 				pcolv[i].nmask = nmask;
-				pcolv[i].pgreyt = pgreyt;
+				pcolv[i].altrep = altrep;
 				pcolv[i].n  = nchan;
 				pcolv[i].id = "";
 				sprintf(cols[i].loc, "???");
@@ -3575,7 +3649,7 @@ char *argv[];
 	            pap != NULL ? pap->w : cwidth, pap != NULL ? pap->h : cheight,
 	            marg, nosubmarg, nollimit, nolpcbord, rand, rstart, saix, paix,	ixord,
 	            pscale, sscale, hflag, verb, scanc, oft, tiffdpth, tiffres, ncha, tiffdith,
-	            tiffcomp, spacer, nmask, pgreyt, pcol, wp,
+	            tiffcomp, spacer, nmask, altrep, pcol, wp,
 	            &sip, &pis, &plen, &glen, &tlen, &nppat);
 
 	if (itype == instDTP20

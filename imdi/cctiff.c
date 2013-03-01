@@ -499,7 +499,7 @@ char **inknames					/* Return ASCII inknames if non NULL */
 				*inknames = "cyan\000magenta\000yellow\000black\000orange\000green\000\000";
 				*len = zzstrlen(*inknames);
 			}
-			return 0;				/* Not CMYK */
+			return INKSET_MULTIINK;
 
 		case icSig7colorData:
 		case icSigMch7Data:
@@ -514,7 +514,7 @@ char **inknames					/* Return ASCII inknames if non NULL */
 				*inknames = "cyan\000magenta\000yellow\000black\000orange\000green\000lightcyan\000lightmagenta\000\000";
 				*len = zzstrlen(*inknames);
 			}
-			return 0;				/* Not CMYK */
+			return INKSET_MULTIINK;
 		case icSig9colorData:
 		case icSig10colorData:
 		case icSig11colorData:
@@ -1481,7 +1481,6 @@ main(int argc, char *argv[]) {
 					error("Malloc of input file description string failed");
 				memcpy(rdesc, mlp->data, mlp->data_length-1);
 				rdesc[mlp->data_length] = '\000';
-printf("~1 found JPEG commend '%s'\n",rdesc);
 				break;
 			} 
 		}
@@ -1705,10 +1704,36 @@ printf("~1 found JPEG commend '%s'\n",rdesc);
 		} else {
 
 			if (wphotometric == PHOTOMETRIC_SEPARATED) {
+				icc *c = su.profs[su.lclut].c; 
+				icmColorantTable *ct;
 				int iset;
 				int inlen;
-				char *inames;
-				iset = ColorSpaceSignature2TiffInkset(su.outs, &inlen, &inames);
+				char *inames = NULL;
+
+				if (c == NULL
+				 || ((ct = (icmColorantTable *)c->read_tag(c, icSigColorantTableOutTag)) == NULL
+				  && (ct = (icmColorantTable *)c->read_tag(c, icSigColorantTableTag)) == NULL)
+				 || ct->count != wsamplesperpixel
+				) {
+					iset = ColorSpaceSignature2TiffInkset(su.outs, &inlen, &inames);
+				} else {
+					int i;
+					char *cp;
+					inlen = 0;
+					for (i = 0; i < ct->count; i++)
+						inlen += strlen(ct->data[i].name) + 1;
+					inlen += 1;
+					if ((inames = malloc(inlen)) == NULL)
+						error("malloc failed on inknames string");
+					cp = inames;
+					for (i = 0; i < ct->count; i++) {
+						int slen = strlen(ct->data[i].name) + 1;
+						memcpy(cp, ct->data[i].name, slen);
+						cp += slen;
+					}
+					*cp = '\000';
+					iset = INKSET_MULTIINK;
+				}
 				if (iset != 0xffff && inlen > 0 && inames != NULL) {
 					TIFFSetField(wh, TIFFTAG_INKSET, iset);
 					if (inames != NULL) {
@@ -1761,7 +1786,7 @@ printf("~1 found JPEG commend '%s'\n",rdesc);
 				wj.in_color_space = JCS_RGB;
 				if (ochoice < 0 || ochoice > 2) {
 					printf("Possible JPEG Output Encodings for output colorspace icSigRgbData are\n"
-						  "1: YCbCr (Default)\n", "2: RGB\n");
+						  "1: YCbCr (Default)\n" "2: RGB\n");
 					ochoice = 1;
 				}
 				if (ochoice == 2)
@@ -1774,7 +1799,7 @@ printf("~1 found JPEG commend '%s'\n",rdesc);
 				wj.in_color_space = JCS_CMYK;
 				if (ochoice < 0 || ochoice > 2) {
 					printf("Possible JPEG Output Encodings for output colorspace icSigCmykData are\n"
-						  "1: YCCK (Default)\n", "2: CMYK\n");
+						  "1: YCCK (Default)\n" "2: CMYK\n");
 					ochoice = 1;
 				}
 				if (ochoice == 2)
@@ -1793,8 +1818,8 @@ printf("~1 found JPEG commend '%s'\n",rdesc);
 				wj.density_unit = 1;
 			else if (resunits == RESUNIT_CENTIMETER)
 				wj.density_unit = 2;
-			wj.X_density;
-			wj.Y_density;
+			wj.X_density = resx;
+			wj.Y_density = resy;
 		}
 
 		jpeg_set_defaults(&wj);
@@ -1822,11 +1847,11 @@ printf("~1 found JPEG commend '%s'\n",rdesc);
 				strcat(wdesc, " ");
 				strcat(wdesc, ddesc);
 			}
-			jpeg_write_marker(&wj, JPEG_COM, wdesc, strlen(wdesc)+1);
+			jpeg_write_marker(&wj, JPEG_COM, (const JOCTET *)wdesc, strlen(wdesc)+1);
 		} else if (nodesc == 0 && su.nprofs > 0) {
 			if ((wdesc = strdup(ddesc)) == NULL)
 				error("malloc failed on new desciption string");
-			jpeg_write_marker(&wj, JPEG_COM, wdesc, strlen(wdesc)+1);
+			jpeg_write_marker(&wj, JPEG_COM, (const JOCTET *)wdesc, strlen(wdesc)+1);
 		}
 	}
 
@@ -1887,9 +1912,9 @@ printf("~1 found JPEG commend '%s'\n",rdesc);
 	}
 
 	/* - - - - - - - - - - - - - - - */
-	if (su.fclut <= su.lclut
-	 && ((su.profs[su.fclut].natpcs == icSigXYZData && su.profs[su.fclut].alg == icmMatrixFwdType))
-	  || (su.profs[su.fclut].ins == icSigXYZData)) {
+	if ((su.fclut <= su.lclut
+	 && (su.profs[su.fclut].natpcs == icSigXYZData) && (su.profs[su.fclut].alg == icmMatrixFwdType))
+	  || su.profs[su.fclut].ins == icSigXYZData) {
 		su.ilcurve = 1;			/* Index CLUT with L* curve rather than Y */
 	}
 
@@ -1898,8 +1923,8 @@ printf("~1 found JPEG commend '%s'\n",rdesc);
 		su.icombine = 1;		/* CIE can't be conveyed through 0..1 domain lookup */
 	}
 
-	if (su.fclut <= su.lclut
-	 && ((su.profs[su.lclut].natpcs == icSigXYZData && su.profs[su.lclut].alg == icmMatrixBwdType))
+	if ((su.fclut <= su.lclut
+	 && (su.profs[su.lclut].natpcs == icSigXYZData && su.profs[su.lclut].alg == icmMatrixBwdType))
 	  || (su.profs[su.lclut].outs == icSigXYZData)) {
 		su.olcurve = 1;			/* Interpolate in L* space rather than Y */
 	}

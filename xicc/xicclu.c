@@ -76,6 +76,7 @@ void usage(char *diag) {
 	fprintf(stderr," -l tlimit      set total ink limit, 0 - 400%% (estimate by default)\n");
 	fprintf(stderr," -L klimit      set black ink limit, 0 - 100%% (estimate by default)\n");
 	fprintf(stderr," -a             show actual target values if clipped\n");
+	fprintf(stderr," -u             warn if output PCS is outside the spectrum locus\n");
 	fprintf(stderr," -m             merge output processing into clut\n");
 	fprintf(stderr," -b             use CAM Jab for clipping\n");
 //	fprintf(stderr," -S             Use internal optimised separation for inverse 4d [NOT IMPLEMENTED]\n");
@@ -163,6 +164,7 @@ main(int argc, char *argv[]) {
 	double vc_fxy[2] = {-1.0, -1.0};		/* Flare color override in x,y */
 	int verb = 1;
 	int actual = 0;
+	int slocwarn = 0;
 	int merge = 0;
 	int camclip = 0;
 	int repYxy = 0;			/* Report Yxy */
@@ -257,15 +259,19 @@ main(int argc, char *argv[]) {
 					usage("Unrecognised parameters after -G");
 			}
 			/* Actual target values */
-			else if (argv[fa][1] == 'a' || argv[fa][1] == 'A') {
+			else if (argv[fa][1] == 'a') {
 				actual = 1;
 			}
+			/* Warn if output is outside the spectrum locus */
+			else if (argv[fa][1] == 'u') {
+				slocwarn = 1;
+			}
 			/* Merge output */
-			else if (argv[fa][1] == 'm' || argv[fa][1] == 'M') {
+			else if (argv[fa][1] == 'm') {
 				merge = 1;
 			}
 			/* Use CAM Jab for clipping on reverse lookup */
-			else if (argv[fa][1] == 'b' || argv[fa][1] == 'B') {
+			else if (argv[fa][1] == 'b') {
 				camclip = 1;
 			}
 			/* Use optimised internal separation */
@@ -273,14 +279,14 @@ main(int argc, char *argv[]) {
 				intsep = 1;
 			}
 			/* Device scale */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+			else if (argv[fa][1] == 's') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -s");
 				scale = atof(na);
 				if (scale <= 0.0) usage("Illegal scale value");
 			}
 			/* function */
-			else if (argv[fa][1] == 'f' || argv[fa][1] == 'F') {
+			else if (argv[fa][1] == 'f') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -f");
     			switch (na[0]) {
@@ -316,7 +322,7 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Intent */
-			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
+			else if (argv[fa][1] == 'i') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -i");
     			switch (na[0]) {
@@ -346,7 +352,7 @@ main(int argc, char *argv[]) {
 			}
 
 			/* PCS override */
-			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+			else if (argv[fa][1] == 'p') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -i");
     			switch (na[0]) {
@@ -401,7 +407,7 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Search order */
-			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+			else if (argv[fa][1] == 'o') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -o");
     			switch (na[0]) {
@@ -419,7 +425,7 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Inking rule */
-			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
+			else if (argv[fa][1] == 'k') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -k");
 				if (argv[fa][1] == 'k')
@@ -528,7 +534,7 @@ main(int argc, char *argv[]) {
 			}
 #endif
 			/* Viewing conditions */
-			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
+			else if (argv[fa][1] == 'c') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -c");
 #ifdef NEVER
@@ -875,6 +881,10 @@ main(int argc, char *argv[]) {
 		if (pend[0] == -1000.0)
 			icmCpy3(pend, end);
 
+		if (verb) {
+			printf("Plotting from white %f %f %f to black %f %f %f\n",
+			        pstart[0], pstart[1], pstart[2], pend[0], pend[1], pend[2]);
+		}
 		for (i = 0; i < XRES; i++) {
 			double ival = (double)i/(XRES-1.0);
 
@@ -933,10 +943,19 @@ main(int argc, char *argv[]) {
 
 
 	} else {
+
+		if (slocwarn && outs != icSigXYZData
+		             && outs != icSigYxyData
+		             && outs != icSigLabData
+		             && outs != icxSigLChData) {
+			error("Can't warn if outside spectrum locus unless XYZ like space");
+		}
+
 		/* Process colors to translate */
 		for (;;) {
 			int i,j;
 			char *bp, *nbp;
+			int outsloc = 0;
 
 			/* Read in the next line */
 			if (fgets(buf, 200, stdin) == NULL)
@@ -1002,6 +1021,18 @@ main(int argc, char *argv[]) {
 				if ((rv = luo->lookup(luo, out, in)) > 1)
 					error ("%d, %s",xicco->errc,xicco->err);
 			}
+
+			if (slocwarn) {
+				double xyz[3];
+
+				if (outs == icSigLabData || outs == icxSigLChData)
+					icmLab2XYZ(&icmD50, out, xyz);	
+				else
+					icmCpy3(xyz, out);
+
+				outsloc = icx_outside_spec_locus(xyz, icxOT_CIE_1931_2);
+			}
+
 			/* Copy conversion out value so that we can create user values */
 			for (i = 0; i < MAX_CHAN; i++)
 				uout[i] = out[i];
@@ -1071,6 +1102,9 @@ main(int argc, char *argv[]) {
 				}
 				printf(" Lim %f",tot);
 			}
+			if (outsloc)
+				fprintf(stdout,"(Imaginary)");
+
 			if (verb == 0 || rv == 0)
 				fprintf(stdout,"\n");
 			else {

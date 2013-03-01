@@ -15,8 +15,8 @@
 
 /* Common utility definitions used at both generation and runtime. */
 
-#define IXDI 8		/* maximum input channels/dimensions allowed */
-#define IXDO 8		/* maximum output channels/dimensions allowed */
+#define IXDI 10		/* maximum input channels/dimensions allowed */
+#define IXDO 10		/* maximum output channels/dimensions allowed */
 
 #if IXDI > IXDO		/* Maximum of either DI or DO */
 # define IXDIDO IXDI
@@ -26,8 +26,10 @@
 
 #define ALLOW64		/* Allow declarations but not use of 64 bit types */
 
-#undef FORCE64		/* Use 64 bit, even on architectures where it's */
+#ifndef FORCE64
+# undef FORCE64		/* Use 64 bit, even on architectures where it's */
 					/* not a native size. ALLOW64 must be defined */
+#endif
 
 /* ------------------------------------------------------ */
 

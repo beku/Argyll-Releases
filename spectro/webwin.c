@@ -7,7 +7,7 @@
  * Author: Graeme W. Gill
  * Date:   3/4/12
  *
- * Copyright 2012 Graeme W. Gill
+ * Copyright 2013 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -18,11 +18,15 @@
 #include <string.h>
 #ifdef NT
 # include <winsock2.h>
-#else
+#endif
+#ifdef UNIX
 # include <sys/types.h>
 # include <ifaddrs.h>
 # include <netinet/in.h> 
 # include <arpa/inet.h>
+# ifdef __FreeBSD__
+#  include <sys/socket.h>
+# endif /* __FreeBSD__ */
 #endif
 #include "copyright.h"
 #include "aconfig.h"
@@ -63,7 +67,8 @@ static void ajax_get_messages(struct mg_connection *conn,
                               const struct mg_request_info *request_info) {
 char src_addr[20];
 
-	dispwin *p = (dispwin *)(request_info->user_data);
+//	dispwin *p = (dispwin *)(request_info->user_data);
+	dispwin *p = (dispwin *)mg_get_user_data(conn);
 
 //sockaddr_to_string(src_addr, sizeof(src_addr), &conn->client.rsa);
 
@@ -75,20 +80,25 @@ char src_addr[20];
 		msec_sleep(50);
 	}
 
-	mg_printf(conn, "#%02X%02X%02X",
+	mg_printf(conn,
+			"\r\n#%02X%02X%02X",
 			(int)(p->r_rgb[0] * 255.0 + 0.5),
 			(int)(p->r_rgb[1] * 255.0 + 0.5),
 			(int)(p->r_rgb[2] * 255.0 + 0.5));
 }
 
+/* Event handler */
 static void *webwin_ehandler(enum mg_event event,
-                           struct mg_connection *conn,
-                           const struct mg_request_info *request_info) {
+                           struct mg_connection *conn) {
+//                           const struct mg_request_info *request_info) {
+	const struct mg_request_info *request_info = mg_get_request_info(conn);
 
 	if (event != MG_NEW_REQUEST) {
 		return NULL;
 	}
-//	printf("Got event with uri = '%s'\n",request_info->uri);
+#ifdef DEBUG
+	printf("Got event with uri = '%s'\n",request_info->uri);
+#endif
 	if (strcmp(request_info->uri, "/ajax/messages") == 0) {
 		ajax_get_messages(conn, request_info);
 	} else if (strcmp(request_info->uri, "/webdisp.js") == 0) {
@@ -117,8 +127,11 @@ static void *webwin_ehandler(enum mg_event event,
 	"	if (oXHR.status != 200) {\r\n"
 	"		return;\r\n"
 	"	}\r\n"
-	"	if (ccolor != oXHR.responseText) {\r\n"
-	"		ccolor = oXHR.responseText;\r\n"
+	"	var rt = oXHR.responseText;\r\n"
+	"	if (rt.charAt(0) == '\\r' && rt.charAt(1) == '\\n')\r\n"
+	"		rt = rt.slice(2);\r\n"
+	"	if (ccolor != rt) {\r\n"
+	"		ccolor = rt;\r\n"
 	"		document.body.style.background = ccolor;\r\n"
 	"	}\r\n"
 	"	oXHR.open(\"GET\", \"/ajax/messages?\" + document.body.style.background + \" \" + Math.random(), true);\r\n"
@@ -152,6 +165,7 @@ static void *webwin_ehandler(enum mg_event event,
 		);
 	}
 
+//		"<script type=\"text/javascript\"src=\"webdisp.js\"></script>"
 	return "yes";
 }
 

@@ -336,7 +336,7 @@ thscreen *new_thscreen(
 	}
 
 	t->oo = oo;
-	t->overlap;
+	t->overlap = olap;
 
 	/* Create a suitable LUT from the given function */
 	/* Input is either 8 or 16 bits, output is always 16 bits */

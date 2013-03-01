@@ -498,7 +498,7 @@ int main(int argc, char *argv[])
 			xsp2cie *sc;
 			xspect sp;
 
-			if ((sc = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+			if ((sc = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, icxClamp)) == NULL)
 				error("Failed to create xsp2cie object");
 
 			/* Set standard D50 viewer & illum. */

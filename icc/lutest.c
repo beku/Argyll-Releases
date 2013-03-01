@@ -4,8 +4,8 @@
  * Lookup test code, and profile creation examples.
  *
  * Author:  Graeme W. Gill
- * Date:    00/6/18
- * Version: 2.13
+ * Date:    2000/6/18
+ * Version: 2.15
  *
  * Copyright 1998 - 2012 Graeme W. Gill
  *

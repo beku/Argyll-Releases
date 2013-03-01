@@ -7,7 +7,7 @@
  * Author: Graeme W. Gill
  * Date:   19/8/2010
  *
- * Copyright 2010, 2011 Graeme W. Gill
+ * Copyright 2010, 2011, 2013 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -27,6 +27,20 @@
 /* 
 	TTBD:
 
+		Should add an option to set a UI_SELECTORS value.
+
+		If any spectrometer gets a display type function (ie. refresh/non-refresh)
+		then it becomes difficult to know what to do with the -y option :-
+
+		* Ignore the problem - don't set -y option on spectrometers.
+		  Error shouldn't be significant for ref/nonref ?
+
+		* Force the colorimeter to go first, record the ref/nonref state and
+		  set in the spectrometer ? Make .ti3 file order the same for consistency ?
+
+		Would be nice to have a veryify option that produces
+		a fit report of a matrix vs. the input files.
+
 		Would be nice to have the option of procssing a Spyder 3 correction.txt file.
 		(See post from umberto.guidali@tiscali.it)
 
@@ -36,6 +50,7 @@
 		Would be nice to have an option of providing two ICC profiles,
 		instead of using .ti3 files (?? How well would it work though ?)
  */
+
 
 #undef DEBUG
 
@@ -52,14 +67,15 @@
 #include "cgats.h"
 #include "xspect.h"
 #include "insttypes.h"
+#include "conv.h"
 #include "icoms.h"
 #include "inst.h"
-#include "conv.h"
 #include "dispwin.h"
 #include "webwin.h"
 #include "dispsup.h"
 #include "ccss.h"
 #include "ccmx.h"
+#include "instappsup.h"
 #include "spyd2setup.h"
 
 #if defined (NT)
@@ -69,7 +85,6 @@
 #define DEFAULT_MSTEPS 1
 #undef SHOW_WINDOW_ONFAKE	/* Display a test window up for a fake device */
 #define COMPORT 1			/* Default com port 1..4 */
-#define VERBOUT stdout
 
 
 #if defined(__APPLE__) && defined(__POWERPC__)
@@ -89,8 +104,8 @@ static int gcc_bug_fix(int i) {
 void
 usage(char *diag, ...) {
 	disppath **dp;
-	icoms *icom = new_icoms();
-	inst_capability cap = 0;
+	icompaths *icmps = new_icompaths(0);
+	inst2_capability cap = 0;
 
 	fprintf(stderr,"Create CCMX or CCSS, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
@@ -108,7 +123,7 @@ usage(char *diag, ...) {
 	fprintf(stderr," -v                     Verbose mode\n");
 	fprintf(stderr," -S                     Create CCSS rather than CCMX\n");
 	fprintf(stderr," -f file1.ti3[,file2.ti3] Create from one or two .ti3 files rather than measure.\n");
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	fprintf(stderr," -display displayname   Choose X11 display name\n");
 	fprintf(stderr," -d n[,m]               Choose the display n from the following list (default 1)\n");
 	fprintf(stderr,"                        Optionally choose different display m for VideoLUT access\n"); 
@@ -130,18 +145,18 @@ usage(char *diag, ...) {
 	free_disppaths(dp);
 	fprintf(stderr," -dweb[:port]           Display via a web server at port (default 8080)\n");
 //	fprintf(stderr," -d fake                Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
-	fprintf(stderr," -p                     Use projector mode (if available)\n");
-	cap = inst_show_disptype_options(stderr, " -y c|l                 ", icom);
-	fprintf(stderr," -P ho,vo,ss            Position test window and scale it\n");
+	fprintf(stderr," -p                     Use telephoto mode (ie. for a projector) (if available)\n");
+	cap = inst_show_disptype_options(stderr, " -y c|l                 ", icmps, 1);
+	fprintf(stderr," -P ho,vo,ss[,vs]       Position test window and scale it\n");
 	fprintf(stderr,"                        ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                        ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
 	fprintf(stderr," -F                     Fill whole screen with black background\n");
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	fprintf(stderr," -n                     Don't set override redirect on test window\n");
 #endif
-	fprintf(stderr," -N                     Disable auto calibration of instrument\n");
+	fprintf(stderr," -N                     Disable initial calibration of instrument if possible\n");
 	fprintf(stderr," -H                     Use high resolution spectrum mode (if available)\n");
-	fprintf(stderr," -V                     Use adaptive measurement mode (if available)\n");
+//	fprintf(stderr," -V                     Use adaptive measurement mode (if available)\n");
 	fprintf(stderr," -C \"command\"           Invoke shell \"command\" each time a color is set\n");
 	fprintf(stderr," -o observ              Choose CIE Observer for CCMX spectrometer data:\n");
 	fprintf(stderr,"                        1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
@@ -151,20 +166,24 @@ usage(char *diag, ...) {
 	fprintf(stderr," -E desciption          Override the default overall description\n");
 	fprintf(stderr," -I displayname         Set display make and model description\n");
 	fprintf(stderr," -T displaytech         Set display technology description (ie. CRT, LCD etc.)\n");
+	fprintf(stderr," -U c                   Set UI selection character(s)\n");
+	fprintf(stderr," -Y r|n                 Set or override refresh/non-refresh display type\n");
+	fprintf(stderr," -Y A                   Use non-adaptive integration time mode (if available).\n");
 	fprintf(stderr," correction.ccmx | calibration.ccss\n");
 	fprintf(stderr,"                        File to save result to\n");
+	if (icmps != NULL)
+		icmps->del(icmps);
 	exit(1);
-	}
+}
 
 typedef double ary3[3];
 
 int main(int argc, char *argv[])
 {
 	int i,j;
-	int fa, nfa, mfa;				/* current argument we're looking at */
+	int fa, nfa, mfa;					/* current argument we're looking at */
 	disppath *disp = NULL;				/* Display being used */
-	double patsize = 100.0;				/* size of displayed color patch */
-	double patscale = 1.0;				/* scale factor for test patch size */
+	double hpatscale = 1.0, vpatscale = 1.0;	/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;			/* Test window offsets, -1.0 to 1.0 */
 	int blackbg = 0;            		/* NZ if whole screen should be filled with black */
 	int verb = 0;
@@ -176,13 +195,16 @@ int main(int argc, char *argv[])
 	int spec = 0;						/* Need spectral data to implement option */
 	icxObserverType observ = icxOT_CIE_1931_2;
 	int override = 1;					/* Override redirect on X11 */
+	icompaths *icmps = NULL;			/* Ports to choose from */
 	int comno = COMPORT;				/* COM port used */
 	flow_control fc = fc_nc;			/* Default flow control */
 	int highres = 0;					/* High res mode if available */
-	int adaptive = 0;					/* Use adaptive mode if available */
 	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
-	int proj = 0;						/* NZ if projector */
-	int noautocal = 0;					/* Disable auto calibration */
+	int refrmode = -1;					/* Refresh mode */
+	int cbid = 0;						/* Calibration base display mode ID */
+	int nadaptive = 0;					/* Use non-adaptive mode if available */
+	int tele = 0;						/* NZ if telephoto mode */
+	int noinitcal = 0;					/* Disable initial calibration */
 	int webdisp = 0;					/* NZ for web display, == port number */
 	char *ccallout = NULL;				/* Change color Shell callout */
 	int msteps = DEFAULT_MSTEPS;		/* Patch surface size */
@@ -200,6 +222,7 @@ int main(int argc, char *argv[])
 	char *description = NULL;			/* Given overall description */
 	char *displayname = NULL;			/* Given display name */
 	char *displaytech = NULL;			/* Given display technology */
+	char *uisel = NULL;					/* UI selection letters */
 	int rv;
 
 	set_exe_path(argv[0]);				/* Set global exe_path and error_program */
@@ -229,6 +252,7 @@ int main(int argc, char *argv[])
 
 			} else if (argv[fa][1] == 'v') {
 				verb = 1;
+				g_log->verb = verb;
 
 			} else if (argv[fa][1] == 'S') {
 				doccss = 1;
@@ -266,7 +290,7 @@ int main(int argc, char *argv[])
 					}
 					fa = nfa;
 				} else {
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 					int ix, iv;
 
 					if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
@@ -309,7 +333,7 @@ int main(int argc, char *argv[])
 					}
 #endif
 				}
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 			} else if (argv[fa][1] == 'n') {
 				override = 0;
 #endif /* UNIX */
@@ -321,26 +345,39 @@ int main(int argc, char *argv[])
 				comno = atoi(na);
 				if (comno < 1 || comno > 40) usage("-c parameter %d out of range",comno);
 
-			/* Projector */
+			/* Telephoto */
 			} else if (argv[fa][1] == 'p') {
-				proj = 1;
+				tele = 1;
 
 			/* Display type */
-			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
+			} else if (argv[fa][1] == 'y') {
 				fa = nfa;
 				if (na == NULL) usage("Parameter expected after -y");
 				dtype = na[0];
+
+				/* For ccss, set a default */
+				if (na[0] == 'r') {
+					refrmode = 1;
+				} else if (na[0] == 'n') {
+					refrmode = 0;
+				}
 
 			/* Test patch offset and size */
 			} else if (argv[fa][1] == 'P') {
 				fa = nfa;
 				if (na == NULL) usage("Parameter expected after -P");
-				if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &patscale) != 3)
+				if (sscanf(na, " %lf,%lf,%lf,%lf ", &ho, &vo, &hpatscale, &vpatscale) == 4) {
+					;
+				} else if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &hpatscale) == 3) {
+					vpatscale = hpatscale;
+				} else {
 					usage("-P parameter '%s' not recognised",na);
+				}
 				if (ho < 0.0 || ho > 1.0
 				 || vo < 0.0 || vo > 1.0
-				 || patscale <= 0.0 || patscale > 50.0)
-					usage("-P parameters %f %f %f out of range",ho,vo,patscale);
+				 || hpatscale <= 0.0 || hpatscale > 50.0
+				 || vpatscale <= 0.0 || vpatscale > 50.0)
+					usage("-P parameters %f %f %f %f out of range",ho,vo,hpatscale,vpatscale);
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
@@ -348,17 +385,17 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'F') {
 				blackbg = 1;
 
-			/* No auto calibration */
+			/* No initial calibration */
 			} else if (argv[fa][1] == 'N') {
-				noautocal = 1;
+				noinitcal = 1;
 
 			/* High res spectral mode */
 			} else if (argv[fa][1] == 'H') {
 				highres = 1;
 
-			/* Adaptive mode */
+			/* Adaptive mode - now default, so flag is deprecated */
 			} else if (argv[fa][1] == 'V') {
-				adaptive = 1;
+				warning("dispcal -V flag is deprecated");
 
 			/* Spectral Observer type (only relevant for CCMX) */
 			} else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
@@ -414,6 +451,7 @@ int main(int argc, char *argv[])
 					debug = atoi(na);
 					fa = nfa;
 				}
+				g_log->debug = debug;
 
 			} else if (argv[fa][1] == 'I') {
 				fa = nfa;
@@ -430,14 +468,41 @@ int main(int argc, char *argv[])
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to overall description flag -E");
 				description = strdup(na);
+
+			/* Extra flags */
+			} else if (argv[fa][1] == 'Y') {
+				if (na == NULL)
+					usage("Flag '-Y' expects extra flag");
+			
+				if (na[0] == 'A') {
+					nadaptive = 1;
+				} else if (na[0] == 'r') {
+					refrmode = 1;
+				} else if (na[0] == 'n') {
+					refrmode = 0;
+				} else {
+					usage("Flag '-Z %c' not recognised",na[0]);
+				}
+
+			/* UI selection character */
+			} else if (argv[fa][1] == 'U') {
+				fa = nfa;
+				if (na == NULL || na[0] == '\000') usage("Expect argument to flag -U");
+				uisel = na;
+				for (i = 0; uisel[i] != '\000'; i++) {
+					if (!( (uisel[i] >= '0' && uisel[i] <= '9')
+					    || (uisel[i] >= 'A' && uisel[i] <= 'Z')
+					    || (uisel[i] >= 'a' && uisel[i] <= 'z'))) {
+						usage("-U character(s) must be 0-9,A-Z,a-z");
+					}
+				}
+
 			} else 
 				usage("Flag '-%c' not recognised",argv[fa][1]);
 		}
 		else
 			break;
 	}
-
-	patsize *= patscale;
 
 	/* Get the output ccmx file name argument */
 	if (fa >= argc)
@@ -482,6 +547,13 @@ int main(int argc, char *argv[])
 
 		if ((ii = cgf->find_kword(cgf, 0, "TARGET_INSTRUMENT")) < 0)
 			error ("Can't find keyword TARGET_INSTRUMENT in '%s'",innames[0]);
+
+		if ((ti = cgf->find_kword(cgf, 0, "DISPLAY_TYPE_REFRESH")) >= 0) {
+			if (stricmp(cgf->t[0].kdata[ti], "YES") == 0)
+				refrmode = 1;
+			else if (stricmp(cgf->t[0].kdata[ti], "NO") == 0)
+				refrmode = 0;
+		}
 
 		if ((ii = cgf->find_kword(cgf, 0, "SPECTRAL_BANDS")) < 0)
 			error ("Input file '%s' doesn't contain keyword SPECTRAL_BANDS",innames[0]);
@@ -546,11 +618,14 @@ int main(int argc, char *argv[])
 				samples[i].spec[j] *= scale / bigv;
 		}
 			
+		if (refrmode < 0)
+			error("The display refresh mode is not known - use the -Y flag");
+
 		if ((cc = new_ccss()) == NULL)
 			error("new_ccss() failed");
 
 		if (cc->set_ccss(cc, "Argyll ccxxmake", NULL, description, displayname,
-		                 displaytech, refname, samples, npat)) {
+		                 displaytech, refrmode, uisel, refname, samples, npat)) {
 			error("set_ccss failed with '%s'\n",cc->err);
 		}
 		if(cc->write_ccss(cc, outname))
@@ -648,10 +723,23 @@ int main(int argc, char *argv[])
 					}
 					gotref = 1;
 					warning("Got two colorimetric files - assuming '%s' is the refrence",innames[0]);
+					refrmode = -1;
+					cbid = 0;
 
 					if (spec) {
 						error("Spectral reference is required to use non-standard observer");
 					}
+				}
+				if ((ti = cgf->find_kword(cgf, 0, "DISPLAY_TYPE_REFRESH")) >= 0) {
+					if (stricmp(cgf->t[0].kdata[ti], "YES") == 0)
+						refrmode = 1;
+					else if (stricmp(cgf->t[0].kdata[ti], "NO") == 0)
+						refrmode = 0;
+				}
+				if ((ti = cgf->find_kword(cgf, 0, "DISPLAY_TYPE_BASE_ID")) >= 0) {
+					cbid = atoi(cgf->t[0].kdata[ti]);
+				} else {
+					cbid = 0;
 				}
 				current = cols;
 				colname = strdup(cgf->t[0].kdata[ii]);
@@ -704,7 +792,7 @@ int main(int argc, char *argv[])
 				}
 
 				/* Create a spectral conversion object */
-				if ((sp2cie = new_xsp2cie(icxIT_none, NULL, observ, NULL, icSigXYZData)) == NULL)
+				if ((sp2cie = new_xsp2cie(icxIT_none, NULL, observ, NULL, icSigXYZData, icxClamp)) == NULL)
 					error("Creation of spectral conversion object failed");
 
 				for (i = 0; i < npat; i++) {
@@ -789,11 +877,18 @@ int main(int argc, char *argv[])
 			strcat(description, " & ");
 			strcat(description, disp);
 		}
+
+		if (refrmode < 0)
+			error("The display refresh mode is not known - use the -Y flag");
+
+		if (cbid == 0)
+			error("The calibration base display mode not specified in the .ti3 file");
+
 		if ((cc = new_ccmx()) == NULL)
 			error("new_ccmx() failed");
 
-		if (cc->create_ccmx(cc, description, colname, displayname, displaytech, refname,
-               npat, refs, cols)) {
+		if (cc->create_ccmx(cc, description, colname, displayname, displaytech,
+			                     refrmode, cbid, uisel, refname, npat, refs, cols)) {
 			error("create_ccmx failed with '%s'\n",cc->err);
 		}
 		if (verb) {
@@ -813,11 +908,6 @@ int main(int argc, char *argv[])
 	/* Do interactive measurements */
 	} else {
 
-		if (!doccss && dtype == 0) {
-			printf("**** Warning: display type (-y option) hasn't been set! ****\n");
-			printf("****     The colorimeter may not work without this!     ****\n\n");
-		}
-
 		/* No explicit display has been set */
 		if (
 #ifndef SHOW_WINDOW_ONFAKE
@@ -825,7 +915,7 @@ int main(int argc, char *argv[])
 #endif
 		 webdisp == 0 && disp == NULL) {
 			int ix = 0;
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 			char *dn, *pp;
 
 			if ((dn = getenv("DISPLAY")) != NULL) {
@@ -943,22 +1033,24 @@ int main(int argc, char *argv[])
 				printf("[Got colorimeter readings]\n");
 			printf("Press 1 .. 4:\n");
 			{
-				icoms *icom;
 				printf("1) Select an instrument, Currently %d (", comno);
-				if ((icom = new_icoms()) != NULL) {
+				if (icmps == NULL)
+					icmps = new_icompaths(g_log);
+				else
+					icmps->refresh(icmps);
+				if (icmps != NULL) {
 					icompath **paths;
-					if ((paths = icom->get_paths(icom)) != NULL) {
+					if ((paths = icmps->paths) != NULL) {
 						int i;
 						for (i = 0; ; i++) {
 							if (paths[i] == NULL)
 								break;
 							if ((i+1) == comno) {
-								printf(" '%s'",paths[i]->path);
+								printf(" '%s'",paths[i]->name);
 								break;
 							}
 						}
 					}
-					icom->del(icom);
 				}
 				printf(")\n");
 			}
@@ -1008,21 +1100,21 @@ int main(int argc, char *argv[])
 
 			/* Deal with selecting the instrument */
 			if (c == '1') {
-				icoms *icom;
-
-				if ((icom = new_icoms()) != NULL) {
+				if (icmps == NULL)
+					icmps = new_icompaths(g_log);
+				else
+					icmps->refresh(icmps);
+				if (icmps != NULL) {
 					icompath **paths;
-					if ((paths = icom->get_paths(icom)) != NULL) {
+					if ((paths = icmps->paths) != NULL) {
 						int i;
 						for (i = 0; ; i++) {
 							if (paths[i] == NULL)
 								break;
-							if (strlen(paths[i]->path) >= 8
-							  && strcmp(paths[i]->path+strlen(paths[i]->path)-8, "Spyder2)") == 0
-							  && setup_spyd2() == 0)
-								fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->path);
+							if (paths[i]->itype == instSpyder2 && setup_spyd2() == 0)
+								fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->name);
 							else
-								fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
+								fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->name);
 						}
 						printf("Select device 1 - %d: \n",i);
 						empty_con_chars();
@@ -1037,7 +1129,6 @@ int main(int argc, char *argv[])
 					} else {
 						fprintf(stderr,"No ports to select from!\n");
 					}
-					icom->del(icom);
 				}
 				continue;
 			}
@@ -1047,31 +1138,44 @@ int main(int argc, char *argv[])
 				int errc;				/* Return value from new_disprd() */
 				disprd *dr;				/* Display patch read object */
 				inst *it;				/* Instrument */
-				inst_capability  cap = inst_unknown;	/* Instrument capabilities */
-				inst2_capability cap2 = inst2_unknown;	/* Instrument capabilities 2 */
+				inst_mode  cap = inst_mode_none;	/* Instrument mode capabilities */
+				inst2_capability cap2 = inst2_none;	/* Instrument capabilities 2 */
+				inst3_capability cap3 = inst3_none;	/* Instrument capabilities 3 */
+
+				if (fake)
+					comno = -99;
+				if (icmps == NULL)
+					icmps = new_icompaths(g_log);
 
 				/* Should we use current cal rather than native ??? */
-				if ((dr = new_disprd(&errc, fake ? -99 : comno, fc, dtype, proj, adaptive,
-				                     noautocal, highres, 2, NULL, NULL, 0, 0, disp, blackbg,
-				                     override, webdisp, ccallout, NULL, patsize, ho, vo,
+				if ((dr = new_disprd(&errc, icmps->get_path(icmps, comno),
+				                     fc, dtype, 1, tele, nadaptive,
+				                     noinitcal, highres, 2, NULL, NULL, 0, 0, disp, blackbg,
+				                     override, webdisp, ccallout, NULL,
+					                 100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
 					                 NULL, NULL, 0, 2, icxOT_default, NULL, 
-				                     0, 0, verb, VERBOUT, debug, "fake" ICC_FILE_EXT)) == NULL)
+				                     0, 0, "fake" ICC_FILE_EXT, g_log)) == NULL)
 					error("new_disprd failed with '%s'\n",disprd_err(errc));
 			
 				it = dr->it;
 
 				if (fake) {
 					if (faketoggle)
-						cap = inst_spectral;
+						cap = inst_mode_spectral;
 					else
-						cap = inst_colorimeter;
-					cap2 = 0;
+						cap = inst_mode_colorimeter;
+					cap2 = inst2_none;
+					cap3 = inst3_none;
+					refrmode = 0; 
+					cbid = 1;
 				} else {
-					cap = it->capabilities(it);
-					cap2 = it->capabilities2(it);
+					it->capabilities(it, &cap, &cap2, &cap3);
+					if (!IMODETST(cap, inst_mode_spectral)) {
+						dr->get_disptype(dr, &refrmode, &cbid);	/* Get the display type info */
+					}
 				}
 
-				if (doccss && (cap & inst_spectral) == 0) {
+				if (doccss && !IMODETST(cap, inst_mode_spectral)) {
 					printf("You have to use a spectrometer to create a CCSS!\n");
 					continue;
 				}
@@ -1082,7 +1186,7 @@ int main(int argc, char *argv[])
 					dr->fake2 = -1;
 
 				/* Test the CRT with all of the test points */
-				if ((rv = dr->read(dr, rdcols, npat, 1, npat, 1, 0)) != 0) {
+				if ((rv = dr->read(dr, rdcols, npat, 1, npat, 1, 0, instClamp)) != 0) {
 					dr->del(dr);
 					error("disprd returned error code %d\n",rv);
 				}
@@ -1090,12 +1194,12 @@ int main(int argc, char *argv[])
 				if (doccss) {		/* We'll use the rdcols values */
 					gotref = 1;
 				} else {
-					if (cap & inst_spectral) {
+					if (IMODETST(cap, inst_mode_spectral)) {
 						xsp2cie *sp2cie = NULL;
 
 						if (spec) {
 							/* Create a spectral conversion object */
-							if ((sp2cie = new_xsp2cie(icxIT_none, NULL, observ, NULL, icSigXYZData)) == NULL)
+							if ((sp2cie = new_xsp2cie(icxIT_none, NULL, observ, NULL, icSigXYZData, icxClamp)) == NULL)
 								error("Creation of spectral conversion object failed");
 						}
 						for (i = 0; i < npat; i++) {	/* For all grid points */
@@ -1104,11 +1208,11 @@ int main(int argc, char *argv[])
 									error("Didn't get spectral value");
 								sp2cie->convert(sp2cie, refs[i], &rdcols[i].sp);
 							} else {
-								if (rdcols[i].aXYZ_v == 0)
-									error("Didn't get absolute XYZ value");
-								refs[i][0] = rdcols[i].aXYZ[0];
-								refs[i][1] = rdcols[i].aXYZ[1];
-								refs[i][2] = rdcols[i].aXYZ[2];
+								if (rdcols[i].XYZ_v == 0)
+									error("Didn't get XYZ value");
+								refs[i][0] = rdcols[i].XYZ[0];
+								refs[i][1] = rdcols[i].XYZ[1];
+								refs[i][2] = rdcols[i].XYZ[2];
 							}
 						}
 						if (fake)
@@ -1118,13 +1222,13 @@ int main(int argc, char *argv[])
 						gotref = 1;
 						if (sp2cie != NULL)
 							sp2cie->del(sp2cie);
-					} else if (cap & inst_colorimeter) {
+					} else if (IMODETST(cap, inst_mode_colorimeter)) {
 						for (i = 0; i < npat; i++) {	/* For all grid points */
-							if (rdcols[i].aXYZ_v == 0)
-								error("Didn't get absolute XYZ value");
-							cols[i][0] = rdcols[i].aXYZ[0];
-							cols[i][1] = rdcols[i].aXYZ[1];
-							cols[i][2] = rdcols[i].aXYZ[2];
+							if (rdcols[i].XYZ_v == 0)
+								error("Didn't get XYZ value");
+							cols[i][0] = rdcols[i].XYZ[0];
+							cols[i][1] = rdcols[i].XYZ[1];
+							cols[i][2] = rdcols[i].XYZ[2];
 						}
 						if (fake)
 							colname = "fake colorimeter";
@@ -1182,11 +1286,14 @@ int main(int argc, char *argv[])
 							samples[i].spec[j] *= scale / bigv;
 					}
 						
+					if (refrmode < 0)
+						warning("No refresh mode specified! Assuming non-refresh !");
+
 					if ((cc = new_ccss()) == NULL)
 						error("new_ccss() failed");
 	
 					if (cc->set_ccss(cc, "Argyll ccxxmake", NULL, description, displayname,
-					                 displaytech, refname, samples, npat)) {
+					                 displaytech, refrmode, NULL, refname, samples, npat)) {
 						error("set_ccss failed with '%s'\n",cc->err);
 					}
 					if(cc->write_ccss(cc, outname))
@@ -1231,11 +1338,17 @@ int main(int argc, char *argv[])
 						strcat(description, " & ");
 						strcat(description, displayname);
 					}
+
+					if (refrmode < 0)
+						error("Internal error - the instrument did not return a refmode");
+					if (cbid == 0)
+						error("Internal error - the instrument did not return a cbid");
+
 					if ((cc = new_ccmx()) == NULL)
 						error("new_ccmx() failed");
 	
 					if (cc->create_ccmx(cc, description, colname, displayname, displaytech,
-					                    refname, npat, refs, cols)) {
+					                    refrmode, cbid, uisel, refname, npat, refs, cols)) {
 						error("create_ccmx failed with '%s'\n",cc->err);
 					}
 					if (verb) {
@@ -1270,6 +1383,8 @@ int main(int argc, char *argv[])
 		}	/* Next command */
 
 		free(displayname);
+		if (icmps != NULL)
+			icmps->del(icmps);
 	}
 
 #ifdef DEBUG

@@ -4,8 +4,8 @@
  * Profile read then re-write skeleton utility.
  *
  * Author:  Graeme W. Gill
- * Date:    99/11/29
- * Version: 2.13
+ * Date:    1999/11/29
+ * Version: 2.15
  *
  * Copyright 1997 - 2012 Graeme W. Gill
  *
@@ -136,7 +136,7 @@ main(int argc, char *argv[]) {
 			double vi, vo;
 			vi = i/(double)(ro->size-1);
 
-			if (vi < 0.03928) {
+			if (vi < 0.04045) {
 				vo = vi/12.92;
 			} else {
 				vo = pow((0.055+vi)/1.055,2.4);

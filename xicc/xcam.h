@@ -1,4 +1,6 @@
 
+#ifndef _XCAM_H_
+
 /* 
  * Abstract interface to color appearance model transforms.
  * 
@@ -74,5 +76,7 @@ icxCAM icxcam_default();
 /* Return a string describing the given CAM */
 char *icxcam_description(icxCAM ct); 
 
+#define _XCAM_H_
+#endif /* _XCAM_H_ */
 
 

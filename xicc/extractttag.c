@@ -165,7 +165,7 @@ main(int argc, char *argv[]) {
 			if (icg->t[tab].tt == tt_other && icg->t[tab].oi == oi) {
 				break;
 			}
-			}
+		}
 		if (tab >= icg->ntables) {
 			error("Failed to locate CAL table in CGATS");
 		}

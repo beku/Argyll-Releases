@@ -24,6 +24,8 @@
 	Do we need to worry about normalising display values to Y = 100, or marking
 	them not normalised ?
 
+	Should have an option to output .ti1 files instead of .ti3.
+
  */
 
 #undef DEBUG

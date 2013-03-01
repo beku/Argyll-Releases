@@ -9,7 +9,7 @@
  * Derived from printread.c/chartread.c
  * Was called printspot.
  *
- * Copyright 2001 - 2010 Graeme W. Gill
+ * Copyright 2001 - 2013 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -57,6 +57,7 @@
 #include "conv.h"
 #include "inst.h"
 #include "icoms.h"
+#include "instappsup.h"
 #include "plot.h"
 #include "spyd2setup.h"			/* Enable Spyder 2 access */
 
@@ -126,7 +127,7 @@ static double bfindfunc(void *adata, double pv[]) {
 	xsp_setUV(&b->ill, b->i_sp, pv[0]);
 
 	/* Update the conversion */
-	if (b->pap->update_fwa_custillum(b->pap, &b->ill) != 0) 
+	if (b->pap->update_fwa_custillum(b->pap, NULL, &b->ill) != 0) 
 		error ("Updating FWA compensation failed");
 
 	/* Apply FWA compensation to the paper reflectance */
@@ -211,8 +212,8 @@ static double cfindfunc(void *adata, double pv[]) {
 
 /* ============================================================== */
 void
-usage(int debug) {
-	icoms *icom;
+usage() {
+	icompaths *icmps;
 	fprintf(stderr,"Measure an illuminant, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (setup_spyd2() == 2)
@@ -221,33 +222,31 @@ usage(int debug) {
 	fprintf(stderr," -v                   Verbose mode\n");
 	fprintf(stderr," -S                   Plot spectrum for each reading\n");
 	fprintf(stderr," -c listno            Choose instrument from the following list (default 1)\n");
-	if ((icom = new_icoms()) != NULL) {
+	if ((icmps = new_icompaths(g_log)) != NULL) {
 		icompath **paths;
-		if (debug)
-			icom->debug = debug;
-		if ((paths = icom->get_paths(icom)) != NULL) {
+		if ((paths = icmps->paths) != NULL) {
 			int i;
 			for (i = 0; ; i++) {
 				if (paths[i] == NULL)
 					break;
-				if (strlen(paths[i]->path) >= 8
-				  && strcmp(paths[i]->path+strlen(paths[i]->path)-8, "Spyder2)") == 0
-				  && setup_spyd2() == 0)
-					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->path);
+				if (paths[i]->itype == instSpyder2 && setup_spyd2() == 0)
+					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->name);
 				else
-					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
+					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->name);
 			}
 		} else
 			fprintf(stderr,"    ** No ports found **\n");
-		icom->del(icom);
 	}
-	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
+	fprintf(stderr," -N                   Disable initial calibration of instrument if possible\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," illuminant.sp        File to save measurement to\n");
+	
+	if (icmps != NULL)
+		icmps->del(icmps);
 	exit(1);
-	}
+}
 
 int main(int argc, char *argv[])
 {
@@ -255,7 +254,7 @@ int main(int argc, char *argv[])
 	int fa, nfa, mfa;				/* current argument we're looking at */
 	int verb = 0;
 	int debug = 0;
-	int nocal = 0;					/* Disable auto calibration */
+	int nocal = 0;					/* Disable initial calibration */
 	int pspec = 0;                  /* 2 = Plot out the spectrum for each reading */
 	int highres = 0;				/* Use high res mode if available */
 	char outname[MAXNAMEL+1] = "\000";  /* Spectral output file name */
@@ -264,13 +263,15 @@ int main(int argc, char *argv[])
 	int rd_i = 0, rd_r = 0, rd_p = 0;
 #endif
 
+	icompaths *icmps = NULL;		/* Ports to choose from */
 	int comno = 1;					/* Specific port suggested by user */
 	inst *it = NULL;				/* Instrument object, NULL if none */
 	inst_mode mode = 0;				/* Instrument reading mode */
-	inst_opt_mode trigmode = inst_opt_unknown;	/* Chosen trigger mode */
+	inst_opt_type trigmode = inst_opt_unknown;	/* Chosen trigger mode */
 	instType itype = instUnknown;	/* No default target instrument */
-	inst_capability  cap = inst_unknown;	/* Instrument capabilities */
-	inst2_capability cap2 = inst2_unknown;	/* Instrument capabilities 2 */
+	inst_mode cap = inst_mode_none;		/* Instrument mode capabilities */
+	inst2_capability cap2 = inst2_none;	/* Instrument capabilities 2 */
+	inst3_capability cap3 = inst3_none;	/* Instrument capabilities 3 */
 	baud_rate br = baud_38400;		/* Target baud rate */
 	flow_control fc = fc_nc;		/* Default flow control */
 
@@ -315,10 +316,11 @@ int main(int argc, char *argv[])
 			}
 
 			if (argv[fa][1] == '?') {
-				usage(debug);
+				usage();
 
 			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
+				g_log->verb = verb;
 
 			} else if (argv[fa][1] == 'S') {
 				pspec = 2;
@@ -326,11 +328,11 @@ int main(int argc, char *argv[])
 			/* COM port  */
 			} else if (argv[fa][1] == 'c') {
 				fa = nfa;
-				if (na == NULL) usage(debug);
+				if (na == NULL) usage();
 				comno = atoi(na);
-				if (comno < 1 || comno > 40) usage(debug);
+				if (comno < 1 || comno > 99) usage();
 
-			/* No auto calibration */
+			/* No initial calibration */
 			} else if (argv[fa][1] == 'N') {
 				nocal = 1;
 
@@ -341,7 +343,7 @@ int main(int argc, char *argv[])
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
-				if (na == NULL) usage(debug);
+				if (na == NULL) usage();
 				if (na[0] == 'n' || na[0] == 'N')
 					fc = fc_none;
 				else if (na[0] == 'h' || na[0] == 'H')
@@ -349,7 +351,7 @@ int main(int argc, char *argv[])
 				else if (na[0] == 'x' || na[0] == 'X')
 					fc = fc_XonXOff;
 				else
-					usage(debug);
+					usage();
 
 			} else if (argv[fa][1] == 'D') {
 				debug = 1;
@@ -357,8 +359,9 @@ int main(int argc, char *argv[])
 					debug = atoi(na);
 					fa = nfa;
 				}
+				g_log->debug = debug;
 			} else 
-				usage(debug);
+				usage();
 		}
 		else
 			break;
@@ -366,7 +369,7 @@ int main(int argc, char *argv[])
 
 	/* Get the output spectrum file name argument */
 	if (fa >= argc)
-		usage(debug);
+		usage();
 
 	strncpy(outname,argv[fa++],MAXNAMEL-1); outname[MAXNAMEL-1] = '\000';
 
@@ -406,22 +409,24 @@ int main(int argc, char *argv[])
 		printf("2) Measure illuminant reflected from paper%s\n", r_sp.spec_n != 0 ? " (measured)":""); 
 		printf("3) Measure paper%s\n", p_sp.spec_n != 0 ? " (measured)":""); 
 		if (it == NULL) {
-			icoms *icom;
 			printf("4) Select another instrument, Currently %d (", comno);
-			if ((icom = new_icoms()) != NULL) {
+			if (icmps == NULL)
+				icmps = new_icompaths(g_log);
+			else
+				icmps->refresh(icmps);
+			if (icmps != NULL) {
 				icompath **paths;
-				if ((paths = icom->get_paths(icom)) != NULL) {
+				if ((paths = icmps->paths) != NULL) {
 					int i;
 					for (i = 0; ; i++) {
 						if (paths[i] == NULL)
 							break;
 						if ((i+1) == comno) {
-							printf(" '%s'",paths[i]->path);
+							printf(" '%s'",paths[i]->name);
 							break;
 						}
 					}
 				}
-				icom->del(icom);
 			}
 			printf(")\n");
 		} else
@@ -439,8 +444,11 @@ int main(int argc, char *argv[])
 			int ch;
 
 			if (it == NULL) {
+				if (icmps == NULL)
+					icmps = new_icompaths(g_log);
+
 				/* Open the instrument */
-				if ((it = new_inst(comno, 0, debug, verb)) == NULL) {
+				if ((it = new_inst(icmps->get_path(icmps, comno), 0, g_log, DUIH_FUNC_AND_CONTEXT)) == NULL) {
 					printf("!!! Unknown, inappropriate or no instrument detected !!!\n");
 					continue;
 				}
@@ -453,7 +461,7 @@ int main(int argc, char *argv[])
 #endif
 
 				/* Establish communications */
-				if ((rv = it->init_coms(it, comno, br, fc, 15.0)) != inst_ok) {
+				if ((rv = it->init_coms(it, br, fc, 15.0)) != inst_ok) {
 					printf("!!! Failed to initialise communications with instrument\n"
 					       "    or wrong instrument or bad configuration !!!\n"
 					       "   ('%s' + '%s')\n", it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -480,26 +488,25 @@ int main(int argc, char *argv[])
 				itype = it->get_itype(it);		/* get actual type of instrument */
 
 				/* Check the instrument has the necessary capabilities */
-				cap = it->capabilities(it);
-				cap2 = it->capabilities2(it);
+				it->capabilities(it, &cap, &cap2, &cap3);
 
 				/* Need spectral */
-				if ((cap & inst_spectral) == 0) {
+				if (!IMODETST(cap, inst_mode_spectral)) {
 					printf("Instrument lacks spectral measurement capability");
 				}
 
-				/* Disable autocalibration of machine if selected */
+				/* Disable iniial calibration of machine if selected */
 				if (nocal != 0){
-					if ((rv = it->set_opt_mode(it,inst_opt_noautocalib)) != inst_ok) {
-						printf("Setting no-autocalibrate failed failed with '%s' (%s) !!!\n",
+					if ((rv = it->get_set_opt(it,inst_opt_noinitcalib, 0)) != inst_ok) {
+						printf("Setting no-initial calibrate failed failed with '%s' (%s) !!!\n",
 					       it->inst_interp_error(it, rv), it->interp_error(it, rv));
-						printf("Disable auto-calibrate not supported\n");
+						printf("Disable initial-calibrate not supported\n");
 					}
 				}
 				if (highres) {
-					if (cap & inst_highres) {
+					if (IMODETST(cap, inst_mode_highres)) {
 						inst_code ev;
-						if ((ev = it->set_opt_mode(it, inst_opt_highres)) != inst_ok) {
+						if ((ev = it->get_set_opt(it, inst_opt_highres)) != inst_ok) {
 							printf("!!! Setting high res mode failed with error :'%s' (%s) !!!\n",
 					       	       it->inst_interp_error(it, ev), it->interp_error(it, ev));
 						}
@@ -510,13 +517,12 @@ int main(int argc, char *argv[])
 			}
 
 			/* Check the instrument has the necessary capabilities for this measurement */
-			cap = it->capabilities(it);
-			cap2 = it->capabilities2(it);
+			it->capabilities(it, &cap, &cap2, &cap3);
 
 			if (c == '1') {
-				if ((cap & inst_emis_ambient) != 0) {
+				if (IMODETST(cap, inst_mode_emis_ambient)) {
 					mode = inst_mode_emis_ambient;
-				} else if ((cap & inst_emis_spot) != 0) {
+				} else if (IMODETST(cap, inst_mode_emis_spot)) {
 					mode = inst_mode_emis_spot;
 				} else {
 					printf("!!! Instrument doesn't have ambient or emissive capability !!!\n");
@@ -524,26 +530,26 @@ int main(int argc, char *argv[])
 				}
 			}
 			if (c == '2') {
-				if ((cap & inst_emis_tele) != 0) {
+				if (IMODETST(cap, inst_mode_emis_tele)) {
 					mode = inst_mode_emis_tele;
-				} else if ((cap & inst_emis_spot) != 0) {
+				} else if (IMODETST(cap, inst_mode_emis_spot)) {
 					mode = inst_mode_emis_spot;
 				} else {
-					printf("!!! Instrument doesn't have projector or emissive capability !!!\n");
+					printf("!!! Instrument doesn't have telephoto or emissive capability !!!\n");
 					continue;
 				}
 			}
 			if (c == '3') {
 				inst_opt_filter filt;
 
-				if ((cap & inst_ref_spot) != 0) {
+				if (IMODETST(cap, inst_mode_ref_spot)) {
 					mode = inst_mode_ref_spot;
 				} else {
 					printf("!!! Instrument lacks reflective spot measurement capability !!!\n");
 					continue;
 				}
 
-				if ((rv = it->get_status(it, inst_stat_get_filter, &filt)) == inst_ok) {
+				if ((rv = it->get_set_opt(it, inst_stat_get_filter, &filt)) == inst_ok) {
 					if (filt & inst_opt_filter_UVCut) {
 						printf("!!! Instrument has UV filter - can't measure FWA !!!\n");
 						continue;
@@ -557,54 +563,45 @@ int main(int argc, char *argv[])
 			     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 				continue;
 			}
-			cap = it->capabilities(it);
-			cap2 = it->capabilities2(it);
+			it->capabilities(it, &cap, &cap2, &cap3);
 
 			/* If it batter powered, show the status of the battery */
 			if ((cap2 & inst2_has_battery)) {
 				double batstat = 0.0;
-				if ((rv = it->get_status(it, inst_stat_battery, &batstat)) == inst_ok)
+				if ((rv = it->get_set_opt(it, inst_stat_battery, &batstat)) == inst_ok)
 					printf("The battery charged level is %.0f%%\n",batstat * 100.0);
 			}
 
-			/* If it's an instrument that need positioning do trigger via keyboard */
+			/* If it's an instrument that need positioning do trigger using user via uicallback */
 			/* in illumread, else enable switch or keyboard trigger if possible. */
 			if ((cap2 & inst2_xy_locate) && (cap2 & inst2_xy_position)) {
 				trigmode = inst_opt_trig_prog;
 
-			} else if (cap2 & inst2_keyb_switch_trig) {
-				trigmode = inst_opt_trig_keyb_switch;
+			} else if (cap2 & inst2_user_switch_trig) {
+				trigmode = inst_opt_trig_user_switch;
 				uswitch = 1;
 
-			/* Or go for keyboard trigger */
-			} else if (cap2 & inst2_keyb_trig) {
-				trigmode = inst_opt_trig_keyb;
+			/* Or go for user via uicallback trigger */
+			} else if (cap2 & inst2_user_trig) {
+				trigmode = inst_opt_trig_user;
 
 			/* Or something is wrong with instrument capabilities */
 			} else {
 				printf("!!! No reasonable trigger mode avilable for this instrument !!!\n");
 				continue;
 			}
-			if ((rv = it->set_opt_mode(it, trigmode)) != inst_ok) {
-				printf("!!! Setting trigger mode failed with error :'%s' (%s) !!!\n",
-		       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
-				continue;
-			}
-
-			/* Prompt on trigger */
-			if ((rv = it->set_opt_mode(it, inst_opt_trig_return)) != inst_ok) {
+			if ((rv = it->get_set_opt(it, trigmode)) != inst_ok) {
 				printf("!!! Setting trigger mode failed with error :'%s' (%s) !!!\n",
 		       	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 				continue;
 			}
 
 			/* Setup the keyboard trigger to return our commands */
-			it->icom->reset_uih(it->icom);
-			it->icom->set_uih(it->icom, 0x0, 0xff, ICOM_TRIG);
-			it->icom->set_uih(it->icom, 'q', 'q', ICOM_USER);
-			it->icom->set_uih(it->icom, 'Q', 'Q', ICOM_USER);
-			it->icom->set_uih(it->icom, 0x03, 0x03, ICOM_USER);		/* ^c */
-			it->icom->set_uih(it->icom, 0x1b, 0x1b, ICOM_USER);		/* Esc */
+			inst_set_uih(0x0, 0xff,  DUIH_TRIG);
+			inst_set_uih('q', 'q',   DUIH_ABORT);
+			inst_set_uih('Q', 'Q',   DUIH_ABORT);
+			inst_set_uih(0x03, 0x03, DUIH_ABORT);		/* ^c */
+			inst_set_uih(0x1b, 0x1b, DUIH_ABORT);		/* Esc */
 
 			/* Hold table */
 			if (cap2 & inst2_xy_holdrel) {
@@ -622,7 +619,7 @@ int main(int argc, char *argv[])
 			}
 
 			/* Do any needed calibration before the user places the instrument on a desired spot */
-			if ((it->needs_calibration(it) & inst_calt_needs_cal_mask) != 0) {
+			if (it->needs_calibration(it) != inst_calt_none) {
 				double lx, ly;
 				inst_code ev;
 
@@ -644,7 +641,7 @@ int main(int argc, char *argv[])
 					}
 				}
 
-				ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL);
+				ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL);
 				if (ev != inst_ok) {	/* Abort or fatal error */
 					printf("!!! Calibration failed with error :'%s' (%s) !!!\n",
 						it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -696,7 +693,7 @@ int main(int argc, char *argv[])
 			} else {
 
 				if (c == '1') {
-					if ((cap & inst_emis_ambient) != 0) {
+					if (IMODETST(cap, inst_mode_emis_ambient)) {
 						printf("\n(If applicable) set instrument to ambient measurenent mode, or place\n");
 						printf("ambient adapter on it, and position it so as to measure the illuminant directly.\n");
 					} else {
@@ -704,8 +701,8 @@ int main(int argc, char *argv[])
 						printf("and position it so as to measure the illuminant directly.\n");
 					}
 				} else if (c == '2') {
-					if ((cap & inst_emis_proj) != 0) {
-						printf("\n(If applicable) set instrument to projector measurenent mode,\n");
+					if (IMODETST(cap, inst_mode_emis_tele)) {
+						printf("\n(If applicable) set instrument to telephoto measurenent mode,\n");
 						printf("position it so as to measure the illuminant reflected from the paper.\n");
 					} else {
 						printf("\n(If applicable) set instrument to emsissive measurenent mode,\n");
@@ -724,7 +721,17 @@ int main(int argc, char *argv[])
 			fflush(stdout);
 
 			if ((cap2 & inst2_xy_locate) && (cap2 & inst2_xy_position)) {
-				if ((rv = it->poll_user(it, 1)) == inst_user_trig)  {
+
+				/* Wait for the user to hit a key */
+				for (;;) {
+					if ((rv = inst_get_uicallback()(inst_get_uicontext(), inst_armed)) != inst_ok)
+						break;
+				}
+
+				if (rv == inst_user_abort) {
+					break;				/* Abort */
+
+				} else if (rv == inst_user_trig) {
 					double lx, ly;
 					inst_code ev;
 
@@ -761,7 +768,7 @@ int main(int argc, char *argv[])
 						if (rv != inst_ok)
 							break;			/* Abort */
 					}
-					rv = it->read_sample(it, "SPOT", &val);
+					rv = it->read_sample(it, "SPOT", &val, 1);
 
 					/* Restore the location the instrument to have the location */
 					/* sight over the selected patch. */
@@ -775,8 +782,11 @@ int main(int argc, char *argv[])
 					if (ev != inst_ok)
 						break;			/* Abort */
 				}
+				/* else what ? */
+
+			/* Not an XY instrument */
 			} else {
-				rv = it->read_sample(it, "SPOT", &val);
+				rv = it->read_sample(it, "SPOT", &val, 1);
 			}
 
 			/* Release paper */
@@ -790,24 +800,29 @@ int main(int argc, char *argv[])
 #endif /* DEBUG */
 
 			/* Deal with a trigger or command */
-			if ((rv & inst_mask) == inst_user_trig
-		        || (rv & inst_mask) == inst_user_cmnd) {
-			    ch = it->icom->get_uih_char(it->icom);
+			if ((rv & inst_mask) == inst_user_trig) {
+			    ch = inst_get_uih_char() & 0xff;
 
-			/* Deal with an error or abort */
+			/* Deal with a command or abort */
 			} else if ((rv & inst_mask) == inst_user_abort) {
-				printf("\nIlluminant measure aborted at user request!\n");
-				continue;
+			    ch = inst_get_uih_char();
+				
+				if (ch & DUIH_CMND) {
+			    	ch &= 0xff;
+				} else if (ch & DUIH_ABORT) {
+					printf("\nIlluminant measure aborted at user request!\n");
+					continue;
+				}
 
 			/* Deal with a needs calibration */
 			} else if ((rv & inst_mask) == inst_needs_cal) {
 				inst_code ev;
 				printf("\nIlluminant measure failed because instruments needs calibration.\n");
-				ev = inst_handle_calibrate(it, inst_calt_all, inst_calc_none, NULL, NULL);
+				ev = inst_handle_calibrate(it, inst_calt_needed, inst_calc_none, NULL, NULL);
 				continue;
 
 			/* Deal with a bad sensor position */
-			} else if ((rv & inst_mask) == inst_wrong_sensor_pos) {
+			} else if ((rv & inst_mask) == inst_wrong_config) {
 				printf("\nIlluminant measure failed due to the sensor being in the wrong position\n(%s)\n",it->interp_error(it, rv));
 				continue;
 
@@ -895,26 +910,29 @@ int main(int argc, char *argv[])
 			continue;
 		}	/* End of take a measurement */
 
+		/* Deal with selecting the instrument */
 		if (c == '4') {
-			icoms *icom;
+
 			if (it != NULL)
 				it->del(it);
 			it = NULL;
 			itype = instUnknown;
 
-			if ((icom = new_icoms()) != NULL) {
+			if (icmps == NULL)
+				icmps = new_icompaths(g_log);
+			else
+				icmps->refresh(icmps);
+			if (icmps != NULL) {
 				icompath **paths;
-				if ((paths = icom->get_paths(icom)) != NULL) {
+				if ((paths = icmps->paths) != NULL) {
 					int i;
 					for (i = 0; ; i++) {
 						if (paths[i] == NULL)
 							break;
-						if (strlen(paths[i]->path) >= 8
-						  && strcmp(paths[i]->path+strlen(paths[i]->path)-8, "Spyder2)") == 0
-						  && setup_spyd2() == 0)
-							fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->path);
+						if (paths[i]->itype == instSpyder2 && setup_spyd2() == 0)
+							fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->name);
 						else
-							fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
+							fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->name);
 					}
 					printf("Select device 1 - %d: \n",i);
 					empty_con_chars();
@@ -929,7 +947,6 @@ int main(int argc, char *argv[])
 				} else {
 					fprintf(stderr,"No ports to select from!\n");
 				}
-				icom->del(icom);
 			}
 			continue;
 		}
@@ -975,14 +992,14 @@ int main(int argc, char *argv[])
 			bf.r_sp = &r_sp;
 			bf.p_sp = &p_sp;
 
-			if ((bf.pap = new_xsp2cie(icxIT_custom, &i_sp, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+			if ((bf.pap = new_xsp2cie(icxIT_custom, &i_sp, icxOT_CIE_1931_2, NULL, icSigLabData, icxClamp)) == NULL)
 				error("new_xsp2cie pap failed");
 
-			if (bf.pap->set_fwa(bf.pap, &insp, &p_sp) != 0) 
+			if (bf.pap->set_fwa(bf.pap, &insp, NULL, &p_sp) != 0) 
 				error ("Setting FWA compensation failed");
 
 			/* Setup the equal energy to Lab conversion */
-			if ((bf.ref = new_xsp2cie(icxIT_E, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+			if ((bf.ref = new_xsp2cie(icxIT_E, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, icxClamp)) == NULL)
 				error("new_xsp2cie ref failed");
 
 			/* Estimate an initial gain match */
@@ -1065,7 +1082,7 @@ int main(int argc, char *argv[])
 				xspect cpdsp;		/* FWA corrected calculated daylight paper reflectance */
 				
 				/* Setup the referencec comversion */
-				if ((cf.ref = new_xsp2cie(icxIT_E, NULL, icxOT_CIE_1931_2, NULL, icSigLabData)) == NULL)
+				if ((cf.ref = new_xsp2cie(icxIT_E, NULL, icxOT_CIE_1931_2, NULL, icSigLabData, icxClamp)) == NULL)
 					error("new_xsp2cie ref failed");
 
 				cf.ill = bf.ill; 
@@ -1111,7 +1128,7 @@ int main(int argc, char *argv[])
 				          xmin, xmax, ymin, ymax, 2.0);
 
 				/* Update the conversion to the matched Dayligh */
-				if (bf.pap->update_fwa_custillum(bf.pap, &cf.dxx) != 0) 
+				if (bf.pap->update_fwa_custillum(bf.pap, NULL, &cf.dxx) != 0) 
 					error ("Updating FWA compensation to daylight failed");
 
 				/* Apply FWA compensation to the paper reflectance */

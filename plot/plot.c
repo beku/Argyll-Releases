@@ -22,6 +22,9 @@
  *		(Will have to lock plot info updates or ping pong them);
  *		Have call to destroy window.
  *		(Could then move to having multiple instances of plot).
+ *
+ *    OS X Cocoa code doesn't get window focus. No idea why.
+ *
  */
 
 #include <stdio.h>
@@ -74,6 +77,7 @@ struct _plot_info {
 	void *cx;				/* Other Context */
 
 	int dowait;				/* Wait for user key if > 0, wait for n secs if < 0 */
+	double ratio;			/* Aspect ratio of window, X/Y */
 
 	/* Plot point information */
 	double mnx, mxx, mny, mxy;		/* Extrema of values to be plotted */
@@ -806,6 +810,7 @@ static int do_plot_imp(
 	int o
 ) {
 	pd.dowait = 10 * dowait;
+	pd.ratio = ratio;
 	{
 		int j;
 		double xr,yr;
@@ -895,7 +900,7 @@ static int do_plot_imp(
 		}
 
 		if (dowait > 0) {		/* Wait for a space key */
-			while(plot_signal == 0)
+			while(plot_signal == 0 && plot_hwnd != NULL)
 				Sleep(50);
 			plot_signal = 0;
 		} else if (dowait < 0) {
@@ -1237,10 +1242,19 @@ plot_info *pdp
 
 #else /* !NT */
 
-/* ************************** APPLE OSX Carbon version ****************** */
+/* ************************** APPLE OSX Cocoa version ****************** */
 #ifdef __APPLE__
 
-#include <Carbon/Carbon.h>
+#include <Foundation/Foundation.h>
+#include <AppKit/AppKit.h>
+
+#ifndef CGFLOAT_DEFINED
+#ifdef __LP64__
+typedef double CGFloat;
+#else
+typedef float CGFloat;
+#endif  /* defined(__LP64__) */
+#endif
 
 #ifdef DODEBUG
 # define debugf(xx)	printf xx
@@ -1248,9 +1262,132 @@ plot_info *pdp
 # define debugf(xx)
 #endif
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-static void DoPlot(WindowRef win, plot_info *pdp);
-static pascal OSStatus HandleEvent(EventHandlerCallRef inRef, EventRef inEvent, void* userData);
+
+@class PLWin;
+@class PLView;
+
+/* Our static instance variables */
+typedef struct {
+	PLWin *window;				/* NSWindow */
+	PLView *view;				/* NSTextField */
+	volatile int plot_signal;	/* Signal a key or quit */
+} cntx_t;
+
+/* Global plot instanc */
+
+cntx_t *plot_cx = NULL;
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - 
+@interface PLView : NSView {
+	cntx_t *cntx;
+}
+- (void)setCntx:(cntx_t *)cntx;
+@end
+
+@implementation PLView
+
+- (void)setCntx:(cntx_t *)val {
+	cntx = val;
+}
+
+/* This function does the work */
+static void DoPlot(NSRect *rect, plot_info *pdp);
+
+- (void)drawRect:(NSRect)rect {
+
+	/* Use global plot data struct for now */
+	DoPlot(&rect, &pd);
+}
+
+@end
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+@interface PLWin : NSWindow {
+	cntx_t *cntx;
+}
+- (void)setCntx:(cntx_t *)cntx;
+@end
+
+@implementation PLWin
+
+- (void)setCntx:(cntx_t *)val {
+	cntx = val;
+}
+
+- (BOOL)canBecomeMainWindow {
+	return YES;
+}
+
+- (void)keyDown:(NSEvent *)event {
+	const char *chars;
+
+	chars = [[event characters] UTF8String];
+//	printf("Got Window KeyDown type %d char %s\n",(int)[event type], chars);
+
+	if (chars[0] == ' ') {
+//		printf("Set plot_signal = 1\n");
+		plot_cx->plot_signal = 1;
+	}
+}
+
+- (BOOL)windowShouldClose:(id)sender {
+//	printf("Got Window windowShouldClose\n");
+
+    [NSApp terminate: nil];
+    return YES;
+}
+
+@end
+
+/* Create our window */
+static void create_my_win(cntx_t *cx) {
+	NSRect wRect;
+
+	/* Create Window */
+   	wRect.origin.x = 100;
+	wRect.origin.y = 100;
+	wRect.size.width = (int)(DEFWWIDTH*pd.ratio+0.5);
+	wRect.size.height = DEFWHEIGHT;
+
+	cx->window = [[PLWin alloc] initWithContentRect: wRect
+                                        styleMask: (NSTitledWindowMask |
+	                                                NSClosableWindowMask |
+                                                    NSMiniaturizableWindowMask |
+                                                    NSResizableWindowMask)
+                                          backing: NSBackingStoreBuffered
+                                            defer: YES
+	                                       screen: nil];		/* Main screen */
+
+	[cx->window setBackgroundColor: [NSColor whiteColor]];
+
+	[cx->window setLevel: NSMainMenuWindowLevel];		// ~~99
+
+	[cx->window setTitle: @"PlotWin"];
+
+	/* Use our view for the whole window to draw plot */
+	cx->view = [PLView new];
+	[cx->view setCntx:(void *)cx];
+	[cx->window setContentView: cx->view];
+
+	[cx->window makeKeyAndOrderFront: nil];
+
+//	[cx->window makeMainWindow];
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/*
+	Cocoa NSApp is pretty horrible - it will only get user events
+	if created and run in the main thread. So the only way we could
+	decouble the windows from the application would be to intercept
+	main() and create a secondary thread to run the appication while
+	leaving main() in reserve for creating an NSApp and windows.
+	
+	Instead we poll events for a while and then go back to the main application.
+ */
 
 /* Superset implementation function: */
 /* return 0 on success, -1 on error */
@@ -1274,11 +1411,13 @@ static int do_plot_imp(
 	double *x8, double *y8, double *x9, double*y9, plot_col *ocols,
 	int o
 ) {
+	/* Put information in global pd */
 	{
 		int j;
 		double xr,yr;
 
 		pd.dowait = dowait;
+		pd.ratio = ratio;
 
 		pd.mnx = xmin;
 		pd.mny = ymin;
@@ -1332,315 +1471,137 @@ static int do_plot_imp(
 		pd.o = abs(o);
 	}
 
-	{
-		OSStatus stat;
-		EventHandlerRef fHandler;		/* Event handler reference */
-		static WindowRef myWindow = NULL;	/* keep over the application run */
-		const EventTypeSpec	kEvents[] =
-		{ 
-			{ kEventClassTextInput, kEventTextInputUnicodeForKeyEvent },
-			{ kEventClassWindow, kEventWindowClose },
-			{ kEventClassWindow, kEventWindowBoundsChanged },
-			{ kEventClassWindow, kEventWindowDrawContent }
-		};
+	/* If needed, create the indow */
+	if (plot_cx == NULL) {
 
-		if (myWindow == NULL) {
-		    Rect	wRect;
-			WindowClass wclass = 0;
-			WindowAttributes attr = kWindowNoAttributes;
+		/* If there is no NSApp */
+		/* (This should go in a common library) */
+		/* Note that we don't actually clean this up on exit - */
+		/* possibly we can't. */
+		if (NSApp == nil) {
+			static NSAutoreleasePool *pool = nil;
 			ProcessSerialNumber psn = { 0, 0 };
-
-			if ((stat = GetCurrentProcess(&psn)) != noErr) {
-#ifdef DEBUG
-				printf("GetCurrentProcess returned error %d\n",stat);
-#endif
-			}
 
 			/* Transform the process so that the desktop interacts with it properly. */
 			/* We don't need resources or a bundle if we do this. */
-			if (psn.lowLongOfPSN != 0 && (stat = TransformProcessType(&psn, kProcessTransformToForegroundApplication)) != noErr) {
-				debugf(("TransformProcess failed with code %d\n",stat));
+			if (GetCurrentProcess(&psn) == noErr) {
+				OSStatus stat;
+				if (psn.lowLongOfPSN != 0 && (stat = TransformProcessType(&psn,
+					               kProcessTransformToForegroundApplication)) != noErr) {
+//				fprintf(stderr,"TransformProcess failed with code %d\n",stat);
+				} else {
+//				fprintf(stderr,"TransformProcess suceeded\n");
+				}
 			}
 
-			/* Choose the windows class and attributes */
-			wclass = kDocumentWindowClass;		/* document windows*/
-			attr |= kWindowStandardHandlerAttribute;/* This window has the standard Carbon Handler */
-			attr |= kWindowStandardDocumentAttributes;	/* The minimum set of window attributes */
 
-	    	wRect.left = 100;
-			wRect.top = 100;
-			wRect.right = (int)(100+DEFWWIDTH*ratio+0.5);
-			wRect.bottom = 100+DEFWHEIGHT;
+			pool = [NSAutoreleasePool new];
+			[NSApplication sharedApplication];	/* Creates NSApp */
+			[NSApp finishLaunching];
 
-			/* Create invisible new window of given class, attributes and size */
-		    stat = CreateNewWindow(wclass, attr, &wRect, &myWindow);
-			if (stat != noErr || myWindow == nil) {
-				debugf(("CreateNewWindow failed with code %d\n",stat));
-				return(-1);
-			}
-			pd.cx = (void *)myWindow;		/* Allow callback to get window reference */
-
-			/* Set a title */
-			SetWindowTitleWithCFString(myWindow, CFSTR("PlotWin"));
-
-			/* Install the event handler */
-		    stat = InstallEventHandler(
-				GetWindowEventTarget(myWindow),	/* Objects events to handle */
-				NewEventHandlerUPP(HandleEvent),/* Handler to call */
-				sizeof(kEvents)/sizeof(EventTypeSpec),	/* Number in type list */
-				kEvents,						/* Table of events to handle */
-				(void *)&pd,					/* User Data is our application context */
-				&fHandler						/* Event handler reference return value */
-			);
-			if (stat != noErr) {
-				debugf(("InstallEventHandler failed with code %d\n",stat));
-				return(-1);
-			}
-			/* make window come to the front at start */
-			if (psn.lowLongOfPSN != 0 && (stat = SetFrontProcess(&psn)) != noErr) {
-#ifdef DEBUG
-				printf("SetFrontProcess returned error %d\n",stat);
-#endif
-			}
-
-			/* Activate the window */
-			ShowWindow(myWindow);	/* Makes visible and triggers update event */
-
-		} else {
-			/* Cause window repaint with the new data */
-			Rect wrect;
-			debugf(("Causing Window Repaint ?\n"));
-			GetWindowPortBounds(myWindow, &wrect);
-			if ((stat = InvalWindowRect(myWindow, &wrect)) != noErr) {
-				debugf(("InvalWindowRect failed with %d\n",stat));
-			}
+			/* We seem to need this, because otherwise we don't get focus automatically */
+			[NSApp activateIgnoringOtherApps: YES];
 		}
 
-		/* Run the event loop */
-		RunApplicationEventLoop();
+		if ((plot_cx = (cntx_t *)calloc(sizeof(cntx_t), 1)) == NULL)
+			error("new_dispwin: Malloc failed (cntx_t)\n");
+
+		create_my_win(plot_cx);
+
+	} else {	/* Trigger an update */
+		[plot_cx->view setNeedsDisplay: YES ];
+	}
+
+	/* Wait until the events are done */
+	{
+		NSEvent *event;
+		double tot;
+		NSDate *to;
+		/* We're creating and draining a pool here to ensure that all the */
+		/* auto release objects get drained when we're finished (?) */
+		NSAutoreleasePool *tpool = [NSAutoreleasePool new];
+
+		if (dowait > 0) {		/* Wait for a space key */
+			tot = 24.0 * 60.0 * 60.0;
+		} else if (dowait < 0) {
+			tot = (double)-dowait;
+		} else {
+			tot = 0.1;
+		}
+		to = [NSDate dateWithTimeIntervalSinceNow:tot];		/* autorelease ? */
+		plot_cx->plot_signal = 0;
+		for (;plot_cx->plot_signal == 0;) {
+			/* Hmm. Assume event is autorelease */
+			if ((event = [NSApp nextEventMatchingMask:NSAnyEventMask
+			             untilDate:to inMode:NSDefaultRunLoopMode dequeue:YES]) != nil) {
+				[NSApp sendEvent:event];
+			} else {
+				break;
+			}
+	    }
+		[tpool release];
 	}
 	return 0;
 }
 
-/* The OSX event handler */
-pascal OSStatus HandleEvent(
-EventHandlerCallRef nextHandler,
-EventRef theEvent,
-void* userData
-) {
-	plot_info *pdp = (plot_info *)userData;
-	WindowRef myWindow = (WindowRef)pdp->cx;
-	OSStatus result = eventNotHandledErr;
-	
-	switch (GetEventClass(theEvent)) {
-		case kEventClassWindow: {
-			switch (GetEventKind(theEvent)) {
-				case kEventWindowClose:
-					debugf(("Event: Close Window, exiting event loop\n"));
-					/* pdp->cx = NULL; */			/* Mark the window closed */
-					QuitApplicationEventLoop();
-					result = noErr;
-					break;
-				
-				case kEventWindowBoundsChanged: {
-					OSStatus stat;
-					Rect wrect;
-					debugf(("Event: Bounds Changed\n"));
-					GetWindowPortBounds(myWindow, &wrect);
-					if ((stat = InvalWindowRect(myWindow, &wrect)) != noErr) {
-						debugf(("InvalWindowRect failed with %d\n",stat));
-					}
-					break;
-				}
-				case kEventWindowDrawContent: {
-					DoPlot(myWindow, pdp);
-					result = noErr;
-					if (pdp->dowait <= 0) { 		/* Don't wait or delay */
-						debugf(("Exiting event loop after drawing contents\n"));
-						if (pdp->dowait < 0)
-							sleep(-pdp->dowait);
-						QuitApplicationEventLoop();
-					}
-					break;
-				}
-			}
-		}
-		case kEventClassTextInput: {
-			switch (GetEventKind(theEvent)) {
-				case kEventTextInputUnicodeForKeyEvent: {
-					OSStatus stat;
-					UniChar *text;
-					UInt32 actualSize = 0;
+/* - - - - - - - - - - - - - - - - - - - - - - - - -  */
+/* Cleanup code (not called) */
 
-					debugf(("Event: Text Input\n"));
-					/* First get the size */
-					if ((stat = GetEventParameter(theEvent, kEventParamTextInputSendText,
-					                   typeUnicodeText, NULL, 0, &actualSize, NULL)) != noErr)
-						break;
-
-					/* Then read it */
-					if (actualSize > 0
-					 && (text = (UniChar*)malloc(actualSize)) != NULL) {
-						if ((stat = GetEventParameter(theEvent,kEventParamTextInputSendText,
-						                  typeUnicodeText, NULL, actualSize, NULL, text)) != noErr)
-							break;
-
-						if (text[0]  == L' ') {
-							debugf(("Event: Text got a space, exiting event loop\n"));
-							QuitApplicationEventLoop();
-						}
-						free((void *)text);
-					}
-					result = noErr;
-					break;
-				}
-			}
-		}
-	}
-
-	/* Call next hander if not handled here */
-	if (result == eventNotHandledErr) {
-		result =  CallNextEventHandler(nextHandler, theEvent);	/* Close window etc */
-	}
-
-	return result;
+static void cleanup() {
+	[plot_cx->window release];		/* Take down the plot window */
+	free(plot_cx);
+	plot_cx = NULL;
 }
 
-/* - - - - - - - - - - - - OSX Drawing support - - - - - - - - - - - - */
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-/* Utility to draw text in Quartz with centering */
-/* (Cover up ATSU ugliness) */
+/* Utility to draw text in Cocoa with centering */
 /* Size is points */
 /* Flags 0x1 == horizontal center */
 /* Flags 0x2 == vertical center */
-static void CDrawText(CGContextRef gc, float size, float x, float y, int flags, char *text) {
-	int i;
-	OSStatus stat;
-
-	/* Layout Attributes */
-	int lano = 1;		/* Number of attributes in arrays */
-	ATSUAttributeTag latags[] = { kATSUCGContextTag };
-	ATSUAttributeValuePtr lavalues[] = { &gc };
-	ByteCount lavsizes[] = { sizeof(CGContextRef) };
-
-	/* Style Attributes */
-	/* (Would specify a font here) */
-	int sano = 1;		/* Number of attributes in arrays */
-	Fixed tsize = (Fixed)(size * 65536.0 + 0.5);
-	ATSUAttributeTag satags[] = { kATSUSizeTag };
-	ATSUAttributeValuePtr savalues[] = { &tsize };
-	ByteCount savsizes[] = { sizeof(Fixed) };
-
-	UniCharCount slength = strlen(text);
-	UniChar *stext;
-	ATSUStyle rstyle;
-	ATSUTextLayout tlayout;
-	
-	/* Convert ASCIIZ to UniChar */
-	if ((stext = (UniChar*)malloc(slength * sizeof(UniChar))) == NULL)
-		return;
-	for (i = 0; i < slength; i++)
-		stext[i] = (UniChar)text[i];
-	
-	/* Create a default style */
-	if ((stat = ATSUCreateStyle(&rstyle)) != noErr) {
-		debugf(("ATSUCreateStyle failed with %d\n",stat));
-		return;
-	}
-
-	/* Assign any style attributes */
-	if ((stat = ATSUSetAttributes(
-	  rstyle,
-	  sano,				/* Number of attributes */
-	  satags,			/* Tag types */
-	  savsizes,			/* Sizes of each type */
-	  savalues			/* Pointers to value of each type */
-	)) != noErr) {
-		debugf(("ATSUSetAttributes failed with %d\n",stat));
-		return;
-	}
-
-	/* Create a text layout object for our text */
-	if ((stat = ATSUCreateTextLayoutWithTextPtr(
-	  stext,				/* Text */
-	  0,					/* Offset into text */
-	  slength,				/* Length of text */
-	  slength,				/* Total length of text */
-	  1,					/* Number of runs */
-	  &slength,				/* Array of run lengths */
-	  &rstyle, 				/* Array of styles for each run */
-	  &tlayout				/* Return value */
-	)) != noErr) {
-		debugf(("ATSUCreateTextLayoutWithTextPtr failed with %d\n",stat));
-		return;
-	}
-
-	/* Assign layout attributes */
-	if ((stat = ATSUSetLayoutControls(
-	  tlayout, 
-	  lano, 			/* Number of attributes */
-	  latags,			/* Tag types */
-	  lavsizes,			/* Sizes of each type */
-	  lavalues			/* Pointers to value of each type */
-	)) != noErr) {
-		debugf(("ATSUSetLayoutControls failed with %d\n",stat));
-		return;
-	}
+static void ADrawText(NSColor *col, float size, float x, float y, int flags, char *text) {
+	NSFont* font = [NSFont systemFontOfSize:size];
+	NSDictionary *att = [NSDictionary dictionaryWithObjectsAndKeys:
+				font, NSFontAttributeName,
+	            col, NSForegroundColorAttributeName,
+				nil];
+	NSString *str = [[NSString alloc] initWithUTF8String: text];
 
 	if (flags != 0x0) {
-		Rect trect;
+		NSSize size;
+
 		/* Figure out how big it will be */
-		if ((stat = ATSUMeasureTextImage(
-		  tlayout, 
-		  0,
-		  slength, 
-		  Long2Fix(x), 
-		  Long2Fix(y), 
-		  &trect
-		)) != noErr) {
-			debugf(("ATSUMeasureTextImage failed with %d\n",stat));
-			return;
-		}
+		size = [str sizeWithAttributes: att ];
 		if (flags & 0x1) {
-			double w = fabs((double)trect.right - trect.left);
+			double w = fabs(size.width);
 			x -= 0.5 * w;
 		}
 		if (flags & 0x2) {
-			double h = fabs((double)trect.top - trect.bottom);
+			double h = fabs(size.height);
 			y -= 0.5 * h;
 		}
 	}
 
-	/* Draw it */
-	if ((stat = ATSUDrawText (
-	  tlayout, 
-	  0,
-	  slength, 
-	  Long2Fix(x), 
-	  Long2Fix(y)
-	)) != noErr) {
-		debugf(("ATSUDrawText failed with %d\n",stat));
-		return;
-	}
-
-	/* Clean up */
-	ATSUDisposeStyle(rstyle);
-	ATSUDisposeTextLayout(tlayout);
+	[str drawAtPoint: NSMakePoint(x, y) withAttributes: att];
+	[str release];		/* Others are autorelease */
 }
 
 /* Draw a line */
-static void CDrawLine(CGContextRef mygc, float xs, float ys, float xe, float ye) {
-	CGContextBeginPath(mygc);
-	CGContextMoveToPoint(mygc, xs, ys);
-	CGContextAddLineToPoint(mygc, xe, ye);
-	CGContextStrokePath(mygc);
+/* We re-use the same path so that we can set the dash style */
+static void ADrawLine(NSBezierPath *path, float xs, float ys, float xe, float ye) {
+	[path removeAllPoints ];
+	[path moveToPoint:NSMakePoint(xs, ys)];
+	[path lineToPoint:NSMakePoint(xe, ye)];
+	[path stroke];
 }
 
 /* Draw X axis grid lines */
 void
 xtick(
-CGContextRef mygc,
 plot_info *pdp,
+NSBezierPath *path,
+NSColor *lcol,
+NSColor *tcol,
 double x, char *lab
 ) {
 	float xx, yy;
@@ -1648,15 +1609,18 @@ double x, char *lab
 	xx = 20.0 + (x - pdp->mnx) * pdp->scx;
 	yy = 20.0;
 
-	CDrawLine(mygc, xx, yy, xx, (float)pdp->sh);
-	CDrawText(mygc, 10.0, xx, 5.0, 0x1, lab);
+	[lcol setStroke];		/* There is a bug in 10.4 which resets this after each stroke */
+	ADrawLine(path, xx, yy, xx, (float)pdp->sh);
+	ADrawText(tcol, 10.0, xx, 5.0, 0x1, lab);
 }
 
 /* Draw Y axis grid lines */
 void
 ytick(
-CGContextRef mygc,
 plot_info *pdp,
+NSBezierPath *path,
+NSColor *lcol,
+NSColor *tcol,
 double y, char *lab
 ) {
 	float xx, yy;
@@ -1664,16 +1628,19 @@ double y, char *lab
 	xx = 20.0;
 	yy = 20.0 + (y - pdp->mny) * pdp->scy;
 
-	CDrawLine(mygc, xx, yy, (float)pdp->sw, yy);
-	CDrawText(mygc, 10.0, 3.0, yy, 0x2, lab);
+	[lcol setStroke];		/* There is a bug in 10.4 which resets this after each stroke */
+	ADrawLine(path, xx, yy, (float)pdp->sw, yy);
+	ADrawText(tcol, 10.0, 3.0, yy, 0x2, lab);
 }
 
 void
 loose_label(
-CGContextRef mygc,
 plot_info *pdp,
+NSBezierPath *path,
+NSColor *lcol,
+NSColor *tcol,
 double min, double max,
-void (*pfunc)(CGContextRef mygc, plot_info *pdp, double, char *)
+void (*pfunc)(plot_info *pdp, NSBezierPath *path, NSColor *lcol, NSColor *tcol, double, char *)
 ) {
 	char str[6], temp[20];
 	int nfrac;
@@ -1689,63 +1656,53 @@ void (*pfunc)(CGContextRef mygc, plot_info *pdp, double, char *)
 	sprintf(str,"%%.%df", nfrac);
 	for (x = graphmin; x < graphmax + 0.5 * d; x += d) {
 		sprintf(temp,str,x);
-		pfunc(mygc, pdp, x, temp);
+		pfunc(pdp, path, lcol, tcol, x, temp);
 	}
 }
 
-static void DoPlot(WindowRef win, plot_info *pdp) {
-	CGrafPtr port;
-	OSStatus stat;
-	CGContextRef mygc;
-	Rect rect;
+/* Called from within view to plot overall graph  */
+static void DoPlot(NSRect *rect, plot_info *pdp) {
 	int i, j;
 	int lx,ly;		/* Last x,y */
-	float dash_list[2] = {7.0, 2.0};
-
-	port = GetWindowPort(win);
-	GetWindowPortBounds(win, &rect);		/* Bounds is inclusive, global coords */
+	CGFloat dash_list[2] = {7.0, 2.0};
+	/* Note path and tcol are autorelease */
+	NSBezierPath *path = [NSBezierPath bezierPath];		/* Path to use */
+	NSColor *lcol = nil;
+	NSColor *tcol = nil;
 
 	/* Setup the plot info structure for this drawing */
 	/* Note port rect is raster like, pdp/Quartz2D is Postscript like */
-	pdp->sx = rect.left; 
-	pdp->sy = rect.top; 
-	pdp->sw = 1 + rect.right - rect.left; 
-	pdp->sh = 1 + rect.bottom - rect.top; 
+	pdp->sx = rect->origin.x; 
+	pdp->sy = rect->origin.y; 
+	pdp->sw = rect->size.width; 
+	pdp->sh = rect->size.height; 
 	pdp->scx = (pdp->sw - 20)/(pdp->mxx - pdp->mnx);
 	pdp->scy = (pdp->sh - 20)/(pdp->mxy - pdp->mny);
 
-	if ((stat = QDBeginCGContext(port, &mygc)) != noErr) {
-		debugf(("QDBeginCGContext returned error %d\n",stat));
-		return;
-	}
-
-	/* Clear the page */
-	{
-		CGRect frect = CGRectMake(0.0, 0.0, (float)pdp->sw, (float)pdp->sh);
-		CGContextSetRGBFillColor(mygc, 1.0, 1.0, 1.0, 1.0);	/* White */
-		CGContextFillRect(mygc, frect);
-	}
-	
 	/* Plot the axis lines */
-	CGContextSetLineWidth(mygc, 1.0);
-	CGContextSetRGBStrokeColor(mygc, 0.6, 0.6, 0.6, 1.0);	/* Grey */
-	CGContextSetLineDash(mygc, 0.0, dash_list, 2);		/* Set dashed lines for axes */
+	[path setLineWidth:1.0];
+	[path setLineDash: dash_list count: 2 phase: 0.0 ];	/* Set dashed lines for axes */
 
 	/* Make sure text is black */
-	CGContextSetRGBFillColor(mygc, 0.0, 0.0, 0.0, 1.0);
+	tcol = [NSColor colorWithCalibratedRed: 0.0
+	                           green: 0.0
+	                            blue: 0.0
+	                           alpha: 1.0];
+
+	lcol = [NSColor colorWithCalibratedRed:0.7 green: 0.7 blue:0.7 alpha: 1.0];	/* Grey */
 
 	/* Plot horizontal axis */
 	if (pdp->revx)
-		loose_label(mygc, pdp, pdp->mxx, pdp->mnx, xtick);
+		loose_label(pdp, path, lcol, tcol, pdp->mxx, pdp->mnx, xtick);
 	else
-		loose_label(mygc, pdp, pdp->mnx, pdp->mxx, xtick);
+		loose_label(pdp, path, lcol, tcol, pdp->mnx, pdp->mxx, xtick);
 
 	/* Plot vertical axis */
-	loose_label(mygc, pdp, pdp->mny, pdp->mxy, ytick);
+	loose_label(pdp, path, lcol, tcol, pdp->mny, pdp->mxy, ytick);
 
 	/* Set to non-dashed line */
-	CGContextSetLineWidth(mygc, LTHICK);
-	CGContextSetLineDash(mygc, 0.0, NULL, 0);
+	[path setLineWidth: LTHICK];
+	[path setLineDash: NULL count: 0 phase: 0.0 ];
 
 	if (pdp->graph) {		/* Up to 6 graphs */
 		int gcolors[MXGPHS][3] = {
@@ -1765,7 +1722,10 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 		
 			if (yp == NULL)
 				continue;
-			CGContextSetRGBStrokeColor(mygc, gcolors[j][0]/255.0, gcolors[j][1]/255.0, gcolors[j][2]/255.0, 1.0);
+			[[NSColor colorWithCalibratedRed: gcolors[j][0]/255.0
+			                           green: gcolors[j][1]/255.0
+			                            blue: gcolors[j][2]/255.0
+			                           alpha: 1.0] setStroke];
 
 			lx = (int)((pdp->x1[0] - pdp->mnx) * pdp->scx + 0.5);
 			ly = (int)((     yp[0] - pdp->mny) * pdp->scy + 0.5);
@@ -1775,10 +1735,10 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 				cx = (int)((pdp->x1[i] - pdp->mnx) * pdp->scx + 0.5);
 				cy = (int)((     yp[i] - pdp->mny) * pdp->scy + 0.5);
 
-				CDrawLine(mygc, 20.0 + lx, 20.0 + ly, 20 + cx, 20.0 + cy);
+				ADrawLine(path, 20.0 + lx, 20.0 + ly, 20 + cx, 20.0 + cy);
 #ifdef CROSSES
-				CDrawLine(mygc, 20.0 + cx - 5, 20.0 - cy - 5, 20.0 + cx + 5, 20.0 + cy + 5);
-				CDrawLine(mygc, 20.0 + cx + 5, 20.0 - cy - 5, 20.0 + cx - 5, 20.0 + cy + 5);
+				ADrawLine(path, 20.0 + cx - 5, 20.0 - cy - 5, 20.0 + cx + 5, 20.0 + cy + 5);
+				ADrawLine(path, 20.0 + cx + 5, 20.0 - cy - 5, 20.0 + cx - 5, 20.0 + cy + 5);
 #endif
 				lx = cx;
 				ly = cy;
@@ -1786,9 +1746,16 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 		}
 
 	} else {	/* Vectors */
-		CGContextSetRGBStrokeColor(mygc, 0.0, 0.0, 0.0, 1.0);	/* Black */
-		if (pdp->ntext != NULL)
-			CGContextSetRGBFillColor(mygc, 0.0, 0.0, 0.0, 1.0);
+		[[NSColor colorWithCalibratedRed: 0.0
+		                           green: 0.0
+		                            blue: 0.0
+		                           alpha: 1.0] setStroke];
+		if (pdp->ntext != NULL) {
+			tcol = [NSColor colorWithCalibratedRed: 0.0
+			                           green: 0.0
+			                            blue: 0.0
+			                           alpha: 1.0];
+		}
 		for (i = 0; i < pdp->n; i++) {
 			int cx,cy;
 
@@ -1798,54 +1765,71 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 			cx = (int)((pdp->x2[i] - pdp->mnx) * pdp->scx + 0.5);
 			cy = (int)((pdp->yy[1][i] - pdp->mny) * pdp->scy + 0.5);
 
-			CDrawLine(mygc, 20.0 + lx, 20.0 + ly, 20.0 + cx, 20.0 + cy);
+			ADrawLine(path, 20.0 + lx, 20.0 + ly, 20.0 + cx, 20.0 + cy);
 
-			CDrawLine(mygc, 20.0 + cx - 5, 20.0 + cy - 5, 20.0 + cx + 5, 20.0 + cy + 5);
-			CDrawLine(mygc, 20.0 + cx + 5, 20.0 + cy - 5, 20.0 + cx - 5, 20.0 + cy + 5);
+			ADrawLine(path, 20.0 + cx - 5, 20.0 + cy - 5, 20.0 + cx + 5, 20.0 + cy + 5);
+			ADrawLine(path, 20.0 + cx + 5, 20.0 + cy - 5, 20.0 + cx - 5, 20.0 + cy + 5);
 
 			if (pdp->ntext != NULL)
-				CDrawText(mygc, 9.0, 20.0 + cx + 9, 20.0 + cy - 7, 0x1, pdp->ntext[i]);
+				ADrawText(tcol, 9.0, 20.0 + cx + 9, 20.0 + cy - 7, 0x1, pdp->ntext[i]);
 		}
 	}
 
 	/* Extra points */
 	if (pdp->x7 != NULL && pdp->y7 != NULL && pdp->m > 0 ) {
-		CGContextSetRGBStrokeColor(mygc, 0.82, 0.59, 0.0, 1.0);	/* Orange ? */
+		[[NSColor colorWithCalibratedRed: 0.82		/* Orange ? */
+		                           green: 0.59
+		                            blue: 0.0
+		                           alpha: 1.0] setStroke];
 	
 		for (i = 0; i < pdp->m; i++) {
 
 			if (pdp->mcols != NULL) {
-				CGContextSetRGBStrokeColor(mygc, pdp->mcols[i].rgb[0],
-					pdp->mcols[i].rgb[1], pdp->mcols[i].rgb[2], 1.0);
-				if (pdp->mtext != NULL)
-					CGContextSetRGBFillColor(mygc, pdp->mcols[i].rgb[0],
-					pdp->mcols[i].rgb[1], pdp->mcols[i].rgb[2], 1.0);
+				[[NSColor colorWithCalibratedRed: pdp->mcols[i].rgb[0]
+				                           green: pdp->mcols[i].rgb[1]
+				                            blue: pdp->mcols[i].rgb[2]
+				                           alpha: 1.0] setStroke];
+
+				if (pdp->mtext != NULL) {
+					tcol = [NSColor colorWithCalibratedRed: pdp->mcols[i].rgb[0]
+					                           green: pdp->mcols[i].rgb[1]
+					                            blue: pdp->mcols[i].rgb[2]
+					                           alpha: 1.0];
+				}
 			}
 			lx = (int)((pdp->x7[i] - pdp->mnx) * pdp->scx + 0.5);
 			ly = (int)((pdp->y7[i] - pdp->mny) * pdp->scy + 0.5);
 
-			CDrawLine(mygc, 20.0 + lx - 5, 20.0 + ly, 20.0 + lx + 5, 20.0 + ly);
-			CDrawLine(mygc, 20.0 + lx, 20.0 + ly - 5, 20.0 + lx, 20.0 + ly + 5);
+			ADrawLine(path, 20.0 + lx - 5, 20.0 + ly, 20.0 + lx + 5, 20.0 + ly);
+			ADrawLine(path, 20.0 + lx, 20.0 + ly - 5, 20.0 + lx, 20.0 + ly + 5);
 
 			if (pdp->mtext != NULL) {
-				CDrawText(mygc, 9.0, 20.0 + lx + 9, 20.0 + ly + 7, 0x1, pdp->mtext[i]);
+				ADrawText(tcol, 9.0, 20.0 + lx + 9, 20.0 + ly + 7, 0x1, pdp->mtext[i]);
 			}
 		}
 	}
 
 	/* Extra vectors */
 	if (pdp->x8 != NULL && pdp->y8 != NULL && pdp->x9 != NULL && pdp->y9 && pdp->o > 0 ) {
-		CGContextSetRGBStrokeColor(mygc, 0.5, 0.9, 0.9, 1.0);	/* Light blue */
+		[[NSColor colorWithCalibratedRed: 0.5		/* Light blue */
+		                           green: 0.9
+		                            blue: 0.9
+		                           alpha: 1.0] setStroke];
 	
 		for (i = 0; i < pdp->o; i++) {
 			int cx,cy;
 
 			if (pdp->ocols != NULL) {
-				CGContextSetRGBStrokeColor(mygc, pdp->ocols[i].rgb[0],
-					pdp->ocols[i].rgb[1], pdp->ocols[i].rgb[2], 1.0);
-				if (pdp->mtext != NULL)
-					CGContextSetRGBFillColor(mygc, pdp->ocols[i].rgb[0],
-					pdp->ocols[i].rgb[1], pdp->ocols[i].rgb[2], 1.0);
+				[[NSColor colorWithCalibratedRed: pdp->ocols[i].rgb[0]
+				                           green: pdp->ocols[i].rgb[1]
+				                            blue: pdp->ocols[i].rgb[2]
+				                           alpha: 1.0] setStroke];
+				if (pdp->mtext != NULL) {
+					tcol = [NSColor colorWithCalibratedRed: pdp->ocols[i].rgb[0]
+					                           green: pdp->ocols[i].rgb[1]
+					                            blue: pdp->ocols[i].rgb[2]
+					                           alpha: 1.0];
+				}
 			}
 			lx = (int)((pdp->x8[i] - pdp->mnx) * pdp->scx + 0.5);
 			ly = (int)((pdp->y8[i] - pdp->mny) * pdp->scy + 0.5);
@@ -1853,16 +1837,8 @@ static void DoPlot(WindowRef win, plot_info *pdp) {
 			cx = (int)((pdp->x9[i] - pdp->mnx) * pdp->scx + 0.5);
 			cy = (int)((pdp->y9[i] - pdp->mny) * pdp->scy + 0.5);
 
-			CDrawLine(mygc, 20.0 + lx, 20.0 + ly, 20.0 + cx, 20.0 + cy);
+			ADrawLine(path, 20.0 + lx, 20.0 + ly, 20.0 + cx, 20.0 + cy);
 		}
-	}
-
-	CGContextSynchronize(mygc);
-//	CGContextFlush(mygc);
-
-	if ((stat = QDEndCGContext(port, &mygc)) != noErr) {
-		debugf(("QDEndCGContext returned error %d\n",stat));
-		return;
 	}
 }
 
@@ -1910,6 +1886,7 @@ static int do_plot_imp(
 		double xr,yr;
 
 		pd.dowait = dowait;
+		pd.ratio = ratio;
 
 		pd.mnx = xmin;
 		pd.mny = ymin;
@@ -2337,9 +2314,9 @@ double nicenum(double x, int round) {
 /* test code */
 
 // ~~99
-#undef TEST_NON_CONSOLE	/* Version that works from command line and GUI */
+#define TEST_NON_CONSOLE	/* Version that works from command line and GUI */
 // May have to add link flag -Wl,-subsystem,windows
-// since MingW is stupid about noticing WinMain
+// since MingW is stupid about noticing WinMain or pragma
 
 //#include <windows.h>
 //#include <stdio.h>
@@ -2362,64 +2339,7 @@ static void dprintf(char *fmt, ...) {
 }
 #endif // NEVER
 
-int
-#ifndef TEST_NON_CONSOLE
-main()
-#else
-APIENTRY WinMain(
-    HINSTANCE hInstance,
-    HINSTANCE hPrevInstance,
-    LPSTR lpCmdLine,
-    int nCmdShow)
-#endif
-	{
-	double x[10]  = {0.0, 0.5, 0.7, 1.0};
-	double y1[10] = {0.0, 0.5, 0.7, 1.0};
-	double y2[10] = {0.9, 0.8, 1.4, 1.2};
-	double y3[10] = {0.1, 0.8, 0.7, -0.1};
-
-	double Bx1[10] = {0.0, 0.5, 0.9, 0.5};
-	double By1[10] = {0.0, 0.3, 1.2, 0.2};
-	double Bx2[10] = {0.1, 0.8, 0.1, 0.2};
-	double By2[10] = {0.1, 1.8, 2.0, 0.5};
-
-	double Bx3[10] = {0.8, 0.4, 1.3, 0.5, 0.23};
-	double By3[10] = {0.5, 1.3, 0.4, 0.7, 0.77};
-
-	plot_col mcols[5] = {
-	{ 1.0, 0.0, 0.0 },
-	{ 0.0, 1.0, 0.0 },
-	{ 0.0, 0.0, 1.0 },
-	{ 0.6, 0.6, 0.6 },
-	{ 1.0, 1.0, 0.0 } };
-
-	char *ntext[5] = { "A", "B", "C", "D" };
-	char *mtext[5] = { "10", "20", "30", "40", "50" };
-
-#ifdef TEST_NON_CONSOLE
-	{			/* Only works on >= XP though */
-		BOOL (WINAPI *AttachConsole)(DWORD dwProcessId);
-
-		*(FARPROC *)&AttachConsole = 
-          GetProcAddress(LoadLibraryA("kernel32.dll"), "AttachConsole");
-
-		if (AttachConsole != NULL && AttachConsole(((DWORD)-1)))
-		{
-			if (_fileno(stdout) < 0)
-				freopen("CONOUT$","wb",stdout);
-			if (_fileno(stderr) < 0)
-				freopen("CONOUT$","wb",stderr);
-			if (_fileno(stdin) < 0)
-				freopen("CONIN$","rb",stdin);
-#ifdef __cplusplus 
-			// make cout, wcout, cin, wcin, wcerr, cerr, wclog and clog point to console as well
-			std::ios::sync_with_stdio();
-#endif
-		}
-	}
-#endif /* TEST_NON_CONSOLE */
-
-#ifdef NEVER	// Attempt to find something that works on Win2K */
+#ifdef NEVER	/* Other non-working enable console output code */
 {
 	/* This clever code have been found at:
 	   Adding Console I/O to a Win32 GUI App
@@ -2499,6 +2419,65 @@ printf("~1 failed to find AttachConsole\n"); fflush(stdout);
 	}
 // ~~~~~~~~~~~~~
 #endif // NEVER
+
+#if defined(TEST_NON_CONSOLE) && defined(NT)
+# pragma comment( linker, "/subsystem:windows" )
+
+APIENTRY WinMain(
+    HINSTANCE hInstance,
+    HINSTANCE hPrevInstance,
+    LPSTR lpCmdLine,
+    int nCmdShow
+) {
+	{			/* Only works on >= XP though */
+		BOOL (WINAPI *AttachConsole)(DWORD dwProcessId);
+
+		*(FARPROC *)&AttachConsole = 
+          GetProcAddress(LoadLibraryA("kernel32.dll"), "AttachConsole");
+
+		if (AttachConsole != NULL && AttachConsole(((DWORD)-1)))
+		{
+			if (_fileno(stdout) < 0)
+				freopen("CONOUT$","wb",stdout);
+			if (_fileno(stderr) < 0)
+				freopen("CONOUT$","wb",stderr);
+			if (_fileno(stdin) < 0)
+				freopen("CONIN$","rb",stdin);
+#ifdef __cplusplus 
+			// make cout, wcout, cin, wcin, wcerr, cerr, wclog and clog point to console as well
+			std::ios::sync_with_stdio();
+#endif
+		}
+	}
+
+	return main(__argc, __argv);
+}
+#endif /* TEST_NON_CONSOLE && NT */
+
+int main(int argc, char *argv[]) {
+	double x[10]  = {0.0, 0.5, 0.7, 1.0};
+	double y1[10] = {0.0, 0.5, 0.7, 1.0};
+	double y2[10] = {0.9, 0.8, 1.4, 1.2};
+	double y3[10] = {0.1, 0.8, 0.7, -0.1};
+
+	double Bx1[10] = {0.0, 0.5, 0.9, 0.5};
+	double By1[10] = {0.0, 0.3, 1.2, 0.2};
+	double Bx2[10] = {0.1, 0.8, 0.1, 0.2};
+	double By2[10] = {0.1, 1.8, 2.0, 0.5};
+
+	double Bx3[10] = {0.8, 0.4, 1.3, 0.5, 0.23};
+	double By3[10] = {0.5, 1.3, 0.4, 0.7, 0.77};
+
+	plot_col mcols[5] = {
+	{ 1.0, 0.0, 0.0 },
+	{ 0.0, 1.0, 0.0 },
+	{ 0.0, 0.0, 1.0 },
+	{ 0.6, 0.6, 0.6 },
+	{ 1.0, 1.0, 0.0 } };
+
+	char *ntext[5] = { "A", "B", "C", "D" };
+	char *mtext[5] = { "10", "20", "30", "40", "50" };
+
 	printf("Doing first plot\n");
 	if (do_plot(x,y1,y2,y3,4) < 0)
 		printf("Error - do_plot returned -1!\n");
@@ -2525,7 +2504,7 @@ printf("~1 failed to find AttachConsole\n"); fflush(stdout);
 
 	printf("We're done\n");
 	return 0;
-	}
+}
 
 #endif /* STANDALONE_TEST */
 /* ---------------------------------------------------------------- */

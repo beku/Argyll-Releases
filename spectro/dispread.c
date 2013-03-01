@@ -5,7 +5,7 @@
  * Author: Graeme W. Gill
  * Date:   4/10/96
  *
- * Copyright 1996 - 2007 Graeme W. Gill
+ * Copyright 1996 - 2013 Graeme W. Gill
  * All rights reserved.
  *
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
@@ -31,7 +31,6 @@
 /* Will use fake.icm/.icc if present */
 
 #define COMPORT 1		/* Default com port 1..4 */
-#define VERBOUT stdout
 
 #ifdef __MINGW32__
 # define WINVER 0x0500
@@ -44,6 +43,9 @@
 #include <sys/types.h>
 #include <time.h>
 #include <string.h>
+#if defined (NT)
+#include <conio.h>
+#endif
 #include "copyright.h"
 #include "aconfig.h"
 #include "numlib.h"
@@ -52,16 +54,13 @@
 #include "ccss.h"
 #include "cgats.h"
 #include "insttypes.h"
+#include "conv.h"
 #include "icoms.h"
 #include "inst.h"
-#include "conv.h"
 #include "dispwin.h"
 #include "dispsup.h"
 #include "sort.h"
-#if defined (NT)
-#include <conio.h>
-#endif
-
+#include "instappsup.h"
 #include "spyd2setup.h"			/* Enable Spyder 2 access */
 
 /* ------------------------------------------------------------------- */
@@ -80,22 +79,21 @@ static int gcc_bug_fix(int i) {
 
 /* ------------------------------------------------------------------- */
 
-#ifdef NT       /* You'd think there might be some standards.... */
-# ifndef __BORLANDC__
-#  define stricmp _stricmp
-# endif
-#else
-# define stricmp strcasecmp
-#endif
+/*
 
-/* ------------------------------------------------------------------- */
+  Flags used:
 
+         ABCDEFGHIJKLMNOPQRSTUVWXYZ
+  upper    .. . .... .. ..    ...  
+  lower    ..      .  . .  .  .. . 
 
-void usage(iccss *cl, char *diag, ...) {
+*/
+
+void usage(char *diag, ...) {
 	int i;
 	disppath **dp;
-	icoms *icom;
-	inst_capability cap = 0;
+	icompaths *icmps;
+	inst2_capability cap2 = inst2_none;
 
 	fprintf(stderr,"Read a Display, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
@@ -111,7 +109,7 @@ void usage(iccss *cl, char *diag, ...) {
 	}
 	fprintf(stderr,"usage: dispread [options] outfile\n");
 	fprintf(stderr," -v              Verbose mode\n");
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	fprintf(stderr," -display displayname Choose X11 display name\n");
 	fprintf(stderr," -d n[,m]             Choose the display n from the following list (default 1)\n");
 	fprintf(stderr,"                      Optionally choose different display m for VideoLUT access\n"); 
@@ -133,61 +131,54 @@ void usage(iccss *cl, char *diag, ...) {
 	fprintf(stderr," -dweb[:port]         Display via a web server at port (default 8080)\n");
 //	fprintf(stderr," -d fake              Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	fprintf(stderr," -c listno            Set communication port from the following list (default %d)\n",COMPORT);
-	if ((icom = new_icoms()) != NULL) {
+	if ((icmps = new_icompaths(g_log)) != NULL) {
 		icompath **paths;
-		if ((paths = icom->get_paths(icom)) != NULL) {
+		if ((paths = icmps->paths) != NULL) {
 			int i;
 			for (i = 0; ; i++) {
 				if (paths[i] == NULL)
 					break;
-				if (strlen(paths[i]->path) >= 8
-				  && strcmp(paths[i]->path+strlen(paths[i]->path)-8, "Spyder2)") == 0
-				  && setup_spyd2() == 0)
-					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->path);
+				if (paths[i]->itype == instSpyder2 && setup_spyd2() == 0)
+					fprintf(stderr,"    %d = '%s' !! Disabled - no firmware !!\n",i+1,paths[i]->name);
 				else
-					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->path);
+					fprintf(stderr,"    %d = '%s'\n",i+1,paths[i]->name);
 			}
 		} else
 			fprintf(stderr,"    ** No ports found **\n");
 	}
-	fprintf(stderr," -p                   Use projector mode (if available)\n");
-	cap = inst_show_disptype_options(stderr, " -y                   ", icom);
+	fprintf(stderr," -p                   Use telephoto mode (ie. for a projector) (if available)\n");
+	cap2 = inst_show_disptype_options(stderr, " -y                   ", icmps, 0);
 	fprintf(stderr," -k file.cal          Load calibration file into display while reading\n");
 	fprintf(stderr," -K file.cal          Apply calibration file to test values while reading\n");
 	fprintf(stderr," -s                   Save spectral information (default don't save)\n");
-	fprintf(stderr," -P ho,vo,ss          Position test window and scale it\n");
+	fprintf(stderr," -P ho,vo,ss[,vs]     Position test window and scale it\n");
 	fprintf(stderr,"                      ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                      ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
 	fprintf(stderr," -F                   Fill whole screen with black background\n");
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 	fprintf(stderr," -n                   Don't set override redirect on test window\n");
 #endif
 	fprintf(stderr," -J                   Run instrument calibration first (used rarely)\n");
-	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
+	fprintf(stderr," -N                   Disable initial calibration of instrument if possible\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
-	fprintf(stderr," -V                   Use adaptive measurement mode (if available)\n");
+//	fprintf(stderr," -V                   Use adaptive measurement mode (if available)\n");
 	fprintf(stderr," -w                   Disable normalisation of white to Y = 100\n");
-	fprintf(stderr," -X file.ccmx         Apply Colorimeter Correction Matrix\n");
-	fprintf(stderr," -X file.ccss         Use Colorimeter Calibration Spectral Samples for calibration\n");
-	if (cap & inst_ccss) {
-		for (i = 0; cl != NULL && cl[i].desc != NULL; i++) {
-			if (i == 0)
-				fprintf(stderr," -X N                  0: %s\n",cl[i].desc); 
-			else
-				fprintf(stderr,"                       %d: %s\n",i,cl[i].desc); 
-		}
+	if (cap2 & inst2_ccmx)
+		fprintf(stderr," -X file.ccmx         Apply Colorimeter Correction Matrix\n");
+	if (cap2 & inst2_ccss) {
+		fprintf(stderr," -X file.ccss         Use Colorimeter Calibration Spectral Samples for calibration\n");
+		fprintf(stderr," -Q observ            Choose CIE Observer for spectrometer or CCSS colorimeter data:\n");
+		fprintf(stderr,"                      1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2, 1964_10c\n");
 	}
-	free_iccss(cl);
-	fprintf(stderr," -Q observ            Choose CIE Observer for spectrometer or CCSS colorimeter data:\n");
-	fprintf(stderr,"                      1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2, 1964_10c\n");
 	fprintf(stderr," -I b|w               Drift compensation, Black: -Ib, White: -Iw, Both: -Ibw\n");
+	fprintf(stderr," -Y A                 Use non-adaptive integration time mode (if available).\n");
 	fprintf(stderr," -C \"command\"         Invoke shell \"command\" each time a color is set\n");
 	fprintf(stderr," -M \"command\"         Invoke shell \"command\" each time a color is measured\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," outfile              Base name for input[ti1]/output[ti3] file\n");
-	if (icom != NULL)
-		icom->del(icom);
+	if (icmps != NULL)
+		icmps->del(icmps);
 	exit(1);
 }
 
@@ -195,8 +186,7 @@ int main(int argc, char *argv[]) {
 	int i,j;
 	int fa, nfa, mfa;					/* current argument we're looking at */
 	disppath *disp = NULL;				/* Display being used */
-	double patsize = 100.0;				/* size of displayed color patch */
-	double patscale = 1.0;				/* scale factor for test patch size */
+	double hpatscale = 1.0, vpatscale = 1.0;	/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;			/* Test window offsets, -1.0 to 1.0 */
 	int blackbg = 0;            		/* NZ if whole screen should be filled with black */
 	int verb = 0;
@@ -204,19 +194,19 @@ int main(int argc, char *argv[]) {
 	int fake = 0;						/* Use the fake device for testing */
 	int override = 1;					/* Override redirect on X11 */
 	int comport = COMPORT;				/* COM port used */
+	icompaths *icmps = NULL;
+	icompath *ipath = NULL;
 	flow_control fc = fc_nc;			/* Default flow control */
 	int docalib = 0;					/* Do a calibration */
 	int highres = 0;					/* Use high res mode if available */
-	int adaptive = 0;					/* Use adaptive mode if available */
+	int nadaptive = 0;					/* Use non-adaptive mode if available */
 	int bdrift = 0;						/* Flag, nz for black drift compensation */
 	int wdrift = 0;						/* Flag, nz for white drift compensation */
 	int dtype = 0;						/* Display type selection charater */
-	int proj = 0;						/* NZ if projector */
+	int tele = 0;						/* NZ if telephoto mode */
 	int noautocal = 0;					/* Disable auto calibration */
 	int nonorm = 0;						/* Disable normalisation */
 	char ccxxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction Matrix name */
-	iccss *cl = NULL;					/* List of installed CCSS files */
-	int ncl = 0;						/* Number of them */
 	ccmx *cmx = NULL;					/* Colorimeter Correction Matrix */
 	ccss *ccs = NULL;					/* Colorimeter Calibration Spectral Samples */
 	int spec = 0;						/* Don't save spectral information */
@@ -263,11 +253,8 @@ int main(int argc, char *argv[]) {
 	printf("!!!!!! Debug turned on !!!!!!\n");
 #endif
 
-	/* Get a list of installed CCSS files */
-	cl = list_iccss(&ncl);
-
 	if (argc <= 1)
-		usage(cl, "Too few arguments");
+		usage("Too few arguments");
 
 	if (ncal > MAX_CAL_ENT)
 		error("Internal, ncal = %d > MAX_CAL_ENT %d\n",ncal,MAX_CAL_ENT);
@@ -291,10 +278,11 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (argv[fa][1] == '?' || argv[fa][1] == '-') {
-				usage(cl, "Usage requested");
+				usage("Usage requested");
 
 			} else if (argv[fa][1] == 'v') {
 				verb = 1;
+				g_log->verb = verb;
 
 			/* Display number */
 			} else if (argv[fa][1] == 'd') {
@@ -304,18 +292,18 @@ int main(int argc, char *argv[]) {
 					if (na[3] == ':') {
 						webdisp = atoi(na+4);
 						if (webdisp == 0 || webdisp > 65535)
-							usage(cl,"Web port number must be in range 1..65535");
+							usage("Web port number must be in range 1..65535");
 					}
 					fa = nfa;
 				} else {
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 					int ix, iv;
 
 					if (strcmp(&argv[fa][2], "isplay") == 0 || strcmp(&argv[fa][2], "ISPLAY") == 0) {
-						if (++fa >= argc || argv[fa][0] == '-') usage(cl, "Parameter expected following -display");
+						if (++fa >= argc || argv[fa][0] == '-') usage("Parameter expected following -display");
 						setenv("DISPLAY", argv[fa], 1);
 					} else {
-						if (na == NULL) usage(cl, "Parameter expected following -d");
+						if (na == NULL) usage("Parameter expected following -d");
 						fa = nfa;
 						if (strcmp(na,"fake") == 0) {
 							fake = 1;
@@ -327,14 +315,14 @@ int main(int argc, char *argv[]) {
 							if (disp != NULL)
 								free_a_disppath(disp);
 							if ((disp = get_a_display(ix-1)) == NULL)
-								usage(cl, "-d parameter %d out of range",ix);
+								usage("-d parameter %d out of range",ix);
 							if (iv > 0)
 								disp->rscreen = iv-1;
 						}
 					}
 #else
 					int ix;
-					if (na == NULL) usage(cl, "Parameter expected following -d");
+					if (na == NULL) usage("Parameter expected following -d");
 					fa = nfa;
 					if (strcmp(na,"fake") == 0) {
 						fake = 1;
@@ -343,11 +331,11 @@ int main(int argc, char *argv[]) {
 						if (disp != NULL)
 							free_a_disppath(disp);
 						if ((disp = get_a_display(ix-1)) == NULL)
-							usage(cl, "-d parameter %d out of range",ix);
+							usage("-d parameter %d out of range",ix);
 					}
 #endif
 				}
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 			} else if (argv[fa][1] == 'n') {
 				override = 0;
 #endif /* UNIX */
@@ -355,24 +343,24 @@ int main(int argc, char *argv[]) {
 			/* COM port  */
 			} else if (argv[fa][1] == 'c') {
 				fa = nfa;
-				if (na == NULL) usage(cl, "Paramater expected following -c");
+				if (na == NULL) usage("Paramater expected following -c");
 				comport = atoi(na);
-				if (comport < 1 || comport > 50) usage(cl, "-c parameter %d out of range",comport);
+				if (comport < 1 || comport > 50) usage("-c parameter %d out of range",comport);
 
-			/* Projector */
+			/* Telephoto */
 			} else if (argv[fa][1] == 'p') {
-				proj = 1;
+				tele = 1;
 
 			/* Display type */
-			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
+			} else if (argv[fa][1] == 'y') {
 				fa = nfa;
-				if (na == NULL) usage(cl, "Parameter expected after -y");
+				if (na == NULL) usage("Parameter expected after -y");
 				dtype = na[0];
 
 			/* Calibration file */
 			} else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
 				fa = nfa;
-				if (na == NULL) usage(cl, "Parameter expected after -k/-K");
+				if (na == NULL) usage("Parameter expected after -k/-K");
 				strncpy(calname,na,MAXNAMEL); calname[MAXNAMEL] = '\000';
 				softcal = 0;
 				if (argv[fa][1] == 'K')
@@ -380,19 +368,25 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* Save spectral data */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+			else if (argv[fa][1] == 's') {
 				spec = 1;
 
 			/* Test patch offset and size */
 			} else if (argv[fa][1] == 'P') {
 				fa = nfa;
-				if (na == NULL) usage(cl, "Parameter expected after -P");
-				if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &patscale) != 3)
-					usage(cl, "-P parameter '%s' not recognised",na);
+				if (na == NULL) usage("Parameter expected after -P");
+				if (sscanf(na, " %lf,%lf,%lf,%lf ", &ho, &vo, &hpatscale, &vpatscale) == 4) {
+					;
+				} else if (sscanf(na, " %lf,%lf,%lf ", &ho, &vo, &hpatscale) == 3) {
+					vpatscale = hpatscale;
+				} else {
+					usage("-P parameter '%s' not recognised",na);
+				}
 				if (ho < 0.0 || ho > 1.0
 				 || vo < 0.0 || vo > 1.0
-				 || patscale <= 0.0 || patscale > 50.0)
-					usage(cl, "-P parameters %f %f %f out of range",ho,vo,patscale);
+				 || hpatscale <= 0.0 || hpatscale > 50.0
+				 || vpatscale <= 0.0 || vpatscale > 50.0)
+					usage("-P parameters %f %f %f %f out of range",ho,vo,hpatscale,vpatscale);
 				ho = 2.0 * ho - 1.0;
 				vo = 2.0 * vo - 1.0;
 
@@ -412,9 +406,9 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'H') {
 				highres = 1;
 
-			/* Adaptive mode */
+			/* Adaptive mode - default, so flag is deprecated */
 			} else if (argv[fa][1] == 'V') {
-				adaptive = 1;
+				warning("dispread -V flag is deprecated");
 
 			/* No normalisation */
 			} else if (argv[fa][1] == 'w') {
@@ -425,18 +419,12 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'X') {
 				int ix;
 				fa = nfa;
-				if (na == NULL) usage(cl,"Parameter expected following -X");
-				if (ncl > 0 && sscanf(na, " %d ", &ix) == 1) {
-					if (ix < 0 || ix > ncl)
-						usage(cl, "-X ccss selection is out of range");
-					strncpy(ccxxname,cl[ix].path,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
-				} else {
-					strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
-				}
+				if (na == NULL) usage("Parameter expected following -X");
+				strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
 
 			} else if (argv[fa][1] == 'I') {
 				fa = nfa;
-				if (na == NULL || na[0] == '\000') usage(cl, "Parameter expected after -I");
+				if (na == NULL || na[0] == '\000') usage("Parameter expected after -I");
 				for (i=0; ; i++) {
 					if (na[i] == '\000')
 						break;
@@ -445,13 +433,13 @@ int main(int argc, char *argv[]) {
 					else if (na[i] == 'w' || na[i] == 'W')
 						wdrift = 1;
 					else
-						usage(cl, "-I parameter '%c' not recognised",na[i]);
+						usage("-I parameter '%c' not recognised",na[i]);
 				}
 
 			/* Spectral Observer type */
 			} else if (argv[fa][1] == 'Q') {
 				fa = nfa;
-				if (na == NULL) usage(cl,"Parameter expecte after -Q");
+				if (na == NULL) usage("Parameter expecte after -Q");
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
 					obType = icxOT_CIE_1931_2;
 				} else if (strcmp(na, "1964_10") == 0) {	/* Classic 10 degree */
@@ -465,25 +453,25 @@ int main(int argc, char *argv[]) {
 				} else if (strcmp(na, "shaw") == 0) {		/* Shaw and Fairchilds 1997 2 degree */
 					obType = icxOT_Shaw_Fairchild_2;
 				} else
-					usage(cl,"-Q parameter '%s' not recognised",na);
+					usage("-Q parameter '%s' not recognised",na);
 
 
 			/* Change color callout */
 			} else if (argv[fa][1] == 'C') {
 				fa = nfa;
-				if (na == NULL) usage(cl, "Parameter expected after -C");
+				if (na == NULL) usage("Parameter expected after -C");
 				ccallout = na;
 
 			/* Measure color callout */
 			} else if (argv[fa][1] == 'M') {
 				fa = nfa;
-				if (na == NULL) usage(cl, "Parameter expected after -M");
+				if (na == NULL) usage("Parameter expected after -M");
 				mcallout = na;
 
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
-				if (na == NULL) usage(cl, "Parameter expected after -W");
+				if (na == NULL) usage("Parameter expected after -W");
 				if (na[0] == 'n' || na[0] == 'N')
 					fc = fc_none;
 				else if (na[0] == 'h' || na[0] == 'H')
@@ -491,7 +479,7 @@ int main(int argc, char *argv[]) {
 				else if (na[0] == 'x' || na[0] == 'X')
 					fc = fc_XonXOff;
 				else
-					usage(cl, "-W parameter '%s' not recognised",na);
+					usage("-W parameter '%s' not recognised",na);
 
 			} else if (argv[fa][1] == 'D') {
 				debug = 1;
@@ -499,21 +487,31 @@ int main(int argc, char *argv[]) {
 					debug = atoi(na);
 					fa = nfa;
 				}
+				g_log->debug = debug;
 				callback_ddebug = 1;		/* dispwin global */
 
+			/* Extra flags */
+			} else if (argv[fa][1] == 'Y') {
+				if (na == NULL)
+					usage("Flag '-Y' expects extra flag");
+			
+				if (na[0] == 'A') {
+					nadaptive = 1;
+				} else {
+					usage("Flag '-Y %c' not recognised",na[0]);
+				}
+
 			} else 
-				usage(cl, "Flag '-%c' not recognised",argv[fa][1]);
+				usage("Flag '-%c' not recognised",argv[fa][1]);
 			}
 		else
 			break;
 	}
 
-	patsize *= patscale;
-
 	/* No explicit display has been set */
 	if (!fake && disp == NULL) {
 		int ix = 0;
-#if defined(UNIX) && !defined(__APPLE__)
+#if defined(UNIX_X11)
 		char *dn, *pp;
 
 		if ((dn = getenv("DISPLAY")) != NULL) {
@@ -561,16 +559,24 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	if (fake)
+		comport = -99;
+	if ((icmps = new_icompaths(g_log)) == NULL)
+		error("Finding instrument paths failed");
+	if ((ipath = icmps->get_path(icmps, comport)) == NULL)
+		error("No instrument at port %d",comport);
+
 	if (docalib) {
-		if ((rv = disprd_calibration(comport, fc, dtype, proj, adaptive, noautocal, disp,
-		                             webdisp, blackbg, override, patsize, ho, vo,
-		                             verb, debug)) != 0) {
+		if ((rv = disprd_calibration(ipath, fc, dtype, 0, tele, nadaptive, noautocal, disp,
+		                             webdisp, blackbg, override,
+			                         100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
+		                             g_log)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
 		}
 	}
 
 	/* Get the file name argument */
-	if (fa >= argc || argv[fa][0] == '-') usage(cl, "Filname parameter not found");
+	if (fa >= argc || argv[fa][0] == '-') usage("Filname parameter not found");
 	strncpy(inname,argv[fa++],MAXNAMEL-4); inname[MAXNAMEL-4] = '\000';
 	strcpy(outname,inname);
 	strcat(inname,".ti1");
@@ -747,58 +753,89 @@ int main(int argc, char *argv[]) {
 		cal[0][0] = -1.0;	/* Not used */
 	}
 
-	if ((dr = new_disprd(&errc, fake ? -99 : comport, fc, dtype, proj, adaptive, noautocal,
+	if ((dr = new_disprd(&errc, ipath, fc, dtype, 0, tele, nadaptive, noautocal,
 	                     highres, 0, &noramdac, cal, ncal, softcal, disp, blackbg, override,
-	                     webdisp, ccallout, mcallout, patsize, ho, vo,
+	                     webdisp, ccallout, mcallout, 100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
 	                     cmx != NULL ? cmx->matrix : NULL,
 	                     ccs != NULL ? ccs->samples : NULL, ccs != NULL ? ccs->no_samp : 0,
-		                 spec, obType, NULL, bdrift, wdrift, verb, VERBOUT, debug,
-		                 "fake" ICC_FILE_EXT)) == NULL)
+		                 spec, obType, NULL, bdrift, wdrift,
+		                 "fake" ICC_FILE_EXT, g_log)) == NULL)
 		error("new_disprd failed with '%s'\n",disprd_err(errc));
 
 	if (cmx != NULL)
 		cmx->del(cmx);
 	if (ccs != NULL)
 		ccs->del(ccs);
-	free_iccss(cl); cl = NULL; ncl = 0;
 
 	/* Test the CRT with all of the test points */
-	if ((rv = dr->read(dr, cols, npat + xpat, 1, npat + xpat, 1, 0)) != 0) {
+	if ((rv = dr->read(dr, cols, npat + xpat, 1, npat + xpat, 1, 0, instClamp)) != 0) {
 		dr->del(dr);
 		error("test_crt returned error code %d\n",rv);
 	}
 	/* Note what instrument the chart was read with */
-	if (dr->it != NULL)
+	if (dr->it != NULL) {
+		int refrmode, cbid;
 		ocg->add_kword(ocg, 0, "TARGET_INSTRUMENT", inst_name(dr->it->get_itype(dr->it)) , NULL);
-	else
+		dr->get_disptype(dr, &refrmode, &cbid);
+		if (refrmode >= 0)
+			ocg->add_kword(ocg, 0, "DISPLAY_TYPE_REFRESH", refrmode ? "YES" : "NO", NULL);
+		if (cbid != 0) {
+			char buf[100];
+			sprintf(buf, "%d", cbid);
+			ocg->add_kword(ocg, 0, "DISPLAY_TYPE_BASE_ID", buf, NULL);
+		}
+	} else {
 		ocg->add_kword(ocg, 0, "TARGET_INSTRUMENT", "Fake" , NULL);
+	}
 
 	/* Note if the instrument is natively spectral or not */
-	if (dr->it != NULL && dr->it->capabilities(dr->it) & inst_spectral)
-		ocg->add_kword(ocg, 0, "INSTRUMENT_TYPE_SPECTRAL", "YES" , NULL);
-	else
+	if (dr->it != NULL) {
+		inst_mode cap;
+		dr->it->capabilities(dr->it, &cap, NULL, NULL);
+
+		if (dr->it != NULL && cap & inst_mode_spectral)
+			ocg->add_kword(ocg, 0, "INSTRUMENT_TYPE_SPECTRAL", "YES" , NULL);
+		else
+			ocg->add_kword(ocg, 0, "INSTRUMENT_TYPE_SPECTRAL", "NO" , NULL);
+	} else {
 		ocg->add_kword(ocg, 0, "INSTRUMENT_TYPE_SPECTRAL", "NO" , NULL);
+	}
 
 	dr->del(dr);
 
 	/* And save the result: */
 
 	/* Convert from absolute XYZ to relative XYZ */
-	if (npat > 0 && cols[0].XYZ_v == 0) {
+	if (npat > 0) {
 		double nn;
 
-		if (npat > 0 && cols[0].aXYZ_v == 0)
-			error("Neither relative or absolute XYZ is valid!");
+		/* Make sure there is a copy of the white patch beyond npat, */
+		/* so that it can be left absolute. */
+		if (wpat != npat) {
+			cols[npat].r = cols[npat].g = cols[npat].b = 1.0;
+			cols[npat].XYZ[0] = cols[wpat].XYZ[0];
+			cols[npat].XYZ[1] = cols[wpat].XYZ[1];
+			cols[npat].XYZ[2] = cols[wpat].XYZ[2];
+			cols[npat].XYZ_v = cols[wpat].XYZ_v; 
+			wpat = npat;
+		}
 
 		if (nonorm)
 			nn = 1.0;
-		else
-			nn = 100.0 / cols[wpat].aXYZ[1];		/* Normalise Y of white to 100 */
+		else {
+			if (cols[wpat].XYZ_v == 0)
+				error("XYZ of white patch is not valid!",i);
 
-		for (i = 0; i < (npat + xpat); i++) {
+			nn = 100.0 / cols[wpat].XYZ[1];		/* Normalise Y of white to 100 */
+		}
+
+		for (i = 0; i < npat; i++) {
+
+			if (cols[i].XYZ_v == 0)
+				error("XYZ %d is not valid!",i);
+
 			for (j = 0; j < 3; j++)
-				cols[i].XYZ[j] = nn * cols[i].aXYZ[j];
-			cols[i].XYZ_v = 1;
+				cols[i].XYZ[j] = nn * cols[i].XYZ[j];
 		
 			/* Keep spectral aligned with normalised XYZ */
 			if (cols[i].sp.spec_n > 0) {
@@ -863,10 +900,10 @@ int main(int argc, char *argv[]) {
 	free(setel);
 
 	/* If we have the absolute brightness of the display, record it */
-	if (cols[wpat].aXYZ_v != 0) {
+	if (cols[wpat].XYZ_v != 0) {
 		char buf[100];
 
-		sprintf(buf,"%f %f %f", cols[wpat].aXYZ[0], cols[wpat].aXYZ[1], cols[wpat].aXYZ[2]);
+		sprintf(buf,"%f %f %f", cols[wpat].XYZ[0], cols[wpat].XYZ[1], cols[wpat].XYZ[2]);
 		ocg->add_kword(ocg, 0, "LUMINANCE_XYZ_CDM2",buf, NULL);
 	}
 
@@ -920,6 +957,7 @@ int main(int argc, char *argv[]) {
 	if (verb)
 		printf("Written '%s'\n",outname);
 
+	icmps->del(icmps);
 	free(cols);
 	ocg->del(ocg);		/* Clean up */
 	icg->del(icg);		/* Clean up */

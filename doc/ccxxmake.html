@@ -19,12 +19,14 @@
     subsequent measurements with that Colorimeter on that Display by
     using it with the <a href="dispcal.html#X">dispcal</a>, <a
       href="dispread.html#X">dispread</a> and <a href="spotread.html#X">spotread</a>
-    -X option. See <a href="WideGamutColmters.html">Wide Gamut Displays
+    -X option. A ccmx file can also be <a href="oeminst.html">installed</a>,
+    and will then appear in the available display type selection (<b>-y</b>
+    option). See <a href="WideGamutColmters.html">Wide Gamut Displays
       and Colorimeters</a> for more information on why this may be
-    useful. <span style="font-weight: bold;">Note</span> that to make
-    use of a colorimeter as a CCMX reference, you will have to provide
-    two .ti3 files rather than using interactive measurement- see <a
-      href="#f"><span style="font-weight: bold;">-f</span></a>.<br>
+    useful. [ <span style="font-weight: bold;">Note</span> that to make
+    use of a <u>colorimeter</u> as a CCMX reference, you will have to
+    provide two .ti3 files rather than using interactive measurement-
+    see <a href="#f"><span style="font-weight: bold;">-f</span></a>. ]<br>
     <br>
     For Colorimeters that have sensor spectral sensitivity calibration
     information built into them&nbsp; (ie. the X-Rite <span
@@ -39,7 +41,13 @@
     subsequent measurements on that Display using such Colorimeters, by
     using it with the <a href="dispcal.html#X">dispcal</a>, <a
       href="dispread.html#X">dispread</a> and <a href="spotread.html#X">spotread</a>
-    -X option.<br>
+    -X option, or it can be <a
+      href="file:///D:/src/argyll/doc/oeminst.html">installed</a>, and
+    will then appear in the available display type selection (<b>-y</b>
+    option).<br>
+    <br>
+    The instrument manufacturer may supply spectral sample files (see <a
+      href="oeminst.html">oeminst</a>).<br>
     <br>
     There is a <a href="ccmxs.html">list of contributed</a> <span
       style="font-weight: bold;">ccmx</span> (Colorimeter Correction
@@ -50,11 +58,33 @@
     </small><small style="font-family: monospace;">&nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
       &nbsp; &nbsp; &nbsp; Verbose mode</small><br>
     &nbsp; <a href="#S">-S</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Create
 CCSS
 rather
+
+
+
+
+
+
+
+
+
+
+
 
 
     than CCMX<br>
@@ -67,9 +97,31 @@ or
 two
 
 
+
+
+
+
+
+
+
+
+
+
+
     .ti3 files rather than measure.<br style="font-family: monospace;">
     <span style="font-family: monospace;">&nbsp;</span><font
       style="font-family: monospace;" size="-1"><a href="#display">-display
+
+
+
+
+
+
+
+
+
+
+
 
 
         displayname</a>&nbsp; [X11 only] Choose X11 display name</font><br
@@ -90,8 +142,30 @@ display
 m
 
 
+
+
+
+
+
+
+
+
+
+
+
       for VideoLUT access.</font><br style="font-family: monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;<a href="#d">-d
+
+
+
+
+
+
+
+
+
+
+
 
 
         n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -104,8 +178,30 @@ following
 list
 
 
+
+
+
+
+
+
+
+
+
+
+
       (default 1)</font><br>
     <span style="font-family: monospace;">&nbsp;<a href="#dweb">-dweb[:port]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -118,12 +214,34 @@ list
       style="font-family: monospace;" size="-1"><a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-      Use projector mode (if available)</font><br style="font-family:
-      monospace;">
+
+
+
+
+
+
+
+
+
+
+
+      Use telephoto mode (ie. for a projector) (if available)</font><br
+      style="font-family: monospace;">
     &nbsp; <font size="-1"><span style="font-family: monospace;"><a
           href="#y">-y X</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
         Display type - instrument specific list to choose from.</span></font><font
@@ -132,11 +250,19 @@ list
     <font style="font-family: monospace;" size="-1">&nbsp;<a href="#P">-P
 
 
-        ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-      Position test window and scale it</font><br style="font-family:
-      monospace;">
+
+
+
+
+
+
+
+
+
+        ho,vo,ss[,vs]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Position test
+      window and scale it</font><br style="font-family: monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ho,vi:
 0.0
@@ -145,6 +271,17 @@ left/top,
 0.5
 =
 center,
+
+
+
+
+
+
+
+
+
+
+
 
 
       1.0 = right/bottom etc.</font><br style="font-family: monospace;">
@@ -158,10 +295,42 @@ half,
 normal,
 
 
-      2.0 = double etc.</font><br style="font-family: monospace;">
+
+
+
+
+
+
+
+
+
+
+
+      2.0 = double etc.</font><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+        ss,vs: = optional horizontal, vertical scale.</span></font><br
+      style="font-family: monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;</font><font
       style="font-family: monospace;" size="-1"><a href="#F">-F</a>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
       Fill whole screen with black background</font><br
@@ -178,25 +347,66 @@ redirect
 on
 
 
+
+
+
+
+
+
+
+
+
+
+
       test window<br>
     </small><font style="font-family: monospace;" size="-1">&nbsp;<a
         href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-      Disable auto calibration of instrument</font><small
-      style="font-family: monospace;"><br>
+
+
+
+
+
+
+
+
+
+
+
+      Disable initial calibration of instrument</font><small
+      style="font-family: monospace;"> if possible<br>
     </small><span style="font-family: monospace;">&nbsp;</span><font
       style="font-family: monospace;" size="-1"><a href="#H">-H</a>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-      Use high resolution spectrum mode (if available)<br>
-    </font><font style="font-family: monospace;" size="-1">&nbsp;<a
-        href="#V">-V</a>
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use adaptive measurement mode (if
-      available)</font><br style="font-family: monospace;">
+
+
+
+
+
+
+
+
+
+
+
+      Use high resolution spectrum mode (if available)</font><font
+      style="font-family: monospace;" size="-1"></font><br
+      style="font-family: monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;<a href="#C">-C
+
+
+
+
+
+
+
+
+
+
+
 
 
         "command"</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -218,9 +428,31 @@ patch
 sequence
 
 
+
+
+
+
+
+
+
+
+
+
+
       combination steps (default 3)</font><br style="font-family:
       monospace;">
     <font style="font-family: monospace;" size="-1">&nbsp;<a href="#W">-W
+
+
+
+
+
+
+
+
+
+
+
 
 
         n|h|x</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -231,6 +463,17 @@ flow
 control:
 n
 =
+
+
+
+
+
+
+
+
+
+
+
 
 
       none, h = HW, x = Xon/Xoff</font><br style="font-family:
@@ -246,6 +489,17 @@ default
 overall
 
 
+
+
+
+
+
+
+
+
+
+
+
       escription</small><br>
     <small style="font-family: monospace;">&nbsp;<a href="#I">-I
         "displayname"</a> &nbsp;&nbsp;&nbsp;&nbsp; </small><span
@@ -254,10 +508,43 @@ overall
       &nbsp;</small><small style="font-family: monospace;"><a href="#T">-T
 
 
+
+
+
+
+
+
+
+
+
+
+
         "displaytech"</a> &nbsp;&nbsp;&nbsp;&nbsp; </small><span
       style="font-family: monospace;">Set display technology description</span>
-    (ie. CRT, LCD etc.)<small style="font-family: monospace;"></small><br
-      style="font-family: monospace;">
+    (ie. CRT, LCD etc.)<small style="font-family: monospace;"></small><br>
+    <tt>&nbsp;<a href="#U">-U c</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+      Set UI selection character(s)</tt><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+        style=" font-family: monospace;" href="#Yrn">-<font size="-1">Y</font>
+        r|n</a><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+        &nbsp;&nbsp;&nbsp;&nbsp; Override refresh, non-refresh display
+        mode</span></font><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
+        style=" font-family: monospace;" href="#YA">-<font size="-1">Y</font>A</a><span
+        style="font-family: monospace;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        &nbsp;&nbsp;&nbsp;&nbsp; Use non-adaptive integration time mode
+        (if available).</span></font><br style="font-family: monospace;">
     <span style="font-family: monospace;">&nbsp;</span><font
       style="font-family: monospace;" size="-1"><a href="#file1"><span
           style="font-style: italic;">correction.ccmx</span></a> |&nbsp;<a
@@ -340,6 +627,17 @@ overall
     specified as a single string, e.g. <span style="font-weight: bold;">-d
 
 
+
+
+
+
+
+
+
+
+
+
+
       1,2</span> . Some experimentation may be needed using <a
       href="dispwin.html">dispwin</a> on such systems, to discover what
     screen has access to the VideoLUT hardware, and which screens the
@@ -363,29 +661,36 @@ overall
     and identify an internet address for your machine that way.<br>
     <br>
     <a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
-    allows measuring in projector mode, using instruments that support
-    this.<br>
+    allows measuring in telephoto mode, using instruments that support
+    this mode, e.g. the ColorMunki. Telephoto mode is one for taking
+    emissive measurements from a distance (ie. telespectometer,
+    tele-colorimeter) mode, and typically would be used for measuring
+    projector type displays. If a device does not support a specific
+    telephoto mode, then the normal emissive mode may be suitable for
+    measuring projectors.<br>
     <br>
     <a name="y"></a> The <span style="font-weight: bold;">-y</span>
-    flag allows setting the Display Type (CCMX creation). Most
-    colorimeters need this parameter set to operate correctly. The
-    selection typically determines two aspects of of the instrument
-    operation: <span style="font-weight: bold;">1)</span> It may set
-    the measuring mode to suite <a
+    flag allows setting the Display Type used as a base for color
+    correction matrix CCMX creation. Only base calibration display types
+    will be listed. The selection typically determines two aspects of of
+    the instrument operation: <span style="font-weight: bold;">1)</span>
+    It may set the measuring mode to suite <a
       href="http://en.wikipedia.org/wiki/Comparison_of_display_technology"><span
         style="font-weight: bold;">refresh</span> or <span
         style="font-weight: bold;">non-refresh</span> displays</a>.
     Typically only LCD (Liquid Crystal) displays have a non-refresh
     nature. <span style="font-weight: bold;">2)</span> It may select an
-    instrument calibration matrix suitable for a particular display
-    type. The selections available depends on the type and model of
-    instrument, and a list of the options for the discovered instruments
-    will be shown in the <a href="ArgyllDoc.html#CmdLine">usage</a>
+    instrument internal calibration matrix suitable for a particular
+    display type. The selections available depends on the type and model
+    of instrument, and a list of the options for the discovered
+    instruments will be shown in the <a href="ArgyllDoc.html#CmdLine">usage</a>
     information. For more details on what particular instruments support
     and how this works, see <a href="instruments.html">Operation of
       particular instruments</a>. Any CCMX created will work on top of
-    the Display Type, so to be valid, the same Display Type must be
-    selected whenever the CCMX is used with this instrument.<br>
+    the selected Display Type, so to be valid, the same Display Type
+    must be selected whenever the CCMX is used with this instrument.
+    Installed CCMX files will automatically select the appropriate base
+    type.<br>
     <br>
     <a name="P"></a> The <span style="font-weight: bold;">-P</span>
     parameter allows you to position and size the test patch window. By
@@ -396,15 +701,18 @@ overall
     and vertical offset respectively. A value of 0.0 positions the
     window to the far left or top of the screen, a value of 0.5
     positions it in the center of the screen (the default), and 1.0
-    positions it to the far right or bottom of the screen. The <span
-      style="font-weight: bold;">ss</span> parameter is a scale factor
-    for the test window size. A value of 0.5 for instance, would produce
-    a half sized window. A value of 2.0 will produce a double size
-    window. Note that the ho,vo,ss numbers must be specified as a single
-    string (no space between the numbers and the comma).<br>
-    For example, to create a double sized test window at the top right
-    of the screen, use <span style="font-weight: bold;">-P 1,0,2</span>
-    .<br>
+    positions it to the far right or bottom of the screen. If three
+    parameters are provided, then the <span style="font-weight: bold;">ss</span>
+    parameter is a scale factor for the test window size. A value of 0.5
+    for instance, would produce a half sized window. A value of 2.0 will
+    produce a double size window. If four parameters are provided, then
+    the last two set independent horizontal and vertical scaling
+    factors. Note that the ho,vo,ss or ho,vo,hs,vs numbers must be
+    specified as a single string (no space between the numbers and the
+    comma). For example, to create a double sized test window at the top
+    right of the screen, use <span style="font-weight: bold;">-P 1,0,2</span>
+    . To create a window twice as wide as high: <span
+      style="font-weight: bold;">-P 1,0,2,1</span>.<br>
     <br>
     <a name="F"></a> The <span style="font-weight: bold;">-F</span>
     flag causes the while screen behind the test window to be masked
@@ -418,25 +726,34 @@ overall
     can interfere with window manager operation, and the <b>-n</b>
     option turns this behaviour off.<br>
     <br>
-    <a name="N"></a>The <b>-N</b> option disables the automatic
-    calibration of an instrument if it is possible to do so. Sometimes
-    it is awkward to have to re-calibrate and instrument every time a
-    tool starts, and unnecessary if the instrument has recently been
-    calibration, and this switch prevents it happening.<br>
+    <a name="N"></a><span style="font-weight: bold;">-N</span> Any
+    instrument that requires regular calibration will ask for
+    calibration on initial start-up. Sometimes this can be awkward if
+    the instrument is being mounted in some sort of measuring jig, or
+    annoying if several sets of readings are being taken in quick
+    succession. The -<span style="font-weight: bold;">N</span>
+    suppresses this initial calibration if a valid and not timed out
+    previous calibration is recorded in the instrument or on the host
+    computer. It is advisable to only use this option on the second and
+    subsequent measurements in a single session.<br>
     <br>
     <a name="L"></a> The -<span style="font-weight: bold;">H</span>
     option on high resolution spectral mode, if the instrument supports
     it, such as the Eye-One Pro. See <a href="instruments.html">Operation
 
+
+
+
+
+
+
+
+
+
+
+
       of particular instruments</a> for more details. This may give
     better accuracy for display measurements.<br>
-    <br>
-    <a name="V"></a> The -<span style="font-weight: bold;">V</span>
-    option uses adaptive emission measurement mode, if the instrument
-    supports it, such as the Eye-One Pro. This may give better accuracy
-    for low level measurements, but may be more inconsistent overall due
-    to the varying integration times. Overall measurement time will
-    probably be longer.<br>
     <br>
     <a name="C"></a> The -<span style="font-weight: bold;">C</span> <span
       style="font-weight: bold;">"command" </span>option allows a
@@ -515,7 +832,7 @@ overall
     included in the parameter, and not mistaken for the start of another
     flag, or as a final command line parameters.<br>
     <br>
-    <a name="I"></a>The <b>-T</b> parameter allows setting of the
+    <a name="T"></a>The <b>-T</b> parameter allows setting of the
     display technology description string in the resulting <span
       style="font-weight: bold;">ccmx/ccss</span> file. The
     applicability of the calibration mainly depends on the technology
@@ -527,6 +844,38 @@ overall
     quotes, so that spaces and other special characters are included in
     the parameter, and not mistaken for the start of another flag, or as
     a final command line parameters.<br>
+    <br>
+    <a name="U"></a>The <b>-U</b> parameter allows setting of the user
+    interface selection character this display type can be selected by,
+    if installed. This character will only be used if there is no clash
+    with any preceding selections. Characters in the range 0-9, A-Z a-z
+    can be used.<br>
+    <br>
+    <a name="Yrn"></a>The -<span style="font-weight: bold;">Y r </span>and
+
+
+
+
+
+
+
+
+    <b>-Y n</b> options overrides the refresh display mode set by the <a
+      href="file:///D:/src/argyll/doc/spotread.html#y">-y display type
+      selection</a>, with <b>-Y</b><span style="font-weight: bold;"> r</span>
+    forcing refresh display mode, and <b>-Y n</b> forcing a non-refresh
+    display mode. Not all instruments support a display measurement
+    refresh mode, or the ability to override the mode set by the display
+    type selection.<br>
+    <br>
+    <a name="YA"></a> The -<span style="font-weight: bold;">Y A</span>
+    option uses a non-adaptive integration time emission measurement
+    mode, if the instrument supports it, such as the Eye-One Pro or
+    ColorMunki. By default an adaptive integration time measurement mode
+    will be used for emission measurements, but some instruments support
+    a fixed integration time mode that can be used with display devices.
+    This may give increased consistency and faster measurement times,
+    but may also give less accurate low level readings.<br>
     <br>
     <a name="file1"></a>The <span style="font-weight: bold; font-style:
       italic;">correction.ccmx</span> is the name of the file to save

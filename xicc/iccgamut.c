@@ -61,7 +61,7 @@ void usage(char *diag) {
 	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
 	fprintf(stderr,"               s = saturation, a = absolute (default), d = profile default\n");
 //  fprintf(stderr,"               P = absolute perceptual, S = absolute saturation\n");
-	fprintf(stderr," -p oride      l = Lab_PCS (default), j = %s Appearance Jab\n",icxcam_description(cam_default),icxcam_description(cam_default));
+	fprintf(stderr," -p oride      l = Lab_PCS (default), j = %s Appearance Jab\n",icxcam_description(cam_default));
 	fprintf(stderr," -o order      n = normal (priority: lut > matrix > monochrome)\n");
 	fprintf(stderr,"               r = reverse (priority: monochrome > matrix > lut)\n");
 	fprintf(stderr," -l tlimit     set total ink limit, 0 - 400%% (estimate by default)\n");

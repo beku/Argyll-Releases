@@ -236,10 +236,10 @@ main(void) {
 
 		/* Create two conversions for the target/check illuminant */
 		if ((con = new_xsp2cie(icxIT_D50, NULL, icxOT_CIE_1931_2,
-		                       NULL, icSigLabData)) == NULL)
+		                       NULL, icSigLabData, 1)) == NULL)
 			error ("Creating conversion failed");
 
-		if (con->set_fwa(con, &insp, &mat[0][m]))
+		if (con->set_fwa(con, &insp, NULL, &mat[0][m]))
 			error ("Setting FWA compensation failed");
 
 		for (i = 0; i < mat[0][m].spec_n; i++) {

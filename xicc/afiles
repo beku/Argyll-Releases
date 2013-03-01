@@ -17,8 +17,6 @@ ccmx.h
 ccmx.c
 ccss.h
 ccss.c
-xsep.h
-xsep.c
 xcolorants.h
 xcolorants.c
 xcolorantslu.c

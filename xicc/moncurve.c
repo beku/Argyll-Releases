@@ -40,7 +40,7 @@
 #undef TEST_PDE				/* Ckeck partial derivative calcs */
 
 /* Normalization factors for an average data point error squared, scale 100 */
-#define HW01		0.2		/* 0 & 1 harmonic weights */
+#define HW01		0.002	/* 0 & 1 harmonic weights */
 #define HBREAK	    4		/* Harmonic that has HWBR */
 #define HWBR        0.8		/* Base weight of harmonics HBREAK up */
 #define HWINC       0.5		/* Increase in weight for each harmonic above HWBR */

@@ -4,7 +4,7 @@
  *
  * Author:  Graeme W. Gill
  * Date:    2002/10/24
- * Version: 2.13
+ * Version: 2.15
  *
  * Copyright 1997 - 2012 Graeme W. Gill
  *
@@ -201,7 +201,9 @@ icmAlloc *new_icmAllocStd() {
 
 /* Get the size of the file (Only valid for reading file. */
 static size_t icmFileStd_get_size(icmFile *pp) {
-	return pp->size;
+	icmFileStd *p = (icmFileStd *)pp;
+
+	return p->size;
 }
 
 /* Set current position to offset. Return 0 on success, nz on failure. */
@@ -264,6 +266,15 @@ icmFile *pp
 	return fflush(p->fp);
 }
 
+/* Return the memory buffer. Error if not icmFileMem */
+static int icmFileStd_get_buf(
+icmFile *pp,
+unsigned char **buf,
+size_t *len
+) {
+	return 1;
+}
+
 /* we're done with the file object, return nz on failure */
 static int icmFileStd_delete(
 icmFile *pp
@@ -320,6 +331,7 @@ icmAlloc *al		/* heap allocator, NULL for default */
 	p->write    = icmFileStd_write;
 	p->gprintf  = icmFileStd_printf;
 	p->flush    = icmFileStd_flush;
+	p->get_buf  = icmFileStd_get_buf;
 	p->del      = icmFileStd_delete;
 
 	if (fstat(fileno(fp), &sbuf) == 0) {
@@ -392,6 +404,20 @@ size_t length		/* Number of bytes in buffer */
 
 	((icmFileMem *)p)->del_al = 1;		/* Get icmFileMem->del to cleanup allocator */
 	return p;
+}
+
+/* Create a memory image file access class with the std allocator */
+/* and delete buffer when icmFile is deleted. */
+icmFile *new_icmFileMem_d(
+void *base,			/* Pointer to base of memory buffer */
+size_t length		/* Number of bytes in buffer */
+) {
+	icmFile *fp;
+
+	if ((fp = new_icmFileMem(base, length)) != NULL) {	
+		((icmFileMem *)fp)->del_buf = 1;
+	}
+	return fp;
 }
 
 /* ------------------------------------------------- */

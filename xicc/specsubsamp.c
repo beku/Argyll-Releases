@@ -28,7 +28,7 @@ void usage(void) {
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: specsubsamp -options\n");
 	fprintf(stderr," -i illum        Choose illuminant for print/transparency spectral data:\n");
-	fprintf(stderr,"                 A, C, D50, D65, F5, F8, F10 or file.sp\n");
+	fprintf(stderr,"                 A, C, D50, D50M2, D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"                 1931_2, 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
 	fprintf(stderr," -w st,en,sp     Output start, end and spacing nm\n");
@@ -80,6 +80,8 @@ main(
 					illum = icxIT_C;
 				} else if (strcmp(na, "D50") == 0) {
 					illum = icxIT_D50;
+				} else if (strcmp(na, "D50M2") == 0) {
+					illum = icxIT_D50M2;
 				} else if (strcmp(na, "D65") == 0) {
 					illum = icxIT_D65;
 				} else if (strcmp(na, "F5") == 0) {
@@ -150,9 +152,9 @@ main(
 
 	if (obs) {
 		int i, j, k;
-		xspect sp[3];
+		xspect *sp[3];
 
-		if (standardObserver(&sp[0], &sp[1], &sp[2], observ) != 0)
+		if (standardObserver(sp, observ) != 0)
 			error ("standardObserver returned error");
 		printf("/* %f - %f, %f spacing, %d samples */\n",wl_short,wl_long,wl_width,wl_n);
 		printf("{\n");
@@ -170,7 +172,7 @@ main(
 					swl = cwl + (j * wl_width)/ns;
 					sw = (ns - abs(j))/(double)ns;
 					tw += sw;
-					outv += sw * value_xspect(&sp[k], swl);
+					outv += sw * value_xspect(sp[k], swl);
 				}
 				outv /= tw;
 				if (!evy5 || i % 5 == 0)

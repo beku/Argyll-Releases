@@ -335,8 +335,8 @@ main(
 						sum += cdev[n];
 				}
 
-				if (tlimit > 0.0 && sum > tlimit
-				 || klimit > 0.0 && kch >= 0 && cdev[kch] > klimit) {
+				if ((tlimit > 0.0 && sum > tlimit)
+				 || (klimit > 0.0 && kch >= 0 && cdev[kch] > klimit)) {
 					DC_INC(co);
 					continue;
 				}

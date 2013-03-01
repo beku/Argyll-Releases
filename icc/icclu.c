@@ -4,8 +4,8 @@
  * Profile color lookup utility.
  *
  * Author:  Graeme W. Gill
- * Date:    99/11/29
- * Version: 2.13
+ * Date:    1999/11/29
+ * Version: 2.15
  *
  * Copyright 1998 - 2012 Graeme W. Gill
  *

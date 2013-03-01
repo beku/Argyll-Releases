@@ -37,6 +37,7 @@
 #define verbo stdout
 
 #include <stdio.h>
+#include "counters.h"
 #include "numlib.h"
 #include "icc.h"
 #include "cgats.h"
@@ -260,7 +261,8 @@ make_input_icc(
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
 	int nocied,				/* nz to supress inclusion of .ti3 data in profile */
 	int verify,
-	int nsabs,				/* nz for non-standard absolute output */
+	int autowpsc,			/* nz for Auto scale the WP to prevent clipping above WP patch */
+	int clipovwp,			/* nz for Clip cLUT values above WP */
 	double wpscale,			/* >= 0.0 for media white point scale factor */
 	int dob2a,				/* nz to create a B2A table as well */
 	int extrap,				/* nz to create extra cLUT interpolation points */
@@ -306,9 +308,6 @@ make_input_icc(
 			isShTRC = 1;		/* Single curve */
 		}
 	}
-
-	if (nsabs == 0)				/* Don't introduce extra points if not absolute range */
-		extrap = 0;
 
 	/* Open up the file for writing */
 	if ((wr_fp = new_icmFileStd_name(file_name,"w")) == NULL)
@@ -650,7 +649,7 @@ make_input_icc(
 	}
 
 	if (extrap) {
-		npxpat = 2 * EXTRAP_MAXPNTS;		/* Allow for up to 20 extra patches */
+		npxpat = 4 * EXTRAP_MAXPNTS;		/* Allow for up to 20 extra patches */
 	}
 
 	/* Allocate arrays to hold test patch input and output values */
@@ -778,7 +777,7 @@ make_input_icc(
 
 			/* Create a spectral conversion object */
 			if ((sp2cie = new_xsp2cie(illum, cust_illum, observ, NULL,
-			                          wantLab ? icSigLabData : icSigXYZData)) == NULL)
+			                          wantLab ? icSigLabData : icSigXYZData, icxClamp)) == NULL)
 				error("Creation of spectral conversion object failed");
 
 			for (i = 0; i < npat; i++) {
@@ -824,10 +823,12 @@ make_input_icc(
 		if (clipprims)
 			flags |= ICX_CLIP_WB | ICX_CLIP_PRIMS;
 				
-		if (nsabs == 0)
-	        flags |= ICX_SET_WHITE | ICX_SET_BLACK;		/* Compute & use white and black */
+        flags |= ICX_SET_BLACK;		/* Compute & use black */
+		flags |= ICX_SET_WHITE;		/* Compute & use white */
+		if (autowpsc)
+	        flags |= ICX_SET_WHITE_US;	/* Compute & use white without scaling to L */
 
-        flags |= ICX_WRITE_WBL;		/* Write white/black/luminence */
+        flags |= ICX_WRITE_WBL;		/* Matrix: write white/black/luminence */
 
 		/* Setup Device -> XYZ conversion (Fwd) object from scattered data. */
 		if ((xluo = wr_xicc->set_luobj(
@@ -835,7 +836,7 @@ make_input_icc(
 		               wr_xicc, icmFwd, icmDefaultIntent,
 		               icmLuOrdNorm,
 		               flags, 		/* Flags */
-		               npat, tpat, 0.0, wpscale, smooth, avgdev,
+		               npat, npat, tpat, NULL, 0.0, wpscale, smooth, avgdev,
 		               NULL, NULL, NULL, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
@@ -845,81 +846,58 @@ make_input_icc(
 
 	} else {		/* cLUT based profile */
 		int flags = 0;
+		icxMatrixModel *mm = NULL;
 
 		xicc *wr_xicc;			/* extention object */
 		icxLuBase *AtoB;		/* AtoB ixcLu */
 
 		if (extrap) {
-			icxMatrixModel *mm;
-			double avgdist;		/* Average distance between points */
 			cow *mpat;
 			int nmpat;
-			double range;
 			int j;
 
 			if (verb) printf("Creating extrapolation black and white points:\n");
 
-			avgdist = pow(1.0/(double)npat, 1.0/3.0);
-			if (avgdist < 0.001)
-				avgdist = 0.001;
-			else if (avgdist > 0.3)
-				avgdist = 0.3;
-//printf("~1 avgdist = %f\n",avgdist);
-
 			if ((mpat = (cow *)malloc(sizeof(cow) * npat)) == NULL)
 				error("Malloc failed - mpat[]");
 
-			/* Select points from full set */
-			for (range = 0.05;; range *= 1.5) {
-				if (range > 1.0)
-					range = 1.0;
+			/* Weight points from full set to build matrix model */
+			/* to extrapolate the neutral axis */
+			for (nmpat = j = 0; j < npat; j++) {
+				double mnp, mxp;
+				int k;
 
-				for (nmpat = j = 0; j < npat; j++) {
-					double mnp, mxp;
-					int k;
-	
-					icmCpy3(mpat[nmpat].p, tpat[j].p);
-					icmCpy3(mpat[nmpat].v, tpat[j].v);
-	
-					/* Locate largest/smallest RGB value */
-					mxp = -1e6, mnp = 1e6;
-					for (k = 0; k < 3; k++) {
-						if (tpat[j].p[k] > mxp)
-							mxp = tpat[j].p[k];
-						if (tpat[j].p[k] < mnp)
-							mnp = tpat[j].p[k];
-					}
-					mxp -= mnp;			/* Spread; 0 for R=G=B */
+				icmCpy3(mpat[nmpat].p, tpat[j].p);
+				icmCpy3(mpat[nmpat].v, tpat[j].v);
 
-					if (mxp <= range) {
-						mpat[nmpat].w = 1.0 - mxp/range;
+				/* Locate largest/smallest RGB value */
+				mxp = -1e6, mnp = 1e6;
+				for (k = 0; k < 3; k++) {
+					if (tpat[j].p[k] > mxp)
+						mxp = tpat[j].p[k];
+					if (tpat[j].p[k] < mnp)
+						mnp = tpat[j].p[k];
+				}
+				mxp -= mnp;			/* Spread; 0 for R=G=B */
+
+				mpat[nmpat].w = pow(1.1 - mxp, 2.0);
 //printf("~1 added value %d: %f %f %f -> %f %f %f wt %f\n",j, mpat[nmpat].p[0], mpat[nmpat].p[1], mpat[nmpat].p[2], mpat[nmpat].v[0], mpat[nmpat].v[1], mpat[nmpat].v[2],mpat[nmpat].w);
-						nmpat++;
-					}
-				}
-
-				if (nmpat >= 16 || range >= 0.99) {
-//printf("~1 stopping with %d points at range %f\n",nmpat,range);
-					break;
-				}
-
-				/* Hmm. Not enough points with that range */
+				nmpat++;
 			}
-
-			if (verb) printf("%d/%d patches for extrapolation gamma/matrix model\n",nmpat,npat);
 	
 			/* Create gamma/matrix model to extrapolate with. */
 			/* (Use ofset & gain, gamma curve as 0th order with 1 harmonic, */
-			/* and heavily smooth it.) */
+			/* and smooth it.) */
 			if ((mm = new_MatrixModel(verb, nmpat, mpat, wantLab,
 				      /* quality */ -1, /* isLinear */ ptype == prof_matonly,
 				      /* isGamma */ 0, /* isShTRC */ 0,
 				      /* shape0gam */ 1, /* clipbw */ 0, /* clipprims */ 0,
-				      /* smooth */ 1.0, /* scale */ 0.7)) == NULL) {
+//				      /* smooth */ 1.0, /* scale */ 0.7)) == NULL) {
+				      /* smooth */ 1.0, /* scale */ 1.0)) == NULL) {
 				error("Creating extrapolation matrix model failed - memory ?");
 			}
 
-#ifdef NEVER
+#ifdef NEVER	/* Plot Lab of model */
 {
 	#define	XRES 100
 	double xx[XRES];
@@ -932,7 +910,8 @@ make_input_icc(
 		double rgb[3], lab[3];
 		xx[i] = rgb[0] = rgb[1] = rgb[2] = i/(double)(XRES-1);
 		mm->lookup(mm, lab, rgb);
-		icmLab2XYZ(&icmD50,lab,lab);
+		if (wantLab)
+			icmLab2XYZ(&icmD50,lab,lab);
 		y0[i] = lab[0];
 		y1[i] = lab[1];
 		y2[i] = lab[2];
@@ -940,43 +919,107 @@ make_input_icc(
 	do_plot(xx,y0,y1,y2,XRES);
 }
 #endif /* DEBUG_PLOT */
+		}
 
+		if (extrap) {
+			int ii, wix = 0, j;
+			int pcsy;						/* Effective PCS L or Y chanel index */
+			double wpy = -1e60;
+			double dwhite[MXDI];  /* Device white */
+			double mxdw;
+			double avgdist;		/* Average distance between points */
 
-			/* Create a black and white patch */
-			for (i = 0; i < 2; i++) {
-				int cix;					/* Closest point index */
-				int eix;					/* End point index */
-				double cde = 1e60;			/* Closest point distance */
-				double tt;
-				double corr[3], cwt;		/* Correction */
+			/* Figure out the device white point. */
+			/* Note that this is duplicating code in xicc/xmatrix.c */
+			/* and xfit.c */
 
-				tpat[npat + nxpat].p[0] = 
-				tpat[npat + nxpat].p[1] = 
-				tpat[npat + nxpat].p[2] = (double)i; 
+			if (wantLab)
+				pcsy = 0;	/* L or Lab */
+			else
+				pcsy = 1;	/* Y of XYZ */
 
-				/* Locate closest point */
-				for (nmpat = j = 0; j < npat; j++) {
-					double mnp, mxp;
-					int k;
-	
-					/* Locate largest/smallest RGB value */
-					mxp = -1e6, mnp = 1e6;
-					for (k = 0; k < 3; k++) {
-						if (tpat[j].p[k] > mxp)
-							mxp = tpat[j].p[k];
-						if (tpat[j].p[k] < mnp)
-							mnp = tpat[j].p[k];
-					}
-					mxp -= mnp;			/* Spread; 0 for R=G=B */
+			for (i = 0; i < npat; i++) {
+				double labv[3], yv;
 
-					tt = icmNorm33(tpat[npat + nxpat].p, tpat[j].p);
-					tt += mxp;
+				/* Create D50 Lab to allow some chromatic sensitivity */
+				/* in picking the white point */
+				if (wantLab)
+					icmCpy3(labv, tpat[i].v);
+				else
+					icmXYZ2Lab(&icmD50, labv, tpat[i].v);
 
-					if (tt < cde) {
-						cde = tt;
-						cix = j;
-					}
+				/* Tilt things towards D50 neutral white patches */
+				yv = labv[0] - 0.3 * sqrt(labv[1] * labv[1] + labv[2] * labv[2]);
+				if (yv > wpy) {
+					for (j = 0; j < 3; j++)
+						dwhite[j] = tpat[i].p[j];
+					wpy = yv;
+					wix = i;
 				}
+			}
+
+			/* Fix extrapolation matrix to be perfect at white point */
+			mm->force(mm, tpat[wix].v, tpat[wix].p);
+
+			/* Scale the white point to make one dev value 1.0 */
+			mxdw = -1;
+			for (j = 0; j < 3; j++) {
+				if (dwhite[j] > mxdw)
+					mxdw = dwhite[j];
+			}
+			for (j = 0; j < 3; j++) {
+				dwhite[j] /= mxdw;
+			}
+
+			avgdist = pow(1.0/(double)npat, 1.0/3.0);
+			if (avgdist < 0.001)
+				avgdist = 0.001;
+			else if (avgdist > 0.3)
+				avgdist = 0.3;
+//printf("~1 avgdist = %f\n",avgdist);
+
+			/* For points with white point device ratio, */
+			/* and points with R=G=B ratio, create extrapolation points. */
+			for (ii = 0; ii < 2; ii++) {
+
+				if (ii > 1)
+					dwhite[0] = dwhite[1] = dwhite[2] = 1.0;
+
+				/* Create a series of black and white patch */
+				for (i = 0; i < 2; i++) {
+					int cix;					/* Closest point index */
+					int eix;					/* End point index */
+					double cde = 1e60;			/* Closest point distance */
+					double tt;
+					double corr[3], cwt;		/* Correction */
+
+					eix = npat + nxpat;
+
+					icmScale3(tpat[eix].p, dwhite, (double)i);
+
+					/* Locate closest point */
+					for (j = 0; j < npat; j++) {
+						double mnp, mxp;
+						int k;
+		
+						/* Locate largest/smallest RGB value */
+						mxp = -1e6, mnp = 1e6;
+						for (k = 0; k < 3; k++) {
+							if (tpat[j].p[k] > mxp)
+								mxp = tpat[j].p[k];
+							if (tpat[j].p[k] < mnp)
+								mnp = tpat[j].p[k];
+						}
+						mxp -= mnp;			/* Spread; 0 for R=G=B */
+
+						tt = icmNorm33(tpat[eix].p, tpat[j].p);
+						tt += mxp;
+
+						if (tt < cde) {
+							cde = tt;
+							cix = j;
+						}
+					}
 
 //printf("~1 closest %d: de %f, %f %f %f -> %f %f %f\n",cix, cde, tpat[cix].p[0], tpat[cix].p[1], tpat[cix].p[2], tpat[cix].v[0], tpat[cix].v[1], tpat[cix].v[2]);
 
@@ -986,58 +1029,55 @@ make_input_icc(
 //printf("~1 closest gam/matrix -> %f %f %f\n",val[0],val[1],val[2]);
 //}
 
-				/* Lookup matrix value for our new point */
-				eix = npat + nxpat;
-				mm->lookup(mm, tpat[eix].v, tpat[eix].p);
+					/* Lookup matrix value for our new point */
+					mm->lookup(mm, tpat[eix].v, tpat[eix].p);
 //printf("~1 got value %d: %f %f %f -> %f %f %f\n",i, tpat[eix].p[0], tpat[eix].p[1], tpat[eix].p[2], tpat[eix].v[0], tpat[eix].v[1], tpat[eix].v[2]);
-				/* Weight the extra point so that it doesn't overpower the */
-				/* nearest real point to it too much. */
-				tt = cde;
-				if (tt > avgdist)		/* Distance at which sythetic point has 100% weight */
-					tt = avgdist;
-				tpat[eix].w = EXTRAP_WEIGHT * tt/avgdist;	
+					/* Weight the extra point so that it doesn't overpower the */
+					/* nearest real point to it too much. */
+					tt = cde;
+					if (tt > avgdist)		/* Distance at which sythetic point has 100% weight */
+						tt = avgdist;
+					tpat[eix].w = 0.5 * EXTRAP_WEIGHT * tt/avgdist;	
 //printf("~1 weight %f\n",tpat[eix].w);
-				if (verb)
-					printf("Added synthetic point @ %f %f %f, val %f %f %f, weight %f\n",tpat[eix].p[0], tpat[eix].p[1], tpat[eix].p[2], tpat[eix].v[0], tpat[eix].v[1], tpat[eix].v[2],tpat[eix].w);
-				nxpat++;
-				
-				/* If there is a lot of space, add a second intemediate point */
+					if (verb)
+						printf("Added synthetic point @ %f %f %f, val %f %f %f, weight %f\n",tpat[eix].p[0], tpat[eix].p[1], tpat[eix].p[2], tpat[eix].v[0], tpat[eix].v[1], tpat[eix].v[2],tpat[eix].w);
+					nxpat++;
+					
+					/* If there is a lot of space, add a second intemediate point */
 //printf("~1 cde = %f, avgdist = %f\n",cde,avgdist);
-				if (cde >= (0.5 * avgdist)) {
-					int nxps;				/* Number of extra points including end point */
-					nxps = 1 + (int)(cde/(0.5 * avgdist));
-					if (nxps > EXTRAP_MAXPNTS)
-						nxps = EXTRAP_MAXPNTS;
+					if (cde >= (0.5 * avgdist)) {
+						int nxps;				/* Number of extra points including end point */
+						nxps = 1 + (int)(cde/(0.5 * avgdist));
+						if (nxps > EXTRAP_MAXPNTS)
+							nxps = EXTRAP_MAXPNTS;
 
 //printf("~1 nxps = %d\n",nxps);
-					for (j = 1; j < nxps; j++) {
-						double bl, ipos;
-	
-						bl = j/(nxps + 1.0);
+						for (j = 1; j < nxps; j++) {
+							double bl, ipos;
+		
+							bl = j/(nxps + 1.0);
 
-						ipos = (1.0 - bl) * tpat[eix].p[0]
-						     +        bl * (tpat[cix].p[0] + tpat[cix].p[1] + tpat[cix].p[1])/3.0;
-						tpat[npat + nxpat].p[0] = 
-						tpat[npat + nxpat].p[1] = 
-						tpat[npat + nxpat].p[2] = ipos;
-		
-						/* Lookup matrix value for our new point */
-						mm->lookup(mm, tpat[npat + nxpat].v, tpat[npat + nxpat].p);
-		
-						/* Weight the extra point so that it doesn't overpower the */
-						/* nearest real point to it too much. */
-						cde = icmNorm33(tpat[cix].p, tpat[npat + nxpat].p);
-		
-						if (cde > avgdist)		/* Distance at which sythetic point has 100% weight */
-							cde = avgdist;
-						tpat[npat + nxpat].w = EXTRAP_WEIGHT * cde/avgdist;	
-						if (verb)
-							printf("Added synthetic point @ %f %f %f, val %f %f %f, weight %f\n",tpat[npat + nxpat].p[0], tpat[npat + nxpat].p[1], tpat[npat + nxpat].p[2], tpat[npat + nxpat].v[0], tpat[npat + nxpat].v[1], tpat[npat + nxpat].v[2],tpat[npat + nxpat].w);
-						nxpat++;
+							ipos = (1.0 - bl) * tpat[eix].p[0]
+							     +        bl * (tpat[cix].p[0] + tpat[cix].p[1] + tpat[cix].p[1])/3.0;
+							icmScale3(tpat[npat + nxpat].p, dwhite, ipos);
+			
+							/* Lookup matrix value for our new point */
+							mm->lookup(mm, tpat[npat + nxpat].v, tpat[npat + nxpat].p);
+			
+							/* Weight the extra point so that it doesn't overpower the */
+							/* nearest real point to it too much. */
+							cde = icmNorm33(tpat[cix].p, tpat[npat + nxpat].p);
+			
+							if (cde > avgdist)		/* Distance at which sythetic point has 100% weight */
+								cde = avgdist;
+							tpat[npat + nxpat].w = 0.5 * EXTRAP_WEIGHT * cde/avgdist;	
+							if (verb)
+								printf("Added synthetic point @ %f %f %f, val %f %f %f, weight %f\n",tpat[npat + nxpat].p[0], tpat[npat + nxpat].p[1], tpat[npat + nxpat].p[2], tpat[npat + nxpat].v[0], tpat[npat + nxpat].v[1], tpat[npat + nxpat].v[2],tpat[npat + nxpat].w);
+							nxpat++;
+						}
 					}
 				}
 			}
-			mm->del(mm);
 		}
 
 		/* Wrap with an expanded icc */
@@ -1061,11 +1101,16 @@ make_input_icc(
 		if (clipprims)
 			flags |= ICX_CLIP_WB;
 				
-		if (nsabs == 0)
-	        flags |= ICX_SET_WHITE | ICX_SET_BLACK;		/* Compute & use white and black */
+        flags |= ICX_SET_BLACK;		/* Compute & use black */
+		flags |= ICX_SET_WHITE;		/* Compute & use white */
+		if (clipovwp)
+	        flags |= ICX_SET_WHITE_C;	/* Compute & use white and clip cLUT over D50 */
+		else if (autowpsc)
+	        flags |= ICX_SET_WHITE_US;	/* Compute & use white without scaling to L */
 
 		/* Setup RGB -> Lab conversion object from scattered data. */
 		/* Note that we've layered it on a native XYZ icc profile. */
+		/* (The skeleton model is not used - it doesn't seem to help) */
 		if ((AtoB = wr_xicc->set_luobj(
 		               wr_xicc, icmFwd, icmDefaultIntent,
 		               icmLuOrdNorm,
@@ -1076,9 +1121,12 @@ make_input_icc(
 			               ICX_2PASSSMTH |
 #endif
 		               flags, 		/* Flags */
-		               npat + nxpat, tpat, 0.0, wpscale, smooth, avgdev,
+		               npat + nxpat, npat, tpat, NULL, 0.0, wpscale, smooth, avgdev,
 			           NULL, NULL, NULL, iquality)) == NULL)
 			error ("%d, %s",wr_xicc->errc, wr_xicc->err);
+
+		if (mm != NULL)
+			mm->del(mm);
 
 		/* Free up xicc stuff */
 		AtoB->del(AtoB);

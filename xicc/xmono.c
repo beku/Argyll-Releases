@@ -113,6 +113,14 @@ double *in			/* Vector of input values */
 	if (p->pcs == icxSigJabData) {
 		p->cam->cam_to_XYZ(p->cam, out, in);
 		rv |= ((icmLuMono *)p->plu)->bwd_abs((icmLuMono *)p->plu, out, out);
+		/* Hack to prevent CAM02 weirdness being amplified by */
+		/* any later per channel clipping. */
+		/* Limit -Y to non-stupid values by scaling */
+		if (out[1] < -0.1) {
+			out[0] *= -0.1/out[1];
+			out[2] *= -0.1/out[1];
+			out[1] = -0.1;
+		}
 	} else {
 		rv |= ((icmLuMono *)p->plu)->bwd_abs((icmLuMono *)p->plu, out, in);
 	}

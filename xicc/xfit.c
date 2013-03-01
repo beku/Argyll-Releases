@@ -101,16 +101,20 @@
 
 /* Weights for shaper in/out curve parameters, to minimise unconstrained "wiggles" */
 #define SHAPE_WEIGHT	1.0		/* Overal shaper weight contribution - err on side of smoothness */
-#define SHAPE_HW01		0.1		/* 0 & 1 harmonic weights */
+#define SHAPE_HW01		0.002	/* 0 & 1 harmonic weights */
 #define SHAPE_HBREAK    4		/* Harmonic that has HWBR */
-#define SHAPE_HWBR  	20.0		/* Base weight of harmonics HBREAK up */
-#define SHAPE_HWINC  	60.0		/* Increase in weight for each harmonic above HWBR */
+#define SHAPE_HWBR  	20.0	/* Base weight of harmonics HBREAK up */
+#define SHAPE_HWINC  	60.0	/* Increase in weight for each harmonic above HWBR */
 
 /* Weights for the positioning curve parameters */
 #define PSHAPE_MINE 0.02		/* Minum background residual error level */
 #define PSHAPE_DIST 1.0			/* Agressivness of grid distribution */
 
 /* - - - - - - - - - - - - - - - - - */
+
+#ifdef DEBUG
+static void dump_xfit(xfit *p);
+#endif
 
 #ifdef DEBUG_PLOT	/* Not currently used in runtime code*/
 
@@ -705,9 +709,24 @@ static double xfitfunc(void *edata, double *v) {
 	int i, e, f;
 
 	/* Copy the parameters being optimised into xfit structure */
-	for (i = 0; i < p->opt_cnt; i++) { 
+
+	/* Special case - a single shaper curve. The first sm_iluord params */
+	/* are the common curve parameters, and the remainder are the matrix onwards */
+	if (p->opt_ssch) {
+
+		for (e = 0; e < di; e++) {	/* Duplicate and extend to per channel curve params */
+			for (i = 0; i < p->sm_iluord; i++)
+				p->v[p->shp_offs[e] + i] = v[i];
+			for (; i < p->iluord[e]; i++)
+				p->v[p->shp_offs[e] + i] = 0.0;
+		}
+		for (i = p->sm_iluord; i < p->opt_cnt; i++)
+			p->v[p->mat_off + i - p->sm_iluord] = v[i];
+	} else {
+		for (i = 0; i < p->opt_cnt; i++) { 
 //printf("~1 param %d = %f\n",i,v[i]);
-		p->v[p->opt_off + i] = v[i];
+			p->v[p->opt_off + i] = v[i];
+		}
 	}
 
 	/* For all our data points */
@@ -792,9 +811,24 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 	int i, jj, k, e, ee, f, ff;
 
 	/* Copy the parameters being optimised into xfit structure */
-	for (i = 0; i < p->opt_cnt; i++) {
+
+	/* Special case - a single shaper curve. The first sm_iluord params */
+	/* are the common curve parameters, and the remainder are the matrix onwards */
+	if (p->opt_ssch) {
+		for (e = 0; e < di; e++) {	/* Duplicate and extend to per channel curve params */
+			for (i = 0; i < p->sm_iluord; i++)
+				p->v[p->shp_offs[e] + i] = v[i];
+			for (; i < p->iluord[e]; i++)
+				p->v[p->shp_offs[e] + i] = 0.0;
+		}
+		for (i = p->sm_iluord; i < p->opt_cnt; i++) 
+			p->v[p->mat_off + i - p->sm_iluord] = v[i];
+
+	} else {
+		for (i = 0; i < p->opt_cnt; i++) { 
 //printf("~1 param %d = %f\n",i,v[i]);
-		p->v[p->opt_off + i] = v[i];
+			p->v[p->opt_off + i] = v[i];
+		}
 	}
 
 	/* Zero the accumulated partial derivatives */
@@ -931,8 +965,21 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 	rv = ev + smv;
 
 	/* Sum the del for parameters being optimised and copy to return array */
-	for (i = 0; i < p->opt_cnt; i++)
-		dv[i] = dav[p->opt_off + i] + sdav[p->opt_off + i];
+
+	if (p->opt_ssch) {
+		for (i = 0; i < p->sm_iluord; i++)
+			dv[i] = 0.0;
+		for (e = 0; e < di; e++) {	/* Combine per channel curve de's */
+			for (i = 0; i < p->sm_iluord; i++)
+				dv[i] += dav[p->shp_offs[e] + i] = sdav[p->shp_offs[e] + i];
+		}
+		for (i = p->sm_iluord; i < p->opt_cnt; i++)	/* matrix and rest de's */ 
+			dv[i] = dav[p->mat_off + i - p->sm_iluord] + sdav[p->mat_off + i - p->sm_iluord];
+
+	} else {
+		for (i = 0; i < p->opt_cnt; i++)
+			dv[i] = dav[p->opt_off + i] + sdav[p->opt_off + i];
+	}
 
 #ifdef DEBUG
 fprintf(stdout,"~1(sm %f, ev %f)dxfitfunc returning %f\n",smv,ev,rv);
@@ -1077,13 +1124,27 @@ double matrad	/* Nominal matrix radius, 0.0 - 1.0 */
 	p->opt_cnt = 0;
 	
 	if (p->opt_msk & oc_i) {
-		if (p->opt_off < 0)
-			p->opt_off = p->shp_off;
-		p->opt_cnt += p->shp_cnt;
-	
-		for (i = 0; i < p->shp_cnt; i++) {
-			*wv++ = p->v[p->shp_off + i];
-			*sa++ = transrad;
+
+		if (p->opt_ssch) {	/* Special case - should only be used first, */
+							/* Fitting a sigle common input shaper curve. */
+			if (p->opt_off < 0)
+				p->opt_off = p->mat_off - p->sm_iluord;	/* Shouldn't be used... */
+			p->opt_cnt += p->sm_iluord;
+		
+			for (i = 0; i < p->sm_iluord; i++) {
+				*wv++ = 0.0;
+				*sa++ = transrad;
+			}
+
+		} else {	/* Initial or continuing fitting of all the curves */
+			if (p->opt_off < 0)
+				p->opt_off = p->shp_off;
+			p->opt_cnt += p->shp_cnt;
+		
+			for (i = 0; i < p->shp_cnt; i++) {
+				*wv++ = p->v[p->shp_off + i];
+				*sa++ = transrad;
+			}
 		}
 	}
 	if (p->opt_msk & oc_m) {
@@ -1109,11 +1170,10 @@ double matrad	/* Nominal matrix radius, 0.0 - 1.0 */
 	if (p->opt_cnt > MXPARMS)
 		error("setup_xfit: asert, %d exceeded MXPARMS %d",p->opt_cnt,MXPARMS);
 
-#ifdef NEVER
-printf("~1 opt_msk = 0x%x\n",p->opt_msk);
-printf("~1 opt_off = %d\n",p->opt_off);
-printf("~1 opt_cnt = %d\n\n",p->opt_cnt);
-#endif /* NEVER */
+#ifdef DEBUG
+	printf("setup_xfit() got opt_msk 0x%x, opt_off %d, opt_cnt = %d\n",
+	                                  p->opt_msk,p->opt_off,p->opt_cnt);
+#endif /* DEBUG */
 }
 
 #ifdef DEBUG
@@ -1245,6 +1305,54 @@ static void setup_piv(xfit *p) {
 /* - - - - - - - - - */
 
 /* Function to pass to rspl to re-set output values, */
+/* to account for skeleton model offset. */
+static void
+skm_rspl_out(
+	void *pp,			/* relativectx structure */
+	double *out,		/* output value */
+	double *in			/* input value */
+) {
+	xfit *p    = (xfit *)pp;
+	int f, fdi = p->fdi;
+	double inval[MXDI];
+	double skval[MXDO];
+
+	/* Look up the skeleton value for this grid point */
+	xfit_invinpscurves(p, inval, in);		/* Back to input values */
+	p->skm->lookup(p->skm, skval, inval);	/* Skm */
+	xfit_abs_to_rel(p, skval, skval);
+	xfit_invoutcurves(p, skval, skval);
+
+	for (f = 0; f < fdi; f++)
+		out[f] += skval[f]; 			/* Add it back */
+}
+
+/* Weak function rspl callback (not used) */
+void skm_weak(void *cbntx, double *out, double *in) {
+	xfit *p    = (xfit *)cbntx;
+
+#ifndef NEVER
+	int f, fdi = p->fdi;
+
+	for (f = 0; f < fdi; f++)
+		out[f] = 0.0;			/* Deviation from skeleton should tend to zero */
+
+#else		/* Skeleton as weak atractor */
+	int f, fdi = p->fdi;
+	double inval[MXDI];
+
+	/* Look up the skeleton value for this grid point */
+	xfit_invinpscurves(p, inval, in);		/* Back to input values */
+	p->skm->lookup(p->skm, out, inval);	/* Skm */
+	xfit_abs_to_rel(p, out, out);
+	xfit_invoutcurves(p, out, out);
+
+#endif
+}
+
+/* - - - - - - - - - */
+
+/* Function to pass to rspl to re-set output values, */
 /* to make them relative to the white and black points */
 static void
 conv_rspl_out(
@@ -1259,7 +1367,6 @@ conv_rspl_out(
 	xfit_outcurves(p, tt, out);
 
 	if (p->flags & XFIT_OUT_LAB) {
-
 		icmLab2XYZ(&icmD50, tt, tt);
 		icmMulBy3x3(out, p->cmat, tt);
 		icmXYZ2Lab(&icmD50, out, out);
@@ -1270,6 +1377,29 @@ conv_rspl_out(
 
 	/* And then convert them back to clut values */
 	xfit_invoutcurves(p, out, out);
+}
+
+/* Function to pass to rspl to re-set output values, */
+/* to clip any with Y over 1.0 to D50 */
+static void
+clip_rspl_out(
+	void *pp,			/* relativectx structure */
+	double *out,		/* output value */
+	double *in			/* input value */
+) {
+	xfit *p    = (xfit *)pp;
+	double tt[3];
+
+	/* Convert the clut values to output values */
+	xfit_outcurves(p, tt, out);
+
+	if (p->flags & XFIT_OUT_LAB) {
+		if (tt[0] > 100.0)
+			icmCpy3(out, p->cmat[0]);
+	} else {
+		if (tt[1] > 1.0)
+			icmCpy3(out, p->cmat[0]);
+	}
 }
 
 //#ifdef SPECIAL_TEST
@@ -1356,12 +1486,15 @@ int xfit_fit(
 	int di,					/* Input dimensions */
 	int fdi,				/* Output dimensions */
 	int rsplflags,			/* clut rspl creation flags */
-	double *wp,				/* if flags & XFIT_OUT_WP_REL, */
+	double *wp,				/* if flags & XFIT_OUT_WP_REL or XFIT_OUT_WP_REL_US, */
 							/* Initial white point, returns final wp */
 	double *dw,				/* Device white value to adjust to be D50 */
 	double wpscale,			/* If >= 0.0 scale final wp */  
+	double *dgw,			/* Device space gamut boundary white for XFIT_OUT_WP_REL_US */
+							/* (ie. RGB 1,1,1 CMYK 0,0,0,0, etc) */
 	cow *ipoints,			/* Array of data points to fit - referece taken */
 	int nodp,				/* Number of data points */
+	icxMatrixModel *skm,	/* Optional skeleton model (used for input profiles) */
 	double in_min[MXDI],	/* Input value scaling/domain minimum */
 	double in_max[MXDI],	/* Input value scaling/domain maximum */
 	int gres[MXDI],			/* clut resolutions being optimised for/returned */
@@ -1398,6 +1531,7 @@ int xfit_fit(
 	p->wp      = wp;		/* Take reference, so modified wp can be returned */
 	p->dw      = dw;
 	p->nodp    = nodp;
+	p->skm     = skm;		/* This isn't current used by profin, because it doesn't help.. */
 	p->ipoints = ipoints;
 	p->tcomb   = tcomb;
 	p->cntx2   = cntx2;
@@ -1414,11 +1548,14 @@ int xfit_fit(
 
 	/* Sanity protect shaper orders */
 	/* and save scaling and smoothness factors. */
+	p->sm_iluord = MXLUORD+1;
 	for (e = 0; e < di; e++) {
 		if (iord[e] > MXLUORD)
 			p->iluord[e] = MXLUORD;
 		else
 			p->iluord[e] = iord[e];
+		if (p->iluord[e] < p->sm_iluord)
+			p->sm_iluord = p->iluord[e];
 		p->in_min[e] = in_min[e];
 		p->in_max[e] = in_max[e];
 		p->shp_smooth[e] = shp_smooth[e];
@@ -1439,7 +1576,7 @@ int xfit_fit(
 	for (poff = p->shp_off, p->shp_cnt = 0, e = 0; e < di; e++) {
 		p->shp_offs[e] = poff;
 		p->shp_cnt += p->iluord[e];
-		poff      += p->iluord[e];
+		poff       += p->iluord[e];
 	}
 
 	p->mat_off = p->shp_off + p->shp_cnt;
@@ -1599,7 +1736,9 @@ int xfit_fit(
 	}
 
 	/* Do the fitting one part at a time, then together */
-	/* Shaper curves are created if poistion or shaper curves are requested */
+	/* Shaper curves are created if position or shaper curves are requested */
+
+	/* Fit just the matrix */
 	if ((p->tcomb & oc_ipo) != 0
 	 && (p->tcomb & oc_m) == oc_m) {	/* Only bother with matrix if in and/or out */
 		double rerr;
@@ -1616,6 +1755,7 @@ printf("\nBefore matrix opt:\n");
 dump_xfit(p);
 #endif
 		/* Optimise matrix on its own */
+		p->opt_ssch = 0;
 		p->opt_ch = -1;
 		p->opt_msk = oc_m;
 		setup_xfit(p, p->wv, p->sa, 0.0, 0.5); 
@@ -1643,12 +1783,54 @@ dump_xfit(p);
 		double rerr;
 
 		if (p->verb)
+			printf("About to optimise a common input curve and matrix\n");
+
+		/* Setup pseudo-inverse if we need it */
+		if (p->flags & XFIT_FM_INPUT)
+			setup_piv(p);
+
+		p->opt_ssch = 1;
+		p->opt_ch = -1;
+		p->opt_msk = oc_im;
+		setup_xfit(p, p->wv, p->sa, 0.5, 0.3); 
+
+#ifdef NODDV
+		if (powell(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		                                xfitfunc, (void *)p, xfitprog, (void *)p) != 0) {
+#ifdef DEBUG
+			warning("xfit_fit: Powell failed to converge, residual error = %f",rerr);
+#endif
+		}
+#else
+		if (conjgrad(&rerr, p->opt_cnt, p->wv, p->sa, POWTOL, MAXITS,
+		                     xfitfunc, dxfitfunc, (void *)p, xfitprog, (void *)p) != 0) {
+#ifdef DEBUG
+			warning("xfit_fit: Conjgrad failed to converge, residual error = %f",rerr);
+#endif
+		}
+#endif	/* !NODDV */
+		for (e = 0; e < di; e++) {				/* Copy optimised values back */
+			for (i = 0; i < p->sm_iluord; i++)
+				p->v[p->shp_offs[e] + i] = p->wv[i];
+			for (; i < p->iluord[e]; i++)
+				p->v[p->shp_offs[e] + i] = 0.0;
+		}
+		for (i = p->sm_iluord; i < p->opt_cnt; i++) 
+			p->v[p->mat_off + i - p->sm_iluord] = p->wv[i];
+#ifdef DEBUG
+printf("\nAfter input and matrix opt:\n");
+dump_xfit(p);
+#endif
+
+		/* - - - - - - - - - - - */
+		if (p->verb)
 			printf("About to optimise input curves and matrix\n");
 
 		/* Setup pseudo-inverse if we need it */
 		if (p->flags & XFIT_FM_INPUT)
 			setup_piv(p);
 
+		p->opt_ssch = 0;
 		p->opt_ch = -1;
 		p->opt_msk = oc_im;
 		setup_xfit(p, p->wv, p->sa, 0.5, 0.3); 
@@ -1689,6 +1871,7 @@ dump_xfit(p);
 		if (p->flags & XFIT_FM_INPUT)
 			setup_piv(p);
 
+		p->opt_ssch = 0;
 		p->opt_ch = -1;
 		p->opt_msk = oc_mo;
 		setup_xfit(p, p->wv, p->sa, 0.3, 0.3); 
@@ -1718,6 +1901,7 @@ dump_xfit(p);
 			if (p->flags & XFIT_FM_INPUT)
 				setup_piv(p);
 
+			p->opt_ssch = 0;
 			p->opt_ch = -1;
 			p->opt_msk = oc_im;
 			setup_xfit(p, p->wv, p->sa, 0.2, 0.2); 
@@ -1749,6 +1933,7 @@ dump_xfit(p);
 			if (p->flags & XFIT_FM_INPUT)
 				setup_piv(p);
 
+			p->opt_ssch = 0;
 			p->opt_ch = -1;
 			p->opt_msk = oc_imo;
 			setup_xfit(p, p->wv, p->sa, 0.1, 0.1); 
@@ -1806,6 +1991,9 @@ dump_xfit(p);
 
 
 	/* If we want position curves, generate them */
+	/* (This could possibly be improved by using some sort */
+	/* of optimization drivel approach rather than the predictive */
+	/* method used here.) */
 	if (p->tcomb & oc_p) {
 		int ee;
 
@@ -1938,7 +2126,7 @@ dump_xfit(p);
 			if ((posc = new_mcv_noos()) == NULL)
 				return 1;
 
-			posc->fit(posc, 0, p->iluord[ee], pgp, NPGP, 1.0);
+			posc->fit(posc, 0, p->iluord[ee], pgp, NPGP, 0.1);	// ~~99
 
 #ifdef DEBUG_PLOT
 			{
@@ -2042,6 +2230,23 @@ dump_xfit(p);
 				p->rpoints[i].v[f] = p->ipoints[i].v[f];
 			xfit_abs_to_rel(p, p->rpoints[i].v, p->rpoints[i].v);
 			xfit_invoutcurves(p, p->rpoints[i].v, p->rpoints[i].v);
+
+			if (p->skm) {
+				/* Look up the skeleton value */
+				double skval[MXDO];
+				p->skm->lookup(p->skm, skval, p->ipoints[i].p);
+				xfit_abs_to_rel(p, skval, skval);
+				xfit_invoutcurves(p, skval, skval);
+
+//printf("~1 point %d at %f %f %f, targ %f %f %f skm %f %f %f\n",
+//i,p->ipoints[i].p[0],p->ipoints[i].p[1],p->ipoints[i].p[2],
+//p->rpoints[i].v[0],p->rpoints[i].v[1],p->rpoints[i].v[2],
+//skval[0], skval[1], skval[2]);
+				/* Subtract it from value at this point, */
+				/* so rspl will fit difference to skeleton model */
+				for (f = 0; f < fdi; f++)
+					p->rpoints[i].v[f] -= skval[f]; 
+			}
 //printf("~1 point %d, w %f, %f %f %f %f -> %f %f %f\n",
 //i,p->rpoints[i].w,p->rpoints[i].p[0], p->rpoints[i].p[1], p->rpoints[i].p[2], p->rpoints[i].p[3],
 //p->rpoints[i].v[0], p->rpoints[i].v[1], p->rpoints[i].v[2]);
@@ -2132,8 +2337,13 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 		}
 #undef XN
 #else
+//		if (p->skm) {
+//			/* This doesn't seem to work as well as some explicit neutral axis points.. */
+//			p->clut->fit_rspl_w_df(p->clut, rsplflags, p->rpoints, p->nodp, in_min, in_max, gres,
+//				out_min, out_max, smooth, oavgdev, ipos, 1.0, (void *)p, skm_weak);
+//		} else
 		p->clut->fit_rspl_w(p->clut, rsplflags, p->rpoints, p->nodp, in_min, in_max, gres,
-			out_min, out_max, smooth, oavgdev, ipos);
+				out_min, out_max, smooth, oavgdev, ipos);
 #endif
 		if (p->verb)
 			printf("\n");
@@ -2141,81 +2351,52 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 		for (e = 0; e < p->di; e++)
 			free(ipos[e]);
 
-		/* The current rspl is an aproximate white point relative dev->PCS lookup, */ 
-		/* check if this now implies a white point with Y > 1.0 */
-		if (p->flags & XFIT_CLIP_WP) {
-			co wcc;
+		/* If we used a skeleton model, add it into the resulting rspl values */
+		if (p->skm) {
 
-			if (p->verb)
-				printf("Checking if White point needs clipping:\n");
-				
-			/* See what current device white maps to */
-			xfit_inpscurves(p, wcc.p, dw);
-			p->clut->interp(p->clut, &wcc);
-			xfit_outcurves(p, wcc.v, wcc.v);
-			if (p->flags & XFIT_OUT_LAB)
-				icmLab2XYZ(&icmD50, wcc.v, wcc.v);
-			icmMulBy3x3(wcc.v, p->toAbs, wcc.v); /* Convert to absolute */
+			/* Undo the input point change to allow diagnostic code to work */
+			for (i = 0; i < p->nodp; i++) {
+				/* Look up the skeleton value */
+				double skval[MXDO];
+				p->skm->lookup(p->skm, skval, p->ipoints[i].p);
+				xfit_abs_to_rel(p, skval, skval);
+				xfit_invoutcurves(p, skval, skval);
 
-			if (wcc.v[1] > 1.0) {
-				icmXYZNumber _wp;
-				double cwp[3];
-				icmXYZNumber _cwp;
-
-				if (p->verb) {
-					double labwp[3];
-					icmXYZ2Lab(&icmD50, labwp, wcc.v);
-					printf("Need to clip current wp = XYZ %f %f %f, Lab %f %f %f\n",
-					wcc.v[0], wcc.v[1],wcc.v[2], labwp[0], labwp[1], labwp[2]);
-				}
-				/* Matrix needed to correct from approximate to exact D50 */
-				icmAry2XYZ(_wp, wcc.v);		/* Current wp */
-				icmScale3(cwp, wcc.v, 1.0/wcc.v[1]);
-				icmAry2XYZ(_cwp, cwp);		/* Target clipped white point */
-				icmChromAdaptMatrix(ICM_CAM_BRADFORD, _cwp, _wp, p->cmat);
-		
-				/* Adjust the rspl to give the clipped wp for dw in */
-				p->clut->re_set_rspl(
-					p->clut,		/* this */
-					0,				/* Combination of flags */
-					(void *)p,		/* Opaque function context */
-					conv_rspl_out	/* Function to set from */
-				);
-
-				if (p->verb) {
-					double labwp[3];
-
-					xfit_inpscurves(p, wcc.p, dw);
-					p->clut->interp(p->clut, &wcc);
-					xfit_outcurves(p, wcc.v, wcc.v);
-					if (p->flags & XFIT_OUT_LAB)
-						icmLab2XYZ(&icmD50, wcc.v, wcc.v);
-					icmMulBy3x3(wcc.v, p->toAbs, wcc.v); /* Convert to absolute */
-					icmXYZ2Lab(&icmD50, labwp, wcc.v);
-					printf("After clip wp = XYZ %f %f %f, Lab %f %f %f\n",
-					wcc.v[0], wcc.v[1], wcc.v[2], labwp[0], labwp[1], labwp[2]);
-				}
+				/* Subtract it from value at this point, */
+				/* so rspl will fit difference to skeleton model */
+				for (f = 0; f < fdi; f++)
+					p->rpoints[i].v[f] += skval[f]; 
 			}
+
+			/* Undo the skm from the resultant rspl */
+			p->clut->re_set_rspl(
+				p->clut,		/* this */
+				0,				/* Combination of flags */
+				(void *)p,		/* Opaque function context */
+				skm_rspl_out	/* Function to set from */
+			);
+
 		}
 
-		/* The current rspl is an aproximate white point relative dev->PCS lookup, */ 
-		/* now do a final white point fixup to make it perfect. */
+		/* The overall device to absolute conversion is now what we want */
+		/* (as dictated by the points, weighting and best fit), */
+		/* but we need to adjust the device to relative conversion */
+		/* to make device white map exactly to D50, without touching */
+		/* the overall absolute behaviour. */
 		if (p->flags & XFIT_OUT_WP_REL) {
-			co wcc;
-			icmXYZNumber _wp;
+			co wcc;						/* device white + aprox rel. white */
+			icmXYZNumber _wp;			/* Uncorrected dw maps to _wp */ 
 
 			if (p->verb)
 				printf("Doing White point fine tune:\n");
 				
-			/* See what current device white maps to */
+			/* See what the relative and absolute white point has turned out to be, */
+			/* by looking up the device white in the current conversion */
 			xfit_inpscurves(p, wcc.p, dw);
 			p->clut->interp(p->clut, &wcc);
 			xfit_outcurves(p, wcc.v, wcc.v);
 			if (p->flags & XFIT_OUT_LAB)
 				icmLab2XYZ(&icmD50, wcc.v, wcc.v);
-
-//printf("~1 device white %f %f %f %f -> %f %f %f\n",
-//dw[0], dw[1], dw[2], dw[3], wcc.v[0], wcc.v[1], wcc.v[2]);
 
 			if (p->verb) {
 				double labwp[3];
@@ -2223,37 +2404,16 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 				printf("Before fine tune, rel WP = XYZ %f %f %f, Lab %f %f %f\n",
 				wcc.v[0], wcc.v[1],wcc.v[2], labwp[0], labwp[1], labwp[2]);
 			}
-			icmMulBy3x3(wcc.v, p->toAbs, wcc.v); /* Convert to absolute */
-//printf("~1 aprox abs wp = XYZ %f %f %f\n", wcc.v[0], wcc.v[1], wcc.v[2]);
 
-			/* Optional input profile adjustment of white point */
-			if (wpscale >= 0.0) {
-				wcc.v[0] *= wpscale;
-				wcc.v[1] *= wpscale;
-				wcc.v[2] *= wpscale;
-			}
-			icmAry2XYZ(_wp, wcc.v);		/* Target abs white point */
-//printf("~1 target abs wp = XYZ %f %f %f\n", _wp.X, _wp.Y, _wp.Z);
-
-			icmMulBy3x3(wcc.v, p->fromAbs, wcc.v); /* Aprox relative target white point for later */
-//printf("~1 aprox rel wp = XYZ %f %f %f\n", wcc.v[0], wcc.v[1], wcc.v[2]);
-
-			/* Fixup conversion matricies so that they transform */
-			/* the absolute input values to perfect relative. */
-
-			/* Absolute->Relative Adaptation matrix */
-			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->fromAbs);
-		
-			/* Relative to absolute conversion matrix */
-			icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, p->toAbs);
-	
-			/* return accurate white point to caller */
-			icmXYZ2Ary(p->wp, _wp);
-
-			/* Matrix needed to correct from approximate to exact D50 */
+			/* Matrix needed to correct approx rel wp to target D50 */
 			icmAry2XYZ(_wp, wcc.v);		/* Aprox relative target white point */
-			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->cmat);
-	
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->cmat);	/* Correction */
+
+			/* Compute the actual white point, and return it to caller */
+			icmMulBy3x3(wp, p->toAbs, wcc.v);
+			icmAry2Ary(p->wp, wp);
+
+			/* Apply correction to fine tune rspl data. */
 			/* NOTE: this doesn't always give us a perfect D50 white for */
 			/* Lab PCS input profiles because the dev white may land */
 			/* within a cell, and the clipping of Lab PCS values in the grid */
@@ -2265,9 +2425,15 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 				conv_rspl_out	/* Function to set from */
 			);
 
+			/* Fix absolute conversions to leave absolute response unchanged. */
+			icmAry2XYZ(_wp, wp);		/* Actual white point */
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->fromAbs);
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, p->toAbs);
+
 			if (p->verb) {
 				double labwp[3];
 
+				/* Lookup white again */
 				xfit_inpscurves(p, wcc.p, dw);
 				p->clut->interp(p->clut, &wcc);
 				xfit_outcurves(p, wcc.v, wcc.v);
@@ -2276,9 +2442,135 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 				icmXYZ2Lab(&icmD50, labwp, wcc.v);
 				printf("After fine tune, rel WP = XYZ %f %f %f, Lab %f %f %f\n",
 				wcc.v[0], wcc.v[1], wcc.v[2], labwp[0], labwp[1], labwp[2]);
-//icmMulBy3x3(wcc.v, p->toAbs, wcc.v); /* Convert to absolute */
-//printf("~1 verify abs wp = XYZ %f %f %f\n", wcc.v[0], wcc.v[1], wcc.v[2]);
+				printf("                 abs WP = XYZ %s, Lab %s\n", icmPdv(3, wp), icmPLab(wp));
 			}
+		}
+
+		/* Create default wpscale */
+		if (wpscale < 0.0) {
+			wpscale = 1.0;
+		} else {
+			if (p->verb) {
+				printf("White manual point scale %f\n", wpscale);
+			}
+		}
+
+		/* If we are going to auto scale the WP to avoid clipping */
+		/* cLUT values above the WP: */
+		if ((p->flags & XFIT_OUT_WP_REL_US) == XFIT_OUT_WP_REL_US) {
+			co wcc;
+			double bw[3];
+			icmXYZNumber _wp;
+			double uswpscale = 1.0;
+			double mxd, mxY;
+			double ndw[3];
+
+			/* See what device space gamut boundary white (ie. 1,1,1) maps to */
+			xfit_inpscurves(p, wcc.p, dgw);
+			p->clut->interp(p->clut, &wcc);
+			xfit_outcurves(p, wcc.v, wcc.v);
+			if (p->flags & XFIT_OUT_LAB)
+				icmLab2XYZ(&icmD50, wcc.v, wcc.v);
+			icmMulBy3x3(wcc.v, p->toAbs, wcc.v);	/* Convert to absolute */
+
+			mxY = wcc.v[1];
+			icmCpy3(bw, wcc.v);
+//printf("~1 1,1,1 Y = %f\n",wcc.v[1]);
+
+			/* See what the device white point value scaled to 1 produces */
+			mxd = -1.0;
+			for (e = 0; e < p->di; e++) {
+				if (dw[e] > mxd)
+					mxd = dw[e];
+			}
+			for (e = 0; e < p->di; e++)
+				ndw[e] = dw[e]/mxd;
+
+			xfit_inpscurves(p, wcc.p, ndw);
+			p->clut->interp(p->clut, &wcc);
+			xfit_outcurves(p, wcc.v, wcc.v);
+			if (p->flags & XFIT_OUT_LAB)
+				icmLab2XYZ(&icmD50, wcc.v, wcc.v);
+			icmMulBy3x3(wcc.v, p->toAbs, wcc.v);	/* Convert to absolute */
+
+//printf("~1 ndw = %f %f %f Y = %f\n",ndw[0],ndw[1],ndw[2],wcc.v[1]);
+			if (wcc.v[1] > mxY) {
+				mxY = wcc.v[1];
+				icmCpy3(bw, wcc.v);
+			}
+
+			/* Compute WP scale factor needed to fit mxY */
+			if (mxY > wp[1]) {
+				uswpscale = mxY/wp[1];
+				wpscale *= uswpscale;
+				if (p->verb) {
+					printf("Dev boundary white XYZ %s, scale WP by %f, total WP scale %f\n",
+					icmPdv(3, bw), uswpscale, wpscale);
+				}
+			}
+		}
+
+		/* If the scaled WP would have Y > 1.0, clip it to 1.0 */
+		if (p->flags & XFIT_CLIP_WP) {
+
+			if ((wp[1] * wpscale) > 1.0) {
+				wpscale = 1.0/wp[1];		/* Make wp Y = 1.0 */		
+				if (p->verb) {
+					printf("WP Y would ve > 1.0. scale by %f to clip it\n",wpscale);
+				}
+			}
+		}
+
+		/* Apply our total wp scale factor */
+		if (wpscale != 1.0) {
+			icmXYZNumber _wp;
+
+			/* Create inverse scaling matrix for relative rspl data */
+			icmSetUnity3x3(p->cmat);
+			icmScale3x3(p->cmat, p->cmat, 1.0/wpscale);
+
+			/* Inverse scale the rspl */
+			p->clut->re_set_rspl(
+				p->clut,		/* this */
+				0,				/* Combination of flags */
+				(void *)p,		/* Opaque function context */
+				conv_rspl_out	/* Function to set from */
+			);
+
+			/* Scale the WP */
+			icmScale3(wp, wp, wpscale);
+
+			/* return scaled white point to caller */
+			icmAry2Ary(p->wp, wp);
+
+			/* Fix absolute conversions to leave absolute response unchanged. */
+			icmAry2XYZ(_wp, wp);		/* Actual white point */
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, p->fromAbs);
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, p->toAbs);
+		}
+
+		/* Clip any values in the grid over D50 L to D50 */
+		if ((p->flags & XFIT_OUT_WP_REL_C) == XFIT_OUT_WP_REL_C) {
+
+			/* Compute the rspl D50 value to avoid calc in clip_rspl_out() */
+			if (p->flags & XFIT_OUT_LAB) {
+				p->cmat[0][0] = 100.0;
+				p->cmat[0][1] = 0.0;
+				p->cmat[0][2] = 0.0;
+			} else {
+				icmXYZ2Ary(p->cmat[0], icmD50);
+			}
+			xfit_invoutcurves(p, p->cmat[0], p->cmat[0]);
+
+			if (p->verb)
+				printf("Clipping any cLUT grid points with Y > 1 to D50\n");
+
+			p->clut->re_set_rspl(
+				p->clut,		/* this */
+				0,				/* Combination of flags */
+				(void *)p,		/* Opaque function context */
+				clip_rspl_out	/* Function to set from */
+			);
 		}
 
 #ifdef SPECIAL_FORCE

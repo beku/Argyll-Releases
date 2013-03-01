@@ -5,8 +5,8 @@
  * International Color Consortium Format Library (icclib)
  *
  * Author:  Graeme W. Gill
- * Date:    99/11/29
- * Version: 2.13
+ * Date:    1999/11/29
+ * Version: 2.15
  *
  * Copyright 1997 - 2012 Graeme W. Gill
  *
@@ -30,8 +30,8 @@
 
 /* Version of icclib release */
 
-#define ICCLIB_VERSION 0x020013
-#define ICCLIB_VERSION_STR "2.13"
+#define ICCLIB_VERSION 0x020016
+#define ICCLIB_VERSION_STR "2.16"
 
 #undef ENABLE_V4		/* V4 is not fully implemented */
 
@@ -216,7 +216,7 @@ icmAlloc *new_icmAllocStd(void);
 #define ICM_FILE_BASE																		\
 	/* Public: */																			\
 																							\
-	/* Get the size of the file (Only valid for memory file). */							\
+	/* Get the size of the file (Typically valid after read only) */						\
 	size_t (*get_size) (struct _icmFile *p);												\
 																							\
 	/* Set current position to offset. Return 0 on success, nz on failure. */				\
@@ -234,11 +234,11 @@ icmAlloc *new_icmAllocStd(void);
 	/* flush all write data out to secondary storage. Return nz on failure. */				\
 	int (*flush)(struct _icmFile *p);														\
 																							\
+	/* Return the memory buffer. Error if not icmFileMem */									\
+	int (*get_buf)(struct _icmFile *p, unsigned char **buf, size_t *len);					\
+																							\
 	/* we're done with the file object, return nz on failure */								\
 	int (*del)(struct _icmFile *p);															\
-																							\
-	/* Private: */																			\
-	size_t size;	/* Size of the file */													\
 
 /* Common file interface class */
 struct _icmFile {
@@ -259,6 +259,10 @@ struct _icmFileStd {
 	int      del_al;	/* NZ if heap allocator should be deleted */
 	FILE     *fp;
 	int   doclose;		/* nz if free should close */
+
+	/* Private: */
+	size_t size;    /* Size of the file (For read) */
+
 }; typedef struct _icmFileStd icmFileStd;
 
 /* Create given a file name */
@@ -276,6 +280,9 @@ icmFile *new_icmFileStd_fp_a(FILE *fp, icmAlloc *al);
 
 /* - - - - - - - - - - - - - - - - - - - - -  */
 /* Implementation of file access class based on a memory image */
+/* The buffer is assumed to be allocated with the given heap allocator */
+/* Pass base = NULL, length = 0 for no initial buffer */
+
 struct _icmFileMem {
 	ICM_FILE_BASE
 
@@ -283,15 +290,16 @@ struct _icmFileMem {
 	icmAlloc *al;		/* Heap allocator */
 	int      del_al;	/* NZ if heap allocator should be deleted */
 	int      del_buf;	/* NZ if memory file buffer should be deleted */
-	unsigned char *start, *cur, *end;
+	unsigned char *start, *cur, *end, *aend;
 
 }; typedef struct _icmFileMem icmFileMem;
 
 /* Create a memory image file access class with given allocator */
+/* The buffer is not delete with the object. */
 icmFile *new_icmFileMem_a(void *base, size_t length, icmAlloc *al);
 
 /* Create a memory image file access class with given allocator */
-/* and delete base when icmFile is deleted. */
+/* and delete buffer when icmFile is deleted. */
 icmFile *new_icmFileMem_ad(void *base, size_t length, icmAlloc *al);
 
 /* This is avalailable if SEPARATE_STD is not defined: */
@@ -299,6 +307,9 @@ icmFile *new_icmFileMem_ad(void *base, size_t length, icmAlloc *al);
 /* Create a memory image file access class */
 icmFile *new_icmFileMem(void *base, size_t length);
 
+/* Create a memory image file access class */
+/* and delete buffer when icmFile is deleted. */
+icmFile *new_icmFileMem_d(void *base, size_t length);
 
 /* --------------------------------- */
 /* Assumed constants                 */
@@ -345,6 +356,9 @@ typedef int icmSig;	/* Otherwise un-enumerated 4 byte signature */
 /* Non-standard Platform Signature */
 #define icmSig_nix ((icPlatformSignature) icmMakeTag('*','n','i','x'))
 
+
+/* Alias for icSigColorantTableType found in LOGO profiles (Byte swapped clrt !) */ 
+#define icmSigAltColorantTableType ((icTagTypeSignature)icmMakeTag('t','r','l','c'))
 
 /* Tag Type signature, used to handle any tag that */
 /* isn't handled with a specific type object. */
@@ -691,6 +705,9 @@ typedef struct {
 #define ICM_CLUT_SET_EXACT 0x0000	/* Set clut node values exactly from callback */
 #define ICM_CLUT_SET_APXLS 0x0001	/* Set clut node values to aproximate least squares fit */
 
+#define ICM_CLUT_SET_FILTER 0x0002	/* Post filter values (icmSetMultiLutTables() only) */
+
+
 /* lut */
 struct _icmLut {
 	ICM_BASE_MEMBERS
@@ -771,6 +788,9 @@ struct _icmLut {
 /* having the same configuration and resolutions, and the */
 /* same per channel input and output curves. */
 /* Set errc and return error number in underlying icc */
+/* Note that clutfunc in[] value has "index under". */
+/* If ICM_CLUT_SET_FILTER is set, the per grid node filtering radius */
+/* is returned in clutfunc out[-1], out[-2] etc for each table */
 int icmSetMultiLutTables(
 	int ntables,							/* Number of tables to be set, 1..n */
 	struct _icmLut **p,						/* Pointer to Lut object */
@@ -1421,6 +1441,8 @@ struct _icc {
 							/* Returns 0 if found, 1 if found but not readable, 2 of not found */
 	icmBase *    (*read_tag)(struct _icc *p, icTagSignature sig);
 															/* Returns pointer to object */
+	icmBase *    (*read_tag_any)(struct _icc *p, icTagSignature sig);
+								/* Returns pointer to object, but may be icmSigUnknownType! */
 	icmBase *    (*add_tag)(struct _icc *p, icTagSignature sig, icTagTypeSignature ttype);
 															/* Returns pointer to object */
 	int          (*rename_tag)(struct _icc *p, icTagSignature sig, icTagSignature sigNew);
@@ -1570,6 +1592,9 @@ struct _icmFileMD5 {
 	unsigned int of;	/* Current offset */
 	int errc;			/* Error code, 0 for OK */
 
+	/* Private: */
+	size_t size;    /* Size of the file (For read) */
+
 }; typedef struct _icmFileMD5 icmFileMD5;
 
 /* Create a dumy file access class with allocator */
@@ -1639,6 +1664,7 @@ extern ICCLIB_API unsigned int icmCSSig2chanNames( icColorSpaceSignature sig, ch
                                   (d_xyz).Z = (s_xyz).Z)
 
 /* Simple macro to transfer an 3array to 3array */
+/* Hmm. Same as icmCpy3 */
 #define icmAry2Ary(d_ary, s_ary) ((d_ary)[0] = (s_ary)[0], (d_ary)[1] = (s_ary)[1], \
                                   (d_ary)[2] = (s_ary)[2])
 
@@ -1706,11 +1732,13 @@ extern ICCLIB_API void icm1960UCS21964WUV(icmXYZNumber *w, double *out, double *
 extern icmXYZNumber icmD50;
 extern icmXYZNumber icmD50_100;		/* Scaled to 100 */
 double icmD50_ary3[3];				/* As an array */
+double icmD50_100_ary3[3];			/* Scaled to 100 as an array */
 
 /* The standard D65 illuminant value */
 extern icmXYZNumber icmD65;
 extern icmXYZNumber icmD65_100;		/* Scaled to 100 */
 double icmD65_ary3[3];				/* As an array */
+double icmD65_100_ary3[3];			/* Scaled to 100 as an array */
 
 /* The default black value */
 extern icmXYZNumber icmBlack;
@@ -1759,6 +1787,9 @@ void icmChromAdaptMatrix(
 /* Copy a 3 vector */
 #define icmCpy3(d_ary, s_ary) ((d_ary)[0] = (s_ary)[0], (d_ary)[1] = (s_ary)[1], \
                               (d_ary)[2] = (s_ary)[2])
+
+/* Clamp a 3 vector to be +ve */
+void icmClamp3(double out[3], double in[3]);
 
 /* Add two 3 vectors */
 void icmAdd3(double out[3], double in1[3], double in2[3]);

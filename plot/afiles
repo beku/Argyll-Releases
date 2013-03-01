@@ -7,3 +7,8 @@ plot.c
 plot.h
 vrml.c
 vrml.h
+osx/Readme.txt
+osx/Jamfile
+osx/helloc.c
+osx/acoccoa.h
+osx/hellom.m

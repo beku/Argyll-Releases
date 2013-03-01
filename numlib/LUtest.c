@@ -44,15 +44,17 @@ int main() {
 	b[0] = 6.0;
 	b[1] = 4.0;
 	b[2] = 4.5;
-	b[2] = -10.0;
+	b[3] = -10.0;
 
 	if ((rv = test(n, a, b)) != 0) {
 		if (rv == 1)
 			printf("LU test failed due to singularity\n");
-		else
+		else {
 			printf("LU test failed to verify\n");
+			printf("Got solution %f %f %f %f\n",b[0],b[1],b[2],b[3]);
+		}
 	} else {
-		printf("Got solution %f %f %f %f\n",b[0],b[1],b[2],b[3]);
+		printf("Got verified solution %f %f %f %f\n",b[0],b[1],b[2],b[3]);
 	}
 	return 0;
 }
@@ -67,6 +69,7 @@ double  *b	/* B[]   input array, returns solution X[] */
 	int i, j;
 	double rip;		/* Row interchange parity */
 	int *pivx;
+	int rv = 0;
 
 	double **sa;		/* save input matrix values */
 	double *sb;			/* save input vector values */
@@ -99,16 +102,12 @@ double  *b	/* B[]   input array, returns solution X[] */
 			sum += sa[i][j] * b[j];
 //printf("~~ check %d = %f, against %f\n",i,sum,sb[i]);
 		temp = fabs(sum - sb[i]);
-		if (temp > 1e-6) {
-			free_dvector(sb, 0, n-1);
-			free_dmatrix(sa, 0, n-1, 0, n-1);
-			free_ivector(pivx, 0, n-1);
-			return 2;
-		}
+		if (temp > 1e-6)
+			rv = 2;
 	}
 	free_dvector(sb, 0, n-1);
 	free_dmatrix(sa, 0, n-1, 0, n-1);
 	free_ivector(pivx, 0, n-1);
-	return 0;
+	return rv;
 }
 

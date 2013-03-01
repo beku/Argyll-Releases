@@ -12,6 +12,8 @@
 
 /*
  * To Do: 
+ *		  Add option to output a raster file made from the .cht and example values.
+ *
  *        Fix sboxes parameters/digitization to fix "droop" in box areas.
  *        Scale parameters with image size.
  *        To handle high res, introduce automatic sub-sampler.
@@ -2342,7 +2344,7 @@ elist *el
 ) {
 	int i, rc = el->c;
 	
-	DBG((dbgo,"Elist has %d entries allocated at 0x%x\n",el->c,(unsigned long)el->a));
+	DBG((dbgo,"Elist has %d entries allocated at 0x%p\n",el->c,el->a));
 	DBG((dbgo,"lennorm = %f\n",el->lennorm));
 	for (i = 0; i < rc; i++)
 		DBG((dbgo,"  [%d] = %f %f %f\n",i,el->a[i].pos,el->a[i].len,el->a[i].ccount));
@@ -3247,7 +3249,7 @@ scanrd_ *s
 		clip_ipoint(s, &p[3]);
 
 		if (s->verb >= 4)
-			DBG((dbgo,"Box number %d:\n",sp - &s->sboxes[0]));
+			DBG((dbgo,"Box number %ld:\n",(long)(sp - &s->sboxes[0])));
 
 		/* Need to find min/max in y */
 		for (i = ymin = ymax = 0; i < 4; i++) {
@@ -3465,7 +3467,7 @@ scanrd_ *s
 			if (s->sbstart[s->csi]->diag == 0 && s->sbstart[s->csi]->ymin == y) {
 				sp = s->sbstart[s->csi];
 				if (s->verb >= 4)
-					DBG((dbgo,"added box %d '%s' to the active list\n",sp - &s->sboxes[0],sp->name));
+					DBG((dbgo,"added box %ld '%s' to the active list\n",(long)(sp - &s->sboxes[0]),sp->name));
 				ADD_ITEM_TO_TOP(s->alist,sp);	/* Add it to the active list */
 				sp->active = 1;
 				sp->ps[0] = calloc(s->tdepth * binsize,sizeof(unsigned long));
@@ -3513,7 +3515,7 @@ scanrd_ *s
 				double P[MXDE];
 				sp = s->sbend[s->cei];
 				if (s->verb >= 4)
-					DBG((dbgo,"deleted box %d '%s' from the active list\n",sp - &s->sboxes[0],sp->name));
+					DBG((dbgo,"deleted box %ld '%s' from the active list\n",(long)(sp - &s->sboxes[0]),sp->name));
 				DEL_LINK(s->alist,sp);		/* Remove it from active list */
 
 				/* Compute mean */

@@ -256,6 +256,8 @@ main(
 					inm = "C"; break;
 			    case icxIT_D50:
 					inm = "D50"; break;
+			    case icxIT_D50M2:
+					inm = "D50M2"; break;
 			    case icxIT_D65:
 					inm = "D65"; break;
 			    case icxIT_F5:

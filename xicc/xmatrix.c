@@ -22,13 +22,6 @@
 /*
  * TTBD:
  *
- *		The ICX_CLIP_WB implementation could probably be smarter,
- *      and constrain the white and black in the matrix optimizations,
- *		as well as clipping them afterwards.
- *
- *		Should the input profile white point determination
- *		be made a bit smarter about determining the chromaticity ?
- *
  *      Some of the error handling is crude. Shouldn't use
  *      error(), should return status.
  *
@@ -39,7 +32,6 @@
  *      normalized back to zero by scaling the matrix before storing
  *      the result in the ICC profile.
  *
- *		See xlut.c for outline of future chromatic adapation approachs.
  */
 
 #define USE_CIE94_DE	/* Use CIE94 delta E measure when creating fit */
@@ -48,9 +40,9 @@
 #define MXNORDERS 30			/* Maximum shaper harmonic orders to use */
 #define XSHAPE_MAG  1.0			/* Overall shaper parameter magnitide */
 
-#define XSHAPE_OFFG			0.1		/* Default offset weights */
+#define XSHAPE_OFFG			0.1		/* Input offset weights when ord 0 is gamma */
 #define XSHAPE_OFFS			1.0		/* Input offset weights when ord 0 is shaper */
-#define XSHAPE_HW01			0.2		/* 0 & 1 harmonic weights */
+#define XSHAPE_HW01			0.002	/* 0 & 1 harmonic weights */
 #define XSHAPE_HBREAK	    4		/* Harmonic that has HWBR */
 #define XSHAPE_HWBR        0.8		/* Base weight of harmonics HBREAK up */
 #define XSHAPE_HWINC       0.5		/* Increase in weight for each harmonic above HWBR */
@@ -148,6 +140,14 @@ double *in			/* Vector of input values */
 
 	if (p->pcs == icxSigJabData) {
 		p->cam->cam_to_XYZ(p->cam, out, in);
+		/* Hack to prevent CAM02 weirdness being amplified by */
+		/* any later per channel clipping. */
+		/* Limit -Y to non-stupid values by scaling */
+		if (out[1] < -0.1) {
+			out[0] *= -0.1/out[1];
+			out[2] *= -0.1/out[1];
+			out[1] = -0.1;
+		}
 		rv |= ((icmLuMatrix *)p->plu)->bwd_abs((icmLuMatrix *)p->plu, out, out);
 	} else {
 		rv |= ((icmLuMatrix *)p->plu)->bwd_abs((icmLuMatrix *)p->plu, out, in);
@@ -394,6 +394,7 @@ typedef struct {
 							/* 21, 22, 23 are 2nd harmonics */
 							/* 24, 25, 26 etc. */
 							/* For isShTRC there is only one set of offsets & harmonics */
+	icmXYZNumber wp;		/* Assumed white point for Lab conversion */
 	cow *points;			/* List of test points as dev->Lab */
 	int nodp;				/* Number of data points */
 } mxopt;
@@ -409,7 +410,6 @@ static void mxmfunc1(mxopt *p, int j, double *v, double *out, double *in) {
 		j = 0;
 		ps = 1;				/* Only one channel */
 	}
-
 
 	if (p->isLinear) {		/* No per channel curve */
 		*out = vv;
@@ -524,6 +524,7 @@ static void mxmfunc(mxopt *p, double *v, double *xyz, double *in) {
 	xyz[0] = v[0] * rgb[0] + v[1] * rgb[1] + v[2] * rgb[2];
 	xyz[1] = v[3] * rgb[0] + v[4] * rgb[1] + v[5] * rgb[2];
 	xyz[2] = v[6] * rgb[0] + v[7] * rgb[1] + v[8] * rgb[2];
+
 }
 
 /* return the sum of the squares of the current shaper parameters */
@@ -557,14 +558,16 @@ double *v			/* Pointer to parameters */
 		/* Shaper values */
 		for (f = 0; f < p->norders; f++) {
 			tt = v[11 + f];
+			if (f == 0 && p->shape0gam)
+				tt -= 1.0;			/* default is linear */
 			tt *= tt;
 			/* Weigh to suppress ripples */
-			if (f <= 1) {
+			if (f <= 1) {						/* Use XSHAPE_HW01 */
 				w = XSHAPE_HW01;
-			} else if (f <= XSHAPE_HBREAK) {
+			} else if (f <= XSHAPE_HBREAK) {	/* Blend from XSHAPE_HW01 to XSHAPE_HWBR * smooth */
 				double bl = (f - 1.0)/(XSHAPE_HBREAK - 1.0);
 				w = (1.0 - bl) * XSHAPE_HW01 + bl * XSHAPE_HWBR * p->smooth;
-			} else {
+			} else {				/* Use XSHAPE_HWBR * smooth */
 				w = XSHAPE_HWBR + (f-XSHAPE_HBREAK) * XSHAPE_HWINC;
 				w *= p->smooth;
 			}
@@ -604,6 +607,8 @@ double *v			/* Pointer to parameters */
 		}
 		for (g = 0; g < 3; g++) {
 			tt = v[15 + 3 * f + g];
+			if (f == 0 && p->shape0gam)
+				tt -= 1.0;			/* default is linear */
 			tt *= tt;
 			tparam += w * tt;
 		}
@@ -625,7 +630,7 @@ static double mxoptfunc(void *edata, double *v) {
 		mxmfunc(p, v, xyz, p->points[i].p);
 	
 		/* Convert to Lab */
-		icmXYZ2Lab(&icmD50, lab, xyz);
+		icmXYZ2Lab(&p->wp, lab, xyz);
 //printf("%f %f %f -> %f %f %f, target %f %f %f\n", p->points[i].p[0], p->points[i].p[1], p->points[i].p[2], lab[0], lab[1], lab[2], p->points[i].v[0], p->points[i].v[1], p->points[i].v[2]);
 	
 		/* Accumulate total delta E squared */
@@ -644,7 +649,7 @@ static double mxoptfunc(void *edata, double *v) {
 	smv = xshapmag(p, v);
 	rv += smv;
 
-	/* Penalize if we have -ve primaries */
+	/* Penalize if we have white > 1 or -ve black */ 
 	if (p->clipbw) {
 		double tp[3];
 
@@ -690,6 +695,24 @@ static void mxprogfunc(void *pdata, int perc) {
 }
 
 
+/* Given a correction matrix, transform the matrix values */
+static void mxtransform(mxopt *os, double mat[3][3]) { 
+	double vec[3];
+			
+	vec[0] = os->v[0]; vec[1] = os->v[3]; vec[2] = os->v[6];
+	icmMulBy3x3(vec, mat, vec);
+	os->v[0] = vec[0]; os->v[3] = vec[1]; os->v[6] = vec[2];
+			
+	vec[0] = os->v[1]; vec[1] = os->v[4]; vec[2] = os->v[7];
+	icmMulBy3x3(vec, mat, vec);
+	os->v[1] = vec[0]; os->v[4] = vec[1]; os->v[7] = vec[2];
+			
+	vec[0] = os->v[2]; vec[1] = os->v[5]; vec[2] = os->v[8];
+	icmMulBy3x3(vec, mat, vec);
+	os->v[2] = vec[0]; os->v[5] = vec[1]; os->v[8] = vec[2];
+}
+
+
 /* Setup and then return the optimized matrix fit in the mxopt structure. */
 /* Return 0 on sucess, error code on failure. */
 static int
@@ -710,6 +733,7 @@ int clipprims,		/* Prevent primaries going -ve */
 double smooth,		/* Smoothing factor (nominal 1.0) */
 double scale		/* Scale device values */
 ) {
+	double nweight = 1.0;		/* Amount to weight neutral patches (make a parameter ?) */
 	int inputChan = 3;			/* Must be RGB like */
 	int outputChan = 3;			/* Must be the PCS */
 	int rsplflags = 0;			/* Flags for scattered data rspl */
@@ -735,21 +759,6 @@ double scale		/* Scale device values */
 		return 2;
 	}
 
-	/* Setup points ready for optimisation */
-	for (i = 0; i < nodp; i++) {
-		for (e = 0; e < inputChan; e++)
-			points[i].p[e] = ipoints[i].p[e];
-		
-		for (f = 0; f < outputChan; f++)
-			points[i].v[f] = ipoints[i].v[f];
-
-		points[i].w = ipoints[i].w;
-
-		/* Make sure its Lab for delta E calculation */
-		if (isLab == 0)
-			icmXYZ2Lab(&icmD50, points[i].v, points[i].v);
-	}
-
 	/* Setup for optimising run */
 	if (verb != 0)
 		os->verb = verb;
@@ -771,7 +780,7 @@ double scale		/* Scale device values */
 		stopon = 5e-7;
 	} else if (quality == 2) {	/* High */
 		os->norders = 12;
-		maxits = 4000;
+		maxits = 5000;
 		stopon = 5e-6;
 	} else if (quality == 1) {	/* Medium */
 		os->norders = 8;
@@ -780,72 +789,195 @@ double scale		/* Scale device values */
 	} else if (quality == 0) {  /* Low */
 		os->norders = 4;
 		maxits = 1000;
-		stopon = 0.0005;
+		stopon = 5e-4;
 	} else {					/* Ultra Low */
 		os->norders = 2;
 		maxits = 1000;
-		stopon = 0.0005;
+		stopon = 5e-4;
 	}
 	if (os->norders > MXNORDERS)
 		os->norders = MXNORDERS;
 	
-	/* Set initial optimisation values */
+	/* Setup points ready for optimisation and do an initial Lab conversion */
+	for (i = 0; i < nodp; i++) {
+		for (e = 0; e < inputChan; e++)
+			points[i].p[e] = ipoints[i].p[e];
+		
+		for (f = 0; f < outputChan; f++)
+			points[i].v[f] = ipoints[i].v[f];
+
+		points[i].w = ipoints[i].w;
+	}
+
+	/* Pick a white point for the real Lab conversion */
+	{
+		double wp[3];
+		double wpy = -1e60;
+		int wix = -1;
+
+		/* We assume that the input target is well behaved, */
+		/* and that it includes a white point patch, */
+		/* and that it has an extreme L value */
+
+		for (i = 0; i < nodp; i++) {
+			double yv;
+
+			/* Tilt things towards D50 neutral white patches */
+			yv = points[i].v[0] - 0.3 * sqrt(points[i].v[1] * points[i].v[1]
+			                                + points[i].v[2] * points[i].v[2]);
+			if (yv > wpy) {
+				wpy = yv;
+				wix = i;
+			}
+		}
+//printf("~1 picked point %d as white\n",wix);
+		icmLab2XYZ(&icmD50, wp, points[wix].v);
+		wp[0] /= wp[1];
+		wp[2] /= wp[1];
+		wp[1] = 1.0;
+		icmAry2XYZ(os->wp, wp);
+
+		/* We'll use this wp for delta E calculation when creating the matrix */
+//		if (os->verb) printf("Switching to L*a*b* white point %f %f %f\n",os->wp.X,os->wp.Y,os->wp.Z);
+		if (nweight < 1.0)		/* Sanity */
+			nweight = 1.0;
+		for (i = 0; i < nodp; i++) {
+			double lch[3];
+			if (isLab)
+				icmLab2XYZ(&icmD50, points[i].v, points[i].v);
+			icmXYZ2Lab(&os->wp, points[i].v, points[i].v);
+			icmLab2LCh(lch, points[i].v);
+			/* Apply any neutral weighting */
+			if (lch[1] < 10.0) {
+				double w = nweight;
+				if (lch[1] > 5.0)
+					w = 1.0 + (nweight - 1.0) * (10.0 - lch[1])/(10.0 - 5.0);
+				points[i].w = w;
+			}
+//printf("~1 patch %d = Lab %f %f %f, C = %f w = %f\n",i,points[i].v[0], points[i].v[1], points[i].v[2], lch[1],points[i].w);
+		}
+	}
+
+	/* Set initial matrix optimisation values */
 	os->v[0] = 0.4;  os->v[1] = 0.4;  os->v[2] = 0.2;		/* Matrix */
 	os->v[3] = 0.2;  os->v[4] = 0.8;  os->v[5] = 0.1;
 	os->v[6] = 0.02; os->v[7] = 0.15; os->v[8] = 1.3;
 
-	if (isLinear) {				/* Linear */
-		os->isLinear = 1;
-		os->isGamma = 1;
-		os->optdim = 9;
-		os->v[9] = os->v[10] = os->v[11] = 1.0;					/* Linear */ 
-	} else if (isGamma) {		/* Just gamma curve */
-		os->isLinear = 0;
-		os->isGamma = 1;
-		os->optdim = 12;
-		os->v[9] = os->v[10] = os->v[11] = 2.4;					/* Gamma */ 
-	} else {		/* Creating input curves */
-		os->isLinear = 0;
-		os->isGamma = 0;
-		os->optdim = 9 + 6 + 3 * os->norders;		/* Matrix, offset + orders */
-		os->v[9] = os->v[10] = os->v[11] = 0.0;		/* Input offset */
-		os->v[12] = os->v[13] = os->v[14] = 0.0;	/* Output offset */
-		if (shape0gam)
-			os->v[15] = os->v[16] = os->v[17] = 2.0; 	/* Gamma */
-		else
-			os->v[15] = os->v[16] = os->v[17] = 0.0; 	/* 0th Harmonic */
-		for (i = 18; i < os->optdim; i++)
-			os->v[i] = 0.0; 						/* Higher orders */
-	}
+	/* Do a first pass just setting the matrix values */
+	os->isLinear = 1;
+	os->isGamma = 1;
+	os->optdim = 9;
+	os->v[9] = os->v[10] = os->v[11] = 1.0;					/* Linear */ 
 
 	/* Set search area to starting values */
 	for (j = 0; j < os->optdim; j++)
 		os->sa[j] = 0.2;					/* Matrix, Gamma, Offsets, harmonics */
 
-	if (isShTRC) {							/* Adjust things for shared */
-		os->isShTRC = 1;
-
-		if (os->optdim > 9) {
-			/* Pack red paramenters down */
-			for (i = 9; i < os->optdim; i++) {
-				os->v[i] = os->v[(i - 9) * 3 + 9];
-				os->sa[i] = os->sa[(i - 9) * 3 + 9];
-			}
-			os->optdim = ((os->optdim - 9)/3) + 9;
-		}
-	}
-
-	if (os->verb) {
-		if (os->isLinear)
-			printf("Creating matrix...\n"); 
-		else
-			printf("Creating matrix and curves...\n"); 
-	}
+	if (os->verb)
+		printf("Creating matrix...\n"); 
 
 	if (powell(&rerr, os->optdim, os->v, os->sa, stopon, maxits,
-	           mxoptfunc, (void *)os, mxprogfunc, (void *)&os) != 0)
+	           mxoptfunc, (void *)os, mxprogfunc, (void *)os) != 0)
 		warning("Powell failed to converge, residual error = %f",rerr);
 
+#ifndef NEVER
+	if (os->verb) {
+		printf("Matrix = %f %f %f\n",os->v[0], os->v[1], os->v[2]);
+		printf("         %f %f %f\n",os->v[3], os->v[4], os->v[5]);
+		printf("         %f %f %f\n",os->v[6], os->v[7], os->v[8]);
+	}
+#endif /* NEVER */
+
+	/* Now optimize again with shaper or gamma curves */
+	if (!isLinear || isGamma) {
+
+		/* Start from linear, which is what was assumed for the matrix fit, */
+		/* and fit first with a single shared curve. */
+		os->isShTRC = 1;
+		if (isGamma) {		/* Just gamma curve */
+			os->isLinear = 0;
+			os->isGamma = 1;
+			os->optdim = 10;
+			os->v[9] = 1.0;		/* Linear */ 
+		} else {		/* Creating input curves */
+			os->isLinear = 0;
+			os->isGamma = 0;
+			os->optdim = 9 + 2 + os->norders;			/* Matrix, offset + orders */
+			os->v[9] = 0.0;		/* Input offset */
+			os->v[10] = 0.0;	/* Output offset */
+			if (shape0gam)
+				os->v[11] = 1.0; 	/* Gamma */
+			else
+				os->v[11] = 0.0; 	/* 0th Harmonic */
+			for (i = 12; i < os->optdim; i++)
+				os->v[i] = 0.0; 	/* Higher orders */
+		}
+
+		/* Set search area to starting values */
+		for (j = 0; j < os->optdim; j++)
+			os->sa[j] = 0.2;					/* Matrix, Gamma, Offsets, harmonics */
+
+		if (os->verb)
+			printf("Creating matrix and single curve...\n"); 
+
+		if (powell(&rerr, os->optdim, os->v, os->sa, stopon, maxits,
+		           mxoptfunc, (void *)os, mxprogfunc, (void *)os) != 0)
+			warning("Powell failed to converge, residual error = %f",rerr);
+
+#ifndef NEVER
+		if (os->verb) {
+			printf("Matrix = %f %f %f\n",os->v[0], os->v[1], os->v[2]);
+			printf("         %f %f %f\n",os->v[3], os->v[4], os->v[5]);
+			printf("         %f %f %f\n",os->v[6], os->v[7], os->v[8]);
+			if (isGamma) {		/* Creating input curves */
+				printf("Gamma = %f\n",os->v[9]);
+			} else {		/* Creating input curves */
+				printf("Input offset  = %f\n",os->v[9]);
+				printf("Output offset = %f\n",os->v[10]);
+				for (j = 0; j < os->norders; j++) {
+					if (shape0gam && j == 0)
+						printf("gamma = %f\n", os->v[11 + j]);
+					else
+						printf("%d harmonics = %f\n",j, os->v[11 + j]);
+				}
+			}
+		}
+#endif /* NEVER */
+
+		/* Now do the final optimisation with all curves */
+		if (!isShTRC) {
+			os->isShTRC = 0;
+			if (isGamma) {		/* Just gamma curves */
+				os->isLinear = 0;
+				os->isGamma = 1;
+				os->optdim = 12;
+				os->v[9] = os->v[10] = os->v[11] = 1.0;		/* Linear */ 
+			} else {		/* Creating input curves */
+				os->isLinear = 0;
+				os->isGamma = 0;
+				os->optdim = 9 + 6 + 3 * os->norders;		/* Matrix, offset + orders */
+				os->v[9] = os->v[10] = os->v[11] = 0.0;		/* Input offset */
+				os->v[12] = os->v[13] = os->v[14] = 0.0;	/* Output offset */
+				if (shape0gam)
+					os->v[15] = os->v[16] = os->v[17] = 1.0; 	/* Gamma */
+				else
+					os->v[15] = os->v[16] = os->v[17] = 0.0; 	/* 0th Harmonic */
+				for (i = 18; i < os->optdim; i++)
+					os->v[i] = 0.0; 						/* Higher orders */
+			}
+	
+			/* Set search area to starting values */
+			for (j = 0; j < os->optdim; j++)
+				os->sa[j] = 0.2;					/* Matrix, Gamma, Offsets, harmonics */
+	
+			if (os->verb)
+				printf("Creating matrix and curves...\n"); 
+	
+			if (powell(&rerr, os->optdim, os->v, os->sa, stopon, maxits,
+			           mxoptfunc, (void *)os, mxprogfunc, (void *)os) != 0)
+				warning("Powell failed to converge, residual error = %f",rerr);
+		}
+	}
 	if (os->clipprims) { /* Clip -ve primaries */
 		for (i = 0; i < 9; i++) {
 			if (os->v[i] < 0.0)
@@ -891,11 +1023,51 @@ double scale		/* Scale device values */
 		}
 	}
 #endif /* NEVER */
+#ifdef NEVER	/* Check DE of fit */
+	{
+		double xyz[3], txyz[3];
+
+		for (i = 0; i < nodp; i++) {
+
+			mxmfunc(os, os->v, xyz, ipoints[i].p);
+
+			if (isLab)
+				icmLab2XYZ(&icmD50, txyz, ipoints[i].v);
+			else
+				icmCpy3(txyz, ipoints[i].v);
+
+			printf("~1 point %d DE %f\n", i, icmXYZLabDE(&icmD50, txyz, xyz));
+		}
+	}
+#endif
 
 	/* Free the coordinate lists */
 	free(points);
 
 	return 0;
+}
+
+/* Apply a chromatic transform to the matrix to force the given */
+/* xyz value (typically white) to be exact */
+static void icxMM_force_exact(icxMatrixModel *p, double *targ, double *rgb) {
+	mxopt *os = (mxopt *)p->imp;
+	double txyz[3], axyz[3];	/* Target & actual xyz */
+	icmXYZNumber _tp, _ap;
+	double cmat[3][3];			/* Model transform matrix */
+
+	if (p->isLab)
+		icmLab2XYZ(&icmD50, txyz, targ);
+	else
+		icmCpy3(txyz, targ);
+
+	mxmfunc(os, os->v, axyz, rgb);
+
+	icmAry2XYZ(_ap, axyz);
+	icmAry2XYZ(_tp, txyz);
+	icmChromAdaptMatrix(ICM_CAM_BRADFORD, _tp, _ap, cmat);
+
+	/* Apply correction to fine tune matrix. */
+	mxtransform(os, cmat);
 }
 
 static void icxMM_lookup(icxMatrixModel *p, double *out, double *in) {
@@ -934,6 +1106,7 @@ double scale		/* Scale device values */
 	if ((p = (icxMatrixModel *) calloc(1,sizeof(icxMatrixModel))) == NULL)
 		return NULL;
 
+	p->force = icxMM_force_exact;
 	p->lookup = icxMM_lookup;
 	p->del = icxMM_del;
 
@@ -970,10 +1143,13 @@ xicc               *xicp,
 icmLuBase          *plu,			/* Pointer to Lu we are expanding (ours) */	
 int                flags,			/* white/black point flags */
 int                nodp,			/* Number of points */
+int                nodpbw,			/* Number of points to look for white  & black patches in */
 cow                *ipoints,		/* Array of input points in XYZ space */
+icxMatrixModel     *skm,    		/* Optional skeleton model (not used here) */
 double             dispLuminance,	/* > 0.0 if display luminance value and is known */
 double             wpscale,			/* > 0.0 if input white point is to be scaled */
-int                quality			/* Quality metric, 0..3 */
+int                quality,			/* Quality metric, 0..3 */
+double             smooth			/* Curve smoothing, nominally 1.0 */
 ) {
 	icxLuMatrix *p;						/* Object being created */
 	icc *icco = xicp->pp;				/* Underlying icc object */
@@ -989,8 +1165,17 @@ int                quality			/* Quality metric, 0..3 */
 	int e, f, i, j;
 	int maxits = 200;					/* Optimisation stop params */
 	double stopon = 0.01;				/* Absolute delta E change to stop on */
-	mxopt os;			/* Optimisation information */
+	mxopt os;							/* Optimisation information */
 	double rerr;
+						/* If ICX_SET_WHITE | ICX_SET_BLACK: */
+	double wp[3];		/* Absolute White point in XYZ */
+	double bp[3];		/* Absolute Black point in XYZ */
+	double dw[MXDI];	/* Device white value to adjust to be D50 */
+	double db[MXDI];	/* Device balck value */
+	double dgw[3];		/* Device space gamut boundary white for ICX_SET_WHITE_US */
+	double fromAbs[3][3];	/* From abs to relative */
+	double toAbs[3][3];		/* To abs from relative */
+	cow *rpoints = NULL;	/* Aprox. relative in->output values */
 
 #ifdef DEBUG_PLOT
 	#define	XRES 100
@@ -1033,8 +1218,11 @@ int                quality			/* Quality metric, 0..3 */
 	}
 
 	/* Do basic icxLu creation and initialisation */
-	if ((p = alloc_icxLuMatrix(xicp, plu, 0, luflags)) == NULL)
+	if ((p = alloc_icxLuMatrix(xicp, plu, 0, luflags)) == NULL) {
+		xicp->errc = 1;
+		sprintf(xicp->err,"icx_set_matrix: malloc failed");
 		return NULL;
+	}
 
 	p->func = icmFwd;		/* Assumed by caller */
 
@@ -1071,31 +1259,48 @@ int                quality			/* Quality metric, 0..3 */
 
 	/* ------------------------------- */
 
-	/* (Use a gamma curve as 0th order shape) */
-	if (p->pp->errc = createMatrix(p->pp->err, &os, flags & ICX_VERBOSE ? 1 : 0,  
-	                               nodp, ipoints, 0, quality,
-	                               isLinear, isGamma, isShTRC, 1,
-		                           flags & ICX_CLIP_WB ? 1 : 0,
-		                           flags & ICX_CLIP_PRIMS ? 1 : 0,
-		                           1.0, 1.0) != 0) {   
-		p->del((icxLuBase *)p);
-		return NULL;
-	}
-
-	/* Deal with white/black points */
+	/* Choose a white and black point */
 	if (flags & (ICX_SET_WHITE | ICX_SET_BLACK)) {
-		double wp[3];	/* Absolute White point in XYZ */
-		double bp[3];	/* Absolute Black point in XYZ */
 
 		if (flags & ICX_VERBOSE)
 			printf("Find white & black points\n");
 
-		icmXYZ2Ary(wp, icmD50); 		/* Set a default value - D50 */
-		icmXYZ2Ary(bp, icmBlack); 		/* Set a default value - absolute black */
+		/* Compute device white and black points as if */
+		/* we are doing an Output or Display device */
+		{
+			switch (h->colorSpace) {
+	
+				case icSigCmyData:
+					for (e = 0; e < p->inputChan; e++) {
+						dw[e] = 0.0;
+						db[e] = 1.0;
+					}
+					break;
+				case icSigRgbData:
+					for (e = 0; e < p->inputChan; e++) {
+						dw[e] = 1.0;
+						db[e] = 0.0;
+					}
+					break;
+	
+				default: {
+					xicp->errc = 1;
+					sprintf(xicp->err,"set_icxLuMatrix: can't handle color space %s",
+					                           icm2str(icmColorSpaceSignature, h->colorSpace));
+					p->del((icxLuBase *)p);
+					return NULL;
+					break;
+				}
+			}
+		}
 
-		/* Figure out the device values for white */
+		/* dw is what we want for dgw[], used for XFIT_OUT_WP_REL_US */
+		for (e = 0; e < p->inputChan; e++)
+			dgw[e] = dw[e];
+
+		/* If this is actuall an input device, lookup wp & bp */
+		/* and override dwhite & dblack */
 		if (h->deviceClass == icSigInputClass) {
-			double dwhite[MXDI], dblack[MXDI];	/* Device white and black values */
 			double wpy = -1e60, bpy = 1e60;
 			int wix = -1, bix = -1;
 
@@ -1112,7 +1317,7 @@ int                quality			/* Quality metric, 0..3 */
 			 */
 
 			/* Discover the white and black patches */
-			for (i = 0; i < nodp; i++) {
+			for (i = 0; i < nodpbw; i++) {
 				double labv[3], yv;
 
 				/* Create D50 Lab to allow some chromatic sensitivity */
@@ -1126,7 +1331,7 @@ int                quality			/* Quality metric, 0..3 */
 					wp[1] = ipoints[i].v[1];
 					wp[2] = ipoints[i].v[2];
 					for (e = 0; e < p->inputChan; e++)
-						dwhite[e] = ipoints[i].p[e];
+						dw[e] = ipoints[i].p[e];
 					wpy = ipoints[i].v[1];
 					wix = i;
 				}
@@ -1139,7 +1344,7 @@ int                quality			/* Quality metric, 0..3 */
 					wp[1] = ipoints[i].v[1];
 					wp[2] = ipoints[i].v[2];
 					for (e = 0; e < p->inputChan; e++)
-						dwhite[e] = ipoints[i].p[e];
+						dw[e] = ipoints[i].p[e];
 					wpy = yv;
 					wix = i;
 				}
@@ -1149,127 +1354,284 @@ int                quality			/* Quality metric, 0..3 */
 					bp[1] = ipoints[i].v[1];
 					bp[2] = ipoints[i].v[2];
 					for (e = 0; e < p->inputChan; e++)
-						dblack[e] = ipoints[i].p[e];
+						db[e] = ipoints[i].p[e];
 					bpy = ipoints[i].v[1];
 					bix = i;
 				}
 			}
-			/* Lookup device white/black XYZ values in model */
-			mxmfunc(&os, os.v, wp, dwhite);
-			mxmfunc(&os, os.v, bp, dblack);
-			
 			if (flags & ICX_VERBOSE) {
-				printf("Picked white patch %d with XYZ = %s, Lab = %s\n",
-				        wix+1, icmPdv(3, wp), icmPLab(wp));
-				printf("Picked black patch %d with XYZ = %s, Lab = %s\n",
-				        bix+1, icmPdv(3, bp), icmPLab(bp));
+				printf("Picked white patch %d with dev = %s\n       XYZ = %s, Lab = %s\n",
+				        wix+1, icmPdv(p->inputChan, dw), icmPdv(3, wp), icmPLab(wp));
+				printf("Picked black patch %d with dev = %s\n       XYZ = %s, Lab = %s\n",
+				        bix+1, icmPdv(p->inputChan, db), icmPdv(3, bp), icmPLab(bp));
 			}
 
-			if (flags & ICX_CLIP_WB) {
-				if (wp[1] > 1.0) {
-					if (flags & ICX_VERBOSE)
-						printf("Clipping white point from XYZ %f %f %f",wp[0],wp[1],wp[2]);
-					icmScale3(wp, wp, 1.0/wp[1]);
-					if (flags & ICX_VERBOSE)
-						printf(" to XYZ %f %f %f\n",wp[0],wp[1],wp[2]);
-				}
-				if (bp[0] < 0.0 || bp[1] < 0.0 || bp[1] < 0.0) {
-					if (flags & ICX_VERBOSE)
-						printf("Clipping black point from XYZ %f %f %f",bp[0],bp[1],bp[2]);
-					if (bp[0] < 0.0)
-						bp[0] = 0.0;
-					if (bp[1] < 0.0)
-						bp[1] = 0.0;
-					if (bp[2] < 0.0)
-						bp[2] = 0.0;
-					if (flags & ICX_VERBOSE)
-						printf(" to XYZ %f %f %f\n",bp[0],bp[1],bp[2]);
-				}
-			}
+		} else {
+			/* We assume that the display target is well behaved, */
+			/* and that it includes a white point patch. */
+			int nw = 0;
 
-			/* If we were given an input white point scale factor, apply it */
-			if (wpscale >= 0.0) {
-				wp[0] *= wpscale;
-				wp[1] *= wpscale;
-				wp[2] *= wpscale;
-			}
+			wp[0] = wp[1] = wp[2] = 0.0;
 
-		} else {	/* Assume Monitor class */
-
-			switch(h->colorSpace) {
-
-				case icSigCmyData: {
-					double cmy[3];
-
-					/* Lookup white value */
-					for (e = 0; e < inputChan; e++)
-						cmy[e] = 0.0;
-
-					mxmfunc(&os, os.v, wp, cmy);
-
-					if (flags & ICX_VERBOSE)
-						printf("Initial white point = %f %f %f\n",wp[0],wp[1],wp[2]);
-
-					/* Lookup black value */
-					for (e = 0; e < inputChan; e++)
-						cmy[e] = 1.0;
-
-					mxmfunc(&os, os.v, bp, cmy);
-
-					if (flags & ICX_VERBOSE)
-						printf("Initial black point = %f %f %f\n",bp[0],bp[1],bp[2]);
+			switch (h->colorSpace) {
+	
+				case icSigCmyData:
+					for (i = 0; i < nodpbw; i++) {
+						if (ipoints[i].p[0] < 0.001
+						 && ipoints[i].p[1] < 0.001
+						 && ipoints[i].p[2] < 0.001) {
+							wp[0] += ipoints[i].v[0];
+							wp[1] += ipoints[i].v[1];
+							wp[2] += ipoints[i].v[2];
+							nw++;
+						}
+					}
 					break;
-				}
-
-				case icSigRgbData: {
-					double rgb[3];
-
-					/* Lookup white value */
-					for (e = 0; e < inputChan; e++)
-						rgb[e] = 1.0;
-
-					mxmfunc(&os, os.v, wp, rgb);
-
-					if (flags & ICX_VERBOSE)
-						printf("Initial white point = %f %f %f\n",wp[0],wp[1],wp[2]);
-
-					/* Lookup black value */
-					for (e = 0; e < inputChan; e++)
-						rgb[e] = 0.0;
-
-					mxmfunc(&os, os.v, bp, rgb);
-					
-					if (flags & ICX_VERBOSE)
-						printf("Initial black point = %f %f %f\n",bp[0],bp[1],bp[2]);
+				case icSigRgbData:
+					for (i = 0; i < nodpbw; i++) {
+						if (ipoints[i].p[0] > 0.999
+						 && ipoints[i].p[1] > 0.999
+						 && ipoints[i].p[2] > 0.999) {
+							wp[0] += ipoints[i].v[0];
+							wp[1] += ipoints[i].v[1];
+							wp[2] += ipoints[i].v[2];
+							nw++;
+						}
+					}
 					break;
-				}
-
-				default: {
+	
+				default:
 					xicp->errc = 1;
 					sprintf(xicp->err,"set_icxLuMatrix: can't handle color space %s",
 					                           icm2str(icmColorSpaceSignature, h->colorSpace));
 					p->del((icxLuBase *)p);
 					return NULL;
 					break;
-				}
 			}
 
-			if (flags & ICX_CLIP_WB) {
-				/* Don't clip white, as it will be scaled to 1.0 anyway */
-				if (bp[0] < 0.0 || bp[1] < 0.0 || bp[1] < 0.0) {
-					if (flags & ICX_VERBOSE)
-						printf("Clipping black point from XYZ %f %f %f",bp[0],bp[1],bp[2]);
-					if (bp[0] < 0.0)
-						bp[0] = 0.0;
-					if (bp[1] < 0.0)
-						bp[1] = 0.0;
-					if (bp[2] < 0.0)
-						bp[2] = 0.0;
-					if (flags & ICX_VERBOSE)
-						printf(" to XYZ %f %f %f\n",bp[0],bp[1],bp[2]);
-				}
+			if (nw == 0) {
+				xicp->errc = 1;
+				sprintf(xicp->err,"set_icxLuMatrix: can't handle test points without a white patch");
+				p->del((icxLuBase *)p);
+				return NULL;
+			}
+			wp[0] /= (double)nw;
+			wp[1] /= (double)nw;
+			wp[2] /= (double)nw;
+
+			if (flags & ICX_VERBOSE) {
+				printf("Initial white point = %f %f %f\n",wp[0],wp[1],wp[2]);
+			}
+
+			/* Need to lookup bp[] before we set the tag */
+		}
+
+		/* Create some abs<->rel chromatic conversions */
+		{
+			icmXYZNumber _wp;
+			icmAry2XYZ(_wp, wp);
+	
+			/* Absolute->Aprox. Relative Adaptation matrix */
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, fromAbs);
+		
+			/* Aproximate relative to absolute conversion matrix */
+			icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, toAbs);
+		}
+
+	} else {
+		icmSetUnity3x3(fromAbs);
+		icmSetUnity3x3(toAbs);
+	}
+
+	/* Create copy of input points with output converted to white relative */
+	if ((rpoints = (cow *)malloc(nodp * sizeof(cow))) == NULL) {
+		xicp->errc = 1;
+		sprintf(xicp->err,"set_icxLuMatrix: malloc failed");
+		p->del((icxLuBase *)p);
+		return NULL;
+	}
+	for (i = 0; i < nodp; i++) {
+		rpoints[i].w = ipoints[i].w;
+		for (e = 0; e < inputChan; e++)
+			rpoints[i].p[e] = ipoints[i].p[e];
+		for (f = 0; f < outputChan; f++)
+			rpoints[i].v[f] = ipoints[i].v[f];
+
+		/* abs out -> aprox. rel out */
+		icmMulBy3x3(rpoints[i].v, fromAbs, rpoints[i].v);
+	}
+  
+	/* ------------------------------- */
+
+	/* (Use a gamma curve as 0th order shape) */
+	if ((p->pp->errc = createMatrix(p->pp->err, &os, flags & ICX_VERBOSE ? 1 : 0,  
+	                               nodp, rpoints, 0, quality,
+	                               isLinear, isGamma, isShTRC, 1,
+		                           flags & ICX_CLIP_WB ? 1 : 0,
+		                           flags & ICX_CLIP_PRIMS ? 1 : 0,
+		                           smooth, 1.0)) != 0) {   
+		free(rpoints);
+		p->del((icxLuBase *)p);
+		return NULL;
+	}
+	free(rpoints); rpoints = NULL;
+
+	/* The overall device to absolute conversion is now what we want */
+	/* (as dictated by the points, weighting and best fit), */
+	/* but we need to adjust the device to relative conversion */
+	/* to make device white map exactly to D50, without touching */
+	/* the overall absolute behaviour. */
+	if (p->flags & ICX_SET_WHITE) {
+		double aw[3];				/* aprox rel. white */
+		icmXYZNumber _wp;			/* Uncorrected dw maps to _wp */ 
+		double cmat[3][3];			/* Model correction matrix */
+
+		if (flags & ICX_VERBOSE)
+			printf("Doing White point fine tune:\n");
+			
+		/* See what the relative and absolute white point has turned out to be, */
+		/* by looking up the device white in the current conversion */
+		mxmfunc(&os, os.v, aw, dw);
+
+		if (flags & ICX_VERBOSE) {
+			printf("Before fine tune, rel WP = XYZ %s, Lab %s\n", icmPdv(3,aw), icmPLab(aw));
+		}
+
+		/* Matrix needed to correct aw to target D50 */
+		icmAry2XYZ(_wp, aw);		/* Aprox relative target white point */
+		icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, cmat);	/* Correction */
+
+		/* Compute the actual white point */
+		icmMulBy3x3(wp, toAbs, aw);
+
+		/* Apply correction to fine tune matrix. */
+		mxtransform(&os, cmat);
+
+		/* Fix absolute conversions to leave absolute response unchanged. */
+		icmAry2XYZ(_wp, wp);		/* Actual white point */
+		icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, fromAbs);
+		icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, toAbs);
+
+		if (flags & ICX_VERBOSE) {
+			double tw[3];
+			mxmfunc(&os, os.v, tw, dw); /* Lookup white again */
+			printf("After fine tune, rel WP = XYZ %s, Lab %s\n", icmPdv(3, tw), icmPLab(tw));
+			printf("                 abs WP = XYZ %s, Lab %s\n", icmPdv(3, wp), icmPLab(wp));
+		}
+	}
+
+	/* Look up the actual black point */
+	if (p->flags & ICX_SET_BLACK) {
+
+		mxmfunc(&os, os.v, bp, db);
+
+		if (flags & ICX_CLIP_WB) {
+			if (bp[0] < 0.0 || bp[1] < 0.0 || bp[1] < 0.0) {
+				if (flags & ICX_VERBOSE)
+					printf("Clipping black point from XYZ %f %f %f",bp[0],bp[1],bp[2]);
+				if (bp[0] < 0.0)
+					bp[0] = 0.0;
+				if (bp[1] < 0.0)
+					bp[1] = 0.0;
+				if (bp[2] < 0.0)
+					bp[2] = 0.0;
+				if (flags & ICX_VERBOSE)
+					printf(" to XYZ %f %f %f\n",bp[0],bp[1],bp[2]);
 			}
 		}
+		if (flags & ICX_VERBOSE) {
+			printf("Actual BP = XYZ %s, Lab %s\n", icmPdv(3, bp), icmPLab(bp));
+		}
+	}
+
+	/* Create default wpscale */
+	if (wpscale < 0.0) {
+		wpscale = 1.0;
+	} else {
+		if (flags & ICX_VERBOSE) {
+			printf("White manual point scale %f\n", wpscale);
+		}
+	}
+
+	/* If we are going to auto scale the WP to avoid clipping */
+	/* values above the WP: (not important for matrix profiles ?) */
+	if ((p->flags & ICX_SET_WHITE_US) == ICX_SET_WHITE_US) {
+		double tw[3], bw[3];
+		icmXYZNumber _wp;
+		double uswpscale = 1.0;
+		double mxd, mxY;
+		double ndw[3];
+
+		/* See what device space gamut boundary white (ie. 1,1,1) maps to */
+		mxmfunc(&os, os.v, tw, dgw);
+		icmMulBy3x3(tw, toAbs, tw);	/* Convert to absolute */
+
+		mxY = tw[1];
+		icmCpy3(bw, tw);
+//printf("~1 1,1,1 Y = %f\n",tw[1]);
+
+		/* See what the device white point value scaled to 1 produces */
+		mxd = -1.0;
+		for (e = 0; e < inputChan; e++) {
+			if (dw[e] > mxd)
+				mxd = dw[e];
+		}
+		for (e = 0; e < inputChan; e++)
+			ndw[e] = dw[e]/mxd;
+
+		mxmfunc(&os, os.v, tw, ndw);
+		icmMulBy3x3(tw, toAbs, tw);	/* Convert to absolute */
+
+//printf("~1 ndw = %f %f %f Y = %f\n",ndw[0],ndw[1],ndw[2],tw[1]);
+		if (tw[1] > mxY) {
+			mxY = tw[1];
+			icmCpy3(bw, tw);
+		}
+
+		/* Compute WP scale factor needed to fit mxY */
+		if (mxY > wp[1]) {
+			uswpscale = mxY/wp[1];
+			wpscale *= uswpscale;
+			if (flags & ICX_VERBOSE) {
+				printf("Dev boundary white XYZ %s, scale WP by %f, total WP scale %f\n",
+				icmPdv(3, bw), uswpscale, wpscale);
+			}
+		}
+	}
+
+	/* If the scaled WP would have Y > 1.0, clip it to 1.0 */
+	if (p->flags & ICX_CLIP_WB) {
+
+		if ((wp[1] * wpscale) > 1.0) {
+			wpscale = 1.0/wp[1];		/* Make wp Y = 1.0 */		
+			if (flags & ICX_VERBOSE) {
+				printf("WP Y would ve > 1.0. scale by %f to clip it\n",wpscale);
+			}
+		}
+	}
+
+	/* Apply our total wp scale factor */
+	if (wpscale != 1.0) {
+		icmXYZNumber _wp;
+		double cmat[3][3];			/* Model correction matrix */
+
+		/* Create inverse scaling matrix for relative rspl data */
+		icmSetUnity3x3(cmat);
+		icmScale3x3(cmat, cmat, 1.0/wpscale);
+
+		/* Inverse scale the matrix */
+		mxtransform(&os, cmat);
+
+		/* Scale the WP */
+		icmScale3(wp, wp, wpscale);
+
+		/* Fix absolute conversions to leave absolute response unchanged. */
+		icmAry2XYZ(_wp, wp);		/* Actual white point */
+		icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, fromAbs);
+		icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, toAbs);
+	}
+
+	if (flags & (ICX_SET_WHITE | ICX_SET_BLACK)) {
 
 		/* If this is a display, adjust the white point to be */
 		/* exactly Y = 1.0, and compensate the matrix, dispLuminance */
@@ -1373,41 +1735,11 @@ int                quality			/* Quality metric, 0..3 */
 				printf("Black point XYZ = %f %f %f\n",bp[0],bp[1],bp[2]);
 		}
 
-		/* Fix matrix to be relative to D50 white point, rather than absolute */
-		if (flags & ICX_SET_WHITE) {
-			icmXYZNumber swp;
-			double mat[3][3];
-			
-			if (flags & ICX_VERBOSE)
-				printf("Fixup matrix for white point\n");
-
-			icmAry2XYZ(swp, wp);
-
-			/* Transfer from parameter to matrix */
-			mat[0][0] = os.v[0]; mat[0][1] = os.v[1]; mat[0][2] = os.v[2];
-			mat[1][0] = os.v[3]; mat[1][1] = os.v[4]; mat[1][2] = os.v[5];
-			mat[2][0] = os.v[6]; mat[2][1] = os.v[7]; mat[2][2] = os.v[8];
-
-			/* Adapt matrix */
-			icmChromAdaptMatrix(ICM_CAM_MULMATRIX | ICM_CAM_BRADFORD, icmD50, swp, mat);
-
-			/* Transfer back to parameters */ 
-			os.v[0] = mat[0][0]; os.v[1] = mat[0][1]; os.v[2] = mat[0][2];
-			os.v[3] = mat[1][0]; os.v[4] = mat[1][1]; os.v[5] = mat[1][2];
-			os.v[6] = mat[2][0]; os.v[7] = mat[2][1]; os.v[8] = mat[2][2];
-
-			/* Hmm. Ideally this should be within the matrix optimzation.. */
-			if (flags & ICX_CLIP_PRIMS) {
-				for (i = 0; i < 9; i++) {
-					if (os.v[i] < 0.0)
-						os.v[i] = 0.0;
-				}
-			}
-			if (flags & ICX_VERBOSE) {
-				printf("After white point adjust:\n");
-				printf("Matrix = %f %f %f\n",os.v[0], os.v[1], os.v[2]);
-				printf("         %f %f %f\n",os.v[3], os.v[4], os.v[5]);
-				printf("         %f %f %f\n",os.v[6], os.v[7], os.v[8]);
+		// ~~99
+		if (flags & ICX_CLIP_PRIMS) {
+			for (i = 0; i < 9; i++) {
+				if (os.v[i] < 0.0)
+					os.v[i] = 0.0;
 			}
 		}
 	}

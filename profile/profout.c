@@ -59,7 +59,7 @@
  */
 
 #undef DEBUG				/* Print B2A processing information */
-#undef DEBUG_ONE			/* Test a particular value */
+#undef DEBUG_ONE			/* Test a particular value rather than process whole grid */
 
 #define verbo stdout
 
@@ -67,11 +67,16 @@
 
 #define NO_B2A_PCS_CURVES		/* [Define] PCS curves seem to make B2A less accurate. Why ? */
 #define USE_CAM_CLIP_OPT		/* [Define] Clip out of gamut in CAM space rather than PCS */
-#define USE_LEASTSQUARES_APROX	/* [Define] Use least squares fitting approximation */
-#undef USE_EXTRA_FITTING		/* [Undef] Turn on data point error compensation */
-#undef USE_2PASSSMTH			/* [Undef] Turn on Gaussian smoothing */
-#undef DISABLE_GAMUT_TAG		/* [Undef] To dispable gamut tag */
+#define USE_LEASTSQUARES_APROX	/* [Define] Use least squares fitting approximation in B2A */
+//#undef USE_EXTRA_FITTING		/* [Undef] Turn on data point error compensation in A2B */
+//#undef USE_2PASSSMTH			/* [Undef] Turn on Gaussian smoothing in A2B */
+#undef DISABLE_GAMUT_TAG		/* [Undef] To disable gamut tag */
 #undef WARN_CLUT_CLIPPING		/* [Undef] Print warning if setting clut clips */
+#undef COMPARE_INV_CLUT			/* [Undef] Compare result of inv_clut with clut to diag inv probs */
+#define FILTER_B2ACLIP			/* [Define] Filter clip area of B2A */
+#define FILTER_THR_DE 3.0		/* [5.0] Filtering threshold DE */
+#define FILTER_MAX_DE 5.0		/* [10.0] Filtering DE to gamut surface at whit MAX_RAD starts */
+#define FILTER_MAX_RAD 0.1		/* [0.1] Filtering maximum radius in grid */
 
 #include <stdio.h>
 #include "numlib.h"
@@ -153,6 +158,10 @@ typedef struct {
 	int verb;
 	int total, count, last;	/* Progress count information */
 	int noPCScurves;		/* Flag set if we don't want PCS curves */
+	int filter;				/* Filter clipped values */
+	double filter_thr;		/* Clip DE threshold */
+	double filter_ratio;	/* Clip DE to radius factor */
+	double filter_maxrad;	/* Clip maximum filter radius */
 	icColorSpaceSignature pcsspace;	/* The PCS colorspace */
 	icColorSpaceSignature devspace;	/* The device colorspace */
 	icxLuLut *x;			/* A2B icxLuLut we are inverting in std PCS */
@@ -308,16 +317,19 @@ void out_b2a_input(void *cntx, double out[3], double in[3]) {
 /* output device. Ideally the gamut mapping should take the change */
 /* the abstract profile has on the output device into account, but */
 /* currently we're not doing this.. */
+/* If ICM_CLUT_SET_FILTER is being used, then */
+/* we need to set a filter radius value at out[-1-table] */
 void out_b2a_clut(void *cntx, double *out, double in[3]) {
 	out_b2a_callback *p = (out_b2a_callback *)cntx;
 	double inn[3], in1[3];
+	double cdist = 0.0;		/* Clipping DE */
 	int tn;
 
 	DBG(("\nout_b2a_clut got      PCS'' %f %f %f\n",in[0],in[1],in[2]))
 
 	in1[0] = in[0];		/* in[] may be aliased with out[] */
 	in1[1] = in[1];		/* so take a copy.  */
-	in1[2] = in[2];
+	in1[2] = in[2];		/* (If we were using "index-under", we should copy it too) */
 
 	DBG(("out_b2a_clut got       PCS' %f %f %f\n",in[0],in[1],in[2]))
 
@@ -346,18 +358,38 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 			error("%d, %s",p->x->pp->errc,p->x->pp->err);
 
 		DBG(("noPCScurves = %d, abs_luo[0] = 0x%x\n",p->noPCScurves,p->abs_luo[0]))
-		DBG(("convert to PCS' got         %f %f %f\n",in1[0],in1[1],in1[2]))
+		DBG(("convert PCS to PCS' got     %f %f %f\n",in1[0],in1[1],in1[2]))
 	}
 
 	/* Invert AtoB clut (PCS' to Dev') Colorimetric */
 	/* to producte the colorimetric tables output. */
 	/* (Note that any aux target if we were using one, would be in Dev space) */
-	if (p->x->inv_clut(p->x, out, in1) > 1)
+	if (p->x->inv_clut_aux(p->x, out, NULL, NULL, NULL, &cdist, in1) > 1)
 		error("%d, %s",p->x->pp->errc,p->x->pp->err);
+	if (p->filter) {
+		cdist -= p->filter_thr;
+		if (cdist < 0.0)
+			cdist = 0.0; 
+		cdist *= p->filter_ratio;
+		if (cdist > p->filter_maxrad)
+			cdist = p->filter_maxrad;
+		out[-1-0] = cdist;
+	}
 
-	DBG(("convert PCS' to DEV' got    %f %f %f %f\n",out[0],out[1],out[2],out[3]))
+	DBG(("convert PCS' to DEV' got    %s\n",icmPdv(p->ochan, out)))
 
+#ifdef COMPARE_INV_CLUT		/* Compare the inversion result with the fwd lookup */
+	{
+		double chk[3];
+
+		if (p->x->clut(p->x, chk, out) > 1)
+			error("%d, %s",p->x->pp->errc,p->x->pp->err);
+
+		DBG(("check DEV' to PCS' got      %f %f %f\n",chk[0],chk[1],chk[2]))
+	}
+#endif
 	if (p->ntables > 1) {		/* Do first part once for both intents */
+		double *tnout = out;	/* This tables output values */
 
 		DBG(("\n"))
 
@@ -382,7 +414,7 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 		for (tn = 1; tn < p->ntables; tn++) {
 			double in2[3];
 
-			out += p->ochan;	/* next table/intent */
+			tnout += p->ochan;	/* next table/intent */
 			in2[0] = in1[0];	/* Copy in1[] so it can be used for both tables */
 			in2[1] = in1[1];
 			in2[2] = in1[2];
@@ -436,13 +468,22 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 			/* Invert AtoB clut (PCS' to Dev') */
 			/* to producte the perceptual or saturation tables output. */
 			/* (Note that any aux target if we were using one, would be in Dev space) */
-			if (p->x->inv_clut(p->x, out, in2) > 1)
+			if (p->x->inv_clut_aux(p->x, tnout, NULL, NULL, NULL, &cdist, in2) > 1)
 				error("%d, %s",p->x->pp->errc,p->x->pp->err);
-			DBG(("convert PCS' to DEV' got %f %f %f %f\n",out[0],out[1],out[2],out[3]))
+			if (p->filter) {
+				cdist -= p->filter_thr;
+				if (cdist < 0.0)
+					cdist = 0.0; 
+				cdist *= p->filter_ratio;
+				if (cdist > p->filter_maxrad)
+					cdist = p->filter_maxrad;
+				out[-1-tn] = cdist;
+			}
+			DBG(("convert PCS' to DEV' got %s\n",icmPdv(p->ochan, tnout)))
 		}
 	}
 
-	DBG(("out_b2a_clut returning DEV' %f %f %f\n",out[0],out[1],out[2]))
+	DBG(("out_b2a_clut returning DEV' %s\n",icmPdv(p->ochan, out)))
 
 	if (p->verb) {		/* Output percent intervals */
 		int pc;
@@ -460,12 +501,12 @@ void out_b2a_clut(void *cntx, double *out, double in[3]) {
 void out_b2a_output(void *cntx, double out[4], double in[4]) {
 	out_b2a_callback *p = (out_b2a_callback *)cntx;
 
-	DBG(("out_b2a_output got      DEV' %f %f %f\n",in[0],in[1],in[2]))
+	DBG(("out_b2a_output got      DEV' %s\n",icmPdv(p->ochan,in)))
 
 	if (p->x->inv_input(p->x, out, in) > 1)
 		error("%d, %s",p->x->pp->errc,p->x->pp->err);
 
-	DBG(("out_b2a_output returning DEV %f %f %f\n",out[0],out[1],out[2]))
+	DBG(("out_b2a_output returning DEV %s\n",icmPdv(p->ochan,out)))
 }
 
 /* --------------------------------------------------------- */
@@ -606,6 +647,8 @@ make_output_icc(
 	char *file_name,		/* output icc name */
 	cgats *icg,				/* input cgats structure */
 	int spec,				/* Use spectral data flag */
+	icxIllumeType tillum,	/* Target/simulated instrument illuminant */
+	xspect *cust_tillum,	/* Possible custom target/simulated instrument illumination */
 	icxIllumeType illum,	/* Spectral illuminant */
 	xspect *cust_illum,		/* Possible custom illumination */
 	icxObserverType observ,	/* Spectral observer */
@@ -615,7 +658,6 @@ make_output_icc(
 	char *ipname,			/* input icc profile - enables gamut map, NULL if none */
 	char *sgname,			/* source image gamut - NULL if none */
 	char *absname[3],		/* abstract profile name for each table */
-							/* may be duplicated, NULL if none */
 	int sepsat,				/* Create separate Saturation B2A */
 	icxViewCond *ivc_p,		/* Input Viewing Parameters for CAM */
 	icxViewCond *ovc_p,		/* Output Viewing Parameters for CAM */
@@ -651,6 +693,7 @@ make_output_icc(
 	xcal *cal = NULL;		/* Calibration if present, NULL if none */
 	icxInk iink;			/* Source profile ink limit values */
 
+	memset((void *)&iink, 0, sizeof(icxInk));
 	iink.tlimit = -1.0;		/* default to unknown */
 	iink.klimit = -1.0;
 
@@ -893,6 +936,7 @@ make_output_icc(
 		    	b2aoutres = 64;
 			}
 		}
+
 	}
 
 	/* See if there is a calibration in the .ti3, and read it if there is */
@@ -1464,6 +1508,13 @@ make_output_icc(
 				oink->tlimit = ilimit/100.0;	/* Set requested ink limit */
 			}
 		}
+
+		/* A sanity check */
+		if (isAdditive && oink != NULL && oink->tlimit > 0 && oink->tlimit < (double)devchan) {
+			warning("\n!!!!!!! Additive space has ink limit of %.0f%% set !!!!!!!\n"
+			        ">> You probably don't want to do this, as it will limit the white point <<",oink->tlimit * 100.0);
+		}
+
 		/* Should targen/.ti3 file allow for BLACK_INK_LIMIT ?? */
 		
 		/* A problem here is that if the .ti3 is corrupted, then */
@@ -1645,7 +1696,7 @@ make_output_icc(
 
 			/* Create a spectral conversion object */
 			if ((sp2cie = new_xsp2cie(illum, cust_illum, observ, NULL,
-			                          wantLab ? icSigLabData : icSigXYZData)) == NULL)
+			                          wantLab ? icSigLabData : icSigXYZData, icxClamp)) == NULL)
 				error("Creation of spectral conversion object failed");
 
 			/* If Fluorescent Whitening Agent compensation is enabled */
@@ -1654,6 +1705,7 @@ make_output_icc(
 				xspect mwsp;			/* Medium spectrum */
 				instType itype;			/* Spectral instrument type */
 				xspect insp;			/* Instrument illuminant */
+				xspect tinsp, *tinspp = NULL;	/* Target/simulated instrument illuminant */
 
 				mwsp = sp;		/* Struct copy */
 
@@ -1729,8 +1781,21 @@ make_output_icc(
 					mwsp.spec[j] /= nw;	/* Compute average */
 				}
 
+				/* If the simulated instrument illumination is */
+				/* not the observer/final illuminant */
+				if (tillum != icxIT_none) {
+					if (tillum == icxIT_custom)
+						tinspp = cust_tillum;
+					else {
+						tinspp = &tinsp;
+						if (standardIlluminant(tinspp, tillum, 0.0)) {
+							error("simulated inst. illum. not recognised");
+						}
+					}
+				}
+
 				/* (Note that sp and mwsp.norm is set to 100.0) */
-				if (sp2cie->set_fwa(sp2cie, &insp, &mwsp)) 
+				if (sp2cie->set_fwa(sp2cie, &insp, tinspp, &mwsp)) 
 					error ("Set FWA on sp2cie failed");
 
 				if (verb) {
@@ -1855,7 +1920,7 @@ make_output_icc(
 			               ICX_2PASSSMTH |
 #endif
 			               flags,
-			               npat, tpat, dispLuminance, -1.0, smooth, avgdev,
+			               npat, npat, tpat, NULL, dispLuminance, -1.0, smooth, avgdev,
 			               NULL, oink, cal, iquality)) == NULL)
 				error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
@@ -1877,6 +1942,18 @@ make_output_icc(
 
 			if (verb)
 				printf("Setting up B to A table lookup\n");
+
+#ifdef FILTER_B2ACLIP
+			cx.filter = 1;
+			cx.filter_thr = FILTER_THR_DE;
+			cx.filter_ratio = FILTER_MAX_RAD/FILTER_MAX_DE;
+			cx.filter_maxrad = FILTER_MAX_RAD;
+#else
+			cx.filter = 0;
+			cx.filter_thr = 100.0;
+			cx.filter_ratio = 0.0;
+			cx.filter_maxrad = 0.0;
+#endif
 
 			if (ipname != NULL) {		/* There is a source profile to determine gamut mapping */
 
@@ -1938,7 +2015,7 @@ make_output_icc(
 				if (v->Lv >= 0.0)
 					vc->Lv = v->Lv;
 				if (v->Yf >= 0.0)
-					vc->Yf = vc->Yf;
+					vc->Yf = v->Yf;
 				if (v->Fxyz[0] >= 0.0 && v->Fxyz[1] > 0.0 && v->Fxyz[2] >= 0.0) {
 					/* Normalise XYZ to current media white */
 					vc->Fxyz[0] = v->Fxyz[0]/v->Fxyz[1] * vc->Fxyz[1];
@@ -2522,9 +2599,9 @@ make_output_icc(
 			{
 				double in[10][MAX_CHAN];
 				double out[MAX_CHAN];
-				in[0][0] = 100.0;			/* White point blue */
-				in[0][1] = 0.0;
-				in[0][2] = 0.0;
+				in[0][0] = 100.0;			/* White point */
+				in[0][1] = 0.001;
+				in[0][2] = 0.001;
 
 				for (i = 0; i < DBGNO; i++) {
 					printf("Input %s\n",icmPdv(3,in[i]));
@@ -2545,10 +2622,12 @@ make_output_icc(
 			        cx.ntables,
 			        wo,
 #ifdef USE_LEASTSQUARES_APROX
-					ICM_CLUT_SET_APXLS,
-#else
-					0,
+					ICM_CLUT_SET_APXLS | 
 #endif
+#ifdef FILTER_B2ACLIP
+					ICM_CLUT_SET_FILTER | 
+#endif
+					0,
 					&cx,						/* Context */
 					cx.pcsspace,				/* Input color space */
 					devspace, 					/* Output color space */
@@ -2744,7 +2823,7 @@ make_output_icc(
 		               wr_xicc, icmFwd, isdisp ? icmDefaultIntent : icRelativeColorimetric,
 		               icmLuOrdRev,
 			           flags,		 		/* Compute white & black */
-		               npat, tpat, dispLuminance, -1.0, smooth, avgdev,
+		               npat, npat, tpat, NULL, dispLuminance, -1.0, smooth, avgdev,
 		               NULL, oink, cal, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);
 

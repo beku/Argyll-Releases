@@ -38,7 +38,6 @@
 #include "xutils.h"		/* Utility functions */
 #include "xcam.h"		/* CAM definitions */
 #include "xspect.h"		/* Spectral conversion object */
-#include "xsep.h"		/* Separation and multi-ink support */
 #include "xcolorants.h"	/* Known colorants support */
 #include "insttypes.h"	/* Instrument type support */
 #include "mpp.h"		/* model printer profile support */
@@ -95,6 +94,38 @@
 /* Return a string description of the given enumeration value */
 const char *icx2str(icmEnumType etype, int enumval);
 
+
+/* ------------------------------------------------------------------------------ */
+
+/* A 3x3 matrix model */
+struct _icxMatrixModel {
+	void *imp;		/* Opaque implementation */
+
+	int isLab;		/* Convert lookup to Lab */
+
+	void (*force) (struct _icxMatrixModel *p, double *targ, double *in);
+	void (*lookup) (struct _icxMatrixModel *p, double *out, double *in);
+	void (*del) (struct _icxMatrixModel *p);
+
+}; typedef struct _icxMatrixModel icxMatrixModel;
+
+/* Create a matrix model of a set of points, and return an object to lookup */
+/* points from the model. Return NULL on error. */
+icxMatrixModel *new_MatrixModel(
+int verb,			/* NZ if verbose */
+int nodp,			/* Number of points */
+cow *ipoints,		/* Array of input points in XYZ space */
+int isLab,			/* nz if data points are Lab */
+int quality,		/* Quality metric, 0..3 (-1 == 2 orders only) */
+int isLinear,		/* NZ if pure linear, gamma = 1.0 */
+int isGamma,		/* NZ if gamma rather than shaper */
+int isShTRC,		/* NZ if shared TRCs */
+int shape0gam,		/* NZ if zero'th order shaper should be gamma function */
+int clipbw,			/* Prevent white > 1 and -ve black */
+int clipprims,		/* Prevent primaries going -ve */
+double smooth,		/* Smoothing factor (nominal 1.0) */
+double scale		/* Scale device values */
+);
 
 /* ------------------------------------------------------------------------------ */
 /* Basic class keeps extra state for an icc, and provides the */
@@ -231,24 +262,31 @@ struct _xicc {
 										/* Return appropriate lookup object */
 										/* NULL on error, check errc+err for reason */
 	/* "create" flags */
-#define ICX_SET_WHITE       0x0001		/* find, set and make relative to the white point */
-#define ICX_SET_BLACK       0x0002		/* find and set the black point */
-#define ICX_WRITE_WBL       0x0004		/* Matrix: write White, Black & Luminance tags */
-#define ICX_CLIP_WB         0x0008		/* Clip white and black to be < 1 and > 0 respectively */
-#define ICX_CLIP_PRIMS      0x0010		/* Clip matrix primaries to be > 0 */
-#define ICX_NO_IN_SHP_LUTS  0x0040		/* Lut/Mtx: Don't create input (Device) shaper curves. */
-#define ICX_NO_IN_POS_LUTS  0x0080		/* LuLut: Don't create input (Device) postion curves. */
-#define ICX_NO_OUT_LUTS     0x0100		/* LuLut: Don't create output (PCS) curves. */
-//#define ICX_2PASSSMTH       0x0400		/* If LuLut: Use Gaussian smoothing */
-//#define ICX_EXTRA_FIT       0x0800		/* If LuLut: Counteract scat data point errors. */
-/* And  ICX_VERBOSE         0x8000 */	/* Turn on verboseness during creation */
+#define ICX_SET_WHITE       0x00010000	/* find, set and make relative to the white point */
+#define ICX_SET_WHITE_US    0x00030000	/* find, set and make relative to the white point hue, */
+										/* but not scale to W L value, to avoid input clipping */
+#define ICX_SET_WHITE_C     0x00050000	/* find, set and make relative to the white point hue, */
+										/* and clip any cLUT values over D50 to D50 */
+#define ICX_SET_BLACK       0x00080000	/* find and set the black point */
+#define ICX_WRITE_WBL       0x00100000	/* Matrix: write White, Black & Luminance tags */
+#define ICX_CLIP_WB         0x00200000	/* Clip white and black to be < 1 and > 0 respectively */
+#define ICX_CLIP_PRIMS      0x00400000	/* Clip matrix primaries to be > 0 */
+#define ICX_NO_IN_SHP_LUTS  0x00800000	/* Lut/Mtx: Don't create input (Device) shaper curves. */
+#define ICX_NO_IN_POS_LUTS  0x01000000	/* LuLut: Don't create input (Device) postion curves. */
+#define ICX_NO_OUT_LUTS     0x02000000	/* LuLut: Don't create output (PCS) curves. */
+//#define ICX_2PASSSMTH     0x04000000	/* If LuLut: Use Gaussian smoothing */
+//#define ICX_EXTRA_FIT     0x08000000	/* If LuLut: Counteract scat data point errors. */
+/* And  ICX_VERBOSE         			   Turn on verboseness during creation */
 	struct _icxLuBase * (*set_luobj) (struct _xicc *p,
 	                                  icmLookupFunc func,		/* Functionality to set */
 	                                  icRenderingIntent intent,	/* Intent to set */
 	                                  icmLookupOrder order,		/* Search Order */
 	                                  int flags,				/* white/black point flags */
-	                                  int no,					/* Number of points */
+	                                  int no,					/* Total Number of points */
+	                                  int nobw,					/* Number of points to look */
+																/* for white & black patches in */
 	                                  cow *points,				/* Array of input points */
+	                                  icxMatrixModel *skm, 		/* Optional skeleton model */
 	                                  double dispLuminance,		/* > 0.0 if display luminance */
 	                                                                    /* value and is known */
 	                                  double wpscale,			/* > 0.0 if input white pt is */
@@ -522,7 +560,7 @@ struct _icxLuLut {
 	int (*inv_output)  (struct _icxLuLut *p, double *out, double *in);
 	int (*inv_clut)    (struct _icxLuLut *p, double *out, double *in);
 	int (*inv_clut_aux)(struct _icxLuLut *p, double *out, double *auxv,
-                                             double *auxr, double *auxt, double *in);
+                 double *auxr, double *auxt, double *clipd, double *in);
 	int (*inv_input)   (struct _icxLuLut *p, double *out, double *in);
 	int (*inv_matrix)  (struct _icxLuLut *p, double *out, double *in);
 	int (*inv_in_abs)  (struct _icxLuLut *p, double *out, double *in);
@@ -569,36 +607,6 @@ struct _profxinf {
 	/* Other stuff ICC ?? */
 
 }; typedef struct _profxinf profxinf;
-
-
-/* A 3x3 matrix model */
-struct _icxMatrixModel {
-	void *imp;		/* Opaque implementation */
-
-	int isLab;		/* Convert lookup to Lab */
-
-	void (*lookup) (struct _icxMatrixModel *p, double *out, double *in);			\
-	void (*del) (struct _icxMatrixModel *p);
-
-}; typedef struct _icxMatrixModel icxMatrixModel;
-
-/* Create a matrix model of a set of points, and return an object to lookup */
-/* points from the model. Return NULL on error. */
-icxMatrixModel *new_MatrixModel(
-int verb,			/* NZ if verbose */
-int nodp,			/* Number of points */
-cow *ipoints,		/* Array of input points in XYZ space */
-int isLab,			/* nz if data points are Lab */
-int quality,		/* Quality metric, 0..3 (-1 == 2 orders only) */
-int isLinear,		/* NZ if pure linear, gamma = 1.0 */
-int isGamma,		/* NZ if gamma rather than shaper */
-int isShTRC,		/* NZ if shared TRCs */
-int shape0gam,		/* NZ if zero'th order shaper should be gamma function */
-int clipbw,			/* Prevent white > 1 and -ve black */
-int clipprims,		/* Prevent primaries going -ve */
-double smooth,		/* Smoothing factor (nominal 1.0) */
-double scale		/* Scale device values */
-);
 
 /* Set an icc's Lut tables, and take care of auxiliary continuity problems. */
 /* Only useful if there are auxiliary device output chanels to be set. */

@@ -25,7 +25,7 @@
     permissions mean that you can't set a calibration persistently when
     the default system profile is being used, unless you run as root
     (ie. use sudo). Note that you do <span style="font-weight: bold;">not</span>
-    need to run a root to install a user profile (-Su, the default
+    need to run as root to install a user profile (-Su, the default
     install type.)]<br>
     <h3>Usage</h3>
     <font size="-1"><span style="font-family: monospace;">dispwin
@@ -36,6 +36,10 @@
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;&nbsp;&nbsp;
 Verbose
+
+
+
+
 
 
 
@@ -56,6 +60,10 @@ optionally
 
 
 
+
+
+
+
         choose a different display m for Video LUT access.<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#d">-d n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -64,23 +72,31 @@ X11]
 
 
 
+
+
+
+
         Choose the display from the following list (default 1)<br>
       </span></font><span style="font-family: monospace;">&nbsp;<a
         href="#dweb">-dweb[:port]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
+
+
+
       Display via a web server at port (default 8080)</span><br
       style="font-family: monospace;">
     <font size="-1"><span style="font-family: monospace;"></span><span
-        style="font-family: monospace;">&nbsp;<a href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-Position
-test
-
-
-
-        window and scale it</span><br style="font-family: monospace;">
+        style="font-family: monospace;">&nbsp;<a href="#P">-P
+          ho,vo,ss[,vs]</a>&nbsp;&nbsp;&nbsp;&nbsp; Position test window
+        and scale it</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ho,vi:
 0.0
+
+
+
+
 
 
 
@@ -92,12 +108,25 @@ ss:
 
 
 
+
+
+
+
         = half, 1.0 = normal, 2.0 = double etc.<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+        ss,vs: = optional horizontal, vertical scale.<br>
         &nbsp;</span></font><font size="-1"><span style="font-family:
         monospace;"><a href="#F">-F</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Fill
 whole
+
+
+
+
 
 
 
@@ -124,12 +153,20 @@ just
 
 
 
+
+
+
+
         video LUT loading &amp; Beeps<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#n">-n</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Test
 native
+
+
+
+
 
 
 
@@ -140,12 +177,20 @@ the
 
 
 
+
+
+
+
         currently loaded Video LUT to 'filename'<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#c">-c</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Load
 a
+
+
+
+
 
 
 
@@ -159,10 +204,18 @@ that
 
 
 
+
+
+
+
         calfile/profile cal. is currently loaded in LUT<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#I">-I</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
 
 
 
@@ -174,6 +227,10 @@ that
 
 
 
+
+
+
+
       </span></font><font size="-1"><span style="font-family:
         monospace;">Un-install profile for display<br>
         &nbsp;<a href="#S">-S d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -182,10 +239,18 @@ the
 
 
 
+
+
+
+
         install/uninstall scope for OS X [nlu] or Vista [lu]<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 d
 is
+
+
+
+
 
 
 
@@ -197,11 +262,19 @@ is
 
 
 
+
+
+
+
       </span></font><font size="-1"><span style="font-family:
         monospace;">Load installed profiles cal. into Video LUT<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#E">-E</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
 
 
 
@@ -215,6 +288,10 @@ debug
 
 
 
+
+
+
+
         diagnostics to stderr</span></font><font size="-1"><span
         style="font-family: monospace;"></span></font><font size="-1"><span
         style="font-family: monospace;"></span><span style="font-family:
@@ -225,6 +302,10 @@ debug
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Load
 display
+
+
+
+
 
 
 
@@ -287,6 +368,10 @@ the
 
 
 
+
+
+
+
     difficulty cause by TwinView and MergedFB in X11 based systems, you
     can optionally specify a separate display number after the display
     that is going to be used to present test patches, for accessing the
@@ -313,7 +398,8 @@ the
     URL will be printed once the server is started, or you could run <span
       style="font-weight: bold;">ipconfig</span> (MSWin) or <span
       style="font-weight: bold;">/sbin/ifconfig</span> (Linux or OS X)
-    and identify an internet address for your machine that way.<br>
+    and identify an internet address for your machine that way. <b>JavaScript</b>
+    needs to be enabled in your web browser for this to work.<br>
     <br>
     Note that if you use this method of accessing a display, that there
     is no access to the display Video Lookup tables, and that any
@@ -329,15 +415,18 @@ the
     and vertical offset respectively. A value of 0.0 positions the
     window to the far left or top of the screen, a value of 0.5
     positions it in the center of the screen (the default), and 1.0
-    positions it to the far right or bottom of the screen. The <span
-      style="font-weight: bold;">ss</span> parameter is a scale factor
-    for the test window size. A value of 0.5 for instance, would produce
-    a half sized window. A value of 2.0 will produce a double size
-    window. Note that the ho,vo,ss numbers must be specified as a single
-    string (no space between the numbers and the comma).<br>
-    For example, to create a double sized test window at the top right
-    of the screen, use <span style="font-weight: bold;">-P 1,0,2</span>
-    .<br>
+    positions it to the far right or bottom of the screen. If three
+    parameters are provided, then the <span style="font-weight: bold;">ss</span>
+    parameter is a scale factor for the test window size. A value of 0.5
+    for instance, would produce a half sized window. A value of 2.0 will
+    produce a double size window. If four parameters are provided, then
+    the last two set independent horizontal and vertical scaling
+    factors. Note that the ho,vo,ss or ho,vo,hs,vs numbers must be
+    specified as a single string (no space between the numbers and the
+    comma). For example, to create a double sized test window at the top
+    right of the screen, use <span style="font-weight: bold;">-P 1,0,2</span>
+    . To create a window twice as wide as high: <span
+      style="font-weight: bold;">-P 1,0,2,1</span>.<br>
     <br>
     <a name="F"></a> The <span style="font-weight: bold;">-F</span>
     flag causes the while screen behind the test window to be masked

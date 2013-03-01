@@ -1,6 +1,17 @@
 
- Change History:
- 
+ Change History: (See ArgyllCMS log.txt too)
+
+ 2.15
+	Change icc->read_tag() to only succeed if the tag type is
+	known, since the standard expectation of a non NULL
+	return type is that it is of a known type. Added new
+	method icc->read_tag_any() which will return a
+	icmSigUnknownType if the tag type is unknown.
+
+ 2.14
+	Fix potential array bounds violation in icc/icc.c for malformed
+	cLUT profiles with zero input channels.
+
  2.10
 	
 	Added protection against crafted file integer overflows.

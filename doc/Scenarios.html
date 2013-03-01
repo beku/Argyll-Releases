@@ -124,6 +124,9 @@
     test colors to a display (see <span style="font-weight: bold;">-C</span>
     and <span style="font-weight: bold;">-M</span> options of dispcal
     and dispread), but you may want to refer to <a href="#PM7">Calibrating
+
+
+
       and profiling a display that doesn't have VideoLUT access</a>.<br>
     <br>
     <h3><a name="PM1b"></a>Adjusting and Calibrating Displays</h3>
@@ -146,6 +149,9 @@
     your display is currently set up. (you may have to run this as <span
       style="text-decoration: underline; color: rgb(204, 51, 204);">dispcal
 -yl
+
+
+
 
 
 
@@ -451,17 +457,6 @@
     This may be better at capturing the often narrow wavelength peaks
     that are typical of display primary colors.<br>
     <br>
-    Another option that can be used with the Eye-One Pro or ColorMunki
-    spectrometer is the <a href="dispcal.html#V">adaptive measurement
-      mode</a> (<span style="font-weight: bold;">-V</span>). By default
-    a fixed measurement integration time is used, as this will give the
-    most consistent results, but for displays with high contrast ratio's
-    and deep blacks, the integration time may be too short to give
-    adequate precision. The adaptive measurement mode increases
-    integration time when measuring dark colors (which will increase the
-    overall calibration or profiling time), and is capable of achieving
-    higher precision for these dark measurements.<br>
-    <br>
     All instruments depend on silicon sensors, and such sensors generate
     a temperature dependant level of noise ("dark noise") that is
     factored out of the measurements by a dark or black instrument
@@ -492,6 +487,9 @@
 
 
 
+
+
+
     (<span style="font-weight: bold;">-Iw</span>) changes by doing on
     the fly calibrations during the measurements. Instrument black level
     drift and display white level drift can be combined (<span
@@ -507,6 +505,9 @@
     displays,&nbsp; (ie. you have a Wide Gamut Display), then you may
     get disappointing results with a Colorimeter. One way of addressing
     this problem is to use a <a href="File_Formats.html#.ccmx">Colorimeter
+
+
+
 
 
 
@@ -628,6 +629,9 @@
 
 
 
+
+
+
       SG</a> charts:<br>
     <br>
     <img src="DC.jpg" alt="GretagMacbeth ColorChecker DC chart"
@@ -640,6 +644,9 @@
       2px solid ; width: 200px; height: 140px;"><br>
     <br>
     Also supported is the <a href="http://www.hutchcolor.com/hct.htm">HutchColor
+
+
+
 
 
 
@@ -658,8 +665,14 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
 
 
 
+
+
+
       M&eacute;tairie's Digital TargeT 003</a> and <a
 href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.html">Christophe
+
+
+
 
 
 
@@ -677,6 +690,9 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
 
 
 
+
+
+
       Imaging DCPro Target</a>:<br>
     <br>
     <img style="width: 153px; height: 122px;" alt="LaserSoft DCPro
@@ -687,6 +703,23 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
     <br>
     <img style=" width: 146px; height: 109px;" alt="Datacolor
       SpyderCheckr" src="SpyderChecker.jpg"><br>
+    <br>
+    One of the QPcard's:<br>
+    <a
+      href="http://www.qpcard.com/en_b2c/color-reference-cards/qpcard201.html">QPcard
+
+
+      201</a>:&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; <a
+href="http://www.qpcard.com/en_b2c/color-reference-cards/instant-camera-raw-profiling-with-qpcard-202.html">QPcard
+
+
+      202</a>:<br>
+    <br>
+    <img style=" width: 41px; height: 141px;" alt="QPCard201"
+      src="QPcard201.jpg">&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;
+    &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; <img
+      style=" width: 97px; height: 141px;" alt="QPcard202"
+      src="QPcard202.jpg"><br>
     <br>
     <h4><a name="PS3"></a>Taking readings from a scanner or camera<br>
     </h4>
@@ -721,7 +754,9 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
         style="font-weight: bold;">ref/</span><b>it8.cht</b> file
       supplied with Argyll, and&nbsp; the manufacturer will will supply
       an individual or batch average file along with the chart
-      containing this information, or downloadable from their web site.<br>
+      containing this information, or downloadable from their web site.
+      For instance, Kodak Q60 target reference files are <a
+        href="ftp://ftp.kodak.com/gastds/Q60DATA/">here</a>.<br>
       NOTE that the reference file for the IT8.7/2 chart supplied with <span
         style="font-weight: bold;">Monaco&nbsp;EZcolor</span> can be
       obtained by unzipping the .mrf file. (You may have to make a copy
@@ -759,6 +794,9 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
         style="text-decoration: underline;">plain text</span> editor,
       first deleting everything before the line starting with "A1" and
       everything after "N10", then prepending <a href="SG_header.txt">this
+
+
+
 
 
 
@@ -821,11 +859,24 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
       transcribing the <a
         href="http://spyder.datacolor.com/images/photo_checkr_colordatainfo.jpg">values</a>
       on the Datacolor website. <br>
+      <br>
+      For the QPCard 201, the <span style="font-weight: bold;">ref/QPcard_201.cht</span>
+      file should be used, and a reference <span style="font-weight:
+        bold;">ref/QPcard_201.cie</span> file made from measuring a
+      sample chart is also available. <br>
+      <br>
+      For the QPCard 202, the <span style="font-weight: bold;">ref/QPcard_202.cht</span>
+      file should be used, and a reference <span style="font-weight:
+        bold;">ref/QPcard_202.cie</span> file made from measuring a
+      sample chart is also available. <br>
     </div>
     <br>
     For any other type of chart, a chart recognition template file will
     need to be created (this is beyond the scope of the current
     documentation, although see&nbsp; the <a href="cht_format.html">.cht_format
+
+
+
 
 
 
@@ -1228,6 +1279,9 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
+
+
         scanner or camera must be configured and used exactly the same
         as it was when it was profiled.</span></big><br>
     <br>
@@ -1326,6 +1380,9 @@ then
 
 
 
+
+
+
     it can save considerable processing time and space if the -b flag is
     used, and the -S flag not used.<br>
     <br>
@@ -1390,6 +1447,9 @@ then
     profile (using <a href="colprof.html#q">-ql</a> <a
       href="colprof.html#b">-b</a> <a href="colprof.html#ni">-no</a>, <a
       href="colprof.html#no">-ni</a> and no <a href="colprof.html#S">-S</a>),
+
+
+
 
 
 
@@ -1808,6 +1868,9 @@ chart,
 
 
 
+
+
+
     and/or to have it included in .ti3 file.<br>
     &nbsp;&nbsp;&nbsp; <a href="cctiff.html#p2">cctiff</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 To
@@ -1823,8 +1886,14 @@ an
 
 
 
+
+
+
     image file.<br>
     &nbsp;&nbsp;&nbsp; <a href="applycal.html#p1">applycal</a>&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -1840,6 +1909,9 @@ assumed
 when
 reading
 a
+
+
+
 
 
 
@@ -2049,15 +2121,15 @@ a
     Although a device profile or device link profile may be useful with
     other programs and systems, Argyll provides the tool <a
       href="cctiff.html">cctiff</a> for directly applying a device to
-    device transform to a <a href="File_Formats.html#TIFF">TIFF</a>
-    or <a href="File_Formats.html#JPEG">JPEG</a> raster file. The
-    cctiff tool is capable of linking an arbitrary sequence of device
-    profiles, device links, abstract profiles and calibration curves.
-    Each device profile can be preceded by the <span
-      style="font-weight: bold;">-i</span> option to indicate the intent
-    that should be used. Both 8 and 16 bit per component files can be
-    handled, and up to 8 color channels. The color transform is
-    optimized to perform the overall transformation rapidly.<br>
+    device transform to a <a href="File_Formats.html#TIFF">TIFF</a> or
+    <a href="File_Formats.html#JPEG">JPEG</a> raster file. The cctiff
+    tool is capable of linking an arbitrary sequence of device profiles,
+    device links, abstract profiles and calibration curves. Each device
+    profile can be preceded by the <span style="font-weight: bold;">-i</span>
+    option to indicate the intent that should be used. Both 8 and 16 bit
+    per component files can be handled, and up to 8 color channels. The
+    color transform is optimized to perform the overall transformation
+    rapidly.<br>
     <br>
     If a device link is to be used, the following is a typical example:<br>
     <br>

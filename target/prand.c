@@ -33,6 +33,7 @@
 #include "sort.h"
 #include "plot.h"
 #include "icc.h"
+#include "xicc.h"
 #include "xcolorants.h"
 #include "targen.h"
 #include "prand.h"
@@ -132,7 +133,7 @@ prand_seed(prand *s) {
 		}
 		if (prand_from_percept(s, p->p, p->v) == 0) {
 			s->np++;
-			printf("%crAdded %d/%d",cr_char,s->np,s->tinp); fflush(stdout);
+			printf("%cAdded %d/%d",cr_char,s->np,s->tinp); fflush(stdout);
 		}
 	}
 	printf("\n");

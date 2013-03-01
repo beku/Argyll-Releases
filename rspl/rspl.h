@@ -21,13 +21,13 @@
 
 /** General Limits **/
 
-#define MXDI 8			/* Maximum input dimensionality */
-#define MXDO 8			/* Maximum output dimensionality (Is not fully tested!!!) */
-#define LOG2MXDI 3		/* log2 MXDI */
-#define DEF2MXDI 16		/* Default allocation size for 2^di */
-#define POW2MXDI 256	/* 2 ^ MXDI */
-#define DEF3MXDI 81		/* Default allocation size for 3^di */
-#define POW3MXDI 6561	/* 3 ^ MXDI */
+#define MXDI 10			/* Maximum input dimensionality */
+#define MXDO 10			/* Maximum output dimensionality (Is not fully tested!!!) */
+#define LOG2MXDI 4		/* log2 MXDI */
+#define DEF2MXDI 16		/* Default allocation size for 2^di (di=4) */
+#define POW2MXDI 1024	/* 2 ^ MXDI */
+#define DEF3MXDI 81		/* Default allocation size for 3^di (di=4) */
+#define POW3MXDI 59049	/* 3 ^ MXDI */
 
 #if MXDI > MXDO		/* Maximum of either DI or DO */
 # define MXDIDO MXDI
@@ -38,7 +38,7 @@
 /* RESTRICTED SIZE Limits, used for reverse, spline and scattered interpolation */
 
 #define MXRI 4			/* Maximum input dimensionality */
-#define MXRO 8			/* Maximum output dimensionality (Is not fully tested!!!) */
+#define MXRO 10			/* Maximum output dimensionality (Is not fully tested!!!) */
 #define LOG2MXRI 2		/* log2 MXRI */
 #define POW2MXRI 16		/* 2 ^ MXRI */
 #define POW3MXRI 81		/* 3 ^ MXRI */
@@ -427,7 +427,8 @@ struct _rspl {
 		datao vhigh		/* Data value high normalize - NULL = default 1.0 */
 	);
 
-	/* Filter the existing values. Grid index values are supplied "under" in[] */
+	/* Filter the existing values using the surrounding 3x3 cells. */
+	/* Grid index values are supplied "under" in[] */
 	void
 	(*filter_rspl)(
 		struct _rspl *s,	/* this */
@@ -465,7 +466,6 @@ struct _rspl {
 
 
 	/* ------------------------------- */
-
 	/* Create a surface gamut representation. */
 	/* Return NZ on error */
 	int (*comp_gamut)(struct _rspl *s,

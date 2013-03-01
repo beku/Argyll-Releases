@@ -23,6 +23,17 @@
       &nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
       &nbsp;&nbsp;&nbsp;&nbsp; Verbose mode<br>
       &nbsp;</small><font size="-1"><a style="font-family: monospace;"
         href="#display">-display displayname</a><span
@@ -43,6 +54,17 @@ display
 m
 
 
+
+
+
+
+
+
+
+
+
+
+
         for VideoLUT access.</span></font><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;<a
           href="#d">-d n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -55,8 +77,30 @@ following
 list
 
 
+
+
+
+
+
+
+
+
+
+
+
         (default 1)</span></font><small style="font-family: monospace;"><br>
     </small><span style="font-family: monospace;">&nbsp;<a href="#dweb">-dweb[:port]</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -71,11 +115,33 @@ list
         monospace;">&nbsp;<a href="#p">-p</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-        Use projector mode (if available)</span></font><br>
+
+
+
+
+
+
+
+
+
+
+
+        Use telephoto mode (ie. for a projector) (if available)</span></font><br>
     &nbsp; <font size="-1"><span style="font-family: monospace;"><a
           href="#y">-y X</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Display
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -85,6 +151,17 @@ Display
         file.cal</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
+
+
+
+
+
+
+
+
+
+
       Load calibration file into display while reading<br>
     </small><small style="font-family: monospace;">&nbsp;<span
         style="text-decoration: underline;">-</span><a href="#K">K
@@ -92,17 +169,37 @@ Display
 Apply
 
 
+
+
+
+
+
+
+
+
+
+
+
       calibration file to test values while reading</small><br>
     <small style="font-family: monospace;">&nbsp;<a href="#s">-s</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
       &nbsp;&nbsp;&nbsp;&nbsp; Save spectral information (default don't
       save)<br>
     </small><font style="font-family: monospace;" size="-1">&nbsp;<a
-        href="#P">-P ho,vo,ss</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-
-
-      Position test window and scale it<br>
+        href="#P">-P ho,vo,ss[,vs]</a>&nbsp;&nbsp;&nbsp;&nbsp; Position
+      test window and scale it<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ho,vi:
 0.0
@@ -111,6 +208,17 @@ left/top,
 0.5
 =
 center,
+
+
+
+
+
+
+
+
+
+
+
 
 
       1.0 = right/bottom etc.<br>
@@ -124,10 +232,40 @@ half,
 normal,
 
 
+
+
+
+
+
+
+
+
+
+
+
       2.0 = double etc.<br>
-      &nbsp;</font><font size="-1"><span style="font-family: monospace;"><a
-          href="#F">-F</a>
+    </font><font size="-1"><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+        ss,vs: = optional horizontal, vertical scale.</span></font><br>
+    <font style="font-family: monospace;" size="-1"> &nbsp;</font><font
+      size="-1"><span style="font-family: monospace;"><a href="#F">-F</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
         Fill whole screen with black background</span></font><br
@@ -143,9 +281,31 @@ override
 redirect
 
 
+
+
+
+
+
+
+
+
+
+
+
       on test window<br>
     </small><small style="font-family: monospace;">&nbsp;<a href="#J">-J</a>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
       &nbsp;&nbsp;&nbsp;&nbsp; Run calibration first</small><br>
@@ -153,19 +313,26 @@ redirect
           href="#N">-N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-        Disable auto calibration of instrument<br>
+
+
+
+
+
+
+
+
+
+
+
+        Disable initial calibration of instrument if possible<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;</span><a style="font-family: monospace;"
         href="#H">-H</a><span style="font-family: monospace;">
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
         &nbsp;&nbsp;&nbsp;&nbsp; Use high resolution spectrum mode (if
-        available)<br>
-      </span></font><font size="-1"><span style="font-family:
-        monospace;">&nbsp;</span><a style="font-family: monospace;"
-        href="#V">-V</a><span style="font-family: monospace;">
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-        &nbsp;&nbsp;&nbsp;&nbsp; Use adaptive measurement mode (if
-        available)<br>
+        available)</span></font><font size="-1"><span
+        style="font-family: monospace;"></span><span style="font-family:
+        monospace;"><br>
         &nbsp;<a href="#w">-w</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Disable
@@ -177,9 +344,31 @@ Y
 =
 
 
+
+
+
+
+
+
+
+
+
+
+
         100</span></font><small><span style="font-family: monospace;"></span></small><br>
     &nbsp; <font size="-1"><span style="font-family: monospace;"><a
           href="#X1">-X file.ccmx</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
         Apply Colorimeter Correction Matrix</span></font><br>
@@ -190,26 +379,36 @@ Colorimeter
 Calibration
 
 
-      Spectral Samples for calibration</span><br style="font-family:
-      monospace;">
-    <span style="font-family: monospace;">&nbsp;<a href="#X3">-X N</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-0:
-Technology
-(Display
 
 
-      description)</span><br style="font-family: monospace;">
-    <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
-      1: etc.</span><font size="-1"><span style="font-family:
-        monospace;"><br>
+
+
+
+
+
+
+
+      Spectral Samples for calibration</span><font size="-1"><span
+        style="font-family: monospace;"><br>
       </span></font><small><span style="font-family: monospace;">&nbsp;</span><a
         style="font-family: monospace;" href="#Q">-Q <i>observ</i></a><span
         style="font-family: monospace;">&nbsp; &nbsp; &nbsp; &nbsp;
         &nbsp;&nbsp;&nbsp; Choose CIE Observer for spectrometer or CCSS
         colorimeter data:</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
         &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 1931_2 </span></small><small><span
@@ -227,7 +426,28 @@ White:
 Both:
 
 
-        -Ibw</span></small><br>
+
+
+
+
+
+
+
+
+
+
+
+        -Ibw<br>
+      </span></small><font size="-1"><span style="font-family:
+        monospace;">&nbsp;</span><a style=" font-family: monospace;"
+        href="#YA">-<font size="-1">Y</font> A</a><span
+        style="font-family: monospace;">
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+        Use non-adaptive integration time mode (if available).</span></font><br>
     <font size="-1"><span style="font-family: monospace;">&nbsp;</span><a
         style="font-family: monospace;" href="#C">-C "command"</a><span
         style="font-family: monospace;">
@@ -249,11 +469,33 @@ n
 =
 
 
+
+
+
+
+
+
+
+
+
+
+
         none, h = HW, x = Xon/Xoff</span></font><br>
     <small style="font-family: monospace;">&nbsp;<a href="#D">-D [level]</a>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Print debug
       diagnostics to stderr</small><br>
     <small style="font-family: monospace;">&nbsp;<a href="#p1"><i>inoutfile</i></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
 
 
       Base name for input[<a href="File_Formats.html#.ti1">.ti1</a>]/output[<a
@@ -325,6 +567,17 @@ n
     specified as a single string, e.g. <span style="font-weight: bold;">-d
 
 
+
+
+
+
+
+
+
+
+
+
+
       1,2</span> . Some experimentation may be needed using <a
       href="dispwin.html">dispwin</a> on such systems, to discover what
     screen has access to the VideoLUT hardware, and which screens the
@@ -347,7 +600,9 @@ n
     URL will be printed once the server is started, or you could run <span
       style="font-weight: bold;">ipconfig</span> (MSWin) or <span
       style="font-weight: bold;">/sbin/ifconfig</span> (Linux or OS X)
-    and identify an internet address for your machine that way.<br>
+    and identify an internet address for your machine that way.
+    <b> JavaScript</b> needs to be enabled in your web browser for this
+    to work.<br>
     <br>
     Note that if you use this method of displaying test patches, that
     there is no access to the display VideoLUTs and that the colors will
@@ -369,13 +624,17 @@ n
     all of them may actually be present on your system.<br>
     <br>
     <a name="p"></a>The <span style="font-weight: bold;">-p</span> flag
-    allows measuring in projector mode, using instruments that support
-    this.<br>
+    allows measuring in telephoto mode, using instruments that support
+    this mode, e.g. the ColorMunki. Telephoto mode is one for taking
+    emissive measurements from a distance (ie. telespectometer,
+    tele-colorimeter) mode, and typically would be used for measuring
+    projector type displays. If a device does not support a specific
+    telephoto mode, then the normal emissive mode may be suitable for
+    measuring projectors.<br>
     <br>
     <a name="y"></a>The <span style="font-weight: bold;">-y</span> flag
-    allows setting the Display Type. Most colorimeters need this
-    parameter set to operate correctly. The selection typically
-    determines two aspects of of the instrument operation: <span
+    allows setting the Display Type. The selection typically determines
+    two aspects of of the instrument operation: <span
       style="font-weight: bold;">1)</span> It may set the measuring mode
     to suite <a
       href="http://en.wikipedia.org/wiki/Comparison_of_display_technology"><span
@@ -389,7 +648,12 @@ n
     will be shown in the <a href="ArgyllDoc.html#CmdLine">usage</a>
     information. For more details on what particular instruments support
     and how this works, see <a href="instruments.html">Operation of
-      particular instruments</a>.<br>
+      particular instruments</a>. <b>3)</b> Any installed CCSS files
+    (if applicable), or CCMX files. These files are typically created
+    using <a href="file:///D:/src/argyll/doc/ccxxmake.html">ccxxmake</a>,
+    and installed using <a
+      href="file:///D:/src/argyll/doc/oeminst.html">oeminst</a>. The
+    default and Base Calibration types will be indicated in the usage.<br>
     <br>
     <a name="s"></a><span style="font-weight: bold;">-s</span>: By
     default only the colorimetric information (XYZ value) will be saved,
@@ -438,14 +702,18 @@ n
     and vertical offset respectively. A value of 0.0 positions the
     window to the far left or top of the screen, a value of 0.5
     positions it in the center of the screen (the default), and 1.0
-    positions it to the far right or bottom of the screen. The <span
-      style="font-weight: bold;">ss</span> parameter is a scale factor
-    for the test window size. A value of 0.5 for instance, would produce
-    a half sized window. A value of 2.0 will produce a double size
-    window. Note that the ho,vo,ss numbers must be specified as a single
-    string (no space between the numbers and the comma). For example, to
-    create a double sized test window at the top right of the screen,
-    use <span style="font-weight: bold;">-P 1,0,2</span> .<br>
+    positions it to the far right or bottom of the screen. If three
+    parameters are provided, then the <span style="font-weight: bold;">ss</span>
+    parameter is a scale factor for the test window size. A value of 0.5
+    for instance, would produce a half sized window. A value of 2.0 will
+    produce a double size window. If four parameters are provided, then
+    the last two set independent horizontal and vertical scaling
+    factors. Note that the ho,vo,ss or ho,vo,hs,vs numbers must be
+    specified as a single string (no space between the numbers and the
+    comma). For example, to create a double sized test window at the top
+    right of the screen, use <span style="font-weight: bold;">-P 1,0,2</span>
+    . To create a window twice as wide as high: <span
+      style="font-weight: bold;">-P 1,0,2,1</span>.<br>
     <br>
     <a name="F"></a> The <span style="font-weight: bold;">-F</span>
     flag causes the while screen behind the test window to be masked
@@ -474,25 +742,22 @@ n
     doing&nbsp; a CRT frequency calibration, as this will be done
     automatically at the commencement of patch reading.<br>
     <br>
-    <a name="N"></a>The <b>-N</b> flag disables any automatic
-    instrument calibration (used for the Gretag Spectrolino for
-    instance). This would be used when the instrument is being used for
-    a series of measurements, and it is inconvenient to place it on it's
-    calibration tile between measurements. The instrument should be
-    calibrated at least once for each measurement session though.<br>
+    <a name="N"></a> <span style="font-weight: bold;">-N</span> Any
+    instrument that requires regular calibration will ask for
+    calibration on initial start-up. Sometimes this can be awkward if
+    the instrument is being mounted in some sort of measuring jig, or
+    annoying if several sets of readings are being taken in quick
+    succession. The -<span style="font-weight: bold;">N</span>
+    suppresses this initial calibration if a valid and not timed out
+    previous calibration is recorded in the instrument or on the host
+    computer. It is advisable to only use this option on the second and
+    subsequent measurements in a single session.<br>
     <br>
     <a name="H"></a> The -<span style="font-weight: bold;">H</span>
     option turns on high resolution spectral mode, if the instrument
     supports it. See <a href="instruments.html">Operation of particular
       instruments</a> for more details. This may give better accuracy
     for display measurements.<br>
-    <br>
-    <a name="V"></a> The -<span style="font-weight: bold;">V</span>
-    option uses adaptive emission measurement mode, if the instrument
-    supports it, such as the Eye-One Pro. This may give better accuracy
-    for low level measurements, but may be more inconsistent overall due
-    to the varying integration times. Overall measurement time will
-    probably be longer.<br>
     <br>
     <a name="w"></a>The <b>-w</b> flag disables the normalisation of
     the white patch value to 100.0, resulting in values that are in
@@ -519,16 +784,18 @@ improve
 a
 
 
+
+
+
+
+
+
+
+
+
+
+
     colorimeters accuracy for a particular type of display.<br>
-    <br>
-    <a name="X3"></a> The -<span style="font-weight: bold;">X <span
-        style="font-style: italic;">N</span></span> option selects a <a
-      href="File_Formats.html#.ccss">Colorimeter Calibration Spectral
-      Sample</a> from the list of installed ccss files, rather than
-    specifying a specific ccss files as in the above usage. The CCSS
-    file that came with the i1d3 colorimeters can be installed using <a
-      href="i1d3ccss.html">i1d3ccss</a>, or one can be created and
-    installed using <a href="ccxxmake.html">ccxxmake</a>.<br>
     <br>
     <a name="Q"></a> The <b>-Q</b> flag allows specifying a tristimulus
     observer, and is used to compute PCS (Profile Connection Space)
@@ -571,6 +838,15 @@ a
       style="font-weight: bold;">-Iwb</span>.<span style="font-weight:
       bold;"> <br>
       <br>
+    </span><a name="YA"></a> The -<span style="font-weight: bold;">Y A</span>
+    option uses a non-adaptive integration time emission measurement
+    mode, if the instrument supports it, such as the Eye-One Pro or
+    ColorMunki. By default an adaptive integration time measurement mode
+    will be used for emission measurements, but some instruments support
+    a fixed integration time mode that can be used with display devices.
+    This may give increased consistency and faster measurement times,
+    but may also give less accurate low level readings.<br>
+    <span style="font-weight: bold;"> <br>
     </span><a name="C"></a> The -<span style="font-weight: bold;">C</span>
     <span style="font-weight: bold;">"command" </span>option allows a
     method of relaying each test value to some other display than that

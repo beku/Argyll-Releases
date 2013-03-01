@@ -1,6 +1,6 @@
 
 This is the development area for IMDI, the
-Interger Multi-Dimensional Interpolation routines.
+Integer Multi-Dimensional Interpolation routines.
 
 They provide a flexible and high performance
 system for applying color transforms to typical

@@ -5,7 +5,7 @@ PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;
 
 # Run configure if it seems to be needed
 if $(UNIX) {
-	GenFileNND config.h : "(cd $(SUBDIR); chmod +x configure ; ./configure)" : configure ;
+	GenFileNND jconfig.h : "(cd $(SUBDIR); chmod +x configure ; ./configure)" : configure ;
 }
 
 # else copy them
@@ -22,5 +22,5 @@ LIBSRCS = jcapimin.c jcapistd.c jdapimin.c jdapistd.c jcomapi.c jcparam.c jctran
           jdsample.c jdcolor.c jdmerge.c jquant1.c jquant2.c jdatasrc.c jaricom.c
           jerror.c jmemmgr.c jutils.c jmemmgr.c jmemnobs.c ;
 
-Library libjpg : $(LIBSRCS) ;
+Library libjpeg : $(LIBSRCS) ;
 

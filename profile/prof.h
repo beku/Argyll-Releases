@@ -54,6 +54,8 @@ void make_output_icc(
 	char *file_name,		/* output icc name */
 	cgats *icg,				/* input cgats structure */
 	int spec,				/* Use spectral data flag */
+	icxIllumeType tillum,	/* Target/simulated instrument illuminant */
+	xspect *cust_tillum,	/* Possible custom target/simulated instrument illumination */
 	icxIllumeType illum,	/* Spectral illuminant */
 	xspect *cust_illum,		/* Possible custom illumination */
 	icxObserverType observ,	/* Spectral observer */
@@ -86,7 +88,8 @@ void make_input_icc(
 	int nooluts,			/* nz to supress creation of output (PCS) shaper luts */
 	int nocied,				/* nz to supress inclusion of .ti3 data in profile */
 	int verify,
-	int nsabs,				/* nz for non-standard absolute output */
+	int autowpsc,			/* nz for Auto scale the WP to prevent clipping above WP patch */
+	int clipovwp,			/* nz for Clip cLUT values above WP */
 	double wpscale,			/* >= 0.0 for media white point scale factor */
 	int dob2a,				/* nz to create a B2A table as well */
 	int extrap,				/* nz to create extra cLUT interpolation points */

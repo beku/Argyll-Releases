@@ -52,9 +52,11 @@ typedef enum {
 #define XFIT_IN_ZERO       0x0004		/* Adjust input curves 1 & 2 for zero (~~not impd. yet) */
 #define XFIT_OPTGRID_RANGE 0x0008		/* Optimize inner grid around used range (~~not impd. yet) */
 
-#define XFIT_OUT_WP_REL    0x0010		/*  Extract the white point and make output relative */
-#define XFIT_CLIP_WP       0x0020		/*  Clip white point to have Y <= 1.0 */
-#define XFIT_OUT_LAB       0x0040		/*  Output space is LAB else XYZ for reading WP */
+#define XFIT_OUT_WP_REL    0x0010		/* Extract the white point and make output relative */
+#define XFIT_OUT_WP_REL_US 0x0030		/* Same as above but scale to avoid clipping above WP */
+#define XFIT_OUT_WP_REL_C  0x0050		/* Same as above but clip any cLUT values over D50 */
+#define XFIT_CLIP_WP       0x0080		/*  Clip white point to have Y <= 1.0 (conflict with above) */
+#define XFIT_OUT_LAB       0x0100		/*  Output space is LAB else XYZ for reading WP */
 
 #define XFIT_OUT_ZERO      0x0200		/* Adjust output curves 1 & 2 for zero */
 
@@ -73,6 +75,8 @@ struct _xfit {
 	int di, fdi;			/* Dimensionaluty of input and output */
 	optcomb tcomb;			/* Target 1D curve elements to fit */
 
+	icxMatrixModel *skm;	/* Optional skeleton model (used for input profiles) */
+
 	double *wp;				/* Ref. to current white point if XFIT_OUT_WP_REL */
 	double *dw;				/* Ref. to device value that should map to D50 if XFIT_OUT_WP_REL */
 	double fromAbs[3][3];	/* From abs to relative (used by caller) */
@@ -87,6 +91,7 @@ struct _xfit {
 							/* Same, but with partial derivatives */
 
 	int iluord[MXDI];		/* Input Shaper order actualy used (must be <= MXLUORD) */
+	int sm_iluord;			/* Smallest Input Shaper order used */
 	int oluord[MXDO];		/* Output Shaper order actualy used (must be <= MXLUORD) */
 	int sluord[MXDI];		/* Sub-grid shaper order */
 	double in_min[MXDI];	/* Input value scaling minimum */
@@ -129,11 +134,12 @@ struct _xfit {
 	double mat[3][3];		/* XYZ White point aprox relative to accurate relative matrix */
 	double cmat[3][3];		/* Final rspl correction matrix */
 
-	double shp_smooth[MXDI];/* Smoothing factors for each curve, nom = 1.0 */
+	double shp_smooth[MXDI];/* Smoothing factors for each input shape curve, nom = 1.0 */
 	double out_smooth[MXDO];
 
 	/* Optimisation state */
 	optcomb opt_msk;		/* Optimisation mask: 3 = i+m, 2 = m, 6 = m+o, 7 = i+m+o */
+	int opt_ssch;			/* Single shaper channel mode flag */
 	int opt_off;			/* Optimisation parameters offset from v[0] */
 	int opt_cnt;			/* Optimisation parameters count */
 	double *wv;				/* Parameters being optimised */
@@ -154,8 +160,11 @@ struct _xfit {
 								/* Initial white point, returns final wp */
 		double *dw,				/* Device white value to adjust to be D50 */
 		double wpscale,			/* If >= 0.0 scale final wp */  
+		double *dgw,			/* Device space gamut boundary white for XFIT_OUT_WP_REL_US */
+								/* (ie. RGB 1,1,1 CMYK 0,0,0,0, etc) */
 		cow *ipoints,			/* Array of data points to fit - referece taken */
 		int nodp,				/* Number of data points */
+		icxMatrixModel *skm,	/* Optional skeleton model (used for input profiles) */
 		double in_min[MXDI],	/* Input value scaling/domain minimum */
 		double in_max[MXDI],	/* Input value scaling/domain maximum */
 		int gres[MXDI],			/* clut resolutions being optimised for/returned */

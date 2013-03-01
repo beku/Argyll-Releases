@@ -62,10 +62,10 @@
 # FileNoClean dest : source ;			copy file, but don't delete dest during clean
 # FakeFile dest : source ;				Fudge to say dest is created with source
 # Fortran obj.o : source.f ;			.f -> .o
-# GenFile source.c : program args ;		make custom file
-# GenFileND source.c : program args : extra_dependecies ;
+# GenFile target : program args ;		make custom file
+# GenFileND target : program args : extra_dependecies ;
 #										make custom file, program dependent & args not
-# GenFileNND source.c : program args : extra_dependecies ;
+# GenFileNND target : program args : extra_dependecies ;
 #                                       make custom file, program & args not dependent
 # CatToFile dest : strings ;			save the arguments to the file
 # GuiBin image ;						Mark executable as GUI applications
@@ -94,13 +94,17 @@
 #										create executable from objects
 # MainVariant image : sources : flags : defines : hdrpaths : objects : libs : shlibs ;
 # 										create exe from compiled sources with separate named objs
+# MainLinkFlags mains : flags ;			add linker flags for object
 # MkDir dir ;							make a directory, if not there
 # Mod target : mode ;					sets mode of file
 # NDepends dest : source ;				make Normalized dependency
+# NNoUpdate targ ;						create Normalized target if needed but never update it 
 # NIncludes dest : source ;				make Normalized co-dependency
-# Object object : sources : flags : defines : hdrpaths 	compile object from source
+# Object object : sources : flags : defines : hdrpaths ; 	compile object from source
 # ObjectCcFlags objects : flags ;		add compiler flags for object
+# ObjectPrefCcFlags objects : flags ;	add preference compiler flags for object (overridable)
 # ObjectC++Flags objects : flags ;		add compiler flags for object
+# ObjectPrefC++Flags objects : flags ;	add preference compiler flags for object (overridable)
 # ObjectDefines objects : defines ;		add defines for object
 # ObjectHdrs objects : dirs ;			add include directories for object
 # ObjectKeep objects ;					mark objects to be kept after library build
@@ -300,7 +304,7 @@
 
 # NOTE:	Cross compiling support :-
 #	To fix this to support cross compilation, the setup needs to be
-#	modularised into 3, making them all rules that can be re-involked:
+#	modularised into 3 parts, making them all rules that can be re-involked:
 #	1) OS/Platform setup. System tools like copy, delete etc.
 #	2) Compiler setup. Basic compiler syntax etc.
 #	3) Target setup. Make this a rule, and allow switching
@@ -420,6 +424,7 @@ if $(NT)
 			ECHO "Compiler is MingW for 64 bit target" ;
 			TARGET64     = true ;
 			TPFX         = x86_64-w64-mingw32- ;
+			MINGW64_LIB32 = $(MINGW)/mingw/lib32 ;
 		} else {
 			ECHO "Compiler is MingW for 32 bit target" ;
 		}
@@ -465,9 +470,9 @@ if $(NT)
 		}
 
 		CCDEBUGFLAG		?= -g ;				# default (TABS? DWARF2 ?) format
-		CCPROFFLAG		?= -p ;
-		LINKDEBUGFLAG	?= ;
-		LINKPROFFLAG	?= -p ; 
+		CCPROFFLAG		?= -pg ;
+		LINKDEBUGFLAG	?= -g ;
+		LINKPROFFLAG	?= -pg ; 
 		LINKOPTFLAG		?= -s -O ;			# Affects creating .so's ??
 		LINKSTRIPFLAG	?= -s ;	
 
@@ -901,7 +906,8 @@ else if $(UNIX)
 	if $(OS) = MACOSX {
 		CCFLAGS   		+= -Wno-sign-compare ;		# supress new gcc4 warnings ?
 		CCFLAGS   		+= -fpascal-strings ;		# for compatibility with the OSX API
-		LINKFLAGS 		+= -framework Carbon ;		# A good default
+		LINKFLAGS 		+= -framework Carbon ;		# default for .c
+		LINKFLAGS       += -framework Cocoa ;		# default for .m
 	}
 
 	# Make things work on 64 bit Linux
@@ -1960,14 +1966,18 @@ rule _JamInclude
 		P_SHLINKLIBS = [ NormPaths $(SHLINKLIBS) ] $(P_SHLINKLIBS) ;
 		P_SHLINKSHLIBS = [ NormPaths $(SHLINKSHLIBS) ] $(P_SHLINKSHLIBS) ;
 
-		P_PREF_ASFLAGS = $(PREF_ASFLAGS) ;
-		P_PREF_CCFLAGS = $(PREF_CCFLAGS) ;
-		P_PREF_C++FLAGS = $(PREF_C++FLAGS) ;
-		P_PREF_LINKFLAGS = $(PREF_LINKFLAGS) ;
-		P_PREF_SHLINKFLAGS = $(PREF_SHLINKFLAGS) ;
-
+		# Set parent flags no existing parent flags
+		if ! $(P_PREF_ASFLAGS) {
+			P_PREF_ASFLAGS = $(PREF_ASFLAGS) ; }
+		if ! $(P_PREF_CCFLAGS) {
+			P_PREF_CCFLAGS = $(PREF_CCFLAGS) ; }
+		if ! $(P_PREF_C++FLAGS) {
+			P_PREF_C++FLAGS = $(PREF_C++FLAGS) ; }
+		if ! $(P_PREF_LINKFLAGS) {
+			P_PREF_LINKFLAGS = $(PREF_LINKFLAGS) ; }
+		if ! $(P_PREF_SHLINKFLAGS) {
+			P_PREF_SHLINKFLAGS = $(PREF_SHLINKFLAGS) ; }
 	}
-
 	
 	# Set default for new Jamfile extra and preferred flags
 	ASFLAGS = ;
@@ -2078,7 +2088,7 @@ rule As
 rule As_
 {
 	local pref_asflags = $(P_PREF_ASFLAGS) ;
-	pref_asflags = $(PREF_ASFLAGS) ;
+	pref_asflags ?= $(PREF_ASFLAGS) ;
 	ASFLAGS1 on $(<) = $(P_ASFLAGS) $(ASFLAGS) ;
 	ASFLAGS2 on $(<) = $(pref_asflags) ;
 	ASFLAGS on $(<) = [ geton $(<) : ASFLAGS1 ] [ geton $(<) : ASFLAGS2 ] ;
@@ -2166,8 +2176,9 @@ rule Cc_
 
 	local pref_ccflags = $(P_PREF_CCFLAGS) ;
 	pref_ccflags ?= $(PREF_CCFLAGS) ;
-	CCFLAGS1 on $(<) = $(P_CCFLAGS) $(CCFLAGS) ;
-	CCFLAGS2 on $(<) = $(pref_ccflags) ;
+	# Make sure we incorporate any CCFLAGS[12] on object into total
+	CCFLAGS1 on $(<) += $(P_CCFLAGS) $(CCFLAGS) ;
+	CCFLAGS2 on $(<) += $(pref_ccflags) ;
 	CCFLAGS on $(<) = [ geton $(<) : CCFLAGS1 ] [ geton $(<) : CCFLAGS2 ] ;
 
 #Echo "Cc object '" $(<) "' got CCFLAGS1 '" [ geton $(<) : CCFLAGS1 ] "' and CCFLAGS2 '" [ geton $(<) : CCFLAGS2 ] "' for total CCFLAGS '" [ geton $(<) : CCFLAGS ] "'" ;
@@ -2231,9 +2242,10 @@ rule C++_
 	}
 
 	local pref_c++flags = $(P_PREF_C++FLAGS) ;
-	pref_c++flags = $(PREF_C++FLAGS) ;
-	C++FLAGS1 on $(<) = $(P_C++FLAGS) $(C++FLAGS) ;
-	C++FLAGS2 on $(<) = $(pref_c++flags) ;
+	pref_c++flags ?= $(PREF_C++FLAGS) ;
+	# Make sure we incorporate any C++FLAGS[12] on object into total
+	C++FLAGS1 on $(<) += $(P_C++FLAGS) $(C++FLAGS) ;
+	C++FLAGS2 on $(<) += $(pref_c++flags) ;
 	C++FLAGS on $(<) = [ geton $(<) : C++FLAGS1 ] [ geton $(<) : C++FLAGS2 ] ;
 
 	# Make sure the CCHDRS and CCDEFS are formatter correctly
@@ -2283,6 +2295,44 @@ rule NDepends {
 #Echo "Passing Depends '" $(_t) "' and '" $(_s) "'" ;
 
 	Depends $(_t) : $(_s) ;
+}
+
+# Public use NoUpdate that does normalisation of its targets
+# (non-normalizing NoUpdate is a built in)
+# NNoUpdate dest ;			Make sure created, but don't update
+rule NNoUpdate {
+	local _t ;
+	local _p = ;
+
+#Echo "NNoUpdate got '" $(<) "'" ;
+
+	# Don't anchor psuedo targets
+	switch $(<)
+	{
+       case all : _p = true ;
+       case first : _p = true ;
+       case shell : _p = true ;
+       case files : _p = true ;
+       case lib : _p = true ;
+       case exe : _p = true ;
+       case obj : _p = true ;
+       case dirs : _p = true ;
+       case clean : _p = true ;
+       case install : _p = true ;
+       case uninstall : _p = true ;
+	}
+
+	# Normalize target names and set Grist LOCATE and SOURCE
+	if ! $(_p) {
+		_t = [ NormDstTargets $(<) ] ;
+	} else {
+		_t = $(<) ;
+	}
+	_s = [ NormSrcTargets $(>) ] ;
+
+#Echo "Passing NoUpdate '" $(_t) "'" ;
+
+	NoUpdate $(_t) ;
 }
 
 # Public use Includes that does normalisation of its targets
@@ -2459,6 +2509,7 @@ rule GenFileND1
 	MakeLocate $(<) ;
 }
 
+# GenFileNND target : program args : extra_dependecies ;
 # None of > is assumed to be a file.
 # $(3) are optional extra dependecies
 # SRCDIR and DSTDIR are ignored.
@@ -2468,7 +2519,7 @@ rule GenFileNND
 	# Normalize target names and set Grist LOCATE and SOURCE
 	local _t = [ NormIDstTargets $(<) ] ;
 	local _a = $(>) ;
-	_a = $(_a:J=" ") ;
+	_a = $(_a:J=" ") ;		# Split up by space delimeter ?
 	local _d = [ NormSrcTargets $(3) ] ;
 
 #Echo "GenFileNND normed '$(_t)' plus '$(_a)' and src targets '$(_d)'" ;
@@ -3006,7 +3057,7 @@ rule ShLibraryFromObjects
 	if $(SHLINKFLAGS) || $(P_SHLINKFLAGS)
 	 || $(PREF_SHLINKFLAGS) || $(P_PREF_SHLINKFLAGS) {
 		local pref_shlinkflags = $(P_PREF_SHLINKFLAGS) ;
-		pref_shlinkflags = $(PREF_SHLINKFLAGS) ;
+		pref_shlinkflags ?= $(PREF_SHLINKFLAGS) ;
 		SHLINKFLAGS on $(_sl) += $(P_SHLINKFLAGS) $(SHLINKFLAGS) $(pref_shlinkflags) ;
 	}
 
@@ -3111,6 +3162,20 @@ rule ShLibraryShLibraries
 	SHLINKSHLIBS on $(_t) += $(_l) ;
 }
 
+# Add extra LINKFLAGS to mains
+# MainLinkFlags mains : flags ;
+rule MainLinkFlags
+{
+#Echo "MainLinkFlags got '" $(<) "' and '" $(>) "'" ;
+	local _t = [ NormDstTargets $(<:S=$(SUFEXE)) ] ;
+	local _i ;
+
+	for _i in $(_t) {
+		LINKFLAGS on $(_i) += $(>) ;
+#Echo "exes '" $(_i) "' got LINKFLAGS '" [ geton $(_i) : LINKFLAGS ] "'" ;
+	}
+}
+
 # Make an executable from sources
 # Main image : sources : flags : defines : hdrpaths : objects : libs : shlibs ; 
 rule Main
@@ -3175,8 +3240,9 @@ rule MainFromObjects
 	if $(LINKFLAGS) || $(P_LINKFLAGS)
 	 || $(PREF_LINKFLAGS) || $(P_PREF_LINKFLAGS) {
 		local pref_linkflags = $(P_PREF_LINKFLAGS) ;
-		pref_linkflags = $(PREF_LINKFLAGS) ;
+		pref_linkflags ?= $(PREF_LINKFLAGS) ;
 		LINKFLAGS on $(_t) += $(P_LINKFLAGS) $(LINKFLAGS) $(pref_linkflags) ;
+#Echo "LINKFLAGS on $(_t) = '" [ geton $(_t) : LINKFLAGS ] "'" ; 
 	}
 
 #Echo "MainFromObjects LINKOBJS = '" $(LINKOBJS) "' and P_LINKOBJS ='" $(P_LINKOBJS) "'" ;
@@ -3439,6 +3505,8 @@ rule Object
 		case .cpp : C++_ $(_t) : $(_s) ;
 		case .cxx : C++_ $(_t) : $(_s) ;
 
+		case .m :	Cc_ $(_t) : $(_s) ;
+
 		case .f :	Fortran_ $(_t) : $(_s) ;
 
 		case .l :	{
@@ -3511,6 +3579,7 @@ rule ObjectPrefCcFlags
 		for _i in $(_t) {
 			CCFLAGS2 on $(_i) += $(>) ;
 			CCFLAGS on $(_i) = [ geton $(_i) : CCFLAGS1 ] [ geton $(_i) : CCFLAGS2 ] ;
+#Echo "object '" $(_i) "' got CCFLAGS1 '" [ geton $(_i) : CCFLAGS1 ] "' and CCFLAGS2 '" [ geton $(_i) : CCFLAGS2 ] "' for total CCFLAGS '" [ geton $(_i) : CCFLAGS ] "'" ;
 		}
 	}
 }
@@ -4017,9 +4086,10 @@ actions LexMv_
 	$(MV) lex.yy.c $(<)
 }
 
+#	$(LINK) $(LINKOUTFLAG)$(<) $(UNDEFS) $(>) $(LINKOBJS) $(LINKFLAGS) $(LINKLIBS) $(LINKSHLIBS) $(STDLIBS) 
 actions Link_ bind LINKOBJS LINKLIBS LINKSHLIBS
 {
-	$(LINK) $(LINKOUTFLAG)$(<) $(UNDEFS) $(>) $(LINKOBJS) $(LINKFLAGS) $(LINKLIBS) $(LINKSHLIBS) $(STDLIBS) 
+	$(LINK) $(LINKFLAGS) $(LINKOUTFLAG)$(<) $(UNDEFS) $(>) $(LINKOBJS) $(LINKLIBS) $(LINKSHLIBS) $(STDLIBS) 
 }
 
 if $(OS) = MACOSX {		# OS X version of ld
@@ -4155,6 +4225,7 @@ if $(UNIX)
 		# but this no longer works in OS X 10.5, and we don't need this
 		# stuff with TransformProcessType()
 		# Another alternative is to use link option "-sectcreate __TEXT __info_plist Info.plist" ???
+		# to embed the plist in the executable, but not sure what should be in plist.
 		# Pure GUI app
 		actions GUIAPP
 		{
@@ -4233,8 +4304,8 @@ if $(NT) && $(MSVCNT)
 		for %%i in ( $(>) ) do COPY %%i $(<:BS)_ 1>nul
 		if exist $(<) set _$(<:B)_=$(<)
 		$(AR) /out:$(<) %_$(<:B)_% $(<:BS)_\*
-		RMDIR /S/Q $(<:BS)_
-
+		DEL /F/S/Q $(<:BS)_\* 1>nul
+		RMDIR /Q $(<:BS)_
 	}
 
 	actions together ArchiveArchive

@@ -15,6 +15,7 @@
  * see the License.txt file for licencing details.
  */
 
+#define DISPLAY_UPDATE_DELAY 200	/* default display update delay allowance */
 
 int do_plot(double *x, double *y1, double *y2, double *y3, int n);
 
@@ -161,6 +162,9 @@ struct _ramdac {
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 /* Dispwin object */
+
+/* !!!! Make changes in dispwin.c and webwin.c !!!! */
+
 struct _dispwin {
 
 /* private: */

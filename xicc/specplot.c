@@ -292,8 +292,10 @@ main(
 			if (read_nxspect(&sp[nsp], argv[fa], &nret, soff, nreq, 0) != 0) {
 				error ("Unable to read custom spectrum, CMF or CCSS '%s'",argv[fa]);
 			}
-			for (i = 0; i < nret; i++)
+			for (i = 0; i < nret; i++) {
+				xspect_denorm(&sp[nsp + i]);
 				sprintf(buf[nsp + i],"File '%s' spect %d",argv[fa], soff + i);
+			}
 			nsp += nret;
 			soff += nret;
 			if (nret < nreq) {		/* We're done with this file */

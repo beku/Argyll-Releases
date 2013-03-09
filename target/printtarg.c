@@ -17,6 +17,9 @@
 
 	TTBD:
 
+	Add "single pixel patch" mode, for pure digital processing for
+	abstract profile creation.
+
 	Add -h2 flag for Munki for super high-res chart ?
 	Note:   i1Pro:  Illum spot: 3.5mm Aperture: 4.5mm, Physical aperture: 4.55mm
             Munki:  Illum spot: 8.0mm Aperture: 6.0mm, Physical aperture: 7.63mm

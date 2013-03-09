@@ -28,29 +28,6 @@ if [ GLOB $(PATH) : sed sed.exe ] {
 	CREATE_INFS = false ;
 }
 
-## List of .inf files needed
-#INFS = i1Pro Spyd2 HCFR3.1 HCFR4.0 Smile
-#        ColorMunki DTP20 DTP92 DTP94 Huey MonacoOptix
-#        Spyd3 Spyd4 i1Monitor i1Disp i1D3 ColorHugOld ColorHug ;
-#
-## Optionally generate all the .inf's from the template_inf
-#if $(CREATE_INFS) = true {
-#	local _i _ns _nt _nds _ni ;
-#	NDepends files : $(INFS1).inf $(INFS2).inf ;
-#
-#	for  _i in $(INFS) {
-#		_ni  = [ NormPaths $(_i).inf ] ;
-#		_ns  = [ NormPaths $(_i).sed ] ;
-#		_nt  = [ NormPaths template_inf ] ;
-#		GenFileNND $(_i).inf : "sed -f $(_ns) < $(_nt) > $(_ni)"
-#		                      : $(_i).sed template_inf ;
-#		File $(_i).cat     : template_cat ;
-#		File $(_i)_x64.cat : template_cat ;
-#		NDepends install : $(_i).inf $(_i).cat $(_i)_x64.cat ;
-#	}
-#}
-#
-
 # Create ArgyllCMS.inf from the template and device list
 if $(CREATE_INFS) = true {
 	local _i _t _d ;

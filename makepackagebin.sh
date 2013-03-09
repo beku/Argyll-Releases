@@ -1,30 +1,34 @@
 #!/bin/sh
 echo "Script to invoke Jam and then package the binary release."
 
-#	Typical environment variables:
+#   Typical environment variables:
+#   (NOTE some systems don't export these ENV vars. by default !!!)
 #
-#	Platform						$OSTYPE		MACHTYPE				HOSTTYPE
+#   Platform                        $OSTYPE      $MACHTYPE                $HOSTTYPE
 #
-#	Win2K [CMD.EXE]					(none)		(none)					(none)		
+#   Win2K [CMD.EXE]                 (none)       (none)                   (none)        
 #
-#	Cygwin Win2K [bash]				cygwin		i686-pc-cygwin			i686
+#   Cygwin Win2K [bash]             cygwin       i686-pc-cygwin           i686
 #
-#	OS X PPC 10.3 [zsh]				darwin7.0	powerpc					(none)
+#   OS X PPC 10.3 [zsh]             darwin7.0    powerpc                  (none)
 #
-#	OS X i386 10.4 [bash]			darwin8.0	i386-apple-darwin8.0	i386
+#   OS X i386 10.4 [bash]           darwin8.0    i386-apple-darwin8.0     i386
 #
-#	OS X i386 10.5 [bash]			darwin9.0	i386-apple-darwin9.0	i386
+#   OS X i386 10.5 [bash]           darwin9.0    i386-apple-darwin9.0     i386
 #
-#	OS X i386 10.6 [bash]			darwin10.0	x86_64-apple-darwin10.0	x86_64
+#   OS X i386 10.6 [bash]           darwin10.0   x86_64-apple-darwin10.0  x86_64
 #
-#	OS X i386 10.7 [bash]			darwin11	x86_64-apple-darwin11	x86_64
+#   OS X i386 10.7 [bash]           darwin11     x86_64-apple-darwin11    x86_64
 #
-#	Linux RH 4.0 [bash]				linux-gnu	i686-redhat-linux-gnu	i686
+#   Linux RH 4.0 [bash]             linux-gnu    i686-redhat-linux-gnu    i686
 #
-#	Linux Fedora 7.1 [bash]			linux-gnu	i386-redhat-linux-gnu	i386
-#	Linux Ubuntu  ??7				linux-gnu	i486-pc-linux-gnu		i686
+#   Linux Fedora 7.1 [bash]         linux-gnu    i386-redhat-linux-gnu    i386
+#   Linux Ubuntu  ??7               linux-gnu    i486-pc-linux-gnu        i686
 #
-#	Linux Fedora 7.1 64 bit [bash]	linux-gnu	x86_64-redhat-linux-gnu	x86_64
+#   Linux Fedora 7.1 64 bit [bash]  linux-gnu    x86_64-redhat-linux-gnu  x86_64
+#   Ubuntu 12.10 64 bit [bash]      linux-gnu    x86_64-pc-linux-gnu      x86_64
+#
+#   FreeBSD 9.1 64 bit [bash]       freebsd9.1   amd64-portbld-freebsd9.1 amd64
 #
 
 # Set the environment string VERSION from the #define, ie 1.0.0
@@ -37,8 +41,6 @@ TOPDIR=Argyll_V$VERSION
 if [ X$OS != "XWindows_NT" ] ; then
 	# Fixup issues with the .zip format
 	chmod +x *.sh
-	chmod +x tiff/configure
-#	chmod +x libusb/configure
 fi
 
 # Make sure that some environment variable are visible to Jam:
@@ -101,14 +103,12 @@ else if [ X$OSTYPE = "Xdarwin10.0" \
 	USBBINFILES="binfiles.osx"
 	USETAR=true
 else if [ X$OSTYPE = "Xlinux-gnu" ] ; then
-	if [ X$MACHTYPE = "Xi686-redhat-linux-gnu" \
-      -o X$MACHTYPE = "Xi386-redhat-linux-gnu" \
-      -o X$MACHTYPE = "Xi486-pc-linux-gnu" ] ; then
-		echo "We're on Linux x86!"
-		PACKAGE=Argyll_V${VERSION}_linux_x86_bin.tgz
-	else if [ X$MACHTYPE = "Xx86_64-redhat-linux-gnu" ] ; then
+	if [[ "$MACHTYPE" =~ x86_64-.*-linux-gnu ]] ; then
 		echo "We're on Linux x86_64!"
 		PACKAGE=Argyll_V${VERSION}_linux_x86_64_bin.tgz
+	else if [[ "$MACHTYPE" =~ i.86-.*-linux-gnu ]] ; then
+		echo "We're on Linux x86!"
+		PACKAGE=Argyll_V${VERSION}_linux_x86_bin.tgz
 	fi
 	fi
 	USBDIRS="usb"

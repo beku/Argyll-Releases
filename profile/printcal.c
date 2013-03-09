@@ -22,7 +22,8 @@
 
 /*
  * TTBD:
- *			Allow auto max threshold to be scaled on command line ?
+ *		Allow auto max threshold to be scaled on command line ?
+ *		ie. -m# set % to go below the default optimal maximum.
  */
 
 
@@ -92,9 +93,10 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -M model        Set the model description string\n");
 	fprintf(stderr," -D description  Set the profile Description string\n");
 	fprintf(stderr," -C copyright    Set the copyright string\n");
-	fprintf(stderr," -x# percent     Set maximum device percentage target\n");
-	fprintf(stderr," -n# deltaE      Set white minimum deltaE target\n");
-	fprintf(stderr," -t# percent     Set 50%% transfer curve percentage target\n");
+	fprintf(stderr," -x# percent     Set initial maximum device %% target (override auto)\n");
+	fprintf(stderr," -m# percent     Set initial dev target to %% of auto maximum\n");
+	fprintf(stderr," -n# deltaE      Set initial white minimum deltaE target\n");
+	fprintf(stderr," -t# percent     Set initial 50%% transfer curve percentage target\n");
 	fprintf(stderr,"   # = c, r, 0	 First channel\n");
 	fprintf(stderr,"       m, g, 1	 Second channel\n");
 	fprintf(stderr,"       y, b, 2	 Third channel\n");
@@ -568,6 +570,7 @@ int main(int argc, char *argv[]) {
 	char calname[MAXNAMEL+1] = "";	/* previous .cal input file name */
 	char outname[MAXNAMEL+1] = "";	/* new .cal output file name */
 	char ampname[MAXNAMEL+1] = "";	/* new .amp output file name */
+	double maxscale[MAX_CHAN];	/* Scale auto device maximum to % */
 	cgats *icg = NULL;			/* .ti3 input cgats structure */
 	int ti;						/* Temporary CGATs index */
 	inkmask devmask;			/* ICX ink mask of device space */
@@ -592,6 +595,7 @@ int main(int argc, char *argv[]) {
 
 	/* Init pointers to NULL */
 	for (j = 0; j < MAX_CHAN; j++) {
+		maxscale[j] = -1.0;
 		pvals[j] = NULL;
 		raw[j] = NULL;
 		ade[j] = NULL;
@@ -742,10 +746,11 @@ int main(int argc, char *argv[]) {
 				xpi.copyright = na;
 			}
 
-			/* Device maximum percentage */
-			else if (argv[fa][1] == 'x' || argv[fa][1] == 'X'
-			      || argv[fa][1] == 't' || argv[fa][1] == 'T'
-			      || argv[fa][1] == 'n' || argv[fa][1] == 'N') {
+			/* Per channel target modifiers */
+			else if (argv[fa][1] == 'x'
+			      || argv[fa][1] == 'm'
+			      || argv[fa][1] == 'n' 
+			      || argv[fa][1] == 't') {
 				char fch = argv[fa][1];
 				int chan = -1;
 				double val = -1.0;
@@ -808,16 +813,22 @@ int main(int argc, char *argv[]) {
 				if (fa >= argc || argv[fa][0] == '-') usage("Expect argument after flag -%c%c",fch,na[0]);
 				val = atof(argv[fa]);
 			
-				if (fch == 'x' || fch == 'X') {
+				if (fch == 'x') {
 					if (val < 0.0 || val > 100.0)
 						usage("Argument to -%c%c %f from '%s' is out of range",fch,na[0],val,argv[fa]);
 					val /= 100.0;
 					upct->update_devmax(upct, chan, val);
-				}
-				if (fch == 'n' || fch == 'N') {
+
+				} else if (fch == 'm') {
+					if (val < 0.0 || val > 100.0)
+						usage("Argument to -%c%c %f from '%s' is out of range",fch,na[0],val,argv[fa]);
+					val /= 100.0;
+					maxscale[chan] = val;
+
+				} else if (fch == 'n') {
 					upct->update_ademin(upct, chan, val);
-				}
-				if (fch == 't' || fch == 'T') {
+
+				} else if (fch == 't') {
 					if (val < 0.0 || val > 100.0)
 						usage("Argument to -%c%c %f from '%s' is out of range",fch,na[0],val,argv[fa]);
 					val /= 100.0;
@@ -1531,6 +1542,15 @@ int main(int argc, char *argv[]) {
 						break;
 				}
 				pct->devmax[j] = i/(GRES-1.0);
+
+				/* Scale auto max device value */
+				if (maxscale[j] >= 0.0)
+					pct->devmax[j] *= maxscale[j];
+
+			/* Manually set initial dev max */
+			} else {
+				if (maxscale[j] >= 0.0)
+					warning("Chan %d, scale %.1f%% of auto max ignored since max override used\n", j, maxscale[j] * 100.0);
 			}
 
 			/* Lookup devmax to set ademax */

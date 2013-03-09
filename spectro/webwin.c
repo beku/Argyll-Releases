@@ -253,6 +253,20 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 }
 
 /* ----------------------------------------------- */
+/* Set an update delay, and return the previous value */
+/* Value can be set to zero, but othewise will be forced */
+/* to be >= min_update_delay */
+static int webwin_set_update_delay(
+dispwin *p,
+int update_delay) {
+	int cval = p->update_delay;
+	p->update_delay = update_delay;
+	if (update_delay != 0 && p->update_delay < p->min_update_delay)
+		p->update_delay = p->min_update_delay;
+	return cval;
+}
+
+/* ----------------------------------------------- */
 /* Set the shell set color callout */
 void webwin_set_callout(
 dispwin *p,
@@ -300,6 +314,7 @@ int verb,						/* NZ for verbose prompts */
 int ddebug						/* >0 to print debug statements to stderr */
 ) {
 	dispwin *p = NULL;
+	char *cp;
 	struct mg_context *mg;
 	const char *options[3];
 	char port[50];
@@ -311,6 +326,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		return NULL;
 	}
 
+	/* !!!! Make changes in dispwin.c as well !!!! */
 	p->name = strdup("Web Window");
 	p->nowin = nowin;
 	p->native = 0;
@@ -322,10 +338,26 @@ int ddebug						/* >0 to print debug statements to stderr */
 	p->uninstall_profile = webwin_uninstall_profile;
 	p->get_profile     = webwin_get_profile;
 	p->set_color       = webwin_set_color;
+	p->set_update_delay  = webwin_set_update_delay;
 	p->set_callout     = webwin_set_callout;
 	p->del             = webwin_del;
 
 	p->rgb[0] = p->rgb[1] = p->rgb[2] = 0.5;	/* Set Grey as the initial test color */
+
+	p->min_update_delay = 20;
+
+	if ((cp = getenv("ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS")) != NULL) {
+		p->min_update_delay = atoi(cp);
+		if (p->min_update_delay < 20)
+			p->min_update_delay = 20;
+		if (p->min_update_delay > 60000)
+			p->min_update_delay = 60000;
+		debugr2((errout, "new_webwin: Minimum display update delay set to %d msec\n",p->min_update_delay));
+	}
+
+	p->update_delay = DISPLAY_UPDATE_DELAY;		/* Default update delay */
+	if (p->update_delay < p->min_update_delay)
+		p->update_delay = p->min_update_delay;
 
 	p->ncix = 1;
 

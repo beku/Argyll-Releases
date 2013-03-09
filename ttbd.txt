@@ -29,7 +29,13 @@ Categories:
 
 
 --------------------------------------------------------
-1) List 1
+
+*) Add some i1pro RevE UV support for improved FWA
+
+*) Add "single pixel chart" mode to printtarg and scanin.
+
+--------------------------------------------------------
+1) List 2
 
 
 1a) Candidate list:
@@ -314,17 +320,7 @@ Categories:
 * Modify scanin reference .cht format to be more robust (ie. CGATS)
 
 
-10) Calibration
-
-* Add printer calibration utility, to create linearizations.
-  [ See profile/printcal.c for the start of this. ]
-
-* Implement calibration support in various other utilities:
-  - Profile creation
-  - cctiff
-  - test chart generation or printing
-
-11) Bugs
+10) Bugs
 
 * filmtarg  doesn't work any more with latest .ti1 data format.
   Need to fix it.

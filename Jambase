@@ -4086,10 +4086,11 @@ actions LexMv_
 	$(MV) lex.yy.c $(<)
 }
 
-#	$(LINK) $(LINKOUTFLAG)$(<) $(UNDEFS) $(>) $(LINKOBJS) $(LINKFLAGS) $(LINKLIBS) $(LINKSHLIBS) $(STDLIBS) 
+#	Old: $(LINK) $(LINKFLAGS) $(LINKOUTFLAG)$(<) $(UNDEFS) $(>) $(LINKOBJS) $(LINKLIBS) $(LINKSHLIBS) $(STDLIBS) 
+#	$(LINK) $(LINKOUTFLAG)$(<) $(UNDEFS) $(>) $(LINKFLAGS) $(LINKOBJS) $(LINKLIBS) $(LINKSHLIBS) $(STDLIBS) 
 actions Link_ bind LINKOBJS LINKLIBS LINKSHLIBS
 {
-	$(LINK) $(LINKFLAGS) $(LINKOUTFLAG)$(<) $(UNDEFS) $(>) $(LINKOBJS) $(LINKLIBS) $(LINKSHLIBS) $(STDLIBS) 
+	$(LINK) $(LINKOUTFLAG)$(<) $(UNDEFS) $(>) $(LINKOBJS) $(LINKLIBS) $(LINKSHLIBS) $(LINKFLAGS) $(STDLIBS)  
 }
 
 if $(OS) = MACOSX {		# OS X version of ld
@@ -4099,7 +4100,7 @@ if $(OS) = MACOSX {		# OS X version of ld
 	# -Wl,-install_name,@executable_path ???
 	actions ShLink_ 
 	{
-		$(LINK) -dynamiclib -Wl,-undefined,dynamic_lookup,-install_name,$(SHLINKSEARCHEXEPATH)$(<[1]:BS) $(SHLINKFLAGS) $(LINKOUTFLAG)$(<[1]) $(>) $(SHLINKOBJS) $(SHLINKLIBS) $(SHLINKSHLIBS) $(SHSTDLIBS)
+		$(LINK) -dynamiclib -Wl,-undefined,dynamic_lookup,-install_name,$(SHLINKSEARCHEXEPATH)$(<[1]:BS) $(LINKOUTFLAG)$(<[1]) $(>) $(SHLINKOBJS) $(SHLINKLIBS) $(SHLINKSHLIBS) $(SHLINKFLAGS) $(SHSTDLIBS)
 	}
 
 } else {	# General gcc
@@ -4109,9 +4110,10 @@ if $(OS) = MACOSX {		# OS X version of ld
 	# or set LD_LIBRARY_PATH
 	# or set /etc/ld.so.conf.d/*.conf
 	# To set .so search path (after flag):  -Wl,-soname=$(<[1]:BS)
+# Old:	$(LINK) -shared -Wl,-soname=$(SHLINKSEARCHEXEPATH)$(<[1]:BS) $(SHLINKFLAGS) $(LINKOUTFLAG)$(<[1]) $(>) $(SHLINKOBJS) $(SHLINKLIBS) $(SHLINKSHLIBS) $(SHSTDLIBS)
 	actions ShLink_ 
 	{
-		$(LINK) -shared -Wl,-soname=$(SHLINKSEARCHEXEPATH)$(<[1]:BS) $(SHLINKFLAGS) $(LINKOUTFLAG)$(<[1]) $(>) $(SHLINKOBJS) $(SHLINKLIBS) $(SHLINKSHLIBS) $(SHSTDLIBS)
+		$(LINK) -shared -Wl,-soname=$(SHLINKSEARCHEXEPATH)$(<[1]:BS) $(LINKOUTFLAG)$(<[1]) $(>) $(SHLINKOBJS) $(SHLINKLIBS) $(SHLINKSHLIBS) $(SHLINKFLAGS) $(SHSTDLIBS)
 	}
 }
 

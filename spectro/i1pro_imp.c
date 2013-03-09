@@ -154,6 +154,7 @@
 #define HIGHRES_LONG  740
 #define HIGHRES_WIDTH  (10.0/3.0) /* (The 3.3333 spacing and lanczos2 seems a good combination) */
 #define HIGHRES_REF_MIN 375.0	  /* Too much stray light below this in reflective mode */
+								  /* (i1pro2 could go lower with different correction) */
 
 #include "i1pro.h"
 #include "i1pro_imp.h"
@@ -170,7 +171,7 @@
 #endif
 
 
-#if defined(DEBUG) || defined(PLOT_DEBUG) || defined(HIGH_RES_PLOT)
+#if defined(DEBUG) || defined(PLOT_DEBUG) || defined(HIGH_RES_PLOT) || defined(PATREC_DEBUG)
 static int disdebplot = 0;
 
 #define DISDPLOT disdebplot = 1;
@@ -1240,8 +1241,8 @@ int i1pro_imp_ambient(i1pro *p) {
 /* Set the measurement mode. It may need calibrating */
 i1pro_code i1pro_imp_set_mode(
 	i1pro *p,
-	i1p_mode mmode,
-	int spec_en		/* nz to enable reporting spectral */
+	i1p_mode mmode,		/* Operating mode */
+	inst_mode mode		/* Full mode mask for options */
 ) {
 	i1proimp *m = (i1proimp *)p->m;
 
@@ -1260,12 +1261,18 @@ i1pro_code i1pro_imp_set_mode(
 		case i1p_trans_spot:
 		case i1p_trans_scan:
 			m->mmode = mmode;
-			m->spec_en = spec_en ? 1 : 0;
-			return I1PRO_OK;
-		default:
 			break;
+		default:
+			return I1PRO_INT_ILLEGALMODE;
 	}
-	return I1PRO_INT_ILLEGALMODE;
+	m->spec_en = (mode & inst_mode_spectral) != 0;
+	m->uv_en = 0;
+
+	if (mmode == i1p_refl_spot
+	 || mmode == i1p_refl_scan)
+		m->uv_en = (mode & inst_mode_ref_uv) != 0;
+
+	return I1PRO_OK;
 }
 
 /* Return needed and available inst_cal_type's */
@@ -2304,12 +2311,13 @@ i1pro_code i1pro_imp_measure(
 	double duration = 0.0;		/* Possible flash duration value */
 	int user_trig = 0;
 
-	a1logd(p->log,2,"i1pro_imp_measure: Taking %d measurments in %s%s%s%s%s mode called\n", nvals,
+	a1logd(p->log,2,"i1pro_imp_measure: Taking %d measurments in %s%s%s%s%s%s mode called\n", nvals,
 		        s->emiss ? "Emission" : s->trans ? "Trans" : "Refl", 
 		        s->emiss && s->ambient ? " Ambient" : "",
 		        s->scan ? " Scan" : "",
 		        s->flash ? " Flash" : "",
-		        s->adaptive ? " Adaptive" : "");
+		        s->adaptive ? " Adaptive" : "",
+		        m->uv_en ? " UV" : "");
 
 
 	if ((s->emiss && s->adaptive && !s->idark_valid)
@@ -2330,7 +2338,7 @@ i1pro_code i1pro_imp_measure(
 	/* Notional number of measurements, befor adaptive and not counting scan */
 	nummeas = i1pro_comp_nummeas(p, s->wreadtime, s->inttime);
 
-	/* Do dark cal allocation before we wait for user hitting switch */
+	/* Allocate buf for pre-measurement dark calibration */
 	if (s->reflective) {
 		bsize = m->nsen * 2 * nummeas;
 		if ((buf = (unsigned char *)malloc(sizeof(unsigned char) * bsize)) == NULL) {
@@ -4754,6 +4762,7 @@ i1pro_code i1pro2_wl_measure(
 
 /* Take a measurement reading using the current mode, part 1 */
 /* Converts to completely processed output readings. */
+/* (NOTE:- this can't be used for calibration, as it implements uv mode) */
 i1pro_code i1pro_read_patches_1(
 	i1pro *p,
 	int minnummeas,			/* Minimum number of measurements to take */
@@ -4767,6 +4776,7 @@ i1pro_code i1pro_read_patches_1(
 	i1pro_code ev = I1PRO_OK;
 	i1proimp *m = (i1proimp *)p->m;
 	i1pro_state *s = &m->ms[m->mmode];
+	i1p_mmodif mmod = i1p_norm;
 	int rv = 0;
 
 	if (minnummeas <= 0)
@@ -4774,15 +4784,18 @@ i1pro_code i1pro_read_patches_1(
 	if (minnummeas > maxnummeas)
 		maxnummeas = minnummeas;
 		
+	if (m->uv_en)
+		mmod = i1p2_UV;
+
 	a1logd(p->log,3,"Triggering & gathering cycle, minnummeas %d, inttime %f, gainmode %d\n",
 	                                              minnummeas, *inttime, gainmode);
 
-	if ((ev = i1pro_trigger_one_measure(p, minnummeas, inttime, gainmode, i1p_norm)) != I1PRO_OK) {
+	if ((ev = i1pro_trigger_one_measure(p, minnummeas, inttime, gainmode, mmod)) != I1PRO_OK) {
 		return ev;
 	}
 
 	if ((ev = i1pro_readmeasurement(p, minnummeas, m->c_measmodeflags & I1PRO_MMF_SCAN,
-	                                             buf, bsize, nmeasuered, i1p_norm)) != I1PRO_OK) {
+	                                             buf, bsize, nmeasuered, mmod)) != I1PRO_OK) {
 		return ev;
 	}
 
@@ -5038,6 +5051,7 @@ i1pro_code i1pro_read_patches_2a(
 
 /* Take a measurement reading using the current mode (combined parts 1 & 2) */
 /* Converts to completely processed output readings. */
+/* (NOTE:- this can't be used for calibration, as it implements uv mode) */
 i1pro_code i1pro_read_patches(
 	i1pro *p,
 	double *duration,		/* Return flash duration */
@@ -5088,6 +5102,7 @@ i1pro_code i1pro_read_patches(
 /* Take a measurement reading using the current mode (combined parts 1 & 2a) */
 /* Converts to completely processed output readings, without averaging or extracting */
 /* sample patches. */
+/* (NOTE:- this can't be used for calibration, as it implements uv mode) */
 i1pro_code i1pro_read_patches_all(
 	i1pro *p,
 	double **specrd,		/* Return array [numpatches][nwav] of spectral reading values */
@@ -5200,7 +5215,7 @@ i1pro_code i1pro_trialmeasure(
 		free_dvector(absraw, -1, m->nraw-1);
 		free_dmatrix(multimes, 0, nummeas-1, -1, m->nraw-1);
 		free(buf);
-		a1logd(p->log,2,"i1pro_imp_measure interplate dark ref failed\n");
+		a1logd(p->log,2,"i1pro_trialmeasure interplate dark ref failed\n");
 		return ev;
 	}
 
@@ -5908,6 +5923,8 @@ i1pro_code i1pro_extract_patches_multimeas(
 	double window;				/* +/- around median to accept */
 	double highest = -1e6;
 	double white_avg;			/* Average of (aproximate) white data */
+	int b_lo = BL;				/* Patch detection low band */
+	int b_hi = BH;				/* Patch detection low band */
 	int rv = 0;
 	double patch_cons_thr = PATCH_CONS_THR * m->scan_toll_ratio;
 #ifdef PATREC_DEBUG
@@ -5915,6 +5932,13 @@ i1pro_code i1pro_extract_patches_multimeas(
 #endif
 
 	a1logd(p->log,2,"i1pro_extract_patches_multimeas looking for %d patches out of %d samples\n",tnpatch,nummeas);
+
+	/* Adjust bands if UV mode */
+	/* (This is insufficient for useful patch recognition) */
+	if (m->uv_en) {
+		b_lo = 91;
+		b_hi = 117;
+	}
 
 	maxval = dvectorz(-1, m->nraw-1);  
 
@@ -5963,8 +5987,8 @@ i1pro_code i1pro_extract_patches_multimeas(
 #ifndef NEVER		/* Good with this on */
 	/* Average bands together */
 	for (i = 0; i < nummeas; i++) {
-		for (j = BL + BW; j < (BH - BW); j++) {
-			for (k = -BL; k <= BW; k++)		/* Box averaging filter over bands */
+		for (j = b_lo + BW; j < (b_hi - BW); j++) {
+			for (k = -b_lo; k <= BW; k++)		/* Box averaging filter over bands */
 				 sslope[i][j] += multimeas[i][j + k]/maxval[j];
 		}
 	}
@@ -5983,7 +6007,7 @@ i1pro_code i1pro_extract_patches_multimeas(
 #ifdef NEVER		/* Works well for non-noisy readings */
 	/* Median of 5 differences from 6 points */
 	for (i = 2; i < (nummeas-3); i++) {
-		for (j = BL; j < BH; j++) {
+		for (j = b_lo; j < b_hi; j++) {
 			double sl, asl[5];
 			int r, s;
 			asl[0] = fabs(sslope[i-2][j] - sslope[i-1][j]);
@@ -6025,7 +6049,7 @@ i1pro_code i1pro_extract_patches_multimeas(
 
 		for (pp = 0; pp < 2; pp++) { 			/* For each pass */
 
-			for (j = BL; j < BH; j++) {				/* Bands */
+			for (j = b_lo; j < b_hi; j++) {				/* Bands */
 
 				/* Compute differences for the range of our windows */
 				for (k = 0; k < (2 * FW -1); k++)
@@ -6197,11 +6221,11 @@ i1pro_code i1pro_extract_patches_multimeas(
 	printf("Slope filter output\n");
 	for (i = 0; i < nummeas; i++) { 
 		int jj;
-		for (jj = 0, j = BL; jj < 6 && j < BH; jj++, j += ((BH-BL)/6)) {
+		for (jj = 0, j = b_lo; jj < 6 && j < b_hi; jj++, j += ((b_hi-b_lo)/6)) {
 			double sum = 0.0;
-			for (k = -BL; k <= BW; k++)		/* Box averaging filter over bands */
+			for (k = -b_lo; k <= BW; k++)		/* Box averaging filter over bands */
 				sum += multimeas[i][j + k];
-			plot[jj][i] = sum/((2.0 * BL + 1.0) * maxval[j+k]);
+			plot[jj][i] = sum/((2.0 * b_lo + 1.0) * maxval[j+k]);
 		}
 	}
 	for (i = 0; i < nummeas; i++)
@@ -6399,11 +6423,11 @@ i1pro_code i1pro_extract_patches_multimeas(
 	printf("Trimmed output:\n");
 	for (i = 0; i < nummeas; i++) { 
 		int jj;
-		for (jj = 0, j = BL; jj < 6 && j < BH; jj++, j += ((BH-BL)/6)) {
+		for (jj = 0, j = b_lo; jj < 6 && j < b_hi; jj++, j += ((b_hi-b_lo)/6)) {
 			double sum = 0.0;
-			for (k = -BL; k <= BW; k++)		/* Box averaging filter over bands */
+			for (k = -b_lo; k <= BW; k++)		/* Box averaging filter over bands */
 				sum += multimeas[i][j + k];
-			plot[jj][i] = sum/((2.0 * BL + 1.0) * maxval[j+k]);
+			plot[jj][i] = sum/((2.0 * b_lo + 1.0) * maxval[j+k]);
 		}
 	}
 	for (i = 0; i < nummeas; i++)

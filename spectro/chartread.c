@@ -214,6 +214,7 @@ double scan_tol,	/* Modify patch consistency tolerance */
 int pbypatch,		/* Patch by patch measurement */
 int xtern,			/* Use external (user supplied) values rather than instument read */
 int spectral,		/* Generate spectral info flag */
+int uvmode,			/* ~~~ i1pro2 test mode ~~~ */
 int accurate_expd,	/* Expected values can be assumed to be accurate */
 int emit_warnings,	/* Emit warnings for wrong strip, unexpected value */
 a1log *log			/* verb, debug & error log */
@@ -673,6 +674,16 @@ a1log *log			/* verb, debug & error log */
 			}
 			if (spectral)
 				mode |= inst_mode_spectral;
+
+			// ~~~ i1pro2 test code ~~~ */
+			if (uvmode) {
+				if (!IMODETST(cap, inst_mode_ref_uv)) {
+					warning("UV measurement mode requested, but instrument doesn't support this mode");
+					uvmode = 0;
+				} else {
+					mode |= inst_mode_ref_uv;
+				}
+			}
 
 			if ((rv = it->set_mode(it, mode)) != inst_ok) {
 				printf("\nSetting instrument mode failed with error :'%s' (%s)\n",
@@ -2050,6 +2061,7 @@ usage() {
 	}
 	fprintf(stderr," -T ratio        Modify strip patch consistency tolerance by ratio\n");
 	fprintf(stderr," -S              Suppress wrong strip & unexpected value warnings\n");
+//	fprintf(stderr," -Y U                 Test i1pro2 UV measurement mode\n");
 	fprintf(stderr," -W n|h|x        Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]      Print debug diagnostics to stderr\n");
 	fprintf(stderr," outfile         Base name for input[ti2]/output[ti3] file\n");
@@ -2081,6 +2093,7 @@ int main(int argc, char *argv[]) {
 	double scan_tol = 1.0;			/* Patch consistency tolerance modification */
 	int xtern = 0;					/* Take external values, 1 = Lab, 2 = XYZ */
 	int spectral = 1;				/* Save spectral information */
+	int uvmode = 0;					/* ~~~ i1pro2 test mode ~~~ */
 	int accurate_expd = 0;			/* Expected value assumed to be accurate */
 	int emit_warnings = 1;			/* Emit warnings for wrong strip, unexpected value */
 	int dolab = 0;					/* 1 = Save CIE as Lab, 2 = Save CIE as XYZ and Lab */
@@ -2149,7 +2162,7 @@ int main(int argc, char *argv[]) {
 				usage();
 
 			/* Verbose */
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			else if (argv[fa][1] == 'v') {
 				verb = 1;
 				g_log->verb = verb;
 
@@ -2225,7 +2238,7 @@ int main(int argc, char *argv[]) {
 				g_log->debug = debug;
 
 			/* COM port  */
-			} else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
+			} else if (argv[fa][1] == 'c') {
 				fa = nfa;
 				if (na == NULL) usage();
 				comport = atoi(na);
@@ -2245,23 +2258,23 @@ int main(int argc, char *argv[]) {
 				displ = 2;
 
 			/* Request emissive measurement */
-			} else if (argv[fa][1] == 'e' || argv[fa][1] == 'E') {
+			} else if (argv[fa][1] == 'e') {
 				emis = 1;
 				trans = 0;
 				displ = 0;
 
 			/* Display type */
-			} else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y') {
+			} else if (argv[fa][1] == 'y') {
 				fa = nfa;
 				if (na == NULL) usage();
 				dtype = na[0];
 
 			/* Request patch by patch measurement */
-			} else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+			} else if (argv[fa][1] == 'p') {
 				pbypatch = 1;
 
 			/* Request external values */
-			} else if (argv[fa][1] == 'x' || argv[fa][1] == 'X') {
+			} else if (argv[fa][1] == 'x') {
 				fa = nfa;
 				if (na == NULL) usage();
 
@@ -2285,7 +2298,7 @@ int main(int argc, char *argv[]) {
 				dolab = 2;
 
 			/* Resume reading a chart */
-			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R')
+			else if (argv[fa][1] == 'r')
 				doresume = 1;
 
 			/* Printer calibration info */
@@ -2308,6 +2321,18 @@ int main(int argc, char *argv[]) {
 					fe = inst_opt_filter_UVCut;
 				else
 					usage();
+
+			/* Extra flags */
+			} else if (argv[fa][1] == 'Y') {
+				if (na == NULL)
+					usage();
+			
+				/* ~~~ i1pro2 test code ~~~ */
+				if (na[0] == 'U') {
+					uvmode = 1;
+				} else {
+					usage();
+				}
 
 			} else 
 				usage();
@@ -2815,7 +2840,7 @@ int main(int argc, char *argv[]) {
 	if (read_strips(itype, scols, &atype, npat, totpa, stipa, pis, paix,
 	                saix, ixord, rstart, hex, ipath, fc, plen, glen, tlen,
 	                trans, emis, displ, dtype, fe, nocal, disbidi, highres, ccxxname, obType,
-	                scan_tol, pbypatch, xtern, spectral, accurate_expd,
+	                scan_tol, pbypatch, xtern, spectral, uvmode, accurate_expd,
 	                emit_warnings, g_log) == 0) {
 		/* And save the result */
 

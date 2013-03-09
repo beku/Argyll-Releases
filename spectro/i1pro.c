@@ -142,6 +142,12 @@ i1pro_determine_capabilities(i1pro *p) {
 		       ;
 	}
 
+	/* Set the Pro2 capabilities mask */
+	if (p->itype == instI1Pro2) {
+		p->cap |= inst_mode_ref_uv
+		       ;
+	}
+
 	if (i1pro_imp_highres(p))		/* This is static */
 		p->cap |= inst_mode_highres;
 
@@ -654,8 +660,7 @@ inst_code i1pro_set_mode(inst *pp, inst_mode m) {
 	if ((mmode = i1pro_convert_mode(p, m)) == i1p_no_modes)
 		return inst_unsupported;
 
-	if ((rv = i1pro_interp_code(p, i1pro_imp_set_mode(p, mmode, m & inst_mode_spectral)))
-		                                                                           != inst_ok) 
+	if ((rv = i1pro_interp_code(p, i1pro_imp_set_mode(p, mmode, m))) != inst_ok) 
 		return rv;
 
 	i1pro_determine_capabilities(p);

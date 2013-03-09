@@ -14,6 +14,15 @@
  * see the License.txt file for licencing details.
  */
 
+/*
+	TTBD
+
+	Add "single pixel patch" mode, for pure digital processing for
+	abstract profile creation.
+
+
+ */
+
 #include <stdio.h>
 #include <fcntl.h>		/* In case DOS binary stuff is needed */
 #include <ctype.h>

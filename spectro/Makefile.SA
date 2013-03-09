@@ -36,15 +36,15 @@ LINKFLAGS = $(LINKFLAGSDEF) $(LINKDEBUGFLAG)
 STDHDRS = $(INCFLAG)$(STDHDRSDEF)
 WIN_STDHDRS = $(INCFLAG)usb$(SLASH)driver
 
-all:: libinst$(SUFLIB) libinstappsup$(SUFLIB) spotread$(SUFEXE) spyd2en$(SUFEXE) spyd4en$(SUFEXE) i1d3ccss$(SUFEXE)
+all:: libinst$(SUFLIB) libinstappsup$(SUFLIB) spotread$(SUFEXE) oeminst$(SUFEXE) 
 
 INSTHEADERS = dtp20.h dtp22.h dtp41.h dtp51.h dtp92.h ss.h ss_imp.h i1disp.h i1d3.h i1pro.h i1pro_imp.h munki.h munki_imp.h hcfr.h huey.h colorhug.h spyd2.h spyd2setup.h spyd2PLD.h
 INSOBJS = dtp20$(SUFOBJ) dtp22$(SUFOBJ) dtp41$(SUFOBJ) dtp51$(SUFOBJ) dtp92$(SUFOBJ) ss$(SUFOBJ) ss_imp$(SUFOBJ) i1disp$(SUFOBJ) i1d3$(SUFOBJ) i1pro$(SUFOBJ) i1pro_imp$(SUFOBJ) munki$(SUFOBJ) munki_imp$(SUFOBJ) hcfr$(SUFOBJ) huey$(SUFOBJ) colorhug$(SUFOBJ) spyd2$(SUFOBJ)
 
-HEADERS = pollem.h conv.h aglob.h hidio.h icoms.h inst.c inst.h insttypeinst.h insttypes.h $(INSTHEADERS) usbio.h xspect.h rspl1.h sort.h xdg_bds.h ccss.h pars.h cgats.h instappsup.h usb$(SLASH)driver$(SLASH)driver_api.h
+HEADERS = pollem.h conv.h aglob.h hidio.h icoms.h inst.c inst.h insttypeinst.h insttypes.h $(INSTHEADERS) usbio.h xspect.h rspl1.h sort.h xdg_bds.h ccss.h ccmx.h pars.h cgats.h instappsup.h usb$(SLASH)driver$(SLASH)driver_api.h
 
 # libinst objects
-OBJS = conv$(SUFOBJ) aglob$(SUFOBJ) inst$(SUFOBJ) numsup$(SUFOBJ) rspl1$(SUFOBJ) icoms$(SUFOBJ) usbio$(SUFOBJ) hidio$(SUFOBJ) insttypes$(SUFOBJ) pollem$(SUFOBJ) xspect$(SUFOBJ) xdg_bds$(SUFOBJ) ccss$(SUFOBJ) pars$(SUFOBJ) cgats$(SUFOBJ) $(INSOBJS)
+OBJS = conv$(SUFOBJ) aglob$(SUFOBJ) inst$(SUFOBJ) numsup$(SUFOBJ) rspl1$(SUFOBJ) icoms$(SUFOBJ) usbio$(SUFOBJ) hidio$(SUFOBJ) insttypes$(SUFOBJ) pollem$(SUFOBJ) xspect$(SUFOBJ) xdg_bds$(SUFOBJ) ccss$(SUFOBJ) ccmx$(SUFOBJ) pars$(SUFOBJ) cgats$(SUFOBJ) $(INSOBJS)
 
 
 # instrument library
@@ -139,14 +139,11 @@ colorhug$(SUFOBJ): colorhug.c $(HEADERS)
 spyd2$(SUFOBJ): spyd2.c $(HEADERS)
 	$(CC) spyd2.c
 
-spyd2en$(SUFOBJ): spyd2en.c $(HEADERS)
-	$(CC) spyd2en.c
+oemarch$(SUFOBJ): oemarch.c $(HEADERS)
+	$(CC) oemarch.c
 
-spyd4en$(SUFOBJ): spyd4en.c $(HEADERS)
-	$(CC) spyd4en.c
-
-i1d3ccss$(SUFOBJ): i1d3ccss.c $(HEADERS)
-	$(CC) i1d3ccss.c
+oeminst$(SUFOBJ): oeminst.c $(HEADERS)
+	$(CC) oeminst.c
 
 vinflate$(SUFOBJ): vinflate.c $(HEADERS)
 	$(CC) vinflate.c
@@ -178,16 +175,9 @@ libinstappsup$(SUFLIB): $(SUPOBJS)
 spotread$(SUFEXE): spotread$(SUFOBJ) libinst$(SUFLIB) inst.h
 	$(LINK) $(LINKOF)spotread$(SUFEXE) spotread$(SUFOBJ) libinst$(SUFLIB) libinstappsup$(SUFLIB) $(LINKLIBS) 
 
-spyd2en$(SUFEXE): spyd2en$(SUFOBJ) vinflate$(SUFOBJ) libinst$(SUFLIB)
-	$(LINK) $(LINKOF)spyd2en$(SUFEXE) spyd2en$(SUFOBJ) vinflate$(SUFOBJ) libinstappsup$(SUFLIB) libinst$(SUFLIB) $(LINKLIBS) 
-
-i1d3ccss$(SUFEXE): i1d3ccss$(SUFOBJ) inflate$(SUFOBJ) LzmaDec$(SUFOBJ) libinst$(SUFLIB)
-	$(LINK) $(LINKOF)i1d3ccss$(SUFEXE) i1d3ccss$(SUFOBJ) inflate$(SUFOBJ) LzmaDec$(SUFOBJ) libinst$(SUFLIB) libinstappsup$(SUFLIB) $(LINKLIBS) 
-
-spyd4en$(SUFEXE): spyd4en$(SUFOBJ) vinflate$(SUFOBJ) libinst$(SUFLIB)
-	$(LINK) $(LINKOF)spyd4en$(SUFEXE) spyd4en$(SUFOBJ) vinflate$(SUFOBJ) libinst$(SUFLIB) libinstappsup$(SUFLIB) $(LINKLIBS) 
-
+oeminst$(SUFEXE): oeminst$(SUFOBJ) oemarch$(SUFOBJ) inflate$(SUFOBJ) vinflate$(SUFOBJ) LzmaDec$(SUFOBJ) libinst$(SUFLIB) libinstappsup$(SUFLIB)
+	$(LINK) $(LINKOF)oeminst$(SUFEXE) oeminst$(SUFOBJ) oemarch$(SUFOBJ) inflate$(SUFOBJ) vinflate$(SUFOBJ) LzmaDec$(SUFOBJ) libinst$(SUFLIB) libinstappsup$(SUFLIB) $(LINKLIBS) 
 
 clean:
-	$(RM) *$(SUFOBJ) *$(SUFLIB) spotread$(SUFEXE) spyd2en$(SUFEXE) i1d3css$(SUFEXE) spyd4en$(SUFEXE)
+	$(RM) *$(SUFOBJ) *$(SUFLIB) spotread$(SUFEXE) i1d3css$(SUFEXE)
 

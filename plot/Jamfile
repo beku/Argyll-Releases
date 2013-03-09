@@ -23,3 +23,5 @@ MainVariant plot : plot.c : : STANDALONE_TEST : ../h ../numlib ../spectro : : ..
 # VRML plot library
 Library libvrml : vrml.c : : : ../h ../icc ../cgats ../numlib ../gamut ;
 
+#MainsFromSources t.c ;
+

@@ -47,7 +47,6 @@
 #include "numlib.h"
 #include "cgats.h"
 #include "xicc.h"
-#include "ccmx.h"
 #include "conv.h"
 #include "plot.h"
 #else /* SALONEINSTLIB */
@@ -57,6 +56,7 @@
 #include "conv.h"
 #endif /* SALONEINSTLIB */
 #include "ccss.h"
+#include "ccmx.h"
 #include "inst.h"
 #include "icoms.h"
 #include "instappsup.h"
@@ -294,8 +294,10 @@ usage(char *diag, ...) {
 	fprintf(stderr," -a                   Use ambient measurement mode (absolute results)\n");
 	fprintf(stderr," -f                   Use ambient flash measurement mode (absolute results)\n");
 	cap2 = inst_show_disptype_options(stderr, " -y                   ", icmps, 0);
+#ifndef SALONEINSTLIB
 	fprintf(stderr," -I illum             Set simulated instrument illumination using FWA (def -i illum):\n");
 	fprintf(stderr,"                       M0, M1, M2, A, C, D50, D50M2, D65, F5, F8, F10 or file.sp]\n");
+#endif
 	fprintf(stderr," -i illum             Choose illuminant for computation of CIE XYZ from spectral data & FWA:\n");
 #ifndef SALONEINSTLIB
 	fprintf(stderr,"                       A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp\n");
@@ -326,15 +328,14 @@ usage(char *diag, ...) {
 //	fprintf(stderr," -K type              Run instrument calibration first\n");
 	fprintf(stderr," -N                   Disable auto calibration of instrument\n");
 	fprintf(stderr," -H                   Start in high resolution spectrum mode (if available)\n");
-#ifndef SALONEINSTLIB
 	if (cap2 & inst2_ccmx)
 		fprintf(stderr," -X file.ccmx         Apply Colorimeter Correction Matrix\n");
-#endif
 	if (cap2 & inst2_ccss) {
 		fprintf(stderr," -X file.ccss         Use Colorimeter Calibration Spectral Samples for calibration\n");
 	}
 	fprintf(stderr," -Y r|n               Override refresh, non-refresh display mode\n");
 	fprintf(stderr," -Y A                 Use non-adaptive integration time mode (if available).\n");
+//	fprintf(stderr," -Y U                 Test i1pro2 UV measurement mode\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," logfile              Optional file to save reading results as text\n");
@@ -359,6 +360,7 @@ int main(int argc, char *argv[]) {
 	int tele = 0;					/* 1 = Use telephoto emissive sub-mode. */
 	int ambient = 0;				/* 1 = Use ambient emissive mode, 2 = ambient flash mode */
 	int highres = 0;				/* Use high res mode if available */
+	int uvmode = 0;					/* ~~~ i1pro2 test mode ~~~ */
 	int refrmode = -1;				/* -1 = default, 0 = non-refresh mode, 1 = non-refresh mode */
 	int nadaptive = 0;				/* Use non-apative mode if available */
 	int doYxy= 0;					/* Display Yxy instead of Lab */
@@ -474,6 +476,7 @@ int main(int argc, char *argv[]) {
 				if (na == NULL) usage("Paramater expected following -y");
 				dtype = na[0];
 
+#ifndef SALONEINSTLIB
 			/* Simulated instrument illumination (FWA) */
 			} else if (argv[fa][1] == 'I') {
 
@@ -512,6 +515,7 @@ int main(int argc, char *argv[]) {
 					if (read_xspect(&cust_tillum, na) != 0)
 						usage("Failed to read custom target illuminant spectrum in file '%s'",na);
 				}
+#endif /* SALONEINSTLIB */
 
 			/* Spectral Illuminant type for XYZ computation */
 			} else if (argv[fa][1] == 'i') {
@@ -550,7 +554,7 @@ int main(int argc, char *argv[]) {
 				}
 #else /* SALONEINSTLIB */
 				} else
-					usage();
+					usage("Unrecognised illuminant '%s'",na);
 #endif /* SALONEINSTLIB */
 
 			/* Spectral Observer type */
@@ -690,9 +694,7 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'H') {
 				highres = 1;
 
-#ifndef SALONEINSTLIB
 			/* Colorimeter Correction Matrix or */
-#endif
 			/* Colorimeter Calibration Spectral Samples */
 			} else if (argv[fa][1] == 'X') {
 				int ix;
@@ -724,6 +726,9 @@ int main(int argc, char *argv[]) {
 					refrmode = 1;
 				} else if (na[0] == 'n') {
 					refrmode = 0;
+				/* ~~~ i1pro2 test code ~~~ */
+				} else if (na[0] == 'U') {
+					uvmode = 1;
 				} else {
 					usage("-Y parameter '%c' not recognised",na[0]);
 				}
@@ -749,10 +754,8 @@ int main(int argc, char *argv[]) {
 		if ((na = getenv("ARGYLL_COLMTER_CAL_SPEC_SET")) != NULL) {
 			strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
 
-#ifndef SALONEINSTLIB
 		} else if ((na = getenv("ARGYLL_COLMTER_COR_MATRIX")) != NULL) {
 			strncpy(ccxxname,na,MAXNAMEL-1); ccxxname[MAXNAMEL-1] = '\000';
-#endif
 		}
 	}
 
@@ -1029,6 +1032,17 @@ int main(int argc, char *argv[]) {
 			smode |= inst_mode_spectral;
 		}
 
+		// ~~~ i1pro2 test code ~~~ */
+		if (uvmode) {
+			if (!IMODETST(cap, inst_mode_ref_uv)) {
+				printf("UV measurement mode requested, but instrument doesn't support this mode\n");
+				it->del(it);
+				return -1;
+			}
+			mode  |= inst_mode_ref_uv;
+			smode |= inst_mode_ref_uv;
+		}
+
 		if ((rv = it->set_mode(it, mode)) != inst_ok) {
 			printf("\nSetting instrument mode failed with error :'%s' (%s)\n",
 		     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -1050,7 +1064,6 @@ int main(int argc, char *argv[]) {
 		/* Colorimeter Correction Matrix */
 		if (ccxxname[0] != '\000') {
 			ccss *cs = NULL;
-#ifndef SALONEINSTLIB
 			ccmx *cx = NULL;
 
 			if ((cx = new_ccmx()) == NULL) {
@@ -1072,13 +1085,10 @@ int main(int argc, char *argv[]) {
 					return -1;
 				}
 				cx->del(cx);
-			} else
-#endif
-			{
-#ifndef SALONEINSTLIB
+
+			} else {
 				cx->del(cx);
 				cx = NULL;
-#endif
 				
 				/* CCMX failed, try CCSS */
 				if ((cs = new_ccss()) == NULL) {
@@ -1940,7 +1950,7 @@ int main(int argc, char *argv[]) {
 				
 				xmax = ss->spec_wl_long;
 				xmin = ss->spec_wl_short;
-				if (emiss) {
+				if (emiss || uvmode) {
 					ymin = ymax = 0.0;	/* let it scale */
 				} else {
 					ymin = 0.0;

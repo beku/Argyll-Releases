@@ -84,7 +84,6 @@ CFUUIDRef CGDisplayCreateUUIDFromDisplayID (uint32_t displayID);
 
 #endif /* __APPLE__ */
 
-#define DISPLAY_UPDATE_DELAY 200	/* default display update delay allowance */
 #define VERIFY_TOL (1.0/255.0)
 #undef DISABLE_RANDR				/* Disable XRandR code */
 
@@ -3996,6 +3995,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		return NULL;
 	}
 
+	/* !!!! Make changes in webwin.c as well !!!! */
 	p->nowin = nowin;
 	p->native = native;
 	p->blackbg = blackbg;

@@ -60,15 +60,19 @@
 
 #undef STOCKFWA				/* [und] Use table shape else compute from flat line estimate*/
 
-#undef DEBUG				/* Extra printouts + debugging messages */
-#define DOPLOT				/* Plot FWA setup */
-#define DOPLOT_ALL_FWA		/* Plot all FWA corrected conversions */
-#undef WRITE_FWA1_STIM		/* Write file "fwa1_stip.sp" when FWA is setup */
+#undef DEBUG				/* [und] Extra printouts + debugging messages */
+#undef DOPLOT				/* [und] Plot FWA setup */
+#undef DOPLOT_ALL_FWA		/* [und] Plot all FWA corrected conversions */
+#undef WRITE_FWA1_STIM		/* [und] Write file "fwa1_stip.sp" when FWA is setup */
 
 #endif /* !SALONEINSTLIB */
 
 #ifndef CLAMP_XYZ
 # pragma message("###### CLAMP_XYZ is not defined ######")
+#endif
+
+#if defined(DEBUG) || defined(DOPLOT) || defined(DOPLOT_ALL_FWA) || defined(WRITE_FWA1_STIM)
+# pragma message("###### xspect debugging is on ######")
 #endif
 
 #ifdef DEBUG
@@ -3222,9 +3226,7 @@ xspect *in			/* Spectrum to be converted */
 	tsout.spec_wl_long = 0.0;
 	tsout.norm = 0.0;
 
-#define MIN_UVILLUM 1e-8		/* Minimum assumed UV illumination level at wavelength */
-#define MIN_UVREFL  1e-6		/* Minimum assumed UV reflectance at wavelength */
-#define MIN_ILLUM 1e-6		/* Minimum assumed illumination level at wavelength */
+#define MIN_ILLUM 1e-8		/* Minimum assumed illumination level at wavelength */
 #define MIN_REFL  1e-6		/* Minimum assumed reflectance at wavelength */
 
 	/* With colorant, estimate stimulation level of FWA for instrument illuminant */
@@ -3250,23 +3252,27 @@ xspect *in			/* Spectrum to be converted */
 			Kct = Emct * Eu;					/* FWA contribution under target illum. */
 
 			getval_lxspec(&p->iillum, &Ii, ww);	/* Normalised instr. illuminant at wavelength */
-			if (Ii < MIN_UVILLUM)
-				Ii = MIN_UVILLUM;
+			if (Ii < MIN_ILLUM)
+				Ii = MIN_ILLUM;
+
 			getval_lxspec(&p->tillum, &It, ww);/* Normalised target. illuminant at wavelength */
-			if (It < MIN_UVILLUM)
-				It = MIN_UVILLUM;
-			getval_lxspec(in, &Rc, ww)	;		/* Media + colorant reflectance at wavelength */
+			if (It < MIN_ILLUM)
+				It = MIN_ILLUM;
 
 			getval_lxspec(&p->media, &Rmb, ww);	/* Base media reflectance at this wavelength */
-			if (Rmb < MIN_UVREFL)
-				Rmb = MIN_UVREFL;
+			if (Rmb < MIN_REFL)
+				Rmb = MIN_REFL;
+
+			getval_lxspec(in, &Rc, ww)	;		/* Media + colorant reflectance at wavelength */
+			if (Rc < 0.0)
+				Rc = 0.0;
 
 #ifdef NEVER
 			Rcch = sqrt(Rc/Rmb);				/* Half reflectance estimate (valid if no FWA) */
 
 #else
 			/* Solve for underlying colorant half reflectance, discounting FWA */
-			if (Rmb <= MIN_UVREFL) /* Hmm. */
+			if (Rmb <= MIN_REFL) /* Hmm. */
 				Rcch = sqrt(fabs(Rmb));
 			else
 				Rcch = (-Kc + sqrt(Kc * Kc + 4.0 * Ii * Ii * Rmb * Rc))/(2.0 * Ii * Rmb);
@@ -3311,11 +3317,21 @@ xspect *in			/* Spectrum to be converted */
 		Kc  = Emc * Eu;						/* FWA contribution under inst. illum. */
 		Kct = Emct * Eu;					/* FWA contribution under target illum. */
 
-		getval_lxspec(&p->media, &Rmb, ww);	/* Base Media */
-		getval_lxspec(in, &Rc, ww);			/* Media + colorant reflectance at wavelength + FWA */
-		getval_lxspec(&p->iillum, &Ii, ww);	/* Normalised instrument illuminant */
+		getval_lxspec(&p->iillum, &Ii, ww);	/* Normalised instr. illuminant at wavelength */
 		if (Ii < MIN_ILLUM)
 			Ii = MIN_ILLUM;
+
+		getval_lxspec(&p->tillum, &It, ww);/* Normalised target. illuminant at wavelength */
+		if (It < MIN_ILLUM)
+			It = MIN_ILLUM;
+
+		getval_lxspec(&p->media, &Rmb, ww);	/* Base media reflectance at this wavelength */
+		if (Rmb < MIN_REFL)
+			Rmb = MIN_REFL;
+
+		getval_lxspec(in, &Rc, ww)	;		/* Media + colorant reflectance at wavelength */
+		if (Rc < 0.0)
+			Rc = 0.0;
 
 		/* Solve for underlying colorant half transmittance, discounting FWA */
 		if (Rmb <= MIN_REFL) /* Hmm. */
@@ -3324,9 +3340,6 @@ xspect *in			/* Spectrum to be converted */
 			Rcch = (-Kc + sqrt(Kc * Kc + 4.0 * Ii * Ii * Rmb * Rc))/(2.0 * Ii * Rmb);
 
 		/* Estimated corrected reflectance */
-		getval_lxspec(&p->tillum, &It, ww);
-		if (It < MIN_ILLUM)
-			It = MIN_ILLUM;
 		Rct = ((It * Rcch * Rmb + Kct) * Rcch)/It;
 
 		DBGF((DBGA,"at %.1fnm, Rmb %f, Rc %f, Rch %f, Rcch %f, Ii %f, It %f, Kct %f, Rct %f\n",ww,Rmb,Rc,sqrt(Rc),Rcch,Ii,It,Kct,Rct));
@@ -3420,21 +3433,27 @@ xspect *in			/* Spectrum to be converted */
 			Kc  = Emc * Eu;				/* FWA contribution under inst. illum. */
 			Kct = Emct * Eu;			/* FWA contribution under target illum. */
 	
-			getval_lxspec(&p->media, &Rmb, ww);	/* Base Media */
-			getval_lxspec(in, &Rc, ww);	/* Media + colorant reflectance at wavelength + FWA */
-			getval_lxspec(&p->iillum, &Ii, ww);	/* Normalised instrument illuminant */
+			getval_lxspec(&p->iillum, &Ii, ww);	/* Normalised instr. illuminant at wavelength */
 			if (Ii < MIN_ILLUM)
 				Ii = MIN_ILLUM;
 	
+			getval_lxspec(&p->tillum, &It, ww);/* Normalised target. illuminant at wavelength */
+			if (It < MIN_ILLUM)
+				It = MIN_ILLUM;
+	
+			getval_lxspec(&p->media, &Rmb, ww);	/* Base media reflectance at this wavelength */
+			if (Rmb < MIN_REFL)
+				Rmb = MIN_REFL;
+	
+			getval_lxspec(in, &Rc, ww)	;		/* Media + colorant reflectance at wavelength */
+			if (Rc < 0.0)
+				Rc = 0.0;
+
 			if (Rmb < MIN_REFL) /* Hmm. */
 				Rcch = sqrt(fabs(Rmb));
 			else
 				Rcch = (-Kc + sqrt(Kc * Kc + 4.0 * Ii * Ii * Rmb * Rc))/(2.0 * Ii * Rmb);
 	
-			/* Estimated corrected reflectance */
-			getval_lxspec(&p->tillum, &It, ww);
-			if (It < MIN_ILLUM)
-				It = MIN_ILLUM;
 			Rct = ((It * Rcch * Rmb + Kct) * Rcch)/It;
 
 			if (p->insteqtarget)		/* Ignore FWA corrected value if same illuminant */
@@ -3459,8 +3478,6 @@ xspect *in			/* Spectrum to be converted */
 		*sout = tsout;		/* Structure copy */
 	}
 
-#undef MIN_UVILLUM 
-#undef MIN_UVREFL
 #undef MIN_ILLUM 
 #undef MIN_REFL
 

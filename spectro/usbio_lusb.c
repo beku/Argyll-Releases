@@ -34,6 +34,12 @@
 # define usb_strerror           libusb_strerror
 #endif
 
+#if defined(__FreeBSD__)		/* Shut spurious warnings up */
+# define CASTFIX (intptr_t)
+#else
+# define CASTFIX
+#endif
+
 /* Check a USB Vendor and product ID, and add the device */
 /* to the icoms path if it is supported. */
 /* (this is used to help implement usb_get_paths) */
@@ -770,7 +776,7 @@ static int icoms_usb_transaction(icoms *p, usb_cancelt *cancelt, int *xbytes,
 		*xbytes = 0;
 	if (cancelt != NULL) {
 		usb_lock_cancel(cancelt);
-		cancelt->hcancel = (void *)ep;
+		cancelt->hcancel = (void *) CASTFIX ep;
 		usb_lock_cancel(cancelt);
 	}
 	if (type == icom_usb_trantype_interrutpt) {
@@ -832,9 +838,9 @@ int icoms_usb_cancel_io(
 			rv = 0;
 	}
 #else
-	if ((int)cancelt->hcancel >= 0) {
+	if ((int) CASTFIX cancelt->hcancel >= 0) {
 //		msec_sleep(1);		/* Let device recover ? */
-		rv = usb_resetep(p->usbh, (int)cancelt->hcancel);	/* Not reliable ? */
+		rv = usb_resetep(p->usbh, (int) CASTFIX cancelt->hcancel);	/* Not reliable ? */
 //		msec_sleep(1);		/* Let device recover ? */
 	}
 #endif

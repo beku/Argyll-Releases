@@ -2,13 +2,125 @@
 
 # Package up the source and other files for the standalone GPLv2 Instrument library.
 
-# Copyright 2007 - 2012 Graeme W. Gill
+# Copyright 2007 - 2013 Graeme W. Gill
 # This material is licenced under the GNU GENERAL PUBLIC LICENSE Version 2 or later :-
 # see the License2.txt file for licencing details.
 
 echo "Making standalone GPLv2 instrument archive instlib.zip "
 
-FILES="License2.txt Makefile.OSX  Makefile.UNIX  Makefile.WNT pollem.h pollem.c conv.h conv.c aglob.c aglob.h hidio.h hidio.c icoms.h inst.h inst.c insttypes.c insttypes.h insttypeinst.h instappsup.c instappsup.h dtp20.c dtp20.h dtp22.c dtp22.h dtp41.c dtp41.h dtp51.c dtp51.h dtp92.c dtp92.h ss.h ss.c ss_imp.h ss_imp.c i1disp.c i1disp.h i1d3.h i1d3.c i1pro.h i1pro.c i1pro_imp.h i1pro_imp.c munki.h munki.c munki_imp.h munki_imp.c hcfr.c hcfr.h huey.c huey.h colorhug.c  colorhug.h spyd2.c spyd2.h spyd2setup.h spyd2PLD.h spyd2en.c spyd4en.c i1d3ccss.c vinflate.c inflate.c LzmaDec.c  LzmaDec.h LzmaTypes.h icoms.c icoms_nt.c icoms_ux.c iusb.h usbio.h usbio.c usbio_lusb.c usbio_nt.c usbio_ox.c usbio_lx.c xdg_bds.c xdg_bds.h ../xicc/xspect.h ../xicc/xspect.c ../xicc/ccss.h ../xicc/ccss.c ../rspl/rspl1.h ../rspl/rspl1.c ../h/sort.h ../numlib/numsup.h ../numlib/numsup.c ../cgats/pars.h ../cgats/pars.c ../cgats/parsstd.c ../cgats/cgats.h ../cgats/cgats.c ../cgats/cgatsstd.c  spotread.c"
+H_FILES="
+	../h/sort.h
+	"
+
+NUMLIB_FILES="
+	../numlib/numsup.h
+	../numlib/numsup.c
+	"
+
+CGATS_FILES="
+	../cgats/pars.h
+	../cgats/pars.c
+	../cgats/parsstd.c
+	../cgats/cgats.h
+	../cgats/cgats.c
+	../cgats/cgatsstd.c
+	"
+
+XICC_FILES="
+	../xicc/xspect.h
+	../xicc/xspect.c
+	../xicc/ccss.h
+	../xicc/ccss.c
+	../xicc/ccmx.h
+	../xicc/ccmx.c
+	"
+
+RSPL_FILES="
+	../rspl/rspl1.h
+	../rspl/rspl1.c
+	"
+
+SPECTRO_FILES="
+	License2.txt
+	Makefile.OSX
+	Makefile.UNIX
+	Makefile.WNT
+	pollem.h
+	pollem.c
+	conv.h
+	conv.c
+	aglob.c
+	aglob.h
+	hidio.h
+	hidio.c
+	icoms.h
+	inst.h
+	inst.c
+	insttypes.c
+	insttypes.h
+	insttypeinst.h
+	instappsup.c
+	instappsup.h
+	dtp20.c
+	dtp20.h
+	dtp22.c
+	dtp22.h
+	dtp41.c
+	dtp41.h
+	dtp51.c
+	dtp51.h
+	dtp92.c
+	dtp92.h
+	ss.h
+	ss.c
+	ss_imp.h
+	ss_imp.c
+	i1disp.c
+	i1disp.h
+	i1d3.h
+	i1d3.c
+	i1pro.h
+	i1pro.c
+	i1pro_imp.h
+	i1pro_imp.c
+	munki.h
+	munki.c
+	munki_imp.h
+	munki_imp.c
+	hcfr.c
+	hcfr.h
+	huey.c
+	huey.h
+	colorhug.c
+	colorhug.h
+	spyd2.c
+	spyd2.h
+	spyd2setup.h
+	spyd2PLD.h
+	oemarch.c
+	oemarch.h
+	oeminst.c
+	vinflate.c
+	inflate.c
+	LzmaDec.c
+	LzmaDec.h
+	LzmaTypes.h
+	icoms.c
+	icoms_nt.c
+	icoms_ux.c
+	iusb.h
+	usbio.h
+	usbio.c
+	usbio_lusb.c
+	usbio_nt.c
+	usbio_ox.c
+	usbio_lx.c
+	xdg_bds.c
+	xdg_bds.h
+	spotread.c
+	"
+
+FILES=" $H_FILES $CGATS_FILES $NUMLIB_FILES $RSPL_FILES $XICC_FILES $SPECTRO_FILES "
 
 rm -f instlib.zip
 rm -rf _zipdir

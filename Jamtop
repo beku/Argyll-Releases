@@ -36,10 +36,10 @@ USE_NATIVE_USB = true ;
 # Use libusb1 rather than libusb0 & libusb0-win32
 USE_LIBUSB1 = true ;
 
-# Except that FreeBSD doesn't have libusb1 port yet..
+# Except that FreeBSD doesn't have a spectro/usbio_bsd.c yet
 if $(OS) = FREEBSD || $(OS) = OPENBSD {
-	USE_NATIVE_USB = false ;
-	USE_LIBUSB1 = false ; # Use libusb 0.1
+	USE_NATIVE_USB = false ;	# Use libusb
+	USE_LIBUSB1 = false ; 		# Use libusb 0.1
 }
 
 # Make the USB V1 library static

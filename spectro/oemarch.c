@@ -841,7 +841,7 @@ void save_xfile(xfile *xf, char *sname, char *pfx, int verb) {
 	if (fclose(fp))
 		error("Failed to close file '%s' after writing",fname);
 
-	if (verb) printf("Wrote '%s' %d bytes\n",fname, xf->len);
+	if (verb) printf("Wrote '%s' %ld bytes\n",fname, xf->len);
 
 	if (sname == NULL)
 		free(fname);
@@ -1179,7 +1179,7 @@ static xfile *spyd2pld_extract(xfile **pxf, xfile *dll, int verb) {
 	xf->ftype = file_data;
 	xf->ttype = targ_spyd_pld;
 
-	if (verb) printf("Returning '%s' length %d from '%s'\n",xf->name, xf->len, dll->name);
+	if (verb) printf("Returning '%s' length %ld from '%s'\n",xf->name, xf->len, dll->name);
 
 	return xf;
 }

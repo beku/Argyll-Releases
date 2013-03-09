@@ -1,6 +1,11 @@
 
 #ifndef INST_H
 
+ /* instlib API definition. */
+
+ /* See spotread.c, chartread.c, illumread.c & ccxxmake.c for examples of */
+ /* the API usage. */
+
  /* Abstract base class for common color instrument interface */
  /* and other common instrument stuff.                        */
 
@@ -45,7 +50,7 @@
 #endif
 
 /* ------------------------------------------------- */
-/* debug level guide:
+/* aprox. debug level guide:
 
 	1,2  Applications, internal errors
 	2,3  High level instrument drivers
@@ -61,14 +66,14 @@
 #define ICOM_MAX_LOC_LEN 10
 
 /* Type of measurement result */
-typedef enum {						/* XYZ units, spectral units */
+typedef enum {						/* XYZ units,      spectral units */
 	inst_mrt_none           = 0,	/* Not set */
-	inst_mrt_emission       = 1,	/* cd/m^2,    mW/m^2/nm */
-	inst_mrt_ambient        = 2,	/* Lux/3.1415926 ?? */
-	inst_mrt_emission_flash = 3,	/* cd/m^2.s,  mW/m^2/nm.s*/
-	inst_mrt_ambient_flash  = 4,
-	inst_mrt_reflective     = 5,	/* %,         %/nm */
-	inst_mrt_transmissive   = 6		/* %,         %/nm */
+	inst_mrt_emission       = 1,	/* cd/m^2,         mW/m^2/nm */
+	inst_mrt_ambient        = 2,	/* Lux/3.1415926   ?? */
+	inst_mrt_emission_flash = 3,	/* cd/m^2.s,       mW/m^2/nm.s*/
+	inst_mrt_ambient_flash  = 4,	/* Lux/3.1415926/s ?? */
+	inst_mrt_reflective     = 5,	/* %,              %/nm */
+	inst_mrt_transmissive   = 6		/* %,              %/nm */
 } inst_meas_type;
 
 struct _ipatch {
@@ -81,9 +86,10 @@ struct _ipatch {
 
 	xspect sp;			/* Spectrum. sp.spec_n > 0 if valid */
 						/* Reflectance/Transmittance 0.0 .. 100.0%, norm = 100.0 */
-						/* or mW/nm/m^2, norm = 1.0  */
+						/* or mW/nm/m^2, norm = 1.0, etc.  */
 
 	double duration;	/* Apparent total duration in seconds (flash measurement) */
+						/* Typicall limited to sampling rate of instrument. */
 
 }; typedef struct _ipatch ipatch;
 
@@ -149,11 +155,35 @@ typedef enum {
 	/* Basic mode */
 	inst_mode_basic_mask         = inst_mode_illum_mask | inst_mode_sub_mask,
 
+/*
+	possible UV modes:
+
+	Do the reflective measurement with UV rather than normal illuminant
+	[ Should this be reflectivity against 'A', or absolute ?? ]
+	(ie. spot, strip, xy or chart). inst_mode_ref_uv
+
+	Do a white & UV measurement at the start of each strip reading.
+	Return result with special call after each strip read.
+	                                inst_mode_ref_uv_strip_1
+
+	Do a dual white & UV measurement
+	[ Can do in one hit for spot, but how should two strip passes be handled ?
+	  ie. two separate strip reads of phase 1 & then 2 ? ]
+	(ie. spot, strip, xy or chart). inst_mode_ref_uv_2pass 
+
+	Get normal illuminant spectrum.
+	
+	Get UV spectrum.
+
+	                                get_meas_illum_spectrum(mode);
+ */
+
 	/* Extra dependent modes */
 	inst_mode_emis_nonadaptive   = 0x00000800,	/* Emissom Non-adaptive mode */
-	inst_mode_emis_refresh_ovd   = 0x00001000,	/* Emissom Refresh mode override */
-	inst_mode_emis_norefresh_ovd = 0x00003000,	/* Emissom Non-refresh mode override */
-	inst_mode_dep_extra_mask     = 0x00003800,	/* Mask of measurement modifiers */
+	inst_mode_ref_uv             = 0x00001000,	/* Ultra Violet measurement mode */
+	inst_mode_emis_refresh_ovd   = 0x00002000,	/* Emissom Refresh mode override */
+	inst_mode_emis_norefresh_ovd = 0x00006000,	/* Emissom Non-refresh mode override */
+	inst_mode_dep_extra_mask     = 0x00007800,	/* Mask of measurement modifiers */
 
 	/* Extra independent modes */
 	inst_mode_colorimeter        = 0x00004000,	/* Colorimetric mode */

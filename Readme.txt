@@ -2,7 +2,7 @@
 Argyll CMS README file - Version 1.5.0
 --------------------------------------
 
-Date: 1th March 2013   
+Date: 8th March 2013   
 Author: Graeme Gill
 
 Introduction
@@ -23,7 +23,7 @@ is provided for each major tool, and a general guide to using the tools for typi
 color management tasks is also available. A mailing list provides support for
 more advanced usage.
 
-This is Version 1.5.0, a bug fix and feature update to V1.4.0 released on 20th April 2012.
+This is Version 1.5.1, a bug fix update to V1.5.0 released on 1st March 2013.
 The first public release of icclib was in November 1998,
 and of Argyll was in October 2000. Code development commenced in 1995. See
 Changes Summary for an overview of changes since the last release. Changes

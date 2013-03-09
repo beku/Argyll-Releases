@@ -174,7 +174,9 @@ struct _i1proimp {
 	/* Current settings */
 	i1p_mode mmode;					/* Current measurement mode selected */
 	i1pro_state ms[i1p_no_modes];	/* Mode state */
-	int spec_en;				/* Enable reporting of spectral data */
+	int spec_en;				/* NZ to enable reporting of spectral data */
+	int uv_en;					/* NZ to do UV reflective measurement */
+								/* ~~ change this to uv_mode of none, uv, strip1, 2pass */
 
 	double intclkp;				/* Integration clock period (typically 68 usec) */
 	int subclkdiv;				/* Sub clock divider ratio */
@@ -441,7 +443,7 @@ int i1pro_imp_ambient(i1pro *p);
 i1pro_code i1pro_imp_set_mode(
 	i1pro *p,
 	i1p_mode mmode,		/* i1pro mode to use */
-	int spec_en);		/* nz to enable reporting spectral */
+	inst_mode m);		/* full mode mask */
 
 /* Implement get_n_a_cals */
 i1pro_code i1pro_imp_get_n_a_cals(i1pro *p, inst_cal_type *pn_cals, inst_cal_type *pa_cals);

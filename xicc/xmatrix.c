@@ -1488,26 +1488,27 @@ double             smooth			/* Curve smoothing, nominally 1.0 */
 
 		if (flags & ICX_VERBOSE)
 			printf("Doing White point fine tune:\n");
-			
-		/* See what the relative and absolute white point has turned out to be, */
+
+
+		/* See what the aprox. relative white point has turned out to be, */
 		/* by looking up the device white in the current conversion */
 		mxmfunc(&os, os.v, aw, dw);
-
+	
 		if (flags & ICX_VERBOSE) {
 			printf("Before fine tune, rel WP = XYZ %s, Lab %s\n", icmPdv(3,aw), icmPLab(aw));
 		}
-
-		/* Matrix needed to correct aw to target D50 */
+	
+		/* Matrix needed to correct aprox white to target D50 */
 		icmAry2XYZ(_wp, aw);		/* Aprox relative target white point */
 		icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, cmat);	/* Correction */
-
-		/* Compute the actual white point */
+	
+		/* Compute the current absolute white point */
 		icmMulBy3x3(wp, toAbs, aw);
 
 		/* Apply correction to fine tune matrix. */
 		mxtransform(&os, cmat);
-
-		/* Fix absolute conversions to leave absolute response unchanged. */
+	
+		/* Fix relative conversions to leave absolute response unchanged. */
 		icmAry2XYZ(_wp, wp);		/* Actual white point */
 		icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, _wp, fromAbs);
 		icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, toAbs);
@@ -1517,30 +1518,6 @@ double             smooth			/* Curve smoothing, nominally 1.0 */
 			mxmfunc(&os, os.v, tw, dw); /* Lookup white again */
 			printf("After fine tune, rel WP = XYZ %s, Lab %s\n", icmPdv(3, tw), icmPLab(tw));
 			printf("                 abs WP = XYZ %s, Lab %s\n", icmPdv(3, wp), icmPLab(wp));
-		}
-	}
-
-	/* Look up the actual black point */
-	if (p->flags & ICX_SET_BLACK) {
-
-		mxmfunc(&os, os.v, bp, db);
-
-		if (flags & ICX_CLIP_WB) {
-			if (bp[0] < 0.0 || bp[1] < 0.0 || bp[1] < 0.0) {
-				if (flags & ICX_VERBOSE)
-					printf("Clipping black point from XYZ %f %f %f",bp[0],bp[1],bp[2]);
-				if (bp[0] < 0.0)
-					bp[0] = 0.0;
-				if (bp[1] < 0.0)
-					bp[1] = 0.0;
-				if (bp[2] < 0.0)
-					bp[2] = 0.0;
-				if (flags & ICX_VERBOSE)
-					printf(" to XYZ %f %f %f\n",bp[0],bp[1],bp[2]);
-			}
-		}
-		if (flags & ICX_VERBOSE) {
-			printf("Actual BP = XYZ %s, Lab %s\n", icmPdv(3, bp), icmPLab(bp));
 		}
 	}
 
@@ -1631,25 +1608,53 @@ double             smooth			/* Curve smoothing, nominally 1.0 */
 		icmChromAdaptMatrix(ICM_CAM_BRADFORD, _wp, icmD50, toAbs);
 	}
 
+	/* Look up the actual black point */
+	if (p->flags & ICX_SET_BLACK) {
+
+		/* Look black point up in dev->rel model */
+		mxmfunc(&os, os.v, bp, db);
+
+		/* Convert from relative to Absolute colorimetric */
+		icmMulBy3x3(bp, toAbs, bp);
+
+		
+		/* Got XYZ black point in bp[] */
+		if (flags & ICX_VERBOSE) {
+			printf("Black point XYZ = %s, Lab = %s\n", icmPdv(3,bp),icmPLab(bp));
+		}
+
+		if (flags & ICX_CLIP_WB) {
+			if (bp[0] < 0.0 || bp[1] < 0.0 || bp[1] < 0.0) {
+				if (bp[0] < 0.0)
+					bp[0] = 0.0;
+				if (bp[1] < 0.0)
+					bp[1] = 0.0;
+				if (bp[2] < 0.0)
+					bp[2] = 0.0;
+				if (flags & ICX_VERBOSE)
+					printf("Black point clipped to XYZ = %s, Lab = %s\n",icmPdv(3,bp),icmPLab(bp));
+			}
+		}
+	}
+
 	if (flags & (ICX_SET_WHITE | ICX_SET_BLACK)) {
 
-		/* If this is a display, adjust the white point to be */
+		/* If this is a display, adjust the absolute white point to be */
 		/* exactly Y = 1.0, and compensate the matrix, dispLuminance */
 		/* and black point accordingly. */
 		if (h->deviceClass == icSigDisplayClass) {
+			double cmat[3][3];			/* Model correction matrix */
 			double scale = 1.0/wp[1];
-			int i;
 
-			for (i = 0; i < 9; i++) {
-				os.v[i] *= scale;
-			}
+			if (flags & ICX_VERBOSE)
+				printf("Scaling White Point by %f to make Y = 1.0\n", scale);
 
-			dispLuminance *= wp[1];
+			/* Scale the WP & BP*/
+			icmScale3(wp, wp, scale);
+			icmScale3(bp, bp, scale);
 
-			for (i = 0; i < 3; i++) {
-				wp[i] *= scale;
-				bp[i] *= scale;
-			}
+			/* Inverse scale the luminance */
+			dispLuminance /= scale;
 		}
 
 		/* Absolute luminance tag */

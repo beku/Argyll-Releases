@@ -47,7 +47,7 @@ if ! $(USE_NATIVE_USB) {
 		if $(NT) {
 			SubInclude libusbw ;
 		}
-		if $(UNIX) && $(OS) != FREEBSD {
+		if $(UNIX) {
 			SubInclude libusb ;
 		}
 	}
@@ -62,3 +62,6 @@ if $(UNIX) && $(OS) != MACOSX {
 	SubInclude ucmm ;
 }
 
+if $(OS) = FREEBSD || $(OS) = OPENBSD {
+	SubInclude libusb ;
+}

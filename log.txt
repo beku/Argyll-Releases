@@ -2,7 +2,26 @@
 Argyll CMS change log
 =====================
 
-Version 1.5.0 (27 February 2013)
+Version 1.5.1 (8th March 2013)
+-------------
+
+*	Fix spectro/instlib.ksh and standalone instlib build.
+
+*	Turned off debug plot on using FWA.
+
+*	Changed link $(LINKFLAGS) location in link command line
+	Jambase to get latest gcc working. 
+
+*	Fixed new bug in matrix display profile creation that causes an	
+	inacurate relative white point. This causes Photoshop to barf on
+	the profiles.
+
+*	Added -m option to printcal.
+
+*	Fix bug in webwin that causes crash.
+
+
+Version 1.5.0 (1st March 2013)
 -------------
 
 *	Made SpectroScanT respond to enter key when reading

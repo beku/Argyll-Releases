@@ -3665,7 +3665,7 @@ int                quality			/* Quality metric, 0..3 */
 			double scale = 1.0/wp[1];
 			int i;
 
-			dispLuminance *= wp[1];
+			dispLuminance /= scale;
 
 			for (i = 0; i < 3; i++) {
 				wp[i] *= scale;

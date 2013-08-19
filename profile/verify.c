@@ -46,9 +46,10 @@ usage(void) {
 	fprintf(stderr,"Verify CIE values, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	fprintf(stderr,"usage: verify [-options] target.ti3 measured.ti3\n");
-	fprintf(stderr," -v              Verbose - print each patch value\n");
-	fprintf(stderr," -n              Normalise each files reading to white Y\n");
-	fprintf(stderr," -N              Normalise each files reading to white XYZ\n");
+	fprintf(stderr," -v [n]          Verbose mode, n >= 2 print each value\n");
+	fprintf(stderr," -n              Normalise each files reading to its white Y\n");
+	fprintf(stderr," -N              Normalise each files reading to its white XYZ\n");
+	fprintf(stderr," -m              Normalise each files reading to its white X+Y+Z\n");
 	fprintf(stderr," -D              Use D50 100.0 as L*a*b* white reference\n");
 	fprintf(stderr," -c              Show CIE94 delta E values\n");
 	fprintf(stderr," -k              Show CIEDE2000 delta E values\n");
@@ -62,6 +63,7 @@ usage(void) {
 	fprintf(stderr,"                  A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp\n");
 	fprintf(stderr," -o observ       Choose CIE Observer for spectral data:\n");
 	fprintf(stderr,"                 1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2\n");
+	fprintf(stderr," -L profile.%s  Skip any first file out of profile gamut patches\n",ICC_FILE_EXT_ND);
 	fprintf(stderr," -X file.ccmx    Apply Colorimeter Correction Matrix to second file\n");
 	fprintf(stderr," target.ti3      Target (reference) PCS or spectral values.\n");
 	fprintf(stderr," measured.ti3    Measured (actual) PCS or spectral values\n");
@@ -71,16 +73,21 @@ usage(void) {
 /* Patch value type */
 typedef struct {
 	char sid[50];		/* sample id */
+	int og;				/* Out of gamut flag */
+	double xyz[3];		/* XYZ value */
 	double v[3];		/* Lab value */
 	double de;			/* Delta E */
+	double ixde[3];		/* XYZ Component DE */
+	double ide[3];		/* Lab Component DE */
 } pval;
 
 int main(int argc, char *argv[])
 {
 	int fa,nfa;				/* current argument we're looking at */
-	int verb = 0;
-	int norm = 0;			/* 1 = norm to Y, 2 = norm to XYZ */
-	int usestdd50 = 0;		/* Use standard D50 instead of scaled D50 as Lab reference */
+	int verb = 0;       	/* Verbose level */
+	int norm = 0;			/* 1 = norm to White Y, 2 = norm to White XYZ */
+							/* 3 = norm to White X+Y+Z */
+	int usestdd50 = 0;		/* Use standard D50 instead of avg white as reference */
 	int cie94 = 0;
 	int cie2k = 0;
 	int dovrml = 0;
@@ -88,12 +95,20 @@ int main(int argc, char *argv[])
 	int dosort = 0;
 	char ccmxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction Matrix name */
 	ccmx *cmx = NULL;					/* Colorimeter Correction Matrix */
+	char gprofname[MAXNAMEL+1] = "\000";  /* Gamut limit profile name */
+	icmFile *fp = NULL;
+	icc *icco = NULL;
+	xicc *xicco = NULL;
+	icxLuBase *luo = NULL;
 
 	struct {
 		char name[MAXNAMEL+1];	/* Patch filename  */
 		int isdisp;				/* nz if display */
 		int isdnormed;      	/* Has display data been normalised to 100 ? */
 		int npat;				/* Number of patches */
+		int nig;				/* Number of patches in gamut */
+		double w[3];			/* XYZ of "white" */
+		double nw[3];			/* Normalised XYZ of "white" */
 		pval *pat;				/* patch values */
 	} cg[2];					/* Target and current patch file information */
 
@@ -143,14 +158,26 @@ int main(int argc, char *argv[])
 			if (argv[fa][1] == '?')
 				usage();
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			/* Verbose */
+			else if (argv[fa][1] == 'v') {
 				verb = 1;
 
+				if (na != NULL && na[0] >= '0' && na[0] <= '9') {
+					verb = atoi(na);
+					fa = nfa;
+				}
+			}
+
 			/* normalize */
-			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
+			else if (argv[fa][1] == 'n'
+			      || argv[fa][1] == 'N') {
 				norm = 1;
 				if (argv[fa][1] == 'N')
 					norm = 2;
+			}
+
+			else if (argv[fa][1] == 'm') {
+				norm = 3;
 			}
 
 			else if (argv[fa][1] == 'D')
@@ -167,18 +194,18 @@ int main(int argc, char *argv[])
 				doaxes = 1;
 
 			/* CIE94 delta E */
-			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
+			else if (argv[fa][1] == 'c') {
 				cie94 = 1;
 				cie2k = 0;
 			}
 
-			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
+			else if (argv[fa][1] == 'k') {
 				cie94 = 0;
 				cie2k = 1;
 			}
 
 			/* Sort */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S')
+			else if (argv[fa][1] == 's')
 				dosort = 1;
 
 			/* FWA compensation */
@@ -224,7 +251,7 @@ int main(int argc, char *argv[])
 			}
 
 			/* Spectral to CIE Illuminant type */
-			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
+			else if (argv[fa][1] == 'i') {
 				fa = nfa;
 				if (na == NULL) usage();
 				if (strcmp(na, "A") == 0) {
@@ -260,7 +287,7 @@ int main(int argc, char *argv[])
 			}
 
 			/* Spectral Observer type */
-			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+			else if (argv[fa][1] == 'o') {
 				fa = nfa;
 				if (na == NULL) usage();
 				if (strcmp(na, "1931_2") == 0) {			/* Classic 2 degree */
@@ -280,6 +307,13 @@ int main(int argc, char *argv[])
 					observ = icxOT_Shaw_Fairchild_2;
 				} else
 					usage();
+			}
+
+			/* Gamut limit profile for first file */
+			else if (argv[fa][1] == 'L') {
+				fa = nfa;
+				if (na == NULL) usage();
+				strncpy(gprofname,na,MAXNAMEL-1); gprofname[MAXNAMEL-1] = '\000';
 			}
 
 			/* Colorimeter Correction Matrix for second file */
@@ -313,6 +347,35 @@ int main(int argc, char *argv[])
 	if (fwacomp && spec == 0)
 		error ("FWA compensation only works when viewer and/or illuminant selected");
 
+	/* Gamut limit profile */
+	if (gprofname[0] != '\000') {
+		int rv;
+
+		if ((fp = new_icmFileStd_name(gprofname,"r")) == NULL)
+			error ("Can't open file '%s'",gprofname);
+	
+		if ((icco = new_icc()) == NULL)
+			error ("Creation of ICC object failed");
+	
+		if ((rv = icco->read(icco,fp,0)) != 0)
+			error("Reading profile '%s' failed failed with error %d:'%s'\n",
+		     	       gprofname, icco->errc,  icco->err);
+
+		if (icco->header->deviceClass != icSigInputClass
+		 && icco->header->deviceClass != icSigDisplayClass
+		 && icco->header->deviceClass != icSigOutputClass)
+			error("Profile '%s' must be a device profile to filter by gamut",gprofname);
+
+		/* Wrap with an expanded icc */
+		if ((xicco = new_xicc(icco)) == NULL)
+			error ("Creation of xicc failed");
+
+		/* Get a expanded color conversion object */
+		if ((luo = xicco->get_luobj(xicco, ICX_CLIP_NEAREST | ICX_FAST_SETUP,
+		    icmFwd, icRelativeColorimetric, icSigXYZData, icmLuOrdNorm, NULL, NULL)) == NULL)
+			error ("%d, %s",xicco->errc, xicco->err);
+	}
+
 	/* Colorimeter Correction Matrix */
 	if (ccmxname[0] != '\000') {
 		if ((cmx = new_ccmx()) == NULL)
@@ -321,6 +384,7 @@ int main(int argc, char *argv[])
 			error("Reading Colorimeter Correction Matrix file '%s' failed with error %d:'%s'\n",
 		     	       ccmxname, cmx->errc,  cmx->err);
 	}
+
 
 	/* Open up each file in turn, target then measured, */
 	/* and read in the CIE values. */
@@ -361,29 +425,41 @@ int main(int argc, char *argv[])
 		if (!spec && cgf->find_field(cgf, 0, "LAB_L") >= 0)
 			isLab = 1;
 		
-		cg[n].npat = cgf->t[0].nsets;		/* Number of patches */
+		cg[n].nig = cg[n].npat = cgf->t[0].nsets;		/* Number of patches */
 	
 		/* Figure out what sort of device it is */
 		{
 			int ti;
 	
 			cg[n].isdisp = 0;
+			cg[n].isdnormed = 0;
+			cg[n].w[0] = cg[n].w[1] = cg[n].w[2] = 0.0;
 
 			if ((ti = cgf->find_kword(cgf, 0, "DEVICE_CLASS")) < 0)
 				error ("Input file '%s' doesn't contain keyword DEVICE_CLASS",cg[n].name);
 	
 			if (strcmp(cgf->t[0].kdata[ti],"DISPLAY") == 0) {
 				cg[n].isdisp = 1;
+				cg[n].isdnormed = 1;	/* Assume display type is normalised to 100 */
 				illum = icxIT_none;		/* Displays are assumed to be self luminous */
 				/* ?? What if two files are different ?? */
 			}
 
-			/* See if the CIE data has been normalised to Y = 100 */
-			if ((ti = cgf->find_kword(cgf, 0, "NORMALIZED_TO_Y_100")) < 0
-			 || strcmp(cgf->t[0].kdata[ti],"NO") == 0) {
-				cg[n].isdnormed = 0;
-			} else {
-				cg[n].isdnormed = 1;
+			if (cg[n].isdisp) {
+
+				if ((ti = cgf->find_kword(cgf, 0, "LUMINANCE_XYZ_CDM2")) >= 0) {
+					if (sscanf(cgf->t[0].kdata[ti], " %lf %lf %lf ",&cg[n].w[0], &cg[n].w[1], &cg[n].w[2]) != 3)
+						cg[n].w[0] = cg[n].w[1] = cg[n].w[2] = 0.0;
+				}
+
+				/* See if there is an explicit tag indicating data has been normalised to Y = 100 */
+				if ((ti = cgf->find_kword(cgf, 0, "NORMALIZED_TO_Y_100")) >= 0) {
+					if (strcmp(cgf->t[0].kdata[ti],"NO") == 0) {
+						cg[n].isdnormed = 0;
+					} else {
+						cg[n].isdnormed = 1;
+					}
+				}
 			}
 		}
 
@@ -443,24 +519,35 @@ int main(int argc, char *argv[])
 
 			for (i = 0; i < cg[n].npat; i++) {
 				strcpy(cg[n].pat[i].sid, (char *)cgf->t[0].fdata[i][sidx]);
-				cg[n].pat[i].v[0] = *((double *)cgf->t[0].fdata[i][xix]);
-				cg[n].pat[i].v[1] = *((double *)cgf->t[0].fdata[i][yix]);
-				cg[n].pat[i].v[2] = *((double *)cgf->t[0].fdata[i][zix]);
+				cg[n].pat[i].og = 0;
+				cg[n].pat[i].xyz[0] = *((double *)cgf->t[0].fdata[i][xix]);
+				cg[n].pat[i].xyz[1] = *((double *)cgf->t[0].fdata[i][yix]);
+				cg[n].pat[i].xyz[2] = *((double *)cgf->t[0].fdata[i][zix]);
 
-				if (!isLab) {	/* If XYZ */
-
-					/* If normalised to 100, scale back to 1.0 */
-					if (!cg[n].isdisp || !cg[n].isdnormed) {
-						cg[n].pat[i].v[0] /= 100.0;		/* scale back to 1.0 */
-						cg[n].pat[i].v[1] /= 100.0;
-						cg[n].pat[i].v[2] /= 100.0;
-					}
-				} else {		/* If Lab */
-					icmLab2XYZ(&icmD50, cg[n].pat[i].v, cg[n].pat[i].v);
+				if (isLab) {	/* Convert to XYZ */
+					icmLab2XYZ(&icmD50, cg[n].pat[i].xyz, cg[n].pat[i].xyz);
 				}
+//printf("~1 file %d patch %d = XYZ %f %f %f\n", n,i,cg[n].pat[i].xyz[0],cg[n].pat[i].xyz[1],cg[n].pat[i].xyz[2]);
+
+				/* restore normalised display values to absolute */
+				if (cg[n].isdnormed) {
+					if (cg[n].w[1] > 0.0) {
+						cg[n].pat[i].xyz[0] *= cg[n].w[1]/100.0;
+						cg[n].pat[i].xyz[1] *= cg[n].w[1]/100.0;
+						cg[n].pat[i].xyz[2] *= cg[n].w[1]/100.0;
+					}
+
+				} else if (!cg[n].isdisp) {
+					/* If reflective or transmissive that are 0..100%, */
+					/* scale back to 0.. 1 */
+					cg[n].pat[i].xyz[0] /= 100.0;		/* scale back to XYZ 1.0 */
+					cg[n].pat[i].xyz[1] /= 100.0;
+					cg[n].pat[i].xyz[2] /= 100.0;
+				}
+
 				/* Apply ccmx */
 				if (n == 1 && cmx != NULL) {
-					cmx->xform(cmx, cg[n].pat[i].v, cg[n].pat[i].v);
+					cmx->xform(cmx, cg[n].pat[i].xyz, cg[n].pat[i].xyz);
 				}
 			}
 
@@ -563,6 +650,7 @@ int main(int argc, char *argv[])
 			for (i = 0; i < cg[0].npat; i++) {
 
 				strcpy(cg[n].pat[i].sid, (char *)cgf->t[0].fdata[i][sidx]);
+				cg[n].pat[i].og = 0;
 
 				/* Read the spectral values for this patch */
 				for (j = 0; j < sp.spec_n; j++) {
@@ -570,11 +658,21 @@ int main(int argc, char *argv[])
 				}
 
 				/* Convert it to XYZ space */
-				sp2cie->convert(sp2cie, cg[n].pat[i].v, &sp);
+				sp2cie->convert(sp2cie, cg[n].pat[i].xyz, &sp);
 
-				/* Applu ccmx */
+				/* restore normalised display values to absolute */
+				if (cg[n].isdnormed) {
+					if (cg[n].w[1] > 0.0) {
+						cg[n].pat[i].xyz[0] *= cg[n].w[1];
+						cg[n].pat[i].xyz[1] *= cg[n].w[1];
+						cg[n].pat[i].xyz[2] *= cg[n].w[1];
+					}
+
+				}
+
+				/* Apply ccmx */
 				if (n == 1 && cmx != NULL) {
-					cmx->xform(cmx, cg[n].pat[i].v, cg[n].pat[i].v);
+					cmx->xform(cmx, cg[n].pat[i].xyz, cg[n].pat[i].xyz);
 				}
 			}
 
@@ -583,31 +681,68 @@ int main(int argc, char *argv[])
 		}	/* End of reading in CGATs file */
 
 
+		/* Locate the patch with maximum Y, a possible white patch */
+		if (norm) {
+			int ii;
+
+			if (cg[n].w[1] == 0.0) {	/* No white patch */
+
+				/* Locate patch with biggest Y, assume it is white... */
+				for (i = 0; i < cg[n].npat; i++) {
+					if (cg[n].pat[i].xyz[1] > cg[n].w[1]) {
+						icmCpy3(cg[n].w, cg[n].pat[i].xyz);
+						ii = i;
+					}
+				}
+				if (verb) printf("File %d Chose patch %d as white, xyz %f %f %f\n",
+				                       n, ii+1,cg[n].w[0],cg[n].w[1],cg[n].w[2]);
+			} else {
+				if (verb) printf("File %d White is from display luminance ref. xyz %f %f %f\n",
+				                       n, cg[n].w[0],cg[n].w[1],cg[n].w[2]);
+			}
+			icmCpy3(cg[n].nw, cg[n].w);
+		}
+
+
 		/* Normalise this file to white = 1.0 or D50 */
 		if (norm) {
-			double bxyz[3] = { 0.0, -100.0, 0.0 };
+			int ii;
 
-			/* Locate patch with biggest Y */
-			for (i = 0; i < cg[n].npat; i++) {
-				double xyz[3];
-				icmLab2XYZ(&icmD50, xyz, cg[n].pat[i].v);
-				if (cg[n].pat[i].v[1] > bxyz[1]) {
-					icmCpy3(bxyz, cg[n].pat[i].v);
-				}
+			double chmat[3][3];				/* Chromatic adapation matrix */
+
+			if (norm == 2) {		/* Norm to white XYZ */ 
+				icmXYZNumber s_wp;
+				icmAry2XYZ(s_wp, cg[n].w);
+				icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, s_wp, chmat);
 			}
 
-			/* Then normalize all the values */
 			for (i = 0; i < cg[n].npat; i++) {
 				if (norm == 1) {
-					cg[n].pat[i].v[0] /= bxyz[1];
-					cg[n].pat[i].v[1] /= bxyz[1];
-					cg[n].pat[i].v[2] /= bxyz[1];
+					cg[n].pat[i].xyz[0] *= 100.0 / cg[n].w[1];
+					cg[n].pat[i].xyz[1] *= 100.0 / cg[n].w[1];
+					cg[n].pat[i].xyz[2] *= 100.0 / cg[n].w[1];
+				} else if (norm == 2) { 
+					icmMulBy3x3(cg[n].pat[i].xyz, chmat, cg[n].pat[i].xyz);
 				} else {
-					cg[n].pat[i].v[0] *= icmD50.X/bxyz[0];
-					cg[n].pat[i].v[1] *= icmD50.Y/bxyz[1];
-					cg[n].pat[i].v[2] *= icmD50.Z/bxyz[2];
+					cg[n].pat[i].xyz[0] *= 100.0 / (cg[n].w[0] + cg[n].w[1] + cg[n].w[2]);
+					cg[n].pat[i].xyz[1] *= 100.0 / (cg[n].w[0] + cg[n].w[1] + cg[n].w[2]);
+					cg[n].pat[i].xyz[2] *= 100.0 / (cg[n].w[0] + cg[n].w[1] + cg[n].w[2]);
 				}
+//printf("~1 file %d patch %d = norm XYZ %f %f %f\n", n,i,cg[n].pat[i].xyz[0],cg[n].pat[i].xyz[1],cg[n].pat[i].xyz[2]);
 			}
+			/* Compute normalised white too */
+			if (norm == 1) {
+				cg[n].nw[0] *= 100.0 / cg[n].w[1];
+				cg[n].nw[1] *= 100.0 / cg[n].w[1];
+				cg[n].nw[2] *= 100.0 / cg[n].w[1];
+			} else if (norm == 2) { 
+				icmMulBy3x3(cg[n].nw, chmat, cg[n].w);
+			} else {
+				cg[n].nw[0] *= 100.0 / (cg[n].w[0] + cg[n].w[1] + cg[n].w[2]);
+				cg[n].nw[1] *= 100.0 / (cg[n].w[0] + cg[n].w[1] + cg[n].w[2]);
+				cg[n].nw[2] *= 100.0 / (cg[n].w[0] + cg[n].w[1] + cg[n].w[2]);
+			}
+//printf("~1 file %d norm white XYZ %f %f %f\n", n,cg[n].nw[0], cg[n].nw[1], cg[n].nw[2]);
 		}
 		cgf->del(cgf);		/* Clean up */
 	}
@@ -634,19 +769,46 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	/* Adjust the reference white Y to be larger than the largest Y of the two files */
-	if (!usestdd50) {
-		double maxy = -1e6;
- 
-		for (n = 0; n < 2; n++) {
-			for (i = 0; i < cg[n].npat; i++) {
-				if (cg[n].pat[i].v[1] > maxy)
-					maxy = cg[n].pat[i].v[1];
+	/* Figure out which patches to skip because they are out of gamut */
+	if (luo != NULL) {
+		double chmat[3][3];				/* Chromatic adapation matrix */
+		double out[MAX_CHAN], in[3], check[3];
+		icmXYZNumber s_wp;
+		int rv;
+
+		/* Convert sample PCS to relative */
+		icmAry2XYZ(s_wp, cg[0].nw);
+		icmChromAdaptMatrix(ICM_CAM_BRADFORD, icmD50, s_wp, chmat);
+
+		for (i = 0; i < cg[0].npat; i++) {
+			icmMulBy3x3(in, chmat, cg[0].pat[i].xyz);
+//printf("~1 %d: xyz %f %f %f, rel %f %f %f\n", i+1, cg[0].pat[i].xyz[0], cg[0].pat[i].xyz[1], cg[0].pat[i].xyz[2], in[0], in[1], in[2]);
+
+			if ((rv = luo->inv_lookup(luo, out, in)) > 0 || 1) {
+				double de;
+
+				luo->lookup(luo, check, out);
+				de = icmXYZLabDE(&icmD50,check, in);
+//printf("~1 %d: rv %d, de %f, check XYZ %f %f %f\n",i+1,rv, de, check[0],check[1],check[2]);
+
+				if (de >= 0.01) {
+					cg[0].pat[i].og = 1;
+//printf("~1 Patch %d is out of gamut by DE %f RGB %f %f %f\n",i+1,de,out[0],out[1],out[2]);
+					if (verb >= 3)
+						printf("Patch %d is out of gamut by DE %f\n",i+1,de);
+					cg[0].nig--;
+				}
 			}
 		}
-		labw.X *= maxy/icmD50.Y;		/* Scale white uniformly */
-		labw.Y *= maxy/icmD50.Y;		/* Scale white uniformly */
-		labw.Z *= maxy/icmD50.Y;
+		if (verb)
+			fprintf(verbo,"No of test patches in gamut = %d/%d\n",cg[0].npat - cg[0].nig,cg[0].npat);
+	}
+
+	/* Adjust the Lab reference white to be the mean of the white of the two files */
+	if (norm != 0 && !usestdd50) {
+		labw.X = 0.5 * (cg[0].nw[0] + cg[1].nw[0]);
+		labw.Y = 0.5 * (cg[0].nw[1] + cg[1].nw[1]);
+		labw.Z = 0.5 * (cg[0].nw[2] + cg[1].nw[2]);
 
 		if (verb)
 			printf("L*a*b* white reference = XYZ %f %f %f\n",labw.X,labw.Y,labw.Z);
@@ -655,18 +817,30 @@ int main(int argc, char *argv[])
 	/* Convert XYZ to Lab */
 	for (n = 0; n < 2; n++) {
 		for (i = 0; i < cg[n].npat; i++) {
-			icmXYZ2Lab(&labw, cg[n].pat[i].v, cg[n].pat[i].v);
+			icmXYZ2Lab(&labw, cg[n].pat[i].v, cg[n].pat[i].xyz);
 		}
 	}
 
 	/* Compute the delta E's */
 	for (i = 0; i < cg[0].npat; i++) {
+
+		if (cg[0].pat[i].og)		/* Skip out of gamut patches */
+			continue;
+
+		cg[0].pat[i].ixde[0] = fabs(cg[0].pat[i].xyz[0] - cg[1].pat[match[i]].xyz[0]);
+		cg[0].pat[i].ixde[1] = fabs(cg[0].pat[i].xyz[1] - cg[1].pat[match[i]].xyz[1]);
+		cg[0].pat[i].ixde[2] = fabs(cg[0].pat[i].xyz[2] - cg[1].pat[match[i]].xyz[2]);
+
 		if (cie2k)
 			cg[0].pat[i].de = icmCIE2K(cg[0].pat[i].v, cg[1].pat[match[i]].v);
 		else if (cie94)
 			cg[0].pat[i].de = icmCIE94(cg[0].pat[i].v, cg[1].pat[match[i]].v);
 		else
 			cg[0].pat[i].de = icmLabDE(cg[0].pat[i].v, cg[1].pat[match[i]].v);
+
+		cg[0].pat[i].ide[0] = fabs(cg[0].pat[i].v[0] - cg[1].pat[match[i]].v[0]);
+		cg[0].pat[i].ide[1] = fabs(cg[0].pat[i].v[1] - cg[1].pat[match[i]].v[1]);
+		cg[0].pat[i].ide[2] = fabs(cg[0].pat[i].v[2] - cg[1].pat[match[i]].v[2]);
 	}
 
 	/* Create sorted list, from worst to best. */
@@ -688,6 +862,8 @@ int main(int argc, char *argv[])
 		int n10;
 		double merr10 = 0.0, aerr10 = 0.0;
 		double rad;
+		double aierr[3] = { 0.0, 0.0, 0.0 };
+		double aixerr[3] = { 0.0, 0.0, 0.0 };
 
 		if (dovrml) {
 			wrl = new_vrml(out_name, doaxes, 0);
@@ -700,6 +876,10 @@ int main(int argc, char *argv[])
 		/* Do overall results */
 		for (i = 0; i < cg[0].npat; i++) {
 			double de;
+
+			if (cg[0].pat[i].og)		/* Skip out of gamut patches */
+				continue;
+
 			if (dosort)
 				j = sort[i];
 			else
@@ -708,12 +888,27 @@ int main(int argc, char *argv[])
 			de = cg[0].pat[j].de;
 			aerr += de;
 
-			if (verb) {
+			aierr[0] += cg[0].pat[j].ide[0];
+			aierr[1] += cg[0].pat[j].ide[1];
+			aierr[2] += cg[0].pat[j].ide[2];
+
+			aixerr[0] += cg[0].pat[j].ixde[0];
+			aixerr[1] += cg[0].pat[j].ixde[1];
+			aixerr[2] += cg[0].pat[j].ixde[2];
+
+			if (verb >= 2) {
+
 				printf("%s: %f %f %f <=> %f %f %f  de %f\n",
 					cg[0].pat[j].sid,
 					cg[0].pat[j].v[0], cg[0].pat[j].v[1], cg[0].pat[j].v[2],
 					cg[1].pat[match[j]].v[0], cg[1].pat[match[j]].v[1], cg[1].pat[match[j]].v[2],
 					de);
+
+#ifdef NEVER	/* Print XYZ as well */
+				printf("  %f %f %f <=> %f %f %f\n",
+					cg[0].pat[j].xyz[0], cg[0].pat[j].xyz[1], cg[0].pat[j].xyz[2],
+					cg[1].pat[match[j]].xyz[0], cg[1].pat[match[j]].xyz[1], cg[1].pat[match[j]].xyz[2]);
+#endif
 			}
 
 			if (de > merr)
@@ -731,8 +926,16 @@ int main(int argc, char *argv[])
 			}
 
 		}
-		if (cg[0].npat > 0)
-			aerr /= (double)cg[0].npat;
+		if (cg[0].nig > 0) {
+			aerr /= (double)cg[0].nig;
+			aierr[0] /= (double)cg[0].nig;
+			aierr[1] /= (double)cg[0].nig;
+			aierr[2] /= (double)cg[0].nig;
+
+			aixerr[0] /= (double)cg[0].nig;
+			aixerr[1] /= (double)cg[0].nig;
+			aixerr[2] /= (double)cg[0].nig;
+		}
 
 		if (dovrml) {
 			wrl->make_lines(wrl, 0, 2);
@@ -741,23 +944,33 @@ int main(int argc, char *argv[])
 		}
 
 		/* Do best 90% */
-		n90 = (int)(cg[0].npat * 9.0/10.0 + 0.5);
-		for (i = (cg[0].npat-n90); i < cg[0].npat; i++) {
+		n90 = (int)(cg[0].nig * 9.0/10.0 + 0.5);
+		for (i = j = 0; i < cg[0].npat; i++) {
 			double de = cg[0].pat[sort[i]].de;
-			aerr90 += de;
-			if (de > merr90)
-				merr90 = de;
+			if (cg[0].pat[i].og)		/* Skip out of gamut */
+				continue;
+			if (j >= (cg[0].nig-n90)) {	/* If in top 90% of in gamut patches */
+				aerr90 += de;
+				if (de > merr90)
+					merr90 = de;
+			}
+			j++;						/* Index of within gamut patches */
 		}
 		if (n90 > 0)
 			aerr90 /= (double)n90;
 
 		/* Do worst 10% */
-		n10 = (int)(cg[0].npat * 1.0/10.0 + 0.5);
-		for (i = 0; i < n10; i++) {
+		n10 = (int)(cg[0].nig * 1.0/10.0 + 0.5);
+		for (i = j = 0; i < cg[0].npat; i++) {
 			double de = cg[0].pat[sort[i]].de;
-			aerr10 += de;
-			if (de > merr10)
-				merr10 = de;
+			if (cg[0].pat[i].og)		/* Skip out of gamut */
+				continue;
+			if (j <= n10) {				/* If in worst 10% of in gamut patches */
+				aerr10 += de;
+				if (de > merr10)
+					merr10 = de;
+			}
+			j++;
 		}
 		if (n10 > 0)
 			aerr10 /= (double)n10;
@@ -770,12 +983,23 @@ int main(int argc, char *argv[])
 		printf("  Total errors%s:     peak = %f, avg = %f\n", cie2k ? " (CIEDE2000)" : cie94 ? " (CIE94)" : "", merr, aerr);
 		printf("  Worst 10%% errors%s: peak = %f, avg = %f\n", cie2k ? " (CIEDE2000)" : cie94 ? " (CIE94)" : "", merr10, aerr10);
 		printf("  Best  90%% errors%s: peak = %f, avg = %f\n", cie2k ? " (CIEDE2000)" : cie94 ? " (CIE94)" : "", merr90, aerr90);
+		printf("  avg err X  %f, Y  %f, Z  %f\n", aixerr[0], aixerr[1], aixerr[2]);
+		printf("  avg err L* %f, a* %f, b* %f\n", aierr[0], aierr[1], aierr[2]);
 	
 		free(sort);
 		free(match);
 		free(cg[0].pat);
 		free(cg[1].pat);
 	}
+
+	if (luo != NULL)
+		luo->del(luo);
+	if (xicco != NULL)
+		xicco->del(xicco);		/* Expansion wrapper */
+	if (icco != NULL)
+		icco->del(icco);		/* Icc */
+	if (fp != NULL)
+		fp->del(fp);
 
 	return 0;
 }

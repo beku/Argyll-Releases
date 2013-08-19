@@ -10,13 +10,16 @@ if $(OS) = MACOSX {
 	ObjectCcFlags dispwin_dispwin : -ObjC ;
 }
 
+MADVRSOURCE = ;
+
 # Setup the right hardware access libraries
 if $(NT) {
-	if $(USE_NATIVE_USB)  = true {
-		DEFINES += NATIVE_USB ;
-		LIBUSBHDRS = ../usb/driver ;	# libusb-win32 kernel driver info
-	} else {
+	MADVRSOURCE = madvrwin.c ;
+
+	if $(USE_LIBUSB)  = true {
+		DEFINES += USE_LIBUSB ;
 		if $(USE_LIBUSB1) = true {
+			DEFINES += USE_LIBUSB1 ;
 			LIBUSBDIR = ../libusb1 ;
 			LIBUSBHDRS = ../libusb1 ;
 			if $(MSVCNT) {
@@ -28,19 +31,21 @@ if $(NT) {
 			} else {
 				LIBUSB = $(LIBUSB1NAME)$(SUFLIB) ;
 			}
-			DEFINES += USE_LIBUSB1 ;
 		} else {
 			LIBUSBDIR = ../libusbw ;
 			LIBUSBHDRS = ../libusbw ;
 			LIBUSB = libusb ;
 		}
+	} else {
+		LIBUSBHDRS = ../usb/driver ;	# libusb-win32 kernel driver info
 	}
 }
+
 if $(UNIX) {
-	if $(USE_NATIVE_USB)  = true {
-		DEFINES += NATIVE_USB ;
-	} else {
+	if $(USE_LIBUSB)  = true {
+		DEFINES += USE_LIBUSB ;
 		if $(USE_LIBUSB1) = true {
+			DEFINES += USE_LIBUSB1 ;
 			LIBUSBDIR = ../libusb1 ;
 			LIBUSBHDRS = ../libusb1 ;
 			if $(LIBUSB_IS_DLL) = true {
@@ -49,7 +54,6 @@ if $(UNIX) {
 			} else {
 				LIBUSB = $(LIBUSB1NAME)$(SUFLIB) ;
 			}
-			DEFINES += USE_LIBUSB1 ;
 		} else {
 			LIBUSBDIR = ../libusb ;
 			LIBUSBHDRS = ../libusb ;
@@ -84,11 +88,13 @@ HDRS = ../h ../numlib ../icc ../cgats ../rspl ../xicc ../gamut ../spectro
 # Instrument access library library
 SER_INSTS = dtp22.c dtp41.c dtp51.c ss.c ss_imp.c ;
 
-SER_USB_INSTS = dtp92.c ;
-
 USB_INSTS = dtp20.c i1disp.c i1d3.c i1pro.c i1pro_imp.c
                       munki.c munki_imp.c hcfr.c spyd2.c huey.c
                       colorhug.c usbio.c hidio.c ;
+
+FAST_SER_INSTS = specbos.c ;
+
+SER_USB_INSTS = dtp92.c ;
 
 if $(USE_SERIAL) = true {
 	DEFINES += ENABLE_SERIAL ;
@@ -100,6 +106,11 @@ if $(USE_USB) = true {
 	INST_SRCS += $(USB_INSTS) ;
 }
 
+if $(USE_FAST_SERIAL) = true || $(USE_SERIAL) = true {
+	DEFINES += ENABLE_FAST_SERIAL ;
+	INST_SRCS += $(FAST_SER_INSTS) ;
+}
+
 if $(USE_SERIAL) = true || $(USE_USB) = true {
 	INST_SRCS += $(SER_USB_INSTS) ;
 }
@@ -108,7 +119,7 @@ Library libinst : inst.c insttypes.c icoms.c $(INST_SRCS) ;
 
 # Display access library 
 ObjectKeep mongoose.c ;
-Library libdisp : dispsup.c dispwin.c webwin.c : : : $(LibWinH) : mongoose ;
+Library libdisp : dispsup.c dispwin.c webwin.c $(MADVRSOURCE) : : : $(LibWinH) : mongoose ;
 
 # Instrument types utility functions library. Use this instead of libinst when */
 # applications need to know about different instrument types, but not access them. */
@@ -173,7 +184,7 @@ Main dispread : dispread.c : : : : : libdisp ;
 #display test window test/Lut loader utility
 # [ Could avoid need for libisnt libusb etc.
 #   by separating system dependent utils to a separate library .] 
-MainVariant dispwin : dispwin.c webwin.c : : STANDALONE_TEST : : mongoose : $(LibWin) ;
+MainVariant dispwin : dispwin.c webwin.c $(MADVRSOURCE) : : STANDALONE_TEST : : mongoose : $(LibWin) ;
 
 LINKLIBS = libinsttypes ../xicc/libxicc ../gamut/libgamut ../rspl/librspl
            ../cgats/libcgats ../icc/libicc ../numlib/libnum ../plot/libplot

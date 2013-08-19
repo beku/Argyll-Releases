@@ -21,8 +21,9 @@
  *		Need to use this for B2A tables rather than inverting
  *		A2B curves. Need to add grid sizing to cover just gamut range
  *      (including level axis gamut, but watch out for devices that
- *      have values below the black point), 3x3 matrix optimization,
- *      and white point to grid node mapping for B2A.
+ *      have values below the black point or above the white point),
+ *      3x3 matrix optimization, and white point to grid node mapping for B2A.
+ *		Currently code assumes output is always PCS ?? - would need to fix for opposite.
  *
  *      Currently the Lab A2B output tables are adjusted for ab symetry
  *		to make the B2A white point land on a grid point, given that
@@ -78,6 +79,9 @@
 #include "xfit.h"
 #include "sort.h"
 
+#undef USE_XYZ_Y2LCURVE     /* [Und] Use underlying L* curve for XYZ encoding */
+							/* This seems to work badly, even with high smoothness. Why ? */
+							/* It does speed up 1D lut creation though. */
 
 #undef DEBUG 			/* Verbose debug information */
 #undef DEBUG_PLOT 		/* Plot in & out curves */
@@ -109,6 +113,104 @@
 /* Weights for the positioning curve parameters */
 #define PSHAPE_MINE 0.02		/* Minum background residual error level */
 #define PSHAPE_DIST 1.0			/* Agressivness of grid distribution */
+
+
+/* - - - - - - - - - - - - - - - - - */
+
+/* Extra non-linearity used as base for XYZ output curves. */
+/* This makes the XYZ grid values more perceptual, and asks less */
+/* of the automatically created output curve shape. */
+/* (We assume XYZ is in 0..1 scale */
+
+/* Transfer function with offset and scale + Y2L curve */
+static double icxSTransFuncY2L(
+double *v,			/* Pointer to first parameter */
+int    luord,		/* Number of parameters */
+double vv,			/* Source of value */
+double min,			/* Scale values */
+double max
+) {
+	max -= min;
+
+	vv = (vv - min)/max;
+
+#ifdef USE_XYZ_Y2LCURVE
+	if (vv > 0.008856451586)
+		vv = 1.16 * pow(vv,1.0/3.0) - 0.16;
+	else
+		vv = 9.032962896 * vv;
+#endif
+
+	vv = icxTransFunc(v, luord, vv);
+
+	vv = (vv * max) + min;
+	return vv;
+}
+
+/* Inverse Transfer function with offset and scale + Y2L */
+static double icxInvSTransFuncY2L(
+double *v,			/* Pointer to first parameter */
+int    luord,		/* Number of parameters */
+double vv,			/* Source of value */
+double min,			/* Scale values */
+double max
+) {
+	max -= min;
+
+	vv = (vv - min)/max;
+	vv = icxInvTransFunc(v, luord, vv);
+
+#ifdef USE_XYZ_Y2LCURVE
+	if (vv > 0.08)
+		vv = pow((vv + 0.16)/1.16, 3.0);
+	else
+		vv = vv/9.032962896;
+#endif
+
+	vv = (vv * max) + min;
+
+	return vv;
+}
+
+/* Transfer function with offset and scale, and */
+/* partial derivative with respect to the */
+/* parameters and the input value. */
+static double icxdpdiSTransFuncY2L(
+double *v,			/* Pointer to first parameter */
+double *dv,			/* Return derivative wrt each parameter */
+double *pdin,		/* Return derivative wrt source value */
+int    luord,		/* Number of parameters */
+double vv,			/* Source of value */
+double min,			/* Scale values */
+double max
+) {
+	int i;
+	double idv = 1.0;
+	max -= min;
+
+#ifdef USE_XYZ_Y2LCURVE
+	if (vv > 0.008856451586) {
+		vv = 1.16 * pow(vv,1.0/3.0) - 0.16;
+		idv = 1.16 / (3.0 * pow(vv, 2.0/3.0));
+	} else {
+		vv = 9.032962896 * vv;
+		idv = 9.032962896; 
+	}
+#endif
+
+	vv = (vv - min)/max;
+
+	vv = icxdpdiTransFunc(v, dv, pdin, luord, vv);
+
+	*pdin *= idv;		/* Account for input multiplier */
+
+	vv = (vv * max) + min;
+
+	for (i = 0; i < luord; i++) {
+		dv[i] *= max;
+	}
+	return vv;
+}
 
 /* - - - - - - - - - - - - - - - - - */
 
@@ -255,9 +357,15 @@ static void xfit_shmatsh(xfit *p, double *out, double *in) {
 
 	icxCubeInterp(p->v + p->mat_off, p->fdi, p->di, out, tin);
 
-	for (f = 0; f < p->fdi; f++)
-		out[f] = icxSTransFunc(p->v + p->out_offs[f], p->oluord[f], out[f],
-			                       p->out_min[f], p->out_max[f]);
+	if (p->flags & XFIT_OUT_LAB) {
+		for (f = 0; f < p->fdi; f++)
+			out[f] = icxSTransFunc(p->v + p->out_offs[f], p->oluord[f], out[f],
+				                       p->out_min[f], p->out_max[f]);
+	} else {
+		for (f = 0; f < p->fdi; f++)
+			out[f] = icxSTransFuncY2L(p->v + p->out_offs[f], p->oluord[f], out[f],
+				                       p->out_min[f], p->out_max[f]);
+	}
 }
 
 /* - - - - - - - - - - - - - - - - - - - - */
@@ -453,10 +561,14 @@ static void xfit_invinpscurves(xfit *p, double *out, double *in) {
 /* Lookup a value though an output curve */
 static double xfit_outcurve(xfit *p, double in, int chan) {
 	double rv;
-	if (p->tcomb & oc_o)
-		rv = icxSTransFunc(p->v + p->out_offs[chan], p->oluord[chan], in,  
-		                       p->out_min[chan], p->out_max[chan]);
-	else
+	if (p->tcomb & oc_o) {
+		if (p->flags & XFIT_OUT_LAB)
+			rv = icxSTransFunc(p->v + p->out_offs[chan], p->oluord[chan], in,  
+			                       p->out_min[chan], p->out_max[chan]);
+		else
+			rv = icxSTransFuncY2L(p->v + p->out_offs[chan], p->oluord[chan], in,  
+			                       p->out_min[chan], p->out_max[chan]);
+	} else
 		rv = in;
 	return rv;
 }
@@ -465,22 +577,36 @@ static double xfit_outcurve(xfit *p, double in, int chan) {
 static void xfit_outcurves(xfit *p, double *out, double *in) {
 	int f;
 	
-	for (f = 0; f < p->fdi; f++) {
-		double val = in[f];
-		if (p->tcomb & oc_o)
-			val = icxSTransFunc(p->v + p->out_offs[f], p->oluord[f], val,  
-			                       p->out_min[f], p->out_max[f]);
-		out[f] = val;
+	if (p->flags & XFIT_OUT_LAB) {
+		for (f = 0; f < p->fdi; f++) {
+			double val = in[f];
+			if (p->tcomb & oc_o)
+				val = icxSTransFunc(p->v + p->out_offs[f], p->oluord[f], val,  
+				                       p->out_min[f], p->out_max[f]);
+			out[f] = val;
+		}
+	} else {
+		for (f = 0; f < p->fdi; f++) {
+			double val = in[f];
+			if (p->tcomb & oc_o)
+				val = icxSTransFuncY2L(p->v + p->out_offs[f], p->oluord[f], val,  
+				                       p->out_min[f], p->out_max[f]);
+			out[f] = val;
+		}
 	}
 }
 
 /* Inverse Lookup a value though an output curve */
 static double xfit_invoutcurve(xfit *p, double in, int chan) {
 	double rv;
-	if (p->tcomb & oc_o)
-		rv = icxInvSTransFunc(p->v + p->out_offs[chan], p->oluord[chan], in,  
-		                       p->out_min[chan], p->out_max[chan]);
-	else
+	if (p->tcomb & oc_o) {
+		if (p->flags & XFIT_OUT_LAB)
+			rv = icxInvSTransFunc(p->v + p->out_offs[chan], p->oluord[chan], in,  
+			                       p->out_min[chan], p->out_max[chan]);
+		else
+			rv = icxInvSTransFuncY2L(p->v + p->out_offs[chan], p->oluord[chan], in,  
+			                       p->out_min[chan], p->out_max[chan]);
+	} else
 		rv = in;
 	return rv;
 }
@@ -489,12 +615,22 @@ static double xfit_invoutcurve(xfit *p, double in, int chan) {
 static void xfit_invoutcurves(xfit *p, double *out, double *in) {
 	int f;
 	
-	for (f = 0; f < p->fdi; f++) {
-		double val = in[f];
-		if (p->tcomb & oc_o)
-			val = icxInvSTransFunc(p->v + p->out_offs[f], p->oluord[f], val,  
-			                       p->out_min[f], p->out_max[f]);
-		out[f] = val;
+	if (p->flags & XFIT_OUT_LAB) {
+		for (f = 0; f < p->fdi; f++) {
+			double val = in[f];
+			if (p->tcomb & oc_o)
+				val = icxInvSTransFunc(p->v + p->out_offs[f], p->oluord[f], val,  
+				                       p->out_min[f], p->out_max[f]);
+			out[f] = val;
+		}
+	} else {
+		for (f = 0; f < p->fdi; f++) {
+			double val = in[f];
+			if (p->tcomb & oc_o)
+				val = icxInvSTransFuncY2L(p->v + p->out_offs[f], p->oluord[f], val,  
+				                       p->out_min[f], p->out_max[f]);
+			out[f] = val;
+		}
 	}
 }
 
@@ -742,9 +878,15 @@ static double xfitfunc(void *edata, double *v) {
 		icxCubeInterp(p->v + p->mat_off, fdi, di, out, tin);
 
 		/* Apply output channel curves */
-		for (f = 0; f < fdi; f++)
-			out[f] = icxSTransFunc(p->v + p->out_offs[f], p->oluord[f], out[f],  
-			                       p->out_min[f], p->out_max[f]);
+		for (f = 0; f < fdi; f++) {
+			if (p->flags & XFIT_OUT_LAB) {
+				out[f] = icxSTransFunc(p->v + p->out_offs[f], p->oluord[f], out[f],  
+				                       p->out_min[f], p->out_max[f]);
+			} else {
+				out[f] = icxSTransFuncY2L(p->v + p->out_offs[f], p->oluord[f], out[f],  
+				                       p->out_min[f], p->out_max[f]);
+			}
+		}
 
 		/* Evaluate the error squared */
 		if (p->flags & XFIT_FM_INPUT) {
@@ -849,11 +991,16 @@ static double dxfitfunc(void *edata, double *dv, double *v) {
 		icxdpdiCubeInterp(p->v + p->mat_off, dmato_mv, dmato_tin, fdi, di, out, tin);
 
 		/* Apply output channel curves */
-		for (f = 0; f < fdi; f++)
-			out[f] = icxdpdiSTransFunc(p->v + p->out_offs[f],
-			                           &dout_ov[p->out_offs[f] - p->out_off], &dout_mato[f],
-			                           p->oluord[f], out[f], p->out_min[f], p->out_max[f]);
-
+		for (f = 0; f < fdi; f++) {
+			if (p->flags & XFIT_OUT_LAB)
+				out[f] = icxdpdiSTransFunc(p->v + p->out_offs[f],
+				                           &dout_ov[p->out_offs[f] - p->out_off], &dout_mato[f],
+				                           p->oluord[f], out[f], p->out_min[f], p->out_max[f]);
+			else
+				out[f] = icxdpdiSTransFuncY2L(p->v + p->out_offs[f],
+				                           &dout_ov[p->out_offs[f] - p->out_off], &dout_mato[f],
+				                           p->oluord[f], out[f], p->out_min[f], p->out_max[f]);
+		}
 
 		/* Convert to Delta E and compute pde's into dout_de squared */
 		if (p->flags & XFIT_FM_INPUT) {
@@ -1095,7 +1242,11 @@ static double symoptfunc(void *edata, double *v) {
 
 	/* Copy the parameter being tested back into xfit */
 	p->v[p->out_offs[ch]] = v[0];
-	*out = icxSTransFunc(p->v + p->out_offs[ch], p->oluord[ch], *in,
+	if (p->flags & XFIT_OUT_LAB)
+		*out = icxSTransFunc(p->v + p->out_offs[ch], p->oluord[ch], *in,
+							   p->out_min[ch], p->out_max[ch]);
+	else
+		*out = icxSTransFuncY2L(p->v + p->out_offs[ch], p->oluord[ch], *in,
 							   p->out_min[ch], p->out_max[ch]);
 
 	rv = out[0] * out[0];
@@ -1253,10 +1404,14 @@ static void setup_piv(xfit *p) {
 		icxCubeInterp(p->v + p->mat_off, fdi, di, vv, vv);
 
 		/* Apply output channel curves */
-		for (f = 0; f < fdi; f++)
-			vv[f] = icxSTransFunc(p->v + p->out_offs[f], p->oluord[f], vv[f],  
-			                       p->out_min[f], p->out_max[f]);
-
+		for (f = 0; f < fdi; f++) {
+			if (p->flags & XFIT_OUT_LAB)
+				vv[f] = icxSTransFunc(p->v + p->out_offs[f], p->oluord[f], vv[f],  
+				                       p->out_min[f], p->out_max[f]);
+			else
+				vv[f] = icxSTransFuncY2L(p->v + p->out_offs[f], p->oluord[f], vv[f],  
+				                       p->out_min[f], p->out_max[f]);
+		}
 		
 		for (e = 0; e < di; e++) {
 			double tt[MXDIDO];
@@ -1272,10 +1427,14 @@ static void setup_piv(xfit *p) {
 			icxCubeInterp(p->v + p->mat_off, fdi, di, tt, tt);
 	
 			/* Apply output channel curves */
-			for (f = 0; f < fdi; f++)
-				tt[f] = icxSTransFunc(p->v + p->out_offs[f], p->oluord[f], tt[f],  
-				                       p->out_min[f], p->out_max[f]);
-
+			for (f = 0; f < fdi; f++) {
+				if (p->flags & XFIT_OUT_LAB)
+					tt[f] = icxSTransFunc(p->v + p->out_offs[f], p->oluord[f], tt[f],  
+					                       p->out_min[f], p->out_max[f]);
+				else
+					tt[f] = icxSTransFuncY2L(p->v + p->out_offs[f], p->oluord[f], tt[f],  
+					                       p->out_min[f], p->out_max[f]);
+			}
 	
 			for (f = 0; f < p->fdi; f++)
 				pd[f][e] = (tt[f] - vv[f])/1e-4;
@@ -2237,19 +2396,13 @@ dump_xfit(p);
 				p->skm->lookup(p->skm, skval, p->ipoints[i].p);
 				xfit_abs_to_rel(p, skval, skval);
 				xfit_invoutcurves(p, skval, skval);
-
-//printf("~1 point %d at %f %f %f, targ %f %f %f skm %f %f %f\n",
-//i,p->ipoints[i].p[0],p->ipoints[i].p[1],p->ipoints[i].p[2],
-//p->rpoints[i].v[0],p->rpoints[i].v[1],p->rpoints[i].v[2],
-//skval[0], skval[1], skval[2]);
+//printf("~1 point %d at %f %f %f, targ %f %f %f skm %f %f %f\n", i,p->ipoints[i].p[0],p->ipoints[i].p[1],p->ipoints[i].p[2], p->rpoints[i].v[0],p->rpoints[i].v[1],p->rpoints[i].v[2], skval[0], skval[1], skval[2]);
 				/* Subtract it from value at this point, */
 				/* so rspl will fit difference to skeleton model */
 				for (f = 0; f < fdi; f++)
 					p->rpoints[i].v[f] -= skval[f]; 
 			}
-//printf("~1 point %d, w %f, %f %f %f %f -> %f %f %f\n",
-//i,p->rpoints[i].w,p->rpoints[i].p[0], p->rpoints[i].p[1], p->rpoints[i].p[2], p->rpoints[i].p[3],
-//p->rpoints[i].v[0], p->rpoints[i].v[1], p->rpoints[i].v[2]);
+//printf("~1 point %d, w %f, %f %f %f %f -> %f %f %f\n",i,p->rpoints[i].w,p->rpoints[i].p[0], p->rpoints[i].p[1], p->rpoints[i].p[2], p->rpoints[i].p[3],p->rpoints[i].v[0], p->rpoints[i].v[1], p->rpoints[i].v[2]);
 		}
 
 		/* Create ipos[] arrays, that hold the shaper space */

@@ -239,6 +239,8 @@ usage() {
 	}
 	fprintf(stderr," -N                   Disable initial calibration of instrument if possible\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
+	fprintf(stderr," -Y r                 Set refresh measurement mode\n");
+	fprintf(stderr," -Y R:rate            Override measured refresh rate with rate Hz\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
 	fprintf(stderr," -D [level]           Print debug diagnostics to stderr\n");
 	fprintf(stderr," illuminant.sp        File to save measurement to\n");
@@ -257,6 +259,8 @@ int main(int argc, char *argv[])
 	int nocal = 0;					/* Disable initial calibration */
 	int pspec = 0;                  /* 2 = Plot out the spectrum for each reading */
 	int highres = 0;				/* Use high res mode if available */
+	int refrmode = -1;				/* -1 = default,  = non-refresh mode, 1 = non-refresh mode */
+	double refrate = 0.0;			/* 0.0 = default, > 0.0 = override refresh rate */ 
 	char outname[MAXNAMEL+1] = "\000";  /* Spectral output file name */
 #ifdef DEBUG
 	char tname[MAXNAMEL+11] = "\000", *tnp;
@@ -340,10 +344,28 @@ int main(int argc, char *argv[])
 			} else if (argv[fa][1] == 'H') {
 				highres = 1;
 
+			/* Extra flags */
+			} else if (argv[fa][1] == 'Y') {
+				if (na == NULL)
+					usage();
+			
+				if (na[0] == 'R') {
+					if (na[1] != ':')
+						usage("-Y R:rate syntax incorrect");
+					refrate = atof(na+2);
+					if (refrate < 5.0 || refrate > 150.0)
+						usage("-Y R:rate %f Hz not in valid range",refrate);
+				} else if (na[0] == 'r')
+					refrmode = 1;
+				else
+					usage();
+				fa = nfa;
+
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
 				if (na == NULL) usage();
+
 				if (na[0] == 'n' || na[0] == 'N')
 					fc = fc_none;
 				else if (na[0] == 'h' || na[0] == 'H')
@@ -495,8 +517,16 @@ int main(int argc, char *argv[])
 					printf("Instrument lacks spectral measurement capability");
 				}
 
+				if (refrmode >= 0 && !IMODETST(cap, inst_mode_emis_refresh_ovd)
+				                  && !IMODETST(cap, inst_mode_emis_norefresh_ovd)) {
+					if (verb) {
+						printf("Requested refresh mode override and instrument doesn't support it (ignored)\n");
+						refrmode = -1;
+					}
+				}
+
 				/* Disable iniial calibration of machine if selected */
-				if (nocal != 0){
+				if (nocal != 0) {
 					if ((rv = it->get_set_opt(it,inst_opt_noinitcalib, 0)) != inst_ok) {
 						printf("Setting no-initial calibrate failed failed with '%s' (%s) !!!\n",
 					       it->inst_interp_error(it, rv), it->interp_error(it, rv));
@@ -558,12 +588,30 @@ int main(int argc, char *argv[])
 			}
 			mode |= inst_mode_spectral;
 
+			if (refrmode == 0)
+				mode |= inst_mode_emis_norefresh_ovd;
+			else if (refrmode == 1)
+				mode |= inst_mode_emis_refresh_ovd;
+
 			if ((rv = it->set_mode(it, mode)) != inst_ok) {
 				printf("!!! Setting instrument mode failed with error :'%s' (%s) !!!\n",
 			     	       it->inst_interp_error(it, rv), it->interp_error(it, rv));
 				continue;
 			}
 			it->capabilities(it, &cap, &cap2, &cap3);
+
+			if (refrate > 0.0) {
+				if (!(cap2 & inst2_set_refresh_rate)) {
+					if (verb)
+						printf("Attempted to set refresh rate and instrument doesn't support setting it (ignored)\n");
+					refrate = 0.0;
+				} else {
+					if ((rv = it->set_refr_rate(it, refrate)) != inst_ok) {
+						error("Setting instrument refresh rate to %f Hz failed with error :'%s' (%s)",
+					     	       refrate, it->inst_interp_error(it, rv), it->interp_error(it, rv));
+					}
+				}
+			}
 
 			/* If it batter powered, show the status of the battery */
 			if ((cap2 & inst2_has_battery)) {

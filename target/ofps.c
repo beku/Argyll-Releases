@@ -32,7 +32,7 @@
 
 	Some profiles are too rough, and slow/stall vertex placement.
 	Reducing the cache grid and/or smoothing the rspl values
-	ay mitigate this to some degree, and make this more robust ??
+	may mitigate this to some degree, and make this more robust ??
 
  */
 
@@ -45,7 +45,7 @@
 
 	We then initially add sampling points at the largest estimated error
 	verticies of the veronoi natural neighbourhood.
-	This gives us an optimal distribution measuring in mestimated position
+	This gives us an optimal distribution measuring in estimated position
 	error within a tollerance of 2:1
 	
 	We then iteratively improve the distribution of point nodes by
@@ -84,7 +84,7 @@
 	all possible device channel values. This also applies at
 	higher dimensions (ie. the CMYK values exploring response
 	to different K values doesn't spread the CMY values
-	evenly appart.)
+	evenly apart.)
 
 	Stratification seems to be somewhat at odds with the primary goal
 	of minimizing the maximum estimated error from any point in the

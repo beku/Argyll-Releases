@@ -41,7 +41,8 @@ struct _cam02ref {
 		double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 						/* Ignored if Ev is set */
 		double Yf,		/* Flare as a fraction of the reference white (range 0.0 .. 1.0) */
-		double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
+		double Yg,		/* Glare as a fraction of the ambient (range 0.0 .. 1.0) */
+		double Gxyz[3],	/* The Glare white coordinates (typically the Ambient color) */
 		int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	);
 
@@ -51,9 +52,10 @@ struct _cam02ref {
 /* Private: */
 	/* Scene parameters */
 	ViewingCondition Ev;	/* Enumerated Viewing Condition */
+	double Lv;		/* Luminance of white in the Viewing/Image cd/m^2 */
+	double La;		/* Adapting/Surround Luminance cd/m^2 */
 	double Wxyz[3];	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
 	double Yb;		/* Relative Luminance of Background to reference white (Y range 0.0 .. 1.0) */
-	double La;		/* Adapting/Surround Luminance cd/m^2 */
 	double Yf;		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
 	double Fxyz[3];	/* The Flare white coordinates (typically the Ambient color) */
 
@@ -120,7 +122,7 @@ double Lv		/* Luminence of white in the Viewing/Scene/Image field (cd/m^2) */
 
 static void cam02ref_free(cam02ref *s);
 static int cam02ref_set_view(cam02ref *s, ViewingCondition Ev, double Wxyz[3],
-                double Yb, double La, double Lv, double Yf, double Fxyz[3], int hk);
+                double Yb, double La, double Lv, double Yf, double Yg, double Gxyz[3], int hk);
 static int cam02ref_XYZ_to_cam(cam02ref *s, double *Jab, double *xyz);
 static int cam02ref_cam_to_XYZ(cam02ref *s, double XYZ[3], double Jab[3]);
 
@@ -156,7 +158,8 @@ double Yb,		/* Relative Luminence of Background to reference white */
 double Lv,		/* Luminence of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
+double Yg,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+double Gxyz[3],	/* The Glare white coordinates (typically the Ambient color) */
 int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 ) {
 	double tt;
@@ -171,9 +174,16 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->Yb = Yb > 0.005 ? Yb : 0.005;	/* Set minimum to avoid divide by 0.0 */
 	s->La = La;
 	s->Yf = Yf;
-	s->Fxyz[0] = Fxyz[0];
-	s->Fxyz[1] = Fxyz[1];
-	s->Fxyz[2] = Fxyz[2];
+	if (Gxyz[0] > 0.0 && Gxyz[1] > 0.0 && Gxyz[2] > 0.0) {
+		tt = Wxyz[1]/Gxyz[1];		/* Scale to white ref white */
+		s->Gxyz[0] = tt * Gxyz[0];
+		s->Gxyz[1] = tt * Gxyz[1];
+		s->Gxyz[2] = tt * Gxyz[2];
+	} else {
+		s->Gxyz[0] = Wxyz[0];
+		s->Gxyz[1] = Wxyz[1];
+		s->Gxyz[2] = Wxyz[2];
+	}
 	s->hk = hk;
 
 	/* Compute the internal parameters by category */
@@ -182,38 +192,42 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 			s->C = 0.525;
 			s->Nc = 0.8;
 			s->F = 0.8;
+			Lv = La/0.033;
 			break;
 		case vc_dim:
 			s->C = 0.59;
 			s->Nc = 0.95;
 			s->F = 0.9;
+			Lv = La/0.1;
+			break;
+		case vc_average:
+		default:	/* average */
+			s->C = 0.69;
+			s->Nc = 1.0;
+			s->F = 1.0;
+			Lv = La/0.2;
 			break;
 		case vc_cut_sheet:
 			s->C = 0.41;
 			s->Nc = 0.8;
 			s->F = 0.8;
-			break;
-		default:	/* average */
-			s->C = 0.69;
-			s->Nc = 1.0;
-			s->F = 1.0;
+			Lv = La/0.02;   // ???
 			break;
 	}
+	s->Lv = Lv;
 
 	/* Compute values that only change with viewing parameters */
 
 	/* Figure out the Flare contribution to the flareless XYZ input */
-	tt = s->Yf * s->Wxyz[1]/s->Fxyz[1];
-	s->Fsxyz[0] = tt * s->Fxyz[0];
-	s->Fsxyz[1] = tt * s->Fxyz[1];
-	s->Fsxyz[2] = tt * s->Fxyz[2];
+	s->Fsxyz[0] = s->Yf * s->Wxyz[0];
+	s->Fsxyz[1] = s->Yf * s->Wxyz[1];
+	s->Fsxyz[2] = s->Yf * s->Wxyz[2];
 
-	/* Rescale so that the sum of the flare and the input doesn't exceed white */
-	s->Fsc = s->Wxyz[1]/(s->Fsxyz[1] + s->Wxyz[1]);
-	s->Fsxyz[0] *= s->Fsc;
-	s->Fsxyz[1] *= s->Fsc;
-	s->Fsxyz[2] *= s->Fsc;
-	s->Fisc = 1.0/s->Fsc;
+	/* Add in the Glare contribution from the ambient */
+	tt = s->Yg * s->La/s->Lv;
+	s->Fsxyz[0] += tt * s->Gxyz[0];
+	s->Fsxyz[1] += tt * s->Gxyz[1];
+	s->Fsxyz[2] += tt * s->Gxyz[2];
 
 	/* Sharpened cone response white values */
 	s->rgbW[0] =  0.7328 * s->Wxyz[0] + 0.4296 * s->Wxyz[1] - 0.1624 * s->Wxyz[2];

@@ -1,4 +1,4 @@
-/* 
+	/* 
  * Argyll Color Correction System
  * Fake print target chart reader - use ICC or MPP profile rather than instrument
  *
@@ -15,6 +15,10 @@
 /*
  * TTBD: 
 	
+	This utility should really be merged with cctiff ?
+		ie. Add cgats i/o to cctiff
+		Add other processing steps such as TV, BT.1886, random to cctiff. 
+
 	Do we need to deterct & mark display values normalized to Y = 100 ??
  */
 
@@ -46,21 +50,36 @@ void usage(char *diag, ...) {
 		va_end(args);
 		fprintf(stderr,"\n");
 	}
-	fprintf(stderr,"usage: fakeread [-v] [-s] [separation.icm] profile.[%s|mpp|ti3] outfile\n",ICC_FILE_EXT_ND);
-	fprintf(stderr," -v                Verbose mode\n");
-	fprintf(stderr," -s                Lookup MPP spectral values\n");
-	fprintf(stderr," -p                Use separation profile\n");
+	/* Keep options in order of processing */
+	fprintf(stderr,"usage: fakeread [-options] profile.[%s|mpp|ti3] outfile\n",ICC_FILE_EXT_ND);
+	fprintf(stderr," -v [n]            Verbose mode [level]\n");
+	fprintf(stderr," -e flag           Video encode device input to sepration as:\n");
+	fprintf(stderr,"     n              normal 0..1 full range RGB levels (default)\n");
+	fprintf(stderr,"     t              (16-235)/255 \"TV\" RGB levels\n");
+	fprintf(stderr,"     6              Rec601 YCbCr SD (16-235,240)/255 \"TV\" levels\n");
+	fprintf(stderr,"     7              Rec709 1125/60Hz YCbCr HD (16-235,240)/255 \"TV\" levels\n");
+	fprintf(stderr,"     5              Rec709 1250/50Hz YCbCr HD (16-235,240)/255 \"TV\" levels\n");
+	fprintf(stderr,"     2              Rec2020 YCbCr UHD (16-235,240)/255 \"TV\" levels\n");
+	fprintf(stderr,"     C              Rec2020 Constant Luminance YCbCr UHD (16-235,240)/255 \"TV\" levels\n");
+	fprintf(stderr," -p separation.%s Use device link separation profile on input\n",ICC_FILE_EXT_ND);
+	fprintf(stderr," -E flag           Video decode separation device output. See -e above\n");
+	fprintf(stderr," -k file.cal       Apply calibration (include in .ti3 output)\n");
+	fprintf(stderr," -i file.cal       Include calibration in .ti3 output, but don't apply it\n");
+	fprintf(stderr," -K file.cal       Apply inverse calibration\n");
+
+	fprintf(stderr," -r level          Add average random deviation of <level>%% to device values (after sep. & cal.)\n");
+	fprintf(stderr," -0 pow            Apply power to device chanel 0-9\n");
+	fprintf(stderr," -b output.%s     Apply BT.1886-like mapping with effective gamma 2.2\n",ICC_FILE_EXT_ND);
+	fprintf(stderr," -b g.g:output.%s Apply BT.1886-like mapping with effective gamma g.g\n",ICC_FILE_EXT_ND);
+	fprintf(stderr," -B output.%s     Apply BT.1886 mapping with technical gamma 2.4\n",ICC_FILE_EXT_ND);
+	fprintf(stderr," -B g.g:output.%s Apply BT.1886 mapping with technical gamma g.g\n",ICC_FILE_EXT_ND);
+	fprintf(stderr," -I intent         r = relative colorimetric, a = absolute (default)\n");
+	fprintf(stderr," -A L,a,b          Scale black point to target Lab value\n");
 	fprintf(stderr," -l                Output Lab rather than XYZ\n");
-	fprintf(stderr," -k file.cal       Apply calibration (after sep.) and include in .ti3\n");
-	fprintf(stderr," -i file.cal       Include calibration in .ti3 (but don't apply it)\n");
-	fprintf(stderr," -r level          Add average random deviation of <level>%% to input device values (after sep. & cal.)\n");
-	fprintf(stderr," -0 pow            Apply power to input device chanel 0-9 (after sep. cal. & rand)\n");
+	fprintf(stderr," -s                Lookup MPP spectral values\n");
 	fprintf(stderr," -R level          Add average random deviation of <level>%% to output PCS values\n");
 	fprintf(stderr," -u                Make random deviations have uniform distributions rather than normal\n");
 	fprintf(stderr," -S seed           Set random seed\n");
-	fprintf(stderr," -b L,a,b          Scale black point to target Lab value\n");
-	fprintf(stderr," -I intent         r = relative colorimetric, a = absolute (default)\n");
-	fprintf(stderr," [separation.%s]  Device link separation profile\n",ICC_FILE_EXT_ND);
 	fprintf(stderr," profile.[%s|mpp|ti3] ICC, MPP profile or TI3 to use\n",ICC_FILE_EXT_ND);
 	fprintf(stderr," outfile           Base name for input[ti1]/output[ti3] file\n");
 	exit(1);
@@ -69,9 +88,14 @@ void usage(char *diag, ...) {
 int main(int argc, char *argv[])
 {
 	int j;
-	int fa,nfa;							/* current argument we're looking at */
+	int fa, nfa, mfa;	/* current argument we're looking at */
 	int verb = 0;		/* Verbose flag */
 	int dosep = 0;		/* Use separation before profile */
+	int bt1886 = 0;		/* 1 to apply BT.1886 black point & effective gamma to input */
+						/* 2 to apply BT.1886 black point & technical gamma to input */
+	double egamma = 2.2;	/* effective BT.1886 style gamma to ain for */
+	double tgamma = 2.4;	/* technical BT.1886 style gamma to ain for */
+	bt1886_info bt;		/* BT.1886 adjustment info */
 	int dolab = 0;		/* Output Lab rather than XYZ */
 	int gfudge = 0;		/* Do grey fudge, 1 = W->RGB, 2 = K->xxxK */
 	double chpow[10] = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
@@ -80,12 +104,13 @@ int main(int argc, char *argv[])
 	int unidist = 0;		/* Use uniform distribution of errors */
 	unsigned int seed = time(NULL);	/* Random seed value */
 	double tbp[3] = { -1.0, 0.0, 0.0 };	/* Target black point */
-	int applycal = 0;		/* NZ to apply calibration */
+	int applycal = 0;		/* 1 to apply calibration, 2 to apply inverse calibration */
 	static char sepname[MAXNAMEL+1] = { 0 };	/* ICC separation profile */
 	static char calname[MAXNAMEL+1] = { 0 };	/* device calibration */
 	static char profname[MAXNAMEL+1] = { 0 };	/* ICC or MPP Profile name */
 	static char inname[MAXNAMEL+1] = { 0 };	/* Input cgats file base name */
 	static char outname[MAXNAMEL+1] = { 0 };	/* Output cgats file base name */
+	static char oprofname[MAXNAMEL+1] = { 0 };	/* BT.1886 output profile name */
 	cgats *icg;			/* input cgats structure */
 	cgats *ocg;			/* output cgats structure */
 	int nmask = 0;		/* Test chart device colorant mask */
@@ -96,7 +121,11 @@ int main(int argc, char *argv[])
 	int fi;				/* Colorspace index */
 	int inti3 = 0;		/* Input is a renamed .ti3 file rather than .ti1 */
 
-	/* ICC separation device link profile  */
+	/* TV encode/decode of separation/calibration device link */
+	int in_tvenc = 0;		/* 1 to use RGB Video Level encoding, 2 = Rec601, etc. */
+	int out_tvenc = 0;		/* 1 to use RGB Video Level encoding, 2 = Rec601, etc. */
+
+	/* ICC separation/calibration device link profile  */
 	icmFile *sep_fp = NULL;		/* Color profile file */
 	icc *sep_icco = NULL;		/* Profile object */
 	icmLuBase *sep_luo = NULL;	/* Conversion object */
@@ -114,6 +143,7 @@ int main(int argc, char *argv[])
 	icmFile *icc_fp = NULL;	/* Color profile file */
 	icc *icc_icco = NULL;	/* Profile object */
 	icmLuBase *icc_luo = NULL;	/* Conversion object */
+	icmLuAlgType alg;		/* Algorithm */
 
 	/* MPP profile based */
 	mpp *mlu = NULL;	/* Conversion object */
@@ -146,6 +176,7 @@ int main(int argc, char *argv[])
 		usage("Too few arguments");
 
 	/* Process the arguments */
+	mfa = 2;        /* Minimum final arguments */
 	for(fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */
 		if (argv[fa][0] == '-') {	/* Look for any flags */
@@ -155,7 +186,7 @@ int main(int argc, char *argv[])
 				na = &argv[fa][2];		/* next is directly after flag */
 			else
 				{
-				if ((fa+1) < argc)
+				if ((fa+1+mfa) < argc)
 					{
 					if (argv[fa+1][0] != '-')
 						{
@@ -169,16 +200,92 @@ int main(int argc, char *argv[])
 				usage("Usage requested");
 
 			/* Verbose */
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			else if (argv[fa][1] == 'v') {
 				verb = 1;
+
+				if (na != NULL && na[0] >= '0' && na[0] <= '9') {
+					verb = atoi(na);
+					fa = nfa;
+				}
+			}
 
 			/* Spectral MPP lookup */
 			else if (argv[fa][1] == 's')
 				dospec = 1;
 
+			/* Video RGB encoding */
+			else if (argv[fa][1] == 'e'
+			      || argv[fa][1] == 'E') {
+				int enc;
+				if (na == NULL) usage("Video encodong flag (-e/E) needs an argument");
+    			switch (na[0]) {
+					case 'n':				/* Normal */
+						enc = 0;
+						break;
+					case 't':				/* TV 16 .. 235 */
+						enc = 1;
+						break;
+					case '6':				/* Rec601 YCbCr */
+						enc = 2;
+						break;
+					case '7':				/* Rec709 1150/60/2:1 YCbCr */
+						enc = 3;
+						break;
+					case '5':				/* Rec709 1250/50/2:1 YCbCr (HD) */
+						enc = 4;
+						break;
+					case '2':				/* Rec2020 Non-constant Luminance YCbCr (UHD) */
+						enc = 5;
+						break;
+					case 'C':				/* Rec2020 Constant Luminance YCbCr (UHD) */
+						enc = 6;
+						break;
+					default:
+						usage("Video encoding (-E) argument not recognised");
+				}
+				if (argv[fa][1] == 'e')
+					in_tvenc = enc;
+				else
+					out_tvenc = enc;
+				fa = nfa;
+			}
+
 			/* Separation */
-			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P')
+			else if (argv[fa][1] == 'p') {
 				dosep = 1;
+
+				fa = nfa;
+				if (na == NULL) usage("Expected an argument to -p");
+				strncpy(sepname,na,MAXNAMEL); sepname[MAXNAMEL] = '\000';
+			}
+
+			/* BT.1886 modifier */
+			else if (argv[fa][1] == 'b'
+			      || argv[fa][1] == 'B') {
+				char *cp;
+
+				bt1886 = 1;
+				if (argv[fa][1] == 'B')
+					bt1886 = 2;
+
+				if (na == NULL) usage("BT.1886 flag (-%c) needs an argument",argv[fa][1]);
+				fa = nfa;
+				
+				if ((cp = strchr(na, ':')) != NULL) {
+					double gamma = 0.0;
+					*cp = '\000';
+					cp++;
+					gamma = atof(na);
+					if (gamma < 0.01 || gamma > 10.0) usage("BT.1886 gamma is out of range");
+					if (bt1886 == 1)
+						egamma = gamma;
+					else
+						tgamma = gamma;
+				} else {
+					cp = na;
+				}
+				strncpy(oprofname,cp,MAXNAMEL); oprofname[MAXNAMEL] = '\000';
+			}
 
 			/* Lab */
 			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L')
@@ -197,8 +304,12 @@ int main(int argc, char *argv[])
 			}
 
 			/* calibration to device values */
-			else if (argv[fa][1] == 'k' || argv[fa][1] == 'i') {
-				if (argv[fa][1] == 'k')
+			else if (argv[fa][1] == 'k'
+			     ||  argv[fa][1] == 'K'
+			     ||  argv[fa][1] == 'i') {
+				if (argv[fa][1] == 'K')
+					applycal = 2;
+				else if (argv[fa][1] == 'k')
 					applycal = 1;
 				else
 					applycal = 0;
@@ -233,8 +344,8 @@ int main(int argc, char *argv[])
 			}
 
 			/* Black point scale */
-			else if (argv[fa][1] == 'b' || argv[fa][1] == 'B') {
-				if (na == NULL) usage("Expect argument to -b");
+			else if (argv[fa][1] == 'A') {
+				if (na == NULL) usage("Expect argument to -A");
 				fa = nfa;
 				if (sscanf(na, " %lf , %lf , %lf ",&tbp[0], &tbp[1], &tbp[2]) != 3)
 					usage("Couldn't parse argument to -b");
@@ -264,12 +375,6 @@ int main(int argc, char *argv[])
 		}
 		else
 			break;
-	}
-
-	/* Get the file name argument */
-	if (dosep) {
-		if (fa >= argc || argv[fa][0] == '-') usage("Missing separation profile filename argument");
-		strncpy(sepname,argv[fa++],MAXNAMEL); sepname[MAXNAMEL] = '\000';
 	}
 
 	if (fa >= argc || argv[fa][0] == '-') usage("Missing profile filename argument");
@@ -302,6 +407,13 @@ int main(int argc, char *argv[])
 			sep_luo->spaces(sep_luo, &sep_ins, &sep_inn, &sep_outs, NULL, NULL, NULL, NULL, NULL, NULL);
 			sep_nmask = icx_icc_to_colorant_comb(sep_ins, sep_icco->header->deviceClass);
 		}
+		if (in_tvenc && sep_ins != icSigRgbData)
+			error("Can only use TV encoding on sepration RGB input");
+		if (out_tvenc && sep_outs != icSigRgbData)
+			error("Can only use TV decoding on sepration RGB output");
+	} else {
+		if (in_tvenc || out_tvenc)
+			warning("TV encoding ignored because there is no sepration file");
 	}
 
 	/* Deal with calibration */
@@ -311,8 +423,10 @@ int main(int argc, char *argv[])
 		if ((cal->read(cal, calname)) != 0)
 			error("%s",cal->err);
 		if (verb)
-			if (applycal)
+			if (applycal == 1)
 				printf("Applying calibration curves from '%s'\n",calname);
+			else if (applycal == 2)
+				printf("Applying inverse calibration curves from '%s'\n",calname);
 			else
 				printf("Embedding calibration curves from '%s' in output\n",calname);
 	}
@@ -345,7 +459,8 @@ int main(int argc, char *argv[])
 		}
 
 		/* Get details of conversion */
-		icc_luo->spaces(icc_luo, &ins, &inn, &outs, &outn, NULL, NULL, NULL, NULL, NULL);
+		icc_luo->spaces(icc_luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL, NULL);
+
 		cnv_nmask = icx_icc_to_colorant_comb(ins, icc_icco->header->deviceClass);
 
 		if (dospec)
@@ -529,6 +644,105 @@ int main(int argc, char *argv[])
 			error("Can't lookup spectral values for non-spectral TI3 file");
 
 		free(ti3_bident);
+	}
+
+	/* Dealy with BT.1886 processing */
+	if (bt1886) {
+		icmFile *ofp = NULL;	/* Output Color profile file */
+		icc *oicco = NULL;		/* Output Profile object */
+		icmLuBase *oluo = NULL;	/* Output Conversion object */
+		icmLuMatrix *lu;		/* Input profile lookup */
+		double bp[3], rgb[3];
+
+		if (icc_luo == NULL)
+			error ("Can only use BT.1886 with an ICC profile");
+
+		/* Check input profile is an RGB matrix profile */
+		if (alg != icmMatrixFwdType
+		 || ins != icSigRgbData)
+			error("BT.1886 mode only works with an RGB matrix input profile");
+
+		lu = (icmLuMatrix *)icc_luo;	/* Safe to coerce - we have checked it's matrix. */
+
+		/* Open up output profile used for BT.1886 black point */
+		if ((ofp = new_icmFileStd_name(oprofname,"r")) == NULL)
+			error ("Can't open file '%s'",oprofname);
+	
+		if ((oicco = new_icc()) == NULL)
+			error ("Creation of ICC object failed");
+	
+		if (oicco->read(oicco,ofp,0))
+			error ("Unable to read '%s'",oprofname);
+
+		if ((oluo = oicco->get_luobj(oicco, icmFwd, icRelativeColorimetric,
+		                           icSigXYZData, icmLuOrdNorm)) == NULL)
+			error("get output ICC lookup object failed: %d, %s",oicco->errc,oicco->err);
+
+		/* We're assuming that the input space has a perfect black point... */
+
+		/* Lookup the ouput black point in XYZ PCS. We're assuming monotonicity.. */
+		bp[0] = bp[1] = bp[2] = 0.0;
+		oluo->lookup(oluo, bp, bp);
+
+		/* Done with output profile */
+		oluo->del(oluo);
+		oicco->del(oicco);
+		ofp->del(ofp);
+
+		if (bt1886 == 1) {		/* Using effective gamma */
+			tgamma = xicc_tech_gamma(egamma, bp[1]);
+			if (verb)
+				printf("BT.1886: Technical gamma %f used to achieve effective gamma %f\n",
+				                                                           tgamma, egamma);
+		} else {
+			if (verb)
+				printf("BT.1886: Using technical gamma %f\n",tgamma);
+		}
+
+		bt1886_setup(&bt, bp, tgamma);
+		
+		if (verb) {
+			printf("BT.1886: target out black rel XYZ = %f %f %f, Lab %f %f %f\n",
+			                      bp[0],bp[1],bp[2], bt.outL, bt.tab[0], bt.tab[1]);
+			printf("BT.1886: Y input offset = %f\n", bt.ingo);
+			printf("BT.1886: Y output scale = %f\n", bt.outsc);
+		}
+
+		/* Check black point now produced by input profile with bt.1886 adjustment */
+		rgb[0] = rgb[1] = rgb[2] = 0.0;
+		lu->fwd_curve(lu, rgb, rgb);
+		lu->fwd_matrix(lu, rgb, rgb);
+		bt1886_apply(&bt, lu, rgb, rgb);
+		if (verb) printf("BT.1886: check input black point rel. XYZ %f %f %f\n", rgb[0],rgb[1],rgb[2]);
+		if (verb > 1) {
+			int i, no = 21;
+
+			/* Overral rendering curve from video in to output target */
+			printf("BT.1886: overall rendering\n");
+			for (i = 0; i < no; i++) {
+				double v = i/(no-1.0), vv;
+				double vi[3], vo[3], Lab[3];
+				double loglog = 0.0;
+				
+				if (v <= 0.081)
+					vv = v/4.5;
+				else
+					vv = pow((0.099 + v)/1.099, 1.0/0.45);
+
+				vi[0] = vv * 0.9642;		/* To D50 XYZ */
+				vi[1] = vv * 1.0000;
+				vi[2] = vv * 0.8249;
+
+				bt1886_apply(&bt, lu, vo, vi);	/* BT.1886 mapping */
+		
+				icmXYZ2Lab(&icmD50, Lab, vo);
+
+				if (v > 1e-9 && vo[1] > 1e-9 && fabs(v - 1.0) > 1e-9)
+					loglog = log(vo[1])/log(v);
+
+				printf(" In %5.1f%% -> XYZ in %f -> bt.1886 %f, log/log %.3f, Lab %f %f %f \n",v * 100.0,vi[1],vo[1], loglog, Lab[0], Lab[1], Lab[2]);
+			}
+		}
 	}
 
 	/* Some sanity checking */
@@ -842,13 +1056,62 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			if (dosep)
+			if (dosep) {
+				if (in_tvenc != 0) {
+					if (in_tvenc == 1) {			/* Video 16-235 range */
+						icmRGB_2_VidRGB(dev, dev);
+					} else if (in_tvenc == 2) {		/* Rec601 YCbCr */
+						icmRec601_RGBd_2_YPbPr(dev, dev);
+						icmRecXXX_YPbPr_2_YCbCr(dev, dev);
+					} else if (in_tvenc == 3) {		/* Rec709 YCbCr */
+						icmRec709_RGBd_2_YPbPr(dev, dev);
+						icmRecXXX_YPbPr_2_YCbCr(dev, dev);
+					} else if (out_tvenc == 4) {		/* Rec709 1250/50/2:1 YCbCr */
+						icmRec709_50_RGBd_2_YPbPr(dev, dev);
+						icmRecXXX_YPbPr_2_YCbCr(dev, dev);
+					} else if (out_tvenc == 5) {		/* Rec2020 Non-constant Luminance YCbCr */
+						icmRec2020_NCL_RGBd_2_YPbPr(dev, dev);
+						icmRecXXX_YPbPr_2_YCbCr(dev, dev);
+					} else if (out_tvenc == 6) {		/* Rec2020 Non-constant Luminance YCbCr */
+						icmRec2020_CL_RGBd_2_YPbPr(dev, dev);
+						icmRecXXX_YPbPr_2_YCbCr(dev, dev);
+					}
+				}
+
 				if (sep_luo->lookup(sep_luo, sep, dev) > 1)
 					error ("%d, %s",icc_icco->errc,icc_icco->err);
 
+				if (out_tvenc != 0) {
+					if (out_tvenc == 1) {				/* Video 16-235 range */
+						icmVidRGB_2_RGB(sep, sep);
+					} else if (out_tvenc == 2) {		/* Rec601 YCbCr */
+						icmRecXXX_YCbCr_2_YPbPr(sep, sep);
+						icmRec601_YPbPr_2_RGBd(sep, sep);
+					} else if (out_tvenc == 3) {		/* Rec709 1150/60/2:1 YCbCr */
+						icmRecXXX_YCbCr_2_YPbPr(sep, sep);
+						icmRec709_YPbPr_2_RGBd(sep, sep);
+					} else if (out_tvenc == 4) {		/* Rec709 1250/50/2:1 YCbCr */
+						icmRecXXX_YCbCr_2_YPbPr(sep, sep);
+						icmRec709_50_YPbPr_2_RGBd(sep, sep);
+					} else if (out_tvenc == 5) {		/* Rec2020 Non-constant Luminance YCbCr */
+						icmRecXXX_YCbCr_2_YPbPr(sep, sep);
+						icmRec2020_NCL_YPbPr_2_RGBd(sep, sep);
+					} else if (out_tvenc == 6) {		/* Rec2020 Non-constant Luminance YCbCr */
+						icmRecXXX_YCbCr_2_YPbPr(sep, sep);
+						icmRec2020_CL_YPbPr_2_RGBd(sep, sep);
+					}
+				}
+			}
+
 			/* Do calibration */
-			if (applycal && cal != NULL)
-				cal->interp(cal, sep, sep);
+			if (applycal && cal != NULL) {
+				if (applycal == 1)
+					cal->interp(cal, sep, sep);
+				else if (applycal == 2) {
+					if (cal->inv_interp(cal, sep, sep))
+						warning("Inverse calibration of patch %d failed",i+1); 
+				}
+			}
 
 			/* Add randomness and non-linearity to device values. */
 			/* rdlevel = avg. dev. */
@@ -875,8 +1138,21 @@ int main(int argc, char *argv[])
 
 			/* Do color conversion */
 			if (icc_luo != NULL) {
-				if (icc_luo->lookup(icc_luo, PCS, sep) > 1)
-					error ("%d, %s",icc_icco->errc,icc_icco->err);
+				if (bt1886) {
+					icmLuMatrix *lu = (icmLuMatrix *)icc_luo;    /* Safe to coerce */
+//printf("Matrix dev in: %s\n",icmPdv(inn, sep));
+					lu->fwd_curve(lu, sep, sep);
+//printf("Matrix after in curve: %s\n",icmPdv(inn, sep));
+					lu->fwd_matrix(lu, PCS, sep);
+//printf("Matrix after matrix XYZ %s Lab %s\n",icmPdv(3, PCS), icmPLab(PCS));
+					bt1886_apply(&bt, lu, PCS, PCS);
+//printf("Matrix after bt1186 XYZ %s Lab %s\n",icmPdv(3, PCS), icmPLab(PCS));
+					lu->fwd_abs(lu, PCS, PCS);
+//printf("Matrix after abs %s\n",icmPdv(3, PCS));
+				} else {
+					if (icc_luo->lookup(icc_luo, PCS, sep) > 1)
+						error ("%d, %s",icc_icco->errc,icc_icco->err);
+				}
 
 				if (tbp[0] >= 0) {	/* Doing black point scaling */
 
@@ -913,7 +1189,7 @@ int main(int argc, char *argv[])
 					}
 				}
 				/* Copy best value over */
-				if (!dosep)		/* Doesn't make sense for separation */
+				if (!dosep)		/* Doesn't make sense for separation ??? */
 					for (j = 0; j < nchan; j++) {
 						dev[j] = *((double *)ti3->t[0].fdata[bix][ti3_chix[j]]) / 100.0;
 					}
@@ -949,8 +1225,12 @@ int main(int argc, char *argv[])
 
 			/* Add randomness. rplevel is avg. dev. */
 			/* Note PCS is 0..100 XYZ or Lab at this point */
+			/* Adding uniform error to XYZ produces unreasonable */
+			/* bumpiness near black, so scale it by Y */
 			if (rplevel > 0.0) {
-				double opcs[3];
+				double opcs[3], ll = 1.0;
+				if (!dolab)
+					ll = 0.01 * PCS[1];
 				for (j = 0; j < 3; j++) {
 					double dv = PCS[j];
 					double rr;
@@ -959,7 +1239,7 @@ int main(int argc, char *argv[])
 						rr = 100.0 * d_rand(-2.0 * rplevel, 2.0 * rplevel);
 					else
 						rr = 100.0 * 1.2533 * rplevel * norm_rand();
-					dv += rr;
+					dv += ll * rr;
 
 					/* Don't let L*, X, Y or Z go negative */
 					if ((!dolab || j == 0) && dv < 0.0)

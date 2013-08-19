@@ -825,6 +825,8 @@ make_input_icc(
 				
         flags |= ICX_SET_BLACK;		/* Compute & use black */
 		flags |= ICX_SET_WHITE;		/* Compute & use white */
+
+		/* ICX_SET_WHITE_C isn't applicable to matrix profiles */
 		if (autowpsc)
 	        flags |= ICX_SET_WHITE_US;	/* Compute & use white without scaling to L */
 
@@ -1207,7 +1209,8 @@ make_input_icc(
 					NULL, NULL,					/* Use default Lab' range */
 					in_b2a_clut,				/* Lab' -> Device' transfer function */
 					NULL, NULL,					/* Use default Device' range */
-					in_b2a_output) != 0)		/* Output transfer function, Device'->Device */
+					in_b2a_output,				/* Output transfer function, Device'->Device */
+					NULL, NULL) != 0)			/* Use default APXLS range */
 				error("Setting 16 bit PCS->Device Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 			if (cx.verb) {
 				printf("\n");

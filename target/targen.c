@@ -108,6 +108,12 @@
 #define SIMDLAT_TYPE SIMDLAT_BCC	/* Simdlat geometry type */
 #define MATCH_TOLL 1e-3	/* Tollerance of device value to consider a patch a duplicate */
 
+/* Display rise and fall time delay model. This is CRT like */
+#define DISPLAY_RISE_TIME 0.03		/* Assumed rise time to 90% of target level */ 
+#define DISPLAY_FALL_TIME 0.12		/* Assumed fall time to 90% of target level */
+#define DISPLAY_SETTLE_AIM 0.01		/* Aim for 1% of true level */
+#define DISPLAY_ABS_AIM 0.0001		/* Aim for .01% of true absolute level */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -809,9 +815,11 @@ usage(int level, char *diag, ...) {
 	}
 	fprintf(stderr," -G               Generate good optimized points rather than Fast\n");
 	fprintf(stderr," -e patches       White test patches (default 4)\n");
+	fprintf(stderr," -B patches       Black test patches (default 4 Grey/RGB, else 0)\n");
 	fprintf(stderr," -s steps         Single channel steps (default grey 50, color 0)\n");
 	fprintf(stderr," -g steps         Grey axis RGB or CMY steps (default 0)\n");
 	fprintf(stderr," -m steps         Multidimensional device space cube steps (default 0)\n");
+	fprintf(stderr," -b steps         Multidimensional body centered cubic steps (default 0)\n");
 	fprintf(stderr," -f patches       Add iterative & adaptive full spread patches to total (default grey 0, color 836)\n");
 	fprintf(stderr,"                  Default is Optimised Farthest Point Sampling (OFPS)\n");
 	fprintf(stderr,"  -t              Use incremental far point for full spread\n");
@@ -860,6 +868,8 @@ int dofilt(
 	return 0;
 }
 
+static double disprespt(cgats *pp, int p1, int p2);
+
 int main(int argc, char *argv[]) {
 	int i, j, k;
 	int fa, nfa, mfa;		/* current argument we're looking at */
@@ -873,10 +883,12 @@ int main(int argc, char *argv[]) {
 	char *ident;			/* Ink combination identifier (includes possible leading 'i') */
 	int good = 0;			/* 0 - fast, 1 = good */
 	int esteps = 4;			/* White color patches */
+	int Bsteps = -1;		/* Black color patches */
 	int ssteps = -1;		/* Single channel steps */
 	double xpow = 1.0;		/* Power to apply to all device values created */
 	int gsteps = 0;			/* Composite grey wedge steps */
 	int msteps = 0;			/* Regular grid multidimensional steps */
+	int bsteps = 0;			/* Regular body centered cubic grid multidimensional steps */
 	int fsteps = -1;		/* Fitted Multidimensional patches */
 	int uselat = 0;			/* Use incremental far point alg. for full spread points */
 	int userand = 0;		/* Use random for full spread points, 2 = perceptual */
@@ -920,7 +932,7 @@ int main(int argc, char *argv[]) {
 	mfa = 1;        /* Minimum final arguments */
 	for(fa = 1;fa < argc;fa++) {
 		nfa = fa;					/* skip to nfa if next argument is used */
-		if (argv[fa][0] == '-') {		/* Look for any flags */
+		if (argv[fa][0] == '-') {	/* Look for any flags */
 			char *na = NULL;		/* next argument after flag, null if none */
 
 			if (argv[fa][2] != '\000')
@@ -940,7 +952,7 @@ int main(int argc, char *argv[]) {
 				usage(0, "Usage requested");
 			}
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
+			else if (argv[fa][1] == 'v') {
 				verb = 1;
 				if (na != NULL && na[0] >= '0' && na[0] <= '9') {
 					verb = atoi(na);
@@ -978,51 +990,70 @@ int main(int argc, char *argv[]) {
 				good = 1;
 			}
 			/* White color patches */
-			else if (argv[fa][1] == 'e' || argv[fa][1] == 'E') {
+			else if (argv[fa][1] == 'e') {
 				int tt;
-				fa = nfa;
 				if (na == NULL) usage(0,"Expect argument after -e");
 				if ((tt = atoi(na)) >= 0)
 					esteps = tt;
+				fa = nfa;
+			}
+			/* Black color patches */
+			else if (argv[fa][1] == 'B') {
+				int tt;
+				if (na == NULL) usage(0,"Expect argument after -B");
+				if ((tt = atoi(na)) >= 0)
+					Bsteps = tt;
+				fa = nfa;
 			}
 			/* Individual chanel steps */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+			else if (argv[fa][1] == 's') {
 				int tt;
-				fa = nfa;
 				if (na == NULL) usage(0,"Expect argument after -s");
 				if ((tt = atoi(na)) >= 0)
 					ssteps = tt;
+				fa = nfa;
 			}
 			/* RGB or CMY grey wedge steps */
 			else if (argv[fa][1] == 'g') {
 				int tt;
-				fa = nfa;
 				if (na == NULL) usage(0,"Expect argument after -g");
 				if ((tt = atoi(na)) >= 0)
 					gsteps = tt;
+				fa = nfa;
 			}
 			/* Multidimentional cube steps */
 			else if (argv[fa][1] == 'm') {
 				int tt;
-				fa = nfa;
 				if (na == NULL) usage(0,"Expect argument after -m");
 				if ((tt = atoi(na)) >= 0) {
 					msteps = tt;
 					if (msteps == 1)
 						msteps = 2;
 				}
+				fa = nfa;
+			}
+			/* Multidimentional body centered cube steps */
+			else if (argv[fa][1] == 'b') {
+				int tt;
+				if (na == NULL) usage(0,"Expect argument after -b");
+				if ((tt = atoi(na)) >= 0) {
+					bsteps = tt;
+					if (bsteps == 1)
+						bsteps = 2;
+				}
+				fa = nfa;
 			}
 			/* Full even spread Multidimentional patches */
 			else if (argv[fa][1] == 'f') {
 				int tt;
-				fa = nfa;
 				if (na == NULL) usage(0,"Expect argument after -f");
 				if ((tt = atoi(na)) >= 0)
 					fsteps = tt;
+				fa = nfa;
 			}
 
 			/* Use incremental far point algorithm for full spread */
-			else if (argv[fa][1] == 't' || argv[fa][1] == 'T') {
+			else if (argv[fa][1] == 't') {
 				uselat = 1;
 				userand = 0;
 				useqrand = 0;
@@ -1031,7 +1062,8 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* Random requested */
-			else if (argv[fa][1] == 'r' || argv[fa][1] == 'R') {
+			else if (argv[fa][1] == 'r'
+				  || argv[fa][1] == 'R') {
 				uselat = 0;
 				if (argv[fa][1] == 'R')
 					userand = 2;
@@ -1043,7 +1075,8 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* Space filling quasi-random requested */
-			else if (argv[fa][1] == 'q' || argv[fa][1] == 'Q') {
+			else if (argv[fa][1] == 'q'
+				  || argv[fa][1] == 'Q') {
 				uselat = 0;
 				userand = 0;
 				if (argv[fa][1] == 'Q')
@@ -1075,14 +1108,13 @@ int main(int argc, char *argv[]) {
 
 			/* Simplex grid angle */
 			else if (argv[fa][1] == 'a') {
-				fa = nfa;
 				if (na == NULL) usage(0,"Expect argument after -a");
 				simangle = atof(na);
+				fa = nfa;
 			}
 
 			/* Degree of iterative adaptation */
 			else if (argv[fa][1] == 'A') {
-				fa = nfa;
 				if (na == NULL) usage(0,"Expected argument to average deviation flag -A");
 				if (na[0] == 'p') {			/* (relative, for verification) */
 					perc_wght = atof(na+1);
@@ -1099,49 +1131,50 @@ int main(int argc, char *argv[]) {
 					if (dadapt < 0.0 || dadapt > 1.0)
 						usage(0,"Average Deviation argument %f must be between 0.0 and 1.0",dadapt);
 				}
+				fa = nfa;
 			}
 
 			/* Ink limit percentage */
-			else if (argv[fa][1] == 'l' || argv[fa][1] == 'L') {
+			else if (argv[fa][1] == 'l') {
 				double tt;
-				fa = nfa;
 				if (na == NULL) usage(0,"Expect argument after -l");
 				if ((tt = atof(na)) > 0.0)
 					uilimit = ilimit = 0.01 * tt;
+				fa = nfa;
 			}
 
 			/* Extra device power-like to use */
-			else if (argv[fa][1] == 'p' || argv[fa][1] == 'P') {
+			else if (argv[fa][1] == 'p') {
 				double tt;
-				fa = nfa;
 				if (na == NULL) usage(0,"Expect argument after -p");
 				if ((tt = atof(na)) > 0.0)
 					xpow = tt;
+				fa = nfa;
 			}
 
 			/* ICC profile for perceptual linearisation */
-			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C') {
-				fa = nfa;
+			else if (argv[fa][1] == 'c') {
 				if (na == NULL) usage(0,"Expect argument after -c");
 				strncpy(pname,na,MAXNAMEL-1); pname[MAXNAMEL-1] = '\000';
+				fa = nfa;
 			}
 
 			/* Degree of neutral axis emphasis */
 			else if (argv[fa][1] == 'N') {
-				fa = nfa;
 				if (na == NULL) usage(0,"Expected argument to neutral emphasis flag -N");
 				nemph = atof(na);
 				if (nemph < 0.0 || nemph > 10.0)
 					usage(0,"Neautral weighting argument %f to '-N' is out of range",nemph);
+				fa = nfa;
 			}
 
 			/* Filter out samples outside given sphere */
 			else if (argv[fa][1] == 'F') {
-				fa = nfa;
 				if (na == NULL) usage(0,"Expect argument after -F");
 				if (sscanf(na, " %lf,%lf,%lf,%lf ",&filt[0], &filt[1], &filt[2], &filt[3]) != 4)
 					usage(0,"Argument to -F '%s' isn't correct",na);
 				filter = 1;
+				fa = nfa;
 			}
 
 #ifdef VRML_DIAG
@@ -1187,6 +1220,13 @@ int main(int argc, char *argv[]) {
 	stime = clock();
 
 	/* Implement some defaults */
+	if (Bsteps < 0) {
+		if (xmask == ICX_W || xmask == ICX_K || xmask == ICX_RGB || xmask == ICX_IRGB)
+			Bsteps = 4;
+		else
+			Bsteps = 0; 
+	}
+
 	if (di == 1) {
 		if (ssteps < 0)
 			ssteps = 50;
@@ -1201,17 +1241,17 @@ int main(int argc, char *argv[]) {
 
 	/* Do some sanity checking */
 	if (di == 1) {
-		if (ssteps == 0 && fsteps == 0 && msteps == 0)
+		if (ssteps == 0 && fsteps == 0 && msteps == 0 && bsteps == 0)
 			error ("Must have some Gray steps");
 		if (gsteps > 0) {
 			warning ("Composite grey steps ignored for monochrome output");
 			gsteps = 0;
 		}
 	} else if (di == 3) {
-		if (ssteps == 0 && fsteps == 0 && msteps == 0 && gsteps == 0)
+		if (ssteps == 0 && fsteps == 0 && msteps == 0 && bsteps == 0 && gsteps == 0)
 			error ("Must have some single or multi dimensional RGB or CMY steps");
 	} else {
-		if (ssteps == 0 && fsteps == 0 && msteps == 0 && gsteps == 0)
+		if (ssteps == 0 && fsteps == 0 && msteps == 0 && bsteps == 0 && gsteps == 0)
 			error ("Must have some single or multi dimensional steps");
 	}
 
@@ -1239,6 +1279,8 @@ int main(int argc, char *argv[]) {
 			printf("Full spread patches = %d\n",fsteps);
 		if (msteps > 0)
 			printf("Multi-dimention cube steps = %d\n",msteps);
+		if (bsteps > 0)
+			printf("Multi-dimention body centered cube steps = %d\n",bsteps);
 		if (ilimit >= 0.0)
 			printf("Ink limit = %.1f%% (underlying %.1f%%)\n",ilimit * 100.0, uilimit * 100.0);
 		if (filter) {
@@ -1401,9 +1443,77 @@ int main(int argc, char *argv[]) {
 				}
 				for (e = 0; e < di; e++)
 					fxlist[fxno].p[e] = val[e];
+				fxlist[fxno].eloc = pp->t[0].nsets;
 				fxno++;
 			}
 		}
+	}
+
+	/* Black color patches */
+	if (Bsteps > 0)	{
+		int j, k, e;
+
+		for (j = k = 0; j < Bsteps; j++) {
+			double val[MXTD], XYZ[3];
+			cgats_set_elem ary[1 + MXTD + 3];
+	
+			if (nmask & ICX_ADDITIVE) {
+				for (e = 0; e < di; e++) {
+					val[e] = 0.0;			/* Black is no colorant */
+				}
+			} else {
+				for (e = 0; e < di; e++) {
+					val[e] = 1.0;			/* Black is full colorant */
+				}
+			}
+	
+			/* Apply general filter */
+			if (filter && dofilt(pdata, filt, val))
+				continue;
+
+			/* Do a simple ink limit */
+			if (uilimit < (double)di) {
+				double tot = 0.0;
+				for (e = 0; e < di; e++)
+					tot += val[e];
+				if (tot > uilimit) {
+					for (e = 0; e < di; e++)
+						val[e] *= uilimit/tot;
+				}
+			}
+
+			sprintf(buf,"%d",id++);
+			ary[0].c = buf;
+			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
+			if (xmask == nmask) {
+				for (e = 0; e < di; e++)
+					ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+			} else {
+				for (e = 0; e < di; e++)
+					ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+			}
+			ary[1 + di + 0].d = 100.0 * XYZ[0];
+			ary[1 + di + 1].d = 100.0 * XYZ[1];
+			ary[1 + di + 2].d = 100.0 * XYZ[2];
+	
+			pp->add_setarr(pp, 0, ary);
+	
+			if (fxlist != NULL) {		/* Note in fixed list */
+				if (fxno >= fxlist_a) {
+					fxlist_a *= 2;
+					if ((fxlist = (fxpos *)realloc(fxlist, sizeof(fxpos) * fxlist_a)) == NULL)
+						error ("Failed to malloc fxlist");
+				}
+				for (e = 0; e < di; e++)
+					fxlist[fxno].p[e] = val[e];
+				fxlist[fxno].eloc = pp->t[0].nsets;
+				fxno++;
+			}
+			k++;
+		}
+		sprintf(buf,"%d",k);
+		pp->add_kword(pp, 0, "BLACK_COLOR_PATCHES",buf, NULL);
+	
 	}
 
 	/* Primary wedge steps */
@@ -1473,6 +1583,7 @@ int main(int argc, char *argv[]) {
 						}
 						for (e = 0; e < di; e++)
 							fxlist[fxno].p[e] = val[e];
+						fxlist[fxno].eloc = -1;
 						fxno++;
 					}
 				}
@@ -1569,6 +1680,7 @@ int main(int argc, char *argv[]) {
 					}
 					for (e = 0; e < di; e++)
 						fxlist[fxno].p[e] = val[e];
+					fxlist[fxno].eloc = -1;
 					fxno++;
 				}
 			}
@@ -1651,11 +1763,11 @@ int main(int argc, char *argv[]) {
 					}
 					for (e = 0; e < di; e++)
 						fxlist[fxno].p[e] = val[e];
+					fxlist[fxno].eloc = -1;
 					fxno++;
 				}
 			}
 
-	next_cpoint:;
 			/* Increment grid index and position */
 			for (j = 0; j < di; j++) {
 				gc[j]++;
@@ -1741,6 +1853,7 @@ int main(int argc, char *argv[]) {
 									}
 									for (e = 0; e < di; e++)
 										fxlist[fxno].p[e] = val[e];
+									fxlist[fxno].eloc = -1;
 									fxno++;
 								}
 							}
@@ -1760,6 +1873,104 @@ int main(int argc, char *argv[]) {
 			}
 		}
 #endif /* ADDRECCLIPPOINTS */
+	}
+
+	/* Regular body centered cubic gridded Multi dimension steps */
+	if (bsteps > 0) {
+		int gc[MXTD];			/* Grid coordinate */
+		int pass = 0;			/* 0 = outer grid, 1 = inner grid */
+
+		sprintf(buf,"%d",bsteps);
+		pp->add_kword(pp, 0, "MULTI_DIM_BCC_STEPS",buf, NULL);
+
+		for (pass = 0; pass < 2; pass++) {
+
+			for (j = 0; j < di; j++)
+				gc[j] = 0;			/* init coords */
+				
+			for (;;) {	/* For all grid points */
+				double sum, val[MXTD], XYZ[3];
+				int addp, e;
+
+				addp = 1;			/* Default add the point */
+
+				for (e = 0; e < di; e++)
+					val[e] = (double)(pass * 0.5 + gc[e])/(bsteps-1);
+
+				/* Apply general filter */
+				if (filter && dofilt(pdata, filt, val))
+					addp = 0;
+
+				pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
+
+				/* Compute sum that includes affect of power */
+				for (sum = 0.0, e = 0; e < di; e++)
+					sum += icx_powlike(val[e], xpow);
+
+				if (sum > uilimit)
+					addp = 0;		/* Don't add patches over ink limit */
+
+				/* See if it is already in the fixed list */
+				if (addp && fxlist != NULL) { 
+					int k;
+					for (k = 0; k < fxno; k++) {
+						for (e = 0; e < di; e++) {
+							double tt;
+							tt = fabs(fxlist[k].p[e] - val[e]);
+							if (tt > MATCH_TOLL)
+								break;			/* Not identical */
+						}
+						if (e >= di)
+							break;				/* Was identical */
+					}
+					if (k < fxno)				/* Found an identical patch */
+						addp = 0;				/* Don't add the point */
+				}
+
+				/* Add patch to list if OK */
+				if (addp) {
+					cgats_set_elem ary[1 + MXTD + 3];
+
+					sprintf(buf,"%d",id++);
+					ary[0].c = buf;
+					if (xmask == nmask) {
+						for (e = 0; e < di; e++)
+							ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+					} else {
+						for (e = 0; e < di; e++)
+							ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+					}
+					ary[1 + di + 0].d = 100.0 * XYZ[0];
+					ary[1 + di + 1].d = 100.0 * XYZ[1];
+					ary[1 + di + 2].d = 100.0 * XYZ[2];
+
+					pp->add_setarr(pp, 0, ary);
+
+					if (fxlist != NULL) {		/* Note in fixed list */
+						if (fxno >= fxlist_a) {
+							fxlist_a *= 2;
+							if ((fxlist = (fxpos *)realloc(fxlist, sizeof(fxpos) * fxlist_a)) == NULL)
+								error ("Failed to malloc fxlist");
+						}
+						for (e = 0; e < di; e++)
+							fxlist[fxno].p[e] = val[e];
+						fxlist[fxno].eloc = -1;
+						fxno++;
+					}
+				}
+
+				/* Increment grid index and position */
+				for (j = 0; j < di; j++) {
+					gc[j]++;
+					if (pass == 0 && gc[j] < bsteps
+					 || pass == 1 && gc[j] < (bsteps-1))
+						break;	/* No carry */
+					gc[j] = 0;
+				}
+				if (j >= di)
+					break;		/* Done grid */
+			}
+		}
 	}
 
 	if (fsteps > fxno) { /* Top up with full spread (perceptually even) and other patch types */
@@ -1827,6 +2038,7 @@ int main(int argc, char *argv[]) {
 					}
 					for (e = 0; e < di; e++)
 						fxlist[fxno].p[e] = val[e];
+					fxlist[fxno].eloc = -1;
 					fxno++;
 				}
 
@@ -1953,11 +2165,261 @@ int main(int argc, char *argv[]) {
 					}
 					for (e = 0; e < di; e++)
 						fxlist[fxno].p[e] = val[e];
+					fxlist[fxno].eloc = -1;
 					fxno++;
 				}
 			}
 			(s ? s->del(s) : t ? t->del(t) : dx ? dx->del(dx) : rx ? rx->del(rx) : px->del(px));
 		}
+	}
+
+	/* Even the location of marked patches into sequence */
+	{
+		int ii, p1, p2, t1;
+
+		/* For each patch to be dispersed */
+		for (ii = 0; ii < fxno; ii++) {
+			if (fxlist[ii].eloc >= 0) {
+				p1 = fxlist[ii].eloc;
+
+				for (k = 0; k < 10; k++) {		/* Retry 10 times */
+
+					/* Pick a random patch to exchange it with */
+					p2 = i_rand(0, pp->t[0].nsets-1);
+	
+					/* Check it isn't one of our patches to be dispersed */
+					for (i = 0; i < fxno; i++) {
+						if (fxlist[i].eloc == p2)
+							break;
+					}
+					if (i < fxno)
+						continue;		/* Try another patch to exchange with */
+
+					/* Swap */
+					for (j = 1; j < (1 + di + 3); j++) {
+						double tt = *((double *)pp->t[0].fdata[p1][j]);
+						*((double *)pp->t[0].fdata[p1][j]) = *((double *)pp->t[0].fdata[p2][j]);
+						*((double *)pp->t[0].fdata[p2][j]) = tt;
+					}
+					fxlist[ii].eloc = p2;
+
+					break;
+				}
+			}
+		}
+	}
+
+	/* If this seems to be for a CRT, optimise the patch order to minimise the */
+	/* response time delays */
+	if (nmask == ICX_RGB && pp->t[0].nsets > 1) {
+		int npat = pp->t[0].nsets;
+		char *nm;						/* Don't move array */
+		double udelay, *delays, adelay;
+		double temp, trate;	/* Annealing temperature & rate */
+		double tstart, tend;/* Annealing chedule range */
+
+		if ((nm = (char *)malloc(sizeof(char) * npat)) == NULL)
+			error ("Failed to malloc nm array");
+		if ((delays = (double *)malloc(sizeof(double) * npat)) == NULL)
+			error ("Failed to malloc delay array");
+
+		/* Set nm[] to mark patches that shouldn't be moved */
+		for (i = 0; i < npat; i++)
+			nm[i] = 0;
+		for (i = 0; i < fxno; i++) {
+			if (fxlist[i].eloc >= 0)
+				nm[fxlist[i].eloc] = 1;
+		}
+
+#ifdef NEVER
+		/* Randomly shuffle patches */
+		{
+			int p1, p2;
+
+			for (p1 = 0; p1 < npat; p1++) {
+	
+				if (nm[p1])
+					continue;
+
+				p2 = i_rand(0, npat-1);
+				if (nm[p2])
+					continue;
+				for (j = 1; j < (1 + di + 3); j++) {
+					double tt = *((double *)pp->t[0].fdata[p1][j]);
+					*((double *)pp->t[0].fdata[p1][j]) = *((double *)pp->t[0].fdata[p2][j]);
+					*((double *)pp->t[0].fdata[p2][j]) = tt;
+				}
+			}
+		}
+#endif
+#ifdef NEVER
+		/* Simple sort by brightness */
+		{
+			int p1, p2;
+			double rgb1, rgb2;
+
+			for (p1 = 0; p1 < (npat-1); p1++) {
+	
+				if (nm[p1])
+					continue;
+
+				rgb1 = pow(*((double *)pp->t[0].fdata[p1][1 + 0]), 2.2)
+				     + pow(*((double *)pp->t[0].fdata[p1][1 + 1]), 2.2)
+				     + pow(*((double *)pp->t[0].fdata[p1][1 + 2]), 2.2);
+	
+				for (p2 = p1 + 1; p2 < npat; p2++) {
+
+					if (nm[p2])
+						continue;
+
+					rgb2 = pow(*((double *)pp->t[0].fdata[p2][1 + 0]), 2.2)
+					     + pow(*((double *)pp->t[0].fdata[p2][1 + 1]), 2.2)
+					     + pow(*((double *)pp->t[0].fdata[p2][1 + 2]), 2.2);
+		
+					if (rgb2 < rgb1) {
+						for (j = 1; j < (1 + di + 3); j++) {
+							double tt = *((double *)pp->t[0].fdata[p1][j]);
+							*((double *)pp->t[0].fdata[p1][j]) = *((double *)pp->t[0].fdata[p2][j]);
+							*((double *)pp->t[0].fdata[p2][j]) = tt;
+						}
+						rgb1 = rgb2;
+					}
+				}
+			}
+		}
+#endif
+		/* Compute the current overall update delay */
+		udelay = 0.0;
+		for (i = 1; i < npat; i++) {
+			double xdelay;
+
+			xdelay = disprespt(pp, i-1, i);
+
+			delays[i] = xdelay;
+//printf("~1 delay[%d] = %f\n",i,xdelay);
+			udelay += xdelay;
+		}
+
+		if (verb)
+			printf("Extra display response delay = %f sec., optimizing....\n",udelay);
+
+		{
+			int nchunks, chsize;
+			int chstart, chend;
+
+			if (verb)
+				printf("%c%2d%%",cr_char,0); fflush(stdout);
+
+			/* We'll do this in chunks of 500 to make it linear time overall, */
+			/* at the cost of the best possible optimisation. */
+			nchunks = (int)ceil(npat/500.0); 
+			chsize = (int)ceil(npat/nchunks);
+			for (chstart = 0; chstart < npat; chstart += chsize) {
+				int p1, p2, bp2;
+				double p1d, p2d, p1d1, p2d1;
+				double p1nd, p2nd, p1nd1, p2nd1;
+				double tdelay, de;
+				int noswapped;
+
+				chend = chstart + chsize+2;
+				if (chend > npat)
+					chend = npat;
+				noswapped = chend - chstart;
+//printf("~1 chstart %d, chend %d, size %d\n",chstart,chend, chend - chstart);
+
+				/* While we are still improving, and the improvement was significant */
+				for (;noswapped > 5;) {
+					noswapped = 0;
+
+					for (p1 = chstart + 1; p1 < chend; p1++) {
+						if (nm[p1])
+							continue;
+
+						p1d = delays[p1];
+
+						/* Locate the patch ahead of us that is best to swap with */
+						bp2 = -1;
+						for (p2 = p1 + 2; p2 < chend; p2++) {
+
+							if (nm[p2])
+								continue;
+
+							/* Compute effect of a swap on the total delay */
+							p2d = delays[p2];
+							p1nd = disprespt(pp, p2-1, p1);
+							p2nd = disprespt(pp, p1-1, p2);
+							p1d1 = p1nd1 = 0.0;
+							if ((p1+1) < chend) {
+								p1d1 = delays[p1+1];
+								p1nd1 = disprespt(pp, p2, p1+1);
+							}
+							p2d1 = p2nd1 = 0.0;
+							if ((p2+1) < chend) {
+								p2d1 = delays[p2+1];
+								p2nd1 = disprespt(pp, p1, p2+1);
+							}
+			
+							tdelay = udelay - p1d - p2d - p1d1 - p2d1 + p1nd + p2nd + p1nd1 + p2nd1;
+
+							if (tdelay < udelay) {
+								bp2 = p2;
+							}
+						}
+						if (bp2 < 0) {
+							continue;
+						} 
+
+						noswapped++;
+
+						p2 = bp2;
+
+						p2d = delays[p2];
+						p1nd = disprespt(pp, p2-1, p1);
+						p2nd = disprespt(pp, p1-1, p2);
+						p1d1 = p1nd1 = 0.0;
+						if ((p1+1) < chend) {
+							p1d1 = delays[p1+1];
+							p1nd1 = disprespt(pp, p2, p1+1);
+						}
+						p2d1 = p2nd1 = 0.0;
+						if ((p2+1) < chend) {
+							p2d1 = delays[p2+1];
+							p2nd1 = disprespt(pp, p1, p2+1);
+						}
+
+						tdelay = udelay - p1d - p2d - p1d1 - p2d1 + p1nd + p2nd + p1nd1 + p2nd1;
+
+						/* Swap the values */
+						udelay = tdelay;
+						delays[p2] = p1nd;
+						delays[p1] = p2nd;
+						if (p1 < (chend-1))
+							delays[p1+1] = p1nd1;
+						if (p2 < (chend-1))
+							delays[p2+1] = p2nd1;
+
+						for (j = 1; j < (1 + di + 3); j++) {
+							double tt = *((double *)pp->t[0].fdata[p1][j]);
+							*((double *)pp->t[0].fdata[p1][j]) = *((double *)pp->t[0].fdata[p2][j]);
+							*((double *)pp->t[0].fdata[p2][j]) = tt;
+						}
+//printf("~1 swaping %d and %d, udelay %f\n",p1,p2,udelay);
+					}
+//printf("~1 udelay %f\n",udelay);
+					if (verb) {
+						printf("%c%2d%%",cr_char,(int)(100.0 * (chend-1 - noswapped)/(npat-1.0)));
+						fflush(stdout);
+					}
+				}
+			}
+			if (verb)
+				printf("%c%2d%%",cr_char,100); fflush(stdout);
+		}
+		if (verb)
+			printf("\nOptimised display response delay = %f sec.\n",udelay);
+
+		free(delays);
+		free(nm);
 	}
 
 	/* Use ofps to measure the stats of the points */
@@ -2215,6 +2677,47 @@ int main(int argc, char *argv[]) {
 		free(fxlist);
 
 	return 0;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - -  */
+
+/* Compte the display response time */
+static double disprespt(cgats *pp, int p1, int p2) {
+	double kr, kf;
+	double orgb[3], rgb[3];
+	double xdelay = 0.0;
+	int j;
+
+	kr = DISPLAY_RISE_TIME/log(1 - 0.9);	/* Exponent constant */
+	kf = DISPLAY_FALL_TIME/log(1 - 0.9);	/* Exponent constant */
+
+	orgb[0] = *((double *)pp->t[0].fdata[p1][1 + 0]) / 100.0;
+	orgb[1] = *((double *)pp->t[0].fdata[p1][1 + 1]) / 100.0;
+	orgb[2] = *((double *)pp->t[0].fdata[p1][1 + 2]) / 100.0;
+
+	rgb[0] = *((double *)pp->t[0].fdata[p2][1 + 0]) / 100.0;
+	rgb[1] = *((double *)pp->t[0].fdata[p2][1 + 1]) / 100.0;
+	rgb[2] = *((double *)pp->t[0].fdata[p2][1 + 2]) / 100.0;
+
+	for (j = 0; j < 3; j++) {
+		double el, dl, n, t;
+
+		el = pow(rgb[j], 2.2);
+		dl = el - pow(orgb[j], 2.2);	/* Change in level */
+		if (fabs(dl) > 0.01) {		/* More than 1% change in level */
+			n = DISPLAY_SETTLE_AIM * el;
+			if (n < DISPLAY_ABS_AIM)
+				n = DISPLAY_ABS_AIM;
+			if (dl > 0.0)
+				t = kr * log(n/dl);
+			else
+				t = kf * log(n/-dl);
+
+			if (t > xdelay)
+				xdelay = t;
+		}
+	}
+	return xdelay;
 }
 
 

@@ -8,7 +8,11 @@ huey.c
 i1d3.c
 spyd2.c
 ss.c
+ss_imp.c
 i1pro.c
+i1pro_imp.c
 munki.c
+munki_imp.c
 hcfr.c
 colorhug.c
+specbos.c

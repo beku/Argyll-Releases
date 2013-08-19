@@ -39,11 +39,10 @@
 
 #undef TEST_PDE				/* Ckeck partial derivative calcs */
 
-/* Normalization factors for an average data point error squared, scale 100 */
-#define HW01		0.002	/* 0 & 1 harmonic weights */
-#define HBREAK	    4		/* Harmonic that has HWBR */
-#define HWBR        0.8		/* Base weight of harmonics HBREAK up */
-#define HWINC       0.5		/* Increase in weight for each harmonic above HWBR */
+#define HW01		0.01	/* 0 & 1 harmonic weights */
+#define HBREAK	    3		/* Harmonic that has HWBR */
+#define HWBR        0.5		/* Base weight of harmonics HBREAK up */
+#define HWINC       0.7		/* Increase in weight for each harmonic above HWBR */
 
 static void mcv_del(mcv *p);
 static void mcv_fit(mcv *p, int verb, int order, mcvco *d, int ndp, double smooth);
@@ -550,7 +549,7 @@ double smooth) {
 			w = HW01;
 		} else if (cx <= HBREAK) {
 			double bl = (cx - 1.0)/(HBREAK - 1.0);
-			w = (1.0 - bl) * HW01 + bl * HWBR;
+			w = (1.0 - bl) * HW01 + bl * HWBR * smooth;
 		} else {
 			w = HWBR + (cx-HBREAK) * HWINC * smooth;
 		}
@@ -653,7 +652,7 @@ double smooth) {
 			w = HW01;
 		} else if (cx <= HBREAK) {	/* First or second curves */
 			double bl = (cx - 1.0)/(HBREAK - 1.0);
-			w = (1.0 - bl) * HW01 + bl * HWBR;
+			w = (1.0 - bl) * HW01 + bl * HWBR * smooth;
 		} else {
 			w = HWBR + (cx-HBREAK) * HWINC * smooth;
 		}

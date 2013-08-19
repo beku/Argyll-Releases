@@ -39,6 +39,21 @@
 /* Note that all whites are assumed to be normalised (ie. Y = 1.0) */
 
 /*
+	TTBD: Should convert to using Timo Kunkel and Erik Reinhard's simplified
+	and improved version of CIECAM02 (ie. "CIECAM02-KR").
+
+	The rgbp compression has it's problems in terms of perceptual
+	uniformity. A color with one component near zero might shift
+	all the components to -ve values on inverse conversion - ie.
+	a 1 DE shift in Jab becomes a masive DE in XYZ/Lab/perceptual,
+	with (say) a darl red becomong black because the blue
+	value is small. One way around this is to re-introduce
+	a flag to turn off perfect symetry by disabling
+	expansion on the reverse conversion.
+
+ */
+
+/*
 	Various additions and changes have been made to allow the CAM
 	conversions to and from an unbounded range of XYZ and Jab values,
 	in a (somewhat) geometrically consistent maner. This is because
@@ -106,6 +121,7 @@
 #include "numlib.h"
 
 #define ENABLE_COMPR		/* [Def] Enable XYZ compression  */
+#undef ENABLE_DECOMPR		/* [Undef] Enable XYZ de-compression  */
 #define ENABLE_BLUE_ANGLE_FIX	/* [Def] Limit maximum blue angle */
 #define ENABLE_DDL			/* [Def] Enable k1,k2,k3 overall ss limit values (seems to be the best scheme) */
 #undef ENABLE_SS			/* [Undef] Disable overall ss limit values (not the scheme used) */
@@ -123,10 +139,10 @@
 #undef DISABLE_HHKR			/* Debug - disable Helmholtz-Kohlraush */
 
 #ifdef ENABLE_COMPR
-# define BC_WHMINY 0.3		/* [0.3] Compression direction minimum Y value */
-# define BC_RANGE_R 0.01	/* [0.01] Set compression range as prop. of distance to neutral - red */
-# define BC_RANGE_G 0.05	/* [0.05] Set compression range as prop. of distance to neutral - green*/
-# define BC_RANGE_B 0.10	/* [0.10] Set compression range as prop. of distance to neutral - blue */
+# define BC_WHMINY 0.2		/* [0.2] Compression direction minimum Y value */
+# define BC_RANGE_R 0.01	/* [0.02] Set comp. range as prop. of distance to neutral - red */
+# define BC_RANGE_G 0.01	/* [0.02] Set comp. range as prop. of distance to neutral - green*/
+# define BC_RANGE_B 0.01	/* [0.02] Set comp. range as prop. of distance to neutral - blue */
 # define BC_MAXRANGE 0.13	/* [0.13] Maximum compression range */
 # define BC_LIMIT 0.7		/* [0.7] Correction limit (abs. rgbp distance shift) */
 #endif /* ENABLE_COMPR */
@@ -174,7 +190,7 @@ double minj = 1e38, maxj = -1e38;
 
 static void cam_free(cam02 *s);
 static int set_view(struct _cam02 *s, ViewingCondition Ev, double Wxyz[3],
-	                double La, double Yb, double Lv, double Yf, double Fxyz[3],
+	                double La, double Yb, double Lv, double Yf, double Yg, double Gxyz[3],
 					int hk);
 static int XYZ_to_cam(struct _cam02 *s, double *Jab, double *xyz);
 static int cam_to_XYZ(struct _cam02 *s, double *xyz, double *Jab);
@@ -263,7 +279,9 @@ double Yb,		/* Relative Luminance of Background to reference white (range 0.0 ..
 double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 				/* Ignored if Ev is set to other than vc_none */
 double Yf,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
+double Yg,		/* Flare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+double Gxyz[3],	/* The Glare white coordinates (typically the Ambient color) */
+				/* If <= 0 will Wxyz will be used. */
 int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 ) {
 	double tt, t1, t2;
@@ -271,7 +289,8 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	int i;
 
 	if (Ev == vc_none) {
-		/* Compute the internal parameters by interpolation */
+		/* Compute the internal parameters from the */
+		/* ratio of La to Lv by interpolation */
 		int i;
 		double r, bf;
 		/* Dark, dim, average, above average */
@@ -302,26 +321,32 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 		s->F  = t_F[i] * (1.0 - bf)  + t_F[i+1] * bf;
 	} else {
 		/* Compute the internal parameters by category */
+		/* Fake up Lv according to category */
 		switch(Ev) {
 			case vc_dark:
 				s->C = 0.525;
 				s->Nc = 0.8;
 				s->F = 0.8;
+				Lv = La/0.033; 
 				break;
 			case vc_dim:
 				s->C = 0.59;
 				s->Nc = 0.95;
 				s->F = 0.9;
+				Lv = La/0.1; 
+				break;
+			case vc_average:
+			default:
+				s->C = 0.69;
+				s->Nc = 1.0;
+				s->F = 1.0;
+				Lv = La/0.2; 
 				break;
 			case vc_cut_sheet:
 				s->C = 0.41;
 				s->Nc = 0.8;
 				s->F = 0.8;
-				break;
-			default:	/* average */
-				s->C = 0.69;
-				s->Nc = 1.0;
-				s->F = 1.0;
+				Lv = La/0.02; 	// ???
 				break;
 		}
 	}
@@ -331,12 +356,21 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	s->Wxyz[0] = Wxyz[0];
 	s->Wxyz[1] = Wxyz[1];
 	s->Wxyz[2] = Wxyz[2];
-	s->Yb = Yb > 0.005 ? Yb : 0.005;	/* Set minimum to avoid divide by 0.0 */
 	s->La = La;
+	s->Yb = Yb > 0.005 ? Yb : 0.005;	/* Set minimum to avoid divide by 0.0 */
+	s->Lv = Lv;
 	s->Yf = Yf;
-	s->Fxyz[0] = Fxyz[0];
-	s->Fxyz[1] = Fxyz[1];
-	s->Fxyz[2] = Fxyz[2];
+	s->Yg = Yg;
+	if (Gxyz[0] > 0.0 && Gxyz[1] > 0.0 && Gxyz[2] > 0.0) {
+		tt = Wxyz[1]/Gxyz[1];		/* Scale to white ref white */
+		s->Gxyz[0] = tt * Gxyz[0];
+		s->Gxyz[1] = tt * Gxyz[1];
+		s->Gxyz[2] = tt * Gxyz[2];
+	} else {
+		s->Gxyz[0] = Wxyz[0];
+		s->Gxyz[1] = Wxyz[1];
+		s->Gxyz[2] = Wxyz[2];
+	}
 	s->hk = hk;
 
 	/* The rgba vectors */
@@ -365,10 +399,15 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	/* Compute values that only change with viewing parameters */
 
 	/* Figure out the Flare contribution to the flareless XYZ input */
-	tt = s->Yf * s->Wxyz[1]/s->Fxyz[1];
-	s->Fsxyz[0] = tt * s->Fxyz[0];
-	s->Fsxyz[1] = tt * s->Fxyz[1];
-	s->Fsxyz[2] = tt * s->Fxyz[2];
+	s->Fsxyz[0] = s->Yf * s->Wxyz[0];
+	s->Fsxyz[1] = s->Yf * s->Wxyz[1];
+	s->Fsxyz[2] = s->Yf * s->Wxyz[2];
+
+	/* Add in the Glare contribution from the ambient */
+	tt = s->Yg * s->La/s->Lv;
+	s->Fsxyz[0] += tt * s->Gxyz[0];
+	s->Fsxyz[1] += tt * s->Gxyz[1];
+	s->Fsxyz[2] += tt * s->Gxyz[2];
 
 	/* Rescale so that the sum of the flare and the input doesn't exceed white */
 	s->Fsc = s->Wxyz[1]/(s->Fsxyz[1] + s->Wxyz[1]);
@@ -522,7 +561,8 @@ int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	printf("Relative liminance of background Yb = %f\n", s->Yb);
 	printf("Adapting liminance La = %f\n", s->La);
 	printf("Flare Yf = %f\n", s->Yf);
-	printf("Flare color Fxyz = %f %f %f\n", s->Fxyz[0], s->Fxyz[1], s->Fxyz[2]);
+	printf("Glare Yg = %f\n", s->Yg);
+	printf("Glare color Gxyz = %f %f %f\n", s->Gxyz[0], s->Gxyz[1], s->Gxyz[2]);
 
 	printf("Internal parameters:\n");
 	printf("Surround Impact C = %f\n", s->C);
@@ -569,7 +609,7 @@ double XYZ[3]
 	XYZi[2] = XYZ[2];
 #endif
 
-	TRACE(("\nForward conversion:\n"))
+	TRACE(("\nCIECAM02 Forward conversion:\n"))
 	TRACE(("XYZ = %f %f %f\n",XYZ[0], XYZ[1], XYZ[2]))
 
 #ifdef DISABLE_MATRIX
@@ -622,7 +662,7 @@ double XYZ[3]
 			/*  but compressing towards white seems to be the best.) */
 			icmSub3(cvec, wrgb, rgbp);					/* Direction of white target */
 
-			TRACE(("rgbp %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]))
+			TRACE(("ch %d, rgbp %f %f %f\n", i, rgbp[0], rgbp[1], rgbp[2]))
 			TRACE(("cvec %f %f %f\n", cvec[0], cvec[1], cvec[2]))
 
 			if (cvec[i] < 1e-9) {		/* compression direction can't correct this coord */
@@ -632,7 +672,7 @@ double XYZ[3]
 
 			/* Scale compression vector to make it move a unit in normal direction */
 			icmScale3(cvec, cvec, 1.0/cvec[i]);		/* Normalized vector to white */
-			TRACE(("cvec %f %f %f\n", cvec[0], cvec[1], cvec[2]))
+			TRACE(("ncvec %f %f %f\n", cvec[0], cvec[1], cvec[2]))
 
 			/* Compute intersection of correction direction with this limit plane */
 			/* (This corresponds with finding displacement of rgbp by cvec */
@@ -971,7 +1011,7 @@ double Jab[3]
 
 #endif
 
-	TRACE(("\nReverse conversion:\n"))
+	TRACE(("\nCIECAM02 Reverse conversion:\n"))
 	TRACE(("Jab %f %f %f\n",Jab[0], Jab[1], Jab[2]))
 
 	JJ = Jab[0] * 0.01;	/* J/100 */
@@ -1153,7 +1193,7 @@ double Jab[3]
 #endif
 
 
-#ifdef ENABLE_COMPR
+#ifdef ENABLE_DECOMPR
 	/* Undo soft limiting */
 	{
 		double tt;			/* Temporary */
@@ -1181,7 +1221,7 @@ double Jab[3]
 			/*  but compressing towards white seems to be the best.) */
 			icmSub3(cvec, wrgb, rgbp);					/* Direction of white target */
 
-			TRACE(("rgbp %f %f %f\n", rgbp[0], rgbp[1], rgbp[2]))
+			TRACE(("ch %d, rgbp %f %f %f\n", i, rgbp[0], rgbp[1], rgbp[2]))
 			TRACE(("cvec %f %f %f\n", cvec[0], cvec[1], cvec[2]))
 
 			if (cvec[i] < 1e-9) {		/* compression direction can't correct this coord */

@@ -164,7 +164,7 @@ main(int argc, char *argv[]) {
 	/* - - - - - - - - - - - - - - - - - - - */
 
 	/* Create the gamut mapping */
-	gmi.usecas = 0;
+	gmi.usecas = 1;			/* Abs. L*a*b* */
 	gmi.usemap = 1;
 	gmi.greymf = 1.0;		/* Gray axis hue matching factor, 0.0 - 1.0 */
 	gmi.glumwcpf = 1.0;		/* Grey axis luminance white compression factor, 0.0 - 1.0 */
@@ -172,6 +172,7 @@ main(int argc, char *argv[]) {
 	gmi.glumbcpf = 1.0;		/* Grey axis luminance black compression factor, 0.0 - 1.0 */
 	gmi.glumbexf = 1.0;		/* Grey axis luminance black expansion factor, 0.0 - 1.0 */
 	gmi.glumknf = 0.7;		/* Gray axis luminance knee factor, 0.0 - 1.0 */
+	gmi.bph = gmm_bendBP;	/* Extend and bend */
 	gmi.gamcpf = 1.0;		/* Gamut compression factor, 0.0 - 1.0 */
 	if (sat)
 		gmi.gamexf = 1.0;		/* Gamut expansion factor, 0.0 - 1.0 */

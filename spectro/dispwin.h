@@ -15,7 +15,13 @@
  * see the License.txt file for licencing details.
  */
 
-#define DISPLAY_UPDATE_DELAY 200	/* default display update delay allowance */
+#define DISPLAY_UPDATE_DELAY 200	/* default minimum display update delay allowance */
+
+/* Display rise and fall time model. This is CRT like */
+#define DISPLAY_RISE_TIME 0.03		/* Assumed rise time to 90% of target level */ 
+#define DISPLAY_FALL_TIME 0.12		/* Assumed fall time to 90% of target level */
+#define DISPLAY_SETTLE_AIM 0.01		/* Aim for 1% of true level */
+#define DISPLAY_ABS_AIM 0.0001		/* Aim for .01% of true absolute level */
 
 int do_plot(double *x, double *y1, double *y2, double *y3, int n);
 
@@ -145,7 +151,7 @@ extern int callback_ddebug;		/* Diagnostic global for get_displays() and get_a_d
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 /* Structure to handle RAMDAC values */
 struct _ramdac {
-	int pdepth;		/* Plane depth, usually 8 */
+	int pdepth;		/* Frame buffer plane depth, usually 8 */
 	int nent;		/* Number of entries, =  2^pdepth */
 	double *v[3];	/* 2^pdepth entries for RGB, values 0.0 - 1.0 */
 
@@ -163,7 +169,7 @@ struct _ramdac {
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 /* Dispwin object */
 
-/* !!!! Make changes in dispwin.c and webwin.c !!!! */
+/* !!!! Make changes in dispwin.c, webwin.c & madvrwin.c !!!! */
 
 struct _dispwin {
 
@@ -179,15 +185,21 @@ struct _dispwin {
 	int tx,ty;			/* Test area within window offset in pixels */
 	int tw,th;			/* Test area width and height in pixels */
 
-	double rgb[3];		/* Current color (full resolution) */
+	double rgb[3];		/* Current color (full resolution, full range) */
+	double s_rgb[3];	/* Current color (possibly scaled range) */
 	double r_rgb[3];	/* Current color (raster value) */
-	int update_delay;	/* Update delay in msec, default 200 */
-	int min_update_delay;	/* Minimum update delay, default 20, overriden by EV */
+	int out_tvenc;		/* 1 to use RGB Video Level encoding */
+	int update_delay;	/* Update latency delay in msec, default 200 */
+	int min_update_delay;	/* Minimum update latency delay, default 20, overriden by EV */
+	int do_resp_time_del;	/* NZ to compute and use expected display response time */
 	int nowin;			/* Don't create a test window */
-	int native;			/*  0 = use current current or given calibration curve */
-						/*  1 = set native linear output and use ramdac high precision */
-	ramdac *or;			/* Original ramdac contents, NULL if none */
-	ramdac *r;			/* Ramdac in use for native mode */
+	int native;			/*  X0 = use current per channel calibration curve */
+						/*  X1 = set native linear output and use ramdac high precision */
+						/*  0X = use current color management cLut (MadVR) */
+						/*  1X = disable color management cLUT (MadVR) */
+	ramdac *oor;		/* Original orgininal ramdac contents, NULL if not accessible */
+	ramdac *or;			/* Original ramdac contents, NULL if not accessible, restored on exit */
+	ramdac *r;			/* Ramdac in use for native mode or general use */
 	int blackbg;		/* NZ if black full screen background */
 
 	char *callout;		/* if not NULL - set color Shell callout routine */
@@ -210,8 +222,8 @@ struct _dispwin {
 	int inited;
 	int quit;			/* Request to quit */
 
-	int colupd;			/* Color update count */
-	int colupde;		/* Color update count echo */
+	volatile int colupd;		/* Color update count */
+	volatile int colupde;		/* Color update count echo */
 
 #endif /* NT */
 
@@ -265,10 +277,13 @@ struct _dispwin {
 	volatile unsigned int ncix, ccix;	/* Counters to trigger webwin colorchange */
 	volatile int mg_stop;				/* Stop flag */
 
+	volatile int cberror;		/* NZ if error detected in a callback routine */
 	int ddebug;					/* >0 to print debug to stderr */
 
 /* public: */
-	int pdepth;				/* Plane depth of display */
+	int pdepth;		/* Frame buffer plane depth of display */
+	int edepth;		/* Notional ramdac entry size in bits. (Bits actually used may be less) */
+					/* This is used to scale out_tvenc appropriately */
 
 	/* Get RAMDAC values. ->del() when finished. */
 	/* Return NULL if not possible */
@@ -296,7 +311,14 @@ struct _dispwin {
 	/* Return nz on error */
 	int (*set_color)(struct _dispwin *p, double r, double g, double b);
 
+	/* Optional - may be NULL */
+	/* set patch info */
+	/* Return nz on error */
+	int (*set_pinfo)(struct _dispwin *p, int pno, int tno);
+
 	/* Set an update delay, and return the previous value */
+	/* Note that 0 is a special case and forces a zero delay */
+	/* in spite of min_update_delay and do_resp_time_del */
 	int (*set_update_delay)(struct _dispwin *p, int update_delay);
 
 	/* Set a shell set color callout command line */
@@ -313,13 +335,22 @@ dispwin *new_dispwin(
 	double width, double height,	/* Width and height in mm */
 	double hoff, double voff,		/* Offset from c. in fraction of screen, range -1.0 .. 1.0 */
 	int nowin,						/* NZ if no window should be created - RAMDAC access only */
-	int native,						/* 0 = use current current or given calibration curve */
-									/* 1 = use native linear out & high precision */
-	int *noramdac,					/* Return nz if no ramdac access. native is set to 0 */
+	int native,						/* X0 = use current per channel calibration curve */
+									/* X1 = set native linear output and use ramdac high precn. */
+									/* 0X = use current color management cLut (MadVR) */
+									/* 1X = disable color management cLUT (MadVR) */
+	int *noramdac,					/* Return nz if no ramdac access. native is set to X0 */
+	int *nocm,						/* Return nz if no CM cLUT access. native is set to 0X */
+	int out_tvenc,					/* 1 = use RGB Video Level encoding */
 	int blackbg,					/* NZ if whole screen should be filled with black */
 	int override,					/* NZ if override_redirect is to be used on X11 */
 	int ddebug						/* >0 to print debug statements to stderr */
 );
+
+/* Shared implementation */
+ramdac *dispwin_clone_ramdac(ramdac *r);
+void dispwin_setlin_ramdac(ramdac *r);
+void dispwin_del_ramdac(ramdac *r);
 
 
 #define DISPWIN_H

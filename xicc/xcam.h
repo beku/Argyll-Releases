@@ -49,7 +49,8 @@ struct _icxcam {
 		double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 						/* Ignored if Ev is set */
 		double Yf,		/* Flare as a fraction of the reference white (range 0.0 .. 1.0) */
-		double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
+		double Yg,		/* Glare as a fraction of the ambient (range 0.0 .. 1.0) */
+		double Gxyz[3],	/* The Glare white coordinates (typically the Ambient color) */
 		int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	);
 

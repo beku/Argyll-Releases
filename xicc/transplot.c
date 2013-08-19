@@ -35,6 +35,10 @@ void usage(void) {
 	fprintf(stderr,"Author: Graeme W. Gill\n");
 	fprintf(stderr,"usage: transplot [-v] infile\n");
 	fprintf(stderr," -v        verbose\n");
+	fprintf(stderr," -i intent     p = perceptual, r = relative colorimetric,\n");
+	fprintf(stderr,"               s = saturation, a = absolute\n");
+	fprintf(stderr," -o order      n = normal (priority: lut > matrix > monochrome)\n");
+	fprintf(stderr,"               r = reverse (priority: monochrome > matrix > lut)\n");
 	fprintf(stderr," -c -m -y -k  Check Cyan and/or Magenta and/or Yellow and/or Black input\n");
 	fprintf(stderr," -r -g -b  Check Red and/or Green and/or Blue input\n");
 	fprintf(stderr," -L -A -B  Check L and/or a* and/or b* input\n");
@@ -56,6 +60,10 @@ main(
 	icmFile *rd_fp;
 	icc *rd_icco;		/* Keep object separate */
 	int rv = 0;
+
+	/* Lookup parameters */
+	icRenderingIntent intent = icmDefaultIntent;	/* Default */
+	icmLookupOrder    order  = icmLuOrdNorm;		/* Default */
 
 	/* Check variables */
 	icmLuBase *luo;
@@ -94,6 +102,54 @@ main(
 			if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
 			}
+
+			/* Intent */
+			else if (argv[fa][1] == 'i' || argv[fa][1] == 'I') {
+				fa = nfa;
+				if (na == NULL) usage();
+    			switch (na[0]) {
+					case 'p':
+						intent = icPerceptual;
+						break;
+					case 'r':
+						intent = icRelativeColorimetric;
+						break;
+					case 's':
+						intent = icSaturation;
+						break;
+					case 'a':
+						intent = icAbsoluteColorimetric;
+						break;
+					/* Special function icclib intents */
+					case 'P':
+						intent = icmAbsolutePerceptual;
+						break;
+					case 'S':
+						intent = icmAbsoluteSaturation;
+						break;
+					default:
+						usage();
+				}
+			}
+
+			/* Search order */
+			else if (argv[fa][1] == 'o' || argv[fa][1] == 'O') {
+				fa = nfa;
+				if (na == NULL) usage();
+    			switch (na[0]) {
+					case 'n':
+					case 'N':
+						order = icmLuOrdNorm;
+						break;
+					case 'r':
+					case 'R':
+						order = icmLuOrdRev;
+						break;
+					default:
+						usage();
+				}
+			}
+
 			/* Cyan, Red */
 			else if (argv[fa][1] == 'c' || argv[fa][1] == 'C'
 			      || argv[fa][1] == 'r' || argv[fa][1] == 'R') {
@@ -153,12 +209,12 @@ main(
 
 	if (labin) {
 		/* Get a Device to PCS conversion object */
-		if ((luo = rd_icco->get_luobj(rd_icco, icmBwd, icmDefaultIntent, icSigLabData, icmLuOrdNorm)) == NULL)
+		if ((luo = rd_icco->get_luobj(rd_icco, icmBwd, intent, icSigLabData, order)) == NULL)
 			error ("%d, %s",rd_icco->errc, rd_icco->err);
 	} else {
 		/* Get a PCS to Device conversion object */
-		if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, icmDefaultIntent, icSigLabData, icmLuOrdNorm)) == NULL) {
-			if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, icmDefaultIntent, icmSigDefaultData, icmLuOrdNorm)) == NULL) {
+		if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, intent, icSigLabData, order)) == NULL) {
+			if ((luo = rd_icco->get_luobj(rd_icco, icmFwd, intent, icmSigDefaultData, order)) == NULL) {
 				error ("%d, %s",rd_icco->errc, rd_icco->err);
 			}
 		}

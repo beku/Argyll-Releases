@@ -136,6 +136,7 @@
 static void triangulate(gamut *s);
 static void del_gamut(gamut *s);
 static gvert *expand_gamut(gamut *s, double in[3]);
+static void set_cs_bp_kp_ovrd(gamut *s, double *bk, double *kp);
 static double getsres(gamut *s);
 static int getisjab(gamut *s);
 static int getisrast(gamut *s);
@@ -175,6 +176,7 @@ static int intersect(gamut *s, gamut *s1, gamut *s2);
 static int compdstgamut(gamut *s, gamut *img, gamut *src, gamut *dst, int docomp, int doexp,
               gamut *nedst, void (*cvect)(void *cntx, double *vec, double *pos), void *cntx);
 static int vect_intersect(gamut *s, double *rvp, double *ip, double *p1, double *p2, gtri *t);
+static void compgawb(gamut *s);
 
 /* in isecvol.c: */
 extern double isect_volume(gamut *s1, gamut *s2);
@@ -632,6 +634,7 @@ int isRast				/* Flag indicating Raster rather than colorspace */
 	/* Setup methods */
 	s->del         = del_gamut;
 	s->expand      = expand_gamut;
+	s->set_cs_bp_kp_ovrd = set_cs_bp_kp_ovrd;
 	s->getsres     = getsres;
 	s->getisjab    = getisjab;
 	s->getisrast   = getisrast;
@@ -2889,6 +2892,23 @@ gamut *s
 //		triangulate_ch(s);
 	}
 #endif /* DO_TWOPASS && !TEST_CONVEX_HULL */
+}
+
+/* ===================================================== */
+/* Special override code (To support BT.1886 modification */
+/* ===================================================== */
+
+/* Override cs black points */
+static void set_cs_bp_kp_ovrd(gamut *s, double *bp, double *kp) {
+	if (bp != NULL) {
+		icmCpy3(s->cs_bp, bp);
+	}
+	if (kp != NULL) {
+		icmCpy3(s->cs_kp, kp);
+	}
+
+	/* recompute the gamut white/black available */
+	compgawb(s);
 }
 
 /* ===================================================== */

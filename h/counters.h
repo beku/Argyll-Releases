@@ -51,7 +51,7 @@
 	}												\
 }
 
-/* After increment, expression is TRUE if counter is done */
+/* After init or increment, expression is TRUE if counter is done */
 #define DC_DONE(nn)									\
 	(nn##_e >= nn##_di)
 	

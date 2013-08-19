@@ -49,6 +49,7 @@ void make_output_icc(
 	int gamdiag,			/* Make gamut mapping diagnostic wrl plots */
 	int verify,				/* nz to print verification */
 	int clipprims,			/* Clip white, black and primaries */
+	double wpscale,			/* >= 0.0 for media white point scale factor */
 	icxInk *ink,			/* Ink limit/black generation setup */
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */

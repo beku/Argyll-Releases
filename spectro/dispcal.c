@@ -58,7 +58,7 @@
 	  display gives about 18% output at 50% device input.]
 
 
-	The verify (-E) may not be being done correctly.
+	The verify (-z) may not be being done correctly.
 	Like update, shouldn't it read the .cal file to set what's
 	being calibrated aganist ? (This would fix missing ambient value too!)
 
@@ -67,6 +67,13 @@
 	in "Figure out the black point target" - Yes they are !!
 	Verify probably shouldn't work this way.
 
+	Add DICOM support:
+
+		* Add 20% grey background full screen option + 10% patch recommendation
+		* Add "include Glare" option for contact instruments to dispsup.
+		* Add absolute DICOM function target.
+		* Add DICOM mode black point hue handling (? what policy ?)
+		* Add DICOM stats report (JND dE + mean + SD) to verify ??
  */
 
 #ifdef __MINGW32__
@@ -190,6 +197,7 @@ typedef struct {
 
 	double nwh[3];		/* Target white normalised XYZ value (Y = 1.0) */
 	double twh[3];		/* Target white absolute XYZ value */
+	double twYxy[3];	/* Target white Yxy (informational) */
 	icmXYZNumber twN;	/* Same as above as XYZNumber */
 
 	double tbk[3];		/* Target black point color */
@@ -946,8 +954,8 @@ static void init_csamp_txyz(csamp *p, calx *x, int fixdev) {
 
 		/* Compute blended neutral target a* b* */
 		bl = pow((1.0 - vv), x->nbrate);		/* Crossover near the black */
-		Lab[1] = bl * tbL[1];
-		Lab[2] = bl * tbL[2];
+		Lab[1] = (1.0 - bl) * 0.0 + bl * tbL[1];
+		Lab[2] = (1.0 - bl) * 0.0 + bl * tbL[2];
 
 		icmAry2Ary(XYZ, p->s[i].tXYZ);				/* Save the existing values */
 		icmLab2XYZ(&x->twN, p->s[i].tXYZ, Lab);		/* New XYZ Value to aim for */
@@ -1232,7 +1240,7 @@ double g_def_gamma = 2.4;
 
          ABCDEFGHIJKLMNOPQRSTUVWXYZ
   upper  .......... ....... . ...  
-  lower  .......   . ...... .... . 
+  lower  .......   . ...... .... ..
 
 */
 
@@ -1276,6 +1284,9 @@ void usage(char *diag, ...) {
 	}
 	free_disppaths(dp);
 	fprintf(stderr," -dweb[:port]         Display via a web server at port (default 8080)\n");
+#ifdef NT
+	fprintf(stderr," -dmadvr              Display via MadVR Video Renderer\n");
+#endif
 //	fprintf(stderr," -d fake              Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	fprintf(stderr," -c listno            Set communication port from the following list (default %d)\n",COMPORT);
 	if ((icmps = new_icompaths(g_log)) != NULL) {
@@ -1323,7 +1334,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -A rate              Rate of blending from neutral to black point. Default %.1f\n",NEUTRAL_BLEND_RATE);
 	fprintf(stderr," -B blkbright         Set the target black brightness in cd/m^2\n");
 	fprintf(stderr," -e [n]               Run n verify passes on final curves\n");
-	fprintf(stderr," -E                   Run only verify pass on installed calibration curves\n");
+	fprintf(stderr," -z                   Run only verify pass on installed calibration curves\n");
 	fprintf(stderr," -P ho,vo,ss[,vs]     Position test window and scale it\n");
 	fprintf(stderr,"                      ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
 	fprintf(stderr,"                      ss: 0.5 = half, 1.0 = normal, 2.0 = double etc.\n");
@@ -1331,6 +1342,7 @@ void usage(char *diag, ...) {
 #if defined(UNIX_X11)
 	fprintf(stderr," -n                   Don't set override redirect on test window\n");
 #endif
+	fprintf(stderr," -E                   Encode the test values for video range 16..235/255\n");
 	fprintf(stderr," -J                   Run instrument calibration first (used rarely)\n");
 	fprintf(stderr," -N                   Disable initial calibration of instrument if possible\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
@@ -1343,7 +1355,9 @@ void usage(char *diag, ...) {
 		fprintf(stderr,"                      1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2, 1964_10c\n");
 	}
 	fprintf(stderr," -I b|w               Drift compensation, Black: -Ib, White: -Iw, Both: -Ibw\n");
+	fprintf(stderr," -Y R:rate            Override measured refresh rate with rate Hz\n");
 	fprintf(stderr," -Y A                 Use non-adaptive integration time mode (if available).\n");
+	fprintf(stderr," -Y p                 Don't wait for the instrument to be placed on the display\n");
 	fprintf(stderr," -C \"command\"         Invoke shell \"command\" each time a color is set\n");
 	fprintf(stderr," -M \"command\"         Invoke shell \"command\" each time a color is measured\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
@@ -1360,6 +1374,7 @@ int main(int argc, char *argv[]) {
 	disppath *disp = NULL;				/* Display being used */
 	double hpatscale = 1.0, vpatscale = 1.0;	/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;			/* Test window offsets, -1.0 to 1.0 */
+	int out_tvenc = 0;					/* 1 to use RGB Video Level encoding */
 	int blackbg = 0;            		/* NZ if whole screen should be filled with black */
 	int verb = 0;
 	int debug = 0;
@@ -1382,7 +1397,9 @@ int main(int argc, char *argv[]) {
 	int dtype = 0;						/* Display type selection charater */
 	int tele  = 0;						/* nz if telephoto mode */
 	int nocal = 0;						/* Disable auto calibration */
+	int noplace = 0;					/* Disable initial user placement check */
 	int highres = 0;					/* Use high res mode if available */
+	double refrate = 0.0;				/* 0.0 = default, > 0.0 = override refresh rate */ 
 	int nadaptive = 0;					/* Use non-adaptive mode if available */
 	int bdrift = 0;						/* Flag, nz for black drift compensation */
 	int wdrift = 0;						/* Flag, nz for white drift compensation */
@@ -1393,7 +1410,7 @@ int main(int argc, char *argv[]) {
 	double tbright = 0.0;				/* Target white brightness ( 0.0 == max)  */
 	double gamma = 0.0;					/* Advertised Gamma target */
 	double egamma = 0.0;				/* Effective Gamma target, NZ if set */
-	double ambient = 0.0;				/* NZ if viewing cond. adjustment to be used (cd/m^2) */
+	double ambient = 0.0;				/* NZ if viewing cond. adjustment to be used (Lux) */
 	double bkcorrect = -1.0;			/* Level of black point correction, < 0 = auto */ 
 	double bkbright = 0.0;				/* Target black brightness ( 0.0 == min)  */
 	int quality = -99;					/* Quality level, -2 = v, -1 = l, 0 = m, 1 = h, 2 = u */
@@ -1406,6 +1423,9 @@ int main(int argc, char *argv[]) {
 	int verify = 0;						/* Do a verify after last refinement, 2 = do only verify. */
 	int nver = 0;						/* Number of verify passes after refinement */
 	int webdisp = 0;					/* NZ for web display, == port number */
+#ifdef NT
+	int madvrdisp = 0;					/* NZ for madvr display */
+#endif
 	char *ccallout = NULL;				/* Change color Shell callout */
 	char *mcallout = NULL;				/* Measure color Shell callout */
 	char outname[MAXNAMEL+1] = { 0 };	/* Output cgats file base name */
@@ -1421,9 +1441,12 @@ int main(int argc, char *argv[]) {
 	int it;								/* verify & refine iteration */
 	int rv;
 	int fitord = 30;					/* More seems to make curves smoother */
-	int native = 1;						/* 0 = use current or given calibration curve */
-										/* 1 = set native linear op and use ramdac high prec'n */
+	int native = 3;						/* X0 = use current per channel calibration curve */
+										/* X1 = set native linear output and use ramdac high prec */
+										/* 0X = use current color management cLut (MadVR) */
+										/* 1X = disable color management cLUT (MadVR) */
 	int noramdac = 0;					/* Will be set to nz if can't set ramdac */
+	int nocm = 0;						/* Will be set to nz if can't set color managament */
 	int errc;							/* Return value from new_disprd() */
 	calx x;								/* Context for calibration solution */
 
@@ -1513,6 +1536,12 @@ int main(int argc, char *argv[]) {
 							usage("Web port number must be in range 1..65535");
 					}
 					fa = nfa;
+#ifdef NT
+				} else if (strncmp(na,"madvr",5) == 0
+				 || strncmp(na,"MADVR",5) == 0) {
+					madvrdisp = 1;
+					fa = nfa;
+#endif
 				} else {
 #if defined(UNIX_X11)
 					int ix, iv;
@@ -1553,6 +1582,9 @@ int main(int argc, char *argv[]) {
 					}
 #endif
 				}
+
+			} else if (argv[fa][1] == 'E') {
+				out_tvenc = 1;
 
 			} else if (argv[fa][1] == 'J') {
 				docalib = 1;
@@ -1673,7 +1705,7 @@ int main(int argc, char *argv[]) {
 					fa = nfa;
 				}
 
-			} else if (argv[fa][1] == 'E') {
+			} else if (argv[fa][1] == 'z') {
 				verify = 2;
 				mfa = 0;
 
@@ -1834,7 +1866,6 @@ int main(int argc, char *argv[]) {
 				ambient = atof(na);
 				if (ambient < 0.0)
 					usage("-a parameter %f out of range",ambient);
-				ambient /= 3.141592654;	/* Convert from Lux to cd/m^2 */
 
 			/* Test patch offset and size */
 			} else if (argv[fa][1] == 'P') {
@@ -1864,11 +1895,20 @@ int main(int argc, char *argv[]) {
 				if (na == NULL)
 					usage("Flag '-Y' expects extra flag");
 			
-				if (na[0] == 'A') {
+				if (na[0] == 'R') {
+					if (na[1] != ':')
+						usage("-Y R:rate syntax incorrect");
+					refrate = atof(na+2);
+					if (refrate < 5.0 || refrate > 150.0)
+						usage("-Y R:rate %f Hz not in valid range",refrate);
+				} else if (na[0] == 'A') {
 					nadaptive = 1;
+				} else if (na[0] == 'p') {
+					noplace = 1;
 				} else {
 					usage("Flag '-Y %c' not recognised",na[0]);
 				}
+				fa = nfa;
 
 			} else 
 				usage("Flag '-%c' not recognised",argv[fa][1]);
@@ -1940,7 +1980,11 @@ int main(int argc, char *argv[]) {
 
 	if (docalib) {
 		if ((rv = disprd_calibration(ipath, fc, dtype, 0, tele, nadaptive, nocal, disp,
-		                             webdisp, blackbg, override,
+		                             webdisp,
+#ifdef NT
+			                         madvrdisp,
+#endif
+			                         out_tvenc, blackbg, override,
 			                         100.0 * hpatscale, 100.0 * vpatscale,
 			                         ho, vo, g_log)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
@@ -1973,12 +2017,16 @@ int main(int argc, char *argv[]) {
 
 	/* Normally calibrate against native response */
 	if (verify == 2 || doreport == 2)
-		native = 0;	/* But measure calibrated response of verify or report calibrated */ 
+		native = 0;	/* But measure current calibrated & CM response for verify or report calibrated */ 
 
 	/* Get ready to do some readings */
-	if ((dr = new_disprd(&errc, ipath, fc, dtype, 0, tele, nadaptive, nocal,
-	                     highres, native, &noramdac, NULL, 0, 0, disp, blackbg, override,
-	                     webdisp, ccallout, mcallout,
+	if ((dr = new_disprd(&errc, ipath, fc, dtype, 0, tele, nadaptive, nocal, noplace,
+	                     highres, refrate, native, &noramdac, &nocm, NULL, 0,
+		                 disp, out_tvenc, blackbg, override, webdisp,
+#ifdef NT
+		                 madvrdisp,
+#endif
+		                 ccallout, mcallout,
 	                     100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
 	                     cmx != NULL ? cmx->matrix : NULL,
 	                     ccs != NULL ? ccs->samples : NULL, ccs != NULL ? ccs->no_samp : 0,
@@ -1986,11 +2034,11 @@ int main(int argc, char *argv[]) {
 	                     "fake" ICC_FILE_EXT, g_log)) == NULL)
 		error("new_disprd() failed with '%s'\n",disprd_err(errc));
 
-	if (native != 0 && noramdac) {
-		warning("No access to VideoLUTs, so calibrating display as-is rather than native");
+	if ((native & 1) && noramdac) {
+		warning("Unable to access to VideoLUTs so can't be sure colors are native");
 		if (doprofile)
 			warning("Profile will reflect the as-is display response and not contain a 'vcgt' tag");
-		native = 0;
+		native &= ~1;
 
 		if (doupdate && doprofile)
 			error("Can't update a profile that doesn't use the 'vcgt' tag for calibration");
@@ -2053,7 +2101,7 @@ int main(int argc, char *argv[]) {
 		if (doreport == 1) {
 #define MAX_RES_SAMPS 24
 			col ttt[MAX_RES_SAMPS];
-			int res_samps = 6;
+			int res_samps = 9;
 			double a0, a1, a2, dd;
 			int n;
 			int issig = 0;
@@ -2073,7 +2121,7 @@ int main(int argc, char *argv[]) {
 					gcc_bug_fix(sigbits);
 #endif
 					/* Notional test value */
-					v = (5 << (sigbits-3))/((1 << sigbits) - 1.0);
+					v = (7 << (sigbits-3))/((1 << sigbits) - 1.0);
 					/* And -1, 0 , +1 bit test values */
 					if ((n % 3) == 2)
 						v += 1.0/((1 << sigbits) - 1.0);
@@ -2102,6 +2150,7 @@ int main(int argc, char *argv[]) {
 				a0 /= (res_samps / 3.0);
 				a1 /= (res_samps / 3.0);
 				a2 /= (res_samps / 3.0);
+				DBG((dbgo,"Bits %d: -1: %f 0: %f +1 %f\n",sigbits, a0, a1, a2));
 				/* Judge significance of any differences */
 				dd = 0.0;
 				for (n = 0; n < res_samps; n++) {
@@ -2120,13 +2169,13 @@ int main(int argc, char *argv[]) {
 					issig = 1;		/* Noticable difference */
 				else
 					issig = 0;		/* No noticable difference */
-				DBG((dbgo,"Bits %d: Between = %f, %f within = %f, sig = %s\n",sigbits, fabs(a1 - a0), fabs(a2 - a1),dd, issig ? "yes" : "no"));
+				DBG((dbgo,"Bits %d: Between = %f, %f within = %f, sig = %s\n",sigbits, fabs(a1 - a0), fabs(a2 - a1), dd, issig ? "yes" : "no"));
 
 				switch(sigbits) {
 					case 8:				/* Do another trial */
 						if (issig) {
 							sigbits = 10;
-							res_samps = 6;
+							res_samps = 9;
 						} else {
 							sigbits = 6;
 						}
@@ -2134,6 +2183,7 @@ int main(int argc, char *argv[]) {
 					case 6:				/* Do another trial or give up */
 						if (issig) {
 							sigbits = 7;
+							res_samps = 6;
 						} else {
 							sigbits = 0;
 							issig = 2;	/* Give up */
@@ -2147,7 +2197,7 @@ int main(int argc, char *argv[]) {
 					case 10:			/* Do another trial */
 						if (issig) {
 							sigbits = 12;
-							res_samps = 9;
+							res_samps = 12;
 						} else {
 							sigbits = 9;
 						}
@@ -2182,6 +2232,7 @@ int main(int argc, char *argv[]) {
 		else
 			printf("Uncalibrated response:\n");
 		printf("Black level = %.2f cd/m^2\n",tcols[0].XYZ[1]);
+		printf("50%%   level = %.2f cd/m^2\n",tcols[1].XYZ[1]);
 		printf("White level = %.2f cd/m^2\n",tcols[2].XYZ[1]);
 		printf("Aprox. gamma = %.2f\n",cgamma);
 		printf("Contrast ratio = %.0f:1\n",tcols[2].XYZ[1]/tcols[0].XYZ[1]);
@@ -2237,6 +2288,13 @@ int main(int argc, char *argv[]) {
 		if (icg->ntables < 2) {
 			dr->del(dr);
 			error("Can't update '%s' - there aren't two tables",outname);
+		}
+
+		out_tvenc = 0;
+		if ((fi = icg->find_kword(icg, 0, "TV_OUTPUT_ENCODING")) >= 0) {
+			if (strcmp(icg->t[0].kdata[fi], "YES") == 0
+			 || strcmp(icg->t[0].kdata[fi], "yes") == 0)
+				out_tvenc = 1;
 		}
 
 //printf("~1 reading previous cal, got 2 tables\n");
@@ -2560,6 +2618,9 @@ int main(int argc, char *argv[]) {
 
 	/* Say something about what we're doing */
 	if (verb) {
+		if (out_tvenc)
+			printf("Using TV encoding range of (16-235)/255\n");
+
 		if (dtype > 0)
 			printf("Display type is '%c'\n",dtype);
 
@@ -3312,7 +3373,7 @@ int main(int argc, char *argv[]) {
 						error("ambient measure failed with '%s'\n",disprd_err(rv));
 					}
 				} else {
-					printf("Measured ambient level = %.1f Lux\n",ambient * 3.141592654);
+					printf("Measured ambient level = %.1f Lux\n",ambient);
 				}
 
 			} else if (c == '7') {
@@ -3783,8 +3844,11 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
+		icmXYZ2Yxy(x.twYxy, x.twh);		/* For information */
+
 		if (verb)
-			printf("Target white value is XYZ %f %f %f\n",x.twh[0],x.twh[1],x.twh[2]);
+			printf("Target white value is XYZ %f %f %f [xy %f %f]\n",x.twh[0],x.twh[1],x.twh[2],
+			                                                          x.twYxy[1], x.twYxy[2]);
 	}
 
 	/* Need this for Lab conversions */
@@ -3800,6 +3864,7 @@ int main(int argc, char *argv[]) {
 //printf("~1 black point Lab = %f %f %f\n", tbkLab[0], tbkLab[1], tbkLab[2]);
 
 		/* Now blend the a* b* with that of the target white point */
+		/* according to how much to try and correct. */
 		tbL[0] = tbkLab[0];
 		tbL[1] = bkcorrect * 0.0 + (1.0 - bkcorrect) * tbkLab[1];
 		tbL[2] = bkcorrect * 0.0 + (1.0 - bkcorrect) * tbkLab[2];
@@ -3896,7 +3961,7 @@ int main(int argc, char *argv[]) {
 					0.2 * 80.0,				/* Adapting luminence, 20% of display 80 cd/m^2 */
 					0.2,					/* Background relative to reference white */
 					80.0,					/* Display is 80 cd/m^2 */
-			        0.01, x.nwh,			/* 1% flare same white point */
+			        0.0, 0.01, x.nwh,		/* 0% flare and 1% glare same white point */
 					0);
 				break;
 
@@ -3907,7 +3972,7 @@ int main(int argc, char *argv[]) {
 					0.2 * 1000.0/3.1415,	/* Adapting luminence, 20% of 1000 lux in cd/m^2 */
 					0.2,					/* Background relative to reference white */
 					1000.0/3.1415,			/* Luminance of white in the Image field (cd/m^2) */
-			        0.01, x.nwh,			/* 1% flare same white point */
+			        0.0, 0.01, x.nwh,		/* 0% flare and 1% glare same white point */
 					0);
 				break;
 
@@ -3917,10 +3982,10 @@ int main(int argc, char *argv[]) {
 		/* The display we're calibratings situation */
 		x.dvc->set_view(x.dvc, vc_none,
 			x.nwh,				/* Display normalised white point */
-			0.2 * ambient,		/* Adapting luminence, 20% of ambient in cd/m^2 */
+			0.2 * ambient/3.1415,	/* Adapting luminence, 20% of ambient in cd/m^2 */
 			0.2,				/* Background relative to reference white */
 			x.twh[1],			/* Target white level (cd/m^2) */
-	        0.01, x.nwh,		/* 1% flare same white point */
+	        0.0, 0.01, x.nwh,	/* 0% flare and 1% glare same white point */
 			0);
 
 		/* Compute the normalisation values */
@@ -4623,6 +4688,8 @@ int main(int argc, char *argv[]) {
 		/* Tell downstream whether they can expect that this calibration */
 		/* will be applied in hardware or not. */
 		ocg->add_kword(ocg, 0, "VIDEO_LUT_CALIBRATION_POSSIBLE",noramdac ? "NO" : "YES", NULL);
+		/* Tell downstream whether the device range was actually (16-235)/255 */
+		ocg->add_kword(ocg, 0, "TV_OUTPUT_ENCODING",out_tvenc ? "YES" : "NO", NULL);
 
 		/* Put the target parameters in the CGATS file too */
 		if (dtype != 0) {
@@ -4833,6 +4900,16 @@ int main(int argc, char *argv[]) {
 					cc = 0.0;
 				else if (cc > 1.0)
 					cc = 1.0;
+				if (out_tvenc) {
+					cc = (cc * (235.0-16.0) + 16.0)/255.0;
+
+					/* For video encoding the extra bits of precision are created by bit shifting */
+					/* rather than scaling, so we need to scale the fp value to account for this. */
+					/* We assume the precision is the vcgt table size = 16 */
+					/* ~~99 ideally we should tag the fact that this is video encoded, so that */
+					/* the vcgt loaded can adjust for a different bit precision ~~~~ */
+					cc = (cc * 255 * (1 << (16 - 8)))/((1 << 16) - 1.0); 	
+				}
 				((unsigned short*)wo->u.table.data)[CAL_RES * j + i] = (int)(cc * 65535.0 + 0.5);
 			}
 		}
@@ -5174,6 +5251,15 @@ int main(int argc, char *argv[]) {
 						cc = 0.0;
 					else if (cc > 1.0)
 						cc = 1.0;
+					if (out_tvenc) {
+						cc = (cc * (235.0-16.0) + 16.0)/255.0;
+						/* For video encoding the extra bits of precision are created by bit */
+						/* shifting rather than scaling, so we need to scale the fp value to */
+						/* account for this. We assume the precision is the vcgt table size = 16 */
+						/* ~~99 ideally we should tag the fact that this is video encoded, so */
+						/* that the vcgt loaded can adjust for a different bit precision ~~~~ */
+						cc = (cc * 255 * (1 << (16 - 8)))/((1 << 16) - 1.0); 	
+					}
 					((unsigned short*)wo->u.table.data)[CAL_RES * j + i] = (int)(cc * 65535.0 + 0.5);
 				}
 			}

@@ -8,7 +8,7 @@
  * Date:    1999/11/29
  * Version: 2.15
  *
- * Copyright 1997 - 2012 Graeme W. Gill
+ * Copyright 1997 - 2013 Graeme W. Gill
  *
  * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
@@ -778,8 +778,11 @@ struct _icmLut {
 								/* inspace' -> outspace' transfer function */
 		double *clutmin, double *clutmax,		/* Maximum range of outspace' values */
 												/* (NULL = default) */
-		void (*outfunc)(void *cbntx, double *out, double *in));
+		void (*outfunc)(void *cbntx, double *out, double *in),
 								/* Output transfer function, outspace'->outspace (NULL = deflt) */
+		int *apxls_gmin, int *apxls_gmax	/* If not NULL, the grid indexes not to be affected */
+										/* by ICM_CLUT_SET_APXLS, defaulting to 0..>clutPoints-1 */
+);
 		
 }; typedef struct _icmLut icmLut;
 
@@ -792,27 +795,29 @@ struct _icmLut {
 /* If ICM_CLUT_SET_FILTER is set, the per grid node filtering radius */
 /* is returned in clutfunc out[-1], out[-2] etc for each table */
 int icmSetMultiLutTables(
-	int ntables,							/* Number of tables to be set, 1..n */
-	struct _icmLut **p,						/* Pointer to Lut object */
-	int     flags,							/* Setting flags */
-	void   *cbctx,							/* Opaque callback context pointer value */
-	icColorSpaceSignature insig, 			/* Input color space */
-	icColorSpaceSignature outsig, 			/* Output color space */
+	int ntables,						/* Number of tables to be set, 1..n */
+	struct _icmLut **p,					/* Pointer to Lut object */
+	int     flags,						/* Setting flags */
+	void   *cbctx,						/* Opaque callback context pointer value */
+	icColorSpaceSignature insig, 		/* Input color space */
+	icColorSpaceSignature outsig, 		/* Output color space */
 	void (*infunc)(void *cbctx, double *out, double *in),
 							/* Input transfer function, inspace->inspace' (NULL = default) */
 							/* Will be called ntables times each input grid value */
-	double *inmin, double *inmax,			/* Maximum range of inspace' values */
-											/* (NULL = default) */
+	double *inmin, double *inmax,		/* Maximum range of inspace' values */
+										/* (NULL = default) */
 	void (*clutfunc)(void *cbntx, double *out, double *in),
 							/* inspace' -> outspace[ntables]' transfer function */
 							/* will be called once for each input' grid value, and */
 							/* ntables output values should be written consecutively */
 							/* to out[]. */
-	double *clutmin, double *clutmax,		/* Maximum range of outspace' values */
-											/* (NULL = default) */
-	void (*outfunc)(void *cbntx, double *out, double *in)
+	double *clutmin, double *clutmax,	/* Maximum range of outspace' values */
+										/* (NULL = default) */
+	void (*outfunc)(void *cbntx, double *out, double *in),
 								/* Output transfer function, outspace'->outspace (NULL = deflt) */
 								/* Will be called ntables times on each output value */
+	int *apxls_gmin, int *apxls_gmax	/* If not NULL, the grid indexes not to be affected */
+										/* by ICM_CLUT_SET_APXLS, defaulting to 0..>clutPoints-1 */
 );
 		
 /* - - - - - - - - - - - - - - - - - - - - -  */
@@ -1487,6 +1492,8 @@ struct _icc {
 	int              errc;				/* Error code */
 	int              warnc;				/* Warning code */
 
+	int              allowclutPoints256; /* Non standard - allow 256 res cLUT */
+
   /* Private: ? */
 	icmAlloc        *al;				/* Heap allocator */
 	int              del_al;			/* NZ if heap allocator should be deleted */
@@ -1652,6 +1659,167 @@ extern ICCLIB_API unsigned int icmCSSig2nchan(icColorSpaceSignature sig);
 /* 1 if it is a colorant based colorspace, and 2 if it is not a colorant based space */
 extern ICCLIB_API unsigned int icmCSSig2chanNames( icColorSpaceSignature sig, char *cvals[]);
 
+/* - - - - - - - - - - - - - - */
+
+/* Set a 3 vector to the same value */
+#define icmSet3(d_ary, s_val) ((d_ary)[0] = (s_val), (d_ary)[1] = (s_val), \
+                              (d_ary)[2] = (s_val))
+
+/* Copy a 3 vector */
+#define icmCpy3(d_ary, s_ary) ((d_ary)[0] = (s_ary)[0], (d_ary)[1] = (s_ary)[1], \
+                              (d_ary)[2] = (s_ary)[2])
+
+/* Clamp a 3 vector to be +ve */
+void icmClamp3(double out[3], double in[3]);
+
+/* Add two 3 vectors */
+void icmAdd3(double out[3], double in1[3], double in2[3]);
+
+#define ICMADD3(o, i, j) ((o)[0] = (i)[0] + (j)[0], (o)[1] = (i)[1] + (j)[1], (o)[2] = (i)[2] + (j)[2])
+
+/* Subtract two 3 vectors, out = in1 - in2 */
+void icmSub3(double out[3], double in1[3], double in2[3]);
+
+#define ICMSUB3(o, i, j) ((o)[0] = (i)[0] - (j)[0], (o)[1] = (i)[1] - (j)[1], (o)[2] = (i)[2] - (j)[2])
+
+/* Divide two 3 vectors, out = in1/in2 */
+void icmDiv3(double out[3], double in1[3], double in2[3]);
+
+#define ICMDIV3(o, i, j) ((o)[0] = (i)[0]/(j)[0], (o)[1] = (i)[1]/(j)[1], (o)[2] = (i)[2]/(j)[2])
+
+/* Multiply two 3 vectors, out = in1 * in2 */
+void icmMul3(double out[3], double in1[3], double in2[3]);
+
+#define ICMMUL3(o, i, j) ((o)[0] = (i)[0] * (j)[0], (o)[1] = (i)[1] * (j)[1], (o)[2] = (i)[2] * (j)[2])
+
+/* Compute the dot product of two 3 vectors */
+double icmDot3(double in1[3], double in2[3]);
+
+#define ICMDOT3(o, i, j) ((o) = (i)[0] * (j)[0] + (i)[1] * (j)[1] + (i)[2] * (j)[2])
+
+/* Compute the cross product of two 3D vectors, out = in1 x in2 */
+void icmCross3(double out[3], double in1[3], double in2[3]);
+
+/* Compute the norm squared (length squared) of a 3 vector */
+double icmNorm3sq(double in[3]);
+
+#define ICMNORM3SQ(i) ((i)[0] * (i)[0] + (i)[1] * (i)[1] + (i)[2] * (i)[2])
+
+/* Compute the norm (length) of a 3 vector */
+double icmNorm3(double in[3]);
+
+#define ICMNORM3(i) sqrt((i)[0] * (i)[0] + (i)[1] * (i)[1] + (i)[2] * (i)[2])
+
+/* Scale a 3 vector by the given ratio */
+void icmScale3(double out[3], double in[3], double rat);
+
+#define ICMSCALE3(o, i, j) ((o)[0] = (i)[0] * (j), (o)[1] = (i)[1] * (j), (o)[2] = (i)[2] * (j))
+
+/* Compute a blend between in0 and in1 */
+void icmBlend3(double out[3], double in0[3], double in1[3], double bf);
+
+/* Clip a vector to the range 0.0 .. 1.0 */
+void icmClip3(double out[3], double in[3]);
+
+/* Normalise a 3 vector to the given length. Return nz if not normalisable */
+int icmNormalize3(double out[3], double in[3], double len);
+
+/* Compute the norm squared (length squared) of a vector defined by two points */
+double icmNorm33sq(double in1[3], double in0[3]);
+
+/* Compute the norm (length) of of a vector defined by two points */
+double icmNorm33(double in1[3], double in0[3]);
+
+/* Scale a two point vector by the given ratio. in0[] is the origin. */
+void icmScale33(double out[3], double in1[3], double in0[3], double rat);
+
+/* Normalise a two point vector to the given length. */
+/* The new location of in1[] is returned in out[], in0[] is the origin. */
+/* Return nz if not normalisable */
+int icmNormalize33(double out[3], double in1[3], double in0[3], double len);
+
+
+/* Set a 3x3 matrix to unity */
+void icmSetUnity3x3(double mat[3][3]);
+
+/* Copy a 3x3 transform matrix */
+void icmCpy3x3(double out[3][3], double mat[3][3]);
+
+/* Scale each element of a 3x3 transform matrix */
+void icmScale3x3(double dst[3][3], double src[3][3], double scale);
+
+/* Multiply 3 vector by 3x3 transform matrix */
+/* Organization is mat[out][in] */
+void icmMulBy3x3(double out[3], double mat[3][3], double in[3]);
+
+/* Add one 3x3 to another */
+/* dst = src1 + src2 */
+void icmAdd3x3(double dst[3][3], double src1[3][3], double src2[3][3]);
+
+/* Tensor product. Multiply two 3 vectors to form a 3x3 matrix */
+/* src1[] forms the colums, and src2[] forms the rows in the result */
+void icmTensMul3(double dst[3][3], double src1[3], double src2[3]);
+
+/* Multiply one 3x3 with another */
+/* dst = src * dst */
+void icmMul3x3(double dst[3][3], double src[3][3]);
+
+/* Multiply one 3x3 with another #2 */
+/* dst = src1 * src2 */
+void icmMul3x3_2(double dst[3][3], double src1[3][3], double src2[3][3]);
+
+/* Compute the determinant of a 3x3 matrix */
+double icmDet3x3(double in[3][3]);
+
+/* Invert a 3x3 transform matrix. Return 1 if error. */
+int icmInverse3x3(double out[3][3], double in[3][3]);
+
+/* Transpose a 3x3 matrix */
+void icmTranspose3x3(double out[3][3], double in[3][3]);
+
+/* Given two 3D points, create a matrix that rotates */
+/* and scales one onto the other about the origin 0,0,0. */
+/* Use icmMulBy3x3() to apply this to other points */
+void icmRotMat(double mat[3][3], double src[3], double targ[3]);
+
+/* Copy a 3x4 transform matrix */
+void icmCpy3x4(double out[3][4], double mat[3][4]);
+
+/* Multiply 3 array by 3x4 transform matrix */
+void icmMul3By3x4(double out[3], double mat[3][4], double in[3]);
+
+/* Given two 3D vectors, create a matrix that translates, */
+/* rotates and scales one onto the other. */
+/* Use icmMul3By3x4 to apply this to other points */
+void icmVecRotMat(double m[3][4], double s1[3], double s0[3], double t1[3], double t0[3]);
+
+
+/* Compute the intersection of a vector and a plane */
+/* return nz if there is no intersection */
+int icmVecPlaneIsect(double isect[3], double pl_const, double pl_norm[3], double ve_1[3], double ve_0[3]);
+
+/* Compute the closest points between two lines a and b. */
+/* Return closest points and parameter values if not NULL. */
+/* Return nz if they are paralel. */
+int icmLineLineClosest(double ca[3], double cb[3], double *pa, double *pb,
+                       double la0[3], double la1[3], double lb0[3], double lb1[3]);
+
+/* Given 3 3D points, compute a plane equation. */
+/* The normal will be right handed given the order of the points */
+/* The plane equation will be the 3 normal components and the constant. */
+/* Return nz if any points are cooincident or co-linear */
+int icmPlaneEqn3(double eq[4], double p0[3], double p1[3], double p2[3]);
+
+/* Given a 3D point and a plane equation, return the signed */
+/* distance from the plane */
+double icmPlaneDist3(double eq[4], double p[3]);
+
+/* - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* Multiply 2 array by 2x2 transform matrix */
+void icmMulBy2x2(double out[2], double mat[2][2], double in[2]);
+
+/* - - - - - - - - - - - - - - */
 
 /* Simple macro to transfer an array to an XYZ number */
 #define icmAry2XYZ(xyz, ary) ((xyz).X = (ary)[0], (xyz).Y = (ary)[1], (xyz).Z = (ary)[2])
@@ -1754,177 +1922,6 @@ extern ICCLIB_API void psh_reset(psh *p);
 /* Return non-zero if count rolls over to 0 */
 extern ICCLIB_API int psh_inc(psh *p, int co[]);
 
-
-/* RGB primaries to device to RGB->XYZ transform matrix */
-/* Return non-zero if matrix would be singular */
-int icmRGBprim2matrix(
-	icmXYZNumber white,		/* White point */
-	icmXYZNumber red,		/* Red colorant */
-	icmXYZNumber green,		/* Green colorant */
-	icmXYZNumber blue,		/* Blue colorant */
-	double mat[3][3]		/* Destination matrix */
-);
-
-/* Chromatic Adaption transform utility */
-/* Return a 3x3 chromatic adaption matrix */
-/* Use icmMulBy3x3(dst, mat, src) */
-
-#define ICM_CAM_BRADFORD	0x0001	/* Use Bradford sharpened response space */
-#define ICM_CAM_MULMATRIX	0x0002	/* Transform the given matrix */
-
-void icmChromAdaptMatrix(
-	int flags,				/* Flags as defined below */
-	icmXYZNumber d_wp,		/* Destination white point */
-	icmXYZNumber s_wp,		/* Source white point */
-	double mat[3][3]		/* Destination matrix */
-);
-
-/* - - - - - - - - - - - - - - */
-/* Set a 3 vector */
-#define icmSet3(d_ary, s_val) ((d_ary)[0] = (s_val), (d_ary)[1] = (s_val), \
-                              (d_ary)[2] = (s_val))
-
-/* Copy a 3 vector */
-#define icmCpy3(d_ary, s_ary) ((d_ary)[0] = (s_ary)[0], (d_ary)[1] = (s_ary)[1], \
-                              (d_ary)[2] = (s_ary)[2])
-
-/* Clamp a 3 vector to be +ve */
-void icmClamp3(double out[3], double in[3]);
-
-/* Add two 3 vectors */
-void icmAdd3(double out[3], double in1[3], double in2[3]);
-
-#define ICMADD3(o, i, j) ((o)[0] = (i)[0] + (j)[0], (o)[1] = (i)[1] + (j)[1], (o)[2] = (i)[2] + (j)[2])
-
-/* Subtract two 3 vectors, out = in1 - in2 */
-void icmSub3(double out[3], double in1[3], double in2[3]);
-
-#define ICMSUB3(o, i, j) ((o)[0] = (i)[0] - (j)[0], (o)[1] = (i)[1] - (j)[1], (o)[2] = (i)[2] - (j)[2])
-
-/* Compute the dot product of two 3 vectors */
-double icmDot3(double in1[3], double in2[3]);
-
-#define ICMDOT3(o, i, j) ((o) = (i)[0] * (j)[0] + (i)[1] * (j)[1] + (i)[2] * (j)[2])
-
-/* Compute the cross product of two 3D vectors, out = in1 x in2 */
-void icmCross3(double out[3], double in1[3], double in2[3]);
-
-/* Compute the norm squared (length squared) of a 3 vector */
-double icmNorm3sq(double in[3]);
-
-#define ICMNORM3SQ(i) ((i)[0] * (i)[0] + (i)[1] * (i)[1] + (i)[2] * (i)[2])
-
-/* Compute the norm (length) of a 3 vector */
-double icmNorm3(double in[3]);
-
-#define ICMNORM3(i) sqrt((i)[0] * (i)[0] + (i)[1] * (i)[1] + (i)[2] * (i)[2])
-
-/* Scale a 3 vector by the given ratio */
-void icmScale3(double out[3], double in[3], double rat);
-
-/* Compute a blend between in0 and in1 */
-void icmBlend3(double out[3], double in0[3], double in1[3], double bf);
-
-#define ICMSCALE3(o, i, j) ((o)[0] = (i)[0] * (j), (o)[1] = (i)[1] * (j), (o)[2] = (i)[2] * (j))
-
-/* Normalise a 3 vector to the given length. Return nz if not normalisable */
-int icmNormalize3(double out[3], double in[3], double len);
-
-/* Compute the norm squared (length squared) of a vector defined by two points */
-double icmNorm33sq(double in1[3], double in0[3]);
-
-/* Compute the norm (length) of of a vector defined by two points */
-double icmNorm33(double in1[3], double in0[3]);
-
-/* Scale a two point vector by the given ratio. in0[] is the origin. */
-void icmScale33(double out[3], double in1[3], double in0[3], double rat);
-
-/* Normalise a two point vector to the given length. */
-/* The new location of in1[] is returned in out[], in0[] is the origin. */
-/* Return nz if not normalisable */
-int icmNormalize33(double out[3], double in1[3], double in0[3], double len);
-
-
-/* Set a 3x3 matrix to unity */
-void icmSetUnity3x3(double mat[3][3]);
-
-/* Copy a 3x3 transform matrix */
-void icmCpy3x3(double out[3][3], double mat[3][3]);
-
-/* Scale each element of a 3x3 transform matrix */
-void icmScale3x3(double dst[3][3], double src[3][3], double scale);
-
-/* Multiply 3 vector by 3x3 transform matrix */
-/* Organization is mat[out][in] */
-void icmMulBy3x3(double out[3], double mat[3][3], double in[3]);
-
-/* Add one 3x3 to another */
-/* dst = src1 + src2 */
-void icmAdd3x3(double dst[3][3], double src1[3][3], double src2[3][3]);
-
-/* Tensor product. Multiply two 3 vectors to form a 3x3 matrix */
-/* src1[] forms the colums, and src2[] forms the rows in the result */
-void icmTensMul3(double dst[3][3], double src1[3], double src2[3]);
-
-/* Multiply one 3x3 with another */
-/* dst = src * dst */
-void icmMul3x3(double dst[3][3], double src[3][3]);
-
-/* Multiply one 3x3 with another #2 */
-/* dst = src1 * src2 */
-void icmMul3x3_2(double dst[3][3], double src1[3][3], double src2[3][3]);
-
-/* Compute the determinant of a 3x3 matrix */
-double icmDet3x3(double in[3][3]);
-
-/* Invert a 3x3 transform matrix. Return 1 if error. */
-int icmInverse3x3(double out[3][3], double in[3][3]);
-
-/* Transpose a 3x3 matrix */
-void icmTranspose3x3(double out[3][3], double in[3][3]);
-
-/* Given two 3D points, create a matrix that rotates */
-/* and scales one onto the other about the origin 0,0,0. */
-/* Use icmMulBy3x3() to apply this to other points */
-void icmRotMat(double mat[3][3], double src[3], double targ[3]);
-
-/* Copy a 3x4 transform matrix */
-void icmCpy3x4(double out[3][4], double mat[3][4]);
-
-/* Multiply 3 array by 3x4 transform matrix */
-void icmMul3By3x4(double out[3], double mat[3][4], double in[3]);
-
-/* Given two 3D vectors, create a matrix that translates, */
-/* rotates and scales one onto the other. */
-/* Use icmMul3By3x4 to apply this to other points */
-void icmVecRotMat(double m[3][4], double s1[3], double s0[3], double t1[3], double t0[3]);
-
-
-/* Compute the intersection of a vector and a plane */
-/* return nz if there is no intersection */
-int icmVecPlaneIsect(double isect[3], double pl_const, double pl_norm[3], double ve_1[3], double ve_0[3]);
-
-/* Compute the closest points between two lines a and b. */
-/* Return closest points and parameter values if not NULL. */
-/* Return nz if they are paralel. */
-int icmLineLineClosest(double ca[3], double cb[3], double *pa, double *pb,
-                       double la0[3], double la1[3], double lb0[3], double lb1[3]);
-
-/* Given 3 3D points, compute a plane equation. */
-/* The normal will be right handed given the order of the points */
-/* The plane equation will be the 3 normal components and the constant. */
-/* Return nz if any points are cooincident or co-linear */
-int icmPlaneEqn3(double eq[4], double p0[3], double p1[3], double p2[3]);
-
-/* Given a 3D point and a plane equation, return the signed */
-/* distance from the plane */
-double icmPlaneDist3(double eq[4], double p[3]);
-
-/* - - - - - - - - - - - - - - - - - - - - - - - */
-
-/* Multiply 2 array by 2x2 transform matrix */
-void icmMulBy2x2(double out[2], double mat[2][2], double in[2]);
-
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 
 /* Return the normal Delta E given two Lab values */
@@ -1966,6 +1963,113 @@ int icmClipLab(double out[3], double in[3]);
 int icmClipXYZ(double out[3], double in[3]);
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
+
+/* RGB primaries to device to RGB->XYZ transform matrix */
+/* Return non-zero if matrix would be singular */
+int icmRGBprim2matrix(
+	icmXYZNumber white,		/* White point */
+	icmXYZNumber red,		/* Red colorant */
+	icmXYZNumber green,		/* Green colorant */
+	icmXYZNumber blue,		/* Blue colorant */
+	double mat[3][3]		/* Destination matrix */
+);
+
+/* Chromatic Adaption transform utility */
+/* Return a 3x3 chromatic adaption matrix */
+/* Use icmMulBy3x3(dst, mat, src) */
+
+#define ICM_CAM_BRADFORD	0x0001	/* Use Bradford sharpened response space */
+#define ICM_CAM_MULMATRIX	0x0002	/* Transform the given matrix */
+
+void icmChromAdaptMatrix(
+	int flags,				/* Flags as defined below */
+	icmXYZNumber d_wp,		/* Destination white point */
+	icmXYZNumber s_wp,		/* Source white point */
+	double mat[3][3]		/* Destination matrix */
+);
+
+/* - - - - - - - - - - - - - - */
+/* Video functions */
+
+/* Convert Lut table index/value to YCbCr */
+void icmLut2YCbCr(double *out, double *in);
+
+/* Convert YCbCr to Lut table index/value */
+void icmYCbCr2Lut(double *out, double *in);
+
+
+/* Convert Rec601 RGB' into YPbPr, (== "full range YCbCr") */
+/* where input 0..1, output 0..1, -0.5 .. 0.5, -0.5 .. 0.5 */
+void icmRec601_RGBd_2_YPbPr(double out[3], double in[3]);
+
+/* Convert Rec601 YPbPr to RGB' (== "full range YCbCr") */
+/* where input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, output 0.0 .. 1 */
+void icmRec601_YPbPr_2_RGBd(double out[3], double in[3]);
+
+
+/* Convert Rec709 1150/60/2:1 RGB' into YPbPr, or "full range YCbCr" */
+/* where input 0..1, output 0..1, -0.5 .. 0.5, -0.5 .. 0.5 */
+void icmRec709_RGBd_2_YPbPr(double out[3], double in[3]);
+
+/* Convert Rec709 1150/60/2:1 YPbPr to RGB' (== "full range YCbCr") */
+/* where input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, output 0.0 .. 1 */
+void icmRec709_YPbPr_2_RGBd(double out[3], double in[3]);
+
+/* Convert Rec709 1250/50/2:1 RGB' into YPbPr, or "full range YCbCr" */
+/* where input 0..1, output 0..1, -0.5 .. 0.5, -0.5 .. 0.5 */
+void icmRec709_50_RGBd_2_YPbPr(double out[3], double in[3]);
+
+/* Convert Rec709 1250/50/2:1 YPbPr to RGB' (== "full range YCbCr") */
+/* where input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, output 0.0 .. 1 */
+void icmRec709_50_YPbPr_2_RGBd(double out[3], double in[3]);
+
+
+/* Convert Rec2020 RGB' into Non-constant liminance YPbPr, or "full range YCbCr" */
+/* where input 0..1, output 0..1, -0.5 .. 0.5, -0.5 .. 0.5 */
+void icmRec2020_NCL_RGBd_2_YPbPr(double out[3], double in[3]);
+
+/* Convert Rec2020 Non-constant liminance YPbPr into RGB' (== "full range YCbCr") */
+/* where input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, output 0.0 .. 1 */
+void icmRec2020_NCL_YPbPr_2_RGBd(double out[3], double in[3]);
+
+/* Convert Rec2020 RGB' into Constant liminance YPbPr, or "full range YCbCr" */
+/* where input 0..1, output 0..1, -0.5 .. 0.5, -0.5 .. 0.5 */
+void icmRec2020_CL_RGBd_2_YPbPr(double out[3], double in[3]);
+
+/* Convert Rec2020 Constant liminance YPbPr into RGB' (== "full range YCbCr") */
+/* where input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, output 0.0 .. 1 */
+void icmRec2020_CL_YPbPr_2_RGBd(double out[3], double in[3]);
+
+
+/* Convert Rec601/709/2020 YPbPr to YCbCr range. */
+/* input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, */
+/* output 16/255 .. 235/255, 16/255 .. 240/255, 16/255 .. 240/255 */ 
+void icmRecXXX_YPbPr_2_YCbCr(double out[3], double in[3]);
+
+/* Convert Rec601/709/2020 YCbCr to YPbPr range. */
+/* input 16/255 .. 235/255, 16/255 .. 240/255, 16/255 .. 240/255 */ 
+/* output 0..1, -0.5 .. 0.5, -0.5 .. 0.5, */
+void icmRecXXX_YCbCr_2_YPbPr(double out[3], double in[3]);
+
+
+/* Convert full range RGB to Video range 16..235 RGB */
+void icmRGB_2_VidRGB(double out[3], double in[3]);
+
+/* Convert Video range 16..235 RGB to full range RGB */
+void icmVidRGB_2_RGB(double out[3], double in[3]);
+
+/* ---------------------------------------------------------- */
+/* PS 3.14-2009, Digital Imaging and Communications in Medicine */
+/* (DICOM) Part 14: Grayscale Standard Display Function */
+
+/* JND index value 1..1023 to L 0.05 .. 3993.404 cd/m^2 */
+double icmDICOM_fwd(double jnd);
+
+/* L 0.05 .. 3993.404 cd/m^2 to JND index value 1..1023 */
+double icmDICOM_bwd(double L);
+
+
+/* ---------------------------------------------------------- */
 /* Print an int vector to a string. */
 /* Returned static buffer is re-used every 5 calls. */
 char *icmPiv(int di, int *p);
@@ -1981,8 +2085,8 @@ char *icmPfv(int di, float *p);
 /* Print an 0..1 range XYZ as a D50 Lab string */
 /* Returned static buffer is re-used every 5 calls. */
 char *icmPLab(double *p);
+/* - - - - - - - - - - - - - - - - - - - - - - - */
 
-/* ---------------------------------------------------------- */
 
 #ifdef __cplusplus
 	}

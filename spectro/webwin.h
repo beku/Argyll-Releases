@@ -22,6 +22,13 @@ int webdisp,					/* Port number */
 double width, double height,	/* Width and height in mm */
 double hoff, double voff,		/* Offset from center in fraction of screen, range -1.0 .. 1.0 */
 int nowin,						/* NZ if no window should be created - RAMDAC access only */
+int native,						/* X0 = use current per channel calibration curve */
+								/* X1 = set native linear output and use ramdac high precn. */
+								/* 0X = use current color management cLut (MadVR) */
+								/* 1X = disable color management cLUT (MadVR) */
+int *noramdac,					/* Return nz if no ramdac access. native is set to X0 */
+int *nocm,						/* Return nz if no CM cLUT access. native is set to 0X */
+int out_tvenc,					/* 1 = use RGB Video Level encoding */
 int blackbg,					/* NZ if whole screen should be filled with black */
 int verb,						/* NZ for verbose prompts */
 int ddebug						/* >0 to print debug statements to stderr */

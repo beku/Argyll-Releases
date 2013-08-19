@@ -1,9 +1,9 @@
-Argyll - Things To Be Done (in no particular priority)
+Argyll - Things To Be Done & odeas (in no particular priority)
 --------------------------
 
 Categories:
 
-1)  Active list
+1)  Ideas list
 2)  General
 3)  Documentation
 4)  Charts
@@ -17,8 +17,18 @@ Categories:
 10) Calibration
 11) Bugs
 
---------------------------------------------------------
- To be added:
+===================================================================
+Recent suggestions:
+
+	Add flat field support to scanin
+
+	Add "dynamic range" option to targen to concentrate
+	samples near black, + tweak colprof to skew grid
+	in that direction too.
+
+	Add DICOM support to dispcal.
+
+	Change CIECAM02 to simplified & improved version
 
 	add filtered mode for tiffgamut
 
@@ -27,12 +37,9 @@ Categories:
 
 	add option to dark cal spectro's evern N readings in dispsup.
 
+	Add some i1pro RevE UV support for improved FWA
 
---------------------------------------------------------
-
-*) Add some i1pro RevE UV support for improved FWA
-
-*) Add "single pixel chart" mode to printtarg and scanin.
+	Add "single pixel chart" mode to printtarg and scanin.
 
 --------------------------------------------------------
 1) List 2

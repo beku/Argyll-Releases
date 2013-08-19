@@ -84,7 +84,7 @@ static int gcc_bug_fix(int i) {
   Flags used:
 
          ABCDEFGHIJKLMNOPQRSTUVWXYZ
-  upper    .. . .... .. ..    ...  
+  upper    .... .... .. ..    ...  
   lower    ..      .  . .  .  .. . 
 
 */
@@ -129,6 +129,9 @@ void usage(char *diag, ...) {
 	}
 	free_disppaths(dp);
 	fprintf(stderr," -dweb[:port]         Display via a web server at port (default 8080)\n");
+#ifdef NT
+	fprintf(stderr," -dmadvr              Display via MadVR Video Renderer\n");
+#endif
 //	fprintf(stderr," -d fake              Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	fprintf(stderr," -c listno            Set communication port from the following list (default %d)\n",COMPORT);
 	if ((icmps = new_icompaths(g_log)) != NULL) {
@@ -150,6 +153,9 @@ void usage(char *diag, ...) {
 	cap2 = inst_show_disptype_options(stderr, " -y                   ", icmps, 0);
 	fprintf(stderr," -k file.cal          Load calibration file into display while reading\n");
 	fprintf(stderr," -K file.cal          Apply calibration file to test values while reading\n");
+#ifdef NT
+	fprintf(stderr," -V                   Enable MadVR color management (3dLut)\n");
+#endif
 	fprintf(stderr," -s                   Save spectral information (default don't save)\n");
 	fprintf(stderr," -P ho,vo,ss[,vs]     Position test window and scale it\n");
 	fprintf(stderr,"                      ho,vi: 0.0 = left/top, 0.5 = center, 1.0 = right/bottom etc.\n");
@@ -158,6 +164,7 @@ void usage(char *diag, ...) {
 #if defined(UNIX_X11)
 	fprintf(stderr," -n                   Don't set override redirect on test window\n");
 #endif
+	fprintf(stderr," -E                   Encode the test values for video range 16..235/255\n");
 	fprintf(stderr," -J                   Run instrument calibration first (used rarely)\n");
 	fprintf(stderr," -N                   Disable initial calibration of instrument if possible\n");
 	fprintf(stderr," -H                   Use high resolution spectrum mode (if available)\n");
@@ -171,7 +178,9 @@ void usage(char *diag, ...) {
 		fprintf(stderr,"                      1931_2 (def), 1964_10, S&B 1955_2, shaw, J&V 1978_2, 1964_10c\n");
 	}
 	fprintf(stderr," -I b|w               Drift compensation, Black: -Ib, White: -Iw, Both: -Ibw\n");
+	fprintf(stderr," -Y R:rate            Override measured refresh rate with rate Hz\n");
 	fprintf(stderr," -Y A                 Use non-adaptive integration time mode (if available).\n");
+	fprintf(stderr," -Y p                 Don't wait for the instrument to be placed on the display\n");
 	fprintf(stderr," -C \"command\"         Invoke shell \"command\" each time a color is set\n");
 	fprintf(stderr," -M \"command\"         Invoke shell \"command\" each time a color is measured\n");
 	fprintf(stderr," -W n|h|x             Override serial port flow control: n = none, h = HW, x = Xon/Xoff\n");
@@ -188,6 +197,7 @@ int main(int argc, char *argv[]) {
 	disppath *disp = NULL;				/* Display being used */
 	double hpatscale = 1.0, vpatscale = 1.0;	/* scale factor for test patch size */
 	double ho = 0.0, vo = 0.0;			/* Test window offsets, -1.0 to 1.0 */
+	int out_tvenc = 0;					/* 1 to use RGB Video Level encoding */
 	int blackbg = 0;            		/* NZ if whole screen should be filled with black */
 	int verb = 0;
 	int debug = 0;
@@ -199,12 +209,14 @@ int main(int argc, char *argv[]) {
 	flow_control fc = fc_nc;			/* Default flow control */
 	int docalib = 0;					/* Do a calibration */
 	int highres = 0;					/* Use high res mode if available */
+	double refrate = 0.0;			    /* 0.0 = default, > 0.0 = override refresh rate */ 
 	int nadaptive = 0;					/* Use non-adaptive mode if available */
 	int bdrift = 0;						/* Flag, nz for black drift compensation */
 	int wdrift = 0;						/* Flag, nz for white drift compensation */
 	int dtype = 0;						/* Display type selection charater */
 	int tele = 0;						/* NZ if telephoto mode */
 	int noautocal = 0;					/* Disable auto calibration */
+	int noplace = 0;					/* Disable user instrument placement */
 	int nonorm = 0;						/* Disable normalisation */
 	char ccxxname[MAXNAMEL+1] = "\000";  /* Colorimeter Correction Matrix name */
 	ccmx *cmx = NULL;					/* Colorimeter Correction Matrix */
@@ -212,12 +224,18 @@ int main(int argc, char *argv[]) {
 	int spec = 0;						/* Don't save spectral information */
 	icxObserverType obType = icxOT_default;
 	int webdisp = 0;					/* NZ for web display, == port number */
+#ifdef NT
+	int madvrdisp = 0;					/* NZ for MadVR display */
+#endif
 	char *ccallout = NULL;				/* Change color Shell callout */
 	char *mcallout = NULL;				/* Measure color Shell callout */
 	char inname[MAXNAMEL+1] = "\000";	/* Input cgats file base name */
 	char outname[MAXNAMEL+1] = "\000";	/* Output cgats file base name */
 	char calname[MAXNAMEL+1] = "\000";	/* Calibration file name (if any) */
-	int softcal = 0;					/* nz if cal applied to values rather than hardware */
+	int native = 2;						/* X0 = use current per channel calibration curve */
+										/* X1 = set native linear output and use ramdac high prec */
+										/* 0X = use current color management cLut (MadVR) */
+										/* 1X = disable color management cLUT (MadVR) */
 	double cal[3][MAX_CAL_ENT];			/* Display calibration */
 	int ncal = 256;						/* number of cal entries used */
 	cgats *icg;							/* input cgats structure */
@@ -237,6 +255,7 @@ int main(int argc, char *argv[]) {
 	cgats_set_elem *setel;				/* Array of set value elements */
 	disprd *dr;							/* Display patch read object */
 	int noramdac = 0;					/* Will be set to nz if can't set ramdac */
+	int nocm = 0;						/* Will be set to nz if can't set color management */
 	int errc;							/* Return value from new_disprd() */
 	int rv;
 
@@ -295,6 +314,12 @@ int main(int argc, char *argv[]) {
 							usage("Web port number must be in range 1..65535");
 					}
 					fa = nfa;
+#ifdef NT
+				} else if (strncmp(na,"madvr",5) == 0
+				 || strncmp(na,"MADVR",5) == 0) {
+					madvrdisp = 1;
+					fa = nfa;
+#endif
 				} else {
 #if defined(UNIX_X11)
 					int ix, iv;
@@ -358,17 +383,24 @@ int main(int argc, char *argv[]) {
 				dtype = na[0];
 
 			/* Calibration file */
-			} else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
-				fa = nfa;
-				if (na == NULL) usage("Parameter expected after -k/-K");
+			} else if (argv[fa][1] == 'k'
+			        || argv[fa][1] == 'K') {
+				if (na == NULL) usage("Parameter expected after -%c",argv[fa][1]);
 				strncpy(calname,na,MAXNAMEL); calname[MAXNAMEL] = '\000';
-				softcal = 0;
 				if (argv[fa][1] == 'K')
-					softcal = 1;
-			}
+					native |= 1;			/* Use native linear & soft cal */
+				else
+					native &= ~1;			/* Use HW cal */
+				fa = nfa;
+
+#ifdef NT
+			/* MadVR verify mode */
+			} else if (argv[fa][1] == 'V') {
+				native &= ~2;
+#endif
 
 			/* Save spectral data */
-			else if (argv[fa][1] == 's') {
+			} else if (argv[fa][1] == 's') {
 				spec = 1;
 
 			/* Test patch offset and size */
@@ -394,6 +426,10 @@ int main(int argc, char *argv[]) {
 			} else if (argv[fa][1] == 'F') {
 				blackbg = 1;
 
+			/* Video encoded output */
+			} else if (argv[fa][1] == 'E') {
+				out_tvenc = 1;
+
 			/* Force calibration */
 			} else if (argv[fa][1] == 'J') {
 				docalib = 1;
@@ -405,10 +441,6 @@ int main(int argc, char *argv[]) {
 			/* High res mode */
 			} else if (argv[fa][1] == 'H') {
 				highres = 1;
-
-			/* Adaptive mode - default, so flag is deprecated */
-			} else if (argv[fa][1] == 'V') {
-				warning("dispread -V flag is deprecated");
 
 			/* No normalisation */
 			} else if (argv[fa][1] == 'w') {
@@ -495,11 +527,20 @@ int main(int argc, char *argv[]) {
 				if (na == NULL)
 					usage("Flag '-Y' expects extra flag");
 			
-				if (na[0] == 'A') {
+				if (na[0] == 'R') {
+					if (na[1] != ':')
+						usage("-Y R:rate syntax incorrect");
+					refrate = atof(na+2);
+					if (refrate < 5.0 || refrate > 150.0)
+						usage("-Y R:rate %f Hz not in valid range",refrate);
+				} else if (na[0] == 'p') {
+					noplace = 1;
+				} else if (na[0] == 'A') {
 					nadaptive = 1;
 				} else {
 					usage("Flag '-Y %c' not recognised",na[0]);
 				}
+				fa = nfa;
 
 			} else 
 				usage("Flag '-%c' not recognised",argv[fa][1]);
@@ -567,8 +608,12 @@ int main(int argc, char *argv[]) {
 		error("No instrument at port %d",comport);
 
 	if (docalib) {
-		if ((rv = disprd_calibration(ipath, fc, dtype, 0, tele, nadaptive, noautocal, disp,
-		                             webdisp, blackbg, override,
+		if ((rv = disprd_calibration(ipath, fc, dtype, 0, tele, nadaptive, noautocal, 
+			                         disp, webdisp,
+#ifdef NT
+			                         madvrdisp,
+#endif
+			                         out_tvenc, blackbg, override,
 			                         100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
 		                             g_log)) != 0) {
 			error("docalibration failed with return value %d\n",rv);
@@ -717,8 +762,16 @@ int main(int argc, char *argv[]) {
 
 		if ((fi = ccg->find_kword(ccg, 0, "VIDEO_LUT_CALIBRATION_POSSIBLE")) >= 0) {
 			if (stricmp(ccg->t[0].kdata[fi],"NO") == 0) {
-				softcal = 1;
+				native = 1;
 				if (verb) printf("Switching to soft cal because there is no access to VideoLUTs\n");
+			}
+		}
+
+		if ((fi = icg->find_kword(icg, 0, "TV_OUTPUT_ENCODING")) >= 0) {
+			if (!out_tvenc && (strcmp(icg->t[0].kdata[fi], "YES") == 0
+			 || strcmp(icg->t[0].kdata[fi], "yes")) == 0) {
+				if (verb) printf("Using Video range (16-235)/255 range encoding because cal. used it\n");
+				out_tvenc = 1;
 			}
 		}
 
@@ -753,9 +806,14 @@ int main(int argc, char *argv[]) {
 		cal[0][0] = -1.0;	/* Not used */
 	}
 
-	if ((dr = new_disprd(&errc, ipath, fc, dtype, 0, tele, nadaptive, noautocal,
-	                     highres, 0, &noramdac, cal, ncal, softcal, disp, blackbg, override,
-	                     webdisp, ccallout, mcallout, 100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
+	if ((dr = new_disprd(&errc, ipath, fc, dtype, 0, tele, nadaptive, noautocal, noplace,
+	                     highres, refrate, native, &noramdac, &nocm, cal, ncal, disp,
+		                 out_tvenc, blackbg, override, webdisp,
+#ifdef NT
+						 madvrdisp,
+#endif
+		                 ccallout, mcallout,
+		                 100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
 	                     cmx != NULL ? cmx->matrix : NULL,
 	                     ccs != NULL ? ccs->samples : NULL, ccs != NULL ? ccs->no_samp : 0,
 		                 spec, obType, NULL, bdrift, wdrift,
@@ -824,7 +882,7 @@ int main(int argc, char *argv[]) {
 			nn = 1.0;
 		else {
 			if (cols[wpat].XYZ_v == 0)
-				error("XYZ of white patch is not valid!",i);
+				error("XYZ of white patch is not valid!\nCan't normalise value to white",i);
 
 			nn = 100.0 / cols[wpat].XYZ[1];		/* Normalise Y of white to 100 */
 		}
@@ -832,7 +890,7 @@ int main(int argc, char *argv[]) {
 		for (i = 0; i < npat; i++) {
 
 			if (cols[i].XYZ_v == 0)
-				error("XYZ %d is not valid!",i);
+				warning("XYZ patch %d is not valid!",i+1);
 
 			for (j = 0; j < 3; j++)
 				cols[i].XYZ[j] = nn * cols[i].XYZ[j];
@@ -880,6 +938,11 @@ int main(int argc, char *argv[]) {
 	/* Write out the patch info to the output CGATS file */
 	for (i = 0; i < npat; i++) {
 		int k = 0;
+
+		if (cols[i].XYZ_v == 0) {
+			warning("Omitting patch %d from .ti3 file!",i+1);
+			continue;
+		}
 
 		setel[k++].c = cols[i].id;
 		setel[k++].d = 100.0 * cols[i].r;

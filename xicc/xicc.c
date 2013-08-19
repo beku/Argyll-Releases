@@ -929,7 +929,7 @@ icxInk *ink					/* inking details (NULL for default) */
 	icRenderingIntent n_intent = intent;			/* Native Intent to request */
 	icColorSpaceSignature n_pcs = icmSigDefaultData;	/* Native PCS to request */
 
-//printf("~1 xicc_get_luobj got intent %s and pcsor %s\n",icx2str(icmRenderingIntent,intent),icx2str(icmColorSpaceSignature,pcsor));
+//printf("~1 xicc_get_luobj got intent '%s' and pcsor '%s'\n",icx2str(icmRenderingIntent,intent),icx2str(icmColorSpaceSignature,pcsor));
 
 	/* Ensure that appropriate PCS is slected for an appearance intent */
 	if (intent == icxAppearance
@@ -939,6 +939,7 @@ icxInk *ink					/* inking details (NULL for default) */
 	 || intent == icxSaturationAppearance
 	 || intent == icxAbsSaturationAppearance) {
 		pcsor = icxSigJabData;
+//printf("~1 pcsor = %s\n",tag2str(pcsor));
 
 	/* Translate non-Jab intents to the equivalent appearance "intent" if pcsor == Jab. */
 	/* This is how we get these when the UI's don't list all the apperances intents, */
@@ -960,6 +961,7 @@ icxInk *ink					/* inking details (NULL for default) */
 		else
 			intent = icxAppearance;
 	}
+//printf("~1 intent = %s\n",tag2str(intent));
 
 	/* Translate intent asked for into intent needed in icclib */
 	if      (intent == icxAppearance
@@ -971,6 +973,7 @@ icxInk *ink					/* inking details (NULL for default) */
 	else if (intent == icxSaturationAppearance
 	      || intent == icxAbsSaturationAppearance)
 		n_intent = icmAbsoluteSaturation;
+//printf("~1 n_intent = %s\n",tag2str(n_intent));
 
 	if (pcsor != icmSigDefaultData)
 		n_pcs = pcsor;			/* There is an icclib override */
@@ -995,15 +998,16 @@ icxInk *ink					/* inking details (NULL for default) */
 	 && (intent == icxAbsAppearance
 	  || intent == icxAbsPerceptualAppearance
 	  || intent == icxAbsSaturationAppearance)) {	/* make sure its "Abs CAM" */
+//printf("~1 xicc_get_luobj using absolute apperance space with white = D50\n");
 		/* Set white point and flare color to D50 */
 		/* (Hmm. This doesn't match what happens within collink with absolute intent!!) */
 		vc->Wxyz[0] = icmD50.X/icmD50.Y;
 		vc->Wxyz[1] = icmD50.Y/icmD50.Y;	// Normalise white reference to Y = 1 ?
 		vc->Wxyz[2] = icmD50.Z/icmD50.Y;
 	
-		vc->Fxyz[0] = icmD50.X;
-		vc->Fxyz[1] = icmD50.Y;
-		vc->Fxyz[2] = icmD50.Z;
+		vc->Gxyz[0] = icmD50.X;
+		vc->Gxyz[1] = icmD50.Y;
+		vc->Gxyz[2] = icmD50.Z;
 	}
 
 	/* Call xiccLu wrapper creation */
@@ -1217,7 +1221,8 @@ icxViewCond *vc		/* Viewing parameters to return */
 	double Lvr = -1.0;		/* Reflective device image luminance */
 	double Lv = -1.0;		/* device image luminance */
 	double Yf = -1.0;		/* Flare relative luminance to Lv */
-	double Fxyz[3] = {-1.0, -1.0, -1.0};	/* Flare color */
+	double Yg = -1.0;		/* Glare relative luminance to La */
+	double Gxyz[3] = {-1.0, -1.0, -1.0};	/* Glare color */
     icTechnologySignature tsig = icMaxEnumTechnology; /* Technology Signature */
     icProfileClassSignature devc = icMaxEnumClass;
 	int trans = -1;		/* Set to 0 if not transparency, 1 if it is */
@@ -1241,7 +1246,8 @@ icxViewCond *vc		/* Viewing parameters to return */
 		if ((ro = (icmMeasurement *)pp->read_tag(pp, icSigMeasurementTag)) != NULL
 		 && ro->ttype == icSigMeasurementType) {
 	
-    		Yf = ro->flare;
+    		Yf = 0.0 * ro->flare;		// ?????
+    		Yg = 1.0 * ro->flare;		// ?????
    			/* ro->illuminant ie D50, D65, D93, A etc. */
 		}
 	}
@@ -1345,7 +1351,8 @@ icxViewCond *vc		/* Viewing parameters to return */
 	printf("Reflective Image White Lvr = %f\n",Lvr);
 	printf("Device Image White Lv = %f\n",Lv);
 	printf("Relative Flare Yf = %f\n",Yf);
-	printf("Flare color %f %f %f\n",Fxyz[0], Fxyz[1], Fxyz[2]);
+	printf("Relative Glare Yg = %f\n",Yg);
+	printf("Glare color %f %f %f\n",Gxyz[0], Gxyz[1], Gxyz[2]);
 	printf("Technology = %s\n",tag2str(tsig));
 	printf("deviceClass = %s\n",tag2str(devc));
 	printf("Transparency = %d\n",trans);
@@ -1357,7 +1364,8 @@ icxViewCond *vc		/* Viewing parameters to return */
 	 && Yb >= 0.0
 	 && Lv >= 0.0
 	 && Yf >= 0.0
-	 && Fxyz[0] >= 0.0 && Fxyz[1] >= 0.0 && Fxyz[2] >= 0.0) {
+	 && Yg >= 0.0
+	 && Gxyz[0] >= 0.0 && Gxyz[1] >= 0.0 && Gxyz[2] >= 0.0) {
 
 		vc->Ev = vc_none;
 		vc->Wxyz[0] = Wxyz[0];
@@ -1367,9 +1375,10 @@ icxViewCond *vc		/* Viewing parameters to return */
 		vc->Yb = Yb;
 		vc->Lv = Lv;
 		vc->Yf = Yf;
-		vc->Fxyz[0] = Fxyz[0];	
-		vc->Fxyz[1] = Fxyz[1];	
-		vc->Fxyz[2] = Fxyz[2];	
+		vc->Yg = Yg;
+		vc->Gxyz[0] = Gxyz[0];	
+		vc->Gxyz[1] = Gxyz[1];	
+		vc->Gxyz[2] = Gxyz[2];	
 		return 0;
 	}
 
@@ -1400,9 +1409,11 @@ icxViewCond *vc		/* Viewing parameters to return */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
-					Yf = 0.01;	/* Assume 1% flare */
-				if (Fxyz[0] < 0.0 || Fxyz[1] < 0.0 || Fxyz[2] < 0.0)	/* No flare color */
-					Fxyz[0] = Wxyz[0], Fxyz[1] = Wxyz[1], Fxyz[2] = Wxyz[2];
+					Yf = 0.0;	/* Assume 0% flare */
+				if (Yg < 0.0)	/* No glare figure */
+					Yg = 0.01;	/* Assume 1% glare */
+				if (Gxyz[0] < 0.0 || Gxyz[1] < 0.0 || Gxyz[2] < 0.0)	/* No flare color */
+					Gxyz[0] = Wxyz[0], Gxyz[1] = Wxyz[1], Gxyz[2] = Wxyz[2];
 				break;
 			}
 
@@ -1419,9 +1430,11 @@ icxViewCond *vc		/* Viewing parameters to return */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
-					Yf = 0.005;	/* Assume 0.5% flare */
-				if (Fxyz[0] < 0.0 || Fxyz[1] < 0.0 || Fxyz[2] < 0.0)	/* No flare color */
-					Fxyz[0] = Wxyz[0], Fxyz[1] = Wxyz[1], Fxyz[2] = Wxyz[2];
+					Yf = 0.0;	/* Assume 0% flare */
+				if (Yg < 0.0)	/* No glare figure */
+					Yg = 0.01;	/* Assume 1% glare */
+				if (Gxyz[0] < 0.0 || Gxyz[1] < 0.0 || Gxyz[2] < 0.0)	/* No flare color */
+					Gxyz[0] = Wxyz[0], Gxyz[1] = Wxyz[1], Gxyz[2] = Wxyz[2];
 				break;
 			}
 
@@ -1437,8 +1450,12 @@ icxViewCond *vc		/* Viewing parameters to return */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
 					Yf = 0.0;	/* Assume 0% flare */
-				if (Fxyz[0] < 0.0 || Fxyz[1] < 0.0 || Fxyz[2] < 0.0)	/* No flare color */
-					Fxyz[0] = Wxyz[0], Fxyz[1] = Wxyz[1], Fxyz[2] = Wxyz[2];
+				if (Yg < 0.0)	/* No glare figure */
+					Yg = 0.01;	/* Assume 1% glare */
+				if (Gxyz[0] < 0.0 || Gxyz[1] < 0.0 || Gxyz[2] < 0.0)	/* No flare color */
+					Gxyz[0] = Wxyz[0], Gxyz[1] = Wxyz[1], Gxyz[2] = Wxyz[2];
+				if (Gxyz[0] < 0.0 || Gxyz[1] < 0.0 || Gxyz[2] < 0.0)	/* No flare color */
+					Gxyz[0] = Wxyz[0], Gxyz[1] = Wxyz[1], Gxyz[2] = Wxyz[2];
 				break;
 			}
 
@@ -1453,9 +1470,11 @@ icxViewCond *vc		/* Viewing parameters to return */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_dim;	/* Assume dim viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
-					Yf = 0.01;	/* Assume 1% flare */
-				if (Fxyz[0] < 0.0 || Fxyz[1] < 0.0 || Fxyz[2] < 0.0)	/* No flare color */
-					Fxyz[0] = Wxyz[0], Fxyz[1] = Wxyz[1], Fxyz[2] = Wxyz[2];
+					Yf = 0.0;	/* Assume 0% flare */
+				if (Yg < 0.0)	/* No glare figure */
+					Yg = 0.01;	/* Assume 1% glare */
+				if (Gxyz[0] < 0.0 || Gxyz[1] < 0.0 || Gxyz[2] < 0.0)	/* No flare color */
+					Gxyz[0] = Wxyz[0], Gxyz[1] = Wxyz[1], Gxyz[2] = Wxyz[2];
 				break;
 			}
 
@@ -1472,9 +1491,11 @@ icxViewCond *vc		/* Viewing parameters to return */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
-					Yf = 0.02;	/* Assume 2% flare */
-				if (Fxyz[0] < 0.0 || Fxyz[1] < 0.0 || Fxyz[2] < 0.0)	/* No flare color */
-					Fxyz[0] = Wxyz[0], Fxyz[1] = Wxyz[1], Fxyz[2] = Wxyz[2];
+					Yf = 0.0;	/* Assume 0% flare */
+				if (Yg < 0.0)	/* No glare figure */
+					Yg = 0.01;	/* Assume 1% glare */
+				if (Gxyz[0] < 0.0 || Gxyz[1] < 0.0 || Gxyz[2] < 0.0)	/* No flare color */
+					Gxyz[0] = Wxyz[0], Gxyz[1] = Wxyz[1], Gxyz[2] = Wxyz[2];
 				break;
 			}
 
@@ -1489,9 +1510,11 @@ icxViewCond *vc		/* Viewing parameters to return */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
-					Yf = 0.00;	/* Assume 0% flare */
-				if (Fxyz[0] < 0.0 || Fxyz[1] < 0.0 || Fxyz[2] < 0.0)	/* No flare color */
-					Fxyz[0] = Wxyz[0], Fxyz[1] = Wxyz[1], Fxyz[2] = Wxyz[2];
+					Yf = 0.0;	/* Assume 0% flare */
+				if (Yg < 0.0)	/* No glare figure */
+					Yg = 0.0;	/* Assume 0% glare */
+				if (Gxyz[0] < 0.0 || Gxyz[1] < 0.0 || Gxyz[2] < 0.0)	/* No flare color */
+					Gxyz[0] = Wxyz[0], Gxyz[1] = Wxyz[1], Gxyz[2] = Wxyz[2];
 				break;
 			}
 
@@ -1507,9 +1530,11 @@ icxViewCond *vc		/* Viewing parameters to return */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_dim;	/* Dim environment */
 				if (Yf < 0.0)	/* No flare figure */
-					Yf = 0.01;	/* Assume 1% flare */
-				if (Fxyz[0] < 0.0 || Fxyz[1] < 0.0 || Fxyz[2] < 0.0)	/* No flare color */
-					Fxyz[0] = Wxyz[0], Fxyz[1] = Wxyz[1], Fxyz[2] = Wxyz[2];
+					Yf = 0.0;	/* Assume 0% flare */
+				if (Yg < 0.0)	/* No glare figure */
+					Yg = 0.01;	/* Assume 1% glare */
+				if (Gxyz[0] < 0.0 || Gxyz[1] < 0.0 || Gxyz[2] < 0.0)	/* No flare color */
+					Gxyz[0] = Wxyz[0], Gxyz[1] = Wxyz[1], Gxyz[2] = Wxyz[2];
 				break;
 			}
 		/* Assume very darkened room, no background */
@@ -1522,9 +1547,11 @@ icxViewCond *vc		/* Viewing parameters to return */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_dark;	/* Dark environment */
 				if (Yf < 0.0)	/* No flare figure */
-					Yf = 0.01;	/* Assume 1% flare */
-				if (Fxyz[0] < 0.0 || Fxyz[1] < 0.0 || Fxyz[2] < 0.0)	/* No flare color */
-					Fxyz[0] = Wxyz[0], Fxyz[1] = Wxyz[1], Fxyz[2] = Wxyz[2];
+					Yf = 0.0;	/* Assume 0% flare */
+				if (Yg < 0.0)	/* No glare figure */
+					Yg = 0.01;	/* Assume 1% glare */
+				if (Gxyz[0] < 0.0 || Gxyz[1] < 0.0 || Gxyz[2] < 0.0)	/* No flare color */
+					Gxyz[0] = Wxyz[0], Gxyz[1] = Wxyz[1], Gxyz[2] = Wxyz[2];
 				break;
 			}
 
@@ -1549,9 +1576,11 @@ icxViewCond *vc		/* Viewing parameters to return */
 				if (Lv < 0.0)	/* No device image luminance */
 					Ev = vc_average;	/* Assume average viewing conditions */
 				if (Yf < 0.0)	/* No flare figure */
-					Yf = 0.01;	/* Assume 1% flare */
-				if (Fxyz[0] < 0.0 || Fxyz[1] < 0.0 || Fxyz[2] < 0.0)	/* No flare color */
-					Fxyz[0] = Wxyz[0], Fxyz[1] = Wxyz[1], Fxyz[2] = Wxyz[2];
+					Yf = 0.0;	/* Assume 0% flare */
+				if (Yg < 0.0)	/* No glare figure */
+					Yg = 0.01;	/* Assume 1% glare */
+				if (Gxyz[0] < 0.0 || Gxyz[1] < 0.0 || Gxyz[2] < 0.0)	/* No flare color */
+					Gxyz[0] = Wxyz[0], Gxyz[1] = Wxyz[1], Gxyz[2] = Wxyz[2];
 				break;
 			}
 
@@ -1623,19 +1652,20 @@ double *wp			/* Provide white point if xicc is NULL */
 			}
 		}
 
-		/* Set a default flare color */
-		vc->Fxyz[0] = vc->Wxyz[0];
-		vc->Fxyz[1] = vc->Wxyz[1];
-		vc->Fxyz[2] = vc->Wxyz[2];
+		/* Set a default Glare color */
+		vc->Gxyz[0] = vc->Wxyz[0];
+		vc->Gxyz[1] = vc->Wxyz[1];
+		vc->Gxyz[2] = vc->Wxyz[2];
 	}
 
 	/*
 
 	Typical adapting field luminances and white luminance in reflective setup:
+	(Note that displays Lv is typically brighter under the same conditions)
 
 	E = illuminance in Lux
-	Lv = White luminance assuming 100% reflectance
 	La = Adapting field luminance in cd/m^2, assuming 20% reflectance from surround
+	Lv = White luminance assuming 100% reflectance
     
 	    E     La     Lv   Condition 
 	    11     0.7    4   Twilight
@@ -1651,6 +1681,22 @@ double *wp			/* Provide white point if xicc is NULL */
 	 10000   637   3183   Typical outdoors, full daylight 
 	 50000  3185  15915   Bright summers day 
 
+	Display numbers:
+
+	SMPTE video standard white 100
+	SMPTE cinema standard white 55
+
+	Flare is image content dependent, and is typically 1% from factors
+	including display self illumination and observer/camera internal
+	stray light. Because image content is not static, using a 1% of white point
+	flare results quite erronious appearance modelling for predominantly
+	dark images. As a result, it is best to default to a Yf of 0%,
+	and only introduce a higher number depending on the known image content.
+
+	Glare is assumed to be from the ambient light reflecting from the display
+	and also striking the observer directly, and is (typically) defaulted
+	to 1% of ambient here.
+	
 	*/
 
 	if (no == -1
@@ -1663,31 +1709,8 @@ double *wp			/* Provide white point if xicc is NULL */
 			vc->La = 50.0;			/* Practical to Good lighting */
 			vc->Lv = 250.0;			/* Average viewing conditions ratio */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.01;			/* 1% flare */
-		}
-	}
-	else if (no == 0
-	 || (as != NULL && stricmp(as,"pp") == 0)) {
-
-		no = 0;
-		if (vc != NULL) {
-			vc->desc = " pp - Practical Reflection Print (ISO-3664 P2)";
-			vc->Ev = vc_average;	/* Average viewing conditions */
-			vc->La = 32.0;			/* Use a practical print evaluation number */
-			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.01;			/* 1% flare */
-		}
-	}
-	else if (no == 1
-	 || (as != NULL && stricmp(as,"pe") == 0)) {
-
-		no = 1;
-		if (vc != NULL) {
-			vc->desc = " pe - Print evaluation environment (CIE 116-1995)";
-			vc->Ev = vc_average;	/* Average viewing conditions */
-			vc->La = 64.0;			/* Good */
-			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.01;			/* 1% flare */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
 		}
 	}
 	else if (no == 2
@@ -1697,21 +1720,39 @@ double *wp			/* Provide white point if xicc is NULL */
 		if (vc != NULL) {
 			vc->desc = " pc - Critical print evaluation environment (ISO-3664 P1)";
 			vc->Ev = vc_average;	/* Average viewing conditions */
-			vc->La = 127.0;			/* Critical */
+			vc->La = 127.0;			/* 0.2 * Lv ? */
+			vc->Lv = 2000.0/3.1415;	/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.01;			/* 1% flare */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
 		}
 	}
-	else if (no == 3
-	 || (as != NULL && stricmp(as,"mt") == 0)) {
+	else if (no == 0
+	 || (as != NULL && stricmp(as,"pp") == 0)) {
 
-		no = 3;
+		no = 0;
 		if (vc != NULL) {
-			vc->desc = " mt - Monitor in typical work environment";
-			vc->Ev = vc_average;	/* Average viewing conditions */
-			vc->La = 22.0;			/* Typical work environment */
+			vc->desc = " pp - Practical Reflection Print (ISO-3664 P2)";
+			vc->Ev = vc_none;		/* Use explicit La/Lv */
+			vc->La = 32.0;			/* 0.2 * Lv ? */
+			vc->Lv = 500.0/3.1415;	/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.02;			/* 2% flare */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
+		}
+	}
+	else if (no == 1
+	 || (as != NULL && stricmp(as,"pe") == 0)) {
+
+		no = 1;
+		if (vc != NULL) {
+			vc->desc = " pe - Print evaluation environment (CIE 116-1995)";
+			vc->Ev = vc_none;		/* Use explicit La/Lv */
+			vc->La = 30.0;			/* 0.2 * Lv ? */ 
+			vc->Lv = 150.0;			/* White of the image field */ 
+			vc->Yb = 0.2;			/* Grey world */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
 		}
 	}
 	else if (no == 4
@@ -1720,10 +1761,26 @@ double *wp			/* Provide white point if xicc is NULL */
 		no = 4;
 		if (vc != NULL) {
 			vc->desc = " mb - Bright monitor in bright work environment";
-			vc->Ev = vc_average;	/* Average viewing conditions */
+			vc->Ev = vc_none;		/* Use explicit La/Lv */
 			vc->La = 42.0;			/* Bright work environment */
+			vc->Lv = 150.0;			/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.02;			/* 2% flare */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
+		}
+	}
+	else if (no == 3
+	 || (as != NULL && stricmp(as,"mt") == 0)) {
+
+		no = 3;
+		if (vc != NULL) {
+			vc->desc = " mt - Monitor in typical work environment";
+			vc->Ev = vc_none;		/* Use explicit La/Lv */
+			vc->La = 22.0;			/* Typical work environment */
+			vc->Lv = 120.0;			/* White of the image field */ 
+			vc->Yb = 0.2;			/* Grey world */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
 		}
 	}
 	else if (no == 5
@@ -1732,10 +1789,12 @@ double *wp			/* Provide white point if xicc is NULL */
 		no = 5;
 		if (vc != NULL) {
 			vc->desc = " md - Monitor in darkened work environment";
-			vc->Ev = vc_dim;		/* Dim viewing conditions */
-			vc->La = 4.0;			/* Darkened work environment */
+			vc->Ev = vc_none;		/* Use explicit La/Lv */
+			vc->La = 10.0;			/* Darkened work environment */
+			vc->Lv = 100.0;			/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.01;			/* 1% flare */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
 		}
 	}
 	else if (no == 6
@@ -1744,10 +1803,12 @@ double *wp			/* Provide white point if xicc is NULL */
 		no = 6;
 		if (vc != NULL) {
 			vc->desc = " jm - Projector in dim environment";
-			vc->Ev = vc_dim;		/* Dim viewing conditions */
+			vc->Ev = vc_none;		/* Use explicit La/Lv */
 			vc->La = 10.0;			/* Adaptation is from display */
+			vc->Lv = 80.0;			/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.01;			/* 1% flare */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
 		}
 	}
 	else if (no == 7
@@ -1756,46 +1817,65 @@ double *wp			/* Provide white point if xicc is NULL */
 		no = 7;
 		if (vc != NULL) {
 			vc->desc = " jd - Projector in dark environment";
-			vc->Ev = vc_dark;		/* Dark viewing conditions */
-			vc->La = 10.0;			/* Adaptation is from display */
+			vc->Ev = vc_none;		/* Use explicit La/Lv */
+			vc->La = 8.0;			/* Adaptation is from display */
+			vc->Lv = 80.0;			/* White of the image field */ 
 			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.01;			/* 1% flare ? */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
 		}
 	}
 	else if (no == 8
-	 || (as != NULL && stricmp(as,"pcd") == 0)) {
+	 || (as != NULL && stricmp(as,"tv") == 0)) {
 
 		no = 8;
+		if (vc != NULL) {
+			vc->desc = " tv - Television/Film Studio";
+			vc->Ev = vc_none;				/* Compute from La/Lv */
+			vc->La = 0.2 * 1000.0/3.1415;	/* Adative/Surround */
+			vc->Yb = 0.2;					/* Grey world */
+			vc->Lv = 1000.0/3.1415;			/* White of the image field */ 
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
+		}
+	}
+	else if (no == 9
+	 || (as != NULL && stricmp(as,"pcd") == 0)) {
+
+		no = 9;
 		if (vc != NULL) {
 			vc->desc = "pcd - Photo CD - original scene outdoors";
 			vc->Ev = vc_average;	/* Average viewing conditions */
 			vc->La = 320.0;			/* Typical outdoors, 1600 cd/m^2 */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.00;			/* 0% flare */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.0;			/* 0% glare - assumed to be compensated ? */
 		}
 	}
-	else if (no == 9
+	else if (no == 10
 	 || (as != NULL && stricmp(as,"ob") == 0)) {
 
-		no = 9;
+		no = 10;
 		if (vc != NULL) {
 			vc->desc = " ob - Original scene - Bright Outdoors";
 			vc->Ev = vc_average;	/* Average viewing conditions */
 			vc->La = 2000.0;		/* Bright Outdoors */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.00;			/* 0% flare */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.0;			/* 0% glare - assumed to be compensated ? */
 		}
 	}
-	else if (no == 10
+	else if (no == 11
 	 || (as != NULL && stricmp(as,"cx") == 0)) {
 
-		no = 10;
+		no = 11;
 		if (vc != NULL) {
 			vc->desc = " cx - Cut Sheet Transparencies on a viewing box";
 			vc->Ev = vc_cut_sheet;	/* Cut sheet viewing conditions */
 			vc->La = 53.0;			/* Dim, adapted to slide ? */
 			vc->Yb = 0.2;			/* Grey world */
-			vc->Yf = 0.01;			/* 1% flare ? */
+			vc->Yf = 0.0;			/* 0% flare */
+			vc->Yg = 0.01;			/* 1% glare */
 		}
 	}
 	else {
@@ -1828,7 +1908,8 @@ icxViewCond *vc
 	if (vc->Ev == vc_none)
 		printf("  Image luminance = %f cd/m^2\n",vc->Lv);
 	printf("  Flare to image ratio = %f\n",vc->Yf);
-	printf("  Flare color = %f %f %f\n",vc->Fxyz[0], vc->Fxyz[1], vc->Fxyz[2]);
+	printf("  Glare to ambient ratio = %f\n",vc->Yg);
+	printf("  Flare color = %f %f %f\n",vc->Gxyz[0], vc->Gxyz[1], vc->Gxyz[2]);
 }
 
 
@@ -1899,11 +1980,11 @@ int no,					/* Enumeration selected, icxNoGMIntent for none */
 char *as				/* Alias string selector, NULL for none */
 ) {
 #ifdef USE_CAM
-	int colccas = 0x2;	/* Use cas clipping for colorimetric style intents */
-	int perccas = 0x1;	/* Use cas for perceptual style intents */
+	int colccas = 0x3;	/* Use abs. CAS for abs colorimetric intents */
+	int perccas = 0x2;	/* Use CAS for other intents */
 #else
-	int colccas = 0x0;	/* Use Lab for colorimetric style intents */
-	int perccas = 0x0;	/* Use Lab for perceptual style intents */
+	int colccas = 0x1;	/* Use abs. Lab for abs colorimetric intents */
+	int perccas = 0x0;	/* Use Lab for other intents */
 	fprintf(stderr,"!!!!!! Warning, USE_CAM is off in xicc.c !!!!!!\n");
 #endif
 
@@ -1927,6 +2008,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 0.0;
 		gmi->glumbexf = 0.0;
 		gmi->glumknf = 0.0;
+		gmi->bph = gmm_noBPadpt;	/* No BP adapation */
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
 		gmi->gamcknf  = 0.0;
@@ -1958,6 +2040,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 0.0;
 		gmi->glumbexf = 0.0;
 		gmi->glumknf = 0.0;
+		gmi->bph = gmm_noBPadpt;	/* No BP adapation */
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
 		gmi->gamcknf  = 0.0;
@@ -1982,6 +2065,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 0.0;
 		gmi->glumbexf = 0.0;
 		gmi->glumknf = 0.0;
+		gmi->bph = gmm_noBPadpt;	/* No BP adapation */
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
 		gmi->gamcknf  = 0.0;
@@ -2008,6 +2092,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 0.0;		/* No compression at black end */
 		gmi->glumbexf = 0.0;		/* No expansion at black end */
 		gmi->glumknf = 0.0;
+		gmi->bph = gmm_noBPadpt;	/* No BP adapation */
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
 		gmi->gamcknf  = 0.0;
@@ -2033,6 +2118,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
 		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
 		gmi->glumknf = 0.0;			/* No knee on grey mapping */
+		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 0.0;			/* No gamut compression */
 		gmi->gamexf  = 0.0;			/* No gamut expansion */
 		gmi->gamcknf  = 0.0;		/* No knee in gamut compress */
@@ -2060,6 +2146,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
 		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
 		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
+		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 0.0;			/* No gamut expansion */
 		gmi->gamcknf  = 0.8;		/* High Sigma knee in gamut compress */
@@ -2073,7 +2160,7 @@ char *as				/* Alias string selector, NULL for none */
 
 		/* Don't align neutral axes, but perceptually compress out of gamut */
 		/* and map appearance space Jab to Jab. */  
-		no = 5;
+		no = 6;
 		gmi->as = "pa";
 		gmi->desc = "pa - Perceptual Apperance ";
 		gmi->icci = icPerceptual;
@@ -2085,6 +2172,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
 		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
 		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
+		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 0.0;			/* No gamut expansion */
 		gmi->gamcknf  = 0.8;		/* High Sigma knee in gamut compress */
@@ -2098,7 +2186,7 @@ char *as				/* Alias string selector, NULL for none */
 
 		/* Align neutral axes and perceptually map white and black points, */ 
 		/* perceptually compress and expand to match gamuts and map Jab to Jab. */  
-		no = 6;
+		no = 7;
 		gmi->as = "ms";
 		gmi->desc = "ms - Saturation";
 		gmi->icci = icSaturation;
@@ -2110,6 +2198,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
 		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
 		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
+		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 1.0;			/* Full gamut expansion  */
 		gmi->gamcknf = 1.0;			/* High Sigma knee in gamut compress/expand */
@@ -2123,7 +2212,7 @@ char *as				/* Alias string selector, NULL for none */
 	 || (as != NULL && stricmp(as,"s") == 0)) {
 
 		/* Same as "ms" but enhance saturation */
-		no = 7;
+		no = 8;
 		gmi->as = "s";
 		gmi->desc = " s - Enhanced Saturation [ICC Saturation]";
 		gmi->icci = icSaturation;
@@ -2135,6 +2224,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 1.0;		/* Fully compress grey axis at black end */
 		gmi->glumbexf = 1.0;		/* Fully expand grey axis at black end */
 		gmi->glumknf = 1.0;			/* Sigma knee in grey compress/expand */
+		gmi->bph = gmm_bendBP;		/* extent and bend */
 		gmi->gamcpf  = 1.0;			/* Full gamut compression */
 		gmi->gamexf  = 1.0;			/* Full gamut expansion */
 		gmi->gamcknf = 1.0;			/* High sigma knee in gamut compress */
@@ -2147,11 +2237,11 @@ char *as				/* Alias string selector, NULL for none */
 	 || (as != NULL && stricmp(as,"al") == 0)) {
 
 		/* Map absolute L*a*b* to L*a*b* and clip out of gamut */
-		no = 8;
+		no = 9;
 		gmi->as = "al";
 		gmi->desc = "al - Absolute Colorimetric (Lab)";
 		gmi->icci = icAbsoluteColorimetric;
-		gmi->usecas  = 0x0;			/* Don't use appearance space, use L*a*b* */
+		gmi->usecas  = 0x1;			/* Don't use appearance space, use abs. L*a*b* */
 		gmi->usemap  = 0;			/* Don't use gamut mapping */
 		gmi->greymf  = 0.0;
 		gmi->glumwcpf = 0.0;
@@ -2159,6 +2249,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 0.0;
 		gmi->glumbexf = 0.0;
 		gmi->glumknf = 0.0;
+		gmi->bph = gmm_noBPadpt;	/* No BP adapation */
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
 		gmi->gamcknf = 0.0;
@@ -2172,11 +2263,11 @@ char *as				/* Alias string selector, NULL for none */
 
 		/* Align neutral axes and linearly map white point, then */
 		/* map L*a*b* to L*a*b* and clip out of gamut */
-		no = 3;
+		no = 10;
 		gmi->as = "rl";
-		gmi->desc = "rl - White Point Matched Appearance (Lab)";
+		gmi->desc = "rl - White Point Matched Colorimetric (Lab)";
 		gmi->icci = icRelativeColorimetric;
-		gmi->usecas  = 0x0;			/* Don't use appearance space, use L*a*b* */
+		gmi->usecas  = 0x0;			/* Don't use appearance space, use relative L*a*b* */
 		gmi->usemap  = 1;			/* Use gamut mapping */
 		gmi->greymf  = 1.0;			/* And linearly map white point */
 		gmi->glumwcpf = 1.0;
@@ -2184,6 +2275,7 @@ char *as				/* Alias string selector, NULL for none */
 		gmi->glumbcpf = 0.0;
 		gmi->glumbexf = 0.0;
 		gmi->glumknf = 0.0;
+		gmi->bph = gmm_noBPadpt;	/* No BP adapation */
 		gmi->gamcpf  = 0.0;
 		gmi->gamexf  = 0.0;
 		gmi->gamcknf = 0.0;
@@ -2210,10 +2302,12 @@ icxGMappingIntent *gmi	/* Gamut Mapping parameters to return */
 	printf("  Closest ICC intent = '%s'\n",icm2str(icmRenderingIntent,gmi->icci));
 
 	if ((gmi->usecas & 0xff) == 0)
-		printf("  Not using Color Apperance Space\n");
+		printf("  Not using Color Apperance Space - using L*a*b*\n");
 	else if ((gmi->usecas & 0xff) == 1)
-		printf("  Using Color Apperance Space\n");
+		printf("  Not using Color Apperance Space - using Absoute L*a*b*\n");
 	else if ((gmi->usecas & 0xff) == 2)
+		printf("  Using Color Apperance Space\n");
+	else if ((gmi->usecas & 0xff) == 3)
 		printf("  Using Absolute Color Apperance Space\n");
 
 	if ((gmi->usecas & 0x100) != 0)
@@ -2229,6 +2323,13 @@ icxGMappingIntent *gmi	/* Gamut Mapping parameters to return */
 		printf("  Grey axis black compression factor %f\n", gmi->glumbcpf);
 		printf("  Grey axis black expansion   factor %f\n", gmi->glumbexf);
 		printf("  Grey axis knee        factor %f\n", gmi->glumknf);
+		printf("  Black point algorithm: ");
+		switch(gmi->bph) {
+			case gmm_clipBP:	printf("Neutral axis no-adapt extend and clip\n"); break;
+			case gmm_BPadpt:	printf("Neutral axis fully adapt\n"); break;
+			case gmm_bendBP:	printf("Neutral axis no-adapt extend and bend\n"); break;
+			case gmm_noBPadpt:	printf("Neutral axis no-adapt\n"); break;
+		}
 		printf("  Gamut compression factor %f\n", gmi->gamcpf);
 		printf("  Gamut expansion   factor %f\n", gmi->gamexf);
 		printf("  Gamut compression knee factor %f\n", gmi->gamcknf);
@@ -3581,6 +3682,164 @@ void icxdpdiMulBy3x3Parm(
 	out[2] = ov[2];
 }
 
+/* ------------------------------------------- */
+/* BT.1886 support */
+
+/* Compute technical gamma from effective gamma in BT.1886 style */
+
+/* Info for optimization */
+typedef struct {
+	double thyr;		/* 50% input target */
+	double roo;			/* 0% input target */
+} gam_fits;
+
+/* gamma + input offset function handed to powell() */
+static double gam_fit(void *dd, double *v) {
+	gam_fits *gf = (gam_fits *)dd;
+	double gamma = v[0];
+	double a, b;
+	double rv = 0.0;
+	double tt;
+
+	if (gamma < 0.0) {
+		rv += 100.0 * -gamma;
+		gamma = 1e-4;
+	}
+
+	tt = pow(gf->roo, 1.0/gamma);
+	b = tt/(1.0 - tt);						/* Offset */
+	a = pow(1.0 - tt, gamma);				/* Gain */
+
+	tt = a * pow((0.5 + b), gamma);
+	tt = tt - gf->thyr;
+	rv += tt * tt;
+	
+	return rv;
+}
+
+/* Given the effective gamma and the output offset Y, */
+/* return the technical gamma needed for the correct 50% response. */
+double xicc_tech_gamma(
+	double egamma,			/* effective gamma needed */
+	double off				/* Output offset required */
+) {
+	gam_fits gf;
+	double op[1], sa[1], rv;
+
+	if (off <= 0.0) {
+		return egamma;
+	}
+
+	gf.thyr = pow(0.5, egamma);					/* Advetised 50% target */
+	gf.roo = off;
+
+	op[0] = egamma;
+	sa[0] = 0.1;
+
+	if (powell(&rv, 1, op, sa, 1e-6, 500, gam_fit, (void *)&gf, NULL, NULL) != 0)
+		warning("Computing effective gamma and input offset is inaccurate");
+
+	return op[0];
+}
+
+
+/* Set the bt1886_info to a default do nothing state */
+void bt1886_setnop(bt1886_info *p) {
+	p->ingo = 0.0;
+	p->outsc = 1.0;
+	p->outL = 0.0;
+	p->tab[0] = 0.0;
+	p->tab[1] = 0.0;
+}
+
+/* Setup the bt1886_info for the given target */
+void bt1886_setup(bt1886_info *p, double *XYZbp, double gamma) {
+	double Lab[3], bkipow;
+	p->gamma = gamma;
+
+	icmXYZ2Lab(&icmD50, Lab, XYZbp);
+
+	p->outL = Lab[0];		/* For bp blend */
+	p->tab[0] = Lab[1];		/* a* b* correction needed */
+	p->tab[1] = Lab[2];
+
+	bkipow = pow(XYZbp[1], 1.0/p->gamma);
+	p->ingo = bkipow/(1.0 - bkipow);		/* non-linear Y that makes out black point */
+	p->outsc = pow(1.0 - bkipow, p->gamma);	/* Scale to restore 1 -> 1 */
+}
+
+/* Apply BT.1886 black offset and gamma curve to the XYZ out of the input profile. */
+/* Do this in the colorspace defined by the input profile matrix lookup, */
+/* so it will be relative XYZ. We assume that BT.1886 does a Rec709 to gamma */
+/* viewing adjustment, irrespective of the source profile transfer curve. */
+void bt1886_apply(bt1886_info *p, icmLuMatrix *lu, double *out, double *in) {
+	int j;
+	double vv;
+
+#ifdef DEBUG
+	printf("bt1886 XYZ in %f %f %f\n", in[0],in[1],in[2]);
+#endif
+
+	lu->bwd_matrix(lu, out, in);
+
+#ifdef DEBUG
+	printf("bt1886 RGB in %f %f %f\n", out[0],out[1],out[2]);
+#endif
+
+	for (j = 0; j < 3; j++) {
+		vv = out[j];
+	
+		/* Convert linear light to Rec709 transfer curve */
+		if (vv < 0.018)
+			vv = 4.5 * vv;
+		else
+			vv = 1.099 * pow(vv, 0.45) - 0.099;
+		
+		/* Apply input offset & re-scale, and then gamma of 2.4/custom gamma */
+		vv = vv + p->ingo;
+		
+		if (vv > 0.0)
+			vv = p->outsc * pow(vv, p->gamma);
+
+		out[j] = vv;
+	}
+
+	lu->fwd_matrix(lu, out, out);
+
+#ifdef DEBUG
+	printf("bt1886 RGB bt.1886 %f %f %f\n", out[0],out[1],out[2]);
+#endif
+
+	icmXYZ2Lab(&icmD50, out, out);
+
+#ifdef DEBUG
+	printf("bt1886 Lab after Y adj. %f %f %f\n", out[0],out[1],out[2]);
+#endif
+
+	/* Blend ab to required black point offset p->tab[] as L approaches black. */
+	vv = (out[0] - p->outL)/(100.0 - p->outL);	/* 0 at bp, 1 at wp */
+	vv = 1.0 - vv;
+
+	if (vv < 0.0)
+		vv = 0.0;
+	else if (vv > 1.0)
+		vv = 1.0;
+	vv = pow(vv, 40.0);
+	out[1] += vv * p->tab[0];
+	out[2] += vv * p->tab[1];
+
+#ifdef DEBUG
+	printf("bt1886 Lab after wp adj. %f %f %f\n", out[0],out[1],out[2]);
+#endif
+
+	icmLab2XYZ(&icmD50, out, out);
+
+#ifdef DEBUG
+	printf("bt1886 XYZ out %f %f %f\n", out[0],out[1],out[2]);
+#endif
+}
+
+/* - - - - - - - - - - */
 #undef stricmp
 
 

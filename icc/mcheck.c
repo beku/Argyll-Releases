@@ -155,7 +155,7 @@ main(
 			error ("%d, %s",rd_icco->errc, rd_icco->err);
 	}
 	/* Get details of conversion */
-	luo->spaces(luo, &ins, &inn, &outs, NULL, &alg, NULL, NULL, NULL);
+	luo->spaces(luo, &ins, &inn, &outs, NULL, &alg, NULL, NULL, NULL, NULL);
 
 	if (alg != icmLutType) {
 		error("Expecting Lut based profile");

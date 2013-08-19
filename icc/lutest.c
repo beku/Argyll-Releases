@@ -1995,13 +1995,15 @@ main(
 
 		/* Use helper function to do the hard work. */
 		if (wo->set_tables(wo, ICM_CLUT_SET_EXACT, NULL,
-				icSigRgbData, 				/* Input color space */
-				icSigXYZData, 				/* Output color space */
-				RGB_RGBp,					/* Input transfer function, RGB->RGB' (NULL = default) */
-				NULL, NULL,					/* Use default Maximum range of RGB' values */
-				RGBp_XYZp,					/* RGB' -> XYZ' transfer function */
-				xyzmin, xyzmax,				/* Make XYZ' range 0.0 - 1.0 for better precision */
-				XYZp_XYZ) != 0)				/* Output transfer function, XYZ'->XYZ (NULL = deflt) */
+				icSigRgbData, 		/* Input color space */
+				icSigXYZData, 		/* Output color space */
+				RGB_RGBp,			/* Input transfer function, RGB->RGB' (NULL = default) */
+				NULL, NULL,			/* Use default Maximum range of RGB' values */
+				RGBp_XYZp,			/* RGB' -> XYZ' transfer function */
+				xyzmin, xyzmax,		/* Make XYZ' range 0.0 - 1.0 for better precision */
+				XYZp_XYZ,			/* Output transfer function, XYZ'->XYZ (NULL = deflt) */
+				NULL, NULL
+		) != 0)
 			error("Setting 16 bit RGB->XYZ Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 	}
 	/* 16 bit dev -> pcs lut - link intent 0 to intent 1 */
@@ -2126,13 +2128,15 @@ main(
 #endif
 		/* Use helper function to do the hard work. */
 		if (wo->set_tables(wo, ICM_CLUT_SET_EXACT, NULL,
-				icSigXYZData, 				/* Input color space */
-				icSigRgbData, 				/* Output color space */
-				XYZ_XYZp, 					/* Input transfer function, XYZ->XYZ' (NULL = default) */
-				xyzmin, xyzmax,				/* Make XYZ' range 0.0 - 1.0 for better precision */
-				XYZp_RGBp,					/* XYZ' -> RGB' transfer function */
-				rgbmin, rgbmax,				/* Make RGB' range 0.0 - 1.333 for less clip rounding */
-				RGBp_RGB) != 0)				/* Output transfer function, RGB'->RGB (NULL = deflt) */
+				icSigXYZData, 		/* Input color space */
+				icSigRgbData, 		/* Output color space */
+				XYZ_XYZp, 			/* Input transfer function, XYZ->XYZ' (NULL = default) */
+				xyzmin, xyzmax,		/* Make XYZ' range 0.0 - 1.0 for better precision */
+				XYZp_RGBp,			/* XYZ' -> RGB' transfer function */
+				rgbmin, rgbmax,		/* Make RGB' range 0.0 - 1.333 for less clip rounding */
+				RGBp_RGB,			/* Output transfer function, RGB'->RGB (NULL = deflt) */
+				NULL, NULL
+		) != 0)
 			error("Setting 16 bit XYZ->RGB Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 
 	}
@@ -2181,13 +2185,14 @@ main(
 
 		/* Use helper function to do the hard work. */
 		if (wo->set_tables(wo, ICM_CLUT_SET_EXACT, NULL,
-				icSigXYZData, 				/* Input color space */
-				icSigGrayData, 				/* Output color space */
-				XYZ_XYZp,					/* Input transfer function, XYZ->XYZ' (NULL = default) */
-				xyzmin, xyzmax,				/* Make XYZ' range 0.0 - 1.0 for better precision */
-				XYZp_BDIST,					/* XYZ' -> Boundary Distance transfer function */
-				NULL, NULL,					/* Default range from clut to output table */
-				BDIST_GAMMUT				/* Boundary Distance -> Out of gamut distance */
+				icSigXYZData, 		/* Input color space */
+				icSigGrayData, 		/* Output color space */
+				XYZ_XYZp,			/* Input transfer function, XYZ->XYZ' (NULL = default) */
+				xyzmin, xyzmax,		/* Make XYZ' range 0.0 - 1.0 for better precision */
+				XYZp_BDIST,			/* XYZ' -> Boundary Distance transfer function */
+				NULL, NULL,			/* Default range from clut to output table */
+				BDIST_GAMMUT,		/* Boundary Distance -> Out of gamut distance */
+				NULL, NULL
 		) != 0)
 			error("Setting 16 bit XYZ->Gammut Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 	}
@@ -2559,13 +2564,14 @@ main(
 
 		/* Use helper function to do the hard work. */
 		if (wo->set_tables(wo, ICM_CLUT_SET_EXACT, NULL,
-				icSigRgbData, 				/* Input color space */
-				icSigLabData, 				/* Output color space */
-				RGB_RGBp,					/* Input transfer function, RGB->RGB' (NULL = default) */
-				NULL, NULL,					/* Use default Maximum range of RGB' values */
-				RGBp_Labp,					/* RGB' -> Lab' transfer function */
-				NULL, NULL,					/* Use default Maximum range of Lab' values */
-				Labp_Lab					/* Linear output transform Lab'->Lab */
+				icSigRgbData, 		/* Input color space */
+				icSigLabData, 		/* Output color space */
+				RGB_RGBp,			/* Input transfer function, RGB->RGB' (NULL = default) */
+				NULL, NULL,			/* Use default Maximum range of RGB' values */
+				RGBp_Labp,			/* RGB' -> Lab' transfer function */
+				NULL, NULL,			/* Use default Maximum range of Lab' values */
+				Labp_Lab,			/* Linear output transform Lab'->Lab */
+				NULL, NULL
 		) != 0)
 			error("Setting 16 bit RGB->Lab Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 	}
@@ -2643,13 +2649,15 @@ main(
 #endif
 		/* Use helper function to do the hard work. */
 		if (wo->set_tables(wo, ICM_CLUT_SET_EXACT, NULL,
-				icSigLabData, 				/* Input color space */
-				icSigRgbData, 				/* Output color space */
-				Lab_Labp,					/* Linear input transform Lab->Lab' */
-				NULL, NULL,					/* Use default Lab' range */
-				Labp_RGBp,					/* Lab' -> RGB' transfer function */
-				rgbmin, rgbmax,				/* Make RGB' range 0.0 - 1.333 for less clip rounding */
-				RGBp_RGB) != 0)				/* Output transfer function, RGB'->RGB (NULL = deflt) */
+				icSigLabData, 		/* Input color space */
+				icSigRgbData, 		/* Output color space */
+				Lab_Labp,			/* Linear input transform Lab->Lab' */
+				NULL, NULL,			/* Use default Lab' range */
+				Labp_RGBp,			/* Lab' -> RGB' transfer function */
+				rgbmin, rgbmax,		/* Make RGB' range 0.0 - 1.333 for less clip rounding */
+				RGBp_RGB,			/* Output transfer function, RGB'->RGB (NULL = deflt) */
+				NULL, NULL
+		) != 0)
 			error("Setting 16 bit Lab->RGB Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 
 	}
@@ -2690,13 +2698,14 @@ main(
 
 		/* Use helper function to do the hard work. */
 		if (wo->set_tables(wo, ICM_CLUT_SET_EXACT, NULL,
-				icSigLabData, 				/* Input color space */
-				icSigGrayData, 				/* Output color space */
-				Lab_Labp,					/* Linear input transform Lab->Lab' */
-				NULL, NULL	,				/* Default Lab' range */
-				Labp_BDIST,					/* Lab' -> Boundary Distance transfer function */
-				NULL, NULL,					/* Default range from clut to output table */
-				BDIST_GAMMUT				/* Boundary Distance -> Out of gamut distance */
+				icSigLabData, 		/* Input color space */
+				icSigGrayData, 		/* Output color space */
+				Lab_Labp,			/* Linear input transform Lab->Lab' */
+				NULL, NULL,			/* Default Lab' range */
+				Labp_BDIST,			/* Lab' -> Boundary Distance transfer function */
+				NULL, NULL,			/* Default range from clut to output table */
+				BDIST_GAMMUT,		/* Boundary Distance -> Out of gamut distance */
+				NULL, NULL
 		) != 0)
 			error("Setting 16 bit Lab->Gammut Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 	}
@@ -3065,13 +3074,14 @@ main(
 
 		/* Use helper function to do the hard work. */
 		if (wo->set_tables(wo, ICM_CLUT_SET_EXACT, NULL,
-				icSigRgbData, 				/* Input color space */
-				icSigLabData, 				/* Output color space */
-				RGB_RGBp,					/* Input transfer function, RGB->RGB' (NULL = default) */
-				NULL, NULL,					/* Use default Maximum range of RGB' values */
-				RGBp_Labp,					/* RGB' -> Lab' transfer function */
-				NULL, NULL,					/* Use default Maximum range of Lab' values */
-				Labp_Lab					/* Linear output transform Lab'->Lab */
+				icSigRgbData, 		/* Input color space */
+				icSigLabData, 		/* Output color space */
+				RGB_RGBp,			/* Input transfer function, RGB->RGB' (NULL = default) */
+				NULL, NULL,			/* Use default Maximum range of RGB' values */
+				RGBp_Labp,			/* RGB' -> Lab' transfer function */
+				NULL, NULL,			/* Use default Maximum range of Lab' values */
+				Labp_Lab,			/* Linear output transform Lab'->Lab */
+				NULL, NULL
 		) != 0)
 			error("Setting 8 bit RGB->Lab Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 	}
@@ -3149,13 +3159,15 @@ main(
 #endif
 		/* Use helper function to do the hard work. */
 		if (wo->set_tables(wo, ICM_CLUT_SET_EXACT, NULL,
-				icSigLabData, 				/* Input color space */
-				icSigRgbData, 				/* Output color space */
-				Lab_Labp,					/* Linear input transform Lab->Lab' */
-				NULL, NULL,					/* Use default Lab' range */
-				Labp_RGBp,					/* Lab' -> RGB' transfer function */
-				rgbmin, rgbmax,				/* Make RGB' range 0.0 - 1.333 for less clip rounding */
-				RGBp_RGB) != 0)				/* Output transfer function, RGB'->RGB (NULL = deflt) */
+				icSigLabData, 		/* Input color space */
+				icSigRgbData, 		/* Output color space */
+				Lab_Labp,			/* Linear input transform Lab->Lab' */
+				NULL, NULL,			/* Use default Lab' range */
+				Labp_RGBp,			/* Lab' -> RGB' transfer function */
+				rgbmin, rgbmax,		/* Make RGB' range 0.0 - 1.333 for less clip rounding */
+				RGBp_RGB,			/* Output transfer function, RGB'->RGB (NULL = deflt) */
+				NULL, NULL
+		) != 0)
 			error("Setting 8 bit Lab->RGB Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 
 	}
@@ -3196,13 +3208,14 @@ main(
 
 		/* Use helper function to do the hard work. */
 		if (wo->set_tables(wo, ICM_CLUT_SET_EXACT, NULL,
-				icSigLabData, 				/* Input color space */
-				icSigGrayData, 				/* Output color space */
-				Lab_Labp,					/* Linear input transform Lab->Lab' */
-				NULL, NULL	,				/* Default Lab' range */
-				Labp_BDIST,					/* Lab' -> Boundary Distance transfer function */
-				NULL, NULL,					/* Default range from clut to output table */
-				BDIST_GAMMUT				/* Boundary Distance -> Out of gamut distance */
+				icSigLabData, 		/* Input color space */
+				icSigGrayData, 		/* Output color space */
+				Lab_Labp,			/* Linear input transform Lab->Lab' */
+				NULL, NULL	,		/* Default Lab' range */
+				Labp_BDIST,			/* Lab' -> Boundary Distance transfer function */
+				NULL, NULL,			/* Default range from clut to output table */
+				BDIST_GAMMUT,		/* Boundary Distance -> Out of gamut distance */
+				NULL, NULL
 		) != 0)
 			error("Setting 16 bit Lab->Gammut Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 	}

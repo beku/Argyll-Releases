@@ -103,10 +103,10 @@ else if [ X$OSTYPE = "Xdarwin10.0" \
 	USBBINFILES="binfiles.osx"
 	USETAR=true
 else if [ X$OSTYPE = "Xlinux-gnu" ] ; then
-	if [[ "$MACHTYPE" =~ x86_64-.*-linux-gnu ]] ; then
+	if [[ "$MACHTYPE" = x86_64-*-linux-gnu ]] ; then
 		echo "We're on Linux x86_64!"
 		PACKAGE=Argyll_V${VERSION}_linux_x86_64_bin.tgz
-	else if [[ "$MACHTYPE" =~ i.86-.*-linux-gnu ]] ; then
+	else if [[ "$MACHTYPE" = *86-*-linux-gnu ]] ; then
 		echo "We're on Linux x86!"
 		PACKAGE=Argyll_V${VERSION}_linux_x86_bin.tgz
 	fi

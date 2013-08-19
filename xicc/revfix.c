@@ -747,14 +747,16 @@ main(int argc, char *argv[]) {
 				/* Use helper function to do the hard work. */
 				if (wo->set_tables(wo,
 						ICM_CLUT_SET_APXLS,
-						&cb,						/* Context */
-						icSigLabData, 				/* Input color space */
-						icSigCmykData, 				/* Output color space */
-						Lab_Labp,					/* Linear input transform Lab->Lab' */
-						NULL, NULL,					/* Use default Lab' range */
-						Labp_CMYKp,					/* Lab' -> CMYK' transfer function */
-						NULL, NULL,					/* Use default CMYK' range */
-						CMYKp_CMYK) != 0)			/* Output transfer function, CMYK'->CMYK (NULL = deflt) */
+						&cb,				/* Context */
+						icSigLabData, 		/* Input color space */
+						icSigCmykData, 		/* Output color space */
+						Lab_Labp,			/* Linear input transform Lab->Lab' */
+						NULL, NULL,			/* Use default Lab' range */
+						Labp_CMYKp,			/* Lab' -> CMYK' transfer function */
+						NULL, NULL,			/* Use default CMYK' range */
+						CMYKp_CMYK,		 	/* Output transfer function, CMYK'->CMYK */
+						NULL, NULL			/* default APXLS range */
+				) != 0)
 					error("Setting 16 bit Lab->CMYK Lut failed: %d, %s",icco->errc,icco->err);
 	
 				if (verb)

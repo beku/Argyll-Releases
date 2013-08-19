@@ -1,8 +1,8 @@
 
-Argyll CMS README file - Version 1.5.0
+Argyll CMS README file - Version 1.6.0
 --------------------------------------
 
-Date: 8th March 2013   
+Date: 16th August 2013
 Author: Graeme Gill
 
 Introduction
@@ -10,12 +10,13 @@ Introduction
 ArgyllCMS is an ICC compatible color management system, available as Open Source.
 It supports accurate ICC profile creation for scanners, cameras and film
 recorders, and calibration and profiling of displays and RGB & CMYK printers.
-Spectral sample data is supported, allowing a selection of illuminants observer
-types, and paper fluorescent whitener additive compensation. Profiles can also
-incorporate source specific gamut mappings for perceptual and saturation intents.
-Gamut mapping and profile linking uses the CIECAM02 appearance model, a unique
-gamut mapping algorithm, and a wide selection of rendering intents. Device Link
-can be created with a wide variety of advanced options. It also includes code for
+Device Link can be created with a wide variety of advanced options, including
+specialized Video calibration standards and 3dLuts. Spectral sample data is
+supported, allowing a selection of illuminants observer types, and paper
+fluorescent whitener additive compensation. Profiles can also incorporate source
+specific gamut mappings for perceptual and saturation intents. Gamut mapping and
+profile linking uses the CIECAM02 appearance model, a unique gamut mapping algorithm,
+and a wide selection of rendering intents. It also includes code for
 the fastest portable 8 bit raster color conversion engine available anywhere, as
 well as support for fast, fully accurate 16 bit conversion. Device color gamuts
 can also be viewed and compared using a VRML viewer. Comprehensive documentation
@@ -23,7 +24,7 @@ is provided for each major tool, and a general guide to using the tools for typi
 color management tasks is also available. A mailing list provides support for
 more advanced usage.
 
-This is Version 1.5.1, a bug fix update to V1.5.0 released on 1st March 2013.
+This is Version 1.6.0, a feature and bug fix update to V1.5.1 released on 8th March 2013.
 The first public release of icclib was in November 1998,
 and of Argyll was in October 2000. Code development commenced in 1995. See
 Changes Summary for an overview of changes since the last release. Changes

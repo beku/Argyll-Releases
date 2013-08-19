@@ -88,10 +88,11 @@ void usage(void) {
 	fprintf(stderr,"         w:x:y         Adapted white point as x, y\n");
 	fprintf(stderr,"         a:adaptation  Adaptation luminance in cd.m^2 (default 50.0)\n");
 	fprintf(stderr,"         b:background  Background %% of image luminance (default 20)\n");
-	fprintf(stderr,"         l:scenewhite  Scene white in cd.m^2 if surround = auto (default 250)\n");
-	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 1)\n");
-	fprintf(stderr,"         f:X:Y:Z       Flare color as XYZ (default media white)\n");
-	fprintf(stderr,"         f:x:y         Flare color as x, y\n");
+	fprintf(stderr,"         l:imagewhite  Image white in cd.m^2 if surround = auto (default 250)\n");
+	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 0)\n");
+	fprintf(stderr,"         g:glare       Flare light %% of ambient (default 1)\n");
+	fprintf(stderr,"         g:X:Y:Z       Flare color as XYZ (default media white, Abs: D50)\n");
+	fprintf(stderr,"         g:x:y         Flare color as x, y\n");
 	fprintf(stderr," -O outputfile Override the default output filename.\n");
 	exit(1);
 }
@@ -344,9 +345,10 @@ main(int argc, char *argv[]) {
 	double vc_a = -1.0;			/* Adapted luminance */
 	double vc_b = -1.0;			/* Background % overid */
 	double vc_l = -1.0;			/* Scene luminance override */
-	double vc_f = -1.0;			/* Flare % overid */
-	double vc_fXYZ[3] = {-1.0, -1.0, -1.0};	/* Flare color override in XYZ */
-	double vc_fxy[2] = {-1.0, -1.0};		/* Flare color override in x,y */
+	double vc_f = -1.0;			/* Flare % overide */
+	double vc_g = -1.0;			/* Glare % overide */
+	double vc_gXYZ[3] = {-1.0, -1.0, -1.0};	/* Glare color override in XYZ */
+	double vc_gxy[2] = {-1.0, -1.0};		/* Glare color override in x,y */
 	icxLuBase *luo = NULL;					/* Generic lookup object */
 	icColorSpaceSignature ins = icSigLabData, outs;	/* Type of input and output spaces */
 	int inn, outn;						/* Number of components */
@@ -528,13 +530,17 @@ main(int argc, char *argv[]) {
 						usage();
 					vc_l = atof(na+2);
 				} else if (na[0] == 'f' || na[0] == 'F') {
+					if (na[1] != ':')
+						usage();
+					vc_f = atof(na+2);
+				} else if (na[0] == 'g' || na[0] == 'G') {
 					double x, y, z;
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
-						vc_fXYZ[0] = x; vc_fXYZ[1] = y; vc_fXYZ[2] = z;
+						vc_gXYZ[0] = x; vc_gXYZ[1] = y; vc_gXYZ[2] = z;
 					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
-						vc_fxy[0] = x; vc_fxy[1] = y;
+						vc_gxy[0] = x; vc_gxy[1] = y;
 					} else if (sscanf(na+1,":%lf",&x) == 1) {
-						vc_f = x;
+						vc_g = x;
 					} else
 						usage();
 				} else
@@ -666,19 +672,22 @@ main(int argc, char *argv[]) {
 			vc.Yb = vc_b/100.0;
 		if (vc_l >= 0.0)
 			vc.Lv = vc_l;
+
 		if (vc_f >= 0.0)
 			vc.Yf = vc_f/100.0;
-		if (vc_fXYZ[1] > 0.0) {
+		if (vc_g >= 0.0)
+			vc.Yg = vc_g/100.0;
+		if (vc_gXYZ[1] > 0.0) {
 			/* Normalise it to current media white */
-			vc.Fxyz[0] = vc_fXYZ[0]/vc_fXYZ[1] * vc.Fxyz[1];
-			vc.Fxyz[2] = vc_fXYZ[2]/vc_fXYZ[1] * vc.Fxyz[1];
+			vc.Gxyz[0] = vc_gXYZ[0]/vc_gXYZ[1] * vc.Gxyz[1];
+			vc.Gxyz[2] = vc_gXYZ[2]/vc_gXYZ[1] * vc.Gxyz[1];
 		}
-		if (vc_fxy[0] >= 0.0) {
-			double x = vc_fxy[0];
-			double y = vc_fxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
+		if (vc_gxy[0] >= 0.0) {
+			double x = vc_gxy[0];
+			double y = vc_gxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
 			double z = 1.0 - x - y;
-			vc.Fxyz[0] = x/y * vc.Fxyz[1];
-			vc.Fxyz[2] = z/y * vc.Fxyz[1];
+			vc.Gxyz[0] = x/y * vc.Gxyz[1];
+			vc.Gxyz[2] = z/y * vc.Gxyz[1];
 		}
 	
 		/* Get a expanded color conversion object */
@@ -726,23 +735,25 @@ main(int argc, char *argv[]) {
 			vc.Yb = vc_b/100.0;
 		if (vc_f >= 0.0)
 			vc.Yf = vc_f/100.0;
-		if (vc_fXYZ[1] > 0.0) {
+		if (vc_g >= 0.0)
+			vc.Yg = vc_g/100.0;
+		if (vc_gXYZ[1] > 0.0) {
 			/* Normalise it to current media white */
-			vc.Fxyz[0] = vc_fXYZ[0]/vc_fXYZ[1] * vc.Fxyz[1];
-			vc.Fxyz[2] = vc_fXYZ[2]/vc_fXYZ[1] * vc.Fxyz[1];
+			vc.Gxyz[0] = vc_gXYZ[0]/vc_gXYZ[1] * vc.Gxyz[1];
+			vc.Gxyz[2] = vc_gXYZ[2]/vc_gXYZ[1] * vc.Gxyz[1];
 		}
-		if (vc_fxy[0] >= 0.0) {
-			double x = vc_fxy[0];
-			double y = vc_fxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
+		if (vc_gxy[0] >= 0.0) {
+			double x = vc_gxy[0];
+			double y = vc_gxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
 			double z = 1.0 - x - y;
-			vc.Fxyz[0] = x/y * vc.Fxyz[1];
-			vc.Fxyz[2] = z/y * vc.Fxyz[1];
+			vc.Gxyz[0] = x/y * vc.Gxyz[1];
+			vc.Gxyz[2] = z/y * vc.Gxyz[1];
 		}
 	
 		if ((cam = new_icxcam(cam_default)) == NULL)
 			error("new_icxcam failed");
 
-		cam->set_view(cam, vc.Ev, vc.Wxyz, vc.La, vc.Yb, vc.Lv, vc.Yf, vc.Fxyz,
+		cam->set_view(cam, vc.Ev, vc.Wxyz, vc.La, vc.Yb, vc.Lv, vc.Yf, vc.Yg, vc.Gxyz,
 		              XICC_USE_HK);
 	}
 

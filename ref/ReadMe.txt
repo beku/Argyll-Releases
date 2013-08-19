@@ -8,6 +8,10 @@ The following files are in the public domain:
 	ClayRGB1998.icm
 	lab2lab.icm
 
+	Rec709.icm					Standard Rec 709 High Def. Video space
+	EBU3213_PAL.icm				PAL TV Standard Def. type colorspace with Rec 709 transfer curve
+	SMPTE_RP145_NTSC.icm		NTSC TV Standard Def. type colorspace with Rec 709 transfer curve
+
 The following files are licensed acording to the
 GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
 see the License.txt file for licensing details.

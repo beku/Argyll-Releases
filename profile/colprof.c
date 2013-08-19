@@ -238,7 +238,8 @@ int main(int argc, char *argv[]) {
 	ivc_p.Yb = -1.0;
 	ivc_p.Lv = -1.0;
 	ivc_p.Yf = -1.0;
-	ivc_p.Fxyz[0] = -1.0; ivc_p.Fxyz[1] = -1.0; ivc_p.Fxyz[2] = -1.0;
+	ivc_p.Yg = -1.0;
+	ivc_p.Gxyz[0] = -1.0; ivc_p.Gxyz[1] = -1.0; ivc_p.Gxyz[2] = -1.0;
 
 	ovc_p.Ev = -1;
 	ovc_p.Wxyz[0] = -1.0; ovc_p.Wxyz[1] = -1.0; ovc_p.Wxyz[2] = -1.0;
@@ -246,7 +247,8 @@ int main(int argc, char *argv[]) {
 	ovc_p.Yb = -1.0;
 	ovc_p.Lv = -1.0;
 	ovc_p.Yf = -1.0;
-	ovc_p.Fxyz[0] = -1.0; ovc_p.Fxyz[1] = -1.0; ovc_p.Fxyz[2] = -1.0;
+	ovc_p.Yg = -1.0;
+	ovc_p.Gxyz[0] = -1.0; ovc_p.Gxyz[1] = -1.0; ovc_p.Gxyz[2] = -1.0;
 
 	xicc_enum_gmapintent(&pgmi, icxPerceptualGMIntent, NULL);
 	xicc_enum_gmapintent(&sgmi, icxSaturationGMIntent, NULL);
@@ -468,7 +470,7 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 				if (na == NULL) usage("Expected argument to input white point scale flag -U");
 				iwpscale = atof(na);
-				if (iwpscale < 0.0 || iwpscale > 100.0)
+				if (iwpscale < 0.0 || iwpscale > 200.0)
 					usage("Argument '%s' to flag -U out of range",na);
 			}
 			/* Clip primaries */
@@ -781,7 +783,7 @@ int main(int argc, char *argv[]) {
 				}
 
 				fa = nfa;
-				if (na == NULL) usage("Viewing conditions flag (-c) needs an argument");
+				if (na == NULL) usage("Viewing conditions flag (-%c) needs an argument",argv[fa][1]);
 				if (na[1] != ':') {
 					if (vc == &ivc_p) {
 						if ((ivc_e = xicc_enum_viewcond(NULL, NULL, -2, na, 1, NULL)) == -999)
@@ -792,7 +794,7 @@ int main(int argc, char *argv[]) {
 					}
 				} else if (na[0] == 's' || na[0] == 'S') {
 					if (na[1] != ':')
-						usage("Viewing conditions (-cs) missing ':'");
+						usage("Viewing conditions (-%cs) missing ':'",argv[fa][1]);
 					if (na[2] == 'n' || na[2] == 'N') {
 						vc->Ev = vc_none;		/* Automatic */
 					} else if (na[2] == 'a' || na[2] == 'A') {
@@ -804,7 +806,7 @@ int main(int argc, char *argv[]) {
 					} else if (na[2] == 'c' || na[2] == 'C') {
 						vc->Ev = vc_cut_sheet;
 					} else
-						usage("Viewing condition (-c) unrecognised surround '%c'",na[2]);
+						usage("Viewing condition (-%c) unrecognised surround '%c'",argv[fa][1],na[2]);
 				} else if (na[0] == 'w' || na[0] == 'W') {
 					double x, y, z;
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
@@ -812,31 +814,35 @@ int main(int argc, char *argv[]) {
 					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
 						vc->Wxyz[0] = x; vc->Wxyz[1] = y;
 					} else
-						usage("Viewing condition (-cw) unrecognised white point '%s'",na+1);
+						usage("Viewing condition (-%cw) unrecognised white point '%s'",argv[fa][1],na+1);
 				} else if (na[0] == 'a' || na[0] == 'A') {
 					if (na[1] != ':')
-						usage("Viewing conditions (-ca) missing ':'");
+						usage("Viewing conditions (-%ca) missing ':'",argv[fa][1]);
 					vc->La = atof(na+2);
 				} else if (na[0] == 'b' || na[0] == 'B') {
 					if (na[1] != ':')
-						usage("Viewing conditions (-cb) missing ':'");
+						usage("Viewing conditions (-%cb) missing ':'",argv[fa][1]);
 					vc->Yb = atof(na+2)/100.0;
 				} else if (na[0] == 'l' || na[0] == 'L') {
 					if (na[1] != ':')
-						usage("Viewing conditions (-[cd]l) missing ':'");
+						usage("Viewing conditions (-%cl) missing ':'",argv[fa][1]);
 					vc->Lv = atof(na+2);
 				} else if (na[0] == 'f' || na[0] == 'F') {
+					if (na[1] != ':')
+						usage("Viewing conditions (-%cf) missing ':'",argv[fa][1]);
+					vc->Yf = atof(na+2);
+				} else if (na[0] == 'g' || na[0] == 'G') {
 					double x, y, z;
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
-						vc->Fxyz[0] = x; vc->Fxyz[1] = y; vc->Fxyz[2] = z;
+						vc->Gxyz[0] = x; vc->Gxyz[1] = y; vc->Gxyz[2] = z;
 					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
-						vc->Fxyz[0] = x; vc->Fxyz[1] = y;
+						vc->Gxyz[0] = x; vc->Gxyz[1] = y;
 					} else if (sscanf(na+1,":%lf",&x) == 1) {
-						vc->Yf = x/100.0;
+						vc->Yg = x/100.0;
 					} else
-						usage("Viewing condition (-cf) unrecognised flare '%s'",na+1);
+						usage("Viewing condition (-%cg) unrecognised flare '%s'",argv[fa][1],na+1);
 				} else
-					usage("Viewing condition (-c) unrecognised sub flag '%c'",na[0]);
+					usage("Viewing condition (-%c) unrecognised sub flag '%c'",argv[fa][1],na[0]);
 			}
 
 			/* Gammut mapping diagnostic plots */
@@ -1045,7 +1051,7 @@ int main(int argc, char *argv[]) {
 
 		make_output_icc(ptype, 0, iccver, verb, iquality, oquality,
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
-		                gamdiag, verify, clipprims, &ink, inname, outname, icg, 
+		                gamdiag, verify, clipprims, iwpscale, &ink, inname, outname, icg, 
 		                spec, tillum, &cust_tillum, illum, &cust_illum, observ, fwacomp,
 		                smooth, avgdev,
 		                ipname[0] != '\000' ? ipname : NULL,
@@ -1083,7 +1089,7 @@ int main(int argc, char *argv[]) {
 		/* If a source gamut is provided for a Display, then a V2.4.0 profile will be created */
 		make_output_icc(ptype, mtxtoo, iccver, verb, iquality, oquality,
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
-		                gamdiag, verify, clipprims, NULL, inname, outname, icg,
+		                gamdiag, verify, clipprims, iwpscale, NULL, inname, outname, icg,
 		                spec, icxIT_none, NULL, illum, &cust_illum, observ, 0,
 		                smooth, avgdev,
 		                ipname[0] != '\000' ? ipname : NULL,

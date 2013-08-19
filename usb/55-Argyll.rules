@@ -85,6 +85,6 @@ TEST=="/var/run/ConsoleKit/database", ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{A
 ENV{COLOR_MEASUREMENT_DEVICE}=="*?", ENV{ACL_MANAGE}!="*?", MODE="660", GROUP="plugdev"
 
 # Set ID_VENDOR and ID_MODEL acording to VID and PID
-IMPORT{program}="usb-db %p"
+TEST=="/lib/udev/usb-db", IMPORT{program}="usb-db %p"
 
 LABEL="argyll_rules_end"

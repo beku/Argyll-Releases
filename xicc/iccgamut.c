@@ -81,10 +81,11 @@ void usage(char *diag) {
 	fprintf(stderr,"         w:x:y         Adapted white point as x, y\n");
 	fprintf(stderr,"         a:adaptation  Adaptation luminance in cd.m^2 (default 50.0)\n");
 	fprintf(stderr,"         b:background  Background %% of image luminance (default 20)\n");
-	fprintf(stderr,"         l:scenewhite  Scene white in cd.m^2 if surround = auto (default 250)\n");
-	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 1)\n");
-	fprintf(stderr,"         f:X:Y:Z       Flare color as XYZ (default media white)\n");
-	fprintf(stderr,"         f:x:y         Flare color as x, y\n");
+	fprintf(stderr,"         l:imagewhite  Image white in cd.m^2 if surround = auto (default 250)\n");
+	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 0)\n");
+	fprintf(stderr,"         g:glare       Flare light %% of ambient (default 1)\n");
+	fprintf(stderr,"         g:X:Y:Z       Flare color as XYZ (default media white, Abs: D50)\n");
+	fprintf(stderr,"         g:x:y         Flare color as x, y\n");
     fprintf(stderr," -s                    Create special cube surface topology plot\n");
 	fprintf(stderr,"\n");
 	exit(1);
@@ -93,8 +94,8 @@ void usage(char *diag) {
 int
 main(int argc, char *argv[]) {
 	int fa,nfa;				/* argument we're looking at */
-	char prof_name[100];
-	char *xl, out_name[100];
+	char prof_name[MAXNAMEL+1];
+	char *xl, out_name[MAXNAMEL+4+1];
 	icmFile *fp;
 	icc *icco;
 	xicc *xicco;
@@ -119,8 +120,9 @@ main(int argc, char *argv[]) {
 	double vc_b = -1.0;			/* Background % overide */
 	double vc_l = -1.0;			/* Scene luminance override */
 	double vc_f = -1.0;			/* Flare % overide */
-	double vc_fXYZ[3] = {-1.0, -1.0, -1.0};	/* Flare color override in XYZ */
-	double vc_fxy[2] = {-1.0, -1.0};		/* Flare color override in x,y */
+	double vc_g = -1.0;			/* Glare % overide */
+	double vc_gXYZ[3] = {-1.0, -1.0, -1.0};	/* Glare color override in XYZ */
+	double vc_gxy[2] = {-1.0, -1.0};		/* Glare color override in x,y */
 
 	icxLuBase *luo;
 
@@ -328,18 +330,22 @@ main(int argc, char *argv[]) {
 					vc_b = atof(na+2);
 				} else if (na[0] == 'l' || na[0] == 'L') {
 					if (na[1] != ':')
-						usage("Viewing conditions (-[cd]l) missing ':'");
+						usage("Viewing conditions (-cl) missing ':'");
 					vc_l = atof(na+2);
 				} else if (na[0] == 'f' || na[0] == 'F') {
+					if (na[1] != ':')
+						usage("Viewing conditions (-cf) missing ':'");
+					vc_f = atof(na+2);
+				} else if (na[0] == 'g' || na[0] == 'G') {
 					double x, y, z;
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
-						vc_fXYZ[0] = x; vc_fXYZ[1] = y; vc_fXYZ[2] = z;
+						vc_gXYZ[0] = x; vc_gXYZ[1] = y; vc_gXYZ[2] = z;
 					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
-						vc_fxy[0] = x; vc_fxy[1] = y;
+						vc_gxy[0] = x; vc_gxy[1] = y;
 					} else if (sscanf(na+1,":%lf",&x) == 1) {
-						vc_f = x;
+						vc_g = x;
 					} else
-						usage("Unrecognised parameters after -cf");
+						usage("Unrecognised parameters after -cg");
 				} else
 					usage("Unrecognised parameters after -c");
 			}
@@ -357,7 +363,7 @@ main(int argc, char *argv[]) {
 	}
 
 	if (fa >= argc || argv[fa][0] == '-') usage("Expected profile name");
-	strcpy(prof_name,argv[fa]);
+	strncpy(prof_name, argv[fa],MAXNAMEL); prof_name[MAXNAMEL] = '\000';
 
 	/* Open up the profile for reading */
 	if ((fp = new_icmFileStd_name(prof_name,"r")) == NULL)
@@ -431,17 +437,19 @@ main(int argc, char *argv[]) {
 		vc.Lv = vc_l;
 	if (vc_f >= 0.0)
 		vc.Yf = vc_f/100.0;
-	if (vc_fXYZ[1] > 0.0) {
+	if (vc_g >= 0.0)
+		vc.Yg = vc_g/100.0;
+	if (vc_gXYZ[1] > 0.0) {
 		/* Normalise it to current media white */
-		vc.Fxyz[0] = vc_fXYZ[0]/vc_fXYZ[1] * vc.Fxyz[1];
-		vc.Fxyz[2] = vc_fXYZ[2]/vc_fXYZ[1] * vc.Fxyz[1];
+		vc.Gxyz[0] = vc_gXYZ[0]/vc_gXYZ[1] * vc.Gxyz[1];
+		vc.Gxyz[2] = vc_gXYZ[2]/vc_gXYZ[1] * vc.Gxyz[1];
 	}
-	if (vc_fxy[0] >= 0.0) {
-		double x = vc_fxy[0];
-		double y = vc_fxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
+	if (vc_gxy[0] >= 0.0) {
+		double x = vc_gxy[0];
+		double y = vc_gxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
 		double z = 1.0 - x - y;
-		vc.Fxyz[0] = x/y * vc.Fxyz[1];
-		vc.Fxyz[2] = z/y * vc.Fxyz[1];
+		vc.Gxyz[0] = x/y * vc.Gxyz[1];
+		vc.Gxyz[2] = z/y * vc.Gxyz[1];
 	}
 
 	fl |= ICX_CLIP_NEAREST;		/* Don't setup rev uncessarily */

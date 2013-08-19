@@ -62,14 +62,17 @@
     <div style="margin-left: 40px;"><span style="font-weight: bold;"><span
           style="font-weight: bold;"><span style="font-weight: bold;"></span></span></span>Normally
 
+
       a delay of 200 msec is allowed between changing a patch color on a
       display, and reading the color with an instrument, although some
-      instruments (ie. i1d3) will automatically measure and set an
-      appropriate delay during instrument calibration. In rare
-      situations this delay may not be sufficient (ie. some TV's with
-      extensive image processing features turned on), and a larger delay
-      can be set using the <span style="font-weight: bold;"><span
-          style="font-weight: bold;"><span style="font-weight: bold;"></span></span></span>ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS
+      instruments (ie. i1d3, i1pro, ColorMunki) will automatically
+      measure and set an appropriate delay during instrument
+      calibration. In rare situations this delay may not be sufficient
+      (ie. some TV's with extensive image processing features turned
+      on), and a larger delay can be set using the <span
+        style="font-weight: bold;"><span style="font-weight: bold;"><span
+            style="font-weight: bold;"></span></span></span>ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS
+
 
       environment variable, ie. ARGYLL_MIN_DISPLAY_UPDATE_DELAY_MS=400
       would set a 400 msec minimum delay.<br>
@@ -100,6 +103,7 @@
       </span></span>
     <div style="margin-left: 40px;">Argyll tries to follow the <a
 href="http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html">XDG
+
 
         Base Directory Specification</a>, and uses the <span
         style="font-weight: bold;">XDG_CACHE_HOME</span> environment

@@ -71,12 +71,11 @@ static void short2buf(unsigned char *buf, int inv) {
 /* Check a USB Vendor and product ID by reading the device descriptors, */
 /* and add the device to the icoms path if it is supported. */
 /* Return icom nz error code on fatal error */
-int usb_check_and_add_fd(
+static
+int usb_check_and_add(
 a1log *log,
-icompaths *pp,	/* icompaths to add to, or if NULL */
-icompath *p,	/* icompath to set. */
-char *dpath,	/* path to device - may be NULL */
-int fd			/* device file descriptor */
+icompaths *pp,	/* icompaths to add to */
+char *dpath		/* path to device */
 ) {
 	int rv;
 	unsigned char buf[IUSB_DESC_TYPE_DEVICE_SIZE];
@@ -84,8 +83,15 @@ int fd			/* device file descriptor */
 	unsigned int configix, nconfig, totlen;
 	instType itype;
 	struct usb_idevice *usbd = NULL;
+	int fd;			/* device file descriptor */
 
-	a1logd(log, 6, "usb_check_and_add_fd: with fd %d\n",fd);
+	a1logd(log, 6, "usb_check_and_add: givem '%s'\n",dpath);
+
+	/* Open the device so that we can read it */
+	if ((fd = open(dpath, O_RDONLY)) < 0) {
+		a1logd(log, 1, "usb_check_and_add: failed to open '%s'\n",dpath);
+		return ICOM_OK;
+	}
 
 	/* Read the device descriptor */
 	if ((rv = read(fd, buf, IUSB_DESC_TYPE_DEVICE_SIZE)) < 0
@@ -93,6 +99,7 @@ int fd			/* device file descriptor */
 	  || buf[0] != IUSB_DESC_TYPE_DEVICE_SIZE
 	  || buf[1] != IUSB_DESC_TYPE_DEVICE) {
 		a1logd(log, 1, "usb_check_and_add: failed to read device descriptor\n");
+		close(fd);
 		return ICOM_OK;
 	}
 
@@ -106,12 +113,14 @@ int fd			/* device file descriptor */
 	/* Do a preliminary match */
 	if ((itype = inst_usb_match(vid, pid, 0)) == instUnknown) {
 		a1logd(log, 6 , "usb_check_and_add: instrument not reconized\n");
+		close(fd);
 		return ICOM_OK;
 	}
 
 	/* Allocate an idevice so that we can fill in the end point information */
 	if ((usbd = (struct usb_idevice *) calloc(sizeof(struct usb_idevice), 1)) == NULL) {
 		a1loge(log, ICOM_SYS, "icoms: calloc failed!\n");
+		close(fd);
 		return ICOM_SYS;
 	}
 
@@ -130,16 +139,19 @@ int fd			/* device file descriptor */
 		  || buf[1] != IUSB_DESC_TYPE_CONFIG) {
 			a1logd(log, 1, "usb_check_and_add: failed to read device config\n");
 			free(usbd);
+			close(fd);
 			return ICOM_OK;
 		}
 
 		if ((totlen = buf2ushort(buf + 2)) < 6) {
 			a1logd(log, 1, "usb_check_and_add: config desc size strange\n");
 			free(usbd);
+			close(fd);
 			return ICOM_OK;;
 		}
 		if ((buf2 = calloc(1, totlen)) == NULL) {
 			a1loge(log, ICOM_SYS, "usb_check_and_add: calloc of descriptor failed!\n");
+			close(fd);
 			return ICOM_SYS;
 		}
 
@@ -149,6 +161,7 @@ int fd			/* device file descriptor */
 			a1logd(log, 1, "usb_check_and_add: failed to read device config details\n");
 			free(buf2);
 			free(usbd);
+			close(fd);
 			return ICOM_SYS;
 		}
 
@@ -194,6 +207,7 @@ int fd			/* device file descriptor */
 	if (nep10 == 0xffff) {			/* Hmm. Failed to find number of end points */
 		a1logd(log, 1, "usb_check_and_add: failed to find number of end points\n");
 		free(usbd);
+		close(fd);
 		return ICOM_SYS;
 	}
 
@@ -207,57 +221,28 @@ int fd			/* device file descriptor */
 
 		/* Create a path/identification */
 		/* (devnum doesn't seem valid ?) */
-		if (dpath == NULL) {
-			sprintf(pname,"%s", inst_name(itype));
-			if ((usbd->dpath = strdup("no_path")) == NULL) {
-				a1loge(log, ICOM_SYS, "usb_check_and_add: strdup path failed!\n");
-				free(usbd);
-				return ICOM_SYS;
-			}
-		} else {
-			sprintf(pname,"%s (%s)", dpath, inst_name(itype));
-			if ((usbd->dpath = strdup(dpath)) == NULL) {
-				a1loge(log, ICOM_SYS, "usb_check_and_add: strdup path failed!\n");
-				free(usbd);
-				return ICOM_SYS;
-			}
+		sprintf(pname,"%s (%s)", dpath, inst_name(itype));
+		if ((usbd->dpath = strdup(dpath)) == NULL) {
+			a1loge(log, ICOM_SYS, "usb_check_and_add: strdup path failed!\n");
+			free(usbd);
+			close(fd);
+			return ICOM_SYS;
 		}
 
 		/* Add the path and ep info to the list */
-		if (pp != NULL) {
-			if ((rv = pp->add_usb(pp, pname, vid, pid, nep10, usbd, itype)) != ICOM_OK)
-				return rv;
-		} else {
-			usbd->fd = fd;
-			if ((rv = icompath_set_usb(log, p, pname, vid, pid, nep10, usbd, itype)) != ICOM_OK)
-				return rv;
+		if ((rv = pp->add_usb(pp, pname, vid, pid, nep10, usbd, itype)) != ICOM_OK) {
+			close(fd);
+			return rv;
 		}
+
+
+
 	} else {
 		free(usbd);
 	}
-	return ICOM_OK;
-}
-
-/* Same as above, starting with the path */
-static int usb_check_and_add(
-icompaths *p,
-char *dpath
-) {
-	int fd;
-	int rv;
-
-	a1logd(p->log, 6, "usb_check_and_add: givem '%s'\n",dpath);
-
-	/* Open the device so that we can read it */
-	if ((fd = open(dpath, O_RDONLY)) < 0) {
-		a1logd(p->log, 1, "usb_check_and_add: failed to open '%s'\n",dpath);
-		return ICOM_OK;
-	}
-
-	rv = usb_check_and_add_fd(p->log, p, NULL, dpath, fd); 
 
 	close(fd);
-	return rv;
+	return ICOM_OK;
 }
 
 /* Add paths to USB connected instruments */
@@ -268,7 +253,6 @@ icompaths *p
 	int vid, pid;
 
 	a1logd(p->log, 6, "usb_get_paths: about to look through buses:\n");
-
 	{
 		int j;
 		char *paths[3] = { "/dev/bus/usb", 		/* current, from udev */
@@ -307,7 +291,7 @@ icompaths *p
 						a1logd(p->log, 8, "usb_get_paths: about to stat %s\n",path2);
 						if (stat(path2, &statbuf) == 0 && S_ISCHR(statbuf.st_mode)) {
 							found = 1;
-							if ((rv = usb_check_and_add(p, path2)) != ICOM_OK) {
+							if ((rv = usb_check_and_add(p->log, p, path2)) != ICOM_OK) {
 								closedir(d1);
 								return rv;
 							}
@@ -325,7 +309,7 @@ icompaths *p
 					a1logd(p->log, 8, "usb_get_paths: about to stat %s\n",path2);
 					if (stat(path2, &statbuf) == 0 && S_ISCHR(statbuf.st_mode)) {
 						found = 1;
-						if ((rv = usb_check_and_add(p, path2)) != ICOM_OK) {
+						if ((rv = usb_check_and_add(p->log, p, path2)) != ICOM_OK) {
 							closedir(d1);
 							return rv;
 						}
@@ -341,7 +325,6 @@ icompaths *p
 	a1logd(p->log, 8, "usb_get_paths: returning %d paths and ICOM_OK\n",p->npaths);
 	return ICOM_OK;
 }
-
 
 /* Copy usb_idevice contents from icompaths to icom */
 /* return icom error */
@@ -424,9 +407,6 @@ void usb_close_port(icoms *p) {
 		pthread_mutex_destroy(&p->usbd->lock);
 		close(p->usbd->sd_pipe[0]);
 		close(p->usbd->sd_pipe[1]);
-		free(p->usbd->dpath);
-		free(p->usbd);
-		p->usbd = NULL;
 
 		a1logd(p->log, 6, "usb_close_port: usb port has been released and closed\n");
 	}
@@ -690,7 +670,7 @@ static void *urb_reaper(void *context) {
 		iurb = (usbio_urb *)out->usercontext;
 		req = iurb->req;
 
-		a1logd(p->log, 8, "urb_reaper: urb reap URB %d with status %d bytes %d, usrbs left %d\n",iurb->urbno, out->status, out->actual_length, req->nourbs-1);
+		a1logd(p->log, 8, "urb_reaper: urb reap URB %d with status %d bytes %d, urbs left %d\n",iurb->urbno, out->status, out->actual_length, req->nourbs-1);
 
 		pthread_mutex_lock(&req->lock);	/* Stop requester from missing reap */
 		req->nourbs--;					/* We're reaped one */
@@ -841,9 +821,11 @@ a1logd(p->log, 8, "icoms_usb_transaction: reset req 0x%p nourbs to %d\n",&req,re
 	}
 	
 	if (cancelt != NULL) {
-		usb_lock_cancel(cancelt);
+		amutex_lock(cancelt->cmtx);
 		cancelt->hcancel = (void *)&req;
-		usb_unlock_cancel(cancelt);
+		cancelt->state = 1;
+		amutex_unlock(cancelt->cond);		/* Signal any thread waiting for IO start */
+		amutex_unlock(cancelt->cmtx);
 	}
 
 	/* Wait for the reaper to wake us, or for a timeout, */
@@ -934,9 +916,12 @@ a1logd(p->log, 8, "icoms_usb_transaction: reset req 0x%p nourbs to %d\n",&req,re
 
 done:;
 	if (cancelt != NULL) {
-		usb_lock_cancel(cancelt);
+		amutex_lock(cancelt->cmtx);
 		cancelt->hcancel = (void *)NULL;
-		usb_unlock_cancel(cancelt);
+		if (cancelt->state == 0)
+			amutex_unlock(cancelt->cond);
+		cancelt->state = 2;
+		amutex_unlock(cancelt->cmtx);
 	}
 
 	/* Remove our request from the list  */
@@ -1024,10 +1009,10 @@ int icoms_usb_cancel_io(
 ) {
 	int rv = ICOM_OK;
 	a1logd(p->log, 8, "icoms_usb_cancel_io called\n");
-	usb_lock_cancel(cancelt);
+	amutex_lock(cancelt->cmtx);
 	if (cancelt->hcancel != NULL)
 		rv = cancel_req(p, (usbio_req *)cancelt->hcancel, -1);
-	usb_unlock_cancel(cancelt);
+	amutex_unlock(cancelt->cmtx);
 
 	if (rv != ICOM_OK)	/* Assume this could be because of faulty device */
 		rv = ICOM_USBW;

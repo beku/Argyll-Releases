@@ -368,7 +368,8 @@ void (*outfunc)(void *cbctx, double *out, double *in)
 			inmin, inmax, 
 			xif_set_clut,
 			clutmin, clutmax,
-			xif_set_output);
+			xif_set_output,
+			NULL, NULL);
 
 		return rv;
 	}
@@ -540,7 +541,8 @@ printf("~1 doing the first pass\n");
 		inmin, inmax, 
 		xif_set_clut,
 		clutmin, clutmax,
-		xif_set_output);
+		xif_set_output,
+		NULL, NULL);
 
 #if defined(SAVE_TRACE) || defined(USE_TRACE)
 	fclose(xcs.tf);
@@ -594,7 +596,8 @@ printf("~1 updatding the icc\n");
 		inmin, inmax, 
 		xif_set_clut,
 		clutmin, clutmax,
-		xif_set_output);
+		xif_set_output,
+		NULL, NULL);
 
 	free(xcs.fhi);
 	free(xcs.g);

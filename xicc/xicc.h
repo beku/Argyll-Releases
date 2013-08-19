@@ -183,20 +183,30 @@ typedef struct {
 	double Wxyz[3];		/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
 	double La;			/* Adapting/Surround Luminance cd/m^2 */
 	double Yb;			/* Relative Luminance of Background to reference white */
-	double Lv;			/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
+	double Lv;			/* Luminance of white in the Image/Scene/Viewing field (cd/m^2) */
 						/* Ignored if Ev is set to other than vc_none */
 	double Yf;			/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-	double Fxyz[3];		/* The Flare white coordinates (typically the Ambient color) */
-						/* Will be taken from Wxyz if Fxyz == 0.0 */
+	double Yg;			/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+	double Gxyz[3];		/* The Glare white coordinates (ie the Ambient color) */
+						/* will be taken from Wxyz if Gxyz <= 0.0 */
 	char *desc;			/* Possible description of this VC */
 } icxViewCond;
 
+/* Method of black point adaptation */
+typedef enum {
+	gmm_BPadpt    = 0,		/* Adapt source black point to destination */
+	gmm_noBPadpt  = 1,		/* Don't adapt black point to destination */ 
+	gmm_bendBP    = 2,		/* Don't adapt black point, bend it to dest. at end */  
+	gmm_clipBP    = 3		/* Don't adapt black point, clip it to dest. at end */  
+} icx_BPmap;
+
 /* Structure to convey gamut mapping intent */
 typedef struct {
-	int    usecas;			/* 0x0 Use Lab space */
-							/* 0x1 Use Color Appearance Space */
-							/* 0x2 Use Absolute Color Appearance Space */
-							/* 0x101 Use Color Appearance Space with luminence scaling */
+	int    usecas;			/* 0x0 Use relative Lab space */
+							/* 0x1 Use Absolute Lab Space */
+							/* 0x2 Use Color Appearance Space */
+							/* 0x3 Use Absolute Color Appearance Space */
+							/* 0x102 Use Color Appearance Space with luminence scaling */
 	int    usemap;			/* NZ if Gamut mapping should be used, else clip */
 	double greymf;			/* Grey axis hue matching factor, 0.0 - 1.0 */
 	double glumwcpf;		/* Grey axis luminance white compression factor, 0.0 - 1.0 */
@@ -204,6 +214,7 @@ typedef struct {
 	double glumbcpf;		/* Grey axis luminance black compression factor, 0.0 - 1.0 */
 	double glumbexf;		/* Grey axis luminance black expansion factor, 0.0 - 1.0 */
 	double glumknf;			/* Grey axis luminance knee factor, 0.0 - 1.0 */
+	icx_BPmap bph;			/* Method of black point adapation */
 	double gamcpf;			/* Gamut compression factor, 0.0 - 1.0 */
 	double gamexf;			/* Gamut expansion factor, 0.0 - 1.0 */
 	double gamcknf;			/* Gamut compression knee factor, 0.0 - 1.0 */
@@ -902,6 +913,32 @@ void icxdpdiMulBy3x3Parm(
 	double mat[9],			/* Matrix organised in [slow][fast] order */
 	double in[3]			/* Input values */
 );
+
+/* ------------------------------------------- */
+/* BT.1886 support */
+
+/* Convert an effective gamma given an offset into a technical gamma */
+double xicc_tech_gamma(double egamma, double off);
+
+typedef struct {
+	double ingo;				/* input Y gamma offset for bt1886 */
+	double outsc;				/* output Y scale for bt1886 */
+	double outL;				/* output black point L value */
+	double tab[2];				/* Target ab offset value at zero input for bt1886 */
+	double gamma;				/* bt.1886 technical gamma to apply */
+} bt1886_info;
+
+/* Set the bt1886_info to a default do nothing state */
+void bt1886_setnop(bt1886_info *p);
+
+/* Setup the bt1886_info for the given target */
+void bt1886_setup(bt1886_info *p, double *XYZbp, double gamma);
+
+/* Apply BT.1886 black offset and gamma curve to */
+/* the XYZ out of the input profile. */
+/* Do this in the colorspace defined by the input profile matrix lookup, */
+/* so it will be relative XYZ */
+void bt1886_apply(bt1886_info *p, icmLuMatrix *lu, double *out, double *in);
 
 /* - - - - - - - - - - */
 

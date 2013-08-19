@@ -35,6 +35,7 @@
 #include "cgats.h"
 #include "conv.h"
 #include "dispwin.h"
+#include "webwin.h"
 #include "conv.h"
 #include "mongoose.h"
 
@@ -217,22 +218,35 @@ dispwin *p,
 double r, double g, double b	/* Color values 0.0 - 1.0 */
 ) {
 	int j;
+	double orgb[3];		/* Previous RGB value */
+	double kr, kf;
+	int update_delay = p->update_delay; 
+	double xdelay = 0.0;		/* Extra delay for response time */
 
 	debugr("webwin_set_color called\n");
 
 	if (p->nowin)
 		return 1;
 
-	p->rgb[0] = r;
-	p->rgb[1] = g;
-	p->rgb[2] = b;
+	orgb[0] = p->rgb[0]; p->rgb[0] = r;
+	orgb[1] = p->rgb[1]; p->rgb[1] = g;
+	orgb[2] = p->rgb[2]; p->rgb[2] = b;
 
 	for (j = 0; j < 3; j++) {
 		if (p->rgb[j] < 0.0)
 			p->rgb[j] = 0.0;
 		else if (p->rgb[j] > 1.0)
 			p->rgb[j] = 1.0;
-		p->r_rgb[j] = p->rgb[j];
+		p->r_rgb[j] = p->s_rgb[j] = p->rgb[j];
+		if (p->out_tvenc) {
+			p->r_rgb[j] = p->s_rgb[j] = ((235.0 - 16.0) * p->s_rgb[j] + 16.0)/255.0;
+
+			/* For video encoding the extra bits of precision are created by bit shifting */
+			/* rather than scaling, so we need to scale the fp value to account for this. */
+			if (p->pdepth > 8)
+				p->r_rgb[j] = (p->s_rgb[j] * 255 * (1 << (p->pdepth - 8)))
+				            /((1 << p->pdepth) - 1.0); 	
+		}
 	}
 
 	/* This is probably not actually thread safe... */
@@ -242,12 +256,44 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		msec_sleep(50);
 	}
 
+	/* Don't want extra delay if we're measuring update delay */
+	if (update_delay != 0 && p->do_resp_time_del) {
+		/* Compute am expected response time for the change in level */
+		kr = DISPLAY_RISE_TIME/log(1 - 0.9);	/* Exponent constant */
+		kf = DISPLAY_FALL_TIME/log(1 - 0.9);	/* Exponent constant */
+//printf("~1 k2 = %f\n",k2);
+		for (j = 0; j < 3; j++) {
+			double el, dl, n, t;
+	
+			el = pow(p->rgb[j], 2.2);
+			dl = el - pow(orgb[j], 2.2);	/* Change in level */
+			if (fabs(dl) > 0.01) {		/* More than 1% change in level */
+				n = DISPLAY_SETTLE_AIM * el;
+				if (n < DISPLAY_ABS_AIM)
+					n = DISPLAY_ABS_AIM;
+//printf("~1 sl %f, el %f, log (%f / %f)\n",sl,el,n,fabs(sl - el));
+				if (dl > 0.0)
+					t = kr * log(n/dl);
+				else
+					t = kf * log(n/-dl);
+	
+				if (t > xdelay)
+					xdelay = t;
+			}
+		}
+//printf("~1 xdelay = %f secs\n",xdelay);
+		xdelay *= 1000.0;		/* To msec */
+		/* This is kind of a fudge since update delay is after latency, */
+		/* but displays with long delay (ie. CRT) have short latency, and visa versa */
+		if ((int)xdelay > update_delay)
+			update_delay = (int)xdelay;
+	}
+
 	/* Allow some time for the display to update before */
-	/* a measurement can take place. This allows time for */
-	/* the browser to update the background color, the CRT */
-	/* refresh or LCD processing/update time, + */
+	/* a measurement can take place. This allows for CRT */
+	/* refresh, or LCD processing/update time, + */
 	/* display settling time (quite long for smaller LCD changes). */
-	msec_sleep(200);
+	msec_sleep(update_delay);
 
 	return 0;
 }
@@ -309,6 +355,13 @@ int webdisp,					/* Port number */
 double width, double height,	/* Width and height in mm */
 double hoff, double voff,		/* Offset from center in fraction of screen, range -1.0 .. 1.0 */
 int nowin,						/* NZ if no window should be created - RAMDAC access only */
+int native,						/* X0 = use current per channel calibration curve */
+								/* X1 = set native linear output and use ramdac high precn. */
+								/* 0X = use current color management cLut (MadVR) */
+								/* 1X = disable color management cLUT (MadVR) */
+int *noramdac,					/* Return nz if no ramdac access. native is set to X0 */
+int *nocm,						/* Return nz if no CM cLUT access. native is set to 0X */
+int out_tvenc,					/* 1 = use RGB Video Level encoding */
 int blackbg,					/* NZ if whole screen should be filled with black */
 int verb,						/* NZ for verbose prompts */
 int ddebug						/* >0 to print debug statements to stderr */
@@ -326,21 +379,30 @@ int ddebug						/* >0 to print debug statements to stderr */
 		return NULL;
 	}
 
-	/* !!!! Make changes in dispwin.c as well !!!! */
+	/* !!!! Make changes in dispwin.c & madvrwin.c as well !!!! */
 	p->name = strdup("Web Window");
 	p->nowin = nowin;
-	p->native = 0;
+	p->native = native;
+	p->out_tvenc = out_tvenc;
 	p->blackbg = blackbg;
 	p->ddebug = ddebug;
-	p->get_ramdac      = webwin_get_ramdac;
-	p->set_ramdac      = webwin_set_ramdac;
-	p->install_profile = webwin_install_profile;
+	p->get_ramdac        = webwin_get_ramdac;
+	p->set_ramdac        = webwin_set_ramdac;
+	p->install_profile   = webwin_install_profile;
 	p->uninstall_profile = webwin_uninstall_profile;
-	p->get_profile     = webwin_get_profile;
-	p->set_color       = webwin_set_color;
+	p->get_profile       = webwin_get_profile;
+	p->set_color         = webwin_set_color;
 	p->set_update_delay  = webwin_set_update_delay;
-	p->set_callout     = webwin_set_callout;
-	p->del             = webwin_del;
+	p->set_callout       = webwin_set_callout;
+	p->del               = webwin_del;
+
+	if (noramdac != NULL)
+		*noramdac = 1;
+	p->native &= ~1;
+
+	if (nocm != NULL)
+		*nocm = 1;
+	p->native &= ~2;
 
 	p->rgb[0] = p->rgb[1] = p->rgb[2] = 0.5;	/* Set Grey as the initial test color */
 
@@ -360,6 +422,9 @@ int ddebug						/* >0 to print debug statements to stderr */
 		p->update_delay = p->min_update_delay;
 
 	p->ncix = 1;
+
+	p->pdepth = 8;		/* Assume this by API */
+	p->edepth = 8;
 
 	/* Basic object is initialised, so create a web server */
 

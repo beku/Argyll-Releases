@@ -18,7 +18,11 @@
 /* A helper function to handle presenting a display test patch */
 struct _disp_win_info {
 	int webdisp;			/* nz if web display is to be used */
+#ifdef NT
+	int madvrdisp;			/* NZ for MadVR display */
+#endif
 	disppath *disp;			/* display to calibrate. */
+	int out_tvenc;			/* 1 = use RGB Video Level encoding */
 	int blackbg;			/* NZ if whole screen should be filled with black */
 	int override;			/* Override_redirect on X11 */
 	double hpatsize;		/* Size of dispwin */
@@ -49,6 +53,10 @@ int nadaptive,		/* NZ for non-adaptive mode */
 int noinitcal,		/* NZ to disable initial instrument calibration */
 disppath *screen,	/* Screen to calibrate. */
 int webdisp,		/* If nz, port number for web display */
+#ifdef NT
+int madvrdisp,		/* NZ for MadVR display */
+#endif
+int out_tvenc,		/* 1 = use RGB Video Level encoding */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
 double hpatsize,	/* Size of dispwin */
@@ -91,9 +99,12 @@ struct _disprd {
 	char *fake_name;	/* Fake profile name */
 	icmFile *fake_fp;
 	icc *fake_icc;		/* NZ if ICC profile is being used for fake */
+	int native;			/* X0 = use current per channel calibration curve */
+						/* X1 = set native linear output and use ramdac high precn. */
+						/* 0X = use current color management cLut (MadVR) */
+						/* 1X = disable color management cLUT (MadVR) */
 	double cal[3][MAX_CAL_ENT];	/* Calibration being worked through (cal[0][0] < 0.0 or NULL if not used) */
 	int ncal;			/* Number of entries used in cal[] */
-	int softcal;		/* NZ if apply cal to readings rather than hardware */
 	icmLuBase *fake_lu;
 	char *mcallout;		/* fake instrument shell callout */
 	icompath *ipath;	/* Instrument path to open, &icomFakeDevice == fake */
@@ -107,6 +118,7 @@ struct _disprd {
 	int tele;			/* NZ for tele mode */
 	int nadaptive;		/* NZ for non-adaptive mode */
 	int highres;		/* Use high res mode if available */
+	double refrate;		/* If != 0.0, set display refresh rate calibration */
 	int update_delay_set;	/* NZ if we've calibrated the disp. update delay, or tried and failed */
 	double (*ccmtx)[3];	/* Colorimeter Correction Matrix, NULL if none */
 	icxObserverType obType;	/* CCSS Observer */
@@ -119,8 +131,8 @@ struct _disprd {
 	int bdrift;			/* Flag, nz for black drift compensation */
 	int wdrift;			/* Flag, nz for white drift compensation */
 	int noinitcal;		/* No initial instrument calibration */
+	int noinitplace;	/* Don't wait for user to place instrument on screen */
 	dispwin *dw;		/* Window */
-	ramdac *or;			/* Original ramdac if we set one */
 
 	int serno;			/* Reading serial number */
 	col ref_bw[2];   	/* Reference black and white readings for drift comp. */
@@ -199,7 +211,9 @@ struct _disprd {
 /* 9 = spectral conversion failed */
 /* 10 = no ccmx support */
 /* 11 = no ccss support */
-/* 12 = cal to set but native != 0 */
+/* 12 = out_tvenc & native = 0 && no cal but current RAMDAC is not linear */
+/* 13 = out_tvenc for MadVR window */
+/* 14 = no set refresh rate support */
 /* Use disprd_err() to interpret errc */
 disprd *new_disprd(
 int *errc,			/* Error code. May be NULL */ 
@@ -210,18 +224,25 @@ int docbid,			/* NZ to only allow cbid dtypes */
 int tele,			/* NZ for tele mode */
 int nadaptive,		/* NZ for non-adaptive mode */
 int noinitcal,		/* No initial instrument calibration */
+int noinitplace,	/* Don't wait for user to place instrument on screen */
 int highres,		/* Use high res mode if available */
-int native,			/* 0 = use current current or given calibration curve */
-					/* 1 = use native linear out & high precision */
-int *noramdac,		/* Return nz if no ramdac access. native is set to 0 */
-double cal[3][MAX_CAL_ENT],	/* Calibration set/return (cal[0][0] < 0.0 if can't/not to be used) */
-					/* native must be 0 if cal is set */
+double refrate,		/* If != 0.0, set display refresh rate calibration */
+int native,			/* X0 = use current per channel calibration curve */
+					/* X1 = set native linear output and use ramdac high precn. */
+					/* 0X = use current color management cLut (MadVR) */
+					/* 1X = disable color management cLUT (MadVR) */
+int *noramdac,		/* Return nz if no ramdac access. native is set to X0 */
+int *nocm,			/* Return nz if no CM cLUT access. native is set to 0X */
+double cal[3][MAX_CAL_ENT],	/* Calibration set (cal = NULL or cal[0][0] < 0.0 if not to be used) */
 int ncal,			/* number of entries use in cal */
-int softcal,		/* NZ if apply cal to readings rather than hardware */
 disppath *screen,	/* Screen to calibrate. */
+int out_tvenc,		/* 1 = use RGB Video Level encoding */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
 int webdisp,		/* If nz, port number for web display */
+#ifdef NT
+int madvrdisp,		/* NZ for MadVR display */
+#endif
 char *ccallout,		/* Shell callout on set color */
 char *mcallout,		/* Shell callout on measure color (forced fake) */
 double hpatsize,	/* Size of dispwin */

@@ -110,6 +110,12 @@ static int xcal_read_cgats(xcal *p, cgats *tcg, int table, char *filename) {
 		p->noramdac = 1;
 	}
 
+	if ((ti = tcg->find_kword(tcg, table, "TV_OUTPUT_ENCODING")) >= 0) {
+		if (strcmp(tcg->t[0].kdata[ti], "YES") == 0
+		 || strcmp(tcg->t[0].kdata[ti], "yes") == 0)
+			p->tvenc = 1;
+	}
+
 	p->colspace = icx_colorant_comb_to_icc(p->devmask);	/* 0 if none */
 	p->devchan = icx_noofinks(p->devmask);
 	ident = icx_inkmask2char(p->devmask, 1); 
@@ -190,6 +196,90 @@ static int xcal_read_cgats(xcal *p, cgats *tcg, int table, char *filename) {
 	return 0;
 }
 
+/* Read a calibration file from an ICC vcgt tag */
+/* Return nz if this fails */
+int xcal_read_icc(xcal *p, icc *c) {
+	icmVideoCardGamma *vg;
+	icmTextDescription *td;
+	int res, i, j;
+
+	/* See if there is a vcgt tag */
+	if ((vg = (icmVideoCardGamma *)c->read_tag(c, icSigVideoCardGammaTag)) == NULL) {
+		sprintf(p->err, "ICC profile has no vcgt");
+		return p->errc = 1;
+	}
+
+	/* What sort of device the profile is for */
+	p->devclass = c->header->deviceClass;
+	p->colspace = c->header->colorSpace;
+
+	if ((p->devmask = icx_icc_to_colorant_comb(p->colspace, p->devclass)) == 0) {
+		sprintf(p->err, "Unable to determine inkmask from ICC profile");
+		return p->errc = 1;
+	} 
+	p->devchan = icx_noofinks(p->devmask);
+
+	/* Grab any descriptive information */
+	if ((td = (icmTextDescription *)c->read_tag(c, icSigDeviceMfgDescTag)) != NULL) {
+		p->xpi.deviceMfgDesc = strdup(td->desc);
+	} 
+	if ((td = (icmTextDescription *)c->read_tag(c, icSigDeviceModelDescTag)) != NULL) {
+		p->xpi.modelDesc = strdup(td->desc);
+	} 
+	if ((td = (icmTextDescription *)c->read_tag(c, icSigProfileDescriptionTag)) != NULL) {
+		p->xpi.profDesc = strdup(td->desc);
+	} 
+	if ((td = (icmTextDescription *)c->read_tag(c, icSigCopyrightTag)) != NULL) {
+		p->xpi.copyright = strdup(td->desc);
+	} 
+
+	/* Decide the lut resolution */
+	if (vg->tagType == icmVideoCardGammaFormulaType)
+		res = 2048;
+	else
+		res = vg->u.table.entryCount;
+
+	/* Read in each channels values and put them in a rspl */
+	for (j = 0; j < p->devchan; j++) {
+		datai low,high;
+		int gres[MXDI];
+		double smooth = 1.0;
+		co *dpoints;
+
+		low[0] = 0.0;
+		high[0] = 1.0;
+		gres[0] = res;
+
+		if ((p->cals[j] = new_rspl(RSPL_NOFLAGS,1, 1)) == NULL) {
+			sprintf(p->err,"new_rspl() failed");
+			return p->errc = 2;
+		}
+
+		if ((dpoints = malloc(sizeof(co) * gres[0])) == NULL) {
+			sprintf(p->err,"malloc dpoints[%d] failed",gres[0]);
+			return p->errc = 2;
+		}
+
+		/* Copy the points to our array */
+		for (i = 0; i < gres[0]; i++) {
+			dpoints[i].p[0] = i/(double)(gres[0]-1);
+			dpoints[i].v[0] = vg->lookup(vg, j, dpoints[i].p[0]);
+		}
+
+		/* Set the rspl */
+		p->cals[j]->set_rspl(p->cals[j],
+				   0, 
+				   (void *)dpoints,		/* Read points */
+				   xcal_rsplset,		/* Setting function */
+				   low, high, gres,		/* Low, high, resolution of grid */
+				   NULL, NULL			/* Default data scale */
+				   );
+		free(dpoints);
+	}
+
+	return 0;
+}
+
 /* Read a calibration file */
 /* Return nz if this fails */
 static int xcal_read(xcal *p, char *filename) {
@@ -257,6 +347,13 @@ static int xcal_write_cgats(xcal *p, cgats *tcg) {
 	ident = icx_inkmask2char(p->devmask, 1); 
 	bident = icx_inkmask2char(p->devmask, 0); 
 	tcg->add_kword(tcg, table, "COLOR_REP", ident, NULL);
+
+	/* Other tags */
+	if (p->noramdac)
+		tcg->add_kword(tcg, table, "VIDEO_LUT_CALIBRATION_POSSIBLE", "NO", NULL);
+
+	if (p->tvenc) 
+		tcg->add_kword(tcg, table, "TV_OUTPUT_ENCODING", "YES", NULL);
 
 	/* Grab any descriptive information */
 	if (p->xpi.deviceMfgDesc != NULL)
@@ -483,6 +580,7 @@ xcal *new_xcal(void) {
 	/* Init method pointers */
 	p->del            = xcal_del;
 	p->read_cgats     = xcal_read_cgats;
+	p->read_icc       = xcal_read_icc;
 	p->read           = xcal_read;
 	p->write_cgats    = xcal_write_cgats;
 	p->write          = xcal_write;

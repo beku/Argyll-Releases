@@ -42,9 +42,9 @@
 
 #define XSHAPE_OFFG			0.1		/* Input offset weights when ord 0 is gamma */
 #define XSHAPE_OFFS			1.0		/* Input offset weights when ord 0 is shaper */
-#define XSHAPE_HW01			0.002	/* 0 & 1 harmonic weights */
-#define XSHAPE_HBREAK	    4		/* Harmonic that has HWBR */
-#define XSHAPE_HWBR        0.8		/* Base weight of harmonics HBREAK up */
+#define XSHAPE_HW01		   0.01		/* 0 & 1 harmonic weights */
+#define XSHAPE_HBREAK	   3		/* Harmonic that has HWBR */
+#define XSHAPE_HWBR        0.5		/* Base weight of harmonics HBREAK up */
 #define XSHAPE_HWINC       0.5		/* Increase in weight for each harmonic above HWBR */
 
 #define XSHAPE_GAMTHR	   0.01		/* Input threshold for linear slope below gamma power */
@@ -309,8 +309,8 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 		else
 			xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0, NULL);	/* Use a default */
 		p->cam = new_icxcam(cam_default);
-		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf,
-		                 p->vc.Fxyz, XICC_USE_HK);
+		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv,
+		                 p->vc.Yf, p->vc.Yg, p->vc.Gxyz, XICC_USE_HK);
 	} else {
 		p->cam = NULL;
 	}
@@ -560,7 +560,6 @@ double *v			/* Pointer to parameters */
 			tt = v[11 + f];
 			if (f == 0 && p->shape0gam)
 				tt -= 1.0;			/* default is linear */
-			tt *= tt;
 			/* Weigh to suppress ripples */
 			if (f <= 1) {						/* Use XSHAPE_HW01 */
 				w = XSHAPE_HW01;
@@ -568,15 +567,15 @@ double *v			/* Pointer to parameters */
 				double bl = (f - 1.0)/(XSHAPE_HBREAK - 1.0);
 				w = (1.0 - bl) * XSHAPE_HW01 + bl * XSHAPE_HWBR * p->smooth;
 			} else {				/* Use XSHAPE_HWBR * smooth */
-				w = XSHAPE_HWBR + (f-XSHAPE_HBREAK) * XSHAPE_HWINC;
-				w *= p->smooth;
+				w = XSHAPE_HWBR + (f-XSHAPE_HBREAK) * XSHAPE_HWINC * p->smooth;
 			}
+			tt *= tt;
 			tparam += w * tt;
 		}
 		return XSHAPE_MAG * tparam;
 	}
 
-	/* Input ffset value */
+	/* Input offset value */
 	if (p->shape0gam)
 		w = XSHAPE_OFFG;
 	else
@@ -603,7 +602,6 @@ double *v			/* Pointer to parameters */
 			w = (1.0 - bl) * XSHAPE_HW01 + bl * XSHAPE_HWBR * p->smooth;
 		} else {
 			w = XSHAPE_HWBR + (f-XSHAPE_HBREAK) * XSHAPE_HWINC * p->smooth;
-			w *= p->smooth;
 		}
 		for (g = 0; g < 3; g++) {
 			tt = v[15 + 3 * f + g];
@@ -863,6 +861,10 @@ double scale		/* Scale device values */
 	os->v[3] = 0.2;  os->v[4] = 0.8;  os->v[5] = 0.1;
 	os->v[6] = 0.02; os->v[7] = 0.15; os->v[8] = 1.3;
 
+	/* We try and take a homomorphic approach here, in an attempt */
+	/* to avoid getting trapped at a local minimum when a full */
+	/* set of shaper parameters are in play. */
+	
 	/* Do a first pass just setting the matrix values */
 	os->isLinear = 1;
 	os->isGamma = 1;
@@ -889,17 +891,43 @@ double scale		/* Scale device values */
 #endif /* NEVER */
 
 	/* Now optimize again with shaper or gamma curves */
-	if (!isLinear || isGamma) {
+	if (!isLinear) {
+		double scgamma;
 
 		/* Start from linear, which is what was assumed for the matrix fit, */
-		/* and fit first with a single shared curve. */
+		/* and fit with a single shared gamma curve. */
 		os->isShTRC = 1;
-		if (isGamma) {		/* Just gamma curve */
-			os->isLinear = 0;
-			os->isGamma = 1;
-			os->optdim = 10;
-			os->v[9] = 1.0;		/* Linear */ 
-		} else {		/* Creating input curves */
+		os->isLinear = 0;
+		os->isGamma = 1;
+		os->optdim = 10;
+		os->v[9] = 1.0;		/* Linear */ 
+
+		/* Set search area to starting values */
+		for (j = 0; j < os->optdim; j++)
+			os->sa[j] = 0.2;					/* Matrix, Gamma, Offsets, harmonics */
+
+		if (os->verb)
+			printf("Creating matrix and single gamma curve...\n"); 
+
+		if (powell(&rerr, os->optdim, os->v, os->sa, stopon, maxits,
+		           mxoptfunc, (void *)os, mxprogfunc, (void *)os) != 0)
+			warning("Powell failed to converge, residual error = %f",rerr);
+
+		scgamma = os->v[9];
+		if (isShTRC && !isGamma) {
+		
+#ifndef NEVER
+			if (os->verb) {
+				printf("Matrix = %f %f %f\n",os->v[0], os->v[1], os->v[2]);
+				printf("         %f %f %f\n",os->v[3], os->v[4], os->v[5]);
+				printf("         %f %f %f\n",os->v[6], os->v[7], os->v[8]);
+				printf("Gamma = %f\n",os->v[9]);
+			}
+#endif /* NEVER */
+
+			/* Do final optimisation using full curve capability */
+			/* and fit first with a single shared curve. */
+			os->isShTRC = 1;
 			os->isLinear = 0;
 			os->isGamma = 0;
 			os->optdim = 9 + 2 + os->norders;			/* Matrix, offset + orders */
@@ -911,71 +939,96 @@ double scale		/* Scale device values */
 				os->v[11] = 0.0; 	/* 0th Harmonic */
 			for (i = 12; i < os->optdim; i++)
 				os->v[i] = 0.0; 	/* Higher orders */
+
+			/* Set search area to starting values */
+			for (j = 0; j < os->optdim; j++)
+				os->sa[j] = 0.2;					/* Matrix, Gamma, Offsets, harmonics */
+
+			if (os->verb)
+				printf("Creating matrix and single shaper curve...\n"); 
+
+			if (powell(&rerr, os->optdim, os->v, os->sa, stopon, maxits,
+			           mxoptfunc, (void *)os, mxprogfunc, (void *)os) != 0)
+				warning("Powell failed to converge, residual error = %f",rerr);
+
+			scgamma = os->v[9];
+
 		}
 
-		/* Set search area to starting values */
-		for (j = 0; j < os->optdim; j++)
-			os->sa[j] = 0.2;					/* Matrix, Gamma, Offsets, harmonics */
-
-		if (os->verb)
-			printf("Creating matrix and single curve...\n"); 
-
-		if (powell(&rerr, os->optdim, os->v, os->sa, stopon, maxits,
-		           mxoptfunc, (void *)os, mxprogfunc, (void *)os) != 0)
-			warning("Powell failed to converge, residual error = %f",rerr);
+		/* For multiple curves, continue fitting */
+		if (!isShTRC) {
+			double mcgamma[3];
 
 #ifndef NEVER
-		if (os->verb) {
-			printf("Matrix = %f %f %f\n",os->v[0], os->v[1], os->v[2]);
-			printf("         %f %f %f\n",os->v[3], os->v[4], os->v[5]);
-			printf("         %f %f %f\n",os->v[6], os->v[7], os->v[8]);
-			if (isGamma) {		/* Creating input curves */
+			if (os->verb) {
+				printf("Matrix = %f %f %f\n",os->v[0], os->v[1], os->v[2]);
+				printf("         %f %f %f\n",os->v[3], os->v[4], os->v[5]);
+				printf("         %f %f %f\n",os->v[6], os->v[7], os->v[8]);
 				printf("Gamma = %f\n",os->v[9]);
-			} else {		/* Creating input curves */
-				printf("Input offset  = %f\n",os->v[9]);
-				printf("Output offset = %f\n",os->v[10]);
-				for (j = 0; j < os->norders; j++) {
-					if (shape0gam && j == 0)
-						printf("gamma = %f\n", os->v[11 + j]);
-					else
-						printf("%d harmonics = %f\n",j, os->v[11 + j]);
-				}
 			}
-		}
 #endif /* NEVER */
 
-		/* Now do the final optimisation with all curves */
-		if (!isShTRC) {
+			/* Fit matrix + multi gamma curves */
 			os->isShTRC = 0;
-			if (isGamma) {		/* Just gamma curves */
-				os->isLinear = 0;
-				os->isGamma = 1;
-				os->optdim = 12;
-				os->v[9] = os->v[10] = os->v[11] = 1.0;		/* Linear */ 
-			} else {		/* Creating input curves */
-				os->isLinear = 0;
-				os->isGamma = 0;
-				os->optdim = 9 + 6 + 3 * os->norders;		/* Matrix, offset + orders */
-				os->v[9] = os->v[10] = os->v[11] = 0.0;		/* Input offset */
-				os->v[12] = os->v[13] = os->v[14] = 0.0;	/* Output offset */
-				if (shape0gam)
-					os->v[15] = os->v[16] = os->v[17] = 1.0; 	/* Gamma */
-				else
-					os->v[15] = os->v[16] = os->v[17] = 0.0; 	/* 0th Harmonic */
-				for (i = 18; i < os->optdim; i++)
-					os->v[i] = 0.0; 						/* Higher orders */
-			}
+			os->isLinear = 0;
+			os->isGamma = 1;
+			os->optdim = 12;
+			os->v[9] = os->v[10] = os->v[11] = scgamma;	/* Single curve value */
 	
 			/* Set search area to starting values */
 			for (j = 0; j < os->optdim; j++)
 				os->sa[j] = 0.2;					/* Matrix, Gamma, Offsets, harmonics */
 	
 			if (os->verb)
-				printf("Creating matrix and curves...\n"); 
+				printf("Creating matrix and gamma curves...\n"); 
 	
 			if (powell(&rerr, os->optdim, os->v, os->sa, stopon, maxits,
 			           mxoptfunc, (void *)os, mxprogfunc, (void *)os) != 0)
 				warning("Powell failed to converge, residual error = %f",rerr);
+
+		
+			mcgamma[0] = os->v[9];
+			mcgamma[1] = os->v[10];
+			mcgamma[2] = os->v[11];
+
+			if (!isGamma) {
+
+#ifndef NEVER
+				if (os->verb) {
+					printf("Matrix = %f %f %f\n",os->v[0], os->v[1], os->v[2]);
+					printf("         %f %f %f\n",os->v[3], os->v[4], os->v[5]);
+					printf("         %f %f %f\n",os->v[6], os->v[7], os->v[8]);
+					printf("Gamma = %f %f %f\n",os->v[9], os->v[10], os->v[11]);
+				}
+#endif /* NEVER */
+
+				/* Do final curves */
+				os->isShTRC = 0;
+				os->isLinear = 0;
+				os->isGamma = 0;
+				os->optdim = 9 + 6 + 3 * os->norders;		/* Matrix, offset + orders */
+				os->v[9] = os->v[10] = os->v[11] = 0.0;		/* Input offset */
+				os->v[12] = os->v[13] = os->v[14] = 0.0;	/* Output offset */
+				if (shape0gam) {
+					os->v[15] = mcgamma[0];
+					os->v[16] = mcgamma[1];
+					os->v[17] = mcgamma[2];
+				} else
+					os->v[15] = os->v[16] = os->v[17] = 0.0; 	/* 0th Harmonic */
+				for (i = 18; i < os->optdim; i++)
+					os->v[i] = 0.0; 						/* Higher orders */
+		
+				/* Set search area to starting values */
+				for (j = 0; j < os->optdim; j++)
+					os->sa[j] = 0.1;					/* Matrix, Gamma, Offsets, harmonics */
+		
+				if (os->verb)
+					printf("Creating matrix and curves...\n"); 
+		
+				if (powell(&rerr, os->optdim, os->v, os->sa, stopon, maxits,
+				           mxoptfunc, (void *)os, mxprogfunc, (void *)os) != 0)
+					warning("Powell failed to converge, residual error = %f",rerr);
+			}
 		}
 	}
 	if (os->clipprims) { /* Clip -ve primaries */
@@ -991,7 +1044,7 @@ double scale		/* Scale device values */
 		printf("         %f %f %f\n",os->v[3], os->v[4], os->v[5]);
 		printf("         %f %f %f\n",os->v[6], os->v[7], os->v[8]);
 		if (!isLinear) {		/* Creating input curves */
-			if (isGamma) {		/* Creating input curves */
+			if (os->isGamma) {		/* Creating input curves */
 				if (isShTRC) 
 					printf("Gamma = %f\n",os->v[9]);
 				else
@@ -1531,7 +1584,7 @@ double             smooth			/* Curve smoothing, nominally 1.0 */
 	}
 
 	/* If we are going to auto scale the WP to avoid clipping */
-	/* values above the WP: (not important for matrix profiles ?) */
+	/* values above the WP: (not so important for matrix profiles ?) */
 	if ((p->flags & ICX_SET_WHITE_US) == ICX_SET_WHITE_US) {
 		double tw[3], bw[3];
 		icmXYZNumber _wp;

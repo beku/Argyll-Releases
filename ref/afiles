@@ -3,6 +3,11 @@ ReadMe.txt
 License.txt
 sRGB.icm
 ClayRGB1998.icm
+EBU3213_PAL.icm
+SMPTE_RP145_NTSC.icm
+Rec709.icm
+Rec2020.icm
+SMPTE431.icm
 lab2lab.icm
 ccxx.ti1
 CMP_DT_003.cht

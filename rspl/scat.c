@@ -160,8 +160,8 @@
 
 /* Release set: */
 
-#define TOL 1e-6		/* [1e-6] Tollerance of result - usually 1e-5 is best. */
-#define TOL_IMP 0.998	/* [0.998] Minimum error improvement to continue - reduces accuracy (1.0 == off) */
+#define TOL 1e-7		/* [1e-6] Tollerance of result - usually 1e-5 is best. */
+#define TOL_IMP 0.999	/* [0.998] Minimum error improvement to continue - reduces accuracy (1.0 == off) */
 #undef GRADUATED_TOL	/* [Undef] Speedup attemp - use reduced tollerance for prior grids. */
 #define GRATIO 2.0		/* [2.0] Multi-grid resolution ratio */
 #undef OVERRLX 			/* [Undef] Use over relaxation when progress slows (worse accuracy ?) */
@@ -924,6 +924,14 @@ free_data(rspl *s) {
 /* This table is appropriate for the default rspl algorithm + slight EXTRA_SURFACE_SMOOTHING, */
 /* and is NOT setup for RSPL_2PASSSMTH or RSPL_EXTRAFIT2 !! */
 /* SMOOTH */
+
+/* There are still issues with all this - the level of smoothing actually */
+/* depends on the degree of fit of the underlying model - ie. how close */
+/* to straight the mapping is. To get actual noise reduction under these */
+/* conditions is harder than when there is some curvature to "tension" things. */
+/* This is evident is Lab vs. XYZ display profiles, and there is code */
+/* in xlut.c that tries to adjust to this. */
+
 // ~~99
 static double opt_smooth(
 	rspl *s,

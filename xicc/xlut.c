@@ -56,8 +56,8 @@
 	do anything useful though, the chromatic adapation tag would
     have to be used for absolute intent.
 	This may be the way of improving compatibility with other systems,
-	but would break compatibility with existing Argyll profiles,
-	unless special measures are taken:
+	and is needed for V4, but would break compatibility with existing
+	Argyll profiles, unless special measures are taken:
 
 	ie. 
 
@@ -65,7 +65,7 @@
 			Create Bradford chromatic adapation matrix and store it in tag
 			Adapt all the readings using Bradford
 			Create white point and store it in tag (white point will be D50)
-			Adapt all the readings to the white point using wrong Von-Kries (no change)	
+			Adapt all the readings to the white point using wrong Von-Kries (== NOOP)	
 			Store relative colorimetric cLUT 
 			Set version >= 2.4
 
@@ -159,7 +159,10 @@
 #define OUT_SMOOTH2 1.0	/* Output shaper curve smoothing for a*, b* */
 
 #define CAMCLIPTRANS 1.0		/* [1.0] Cam clipping transition region Delta E */
-#define USECAMCLIPSPLINE			/* [def] use spline blend */
+								/* Should this be smaller ? */
+#undef USECAMCLIPSPLINE			/* [Und] use spline blend between PCS and Jab */
+
+#define CCJSCALE	2.0			/* [2.0] Amount to emphasize J delta E in in computing clip */
 
 /*
  * TTBD:
@@ -1322,6 +1325,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 
 	if (crv && clipd != NULL) {
 
+
 		/* Compute the clip DE */
 		for (cdist = 0.0, f = 0; f < fdi; f++) {
 			double tt;
@@ -1329,6 +1333,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 			cdist += tt * tt;
 		}
 		cdist = sqrt(cdist);
+		DBR(("Targ PCS %f %f %f Clipped %f %f %f cdist %f\n",tin[0],tin[1],tin[2],pp[0].v[0],pp[0].v[1],pp[0].v[2],cdist))
 	}
 
 	nsoln &= RSPL_NOSOLNS;		/* Get number of solutions */
@@ -1368,6 +1373,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 
 		for (f = 0; f < fdi; f++)	/* Transfer CAM targ */
 			cpp.v[f] = tin[f];
+		cpp.v[0] *= CCJSCALE;	
 
 		/* Make sure that the auxiliar value is initialized, */
 		/* even though it shouldn't have any effect, since should clipp. */
@@ -1376,7 +1382,6 @@ double *in		/* Function input values to invert (== clut output' values) */
 				cpp.p[e] = 0.5;
 			}
 		}
-
 		if (p->clutTable->di > fdi) {	/* ie. CMYK->Lab, there will be ambiguity */
 
 			nsoln = p->cclutTable->rev_interp(
@@ -1404,12 +1409,14 @@ double *in		/* Function input values to invert (== clut output' values) */
 		}
 
 		/* Compute the CAM clip distances */
+		cpp.v[0] /= CCJSCALE;
 		for (cdist = 0.0, f = 0; f < fdi; f++) {
 			double tt;
 			tt = cpp.v[f] - tin[f];
 			cdist += tt * tt;
 		}
 		cdist = sqrt(cdist);
+		DBR(("Targ CAM %f %f %f Clipped %f %f %f cdist %f\n",tin[0],tin[1],tin[2],cpp.v[0],cpp.v[1],cpp.v[2],cdist))
 
 		/* Use magic number to set blend distance, and compute a blend factor. */
 		/* Blend over 1 delta E, otherwise the Lab & CAM02 divergence can result */
@@ -1425,20 +1432,21 @@ double *in		/* Function input values to invert (== clut output' values) */
 		/* Blend between solution values for PCS and CAM clip result. */
 		/* We're hoping that the solutions are close, and expect them to be */
 		/* that way when we're close to the gamut surface (since the cell */
-		/* vertex values should be exact, irrespective of which space they're */
-		/* in), but weird things could happen away from the surface. Weird */
-		/* things can happen anyway with "clip to nearest", since this is not */
+		/* vertex values should be exact, irrespective of which interpolation */
+		/* space they're in), but weird things could happen away from the surface. */
+		/* Weird things can happen anyway with "clip to nearest", since this is not */
 		/* guaranteed to be a smooth function, depending on the gamut surface */
 		/* geometry, without taking some precaution such as clipping to a */
 		/* convex hull "wrapper" to create a clip vector, which we're not */
 		/* current doing. */
 		DBR(("Clip blend between device:\n"))
-		DBR(("Lab: %f %f %f and\n",pp[0].p[0], pp[0].p[1], pp[0].p[2]))
-		DBR(("Jab: %f %f %f\n",cpp.p[0], cpp.p[1], cpp.p[2]))
+		DBR(("Lab: %s & ",icmPdv(p->clutTable->di, pp[0].p)))
+		DBR(("Jab: %s ",icmPdv(p->clutTable->di, cpp.p)))
 
 		for (e = 0; e < p->clutTable->di; e++) {
 			out[e] = (1.0 - bf) * pp[0].p[e] + bf * cpp.p[e];
 		}
+		DBR((" = %s\n",icmPdv(p->clutTable->di, out)))
 
 	/* Not CAM clip case */
 	} else {
@@ -2289,8 +2297,8 @@ fprintf(stderr,"~1 Internal optimised 4D separations not yet implemented!\n");
 		else
 			xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0, NULL);	/* Use a default */
 		p->cam = new_icxcam(cam_default);
-		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf,
-		                 p->vc.Fxyz, XICC_USE_HK);
+		p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv,
+		                 p->vc.Yf, p->vc.Yg, p->vc.Gxyz, XICC_USE_HK);
 	} else {
 		p->cam = NULL;
 	}
@@ -2477,10 +2485,12 @@ icxLuLut_clut_camclip_func(
 	luluto->output(luluto, out, out);
 	luluto->out_abs(luluto, out, out);
 	p->cam->XYZ_to_cam(p->cam, out, out);
+	out[0] *= CCJSCALE;
 }
 
 /* Initialise the additional CAM space clut rspl, used to compute */
 /* reverse lookup CAM clipping results when the camclip flag is set. */
+/* We scale J by CCJSCALE, to give a more L* preserving clip direction */
 /* return error code. */
 static int
 icxLuLut_init_clut_camclip(
@@ -2490,7 +2500,7 @@ icxLuLut *p) {
 	/* Setup so clut contains transform to CAM Jab */
 	/* (camclip is only used in fwd or invfwd direction lookup) */
 	double cmin[3], cmax[3];
-	cmin[0] = 0.0;		cmax[0] = 100.0;	/* Nominal Jab output ranges */
+	cmin[0] = 0.0;		cmax[0] = CCJSCALE * 100.0;	/* Nominal Jab output ranges */
 	cmin[1] = -128.0;	cmax[1] = 128.0;
 	cmin[2] = -128.0;	cmax[2] = 128.0;
 
@@ -2906,15 +2916,17 @@ int                quality			/* Quality metric, 0..3 */
 	/* (This is for rspl scattered data fitting smoothness adjustment) */
 	/* (This could do with more tuning) */
 
-	/* For some unknown reason XYZ seems masively under-smoothed, so bump it up */
+	/* XYZ display models are under-smoothed, because the mapping is typically */
+	/* very "straight", and the lack of tension reduces any noise reduction effect. */
+	/* We apply an arbitrary correction here */
 	if (p->pcs == icSigXYZData) {
-		oavgdev[0] = 1.0 * 0.60 * avgdev;
-		oavgdev[1] = 1.0 * 1.00 * avgdev;
-		oavgdev[2] = 1.0 * 0.60 * avgdev;
+		oavgdev[0] = 20.0 * 0.70 * avgdev;
+		oavgdev[1] = 20.0 * 1.00 * avgdev;
+		oavgdev[2] = 20.0 * 0.70 * avgdev;
 	} else if (p->pcs == icSigLabData) {
 		oavgdev[0] = 1.00 * avgdev;
-		oavgdev[1] = 0.60 * avgdev;
-		oavgdev[2] = 0.60 * avgdev;
+		oavgdev[1] = 0.70 * avgdev;
+		oavgdev[2] = 0.70 * avgdev;
 	} else {	/* Hmmm */
 		for (f = 0; f < p->outputChan; f++)
 			oavgdev[f] = avgdev;
@@ -3821,7 +3833,8 @@ int                quality			/* Quality metric, 0..3 */
 			NULL, NULL,					/* Use default Maximum range of Dev' values */
 			set_clut,					/* Dev' -> PCS' transfer function */
 			NULL, NULL,					/* Use default Maximum range of PCS' values */
-			set_output					/* Linear output transform PCS'->PCS */
+			set_output,					/* Linear output transform PCS'->PCS */
+			NULL, NULL					/* No APXLS */
 	) != 0)
 		error("Setting 16 bit %s->%s Lut failed: %d, %s",
 			     icm2str(icmColorSpaceSignature, h->colorSpace),
@@ -3843,8 +3856,8 @@ int                quality			/* Quality metric, 0..3 */
 	else
 		xicc_enum_viewcond(xicp, &p->vc, -1, NULL, 0, NULL);	/* Use a default */
 	p->cam = new_icxcam(cam_default);
-	p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv, p->vc.Yf,
-	                 p->vc.Fxyz, XICC_USE_HK);
+	p->cam->set_view(p->cam, p->vc.Ev, p->vc.Wxyz, p->vc.La, p->vc.Yb, p->vc.Lv,
+	                 p->vc.Yf, p->vc.Yg, p->vc.Gxyz, XICC_USE_HK);
 	
 	if (flags & ICX_VERBOSE)
 		printf("Done A to B table creation\n");

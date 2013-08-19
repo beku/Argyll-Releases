@@ -55,8 +55,8 @@ typedef enum {
 #define XFIT_OUT_WP_REL    0x0010		/* Extract the white point and make output relative */
 #define XFIT_OUT_WP_REL_US 0x0030		/* Same as above but scale to avoid clipping above WP */
 #define XFIT_OUT_WP_REL_C  0x0050		/* Same as above but clip any cLUT values over D50 */
-#define XFIT_CLIP_WP       0x0080		/*  Clip white point to have Y <= 1.0 (conflict with above) */
-#define XFIT_OUT_LAB       0x0100		/*  Output space is LAB else XYZ for reading WP */
+#define XFIT_CLIP_WP       0x0080		/* Clip white point to have Y <= 1.0 (conflict with above) */
+#define XFIT_OUT_LAB       0x0100		/* Output space is LAB else XYZ for reading WP */
 
 #define XFIT_OUT_ZERO      0x0200		/* Adjust output curves 1 & 2 for zero */
 

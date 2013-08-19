@@ -22,11 +22,24 @@
     Should fix the clipping case so that a direction weighting
 	funtion can be applied. This should be used just like
 	the perceptual case to increase L* constance for dark
-    colors. Will this stuff up the geometric consistency though ?
-	[ See fill_nncell(), fill_nncell() and users of calc_fwd_nn_cell_list(),
-	  ie. nnearest_clip_solve(), clipn_setsort() etc. ]
+    colors. This would entail large scale changes though,
+	since a lot of code assumes minimal euclidean distance
+	goal, from the cell selection structure [ See fill_nncell(),
+	fill_nncell() and users of calc_fwd_nn_cell_list() ] and
+	the within cell computation [ ie. See  nnearest_clip_solve(),
+	clipn_setsort() etc. ]
+	XYZ PCS couldn't work with a simple weighting - it would have
+	to be a position dependent weighting.
 	The SVD least squares computation case makes this hard to change ?
 	Would have to feed in a weighting function, or can it be general ?
+	-
+	Can this be solved some other way, ie. by using gamut
+	mapping type look up ? Problem is precision.
+	-
+	Vector clip could be used (if intent can be turned
+	into computable vector clip direction), but it is slow,
+	because it search all cells from source until it
+	hits surface.
 
 	Allow function callback to set auxiliary values for 
 	flag RSPL_AUXLOCUS. 

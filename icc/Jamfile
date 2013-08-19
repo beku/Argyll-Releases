@@ -13,7 +13,8 @@ PREF_LINKFLAGS	= $(LINKDEBUGFLAG) ;	# Link debugging flags
 Libraries = libicc ;
 Executables = iccdump icclu ;
 Headers = icc.h ;
-Samples = sRGB.icm ClayRGB1998.icm lab2lab.icm ;
+Samples = sRGB.icm ClayRGB1998.icm EBU3213_PAL.icm SMPTE_RP145_NTSC.icm Rec709.icm
+          Rec2020.icm SMPTE431.icm lab2lab.icm ;
 
 #Install
 InstallBin  $(DESTDIR)$(PREFIX)/bin : $(Executables) ;
@@ -42,7 +43,12 @@ if $(BUILD_JUNK) {
 
 	MainsFromSources mksRGB.c ;
 	MainsFromSources mkAdobeRGB.c ;
+	MainsFromSources mkEBU3213.c ;
+	MainsFromSources mkSMPTERP145.c ;
 	MainsFromSources mklab2lab.c ;
+	MainsFromSources mkRec709.c ;
+	MainsFromSources mkRec2020.c ;
+	MainsFromSources mkSMPTE431.c ;
 #	MainsFromSources icm2ary.c ;
 
 	# Check library is compatible with C++

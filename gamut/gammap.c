@@ -26,9 +26,10 @@
  *  proportionality. Ideally there should be an intent that matches
  *  this, that can be selected for the colorimetric table (or perhaps be default).
  *
- *	It might be good to offer the black mapping method as an option (gmm_BPmap),
+ *	It might be good to offer the black mapping method as an option (icx_BPmap),
  *  as well as offering different profile (xicc/xlut.c) black point options
  *  (neutral, K hue max density, CMY max density, any max density).
+ *  Perhaps print RGB & CMY should default to neutral black, rather than 0,0,0 ??
  *
  *  The gamut mapping code here and the near smooth code don't actually mesh
  *  very well. For instance, the black point bend approach in < V1.3.4
@@ -448,11 +449,6 @@ gammap *new_gammap(
 	double *mx,			/* for rspl grid. */
 	char *diagname		/* If non-NULL, write a gamut mapping diagnostic WRL */
 ) {
-	gmm_BPmap bph = gmm_bendBP;		/* Prefered algorithm */
-//	gmm_BPmap bph = gmm_clipBP;		/* Alternatives tried */
-//	gmm_BPmap bph = gmm_BPadpt;
-//	gmm_BPmap bph = gmm_noBPadpt;
-
 	gammap *s;			/* This */
 	gamut *scl_gam;		/* Source colorspace gamut with rotation and L mapping applied */
 	gamut *sil_gam;		/* Source image gamut with rotation and L mapping applied */
@@ -499,12 +495,6 @@ gammap *new_gammap(
 		printf("Gamut map resolution: %d\n",mapres);
 		if (si_gam != NULL)
 			printf("Image gamut supplied\n");
-		switch(bph) {
-			case gmm_clipBP:	printf("Neutral axis no-adapt extend and clip\n"); break;
-			case gmm_BPadpt:	printf("Neutral axis fully adapt\n"); break;
-			case gmm_bendBP:	printf("Neutral axis no-adapt extend and bend\n"); break;
-			case gmm_noBPadpt:	printf("Neutral axis no-adapt\n"); break;
-		}
 	}
 
 	/* Allocate the object */
@@ -729,8 +719,8 @@ gammap *new_gammap(
 		}
 
 		/* Now decide the detail of the white and black alignment */
-		if (bph == gmm_BPadpt || bph == gmm_bendBP) {	/* Adapt to destination white and black */
-
+		if (gmi->bph == gmm_BPadpt || gmi->bph == gmm_bendBP) {
+														/* Adapt to destination white and black */
 
 			/* Use the fully adapted white and black points */
 			for (j = 0; j < 3; j++) {
@@ -738,7 +728,7 @@ gammap *new_gammap(
 				dr_cs_bp[j] = fabp[j];
 			}
 
-			if (bph == gmm_bendBP) {
+			if (gmi->bph == gmm_bendBP) {
 
 				/* Extend the half adapted (white = dst, black = src) black point */
 				/* to the same L as the target (dst), to use as the initial (bent) black point */
@@ -768,7 +758,7 @@ gammap *new_gammap(
 					dr_cs_wp[0], dr_cs_wp[1], dr_cs_wp[2], dr_cs_bp[0], dr_cs_bp[1], dr_cs_bp[2]);
 			}
 #endif
-			if (bph == gmm_clipBP) {
+			if (gmi->bph == gmm_clipBP) {
 
 				/* Extend the target black point to accomodate the */
 				/* bent or clipped destination space L* range */
@@ -1114,31 +1104,12 @@ glumknf	= 1.0;
 
 	{
 		/* We want to rotate and then map L independently of everything else, */
-		/* so transform source csape & image gamuts through the rotation and L mapping */
+		/* so transform source cs & image gamuts through the rotation and L mapping */
 		/* before we create the surface 3D mapping from them */
 
 		/* Create L mapped versions of rotated src colorspace white/black points */
-#ifdef NEVER
-		co cp;
-		double t;
-		int i;
-
-		cp.p[0] = sr_cs_wp[0];
-		s->grey->interp(s->grey, &cp);
-
-		t = (cp.v[0] - sr_cs_bp[0])/(sr_cs_wp[0] - sr_cs_bp[0]);
-		for (j = 0; j < 3; j++)
-			sl_cs_wp[j] = sr_cs_bp[j] + t * (sr_cs_wp[j] - sr_cs_bp[j]);
-
-		cp.p[0] = sr_cs_bp[0];
-		s->grey->interp(s->grey, &cp);
-		t = (cp.v[0] - sr_cs_wp[0])/(sr_cs_bp[0] - sr_cs_wp[0]);
-		for (j = 0; j < 3; j++)
-			sl_cs_bp[j] = sr_cs_wp[j] + t * (sr_cs_bp[j] - sr_cs_wp[j]);
-#else
 		dopartialmap1(s, sl_cs_wp, s_cs_wp);
 		dopartialmap1(s, sl_cs_bp, s_cs_bp);
-#endif
 
 #ifdef VERBOSE
 		if (verb) {

@@ -43,6 +43,10 @@ Verbose
 
 
 
+
+
+
+
         mode<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;</span><a style="font-family: monospace;"
@@ -64,11 +68,19 @@ optionally
 
 
 
+
+
+
+
         choose a different display m for Video LUT access.<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#d">-d n</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 [Not
 X11]
+
+
+
+
 
 
 
@@ -84,7 +96,15 @@ X11]
 
 
 
-      Display via a web server at port (default 8080)</span><br
+
+
+
+
+      Display via a web server at port (default 8080)</span><br>
+    <span style="font-family: monospace;">&nbsp;<a
+        href="dispwin.html#dmadvr">-dmadvr</a>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      [MSWin] Display via MadVR Video Renderer</span><br
       style="font-family: monospace;">
     <font size="-1"><span style="font-family: monospace;"></span><span
         style="font-family: monospace;">&nbsp;<a href="#P">-P
@@ -93,6 +113,10 @@ X11]
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 ho,vi:
 0.0
+
+
+
+
 
 
 
@@ -112,8 +136,16 @@ ss:
 
 
 
+
+
+
+
         = half, 1.0 = normal, 2.0 = double etc.<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
 
 
 
@@ -130,7 +162,18 @@ whole
 
 
 
-        screen with black background</span></font><br
+
+
+
+
+        screen with black background</span></font><br>
+    <font size="-1"><span style="font-family: monospace;">&nbsp;</span></font><font
+      size="-1"><span style="font-family: monospace;"><a href="#E">-E</a>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+      </span></font><small><span style="font-family: monospace;">Video
+        encode output as (16-235)/255 "TV" levels</span></small><br
       style="font-family: monospace;">
     <font size="-1"><span style="font-family: monospace;"></span><span
         style="font-family: monospace;">&nbsp;</span><a
@@ -157,6 +200,10 @@ just
 
 
 
+
+
+
+
         video LUT loading &amp; Beeps<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#n">-n</a>
@@ -170,10 +217,18 @@ native
 
 
 
-        display values (rather than through Video LUT)<br>
+
+
+
+
+        display values (rather than through Video LUT&nbsp; and C.M.)<br>
         &nbsp;<a href="#s">-s <span style="font-style: italic;">filename.cal</span></a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Save
 the
+
+
+
+
 
 
 
@@ -187,6 +242,10 @@ the
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Load
 a
+
+
+
+
 
 
 
@@ -208,10 +267,18 @@ that
 
 
 
+
+
+
+
         calfile/profile cal. is currently loaded in LUT<br>
       </span></font><font size="-1"><span style="font-family:
         monospace;">&nbsp;<a href="#I">-I</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
 
 
 
@@ -231,6 +298,10 @@ that
 
 
 
+
+
+
+
       </span></font><font size="-1"><span style="font-family:
         monospace;">Un-install profile for display<br>
         &nbsp;<a href="#S">-S d</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -243,10 +314,18 @@ the
 
 
 
+
+
+
+
         install/uninstall scope for OS X [nlu] or Vista [lu]<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 d
 is
+
+
+
+
 
 
 
@@ -266,11 +345,19 @@ is
 
 
 
+
+
+
+
       </span></font><font size="-1"><span style="font-family:
         monospace;">Load installed profiles cal. into Video LUT<br>
       </span></font><font size="-1"><span style="font-family:
-        monospace;">&nbsp;<a href="#E">-E</a>
+        monospace;">&nbsp;<a href="#X">-<font size="-1">X</font></a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
 
 
 
@@ -292,6 +379,10 @@ debug
 
 
 
+
+
+
+
         diagnostics to stderr</span></font><font size="-1"><span
         style="font-family: monospace;"></span></font><font size="-1"><span
         style="font-family: monospace;"></span><span style="font-family:
@@ -302,6 +393,10 @@ debug
         style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Load
 display
+
+
+
+
 
 
 
@@ -372,6 +467,10 @@ the
 
 
 
+
+
+
+
     difficulty cause by TwinView and MergedFB in X11 based systems, you
     can optionally specify a separate display number after the display
     that is going to be used to present test patches, for accessing the
@@ -406,6 +505,16 @@ the
     operation that depends on accessing the VideoLUTs will either
     generate a warning or fail.<br>
     <br>
+    <a name="dmadvr"></a><span style="font-weight: bold;">-dmadvr</span>
+    [MSWin only] causes test patches to be displayed using the MadVR
+    video renderer. Note that you may have to start the video playback
+    software and load a video clip in pause for this to work. MadVR
+    rendering does not need or support VideoLUT access, but be aware
+    that the state of the Graphics Card VideoLUTs may affect the results
+    (check this using dispwin). Test patch colors <u>will</u> be
+    processed by the MadVR 3dLut by default (see <a href="#n">-n</a>
+    flag).<br>
+    <br>
     <a name="P"></a> The <span style="font-weight: bold;">-P</span>
     parameter allows you to position and size the test patch window. By
     default it is places in the center of the screen, and sized
@@ -432,6 +541,12 @@ the
     flag causes the while screen behind the test window to be masked
     with black. This can aid black accuracy when measuring CRT displays
     or projectors.<br>
+    <br>
+    <a name="E"></a> The <span style="font-weight: bold;">-E</span>
+    flag causes the test values to be scaled to the Video RGB encoding
+    range of 16/255 to 235/255. Note that this is not applicable if the
+    MadVR render is being used to display patches, as MadVR should be
+    configured for Video encoding instead.<br>
     <br>
     By default <span style="font-weight: bold;">dispwin</span> will put
     a test window on the selected display, and display some test colors,
@@ -463,7 +578,9 @@ the
     If the&nbsp;<a name="n"></a><span style="font-weight: bold;">-n</span>
     flag is set, then <span style="font-weight: bold;">dispwin</span>
     will display the colors directly on the display, rather than having
-    the color values translated through the currently loaded Video LUTs.<br>
+    the color values translated through the currently loaded Video LUTs.
+    In the case of using the MadVR renderer to display the patches, any
+    3dLut will also be disabled.<br>
     <br>
     <a name="s"></a> If a <span style="font-weight: bold;">-s <span
         style="font-style: italic;">filename.cal</span></span> option is
@@ -507,7 +624,9 @@ the
     particular X11 display, and expands it to accomodate XrandR 1.2.
     Note that for X11 systems, the properties are not persistent, and
     will need to be loaded each time the X11 server is started (see the
-    <a href="#L">-L</a> flag).<br>
+    <a href="#L">-L</a> flag). To make sure that the profile calbration
+    'vcgt' tag gets loaded into the Graphics Card at system start,
+    please read the guide <a href="dispprofloc.html">here</a>.<br>
     <br>
     <a name="U"></a><span style="font-weight: bold;">-U</span>: The ICC
     profile specified as the final argument will be un-installed as the
@@ -539,7 +658,7 @@ the
     display on system startup from the installed display profile, if the
     system doesn't not do this automatically .<br>
     <br>
-    <a name="E"></a> <span style="font-weight: bold;">-E</span>: Daemon
+    <a name="X"></a> <span style="font-weight: bold;">-X</span>: Daemon
     mode (experimental). When running on a UNIX based system that used
     the X11 Windowing System, this option runs dispwin in a "daemon"
     mode where it monitors the given X11 server, waiting for any changes

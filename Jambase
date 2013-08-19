@@ -510,7 +510,7 @@ if $(NT)
 	}
 	else if $(MSVCNT) || $(MSVCDIR) || $(MSVCDir) || $(VCINSTALLDIR)
 	{
-		# Visual C++ 8.0/9.0 uses VCINSTALLDIR
+		# Visual C++ 8.0/9.0/10.0 uses VCINSTALLDIR
 		# We assume VC++ Express + XP32 SDK has been setup
 
 		# Visual C++ 6.0 uses MSVCDIR
@@ -523,17 +523,20 @@ if $(NT)
 			MSVCNT		?= $(MSVCDIR) ;		
 		}
 
-		if $(COMPILER) = MSVCPP10 {
+		if [ MATCH 11\\.(.*) : $(VisualStudioVersion) ] {
+			ECHO "Compiler is VC++11 32 bit" ;
+			MSVCVER     = 11 ;
+		} else if [ MATCH (.*)VC\\+\\+10(.*) : $(MSVCNT) ] {
 			ECHO "Compiler is VC++10 32 bit" ;
 			MSVCVER     = 10 ;
-		} else if $(COMPILER) = MSVCPP9 {
+		} else if [ MATCH (.*)VC\\+\\+9(.*) : $(MSVCNT) ] {
 			ECHO "Compiler is VC++9 32 bit" ;
 			MSVCVER     = 9 ;
-		} else if $(COMPILER) = MSVCPP8 {
+		} else if [ MATCH (.*)VC\\+\\+8(.*) : $(MSVCNT) ] {
 			ECHO "Compiler is VC++8 32 bit" ;
 			MSVCVER     = 8 ;
 		} else {
-			ECHO "Compiler is VC++ 32 bit" ;
+			ECHO "Compiler is VC++6 32 bit" ;
 			MSVCVER     = 6 ;
 		}
 
@@ -3064,22 +3067,22 @@ rule ShLibraryFromObjects
 #Echo "ShLibraryFromObjects SHLINKOBJS = '" $(SHLINKOBJS) "' and P_SHLINKOBJS ='" $(P_SHLINKOBJS) "'" ;
 	if $(SHLINKOBJS) || $(P_SHLINKOBJS) {
 		local _o = [ NormSrcTargets $(SHLINKOBJS:S=$(SUFOBJ)) ] $(P_SHLINKOBJS:S=$(SUFOBJ)) ;
-		Depends $(_t) : $(_o) ;
-		SHLINKOBJS on $(_t) += $(_o) ;
+		Depends $(_sl) : $(_o) ;
+		SHLINKOBJS on $(_sl) += $(_o) ;
 	}
 
 #Echo "ShLibraryFromObjects SHLINKLIBS = '" $(SHLINKLIBS) "' and P_SHLINKLIBS ='" $(P_SHLINKLIBS) "'" ;
 	if $(SHLINKLIBS) || $(P_SHLINKLIBS) {
 		local _l = [ NormSrcTargets $(SHLINKLIBS:S=$(SUFLIB)) ] $(P_SHLINKLIBS:S=$(SUFLIB)) ;
-		Depends $(_t) : $(_l) ;
-		SHLINKLIBS on $(_t) += $(_l) ;
+		Depends $(_sl) : $(_l) ;
+		SHLINKLIBS on $(_sl) += $(_l) ;
 	}
 
 #Echo "ShLibraryFromObjects SHLINKSHLIBS = '" $(SHLINKSHLIBS) "' and P_SHLINKSHLIBS ='" $(P_SHLINKSHLIBS) "'" ;
 	if $(SHLINKSHLIBS) || $(P_SHLINKSHLIBS) {
 		local _l = [ NormSrcTargets $(SHLINKSHLIBS:S=$(SUFSHLIB)) ] $(P_SHLINKSHLIBS:S=$(SUFSHLIB)) ;
-		Depends $(_t) : $(_l) ;
-		SHLINKSHLIBS on $(_t) += $(_l) ;
+		Depends $(_sl) : $(_l) ;
+		SHLINKSHLIBS on $(_sl) += $(_l) ;
 	}
 
 	if $(SHLINKDEFFILE) {	# Windows special option
@@ -4098,7 +4101,7 @@ if $(OS) = MACOSX {		# OS X version of ld
 	# Link .o and .a into a .dylib
 	# gcc -dynamiclib -Wl,-headerpad_max_install_names,-undefined,dynamic_lookup,-compatibility_version,1.0,-current_version,1.0,-install_name,/usr/local/lib/libfoo.1.dylib -o libfoo.1.dylib $(OBJ)
 	# -Wl,-install_name,@executable_path ???
-	actions ShLink_ 
+	actions ShLink_ bind SHLINKOBJS SHLINKLIBS SHLINKSHLIBS  
 	{
 		$(LINK) -dynamiclib -Wl,-undefined,dynamic_lookup,-install_name,$(SHLINKSEARCHEXEPATH)$(<[1]:BS) $(LINKOUTFLAG)$(<[1]) $(>) $(SHLINKOBJS) $(SHLINKLIBS) $(SHLINKSHLIBS) $(SHLINKFLAGS) $(SHSTDLIBS)
 	}
@@ -4111,7 +4114,7 @@ if $(OS) = MACOSX {		# OS X version of ld
 	# or set /etc/ld.so.conf.d/*.conf
 	# To set .so search path (after flag):  -Wl,-soname=$(<[1]:BS)
 # Old:	$(LINK) -shared -Wl,-soname=$(SHLINKSEARCHEXEPATH)$(<[1]:BS) $(SHLINKFLAGS) $(LINKOUTFLAG)$(<[1]) $(>) $(SHLINKOBJS) $(SHLINKLIBS) $(SHLINKSHLIBS) $(SHSTDLIBS)
-	actions ShLink_ 
+	actions ShLink_ bind SHLINKOBJS SHLINKLIBS SHLINKSHLIBS  
 	{
 		$(LINK) -shared -Wl,-soname=$(SHLINKSEARCHEXEPATH)$(<[1]:BS) $(LINKOUTFLAG)$(<[1]) $(>) $(SHLINKOBJS) $(SHLINKLIBS) $(SHLINKSHLIBS) $(SHLINKFLAGS) $(SHSTDLIBS)
 	}

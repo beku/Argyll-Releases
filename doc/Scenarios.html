@@ -74,10 +74,11 @@
     <h4>&nbsp;&nbsp;&nbsp; <a href="#PC6">How profile ink limits are
         handled when calibration is being used<br>
       </a></h4>
-    <h4><br>
-      <a href="#LP1">Linking Profiles</a></h4>
-    <h4><br>
-      <a href="#TR1">Transforming colorspaces of raster files</a></h4>
+    <h4> <a href="#LP1">Linking Profiles</a></h4>
+    <h4> <a href="#TR1">Transforming colorspaces of raster files</a></h4>
+    <h4></h4>
+    <h4> <a href="#TV1">Creating Video Calibration 3DLuts</a></h4>
+    <h4><a href="Scenarios.html#TV2">Verifying Video Calibration 3DLuts</a></h4>
     <br>
     <hr style="width: 100%; height: 2px;"><br>
     <h3><a name="PM1"></a>Profiling Displays</h3>
@@ -127,6 +128,36 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       and profiling a display that doesn't have VideoLUT access</a>.<br>
     <br>
     <h3><a name="PM1b"></a>Adjusting and Calibrating Displays</h3>
@@ -149,6 +180,36 @@
     your display is currently set up. (you may have to run this as <span
       style="text-decoration: underline; color: rgb(204, 51, 204);">dispcal
 -yl
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -373,7 +434,8 @@
       href="colprof.html#d">-dmt</a> <a href="colprof.html#p1">DisplayA</a><br>
     <br>
     Make sure you check the delta E report at the end of the profile
-    creation, to see if the profile is behaving reasonably.<br>
+    creation, to see if the sample data and profile is behaving
+    reasonably.<br>
     If a calibration file was used with <a href="dispread.html">dispread</a>,
     then it will be converted to a vcgt tag in the profile, so that the
     operating system or other system color tools load the lookup curves
@@ -490,6 +552,36 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     (<span style="font-weight: bold;">-Iw</span>) changes by doing on
     the fly calibrations during the measurements. Instrument black level
     drift and display white level drift can be combined (<span
@@ -505,6 +597,36 @@
     displays,&nbsp; (ie. you have a Wide Gamut Display), then you may
     get disappointing results with a Colorimeter. One way of addressing
     this problem is to use a <a href="File_Formats.html#.ccmx">Colorimeter
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -632,6 +754,36 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       SG</a> charts:<br>
     <br>
     <img src="DC.jpg" alt="GretagMacbeth ColorChecker DC chart"
@@ -644,6 +796,36 @@
       2px solid ; width: 200px; height: 140px;"><br>
     <br>
     Also supported is the <a href="http://www.hutchcolor.com/hct.htm">HutchColor
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -668,8 +850,68 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       M&eacute;tairie's Digital TargeT 003</a> and <a
 href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.html">Christophe
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -685,6 +927,36 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
       alt="CMP_Digital_Target-3" src="CMP_Digital_Target-3.jpg"><br>
     <br>
     and the <a href="http://www.silverfast.com/show/dc-targets/en.html">LaserSoft
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -709,8 +981,68 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
       href="http://www.qpcard.com/en_b2c/color-reference-cards/qpcard201.html">QPcard
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       201</a>:&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; <a
 href="http://www.qpcard.com/en_b2c/color-reference-cards/instant-camera-raw-profiling-with-qpcard-202.html">QPcard
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
       202</a>:<br>
@@ -801,6 +1133,36 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         header</a>, and appending <a href="SG_footer.txt">this footer</a>,
       making sure there are no blank lines inserted in the process.<br>
       If you do happen to have access to a more comprehensive instrument
@@ -881,6 +1243,36 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       documentation</a>).<br>
     <br>
     To create the scanner .ti3 file, run the <b>scanin</b> tool as
@@ -950,8 +1342,12 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
       href="colprof.html#p1">scanner</a><br>
     <br>
     Make sure you check the delta E report at the end of the profile
-    creation, to see if the profile is behaving reasonably.<br>
-    <br>
+    creation, to see if the sample data and profile is behaving
+    reasonably. Depending on the type of device, and the consistency of
+    the readings, average errors of 5 or less, and maximum errors of 15
+    or less would normally be expected. If errors are grossly higher
+    than this, then this is an indication that something is seriously
+    wrong with the device measurement, or profile creation.<br>
     <br>
     If profiling a <span style="font-weight: bold;">camera</span> in <span
       style="font-weight: bold;">RAW</span> mode, then there may be some
@@ -1282,6 +1678,36 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         scanner or camera must be configured and used exactly the same
         as it was when it was profiled.</span></big><br>
     <br>
@@ -1383,6 +1809,36 @@ then
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     it can save considerable processing time and space if the -b flag is
     used, and the -S flag not used.<br>
     <br>
@@ -1407,6 +1863,13 @@ then
     If you know what colorspace your originals are in, use that as the
     argument to <span style="font-weight: bold;">-S</span>.<br>
     <br>
+    Make sure you check the delta E report at the end of the profile
+    creation, to see if the sample data and profile is behaving
+    reasonably. Depending on the type of device, and the consistency of
+    the readings, average errors of 5 or less, and maximum errors of 15
+    or less would normally be expected. If errors are grossly higher
+    than this, then this is an indication that something is seriously
+    wrong with the device measurement, or profile creation.
     <h4><a name="PP6"></a>Choosing a black generation curve (and other
       CMYK printer options)<br>
     </h4>
@@ -1447,6 +1910,36 @@ then
     profile (using <a href="colprof.html#q">-ql</a> <a
       href="colprof.html#b">-b</a> <a href="colprof.html#ni">-no</a>, <a
       href="colprof.html#no">-ni</a> and no <a href="colprof.html#S">-S</a>),
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1871,6 +2364,36 @@ chart,
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     and/or to have it included in .ti3 file.<br>
     &nbsp;&nbsp;&nbsp; <a href="cctiff.html#p2">cctiff</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 To
@@ -1889,8 +2412,68 @@ an
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     image file.<br>
     &nbsp;&nbsp;&nbsp; <a href="applycal.html#p1">applycal</a>&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1909,6 +2492,36 @@ assumed
 when
 reading
 a
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2155,6 +2768,734 @@ a
     <br>
     <br>
     <hr size="2" width="100%"><br>
+    <h3><a name="TV1"></a>Creating Video Calibration 3DLuts</h3>
+    Video calibration typically involves trying to make your actual
+    display device emulate an ideal video display, one which matches
+    what your Video media was intended to be displayed on. An ICC device
+    link embodies the machinery to do exactly this, to take device
+    values in the target source colorspace and transform them into an
+    actual output device colorspace. In the Video and Film industries a
+    very similar, but less sophisticated means of doing this is to use
+    3DLuts, which come in a multitude of different format. ICC device
+    links have the advantage of being a superset of 3dLuts, encapsulated
+    in a standard file format.<br>
+    <br>
+    To facilitate Video calibration of certain Video systems, ArgyllCMS
+    supports some 3DLut output options as part of <a
+      href="collink.html">collink</a>.<br>
+    <br>
+    What follows here is an outline of how to create Video calibration
+    3DLuts using ArgyllCMS. First comes a general discussion of various
+    aspects of video device links/3dLuts, and followed with some
+    specific advice regarding the systems that ArgyllCMS supports. Last
+    is some recommended scenarios for verifying the quality of Video
+    calibration achieved.<br>
+    <h5>1) How to display test patches.<br>
+    </h5>
+    Argyll's normal test patch display will be used by default, as long
+    as any video encoding range considerations are dealt with (see
+    Signal encoding below). An alternative when working with MadVR V
+    0.86.9 or latter, is to use the madTPG to display the patches in
+    which case the MadVR video encoding range setting will operate. This
+    can give some quality benefits due to MadVR's use of dithering. To
+    display patches using MadVR rather than Argyll, start madTPG and
+    then use the option "-d madvr" in dispcal, dispread and dispwin.
+    Leave the MadTPG "VideoLUT" and "3dluts" buttons in their
+    default&nbsp; (enabled) state, as the various tools will
+    automatically take care of disabling the 3dLut and/or calibration
+    curves as needed.<br>
+    <h5>2) White point calibration &amp; neutral axis calibration.</h5>
+    A Device Link is capable of embodying all aspects of the
+    calibration, including correcting the white point and neutral axis
+    behavior of the output device, but making such a Link just from two
+    ICC profile requires the use of Absolute Colorimetric intent during
+    linking, and this reduces flexibility. In addition, a typical ICC
+    device profile may not capture the neutral axis behavior quite as
+    well as an explicit calibration, since it doesn't sample the
+    displays neutral axis behaviour in quite as much detail. It is often
+    desirable therefore, to calibrate the display device so as to have
+    the specific white point desired so that one of the white point
+    relative linking intents can be used, and to improve the displays
+    general neutral axis behavior so that subsequent profiling works to
+    best advantage. In summary, there are basically 4 options in
+    handling white point &amp; neutral axis calibration:<br>
+    <ul>
+      <li>Don't bother correcting the white point. Most displays are
+        close to the typical D65 target, and our eyes adapt to the white
+        automatically unless it is very far from the daylight locus or
+        we have something else to refer to. If this approach is taken,
+        then display profiling and linking can ignore calibration, and
+        one of the non Absolute Colorimetric intents (such as Relative
+        Colorimetric) is chosen during profile linking. It is wise to
+        make sure that the video card VideoLUTs are set to some known
+        state (ie. linear using "dispwin -c" , or set by a an installed
+        ICC display profile) though.<br>
+      </li>
+      <li>Calibrate the white point and linearise the neutral axis using
+        the display controls. Many TV's have internal calibration
+        controls that allow setting the white point, and possibly the
+        neutral axis response. Either a dedicated Video calibration
+        package could be used, or ArgyllCMS <a
+          href="file:///D:/src/argyll/doc/dispcal.html">dispcal</a>'s
+        interactive adjustment mode can be used to set the white point.
+        Note that while adjusting the neutral axis for neutrality may
+        help, the Device Link will override the transfer curve
+        characteristic of the calibrated display, so aiming for a
+        transfer curve approximately the same as the target and
+        reasonably perceptually linear is all that is required. If this
+        approach is taken, then display profiling and linking can ignore
+        calibration, and one of the non Absolute Colorimetric intents is
+        chosen during profile linking. It is wise to make sure that the
+        video card VideoLUTs are set to some known state&nbsp; though.</li>
+      <li>[<b>Recommended</b>] Calibrate the white point and neutral
+        axis using ArgyllCMS <a href="dispcal.html">dispcal</a>. Since
+        the Device Link will override the calibrated transfer curve
+        characteristic of the display, there there may be no point in
+        doing much more than a medium calibration, and choosing a
+        standard curve (such as <a href="dispcal.html#g">-g s</a>) If
+        this approach is taken, then the resulting calibration file
+        should be provided to dispread as the <a href="dispcal.html#k">-k
+
+
+
+
+          parameter</a> or <a href="dispcal.html#K">-K parameter</a>.&nbsp;
+
+
+
+
+        See also below <b>Choice of where to apply display per channel
+          calibration curves.</b></li>
+      <li>Choose one of the Absolute Colorimetric intents in collink
+        (ie. -i aw). This greatly reduces flexibility, and may not be
+        quite as accurate as an explicit calibration.</li>
+    </ul>
+    If an explicit calibration is used, then it is a good idea to add
+    some test points down the neutral axis when profiling (targen <a
+      href="targen.html#g">-g parameter</a>). <br>
+    <br>
+    <b>3) Choice of where to apply display per channel calibration
+      curves</b><br>
+    <br>
+    If calibration curves are going to be used, then it needs to be
+    decided where they will be applied in the video processing chain.
+    There are two options:<br>
+    <br>
+    <b>a)</b> Install the calibration curves in the playback system. On
+    a PC the display, this can be done by loading the calibration curves
+    into the Video Card temporarily using "dispwin calibration.cal", or
+    installing the ICC profile into the system persistently using
+    something like "<a href="file:///D:/src/argyll/doc/dispwin.html#I">dispwin
+
+
+
+
+
+
+
+
+
+
+
+
+
+      -I profile.icm</a>",<br>
+    or when using MadVR 0.86.9 or latter by creating a 3dLut with
+    appended calibration curves using <a href="collink#H">-H
+      display.cal</a>.<br>
+    <br>
+    <b>b)</b> The calibration can be incorporated into the Device
+    Link/3dLUT by providing it to collink as the <a
+      href="file:///D:/src/argyll/doc/collink.html#a">-a display.cal</a>.
+    This is the only option if the video display path does not have some
+    separate facility to handle calibration curves. Note that if the
+    playback system has graphic card VideoLUTs then they will have to be
+    set to a defined consistent state such as linear. When using MadVR
+    0.86.9 or latter this will be done automatically since the -a option
+    will append a linear set of calibration curves to the 3dLut.<br>
+    <br>
+    The choice is dictated by a number of considerations:<br>
+    <ul>
+      <li>Does the video playback path have a facility for installing
+        the calibration curves ? If playing back system is a PC, then
+        typically the Graphics Card supports 1D VideoLUTs, thereby
+        making a) a possible choice.<br>
+      </li>
+      <li>Does the video playback <u>always</u> play back through the
+        Video Card VideoLUTs ? Some systems do not apply VIdeoLUTs to
+        things like overlay plane rendering. If not, then you need to
+        choose b), but also make sure that if does use the Video Card
+        VideoLUTs in some situations, that they are set to linear (ie.
+        dispcal -c). One way of determining when the VideoLUTs get used
+        or not is to load a distinct calibration such as "strange.cal"
+        provided in the ref folder, and check visually if it is
+        affecting the video or not, ie. "dispcal strange.cal". Note that
+        using MadVR 0.86.9 or latter in combination with a 3dLut with
+        appended calibration curves will apply the calibration even with
+        overlay plane rendering.<br>
+      </li>
+      <li>Do you want/need other applications to share the calibration
+        curves or profile or not ? If you do, then it is desirable to
+        choose a).</li>
+      <li>Quality considerations. VideoLUTs may or may not be of greater
+        depth than the standard 8 bit per color component frame buffer.
+        If they are, and the video path passes that extra depth through
+        to the display, and the display is capable of using that extra
+        depth, then a) may be a desirable choice from a quality point of
+        view. You can get some idea whether this is the case by running
+        "dispcal -R". If the VideoLUT depth is not better than 8 bits,
+        then it may be more desirable to choose b), since renders like
+        MadVR can use dithering to give better than 8 bits precision in
+        the video playback.<br>
+      </li>
+    </ul>
+    <h5>4) Output device calibration and profiling.</h5>
+    Output device profiling should basically follow the guide above in <a
+      href="#PM1b">Adjusting and Calibrating a displays</a> and <a
+      href="#PM1">Profiling Displays</a>. The assumption is that either
+    you are calibrating/profiling your computer display for video, or
+    your TV is connected to the computer you are creating
+    calibrations/profiles on, and that the connection between the PC and
+    TV display is such that full range RGB signals are being used, or
+    that the Video card has automatically or manually been configured to
+    scale full range RGB values to Video levels for the TV. If the
+    latter is not possible, then use the -E options on dispcal and
+    dispread. (See <b>Signal encoding</b> bellow for more details on
+    this). Don't use the -E options on dispcal and dispread if you are
+    using MadVR to display test patches using the "-d madvr" option.<br>
+    <br>
+    Once the profile has been created, it is possible to then use the
+    resulting Device Link/3DLut with signal encoding other than full
+    range or Video level RGB. <br>
+    <h5>5) Target colorspace<br>
+    </h5>
+    In practical terms, there are five common Video and Digital Cinema
+    encoding colorspaces. <br>
+    <br>
+    For Standard Definition:<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; EBU 3213 or "PAL 576i" primaries.<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; SMPTE RP 145 or "NTSC 480i" primaries.<br>
+    <br>
+    For High Definition:<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; Rec 709 primaries.<br>
+    <br>
+    For Ultra High Defintion<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; Rec 2020 primaries.<br>
+    <br>
+    For Digital Cinema<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; SMPTE-431-2&nbsp; or "DCI-P3"<br>
+    <br>
+    PAL and NTSC have historically had poorly specified transfer curve
+    encodings, and the Rec 709 HDTV encoding curve is the modern <a
+      href="http://www.poynton.com/notes/DVAI/DVAI_TOC_full.html#23">recommendation</a>,
+    but the overall interpretation of Video sources may in fact be
+    partly determined by the expected standard Video display device
+    characteristics (see <b>Viewing conditions adjustment and gamut
+      mapping</b> below for more details).<br>
+    <br>
+    To enable targeting these colorspaces, ArgyllCMS provides 5 ICC
+    profiles in the ref directory to use as source
+    colorspaces:&nbsp;&nbsp;&nbsp; <br>
+    <br>
+    &nbsp;&nbsp;&nbsp; EBU3213_PAL.icm<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; SMPTE_RP145_NTSC.icm<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; Rec709.icm<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; Rec2020.icm<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; SMPTE431.icm<br>
+    <h5>6) Signal encoding</h5>
+    Typical PC display output uses full range RGB signals (0 .. 255 in 8
+    bit parlance), while typical Video encoding allows some head &amp;
+    footroom for overshoot and sync of digitized analog signals, and
+    typically uses a 16..235 range in 8 bits. In many cases Video is
+    encoded as luma and color difference signals YCbCr (loosely known as
+    YUV as well), and this also uses a restricted range 16..235 for Y,
+    and 16..240 for Cb and Cr in 8 bit encoding. The extended gamut
+    xvYCC encoding uses 16..235 for Y, and 1..254 for Cb and Cr.<br>
+    <br>
+    The signal encoding comes into play in two situations: 1)
+    Calibrating and profiling the display, and 2) Using the resulting
+    Device Link/3DLut.<br>
+    The encoding may need to be different in these two situations,
+    either because different video source devices are being used for
+    calibration/profiling and for video playback, or because the video
+    playback system uses the Device Link/3DLut at a point in its
+    processing pipeline that requires a specific encoding.<br>
+    <br>
+    For calibration &amp; profiling, the display will be driven by a
+    computer system so that dispcal and dispread can be used. By default
+    these programs expect to output full range RGB signals, and it is
+    assumed that either the display accepts full range signals, or that
+    the graphics card or connection path has been setup to convert the
+    full range values into Video range signals automatically or
+    manually. If this is not the case, then both dispcal and dispread
+    have a -E option that will modify them to output Video range RGB
+    values.<br>
+    <br>
+    If MadVR is the target of the calibration and profiling, then there
+    is an option to use it to display the calibration and profiling test
+    patches (<b>-d madvr</b>). In this case, MadVR should be configured
+    appropriately for full range or Video range encoding, and the -E
+    flag should <u>not</u> be used with dispcal or dispread, since
+    MadVR will be taking care of such conversions.<br>
+    <br>
+    If a calibration file was created using dispcal -E, then using it in
+    dispread will automatically trigger Video level RGB signals during
+    profiling. Any time such a Video level calibration is loaded into
+    the Graphics card VideoLUTs using dispwin, or the calibration curve
+    is converted to a 'vcgt' tag in a profile, the curve will also
+    convert full range RGB to Video range RGB. This should be kept in
+    mind so that if video playback is being performed with the
+    calibration curves installed in the Graphics card VideoLUTs, that
+    full range is converted only once to Video range (ie. In this
+    situation MadVR output should be set to full range if being played
+    back through the calibration curves in hardware, but only if dispcal
+    -E has been used). On the other hand, if the calibration curves are
+    incorporated into the DeviceLink/3dLUT, then the conversion to Video
+    levels has to be done somewhere else in the pipeline, such as using
+    MadVR video level output, or by the graphics card, etc.<br>
+    <br>
+    When creating the Device Link/3dLut, it is often necessary to
+    specify one of the video encodings so that it fits in to the
+    processing pipeline correctly. For instance the eeColor needs to
+    have input and output encoding that suits the HDMI signals passing
+    through it, typically Video Range RGB. MadVR needs Video Level RGB
+    to match the values being passed through the 3dLut at that point.<br>
+    <br>
+    There are several version of YCbCr encoding supported as well, even
+    though neither the eeColor nor the current version of MadVR need or
+    can use them at present.<br>
+    <h5>7) Black point mapping</h5>
+    <p>Video encoding assumes that the black displayed on a device is a
+      perfect black (zero light). No real device has a perfect black,
+      and if a colorimetric intent is used then certain image values
+      near black will get clipped to the display black point, loosing
+      shadow detail. To avoid this, some sort of black point mapping is
+      usually desirable. There are two mechanisms available in collink:
+      a) BT.1886 black point mapping, or b) using one of the smart gamut
+      mapping intents that does black point mapping (e.g. la, p, pa, ms
+      or s).<br>
+    </p>
+    <h5>8) Viewing conditions adjustment and gamut mapping</h5>
+    <p> </p>
+    <p>In historical TV systems, there is a viewing conditions
+      adjustment being made between the bright studio conditions that TV
+      is filmed in, and the typical dim viewing environment that people
+      view it in. This is created by the difference between the encoding
+      response curve gamma of about 2.0, and a typical CRT response
+      curve gamma of 2.4. <br>
+    </p>
+    <p>In theory Rec709 defines the video encoding, but it seems in
+      practice that much video material is adjusted to look as intended
+      when displayed on a reference monitor having a display gamma of
+      somewhere between 2.2 and 2.4, viewed in a dim viewing
+      environment. The modern standard covering the display transfer
+      curve is <a
+        href="http://www.itu.int/rec/R-REC-BT.1886-0-201103-I">BT.1886</a>,
+      which defines a pure power 2.4 curve with a black point offset. So
+      another means of making the viewing adjustment is to apply the
+      BT.1886-like response to Rec709 encoded material. Collink supports
+      this using the <a href="collink.html#I">-I b</a>, and allows some
+      control over the degree of viewing conditions adjustment by
+      overriding the BT.1886 gamma&nbsp; using the <a
+        href="collink.html#Ib">-I b:g.g</a> parameter. This is the
+      recommended approach to start with, since it gives good results
+      with a single parameter.<br>
+    </p>
+    <p> An alternate approach to making this adjustment is to take
+      advantage of the viewing conditions adjustment using the CIECAM02
+      model available in collink. Some control over the degree of
+      viewing conditions adjustment is possible by varying the viewing
+      condition parameters. </p>
+    <p>A third alternative is to combine the two approaches. The source
+      is defined as Rec709 rendered to a model BT.1886 display in dim
+      viewing conditions, and then CIECAM02 is used to adjust for the
+      actual display viewing conditions. Once again, control over the
+      degree of viewing conditions adjustment is possible by varying the
+      viewing condition parameters. </p>
+    <h5>Putting it all together:</h5>
+    In this example we choose to create a display calibration first
+    using dispcal, and create a simple matrix profile as well:<br>
+    <br>
+    &nbsp; <tt>dispcal -v -o -qm -w 0.3127,0.3290 -gs -o TVmtx.icm TV</tt><br>
+    <br>
+    We are targeting a D65 white point (<tt>-w 0.3127,0.3290)</tt> and
+    an sRGB response curve.<br>
+    <br>
+    If you are using the madTPG you would use:<br>
+    <br>
+    &nbsp; <tt>dispcal -v -d madvr -o -qm -w 0.3127,0.3290 -gs -o
+      TVmtx.icm TV</tt><br>
+    <br>
+    Then we need to create a display patch test set. We can use the
+    simple matrix to pre-condition the test patches, as this helps
+    distribute them where they will be of most benefit. If have
+    previously profiled your display, you should use that previous
+    profile, or if you decided not to do a dispcal, then the Rec709.icm
+    should be used as a substitute. Some per channel and a moderate
+    number of full spread patches is used here - more will increase
+    profiling accuracy, a smaller number will speed it up:<br>
+    <br>
+    &nbsp; <tt>targen -v -d3 -s30 -g100 -f1000 -cTVmtx.icm TV</tt><br>
+    <br>
+    The display can then be measured:<br>
+    <br>
+    &nbsp; <tt>dispread -v -k TV.cal TV</tt><br>
+    <br>
+    or using madTPG:<br>
+    <br>
+    &nbsp;dispread -v -d madvr -K TV.cal TV<br>
+    <br>
+    and then a cLUT type ICC profile created. Since we will be using
+    collink smart linking, we minimize the B2A table size:<br>
+    <br>
+    &nbsp; <tt>colprof -v -qh -bl TV</tt><br>
+    <br>
+    Make sure you check the delta E report at the end of the profile
+    creation, to see if the sample data and profile is behaving
+    reasonably. Depending on the type of device, and the consistency of
+    the readings, average errors of 5 or less, and maximum errors of 15
+    or less would normally be expected. If errors are grossly higher
+    than this, then this is an indication that something is seriously
+    wrong with the device measurement, or profile creation.<br>
+    <br>
+    If you would like to use the display ICC profile for general color
+    managed applications, then you would compute a more complete
+    profile:<br>
+    <br>
+    &nbsp; <tt>colprof -v -qh TV</tt><br>
+    <br>
+    The recommended approach then is to create a Device Link that uses a
+    BT.1886 black point and viewing conditions adjustment, say one of
+    the following:<br>
+    <br>
+    <tt>&nbsp; collink -v -Ib:2.4 -G -ir Rec709.icm TV.icm
+      HD.icm&nbsp;&nbsp; # dark conditions</tt><tt><br>
+    </tt><tt> &nbsp; collink -v -Ib&nbsp;&nbsp;&nbsp;&nbsp; -G -ir
+      Rec709.icm TV.icm HD.icm&nbsp;&nbsp; # dim conditions - good
+      default</tt><tt><br>
+    </tt><tt> &nbsp; collink -v -Ib:2.1 -G -ir Rec709.icm TV.icm
+      HD.icm&nbsp;&nbsp; # mid to dim conditions</tt><tt><br>
+    </tt><tt> &nbsp; collink -v -Ib:2.0 -G -ir Rec709.icm TV.icm
+      HD.icm&nbsp;&nbsp; # mid to light conditions</tt><br>
+    <br>
+    or you could do it using pure CIECAM02 adjustment and a black point
+    mapping:<br>
+    <br>
+    <tt>&nbsp; collink -v -ctv -dmd -da:1 -G -ila Rec709.icm TV.icm
+      HD.icm&nbsp; # very dark conditions</tt><tt><br>
+    </tt><tt> &nbsp; collink -v -ctv -dmd -da:3 -G -ila Rec709.icm
+      TV.icm HD.icm&nbsp; # dim conditions</tt><tt><br>
+    </tt><tt> &nbsp; collink -v -ctv -dmd -da:7 -G -ila Rec709.icm
+      TV.icm HD.icm&nbsp; # mid to dim conditions - good default</tt><tt><br>
+    </tt><tt> &nbsp; collink -v -ctv -dmd -da:15 -G -ila Rec709.icm
+      TV.icm HD.icm # mid conditions</tt><br>
+    <br>
+    or using both to model a reference video display system that is
+    adapted to your viewing conditions:<br>
+    <tt><br>
+    </tt><tt> &nbsp; collink -v -Ib -c md -dmd -da:5&nbsp; -G -ila
+      Rec709.icm TV.icm HD.icm # very dark conditions</tt><tt><br>
+    </tt><tt> &nbsp; collink -v -Ib -c md -dmd -da:10 -G -ila Rec709.icm
+      TV.icm HD.icm&nbsp; # dim conditions</tt><tt><br>
+    </tt><tt> &nbsp; collink -v -Ib -c md -dmd -da:18 -G -ila Rec709.icm
+      TV.icm HD.icm&nbsp; # mid to dark conditions</tt><tt><br>
+    </tt><tt> &nbsp; collink -v -Ib -c md -dmd -da:30 -G -ila Rec709.icm
+      TV.icm HD.icm&nbsp;&nbsp; # mid to dark conditions</tt><br>
+    <br>
+    None of the above examples incorporate the calibration curves, so it
+    is assumed that the calibration curves would be installed so that
+    the Video Card applies calibration, ie:<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; <tt>dispwin TV.cal</tt><br>
+    <br>
+    or the simple matrix profile installed:<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; <tt>dispwin -I TVmtx.icm</tt><br>
+    <br>
+    or a the more complete display profile could be installed:<br>
+    <br>
+    &nbsp; dispwin -I TV.icm<br>
+    <br>
+    See also <a href="file:///D:/src/argyll/doc/dispprofloc.html">here</a>
+    for information on how to make sure the calibration is loaded on
+    each system start. If not, then you will want to incorporate the
+    calibration in the Device Link/3dlut by using collink "-a TV.cal".<br>
+    <br>
+    If the video path needs Video Level RGB encoding but does not
+    provide a means to do this, then you will want to include the <b>-E</b>
+    flag in the dispcal and dispread command lines above.<br>
+    <br>
+    Below are specific recommendation for the eeColor and MadVR that
+    include the flags to create the .3dlut and encode the input and
+    output values appropriately, but only illustrate using BT.1886 black
+    point and viewing conditions adjustments, rather than illustrating
+    CIECAM02 etc. use.<br>
+    <br>
+    For faster exploration of different collink option, you could omit
+    the "colprof -bl" option, and use collink "-g" instead of "-G",
+    since this<br>
+    will greatly speed up collink. Once you are happy with the link
+    details, you can then generate a higher quality link/3dLut using
+    "collink -G ..".<br>
+    <br>
+    You can also increase the precision of the device profile by
+    increasing the number of test patches measured (ie. up to a few
+    thousand, depending on how long you are prepared to wait for the
+    measurement to complete).<br>
+    <br>
+    Alternatives to relative colorimetric rendering ("-i r") or
+    luminance matched appearance ("-i la") used in the examples above
+    and below, are, perceptual ("-i p") which will ensure that the
+    source gamut is compressed rather than clipped by the display, or
+    even a saturation rendering ("-i ms"), which will expand the gamut
+    of the source to the full range of the output.<br>
+    <br>
+    <br>
+    <b>eeColor</b><br>
+    <br>
+    For PC use, where the encoding is full range RGB:<br>
+    <br>
+    &nbsp; <tt>collink -v -3e -Ib -G -ir -a TV.cal Rec709.icm TV.icm
+      HD.icm </tt><br>
+    <br>
+    For correct operation both the 3DLut HD.txt and the per channel
+    input curves HD-first1dred.txt, HD-first1dgreen.txt and
+    HD-first1dblue.txt. the latter by copying them over the default
+    input curve files uploaded by the TruVue application.<br>
+    <br>
+    See <a
+      href="http://www.avsforum.com/t/1464890/eecolor-processor-argyllcms">&lt;http://www.avsforum.com/t/1464890/eecolor-processor-argyllcms&gt;</a>
+    for some more details.<br>
+    <br>
+    Where the eeColor is connected from a Video source using HDMI, it
+    will probably be processing TV RGB levels, or YCbCr encoded signals
+    that it converts to/from RGB internally, so<br>
+    <br>
+    &nbsp; <tt>collink -v -3e -et -Et -Ib -G -ir -a TV.cal Rec709.icm
+      TV.icm HD.icm </tt><br>
+    <br>
+    in this case just the HD.txt file needs installing on the eeColor,
+    but make sure that the original linear "first1*.txt files are
+    re-installed, or install the ones generated by collink, which will
+    be linear for -e t mode.<br>
+    <br>
+    <b>MadVR</b><br>
+    <br>
+    MadVR 0.86.9 or latter has a number of features to support accurate
+    profiling and calibration, and is the recommended version to
+    use.&nbsp; It converts from the media colorspace to the 3dLut input
+    space automatically with the type of source being played, but has
+    configuration for to 5 3dLuts, each one optimized for a particular
+    source color space. The advantage of building and installing several
+    3dLuts is that unnecessary gamut clipping can be avoided.<br>
+    <br>
+    If you are just building one 3dLut then Rec709 source is a good one
+    to pick.<br>
+    <br>
+    If you want to share the VideoLUT calibration curves between your
+    normal desktop and MadVR, then it is recommended that you install
+    the display ICC profile and use the -H option:<br>
+    <br>
+    <tt>&nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir -H TV.cal
+      Rec709.icm TV.icm HD.icm</tt><tt><br>
+    </tt><tt> </tt><tt><br>
+    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir </tt><tt><tt>-H
+
+
+
+
+        TV.cal </tt>EBU3213_PAL.icm TV.icm SD_PAL.icm</tt><tt><br>
+    </tt><tt> </tt><tt><br>
+    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir </tt><tt><tt>-H
+
+
+
+
+        TV.cal </tt>SMPTE_RP145_NTSC.icm TV.icm SD_NTSC.icm</tt><br>
+    <br>
+    For best quality it is better to let MadVR apply the calibration
+    curves using dithering, and allow it to set the graphics card to
+    linear by using the -a option:<br>
+    <br>
+    <tt>&nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir -a TV.cal
+      Rec709.icm TV.icm HD.icm</tt><tt><br>
+    </tt><tt> </tt><tt><br>
+    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir </tt><tt><tt>-a
+
+
+
+
+        TV.cal </tt>EBU3213_PAL.icm TV.icm SD_PAL.icm</tt><tt><br>
+    </tt><tt> </tt><tt><br>
+    </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir </tt><tt><tt>-a
+
+
+
+
+        TV.cal </tt>SMPTE_RP145_NTSC.icm TV.icm SD_NTSC.icm</tt><br>
+    <br>
+    the consequence though is that the appearance of other application
+    will shift when MadVR is using the 3dLut and loading the calibration
+    curves.<br>
+    <br>
+    The 3dLut can be used by opening the MadVR settings dialog,
+    selecting "calibration" and then selecting "calibrate this display
+    by using an external 3DLUT file", and then using the file dialog to
+    use it.<br>
+    <br>
+    If neither the -a no -H options are used, then no calibration curves
+    will be appended to the 3dLut, and MadVR will not change the
+    VideoLUTs when that 3dLut is in use. It is then up to you to manage
+    the graphics card VideoLUTs in some other fashion.<tt><br>
+      <br>
+    </tt>
+    <hr size="2" width="100%"><br>
+    <h3><a name="TV2"></a>Verifying Video Calibration</h3>
+    <p>Often it is desirable to verify the results of a video
+      calibration and profile, and the following gives an outline of how
+      to use ArgyllCMS tools to do this. It is only possible to expect
+      perfect verification if a colorimetric intent was used during
+      linking - currently it's not possible to exactly verify a
+      perceptual or CIECAM02 viewing condition adjusted link.<br>
+      <br>
+    </p>
+    <p>The first step is to create a set of test points. This is
+      essentially the same as creating a set of test points for the
+      purposes of profiling, although it is best not to create exactly
+      the same set, so as to explore the colorspace at different
+      locatioins. For the purposes here, we'll actually create a regular
+      grid test set, since this makes it easier to visualize the
+      results, although a less regular set would probably be better for
+      numerical evaluation:<br>
+    </p>
+    <p>&nbsp; targen -v -d3 -e1 -m6 -f0 -W verify<br>
+    </p>
+    <p>We make sure there is at least one white patch usin g -e1, a 20%
+      increment grid using -m6, no full spread patches, and create a
+      VRML 3d visualization of the point set using the -W flag. It is
+      good to take a look at the verifyd.wrl file using a VRML viewer.
+      You may want to create several test sets that look at particular
+      aspects, ie. neutral axis response, pure colorant responses, etc.<br>
+    </p>
+    <p>Next we create a reference file by simulating the expected
+      response of the perfect video display system. Assuming the collink
+      options were "-et -Et -Ib -G -ir Rec709.icm TV.icm HD.icm" then we
+      would:<tt><tt><br>
+        </tt></tt></p>
+    <p><tt><tt>&nbsp; copy verify.ti1 ref.ti1<br>
+          &nbsp; fakeread -v -b TV.icm Rec709.icm ref<br>
+        </tt></tt></p>
+    <p>You should adjust the parameters as necessary, so that the
+      reference matches the link options. For instance, if your link
+      options included "-I b:2.15" then the equivalent fakeread option
+      "-b 2.15:TV.icm" should be used, etc.<br>
+    </p>
+    <hr size="2" width="20%">
+    <p>A sanity check we can make at this point is to see what the
+      expected result of the profiling &amp; calibration will be, by
+      simulating the reproduction of this test set:<br>
+    </p>
+    <p><tt>&nbsp; copy verify.ti1 checkA.ti1</tt><tt><br>
+        &nbsp; fakeread -v -et -p HD.icm -Et TV.icm checkA<br>
+      </tt></p>
+    <p>If you used collink -a, then the calibration incorporated in the
+      device link needs to be undone to match what the display profile
+      expects:</p>
+    <p><tt>&nbsp; fakeread -v -et -p HD.icm -Et -K TV.cal TV.icm checkA</tt></p>
+    <p><tt>and then you can verify:<br>
+      </tt></p>
+    <p><tt>&nbsp; verify -v -n -w -x ref.ti3 checkA.ti3<br>
+      </tt></p>
+    <p>If you have targeted some other white point rather than video D65
+      for the display, then use the -N flag instead of -n to align the
+      white points. [ Note that there can be some small discrepancies in
+      this case in some parts of the color space if a CIECAM02 linking
+      intent was used, due to the slightly different chromatic
+      adaptation algorithm it uses compared to the one used by verify to
+      match the white points.]<tt><br>
+      </tt></p>
+    <p><tt>&nbsp; v</tt><tt>erify -v -N -w -x ref.ti3 checkA.ti3</tt><br>
+    </p>
+    <p>This will give a numerical report of the delta E's, and also
+      generate a VRML plot of the errors in L*a*b* space. The important
+      thing is to take a look at the checkA.wrl file, to see if gamut
+      clipping is occurring - this is the case if the large error
+      vectors are on the sides or top of the gamut. Note that the
+      perfect cube device space values become a rather distorted cube
+      like shape in the perceptual L*a*b* space. If the vectors are
+      small in the bulk of the space, then this indicates that the link
+      is likely to be doing the right thing in making the display
+      emulate the video colorspace with a BT.1886 like black point
+      adjustment. You could also check just the in gamut test points
+      using:<br>
+    </p>
+    <p><tt>&nbsp; v</tt><tt>erify -v -N -w -x -L TV.icm ref.ti3
+        checkA.ti3<br>
+        <br>
+      </tt></p>
+    <hr size="2" width="20%">
+    <p>You can explicitly compare the gamuts of your video space and
+      your display using the gamut tools:<br>
+    </p>
+    <p><tt>&nbsp; iccgamut -ff -ia Rec709</tt><tt><br>
+      </tt><tt> &nbsp; iccgamut -ff -ia TV.icm</tt><tt><br>
+      </tt><tt> &nbsp; viewgam -i Rec709.gam TV.gam gamuts.wrl</tt><br>
+    </p>
+    <p>and look at the gamuts.wrl file, as well as taking notice of % of
+      the video volume that the display intersects. The VRML solid
+      volume will be the video gamut, while the wire frame is the
+      display gamut. If you are not targetting D65 with your display,
+      you should use iccgamut <b>-ir</b> instead of <b>-ia</b>, so as
+      to align the white points.<br>
+    </p>
+    <hr size="2" width="20%">
+    <p>The main check is to actually measure the display response and
+      compare it against the reference. Make sure the display is setup
+      as you would for video playback and then use dispread:<br>
+    </p>
+    <p><tt>&nbsp; copy verify.ti1 checkB.ti1</tt><tt><br>
+      </tt><tt> &nbsp; dispread -v checkB</tt><br>
+    </p>
+    <p>You would add any other options needed (such as <b>-y</b> etc.)
+      to set your instrument up properly. If you are using madTPG, then
+      configure madVR to use the 3dLut you want to measure as the
+      default, and also use the dispread -V flag to make sure that the
+      3dLut is being used for the measurements: [<b>Note</b> that if the
+      version of MadVR you are using does not have radio buttons in its
+      calibration setup to indicate a default 3dLut, then the 3dLut
+      under test should be the only one set - all others should be
+      blank. ]<br>
+    </p>
+    <p><tt>&nbsp; dispread -v -d madvr -V checkB</tt><br>
+    </p>
+    <p>Verify the same way as above:<br>
+    </p>
+    <p><tt>&nbsp; v</tt><tt>erify -v -n -w -x ref.ti3 checkB.ti3<br>
+      </tt></p>
+    <p>If your display does not cover the full gamut of your video
+      source, the errors are probably dominated by out of gamut colors.
+      You can verify just the in gamut test values by asking verify to
+      skip them, and this will give a better notion of the actual device
+      link and calibration accuracy:<tt><br>
+      </tt></p>
+    <p><tt>&nbsp; v</tt><tt>erify -v -n -w -x -L TV.icm ref.ti3
+        checkB.ti3</tt></p>
+    <p><br>
+    </p>
+    <p>&nbsp;<br>
+    </p>
+    <p><br>
+      <br>
+    </p>
     <br>
     <br>
     <br>

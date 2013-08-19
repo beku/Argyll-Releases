@@ -72,6 +72,9 @@
 #include "inst.h"
 #include "dispwin.h"
 #include "webwin.h"
+#ifdef NT
+# include "madvrwin.h"
+#endif
 #include "dispsup.h"
 #include "ccss.h"
 #include "ccmx.h"
@@ -144,6 +147,9 @@ usage(char *diag, ...) {
 	}
 	free_disppaths(dp);
 	fprintf(stderr," -dweb[:port]           Display via a web server at port (default 8080)\n");
+#ifdef NT
+	fprintf(stderr," -dmadvr                Display via MadVR Video Renderer\n");
+#endif
 //	fprintf(stderr," -d fake                Use a fake display device for testing, fake%s if present\n",ICC_FILE_EXT);
 	fprintf(stderr," -p                     Use telephoto mode (ie. for a projector) (if available)\n");
 	cap = inst_show_disptype_options(stderr, " -y c|l                 ", icmps, 1);
@@ -168,6 +174,7 @@ usage(char *diag, ...) {
 	fprintf(stderr," -T displaytech         Set display technology description (ie. CRT, LCD etc.)\n");
 	fprintf(stderr," -U c                   Set UI selection character(s)\n");
 	fprintf(stderr," -Y r|n                 Set or override refresh/non-refresh display type\n");
+	fprintf(stderr," -Y R:rate              Override measured refresh rate with rate Hz\n");
 	fprintf(stderr," -Y A                   Use non-adaptive integration time mode (if available).\n");
 	fprintf(stderr," correction.ccmx | calibration.ccss\n");
 	fprintf(stderr,"                        File to save result to\n");
@@ -201,11 +208,15 @@ int main(int argc, char *argv[])
 	int highres = 0;					/* High res mode if available */
 	int dtype = 0;						/* Display kind, 0 = default, 1 = CRT, 2 = LCD */
 	int refrmode = -1;					/* Refresh mode */
+	double refrate = 0.0;				/* 0.0 = default, > 0.0 = override refresh rate */ 
 	int cbid = 0;						/* Calibration base display mode ID */
 	int nadaptive = 0;					/* Use non-adaptive mode if available */
 	int tele = 0;						/* NZ if telephoto mode */
 	int noinitcal = 0;					/* Disable initial calibration */
 	int webdisp = 0;					/* NZ for web display, == port number */
+#ifdef NT
+	int madvrdisp = 0;					/* NZ for MadVR display */
+#endif
 	char *ccallout = NULL;				/* Change color Shell callout */
 	int msteps = DEFAULT_MSTEPS;		/* Patch surface size */
 	int npat = 0;						/* Number of patches/colors */
@@ -289,6 +300,12 @@ int main(int argc, char *argv[])
 							usage("Web port number must be in range 1..65535");
 					}
 					fa = nfa;
+#ifdef NT
+				} else if (strncmp(na,"madvr",5) == 0
+				 || strncmp(na,"MADVR",5) == 0) {
+					madvrdisp = 1;
+					fa = nfa;
+#endif
 				} else {
 #if defined(UNIX_X11)
 					int ix, iv;
@@ -474,15 +491,22 @@ int main(int argc, char *argv[])
 				if (na == NULL)
 					usage("Flag '-Y' expects extra flag");
 			
-				if (na[0] == 'A') {
-					nadaptive = 1;
-				} else if (na[0] == 'r') {
+				if (na[0] == 'r') {
 					refrmode = 1;
 				} else if (na[0] == 'n') {
 					refrmode = 0;
+				} else if (na[0] == 'R') {
+					if (na[1] != ':')
+						usage("-Y R:rate syntax incorrect");
+					refrate = atof(na+2);
+					if (refrate < 5.0 || refrate > 150.0)
+						usage("-Y R:rate %f Hz not in valid range",refrate);
+				} else if (na[0] == 'A') {
+					nadaptive = 1;
 				} else {
 					usage("Flag '-Z %c' not recognised",na[0]);
 				}
+				fa = nfa;
 
 			/* UI selection character */
 			} else if (argv[fa][1] == 'U') {
@@ -911,9 +935,13 @@ int main(int argc, char *argv[])
 		/* No explicit display has been set */
 		if (
 #ifndef SHOW_WINDOW_ONFAKE
-		!fake && 
+		 !fake && 
 #endif
-		 webdisp == 0 && disp == NULL) {
+		 webdisp == 0
+#ifdef NT
+		 && madvrdisp == 0
+#endif
+		 && disp == NULL) {
 			int ix = 0;
 #if defined(UNIX_X11)
 			char *dn, *pp;
@@ -1150,8 +1178,13 @@ int main(int argc, char *argv[])
 				/* Should we use current cal rather than native ??? */
 				if ((dr = new_disprd(&errc, icmps->get_path(icmps, comno),
 				                     fc, dtype, 1, tele, nadaptive,
-				                     noinitcal, highres, 2, NULL, NULL, 0, 0, disp, blackbg,
-				                     override, webdisp, ccallout, NULL,
+				                     noinitcal, 0, highres, refrate, 3, NULL, NULL,
+					                 NULL, 0, disp, 0, blackbg,
+				                     override, webdisp,
+#ifdef NT
+					                 madvrdisp,
+#endif
+					                 ccallout, NULL,
 					                 100.0 * hpatscale, 100.0 * vpatscale, ho, vo,
 					                 NULL, NULL, 0, 2, icxOT_default, NULL, 
 				                     0, 0, "fake" ICC_FILE_EXT, g_log)) == NULL)

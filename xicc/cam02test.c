@@ -405,6 +405,7 @@ main(void) {
 			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			tFlair[c],	/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
+			0.00,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
 			twhite[c],	/* The Flare color coordinates (typically the Ambient color) */
 			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
@@ -416,6 +417,7 @@ main(void) {
 			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			tFlair[c],	/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
+			0.00,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
 			twhite[c],	/* The Flare color coordinates (typically the Ambient color) */
 			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
@@ -558,7 +560,8 @@ main(void) {
 			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-			sp_white[c],/* The Flare color coordinates (typically the Ambient color) */
+			0.00,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+			sp_white[c],/* The Glare color coordinates (typically the Ambient color) */
 			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 
@@ -570,7 +573,8 @@ main(void) {
 			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-			sp_white[c],/* The Flare color coordinates (typically the Ambient color) */
+			0.00,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+			sp_white[c],/* The Glare color coordinates (typically the Ambient color) */
 			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 
@@ -710,7 +714,8 @@ main(void) {
 			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-			white[c],	/* The Flare color coordinates (typically the Ambient color) */
+			0.00,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+			white[c],	/* The Glare color coordinates (typically the Ambient color) */
 			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 		
@@ -722,7 +727,8 @@ main(void) {
 			0.20,		/* Relative Luminance of Background to reference white */
 			0.0,		/* Luminance of white in image - not used */
 			0.00,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-			white[c],	/* The Flare color coordinates (typically the Ambient color) */
+			0.00,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+			white[c],	/* The Glare color coordinates (typically the Ambient color) */
 			USE_HK		/* use Helmholtz-Kohlraush flag */ 
 		);
 		
@@ -941,8 +947,9 @@ main(void) {
 				34.0,		/* Adapting/Surround Luminance cd/m^2 */
 				0.20,		/* Relative Luminance of Background to reference white */
 				0.0,		/* Luminance of white in image - not used */
-				0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-				white[c],	/* The Flare color coordinates (typically the Ambient color) */
+				0.0,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
+				0.0,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+				white[c],	/* The Glare color coordinates (typically the Ambient color) */
 				USE_HK		/* use Helmholtz-Kohlraush flag */ 
 			);
 		
@@ -1122,8 +1129,9 @@ main(void) {
 				34.0,		/* Adapting/Surround Luminance cd/m^2 */
 				0.20,		/* Relative Luminance of Background to reference white */
 				0.0,		/* Luminance of white in image - not used */
-				0.01,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-				white[c],	/* The Flare color coordinates (typically the Ambient color) */
+				0.0,		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
+				0.0,		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+				white[c],	/* The Glare color coordinates (typically the Ambient color) */
 				USE_HK		/* use Helmholtz-Kohlraush flag */ 
 			);
 		

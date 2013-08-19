@@ -7,7 +7,7 @@
  * Date:    2002/04/22
  * Version: 2.15
  *
- * Copyright 1997 - 2012 Graeme W. Gill
+ * Copyright 1997 - 2013 Graeme W. Gill
  *
  * This material is licensed with an "MIT" free use license:-
  * see the License.txt file in this directory for licensing details.
@@ -51,10 +51,10 @@
 
 #define _ICC_C_				/* Turn on implimentation code */
 
-#undef DEBUG_SETLUT			/* Show each value being set in setting lut contents */
-#undef DEBUG_SETLUT_CLIP		/* Show clipped values when setting LUT */
-#undef DEBUG_LULUT			/* Show each value being looked up from lut contents */
-#undef DEBUG_LLULUT			/* Debug individual lookup steps (not fully implemented) */
+#undef DEBUG_SETLUT			/* [Und] Show each value being set in setting lut contents */
+#undef DEBUG_SETLUT_CLIP	/* [Und] Show clipped values when setting LUT */
+#undef DEBUG_LULUT			/* [Und] Show each value being looked up from lut contents */
+#undef DEBUG_LLULUT			/* [Und] Debug individual lookup steps (not fully implemented) */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -5550,35 +5550,44 @@ static int getNormFunc(
 
 #define CLIP_MARGIN 0.005		/* Margine to allow before reporting clipping = 0.5% */
 
+/* NOTE that ICM_CLUT_SET_FILTER turns out to be not very useful, */
+/* as it can result in reversals. Could #ifdef out the code ?? */
+
 /* Helper function to set multiple Lut tables simultaneously. */
 /* Note that these tables all have to be compatible in */
 /* having the same configuration and resolution. */
 /* Set errc and return error number in underlying icc */
-/* Set warnc if there is clipping in the output values */
-/* 1 = input table, 2 = main clut, 3 = clut midpoin, 4 = midpoint interp, 5 = output table */
+/* Set warnc if there is clipping in the output values: */
+/*  1 = input table, 2 = main clut, 3 = clut midpoint, 4 = midpoint interp, 5 = output table */
+/* Note that clutfunc in[] value has "index under", ie: */
+/* at ((int *)in)[-chan-1], and for primary grid is simply the */
+/* grid index (ie. 5,3,8), and for the center of cells grid, is */
+/* the -index-1, ie. -6,-3,-8 */
 int icmSetMultiLutTables(
-	int ntables,							/* Number of tables to be set, 1..n */
-	icmLut **pp,							/* Pointer to array of Lut objects */
-	int     flags,							/* Setting flags */
-	void   *cbctx,							/* Opaque callback context pointer value */
-	icColorSpaceSignature insig, 			/* Input color space */
-	icColorSpaceSignature outsig, 			/* Output color space */
+	int ntables,						/* Number of tables to be set, 1..n */
+	icmLut **pp,						/* Pointer to array of Lut objects */
+	int     flags,						/* Setting flags */
+	void   *cbctx,						/* Opaque callback context pointer value */
+	icColorSpaceSignature insig, 		/* Input color space */
+	icColorSpaceSignature outsig, 		/* Output color space */
 	void (*infunc)(void *cbctx, double *out, double *in),
 							/* Input transfer function, inspace->inspace' (NULL = default) */
 							/* Will be called ntables times for each input grid value */
-	double *inmin, double *inmax,			/* Maximum range of inspace' values */
-											/* (NULL = default) */
+	double *inmin, double *inmax,		/* Maximum range of inspace' values */
+										/* (NULL = default) */
 	void (*clutfunc)(void *cbntx, double *out, double *in),
 							/* inspace' -> outspace[ntables]' transfer function */
 							/* will be called once for each input' grid value, and */
 							/* ntables output values should be written consecutively */
 							/* to out[]. */
-	double *clutmin, double *clutmax,		/* Maximum range of outspace' values */
-											/* (NULL = default) */
-	void (*outfunc)(void *cbntx, double *out, double *in))
+	double *clutmin, double *clutmax,	/* Maximum range of outspace' values */
+										/* (NULL = default) */
+	void (*outfunc)(void *cbntx, double *out, double *in),
 								/* Output transfer function, outspace'->outspace (NULL = deflt) */
 								/* Will be called ntables times on each output value */
-{
+	int *apxls_gmin, int *apxls_gmax	/* If not NULL, the grid indexes not to be affected */
+										/* by ICM_CLUT_SET_APXLS, defaulting to 0..>clutPoints-1 */
+) {
 	icmLut *p, *pn;				/* Pointer to 0'th nd tn'th Lut object */
 	icc *icp;					/* Pointer to common icc */
 	int tn;
@@ -5594,6 +5603,7 @@ int icmSetMultiLutTables(
 	double *_iv, *iv, *ivn;	/* Real index value/table value */
 	double imin[MAX_CHAN], imax[MAX_CHAN];
 	double omin[MAX_CHAN], omax[MAX_CHAN];
+	int def_apxls_gmin[MAX_CHAN], def_apxls_gmax[MAX_CHAN];
 	void (*ifromindex)(double *out, double *in);	/* Index to input color space function */
 	void (*itoentry)(double *out, double *in);		/* Input color space to entry function */
 	void (*ifromentry)(double *out, double *in);	/* Entry to input color space function */
@@ -5806,6 +5816,17 @@ int icmSetMultiLutTables(
 
 	/* Allocate space for cell center value lookup */
 	if (flags & ICM_CLUT_SET_APXLS) {
+		if (apxls_gmin == NULL) {
+			apxls_gmin = def_apxls_gmin;
+			for (e = 0; e < p->inputChan; e++)
+				apxls_gmin[e] = 0;
+		}
+		if (apxls_gmax == NULL) {
+			apxls_gmax = def_apxls_gmax;
+			for (e = 0; e < p->inputChan; e++)
+				apxls_gmax[e] = p->clutPoints-1;
+		}
+
 		if ((clutTable2 = (double **) icp->al->calloc(icp->al,sizeof(double *), ntables)) == NULL) {
 			sprintf(icp->err,"icmLut_set_tables malloc of cube center array failed");
 			icp->al->free(icp->al, _iv);
@@ -5884,7 +5905,7 @@ int icmSetMultiLutTables(
 			ti += ii[e] * p->dinc[e];				/* Clut index */
 			iv[e] = ii[e]/(p->clutPoints-1.0);		/* Vertex coordinates */
 			iv[e] = iv[e] * (imax[e] - imin[e]) + imin[e]; /* Undo expansion to 0.0 - 1.0 */
-			*((int *)&iv[-((int)e)-1]) = ii[e];	/* Trick to supply grid index in iv[] */
+			*((int *)&iv[-((int)e)-1]) = ii[e];		/* Trick to supply grid index in iv[] */
 		}
 	
 		if (flags & ICM_CLUT_SET_FILTER) {
@@ -5941,12 +5962,13 @@ int icmSetMultiLutTables(
 		if (clutTable2 != NULL) {
 
 			for (e = 0; e < p->inputChan; e++) {
-				if (ii[e] >= (p->clutPoints-1))
-					break;										/* Don't lookup beyond last */
+				if (ii[e] < apxls_gmin[e]
+				 || ii[e] >= apxls_gmax[e])
+					break;							/* Don't lookup outside least squares area */
 				iv[e] = (ii[e] + 0.5)/(p->clutPoints-1.0);		/* Vertex coordinates + 0.5 */
 				iv[e] = iv[e] * (imax[e] - imin[e]) + imin[e]; /* Undo expansion to 0.0 - 1.0 */
-				*((int *)&iv[-((int)e)-1]) = ii[e];	/* Trick to supply grid index in iv[] */
-													/* (Not this is only the base for +0.5) */
+				*((int *)&iv[-((int)e)-1]) = -ii[e]-1;	/* Trick to supply -ve grid index in iv[] */
+											    /* (Not this is only the base for +0.5 center) */
 			}
 
 			if (e >= p->inputChan) {	/* We're not on the last row */
@@ -5995,7 +6017,7 @@ int icmSetMultiLutTables(
 #define APXLS_DIFF_THRHESH 0.2
 	/* Deal with cell center value, aproximate least squares adjustment. */
 	/* Subtract some of the mean of the surrounding center values from each grid value. */
-	/* Skip the edges so that things like the white point are not changed. */
+	/* Skip the range edges so that things like the white point or Video sync are not changed. */
 	/* Avoid modifying the value if the difference between the */
 	/* interpolated value and the current value is too great, */
 	/* and there is the possibility of different color aliases. */
@@ -6005,9 +6027,9 @@ int icmSetMultiLutTables(
 		int ee;
 		double cw = 1.0/(double)(1 << p->inputChan);		/* Weight for each cube corner */
 
-		/* For each cell center point except last row */  
+		/* For each cell center point except last row because we access ii[e]+1 */  
 		for (e = 0; e < p->inputChan; e++)
-			ii[e] = 0;	/* init coords */
+			ii[e] = apxls_gmin[e];	/* init coords */
 
 		/* Compute linear interpolated value from center values */
 		for (ee = 0; ee < p->inputChan;) {
@@ -6051,14 +6073,15 @@ int icmSetMultiLutTables(
 						}
 						pn->clutTable[ti + f] = vv;
 					}
+					DBGSL(("nix %s apxls ov %s\n",icmPiv(p->inputChan, ii), icmPdv(pn->outputChan, ivn)));
 				}
 			}
 
 			/* Increment coord */
 			for (ee = 0; ee < p->inputChan; ee++) {
-				if (++ii[ee] < (p->clutPoints-2))		/* Don't go through upper edge */
+				if (++ii[ee] < (apxls_gmax[ee]-1))		/* Stop short of upper row of clutTable2 */
 					break;	/* No carry */
-				ii[ee] = 0;
+				ii[ee] = apxls_gmin[ee];
 			}
 		}
 
@@ -6069,6 +6092,7 @@ int icmSetMultiLutTables(
 	}
 
 	/* Apply any smoothing in the clipped region to the resulting clutTable */
+	/* !!! should avoid smoothing outside apxls_gmin[e] & apxls_gmax[e] region !!! */
 	if (clutTable3 != NULL) {
 		double *clutTable1;		/* Copy of current unfilted values */
 		FCOUNT(cc, MAX_CHAN, p->inputChan);   /* Surrounding counter */
@@ -6180,7 +6204,7 @@ int icmSetMultiLutTables(
 		free(clutTable3);
 	}
 
-	/* Create the output table entry values */
+	/* Create the 1D output table entry values */
 	for (tn = 0; tn < ntables; tn++) {
 		pn = pp[tn];
 		for (n = 0; n < pn->outputEnt; n++) {
@@ -6239,19 +6263,21 @@ int icmSetMultiLutTables(
 /* Set errc and return error number */
 /* Set warnc if there is clipping in the output values */
 static int icmLut_set_tables (
-icmLut *p,									/* Pointer to Lut object */
-int     flags,							/* Setting flags */
-void   *cbctx,								/* Opaque callback context pointer value */
-icColorSpaceSignature insig, 				/* Input color space */
-icColorSpaceSignature outsig, 				/* Output color space */
+icmLut *p,							/* Pointer to Lut object */
+int     flags,						/* Setting flags */
+void   *cbctx,						/* Opaque callback context pointer value */
+icColorSpaceSignature insig, 		/* Input color space */
+icColorSpaceSignature outsig, 		/* Output color space */
 void (*infunc)(void *cbcntx, double *out, double *in),
 								/* Input transfer function, inspace->inspace' (NULL = default) */
-double *inmin, double *inmax,				/* Maximum range of inspace' values (NULL = default) */
+double *inmin, double *inmax,		/* Maximum range of inspace' values (NULL = default) */
 void (*clutfunc)(void *cbctx, double *out, double *in),
 								/* inspace' -> outspace' transfer function */
-double *clutmin, double *clutmax,			/* Maximum range of outspace' values (NULL = default) */
-void (*outfunc)(void *cbctx, double *out, double *in)
-								/* Output transfer function, outspace'->outspace (NULL = deflt) */
+double *clutmin, double *clutmax,	/* Maximum range of outspace' values (NULL = default) */
+void (*outfunc)(void *cbctx, double *out, double *in),
+									/* Output transfer function, outspace'->outspace (NULL = deflt) */
+int *apxls_gmin, int *apxls_gmax	/* If not NULL, the grid indexes not to be affected */
+									/* by ICM_CLUT_SET_APXLS, defaulting to 0..>clutPoints-1 */
 ) {
 	struct _icmLut *pp[3];
 	
@@ -6263,7 +6289,8 @@ void (*outfunc)(void *cbctx, double *out, double *in)
 	                            inmin, inmax,
 	                            clutfunc,
 	                            clutmin, clutmax,
-	                            outfunc);
+	                            outfunc,
+	                            apxls_gmin, apxls_gmax);
 }
 
 /* - - - - - - - - - - - - - - - - */
@@ -6347,16 +6374,8 @@ static int icmLut_read(
 	p->outputChan = read_UInt8Number(bp+9);
 	p->clutPoints = read_UInt8Number(bp+10);
 
-	/* Sanity check */
-	if (p->inputChan > MAX_CHAN) {
-		sprintf(icp->err,"icmLut_read: Can't handle > %d input channels\n",MAX_CHAN);
-		return icp->errc = 1;
-	}
-
-	if (p->outputChan > MAX_CHAN) {
-		sprintf(icp->err,"icmLut_read: Can't handle > %d output channels\n",MAX_CHAN);
-		return icp->errc = 1;
-	}
+	if (icp->allowclutPoints256 && p->clutPoints == 0)		/* Special case */
+		p->clutPoints = 256;
 
 	/* Read 3x3 transform matrix */
 	for (j = 0; j < 3; j++) {		/* Rows */
@@ -6375,7 +6394,7 @@ static int icmLut_read(
 		bp = buf+52;
 	}
 
-	/* Sanity check dimensions. This protects against */
+	/* Sanity check tag size. This protects against */
 	/* subsequent integer overflows involving the dimensions. */
 	if ((size = icmLut_get_size((icmBase *)p)) == UINT_MAX
 	 || size > len) {
@@ -6384,12 +6403,15 @@ static int icmLut_read(
 		return icp->errc = 1;
 	}
 
-	/* Read the input tables */
-	size = (p->inputChan * p->inputEnt);
+	/* Sanity check the dimensions and resolution values agains limits, */
+	/* allocate space for them and generate internal offset tables. */
 	if ((rv = p->allocate((icmBase *)p)) != 0) {
 		icp->al->free(icp->al, buf);
 		return rv;
 	}
+
+	/* Read the input tables */
+	size = (p->inputChan * p->inputEnt);
 	if (p->ttype == icSigLut8Type) {
 		for (i = 0; i < size; i++, bp += 1)
 			p->inputTable[i] = read_DCS8Number(bp);
@@ -6400,10 +6422,6 @@ static int icmLut_read(
 
 	/* Read the clut table */
 	size = (p->outputChan * sat_pow(p->clutPoints,p->inputChan));
-	if ((rv = p->allocate((icmBase *)p)) != 0) {
-		icp->al->free(icp->al, buf);
-		return rv;
-	}
 	if (p->ttype == icSigLut8Type) {
 		for (i = 0; i < size; i++, bp += 1)
 			p->clutTable[i] = read_DCS8Number(bp);
@@ -6414,30 +6432,12 @@ static int icmLut_read(
 
 	/* Read the output tables */
 	size = (p->outputChan * p->outputEnt);
-	if ((rv = p->allocate((icmBase *)p)) != 0) {
-		icp->al->free(icp->al, buf);
-		return rv;
-	}
 	if (p->ttype == icSigLut8Type) {
 		for (i = 0; i < size; i++, bp += 1)
 			p->outputTable[i] = read_DCS8Number(bp);
 	} else {
 		for (i = 0; i < size; i++, bp += 2)
 			p->outputTable[i] = read_DCS16Number(bp);
-	}
-
-	/* Private: compute dimensional increment though clut */
-	/* Note that first channel varies least rapidly. */
-	i = p->inputChan-1;
-	p->dinc[i--] = p->outputChan;
-	for (; i < p->inputChan; i--)
-		p->dinc[i] = p->dinc[i+1] * p->clutPoints;
-
-	/* Private: compute offsets from base of cube to other corners */
-	for (p->dcube[0] = 0, g = 1, j = 0; j < p->inputChan; j++) {
-		for (i = 0; i < g; i++)
-			p->dcube[g+i] = p->dcube[i] + p->dinc[j];
-		g *= 2;
 	}
 
 	icp->al->free(icp->al, buf);
@@ -6486,10 +6486,19 @@ static int icmLut_write(
 		icp->al->free(icp->al, buf);
 		return icp->errc = rv;
 	}
-	if ((rv = write_UInt8Number(p->clutPoints, bp+10)) != 0) {
-		sprintf(icp->err,"icmLut_write: write_UInt8Number() failed");
-		icp->al->free(icp->al, buf);
-		return icp->errc = rv;
+	
+	if (icp->allowclutPoints256 && p->clutPoints == 256) {
+		if ((rv = write_UInt8Number(0, bp+10)) != 0) {
+			sprintf(icp->err,"icmLut_write: write_UInt8Number() failed");
+			icp->al->free(icp->al, buf);
+			return icp->errc = rv;
+		}
+	} else {
+		if ((rv = write_UInt8Number(p->clutPoints, bp+10)) != 0) {
+			sprintf(icp->err,"icmLut_write: write_UInt8Number() failed");
+			icp->al->free(icp->al, buf);
+			return icp->errc = rv;
+		}
 	}
 
 	write_UInt8Number(0, bp+11);		/* Set padding to 0 */
@@ -6678,7 +6687,9 @@ static void icmLut_dump(
 	}
 }
 
-/* Allocate variable sized data elements */
+/* Sanity check the input & output dimensions, and */
+/* allocate variable sized data elements, and */
+/* generate internal dimension offset tables */
 static int icmLut_allocate(
 	icmBase *pp
 ) {
@@ -6686,7 +6697,7 @@ static int icmLut_allocate(
 	icmLut *p = (icmLut *)pp;
 	icc *icp = p->icp;
 
-	/* Sanity check */
+	/* Sanity check, so that dinc[] comp. won't fail */
 	if (p->inputChan < 1) {
 		sprintf(icp->err,"icmLut_alloc: Can't handle %d input channels\n",p->inputChan);
 		return icp->errc = 1;
@@ -11369,10 +11380,15 @@ static int check_icc_legal(
 			/* Found entry, so now check that all the required tags are present. */
 			for (j = 0; tagchecktable[i].tags[j] != icMaxEnumType; j++) {
 				if (p->find_tag(p, tagchecktable[i].tags[j]) != 0) {	/* Not present! */
+#ifdef NEVER
+					printf("icc_check_legal: deviceClass %s is missing required tag %s", tag2str(sig), tag2str(tagchecktable[i].tags[j]));
+#endif
 					if (tagchecktable[i].chans == -200
 					 || tagchecktable[i].chans == -dchans) {	/* But can try next table */
 						break;
 					}
+					/* ~~99 Hmm. Should report all possible missing tags from */
+					/* previous failed tables ~~~999 */
 					sprintf(p->err,"icc_check_legal: deviceClass %s is missing required tag %s",
 					               tag2str(sig), tag2str(tagchecktable[i].tags[j]));
 					return p->errc = 1;
@@ -12651,6 +12667,25 @@ static void Lut_Luv2Lut(double *out, double *in) {
 }
 
 /* - - - - - - - - - - - - - - - - */
+/* Convert YCbCr to Lut number */
+/* We are assuming full range here. foot/head scaling */
+/* should be done outside the icc profile. */
+
+/* Convert Lut table index/value to YCbCr */
+static void Lut_Lut2YCbCr(double *out, double *in) {
+	out[0] = in[0];			/* Y */
+	out[1] = in[1] - 0.5;	/* Cb */
+	out[2] = in[2] - 0.5;	/* Cr */
+}
+
+/* Convert YCbCr to Lut table index/value */
+static void Lut_YCbCr2Lut(double *out, double *in) {
+	out[0] = in[0];			/* Y */
+	out[1] = in[1] + 0.5;	/* Cb */
+	out[2] = in[2] + 0.5;	/* Cr */
+}
+
+/* - - - - - - - - - - - - - - - - */
 /* Default N component conversions */
 static void Lut_N(double *out, double *in, int nc) {
 	for (--nc; nc >= 0; nc--)
@@ -12749,7 +12784,6 @@ static void Lut_15(double *out, double *in) {
 
 /* Function table - match conversions to color spaces. */
 /* Anything not here, we don't know how to convert. */
-/* (ie. YCbCr) */
 static struct {
 	icColorSpaceSignature csig;
 	void (*fromLut)(double *out, double *in);	/* from Lut index/entry */
@@ -12764,6 +12798,7 @@ static struct {
 	{icmSigLV2Data,    Lut_Lut2LV2_16,   Lut_L2LutV2_16 },
 	{icmSigLV4Data,    Lut_Lut2LV4_16,   Lut_L2LutV4_16 },
 	{icSigLuvData,     Lut_Lut2Luv,      Lut_Luv2Lut },
+	{icSigYCbCrData,   Lut_Lut2YCbCr,    Lut_YCbCr2Lut },
 	{icSigYxyData,     Lut_3,            Lut_3 },
 	{icSigRgbData,     Lut_3,            Lut_3 },
 	{icSigGrayData,    Lut_1,            Lut_1 },
@@ -12870,7 +12905,6 @@ static int getNormFunc(
 
 /* Function table - match ranges to color spaces. */
 /* Anything not here, we don't know how to convert. */
-/* (ie. YCbCr) */
 /* Hmm. we're not handling Lab8 properly ?? ~~~8888 */
 static struct {
 	icColorSpaceSignature csig;
@@ -12889,7 +12923,7 @@ static struct {
 	{icmSigLV4Data,    1, { 0.0 }, { 100.0 } }, 
 	{icSigLuvData,     0, { 0.0, -128.0, -128.0 },
 	                      { 100.0, 127.0 + 255.0/256.0, 127.0 + 255.0/256.0 } },
-	{icSigYCbCrData,   1, { 0.0 }, { 1.0 } },			/* ??? */
+	{icSigYCbCrData,   0, { 0.0, -0.5, -0.5 }, { 1.0, 0.5, 0.5 } },		/* Full range */
 	{icSigYxyData,     1, { 0.0 }, { 1.0 } },			/* ??? */
 	{icSigRgbData,     1, { 0.0 }, { 1.0 } },
 	{icSigGrayData,    1, { 0.0 }, { 1.0 } },
@@ -12974,8 +13008,8 @@ static int getRange(
 	return 0;
 }
 
-/* ============================================= */
-/* Misc. support functions.                      */
+/* =============================================================== */
+/* Misc. support functions.                                        */
 
 /* Clamp a 3 vector to be +ve */
 void icmClamp3(double out[3], double in[3]) {
@@ -12996,6 +13030,20 @@ void icmSub3(double out[3], double in1[3], double in2[3]) {
 	out[0] = in1[0] - in2[0];
 	out[1] = in1[1] - in2[1];
 	out[2] = in1[2] - in2[2];
+}
+
+/* Divide two 3 vectors, out = in1/in2 */
+void icmDiv3(double out[3], double in1[3], double in2[3]) {
+	out[0] = in1[0]/in2[0];
+	out[1] = in1[1]/in2[1];
+	out[2] = in1[2]/in2[2];
+}
+
+/* Multiply two 3 vectors, out = in1 * in2 */
+void icmMul3(double out[3], double in1[3], double in2[3]) {
+	out[0] = in1[0] * in2[0];
+	out[1] = in1[1] * in2[1];
+	out[2] = in1[2] * in2[2];
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -13305,6 +13353,18 @@ void icmBlend3(double out[3], double in0[3], double in1[3], double bf) {
 	out[0] = (1.0 - bf) * in0[0] + bf * in1[0];
 	out[1] = (1.0 - bf) * in0[1] + bf * in1[1];
 	out[2] = (1.0 - bf) * in0[2] + bf * in1[2];
+}
+
+/* Clip a vector to the range 0.0 .. 1.0 */
+void icmClip3(double out[3], double in[3]) {
+	int j;
+	for (j = 0; j < 3; j++) {
+		out[j] = in[j];
+		if (out[j] < 0.0)
+			out[j] = 0.0;
+		else if (out[j] > 1.0)
+			out[j] = 1.0;
+	}
 }
 
 /* Normalise a 3 vector to the given length. Return nz if not normalisable */
@@ -14300,7 +14360,7 @@ extern ICCLIB_API double icmXYZCIE2K(icmXYZNumber *w, double *in0, double *in1) 
 /* Return a 3x3 chromatic adaptation matrix */
 /* Use icmMulBy3x3(dst, mat, src) */
 void icmChromAdaptMatrix(
-	int flags,				/* Use bradford, Transform given matrix flags */
+	int flags,				/* Use Bradford, Transform given matrix flags */
 	icmXYZNumber d_wp,		/* Destination white point */
 	icmXYZNumber s_wp,		/* Source white point */
 	double mat[3][3]		/* Destination matrix */
@@ -14525,7 +14585,426 @@ int icmClipXYZ(double out[3], double in[3]) {
 	return 1;
 }
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* --------------------------------------------------------------- */
+/* Some video specific functions */
+
+/* Convert Lut table index/value to YPbPr */
+/* (Same as Lut_Lut2YPbPr() ) */ 
+void icmLut2YPbPr(double *out, double *in) {
+	out[0] = in[0];			/* Y */
+	out[1] = in[1] - 0.5;	/* Cb */
+	out[2] = in[2] - 0.5;	/* Cr */
+}
+
+/* Convert YPbPr to Lut table index/value */
+/* (Same as Lut_YPbPr2Lut() ) */ 
+void icmYPbPr2Lut(double *out, double *in) {
+	out[0] = in[0];			/* Y */
+	out[1] = in[1] + 0.5;	/* Cb */
+	out[2] = in[2] + 0.5;	/* Cr */
+}
+
+/* Convert Rec601 RGB' into YPbPr, or "full range YCbCr" */
+/* where input 0..1, output 0..1, -0.5 .. 0.5, -0.5 .. 0.5 */
+/* [From the Rec601 spec. ] */
+void icmRec601_RGBd_2_YPbPr(double out[3], double in[3]) {
+	double tt[3];
+
+	tt[0] = 0.299 * in[0] + 0.587 * in[1] + 0.114 * in[2];
+
+	tt[1] =     -0.299 /1.772 * in[0]
+	      +     -0.587 /1.772 * in[1]
+          + (1.0-0.114)/1.772 * in[2];
+
+	tt[2] = (1.0-0.299)/1.402 * in[0]
+	      +     -0.587 /1.402 * in[1]
+          +     -0.114 /1.402 * in[2];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+/* Convert Rec601 YPbPr to RGB' (== "full range YCbCr") */
+/* where input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, output 0.0 .. 1 */
+/* [Inverse of above] */
+void icmRec601_YPbPr_2_RGBd(double out[3], double in[3]) {
+	double tt[3];
+
+	tt[0] = 1.000000000 * in[0] +  0.000000000 * in[1] +  1.402000000 * in[2];
+	tt[1] = 1.000000000 * in[0] + -0.344136286 * in[1] + -0.714136286 * in[2];
+	tt[2] = 1.000000000 * in[0] +  1.772000000 * in[1] +  0.000000000 * in[2];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+
+/* Convert Rec709 1150/60/2:1 RGB' into YPbPr, or "full range YCbCr" */
+/* where input 0..1, output 0..1, -0.5 .. 0.5, -0.5 .. 0.5 */
+/* [From the Rec709 specification] */
+void icmRec709_RGBd_2_YPbPr(double out[3], double in[3]) {
+	double tt[3];
+
+	tt[0] = 0.2126 * in[0] + 0.7152 * in[1] + 0.0722 * in[2];
+
+	tt[1] = 0.5389 * -0.2126 * in[0]
+	      + 0.5389 * -0.7152 * in[1]
+          + 0.5389 * (1.0-0.0722) * in[2];
+
+	tt[2] = 0.6350 * (1.0-0.2126) * in[0]
+	      + 0.6350 * -0.7152 * in[1]
+          + 0.6350 * -0.0722 * in[2];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+/* Convert Rec709 1150/60/2:1 YPbPr to RGB' (== "full range YCbCr") */
+/* where input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, output 0.0 .. 1 */
+/* [Inverse of above] */
+void icmRec709_YPbPr_2_RGBd(double out[3], double in[3]) {
+	double tt[3];
+
+	tt[0] = 1.000000000 * in[0] +  0.000000000 * in[1] +  1.574803150 * in[2];
+	tt[1] = 1.000000000 * in[0] + -0.187327487 * in[1] + -0.468125209 * in[2];
+	tt[2] = 1.000000000 * in[0] +  1.855631843 * in[1] +  0.000000000 * in[2];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+/* Convert Rec709 1250/50/2:1 RGB' into YPbPr, or "full range YCbCr" */
+/* where input 0..1, output 0..1, -0.5 .. 0.5, -0.5 .. 0.5 */
+/* [From the Rec709 specification] */
+void icmRec709_50_RGBd_2_YPbPr(double out[3], double in[3]) {
+	double tt[3];
+
+	tt[0] = 0.299 * in[0] + 0.587 * in[1] + 0.114 * in[2];
+
+	tt[1] = 0.564 * -0.299 * in[0]
+	      + 0.564 * -0.587 * in[1]
+          + 0.564 * (1.0-0.114) * in[2];
+
+	tt[2] = 0.713 * (1.0-0.299) * in[0]
+	      + 0.713 * -0.587 * in[1]
+          + 0.713 * -0.114 * in[2];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+/* Convert Rec709 1250/50/2:1 YPbPr to RGB' (== "full range YCbCr") */
+/* where input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, output 0.0 .. 1 */
+/* [Inverse of above] */
+void icmRec709_50_YPbPr_2_RGBd(double out[3], double in[3]) {
+	double tt[3];
+
+	tt[0] = 1.000000000 * in[0] +  0.000000000 * in[1] +  1.402524544 * in[2];
+	tt[1] = 1.000000000 * in[0] + -0.344340136 * in[1] + -0.714403473 * in[2];
+	tt[2] = 1.000000000 * in[0] +  1.773049645 * in[1] +  0.000000000 * in[2];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+
+/* Convert Rec2020 RGB' into Non-constant liminance YPbPr, or "full range YCbCr" */
+/* where input 0..1, output 0..1, -0.5 .. 0.5, -0.5 .. 0.5 */
+/* [From the Rec2020 specification] */
+void icmRec2020_NCL_RGBd_2_YPbPr(double out[3], double in[3]) {
+	double tt[3];
+
+	tt[0] = 0.2627 * in[0] + 0.6780 * in[1] + 0.0593 * in[2];
+
+	tt[1] = 1/1.8814 * -0.2627 * in[0]
+	      + 1/1.8814 * -0.6780 * in[1]
+          + 1/1.8814 * (1.0-0.0593) * in[2];
+
+	tt[2] = 1/1.4746 * (1.0-0.2627) * in[0]
+	      + 1/1.4746 * -0.6780 * in[1]
+          + 1/1.4746 * -0.0593 * in[2];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+/* Convert Rec2020 Non-constant liminance YPbPr into RGB' (== "full range YCbCr") */
+/* where input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, output 0.0 .. 1 */
+/* [Inverse of above] */
+void icmRec2020_NCL_YPbPr_2_RGBd(double out[3], double in[3]) {
+	double tt[3];
+
+	tt[0] = 1.000000000 * in[0] +  0.000000000 * in[1] +  1.474600000 * in[2];
+	tt[1] = 1.000000000 * in[0] + -0.164553127 * in[1] + -0.571353127 * in[2];
+	tt[2] = 1.000000000 * in[0] +  1.881400000 * in[1] +  0.000000000 * in[2];
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+/* Convert Rec2020 RGB' into Constant liminance YPbPr, or "full range YCbCr" */
+/* where input 0..1, output 0..1, -0.5 .. 0.5, -0.5 .. 0.5 */
+/* [From the Rec2020 specification] */
+void icmRec2020_CL_RGBd_2_YPbPr(double out[3], double in[3]) {
+	int i;
+	double tt[3];
+
+	/* Convert RGB' to RGB */
+	for (i = 0; i < 3; i++) {
+		if (in[i] < (4.5 * 0.0181))
+			tt[i] = in[i]/4.5;
+		else
+			tt[i] = pow((in[i] + 0.0993)/1.0993, 1.0/0.45);
+	}
+
+	/* Y value */
+	tt[0] = 0.2627 * tt[0] + 0.6780 * tt[1] + 0.0593 * tt[2];
+
+	/* Y' value */
+	if (tt[0] < 0.0181)
+		tt[0] = tt[0] * 4.5;
+	else
+		tt[0] = 1.0993 * pow(tt[0], 0.45) - 0.0993;
+
+	tt[1] = in[2] - tt[0];
+	if (tt[1] <= 0.0)
+		tt[1] /= 1.9404;
+	else
+		tt[1] /= 1.5816;
+
+	tt[2] = in[0] - tt[0];
+	if (tt[2] <= 0.0)
+		tt[2] /= 1.7184;
+	else
+		tt[2] /= 0.9936;
+
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+/* Convert Rec2020 Constant liminance YPbPr into RGB' (== "full range YCbCr") */
+/* where input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, output 0.0 .. 1 */
+/* [Inverse of above] */
+void icmRec2020_CL_YPbPr_2_RGBd(double out[3], double in[3]) {
+	int i;
+	double tin[3], tt[3];
+
+	/* Y' */
+	tin[0] = in[0];
+
+	/* B' - Y' */
+	if (in[1] <= 0.0)
+		tin[1] = 1.9404 * in[1];
+	else
+		tin[1] = 1.5816 * in[1];
+
+	/* R' - Y' */
+	if (in[2] <= 0.0)
+		tin[2] = 1.7184 * in[2];
+	else
+		tin[2] = 0.9936 * in[2];
+
+
+	/* R' */
+	tt[0] = tin[2] + tin[0];
+
+	/* Y' */
+	tt[1] = tin[0];
+
+	/* B' */
+	tt[2] = tin[1] + tin[0];
+
+	/* Convert RYB' to RYB */
+	for (i = 0; i < 3; i++) {
+		if (tt[i] < (4.5 * 0.0181))
+			tin[i] = tt[i]/4.5;
+		else
+			tin[i] = pow((tt[i] + 0.0993)/1.0993, 1.0/0.45);
+	}
+	
+	/* G */
+	tt[1] = (tin[1] - 0.2627 * tin[0] - 0.0593 * tin[2])/0.6780;
+
+	/* G' */
+	if (tt[1] < 0.0181)
+		tt[1] = tt[1] * 4.5;
+	else
+		tt[1] = 1.0993 * pow(tt[1], 0.45) - 0.0993;
+	
+	out[0] = tt[0];
+	out[1] = tt[1];
+	out[2] = tt[2];
+}
+
+
+/* Convert Rec601/Rec709/Rec2020 YPbPr to YCbCr Video range. */
+/* input 0..1, -0.5 .. 0.5, -0.5 .. 0.5, */
+/* output 16/255 .. 235/255, 16/255 .. 240/255, 16/255 .. 240/255 */ 
+void icmRecXXX_YPbPr_2_YCbCr(double out[3], double in[3]) {
+	out[0] = ((235.0 - 16.0) * in[0] + 16.0)/255.0;
+	out[1] = ((128.0 - 16.0) * 2.0 * in[1] + 128.0)/255.0;
+	out[2] = ((128.0 - 16.0) * 2.0 * in[2] + 128.0)/255.0;
+}
+
+/* Convert Rec601/Rec709/Rec2020 Video YCbCr to YPbPr range. */
+/* input 16/255 .. 235/255, 16/255 .. 240/255, 16/255 .. 240/255 */ 
+/* output 0..1, -0.5 .. 0.5, -0.5 .. 0.5, */
+void icmRecXXX_YCbCr_2_YPbPr(double out[3], double in[3]) {
+	out[0] = (255.0 * in[0] - 16.0)/(235.0 - 16.0);
+	out[1] = (255.0 * in[1] - 128.0)/(2.0 * (128.0 - 16.0));
+	out[2] = (255.0 * in[2] - 128.0)/(2.0 * (128.0 - 16.0));
+}
+
+/* Convert full range RGB to Video range 16..235 RGB */
+void icmRGB_2_VidRGB(double out[3], double in[3]) {
+	out[0] = ((235.0 - 16.0) * in[0] + 16.0)/255.0;
+	out[1] = ((235.0 - 16.0) * in[1] + 16.0)/255.0;
+	out[2] = ((235.0 - 16.0) * in[2] + 16.0)/255.0;
+}
+
+/* Convert Video range 16..235 RGB to full range RGB */
+/* Return nz if outside RGB range */
+void icmVidRGB_2_RGB(double out[3], double in[3]) {
+	out[0] = (255.0 * in[0] - 16.0)/(235.0 - 16.0);
+	out[1] = (255.0 * in[1] - 16.0)/(235.0 - 16.0);
+	out[2] = (255.0 * in[2] - 16.0)/(235.0 - 16.0);
+}
+
+/* =============================================================== */
+/* PS 3.14-2009, Digital Imaging and Communications in Medicine */
+/* (DICOM) Part 14: Grayscale Standard Display Function */
+
+/* JND index value 1..1023 to L 0.05 .. 3993.404 cd/m^2 */
+static double icmDICOM_fwd_nl(double jnd) {
+	double a = -1.3011877;
+	double b = -2.5840191e-2;
+	double c =  8.0242636e-2;
+	double d = -1.0320229e-1;
+	double e =  1.3646699e-1;
+	double f =  2.8745620e-2;
+	double g = -2.5468404e-2;
+	double h = -3.1978977e-3;
+	double k =  1.2992634e-4;
+	double m =  1.3635334e-3;
+	double jj, num, den, rv;
+
+	jj = jnd = log(jnd);
+
+	num = a;
+	den = 1.0;
+	num += c * jj;
+	den += b * jj;
+	jj *= jnd;
+	num += e * jj;
+	den += d * jj;
+	jj *= jnd;
+	num += g * jj;
+	den += f * jj;
+	jj *= jnd;
+	num += m * jj;
+	den += h * jj;
+	jj *= jnd;
+	den += k * jj;
+	
+	rv = pow(10.0, num/den);
+
+	return rv;
+}
+
+/* JND index value 1..1023 to L 0.05 .. 3993.404 cd/m^2 */
+double icmDICOM_fwd(double jnd) {
+
+	if (jnd < 0.5)
+		jnd = 0.5;
+	if (jnd > 1024.0)
+		jnd = 1024.0;
+
+	return icmDICOM_fwd_nl(jnd);
+}
+
+/* L 0.05 .. 3993.404 cd/m^2 to JND index value 1..1023 */
+/* This is not super accurate -  typically to 0.03 .. 0.1 jne. */
+static double icmDICOM_bwd_apx(double L) {
+	double A = 71.498068;
+	double B = 94.593053;
+	double C = 41.912053;
+	double D =  9.8247004;
+	double E =  0.28175407;
+	double F = -1.1878455;
+	double G = -0.18014349;
+	double H =  0.14710899;
+	double I = -0.017046845;
+	double rv, LL;
+
+	if (L < 0.049982) {			/* == jnd 0.5 */
+		return 0.5;
+	}
+	if (L > 4019.354716)		/* == jnd 1024 */
+		L = 4019.354716;
+
+	LL = L = log10(L);
+	rv = A;
+	rv += B * LL;
+	LL *= L;
+	rv += C * LL;
+	LL *= L;
+	rv += D * LL;
+	LL *= L;
+	rv += E * LL;
+	LL *= L;
+	rv += F * LL;
+	LL *= L;
+	rv += G * LL;
+	LL *= L;
+	rv += H * LL;
+	LL *= L;
+	rv += I * LL;
+
+	return rv;
+}
+
+/* L 0.05 .. 3993.404 cd/m^2 to JND index value 1..1023 */
+/* Polish the aproximate solution twice using Newton's itteration */
+double icmDICOM_bwd(double L) {
+	double rv, Lc, prv, pLc, de;
+	int i;
+
+	if (L < 0.045848) 			/* == jnd 0.5 */
+		L = 0.045848;
+	if (L > 4019.354716)		/* == jnd 1024 */
+		L = 4019.354716;
+
+	/* Approx solution */
+	rv = icmDICOM_bwd_apx(L);
+
+	/* Compute aprox derivative */
+	Lc = icmDICOM_fwd_nl(rv);
+
+	prv = rv + 0.01;
+	pLc = icmDICOM_fwd_nl(prv);
+
+	do {
+		de = (rv - prv)/(Lc - pLc);
+		prv = rv;
+		rv -= (Lc - L) * de;
+		pLc = Lc;
+		Lc = icmDICOM_fwd_nl(rv);
+	} while (fabs(Lc - L) > 1e-8);
+
+	return rv;
+}
+
+
+/* =============================================================== */
 
 /* Object for computing RFC 1321 MD5 checksums. */
 /* Derived from Colin Plumb's 1993 public domain code. */
@@ -16169,25 +16648,25 @@ double *in			/* Vector of input values */
 	icmLut *lut = p->lut;
 	double temp[MAX_CHAN];
 
-	DBGLL(("icmLuLut_lookup: in = %s\n", icmPdv(p->inputChan, in)));
+	DBGLL(("icmLuLut_lookup: in = %s\n", icmPdv(p->lut->inputChan, in)));
 	rv |= p->in_abs(p,temp,in);						/* Possible absolute conversion */
-	DBGLL(("icmLuLut_lookup: in_abs = %s\n", icmPdv(p->inputChan, temp)));
+	DBGLL(("icmLuLut_lookup: in_abs = %s\n", icmPdv(p->lut->inputChan, temp)));
 	if (p->usematrix) {
 		rv |= lut->lookup_matrix(lut,temp,temp);/* If XYZ, multiply by non-unity matrix */
-		DBGLL(("icmLuLut_lookup: matrix = %s\n", icmPdv(p->inputChan, temp)));
+		DBGLL(("icmLuLut_lookup: matrix = %s\n", icmPdv(p->lut->inputChan, temp)));
 	}
 	p->in_normf(temp, temp);					/* Normalize for input color space */
-	DBGLL(("icmLuLut_lookup: norm = %s\n", icmPdv(p->inputChan, temp)));
+	DBGLL(("icmLuLut_lookup: norm = %s\n", icmPdv(p->lut->inputChan, temp)));
 	rv |= lut->lookup_input(lut,temp,temp);		/* Lookup though input tables */
-	DBGLL(("icmLuLut_lookup: input = %s\n", icmPdv(p->inputChan, temp)));
+	DBGLL(("icmLuLut_lookup: input = %s\n", icmPdv(p->lut->inputChan, temp)));
 	rv |= p->lookup_clut(lut,out,temp);			/* Lookup though clut tables */
-	DBGLL(("icmLuLut_lookup: clut = %s\n", icmPdv(p->outputChan, out)));
+	DBGLL(("icmLuLut_lookup: clut = %s\n", icmPdv(p->lut->outputChan, out)));
 	rv |= lut->lookup_output(lut,out,out);		/* Lookup though output tables */
-	DBGLL(("icmLuLut_lookup: output = %s\n", icmPdv(p->outputChan, out)));
+	DBGLL(("icmLuLut_lookup: output = %s\n", icmPdv(p->lut->outputChan, out)));
 	p->out_denormf(out,out);					/* Normalize for output color space */
-	DBGLL(("icmLuLut_lookup: denorm = %s\n", icmPdv(p->outputChan, out)));
+	DBGLL(("icmLuLut_lookup: denorm = %s\n", icmPdv(p->lut->outputChan, out)));
 	rv |= p->out_abs(p,out,out);				/* Possible absolute conversion */
-	DBGLL(("icmLuLut_lookup: out_abse = %s\n", icmPdv(p->outputChan, out)));
+	DBGLL(("icmLuLut_lookup: out_abse = %s\n", icmPdv(p->lut->outputChan, out)));
 
 	return rv;
 }

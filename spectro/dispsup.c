@@ -44,6 +44,9 @@
 #include "dispwin.h"
 #include "dispsup.h"
 #include "webwin.h"
+#ifdef NT
+# include "madvrwin.h"
+#endif
 #include "instappsup.h"
 
 #undef SIMPLE_MODEL		/* Make fake device well behaved */
@@ -75,7 +78,7 @@ inst_code setup_display_calibrate(
 ) {
 	inst_code rv = inst_ok, ev;
 	dispwin *dw;	/* Display window to display test patches on, NULL if none. */
-	a1logd(p->log,1,"setup_display_calibrate called\n");
+	a1logd(p->log,1,"setup_display_calibrate called with calc = 0x%x\n",calc);
 
 	switch (calc) {
 		case inst_calc_none:		/* Use this as a cleanup flag */
@@ -86,75 +89,70 @@ inst_code setup_display_calibrate(
 			break;
 
 		case inst_calc_emis_white:
-			if (dwi->dw == NULL) {
-				if (dwi->webdisp != 0) {
-					if ((dwi->_dw = new_webwin(dwi->webdisp, dwi->hpatsize, dwi->vpatsize,
-					                      dwi->ho, dwi->vo, 0, dwi->blackbg,
-					                      p->log->verb, p->log->debug)) == NULL) {
-						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
-						return inst_other_error; 
-					}
-				} else {
-					if ((dwi->_dw = new_dispwin(dwi->disp, dwi->hpatsize, dwi->vpatsize,
-					                      dwi->ho, dwi->vo, 0, 0, NULL, dwi->blackbg,
-					                      dwi->override, p->log->debug)) == NULL) {
-						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
-						return inst_other_error; 
-					}
-				}
-				printf("Frequency calibration, Place instrument on test window.\n");
-				printf(" Hit any key to continue,\n"); 
-				printf(" or hit Esc or Q to abort:"); 
-			} else {
-				dwi->_dw = dwi->dw;
-			}
-			p->cal_gy_level = 1.0;
-			dwi->_dw->set_color(dwi->_dw, 1.0, 1.0, 1.0);
-			break;
-
+		case inst_calc_emis_80pc:
 		case inst_calc_emis_grey:
 		case inst_calc_emis_grey_darker: 
 		case inst_calc_emis_grey_ligher:
 			if (dwi->dw == NULL) {
 				if (dwi->webdisp != 0) {
 					if ((dwi->_dw = new_webwin(dwi->webdisp, dwi->hpatsize, dwi->vpatsize,
-					                      dwi->ho, dwi->vo, 0, dwi->blackbg,
-					                      p->log->verb, p->log->debug)) == NULL) {
+						         dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc, dwi->blackbg,
+					             p->log->verb, p->log->debug)) == NULL) {
 						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
 						return inst_other_error; 
 					}
+#ifdef NT
+				} else if (dwi->madvrdisp != 0) {
+					if ((dwi->_dw = new_madvrwin(dwi->hpatsize, dwi->vpatsize,
+					             dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc, dwi->blackbg,
+					             p->log->verb, p->log->debug)) == NULL) {
+						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
+						return inst_other_error; 
+					}
+#endif /* NT */
 				} else {
 					if ((dwi->_dw = new_dispwin(dwi->disp, dwi->hpatsize, dwi->vpatsize,
-					                      dwi->ho, dwi->vo, 0, 0, NULL, dwi->blackbg,
-					                      dwi->override, p->log->debug)) == NULL) {
+					             dwi->ho, dwi->vo, 0, 0, NULL, NULL, dwi->out_tvenc, dwi->blackbg,
+					             dwi->override, p->log->debug)) == NULL) {
 						a1logd(p->log,1,"inst_handle_calibrate failed to create test window 0x%x\n",inst_other_error);
 						return inst_other_error; 
 					}
 				}
-				printf("Cell ratio calibration, Place instrument on test window.\n");
+				printf("Calibration: Place instrument on test window.\n");
 				printf(" Hit any key to continue,\n"); 
 				printf(" or hit Esc or Q to abort:"); 
 			} else {
 				dwi->_dw = dwi->dw;
 			}
-			if (calc == inst_calc_emis_grey) {
-				p->cal_gy_level = 0.6;
-				p->cal_gy_count = 0;
-			} else if (calc == inst_calc_emis_grey_darker) {
-				p->cal_gy_level *= 0.7;
-				p->cal_gy_count++;
-			} else if (calc == inst_calc_emis_grey_ligher) {
-				p->cal_gy_level *= 1.4;
-				if (p->cal_gy_level > 1.0)
-					p->cal_gy_level = 1.0;
-				p->cal_gy_count++;
+
+			if (calc == inst_calc_emis_white) {
+				p->cal_gy_level = 1.0;
+				dwi->_dw->set_color(dwi->_dw, 1.0, 1.0, 1.0);
+
+			} else if (calc == inst_calc_emis_80pc) {
+				p->cal_gy_level = 0.8;
+				dwi->_dw->set_color(dwi->_dw, 0.8, 0.8, 0.8);
+
+			} else  {
+				if (calc == inst_calc_emis_grey) {
+					p->cal_gy_level = 0.6;
+					p->cal_gy_count = 0;
+				} else if (calc == inst_calc_emis_grey_darker) {
+					p->cal_gy_level *= 0.7;
+					p->cal_gy_count++;
+				} else if (calc == inst_calc_emis_grey_ligher) {
+					p->cal_gy_level *= 1.4;
+					if (p->cal_gy_level > 1.0)
+						p->cal_gy_level = 1.0;
+					p->cal_gy_count++;
+				}
+				if (p->cal_gy_count > 4) {
+					printf("Cell ratio calibration failed - too many tries at setting grey level.\n");
+					a1logd(p->log,1,"inst_handle_calibrate too many tries at setting grey level 0x%x\n",inst_internal_error);
+					return inst_internal_error; 
+				}
+				dwi->_dw->set_color(dwi->_dw, p->cal_gy_level, p->cal_gy_level, p->cal_gy_level);
 			}
-			if (p->cal_gy_count > 4) {
-				printf("Cell ratio calibration failed - too many tries at setting grey level.\n");
-				a1logd(p->log,1,"inst_handle_calibrate too many tries at setting grey level 0x%x\n",inst_internal_error);
-				return inst_internal_error; 
-			}
-			dwi->_dw->set_color(dwi->_dw, p->cal_gy_level, p->cal_gy_level, p->cal_gy_level);
 			break;
 
 		default:
@@ -180,6 +178,10 @@ int nadaptive,			/* NZ for non-adaptive mode */
 int noinitcal,			/* NZ to disable initial instrument calibration */
 disppath *disp,			/* display to calibrate. */
 int webdisp,			/* If nz, port number for web display */
+#ifdef NT
+int madvrdisp,		/* NZ for MadVR display */
+#endif
+int out_tvenc,			/* 1 = use RGB Video Level encoding */
 int blackbg,			/* NZ if whole screen should be filled with black */
 int override,			/* Override_redirect on X11 */
 double hpatsize,		/* Size of dispwin */
@@ -201,7 +203,11 @@ a1log *log				/* Verb, debug & error log */
 
 	memset((void *)&dwi, 0, sizeof(disp_win_info));
 	dwi.webdisp = webdisp; 
+#ifdef NT
+	dwi.madvrdisp = madvrdisp; 
+#endif
 	dwi.disp = disp; 
+	dwi.out_tvenc = out_tvenc;
 	dwi.blackbg = blackbg;
 	dwi.override = override;
 	dwi.hpatsize = hpatsize;
@@ -209,14 +215,14 @@ a1log *log				/* Verb, debug & error log */
 	dwi.ho = ho;
 	dwi.vo = vo;
 
-	p->log = new_a1log_d(log);
-
 	a1logv(log, 1, "Setting up the instrument\n");
 
 	if ((p = new_inst(ipath, 0, log, DUIH_FUNC_AND_CONTEXT)) == NULL) {
 		a1logd(log, 1, "new_inst failed\n");
 		return -1;
 	}
+
+	p->log = new_a1log_d(log);
 
 	/* Establish communications */
 	if ((rv = p->init_coms(p, br, fc, 15.0)) != inst_ok) {
@@ -241,6 +247,12 @@ a1log *log				/* Verb, debug & error log */
 		printf("Want telephoto measurement capability but instrument doesn't support it\n");
 		printf("so falling back to emissive spot mode.\n");
 		tele = 0;
+	}
+	
+	if (!tele && !IMODETST(cap, inst_mode_emis_spot)) {
+		printf("Want emissive spot measurement capability but instrument doesn't support it\n");
+		printf("so switching to telephoto spot mode.\n");
+		tele = 1;
 	}
 	
 	/* Set to emission mode to read a display */
@@ -308,13 +320,21 @@ a1log *log				/* Verb, debug & error log */
 	return 0;
 }
 
+/* Set color to black after 50msec delay */
+int del_set_black(void *cx) {
+	disprd *p = (disprd *)cx;
+	int rv;
+
+	msec_sleep(100);
+	if ((rv = p->dw->set_color(p->dw, 0.0, 0.0, 0.0)) != 0) {
+		a1logd(p->log,1,"set_color() returned %d\n",rv);
+		return 3;
+	}
+	return 0;
+}
+
 /* Take a series of readings from the display - implementation */
-/* Return nz on fail/abort */
-/* 1 = user aborted */
-/* 2 = instrument access failed */
-/* 3 = window access failed */ 
-/* 4 = user hit terminate key */
-/* 5 = system error */
+/* Return nz on fail/abort - see dispsup.h */
 /* Use disprd_err() to interpret it */
 static int disprd_read_imp(
 	disprd *p,
@@ -350,19 +370,20 @@ static int disprd_read_imp(
 	/* See if we should calibrate the display update */
 	if (!p->update_delay_set && (cap2 & inst2_meas_disp_update) != 0) {
 		int cdelay, mdelay;
+		athread *th;
 
 		/* Set white with a normal delay */
 		if ((rv = p->dw->set_color(p->dw, 1.0, 1.0, 1.0)) != 0) {
-			a1logd(p->log,1,"set_color() returned %s\n",rv);
+			a1logd(p->log,1,"set_color() returned %d\n",rv);
 			return 3;
 		}
 		
-		/* Set a zero delay */
+		/* Set a zero return delay */
 		cdelay = p->dw->set_update_delay(p->dw, 0);
 
-		/* Set black with zero delay */
-		if ((rv = p->dw->set_color(p->dw, 0.0, 0.0, 0.0)) != 0) {
-			a1logd(p->log,1,"set_color() returned %s\n",rv);
+		/* Set black 50msec after this call */
+		if ((th = new_athread(del_set_black, (void *)p)) == NULL) {
+			a1logd(p->log,1,"failed to create thread to set_color()\n");
 			return 3;
 		}
 		
@@ -372,24 +393,29 @@ static int disprd_read_imp(
 				      p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 			p->dw->set_update_delay(p->dw, cdelay);		/* Restore the default */
 		} else {
+			mdelay -= 100;		/* Correct for delay on set black */
+			if (mdelay < 0)
+				mdelay = 0;
 			a1logv(p->log, 1, "Measured display update delay of %d msec",mdelay);
-			mdelay += mdelay/2 + 50;
+			mdelay += mdelay/2 + 100;
 			p->dw->set_update_delay(p->dw, mdelay);
 			a1logv(p->log, 1, ", using delay of %d msec\n",mdelay);
 		}
 		p->update_delay_set = 1;
+		th->del(th);
 	}
 
 	/* See if we should do a frequency calibration or display integration time cal. first */
 	if (p->it->needs_calibration(p->it) & inst_calt_ref_freq
 	 && npat > 0
-	 && (cols[0].r != 1.0 || cols[0].g != 1.0 || cols[0].b != 1.0)) {
+	 && (cols[0].r != 0.8 || cols[0].g != 0.8 || cols[0].b != 0.8)) {
 		col tc;
 		inst_cal_type calt = inst_calt_ref_freq;
-		inst_cal_cond calc = inst_calc_emis_white;
+		inst_cal_cond calc = inst_calc_emis_80pc;
 
-		if ((rv = p->dw->set_color(p->dw, 1.0, 1.0, 1.0)) != 0) {
-			a1logd(p->log,1,"set_color() returned %s\n",rv);
+		/* Hmm. Should really ask the instrument what sort of calc it needs !!! */
+		if ((rv = p->dw->set_color(p->dw, 0.8, 0.8, 0.8)) != 0) {
+			a1logd(p->log,1,"set_color() returned %d\n",rv);
 			return 3;
 		}
 		/* Do calibrate, but ignore return code. Press on regardless. */
@@ -406,7 +432,7 @@ static int disprd_read_imp(
 		inst_cal_cond calc = inst_calc_emis_white;
 
 		if ((rv = p->dw->set_color(p->dw, 1.0, 1.0, 1.0)) != 0) {
-			a1logd(p->log,1,"set_color() returned %s\n",rv);
+			a1logd(p->log,1,"set_color() returned %d\n",rv);
 			return 3;
 		}
 		/* Do calibrate, but ignore return code. Press on regardless. */
@@ -425,8 +451,11 @@ static int disprd_read_imp(
 		scb->sp.spec_n = 0;
 		scb->duration = 0.0;
 
-		if (spat != 0 && tpat != 0)
+		if (spat != 0 && tpat != 0) {
 			a1logv(p->log, 1, "%cpatch %d of %d",cr_char,spat + (noinc != 0 ? 0 : patch),tpat);
+			if (p->dw->set_pinfo != NULL)
+				p->dw->set_pinfo(p->dw, spat + (noinc != 0 ? 0 : patch),tpat);
+		}
 		a1logd(p->log,1,"About to read patch %d\n",patch);
 
 		rgb[0] = scb->r;
@@ -434,7 +463,8 @@ static int disprd_read_imp(
 		rgb[2] = scb->b;
 
 		/* If we are doing a soft cal, apply it to the test color */
-		if (p->softcal && p->cal[0][0] >= 0.0) {
+		/* (dispwin will apply any tvenc needed) */
+		if ((p->native & 1) && p->cal[0][0] >= 0.0) {
 			int j;
 			double inputEnt_1 = (double)(p->ncal-1);
 
@@ -456,7 +486,7 @@ static int disprd_read_imp(
 			}
 		}
 		if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
-			a1logd(p->log,1,"set_color() returned %s\n",rv);
+			a1logd(p->log,1,"set_color() returned %d\n",rv);
 			return 3;
 		}
 
@@ -599,12 +629,7 @@ typedef struct {
 } dsamples;
 
 /* Take a series of readings from the display - drift compensation */
-/* Return nz on fail/abort */
-/* 1 = user aborted */
-/* 2 = instrument access failed */
-/* 3 = window access failed */ 
-/* 4 = user hit terminate key */
-/* 5 = system error */
+/* Return nz on fail/abort - see dispsup.h */
 /* Use disprd_err() to interpret it */
 static int disprd_read_drift(
 	disprd *p,
@@ -979,12 +1004,7 @@ static void disprd_change_drift_comp(disprd *p,
 }
 
 /* Take a series of readings from the display */
-/* Return nz on fail/abort */
-/* 1 = user aborted */
-/* 2 = instrument access failed */
-/* 3 = window access failed */ 
-/* 4 = user hit terminate key */
-/* 5 = system error */
+/* Return nz on fail/abort - see dispsup.h */
 /* Use disprd_err() to interpret it */
 static int disprd_read(
 	disprd *p,
@@ -1035,12 +1055,7 @@ static void disprd_get_disptype(disprd *p, int *refrmode, int *cbid) {
 static int config_inst_displ(disprd *p);
 
 /* Take an ambient reading if the instrument has the capability. */
-/* return nz on fail/abort */
-/* 1 = user aborted */
-/* 2 = instrument access failed */
-/* 4 = user hit terminate key */
-/* 5 = system error */
-/* 8 = no ambient capability */ 
+/* return nz on fail/abort - see dispsup.h */
 /* Use disprd_err() to interpret it */
 int disprd_ambient(
 	struct _disprd *p,
@@ -1246,12 +1261,7 @@ int disprd_ambient(
 
 
 /* Test without a spectrometer using a fake device */
-/* Return nz on fail/abort */
-/* 1 = user aborted */
-/* 2 = instrument access failed */
-/* 3 = window access failed */ 
-/* 4 = user hit terminate key */
-/* 5 = system error */
+/* Return nz on fail/abort  - see dispsup.h */
 /* Use disprd_err() to interpret it */
 static int disprd_fake_read(
 	disprd *p,
@@ -1390,14 +1400,14 @@ static int disprd_fake_read(
 		/* If we have a test window, display the patch color */
 		if (p->dw) {
 			inst_code rv;
-			if (p->softcal) {	/* Display value with calibration */
+			if (p->native & 1) {	/* Apply soft calibration to display value */
 				if ((rv = p->dw->set_color(p->dw, crgb[0], crgb[1], crgb[2])) != 0) {
-					a1logd(p->log,1,"set_color() returned %s\n",rv);
+					a1logd(p->log,1,"set_color() returned %d\n",rv);
 					return 3;
 				}
 			} else {			/* Hardware will apply calibration */
 				if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
-					a1logd(p->log,1,"set_color() returned %s\n",rv);
+					a1logd(p->log,1,"set_color() returned %d\n",rv);
 					return 3;
 				}
 			}
@@ -1461,12 +1471,7 @@ static int disprd_fake_read(
 }
 
 /* Test without a spectrometer using a fake ICC profile device */
-/* Return nz on fail/abort */
-/* 1 = user aborted */
-/* 2 = instrument access failed */
-/* 3 = window access failed */ 
-/* 4 = user hit terminate key */
-/* 5 = system error */
+/* Return nz on fail/abort - see dispsup.h */
 /* Use disprd_err() to interpret it */
 static int disprd_fake_read_lu(
 	disprd *p,
@@ -1533,7 +1538,7 @@ static int disprd_fake_read_lu(
 		if (p->dw) {
 			inst_code rv;
 			if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
-				a1logd(p->log,1,"set_color() returned %s\n",rv);
+				a1logd(p->log,1,"set_color() returned %d\n",rv);
 				return 3;
 			}
 		}
@@ -1581,12 +1586,7 @@ static int disprd_fake_read_lu(
 }
 
 /* Use without a direct connect spectrometer using shell callout */
-/* Return nz on fail/abort */
-/* 1 = user aborted */
-/* 2 = instrument access failed */
-/* 3 = window access failed */ 
-/* 4 = user hit terminate key */
-/* 5 = system error */
+/* Return nz on fail/abort - see duspsup.h */
 /* Use disprd_err() to interpret it */
 static int disprd_fake_read_co(disprd *p,
 	col *cols,		/* Array of patch colors to be tested */
@@ -1655,7 +1655,7 @@ static int disprd_fake_read_co(disprd *p,
 		if (p->dw) {
 			inst_code rv;
 			if ((rv = p->dw->set_color(p->dw, rgb[0], rgb[1], rgb[2])) != 0) {
-				a1logd(p->log,1,"set_color() returned %s\n",rv);
+				a1logd(p->log,1,"set_color() returned %d\n",rv);
 				return 3;
 			}
 		}
@@ -1726,7 +1726,7 @@ char *disprd_err(int en) {
 		case 2:
 			return "Instrument Access Failed";
 		case 22:
-			return "Instrument Access Failed (No PLD Pattern - have you run spyd2en ?)";
+			return "Instrument Access Failed (No PLD Pattern - have you run oeminst ?)";
 		case 3:
 			return "Window Access Failed";
 		case 4:
@@ -1746,7 +1746,11 @@ char *disprd_err(int en) {
 		case 11:
 			return "Instrument has no CCSS capability";
 		case 12:
-			return "Internal: trying to set calibration when not using calibration";
+			return "Video encoding requested using nonlinear current calibration curves";
+		case 13:
+			return "Video encoding requested for MadVR display - use MadVR to set video encoding";
+		case 14:
+			return "Instrument has no set refresh rate capability";
 	}
 	return "Unknown";
 }
@@ -1782,8 +1786,6 @@ static void disprd_del(disprd *p) {
 	if (p->it != NULL)
 		p->it->del(p->it);
 	if (p->dw != NULL) {
-		if (p->or != NULL)
-			p->dw->set_ramdac(p->dw,p->or, 0);
 		p->dw->del(p->dw);
 	}
 	if (p->sp2cie != NULL)
@@ -1809,6 +1811,12 @@ static int config_inst_displ(disprd *p) {
 		printf("so falling back to spot mode.\n");
 		a1logd(p->log,1,"No telephoto mode so falling back to spot mode.\n");
 		p->tele = 0;
+	}
+	
+	if (!p->tele && !IMODETST(cap, inst_mode_emis_spot)) {
+		printf("Want emissive spot measurement capability but instrument doesn't support it\n");
+		printf("so switching to telephoto spot mode.\n");
+		p->tele = 1;
 	}
 	
 	if (( p->tele && !IMODETST(cap, inst_mode_emis_tele))
@@ -1948,6 +1956,19 @@ static int config_inst_displ(disprd *p) {
 		}
 	}
 	
+	if (p->refrate > 0.0) {
+		if (!(cap2 & inst2_set_refresh_rate)) {
+			a1logd(p->log,1,"Instrument doesn't support setting refresh rate\n");
+			return 11;
+		} else {
+			if ((rv = p->it->set_refr_rate(p->it, p->refrate)) != inst_ok) {
+				a1logd(p->log,1,"set_refr_rate %f Hz returned '%s' (%s)\n",
+			     p->refrate, p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
+				return 2;
+			}
+		}
+	}
+
 	/* Set the trigger mode to program triggered */
 	if ((rv = p->it->get_set_opt(p->it,inst_opt_trig_prog)) != inst_ok) {
 		a1logd(p->log,1,"Setting program trigger mode failed failed with '%s' (%s)\n",
@@ -1964,20 +1985,7 @@ static int config_inst_displ(disprd *p) {
 
 /* Create a display reading object. */
 /* Return NULL if error */
-/* Set *errc to code: */
-/* 0 = no error */
-/* 1 = user aborted */
-/* 2 = instrument access failed */
-/* 22 = instrument access failed  - no PLD pattern */
-/* 3 = window access failed */ 
-/* 4 = RAMDAC access failed */ 
-/* 5 = user hit terminate key */
-/* 6 = system error */
-/* 7 = CRT or LCD must be selected */
-/* 9 = spectral conversion failed */
-/* 10 = no ccmx support */
-/* 11 = no ccss support */
-/* 12 = cal to set but native != 0 */
+/* Set *errc to code. See dispsup.h */
 /* Use disprd_err() to interpret *errc */
 disprd *new_disprd(
 int *errc,          /* Error code. May be NULL (could use log for this instead?) */
@@ -1988,18 +1996,25 @@ int docbid,			/* NZ to only allow cbid dtypes */
 int tele,			/* NZ for tele mode. Falls back to display mode */
 int nadaptive,		/* NZ for non-adaptive mode */
 int noinitcal,		/* No initial instrument calibration */
+int noinitplace,	/* Don't wait for user to place instrument on screen */
 int highres,		/* Use high res mode if available */
-int native,			/* 0 = use current current or given calibration curve */
-					/* 1 = use native linear out & high precision */
-int *noramdac,		/* Return nz if no ramdac access. native is set to 0 */
-double cal[3][MAX_CAL_ENT],	/* Calibration set/return (cal[0][0] < 0.0 or NULL if not used) */
-					/* native must be 0 if cal is set */
+double refrate,		/* If != 0.0, set display refresh rate calibration */
+int native,			/* X0 = use current per channel calibration curve */
+					/* X1 = set native linear output and use ramdac high precn. */
+					/* 0X = use current color management cLut (MadVR) */
+					/* 1X = disable color management cLUT (MadVR) */
+int *noramdac,		/* Return nz if no ramdac access. native is set to X0 */
+int *nocm,			/* Return nz if no CM cLUT access. native is set to 0X */
+double cal[3][MAX_CAL_ENT],	/* Calibration (cal == NULL or cal[0][0] < 0.0 if not valid) */
 int ncal,			/* Number of cal[] entries */
-int softcal,		/* NZ if apply cal to readings rather than hardware */
 disppath *disp,		/* Display to calibrate. NULL if fake and no dispwin */
+int out_tvenc,		/* 1 = use RGB Video Level encoding */
 int blackbg,		/* NZ if whole screen should be filled with black */
 int override,		/* Override_redirect on X11 */
 int webdisp,        /* If nz, port number for web color display */
+#ifdef NT
+int madvrdisp,		/* NZ for MadVR display */
+#endif
 char *ccallout,		/* Shell callout on set color */
 char *mcallout,		/* Shell callout on measure color (forced fake) */
 double hpatsize,	/* Size of dispwin */
@@ -2020,13 +2035,9 @@ a1log *log      	/* Verb, debug & error log */
 	disprd *p = NULL;
 	int ch;
 	inst_code rv;
+	int uout_tvenc = out_tvenc;			/* tvenc to use with dispwin value setting */
 
 	if (errc != NULL) *errc = 0;		/* default return code = no error */
-
-	if (cal != NULL && cal[0][0] >= 0.0 && native != 0) {
-		if (errc != NULL) *errc = 12;
-			return NULL;
-	}
 
 	/* Allocate a disprd */
 	if ((p = (disprd *)calloc(sizeof(disprd), 1)) == NULL) {
@@ -2058,7 +2069,9 @@ a1log *log      	/* Verb, debug & error log */
 	p->tele = tele;
 	p->nadaptive = nadaptive;
 	p->noinitcal = noinitcal;
+	p->noinitplace = noinitplace;
 	p->highres = highres;
+	p->refrate = refrate;
 	if (mcallout != NULL)
 		ipath = &icomFakeDevice;	/* Force fake device */
 	p->mcallout = mcallout;
@@ -2066,7 +2079,10 @@ a1log *log      	/* Verb, debug & error log */
 	p->br = baud_19200;
 	p->fc = fc;
 
-	/* Save this in case we are using a fake device */
+	p->native = native;
+
+	/* Save this so we can return current cal, or */
+	/* in case we are using a fake device */
 	if (cal != NULL && cal[0][0] >= 0.0) {
 		int j, i;
 		for (j = 0; j < 3; j++) {
@@ -2075,11 +2091,9 @@ a1log *log      	/* Verb, debug & error log */
 			}
 		}
 		p->ncal = ncal;
-		p->softcal = softcal;
 	} else {
 		p->cal[0][0] =  -1.0;
 		p->ncal = 0;
-		p->softcal = 0;
 	}
 
 	/* If non-real instrument */
@@ -2179,28 +2193,102 @@ a1log *log      	/* Verb, debug & error log */
 
 	if (webdisp != 0) {
 		/* Open web display */
-		if ((p->dw = new_webwin(webdisp, hpatsize, vpatsize, ho, vo, 0, 0,
-		                                        p->log->verb, p->log->debug)) == NULL) {
+		if ((p->dw = new_webwin(webdisp, hpatsize, vpatsize, ho, vo, 0, native, noramdac, nocm,
+			                    uout_tvenc, 0, p->log->verb, p->log->debug)) == NULL) {
 			a1logd(log,1,"new_disprd failed because new_webwin failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 3;
 			return NULL;
 		}
-		if (noramdac != NULL)
-			*noramdac = 1;
+#ifdef NT
+	} else if (madvrdisp != 0) {
+		if (out_tvenc) {
+			a1logd(log,1,"new_disprd failed because tv_enc & MadVR window\n");
+			p->del(p);
+			if (errc != NULL) *errc = 13;
+			return NULL;
+		}
+			
+		if ((p->dw = new_madvrwin(hpatsize, vpatsize, ho, vo, 0, native, noramdac, nocm, out_tvenc,
+			                                  blackbg, p->log->verb, p->log->debug)) == NULL) {
+			a1logd(log,1,"new_disprd failed because new_madvrwin failed\n");
+			p->del(p);
+			if (errc != NULL) *errc = 3;
+		}
+#endif
 	} else {
+		/* Don't do tvenc on test values if we are going to do it with RAMDAC curve */
+		if (out_tvenc && (p->native & 1) == 0 && p->cal[0][0] >= 0.0) {
+			uout_tvenc = 0;
+		}
+
 		/* Open display window for positioning (no blackbg) */
-		if ((p->dw = new_dispwin(disp, hpatsize, vpatsize, ho, vo, 0, native, noramdac, 0,
-		                                              override, p->log->debug)) == NULL) {
+		if ((p->dw = new_dispwin(disp, hpatsize, vpatsize, ho, vo, 0, native, noramdac, nocm,
+			                               uout_tvenc, 0, override, p->log->debug)) == NULL) {
 			a1logd(log,1,"new_disprd failed because new_dispwin failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 3;
 			return NULL;
 		}
+
+		/* If TV encoding using existing RAMDAC and it is not linear, */
+		/* error out, as TV encoding probably won't work properly. */
+		if (out_tvenc && (native & 1) == 0 && p->cal[0][0] < 0.0) {
+			ramdac *cr;
+			if ((cr = p->dw->get_ramdac(p->dw)) != NULL) {
+				int i, j;
+				for (i = 0; i < cr->nent; i++) {
+					double val = i/(cr->nent-1.0);
+					for (j = 0; j < 3; j++) {
+						if (fabs(val - cr->v[j][i]) > 1e-5)
+							break;
+					}
+					if (j < 3)
+						break;
+				}
+				if (i < cr->nent) {
+					a1logd(log,1,"new_disprd failed because tvenc and nonlinear RAMDAC");
+					cr->del(cr);
+					p->del(p);
+					if (errc != NULL) *errc = 12;
+					return NULL;
+				}
+				cr->del(cr);
+			}
+		}
+
+#ifdef NEVER		// Don't do this - dispread doesn't save calibration when using existing.
+		/* If using exiting RAMDAC, return it */
+		if ((native & 1) == 0 && p->cal[0][0] < 0.0 && cal != NULL) {
+			ramdac *r;
+			
+			if ((r = p->dw->get_ramdac(p->dw)) != NULL) {
+				int j, i;
+
+				/* Get the ramdac contents. */
+				/* We linearly interpolate from RAMDAC[nent] to cal[ncal] resolution */
+				for (i = 0; i < ncal; i++) {
+					double val, w;
+					unsigned int ix;
+	
+					val = (r->nent-1.0) * i/(ncal-1.0);
+					ix = (unsigned int)floor(val);		/* Coordinate */
+					if (ix > (r->nent-2))
+						ix = (r->nent-2);
+					w = val - (double)ix;		/* weight */
+					for (j = 0; j < 3; j++) {
+						val = r->v[j][ix];
+						cal[j][i] = val + w * (r->v[j][ix+1] - val);
+					}
+				}
+				r->del(r);
+			}
+		}
+#endif
 	}
 
 	if (p->it != NULL) {
-		/* Do a calibration up front, so as not to get in the users way, */
+		/* Do an instrument calibration up front, so as not to get in the users way, */
 		/* but ignore a CRT frequency or display integration calibration, */
 		/* since these will be done automatically. */
 		if (p->it->needs_calibration(p->it) & inst_calt_n_dfrble_mask) {
@@ -2223,30 +2311,50 @@ a1log *log      	/* Verb, debug & error log */
 		}
 	}
 
-	/* Ask user to put instrument on screen */
-	empty_con_chars();
-	printf("Place instrument on test window.\n");
-	printf("Hit Esc or Q to give up, any other key to continue:"); fflush(stdout);
-	if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
-		printf("\n");
-		a1logd(log,1,"new_disprd failed because user aborted when placing device\n");
-		p->del(p);
-		if (errc != NULL) *errc = 1;
-		return NULL;
-	}
-	printf("\n");
+	if (!p->noinitplace) {
+		inst2_capability cap2;
 
-	if (webdisp == 0) {
+		p->it->capabilities(p->it, NULL, &cap2, NULL);
+
+		/* Turn target on */
+		if (cap2 & inst2_has_target)
+			p->it->get_set_opt(p->it, inst_opt_set_target_state, 1);
+
+		/* Ask user to put instrument on screen */
+		empty_con_chars();
+
+		printf("Place instrument on test window.\n");
+		printf("Hit Esc or Q to give up, any other key to continue:"); fflush(stdout);
+		if ((ch = next_con_char()) == 0x1b || ch == 0x3 || ch == 'q' || ch == 'Q') {
+			printf("\n");
+			a1logd(log,1,"new_disprd failed because user aborted when placing device\n");
+			if (cap2 & inst2_has_target) /* Turn target off */
+				p->it->get_set_opt(p->it, inst_opt_set_target_state, 0);
+			p->del(p);
+			if (errc != NULL) *errc = 1;
+			return NULL;
+		}
+
+		/* Turn target off */
+		if (cap2 & inst2_has_target)
+			p->it->get_set_opt(p->it, inst_opt_set_target_state, 0);
+
+		printf("\n");
+	}
+
+	if (webdisp == 0
+#ifdef NT
+	 && madvrdisp == 0
+#endif
+	) {
 		/* Close the positioning window */
 		if (p->dw != NULL) {
-			if (p->or != NULL)
-				p->dw->set_ramdac(p->dw,p->or, 0);
 			p->dw->del(p->dw);
 		}
 	
 		/* Open display window again for measurement */
-		if ((p->dw = new_dispwin(disp, hpatsize, vpatsize, ho, vo, 0, native, noramdac, blackbg,
-		                                                    override, p->log->debug)) == NULL) {
+		if ((p->dw = new_dispwin(disp, hpatsize, vpatsize, ho, vo, 0, native, noramdac, nocm,
+			                     out_tvenc, blackbg, override, p->log->debug)) == NULL) {
 			a1logd(log,1,"new_disprd failed new_dispwin failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 3;
@@ -2259,84 +2367,57 @@ a1log *log      	/* Verb, debug & error log */
 		p->dw->set_callout(p->dw, ccallout);
 	}
 
-	/* If we have a calibration to set */
+	/* If we have a calibration to set using the RAMDAC */
 	/* (This is only typically the case for disread) */
-	if (!p->softcal && cal != NULL && cal[0][0] >= 0.0) {
+	if ((p->native & 1) == 0 && p->cal[0][0] >= 0.0) {
 
 		/* Save current RAMDAC so that we can restore it */
-		p->or = NULL;
-		if ((p->or = p->dw->get_ramdac(p->dw)) == NULL) {
+		if (p->dw->r == NULL) {
 			warning("Unable to read or set display RAMDAC - switching to softcal");
-			p->softcal = softcal = 1;
-		}
+			p->native |= 1;
 
 		/* Set the given RAMDAC so we can characterise through it */
-		if (p->or != NULL) {
-			ramdac *r;
+		} else {
 			int j, i;
 			
-			r = p->or->clone(p->or);
-
 			/* Set the ramdac contents. */
 			/* We linearly interpolate from cal[ncal] to RAMDAC[nent] resolution */
-			for (i = 0; i < r->nent; i++) {
+			for (i = 0; i < p->dw->r->nent; i++) {
 				double val, w;
 				unsigned int ix;
 
-				val = (ncal-1.0) * i/(r->nent-1.0);
+				val = (ncal-1.0) * i/(p->dw->r->nent-1.0);
 				ix = (unsigned int)floor(val);		/* Coordinate */
 				if (ix > (ncal-2))
 					ix = (ncal-2);
 				w = val - (double)ix;		/* weight */
 				for (j = 0; j < 3; j++) {
-					val = cal[j][ix];
-					r->v[j][i] = val + w * (cal[j][ix+1] - val);
+					val = p->cal[j][ix];
+					p->dw->r->v[j][i] = val + w * (p->cal[j][ix+1] - val);
+					/* Implement tvenc here rather than dispwin, so that the order is correct */
+					if (out_tvenc) {
+						p->dw->r->v[j][i] = ((235.0 - 16.0) * p->dw->r->v[j][i] + 16.0)/255.0;
+
+						/* For video encoding the extra bits of precision are created by bit */
+						/* shifting rather than scaling, so we need to scale the fp value to */
+						/* account for this. */
+						if (p->dw->edepth > 8)
+							p->dw->r->v[j][i] =
+							           (p->dw->r->v[j][i] * 255 * (1 << (p->dw->edepth - 8)))
+							           /((1 << p->dw->edepth) - 1.0); 	
+					}
 				}
 			}
-			if (p->dw->set_ramdac(p->dw, r, 0)) {
+			if (p->dw->set_ramdac(p->dw, p->dw->r, 0)) {
 				a1logd(log,1,"new_disprd failed becayse set_ramdac failed\n");
 				a1logv(p->log, 1, "Failed to set RAMDAC to desired calibration.\n");
 				a1logv(p->log, 1, "Perhaps the operating system is being fussy ?\n");
-				r->del(r);
-				p->del(p);
 				if (errc != NULL) *errc = 4;
 				return NULL;
 			}
-			r->del(r);
 		}
 	}
 
-	/* Return the ramdac being used */
-	if (p->or != NULL && cal != NULL) {
-		ramdac *r;
-		int j, i;
-		
-		if ((r = p->dw->get_ramdac(p->dw)) == NULL) {
-			a1logd(log,1,"new_disprd failed becayse get_ramdac failed\n");
-			a1logv(p->log, 1, "Failed to read current RAMDAC\n");
-			p->del(p);
-			if (errc != NULL) *errc = 4;
-			return NULL;
-		}
-		/* Get the ramdac contents. */
-		/* We linearly interpolate from RAMDAC[nent] to cal[ncal] resolution */
-		for (i = 0; i < ncal; i++) {
-			double val, w;
-			unsigned int ix;
-
-			val = (r->nent-1.0) * i/(ncal-1.0);
-			ix = (unsigned int)floor(val);		/* Coordinate */
-			if (ix > (r->nent-2))
-				ix = (r->nent-2);
-			w = val - (double)ix;		/* weight */
-			for (j = 0; j < 3; j++) {
-				val = r->v[j][ix];
-				cal[j][i] = val + w * (r->v[j][ix+1] - val);
-			}
-		}
-		r->del(r);
-	}
-	
 	a1logd(log,1,"new_disprd succeeded\n");
 	return p;
 }

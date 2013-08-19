@@ -225,7 +225,7 @@ ucmm_error ucmm_install_monitor_profile(
 		xdg_free(paths, npaths);
 		
 		/* Combined sub-path and profile name */
-		if ((data_pathfile = malloc(strlen(profile_dir) + 1 + strlen(profile))) == NULL)
+		if ((data_pathfile = malloc(strlen(profile_dir) + 1 + strlen(profile) + 1)) == NULL)
 			return ucmm_resource;
 		strcpy(data_pathfile, profile_dir);
 
@@ -527,7 +527,7 @@ ucmm_error ucmm_uninstall_monitor_profile(
 		
 		if (profile != NULL) {
 			/* Combined sub-path and profile name */
-			if ((data_pathfile = malloc(strlen(profile_dir) + 1 + strlen(profile))) == NULL)
+			if ((data_pathfile = malloc(strlen(profile_dir) + 1 + strlen(profile) + 1)) == NULL)
 				return ucmm_resource;
 			strcpy(data_pathfile, profile_dir);
 

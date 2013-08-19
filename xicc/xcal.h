@@ -29,6 +29,10 @@ struct _xcal {
 	/* Return nz if this fails (filename is for error messages) */
 	int (*read_cgats) (struct _xcal *p, cgats *cg, int table, char *filename);
 
+	/* Read a calibration file from an ICC vcgt tag */
+	/* Return nz if this fails */
+	int (*read_icc) (struct _xcal *p, icc *c);
+
 	/* Read a calibration file */
 	/* Return nz if this fails */
 	int (*read) (struct _xcal *p, char *filename);
@@ -41,7 +45,7 @@ struct _xcal {
 	/* Return nz if this fails */
 	int (*write)(struct _xcal *p, char *filename);
 
-	/* Translate values through the curves curves. */
+	/* Translate values through the curves. */
 	void (*interp) (struct _xcal *p, double *out, double *in);
 
 	/* Translate a value backwards through the curves. */
@@ -56,6 +60,7 @@ struct _xcal {
 	double (*inv_interp_ch) (struct _xcal *p, int ch, double in);
 
 	int noramdac;			/* Set to nz if there was no VideoLUT access */
+	int tvenc;				/* nz if this cal was created using (16-235)/255 Video encoding */
 
   /* Private: */
 	icProfileClassSignature devclass;	/* Type of device */

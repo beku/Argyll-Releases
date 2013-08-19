@@ -6,10 +6,8 @@
  * CIECAM02, "The CIECAM02 Color Appearance Model"
  * by Nathan Moroney, Mark D. Fairchild, Robert W.G. Hunt, Changjun Li,
  * M. Ronnier Luo and Todd Newman, IS&T/SID Tenth Color Imaging
- * Conference, with the addition of the Viewing Flare
- * model described on page 487 of "Digital Color Management",
- * by Edward Giorgianni and Thomas Madden, and the
- * Helmholtz-Kohlraush effect, using the equation
+ * Conference, with the addition of a Viewing Flare+Glare
+ * model, and the Helmholtz-Kohlraush effect, using the equation
  * the Bradford-Hunt 96C model as detailed in Mark Fairchilds
  * book "Color Appearance Models". 
  *
@@ -19,7 +17,7 @@
  *
  * This file is based on cam97s3.h by Graeme Gill.
  *
- * Copyright 2004 - 2011 Graeme W. Gill
+ * Copyright 2004 - 2013 Graeme W. Gill
  * Please refer to COPYRIGHT file for details.
  * This material is licenced under the GNU AFFERO GENERAL PUBLIC LICENSE Version 3 :-
  * see the License.txt file for licencing details.
@@ -88,13 +86,18 @@
 /* The Background relative luminance Yb is typically assumed to */
 /* be 0.18 .. 0.2, and is assumed to be grey. */
 
-/* The source of flare light depends on the type of display system. */
-/* For a CRT, it will be the Ambient light reflecting off the glass surface. */
-/* (This implies Yf = Lamb * reflectance/Lv) */
-/* For a reflection print, it will be the Illuminant or Ambient reflecting from the media */
-/* surface. (Yf = Li * reflectance) */
-/* For a projected image, it will be stray projector light, scattered by the */
-/* surround, screen and air particles. (Yf = Li * reflectance_and_scattering) */
+/* Flare is assumed to be stray light from light parts of the */
+/* image illuminating dark parts of the image, and is display technology dependent. */
+/* In theory reflective systems have no Flare ? */
+
+/* Glare is assumed to be stray ambient light reflecting from the display */
+/* surface, dust, or entering the observers eye directly, and as a result */
+/* fogging the dark parts of the image. */
+/* This is typically the major source of veiling light ? */
+
+/* By separatedly specifiying these two, the effect can be automatically */
+/* scalled according to the ambient light level, modelling the effect of */
+/* reduced glare in a darkened viewing environment. */
 
 /*
 
@@ -135,7 +138,9 @@ struct _cam02 {
 		double Lv,		/* Luminance of white in the Viewing/Scene/Image field (cd/m^2) */
 						/* Ignored if Ev is set */
 		double Yf,		/* Flare as a fraction of the reference white (range 0.0 .. 1.0) */
-		double Fxyz[3],	/* The Flare white coordinates (typically the Ambient color) */
+		double Yg,		/* Glare as a fraction of the ambient (range 0.0 .. 1.0) */
+		double Gxyz[3],	/* The Glare white coordinates (ie. the Ambient color) */
+						/* If <= 0 will Wxyz will be used. */
 		int hk			/* Flag, NZ to use Helmholtz-Kohlraush effect */
 	);
 
@@ -146,11 +151,13 @@ struct _cam02 {
 /* Private: */
 	/* Scene parameters */
 	ViewingCondition Ev;	/* Enumerated Viewing Condition */
+	double Lv;		/* Luminance of white in the Viewing/Image cd/m^2 */
 	double La;		/* Adapting/Surround Luminance cd/m^2 */
 	double Wxyz[3];	/* Reference/Adapted White XYZ (Y range 0.0 .. 1.0) */
 	double Yb;		/* Relative Luminance of Background to reference white (Y range 0.0 .. 1.0) */
 	double Yf;		/* Flare as a fraction of the reference white (Y range 0.0 .. 1.0) */
-	double Fxyz[3];	/* The Flare white coordinates (typically the Ambient color) */
+	double Yg;		/* Glare as a fraction of the ambient (Y range 0.0 .. 1.0) */
+	double Gxyz[3];	/* The Glare white coordinates (typically the Ambient color) */
 
 	/* Internal parameters */
 	double  C;		/* Surround Impact */
@@ -163,9 +170,9 @@ struct _cam02 {
 	double crange[3];	/* ENABLE_COMPR compression range */
 	double Va[3], Vb[3], VttA[3], Vttd[3];	/* rgba vectors */
 	double dcomp[3];	/* Vttd in terms of VttA, Va, Vb */
-	double Fsc;			/* Flare scale */
-	double Fisc;		/* Inverse flare scale */
-	double Fsxyz[3];	/* Scaled Flare color coordinates */
+	double Fsc;			/* Flare+Glare scale */
+	double Fisc;		/* Inverse Flare+Glare scale */
+	double Fsxyz[3];	/* Scaled Flare+Glare color coordinates */
 	double rgbW[3];		/* Sharpened cone response white values */
 	double D;			/* Degree of chromatic adaption */
 	double Drgb[3];		/* Chromatic transformation value */

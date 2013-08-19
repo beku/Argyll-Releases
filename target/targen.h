@@ -23,6 +23,7 @@
 struct _fxpos {
 	double p[MXTD];		/* Device coordinate position */
 	double v[MXTD];		/* Room for perceptual value */
+	int eloc;			/* if >= 0, cgats index, to even location */
 }; typedef struct _fxpos fxpos;
 
 

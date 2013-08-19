@@ -1225,7 +1225,8 @@ main(int argc, char *argv[]) {
 				NULL, NULL,				/* Use default Maximum range of Lab' values */
 				PCSp_PCSp,				/* Lab' -> Lab' transfer function */
 				NULL, NULL,				/* Use default Maximum range of Lab' values */
-				NULL					/* Linear output transform Lab'->Lab */
+				NULL,					/* Linear output transform Lab'->Lab */
+				NULL, NULL				/* Default SET_APXLS range */ 
 		) != 0)
 			error("Setting 16 bit Lab->Lab Lut failed: %d, %s",wr_icc->errc,wr_icc->err);
 

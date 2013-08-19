@@ -20,7 +20,11 @@ icctest.c
 lutest.c
 mcheck.c
 testDE2K.c
-makezip.ksh
 sRGB.icm
 ClayRGB1998.icm
 lab2lab.icm
+EBU3213_PAL.icm
+SMPTE_RP145_NTSC.icm
+Rec709.icm
+Rec2020.icm
+SMPTE431.icm

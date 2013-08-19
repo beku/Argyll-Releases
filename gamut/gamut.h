@@ -257,6 +257,8 @@ struct _gamut {
 
 	gvert *(*expand)(struct _gamut *s, double in[3]);		/* Expand the gamut surface */
 
+	void (*set_cs_bp_kp_ovrd)(struct _gamut *s, double *bk, double *kp);	/* Override cs black points */
+
 	int (*getisjab)(struct _gamut *s);	/* Return the isJab flag value */
 
 	int (*getisrast)(struct _gamut *s);	/* Return the isRast flag value */

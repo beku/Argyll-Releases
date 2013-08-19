@@ -65,6 +65,7 @@
 
 #undef IMP_MONO					/* [Undef] Turn on development code */
 
+#define EMPH_DISP_BLACKPOINT	/* [Define] Increase weight near diplay black point */
 #define NO_B2A_PCS_CURVES		/* [Define] PCS curves seem to make B2A less accurate. Why ? */
 #define USE_CAM_CLIP_OPT		/* [Define] Clip out of gamut in CAM space rather than PCS */
 #define USE_LEASTSQUARES_APROX	/* [Define] Use least squares fitting approximation in B2A */
@@ -73,7 +74,7 @@
 #undef DISABLE_GAMUT_TAG		/* [Undef] To disable gamut tag */
 #undef WARN_CLUT_CLIPPING		/* [Undef] Print warning if setting clut clips */
 #undef COMPARE_INV_CLUT			/* [Undef] Compare result of inv_clut with clut to diag inv probs */
-#define FILTER_B2ACLIP			/* [Define] Filter clip area of B2A */
+#undef FILTER_B2ACLIP			/* [Undef] Filter clip area of B2A (Causes reversal problems) */
 #define FILTER_THR_DE 3.0		/* [5.0] Filtering threshold DE */
 #define FILTER_MAX_DE 5.0		/* [10.0] Filtering DE to gamut surface at whit MAX_RAD starts */
 #define FILTER_MAX_RAD 0.1		/* [0.1] Filtering maximum radius in grid */
@@ -185,7 +186,7 @@ typedef struct {
 	double swxyz[3];		/* Source white point in XYZ */
 
     gamut *gam;				/* Output gamut object for setting gamut Lut */
-	int wantLab;			/* 0 if want is XYZ PCS, 1 want is Lab PCS */
+	int wantLab;			/* 0 if is XYZ PCS, 1 if is Lab PCS */
 } out_b2a_callback;
 
 /* Utility to handle abstract profile application to PCS. */
@@ -642,6 +643,7 @@ make_output_icc(
 	int gamdiag,			/* Make gamut mapping diagnostic wrl plots */
 	int verify,				/* nz to print verification */
 	int clipprims,			/* Clip white, black and primaries */
+	double wpscale,			/* >= 0.0 for media white point scale factor */
 	icxInk *oink,			/* Ink limit/black generation setup (NULL if n/a) */
 	char *in_name,			/* input .ti3 file name */
 	char *file_name,		/* output icc name */
@@ -1215,6 +1217,17 @@ make_output_icc(
 					cc = 0.0;
 				else if (cc > 1.0)
 					cc = 1.0;
+
+				if (cal->tvenc) {
+					cc = (cc * (235.0-16.0) + 16.0)/255.0;
+
+					/* For video encoding the extra bits of precision are created by bit shifting */
+					/* rather than scaling, so we need to scale the fp value to account for this. */
+					/* We assume the precision is the vcgt table size = 16 */
+					/* ~~99 ideally we should tag the fact that this is video encoded, so that */
+					/* the vcgt loaded can adjust for a different bit precision ~~~~ */
+					cc = (cc * 255 * (1 << (16 - 8)))/((1 << 16) - 1.0); 	
+				}
 				((unsigned short*)wo->u.table.data)[ncal * j + i] = (int)(cc * 65535.0 + 0.5);
 			}
 		}
@@ -1834,6 +1847,8 @@ make_output_icc(
 
 		}
 
+		isLab = wantLab;		/* We now have what we want */
+
 		/* Normalize display values to Y = 1.0 if needed */
 		/* (re-norm spec derived, since observer may be different) */
 		if (isdisp && (isdnormed == 0 || spec != 0)) {
@@ -1878,6 +1893,51 @@ make_output_icc(
 		}
 	}	/* End of reading in CGATs file */
 
+
+#ifdef EMPH_DISP_BLACKPOINT
+	/* Add extra weighting to sample points near black for additive display. */
+	/* Not sure what the justification is, apart from making the black */
+	/* point more accurately modelled. Does this reflect an underlying */
+	/* problem with rspl in perceptual space ? Or is it a reflection */
+	/* of the possible "scaled" viewing mode of additive display */
+	/* usage ? What about print and scan ?? */
+	if (isdisp && (imask == ICX_W || imask == ICX_RGB)) {
+		double minL = 1e6;;
+
+		/* Locate the lowest L* value */
+		for (i = 0; i < npat; i++) {
+			if (wantLab) {
+				if (tpat[i].v[0] < minL)
+					minL = tpat[i].v[0];
+			} else {
+				double lab[2];
+				icmXYZ2Lab(&icmD50, lab, tpat[i].v);
+				if (lab[0] < minL)
+					minL = lab[0];
+			}
+		}
+
+		/* Compute weighting factor */
+		/* (Hard to guess what numbers to put in here.. */
+		for (i = 0; i < npat; i++) {
+			double lab[3], L;
+			if (wantLab) {
+				L = tpat[i].v[0];
+			} else {
+				icmXYZ2Lab(&icmD50, lab, tpat[i].v);
+				L = lab[0];
+			}
+			L -= minL;
+			L /= 20.0;			/* Just weight over 20 L* range */
+			if (L > 1.0)
+				continue;
+			L = 1.0 + 19.0 * pow(1.0 - L, 3.0); 
+			tpat[i].w *= L;
+//printf("~1 pat %d %f %f %f weight %f\n", i,tpat[i].p[0], tpat[i].p[1], tpat[i].p[2], tpat[i].w);
+		}
+	}
+#endif /* EMPH_DISP_BLACKPOINT */
+
 	if (isLut) {
 		xicc *wr_xicc;			/* extention object */
 		icxLuBase *AtoB;		/* AtoB ixcLu */
@@ -1920,7 +1980,7 @@ make_output_icc(
 			               ICX_2PASSSMTH |
 #endif
 			               flags,
-			               npat, npat, tpat, NULL, dispLuminance, -1.0, smooth, avgdev,
+			               npat, npat, tpat, NULL, dispLuminance, wpscale, smooth, avgdev,
 			               NULL, oink, cal, iquality)) == NULL)
 				error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
@@ -2016,18 +2076,20 @@ make_output_icc(
 					vc->Lv = v->Lv;
 				if (v->Yf >= 0.0)
 					vc->Yf = v->Yf;
-				if (v->Fxyz[0] >= 0.0 && v->Fxyz[1] > 0.0 && v->Fxyz[2] >= 0.0) {
+				if (v->Yg >= 0.0)
+					vc->Yg = v->Yg;
+				if (v->Gxyz[0] >= 0.0 && v->Gxyz[1] > 0.0 && v->Gxyz[2] >= 0.0) {
 					/* Normalise XYZ to current media white */
-					vc->Fxyz[0] = v->Fxyz[0]/v->Fxyz[1] * vc->Fxyz[1];
-					vc->Fxyz[2] = v->Fxyz[2]/v->Fxyz[1] * vc->Fxyz[1];
+					vc->Gxyz[0] = v->Gxyz[0]/v->Gxyz[1] * vc->Gxyz[1];
+					vc->Gxyz[2] = v->Gxyz[2]/v->Gxyz[1] * vc->Gxyz[1];
 				}
-				if (v->Fxyz[0] >= 0.0 && v->Fxyz[1] >= 0.0 && v->Fxyz[2] < 0.0) {
+				if (v->Gxyz[0] >= 0.0 && v->Gxyz[1] >= 0.0 && v->Gxyz[2] < 0.0) {
 					/* Convert Yxy to XYZ */
-					double x = v->Fxyz[0];
-					double y = v->Fxyz[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
+					double x = v->Gxyz[0];
+					double y = v->Gxyz[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
 					double z = 1.0 - x - y;
-					vc->Fxyz[0] = x/y * vc->Fxyz[1];
-					vc->Fxyz[2] = z/y * vc->Fxyz[1];
+					vc->Gxyz[0] = x/y * vc->Gxyz[1];
+					vc->Gxyz[2] = z/y * vc->Gxyz[1];
 				}
 			}
 
@@ -2182,31 +2244,40 @@ make_output_icc(
 					/* cx.ix and cx.ox for each intent, but that would be expensive!. */
 					if (sepsat && (pgmi->usecas & 0xff) != (sgmi->usecas & 0xff))
 						error("Can't handle percept and sat table intents with different CAM spaces");
-					/* Default perceptual input gamut mapping space is absolute perceptual */
-					intentp = noptop ? icAbsoluteColorimetric : icmAbsolutePerceptual;
 
-					/* But override this for apperance space gamut mapping */
-					if ((pgmi->usecas & 0xff) != 0x0) {
+					/* If apperance space perceptual table gamut mapping */
+					if ((pgmi->usecas & 0xff) >= 0x2) {
 						intentp = noptop ? icxAppearance : icxPerceptualAppearance;
+					} else {
+						if ((pgmi->usecas & 0xff) == 0x0)
+							intentp = noptop ? icRelativeColorimetric : icPerceptual;
+						else	/* pgmi->usecas & 0xff == 0x1 */
+							intentp = noptop ? icAbsoluteColorimetric : icmAbsolutePerceptual;
 					}
-					if (sepsat) {
-						/* Default saturation gamut mapping space is absolute saturation */
-						intents = nostos ? icAbsoluteColorimetric : icmAbsoluteSaturation;
 
-						/* But override this for apperance space gamut mapping */
-						if ((sgmi->usecas & 0xff) != 0x0) {
+					if (sepsat) {
+
+						/* If apperance space saturation table gamut mapping */
+						if ((sgmi->usecas & 0xff) >= 0x2) {
 							intents = nostos ? icxAppearance : icxSaturationAppearance;
+						} else {
+							if ((sgmi->usecas & 0xff) == 0x0)
+								intents = nostos ? icRelativeColorimetric : icSaturation;
+							else
+								intents = nostos ? icAbsoluteColorimetric : icmAbsoluteSaturation;
 						}
 					}
-					/* Default output gamut mapping space is absolute colorimetric */
-					intento = icAbsoluteColorimetric;
 
-					/* But override this for apperance space gamut mapping */
-					if ((pgmi->usecas & 0xff) != 0x0) {
+					if ((pgmi->usecas & 0xff) >= 0x2) {
 						intento = icxAppearance;
+					} else {
+						if ((pgmi->usecas & 0xff) == 0x0)
+							intento = icRelativeColorimetric;
+						else	/* pgmi->usecas & 0xff == 0x1 */
+							intento = icAbsoluteColorimetric;
 					}
 
-					if ((pgmi->usecas & 0xff) == 0x2) {
+					if ((pgmi->usecas & 0xff) == 0x3) {		/* Abs. appearance */
 						double mxw;
 						intentp = intents = intento = icxAbsAppearance;
 
@@ -2274,7 +2345,7 @@ make_output_icc(
 					if (sgname != NULL) {	/* Optional source gamut - ie. from an images */
 						int isJab = 0;
 			
-						if ((pgmi->usecas & 0xff) != 0)
+						if ((pgmi->usecas & 0xff) >= 0x2)
 							isJab = 1;
 
 						if (verb)
@@ -2628,14 +2699,16 @@ make_output_icc(
 					ICM_CLUT_SET_FILTER | 
 #endif
 					0,
-					&cx,						/* Context */
-					cx.pcsspace,				/* Input color space */
-					devspace, 					/* Output color space */
-					out_b2a_input,				/* Input transform PCS->PCS' */
-					NULL, NULL,					/* Use default PCS range */
-					out_b2a_clut,				/* Lab' -> Device' transfer function */
-					NULL, NULL,					/* Use default Device' range */
-					out_b2a_output) != 0)		/* Output transfer function, Device'->Device */
+					&cx,					/* Context */
+					cx.pcsspace,			/* Input color space */
+					devspace, 				/* Output color space */
+					out_b2a_input,			/* Input transform PCS->PCS' */
+					NULL, NULL,				/* Use default PCS range */
+					out_b2a_clut,			/* Lab' -> Device' transfer function */
+					NULL, NULL,				/* Use default Device' range */
+					out_b2a_output,			/* Output transfer function, Device'->Device */
+					NULL, NULL				/* Use default APXLS range */
+				) != 0)
 				error("Setting 16 bit PCS->Device Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 			if (cx.verb) {
 				printf("\n");
@@ -2769,7 +2842,9 @@ make_output_icc(
 					NULL, NULL,			/* Use default Lab' range */
 					PCSp_bdist,			/* Lab' -> Boundary distance */
 					NULL, NULL,			/* Use default Device' range */
-					gamut_output) != 0)	/* Boundary distance to out of gamut value */
+					gamut_output,		/* Boundary distance to out of gamut value */
+					NULL, NULL	
+				) != 0)
 				error("Setting 16 bit PCS->Device Gamut Lut failed: %d, %s",wr_icco->errc,wr_icco->err);
 #endif /* !DEBUG_ONE */
 			if (cx.verb) {
@@ -2823,7 +2898,7 @@ make_output_icc(
 		               wr_xicc, icmFwd, isdisp ? icmDefaultIntent : icRelativeColorimetric,
 		               icmLuOrdRev,
 			           flags,		 		/* Compute white & black */
-		               npat, npat, tpat, NULL, dispLuminance, -1.0, smooth, avgdev,
+		               npat, npat, tpat, NULL, dispLuminance, wpscale, smooth, avgdev,
 		               NULL, oink, cal, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);
 

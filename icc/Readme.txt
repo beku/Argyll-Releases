@@ -5,7 +5,7 @@ This version is part of Argyll V 1.50
 
 -------------------------------------------
 
-Date 22 September 2012, Version 2.14
+Date 22 September 2013, Version 2.15
 
 This distribution contains source code which implements the reading and
 writing of color profile files that conform to the International Color
@@ -69,12 +69,6 @@ In summary this library provides:
    * Attempts to be platform neutral, and flexibility in its use of
      system file and memory sub-systems.
    * Loads Tag Types on demand to conserve memory space.
-
-Changes from V2.11
-
-Many changes have been made to support ArgyllCMS.
-A double memory free bug when iccdump'ing a profile
-that has duplicate tags has been fixed.
 
 Package contents:
 

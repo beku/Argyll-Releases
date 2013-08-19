@@ -44,8 +44,12 @@
 
 
 
+
+
     the <span style="font-weight: bold;">/etc/rc.local</span> startup
     script. You may also have to run <span style="font-weight: bold;">xset
+
+
 
 
 
@@ -159,10 +163,19 @@
         href="#serial">Serial instrument access:</a></h5>
     &nbsp;&nbsp; <a href="#serial">All</a><br>
     <br>
-    <span style="font-weight: bold;">NOTE:</span> That <span
-      style="font-weight: bold;">libmtp</span> has been known to
-    interfere with device access, particularly the Spyder 3. You
-    probably want to disable this library (look in udev).<br>
+    <span style="font-weight: bold;">NOTE:</span> That <b>mtp-probe</b>
+    /&nbsp; <span style="font-weight: bold;">libmtp</span> been known
+    to interfere with device access, particularly the Spyder 3 and
+    DTP94. Recent versions of the libmtp should ignore any instrument
+    marked as COLOR_MEASUREMENT_DEVICE by the
+    /etc/udev/rules.d/55-Argyll.rules file, but for older systems you
+    probably need to disable libmtp (look in the udev configuration).<br>
+    <br>
+    The <b>JETI</b> specbos <span style="font-weight: bold;">1211</span><span
+      style="font-weight: bold;"> </span>and <b>1201</b> makes use of
+    the <a href="http://www.ftdichip.com/Drivers/VCP.htm">FTDI Virtual
+      COM Port Drivers</a> (VCP), that should come with any recent
+    version of Linux.<br>
     <br>
     <span style="font-weight: bold;"></span>
     <hr style="width: 100%; height: 2px;">
@@ -202,6 +215,8 @@
     On recent systems the new rules file will be notices as soon as you
     plug the instrument in again.<br>
     On older systems you may need to run <b>/sbin/udevtrigger</b>,&nbsp;
+
+
 
 
 
@@ -387,6 +402,8 @@ instruments
 
 
 
+
+
         access using hotplug:<br>
       </span></h5>
     Under <span style="font-weight: bold;">much older versions of Linux</span>,
@@ -538,6 +555,8 @@ instruments
     <span style="font-weight: bold;"></span>&nbsp; <br>
     <h5><span style="color: rgb(204, 51, 204);"><a name="serial"></a>Serial
 instruments
+
+
 
 
 

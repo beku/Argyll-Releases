@@ -1,7 +1,13 @@
 
  Change History: (See ArgyllCMS log.txt too)
 
- 2.15
+ 2.16
+	Clean up cLUT read code to make sanity checking
+	more explicit and remove redundant code.
+
+	Added special mode that interprets cLUT res of 0 as 256
+	for MadVR testing.
+
 	Change icc->read_tag() to only succeed if the tag type is
 	known, since the standard expectation of a non NULL
 	return type is that it is of a known type. Added new

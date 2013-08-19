@@ -3,7 +3,8 @@
  * xicc lookup/test utility
  *
  * This program is the analog of icclu, but allows reverse lookup
- * of transforms by making use of xicc interpolation code.
+ * of transforms by making use of xicc interpolation code, + other
+ * more advanced features.
  * (Based on the old xfmlu.c)
  *
  * Author:  Graeme W. Gill
@@ -17,6 +18,8 @@
  */
 
 /* TTBD:
+
+	Add HSV as alternative to RGB ?
 
 	Can -ff and -fif be made to work with device link files ?
 
@@ -41,9 +44,9 @@
 
 void usage(char *diag) {
 	int i;
-	fprintf(stderr,"Translate colors through an xicc, Version %s\n",ARGYLL_VERSION_STR);
+	fprintf(stderr,"Lookup ICC or CAL colors, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
-	fprintf(stderr,"usage: xicclu [-options] profile\n");
+	fprintf(stderr,"usage: xicclu [-options] profile_or_cal\n");
 	if (diag != NULL)
 		fprintf(stderr,"Diagnostic: %s\n",diag);
 	fprintf(stderr," -v level       Verbosity level 0 - 2 (default = 1)\n");
@@ -60,6 +63,15 @@ void usage(char *diag) {
 	fprintf(stderr," -p oride       x = XYZ_PCS, X = XYZ * 100, l = Lab_PCS, L = LCh, y = Yxy\n");
 	fprintf(stderr,"                j = %s Appearance Jab, J = %s Appearance JCh\n",icxcam_description(cam_default),icxcam_description(cam_default));
 	fprintf(stderr," -s scale       Scale device range 0.0 - scale rather than 0.0 - 1.0\n");
+	fprintf(stderr," -e flag        Video encode device input as:\n");
+	fprintf(stderr," -E flag        Video decode device output as:\n");
+	fprintf(stderr,"     n           normal 0..1 full range RGB levels (default)\n");
+	fprintf(stderr,"     t           (16-235)/255 \"TV\" RGB levels\n");
+	fprintf(stderr,"     6           Rec601 YCbCr SD (16-235,240)/255 \"TV\" levels\n");
+	fprintf(stderr,"     7           Rec709 1125/60Hz YCbCr HD (16-235,240)/255 \"TV\" levels\n");
+	fprintf(stderr,"     5           Rec709 1250/50Hz YCbCr HD (16-235,240)/255 \"TV\" levels\n");
+	fprintf(stderr,"     2           Rec2020 YCbCr UHD (16-235,240)/255 \"TV\" levels\n");
+	fprintf(stderr,"     C           Rec2020 Constant Luminance YCbCr UHD (16-235,240)/255 \"TV\" levels\n");
 	fprintf(stderr," -k [zhxrlv]    Black value target: z = zero K,\n");
 	fprintf(stderr,"                h = 0.5 K, x = max K, r = ramp K (def.)\n");
 	fprintf(stderr,"                l = extra PCS input is portion of K locus\n");
@@ -101,10 +113,11 @@ void usage(char *diag) {
 	fprintf(stderr,"         w:x:y         Adapted white point as x, y\n");
 	fprintf(stderr,"         a:adaptation  Adaptation luminance in cd.m^2 (default 50.0)\n");
 	fprintf(stderr,"         b:background  Background %% of image luminance (default 20)\n");
-	fprintf(stderr,"         l:scenewhite  Scene white in cd.m^2 if surround = auto (default 250)\n");
-	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 1)\n");
-	fprintf(stderr,"         f:X:Y:Z       Flare color as XYZ (default media white, Abs: D50)\n");
-	fprintf(stderr,"         f:x:y         Flare color as x, y\n");
+	fprintf(stderr,"         l:imagewhite  Image white in cd.m^2 if surround = auto (default 250)\n");
+	fprintf(stderr,"         f:flare       Flare light %% of image luminance (default 0)\n");
+	fprintf(stderr,"         g:glare       Flare light %% of ambient (default 1)\n");
+	fprintf(stderr,"         g:X:Y:Z       Flare color as XYZ (default media white, Abs: D50)\n");
+	fprintf(stderr,"         g:x:y         Flare color as x, y\n");
 	fprintf(stderr,"\n");
 	fprintf(stderr,"    The colors to be translated should be fed into standard in,\n");
 	fprintf(stderr,"    one input color per line, white space separated.\n");
@@ -141,9 +154,10 @@ int
 main(int argc, char *argv[]) {
 	int fa,nfa;				/* argument we're looking at */
 	char prof_name[MAXNAMEL+1];
-	icmFile *fp;
-	icc *icco;
-	xicc *xicco;
+	icmFile *fp = NULL;
+	icc *icco = NULL;
+	xicc *xicco = NULL;
+	xcal *cal = NULL;			/* If .cal rather than .icm/.icc, not NULL */
 	int doplot = 0;				/* Do grey axis plot */
 	double pstart[3] = { -1000.0 };		/* Plot Lab/Jab PCS start point = white */ 
 	double pend[3]   = { -1000.0 };		/* Plot Lab/Jab PCS end point = black */ 
@@ -157,11 +171,12 @@ main(int argc, char *argv[]) {
 	double vc_wXYZ[3] = {-1.0, -1.0, -1.0};	/* Adapted white override in XYZ */
 	double vc_wxy[2] = {-1.0, -1.0};		/* Adapted white override in x,y */
 	double vc_a = -1.0;			/* Adapted luminance */
-	double vc_b = -1.0;			/* Background % overid */
+	double vc_b = -1.0;			/* Background % overide */
 	double vc_l = -1.0;			/* Scene luminance override */
-	double vc_f = -1.0;			/* Flare % overid */
-	double vc_fXYZ[3] = {-1.0, -1.0, -1.0};	/* Flare color override in XYZ */
-	double vc_fxy[2] = {-1.0, -1.0};		/* Flare color override in x,y */
+	double vc_f = -1.0;			/* Flare % overide */
+	double vc_g = -1.0;			/* Glare % overide */
+	double vc_gXYZ[3] = {-1.0, -1.0, -1.0};	/* Glare color override in XYZ */
+	double vc_gxy[2] = {-1.0, -1.0};		/* Glare color override in x,y */
 	int verb = 1;
 	int actual = 0;
 	int slocwarn = 0;
@@ -172,6 +187,8 @@ main(int argc, char *argv[]) {
 	int repLCh = 0;			/* Report LCh */
 	int repXYZ100 = 0;		/* Scale XYZ by 10 */
 	double scale = 0.0;		/* Device value scale factor */
+	int in_tvenc;			/* 1 to use RGB Video Level encoding, 2 = Rec601, 3 = Rec709 YCbCr */
+	int out_tvenc;			/* 1 to use RGB Video Level encoding, 2 = Rec601, 3 = Rec709 YCbCr */
 	int rv = 0;
 	char buf[200];
 	double uin[MAX_CHAN], in[MAX_CHAN], out[MAX_CHAN], uout[MAX_CHAN];
@@ -194,6 +211,8 @@ main(int argc, char *argv[]) {
 	double Kstle1 = 0.0, Kstpo1 = 0.0, Kenle1 = 0.0, Kenpo1 = 0.0, Kshap1 = 0.0;
 	int               invert = 0;
 	
+	xslpoly *chlp = NULL;
+
 #ifdef SPTEST
 	int sptest = 0;
 	warning("xicc/xicclu.c !!!! special rspl gamut sest code is compiled in !!!!\n");
@@ -285,6 +304,43 @@ main(int argc, char *argv[]) {
 				scale = atof(na);
 				if (scale <= 0.0) usage("Illegal scale value");
 			}
+			/* Video RGB encoding */
+			else if (argv[fa][1] == 'e'
+			      || argv[fa][1] == 'E') {
+				int enc;
+				if (na == NULL) usage("Video encodong flag (-e/E) needs an argument");
+    			switch (na[0]) {
+					case 'n':				/* Normal */
+						enc = 0;
+						break;
+					case 't':				/* TV 16 .. 235 */
+						enc = 1;
+						break;
+					case '6':				/* Rec601 YCbCr */
+						enc = 2;
+						break;
+					case '7':				/* Rec709 1150/60/2:1 YCbCr */
+						enc = 3;
+						break;
+					case '5':				/* Rec709 1250/50/2:1 YCbCr (HD) */
+						enc = 4;
+						break;
+					case '2':				/* Rec2020 Non-constant Luminance YCbCr (UHD) */
+						enc = 5;
+						break;
+					case 'C':				/* Rec2020 Constant Luminance YCbCr (UHD) */
+						enc = 6;
+						break;
+					default:
+						usage("Video encoding (-E) argument not recognised");
+				}
+				if (argv[fa][1] == 'e')
+					in_tvenc = enc;
+				else
+					out_tvenc = enc;
+				fa = nfa;
+			}
+
 			/* function */
 			else if (argv[fa][1] == 'f') {
 				fa = nfa;
@@ -425,7 +481,8 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Inking rule */
-			else if (argv[fa][1] == 'k') {
+			else if (argv[fa][1] == 'k'
+			      || argv[fa][1] == 'K') {
 				fa = nfa;
 				if (na == NULL) usage("No parameter after flag -k");
 				if (argv[fa][1] == 'k')
@@ -578,18 +635,22 @@ main(int argc, char *argv[]) {
 					vc_b = atof(na+2);
 				} else if (na[0] == 'l' || na[0] == 'L') {
 					if (na[1] != ':')
-						usage("Viewing conditions (-[cd]l) missing ':'");
+						usage("Viewing conditions (-cl) missing ':'");
 					vc_l = atof(na+2);
 				} else if (na[0] == 'f' || na[0] == 'F') {
+					if (na[1] != ':')
+						usage("Viewing conditions (-cf) missing ':'");
+					vc_f = atof(na+2);
+				} else if (na[0] == 'g' || na[0] == 'G') {
 					double x, y, z;
 					if (sscanf(na+1,":%lf:%lf:%lf",&x,&y,&z) == 3) {
-						vc_fXYZ[0] = x; vc_fXYZ[1] = y; vc_fXYZ[2] = z;
+						vc_gXYZ[0] = x; vc_gXYZ[1] = y; vc_gXYZ[2] = z;
 					} else if (sscanf(na+1,":%lf:%lf",&x,&y) == 2) {
-						vc_fxy[0] = x; vc_fxy[1] = y;
+						vc_gxy[0] = x; vc_gxy[1] = y;
 					} else if (sscanf(na+1,":%lf",&x) == 1) {
-						vc_f = x;
+						vc_g = x;
 					} else
-						usage("Unrecognised parameters after -cf");
+						usage("Unrecognised parameters after -cg");
 				} else
 					usage("Unrecognised parameters after -c");
 			}
@@ -603,34 +664,9 @@ main(int argc, char *argv[]) {
 	if (fa >= argc || argv[fa][0] == '-') usage("Expecting profile file name");
 	strncpy(prof_name,argv[fa],MAXNAMEL); prof_name[MAXNAMEL] = '\000';
 
-	if (doplot) {
-
-		/* Force PCS to be Lab or Jab */
-		repJCh = 0;
-		repLCh = 0;
-		if (pcsor != icxSigJabData)
-			pcsor = icSigLabData;
-
-		if ((invert == 0 && func != icmBwd)
-		 || (invert != 0 && func != icmFwd))
-			error("Must use -fb or -fif for grey axis plot");
-	}
-
-	/* Open up the profile for reading */
-	if ((fp = new_icmFileStd_name(prof_name,"r")) == NULL)
-		error ("Can't open file '%s'",prof_name);
-
-	if ((icco = new_icc()) == NULL)
-		error ("Creation of ICC object failed");
-
-	if ((rv = icco->read(icco,fp,0)) != 0)
-		error ("%d, %s",rv,icco->err);
-
-	if (doplot) {
-		if (icco->header->deviceClass != icSigInputClass
-		 && icco->header->deviceClass != icSigDisplayClass
-		 && icco->header->deviceClass != icSigOutputClass)
-			error("Profile must be a device profile to plot neutral axis");
+	if (slocwarn) {
+		if ((chlp = chrom_locus_poligon(0, icxOT_CIE_1931_2, 0)) == NULL)
+			error("chrom_locus_poligon failed");
 	}
 
 	if (verb > 1) {
@@ -641,230 +677,282 @@ main(int argc, char *argv[]) {
 		op->del(op);
 	}
 
-	/* Wrap with an expanded icc */
-	if ((xicco = new_xicc(icco)) == NULL)
-		error ("Creation of xicc failed");
+	/* Open up the profile for reading */
+	if ((fp = new_icmFileStd_name(prof_name,"r")) == NULL)
+		error ("Can't open file '%s'",prof_name);
 
-	/* Set the default ink limits if not set on command line */
-	icxDefaultLimits(xicco, &ink.tlimit, tlimit, &ink.klimit, klimit);
+	if ((icco = new_icc()) == NULL)
+		error ("Creation of ICC object failed");
 
-	if (verb > 1) {
-		if (ink.tlimit >= 0.0)
-			printf("Total ink limit assumed is %3.0f%%\n",100.0 * ink.tlimit);
-		if (ink.klimit >= 0.0)
-			printf("Black ink limit assumed is %3.0f%%\n",100.0 * ink.klimit);
-	}
+	if ((rv = icco->read(icco,fp,0)) == 0) {		/* ICC profile */
 
-	ink.KonlyLmin = 0;		/* Use normal black as locus Lmin */
+		if (doplot) {
+	
+			/* Force PCS to be Lab or Jab */
+			repJCh = 0;
+			repLCh = 0;
+			if (pcsor != icxSigJabData)
+				pcsor = icSigLabData;
+	
+			if ((invert == 0 && func != icmBwd)
+			 || (invert != 0 && func != icmFwd))
+				error("Must use -fb or -fif for grey axis plot");
+		}
 
-	ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
-	ink.c.Kskew = ICXINKDEFSKEW;	/* default curve skew */
-	ink.x.Ksmth = ICXINKDEFSMTH;
-	ink.x.Kskew = ICXINKDEFSKEW;
+		if (icco->header->cmmId = str2tag("argl"))
+			icco->allowclutPoints256 = 1;
+				
+		if (doplot) {
+			if (icco->header->deviceClass != icSigInputClass
+			 && icco->header->deviceClass != icSigDisplayClass
+			 && icco->header->deviceClass != icSigOutputClass)
+				error("Profile must be a device profile to plot neutral axis");
+		}
 
-	if (inking == 0) {			/* Use minimum */
-		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
-		ink.c.Kstle = 0.0;
-		ink.c.Kstpo = 0.0;
-		ink.c.Kenpo = 1.0;
-		ink.c.Kenle = 0.0;
-		ink.c.Kshap = 1.0;
-	} else if (inking == 1) {	/* Use 0.5  */
-		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
-		ink.c.Kstle = 0.5;
-		ink.c.Kstpo = 0.0;
-		ink.c.Kenpo = 1.0;
-		ink.c.Kenle = 0.5;
-		ink.c.Kshap = 1.0;
-	} else if (inking == 2) {	/* Use maximum  */
-		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
-		ink.c.Kstle = 1.0;
-		ink.c.Kstpo = 0.0;
-		ink.c.Kenpo = 1.0;
-		ink.c.Kenle = 1.0;
-		ink.c.Kshap = 1.0;
-	} else if (inking == 3) {	/* Use ramp  */
-		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
-		ink.c.Kstle = 0.0;
-		ink.c.Kstpo = 0.0;
-		ink.c.Kenpo = 1.0;
-		ink.c.Kenle = 1.0;
-		ink.c.Kshap = 1.0;
-	} else if (inking == 4) {	/* Use locus  */
-		ink.k_rule = icxKlocus;
-	} else if (inking == 5) {	/* Use K target  */
-		ink.k_rule = icxKvalue;
-	} else if (inking == 6) {	/* Use specified curve */
-		ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
-		ink.c.Kstle = Kstle;
-		ink.c.Kstpo = Kstpo;
-		ink.c.Kenpo = Kenpo;
-		ink.c.Kenle = Kenle;
-		ink.c.Kshap = Kshap;
-	} else {				/* Use dual curves */
-		ink.k_rule = locus ? icxKl5l : icxKl5lk;	/* Locus or value target */
-		ink.c.Kstle = Kstle;
-		ink.c.Kstpo = Kstpo;
-		ink.c.Kenpo = Kenpo;
-		ink.c.Kenle = Kenle;
-		ink.c.Kshap = Kshap;
-		ink.x.Kstle = Kstle1;
-		ink.x.Kstpo = Kstpo1;
-		ink.x.Kenpo = Kenpo1;
-		ink.x.Kenle = Kenle1;
-		ink.x.Kshap = Kshap1;
-	}
+		/* Wrap with an expanded icc */
+		if ((xicco = new_xicc(icco)) == NULL)
+			error ("Creation of xicc failed");
 
-	/* Setup the viewing conditions */
-	if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0, NULL) == -999)
-		error ("%d, %s",xicco->errc, xicco->err);
+		/* Set the default ink limits if not set on command line */
+		icxDefaultLimits(xicco, &ink.tlimit, tlimit, &ink.klimit, klimit);
+
+		if (verb > 1) {
+			if (ink.tlimit >= 0.0)
+				printf("Total ink limit assumed is %3.0f%%\n",100.0 * ink.tlimit);
+			if (ink.klimit >= 0.0)
+				printf("Black ink limit assumed is %3.0f%%\n",100.0 * ink.klimit);
+		}
+
+		ink.KonlyLmin = 0;		/* Use normal black as locus Lmin */
+
+		ink.c.Ksmth = ICXINKDEFSMTH;	/* Default curve smoothing */
+		ink.c.Kskew = ICXINKDEFSKEW;	/* default curve skew */
+		ink.x.Ksmth = ICXINKDEFSMTH;
+		ink.x.Kskew = ICXINKDEFSKEW;
+
+		if (inking == 0) {			/* Use minimum */
+			ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
+			ink.c.Kstle = 0.0;
+			ink.c.Kstpo = 0.0;
+			ink.c.Kenpo = 1.0;
+			ink.c.Kenle = 0.0;
+			ink.c.Kshap = 1.0;
+		} else if (inking == 1) {	/* Use 0.5  */
+			ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
+			ink.c.Kstle = 0.5;
+			ink.c.Kstpo = 0.0;
+			ink.c.Kenpo = 1.0;
+			ink.c.Kenle = 0.5;
+			ink.c.Kshap = 1.0;
+		} else if (inking == 2) {	/* Use maximum  */
+			ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
+			ink.c.Kstle = 1.0;
+			ink.c.Kstpo = 0.0;
+			ink.c.Kenpo = 1.0;
+			ink.c.Kenle = 1.0;
+			ink.c.Kshap = 1.0;
+		} else if (inking == 3) {	/* Use ramp  */
+			ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
+			ink.c.Kstle = 0.0;
+			ink.c.Kstpo = 0.0;
+			ink.c.Kenpo = 1.0;
+			ink.c.Kenle = 1.0;
+			ink.c.Kshap = 1.0;
+		} else if (inking == 4) {	/* Use locus  */
+			ink.k_rule = icxKlocus;
+		} else if (inking == 5) {	/* Use K target  */
+			ink.k_rule = icxKvalue;
+		} else if (inking == 6) {	/* Use specified curve */
+			ink.k_rule = locus ? icxKluma5 : icxKluma5k;	/* Locus or value target */
+			ink.c.Kstle = Kstle;
+			ink.c.Kstpo = Kstpo;
+			ink.c.Kenpo = Kenpo;
+			ink.c.Kenle = Kenle;
+			ink.c.Kshap = Kshap;
+		} else {				/* Use dual curves */
+			ink.k_rule = locus ? icxKl5l : icxKl5lk;	/* Locus or value target */
+			ink.c.Kstle = Kstle;
+			ink.c.Kstpo = Kstpo;
+			ink.c.Kenpo = Kenpo;
+			ink.c.Kenle = Kenle;
+			ink.c.Kshap = Kshap;
+			ink.x.Kstle = Kstle1;
+			ink.x.Kstpo = Kstpo1;
+			ink.x.Kenpo = Kenpo1;
+			ink.x.Kenle = Kenle1;
+			ink.x.Kshap = Kshap1;
+		}
+
+		/* Setup the viewing conditions in case we need them */
+		if (xicc_enum_viewcond(xicco, &vc, -1, NULL, 0, NULL) == -999) {
+			if (camclip || pcsor == icxSigJabData)		/* If it will be needed */
+				error("%d, %s",xicco->errc, xicco->err);
+		}
 
 //xicc_dump_viewcond(&vc);
-	if (vc_e != -1)
-		if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0, NULL) == -999)
-			error ("%d, %s",xicco->errc, xicco->err);
-	if (vc_s >= 0)
-		vc.Ev = vc_s;
-	if (vc_wXYZ[1] > 0.0) {
-		/* Normalise it to current media white */
-		vc.Wxyz[0] = vc_wXYZ[0]/vc_wXYZ[1] * vc.Wxyz[1];
-		vc.Wxyz[2] = vc_wXYZ[2]/vc_wXYZ[1] * vc.Wxyz[1];
-	} 
-	if (vc_wxy[0] >= 0.0) {
-		double x = vc_wxy[0];
-		double y = vc_wxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
-		double z = 1.0 - x - y;
-		vc.Wxyz[0] = x/y * vc.Wxyz[1];
-		vc.Wxyz[2] = z/y * vc.Wxyz[1];
-	}
-	if (vc_a >= 0.0)
-		vc.La = vc_a;
-	if (vc_b >= 0.0)
-		vc.Yb = vc_b/100.0;
-	if (vc_l >= 0.0)
-		vc.Lv = vc_l;
-	if (vc_f >= 0.0)
-		vc.Yf = vc_f/100.0;
-	if (vc_fXYZ[1] > 0.0) {
-		/* Normalise it to current media white */
-		vc.Fxyz[0] = vc_fXYZ[0]/vc_fXYZ[1] * vc.Fxyz[1];
-		vc.Fxyz[2] = vc_fXYZ[2]/vc_fXYZ[1] * vc.Fxyz[1];
-	}
-	if (vc_fxy[0] >= 0.0) {
-		double x = vc_fxy[0];
-		double y = vc_fxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
-		double z = 1.0 - x - y;
-		vc.Fxyz[0] = x/y * vc.Fxyz[1];
-		vc.Fxyz[2] = z/y * vc.Fxyz[1];
-	}
-//xicc_dump_viewcond(&vc);
-
-	/* Get a expanded color conversion object */
-	if ((luo = xicco->get_luobj(xicco, 0
-#ifdef USE_NEARCLIP
-	   | ICX_CLIP_NEAREST
-#endif
-	   | (intsep ? ICX_INT_SEPARATE : 0)
-	   | (merge ? ICX_MERGE_CLUT : 0)
-	   | (camclip ? ICX_CAM_CLIP : 0)
-	   | ICX_FAST_SETUP
-	                                  , func, intent, pcsor, order, &vc, &ink)) == NULL)
-		error ("%d, %s",xicco->errc, xicco->err);
-
-	/* Get details of conversion (Arguments may be NULL if info not needed) */
-	if (invert)
-		luo->spaces(luo, &outs, &outn, &ins, &inn, &alg, NULL, NULL, NULL);
-	else
-		luo->spaces(luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL);
-
-	/* If we can do check on clipped values */
-	if (actual != 0) {
-		if (invert == 0) {
-			if (func == icmFwd || func == icmBwd) {
-				if ((aluo = xicco->get_luobj(xicco, ICX_CLIP_NEAREST,
-				     func == icmFwd ? icmBwd : icmFwd, intent, pcsor, order, &vc, &ink)) == NULL)
+		if (vc_e != -1)
+			if (xicc_enum_viewcond(xicco, &vc, vc_e, NULL, 0, NULL) == -999)
 				error ("%d, %s",xicco->errc, xicco->err);
+		if (vc_s >= 0)
+			vc.Ev = vc_s;
+		if (vc_wXYZ[1] > 0.0) {
+			/* Normalise it to current media white */
+			vc.Wxyz[0] = vc_wXYZ[0]/vc_wXYZ[1] * vc.Wxyz[1];
+			vc.Wxyz[2] = vc_wXYZ[2]/vc_wXYZ[1] * vc.Wxyz[1];
+		} 
+		if (vc_wxy[0] >= 0.0) {
+			double x = vc_wxy[0];
+			double y = vc_wxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
+			double z = 1.0 - x - y;
+			vc.Wxyz[0] = x/y * vc.Wxyz[1];
+			vc.Wxyz[2] = z/y * vc.Wxyz[1];
+		}
+		if (vc_a >= 0.0)
+			vc.La = vc_a;
+		if (vc_b >= 0.0)
+			vc.Yb = vc_b/100.0;
+		if (vc_l >= 0.0)
+			vc.Lv = vc_l;
+		if (vc_f >= 0.0)
+			vc.Yf = vc_f/100.0;
+		if (vc_g >= 0.0)
+			vc.Yg = vc_g/100.0;
+		if (vc_gXYZ[1] > 0.0) {
+			/* Normalise it to current media white */
+			vc.Gxyz[0] = vc_gXYZ[0]/vc_gXYZ[1] * vc.Gxyz[1];
+			vc.Gxyz[2] = vc_gXYZ[2]/vc_gXYZ[1] * vc.Gxyz[1];
+		}
+		if (vc_gxy[0] >= 0.0) {
+			double x = vc_gxy[0];
+			double y = vc_gxy[1];	/* If Y == 1.0, then X+Y+Z = 1/y */
+			double z = 1.0 - x - y;
+			vc.Gxyz[0] = x/y * vc.Gxyz[1];
+			vc.Gxyz[2] = z/y * vc.Gxyz[1];
+		}
+//xicc_dump_viewcond(&vc);
+
+		/* Get a expanded color conversion object */
+		if ((luo = xicco->get_luobj(xicco, 0
+#ifdef USE_NEARCLIP
+		   | ICX_CLIP_NEAREST
+#endif
+		   | (intsep ? ICX_INT_SEPARATE : 0)
+		   | (merge ? ICX_MERGE_CLUT : 0)
+		   | (camclip ? ICX_CAM_CLIP : 0)
+		   | ICX_FAST_SETUP
+		                                  , func, intent, pcsor, order, &vc, &ink)) == NULL)
+			error ("%d, %s",xicco->errc, xicco->err);
+
+		/* Get details of conversion (Arguments may be NULL if info not needed) */
+		if (invert)
+			luo->spaces(luo, &outs, &outn, &ins, &inn, &alg, NULL, NULL, NULL);
+		else
+			luo->spaces(luo, &ins, &inn, &outs, &outn, &alg, NULL, NULL, NULL);
+
+		/* If we can do check on clipped values */
+		if (actual != 0) {
+			if (invert == 0) {
+				if (func == icmFwd || func == icmBwd) {
+					if ((aluo = xicco->get_luobj(xicco, ICX_CLIP_NEAREST,
+					     func == icmFwd ? icmBwd : icmFwd, intent, pcsor, order, &vc, &ink)) == NULL)
+					error ("%d, %s",xicco->errc, xicco->err);
+				}
+			} else {
+				aluo = luo;		/* We can use the same one */
 			}
-		} else {
-			aluo = luo;		/* We can use the same one */
-		}
-	}
-
-	/* More information */
-	if (verb > 1) {
-		int j;
-		double inmin[MAX_CHAN], inmax[MAX_CHAN];
-		double outmin[MAX_CHAN], outmax[MAX_CHAN];
-
-		luo->get_native_ranges(luo, inmin, inmax, outmin,outmax);
-		printf("Internal input value range: ");
-		for (j = 0; j < inn; j++) {
-			if (j > 0)
-				fprintf(stdout," %f..%f",inmin[j], inmax[j]);
-			else
-				fprintf(stdout,"%f..%f",inmin[j], inmax[j]);
-		}
-		printf("\nInternal output value range: ");
-		for (j = 0; j < outn; j++) {
-			if (j > 0)
-				fprintf(stdout," %f..%f",outmin[j], outmax[j]);
-			else
-				fprintf(stdout,"%f..%f",outmin[j], outmax[j]);
 		}
 
-		luo->get_ranges(luo, inmin, inmax, outmin,outmax);
-		printf("\nInput value range: ");
-		for (j = 0; j < inn; j++) {
-			if (j > 0)
-				fprintf(stdout," %f..%f",inmin[j], inmax[j]);
-			else
-				fprintf(stdout,"%f..%f",inmin[j], inmax[j]);
-		}
-		printf("\nOutput value range: ");
-		for (j = 0; j < outn; j++) {
-			if (j > 0)
-				fprintf(stdout," %f..%f",outmin[j], outmax[j]);
-			else
-				fprintf(stdout,"%f..%f",outmin[j], outmax[j]);
-		}
-		printf("\n");
-	}
+		/* More information */
+		if (verb > 1) {
+			int j;
+			double inmin[MAX_CHAN], inmax[MAX_CHAN];
+			double outmin[MAX_CHAN], outmax[MAX_CHAN];
 
-	if (repYxy) {	/* report Yxy rather than XYZ */
-		if (ins == icSigXYZData)
-			ins = icSigYxyData; 
-		if (outs == icSigXYZData)
-			outs = icSigYxyData; 
-	}
+			luo->get_native_ranges(luo, inmin, inmax, outmin,outmax);
+			printf("Internal input value range: ");
+			for (j = 0; j < inn; j++) {
+				if (j > 0)
+					fprintf(stdout," %f..%f",inmin[j], inmax[j]);
+				else
+					fprintf(stdout,"%f..%f",inmin[j], inmax[j]);
+			}
+			printf("\nInternal output value range: ");
+			for (j = 0; j < outn; j++) {
+				if (j > 0)
+					fprintf(stdout," %f..%f",outmin[j], outmax[j]);
+				else
+					fprintf(stdout,"%f..%f",outmin[j], outmax[j]);
+			}
 
-	if (repJCh) {	/* report JCh rather than Jab */
-		if (ins == icxSigJabData)
-			ins = icxSigJChData; 
-		if (outs == icxSigJabData)
-			outs = icxSigJChData; 
-	}
-	if (repLCh) {	/* report LCh rather than Lab */
-		if (ins == icSigLabData)
-			ins = icxSigLChData; 
-		if (outs == icSigLabData)
-			outs = icxSigLChData; 
-	}
+			luo->get_ranges(luo, inmin, inmax, outmin,outmax);
+			printf("\nInput value range: ");
+			for (j = 0; j < inn; j++) {
+				if (j > 0)
+					fprintf(stdout," %f..%f",inmin[j], inmax[j]);
+				else
+					fprintf(stdout,"%f..%f",inmin[j], inmax[j]);
+			}
+			printf("\nOutput value range: ");
+			for (j = 0; j < outn; j++) {
+				if (j > 0)
+					fprintf(stdout," %f..%f",outmin[j], outmax[j]);
+				else
+					fprintf(stdout,"%f..%f",outmin[j], outmax[j]);
+			}
+			printf("\n");
+		}
+
+		if (repYxy) {	/* report Yxy rather than XYZ */
+			if (ins == icSigXYZData)
+				ins = icSigYxyData; 
+			if (outs == icSigXYZData)
+				outs = icSigYxyData; 
+		}
+
+		if (repJCh) {	/* report JCh rather than Jab */
+			if (ins == icxSigJabData)
+				ins = icxSigJChData; 
+			if (outs == icxSigJabData)
+				outs = icxSigJChData; 
+		}
+		if (repLCh) {	/* report LCh rather than Lab */
+			if (ins == icSigLabData)
+				ins = icxSigLChData; 
+			if (outs == icSigLabData)
+				outs = icxSigLChData; 
+		}
 
 #ifdef SPTEST
-	if (sptest) {
-		icxLuLut *clu;
-		double cent[3] = { 50.0, 0.0, 0.0 };
+		if (sptest) {
+			icxLuLut *clu;
+			double cent[3] = { 50.0, 0.0, 0.0 };
 
-		if (luo->plu->ttype != icmLutType)
-			error("Special test only works on CLUT profiles");
+			if (luo->plu->ttype != icmLutType)
+				error("Special test only works on CLUT profiles");
 
-		clu = (icxLuLut *)luo;
+			clu = (icxLuLut *)luo;
 
-		clu->clutTable->comp_gamut(clu->clutTable, cent, NULL, spoutf, clu, spioutf, clu);
-		rspl_gam_plot(clu->clutTable, "sp_test.wrl", sptest-1);
-		exit(0);
-	}
+			clu->clutTable->comp_gamut(clu->clutTable, cent, NULL, spoutf, clu, spioutf, clu);
+			rspl_gam_plot(clu->clutTable, "sp_test.wrl", sptest-1);
+			exit(0);
+		}
 #endif
+
+	} else {	/* See if it's a .cal */
+		fp->del(fp);
+		fp = NULL;
+
+		if ((cal = new_xcal()) == NULL)
+			error("new_xcal failed");
+
+		if ((cal->read(cal, prof_name)) != 0) {
+			error ("File '%s' is not an ICC or .cal file",prof_name);
+		}
+
+		/* Get details of conversion (Arguments may be NULL if info not needed) */
+		outs = ins = cal->colspace;
+		outn = inn = cal->devchan;
+	}
 
 	if (doplot) {
 		int i, j;
@@ -872,43 +960,64 @@ main(int argc, char *argv[]) {
 		double yy[6][XRES];
 		double start[3], end[3];
 
-		/* Plot from white to black by default */
-		luo->efv_wh_bk_points(luo, start, end, NULL);
+		if (cal != NULL) {
+			for (i = 0; i < XRES; i++) {
+				double ival = (double)i/(XRES-1.0);
 
-		if (pstart[0] == -1000.0)
-			icmCpy3(pstart, start);
+				for (j = 0; j < inn; j++)
+					in[j] = ival;
 
-		if (pend[0] == -1000.0)
-			icmCpy3(pend, end);
+				/* Do the conversion */
+				if (func == icmBwd || invert) {
+					if ((rv = cal->inv_interp(cal, out, in)) != 0)
+						error ("%d, %s",cal->errc,cal->err);
+				} else {
+					cal->interp(cal, out, in);
+				}
 
-		if (verb) {
-			printf("Plotting from white %f %f %f to black %f %f %f\n",
-			        pstart[0], pstart[1], pstart[2], pend[0], pend[1], pend[2]);
-		}
-		for (i = 0; i < XRES; i++) {
-			double ival = (double)i/(XRES-1.0);
+				xx[i] = 100.0 * ival; 
+				for (j = 0; j < outn; j++)
+					yy[j][i] = 100.0 * out[j];
+			}
+		} else {
+			/* Plot from white to black by default */
+			luo->efv_wh_bk_points(luo, start, end, NULL);
 
-			/* Input is always Jab or Lab */
-			in[0] = ival * pend[0] + (1.0 - ival) * pstart[0];
-			in[1] = ival * pend[1] + (1.0 - ival) * pstart[1];
-			in[2] = ival * pend[2] + (1.0 - ival) * pstart[2];
+			if (pstart[0] == -1000.0)
+				icmCpy3(pstart, start);
+
+			if (pend[0] == -1000.0)
+				icmCpy3(pend, end);
+
+			if (verb) {
+				printf("Plotting from white %f %f %f to black %f %f %f\n",
+				        pstart[0], pstart[1], pstart[2], pend[0], pend[1], pend[2]);
+			}
+			for (i = 0; i < XRES; i++) {
+				double ival = (double)i/(XRES-1.0);
+
+				/* Input is always Jab or Lab */
+				in[0] = ival * pend[0] + (1.0 - ival) * pstart[0];
+				in[1] = ival * pend[1] + (1.0 - ival) * pstart[1];
+				in[2] = ival * pend[2] + (1.0 - ival) * pstart[2];
 //in[1] = in[2] = 0.0;
 
-			/* Do the conversion */
-			if (invert) {
-				if ((rv = luo->inv_lookup(luo, out, in)) > 1)
-					error ("%d, %s",xicco->errc,xicco->err);
+				/* Do the conversion */
+				if (invert) {
+					if ((rv = luo->inv_lookup(luo, out, in)) > 1)
+						error ("%d, %s",xicco->errc,xicco->err);
 //printf("~1 %f: %f %f %f -> %f %f %f %f\n", ival, in[0], in[1], in[2], out[0], out[1], out[2], out[3]);
-			} else {
-				if ((rv = luo->lookup(luo, out, in)) > 1)
-					error ("%d, %s",xicco->errc,xicco->err);
-			}
+				} else {
+					if ((rv = luo->lookup(luo, out, in)) > 1)
+						error ("%d, %s",xicco->errc,xicco->err);
+				}
 
-			xx[i] = 100.0 * ival; 
-			for (j = 0; j < outn; j++)
-				yy[j][i] = 100.0 * out[j];
-		}
+				xx[i] = 100.0 * ival; 
+				for (j = 0; j < outn; j++)
+					yy[j][i] = 100.0 * out[j];
+			}
 //fflush(stdout);
+		}
 
 		/* plot order: Black Red Green Blue Yellow Purple */
 		if (outs == icSigRgbData) {
@@ -940,7 +1049,6 @@ main(int argc, char *argv[]) {
 					break;
 			}
 		}
-
 
 	} else {
 
@@ -976,8 +1084,7 @@ main(int argc, char *argv[]) {
 				break;
 
 			/* If device data and scale */
-			if(scale > 0.0
-			 && ins != icxSigJabData
+			if( ins != icxSigJabData
 			 && ins != icxSigJChData
 			 && ins != icSigXYZData
 			 && ins != icSigLabData
@@ -987,8 +1094,29 @@ main(int argc, char *argv[]) {
 			 && ins != icSigYxyData
 			 && ins != icSigHsvData
 			 && ins != icSigHlsData) {
-				for (i = 0; i < MAX_CHAN; i++) {
-					in[i] /= scale;
+				if (scale > 0.0) {
+					for (i = 0; i < MAX_CHAN; i++)
+						in[i] /= scale;
+				}
+				if (inn == 3 && in_tvenc != 0) {
+					if (in_tvenc == 1) {			/* Video 16-235 range */
+						icmRGB_2_VidRGB(in, in);
+					} else if (in_tvenc == 2) {		/* Rec601 YCbCr */
+						icmRec601_RGBd_2_YPbPr(in, in);
+						icmRecXXX_YPbPr_2_YCbCr(in, in);
+					} else if (in_tvenc == 3) {		/* Rec709 YCbCr */
+						icmRec709_RGBd_2_YPbPr(in, in);
+						icmRecXXX_YPbPr_2_YCbCr(in, in);
+					} else if (out_tvenc == 4) {		/* Rec709 1250/50/2:1 YCbCr */
+						icmRec709_50_RGBd_2_YPbPr(in, in);
+						icmRecXXX_YPbPr_2_YCbCr(in, in);
+					} else if (out_tvenc == 5) {		/* Rec2020 Non-constant Luminance YCbCr */
+						icmRec2020_NCL_RGBd_2_YPbPr(in, in);
+						icmRecXXX_YPbPr_2_YCbCr(in, in);
+					} else if (out_tvenc == 6) {		/* Rec2020 Non-constant Luminance YCbCr */
+						icmRec2020_CL_RGBd_2_YPbPr(in, in);
+						icmRecXXX_YPbPr_2_YCbCr(in, in);
+					}
 				}
 			}
 
@@ -999,7 +1127,7 @@ main(int argc, char *argv[]) {
 			}
 
 			if (repYxy && ins == icSigYxyData) {
-				icmXYZ2Yxy(in, in);
+				icmYxy2XYZ(in, in);
 			}
 
 			/* JCh -> Jab & LCh -> Lab */
@@ -1012,14 +1140,25 @@ main(int argc, char *argv[]) {
 			}
 
 			/* Do conversion */
-			if (invert) {
-				for (j = 0; j < MAX_CHAN; j++)
-					out[j] = in[j];		/* Carry any auxiliary value to out for lookup */
-				if ((rv = luo->inv_lookup(luo, out, in)) > 1)
-					error ("%d, %s",xicco->errc,xicco->err);
-			} else {
-				if ((rv = luo->lookup(luo, out, in)) > 1)
-					error ("%d, %s",xicco->errc,xicco->err);
+			if (cal != NULL) {	/* .cal */
+				if (func == icmBwd || invert) {
+					if ((rv = cal->inv_interp(cal, out, in)) != 0)
+						error ("%d, %s",cal->errc,cal->err);
+				} else {
+					cal->interp(cal, out, in);
+					rv = 0;
+				}
+
+			} else {	/* ICC */
+				if (invert) {
+					for (j = 0; j < MAX_CHAN; j++)
+						out[j] = in[j];		/* Carry any auxiliary value to out for lookup */
+					if ((rv = luo->inv_lookup(luo, out, in)) > 1)
+						error ("%d, %s",xicco->errc,xicco->err);
+				} else {
+					if ((rv = luo->lookup(luo, out, in)) > 1)
+						error ("%d, %s",xicco->errc,xicco->err);
+				}
 			}
 
 			if (slocwarn) {
@@ -1030,7 +1169,7 @@ main(int argc, char *argv[]) {
 				else
 					icmCpy3(xyz, out);
 
-				outsloc = icx_outside_spec_locus(xyz, icxOT_CIE_1931_2);
+				outsloc = icx_outside_spec_locus(chlp, xyz);
 			}
 
 			/* Copy conversion out value so that we can create user values */
@@ -1058,8 +1197,7 @@ main(int argc, char *argv[]) {
 			}
 
 			/* If device data and scale */
-			if(scale > 0.0
-			 && outs != icxSigJabData
+			if( outs != icxSigJabData
 			 && outs != icxSigJChData
 			 && outs != icSigXYZData
 			 && outs != icSigLabData
@@ -1069,8 +1207,29 @@ main(int argc, char *argv[]) {
 			 && outs != icSigYxyData
 			 && outs != icSigHsvData
 			 && outs != icSigHlsData) {
-				for (i = 0; i < MAX_CHAN; i++) {
-					uout[i] *= scale;
+				if (outn == 3 && out_tvenc != 0) {
+					if (out_tvenc == 1) {				/* Video 16-235 range */
+						icmVidRGB_2_RGB(uout, uout);
+					} else if (out_tvenc == 2) {		/* Rec601 YCbCr */
+						icmRecXXX_YCbCr_2_YPbPr(uout, uout);
+						icmRec601_YPbPr_2_RGBd(uout, uout);
+					} else if (out_tvenc == 3) {		/* Rec709 1150/60/2:1 YCbCr */
+						icmRecXXX_YCbCr_2_YPbPr(uout, uout);
+						icmRec709_YPbPr_2_RGBd(uout, uout);
+					} else if (out_tvenc == 4) {		/* Rec709 1250/50/2:1 YCbCr */
+						icmRecXXX_YCbCr_2_YPbPr(uout, uout);
+						icmRec709_50_YPbPr_2_RGBd(uout, uout);
+					} else if (out_tvenc == 5) {		/* Rec2020 Non-constant Luminance YCbCr */
+						icmRecXXX_YCbCr_2_YPbPr(uout, uout);
+						icmRec2020_NCL_YPbPr_2_RGBd(uout, uout);
+					} else if (out_tvenc == 6) {		/* Rec2020 Non-constant Luminance YCbCr */
+						icmRecXXX_YCbCr_2_YPbPr(uout, uout);
+						icmRec2020_CL_YPbPr_2_RGBd(uout, uout);
+					}
+				}
+				if (scale > 0.0) {
+					for (i = 0; i < MAX_CHAN; i++)
+						uout[i] *= scale;
 				}
 			}
 
@@ -1082,8 +1241,11 @@ main(int argc, char *argv[]) {
 					else
 						fprintf(stdout,"%f",uin[j]);
 				}
-				printf(" [%s] -> %s -> ", icx2str(icmColorSpaceSignature, ins),
-				                          icm2str(icmLuAlg, alg));
+				if (cal != NULL)
+					printf(" [%s] -> ", icx2str(icmColorSpaceSignature, ins));
+				else
+					printf(" [%s] -> %s -> ", icx2str(icmColorSpaceSignature, ins),
+					                          icm2str(icmLuAlg, alg));
 			}
 
 			for (j = 0; j < outn; j++) {
@@ -1138,11 +1300,16 @@ main(int argc, char *argv[]) {
 	/* Done with lookup object */
 	if (aluo != NULL && aluo != luo)
 		luo->del(aluo);
-	luo->del(luo);
-
-	xicco->del(xicco);		/* Expansion wrapper */
-	icco->del(icco);		/* Icc */
-	fp->del(fp);
+	if (luo != NULL)
+		luo->del(luo);
+	if (cal != NULL)
+		cal->del(cal);
+	if (xicco != NULL)
+		xicco->del(xicco);		/* Expansion wrapper */
+	if (icco != NULL)
+		icco->del(icco);		/* Icc */
+	if (fp != NULL)
+		fp->del(fp);
 
 	return 0;
 }

@@ -97,6 +97,8 @@ SPECTRO_FILES="
 	spyd2.h
 	spyd2setup.h
 	spyd2PLD.h
+	specbos.h
+	specbos.c
 	oemarch.c
 	oemarch.h
 	oeminst.c
@@ -111,10 +113,10 @@ SPECTRO_FILES="
 	iusb.h
 	usbio.h
 	usbio.c
-	usbio_lusb.c
 	usbio_nt.c
 	usbio_ox.c
 	usbio_lx.c
+	usbio_bsd.c
 	xdg_bds.c
 	xdg_bds.h
 	spotread.c

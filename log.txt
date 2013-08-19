@@ -2,6 +2,180 @@
 Argyll CMS change log
 =====================
 
+Version 1.6.0 (beta)
+-------------
+
+*	Fixed crash in ucmm/ucmm.c when loading certain profiles
+	using dispwin (thanks to Torok Edwin).
+
+*	Fixed JETI specbos 1201 handling so that all refresh mode
+	support is disabled, since it is not supported by this instrument.
+
+*	Changed collink video level extended range handling to do a simple
+	extrapolation rather than linearly interpolated to the sync. values.
+
+*	Added extra options to fakeread & verify to support Video verification.
+
+*	Changed spotread -ew mode to be Bradford chromatic transform
+	rather than XYZ scaling, to better match Argyll ICC abs. vs. rel.
+ 
+*	Added support to xicclu to lookup colors though CAL files, both
+	forward and backwards. Will also plot CAL file contents using -g.
+
+*	Changed frequency calibration test pattern to be 80% white, to
+	avoid some situations where 100% does not exhibit refresh flicker.
+	Added warning for spotread when refresh calibration is expected.
+
+*	Added -Y R:rate option to spotread, dispcal, dispread & ccxxmake
+	to allow setting a chosen display refresh rate. This can be used
+	with the Colormunki display, as well as situations in which refresh rate
+	measurement is not reliable.
+
+*	Added 't' interactive command to specbos to toggle laser target
+	for JETI specbos.
+
+*	Turned off B2A table clip map smoothing, as it seems to introduce
+	reversals for some data sets, and provides little benefit.
+
+*	Changed dispwin & other display test patch programs on Linux/X11
+	to use XRandR V1.3 XRRGetScreenResourcesCurrent() if available,
+	to avoid flickering and blackouts on some displays.
+
+*	Linux profile installation will use colord if libcolordcompat.so
+	is present on system.
+
+*	Changed dispwin to use XRandR V1.3 XRRGetScreenResourcesCurrent()
+	rather than XRRGetScreenResources() if available.
+
+*	Added MadVR test patch support to dispwin, dispcal, dispread
+	and ccxxmake.
+
+*	For those instruments that support it, made ambient readings
+	honour refresh mode measurements, to improve repeatability
+	when measuring regularly flickering light sources.
+	(specbos, i1d3, i1disp).
+
+*	Made allowance for non standard ICC cLUT resolution of 256
+	for special case of MadVR device links.
+
+*	Tweaked colprof display profile creation to give more weight
+	to samples near the black point, in an attempt to improve
+	the black point accuracy.
+
+*	Added default 4 black patches in targen for Grey & RGB spaces, -B option
+	to specify the number of black patches.
+
+*	Fixed gamut mapping intent "rl" to really use relative L*a*b*
+
+*	Add Rec2020 YCbCr encoding support (both types) to collink and xicclu.
+	Added experimental xvYCC encoding support to collink.
+
+*	Add Rec2020 profile.
+
+*	By default printtarg will create PS and EPS files with a CUPS
+	job ticket to disable color management. Use the -U flag to disable this.
+
+*	!!! Changed instlib API ambient XYZ and spectral units to Lux. In prevous versions
+	of instlib they were Lux/pi. !!!
+
+*	Changed spotread so that it won't fall back to emissive spot mode if
+	an ambient reading is requested.
+
+*	Fixed bug in xicclu for Yxy input.
+
+*	Added display update delay calibration support to i1pro and munki (just like
+	i1disp3), to improve measurement times.
+
+*	Changed dispcal & dispread so that they wait up to 0.5 seconds when reading dark
+	patches after light ones to allow for display fall time. Added a patch order
+	optimisation for display patch sets in targen to minimze the extra time.
+
+*	Added MadVR Video calibration support.
+
+*	Added eeColor Video calibration support.
+
+*	Changed dispwin daemon loader mode from -E to -X.
+	Added -E option to encode test patch colors in Video 16-235 range.
+
+*	Changed dispcal verify option from -E to -z.
+	Added -E option to encode test patch colors in Video 16-235 range.
+
+*	Added -E option to to dispread to encode test patch colors in Video 16-235 range.
+
+*	Changed enumerated viewing conditions for new Flare/Glare settings,
+	changed all to Flareless to improve dark image behaviour, while
+	retaining Glare modelling. Tweaked brightness and ambient values.
+
+*	Changed CIECAM02 Flare model to distinguish between Flare from
+	the image itself, and Glare from ambient light. This allows
+	scaling Glare with ambient automatically.
+
+*	Fix bug in cicam02 in V1.5.0 that causes some mapping
+	problems in the red for collink -ir or -ila.
+
+*	Changed cctiff so that it does lossless JPEG copy
+	when there is no color transformation. This makes it
+	more useful for embedding a profile.
+
+*	Fix xicclu so that it works with device links.
+
+*	Add -Et and -E7 option to xicclu to help with testing
+	Video calibration device links.
+
+*	Made sure that MSWin test colors are not color managed.
+	This may affect Vista, Win7 and Win8.
+
+*	Changed spectro/dispwin.c so that null transform
+	color matching is used for displaying test patches
+	on OS X >= 10.6. This should fix calibrating/profiling
+	secondary displays on > OS X 10.6. Note that the 32 bit 10.4
+	binary will still have problems on > OS X 10.6.
+
+*	Improved i1pro hi-res mode to improve accuracy.
+
+*	Added JETI specbos 1211/1201 instrument support.
+
+*	Fix some corner case bugs in imdi/cctiff when handling
+	a calibration file colorspace mismatch, and the zero
+	color transformation case.	
+
+*	Tweak B2A cLUT clipping behaviour slighly, to reduce L* delta E.
+
+*	Added Body Centered Cubic grid option to targen.
+
+*	Added -Yn flag to dispcal and dispread, which skips asking
+	the user to place the instrument on the measuring spot.
+
+*	Fixed bug in shaper/matrix profile curves that caused
+	random bumpy black behaviour (shaper curve optimization local minumum problem).
+
+*	Increased default smoothing for XYZ cLUT profiles, to make
+	their smoothness comparable to L*a*b* cLUT profiles.
+
+*	Improve robustness of i1d3 display update measurement code.
+
+*	Don't add colorant tag to .tiff files in cctiff unless
+	it is a non-standard space, as Photoshop will barf
+	on such files.
+
+*	Added support for applying calibration curves in collink.
+
+*	Added a Rec709.icm HDTV, EBU3213_PAL and SMPTE_RP145_NTSC profiles to samples.
+
+*	Fix ColorHug driver so that it is backwards compatible with FW 1.1.8
+
+*	Fix bug with Spyder not being able to break out of
+	dispcal adjustment loop.
+
+*	Fix bug in xicc/xicclu, -K flag not being recognised.
+
+*	Fix bug in xicc/xmatrix.c introduced in V1.5 that prevents
+	matrix only profiles from being created. 
+
+*	Using libusb is now deprecated in favour of native USB.
+
+*	Added some prelinary BSD USB driver support. [incomplete]
+
 Version 1.5.1 (8th March 2013)
 -------------
 
@@ -1001,7 +1175,7 @@ Version 1.1.1 (21 February 2010)
 	in the input .tif file.
 
 *	Change spotread so that it takes spectral readings by
-	default so that FWA comensation readings can be used.
+	default so that FWA compensation readings can be used.
 
 *	Changed link/collink to apply Y to L* curve if the input or output
 	space is XYZ. Fixed the Y to L* scaling to make sure it only

@@ -39,7 +39,7 @@ if ! $(HAVE_JPEG) {
 	SubInclude jpg ;
 }
 
-if ! $(USE_NATIVE_USB) {
+if $(USE_NATIVE_USB) != true {
 
 	if $(USE_LIBUSB1) = true {
 		SubInclude libusb1 ;
@@ -62,6 +62,3 @@ if $(UNIX) && $(OS) != MACOSX {
 	SubInclude ucmm ;
 }
 
-if $(OS) = FREEBSD || $(OS) = OPENBSD {
-	SubInclude libusb ;
-}

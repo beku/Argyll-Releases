@@ -39,6 +39,7 @@ struct _gammap {
 
 }; typedef struct _gammap gammap;
 
+#ifdef NEVER
 /* Method of black point adaptation */
 typedef enum {
 	gmm_BPadpt    = 0,		/* Adapt source black point to destination */
@@ -46,6 +47,7 @@ typedef enum {
 	gmm_bendBP    = 2,		/* Don't adapt black point, bend it to dest. at end */  
 	gmm_clipBP    = 3		/* Don't adapt black point, clip it to dest. at end */  
 } gmm_BPmap;
+#endif
 
 /* Creator */
 gammap *new_gammap(

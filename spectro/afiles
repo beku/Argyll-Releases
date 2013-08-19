@@ -17,6 +17,8 @@ dispsup.h
 dispsup.c
 webwin.h
 webwin.c
+madvrwin.h
+madvrwin.c
 mongoose.h
 mongoose.c
 insttypes.h
@@ -58,6 +60,8 @@ spyd2.c
 spyd2.h
 spyd2setup.h
 spyd2PLD.h
+specbos.c
+specbos.h
 oemarch.h
 oemarch.c
 oeminst.c
@@ -85,10 +89,10 @@ icoms_ux.c
 iusb.h
 usbio.h
 usbio.c
-usbio_lusb.c
 usbio_nt.c
 usbio_ox.c
 usbio_lx.c
+usbio_bsd.c
 hidio.h
 hidio.c
 pollem.h

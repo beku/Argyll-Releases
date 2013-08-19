@@ -31,6 +31,8 @@
 	rather than at the trailing edges.
 
 	Add direct PDF support, including NChannel output.
+
+	Add option to apply a scale to counteract the Adobe utility problem.
 */
 
 /* This program generates a PostScript or TIFF print target file, */
@@ -526,6 +528,7 @@ trend *new_ps_trend(
 	int nmask,				/* Non zero if we are doing a DeviceN chart */
 	double pw, double ph,	/* Page width and height in mm */
 	int eps,				/* EPS flag */
+	int nocups,				/* NZ to supress cups job ticket */
 	int rand,				/* randomize */
 	int rstart				/* Random start number/chart ID */
 ) {
@@ -595,6 +598,8 @@ trend *new_ps_trend(
 		fprintf(s->of,"%%%%PageOrder: Ascend\n");
 		fprintf(s->of,"%%%%BoundingBox: %d %d %d %d\n",0,0,ipw-1,iph-1);
 		fprintf(s->of,"%%%%Orientation: Portrait\n");		/* Rows are always virtical */
+		if (!nocups)
+			fprintf(s->of,"%%cupsJobTicket: cups-disable-cmm\n");
 		fprintf(s->of,"%%%%EndComments\n");
 		fprintf(s->of,"\n");
 		if (!eps) {
@@ -1733,6 +1738,7 @@ int hflag,			/* Spectroscan/Munki high density modified */
 int verb,			/* Verbose flag */
 int scanc,			/* Scan compatible bits, 1 = .cht gen, 2 = wide first row */
 int oft,			/* PS/EPS/TIFF select (0,1,2) */
+int nocups,			/* NZ to supress cups job ticket in PS/EPS */
 depth2d tiffdpth,	/* TIFF pixel depth */
 double tiffres,		/* TIFF resolution in DPI */
 int ncha,			/* flag, use nchannel alpha */
@@ -2438,7 +2444,7 @@ int *p_npat			/* Return number of patches including padding */
 					if (oft == 0) {	/* PS */
 						if (flags & IS_FPIF) {					/* First page */
 							sprintf(psname,"%s.ps",bname);
-							if ((tro = new_ps_trend(psname,npages,nmask,pw,ph,oft,rand,rstart)) == NULL)
+							if ((tro = new_ps_trend(psname,npages,nmask,pw,ph,oft,nocups,rand,rstart)) == NULL)
 								error ("Unable to create output rendering object file '%s'",psname);
 							if (verb)
 								printf("Creating file '%s'\n",psname);
@@ -2448,7 +2454,7 @@ int *p_npat			/* Return number of patches including padding */
 							sprintf(psname,"%s_%02d.eps",bname,pif);
 						else
 							sprintf(psname,"%s.eps",bname);
-						if ((tro = new_ps_trend(psname,npages,nmask,pw,ph,oft,rand,rstart)) == NULL)
+						if ((tro = new_ps_trend(psname,npages,nmask,pw,ph,oft,rand,rstart,nocups)) == NULL)
 							error ("Unable to create output rendering object file '%s'",psname);
 						if (verb)
 							printf("Creating file '%s'\n",psname);
@@ -2910,6 +2916,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -M margin       Set a page margin in mm and include it in TIFF\n");       
 	fprintf(stderr," -P              Don't limit strip length\n");       
 	fprintf(stderr," -L              Suppress any left paper clip border\n");       
+	fprintf(stderr," -U              Suppress CUPS cupsJobTicket: cups-disable-cmm in PS & EPS files\n");
 	fprintf(stderr," -p size         Select page size from:\n");
 	for (pp = psizes; pp->name != NULL; pp++)
 		fprintf(stderr,"                 %-8s [%.1f x %.1f mm]%s\n", pp->name, pp->w, pp->h,
@@ -2932,6 +2939,7 @@ char *argv[];
 	int rand = 1;
 	int qbits = 0;			/* Quantization bits */
 	int oft = 0;			/* Ouput File type, 0 = PS, 1 = EPS , 2 = TIFF */
+	int nocups = 0;			/* Supress CUPS PS/EPS job ticket */
 	depth2d tiffdpth = bpc8_2d;	/* TIFF pixel depth */
 	double tiffres = 100.0;	/* TIFF resolution in DPI */
 	int ncha = 0;			/* flag, use nchannel alpha */
@@ -3238,6 +3246,11 @@ char *argv[];
 			/* Suppress left paper clip border */
 			else if (argv[fa][1] == 'L') {
 				nolpcbord = 1;
+			}
+
+			/* Suppress CUPS job ticket */
+			else if (argv[fa][1] == 'U') {
+				nocups = 1;
 			}
 
 			/* Page size */
@@ -3651,7 +3664,7 @@ char *argv[];
 	generate_file(itype, psname, cols, npat, applycal ? cal : NULL, label,
 	            pap != NULL ? pap->w : cwidth, pap != NULL ? pap->h : cheight,
 	            marg, nosubmarg, nollimit, nolpcbord, rand, rstart, saix, paix,	ixord,
-	            pscale, sscale, hflag, verb, scanc, oft, tiffdpth, tiffres, ncha, tiffdith,
+	            pscale, sscale, hflag, verb, scanc, oft, nocups, tiffdpth, tiffres, ncha, tiffdith,
 	            tiffcomp, spacer, nmask, altrep, pcol, wp,
 	            &sip, &pis, &plen, &glen, &tlen, &nppat);
 

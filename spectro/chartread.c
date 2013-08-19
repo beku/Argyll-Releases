@@ -2333,6 +2333,7 @@ int main(int argc, char *argv[]) {
 				} else {
 					usage();
 				}
+				fa = nfa;
 
 			} else 
 				usage();

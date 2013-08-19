@@ -15,8 +15,9 @@
     format, but only XYZ, Lab or spectral values will be used (ie. all
     device space values are ignored). Typically the charts would be
     printed on a target system (the one being emulated, say a printing
-    press), and the proofing system (the one that is being profiled).
-    The abstract profile that <span style="font-weight: bold;">refine</span>
+    press, or created using an ideal target profile such as Rec709), and
+    the proofing system (the device that is being profiled). The
+    abstract profile that <span style="font-weight: bold;">refine</span>
     produces will be a correction that makes the proofing system behave
     more like the target. This can then be used to recreate the proofing
     systems ICC profile, or device link. By feeding a previous abstract
@@ -32,13 +33,16 @@
         [inabs] outabs<br>
         &nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
         Verbose<br>
         &nbsp;-c&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Create
 
+
         initial abstract correction profile<br>
         &nbsp;-g&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Don't
+
 
         impose output device gamut limit<br>
         &nbsp;-r res&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Set
@@ -48,11 +52,13 @@ Don't
         &nbsp;-R&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Aim
 
+
         for white point relative match rather than absolute<br>
         &nbsp;</small></tt><tt><small><small></small><small><small>-f
             [illum]&nbsp;&nbsp;&nbsp; Use Fluorescent Whitening Agent
             compensation [opt. simulated inst. illum.:<br>
             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
             M0, M1, M2, A, C, D50 (def.), D50M2, D65, F5, F8, F10 or
@@ -63,25 +69,32 @@ Aim
             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
             A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp</small></small><br>
         &nbsp;-o observ&nbsp;&nbsp;&nbsp;&nbsp; Choose CIE Observer for
         spectral data:<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 1931_2,
 
+
         1964_10, S&amp;B 1955_2, J&amp;V 1978_2 (def.)<br>
         &nbsp;<span style="font-style: italic;">cietarget&nbsp;</span>&nbsp;&nbsp;&nbsp;
+
         Target CIE or spectral values, CGATS file (e.g. .ti3)<br>
         &nbsp;<span style="font-style: italic;">ciecurrent</span>&nbsp;&nbsp;&nbsp;
+
         Actual CIE or spectral values, CGATS file (e.g. .ti3)<br>
         &nbsp;[<span style="font-style: italic;">outdevicc</span>]&nbsp;&nbsp;
+
         Output device ICC profile to set gamut limit (not used if -g)<br>
         &nbsp;[<span style="font-style: italic;">inabs</span>]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Previous
 
+
         abstract correction ICC profile (not used if -c)<br>
         &nbsp;<span style="font-style: italic;">outabs</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Created/refined
+
 
         abstract correction ICC profile</small></tt><br>
     <h3>Usage Details</h3>
@@ -178,6 +191,7 @@ Created/refined
     <span style="font-style: italic; font-weight: bold;">cietarget</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Is
 
+
     the filename of the target CIE or spectral values. This is a <a
       href="File_Formats.html#CGATS">CGATS</a> file (e.g. a <a
       href="File_Formats.html#.ti3">.ti3</a> made using <a
@@ -198,6 +212,7 @@ Is
     &nbsp;[<span style="font-style: italic; font-weight: bold;">outdevicc</span>]&nbsp;&nbsp;&nbsp;&nbsp;
 If
 
+
     the <span style="font-weight: bold;">-g</span> flag is not used,
     then the output device ICC profile should be supplied here, to allow
     <span style="font-weight: bold;">refine</span> to limit its
@@ -205,6 +220,7 @@ If
     <br>
     &nbsp;[<span style="font-weight: bold; font-style: italic;">inabs</span>]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 After
+
 
     the first correction has been created, subsequent corrections need
     to improve upon previous ones, so the previous correction profile
@@ -214,6 +230,7 @@ After
     <br>
     &nbsp;<span style="font-weight: bold; font-style: italic;">outabs</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 The
+
 
     name of the created or refined abstract correction ICC profile<br>
     <br>
@@ -282,6 +299,7 @@ The
       the same options as you used to create your initial <span
         style="font-weight: bold;"><span style="font-weight: bold;"></span>proofer.icm&nbsp;
 
+
       </span>or <span style="font-weight: bold;">target_proofer.icm</span>,
       with the addition of the "-p fix1.icm" option to specify the
       abstract correction profile be applied.<br>
@@ -301,6 +319,7 @@ The
       <span style="font-weight: bold;"><span style="font-weight: bold;"></span></span><br>
       <span style="font-weight: bold;"><span style="font-weight: bold;">&nbsp;</span></span>We
 can
+
 
       then start another round of improvement:<br>
       <br>
@@ -335,6 +354,7 @@ can
       Rounds of improvements can be continues by looping back to <span
         style="font-weight: bold;">&gt;&gt;&gt;</span>, being careful to
       increment the names of the <span style="font-weight: bold;">fixN.icm</span>,&nbsp;
+
 
       <span style="font-weight: bold;">proofer_fixN.icm</span> or <span
         style="font-weight: bold;">target_proofer_fixN.icm</span> and <span

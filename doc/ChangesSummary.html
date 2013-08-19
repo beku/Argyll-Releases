@@ -16,6 +16,96 @@
     <h1> Summary of Argyll CMS Changes since last release</h1>
     <h3>For a <span style="text-decoration: underline;">complete</span>
       and more detailed list of changes, please see the log.txt file.</h3>
+    <h1>[V1.5.1 -&gt; V1.6.0] 16th August 2013</h1>
+    <ul>
+      <li>Added support for <b>JETI</b> specbos 1211 and 1201 (Thanks
+        to JETI for their support!)</li>
+      <li>Added Video profiling &amp; 3dLut creation support for eeColor
+        and MadVR. See video section in tutorial for pointers to
+        relevant changes to tools. This includes support for MadTPG +
+        various Video standard ICC profiles + verification workflow.<br>
+      </li>
+      <li>Linux profile installation will use <b>colord</b> if
+        libcolordcompat.so is present on system.</li>
+      <li>Fix <b>ColorHug</b> driver so that it is backwards compatible
+        with FW 1.1.8</li>
+      <li>Made sure that MSWin test colors are not color managed. This
+        may affect Vista, Win7 and Win8.</li>
+      <li>Changed spectro/dispwin.c so that null transform color
+        matching is used for displaying test patches on OS X &gt;= 10.6.
+        This should fix calibrating/profiling secondary displays on &gt;
+        OS X 10.6. Note that the 32 bit 10.4 binary will still have
+        problems on &gt; OS X 10.6.</li>
+      <li>Changed <b>instlib API</b> ambient XYZ and spectral units to
+        Lux. In previous versions of instlib they were Lux/pi.</li>
+      <li>For those instruments that support it, made ambient readings
+        honor refresh mode measurements, to improve repeatability when
+        measuring regularly flickering light sources. (specbos, i1d3,
+        i1disp).</li>
+      <li>Changed spotread -ew mode to be Bradford chromatic transform
+        rather than XYZ scaling, to better match Argyll ICC abs. vs.
+        rel.</li>
+      <li>Added support to xicclu to lookup colors though CAL files,
+        both forward and backwards. Will also plot CAL file contents
+        using -g.</li>
+      <li>Added -Y R:rate option to spotread, dispcal, dispread &amp;
+        ccxxmake to allow setting a chosen display refresh rate. This
+        can be used with the Colormunki display, as well as situations
+        in which refresh rate measurement is not reliable.</li>
+      <li>By default printtarg will create PS and EPS files with a CUPS
+        job ticket to disable color management. Use the -U flag to
+        disable this.</li>
+      <li>Added display update delay calibration support to i1pro and
+        ColorMunki (just like i1disp3), to improve measurement times.</li>
+      <li>Changed dispcal &amp; dispread so that they wait up to 0.5
+        seconds when reading dark patches after light ones to allow for
+        display fall time. Added&nbsp; patch order optimization for
+        display patch sets in targen to minimize the extra time.</li>
+      <li>Changed dispwin daemon loader mode option from -E to -X. Added
+        -E option to encode test patch colors in Video 16-235 range.</li>
+      <li>Changed dispcal verify option from -E to -z. Added -E option
+        to encode test patch colors in Video 16-235 range.</li>
+      <li>Added -E option to to dispread to encode test patch colors in
+        Video 16-235 range.</li>
+      <li>Changed CIECAM02 Flare model to distinguish between Flare from
+        the image itself, and Glare from ambient light. This allows
+        scaling Glare with ambient automatically. Changed enumerated
+        viewing conditions for new Flare/Glare settings, changed all to
+        Flareless to improve dark image behavior, while retaining Glare
+        modelling. Tweaked brightness and ambient values.</li>
+      <li>Improved i1pro hi-res mode to improve accuracy.</li>
+      <li>Added Body Centered Cubic grid option to targen.</li>
+      <li>Added -Yn flag to dispcal and dispread, which skips asking the
+        user to place the instrument on the measuring spot.</li>
+      <li>Improve robustness of i1d3 display update measurement code.</li>
+      <li>Added support for applying calibration curves in collink.</li>
+      <li>Changed spotread so that it won't fall back to emissive spot
+        mode if an ambient reading is requested.</li>
+      <li>Turned off B2A table clip map smoothing, as it seems to
+        introduce reversals for some data sets, and provides little
+        benefit.</li>
+      <li>Fixed crash in ucmm/ucmm.c when loading certain profiles using
+        dispwin (thanks to Torok Edwin).</li>
+      <li>Fixed gamut mapping intent "rl" to really use relative L*a*b*</li>
+      <li>Fix bug in cicam02 in V1.5.0 that causes some mapping problems
+        in the red for collink -ir or -ila.&nbsp;</li>
+      <li>Changed cctiff so that it does lossless JPEG copy when there
+        is no color transformation. This makes it more useful for
+        embedding a profile.</li>
+      <li>Fix xicclu so that it works with device links.</li>
+      <li>Fixed bug in shaper/matrix profile curves that caused random
+        bumpy black behaviour (shaper curve optimization local minimum
+        problem).</li>
+      <li>Don't add colorant tag to .tiff files in cctiff unless it is a
+        non-standard space, as Photoshop will barf on such files.</li>
+      <li>Fix bug with Spyder not being able to break out of dispcal
+        adjustment loop.</li>
+      <li>Fix bug in xicc/xicclu, -K flag not being recognised.</li>
+      <li>Fix bug in xicc/xmatrix.c introduced in V1.5 that prevents
+        matrix only profiles from being created.</li>
+      <li>libusb 1.0 is now deprecated in favor of native USB drivers.<br>
+      </li>
+    </ul>
     <h1>[V1.5.0 -&gt; V1.5.1] 8th March 2013</h1>
     <ul>
       <li>Fix spectro/instlib.ksh and standalone instlib build.</li>
@@ -689,6 +779,7 @@
 
 
 
+
         </span>for systems with &gt; 3Gig Ram.</li>
       <li>Add support for the Eye-One Monitor spectrometer.</li>
       <li>Added -L option to <span style="font-weight: bold;">printtarg</span>
@@ -703,6 +794,7 @@
     Various bug fixes, the main ones being:<br>
     <ul>
       <li>Fixed some <span style="font-weight: bold;">colprof </span>performance
+
 
 
 

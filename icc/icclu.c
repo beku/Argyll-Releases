@@ -245,6 +245,9 @@ main(int argc, char *argv[]) {
 	if ((rv = icco->read(icco,fp,0)) != 0)
 		error ("%d, %s",rv,icco->err);
 
+	if (icco->header->cmmId = str2tag("argl"))
+		icco->allowclutPoints256 = 1;
+
 	if (verb > 1) {
 		icmFile *op;
 		if ((op = new_icmFileStd_fp(stdout)) == NULL)
@@ -310,19 +313,7 @@ main(int argc, char *argv[]) {
 		}
 
 		if (repYxy && ins == icSigYxyData) {
-			double Y = in[0];
-			double x = in[1];
-			double y = in[2];
-			double z = 1.0 - x - y;
-			double sum;
-			if (y < 1e-6) {
-				in[0] = in[1] = in[2] = 0.0;
-			} else {
-				sum = Y/y;
-				in[0] = x * sum;
-				in[1] = Y;
-				in[2] = z * sum;
-			}
+			icmYxy2XYZ(in, in);
 		}
 
 		/* Do conversion */
@@ -342,17 +333,7 @@ main(int argc, char *argv[]) {
 		}
 		
 		if (repYxy && outs == icSigYxyData) {
-			double X = out[0];
-			double Y = out[1];
-			double Z = out[2];
-			double sum = X + Y + Z;
-			if (sum < 1e-6) {
-				out[0] = out[1] = out[2] = 0.0;
-			} else {
-				out[0] = Y;
-				out[1] = X/sum;
-				out[2] = Y/sum;
-			}
+			icmXYZ2Yxy(out, out);
 		}
 
 		/* If device data and scale */

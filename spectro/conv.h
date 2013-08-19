@@ -151,6 +151,7 @@ int set_normal_priority();
 
 #ifdef NT
 # define amutex CRITICAL_SECTION 
+# define amutex_static(lock) CRITICAL_SECTION lock = { NULL, -1 } 
 # define amutex_init(lock) InitializeCriticalSection(&(lock))
 # define amutex_del(lock) DeleteCriticalSection(&(lock))
 # define amutex_lock(lock) EnterCriticalSection(&(lock))
@@ -160,6 +161,7 @@ int set_normal_priority();
 
 #ifdef UNIX
 # define amutex pthread_mutex_t
+# define amutex_static(lock) pthread_mutex_t (lock) = PTHREAD_MUTEX_INITIALIZER
 # define amutex_init(lock) pthread_mutex_init(&(lock), NULL)
 # define amutex_del(lock) pthread_mutex_destroy(&(lock))
 # define amutex_lock(lock) pthread_mutex_lock(&(lock))

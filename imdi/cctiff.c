@@ -17,6 +17,10 @@
 
 /* TTBD:
 
+	Should special case jpeg noop used to embed profile
+	in output, using jpeg_read_coefficients()/jpeg_write_coefficients()
+	rather than jpeg_start_decompress(), jpeg_read_scanlines() etc.
+
 	Should make -d option default to the last device
 	profile.
 
@@ -469,7 +473,7 @@ char **inknames					/* Return ASCII inknames if non NULL */
 			return 0;				/* Not CMYK */
 		case icSigCmykData:
 			if (inknames != NULL) {
-				*inknames = NULL;	/* No inknames */
+				*inknames = NULL;	/* No inknames - it's coded */
 				*len = 0;
 			}
 			return INKSET_CMYK;
@@ -629,7 +633,7 @@ static void l2y_curve(double *out, double *in, int isXYZ) {
 /* Callbacks used to initialise imdi */
 
 
-/* Information needed from a single profile */
+/* Information needed from a single profile or calibration */
 struct _profinfo {
 	char name[MAXNAMEL+1];
 	icc *c;								/* If non-NULL, ICC profile. */
@@ -984,6 +988,7 @@ main(int argc, char *argv[]) {
 	int alpha = 0;			/* Use alpha for extra planes */
 	int ignoremm = 0;		/* Ignore any colorspace mismatches */
 	int nodesc = 0;			/* Don't append or set the description */
+	int copydct = 0;		/* For jpeg->jpeg with no changes, copy DCT cooeficients */
 	int i, j, rv = 0;
 
 	/* TIFF file info */
@@ -1238,10 +1243,10 @@ main(int argc, char *argv[]) {
 		}
 	}
 
-	/* The last two "profiles" are actually the input and output TIFF filenames */
+	/* The last two "profiles" are actually the input and output TIFF/JPEG filenames */
 	/* Unwind them */
 	if (su.nprofs < 2)
-		usage("Not enough arguments to specify input and output TIFF files");
+		usage("Not enough arguments to specify input and output TIFF/JPEG files");
 
 	strncpy(out_name,su.profs[--su.nprofs].name, MAXNAMEL); out_name[MAXNAMEL] = '\000';
 	strncpy(in_name,su.profs[--su.nprofs].name, MAXNAMEL); in_name[MAXNAMEL] = '\000';
@@ -1250,13 +1255,13 @@ main(int argc, char *argv[]) {
 	su.lclut = su.last = su.nprofs-1;
 
 	if (check && (!doimdi || !dofloat))
-		error("Can't do check unless both integera and float processing are enabled");
+		error("Can't do check unless both integeral and float processing are enabled");
 
 /*
 
 	Logic required:
 
-	Discover input TIFF colorspace and set as (ICC) "next_space"
+	Discover input TIFF/JPEG colorspace and set as (ICC) "next_space"
 	Set any special input space encoding transform (ie. device, Lab flavour)
 
 	For each profile:
@@ -1396,6 +1401,8 @@ main(int argc, char *argv[]) {
 		
 		jpeg_stdio_src(&rj, rf);
 		jpeg_save_markers(&rj, JPEG_COM, 0xFFFF);
+		for (i = 0; i < 16; i++)
+			jpeg_save_markers(&rj, JPEG_APP0 + i, 0xFFFF);
 
 		/* we'll longjmp on error */
 		jpeg_read_header(&rj, TRUE);
@@ -1488,9 +1495,6 @@ main(int argc, char *argv[]) {
 		if (dojpg < 0)
 			dojpg = 1;
 
-		/* ~~ Should determine deafult jpgq from tables of this file */
-
-		jpeg_start_decompress(&rj);
 	}
 
 
@@ -1585,7 +1589,7 @@ main(int argc, char *argv[]) {
 			error("Last colorspace %s from file '%s' doesn't match input space %s of profile %s",
 		      icm2str(icmColorSpaceSignature,last_colorspace),
 			  last_cs_file,
-			  icm2str(icmColorSpaceSignature,su.profs[i].h->colorSpace),
+			  icm2str(icmColorSpaceSignature,su.profs[i].ins),
 			  su.profs[i].name);
 
 		last_dim = icmCSSig2nchan(su.profs[i].outs);
@@ -1680,10 +1684,13 @@ main(int argc, char *argv[]) {
 		
 			if (no_pmtc > 1) {		/* Need to choose a photometric */
 				if (ochoice < 1 || ochoice > no_pmtc ) {
-					printf("Possible Output Encodings for output colorspace %s are:\n",
-					        icm2str(icmColorSpaceSignature,last_colorspace));
-					for (i = 0; i < no_pmtc; i++)
-						printf("%d: %s%s\n",i+1, Photometric2str(pmtc[i]), i == 0 ? " (Default)" : "");
+					if (su.verb) {
+						printf("Possible Output Encodings for output colorspace %s are:\n",
+						        icm2str(icmColorSpaceSignature,last_colorspace));
+						for (i = 0; i < no_pmtc; i++)
+							printf("%d: %s%s\n",i+1, Photometric2str(pmtc[i]), i == 0 ? " (Default)" : "");
+						printf("Using default\n\n");
+					}
 					ochoice = 1;
 				}
 				wphotometric = pmtc[ochoice-1];
@@ -1710,13 +1717,14 @@ main(int argc, char *argv[]) {
 				int inlen;
 				char *inames = NULL;
 
-				if (c == NULL
-				 || ((ct = (icmColorantTable *)c->read_tag(c, icSigColorantTableOutTag)) == NULL
-				  && (ct = (icmColorantTable *)c->read_tag(c, icSigColorantTableTag)) == NULL)
-				 || ct->count != wsamplesperpixel
+				iset = ColorSpaceSignature2TiffInkset(su.outs, &inlen, &inames);
+
+				/* Use ICC profile ink names if they are available */
+				if (c != NULL
+				 && ((ct = (icmColorantTable *)c->read_tag(c, icSigColorantTableOutTag)) != NULL
+				  || (ct = (icmColorantTable *)c->read_tag(c, icSigColorantTableTag)) != NULL)
+				 && ct->count != wsamplesperpixel
 				) {
-					iset = ColorSpaceSignature2TiffInkset(su.outs, &inlen, &inames);
-				} else {
 					int i;
 					char *cp;
 					inlen = 0;
@@ -1732,11 +1740,12 @@ main(int argc, char *argv[]) {
 						cp += slen;
 					}
 					*cp = '\000';
-					iset = INKSET_MULTIINK;
 				}
-				if (iset != 0xffff && inlen > 0 && inames != NULL) {
+				if (iset != 0xffff) {
 					TIFFSetField(wh, TIFFTAG_INKSET, iset);
-					if (inames != NULL) {
+					/* An inknames tage confuses Photoshop with standard spaces */
+					if ((iset == INKSET_MULTIINK || iset == 0)		/* N color or CMY */
+					 && inlen > 0 && inames != NULL) {
 						TIFFSetField(wh, TIFFTAG_INKNAMES, inlen, inames);
 					}
 				}
@@ -1834,87 +1843,12 @@ main(int argc, char *argv[]) {
 
 		if (wj.write_Adobe_marker)
 			su.oinv = 1;
-
-		jpeg_start_compress(&wj, TRUE);
-
-		/* Perhaps the description could be more informative ? */
-		if (rdesc != NULL) {
-			if ((wdesc = malloc(sizeof(char) * (strlen(rdesc) + strlen(ddesc) + 2))) == NULL)
-				error("malloc failed on new desciption string");
-			
-			strcpy(wdesc, rdesc);
-			if (nodesc == 0 && su.nprofs > 0) {
-				strcat(wdesc, " ");
-				strcat(wdesc, ddesc);
-			}
-			jpeg_write_marker(&wj, JPEG_COM, (const JOCTET *)wdesc, strlen(wdesc)+1);
-		} else if (nodesc == 0 && su.nprofs > 0) {
-			if ((wdesc = strdup(ddesc)) == NULL)
-				error("malloc failed on new desciption string");
-			jpeg_write_marker(&wj, JPEG_COM, (const JOCTET *)wdesc, strlen(wdesc)+1);
-		}
 	}
 
 	/* - - - - - - - - - - - - - - - */
-	/* Setup any destination embedded profile */
-	if (dst_pname[0] != '\000') {
-		icmFile *fp;		/* Read fp for the profile */
-		unsigned char *buf;
-		int size;
-
-		if ((deicc = read_embedded_icc(dst_pname)) == NULL)
-			error("Unable to open profile for destination embedding '%s'",dst_pname);
-
-		/* Check that it is compatible with the destination raster file */
-		if (deicc->header->deviceClass != icSigColorSpaceClass
-		 && deicc->header->deviceClass != icSigInputClass
-		 && deicc->header->deviceClass != icSigDisplayClass
-		 && deicc->header->deviceClass != icSigOutputClass) {
-			error("Destination embedded profile is wrong device class for embedding");
-		}
-
-		if (deicc->header->colorSpace != su.outs
-		 || (deicc->header->pcs != icSigXYZData 
-		  && deicc->header->pcs != icSigLabData)) {
-			error("Destination embedded profile colorspaces don't match TIFF");
-		}
-
-		if ((fp = deicc->get_rfp(deicc)) == NULL)
-			error("Failed to be able to read destination embedded profile");
-
-		if ((size = fp->get_size(fp)) == 0)
-			error("Failed to be able to get size of destination embedded profile");
-
-		if ((buf = malloc(size)) == NULL)
-			error("malloc failed on destination embedded profile size %d",size);
-
-		if (fp->seek(fp,0))
-			error("rewind on destination embedded profile failed");
-
-		if (fp->read(fp, buf, 1, size) != size)
-			error("reading destination embedded profile failed");
-
-		/* (For iccv4 we would now fp->del(fp) because we got a reference) */
-
-		if (wh != NULL) {
-			if (TIFFSetField(wh, TIFFTAG_ICCPROFILE, size, buf) == 0)
-				error("setting TIFF embedded ICC profile field failed");
-		} else {
-			if (setjmp(jpeg_werr.env)) {
-				jpeg_destroy_compress(&wj);
-				error("setting JPEG embedded ICC profile marker failed");
-			}
-			write_icc_profile(&wj, buf, size);
-		}
-
-		free(buf);
-		deicc->del(deicc);
-	}
-
-	/* - - - - - - - - - - - - - - - */
-	if ((su.fclut <= su.lclut
-	 && (su.profs[su.fclut].natpcs == icSigXYZData) && (su.profs[su.fclut].alg == icmMatrixFwdType))
-	  || su.profs[su.fclut].ins == icSigXYZData) {
+	if (su.fclut <= su.lclut
+	 && ((su.profs[su.fclut].natpcs == icSigXYZData && su.profs[su.fclut].alg == icmMatrixFwdType)
+	  || su.profs[su.fclut].ins == icSigXYZData)) {
 		su.ilcurve = 1;			/* Index CLUT with L* curve rather than Y */
 	}
 
@@ -1923,14 +1857,19 @@ main(int argc, char *argv[]) {
 		su.icombine = 1;		/* CIE can't be conveyed through 0..1 domain lookup */
 	}
 
-	if ((su.fclut <= su.lclut
-	 && (su.profs[su.lclut].natpcs == icSigXYZData && su.profs[su.lclut].alg == icmMatrixBwdType))
-	  || (su.profs[su.lclut].outs == icSigXYZData)) {
+	if (su.fclut <= su.lclut
+	 && ((su.profs[su.lclut].natpcs == icSigXYZData && su.profs[su.lclut].alg == icmMatrixBwdType)
+	  || su.profs[su.lclut].outs == icSigXYZData)) {
 		su.olcurve = 1;			/* Interpolate in L* space rather than Y */
 	}
 
 	if (su.outs == icSigLabData || su.outs == icSigXYZData) {
 		su.ocombine = 1;		/* CIE can't be conveyed through 0..1 domain lookup */
+	}
+
+	/* Decide if jpeg should decompress & compress */
+	if (rf != NULL && wf != NULL && su.nprofs == 0) {
+		copydct = 1;
 	}
 
 	/* - - - - - - - - - - - - - - - */
@@ -1944,6 +1883,8 @@ main(int argc, char *argv[]) {
 		} else {
 			printf("Input raster file '%s' is JPEG\n",in_name);
 			printf("Input JPEG file original colorspace is %s\n",JPEG_cspace2str(rj.jpeg_color_space));
+			if (copydct)
+				printf("JPEG copy will be lossless\n");
 		}
 		printf("Input raster file ICC colorspace is %s\n",icm2str(icmColorSpaceSignature,su.ins));
 		printf("Input raster file is %d x %d pixels\n",su.width, su.height);
@@ -1952,6 +1893,7 @@ main(int argc, char *argv[]) {
 		printf("\n");
 
 		printf("There are %d profiles/calibrations in the sequence:\n\n",su.nprofs);
+
 
 		for (i = su.first; i <= su.last; i++) {
 			if (su.profs[i].c != NULL) {
@@ -2119,164 +2061,251 @@ main(int argc, char *argv[]) {
 		}
 	}
 
+	/* NOTE :- the legal of jpeg calls is rather tricky.... */
 
-	/* - - - - - - - - - - - - - - - */
-	/* Process colors to translate */
-	/* (Should fix this to process a group of lines at a time ?) */
+	if (!copydct) {		/* Do this before writing description */
+		if (rf)
+			jpeg_start_decompress(&rj);
+		if (wf)
+			jpeg_start_compress(&wj, TRUE);
+	}
 
-	for (y = 0; y < height; y++) {
-		tdata_t *obuf;
-
-		/* Read in the next line */
-		if (rh) {
-			if (TIFFReadScanline(rh, inbuf, y, 0) < 0)
-				error ("Failed to read TIFF line %d",y);
-		} else {
-			jpeg_read_scanlines(&rj, (JSAMPARRAY)&inbuf, 1);
-			if (su.iinv) {
-				unsigned char *cp, *ep = (unsigned char *)inbuf + inbpix;
-				for (cp = (unsigned char *)inbuf; cp < ep; cp++)
-					*cp = ~*cp;
-			}
-		}
-
-		if (doimdi && su.nprofs > 0) {
-			/* Do fast conversion */
-			s->interp(s, (void **)outp, 0, (void **)inp, su.id, width);
-		}
-		
-		if (dofloat || su.nprofs == 0) {
-			/* Do floating point conversion into the hprecbuf[] */
-			for (x = 0; x < width; x++) {
-				int i;
-				double in[MAX_CHAN], out[MAX_CHAN];
-				
-//printf("\n");
-				if (bitspersample == 8) {
-					for (i = 0; i < su.id; i++) {
-						int v = ((unsigned char *)inbuf)[x * su.id + i];
-//printf("~1 8 bit pixel value chan %d = %d\n",i,v);
-						if (su.isign_mask & (1 << i))		/* Treat input as signed */
-							v = (v & 0x80) ? v - 0x80 : v + 0x80;
-//printf("~1 8 bit after treat as signed chan %d = %d\n",i,v);
-						in[i] = v/255.0;
-//printf("~1 8 bit fp chan %d value = %f\n",i,in[i]);
-					}
-				} else {
-					for (i = 0; i < su.id; i++) {
-						int v = ((unsigned short *)inbuf)[x * su.id + i];
-//printf("~1 16 bit pixel value chan %d = %d\n",i,v);
-						if (su.isign_mask & (1 << i))		/* Treat input as signed */
-							v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
-//printf("~1 16 bit after treat as signed chan %d = %d\n",i,v);
-						in[i] = v/65535.0;
-//printf("~1 16 bit fp chan %d value = %f\n",i,in[i]);
-					}
-				}
-
-				if (su.nprofs > 0) {
-					/* Apply the reference conversion */
-					input_curves((void *)&su, out, in);
-//for (i = 0; i < su.id; i++) printf("~1 after input curve chan %d = %f\n",i,out[i]);
-					md_table((void *)&su, out, out);
-//for (i = 0; i < su.od; i++) printf("~1 after md table chan %d = %f\n",i,out[i]);
-					output_curves((void *)&su, out, out);
-//for (i = 0; i < su.od; i++) printf("~1 after output curve chan %d = %f\n",i,out[i]);
-				} else {
-					for (i = 0; i < su.od; i++)
-						 out[i] = in[i];
-				}
-
-				if (bitspersample == 8) {
-					for (i = 0; i < su.od; i++) {
-						int v = (int)(out[i] * 255.0 + 0.5);
-//printf("~1 8 bit chan %d = %d\n",i,v);
-						if (v < 0)
-							v = 0;
-						else if (v > 255)
-							v = 255;
-//printf("~1 8 bit after clip curve chan %d = %d\n",i,v);
-						if (su.osign_mask & (1 << i))		/* Treat input as offset */
-							v = (v & 0x80) ? v - 0x80 : v + 0x80;
-//printf("~1 8 bit after treat as offset chan %d = %d\n",i,v);
-						((unsigned char *)hprecbuf)[x * su.od + i] = v;
-					}
-				} else {
-					for (i = 0; i < su.od; i++) {
-						int v = (int)(out[i] * 65535.0 + 0.5);
-//printf("~1 16 bit chan %d = %d\n",i,v);
-						if (v < 0)
-							v = 0;
-						else if (v > 65535)
-							v = 65535;
-//printf("~1 16 bit after clip curve chan %d = %d\n",i,v);
-						if (su.osign_mask & (1 << i))		/* Treat input as offset */
-							v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
-//printf("~1 16 bit after treat as offset chan %d = %d\n",i,v);
-						((unsigned short *)hprecbuf)[x * su.od + i] = v;
-					}
-				}
-			}
-
-			if (check) {
-				/* Compute the errors */
-				for (x = 0; x < (width * su.od); x++) {
-					int err;
-					if (bitspersample == 8)
-						err = ((unsigned char *)outbuf)[x] - ((unsigned char *)hprecbuf)[x];
-					else
-						err = ((unsigned short *)outbuf)[x] - ((unsigned short *)hprecbuf)[x];
-					if (err < 0)
-						err = -err;
-					if (err > mxerr)
-						mxerr = err;
-					avgerr += (double)err;
-					avgcount++;
-				}
-			}
-		}
+	if (wf != NULL) {
+		/* Perhaps the description could be more informative ? */
+		if (rdesc != NULL) {
+			if ((wdesc = malloc(sizeof(char) * (strlen(rdesc) + strlen(ddesc) + 2))) == NULL)
+				error("malloc failed on new desciption string");
 			
-		if (dofloat || su.nprofs == 0) 	/* Use the results of the f.p. conversion */
-			obuf = hprecbuf;
-		else
-			obuf = outbuf;
+			strcpy(wdesc, rdesc);
+			if (nodesc == 0 && su.nprofs > 0) {
+				strcat(wdesc, " ");
+				strcat(wdesc, ddesc);
+			}
+			jpeg_write_marker(&wj, JPEG_COM, (const JOCTET *)wdesc, strlen(wdesc)+1);
+		} else if (nodesc == 0 && su.nprofs > 0) {
+			if ((wdesc = strdup(ddesc)) == NULL)
+				error("malloc failed on new desciption string");
+			jpeg_write_marker(&wj, JPEG_COM, (const JOCTET *)wdesc, strlen(wdesc)+1);
+		}
+	}
+
+	if (copydct) {		/* Lossless JPEG copy - copy image data */
+		jvirt_barray_ptr *coefas;
+		jpeg_saved_marker_ptr marker;
+
+		coefas = jpeg_read_coefficients(&rj);
+		jpeg_copy_critical_parameters(&rj, &wj);
+		jpeg_write_coefficients(&wj, coefas);
+
+// We don't copy these normally.
+//		for (marker = rj.marker_list; marker != NULL; marker = marker->next) {
+//			jpeg_write_marker(&wj, marker->marker, marker->data, marker->data_length);
+	}
+
+	/* Setup any destination embedded profile */
+	if (dst_pname[0] != '\000') {
+		icmFile *fp;		/* Read fp for the profile */
+		unsigned char *buf;
+		int size;
+
+		if ((deicc = read_embedded_icc(dst_pname)) == NULL)
+			error("Unable to open profile for destination embedding '%s'",dst_pname);
+
+		/* Check that it is compatible with the destination raster file */
+		if (deicc->header->deviceClass != icSigColorSpaceClass
+		 && deicc->header->deviceClass != icSigInputClass
+		 && deicc->header->deviceClass != icSigDisplayClass
+		 && deicc->header->deviceClass != icSigOutputClass) {
+			error("Destination embedded profile is wrong device class for embedding");
+		}
+
+		if (deicc->header->colorSpace != su.outs
+		 || (deicc->header->pcs != icSigXYZData 
+		  && deicc->header->pcs != icSigLabData)) {
+			error("Destination embedded profile colorspaces don't match TIFF");
+		}
+
+		if ((fp = deicc->get_rfp(deicc)) == NULL)
+			error("Failed to be able to read destination embedded profile");
+
+		if ((size = fp->get_size(fp)) == 0)
+			error("Failed to be able to get size of destination embedded profile");
+
+		if ((buf = malloc(size)) == NULL)
+			error("malloc failed on destination embedded profile size %d",size);
+
+		if (fp->seek(fp,0))
+			error("rewind on destination embedded profile failed");
+
+		if (fp->read(fp, buf, 1, size) != size)
+			error("reading destination embedded profile failed");
+
+		/* (For iccv4 we would now fp->del(fp) because we got a reference) */
 
 		if (wh != NULL) {
-			if (TIFFWriteScanline(wh, obuf, y, 0) < 0)
-				error ("Failed to write TIFF line %d",y);
-		} else {	
-			if (su.oinv) {
-				unsigned char *cp, *ep = (unsigned char *)obuf + outbpix;
-				for (cp = (unsigned char *)obuf; cp < ep; cp++)
-					*cp = ~(*cp);
+			if (TIFFSetField(wh, TIFFTAG_ICCPROFILE, size, buf) == 0)
+				error("setting TIFF embedded ICC profile field failed");
+		} else {
+			if (setjmp(jpeg_werr.env)) {
+				jpeg_destroy_compress(&wj);
+				error("setting JPEG embedded ICC profile marker failed");
 			}
-			jpeg_write_scanlines(&wj, (JSAMPARRAY)&obuf, 1);
+			write_icc_profile(&wj, buf, size);
 		}
+
+		free(buf);
+		deicc->del(deicc);
 	}
 
-	if (check) {
-		printf("Worst error = %d bits, average error = %f bits\n", mxerr, avgerr/avgcount);
-		if (bitspersample == 8)
-			printf("Worst error = %f%%, average error = %f%%\n",
-			       mxerr/2.55, avgerr/(2.55 * avgcount));
-		else
-			printf("Worst error = %f%%, average error = %f%%\n",
-			       mxerr/655.35, avgerr/(655.35 * avgcount));
-	}
+	if (!copydct) {
+
+		/* We're not doing a lossless copy */
 
 
-	/* Release buffers and close files */
-	if (rh != NULL) {
-		if (inbuf != NULL)
-			_TIFFfree(inbuf);
-		TIFFClose(rh); /* Close Input file */
-	} else {
-		jpeg_finish_decompress(&rj);
-		jpeg_destroy_decompress(&rj);
-		if (inbuf != NULL)
-			free(inbuf);
-		if (fclose(rf))
-			error("Error closing JPEG input file '%s'\n",in_name);
+		/* - - - - - - - - - - - - - - - */
+		/* Process colors to translate */
+		/* (Should fix this to process a group of lines at a time ?) */
+
+		for (y = 0; y < height; y++) {
+			tdata_t *obuf;
+
+			/* Read in the next line */
+			if (rh) {
+				if (TIFFReadScanline(rh, inbuf, y, 0) < 0)
+					error ("Failed to read TIFF line %d",y);
+			} else {
+				jpeg_read_scanlines(&rj, (JSAMPARRAY)&inbuf, 1);
+				if (su.iinv) {
+					unsigned char *cp, *ep = (unsigned char *)inbuf + inbpix;
+					for (cp = (unsigned char *)inbuf; cp < ep; cp++)
+						*cp = ~*cp;
+				}
+			}
+
+			if (doimdi && su.nprofs > 0) {
+				/* Do fast conversion */
+				s->interp(s, (void **)outp, 0, (void **)inp, su.id, width);
+			}
+			
+			if (dofloat || su.nprofs == 0) {
+				/* Do floating point conversion into the hprecbuf[] */
+				for (x = 0; x < width; x++) {
+					int i;
+					double in[MAX_CHAN], out[MAX_CHAN];
+					
+//printf("\n");
+					if (bitspersample == 8) {
+						for (i = 0; i < su.id; i++) {
+							int v = ((unsigned char *)inbuf)[x * su.id + i];
+//printf("~1 8 bit pixel value chan %d = %d\n",i,v);
+							if (su.isign_mask & (1 << i))		/* Treat input as signed */
+								v = (v & 0x80) ? v - 0x80 : v + 0x80;
+//printf("~1 8 bit after treat as signed chan %d = %d\n",i,v);
+							in[i] = v/255.0;
+//printf("~1 8 bit fp chan %d value = %f\n",i,in[i]);
+						}
+					} else {
+						for (i = 0; i < su.id; i++) {
+							int v = ((unsigned short *)inbuf)[x * su.id + i];
+//printf("~1 16 bit pixel value chan %d = %d\n",i,v);
+							if (su.isign_mask & (1 << i))		/* Treat input as signed */
+								v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
+//printf("~1 16 bit after treat as signed chan %d = %d\n",i,v);
+							in[i] = v/65535.0;
+//printf("~1 16 bit fp chan %d value = %f\n",i,in[i]);
+						}
+					}
+
+					if (su.nprofs > 0) {
+						/* Apply the reference conversion */
+						input_curves((void *)&su, out, in);
+//for (i = 0; i < su.id; i++) printf("~1 after input curve chan %d = %f\n",i,out[i]);
+						md_table((void *)&su, out, out);
+//for (i = 0; i < su.od; i++) printf("~1 after md table chan %d = %f\n",i,out[i]);
+						output_curves((void *)&su, out, out);
+//for (i = 0; i < su.od; i++) printf("~1 after output curve chan %d = %f\n",i,out[i]);
+					} else {
+						for (i = 0; i < su.od; i++)
+							 out[i] = in[i];
+					}
+
+					if (bitspersample == 8) {
+						for (i = 0; i < su.od; i++) {
+							int v = (int)(out[i] * 255.0 + 0.5);
+//printf("~1 8 bit chan %d = %d\n",i,v);
+							if (v < 0)
+								v = 0;
+							else if (v > 255)
+								v = 255;
+//printf("~1 8 bit after clip curve chan %d = %d\n",i,v);
+							if (su.osign_mask & (1 << i))		/* Treat input as offset */
+								v = (v & 0x80) ? v - 0x80 : v + 0x80;
+//printf("~1 8 bit after treat as offset chan %d = %d\n",i,v);
+							((unsigned char *)hprecbuf)[x * su.od + i] = v;
+						}
+					} else {
+						for (i = 0; i < su.od; i++) {
+							int v = (int)(out[i] * 65535.0 + 0.5);
+//printf("~1 16 bit chan %d = %d\n",i,v);
+							if (v < 0)
+								v = 0;
+							else if (v > 65535)
+								v = 65535;
+//printf("~1 16 bit after clip curve chan %d = %d\n",i,v);
+							if (su.osign_mask & (1 << i))		/* Treat input as offset */
+								v = (v & 0x8000) ? v - 0x8000 : v + 0x8000;
+//printf("~1 16 bit after treat as offset chan %d = %d\n",i,v);
+							((unsigned short *)hprecbuf)[x * su.od + i] = v;
+						}
+					}
+				}
+
+				if (check) {
+					/* Compute the errors */
+					for (x = 0; x < (width * su.od); x++) {
+						int err;
+						if (bitspersample == 8)
+							err = ((unsigned char *)outbuf)[x] - ((unsigned char *)hprecbuf)[x];
+						else
+							err = ((unsigned short *)outbuf)[x] - ((unsigned short *)hprecbuf)[x];
+						if (err < 0)
+							err = -err;
+						if (err > mxerr)
+							mxerr = err;
+						avgerr += (double)err;
+						avgcount++;
+					}
+				}
+			}
+				
+			if (dofloat || su.nprofs == 0) 	/* Use the results of the f.p. conversion */
+				obuf = hprecbuf;
+			else
+				obuf = outbuf;
+
+			if (wh != NULL) {
+				if (TIFFWriteScanline(wh, obuf, y, 0) < 0)
+					error ("Failed to write TIFF line %d",y);
+			} else {	
+				if (su.oinv) {
+					unsigned char *cp, *ep = (unsigned char *)obuf + outbpix;
+					for (cp = (unsigned char *)obuf; cp < ep; cp++)
+						*cp = ~(*cp);
+				}
+				jpeg_write_scanlines(&wj, (JSAMPARRAY)&obuf, 1);
+			}
+		}
+
+		if (check) {
+			printf("Worst error = %d bits, average error = %f bits\n", mxerr, avgerr/avgcount);
+			if (bitspersample == 8)
+				printf("Worst error = %f%%, average error = %f%%\n",
+				       mxerr/2.55, avgerr/(2.55 * avgcount));
+			else
+				printf("Worst error = %f%%, average error = %f%%\n",
+				       mxerr/655.35, avgerr/(655.35 * avgcount));
+		}
+
 	}
 
 	if (wh != NULL) {
@@ -2294,6 +2323,20 @@ main(int argc, char *argv[]) {
 			free(hprecbuf);
 		if (fclose(wf))
 			error("Error closing output file '%s'\n",out_name);
+	}
+
+	/* Release buffers and close files */
+	if (rh != NULL) {
+		if (inbuf != NULL)
+			_TIFFfree(inbuf);
+		TIFFClose(rh); /* Close Input file */
+	} else {
+		jpeg_finish_decompress(&rj);
+		jpeg_destroy_decompress(&rj);
+		if (inbuf != NULL)
+			free(inbuf);
+		if (fclose(rf))
+			error("Error closing JPEG input file '%s'\n",in_name);
 	}
 
 	/* Done with lookup object */

@@ -96,9 +96,9 @@
     down by the International Commission on Illumination (CIE) in 1931
     with the establishment of the CIE 1931 <span style="font-weight:
       bold;">XYZ</span> color space. This provides a means of predicting
-    what light spectra will match in color for a Standard Observer, who
-    represents the typical response of the Human eye under given viewing
-    conditions. Such a color space is said to be <span
+    what light spectra will be a color match a Standard Observer. The
+    Standard Observer represents the typical response of the Human eye
+    under given viewing conditions. Such a color space is said to be <span
       style="font-weight: bold;">Device Independent</span> since it is
     not related to a particular technological capture or reproduction
     device. There are also closely related color-spaces which are direct
@@ -150,8 +150,8 @@
     <br>
     &nbsp;&nbsp;&nbsp; A Device Link profile provides a transformation
     from one Device space to another. It is typically the result of
-    linking two device profiles, ie. Device A -&gt; PCS -&gt; Device B,
-    resulting in a direct Device A -&gt; Device B transformation.<br>
+    linking two device profiles, ie. Device 1 -&gt; PCS -&gt; Device 2,
+    resulting in a direct Device 1 -&gt; Device 2 transformation.<br>
     <br>
     <span style="font-weight: bold;">Abstract</span><br>
     <br>
@@ -234,11 +234,11 @@
     common white point (D50), to facilitate ease of matching colors
     amongst devices with different white points. Other viewing condition
     effects (ie. image luminance level, viewing surround luminance and
-    flare) can be modeled using (for example) using CIECAM02 to modify
-    XYZ values.<br>
+    flare/glare) can be modeled using (for example) using CIECAM02 to
+    modify XYZ values.<br>
     <br>
     Another limitation relates to spectral assumptions. CIE XYZ uses a
-    standard observer to convert spectral light values into XYZ values,
+    Standard Observer to convert spectral light values into XYZ values,
     but in practice every observer may have slightly different spectral
     sensitivities due to biological differences, including aging.
     (People with color deficient vision may have radically different
@@ -252,7 +252,7 @@
     of reflective prints from the light source used to view them, by
     characterizing a prints color by it's reflectance. This is very
     convenient, since a print will probably be taken into many different
-    lighting situations, but if the color is reduced to XYZ reflectance
+    lighting situations, but if the color is reduced to XYZ reflectance,
     the effect of the detailed interaction between the spectra of the
     light source and print will lead to inaccuracies.<br>
     <br>

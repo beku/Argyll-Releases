@@ -37,7 +37,8 @@ void usage(void);
 #undef NORMONLY	/* Defined to use 0.0 - 1.0 limited curve */
 
 #undef ORDER_STEP		/* Step orders from 2 to SHAPE_ORDERS */
-#define SHAPE_ORDS 30		/* Number of order to use */
+//#define SHAPE_ORDS 30		/* Number of order to use */
+#define SHAPE_ORDS 12		/* Number of order to use */
 
 #define ABS_MAX_PNTS 100
 
@@ -169,7 +170,7 @@ int main() {
 				xa[i] = (xa[i]/xa[pnts-1]);
 
 			/* Create y values */
-			ya[0] = xa[0] + d_rand(-0.1, 0.5);
+			ya[0] = xa[0] + d_rand(-0.2, 0.7);
 			for (i = 1; i < pnts; i++)
 				ya[i] = ya[i-1] + d_rand(0.1,1.0) + d_rand(-0.1,0.4) + d_rand(-0.4,0.5);
 

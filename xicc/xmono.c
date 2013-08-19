@@ -261,7 +261,7 @@ int                   dir			/* 0 = fwd, 1 = bwd */
 	if (pcsor == icxSigJabData) {
 		p->vc  = *vc;				/* Copy the structure */
 		p->cam = new_icxcam(cam_default);
-		p->cam->set_view(p->cam, vc->Ev, vc->Wxyz, vc->La, vc->Yb, vc->Lv, vc->Yf, vc->Fxyz,
+		p->cam->set_view(p->cam, vc->Ev, vc->Wxyz, vc->La, vc->Yb, vc->Lv, vc->Yf, vc->Yg, vc->Gxyz,
 		XICC_USE_HK);
 	} else 
 		p->cam = NULL;

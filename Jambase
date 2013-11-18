@@ -67,6 +67,8 @@
 #										make custom file, program dependent & args not
 # GenFileNND target : program args : extra_dependecies ;
 #                                       make custom file, program & args not dependent
+# GenFileNNDnc target : program args : extra_dependecies ;
+#                                       Same as GenFileNND but don't clean the target.
 # CatToFile dest : strings ;			save the arguments to the file
 # GuiBin image ;						Mark executable as GUI applications
 #                                       (Needs to go before other declarations of image) 
@@ -2542,6 +2544,32 @@ rule GenFileNND1
 {
 #Echo "GenFileNND1 got "' $(<) "' and "' $(>) "'" ;
 	MakeLocate $(<) ;
+}
+
+# GenFileNNDnc target : program args : extra_dependecies ;
+# Same as GenFileNND but don't clean the target.
+# None of > is assumed to be a file.
+# $(3) are optional extra dependecies
+# SRCDIR and DSTDIR are ignored.
+rule GenFileNNDnc 
+{
+#Echo "GenFileNNDnc got '$(<)' and '$(>)' and src targets '$(3)' " ;
+	# Normalize target names and set Grist LOCATE and SOURCE
+	local _t = [ NormIDstTargets $(<) ] ;
+	local _a = $(>) ;
+	_a = $(_a:J=" ") ;		# Split up by space delimeter ?
+	local _d = [ NormSrcTargets $(3) ] ;
+
+#Echo "GenFileNNDnc normed '$(_t)' plus '$(_a)' and src targets '$(_d)'" ;
+
+	Depends files : $(_t) ;
+	Depends $(_t) : $(_d) ;
+
+	NotTargets $(_a) ;
+	NoCare $(_a) ;
+	NotFile $(_a) ;			# Supresses "independent target", but may mark a directory wrongly
+	
+	GenFileNND1 $(_t) : $(_a) ;
 }
 
 # Concatenate all the argument to the file 

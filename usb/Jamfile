@@ -42,6 +42,14 @@ if $(CREATE_INFS) = true {
 	GenFileNND ArgyllCMS.inf : "sed s/#PLAT#// $(_d) >> $(_i)" : ArgyllCMS.inf.t ArgyllCMS.inf.d ;
 	GenFileNND ArgyllCMS.inf : "sed s/#PLAT#/.NTx86/ $(_d) >> $(_i)" : ArgyllCMS.inf.t ArgyllCMS.inf.d ; 
 	GenFileNND ArgyllCMS.inf : "sed s/#PLAT#/.NTamd64/ $(_d) >> $(_i)" : ArgyllCMS.inf.t ArgyllCMS.inf.d ;
+
+	# If we have the tools and the .inf file has changed,
+	# create valid (but unsigned) .cat files.
+	if $(NT) && [ GLOB $(PATH) : inf2cat.exe ] {
+		_b  = [ NormPaths makecat.bat ] ;
+		# echo "SUBDIR = '" $(SUBDIR) "'" ;
+		GenFileNNDnc ArgyllCMS.cat : $(_b) $(SUBDIR) : ArgyllCMS.inf ;
+	}
 }
 
 

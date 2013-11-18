@@ -393,7 +393,7 @@ huey_rdreg_float(
 	if ((ev = huey_rdreg_word(p, &val, addr)) != inst_ok)
 		return ev;
 
-	if (ev == 0xffffffff) {
+	if (val == 0xffffffff) {
 		return inst_ok;
 	}
 
@@ -1225,7 +1225,7 @@ double mtx[3][3]
 	} else {
 		if (p->cbid == 0) {
 			a1loge(p->log, 1, "huey: can't set col_cor_mat over non base display type\n");
-			inst_wrong_setup;
+			return inst_wrong_setup;
 		}
 		icmCpy3x3(p->ccmat, mtx);
 	}

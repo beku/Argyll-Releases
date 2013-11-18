@@ -2845,6 +2845,7 @@ double             dispLuminance,	/* > 0.0 if display luminance value and is kno
 double             wpscale,			/* > 0.0 if white point is to be scaled */
 double             smooth,			/* RSPL smoothing factor, -ve if raw */
 double             avgdev,			/* reading Average Deviation as a prop. of the input range */
+double             demph,			/* dark emphasis factor for cLUT grid res. */
 icxViewCond        *vc,				/* Viewing Condition (NULL if not using CAM) */
 icxInk             *ink,			/* inking details (NULL for default) */
 int                quality			/* Quality metric, 0..3 */
@@ -3360,7 +3361,7 @@ int                quality			/* Quality metric, 0..3 */
 		if (xf->fit(xf, xfflags, p->inputChan, p->outputChan,
 			rsplflags, wp, dwhite, wpscale, dgwhite, 
 		    ipoints, nodp, skm, in_min, in_max, gres, out_min, out_max,
-		    smooth, oavgdev, iord, sord, oord, shp_smooth, out_smooth, tcomb,
+		    smooth, oavgdev, demph, iord, sord, oord, shp_smooth, out_smooth, tcomb,
 		   (void *)p, xfit_to_de2, xfit_to_dde2) != 0) {
 			p->pp->errc = 2;
 			sprintf(p->pp->err,"xfit fitting failed");

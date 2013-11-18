@@ -699,7 +699,7 @@ main(int argc, char *argv[]) {
 				error("Must use -fb or -fif for grey axis plot");
 		}
 
-		if (icco->header->cmmId = str2tag("argl"))
+		if (icco->header->cmmId == str2tag("argl"))
 			icco->allowclutPoints256 = 1;
 				
 		if (doplot) {
@@ -1074,7 +1074,7 @@ main(int argc, char *argv[]) {
 				continue;
 			}
 			/* For each input number */
-			for (bp = buf-1, nbp = buf, i = 0; i < MAX_CHAN; i++) {
+			for (nbp = buf, i = 0; i < MAX_CHAN; i++) {
 				bp = nbp;
 				uout[i] = out[i] = in[i] = uin[i] = strtod(bp, &nbp);
 				if (nbp == bp)

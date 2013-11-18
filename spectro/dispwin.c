@@ -1216,7 +1216,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 	}
 
 	if (nent != (1 << p->pdepth)) {
-		debugr("CGGetDisplayTransferByTable number of entries mismatches screen depth\n");
+		debugr2((errout,"CGGetDisplayTransferByTable number of entries %d mismatches screen depth %d\n",nent,p->pdepth));
 		return NULL;
 	}
 
@@ -1276,7 +1276,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 		}
 
 		if (nent != (1 << p->pdepth)) {
-			debugr2((errout,"XRRGetCrtcGammaSize number of entries %d mismatches screen depth %d\n",nent,(1 << p->pdepth)));
+			debugr2((errout,"XRRGetCrtcGammaSize number of entries %d mismatches screen depth %d bits\n",nent,(1 << p->pdepth)));
 			return NULL;
 		}
 
@@ -1337,7 +1337,7 @@ static ramdac *dispwin_get_ramdac(dispwin *p) {
 		}
 
 		if (nent != (1 << p->pdepth)) {
-			debugr2((errout,"CGGetDisplayTransferByTable number of entries %d mismatches screen depth %d\n",nent,(1 << p->pdepth)));
+			debugr2((errout,"CGGetDisplayTransferByTable number of entries %d mismatches screen depth %d bits\n",nent,(1 << p->pdepth)));
 			return NULL;
 		}
 	}
@@ -3803,6 +3803,10 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 		return 2;
 	}
 
+	/* We're creating and draining a pool here to ensure that all the */
+	/* auto release objects get drained when we're finished (?) */
+	NSAutoreleasePool *tpool = [NSAutoreleasePool new];
+
 	/* Stop the system going to sleep */
     UpdateSystemActivity(OverallAct);
 
@@ -3831,6 +3835,8 @@ double r, double g, double b	/* Color values 0.0 - 1.0 */
 
 	/* Process events */
 	OSX_ProcessEvents(p);
+
+	[tpool release];
 
 #endif /* __APPLE__ */
 
@@ -4053,6 +4059,11 @@ dispwin *p
 #define SWP_STATECHANGED 0x8000
 #endif
 
+/* MingW doesn't seem to have this, even though it's been there sine Win2k ... */
+#ifndef ICM_DONE_OUTSIDEDC
+# define ICM_DONE_OUTSIDEDC 4
+#endif
+
 static LRESULT CALLBACK MainWndProc(
 	HWND hwnd,
 	UINT message,
@@ -4191,7 +4202,7 @@ static void OSX_ProcessEvents(dispwin *p) {
 
 	/* We're creating and draining a pool here to ensure that all the */
 	/* auto release objects get drained when we're finished (?) */
-	NSAutoreleasePool *tpool = [NSAutoreleasePool new];
+//	NSAutoreleasePool *tpool = [NSAutoreleasePool new];
 
 	/* Wait until the events are done */
 	to = [NSDate dateWithTimeIntervalSinceNow:0.01];	/* autorelease ? */
@@ -4204,7 +4215,7 @@ static void OSX_ProcessEvents(dispwin *p) {
 			break;
 		}
     }
-	[tpool release];
+//	[tpool release];
 }
 
 #endif /* __APPLE__ */
@@ -4537,8 +4548,25 @@ int ddebug						/* >0 to print debug statements to stderr */
 	{
 		CGDisplayModeRef dispmode;
 		CFStringRef pixenc;
+		int cap = CGDisplayGammaTableCapacity(p->ddid);
+		int fbdepth = 0;
 
-		p->pdepth = 0;
+		debugr2((errout,"new_dispwin: CGDisplayGammaTableCapacity = %d\n",cap));
+
+		/* Compute GammaTable depth */ 
+		{
+			for (p->pdepth = 1; p->pdepth < 17; p->pdepth++) {
+				if ((1 << p->pdepth) == cap)
+					break;
+			}
+			if (p->pdepth >= 17) {
+				debugr2((errout,"new_dispwin: failed to extract depth from GammaTableCapacity %d\n",cap));
+				dispwin_del(p);
+				return NULL;
+			}
+			debugr2((errout,"new_dispwin: found pixel depth %d bits\n",p->pdepth));
+		}
+		/* Get frame buffer depth for sanity check */
 
 		dispmode = CGDisplayCopyDisplayMode(p->ddid);
 		pixenc = CGDisplayModeCopyPixelEncoding(dispmode);
@@ -4546,18 +4574,35 @@ int ddebug						/* >0 to print debug statements to stderr */
 		/* Hmm. Don't know what to do with kIO16BitFloatPixels or kIO32BitFloatPixels */
 		if (CFStringCompare(pixenc, CFSTR(kIO64BitDirectPixels), kCFCompareCaseInsensitive)
 		                                                             == kCFCompareEqualTo)
-			p->pdepth = 16;
+			fbdepth = 16;
 		else if (CFStringCompare(pixenc, CFSTR(kIO30BitDirectPixels), kCFCompareCaseInsensitive)
 		                                                             == kCFCompareEqualTo)
-			p->pdepth = 10;
+			fbdepth = 10;
 		else if (CFStringCompare(pixenc, CFSTR(IO32BitDirectPixels), kCFCompareCaseInsensitive)
 		                                                             == kCFCompareEqualTo)
-			p->pdepth = 8;
+			fbdepth = 8;
 		else if (CFStringCompare(pixenc, CFSTR(IO16BitDirectPixels), kCFCompareCaseInsensitive)
 			                                                             == kCFCompareEqualTo)
-			p->pdepth = 5;
+			fbdepth = 5;
+#ifndef DEBUG
+		if (p->ddebug)
+#endif
+		{
+			char buf[200];
+			CFStringGetCString(pixenc, buf, 200, kCFStringEncodingUTF8);
+			debugr2((errout,"new_dispwin: CGDisplayModePixelEncoding = '%s'\n",buf));
+		}
+
 		CFRelease(pixenc);
 		CGDisplayModeRelease(dispmode);
+
+		if (p->pdepth != fbdepth) {
+			static int warned  = 0;
+			if (!warned) {
+				warning("new_dispwin: frame buffer depth %d != GammaTable depth %d\n",fbdepth, p->pdepth);
+				warned = 1;
+			}
+		}
 	}
 #else
 	p->pdepth = CGDisplayBitsPerSample(p->ddid);
@@ -4574,13 +4619,17 @@ int ddebug						/* >0 to print debug statements to stderr */
 
 		debugr2((errout, "new_dispwin: About to open display '%s'\n",disp->name));
 
+		/* We're creating and draining a pool here to ensure that all the */
+		/* auto release objects get drained when we're finished (?) */
+		NSAutoreleasePool *tpool = [NSAutoreleasePool new];
+
 		/* If we don't have an application object, create one. */
 		/* (This should go in a common library) */
 		/* Note that we don't actually clean this up on exit - */
 		/* possibly we can't. */
 		if (NSApp == nil) {
-			static NSAutoreleasePool *pool;	/* Pool used for NSApp */
-			pool = [NSAutoreleasePool new];
+//			static NSAutoreleasePool *pool;	/* Pool used for NSApp */
+//			pool = [NSAutoreleasePool new];
 			NSApp = [NSApplication sharedApplication];	/* Creates NSApp */
 			[NSApp finishLaunching];
 			/* We seem to need this, because otherwise we don't get focus automatically */
@@ -4588,6 +4637,7 @@ int ddebug						/* >0 to print debug statements to stderr */
 		}
 
 		if ((cx = (osx_cntx_t *)calloc(sizeof(osx_cntx_t), 1)) == NULL) {
+			[tpool release];
 			debugr2((errout,"new_dispwin: Malloc failed (osx_cntx_t)\n"));
 			dispwin_del(p);
 			return NULL;
@@ -4635,6 +4685,8 @@ int ddebug						/* >0 to print debug statements to stderr */
 		create_my_win(wrect, cx);
 
 		OSX_ProcessEvents(p);
+
+		[tpool release];
 
 		p->winclose = 0;
 	}

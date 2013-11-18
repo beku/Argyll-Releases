@@ -3200,7 +3200,6 @@ datao map_oh
 //if (PFCOND) printf("~1 neutral axis point = %f %f %f\n", napoint[0], napoint[1], napoint[2]);
 							/* Compute a normalized available depth from distance */
 							/* to closest to neautral axis point */
-							if (maxt > 1.0)		/* Compression */
 							if ((mint > 1e-8 && maxt > -1e-8)		/* G. & V. Compression */
 							 || ((mint < -1e-8 && maxt > -1e-8)		/* G. Exp & V. comp. */
 							  && (fabs(mint) < (fabs(maxt) - 1e-8))))

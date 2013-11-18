@@ -438,22 +438,6 @@ a1log *log			/* verb, debug & error log */
 				printf("The battery charged level is %.0f%%\n",batstat * 100.0);
 			}
 
-			/* Set it to the appropriate mode */
-			if (highres) {
-				if (IMODETST(cap, inst_mode_highres)) {
-					inst_code ev;
-					if ((ev = it->get_set_opt(it, inst_opt_highres)) != inst_ok) {
-						printf("\nSetting high res mode failed with error :'%s' (%s)\n",
-				       	       it->inst_interp_error(it, ev), it->interp_error(it, ev));
-						it->del(it);
-						return -1;
-					}
-					highres = 1;
-				} else {
-					a1logv(log, 1, "high resolution ignored - instrument doesn't support high res. mode\n");
-				}
-			}
-
 			if (scan_tol != 1.0) {
 				if (cap2 & inst2_has_scan_toll) {
 					inst_code ev;
@@ -674,6 +658,14 @@ a1log *log			/* verb, debug & error log */
 			}
 			if (spectral)
 				mode |= inst_mode_spectral;
+
+			if (highres) {
+				if (IMODETST(cap, inst_mode_highres)) {
+					mode |= inst_mode_highres;
+				} else {
+					a1logv(log, 1, "high resolution ignored - instrument doesn't support high res. mode\n");
+				}
+			}
 
 			// ~~~ i1pro2 test code ~~~ */
 			if (uvmode) {

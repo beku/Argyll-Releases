@@ -60,9 +60,9 @@
     <br>
     &nbsp;So if the current value of PATH is
     "%SystemRoot%\system32;%SystemRoot%" and you unpacked Argyll version
-    1.6.0 in <span style="font-weight: bold;">d:\bin\</span>, then you
+    1.6.2 in <span style="font-weight: bold;">d:\bin\</span>, then you
     would modify PATH to be
-    "%SystemRoot%\system32;%SystemRoot%;d:\bin\Argyll_V1.6.0\bin", -
+    "%SystemRoot%\system32;%SystemRoot%;d:\bin\Argyll_V1.6.2\bin", -
     i.e. you append the path to the Argyll binaries to your PATH,
     separated by the ';' character. The change will take effect when you
     start a new command shell, which you start from Start
@@ -112,28 +112,28 @@
     have to disable all of them. Reboot after changing settings.<br>
     <br>
     <hr style="width: 100%; height: 2px;">
-    <h3><span style="color: rgb(51, 153, 153);">Serial Instruments:</span><br>
+    <h3><u><font color="#009900">Serial Instruments:</font></u><br>
     </h3>
     If you are using a serial connected instrument, then there is
     nothing special to do to enable this.<br>
-    <h3><span style="color: rgb(51, 153, 153);">USB Instruments:</span></h3>
+    <h3><font color="#ff6600"><u>USB Instruments:</u></font></h3>
     If you are using a USB connected instrument, then suitable <span
-      style="font-weight: bold;">USB drivers</span> may need to be
-    installed.<br>
+      style="font-weight: bold;">USB system drivers</span> may need to
+    be installed.<br>
     <span style="font-weight: bold;"><br>
-    </span>Note that the <span style="font-weight: bold;">Huey</span>
-    and <span style="font-weight: bold;">i1 Display Pro</span> and <span
-      style="font-weight: bold;">ColorMunki Display</span> colorimeter
-    appears as an HID (USB Human Interface Device Class) device, and
-    hence will be assigned to the default MSWindows HID driver. You
-    therefore <span style="font-weight: bold; text-decoration:
-      underline;">don't need</span> to install an Argyll <span
-      style="font-weight: bold;">usb</span> driver for these
-    instruments, although it is possible to select the libusb0.sys
-    driver as an alternative to the default HID driver.<br>
+    </span>Note that the <span style="font-weight: bold;">Huey</span>,
+    <span style="font-weight: bold;">i1 Display Pro</span>, <span
+      style="font-weight: bold;">ColorMunki Display</span> and <b>ColorHug</b>
+    colorimeter appears as an HID (USB Human Interface Device Class)
+    device, and hence will be assigned to the default MSWindows HID
+    driver. You therefore <span style="font-weight: bold;
+      text-decoration: underline;">don't need</span> to install an
+    Argyll <span style="font-weight: bold;">usb</span> system driver
+    for these instruments, although it is possible to select the
+    libusb0.sys driver as an alternative to the default HID driver.<br>
     <br>
     If you are using the <b>JETI</b> specbos <span style="font-weight:
-      bold;">1211</span><span style="font-weight: bold;"> </span>and <b>1201</b>,
+      bold;">1211</span><span style="font-weight: bold;"> </span>or <b>1201</b>,
     then you may need to install the <a
       href="http://www.ftdichip.com/Drivers/VCP.htm">FTDI Virtual COM
       Port Drivers</a> (VCP), if they are not already on your system.<br>
@@ -164,13 +164,7 @@
     <br>
     <span style="text-decoration: underline;">To install the Argyll
       driver for the first instrument:</span><br>
-    &nbsp;&nbsp;&nbsp; Settings -&gt; Power -&gt; <span
-      style="font-weight: bold;">Hold Shift Key down and click</span>
-    "Restart" -&gt; Troubleshoot -&gt; Advanced Options -&gt; Startup
-    Settings -&gt; Restart -&gt;<br>
-    &nbsp;&nbsp;&nbsp; (After Reboot) -&gt; "Disable Driver Signature
-    Enforcement" (number 7 on the list)<br>
-    &nbsp;&nbsp;&nbsp; (After system starts, Plug in instrument)<br>
+    &nbsp;&nbsp;&nbsp; (Plug in instrument)<br>
     &nbsp;&nbsp;&nbsp; Desktop -&gt; Settings -&gt; Control Panel -&gt;
     Hardware and Sound -&gt; Device Manager -&gt;<br>
     &nbsp;&nbsp;&nbsp; Other Devices -&gt; &lt;instrument being
@@ -197,12 +191,7 @@
     <br>
     <span style="text-decoration: underline;">To install the Argyll
       Driver:</span><br>
-    Settings -&gt; Power -&gt; <span style="font-weight: bold;">Hold
-      Shift Key down and click</span> "Restart" -&gt; Troubleshoot -&gt;
-    Advanced Options -&gt; Startup Settings -&gt; Restart -&gt;<br>
-    &nbsp;&nbsp;&nbsp; (After Reboot) -&gt; Disable Driver Signature
-    Enforcement" (number 7 on the list)<br>
-    &nbsp;&nbsp;&nbsp; (After system starts, Plug in instrument)<br>
+    &nbsp;&nbsp;&nbsp; (Plug in instrument)<br>
     &nbsp;&nbsp;&nbsp; Desktop -&gt; Settings -&gt; Control Panel -&gt;
     Hardware and Sound -&gt; Device Manager<br>
     &nbsp;&nbsp;&nbsp; (Locate the instrument in the device list. It may

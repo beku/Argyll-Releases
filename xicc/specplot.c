@@ -107,7 +107,7 @@ static int do_spec(
 				
 			/* Compute XYZ of illuminant */
 			if (icx_ill_sp2XYZ(xyz, icxOT_CIE_1931_2, NULL, icxIT_custom, 0, &tsp) != 0) 
-				error ("icx_sp_temp2XYZ returned error");
+				warning("icx_sp_temp2XYZ returned error");
 
 			icmXYZ2Yxy(Yxy, xyz);
 			icmXYZ2Lab(&icmD50, Lab, xyz);
@@ -129,11 +129,11 @@ static int do_spec(
 
 			/* Compute CCT */
 			if ((cct = icx_XYZ2ill_ct(cct_xyz, BBTYPE, icxOT_CIE_1931_2, NULL, xyz, NULL, 0)) < 0)
-				error ("Got bad cct\n");
+				warning("Got bad cct\n");
 
 			/* Compute VCT */
 			if ((vct = icx_XYZ2ill_ct(vct_xyz, BBTYPE, icxOT_CIE_1931_2, NULL, xyz, NULL, 1)) < 0)
-				error ("Got bad vct\n");
+				warning("Got bad vct\n");
 
 #ifdef PLANKIAN
 			printf("CCT = %f, VCT = %f\n",cct, vct);

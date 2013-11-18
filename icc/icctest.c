@@ -111,6 +111,7 @@ main(
 	if (md5_test() != 0)
 		error ("MD5 checksum routine is faulty");
 
+
 	/* Outer loop does a number of file write/reads, */
 	/* in order to exercise random tests, and to test file offsets. */
 
@@ -198,8 +199,6 @@ main(
 		/* choose another file offset to test */
 		offset = rand_int(0,72789);
 	}
-
-	printf("\nTest completed OK\n");
 
 	return 0;
 }

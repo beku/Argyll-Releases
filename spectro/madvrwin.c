@@ -85,8 +85,14 @@ BOOL (WINAPI *madVR_Disconnect)() = NULL;
 /* Locate and populate the MadVR functions */
 /* Return NZ on failure */
 static int initMadVR(dispwin *p) {
+	wchar_t *dllname;
 
-	if ((HcNetDll = LoadLibraryW(L"madHcNet32.dll")) == NULL) {
+	if (sizeof(dllname) > 4)		/* Compiled as 64 bit */
+		dllname = L"madHcNet64.dll";
+	else
+		dllname = L"madHcNet32.dll";
+
+	if ((HcNetDll = LoadLibraryW(dllname)) == NULL) {
 		HKEY hk1;
     	if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L"CLSID\\{E1A8B82A-32CE-4B0D-BE0D-AA68C772E423}\\InprocServer32", 0, KEY_QUERY_VALUE | KEY_WOW64_32KEY, &hk1) == ERROR_SUCCESS) {
 			DWORD size;
@@ -106,7 +112,7 @@ static int initMadVR(dispwin *p) {
 						us1[i1 + 1] = 0;
 						break;
 					}
-				wcscat(us1, L"madHcNet32.dll");
+				wcscat(us1, dllname);
 				HcNetDll = LoadLibraryW(us1);
 			}
 			LocalFree(us1);
@@ -135,10 +141,10 @@ static int initMadVR(dispwin *p) {
 		 && madVR_Disconnect) {
 			return 0;
 		}
-		debugr2((errout,"Failed to locate function in madHcNet32.dll\n"));
+		debugr2((errout,"Failed to locate function in %ls\n",dllname));
 		FreeLibrary(HcNetDll);
 	} else {
-		debugr2((errout,"Failed to load madHcNet32.dll\n"));
+		debugr2((errout,"Failed to load %ls\n",dllname));
 	}
 	return 1;
 }

@@ -172,6 +172,7 @@ struct _xfit {
 		double out_max[MXDO],	/* Output value scaling/range maximum */
 		double smooth,			/* clut rspl smoothing factor */
 		double oavgdev[MXDO],	/* Average output value deviation */
+		double demph,			/* dark emphasis factor for cLUT grid res. */
 		int iord[],				/* Order of input positioning/shaper curve for each dimension */
 		int sord[],				/* Order of input sub-grid shaper curve (not used) */
 		int oord[],				/* Order of output shaper curve for each dimension */

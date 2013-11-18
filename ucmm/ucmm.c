@@ -213,9 +213,9 @@ ucmm_error ucmm_install_monitor_profile(
 		char **paths;
 		char *tt;
 
-		if (npaths = xdg_bds(&er, &paths, xdg_conf, xdg_write, 
+		if ((npaths = xdg_bds(&er, &paths, xdg_conf, xdg_write, 
 		                     scope == ucmm_local_system ? xdg_local : xdg_user,
-		                     config_file) == 0) {
+		                     config_file)) == 0) {
 			return ucmm_open_config;
 		}
 		if ((conf_name = strdup(paths[0])) == NULL) {
@@ -238,9 +238,9 @@ ucmm_error ucmm_install_monitor_profile(
 			tt = profile;
 		strcat(data_pathfile, tt);
 
-		if (npaths = xdg_bds(&er, &paths, xdg_conf, xdg_write, 
+		if ((npaths = xdg_bds(&er, &paths, xdg_conf, xdg_write, 
 		                     scope == ucmm_local_system ? xdg_local : xdg_user,
-		                     data_pathfile) == 0) {
+		                     data_pathfile)) == 0) {
 			free(data_pathfile);
 			free(conf_name);
 			return ucmm_open_config;
@@ -514,9 +514,9 @@ ucmm_error ucmm_uninstall_monitor_profile(
 		char **paths;
 		char *tt;
 
-		if (npaths = xdg_bds(&er, &paths, xdg_conf, xdg_read, 
+		if ((npaths = xdg_bds(&er, &paths, xdg_conf, xdg_read, 
 		                     scope == ucmm_local_system ? xdg_local : xdg_user,
-		                     config_file) == 0) {
+		                     config_file)) == 0) {
 			return ucmm_open_config;
 		}
 		if ((conf_name = strdup(paths[0])) == NULL) {
@@ -540,9 +540,9 @@ ucmm_error ucmm_uninstall_monitor_profile(
 				tt = profile;
 			strcat(data_pathfile, tt);
 	
-			if (npaths = xdg_bds(&er, &paths, xdg_conf, xdg_read, 
+			if ((npaths = xdg_bds(&er, &paths, xdg_conf, xdg_read, 
 			                     scope == ucmm_local_system ? xdg_local : xdg_user,
-			                     data_pathfile) == 0) {
+			                     data_pathfile)) == 0) {
 				free(data_pathfile);
 				free(conf_name);
 				return ucmm_open_config;
@@ -796,9 +796,9 @@ ucmm_error ucmm_get_monitor_profile(
 			char **paths;
 			char *tt;
 
-			if (npaths = xdg_bds(&er, &paths, xdg_conf, xdg_read, 
+			if ((npaths = xdg_bds(&er, &paths, xdg_conf, xdg_read, 
 			                     scope == ucmm_local_system ? xdg_local : xdg_user,
-			                     config_file) == 0) {
+			                     config_file)) == 0) {
 				continue;
 			}
 			if ((conf_name = strdup(paths[0])) == NULL) {

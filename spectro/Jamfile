@@ -115,6 +115,12 @@ if $(USE_SERIAL) = true || $(USE_USB) = true {
 	INST_SRCS += $(SER_USB_INSTS) ;
 }
 
+if $(USE_DEMOINST) = true && [ GLOB . : demoinst.c ] {
+	echo "Compiling demo instrument support" ;
+	DEFINES += ENABLE_DEMOINST ;
+	INST_SRCS += demoinst.c ;
+}
+
 Library libinst : inst.c insttypes.c icoms.c $(INST_SRCS) ;
 
 # Display access library 

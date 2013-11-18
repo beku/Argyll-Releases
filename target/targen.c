@@ -103,7 +103,8 @@
 #define VRML_DIAG		/* Enable option to dump a VRML of the resulting full spread points */
 #undef ADDRECCLIPPOINTS	/* Add ink limited clipping points to regular grid */
 #define EMPH_NEUTRAL	/* Emphasise neutral axis, like CIE94 does */
-#define NEMPH_DEFAULT 0.5	/* Default emphasis == 2 x CIE94 */
+#define NEMPH_DEFAULT 0.5	/* Default neutral axis emphasis == 2 x CIE94 */
+#define DEMPH_DEFAULT 1.0	/* Default dark region emphasis == none */
 #define DEFANGLE 0.3333	/* For simdlat and simplat */
 #define SIMDLAT_TYPE SIMDLAT_BCC	/* Simdlat geometry type */
 #define MATCH_TOLL 1e-3	/* Tollerance of device value to consider a patch a duplicate */
@@ -171,6 +172,7 @@ struct _pcpt {
 
 	/* Tuning parameters */
 	double nemph;		/* neutral emphasis, 0.0 - 1.0. Default 0.35 for == CIE94 */
+	double idemph;		/* inv. dark emphasis, 1.0 - 1.0/4.0. Default 1.0 == none */
 
 	/* ICC profile based */
 	icmFile *fp;
@@ -279,8 +281,9 @@ pcpt_to_nLab(pcpt *s, double *out, double *in) {
 		else if (s->mlu != NULL) {
 			s->mlu->lookup(s->mlu, lab, inv);
 			icmXYZ2Lab(&icmD50, lab, lab);
-		} else 
+		} else { 
 			s->clu->dev_to_rLab(s->clu, lab, inv);
+		}
 
 #ifdef EMPH_NEUTRAL		/* Emphasise neutral axis, like CIE94 does */
 		{
@@ -289,13 +292,20 @@ pcpt_to_nLab(pcpt *s, double *out, double *in) {
 			c = sqrt(lab[1] * lab[1] + lab[2] * lab[2]);	/* Compute chromanance */
 
 //			c = 2.6624 / (1.0 + 0.013 * c);		/* Full strength scale factor */
-			c = 3.0 / (1.0 + 0.03 * c);		/* Full strength scale factor */
-			c = 1.0 + s->nemph * (c - 1.0);			/* Reduced strength scale factor */
+			c = 3.0 / (1.0 + 0.03 * c);			/* Full strength scale factor */
+			c = 1.0 + s->nemph * (c - 1.0);		/* Reduced strength scale factor */
 
 			lab[1] *= c;			/* scale a & b */
 			lab[2] *= c;
 		}
 #endif
+
+		/* Dark emphasis */
+		if (s->idemph < 1.0) {
+			double vv = lab[0];
+			lab[0] = 100.0 * pow(lab[0]/100.0, s->idemph);
+		}
+
 		/* Copy Lab values to output */
 		for (e = 0; e < (s->di < 3 ? s->di : 3); e++)
 			out[e] = lab[e];
@@ -617,7 +627,8 @@ inkmask xmask,			/* external xcolorants mask */
 inkmask nmask,			/* internal xcolorants mask */
 double *ilimit,			/* ink sum limit (scale 1.0) input and return, -1 if default */
 double *uilimit,		/* underlying ink sum limit (scale 1.0) input and return, -1 if default */
-double nemph			/* Neutral emphasis, 0.0 - 1.0. < 0.0 for default == CIE94 */
+double nemph,			/* Neutral emphasis, 0.0 - 1.0. < 0.0 for default == CIE94 */
+double demph			/* Dark emphasis, 1.0 - 4.0. < 0.0 for default == none */
 ) {
 	int e;
 	pcpt *s;
@@ -642,7 +653,10 @@ double nemph			/* Neutral emphasis, 0.0 - 1.0. < 0.0 for default == CIE94 */
 
 	if (nemph < 0.0)
 		nemph = NEMPH_DEFAULT;
+	if (demph < 0.0)
+		demph = DEMPH_DEFAULT;
 	s->nemph = nemph;
+	s->idemph = 1.0/demph;
 
 	/* See if we have a profile */
 	if (profName != NULL
@@ -838,7 +852,8 @@ usage(int level, char *diag, ...) {
 	fprintf(stderr," -p power         Optional power-like value applied to all device values.\n");
 	fprintf(stderr," -c profile       Optional device ICC or MPP pre-conditioning profile filename\n");
 	fprintf(stderr,"                  (Use \"none\" to turn off any conditioning)\n");
-	fprintf(stderr," -N emphasis      Degree of neutral axis patch concentration 0.0-1.0 (default %.2f)\n",NEMPH_DEFAULT);
+	fprintf(stderr," -N nemphasis     Degree of neutral axis patch concentration 0.0-1.0 (default %.2f)\n",NEMPH_DEFAULT);
+	fprintf(stderr," -V demphasis     Degree of dark region patch concentration 1.0-4.0 (default %.2f = none)\n",DEMPH_DEFAULT);
 	fprintf(stderr," -F L,a,b,rad     Filter out samples outside Lab sphere.\n");
 #ifdef VRML_DIAG
 	fprintf(stderr," -w               Dump diagnostic outfilel.wrl file (Lab locations)\n");
@@ -902,6 +917,7 @@ int main(int argc, char *argv[]) {
 	double ilimit = -1.0;	/* Ink limit (scale 1.0) (default none) */
 	double uilimit = -1.0;	/* Underlying (pre-calibration, scale 1.0) ink limit */
 	double nemph = NEMPH_DEFAULT;
+	double demph = DEMPH_DEFAULT;
 	int filter = 0;			/* Filter values */
 	double filt[4] = { 50,0,0,0 };	
 	static char fname[MAXNAMEL+1] = { 0 };		/* Output file base name */
@@ -1168,6 +1184,15 @@ int main(int argc, char *argv[]) {
 				fa = nfa;
 			}
 
+			/* Degree of dark region emphasis */
+			else if (argv[fa][1] == 'V') {
+				if (na == NULL) usage(0,"Expected argument to dark emphasis flag -V");
+				demph = atof(na);
+				if (demph < 1.0 || demph > 4.0)
+					usage(0,"Dark weighting argument %f to '-V' is out of range",demph);
+				fa = nfa;
+			}
+
 			/* Filter out samples outside given sphere */
 			else if (argv[fa][1] == 'F') {
 				if (na == NULL) usage(0,"Expect argument after -F");
@@ -1256,7 +1281,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Deal with ICC, MPP or fallback profile */
-	if ((pdata = new_pcpt(pname, xmask, nmask, &ilimit, &uilimit, nemph)) == NULL) {
+	if ((pdata = new_pcpt(pname, xmask, nmask, &ilimit, &uilimit, nemph, demph)) == NULL) {
 		error("Perceptual lookup object creation failed");
 	}
 
@@ -1271,6 +1296,10 @@ int main(int argc, char *argv[]) {
 	if (verb) {
 		printf("%s test chart\n",ident);
 
+		if (esteps > 0)
+			printf("White patches = %d\n",esteps);
+		if (Bsteps > 0)
+			printf("Black patches = %d\n",Bsteps);
 		if (ssteps > 0)
 			printf("Single channel steps = %d\n",ssteps);
 		if (gsteps > 0)
@@ -1377,6 +1406,11 @@ int main(int argc, char *argv[]) {
 	if (xpow != 1.0) {
 		sprintf(buf,"%f",xpow);
 		pp->add_kword(pp, 0, "EXTRA_DEV_POW",buf, NULL);
+	}
+
+	if (demph > 1.0) {
+		sprintf(buf,"%f",demph);
+		pp->add_kword(pp, 0, "DARK_REGION_EMPHASIS",buf, NULL);
 	}
 
 	/* Only use optimsed full spread if <= 4 dimensions, else use ifarp */
@@ -1962,8 +1996,8 @@ int main(int argc, char *argv[]) {
 				/* Increment grid index and position */
 				for (j = 0; j < di; j++) {
 					gc[j]++;
-					if (pass == 0 && gc[j] < bsteps
-					 || pass == 1 && gc[j] < (bsteps-1))
+					if ((pass == 0 && gc[j] < bsteps)
+					 || (pass == 1 && gc[j] < (bsteps-1)))
 						break;	/* No carry */
 					gc[j] = 0;
 				}
@@ -2645,6 +2679,7 @@ int main(int argc, char *argv[]) {
 		rad = 15.0/pow(nsets, 1.0/(double)(di <= 3 ? di : 3));
 
 		for (i = 0; i < nsets; i++) {
+
 			/* Re-do any inversion before using dev_to_rLab() */
 			if (xmask == nmask) {
 				for (j = 0; j < di; j++)
@@ -2655,10 +2690,11 @@ int main(int argc, char *argv[]) {
 					idev[j] = 1.0 - dev[j];
 				}
 			}
+
 			pdata->dev_to_rLab(pdata, Lab, idev);
 			wrl->Lab2RGB(wrl, col, Lab);
 
-			/* Fudge device locations into Lab space */
+			/* Fudge device locations into "Lab" space */
 			Lab[0] = 100.0 * dev[0];
 			Lab[1] = 100.0 * dev[1] - 50.0;
 			Lab[2] = 100.0 * dev[2] - 50.0;

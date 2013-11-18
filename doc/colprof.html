@@ -3,7 +3,7 @@
   <head>
     <title>colprof</title>
     <meta http-equiv="content-type" content="text/html;
-      charset=ISO-8859-1">
+      charset=windows-1252">
     <meta name="author" content="Graeme Gill">
   </head>
   <body>
@@ -15,6 +15,9 @@
     <h3>Usage Summary</h3>
     &nbsp;<tt><small>colprof [-<i>options</i>] inoutfile<br>
         &nbsp;<a href="#v">-v</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -54,6 +57,9 @@
 
 
 
+
+
+
         &nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Default
         intent: Perceptual, Rel. Colorimetric, Saturation, Abs.
         Colorimetric</small></tt><tt><br>
@@ -64,6 +70,9 @@
         &nbsp; Low quality B2A table - or specific B2A quality or none
         for input device<br>
         &nbsp;<a href="#y">-y</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -100,12 +109,18 @@
 
 
 
+
+
+
         &nbsp; &nbsp; &nbsp; &nbsp; Don't create input (Device) shaper
         curves<br>
       </small></tt><tt><small>&nbsp;<a href="#np">-np</a>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
         Don't create input (Device) grid position curves</small></tt><tt><br>
     </tt><tt> </tt><tt><small>&nbsp;<a href="#no">-no</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -159,6 +174,9 @@ x
 
 
 
+
+
+
         max K, r = ramp K<br>
         &nbsp;<a href="#kp">-k p stle stpo enpo enle shape</a><br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -172,6 +190,9 @@ level
 at
 White
 0.0
+
+
+
 
 
 
@@ -219,6 +240,9 @@ Wh
 
 
 
+
+
+
         0.0 - Bk 1.0<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
@@ -249,6 +273,9 @@ Wh
 
 
 
+
+
+
         0.0 - Bk 1.0<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
@@ -261,6 +288,9 @@ K
 level
 at
 Black
+
+
+
 
 
 
@@ -308,8 +338,14 @@ concave,
 
 
 
+
+
+
         1.0-2.0 convex<br>
         &nbsp;<a href="#K">-K parameters</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -355,6 +391,9 @@ cLUT
 
 
 
+
+
+
         x = XYZ cLUT, X = display XYZ cLUT + matrix<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
@@ -367,6 +406,9 @@ g
 gamma+matrix,
 s
 =
+
+
+
 
 
 
@@ -414,12 +456,18 @@ S
 
 
 
+
+
+
         single shaper+matrix<br>
         &nbsp;<a href="#u">-u</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
 &nbsp;
 &nbsp;
 &nbsp;
+
+
+
 
 
 
@@ -461,9 +509,15 @@ and
 
 
 
+
+
+
       primaries to be +ve</tt><tt><br>
-    </tt><tt>&nbsp;</tt><tt><small><small><a
-            href="file:///D:/src/argyll/doc/colprof.html#f">-f [<i>illum</i>]</a>
+      &nbsp;<a href="#V">-V demphasis</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+      Degree of dark region cLUT grid emphasis 1.0-4.0 (default 1.00 =
+      none)<br>
+    </tt><tt>&nbsp;</tt><tt><small><small><a href="#f">-f [<i>illum</i>]</a>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Use Fluorescent
           Whitening Agent compensation [opt. simulated inst. illum.:<br>
           &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -474,10 +528,15 @@ and
 
 
 
+
+
+
           M0, M1, M2, </small></small></tt><tt><small><small><small>A,
             C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp ]</small></small></small></tt><tt><br>
-    </tt><tt><small><small><small><small>&nbsp;<a
-                href="file:///D:/src/argyll/doc/colprof.html#i">-i <i>illum</i></a>&nbsp;&nbsp;
+    </tt><tt><small><small><small><small>&nbsp;<a href="#i">-i <i>illum</i></a>&nbsp;&nbsp;
+
+
+
 
 
 
@@ -505,10 +564,16 @@ D50M2,
 
 
 
+
+
+
               D65, F5, F8, F10 or file.sp</small></small></small><br>
         &nbsp;<a href="#o">-o <i>observ</i></a>&nbsp; &nbsp; &nbsp;
         &nbsp; &nbsp; Choose CIE Observer for spectral data:<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -559,8 +624,14 @@ for
 
 
 
+
+
+
         given source<br>
         &nbsp;<a href="#S">-S src.icc</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -598,9 +669,15 @@ for
 
 
 
+
+
+
         Use colormetric source gamut to make output profile perceptual
         table<br>
         &nbsp;<a href="#nS">-nS</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -629,6 +706,9 @@ for
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Override gamut
         mapping intent for output profile perceptual table:<br>
         &nbsp;<a href="#T">-T intent</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -682,8 +762,14 @@ for
 
 
 
+
+
+
         pa - Perceptual Appearance</small></tt><tt><br>
     </tt><tt> </tt><tt><small>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -713,8 +799,14 @@ for
 
 
 
+
+
+
         rl - White Point Matched Colorimetric (Lab)<br>
         &nbsp;<a href="#c">-c viewcond</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -752,8 +844,14 @@ for
 
 
 
+
+
+
         either an enumerated choice, or a parameter<br>
         &nbsp;<a href="#d">-d viewcond</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -791,6 +889,9 @@ for
 
 
 
+
+
+
         either an enumerated choice, or a parameter:value change<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
@@ -810,8 +911,14 @@ for
 
 
 
+
+
+
         Also sets out of gamut clipping CAM space.<br>
         &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -877,6 +984,9 @@ for
 
 
 
+
+
+
         &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;&nbsp;&nbsp;&nbsp;
         &nbsp;&nbsp; c = transparency (default average)<br>
         &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
@@ -905,6 +1015,9 @@ for
                 % of image luminance (default 0)<br>
               </span></small>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
             &nbsp;&nbsp; </span><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -942,9 +1055,15 @@ for
 
 
 
+
+
+
         Create gamut gammap_p.wrl and gammap_s.wrl diagostics<br>
       </small></tt><tt><small>&nbsp;<a href="#O">-O outputfile</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Override
+
+
+
 
 
 
@@ -1109,10 +1228,16 @@ the
 
 
 
+
+
+
     device and CIE/spectral sample data and calibration curves used to
     create a profile is stored in the <span style="font-weight: bold;">'targ'</span>
     text tag in the resulting ICC profile. To suppress this and make the
     resulting profile smaller, use the <span style="font-weight: bold;">-nc
+
+
+
 
 
 
@@ -1184,9 +1309,15 @@ the
 
 
 
+
+
+
       |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp;
       &nbsp;_______&nbsp; enle<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -1223,8 +1354,14 @@ the
 
 
 
+
+
+
       |&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; &nbsp; /<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -1261,6 +1398,9 @@ the
 
 
 
+
+
+
       |&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; /<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
       stle&nbsp; | ------/<br>
@@ -1271,6 +1411,9 @@ the
       stpo&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1.0<br>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
 
 
 
@@ -1453,6 +1596,22 @@ White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nb
     black and primary values, so as to work with these programs, but
     this will reduce the accuracy of the profile.<br>
     <br>
+    <a name="V"></a>The <b>-V demphasis</b> parameter allows sets the
+    degree to which cLUT grid spacing should emphasize the accuracy of
+    modelling the device response in the dark regions, over that of the
+    lighter regions. By default this value will be the same as the one
+    set using the <a href="targen.html#V">targen -V</a> parameter.
+    Display devices used for video or film reproduction are typically
+    viewed in dark viewing environments with no strong white reference,
+    and typically employ a range of brightness levels in different
+    scenes. This often means that the devices dark region response is of
+    particular importance, so increasing the density of cLUT grid points
+    in the dark region may improved the balance of accuracy of the
+    resulting profile for video or film reproduction. This is most
+    valuable when used in concert with a set of test points that more
+    densely sample the dark regions, by use of the corresponding targen
+    -V parameter.<br>
+    <br>
     <a name="f"></a> The <b>-f</b> flag enables Fluorescent Whitening
     Agent (FWA) compensation. This only works if spectral data is
     available and, the instrument is not UV filtered.&nbsp; FWA
@@ -1475,6 +1634,9 @@ White&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nb
     using, you should specify the spectrum of the illuminant you are <span
       style="text-decoration: underline;">actually using</span> for the
     proofing, including its <span style="text-decoration: underline;">Ultra
+
+
+
 
 
 

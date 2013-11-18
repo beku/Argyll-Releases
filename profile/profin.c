@@ -838,7 +838,7 @@ make_input_icc(
 		               wr_xicc, icmFwd, icmDefaultIntent,
 		               icmLuOrdNorm,
 		               flags, 		/* Flags */
-		               npat, npat, tpat, NULL, 0.0, wpscale, smooth, avgdev,
+		               npat, npat, tpat, NULL, 0.0, wpscale, smooth, avgdev, 1.0,
 		               NULL, NULL, NULL, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
@@ -1123,7 +1123,7 @@ make_input_icc(
 			               ICX_2PASSSMTH |
 #endif
 		               flags, 		/* Flags */
-		               npat + nxpat, npat, tpat, NULL, 0.0, wpscale, smooth, avgdev,
+		               npat + nxpat, npat, tpat, NULL, 0.0, wpscale, smooth, avgdev, 1.0,
 			           NULL, NULL, NULL, iquality)) == NULL)
 			error ("%d, %s",wr_xicc->errc, wr_xicc->err);
 

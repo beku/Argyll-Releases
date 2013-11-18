@@ -4,6 +4,7 @@ binfiles.osx
 binfiles.lx
 Readme.txt
 Jamfile
+makecat.bat
 45-Argyll.rules
 55-Argyll.rules
 Argyll

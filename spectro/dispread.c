@@ -601,7 +601,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (fake)
-		comport = -99;
+		comport = FAKE_DEVICE_PORT;
 	if ((icmps = new_icompaths(g_log)) == NULL)
 		error("Finding instrument paths failed");
 	if ((ipath = icmps->get_path(icmps, comport)) == NULL)
@@ -664,6 +664,9 @@ int main(int argc, char *argv[]) {
 	if ((ti = icg->find_kword(icg, 0, "FULL_SPREAD_PATCHES")) >= 0)
 		ocg->add_kword(ocg, 0, "FULL_SPREAD_PATCHES",icg->t[0].kdata[ti], NULL);
 	
+	if ((ti = icg->find_kword(icg, 0, "DARK_REGION_EMPHASIS")) >= 0)
+		ocg->add_kword(ocg, 0, "DARK_REGION_EMPHASIS",icg->t[0].kdata[ti], NULL);
+
 	if (verb) {
 		printf("Number of patches = %d\n",npat);
 	}
@@ -767,9 +770,9 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		if ((fi = icg->find_kword(icg, 0, "TV_OUTPUT_ENCODING")) >= 0) {
-			if (!out_tvenc && (strcmp(icg->t[0].kdata[fi], "YES") == 0
-			 || strcmp(icg->t[0].kdata[fi], "yes")) == 0) {
+		if ((fi = ccg->find_kword(ccg, 0, "TV_OUTPUT_ENCODING")) >= 0) {
+			if (!out_tvenc && (strcmp(ccg->t[0].kdata[fi], "YES") == 0
+			 || strcmp(ccg->t[0].kdata[fi], "yes")) == 0) {
 				if (verb) printf("Using Video range (16-235)/255 range encoding because cal. used it\n");
 				out_tvenc = 1;
 			}

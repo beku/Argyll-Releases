@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
 	static char tiffin_name[MAXNAMEL+1] = { 0 };	/* TIFF Input file name (.tif) */
 	static char datin_name[MAXNAMEL+4+1] = { 0 };	/* Data input name (.cie/.q60) */
 	static char datout_name[MAXNAMEL+4+1] = { 0 };	/* Data output name (.ti3/.val) */
-	static char recog_name[MAXNAMEL+1] = { 0 };	/* Reference chart name (.cht) */
+	static char recog_name[MAXNAMEL+1] = { 0 };		/* Reference chart name (.cht) */
 	static char prof_name[MAXNAMEL+1] = { 0 };		/* scanner profile name (.cht) */
 	static char diag_name[MAXNAMEL+1] = { 0 };		/* Diagnostic Output (.tif) name, if used */
 	int verb = 1;
@@ -337,9 +337,11 @@ int main(int argc, char *argv[])
 	if (fa >= argc || argv[fa][0] == '-') usage();
 	strncpy(tiffin_name,argv[fa],MAXNAMEL); tiffin_name[MAXNAMEL] = '\000';
 
+	/* Create a desination file path and name */
 	if (datout_name[0] == '\000'		/* Not been overridden */
 	 && (flags & SI_BUILD_REF) == 0
-	 && repl == 0 && colm == 0) {	/* Not generate ref or replacing .ti3 dev */
+	 && repl == 0 && colm == 0) {		/* Not generate ref or replacing .ti3 dev */
+										// ~~~99 Hmm. Should we honour -O ??
 		char *xl;
 		strncpy(datout_name,argv[fa],MAXNAMEL); datout_name[MAXNAMEL] = '\000';
 		if ((xl = strrchr(datout_name, '.')) == NULL)	/* Figure where extention is */
@@ -369,7 +371,7 @@ int main(int argc, char *argv[])
 		if (repl != 0 || colm > 0) {	/* Color from image or replacing .ti3 device data */
 			strcpy(datin_name,argv[fa]);
 			strcat(datin_name,".ti2");
-			strcpy(datout_name,argv[fa]);
+			strcpy(datout_name,argv[fa]);		// ~~~99 Hmm. Should we honour -O ??
 			strcat(datout_name,".ti3");
 		}
 	}

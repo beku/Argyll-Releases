@@ -30,7 +30,7 @@
 
  */
 
-#undef DEBUG			/* Save measurements and restore them to outname_X.sp */
+#define DEBUG			/* Save measurements and restore them to outname_X.sp */
 						/* 
 
 							outname_i.sp	Illuminant spectrum
@@ -41,7 +41,7 @@
 
 						 */
 
-#define SHOWDXX			/* Plot the best matched daylight as well */
+#undef SHOWDXX			/* Plot the best matched daylight as well */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -109,7 +109,7 @@ typedef struct {
 	xsp2cie *pap;		/* Estimated illuminant + UV on paper lookup inc FWA */
 	xsp2cie *ref;		/* Measured illuminant on paper lookup */
 
-	xspect ill;			/* Illuminant with UV added */
+	xspect ill;			/* Illuminant with UV added - set by bfindfunc() */
 	xspect cpsp;		/* FWA corrected calculated paper reflectance */
 	xspect srop;		/* Scaled measured paper reflectance */
 
@@ -124,7 +124,7 @@ static double bfindfunc(void *adata, double pv[]) {
 
 	/* Add UV level to illuminant */
 	b->ill = *b->i_sp;
-	xsp_setUV(&b->ill, b->i_sp, pv[0]);
+	xsp_setUV(&b->ill, b->i_sp, pv[0]);		/* Extends ill range into UV */
 
 	/* Update the conversion */
 	if (b->pap->update_fwa_custillum(b->pap, NULL, &b->ill) != 0) 
@@ -212,12 +212,20 @@ static double cfindfunc(void *adata, double pv[]) {
 
 /* ============================================================== */
 void
-usage() {
+usage(char *diag, ...) {
 	icompaths *icmps;
 	fprintf(stderr,"Measure an illuminant, Version %s\n",ARGYLL_VERSION_STR);
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (setup_spyd2() == 2)
 		fprintf(stderr,"WARNING: This file contains a proprietary firmware image, and may not be freely distributed !\n");
+	if (diag != NULL) {
+		va_list args;
+		fprintf(stderr,"Diagnostic: ");
+		va_start(args, diag);
+		vfprintf(stderr, diag, args);
+		va_end(args);
+		fprintf(stderr,"\n");
+	}
 	fprintf(stderr,"usage: illumread [-options] output.sp\n");
 	fprintf(stderr," -v                   Verbose mode\n");
 	fprintf(stderr," -S                   Plot spectrum for each reading\n");
@@ -320,7 +328,7 @@ int main(int argc, char *argv[])
 			}
 
 			if (argv[fa][1] == '?') {
-				usage();
+				usage(NULL);
 
 			} else if (argv[fa][1] == 'v' || argv[fa][1] == 'V') {
 				verb = 1;
@@ -332,9 +340,9 @@ int main(int argc, char *argv[])
 			/* COM port  */
 			} else if (argv[fa][1] == 'c') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(NULL);
 				comno = atoi(na);
-				if (comno < 1 || comno > 99) usage();
+				if (comno < 1 || comno > 99) usage(NULL);
 
 			/* No initial calibration */
 			} else if (argv[fa][1] == 'N') {
@@ -347,7 +355,7 @@ int main(int argc, char *argv[])
 			/* Extra flags */
 			} else if (argv[fa][1] == 'Y') {
 				if (na == NULL)
-					usage();
+					usage(NULL);
 			
 				if (na[0] == 'R') {
 					if (na[1] != ':')
@@ -358,22 +366,22 @@ int main(int argc, char *argv[])
 				} else if (na[0] == 'r')
 					refrmode = 1;
 				else
-					usage();
+					usage(NULL);
 				fa = nfa;
 
 			/* Serial port flow control */
 			} else if (argv[fa][1] == 'W') {
 				fa = nfa;
-				if (na == NULL) usage();
+				if (na == NULL) usage(NULL);
 
-				if (na[0] == 'n' || na[0] == 'N')
-					fc = fc_none;
-				else if (na[0] == 'h' || na[0] == 'H')
-					fc = fc_Hardware;
-				else if (na[0] == 'x' || na[0] == 'X')
-					fc = fc_XonXOff;
-				else
-					usage();
+					if (na[0] == 'n' || na[0] == 'N')
+						fc = fc_none;
+					else if (na[0] == 'h' || na[0] == 'H')
+						fc = fc_Hardware;
+					else if (na[0] == 'x' || na[0] == 'X')
+						fc = fc_XonXOff;
+					else
+						usage(NULL);
 
 			} else if (argv[fa][1] == 'D') {
 				debug = 1;
@@ -383,7 +391,7 @@ int main(int argc, char *argv[])
 				}
 				g_log->debug = debug;
 			} else 
-				usage();
+				usage(NULL);
 		}
 		else
 			break;
@@ -391,7 +399,7 @@ int main(int argc, char *argv[])
 
 	/* Get the output spectrum file name argument */
 	if (fa >= argc)
-		usage();
+		usage(NULL);
 
 	strncpy(outname,argv[fa++],MAXNAMEL-1); outname[MAXNAMEL-1] = '\000';
 
@@ -533,17 +541,6 @@ int main(int argc, char *argv[])
 						printf("Disable initial-calibrate not supported\n");
 					}
 				}
-				if (highres) {
-					if (IMODETST(cap, inst_mode_highres)) {
-						inst_code ev;
-						if ((ev = it->get_set_opt(it, inst_opt_highres)) != inst_ok) {
-							printf("!!! Setting high res mode failed with error :'%s' (%s) !!!\n",
-					       	       it->inst_interp_error(it, ev), it->interp_error(it, ev));
-						}
-					} else if (verb) {
-						printf("!!! High resolution ignored - instrument doesn't support it !!!\n");
-					}
-				}
 			}
 
 			/* Check the instrument has the necessary capabilities for this measurement */
@@ -592,6 +589,14 @@ int main(int argc, char *argv[])
 				mode |= inst_mode_emis_norefresh_ovd;
 			else if (refrmode == 1)
 				mode |= inst_mode_emis_refresh_ovd;
+
+			if (highres) {
+				if (IMODETST(cap, inst_mode_highres)) {
+					mode |= inst_mode_highres;
+				} else if (verb) {
+					printf("!!! High resolution ignored - instrument doesn't support it !!!\n");
+				}
+			}
 
 			if ((rv = it->set_mode(it, mode)) != inst_ok) {
 				printf("!!! Setting instrument mode failed with error :'%s' (%s) !!!\n",

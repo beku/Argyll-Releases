@@ -305,6 +305,7 @@ struct _xicc {
 	                                  double smooth,			/* RSPL smoothing factor, */
 	                                                                        /* -ve if raw */
 	                                  double avgdev,			/* Avge Dev. of points */
+	                                  double demph,				/* cLut dark emphasis factor */
 	                                  icxViewCond *vc,			/* Viewing Condition - only */
 	                                                            /* used if pcsor == CIECAM. */
 																/* or ICX_CAM_CLIP flag. */

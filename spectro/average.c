@@ -311,7 +311,7 @@ int main(int argc, char *argv[]) {
 		/* If merging, append all the values */
 		if (domerge) {
 			for (i = 0; i < inps[n].c->t[0].nsets; i++) {
-				inps[n].c->get_setarr(inps[0].c, 0, i, setel);
+				inps[n].c->get_setarr(inps[n].c, 0, i, setel);
 				ocg->add_setarr(ocg, 0, setel);
 			}
 

@@ -187,7 +187,7 @@
 
 struct _a1log {
 	int refc;					/* Reference count */
-	char *tag;						/* Optional tag name */
+	char *tag;					/* Optional tag name */
 	int verb;					/* Current verbosity level (public) */
 	int debug;					/* Current debug level (public) */
 

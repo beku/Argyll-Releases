@@ -368,7 +368,7 @@ i1disp_rdreg_float(
 	if ((ev = i1disp_rdreg_word(p, &val, addr)) != inst_ok)
 		return ev;
 
-	if (ev == 0xffffffff) {
+	if (val == 0xffffffff) {
 		return I1DISP_FLOAT_NOT_SET;
 	}
 
@@ -1923,7 +1923,7 @@ double mtx[3][3]
 	} else {
 		if (p->cbid == 0) {
 			a1loge(p->log, 1, "spyd2: can't set col_cor_mat over non base display type\n");
-			inst_wrong_setup;
+			return inst_wrong_setup;
 		}
 		icmCpy3x3(p->ccmat, mtx);
 	}
@@ -2576,7 +2576,7 @@ static void dump_bytes(a1log *log, char *pfx, unsigned char *buf, int base, int 
 					bp += sprintf(bp,".");
 			}
 			bp += sprintf(bp,"\n");
-			a1logd(log,0,oline);
+			a1logd(log,0,"%s",oline);
 			bp = oline;
 		}
 	}

@@ -245,7 +245,7 @@ main(int argc, char *argv[]) {
 	if ((rv = icco->read(icco,fp,0)) != 0)
 		error ("%d, %s",rv,icco->err);
 
-	if (icco->header->cmmId = str2tag("argl"))
+	if (icco->header->cmmId == str2tag("argl"))
 		icco->allowclutPoints256 = 1;
 
 	if (verb > 1) {
@@ -289,7 +289,7 @@ main(int argc, char *argv[]) {
 			continue;
 		}
 		/* For each input number */
-		for (bp = buf-1, nbp = buf, i = 0; i < MAX_CHAN; i++) {
+		for (nbp = buf, i = 0; i < MAX_CHAN; i++) {
 			bp = nbp;
 			in[i] = oin[i] = strtod(bp, &nbp);
 			if (nbp == bp)

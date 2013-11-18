@@ -1661,6 +1661,7 @@ int xfit_fit(
 	double out_max[MXDO],	/* Output value scaling/range maximum */
 	double smooth,			/* clut rspl smoothing factor */
 	double oavgdev[MXDO],	/* Average output value deviation */
+	double demph,			/* dark emphasis factor for cLUT grid res. */
 	int iord[],				/* Order of input pos/shaper curve for each dimension */
 	int sord[],				/* Order of input sub-grid shaper curve (not used) */
 	int oord[],				/* Order of output shaper curve for each dimension */
@@ -2269,6 +2270,7 @@ dump_xfit(p);
 					pgp[i].v = vv;
 				else
 					pgp[i].v = pgp[i-1].v + vv;
+
 			}
 			resid->del(resid);
 
@@ -2279,7 +2281,10 @@ dump_xfit(p);
 			for (i = 0; i < NPGP; i++) {
 				pgp[i].v = (pgp[i].v - vo)/vs;
 				
-//printf("~1 guide point %d: %f -> %f\n",i,pgp[i].p,pgp[i].v);
+				/* Apply any dark emphasis */
+				if (demph > 1.0) {
+					pgp[i].v = pow(pgp[i].v, 1.0/demph);
+				}
 			}
 			/* Fit the non-monotonic parameters to the guide points */
 			if ((posc = new_mcv_noos()) == NULL)

@@ -63,6 +63,7 @@ void make_output_icc(
 	int fwacomp,			/* FWA compensation requested */
 	double smooth,			/* RSPL smoothing factor, -ve if raw */
 	double avgdev,			/* reading Average Deviation as a proportion of the input range */
+	double demph,			/* Emphasise dark region grid resolution in cLUT */
 	char *ipname,			/* input icc profile - enables gamut map, NULL if none */
 	char *sgname,			/* source image gamut - NULL if none */
 	char *absname[3],		/* abstract profile name for each table */

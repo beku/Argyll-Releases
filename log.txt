@@ -2,7 +2,70 @@
 Argyll CMS change log
 =====================
 
-Version 1.6.0 (beta)
+Version 1.6.2 - (19th November 2013)
+-------------
+
+*	Added "dark region emphasis" -V parameter to targen and colprof,
+	in an attempt to improve the accuracy of display profiles intended
+	for use with video. This should improve the subsequent black
+	point accuracy of the profile. 
+	
+*	Fixed bug and tweaked dispcal black point optimization to
+	err on the black side. Added -v3 for even more debugging information.
+
+*	Changed i1d3 driver to be more forgiving of EEProm checksum
+	calculation, so that it works with the latest release "A-02" rev. 
+	i1 display pro & colormunki display instruments.
+
+*	Improved robustness of i1d3 driver in recovering from errors.
+
+*	Fixed race condition bug in OS X HID driver. This
+	fixes occassional problem with i1d3, and also solves
+	problem with the ColorHug on OS X.
+
+*	Fixed problem with TV encoded output and dispread -E -k/-K
+	(Thanks to Florian Hoch).
+
+*	Fixed minor bug in DE94 in icclib.
+
+*	Fixed major bug in illumread - result was being corrupted.
+
+*	Fixed "edges don't match" bug in printarg when -iCM -h -s/-S used.
+
+*	Fix bug in -H flag in ccxxmake, chartread, dispcal, dispread,
+	illumread & spotread so that it works once again. 
+
+Version 1.6.1 (30th September 2013)
+-------------
+
+*	Fix bug in "average -m"
+
+*	Fix oeminst to work with a wider range of i1d3 install
+	files.
+
+*	Fix bug introduced into ColorMunki (spectro) reflective
+	measurement that created discrepancies between spot
+	and strip measurement mode. Changed short wavelength
+	handling to be more like the manufacturers driver in
+ 	duplicating values, reduced reflective strip reading
+	scan rate to 55Hz to reduce reflective electrical interference
+	error.
+
+*	Fix bug introduced into DTP94 driver when running on OS X.
+
+*	Add valid (but unsigned) .cat files for MSWin libusb-win32 driver
+	installation. This seems to remove the need to disable diver signature
+    enforcement, and makes it possible to install on Win8.1
+
+*	Fix MadVR test pattern access to look for 64 bit .dll if it's been
+	compiled as 64 bit, otherwise API will fail.
+
+*	Change instlib API to honour the inst_mode_highres flag in set_mode().
+	Note that this means that High Res. mode state will be set by whatever
+	the last set_mode() or get_set_opt(inst_opt_highres/inst_opt_stdre) was.
+
+
+Version 1.6.0 (16th August 2013) 
 -------------
 
 *	Fixed crash in ucmm/ucmm.c when loading certain profiles

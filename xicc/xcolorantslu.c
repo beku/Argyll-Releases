@@ -153,7 +153,7 @@ main(int argc, char *argv[]) {
 			continue;
 		}
 		/* For each input number */
-		for (bp = buf-1, nbp = buf, i = 0; i < MAX_CHAN; i++) {
+		for (nbp = buf, i = 0; i < MAX_CHAN; i++) {
 			bp = nbp;
 			in[i] = strtod(bp, &nbp);
 			if (nbp == bp)

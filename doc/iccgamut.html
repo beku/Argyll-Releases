@@ -23,6 +23,7 @@
       <span style="font-family: monospace;">&nbsp;-v&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
         Verbose</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;-d
         sres&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Surface resolution
@@ -31,16 +32,19 @@
 emit
 
 
+
         VRML .wrl file as well as CGATS .gam file</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;-n&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Don't
 
 
+
         add VRML axes or white/black point</span><br style="font-family:
         monospace;">
       <span style="font-family: monospace;">&nbsp;-k&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Add
+
 
 
         VRML markers for prim. &amp; sec. "cusp" points</span><br
@@ -56,6 +60,7 @@ Add
 s
 
 
+
         = saturation, a = absolute (default), d = profile default</span></small><small><span
         style="font-family: monospace;"></span></small><br
       style="font-family: monospace;">
@@ -66,6 +71,7 @@ s
         monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 r
+
 
 
         = reverse (priority: monochrome &gt; matrix &gt; lut)<br>
@@ -88,6 +94,7 @@ r
 either
 
 
+
         an enumerated choice, or a series of parameters:value changes</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;"></span></small><small><span
@@ -98,9 +105,11 @@ either
 &nbsp;
 
 
+
         &nbsp; pe - Print evaluation environment (CIE 116-1995)<br>
       </span></small><small><span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
+
 
 
         &nbsp; pc - Critical print evaluation environment (ISO-3664 P1)</span></small><small><span
@@ -110,10 +119,12 @@ either
 &nbsp;
 
 
+
         &nbsp; &nbsp; mt - Monitor in typical work environment</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
+
 
 
         &nbsp; mb - Monitor in bright work environment</span><br
@@ -142,10 +153,12 @@ either
 s:surround&nbsp;&nbsp;
 
 
+
         n = auto, a = average, m = dim, d = dark,</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 &nbsp;
+
 
 
         &nbsp; &nbsp;&nbsp; c = transparency (default average)</span><br
@@ -154,10 +167,12 @@ s:surround&nbsp;&nbsp;
 w:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
         Adapted white point as XYZ (default media white)</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
 
         Adapted white point as x, y</span><br style="font-family:
@@ -166,11 +181,13 @@ w:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 a:adaptation
 
 
+
         Adaptation luminance in cd.m^2 (default 50.0)</span><br
         style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 b:background
 Background
+
 
 
         % of image luminance (default 20)<br>
@@ -182,6 +199,7 @@ Background
 f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
+
             Flare light % of image luminance (default 0)<br>
           </span></small>&nbsp;</span><span style="font-family:
         monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -189,14 +207,17 @@ f:flare&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
         (default 1)</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
         g:X:Y:Z&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Glare color as XYZ
         (default media white)</span><br style="font-family: monospace;">
       <span style="font-family: monospace;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
         g:x:y&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Glare color as
         x, y<br>
         &nbsp;-s&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 Create
+
 
 
         special cube surface topology plot<br style="font-family:
@@ -312,6 +333,14 @@ Create
     and the resulting files will be <span style="text-decoration:
       underline;">profile.gam</span> and <span style="text-decoration:
       underline;">profile.wrl</span>.<br>
+    <br>
+    To create a gamut suitable for CIECAM02&nbsp; gamut mapping space in
+    colprof or collink, something like<br>
+    <br>
+    &nbsp;&nbsp;&nbsp; iccgamut -ir -pj -cmt&nbsp; profile.icm<br>
+    <br>
+    where the viewing conditions "mt" should the same as the source
+    conditions in colprof or collink.<br>
     <br style="font-weight: bold;">
     <span style="font-weight: bold;"></span><br>
     <br>

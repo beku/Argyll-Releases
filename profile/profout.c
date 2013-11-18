@@ -657,6 +657,7 @@ make_output_icc(
 	int fwacomp,			/* FWA compensation requested */
 	double smooth,			/* RSPL smoothing factor, -ve if raw */
 	double avgdev,			/* reading Average Deviation as a proportion of the input range */
+	double demph,			/* Emphasise dark region grid resolution in cLUT */
 	char *ipname,			/* input icc profile - enables gamut map, NULL if none */
 	char *sgname,			/* source image gamut - NULL if none */
 	char *absname[3],		/* abstract profile name for each table */
@@ -739,7 +740,7 @@ make_output_icc(
 		int ti;
 
 		if ((ti = icg->find_kword(icg, 0, "LUMINANCE_XYZ_CDM2")) >= 0) {
-			if (sscanf(icg->t[0].kdata[ti], " %*lf %lf %*lf ",&dispLuminance) != 1)
+			if (sscanf(icg->t[0].kdata[ti], " %*f %lf %*f ",&dispLuminance) != 1)
 				dispLuminance = 0.0;
 		}
 
@@ -1980,7 +1981,7 @@ make_output_icc(
 			               ICX_2PASSSMTH |
 #endif
 			               flags,
-			               npat, npat, tpat, NULL, dispLuminance, wpscale, smooth, avgdev,
+			               npat, npat, tpat, NULL, dispLuminance, wpscale, smooth, avgdev, demph, 
 			               NULL, oink, cal, iquality)) == NULL)
 				error("%d, %s",wr_xicc->errc, wr_xicc->err);
 
@@ -2898,7 +2899,7 @@ make_output_icc(
 		               wr_xicc, icmFwd, isdisp ? icmDefaultIntent : icRelativeColorimetric,
 		               icmLuOrdRev,
 			           flags,		 		/* Compute white & black */
-		               npat, npat, tpat, NULL, dispLuminance, wpscale, smooth, avgdev,
+		               npat, npat, tpat, NULL, dispLuminance, wpscale, smooth, avgdev, demph,
 		               NULL, oink, cal, iquality)) == NULL)
 			error("%d, %s",wr_xicc->errc, wr_xicc->err);
 

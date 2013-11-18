@@ -22,7 +22,9 @@
 
 	Add -h2 flag for Munki for super high-res chart ?
 	Note:   i1Pro:  Illum spot: 3.5mm Aperture: 4.5mm, Physical aperture: 4.55mm
+
             Munki:  Illum spot: 8.0mm Aperture: 6.0mm, Physical aperture: 7.63mm
+			Min patch size is 6mm x 6mm, below that increases delta E.
 
 	Add an option that allows including a scale gauge, to detect
 	accidental re-scaling.
@@ -100,7 +102,7 @@
  *    Improve EPS support to add a preview to each eps file.
  */
 
-#undef DEBUG
+#undef DEBUG			/* Print edge details to stderr */
 #undef FORCEN			/* For testing, force DeviceN */
 #define DEN_COMPRESS	/* Compress density estimates > 1.0 */
 						/* - this biases it towards white spacers */
@@ -3004,7 +3006,8 @@ char *argv[];
 		usage("Not enough arguments");
 
 #ifdef DEBUG
-	printf("target: DEBUG is #defined\n");
+# pragma message("######### printtarg DEBUG is #define ########")
+	fprintf(stderr,"target: DEBUG is #defined\n");
 #endif
 
 	/* Find the default paper size */
@@ -3659,7 +3662,7 @@ char *argv[];
 		pcol = pcold;		/* Density spacer alues */
 
 	
-	sprintf(label, "Argyll Color Management System - Test chart \"%s\" (%s %d) %s",
+	sprintf(label, "ArgyllCMS - Chart \"%s\" (%s %d) %s",
 	               psname, rand ? "Random Start" : "Chart ID", rstart, atm);
 	generate_file(itype, psname, cols, npat, applycal ? cal : NULL, label,
 	            pap != NULL ? pap->w : cwidth, pap != NULL ? pap->h : cheight,
@@ -3763,6 +3766,7 @@ char *argv[];
 /* A half edge structure */
 /* coordinate origin is top left */
 struct _hedge {
+	int ix;			/* Index for debug id */
 	double rgb[3];	/* Color this half edge transitions to */
 	int negh;		/* 1 if this is a -ve major coordinate side half edge, 0 otherwise */
 	double mj;		/* Major coordinate offset (ie. X coord for vertical edge) */
@@ -3774,7 +3778,7 @@ struct _hedge {
 /* A patch identifier */
 /* coordinate origin is top left */
 struct _patch {
-	char id[20];	/* ID string, Zeri length if a diagnostic rectangle */
+	char id[20];	/* ID string, Zero length if a diagnostic rectangle */
 	double xo;		/* Location of the rectangle origin (bottom left ???) */
 	double yo;
 	double w;		/* Size of the patch */
@@ -3812,7 +3816,7 @@ struct {
 
 	/* Raw half edge lists, [vertical, horizontal] */
 	int nhe[2];
-	hedge *he[2];
+	hedge *he[2];	/* Pointer to start of hedhe linked list */
 
 	/* Patch identity information */
 	int npatches;
@@ -3955,33 +3959,173 @@ double y
 /* .cht file. */
 void et_write(char *fname, col *cols, int *rix, int si, int ei) {
 	FILE *of;
-	hedge *ep;
+	hedge *ep0, *ep1, *epe;
 	int i, h;
 
 //printf("~1 et has %d vertical and %d horizontal half edges\n", et.nhe[0], et.nhe[1]);
 //printf("~1 et has %d patches\n", et.npatches);
 
+	/* Do X then Y */
 	for (h = 0; h < 2; h++) {
+
 		/* Create sorted list of vertical half edges */
 		if ((et.she[h] = (hedge **)malloc(sizeof(patch*) * et.nhe[h])) == NULL)
 			error("Malloc of array of vertical halfedge pointers failed");
 	
-		for (ep = et.he[h], i = 0; i < et.nhe[h]; i++, ep = ep->next)
-			et.she[h][i] = ep;
+		for (ep0 = et.he[h], i = 0; i < et.nhe[h]; i++, ep0 = ep0->next)
+			et.she[h][i] = ep0;
 	
 		/* Sort helf edges by their X location, then their Y0 location */
 #define HEAP_COMPARE(A,B) (fabs(A->mj - B->mj) < 1e-6 ? A->mi0 < B->mi0 : A->mj < B->mj)
 		HEAPSORT(hedge *, et.she[h], et.nhe[h]);
 #undef HEAP_COMPARE
 
-#ifdef NEVER
-for (i = 0; i < et.nhe[h]; i++) {
-printf("%s %d at %c = %f from %c = %f to %f\n",
-h == 0 ? "Vert" : "Horiz", i,
-h == 0 ? 'X' : 'Y', et.she[h][i]->mj,
-h == 0 ? 'Y' : 'X', et.she[h][i]->mi0, et.she[h][i]->mi1);
-}
-#endif /* NEVER */
+		/* Re-create the linked list in sorted order */
+		et.he[h] = NULL;
+		for (i = et.nhe[h]-1; i >= 0; i--) {
+			et.she[h][i]->next = et.he[h];
+			et.he[h] = et.she[h][i];
+			et.he[h]->ix = i;
+		}
+		
+		free(et.she[h]);
+		et.she[h] = NULL;
+
+#ifdef DEBUG
+		fprintf(stderr,"Sorted %s half edges:\n",h ? "Vertical" : "Horizontal");
+		for (ep0 = et.he[h]; ep0 != NULL; ep0 = ep0->next) {
+			fprintf(stderr,"%s %d at %c = %f from %c = %f to %f\n",
+			h == 0 ? "Vert" : "Horiz", ep0->ix,
+			h == 0 ? 'X' : 'Y', ep0->mj,
+			h == 0 ? 'Y' : 'X', ep0->mi0, ep0->mi1);
+		}
+#endif /* DEBUG */
+
+		/* Do a first pass to locate and split any part overlapping pairs of edges */
+		for (ep0 = et.he[h]; ep0 != NULL; ep0 = epe) {
+
+			/* Locate the end of the half edges at the same position */
+			for (epe = ep0; epe != NULL; epe = epe->next) {
+				if (epe == NULL || fabs(ep0->mj - epe->mj) > 1e-6)
+					break;
+			}
+
+#ifdef DEBUG
+			fprintf(stderr,"Doing group from %d to %d\n",ep0->ix, epe ? epe->ix : -1);
+#endif
+
+			/* Look for overlapping half edges, and split them up so */
+			/* there are no overlaps */
+			for (; ep0 != epe; ep0 = ep0->next) {
+
+				for (ep1 = ep0->next; ep1 != epe; ep1 = ep1->next) {
+
+					if (ep1->mi0 > ep0->mi1)	/* Out of range for overlap */
+						break;
+
+					/* If partial overlap */
+					if (ep0->mi0 < (ep1->mi0-1e-6)
+					 && ep0->mi1 > (ep1->mi0+1e-6)
+					 && ep0->mi1 < (ep1->mi1-1e-6)) {
+						hedge *ep0b, *ep1b;
+						
+#ifdef DEBUG
+						fprintf(stderr,"Half edges partial overlap:\n");
+						fprintf(stderr,"i = %d, j = %d\n",ep0->ix,ep1->ix);
+						fprintf(stderr,"%s %d at %c = %f from %c = %f to %f, half %s\n",
+						h == 0 ? "Vert" : "Horiz", ep0->ix,
+						h == 0 ? 'X' : 'Y', ep0->mj,
+						h == 0 ? 'Y' : 'X', ep0->mi0, ep0->mi1,
+						ep0->negh ? "Neg" : "Pos");
+						fprintf(stderr,"%s %d at %c = %f from %c = %f to %f, half %s\n",
+						h == 0 ? "Vert" : "Horiz", ep1->ix,
+						h == 0 ? 'X' : 'Y', ep1->mj,
+						h == 0 ? 'Y' : 'X', ep1->mi0, ep1->mi1,
+						ep1->negh ? "Neg" : "Pos");
+#endif
+						/* Split up the two edges so that we have four edges */
+						
+						if ((ep0b = (hedge *)calloc(sizeof(hedge), 1)) == NULL)
+							error("Malloc of half edge structure failed");
+						memcpy(ep0b, ep0, sizeof(hedge));
+
+						if ((ep1b = (hedge *)calloc(sizeof(hedge), 1)) == NULL)
+							error("Malloc of half edge structure failed");
+						memcpy(ep1b, ep1, sizeof(hedge));
+
+						ep0b->mi0 = ep1->mi0;
+						ep1b->mi1 = ep0->mi1;
+						ep0->mi1 = ep1->mi0;
+						ep1->mi0 = ep0->mi1;
+
+						/* Insert them in order into linked list */
+						ep1b->next = ep1;
+						ep0b->next = ep1b;
+						ep0->next = ep0b;
+
+						et.nhe[h] += 2;
+
+					/* If full overlap */
+					} else if (ep0->mi0 < (ep1->mi0-1e-6)
+					 && ep0->mi1 > (ep1->mi1+1e-6)) {
+						hedge *ep0b, *ep0c;
+						
+#ifdef DEBUG
+						fprintf(stderr,"Half edges full overlap:\n");
+						fprintf(stderr,"i = %d, j = %d\n",ep0->ix,ep1->ix);
+						fprintf(stderr,"%s %d at %c = %f from %c = %f to %f, half %s\n",
+						h == 0 ? "Vert" : "Horiz", ep0->ix,
+						h == 0 ? 'X' : 'Y', ep0->mj,
+						h == 0 ? 'Y' : 'X', ep0->mi0, ep0->mi1,
+						ep0->negh ? "Neg" : "Pos");
+						fprintf(stderr,"%s %d at %c = %f from %c = %f to %f, half %s\n",
+						h == 0 ? "Vert" : "Horiz", ep1->ix,
+						h == 0 ? 'X' : 'Y', ep1->mj,
+						h == 0 ? 'Y' : 'X', ep1->mi0, ep1->mi1,
+						ep1->negh ? "Neg" : "Pos");
+#endif
+						/* Split up the first edge so that we have four edges */
+						
+						if ((ep0b = (hedge *)calloc(sizeof(hedge), 1)) == NULL)
+							error("Malloc of half edge structure failed");
+						memcpy(ep0b, ep0, sizeof(hedge));
+
+						if ((ep0c = (hedge *)calloc(sizeof(hedge), 1)) == NULL)
+							error("Malloc of half edge structure failed");
+						memcpy(ep0c, ep0, sizeof(hedge));
+
+						ep0b->mi0 = ep1->mi0;
+						ep0b->mi1 = ep1->mi1;
+						ep0c->mi0 = ep1->mi1;
+						ep0->mi1 = ep1->mi0;
+
+						/* Insert them in order into linked list */
+						ep0c->next = ep1->next;
+						ep1->next = ep0c;
+						ep0b->next = ep1;
+						ep0->next = ep0b;
+						et.nhe[h] += 2;
+					}
+				}
+			}
+		}
+
+		/* Now we can assume that edges match completely or not at all */
+
+		/* Re-create sorted list of vertical half edges */
+		/* (Instead of this we could convert the half edge matching loops */
+		/*  below to use the linked list, like the above code.) */
+
+		if ((et.she[h] = (hedge **)malloc(sizeof(patch*) * et.nhe[h])) == NULL)
+			error("Malloc of array of vertical halfedge pointers failed");
+	
+		for (ep0 = et.he[h], i = 0; i < et.nhe[h]; i++, ep0 = ep0->next)
+			et.she[h][i] = ep0;
+	
+		/* Sort helf edges by their X location, then their Y0 location */
+#define HEAP_COMPARE(A,B) (fabs(A->mj - B->mj) < 1e-6 ? A->mi0 < B->mi0 : A->mj < B->mj)
+		HEAPSORT(hedge *, et.she[h], et.nhe[h]);
+#undef HEAP_COMPARE
 
 		et.nel[h] = 0;
 		et.nelp = &et.el[h];		/* Append next edge list here */
@@ -3993,7 +4137,7 @@ h == 0 ? 'Y' : 'X', et.she[h][i]->mi0, et.she[h][i]->mi1);
 			double *rgb = NULL;	/* Contrast RGB */
 			elist *el;		/* Current elist */
 
-			el = *et.nelp;
+			el = *et.nelp;	/* current end of lits */
 
 			/* Locate the end of the half edges at the same position */
 			for (ii = i; ii < et.nhe[h]; ii++) {
@@ -4001,11 +4145,13 @@ h == 0 ? 'Y' : 'X', et.she[h][i]->mi0, et.she[h][i]->mi1);
 					break;
 			}
 
-//printf("~1 doing group from %d to %d\n",i, ii);
+#ifdef DEBUG
+			fprintf(stderr,"Doing group from %d to %d\n",i, ii);
+#endif
+
 			/* Find half edge pairs */
 			/* Note that we assume that the half edges match perfectly, */
-			/* or not at all. This will be normaly be the case with targets */
-			/* generated by printtarg. */
+			/* or not at all. */
 			for (j = i; j < ii; j = nj, j++) {
 				int e, k = j+1;
 				double vv;
@@ -4026,25 +4172,26 @@ h == 0 ? 'Y' : 'X', et.she[h][i]->mi0, et.she[h][i]->mi1);
 					/* Found an overlapping non-matching edge */
 					nj = k;
 
-#ifdef NEVER
-fprintf(stderr,"i = %d, j = %d\n",i,j);
-fprintf(stderr,"%s %d at %c = %f from %c = %f to %f, half %s\n",
-h == 0 ? "Vert" : "Horiz", i,
-h == 0 ? 'X' : 'Y', et.she[h][j]->mj,
-h == 0 ? 'Y' : 'X', et.she[h][j]->mi0, et.she[h][j]->mi1,
-et.she[h][j]->negh ? "Neg" : "Pos");
-fprintf(stderr,"%s %d at %c = %f from %c = %f to %f, half %s\n",
-h == 0 ? "Vert" : "Horiz", i,
-h == 0 ? 'X' : 'Y', et.she[h][k]->mj,
-h == 0 ? 'Y' : 'X', et.she[h][k]->mi0, et.she[h][k]->mi1,
-et.she[h][k]->negh ? "Neg" : "Pos");
-#endif /* NEVER */
+#ifdef DEBUG
+					fprintf(stderr,"Half edges overlap but don't match:\n");
+					fprintf(stderr,"i = %d, j = %d\n",i,j);
+					fprintf(stderr,"%s %d at %c = %f from %c = %f to %f, half %s\n",
+					h == 0 ? "Vert" : "Horiz", i,
+					h == 0 ? 'X' : 'Y', et.she[h][j]->mj,
+					h == 0 ? 'Y' : 'X', et.she[h][j]->mi0, et.she[h][j]->mi1,
+					et.she[h][j]->negh ? "Neg" : "Pos");
+					fprintf(stderr,"%s %d at %c = %f from %c = %f to %f, half %s\n",
+					h == 0 ? "Vert" : "Horiz", j,
+					h == 0 ? 'X' : 'Y', et.she[h][k]->mj,
+					h == 0 ? 'Y' : 'X', et.she[h][k]->mi0, et.she[h][k]->mi1,
+					et.she[h][k]->negh ? "Neg" : "Pos");
+#endif /* DEBUG */
 						error("Internal - half edges don't match");
 
 				} else {
-					/* Must be a non-matching edge */
+					/* Must be a non-matching edge against the media */
 					nj = j;
-					rgb = et.mrgb;	/* Edge must be against media */
+					rgb = et.mrgb;
 				}
 
 				/* Compute vector delta in rgb */

@@ -422,13 +422,14 @@ int main(int argc, char *argv[])
 			error("new_xcal failed");
 		if ((cal->read(cal, calname)) != 0)
 			error("%s",cal->err);
-		if (verb)
+		if (verb) {
 			if (applycal == 1)
 				printf("Applying calibration curves from '%s'\n",calname);
 			else if (applycal == 2)
 				printf("Applying inverse calibration curves from '%s'\n",calname);
 			else
 				printf("Embedding calibration curves from '%s' in output\n",calname);
+		}
 	}
 
 	/* Deal with ICC profile */
@@ -856,6 +857,9 @@ int main(int argc, char *argv[])
 	if ((ti = icg->find_kword(icg, 0, "FULL_SPREAD_PATCHES")) >= 0)
 		ocg->add_kword(ocg, 0, "FULL_SPREAD_PATCHES",icg->t[0].kdata[ti], NULL);
 	
+	if ((ti = icg->find_kword(icg, 0, "DARK_REGION_EMPHASIS")) >= 0)
+		ocg->add_kword(ocg, 0, "DARK_REGION_EMPHASIS",icg->t[0].kdata[ti], NULL);
+
 	if (icc_luo == NULL) {	/* If MPP profile, we know what the target instrument is */
 		ocg->add_kword(ocg, 0, "TARGET_INSTRUMENT", inst_name(itype) , NULL);
 	}

@@ -123,7 +123,7 @@ dtp51_fcommand(
 		return icoms2dtp51_err(se);
 	}
 	rv = DTP51_OK;
-	if (tc == ">" && ntc == 1) {
+	if (tc[0] == '>' && ntc == 1) {
 		rv = extract_ec(out);
 		if (rv > 0) {
 			rv &= inst_imask;

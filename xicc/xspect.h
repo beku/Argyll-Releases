@@ -176,6 +176,7 @@ int standardObserver(xspect *sp[3], icxObserverType obType);
 /* Return a string describing the standard observer */
 char *standardObserverDescription(icxObserverType obType);
 
+
 /* Clamping state */
 typedef enum {
     icxNoClamp			= 0,	/* Don't clamp XYZ/Lab to +ve */
@@ -337,6 +338,11 @@ typedef enum {
 /* return NULL on failure. */
 xslpoly *chrom_locus_poligon(icxLocusType locus_type, icxObserverType obType, int cspace);
 
+
+/* Determine whether the given XYZ is outside the chromaticity locus */
+/* Return 0 if within locus */
+/* Return 1 if outside locus */
+int icx_outside_spec_locus(xslpoly *p, double xyz[3]);
 
 /* --------------------------- */
 /* Density and other functions */

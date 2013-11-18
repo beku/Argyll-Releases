@@ -59,9 +59,11 @@
 
 #ifdef SIMPLE_MODEL
 # undef FAKE_NOISE			/* Add noise to _fake_ devices XYZ */
+# undef FAKE_UNPREDIC		/* Initialise random unpredictably */
 # undef FAKE_BITS 			/* Number of bits of significance of fake device */
 #else
 # define FAKE_NOISE 0.01		/* Add noise to _fake_ devices XYZ */
+# define FAKE_UNPREDIC			/* Initialise random unpredictably */
 # define FAKE_BITS 9			/* Number of bits of significance of fake device */
 #endif
 
@@ -263,6 +265,9 @@ a1log *log				/* Verb, debug & error log */
 	if (nadaptive)
 		mode |= inst_mode_emis_nonadaptive;
 	
+//	if (p->highres)
+//		mode |= inst_mode_highres;
+
 	/* (We're assuming spectral doesn't affect calibration ?) */
 
 	if ((rv = p->set_mode(p, mode)) != inst_ok) {
@@ -1311,9 +1316,9 @@ static int disprd_fake_read(
 	ooff[0] = ooff[1] = ooff[2] = 0.0; /* Output offset */
 #else
 	/* Input offset, equivalent to RGB offsets having various values */
-	doff[0] = 0.10;
+	doff[0] = 0.05;
 	doff[1] = 0.06;
-	doff[2] = 0.08;
+	doff[2] = 0.07;
 	/* Output offset - equivalent to flare [range 0.0 - 1.0] */
 	ooff[0] = 0.03;
 	ooff[1] = 0.04;
@@ -1907,12 +1912,7 @@ static int config_inst_displ(disprd *p) {
 	
 	if (p->highres) {
 		if (IMODETST(cap, inst_mode_highres)) {
-			inst_code ev;
-			if ((ev = p->it->get_set_opt(p->it, inst_opt_highres)) != inst_ok) {
-				a1logd(p->log,1,"\nSetting high res mode failed with error :'%s' (%s)\n",
-		       	       p->it->inst_interp_error(p->it, ev), p->it->interp_error(p->it, ev));
-				return 2;
-			}
+			mode |= inst_mode_highres;
 		} else {
 			a1logv(p->log, 1, "high resolution ignored - instrument doesn't support high res. mode\n");
 		}
@@ -2080,6 +2080,12 @@ a1log *log      	/* Verb, debug & error log */
 	p->fc = fc;
 
 	p->native = native;
+
+#ifdef FAKE_NOISE 
+# ifdef FAKE_UNPREDIC
+	rand32(time(NULL));
+# endif
+#endif
 
 	/* Save this so we can return current cal, or */
 	/* in case we are using a fake device */
@@ -2354,7 +2360,7 @@ a1log *log      	/* Verb, debug & error log */
 	
 		/* Open display window again for measurement */
 		if ((p->dw = new_dispwin(disp, hpatsize, vpatsize, ho, vo, 0, native, noramdac, nocm,
-			                     out_tvenc, blackbg, override, p->log->debug)) == NULL) {
+			                     uout_tvenc, blackbg, override, p->log->debug)) == NULL) {
 			a1logd(log,1,"new_disprd failed new_dispwin failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 3;

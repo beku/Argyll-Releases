@@ -340,10 +340,10 @@ inst_cal_type *n_cals,
 inst_cal_type *a_cals) {
 
 	if (n_cals != NULL)
-		*n_cals = inst_calc_none;
+		*n_cals = inst_calt_none;
 
 	if (a_cals != NULL)
-		*a_cals = inst_mode_none;
+		*a_cals = inst_calt_none;
 
 	return inst_ok;
 }
@@ -604,6 +604,8 @@ void *cntx			/* Context for callback */
 	else if (itype == instColorHug)
 		p = (inst *)new_colorhug(icom, itype);
 #endif /* ENABLE_USB */
+
+
 
 	/* Nothing matched */
 	if (p == NULL) {

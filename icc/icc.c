@@ -127,6 +127,10 @@
 #define DBLLL(xxx) 
 #endif
 
+#ifndef M_PI
+# define M_PI 3.14159265358979323846
+#endif
+
 /* =========================================================== */
 /* Overflow protected unsigned int arithmatic functions. */
 /* These functions saturate rather than wrapping around. */
@@ -12213,8 +12217,8 @@ static icmBase *icc_read_tag_ix(
 }
 
 /* Read the tag element data of the first matching, and return a pointer to the object */
-/* Returns NULL if error - icc->errc will contain:         */
-/* 2 if not found                                          */
+/* Returns NULL if error - icc->errc will contain: */
+/* 2 if not found */
 /* Doesn't read uknown type tags */
 static icmBase *icc_read_tag(
 	icc *p,
@@ -12238,7 +12242,7 @@ static icmBase *icc_read_tag(
 }
 
 /* Read the tag element data of the first matching, and return a pointer to the object */
-/* Returns NULL if error.
+/* Returns NULL if error. */
 /* Returns an icmSigUnknownType object if the tag type isn't handled by a specific object. */
 /* NOTE: we don't handle tag duplication - you'll always get the first in the file. */
 static icmBase *icc_read_tag_any(
@@ -13838,7 +13842,7 @@ void icmLCh2Lab(double *out, double *in) {
 	out[2] = C * sin(h);
 }
 
-/* Lab to LCh */
+/* Lab to LCh (general to polar, works with Luv too) */
 void icmLab2LCh(double *out, double *in) {
 	double C, h;
 
@@ -13943,9 +13947,6 @@ extern ICCLIB_API void icmLuv2XYZ(icmXYZNumber *w, double *out, double *in) {
 	out[2] = Z;
 }
 
-/* NOTE :- none of the following seven have been protected */
-/* against arithmmetic issues (ie. for black) */
-
 /* CIE XYZ to perceptual CIE 1976 UCS diagram Yu'v'*/
 /* (Yu'v' is a better chromaticity space than Yxy) */
 extern ICCLIB_API void icmXYZ21976UCS(double *out, double *in) {
@@ -13953,8 +13954,15 @@ extern ICCLIB_API void icmXYZ21976UCS(double *out, double *in) {
 	double den, u, v;
 
 	den = (X + 15.0 * Y + 3.0 * Z);
-	u = (4.0 * X) / den;
-	v = (9.0 * Y) / den;
+
+	if (den < 1e-9) {
+		Y = 0.0;
+		u = 4.0/19.0;
+		v = 9.0/19.0;
+	} else {
+		u = (4.0 * X) / den;
+		v = (9.0 * Y) / den;
+	}
 	
 	out[0] = Y;
 	out[1] = u;
@@ -13969,8 +13977,12 @@ extern ICCLIB_API void icm1976UCS2XYZ(double *out, double *in) {
 	u = in[1];
 	v = in[2];
 
-	X = ((9.0 * u * Y)/(4.0 * v));
-	Z = -(((20.0 * v + 3.0 * u - 12.0) * Y)/(4.0 * v));
+	if (v < 1e-9) {
+		X = Y = Z = 0.0;
+	} else {
+		X = ((9.0 * u * Y)/(4.0 * v));
+		Z = -(((20.0 * v + 3.0 * u - 12.0) * Y)/(4.0 * v));
+	}
 
 	out[0] = X;
 	out[1] = Y;
@@ -13982,10 +13994,18 @@ extern ICCLIB_API void icm1976UCS2XYZ(double *out, double *in) {
 /*  in computing color temperatures.) */
 extern ICCLIB_API void icmXYZ21960UCS(double *out, double *in) {
 	double X = in[0], Y = in[1], Z = in[2];
-	double u, v;
+	double den, u, v;
 
-	u = (4.0 * X) / (X + 15.0 * Y + 3.0 * Z);
-	v = (6.0 * Y) / (X + 15.0 * Y + 3.0 * Z);
+	den = (X + 15.0 * Y + 3.0 * Z);
+
+	if (den < 1e-9) {
+		Y = 0.0;
+		u = 4.0/19.0;
+		v = 6.0/19.0;
+	} else {
+		u = (4.0 * X) / den; 
+		v = (6.0 * Y) / den;
+	}
 	
 	out[0] = Y;
 	out[1] = u;
@@ -14000,8 +14020,12 @@ extern ICCLIB_API void icm1960UCS2XYZ(double *out, double *in) {
 	u = in[1];
 	v = in[2];
 
-	X = ((3.0 * u * Y)/(2.0 * v));
-	Z = -(((10.0 * v + u - 4.0) * Y)/(2.0 * v));
+	if (v < 1e-9) {
+		X = Y = Z = 0.0;
+	} else {
+		X = ((3.0 * u * Y)/(2.0 * v));
+		Z = -(((10.0 * v + u - 4.0) * Y)/(2.0 * v));
+	}
 
 	out[0] = X;
 	out[1] = Y;
@@ -14049,6 +14073,7 @@ extern ICCLIB_API void icm1964WUV2XYZ(icmXYZNumber *w, double *out, double *in) 
 }
 
 /* CIE CIE1960 UCS to perceptual CIE 1964 WUV (U*V*W*) */
+/* (This is used in computing CRI) */
 extern ICCLIB_API void icm1960UCS21964WUV(icmXYZNumber *w, double *out, double *in) {
 	double W, U, V;
 	double wucs[3];
@@ -14066,6 +14091,7 @@ extern ICCLIB_API void icm1960UCS21964WUV(icmXYZNumber *w, double *out, double *
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* NOTE :- that these values are for the 1931 standard observer */
 
 /* available D50 Illuminant */
 icmXYZNumber icmD50 = { 		/* Profile illuminant - D50 */
@@ -14100,6 +14126,7 @@ double icmD65_ary3[3] = { 		/* Profile illuminant - D65 */
 double icmD65_100_ary3[3] = { 	/* Profile illuminant - D65, scaled to 100 */
 	95.05, 100.00, 108.90
 };
+
 
 /* Default black point */
 icmXYZNumber icmBlack = {
@@ -14186,7 +14213,7 @@ double icmCIE94sq(double Lab0[3], double Lab1[3]) {
 		c12 = sqrt(c1 * c2);	/* Symetric chromanance */
 
 		/* delta chromanance squared */
-		dc = c2 - c1;
+		dc = c1 - c2;
 		dcsq = dc * dc;
 	}
 
@@ -14197,8 +14224,8 @@ double icmCIE94sq(double Lab0[3], double Lab1[3]) {
 		double sc, sh;
 
 		/* Weighting factors for delta chromanance & delta hue */
-		sc = 1.0 + 0.048 * c12;
-		sh = 1.0 + 0.014 * c12;
+		sc = 1.0 + 0.045 * c12;
+		sh = 1.0 + 0.015 * c12;
 		return dlsq + dcsq/(sc * sc) + dhsq/(sh * sh);
 	}
 }
@@ -14346,13 +14373,14 @@ double icmCIE2K(double *Lab0, double *Lab1) {
 }
 
 /* Return the CIEDE2000 Delta E color difference measure for two XYZ values */
-extern ICCLIB_API double icmXYZCIE2K(icmXYZNumber *w, double *in0, double *in1) {
+ICCLIB_API double icmXYZCIE2K(icmXYZNumber *w, double *in0, double *in1) {
 	double lab0[3], lab1[3];
 
 	icmXYZ2Lab(w, lab0, in0);
 	icmXYZ2Lab(w, lab1, in1);
 	return sqrt(icmCIE2Ksq(lab0, lab1));
 }
+
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */

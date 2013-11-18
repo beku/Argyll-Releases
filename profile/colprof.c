@@ -59,6 +59,8 @@
 #define DEFAVGDEV 0.5		/* Default average deviation percentage */
 							/* This equates to a uniform added error of +/- 1% */
 
+#define DEMPH_DEFAULT 1.0	/* Default dark region emphasis == none */
+
 /*
 
   Flags used:
@@ -121,6 +123,7 @@ void usage(char *diag, ...) {
 	fprintf(stderr," -uc             If input profile, clip cLUT values above WP\n");
 	fprintf(stderr," -U scale        If input profile, scale media white point by scale\n");
 	fprintf(stderr," -R              Restrict white <= 1.0, black and primaries to be +ve\n");
+	fprintf(stderr," -V demphasis    Degree of dark region cLUT grid emphasis 1.0-4.0 (default %.2f = none)\n",DEMPH_DEFAULT);
 	fprintf(stderr," -f [illum]      Use Fluorescent Whitening Agent compensation [opt. simulated inst. illum.:\n");
 	fprintf(stderr,"                  M0, M1, M2, A, C, D50 (def.), D50M2, D65, F5, F8, F10 or file.sp]\n");
 	fprintf(stderr," -i illum        Choose illuminant for computation of CIE XYZ from spectral data & FWA:\n");
@@ -183,6 +186,7 @@ int main(int argc, char *argv[]) {
 	int autowpsc = 0;			/* Auto scale the WP to prevent clipping above WP patch */
 	int clipovwp = 0;			/* Clip cLUT values above WP */
 	int clipprims = 0;			/* Clip white, black and primaries */
+	double demph = 0.0;			/* Emphasise dark region grid resolution in cLUT */
 	double iwpscale = -1.0;		/* Input white point scale factor */
 	int doinextrap = 1;			/* Sythesize extra sample points for input device cLUT */
 	int doinb2a = 1;			/* Create an input device B2A table */
@@ -476,6 +480,15 @@ int main(int argc, char *argv[]) {
 			/* Clip primaries */
 			else if (argv[fa][1] == 'R') {
 				clipprims = 1;
+			}
+
+			/* Degree of dark region emphasis */
+			else if (argv[fa][1] == 'V') {
+				if (na == NULL) usage(0,"Expected argument to dark emphasis flag -V");
+				demph = atof(na);
+				if (demph < 1.0 || demph > 4.0)
+					usage("Dark weighting argument %f to '-V' is out of range",demph);
+				fa = nfa;
 			}
 
 			/* Inking rule */
@@ -935,6 +948,17 @@ int main(int argc, char *argv[]) {
 			error ("Requested spectral interpretation when data not available");
 	}
 
+	/* If not set in arguments, set default demph from .ti1 or default none */
+	if (demph == 0.0) {
+		if ((ti = icg->find_kword(icg, 0, "DARK_REGION_EMPHASIS")) >= 0) {
+			demph = atof(icg->t[0].kdata[ti]);
+			if (verb)
+				printf("Dark emphasis factor %f from targen\n",demph);
+		} else {
+			demph = DEMPH_DEFAULT;
+		}
+	}
+
 	/* read the device class, and call function to create profile. */
 	if ((ti = icg->find_kword(icg, 0, "DEVICE_CLASS")) < 0)
 		error ("Input file doesn't contain keyword DEVICE_CLASS");
@@ -1053,7 +1077,7 @@ int main(int argc, char *argv[]) {
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
 		                gamdiag, verify, clipprims, iwpscale, &ink, inname, outname, icg, 
 		                spec, tillum, &cust_tillum, illum, &cust_illum, observ, fwacomp,
-		                smooth, avgdev,
+		                smooth, avgdev, 1.0,
 		                ipname[0] != '\000' ? ipname : NULL,
 		                sgname[0] != '\000' ? sgname : NULL,
 		                absnames,
@@ -1091,7 +1115,7 @@ int main(int argc, char *argv[]) {
 		                noisluts, noipluts, nooluts, nocied, noptop, nostos,
 		                gamdiag, verify, clipprims, iwpscale, NULL, inname, outname, icg,
 		                spec, icxIT_none, NULL, illum, &cust_illum, observ, 0,
-		                smooth, avgdev,
+		                smooth, avgdev, demph,
 		                ipname[0] != '\000' ? ipname : NULL,
 		                sgname[0] != '\000' ? sgname : NULL,
 		                absnames,

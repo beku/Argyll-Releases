@@ -1171,7 +1171,7 @@ int main(int argc, char *argv[])
 				inst3_capability cap3 = inst3_none;	/* Instrument capabilities 3 */
 
 				if (fake)
-					comno = -99;
+					comno = FAKE_DEVICE_PORT;
 				if (icmps == NULL)
 					icmps = new_icompaths(g_log);
 

@@ -50,7 +50,7 @@ usage(char *mes) {
 	fprintf(stderr,"Author: Graeme W. Gill, licensed under the AGPL Version 3\n");
 	if (mes != NULL)
 		fprintf(stderr,"error: %s\n",mes);
-	fprintf(stderr,"usage: txt2ti3 [-v] [-l limit] [devfile] infile [specfile] outfile\n");
+	fprintf(stderr,"usage: txt2ti3 [-v] [-l limit] [devfile] infile [specfile] outbase\n");
 /*	fprintf(stderr," -v            Verbose mode\n"); */
 	fprintf(stderr," -2            Create dummy .ti2 file as well\n");
 	fprintf(stderr," -l limit      set ink limit, 0 - 400%% (default max in file)\n");

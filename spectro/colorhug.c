@@ -726,7 +726,7 @@ double mtx[3][3]
 	} else {
 		if (p->cbid == 0) {
 			a1loge(p->log, 1, "colorhug: can't set col_cor_mat over non base display type\n");
-			inst_wrong_setup;
+			return inst_wrong_setup;
 		}
 		icmCpy3x3(p->ccmat, mtx);
 	}

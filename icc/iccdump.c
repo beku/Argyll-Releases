@@ -182,7 +182,7 @@ main(int argc, char *argv[]) {
 			if ((rv = icco->read(icco,fp,offset)) != 0)
 				error ("%d, %s",rv,icco->err);
 		
-			if (icco->header->cmmId = str2tag("argl"))
+			if (icco->header->cmmId == str2tag("argl"))
 				icco->allowclutPoints256 = 1;
 
 			if (ntag_names > 0) {

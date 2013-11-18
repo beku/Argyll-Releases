@@ -151,7 +151,11 @@ extern int callback_ddebug;		/* Diagnostic global for get_displays() and get_a_d
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 /* Structure to handle RAMDAC values */
 struct _ramdac {
-	int pdepth;		/* Frame buffer plane depth, usually 8 */
+
+	/* Should have separate frame buffer depth + representation to account */
+	/* for floating point frame buffers, even though this isn't currently used. */
+
+	int pdepth;		/* Frame buffer depth into RAMDAC, usually 8 */
 	int nent;		/* Number of entries, =  2^pdepth */
 	double *v[3];	/* 2^pdepth entries for RGB, values 0.0 - 1.0 */
 

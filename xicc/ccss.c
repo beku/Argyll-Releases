@@ -112,7 +112,11 @@ cgats **pocg		/* return CGATS structure */
 	ocg->add_kword(ocg, 0, "SPECTRAL_NORM",buf, NULL);
 
 	/* Fields we want */
-	ocg->add_field(ocg, 0, "SAMPLE_ID", nqcs_t);
+	if (ocg->add_field(ocg, 0, "SAMPLE_ID", nqcs_t)) {
+		strcpy(p->err, "cgats add_field failed!");
+		ocg->del(ocg);		/* Clean up */
+		return 2;
+	}
 	nsetel += 1;		/* For id */
 
 	/* Generate fields for spectral values */
@@ -124,7 +128,11 @@ cgats **pocg		/* return CGATS structure */
 		            * (p->samples[0].spec_wl_long - p->samples[0].spec_wl_short) + 0.5);
 		
 		sprintf(buf,"SPEC_%03d",nm);
-		ocg->add_field(ocg, 0, buf, r_t);
+		if (ocg->add_field(ocg, 0, buf, r_t)) {
+			strcpy(p->err, "cgats add_field failed!");
+			ocg->del(ocg);		/* Clean up */
+			return 2;
+		}
 	}
 	nsetel += p->samples[0].spec_n;		/* Spectral values */
 

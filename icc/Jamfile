@@ -37,6 +37,8 @@ LINKLIBS = libicc ;
 # All utils are made from a single source file 
 MainsFromSources icctest.c lutest.c iccdump.c icclu.c iccrw.c ;
 
+# MainsFromSources t.c ;
+
 if $(BUILD_JUNK) {
 
 #	MainsFromSources tt.c ;

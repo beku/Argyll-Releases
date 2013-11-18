@@ -985,8 +985,8 @@ add_field(cgats *p, int table, const char *fsym, data_type ftype) {
 
 	t->nfields++;
 	if (t->nfields > t->nfieldsa) {
-		/* Allocate fields in groups of 4 */
-		t->nfieldsa += 4;
+		/* Allocate fields in groups of 32 */
+		t->nfieldsa += 32;
 		if ((t->fsym = (char **)al->realloc(al, t->fsym, t->nfieldsa * sizeof(char *))) == NULL)
 			return err(p,-2,"cgats.add_field(), realloc failed!");
 		if ((t->ftype = (data_type *)al->realloc(al, t->ftype, t->nfieldsa * sizeof(data_type)))
@@ -995,6 +995,7 @@ add_field(cgats *p, int table, const char *fsym, data_type ftype) {
 	}
 	if ((t->fsym[t->nfields-1] = (char *)alloc_copy_data_type(al, cs_t, (void *)fsym)) == NULL)
 		return err(p,-2,"cgats.alloc_copy_data_type() malloc fail");
+
 	t->ftype[t->nfields-1] = ftype;
 
 	return t->nfields-1;

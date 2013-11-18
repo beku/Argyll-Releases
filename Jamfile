@@ -39,7 +39,7 @@ if ! $(HAVE_JPEG) {
 	SubInclude jpg ;
 }
 
-if $(USE_NATIVE_USB) != true {
+if $(USE_LIBUSB) = true {
 
 	if $(USE_LIBUSB1) = true {
 		SubInclude libusb1 ;

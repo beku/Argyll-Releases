@@ -1867,15 +1867,13 @@ extern ICCLIB_API void icmXYZ2Luv(icmXYZNumber *w, double *out, double *in);
 extern ICCLIB_API void icmLuv2XYZ(icmXYZNumber *w, double *out, double *in);
 
 
-/* NOTE :- none of the following seven have been protected */
-/* against arithmmetic issues (ie. for black) */
-
 /* CIE XYZ to perceptual CIE 1976 UCS diagram Yu'v'*/
 /* (Yu'v' is a better chromaticity space than Yxy) */
 extern ICCLIB_API void icmXYZ21976UCS(double *out, double *in);
 
 /* Perceptual CIE 1976 UCS diagram Yu'v' to CIE XYZ */
 extern ICCLIB_API void icm1976UCS2XYZ(double *out, double *in);
+
 
 /* CIE XYZ to perceptual CIE 1960 UCS */
 /* (This was obsoleted by the 1976UCS, but is still used */
@@ -1884,6 +1882,7 @@ extern ICCLIB_API void icmXYZ21960UCS(double *out, double *in);
 
 /* Perceptual CIE 1960 UCS to CIE XYZ */
 extern ICCLIB_API void icm1960UCS2XYZ(double *out, double *in);
+
 
 /* CIE XYZ to perceptual CIE 1964 WUV (U*V*W*) */
 /* (This is obsolete but still used in computing CRI) */
@@ -1896,17 +1895,20 @@ extern ICCLIB_API void icm1964WUV2XYZ(icmXYZNumber *w, double *out, double *in);
 extern ICCLIB_API void icm1960UCS21964WUV(icmXYZNumber *w, double *out, double *in);
 
 
+/* NOTE :- that these values are for the 1931 standard observer */
+
 /* The standard D50 illuminant value */
 extern icmXYZNumber icmD50;
 extern icmXYZNumber icmD50_100;		/* Scaled to 100 */
-double icmD50_ary3[3];				/* As an array */
-double icmD50_100_ary3[3];			/* Scaled to 100 as an array */
+extern double icmD50_ary3[3];				/* As an array */
+extern double icmD50_100_ary3[3];			/* Scaled to 100 as an array */
 
 /* The standard D65 illuminant value */
 extern icmXYZNumber icmD65;
 extern icmXYZNumber icmD65_100;		/* Scaled to 100 */
-double icmD65_ary3[3];				/* As an array */
-double icmD65_100_ary3[3];			/* Scaled to 100 as an array */
+extern double icmD65_ary3[3];				/* As an array */
+extern double icmD65_100_ary3[3];			/* Scaled to 100 as an array */
+
 
 /* The default black value */
 extern icmXYZNumber icmBlack;
@@ -1952,6 +1954,7 @@ extern ICCLIB_API double icmCIE2Ksq(double *in0, double *in1);
 
 /* Return the CIEDE2000 Delta E color difference measure for two XYZ values */
 extern ICCLIB_API double icmXYZCIE2K(icmXYZNumber *w, double *in0, double *in1);
+
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 /* Clip Lab, while maintaining hue angle. */

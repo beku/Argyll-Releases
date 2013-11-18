@@ -20,6 +20,14 @@
 
 /* TTBD
 
+	Dealing with noisy/inconsistent readings could probably
+	be improved - the statistical information from a iteration
+	series is being ignored. ie. do a linear regression/fit
+	on all the values for a given target, and then
+	at the end, use a weighted blend of the best solution
+	and the fit. Weight by something like the number used
+	for the fit. vs. 1.
+
 	Try to improve calibration speed by using adaptive
 	measurement set, rather than fixed resolution doubling ?
 	(ie. just measure at troublesome points using a "divide in half"
@@ -127,7 +135,6 @@
 #define COMPORT 1			/* Default com port 1..4 */
 #define OPTIMIZE_MODEL		/* Adjust model for best fit */
 #define REFINE_GAIN 0.80	/* Refinement correction damping/gain */
-#define MAX_RPTS 12			/* Maximum tries at making a sample meet the current threshold */
 #define VER_RES 100			/* Verification resolution */
 #define NEUTRAL_BLEND_RATE 4.0		/* Default rate of transition for -k factor < 1.0 (power) */
 #define ADJ_JACOBIAN		/* Adjust the Jacobian predictor matrix each time */
@@ -137,6 +144,8 @@
 #define REFN_DIST_POW 1.6	/* Power used to distribute test samples for grey axis refinement */
 #define CHECK_DIST_POW 1.6	/* Power used to distribute test samples for grey axis checking */
 #define THRESH_SCALE_POW 0.5 /* Amount to loosen threshold for first itterations */
+#define ADJ_THRESH			/* Adjust threshold to be half a step */
+#define MIN_THRESH 0.1	 	/* Minimum stopping threshold to allow in adjustment */
 #define CAL_RES 256			/* Resolution of calibration table to produce. */
 #define CLIP				/* Clip RGB during refinement */
 #define RDAC_SMOOTH 0.3		/* RAMDAC curve fitting smoothness */
@@ -857,7 +866,7 @@ typedef struct {
 	double deXYZ[3];	/* Delta XYZ wanted to target */
 	double de;			/* Delta Lab to neutral target */
 	double dc;			/* Delta XYZ to neutral target */
-	double peqde;		/* Delta Lab to previous point value (last pass) */
+	double peqde;		/* Delta Lab to last pass equivalent point value */
 	double hde;			/* Hybrid de composed of de and peqde */
 
 	double pXYZ[3];		/* Previous measured XYZ */
@@ -875,7 +884,7 @@ typedef struct {
 typedef struct {
 	int no;				/* Number of samples */
 	int _no;			/* Allocation */
-	csp *s;			/* List of samples */
+	csp *s;				/* List of samples */
 } csamp;
 
 static void free_alloc_csamp(csamp *p) {
@@ -924,9 +933,12 @@ static void init_csamp_v(csamp *p, calx *x, int psrand) {
 }
 
 /* Initialise txyz values from v values */
-static void init_csamp_txyz(csamp *p, calx *x, int fixdev) {
+static void init_csamp_txyz(csamp *p, calx *x, int fixdev, int verb) {
 	int i, j;
 	double tbL[3];		/* tbk as Lab */
+
+	if (verb >= 3)
+		printf("init_csamp_txyz:\n");
 
 	/* Convert target black from XYZ to Lab here, */
 	/* in case twN has changed at some point. */
@@ -960,16 +972,16 @@ static void init_csamp_txyz(csamp *p, calx *x, int fixdev) {
 		icmAry2Ary(XYZ, p->s[i].tXYZ);				/* Save the existing values */
 		icmLab2XYZ(&x->twN, p->s[i].tXYZ, Lab);		/* New XYZ Value to aim for */
 
-#ifdef DEBUG
-		printf("%d: target XYZ %.2f %.2f %.2f, Lab %.2f %.2f %.2f\n",i, p->s[i].tXYZ[0],p->s[i].tXYZ[1],p->s[i].tXYZ[2], Lab[0],Lab[1],Lab[2]);
-#endif
+		if (verb >= 3) {
+			printf("%d: target XYZ %.4f %.4f %.4f, Lab %.3f %.3f %.3f\n",i, p->s[i].tXYZ[0],p->s[i].tXYZ[1],p->s[i].tXYZ[2], Lab[0],Lab[1],Lab[2]);
+		}
 	}
 }
 
 
 /* Allocate the sample points and initialise them with the */
 /* target device and XYZ values, and first cut device values. */
-static void init_csamp(csamp *p, calx *x, int doupdate, int verify, int psrand, int no) {
+static void init_csamp(csamp *p, calx *x, int doupdate, int verify, int psrand, int no, int verb) {
 	int i, j;
 	
 	p->_no = p->no = no;
@@ -979,7 +991,7 @@ static void init_csamp(csamp *p, calx *x, int doupdate, int verify, int psrand, 
 
 	/* Compute v and txyz */
 	init_csamp_v(p, x, psrand);
-	init_csamp_txyz(p, x, 0);
+	init_csamp_txyz(p, x, 0, verb);
 
 	/* Generate the sample points */
 	for (i = 0; i < no; i++) {
@@ -1072,7 +1084,7 @@ static void csamp_interp(csamp *p, double xyz[3], double v) {
 /* Re-initialise a CSP with a new number of points. */
 /* Interpolate the device values and jacobian. */
 /* Set the current rgb from the current RAMDAC curves if not verifying */
-static void reinit_csamp(csamp *p, calx *x, int verify, int psrand, int no) {
+static void reinit_csamp(csamp *p, calx *x, int verify, int psrand, int no, int verb) {
 	csp *os;			/* Old list of samples */
 	int ono;			/* Old number of samples */
 	int i, j, k, m;
@@ -1083,7 +1095,7 @@ static void reinit_csamp(csamp *p, calx *x, int verify, int psrand, int no) {
 	os = p->s;			/* Save the existing per point information */
 	ono = p->no;
 
-	init_csamp(p, x, 0, 2, psrand, no);
+	init_csamp(p, x, 0, 2, psrand, no, verb);
 
 	p->_no = p->no = no;
 
@@ -1229,6 +1241,20 @@ static double comp_ct(
 	return ct;
 }
 	
+/* =================================================================== */
+
+/* Return the normal Delta E given two XYZ values, but */
+/* exagerate the L* error if act L* > targ L* by a factor of fact */
+extern ICCLIB_API double bwXYZLabDE(icmXYZNumber *w, double *targ, double *act, double fact) {
+	double targlab[3], actlab[3], rv;
+
+	icmXYZ2Lab(w, targlab, targ);
+	icmXYZ2Lab(w, actlab, act);
+	if (actlab[0] > targlab[0])
+		actlab[0] = targlab[0] + fact * (actlab[0] - targlab[0]);
+	rv = icmLabDE(targlab, actlab);
+	return rv;
+}
 /* =================================================================== */
 
 /* Default gamma */
@@ -1420,6 +1446,7 @@ int main(int argc, char *argv[]) {
 	int thrfail = 0;					/* Set to NZ if failed to meet threshold target */
 	double failerr = 0.0;				/* Delta E of worst failed target */
 	int mxits = 3;						/* maximum iterations (medium) */
+	int mxrpts = 12;					/* maximum repeats (medium) */
 	int verify = 0;						/* Do a verify after last refinement, 2 = do only verify. */
 	int nver = 0;						/* Number of verify passes after refinement */
 	int webdisp = 0;					/* NZ for web display, == port number */
@@ -1972,7 +1999,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (fake)
-		comport = -99;
+		comport = FAKE_DEVICE_PORT;
 	if ((icmps = new_icompaths(g_log)) == NULL)
 		error("Finding instrument paths failed");
 	if ((ipath = icmps->get_path(icmps, comport)) == NULL)
@@ -2231,7 +2258,7 @@ int main(int argc, char *argv[]) {
 			printf("Current calibration response:\n");
 		else
 			printf("Uncalibrated response:\n");
-		printf("Black level = %.2f cd/m^2\n",tcols[0].XYZ[1]);
+		printf("Black level = %.4f cd/m^2\n",tcols[0].XYZ[1]);
 		printf("50%%   level = %.2f cd/m^2\n",tcols[1].XYZ[1]);
 		printf("White level = %.2f cd/m^2\n",tcols[2].XYZ[1]);
 		printf("Aprox. gamma = %.2f\n",cgamma);
@@ -2547,6 +2574,7 @@ int main(int argc, char *argv[]) {
 			isteps = 3;
 			rsteps = 9;
 			mxits = 1;
+			mxrpts = 8;
 			errthr = 2.0;
 			break;
 		case -2:				/* Very low */
@@ -2557,6 +2585,7 @@ int main(int argc, char *argv[]) {
 				mxits = 1;
 			else
 				mxits = 1;
+			mxrpts = 10;
 			break;
 		case -1:				/* Low */
 			if (verify != 2 && doprofile && !doupdate)
@@ -2569,6 +2598,7 @@ int main(int argc, char *argv[]) {
 				mxits = 1;
 			else
 				mxits = 2;
+			mxrpts = 10;
 			break;
 		default:
 		case 0:					/* Medum */
@@ -2583,6 +2613,7 @@ int main(int argc, char *argv[]) {
 				mxits = 1;
 			else
 				mxits = 3;
+			mxrpts = 12;
 			break;
 		case 1:					/* High */
 			if (verify != 2 && doprofile && !doupdate)
@@ -2595,6 +2626,7 @@ int main(int argc, char *argv[]) {
 				mxits = 1;
 			else
 				mxits = 4;
+			mxrpts = 16;
 			break;
 		case 2:					/* Ultra */
 			if (verify != 2 && doprofile && !doupdate)
@@ -2607,6 +2639,7 @@ int main(int argc, char *argv[]) {
 				mxits = 1;
 			else
 				mxits = 5;
+			mxrpts = 24;
 			break;
 	}
 
@@ -2726,11 +2759,11 @@ int main(int argc, char *argv[]) {
 				} 
 
 				if (verb) {
-					printf("Black = XYZ %6.2f %6.2f %6.2f\n",tcols[0].XYZ[0],
+					printf("Black = XYZ %6.4f %6.4f %6.4f\n",tcols[0].XYZ[0],
 					                                         tcols[0].XYZ[1], tcols[0].XYZ[2]);
-					printf("Grey  = XYZ %6.2f %6.2f %6.2f\n",tcols[1].XYZ[0],
+					printf("Grey  = XYZ %6.3f %6.3f %6.3f\n",tcols[1].XYZ[0],
 					                                         tcols[1].XYZ[1], tcols[1].XYZ[2]);
-					printf("White = XYZ %6.2f %6.2f %6.2f\n",tcols[2].XYZ[0],
+					printf("White = XYZ %6.3f %6.3f %6.3f\n",tcols[2].XYZ[0],
 					                                         tcols[2].XYZ[1], tcols[2].XYZ[2]);
 				}
 
@@ -2802,11 +2835,11 @@ int main(int argc, char *argv[]) {
 						error("display read failed with '%s'\n",disprd_err(rv));
 					}
 					if (verb) {
-						printf("Red   = XYZ %6.2f %6.2f %6.2f\n",ccols[0].XYZ[0],
+						printf("Red   = XYZ %6.3f %6.3f %6.3f\n",ccols[0].XYZ[0],
 						                       ccols[0].XYZ[1], ccols[0].XYZ[2]);
-						printf("Green = XYZ %6.2f %6.2f %6.2f\n",ccols[1].XYZ[0],
+						printf("Green = XYZ %6.3f %6.3f %6.3f\n",ccols[1].XYZ[0],
 						                       ccols[1].XYZ[1], ccols[1].XYZ[2]);
-						printf("Blue  = XYZ %6.2f %6.2f %6.2f\n",ccols[2].XYZ[0],
+						printf("Blue  = XYZ %6.3f %6.3f %6.3f\n",ccols[2].XYZ[0],
 						                       ccols[2].XYZ[1], ccols[2].XYZ[2]);
 					}
 					for (i = 0; i < 3; i++)
@@ -2819,7 +2852,7 @@ int main(int argc, char *argv[]) {
 					error("display read failed with '%s'\n",disprd_err(rv));
 				}
 				if (verb) {
-					printf("White = XYZ %6.2f %6.2f %6.2f\n",tcols[0].XYZ[0],
+					printf("White = XYZ %6.3f %6.3f %6.3f\n",tcols[0].XYZ[0],
 					                       tcols[0].XYZ[1], tcols[0].XYZ[2]);
 				}
 				
@@ -3000,7 +3033,7 @@ int main(int argc, char *argv[]) {
 					error("display read failed with '%s'\n",disprd_err(rv));
 				}
 				if (verb) {
-					printf("White = XYZ %6.2f %6.2f %6.2f\n",tcols[0].XYZ[0],
+					printf("White = XYZ %6.3f %6.3f %6.3f\n",tcols[0].XYZ[0],
 					                       tcols[0].XYZ[1], tcols[0].XYZ[2]);
 				}
 				
@@ -3073,11 +3106,11 @@ int main(int argc, char *argv[]) {
 						error("display read failed with '%s'\n",disprd_err(rv));
 					}
 					if (verb) {
-						printf("Red   = XYZ %6.2f %6.2f %6.2f\n",ccols[0].XYZ[0],
+						printf("Red   = XYZ %6.3f %6.3f %6.3f\n",ccols[0].XYZ[0],
 						                       ccols[0].XYZ[1], ccols[0].XYZ[2]);
-						printf("Green = XYZ %6.2f %6.2f %6.2f\n",ccols[1].XYZ[0],
+						printf("Green = XYZ %6.3f %6.3f %6.3f\n",ccols[1].XYZ[0],
 						                       ccols[1].XYZ[1], ccols[1].XYZ[2]);
-						printf("Blue  = XYZ %6.2f %6.2f %6.2f\n",ccols[2].XYZ[0],
+						printf("Blue  = XYZ %6.3f %6.3f %6.3f\n",ccols[2].XYZ[0],
 						                       ccols[2].XYZ[1], ccols[2].XYZ[2]);
 					}
 					for (i = 0; i < 3; i++)
@@ -3090,11 +3123,11 @@ int main(int argc, char *argv[]) {
 					error("display read failed with '%s'\n",disprd_err(rv));
 				}
 				if (verb) {
-					printf("Black = XYZ %6.2f %6.2f %6.2f\n",tcols[0].XYZ[0],
+					printf("Black = XYZ %6.4f %6.4f %6.4f\n",tcols[0].XYZ[0],
 					                                         tcols[0].XYZ[1], tcols[0].XYZ[2]);
-					printf("Grey  = XYZ %6.2f %6.2f %6.2f\n",tcols[1].XYZ[0],
+					printf("Grey  = XYZ %6.3f %6.3f %6.3f\n",tcols[1].XYZ[0],
 					                                         tcols[1].XYZ[1], tcols[1].XYZ[2]);
-					printf("White = XYZ %6.2f %6.2f %6.2f\n",tcols[2].XYZ[0],
+					printf("White = XYZ %6.3f %6.3f %6.3f\n",tcols[2].XYZ[0],
 					                                         tcols[2].XYZ[1], tcols[2].XYZ[2]);
 				}
 				
@@ -3125,7 +3158,7 @@ int main(int argc, char *argv[]) {
 				}
 
 				printf("\nAdjust R,G & B offsets to get target x,y. Press space when done.\n");
-				printf("   Target Br %.2f, x %.4f , y %.4f \n", tar1, tYxy[1],tYxy[2]);
+				printf("   Target Br %.4f, x %.4f , y %.4f \n", tar1, tYxy[1],tYxy[2]);
 				for (ff = 0;; ff ^= 1) {
 					double dir;			/* Direction to adjust brightness */
 					double sv[3], val1;				/* Scaled values */
@@ -3194,7 +3227,7 @@ int main(int argc, char *argv[]) {
 						rgbdir[0] = rgbdir[1] = rgbdir[2] = 0.0;
 					rgbxdir[bx] = rgbdir[bx];
 
-			 		printf("%c%c Current Br %.2f, x %.4f%c, y %.4f%c  DE %4.1f  R%c%c G%c%c B%c%c ",
+			 		printf("%c%c Current Br %.4f, x %.4f%c, y %.4f%c  DE %4.1f  R%c%c G%c%c B%c%c ",
 					       cr_char,
 					       ff == 0 ? '/' : '\\',
 					       val1,
@@ -3238,11 +3271,11 @@ int main(int argc, char *argv[]) {
 					error("display read failed with '%s'\n",disprd_err(rv));
 				}
 				if (verb) {
-					printf("Black = XYZ %6.2f %6.2f %6.2f\n",tcols[0].XYZ[0],
+					printf("Black = XYZ %6.4f %6.4f %6.4f\n",tcols[0].XYZ[0],
 					                                         tcols[0].XYZ[1], tcols[0].XYZ[2]);
-					printf("Grey  = XYZ %6.2f %6.2f %6.2f\n",tcols[1].XYZ[0],
+					printf("Grey  = XYZ %6.3f %6.3f %6.3f\n",tcols[1].XYZ[0],
 					                                         tcols[1].XYZ[1], tcols[1].XYZ[2]);
-					printf("White = XYZ %6.2f %6.2f %6.2f\n",tcols[2].XYZ[0],
+					printf("White = XYZ %6.3f %6.3f %6.3f\n",tcols[2].XYZ[0],
 					                                         tcols[2].XYZ[1], tcols[2].XYZ[2]);
 				}
 				
@@ -3259,7 +3292,7 @@ int main(int argc, char *argv[]) {
 					error("display read failed with '%s'\n",disprd_err(rv));
 				}
 				if (verb) {
-					printf("1%%    = XYZ %6.2f %6.2f %6.2f\n",tcols[3].XYZ[0],
+					printf("1%%    = XYZ %6.3f %6.3f %6.3f\n",tcols[3].XYZ[0],
 					                                         tcols[3].XYZ[1], tcols[3].XYZ[2]);
 				}
 				
@@ -3338,17 +3371,17 @@ int main(int argc, char *argv[]) {
 				printf("\n");
 
 				if (tbright > 0.0)			/* Given brightness */
-					printf("  Target Brightness = %.2f, Current = %5.2f, error = % .1f%%\n",
+					printf("  Target Brightness = %.3f, Current = %.3f, error = % .1f%%\n",
 				       tarw, tcols[2].XYZ[1], 
 				       100.0 * (tcols[2].XYZ[1] - tarw)/tarw);
 				else
 					printf("  Current Brightness = %.2f\n", tcols[2].XYZ[1]);
 				
-				printf("  Target 50%% Level  = %.2f, Current = %5.2f, error = % .1f%%\n",
+				printf("  Target 50%% Level  = %.3f, Current = %.3f, error = % .1f%%\n",
 				       tarh, tcols[1].XYZ[1], 
 				       100.0 * (tcols[1].XYZ[1] - tarh)/tarw);
 				
-				printf("  Target Near Black = %5.2f, Current = %5.2f, error = % .1f%%\n",
+				printf("  Target Near Black = %.4f, Current = %.4f, error = % .1f%%\n",
 				       tar1, val1, 
 				       100.0 * (val1 - tar1)/tarw);
 
@@ -3476,11 +3509,11 @@ int main(int argc, char *argv[]) {
 		icmAry2XYZ(mwh, base[4].XYZ);
 
 		if (verb) {
-			printf("Black = XYZ %6.2f %6.2f %6.2f\n",x.bk[0],x.bk[1],x.bk[2]);
-			printf("Red   = XYZ %6.2f %6.2f %6.2f\n",base[1].XYZ[0], base[1].XYZ[1], base[1].XYZ[2]);
-			printf("Green = XYZ %6.2f %6.2f %6.2f\n",base[2].XYZ[0], base[2].XYZ[1], base[2].XYZ[2]);
-			printf("Blue  = XYZ %6.2f %6.2f %6.2f\n",base[3].XYZ[0], base[3].XYZ[1], base[3].XYZ[2]);
-			printf("White = XYZ %6.2f %6.2f %6.2f\n",base[4].XYZ[0], base[4].XYZ[1], base[4].XYZ[2]);
+			printf("Black = XYZ %6.4f %6.4f %6.4f\n",x.bk[0],x.bk[1],x.bk[2]);
+			printf("Red   = XYZ %6.3f %6.3f %6.3f\n",base[1].XYZ[0], base[1].XYZ[1], base[1].XYZ[2]);
+			printf("Green = XYZ %6.3f %6.3f %6.3f\n",base[2].XYZ[0], base[2].XYZ[1], base[2].XYZ[2]);
+			printf("Blue  = XYZ %6.3f %6.3f %6.3f\n",base[3].XYZ[0], base[3].XYZ[1], base[3].XYZ[2]);
+			printf("White = XYZ %6.3f %6.3f %6.3f\n",base[4].XYZ[0], base[4].XYZ[1], base[4].XYZ[2]);
 		}
 
 		/* Setup forward matrix */
@@ -3894,7 +3927,7 @@ int main(int argc, char *argv[]) {
 		icmLab2XYZ(&x.twN, x.tbk, tbL);
 		icmAry2XYZ(x.tbN, x.tbk);
 		if (verb)
-			printf("Adjusted target black XYZ %.2f %.2f %.2f, Lab %.2f %.2f %.2f\n",
+			printf("Adjusted target black XYZ %.4f %.4f %.4f, Lab %.3f %.3f %.3f\n",
 	        x.tbk[0], x.tbk[1], x.tbk[2], tbL[0], tbL[1], tbL[2]);
 	}
 
@@ -3922,11 +3955,17 @@ int main(int argc, char *argv[]) {
 
 		if (verb) {
 			double tbp[3], tbplab[3];
-	        tbp[0] = x.tbk[0] * tby/x.tbk[1];
+			if (fabs(x.tbk[1]) > 1e-9)
+		        tbp[0] = x.tbk[0] * tby/x.tbk[1];
+			else
+		        tbp[0] = x.tbk[0];
 			tbp[1] = tby;
-			tbp[2] = x.tbk[2] * tby/x.tbk[1];
+			if (fabs(x.tbk[1]) > 1e-9)
+				tbp[2] = x.tbk[2] * tby/x.tbk[1];
+			else
+				tbp[2] = x.tbk[2];
 			icmXYZ2Lab(&x.twN, tbplab, tbp);
-			printf("Target black after min adjust: XYZ %.3f %.3f %.3f, Lab %.3f %.3f %.3f\n",
+			printf("Target black after min adjust: XYZ %.4f %.4f %.4f, Lab %.3f %.3f %.3f\n",
 			        tbp[0], tbp[1], tbp[2], tbplab[0], tbplab[1], tbplab[2]);
 		}
 
@@ -4049,7 +4088,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Setup the initial calibration test point values */
-	init_csamp(&asgrey, &x, doupdate, verify, verify == 2 ? 1 : 0, rsteps);
+	init_csamp(&asgrey, &x, doupdate, verify, verify == 2 ? 1 : 0, rsteps, verb);
 	
 	/* Calculate the initial calibration curve values */
 	if (verify != 2 && !doupdate) {
@@ -4140,7 +4179,7 @@ int main(int argc, char *argv[]) {
 
 
 		/* re-init asgrey if the number of test points has changed */
-		reinit_csamp(&asgrey, &x, verify, (verify == 2 || it >= mxits) ? 1 : 0, rsteps);
+		reinit_csamp(&asgrey, &x, verify, (verify == 2 || it >= mxits) ? 1 : 0, rsteps, verb);
 
 		if (verb) {
 			if (it >= mxits)
@@ -4163,25 +4202,46 @@ int main(int argc, char *argv[]) {
 			double besthde = 1e7;
 			double rgain = REFINE_GAIN;	/* Scale down if lots of repeats */
 			int mjac = 0;				/* We measured the Jacobian */
-
-			/* Setup a second termination threshold chriteria based on */
+			double ierrth = errthr;		/* This points error threshold */
+			
+			/* Setup a second termination threshold criteria based on */
 			/* the delta E to the previous step point for the last pass. */
+			/* This is to try and steer towards neutral axis consistency ? */
 			if (i == (rsteps-1) || it < (mxits-1)) {
 				icmAry2Ary(peqXYZ, asgrey.s[i].tXYZ);	/* Its own aim point */
 			} else {
 				double Lab1[3], Lab2[3], Lab3[3];
 				icmXYZ2Lab(&x.twN, Lab1, asgrey.s[i+1].XYZ);
 				icmXYZ2Lab(&x.twN, Lab2, asgrey.s[i].tXYZ);
-				Lab3[0] = Lab2[0];
-				Lab3[1] = 0.5 * (Lab1[1] + Lab2[1]);	/* Compute aim point between actual target */
-				Lab3[2] = 0.5 * (Lab1[2] + Lab2[2]);	/* and previous point. */
-				icmLab2XYZ(&x.twN, asgrey.s[i].tXYZ, Lab3);
 				Lab1[0] = Lab2[0];		/* L of current target with ab of previous as 2nd threshold */
-				icmLab2XYZ(&x.twN, peqXYZ, Lab1);
+				icmLab2XYZ(&x.twN, peqXYZ, Lab1);		/* Previous equivalent */
 			}
 
+#ifdef ADJ_THRESH
+			/* Adjust the termination threshold to make sure it is less than */
+			/* half a step */
+			{
+				double de;
+				if (i < (rsteps-1)) {
+					de = 0.5 * icmXYZLabDE(&x.twN, asgrey.s[i].tXYZ, asgrey.s[i+1].tXYZ);
+					if (de < MIN_THRESH)		/* Don't be silly */
+						de = MIN_THRESH;
+					if (de < ierrth)
+						ierrth = de;
+				}
+				if (i > 0) {
+					de = 0.5 * icmXYZLabDE(&x.twN, asgrey.s[i].tXYZ, asgrey.s[i-1].tXYZ);
+					if (de < MIN_THRESH)		/* Don't be silly */
+						de = MIN_THRESH;
+					if (de < ierrth)
+						ierrth = de;
+				}
+			}
+#endif /* ADJ_THRESH */
+
 			/* Until we meet the necessary accuracy or give up */
-			for (rpt = 0;rpt < MAX_RPTS; rpt++) {
+			for (rpt = 0;rpt < mxrpts; rpt++) {
+				double hlew = 1.0;	/* high L* error weight */
 				int gworse = 0;		/* information flag */
 				double wde;			/* informational */
 
@@ -4207,7 +4267,7 @@ int main(int argc, char *argv[]) {
 
 					icmAry2Ary(x.twh, asgrey.s[i].XYZ);		/* Set current white */
 					icmAry2XYZ(x.twN, x.twh);				/* Need this for Lab conversions */
-					init_csamp_txyz(&asgrey, &x, 1);		/* Recompute txyz's */
+					init_csamp_txyz(&asgrey, &x, 1, verb);	/* Recompute txyz's */
 					icmAry2Ary(peqXYZ, asgrey.s[i].tXYZ);	/* Fix peqXYZ */
 //printf("~1 Just reset target white to native white\n");
 					if (wdrift) {	/* Make sure white drift is reset on next read. */
@@ -4217,8 +4277,16 @@ int main(int argc, char *argv[]) {
 
 				/* Compute the current change wanted to hit target */
 				icmSub3(asgrey.s[i].deXYZ, asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
-				asgrey.s[i].de = icmXYZLabDE(&x.twN, asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
-				asgrey.s[i].peqde = icmXYZLabDE(&x.twN, peqXYZ, asgrey.s[i].XYZ);
+
+				/* For the darkest 5% of targets, weight the L* delta E so that */
+				/* we err on the darker side */
+				if (asgrey.s[i].v < 0.05)
+					hlew = 1.0 + 49.0 * (0.05 - asgrey.s[i].v)/0.05;
+				else
+					hlew = 1.0;
+//printf("~1 i %d, v %f, hlew %f\n",i,asgrey.s[i].v,hlew);
+				asgrey.s[i].de = bwXYZLabDE(&x.twN, asgrey.s[i].tXYZ, asgrey.s[i].XYZ, hlew);
+				asgrey.s[i].peqde = bwXYZLabDE(&x.twN, peqXYZ, asgrey.s[i].XYZ, hlew);
 				asgrey.s[i].hde = 0.8 * asgrey.s[i].de + 0.2 * asgrey.s[i].peqde;
 				/* Eudclidian difference of XYZ, because this doesn't always track Lab */
 				asgrey.s[i].dc = icmLabDE(asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
@@ -4226,21 +4294,21 @@ int main(int argc, char *argv[]) {
 				/* Compute change from last XYZ */
 				icmSub3(asgrey.s[i].dXYZ, asgrey.s[i].XYZ, asgrey.s[i].pXYZ);
 
-#ifdef DEBUG
-				printf("\n\nTest point %d, v = %f\n",rsteps - i,asgrey.s[i].v);
-				printf("Current rgb %f %f %f -> XYZ %f %f %f, de %f, dc %f\n", 
-				asgrey.s[i].rgb[0], asgrey.s[i].rgb[1], asgrey.s[i].rgb[2],
-				asgrey.s[i].XYZ[0], asgrey.s[i].XYZ[1], asgrey.s[i].XYZ[2],
-				asgrey.s[i].de, asgrey.s[i].dc);
-				printf("Target XYZ %f %f %f, delta needed %f %f %f\n", 
-				asgrey.s[i].tXYZ[0], asgrey.s[i].tXYZ[1], asgrey.s[i].tXYZ[2],
-				asgrey.s[i].deXYZ[0], asgrey.s[i].deXYZ[1], asgrey.s[i].deXYZ[2]);
-				if (rpt > 0) {
-					printf("Intended XYZ change %f %f %f, actual change %f %f %f\n", 
-					asgrey.s[i].pdXYZ[0], asgrey.s[i].pdXYZ[1], asgrey.s[i].pdXYZ[2],
-					asgrey.s[i].dXYZ[0], asgrey.s[i].dXYZ[1], asgrey.s[i].dXYZ[2]);
+				if (verb >= 3) {
+					printf("\n\nTest point %d, v = %f\n",rsteps - i,asgrey.s[i].v);
+					printf("Current rgb %f %f %f -> XYZ %f %f %f, de %f, dc %f\n", 
+					asgrey.s[i].rgb[0], asgrey.s[i].rgb[1], asgrey.s[i].rgb[2],
+					asgrey.s[i].XYZ[0], asgrey.s[i].XYZ[1], asgrey.s[i].XYZ[2],
+					asgrey.s[i].de, asgrey.s[i].dc);
+					printf("Target XYZ %f %f %f, delta needed %f %f %f\n", 
+					asgrey.s[i].tXYZ[0], asgrey.s[i].tXYZ[1], asgrey.s[i].tXYZ[2],
+					asgrey.s[i].deXYZ[0], asgrey.s[i].deXYZ[1], asgrey.s[i].deXYZ[2]);
+					if (rpt > 0) {
+						printf("Intended XYZ change %f %f %f, actual change %f %f %f\n", 
+						asgrey.s[i].pdXYZ[0], asgrey.s[i].pdXYZ[1], asgrey.s[i].pdXYZ[2],
+						asgrey.s[i].dXYZ[0], asgrey.s[i].dXYZ[1], asgrey.s[i].dXYZ[2]);
+					}
 				}
-#endif
 
 				if (it < mxits) {		/* Not verify, apply correction */
 					int impj = 0;		/* We improved the Jacobian */
@@ -4415,15 +4483,16 @@ int main(int argc, char *argv[]) {
 					}
 
 					/* See if we need to repeat */
-					if (asgrey.s[i].de <= errthr && asgrey.s[i].peqde < errthr) {	
-						if (verb > 1)
+					if (asgrey.s[i].de <= ierrth && asgrey.s[i].peqde < ierrth) {	
+						if (verb > 1) {
 							if (it < (mxits-1))
-								printf("Point %d Delta E %f, OK\n",rsteps - i,asgrey.s[i].de);
+								printf("Point %d Delta E %f, OK ( < %f)\n",rsteps - i,asgrey.s[i].de, ierrth);
 							else
-								printf("Point %d Delta E %f, peqDE %f, OK\n",rsteps - i,asgrey.s[i].de, asgrey.s[i].peqde);
+								printf("Point %d Delta E %f, peqDE %f, OK ( < %f)\n",rsteps - i,asgrey.s[i].de, asgrey.s[i].peqde, ierrth);
+						}
 						break;	/* No more retries */
 					}
-					if ((rpt+1) >= MAX_RPTS) {
+					if ((rpt+1) >= mxrpts) {
 						asgrey.s[i].de = bestde;			/* Restore to best we found */
 						asgrey.s[i].dc = bestdc;
 						asgrey.s[i].peqde = bestpeqde;		/* Restore to best we found */
@@ -4434,11 +4503,12 @@ int main(int argc, char *argv[]) {
 						asgrey.s[i].XYZ[0] = bestxyz[0];
 						asgrey.s[i].XYZ[1] = bestxyz[1];
 						asgrey.s[i].XYZ[2] = bestxyz[2];
-						if (verb > 1)
+						if (verb > 1) {
 							if (it < (mxits-1))
-								printf("Point %d Delta E %f, Fail\n",rsteps - i,asgrey.s[i].de);
+								printf("Point %d Delta E %f, Fail ( > %f)\n",rsteps - i,asgrey.s[i].de, ierrth);
 							else
-								printf("Point %d Delta E %f, peqDE %f, Fail\n",rsteps - i,asgrey.s[i].de,asgrey.s[i].peqde);
+								printf("Point %d Delta E %f, peqDE %f, Fail ( > %f)\n",rsteps - i,asgrey.s[i].de,asgrey.s[i].peqde,ierrth);
+						}
 						thrfail = 1;						/* Failed to meet target */
 						if (bestde > failerr)
 							failerr = bestde;				/* Worst failed delta E */
@@ -4480,27 +4550,37 @@ int main(int argc, char *argv[]) {
 							dclip = 1;
 						}
 					}
-#ifdef DEBUG
-					if (dclip) printf("delta RGB after clip %f %f %f\n",
+					if (verb >= 3 && dclip) printf("delta RGB after clip %f %f %f\n",
 					       asgrey.s[i].pdrgb[0], asgrey.s[i].pdrgb[1], asgrey.s[i].pdrgb[2]);
-#endif	/* DEBUG */
 #endif	/* CLIP */
 					/* Compute next on the basis of this one RGB */
 					icmAdd3(asgrey.s[i].rgb, asgrey.s[i].rgb, asgrey.s[i].pdrgb);
 
 					/* Save expected change in XYZ */
 					icmMulBy3x3(asgrey.s[i].pdXYZ, asgrey.s[i].j, asgrey.s[i].pdrgb);
-#ifdef DEBUG
-					printf("New rgb %f %f %f from expected del XYZ %f %f %f\n",
-					       asgrey.s[i].rgb[0], asgrey.s[i].rgb[1], asgrey.s[i].rgb[2],
-					       asgrey.s[i].pdXYZ[0], asgrey.s[i].pdXYZ[1], asgrey.s[i].pdXYZ[2]);
-#endif
+					if (verb >= 3) {
+						printf("New rgb %f %f %f from expected del XYZ %f %f %f\n",
+						       asgrey.s[i].rgb[0], asgrey.s[i].rgb[1], asgrey.s[i].rgb[2],
+						       asgrey.s[i].pdXYZ[0], asgrey.s[i].pdXYZ[1], asgrey.s[i].pdXYZ[2]);
+					}
 				} else {	/* Verification, so no repeat */
 					break;
 				}
 
 				prevde = asgrey.s[i].de;
 			}	/* Next repeat */
+
+			if (verb >= 3) {
+				printf("After adjustment:\n");
+				printf("Current rgb %f %f %f -> XYZ %f %f %f, de %f, dc %f\n", 
+				asgrey.s[i].rgb[0], asgrey.s[i].rgb[1], asgrey.s[i].rgb[2],
+				asgrey.s[i].XYZ[0], asgrey.s[i].XYZ[1], asgrey.s[i].XYZ[2],
+				asgrey.s[i].de, asgrey.s[i].dc);
+				printf("Target XYZ %f %f %f, delta needed %f %f %f\n", 
+				asgrey.s[i].tXYZ[0], asgrey.s[i].tXYZ[1], asgrey.s[i].tXYZ[2],
+				asgrey.s[i].deXYZ[0], asgrey.s[i].deXYZ[1], asgrey.s[i].deXYZ[2]);
+			}
+
 		}		/* Next resolution step */
 		if (verb)
 			printf("\n");			/* Final return for patch count */
@@ -4552,7 +4632,7 @@ int main(int argc, char *argv[]) {
 			/* We're checking against our given brightness and */
 			/* white point target. */
 			mnerr = anerr = 0.0;
-			init_csamp_txyz(&asgrey, &x, 0);		/* In case the targets were tweaked */
+			init_csamp_txyz(&asgrey, &x, 0, verb);	/* In case the targets were tweaked */
 			for (i = 0; i < asgrey.no; i++) {
 				double err;
 

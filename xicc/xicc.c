@@ -61,7 +61,7 @@ static icxLuBase *xicc_set_luobj(xicc *p, icmLookupFunc func, icRenderingIntent 
                             icmLookupOrder order, int flags, int no, int nobw, cow *points,
 							icxMatrixModel *skm,
                             double dispLuminance, double wpscale, double smooth, double avgdev,
-                            icxViewCond *vc, icxInk *ink, xcal *cal, int quality);
+							double demph, icxViewCond *vc, icxInk *ink, xcal *cal, int quality);
 static void icxLutSpaces(icxLuBase *p, icColorSpaceSignature *ins, int *inn,
                          icColorSpaceSignature *outs, int *outn,
                          icColorSpaceSignature *pcs);
@@ -1058,6 +1058,7 @@ double dispLuminance,		/* > 0.0 if display luminance value and is known */
 double wpscale,				/* > 0.0 if input white point is to be scaled */
 double smooth,				/* RSPL smoothing factor, -ve if raw */
 double avgdev,				/* reading Average Deviation as a proportion of the input range */
+double demph,				/* dark emphasis factor for cLUT grid res. */
 icxViewCond *vc,			/* Viewing Condition (NULL if not using CAM) */
 icxInk *ink,				/* inking details (NULL for default) */
 xcal *cal,                  /* Optional cal, will override any existing (not deleted with xicc)*/
@@ -1108,7 +1109,7 @@ int quality					/* Quality metric, 0..3 */
 
     	case icmLutType:
 			/* ~~~ Should add check that it is a fwd profile ~~~ */
-			xplu = set_icxLuLut(p, plu, func, intent, flags, no, nobw, points, skm, dispLuminance, wpscale, smooth, avgdev, vc, ink, quality);
+			xplu = set_icxLuLut(p, plu, func, intent, flags, no, nobw, points, skm, dispLuminance, wpscale, smooth, avgdev, demph, vc, ink, quality);
 			break;
 
 		default:

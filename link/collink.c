@@ -238,6 +238,9 @@ void usage(char *diag, ...) {
 /* and the CbCr maximum value of 240 missed by 1/256, */
 /* so we haven't yet implemented this fixup */
 
+/* Instead we are just tweaking the cLUT values of the black */
+/* point to avoid any error at this critical value. */
+
 typedef struct {
 	int clip;			/* Clip mask */
 	int ix[MXDI];		/* Index of the grid point that was clipped */
@@ -645,6 +648,7 @@ void devi_devip(void *cntx, double *out, double *in) {
 /* - - - - - - - - - - - - */
 /* clut, DevIn' -> DevOut' */
 void devip_devop(void *cntx, double *out, double *in) {
+	double oin[MAX_CHAN];			/* original input values */
 	double win[MAX_CHAN];			/* working input values */
 	double pcsv[MAX_CHAN];			/* PCS intermediate value, pre-gamut map */
 	double pcsvm[MAX_CHAN];			/* PCS intermediate value, post-gamut map */
@@ -667,9 +671,10 @@ void devip_devop(void *cntx, double *out, double *in) {
 	printf("DevIn'->DevOut' got %s\n",icmPdv(p->in.chan, in));
 #endif
 
-	/* Make a copy so we can modify it */
+	/* Make a copy so we can modify it and are not affected when we write */
+	/* to out when out == in */
 	for (i = 0; i < p->in.chan; i++)
-		win[i] = in[i];
+		win[i] = oin[i] = in[i];
 
 	/* eeColor cLUT is fake 65^3 - only 64^3 is usable. This affects */
 	/* full range and xvYCC RGB, so un-map inputs to cLUT to only use 64^3 */
@@ -1260,11 +1265,24 @@ void devip_devop(void *cntx, double *out, double *in) {
 	}
 
 	if (p->cal != NULL && p->addcal == 1 && p->out.nocurve) {
+#ifdef DEBUG
+#ifdef DEBUGC
+		DEBUGC
+#endif
+		printf("DevOut' before cal curve %s\n\n",icmPdv(p->out.chan, out));
+#endif
 		p->cal->interp(p->cal, out, out);
 	}
 
-	if (p->out.lcurve) 		/* Apply Y to L* */
+	if (p->out.lcurve) { 		/* Apply Y to L* */
+#ifdef DEBUG
+#ifdef DEBUGC
+		DEBUGC
+#endif
+		printf("DevOut' before y2l_curve %s\n\n",icmPdv(p->out.chan, out));
+#endif
 		y2l_curve(out, out, p->out.lcurve == 2);
+	}
 
 	/* Video encoding encode */
 	if (p->out.tvenc) {
@@ -1309,6 +1327,7 @@ void devip_devop(void *cntx, double *out, double *in) {
 		}
 #endif /* NEVER */
 	}
+
 	/* Create linear interpolation from clip to full range */
 	if (clip && p->out.tvenc) {
 		for (i = 0; i < 3; i++) {
@@ -3865,7 +3884,7 @@ main(int argc, char *argv[]) {
 				if ((clutPoints & 1) == 0)
 					warning("Making grid resolution is even - this is not ideal for YCbCr input");
 			}
-			if (li.in.tvenc != 0 && clutPoints != 65)
+			if (li.in.tvenc != 0 && clutPoints != 65 && clutPoints != 129 && clutPoints != 256)
 				warning("Video or YCbCr encoded inputs will work best with grid res. of 65 (got %d)",clutPoints);
 			if (li.tdlut == 1) {		/* eeColor encoded input */
 				if (clutPoints != 65)
@@ -3874,7 +3893,7 @@ main(int argc, char *argv[]) {
 				outputEnt = 4096;		/* Ideally 8192 */
 
 			} else if (li.tdlut == 2) {
-				if (clutPoints != 65)
+				if (clutPoints != 65 && clutPoints != 129 && clutPoints != 256)
 					warning("MadVR 3DLut will work best with grid resolution of 65 (got %d)",clutPoints);
 				inputEnt = 1024;		/* Not used */
 				outputEnt = 1024;		/* Not used */
@@ -3935,16 +3954,16 @@ main(int argc, char *argv[]) {
 			if (li.verb)
 				printf("Filling in Lut table\n");
 #ifdef DEBUG_ONE
-#define DBGNO 1		/* Up to 10 */
+#define DBGNO 3		/* Up to 10 */
 
 #ifndef NEVER
 			/* Test a single given rgb/cmyk -> cmyk value */
 			{
 				double in[10][MAX_CHAN];
 				double out[MAX_CHAN];
-				in[0][0] = 0.2;
-				in[0][1] = 0.2;
-				in[0][2] = 0.8;
+//				in[0][0] = 0.2;
+//				in[0][1] = 0.2;
+//				in[0][2] = 0.8;
 
 //				in[0][0] = 0.5;
 //				in[0][1] = 0.5;
@@ -3954,19 +3973,36 @@ main(int argc, char *argv[]) {
 //				in[0][1] = ((235-16)/255.0 * 0.5) + 16/255.0;
 //				in[0][2] = ((235-16)/255.0 * 0.5) + 16/255.0;
 
+//				in[0][3] = 0.0;
+
+//				in[0][0] = 16.0/255.0;
+//				in[0][1] = 16.0/255.0;
+//				in[0][2] = 16.0/255.0;
+//				in[0][3] = 0.0;
+
+				in[0][0] = 3.0/64.0;
+				in[0][1] = 3.0/64.0;
+				in[0][2] = 3.0/64.0;
 				in[0][3] = 0.0;
 
-				in[1][0] = 16.0/255.0;
-				in[1][1] = 16.0/255.0;
-				in[1][2] = 16.0/255.0;
+				in[1][0] = 4.0/64.0;
+				in[1][1] = 4.0/64.0;
+				in[1][2] = 4.0/64.0;
 				in[1][3] = 0.0;
 
+				in[2][0] = 5.0/64.0;
+				in[2][1] = 5.0/64.0;
+				in[2][2] = 5.0/64.0;
+				in[2][3] = 0.0;
+
 				for (i = 0; i < DBGNO; i++) {
-					printf("Input %f %f %f %f\n",in[i][0], in[i][1], in[i][2], in[i][3]);
+					printf("Input %f %f %f %*\n",in[i][0], in[i][1], in[i][2], in[i][3]);
 					devi_devip((void *)&li, out, in[i]);
+					printf("Input' %f %f %f %*\n",out[0], out[1], out[2], out[3]);
 					devip_devop((void *)&li, out, out);
+					printf("Out'' %f %f %f %*\n",out[0], out[1], out[2], out[3]);
 					devop_devo((void *)&li, out, out);
-					printf("Output %f %f %f %f\n\n",out[0], out[1], out[2], out[3]);
+					printf("Out %f %f %f %*\n\n",out[0], out[1], out[2], out[3]);
 				}
 			}
 #endif /* NEVER */
@@ -4023,6 +4059,67 @@ main(int argc, char *argv[]) {
 			printf("Warning :- white point hack didn't trigger!\n");
 		if (li.verb && li.wphack && li.wphacked > 1)
 			printf("Warning :- white point hack trigger more than once! (%d)\n",li.wphacked);
+
+		/* Special case black point correction when we are usng TV encoding */
+		/* and the black probably doesn't lie on a grid point. */
+		/* This probably only works if we can have "-ve" output values */
+		/* by virtue of the output being tv encoded too. */
+		if (li.in.tvenc) {
+			icmLut *lut;
+			double ival[MXDO];		/* Black input value */
+			double oval[MXDO];		/* Correct output value for black */
+
+			if ((lut = (icmLut *)wr_icc->read_tag(wr_icc, icSigAToB0Tag)) == NULL)
+				error("unableto locate A2B tag: %d, %s",wr_icc->errc,wr_icc->err);
+
+			ival[0] = ival[1] = ival[2] = 0.0;		/* RGB black input */
+			
+			/* Encode input value */
+			if (li.out.tvenc == 1) {				/* Video 16-235 range */
+				icmRGB_2_VidRGB(ival, ival);
+			} else if (li.out.tvenc == 2) {			/* Rec601 YCbCr */
+				icmRec601_RGBd_2_YPbPr(ival, ival);
+				icmRecXXX_YPbPr_2_YCbCr(ival, ival);
+			} else if (li.out.tvenc == 3) {			/* Rec709 1150/60/2:1 YCbCr */
+				icmRec709_RGBd_2_YPbPr(ival, ival);
+				icmRecXXX_YPbPr_2_YCbCr(ival, ival);
+			} else if (li.out.tvenc == 4) {			/* Rec709 1250/50/2:1 YCbCr */
+				icmRec709_50_RGBd_2_YPbPr(ival, ival);
+				icmRecXXX_YPbPr_2_YCbCr(ival, ival);
+			} else if (li.out.tvenc == 5) {			/* Rec2020 Non-constant Luminance YCbCr encoding */
+				icmRec2020_NCL_RGBd_2_YPbPr(ival, ival);
+				icmRecXXX_YPbPr_2_YCbCr(ival, ival);
+			} else if (li.out.tvenc == 6) {			/* Rec2020 Constant Luminance YCbCr encoding */
+				icmRec2020_CL_RGBd_2_YPbPr(ival, ival);
+				icmRecXXX_YPbPr_2_YCbCr(ival, ival);
+			}
+
+//printf("input value     %f %f %f\n",ival[0], ival[1], ival[2]);
+			lut->lookup_clut_sx(lut, oval, ival);
+//printf("before tune out %f %f %f\n",oval[0], oval[1], oval[2]);
+			
+			/* Lookup the cLUT input value */
+			devi_devip((void *)&li, ival, ival);
+
+			/* Look up black output value we want */
+			devip_devop((void *)&li, oval, ival);
+
+//printf("bp tune target  %f %f %f\n",oval[0], oval[1], oval[2]);
+
+			// ~~~~9999 should do a lookup to set sx/nl type corrctly
+			rv = lut->tune_value(lut, oval, ival);
+//			rv = icmLut_tune_value_sx(lut, oval, ival);
+//			rv = icmLut_tune_value_nl(lut, oval, ival);
+
+			if (rv != 0)
+				warning("Fine tuning video black failed - clipping");
+
+//			lut->lookup_clut_sx(lut, oval, ival);
+//printf("after sx out    %f %f %f\n",oval[0], oval[1], oval[2]);
+
+//			lut->lookup_clut_nl(lut, oval, ival);
+//printf("after nl out    %f %f %f\n",oval[0], oval[1], oval[2]);
+		}
 
 		if (li.verb)
 			printf("Writing out file\n");
@@ -4584,6 +4681,8 @@ int write_MadVR_3DLut(clink *li, icc *icc, char *fname) {
 	/* Append a cal1 table to the 3dlut. */
 	/* This can be used to ensure that the Graphics Card VideoLuts */
 	/* are correctly setup to match what the 3dLut is expecting. */
+
+	/* Note that the calibration is full range, never TV encoded output values */
 
 	/* Format is (little endian):
 		4 byte magic number 'cal1'

@@ -20,6 +20,13 @@
 
 /* TTBD
 
+	Calibrating the black point of a true power response
+	device is very slow to converge - the jacobian is always
+	underestimating the actual delta RGB needed because the
+	slope is getting shallower and shallower. Need to
+	be able to figure when to increase rgain in those circumstances,
+	rather than reducing it ? 
+
 	Dealing with noisy/inconsistent readings could probably
 	be improved - the statistical information from a iteration
 	series is being ignored. ie. do a linear regression/fit
@@ -134,18 +141,22 @@
 
 #define COMPORT 1			/* Default com port 1..4 */
 #define OPTIMIZE_MODEL		/* Adjust model for best fit */
-#define REFINE_GAIN 0.80	/* Refinement correction damping/gain */
+#define REFINE_GAIN 0.90	/* Refinement correction damping/gain */
 #define VER_RES 100			/* Verification resolution */
 #define NEUTRAL_BLEND_RATE 4.0		/* Default rate of transition for -k factor < 1.0 (power) */
 #define ADJ_JACOBIAN		/* Adjust the Jacobian predictor matrix each time */
-#define JAC_COR_FACT 0.4	/* Amount to correct Jacobian by (to filter noise) */
-#define REMEAS_JACOBIAN		/* Re-measure Jacobian */
+#define JAC_COMP_FACT 0.4	/* Amount to compound Jacobian correction */
+#define JAC_COR_FACT 0.4	/* Amount to damp Jacobian by (to filter noise) */
+#define REMEAS_JACOBIAN		/* Re-measure Jacobian if it is a poor predictor */
 #define MOD_DIST_POW 1.6	/* Power used to distribute test samples for model building */
 #define REFN_DIST_POW 1.6	/* Power used to distribute test samples for grey axis refinement */
 #define CHECK_DIST_POW 1.6	/* Power used to distribute test samples for grey axis checking */
 #define THRESH_SCALE_POW 0.5 /* Amount to loosen threshold for first itterations */
 #define ADJ_THRESH			/* Adjust threshold to be half a step */
-#define MIN_THRESH 0.1	 	/* Minimum stopping threshold to allow in adjustment */
+#define MIN_THRESH 0.05	 	/* Minimum stopping threshold to allow in ADJ_THRESH */
+#define POWERR_THR 0.05		/* Point near black to start weighting +ve error */
+#define POWERR_WEIGHT 999.0	/* Weight to give +ve delta E at black */
+#define POWERR_WEIGHT_POW 4.0	/* Curve to plend from equal weight to +ve extra weight */
 #define CAL_RES 256			/* Resolution of calibration table to produce. */
 #define CLIP				/* Clip RGB during refinement */
 #define RDAC_SMOOTH 0.3		/* RAMDAC curve fitting smoothness */
@@ -864,14 +875,16 @@ typedef struct {
 	double tXYZ[3];		/* Target XYZ */
 	double XYZ[3];		/* Read XYZ */
 	double deXYZ[3];	/* Delta XYZ wanted to target */
-	double de;			/* Delta Lab to neutral target */
-	double dc;			/* Delta XYZ to neutral target */
-	double peqde;		/* Delta Lab to last pass equivalent point value */
-	double hde;			/* Hybrid de composed of de and peqde */
+	double _de;			/* Non-weighted Delta Lab */
+	double de;			/* Weightd Delta Lab to neutral target */
+	double dc;			/* Weightd Delta XYZ to neutral target */
+	double peqde;		/* Weightd Delta Lab to last pass equivalent point value */
+	double hde;			/* Weightd Hybrid de composed of de and peqde */
 
+	double prgb[3];		/* Previous measured RGB */
 	double pXYZ[3];		/* Previous measured XYZ */
 	double pdXYZ[3];	/* Delta XYZ intended from previous measure */
-	double pdrgb[3];	/* Delta rgb made to previous */
+	double pdrgb[3];	/* Delta rgb made to previous to acorrect XYZ */
 
 	double dXYZ[3];		/* Actual delta XYZ resulting from previous delta rgb */
 
@@ -879,6 +892,7 @@ typedef struct {
 	double ij[3][3];	/* Aproximate inverse Jacobian (del XYZ-> del RGB) */
 	double fb_ij[3][3];	/* Copy of initial inverse Jacobian, used as a fallback */
 } csp;
+
 
 /* All the sample points */
 typedef struct {
@@ -1171,7 +1185,7 @@ static void reinit_csamp(csamp *p, calx *x, int verify, int psrand, int no, int 
 		/* Compute expected delta XYZ using new Jacobian */
 		icmMulBy3x3(p->s[i].pdXYZ, p->s[i].j, p->s[i].pdrgb);
 
-		p->s[i].de = b * os[j+1].de + (1.0 - b) * os[j].de;
+		p->s[i]._de = p->s[i].de = b * os[j+1].de + (1.0 - b) * os[j].de;
 		p->s[i].dc = b * os[j+1].dc + (1.0 - b) * os[j].dc;
 	}
 
@@ -3443,14 +3457,26 @@ int main(int argc, char *argv[]) {
 		icmXYZNumber mwh;
 		ramdac *or = NULL;
 
-		col base[6] = {	/* Base set of test colors */
+		col base[9] = {	/* Base set of test colors */
 			{ 0.0, 0.0, 0.0 },		/* 0 - Black */
 			{ 1.0, 0.0, 0.0 },		/* 1 - Red */
-			{ 0.0, 1.0, 0.0 },		/* 2 - Green */
-			{ 0.0, 0.0, 1.0 },		/* 3 - Blue */
-			{ 1.0, 1.0, 1.0 },		/* 4 - White */
-			{ 0.0, 0.0, 0.0 }		/* 5 - Black */
+			{ 1.0, 1.0, 1.0 },		/* 2 - White */
+			{ 0.0, 0.0, 0.0 },		/* 3 - Black */
+			{ 0.0, 1.0, 0.0 },		/* 4 - Green */
+			{ 0.0, 0.0, 0.0 },		/* 5 - Black */
+			{ 0.0, 0.0, 1.0 },		/* 6 - Blue */
+			{ 1.0, 1.0, 1.0 },		/* 7 - White */
+			{ 0.0, 0.0, 0.0 }		/* 8 - Black */
 		};
+		int ix_k1 = 0;
+		int ix_r  = 1;
+		int ix_w1 = 2;
+		int ix_k2 = 3;
+		int ix_g  = 4;
+		int ix_k3 = 5;
+		int ix_b  = 6;
+		int ix_w2 = 7;
+		int ix_k4 = 8;
 
 		if (verb) {
 			if (verify == 2)
@@ -3473,7 +3499,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* Read the patches without clamping */
-		if ((rv = dr->read(dr, base, 6, 1, 6, 1, 0, instNoClamp)) != 0) {
+		if ((rv = dr->read(dr, base, 9, 1, 9, 1, 0, instNoClamp)) != 0) {
 			dr->del(dr);
 			error("display read failed with '%s'\n",disprd_err(rv));
 		} 
@@ -3485,35 +3511,49 @@ int main(int argc, char *argv[]) {
 			or->del(or);
 		}
 
-		if (base[0].XYZ_v == 0) {
+		if (base[ix_k1].XYZ_v == 0) {
 			dr->del(dr);
 			error("Failed to get an XYZ value from the instrument!\n");
 		}
 
-		/* Average black relative from 2 readings */
-		x.bk[0] = 0.5 * (base[0].XYZ[0] + base[5].XYZ[0]);
-		x.bk[1] = 0.5 * (base[0].XYZ[1] + base[5].XYZ[1]);
-		x.bk[2] = 0.5 * (base[0].XYZ[2] + base[5].XYZ[2]);
+		if (verb >= 3) {
+			for (i = 0; i < 9; i++)
+				printf("Meas %d XYZ = %f %f %f\n",i,base[i].XYZ[0], base[i].XYZ[1], base[i].XYZ[2]);
+		}
+
+		/* Average black relative from 4 readings */
+		x.bk[0] = 0.25 * (base[ix_k1].XYZ[0] + base[ix_k2].XYZ[0]
+		                + base[ix_k3].XYZ[0] + base[ix_k4].XYZ[0]);
+		x.bk[1] = 0.25 * (base[ix_k1].XYZ[1] + base[ix_k2].XYZ[1]
+		                + base[ix_k3].XYZ[1] + base[ix_k4].XYZ[1]);
+		x.bk[2] = 0.25 * (base[ix_k1].XYZ[2] + base[ix_k2].XYZ[2]
+		                + base[ix_k3].XYZ[2] + base[ix_k4].XYZ[2]);
 		icmClamp3(x.bk, x.bk);	/* And clamp them */
-		for (i = 1; i < 5; i++)
+
+		/* Average white reading from 2 readings */
+		base[ix_w1].XYZ[0] = 0.5 * (base[ix_w1].XYZ[0] + base[ix_w2].XYZ[0]);
+		base[ix_w1].XYZ[1] = 0.5 * (base[ix_w1].XYZ[1] + base[ix_w2].XYZ[1]);
+		base[ix_w1].XYZ[2] = 0.5 * (base[ix_w1].XYZ[2] + base[ix_w2].XYZ[2]);
+	
+		for (i = 0; i < 9; i++)
 			icmClamp3(base[i].XYZ, base[i].XYZ);
 
 		/* Copy other readings into place */
-		dispLum = base[4].XYZ[1];				/* White Y */
-		icmAry2Ary(x.wh, base[4].XYZ);
+		dispLum = base[ix_w1].XYZ[1];				/* White Y */
+		icmAry2Ary(x.wh, base[ix_w1].XYZ);
 		icmAry2XYZ(x.twN, x.wh);	/* Use this as Lab reference white until we establish target */
 
-		icmAry2XYZ(mrd, base[1].XYZ);
-		icmAry2XYZ(mgn, base[2].XYZ);
-		icmAry2XYZ(mbl, base[3].XYZ);
-		icmAry2XYZ(mwh, base[4].XYZ);
+		icmAry2XYZ(mrd, base[ix_r].XYZ);
+		icmAry2XYZ(mgn, base[ix_g].XYZ);
+		icmAry2XYZ(mbl, base[ix_b].XYZ);
+		icmAry2XYZ(mwh, base[ix_w1].XYZ);
 
 		if (verb) {
 			printf("Black = XYZ %6.4f %6.4f %6.4f\n",x.bk[0],x.bk[1],x.bk[2]);
-			printf("Red   = XYZ %6.3f %6.3f %6.3f\n",base[1].XYZ[0], base[1].XYZ[1], base[1].XYZ[2]);
-			printf("Green = XYZ %6.3f %6.3f %6.3f\n",base[2].XYZ[0], base[2].XYZ[1], base[2].XYZ[2]);
-			printf("Blue  = XYZ %6.3f %6.3f %6.3f\n",base[3].XYZ[0], base[3].XYZ[1], base[3].XYZ[2]);
-			printf("White = XYZ %6.3f %6.3f %6.3f\n",base[4].XYZ[0], base[4].XYZ[1], base[4].XYZ[2]);
+			printf("Red   = XYZ %6.3f %6.3f %6.3f\n",base[ix_r].XYZ[0], base[ix_r].XYZ[1], base[ix_r].XYZ[2]);
+			printf("Green = XYZ %6.3f %6.3f %6.3f\n",base[ix_g].XYZ[0], base[ix_g].XYZ[1], base[ix_g].XYZ[2]);
+			printf("Blue  = XYZ %6.3f %6.3f %6.3f\n",base[ix_b].XYZ[0], base[ix_b].XYZ[1], base[ix_b].XYZ[2]);
+			printf("White = XYZ %6.3f %6.3f %6.3f\n",base[ix_w1].XYZ[0], base[ix_w1].XYZ[1], base[ix_w1].XYZ[2]);
 		}
 
 		/* Setup forward matrix */
@@ -3521,6 +3561,7 @@ int main(int argc, char *argv[]) {
 			dr->del(dr);
 			error("Aprox. fwd matrix unexpectedly singular\n");
 		}
+		icmTranspose3x3(x.fm, x.fm);	/* Convert [RGB][XYZ] to [XYZ][RGB] */
 
 #ifdef DEBUG
 		if (verb) {
@@ -3897,7 +3938,7 @@ int main(int argc, char *argv[]) {
 //printf("~1 black point Lab = %f %f %f\n", tbkLab[0], tbkLab[1], tbkLab[2]);
 
 		/* Now blend the a* b* with that of the target white point */
-		/* according to how much to try and correct. */
+		/* according to how much to try and correct the hue. */
 		tbL[0] = tbkLab[0];
 		tbL[1] = bkcorrect * 0.0 + (1.0 - bkcorrect) * tbkLab[1];
 		tbL[2] = bkcorrect * 0.0 + (1.0 - bkcorrect) * tbkLab[2];
@@ -4173,9 +4214,9 @@ int main(int argc, char *argv[]) {
 
 		/* Verify pass */
 		if (it >= mxits)
-			rsteps = VER_RES;		/* Fixed verification resolution */
+			rsteps = VER_RES;	/* Fixed verification resolution */
 		else
-			thrfail = 0; /* Not verify pass */
+			thrfail = 0;		/* Not verify pass */
 
 
 		/* re-init asgrey if the number of test points has changed */
@@ -4188,14 +4229,16 @@ int main(int argc, char *argv[]) {
 				printf("Doing iteration %d with %d sample points and repeat threshold of %f DE\n",
 				                                                             it+1,rsteps, errthr);
 		}
+
 		/* Read and adjust each step */
 		/* Do this white to black to track drift in native white point */
 		for (i = rsteps-1; i >= 0; i--) {
-			double rpt;
+			int rpt;
 			double peqXYZ[3];		/* Previous steps equivalent aim point */
 			double bestrgb[3];		/* In case we fail */
 			double bestxyz[3];
 			double prevde = 1e7;
+			double best_de = 1e7;
 			double bestde = 1e7;
 			double bestdc = 1e7;
 			double bestpeqde = 1e7;
@@ -4204,6 +4247,8 @@ int main(int argc, char *argv[]) {
 			int mjac = 0;				/* We measured the Jacobian */
 			double ierrth = errthr;		/* This points error threshold */
 			
+			icmCpy3(asgrey.s[i].prgb, asgrey.s[i].rgb);		/* Init previous */
+
 			/* Setup a second termination threshold criteria based on */
 			/* the delta E to the previous step point for the last pass. */
 			/* This is to try and steer towards neutral axis consistency ? */
@@ -4240,10 +4285,11 @@ int main(int argc, char *argv[]) {
 #endif /* ADJ_THRESH */
 
 			/* Until we meet the necessary accuracy or give up */
-			for (rpt = 0;rpt < mxrpts; rpt++) {
+			for (rpt = 0; rpt < mxrpts; rpt++) {
 				double hlew = 1.0;	/* high L* error weight */
 				int gworse = 0;		/* information flag */
-				double wde;			/* informational */
+				double w_de, wde;	/* informational */
+				double pjadj[3][3] = { 0.0 };	/* Previous jacobian adjustment */
 
 				set[0].r = asgrey.s[i].rgb[0];
 				set[0].g = asgrey.s[i].rgb[1];
@@ -4275,43 +4321,48 @@ int main(int argc, char *argv[]) {
 					}
 				}
 
-				/* Compute the current change wanted to hit target */
+				/* Compute the next change wanted to hit target */
 				icmSub3(asgrey.s[i].deXYZ, asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
 
 				/* For the darkest 5% of targets, weight the L* delta E so that */
 				/* we err on the darker side */
-				if (asgrey.s[i].v < 0.05)
-					hlew = 1.0 + 49.0 * (0.05 - asgrey.s[i].v)/0.05;
+				if (asgrey.s[i].v < POWERR_THR)
+					hlew = 1.0 + POWERR_WEIGHT * pow((POWERR_THR - asgrey.s[i].v)/POWERR_THR,
+					                                                       POWERR_WEIGHT_POW);
 				else
 					hlew = 1.0;
 //printf("~1 i %d, v %f, hlew %f\n",i,asgrey.s[i].v,hlew);
+				asgrey.s[i]._de = icmXYZLabDE(&x.twN, asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
 				asgrey.s[i].de = bwXYZLabDE(&x.twN, asgrey.s[i].tXYZ, asgrey.s[i].XYZ, hlew);
 				asgrey.s[i].peqde = bwXYZLabDE(&x.twN, peqXYZ, asgrey.s[i].XYZ, hlew);
 				asgrey.s[i].hde = 0.8 * asgrey.s[i].de + 0.2 * asgrey.s[i].peqde;
 				/* Eudclidian difference of XYZ, because this doesn't always track Lab */
 				asgrey.s[i].dc = icmLabDE(asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
 
-				/* Compute change from last XYZ */
+				/* Compute actual change from last XYZ */
 				icmSub3(asgrey.s[i].dXYZ, asgrey.s[i].XYZ, asgrey.s[i].pXYZ);
 
+				w_de = asgrey.s[i]._de;
+				wde = asgrey.s[i].de;
+
 				if (verb >= 3) {
-					printf("\n\nTest point %d, v = %f\n",rsteps - i,asgrey.s[i].v);
+					printf("\n\nTest point %d, v = %f, rpt %d\n",rsteps - i,asgrey.s[i].v,rpt);
 					printf("Current rgb %f %f %f -> XYZ %f %f %f, de %f, dc %f\n", 
 					asgrey.s[i].rgb[0], asgrey.s[i].rgb[1], asgrey.s[i].rgb[2],
 					asgrey.s[i].XYZ[0], asgrey.s[i].XYZ[1], asgrey.s[i].XYZ[2],
-					asgrey.s[i].de, asgrey.s[i].dc);
+					asgrey.s[i]._de, asgrey.s[i].dc);
 					printf("Target XYZ %f %f %f, delta needed %f %f %f\n", 
 					asgrey.s[i].tXYZ[0], asgrey.s[i].tXYZ[1], asgrey.s[i].tXYZ[2],
 					asgrey.s[i].deXYZ[0], asgrey.s[i].deXYZ[1], asgrey.s[i].deXYZ[2]);
 					if (rpt > 0) {
-						printf("Intended XYZ change %f %f %f, actual change %f %f %f\n", 
+						printf("Last intended XYZ change %f %f %f, actual change %f %f %f\n", 
 						asgrey.s[i].pdXYZ[0], asgrey.s[i].pdXYZ[1], asgrey.s[i].pdXYZ[2],
 						asgrey.s[i].dXYZ[0], asgrey.s[i].dXYZ[1], asgrey.s[i].dXYZ[2]);
 					}
 				}
 
 				if (it < mxits) {		/* Not verify, apply correction */
-					int impj = 0;		/* We improved the Jacobian */
+					int impj = 0;		/* We adjusted the Jacobian */
 					int dclip = 0;		/* We clipped the new RGB */
 #ifdef ADJ_JACOBIAN
 					int isclipped = 0;
@@ -4330,7 +4381,9 @@ int main(int argc, char *argv[]) {
 
 #ifdef REMEAS_JACOBIAN
 					/* If the de hasn't improved, try and measure the Jacobian */
-					if (it < (rsteps-1) && mjac == 0 && asgrey.s[i].de > (0.8 * prevde)) {
+//					if (it < (rsteps-1) && mjac == 0 && asgrey.s[i].de > (0.8 * prevde))
+					if (mjac == 0 && asgrey.s[i].de > (0.8 * prevde))
+					{
 						double dd;
 						if (asgrey.s[i].v < 0.5)
 							dd = 0.05;
@@ -4357,18 +4410,20 @@ int main(int argc, char *argv[]) {
 						} 
 						totmeas += 3;
 
+//printf("\n~1 remeasured jacobian\n");
 						/* Matrix organization is J[XYZ][RGB] for del RGB->del XYZ*/
 						for (j = 0; j < 3; j++) {
 							asgrey.s[i].j[0][j] = (set[j].XYZ[0] - asgrey.s[i].XYZ[0]) / dd;
 							asgrey.s[i].j[1][j] = (set[j].XYZ[1] - asgrey.s[i].XYZ[1]) / dd;
 							asgrey.s[i].j[2][j] = (set[j].XYZ[2] - asgrey.s[i].XYZ[2]) / dd;
 						}
+
+						/* Clear pjadj */
+						for (j = 0; j < 3; j++)
+							pjadj[3][0] = pjadj[3][1] = pjadj[3][2] = 0.0;
+
 						if (icmInverse3x3(asgrey.s[i].ij, asgrey.s[i].j)) {
 							/* Should repeat with bigger dd ? */
-//printf("~1 matrix =\n");
-//printf("~1    %f %f %f\n", asgrey.s[i].j[0][0], asgrey.s[i].j[0][1], asgrey.s[i].j[0][2]);
-//printf("~1    %f %f %f\n", asgrey.s[i].j[1][0], asgrey.s[i].j[1][1], asgrey.s[i].j[1][2]);
-//printf("~1    %f %f %f\n", asgrey.s[i].j[2][0], asgrey.s[i].j[2][1], asgrey.s[i].j[2][2]);
 							if (verb)
 								printf("dispcal: inverting Jacobian failed (3) - falling back\n");
 
@@ -4377,6 +4432,7 @@ int main(int argc, char *argv[]) {
 						}
 						/* Restart at the best we've had */
 						if (asgrey.s[i].hde > besthde) {
+							asgrey.s[i]._de = best_de;
 							asgrey.s[i].de = bestde;
 							asgrey.s[i].dc = bestdc;
 							asgrey.s[i].peqde = bestpeqde;
@@ -4390,13 +4446,13 @@ int main(int argc, char *argv[]) {
 							icmSub3(asgrey.s[i].deXYZ, asgrey.s[i].tXYZ, asgrey.s[i].XYZ);
 						}
 						mjac = 1;
-						impj = 1;
+						impj = 1;		/* Have remeasured */
 					}
 #endif /* REMEAS_JACOBIAN */
 
 					/* Compute a correction to the Jacobian if we can. */
 					/* (Don't do this unless we have a solid previous */
-					/* reading for this patch) */ 
+					/* reading for this patch, and we haven't remeasured it) */ 
 					if (impj == 0 && rpt > 0 && isclipped == 0) {
 						double nsdrgb;			/* Norm squared of pdrgb */
 						double spdrgb[3];		/* Scaled previous delta rgb */
@@ -4404,6 +4460,10 @@ int main(int argc, char *argv[]) {
 						double jadj[3][3];		/* Adjustment to Jacobian */
 						double tj[3][3];		/* Temp Jacobian */
 						double itj[3][3];		/* Temp inverse Jacobian */
+
+//printf("~1 Jacobian was: %f %f %f\n", asgrey.s[i].j[0][0], asgrey.s[i].j[0][1], asgrey.s[i].j[0][2]);
+//printf("~1               %f %f %f\n", asgrey.s[i].j[1][0], asgrey.s[i].j[1][1], asgrey.s[i].j[1][2]);
+//printf("~1               %f %f %f\n", asgrey.s[i].j[2][0], asgrey.s[i].j[2][1], asgrey.s[i].j[2][2]);
 
 						/* Use Broyden's Formula */
 						icmSub3(dXYZerr, asgrey.s[i].dXYZ, asgrey.s[i].pdXYZ);
@@ -4420,31 +4480,68 @@ int main(int argc, char *argv[]) {
 							{
 								double eXYZ[3];
 	
+//printf("~1 del RGB %f %f %f got del XYZ %f %f %f\n", asgrey.s[i].pdrgb[0], asgrey.s[i].pdrgb[1], asgrey.s[i].pdrgb[2], asgrey.s[i].dXYZ[0], asgrey.s[i].dXYZ[1], asgrey.s[i].dXYZ[2]);
+
 								/* Make a full adjustment to temporary Jac */
 								icmAdd3x3(tj, asgrey.s[i].j, jadj);
+
+//printf("~1 Full Jacobian: %f %f %f\n", tj[0][0], tj[0][1], tj[0][2]);
+//printf("~1                %f %f %f\n", tj[1][0], tj[1][1], tj[1][2]);
+//printf("~1                %f %f %f\n", tj[2][0], tj[2][1], tj[2][2]);
+
 								icmMulBy3x3(eXYZ, tj, asgrey.s[i].pdrgb);
 								icmSub3(eXYZ, eXYZ, asgrey.s[i].dXYZ);
 								printf("Jac check resid %f %f %f\n", eXYZ[0], eXYZ[1], eXYZ[2]);
 							}
 #endif	/* DEBUG */
 
+							/* Add to portion of previous adjustment */
+							/* to counteract undershoot & overshoot */
+							icmScale3x3(pjadj, pjadj, JAC_COMP_FACT);
+							icmAdd3x3(jadj, jadj, pjadj);
+							icmCpy3x3(pjadj, jadj);
+
 							/* Add part of our correction to actual Jacobian */
+							/* to smooth out correction to counteract noise */
 							icmScale3x3(jadj, jadj, JAC_COR_FACT);
 							icmAdd3x3(tj, asgrey.s[i].j, jadj);
+
 							if (icmInverse3x3(itj, tj) == 0) {		/* Invert OK */
 								icmCpy3x3(asgrey.s[i].j, tj);		/* Use adjusted */
 								icmCpy3x3(asgrey.s[i].ij, itj);
 								impj = 1;
+
+#ifdef NEVER
+					/* Check how close new Jacobian predicts previous delta XYZ */
+					{
+						double eXYZ[3];
+						double ergb[3];
+
+						icmMulBy3x3(eXYZ, asgrey.s[i].j, asgrey.s[i].pdrgb);
+						icmSub3(eXYZ, eXYZ, asgrey.s[i].dXYZ);
+						printf("Jac check2 resid %f %f %f\n", eXYZ[0], eXYZ[1], eXYZ[2]);
+
+						icmMulBy3x3(ergb, asgrey.s[i].ij, asgrey.s[i].pdXYZ);
+						printf("Jac check2 drgb would have been %f %f %f\n", ergb[0], ergb[1], ergb[2]);
+						icmAdd3(ergb, ergb, asgrey.s[i].prgb);
+						printf("Jac check2 rgb would have been %f %f %f\n", ergb[0], ergb[1], ergb[2]);
+					}
+#endif
 							}
-//else printf("~1 ij failed\n");
+//else printf("~1 ij failed - reverted\n");
 						}
 //else printf("~1 nsdrgb was below threshold\n");
 					}
 //else if (isclipped) printf("~1 no j update: rgb is clipped\n");
+//printf("~1 Jacobian now: %f %f %f\n", asgrey.s[i].j[0][0], asgrey.s[i].j[0][1], asgrey.s[i].j[0][2]);
+//printf("~1               %f %f %f\n", asgrey.s[i].j[1][0], asgrey.s[i].j[1][1], asgrey.s[i].j[1][2]);
+//printf("~1               %f %f %f\n", asgrey.s[i].j[2][0], asgrey.s[i].j[2][1], asgrey.s[i].j[2][2]);
+
 #endif	/* ADJ_JACOBIAN */
 
 					/* Track the best solution we've found */
 					if (asgrey.s[i].hde <= besthde) {
+						best_de = asgrey.s[i]._de;
 						bestde = asgrey.s[i].de;
 						bestdc = asgrey.s[i].dc;
 						bestpeqde = asgrey.s[i].peqde;
@@ -4456,13 +4553,14 @@ int main(int argc, char *argv[]) {
 						bestxyz[1] = asgrey.s[i].XYZ[1];
 						bestxyz[2] = asgrey.s[i].XYZ[2];
 
+//printf("~1 new best\n");
 					} else if (asgrey.s[i].dc > bestdc) {
 						/* we got worse in Lab and XYZ ! */
 
-						wde = asgrey.s[i].de;
-
 						/* If we've wandered too far, return to best we found */
 						if (asgrey.s[i].hde > (3.0 * besthde)) {
+//printf("~1 resetting to last best\n");
+							asgrey.s[i]._de = best_de;
 							asgrey.s[i].de = bestde;
 							asgrey.s[i].dc = bestdc;
 							asgrey.s[i].peqde = bestpeqde;
@@ -4477,8 +4575,10 @@ int main(int argc, char *argv[]) {
 						}
 
 						/* If the Jacobian hasn't changed, moderate the gain */
-						if (impj == 0)
+						if (impj == 0) {
 							rgain *= 0.8;		/* We might be overshooting */
+//printf("~1 reducing rgain to %f\n",rgain);
+						}
 						gworse = 1;
 					}
 
@@ -4486,14 +4586,15 @@ int main(int argc, char *argv[]) {
 					if (asgrey.s[i].de <= ierrth && asgrey.s[i].peqde < ierrth) {	
 						if (verb > 1) {
 							if (it < (mxits-1))
-								printf("Point %d Delta E %f, OK ( < %f)\n",rsteps - i,asgrey.s[i].de, ierrth);
+								printf("Point %d DE %f, W.DE %f, OK ( < %f)\n",rsteps - i,asgrey.s[i]._de, asgrey.s[i].de, ierrth);
 							else
-								printf("Point %d Delta E %f, peqDE %f, OK ( < %f)\n",rsteps - i,asgrey.s[i].de, asgrey.s[i].peqde, ierrth);
+								printf("Point %d DE %f, W.DE %f, W.peqDE %f, OK ( < %f)\n",rsteps - i,asgrey.s[i]._de,asgrey.s[i].de, asgrey.s[i].peqde, ierrth);
 						}
 						break;	/* No more retries */
 					}
 					if ((rpt+1) >= mxrpts) {
-						asgrey.s[i].de = bestde;			/* Restore to best we found */
+						asgrey.s[i]._de = best_de;			/* Restore to best we found */
+						asgrey.s[i].de = bestde;
 						asgrey.s[i].dc = bestdc;
 						asgrey.s[i].peqde = bestpeqde;		/* Restore to best we found */
 						asgrey.s[i].hde = besthde;			/* Restore to best we found */
@@ -4505,9 +4606,9 @@ int main(int argc, char *argv[]) {
 						asgrey.s[i].XYZ[2] = bestxyz[2];
 						if (verb > 1) {
 							if (it < (mxits-1))
-								printf("Point %d Delta E %f, Fail ( > %f)\n",rsteps - i,asgrey.s[i].de, ierrth);
+								printf("Point %d DE %f, W.DE %f, Fail ( > %f)\n",rsteps - i,asgrey.s[i]._de, asgrey.s[i].de, ierrth);
 							else
-								printf("Point %d Delta E %f, peqDE %f, Fail ( > %f)\n",rsteps - i,asgrey.s[i].de,asgrey.s[i].peqde,ierrth);
+								printf("Point %d DE %f, W.DE %f, W.peqDE %f, Fail ( > %f)\n",rsteps - i,asgrey.s[i]._de,asgrey.s[i].de,asgrey.s[i].peqde,ierrth);
 						}
 						thrfail = 1;						/* Failed to meet target */
 						if (bestde > failerr)
@@ -4517,26 +4618,28 @@ int main(int argc, char *argv[]) {
 					if (verb > 1) {
 						if (gworse)
 							if (it < (mxits-1))
-								printf("Point %d Delta E %f, Repeat (got worse)\n", rsteps - i, wde);
+								printf("Point %d DE %f, W.DE %f, Repeat (got worse)\n", rsteps - i, w_de, wde);
 							else
-								printf("Point %d Delta E %f, peqDE %f, Repeat (got worse)\n", rsteps - i, wde,asgrey.s[i].peqde);
+								printf("Point %d DE %f, W.DE %f, peqDE %f, Repeat (got worse)\n", rsteps - i, w_de, wde,asgrey.s[i].peqde);
 						else
 							if (it < (mxits-1))
-								printf("Point %d Delta E %f, Repeat\n", rsteps - i,asgrey.s[i].de);
+								printf("Point %d DE %f, W.DE %f, Repeat\n", rsteps - i,asgrey.s[i]._de,asgrey.s[i].de);
 							else
-								printf("Point %d Delta E %f, peqDE %f, Repeat\n", rsteps - i,asgrey.s[i].de,asgrey.s[i].peqde);
+								printf("Point %d DE %f, W.DE %f, peqDE %f, Repeat\n", rsteps - i,asgrey.s[i]._de,asgrey.s[i].de,asgrey.s[i].peqde);
 					}
 				
+//printf("~1 RGB Jacobian: %f %f %f\n", asgrey.s[i].j[0][0], asgrey.s[i].j[0][1], asgrey.s[i].j[0][2]);
+//printf("~1               %f %f %f\n", asgrey.s[i].j[1][0], asgrey.s[i].j[1][1], asgrey.s[i].j[1][2]);
+//printf("~1               %f %f %f\n", asgrey.s[i].j[2][0], asgrey.s[i].j[2][1], asgrey.s[i].j[2][2]);
 					/* Compute refinement of rgb */
 					icmMulBy3x3(asgrey.s[i].pdrgb, asgrey.s[i].ij, asgrey.s[i].deXYZ);
-//printf("~1 delta needed %f %f %f -> delta RGB %f %f %f\n",
+//printf("~1 XYZ delta needed %f %f %f -> delta RGB %f %f %f\n",
 //asgrey.s[i].deXYZ[0], asgrey.s[i].deXYZ[1], asgrey.s[i].deXYZ[2],
 //asgrey.s[i].pdrgb[0], asgrey.s[i].pdrgb[1], asgrey.s[i].pdrgb[2]);
 
 					/* Gain scale */
 					icmScale3(asgrey.s[i].pdrgb, asgrey.s[i].pdrgb, rgain);
-//printf("~1 delta RGB after gain scale %f %f %f\n",
-//asgrey.s[i].pdrgb[0], asgrey.s[i].pdrgb[1], asgrey.s[i].pdrgb[2]);
+//printf("~1 delta RGB after gain scale %f %f %f\n", asgrey.s[i].pdrgb[0], asgrey.s[i].pdrgb[1], asgrey.s[i].pdrgb[2]);
 
 #ifdef CLIP
 					/* Component wise clip */
@@ -4554,6 +4657,7 @@ int main(int argc, char *argv[]) {
 					       asgrey.s[i].pdrgb[0], asgrey.s[i].pdrgb[1], asgrey.s[i].pdrgb[2]);
 #endif	/* CLIP */
 					/* Compute next on the basis of this one RGB */
+					icmCpy3(asgrey.s[i].prgb, asgrey.s[i].rgb);		/* Save previous */
 					icmAdd3(asgrey.s[i].rgb, asgrey.s[i].rgb, asgrey.s[i].pdrgb);
 
 					/* Save expected change in XYZ */
@@ -4581,7 +4685,7 @@ int main(int argc, char *argv[]) {
 				asgrey.s[i].deXYZ[0], asgrey.s[i].deXYZ[1], asgrey.s[i].deXYZ[2]);
 			}
 
-		}		/* Next resolution step */
+		}		/* Next patch/step */
 		if (verb)
 			printf("\n");			/* Final return for patch count */
 
@@ -4663,7 +4767,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		/* Verify loop exit */
-		if (it >= (mxits + nver -1)) {
+		if (nver > 0 && it >= (mxits + nver -1)) {
 			break;
 		}
 
@@ -4691,7 +4795,6 @@ int main(int argc, char *argv[]) {
 					sdv[j][i].p = asgrey.s[i].v;
 					sdv[j][i].v = asgrey.s[i].rgb[j];
 					sdv[j][i].w = 1.0;
-// ~~999
 #ifdef NEVER
 					printf("rdac %d point %d = %f, %f\n",j,i,sdv[j][i].p,sdv[j][i].v);
 #endif
@@ -5363,9 +5466,13 @@ int main(int argc, char *argv[]) {
 			wog->allocate((icmBase *)wog);
 			wob->allocate((icmBase *)wob);
 
-			wor->data[0].X = mat[0][0]; wor->data[0].Y = mat[1][0]; wor->data[0].Z = mat[2][0];
-			wog->data[0].X = mat[0][1]; wog->data[0].Y = mat[1][1]; wog->data[0].Z = mat[2][1];
-			wob->data[0].X = mat[0][2]; wob->data[0].Y = mat[1][2]; wob->data[0].Z = mat[2][2];
+			/* Make sure rounding doesn't wreck white point */
+			icmTranspose3x3(mat, mat);	/* Convert [XYZ][RGB] to [RGB][XYZ] */
+			quantizeRGBprimsS15Fixed16(mat);
+
+			wor->data[0].X = mat[0][0]; wor->data[0].Y = mat[0][1]; wor->data[0].Z = mat[0][2];
+			wog->data[0].X = mat[1][0]; wog->data[0].Y = mat[1][1]; wog->data[0].Z = mat[1][2];
+			wob->data[0].X = mat[2][0]; wob->data[0].Y = mat[2][1]; wob->data[0].Z = mat[2][2];
 		}
 
 		/* Red, Green and Blue Tone Reproduction Curve Tags: */

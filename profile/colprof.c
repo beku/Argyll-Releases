@@ -67,7 +67,7 @@
 
          ABCDEFGHIJKLMNOPQRSTUVWXYZ
   upper  . ..    . ... .. ....    .
-  lower  .... .. . .. .........  . 
+  lower  .... .. . .. .........    
 
 */
 
@@ -96,7 +96,6 @@ void usage(char *diag, ...) {
 //	fprintf(stderr," -q fmsu         Speed - Fast, Medium (def), Slow, Ultra Slow\n");
 	fprintf(stderr," -b [lmhun]      Low quality B2A table - or specific B2A quality or none for input device\n");
 //	fprintf(stderr," -b [fmsun]      B2A Speed - Fast, Medium, Slow, Ultra Slow, None, same as -q (def)\n");
-	fprintf(stderr," -y              Verify A2B profile\n");
 	fprintf(stderr," -ni             Don't create input (Device) shaper curves\n");
 	fprintf(stderr," -np             Don't create input (Device) grid position curves\n");
 	fprintf(stderr," -no             Don't create output (PCS) shaper curves\n");
@@ -175,7 +174,7 @@ int main(int argc, char *argv[]) {
 	int verb = 0;
 	int iquality = 1;			/* A2B quality */
 	int oquality = -1;			/* B2A quality same as A2B */
-	int verify = 0;
+	int verify = 0;				/* Not used anymore */
 	int noisluts = 0;			/* No input shaper luts */
 	int noipluts = 0;			/* No input position luts */
 	int nooluts = 0;			/* No output shaper luts */
@@ -282,7 +281,7 @@ int main(int argc, char *argv[]) {
 			if (argv[fa][1] == '?')
 				usage("Usage requested");
 
-			else if (argv[fa][1] == 'v' || argv[fa][1] == 'V')
+			else if (argv[fa][1] == 'v')
 				verb = 1;
 
 			/* Manufacturer description string */
@@ -367,7 +366,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* Quality */
-			else if (argv[fa][1] == 'q' || argv[fa][1] == 'Q') {
+			else if (argv[fa][1] == 'q') {
 				fa = nfa;
 //				if (na == NULL) usage("Expect argument to quality flag -q");
 				if (na == NULL) usage("Expect argument to speed flag -q");
@@ -434,11 +433,8 @@ int main(int argc, char *argv[]) {
 				doinb2a = 0;
 			}
 
-			else if (argv[fa][1] == 'y' || argv[fa][1] == 'Y')
-				verify = 1;
-
 			/* Disable input or output luts */
-			else if (argv[fa][1] == 'n' || argv[fa][1] == 'N') {
+			else if (argv[fa][1] == 'n') {
 				fa = nfa;
 				if (na == NULL) {	/* Backwards compatible */
 					nooluts = 1;
@@ -486,13 +482,14 @@ int main(int argc, char *argv[]) {
 			else if (argv[fa][1] == 'V') {
 				if (na == NULL) usage(0,"Expected argument to dark emphasis flag -V");
 				demph = atof(na);
-				if (demph < 1.0 || demph > 4.0)
+				if (demph < 1.0 || demph > 3.0)
 					usage("Dark weighting argument %f to '-V' is out of range",demph);
 				fa = nfa;
 			}
 
 			/* Inking rule */
-			else if (argv[fa][1] == 'k' || argv[fa][1] == 'K') {
+			else if (argv[fa][1] == 'k'
+			      || argv[fa][1] == 'K') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to inking flag -k");
 				if (argv[fa][1] == 'k')
@@ -559,7 +556,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* Algorithm type */
-			else if (argv[fa][1] == 'a' || argv[fa][1] == 'A') {
+			else if (argv[fa][1] == 'a') {
 				fa = nfa;
 				if (na == NULL) usage("Expect argument to algorithm flag -a");
     			switch (na[0]) {
@@ -728,7 +725,8 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* Percetual Source Gamut and Perceptual/Saturation Gamut Maping mode enable */
-			else if (argv[fa][1] == 's' || argv[fa][1] == 'S') {
+			else if (argv[fa][1] == 's'
+			      || argv[fa][1] == 'S') {
 				if (argv[fa][1] == 'S')
 					sepsat = 1;
 				if (na == NULL)
@@ -739,7 +737,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* Source image gamut */
-			else if (argv[fa][1] == 'g' || argv[fa][1] == 'G') {
+			else if (argv[fa][1] == 'g') {
 				if (na == NULL)
 					usage("Unrecognised argument to source image gamut flag -g",argv[fa][1]);
 				fa = nfa;
@@ -786,7 +784,8 @@ int main(int argc, char *argv[]) {
 			}
 
 			/* Viewing conditions */
-			else if (argv[fa][1] == 'c' || argv[fa][1] == 'd') {
+			else if (argv[fa][1] == 'c'
+			      || argv[fa][1] == 'd') {
 				icxViewCond *vc;
 
 				if (argv[fa][1] == 'c') {
@@ -952,6 +951,7 @@ int main(int argc, char *argv[]) {
 	if (demph == 0.0) {
 		if ((ti = icg->find_kword(icg, 0, "DARK_REGION_EMPHASIS")) >= 0) {
 			demph = atof(icg->t[0].kdata[ti]);
+			demph = pow(demph, 0.7);		/* Reduce intensity */
 			if (verb)
 				printf("Dark emphasis factor %f from targen\n",demph);
 		} else {

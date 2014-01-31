@@ -1403,12 +1403,12 @@ make_output_icc(
 			wog->allocate((icmBase *)wog);
 			wob->allocate((icmBase *)wob);
 
-			wor->data[0].X = 1.0; wor->data[0].Y = 0.0; wor->data[0].Z = 0.0;
-			wog->data[0].X = 0.0; wog->data[0].Y = 1.0; wog->data[0].Z = 0.0;
-			wob->data[0].X = 0.0; wob->data[0].Y = 0.0; wob->data[0].Z = 1.0;
+//			wor->data[0].X = 1.0; wor->data[0].Y = 0.0; wor->data[0].Z = 0.0;
+//			wog->data[0].X = 0.0; wog->data[0].Y = 1.0; wog->data[0].Z = 0.0;
+//			wob->data[0].X = 0.0; wob->data[0].Y = 0.0; wob->data[0].Z = 1.0;
 
 			/* Setup deliberately wrong dummy values (channels rotated). */
-			/* icxMatrix may override override these later */
+			/* icxMatrix may override these later */
 			wor->data[0].X = 0.143066; wor->data[0].Y = 0.060608; wor->data[0].Z = 0.714096;
 			wog->data[0].X = 0.436066; wog->data[0].Y = 0.222488; wog->data[0].Z = 0.013916;
 			wob->data[0].X = 0.385147; wob->data[0].Y = 0.716873; wob->data[0].Z = 0.097076;

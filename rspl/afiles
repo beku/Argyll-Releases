@@ -16,6 +16,8 @@ gam.h
 gam.c
 revbench.c
 c1.c
+cw1.c
+cw3.c
 c1df.c
 spline.c
 t2d.c

@@ -73,6 +73,7 @@ usage(void) {
 /* Patch value type */
 typedef struct {
 	char sid[50];		/* sample id */
+	char loc[100];		/* sample location (empty if none) */
 	int og;				/* Out of gamut flag */
 	double xyz[3];		/* XYZ value */
 	double v[3];		/* Lab value */
@@ -83,7 +84,7 @@ typedef struct {
 
 int main(int argc, char *argv[])
 {
-	int fa,nfa;				/* current argument we're looking at */
+	int fa,nfa,mfa;			/* current argument we're looking at */
 	int verb = 0;       	/* Verbose level */
 	int norm = 0;			/* 1 = norm to White Y, 2 = norm to White XYZ */
 							/* 3 = norm to White X+Y+Z */
@@ -138,6 +139,7 @@ int main(int argc, char *argv[])
 		usage();
 
 	/* Process the arguments */
+	mfa = 2;        				/* Minimum final arguments */
 	for(fa = 1;fa < argc;fa++) {
 
 		nfa = fa;					/* skip to nfa if next argument is used */
@@ -147,7 +149,7 @@ int main(int argc, char *argv[])
 			if (argv[fa][2] != '\000')
 				na = &argv[fa][2];		/* next is directly after flag */
 			else {
-				if ((fa+1) < argc) {
+				if ((fa+1+mfa) < argc) {
 					if (argv[fa+1][0] != '-') {
 						nfa = fa + 1;
 						na = argv[nfa];		/* next is seperate non-flag argument */
@@ -392,6 +394,7 @@ int main(int argc, char *argv[])
 		cgats *cgf = NULL;			/* cgats file data */
 		int isLab = 0;				/* 0 if file CIE is XYZ, 1 if is Lab */
 		int sidx;					/* Sample ID index */
+		int sldx = -1;				/* Sample location index, < 0 if invalid */
 		int xix, yix, zix;
 
 		/* Open CIE target values */
@@ -486,6 +489,10 @@ int main(int argc, char *argv[])
 		 && cgf->t[0].ftype[sidx] != cs_t)
 			error("Sample ID/Name field isn't a quoted or non quoted character string");
 
+		if ((sldx = cgf->find_field(cgf, 0, "SAMPLE_LOC")) < 0
+		 || cgf->t[0].ftype[sldx] != cs_t)
+			sldx = -1;
+
 		if (spec == 0) { 		/* Using instrument tristimulous value */
 
 			if (isLab) {		/* Expect Lab */
@@ -519,6 +526,10 @@ int main(int argc, char *argv[])
 
 			for (i = 0; i < cg[n].npat; i++) {
 				strcpy(cg[n].pat[i].sid, (char *)cgf->t[0].fdata[i][sidx]);
+				if (sldx >= 0)
+					strcpy(cg[n].pat[i].loc, (char *)cgf->t[0].fdata[i][sldx]);
+				else
+					cg[n].pat[i].loc[0] = '\000';
 				cg[n].pat[i].og = 0;
 				cg[n].pat[i].xyz[0] = *((double *)cgf->t[0].fdata[i][xix]);
 				cg[n].pat[i].xyz[1] = *((double *)cgf->t[0].fdata[i][yix]);
@@ -650,6 +661,10 @@ int main(int argc, char *argv[])
 			for (i = 0; i < cg[0].npat; i++) {
 
 				strcpy(cg[n].pat[i].sid, (char *)cgf->t[0].fdata[i][sidx]);
+				if (sldx >= 0)
+					strcpy(cg[n].pat[i].loc, (char *)cgf->t[0].fdata[i][sldx]);
+				else
+					cg[n].pat[i].loc[0] = '\000';
 				cg[n].pat[i].og = 0;
 
 				/* Read the spectral values for this patch */
@@ -898,8 +913,10 @@ int main(int argc, char *argv[])
 
 			if (verb >= 2) {
 
-				printf("%s: %f %f %f <=> %f %f %f  de %f\n",
+				printf("%s%s%s: %f %f %f <=> %f %f %f  de %f\n",
 					cg[0].pat[j].sid,
+					cg[0].pat[j].loc[0] != '\000' ? " " : "",
+					cg[0].pat[j].loc,
 					cg[0].pat[j].v[0], cg[0].pat[j].v[1], cg[0].pat[j].v[2],
 					cg[1].pat[match[j]].v[0], cg[1].pat[match[j]].v[1], cg[1].pat[match[j]].v[2],
 					de);

@@ -214,6 +214,8 @@ struct _disprd {
 /* 12 = out_tvenc & native = 0 && no cal but current RAMDAC is not linear */
 /* 13 = out_tvenc for MadVR window */
 /* 14 = no set refresh rate support */
+/* 15 = unknown calibration/display type */
+/* 16 = non based calibration/display type */
 /* Use disprd_err() to interpret errc */
 disprd *new_disprd(
 int *errc,			/* Error code. May be NULL */ 

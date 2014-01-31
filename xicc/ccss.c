@@ -4,7 +4,7 @@
  * Colorimeter Correction Matrix
  *
  * Author: Graeme W. Gill
- * Date:   1r9/8/2010
+ * Date:   9/8/2010
  *
  * Copyright 2010 Graeme W. Gill
  * All rights reserved.
@@ -112,8 +112,8 @@ cgats **pocg		/* return CGATS structure */
 	ocg->add_kword(ocg, 0, "SPECTRAL_NORM",buf, NULL);
 
 	/* Fields we want */
-	if (ocg->add_field(ocg, 0, "SAMPLE_ID", nqcs_t)) {
-		strcpy(p->err, "cgats add_field failed!");
+	if (ocg->add_field(ocg, 0, "SAMPLE_ID", nqcs_t) < 0) {
+		sprintf(p->err, "cgats add_field SAMPLE_ID failed with '%s'!",ocg->err);
 		ocg->del(ocg);		/* Clean up */
 		return 2;
 	}
@@ -128,8 +128,8 @@ cgats **pocg		/* return CGATS structure */
 		            * (p->samples[0].spec_wl_long - p->samples[0].spec_wl_short) + 0.5);
 		
 		sprintf(buf,"SPEC_%03d",nm);
-		if (ocg->add_field(ocg, 0, buf, r_t)) {
-			strcpy(p->err, "cgats add_field failed!");
+		if (ocg->add_field(ocg, 0, buf, r_t) < 0) {
+			sprintf(p->err, "cgats add_field %s failed with '%s'",buf,ocg->err);
 			ocg->del(ocg);		/* Clean up */
 			return 2;
 		}

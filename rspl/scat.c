@@ -128,10 +128,6 @@
 /* algorithm parameters [Release defaults] */
 #undef POINTWEIGHT		/* [Undef] Increas smoothness weighting proportional to number of points */
 #define INCURVEADJ		/* [Defined] Adjust smoothness criteria for input curve grid spacing */
-#define EXTRA_SURFACE_SMOOTHING /* [Defined] Stiffen surface points to comp. for single ended. */
-						/* The following are available, but the smoothing table is */
-						/* not setup for them, and they are not sufficiently different */
-						/* from the default smoothing to be useful. */
 #define ENABLE_2PASSSMTH	/* [Define] Enable 2 pass smooth using Gaussian filter */
 #define ENABLE_EXTRAFIT	/* [Undef] Enable the extra fit option. Good to combat high smoothness. */
 
@@ -142,12 +138,12 @@
 
 /* Experimental set: */
 
-#pragma message("!!!!!!!!! Experimental config set !!!!!!!!!")
+#pragma message("!!!!!!!!! Experimental hi-accuracy config set !!!!!!!!!")
 
 #define TOL 1e-12		/* Tollerance of result - usually 1e-5 is best. */
 #define TOL_IMP 1.0		/* Minimum error improvement to continue - reduces accuracy (1.0 == off) */
 #undef GRADUATED_TOL	/* Speedup attemp - use reduced tollerance for prior grids. */
-#define GRATIO 2.0		/* Multi-grid resolution ratio */
+#define GRATIO 1.5		/* Multi-grid resolution ratio */
 #undef OVERRLX 		/* Use over relaxation factor when progress slows (worse accuracy ?) */
 #define JITTERS 0		/* Number of 1D conjugate solve itters */
 #define CONJ_TOL 1.0	/* Extra tolereance on 1D conjugate solution times TOL. */
@@ -262,7 +258,7 @@ static void free_cj_arrays(cj_arrays *ta);
 static int add_rspl_imp(rspl *s, int flags, void *d, int dtp, int dno);
 static mgtmp *new_mgtmp(rspl *s, int gres[MXDI], int f);
 static void free_mgtmp(mgtmp *m);
-static void setup_solve(mgtmp *m, int final);
+static void setup_solve(mgtmp *m);
 static void solve_gres(mgtmp *m, cj_arrays *ta, double tol, int final);
 static void init_soln(mgtmp  *m1, mgtmp  *m2);
 static void comp_ccv(mgtmp *m);
@@ -656,8 +652,7 @@ add_rspl_imp(
 					if (s->tpsm && s->tpsm2 != 0) {	/* 2nd pass of 2 pass smoothing */
 						init_ccv(m);				/* Downsample m->ccv from s->g.ccv */
 					}
-//					setup_solve(m, nn == (s->niters-1));
-					setup_solve(m, 1);
+					setup_solve(m);
 
 					if (nn == 0) {						/* Make sure we have an initial x[] */
 						for (i = 0; i <  m->g.no; i++)
@@ -921,7 +916,7 @@ free_data(rspl *s) {
 /* to them, would have an average sample deviation of 0.05. */
 /* For normally distributed errors, the average deviation is */
 /* aproximately 0.564 times the standard deviation. (0.564 * sqrt(variance)) */
-/* This table is appropriate for the default rspl algorithm + slight EXTRA_SURFACE_SMOOTHING, */
+/* This table is appropriate for the default rspl algorithm, */
 /* and is NOT setup for RSPL_2PASSSMTH or RSPL_EXTRAFIT2 !! */
 /* SMOOTH */
 
@@ -931,6 +926,9 @@ free_data(rspl *s) {
 /* conditions is harder than when there is some curvature to "tension" things. */
 /* This is evident is Lab vs. XYZ display profiles, and there is code */
 /* in xlut.c that tries to adjust to this. */
+
+/* !!! Possible answer - should be using third order differences */
+/*     for controlling smoothness, not second order (curvature) ?? */
 
 // ~~99
 static double opt_smooth(
@@ -971,7 +969,7 @@ static double opt_smooth(
 	
 
 	/* New for V1.10, from smtmpp using sRGB, EpsonR1800, Hitachi2112, */
-	/* Fogra39L, Canon1180, Epson10K, with low EXTRA_SURFACE_SMOOTHING. */
+	/* Fogra39L, Canon1180, Epson10K (did use EXTRA_SURFACE_SMOOTHING). */
 
 	/* Main lookup table, by [di][ncix][adix]: */
 	/* Values are log of smoothness value. */
@@ -1357,8 +1355,7 @@ static void free_mgtmp(mgtmp  *m) {
  */
 
 static void setup_solve(
-	mgtmp  *m,		/* initialized grid temp structure */
-	int final		/* nz if final resolution (activate EXTRA_SURFACE_SMOOTHING) */
+	mgtmp  *m		/* initialized grid temp structure */
 ) {
 	rspl *s = m->s;
 	int di   = s->di;
@@ -1478,7 +1475,6 @@ static void setup_solve(
 			b[i] = 0.0;
 	}
 
-#ifdef NEVER
 	/* Production version, without extra edge weight */
 
 	/* Accumulate curvature dependent factors to the triangular A matrix. */
@@ -1507,20 +1503,46 @@ static void setup_solve(
 			ki-1 *   w[i-1]         *   w[i-1] * u[i-1]
 			ki   * -(w[i-1] + w[i]) * -(w[i-1] + w[i]) * u[i])
 			ki+1 *   w[i]           *   w[i] * u[i+1]
+
+		The weighting is adjusted to compensate for increased
+		grid density by the dw weight, and for the different
+		scaling either side of a grid point with the w0 and w1 scale.
+		Both are normalised so that the overall smoothness scaling
+		factor applies.
 	 */
 
-	{		/* Setting this up from scratch */
+	{	/* Setting this up from scratch */
+		double dwtw[MXDIDO];		/* Density weight normalizer */
+		int wtwc[MXDIDO];
 		ECOUNT(gc, MXDIDO, di, 0, gres, 0);
-		EC_INIT(gc);
 
 		for (oawt = 0.0, i = 1; i < 21; i++)
 			oawt += wvals[i];
 		oawt *= wvals[0];
 
+#define EN_DW			/* Enable grid density weighting */
+#define EN_CW			/* Enable grid scale weighting */
+
+		/* Compute the ipos[] weight normalisation factors */
+		for (e = 0; e < di; e++) {
+			if (m->g.ipos[e] == NULL)
+				continue;
+			dwtw[e] = 0.0;
+			for (i = 1; i < gres[e]; i++) {
+				double w;
+				w = fabs(m->g.ipos[e][i] - m->g.ipos[e][i-1]);
+//printf("[%d][%d] w = %f\n",e,i,w);
+				dwtw[e] += w;
+			}
+			dwtw[e] /= (gres[e] - 1.0);		/* Average weights */
+//printf("dwtw[%d] = %f\n",e,dwtw[e]);
+		}
+
+		EC_INIT(gc);
 		for (i = 0; i < gno; i++) {
 
 			for (e = 0; e < di; e++) {	/* For each curvature direction */
-				double w0, w1, tt;
+				double dw, w0, w1, tt;
 				double cw = 2.0 * m->sf.cw[e];	/* Overall curvature weight */
 				cw *= s->d.vw[f];				/* Scale curvature weight for data range */
 
@@ -1529,14 +1551,24 @@ static void setup_solve(
 				if ((gc[e]-2) >= 0) {
 					/* double kw = cw * gp[UO_C(e,1)].k; */	/* Cell bellow k value */
 					double kw = cw;
-					w0 = w1 = 1.0;
+					dw = w1 = 1.0;
 					if (m->g.ipos[e] != NULL) {
+
 						w0 = fabs(m->g.ipos[e][gc[e]-1] - m->g.ipos[e][gc[e]-2]);
 						w1 = fabs(m->g.ipos[e][gc[e]-0] - m->g.ipos[e][gc[e]-1]);
-						tt = sqrt(w0 * w1);		/* Normalise overall width weighting effect */
+//printf("raw [%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
+#ifdef EN_DW
+						dw = 0.5 * (w0 + w1);			/* in this direction around -1  */
+						dw = dw/dwtw[e];				/* normalise */
+#endif
+						tt = sqrt(w0 * w1);
 						w1 = tt/w1;
+#ifndef EN_CW
+						w1 = 1.0;
+#endif
+//printf("[%d][%d] dw = %f, w1 = %f\n",gc[e],i,dw,w1);
 					}
-					A[i][ixcol[0]] += w1 * w1 * kw;
+					A[i][ixcol[0]] += dw * w1 * w1 * kw;
 					if (ccv != NULL)
 						b[i] += kw * (w1) * ccv[i - gci[e]][e]; /* Curvature compensation value */
 				}
@@ -1545,16 +1577,25 @@ static void setup_solve(
 				if ((gc[e]-1) >= 0 && (gc[e]+1) < gres[e]) {
 					/* double kw = cw * gp->k;  */		/* This cells k value */
 					double kw = cw; 
-					w0 = w1 = 1.0;
+					dw = w0 = w1 = 1.0;
 					if (m->g.ipos[e] != NULL) {
 						w0 = fabs(m->g.ipos[e][gc[e]-0] - m->g.ipos[e][gc[e]-1]);
 						w1 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]-0]);
+//printf("raw [%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
+#ifdef EN_DW
+						dw = 0.5 * (w0 + w1);			/* in this direction around 0  */
+						dw = dw/dwtw[e];				/* normalise */
+#endif
 						tt = sqrt(w0 * w1);
 						w0 = tt/w0;
 						w1 = tt/w1;
+#ifndef EN_CW
+						w0 = w1 = 1.0;
+#endif
+//printf("[%d][%d] dw = %f, w0 = %f, w1 = %f\n",gc[e],i,dw,w0,w1);
 					}
-					A[i][ixcol[0]]      += -(w0 + w1) * -(w0 + w1) * kw;
-					A[i][ixcol[gci[e]]] += -(w0 + w1) * w1 * kw * oawt;
+					A[i][ixcol[0]]      += dw * -(w0 + w1) * -(w0 + w1) * kw;
+					A[i][ixcol[gci[e]]] += dw * -(w0 + w1) * w1 * kw * oawt;
 					if (ccv != NULL)
 						b[i] += kw * -(w0 + w1) * ccv[i][e]; /* Curvature compensation value */
 				}
@@ -1563,17 +1604,26 @@ static void setup_solve(
 				if ((gc[e]+2) < gres[e]) {
 					/* double kw = cw * gp[UO_C(e,2)].k;	*/ /* Cell above k value */
 					double kw = cw;
-					w0 = w1 = 1.0;
+					dw = w0 = w1 = 1.0;
 					if (m->g.ipos[e] != NULL) {
 						w0 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]+0]);
 						w1 = fabs(m->g.ipos[e][gc[e]+2] - m->g.ipos[e][gc[e]+1]);
+//printf("raw [%d][%d] w0 = %f, w1 = %f\n",gc[e],i,w0,w1);
+#ifdef EN_DW
+						dw = 0.5 * (w0 + w1);			/* in this direction around +1  */
+						dw = dw/dwtw[e];				/* normalise */
+#endif
 						tt = sqrt(w0 * w1);
 						w0 = tt/w0;
 						w1 = tt/w1;
+#ifndef EN_CW
+						w0 = w1 = 1.0;
+#endif
+//printf("[%d][%d] dw = %f, w0 = %f, w1 = %f\n",gc[e],i,dw,w0,w1);
 					}
-					A[i][ixcol[0]]          += w0 * w0 * kw;
-					A[i][ixcol[gci[e]]]     += w0 * -(w0 + w1) * kw;
-					A[i][ixcol[2 * gci[e]]] += w0 * w1 * kw;
+					A[i][ixcol[0]]          += dw * w0 * w0 * kw;
+					A[i][ixcol[gci[e]]]     += dw * w0 * -(w0 + w1) * kw;
+					A[i][ixcol[2 * gci[e]]] += dw * w0 * w1 * kw;
 					if (ccv != NULL)
 						b[i] += kw * -(w0 + w1) * ccv[i][e]; /* Curvature compensation value */
 				}
@@ -1581,155 +1631,6 @@ static void setup_solve(
 			EC_INC(gc);
 		}
 	}
-#endif /* NEVER */
-
-#ifdef ALWAYS
-	/* Production version that allows for extra weight on grid edges */
-
-	/* Accumulate curvature dependent factors to the triangular A matrix. */
-	/* Because it's triangular, we compute and add in all the weighting */
-	/* factors at and to the right of each cell. */
-
-	/* The ipos[] factor is to allow for the possibility that the */
-	/* grid spacing may be non-uniform in the colorspace where the */
-	/* function being modelled is smooth. Our curvature computation */
-	/* needs to make allowsance for this fact in computing the */
-	/* node value differences that equate to zero curvature. */ 
-	/*
-		The old curvature fixed grid spacing equation was:
-			ki * (u[i-1] - 2 * u[i] + u[i+1])^2
-		with derivatives wrt each node:
-			ki-1 *  1 * 2 * u[i-1] 
-			ki   * -2 * 2 * u[i]
-			ki+1 *  1 * 2 * u[i+1]
-
-		Allowing for scaling of each grid difference by w[i-1] and w[i],
-		where w[i-1] corresponds to the width of cell i-1 to i,
-		and w[i] corresponds to the width of cell i to i+1:
-			ki * (w[i-1] * (u[i-1] - u[i]) + w[i] * (u[i+1] - u[i[))^2
-		=	ki * (w[i-1] * u[i-1] - (w[i-1] + w[i]) * u[i]) + w[i] * u[i+1])^2
-		with derivatives wrt each node:
-			ki-1 *   w[i-1]         *   w[i-1] * u[i-1]
-			ki   * -(w[i-1] + w[i]) * -(w[i-1] + w[i]) * u[i])
-			ki+1 *   w[i]           *   w[i] * u[i+1]
-	 */
-	{		/* Setting this up from scratch */
-		ECOUNT(gc, MXDIDO, di, 0, gres, 0);
-#ifdef EXTRA_SURFACE_SMOOTHING
-//		double  k0w = 4.0, k1w = 1.3333;	/* Extra stiffness */
-//		double  k0w = 3.0, k1w = 1.26;		/* Some extra stiffness */
-		double  k0w = 2.0, k1w = 1.15;		/* A little extra stiffness */
-#else
-		double  k0w = 1.0, k1w = 1.0;		/* No extra weights */
-#endif
-
-		EC_INIT(gc);
-		for (oawt = 0.0, i = 1; i < 21; i++)
-			oawt += wvals[i];
-		oawt *= wvals[0];
-
-		if (final == 0)
-			k0w = k1w = 1.0;			/* Activate extra edge smoothing on final grid ? */
-
-		for (i = 0; i < gno; i++) {
-			int k;
-
-			/* We're creating the equation cooeficients for solving the */
-			/* partial derivative equation w.r.t. node point i. */
-			/* Due to symetry in the smoothness interactions, only */
-			/* the triangle cooeficients of neighbour nodes is needed. */
-			for (e = 0; e < di; e++) {	/* For each curvature direction */
-				double kw, w0, w1, tt;
-				double cw = 2.0 * m->sf.cw[e];	/* Overall curvature weight */
-				double xx = 1.0;				/* Extra edge weighing */
-				cw *= s->d.vw[f];				/* Scale curvature weight for data range */
-
-				/* weight factor for outer or 2nd outer in other dimensions */
-				for (k = 0; k < di; k++) {
-					if (k == e)
-						continue;
-					if (gc[k] == 0 || gc[k] == (gres[k]-1))
-						xx *= k0w;
-					else if (gc[k] == 1 || gc[k] == (gres[k]-2))
-						xx *= k1w;
-				}
-
-				/* If at least two above lower edge in this dimension */
-				/* Add influence on Curvature of cell below */
-				if ((gc[e]-2) >= 0) {
-					/* double kw = cw * gp[-gc[e]].k; */	/* Cell bellow k value */
-					kw = cw * xx;
-					w0 = w1 = 1.0;
-					if (m->g.ipos[e] != NULL) {
-						w0 = fabs(m->g.ipos[e][gc[e]-1] - m->g.ipos[e][gc[e]-2]);
-						w1 = fabs(m->g.ipos[e][gc[e]-0] - m->g.ipos[e][gc[e]-1]);
-						tt = sqrt(w0 * w1);		/* Normalise overall width weighting effect */
-						w1 = tt/w1;
-					}
-					if ((gc[e]-2) == 0 || (gc[e]+0) == (gres[e]-1))
-						kw *= k0w;
-					else if ((gc[e]-2) == 1 || (gc[e]-0) == (gres[e]-2))
-						kw *= k1w;
-					A[i][ixcol[0]] += kw * (w1) * w1;
-					if (ccv != NULL) {
-//printf("~1 tweak b[%d] by %e\n",i,kw * (w1) * ccv[i - gci[e]][e]);
-						b[i] += kw * (w1) * ccv[i - gci[e]][e]; /* Curvature compensation value */
-					}
-				}
-				/* If not one from upper or lower edge in this dimension */
-				/* Add influence on Curvature of this cell */
-				if ((gc[e]-1) >= 0 && (gc[e]+1) < gres[e]) {
-					/* double kw = cw * gp->k;  */		/* This cells k value */
-					kw = cw * xx;
-					w0 = w1 = 1.0;
-					if (m->g.ipos[e] != NULL) {
-						w0 = fabs(m->g.ipos[e][gc[e]-0] - m->g.ipos[e][gc[e]-1]);
-						w1 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]-0]);
-						tt = sqrt(w0 * w1);
-						w0 = tt/w0;
-						w1 = tt/w1;
-					}
-					if ((gc[e]-1) == 0 || (gc[e]+1) == (gres[e]-1))
-						kw *= k0w;
-					else if ((gc[e]-1) == 1 || (gc[e]+1) == (gres[e]-2))
-						kw *= k1w;
-					A[i][ixcol[0]]      += kw * -(w0 + w1) * -(w0 + w1);
-					A[i][ixcol[gci[e]]] += kw * -(w0 + w1) * w1 * oawt;
-					if (ccv != NULL) {
-//printf("~1 tweak b[%d] by %e\n",i, kw * -(w0 + w1) * ccv[i][e]);
-						b[i] += kw * -(w0 + w1) * ccv[i][e]; /* Curvature compensation value */
-					}
-				}
-				/* If at least two below the upper edge in this dimension */
-				/* Add influence on Curvature of cell above */
-				if ((gc[e]+2) < gres[e]) {
-					/* double kw = cw * gp[gc[e]].k;	*/ /* Cell above k value */
-					kw = cw * xx;
-					w0 = w1 = 1.0;
-					if (m->g.ipos[e] != NULL) {
-						w0 = fabs(m->g.ipos[e][gc[e]+1] - m->g.ipos[e][gc[e]+0]);
-						w1 = fabs(m->g.ipos[e][gc[e]+2] - m->g.ipos[e][gc[e]+1]);
-						tt = sqrt(w0 * w1);
-						w0 = tt/w0;
-						w1 = tt/w1;
-					}
-					if ((gc[e]+0) == 0 || (gc[e]+2) == (gres[e]-1))
-						kw *= k0w;
-					else if ((gc[e]+0) == 1 || (gc[e]+2) == (gres[e]-2))
-						kw *= k1w;
-					A[i][ixcol[0]]          += kw * (w0) * w0;
-					A[i][ixcol[gci[e]]]     += kw * (w0) * -(w0 + w1);
-					A[i][ixcol[2 * gci[e]]] += kw * (w0) * w1;
-					if (ccv != NULL) {
-//printf("~1 tweak b[%d] by %e\n",i, kw * (w0) * ccv[i + gci[e]][e]);
-						b[i] += kw * (w0) * ccv[i + gci[e]][e]; /* Curvature compensation value */
-					}
-				}
-			}
-			EC_INC(gc);
-		}
-	}
-#endif /* ALWAYS */
 
 #ifdef DEBUG
 	printf("After adding curvature equations:\n");
@@ -1744,7 +1645,6 @@ static void setup_solve(
 
 	nbsum = 0.0;	/* Zero sum of b[] squared */
 
-#ifdef ALWAYS
 	/* Accumulate weak default function factors. These are effectively a */
 	/* weak "data point" exactly at each grid point. */
 	/* (Note we're not currently doing this in a cache friendly order,   */
@@ -1783,9 +1683,7 @@ static void setup_solve(
 #endif /* DEBUG */
 
 	}
-#endif /* ALWAYS */
 
-#ifdef ALWAYS
 	/* Accumulate data point dependent factors */
 	for (n = 0; n < dno; n++) {		/* Go through all the data points */
 		int j,k;
@@ -1822,8 +1720,6 @@ static void setup_solve(
 	if (nbsum < 1e-4) 
 		nbsum = 1e-4;
 	m->q.normb = nbsum;
-
-#endif /* ALWAYS */ 
 
 #ifdef DEBUG
 	printf("After adding data point equations:\n");

@@ -306,7 +306,6 @@ typedef enum {
 	inst_dtflags_ccss    = 0x0002,			/* ccss */
 	inst_dtflags_ccmx    = 0x0004,			/* ccmx */
 	inst_dtflags_end     = 0x8000			/* end marker */
-
 } inst_dtflags;
 
 #define INST_DTYPE_SEL_LEN 10
@@ -364,8 +363,6 @@ typedef enum {
 
 	inst_opt_set_ccss_obs       = 0x000A,	/* Set the observer used with ccss device types - */
 											/* Not applicable to any other type of instrument. */
-											/* Only takes effect after inst_opt_set_disp_type */ 
-											/* or col_cal_spec_set() */
 											/* [args: icxObserverType obType,*/
 	                                        /*        xspect custObserver[3] */
 

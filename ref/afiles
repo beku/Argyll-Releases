@@ -3,11 +3,13 @@ ReadMe.txt
 License.txt
 sRGB.icm
 ClayRGB1998.icm
+ProPhoto.icm
+ProPhotoLin.icm
 EBU3213_PAL.icm
 SMPTE_RP145_NTSC.icm
 Rec709.icm
 Rec2020.icm
-SMPTE431.icm
+SMPTE431_P3.icm
 lab2lab.icm
 ccxx.ti1
 CMP_DT_003.cht
@@ -18,6 +20,7 @@ ColorChecker.cht
 ColorChecker.cie
 ColorChecker.ti2
 ColorCheckerDC.cht
+ColorCheckerDC.ti2
 ColorCheckerSG.cht
 ColorCheckerPassport.cht
 ColorCheckerPassport.cie
@@ -41,6 +44,9 @@ it8.cht
 linear.cal
 strange.cal
 3dap5k.sp
+F1.sp
+F5.sp
+F8.sp
 CIE_C.sp
 D50_0.0.sp
 D50_0.1.sp

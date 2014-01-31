@@ -1450,7 +1450,8 @@ unsigned int tcount		/* grid touch count for this operation */
 							nunlk++;
 					}
 					fprintf(stdout,"Diagnostic: rev.sz = %lu, rev.max_sz = %lu, numlocked = %d, nunlk = %d\n",
-					               rc->s->rev.sz, rc->s->rev.max_sz, rc->nunlocked,nunlk);
+					               (unsigned long)rc->s->rev.sz, (unsigned long)rc->s->rev.max_sz,
+					               rc->nunlocked, nunlk);
 					error("Not enough memory to process in chunks");
 				}
 				break;		/* cache has run out of room, so abandon, and do it next time */
@@ -4984,7 +4985,7 @@ rspl *s		/* Pointer to rspl grid */
 								g_no_rev_cache_instances > 1 ? "are" : "is",
 			                    g_no_rev_cache_instances,
 								g_no_rev_cache_instances > 1 ? "s" : "",
-			                    ram_portion/1000000);
+			                    (unsigned long)ram_portion/1000000);
 		}
 	}
 
@@ -6178,7 +6179,7 @@ if (prop != NULL) {
 								g_no_rev_cache_instances > 1 ? "are" : "is",
 			                    g_no_rev_cache_instances,
 								g_no_rev_cache_instances > 1 ? "s" : "",
-			                    ram_portion/1000000);
+			                    (unsigned long)ram_portion/1000000);
 	}
 	s->rev.rev_valid = 1;
 
@@ -6246,7 +6247,7 @@ rspl *s		/* Pointer to rspl grid */
 								g_no_rev_cache_instances > 1 ? "are" : "is",
 			                    g_no_rev_cache_instances,
 								g_no_rev_cache_instances > 1 ? "s" : "",
-			                    ram_portion/1000000);
+			                    (unsigned long)ram_portion/1000000);
 		}
 	}
 	s->rev.rev_valid = 0;
@@ -6510,7 +6511,7 @@ rspl *s
 			if (g_avail_ram > safe_max_vmem) {
 				g_avail_ram = safe_max_vmem;
 				if (s->verbose && repsr == 0)
-					fprintf(stdout,"%cTrimmed maximum cache RAM to %lu Mbytes to allow for VM limit\n",cr_char,g_avail_ram/1000000);
+					fprintf(stdout,"%cTrimmed maximum cache RAM to %lu Mbytes to allow for VM limit\n",cr_char,(unsigned long)g_avail_ram/1000000);
 			}
 		}
 	
@@ -6529,7 +6530,7 @@ rspl *s
 		}
 		if (max_vmem != 0 && g_avail_ram > max_vmem && repsr == 0) {
 			g_avail_ram = (size_t)(0.95 * max_vmem);
-			fprintf(stdout,"%cARGYLL_REV_CACHE_MULT * RAM trimmed to %lu Mbytes to allow for VM limit\n",cr_char,g_avail_ram/1000000);
+			fprintf(stdout,"%cARGYLL_REV_CACHE_MULT * RAM trimmed to %lu Mbytes to allow for VM limit\n",cr_char,(unsigned long)g_avail_ram/1000000);
 		}
 	}
 
@@ -6538,7 +6539,7 @@ rspl *s
 
 	DBG(("reverse cache max memory = %d Mbytes\n",s->rev.max_sz/1000000));
 	if (s->verbose && repsr == 0) {
-		fprintf(stdout, "%cRev cache RAM = %lu Mbytes\n",cr_char,g_avail_ram/1000000);
+		fprintf(stdout, "%cRev cache RAM = %lu Mbytes\n",cr_char,(unsigned long)g_avail_ram/1000000);
 		repsr = 1;
 	}
 

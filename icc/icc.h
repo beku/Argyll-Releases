@@ -30,8 +30,8 @@
 
 /* Version of icclib release */
 
-#define ICCLIB_VERSION 0x020016
-#define ICCLIB_VERSION_STR "2.16"
+#define ICCLIB_VERSION 0x020017
+#define ICCLIB_VERSION_STR "2.17"
 
 #undef ENABLE_V4		/* V4 is not fully implemented */
 
@@ -782,7 +782,16 @@ struct _icmLut {
 								/* Output transfer function, outspace'->outspace (NULL = deflt) */
 		int *apxls_gmin, int *apxls_gmax	/* If not NULL, the grid indexes not to be affected */
 										/* by ICM_CLUT_SET_APXLS, defaulting to 0..>clutPoints-1 */
-);
+	);
+
+	/* Helper function to fine tune a single value interpolation */
+	/* Return 0 on success, 1 if input clipping occured, 2 if output clipping occured */
+	/* To guarantee the optimal function, an icmLuLut needs to be create. */
+	/* The default will be to assume simplex interpolation will be used. */
+	int (*tune_value) (
+		struct _icmLut *p,				/* Pointer to Lut object */
+		double *out,					/* Target value */
+		double *in);					/* Input value */
 		
 }; typedef struct _icmLut icmLut;
 
@@ -1816,6 +1825,20 @@ double icmPlaneDist3(double eq[4], double p[3]);
 
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 
+/* Given 2 2D points, compute a plane equation. */
+/* The normal will be right handed given the order of the points */
+/* The plane equation will be the 2 normal components and the constant. */
+/* Return nz if any points are cooincident or co-linear */
+int icmPlaneEqn2(double eq[3], double p0[2], double p1[2]);
+
+/* Given a 2D point and a plane equation, return the signed */
+/* distance from the plane */
+double icmPlaneDist2(double eq[3], double p[2]);
+
+/* Given two infinite 2D lines define by two pairs of points, compute the intersection. */
+/* Return nz if there is no intersection (lines are parallel) */
+int icmLineIntersect2(double res[2], double p1[2], double p2[2], double p3[2], double p4[2]);
+
 /* Multiply 2 array by 2x2 transform matrix */
 void icmMulBy2x2(double out[2], double mat[2][2], double in[2]);
 
@@ -1974,7 +1997,7 @@ int icmRGBprim2matrix(
 	icmXYZNumber red,		/* Red colorant */
 	icmXYZNumber green,		/* Green colorant */
 	icmXYZNumber blue,		/* Blue colorant */
-	double mat[3][3]		/* Destination matrix */
+	double mat[3][3]		/* Destination matrix[RGB[XYZ] */
 );
 
 /* Chromatic Adaption transform utility */
@@ -1983,12 +2006,21 @@ int icmRGBprim2matrix(
 
 #define ICM_CAM_BRADFORD	0x0001	/* Use Bradford sharpened response space */
 #define ICM_CAM_MULMATRIX	0x0002	/* Transform the given matrix */
+									/* NOTE that to transform primaries they */
+									/* must be mat[XYZ][RGB] format! */
 
 void icmChromAdaptMatrix(
 	int flags,				/* Flags as defined below */
 	icmXYZNumber d_wp,		/* Destination white point */
 	icmXYZNumber s_wp,		/* Source white point */
 	double mat[3][3]		/* Destination matrix */
+);
+
+/* Pre-round RGB device primary values to ensure that */
+/* the sum of the quantized primaries is the same as */
+/* the quantized sum. */
+void quantizeRGBprimsS15Fixed16(
+	double mat[3][3]		/* matrix[RGB][XYZ] */
 );
 
 /* - - - - - - - - - - - - - - */

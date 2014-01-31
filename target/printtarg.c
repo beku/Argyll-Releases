@@ -17,6 +17,12 @@
 
 	TTBD:
 
+	Add independent w & h patch scaling option.
+
+	Allow scaling minimum leading/trailing white space.
+
+	Add option to omit labelling.
+
 	Add "single pixel patch" mode, for pure digital processing for
 	abstract profile creation.
 

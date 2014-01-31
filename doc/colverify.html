@@ -1,13 +1,13 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
   <head>
-    <title>verify</title>
+    <title>colverify</title>
     <meta http-equiv="content-type" content="text/html;
       charset=ISO-8859-1">
     <meta name="author" content="Graeme Gill">
   </head>
   <body>
-    <h2><b>profile/verify</b></h2>
+    <h2><b>profile/colverify</b></h2>
     <h3>Summary</h3>
     Verify a color transform by comparing CIE measurement values from
     two test charts. The charts can be any suitably formatted CGATS or <a
@@ -16,7 +16,7 @@
     worst case delta E will be reported, as well as the worst 10% and
     best 90% of values.<br>
     <h3>Usage Summary</h3>
-    <tt><small>verify&nbsp; [-options] target.ti3 measured.ti3<br>
+    <tt><small>colverify&nbsp; [-options] target.ti3 measured.ti3<br>
         &nbsp;-v
         [n]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
         Verbose mode, n &gt;= 2 print each value<br>
@@ -89,7 +89,7 @@ Use
         &nbsp;<i>measured.ti3</i> &nbsp; &nbsp; Measured or actual patch
         data file</small></tt><br>
     <h3>Usage Details and Discussion</h3>
-    <b> verify</b> provides a way of verifying how well a color
+    <b> colverify</b> provides a way of verifying how well a color
     transformation (such a proofing) performs.<br>
     <br>
     The <b>-v</b> flag prints out extra information during the
@@ -180,7 +180,7 @@ Use
     The same parameter value should be used as was used during the
     creation of the profile.<br>
     <br>
-    The <b>-L</b><b> profile.icm</b> parameter causes verify to ignore
+    The <b>-L</b><b> profile.icm</b> parameter causes colverify to ignore
     any patches from the first file that are out of gamut according to
     the profile. This can be useful in evaluating accuracy without
     tainting it by impossible to reach colors.<br>

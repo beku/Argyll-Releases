@@ -24,7 +24,7 @@
     correction profile in as well, iterative improvement can be made to
     the proofing reproduction.<br>
     <br>
-    <a href="verify.html">verify</a> is a useful tool to use on the two
+    <a href="colverify.html">colverify</a> is a useful tool to use on the two
     test charts, to check how well the refinement is proceeding. If a
     white point relative match is being created (refine -R), then use
     veryify -N.<br>
@@ -148,7 +148,7 @@ Created/refined
     illumination spectrum to be used as the similated instrument
     illuminant, overriding the default <b>D50</b> or CIE computation
     illuminant used for FWA (see <b>-i</b> below<b>). </b>See <a
-      href="file:///D:/src/argyll/doc/colprof.html#f">colprof -f</a> for
+      href="colprof.html#f">colprof -f</a> for
     a fuller explanation. The same value should be used as was used
     during the creation of the profile.<br>
     <br>
@@ -159,7 +159,7 @@ Created/refined
     standard illuminant spectrums, with <b>D50</b> being the default.
     If a filename is specified instead, it will be assumed to be an
     Argyll specific <a
-      href="file:///D:/src/argyll/doc/File_Formats.html#.sp">.sp</a>
+      href="File_Formats.html#.sp">.sp</a>
     spectrum file. If FWA compensation is used during measurement, this
     illuminant will be used by default as the simulated instrument
     illuminant. The same value should be used as was used during the
@@ -266,9 +266,9 @@ The
       file.<br>
       <br>
       Lets check how well the proofing system current matches using
-      verify:<br>
+      colverify:<br>
       <br>
-      &nbsp;&nbsp;&nbsp; verify&nbsp; reference.ti3 chart1.ti3<br>
+      &nbsp;&nbsp;&nbsp; colverify&nbsp; reference.ti3 chart1.ti3<br>
       <br>
       We then create our initial abstract correction fix profile <span
         style="font-weight: bold;">fix1.icm</span> using refine:<br>
@@ -310,9 +310,9 @@ The
         style="font-weight: bold;">chart2.ti3</span> file.<br>
       <br>
       Lets check how well the proofing system matches after this first
-      round of refinement using verify:<br>
+      round of refinement using colverify:<br>
       <br>
-      &nbsp;&nbsp;&nbsp; verify&nbsp; reference.ti3 chart2.ti3<br>
+      &nbsp;&nbsp;&nbsp; colverify&nbsp; reference.ti3 chart2.ti3<br>
       <br>
       <br>
       <span style="font-weight: bold;"><span style="font-weight: bold;">&gt;&gt;&gt;</span></span><br>
@@ -347,9 +347,9 @@ can
         style="font-weight: bold;">chart3.ti3</span> file.<br>
       <br>
       Check again how well the proofing system matches after this first
-      round of refinement using verify:<br>
+      round of refinement using colverify:<br>
       <br>
-      &nbsp;&nbsp;&nbsp; verify&nbsp; reference.ti3 chart3.ti3<br>
+      &nbsp;&nbsp;&nbsp; colverify&nbsp; reference.ti3 chart3.ti3<br>
       <br>
       Rounds of improvements can be continues by looping back to <span
         style="font-weight: bold;">&gt;&gt;&gt;</span>, being careful to

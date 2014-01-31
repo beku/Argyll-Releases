@@ -2283,7 +2283,7 @@ dump_xfit(p);
 				
 				/* Apply any dark emphasis */
 				if (demph > 1.0) {
-					pgp[i].v = pow(pgp[i].v, 1.0/demph);
+					pgp[i].v = icx_powlike(pgp[i].v, 1.0/demph);
 				}
 			}
 			/* Fit the non-monotonic parameters to the guide points */
@@ -2500,6 +2500,7 @@ printf("~1 ipos[%d][%d] = %f\n",e,i,cv);
 //			p->clut->fit_rspl_w_df(p->clut, rsplflags, p->rpoints, p->nodp, in_min, in_max, gres,
 //				out_min, out_max, smooth, oavgdev, ipos, 1.0, (void *)p, skm_weak);
 //		} else
+		/* Normal multi-d scattered point fitting */
 		p->clut->fit_rspl_w(p->clut, rsplflags, p->rpoints, p->nodp, in_min, in_max, gres,
 				out_min, out_max, smooth, oavgdev, ipos);
 #endif

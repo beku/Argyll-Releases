@@ -48,6 +48,7 @@
     There shall be a <span style="font-weight: bold;">DEVICE_CLASS</span>
     keyword that has a value of <span style="font-weight: bold;">"OUTPUT</span>",
 
+
     "<span style="font-weight: bold;">DISPLAY</span>" or <span
       style="font-weight: bold;">"INPUT"</span>.<br>
     This indicates what type of device the calibration information is
@@ -56,17 +57,24 @@
     A <span style="font-weight: bold;">"DISPLAY"</span> type device may
     have a <span style="font-weight: bold;">VIDEO_LUT_CALIBRATION_POSSIBLE
 
+
     </span>keyword that must have a value of "<span style="font-weight:
       bold;">NO</span>" or "<span style="font-weight: bold;">YES</span>",
+
     to indicate whether the display has the ability to be calibrated by
     loading VideoLUT values.<br>
     <br>
     A <span style="font-weight: bold;">"DISPLAY"</span> type device may
     have a <span style="font-weight: bold;">TV_OUTPUT_ENCODING </span>keyword
+
     that must have a value of "<span style="font-weight: bold;">NO</span>"
     or "<span style="font-weight: bold;">YES</span>", to indicate
     whether the calibration was created withing the video (16-235)/255
-    compressed range of device value.<br>
+    compressed range of device value. This is used to signal to a
+    VideoLUT loader whether calibration values should be converted to
+    video encoded range when loaded into hardware. The calibration
+    values stored in the .cal file are never video encoded themselves,
+    i.e. 0.0 is always device minimum, and 1.0 is always device maximum.<br>
     <br>
     There shall be a keyword <span style="font-weight: bold;">COLOR_REP</span>
     that has a value that indicates what colorspaces of the device
@@ -77,8 +85,10 @@
     <span style="font-weight: bold;"><span style="font-weight: bold;"></span></span>&nbsp;&nbsp;&nbsp;
 Cyan
 
+
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
     C<br>
     &nbsp;&nbsp;&nbsp; Magenta &nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;
@@ -86,25 +96,31 @@ Cyan
     &nbsp;&nbsp;&nbsp; Yellow &nbsp; &nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
     Y<br>
     &nbsp;&nbsp;&nbsp; Black &nbsp;&nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
     K<br>
     &nbsp;&nbsp;&nbsp; Orange &nbsp;&nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
     O<br>
     &nbsp;&nbsp;&nbsp; Red
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
     R<br>
     &nbsp;&nbsp;&nbsp; Green &nbsp; &nbsp;&nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
     G<br>
     &nbsp;&nbsp;&nbsp; Blue &nbsp;&nbsp; &nbsp;&nbsp;
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
     B<br>
     &nbsp;&nbsp;&nbsp; White &nbsp;
@@ -113,17 +129,21 @@ Cyan
     &nbsp;&nbsp;&nbsp; Light Cyan
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
     c<br>
     &nbsp;&nbsp;&nbsp; Light
     Magenta&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
     m<br>
     &nbsp;&nbsp;&nbsp; Light
     Yellow&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
+
     y<br>
     &nbsp;&nbsp;&nbsp; Light
     Black&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
 
     k<br>
     &nbsp;&nbsp;&nbsp; Medium Cyan&nbsp;
@@ -167,9 +187,11 @@ Cyan
     &nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_I</span>&nbsp;&nbsp;&nbsp;
 &nbsp;&nbsp;
 
+
     The device value input value between 0.0 and 1.0.<br>
     &nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_R</span>&nbsp;&nbsp;&nbsp;
 &nbsp;
+
 
     The Red device value input value between 0.0 and 1.0.<br>
     &nbsp;&nbsp;&nbsp; <span style="font-weight: bold;">RGB_G</span>

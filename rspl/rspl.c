@@ -866,7 +866,7 @@ rspl *s
 
 /* ============================================ */
 /* Initialize the grid from a provided function. By default the grid */
-/* values are set to exactly the value returned fy func(), unless the */
+/* values are set to exactly the value returned by func(), unless the */
 /* RSPL_SET_APXLS flag is set, in which case an attempt is made to have */
 /* the grid points represent a least squares aproximation to the underlying */
 /* surface, by using extra samples in the middle of grid cells. */

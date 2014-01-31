@@ -2,6 +2,73 @@
 Argyll CMS change log
 =====================
 
+Version 1.6.3 (26 January 2014)
+-------------
+
+*   Added icc/mkDispProf.c sample code
+
+*	Added ProPhoto.icm and ProPhotoLin.icm to ref profiles.
+
+*	Fix bug in xicclu -py conversion.
+
+*	Added code to minimize ICC rounding error on matrix profile white point
+	accuracy. Re-generated all reference profiles with this change.
+
+*	Changed i1d3 driver to completely ignore any EEPROM checksum
+	errors for non "A-01" rev. instruments.
+
+*	Made transplot handle RGB->RGB device link.
+
+*	Removed colprof -y option. Use "profcheck -v2" instead, as it is
+	more developed.
+
+*	Fixed bug in dispcal - it was not using the final measurement
+	pass to update the calibration curves.
+
+*	Fixed bug in spotread, dispcal & dispread for CCSS capable instruments
+	where refresh display types was being ignored if a custom observer
+	was used, and/or the custom observer as being ignored, and/or
+	a CCMX was being ignored.
+	Changed instlib semantics for inst_opt_set_ccss_obs :-
+	this is now set immediately, and applied also to any subsequent
+	set_disptype() or col_cal_spec_set().
+
+*	Renamed verify to colverify to avoid clash with MSWin program
+	of the same name. Made it print the patch location for -v2
+	if it is present in the file.
+
+*	Changed targen to ensure that -V and -p options effects are reflected
+	in the resulting expected CIE values of the .ti1 file.
+
+*	Changed targen so that -V parameter also affects single channel,
+	grey wedge, grid & body centered grid point distribution.
+
+*	Changed colprof to deal with variable grid distribution
+	in a more neuanced way, to reduce overshoot artifacts
+	when the -V parameter is used.
+
+*	Changed colprof to used a power_like function for the
+	grid distribution shape from the -V parameter, so as
+	to avoid issues with a power curve infinte slope near zero.
+
+*	Changed colprof to used a scaled down value of the targen -V
+	parameter as the default for its -V parameter. Documentation
+	now recommends more moderate values for -V.
+
+*	Added a special case to collink for RGB video input encoding
+	to (attempt) to fine tune the black point to compensate
+	for it (probably) not falling on a cLUT grid point. & out encoding
+
+*	Tweaked dispcal to try and improve accuracy of black
+	point calibration.
+
+*	Switch dispread to use NoClamp readings, so that
+	average black point value is not biased.
+
+*	Fixed bug introduced into 1.6.2 oeminst that prevents .ccss files
+	being installed.
+
+
 Version 1.6.2 - (19th November 2013)
 -------------
 
@@ -21,7 +88,7 @@ Version 1.6.2 - (19th November 2013)
 
 *	Fixed race condition bug in OS X HID driver. This
 	fixes occassional problem with i1d3, and also solves
-	problem with the ColorHug on OS X.
+	problem with the ColorHug on OS X. ColorHug is now fully supported.
 
 *	Fixed problem with TV encoded output and dispread -E -k/-K
 	(Thanks to Florian Hoch).

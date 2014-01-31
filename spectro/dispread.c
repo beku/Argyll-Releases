@@ -829,7 +829,7 @@ int main(int argc, char *argv[]) {
 		ccs->del(ccs);
 
 	/* Test the CRT with all of the test points */
-	if ((rv = dr->read(dr, cols, npat + xpat, 1, npat + xpat, 1, 0, instClamp)) != 0) {
+	if ((rv = dr->read(dr, cols, npat + xpat, 1, npat + xpat, 1, 0, instNoClamp)) != 0) {
 		dr->del(dr);
 		error("test_crt returned error code %d\n",rv);
 	}

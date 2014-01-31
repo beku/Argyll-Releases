@@ -72,7 +72,6 @@ int icompaths_refresh_paths(icompaths *p) {
 #if defined(ENABLE_SERIAL) || defined(ENABLE_FAST_SERIAL)
 #ifdef __APPLE__
 	/* Search the OSX registry for serial ports */
-// ~~99 need to identify FTDI serial ports and mark them "fast"
 	{
 	    kern_return_t kstat; 
 	    mach_port_t mp;						/* Master IO port */
@@ -98,7 +97,7 @@ int icompaths_refresh_paths(icompaths *p) {
 
 		/* Find all the matching serial ports */
 		for (;;) {
-			char pname[100];
+			char pname[200];
 			int fast = 0;
 			
 	        CFTypeRef dfp;		/* Device file path */
@@ -121,6 +120,7 @@ int icompaths_refresh_paths(icompaths *p) {
 			 || strstr(pname, "Bluetooth") != NULL)
 				goto continue2;
 
+			/* Would be nice to identify FTDI serial ports more specifically ? */
 			if (strstr(pname, "usbserial") != NULL)
 				fast = 1;
 
@@ -271,6 +271,7 @@ int icompaths_refresh_paths(icompaths *p) {
 			/* Add the path to the list */
 			p->add_serial(p, dpath, dpath, 0);
 			a1logd(p->log, 8, "icoms_get_paths: Added path '%s' fast %d\n",dpath,fast);
+			free(dpath);
 
 			/* If fast, try and identify it */
 			if (fast) {
@@ -775,6 +776,13 @@ icoms_del(icoms *p) {
 	usb_del_usb(p);
 	hid_del_hid(p);
 #endif
+#if defined(ENABLE_SERIAL) || defined(ENABLE_FAST_SERIAL)
+	if (p->spath != NULL)
+		free(p->spath);
+#endif
+	p->log = del_a1log(p->log);
+	if (p->name != NULL)
+		free(p->name);
 	p->log = del_a1log(p->log);
 	free (p);
 }

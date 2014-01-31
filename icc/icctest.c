@@ -324,9 +324,9 @@ int doit(
 
 		/* Values that are not normally set. Set them to non-defaults for testing */
 		wh->cmmId = str2tag("tst3");
-    	wh->majv = 3;					/* Default version 2.1.0 */
-		wh->minv = 2;
-		wh->bfv  = 1;
+    	wh->majv = 2;					/* Default version 2.1.0 */
+		wh->minv = 1;
+		wh->bfv  = 0;
     	wh->date.year    = rand_int(1900,3000);		/* Defaults to current date */
     	wh->date.month   = rand_int(1,12);
     	wh->date.day     = rand_int(1,31);

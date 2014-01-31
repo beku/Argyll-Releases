@@ -76,6 +76,7 @@ static int gcolors[MXGPHS][3] = {
 struct _plot_info {
 	void *cx;				/* Other Context */
 
+	int flags;				/* Flags */
 	int dowait;				/* Wait for user key if > 0, wait for n secs if < 0 */
 	double ratio;			/* Aspect ratio of window, X/Y */
 
@@ -108,8 +109,13 @@ struct _plot_info {
 /* Global to transfer info to window callback */
 static plot_info pd;
 
+#define PLOTF_NONE           0x0000
+#define PLOTF_GRAPHCROSSES   0x0001			/* Plot crosses at each point on the graphs */
+#define PLOTF_VECCROSSES     0x0002			/* Plot crosses at the end of x1,y1 -> x2,y2 */
+
 /* Declaration of superset */
 static int do_plot_imp(
+	int flags,
     double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
 	double ratio,	/* Aspect ratio of window, X/Y */
 	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
@@ -173,7 +179,8 @@ int n) {
 	if ((ymax - ymin) == 0.0)
 		ymax += 0.5, ymin -= 0.5;
 
-	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	return do_plot_imp(PLOTF_NONE,
+	                   xmin, xmax, ymin, ymax, 1.0, 1,
 	                   x, NULL, yy, NULL, n,
 	                   NULL, NULL, NULL, NULL, 0,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
@@ -244,7 +251,8 @@ int m) {
 	if ((ymax - ymin) == 0.0)
 		ymax += 0.5, ymin -= 0.5;
 
-	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	return do_plot_imp(PLOTF_NONE,
+	                   xmin, xmax, ymin, ymax, 1.0, 1,
 	                   x, NULL, yy, NULL, n,
 	                   x4, y4, NULL, NULL, m ,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
@@ -318,7 +326,8 @@ double ratio
 		ymin = pymin;
 	}
 
-	return do_plot_imp(xmin, xmax, ymin, ymax, ratio, dowait,
+	return do_plot_imp(PLOTF_NONE,
+	                   xmin, xmax, ymin, ymax, ratio, dowait,
 	                   x, NULL, yy, NULL, n,
 	                   NULL, NULL, NULL, NULL, 0,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
@@ -379,7 +388,8 @@ int n) {	/* Number of values */
 	if ((ymax - ymin) == 0.0)
 		ymax += 0.5, ymin -= 0.5;
 
-	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	return do_plot_imp(PLOTF_NONE,
+	                   xmin, xmax, ymin, ymax, 1.0, 1,
 	                   x, NULL, yy, NULL, n,
 	                   NULL, NULL, NULL, NULL, n ,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
@@ -457,7 +467,8 @@ int m) {
 	if ((ymax - ymin) == 0.0)
 		ymax += 0.5, ymin -= 0.5;
 
-	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	return do_plot_imp(PLOTF_NONE,
+	                   xmin, xmax, ymin, ymax, 1.0, 1,
 	                   x, NULL, yy, NULL, n,
 	                   xp, yp, NULL, NULL, m,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
@@ -531,7 +542,8 @@ int zero	/* Flag - make sure zero is in y range */
 	if ((ymax - ymin) == 0.0)
 		ymax += 0.5, ymin -= 0.5;
 
-	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	return do_plot_imp(PLOTF_NONE,
+	                   xmin, xmax, ymin, ymax, 1.0, 1,
 	                   x, NULL, yy, NULL, n,
 	                   NULL, NULL, NULL, NULL, n ,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
@@ -617,7 +629,8 @@ int m) {
 	if ((ymax - ymin) == 0.0)
 		ymax += 0.5, ymin -= 0.5;
 
-	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, 1,
+	return do_plot_imp(PLOTF_NONE,
+	                   xmin, xmax, ymin, ymax, 1.0, 1,
 	                   x, NULL, yy, NULL, n,
 	                   xp, yp, NULL, NULL, m,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
@@ -652,13 +665,14 @@ int m			/* Number of points */
 	yy[0] = y1;
 	yy[1] = y2;
 
-	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, dowait,
+	return do_plot_imp(PLOTF_VECCROSSES,
+	                   xmin, xmax, ymin, ymax, 1.0, dowait,
 	                   x1, x2, yy, NULL, n,
 	                   x3, y3, mcols, mtext, m,
 	                   NULL, NULL, NULL, NULL, NULL, 0); 
 }
 
-/* Plot a bunch of vectors + optional crosses + optional vectors*/
+/* Plot a bunch of vectors & crosses + optional crosses + optional vectors*/
 /* return 0 on success, -1 on error */
 int do_plot_vec2(
 double xmin,
@@ -672,11 +686,11 @@ double *y2,
 char **ntext,	/* text annotation at cross */
 int n,			/* Number of vectors */
 int dowait,
-double *x3,		/* m extra point */
+double *x3,		/* m extra crosses */
 double *y3,
-plot_col *mcols,/* point colors */
-char **mtext,	/* text annotation */
-int m,			/* Number of points */
+plot_col *mcols,/* cross colors */
+char **mtext,	/* text annotation at cross */
+int m,			/* Number of crosses */
 double *x4,		/* o vector start */
 double *y4,
 double *x5,		/* o vector end */
@@ -693,11 +707,13 @@ int o			/* Number of vectors */
 	yy[0] = y1;
 	yy[1] = y2;
 
-	return do_plot_imp(xmin, xmax, ymin, ymax, 1.0, dowait,
+	return do_plot_imp(PLOTF_VECCROSSES,
+	                   xmin, xmax, ymin, ymax, 1.0, dowait,
 	                   x1, x2, yy, ntext, n,
 	                   x3, y3, mcols, mtext, m,
 	                   x4, y4, x5, y5, ocols, o); 
 }
+
 /* ********************************** NT version ********************** */
 #ifdef NT
 
@@ -791,13 +807,15 @@ DWORD WINAPI plot_message_thread(LPVOID lpParameter) {
 /* return 0 on success, -1 on error */
 /* Hybrid Graph uses x1 : y1, y2, y3, y4, y5, y6 for up to 6 graph curves + */
 /* optional diagonal crosses at x7, y7 in yellow (x2 == NULL). */
-/* Vector uses x1, y1 to x2, y2 as a vector with a diagonal cross at x2, y2 all in black, */
-/* with annotation  ntext at the cross, */
-/* plus a diagonal cross at x7, y7 in yellow. The color for x7, y7 can be overidden by an  */
-/* array of colors mcols, and augmented by optional label text mtext. (x2 != NULL) */
+/* Vector uses x1, y1 to x2, y2 as a vector with a (optional) diagonal cross at x2, y2 */
+/* all in black with annotation ntext at the cross, */
+/* plus a (optiona) diagonal cross at x7, y7 in yellow. The color for x7, y7 can be */
+/* overidden by an array of colors mcols, plus optional label text mtext. (x2 != NULL) */
 /* n = number of points/vectors. -ve for reversed X axis */
 /* m = number of extra points (x2,y3 or x7,y7) */
+/* x8,y8 to x9,y9 are extra optional vectors with optional colors */
 static int do_plot_imp(
+	int flags,
     double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
 	double ratio,	/* Aspect ratio of window, X/Y */
 	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
@@ -809,6 +827,7 @@ static int do_plot_imp(
 	double *x8, double *y8, double *x9, double*y9, plot_col *ocols,
 	int o
 ) {
+	pd.flags = flags;
 	pd.dowait = 10 * dowait;
 	pd.ratio = ratio;
 	{
@@ -974,9 +993,6 @@ xtick(HDC hdc, plot_info *pdp, double x, char *lab)
 	{
 	int xx,yy;
 	RECT rct;
-//	GrLine(10 + (int)((x - pdp->mnx) * scx + 0.5), sh - 10 - 5,
-//	       10 + (int)((x - pdp->mnx) * scx + 0.5), sh - 10 + 5, 1);
-//	GrTextXY(5 + (int)((x - pdp->mnx) * scx + 0.5), sh - 10 - 10, lab, 1, 0);
 
 	xx = 10 + (int)((x - pdp->mnx) * pdp->scx + 0.5);
 	yy = pdp->sh - 10;
@@ -995,9 +1011,6 @@ ytick(HDC hdc, plot_info *pdp, double y, char *lab)
 	{
 	int xx,yy;
 	RECT rct;
-//	GrLine(5,  10 + (int)((y - pdp->mny) * pdp->scy + 0.5),
-//	       15, 10 + (int)((y - pdp->mny) * pdp->scy + 0.5), 1);
-//	GrTextXY(5, pdp->sh - 10 - (int)((y - pdp->mny) * pdp->scy + 0.5), lab, 1, 0);
 
 	xx = 5;
 	yy = pdp->sh - 10 - (int)((y - pdp->mny) * pdp->scy + 0.5);
@@ -1034,7 +1047,7 @@ loose_label(HDC hdc, plot_info *pdp, double min, double max, void (*pfunc)(HDC h
 void
 DoPlot(
 HDC hdc,
-plot_info *pdp
+plot_info *p
 ) {
 	int i, j;
 	int lx,ly;		/* Last x,y */
@@ -1046,18 +1059,18 @@ plot_info *pdp
 	SelectObject(hdc,pen);
 
 	/* Plot horizontal axis */
-	if (pdp->revx)
-		loose_label(hdc, pdp, pdp->mxx, pdp->mnx, xtick);
+	if (p->revx)
+		loose_label(hdc, p, p->mxx, p->mnx, xtick);
 	else
-		loose_label(hdc, pdp, pdp->mnx, pdp->mxx, xtick);
+		loose_label(hdc, p, p->mnx, p->mxx, xtick);
 
 	/* Plot vertical axis */
-	loose_label(hdc, pdp, pdp->mny, pdp->mxy, ytick);
+	loose_label(hdc, p, p->mny, p->mxy, ytick);
 
 	RestoreDC(hdc,-1);
 	DeleteObject(pen);
 
-	if (pdp->graph) {		/* Up to MXGPHS graphs + crosses */
+	if (p->graph) {		/* Up to MXGPHS graphs + crosses */
 		int gcolors[MXGPHS][3] = {
 			{   0,   0,   0},	/* Black */
 			{ 210,  30,   0},	/* Red */
@@ -1071,7 +1084,7 @@ plot_info *pdp
 			{ 220, 220, 220}	/* White */
 		};
 		for (j = MXGPHS-1; j >= 0; j--) {
-			double *yp = pdp->yy[j];
+			double *yp = p->yy[j];
 		
 			if (yp == NULL)
 				continue;
@@ -1079,22 +1092,21 @@ plot_info *pdp
 			pen = CreatePen(PS_SOLID,ILTHICK,RGB(gcolors[j][0],gcolors[j][1],gcolors[j][2]));
 			SelectObject(hdc,pen);
 
-			lx = (int)((pdp->x1[0] - pdp->mnx) * pdp->scx + 0.5);
-			ly = (int)((     yp[0] - pdp->mny) * pdp->scy + 0.5);
+			lx = (int)((p->x1[0] - p->mnx) * p->scx + 0.5);
+			ly = (int)((     yp[0] - p->mny) * p->scy + 0.5);
 
-			for (i = 0; i < pdp->n; i++) {
+			for (i = 0; i < p->n; i++) {
 				int cx,cy;
-				cx = (int)((pdp->x1[i] - pdp->mnx) * pdp->scx + 0.5);
-				cy = (int)((     yp[i] - pdp->mny) * pdp->scy + 0.5);
+				cx = (int)((p->x1[i] - p->mnx) * p->scx + 0.5);
+				cy = (int)((     yp[i] - p->mny) * p->scy + 0.5);
 	
-				MoveToEx(hdc, 10 + lx, pdp->sh - 10 - ly, NULL);
-				LineTo(hdc, 10 + cx, pdp->sh - 10 - cy);
-#ifdef CROSSES
-				MoveToEx(hdc, 10 + cx - 5, pdp->sh - 10 - cy - 5, NULL);
-				LineTo(hdc, 10 + cx + 5, pdp->sh - 10 - cy + 5);
-				GrLine(10 + cx + 5, pdp->sh - 10 - cy - 5);
-				LineTo(hdc, 10 + cx - 5, pdp->sh - 10 - cy + 5);
-#endif
+				MoveToEx(hdc, 10 + lx, p->sh - 10 - ly, NULL);
+				LineTo(hdc, 10 + cx, p->sh - 10 - cy);
+				if (p->flags & PLOTF_GRAPHCROSSES) {
+					MoveToEx(hdc, 10 + cx - 5, p->sh - 10 - cy - 5, NULL);
+					LineTo(hdc, 10 + cx + 5, p->sh - 10 - cy + 5);
+					LineTo(hdc, 10 + cx - 5, p->sh - 10 - cy + 5);
+				}
 				lx = cx;
 				ly = cy;
 			}
@@ -1106,7 +1118,7 @@ plot_info *pdp
 		pen = CreatePen(PS_SOLID,ILTHICK,RGB(0,0,0));
 		SelectObject(hdc,pen);
 
-		if (pdp->ntext != NULL) {
+		if (p->ntext != NULL) {
 			HFONT fon;
 
 			fon = CreateFont(12, 0, 0, 0, FW_LIGHT, FALSE, FALSE, FALSE, ANSI_CHARSET,
@@ -1121,41 +1133,43 @@ plot_info *pdp
 			}
 		}
 
-		for (i = 0; i < pdp->n; i++) {
+		for (i = 0; i < p->n; i++) {
 			int cx,cy;
 
-			lx = (int)((pdp->x1[i] - pdp->mnx) * pdp->scx + 0.5);
-			ly = (int)((pdp->yy[0][i] - pdp->mny) * pdp->scy + 0.5);
+			lx = (int)((p->x1[i] - p->mnx) * p->scx + 0.5);
+			ly = (int)((p->yy[0][i] - p->mny) * p->scy + 0.5);
 
-			cx = (int)((pdp->x2[i] - pdp->mnx) * pdp->scx + 0.5);
-			cy = (int)((pdp->yy[1][i] - pdp->mny) * pdp->scy + 0.5);
+			cx = (int)((p->x2[i] - p->mnx) * p->scx + 0.5);
+			cy = (int)((p->yy[1][i] - p->mny) * p->scy + 0.5);
 
-			MoveToEx(hdc, 10 + lx, pdp->sh - 10 - ly, NULL);
-			LineTo(hdc, 10 + cx, pdp->sh - 10 - cy);
+			MoveToEx(hdc, 10 + lx, p->sh - 10 - ly, NULL);
+			LineTo(hdc, 10 + cx, p->sh - 10 - cy);
 
-			MoveToEx(hdc, 10 + cx - 5, pdp->sh - 10 - cy - 5, NULL);
-			LineTo(hdc, 10 + cx + 5, pdp->sh - 10 - cy + 5);
-			MoveToEx(hdc, 10 + cx + 5, pdp->sh - 10 - cy - 5, NULL);
-			LineTo(hdc, 10 + cx - 5, pdp->sh - 10 - cy + 5);
+			if (p->flags & PLOTF_VECCROSSES) {
+				MoveToEx(hdc, 10 + cx - 5, p->sh - 10 - cy - 5, NULL);
+				LineTo(hdc, 10 + cx + 5, p->sh - 10 - cy + 5);
+				MoveToEx(hdc, 10 + cx + 5, p->sh - 10 - cy - 5, NULL);
+				LineTo(hdc, 10 + cx - 5, p->sh - 10 - cy + 5);
+			}
 
-			if (pdp->ntext != NULL) {
+			if (p->ntext != NULL) {
 				RECT rct;
 				rct.right = 
 				rct.left = 10 + cx + 10;
 				rct.top = 
-				rct.bottom = pdp->sh - 10 - cy + 10;
-				DrawText(hdc, pdp->ntext[i], -1, &rct, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOCLIP);
+				rct.bottom = p->sh - 10 - cy + 10;
+				DrawText(hdc, p->ntext[i], -1, &rct, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOCLIP);
 			}
 		}
 		DeleteObject(pen);
 	}
 
 	/* Extra points */
-	if (pdp->x7 != NULL && pdp->y7 != NULL && pdp->m > 0 ) {
+	if (p->x7 != NULL && p->y7 != NULL && p->m > 0 ) {
 		pen = CreatePen(PS_SOLID,ILTHICK,RGB(210,150,0));
 		SelectObject(hdc,pen);
 		
-		if (pdp->mtext != NULL) {
+		if (p->mtext != NULL) {
 			HFONT fon;
 
 
@@ -1171,68 +1185,68 @@ plot_info *pdp
 			}
 		}
 
-		for (i = 0; i < pdp->m; i++) {
-			lx = (int)((pdp->x7[i] - pdp->mnx) * pdp->scx + 0.5);
-			ly = (int)((pdp->y7[i] - pdp->mny) * pdp->scy + 0.5);
+		for (i = 0; i < p->m; i++) {
+			lx = (int)((p->x7[i] - p->mnx) * p->scx + 0.5);
+			ly = (int)((p->y7[i] - p->mny) * p->scy + 0.5);
 
-			if (pdp->mcols != NULL) {
+			if (p->mcols != NULL) {
 				int rgb[3];
 
 				for (j = 0; j < 3; j++)
-					rgb[j] = (int)(pdp->mcols[i].rgb[j] * 255.0 + 0.5);
+					rgb[j] = (int)(p->mcols[i].rgb[j] * 255.0 + 0.5);
 
 				DeleteObject(pen);
 				pen = CreatePen(PS_SOLID,ILTHICK,RGB(rgb[0],rgb[1],rgb[2]));
 				SelectObject(hdc,pen);
 
-				if (pdp->mtext != NULL)
+				if (p->mtext != NULL)
 					SetTextColor(hdc, RGB(rgb[0],rgb[1],rgb[2]));
 			}
-			MoveToEx(hdc, 10 + lx - 5, pdp->sh - 10 - ly, NULL);
-			LineTo(hdc, 10 + lx + 5, pdp->sh - 10 - ly);
-			MoveToEx(hdc, 10 + lx, pdp->sh - 10 - ly - 5, NULL);
-			LineTo(hdc, 10 + lx, pdp->sh - 10 - ly + 5);
+			MoveToEx(hdc, 10 + lx - 5, p->sh - 10 - ly, NULL);
+			LineTo(hdc, 10 + lx + 5, p->sh - 10 - ly);
+			MoveToEx(hdc, 10 + lx, p->sh - 10 - ly - 5, NULL);
+			LineTo(hdc, 10 + lx, p->sh - 10 - ly + 5);
 
-			if (pdp->mtext != NULL) {
+			if (p->mtext != NULL) {
 				RECT rct;
 				rct.right = 
 				rct.left = 10 + lx + 10;
 				rct.top = 
-				rct.bottom = pdp->sh - 10 - ly - 10;
-				DrawText(hdc, pdp->mtext[i], -1, &rct, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOCLIP);
+				rct.bottom = p->sh - 10 - ly - 10;
+				DrawText(hdc, p->mtext[i], -1, &rct, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOCLIP);
 			}
 		}
 		DeleteObject(pen);
 	}
 	/* Extra vectors */
-	if (pdp->x8 != NULL && pdp->y8 != NULL && pdp->x9 != NULL && pdp->y9 && pdp->o > 0 ) {
+	if (p->x8 != NULL && p->y8 != NULL && p->x9 != NULL && p->y9 && p->o > 0 ) {
 		pen = CreatePen(PS_SOLID,ILTHICK,RGB(150,255,255));
 		SelectObject(hdc,pen);
 		
-		for (i = 0; i < pdp->o; i++) {
+		for (i = 0; i < p->o; i++) {
 			int cx,cy;
 
-			lx = (int)((pdp->x8[i] - pdp->mnx) * pdp->scx + 0.5);
-			ly = (int)((pdp->y8[i] - pdp->mny) * pdp->scy + 0.5);
+			lx = (int)((p->x8[i] - p->mnx) * p->scx + 0.5);
+			ly = (int)((p->y8[i] - p->mny) * p->scy + 0.5);
 
-			cx = (int)((pdp->x9[i] - pdp->mnx) * pdp->scx + 0.5);
-			cy = (int)((pdp->y9[i] - pdp->mny) * pdp->scy + 0.5);
+			cx = (int)((p->x9[i] - p->mnx) * p->scx + 0.5);
+			cy = (int)((p->y9[i] - p->mny) * p->scy + 0.5);
 
-			if (pdp->ocols != NULL) {
+			if (p->ocols != NULL) {
 				int rgb[3];
 
 				for (j = 0; j < 3; j++)
-					rgb[j] = (int)(pdp->ocols[i].rgb[j] * 255.0 + 0.5);
+					rgb[j] = (int)(p->ocols[i].rgb[j] * 255.0 + 0.5);
 
 				DeleteObject(pen);
 				pen = CreatePen(PS_SOLID,ILTHICK,RGB(rgb[0],rgb[1],rgb[2]));
 				SelectObject(hdc,pen);
 
-				if (pdp->mtext != NULL)
+				if (p->mtext != NULL)
 					SetTextColor(hdc, RGB(rgb[0],rgb[1],rgb[2]));
 			}
-			MoveToEx(hdc, 10 + lx, pdp->sh - 10 - ly, NULL);
-			LineTo(hdc, 10 + cx, pdp->sh - 10 - cy);
+			MoveToEx(hdc, 10 + lx, p->sh - 10 - ly, NULL);
+			LineTo(hdc, 10 + cx, p->sh - 10 - cy);
 		}
 		DeleteObject(pen);
 	}
@@ -1393,13 +1407,15 @@ static void create_my_win(cntx_t *cx) {
 /* return 0 on success, -1 on error */
 /* Hybrid Graph uses x1 : y1, y2, y3, y4, y5, y6 for up to 6 graph curves + */
 /* optional diagonal crosses at x7, y7 in yellow (x2 == NULL). */
-/* Vector uses x1, y1 to x2, y2 as a vector with a diagonal cross at x2, y2 all in black, */
-/* with annotation  ntext at the cross, */
-/* plus a diagonal cross at x7, y7 in yellow. The color for x7, y7 can be overidden by an  */
-/* array of colors mcols, and augmented by optional label text mtext. (x2 != NULL) */
+/* Vector uses x1, y1 to x2, y2 as a vector with a (optional) diagonal cross at x2, y2 */
+/* all in black with annotation ntext at the cross, */
+/* plus a (optiona) diagonal cross at x7, y7 in yellow. The color for x7, y7 can be */
+/* overidden by an array of colors mcols, plus optional label text mtext. (x2 != NULL) */
 /* n = number of points/vectors. -ve for reversed X axis */
 /* m = number of extra points (x2,y3 or x7,y7) */
+/* x8,y8 to x9,y9 are extra optional vectors with optional colors */
 static int do_plot_imp(
+	int flags,
     double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
 	double ratio,	/* Aspect ratio of window, X/Y */
 	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
@@ -1416,6 +1432,7 @@ static int do_plot_imp(
 		int j;
 		double xr,yr;
 
+		pd.flags = flags;
 		pd.dowait = dowait;
 		pd.ratio = ratio;
 
@@ -1736,10 +1753,10 @@ static void DoPlot(NSRect *rect, plot_info *pdp) {
 				cy = (int)((     yp[i] - pdp->mny) * pdp->scy + 0.5);
 
 				ADrawLine(path, 20.0 + lx, 20.0 + ly, 20 + cx, 20.0 + cy);
-#ifdef CROSSES
-				ADrawLine(path, 20.0 + cx - 5, 20.0 - cy - 5, 20.0 + cx + 5, 20.0 + cy + 5);
-				ADrawLine(path, 20.0 + cx + 5, 20.0 - cy - 5, 20.0 + cx - 5, 20.0 + cy + 5);
-#endif
+				if (pdp->flags & PLOTF_GRAPHCROSSES) {
+					ADrawLine(path, 20.0 + cx - 5, 20.0 - cy - 5, 20.0 + cx + 5, 20.0 + cy + 5);
+					ADrawLine(path, 20.0 + cx + 5, 20.0 - cy - 5, 20.0 + cx - 5, 20.0 + cy + 5);
+				}
 				lx = cx;
 				ly = cy;
 			}
@@ -1767,8 +1784,10 @@ static void DoPlot(NSRect *rect, plot_info *pdp) {
 
 			ADrawLine(path, 20.0 + lx, 20.0 + ly, 20.0 + cx, 20.0 + cy);
 
-			ADrawLine(path, 20.0 + cx - 5, 20.0 + cy - 5, 20.0 + cx + 5, 20.0 + cy + 5);
-			ADrawLine(path, 20.0 + cx + 5, 20.0 + cy - 5, 20.0 + cx - 5, 20.0 + cy + 5);
+			if (pdp->flags & PLOTF_VECCROSSES) {
+				ADrawLine(path, 20.0 + cx - 5, 20.0 + cy - 5, 20.0 + cx + 5, 20.0 + cy + 5);
+				ADrawLine(path, 20.0 + cx + 5, 20.0 + cy - 5, 20.0 + cx - 5, 20.0 + cy + 5);
+			}
 
 			if (pdp->ntext != NULL)
 				ADrawText(tcol, 9.0, 20.0 + cx + 9, 20.0 + cy - 7, 0x1, pdp->ntext[i]);
@@ -1863,13 +1882,15 @@ void DoPlot(Display *mydisplay, Window mywindow, GC mygc, plot_info *pdp);
 /* return 0 on success, -1 on error */
 /* Hybrid Graph uses x1 : y1, y2, y3, y4, y5, y6 for up to 6 graph curves + */
 /* optional diagonal crosses at x7, y7 in yellow (x2 == NULL). */
-/* Vector uses x1, y1 to x2, y2 as a vector with a diagonal cross at x2, y2 all in black, */
-/* with annotation  ntext at the cross, */
-/* plus a diagonal cross at x7, y7 in yellow. The color for x7, y7 can be overidden by an  */
-/* array of colors mcols, and augmented by optional label text mtext. (x2 != NULL) */
+/* Vector uses x1, y1 to x2, y2 as a vector with a (optional) diagonal cross at x2, y2 */
+/* all in black with annotation ntext at the cross, */
+/* plus a (optiona) diagonal cross at x7, y7 in yellow. The color for x7, y7 can be */
+/* overidden by an array of colors mcols, plus optional label text mtext. (x2 != NULL) */
 /* n = number of points/vectors. -ve for reversed X axis */
 /* m = number of extra points (x2,y3 or x7,y7) */
+/* x8,y8 to x9,y9 are extra optional vectors with optional colors */
 static int do_plot_imp(
+	int flags,
     double xmin, double xmax, double ymin, double ymax,	/* Bounding box */
 	double ratio,	/* Aspect ratio of window, X/Y */
 	int dowait,		/* > 0 wait for user to hit space key, < 0 delat dowait seconds. */
@@ -1885,6 +1906,7 @@ static int do_plot_imp(
 		int j;
 		double xr,yr;
 
+		pd.flags = flags;
 		pd.dowait = dowait;
 		pd.ratio = ratio;
 
@@ -2174,11 +2196,10 @@ plot_info *pdp
 				cy = (int)((     yp[i] - pdp->mny) * pdp->scy + 0.5);
 
 				XDrawLine(mydisplay, mywindow, mygc, 10 + lx, pdp->sh - 10 - ly, 10 + cx, pdp->sh - 10 - cy);
-#ifdef CROSSES
-
-				XDrawLine(mydisplay, mywindow, mygc, 10 + cx - 5, pdp->sh - 10 - cy - 5, 10 + cx + 5, pdp->sh - 10 - cy + 5);
-				XDrawLine(mydisplay, mywindow, mygc, 10 + cx + 5, pdp->sh - 10 - cy - 5, 10 + cx - 5, pdp->sh - 10 - cy + 5);
-#endif
+				if (pdp->flags & PLOTF_GRAPHCROSSES) {
+					XDrawLine(mydisplay, mywindow, mygc, 10 + cx - 5, pdp->sh - 10 - cy - 5, 10 + cx + 5, pdp->sh - 10 - cy + 5);
+					XDrawLine(mydisplay, mywindow, mygc, 10 + cx + 5, pdp->sh - 10 - cy - 5, 10 + cx - 5, pdp->sh - 10 - cy + 5);
+				}
 				lx = cx;
 				ly = cy;
 			}
@@ -2200,10 +2221,14 @@ plot_info *pdp
 			cx = (int)((pdp->x2[i] - pdp->mnx) * pdp->scx + 0.5);
 			cy = (int)((pdp->yy[1][i] - pdp->mny) * pdp->scy + 0.5);
 
+			/* Vector */
 			XDrawLine(mydisplay, mywindow, mygc, 10 + lx, pdp->sh - 10 - ly, 10 + cx, pdp->sh - 10 - cy);
 
-			XDrawLine(mydisplay, mywindow, mygc, 10 + cx - 5, pdp->sh - 10 - cy - 5, 10 + cx + 5, pdp->sh - 10 - cy + 5);
-			XDrawLine(mydisplay, mywindow, mygc, 10 + cx + 5, pdp->sh - 10 - cy - 5, 10 + cx - 5, pdp->sh - 10 - cy + 5);
+			if (pdp->flags & PLOTF_VECCROSSES) {
+				/* Cross at end of vector */
+				XDrawLine(mydisplay, mywindow, mygc, 10 + cx - 5, pdp->sh - 10 - cy - 5, 10 + cx + 5, pdp->sh - 10 - cy + 5);
+				XDrawLine(mydisplay, mywindow, mygc, 10 + cx + 5, pdp->sh - 10 - cy - 5, 10 + cx - 5, pdp->sh - 10 - cy + 5);
+			}
 
 			if (pdp->ntext != NULL)
 				XDrawImageString(mydisplay, mywindow, mygc, 10 + cx + 5, pdp->sh - 10 - cy + 7,

@@ -710,6 +710,12 @@ static int write_S15Fixed16Number(double d, char *p) {
 	return 0;
 }
 
+static double round_S15Fixed16Number(double d) {
+	d = floor(d * 65536.0 + 0.5);		/* Beware! (int)(d + 0.5) doesn't work! */
+	d = d/65536.0;
+	return d;
+}
+
 /* Device coordinate as 8 bit value range 0.0 - 1.0 */
 static double read_DCS8Number(char *p) {
 	unsigned int rv;
@@ -779,7 +785,7 @@ static void read_PCSNumber(icc *icp, icColorSpaceSignature csig, double pcs[3], 
 	if (csig == icmSigPCSData)
 		csig = icp->header->pcs;
 	if (csig == icSigLabData) {
-		if (icp->ver != 0)
+		if (icp->ver >= icmVersion4_1)
 			csig = icmSigLabV4Data;
 		else
 			csig = icmSigLabV2Data;
@@ -824,7 +830,7 @@ static int write_PCSNumber(icc *icp, icColorSpaceSignature csig, double pcs[3], 
 	if (csig == icmSigPCSData)
 		csig = icp->header->pcs;
 	if (csig == icSigLabData) {
-		if (icp->ver != 0)
+		if (icp->ver >= icmVersion4_1)
 			csig = icmSigLabV4Data;
 		else
 			csig = icmSigLabV2Data;
@@ -5378,6 +5384,257 @@ double *in		/* Input array[outputChan] */
 }
 
 /* ----------------------------------------------- */
+/* Tune a single interpolated value. Based on lookup_clut functions (above) */
+
+/* Helper function to fine tune a single value interpolation */
+/* Return 0 on success, 1 if input clipping occured, 2 if output clipping occured */
+int icmLut_tune_value_nl(
+icmLut *p,		/* Pointer to Lut object */
+double *out,	/* Output array[inputChan] */
+double *in		/* Input array[outputChan] */
+) {
+	icc *icp = p->icp;
+	int rv = 0;
+	double *gp;					/* Pointer to grid cube base */
+	double co[MAX_CHAN];		/* Coordinate offset with the grid cell */
+	double *gw, GW[1 << 8];		/* weight for each grid cube corner */
+	double cout[MAX_CHAN];		/* Current output value */
+
+	if (p->inputChan <= 8) {
+		gw = GW;				/* Use stack allocation */
+	} else {
+		if ((gw = (double *) icp->al->malloc(icp->al, sat_mul((1 << p->inputChan), sizeof(double)))) == NULL) {
+			sprintf(icp->err,"icmLut_lookup_clut: malloc() failed");
+			return icp->errc = 2;
+		}
+	}
+
+	/* We are using an multi-linear (ie. Trilinear for 3D input) interpolation. */
+	/* The implementation here uses more multiplies that some other schemes, */
+	/* (for instance, see "Tri-Linear Interpolation" by Steve Hill, */
+	/* Graphics Gems IV, page 521), but has less involved bookeeping, */
+	/* needs less local storage for intermediate output values, does fewer */
+	/* output and intermediate value reads, and fp multiplies are fast on */
+	/* todays processors! */
+
+	/* Compute base index into grid and coordinate offsets */
+	{
+		unsigned int e;
+		double clutPoints_1 = (double)(p->clutPoints-1);
+		int    clutPoints_2 = p->clutPoints-2;
+		gp = p->clutTable;		/* Base of grid array */
+
+		for (e = 0; e < p->inputChan; e++) {
+			unsigned int x;
+			double val;
+			val = in[e] * clutPoints_1;
+			if (val < 0.0) {
+				val = 0.0;
+				rv |= 1;
+			} else if (val > clutPoints_1) {
+				val = clutPoints_1;
+				rv |= 1;
+			}
+			x = (unsigned int)floor(val);	/* Grid coordinate */
+			if (x > clutPoints_2)
+				x = clutPoints_2;
+			co[e] = val - (double)x;	/* 1.0 - weight */
+			gp += x * p->dinc[e];		/* Add index offset for base of cube */
+		}
+	}
+	/* Compute corner weights needed for interpolation */
+	{
+		unsigned int e;
+		int i, g = 1;
+		gw[0] = 1.0;
+		for (e = 0; e < p->inputChan; e++) {
+			for (i = 0; i < g; i++) {
+				gw[g+i] = gw[i] * co[e];
+				gw[i] *= (1.0 - co[e]);
+			}
+			g *= 2;
+		}
+	}
+	/* Now compute the current output value, and distribute the correction */
+	{
+		int i;
+		unsigned int f;
+		double w, *d, ww = 0.0;
+		for (f = 0; f < p->outputChan; f++)
+			cout[f] = 0.0;
+		for (i = 0; i < (1 << p->inputChan); i++) {	/* For all other corners of cube */
+			w = gw[i];				/* Strength reduce */
+			ww += w * w;			/* Sum of weights squared */
+			d = gp + p->dcube[i];
+			for (f = 0; f < p->outputChan; f++)
+				cout[f] += w * d[f];
+		}
+
+		/* We distribute the correction needed in proportion to the */
+		/* interpolation weighting, so the biggest correction is to the */
+		/* closest vertex. */
+
+		for (f = 0; f < p->outputChan; f++)
+			cout[f] = (out[f] - cout[f])/ww;	/* Amount to distribute */
+
+		for (i = 0; i < (1 << p->inputChan); i++) {	/* For all other corners of cube */
+			w = gw[i];				/* Strength reduce */
+			d = gp + p->dcube[i];
+			for (f = 0; f < p->outputChan; f++) {
+				d[f] += w * cout[f];			/* Apply correction */
+				if (d[f] < 0.0) {
+					d[f] = 0.0;
+					rv |= 2;
+				} else if (d[f] > 1.0) {
+					d[f] = 1.0;
+					rv |= 2;
+				} 
+			}
+		}
+	}
+
+	if (gw != GW)
+		icp->al->free(icp->al, (void *)gw);
+	return rv;
+}
+
+/* Helper function to fine tune a single value interpolation */
+/* Return 0 on success, 1 if input clipping occured, 2 if output clipping occured */
+int icmLut_tune_value_sx(
+icmLut *p,		/* Pointer to Lut object */
+double *out,	/* Output array[inputChan] */
+double *in		/* Input array[outputChan] */
+) {
+	int rv = 0;
+	double *gp;					/* Pointer to grid cube base */
+	double co[MAX_CHAN];		/* Coordinate offset with the grid cell */
+	int    si[MAX_CHAN];		/* co[] Sort index, [0] = smalest */
+	double cout[MAX_CHAN];		/* Current output value */
+
+	/* We are using a simplex (ie. tetrahedral for 3D input) interpolation. */
+	/* This method is more appropriate for XYZ/RGB/CMYK input spaces, */
+
+	/* Compute base index into grid and coordinate offsets */
+	{
+		unsigned int e;
+		double clutPoints_1 = (double)(p->clutPoints-1);
+		int    clutPoints_2 = p->clutPoints-2;
+		gp = p->clutTable;		/* Base of grid array */
+
+		for (e = 0; e < p->inputChan; e++) {
+			unsigned int x;
+			double val;
+			val = in[e] * clutPoints_1;
+			if (val < 0.0) {
+				val = 0.0;
+				rv |= 1;
+			} else if (val > clutPoints_1) {
+				val = clutPoints_1;
+				rv |= 1;
+			}
+			x = (unsigned int)floor(val);		/* Grid coordinate */
+			if (x > clutPoints_2)
+				x = clutPoints_2;
+			co[e] = val - (double)x;	/* 1.0 - weight */
+			gp += x * p->dinc[e];		/* Add index offset for base of cube */
+		}
+	}
+	/* Do insertion sort on coordinates, smallest to largest. */
+	{
+		int f, vf;
+		unsigned int e;
+		double v;
+		for (e = 0; e < p->inputChan; e++)
+			si[e] = e;						/* Initial unsorted indexes */
+
+		for (e = 1; e < p->inputChan; e++) {
+			f = e;
+			v = co[si[f]];
+			vf = f;
+			while (f > 0 && co[si[f-1]] > v) {
+				si[f] = si[f-1];
+				f--;
+			}
+			si[f] = vf;
+		}
+	}
+	/* Now compute the current output value, and distribute the correction */
+	{
+		unsigned int e, f;
+		double w, ww = 0.0;		/* Current vertex weight, sum of weights squared */
+		double *ogp = gp;		/* Pointer to grid cube base */
+
+		w = 1.0 - co[si[p->inputChan-1]];		/* Vertex at base of cell */
+		ww += w * w;							/* Sum of weights squared */
+		for (f = 0; f < p->outputChan; f++)
+			cout[f] = w * gp[f];
+
+		for (e = p->inputChan-1; e > 0; e--) {	/* Middle verticies */
+			w = co[si[e]] - co[si[e-1]];
+			ww += w * w;							/* Sum of weights squared */
+			gp += p->dinc[si[e]];				/* Move to top of cell in next largest dimension */
+			for (f = 0; f < p->outputChan; f++)
+				cout[f] += w * gp[f];
+		}
+
+		w = co[si[0]];
+		ww += w * w;							/* Sum of weights squared */
+		gp += p->dinc[si[0]];					/* Far corner from base of cell */
+		for (f = 0; f < p->outputChan; f++)
+			cout[f] += w * gp[f];
+
+		/* We distribute the correction needed in proportion to the */
+		/* interpolation weighting, so the biggest correction is to the */
+		/* closest vertex. */
+		for (f = 0; f < p->outputChan; f++)
+			cout[f] = (out[f] - cout[f])/ww;	/* Amount to distribute */
+
+		gp = ogp;
+		w = 1.0 - co[si[p->inputChan-1]];		/* Vertex at base of cell */
+		for (f = 0; f < p->outputChan; f++) {
+			gp[f] += w * cout[f];			/* Apply correction */
+			if (gp[f] < 0.0) {
+				gp[f] = 0.0;
+				rv |= 2;
+			} else if (gp[f] > 1.0) {
+				gp[f] = 1.0;
+				rv |= 2;
+			}
+		}
+
+		for (e = p->inputChan-1; e > 0; e--) {	/* Middle verticies */
+			w = co[si[e]] - co[si[e-1]];
+			gp += p->dinc[si[e]];				/* Move to top of cell in next largest dimension */
+			for (f = 0; f < p->outputChan; f++) {
+				gp[f] += w * cout[f];			/* Apply correction */
+				if (gp[f] < 0.0) {
+					gp[f] = 0.0;
+					rv |= 2;
+				} else if (gp[f] > 1.0) {
+					gp[f] = 1.0;
+					rv |= 2;
+				}
+			}
+		}
+
+		w = co[si[0]];
+		gp += p->dinc[si[0]];					/* Far corner from base of cell */
+		for (f = 0; f < p->outputChan; f++) {
+			gp[f] += w * cout[f];			/* Apply correction */
+			if (gp[f] < 0.0) {
+				gp[f] = 0.0;
+				rv |= 2;
+			} else if (gp[f] > 1.0) {
+				gp[f] = 1.0;
+				rv |= 2;
+			}
+		}
+	}
+	return rv;
+}
+
+
+/* ----------------------------------------------- */
 /* Pseudo - Hilbert count sequencer */
 
 /* This multi-dimensional count sequence is a distributed */
@@ -6815,6 +7072,8 @@ static icmBase *new_icmLut(
 	icmLut *p;
 	if ((p = (icmLut *) icp->al->calloc(icp->al,1,sizeof(icmLut))) == NULL)
 		return NULL;
+	p->icp      = icp;
+
 	p->ttype    = icSigLut16Type;
 	p->refcount = 1;
 	p->get_size = icmLut_get_size;
@@ -6835,8 +7094,7 @@ static icmBase *new_icmLut(
 
 	/* Set method */
 	p->set_tables = icmLut_set_tables;
-
-	p->icp      = icp;
+	p->tune_value = icmLut_tune_value_sx;		/* Default to most likely simplex */
 
 	/* Set matrix to reasonable default */
 	for (i = 0; i < 3; i++)
@@ -7956,7 +8214,7 @@ static int icmColorantTable_allocate(
 	if (p->count != p->_count) {
 		unsigned int i;
 		if (ovr_mul(p->count, sizeof(icmColorantTableVal))) {
-			sprintf(icp->err,"icmColorantTable_alloc: count overflow (%d of %ld bytes)",p->count,sizeof(icmColorantTableVal));
+			sprintf(icp->err,"icmColorantTable_alloc: count overflow (%d of %lu bytes)",p->count,sizeof(icmColorantTableVal));
 			return icp->errc = 1;
 		}
 		if (p->data != NULL)
@@ -10799,10 +11057,18 @@ static int icmHeader_read(
     p->cmmId = read_SInt32Number(buf + 4);	/* CMM for profile */
 	tt       = read_UInt8Number(buf + 8);	/* Raw major version number */
     p->majv  = (tt >> 4) * 10 + (tt & 0xf);	/* Integer major version number */
-	icp->ver = p->majv > 3 ? 1 : 0;			/* Set major version flag in icc */
-	tt       = read_UInt8Number(buf + 9);	/* Raw minor/bug fix version numbers */
+	tt       = read_UInt8Number(buf + 9);	/* Raw minor & bug fix version numbers */
     p->minv  = (tt >> 4);					/* Integer minor version number */
     p->bfv   = (tt & 0xf);					/* Integer bug fix version number */
+	if (p->majv < 3) {						/* Set version class */
+    	if (p->minv >= 4)
+			icp->ver = icmVersion2_4;
+		else if (p->minv >= 3)
+			icp->ver = icmVersion2_3;
+		else
+			icp->ver = icmVersionDefault;
+	} else
+		icp->ver = icmVersion4_1;
 	p->deviceClass = (icProfileClassSignature)
 	           read_SInt32Number(buf + 12);	/* Type of profile */
     p->colorSpace = (icColorSpaceSignature)
@@ -10829,13 +11095,13 @@ static int icmHeader_read(
 	}
     p->creator = read_SInt32Number(buf + 80);	/* Profile creator */
 
-	for (tt = 0; tt < 16; tt++)
-		p->id[tt] = icp->ver ? read_UInt8Number(buf + 84 + tt) : 0;	/* Profile ID */
+	for (tt = 0; tt < 16; tt++)					/* Profile ID */
+		p->id[tt] = icp->ver >= icmVersion4_1 ? read_UInt8Number(buf + 84 + tt) : 0;
 
 	icp->al->free(icp->al, buf);
 
 #ifndef ENABLE_V4
-	if (icp->ver) {
+	if (icp->ver >= icmVersion4_1) {
 		sprintf(icp->err,"icmHeader_read: ICC V4 not supported!");
 		return icp->errc = 1;
 	}
@@ -10884,6 +11150,7 @@ static int icmHeader_write(
 		icp->al->free(icp->al, buf);
 		return icp->errc = 1;
 	}
+	// ~~~ Hmm. We're not checking ->ver is >= corresponding header version number ~~
 	tt = ((p->majv/10) << 4) + (p->majv % 10);
 	if ((rv = write_UInt8Number(tt, buf + 8)) != 0) {	/* Raw major version number */
 		sprintf(icp->err,"icmHeader_write: Uint8Number major version");
@@ -10961,7 +11228,7 @@ static int icmHeader_write(
 		icp->al->free(icp->al, buf);
 		return icp->errc = rv;
 	}
-	if (doid == 0 && icp->ver) {	/* ID is V4.0+ feature */
+	if (doid == 0 && icp->ver >= icmVersion4_1) {	/* ID is V4.0+ feature */
 		for (tt = 0; tt < 16; tt++) {
 		    if ((rv = write_UInt8Number(p->id[tt], buf + 84 + tt)) != 0) { /* Profile ID */
 				sprintf(icp->err,"icmHeader_write: UInt8Number creator");
@@ -11007,7 +11274,7 @@ static void icmHeader_dump(
 	op->gprintf(op,"  Rndrng Intnt = %s\n", string_RenderingIntent(p->renderingIntent));
 	op->gprintf(op,"  Illuminant   = %s\n", string_XYZNumber_and_Lab(&p->illuminant));
 	op->gprintf(op,"  Creator      = %s\n", tag2str(p->creator));	/* ~~~ */
-	if (p->icp->ver) {	/* V4.0+ feature */
+	if (p->icp->ver >= icmVersion4_1) {	/* V4.0+ feature */
 		for (i = 0; i < 16; i++) {		/* Check if ID has been set */
 			if (p->id[i] != 0)
 				break;
@@ -11796,7 +12063,7 @@ static int icc_write_x(
 
 	/* If V4.0+, Compute the MD5 id for the profile. */
 	/* We do this by writing to a fake icmFile */
-	if (p->ver) {
+	if (p->ver >= icmVersion4_1) {
 		icmMD5 *md5 = NULL;
 		icmFile *ofp, *dfp = NULL;
 
@@ -11816,13 +12083,13 @@ static int icc_write_x(
 		ofp = p->fp;
 		p->fp = dfp;
 
-		/* Dumy write the header */
+		/* Dummy write the header */
 		if ((rv = p->header->write(p->header, 0, 1)) != 0) {
 			p->al->free(p->al, buf);
 			return rv;
 		}
 	
-		/* Dumy write the tag table */
+		/* Dummy write the tag table */
 		if (   p->fp->seek(p->fp, 128) != 0
 		    || p->fp->write(p->fp, buf, 1, len) != len) {
 			sprintf(p->err,"icc_write: seek() or write() failed");
@@ -11830,7 +12097,7 @@ static int icc_write_x(
 			return p->errc = 1;
 		}
 	
-		/* Dumy write all the tag element data */
+		/* Dummy write all the tag element data */
 		/* (We invert meaning of touched here) */
 		for (i = 0; i < p->count; i++) {	/* For all the tag element data */
 			if (p->data[i].objp->touched == 0)
@@ -12876,7 +13143,7 @@ static int getNormFunc(
 		if (tagType == icSigLut16Type)	/* Lut16 retains legacy encoding */
 			csig = icmSigLabV2Data;
 		else {							/* Other tag types use version specific encoding */
-			if (icp->ver)
+			if (icp->ver >= icmVersion4_1)
 				csig = icmSigLabV4Data;
 			else
 				csig = icmSigLabV2Data;
@@ -12978,7 +13245,7 @@ static int getRange(
 		if (tagType == icSigLut16Type)	/* Lut16 retains legacy encoding */
 			csig = icmSigLabV2Data;
 		else {							/* Other tag types use version specific encoding */
-			if (icp->ver)
+			if (icp->ver >= icmVersion4_1)
 				csig = icmSigLabV4Data;
 			else
 				csig = icmSigLabV2Data;
@@ -13745,6 +14012,74 @@ double icmPlaneDist3(double eq[4], double p[3]) {
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Given 2 2D points, compute a plane equation. */
+/* The normal will be right handed given the order of the points */
+/* The plane equation will be the 2 normal components and the constant. */
+/* Return nz if any points are cooincident or co-linear */
+int icmPlaneEqn2(double eq[3], double p0[2], double p1[2]) {
+	double ll, v1[3];
+
+	/* Compute vectors along edge */
+	v1[0] = p1[0] - p0[0];
+	v1[1] = p1[1] - p0[1];
+
+	/* Normal to vector */
+	eq[0] =  v1[1];
+	eq[1] = -v1[0];
+
+	/* Normalise the equation */
+	ll = sqrt(eq[0] * eq[0] + eq[1] * eq[1]);
+	if (ll < 1e-10) {
+		return 1;
+	}
+	eq[0] /= ll;
+	eq[1] /= ll;
+
+	/* Compute the plane equation constant */
+	eq[2] = - (eq[0] * p0[0])
+	        - (eq[1] * p0[1]);
+
+	return 0;
+}
+
+/* Given a 2D point and a plane equation, return the signed */
+/* distance from the plane. The distance will be +ve if the point */
+/* is to the right of the plane formed by two points in order */
+double icmPlaneDist2(double eq[3], double p[2]) {
+	double rv;
+
+	rv = eq[0] * p[0]
+	   + eq[1] * p[1]
+	   + eq[2];
+
+	return rv;
+}
+
+/* Given two infinite 2D lines define by 4 points, compute the intersection. */
+/* Return nz if there is no intersection (lines are parallel) */
+int icmLineIntersect2(double res[2], double p1[2], double p2[2], double p3[2], double p4[2]) {
+	/* Compute by determinants */
+	double x1y2_y1x2 = p1[0] * p2[1] - p1[1] * p2[0];
+	double x3y4_y3x4 = p3[0] * p4[1] - p3[1] * p4[0];
+	double x1_x2     = p1[0] - p2[0];
+	double y1_y2     = p1[1] - p2[1];
+	double x3_x4     = p3[0] - p4[0];
+	double y3_y4     = p3[1] - p4[1];
+	double num;							/* Numerator */
+
+	num = x1_x2 * y3_y4 - y1_y2 * x3_x4;
+
+	if (fabs(num) < 1e-10)
+		return 1;
+
+	res[0] = (x1y2_y1x2 * x3_x4 - x1_x2 * x3y4_y3x4)/num;
+	res[1] = (x1y2_y1x2 * y3_y4 - y1_y2 * x3y4_y3x4)/num;
+
+	return 0;
+}
+
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
 /* CIE Y (range 0 .. 1) to perceptual CIE 1976 L* (range 0 .. 100) */
 double
 icmY2L(double val) {
@@ -14387,6 +14722,8 @@ ICCLIB_API double icmXYZCIE2K(icmXYZNumber *w, double *in0, double *in1) {
 /* Chromatic adaptation transform utility */
 /* Return a 3x3 chromatic adaptation matrix */
 /* Use icmMulBy3x3(dst, mat, src) */
+/* NOTE that to transform primaries they */
+/* must be mat[XYZ][RGB] format! */
 void icmChromAdaptMatrix(
 	int flags,				/* Use Bradford, Transform given matrix flags */
 	icmXYZNumber d_wp,		/* Destination white point */
@@ -14464,7 +14801,7 @@ int icmRGBprim2matrix(
 	icmXYZNumber red,		/* Red colorant */
 	icmXYZNumber green,		/* Green colorant */
 	icmXYZNumber blue,		/* Blue colorant */
-	double mat[3][3]		/* Destination matrix */
+	double mat[3][3]		/* Destination matrix[RGB][XYZ] */
 ) {
 	double tmat[3][3];
 	double t[3];
@@ -14497,16 +14834,70 @@ int icmRGBprim2matrix(
 
 	/* Now formulate the transform matrix */
 	mat[0][0] = red.X   * t[0];
-	mat[0][1] = green.X * t[1];
-	mat[0][2] = blue.X  * t[2];
-	mat[1][0] = red.Y   * t[0];
+	mat[1][0] = green.X * t[1];
+	mat[2][0] = blue.X  * t[2];
+	mat[0][1] = red.Y   * t[0];
 	mat[1][1] = green.Y * t[1];
-	mat[1][2] = blue.Y  * t[2];
-	mat[2][0] = red.Z   * t[0];
-	mat[2][1] = green.Z * t[1];
+	mat[2][1] = blue.Y  * t[2];
+	mat[0][2] = red.Z   * t[0];
+	mat[1][2] = green.Z * t[1];
 	mat[2][2] = blue.Z  * t[2];
 
 	return 0;
+}
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - */
+/* Pre-round RGB device primary values to ensure that */
+/* the sum of the quantized primaries is the same as */
+/* the quantized sum. */
+void quantizeRGBprimsS15Fixed16(
+	double mat[3][3]		/* matrix[RGB][XYZ] */
+) {
+	int i, j;
+	double sum[3];
+
+//	printf("D50 = %f %f %f\n",icmD50.X, icmD50.Y, icmD50.Z);
+
+	/* Compute target sum of primary XYZ */
+	for (i = 0; i < 3; i++) {
+		sum[i] = 0.0;
+		for (j = 0; j < 3; j++)
+			sum[i] += mat[j][i];
+	}
+//	printf("Sum = %f %f %f\n",sum[0], sum[1], sum[2]);
+
+	/* Pre-quantize the primary XYZ's, and then ensure that the */
+	/* sum of the quantized values is the quantized sum by assigning */
+	/* the rounding error to the largest component. */
+	for (i = 0; i < 3; i++) {
+		int bix = 0;
+		double bval = -1e9;
+
+		/* locate the largest and quantize each component */
+		for (j = 0; j < 3; j++) {
+			if (fabs(mat[j][i]) > bval) {	/* Locate largest */
+				bix = j;
+				bval = fabs(mat[j][i]);
+			} 
+			mat[j][i] = round_S15Fixed16Number(mat[j][i]);
+		}
+
+		/* Compute the value the largest has to be */
+		/* to ensure that sum of the quantized values is */
+		/* equal to the quantized sum */
+		for (j = 0; j < 3; j++) {
+			if (j == bix)
+				continue;
+			sum[i] -= mat[j][i];
+		}
+		mat[bix][i] = round_S15Fixed16Number(sum[i]);
+
+		/* Check the sum of the quantized values */
+//		sum[i] = 0.0;
+//		for (j = 0; j < 3; j++)
+//			sum[i] += mat[j][i];
+	}
+//	printf("Q Sum = %f %f %f\n",sum[0], sum[1], sum[2]);
 }
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -17398,8 +17789,10 @@ icc_new_icmLuLut(
 
 		if (use_sx) {
 			p->lookup_clut = p->lut->lookup_clut_sx;
+			p->lut->tune_value = icmLut_tune_value_sx;
 		} else {
 			p->lookup_clut = p->lut->lookup_clut_nl;
+			p->lut->tune_value = icmLut_tune_value_nl;
 		}
 	}
 #else	/* Development code */
@@ -18172,7 +18565,7 @@ icmAlloc *al			/* Memory allocator */
 	if ((p = (icc *) al->calloc(al, 1,sizeof(icc))) == NULL) {
 		return NULL;
 	}
-	p->ver = 0;			/* default is V2 profile */
+	p->ver = icmVersionDefault;		/* default is V2.2.0 profile */
 
 	p->al = al;			/* Heap allocator */
 

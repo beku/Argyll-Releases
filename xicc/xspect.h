@@ -288,7 +288,7 @@ xsp2cie *new_xsp2cie(
 
 	icxObserverType obType,			/* Observer */
 	xspect        custObserver[3],
-	icColorSpaceSignature  rcs,		/* Return color space, icSigXYZData or icSigLabData */
+	icColorSpaceSignature  rcs,		/* Return color space, icSigXYZData or D50 icSigLabData */
 									/* ** Must be icSigXYZData if SALONEINSTLIB ** */
 	icxClamping clamp				/* NZ to clamp XYZ/Lab to be +ve */
 );

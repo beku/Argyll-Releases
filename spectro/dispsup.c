@@ -242,6 +242,9 @@ a1log *log				/* Verb, debug & error log */
 		return -1;
 	}
 
+// ~~~~9999 should we call config_inst_displ(p) instead of badly duplicating
+//  the instrument setup here ???
+
 	itype = p->get_itype(p);			/* Actual type */
 	p->capabilities(p, &cap, &cap2, &cap3);
 
@@ -657,7 +660,7 @@ static int disprd_read_drift(
 	if (p->bdrift == 0) {	/* Must be just wdrift */
 		boff = eoff = 1;
 		dno = 1;
-	} else if (p->bdrift == 0) {	/* Must be just bdrift */
+	} else if (p->wdrift == 0) {	/* Must be just bdrift */
 		boff = eoff = 0;
 		dno = 1;
 	} else {				/* Must be both */
@@ -1328,6 +1331,8 @@ static int disprd_fake_read(
 	if (icmRGBprim2matrix(white, red, green, blue, mat))
 		error("Fake read unexpectedly got singular matrix\n");
 
+	icmTranspose3x3(mat, mat);	/* Convert [RGB][XYZ] to [XYZ][RGB] */
+
 	icmSetUnity3x3(xmat);
 
 	if (p->fake2 == 1) {
@@ -1756,6 +1761,10 @@ char *disprd_err(int en) {
 			return "Video encoding requested for MadVR display - use MadVR to set video encoding";
 		case 14:
 			return "Instrument has no set refresh rate capability";
+		case 15:
+			return "Unknown calibration display type selection";
+		case 16:
+			return "Must use BASE calibration display type selection";
 	}
 	return "Unknown";
 }
@@ -1879,18 +1888,19 @@ static int config_inst_displ(disprd *p) {
 	}
 	
 	/* Set the display type */
-
 	if (p->dtype != 0) {
 		if (cap2 & inst2_disptype) {
 			int ix;
 			if ((ix = inst_get_disptype_index(p->it, p->dtype, p->docbid)) < 0) {
 				a1logd(p->log,1,"Display type selection '%c' is not valid for instrument\n",p->dtype);
-				return 2;
+				if (p->docbid)
+					return 16;
+				return 15;
 			}
 			if ((rv = p->it->set_disptype(p->it, ix)) != inst_ok) {
-				a1logd(p->log,1,"Setting display type failed failed with '%s' (%s)\n",
+				a1logd(p->log,1,"Setting display type failed with '%s' (%s)\n",
 				       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
-				return 2;
+				return 15;
 			}
 		} else
 			printf("Display type ignored - instrument doesn't support display type\n");
@@ -1936,19 +1946,29 @@ static int config_inst_displ(disprd *p) {
 		}
 	}
 	
-	if (p->sets != NULL
-	 || ((cap2 & inst2_ccss) != 0 && p->obType != icxOT_default)) {
+	/* Observer */
+	if ((cap2 & inst2_ccss) != 0 && p->obType != icxOT_default) {
 
 		if ((cap2 & inst2_ccss) == 0) {
-			a1logd(p->log,1,"Instrument doesn't support ccss calibration\n");
+			a1logd(p->log,1,"Instrument doesn't support ccss calibration and we need it\n");
 			return 11;
 		}
 		if ((rv = p->it->get_set_opt(p->it, inst_opt_set_ccss_obs, p->obType, p->custObserver))
-			                                                                        != inst_ok) {
+			                                                                      != inst_ok) {
 			a1logd(p->log,1,"inst_opt_set_ccss_obs returned '%s' (%s)\n",
 			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
 			return 2;
 		}
+	}
+
+	/* Custom CCSS */
+	if (p->sets != NULL) {
+
+		if ((cap2 & inst2_ccss) == 0) {
+			a1logd(p->log,1,"Instrument doesn't support ccss calibration and we need it\n");
+			return 11;
+		}
+
 		if ((rv = p->it->col_cal_spec_set(p->it, p->sets, p->no_sets)) != inst_ok) {
 			a1logd(p->log,1,"col_cal_spec_set returned '%s' (%s)\n",
 			       p->it->inst_interp_error(p->it, rv), p->it->interp_error(p->it, rv));
@@ -2220,6 +2240,7 @@ a1log *log      	/* Verb, debug & error log */
 			a1logd(log,1,"new_disprd failed because new_madvrwin failed\n");
 			p->del(p);
 			if (errc != NULL) *errc = 3;
+			return NULL;
 		}
 #endif
 	} else {

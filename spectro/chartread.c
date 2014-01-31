@@ -2060,7 +2060,7 @@ usage() {
 	if (icmps != NULL)
 		icmps->del(icmps);
 	exit(1);
-	}
+}
 
 int main(int argc, char *argv[]) {
 	int i, j;
@@ -2198,6 +2198,7 @@ int main(int argc, char *argv[]) {
 
 			/* Scan tolerance ratio */
 			else if (argv[fa][1] == 'T') {
+				fa = nfa;
 				if (na == NULL)
 					usage();
 				scan_tol = atof(na);

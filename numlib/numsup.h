@@ -279,6 +279,17 @@ extern char cr_char;
 
 /* =========================================================== */
 
+/* reallocate and clear new allocation */
+void *recalloc(		/* Return new address */
+void *ptr,					/* Current address */
+size_t cnum,				/* Current number and unit size */
+size_t csize,
+size_t nnum,				/* New number and unit size */
+size_t nsize
+); 
+
+/* =========================================================== */
+
 /* Numerical recipes vector/matrix support functions */
 /* Note that the index arguments are the inclusive low and high values */
 

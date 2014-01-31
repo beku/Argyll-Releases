@@ -1,7 +1,7 @@
 
 /* 
  * International Color Consortium Format Library (icclib)
- * Check various aspects of CMYK device link, 
+ * Check various aspects of RGB or CMYK device link, 
  * and RGB/CMYK profile transfer characteristics.
  *
  * Author:  Graeme W. Gill
@@ -244,8 +244,8 @@ main(
 			chans[3] = 0;
 		}
 	
-		if (outs != icSigCmykData && outs != icSigLabData) {
-			error("Expecting Lab or CMYK output space");
+		if (outs != icSigCmykData && outs != icSigLabData && outs != icSigRgbData) {
+			error("Expecting Lab or CMYK or RGB output space");
 		}
 
 		if (outs == icSigLabData)

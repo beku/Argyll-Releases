@@ -27,6 +27,7 @@
 	then suppliment the measured patches. Would have to add another
 	set of measurement columns to .ti1 & .ti2 to carry the
 	already measured values through, or do clumbsy post merge ? 
+	(Latter is easiest).
 
 	Would be nice to be able to generate secondary
 	color ramps (ie. CMY for RGB space, RGB for CMYK space.)
@@ -104,6 +105,7 @@
 #undef ADDRECCLIPPOINTS	/* Add ink limited clipping points to regular grid */
 #define EMPH_NEUTRAL	/* Emphasise neutral axis, like CIE94 does */
 #define NEMPH_DEFAULT 0.5	/* Default neutral axis emphasis == 2 x CIE94 */
+#define XPOW_DEFAULT 1.0	/* Default extra device power value = none */
 #define DEMPH_DEFAULT 1.0	/* Default dark region emphasis == none */
 #define DEFANGLE 0.3333	/* For simdlat and simplat */
 #define SIMDLAT_TYPE SIMDLAT_BCC	/* Simdlat geometry type */
@@ -172,7 +174,8 @@ struct _pcpt {
 
 	/* Tuning parameters */
 	double nemph;		/* neutral emphasis, 0.0 - 1.0. Default 0.35 for == CIE94 */
-	double idemph;		/* inv. dark emphasis, 1.0 - 1.0/4.0. Default 1.0 == none */
+	double idemph;		/* inv. dark emphasis, 1.0 - 4.0. Default 1.0 == none */
+	double ixpow;		/* inv. extra power Default 1.0 == none */
 
 	/* ICC profile based */
 	icmFile *fp;
@@ -208,10 +211,10 @@ pcpt_to_XYZ(pcpt *s, double *out, double *in) {
 
 	if (s->xmask == s->nmask) {
 		for (e = 0; e < s->di; e++)
-			inv[e] = in[e];
+			inv[e] = icx_powlike(in[e], s->ixpow);
 	} else {
 		for (e = 0; e < s->di; e++)
-			inv[e] = 1.0 - in[e];
+			inv[e] = 1.0 - icx_powlike(in[e], s->ixpow);
 	}
 	if (s->luo2 != NULL)
 		s->luo2->lookup(s->luo2, out, inv);
@@ -238,10 +241,10 @@ pcpt_to_rLab(pcpt *s, double *out, double *in) {
 
 	if (s->xmask == s->nmask) {
 		for (e = 0; e < s->di; e++)
-			inv[e] = in[e];
+			inv[e] = icx_powlike(in[e], s->ixpow);
 	} else {
 		for (e = 0; e < s->di; e++)
-			inv[e] = 1.0 - in[e];
+			inv[e] = 1.0 - icx_powlike(in[e], s->ixpow);
 	}
 	if (s->luo != NULL)
 		s->luo->lookup(s->luo, out, inv);
@@ -259,6 +262,7 @@ pcpt_to_rLab(pcpt *s, double *out, double *in) {
 
 /* Perceptual conversion function */
 /* Internal device values 0.0 - 1.0 are converted into perceptually uniform 0.0 - 100.0 */
+/* This is used by optimal spread functions ? */
 static void
 pcpt_to_nLab(pcpt *s, double *out, double *in) {
 	int e;
@@ -266,10 +270,10 @@ pcpt_to_nLab(pcpt *s, double *out, double *in) {
 
 	if (s->xmask == s->nmask) {
 		for (e = 0; e < s->di; e++)
-			inv[e] = in[e];
+			inv[e] = icx_powlike(in[e], s->ixpow);
 	} else {
 		for (e = 0; e < s->di; e++)
-			inv[e] = 1.0 - in[e];
+			inv[e] = 1.0 - icx_powlike(in[e], s->ixpow);
 	}
 
 	/* If we have some sort of perceptual conversion */
@@ -301,6 +305,7 @@ pcpt_to_nLab(pcpt *s, double *out, double *in) {
 #endif
 
 		/* Dark emphasis */
+		/* This doesn't actually match how demph is applied to device values... */
 		if (s->idemph < 1.0) {
 			double vv = lab[0];
 			lab[0] = 100.0 * pow(lab[0]/100.0, s->idemph);
@@ -628,7 +633,8 @@ inkmask nmask,			/* internal xcolorants mask */
 double *ilimit,			/* ink sum limit (scale 1.0) input and return, -1 if default */
 double *uilimit,		/* underlying ink sum limit (scale 1.0) input and return, -1 if default */
 double nemph,			/* Neutral emphasis, 0.0 - 1.0. < 0.0 for default == CIE94 */
-double demph			/* Dark emphasis, 1.0 - 4.0. < 0.0 for default == none */
+double demph,			/* Dark emphasis, 1.0 - 4.0. < 0.0 for default == none */
+double xpow				/* Extra device power, default = none */
 ) {
 	int e;
 	pcpt *s;
@@ -653,10 +659,15 @@ double demph			/* Dark emphasis, 1.0 - 4.0. < 0.0 for default == none */
 
 	if (nemph < 0.0)
 		nemph = NEMPH_DEFAULT;
+	s->nemph = nemph;
+
 	if (demph < 0.0)
 		demph = DEMPH_DEFAULT;
-	s->nemph = nemph;
-	s->idemph = 1.0/demph;
+	s->idemph = demph;
+
+	if (xpow < 0.0)
+		xpow = XPOW_DEFAULT;
+	s->ixpow = xpow;
 
 	/* See if we have a profile */
 	if (profName != NULL
@@ -1281,7 +1292,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	/* Deal with ICC, MPP or fallback profile */
-	if ((pdata = new_pcpt(pname, xmask, nmask, &ilimit, &uilimit, nemph, demph)) == NULL) {
+	if ((pdata = new_pcpt(pname, xmask, nmask, &ilimit, &uilimit, nemph, demph, xpow)) == NULL) {
 		error("Perceptual lookup object creation failed");
 	}
 
@@ -1448,21 +1459,23 @@ int main(int argc, char *argv[]) {
 					val[e] = 0.0;			/* White is no colorant */
 				}
 			}
-	
+
 			/* Apply general filter */
 			if (filter && dofilt(pdata, filt, val))
 				continue;
 
 			sprintf(buf,"%d",id++);
 			ary[0].c = buf;
-			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
+
 			if (xmask == nmask) {
 				for (e = 0; e < di; e++)
-					ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+					ary[1 + e].d = 100.0 * val[e];
 			} else {
 				for (e = 0; e < di; e++)
-					ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+					ary[1 + e].d = 100.0 * (1.0 - val[e]);
 			}
+
+			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 			ary[1 + di + 0].d = 100.0 * XYZ[0];
 			ary[1 + di + 1].d = 100.0 * XYZ[1];
 			ary[1 + di + 2].d = 100.0 * XYZ[2];
@@ -1518,14 +1531,16 @@ int main(int argc, char *argv[]) {
 
 			sprintf(buf,"%d",id++);
 			ary[0].c = buf;
-			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
+
 			if (xmask == nmask) {
 				for (e = 0; e < di; e++)
-					ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+					ary[1 + e].d = 100.0 * val[e];
 			} else {
 				for (e = 0; e < di; e++)
-					ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+					ary[1 + e].d = 100.0 * (1.0 - val[e]);
 			}
+
+			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 			ary[1 + di + 0].d = 100.0 * XYZ[0];
 			ary[1 + di + 1].d = 100.0 * XYZ[1];
 			ary[1 + di + 2].d = 100.0 * XYZ[2];
@@ -1550,7 +1565,7 @@ int main(int argc, char *argv[]) {
 	
 	}
 
-	/* Primary wedge steps */
+	/* Primary (single channel) wedge steps */
 	if (ssteps > 0)	{
 		sprintf(buf,"%d",ssteps);
 		pp->add_kword(pp, 0, "SINGLE_DIM_STEPS",buf, NULL);
@@ -1569,7 +1584,9 @@ int main(int argc, char *argv[]) {
 						val[e] = 0.0;
 				}
 
-				pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
+				/* Extra power and dark emphasis */
+				for (e = 0; e < di; e++)
+					val[e] = icx_powlike(val[e], xpow * demph);
 
 				/* See if it is already in the fixed list */
 				if (fxlist != NULL) {
@@ -1596,13 +1613,16 @@ int main(int argc, char *argv[]) {
 		
 					sprintf(buf,"%d",id++);
 					ary[0].c = buf;
+
 					if (xmask == nmask) {
 						for (e = 0; e < di; e++)
-							ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+							ary[1 + e].d = 100.0 * val[e];
 					} else {
 						for (e = 0; e < di; e++)
-							ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+							ary[1 + e].d = 100.0 * (1.0 - val[e]);
 					}
+
+					pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 					ary[1 + di + 0].d = 100.0 * XYZ[0];
 					ary[1 + di + 1].d = 100.0 * XYZ[1];
 					ary[1 + di + 2].d = 100.0 * XYZ[2];
@@ -1659,16 +1679,17 @@ int main(int argc, char *argv[]) {
 					val[e] = 0.0;
 			}
 
+			/* Extra power and dark emphasis */
+			for (e = 0; e < di; e++)
+				val[e] = icx_powlike(val[e], xpow * demph);
+
 			/* Apply general filter */
 			if (filter && dofilt(pdata, filt, val))
 				addp = 0;
 
-			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
-
-			/* Compute sum that includes affect of power */
+			/* Check if over ink limit */
 			for (sum = 0.0, e = 0; e < di; e++)
-				sum += icx_powlike(val[e], xpow);
-
+				sum += val[e];
 			if (sum > uilimit)
 				addp = 0;
 
@@ -1693,13 +1714,16 @@ int main(int argc, char *argv[]) {
 	
 				sprintf(buf,"%d",id++);
 				ary[0].c = buf;
+
 				if (xmask == nmask) {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+						ary[1 + e].d = 100.0 * val[e];
 				} else {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+						ary[1 + e].d = 100.0 * (1.0 - val[e]);
 				}
+
+				pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 				ary[1 + di + 0].d = 100.0 * XYZ[0];
 				ary[1 + di + 1].d = 100.0 * XYZ[1];
 				ary[1 + di + 2].d = 100.0 * XYZ[2];
@@ -1740,16 +1764,17 @@ int main(int argc, char *argv[]) {
 			for (e = 0; e < di; e++)
 				val[e] = (double)gc[e]/(msteps-1);
 
+			/* Extra power and dark emphasis */
+			for (e = 0; e < di; e++)
+				val[e] = icx_powlike(val[e], xpow * demph);
+
 			/* Apply general filter */
 			if (filter && dofilt(pdata, filt, val))
 				addp = 0;
 
-			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
-
-			/* Compute sum that includes affect of power */
+			/* Check if over ink limit */
 			for (sum = 0.0, e = 0; e < di; e++)
-				sum += icx_powlike(val[e], xpow);
-
+				sum += val[e];
 			if (sum > uilimit)
 				addp = 0;		/* Don't add patches over ink limit */
 
@@ -1776,13 +1801,16 @@ int main(int argc, char *argv[]) {
 
 				sprintf(buf,"%d",id++);
 				ary[0].c = buf;
+
 				if (xmask == nmask) {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+						ary[1 + e].d = 100.0 * val[e];
 				} else {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+						ary[1 + e].d = 100.0 * (1.0 - val[e]);
 				}
+
+				pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 				ary[1 + di + 0].d = 100.0 * XYZ[0];
 				ary[1 + di + 1].d = 100.0 * XYZ[1];
 				ary[1 + di + 2].d = 100.0 * XYZ[2];
@@ -1865,14 +1893,14 @@ int main(int argc, char *argv[]) {
 							if (addp) {
 								sprintf(buf,"%d",id++);
 								ary[0].c = buf;
-								pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 								if (xmask == nmask) {
 									for (e = 0; e < di; e++)
-										ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+										ary[1 + e].d = 100.0 * val[e];;
 								} else {
 									for (e = 0; e < di; e++)
-										ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+										ary[1 + e].d = 100.0 * (1.0 - val[e]);
 								}
+								pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 								ary[1 + di + 0].d = 100.0 * XYZ[0];
 								ary[1 + di + 1].d = 100.0 * XYZ[1];
 								ary[1 + di + 2].d = 100.0 * XYZ[2];
@@ -1931,16 +1959,17 @@ int main(int argc, char *argv[]) {
 				for (e = 0; e < di; e++)
 					val[e] = (double)(pass * 0.5 + gc[e])/(bsteps-1);
 
+				/* Extra power and dark emphasis */
+				for (e = 0; e < di; e++)
+					val[e] = icx_powlike(val[e], xpow * demph);
+
 				/* Apply general filter */
 				if (filter && dofilt(pdata, filt, val))
 					addp = 0;
 
-				pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
-
-				/* Compute sum that includes affect of power */
+				/* Check if over ink limit */
 				for (sum = 0.0, e = 0; e < di; e++)
-					sum += icx_powlike(val[e], xpow);
-
+					sum += val[e];
 				if (sum > uilimit)
 					addp = 0;		/* Don't add patches over ink limit */
 
@@ -1969,11 +1998,13 @@ int main(int argc, char *argv[]) {
 					ary[0].c = buf;
 					if (xmask == nmask) {
 						for (e = 0; e < di; e++)
-							ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+							ary[1 + e].d = 100.0 * val[e];
 					} else {
 						for (e = 0; e < di; e++)
-							ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+							ary[1 + e].d = 100.0 * (1.0 - val[e]);
 					}
+
+					pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 					ary[1 + di + 0].d = 100.0 * XYZ[0];
 					ary[1 + di + 1].d = 100.0 * XYZ[1];
 					ary[1 + di + 2].d = 100.0 * XYZ[2];
@@ -2036,16 +2067,17 @@ int main(int argc, char *argv[]) {
 						val[e] = d_rand(0.0, 1.0);
 				}
 
+				/* Extra power and dark emphasis */
+				for (e = 0; e < di; e++)
+					val[e] = icx_powlike(val[e], xpow * demph);
+
 				/* Apply general filter */
 				if (filter && dofilt(pdata, filt, val))
 					continue;
 
-				pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
-
-				/* Compute sum that includes the affect of power */
+				/* Check if over ink limit */
 				for (sum = 0.0, e = 0; e < di; e++)
-					sum += icx_powlike(val[e], xpow);
-
+					sum += val[e];
 				if (sum > uilimit)
 					continue;
 
@@ -2053,11 +2085,13 @@ int main(int argc, char *argv[]) {
 				ary[0].c = buf;
 				if (xmask == nmask) {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+						ary[1 + e].d = 100.0 * val[e];
 				} else {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+						ary[1 + e].d = 100.0 * (1.0 - val[e]);
 				}
+
+				pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 				ary[1 + di + 0].d = 100.0 * XYZ[0];
 				ary[1 + di + 1].d = 100.0 * XYZ[1];
 				ary[1 + di + 2].d = 100.0 * XYZ[2];
@@ -2163,16 +2197,14 @@ int main(int argc, char *argv[]) {
 				if (filter && dofilt(pdata, filt, val))
 					continue;
 
-				pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
-
-				/* Do a simple ink limit that include the effect of xpow */
+				/* Do a simple ink limit */
 				if (uilimit < (double)di) {
 					double tot = 0.0;
 					for (e = 0; e < di; e++)
-						tot += icx_powlike(val[e],xpow);
+						tot += val[e];
 					if (tot > uilimit) {
 						for (e = 0; e < di; e++)
-							val[e] = icx_powlike(icx_powlike(val[e],xpow) * uilimit/tot, 1.0/xpow);
+							val[e] = val[e] * uilimit/tot;
 					}
 				}
 
@@ -2180,11 +2212,13 @@ int main(int argc, char *argv[]) {
 				ary[0].c = buf;
 				if (xmask == nmask) {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * icx_powlike(val[e],xpow);
+						ary[1 + e].d = 100.0 * val[e];
 				} else {
 					for (e = 0; e < di; e++)
-						ary[1 + e].d = 100.0 * (1.0 - icx_powlike(val[e],xpow));
+						ary[1 + e].d = 100.0 * (1.0 - val[e]);
 				}
+
+				pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 				ary[1 + di + 0].d = 100.0 * XYZ[0];
 				ary[1 + di + 1].d = 100.0 * XYZ[1];
 				ary[1 + di + 2].d = 100.0 * XYZ[2];
@@ -2497,11 +2531,6 @@ int main(int argc, char *argv[]) {
 
 			/* Lookup device values for target density */
 			pdata->den_to_dev(pdata, val, den);	
-			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
-
-			/* Apply extra power */
-			for (e = 0; e < di; e++)
-				val[e] = icx_powlike(val[e], xpow);
 
 			/* Do a simple ink limit */
 			if (uilimit < (double)di) {
@@ -2523,6 +2552,7 @@ int main(int argc, char *argv[]) {
 				for (e = 0; e < di; e++)
 					ary[1 + e].d = 100.0 * (1.0 - val[e]);
 			}
+			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 			ary[1 + di + 0].d = 100.0 * XYZ[0];
 			ary[1 + di + 1].d = 100.0 * XYZ[1];
 			ary[1 + di + 2].d = 100.0 * XYZ[2];
@@ -2586,17 +2616,15 @@ int main(int argc, char *argv[]) {
 					val[0] = val[1] = val[2] = 0.5;
 			}
 			
+			/* Apply extra power to device values (??) */
+			for (e = 0; e < di; e++)
+				val[e] = icx_powlike(val[e], xpow);
+
 			/* If target space isn't something we recognise, convert it */
 			if (ftarg != NULL) {
 				ftarg->dev_to_rLab(ftarg, lab, val);
 				pdata->rLab_to_dev(pdata, val, lab);	
 			}
-
-			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
-
-			/* Apply extra power */
-			for (e = 0; e < di; e++)
-				val[e] = icx_powlike(val[e], xpow);
 
 			/* Do a simple ink limit */
 			if (uilimit < (double)di) {
@@ -2617,6 +2645,8 @@ int main(int argc, char *argv[]) {
 				for (e = 0; e < di; e++)
 					ary[1 + e].d = 100.0 * (1.0 - val[e]);
 			}
+
+			pdata->dev_to_XYZ(pdata, XYZ, val);		/* Add expected XYZ */
 			ary[1 + di + 0].d = 100.0 * XYZ[0];
 			ary[1 + di + 1].d = 100.0 * XYZ[1];
 			ary[1 + di + 2].d = 100.0 * XYZ[2];

@@ -9,7 +9,7 @@ profout.c
 colprof.c
 profcheck.c
 invprofcheck.c
-verify.c
+colverify.c
 applycal.c
 mppprof.c
 mppcheck.c
@@ -25,6 +25,9 @@ Trulux.sp
 TruluxPlus.sp
 example.sp
 example121.sp
+F1.sp
+F5.sp
+F8.sp
 CIE_C.sp
 D50_0.0.sp
 D50_0.1.sp

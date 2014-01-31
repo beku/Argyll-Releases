@@ -162,6 +162,9 @@
 
 
 
+
+
+
       and profiling a display that doesn't have VideoLUT access</a>.<br>
     <br>
     <h3><a name="PM1b"></a>Adjusting and Calibrating Displays</h3>
@@ -184,6 +187,9 @@
     your display is currently set up. (you may have to run this as <span
       style="text-decoration: underline; color: rgb(204, 51, 204);">dispcal
 -yl
+
+
+
 
 
 
@@ -594,6 +600,9 @@
 
 
 
+
+
+
     (<span style="font-weight: bold;">-Iw</span>) changes by doing on
     the fly calibrations during the measurements. Instrument black level
     drift and display white level drift can be combined (<span
@@ -609,6 +618,9 @@
     displays,&nbsp; (ie. you have a Wide Gamut Display), then you may
     get disappointing results with a Colorimeter. One way of addressing
     this problem is to use a <a href="File_Formats.html#.ccmx">Colorimeter
+
+
+
 
 
 
@@ -804,6 +816,9 @@
 
 
 
+
+
+
       SG</a> charts:<br>
     <br>
     <img src="DC.jpg" alt="GretagMacbeth ColorChecker DC chart"
@@ -816,6 +831,9 @@
       2px solid ; width: 200px; height: 140px;"><br>
     <br>
     Also supported is the <a href="http://www.hutchcolor.com/hct.htm">HutchColor
+
+
+
 
 
 
@@ -908,8 +926,14 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
 
 
 
+
+
+
       Métairie's Digital TargeT 003</a> and <a
 href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.html">Christophe
+
+
+
 
 
 
@@ -959,6 +983,9 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
       alt="CMP_Digital_Target-3" src="CMP_Digital_Target-3.jpg"><br>
     <br>
     and the <a href="http://www.silverfast.com/show/dc-targets/en.html">LaserSoft
+
+
+
 
 
 
@@ -1051,8 +1078,14 @@ href="http://www.christophe-metairie-photographie.com/eng%20digital%20target.htm
 
 
 
+
+
+
       201</a>:&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; <a
 href="http://www.qpcard.com/en_b2c/color-reference-cards/instant-camera-raw-profiling-with-qpcard-202.html">QPcard
+
+
+
 
 
 
@@ -1211,6 +1244,9 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
+
+
         header</a>, and appending <a href="SG_footer.txt">this footer</a>,
       making sure there are no blank lines inserted in the process.
       There are reports that X-Rite have experimented with different ink
@@ -1288,6 +1324,9 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
     For any other type of chart, a chart recognition template file will
     need to be created (this is beyond the scope of the current
     documentation, although see&nbsp; the <a href="cht_format.html">.cht_format
+
+
+
 
 
 
@@ -1768,6 +1807,9 @@ href="http://www.xrite.com/documents/apps/public/digital_colorchecker_sg_l_a_b.t
 
 
 
+
+
+
         scanner or camera must be configured and used exactly the same
         as it was when it was profiled.</span></big><br>
     <br>
@@ -1903,6 +1945,9 @@ then
 
 
 
+
+
+
     it can save considerable processing time and space if the -b flag is
     used, and the -S flag not used.<br>
     <br>
@@ -1974,6 +2019,9 @@ then
     profile (using <a href="colprof.html#q">-ql</a> <a
       href="colprof.html#b">-b</a> <a href="colprof.html#ni">-no</a>, <a
       href="colprof.html#no">-ni</a> and no <a href="colprof.html#S">-S</a>),
+
+
+
 
 
 
@@ -2466,6 +2514,9 @@ chart,
 
 
 
+
+
+
     and/or to have it included in .ti3 file.<br>
     &nbsp;&nbsp;&nbsp; <a href="cctiff.html#p2">cctiff</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 To
@@ -2476,6 +2527,9 @@ and
 calibration
 to
 an
+
+
+
 
 
 
@@ -2562,6 +2616,9 @@ an
 
 
 
+
+
+
     To incorporate calibration into an ICC profile.<br>
     &nbsp;&nbsp;&nbsp; <a href="chartread.html#I">chartread</a>&nbsp;&nbsp;
 To
@@ -2572,6 +2629,9 @@ assumed
 when
 reading
 a
+
+
+
 
 
 
@@ -2919,8 +2979,10 @@ a
         the display controls. Many TV's have internal calibration
         controls that allow setting the white point, and possibly the
         neutral axis response. Either a dedicated Video calibration
-        package could be used, or ArgyllCMS <a
-          href="file:///D:/src/argyll/doc/dispcal.html">dispcal</a>'s
+        package could be used, or ArgyllCMS <a href="dispcal.html">dispcal</a>'s
+
+
+
         interactive adjustment mode can be used to set the white point.
         Note that while adjusting the neutral axis for neutrality may
         help, the Device Link will override the transfer curve
@@ -2936,28 +2998,14 @@ a
         the Device Link will override the calibrated transfer curve
         characteristic of the display, there there may be no point in
         doing much more than a medium calibration, and choosing a
-        standard curve (such as <a href="dispcal.html#g">-g s</a>) If
-        this approach is taken, then the resulting calibration file
-        should be provided to dispread as the <a href="dispcal.html#k">-k
-
-
-
-
-
-
-
-
-          parameter</a> or <a href="dispcal.html#K">-K parameter</a>.&nbsp;
-
-
-
-
-
-
-
-
-        See also below <b>Choice of where to apply display per channel
-          calibration curves.</b></li>
+        standard that has a straight segment from black, such as L*a*b*,
+        sRGB, Rec709 or SMPTE240 curve. The exact shape of the
+        calibration curve is not critically important, as the profiling
+        and 3dLut will set the final response. If this approach is
+        taken, then the resulting calibration file should be provided to
+        dispread as the <a href="dispcal.html#k">-k parameter</a> or <a
+          href="dispcal.html#K">-K parameter</a>.&nbsp; See also below <b>Choice
+          of where to apply display per channel calibration curves.</b></li>
       <li>Choose one of the Absolute Colorimetric intents in collink
         (ie. -i aw). This greatly reduces flexibility, and may not be
         quite as accurate as an explicit calibration.</li>
@@ -2977,38 +3025,20 @@ a
     a PC the display, this can be done by loading the calibration curves
     into the Video Card temporarily using "dispwin calibration.cal", or
     installing the ICC profile into the system persistently using
-    something like "<a href="file:///D:/src/argyll/doc/dispwin.html#I">dispwin
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      -I profile.icm</a>",<br>
+    something like "<a href="dispwin.html#I">dispwin -I profile.icm</a>",<br>
     or when using MadVR 0.86.9 or latter by creating a 3dLut with
     appended calibration curves using <a href="collink#H">-H
       display.cal</a>.<br>
     <br>
     <b>b)</b> The calibration can be incorporated into the Device
     Link/3dLUT by providing it to collink as the <a
-      href="file:///D:/src/argyll/doc/collink.html#a">-a display.cal</a>.
-    This is the only option if the video display path does not have some
-    separate facility to handle calibration curves. Note that if the
-    playback system has graphic card VideoLUTs then they will have to be
-    set to a defined consistent state such as linear. When using MadVR
-    0.86.9 or latter this will be done automatically since the -a option
-    will append a linear set of calibration curves to the 3dLut.<br>
+      href="collink.html#a">-a display.cal</a>. This is the only option
+    if the video display path does not have some separate facility to
+    handle calibration curves. Note that if the playback system has
+    graphic card VideoLUTs then they will have to be set to a defined
+    consistent state such as linear. When using MadVR 0.86.9 or latter
+    this will be done automatically since the -a option will append a
+    linear set of calibration curves to the 3dLut.<br>
     <br>
     The choice is dictated by a number of considerations:<br>
     <ul>
@@ -3106,7 +3136,7 @@ a
     <br>
     &nbsp;&nbsp;&nbsp; Rec2020.icm<br>
     <br>
-    &nbsp;&nbsp;&nbsp; SMPTE431.icm<br>
+    &nbsp;&nbsp;&nbsp; SMPTE431_P3.icm<br>
     <h5>6) Signal encoding</h5>
     Typical PC display output uses full range RGB signals (0 .. 255 in 8
     bit parlance), while typical Video encoding allows some head &amp;
@@ -3221,14 +3251,15 @@ a
     In this example we choose to create a display calibration first
     using dispcal, and create a simple matrix profile as well:<br>
     <br>
-    &nbsp; <tt>dispcal -v -o -qm -w 0.3127,0.3290 -gs -o TVmtx.icm TV</tt><br>
+    &nbsp; <tt>dispcal -v -o -qm -k0 -w 0.3127,0.3290 -gs -o TVmtx.icm
+      TV</tt><br>
     <br>
     We are targeting a D65 white point (<tt>-w 0.3127,0.3290)</tt> and
     an sRGB response curve.<br>
     <br>
     If you are using the madTPG you would use:<br>
     <br>
-    &nbsp; <tt>dispcal -v -d madvr -o -qm -w 0.3127,0.3290 -gs -o
+    &nbsp; <tt>dispcal -v -d madvr -o -qm -k0 -w 0.3127,0.3290 -gs -o
       TVmtx.icm TV</tt><br>
     <br>
     Then we need to create a display patch test set. We can use the
@@ -3258,7 +3289,8 @@ a
     &nbsp;dispread -v -d madvr -K TV.cal TV<br>
     <br>
     and then a cLUT type ICC profile created. Since we will be using
-    collink smart linking, we minimize the B2A table size:<br>
+    collink smart linking, we minimize the B2A table size. We use the
+    default colprof -V parameter carried through from targen:<br>
     <br>
     &nbsp; <tt>colprof -v -qh -bl TV</tt><br>
     <br>
@@ -3328,10 +3360,10 @@ a
     <br>
     &nbsp; dispwin -I TV.icm<br>
     <br>
-    See also <a href="file:///D:/src/argyll/doc/dispprofloc.html">here</a>
-    for information on how to make sure the calibration is loaded on
-    each system start. If not, then you will want to incorporate the
-    calibration in the Device Link/3dlut by using collink "-a TV.cal".<br>
+    See also <a href="dispprofloc.html">here</a> for information on how
+    to make sure the calibration is loaded on each system start. If not,
+    then you will want to incorporate the calibration in the Device
+    Link/3dlut by using collink "-a TV.cal".<br>
     <br>
     If the video path needs Video Level RGB encoding but does not
     provide a means to do this, then you will want to include the <b>-E</b>
@@ -3421,9 +3453,15 @@ a
 
 
 
+
+
+
         TV.cal </tt>EBU3213_PAL.icm TV.icm SD_PAL.icm</tt><tt><br>
     </tt><tt> </tt><tt><br>
     </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir </tt><tt><tt>-H
+
+
+
 
 
 
@@ -3450,9 +3488,15 @@ a
 
 
 
+
+
+
         TV.cal </tt>EBU3213_PAL.icm TV.icm SD_PAL.icm</tt><tt><br>
     </tt><tt> </tt><tt><br>
     </tt><tt> &nbsp;&nbsp;&nbsp; collink -v -3m -et -Et -Ib -G -ir </tt><tt><tt>-a
+
+
+
 
 
 
@@ -3533,7 +3577,7 @@ a
     <p><tt>&nbsp; fakeread -v -et -p HD.icm -Et -K TV.cal TV.icm checkA</tt></p>
     <p><tt>and then you can verify:<br>
       </tt></p>
-    <p><tt>&nbsp; verify -v -n -w -x ref.ti3 checkA.ti3<br>
+    <p><tt>&nbsp; colverify -v -n -w -x ref.ti3 checkA.ti3<br>
       </tt></p>
     <p>If you have targeted some other white point rather than video D65
       for the display, then use the -N flag instead of -n to align the

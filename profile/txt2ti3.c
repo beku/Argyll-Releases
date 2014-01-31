@@ -28,7 +28,7 @@
 
  */
 
-#undef DEBUG
+#define DEBUG
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
 	cmy->add_other(cmy, "ECI2002");			/* Gretag/Logo Target file */
 	cmy->add_other(cmy, ""); 				/* Wildcard */
 	if (cmy->read_name(cmy, devname))
-		error ("Read: Can't read dev file '%s'. Unknown format or corrupted file ?",devname);
+		error ("Read: Can't read dev file '%s'. Unknown format or corrupted file ? (%s)",devname,cmy->err);
 	if (cmy->ntables != 1)
 		warning("Input file '%s' doesn't contain exactly one table",devname);
 

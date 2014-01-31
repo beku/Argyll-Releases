@@ -19,7 +19,7 @@
 #undef DIAG
 #undef DIAG2
 #undef GLOB_CHECK
-#undef RES2			/* Do multiple test at various resolutions */
+#define RES2			/* Do multiple test at various resolutions */
 #define AVGDEV 0.0		/* Average deviation of function data */
 
 #include <stdio.h>
@@ -285,7 +285,6 @@ int main(int argc, char *argv[]) {
 				rss->fit_rspl(rss,
 			           0 | (twopass ? RSPL_2PASSSMTH : 0)
 			             | (extra   ? RSPL_EXTRAFIT2 : 0) ,
-			           0,
 			           test_points,			/* Test points */
 			           pnts,	/* Number of test points */
 			           low, high, gres,		/* Low, high, resolution of grid */

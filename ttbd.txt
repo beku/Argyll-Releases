@@ -20,6 +20,14 @@ Categories:
 ===================================================================
 Recent suggestions:
 
+	Add troublshooting section to tutorial:
+		colprof report fit DE's	
+		iccgamut
+		transplot
+		xicclu fwd & bwd and both
+		cctiff through test chart path
+		cctiff soft proof
+
 	Add flat field support to scanin
 
 	Add "dynamic range" option to targen to concentrate

@@ -16,6 +16,55 @@
     <h1> Summary of Argyll CMS Changes since last release</h1>
     <h3>For a <span style="text-decoration: underline;">complete</span>
       and more detailed list of changes, please see the log.txt file.</h3>
+    <h1>[V1.6.2 -&gt; V1.6.3] 26th January 2014</h1>
+    <ul>
+      <li>Added ProPhoto.icm and ProPhotoLin.icm to ref profiles.</li>
+      <li>Fix bug in xicclu -py conversion.</li>
+      <li>Added code to minimize ICC rounding error on matrix profile
+        white point accuracy. Re-generated all reference profiles with
+        this change.</li>
+      <li>Changed i1d3 driver to completely ignore any EEPROM checksum
+        errors for non "A-01" rev. instruments.</li>
+      <li>Made transplot handle RGB-&gt;RGB device link.</li>
+      <li>Removed colprof -y option. Use "profcheck -v2" instead, as it
+        is more developed.</li>
+      <li>Fixed bug in dispcal - it was not using the final measurement
+        pass to update the calibration curves.</li>
+      <li>Fixed bug in spotread, dispcal &amp; dispread for CCSS capable
+        instruments where refresh display types was being ignored if a
+        custom observer was used, and/or the custom observer as being
+        ignored, and/or a&nbsp; CCMX was being ignored. Changed instlib
+        semantics for inst_opt_set_ccss_obs :- this is now set
+        immediately, and applied also to any subsequent set_disptype()
+        or col_cal_spec_set().</li>
+      <li>Renamed verify to colverify to avoid clash with MSWin program
+        of the same name. Made it print the patch location for -v2 if it
+        is present in the file.</li>
+      <li>Changed targen to ensure that -V and -p options effects are
+        reflected in the resulting expected CIE values of the .ti1 file.</li>
+      <li>Changed targen so that -V parameter also affects single
+        channel, grey wedge, grid &amp; body centered grid point
+        distribution.</li>
+      <li>Changed colprof to deal with variable grid distribution in a
+        more neuanced way, to reduce overshoot artifacts when the -V
+        parameter is used.</li>
+      <li>Changed colprof to used a power_like function for the grid
+        distribution shape from the -V parameter, so as to avoid issues
+        with a power curve infinte slope near zero.</li>
+      <li>Changed colprof to used a scaled down value of the targen -V
+        parameter as the default for its -V parameter. Documentation now
+        recommends more moderate values for -V.</li>
+      <li>Added a special case to collink for RGB video input encoding
+        to (attempt) to fine tune the black point to compensate for it
+        (probably) not falling on a cLUT grid point. &amp; out encoding</li>
+      <li>Tweaked dispcal to try and improve accuracy of black point
+        calibration.</li>
+      <li>Switch dispread to use NoClamp readings, so that average black
+        point value is not biased.</li>
+      <li>Fixed bug introduced into 1.6.2 oeminst that prevents .ccss
+        files being installed.<br>
+      </li>
+    </ul>
     <h1>[V1.6.1 -&gt; V1.6.2] 18th November 2013</h1>
     <ul>
       <li> Added "dark region emphasis" -V parameter to targen and
@@ -824,6 +873,7 @@
 
 
 
+
         </span>for systems with &gt; 3Gig Ram.</li>
       <li>Add support for the Eye-One Monitor spectrometer.</li>
       <li>Added -L option to <span style="font-weight: bold;">printtarg</span>
@@ -838,6 +888,7 @@
     Various bug fixes, the main ones being:<br>
     <ul>
       <li>Fixed some <span style="font-weight: bold;">colprof </span>performance
+
 
 
 

@@ -360,7 +360,7 @@ static xspect il_F5 = {
 /* Fluorescent, Wide band 5000K, CRI 95 */
 static xspect il_F8 = {
 	107, 300.0, 830.0,	/* 109 bands from 300 to 830 nm in 5nm steps */
-	20.0,		/* Arbitrary scale factor */
+	30.0,		/* Arbitrary scale factor */
 	{
 /* 300 */	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 /* 340 */	0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
@@ -384,7 +384,7 @@ static xspect il_F8 = {
 /* Fluorescent, Narrow band 5000K, CRI 81 */
 static xspect il_F10 = {
 	107, 300.0, 830.0,	/* 109 bands from 300 to 830 nm in 5nm steps */
-	20.0,		/* Arbitrary scale factor */
+	30.0,		/* Arbitrary scale factor */
 	{
 		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
@@ -2969,6 +2969,8 @@ int write_nxspect(char *fname, xspect *sp, int nspec, int type) {
 	sprintf(buf,"%f", sp->norm);
 	ocg->add_kword(ocg, 0, "SPECTRAL_NORM",buf, NULL);
 
+	/* Should we adda A COORD field for "CMF" and an INDEX field for "SPECT" ? */
+
 	/* Generate fields for spectral values */
 	for (i = 0; i < sp->spec_n; i++) {
 		int nm;
@@ -3006,6 +3008,7 @@ int write_nxspect(char *fname, xspect *sp, int nspec, int type) {
 /* Up to nspec will be restored starting at offset off.. */
 /* The number restored from the file will be written to *nret */
 /* type: 0 = any, mask: 1 = SPECT, 2 = CMF, 4 = ccss */
+/* (Note that not all ccss information is read. Use ccss->read_ccss() for this. */
 /* Return NZ on error */
 /* (Would be nice to return an error message!) */
 int read_nxspect(xspect *sp, char *fname, int *nret, int off, int nspec, int type) {
@@ -4665,7 +4668,7 @@ icxIllumeType ilType,			/* Illuminant */
 xspect        *custIllum,		/* Optional custom illuminant */
 icxObserverType obType,			/* Observer */
 xspect        custObserver[3],	/* Optional custom observer */
-icColorSpaceSignature  rcs,		/* Return color space, icSigXYZData or icSigLabData */
+icColorSpaceSignature  rcs,		/* Return color space, icSigXYZData or D50 icSigLabData */
 								/* ** Must be icSigXYZData if SALONEINSTLIB ** */
 icxClamping clamp				/* NZ to clamp XYZ/Lab to be +ve */
 ) {

@@ -193,7 +193,7 @@ main(int argc, char *argv[]) {
 	char buf[200];
 	double uin[MAX_CHAN], in[MAX_CHAN], out[MAX_CHAN], uout[MAX_CHAN];
 
-	icxLuBase *luo, *aluo = NULL;
+	icxLuBase *luo = NULL, *aluo = NULL;
 	icColorSpaceSignature ins, outs;	/* Type of input and output spaces */
 	int inn, outn;						/* Number of components */
 	icmLuAlgType alg;					/* Type of lookup algorithm */
@@ -431,12 +431,14 @@ main(int argc, char *argv[]) {
 						repYxy = 0;
 						repLCh = 0;
 						repJCh = 0;
+						repXYZ100 = 0;
 						break;
 					case 'L':
 						pcsor = icSigLabData;
 						repYxy = 0;
 						repLCh = 1;
 						repJCh = 0;
+						repXYZ100 = 0;
 						break;
 					case 'y':
 					case 'Y':
@@ -444,18 +446,21 @@ main(int argc, char *argv[]) {
 						repYxy = 1;
 						repLCh = 0;
 						repJCh = 0;
+						repXYZ100 = 0;
 						break;
 					case 'j':
 						pcsor = icxSigJabData;
 						repYxy = 0;
 						repLCh = 0;
 						repJCh = 0;
+						repXYZ100 = 0;
 						break;
 					case 'J':
 						pcsor = icxSigJabData;
 						repYxy = 0;
 						repLCh = 0;
 						repJCh = 1;
+						repXYZ100 = 0;
 						break;
 					default:
 						usage("Unknown parameter after flag -i");
@@ -1183,7 +1188,7 @@ main(int argc, char *argv[]) {
 			}
 
 			if (repYxy && outs == icSigYxyData) {
-				icmXYZ2Yxy(out, out);
+				icmXYZ2Yxy(uout, uout);
 			}
 
 			/* Jab -> JCh and Lab -> LCh */

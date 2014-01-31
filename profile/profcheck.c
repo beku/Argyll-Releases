@@ -507,7 +507,7 @@ int main(int argc, char *argv[])
 	/* Read in the CGATs fields */
 	{
 		int sidx;					/* Sample ID index */
-		int sloc;					/* Sample location indexi (if any) */
+		int sloc;					/* Sample location index (if any) */
 		int ti, ci, mi, yi, ki;
 		int Xi, Yi, Zi;
 

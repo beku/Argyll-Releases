@@ -1866,12 +1866,28 @@ double             smooth			/* Curve smoothing, nominally 1.0 */
 	/* Matrix values */
 	{
 		icmXYZArray *wor, *wog, *wob;
+		double mat[3][3];
 		wor = pmlu->redColrnt;
 		wog = pmlu->greenColrnt;
 		wob = pmlu->blueColrnt;
-		wor->data[0].X = os.v[0]; wor->data[0].Y = os.v[3]; wor->data[0].Z = os.v[6];
-		wog->data[0].X = os.v[1]; wog->data[0].Y = os.v[4]; wog->data[0].Z = os.v[7];
-		wob->data[0].X = os.v[2]; wob->data[0].Y = os.v[5]; wob->data[0].Z = os.v[8];
+
+		/* Copy to mat[RGB][XYZ] */
+		mat[0][0] = os.v[0];
+		mat[0][1] = os.v[3];
+		mat[0][2] = os.v[6];
+		mat[1][0] = os.v[1];
+		mat[1][1] = os.v[4];
+		mat[1][2] = os.v[7];
+		mat[2][0] = os.v[2];
+		mat[2][1] = os.v[5];
+		mat[2][2] = os.v[8];
+
+		/* Make sure rounding doesn't wreck white point */
+		quantizeRGBprimsS15Fixed16(mat);
+
+		wor->data[0].X = mat[0][0]; wor->data[0].Y = mat[0][1]; wor->data[0].Z = mat[0][2];
+		wog->data[0].X = mat[1][0]; wog->data[0].Y = mat[1][1]; wog->data[0].Z = mat[1][2];
+		wob->data[0].X = mat[2][0]; wob->data[0].Y = mat[2][1]; wob->data[0].Z = mat[2][2];
 
 		/* Load into pmlu matrix and inverse ??? */
 	}

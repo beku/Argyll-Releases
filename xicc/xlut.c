@@ -154,6 +154,7 @@
 #undef DISABLE_KCURVE_FILTER	/* [Undef] don't filter the Kcurve */
 #undef REPORT_LOCUS_SEGMENTS    /* [Undef[ Examine how many segments there are in aux inversion */
 
+#define XYZ_EXTRA_SMOOTH 20.0		/* Extra smoothing factor for XYZ profiles */
 #define SHP_SMOOTH 1.0	/* Input shaper curve smoothing */
 #define OUT_SMOOTH1 1.0	/* Output shaper curve smoothing for L*, X,Y,Z */
 #define OUT_SMOOTH2 1.0	/* Output shaper curve smoothing for a*, b* */
@@ -1467,6 +1468,7 @@ double *in		/* Function input values to invert (== clut output' values) */
 			for (i = 0; i < nsoln; i++) {
 				double ss;
 
+				DBR(("Soln %d: %s\n",i, icmPdv(p->clutTable->di, pp[i].p)))
 				for (ss = 0.0, e = 0; e < p->clutTable->di; e++) {
 					double tt;
 					tt = pp[i].p[e] - p->licent[e];
@@ -1477,6 +1479,16 @@ double *in		/* Function input values to invert (== clut output' values) */
 					}
 				}
 			}
+#ifndef NEVER
+			// ~~99 average them
+			for (i = 1; i < nsoln; i++) {
+				for (e = 0; e < p->clutTable->di; e++)
+					pp[0].p[e] += pp[i].p[e];
+			}
+			for (e = 0; e < p->clutTable->di; e++)
+				pp[0].p[e] /= (double)nsoln;
+			bsoln = 0;
+#endif
 //printf("~1 chose %d\n",bsoln);
 			i = bsoln;
 		}
@@ -2919,11 +2931,12 @@ int                quality			/* Quality metric, 0..3 */
 
 	/* XYZ display models are under-smoothed, because the mapping is typically */
 	/* very "straight", and the lack of tension reduces any noise reduction effect. */
+	/* !!! This probably means that we should switch to 3rd order smoothness criteria !! */
 	/* We apply an arbitrary correction here */
 	if (p->pcs == icSigXYZData) {
-		oavgdev[0] = 20.0 * 0.70 * avgdev;
-		oavgdev[1] = 20.0 * 1.00 * avgdev;
-		oavgdev[2] = 20.0 * 0.70 * avgdev;
+		oavgdev[0] = XYZ_EXTRA_SMOOTH * 0.70 * avgdev;
+		oavgdev[1] = XYZ_EXTRA_SMOOTH * 1.00 * avgdev;
+		oavgdev[2] = XYZ_EXTRA_SMOOTH * 0.70 * avgdev;
 	} else if (p->pcs == icSigLabData) {
 		oavgdev[0] = 1.00 * avgdev;
 		oavgdev[1] = 0.70 * avgdev;

@@ -530,6 +530,7 @@ main(int argc, char *argv[])
 			illum = icxIT_none;		/* Displays are assumed to be self luminous */
 		}
 
+
 		/* copy fields to output file (except spectral if nospec) */
 		for (i = 0; i < icg->t[0].nfields; i++) {
 			/* See if this is a input spectral field */
